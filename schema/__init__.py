@@ -3,7 +3,7 @@ from schema.states import StepState
 from schema.actions import ActionType, Action
 from schema.step import Step, Scenario
 from schema.api import ApiSpec, RequestSpec
-
+from schema.resource import Resource
 __all__ = [
     "StepState",
     "ActionType",
@@ -12,4 +12,5 @@ __all__ = [
     "Scenario",
     "ApiSpec",
     "RequestSpec",
+    "Resource"
 ]
