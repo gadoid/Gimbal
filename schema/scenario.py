@@ -11,11 +11,13 @@ class Scenario(BaseModel):
     resource : Resource = Field(description="存放用例需要执行的相关资源信息")
     steps : Steps = Field(..., description="存放具体的执行过程")
 
+
 class Action(BaseModel):
     """ 单步骤数据模型 """
     api : Api = Field(..., description= "当前步骤的接口请求信息")
     request : Request = Field(..., description= "当前步骤的请求体信息")
     strategy : Strategy = Field(... , description= "当前步骤需要执行的策略集")
+
 
 class Strategy(BaseModel):
     """ 策略基类数据模型 """
