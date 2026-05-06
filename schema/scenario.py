@@ -67,5 +67,5 @@ class RetryPolicy(BaseModel):
 
 class Steps(BaseModel) :
     """ 执行步骤包装模型 """
-    StepsId : int = Field(...,default_factory=Stepsgenerator, )
+    StepsId : int = Field(...,default_factory=Stepsgenerator, description="")
     Actions : dict[str ,Strategy]
