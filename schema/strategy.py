@@ -13,7 +13,7 @@ class AssertOperator(str, Enum):
     EQ = "eq"
     NE = "ne"
     GT = "gt"
-    GTE = "get"
+    GTE = "gte"
     LT = "lt"
     LTE = "lte"
     IN = "in"
