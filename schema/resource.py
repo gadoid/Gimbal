@@ -1,7 +1,5 @@
-from pydantic import BaseModel, Field, model_validator,ConfigDict
-from typing import Any, Optional
-import re
-
+from pydantic import BaseModel, Field
+from typing import Any
 
 
 class Resource(BaseModel):
