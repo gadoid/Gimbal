@@ -2,30 +2,13 @@ from pydantic import BaseModel, Field, model_validator, ConfigDict
 from datetime import datetime
 from typing import Any, Optional, Literal , Union , Annotated
 from .resource import Resource
+from .strategy import StrategyUnion
 
 class Ref(BaseModel) :
     ref : str 
 
 class Api(BaseModel) :
     pass
-
-class Strategy(BaseModel):
-    """ 策略基类数据模型 """
-    type : 
-    name : 
-    state : 
-    order :
-    enable :
-
-StrategyUnion = Annotated[
-    Union[],
-    Field(discriminator="type")
-]
-
-class Composite(Strategy):
-
-class Sql()
-
 
 class Action(BaseModel):
     """ 单步骤数据模型 """

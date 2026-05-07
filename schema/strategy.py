@@ -81,6 +81,11 @@ class Assertion(Strategy) :
     message : Optional[str] = None # 断言失败信息
     soft: bool = False # 软断言
 
+StrategyUnion = Annotated[
+    Union[Extract, Assign, Assertion],
+    Field(discriminator="type")
+]
+
 # class Composite(Strategy) :
 #     pass
 
