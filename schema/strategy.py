@@ -82,7 +82,7 @@ class Assertion(StrategyBase) :
     soft: bool = False # 软断言
 
 class StrategyRef(RefBase) : 
-    kind : Literal["strategyref"] = "strategyref"
+    kind : Literal["strategy_ref"] = "strategy_ref"
 
 
 StrategyUnion = Annotated[

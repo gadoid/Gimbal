@@ -8,13 +8,13 @@ from .request import RequestUnion
 
 class Step(BaseModel):
     """ 单步骤数据模型 """
-    kind : Literal["step"]
+    kind : Literal["step"] = "step"
     api : ApiUnion = Field(..., description= "当前步骤的接口请求信息")
     request : RequestUnion = Field(..., description= "当前步骤的请求体信息")
     strategy : list[StrategyUnion] = Field(... , description= "当前步骤需要执行的策略集")
 
 class StepRef(RefBase) :
-    kind : Literal["stepref"] = "stepref"
+    kind : Literal["step_ref"] = "step_ref"
 
 StepUnion = Annotated[
     Union[Step, StepRef],

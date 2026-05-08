@@ -13,7 +13,7 @@ class Mock(Resource):
     portMapping : dict[int,int] = Field(description="端口映射")
 
 class File(Resource):
-    kind : Literal["fileref"] = "fileref"
+    kind : Literal["file"] = "file"
     name : str = Field(description="文件资源名")
     path : str = Field(description="路径或ref")
 

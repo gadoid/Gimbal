@@ -3,7 +3,7 @@ from typing import Any, Optional, Literal , Union , Annotated, Dict
 from .ref import RefBase
 
 class RequestRef(RefBase) :
-    kind : Literal["requestref"] = "requestref"
+    kind : Literal["request_ref"] = "request_ref"
 
 RequestUnion = Annotated[
     Union[Dict,RequestRef],
