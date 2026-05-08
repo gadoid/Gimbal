@@ -3,26 +3,16 @@ from datetime import datetime
 from typing import Any, Optional, Literal , Union , Annotated
 from .resource import Resource
 from .strategy import StrategyUnion
-
-class Ref(BaseModel) :
-    ref : str 
+from .ref import Ref
 
 class Api(BaseModel) :
     pass
 
-class Action(BaseModel):
+class Step(BaseModel):
     """ 单步骤数据模型 """
     api : Api = Field(..., description= "当前步骤的接口请求信息")
     request : dict = Field(..., description= "当前步骤的请求体信息")
     strategy : list[StrategyUnion] = Field(... , description= "当前步骤需要执行的策略集")
-
-class Scenario(BaseModel): 
-    """ 用例数据模型 """
-    scenarioId : str = Field(..., description="场景，用例ID，前缀为sc" )  #  后续定义一个随机的Id生成器/工厂
-    meta : Meta = Field(..., description="用例的元信息，用于管理用例")
-    config : Config = Field(..., description="本次执行的配置信息")
-    resource : dict[str , Union[Resource, Ref]] = Field(description="存放用例需要执行的相关资源信息")
-    steps : dict[int , Union[Action,Ref]] = Field(..., description="存放具体的执行过程")
 
 class Meta(BaseModel):
     """ 用例信息配置模型 """
@@ -62,11 +52,22 @@ class Config(BaseModel):
     timeStrategy : Union[TimeoutStrategy, RecordStrategy] = Field(default_factory=RecordStrategy, discriminator="mode", description="时间处理策略:超时检查或耗时记录")
     retry : RetryPolicy =  None # 定义重试策略
 
+ResourceUnion = Annotated[
+    Union[Resource,Ref],
+    Field(discriminator="kind")
+]
+
+StepUnion = Annotated[
+    Union[Step,Ref],
+    Field(discriminator="kind")
+]
+
+class Scenario(BaseModel): 
+    """ 用例数据模型 """
+    scenarioId : str = Field(..., description="场景，用例ID，前缀为sc" )  #  后续定义一个随机的Id生成器/工厂
+    meta : Meta = Field(..., description="用例的元信息，用于管理用例")
+    config : Config = Field(..., description="本次执行的配置信息")
+    resource : dict[str , Union[Resource, Ref]] = Field(description="存放用例需要执行的相关资源信息")
+    steps : list[StepUnion] = Field(..., description="存放具体的执行过程")
 
 
-    
-
-class Steps(BaseModel) :
-    """ 执行步骤包装模型 """
-    StepsId : int = Field(...,default_factory=Stepsgenerator, description="")
-    Actions : dict[str ,Strategy]

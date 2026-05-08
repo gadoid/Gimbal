@@ -1,13 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Any
 
-
-class Resource(BaseModel):
-    """ 资源模型 """
-    mocks : list[MockSpec] = Field([], description= "mock服务声明")
-    fixture : list[FixtureRef] = Field([], description= "数据夹具引用")
-    files : list[Fileref] = Field([], description="文件资源")
-
 class MockSpec(BaseModel):
     name : str = Field(description="mock服务名")
     image : str = Field(description="容器镜像")
@@ -19,7 +12,14 @@ class FixtureRef(BaseModel):
     source : str = Field(description= "夹具来源" )
     target : str = Field(description= "目标位置" ) 
 
-class Fileref(BaseModel):
+class FileRef(BaseModel):
     name : str = Field(description="文件资源名")
     path : str = Field(description="路径或ref")
     
+
+class Resource(BaseModel):
+    """ 资源模型 """
+    mocks : list[MockSpec] = Field([], description= "mock服务声明")
+    fixture : list[FixtureRef] = Field([], description= "数据夹具引用")
+    files : list[FileRef] = Field([], description="文件资源")
+
