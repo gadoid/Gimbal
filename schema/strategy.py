@@ -1,7 +1,7 @@
-from pydantic import BaseModel, Field , ConfigDict
-from typing import Any , Optional , Literal, Union, Annotated, List, Dict
+from pydantic import BaseModel, Field 
+from typing import Any , Optional , Literal, Union, Annotated, List
 from enum import Enum
-from .ref import Ref
+from .ref import RefBase
 
 class Scope(str, Enum):
     FRAMEWORK = "framework"
@@ -81,7 +81,7 @@ class Assertion(StrategyBase) :
     message : Optional[str] = None # 断言失败信息
     soft: bool = False # 软断言
 
-class StrategyRef(Ref) : 
+class StrategyRef(RefBase) : 
     kind : Literal["strategyref"] = "strategyref"
 
 

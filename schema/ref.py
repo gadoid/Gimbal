@@ -1,5 +1,4 @@
 from pydantic import BaseModel, Field, model_validator, ConfigDict
 
-class Ref(BaseModel) :
+class RefBase(BaseModel) :
     ref : str 
-    
