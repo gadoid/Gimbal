@@ -1,0 +1,1 @@
+"""PluginSpec definitions."""

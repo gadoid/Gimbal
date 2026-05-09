@@ -1,0 +1,1 @@
+"""Ref resolver hook."""

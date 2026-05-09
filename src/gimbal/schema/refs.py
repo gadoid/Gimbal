@@ -1,0 +1,1 @@
+"""Ref string type constraints."""

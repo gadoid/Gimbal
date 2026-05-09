@@ -1,0 +1,1 @@
+"""Suite manager module."""

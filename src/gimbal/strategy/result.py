@@ -1,0 +1,1 @@
+"""StrategyResult definition."""

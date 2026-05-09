@@ -1,0 +1,1 @@
+"""Assemble prompt template."""

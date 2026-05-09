@@ -1,0 +1,1 @@
+"""Standard event type definitions."""

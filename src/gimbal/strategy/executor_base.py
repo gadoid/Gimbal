@@ -1,0 +1,1 @@
+"""StrategyExecutor abstract."""

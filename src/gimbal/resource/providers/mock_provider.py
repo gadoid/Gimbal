@@ -1,0 +1,1 @@
+"""MockProvider implementation."""

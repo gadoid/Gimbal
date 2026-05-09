@@ -1,0 +1,1 @@
+"""Entry points auto-discovery."""
