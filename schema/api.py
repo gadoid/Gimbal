@@ -18,3 +18,17 @@ ApiUnion = Annotated[
     Field(discriminator = "kind"),
 ]
 
+
+if __name__ == "__main__":
+    # 测试 Api 实例化
+    api = Api(
+        service="user-service",
+        method="GET",
+        path="/api/users/{id}"
+    )
+    print(f"Api 测试: service={api.service}, method={api.method}, path={api.path}")
+
+    # 测试 ApiRef 实例化
+    api_ref = ApiRef(ref="api_ref_1")
+    print(f"ApiRef 测试: ref={api_ref.ref}")
+

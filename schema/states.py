@@ -10,3 +10,9 @@ class StepState(str, Enum):
     PASSED = "passed"
     FAILED = "failed"
     SKIPPED = "skipped"
+
+
+if __name__ == "__main__":
+    # 测试 StepState 实例化
+    state = StepState.PENDING
+    print(f"StepState 枚举测试: {state} = {state.value}")

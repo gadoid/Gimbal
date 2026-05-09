@@ -20,3 +20,30 @@ StepUnion = Annotated[
     Union[Step, StepRef],
     Field(discriminator="kind")
 ]
+
+
+if __name__ == "__main__":
+    from .api import Api
+    from .request import Request
+    from .strategy import Extract, StrategyPhase, ExtractSource, Scope
+
+    # 测试 Step 实例化
+    step = Step(
+        api=Api(service="test", method="GET", path="/test"),
+        request=Request(body={}),
+        strategy=[
+            Extract(
+                name="extract_token",
+                phase=StrategyPhase.AFTER_REQUEST,
+                source=ExtractSource.RESPONSE_BODY,
+                expression="$.token",
+                target="auth_token",
+                scope=Scope.SCENARIO
+            )
+        ]
+    )
+    print(f"Step 测试: kind={step.kind}, strategy count={len(step.strategy)}")
+
+    # 测试 StepRef 实例化
+    step_ref = StepRef(ref="step_ref_1")
+    print(f"StepRef 测试: ref={step_ref.ref}")

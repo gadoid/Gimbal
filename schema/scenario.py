@@ -32,12 +32,58 @@ class Config(BaseModel):
     timePolicy : TimePolicyUnion = Field(default_factory=RecordPolicy, description="时间处理策略:超时检查或耗时记录")
     retry : Optional[RetryPolicy] = None # 定义重试策略
 
-class Scenario(BaseModel): 
+class Scenario(BaseModel):
     """ 用例数据模型 """
     scenarioId : str = Field(..., description="场景，用例ID，前缀为sc" )  #  后续定义一个随机的Id生成器/工厂
     meta : Meta = Field(..., description="用例的元信息，用于管理用例")
     config : Config = Field(..., description="本次执行的配置信息")
     resource : dict[str , ResourceUnion] = Field(description="存放用例需要执行的相关资源信息")
     steps : list[StepUnion] = Field(..., description="存放具体的执行过程")
+
+
+if __name__ == "__main__":
+    from .resource import Mock
+    from .step import Step
+    from .api import Api
+    from .request import Request
+
+    # 测试 Meta 实例化
+    meta = Meta(
+        name="test_scenario",
+        description="测试场景",
+        module="user_module",
+        priority=1,
+        author="tester",
+        owner="developer",
+        tags=["smoke", "regression"],
+        version="1.0.0",
+        createTime=datetime.now(),
+        expire=False,
+        requirementRef=[]
+    )
+    print(f"Meta 测试: name={meta.name}, module={meta.module}")
+
+    # 测试 Config 实例化
+    config = Config(
+        serviceDict={"user-service": "http://localhost:8080"},
+        authDict={"token": "test_token"}
+    )
+    print(f"Config 测试: serviceDict={config.serviceDict}")
+
+    # 测试 Scenario 实例化
+    scenario = Scenario(
+        scenarioId="sc_001",
+        meta=meta,
+        config=config,
+        resource={"mock1": Mock(name="mock1", image="nginx", config={}, portMapping={})},
+        steps=[
+            Step(
+                api=Api(service="test", method="GET", path="/test"),
+                request=Request(body={}),
+                strategy=[]
+            )
+        ]
+    )
+    print(f"Scenario 测试: scenarioId={scenario.scenarioId}, steps count={len(scenario.steps)}")
 
 

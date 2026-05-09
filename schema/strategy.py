@@ -90,15 +90,44 @@ StrategyUnion = Annotated[
     Field(discriminator="kind")
 ]
 
-# class Composite(Strategy) :
-#     pass
 
-# class Sql(Strategy) :
-#     kind : Literal["sql"] = "sql"
-#     source : 
+if __name__ == "__main__":
+    # 测试枚举类
+    print(f"Scope 测试: {Scope.SCENARIO.value}")
+    print(f"AssertOperator 测试: {AssertOperator.EQ.value}")
+    print(f"StrategyPhase 测试: {StrategyPhase.BEFORE_REQUEST.value}")
+    print(f"FailurePolicy 测试: {FailurePolicy.ABORT.value}")
+    print(f"ExtractSource 测试: {ExtractSource.RESPONSE_BODY.value}")
 
-# class Poll(Strategy) :
-#     pass
+    # 测试 StrategyBase 实例化
+    strategy_base = StrategyBase(name="base_strategy")
+    print(f"StrategyBase 测试: name={strategy_base.name}")
 
-# class Chaos(Strategy) :
-#     pass
+    # 测试 Extract 实例化
+    extract = Extract(
+        source=ExtractSource.RESPONSE_BODY,
+        expression="$.data.id",
+        target="data_id",
+        scope=Scope.SCENARIO
+    )
+    print(f"Extract 测试: source={extract.source}, target={extract.target}")
+
+    # 测试 Assign 实例化
+    assign = Assign(
+        source="fixed_value",
+        target="output_field",
+        scope=Scope.STEP
+    )
+    print(f"Assign 测试: source={assign.source}, target={assign.target}")
+
+    # 测试 Assertion 实例化
+    assertion = Assertion(
+        target="response.status",
+        operator=AssertOperator.EQ,
+        expected=200
+    )
+    print(f"Assertion 测试: target={assertion.target}, operator={assertion.operator}")
+
+    # 测试 StrategyRef 实例化
+    strategy_ref = StrategyRef(ref="strategy_ref_1")
+    print(f"StrategyRef 测试: ref={strategy_ref.ref}")

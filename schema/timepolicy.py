@@ -18,3 +18,13 @@ TimePolicyUnion = Annotated[
     Union[TimeoutPolicy, RecordPolicy],
     Field(discriminator="kind")
 ]
+
+
+if __name__ == "__main__":
+    # 测试 TimeoutPolicy 实例化
+    timeout = TimeoutPolicy(seconds=60)
+    print(f"TimeoutPolicy 测试: kind={timeout.kind}, seconds={timeout.seconds}")
+
+    # 测试 RecordPolicy 实例化
+    record = RecordPolicy()
+    print(f"RecordPolicy 测试: kind={record.kind}")

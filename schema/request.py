@@ -13,3 +13,13 @@ RequestUnion = Annotated[
     Union[Request,RequestRef],
     Field(discriminator="kind")
 ]
+
+
+if __name__ == "__main__":
+    # 测试 Request 实例化
+    request = Request(body={"userId": 123, "name": "test"})
+    print(f"Request 测试: body={request.body}")
+
+    # 测试 RequestRef 实例化
+    request_ref = RequestRef(ref="request_ref_1")
+    print(f"RequestRef 测试: ref={request_ref.ref}")
