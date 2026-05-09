@@ -1,0 +1,4 @@
+environment: prod
+
+services:
+  base_url: "https://api.example.com"
