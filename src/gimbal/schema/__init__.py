@@ -1,9 +1,9 @@
 """静态描述层 - Pydantic 模型定义"""
 from .states import StepState
 from .ref import RefBase
-from .resource import Resource, Mock, File, ResourceUnion
+from .resource import Resource, Mock, File, MockRef, FileRef, ResourceUnion
 from .api import Api, ApiRef, ApiUnion
-from .request import RequestRef, RequestUnion
+from .request import Request, RequestRef, RequestUnion
 from .step import Step, StepRef, StepUnion
 from .strategy import (
     StrategyBase, Extract, Assign, Assertion, StrategyRef, StrategyUnion,
@@ -12,6 +12,8 @@ from .strategy import (
 from .timepolicy import TimePolicy, TimeoutPolicy, RecordPolicy, TimePolicyUnion
 from .retrypolicy import RetryPolicy
 from .scenario import Scenario, Meta, Config
+from .setup import Setup, SetupRef, SetupUnion
+from .teardown import Teardown, TeardownRef, TeardownUnion
 
 __all__ = [
     "StepState",
@@ -19,10 +21,13 @@ __all__ = [
     "Resource",
     "Mock",
     "File",
+    "MockRef",
+    "FileRef",
     "ResourceUnion",
     "Api",
     "ApiRef",
     "ApiUnion",
+    "Request",
     "RequestRef",
     "RequestUnion",
     "Step",
@@ -47,4 +52,10 @@ __all__ = [
     "Scenario",
     "Meta",
     "Config",
+    "Setup",
+    "SetupRef",
+    "SetupUnion",
+    "Teardown",
+    "TeardownRef",
+    "TeardownUnion",
 ]
