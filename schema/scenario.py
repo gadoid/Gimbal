@@ -6,7 +6,8 @@ from .ref import RefBase
 from .step import StepUnion
 from .timepolicy import TimePolicyUnion, RecordPolicy
 from .retrypolicy import RetryPolicy
-
+from .setup import SetupUnion
+from .teardown import TeardownUnion
 
 class Meta(BaseModel):
     """ 用例信息配置模型 """
@@ -24,11 +25,11 @@ class Meta(BaseModel):
 
 class Config(BaseModel):
     """ 用例执行配置模型 """
-    setup : list = Field(... ,description= "用例前置动作")
-    teardown : list = Field(description= "用例后置动作")
+    setup : list[SetupUnion] = Field(default_factory=list , description= "用例前置动作")
+    teardown : list[TeardownUnion] = Field(default_factory=list , description= "用例后置动作")
     serviceDict : dict[str, str] = Field(description= "服务与URL映射关系")
     authDict : dict[str, Any] = Field(description= "认证信息字典")
-    timePolicy : TimePolicyUnion = Field(default_factory=RecordPolicy, discriminator="kind", description="时间处理策略:超时检查或耗时记录")
+    timePolicy : TimePolicyUnion = Field(default_factory=RecordPolicy, description="时间处理策略:超时检查或耗时记录")
     retry : Optional[RetryPolicy] = None # 定义重试策略
 
 class Scenario(BaseModel): 

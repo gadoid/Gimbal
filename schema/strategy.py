@@ -51,7 +51,7 @@ class StrategyBase(BaseModel) :
     phase : Optional[StrategyPhase] = None           # 处理的阶段
     order : int = 0   # 执行顺序
     enabled : bool = True  # 是否启动
-    on_failure : FailurePolicy = FailurePolicy.ABORT  #失败处理策略
+    onFailure : FailurePolicy = FailurePolicy.ABORT  #失败处理策略
     timeout : Optional[float] = None   # 策略执行超时
     # condition : Optional[str] = None   # 条件表达式
     tags : List[str] =  Field(default_factory=list)  # 标签
