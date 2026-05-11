@@ -36,6 +36,10 @@ class OrderStrategy(str, Enum):
     parallel = "parallel"
     as_given = "as-given"
 
+class InputFormat(str, Enum) :
+    auto = "auto"
+    json = "json"
+    yaml = "yaml"
 
 class LogLevel(str, Enum):
     debug = "debug"
@@ -69,6 +73,15 @@ class AuthMode(str, Enum):
 EnvOpt = Annotated[
     str,
     typer.Option("--env", help="目标环境。", rich_help_panel="环境与日志"),
+]
+
+FormatOpt = Annotated[
+    str,
+    typer.Option(
+        "-f", "--format", 
+        help="输入格式。auto 时按扩展名/内容推断;stdin 和 --inline 必须显式指定。",
+        rich_help_panel = "输入控制"
+    ),
 ]
 
 ProfileOpt = Annotated[

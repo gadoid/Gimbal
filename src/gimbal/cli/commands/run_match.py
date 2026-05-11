@@ -1,4 +1,4 @@
-"""aqua run match —— 按路径/模式匹配本地未注册文件执行。"""
+"""gimbal run match —— 按路径/模式匹配本地未注册文件执行。"""
 from __future__ import annotations
 
 import sys
@@ -105,13 +105,14 @@ def match(
 
     [bold]示例：[/bold]
 
-      aqua run match "tests/customs/**/*.yaml"
-      aqua run match "id:sc-customs-*" --tag=smoke
-      aqua run match --changed-only --changed-since=main
-      aqua run match "tests/**" --collect-only
-      aqua run match --last-failed
+      gimbal run match "tests/customs/**/*.yaml"
+      gimbal run match "id:sc-customs-*" --tag=smoke
+      gimbal run match --changed-only --changed-since=main
+      gimbal run match "tests/**" --collect-only
+      gimbal run match --last-failed
     """
     cli_ctx: CLIContext = ctx.obj
+    cli_ctx.action_path = "run.match"
 
     if not patterns and not (last_failed or changed_only):
         raise typer.BadParameter(

@@ -1,4 +1,4 @@
-"""aqua run suite —— 按 ID 执行 Suite 资产。"""
+"""gimbal run suite —— 按 ID 执行 Suite 资产。"""
 from __future__ import annotations
 
 import sys
@@ -73,13 +73,14 @@ def suite(
 
     [bold]示例：[/bold]
 
-      aqua run suite customs-declare
-      aqua run suite customs-declare forex-settle --order=parallel
-      aqua run suite "customs/*" --yes
-      aqua run suite customs/declare:v1.2 --source=remote
-      aqua run suite tax-refund --include-scenario=happy-path
+      gimbal run suite customs-declare
+      gimbal run suite customs-declare forex-settle --order=parallel
+      gimbal run suite "customs/*" --yes
+      gimbal run suite customs/declare:v1.2 --source=remote
+      gimbal run suite tax-refund --include-scenario=happy-path
     """
     cli_ctx: CLIContext = ctx.obj
+    cli_ctx.action_path = "run.suite"
 
     # 1. 协调资产来源
     resolved_source = resolve_source(source, no_cache, cache_only)

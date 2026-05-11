@@ -1,4 +1,4 @@
-"""Run scenario command - 按 ID 执行 Scenario 资产。"""
+"""Run scenario command."""
 from __future__ import annotations
 
 import sys
@@ -73,10 +73,10 @@ def scenario(
 
     [bold]示例：[/bold]
 
-      aqua run scenario sc-payment-001
-      aqua run scenario sc-001 sc-002 --continue-on-error
-      aqua run scenario "payment/sc-*" --yes
-      aqua run scenario sc-001 --step-from=3 --breakpoint=5
+      gimbal run scenario sc-payment-001
+      gimbal run scenario sc-001 sc-002 --continue-on-error
+      gimbal run scenario "payment/sc-*" --yes
+      gimbal run scenario sc-001 --step-from=3 --breakpoint=5
     """
     cli_ctx: CLIContext = ctx.obj
 

@@ -23,3 +23,4 @@ class CLIContext:
     verbose: bool = False
 
     extras: dict[str, Any] = field(default_factory=dict)
+    action_path : str = ""

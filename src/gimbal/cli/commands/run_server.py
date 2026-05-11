@@ -1,4 +1,4 @@
-"""aqua run server —— 作为常驻服务接收任务并执行。"""
+"""gimbal run server —— 作为常驻服务接收任务并执行。"""
 from __future__ import annotations
 
 from typing import Annotated
@@ -96,12 +96,13 @@ def server(
 
     [bold]示例：[/bold]
 
-      aqua run server --port=8765
-      aqua run server --host=0.0.0.0 --workers=8 --max-concurrent=20
-      aqua run server --health-port=8080 --metrics-port=9090
-      aqua run server --register-to=https://scheduler --auth=token --token-file=/etc/aqua/token
+      gimbal run server --port=8765
+      gimbal run server --host=0.0.0.0 --workers=8 --max-concurrent=20
+      gimbal run server --health-port=8080 --metrics-port=9090
+      gimbal run server --register-to=https://scheduler --auth=token --token-file=/etc/gimbal/token
     """
     cli_ctx: CLIContext = ctx.obj
+    cli_ctx.action_path = "run.server"
 
     if auth == AuthMode.token and not token_file:
         raise typer.BadParameter("--auth=token 需要同时指定 --token-file。")
