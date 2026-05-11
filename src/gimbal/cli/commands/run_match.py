@@ -105,11 +105,11 @@ def match(
 
     [bold]示例：[/bold]
 
-      gimbal run match "tests/customs/**/*.yaml"
-      gimbal run match "id:sc-customs-*" --tag=smoke
-      gimbal run match --changed-only --changed-since=main
-      gimbal run match "tests/**" --collect-only
-      gimbal run match --last-failed
+        gimbal run match "tests/customs/**/*.yaml"
+        gimbal run match "id:sc-customs-*" --tag=smoke
+        gimbal run match --changed-only --changed-since=main
+        gimbal run match "tests/**" --collect-only
+        gimbal run match --last-failed
     """
     cli_ctx: CLIContext = ctx.obj
     cli_ctx.action_path = "run.match"

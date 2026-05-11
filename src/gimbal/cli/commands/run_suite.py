@@ -73,11 +73,11 @@ def suite(
 
     [bold]示例：[/bold]
 
-      gimbal run suite customs-declare
-      gimbal run suite customs-declare forex-settle --order=parallel
-      gimbal run suite "customs/*" --yes
-      gimbal run suite customs/declare:v1.2 --source=remote
-      gimbal run suite tax-refund --include-scenario=happy-path
+        gimbal run suite customs-declare
+        gimbal run suite customs-declare forex-settle --order=parallel
+        gimbal run suite "customs/*" --yes
+        gimbal run suite customs/declare:v1.2 --source=remote
+        gimbal run suite tax-refund --include-scenario=happy-path
     """
     cli_ctx: CLIContext = ctx.obj
     cli_ctx.action_path = "run.suite"

@@ -76,13 +76,14 @@ EnvOpt = Annotated[
 ]
 
 FormatOpt = Annotated[
-    str,
+    InputFormat,
     typer.Option(
         "-f", "--format", 
         help="输入格式。auto 时按扩展名/内容推断;stdin 和 --inline 必须显式指定。",
         rich_help_panel = "输入控制"
     ),
 ]
+
 
 ProfileOpt = Annotated[
     str,
