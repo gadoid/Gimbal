@@ -1,1 +1,0 @@
-"""Four-level Scope implementations."""
