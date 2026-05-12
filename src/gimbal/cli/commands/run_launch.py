@@ -17,7 +17,8 @@ from gimbal.cli.common import (
 )
 from gimbal.cli.context import CLIContext
 from gimbal.core.asset_resolver import AssetKind
-from gimbal.core.runner import LocalMatcher, Runner, RunRequest
+from gimbal.core.runner import Runner, RunRequest
+from gimbal.schema import Scenario
 
 class InputError(typer.BadParameter):
     """输入参数错误。"""
@@ -174,7 +175,6 @@ def launch(
         cat case.yaml | gimbal run launch - -f yaml
     """
     clictx: CLIContext = ctx.obj
-    clictx.action_path = "run.launch"
     # 1. 归一化输入 → dict
     payload: dict = normalize_input(source, inline, fmt)
 
@@ -184,37 +184,8 @@ def launch(
         raise typer.Exit(code=0)
 
     # 3. 交给 Runner 执行 (这里按你现有 Runner 接口填实参)
-    request = RunRequest(
-        kind="scenario",
-        targets=["hello"],
-        env=env,
-        tags=tag or [],
-        log_level=log_level,
-    )
-
-    request = RunRequest(
-        kind=AssetKind.SCENARIO,
-        targets=matched,
-        env=env,
-        profile=profile,
-        log_level=log_level.value,
-        tags=tag or [],
-        variables=parse_vars(var),
-        var_files=var_file or [],
-        parallel=parse_parallel(parallel),
-        timeout=timeout,
-        retry=retry,
-        dry_run=dry_run,
-        fail_fast=fail_fast,
-        reporters=reporter or ["console"],
-        report_dir=report_dir,
-        output=output.value,
-        order=order.value,
-        continue_on_error=continue_on_error,
-        step_from=step_from,
-        step_to=step_to,
-        breakpoints=breakpoint_at or [],
-    )
-    # runner = Runner(matcher=LocalMatcher(), context=clictx)
-    # runner.run(request)
+    Runner(
+        RunRequest(run= Scenario.model_validate(dict)),
+        clictx,
+    ).run()
 

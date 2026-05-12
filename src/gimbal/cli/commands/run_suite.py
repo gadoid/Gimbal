@@ -80,7 +80,6 @@ def suite(
         gimbal run suite tax-refund --include-scenario=happy-path
     """
     cli_ctx: CLIContext = ctx.obj
-    cli_ctx.action_path = "run.suite"
 
     # 1. 协调资产来源
     resolved_source = resolve_source(source, no_cache, cache_only)

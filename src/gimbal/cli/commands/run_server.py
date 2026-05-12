@@ -102,7 +102,6 @@ def server(
       gimbal run server --register-to=https://scheduler --auth=token --token-file=/etc/gimbal/token
     """
     cli_ctx: CLIContext = ctx.obj
-    cli_ctx.action_path = "run.server"
 
     if auth == AuthMode.token and not token_file:
         raise typer.BadParameter("--auth=token 需要同时指定 --token-file。")

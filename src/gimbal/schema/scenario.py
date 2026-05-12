@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, model_validator, ConfigDict
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, Literal, Annotated, Union
 from .resource import ResourceUnion
 from .ref import RefBase
 from .step import StepUnion
@@ -34,12 +34,27 @@ class Config(BaseModel):
 
 class Scenario(BaseModel):
     """ 用例数据模型 """
+    kind : Literal["scenario"] = "scenario"
     scenarioId : str = Field(..., description="场景，用例ID，前缀为sc" )  #  后续定义一个随机的Id生成器/工厂
     meta : Meta = Field(..., description="用例的元信息，用于管理用例")
     config : Config = Field(..., description="本次执行的配置信息")
     resource : dict[str , ResourceUnion] = Field(description="存放用例需要执行的相关资源信息")
     steps : list[StepUnion] = Field(..., description="存放具体的执行过程")
 
+class ScenarioRef(RefBase) :
+    kind : Literal["scenario_ref"] = "scenario_ref"
+
+class Suite(BaseModel):
+    kind : Literal["suite"] = "suite"
+    suite : list[Scenario] = Field(..., description="scenario集合，暂时使用列表实现" )
+
+class SuiteRef(RefBase) :
+    kind : Literal["suite_ref"] = "suite_ref"
+
+RunUnion = Annotated[
+    Union[Scenario,ScenarioRef,Suite,SuiteRef],
+    Field(discriminator="kind")
+]
 
 if __name__ == "__main__":
     from .resource import Mock
