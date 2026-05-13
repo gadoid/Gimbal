@@ -10,7 +10,8 @@ class FrameworkContext(SealedBaseModel):
     run_id: str
     started_at: datetime
     framework_version: str
-    config: dict
+    config: dict = Field(default_factory=dict)
+    # 装载全部的启动时配置信息
     environment: str
     
     # Channels 字段标记 exclude——序列化时 Channels 自己有 snapshot 方法

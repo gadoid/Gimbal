@@ -1,1 +1,0 @@
-"""GIMBAL Engine main controller."""

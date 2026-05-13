@@ -25,6 +25,7 @@ class ContextManager:
         framework_version: str,
         channels_policy: Optional[ChannelsPolicy] = None,
     ) -> FrameworkContext:
+        # 增加配置层的初始化
         channels = Channels(
             owner_layer=ContextLayer.FRAMEWORK,
             policy=channels_policy or Policies.framework_locked(),
