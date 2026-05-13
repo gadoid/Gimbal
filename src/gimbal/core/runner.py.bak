@@ -1,0 +1,295 @@
+# """执行器与本地匹配器。
+
+# CLI 层只负责构造 RunRequest，具体执行委托给 Runner。
+# Runner 内部对接你的 Scenario/Strategy/状态机执行引擎。
+# """
+# from __future__ import annotations
+
+# from pydantic import BaseModel, Field
+# from pathlib import Path
+# from typing import Any, Annotated
+# from schema.scenario import RunUnion
+# import typer
+
+# from gimbal.cli.context import CLIContext
+# from gimbal.core.asset_resolver import AssetKind, ResolvedAsset
+
+# class Reference(BaseModel) :
+#     refLink : str = "占位"
+
+# class RuntimeOptions(BaseModel) :
+#     env: str = "dev"
+#     profile : str = "default"
+#     log_level: str = "info"
+#     reporters: list[str] = Field(default_factory=list)
+#     reportDir: str = "./reports"
+#     output: str = "console" 
+
+# class RunRequest(BaseModel):
+#     """一次执行请求，CLI 层构造，执行层消费。
+
+#     这是 CLI 和核心引擎之间的契约。后续即使把入口换成
+#     HTTP API / gRPC，只要能拼出 RunRequest，引擎层无需改动。
+#     """
+#     run: RunUnion = Field(..., description="最终待执行的内容")
+#     reference: Reference = Field(default_factory=Reference, description="引用的服务地址")
+#     runtime : RuntimeOptions = Field(default_factory=RuntimeOptions, description="运行时配置")
+
+#     # 多目标控制
+#     # order: str = "as-given"
+#     # continue_on_error: bool = False
+
+# class RunResult(BaseModel):
+#     """执行结果。"""
+#     exit_code: int = 0
+#     total: int = 0
+#     passed: int = 0
+#     failed: int = 0
+#     skipped: int = 0
+
+
+# class Runner:
+#     """执行器入口。占位实现，演示接口。"""
+
+#     def __init__(self,runrequest: RunRequest, ctx: CLIContext) -> None:
+#         self.runrequest = runrequest
+#         self.ctx = ctx
+
+#     def run(self) -> RunResult:
+#         typer.echo(f"[Runner] kind={request.kind.value}, targets={len(request.targets)}")
+#         typer.echo(f"[Runner] env={request.env}, profile={request.profile}")
+#         typer.echo(f"[Runner] parallel={request.parallel}, timeout={request.timeout}s")
+#         if request.dry_run:
+#             typer.echo(typer.style("[Runner] DRY-RUN mode, no actual execution.", fg=typer.colors.YELLOW))
+#         for t in request.targets:
+#             typer.echo(f"  → {t.id} ({t.source_path})")
+#         # TODO: 接入你的 Scenario/Strategy 执行引擎
+#         return RunResult(exit_code=0, total=len(request.targets), passed=len(request.targets))
+
+"""执行器主入口（替换 core/runner.py 占位版本）。
+
+CLI 层只负责构造 RunRequest，Runner 负责：
+  1. bootstrap 基础设施（EventBus / Archive / ContextManager）
+  2. 构造 StrategyDispatcher（注册内置 executor）
+  3. 根据 RunRequest.run 的类型分发到 ScenarioRunner / SuiteRunner
+  4. 汇总 RunResult 返回给 CLI
+
+RunRequest.run 的类型（来自 schema.scenario.RunUnion）：
+  - Scenario    → 直接交给 ScenarioRunner
+  - Suite       → 遍历 suite.scenario 列表，依次调用 ScenarioRunner
+  - ScenarioRef / SuiteRef → 预处理阶段应已展开，若未展开则报错
+"""
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from gimbal.cli.context import CLIContext
+from gimbal.schema.scenario import RunUnion, Scenario, Suite
+
+logger = logging.getLogger(__name__)
+
+
+# ── RunRequest / RunResult（替换旧版）────────────────────────────────────────
+
+class RuntimeOptions(BaseModel):
+    env: str = "dev"
+    profile: str = "default"
+    log_level: str = "info"
+    reporters: list[str] = Field(default_factory=list)
+    report_dir: str = "./reports"
+    output: str = "console"
+    fail_fast: bool = False
+
+
+class Reference(BaseModel):
+    ref_link: str = ""
+
+
+class RunRequest(BaseModel):
+    """CLI 层和执行层之间的唯一契约。"""
+    run: RunUnion = Field(..., description="待执行内容：Scenario / Suite / 对应 Ref")
+    reference: Reference = Field(default_factory=Reference)
+    runtime: RuntimeOptions = Field(default_factory=RuntimeOptions)
+
+
+@dataclass
+class RunResult:
+    exit_code: int = 0
+    total: int = 0
+    passed: int = 0
+    failed: int = 0
+    skipped: int = 0
+    error: int = 0
+    details: list[dict[str, Any]] = field(default_factory=list)
+
+
+# ── Runner ───────────────────────────────────────────────────────────────────
+
+class Runner:
+    """顶层执行器。
+
+    用法::
+
+        request = RunRequest(run=scenario_obj)
+        runner = Runner(request, cli_ctx)
+        result = runner.run()
+    """
+
+    def __init__(self, run_request: RunRequest, ctx: CLIContext) -> None:
+        self.request = run_request
+        self.cli_ctx = ctx
+
+    def run(self) -> RunResult:
+        # 1. bootstrap
+        infra = self._bootstrap()
+
+        # 2. 根据 run 类型分发
+        run_target = self.request.run
+
+        if isinstance(run_target, Scenario):
+            return self._run_single_scenario(run_target, infra)
+
+        elif isinstance(run_target, Suite):
+            return self._run_suite(run_target, infra)
+
+        else:
+            # ScenarioRef / SuiteRef 未展开
+            logger.error("RunRequest.run is a Ref that was not resolved: %s", type(run_target))
+            return RunResult(exit_code=3, error=1)
+
+    # ── 分发处理 ─────────────────────────────────────────────────────────────
+
+    def _run_single_scenario(self, scenario: Scenario, infra: "_Infra") -> RunResult:
+        from gimbal.core.scenario_runner import ScenarioRunner
+
+        runner = ScenarioRunner(
+            dispatcher=infra.dispatcher,
+            ctx_manager=infra.ctx_manager,
+        )
+        result = runner.run(scenario, infra.suite_ctx)
+
+        passed = 1 if result.passed else 0
+        failed = 0 if result.passed else 1
+        exit_code = 0 if result.passed else 1
+
+        return RunResult(
+            exit_code=exit_code,
+            total=1,
+            passed=passed,
+            failed=failed,
+            details=[{
+                "scenario_id": result.scenario_id,
+                "status": result.status,
+                "duration_ms": result.duration_ms,
+                "steps": [
+                    {
+                        "step_id": sr.step_id,
+                        "status": sr.status,
+                        "duration_ms": sr.duration_ms,
+                    }
+                    for sr in result.step_results
+                ],
+            }],
+        )
+
+    def _run_suite(self, suite: Suite, infra: "_Infra") -> RunResult:
+        from gimbal.core.scenario_runner import ScenarioRunner
+
+        runner = ScenarioRunner(
+            dispatcher=infra.dispatcher,
+            ctx_manager=infra.ctx_manager,
+        )
+
+        total = passed = failed = error = 0
+        details = []
+        fail_fast = self.request.runtime.fail_fast
+
+        for scenario in suite.suite:
+            result = runner.run(scenario, infra.suite_ctx)
+            total += 1
+            if result.passed:
+                passed += 1
+            elif result.status == "error":
+                error += 1
+            else:
+                failed += 1
+
+            details.append({
+                "scenario_id": result.scenario_id,
+                "status": result.status,
+                "duration_ms": result.duration_ms,
+            })
+
+            if fail_fast and not result.passed:
+                logger.warning("fail_fast: stopping after first failure")
+                break
+
+        exit_code = 0 if (failed + error) == 0 else 1
+        return RunResult(
+            exit_code=exit_code,
+            total=total,
+            passed=passed,
+            failed=failed,
+            error=error,
+            details=details,
+        )
+
+    # ── 基础设施初始化 ────────────────────────────────────────────────────────
+
+    def _bootstrap(self) -> "_Infra":
+        """初始化最小化基础设施。
+
+        当前使用内存实现（EventBus / Archive），
+        生产环境替换为 MongoDB + MinIO 实现即可，Runner 层无需改动。
+        """
+        import uuid
+        from datetime import datetime
+
+        from gimbal.events.bus import InMemoryEventBus
+        from gimbal.repository.backends.filesystem import InMemoryArchive
+        from gimbal.context.manager import ContextManager
+        from gimbal.context.channels import ChannelsPolicy, Policies
+        from gimbal.strategy.dispatcher import build_default_dispatcher
+
+        event_bus = InMemoryEventBus()
+        archive = InMemoryArchive()
+        ctx_manager = ContextManager(archive=archive, event_bus=event_bus)
+
+        # 创建 Framework Context
+        framework_ctx = ctx_manager.create_framework_context(
+            run_id=str(uuid.uuid4()),
+            config={"env": self.cli_ctx.env},
+            environment=self.cli_ctx.env,
+            framework_version="0.1.0",
+        )
+
+        # 创建一个虚拟 Suite Context（单 scenario 执行也需要）
+        suite_ctx = ctx_manager.derive_suite_context(
+            framework_ctx,
+            suite_id="__default__",
+            suite_name="Default Suite",
+            tags=[],
+            plugins={},
+        )
+
+        dispatcher = build_default_dispatcher()
+
+        return _Infra(
+            ctx_manager=ctx_manager,
+            framework_ctx=framework_ctx,
+            suite_ctx=suite_ctx,
+            dispatcher=dispatcher,
+        )
+
+
+@dataclass
+class _Infra:
+    """Runner 内部基础设施，不对外暴露。"""
+    ctx_manager: Any
+    framework_ctx: Any
+    suite_ctx: Any
+    dispatcher: Any

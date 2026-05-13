@@ -2,6 +2,60 @@
 
 静态描述层，使用 Pydantic 定义测试框架的核心数据模型。
 
+## 设计理念
+
+### 1. 层次化设计
+
+Schema 层采用**自顶向下**的层次结构：
+
+```
+Scenario (场景)
+├── Meta (元信息)
+├── Config (配置)
+│   ├── setup/teardown (前置/后置动作)
+│   ├── timePolicy (时间策略)
+│   └── retry (重试策略)
+├── resource (资源)
+│   ├── Mock (Mock 服务)
+│   └── File (文件)
+└── steps (步骤列表)
+    ├── Step
+    │   ├── api (API 定义)
+    │   ├── request (请求体)
+    │   └── strategy (策略列表)
+    │       ├── Extract (字段提取)
+    │       ├── Assign (变量赋值)
+    │       └── Assertion (断言)
+```
+
+### 2. Discriminated Union
+
+使用 Pydantic 的 `Annotated[Union[...], Field(discriminator="kind")]` 实现类型安全的联合体：
+
+```python
+StepUnion = Annotated[
+    Union[Step, StepRef],
+    Field(discriminator="kind")
+]
+```
+
+序列化/反序列化时，Pydantic 自动根据 `kind` 字段选择正确的类型。
+
+### 3. 引用机制
+
+通过 `RefBase` 实现资产引用，支持：
+- 懒加载：先引用，后解析
+- 复用：同一资产可被多处引用
+- 追踪：通过 `ref` 字段追踪资产来源
+
+### 4. 扩展性
+
+- 所有模型都支持 `kind` 字段用于类型识别
+- 新增资产类型只需继承基类并声明 `kind`
+- Union 类型便于未来扩展
+
+---
+
 ## 模块结构总览
 
 | 文件 | 说明 | 导出类 |
@@ -525,7 +579,7 @@ Scenario
 ## 使用示例
 
 ```python
-from schema import (
+from gimbal import (
     Scenario, Meta, Config,
     Step, Api, Request,
     Extract, Assertion, Assign,
@@ -646,16 +700,16 @@ print(scenario.model_dump())
 
 ```bash
 # 使用 -m 方式运行模块测试
-python -m schema.states
-python -m schema.ref
-python -m schema.resource
-python -m schema.api
-python -m schema.request
-python -m schema.step
-python -m schema.strategy
-python -m schema.timepolicy
-python -m schema.retrypolicy
-python -m schema.scenario
-python -m schema.setup
-python -m schema.teardown
+python -m gimbal.schema.states
+python -m gimbal.schema.ref
+python -m gimbal.schema.resource
+python -m gimbal.schema.api
+python -m gimbal.schema.request
+python -m gimbal.schema.step
+python -m gimbal.schema.strategy
+python -m gimbal.schema.timepolicy
+python -m gimbal.schema.retrypolicy
+python -m gimbal.schema.scenario
+python -m gimbal.schema.setup
+python -m gimbal.schema.teardown
 ```

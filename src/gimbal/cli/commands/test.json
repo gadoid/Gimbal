@@ -1,3 +1,79 @@
 {
-    "name" : "codfish"
+  "kind": "scenario",
+  "scenarioId": "sc_001",
+  "meta": {
+    "name": "查询结算单详情-正常",
+    "description": "验证根据结算单ID查询详情接口返回200且数据非空",
+    "module": "settlement",
+    "priority": 1,
+    "author": "codfish",
+    "owner": "codfish",
+    "tags": ["smoke", "settlement"],
+    "version": "1.0.0",
+    "createTime": "2026-05-13T10:00:00",
+    "expire": false,
+    "requirementRef": []
+  },
+  "config": {
+    "setup": [],
+    "teardown": [],
+    "serviceDict": {
+      "settlement-service": "http://settlement-api.internal:8080"
+    },
+    "authDict": {
+      "token": "Bearer test_token_001"
+    },
+    "timePolicy": {
+      "kind": "record"
+    },
+    "retry": null
+  },
+  "resource": {},
+  "steps": [
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "settlement-service",
+        "method": "GET",
+        "path": "/api/v1/settlements/SL-2026-0001",
+        "headers": {
+          "Authorization": "${token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response.status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询结算单详情应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_data_not_empty",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.data",
+          "operator": "exists",
+          "expected": null,
+          "message": "响应体data字段不应为空",
+          "soft": false
+        }
+      ]
+    }
+  ]
 }

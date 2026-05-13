@@ -16,7 +16,7 @@ from gimbal.cli.common import (
 )
 from gimbal.cli.context import CLIContext
 from gimbal.core.asset_resolver import AssetKind, AssetResolver
-from gimbal.core.runner import Runner, RunRequest
+from gimbal.core.runner import Engine, bootstrap
 
 
 def scenario(
@@ -112,29 +112,3 @@ def scenario(
             typer.echo("Aborted.")
             raise typer.Exit(code=0)
 
-    request = RunRequest(
-        kind=AssetKind.SCENARIO,
-        targets=matched,
-        env=env,
-        profile=profile,
-        log_level=log_level.value,
-        tags=tag or [],
-        variables=parse_vars(var),
-        var_files=var_file or [],
-        parallel=parse_parallel(parallel),
-        timeout=timeout,
-        retry=retry,
-        dry_run=dry_run,
-        fail_fast=fail_fast,
-        reporters=reporter or ["console"],
-        report_dir=report_dir,
-        output=output.value,
-        order=order.value,
-        continue_on_error=continue_on_error,
-        step_from=step_from,
-        step_to=step_to,
-        breakpoints=breakpoint_at or [],
-    )
-
-    result = Runner(cli_ctx).run(request)
-    raise typer.Exit(code=result.exit_code)

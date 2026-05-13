@@ -4,21 +4,16 @@ from __future__ import annotations
 import sys
 from typing import Annotated
 from pathlib import Path
+from pprint import pprint
 
 import typer
 import yaml
 import json
 
-
-from gimbal.cli.common import (
-    AllowEmptyOpt, DryRunOpt, EnvOpt, LogLevel, LogLevelOpt,
-    InputFormat, FormatOpt, TagOpt, TimeoutOpt, VarFileOpt, VarOpt, YesOpt,
-    parse_parallel, parse_vars,
-)
+from gimbal.core.runner import bootstrap, Engine
+from gimbal.cli.common import DryRunOpt, EnvOpt, LogLevel, LogLevelOpt, InputFormat, FormatOpt
 from gimbal.cli.context import CLIContext
-from gimbal.core.asset_resolver import AssetKind
-from gimbal.core.runner import Runner, RunRequest
-from gimbal.schema import Scenario
+from gimbal.schema.scenario import Scenario
 
 class InputError(typer.BadParameter):
     """输入参数错误。"""
@@ -42,7 +37,7 @@ def _read_source(source: str | None, inline: str | None) -> tuple[str, str | Non
     # inline 字符串
     if inline is not None:
         return inline, None
-
+    
     # stdin
     if source == "-":
         if sys.stdin.isatty():
@@ -159,7 +154,14 @@ def launch(
     # ========== 通用 ==========
     env: EnvOpt = "dev",
     log_level: LogLevelOpt = LogLevel.info,
-    tag: TagOpt = None,
+    fail_fast: Annotated[
+        bool,
+        typer.Option("--fail-fast", help="首个失败即停止", rich_help_panel="执行控制"),
+    ] = False,
+    report_dir: Annotated[
+        str,
+        typer.Option("--report-dir", help="报告输出目录", rich_help_panel="执行控制"),
+    ] = "./reports",
     dry_run: DryRunOpt = False,
 ) -> None:
     """指定标准输入，用例文件或 inline 内容交给框架直接执行。
@@ -174,7 +176,6 @@ def launch(
         标准输入(stdin):
         cat case.yaml | gimbal run launch - -f yaml
     """
-    clictx: CLIContext = ctx.obj
     # 1. 归一化输入 → dict
     payload: dict = normalize_input(source, inline, fmt)
 
@@ -183,9 +184,24 @@ def launch(
         typer.echo(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         raise typer.Exit(code=0)
 
-    # 3. 交给 Runner 执行 (这里按你现有 Runner 接口填实参)
-    Runner(
-        RunRequest(run= Scenario.model_validate(dict)),
-        clictx,
-    ).run()
-    # 交给bootstrap 启动
+    # 3. cli上下文设置， (这里按你现有 Runner 接口填实参)
+    cli_ctx : CLIContext = ctx.obj
+    cli_ctx.extras["fail_fast"]  = fail_fast
+    cli_ctx.extras["report_dir"] = report_dir
+    cli_ctx.extras["env"] = env
+    cli_ctx.extras["log_level"] = log_level
+
+    #4. schema 检查
+    try:
+        scenario = Scenario.model_validate(payload)
+    except Exception as exc:
+        typer.secho(f"用例格式校验失败: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
+    
+    #5. 配置上下文初始化
+    initial_ctx  = bootstrap(ctx.obj)
+
+    #6. 执行器启动
+    result = Engine(initial_ctx).run(scenario)
+    pprint(result)
+    raise typer.Exit(code=0)
