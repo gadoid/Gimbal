@@ -10,12 +10,12 @@ bootstrap：
     - 调用 ConfigLoader 完成多来源配置合并 → FrameworkConfig
     - 配置日志系统
     - 初始化基础设施（EventBus / Archive / ContextManager / Dispatcher）
-    - 产出 InitialContext（不可变，安全传递）
+    - 产出 Configuration（不可变，安全传递）
 
 Engine.run()：
     - 接收 Scenario 或 Suite 数据对象
-    - 用 InitialContext 中的 ctx_manager 创建本次执行的层级 context
-      （FrameworkContext → SuiteContext，生命周期属于"一次执行"）
+    - 用 Configuration 中的 ctx_manager 创建本次执行的层级 context
+        （FrameworkContext → SuiteContext，生命周期属于"一次执行"）
     - 分发到 ScenarioRunner 执行
 """
 from __future__ import annotations
@@ -28,6 +28,8 @@ from typing import Any
 from gimbal.cli.context import CLIContext
 from gimbal.config.loader import ConfigLoader, FrameworkConfig
 from gimbal.schema.scenario import Scenario, Suite
+
+from .boostrap import bootstrap
 
 logger = logging.getLogger(__name__)
 
@@ -45,28 +47,6 @@ class RunResult:
     details: list[dict[str, Any]] = field(default_factory=list)
 
 
-# ── InitialContext ────────────────────────────────────────────────────────────
-
-@dataclass(frozen=True)
-class InitialContext:
-    """bootstrap 的唯一产出。
-
-    持有：
-      - cfg：合并后的完整配置快照（frozen）
-      - 基础设施引用：ctx_manager / dispatcher / event_bus / archive
-
-    不持有任何层级 Context（framework/suite/scenario/step），
-    这些在 Engine.run() 时按执行生命周期创建。
-
-    frozen=True：产出后不可修改，Engine 只读取，不覆盖。
-    """
-    cfg: FrameworkConfig
-    ctx_manager: Any
-    dispatcher: Any
-    # 以下两个供需要直接访问基础设施的场景（reporter、plugin 等）
-    event_bus: Any
-    archive: Any
-
 
 # ── Engine ────────────────────────────────────────────────────────────────────
 
@@ -77,15 +57,15 @@ class Engine:
     所有执行相关的状态都在 run() 内部创建，保证每次 run() 相互独立。
     """
 
-    def __init__(self, initial_ctx: InitialContext) -> None:
+    def __init__(self, initial_ctx: Configuration) -> None:
         self._ictx = initial_ctx
 
     def run(self, target: Scenario | Suite) -> RunResult:
         """执行入口。
 
         在此方法内创建本次执行的层级 context：
-          1. FrameworkContext  —— 全量配置写入，run_id 在此生成
-          2. SuiteContext      —— 单 scenario 执行时用 __default__ 占位
+            1. FrameworkContext  —— 全量配置写入，run_id 在此生成
+            2. SuiteContext      —— 单 scenario 执行时用 __default__ 占位
         然后分发到 ScenarioRunner。
         """
         ictx = self._ictx
@@ -128,7 +108,7 @@ class Engine:
         self,
         scenario: Scenario,
         framework_ctx: Any,
-        ictx: InitialContext,
+        ictx: Configuration,
     ) -> RunResult:
         from gimbal.core.scenario_runner import ScenarioRunner
         # 2. 为单 scenario 执行创建默认 SuiteContext
@@ -166,7 +146,7 @@ class Engine:
         self,
         suite: Suite,
         framework_ctx: Any,
-        ictx: InitialContext,
+        ictx: Configuration,
     ) -> RunResult:
         from gimbal.core.scenario_runner import ScenarioRunner
 
@@ -209,63 +189,3 @@ class Engine:
             details=details,
         )
 
-
-# ── bootstrap ─────────────────────────────────────────────────────────────────
-
-def bootstrap(cli_ctx: CLIContext) -> InitialContext:
-    """框架启动唯一入口。
-
-    职责：
-      1. 多来源配置合并 → FrameworkConfig
-      2. 配置日志系统
-      3. 初始化基础设施
-      4. 返回 InitialContext
-
-    不创建任何层级 Context（由 Engine.run() 负责）。
-    """
-    # 1. 配置合并
-    cfg = ConfigLoader().load(cli_ctx)
-
-    # 2. 日志（最先，后续所有日志才能正确输出）
-    _configure_logging(cfg)
-
-    logger.debug(
-        "[bootstrap] env=%s mode=%s log_level=%s",
-        cfg.env, cfg.mode, cfg.log_level,
-    )
-
-    # 3. 基础设施
-    from gimbal.events.bus import InMemoryEventBus
-    from gimbal.repository.backends.filesystem import InMemoryArchive
-    from gimbal.context.manager import ContextManager
-    from gimbal.strategy.dispatcher import build_default_dispatcher
-
-    event_bus = InMemoryEventBus()
-    archive   = InMemoryArchive()
-
-    return InitialContext(
-        cfg=cfg,
-        ctx_manager=ContextManager(archive=archive, event_bus=event_bus),
-        dispatcher=build_default_dispatcher(),
-        event_bus=event_bus,
-        archive=archive,
-    )
-
-
-# ── 辅助 ─────────────────────────────────────────────────────────────────────
-
-def _configure_logging(cfg: FrameworkConfig) -> None:
-    level = {
-        "debug":   logging.DEBUG,
-        "info":    logging.INFO,
-        "warning": logging.WARNING,
-        "error":   logging.ERROR,
-    }.get(cfg.log_level.lower(), logging.INFO)
-
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
-        force=True,
-    )
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)

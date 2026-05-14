@@ -188,7 +188,7 @@ def launch(
     cli_ctx.extras["log_level"] = log_level
 
     # 2. 传入ctx, 进行配置信息加载，返回所有信息合并后的上下文信息
-    initial_ctx  = bootstrap(cli_ctx)
+    configration  = bootstrap(cli_ctx)
     # 3. 持有信息后，进行内存总线初始化，插件初始化，资产仓库初始化，
 
 
@@ -210,6 +210,6 @@ def launch(
         raise typer.Exit(code=2)
 
     #8. 数据类有效，引用链接有效，执行器启动
-    result = Engine(initial_ctx).run(scenario)
+    result = Engine(configration).run(scenario)
     pprint(result)
     raise typer.Exit(code=0)

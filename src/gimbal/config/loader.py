@@ -17,10 +17,10 @@ from __future__ import annotations
 
 import logging
 import os
+import yaml
 from pathlib import Path
 from typing import Any
 from .models import FrameworkConfig
-
 from gimbal.cli.context import CLIContext
 
 logger = logging.getLogger(__name__)
@@ -38,6 +38,17 @@ _ENV_MAP: dict[str, str] = {
     "GIMBAL_REPORT_DIR":     "report_dir",
 }
 
+class ConfigLoadError(Exception):
+    """配置加载异常，包含清晰的上下文信息。"""
+    
+    def __init__(self, stage: str, source: str, original_error: Exception):
+        self.stage = stage
+        self.source = source
+        self.original_error = original_error
+        super().__init__(
+            f"配置加载失败 - 阶段: {stage}, 来源: {source}\n"
+            f"原因: {type(original_error).__name__}: {original_error}"
+        )
 
 class ConfigLoader:
     """多来源配置加载器。
@@ -50,31 +61,43 @@ class ConfigLoader:
 
     def load(self, cli_ctx: CLIContext) -> FrameworkConfig:
         """执行完整的多来源合并，返回 FrameworkConfig。"""
+        try:
+            # Step 1: 内置默认值
+            merged = FrameworkConfig.model_validate(self._defaults())
+            logger.debug("[ConfigLoader] 内置默认值加载成功")
+        except Exception as e:
+            raise ConfigLoadError("内置默认值", "defaults", e)
 
-        # Step 1: 内置默认值（最低优先级，作为 base）
-        merged: dict[str, Any] = self._defaults()
+        # Step 2: 配置文件加载
+        #  加载优先级 gimbal.yaml -> env -> mode -> cli -> 环境变量
+        if path := Path("gimbal.yaml").exists() :
+            default_cfg = yaml.safe_load(path)
+            merged = self._merge(merged,default_cfg)
+        else :
+            print("未找到默认配置文件，跳过默认配置加载")
+    
+        if cli_ctx.env and (path := Path(f"./env/gimbal_{cli_ctx.env}.yml")) :
+            env_cfg = yaml.safe_load(path.read_text())
+            merged = self._merge(merged,env_cfg)
+        elif merged.env and (path := Path(f"./env/gimbal_{merged.env}.yml")) :
+            env_cfg = yaml.safe_load(path.read_text())
+            merged = self._merge(merged,env_cfg)
+        else :
+            print("未找到环境配置文件，跳过环境配置加载")
 
-        # Step 2: gimbal.yaml（覆盖默认值）
-        if cli_ctx.config_file:
-            file_cfg = self._load_yaml(
-                Path(cli_ctx.config_file),
-                # mode 此时用 CLI 传的值，但 CLI 可能是 "mode"
-                # 用 CLI > 环境变量 > "default" 的顺序决定 mode
-                mode=self._resolve_mode(cli_ctx),
-            )
-            merged = self._merge(merged, file_cfg)
-        else:
-            # 没有显式指定，按约定路径自动发现（找到第一个即止）
-            candidate = self._discover_config_file()
-            if candidate:
-                mode = self._resolve_mode(cli_ctx)
-                file_cfg = self._load_yaml(candidate, mode)
-                merged = self._merge(merged, file_cfg)
-                logger.debug("[ConfigLoader] 自动发现配置文件: %s", candidate)
+        if cli_ctx.mode and path := Path(f"./mode/{cli_ctx.mode}.yml") :
+            mode_cfg = yaml.safe_load(path)
+            merged = self._merge(merged,mode_cfg)
+        elif merged.mode and path := Path(f"./mode/{cli_ctx.mode}.yml") :
+            mode_cfg = yaml.safe_load(path)
+            merged = self._merge(merged,mode_cfg)
+        else :
+            print("未找到模式配置文件，跳过模式配置加载")   
 
         # Step 3: 环境变量（覆盖文件配置）
         env_cfg = self._load_env()
         merged = self._merge(merged, env_cfg)
+        
 
         # Step 4: CLIContext 字段（最高优先级，覆盖一切）
         cli_cfg = self._from_cli(cli_ctx)
@@ -92,8 +115,8 @@ class ConfigLoader:
             "mode":           "default",
             "log_level":         "info",
             "no_color":          False,
-            "mongo_uri":         "mongodb://localhost:27017",
-            "minio_endpoint":    "localhost:9000",
+            # "mongo_uri":         "mongodb://localhost:27017",
+            # "minio_endpoint":    "localhost:9000",
             "framework_version": "0.1.0",
             "plugins":           [],
             "fail_fast":         False,
@@ -103,36 +126,6 @@ class ConfigLoader:
             "default_retry":     0,
             "extras":            {},
         }
-
-    def _load_yaml(self, path: Path, mode: str) -> dict[str, Any]:
-        """读取 gimbal.yaml，合并 default + mode section。
-
-        文件结构约定：
-            default:
-              mongo_uri: mongodb://localhost:27017
-              plugins: []
-            dev:
-              mongo_uri: mongodb://dev-server:27017
-            prod:
-              plugins: [allure, platform_uploader]
-              report_dir: /data/reports
-        """
-        try:
-            import yaml
-            raw: dict = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except Exception as exc:
-            logger.warning("[ConfigLoader] 读取配置文件失败 %s: %s", path, exc)
-            return {}
-
-        base = dict(raw.get("local", {}))
-        if mode and mode != "local":
-            mode_cfg = raw.get(mode, {})
-            if not mode_cfg:
-                logger.warning("[ConfigLoader] mode '%s' 在 %s 中不存在", mode, path)
-            base.update(mode_cfg)
-
-        logger.debug("[ConfigLoader] 从 %s 加载 mode=%s: %s", path, mode, list(base.keys()))
-        return base
 
     def _load_env(self) -> dict[str, Any]:
         """从环境变量读取配置（GIMBAL_* 前缀）。"""
@@ -176,49 +169,14 @@ class ConfigLoader:
 
     # ── 辅助 ─────────────────────────────────────────────────────────────────
 
-    def _discover_config_file(self) -> "Path | None":
-        """按约定路径查找配置文件，返回第一个存在的路径。
-
-        查找优先级：
-          1. GIMBAL_CONFIG 环境变量（CI/CD 场景，明确指定）
-          2. $PWD/gimbal.yaml  /  $PWD/gimbal.yml（项目级，最常用）
-          3. ~/.gimbal/config.yaml               （用户全局，兜底）
-        """
-        env_path = os.environ.get("GIMBAL_CONFIG")
-        if env_path:
-            p = Path(env_path)
-            if p.exists():
-                return p
-            logger.warning("[ConfigLoader] GIMBAL_CONFIG 指定的文件不存在: %s", env_path)
-
-        for name in ("gimbal.yaml", "gimbal.yml"):
-            p = Path.cwd() / name
-            if p.exists():
-                return p
-
-        user_cfg = Path.home() / ".gimbal" / "config.yaml"
-        if user_cfg.exists():
-            return user_cfg
-
-        return None
-
-    def _resolve_mode(self, cli: CLIContext) -> str:
-        """决定最终使用的 mode（CLI > 环境变量 > 默认）。"""
-        if cli.mode and cli.mode != "local":
-            return cli.mode
-        env_mode = os.environ.get("GIMBAL_MODE")
-        if env_mode:
-            return env_mode
-        return cli.mode or "local"
-
     @staticmethod
-    def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    def _merge(base: FrameworkConfig, override: dict[str, Any]) -> dict[str, Any]:
         """用 override 中的非 None 值覆盖 base，不修改原始 dict。"""
-        result = dict(base)
+        result = base.model_dump()
         for k, v in override.items():
             if v is not None:
                 result[k] = v
-        return result
+        return FrameworkConfig.model_validate(result)
 
     @staticmethod
     def _coerce_env(field: str, raw: str) -> Any:
