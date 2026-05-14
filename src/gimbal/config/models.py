@@ -1,1 +1,46 @@
-"""FrameworkConfig pydantic models."""
+from pydantic import BaseModel, Field, ConfigDict
+from ..version import getVersion
+
+
+class FrameworkConfig(BaseModel):
+    """所有配置来源合并后的不可变快照。
+
+    frozen=True：产出后任何层都不能修改，只能读。
+    需要「修改」配置的场景（例如单测覆盖某个字段）应重新调用 ConfigLoader。
+    """
+    model_config = ConfigDict(frozen=True)
+
+    # ── 运行环境 ──────────────────────────────────────────
+    env: str = Field("dev", description="目标环境 dev|test|staging|prod")
+    mode: str = Field("local", description="执行模式 local|server|service")
+
+    services_pool: dict = Field(default_factory=dict, description="服务域名池 {name: {base_url, timeout}}")
+    connection_pool: dict = Field(default_factory=dict, description="数据库/中间件连接池 {name: {host, port, ...}}")
+    users_pool: dict = Field(default_factory=dict, description="测试用户池 {role: {user_name, user_pass, auth_type}}")
+
+    # ── 日志与输出 ────────────────────────────────────────
+    log_level: str = Field("info", description="日志等级 debug|info|warning|error")
+    no_color: bool = Field(False, description="禁用终端颜色，CI 环境建议开启")
+
+    # ── 框架元信息 ────────────────────────────────────────
+    framework_version: str = Field(default_factory=getVersion, description="框架版本号")
+    plugins: tuple[str, ...] = Field(default_factory=tuple, description="启用的插件列表")
+    reporters: tuple[str, ...] = Field(default_factory=lambda: ("console",), description="启用的 reporter")
+    report_dir: str = Field("reports", description="报告输出根目录")
+
+    # ── 执行控制 ──────────────────────────────────────────
+    fail_fast: bool = Field(False, description="首次失败即终止整个 suite")
+
+    request_timeout: int | None = Field(None, description="单次 HTTP 请求超时（秒），None 不限制")
+    scenario_timeout: int | None = Field(None, description="单 scenario 最大执行时间（秒），None 不限制")
+    suite_timeout: int | None = Field(None, description="单 suite 最大执行时间（秒），None 不限制")
+
+    poll_timeout: int = Field(60, description="Poll strategy 默认超时（秒）")
+    poll_interval: int = Field(5, description="Poll strategy 默认检查周期（秒）")
+
+    retry_count: int = Field(0, description="失败重试次数")
+    retry_interval: int = Field(5, description="重试间隔（秒）")
+
+    # ── 存储后端（暂未启用）─────────────────────────────
+    # mongo_uri: str = "mongodb://localhost:27017"
+    # minio_endpoint: str = "localhost:9000"

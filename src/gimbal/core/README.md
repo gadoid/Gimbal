@@ -74,7 +74,7 @@ class RunRequest(BaseModel):
 ```python
 class RuntimeOptions(BaseModel):
     env: str = "dev"                        # 运行环境
-    profile: str = "default"                 # Profile 名称
+    mode: str = "local"                 # mode 名称
     log_level: str = "info"                 # 日志级别
     reporters: list[str] = []                # 报告器列表
     report_dir: str = "./reports"           # 报告目录

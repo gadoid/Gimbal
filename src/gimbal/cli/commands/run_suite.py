@@ -9,7 +9,7 @@ import typer
 from gimbal.cli.common import (
     AllowEmptyOpt, CacheOnlyOpt, ContinueOnErrorOpt, DryRunOpt, EnvOpt,
     FailFastOpt, LogLevel, LogLevelOpt, NoCacheOpt, OrderOpt, OrderStrategy,
-    OutputFormat, OutputOpt, ParallelOpt, ProfileOpt, RegistryOpt,
+    OutputFormat, OutputOpt, ParallelOpt, ModeOpt, RegistryOpt,
     ReportDirOpt, ReporterOpt, RetryOpt, SourceOpt, SourceStrategy, TagOpt,
     TimeoutOpt, VarFileOpt, VarOpt, VersionOpt, YesOpt,
     parse_parallel, parse_vars, resolve_source,
@@ -52,7 +52,7 @@ def suite(
     allow_empty: AllowEmptyOpt = False,
     # ========== 环境与日志 ==========
     env: EnvOpt = "dev",
-    profile: ProfileOpt = "default",
+    mode: ModeOpt = "local",
     log_level: LogLevelOpt = LogLevel.info,
     # ========== 过滤与变量 ==========
     tag: TagOpt = None,

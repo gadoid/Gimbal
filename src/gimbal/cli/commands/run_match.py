@@ -8,7 +8,7 @@ import typer
 
 from gimbal.cli.common import (
     AllowEmptyOpt, DryRunOpt, EnvOpt, FailFastOpt, LogLevel, LogLevelOpt,
-    OutputFormat, OutputOpt, ParallelOpt, ProfileOpt, ReportDirOpt,
+    OutputFormat, OutputOpt, ParallelOpt, ModeOpt, ReportDirOpt,
     ReporterOpt, RetryOpt, TagOpt, TimeoutOpt, VarFileOpt, VarOpt, YesOpt,
     parse_parallel, parse_vars,
 )
@@ -87,7 +87,7 @@ def match(
     allow_empty: AllowEmptyOpt = False,
     # ========== 通用 ==========
     env: EnvOpt = "dev",
-    profile: ProfileOpt = "default",
+    mode: ModeOpt = "local",
     log_level: LogLevelOpt = LogLevel.info,
     tag: TagOpt = None,
     var: VarOpt = None,

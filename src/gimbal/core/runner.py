@@ -98,9 +98,8 @@ class Engine:
             environment=cfg.env,
             config={
                 "env":             cfg.env,
-                "profile":         cfg.profile,
+                "mode":            cfg.mode,
                 "log_level":       cfg.log_level,
-                "verbose":         cfg.verbose,
                 "no_color":        cfg.no_color,
                 "mongo_uri":       cfg.mongo_uri,
                 "minio_endpoint":  cfg.minio_endpoint,
@@ -231,8 +230,8 @@ def bootstrap(cli_ctx: CLIContext) -> InitialContext:
     _configure_logging(cfg)
 
     logger.debug(
-        "[bootstrap] env=%s profile=%s log_level=%s",
-        cfg.env, cfg.profile, cfg.log_level,
+        "[bootstrap] env=%s mode=%s log_level=%s",
+        cfg.env, cfg.mode, cfg.log_level,
     )
 
     # 3. 基础设施
@@ -268,6 +267,5 @@ def _configure_logging(cfg: FrameworkConfig) -> None:
         format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
         force=True,
     )
-    if not cfg.verbose:
-        logging.getLogger("httpx").setLevel(logging.WARNING)
-        logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)

@@ -51,11 +51,6 @@ OPT_NO_COLOR = typer.Option(
     help="关闭彩色输出（CI 友好）。",
 )
 
-OPT_VERBOSE = typer.Option(
-    "--verbose", "-v",
-    help="详细输出，等价于 --log-level=debug。",
-)
-
 OPT_VERSION = typer.Option(
     "--version",
     help="显示版本并退出。",
@@ -63,8 +58,12 @@ OPT_VERSION = typer.Option(
     is_eager=True,
 )
 
+OPT_LOGLEVEL = typer.Option(
+    "--log-level",
+    help="详细输出，等价于 --log-level=debug。",
+)
 
 ConfigFile = Annotated[Path | None, OPT_CONFIG]
 NoColor = Annotated[bool, OPT_NO_COLOR]
-Verbose = Annotated[bool, OPT_VERBOSE]
 ShowVersion = Annotated[bool, OPT_VERSION]
+LogLevel = Annotated[str, OPT_LOGLEVEL]

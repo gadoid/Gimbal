@@ -11,7 +11,7 @@ import yaml
 import json
 
 from gimbal.core.runner import bootstrap, Engine
-from gimbal.cli.common import DryRunOpt, EnvOpt, LogLevel, LogLevelOpt, InputFormat, FormatOpt
+from gimbal.cli.common import DryRunOpt, EnvOpt, LogLevel, LogLevelOpt, InputFormat, FormatOpt,ModeOpt,PluginsOpt
 from gimbal.cli.context import CLIContext
 from gimbal.schema.scenario import Scenario
 
@@ -153,7 +153,9 @@ def launch(
     fmt: FormatOpt = InputFormat.auto,
     # ========== 通用 ==========
     env: EnvOpt = "dev",
+    mode: ModeOpt = "local",
     log_level: LogLevelOpt = LogLevel.info,
+
     fail_fast: Annotated[
         bool,
         typer.Option("--fail-fast", help="首个失败即停止", rich_help_panel="执行控制"),
@@ -163,6 +165,7 @@ def launch(
         typer.Option("--report-dir", help="报告输出目录", rich_help_panel="执行控制"),
     ] = "./reports",
     dry_run: DryRunOpt = False,
+    plugins : PluginsOpt = []
 ) -> None:
     """指定标准输入，用例文件或 inline 内容交给框架直接执行。
 
@@ -176,32 +179,37 @@ def launch(
         标准输入(stdin):
         cat case.yaml | gimbal run launch - -f yaml
     """
-    # 1. 归一化输入 → dict
+    # 1. 将传入参数 注入到 ctx上下文中
+    cli_ctx : CLIContext = ctx.obj
+    cli_ctx.extras["fail_fast"] = fail_fast
+    cli_ctx.extras["report_dir"] = report_dir
+    cli_ctx.extras["env"] = env
+    cli_ctx.extras["mode"] = mode
+    cli_ctx.extras["log_level"] = log_level
+
+    # 2. 传入ctx, 进行配置信息加载，返回所有信息合并后的上下文信息
+    initial_ctx  = bootstrap(cli_ctx)
+    # 3. 持有信息后，进行内存总线初始化，插件初始化，资产仓库初始化，
+
+
+    # 4. 归一化输入 → dict
     payload: dict = normalize_input(source, inline, fmt)
 
-    # 2. dry-run 仅打印解析结果，不真正执行
+    # 5. suite/scenario 从资产仓库查询对应的suite和scenario信息,进行实例化
+    # 6. dry-run 打印解析结果
     if dry_run:
         typer.echo(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         raise typer.Exit(code=0)
 
-    # 3. cli上下文设置， (这里按你现有 Runner 接口填实参)
-    cli_ctx : CLIContext = ctx.obj
-    cli_ctx.extras["fail_fast"]  = fail_fast
-    cli_ctx.extras["report_dir"] = report_dir
-    cli_ctx.extras["env"] = env
-    cli_ctx.extras["log_level"] = log_level
 
-    #4. schema 检查
+    #7. schema + 资产有效性检查，对数据类进行格式检查，对资产进行有效性检查
     try:
         scenario = Scenario.model_validate(payload)
     except Exception as exc:
         typer.secho(f"用例格式校验失败: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2)
-    
-    #5. 配置上下文初始化
-    initial_ctx  = bootstrap(ctx.obj)
 
-    #6. 执行器启动
+    #8. 数据类有效，引用链接有效，执行器启动
     result = Engine(initial_ctx).run(scenario)
     pprint(result)
     raise typer.Exit(code=0)

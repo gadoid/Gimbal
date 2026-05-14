@@ -1,0 +1,32 @@
+# config/mode/local.yaml
+mode:
+  name: server
+
+  execution:
+    parallel_workers: 4
+    retry_count: 2
+    retry_interval: 3          # seconds
+    fail_fast: true            # 首次失败即停止 suite
+    
+  timeout:
+    request: 15                # 单请求超时
+    scenario: 120              # 单用例超时
+    suite: 1800                # 整个 suite 超时
+
+  scope:
+    tags_include: ["smoke", "regression"]
+    tags_exclude: ["manual", "slow", "wip"]
+    priority_threshold: P2     # 只跑 P0/P1/P2
+
+  reporter:
+    level: summary             # summary / detailed / debug
+    screenshot_on_fail: true
+    attach_request_log: false  # CI 环境减少产物体积
+    output_formats: ["html"]
+
+  chaos:                       # Chaos Strategy 开关
+    enabled: false
+    
+  poll:
+    default_interval: 5
+    default_timeout: 60

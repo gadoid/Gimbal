@@ -42,16 +42,15 @@ class InputFormat(str, Enum) :
     yaml = "yaml"
 
 class LogLevel(str, Enum):
-    debug = "debug"
     info = "info"
     warning = "warning"
+    debug = "debug"
     error = "error"
 
 
 class OutputFormat(str, Enum):
     console = "console"
     json = "json"
-    junit = "junit"
 
 
 class ServerMode(str, Enum):
@@ -85,9 +84,9 @@ FormatOpt = Annotated[
 ]
 
 
-ProfileOpt = Annotated[
+ModeOpt = Annotated[
     str,
-    typer.Option("--profile", help="使用的配置 profile。", rich_help_panel="环境与日志"),
+    typer.Option("--mode", help="使用的启动模式(mode)。", rich_help_panel="环境与日志"),
 ]
 
 LogLevelOpt = Annotated[
@@ -150,6 +149,14 @@ RetryOpt = Annotated[
         help="失败重试次数。",
         rich_help_panel="执行控制",
     ),
+]
+PluginsOpt = Annotated[
+    list[str],
+    typer.Option(
+       "-P","--plugins",
+       help="加载插件",
+       rich_help_panel="插件执行"
+    )
 ]
 
 DryRunOpt = Annotated[

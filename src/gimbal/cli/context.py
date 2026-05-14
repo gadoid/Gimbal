@@ -14,11 +14,10 @@ class CLIContext(BaseModel):
     """CLI 全局上下文。"""
 
     config_file: Path | None = None
-    profile: str = "default"
+    mode: str = "local"
     env: str = "dev"
-
+    report_dir: str = "./report/"
     log_level: str = "info"
     no_color: bool = False
-    verbose: bool = False
 
     extras: dict[str, Any] = Field(default_factory=dict)

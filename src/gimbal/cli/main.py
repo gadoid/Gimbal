@@ -12,7 +12,7 @@ from __future__ import annotations
 import typer
 
 from gimbal.cli.context import CLIContext
-from gimbal.cli.params import starter, ConfigFile, NoColor, Verbose, ShowVersion
+from gimbal.cli.params import starter, ConfigFile, NoColor, LogLevel, ShowVersion
 
 
 @starter.callback()
@@ -20,15 +20,14 @@ def main(
     ctx: typer.Context,
     config: ConfigFile = None,
     no_color: NoColor= False,
-    verbose: Verbose = False,
     version: ShowVersion = False,
+    log_level : LogLevel = "info"
 ) -> None:
     """回调入口方法：初始化共享上下文。"""
     ctx.obj = CLIContext(
         config_file=config,
         no_color=no_color,
-        verbose=verbose,
-        log_level="debug" if verbose else "info",
+        log_level=log_level
     )
 
 
