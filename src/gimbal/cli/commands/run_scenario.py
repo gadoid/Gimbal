@@ -16,7 +16,6 @@ from gimbal.cli.common import (
 )
 from gimbal.cli.context import CLIContext
 from gimbal.core.asset_resolver import AssetKind, AssetResolver
-from gimbal.core.runner import Engine, bootstrap
 
 
 def scenario(

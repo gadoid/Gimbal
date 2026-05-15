@@ -10,10 +10,12 @@ import typer
 import yaml
 import json
 
-from gimbal.core.runner import bootstrap, Engine
+from gimbal.core.runner import Engine
+from gimbal.core.boostrap import bootstrap
 from gimbal.cli.common import DryRunOpt, EnvOpt, LogLevel, LogLevelOpt, InputFormat, FormatOpt,ModeOpt,PluginsOpt
 from gimbal.cli.context import CLIContext
 from gimbal.schema.scenario import Scenario
+
 
 class InputError(typer.BadParameter):
     """输入参数错误。"""
@@ -181,16 +183,18 @@ def launch(
     """
     # 1. 将传入参数 注入到 ctx上下文中
     cli_ctx : CLIContext = ctx.obj
-    cli_ctx.extras["fail_fast"] = fail_fast
-    cli_ctx.extras["report_dir"] = report_dir
-    cli_ctx.extras["env"] = env
-    cli_ctx.extras["mode"] = mode
-    cli_ctx.extras["log_level"] = log_level
+    # cli_ctx.extras["fail_fast"] = fail_fast
+    # cli_ctx.extras["report_dir"] = report_dir
+    # cli_ctx.extras["env"] = env
+    # cli_ctx.extras["mode"] = mode
+    # cli_ctx.extras["log_level"] = log_level
+    cli_ctx.env = env
+    cli_ctx.mode = mode
+
 
     # 2. 传入ctx, 进行配置信息加载，返回所有信息合并后的上下文信息
     configration  = bootstrap(cli_ctx)
     # 3. 持有信息后，进行内存总线初始化，插件初始化，资产仓库初始化，
-
 
     # 4. 归一化输入 → dict
     payload: dict = normalize_input(source, inline, fmt)

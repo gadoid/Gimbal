@@ -1,13 +1,15 @@
 from pydantic import BaseModel, Field, ConfigDict
 from ..version import getVersion
+from pathlib import Path
 
 
-class FrameworkConfig(BaseModel):
+class BootstrapConfig(BaseModel):
     """所有配置来源合并后的不可变快照。
 
     frozen=True：产出后任何层都不能修改，只能读。
     需要「修改」配置的场景（例如单测覆盖某个字段）应重新调用 ConfigLoader。
     """
+    base_dir : Path = Path(".")
     model_config = ConfigDict(frozen=True)
 
     # ── 运行环境 ──────────────────────────────────────────

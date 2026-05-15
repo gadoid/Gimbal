@@ -1,31 +1,30 @@
 # config/env/gimbal_staging.yaml
 
-env:
-  name: prod
-  services:
-    settlement_api:
-      base_url: "http://sit-gateway.internal:8080"
-      timeout: 30
-    legacy_php:
-      base_url: "http://sit-php.internal:9000"
-      timeout: 30
+env: staging
+services:
+  settlement_api:
+    base_url: "http://sit-gateway.internal:8080"
+    timeout: 30
+  legacy_php:
+    base_url: "http://sit-php.internal:9000"
+    timeout: 30
+  
+database:
+  mysql:
+    host: sit-db.internal
+    port: 3306
+    database: trade_settlement
+  redis:
+    host: sit-redis.internal
+    port: 6379
+    db: 0
     
-  database:
-    mysql:
-      host: sit-db.internal
-      port: 3306
-      database: trade_settlement
-    redis:
-      host: sit-redis.internal
-      port: 6379
-      db: 0
-      
-  users:
-    user :
-      user_name : "test_user_sit"
-      user_pass : ""
-      auth_type : ""
-    admin:
-      user_name : ""
-      user_pass : ""
-      auth_type : ""
+users:
+  user :
+    user_name : "test_user_sit"
+    user_pass : ""
+    auth_type : ""
+  admin:
+    user_name : ""
+    user_pass : ""
+    auth_type : ""

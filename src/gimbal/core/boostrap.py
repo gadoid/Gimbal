@@ -6,8 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from gimbal.cli.context import CLIContext
-from gimbal.config.loader import ConfigLoader, FrameworkConfig
-from gimbal.schema.scenario import Scenario, Suite
+from gimbal.config.loader import ConfigLoader, BootstrapConfig
 
 @dataclass(frozen=True)
 class Configuration:
@@ -22,7 +21,7 @@ class Configuration:
 
     frozen=True：产出后不可修改，Engine 只读取，不覆盖。
     """
-    cfg: FrameworkConfig
+    cfg: BootstrapConfig
     ctx_manager: Any
     dispatcher: Any
     # 以下两个供需要直接访问基础设施的场景（reporter、plugin 等）
@@ -37,7 +36,7 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
     加载优先级 gimbal.yaml -> env -> mode -> cli -> 环境变量
 
     职责：
-        1. 多来源配置合并 → FrameworkConfig
+        1. 多来源配置合并 → BootstrapConfig
         2. 配置日志系统
         3. 初始化基础设施
         4. 返回 Configuration
@@ -46,6 +45,7 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
     """
     # 1. 配置合并
     cfg = ConfigLoader().load(cli_ctx)
+
 
     # 2. 日志（最先，后续所有日志才能正确输出）
     _configure_logging(cfg)
@@ -64,7 +64,6 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
 
     event_bus = InMemoryEventBus()
     archive   = InMemoryArchive()
-
     return Configuration(
         cfg=cfg,
         ctx_manager=ContextManager(archive=archive, event_bus=event_bus),
@@ -74,7 +73,7 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
     )
 
 
-def _configure_logging(cfg: FrameworkConfig) -> None:
+def _configure_logging(cfg: BootstrapConfig) -> None:
     level = {
         "debug":   logging.DEBUG,
         "info":    logging.INFO,

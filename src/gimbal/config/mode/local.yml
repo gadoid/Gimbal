@@ -1,31 +1,30 @@
 # config/mode/local.yaml
-mode:
-  name: local
+mode: local
 
-  execution:
-    retry_count: 2
-    retry_interval: 3          # seconds
-    fail_fast: true            # 首次失败即停止 suite
-    
-
-  timeout:
-    request: 15                # 单请求超时
-    scenario: 120              # 单用例超时
-    suite: 1800                # 整个 suite 超时
-
-  scope:
-    tags_include: ["smoke", "regression"]
-    tags_exclude: ["manual", "slow", "wip"]
-    priority_threshold: P2     # 只跑 P0/P1/P2
-    
-  poll:
-    default_interval: 5
-    default_timeout: 60
-
-  output:
-    log_level : info
-    no_color : false
+execution:
+  retry_count: 2
+  retry_interval: 3          # seconds
+  fail_fast: true            # 首次失败即停止 suite
   
-  plugins :
-    - aaa 
+
+timeout:
+  request: 15                # 单请求超时
+  scenario: 120              # 单用例超时
+  suite: 1800                # 整个 suite 超时
+
+scope:
+  tags_include: ["smoke", "regression"]
+  tags_exclude: ["manual", "slow", "wip"]
+  priority_threshold: P2     # 只跑 P0/P1/P2
   
+poll:
+  default_interval: 5
+  default_timeout: 60
+
+output:
+  log_level : info
+  no_color : false
+
+plugins :
+  - aaa 
+

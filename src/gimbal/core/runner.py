@@ -7,7 +7,7 @@
     result      = engine.run(scenario)    # 此时才创建 framework/suite 层级 context
 
 bootstrap：
-    - 调用 ConfigLoader 完成多来源配置合并 → FrameworkConfig
+    - 调用 ConfigLoader 完成多来源配置合并 → BootstrapConfig
     - 配置日志系统
     - 初始化基础设施（EventBus / Archive / ContextManager / Dispatcher）
     - 产出 Configuration（不可变，安全传递）
@@ -25,11 +25,9 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from gimbal.cli.context import CLIContext
-from gimbal.config.loader import ConfigLoader, FrameworkConfig
 from gimbal.schema.scenario import Scenario, Suite
 
-from .boostrap import bootstrap
+from .boostrap import Configuration
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +55,8 @@ class Engine:
     所有执行相关的状态都在 run() 内部创建，保证每次 run() 相互独立。
     """
 
-    def __init__(self, initial_ctx: Configuration) -> None:
-        self._ictx = initial_ctx
+    def __init__(self, configuration: Configuration) -> None:
+        self._ictx = configuration
 
     def run(self, target: Scenario | Suite) -> RunResult:
         """执行入口。
@@ -81,18 +79,18 @@ class Engine:
                 "mode":            cfg.mode,
                 "log_level":       cfg.log_level,
                 "no_color":        cfg.no_color,
-                "mongo_uri":       cfg.mongo_uri,
-                "minio_endpoint":  cfg.minio_endpoint,
+                # "mongo_uri":       cfg.mongo_uri,
+                # "minio_endpoint":  cfg.minio_endpoint,
                 "plugins":         list(cfg.plugins),
                 "reporters":       list(cfg.reporters),
                 "report_dir":      cfg.report_dir,
                 "fail_fast":       cfg.fail_fast,
-                "default_timeout": cfg.default_timeout,
-                "default_retry":   cfg.default_retry,
-                **cfg.extras,
+                # "default_timeout": cfg.default_timeout,
+                # "default_retry":   cfg.default_retry,
+                # **cfg.extras,
             },
         )
-        logger.info("[Engine] run_id=%s env=%s", framework_ctx.run_id, cfg.env)
+        logger.info("[Engine] run_id=%s env=%s mode=%s", framework_ctx.run_id, cfg.env, cfg.mode)
 
         if isinstance(target, Scenario):
             return self._run_scenario(target, framework_ctx, ictx)
