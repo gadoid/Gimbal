@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import traceback
 from typing import Any, TYPE_CHECKING
+from .utils import _evaluate
 
 from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, StrategyStatus
 
@@ -20,17 +21,17 @@ class AssertionExecutor(StrategyExecutor):
         from gimbal.context.step import AssertionResult
 
         assert isinstance(spec, Assertion)
-
         try:
-            logger.debug("[AssertionExecutor] 执行断言: target=%s operator=%s expected=%s",
+            logger.info("[AssertionExecutor] 执行断言: target=%s operator=%s expected=%s",
                         spec.target, spec.operator, spec.expected)
-
+            # from pprint import pprint
+            # pprint(view.content)
             # 读取被断言的目标值
             actual = view.read_variable(
                 spec.target,
                 from_layer=ContextLayer.SCENARIO,
             )
-            logger.debug("[AssertionExecutor] 读取实际值: target=%s actual=%s", spec.target, actual)
+            logger.info("[AssertionExecutor] 读取实际值: target=%s actual=%s", spec.target, actual)
 
             passed, msg = _evaluate(spec.operator, actual, spec.expected)
             human_msg = spec.message or msg

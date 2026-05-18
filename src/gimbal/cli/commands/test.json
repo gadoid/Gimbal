@@ -54,7 +54,38 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "response.status",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询结算单详情应返回200",
+          "soft": false
+        }
+      ]
+    },    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "settlement-service",
+        "method": "GET",
+        "path": "/tags/",
+        "headers": {
+          "Authorization": "${token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
           "operator": "eq",
           "expected": 200,
           "message": "查询结算单详情应返回200",

@@ -1,5 +1,5 @@
 from typing import Any
-from context.views import StrategyContextView
+from gimbal.context.views import StrategyContextView
 
 def _source_to_var_key(source) -> str:
     """将 ExtractSource 枚举映射到 context 变量名。"""

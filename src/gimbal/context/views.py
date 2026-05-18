@@ -43,7 +43,7 @@ class StepContextAdapter:
     
     def __init__(self, ctx: StepContext):
         self._ctx = ctx
-    
+        self.content = ctx
     @property
     def step_id(self) -> str:
         return self._ctx.step_id
