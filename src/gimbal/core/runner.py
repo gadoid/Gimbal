@@ -26,8 +26,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from gimbal.schema.scenario import Scenario, Suite
-from gimbal.context.manager import ContextManager
-
+from gimbal.context.manager import ContextManager,FrameworkContext
 
 from .boostrap import Configuration
 
@@ -69,7 +68,7 @@ class Engine:
             2. SuiteContext      —— 单 scenario 执行时用 __default__ 占位
         然后分发到 ScenarioRunner。
         """
-        ictx:Configuration = self._ictx
+        ictx = self._ictx
 
         # 1. 创建 FrameworkContext（每次 run 独立的 run_id）
         framework_ctx = ictx.ctx_manager.create_framework_context(
@@ -91,7 +90,7 @@ class Engine:
     def _run_scenario(
         self,
         scenario: Scenario,
-        framework_ctx: Any,
+        framework_ctx: FrameworkContext,
     ) -> RunResult:
         from gimbal.core.scenario_runner import ScenarioRunner
         # 2. 为单 scenario 执行创建默认 SuiteContext
@@ -128,7 +127,7 @@ class Engine:
     def _run_suite(
         self,
         suite: Suite,
-        framework_ctx: Any,
+        framework_ctx: FrameworkContext,
     ) -> RunResult:
         from gimbal.core.scenario_runner import ScenarioRunner
 
@@ -142,7 +141,7 @@ class Engine:
         )
 
         runner = ScenarioRunner(framework_ctx.dispatcher, framework_ctx.ctx_manager)
-        cfg = framework_ctx.cfg
+        cfg = framework_ctx.config
         total = passed = failed = error = 0
         details: list[dict[str, Any]] = []
 

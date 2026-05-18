@@ -7,24 +7,29 @@
 ### 1. 执行链路
 
 ```
-CLI (RunRequest)
+CLI
     │
-    └── Runner
+    └── bootstrap()                    # 初始化基础设施（独立函数）
+    │       ├── Configuration (frozen)
+    │       ├── EventBus
+    │       ├── Archive
+    │       ├── ContextManager
+    │       └── StrategyDispatcher
+    │
+    └── Engine(Configuration)
             │
-            ├── bootstrap()          # 初始化基础设施
-            │       ├── EventBus
-            │       ├── Archive
-            │       ├── ContextManager
-            │       └── StrategyDispatcher
-            │
-            └── run()
+            └── run(Scenario | Suite)
                     │
                     ├── Scenario → ScenarioRunner
                     │       │
                     │       └── StepRunner × n
                     │               │
-                    │               ├── StepStateMachine
-                    │               └── StrategyDispatcher
+                    │               └── StepStateMachine (自驱动)
+                    │                       ├── _handle_before_request
+                    │                       ├── _handle_calling
+                    │                       ├── _handle_after_request
+                    │                       ├── _handle_verifying
+                    │                       └── _handle_teardown
                     │
                     └── Suite → 遍历 Scenario × n
 ```
@@ -33,16 +38,18 @@ CLI (RunRequest)
 
 | 类 | 职责 |
 |----|------|
-| `Runner` | 入口编排，基础设施初始化 |
-| `ScenarioRunner` | 单个 Scenario 的执行流程 |
-| `StepRunner` | 单个 Step 的阶段执行 |
+| `bootstrap()` | 配置合并 + 基础设施初始化，返回 Configuration |
+| `Engine` | 入口编排，根据 target 类型分发执行 |
+| `ScenarioRunner` | 单个 Scenario 的执行流程编排 |
+| `StepRunner` | 构造 StepStateMachine 并触发执行 |
+| `StepStateMachine` | 驱动单个 Step 的完整生命周期（自驱动） |
 | `AssetResolver` | 资产解析（占位） |
 
-### 3. Request/Result 契约
+### 3. 职责分离原则
 
-```
-CLI → RunRequest → Runner → RunResult → CLI
-```
+- `Engine` 只负责创建层级 Context 和分发执行，不感知具体执行逻辑
+- `StepRunner` 只负责创建状态机和上下文，不驱动状态流转
+- `StepStateMachine` 内部持有全部执行依赖，自己驱动整个流程直到终态
 
 ---
 
@@ -50,130 +57,203 @@ CLI → RunRequest → Runner → RunResult → CLI
 
 | 文件 | 说明 |
 |------|------|
-| `runner.py` | `Runner`, `RunRequest`, `RunResult` |
-| `scenario_runner.py` | `ScenarioRunner`, `StepRunner` |
-| `asset_resolver.py` | `AssetResolver`, `ResolvedAsset` |
-| `bootstrap.py` | `bootstrap()` 函数（框架） |
+| `boostrap.py` | `bootstrap()` 函数、`Configuration` dataclass |
+| `runner.py` | `Engine`、`RunResult` |
+| `scenario_runner.py` | `ScenarioRunner`、`StepRunner`、`ScenarioRunResult` |
+| `asset_resolver.py` | `AssetResolver`、`ResolvedAsset` |
 
 ---
 
-## RunRequest / RunResult
+## bootstrap()
 
-### RunRequest
-
-```python
-class RunRequest(BaseModel):
-    """CLI 层和执行层之间的唯一契约。"""
-    run: RunUnion                    # Scenario / Suite / 对应 Ref
-    reference: Reference = Reference()
-    runtime: RuntimeOptions = RuntimeOptions()
-```
-
-### RuntimeOptions
+框架启动唯一入口。
 
 ```python
-class RuntimeOptions(BaseModel):
-    env: str = "dev"                        # 运行环境
-    mode: str = "local"                 # mode 名称
-    log_level: str = "info"                 # 日志级别
-    reporters: list[str] = []                # 报告器列表
-    report_dir: str = "./reports"           # 报告目录
-    output: str = "console"                 # 输出格式
-    fail_fast: bool = False                 # 首个失败停止
+def bootstrap(cli_ctx: CLIContext) -> Configuration:
+    """框架启动函数。
+
+    职责：
+        1. 多来源配置合并 → BootstrapConfig
+        2. 配置日志系统
+        3. 初始化基础设施
+        4. 返回 Configuration（frozen，不可修改）
+
+    不创建任何层级 Context（由 Engine.run() 负责）。
+    """
+    # 1. 配置合并
+    cfg = ConfigLoader().load(cli_ctx)
+
+    # 2. 日志
+    _configure_logging(cfg)
+
+    # 3. 基础设施
+    event_bus = InMemoryEventBus()
+    archive = InMemoryArchive()
+    ctx_manager = ContextManager(archive=archive, event_bus=event_bus)
+    dispatcher = build_default_dispatcher()
+
+    return Configuration(
+        cfg=cfg,
+        ctx_manager=ctx_manager,
+        dispatcher=dispatcher,
+        event_bus=event_bus,
+        archive=archive,
+    )
 ```
 
-### RunResult
+### Configuration
+
+```python
+@dataclass(frozen=True)
+class Configuration:
+    """bootstrap 的唯一产出。持有执行所需的全部基础设施引用。"""
+    cfg: BootstrapConfig
+    ctx_manager: ContextManager
+    dispatcher: Any
+    event_bus: Any
+    archive: Any
+```
+
+---
+
+## Engine
+
+顶层执行器，持有 Configuration 引用。
+
+```python
+class Engine:
+    """执行引擎。
+
+    __init__ 只存引用，不做任何 I/O 或状态初始化。
+    所有执行相关的状态都在 run() 内部创建，保证每次 run() 相互独立。
+    """
+
+    def __init__(self, configuration: Configuration) -> None:
+        self._ictx = configuration
+
+    def run(self, target: Scenario | Suite) -> RunResult:
+        """执行入口。
+
+        在此方法内创建本次执行的层级 context：
+            1. FrameworkContext  —— 全量配置写入，run_id 在此生成
+            2. SuiteContext      —— 单 scenario 执行时用 __default__ 占位
+        然后分发到 ScenarioRunner。
+        """
+        # 1. 创建 FrameworkContext
+        framework_ctx = ictx.ctx_manager.create_framework_context(
+            run_id=str(uuid.uuid4()),
+            cfg=ictx,
+        )
+
+        if isinstance(target, Scenario):
+            return self._run_scenario(target, framework_ctx)
+        elif isinstance(target, Suite):
+            return self._run_suite(target, framework_ctx)
+```
+
+### _run_scenario()
+
+```python
+def _run_scenario(self, scenario: Scenario, framework_ctx: FrameworkContext) -> RunResult:
+    # 为单 scenario 执行创建默认 SuiteContext
+    suite_ctx = framework_ctx.ctx_manager.derive_suite_context(
+        framework_ctx,
+        suite_id="__default__",
+        suite_name="Default Suite",
+        tags=[],
+        plugins={},
+    )
+    result = ScenarioRunner(
+        framework_ctx.dispatcher,
+        framework_ctx.ctx_manager
+    ).run(scenario, suite_ctx)
+
+    return RunResult(
+        exit_code=0 if result.passed else 1,
+        total=1,
+        passed=1 if result.passed else 0,
+        failed=0 if result.passed else 1,
+        details=[{...}],
+    )
+```
+
+### _run_suite()
+
+```python
+def _run_suite(self, suite: Suite, framework_ctx: FrameworkContext) -> RunResult:
+    suite_ctx = framework_ctx.ctx_manager.derive_suite_context(
+        framework_ctx,
+        suite_id=getattr(suite, "suiteId", "__suite__"),
+        suite_name=getattr(suite, "name", "Suite"),
+        tags=[],
+        plugins={},
+    )
+    runner = ScenarioRunner(framework_ctx.dispatcher, framework_ctx.ctx_manager)
+    # 遍历执行，fail_fast 由 Configuration.cfg.fail_fast 控制
+```
+
+---
+
+## RunResult
 
 ```python
 @dataclass
 class RunResult:
-    exit_code: int = 0                       # 退出码
-    total: int = 0                          # 总数
-    passed: int = 0                         # 通过数
-    failed: int = 0                         # 失败数
-    skipped: int = 0                        # 跳过数
-    error: int = 0                          # 错误数
-    details: list[dict] = field(default_factory=list)  # 详情
-```
-
----
-
-## Runner
-
-顶层执行器。
-
-```python
-class Runner:
-    def __init__(self, run_request: RunRequest, ctx: CLIContext) -> None:
-        self.request = run_request
-        self.cli_ctx = ctx
-
-    def run(self) -> RunResult:
-        # 1. bootstrap 基础设施
-        infra = self._bootstrap()
-
-        # 2. 根据 run 类型分发
-        if isinstance(run_target, Scenario):
-            return self._run_single_scenario(run_target, infra)
-        elif isinstance(run_target, Suite):
-            return self._run_suite(run_target, infra)
-        else:
-            return RunResult(exit_code=3, error=1)
-```
-
-### _bootstrap()
-
-```python
-def _bootstrap(self) -> "_Infra":
-    """初始化最小化基础设施。
-
-    当前使用内存实现（EventBus / Archive），
-    生产环境替换为 MongoDB + MinIO 实现即可。
-    """
-    event_bus = InMemoryEventBus()
-    archive = InMemoryArchive()
-    ctx_manager = ContextManager(archive=archive, event_bus=event_bus)
-
-    # 创建 Framework / Suite Context
-    framework_ctx = ctx_manager.create_framework_context(...)
-    suite_ctx = ctx_manager.derive_suite_context(...)
-
-    dispatcher = build_default_dispatcher()
-
-    return _Infra(
-        ctx_manager=ctx_manager,
-        framework_ctx=framework_ctx,
-        suite_ctx=suite_ctx,
-        dispatcher=dispatcher,
-    )
+    exit_code: int = 0
+    total: int = 0
+    passed: int = 0
+    failed: int = 0
+    skipped: int = 0
+    error: int = 0
+    details: list[dict[str, Any]] = field(default_factory=list)
 ```
 
 ---
 
 ## ScenarioRunner
 
-驱动单个 Scenario 执行。
-
-### 核心方法
+驱动整个 Scenario 的执行。
 
 ```python
 class ScenarioRunner:
     def run(self, scenario_schema: Scenario, suite_ctx: SuiteContext) -> ScenarioRunResult:
-        # 1. 创建 ScenarioContext
-        scenario_ctx = self._ctx_manager.derive_scenario_context(...)
+        # 1. 派生 ScenarioContext
+        scenario_ctx = self._ctx_manager.derive_scenario_context(
+            suite_ctx,
+            scenario_id=scenario_schema.scenarioId,
+            scenario_name=scenario_schema.meta.name,
+            description=scenario_schema.meta.description,
+        )
 
-        # 2. 注入 config 到 channels
+        # 2. 注入 serviceDict / authDict 到 channels
         self._inject_config(scenario_schema, scenario_ctx)
 
-        # 3. 顺序执行所有 steps
+        # 3. 创建 StepRunner，逐步执行
+        step_runner = StepRunner(
+            dispatcher=self._dispatcher,
+            ctx_manager=self._ctx_manager,
+            service_base_url=self._pick_base_url(scenario_schema),
+        )
+
+        step_results: list[StepRunResult] = []
+        overall_status = "passed"
+
         for idx, step_union in enumerate(scenario_schema.steps):
+            # 跳过未展开的 Ref
+            if not hasattr(step_union, "api"):
+                continue
+
             result = step_runner.run(step_union, scenario_ctx, idx)
             step_results.append(result)
-            if result.status in ("failed", "error") and fail_fast:
+
+            # fail_fast：首个失败即停止后续 step
+            if not result.passed:
+                overall_status = result.status
                 break
 
-        # 4. finalize
+        # 4. finalize ScenarioContext
         self._ctx_manager.finalize_scenario(scenario_ctx, overall_status)
+
         return ScenarioRunResult(...)
 ```
 
@@ -189,144 +269,68 @@ class ScenarioRunResult:
     ended_at: Optional[datetime]
 
     @property
-    def passed(self) -> bool: ...
+    def passed(self) -> bool:
+        return self.status == "passed"
+
     @property
-    def duration_ms(self) -> float: ...
+    def duration_ms(self) -> float:
+        if self.started_at and self.ended_at:
+            return (self.ended_at - self.started_at).total_seconds() * 1000
+        return 0.0
 ```
 
 ---
 
 ## StepRunner
 
-驱动单个 Step 完成全部阶段。
-
-### 执行阶段
-
-```
-PENDING → BEFORE_REQUEST → CALLING → AFTER_REQUEST → VERIFYING → [TEARDOWN] → PASSED/FAILED
-```
-
-### run() 方法流程
+构造 StepStateMachine 并触发执行。**不感知状态流转细节**。
 
 ```python
-def run(self, step_schema: Step, scenario_ctx: ScenarioContext, step_index: int) -> StepRunResult:
-    # 1. 创建 StepContext
-    step_ctx = self._ctx_manager.derive_step_context(...)
-
-    # 2. 初始化状态机
-    sm = StepStateMachine(step_id=step_id, on_transition=hook)
-
-    # 3. BEFORE_REQUEST
-    sm.advance(StepState.BEFORE_REQUEST)
-    pr = self._run_phase(StrategyPhase.BEFORE_REQUEST, step_schema.strategy, view)
-    if pr.hard_failed:
-        sm.advance(StepState.TEARDOWN)
-        self._run_teardown(...)
-        return self._finalize(...)
-
-    # 4. CALLING
-    sm.advance(StepState.CALLING)
-    call_result = self._do_http_call(step_schema, view, scenario_ctx)
-    if call_result.failed:
-        sm.advance(StepState.TEARDOWN)
-        self._run_teardown(...)
-        return self._finalize(...)
-
-    # 5. AFTER_REQUEST
-    sm.advance(StepState.AFTER_REQUEST)
-    pr = self._run_phase(StrategyPhase.AFTER_REQUEST, step_schema.strategy, view)
-    if pr.hard_failed:
-        sm.advance(StepState.TEARDOWN)
-        self._run_teardown(...)
-        return self._finalize(...)
-
-    # 6. VERIFYING
-    sm.advance(StepState.VERIFYING)
-    pr = self._run_phase(StrategyPhase.VERIFYING, step_schema.strategy, view)
-
-    # 7. TEARDOWN (如果有)
-    if has_teardown:
-        sm.advance(StepState.TEARDOWN)
-        self._run_teardown(...)
-    else:
-        terminal = StepState.PASSED if pr.all_passed else StepState.FAILED
-        sm.advance(terminal)
-
-    return self._finalize(...)
-```
-
-### _do_http_call()
-
-```python
-def _do_http_call(self, step_schema, view, scenario_ctx):
-    # 1. 读取 API / Request
-    api = step_schema.api
-    request = step_schema.request
-    body = getattr(request, "body", {})
-
-    # 2. 合成 _CallSpec
-    call_spec = _CallSpec(
-        method=api.method,
-        url=f"{service_url}{api.path}",
-        headers=api.headers,
-        body=body,
-        timeout=api.timeout,
-    )
-
-    # 3. 分发执行
-    return self._dispatcher.dispatch(call_spec, view)
-```
-
-### _CallSpec
-
-内部 dataclass，用于 CallExecutor：
-
-```python
-@dataclass
-class _CallSpec:
-    kind: str = "_call"
-    method: str = "GET"
-    url: str = ""
-    headers: dict = field(default_factory=dict)
-    body: dict = field(default_factory=dict)
-    timeout: float = 30.0
-    # StrategyBase 必需字段
-    name: Optional[str] = "http_call"
-    phase: Optional[str] = None
-    order: int = 0
-    enabled: bool = True
-    onFailure: str = "abort"
-    tags: list = field(default_factory=list)
-```
-
----
-
-## AssetResolver
-
-资产解析器（占位）。
-
-```python
-class AssetResolver:
-    """资产解析器。
-
-    占位实现，演示接口。实际实现应：
-      - 接入资产库（MongoDB + 对象存储）
-      - 支持命名空间通配展开
-      - 处理本地缓存与远端拉取的协调
+class StepRunner:
+    """StepRunner 的职责：
+      1. 创建 StepContext（由上层 scenario_ctx 派生）
+      2. 构造 StepStateMachine（注入执行所需的全部依赖）
+      3. 调用 sm.run()，拿到结果
+      4. finalize StepContext
     """
 
-    def resolve(self, ids: list[str]) -> list[ResolvedAsset]:
-        """将一组 ID（含通配）解析为具体的资产列表。"""
-        ...
+    def run(
+        self,
+        step_schema: Step,
+        scenario_ctx: ScenarioContext,
+        step_index: int,
+    ) -> StepRunResult:
+        step_id = f"step-{step_index:03d}"
 
-    def _is_namespace_wildcard(self, raw_id: str) -> bool:
-        """命名空间通配：含 * 且只在分隔符之间。"""
+        # 1. 创建 StepContext
+        step_ctx = self._ctx_manager.derive_step_context(
+            scenario_ctx,
+            step_id=step_id,
+            step_name=step_id,
+            strategy_kind="multi",
+            strategy_spec=step_schema.model_dump(),
+            resolved_vars={},
+        )
 
-    def _expand_namespace(self, pattern: str) -> list[ResolvedAsset]:
-        """展开命名空间通配。占位实现。"""
+        # 2. 构造状态机，注入全部执行依赖
+        sm = StepStateMachine(
+            step_id=step_id,
+            step_schema=step_schema,
+            dispatcher=self._dispatcher,
+            view=StepContextAdapter(step_ctx),
+            service_base_url=self._service_base_url,
+        )
 
-    def _resolve_single(self, raw_id: str) -> ResolvedAsset | None:
-        """解析单个 ID。占位实现。"""
+        # 3. 状态机自驱动运行
+        result = sm.run()
+
+        # 4. finalize StepContext
+        step_status = StepStatus(result.status) \
+            if result.status in StepStatus._value2member_map_ \
+            else StepStatus.ERROR
+        self._ctx_manager.finalize_step(step_ctx, step_status)
+
+        return result
 ```
 
 ---
@@ -334,21 +338,18 @@ class AssetResolver:
 ## 执行示例
 
 ```python
-from gimbal.core.runner import Runner, RunRequest, RuntimeOptions
-from gimbal.schema import Scenario, Meta, Config
+from gimbal.core.boostrap import bootstrap
+from gimbal.core.runner import Engine, RunResult
+from gimbal.cli.context import CLIContext
 
-# 构造请求
-request = RunRequest(
-    run=scenario,
-    runtime=RuntimeOptions(
-        env="dev",
-        fail_fast=True,
-    )
-)
+# 1. bootstrap 初始化基础设施
+configuration = bootstrap(cli_ctx)
 
-# 执行
-runner = Runner(request, cli_ctx)
-result = runner.run()
+# 2. 创建 Engine
+engine = Engine(configuration)
+
+# 3. 执行
+result = engine.run(scenario)  # 或 engine.run(suite)
 
 # 检查结果
 print(f"Exit code: {result.exit_code}")

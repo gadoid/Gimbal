@@ -237,26 +237,30 @@ Context 生命周期协调器。
 ### 执行流程
 
 ```
-Runner._bootstrap()
+bootstrap()
     │
-    └── ContextManager.create_framework_context()
+    └── Configuration (持有 ctx_manager)
             │
-            └── for each Suite:
-                └── ContextManager.derive_suite_context()
-                        │
-                        └── for each Scenario:
-                            └── ContextManager.derive_scenario_context()
-                                    │
-                                    └── for each Step:
-                                        └── ContextManager.derive_step_context()
-                                                │
-                                                └── 执行策略...
+            └── Engine.run()
+                    │
+                    └── ContextManager.create_framework_context()
+                            │
+                            └── for each Suite:
+                                └── ContextManager.derive_suite_context()
+                                        │
+                                        └── for each Scenario:
+                                            └── ContextManager.derive_scenario_context()
                                                     │
-                                                    └── ContextManager.finalize_step()
-                                                    │
-                                            ContextManager.finalize_scenario()
-                                            │
-                                    ContextManager.finalize_suite()
+                                                    └── for each Step:
+                                                        └── ContextManager.derive_step_context()
+                                                                │
+                                                                └── 执行策略...
+                                                                    │
+                                                                    └── ContextManager.finalize_step()
+                                                                    │
+                                                            ContextManager.finalize_scenario()
+                                                            │
+                                                    ContextManager.finalize_suite()
 ```
 
 ---

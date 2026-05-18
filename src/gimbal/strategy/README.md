@@ -313,32 +313,45 @@ def build_default_dispatcher() -> StrategyDispatcher:
 
 ## 执行流程
 
+**说明**：策略分发由 `StepStateMachine` 内部通过 `_run_phase()` 调用 `dispatcher.dispatch_phase()` 触发。
+
 ```
-StepRunner.run()
+StepStateMachine.run() 【自驱动】
     │
-    ├── BEFORE_REQUEST
-    │   └── dispatcher.dispatch_phase(BEFORE_REQUEST, strategies, view)
+    ├── BEFORE_REQUEST 阶段
+    │   └── _run_phase(BEFORE_REQUEST)
     │           │
-    │           └── AssignExecutor.execute() × n
+    │           └── dispatcher.dispatch_phase(BEFORE_REQUEST, strategies, view)
+    │                   │
+    │                   └── AssignExecutor.execute() × n
     │
-    ├── CALLING
-    │   └── CallExecutor.execute(_CallSpec)
+    ├── CALLING 阶段
+    │   └── _do_http_call()
+    │           └── dispatcher.dispatch(_CallSpec, view)
+    │                   │
+    │                   └── CallExecutor.execute()
+    │                           │
+    │                           └── HTTP 请求
+    │                           └── 写入 response_status/headers/body
+    │
+    ├── AFTER_REQUEST 阶段
+    │   └── _run_phase(AFTER_REQUEST)
     │           │
-    │           └── HTTP 请求
-    │           └── 写入 response_status/headers/body
+    │           └── dispatcher.dispatch_phase(AFTER_REQUEST, strategies, view)
+    │                   │
+    │                   └── ExtractExecutor.execute() × n
     │
-    ├── AFTER_REQUEST
-    │   └── dispatcher.dispatch_phase(AFTER_REQUEST, strategies, view)
+    ├── VERIFYING 阶段
+    │   └── _run_phase(VERIFYING)
     │           │
-    │           └── ExtractExecutor.execute() × n
+    │           └── dispatcher.dispatch_phase(VERIFYING, strategies, view)
+    │                   │
+    │                   └── AssertionExecutor.execute() × n
     │
-    ├── VERIFYING
-    │   └── dispatcher.dispatch_phase(VERIFYING, strategies, view)
-    │           │
-    │           └── AssertionExecutor.execute() × n
-    │
-    └── TEARDOWN (可选)
-        └── dispatcher.dispatch_phase(TEARDOWN, strategies, view)
+    └── TEARDOWN 阶段 (可选)
+        └── _run_phase(TEARDOWN)
+                │
+                └── dispatcher.dispatch_phase(TEARDOWN, strategies, view)
 ```
 
 ---

@@ -273,30 +273,36 @@ class InvalidTransitionError(StateMachineError):
 
 ---
 
-## 与 Runner 的集成
+## 与核心模块的集成
+
+**设计原则**：状态机持有执行所需的全部依赖（dispatcher、view、step schema），自己驱动整个流程直到终态。调用方只需要 `sm.run()`，不感知内部如何流转。
 
 ```
-ScenarioRunner
+Engine.run()
     │
-    └── StepRunner
+    └── ScenarioRunner.run()
             │
-            ├── StepStateMachine          # 状态管理
-            │
-            └── 循环:
-                ├── sm.advance(BEFORE_REQUEST)
-                │   └── 执行 BEFORE_REQUEST 策略
-                │
-                ├── sm.advance(CALLING)
-                │   └── 执行 HTTP 调用
-                │
-                ├── sm.advance(AFTER_REQUEST)
-                │   └── 执行 AFTER_REQUEST 策略
-                │
-                ├── sm.advance(VERIFYING)
-                │   └── 执行断言策略
-                │
-                └── sm.advance(PASSED/FAILED)
-                    └── finalize_step()
+            └── StepRunner.run()
+                    │
+                    ├── 创建 StepContext
+                    ├── 构造 StepStateMachine（注入全部依赖）
+                    └── 调用 sm.run()
+
+StepStateMachine.run() 【状态机内部自驱动】
+    │
+    ├── _advance(PENDING → BEFORE_REQUEST)
+    │
+    └── while not is_terminal:
+            ├── handler = _handlers[current_state]
+            ├── next_state = handler()    # handler 返回下一个状态
+            └── _advance(next_state)
+
+    各状态 handler:
+        _handle_before_request() → CALLING 或 TEARDOWN
+        _handle_calling()         → AFTER_REQUEST 或 TEARDOWN
+        _handle_after_request()  → VERIFYING 或 TEARDOWN
+        _handle_verifying()      → PASSED/FAILED 或 TEARDOWN
+        _handle_teardown()       → PASSED/FAILED
 ```
 
 ---
