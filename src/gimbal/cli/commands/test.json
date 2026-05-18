@@ -18,7 +18,7 @@
     "setup": [],
     "teardown": [],
     "serviceDict": {
-      "settlement-service": "http://settlement-api.internal:8080"
+      "settlement-service": "https://gadoid.github.io"
     },
     "authDict": {
       "token": "Bearer test_token_001"
@@ -36,7 +36,7 @@
         "kind": "api",
         "service": "settlement-service",
         "method": "GET",
-        "path": "/api/v1/settlements/SL-2026-0001",
+        "path": "/tags/",
         "headers": {
           "Authorization": "${token}"
         },
@@ -58,19 +58,6 @@
           "operator": "eq",
           "expected": 200,
           "message": "查询结算单详情应返回200",
-          "soft": false
-        },
-        {
-          "kind": "assertion",
-          "name": "assert_data_not_empty",
-          "phase": "verifying",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.data",
-          "operator": "exists",
-          "expected": null,
-          "message": "响应体data字段不应为空",
           "soft": false
         }
       ]

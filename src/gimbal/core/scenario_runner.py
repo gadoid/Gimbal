@@ -68,6 +68,7 @@ class StepRunner:
         self._dispatcher = dispatcher
         self._ctx_manager = ctx_manager
         self._service_base_url = service_base_url
+        logger.debug("[StepRunner] 初始化: service_base_url=%s", service_base_url)
 
     def run(
         self,
@@ -76,6 +77,8 @@ class StepRunner:
         step_index: int,
     ) -> StepRunResult:
         step_id = f"step-{step_index:03d}"
+        logger.debug("[StepRunner] 开始执行 Step: step_id=%s scenario_id=%s",
+                     step_id, scenario_ctx.scenario_id)
 
         # 1. 创建 StepContext（由上层 scenario_ctx 派生）
         step_ctx = self._ctx_manager.derive_step_context(
@@ -86,6 +89,7 @@ class StepRunner:
             strategy_spec=step_schema.model_dump(),
             resolved_vars={},
         )
+        logger.debug("[StepRunner] StepContext 创建完成: step_id=%s", step_id)
 
         # 2. 构造状态机，注入全部执行依赖
         sm = StepStateMachine(
@@ -95,15 +99,19 @@ class StepRunner:
             view=StepContextAdapter(step_ctx),
             service_base_url=self._service_base_url,
         )
+        logger.debug("[StepRunner] StepStateMachine 构造完成: step_id=%s", step_id)
 
         # 3. 状态机自驱动运行
         result = sm.run()
+        logger.debug("[StepRunner] Step 执行完成: step_id=%s status=%s duration_ms=%.2f",
+                     step_id, result.status, result.duration_ms)
 
         # 4. finalize StepContext
         step_status = StepStatus(result.status) \
             if result.status in StepStatus._value2member_map_ \
             else StepStatus.ERROR
         self._ctx_manager.finalize_step(step_ctx, step_status)
+        logger.debug("[StepRunner] StepContext finalized: step_id=%s status=%s", step_id, step_status)
 
         return result
 
@@ -127,6 +135,7 @@ class ScenarioRunner:
     ) -> None:
         self._dispatcher = dispatcher
         self._ctx_manager = ctx_manager
+        logger.debug("[ScenarioRunner] 初始化完成")
 
     def run(
         self,
@@ -135,6 +144,8 @@ class ScenarioRunner:
     ) -> ScenarioRunResult:
         started_at = datetime.utcnow()
         sid = scenario_schema.scenarioId
+        logger.info("[ScenarioRunner] 开始执行 Scenario: scenario_id=%s scenario_name=%s step_count=%d",
+                    sid, scenario_schema.meta.name, len(scenario_schema.steps))
 
         # 1. 派生 ScenarioContext（挂载在 suite_ctx 下）
         scenario_ctx = self._ctx_manager.derive_scenario_context(
@@ -143,6 +154,7 @@ class ScenarioRunner:
             scenario_name=scenario_schema.meta.name,
             description=scenario_schema.meta.description,
         )
+        logger.debug("[ScenarioRunner] ScenarioContext 创建完成: scenario_id=%s", sid)
 
         # 2. 注入 serviceDict / authDict
         self._inject_config(scenario_schema, scenario_ctx)
@@ -159,18 +171,25 @@ class ScenarioRunner:
 
         for idx, step_union in enumerate(scenario_schema.steps):
             if not hasattr(step_union, "api"):
-                logger.warning("[Scenario %s] step[%d] 是未展开的 Ref，跳过", sid, idx)
+                logger.warning("[ScenarioRunner] step[%d] 是未展开的 Ref，跳过", idx)
                 continue
 
+            logger.debug("[ScenarioRunner] 开始执行第 %d/%d 个 Step: scenario_id=%s",
+                        idx + 1, len(scenario_schema.steps), sid)
             result = step_runner.run(step_union, scenario_ctx, idx)
             step_results.append(result)
 
+            logger.info("[ScenarioRunner] Step 完成: step_id=%s status=%s duration_ms=%.2f (%d/%d)",
+                       result.step_id, result.status, result.duration_ms, idx + 1, len(scenario_schema.steps))
+
             if not result.passed:
                 overall_status = result.status
+                logger.warning("[ScenarioRunner] Scenario 中断: step_id=%s 失败，后续 step 不再执行", result.step_id)
                 break   # fail_fast，后续 step 不再执行
 
         # 4. finalize ScenarioContext
         self._ctx_manager.finalize_scenario(scenario_ctx, overall_status)
+        logger.debug("[ScenarioRunner] ScenarioContext finalized: scenario_id=%s status=%s", sid, overall_status)
 
         return ScenarioRunResult(
             scenario_id=sid,
@@ -189,6 +208,9 @@ class ScenarioRunner:
         service_dict = getattr(schema.config, "serviceDict", None) or {}
         auth_dict = getattr(schema.config, "authDict", None) or {}
 
+        logger.debug("[ScenarioRunner] 注入配置: service_count=%d auth_count=%d",
+                    len(service_dict), len(auth_dict))
+
         for k, v in service_dict.items():
             ctx.channels.promote_from(
                 key=f"service.{k}", value=v,
@@ -204,4 +226,6 @@ class ScenarioRunner:
 
     def _pick_base_url(self, schema: Scenario) -> str:
         sd = getattr(schema.config, "serviceDict", None) or {}
-        return next(iter(sd.values()), "")
+        base_url = next(iter(sd.values()), "")
+        logger.debug("[ScenarioRunner] 选取 base_url: %s", base_url)
+        return base_url

@@ -59,6 +59,7 @@ class Engine:
 
     def __init__(self, configuration: Configuration) -> None:
         self._ictx = configuration
+        logger.debug("[Engine] Engine 初始化完成，持有 Configuration 引用")
 
     def run(self, target: Scenario | Suite) -> RunResult:
         """执行入口。
@@ -75,7 +76,8 @@ class Engine:
             run_id=str(uuid.uuid4()),
             cfg= ictx,
         )
-        logger.info("[Engine] run_id=%s env=%s mode=%s", framework_ctx.run_id, framework_ctx.config.env, framework_ctx.mode)
+        logger.info("[Engine] 执行开始: run_id=%s env=%s mode=%s target=%s",
+                    framework_ctx.run_id, framework_ctx.config.env, framework_ctx.mode, type(target).__name__)
 
         if isinstance(target, Scenario):
             return self._run_scenario(target, framework_ctx)
@@ -93,6 +95,9 @@ class Engine:
         framework_ctx: FrameworkContext,
     ) -> RunResult:
         from gimbal.core.scenario_runner import ScenarioRunner
+
+        logger.info("[Engine] 开始执行 Scenario: scenario_id=%s", scenario.scenarioId)
+
         # 2. 为单 scenario 执行创建默认 SuiteContext
         suite_ctx = framework_ctx.ctx_manager.derive_suite_context(
             framework_ctx,
@@ -101,9 +106,15 @@ class Engine:
             tags=[],
             plugins={},
         )
+        logger.debug("[Engine] SuiteContext 创建完成: suite_id=%s", suite_ctx.suite_id)
+
         result = ScenarioRunner(framework_ctx.dispatcher, framework_ctx.ctx_manager).run(
             scenario, suite_ctx
         )
+
+        logger.info("[Engine] Scenario 执行完成: scenario_id=%s status=%s duration_ms=%.2f",
+                    scenario.scenarioId, result.status, result.duration_ms)
+
         return RunResult(
             exit_code=0 if result.passed else 1,
             total=1,
@@ -131,21 +142,29 @@ class Engine:
     ) -> RunResult:
         from gimbal.core.scenario_runner import ScenarioRunner
 
+        suite_id = getattr(suite, "suiteId", "__suite__")
+        suite_name = getattr(suite, "name", "Suite")
+        logger.info("[Engine] 开始执行 Suite: suite_id=%s suite_name=%s scenario_count=%d",
+                     suite_id, suite_name, len(suite.suite))
+
         # 2. Suite 执行时用 Suite 自身信息创建 SuiteContext
         suite_ctx = framework_ctx.ctx_manager.derive_suite_context(
             framework_ctx,
-            suite_id=getattr(suite, "suiteId", "__suite__"),
-            suite_name=getattr(suite, "name", "Suite"),
+            suite_id=suite_id,
+            suite_name=suite_name,
             tags=[],
             plugins={},
         )
+        logger.debug("[Engine] SuiteContext 创建完成: suite_id=%s", suite_ctx.suite_id)
 
         runner = ScenarioRunner(framework_ctx.dispatcher, framework_ctx.ctx_manager)
         cfg = framework_ctx.config
         total = passed = failed = error = 0
         details: list[dict[str, Any]] = []
 
-        for scenario in suite.suite:
+        for idx, scenario in enumerate(suite.suite):
+            logger.debug("[Engine] 开始执行 Suite 中第 %d/%d 个 Scenario: scenario_id=%s",
+                         idx + 1, len(suite.suite), scenario.scenarioId)
             result = runner.run(scenario, suite_ctx)
             total += 1
             if result.passed:
@@ -159,9 +178,14 @@ class Engine:
                 "status":      result.status,
                 "duration_ms": result.duration_ms,
             })
+            logger.info("[Engine] Scenario 完成: scenario_id=%s status=%s duration_ms=%.2f (%d/%d)",
+                        result.scenario_id, result.status, result.duration_ms, idx + 1, len(suite.suite))
             if cfg.fail_fast and not result.passed:
-                logger.warning("[Engine] fail_fast：在 %s 后停止", result.scenario_id)
+                logger.warning("[Engine] fail_fast 触发：在 %s 后停止执行", result.scenario_id)
                 break
+
+        logger.info("[Engine] Suite 执行完成: suite_id=%s total=%d passed=%d failed=%d error=%d exit_code=%d",
+                    suite_id, total, passed, failed, error, 0 if (failed + error) == 0 else 1)
 
         return RunResult(
             exit_code=0 if (failed + error) == 0 else 1,

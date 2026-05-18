@@ -47,19 +47,16 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
     不创建任何层级 Context（由 Engine.run() 负责）。
     """
     # 1. 配置合并
+    logger.info("[bootstrap] 开始加载配置...")
     cfg = ConfigLoader().load(cli_ctx)
-
+    logger.debug("[bootstrap] 配置加载完成: env=%s mode=%s", cfg.env, cfg.mode)
 
     # 2. 日志（最先，后续所有日志才能正确输出）
     _configure_logging(cfg)
-
-
-    logger.debug(
-        "[bootstrap] env=%s mode=%s log_level=%s",
-        cfg.env, cfg.mode, cfg.log_level,
-    )
+    logger.debug("[bootstrap] 日志系统配置完成: log_level=%s", cfg.log_level)
 
     # 3. 基础设施
+    logger.info("[bootstrap] 初始化基础设施...")
     from gimbal.events.bus import InMemoryEventBus
     from gimbal.repository.backends.filesystem import InMemoryArchive
     from gimbal.context.manager import ContextManager
@@ -67,10 +64,15 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
 
     event_bus = InMemoryEventBus()
     archive   = InMemoryArchive()
+    ctx_manager = ContextManager(archive=archive, event_bus=event_bus)
+    dispatcher = build_default_dispatcher()
+
+    logger.info("[bootstrap] 基础设施初始化完成: EventBus, Archive, ContextManager, Dispatcher")
+
     return Configuration(
         cfg=cfg,
-        ctx_manager=ContextManager(archive=archive, event_bus=event_bus),
-        dispatcher=build_default_dispatcher(),
+        ctx_manager=ctx_manager,
+        dispatcher=dispatcher,
         event_bus=event_bus,
         archive=archive,
     )
