@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum
+from dataclasses import dataclass, field
 from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field
 from .base import SealedBaseModel, ContextLayer
@@ -43,6 +44,16 @@ class ErrorInfo(BaseModel):
     message: str
     traceback: Optional[str] = None
 
+@dataclass
+class HttpExchange:
+    request_method: str = ""
+    request_url: str = ""
+    request_headers: dict = field(default_factory=dict)
+    request_body: Any = None
+    response_status: Optional[int] = None
+    response_headers: dict = field(default_factory=dict)
+    response_body: Any = None
+    duration_ms: float = 0.0
 
 class StepOutcome(BaseModel):
     """Step 产物态:执行期间累积,seal 时定型。"""
@@ -61,6 +72,7 @@ class StepOutcome(BaseModel):
 class StepContext(SealedBaseModel):
     inputs: StepInputs
     outcome: StepOutcome = Field(default_factory=StepOutcome)
+    http_exchange: Optional[HttpExchange] = None 
     started_at: datetime
     ended_at: Optional[datetime] = None
     

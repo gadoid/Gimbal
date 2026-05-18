@@ -3,7 +3,7 @@ from .base import ContextLayer
 from .channels import ArtifactRef
 from .exceptions import LayerResolutionError
 from .step import StepContext, AssertionResult
-
+from gimbal.context.step import HttpExchange
 
 @runtime_checkable
 class StrategyContextView(Protocol):
@@ -120,3 +120,10 @@ class StepContextAdapter:
         if layer == ContextLayer.FRAMEWORK:
             return ctx
         raise LayerResolutionError(f"Unknown layer: {layer}")
+    
+    def read_http_exchange(self) -> Optional[HttpExchange]:
+        return self._ctx.http_exchange
+
+    def write_http_exchange(self, exchange: HttpExchange) -> None:  
+        # seal 之前可以直接赋值
+        object.__setattr__(self._ctx, "http_exchange", exchange)    

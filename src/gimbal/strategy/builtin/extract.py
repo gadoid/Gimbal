@@ -5,6 +5,10 @@ import traceback
 from typing import Any, TYPE_CHECKING
 
 from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, StrategyStatus
+from gimbal.utils.jsonpath import (
+    get as jget , get_all , set_value as jset ,
+    resolve_template, is_template
+)
 
 if TYPE_CHECKING:
     from gimbal.context.views import StrategyContextView
@@ -32,16 +36,21 @@ class ExtractExecutor(StrategyExecutor):
                         spec.target, spec.source, spec.expression, spec.scope)
 
             # 1. 取出要解析的原始数据
+            exchange = view.read_http_exchange()
+            if exchange is None:
+                return StrategyResult(
+                    status=StrategyStatus.ERROR,
+                    message="ExtractExecutor: no http_exchange found, "
+                            "Extract must run after CALLING phase",
+                )
+
             source_key = _source_to_var_key(spec.source)
-            raw = view.read_variable(
-                source_key,
-                from_layer=_scope_to_layer(spec.scope),
-            )
+            raw = getattr(exchange, source_key, None)
             logger.debug("[ExtractExecutor] 读取源数据: source=%s raw_type=%s",
                         source_key, type(raw).__name__)
 
             # 2. 解析表达式
-            value = _jsonpath_simple(raw, spec.expression)
+            value = jget(raw, spec.expression)
             logger.debug("[ExtractExecutor] JSONPath 解析结果: expression=%s value=%s", spec.expression, value)
 
             if value is None:

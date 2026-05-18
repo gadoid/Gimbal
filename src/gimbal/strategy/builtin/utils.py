@@ -2,17 +2,15 @@ from typing import Any
 from gimbal.context.views import StrategyContextView
 
 def _source_to_var_key(source) -> str:
-    """将 ExtractSource 枚举映射到 context 变量名。"""
     from gimbal.schema.strategy import ExtractSource
     mapping = {
-        ExtractSource.RESPONSE_BODY: "response_body",
-        ExtractSource.RESPONSE_HEADER: "response_headers",
-        ExtractSource.REQUEST_BODY: "request_body",
-        ExtractSource.REQUEST_HEADER: "request_headers",
+        ExtractSource.RESPONSE_BODY:    "response_body",
+        ExtractSource.RESPONSE_HEADER:  "response_headers",
+        ExtractSource.REQUEST_BODY:     "request_body",
+        ExtractSource.REQUEST_HEADER:   "request_headers",
     }
-    return mapping.get(source, str(source))
- 
- 
+    return mapping.get(source, str(source)) 
+
 def _scope_to_layer(scope):
     """将 schema Scope 映射到 ContextLayer。"""
     from gimbal.schema.strategy import Scope

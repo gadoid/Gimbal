@@ -4,7 +4,7 @@ import logging
 import traceback
 from typing import Any, TYPE_CHECKING
 from .utils import _evaluate
-
+from gimbal.utils.jsonpath import is_jsonpath
 from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, StrategyStatus
 
 logger = logging.getLogger(__name__)
@@ -27,10 +27,23 @@ class AssertionExecutor(StrategyExecutor):
             # from pprint import pprint
             # pprint(view.content)
             # 读取被断言的目标值
-            actual = view.read_variable(
-                spec.target,
-                from_layer=ContextLayer.SCENARIO,
-            )
+            _HTTP_EXCHANGE_KEYS = {
+                "response_status", "response_body",
+                "response_headers", "request_body"
+            }
+
+            if spec.target in _HTTP_EXCHANGE_KEYS:
+                exchange = view.read_http_exchange()
+                actual = getattr(exchange, spec.target, None) if exchange else None
+            elif is_jsonpath(spec.target):
+                # $.data.code 这类路径，从 response_body 里提取
+                exchange = view.read_http_exchange()
+                raw_body = exchange.response_body if exchange else None
+                actual = jget(raw_body, spec.target)
+            else:
+                # 普通 key，从 Scenario channels 读（Extract 提升上来的业务字段）
+                actual = view.read_variable(spec.target, from_layer=ContextLayer.SCENARIO)
+
             logger.info("[AssertionExecutor] 读取实际值: target=%s actual=%s", spec.target, actual)
 
             passed, msg = _evaluate(spec.operator, actual, spec.expected)

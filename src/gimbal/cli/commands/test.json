@@ -54,7 +54,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "response_status",
+          "target": "response.status",
           "operator": "eq",
           "expected": 200,
           "message": "查询结算单详情应返回200",
