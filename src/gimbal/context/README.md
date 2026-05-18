@@ -84,7 +84,6 @@ class ContextLayer(str, Enum):
 |------|------|------|
 | `run_id` | `str` | 唯一运行 ID |
 | `started_at` | `datetime` | 开始时间 |
-| `framework_version` | `str` | 框架版本 |
 | `config` | `dict` | 配置字典 |
 | `environment` | `str` | 运行环境 |
 | `channels` | `Channels` | 数据通道 |

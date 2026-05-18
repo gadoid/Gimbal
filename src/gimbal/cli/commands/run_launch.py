@@ -205,7 +205,6 @@ def launch(
         typer.echo(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         raise typer.Exit(code=0)
 
-
     #7. schema + 资产有效性检查，对数据类进行格式检查，对资产进行有效性检查
     try:
         scenario = Scenario.model_validate(payload)

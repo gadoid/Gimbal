@@ -1,11 +1,12 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from .base import ContextLayer
 from .channels import Channels, ChannelsPolicy, Policies, Promotion
 from .framework import FrameworkContext
 from .suite import SuiteContext
 from .scenario import ScenarioContext
 from .step import StepContext, StepInputs, StepStatus
+from gimbal.core.boostrap import Configuration
 from .events import (
     ScenarioStartedEvent, ScenarioCompletedEvent,
     project_step_started, project_step_completed, project_promotion,
@@ -21,8 +22,7 @@ class ContextManager:
     
     # ── Framework ─────────────────────────────────────
     def create_framework_context(
-        self, *, run_id: str, config: dict, environment: str,
-        framework_version: str,
+        self, *, run_id: str, cfg: Configuration, 
         channels_policy: Optional[ChannelsPolicy] = None,
     ) -> FrameworkContext:
         # 增加配置层的初始化
@@ -35,9 +35,11 @@ class ContextManager:
         ctx = FrameworkContext(
             run_id=run_id,
             started_at=datetime.utcnow(),
-            framework_version=framework_version,
-            config=config,
-            environment=environment,
+            config=cfg.cfg,
+            ctx_manager=cfg.ctx_manager,
+            dispatcher=cfg.dispatcher,
+            event_bus=cfg.event_bus,
+            archive=cfg.archive,
             channels=channels,
         )
         ctx.seal()

@@ -26,8 +26,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from gimbal.schema.scenario import Scenario, Suite
+from gimbal.context.manager import ContextManager
+
 
 from .boostrap import Configuration
+
 
 logger = logging.getLogger(__name__)
 
@@ -66,36 +69,19 @@ class Engine:
             2. SuiteContext      —— 单 scenario 执行时用 __default__ 占位
         然后分发到 ScenarioRunner。
         """
-        ictx = self._ictx
-        cfg = ictx.cfg
+        ictx:Configuration = self._ictx
 
         # 1. 创建 FrameworkContext（每次 run 独立的 run_id）
         framework_ctx = ictx.ctx_manager.create_framework_context(
             run_id=str(uuid.uuid4()),
-            framework_version=cfg.framework_version,
-            environment=cfg.env,
-            config={
-                "env":             cfg.env,
-                "mode":            cfg.mode,
-                "log_level":       cfg.log_level,
-                "no_color":        cfg.no_color,
-                # "mongo_uri":       cfg.mongo_uri,
-                # "minio_endpoint":  cfg.minio_endpoint,
-                "plugins":         list(cfg.plugins),
-                "reporters":       list(cfg.reporters),
-                "report_dir":      cfg.report_dir,
-                "fail_fast":       cfg.fail_fast,
-                # "default_timeout": cfg.default_timeout,
-                # "default_retry":   cfg.default_retry,
-                # **cfg.extras,
-            },
+            cfg= ictx,
         )
-        logger.info("[Engine] run_id=%s env=%s mode=%s", framework_ctx.run_id, cfg.env, cfg.mode)
+        logger.info("[Engine] run_id=%s env=%s mode=%s", framework_ctx.run_id, framework_ctx.config.env, framework_ctx.mode)
 
         if isinstance(target, Scenario):
-            return self._run_scenario(target, framework_ctx, ictx)
+            return self._run_scenario(target, framework_ctx)
         elif isinstance(target, Suite):
-            return self._run_suite(target, framework_ctx, ictx)
+            return self._run_suite(target, framework_ctx)
         else:
             logger.error("[Engine] 收到未展开的 Ref: %s", type(target).__name__)
             return RunResult(exit_code=3, error=1)
@@ -106,18 +92,17 @@ class Engine:
         self,
         scenario: Scenario,
         framework_ctx: Any,
-        ictx: Configuration,
     ) -> RunResult:
         from gimbal.core.scenario_runner import ScenarioRunner
         # 2. 为单 scenario 执行创建默认 SuiteContext
-        suite_ctx = ictx.ctx_manager.derive_suite_context(
+        suite_ctx = framework_ctx.ctx_manager.derive_suite_context(
             framework_ctx,
             suite_id="__default__",
             suite_name="Default Suite",
             tags=[],
             plugins={},
         )
-        result = ScenarioRunner(ictx.dispatcher, ictx.ctx_manager).run(
+        result = ScenarioRunner(framework_ctx.dispatcher, framework_ctx.ctx_manager).run(
             scenario, suite_ctx
         )
         return RunResult(
@@ -144,12 +129,11 @@ class Engine:
         self,
         suite: Suite,
         framework_ctx: Any,
-        ictx: Configuration,
     ) -> RunResult:
         from gimbal.core.scenario_runner import ScenarioRunner
 
         # 2. Suite 执行时用 Suite 自身信息创建 SuiteContext
-        suite_ctx = ictx.ctx_manager.derive_suite_context(
+        suite_ctx = framework_ctx.ctx_manager.derive_suite_context(
             framework_ctx,
             suite_id=getattr(suite, "suiteId", "__suite__"),
             suite_name=getattr(suite, "name", "Suite"),
@@ -157,8 +141,8 @@ class Engine:
             plugins={},
         )
 
-        runner = ScenarioRunner(ictx.dispatcher, ictx.ctx_manager)
-        cfg = ictx.cfg
+        runner = ScenarioRunner(framework_ctx.dispatcher, framework_ctx.ctx_manager)
+        cfg = framework_ctx.cfg
         total = passed = failed = error = 0
         details: list[dict[str, Any]] = []
 

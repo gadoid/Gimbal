@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from gimbal.cli.context import CLIContext
 from gimbal.config.loader import ConfigLoader, BootstrapConfig
+
+if TYPE_CHECKING :
+    from gimbal.context.manager import ContextManager
+
 
 @dataclass(frozen=True)
 class Configuration:
@@ -22,7 +25,7 @@ class Configuration:
     frozen=True：产出后不可修改，Engine 只读取，不覆盖。
     """
     cfg: BootstrapConfig
-    ctx_manager: Any
+    ctx_manager: ContextManager
     dispatcher: Any
     # 以下两个供需要直接访问基础设施的场景（reporter、plugin 等）
     event_bus: Any
