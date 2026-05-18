@@ -4,7 +4,7 @@ import logging
 import traceback
 from typing import Any, TYPE_CHECKING
 from .utils import _evaluate
-from gimbal.utils.jsonpath import is_jsonpath
+from gimbal.utils.jsonpath import is_jsonpath, get as jget
 from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, StrategyStatus
 
 logger = logging.getLogger(__name__)
