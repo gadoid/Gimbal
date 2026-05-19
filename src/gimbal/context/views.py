@@ -121,9 +121,27 @@ class StepContextAdapter:
             return ctx
         raise LayerResolutionError(f"Unknown layer: {layer}")
     
-    def read_http_exchange(self) -> Optional[HttpExchange]:
-        return self._ctx.http_exchange
+    def read_http_exchange(self, *keys: str) -> dict[str, Any]:
+        """读取 http_exchange 中指定字段，不传 keys 则返回全部。"""
+        exchange = self._ctx.http_exchange
+        if exchange is None:
+            return {}
+        
+        if not keys:
+            return {
+                "request_method":   exchange.request_method,
+                "request_url":      exchange.request_url,
+                "request_headers":  exchange.request_headers,
+                "request_body":     exchange.request_body,
+                "response_status":  exchange.response_status,
+                "response_headers": exchange.response_headers,
+                "response_body":    exchange.response_body,
+                "duration_ms":      exchange.duration_ms,
+            }
+        
+        return {k: getattr(exchange, k, None) for k in keys}
 
-    def write_http_exchange(self, exchange: HttpExchange) -> None:  
-        # seal 之前可以直接赋值
-        object.__setattr__(self._ctx, "http_exchange", exchange)    
+    def write_http_exchange(self, **kwargs) -> None:
+        if self._ctx.http_exchange is None:
+            object.__setattr__(self._ctx, "http_exchange", HttpExchange())
+        self._ctx.http_exchange.update(**kwargs)

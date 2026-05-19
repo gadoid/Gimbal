@@ -5,6 +5,8 @@ import traceback
 from typing import Any, TYPE_CHECKING
 
 from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, StrategyStatus
+from gimbal.context.step import HttpExchange
+from gimbal.context.views import StepContextAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +21,7 @@ class CallExecutor(StrategyExecutor):
 
     kind = "_call"
 
-    def execute(self, spec: "StrategyBase", view: "StrategyContextView") -> StrategyResult:
+    def execute(self, spec: "StrategyBase", view: "StepContextAdapter") -> StrategyResult:
         """
         spec 是内部 _CallSpec dataclass，包含：
           - method / url / headers / body / timeout
@@ -48,14 +50,20 @@ class CallExecutor(StrategyExecutor):
             logger.info("[CallExecutor] HTTP 响应: %s %s -> %d", method, url, response.status_code)
 
             # 将响应写入 scenario context，供后续 Extract 使用
-            view.promote_variable("response_status", response.status_code, to=ContextLayer.SCENARIO)
-            view.promote_variable("response_headers", dict(response.headers), to=ContextLayer.SCENARIO)
+            # view.promote_variable("response_status", response.status_code, to=ContextLayer.SCENARIO)
+            # view.promote_variable("response_headers", dict(response.headers), to=ContextLayer.SCENARIO)
+            # logger.info(f"{response.status_code}")
+            view.write_http_exchange(response_status=response.status_code)
+            # logger.info(f"{view.read_http_exchange("response_status")}")
+            view.write_http_exchange(response_headers=response.headers)
+            # logger.info(f"{view.read_http_exchange("response_headers")}")
+
             try:
                 resp_body = response.json()
             except Exception:
                 resp_body = response.text
-            view.promote_variable("response_body", resp_body, to=ContextLayer.SCENARIO)
-
+            # view.promote_variable("response_body", resp_body, to=ContextLayer.SCENARIO)
+            view.write_http_exchange(response_body=resp_body)
             logger.debug("[CallExecutor] 响应已写入 context: response_status=%s", response.status_code)
 
             return StrategyResult(

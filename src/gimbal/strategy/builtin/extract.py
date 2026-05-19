@@ -36,7 +36,7 @@ class ExtractExecutor(StrategyExecutor):
                         spec.target, spec.source, spec.expression, spec.scope)
 
             # 1. 取出要解析的原始数据
-            exchange = view.read_http_exchange()
+            exchange = view.read_http_exchange(spec.target)
             if exchange is None:
                 return StrategyResult(
                     status=StrategyStatus.ERROR,

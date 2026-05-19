@@ -44,16 +44,23 @@ class ErrorInfo(BaseModel):
     message: str
     traceback: Optional[str] = None
 
-@dataclass
 class HttpExchange:
-    request_method: str = ""
-    request_url: str = ""
-    request_headers: dict = field(default_factory=dict)
-    request_body: Any = None
-    response_status: Optional[int] = None
-    response_headers: dict = field(default_factory=dict)
-    response_body: Any = None
-    duration_ms: float = 0.0
+    def __init__(self):
+        self.request_method = ""
+        self.request_url = ""
+        self.request_headers = {}
+        self.request_body = None
+        self.response_status = None
+        self.response_headers = {}
+        self.response_body = None
+        self.duration_ms = 0.0
+
+    def update(self, **kwargs) -> None:
+        for k, v in kwargs.items():
+            if hasattr(self, k):
+                setattr(self, k, v)
+            else :
+                print(f"{k} 属性不存在，请检查")
 
 class StepOutcome(BaseModel):
     """Step 产物态:执行期间累积,seal 时定型。"""

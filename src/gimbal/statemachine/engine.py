@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 from gimbal.statemachine.states import StepState, VALID_TRANSITIONS
 from gimbal.statemachine.exceptions import InvalidTransitionError, AlreadyTerminalError
 from gimbal.strategy.executor_base import PhaseResult, StrategyResult, StrategyStatus
+from gimbal.context.step import HttpExchange
 
 if TYPE_CHECKING:
     from gimbal.context.views import StepContextAdapter
@@ -286,7 +287,7 @@ class StepStateMachine:
 
     def _do_http_call(self) -> StrategyResult:
         """合成 _CallSpec 交给 CallExecutor 执行。"""
-        from gimbal.context.base import ContextLayer
+       # from gimbal.context.base import ContextLayer
 
         api = self._step_schema.api
         if not hasattr(api, "service"):
@@ -301,11 +302,12 @@ class StepStateMachine:
         body = getattr(request, "body", {}) or {}
 
         # 把请求体写入 context，供 BEFORE_REQUEST 阶段的 Assign 使用
-        self._view.promote_variable(
-            "request_body", body,
-            to=ContextLayer.SCENARIO,
-            allow_overwrite=True,
-        )
+        # self._view.promote_variable(
+        #     "request_body", body,
+        #     to=ContextLayer.SCENARIO,
+        #     allow_overwrite=True,
+        # )
+        self._view.write_http_exchange(request_body=body)
 
         call_spec = _CallSpec(
             method=api.method,
