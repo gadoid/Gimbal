@@ -55,6 +55,12 @@ class HttpExchange:
         self.response_body = None
         self.duration_ms = 0.0
 
+    
+    def __getattr__(self, name):
+        """当属性不存在时给出提示"""
+        print(f"属性 '{name}' 不存在")
+        return None
+
     def update(self, **kwargs) -> None:
         for k, v in kwargs.items():
             if hasattr(self, k):

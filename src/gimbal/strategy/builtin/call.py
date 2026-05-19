@@ -54,9 +54,9 @@ class CallExecutor(StrategyExecutor):
             # view.promote_variable("response_headers", dict(response.headers), to=ContextLayer.SCENARIO)
             # logger.info(f"{response.status_code}")
             view.write_http_exchange(response_status=response.status_code)
-            # logger.info(f"{view.read_http_exchange("response_status")}")
+            logger.info(f"{view.read_http_exchange("response_status")}")
             view.write_http_exchange(response_headers=response.headers)
-            # logger.info(f"{view.read_http_exchange("response_headers")}")
+            logger.info(f"{view.read_http_exchange("response_headers")}")
 
             try:
                 resp_body = response.json()

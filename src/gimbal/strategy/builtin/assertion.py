@@ -31,10 +31,10 @@ class AssertionExecutor(StrategyExecutor):
                 "response_status", "response_body",
                 "response_headers", "request_body"
             }
-
+            logger.info(f"spec.target: {spec.target}")
             if spec.target in _HTTP_EXCHANGE_KEYS:
-                exchange = view.read_http_exchange(spec.target)
-                actual = getattr(exchange, spec.target, None) if exchange else None
+               # actual = view.read_http_exchange(spec.target)[spec.target]
+                actual = view.read_http_exchange()[spec.target]
             elif is_jsonpath(spec.target):
                 # $.data.code 这类路径，从 response_body 里提取
                 exchange = view.read_http_exchange()
