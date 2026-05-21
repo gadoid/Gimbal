@@ -14,6 +14,7 @@ from .retrypolicy import RetryPolicy
 from .scenario import Scenario, Meta, Config
 from .setup import Setup, SetupRef, SetupUnion
 from .teardown import Teardown, TeardownRef, TeardownUnion
+from .auth import AuthSession
 
 __all__ = [
     "StepState",
@@ -58,4 +59,5 @@ __all__ = [
     "Teardown",
     "TeardownRef",
     "TeardownUnion",
+    "AuthSession",
 ]

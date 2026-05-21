@@ -57,13 +57,14 @@ class ContextManager:
             policy=channels_policy or Policies.suite_default(),
         )
         self._wire_promotion_listener(channels, framework_ctx.run_id)
-        
+
         return SuiteContext(
             suite_id=suite_id,
             suite_name=suite_name,
             tags=tags,
             started_at=datetime.utcnow(),
             parent=framework_ctx,
+            config=framework_ctx.config,  # 引用传递
             plugins=plugins,
             channels=channels,
         )
@@ -95,6 +96,7 @@ class ContextManager:
             description=description,
             started_at=datetime.utcnow(),
             parent=suite_ctx,
+            config=suite_ctx.config,  # 引用传递
             channels=channels,
         )
         self._event_bus.publish(ScenarioStartedEvent(

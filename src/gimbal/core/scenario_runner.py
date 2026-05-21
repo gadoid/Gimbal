@@ -202,24 +202,20 @@ class ScenarioRunner:
     # ── 内部辅助 ─────────────────────────────────────────────────────────────
 
     def _inject_config(self, schema: Scenario, ctx: ScenarioContext) -> None:
-        """把 serviceDict / authDict 写入 scenario channels。"""
+        """把 serviceDict 写入 scenario channels。
+
+        注意：auth 信息存储在 ctx.config.users_pool 中（引用传递），
+        无需注入到 channels，直接通过 ctx.config 访问即可。
+        """
         from gimbal.context.base import ContextLayer
 
         service_dict = getattr(schema.config, "serviceDict", None) or {}
-        auth_dict = getattr(schema.config, "authDict", None) or {}
 
-        logger.debug("[ScenarioRunner] 注入配置: service_count=%d auth_count=%d",
-                    len(service_dict), len(auth_dict))
+        logger.debug("[ScenarioRunner] 注入配置: service_count=%d", len(service_dict))
 
         for k, v in service_dict.items():
             ctx.channels.promote_from(
                 key=f"service.{k}", value=v,
-                from_layer=ContextLayer.STEP,
-                by_step_id="__framework__",
-            )
-        for k, v in auth_dict.items():
-            ctx.channels.promote_from(
-                key=f"auth.{k}", value=v,
                 from_layer=ContextLayer.STEP,
                 by_step_id="__framework__",
             )

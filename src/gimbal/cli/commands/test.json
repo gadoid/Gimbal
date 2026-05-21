@@ -21,7 +21,12 @@
       "settlement-service": "https://gadoid.github.io"
     },
     "authDict": {
-      "token": "Bearer test_token_001"
+      "tag": "admin",
+      "url": "https://api.example.com/login",
+      "username": "admin",
+      "password": "secret",
+      "expires_in": 7200,
+      "token_type": "Bearer"
     },
     "timePolicy": {
       "kind": "record"
@@ -38,7 +43,7 @@
         "method": "GET",
         "path": "/tags/",
         "headers": {
-          "Authorization": "${token}"
+          "Authorization": "${auth.admin.auth_header}"
         },
         "timeout": 30
       },
@@ -69,7 +74,7 @@
         "method": "GET",
         "path": "/tags/",
         "headers": {
-          "Authorization": "${token}"
+          "Authorization": "${auth.admin.auth_header}"
         },
         "timeout": 30
       },
