@@ -1,12 +1,10 @@
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 from pydantic import Field
 from .base import SealedBaseModel, ContextLayer
 from .channels import Channels
 from .suite import SuiteContext
-
-if TYPE_CHECKING:
-    from ..config.models import BootstrapConfig
+from ..config.models import BootstrapConfig
 
 
 class ScenarioContext(SealedBaseModel):
@@ -19,7 +17,7 @@ class ScenarioContext(SealedBaseModel):
     step_refs: list[str] = Field(default_factory=list)
 
     parent: SuiteContext = Field(exclude=True)
-    config: "BootstrapConfig" = Field(exclude=True)  # 引用传递
+    config: BootstrapConfig = Field(exclude=True)  # 引用传递
     channels: Channels = Field(exclude=True)
 
     @property

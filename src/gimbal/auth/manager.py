@@ -7,9 +7,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-import httpx
-
 from ..schema.auth import AuthSession
+from .authenticator import get_authenticator
 from .exceptions import AuthLoginFailed, AuthSessionNotFound
 
 if TYPE_CHECKING:
@@ -58,13 +57,13 @@ class AuthManager:
         # 未认证 → 登录
         if not auth.is_authenticated:
             logger.info("[AuthManager] 登录认证: tag=%s", tag)
-            self._login(auth)
+            self._login(auth, tag)
             return auth
 
         # 需刷新
         if auth.should_refresh:
             logger.info("[AuthManager] 刷新 token: tag=%s", tag)
-            self._refresh(auth)
+            self._refresh(auth, tag)
             return auth
 
         return auth
@@ -81,54 +80,35 @@ class AuthManager:
         """
         # 1. dict → AuthSession
         auth = AuthSession(**data)
-        auth.tag = tag
 
         # 2. 存入 config
         self._config.users_pool[tag] = auth
 
         # 3. 认证
         if not auth.is_authenticated:
-            self._login(auth)
+            self._login(auth, tag)
 
         return auth
 
-    def _login(self, auth: AuthSession) -> None:
-        """执行登录。"""
+    def _login(self, auth: AuthSession, tag: str) -> None:
+        """执行登录（委托给认证器）。"""
         try:
-            if not auth.url:
-                # 无 url，使用预置 token（password 作为 token）
-                if auth.password:
-                    auth.apply_token(auth.password)
-                return
-
-            # 调用登录接口
-            response = httpx.post(
-                auth.url,
-                json={
-                    "username": auth.username,
-                    "password": auth.password,
-                },
-                timeout=30,
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            token = data.get("access_token") or data.get("token")
-            expires_in = data.get("expires_in")
-            auth.apply_token(token, expires_in)
-            logger.info("[AuthManager] 登录成功: tag=%s", auth.tag)
+            authenticator = get_authenticator(auth.url)
+            authenticator.authenticate(auth, tag)
+            logger.info("[AuthManager] 登录成功: tag=%s", tag)
 
         except Exception as e:
-            logger.error("[AuthManager] 登录失败: tag=%s error=%s", auth.tag, e)
-            raise AuthLoginFailed(f"Login failed for '{auth.tag}': {e}") from e
+            logger.error("[AuthManager] 登录失败: tag=%s error=%s", tag, e)
+            raise AuthLoginFailed(f"Login failed for '{tag}': {e}") from e
 
-    def _refresh(self, auth: AuthSession) -> None:
+    def _refresh(self, auth: AuthSession, tag: str) -> None:
         """刷新 token。"""
         if not auth.url:
             # 无法刷新，重新登录
-            self._login(auth)
+            self._login(auth, tag)
             return
 
+        import httpx
         try:
             # 尝试调用 refresh 接口
             refresh_url = auth.url.rstrip("/") + "/refresh"
@@ -143,9 +123,9 @@ class AuthManager:
             token = data.get("access_token")
             expires_in = data.get("expires_in")
             auth.apply_token(token, expires_in)
-            logger.info("[AuthManager] 刷新成功: tag=%s", auth.tag)
+            logger.info("[AuthManager] 刷新成功: tag=%s", tag)
 
         except Exception as e:
             # 刷新失败，尝试重新登录
-            logger.warning("[AuthManager] 刷新失败，尝试重新登录: tag=%s error=%s", auth.tag, e)
-            self._login(auth)
+            logger.warning("[AuthManager] 刷新失败，尝试重新登录: tag=%s error=%s", tag, e)
+            self._login(auth, tag)

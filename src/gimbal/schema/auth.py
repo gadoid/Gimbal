@@ -1,6 +1,6 @@
 """认证会话数据类 - 读写一体设计。
 
-认证前：填写 tag/url/username/password/expires_in
+认证前：填写 url/username/password/expires_in
 认证后：token/expires_at 自动填充
 """
 from __future__ import annotations
@@ -12,11 +12,12 @@ from pydantic import BaseModel, Field
 class AuthSession(BaseModel):
     """认证会话（读写一体）。
 
-    认证前：填写 tag/url/username/password/expires_in
+    认证前：填写 url/username/password/expires_in
     认证后：token/expires_at 自动填充
 
+    注意：tag（唯一标识）通过 users_pool 字典的 key 决定，不再存储在对象中。
+
     属性：
-        tag: 唯一标识，如 'admin', 'service_a'
         url: 认证接口地址
         username: 用户名
         password: 密码
@@ -35,8 +36,6 @@ class AuthSession(BaseModel):
         apply_token(token, expires_in): 填充 token，自动计算 expires_at
         clear_token(): 清除 token 信息
     """
-    # ── 标识 ────────────────────────────────────────────────
-    tag: str = Field(..., description="唯一标识，如 'admin', 'service_a'")
 
     # ── 认证地址和凭证 ──────────────────────────────────────
     url: str = Field(default="", description="认证接口地址")
@@ -112,26 +111,21 @@ class AuthSession(BaseModel):
         return self
 
     def is_same_credential(self, other: AuthSession) -> bool:
-        """判断是否具有相同的凭证配置（tag/url/username/password）。"""
+        """判断是否具有相同的凭证配置（url/username/password）。"""
         return (
-            self.tag == other.tag
-            and self.url == other.url
+            self.url == other.url
             and self.username == other.username
             and self.password == other.password
         )
 
     @classmethod
-    def from_dict(cls, data: dict, tag: str | None = None) -> AuthSession:
+    def from_dict(cls, data: dict) -> AuthSession:
         """从字典创建 AuthSession。
 
         Args:
             data: 配置字典
-            tag: 可选，指定 tag（优先使用 data 中的 tag）
 
         Returns:
             AuthSession 实例
         """
-        # 合并 tag
-        if tag:
-            data = {**data, "tag": tag}
         return cls(**data)

@@ -19,7 +19,7 @@ class BootstrapConfig(BaseModel):
 
     services_pool: dict = Field(default_factory=dict, description="服务域名池 {name: {base_url, timeout}}")
     connection_pool: dict = Field(default_factory=dict, description="数据库/中间件连接池 {name: {host, port, ...}}")
-    users_pool: dict[str, AuthSession] = Field(default_factory=dict, description="认证会话池 {tag: AuthSession}")
+    users_pool: dict[str, AuthSession] = Field(default_factory=dict, description="认证会话池，key 即 tag")
 
     # ── 日志与输出 ────────────────────────────────────────
     log_level: str = Field("info", description="日志等级 debug|info|warning|error")
