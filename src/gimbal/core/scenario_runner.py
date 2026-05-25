@@ -16,6 +16,7 @@ from gimbal.context.scenario import ScenarioContext
 from gimbal.context.step import StepStatus
 from gimbal.context.suite import SuiteContext
 from gimbal.context.views import StepContextAdapter
+from gimbal.context.resolver import SpecResolver
 from gimbal.schema.scenario import Scenario
 from gimbal.schema.step import Step
 from gimbal.statemachine.engine import StepStateMachine, StepRunResult
@@ -63,11 +64,13 @@ class StepRunner:
         self,
         dispatcher: StrategyDispatcher,
         ctx_manager: ContextManager,
+        config,
         service_base_url: str = "",
     ) -> None:
         self._dispatcher = dispatcher
         self._ctx_manager = ctx_manager
         self._service_base_url = service_base_url
+        self._config = config
         logger.debug("[StepRunner] 初始化: service_base_url=%s", service_base_url)
 
     def run(
@@ -90,11 +93,13 @@ class StepRunner:
             resolved_vars={},
         )
         logger.debug("[StepRunner] StepContext 创建完成: step_id=%s", step_id)
+        view = StepContextAdapter(step_ctx)
+        resolved_schema = SpecResolver(view, self._config).resolve(step_schema)  # 新增
 
         # 2. 构造状态机，注入全部执行依赖
         sm = StepStateMachine(
             step_id=step_id,
-            step_schema=step_schema,
+            step_schema=resolved_schema,
             dispatcher=self._dispatcher,
             view=StepContextAdapter(step_ctx),
             service_base_url=self._service_base_url,
@@ -158,11 +163,13 @@ class ScenarioRunner:
 
         # 2. 注入 serviceDict / authDict
         self._inject_config(scenario_schema, scenario_ctx)
+        print(f"config : {scenario_ctx.config}")
 
         # 3. 逐步执行
         step_runner = StepRunner(
             dispatcher=self._dispatcher,
             ctx_manager=self._ctx_manager,
+            config = scenario_ctx.config,
             service_base_url=self._pick_base_url(scenario_schema),
         )
 
@@ -202,15 +209,17 @@ class ScenarioRunner:
     # ── 内部辅助 ─────────────────────────────────────────────────────────────
 
     def _inject_config(self, schema: Scenario, ctx: ScenarioContext) -> None:
-        """把 serviceDict 写入 scenario channels。
+        """把 serviceDict / authDict 注入到上下文中。
 
-        注意：auth 信息存储在 ctx.config.users_pool 中（引用传递），
-        无需注入到 channels，直接通过 ctx.config 访问即可。
+        - serviceDict: 写入 channels，供 ${service.*} 引用
+        - authDict: 转换为 AuthSession，存入 users_pool，并触发认证
         """
         from gimbal.context.base import ContextLayer
+        from gimbal.schema.auth import AuthSession
+        from gimbal.auth import AuthManager
 
+        # 1. 注入 serviceDict 到 channels
         service_dict = getattr(schema.config, "serviceDict", None) or {}
-
         logger.debug("[ScenarioRunner] 注入配置: service_count=%d", len(service_dict))
 
         for k, v in service_dict.items():
@@ -219,6 +228,25 @@ class ScenarioRunner:
                 from_layer=ContextLayer.STEP,
                 by_step_id="__framework__",
             )
+
+        # 2. 注入 authDict 到 users_pool 并触发认证
+        auth_dict = getattr(schema.config, "authDict", None) or {}
+        if auth_dict:
+            tag = auth_dict.pop("tag", None)
+            if tag:
+                auth_session = AuthSession(**auth_dict)
+                ctx.config.users_pool[tag] = auth_session
+                logger.info("[ScenarioRunner] authDict 注入完成: tag=%s", tag)
+
+                # 触发一次认证
+                auth_manager = AuthManager(ctx.config)
+                try:
+                    auth_manager.get_auth(tag)
+                    auth_session = ctx.config.users_pool.get(tag)
+                    logger.info("[ScenarioRunner] 认证成功: tag=%s token=%s", tag, auth_session.token if auth_session else None)
+                except Exception as e:
+                    logger.error("[ScenarioRunner] 认证失败: tag=%s error=%s", tag, e)
+                    raise
 
     def _pick_base_url(self, schema: Scenario) -> str:
         sd = getattr(schema.config, "serviceDict", None) or {}

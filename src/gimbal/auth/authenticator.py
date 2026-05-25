@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from ..schema.auth import AuthSession
 
 # ── 注册表 ────────────────────────────────────────────────
-_AUTHENTICATOR_REGISTRY: dict[str, type["Authenticator"]] = {}
+_AUTHENTICATOR_REGISTRY: dict[str, type] = {}
 
 def register_authenticator(url_pattern: str):
     """装饰器：注册 URL pattern -> 认证器类。

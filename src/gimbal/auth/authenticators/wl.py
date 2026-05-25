@@ -1,5 +1,6 @@
 """GitHub OAuth2 认证器"""
 import httpx
+# API 库
 from gimbal.auth.authenticator import Authenticator, register_authenticator
 # 导入认证基类 和 装饰器
 from .defaults import DEFAULT_EXPIRES_IN
@@ -41,12 +42,16 @@ class WLAuthenticator(Authenticator):
             timeout=30,
         )
         response.raise_for_status()
+        
         data = response.json()
         print(f"Response data: {data}")
 
         # 根据实际响应结构调整 token 提取逻辑
-        token = data.get("data").get("token")
-
+        resp_data = data.get("data")
+        if isinstance(resp_data, dict):
+            token = resp_data.get("token")
+        else:
+            token = None
 
         if not token:
             raise ValueError(f"API 响应中未找到 token: {data}")

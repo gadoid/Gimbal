@@ -370,10 +370,14 @@ def _eval_nodes(data: Any, nodes: list[PathNode]) -> list[Any]:
 
     # ── FIELD ──────────────────────────────
     if node.kind == NodeKind.FIELD:
-        if not isinstance(data, dict):
-            return []
-        val = data.get(node.value)
-        if val is None and node.value not in data:
+        if isinstance(data, dict):
+            val = data.get(node.value)
+            if val is None and node.value not in data:
+                return []
+        elif hasattr(data, node.value):
+            # 支持 Pydantic 模型字段 和 @property
+            val = getattr(data, node.value)
+        else:
             return []
         return _eval_nodes(val, rest)
 
@@ -596,11 +600,38 @@ def exists(data: Any, path: str) -> bool:
 _TEMPLATE_VAR_RE = re.compile(r"\$\{([^}]+)\}")
 
 
+def _get_nested(variables: dict, var_name: str) -> Any:
+    """根据点号分隔的路径获取嵌套值。
+
+    支持：
+    - dict 嵌套：variables["auth"]["codfish"]
+    - 对象属性：variables["auth"]["codfish"].token
+    - Pydantic @property
+
+    Examples::
+
+        _get_nested({"auth": {"codfish": AuthSession(...)}}, "auth.codfish.token")
+        # → AuthSession.token 属性值
+    """
+    parts = var_name.split(".")
+    current = variables
+    for part in parts:
+        if current is None:
+            return None
+        if isinstance(current, dict):
+            current = current.get(part)
+        elif hasattr(current, part):
+            current = getattr(current, part)
+        else:
+            return None
+    return current
+
+
 def resolve_template(template: str, variables: dict[str, Any]) -> Any:
     """将 '${varname}' 占位符替换为 variables 中的对应值。
 
-    - 若整个 template 就是单个占位符（如 "${token}"），直接返回原始类型值
-      （避免把 int/dict 强制转为字符串）。
+    - 若整个 template 就是单个占位符（如 "${token}" 或 "${auth.codfish.token}"），
+      直接返回原始类型值（避免把 int/dict 强制转为字符串）。
     - 若包含多个占位符或夹杂普通文本，则做字符串替换。
 
     Examples::
@@ -608,17 +639,21 @@ def resolve_template(template: str, variables: dict[str, Any]) -> Any:
         resolve_template("Bearer ${token}", {"token": "abc"})  # → "Bearer abc"
         resolve_template("${user_id}", {"user_id": 42})        # → 42  (int 保留)
         resolve_template("${a}+${b}", {"a": 1, "b": 2})       # → "1+2"
+        resolve_template("${auth.codfish.token}", {"auth": {"codfish": AuthSession(...)}})
+        # → token 属性值
     """
-    # 整个字符串就是单个变量 → 直接返回原始类型
+    # 整个字符串就是单个变量 → 直接返回原始类型（支持嵌套路径）
     m = _TEMPLATE_VAR_RE.fullmatch(template.strip())
     if m:
         var_name = m.group(1).strip()
-        return variables.get(var_name)
+        return _get_nested(variables, var_name)
 
     def _replacer(match: re.Match) -> str:
         var_name = match.group(1).strip()
-        val = variables.get(var_name, match.group(0))  # 找不到保留原样
-        return str(val) if val is not None else ""
+        val = _get_nested(variables, var_name)
+        if val is None:
+            return match.group(0)  # 找不到保留原样
+        return str(val)
 
     return _TEMPLATE_VAR_RE.sub(_replacer, template)
 

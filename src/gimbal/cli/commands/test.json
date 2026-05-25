@@ -43,7 +43,7 @@
         "method": "POST",
         "path": "/api/home/user/userList",
         "headers": {
-          "Authorization": "${codfish.admin.auth_header}"
+          "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
       },
@@ -74,7 +74,7 @@
         "method": "POST",
         "path": "/api/home/user/userList",
         "headers": {
-          "Authorization": "${codfish.admin.auth_header}"
+          "Authorization": "${auth.codfish.token}"
         },
         "timeout": 30
       },
