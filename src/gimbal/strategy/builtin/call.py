@@ -27,17 +27,17 @@ class CallExecutor(StrategyExecutor):
           - method / url / headers / body / timeout
         执行成功后将 response_status / response_body / response_headers 写入 SCENARIO context。
         """
+        method: str = spec.method        # type: ignore[attr-defined]
+        url: str = spec.url              # type: ignore[attr-defined]
+        headers: dict = spec.headers     # type: ignore[attr-defined]
+        body: dict = spec.body           # type: ignore[attr-defined]
+        timeout: float = spec.timeout    # type: ignore[attr-defined]
+
         try:
             import httpx
-            from gimbal.context.base import ContextLayer
-
-            method: str = spec.method        # type: ignore[attr-defined]
-            url: str = spec.url              # type: ignore[attr-defined]
-            headers: dict = spec.headers     # type: ignore[attr-defined]
-            body: dict = spec.body           # type: ignore[attr-defined]
-            timeout: float = spec.timeout    # type: ignore[attr-defined]
 
             logger.info("[CallExecutor] HTTP 请求开始: %s %s", method, url)
+            logger.info("[CallExecutor] 请求 headers: %s", headers)
             with httpx.Client(timeout=timeout) as client:
                 response = client.request(
                     method=method,
@@ -95,3 +95,5 @@ class CallExecutor(StrategyExecutor):
                 message=str(exc),
                 error=traceback.format_exc(),
             )
+        finally:
+            view.seal_http_exchange()

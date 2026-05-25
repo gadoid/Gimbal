@@ -37,7 +37,7 @@ class ExtractExecutor(StrategyExecutor):
 
             # 1. 取出要解析的原始数据
             exchange = view.read_http_exchange(spec.target)
-            if exchange is None:
+            if not exchange:
                 return StrategyResult(
                     status=StrategyStatus.ERROR,
                     message="ExtractExecutor: no http_exchange found, "
@@ -45,7 +45,7 @@ class ExtractExecutor(StrategyExecutor):
                 )
 
             source_key = _source_to_var_key(spec.source)
-            raw = getattr(exchange, source_key, None)
+            raw = exchange.get(source_key)
             logger.debug("[ExtractExecutor] 读取源数据: source=%s raw_type=%s",
                         source_key, type(raw).__name__)
 

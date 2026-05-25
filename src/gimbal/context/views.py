@@ -21,7 +21,11 @@ class StrategyContextView(Protocol):
         from_layer: ContextLayer = ContextLayer.SCENARIO,
         default: Any = None,
     ) -> Any: ...
-    
+
+    def resolve(
+        self, key: str, default: Any = None,
+    ) -> Any: ...
+
     def promote_variable(
         self, key: str, value: Any, *,
         to: ContextLayer = ContextLayer.SCENARIO,
@@ -68,7 +72,25 @@ class StepContextAdapter:
     ) -> Any:
         target = self._resolve_layer(from_layer)
         return target.channels.get_variable(key, default)
-    
+
+    def resolve(self, key: str, default: Any = None) -> Any:
+        """统一查询：先 resolved_vars，再 channels，最后 config。"""
+        # 1. Step 自身预解析的变量
+        if key in self._ctx.inputs.resolved_vars:
+            return self._ctx.inputs.resolved_vars[key]
+
+        # 2. 默认从 SCENARIO 层的 channels 查
+        target = self._ctx.parent  # scenario
+        if target.channels.has_variable(key):
+            return target.channels.get_variable(key)
+
+        # 3. 查 config（直接用 model_dump 转 dict 查询）
+        cfg = target.config.model_dump()
+        if key in cfg:
+            return cfg[key]
+
+        return default
+
     # ── 写(向上提升) ─────────────────────────────────
     def promote_variable(
         self, key: str, value: Any, *,
@@ -143,5 +165,14 @@ class StepContextAdapter:
 
     def write_http_exchange(self, **kwargs) -> None:
         if self._ctx.http_exchange is None:
-            object.__setattr__(self._ctx, "http_exchange", HttpExchange())
+            raise RuntimeError("http_exchange not initialized; reset_http_exchange() must be called before CALLING phase")
         self._ctx.http_exchange.update(**kwargs)
+
+    def reset_http_exchange(self) -> None:
+        """重置 http_exchange 为新实例，允许在 retry 时重新初始化。"""
+        object.__setattr__(self._ctx, "http_exchange", HttpExchange())
+
+    def seal_http_exchange(self) -> None:
+        """封印 http_exchange，封印后不可再写入。幂等操作。"""
+        if self._ctx.http_exchange is not None:
+            self._ctx.http_exchange.seal()

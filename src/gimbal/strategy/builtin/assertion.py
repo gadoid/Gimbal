@@ -38,7 +38,7 @@ class AssertionExecutor(StrategyExecutor):
             elif is_jsonpath(spec.target):
                 # $.data.code 这类路径，从 response_body 里提取
                 exchange = view.read_http_exchange()
-                raw_body = exchange.response_body if exchange else None
+                raw_body = exchange.get("response_body") if exchange else None
                 actual = jget(raw_body, spec.target)
             else:
                 # 普通 key，从 Scenario channels 读（Extract 提升上来的业务字段）

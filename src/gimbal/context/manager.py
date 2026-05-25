@@ -157,6 +157,8 @@ class ContextManager:
         ctx.seal()
         self._event_bus.publish(project_step_completed(ctx, ctx.parent.run_id))
         self._archive.save_step(ctx)
+        if ctx.http_exchange is not None:
+            self._archive.save_exchange(ctx.http_exchange, ctx.step_id)
     
     # ── 内部:把 Channels 的 Promotion 转事件 ──────────
     def _wire_promotion_listener(self, channels: Channels, run_id: str) -> None:

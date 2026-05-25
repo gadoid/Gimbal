@@ -54,14 +54,21 @@ class HttpExchange:
         self.response_headers = {}
         self.response_body = None
         self.duration_ms = 0.0
+        self._sealed = False
 
-    
+
     def __getattr__(self, name):
         """当属性不存在时给出提示"""
         print(f"属性 '{name}' 不存在")
         return None
 
+    def seal(self) -> None:
+        """封印 exchange，封印后 update() 不可调用。幂等操作。"""
+        self._sealed = True
+
     def update(self, **kwargs) -> None:
+        if self._sealed:
+            raise RuntimeError("http_exchange already sealed; cannot update after CALLING phase")
         for k, v in kwargs.items():
             if hasattr(self, k):
                 setattr(self, k, v)

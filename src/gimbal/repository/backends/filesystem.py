@@ -32,3 +32,8 @@ class InMemoryArchive:
         key = getattr(ctx, "step_id", str(id(ctx)))
         self._steps[key] = ctx
         logger.debug("[Archive] Step saved: %s", key)
+
+    def save_exchange(self, exchange: Any, step_id: str) -> None:
+        """将 HttpExchange 归档，按 step_id 关联。"""
+        self._steps[f"{step_id}_exchange"] = exchange
+        logger.debug("[Archive] Exchange saved for step: %s", step_id)

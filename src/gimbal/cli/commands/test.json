@@ -40,10 +40,10 @@
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
-        "method": "GET",
-        "path": "/tags/",
+        "method": "POST",
+        "path": "/api/home/user/userList",
         "headers": {
-          "Authorization": "${auth.admin.auth_header}"
+          "Authorization": "${codfish.admin.auth_header}"
         },
         "timeout": 30
       },
@@ -70,11 +70,11 @@
       "kind": "step",
       "api": {
         "kind": "api",
-        "service": "settlement-service",
-        "method": "GET",
-        "path": "/tags/",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/home/user/userList",
         "headers": {
-          "Authorization": "${auth.admin.auth_header}"
+          "Authorization": "${codfish.admin.auth_header}"
         },
         "timeout": 30
       },
