@@ -1,6 +1,5 @@
 """GitHub OAuth2 认证器"""
 import httpx
-# API 库
 from gimbal.auth.authenticator import Authenticator, register_authenticator
 # 导入认证基类 和 装饰器
 from .defaults import DEFAULT_EXPIRES_IN

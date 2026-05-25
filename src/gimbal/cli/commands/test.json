@@ -18,15 +18,15 @@
     "setup": [],
     "teardown": [],
     "serviceDict": {
-      "settlement-service": "https://gadoid.github.io"
+      "tidb-test-service": "https://fin-tidb.21eflag.com/"
     },
     "authDict": {
-      "tag": "admin",
-      "url": "https://api.example.com/login",
-      "username": "admin",
-      "password": "secret",
+      "tag": "codfish",
+      "url": "https://fin-tidb.21eflag.com/",
+      "username": "18180789650",
+      "password": "yhd123456!",
       "expires_in": 7200,
-      "token_type": "Bearer"
+      "token_type": "Authorization"
     },
     "timePolicy": {
       "kind": "record"
@@ -39,7 +39,7 @@
       "kind": "step",
       "api": {
         "kind": "api",
-        "service": "settlement-service",
+        "service": "tidb-test-service",
         "method": "GET",
         "path": "/tags/",
         "headers": {
