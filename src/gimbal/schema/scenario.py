@@ -28,8 +28,8 @@ class Config(BaseModel):
     """ 用例执行配置模型 """
     setup : list[SetupUnion] = Field(default_factory=list , description= "用例前置动作")
     teardown : list[TeardownUnion] = Field(default_factory=list , description= "用例后置动作")
-    serviceDict : dict[str, str] = Field(description= "服务与URL映射关系")
-    authDict : dict[str, AuthSession] = Field(description= "认证信息字典")
+    serviceDict : dict[str, str] = Field(default_factory=dict,description= "服务与URL映射关系")
+    authDict : dict[str, dict[str,AuthSession]] = Field(default_factory=dict, description= "认证信息字典")
     timePolicy : TimePolicyUnion = Field(default_factory=RecordPolicy, description="时间处理策略:超时检查或耗时记录")
     retry : Optional[RetryPolicy] = None # 定义重试策略
 

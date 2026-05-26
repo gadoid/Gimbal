@@ -111,31 +111,15 @@ class ScenarioPreprocessor:
             return
 
         # authDict 可能包含多个认证入口（tag → {...}）
-        # 也可能是单个扁平结构 {"tag": "xxx", "url": "...", ...}
-        # 统一处理：检查是否有 "tag" 字段
-        if "tag" in auth_dict:
-            # 单个扁平结构
-            self._authenticate_one(dict(auth_dict))
-        else:
-            # 多个：{"admin": {...}, "operator": {...}}
-            for tag, entry in auth_dict.items():
-                if isinstance(entry, dict):
-                    entry_with_tag = {**entry, "tag": tag}
-                    self._authenticate_one(entry_with_tag)
+        for tag, entry in auth_dict.items():
+            if isinstance(entry, dict):
+                self._authenticate_one(entry)
 
-    def _authenticate_one(self, auth_dict: dict) -> None:
-        """对单个 authDict 条目执行认证。"""
+    def _authenticate_one(self, tag: str, entry: dict) -> None:
         from gimbal.schema.auth import AuthSession
         from gimbal.auth import AuthManager
 
-        tag = auth_dict.pop("tag", None)
-        if not tag:
-            logger.warning("[Preprocessor] authDict 条目缺少 tag，跳过: %s", auth_dict)
-            return
-
-        auth_session = AuthSession(**auth_dict)
-
-        # 写入 users_pool（dict 可变，绕过 BootstrapConfig frozen）
+        auth_session = AuthSession(**entry)
         self._cfg.users_pool[tag] = auth_session
         logger.debug("[Preprocessor] AuthSession 注入 users_pool: tag=%s", tag)
 
