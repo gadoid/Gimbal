@@ -110,16 +110,19 @@ class ScenarioPreprocessor:
             logger.debug("[Preprocessor] 无 authDict，跳过认证")
             return
 
-        # authDict 可能包含多个认证入口（tag → {...}）
         for tag, entry in auth_dict.items():
-            if isinstance(entry, dict):
-                self._authenticate_one(entry)
+            if isinstance(entry, AuthSession):
+                # 已经是 AuthSession 对象，直接认证
+                self._authenticate_one(tag, entry)
+            elif isinstance(entry, dict):
+                # 是 dict，先转成 AuthSession
+                self._authenticate_one(tag, AuthSession(**entry))
+            else:
+                logger.warning("[Preprocessor] 未知的 authDict entry 类型: tag=%s type=%s", tag, type(entry).__name__)
 
-    def _authenticate_one(self, tag: str, entry: dict) -> None:
-        from gimbal.schema.auth import AuthSession
+    def _authenticate_one(self, tag: str, auth_session) -> None:
         from gimbal.auth import AuthManager
 
-        auth_session = AuthSession(**entry)
         self._cfg.users_pool[tag] = auth_session
         logger.debug("[Preprocessor] AuthSession 注入 users_pool: tag=%s", tag)
 
@@ -128,8 +131,9 @@ class ScenarioPreprocessor:
             auth_manager.get_auth(tag)
             session = self._cfg.users_pool.get(tag)
             logger.info(
-                "[Preprocessor] 认证成功: tag=%s token_type=%s",
+                "[Preprocessor] 认证成功: tag=%s token=%s token_type=%s",
                 tag,
+                session.token if session else "?",
                 session.token_type if session else "?",
             )
         except Exception as exc:
