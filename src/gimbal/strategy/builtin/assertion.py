@@ -24,8 +24,6 @@ class AssertionExecutor(StrategyExecutor):
         try:
             logger.info("[AssertionExecutor] 执行断言: target=%s operator=%s expected=%s",
                         spec.target, spec.operator, spec.expected)
-            # from pprint import pprint
-            # pprint(view.content)
             # 读取被断言的目标值
             _HTTP_EXCHANGE_KEYS = {
                 "response_status", "response_body",

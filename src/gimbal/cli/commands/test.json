@@ -57,7 +57,7 @@
           "kind": "assertion",
           "name": "assert_status_200",
           "phase": "verifying",
-          "order": 0,
+          "order": 1,
           "enabled": true,
           "onFailure": "abort",
           "target": "response_status",
@@ -65,6 +65,19 @@
           "expected": 200,
           "message": "查询结算单详情应返回200",
           "soft": false
+        },{
+          "kind": "extract",
+          "name": "extract_token",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "response_body",
+          "expression": "$.msg",
+          "target": "msg",
+          "scope": "scenario",
+          "required": true,
+          "default": null
         }
       ]
     },    {

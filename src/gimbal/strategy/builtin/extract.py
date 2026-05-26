@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import traceback
+from .utils import _scope_to_layer
 from typing import Any, TYPE_CHECKING
 
 from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, StrategyStatus
@@ -36,7 +37,7 @@ class ExtractExecutor(StrategyExecutor):
                         spec.target, spec.source, spec.expression, spec.scope)
 
             # 1. 取出要解析的原始数据
-            exchange = view.read_http_exchange(spec.target)
+            exchange = view.read_http_exchange(spec.source)
             if not exchange:
                 return StrategyResult(
                     status=StrategyStatus.ERROR,
@@ -44,10 +45,9 @@ class ExtractExecutor(StrategyExecutor):
                             "Extract must run after CALLING phase",
                 )
 
-            source_key = _source_to_var_key(spec.source)
-            raw = exchange.get(source_key)
+            raw = exchange.get(spec.source)
             logger.debug("[ExtractExecutor] 读取源数据: source=%s raw_type=%s",
-                        source_key, type(raw).__name__)
+                        spec.source, type(raw).__name__)
 
             # 2. 解析表达式
             value = jget(raw, spec.expression)

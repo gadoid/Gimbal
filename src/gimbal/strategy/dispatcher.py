@@ -59,7 +59,6 @@ class StrategyDispatcher:
                 strategy_id=strategy_id,
                 message="strategy disabled",
             )
-
         # 2. 查找 executor
         executor = self._registry.get(kind)  # type: ignore[arg-type]
         if executor is None:
