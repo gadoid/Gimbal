@@ -30,7 +30,7 @@ class AuthManager:
         """初始化 AuthManager。
 
         Args:
-            config: BootstrapConfig，持有 users_pool
+            config: BootstrapConfig，持有 users
         """
         self._config = config
 
@@ -38,7 +38,7 @@ class AuthManager:
         """获取认证会话，自动处理登录/刷新。
 
         Args:
-            tag: users_pool 中的 key
+            tag: users 中的 key
 
         Returns:
             AuthSession，已登录状态
@@ -46,9 +46,9 @@ class AuthManager:
         Raises:
             AuthSessionNotFound: tag 不存在
         """
-        auth = self._config.users_pool.get(tag)
+        auth = self._config.users.get(tag)
         if not auth:
-            raise AuthSessionNotFound(f"Auth session '{tag}' not found in users_pool")
+            raise AuthSessionNotFound(f"Auth session '{tag}' not found in users")
 
         # 已认证且无需刷新
         if auth.is_authenticated and not auth.should_refresh:
@@ -82,7 +82,7 @@ class AuthManager:
         auth = AuthSession(**data)
 
         # 2. 存入 config
-        self._config.users_pool[tag] = auth
+        self._config.users[tag] = auth
 
         # 3. 认证
         if not auth.is_authenticated:

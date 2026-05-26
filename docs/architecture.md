@@ -53,8 +53,8 @@ Scenario (场景)
 ├── Meta (元信息)
 ├── Config (配置)
 │   ├── setup/teardown (前置/后置动作)
-│   ├── serviceDict (服务URL映射)
-│   ├── authDict (认证信息)
+│   ├── services (服务URL映射)
+│   ├── users (认证信息)
 │   └── retry (重试策略)
 ├── resource (资源)
 └── steps: list[StepUnion]  # Step 或 StepRef
@@ -197,7 +197,7 @@ class PhaseResult:
    └── Suite: 遍历 suite.scenarios，执行每个 ScenarioRunner.run()
 4. ScenarioRunner.run()
    ├── 创建 ScenarioContext
-   ├── 注入 serviceDict/authDict 到 channels
+   ├── 注入 services/users 到 channels
    ├── 遍历 scenario.steps (StepUnion 列表)
    │   ├── StepRef: 跳过（未展开）
    │   └── Step: 调用 StepRunner.run()

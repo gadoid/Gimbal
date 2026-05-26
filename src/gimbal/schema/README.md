@@ -475,8 +475,8 @@ API 联合类型，由 `Api`, `ApiRef` 组成，通过 `kind` 字段区分。
 |------|------|------|--------|------|
 | `setup` | `list[SetupUnion]` | 否 | `[]` | 用例前置动作列表 |
 | `teardown` | `list[TeardownUnion]` | 否 | `[]` | 用例后置动作列表 |
-| `serviceDict` | `dict[str, str]` | 否 | - | 服务与 URL 映射关系字典 |
-| `authDict` | `dict[str, Any]` | 否 | - | 认证信息字典 |
+| `services` | `dict[str, str]` | 否 | - | 服务与 URL 映射关系字典 |
+| `users` | `dict[str, Any]` | 否 | - | 认证信息字典 |
 | `timePolicy` | `TimePolicyUnion` | 否 | `RecordPolicy()` | 时间处理策略（超时检查或耗时记录） |
 | `retry` | `Optional[RetryPolicy]` | 否 | `None` | 重试策略配置 |
 
@@ -665,8 +665,8 @@ meta = Meta(
 config = Config(
     setup=[setup],
     teardown=[teardown],
-    serviceDict={"user-service": "http://localhost:8080"},
-    authDict={"token": "test_token_123"},
+    services={"user-service": "http://localhost:8080"},
+    users={"token": "test_token_123"},
     timePolicy=TimeoutPolicy(seconds=60),
     retry=RetryPolicy(maxAttempts=3, backoffSeconds=30, retryOn=["500", "502"])
 )

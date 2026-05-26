@@ -17,10 +17,10 @@
   "config": {
     "setup": [],
     "teardown": [],
-    "serviceDict": {
+    "services": {
       "tidb-test-service": "https://fin-tidb.21eflag.com/"
     },
-    "authDict": {
+    "users": {
       "codfish": {
           "url": "https://fin-tidb.21eflag.com/",
           "username": "18180789650",

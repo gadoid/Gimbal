@@ -28,9 +28,9 @@ gimbal.yaml ─────────── 项目级基础配置
 |------|------|------|
 | **运行环境** | `env` | 目标环境 dev\|test\|staging\|prod |
 | | `mode` | 执行模式 local\|server\|service |
-| | `services_pool` | 服务域名池 |
+| | `services` | 服务域名池 |
 | | `connection_pool` | 数据库/中间件连接池 |
-| | `users_pool` | 认证会话池 {tag: AuthSession} |
+| | `users` | 认证会话池 {tag: AuthSession} |
 | **日志与输出** | `log_level` | 日志等级 debug\|info\|warning\|error |
 | | `no_color` | 禁用终端颜色 |
 | **框架元信息** | `framework_version` | 框架版本号 |
@@ -79,9 +79,9 @@ class BootstrapConfig(BaseModel):
     base_dir: Path = Path(".")
     env: str = "dev"
     mode: str = "local"
-    services_pool: dict = {}
+    services: dict = {}
     connection_pool: dict = {}
-    users_pool: dict[str, AuthSession] = {}  # 认证会话池，引用传递
+    users: dict[str, AuthSession] = {}  # 认证会话池，引用传递
     log_level: str = "info"
     no_color: bool = False
     framework_version: str = "0.1.0"

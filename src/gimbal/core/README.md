@@ -225,7 +225,7 @@ class ScenarioRunner:
             description=scenario_schema.meta.description,
         )
 
-        # 2. 注入 serviceDict / authDict 到 channels
+        # 2. 注入 services / users 到 channels
         self._inject_config(scenario_schema, scenario_ctx)
 
         # 3. 创建 StepRunner，逐步执行

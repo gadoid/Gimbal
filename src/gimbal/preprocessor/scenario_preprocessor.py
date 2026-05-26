@@ -5,12 +5,12 @@ Scenario 预处理器：在执行链进入 StepRunner 之前，完成所有准�
 职责
 ----
 1. 认证（原 ScenarioRunner._inject_config 的认证部分）
-   - 从 scenario.config.authDict 构造 AuthSession，写入 users_pool
+   - 从 scenario.config.users 构造 AuthSession，写入 BootstrapConfig.users
    - 调用 AuthManager.get_auth() 触发登录，填充 token
 
 2. 构建两段查询根对象
-   - 第一段：scenario.config.serviceDict / authDict（用例自带，优先级高）
-   - 第二段：BootstrapConfig.services_pool / users_pool（框架级，优先级低）
+   - 第一段：scenario.config.services / users（用例自带，优先级高）
+   - 第二段：BootstrapConfig.services / users（框架级，优先级低）
    - 不做 model_dump()，直接持有对象引用——AuthSession 刷新后 token 自动可见
 
 3. 批量展开 steps 中的模板字段
@@ -23,7 +23,7 @@ Scenario 预处理器：在执行链进入 StepRunner 之前，完成所有准�
 设计原则
 --------
 - 预处理器无副作用：不写入任何 Context，不触发事件
-- 认证副作用（写 users_pool）在此集中，后续执行链只读
+- 认证副作用（写 BootstrapConfig.users）在此集中，后续执行链只读
 - token 刷新由 AuthManager 在执行期按需触发，预处理不负责
 - 两段查询顺序：scenario 级 > bootstrap 级（同名 key scenario 级覆盖）
 """
@@ -66,7 +66,7 @@ class ScenarioPreprocessor:
         """执行完整预处理，返回 (resolved_steps, base_url)。
 
         步骤：
-          1. 认证（填充 token 到 users_pool）
+          1. 认证（填充 token 到 users）
           2. 构建查询根对象
           3. 批量展开 steps 模板
           4. 提取 base_url
@@ -94,20 +94,20 @@ class ScenarioPreprocessor:
     # ── 第一段：认证 ──────────────────────────────────────────────────────────
 
     def _setup_auth(self) -> None:
-        """从 scenario.config.authDict 构造 AuthSession 并触发认证。
+        """从 scenario.config.users 构造 AuthSession 并触发认证。
 
-        认证结果（token）写入 BootstrapConfig.users_pool，
-        后续 _build_resolve_root() 直接从 users_pool 拿对象引用。
+        认证结果（token）写入 BootstrapConfig.users，
+        后续 _build_resolve_root() 直接从 users 拿对象引用。
 
-        BootstrapConfig 本身是 frozen 的，但 users_pool 是 dict，
+        BootstrapConfig 本身是 frozen 的，但 users 是 dict，
         dict 内容可变——这里直接操作 dict，不违反 frozen 约束。
         """
         from gimbal.schema.auth import AuthSession
         from gimbal.auth import AuthManager
 
-        auth_dict = getattr(self._schema.config, "authDict", None) or {}
+        auth_dict = getattr(self._schema.config, "users", None) or {}
         if not auth_dict:
-            logger.debug("[Preprocessor] 无 authDict，跳过认证")
+            logger.debug("[Preprocessor] 无 users，跳过认证")
             return
 
         for tag, entry in auth_dict.items():
@@ -118,18 +118,18 @@ class ScenarioPreprocessor:
                 # 是 dict，先转成 AuthSession
                 self._authenticate_one(tag, AuthSession(**entry))
             else:
-                logger.warning("[Preprocessor] 未知的 authDict entry 类型: tag=%s type=%s", tag, type(entry).__name__)
+                logger.warning("[Preprocessor] 未知的 users entry 类型: tag=%s type=%s", tag, type(entry).__name__)
 
     def _authenticate_one(self, tag: str, auth_session) -> None:
         from gimbal.auth import AuthManager
 
-        self._cfg.users_pool[tag] = auth_session
-        logger.debug("[Preprocessor] AuthSession 注入 users_pool: tag=%s", tag)
+        self._cfg.users[tag] = auth_session
+        logger.debug("[Preprocessor] AuthSession 注入 users: tag=%s", tag)
 
         auth_manager = AuthManager(self._cfg)
         try:
             auth_manager.get_auth(tag)
-            session = self._cfg.users_pool.get(tag)
+            session = self._cfg.users.get(tag)
             logger.info(
                 "[Preprocessor] 认证成功: tag=%s token=%s token_type=%s",
                 tag,
@@ -146,8 +146,8 @@ class ScenarioPreprocessor:
         """构建两段查询根对象。
 
         优先级（高 → 低）：
-          scenario.config.serviceDict  >  bootstrap.services_pool
-          bootstrap.users_pool（含已认证的 AuthSession）
+          scenario.config.services  >  bootstrap.services
+          bootstrap.users（含已认证的 AuthSession）
 
         不做 model_dump()，直接持有对象引用：
           - AuthSession.token 是普通字段，认证后已填充
@@ -158,19 +158,19 @@ class ScenarioPreprocessor:
 
         # --- service ---
         # 先放 bootstrap 级（低优先级）
-        if self._cfg.services_pool:
-            root["service"] = dict(self._cfg.services_pool)
+        if self._cfg.services:
+            root["service"] = dict(self._cfg.services)
         else:
             root["service"] = {}
 
         # scenario 级覆盖（高优先级）
-        service_dict = getattr(self._schema.config, "serviceDict", None) or {}
+        service_dict = getattr(self._schema.config, "services", None) or {}
         if service_dict:
             root["service"].update(service_dict)
 
         # --- auth ---
-        # users_pool 已包含刚认证好的 AuthSession 对象
-        root["auth"] = self._cfg.users_pool
+        # users 已包含刚认证好的 AuthSession 对象
+        root["auth"] = self._cfg.users
 
         logger.debug(
             "[Preprocessor] 查询根构建完成: service_keys=%s auth_tags=%s",
@@ -322,19 +322,19 @@ class ScenarioPreprocessor:
     # ── 第四段：提取 base_url ──────────────────────────────────────────────────
 
     def _pick_base_url(self) -> str:
-        """从 serviceDict 取第一个 URL 作为 base_url。
+        """从 services 取第一个 URL 作为 base_url。
 
-        优先取 scenario.config.serviceDict，找不到再查 bootstrap.services_pool。
+        优先取 scenario.config.services，找不到再查 bootstrap.services。
         """
-        sd = getattr(self._schema.config, "serviceDict", None) or {}
+        sd = getattr(self._schema.config, "services", None) or {}
         if sd:
             url = next(iter(sd.values()), "")
-            logger.debug("[Preprocessor] base_url（来自 serviceDict）: %s", url)
+            logger.debug("[Preprocessor] base_url（来自 services）: %s", url)
             return url
 
-        if self._cfg.services_pool:
-            url = next(iter(self._cfg.services_pool.values()), "")
-            logger.debug("[Preprocessor] base_url（来自 services_pool）: %s", url)
+        if self._cfg.services:
+            url = next(iter(self._cfg.services.values()), "")
+            logger.debug("[Preprocessor] base_url（来自 services）: %s", url)
             return url
 
         logger.debug("[Preprocessor] 未找到 base_url，使用空字符串")

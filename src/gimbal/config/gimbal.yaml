@@ -17,7 +17,7 @@ database:
     port: 6379
     db: 0
 
-users_pool:
+users:
   admin:
     url: "https://api.example.com/login"
     username: "admin"

@@ -17,9 +17,9 @@ class BootstrapConfig(BaseModel):
     env: str = Field("dev", description="目标环境 dev|test|staging|prod")
     mode: str = Field("local", description="执行模式 local|server|service")
 
-    services_pool: dict = Field(default_factory=dict, description="服务域名池 {name: {base_url, timeout}}")
+    services: dict = Field(default_factory=dict, description="服务域名池 {name: {base_url, timeout}}")
     connection_pool: dict = Field(default_factory=dict, description="数据库/中间件连接池 {name: {host, port, ...}}")
-    users_pool: dict[str, AuthSession] = Field(default_factory=dict, description="认证会话池，key 即 tag")
+    users: dict[str, AuthSession] = Field(default_factory=dict, description="认证会话池，key 即 tag")
 
     # ── 日志与输出 ────────────────────────────────────────
     log_level: str = Field("info", description="日志等级 debug|info|warning|error")
@@ -63,9 +63,9 @@ class BootstrapConfig(BaseModel):
 
 
 # class SourceOptions(BaseModel) :
-#     services_pool: dict = Field(default_factory=dict, description="服务域名池 {name: {base_url, timeout}}")
+#     services: dict = Field(default_factory=dict, description="服务域名池 {name: {base_url, timeout}}")
 #     connection_pool: dict = Field(default_factory=dict, description="数据库/中间件连接池 {name: {host, port, ...}}")
-#     users_pool: dict = Field(default_factory=dict, description="测试用户池 {role: {user_name, user_pass, auth_type}}")
+#     users: dict = Field(default_factory=dict, description="测试用户池 {role: {user_name, user_pass, auth_type}}")
 
 # class LogOptions(BaseModel) :
 #     log_level: str = Field("info", description="日志等级 debug|info|warning|error")

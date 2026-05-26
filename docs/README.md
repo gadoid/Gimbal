@@ -140,9 +140,9 @@ meta:
   tags: [smoke, login]
   version: "1.0"
 config:
-  serviceDict:
+  services:
     user-service: http://localhost:8080
-  authDict:
+  users:
     admin:
       url: http://localhost:8080/auth/login
       username: admin

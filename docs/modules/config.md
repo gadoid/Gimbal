@@ -26,9 +26,9 @@ class BootstrapConfig(BaseModel):
     mode: str = "local"        # 执行模式 local|server|service
 
     # 服务和连接池
-    services_pool: dict        # 服务域名池 {name: {base_url, timeout}}
+    services: dict        # 服务域名池 {name: {base_url, timeout}}
     connection_pool: dict      # 数据库/中间件连接池
-    users_pool: dict           # 认证会话池，key 即 tag
+    users: dict           # 认证会话池，key 即 tag
 
     # 日志与输出
     log_level: str = "info"
@@ -121,7 +121,7 @@ cfg = ConfigLoader().load(cli_ctx)
 # 使用配置
 print(f"Environment: {cfg.env}")
 print(f"Log level: {cfg.log_level}")
-print(f"Services: {cfg.services_pool}")
+print(f"Services: {cfg.services}")
 ```
 
 ## 设计原则

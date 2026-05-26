@@ -74,8 +74,8 @@ class Meta(BaseModel):
 class Config(BaseModel):
     setup: list[SetupUnion]           # 前置动作
     teardown: list[TeardownUnion]     # 后置动作
-    serviceDict: dict[str, str]       # 服务与URL映射
-    authDict: dict[str, dict[str, AuthSession]]  # 认证信息
+    services: dict[str, str]       # 服务与URL映射
+    users: dict[str, dict[str, AuthSession]]  # 认证信息
     timePolicy: TimePolicyUnion       # 时间策略
     retry: RetryPolicy | None         # 重试策略
 ```

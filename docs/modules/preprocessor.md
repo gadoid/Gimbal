@@ -31,7 +31,7 @@ class ScenarioPreprocessor:
 
     def run(self) -> tuple[list[StepUnion], str]:
         """执行完整预处理，返回 (resolved_steps, base_url)"""
-        # 1. 认证（填充 token 到 users_pool）
+        # 1. 认证（填充 token 到 users）
         # 2. 构建查询根对象
         # 3. 批量展开 steps 模板
         # 4. 提取 base_url
@@ -43,11 +43,11 @@ class ScenarioPreprocessor:
 
 ```python
 def _setup_auth(self) -> None:
-    """从 scenario.config.authDict 构造 AuthSession 并触发认证"""
-    # authDict 可能包含多个认证入口（tag → {...}）
+    """从 scenario.config.users 构造 AuthSession 并触发认证"""
+    # users 可能包含多个认证入口（tag → {...}）
     for tag, entry in auth_dict.items():
         auth_session = AuthSession(**entry)
-        self._cfg.users_pool[tag] = auth_session
+        self._cfg.users[tag] = auth_session
         auth_manager = AuthManager(self._cfg)
         auth_manager.get_auth(tag)
 ```
@@ -55,8 +55,8 @@ def _setup_auth(self) -> None:
 ### 2. 构建查询根
 
 两段查询根对象，优先级（高 → 低）：
-- `scenario.config.serviceDict` > `bootstrap.services_pool`
-- `bootstrap.users_pool`（含已认证的 AuthSession）
+- `scenario.config.services` > `bootstrap.services`
+- `bootstrap.users`（含已认证的 AuthSession）
 
 ```python
 def _build_resolve_root(self) -> dict[str, Any]:
@@ -64,16 +64,16 @@ def _build_resolve_root(self) -> dict[str, Any]:
     root = {}
 
     # 先放 bootstrap 级（低优先级）
-    if self._cfg.services_pool:
-        root["service"] = dict(self._cfg.services_pool)
+    if self._cfg.services:
+        root["service"] = dict(self._cfg.services)
 
     # scenario 级覆盖（高优先级）
-    service_dict = getattr(self._schema.config, "serviceDict", None) or {}
+    service_dict = getattr(self._schema.config, "services", None) or {}
     if service_dict:
         root["service"].update(service_dict)
 
-    # users_pool 已包含刚认证好的 AuthSession 对象
-    root["auth"] = self._cfg.users_pool
+    # users 已包含刚认证好的 AuthSession 对象
+    root["auth"] = self._cfg.users
 
     return root
 ```
@@ -102,13 +102,13 @@ def _resolve_steps(self, root: dict[str, Any]) -> list[StepUnion]:
 
 ```python
 def _pick_base_url(self) -> str:
-    """从 serviceDict 取第一个 URL 作为 base_url"""
-    sd = getattr(self._schema.config, "serviceDict", None) or {}
+    """从 services 取第一个 URL 作为 base_url"""
+    sd = getattr(self._schema.config, "services", None) or {}
     if sd:
         return next(iter(sd.values()), "")
 
-    if self._cfg.services_pool:
-        return next(iter(self._cfg.services_pool.values()), "")
+    if self._cfg.services:
+        return next(iter(self._cfg.services.values()), "")
 
     return ""
 ```

@@ -15,7 +15,7 @@ class AuthSession(BaseModel):
     认证前：填写 url/username/password/expires_in
     认证后：token/expires_at 自动填充
 
-    注意：tag（唯一标识）通过 users_pool 字典的 key 决定，不再存储在对象中。
+    注意：tag（唯一标识）通过 users 字典的 key 决定，不再存储在对象中。
 
     属性：
         url: 认证接口地址

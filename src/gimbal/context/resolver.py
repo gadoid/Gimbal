@@ -7,8 +7,8 @@
     返回新的 Step 对象，不修改原始 schema。
 
 数据源（按优先级）：
-    auth.*      → BootstrapConfig.users_pool   AuthSession 对象及其 @property
-    service.*   → BootstrapConfig.services_pool
+    auth.*      → BootstrapConfig.users   AuthSession 对象及其 @property
+    service.*   → BootstrapConfig.services
     *           → Scenario.channels（Extract 提升的动态值）
 
 解析方式：
@@ -201,8 +201,8 @@ class SpecResolver:
 
         结构：
             {
-                "auth":    users_pool dict（值为 AuthSession 对象）,
-                "service": services_pool dict,
+                "auth":    users dict（值为 AuthSession 对象）,
+                "service": services dict,
                 # channels 里的变量直接展平到根
                 "token":   "eyJxx...",
                 "user_id": 42,
@@ -219,13 +219,13 @@ class SpecResolver:
         root.update(channels_vars)
         logger.debug("[SpecResolver] channels 变量: %s", list(channels_vars.keys()))
 
-        # 2. services_pool
-        if self._config.services_pool:
-            root["service"] = self._config.services_pool
+        # 2. services
+        if self._config.services:
+            root["service"] = self._config.services
 
-        # 3. users_pool（优先级最高，后写）
-        if self._config.users_pool:
-            root["auth"] = self._config.users_pool
+        # 3. users（优先级最高，后写）
+        if self._config.users:
+            root["auth"] = self._config.users
 
         return root
 

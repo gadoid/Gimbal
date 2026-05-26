@@ -162,7 +162,7 @@ class ScenarioRunner:
         logger.debug("[ScenarioRunner] ScenarioContext 创建完成: scenario_id=%s", sid)
 
         # 2. 预处理：认证 + 模板展开 + 提取 base_url
-        #    预处理器直接持有 bootstrap_config 引用，认证结果写入 users_pool
+        #    预处理器直接持有 bootstrap_config 引用，认证结果写入 users
         from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
 
         preprocessor = ScenarioPreprocessor(
