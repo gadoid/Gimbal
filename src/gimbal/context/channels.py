@@ -5,6 +5,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .base import ContextLayer
 from .exceptions import PromotionRejected
+from gimbal.log import get_logger
+
+logger = get_logger(__name__)
 
 
 class ArtifactRef(BaseModel):
@@ -191,6 +194,10 @@ class Channels:
         self._variables[key] = value
         self._promotions.append(record)
         self._notify(record)
+        logger.debug(
+            "[Channels] Variable promoted: key={} from_layer={} to_layer={} by_step={} overwrote={}",
+            key, from_layer.value, self._owner_layer.value, by_step_id, overwrote,
+        )
         return record
     
     def attach_artifact_from(
@@ -233,13 +240,21 @@ class Channels:
         p = self._policy
         
         if from_layer not in p.accept_from_layers:
+            logger.warning(
+                "[Channels] Promotion rejected: layer not allowed: key={} from_layer={} to_layer={}",
+                key, from_layer.value, self._owner_layer.value,
+            )
             raise PromotionRejected(
                 f"Layer {from_layer.value} cannot promote to "
                 f"{self._owner_layer.value} (policy: accept_from="
                 f"{[l.value for l in p.accept_from_layers]})"
             )
-        
+
         if key in p.forbidden_keys:
+            logger.warning(
+                "[Channels] Promotion rejected: forbidden key: key={} to_layer={}",
+                key, self._owner_layer.value,
+            )
             raise PromotionRejected(
                 f"Key '{key}' is forbidden by policy on "
                 f"{self._owner_layer.value} channels"
@@ -275,6 +290,8 @@ class Channels:
         for listener in self._listeners:
             try:
                 listener(record)
-            except Exception:
-                # 监听器异常不应影响主流程,这里可接日志
-                pass
+            except Exception as exc:
+                logger.exception(
+                    "[Channels] Listener exception during promotion notification: key={} listener={}",
+                    record.key, getattr(listener, "__name__", repr(listener)),
+                )

@@ -21,7 +21,8 @@ from gimbal.schema.step import Step
 from gimbal.statemachine.engine import StepStateMachine, StepRunResult
 from gimbal.strategy.dispatcher import StrategyDispatcher
 
-logger = logging.getLogger(__name__)
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 
 # ── ScenarioRunResult ─────────────────────────────────────────────────────────
@@ -69,7 +70,7 @@ class StepRunner:
         self._dispatcher = dispatcher
         self._ctx_manager = ctx_manager
         self._service_base_url = service_base_url
-        logger.debug("[StepRunner] 初始化: service_base_url=%s", service_base_url)
+        logger.debug("[StepRunner] 初始化: service_base_url={}", service_base_url)
 
     def run(
         self,
@@ -78,7 +79,7 @@ class StepRunner:
         step_index: int,
     ) -> StepRunResult:
         step_id = f"step-{step_index:03d}"
-        logger.debug("[StepRunner] 开始执行 Step: step_id=%s scenario_id=%s",
+        logger.debug("[StepRunner] 开始执行 Step: step_id={} scenario_id={}",
                      step_id, scenario_ctx.scenario_id)
 
         # 1. 创建 StepContext
@@ -90,7 +91,7 @@ class StepRunner:
             strategy_spec=step_schema.model_dump(),
             resolved_vars={},
         )
-        logger.debug("[StepRunner] StepContext 创建完成: step_id=%s", step_id)
+        logger.debug("[StepRunner] StepContext 创建完成: step_id={}", step_id)
 
         # 2. 构造状态机，注入全部执行依赖
         #    step_schema 已由预处理器展开，直接使用
@@ -101,11 +102,11 @@ class StepRunner:
             view=StepContextAdapter(step_ctx),
             service_base_url=self._service_base_url,
         )
-        logger.debug("[StepRunner] StepStateMachine 构造完成: step_id=%s", step_id)
+        logger.debug("[StepRunner] StepStateMachine 构造完成: step_id={}", step_id)
 
         # 3. 状态机自驱动运行
         result = sm.run()
-        logger.debug("[StepRunner] Step 执行完成: step_id=%s status=%s duration_ms=%.2f",
+        logger.debug("[StepRunner] Step 执行完成: step_id={} status={} duration_ms={:.2f}",
                      step_id, result.status, result.duration_ms)
 
         # 4. finalize StepContext
@@ -113,7 +114,7 @@ class StepRunner:
             if result.status in StepStatus._value2member_map_ \
             else StepStatus.ERROR
         self._ctx_manager.finalize_step(step_ctx, step_status)
-        logger.debug("[StepRunner] StepContext finalized: step_id=%s status=%s",
+        logger.debug("[StepRunner] StepContext finalized: step_id={} status={}",
                      step_id, step_status)
 
         return result
@@ -148,7 +149,7 @@ class ScenarioRunner:
         started_at = datetime.utcnow()
         sid = scenario_schema.scenarioId
         logger.info(
-            "[ScenarioRunner] 开始执行 Scenario: scenario_id=%s scenario_name=%s step_count=%d",
+            "[ScenarioRunner] 开始执行 Scenario: scenario_id={} scenario_name={} step_count={}",
             sid, scenario_schema.meta.name, len(scenario_schema.steps),
         )
 
@@ -159,7 +160,7 @@ class ScenarioRunner:
             scenario_name=scenario_schema.meta.name,
             description=scenario_schema.meta.description,
         )
-        logger.debug("[ScenarioRunner] ScenarioContext 创建完成: scenario_id=%s", sid)
+        logger.debug("[ScenarioRunner] ScenarioContext 创建完成: scenario_id={}", sid)
 
         # 2. 预处理：认证 + 模板展开 + 提取 base_url
         #    预处理器直接持有 bootstrap_config 引用，认证结果写入 users
@@ -171,7 +172,7 @@ class ScenarioRunner:
         )
         resolved_steps, base_url = preprocessor.run()
         logger.debug(
-            "[ScenarioRunner] 预处理完成: resolved_steps=%d base_url=%s",
+            "[ScenarioRunner] 预处理完成: resolved_steps={} base_url={}",
             len(resolved_steps), base_url,
         )
 
@@ -187,18 +188,18 @@ class ScenarioRunner:
 
         for idx, step_union in enumerate(resolved_steps):
             if not hasattr(step_union, "api"):
-                logger.warning("[ScenarioRunner] step[%d] 是未展开的 StepRef，跳过", idx)
+                logger.warning("[ScenarioRunner] step[{}] 是未展开的 StepRef，跳过", idx)
                 continue
 
             logger.debug(
-                "[ScenarioRunner] 开始执行第 %d/%d 个 Step: scenario_id=%s",
+                "[ScenarioRunner] 开始执行第 {}/{} 个 Step: scenario_id={}",
                 idx + 1, len(resolved_steps), sid,
             )
             result = step_runner.run(step_union, scenario_ctx, idx)
             step_results.append(result)
 
             logger.info(
-                "[ScenarioRunner] Step 完成: step_id=%s status=%s duration_ms=%.2f (%d/%d)",
+                "[ScenarioRunner] Step 完成: step_id={} status={} duration_ms={:.2f} ({}/{})",
                 result.step_id, result.status, result.duration_ms,
                 idx + 1, len(resolved_steps),
             )
@@ -206,7 +207,7 @@ class ScenarioRunner:
             if not result.passed:
                 overall_status = result.status
                 logger.warning(
-                    "[ScenarioRunner] Scenario 中断: step_id=%s 失败，后续 step 不再执行",
+                    "[ScenarioRunner] Scenario 中断: step_id={} 失败，后续 step 不再执行",
                     result.step_id,
                 )
                 break
@@ -214,7 +215,7 @@ class ScenarioRunner:
         # 4. finalize ScenarioContext
         self._ctx_manager.finalize_scenario(scenario_ctx, overall_status)
         logger.debug(
-            "[ScenarioRunner] ScenarioContext finalized: scenario_id=%s status=%s",
+            "[ScenarioRunner] ScenarioContext finalized: scenario_id={} status={}",
             sid, overall_status,
         )
 

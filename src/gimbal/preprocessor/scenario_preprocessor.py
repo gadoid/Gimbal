@@ -37,8 +37,8 @@ if TYPE_CHECKING:
     from gimbal.schema.scenario import Scenario, Config
     from gimbal.schema.step import Step, StepUnion
 
-logger = logging.getLogger(__name__)
-
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 class ScenarioPreprocessor:
     """Scenario 预处理器。
@@ -84,7 +84,7 @@ class ScenarioPreprocessor:
         base_url = self._pick_base_url()
 
         logger.info(
-            "[Preprocessor] 预处理完成: scenario_id=%s steps=%d base_url=%s",
+            "[Preprocessor] 预处理完成: scenario_id={} steps={} base_url={}",
             self._schema.scenarioId,
             len(resolved_steps),
             base_url,
@@ -118,26 +118,26 @@ class ScenarioPreprocessor:
                 # 是 dict，先转成 AuthSession
                 self._authenticate_one(tag, AuthSession(**entry))
             else:
-                logger.warning("[Preprocessor] 未知的 users entry 类型: tag=%s type=%s", tag, type(entry).__name__)
+                logger.warning("[Preprocessor] 未知的 users entry 类型: tag={} type={}", tag, type(entry).__name__)
 
     def _authenticate_one(self, tag: str, auth_session) -> None:
         from gimbal.auth import AuthManager
 
         self._cfg.users[tag] = auth_session
-        logger.debug("[Preprocessor] AuthSession 注入 users: tag=%s", tag)
+        logger.debug("[Preprocessor] AuthSession 注入 users: tag={}", tag)
 
         auth_manager = AuthManager(self._cfg)
         try:
             auth_manager.get_auth(tag)
             session = self._cfg.users.get(tag)
             logger.info(
-                "[Preprocessor] 认证成功: tag=%s token=%s token_type=%s",
+                "[Preprocessor] 认证成功: tag={} token={} token_type={}",
                 tag,
                 session.token if session else "?",
                 session.token_type if session else "?",
             )
         except Exception as exc:
-            logger.error("[Preprocessor] 认证失败: tag=%s error=%s", tag, exc)
+            logger.error("[Preprocessor] 认证失败: tag={} error={}", tag, exc)
             raise
 
     # ── 第二段：构建查询根 ────────────────────────────────────────────────────
@@ -173,7 +173,7 @@ class ScenarioPreprocessor:
         root["auth"] = self._cfg.users
 
         logger.debug(
-            "[Preprocessor] 查询根构建完成: service_keys=%s auth_tags=%s",
+            "[Preprocessor] 查询根构建完成: service_keys={} auth_tags={}",
             list(root["service"].keys()),
             list(root["auth"].keys()),
         )
@@ -190,7 +190,7 @@ class ScenarioPreprocessor:
         for idx, step_union in enumerate(self._schema.steps):
             if not hasattr(step_union, "api"):
                 # StepRef，原样保留
-                logger.debug("[Preprocessor] step[%d] 是 StepRef，跳过展开", idx)
+                logger.debug("[Preprocessor] step[{}] 是 StepRef，跳过展开", idx)
                 resolved.append(step_union)
                 continue
             resolved.append(self._resolve_step(step_union, root, idx))
@@ -206,7 +206,7 @@ class ScenarioPreprocessor:
             request=self._resolve_request(step.request, root),
             strategy=[self._resolve_strategy(s, root) for s in step.strategy],
         )
-        logger.debug("[Preprocessor] step[%d] 展开完成", idx)
+        logger.debug("[Preprocessor] step[{}] 展开完成", idx)
         return resolved
 
     def _resolve_api(self, api, root: dict):
@@ -305,10 +305,10 @@ class ScenarioPreprocessor:
         resolved = resolve_template(value, root)
 
         if resolved is None:
-            logger.warning("[Preprocessor] 模板变量未找到: %s", value)
+            logger.warning("[Preprocessor] 模板变量未找到: {}", value)
             return value  # 保留原始占位符，不返回 None，避免意外空值
 
-        logger.debug("[Preprocessor] 模板展开: %r → %r", value, resolved)
+        logger.debug("[Preprocessor] 模板展开: {!r} → {!r}", value, resolved)
         return resolved
 
     def _resolve_nested(self, data: Any, root: dict) -> Any:
@@ -329,12 +329,12 @@ class ScenarioPreprocessor:
         sd = getattr(self._schema.config, "services", None) or {}
         if sd:
             url = next(iter(sd.values()), "")
-            logger.debug("[Preprocessor] base_url（来自 services）: %s", url)
+            logger.debug("[Preprocessor] base_url（来自 services）: {}", url)
             return url
 
         if self._cfg.services:
             url = next(iter(self._cfg.services.values()), "")
-            logger.debug("[Preprocessor] base_url（来自 services）: %s", url)
+            logger.debug("[Preprocessor] base_url（来自 services）: {}", url)
             return url
 
         logger.debug("[Preprocessor] 未找到 base_url，使用空字符串")

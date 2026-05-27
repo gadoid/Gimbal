@@ -10,8 +10,9 @@ from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, Stra
 if TYPE_CHECKING:
     from gimbal.context.views import StrategyContextView
     from gimbal.schema.strategy import StrategyBase
-
-logger = logging.getLogger(__name__)
+    
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 
 class PollExecutor(StrategyExecutor):
@@ -27,7 +28,7 @@ class PollExecutor(StrategyExecutor):
             target = getattr(spec, "target", "")
             interval = getattr(spec, "interval", 1.0)
             timeout = getattr(spec, "timeout", 30.0)
-            logger.info("[PollExecutor] 开始轮询: target=%s interval=%s timeout=%s", target, interval, timeout)
+            logger.info("[PollExecutor] 开始轮询: target={} interval={} timeout={}", target, interval, timeout)
             # TODO: 实现轮询逻辑
             logger.warning("[PollExecutor] 轮询执行器为占位实现，实际未执行轮询")
             return StrategyResult(

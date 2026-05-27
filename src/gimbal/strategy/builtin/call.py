@@ -8,8 +8,8 @@ from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, Stra
 from gimbal.context.step import HttpExchange
 from gimbal.context.views import StepContextAdapter
 
-logger = logging.getLogger(__name__)
-
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 class CallExecutor(StrategyExecutor):
     """执行 HTTP 调用，将响应存入 context。
@@ -36,8 +36,8 @@ class CallExecutor(StrategyExecutor):
         try:
             import httpx
 
-            logger.info("[CallExecutor] HTTP 请求开始: %s %s", method, url)
-            logger.info("[CallExecutor] 请求 headers: %s", headers)
+            logger.info("[CallExecutor] HTTP 请求开始: {} {}", method, url)
+            logger.info("[CallExecutor] 请求 headers: {}", headers)
             with httpx.Client(timeout=timeout) as client:
                 response = client.request(
                     method=method,
@@ -47,7 +47,7 @@ class CallExecutor(StrategyExecutor):
                     params=body if method.upper() in ("GET", "HEAD") else None,
                 )
 
-            logger.info("[CallExecutor] HTTP 响应: %s %s -> %d", method, url, response.status_code)
+            logger.info("[CallExecutor] HTTP 响应: {} {} -> {}", method, url, response.status_code)
 
             # 将响应写入 scenario context，供后续 Extract 使用
             # view.promote_variable("response_status", response.status_code, to=ContextLayer.SCENARIO)
@@ -62,7 +62,7 @@ class CallExecutor(StrategyExecutor):
                 resp_body = response.text
             # view.promote_variable("response_body", resp_body, to=ContextLayer.SCENARIO)
             view.write_http_exchange(response_body=resp_body)
-            logger.debug("[CallExecutor] 响应已写入 context: response_status=%s", response.status_code)
+            logger.debug("[CallExecutor] 响应已写入 context: response_status={}", response.status_code)
 
             return StrategyResult(
                 status=StrategyStatus.PASSED,
@@ -73,21 +73,21 @@ class CallExecutor(StrategyExecutor):
                 },
             )
         except httpx.TimeoutException as exc:
-            logger.error("[CallExecutor] HTTP 请求超时: %s %s timeout=%.1fs", method, url, timeout)
+            logger.error("[CallExecutor] HTTP 请求超时: {} {} timeout={%.1f}s", method, url, timeout)
             return StrategyResult(
                 status=StrategyStatus.ERROR,
                 message=f"Request timeout: {exc}",
                 error=traceback.format_exc(),
             )
         except httpx.RequestError as exc:
-            logger.error("[CallExecutor] HTTP 请求失败: %s %s - %s", method, url, exc)
+            logger.error("[CallExecutor] HTTP 请求失败: {} {} - {}", method, url, exc)
             return StrategyResult(
                 status=StrategyStatus.ERROR,
                 message=f"Request error: {exc}",
                 error=traceback.format_exc(),
             )
         except Exception as exc:
-            logger.exception("[CallExecutor] HTTP 请求异常: %s %s", method, url)
+            logger.exception("[CallExecutor] HTTP 请求异常: {} {}", method, url)
             return StrategyResult(
                 status=StrategyStatus.ERROR,
                 message=str(exc),

@@ -16,6 +16,9 @@ from gimbal.cli.common import (
 )
 from gimbal.cli.context import CLIContext
 from gimbal.core.asset_resolver import AssetKind, AssetResolver
+from gimbal.log import get_logger
+
+logger = get_logger(__name__)
 
 
 def scenario(
@@ -83,6 +86,8 @@ def scenario(
     if step_from is not None and step_to is not None and step_from > step_to:
         raise typer.BadParameter("--step-from 不能大于 --step-to。")
 
+    logger.info("[CLI] Scenario command invoked: scenario_ids={} env={} mode={}", scenario_ids, env, mode)
+
     resolved_source = resolve_source(source, no_cache, cache_only)
 
     resolver = AssetResolver(
@@ -95,19 +100,23 @@ def scenario(
 
     if not matched:
         if allow_empty:
+            logger.warning("[CLI] No scenarios matched, allow_empty enabled - exiting cleanly")
             typer.echo("No scenarios matched, exiting cleanly due to --allow-empty.")
             raise typer.Exit(code=0)
+        logger.error("[CLI] No scenarios matched: {}", scenario_ids)
         typer.secho(
             f"Error: No scenarios matched: {', '.join(scenario_ids)}",
             fg=typer.colors.RED, bold=True, err=True,
         )
         raise typer.Exit(code=5)
 
+    logger.info("[CLI] Matched {} scenario(s)", len(matched))
     if len(matched) > 1 and not yes and sys.stdin.isatty():
         typer.echo(f"Matched {len(matched)} scenarios:")
         for s in matched:
             typer.echo(f"  - {s.id}")
         if not typer.confirm("Proceed?", default=False):
+            logger.info("[CLI] User aborted - proceeding=false")
             typer.echo("Aborted.")
             raise typer.Exit(code=0)
 

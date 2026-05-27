@@ -6,8 +6,8 @@ from typing import Any, TYPE_CHECKING
 
 from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, StrategyStatus
 
-logger = logging.getLogger(__name__)
-
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 class AssignExecutor(StrategyExecutor):
     """将字面量或 context 变量赋值到指定路径。
@@ -25,7 +25,7 @@ class AssignExecutor(StrategyExecutor):
         assert isinstance(spec, Assign)
 
         try:
-            logger.debug("[AssignExecutor] 执行赋值: target=%s source=%s scope=%s",
+            logger.debug("[AssignExecutor] 执行赋值: target={} source={} scope={}",
                         spec.target, spec.source, spec.scope)
 
             # 解析 source：是模板还是字面量
@@ -34,9 +34,9 @@ class AssignExecutor(StrategyExecutor):
             if value is None:
                 if spec.default is not None:
                     value = spec.default
-                    logger.debug("[AssignExecutor] 使用默认值: target=%s default=%s", spec.target, value)
+                    logger.debug("[AssignExecutor] 使用默认值: target={} default={}", spec.target, value)
                 elif spec.required:
-                    logger.warning("[AssignExecutor] 赋值失败: target=%s source=%s is required but resolved to None",
+                    logger.warning("[AssignExecutor] 赋值失败: target={} source={} is required but resolved to None",
                                   spec.target, spec.source)
                     return StrategyResult(
                         status=StrategyStatus.FAILED,
@@ -48,7 +48,7 @@ class AssignExecutor(StrategyExecutor):
             target_layer = _scope_to_layer(spec.scope)
             view.promote_variable(spec.target, value, to=target_layer)
 
-            logger.info("[AssignExecutor] 赋值成功: %s=%r (layer=%s)", spec.target, value, target_layer.value)
+            logger.info("[AssignExecutor] 赋值成功: {}=%r (layer={})", spec.target, value, target_layer.value)
 
             return StrategyResult(
                 status=StrategyStatus.PASSED,
@@ -56,7 +56,7 @@ class AssignExecutor(StrategyExecutor):
                 extracted={spec.target: value},
             )
         except Exception as exc:
-            logger.exception("[AssignExecutor] 赋值异常: target=%s", spec.target)
+            logger.exception("[AssignExecutor] 赋值异常: target={}", spec.target)
             return StrategyResult(
                 status=StrategyStatus.ERROR,
                 message=str(exc),

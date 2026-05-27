@@ -190,6 +190,7 @@ def launch(
     # cli_ctx.extras["log_level"] = log_level
     cli_ctx.env = env
     cli_ctx.mode = mode
+    cli_ctx.log_level = log_level.value  # LogLevel is a str enum, use .value to get the actual string
 
 
     # 2. 传入ctx, 进行配置信息加载，返回所有信息合并后的上下文信息

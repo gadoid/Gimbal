@@ -5,6 +5,10 @@ from gimbal.auth.authenticator import Authenticator, register_authenticator
 # 导入认证基类 和 装饰器
 from .defaults import DEFAULT_EXPIRES_IN
 from ...schema.auth import AuthSession
+from ...exceptions import AuthError
+from ...log import get_logger
+
+logger = get_logger(__name__)
 
 @register_authenticator("https://fin-tidb.21eflag.com/")
 class WLAuthenticator(Authenticator):
@@ -44,7 +48,7 @@ class WLAuthenticator(Authenticator):
         response.raise_for_status()
         
         data = response.json()
-        print(f"Response data: {data}")
+        logger.debug(f"Response data: {data}")
 
         # 根据实际响应结构调整 token 提取逻辑
         resp_data = data.get("data")
@@ -54,7 +58,7 @@ class WLAuthenticator(Authenticator):
             token = None
 
         if not token:
-            raise ValueError(f"API 响应中未找到 token: {data}")
+            raise AuthError(f"API 响应中未找到 token: {data}")
 
         auth.apply_token(token, auth.expires_in if auth.expires_in else DEFAULT_EXPIRES_IN )
 

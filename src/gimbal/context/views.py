@@ -1,7 +1,7 @@
 from typing import Any, Optional, Protocol, runtime_checkable
 from .base import ContextLayer
 from .channels import ArtifactRef
-from .exceptions import LayerResolutionError
+from .exceptions import LayerResolutionError, ContextError
 from .step import StepContext, AssertionResult
 from gimbal.context.step import HttpExchange
 
@@ -165,7 +165,7 @@ class StepContextAdapter:
 
     def write_http_exchange(self, **kwargs) -> None:
         if self._ctx.http_exchange is None:
-            raise RuntimeError("http_exchange not initialized; reset_http_exchange() must be called before CALLING phase")
+            raise ContextError("http_exchange not initialized; reset_http_exchange() must be called before CALLING phase")
         self._ctx.http_exchange.update(**kwargs)
 
     def reset_http_exchange(self) -> None:

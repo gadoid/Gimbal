@@ -7,8 +7,8 @@ from .utils import _evaluate
 from gimbal.utils.jsonpath import is_jsonpath, get as jget
 from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, StrategyStatus
 
-logger = logging.getLogger(__name__)
-
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 class AssertionExecutor(StrategyExecutor):
     """对 context 中的字段执行断言。"""
@@ -22,7 +22,7 @@ class AssertionExecutor(StrategyExecutor):
 
         assert isinstance(spec, Assertion)
         try:
-            logger.info("[AssertionExecutor] 执行断言: target=%s operator=%s expected=%s",
+            logger.info("[AssertionExecutor] 执行断言: target={} operator={} expected={}",
                         spec.target, spec.operator, spec.expected)
             # 读取被断言的目标值
             _HTTP_EXCHANGE_KEYS = {
@@ -42,7 +42,7 @@ class AssertionExecutor(StrategyExecutor):
                 # 普通 key，从 Scenario channels 读（Extract 提升上来的业务字段）
                 actual = view.read_variable(spec.target, from_layer=ContextLayer.SCENARIO)
 
-            logger.info("[AssertionExecutor] 读取实际值: target=%s actual=%s", spec.target, actual)
+            logger.info("[AssertionExecutor] 读取实际值: target={} actual={}", spec.target, actual)
 
             passed, msg = _evaluate(spec.operator, actual, spec.expected)
             human_msg = spec.message or msg
@@ -58,10 +58,10 @@ class AssertionExecutor(StrategyExecutor):
 
             status = StrategyStatus.PASSED if passed else StrategyStatus.FAILED
             if passed:
-                logger.info("[AssertionExecutor] 断言通过: %s %s %s -> actual=%s",
+                logger.info("[AssertionExecutor] 断言通过: {} {} {} -> actual={}",
                            actual, spec.operator.value if hasattr(spec.operator, 'value') else spec.operator, spec.expected, actual)
             else:
-                logger.warning("[AssertionExecutor] 断言失败: %s %s %s -> actual=%s",
+                logger.warning("[AssertionExecutor] 断言失败: {} {} {} -> actual={}",
                              actual, spec.operator.value if hasattr(spec.operator, 'value') else spec.operator, spec.expected, actual)
 
             return StrategyResult(
@@ -69,7 +69,7 @@ class AssertionExecutor(StrategyExecutor):
                 message=human_msg,
             )
         except Exception as exc:
-            logger.exception("[AssertionExecutor] 断言异常: target=%s", spec.target)
+            logger.exception("[AssertionExecutor] 断言异常: target={}", spec.target)
             return StrategyResult(
                 status=StrategyStatus.ERROR,
                 message=str(exc),

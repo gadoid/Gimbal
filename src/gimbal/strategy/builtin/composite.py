@@ -11,7 +11,8 @@ if TYPE_CHECKING:
     from gimbal.context.views import StrategyContextView
     from gimbal.schema.strategy import StrategyBase
 
-logger = logging.getLogger(__name__)
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 
 class CompositeExecutor(StrategyExecutor):
@@ -25,7 +26,7 @@ class CompositeExecutor(StrategyExecutor):
     def execute(self, spec: "StrategyBase", view: "StrategyContextView") -> StrategyResult:
         try:
             name = getattr(spec, "name", "unnamed")
-            logger.info("[CompositeExecutor] 执行组合策略: name=%s", name)
+            logger.info("[CompositeExecutor] 执行组合策略: name={}", name)
             # TODO: 实现子策略列表的顺序执行和结果聚合
             logger.warning("[CompositeExecutor] 组合执行器为占位实现，实际未执行子策略")
             return StrategyResult(

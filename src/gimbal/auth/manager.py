@@ -14,7 +14,8 @@ from .exceptions import AuthLoginFailed, AuthSessionNotFound
 if TYPE_CHECKING:
     from ..config.models import BootstrapConfig
 
-logger = logging.getLogger(__name__)
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 
 class AuthManager:
@@ -56,13 +57,13 @@ class AuthManager:
 
         # 未认证 → 登录
         if not auth.is_authenticated:
-            logger.info("[AuthManager] 登录认证: tag=%s", tag)
+            logger.info("[AuthManager] 登录认证: tag={}", tag)
             self._login(auth, tag)
             return auth
 
         # 需刷新
         if auth.should_refresh:
-            logger.info("[AuthManager] 刷新 token: tag=%s", tag)
+            logger.info("[AuthManager] 刷新 token: tag={}", tag)
             self._refresh(auth, tag)
             return auth
 
@@ -95,10 +96,10 @@ class AuthManager:
         try:
             authenticator = get_authenticator(auth.url)
             authenticator.authenticate(auth, tag)
-            logger.info("[AuthManager] 登录成功: tag=%s", tag)
+            logger.info("[AuthManager] 登录成功: tag={}", tag)
 
         except Exception as e:
-            logger.error("[AuthManager] 登录失败: tag=%s error=%s", tag, e)
+            logger.error("[AuthManager] 登录失败: tag={} error={}", tag, e)
             raise AuthLoginFailed(f"Login failed for '{tag}': {e}") from e
 
     def _refresh(self, auth: AuthSession, tag: str) -> None:
@@ -123,9 +124,9 @@ class AuthManager:
             token = data.get("access_token")
             expires_in = data.get("expires_in")
             auth.apply_token(token, expires_in)
-            logger.info("[AuthManager] 刷新成功: tag=%s", tag)
+            logger.info("[AuthManager] 刷新成功: tag={}", tag)
 
         except Exception as e:
             # 刷新失败，尝试重新登录
-            logger.warning("[AuthManager] 刷新失败，尝试重新登录: tag=%s error=%s", tag, e)
+            logger.warning("[AuthManager] 刷新失败，尝试重新登录: tag={} error={}", tag, e)
             self._login(auth, tag)

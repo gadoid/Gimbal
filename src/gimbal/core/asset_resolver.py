@@ -11,6 +11,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from gimbal.log import get_logger
+
+logger = get_logger(__name__)
+
 
 class AssetKind(str, Enum):
     SUITE = "suite"
@@ -50,12 +54,16 @@ class AssetResolver:
         self.source = source
         self.registry = registry
         self.version = version
+        logger.debug("[AssetResolver] Initialized: kind={} source={} registry={} version={}",
+                    kind, source, registry, version)
 
     def resolve(self, ids: list[str]) -> list[ResolvedAsset]:
         """将一组 ID（含通配）解析为具体的资产列表。"""
+        logger.info("[AssetResolver] Resolving assets: kind={} ids={}", self.kind, ids)
         resolved: list[ResolvedAsset] = []
         for raw_id in ids:
             if self._is_namespace_wildcard(raw_id):
+                logger.debug("[AssetResolver] Expanding namespace wildcard: pattern={}", raw_id)
                 resolved.extend(self._expand_namespace(raw_id))
             else:
                 asset = self._resolve_single(raw_id)
@@ -68,6 +76,7 @@ class AssetResolver:
             if a.id not in seen:
                 seen.add(a.id)
                 unique.append(a)
+        logger.info("[AssetResolver] Resolution complete: requested={} resolved={}", len(ids), len(unique))
         return unique
 
     def _is_namespace_wildcard(self, raw_id: str) -> bool:

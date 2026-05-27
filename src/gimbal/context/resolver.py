@@ -32,7 +32,8 @@ if TYPE_CHECKING:
     from gimbal.schema.request import Request, RequestUnion
     from gimbal.schema.strategy import StrategyUnion
 
-logger = logging.getLogger(__name__)
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 # ${} 内部默认 JSONPath，$ 可省略
 # 保留前缀，用于路由到不同数据源
@@ -58,7 +59,7 @@ class SpecResolver:
         self._config = config
         # 构建根上下文，所有数据源合并到一个 dict
         self._root = self._build_root()
-        logger.debug("[SpecResolver] 根上下文构建完成，channels keys=%s",
+        logger.debug("[SpecResolver] 根上下文构建完成，channels keys={}",
                      list(self._root.get("_channels", {}).keys()))
 
     # ── 公开接口 ──────────────────────────────────────────────────────────────
@@ -177,9 +178,9 @@ class SpecResolver:
         resolved = resolve_template(value, self._root)
 
         if resolved is None:
-            logger.warning("[SpecResolver] 变量未找到: %s", value)
+            logger.warning("[SpecResolver] 变量未找到: {}", value)
 
-        logger.debug("[SpecResolver] 解析: %r → %r", value, resolved)
+        logger.debug("[SpecResolver] 解析: {!r} → {!r}", value, resolved)
         return resolved
 
     def _resolve_dict(self, data: dict) -> dict:
@@ -217,7 +218,7 @@ class SpecResolver:
         # 1. Scenario.channels（优先级最低，先写）
         channels_vars = self._view._ctx.parent.channels.variables_snapshot()
         root.update(channels_vars)
-        logger.debug("[SpecResolver] channels 变量: %s", list(channels_vars.keys()))
+        logger.debug("[SpecResolver] channels 变量: {}", list(channels_vars.keys()))
 
         # 2. services
         if self._config.services:

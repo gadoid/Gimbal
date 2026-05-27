@@ -45,8 +45,9 @@ if TYPE_CHECKING:
     from gimbal.schema.step import Step
     from gimbal.schema.strategy import StrategyPhase
     from gimbal.strategy.dispatcher import StrategyDispatcher
-
-logger = logging.getLogger(__name__)
+    
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 TransitionHook = Callable[[StepState, StepState, str], None]
 
@@ -134,7 +135,7 @@ class StepStateMachine:
             StepState.TEARDOWN:       self._handle_teardown,
         }
 
-        logger.debug("[SM %s] StepStateMachine 初始化完成", self._step_id)
+        logger.debug("[SM {}] StepStateMachine 初始化完成", self._step_id)
 
     # ── 公开接口 ──────────────────────────────────────────────────────────────
 
@@ -149,7 +150,7 @@ class StepStateMachine:
     def run(self) -> StepRunResult:
         """驱动状态机运行直到终态，返回执行结果。"""
         t_start = datetime.utcnow()
-        logger.info("[SM %s] 状态机开始执行", self._step_id)
+        logger.info("[SM {}] 状态机开始执行", self._step_id)
 
         try:
             # 从 PENDING 推进到第一个执行阶段
@@ -160,19 +161,19 @@ class StepStateMachine:
                 handler = self._handlers.get(self._state)
                 if handler is None:
                     # 防御：没有 handler 的非终态，直接 ERROR
-                    logger.warning("[SM %s] 无 handler for state=%s，进入 ERROR 状态", self._step_id, self._state.value)
+                    logger.warning("[SM {}] 无 handler for state={}，进入 ERROR 状态", self._step_id, self._state.value)
                     self._advance(StepState.ERROR, reason=f"no handler for {self._state.value}")
                     break
                 next_state = handler()
                 self._advance(next_state, reason=f"{self._state.value} done")
 
         except Exception as exc:
-            logger.exception("[SM %s] 状态机执行异常: %s", self._step_id, exc)
+            logger.exception("[SM {}] 状态机执行异常: {}", self._step_id, exc)
             self._error = traceback.format_exc()
             self._try_advance(StepState.ERROR, reason=str(exc))
 
         duration_ms = (datetime.utcnow() - t_start).total_seconds() * 1000
-        logger.info("[SM %s] 状态机执行完成: final_state=%s duration_ms=%.2f",
+        logger.info("[SM {}] 状态机执行完成: final_state={} duration_ms={:.2f}",
                     self._step_id, self._state.value, duration_ms)
 
         return StepRunResult(
@@ -189,69 +190,69 @@ class StepStateMachine:
         """执行前置策略（Assign / SQL 注入等）。"""
         from gimbal.schema.strategy import StrategyPhase
 
-        logger.debug("[SM %s] 进入 BEFORE_REQUEST 阶段", self._step_id)
+        logger.debug("[SM {}] 进入 BEFORE_REQUEST 阶段", self._step_id)
         pr = self._run_phase(StrategyPhase.BEFORE_REQUEST)
         self._phase_results.append(pr)
 
         if pr.hard_failed:
-            logger.warning("[SM %s] BEFORE_REQUEST 阶段 hard_failed，进入 TEARDOWN", self._step_id)
+            logger.warning("[SM {}] BEFORE_REQUEST 阶段 hard_failed，进入 TEARDOWN", self._step_id)
             return StepState.TEARDOWN   # 跳过 HTTP，直接清理
-        logger.debug("[SM %s] BEFORE_REQUEST 阶段完成 all_passed=%s，进入 CALLING", self._step_id, pr.all_passed)
+        logger.debug("[SM {}] BEFORE_REQUEST 阶段完成 all_passed={}，进入 CALLING", self._step_id, pr.all_passed)
         return StepState.CALLING
 
     def _handle_calling(self) -> StepState:
         """发出 HTTP 请求，把响应写入 context。"""
-        logger.info("[SM %s] 开始 HTTP 请求", self._step_id)
+        logger.info("[SM {}] 开始 HTTP 请求", self._step_id)
         self._view.reset_http_exchange()
         result = self._do_http_call()
         self._phase_results.append(PhaseResult(phase="calling", results=[result]))
 
         if result.failed:
-            logger.warning("[SM %s] HTTP 请求失败: status=%s message=%s，进入 TEARDOWN",
+            logger.warning("[SM {}] HTTP 请求失败: status={} message={}，进入 TEARDOWN",
                           self._step_id, result.status, result.message)
             return StepState.TEARDOWN
-        logger.info("[SM %s] HTTP 请求成功，进入 AFTER_REQUEST", self._step_id)
+        logger.info("[SM {}] HTTP 请求成功，进入 AFTER_REQUEST", self._step_id)
         return StepState.AFTER_REQUEST
 
     def _handle_after_request(self) -> StepState:
         """执行后置策略（Extract 提取字段等）。"""
         from gimbal.schema.strategy import StrategyPhase
 
-        logger.debug("[SM %s] 进入 AFTER_REQUEST 阶段", self._step_id)
+        logger.debug("[SM {}] 进入 AFTER_REQUEST 阶段", self._step_id)
         pr = self._run_phase(StrategyPhase.AFTER_REQUEST)
         self._phase_results.append(pr)
 
         if pr.hard_failed:
-            logger.warning("[SM %s] AFTER_REQUEST 阶段 hard_failed，进入 TEARDOWN", self._step_id)
+            logger.warning("[SM {}] AFTER_REQUEST 阶段 hard_failed，进入 TEARDOWN", self._step_id)
             return StepState.TEARDOWN
-        logger.debug("[SM %s] AFTER_REQUEST 阶段完成 all_passed=%s，进入 VERIFYING", self._step_id, pr.all_passed)
+        logger.debug("[SM {}] AFTER_REQUEST 阶段完成 all_passed={}，进入 VERIFYING", self._step_id, pr.all_passed)
         return StepState.VERIFYING
 
     def _handle_verifying(self) -> StepState:
         """执行断言策略。"""
         from gimbal.schema.strategy import StrategyPhase
 
-        logger.debug("[SM %s] 进入 VERIFYING 阶段", self._step_id)
+        logger.debug("[SM {}] 进入 VERIFYING 阶段", self._step_id)
         pr = self._run_phase(StrategyPhase.VERIFYING)
         self._phase_results.append(pr)
 
         # 有 teardown 策略则必须进入 TEARDOWN（无论断言结果）
         if self._has_phase(StrategyPhase.TEARDOWN):
-            logger.debug("[SM %s] 检测到 TEARDOWN 策略，进入 TEARDOWN", self._step_id)
+            logger.debug("[SM {}] 检测到 TEARDOWN 策略，进入 TEARDOWN", self._step_id)
             return StepState.TEARDOWN
 
         if pr.all_passed:
-            logger.info("[SM %s] VERIFYING 阶段全部通过，进入 PASSED", self._step_id)
+            logger.info("[SM {}] VERIFYING 阶段全部通过，进入 PASSED", self._step_id)
             return StepState.PASSED
         else:
-            logger.warning("[SM %s] VERIFYING 阶段存在失败，进入 FAILED", self._step_id)
+            logger.warning("[SM {}] VERIFYING 阶段存在失败，进入 FAILED", self._step_id)
             return StepState.FAILED
 
     def _handle_teardown(self) -> StepState:
         """执行清理策略，决定最终终态。"""
         from gimbal.schema.strategy import StrategyPhase
 
-        logger.debug("[SM %s] 进入 TEARDOWN 阶段", self._step_id)
+        logger.debug("[SM {}] 进入 TEARDOWN 阶段", self._step_id)
         pr = self._run_phase(StrategyPhase.TEARDOWN)
         self._phase_results.append(pr)
 
@@ -262,21 +263,21 @@ class StepStateMachine:
         )
 
         if had_failure or pr.any_failed:
-            logger.warning("[SM %s] TEARDOWN 阶段完成，存在前置失败，进入 FAILED", self._step_id)
+            logger.warning("[SM {}] TEARDOWN 阶段完成，存在前置失败，进入 FAILED", self._step_id)
             return StepState.FAILED
-        logger.info("[SM %s] TEARDOWN 阶段完成，进入 PASSED", self._step_id)
+        logger.info("[SM {}] TEARDOWN 阶段完成，进入 PASSED", self._step_id)
         return StepState.PASSED
 
     # ── 内部辅助 ──────────────────────────────────────────────────────────────
 
     def _run_phase(self, phase: str) -> PhaseResult:
-        logger.debug("[SM %s] 执行策略阶段: phase=%s", self._step_id, phase)
+        logger.debug("[SM {}] 执行策略阶段: phase={}", self._step_id, phase)
         results = self._dispatcher.dispatch_phase(
             phase, self._step_schema.strategy, self._view
         )
         passed_count = sum(1 for r in results if r.passed)
         failed_count = sum(1 for r in results if r.failed)
-        logger.debug("[SM %s] 策略阶段完成: phase=%s total=%d passed=%d failed=%d",
+        logger.debug("[SM {}] 策略阶段完成: phase={} total={} passed={} failed={}",
                     self._step_id, phase, len(results), passed_count, failed_count)
         return PhaseResult(phase=phase, results=results)
 
@@ -292,7 +293,7 @@ class StepStateMachine:
 
         api = self._step_schema.api
         if not hasattr(api, "service"):
-            logger.error("[SM %s] API 是未解析的 Ref", self._step_id)
+            logger.error("[SM {}] API 是未解析的 Ref", self._step_id)
             return StrategyResult(
                 status=StrategyStatus.ERROR,
                 message="api is a ref that was not resolved before execution",
@@ -317,10 +318,10 @@ class StepStateMachine:
             body=body,
             timeout=api.timeout,
         )
-        logger.info("[SM %s] HTTP 请求: method=%s url=%s timeout=%.1fs",
+        logger.info("[SM {}] HTTP 请求: method={} url={} timeout={:.1f}s",
                     self._step_id, api.method, call_spec.url, api.timeout)
         result = self._dispatcher.dispatch(call_spec, self._view)
-        logger.info("[SM %s] HTTP 响应: status=%s duration_ms=%.2f",
+        logger.info("[SM {}] HTTP 响应: status={} duration_ms={:.2f}",
                     self._step_id, result.status, result.duration_ms)
         return result
 
@@ -332,8 +333,11 @@ class StepStateMachine:
             try:
                 self._on_transition(self._state, to, reason)
             except Exception:
-                pass
-        logger.debug("[SM %s] 状态转换: %s → %s (%s)", self._step_id, self._state.value, to.value, reason)
+                logger.warning(
+                    "[SM {}] 状态转换回调异常: {} → {} ({})",
+                    self._step_id, self._state.value, to.value, reason,
+                )
+        logger.debug("[SM {}] 状态转换: {} → {} ({})", self._step_id, self._state.value, to.value, reason)
         self._state = to
 
     def _try_advance(self, to: StepState, *, reason: str = "") -> bool:

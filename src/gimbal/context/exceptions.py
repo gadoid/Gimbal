@@ -1,14 +1,20 @@
-class ContextError(Exception):
-    """Context 相关错误的基类。"""
+"""context/exceptions.py
 
+Context 相关异常定义。
 
-class SealedContextError(ContextError):
-    """对已 sealed 的字段进行写入。"""
+注意：所有异常已迁移至 gimbal.exceptions。
+本模块保留用于向后兼容，请直接使用 gimbal.exceptions 中的异常类。
+"""
+from gimbal.exceptions import (
+    ContextError,
+    SealedContextError,
+    PromotionRejected,
+    LayerResolutionError,
+)
 
-
-class PromotionRejected(ContextError):
-    """变量提升被 policy 拒绝。"""
-
-
-class LayerResolutionError(ContextError):
-    """目标 layer 在当前链路中不存在。"""
+__all__ = [
+    "ContextError",
+    "SealedContextError",
+    "PromotionRejected",
+    "LayerResolutionError",
+]

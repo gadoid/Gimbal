@@ -26,9 +26,8 @@ from typing import Any
 from .models import BootstrapConfig
 from gimbal.cli.context import CLIContext
 
-
-logger = logging.getLogger(__name__)
-
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 
 # 环境变量名 → BootstrapConfig 字段名 的映射
@@ -123,12 +122,12 @@ class ConfigLoader:
     def _load_yaml_file(self, path: Path, label: str) -> dict[str, Any]:
         """读取单个 YAML 文件，返回 dict。文件不存在时返回空 dict（非错误）。"""
         if not path.exists():
-            logger.warning("[ConfigLoader] 配置文件不存在，跳过: %s", path)
+            logger.warning("[ConfigLoader] 配置文件不存在，跳过: {}", path)
             return {}
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
-            logger.debug("[ConfigLoader] 已加载配置文件: %s", path)
+            logger.debug("[ConfigLoader] 已加载配置文件: {}", path)
             # safe_load 在空文件时返回 None
             return data or {}
         except yaml.YAMLError as e:
@@ -143,7 +142,7 @@ class ConfigLoader:
             val = os.environ.get(env_key)
             if val is not None:
                 result[field_name] = self._coerce_env(field_name, val)
-                logger.debug("[ConfigLoader] 环境变量 %s=%s → %s", env_key, val, field_name)
+                logger.debug("[ConfigLoader] 环境变量 {}={} → {}", env_key, val, field_name)
         return result
 
     def _from_cli(self, cli: CLIContext) -> dict[str, Any]:
@@ -250,10 +249,10 @@ class ConfigLoader:
         current = Path.cwd()
         for directory in [current, *current.parents]:
             if (directory / "pyproject.toml").exists():
-                logger.warning("[ConfigLoader] 项目根目录: %s", directory)
+                logger.warning("[ConfigLoader] 项目根目录: {}", directory)
                 return directory
         logger.warning(
-            "[ConfigLoader] 未找到 gimbal.yaml（已遍历至 %s），使用当前目录: %s",
+            "[ConfigLoader] 未找到 gimbal.yaml（已遍历至 {}），使用当前目录: {}",
             current.anchor,   # 文件系统根，Windows 是 C:\，Linux 是 /
             current,
         )

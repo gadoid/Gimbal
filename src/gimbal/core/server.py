@@ -6,6 +6,9 @@ from dataclasses import dataclass, field
 import typer
 
 from gimbal.cli.context import CLIContext
+from gimbal.log import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -38,10 +41,16 @@ def start_server(ctx: CLIContext, config: ServerConfig) -> int:
       - 注册到调度中心后台维持心跳协程
     """
     listen = config.unix_socket or f"{config.host}:{config.port}"
+    logger.info("[Server] Starting: listen={} mode={} auth={}", listen, config.mode, config.auth)
+    logger.info("[Server] Configuration: workers={} max_concurrent={} queue_size={}",
+                config.workers, config.max_concurrent, config.queue_size)
+    if config.register_to:
+        logger.info("[Server] Will register to: {}", config.register_to)
     typer.echo(typer.style(f"[Server] Starting on {listen}", fg=typer.colors.GREEN, bold=True))
     typer.echo(f"[Server] mode={config.mode}, auth={config.auth}")
     typer.echo(f"[Server] workers={config.workers}, max_concurrent={config.max_concurrent}")
     if config.register_to:
         typer.echo(f"[Server] Will register to {config.register_to}")
     typer.echo(typer.style("[Server] (placeholder, not actually serving)", fg=typer.colors.YELLOW))
+    logger.warning("[Server] Running in placeholder mode - not actually serving requests")
     return 0

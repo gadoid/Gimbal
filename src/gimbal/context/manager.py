@@ -11,6 +11,9 @@ from .events import (
     ScenarioStartedEvent, ScenarioCompletedEvent,
     project_step_started, project_step_completed, project_promotion,
 )
+from gimbal.log import get_logger
+
+logger = get_logger(__name__)
 
 
 class ContextManager:
@@ -19,10 +22,11 @@ class ContextManager:
     def __init__(self, archive, event_bus):
         self._archive = archive
         self._event_bus = event_bus
+        logger.debug("[ContextManager] Initialized with archive={} event_bus={}", archive, event_bus)
     
     # ── Framework ─────────────────────────────────────
     def create_framework_context(
-        self, *, run_id: str, cfg: Configuration, 
+        self, *, run_id: str, cfg: Configuration,
         channels_policy: Optional[ChannelsPolicy] = None,
     ) -> FrameworkContext:
         # 增加配置层的初始化
@@ -31,7 +35,7 @@ class ContextManager:
             policy=channels_policy or Policies.framework_locked(),
         )
         self._wire_promotion_listener(channels, run_id)
-        
+
         ctx = FrameworkContext(
             run_id=run_id,
             started_at=datetime.utcnow(),
@@ -43,6 +47,7 @@ class ContextManager:
             channels=channels,
         )
         ctx.seal()
+        logger.info("[ContextManager] FrameworkContext created: run_id={}", run_id)
         return ctx
     
     # ── Suite ─────────────────────────────────────────
@@ -58,6 +63,7 @@ class ContextManager:
         )
         self._wire_promotion_listener(channels, framework_ctx.run_id)
 
+        logger.debug("[ContextManager] SuiteContext deriving: suite_id={} suite_name={}", suite_id, suite_name)
         return SuiteContext(
             suite_id=suite_id,
             suite_name=suite_name,
@@ -68,7 +74,7 @@ class ContextManager:
             plugins=plugins,
             channels=channels,
         )
-    
+
     def finalize_suite(self, ctx: SuiteContext, status: str = "passed") -> None:
         # 用 object.__setattr__ 绕过 seal 检查写入终态字段
         # 这是 ContextManager 的特权操作,业务代码无法这样写
@@ -76,6 +82,7 @@ class ContextManager:
         object.__setattr__(ctx, "status", status)
         ctx.seal()
         self._archive.save_suite(ctx)
+        logger.info("[ContextManager] SuiteContext finalized: suite_id={} status={}", ctx.suite_id, status)
     
     # ── Scenario ──────────────────────────────────────
     def derive_scenario_context(
@@ -89,7 +96,7 @@ class ContextManager:
             policy=channels_policy or Policies.scenario_default(),
         )
         self._wire_promotion_listener(channels, suite_ctx.run_id)
-        
+
         ctx = ScenarioContext(
             scenario_id=scenario_id,
             scenario_name=scenario_name,
@@ -105,8 +112,10 @@ class ContextManager:
             suite_id=ctx.suite_id,
             scenario_id=ctx.scenario_id,
         ))
+        logger.info("[ContextManager] ScenarioContext created: scenario_id={} suite_id={}",
+                    scenario_id, suite_ctx.suite_id)
         return ctx
-    
+
     def finalize_scenario(self, ctx: ScenarioContext, status: str) -> None:
         object.__setattr__(ctx, "ended_at", datetime.utcnow())
         object.__setattr__(ctx, "status", status)
@@ -120,6 +129,8 @@ class ContextManager:
             step_count=len(ctx.step_refs),
         ))
         self._archive.save_scenario(ctx)
+        logger.info("[ContextManager] ScenarioContext finalized: scenario_id={} status={} step_count={}",
+                    ctx.scenario_id, status, len(ctx.step_refs))
     
     # ── Step ──────────────────────────────────────────
     def derive_step_context(
@@ -141,8 +152,10 @@ class ContextManager:
             parent=scenario_ctx,
         )
         self._event_bus.publish(project_step_started(ctx, scenario_ctx.run_id))
+        logger.debug("[ContextManager] StepContext created: step_id={} scenario_id={} strategy={}",
+                     step_id, scenario_ctx.scenario_id, strategy_kind)
         return ctx
-    
+
     def finalize_step(self, ctx: StepContext, status: StepStatus) -> None:
         ended = datetime.now()
         # outcome 是 validate_assignment 的可变模型,这些写入是合法的
@@ -150,15 +163,17 @@ class ContextManager:
         ctx.outcome.duration_ms = (ended - ctx.started_at).total_seconds() * 1000
         # step 自身的字段——seal 前修改
         object.__setattr__(ctx, "ended_at", ended)
-        
+
         # 把本 step 登记到 scenario 的 step_refs(scenario 此时未 seal,直接 append)
         ctx.parent.step_refs.append(ctx.step_id)
-        
+
         ctx.seal()
         self._event_bus.publish(project_step_completed(ctx, ctx.parent.run_id))
         self._archive.save_step(ctx)
         if ctx.http_exchange is not None:
             self._archive.save_exchange(ctx.http_exchange, ctx.step_id)
+        logger.info("[ContextManager] StepContext finalized: step_id={} status={} duration_ms={:.2f}",
+                    ctx.step_id, status.value, ctx.outcome.duration_ms)
     
     # ── 内部:把 Channels 的 Promotion 转事件 ──────────
     def _wire_promotion_listener(self, channels: Channels, run_id: str) -> None:

@@ -9,10 +9,14 @@ import time
 from typing import TYPE_CHECKING
 
 from .executor_base import StrategyExecutor, StrategyResult, StrategyStatus
+from gimbal.exceptions import StrategyError
+from gimbal.log import get_logger
 
 if TYPE_CHECKING:
     from gimbal.context.views import StrategyContextView
     from gimbal.schema.strategy import StrategyBase
+
+logger = get_logger(__name__)
 
 
 class StrategyDispatcher:
@@ -34,8 +38,9 @@ class StrategyDispatcher:
     def register(self, executor: StrategyExecutor) -> None:
         """注册一个 executor，以其 kind 为键。"""
         if not executor.kind:
-            raise ValueError(f"{type(executor).__name__} must declare a non-empty `kind`")
+            raise StrategyError(f"{type(executor).__name__} must declare a non-empty `kind`")
         self._registry[executor.kind] = executor
+        logger.debug("[StrategyDispatcher] Executor registered: kind={} executor={}", executor.kind, type(executor).__name__)
 
     def dispatch(
         self,
@@ -54,6 +59,7 @@ class StrategyDispatcher:
 
         # 1. disabled 跳过
         if not getattr(spec, "enabled", True):
+            logger.debug("[StrategyDispatcher] Strategy skipped (disabled): strategy_id={}", strategy_id)
             return StrategyResult(
                 status=StrategyStatus.SKIPPED,
                 strategy_id=strategy_id,
@@ -62,6 +68,7 @@ class StrategyDispatcher:
         # 2. 查找 executor
         executor = self._registry.get(kind)  # type: ignore[arg-type]
         if executor is None:
+            logger.error("[StrategyDispatcher] No executor registered: kind={} strategy_id={}", kind, strategy_id)
             return StrategyResult(
                 status=StrategyStatus.ERROR,
                 strategy_id=strategy_id,
@@ -74,6 +81,7 @@ class StrategyDispatcher:
         try:
             result = executor.execute(spec, view)
         except Exception as exc:  # noqa: BLE001
+            logger.exception("[StrategyDispatcher] Unexpected exception in executor: strategy_id={}", strategy_id)
             result = StrategyResult(
                 status=StrategyStatus.ERROR,
                 strategy_id=strategy_id,
@@ -82,6 +90,8 @@ class StrategyDispatcher:
             )
         result.duration_ms = (time.monotonic() - t0) * 1000
         result.strategy_id = result.strategy_id or strategy_id
+        logger.debug("[StrategyDispatcher] Strategy executed: strategy_id={} status={} duration_ms={:.2f}",
+                    strategy_id, result.status.value, result.duration_ms)
         return result
 
     def dispatch_phase(
@@ -107,6 +117,7 @@ class StrategyDispatcher:
         )
 
         results: list[StrategyResult] = []
+        logger.debug("[StrategyDispatcher] Phase dispatch starting: phase={} strategy_count={}", phase, len(phase_specs))
         for spec in phase_specs:
             result = self.dispatch(spec, view)
             results.append(result)
@@ -115,8 +126,11 @@ class StrategyDispatcher:
             if result.failed:
                 on_failure = getattr(spec, "onFailure", FailurePolicy.ABORT)
                 if on_failure == FailurePolicy.ABORT:
+                    logger.warning("[StrategyDispatcher] Phase aborting due to failure: phase={} strategy_id={}",
+                                 phase, result.strategy_id)
                     break   # 硬中止，后续策略不再执行
 
+        logger.debug("[StrategyDispatcher] Phase dispatch completed: phase={} result_count={}", phase, len(results))
         return results
 
 

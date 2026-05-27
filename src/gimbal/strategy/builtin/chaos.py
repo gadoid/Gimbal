@@ -11,7 +11,8 @@ if TYPE_CHECKING:
     from gimbal.context.views import StrategyContextView
     from gimbal.schema.strategy import StrategyBase
 
-logger = logging.getLogger(__name__)
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 
 class ChaosExecutor(StrategyExecutor):
@@ -26,7 +27,7 @@ class ChaosExecutor(StrategyExecutor):
         try:
             action = getattr(spec, "action", "")
             target = getattr(spec, "target", "")
-            logger.info("[ChaosExecutor] 执行混沌实验: action=%s target=%s", action, target)
+            logger.info("[ChaosExecutor] 执行混沌实验: action={} target={}", action, target)
             # TODO: 接入混沌工程平台（如 Chaos Mesh）
             logger.warning("[ChaosExecutor] 混沌执行器为占位实现，实际未执行故障注入")
             return StrategyResult(

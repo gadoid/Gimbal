@@ -15,7 +15,8 @@ if TYPE_CHECKING:
     from gimbal.context.views import StrategyContextView
     from gimbal.schema.strategy import StrategyBase
 
-logger = logging.getLogger(__name__)
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 
 class ExtractExecutor(StrategyExecutor):
@@ -33,7 +34,7 @@ class ExtractExecutor(StrategyExecutor):
         assert isinstance(spec, Extract)
 
         try:
-            logger.debug("[ExtractExecutor] 执行提取: target=%s source=%s expression=%s scope=%s",
+            logger.debug("[ExtractExecutor] 执行提取: target={} source={} expression={} scope={}",
                         spec.target, spec.source, spec.expression, spec.scope)
 
             # 1. 取出要解析的原始数据
@@ -46,19 +47,19 @@ class ExtractExecutor(StrategyExecutor):
                 )
 
             raw = exchange.get(spec.source)
-            logger.debug("[ExtractExecutor] 读取源数据: source=%s raw_type=%s",
+            logger.debug("[ExtractExecutor] 读取源数据: source={} raw_type={}",
                         spec.source, type(raw).__name__)
 
             # 2. 解析表达式
             value = jget(raw, spec.expression)
-            logger.debug("[ExtractExecutor] JSONPath 解析结果: expression=%s value=%s", spec.expression, value)
+            logger.debug("[ExtractExecutor] JSONPath 解析结果: expression={} value={}", spec.expression, value)
 
             if value is None:
                 if spec.default is not None:
                     value = spec.default
-                    logger.debug("[ExtractExecutor] 使用默认值: target=%s default=%s", spec.target, value)
+                    logger.debug("[ExtractExecutor] 使用默认值: target={} default={}", spec.target, value)
                 elif spec.required:
-                    logger.warning("[ExtractExecutor] 提取失败: expression=%s is required but returned None", spec.expression)
+                    logger.warning("[ExtractExecutor] 提取失败: expression={} is required but returned None", spec.expression)
                     return StrategyResult(
                         status=StrategyStatus.FAILED,
                         message=f"Extract: expression {spec.expression!r} returned None, "
@@ -72,7 +73,7 @@ class ExtractExecutor(StrategyExecutor):
             target_layer = _scope_to_layer(spec.scope)
             view.promote_variable(spec.target, value, to=target_layer)
 
-            logger.info("[ExtractExecutor] 提取成功: %s=%r (layer=%s)", spec.target, value, target_layer.value)
+            logger.info("[ExtractExecutor] 提取成功: {}=%r (layer={})", spec.target, value, target_layer.value)
 
             return StrategyResult(
                 status=StrategyStatus.PASSED,
@@ -80,7 +81,7 @@ class ExtractExecutor(StrategyExecutor):
                 extracted={spec.target: value},
             )
         except Exception as exc:
-            logger.exception("[ExtractExecutor] 提取异常: target=%s expression=%s", spec.target, spec.expression)
+            logger.exception("[ExtractExecutor] 提取异常: target={} expression={}", spec.target, spec.expression)
             return StrategyResult(
                 status=StrategyStatus.ERROR,
                 message=str(exc),

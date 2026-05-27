@@ -31,7 +31,8 @@ class Configuration:
     event_bus: Any
     archive: Any
 
-logger = logging.getLogger(__name__)
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 
 def bootstrap(cli_ctx: CLIContext) -> Configuration:
@@ -39,21 +40,24 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
     加载优先级 gimbal.yaml -> env -> mode -> cli -> 环境变量
 
     职责：
-        1. 多来源配置合并 → BootstrapConfig
-        2. 配置日志系统
+        1. 配置日志系统（最先，在任何 logger 调用之前）
+        2. 多来源配置合并 → BootstrapConfig
         3. 初始化基础设施
         4. 返回 Configuration
 
     不创建任何层级 Context（由 Engine.run() 负责）。
     """
-    # 1. 配置合并
-    logger.info("[bootstrap] 开始加载配置...")
-    cfg = ConfigLoader().load(cli_ctx)
-    logger.debug("[bootstrap] 配置加载完成: env=%s mode=%s", cfg.env, cfg.mode)
+    # 1. 日志系统（最先，在任何 logger 调用之前）
+    from gimbal.log.integration import configure_logging_from_cli
+    configure_logging_from_cli(cli_ctx)
 
-    # 2. 日志（最先，后续所有日志才能正确输出）
-    _configure_logging(cfg)
-    logger.debug("[bootstrap] 日志系统配置完成: log_level=%s", cfg.log_level)
+    # 2. 配置合并
+    cfg = ConfigLoader().load(cli_ctx)
+
+    # 3. 日志（用最终配置重新设置，确保 bootstrap 阶段的日志也受控制）
+    from gimbal.log.integration import configure_logging_from_bootstrap
+    configure_logging_from_bootstrap(cfg)
+    logger.info("[bootstrap] 配置加载完成: env={} mode={}", cfg.env, cfg.mode)
 
     # 3. 基础设施
     logger.info("[bootstrap] 初始化基础设施...")

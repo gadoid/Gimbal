@@ -1,6 +1,10 @@
 """GitHub OAuth2 认证器"""
 import httpx
 from gimbal.auth.authenticator import Authenticator, register_authenticator
+from gimbal.exceptions import AuthError
+from gimbal.log import get_logger
+
+logger = get_logger(__name__)
 
 
 @register_authenticator("https://api.github.com/")
@@ -27,10 +31,11 @@ class GitHubAuthenticator(Authenticator):
         )
         response.raise_for_status()
         data = response.json()
+        logger.debug(f"GitHub OAuth response: {data}")
 
         token = data.get("access_token")
         if not token:
-            raise ValueError(f"GitHub OAuth 未返回 access_token: {data}")
+            raise AuthError(f"GitHub OAuth 未返回 access_token: {data}")
 
         # GitHub token 没有明确的过期时间，默认给个合理值
         expires_in = 3600 * 8  # 8 小时

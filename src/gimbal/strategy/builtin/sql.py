@@ -10,8 +10,9 @@ from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, Stra
 if TYPE_CHECKING:
     from gimbal.context.views import StrategyContextView
     from gimbal.schema.strategy import StrategyBase
-
-logger = logging.getLogger(__name__)
+    
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 
 class SqlExecutor(StrategyExecutor):
@@ -25,7 +26,7 @@ class SqlExecutor(StrategyExecutor):
     def execute(self, spec: "StrategyBase", view: "StrategyContextView") -> StrategyResult:
         try:
             sql = getattr(spec, "sql", "")
-            logger.info("[SqlExecutor] 执行 SQL: %s", sql)
+            logger.info("[SqlExecutor] 执行 SQL: {}", sql)
             # TODO: 接入数据库执行
             logger.warning("[SqlExecutor] SQL 执行器为占位实现，实际未执行 SQL")
             return StrategyResult(

@@ -12,7 +12,8 @@ if TYPE_CHECKING:
     from gimbal.context.views import StrategyContextView
     from gimbal.schema.strategy import StrategyBase
 
-logger = logging.getLogger(__name__)
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 
 class SleepExecutor(StrategyExecutor):
@@ -26,7 +27,7 @@ class SleepExecutor(StrategyExecutor):
     def execute(self, spec: "StrategyBase", view: "StrategyContextView") -> StrategyResult:
         try:
             duration = getattr(spec, "duration", 1.0)
-            logger.info("[SleepExecutor] 等待 %s 秒...", duration)
+            logger.info("[SleepExecutor] 等待 {} 秒...", duration)
             time.sleep(duration)
             logger.info("[SleepExecutor] 等待完成")
             return StrategyResult(

@@ -1,24 +1,20 @@
 """auth/exceptions.py
 
 认证相关异常定义。
+
+注意：所有异常已迁移至 gimbal.exceptions。
+本模块保留用于向后兼容，请直接使用 gimbal.exceptions 中的异常类。
 """
+from gimbal.exceptions import (
+    AuthError,
+    AuthLoginFailed,
+    AuthTokenExpired,
+    AuthSessionNotFound,
+)
 
-
-class AuthError(Exception):
-    """认证异常基类。"""
-    pass
-
-
-class AuthLoginFailed(AuthError):
-    """登录失败。"""
-    pass
-
-
-class AuthTokenExpired(AuthError):
-    """Token 已过期或无效。"""
-    pass
-
-
-class AuthSessionNotFound(AuthError):
-    """AuthSession 未找到。"""
-    pass
+__all__ = [
+    "AuthError",
+    "AuthLoginFailed",
+    "AuthTokenExpired",
+    "AuthSessionNotFound",
+]
