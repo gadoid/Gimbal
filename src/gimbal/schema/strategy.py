@@ -66,17 +66,6 @@ class Assign(StrategyBase) :
     default : Optional[Any] = None # 提取失败，注入的默认值
     required : bool = True # 注入失败是否抛出异常
 
-class AssignTemp(StrategyBase):
-    """从上下文读取值并更新到 request_body 的指定路径。
-
-    1. 从指定层级的上下文用 jsonpath 解析 source 获取值
-    2. 将值写入 request_body 的 target 路径（使用 jsonpath set 语法）
-    """
-    kind: Literal["assign_temp"] = "assign_temp"
-    source: str = Field(description="jsonpath 表达式，从上下文读取值，如 '$.order_no' 或 'order_no'")
-    target: str = Field(description="jsonpath 目标路径，写入 request_body，如 '$.order_sn' 或 '$.items[0].name'")
-    scope: Scope = Scope.SCENARIO  # 从哪个层级读取上下文
-
 class Assertion(StrategyBase) :
     kind : Literal["assertion"] = "assertion"
     target : str # 断言的目标字段
