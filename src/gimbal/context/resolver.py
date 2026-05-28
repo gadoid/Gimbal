@@ -124,7 +124,6 @@ class SpecResolver:
         if isinstance(strategy, Extract):
             return Extract(
                 **self._base_fields(strategy),
-                source=strategy.source,
                 expression=self._resolve_value(strategy.expression),
                 target=strategy.target,        # target 是写入 key，不做解析
                 scope=strategy.scope,

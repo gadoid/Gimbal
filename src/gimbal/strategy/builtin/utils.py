@@ -1,5 +1,7 @@
 from typing import Any
 from gimbal.context.views import StrategyContextView
+from gimbal.log import get_logger
+logger = get_logger(__name__)
 
 def _scope_to_layer(scope):
     """将 schema Scope 映射到 ContextLayer。"""
@@ -51,22 +53,61 @@ def _jsonpath_simple(data: Any, expression: str) -> Any:
 
 def _resolve_source_value(source: Any, view: "StrategyContextView", scope) -> Any:
     """解析 Assign.source：
+    - scope=STEP: 先从 scratch JSONPath 查询，查不到再去场景上下文
+    - scope=SCENARIO: 直接从场景上下文查询
     - "$.jsonpath" -> 从 scratch 读取（如 "$.response_body.data.order_no"）
     - "${varname}" -> 从 context 读取（如 "${order_no}"）
     - 字面量 -> 直接返回
     """
     from gimbal.utils.jsonpath import get as jsonpath_get
+    from gimbal.schema.strategy import Scope
 
-    if isinstance(source, str):
-        # JSONPath 格式：从 scratch 读取
+    if not isinstance(source, str):
+        return source
+
+    # STEP scope: 先查 scratch，再查 context
+    if scope == Scope.STEP:
+        # JSONPath 格式：先从 scratch 查询
         if source.startswith("$."):
             scratch = view.get_scratch_dict()
-            return jsonpath_get(scratch, source)
-        # 模板格式：从 context 读取
+            value = jsonpath_get(scratch, source)
+            if value is not None:
+                logger.debug("[_resolve_source_value] STEP scope scratch hit: {} -> {}", source, value)
+                return value
+            # scratch 查不到，再从场景上下文查询（作为普通变量名）
+            var_name = source.lstrip("$.").strip()
+            layer = _scope_to_layer(scope)
+            ctx_value = view.read_variable(var_name, from_layer=layer)
+            logger.debug("[_resolve_source_value] STEP scope scratch miss, fallback to context: {} -> {}", var_name, ctx_value)
+            return ctx_value
+
+        # 模板格式：先查 scratch，再查 context
         if source.startswith("${") and source.endswith("}"):
             var_name = source[2:-1].strip()
+            # 先从 scratch 查找
+            scratch = view.get_scratch_dict()
+            if var_name in scratch:
+                value = scratch[var_name]
+                logger.debug("[_resolve_source_value] STEP scope scratch hit: {} -> {}", var_name, value)
+                return value
+            # 查不到再从 context
             layer = _scope_to_layer(scope)
-            return view.read_variable(var_name, from_layer=layer)
+            ctx_value = view.read_variable(var_name, from_layer=layer)
+            logger.debug("[_resolve_source_value] STEP scope scratch miss, fallback to context: {} -> {}", var_name, ctx_value)
+            return ctx_value
+
+    # SCENARIO scope: 直接从场景上下文查询
+    if source.startswith("$."):
+        # JSONPath 格式，从 context 读取
+        var_name = source.lstrip("$.").strip()
+        layer = _scope_to_layer(scope)
+        return view.read_variable(var_name, from_layer=layer)
+
+    if source.startswith("${") and source.endswith("}"):
+        var_name = source[2:-1].strip()
+        layer = _scope_to_layer(scope)
+        return view.read_variable(var_name, from_layer=layer)
+
     return source
 
 

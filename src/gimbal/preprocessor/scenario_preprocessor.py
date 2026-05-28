@@ -256,7 +256,6 @@ class ScenarioPreprocessor:
         if isinstance(strategy, Extract):
             return Extract(
                 **base,
-                source=strategy.source,
                 expression=self._resolve_value(strategy.expression, root),
                 target=strategy.target,
                 scope=strategy.scope,

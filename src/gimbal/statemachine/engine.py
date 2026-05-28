@@ -307,7 +307,7 @@ class StepStateMachine:
         #     to=ContextLayer.SCENARIO,
         #     allow_overwrite=True,
         # )
-        self._view.write_http_exchange(request_body=body)
+        self._view.write_scratch("request_body", body)
 
         call_spec = _CallSpec(
             method=api.method,
