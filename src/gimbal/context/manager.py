@@ -167,11 +167,19 @@ class ContextManager:
         # 把本 step 登记到 scenario 的 step_refs(scenario 此时未 seal,直接 append)
         ctx.parent.step_refs.append(ctx.step_id)
 
+        # 归档前快照 HTTP 数据（scratch clear 之前）
+        self._archive.save_step(ctx)
+        scratch_snapshot = ctx.scratch.as_dict()
+        if any(k in scratch_snapshot for k in (
+            "response_status", "response_body", "request_url"
+        )):
+            self._archive.save_exchange(scratch_snapshot, ctx.step_id)
+
+        # scratch 随 Step 生命周期结束
+        ctx.scratch.clear()
+
         ctx.seal()
         self._event_bus.publish(project_step_completed(ctx, ctx.parent.run_id))
-        self._archive.save_step(ctx)
-        if ctx.http_exchange is not None:
-            self._archive.save_exchange(ctx.http_exchange, ctx.step_id)
         logger.info("[ContextManager] StepContext finalized: step_id={} status={} duration_ms={:.2f}",
                     ctx.step_id, status.value, ctx.outcome.duration_ms)
     

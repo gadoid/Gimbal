@@ -5,6 +5,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field
 from .base import SealedBaseModel, ContextLayer
 from .scenario import ScenarioContext
+from gimbal.exceptions import SealedContextError
 
 
 class StepStatus(str, Enum):
@@ -16,10 +17,55 @@ class StepStatus(str, Enum):
     SKIPPED = "skipped"
 
 
+class StepScratch:
+    """Step 级统一临时存储。
+
+    生命周期随 StepContext，finalize 后 clear。
+    所有 Step 内临时数据统一存储，通过 JSONPath 导航读取。
+
+    约定 key：
+        request_method / request_url / request_headers / request_body
+        response_status / response_headers / response_body
+        duration_ms
+        其余 key 为业务临时变量
+    """
+
+    def __init__(self) -> None:
+        self._data: dict[str, Any] = {}
+        self._sealed: bool = False
+
+    def set(self, key: str, value: Any) -> None:
+        if self._sealed:
+            raise SealedContextError(
+                f"StepScratch is sealed; cannot set '{key}'"
+            )
+        self._data[key] = value
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._data.get(key, default)
+
+    def has(self, key: str) -> bool:
+        return key in self._data
+
+    def as_dict(self) -> dict[str, Any]:
+        """暴露给 JSONPath 引擎的根对象。"""
+        return self._data
+
+    def seal(self) -> None:
+        self._sealed = True
+
+    def clear(self) -> None:
+        self._data.clear()
+
+    @property
+    def is_sealed(self) -> bool:
+        return self._sealed
+
+
 class StepInputs(BaseModel):
     """Step 输入态:开始时定型,执行期间只读。frozen=True 强制不可变。"""
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-    
+
     step_id: str
     step_name: str
     strategy_kind: str
@@ -29,7 +75,7 @@ class StepInputs(BaseModel):
 
 class AssertionResult(BaseModel):
     model_config = ConfigDict(frozen=True)
-    
+
     name: str
     passed: bool
     expected: Any
@@ -39,41 +85,11 @@ class AssertionResult(BaseModel):
 
 class ErrorInfo(BaseModel):
     model_config = ConfigDict(frozen=True)
-    
+
     type: str
     message: str
     traceback: Optional[str] = None
 
-class HttpExchange:
-    def __init__(self):
-        self.request_method = ""
-        self.request_url = ""
-        self.request_headers = {}
-        self.request_body = None
-        self.response_status = None
-        self.response_headers = {}
-        self.response_body = None
-        self.duration_ms = 0.0
-        self._sealed = False
-
-
-    def __getattr__(self, name):
-        """当属性不存在时给出提示"""
-        print(f"属性 '{name}' 不存在")
-        return None
-
-    def seal(self) -> None:
-        """封印 exchange，封印后 update() 不可调用。幂等操作。"""
-        self._sealed = True
-
-    def update(self, **kwargs) -> None:
-        if self._sealed:
-            raise RuntimeError("http_exchange already sealed; cannot update after CALLING phase")
-        for k, v in kwargs.items():
-            if hasattr(self, k):
-                setattr(self, k, v)
-            else :
-                print(f"{k} 属性不存在，请检查")
 
 class StepOutcome(BaseModel):
     """Step 产物态:执行期间累积,seal 时定型。"""
@@ -92,20 +108,25 @@ class StepOutcome(BaseModel):
 class StepContext(SealedBaseModel):
     inputs: StepInputs
     outcome: StepOutcome = Field(default_factory=StepOutcome)
-    http_exchange: Optional[HttpExchange] = None 
+    scratch: StepScratch = Field(default_factory=StepScratch, exclude=True)
     started_at: datetime
     ended_at: Optional[datetime] = None
-    
+
     parent: ScenarioContext = Field(exclude=True)
-    
+
     @property
     def layer(self) -> ContextLayer:
         return ContextLayer.STEP
-    
+
     @property
     def step_id(self) -> str:
         return self.inputs.step_id
-    
+
     @property
     def scenario_id(self) -> str:
         return self.parent.scenario_id
+
+    model_config = {
+        **SealedBaseModel.model_config,
+        "arbitrary_types_allowed": True,
+    }

@@ -1,9 +1,9 @@
 from typing import Any, Optional, Protocol, runtime_checkable
 from .base import ContextLayer
 from .channels import ArtifactRef
-from .exceptions import LayerResolutionError, ContextError
+from .exceptions import LayerResolutionError
 from .step import StepContext, AssertionResult
-from gimbal.context.step import HttpExchange
+
 
 @runtime_checkable
 class StrategyContextView(Protocol):
@@ -15,7 +15,7 @@ class StrategyContextView(Protocol):
     def strategy_spec(self) -> dict: ...
     @property
     def resolved_vars(self) -> dict[str, Any]: ...
-    
+
     def read_variable(
         self, key: str, *,
         from_layer: ContextLayer = ContextLayer.SCENARIO,
@@ -32,13 +32,17 @@ class StrategyContextView(Protocol):
         reason: Optional[str] = None,
         allow_overwrite: bool = False,
     ) -> None: ...
-    
+
     def record_assertion(self, result: AssertionResult) -> None: ...
-    
+
     def attach_artifact(
         self, name: str, ref: ArtifactRef,
         *, to: ContextLayer = ContextLayer.SCENARIO,
     ) -> None: ...
+
+    def write_scratch(self, key: str, value: Any) -> None: ...
+    def read_scratch(self, key: str, default: Any = None) -> Any: ...
+    def get_scratch_dict(self) -> dict[str, Any]: ...
 
 
 class StepContextAdapter:
@@ -126,6 +130,20 @@ class StepContextAdapter:
             by_step_id=self._ctx.step_id,
         )
     
+    # ── scratch 读写 ──────────────────────────────────────
+
+    def write_scratch(self, key: str, value: Any) -> None:
+        """写入 Step 级临时变量。"""
+        self._ctx.scratch.set(key, value)
+
+    def read_scratch(self, key: str, default: Any = None) -> Any:
+        """读取 Step 级临时变量。"""
+        return self._ctx.scratch.get(key, default)
+
+    def get_scratch_dict(self) -> dict[str, Any]:
+        """暴露整个 scratch 给 JSONPath 引擎。"""
+        return self._ctx.scratch.as_dict()
+
     # ── 内部 ─────────────────────────────────────────
     def _resolve_layer(self, layer: ContextLayer):
         if layer == ContextLayer.STEP:
@@ -142,37 +160,3 @@ class StepContextAdapter:
         if layer == ContextLayer.FRAMEWORK:
             return ctx
         raise LayerResolutionError(f"Unknown layer: {layer}")
-    
-    def read_http_exchange(self, *keys: str) -> dict[str, Any]:
-        """读取 http_exchange 中指定字段，不传 keys 则返回全部。"""
-        exchange = self._ctx.http_exchange
-        if exchange is None:
-            return {}
-        
-        if not keys:
-            return {
-                "request_method":   exchange.request_method,
-                "request_url":      exchange.request_url,
-                "request_headers":  exchange.request_headers,
-                "request_body":     exchange.request_body,
-                "response_status":  exchange.response_status,
-                "response_headers": exchange.response_headers,
-                "response_body":    exchange.response_body,
-                "duration_ms":      exchange.duration_ms,
-            }
-        
-        return {k: getattr(exchange, k, None) for k in keys}
-
-    def write_http_exchange(self, **kwargs) -> None:
-        if self._ctx.http_exchange is None:
-            raise ContextError("http_exchange not initialized; reset_http_exchange() must be called before CALLING phase")
-        self._ctx.http_exchange.update(**kwargs)
-
-    def reset_http_exchange(self) -> None:
-        """重置 http_exchange 为新实例，允许在 retry 时重新初始化。"""
-        object.__setattr__(self._ctx, "http_exchange", HttpExchange())
-
-    def seal_http_exchange(self) -> None:
-        """封印 http_exchange，封印后不可再写入。幂等操作。"""
-        if self._ctx.http_exchange is not None:
-            self._ctx.http_exchange.seal()

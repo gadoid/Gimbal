@@ -13,20 +13,20 @@ def _scope_to_layer(scope):
         Scope.REQUEST: ContextLayer.SCENARIO,
     }
     return mapping.get(scope, ContextLayer.SCENARIO)
- 
- 
+
+
 def _jsonpath_simple(data: Any, expression: str) -> Any:
     """极简 JSONPath 实现，支持 $.a.b.c 和 $.a[0].b 形式。
     生产环境建议替换为 jsonpath-ng。
     """
     if data is None:
         return None
- 
+
     # 去掉前缀 $
     expr = expression.lstrip("$").lstrip(".")
     if not expr:
         return data
- 
+
     parts = expr.split(".")
     current = data
     for part in parts:
@@ -47,23 +47,33 @@ def _jsonpath_simple(data: Any, expression: str) -> Any:
         else:
             return None
     return current
- 
- 
+
+
 def _resolve_source_value(source: Any, view: "StrategyContextView", scope) -> Any:
-    """解析 Assign.source：模板变量或字面量。"""
-    from gimbal.context.base import ContextLayer
- 
-    if isinstance(source, str) and source.startswith("${") and source.endswith("}"):
-        var_name = source[2:-1].strip()
-        layer = _scope_to_layer(scope)
-        return view.read_variable(var_name, from_layer=layer)
+    """解析 Assign.source：
+    - "$.jsonpath" -> 从 scratch 读取（如 "$.response_body.data.order_no"）
+    - "${varname}" -> 从 context 读取（如 "${order_no}"）
+    - 字面量 -> 直接返回
+    """
+    from gimbal.utils.jsonpath import get as jsonpath_get
+
+    if isinstance(source, str):
+        # JSONPath 格式：从 scratch 读取
+        if source.startswith("$."):
+            scratch = view.get_scratch_dict()
+            return jsonpath_get(scratch, source)
+        # 模板格式：从 context 读取
+        if source.startswith("${") and source.endswith("}"):
+            var_name = source[2:-1].strip()
+            layer = _scope_to_layer(scope)
+            return view.read_variable(var_name, from_layer=layer)
     return source
- 
- 
+
+
 def _evaluate(operator, actual: Any, expected: Any) -> tuple[bool, str]:
     """执行比较操作，返回 (是否通过, 描述信息)。"""
     from gimbal.schema.strategy import AssertOperator
- 
+
     op = operator
     try:
         if op == AssertOperator.EQ:
@@ -94,7 +104,7 @@ def _evaluate(operator, actual: Any, expected: Any) -> tuple[bool, str]:
             ok = len(actual) == expected
         else:
             return False, f"Unknown operator: {op}"
- 
+
         msg = (
             f"PASS: {actual!r} {op.value} {expected!r}"
             if ok

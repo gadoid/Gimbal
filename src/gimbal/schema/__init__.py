@@ -7,7 +7,7 @@ from .request import Request, RequestRef, RequestUnion
 from .step import Step, StepRef, StepUnion
 from .strategy import (
     StrategyBase, Extract, Assign, Assertion, StrategyRef, StrategyUnion,
-    Scope, AssertOperator, StrategyPhase, FailurePolicy, ExtractSource,
+    Scope, AssertOperator, StrategyPhase, FailurePolicy,
 )
 from .timepolicy import TimePolicy, TimeoutPolicy, RecordPolicy, TimePolicyUnion
 from .retrypolicy import RetryPolicy
@@ -44,7 +44,6 @@ __all__ = [
     "AssertOperator",
     "StrategyPhase",
     "FailurePolicy",
-    "ExtractSource",
     "TimePolicy",
     "TimeoutPolicy",
     "RecordPolicy",

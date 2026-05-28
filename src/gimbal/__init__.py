@@ -10,7 +10,6 @@ from .schema import (
     AssertOperator,
     StrategyPhase,
     FailurePolicy,
-    ExtractSource,
     # 引用基类
     RefBase,
     # 资源模型
@@ -68,7 +67,6 @@ __all__ = [
     "AssertOperator",
     "StrategyPhase",
     "FailurePolicy",
-    "ExtractSource",
     # 引用基类
     "RefBase",
     # 资源模型

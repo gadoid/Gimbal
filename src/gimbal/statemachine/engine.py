@@ -38,7 +38,6 @@ from typing import TYPE_CHECKING, Callable, Optional
 from gimbal.statemachine.states import StepState, VALID_TRANSITIONS
 from gimbal.statemachine.exceptions import InvalidTransitionError, AlreadyTerminalError
 from gimbal.strategy.executor_base import PhaseResult, StrategyResult, StrategyStatus
-from gimbal.context.step import HttpExchange
 
 if TYPE_CHECKING:
     from gimbal.context.views import StepContextAdapter
@@ -203,7 +202,6 @@ class StepStateMachine:
     def _handle_calling(self) -> StepState:
         """发出 HTTP 请求，把响应写入 context。"""
         logger.info("[SM {}] 开始 HTTP 请求", self._step_id)
-        self._view.reset_http_exchange()
         result = self._do_http_call()
         self._phase_results.append(PhaseResult(phase="calling", results=[result]))
 

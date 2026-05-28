@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import logging
 import traceback
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
 from .utils import _evaluate
 from gimbal.utils.jsonpath import is_jsonpath, get as jget
 from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, StrategyStatus
@@ -10,44 +10,43 @@ from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, Stra
 from gimbal.log import get_logger
 logger = get_logger(__name__)
 
-class AssertionExecutor(StrategyExecutor):
-    """对 context 中的字段执行断言。"""
 
+class AssertionExecutor(StrategyExecutor):
     kind = "assertion"
 
-    def execute(self, spec: "StrategyBase", view: "StrategyContextView") -> StrategyResult:
-        from gimbal.schema.strategy import Assertion, AssertOperator
-        from gimbal.context.base import ContextLayer
-        from gimbal.context.step import AssertionResult
-
-        assert isinstance(spec, Assertion)
+    def execute(self, spec, view) -> StrategyResult:
         try:
-            logger.info("[AssertionExecutor] 执行断言: target={} operator={} expected={}",
-                        spec.target, spec.operator, spec.expected)
-            # 读取被断言的目标值
-            _HTTP_EXCHANGE_KEYS = {
-                "response_status", "response_body",
-                "response_headers", "request_body"
-            }
-            logger.info(f"spec.target: {spec.target}")
-            if spec.target in _HTTP_EXCHANGE_KEYS:
-               # actual = view.read_http_exchange(spec.target)[spec.target]
-                actual = view.read_http_exchange()[spec.target]
-            elif is_jsonpath(spec.target):
-                # $.data.code 这类路径，从 response_body 里提取
-                exchange = view.read_http_exchange()
-                raw_body = exchange.get("response_body") if exchange else None
-                actual = jget(raw_body, spec.target)
-            else:
-                # 普通 key，从 Scenario channels 读（Extract 提升上来的业务字段）
-                actual = view.read_variable(spec.target, from_layer=ContextLayer.SCENARIO)
+            logger.info(
+                "[AssertionExecutor] 执行断言: target={} operator={} expected={}",
+                spec.target, spec.operator, spec.expected
+            )
 
-            logger.info("[AssertionExecutor] 读取实际值: target={} actual={}", spec.target, actual)
+            # 统一从 scratch 用 JSONPath 取值
+            # target 可以是 "$.response_status" 或 "$.response_body.code"
+            scratch = view.get_scratch_dict()
+
+            if is_jsonpath(spec.target):
+                actual = jget(scratch, spec.target)
+            else:
+                # 普通 key，直接从 scratch 取
+                actual = scratch.get(spec.target)
+                # 取不到再从上层 channels 找
+                if actual is None:
+                    from gimbal.context.base import ContextLayer
+                    actual = view.read_variable(
+                        spec.target,
+                        from_layer=ContextLayer.SCENARIO
+                    )
+
+            logger.info(
+                "[AssertionExecutor] 实际值: target={} actual={}",
+                spec.target, actual
+            )
 
             passed, msg = _evaluate(spec.operator, actual, spec.expected)
             human_msg = spec.message or msg
 
-            # 记录断言结果到 context
+            from gimbal.context.step import AssertionResult
             view.record_assertion(AssertionResult(
                 name=spec.name or spec.target,
                 passed=passed,
@@ -58,16 +57,12 @@ class AssertionExecutor(StrategyExecutor):
 
             status = StrategyStatus.PASSED if passed else StrategyStatus.FAILED
             if passed:
-                logger.info("[AssertionExecutor] 断言通过: {} {} {} -> actual={}",
-                           actual, spec.operator.value if hasattr(spec.operator, 'value') else spec.operator, spec.expected, actual)
+                logger.info("[AssertionExecutor] 断言通过: {}", human_msg)
             else:
-                logger.warning("[AssertionExecutor] 断言失败: {} {} {} -> actual={}",
-                             actual, spec.operator.value if hasattr(spec.operator, 'value') else spec.operator, spec.expected, actual)
+                logger.warning("[AssertionExecutor] 断言失败: {}", human_msg)
 
-            return StrategyResult(
-                status=status,
-                message=human_msg,
-            )
+            return StrategyResult(status=status, message=human_msg)
+
         except Exception as exc:
             logger.exception("[AssertionExecutor] 断言异常: target={}", spec.target)
             return StrategyResult(

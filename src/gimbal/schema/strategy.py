@@ -40,14 +40,8 @@ class FailurePolicy(str, Enum):
     WARN = "warn"            # 仅警告
     RETRY = "retry"          # 配合 retry 字段
 
-class ExtractSource(str, Enum):
-    RESPONSE_BODY = "response_body"
-    RESPONSE_HEADER = "response_header"
-    REQUEST_BODY = "request_body"
-    REQUEST_HEADER = "request_header"
-
 class StrategyBase(BaseModel) :
-    name : Optional[str] = None             
+    name : Optional[str] = None
     phase : Optional[StrategyPhase] = None           # 处理的阶段
     order : int = 0   # 执行顺序
     enabled : bool = True  # 是否启动
@@ -57,13 +51,12 @@ class StrategyBase(BaseModel) :
     tags : List[str] =  Field(default_factory=list)  # 标签
 
 class Extract(StrategyBase) :
-    kind : Literal["extract"] = "extract"   
-    source : ExtractSource  # 提取源 枚举类
-    expression : str # 提取路径
-    target : str # 写入上下文中的字段信息
-    scope : Scope = Scope.SCENARIO # 提取后注入到对应的作用域
-    default : Optional[Any] = None # 提取失败的默认值
-    required : bool = True # 提取失败是否抛出异常
+    kind : Literal["extract"] = "extract"
+    expression: str          # JSONPath，在 scratch 上导航
+    target: str              # 写入目标的 key
+    scope: Scope = Scope.STEP
+    default: Optional[Any] = None
+    required: bool = True
 
 class Assign(StrategyBase) :
     kind : Literal["assign"] = "assign"
@@ -72,6 +65,17 @@ class Assign(StrategyBase) :
     scope: Scope = Scope.SCENARIO # 如果source为空则从对应的作用域检查是否存在同名字段提取数据
     default : Optional[Any] = None # 提取失败，注入的默认值
     required : bool = True # 注入失败是否抛出异常
+
+class AssignTemp(StrategyBase):
+    """从上下文读取值并更新到 request_body 的指定路径。
+
+    1. 从指定层级的上下文用 jsonpath 解析 source 获取值
+    2. 将值写入 request_body 的 target 路径（使用 jsonpath set 语法）
+    """
+    kind: Literal["assign_temp"] = "assign_temp"
+    source: str = Field(description="jsonpath 表达式，从上下文读取值，如 '$.order_no' 或 'order_no'")
+    target: str = Field(description="jsonpath 目标路径，写入 request_body，如 '$.order_sn' 或 '$.items[0].name'")
+    scope: Scope = Scope.SCENARIO  # 从哪个层级读取上下文
 
 class Assertion(StrategyBase) :
     kind : Literal["assertion"] = "assertion"
@@ -86,7 +90,7 @@ class StrategyRef(RefBase) :
 
 
 StrategyUnion = Annotated[
-    Union[Extract, Assign, Assertion, StrategyRef],
+    Union[Extract, Assign, AssignTemp, Assertion, StrategyRef],
     Field(discriminator="kind")
 ]
 
@@ -97,7 +101,6 @@ if __name__ == "__main__":
     print(f"AssertOperator 测试: {AssertOperator.EQ.value}")
     print(f"StrategyPhase 测试: {StrategyPhase.BEFORE_REQUEST.value}")
     print(f"FailurePolicy 测试: {FailurePolicy.ABORT.value}")
-    print(f"ExtractSource 测试: {ExtractSource.RESPONSE_BODY.value}")
 
     # 测试 StrategyBase 实例化
     strategy_base = StrategyBase(name="base_strategy")
@@ -105,12 +108,11 @@ if __name__ == "__main__":
 
     # 测试 Extract 实例化
     extract = Extract(
-        source=ExtractSource.RESPONSE_BODY,
-        expression="$.data.id",
+        expression="$.response_body.data.id",
         target="data_id",
         scope=Scope.SCENARIO
     )
-    print(f"Extract 测试: source={extract.source}, target={extract.target}")
+    print(f"Extract 测试: expression={extract.expression}, target={extract.target}")
 
     # 测试 Assign 实例化
     assign = Assign(

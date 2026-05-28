@@ -42,6 +42,6 @@ class InMemoryArchive:
                      key, status, duration_ms, len(self._steps))
 
     def save_exchange(self, exchange: Any, step_id: str) -> None:
-        """将 HttpExchange 归档，按 step_id 关联。"""
+        """将 scratch 快照归档，按 step_id 关联。"""
         self._steps[f"{step_id}_exchange"] = exchange
         logger.debug("[Archive] Exchange saved for step: {}", step_id)

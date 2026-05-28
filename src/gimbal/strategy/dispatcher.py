@@ -138,12 +138,14 @@ def build_default_dispatcher() -> StrategyDispatcher:
     """构造并注册内置所有 executor 的 dispatcher。"""
     from gimbal.strategy.builtin.extract import ExtractExecutor
     from gimbal.strategy.builtin.assign import AssignExecutor
+    from gimbal.strategy.builtin.assign_temp import AssignTempExecutor
     from gimbal.strategy.builtin.assertion import AssertionExecutor
     from gimbal.strategy.builtin.call import CallExecutor
 
     d = StrategyDispatcher()
     d.register(ExtractExecutor())
     d.register(AssignExecutor())
+    d.register(AssignTempExecutor())
     d.register(AssertionExecutor())
     d.register(CallExecutor())
     return d

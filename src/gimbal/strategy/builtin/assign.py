@@ -5,7 +5,7 @@ import traceback
 from typing import Any, TYPE_CHECKING
 
 from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, StrategyStatus
-
+from .utils import _resolve_source_value, _scope_to_layer
 from gimbal.log import get_logger
 logger = get_logger(__name__)
 
@@ -48,7 +48,7 @@ class AssignExecutor(StrategyExecutor):
             target_layer = _scope_to_layer(spec.scope)
             view.promote_variable(spec.target, value, to=target_layer)
 
-            logger.info("[AssignExecutor] 赋值成功: {}=%r (layer={})", spec.target, value, target_layer.value)
+            logger.info("[AssignExecutor] 赋值成功: target={} value={} layer={}", spec.target, value, target_layer.value)
 
             return StrategyResult(
                 status=StrategyStatus.PASSED,

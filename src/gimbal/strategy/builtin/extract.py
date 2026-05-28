@@ -1,87 +1,82 @@
 from __future__ import annotations
 
-import logging
 import traceback
-from .utils import _scope_to_layer
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, StrategyStatus
-from gimbal.utils.jsonpath import (
-    get as jget , get_all , set_value as jset ,
-    resolve_template, is_template
-)
+from gimbal.strategy.builtin.utils import _scope_to_layer
+from gimbal.utils.jsonpath import get as jget
 
 if TYPE_CHECKING:
-    from gimbal.context.views import StrategyContextView
-    from gimbal.schema.strategy import StrategyBase
+    from gimbal.context.views import StepContextAdapter
+    from gimbal.schema.strategy import Extract
 
 from gimbal.log import get_logger
 logger = get_logger(__name__)
 
 
 class ExtractExecutor(StrategyExecutor):
-    """从响应/请求中提取字段写入 context。
-
-    支持简单的 JSONPath-like 表达式（$.field.sub）。
-    完整 JSONPath 可替换为 jsonpath-ng 库。
-    """
-
     kind = "extract"
 
-    def execute(self, spec: "StrategyBase", view: "StrategyContextView") -> StrategyResult:
-        from gimbal.schema.strategy import Extract, ExtractSource
-
-        assert isinstance(spec, Extract)
-
+    def execute(self, spec: "Extract", view: "StepContextAdapter") -> StrategyResult:
         try:
-            logger.debug("[ExtractExecutor] 执行提取: target={} source={} expression={} scope={}",
-                        spec.target, spec.source, spec.expression, spec.scope)
+            logger.debug(
+                "[ExtractExecutor] 执行提取: expression={} target={} scope={}",
+                spec.expression, spec.target, spec.scope
+            )
 
-            # 1. 取出要解析的原始数据
-            exchange = view.read_http_exchange(spec.source)
-            if not exchange:
-                return StrategyResult(
-                    status=StrategyStatus.ERROR,
-                    message="ExtractExecutor: no http_exchange found, "
-                            "Extract must run after CALLING phase",
-                )
+            # 1. 从 scratch 用 JSONPath 取值
+            scratch = view.get_scratch_dict()
+            value = jget(scratch, spec.expression)
 
-            raw = exchange.get(spec.source)
-            logger.debug("[ExtractExecutor] 读取源数据: source={} raw_type={}",
-                        spec.source, type(raw).__name__)
+            logger.debug(
+                "[ExtractExecutor] JSONPath 结果: expression={} value={}",
+                spec.expression, value
+            )
 
-            # 2. 解析表达式
-            value = jget(raw, spec.expression)
-            logger.debug("[ExtractExecutor] JSONPath 解析结果: expression={} value={}", spec.expression, value)
-
+            # 2. 处理空值
             if value is None:
                 if spec.default is not None:
                     value = spec.default
-                    logger.debug("[ExtractExecutor] 使用默认值: target={} default={}", spec.target, value)
+                    logger.debug(
+                        "[ExtractExecutor] 使用默认值: target={} default={}",
+                        spec.target, value
+                    )
                 elif spec.required:
-                    logger.warning("[ExtractExecutor] 提取失败: expression={} is required but returned None", spec.expression)
                     return StrategyResult(
                         status=StrategyStatus.FAILED,
-                        message=f"Extract: expression {spec.expression!r} returned None, "
-                                f"field is required",
+                        message=(
+                            f"Extract: expression {spec.expression!r} "
+                            f"returned None, required=True"
+                        ),
                     )
-                else:
-                    value = spec.default
 
-            # 3. 写入 context
-            from gimbal.context.base import ContextLayer
-            target_layer = _scope_to_layer(spec.scope)
-            view.promote_variable(spec.target, value, to=target_layer)
-
-            logger.info("[ExtractExecutor] 提取成功: {}=%r (layer={})", spec.target, value, target_layer.value)
+            # 3. 根据 scope 决定写入目标
+            from gimbal.schema.strategy import Scope
+            if spec.scope == Scope.STEP:
+                view.write_scratch(spec.target, value)
+                logger.info(
+                    "[ExtractExecutor] 写入 scratch: {}={!r}",
+                    spec.target, value
+                )
+            else:
+                target_layer = _scope_to_layer(spec.scope)
+                view.promote_variable(spec.target, value, to=target_layer)
+                logger.info(
+                    "[ExtractExecutor] 提升变量: {}={!r} layer={}",
+                    spec.target, value, target_layer.value
+                )
 
             return StrategyResult(
                 status=StrategyStatus.PASSED,
                 message=f"Extracted {spec.target}={value!r}",
                 extracted={spec.target: value},
             )
+
         except Exception as exc:
-            logger.exception("[ExtractExecutor] 提取异常: target={} expression={}", spec.target, spec.expression)
+            logger.exception(
+                "[ExtractExecutor] 提取异常: expression={}", spec.expression
+            )
             return StrategyResult(
                 status=StrategyStatus.ERROR,
                 message=str(exc),

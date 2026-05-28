@@ -25,7 +25,7 @@ StepUnion = Annotated[
 if __name__ == "__main__":
     from .api import Api
     from .request import Request
-    from .strategy import Extract, StrategyPhase, ExtractSource, Scope
+    from .strategy import Extract, StrategyPhase, Scope
 
     # 测试 Step 实例化
     step = Step(
@@ -35,8 +35,7 @@ if __name__ == "__main__":
             Extract(
                 name="extract_token",
                 phase=StrategyPhase.AFTER_REQUEST,
-                source=ExtractSource.RESPONSE_BODY,
-                expression="$.token",
+                expression="$.response_body.token",
                 target="auth_token",
                 scope=Scope.SCENARIO
             )
