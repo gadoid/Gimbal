@@ -13,17 +13,11 @@ class StrategyContextView(Protocol):
     def scenario_id(self) -> str: ...
     @property
     def strategy_spec(self) -> dict: ...
-    @property
-    def resolved_vars(self) -> dict[str, Any]: ...
 
     def read_variable(
         self, key: str, *,
         from_layer: ContextLayer = ContextLayer.SCENARIO,
         default: Any = None,
-    ) -> Any: ...
-
-    def resolve(
-        self, key: str, default: Any = None,
     ) -> Any: ...
 
     def promote_variable(
@@ -63,11 +57,7 @@ class StepContextAdapter:
     @property
     def strategy_spec(self) -> dict:
         return self._ctx.inputs.strategy_spec
-    
-    @property
-    def resolved_vars(self) -> dict[str, Any]:
-        return self._ctx.inputs.resolved_vars
-    
+
     # ── 读 ───────────────────────────────────────────
     def read_variable(
         self, key: str, *,
@@ -76,24 +66,6 @@ class StepContextAdapter:
     ) -> Any:
         target = self._resolve_layer(from_layer)
         return target.channels.get_variable(key, default)
-
-    def resolve(self, key: str, default: Any = None) -> Any:
-        """统一查询：先 resolved_vars，再 channels，最后 config。"""
-        # 1. Step 自身预解析的变量
-        if key in self._ctx.inputs.resolved_vars:
-            return self._ctx.inputs.resolved_vars[key]
-
-        # 2. 默认从 SCENARIO 层的 channels 查
-        target = self._ctx.parent  # scenario
-        if target.channels.has_variable(key):
-            return target.channels.get_variable(key)
-
-        # 3. 查 config（直接用 model_dump 转 dict 查询）
-        cfg = target.config.model_dump()
-        if key in cfg:
-            return cfg[key]
-
-        return default
 
     # ── 写(向上提升) ─────────────────────────────────
     def promote_variable(

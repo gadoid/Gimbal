@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .base import ContextLayer
 from .exceptions import PromotionRejected
 from gimbal.log import get_logger
+from gimbal.utils.jsonpath import get as jsonpath_get
 
 logger = get_logger(__name__)
 
@@ -121,10 +122,35 @@ class Channels:
     
     # ── 只读访问 ─────────────────────────────────────────
     def get_variable(self, key: str, default: Any = None) -> Any:
+        if key.startswith("$."):
+            return self._jsonpath_get(key, default)
         return self._variables.get(key, default)
-    
+
     def has_variable(self, key: str) -> bool:
+        if key.startswith("$."):
+            return self._jsonpath_get(key, default=...) is not ...
         return key in self._variables
+
+    def _jsonpath_get(self, path: str, default: Any = None) -> Any:
+        """支持 JSONPath 在 flat dict 上的查询。
+
+        对于 path=$.order_id，先找 key=order_id，再用 JSONPath 解析其 value。
+        对于 path=$.response.body.order_id，找 key=response，再用 $.body.order_id 解析 value。
+        """
+        if not path.startswith("$."):
+            return default
+        expr = path[2:].strip()  # 去掉 $. 前缀
+        if not expr:
+            return default
+        # 第一个 segment 作为 flat dict 的 key
+        first_key, _, remainder = expr.partition(".")
+        if first_key not in self._variables:
+            return default
+        value = self._variables[first_key]
+        if not remainder:
+            return value
+        # 用剩余 path 继续解析 value
+        return jsonpath_get(value, f"$.{remainder}", default)
     
     def variables_snapshot(self) -> dict[str, Any]:
         """返回防御性拷贝。外部修改不会影响内部状态。"""

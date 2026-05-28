@@ -39,7 +39,19 @@ class StepScratch:
             raise SealedContextError(
                 f"StepScratch is sealed; cannot set '{key}'"
             )
-        self._data[key] = value
+        if key.startswith("$."):
+            self._set_jsonpath(key, value)
+        else:
+            self._data[key] = value
+
+    def _set_jsonpath(self, path: str, value: Any) -> None:
+        """支持 JSONPath 写入嵌套结构。
+
+        path=$.request_body.order_id ->
+            _data["request_body"]["order_id"] = value
+        """
+        from gimbal.utils.jsonpath import set_value as jsonpath_set
+        jsonpath_set(self._data, path, value)
 
     def get(self, key: str, default: Any = None) -> Any:
         return self._data.get(key, default)

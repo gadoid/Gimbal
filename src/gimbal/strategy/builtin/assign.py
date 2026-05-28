@@ -5,7 +5,7 @@ import traceback
 from typing import Any, TYPE_CHECKING
 
 from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, StrategyStatus
-from .utils import _resolve_source_value, _scope_to_layer
+from .utils import _resolve_source_value
 from gimbal.log import get_logger
 logger = get_logger(__name__)
 
@@ -43,12 +43,10 @@ class AssignExecutor(StrategyExecutor):
                         message=f"Assign: source {spec.source!r} resolved to None, field required",
                     )
 
-            # 写入 context（target 在 request body 里的路径留给模板引擎处理）
-            from gimbal.context.base import ContextLayer
-            target_layer = _scope_to_layer(spec.scope)
-            view.promote_variable(spec.target, value, to=target_layer)
+            # 写入 StepScratch（支持 JSONPath 写入嵌套结构）
+            view.write_scratch(spec.target, value)
 
-            logger.info("[AssignExecutor] 赋值成功: target={} value={} layer={}", spec.target, value, target_layer.value)
+            logger.info("[AssignExecutor] 赋值成功: target={} value={}", spec.target, value)
 
             return StrategyResult(
                 status=StrategyStatus.PASSED,

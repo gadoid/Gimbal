@@ -65,20 +65,19 @@ def _resolve_source_value(source: Any, view: "StrategyContextView", scope) -> An
     if not isinstance(source, str):
         return source
 
-    # STEP scope: 先查 scratch，再查 context
+    # STEP scope: 先查 scratch，再提升到 scenario context 用同一 JSONPath 查询
     if scope == Scope.STEP:
-        # JSONPath 格式：先从 scratch 查询
+        # JSONPath 格式：先从 scratch JSONPath 查询，查不到再提升到 scenario 用同一路径查询
         if source.startswith("$."):
             scratch = view.get_scratch_dict()
             value = jsonpath_get(scratch, source)
             if value is not None:
                 logger.debug("[_resolve_source_value] STEP scope scratch hit: {} -> {}", source, value)
                 return value
-            # scratch 查不到，再从场景上下文查询（作为普通变量名）
-            var_name = source.lstrip("$.").strip()
-            layer = _scope_to_layer(scope)
-            ctx_value = view.read_variable(var_name, from_layer=layer)
-            logger.debug("[_resolve_source_value] STEP scope scratch miss, fallback to context: {} -> {}", var_name, ctx_value)
+            # scratch 查不到，提升到 scenario 用同一 JSONPath 继续查询
+            layer = _scope_to_layer(Scope.SCENARIO)
+            ctx_value = view.read_variable(source, from_layer=layer)
+            logger.debug("[_resolve_source_value] STEP scope scratch miss, promote to scenario with same path: {} -> {}", source, ctx_value)
             return ctx_value
 
         # 模板格式：先查 scratch，再查 context
@@ -91,17 +90,17 @@ def _resolve_source_value(source: Any, view: "StrategyContextView", scope) -> An
                 logger.debug("[_resolve_source_value] STEP scope scratch hit: {} -> {}", var_name, value)
                 return value
             # 查不到再从 context
-            layer = _scope_to_layer(scope)
+            layer = _scope_to_layer(Scope.SCENARIO)
             ctx_value = view.read_variable(var_name, from_layer=layer)
-            logger.debug("[_resolve_source_value] STEP scope scratch miss, fallback to context: {} -> {}", var_name, ctx_value)
+            logger.debug("[_resolve_source_value] STEP scope scratch miss, fallback to scenario: {} -> {}", var_name, ctx_value)
             return ctx_value
 
-    # SCENARIO scope: 直接从场景上下文查询
-    if source.startswith("$."):
-        # JSONPath 格式，从 context 读取
-        var_name = source.lstrip("$.").strip()
+    # SCENARIO scope: 直接从场景上下文用同一 JSONPath 查询
+    if scope == Scope.SCENARIO and source.startswith("$."):
         layer = _scope_to_layer(scope)
-        return view.read_variable(var_name, from_layer=layer)
+        ctx_value = view.read_variable(source, from_layer=layer)
+        logger.debug("[_resolve_source_value] SCENARIO scope: {} -> {}", source, ctx_value)
+        return ctx_value
 
     if source.startswith("${") and source.endswith("}"):
         var_name = source[2:-1].strip()

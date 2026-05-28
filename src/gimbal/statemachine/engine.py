@@ -152,6 +152,11 @@ class StepStateMachine:
         logger.info("[SM {}] 状态机开始执行", self._step_id)
 
         try:
+            # 初始化 scratch.request_body（可能被 Assign 等策略修改）
+            request_body = getattr(self._step_schema.request, "body", None) or {}
+            if request_body:
+                self._view.write_scratch("request_body", request_body)
+
             # 从 PENDING 推进到第一个执行阶段
             self._advance(StepState.BEFORE_REQUEST, reason="start")
 
@@ -301,13 +306,8 @@ class StepStateMachine:
         request = self._step_schema.request
         body = getattr(request, "body", {}) or {}
 
-        # 把请求体写入 context，供 BEFORE_REQUEST 阶段的 Assign 使用
-        # self._view.promote_variable(
-        #     "request_body", body,
-        #     to=ContextLayer.SCENARIO,
-        #     allow_overwrite=True,
-        # )
-        self._view.write_scratch("request_body", body)
+        # request_body 已由 run() 初始化到 scratch，BEFORE_REQUEST 阶段的 Assign 可能已修改它
+        # 不再重复写入，避免覆盖 Assign 的修改
 
         call_spec = _CallSpec(
             method=api.method,

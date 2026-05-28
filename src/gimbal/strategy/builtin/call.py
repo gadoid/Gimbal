@@ -23,8 +23,12 @@ class CallExecutor(StrategyExecutor):
         method = spec.method
         url = spec.url
         headers = spec.headers
-        body = spec.body
         timeout = spec.timeout
+        # 如果 scratch 中没有 request_body，先用 spec.body 初始化
+        if not view.read_scratch("request_body"):
+            view.write_scratch("request_body", spec.body)
+        # 从 scratch 读取实时渲染的 request_body（可能被 Assign 等策略修改过）
+        body = view.read_scratch("request_body")
 
         try:
             import httpx
