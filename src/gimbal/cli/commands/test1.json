@@ -1,0 +1,125 @@
+{
+  "kind": "scenario",
+  "scenarioId": "sc_001",
+  "meta": {
+    "name": "查询结算单详情-正常",
+    "description": "验证根据结算单ID查询详情接口返回200且数据非空",
+    "module": "settlement",
+    "priority": 1,
+    "author": "codfish",
+    "owner": "codfish",
+    "tags": ["smoke", "settlement"],
+    "version": "1.0.0",
+    "createTime": "2026-05-13T10:00:00",
+    "expire": false,
+    "requirementRef": []
+  },
+  "config": {
+    "setup": [],
+    "teardown": [],
+    "services": {
+      "tidb-test-service": "https://fin-tidb.21eflag.com/"
+    },
+    "users": {
+      "codfish": {
+          "url": "https://fin-tidb.21eflag.com/",
+          "username": "18180789650",
+          "password": "yhd123456!",
+          "expires_in": 7200,
+          "token_type": "Authorization"
+      }
+    },
+    "timePolicy": {
+      "kind": "record"
+    },
+    "retry": null
+  },
+  "resource": {},
+  "steps": [
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/orderEntrust/orderAdd",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {"client_expand_name":"孙硕","client_expand_id":"250","m_delivery_type":"","customer_id":"16","customer_name":"","service_id":"55","service_name":"曲静霞","operator_id":"67","operator_name":"","customer_contact_id":"1547","customer_contact_name":"","main_sort":"易汇智-易航道","policy_id":"112","policy_name":"【SPV对客】易汇智","policy_type":"JSZX","service_items":["booking_space","customs_clearance"],"business_type":"1","trade_term":"","carrier":"","carrier_id":"","bl_no":"GIMBAL_TICKET_28","etd":"","atd":"","ship_name":"","voy":"","pol":"","pot":"","pod":"","del":"","country_name":"","airline_type":"","ocean_type":"","terms_payment":"T/T","terms_transport":"CY/CY","pay_type":"FREIGHT PREPAID","customer_order_sn":"","terms_shipment":"","shipper":"","consignee":"","notifier":"","ship_mark":"","commodity":"","notes":"","cargo_type":"","packer":"","num":"","gross_weight":null,"bulk":null,"sea_trans_cost":"","teu":"","volume":"","volume_desc":"","order_sn":"","status":"1","sea_trans_currency":"USD","container":[],"message_board":[],"customer_file_list":[],"supplier":[{"is_manual":"","is_primary":"1","isset_fee":"0","isset_supplier":"1","order_id":"","order_supplier_id":"","service_item":"booking_space","service_item_name":"订舱","settle_object_id":"","settlement_date":null,"supplier_id":"8","supplier_name":"上海华运船务有限公司青岛分公司","supplier_pay_date":null,"supplier_period":null,"user_id":"16","user_name":"荣洋"},{"is_manual":"","is_primary":"1","isset_fee":"0","isset_supplier":"1","order_id":"","order_supplier_id":"","service_item":"customs_clearance","service_item_name":"报关","settle_object_id":"","settlement_date":null,"supplier_id":"","supplier_name":"","supplier_pay_date":null,"supplier_period":null,"user_id":"","user_name":""}],"remark":"","policy_type_name":"","main_ids":"31,1","action":"check","entrust_status":1,"order_file":[]}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询结算单详情应返回200",
+          "soft": false
+        },{
+          "kind": "extract",
+          "name": "extract_token",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.request_body",
+          "target": "request_body",
+          "required": true,
+          "default": null
+        }
+      ]
+    },    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/orderEntrust/orderAdd",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {"client_expand_name":"孙硕","client_expand_id":"250","m_delivery_type":"","customer_id":"16","customer_name":"","service_id":"55","service_name":"曲静霞","operator_id":"67","operator_name":"","customer_contact_id":"1547","customer_contact_name":"","main_sort":"易汇智-易航道","policy_id":"112","policy_name":"【SPV对客】易汇智","policy_type":"JSZX","service_items":["booking_space","customs_clearance"],"business_type":"1","trade_term":"","carrier":"","carrier_id":"","bl_no":"GIMBAL_TICKET_28","etd":"","atd":"","ship_name":"","voy":"","pol":"","pot":"","pod":"","del":"","country_name":"","airline_type":"","ocean_type":"","terms_payment":"T/T","terms_transport":"CY/CY","pay_type":"FREIGHT PREPAID","customer_order_sn":"","terms_shipment":"","shipper":"","consignee":"","notifier":"","ship_mark":"","commodity":"","notes":"","cargo_type":"","packer":"","num":"","gross_weight":null,"bulk":null,"sea_trans_cost":"","teu":"","volume":"","volume_desc":"","order_sn":"","status":"1","sea_trans_currency":"USD","container":[],"message_board":[],"customer_file_list":[],"supplier":[{"is_manual":"","is_primary":"1","isset_fee":"0","isset_supplier":"1","order_id":"","order_supplier_id":"","service_item":"booking_space","service_item_name":"订舱","settle_object_id":"","settlement_date":null,"supplier_id":"8","supplier_name":"上海华运船务有限公司青岛分公司","supplier_pay_date":null,"supplier_period":null,"user_id":"16","user_name":"荣洋"},{"is_manual":"","is_primary":"1","isset_fee":"0","isset_supplier":"1","order_id":"","order_supplier_id":"","service_item":"customs_clearance","service_item_name":"报关","settle_object_id":"","settlement_date":null,"supplier_id":"","supplier_name":"","supplier_pay_date":null,"supplier_period":null,"user_id":"","user_name":""}],"remark":"","policy_type_name":"","main_ids":"31,1","action":"submit","entrust_status":1,"order_file":[]}
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询结算单详情应返回200",
+          "soft": false
+        },{
+          "kind": "extract",
+          "name": "extract_token",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body",
+          "target": "response_body",
+          "required": true,
+          "default": null
+        }
+      ]
+    }
+  ]
+}
