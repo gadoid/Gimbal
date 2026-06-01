@@ -79,7 +79,7 @@ class StrategyRef(RefBase) :
 
 
 StrategyUnion = Annotated[
-    Union[Extract, Assign, AssignTemp, Assertion, StrategyRef],
+    Union[Extract, Assign, Assertion, StrategyRef],
     Field(discriminator="kind")
 ]
 
