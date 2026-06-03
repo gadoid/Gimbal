@@ -26,5 +26,6 @@ output:
   no_color : false
 
 plugins :
-  - aaa 
+  - aaa
+  - self_check
 

@@ -80,13 +80,54 @@ class Engine:
         logger.info("[Engine] 执行开始: run_id={} env={} mode={} target={}",
                     framework_ctx.run_id, framework_ctx.config.env, framework_ctx.mode, type(target).__name__)
 
-        if isinstance(target, Scenario):
-            return self._run_scenario(target, framework_ctx)
-        elif isinstance(target, Suite):
-            return self._run_suite(target, framework_ctx)
-        else:
-            logger.error("[Engine] 收到未展开的 Ref: {}", type(target).__name__)
-            return RunResult(exit_code=3, error=1)
+        # 2. 触发 RUN_START 事件
+        self._emit_run_start(framework_ctx)
+
+        try:
+            if isinstance(target, Scenario):
+                result = self._run_scenario(target, framework_ctx)
+            elif isinstance(target, Suite):
+                result = self._run_suite(target, framework_ctx)
+            else:
+                logger.error("[Engine] 收到未展开的 Ref: {}", type(target).__name__)
+                result = RunResult(exit_code=3, error=1)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("[Engine] 执行异常: {}", e)
+            result = RunResult(exit_code=2, error=1)
+
+        # 3. 触发 RUN_END 事件
+        self._emit_run_end(framework_ctx, result)
+        return result
+
+    def _emit_run_start(self, framework_ctx: FrameworkContext) -> None:
+        bus = self._ictx.event_bus
+        if bus is None:
+            return
+        try:
+            from gimbal.events.types import RunStartEvent
+            bus.publish(RunStartEvent(
+                run_id=framework_ctx.run_id,
+                env=framework_ctx.config.env,
+                mode=framework_ctx.mode,
+            ))
+        except Exception:  # noqa: BLE001
+            logger.debug("[Engine] emit RUN_START failed")
+
+    def _emit_run_end(self, framework_ctx: FrameworkContext, result: RunResult) -> None:
+        bus = self._ictx.event_bus
+        if bus is None:
+            return
+        try:
+            from gimbal.events.types import RunEndEvent
+            bus.publish(RunEndEvent(
+                run_id=framework_ctx.run_id,
+                total=result.total,
+                passed=result.passed,
+                failed=result.failed,
+                error=result.error,
+            ))
+        except Exception:  # noqa: BLE001
+            logger.debug("[Engine] emit RUN_END failed")
 
     # ── 内部分发 ─────────────────────────────────────────────────────────────
 
@@ -109,7 +150,12 @@ class Engine:
         )
         logger.debug("[Engine] SuiteContext 创建完成: suite_id={}", suite_ctx.suite_id)
 
-        result = ScenarioRunner(framework_ctx.dispatcher, framework_ctx.ctx_manager).run(
+        result = ScenarioRunner(
+            framework_ctx.dispatcher,
+            framework_ctx.ctx_manager,
+            hook_registry=self._ictx.hook_registry,
+            event_bus=self._ictx.event_bus,
+        ).run(
             scenario, suite_ctx
         )
 
@@ -158,7 +204,12 @@ class Engine:
         )
         logger.debug("[Engine] SuiteContext 创建完成: suite_id={}", suite_ctx.suite_id)
 
-        runner = ScenarioRunner(framework_ctx.dispatcher, framework_ctx.ctx_manager)
+        runner = ScenarioRunner(
+            framework_ctx.dispatcher,
+            framework_ctx.ctx_manager,
+            hook_registry=self._ictx.hook_registry,
+            event_bus=self._ictx.event_bus,
+        )
         cfg = framework_ctx.config
         total = passed = failed = error = 0
         details: list[dict[str, Any]] = []

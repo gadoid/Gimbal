@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 from .executor_base import StrategyExecutor, StrategyResult, StrategyStatus
 from gimbal.exceptions import StrategyError
@@ -30,10 +30,14 @@ class StrategyDispatcher:
         dispatcher.register(AssertionExecutor())
 
         result = dispatcher.dispatch(spec, view)
+
+    可选埋点：
+        dispatcher = StrategyDispatcher(hook_registry=registry)
     """
 
-    def __init__(self) -> None:
+    def __init__(self, hook_registry: Optional[Any] = None) -> None:
         self._registry: dict[str, StrategyExecutor] = {}
+        self._hooks = hook_registry
 
     def register(self, executor: StrategyExecutor) -> None:
         """注册一个 executor，以其 kind 为键。"""
@@ -51,7 +55,9 @@ class StrategyDispatcher:
 
         框架在这里统一做：
           - 跳过 disabled 的策略
+          - 触发 STRATEGY_BEFORE hook（可改写 spec/view）
           - 计时
+          - 触发 STRATEGY_AFTER hook（可改写 result）
           - 兜底异常捕获（executor 内部不应抛出，但双保险）
         """
         kind = getattr(spec, "kind", None)
@@ -76,7 +82,22 @@ class StrategyDispatcher:
                 error=f"UnregisteredKind: {kind}",
             )
 
-        # 3. 执行（含计时 + 兜底捕获）
+        # 3. STRATEGY_BEFORE hook（可被 hook 抛出 STOP 来短路此 strategy）
+        if self._hooks is not None:
+            payload = {"strategy_name": strategy_id, "kind": kind, "spec": spec, "view": view}
+            result_hook = self._hooks.trigger(__import__("gimbal.core.hooks", fromlist=["HookPoint"]).HookPoint.STRATEGY_BEFORE, payload)
+            if result_hook.stopped:
+                logger.info(
+                    "[StrategyDispatcher] STRATEGY_BEFORE blocked: strategy_id={} plugin={} reason={}",
+                    strategy_id, result_hook.stop_plugin, result_hook.stop_reason,
+                )
+                return StrategyResult(
+                    status=StrategyStatus.SKIPPED,
+                    strategy_id=strategy_id,
+                    message=f"blocked by hook: {result_hook.stop_reason}",
+                )
+
+        # 4. 执行（含计时 + 兜底捕获）
         t0 = time.monotonic()
         try:
             result = executor.execute(spec, view)
@@ -92,6 +113,17 @@ class StrategyDispatcher:
         result.strategy_id = result.strategy_id or strategy_id
         logger.debug("[StrategyDispatcher] Strategy executed: strategy_id={} status={} duration_ms={:.2f}",
                     strategy_id, result.status.value, result.duration_ms)
+
+        # 5. STRATEGY_AFTER hook（可改写 result）
+        if self._hooks is not None:
+            payload = {
+                "strategy_name": strategy_id,
+                "kind": kind,
+                "result": result,
+                "view": view,
+            }
+            self._hooks.trigger(__import__("gimbal.core.hooks", fromlist=["HookPoint"]).HookPoint.STRATEGY_AFTER, payload)
+
         return result
 
     def dispatch_phase(
@@ -134,14 +166,14 @@ class StrategyDispatcher:
         return results
 
 
-def build_default_dispatcher() -> StrategyDispatcher:
+def build_default_dispatcher(hook_registry: Optional[Any] = None) -> StrategyDispatcher:
     """构造并注册内置所有 executor 的 dispatcher。"""
     from gimbal.strategy.builtin.extract import ExtractExecutor
     from gimbal.strategy.builtin.assign import AssignExecutor
     from gimbal.strategy.builtin.assertion import AssertionExecutor
     from gimbal.strategy.builtin.call import CallExecutor
 
-    d = StrategyDispatcher()
+    d = StrategyDispatcher(hook_registry=hook_registry)
     d.register(ExtractExecutor())
     d.register(AssignExecutor())
     d.register(AssertionExecutor())

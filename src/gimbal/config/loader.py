@@ -213,6 +213,8 @@ class ConfigLoader:
             # "minio_endpoint":    "localhost:9000",
             "framework_version": "0.1.0",
             "plugins":           [],
+            "plugins_dir":       "plugins",
+            "plugin_configs":    {},
             "fail_fast":         False,
             "reporters":         ["console"],
             "report_dir":        "./reports",

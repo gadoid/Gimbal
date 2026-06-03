@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from gimbal.context.manager import ContextManager
 from gimbal.context.scenario import ScenarioContext
@@ -66,10 +66,14 @@ class StepRunner:
         dispatcher: StrategyDispatcher,
         ctx_manager: ContextManager,
         service_base_url: str = "",
+        hook_registry: Optional[Any] = None,
+        event_bus: Optional[Any] = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._ctx_manager = ctx_manager
         self._service_base_url = service_base_url
+        self._hooks = hook_registry
+        self._bus = event_bus
         logger.debug("[StepRunner] 初始化: service_base_url={}", service_base_url)
 
     def run(
@@ -101,6 +105,8 @@ class StepRunner:
             dispatcher=self._dispatcher,
             view=StepContextAdapter(step_ctx),
             service_base_url=self._service_base_url,
+            hook_registry=self._hooks,
+            event_bus=self._bus,
         )
         logger.debug("[StepRunner] StepStateMachine 构造完成: step_id={}", step_id)
 
@@ -130,15 +136,20 @@ class ScenarioRunner:
       - 调用 ScenarioPreprocessor 完成认证 + 模板展开
       - 按序调用 StepRunner 执行每个已展开的 step
       - 汇总结果，finalize ScenarioContext
+      - 触发 SCENARIO_START / SCENARIO_END 事件
     """
 
     def __init__(
         self,
         dispatcher: StrategyDispatcher,
         ctx_manager: ContextManager,
+        hook_registry: Optional[Any] = None,
+        event_bus: Optional[Any] = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._ctx_manager = ctx_manager
+        self._hooks = hook_registry
+        self._bus = event_bus
         logger.debug("[ScenarioRunner] 初始化完成")
 
     def run(
@@ -176,11 +187,16 @@ class ScenarioRunner:
             len(resolved_steps), base_url,
         )
 
-        # 3. 逐步执行（使用已展开的 resolved_steps）
+        # 3. 触发 SCENARIO_START 事件
+        self._emit_scenario_start(scenario_schema, sid, len(resolved_steps))
+
+        # 4. 逐步执行（使用已展开的 resolved_steps）
         step_runner = StepRunner(
             dispatcher=self._dispatcher,
             ctx_manager=self._ctx_manager,
             service_base_url=base_url,
+            hook_registry=self._hooks,
+            event_bus=self._bus,
         )
 
         step_results: list[StepRunResult] = []
@@ -212,12 +228,15 @@ class ScenarioRunner:
                 )
                 break
 
-        # 4. finalize ScenarioContext
+        # 5. finalize ScenarioContext
         self._ctx_manager.finalize_scenario(scenario_ctx, overall_status)
         logger.debug(
             "[ScenarioRunner] ScenarioContext finalized: scenario_id={} status={}",
             sid, overall_status,
         )
+
+        # 6. 触发 SCENARIO_END 事件
+        self._emit_scenario_end(sid, overall_status, len(resolved_steps))
 
         return ScenarioRunResult(
             scenario_id=sid,
@@ -226,3 +245,30 @@ class ScenarioRunner:
             started_at=started_at,
             ended_at=datetime.utcnow(),
         )
+
+    # ── 埋点辅助 ──
+    def _emit_scenario_start(self, scenario: Scenario, sid: str, step_count: int) -> None:
+        if self._bus is None:
+            return
+        try:
+            from gimbal.events.types import ScenarioStartEvent
+            self._bus.publish(ScenarioStartEvent(
+                scenario_id=sid,
+                scenario_name=scenario.meta.name,
+                step_count=step_count,
+            ))
+        except Exception:  # noqa: BLE001
+            logger.debug("[ScenarioRunner] emit SCENARIO_START failed")
+
+    def _emit_scenario_end(self, sid: str, status: str, step_count: int) -> None:
+        if self._bus is None:
+            return
+        try:
+            from gimbal.events.types import ScenarioEndEvent
+            self._bus.publish(ScenarioEndEvent(
+                scenario_id=sid,
+                status=status,
+                step_count=step_count,
+            ))
+        except Exception:  # noqa: BLE001
+            logger.debug("[ScenarioRunner] emit SCENARIO_END failed")

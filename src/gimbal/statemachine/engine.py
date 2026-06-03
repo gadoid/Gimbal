@@ -33,7 +33,7 @@ import logging
 import traceback
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from gimbal.statemachine.states import StepState, VALID_TRANSITIONS
 from gimbal.statemachine.exceptions import InvalidTransitionError, AlreadyTerminalError
@@ -113,6 +113,8 @@ class StepStateMachine:
         view: "StepContextAdapter",
         service_base_url: str = "",
         on_transition: Optional[TransitionHook] = None,
+        hook_registry: Optional[Any] = None,
+        event_bus: Optional[Any] = None,
     ) -> None:
         self._step_id = step_id
         self._step_schema = step_schema
@@ -120,6 +122,9 @@ class StepStateMachine:
         self._view = view
         self._service_base_url = service_base_url
         self._on_transition = on_transition
+        # 埋点设施：可选，不传则不触发（保持向后兼容）
+        self._hooks = hook_registry
+        self._bus = event_bus
 
         self._state: StepState = StepState.PENDING
         self._phase_results: list[PhaseResult] = []
@@ -151,6 +156,9 @@ class StepStateMachine:
         t_start = datetime.utcnow()
         logger.info("[SM {}] 状态机开始执行", self._step_id)
 
+        # 埋点：STEP_START 事件
+        self._emit_step_start()
+
         try:
             # 初始化 scratch.request_body（可能被 Assign 等策略修改）
             request_body = getattr(self._step_schema.request, "body", None) or {}
@@ -179,6 +187,12 @@ class StepStateMachine:
         duration_ms = (datetime.utcnow() - t_start).total_seconds() * 1000
         logger.info("[SM {}] 状态机执行完成: final_state={} duration_ms={:.2f}",
                     self._step_id, self._state.value, duration_ms)
+
+        # 埋点：STEP_END / STEP_FAILED 事件
+        if self._state == StepState.FAILED or self._state == StepState.ERROR:
+            self._emit_step_failed(self._error or f"final_state={self._state.value}")
+        else:
+            self._emit_step_end(duration_ms)
 
         return StepRunResult(
             step_id=self._step_id,
@@ -318,9 +332,40 @@ class StepStateMachine:
         )
         logger.info("[SM {}] HTTP 请求: method={} url={} timeout={:.1f}s",
                     self._step_id, api.method, call_spec.url, api.timeout)
+
+        # 埋点：HTTP_REQUEST 事件 + HTTP_BEFORE_SEND hook（可改写 call_spec）
+        self._emit_http_request(call_spec)
+        if not self._fire_hook("HTTP_BEFORE_SEND", {
+            "method": call_spec.method,
+            "url": call_spec.url,
+            "headers": call_spec.headers,
+            "body": call_spec.body,
+            "timeout": call_spec.timeout,
+            "step_id": self._step_id,
+            "ctx": self._view,
+        }):
+            # hook 中断：返回错误结果
+            return StrategyResult(
+                status=StrategyStatus.ERROR,
+                message="HTTP request blocked by hook",
+            )
+
         result = self._dispatcher.dispatch(call_spec, self._view)
         logger.info("[SM {}] HTTP 响应: status={} duration_ms={:.2f}",
                     self._step_id, result.status, result.duration_ms)
+
+        # 埋点：HTTP_RESPONSE 事件 + HTTP_AFTER_RECV hook（可改写 result）
+        self._emit_http_response(call_spec, result)
+        self._fire_hook("HTTP_AFTER_RECV", {
+            "method": call_spec.method,
+            "url": call_spec.url,
+            "status": result.status,
+            "headers": getattr(result, "headers", {}),
+            "body": getattr(result, "body", None),
+            "duration_ms": getattr(result, "duration_ms", 0.0),
+            "step_id": self._step_id,
+            "ctx": self._view,
+        })
         return result
 
     def _advance(self, to: StepState, *, reason: str = "") -> None:
@@ -344,3 +389,86 @@ class StepStateMachine:
             return True
         except (InvalidTransitionError, AlreadyTerminalError):
             return False
+
+    # ── 埋点辅助 ──────────────────────────────────────────────────────
+
+    def _fire_hook(self, point_name: str, payload: dict) -> bool:
+        """触发 hook。返回 True 表示继续，False 表示被 STOP 中断。"""
+        if self._hooks is None:
+            return True
+        try:
+            from gimbal.core.hooks import HookPoint
+            point = HookPoint(point_name)
+        except (ValueError, ImportError):
+            return True
+        result = self._hooks.trigger(point, payload)
+        return not result.stopped
+
+    def _emit_step_start(self) -> None:
+        if self._bus is None:
+            return
+        try:
+            from gimbal.events.types import StepStartEvent
+            self._bus.publish(StepStartEvent(
+                step_id=self._step_id,
+                step_name=getattr(self._step_schema, "name", "") or self._step_id,
+            ))
+        except Exception:  # noqa: BLE001
+            logger.debug("[SM {}] emit STEP_START failed", self._step_id)
+
+    def _emit_step_end(self, duration_ms: float) -> None:
+        if self._bus is None:
+            return
+        try:
+            from gimbal.events.types import StepEndEvent
+            self._bus.publish(StepEndEvent(
+                step_id=self._step_id,
+                status=self._state.value,
+                duration_ms=duration_ms,
+            ))
+        except Exception:  # noqa: BLE001
+            logger.debug("[SM {}] emit STEP_END failed", self._step_id)
+
+    def _emit_step_failed(self, error: str) -> None:
+        if self._bus is None:
+            return
+        try:
+            from gimbal.events.types import StepFailedEvent
+            self._bus.publish(StepFailedEvent(
+                step_id=self._step_id,
+                error=error[:500] if error else "",
+                phase=self._state.value,
+            ))
+        except Exception:  # noqa: BLE001
+            logger.debug("[SM {}] emit STEP_FAILED failed", self._step_id)
+
+    def _emit_http_request(self, call_spec: "_CallSpec") -> None:
+        if self._bus is None:
+            return
+        try:
+            from gimbal.events.types import HttpRequestEvent
+            self._bus.publish(HttpRequestEvent(
+                step_id=self._step_id,
+                method=call_spec.method,
+                url=call_spec.url,
+                request_body=call_spec.body,
+                request_headers=dict(call_spec.headers or {}),
+            ))
+        except Exception:  # noqa: BLE001
+            logger.debug("[SM {}] emit HTTP_REQUEST failed", self._step_id)
+
+    def _emit_http_response(self, call_spec: "_CallSpec", result: StrategyResult) -> None:
+        if self._bus is None:
+            return
+        try:
+            from gimbal.events.types import HttpResponseEvent
+            self._bus.publish(HttpResponseEvent(
+                step_id=self._step_id,
+                method=call_spec.method,
+                url=call_spec.url,
+                status_code=int(result.status) if result.status is not None else 0,
+                duration_ms=float(getattr(result, "duration_ms", 0.0) or 0.0),
+                response_body=getattr(result, "body", None),
+            ))
+        except Exception:  # noqa: BLE001
+            logger.debug("[SM {}] emit HTTP_RESPONSE failed", self._step_id)

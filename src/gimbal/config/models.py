@@ -27,7 +27,9 @@ class BootstrapConfig(BaseModel):
 
     # ── 框架元信息 ────────────────────────────────────────
     framework_version: str = Field(default_factory=getVersion, description="框架版本号")
-    plugins: tuple[str, ...] = Field(default_factory=tuple, description="启用的插件列表")
+    plugins: tuple[str, ...] = Field(default_factory=tuple, description="启用的插件列表（白名单；空 = 全部启用）")
+    plugins_dir: str = Field("plugins", description="插件目录（相对 base_dir）")
+    plugin_configs: dict[str, dict] = Field(default_factory=dict, description="按插件名配置: {plugin_name: {key: value}}")
     reporters: tuple[str, ...] = Field(default_factory=lambda: ("console",), description="启用的 reporter")
     report_dir: str = Field("reports", description="报告输出根目录")
 
