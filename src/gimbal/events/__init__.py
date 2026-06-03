@@ -1,5 +1,6 @@
 """events package - 事件系统公共 API。"""
 from .bus import InMemoryEventBus
+from .protocols import EventBusProtocol, HookRegistryProtocol
 from .subscription import EventFilter, EventHandler, Subscription, SubscriptionMode
 from .types import (
     FrameworkEvent,
@@ -15,6 +16,7 @@ from .types import (
 
 __all__ = [
     "InMemoryEventBus",
+    "EventBusProtocol", "HookRegistryProtocol",
     "EventFilter", "EventHandler", "Subscription", "SubscriptionMode",
     "FrameworkEvent",
     "FrameworkInitEvent", "FrameworkTeardownEvent",

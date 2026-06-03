@@ -9,6 +9,7 @@ import time
 from typing import TYPE_CHECKING, Any, Optional
 
 from .executor_base import StrategyExecutor, StrategyResult, StrategyStatus
+from gimbal.core.hooks import HookPoint
 from gimbal.exceptions import StrategyError
 from gimbal.log import get_logger
 
@@ -85,7 +86,7 @@ class StrategyDispatcher:
         # 3. STRATEGY_BEFORE hook（可被 hook 抛出 STOP 来短路此 strategy）
         if self._hooks is not None:
             payload = {"strategy_name": strategy_id, "kind": kind, "spec": spec, "view": view}
-            result_hook = self._hooks.trigger(__import__("gimbal.core.hooks", fromlist=["HookPoint"]).HookPoint.STRATEGY_BEFORE, payload)
+            result_hook = self._hooks.trigger(HookPoint.STRATEGY_BEFORE, payload)
             if result_hook.stopped:
                 logger.info(
                     "[StrategyDispatcher] STRATEGY_BEFORE blocked: strategy_id={} plugin={} reason={}",
@@ -122,7 +123,7 @@ class StrategyDispatcher:
                 "result": result,
                 "view": view,
             }
-            self._hooks.trigger(__import__("gimbal.core.hooks", fromlist=["HookPoint"]).HookPoint.STRATEGY_AFTER, payload)
+            self._hooks.trigger(HookPoint.STRATEGY_AFTER, payload)
 
         return result
 

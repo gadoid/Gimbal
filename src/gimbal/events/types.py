@@ -1,34 +1,29 @@
 """events/types.py
 框架事件类型定义。
-所有事件必须继承 FrameworkEvent，event_type 自动用类名生成。
+所有事件必须继承 FrameworkEvent，并显式声明 event_type 字面量。
+
+历史说明：早期版本尝试通过 __init_subclass__ 从类名自动推导 event_type，
+但 Pydantic v2 的 model_fields 在类创建时已冻结，运行时改 default 不生效。
+所有子类都已显式声明 Literal[xxx] = "xxx" 形式，所以那段"自动生成"代码
+实际上是死代码。这里删掉以避免误导。
 """
 from __future__ import annotations
-import re
 from datetime import datetime
 from typing import Any, Optional, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class FrameworkEvent(BaseModel):
-    """所有框架事件的基类。"""
+    """所有框架事件的基类。
+
+    子类必须显式声明 event_type 字面量，例如：
+        class StepStartEvent(FrameworkEvent):
+            event_type: Literal["step.start"] = "step.start"
+    """
     model_config = ConfigDict(frozen=True, extra="forbid")
     event_type: str = ""
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     run_id: Optional[str] = None
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        # 自动从类名生成 event_type（去掉 Event 后缀，PascalCase -> snake_case）
-        if not cls.__dict__.get("event_type", ""):
-            name = cls.__name__
-            if name.endswith("Event"):
-                name = name[:-5]
-            snake = re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
-            # 必须设置到类属性上（不是 instance default）
-            cls.__annotations__ = cls.__annotations__
-            # 直接设置 field default
-            if "event_type" in cls.model_fields:
-                cls.model_fields["event_type"].default = snake
 
 
 # ── 框架级 ─────────────────────────────────────────────

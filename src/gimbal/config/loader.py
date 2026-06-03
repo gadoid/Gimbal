@@ -1,5 +1,5 @@
 """config/loader.py
-路径: BASE_DIR + \\src\\gimbal\\config
+路径: BASE_DIR / src/gimbal/config
 ConfigLoader: 多来源配置合并, 产出不可变的 BootstrapConfig。
 
 来源优先级（高 → 低）：
@@ -14,7 +14,9 @@ ConfigLoader: 多来源配置合并, 产出不可变的 BootstrapConfig。
   - 高优先级来源的非 None 值覆盖低优先级
   - 环境变量在 env/mode 文件路径确定之前先行加载，确保 GIMBAL_ENV/GIMBAL_MODE 生效
   - extras 字段做浅层合并（dict.update），而非整体替换
-  # 路径符号转换
+
+路径处理：
+  - 全部使用 pathlib.Path 的 / 运算符，跨平台兼容（Windows / Linux / macOS）
 """
 from __future__ import annotations
 
@@ -39,7 +41,7 @@ _ENV_MAP: dict[str, str] = {
     "GIMBAL_MINIO_ENDPOINT": "minio_endpoint",
     "GIMBAL_REPORT_DIR":     "report_dir",
 }
-RELATIVE_PATH = "src\\gimbal\\config"
+RELATIVE_PATH = Path("src") / "gimbal" / "config"
 
 
 class ConfigLoadError(Exception):
@@ -81,7 +83,7 @@ class ConfigLoader:
         merged = self._load_defaults()
 
         # Step 2: gimbal.yaml（项目基础配置）
-        merged = self._merge(merged, self._load_yaml_file(Path(f"{BASE_DIR}\\{RELATIVE_PATH}\\gimbal.yaml"), "gimbal.yaml"))
+        merged = self._merge(merged, self._load_yaml_file(BASE_DIR / RELATIVE_PATH / "gimbal.yaml", "gimbal.yaml"))
 
         # --- 提前收集 env/mode 的最终决议值 ---
         # 优先级：CLI > 环境变量 > 已合并配置
@@ -94,12 +96,12 @@ class ConfigLoader:
 
         # Step 3: env 配置文件
         if effective_env:
-            env_path = Path(f"{BASE_DIR}\\{RELATIVE_PATH}\\env\\gimbal_{effective_env}.yml")
+            env_path = BASE_DIR / RELATIVE_PATH / "env" / f"gimbal_{effective_env}.yml"
             merged = self._merge(merged, self._load_yaml_file(env_path, f"{effective_env}"))
 
         # Step 4: mode 配置文件
         if effective_mode:
-            mode_path = Path(f"{BASE_DIR}\\{RELATIVE_PATH}\\mode\\{effective_mode}.yml")
+            mode_path = BASE_DIR / RELATIVE_PATH / "mode" / f"{effective_mode}.yml"
             merged = self._merge(merged, self._load_yaml_file(mode_path, f"{effective_mode}"))
 
         # Step 5: 环境变量

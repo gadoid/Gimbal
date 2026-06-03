@@ -132,7 +132,16 @@ def _load_plugins(
 ) -> list["Plugin"]:
     """插件发现 → 解析依赖 → 加载 → 激活。
 
-    失败容错：单个插件失败不影响其它插件加载。
+    失败容错策略（分阶段、按异常类型区分）：
+
+        1. discover()     —— 内部已对每个 manifest 单独 try/except，
+                            顶层只兜底"入口点扫描异常"这种结构性故障。
+        2. resolve_deps() —— 循环依赖是结构性错误，必须快速失败。
+        3. load_all()     —— 内部已隔离单插件 import / 加载失败。
+        4. activate_all() —— 内部已隔离单插件激活失败。
+
+    整体约定：单插件失败绝不影响其它插件；只有"整个发现阶段崩了"
+    或"循环依赖"才视为致命错误并中断 bootstrap。
     """
     from gimbal.plugins import PluginLoader
 
@@ -140,18 +149,23 @@ def _load_plugins(
     white = set(cfg.plugins) if cfg.plugins else None   # 空 = 全部启用
     loader = PluginLoader(plugins_dir=plugins_dir, enabled_filter=white)
 
+    # Step 1: 发现（filesystem / manifest 错误已内部隔离；入口点扫描故障回退到空）
     try:
         specs = loader.discover()
-    except Exception as e:  # noqa: BLE001
-        logger.error("[bootstrap] 插件发现失败: {}", e)
+    except (OSError, ImportError) as e:
+        # OSError：plugins_dir 不可访问（权限 / 消失）
+        # ImportError：entry_point 解析时元数据损坏
+        logger.error("[bootstrap] 插件发现结构性失败: {}: {}", type(e).__name__, e)
         return []
 
+    # Step 2: 依赖解析（ValueError = 循环依赖，必须让用户看见）
     try:
         specs = loader.resolve_deps(specs)
     except ValueError as e:
         logger.error("[bootstrap] 依赖解析失败: {}", e)
         return []
 
+    # Step 3 + 4: 加载 + 激活（loader 内部已做单插件隔离，无需外层 try/except）
     plugins = loader.load_all(specs)
     activated = loader.activate_all(
         plugins,

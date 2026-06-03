@@ -30,8 +30,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Optional
 
-from .hooks import HookPoint, HookRegistry
-from gimbal.events.bus import InMemoryEventBus
+from .hooks import HookPoint
+from gimbal.events.protocols import EventBusProtocol, HookRegistryProtocol
 from gimbal.events.types import FrameworkEvent
 
 logger = logging.getLogger(__name__)
@@ -75,11 +75,20 @@ class PluginManifest:
 
 @dataclass
 class PluginContext:
-    """插件在 activate() 时获得的运行时句柄集合。"""
+    """插件在 activate() 时获得的运行时句柄集合。
+
+    通过 Protocol 持有基础设施引用：
+        - event_bus:        EventBusProtocol（可替换为分布式实现）
+        - hook_registry:    HookRegistryProtocol（可替换为远程注册表）
+        - plugin_registry:  通用插件注册表（避开循环 import）
+
+    插件代码可以照常调用 subscribe/publish/register 等方法，
+    底层是 InMemoryEventBus / HookRegistry 或是它们的远端替代，对插件透明。
+    """
     plugin_name: str
     config: dict[str, Any]                                 # 用户配置（与 default_config 合并后）
-    event_bus: InMemoryEventBus
-    hook_registry: HookRegistry
+    event_bus: EventBusProtocol
+    hook_registry: HookRegistryProtocol
     plugin_registry: Any = None                            # 通用插件注册表（避开循环 import）
 
     # 由框架在 activate 后写入，便于插件查询
