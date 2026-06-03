@@ -10,7 +10,7 @@ Pipeline:
     resolve_deps()  → list[PluginSpec] in dependency order
     load_all()      → list[Plugin]   (instances created, on_load called)
     activate_all()  → registers event/hook/strategy via PluginContext
-    deactivate_all()→ reverse order, cleanup
+    deactivate_all()→ reverse order, returns DeactivateReport
 
 Each stage is independently re-runnable (e.g. for hot reload).
 """
@@ -20,6 +20,7 @@ import importlib.metadata as importlib_metadata
 import logging
 import os
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -31,6 +32,31 @@ from .registry import PluginRegistry
 from gimbal.core.plugin import Plugin, PluginContext, PluginManifest, PluginState
 
 logger = logging.getLogger(__name__)
+
+
+# ── 卸载结果报告 ─────────────────────────────────────────────
+
+@dataclass
+class DeactivateReport:
+    """插件卸载结果报告。
+
+    不吞异常：单个插件的卸载失败（包括 on_deactivate 抛异常、
+    hook/event 清理失败）都会被记录到 failed 列表中。
+    调用方根据 succeeded/failed 决定后续动作。
+    """
+    succeeded: list[str] = field(default_factory=list)
+    failed: list[tuple[str, str]] = field(default_factory=list)   # (plugin_name, error_message)
+
+    @property
+    def all_ok(self) -> bool:
+        return not self.failed
+
+    def __str__(self) -> str:  # pragma: no cover
+        ok = len(self.succeeded)
+        bad = len(self.failed)
+        if self.all_ok:
+            return f"DeactivateReport(ok={ok})"
+        return f"DeactivateReport(ok={ok} failed={bad} failures={self.failed})"
 
 
 # ── Entry point group name (用于 pip 安装的插件) ─────────────────────
@@ -275,16 +301,67 @@ class PluginLoader:
         )
 
     # ── 5. 卸载（反向） ──
-    def deactivate_all(self, plugins: list[Plugin]) -> None:
+    def deactivate_all(
+        self,
+        plugins: list[Plugin],
+        *,
+        plugin_registry: Optional[PluginRegistry] = None,
+    ) -> DeactivateReport:
+        """反向卸载所有插件，并清理它们在 event_bus / hook_registry /
+        plugin_registry 中留下的注册。
+
+        这是**唯一**的插件卸载入口：
+            - bootstrap.shutdown()  →  loader.deactivate_all(plugins, plugin_registry=...)
+            - 测试代码             →  loader.deactivate_all([plugin], plugin_registry=...)
+
+        不吞异常：单个插件的失败（包括 on_deactivate 抛异常、
+        event/hook 清理失败）都会被记录到 DeactivateReport.failed 中，
+        不会中断后续插件的卸载。调用方读取 report 决定后续动作。
+        """
+        registry = plugin_registry or self._registry
+        report = DeactivateReport()
+
         for plugin in reversed(plugins):
+            errors: list[str] = []
+
+            # 5a. on_deactivate 钩子 + 状态机转换
             try:
                 plugin.deactivate()
             except Exception as e:  # noqa: BLE001
-                logger.error("[PluginLoader] deactivate error for %s: %s", plugin.name, e)
-            # 清理 event/hook 注册
+                errors.append(f"on_deactivate: {type(e).__name__}: {e}")
+
+            # 5b. event/hook 注册清理（即使 5a 失败也要尝试）
             if plugin.ctx is not None:
-                if plugin.ctx.event_bus is not None:
-                    plugin.ctx.event_bus.unsubscribe_plugin(plugin.name)
-                if plugin.ctx.hook_registry is not None:
-                    plugin.ctx.hook_registry.unregister_plugin(plugin.name)
-            self._registry.unregister(plugin.name)
+                try:
+                    if plugin.ctx.event_bus is not None:
+                        plugin.ctx.event_bus.unsubscribe_plugin(plugin.name)
+                except Exception as e:  # noqa: BLE001
+                    errors.append(f"unsubscribe: {type(e).__name__}: {e}")
+                try:
+                    if plugin.ctx.hook_registry is not None:
+                        plugin.ctx.hook_registry.unregister_plugin(plugin.name)
+                except Exception as e:  # noqa: BLE001
+                    errors.append(f"unregister_hook: {type(e).__name__}: {e}")
+
+            # 5c. 框架级 plugin registry 注销
+            try:
+                registry.unregister(plugin.name)
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"registry_unregister: {type(e).__name__}: {e}")
+
+            # 5d. 报告
+            if errors:
+                report.failed.append((plugin.name, " | ".join(errors)))
+                logger.error(
+                    "[PluginLoader] deactivate failed: plugin=%s errors=%s",
+                    plugin.name, errors,
+                )
+            else:
+                report.succeeded.append(plugin.name)
+                logger.debug("[PluginLoader] deactivated: plugin=%s", plugin.name)
+
+        logger.info(
+            "[PluginLoader] deactivate_all done: ok=%d failed=%d",
+            len(report.succeeded), len(report.failed),
+        )
+        return report

@@ -6,6 +6,7 @@ from typing import Annotated
 import typer
 
 from gimbal.cli.commands.run import run_app
+from gimbal.cli.commands.self_check import self_check
 
 EXIT_OK = 0
 EXIT_TEST_FAILED = 1
@@ -22,14 +23,17 @@ starter = typer.Typer(
         "  gimbal run suite customs-declare\n"
         "  gimbal run scenario sc-001 sc-002\n"
         '  gimbal run match "tests/**/*.yaml"\n'
-        "  gimbal run server --port=8765"
+        "  gimbal run server --port=8765\n"
+        "  gimbal self-check            验证框架基础设施"
     ),
     context_settings={"help_option_names": ["-h", "--help"]},
     no_args_is_help=True,
     rich_markup_mode="rich",
-    add_completion=True,  
+    add_completion=True,
 )
 starter.add_typer(run_app, name="run")
+# self-check 是顶层命令（不是 run 的子命令），因为它不执行任何测试
+starter.command("self-check")(self_check)
 
 
 def _version_callback(value: bool) -> None:

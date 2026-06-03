@@ -24,7 +24,7 @@ from .manifest import (
     find_manifest, parse_manifest_file, ManifestError,
     MANIFEST_FILENAMES,
 )
-from .loader import PluginLoader, ENTRY_POINT_GROUP
+from .loader import PluginLoader, DeactivateReport, ENTRY_POINT_GROUP
 from .discovery import discover_entry_points  # re-export below
 
 # 重新导出 Plugin 相关（从 core.plugin 透传，避免在多个地方都 import）
@@ -48,6 +48,7 @@ __all__ = [
     "PluginRegistry",
     # 加载
     "PluginLoader",
+    "DeactivateReport",
     "ENTRY_POINT_GROUP",
     # Manifest
     "find_manifest",

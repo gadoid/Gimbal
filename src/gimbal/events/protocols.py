@@ -31,18 +31,20 @@ class EventBusProtocol(Protocol):
     def subscribe(
         self,
         handler: Callable[[Any], None],
-        *,
         event_type: Optional[str] = None,
-        event_type_pattern: Optional[str] = None,
-        run_id: Optional[str] = None,
-        step_id: Optional[str] = None,
-        scenario_id: Optional[str] = None,
-        custom: Optional[dict] = None,
+        *,
+        filter: Optional[Any] = None,
         mode: Any = ...,
         plugin_name: Optional[str] = None,
         priority: int = 100,
     ) -> str:
-        """注册一个事件订阅，返回 subscription_id。"""
+        """注册一个事件订阅，返回 subscription_id。
+
+        新签名（Issue 2 修复后）：3 种调用风格
+            - 极简：subscribe(handler, "step.start")
+            - 显式 filter：subscribe(handler, filter=EventFilter(...))
+            - 叠加：subscribe(handler, "step.start", filter=EventFilter(step_id="x"))
+        """
         ...
 
     def unsubscribe(self, subscription_id: str) -> bool:

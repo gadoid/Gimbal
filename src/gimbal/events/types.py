@@ -6,11 +6,65 @@
 但 Pydantic v2 的 model_fields 在类创建时已冻结，运行时改 default 不生效。
 所有子类都已显式声明 Literal[xxx] = "xxx" 形式，所以那段"自动生成"代码
 实际上是死代码。这里删掉以避免误导。
+
+命名约定（Issue 4 修复后与 HookPoint 对称）：
+    - event_type 字符串：dot.notation  小写（"http.request"）
+    - EventType 枚举：  SCREAMING_SNAKE，但值仍是 dot.notation
+    用户可任选其一：
+        bus.subscribe(handler, "http.request")         # 字符串
+        bus.subscribe(handler, EventType.HTTP_REQUEST)  # 枚举
 """
 from __future__ import annotations
 from datetime import datetime
+from enum import Enum
 from typing import Any, Optional, Literal
 from pydantic import BaseModel, ConfigDict, Field
+
+
+# ── EventType 枚举（与 HookPoint 对称） ──────────────────────
+
+class EventType(str, Enum):
+    """事件类型枚举——与 HookPoint 的设计风格一致。
+
+    目的：让"订阅事件"和"注册 hook"的 API 看起来一样：
+        bus.subscribe(handler, EventType.STEP_START)
+        hook_registry.register(HookPoint.STEP_START, handler)
+
+    字符串字面量仍然有效：
+        bus.subscribe(handler, "step.start")
+    """
+    # 框架生命周期
+    FRAMEWORK_INIT = "framework.init"
+    FRAMEWORK_TEARDOWN = "framework.teardown"
+
+    # Run 生命周期
+    RUN_START = "run.start"
+    RUN_END = "run.end"
+
+    # Suite 生命周期
+    SUITE_START = "suite.start"
+    SUITE_END = "suite.end"
+
+    # Scenario 生命周期
+    SCENARIO_START = "scenario.start"
+    SCENARIO_END = "scenario.end"
+
+    # Step 生命周期
+    STEP_START = "step.start"
+    STEP_END = "step.end"
+    STEP_FAILED = "step.failed"
+
+    # HTTP 调用
+    HTTP_REQUEST = "http.request"
+    HTTP_RESPONSE = "http.response"
+
+    # Context 提升
+    CONTEXT_PROMOTION = "context.promotion"
+
+    # 插件生命周期
+    PLUGIN_ACTIVATED = "plugin.activated"
+    PLUGIN_FAILED = "plugin.failed"
+    PLUGIN_DEACTIVATED = "plugin.deactivated"
 
 
 class FrameworkEvent(BaseModel):

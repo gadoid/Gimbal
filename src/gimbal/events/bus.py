@@ -38,28 +38,50 @@ class InMemoryEventBus:
     def subscribe(
         self,
         handler: EventHandler,
-        *,
         event_type: Optional[str] = None,
-        event_type_pattern: Optional[str] = None,
-        run_id: Optional[str] = None,
-        step_id: Optional[str] = None,
-        scenario_id: Optional[str] = None,
-        custom: Optional[dict] = None,
+        *,
+        filter: Optional[EventFilter] = None,
         mode: SubscriptionMode = SubscriptionMode.SYNC,
         plugin_name: Optional[str] = None,
         priority: int = 100,
     ) -> str:
-        flt = EventFilter(
-            event_type=event_type,
-            event_type_pattern=event_type_pattern,
-            run_id=run_id,
-            step_id=step_id,
-            scenario_id=scenario_id,
-            custom=custom or {},
-        )
+        """订阅事件。
+
+        三种调用风格（从最简到最强）：
+
+        1. 极简（80% 用法）：只关心事件类型
+            bus.subscribe(handler, "step.start")
+
+        2. 显式 EventFilter（中等复杂度：正则 / run_id / step_id 过滤）
+            bus.subscribe(handler, filter=EventFilter(
+                event_type="step.*", step_id="step-000"))
+
+        3. event_type 与 filter 叠加（罕见：filter 是基础，event_type 覆盖）
+            bus.subscribe(handler, "step.start", filter=EventFilter(step_id="x"))
+            # 最终 filter: event_type="step.start" + step_id="x"
+
+        参数：
+            handler:     事件处理函数
+            event_type:  事件类型字符串（覆盖 filter.event_type）
+            filter:      复杂过滤（正则 / run_id / step_id / scenario_id / custom）
+            mode:        SYNC / ASYNC / BATCH
+            plugin_name: 订阅者名（用于热卸载）
+            priority:    数字越小越先调用
+        """
+        # 合并 event_type 和 filter：event_type 优先
+        if event_type is not None:
+            if filter is None:
+                filter = EventFilter(event_type=event_type)
+            else:
+                # 复制 filter 并覆盖 event_type（避免修改入参）
+                filter = filter.model_copy(update={"event_type": event_type})
+        elif filter is None:
+            # 都不给：订阅所有事件
+            filter = EventFilter()
+
         sub = Subscription(
             subscription_id=str(uuid.uuid4()),
-            event_filter=flt,
+            event_filter=filter,
             handler=handler,
             mode=mode,
             plugin_name=plugin_name,
@@ -68,8 +90,8 @@ class InMemoryEventBus:
         self._subscriptions.append(sub)
         self._subscriptions.sort(key=lambda s: s.priority)
         logger.debug(
-            "[EventBus] Subscribed: id={} type={} pattern={} mode={} plugin={}",
-            sub.subscription_id, event_type, event_type_pattern, mode, plugin_name,
+            "[EventBus] Subscribed: id={} type={} mode={} plugin={}",
+            sub.subscription_id, filter.event_type, mode, plugin_name,
         )
         return sub.subscription_id
 

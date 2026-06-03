@@ -27,5 +27,4 @@ output:
 
 plugins :
   - aaa
-  - self_check
 

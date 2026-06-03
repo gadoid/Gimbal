@@ -3,6 +3,7 @@ from .bus import InMemoryEventBus
 from .protocols import EventBusProtocol, HookRegistryProtocol
 from .subscription import EventFilter, EventHandler, Subscription, SubscriptionMode
 from .types import (
+    EventType,                            # 枚举（与 HookPoint 对称）
     FrameworkEvent,
     FrameworkInitEvent, FrameworkTeardownEvent,
     RunStartEvent, RunEndEvent,
@@ -18,6 +19,7 @@ __all__ = [
     "InMemoryEventBus",
     "EventBusProtocol", "HookRegistryProtocol",
     "EventFilter", "EventHandler", "Subscription", "SubscriptionMode",
+    "EventType",
     "FrameworkEvent",
     "FrameworkInitEvent", "FrameworkTeardownEvent",
     "RunStartEvent", "RunEndEvent",

@@ -178,25 +178,39 @@ def _load_plugins(
 
 
 def shutdown(configuration: Configuration) -> None:
-    """框架关闭入口：停 EventBus / 卸载插件 / 触发 FRAMEWORK_TEARDOWN。"""
-    from gimbal.core.hooks import HookPoint
+    """框架关闭入口。
 
-    hook_registry = configuration.hook_registry
-    hook_registry.trigger(
+    步骤：
+        1. 触发 FRAMEWORK_TEARDOWN 钩子
+        2. 走 PluginLoader.deactivate_all() 统一卸载所有插件
+           （它负责：on_deactivate + event unsubscribe + hook unregister + plugin registry unregister）
+        3. 停 EventBus
+
+    卸载的失败/成功以 DeactivateReport 形式报告，调用方按需处理。
+    """
+    from gimbal.core.hooks import HookPoint
+    from gimbal.plugins import PluginLoader
+
+    # 1. 触发 TEARDOWN 钩子（钩子中可改写 cleanup 顺序或补充清理）
+    configuration.hook_registry.trigger(
         HookPoint.FRAMEWORK_TEARDOWN,
         {"cfg": configuration.cfg},
     )
 
-    # 插件反向卸载
-    for plugin in reversed(configuration.plugins):
-        try:
-            plugin.deactivate()
-        except Exception as e:  # noqa: BLE001
-            logger.error("[bootstrap] 卸载插件失败 {}: {}", plugin.name, e)
-        configuration.event_bus.unsubscribe_plugin(plugin.name)
-        hook_registry.unregister_plugin(plugin.name)
-        configuration.plugin_registry.unregister(plugin.name)
+    # 2. 统一插件卸载入口（唯一卸载路径，详见 PluginLoader.deactivate_all 文档）
+    loader = PluginLoader()  # 不需要 dir / filter，只用它的 deactivate_all
+    report = loader.deactivate_all(
+        list(configuration.plugins),
+        plugin_registry=configuration.plugin_registry,
+    )
+    if not report.all_ok:
+        total = len(report.succeeded) + len(report.failed)
+        logger.error(
+            "[bootstrap] 部分插件卸载失败 ({} / {}): {}",
+            len(report.failed), total, report.failed,
+        )
 
+    # 3. 停 EventBus
     configuration.event_bus.stop()
 
 
