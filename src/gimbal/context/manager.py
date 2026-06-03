@@ -7,8 +7,8 @@ from .suite import SuiteContext
 from .scenario import ScenarioContext
 from .step import StepContext, StepInputs, StepStatus
 from gimbal.core.boostrap import Configuration
-from .events import (
-    ScenarioStartedEvent, ScenarioCompletedEvent,
+from .projections import (
+    project_scenario_started, project_scenario_completed,
     project_step_started, project_step_completed, project_promotion,
 )
 from gimbal.log import get_logger
@@ -106,12 +106,7 @@ class ContextManager:
             config=suite_ctx.config,  # 引用传递
             channels=channels,
         )
-        self._event_bus.publish(ScenarioStartedEvent(
-            timestamp=ctx.started_at,
-            run_id=ctx.run_id,
-            suite_id=ctx.suite_id,
-            scenario_id=ctx.scenario_id,
-        ))
+        self._event_bus.publish(project_scenario_started(ctx, ctx.run_id))
         logger.info("[ContextManager] ScenarioContext created: scenario_id={} suite_id={}",
                     scenario_id, suite_ctx.suite_id)
         return ctx
@@ -120,14 +115,7 @@ class ContextManager:
         object.__setattr__(ctx, "ended_at", datetime.utcnow())
         object.__setattr__(ctx, "status", status)
         ctx.seal()
-        self._event_bus.publish(ScenarioCompletedEvent(
-            timestamp=ctx.ended_at,
-            run_id=ctx.run_id,
-            suite_id=ctx.suite_id,
-            scenario_id=ctx.scenario_id,
-            status=status,
-            step_count=len(ctx.step_refs),
-        ))
+        self._event_bus.publish(project_scenario_completed(ctx, ctx.run_id))
         self._archive.save_scenario(ctx)
         logger.info("[ContextManager] ScenarioContext finalized: scenario_id={} status={} step_count={}",
                     ctx.scenario_id, status, len(ctx.step_refs))

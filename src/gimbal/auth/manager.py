@@ -5,14 +5,14 @@ AuthManager - 统一认证入口。
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ..schema.auth import AuthSession
 from .authenticator import get_authenticator
 from .exceptions import AuthLoginFailed, AuthSessionNotFound
 
 if TYPE_CHECKING:
-    from ..config.models import BootstrapConfig
+    from .registry import AuthRegistry
 
 from gimbal.log import get_logger
 logger = get_logger(__name__)
@@ -22,24 +22,28 @@ class AuthManager:
     """统一认证入口。
 
     使用流程：
-        auth = AuthManager(config).get_auth("admin")
+        auth = AuthManager(registry).get_auth("admin")
         if auth.is_authenticated:
             headers = {"Authorization": auth.auth_header}
     """
 
-    def __init__(self, config: "BootstrapConfig"):
+    def __init__(self, registry: "AuthRegistry | Any"):
         """初始化 AuthManager。
 
         Args:
-            config: BootstrapConfig，持有 users
+            registry: AuthRegistry 实例（运行期 token 状态容器）。
+                     也兼容接受 Configuration——自动取 .auth_registry。
         """
-        self._config = config
+        # 兼容老调用：AuthManager(configuration) → 取 .auth_registry
+        if hasattr(registry, "auth_registry") and not hasattr(registry, "set"):
+            registry = registry.auth_registry
+        self._registry = registry
 
     def get_auth(self, tag: str) -> AuthSession:
         """获取认证会话，自动处理登录/刷新。
 
         Args:
-            tag: users 中的 key
+            tag: registry 中的 key
 
         Returns:
             AuthSession，已登录状态
@@ -47,9 +51,9 @@ class AuthManager:
         Raises:
             AuthSessionNotFound: tag 不存在
         """
-        auth = self._config.users.get(tag)
+        auth = self._registry.get(tag)
         if not auth:
-            raise AuthSessionNotFound(f"Auth session '{tag}' not found in users")
+            raise AuthSessionNotFound(f"Auth session '{tag}' not found in registry")
 
         # 已认证且无需刷新
         if auth.is_authenticated and not auth.should_refresh:
@@ -82,8 +86,8 @@ class AuthManager:
         # 1. dict → AuthSession
         auth = AuthSession(**data)
 
-        # 2. 存入 config
-        self._config.users[tag] = auth
+        # 2. 存入 registry
+        self._registry.set(tag, auth)
 
         # 3. 认证
         if not auth.is_authenticated:

@@ -5,12 +5,12 @@ Scenario 预处理器：在执行链进入 StepRunner 之前，完成所有准�
 职责
 ----
 1. 认证（原 ScenarioRunner._inject_config 的认证部分）
-   - 从 scenario.config.users 构造 AuthSession，写入 BootstrapConfig.users
+   - 从 scenario.config.users 构造 AuthSession，写入 AuthRegistry
    - 调用 AuthManager.get_auth() 触发登录，填充 token
 
 2. 构建两段查询根对象
    - 第一段：scenario.config.services / users（用例自带，优先级高）
-   - 第二段：BootstrapConfig.services / users（框架级，优先级低）
+   - 第二段：BootstrapConfig.services + AuthRegistry（框架级，优先级低）
    - 不做 model_dump()，直接持有对象引用——AuthSession 刷新后 token 自动可见
 
 3. 批量展开 steps 中的模板字段
@@ -23,17 +23,22 @@ Scenario 预处理器：在执行链进入 StepRunner 之前，完成所有准�
 设计原则
 --------
 - 预处理器无副作用：不写入任何 Context，不触发事件
-- 认证副作用（写 BootstrapConfig.users）在此集中，后续执行链只读
+- 认证副作用（写 AuthRegistry）在此集中，后续执行链只读
 - token 刷新由 AuthManager 在执行期按需触发，预处理不负责
 - 两段查询顺序：scenario 级 > bootstrap 级（同名 key scenario 级覆盖）
+
+历史：原代码把 AuthSession 写入 BootstrapConfig.users，但 BootstrapConfig 是
+frozen=True，依赖 dict 内部可变性绕过。Issue 1 修复后 AuthSession 改由
+独立的 AuthRegistry 持有，BootstrapConfig.users 字段已删除。
 """
 from __future__ import annotations
 
 import logging
-from typing import Any, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from gimbal.config.models import BootstrapConfig
+    from gimbal.auth.registry import AuthRegistry
     from gimbal.schema.scenario import Scenario, Config
     from gimbal.schema.step import Step, StepUnion
 
@@ -45,7 +50,7 @@ class ScenarioPreprocessor:
 
     用法::
 
-        pre = ScenarioPreprocessor(scenario_schema, bootstrap_config)
+        pre = ScenarioPreprocessor(scenario_schema, bootstrap_config, auth_registry)
         resolved_steps, base_url = pre.run()
 
         # resolved_steps 中所有 ${} 模板已展开
@@ -56,9 +61,15 @@ class ScenarioPreprocessor:
         self,
         scenario_schema: "Scenario",
         bootstrap_config: "BootstrapConfig",
+        auth_registry: Optional["AuthRegistry"] = None,
     ) -> None:
         self._schema = scenario_schema
         self._cfg = bootstrap_config
+        # 缺省时构造一个空的 registry（仅当 scenario 不需要认证时安全）
+        if auth_registry is None:
+            from gimbal.auth.registry import AuthRegistry
+            auth_registry = AuthRegistry()
+        self._auth_registry = auth_registry
 
     # ── 公开入口 ──────────────────────────────────────────────────────────────
 
@@ -66,7 +77,7 @@ class ScenarioPreprocessor:
         """执行完整预处理，返回 (resolved_steps, base_url)。
 
         步骤：
-          1. 认证（填充 token 到 users）
+          1. 认证（填充 token 到 AuthRegistry）
           2. 构建查询根对象
           3. 批量展开 steps 模板
           4. 提取 base_url
@@ -96,11 +107,8 @@ class ScenarioPreprocessor:
     def _setup_auth(self) -> None:
         """从 scenario.config.users 构造 AuthSession 并触发认证。
 
-        认证结果（token）写入 BootstrapConfig.users，
-        后续 _build_resolve_root() 直接从 users 拿对象引用。
-
-        BootstrapConfig 本身是 frozen 的，但 users 是 dict，
-        dict 内容可变——这里直接操作 dict，不违反 frozen 约束。
+        认证结果（token）写入 AuthRegistry，
+        后续 _build_resolve_root() 直接从 registry 拿对象引用。
         """
         from gimbal.schema.auth import AuthSession
         from gimbal.auth import AuthManager
@@ -123,13 +131,13 @@ class ScenarioPreprocessor:
     def _authenticate_one(self, tag: str, auth_session) -> None:
         from gimbal.auth import AuthManager
 
-        self._cfg.users[tag] = auth_session
-        logger.debug("[Preprocessor] AuthSession 注入 users: tag={}", tag)
+        self._auth_registry.set(tag, auth_session)
+        logger.debug("[Preprocessor] AuthSession 注入 registry: tag={}", tag)
 
-        auth_manager = AuthManager(self._cfg)
+        auth_manager = AuthManager(self._auth_registry)
         try:
             auth_manager.get_auth(tag)
-            session = self._cfg.users.get(tag)
+            session = self._auth_registry.get(tag)
             logger.info(
                 "[Preprocessor] 认证成功: tag={} token={} token_type={}",
                 tag,
@@ -147,7 +155,7 @@ class ScenarioPreprocessor:
 
         优先级（高 → 低）：
           scenario.config.services  >  bootstrap.services
-          bootstrap.users（含已认证的 AuthSession）
+          AuthRegistry.snapshot()（含已认证的 AuthSession）
 
         不做 model_dump()，直接持有对象引用：
           - AuthSession.token 是普通字段，认证后已填充
@@ -169,8 +177,8 @@ class ScenarioPreprocessor:
             root["service"].update(service_dict)
 
         # --- auth ---
-        # users 已包含刚认证好的 AuthSession 对象
-        root["auth"] = self._cfg.users
+        # AuthRegistry.snapshot() 返回浅拷贝字典，下游模板解析只读
+        root["auth"] = self._auth_registry.snapshot()
 
         logger.debug(
             "[Preprocessor] 查询根构建完成: service_keys={} auth_tags={}",

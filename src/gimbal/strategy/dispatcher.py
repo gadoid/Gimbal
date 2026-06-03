@@ -112,8 +112,17 @@ class StrategyDispatcher:
             )
         result.duration_ms = (time.monotonic() - t0) * 1000
         result.strategy_id = result.strategy_id or strategy_id
-        logger.debug("[StrategyDispatcher] Strategy executed: strategy_id={} status={} duration_ms={:.2f}",
-                    strategy_id, result.status.value, result.duration_ms)
+        # 软失败标记：spec.onFailure != ABORT 时，即使失败也仅记录不中止
+        from gimbal.schema.strategy import FailurePolicy
+        on_failure = getattr(spec, "onFailure", FailurePolicy.ABORT)
+        if result.failed and on_failure != FailurePolicy.ABORT:
+            result.soft = True
+            logger.debug(
+                "[StrategyDispatcher] Strategy marked soft-fail: strategy_id={} onFailure={}",
+                strategy_id, on_failure.value,
+            )
+        logger.debug("[StrategyDispatcher] Strategy executed: strategy_id={} status={} duration_ms={:.2f} soft={}",
+                    strategy_id, result.status.value, result.duration_ms, result.soft)
 
         # 5. STRATEGY_AFTER hook（可改写 result）
         if self._hooks is not None:

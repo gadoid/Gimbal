@@ -155,6 +155,7 @@ class Engine:
             framework_ctx.ctx_manager,
             hook_registry=self._ictx.hook_registry,
             event_bus=self._ictx.event_bus,
+            auth_registry=self._ictx.auth_registry,
         ).run(
             scenario, suite_ctx
         )
@@ -209,6 +210,7 @@ class Engine:
             framework_ctx.ctx_manager,
             hook_registry=self._ictx.hook_registry,
             event_bus=self._ictx.event_bus,
+            auth_registry=self._ictx.auth_registry,
         )
         cfg = framework_ctx.config
         total = passed = failed = error = 0

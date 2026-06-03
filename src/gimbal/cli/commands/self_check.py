@@ -123,6 +123,14 @@ def self_check(ctx: typer.Context) -> None:
     )
     from gimbal.events.protocols import EventBusProtocol, HookRegistryProtocol
 
+    # self_check 不是 Plugin，但本工具直接往 bus / hook_registry 注册的订阅与 hook
+    # 全部带上同一个 plugin_name（OWNER），便于精确清理。
+    # 历史：原代码不带 plugin_name，注册物 plugin_name=None，shutdown 走
+    # unsubscribe_plugin(None) / unregister_plugin(None) 路径，要么漏清，要么
+    # 全清。Issue ③ 修复后所有自检的注册物都归到 OWNER 名下，finally 块里
+    # 显式 unsubscribe / unregister，再走 shutdown——三层兜底。
+    OWNER = "self_check"
+
     cli_ctx: CLIContext = ctx.obj
     typer.echo("[self_check] bootstrapping framework...")
 
@@ -155,18 +163,20 @@ def self_check(ctx: typer.Context) -> None:
         ]
         for ev_type in event_types:
             # 两种风格都支持：EventType 枚举 或 字符串字面量
-            bus.subscribe(_make_event_handler(sc_ctx, ev_type.name), ev_type)
+            bus.subscribe(_make_event_handler(sc_ctx, ev_type.name), ev_type, plugin_name=OWNER)
         sc_ctx.check(f"subscribed {len(event_types)} event types (EventType enum API)",
                      True, f"count={len(event_types)}")
 
         # ── C. 注册 3 个 hook（用 HookPoint 枚举，与 EventType 对称）──
         for point in (HookPoint.HTTP_BEFORE_SEND, HookPoint.HTTP_AFTER_RECV, HookPoint.STEP_START):
             hook_registry.register(point, _make_hook(sc_ctx, point.value), priority=10,
+                                   plugin_name=OWNER,
                                    description="self_check: trace")
         sc_ctx.check("registered 3 hooks (HookPoint enum API)", True)
 
         # ── D. 注册 FRAMEWORK_INIT hook（验证 post-init 路径）──
         hook_registry.register(HookPoint.FRAMEWORK_INIT, _on_framework_init(sc_ctx),
+                               plugin_name=OWNER,
                                description="self_check: post-init check")
         sc_ctx.check("registered framework.init hook", True)
 
@@ -181,7 +191,19 @@ def self_check(ctx: typer.Context) -> None:
                      any(point == "http.before_send" for point, _ in sc_ctx.hooks_invoked))
 
     finally:
-        # 走统一的卸载入口（验证 Issue 5 的修复）
+        # 1. 显式清理 OWNER 名下的所有订阅 / hook（精确路径）
+        try:
+            configuration.event_bus.unsubscribe_plugin(OWNER)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            configuration.hook_registry.unregister_plugin(OWNER)
+        except Exception:  # noqa: BLE001
+            pass
+
+        # 2. 走统一的卸载入口（验证 Issue 5 的修复）
+        #    此时 OWNER 名下的注册物已被清掉，shutdown 的 hook_registry.clear()
+        #    兜底应只清零"零个"——若还有遗留说明有别的路径在泄漏，应 warning。
         shutdown(configuration)
 
     # 报告

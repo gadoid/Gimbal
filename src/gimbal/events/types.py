@@ -13,6 +13,12 @@
     用户可任选其一：
         bus.subscribe(handler, "http.request")         # 字符串
         bus.subscribe(handler, EventType.HTTP_REQUEST)  # 枚举
+
+历史说明（Issue 5 合并）：早期另有一份 context/events.py 定义了 *Started/*Completed
+事件（"step.started" / "step.completed" / "scenario.started" / "scenario.completed"）。
+本文件已合并双方字段（strategy_kind、assertion_count、assertion_passed、promotion_count、
+error_brief、suite_id、reason 等），event_type 字符串统一为 "step.start" / "step.end" /
+"scenario.start" / "scenario.end" / "variable.promoted"。
 """
 from __future__ import annotations
 from datetime import datetime
@@ -58,8 +64,9 @@ class EventType(str, Enum):
     HTTP_REQUEST = "http.request"
     HTTP_RESPONSE = "http.response"
 
-    # Context 提升
-    CONTEXT_PROMOTION = "context.promotion"
+    # Context 提升（合并自旧 context/events.py 的 VariablePromotedEvent）
+    CONTEXT_PROMOTION = "context.promotion"  # 兼容旧订阅；新订阅应使用 VARIABLE_PROMOTED
+    VARIABLE_PROMOTED = "variable.promoted"
 
     # 插件生命周期
     PLUGIN_ACTIVATED = "plugin.activated"
@@ -120,6 +127,8 @@ class SuiteEndEvent(FrameworkEvent):
 
 class ScenarioStartEvent(FrameworkEvent):
     event_type: Literal["scenario.start"] = "scenario.start"
+    # suite_id 由 ContextManager 填充；ScenarioRunner 直接发时为空
+    suite_id: str = ""
     scenario_id: str
     scenario_name: str
     step_count: int
@@ -127,6 +136,8 @@ class ScenarioStartEvent(FrameworkEvent):
 
 class ScenarioEndEvent(FrameworkEvent):
     event_type: Literal["scenario.end"] = "scenario.end"
+    # suite_id 由 ContextManager 填充；ScenarioRunner 直接发时为空
+    suite_id: str = ""
     scenario_id: str
     status: str
     step_count: int
@@ -135,15 +146,24 @@ class ScenarioEndEvent(FrameworkEvent):
 # ── Step 级 ───────────────────────────────────────────
 class StepStartEvent(FrameworkEvent):
     event_type: Literal["step.start"] = "step.start"
+    scenario_id: str = ""
     step_id: str
     step_name: str
+    # 由 ContextManager.project_step_started 填充；statemachine 直接发时为空
+    strategy_kind: str = ""
 
 
 class StepEndEvent(FrameworkEvent):
     event_type: Literal["step.end"] = "step.end"
+    scenario_id: str = ""
     step_id: str
     status: str
     duration_ms: float
+    # 以下字段由 ContextManager.project_step_completed 填充；statemachine 直接发时为 0/None
+    assertion_count: int = 0
+    assertion_passed: int = 0
+    promotion_count: int = 0
+    error_brief: Optional[str] = None
 
 
 class StepFailedEvent(FrameworkEvent):
@@ -174,14 +194,23 @@ class HttpResponseEvent(FrameworkEvent):
 
 
 # ── Context 提升 ─────────────────────────────────────
-class ContextPromotionEvent(FrameworkEvent):
-    event_type: Literal["context.promotion"] = "context.promotion"
+class VariablePromotedEvent(FrameworkEvent):
+    """变量从一层 Context 提升到另一层时发布。
+
+    合并自旧 context/events.py.VariablePromotedEvent。
+    """
+    event_type: Literal["variable.promoted"] = "variable.promoted"
     key: str
     from_layer: str
     to_layer: str
     by_step_id: str
     by_scenario_id: Optional[str] = None
     overwrote_previous: bool = False
+    reason: Optional[str] = None
+
+
+# 旧名：保留以兼容旧订阅代码（已 deprecated，新代码应使用 VariablePromotedEvent）
+ContextPromotionEvent = VariablePromotedEvent  # type: ignore[assignment,misc]
 
 
 # ── 插件生命周期 ─────────────────────────────────────

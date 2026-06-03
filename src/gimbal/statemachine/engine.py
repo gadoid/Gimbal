@@ -393,12 +393,20 @@ class StepStateMachine:
     # ── 埋点辅助 ──────────────────────────────────────────────────────
 
     def _fire_hook(self, point_name: str, payload: dict) -> bool:
-        """触发 hook。返回 True 表示继续，False 表示被 STOP 中断。"""
+        """触发 hook。返回 True 表示继续，False 表示被 STOP 中断。
+
+        point_name 可以是 HookPoint 枚举的名字（如 "HTTP_BEFORE_SEND"），
+        也可以是它的 value（如 "http.before_send"）。
+        """
         if self._hooks is None:
             return True
         try:
             from gimbal.core.hooks import HookPoint
-            point = HookPoint(point_name)
+            # 优先按枚举名查（"HTTP_BEFORE_SEND"），再按 value 查（"http.before_send"）
+            try:
+                point = HookPoint[point_name]
+            except KeyError:
+                point = HookPoint(point_name)
         except (ValueError, ImportError):
             return True
         result = self._hooks.trigger(point, payload)

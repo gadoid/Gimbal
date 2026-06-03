@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
 from ..version import getVersion
-from ..schema.auth import AuthSession
 from pathlib import Path
 
 
@@ -9,6 +8,9 @@ class BootstrapConfig(BaseModel):
 
     frozen=True：产出后任何层都不能修改，只能读。
     需要「修改」配置的场景（例如单测覆盖某个字段）应重新调用 ConfigLoader。
+
+    注意：运行期可变状态（认证会话、token 等）由独立容器承载，不在
+    BootstrapConfig 范围内。详见 gimbal.auth.registry.AuthRegistry。
     """
     base_dir : Path = Path(".")
     model_config = ConfigDict(frozen=True)
@@ -19,7 +21,6 @@ class BootstrapConfig(BaseModel):
 
     services: dict = Field(default_factory=dict, description="服务域名池 {name: {base_url, timeout}}")
     connection_pool: dict = Field(default_factory=dict, description="数据库/中间件连接池 {name: {host, port, ...}}")
-    users: dict[str, AuthSession] = Field(default_factory=dict, description="认证会话池，key 即 tag")
 
     # ── 日志与输出 ────────────────────────────────────────
     log_level: str = Field("info", description="日志等级 debug|info|warning|error")

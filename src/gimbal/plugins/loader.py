@@ -209,11 +209,26 @@ class PluginLoader:
         # 让 import 找得到插件包：
         #   - 把 plugin_path 自身加入 sys.path，使得 entry_point 里只有模块名（无包前缀）也能 import
         #   - 同时把 parent 目录也加入，使得 entry_point 是 `pkg.mod:Cls` 的写法也能 import
-        for p in (spec.plugin_path, str(Path(spec.plugin_path).parent) if spec.plugin_path else None):
-            if p and p not in sys.path:
-                sys.path.insert(0, p)
+        #
+        # 历史：原代码 sys.path.insert(0) 后从不 remove，导致后续 import 都能意外看到
+        # 插件代码，且多次 bootstrap 后 sys.path 越积越长。Issue 7 修复后改用上下文管理器，
+        # import 完立刻把 path 撤掉，不留痕。
+        added_paths: list[str] = []
+        try:
+            for p in (spec.plugin_path, str(Path(spec.plugin_path).parent) if spec.plugin_path else None):
+                if p and p not in sys.path:
+                    sys.path.insert(0, p)
+                    added_paths.append(p)
 
-        module = importlib.import_module(module_name)
+            module = importlib.import_module(module_name)
+        finally:
+            # LIFO 撤掉（与 insert 顺序相反）
+            for p in reversed(added_paths):
+                try:
+                    sys.path.remove(p)
+                except ValueError:
+                    pass  # 已被其它逻辑移除，忽略
+
         cls = getattr(module, attr, None)
         if cls is None:
             raise ValueError(f"{spec.entry_point} not found")

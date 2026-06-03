@@ -19,6 +19,7 @@ class Configuration:
 
     持有：
         - cfg：合并后的完整配置快照（frozen）
+        - auth_registry：可变的 AuthSession 容器（运行期 token 状态）
         - 基础设施引用：ctx_manager / dispatcher / event_bus / archive
         - 插件设施：hook_registry / plugin_registry
         - plugins：已激活的插件实例（仅持有引用，不调用其方法）
@@ -27,8 +28,10 @@ class Configuration:
     这些在 Engine.run() 时按执行生命周期创建。
 
     frozen=True：产出后不可修改，Engine 只读取，不覆盖。
+    唯一例外是 auth_registry——它是引用类型，引用本身不变，但其内部状态可变。
     """
     cfg: BootstrapConfig
+    auth_registry: Any  # gimbal.auth.registry.AuthRegistry（不强制类型以避免循环导入）
     ctx_manager: "ContextManager"
     dispatcher: Any
     # 以下供需要直接访问基础设施的场景（reporter、plugin 等）
@@ -77,11 +80,13 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
     from gimbal.strategy.dispatcher import build_default_dispatcher
     from gimbal.core.hooks import HookRegistry
     from gimbal.plugins import PluginRegistry
+    from gimbal.auth.registry import AuthRegistry
 
     event_bus = InMemoryEventBus()
     archive = InMemoryArchive()
     hook_registry = HookRegistry()
     plugin_registry = PluginRegistry()
+    auth_registry = AuthRegistry()
     ctx_manager = ContextManager(archive=archive, event_bus=event_bus)
     dispatcher = build_default_dispatcher(hook_registry=hook_registry)
 
@@ -113,6 +118,7 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
 
     return Configuration(
         cfg=cfg,
+        auth_registry=auth_registry,
         ctx_manager=ctx_manager,
         dispatcher=dispatcher,
         event_bus=event_bus,
@@ -209,6 +215,20 @@ def shutdown(configuration: Configuration) -> None:
             "[bootstrap] 部分插件卸载失败 ({} / {}): {}",
             len(report.failed), total, report.failed,
         )
+
+    # 2.5 兜底清空 hook_registry。
+    #     Plugin.register_hook() 会把 hook_id 记到 Plugin.registered_hook_ids 里，
+    #     deactivate_all 会按这个列表 unregister。但有些代码路径会绕过
+    #     Plugin.register_hook，直接调用 ctx.hook_registry.register()——
+    #     这种 hook 没被任何 plugin 记录，deactivate_all 不会清掉。
+    #     shutdown 时统一 clear()，保证下一次 bootstrap 启动时不残留旧 hook。
+    remaining = configuration.hook_registry.list_hooks()
+    if remaining:
+        logger.warning(
+            "[bootstrap] hook_registry 还有 {} 个未清空的 hook（绕过 Plugin.register_hook 注册的），shutdown 兜底 clear",
+            len(remaining),
+        )
+        configuration.hook_registry.clear()
 
     # 3. 停 EventBus
     configuration.event_bus.stop()

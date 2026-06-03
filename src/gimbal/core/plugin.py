@@ -91,9 +91,12 @@ class PluginContext:
     hook_registry: HookRegistryProtocol
     plugin_registry: Any = None                            # 通用插件注册表（避开循环 import）
 
-    # 由框架在 activate 后写入，便于插件查询
-    registered_event_ids: list[str] = field(default_factory=list)
-    registered_hook_ids: list[str] = field(default_factory=list)
+    # 计数器：仅用于 activate 日志打印"本插件注册了几个 event/hook"。
+    # 实际的清理走 name-based 路径（event_bus.unsubscribe_plugin(name) /
+    # hook_registry.unregister_plugin(name)），不需要记 id。
+    # 旧实现用 list 存 id 但从未被消费过，是死代码。Issue ② 已清理。
+    event_count: int = 0
+    hook_count: int = 0
 
     def register_event(
         self,
@@ -114,7 +117,7 @@ class PluginContext:
             priority=priority,
             plugin_name=self.plugin_name,
         )
-        self.registered_event_ids.append(sid)
+        self.event_count += 1
         return sid
 
     def register_hook(
@@ -136,7 +139,7 @@ class PluginContext:
             plugin_name=self.plugin_name,
             description=description,
         )
-        self.registered_hook_ids.append(hid)
+        self.hook_count += 1
         return hid
 
     def emit(self, event: FrameworkEvent) -> None:
@@ -196,8 +199,8 @@ class Plugin(ABC):
             logger.info(
                 "[Plugin:%s] activated (events=%d hooks=%d)",
                 self.manifest.name,
-                len(ctx.registered_event_ids),
-                len(ctx.registered_hook_ids),
+                ctx.event_count,
+                ctx.hook_count,
             )
         except Exception as e:  # noqa: BLE001
             self.state = PluginState.FAILED
@@ -223,6 +226,7 @@ class Plugin(ABC):
             logger.exception("[Plugin:%s] on_deactivate raised: %s", self.manifest.name, e)
         finally:
             # 框架会负责清理：event_bus.unsubscribe_plugin(name) + hook_registry.unregister_plugin(name)
+            # 走 name-based 路径，无需 id 列表（PluginContext 内只记 event_count/hook_count 供日志）
             self.state = PluginState.DEACTIVATED
             logger.info("[Plugin:%s] deactivated", self.manifest.name)
 

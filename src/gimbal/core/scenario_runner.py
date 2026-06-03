@@ -145,11 +145,13 @@ class ScenarioRunner:
         ctx_manager: ContextManager,
         hook_registry: Optional[Any] = None,
         event_bus: Optional[Any] = None,
+        auth_registry: Optional[Any] = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._ctx_manager = ctx_manager
         self._hooks = hook_registry
         self._bus = event_bus
+        self._auth_registry = auth_registry
         logger.debug("[ScenarioRunner] 初始化完成")
 
     def run(
@@ -174,12 +176,13 @@ class ScenarioRunner:
         logger.debug("[ScenarioRunner] ScenarioContext 创建完成: scenario_id={}", sid)
 
         # 2. 预处理：认证 + 模板展开 + 提取 base_url
-        #    预处理器直接持有 bootstrap_config 引用，认证结果写入 users
+        #    认证结果写入 self._auth_registry（运行期容器）
         from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
 
         preprocessor = ScenarioPreprocessor(
             scenario_schema=scenario_schema,
             bootstrap_config=scenario_ctx.config,
+            auth_registry=self._auth_registry,
         )
         resolved_steps, base_url = preprocessor.run()
         logger.debug(

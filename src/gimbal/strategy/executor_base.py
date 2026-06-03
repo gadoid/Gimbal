@@ -33,6 +33,9 @@ class StrategyResult:
         extracted:   本次提取/赋值写入 context 的键值（用于日志回放）。
         error:       非预期异常信息。
         duration_ms: 本条策略耗时。
+        soft:        是否为软失败（spec.onFailure != ABORT 时由 dispatcher 置 True），
+                     用于 PhaseResult.hard_failed 区分 hard/abort 失败。
+                     注意：ERROR（系统异常）永远不是 soft。
     """
 
     status: StrategyStatus
@@ -41,6 +44,7 @@ class StrategyResult:
     extracted: dict[str, Any] = field(default_factory=dict)
     error: Optional[str] = None
     duration_ms: float = 0.0
+    soft: bool = False
 
     @property
     def passed(self) -> bool:
@@ -49,6 +53,11 @@ class StrategyResult:
     @property
     def failed(self) -> bool:
         return self.status in (StrategyStatus.FAILED, StrategyStatus.ERROR)
+
+    @property
+    def hard_failed(self) -> bool:
+        """硬失败：失败且非软。"""
+        return self.failed and not self.soft
 
 
 @dataclass
@@ -68,11 +77,11 @@ class PhaseResult:
 
     @property
     def hard_failed(self) -> bool:
-        """存在非软断言失败 → 必须中止。"""
-        return any(
-            r.failed and not getattr(r, "soft", False)
-            for r in self.results
-        )
+        """存在非软断言失败 → 必须中止。
+
+        与 any_failed 的区别：CONTINUE/WARN 策略即使失败也不会触发 hard_failed。
+        """
+        return any(r.hard_failed for r in self.results)
 
 
 class StrategyExecutor(ABC):
