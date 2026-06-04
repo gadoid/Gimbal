@@ -1,13 +1,13 @@
 # Strategy 模块
 
-> 策略模块，定义 Extract/Assign/Assertion 等策略及其执行器
+> 策略模块，定义 Extract/Assign/Assertion 等策略及其执行器，支持软失败（soft）
 
 ## 目录结构
 
 ```
 gimbal/strategy/
 ├── __init__.py
-├── executor_base.py   # StrategyExecutor 基类和执行结果
+├── executor_base.py   # StrategyExecutor 基类 + StrategyResult + PhaseResult
 ├── dispatcher.py      # StrategyDispatcher
 ├── result.py          # 执行结果定义
 └── builtin/          # 内置策略执行器
@@ -15,13 +15,13 @@ gimbal/strategy/
     ├── extract.py     # ExtractExecutor
     ├── assign.py      # AssignExecutor
     ├── assertion.py   # AssertionExecutor
-    ├── call.py       # CallExecutor (HTTP 调用)
-    ├── sleep.py      # SleepExecutor
-    ├── sql.py        # SQLExecutor
-    ├── poll.py       # PollExecutor
-    ├── chaos.py      # ChaosExecutor
-    ├── composite.py  # CompositeExecutor
-    └── utils.py      # 工具函数
+    ├── call.py        # CallExecutor (HTTP 调用)
+    ├── sleep.py       # SleepExecutor
+    ├── sql.py         # SQLExecutor
+    ├── poll.py        # PollExecutor
+    ├── chaos.py       # ChaosExecutor
+    ├── composite.py   # CompositeExecutor
+    └── utils.py       # 工具函数
 ```
 
 ## 核心概念
@@ -40,51 +40,35 @@ class StrategyPhase(str, Enum):
 
 ### StrategyExecutor
 
-策略执行器基类：
-
 ```python
 class StrategyExecutor(ABC):
-    """策略执行器抽象基类"""
+    """策略执行器抽象基类。
+
+    子类只需实现 execute()，框架负责计时、异常捕获、日志。
+    """
 
     kind: str = ""  # 子类声明自己处理哪种 kind
 
     @abstractmethod
     def execute(self, spec: StrategyBase, view: StrategyContextView) -> StrategyResult:
-        """执行策略，返回结果"""
-        raise NotImplementedError
+        """执行策略，返回结果。不允许抛出异常——异常应被包裹进 StrategyResult。"""
+        ...
 ```
 
 ### StrategyDispatcher
-
-策略分发器：
 
 ```python
 class StrategyDispatcher:
     """策略分发器"""
 
-    def register(self, executor: StrategyExecutor) -> None:
-        """注册 executor"""
-        ...
-
-    def dispatch(self, spec: StrategyBase, view: StrategyContextView) -> StrategyResult:
-        """根据 spec.kind 找到对应 executor，执行并返回结果"""
-        ...
-
-    def dispatch_phase(
-        self,
-        phase: str,
-        strategies: list[StrategyBase],
-        view: StrategyContextView,
-    ) -> list[StrategyResult]:
-        """执行属于指定 phase 的所有策略，按 order 排序"""
-        ...
+    def register(self, executor: StrategyExecutor) -> None
+    def dispatch(self, spec, view) -> StrategyResult
+    def dispatch_phase(self, phase, strategies, view) -> list[StrategyResult]
 ```
 
 ## 内置执行器
 
 ### ExtractExecutor
-
-从响应/请求中提取字段：
 
 ```python
 class ExtractExecutor(StrategyExecutor):
@@ -102,46 +86,37 @@ class ExtractExecutor(StrategyExecutor):
 
 ### AssignExecutor
 
-赋值到指定路径：
-
 ```python
 class AssignExecutor(StrategyExecutor):
     kind = "assign"
 
-    # Schema
     class Assign(StrategyBase):
         source: Any              # 字面量或 ${template}
         target: str              # 模板路径
         scope: Scope             # 注入到哪个作用域
-        default: Any              # 注入失败的默认值
-        required: bool           # 注入失败是否抛出异常
+        default: Any
+        required: bool
 ```
 
 ### AssertionExecutor
-
-断言执行：
 
 ```python
 class AssertionExecutor(StrategyExecutor):
     kind = "assertion"
 
-    # Schema
     class Assertion(StrategyBase):
         target: str              # 断言的目标字段
-        operator: AssertOperator  # EQ / NE / GT / GTE / LT / LTE / IN / CONTAINS / ...
+        operator: AssertOperator  # EQ / NE / GT / ...
         expected: Any             # 断言的比较值
-        message: str | None       # 断言失败信息
-        soft: bool                # 软断言
+        message: str | None
+        soft: bool                # 软断言（失败不中断）
 ```
 
 ### CallExecutor
 
-HTTP 调用：
-
 ```python
 class CallExecutor(StrategyExecutor):
     """执行 HTTP 调用（由状态机在 CALLING 阶段直接调用）"""
-
     kind = "_call"  # 内部 kind，不对应 schema
 ```
 
@@ -169,51 +144,79 @@ class AssertOperator(str, Enum):
 
 ```python
 class Scope(str, Enum):
-    FRAMEWORK = "framework"   # 框架级，所有 Scenario 共享
+    FRAMEWORK = "framework"   # 框架级
     SESSION = "session"       # 会话级
     SCENARIO = "scenario"    # Scenario 级
     STEP = "step"            # Step 级
     REQUEST = "request"      # 请求级
 ```
 
-## StrategyResult
-
-执行结果：
+## StrategyResult（Issue 8 新增 soft 字段）
 
 ```python
+class StrategyStatus(str, Enum):
+    PASSED = "passed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    ERROR = "error"    # executor 内部抛出未预期异常
+
+
 @dataclass
 class StrategyResult:
-    status: StrategyStatus  # PASSED / FAILED / SKIPPED / ERROR
-    strategy_id: str
-    message: str
-    extracted: dict        # 本次提取/赋值写入的键值
-    error: str | None
-    duration_ms: float
+    """单条策略的执行结果。
+
+    Attributes:
+        status:      执行结论。
+        strategy_id: 对应策略的 name 或自动生成的 id。
+        message:     人类可读的描述。
+        extracted:   本次提取/赋值写入 context 的键值。
+        error:       非预期异常信息。
+        duration_ms: 本条策略耗时。
+        soft:        是否为软失败（spec.onFailure != ABORT 时由 dispatcher 置 True），
+                     用于 PhaseResult.hard_failed 区分 hard/abort 失败。
+                     注意：ERROR（系统异常）永远不是 soft。
+    """
+
+    status: StrategyStatus
+    strategy_id: str = ""
+    message: str = ""
+    extracted: dict[str, Any] = field(default_factory=dict)
+    error: Optional[str] = None
+    duration_ms: float = 0.0
+    soft: bool = False
 
     @property
     def passed(self) -> bool: ...
-
     @property
     def failed(self) -> bool: ...
+    @property
+    def hard_failed(self) -> bool:
+        """硬失败：失败且非软。"""
+        return self.failed and not self.soft
 ```
 
 ## PhaseResult
-
-阶段执行结果汇总：
 
 ```python
 @dataclass
 class PhaseResult:
     phase: str
-    results: list[StrategyResult]
+    results: list[StrategyResult] = field(default_factory=list)
 
     @property
     def all_passed(self) -> bool: ...
     @property
     def any_failed(self) -> bool: ...
     @property
-    def hard_failed(self) -> bool: ...  # 存在非软断言失败
+    def hard_failed(self) -> bool:
+        """存在非软断言失败 → 必须中止。
+
+        与 any_failed 的区别：CONTINUE/WARN 策略即使失败也不会触发 hard_failed。
+        """
+        return any(r.hard_failed for r in self.results)
 ```
+
+`hard_failed` 已被 `StepStateMachine` 用于决定是否进入 TEARDOWN 状态——比 `any_failed` 更精确（不把软失败当成需要中止的失败）。
 
 ## 使用示例
 
@@ -233,7 +236,9 @@ results = dispatcher.dispatch_phase("before_request", strategies, view)
 
 ## 设计原则
 
-1. **Executor 单一职责**: 每种策略对应一个 Executor
-2. **Dispatcher 统一分发**: 所有策略都通过 Dispatcher 分发
-3. **Phase 有序执行**: 同一阶段的策略按 order 排序执行
-4. **失败策略可控**: 通过 onFailure 控制失败行为
+1. **Executor 单一职责**：每种策略对应一个 Executor。
+2. **Dispatcher 统一分发**：所有策略都通过 Dispatcher 分发。
+3. **Phase 有序执行**：同一阶段的策略按 order 排序执行。
+4. **失败策略可控**：通过 `onFailure` 控制失败行为；软失败（CONTINUE/WARN）走 `soft=True`。
+5. **不抛异常**：executor 异常被包裹为 `StrategyResult(status=ERROR)`，避免主流程崩溃。
+6. **软失败语义**：`StrategyResult.soft` 由 dispatcher 根据 `spec.onFailure` 注入；ERROR 永远不是 soft。

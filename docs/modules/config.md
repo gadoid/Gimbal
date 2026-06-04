@@ -8,39 +8,48 @@
 gimbal/config/
 ├── __init__.py
 ├── loader.py    # ConfigLoader 多来源配置合并
-└── models.py    # BootstrapConfig 数据模型
+└── models.py    # BootstrapConfig 数据模型（frozen）
 ```
 
 ## 核心组件
 
-### BootstrapConfig
+### BootstrapConfig（Issue 1 修复后）
 
-所有配置来源合并后的不可变快照（`frozen=True`）。
+所有配置来源合并后的不可变快照（`frozen=True`）。**已不再承载运行期状态**——`users` 字段已删除，认证状态改由 `AuthRegistry` 承载。
 
 ```python
 class BootstrapConfig(BaseModel):
-    """所有配置来源合并后的不可变快照"""
+    """所有配置来源合并后的不可变快照。
 
-    # 运行环境
-    env: str = "dev"           # 目标环境 dev|test|staging|prod
-    mode: str = "local"        # 执行模式 local|server|service
+    frozen=True：产出后任何层都不能修改，只能读。
+    需要「修改」配置的场景（例如单测覆盖某个字段）应重新调用 ConfigLoader。
 
-    # 服务和连接池
-    services: dict        # 服务域名池 {name: {base_url, timeout}}
-    connection_pool: dict      # 数据库/中间件连接池
-    users: dict           # 认证会话池，key 即 tag
+    注意：运行期可变状态（认证会话、token 等）由独立容器承载，不在
+    BootstrapConfig 范围内。详见 gimbal.auth.registry.AuthRegistry。
+    """
+    base_dir: Path = Path(".")
+    model_config = ConfigDict(frozen=True)
 
-    # 日志与输出
-    log_level: str = "info"
-    no_color: bool = False
+    # ── 运行环境 ──
+    env: str = "dev"            # 目标环境 dev|test|staging|prod
+    mode: str = "local"         # 执行模式 local|server|service
 
-    # 框架元信息
+    services: dict             # 服务域名池 {name: {base_url, timeout}}
+    connection_pool: dict       # 数据库/中间件连接池 {name: {host, port, ...}}
+
+    # ── 日志与输出 ──
+    log_level: str = "info"     # debug|info|warning|error
+    no_color: bool = False      # 禁用终端颜色
+
+    # ── 框架元信息 ──
     framework_version: str
-    plugins: tuple[str, ...]
+    plugins: tuple[str, ...]          # 启用的插件列表（白名单；空 = 全部启用）
+    plugins_dir: str = "plugins"        # 插件目录（相对 base_dir）
+    plugin_configs: dict[str, dict]    # {plugin_name: {key: value}}
     reporters: tuple[str, ...] = ("console",)
     report_dir: str = "reports"
 
-    # 执行控制
+    # ── 执行控制 ──
     fail_fast: bool = False
     request_timeout: int | None
     scenario_timeout: int | None
@@ -50,6 +59,11 @@ class BootstrapConfig(BaseModel):
     retry_count: int = 0
     retry_interval: int = 5
 ```
+
+**重大变化（Issue 1）**：
+- ❌ `users: dict` 字段已删除
+- ✅ 认证运行期状态由 `Configuration.auth_registry`（`AuthRegistry` 实例）承载
+- ✅ `BootstrapConfig` 严格只承载"配置输入"，保持 frozen 语义清晰
 
 ### ConfigLoader
 
@@ -63,7 +77,6 @@ class ConfigLoader:
         """执行完整的多来源合并"""
         # 加载顺序（低 → 高）：
         # 内置默认值 → gimbal.yaml → env 文件 → mode 文件 → 环境变量 → CLI 参数
-        ...
 ```
 
 ## 配置来源优先级
@@ -84,16 +97,16 @@ class ConfigLoader:
 | `GIMBAL_ENV` | `env` |
 | `GIMBAL_MODE` | `mode` |
 | `GIMBAL_LOG_LEVEL` | `log_level` |
-| `GIMBAL_MONGO_URI` | `mongo_uri` |
-| `GIMBAL_MINIO_ENDPOINT` | `minio_endpoint` |
 | `GIMBAL_REPORT_DIR` | `report_dir` |
+| `GIMBAL_NO_COLOR` | `no_color` |
+| `GIMBAL_FAIL_FAST` | `fail_fast` |
 
 ## 类型强制转换
 
 ```python
 # bool 字段
 GIMBAL_NO_COLOR=true  → True
-GIMBAL_FAIL_FAST=1   → True
+GIMBAL_FAIL_FAST=1    → True
 
 # int 字段
 GIMBAL_DEFAULT_TIMEOUT=300  → 300
@@ -108,17 +121,9 @@ GIMBAL_PLUGINS=a,b,c  → ["a", "b", "c"]
 from gimbal.config.loader import ConfigLoader
 from gimbal.cli.context import CLIContext
 
-# 创建 CLI 上下文
-cli_ctx = CLIContext(
-    env="test",
-    mode="ci",
-    log_level="debug"
-)
-
-# 加载配置
+cli_ctx = CLIContext(env="test", mode="ci", log_level="debug")
 cfg = ConfigLoader().load(cli_ctx)
 
-# 使用配置
 print(f"Environment: {cfg.env}")
 print(f"Log level: {cfg.log_level}")
 print(f"Services: {cfg.services}")
@@ -126,7 +131,8 @@ print(f"Services: {cfg.services}")
 
 ## 设计原则
 
-1. **Frozen 不可变**: BootstrapConfig 创建后不可修改，任何修改需重新加载
-2. **来源优先级清晰**: 明确的优先级顺序，高优先级覆盖低优先级
-3. **类型安全**: 环境变量自动类型转换
-4. **extras 浅层合并**: extras 字段做增量合并而非整体替换
+1. **Frozen 不可变**：`BootstrapConfig` 创建后不可修改；**`users` 已迁出**，保持配置/状态边界清晰。
+2. **来源优先级清晰**：明确的优先级顺序，高优先级覆盖低优先级。
+3. **类型安全**：环境变量自动类型转换。
+4. **extras 浅层合并**：extras 字段做增量合并而非整体替换。
+5. **配置/状态分离**：配置由 `BootstrapConfig` 承载，运行期状态由 `AuthRegistry` 等独立容器承载。

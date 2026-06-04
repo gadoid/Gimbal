@@ -6,17 +6,19 @@
 
 ```
 gimbal/observability/
-├── __init__.py
-├── logger.py            # StructuredLogger
-├── tracer.py            # 分布式追踪
-├── metrics.py           # 指标收集
-├── snapshot_recorder.py # 快照记录
-└── backends/            # 后端实现
+├── __init__.py            # 公共 API
+├── logger.py              # StructuredLogger（占位；实际 logger 位于 gimbal.log）
+├── tracer.py              # 分布式追踪
+├── metrics.py             # 指标收集
+├── snapshot_recorder.py   # 快照记录
+└── backends/              # 后端实现
     ├── __init__.py
-    ├── graylog.py       # Graylog 后端
-    ├── skywalking.py    # SkyWalking 后端
-    └── prometheus.py    # Prometheus 后端
+    ├── graylog.py         # Graylog 后端
+    ├── skywalking.py      # SkyWalking 后端
+    └── prometheus.py      # Prometheus 后端
 ```
+
+> **注意**：实际日志实现位于 `gimbal/log/`（`get_logger` / `setup_logging`），详见 [log.md](log.md)。`observability/logger.py` 是 StructuredLogger 接口的占位，待 backend 化后填充。
 
 ## 核心组件
 

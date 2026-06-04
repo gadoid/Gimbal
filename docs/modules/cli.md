@@ -22,7 +22,8 @@ gimbal/cli/
     ├── resolve.py      # 解析引用
     ├── validate.py     # 验证
     ├── compile_case.py # 编译用例
-    └── list_assets.py  # 列出资产
+    ├── list_assets.py  # 列出资产
+    └── self_check.py   # 框架自检（集成测试）
 ```
 
 ## 命令树
@@ -114,6 +115,20 @@ gimbal run server --host 0.0.0.0 --port 8080
 ```bash
 gimbal run launch --file ./test.yaml
 ```
+
+### gimbal self-check
+
+框架自检（**集成测试**级别）。这是 CLI 命令而非插件——不走 `PluginLoader` 流水线，直接 bootstrap 框架后手动 exercise `event_bus` / `hook_registry`。
+
+```bash
+gimbal self-check
+```
+
+退出码：
+- `0` = 全部通过
+- 非 `0` = 有失败（CI 友好）
+
+替代了原 `plugins/self_check/` —— 后者把框架自检伪装成插件，混淆了"扩展点"和"基础设施自检"两个概念。
 
 ## 公共参数
 
