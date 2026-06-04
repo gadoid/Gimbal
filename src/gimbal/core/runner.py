@@ -58,9 +58,13 @@ class Engine:
     所有执行相关的状态都在 run() 内部创建，保证每次 run() 相互独立。
     """
 
-    def __init__(self, configuration: Configuration) -> None:
+    def __init__(self, configuration: Configuration, *, asset_store: Any = None) -> None:
         self._ictx = configuration
-        logger.debug("[Engine] Engine 初始化完成，持有 Configuration 引用")
+        self._asset_store = asset_store
+        logger.debug(
+            "[Engine] Engine 初始化完成: asset_store={}",
+            type(asset_store).__name__ if asset_store is not None else "None",
+        )
 
     def run(self, target: Scenario | Suite) -> RunResult:
         """执行入口。
@@ -156,6 +160,7 @@ class Engine:
             hook_registry=self._ictx.hook_registry,
             event_bus=self._ictx.event_bus,
             auth_registry=self._ictx.auth_registry,
+            asset_store=self._asset_store,
         ).run(
             scenario, suite_ctx
         )
@@ -211,6 +216,7 @@ class Engine:
             hook_registry=self._ictx.hook_registry,
             event_bus=self._ictx.event_bus,
             auth_registry=self._ictx.auth_registry,
+            asset_store=self._asset_store,
         )
         cfg = framework_ctx.config
         total = passed = failed = error = 0

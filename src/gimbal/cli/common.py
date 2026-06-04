@@ -14,9 +14,13 @@ Typer 推荐用 `Annotated[T, typer.Option(...)]` 定义参数。
 from __future__ import annotations
 
 from enum import Enum
-from typing import Annotated
+from pathlib import Path
+from typing import Annotated, TYPE_CHECKING
 
 import typer
+
+if TYPE_CHECKING:
+    from gimbal.repository import AssetStore
 
 
 # ============================================================
@@ -346,3 +350,70 @@ def parse_parallel(value: str) -> int:
         return n
     except ValueError:
         raise typer.BadParameter(f"Invalid --parallel: {value!r}, expected integer or 'auto'.")
+
+
+def _build_default_asset_store(registry: Path | None = None) -> "AssetStore":
+    """构造默认的本地 AssetStore（registry 路径由 --registry 覆盖）。
+
+    供 suite / scenario CLI 子命令共用，避免在两处重复构造。
+    """
+    from gimbal.repository import AssetStore, LocalFsContentStore
+
+    root = (registry or Path("~/.gimbal/registry")).expanduser()
+    return AssetStore(backend=LocalFsContentStore(root=root))
+
+
+def _print_run_report(result: Any, fmt: "OutputFormat") -> None:
+    """统一格式化输出 RunResult。
+
+    console —— 给人看的高亮摘要
+    json    —— 机器读的 JSON dump
+    """
+    import json as _json
+    import typer as _typer
+
+    payload = {
+        "exit_code": result.exit_code,
+        "total":     result.total,
+        "passed":    result.passed,
+        "failed":    result.failed,
+        "skipped":   result.skipped,
+        "error":     result.error,
+        "details":   result.details,
+    }
+
+    if fmt == OutputFormat.json:
+        _typer.echo(_json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        return
+
+    # console：分组显示通过/失败/错误
+    if result.passed == result.total and result.total > 0:
+        _typer.secho(
+            f"PASS  total={result.total} passed={result.passed} duration={_total_duration_ms(result):.1f}ms",
+            fg=_typer.colors.GREEN, bold=True,
+        )
+    elif result.total == 0:
+        _typer.secho("WARN  no targets executed", fg=_typer.colors.YELLOW, bold=True)
+    else:
+        _typer.secho(
+            f"FAIL  total={result.total} passed={result.passed} "
+            f"failed={result.failed} error={result.error} "
+            f"duration={_total_duration_ms(result):.1f}ms",
+            fg=_typer.colors.RED, bold=True,
+        )
+    for d in result.details:
+        status = d.get("status", "?")
+        color = {
+            "passed": _typer.colors.GREEN,
+            "failed": _typer.colors.RED,
+            "error":  _typer.colors.RED,
+            "skipped": _typer.colors.YELLOW,
+        }.get(status, _typer.colors.WHITE)
+        _typer.secho(
+            f"  - {d.get('scenario_id', '?')}: {status} ({d.get('duration_ms', 0):.1f}ms)",
+            fg=color,
+        )
+
+
+def _total_duration_ms(result: Any) -> float:
+    return sum(float(d.get("duration_ms", 0)) for d in result.details)

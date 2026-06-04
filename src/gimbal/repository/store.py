@@ -108,6 +108,11 @@ class AssetStore:
         self._logger = get_logger(self.__class__.__name__)
         self._logger.debug("AssetStore initialized: backend={}", type(backend).__name__)
 
+    @property
+    def backend_name(self) -> str:
+        """后端实现类名（如 'LocalFsContentStore'），用于日志/CLI 输出。"""
+        return type(self._backend).__name__
+
     # ── 推 / 拉 ──
     def push(
         self,

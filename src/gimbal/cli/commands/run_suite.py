@@ -13,12 +13,17 @@ from gimbal.cli.common import (
     OutputFormat, OutputOpt, ParallelOpt, ModeOpt, RegistryOpt,
     ReportDirOpt, ReporterOpt, RetryOpt, SourceOpt, SourceStrategy, TagOpt,
     TimeoutOpt, VarFileOpt, VarOpt, VersionOpt, YesOpt,
+    _build_default_asset_store, _print_run_report,
     parse_parallel, parse_vars, resolve_source,
 )
 from gimbal.cli.context import CLIContext
 from gimbal.core.asset_resolver import AssetKind, AssetResolver
-# 引用物化由 ScenarioRunner 内部 preprocessor (Phase 0) 完成
-from gimbal.repository import AssetStore, LocalFsContentStore
+from gimbal.core.boostrap import bootstrap, shutdown
+from gimbal.core.runner import Engine
+from gimbal.log import get_logger
+from gimbal.schema.scenario import Suite
+
+logger = get_logger(__name__)
 
 
 def suite(
@@ -83,13 +88,11 @@ def suite(
     """
     cli_ctx: CLIContext = ctx.obj
 
-    # 1. 协调资产来源
+    # 1. 协调资产来源 + 解析资产
     resolved_source = resolve_source(source, no_cache, cache_only)
+    asset_store = _build_default_asset_store(Path(registry) if registry else None)
+    logger.debug("[CLI] asset_store ready: backend={}", asset_store.backend_name)
 
-    # 2. 解析资产
-    asset_store = AssetStore(
-        backend=LocalFsContentStore(root=Path("~/.gimbal/registry").expanduser())
-    )
     resolver = AssetResolver(
         kind=AssetKind.SUITE,
         asset_store=asset_store,
@@ -98,7 +101,7 @@ def suite(
     )
     matched = resolver.resolve(suite_ids)
 
-    # 3. 零匹配处理
+    # 2. 零匹配处理
     if not matched:
         if allow_empty:
             typer.echo("No suites matched, exiting cleanly due to --allow-empty.")
@@ -109,7 +112,7 @@ def suite(
         )
         raise typer.Exit(code=5)
 
-    # 4. 通配多匹配的确认
+    # 3. 通配多匹配的确认
     if len(matched) > 1 and not yes and sys.stdin.isatty():
         typer.echo(f"Matched {len(matched)} suites:")
         for s in matched:
@@ -118,9 +121,75 @@ def suite(
             typer.echo("Aborted.")
             raise typer.Exit(code=0)
 
-    # asset_store 已构造；suite 内每个 scenario 都会被 preprocessor 物化 Ref。
-    logger.debug(
-        "[CLI] asset_store ready for ScenarioRunner (Phase 0 materialization): backend={}",
-        type(asset_store._backend).__name__,
+    # 4. dry-run：仅解析 + 校验
+    if dry_run:
+        for asset in matched:
+            try:
+                parsed = Suite.model_validate(asset.content.parsed)
+            except Exception as exc:  # noqa: BLE001
+                typer.secho(f"[{asset.id}] 校验失败: {exc}", fg=typer.colors.RED, err=True)
+                raise typer.Exit(code=2)
+            typer.secho(
+                f"[{asset.id}] OK (dry-run): {len(parsed.suite)} scenario(s)",
+                fg=typer.colors.CYAN,
+            )
+        raise typer.Exit(code=0)
+
+    # 5. 引导框架
+    cli_ctx.env = env
+    cli_ctx.mode = mode
+    cli_ctx.log_level = log_level.value
+    try:
+        configuration = bootstrap(cli_ctx)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("[CLI] bootstrap 失败: {}", exc)
+        typer.secho(f"Framework bootstrap failed: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=4)
+
+    # 6. 校验每个匹配到的 suite
+    suites: list[tuple[str, Suite]] = []
+    for asset in matched:
+        try:
+            st = Suite.model_validate(asset.content.parsed)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("[CLI] suite 校验失败: id={} err={}", asset.id, exc)
+            typer.secho(
+                f"Suite validation failed for {asset.id}: {exc}",
+                fg=typer.colors.RED, err=True,
+            )
+            shutdown(configuration)
+            raise typer.Exit(code=2)
+        suites.append((asset.id, st))
+
+    # 7. 构造 Engine，依次执行
+    engine = Engine(configuration, asset_store=asset_store)
+    try:
+        results = []
+        for original_id, st in suites:
+            logger.info("[CLI] 执行 suite: id={} scenario_count={}", original_id, len(st.suite))
+            result = engine.run(st)
+            results.append(result)
+            if fail_fast and result.exit_code != 0:
+                logger.warning("[CLI] fail_fast 触发：在 {} 后停止", original_id)
+                break
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("[CLI] 执行异常: {}", exc)
+        typer.secho(f"Execution error: {exc}", fg=typer.colors.RED, err=True)
+        shutdown(configuration)
+        raise typer.Exit(code=3)
+    finally:
+        shutdown(configuration)
+
+    # 8. 汇总
+    from gimbal.core.runner import RunResult as _RR
+    merged = _RR(
+        exit_code=0 if all(r.exit_code == 0 for r in results) else 1,
+        total=sum(r.total for r in results),
+        passed=sum(r.passed for r in results),
+        failed=sum(r.failed for r in results),
+        error=sum(r.error for r in results),
+        details=[d for r in results for d in r.details],
     )
+    _print_run_report(merged, output)
+    raise typer.Exit(code=merged.exit_code)
 
