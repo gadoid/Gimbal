@@ -7,7 +7,7 @@
 ```
 gimbal/core/
 ├── __init__.py
-├── boostrap.py        # bootstrap() / shutdown() 入口、Configuration 容器
+├── bootstrap.py        # bootstrap() / shutdown() 入口、Configuration 容器
 ├── runner.py          # Engine 执行引擎
 ├── scenario_runner.py # ScenarioRunner、StepRunner、ScenarioRunResult
 ├── asset_resolver.py  # 资产解析器（外层：CLI/Suite 拉取完整 scenario）

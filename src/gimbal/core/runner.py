@@ -28,7 +28,7 @@ from typing import Any
 from gimbal.schema.scenario import Scenario, Suite
 from gimbal.context.manager import ContextManager,FrameworkContext
 
-from .boostrap import Configuration
+from .bootstrap import Configuration
 
 
 from gimbal.log import get_logger

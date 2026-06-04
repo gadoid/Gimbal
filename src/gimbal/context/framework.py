@@ -3,7 +3,7 @@ from datetime import datetime
 from pydantic import Field
 from .base import SealedBaseModel, ContextLayer
 from .channels import Channels
-from gimbal.core.boostrap import BootstrapConfig
+from gimbal.core.bootstrap import BootstrapConfig
 from typing import Any
 
 class FrameworkContext(SealedBaseModel):

@@ -11,7 +11,7 @@ import yaml
 import json
 
 from gimbal.core.runner import Engine
-from gimbal.core.boostrap import bootstrap
+from gimbal.core.bootstrap import bootstrap
 from gimbal.cli.common import DryRunOpt, EnvOpt, LogLevel, LogLevelOpt, InputFormat, FormatOpt,ModeOpt,PluginsOpt
 from gimbal.cli.context import CLIContext
 from gimbal.schema.scenario import Scenario

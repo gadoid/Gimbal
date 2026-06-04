@@ -17,7 +17,7 @@ gimbal/plugins/
 
 > `Plugin` / `PluginContext` / `PluginManifest` / `PluginState` 实际定义在 `gimbal.core.plugin`（历史原因），`plugins/__init__.py` 透传导出。**不构成 import 环**——`core.plugin` 不 import 任何 `gimbal.plugins.*`，依赖图是 DAG：
 > ```
-> core.boostrap → gimbal.plugins → core.plugin → events/hooks
+> core.bootstrap → gimbal.plugins → core.plugin → events/hooks
 > ```
 
 ## 核心组件

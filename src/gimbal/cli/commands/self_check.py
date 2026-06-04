@@ -112,7 +112,7 @@ def self_check(ctx: typer.Context) -> None:
     """运行框架自检：验证 plugin/event/hook 基础设施工作正常。"""
     # Lazy imports（避开循环）
     from gimbal.cli.params import EXIT_OK, EXIT_SYSTEM_ERROR
-    from gimbal.core.boostrap import bootstrap, shutdown
+    from gimbal.core.bootstrap import bootstrap, shutdown
     from gimbal.core.hooks import HookPoint
     from gimbal.events.types import (
         EventType,

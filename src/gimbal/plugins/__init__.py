@@ -12,10 +12,10 @@ Public API:
 
 注：Plugin 基类目前住在 `gimbal.core.plugin`（历史原因），不构成 import 环。
    实际依赖图是 DAG：
-       core.boostrap → gimbal.plugins → core.plugin → events/hooks
+       core.bootstrap → gimbal.plugins → core.plugin → events/hooks
    core.plugin 不 import 任何 gimbal.plugins.* 模块，所以加载顺序没问题。
    后续重构（若 Plugin 迁到 plugins/base.py）需要同步更新 plugins/loader.py、
-   core/boostrap.py、文档及第三方插件示例。
+   core/bootstrap.py、文档及第三方插件示例。
 """
 from .categories import (
     PluginCategory,

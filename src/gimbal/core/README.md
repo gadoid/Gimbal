@@ -57,7 +57,7 @@ CLI
 
 | 文件 | 说明 |
 |------|------|
-| `boostrap.py` | `bootstrap()` 函数、`Configuration` dataclass |
+| `bootstrap.py` | `bootstrap()` 函数、`Configuration` dataclass |
 | `runner.py` | `Engine`、`RunResult` |
 | `scenario_runner.py` | `ScenarioRunner`、`StepRunner`、`ScenarioRunResult` |
 | `asset_resolver.py` | `AssetResolver`、`ResolvedAsset` |
@@ -338,7 +338,7 @@ class StepRunner:
 ## 执行示例
 
 ```python
-from gimbal.core.boostrap import bootstrap
+from gimbal.core.bootstrap import bootstrap
 from gimbal.core.runner import Engine, RunResult
 from gimbal.cli.context import CLIContext
 

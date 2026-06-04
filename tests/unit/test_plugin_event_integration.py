@@ -138,7 +138,7 @@ print("  PASS")
 # 7. Configuration contains all infrastructure
 print()
 print("[7] Configuration contains all infrastructure")
-from gimbal.core.boostrap import Configuration
+from gimbal.core.bootstrap import Configuration
 import dataclasses
 fields = {f.name for f in dataclasses.fields(Configuration)}
 for f in ("cfg", "ctx_manager", "dispatcher", "event_bus", "archive",

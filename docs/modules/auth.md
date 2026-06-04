@@ -186,7 +186,7 @@ class AuthTokenExpired(AuthError): pass        # token 过期
 from gimbal.auth import AuthManager, AuthSession
 
 # 1. 通过 Configuration 创建（bootstrap 时已注入 auth_registry）
-from gimbal.core.boostrap import bootstrap
+from gimbal.core.bootstrap import bootstrap
 config = bootstrap(cli_ctx)
 auth = AuthManager(config.auth_registry).get_auth("admin")
 

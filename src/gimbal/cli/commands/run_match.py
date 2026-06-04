@@ -14,7 +14,7 @@ from gimbal.cli.common import (
 )
 from gimbal.cli.context import CLIContext
 from gimbal.core.asset_resolver import AssetKind
-from gimbal.core import boostrap,runner
+from gimbal.core import bootstrap,runner
 
 
 

@@ -14,7 +14,7 @@ Step 1 — 在 config/models.py 的 BootstrapConfig 中增加一个字段（可�
     from gimbal.logging import LoggingConfig
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
-Step 2 — 在 core/boostrap.py 中替换 _configure_logging()：
+Step 2 — 在 core/bootstrap.py 中替换 _configure_logging()：
 
     # 旧代码
     from gimbal.logging import _configure_logging
@@ -50,7 +50,7 @@ from .setup import setup_logging
 def configure_logging_from_bootstrap(cfg: "BootstrapConfig") -> None:
     """从 BootstrapConfig 初始化日志系统。
 
-    这是对 core/boostrap.py 中 _configure_logging(cfg) 的直接替换。
+    这是对 core/bootstrap.py 中 _configure_logging(cfg) 的直接替换。
     将此函数放在 ConfigLoader().load() 之后、任何 logger 调用之前。
 
     Parameters

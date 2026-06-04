@@ -6,7 +6,7 @@ from .framework import FrameworkContext
 from .suite import SuiteContext
 from .scenario import ScenarioContext
 from .step import StepContext, StepInputs, StepStatus
-from gimbal.core.boostrap import Configuration
+from gimbal.core.bootstrap import Configuration
 from .projections import (
     project_scenario_started, project_scenario_completed,
     project_step_started, project_step_completed, project_promotion,
