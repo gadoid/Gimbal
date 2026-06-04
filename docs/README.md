@@ -53,7 +53,7 @@ Engine
 
 | 模块 | 说明 |
 |------|------|
-| [preprocessor](modules/preprocessor.md) | 预处理：认证、模板展开 |
+| [preprocessor](modules/preprocessor.md) | 预处理：引用物化、认证、模板展开 |
 | [auth](modules/auth.md) | 认证管理 |
 | [cli](modules/cli.md) | 命令行接口 |
 | [compiler](modules/compiler.md) | 场景文件编译 |

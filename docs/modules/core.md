@@ -10,7 +10,8 @@ gimbal/core/
 ├── boostrap.py        # bootstrap() / shutdown() 入口、Configuration 容器
 ├── runner.py          # Engine 执行引擎
 ├── scenario_runner.py # ScenarioRunner、StepRunner、ScenarioRunResult
-├── asset_resolver.py  # 资产解析器
+├── asset_resolver.py  # 资产解析器（外层：CLI/Suite 拉取完整 scenario）
+├── asset_materializer.py  # 资产物化器（内层：递归还原 Ref → 数据类对象）
 ├── hooks.py           # HookPoint / Hook / HookResult / HookRegistry / HookTriggerer
 ├── plugin.py          # Plugin / PluginContext / PluginManifest / PluginState
 └── server.py          # 服务端（待实现）
@@ -311,12 +312,17 @@ class ScenarioRunner:
         hook_registry: Any = None,
         event_bus: Any = None,
         auth_registry: Any = None,        # 注入运行期 token 容器
+        asset_store: Any = None,          # Phase 0：注入 AssetStore（供 Preprocessor 物化 Ref）
     ): ...
 
     def run(self, scenario_schema, suite_ctx) -> ScenarioRunResult:
         # 1. 派生 ScenarioContext
-        # 2. 预处理：ScenarioPreprocessor（认证 + 模板展开）
-        #    认证结果写入 auth_registry
+        # 2. 预处理：ScenarioPreprocessor
+        #    Phase 0  引用物化（asset_store 不为 None 时；AssetMaterializer 还原 Ref 节点）
+        #    Phase 1  认证（写入 auth_registry）
+        #    Phase 2  构建查询根
+        #    Phase 3  模板展开（${} 替换为实际值）
+        #    Phase 4  提取 base_url
         # 3. 触发 SCENARIO_START 事件
         # 4. 顺序执行每个已展开的 step（任一失败则中断）
         # 5. finalize ScenarioContext

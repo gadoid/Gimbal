@@ -1,6 +1,6 @@
 """静态描述层 - Pydantic 模型定义"""
 from .states import StepState
-from .ref import RefBase
+from .ref import RefBase, Ref
 from .resource import Resource, Mock, File, MockRef, FileRef, ResourceUnion
 from .api import Api, ApiRef, ApiUnion
 from .request import Request, RequestRef, RequestUnion
@@ -19,6 +19,7 @@ from .auth import AuthSession
 __all__ = [
     "StepState",
     "RefBase",
+    "Ref",
     "Resource",
     "Mock",
     "File",

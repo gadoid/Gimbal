@@ -7,13 +7,12 @@
 ```
 gimbal/preprocessor/
 ├── __init__.py
-├── scenario_preprocessor.py  # ScenarioPreprocessor（核心入口）
-├── pipeline.py               # 预处理管道
-├── hook_base.py              # 预处理器钩子基类
-└── cache.py                  # 预处理缓存
+└── scenario_preprocessor.py  # ScenarioPreprocessor（核心入口；含 Phase 0 物化、Phase 1 认证、Phase 2~4 模板/URL 解析）
 ```
 
-> 旧 `preprocessor/hooks/` 子目录（ref_resolver / cycle_detector / completeness_checker / schema_validator）已移除，相关职责由 `scenario_preprocessor.py` 内部承担或由其它模块负责。
+> 旧 `preprocessor/hooks/` 子目录（ref_resolver / cycle_detector / completeness_checker / schema_validator）
+> 与 `pipeline.py` / `hook_base.py` / `cache.py` 等占位文件已清理——之前是 hook 管线风格的脚手架，
+> 实际逻辑由 `ScenarioPreprocessor` 内部阶段化承担，引用物化由 [`AssetMaterializer`](repository.md#assetmaterializer-结构化引用物化) 负责。
 
 ## 核心组件
 
@@ -35,17 +34,20 @@ class ScenarioPreprocessor:
         scenario_schema: "Scenario",
         bootstrap_config: "BootstrapConfig",
         auth_registry: Optional["AuthRegistry"] = None,    # Issue 1 新增
+        asset_store: Optional["AssetStore"] = None,        # Phase 0 新增
     ) -> None:
         # 缺省时构造一个空 registry（仅当 scenario 不需要认证时安全）
         if auth_registry is None:
             from gimbal.auth.registry import AuthRegistry
             auth_registry = AuthRegistry()
         self._auth_registry = auth_registry
+        self._asset_store = asset_store
 
     def run(self) -> tuple[list["StepUnion"], str]:
         """执行完整预处理，返回 (resolved_steps, base_url)。
 
         步骤：
+          0. 引用物化（Phase 0：asset_store 不为 None 时递归还原 Ref 节点）
           1. 认证（填充 token 到 AuthRegistry）
           2. 构建查询根对象
           3. 批量展开 steps 模板
@@ -54,6 +56,18 @@ class ScenarioPreprocessor:
 ```
 
 ## 职责
+
+### 0. 引用物化（Phase 0，asset 仓库引用还原）
+
+在所有其他阶段**之前**完成对 scenario 中 `Ref` 节点的结构化还原。
+
+- 调用方传入 `AssetStore`（由 `ScenarioRunner` 持有）
+- 通过 [`AssetMaterializer`](../modules/repository.md#assetmaterializer-结构化引用物化) 递归识别 `RefBase` 子类（含 `StepRef` / `ApiRef` / `RequestRef` / `StrategyRef` 以及通用内联 `Ref`），从仓库拉取并替换为真实数据类对象
+- 递归到不动点（fixed-point），自动处理传递闭包
+- 显式环检测 + `max_depth` 兜底 → `AssetCycleError`
+- `asset_store is None` 时此阶段整体跳过（保持向后兼容）
+
+详见 [repository.md](../modules/repository.md#assetmaterializer-结构化引用物化)。
 
 ### 1. 认证（Issue 1 修复后）
 

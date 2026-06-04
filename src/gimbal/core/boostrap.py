@@ -75,7 +75,7 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
     # 4. 基础设施
     logger.info("[bootstrap] 初始化基础设施...")
     from gimbal.events.bus import InMemoryEventBus
-    from gimbal.repository.backends.filesystem import InMemoryArchive
+    from gimbal.context.archive import InMemoryArchive
     from gimbal.context.manager import ContextManager
     from gimbal.strategy.dispatcher import build_default_dispatcher
     from gimbal.core.hooks import HookRegistry

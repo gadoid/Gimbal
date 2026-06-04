@@ -1,10 +1,21 @@
 """repository/exceptions.py
 
-Asset 相关异常定义。
-
-注意：所有异常已迁移至 gimbal.exceptions。
-本模块保留用于向后兼容，请直接使用 gimbal.exceptions 中的异常类。
+Asset 相关异常的 re-export 兼容层。
+真正的异常定义在 `gimbal.exceptions`（框架统一基类 GimbalError），
+本模块保留用于向后兼容，外部代码可直接从 gimbal.exceptions 导入。
 """
-from gimbal.exceptions import GimbalError
+from gimbal.exceptions import (
+    AssetAlreadyExists,
+    AssetDigestMismatch,
+    AssetError,
+    AssetNotFound,
+    InvalidAssetRef,
+)
 
-__all__ = ["GimbalError"]
+__all__ = [
+    "AssetError",
+    "AssetNotFound",
+    "AssetAlreadyExists",
+    "AssetDigestMismatch",
+    "InvalidAssetRef",
+]

@@ -39,11 +39,16 @@ from typing import Any, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from gimbal.config.models import BootstrapConfig
     from gimbal.auth.registry import AuthRegistry
+    from gimbal.repository import AssetStore
     from gimbal.schema.scenario import Scenario, Config
     from gimbal.schema.step import Step, StepUnion
 
 from gimbal.log import get_logger
 logger = get_logger(__name__)
+
+# 引用物化器（懒导入避免循环）：
+# AssetStore 仅在构造 preprocessor 时被使用；放 TYPE_CHECKING 是因为它只在
+# Phase 0 才需要，Phase 0 是可选的（asset_store 为 None 时跳过）。
 
 class ScenarioPreprocessor:
     """Scenario 预处理器。
@@ -62,7 +67,17 @@ class ScenarioPreprocessor:
         scenario_schema: "Scenario",
         bootstrap_config: "BootstrapConfig",
         auth_registry: Optional["AuthRegistry"] = None,
+        asset_store: Optional["AssetStore"] = None,
     ) -> None:
+        """
+        Args:
+            scenario_schema:  待预处理的 scenario
+            bootstrap_config: 框架级配置
+            auth_registry:    认证 session 容器（None 时构造空 registry）
+            asset_store:      资产仓库（None 时跳过 Phase 0 物化）。
+                              传入即启用引用物化：把所有 RefBase 子类节点
+                              替换为从仓库拉来的真实数据类对象。
+        """
         self._schema = scenario_schema
         self._cfg = bootstrap_config
         # 缺省时构造一个空的 registry（仅当 scenario 不需要认证时安全）
@@ -70,6 +85,7 @@ class ScenarioPreprocessor:
             from gimbal.auth.registry import AuthRegistry
             auth_registry = AuthRegistry()
         self._auth_registry = auth_registry
+        self._asset_store = asset_store
 
     # ── 公开入口 ──────────────────────────────────────────────────────────────
 
@@ -77,11 +93,18 @@ class ScenarioPreprocessor:
         """执行完整预处理，返回 (resolved_steps, base_url)。
 
         步骤：
+          0. 引用物化（asset_store 不为 None 时）：递归替换 scenario 中所有
+             Ref 节点（StepRef / ApiRef / RequestRef / StrategyRef / Ref）为
+             仓库拉来的真实数据类对象。必须在认证 / 模板替换之前完成，
+             否则执行器会碰到未解析的 Ref 节点。
           1. 认证（填充 token 到 AuthRegistry）
           2. 构建查询根对象
           3. 批量展开 steps 模板
           4. 提取 base_url
         """
+        # 0. 引用物化
+        self._materialize_refs()
+
         # 1. 认证
         self._setup_auth()
 
@@ -101,6 +124,35 @@ class ScenarioPreprocessor:
             base_url,
         )
         return resolved_steps, base_url
+
+    # ── 第零段：引用物化（Phase 0）────────────────────────────────────────────
+
+    def _materialize_refs(self) -> None:
+        """物化 scenario 中所有 Ref 节点。
+
+        仅在构造时传入了 asset_store 才执行；
+        否则此方法为空（保持向后兼容）。
+
+        注意：
+          - 直接修改 self._schema（Pydantic v2 默认非 frozen 即可 setattr）
+          - 物化后的 scenario.steps 中应该全部是 Step，不再含 StepRef
+          - 物化后 step 内 body 等 free-form dict 中的内联 Ref 也会被替换
+        """
+        if self._asset_store is None:
+            logger.debug(
+                "[Preprocessor] 未提供 asset_store，跳过 Phase 0 物化",
+            )
+            return
+
+        from gimbal.core.asset_materializer import AssetMaterializer
+
+        materializer = AssetMaterializer(self._asset_store)
+        # 物化整个 scenario 图（包括 steps、api、request、strategy、body）
+        materializer.materialize(self._schema)
+        logger.info(
+            "[Preprocessor] Phase 0 物化完成: scenario_id={}",
+            self._schema.scenarioId,
+        )
 
     # ── 第一段：认证 ──────────────────────────────────────────────────────────
 

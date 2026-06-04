@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -16,6 +17,8 @@ from gimbal.cli.common import (
 )
 from gimbal.cli.context import CLIContext
 from gimbal.core.asset_resolver import AssetKind, AssetResolver
+# 引用物化由 ScenarioRunner 内部 preprocessor (Phase 0) 完成
+from gimbal.repository import AssetStore, LocalFsContentStore
 
 
 def suite(
@@ -84,11 +87,14 @@ def suite(
     resolved_source = resolve_source(source, no_cache, cache_only)
 
     # 2. 解析资产
+    asset_store = AssetStore(
+        backend=LocalFsContentStore(root=Path("~/.gimbal/registry").expanduser())
+    )
     resolver = AssetResolver(
         kind=AssetKind.SUITE,
+        asset_store=asset_store,
         source=resolved_source.value,
         registry=registry,
-        version=version,
     )
     matched = resolver.resolve(suite_ids)
 
@@ -111,4 +117,10 @@ def suite(
         if not typer.confirm("Proceed?", default=False):
             typer.echo("Aborted.")
             raise typer.Exit(code=0)
+
+    # asset_store 已构造；suite 内每个 scenario 都会被 preprocessor 物化 Ref。
+    logger.debug(
+        "[CLI] asset_store ready for ScenarioRunner (Phase 0 materialization): backend={}",
+        type(asset_store._backend).__name__,
+    )
 

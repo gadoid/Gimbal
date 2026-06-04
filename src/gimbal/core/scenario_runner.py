@@ -146,13 +146,25 @@ class ScenarioRunner:
         hook_registry: Optional[Any] = None,
         event_bus: Optional[Any] = None,
         auth_registry: Optional[Any] = None,
+        asset_store: Optional[Any] = None,
     ) -> None:
+        """
+        Args:
+            ...: 原有参数
+            asset_store: 资产仓库（None 时跳过 Phase 0 引用物化）。
+                         传入即在 preprocessor 中启用对 scenario.steps 树中
+                         所有 RefBase 节点的结构化实例化。
+        """
         self._dispatcher = dispatcher
         self._ctx_manager = ctx_manager
         self._hooks = hook_registry
         self._bus = event_bus
         self._auth_registry = auth_registry
-        logger.debug("[ScenarioRunner] 初始化完成")
+        self._asset_store = asset_store
+        logger.debug(
+            "[ScenarioRunner] 初始化完成: asset_store={}",
+            type(asset_store).__name__ if asset_store is not None else "None",
+        )
 
     def run(
         self,
@@ -183,6 +195,7 @@ class ScenarioRunner:
             scenario_schema=scenario_schema,
             bootstrap_config=scenario_ctx.config,
             auth_registry=self._auth_registry,
+            asset_store=self._asset_store,
         )
         resolved_steps, base_url = preprocessor.run()
         logger.debug(

@@ -1,1 +1,0 @@
-"""PreprocessorHook abstract."""

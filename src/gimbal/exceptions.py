@@ -8,7 +8,8 @@
     ├── ConfigError
     ├── StrategyError
     ├── ExecutionError
-    └── ValidationError
+    ├── ValidationError
+    └── AssetError
 
 所有框架异常都应该继承自 GimbalError，以支持统一的异常捕获和处理。
 """
@@ -165,3 +166,55 @@ class ExecutionError(GimbalError):
 class ValidationError(GimbalError):
     """数据验证失败的错误。"""
     code = "VALIDATION_ERROR"
+
+
+# ── Asset 相关异常 ──────────────────────────────────────────────────────────────
+
+
+class AssetError(GimbalError):
+    """资产（asset）相关错误的基类。
+
+    适用于 gimbal.repository 的 push / pull / inspect / remove / tag 等操作。
+    """
+    code = "ASSET_ERROR"
+
+
+class AssetNotFound(AssetError):
+    """指定的 asset（namespace/name:tag 或 digest）不存在。"""
+    code = "ASSET_NOT_FOUND"
+
+
+class AssetAlreadyExists(AssetError):
+    """push 时目标 tag 已存在，且调用方要求 strict（不允许覆盖）。"""
+    code = "ASSET_ALREADY_EXISTS"
+
+
+class AssetDigestMismatch(AssetError):
+    """push 时计算出的内容 digest 与 ref/digest 声明不一致。"""
+    code = "ASSET_DIGEST_MISMATCH"
+
+
+class InvalidAssetRef(AssetError):
+    """asset 引用格式非法（namespace / name / tag 不符合 [a-z0-9._-]+ 规则）。"""
+    code = "ASSET_INVALID_REF"
+
+
+class AssetMaterializationError(AssetError):
+    """引用物化失败。
+
+    例如：
+      - pull 出的内容无法反序列化为目标 Pydantic 类
+      - 通用内联 Ref 的内容既不是合法 JSON 也无法按 utf-8 解码
+      - 类型化 Ref 与 Pydantic 目标类的 kind 不匹配
+    """
+    code = "ASSET_MATERIALIZATION_ERROR"
+
+
+class AssetCycleError(AssetError):
+    """引用图出现环 / 嵌套超过 max_depth。
+
+    物化器 (AssetMaterializer) 在递归实例化过程中：
+      - 显式检测到同一 (RefClass, ref) 再次入栈 → 立即报错
+      - 或递归深度超过 max_depth（默认 8）→ 兜底报错
+    """
+    code = "ASSET_CYCLE"

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -16,6 +17,8 @@ from gimbal.cli.common import (
 )
 from gimbal.cli.context import CLIContext
 from gimbal.core.asset_resolver import AssetKind, AssetResolver
+# 引用物化由 ScenarioRunner 内部 preprocessor (Phase 0) 完成；asset_store 在此注入
+from gimbal.repository import AssetStore, LocalFsContentStore
 from gimbal.log import get_logger
 
 logger = get_logger(__name__)
@@ -90,11 +93,14 @@ def scenario(
 
     resolved_source = resolve_source(source, no_cache, cache_only)
 
+    asset_store = AssetStore(
+        backend=LocalFsContentStore(root=Path("~/.gimbal/registry").expanduser())
+    )
     resolver = AssetResolver(
         kind=AssetKind.SCENARIO,
+        asset_store=asset_store,
         source=resolved_source.value,
         registry=registry,
-        version=version,
     )
     matched = resolver.resolve(scenario_ids)
 
@@ -119,4 +125,13 @@ def scenario(
             logger.info("[CLI] User aborted - proceeding=false")
             typer.echo("Aborted.")
             raise typer.Exit(code=0)
+
+    # ── 引用物化 ────────────────────────────────────────────────────────────
+    # asset_store 已构造；后续 ScenarioRunner 会把它传给 preprocessor，
+    # 由 preprocessor 在 Phase 0 物化整个 scenario.steps 树里的 Ref 节点。
+    # 此处保留为可注入点，便于后续接上 StepRunner 驱动循环。
+    logger.debug(
+        "[CLI] asset_store ready for ScenarioRunner (Phase 0 materialization): backend={}",
+        type(asset_store._backend).__name__,
+    )
 
