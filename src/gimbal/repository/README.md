@@ -1,162 +1,60 @@
 # Repository 模块
 
-资产仓库模块，负责测试资产的存储、检索和管理。
+资产仓库（Asset Registry），仿 Docker Registry v2 的内容寻址存储。**详见** [docs/modules/repository.md](../../../docs/modules/repository.md)。
 
-## 设计理念
+> 本 README 只列**当前实际存在的**符号与结构。前一版 README 中描述的 `AssetRepository` ABC / `AssetRouter` / `FileSystemBackend` / `MySQLBackend` / `PythonModuleBackend` 是早期 API 的残留描述，**与当前实现不符**，已被 `AssetStore` 门面 + `ContentStore` Protocol 取代。
 
-### 1. Repository 架构
+## 目录结构（与代码一致）
 
 ```
-Asset Reference (e.g., suite:id, scenario:path)
-         │
-         ▼
-┌─────────────────┐
-│     Router      │  引用路由
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ AssetRepository │  资产仓库抽象
-└────────┬────────┘
-         │
-         ├── FileSystemBackend ──▶ 本地文件系统
-         ├── MySQLBackend ───────▶ MySQL 数据库
-         └── PythonModuleBackend ▶ Python 模块
+gimbal/repository/
+├── __init__.py                # 公共 API 导出
+├── models.py                  # AssetRef / AssetRecord / AssetContent
+├── store.py                   # AssetStore 门面（push/pull/inspect/list_tags/...）
+├── exceptions.py              # 异常 re-export 兼容层
+├── backends/
+│   ├── __init__.py
+│   ├── base.py                # ContentStore Protocol（骨架）
+│   ├── filesystem.py          # LocalFsContentStore（本地 FS 实现）
+│   ├── mysql.py               # 占位（39 字节，待实现）
+│   └── python_module.py       # 占位（46 字节，待实现）
 ```
 
-### 2. 资产引用格式
+## 公共 API（`__init__.py` 导出）
 
-| 类型 | 格式 | 示例 |
+| 符号 | 类别 | 说明 |
 |------|------|------|
-| Suite | `suite:<id>` | `suite:customs-declare` |
-| Scenario | `scenario:<path>` | `scenario:tests/login.yaml` |
-| 远程 | `<source>:<id>` | `remote:customs:v1.2` |
+| `AssetRef` | frozen dataclass | 资产引用（`namespace/name:tag` 或 `@digest`）|
+| `AssetContent` | dataclass | 资产内容（`raw` + `parsed` + `record`）|
+| `AssetRecord` | frozen dataclass | 资产元数据 |
+| `AssetStore` | class | 业务门面 |
+| `LocalFsContentStore` | class | 本地 FS 后端 |
+| `compute_digest` | function | sha256 工具 |
 
----
+## AssetStore 方法（`store.py`）
 
-## 模块结构
+| 方法 | 签名 | 异常 |
+|------|------|------|
+| `push` | `(ref, data, *, kind, media_type, metadata, overwrite=False)` | `AssetAlreadyExists` / `AssetDigestMismatch` |
+| `pull` | `(ref, *, parse_json=True)` | `AssetNotFound` |
+| `inspect` | `(ref)` | `AssetNotFound` |
+| `list_tags` | `(namespace, name)` | — |
+| `list_assets` | `(namespace=None)` | — |
+| `find_by_digest` | `(digest)` | — |
+| `tag` | `(src, dst, *, overwrite=False)` | `AssetNotFound` / `AssetAlreadyExists` |
+| `remove` | `(ref, *, delete_blob_if_orphan=True)` | `AssetNotFound` |
+| `backend_name` | `@property` | — |
 
-| 文件 | 说明 |
-|------|------|
-| `base.py` | `AssetRepository` 抽象基类 |
-| `router.py` | `AssetRouter` 引用路由实现 |
-| `exceptions.py` | 资产相关异常 |
-| `backends/` | 存储后端实现 |
-| `backends/filesystem.py` | 文件系统后端 |
-| `backends/mysql.py` | MySQL 后端（预留） |
-| `backends/python_module.py` | Python 模块后端（预留） |
+详细参数与示例见 [docs/modules/repository.md](../../../docs/modules/repository.md)。
 
----
+## 待实现
 
-## AssetRepository
+- [ ] `backends/base.py` 写完整的 `ContentStore` Protocol（目前 43 字节骨架）
+- [ ] `backends/mysql.py` 实现 PostgreSQL / MySQL 后端（多机/生产用）
+- [ ] `backends/python_module.py` 实现 Python 模块后端（动态资产）
 
-```python
-class AssetRepository(ABC):
-    """资产仓库抽象基类。"""
+## 集成点
 
-    @abstractmethod
-    def get_scenario(self, ref: str) -> Scenario:
-        """获取 Scenario 资产。"""
-        pass
-
-    @abstractmethod
-    def get_suite(self, ref: str) -> Suite:
-        """获取 Suite 资产。"""
-        pass
-
-    @abstractmethod
-    def list_assets(self, asset_type: str) -> list[AssetRef]:
-        """列出资产。"""
-        pass
-```
-
----
-
-## AssetRouter
-
-```python
-class AssetRouter:
-    """资产引用路由。"""
-
-    def resolve(self, ref: str) -> tuple[str, AssetRepository]:
-        """解析引用，返回 (backend_type, repository)。"""
-        pass
-
-    def register_backend(self, scheme: str, backend: AssetRepository) -> None:
-        """注册后端。"""
-        pass
-```
-
----
-
-## 异常类
-
-```python
-class AssetNotFoundError(Exception):
-    """资产未找到。"""
-
-class AssetResolveError(Exception):
-    """资产解析失败。"""
-```
-
----
-
-## 内置后端
-
-### FileSystemBackend
-
-本地文件系统后端。
-
-```python
-class FileSystemBackend(AssetRepository):
-    """文件系统资产后端。"""
-
-    def __init__(self, base_dir: Path):
-        self.base_dir = base_dir
-```
-
-### MySQLBackend
-
-MySQL 数据库后端（预留）。
-
-```python
-class MySQLBackend(AssetRepository):
-    """MySQL 资产后端。"""
-    pass
-```
-
-### PythonModuleBackend
-
-Python 模块后端（预留）。
-
-```python
-class PythonModuleBackend(AssetRepository):
-    """Python 模块资产后端。"""
-    pass
-```
-
----
-
-## 使用示例
-
-```python
-from gimbal.repository import AssetRouter, FileSystemBackend
-
-# 创建路由
-router = AssetRouter()
-
-# 注册后端
-router.register_backend("file", FileSystemBackend(Path("./assets")))
-
-# 解析资产引用
-backend, ref = router.resolve("file:scenario/login.yaml")
-scenario = backend.get_scenario(ref)
-```
-
----
-
-## 运行测试
-
-```bash
-python -m gimbal.repository
-```
+- CLI `gimbal asset <subcmd>`：[cli/commands/asset.py](../cli/commands/asset.py)
+- 外层资产解析：[core/asset_resolver.py](../core/asset_resolver.py)
+- 内层引用物化：[core/asset_materializer.py](../core/asset_materializer.py)

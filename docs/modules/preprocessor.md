@@ -14,6 +14,8 @@ gimbal/preprocessor/
 > 与 `pipeline.py` / `hook_base.py` / `cache.py` 等占位文件已清理——之前是 hook 管线风格的脚手架，
 > 实际逻辑由 `ScenarioPreprocessor` 内部阶段化承担，引用物化由 [`AssetMaterializer`](repository.md#assetmaterializer-结构化引用物化) 负责。
 
+> **无任何 stub 文件**：本模块已精简到单文件实现。
+
 ## 核心组件
 
 ### ScenarioPreprocessor
@@ -23,7 +25,7 @@ class ScenarioPreprocessor:
     """Scenario 预处理器。
 
     用法：
-        pre = ScenarioPreprocessor(scenario_schema, bootstrap_config, auth_registry)
+        pre = ScenarioPreprocessor(scenario_schema, bootstrap_config, auth_registry, asset_store)
         resolved_steps, base_url = pre.run()
         # resolved_steps 中所有 ${} 模板已展开
         # base_url 供 StepRunner 构造完整 URL
@@ -33,8 +35,8 @@ class ScenarioPreprocessor:
         self,
         scenario_schema: "Scenario",
         bootstrap_config: "BootstrapConfig",
-        auth_registry: Optional["AuthRegistry"] = None,    # Issue 1 新增
-        asset_store: Optional["AssetStore"] = None,        # Phase 0 新增
+        auth_registry: Optional["AuthRegistry"] = None,    # 认证目标容器
+        asset_store: Optional["AssetStore"] = None,        # Phase 0 注入
     ) -> None:
         # 缺省时构造一个空 registry（仅当 scenario 不需要认证时安全）
         if auth_registry is None:
@@ -167,17 +169,6 @@ def _pick_base_url(self) -> str:
 ### 模板保留类型
 
 `${auth.admin.auth_header}` 这种**整体是单个 `${}`** 的字段，**保留原始类型**——`AuthSession` 不会被 dump 成 dict，`@property`（如 `auth_header`）在每次访问时实时计算。
-
-## 辅助模块
-
-### pipeline.py
-通用预处理管道（链式调用 hook）。
-
-### hook_base.py
-预处理器钩子基类。
-
-### cache.py
-预处理结果缓存（按 scenario hash）。
 
 ## 设计原则
 

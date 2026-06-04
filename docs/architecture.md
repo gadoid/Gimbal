@@ -109,9 +109,13 @@ PENDING
 
 使用 Pydantic `Annotated[Union[...], Field(discriminator="kind")]` 实现类型安全联合体：
 
-- `StepUnion` = `Step` | `StepRef`
-- `ApiUnion` = `Api` | `ApiRef`
-- `StrategyUnion` = `Extract` | `Assign` | `Assertion` | `StrategyRef`
+- `StepUnion` = `Step` | `StepRef`（内层，被 `AssetMaterializer` 在 Phase 0 递归还原）
+- `ApiUnion` = `Api` | `ApiRef`（同 Phase 0 还原）
+- `RequestUnion` = `Request` | `RequestRef`（同 Phase 0 还原）
+- `StrategyUnion` = `Extract` | `Assign` | `Assertion` | `StrategyRef`（同 Phase 0 还原）
+- `RunUnion` = `Scenario` | `ScenarioRef` | `Suite` | `SuiteRef`（**外层**，CLI `run scenario <REF>` / `run suite <REF>` 直接接受这四种，由 `AssetResolver` 解析）
+
+所有 `*Ref` 节点都通过 `kind` 字段（`"step_ref"` / `"api_ref"` / `"request_ref"` / `"strategy_ref"` / `"scenario_ref"` / `"suite_ref"`）被 Pydantic 自动分发到对应子类。Phase 0 物化只处理内层 `Ref`，外层 `RunUnion` 解析在 CLI 入口完成（见 [cli.md](modules/cli.md)）。
 
 ## 设计原则
 
@@ -197,9 +201,17 @@ class PhaseResult:
    └── Suite: 遍历 suite.scenarios，执行每个 ScenarioRunner.run()
 4. ScenarioRunner.run()
    ├── 创建 ScenarioContext
-   ├── 注入 services/users 到 channels
-   ├── 遍历 scenario.steps (StepUnion 列表)
-   │   ├── StepRef: 跳过（未展开）
+   ├── 调用 ScenarioPreprocessor.run()
+   │     ├── Phase 0  引用物化 (AssetMaterializer 递归还原内层 Ref)
+   │     │   ├── StepRef   → Step
+   │     │   ├── ApiRef    → Api
+   │     │   ├── RequestRef → Request
+   │     │   └── StrategyRef → Extract/Assign/Assertion
+   │     ├── Phase 1  认证 (AuthManager → AuthRegistry)
+   │     ├── Phase 2  构建查询根 (services + auth.snapshot)
+   │     ├── Phase 3  模板展开 (${auth.*} ${service.*} ${var.*})
+   │     └── Phase 4  提取 base_url
+   ├── 遍历已展开的 steps（此时已无 Ref 节点）
    │   └── Step: 调用 StepRunner.run()
    └── 汇总结果，finalize
 5. StepRunner.run()

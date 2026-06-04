@@ -171,6 +171,29 @@ class ContentStore(Protocol):
 
 业务方唯一入口。把 ref ↔ record ↔ content 的逻辑集中在这里。
 
+### 方法总览
+
+| 方法 | 签名 | 返回 | 异常 |
+|------|------|------|------|
+| `push` | `(ref, data, *, kind, media_type, metadata, overwrite=False)` | `AssetRecord` | `AssetAlreadyExists` / `AssetDigestMismatch` |
+| `pull` | `(ref, *, parse_json=True)` | `AssetContent` | `AssetNotFound` |
+| `inspect` | `(ref)` | `AssetRecord`（不下载内容） | `AssetNotFound` |
+| `list_tags` | `(namespace, name)` | `list[AssetRef]` | — |
+| `list_assets` | `(namespace=None)` | `list[AssetRecord]` | — |
+| `find_by_digest` | `(digest)` | `list[AssetRecord]` | — |
+| `tag` | `(src, dst, *, overwrite=False)` | `AssetRecord` | `AssetNotFound` / `AssetAlreadyExists` |
+| `remove` | `(ref, *, delete_blob_if_orphan=True)` | `bool` | `AssetNotFound` |
+| `backend_name` | `@property` | `str`（如 `"LocalFsContentStore"`） | — |
+
+### backend_name
+
+```python
+store = AssetStore(backend=LocalFsContentStore(root=Path("~/.gimbal/registry").expanduser()))
+print(store.backend_name)   # 'LocalFsContentStore'
+```
+
+> 用于 CLI 日志 / 调试输出，**不要**用 `type(store._backend).__name__` 访问私有字段。
+
 ### push
 
 ```python
@@ -194,11 +217,15 @@ record = store.push(
 
 ```python
 content = store.pull(AssetRef.parse("customs/declare:v1.0"))
-content.digest   # sha256:abc...
-content.size     # N
-content.raw      # b'{"name": "declare"}'
-content.parsed   # {"name": "declare"}  (kind in {suite/scenario/data} 时自动)
+# content.digest   # sha256:abc...
+# content.size     # N
+# content.raw      # b'{"name": "declare"}'
+# content.parsed   # {"name": "declare"}  (kind in {suite/scenario/data} 且 parse_json=True 时自动 json.loads)
 ```
+
+`parse_json` 参数：
+- `True`（默认）：当 `kind ∈ {suite, scenario, data}` 时自动 `json.loads` 到 `content.parsed`
+- `False`：`content.parsed` 为 `None`，调用方拿到 raw bytes 自行处理
 
 不存在 → 抛 `AssetNotFound`。
 
@@ -209,7 +236,7 @@ record = store.inspect(AssetRef.parse("customs/declare:v1.0"))
 # record.size, record.digest, record.metadata, ...
 ```
 
-### list_tags / list_assets
+### list_tags / list_assets / find_by_digest
 
 ```python
 # 列出某 name 下所有 tag
@@ -222,6 +249,10 @@ records = store.list_assets(namespace="customs")
 
 # 列出全库
 all_records = store.list_assets()
+
+# 按 digest 反查（不限于同一 ns/name）
+hits = store.find_by_digest("sha256:abc...")
+# → [AssetRecord(...), ...]
 ```
 
 ### tag（添加新 tag 到已有 digest）
@@ -238,8 +269,14 @@ new_record = store.tag(
 
 ```python
 store.remove(AssetRef.parse("customs/declare:v1.0"))
-# tag 索引被删除；blob 在无其它 tag 引用时变孤儿（gc 时清理）
+# tag 索引被删除；
+# 若 delete_blob_if_orphan=True 且 blob 无其它 tag 引用则同步删除（默认）
+# 否则 blob 变孤儿，gc 时清理
 ```
+
+`delete_blob_if_orphan` 参数：
+- `True`（默认）：删除 tag 后若 blob 已无任何 tag 引用，**同步**删 blob
+- `False`：保留孤儿 blob，等 `gc()` 阶段清理
 
 ### gc（清理孤儿 blob）
 
@@ -247,6 +284,9 @@ store.remove(AssetRef.parse("customs/declare:v1.0"))
 removed = backend.gc()
 # 遍历 blobs/，删除无 record 引用的 blob
 ```
+
+> `gc()` 是 `ContentStore` 的方法（在 backend 实例上），**不是** `AssetStore` 的方法。
+> `AssetStore` 不持有 gc 入口。CLI 走 `gimbal asset gc`（`asset.py:gc`）调用。
 
 ## CLI 入口
 
@@ -306,13 +346,15 @@ GimbalError
 
 `RefBase` 在 `gimbal/schema/ref.py` 中定义：
 
-| 类                | 出现位置                                            | 替换后              |
-| ----------------- | --------------------------------------------------- | ------------------- |
-| `StepRef`         | `Scenario.steps: list[StepUnion]`                  | `Step`              |
-| `ApiRef`          | `Step.api: ApiUnion`                                | `Api`               |
-| `RequestRef`      | `Step.request: RequestUnion`                        | `Request`           |
-| `StrategyRef`     | `Step.strategy: list[StrategyUnion]`                | `Extract` / `Assign` / `Assertion` |
-| `Ref`（通用内联） | `Request.body: dict` 等 free-form dict / list 中    | 任意对象（看仓库内容） |
+| 类                | 出现位置                                            | 替换后              | 适配器（RunUnion 等）|
+| ----------------- | --------------------------------------------------- | ------------------- | -------------------- |
+| `StepRef`         | `Scenario.steps: list[StepUnion]`                  | `Step`              | `StepUnion`          |
+| `ApiRef`          | `Step.api: ApiUnion`                                | `Api`               | `ApiUnion`           |
+| `RequestRef`      | `Step.request: RequestUnion`                        | `Request`           | `RequestUnion`       |
+| `StrategyRef`     | `Step.strategy: list[StrategyUnion]`                | `Extract` / `Assign` / `Assertion` | `StrategyUnion` |
+| `ScenarioRef`     | 顶层（资产可指向整个 scenario）                     | `Scenario`          | `RunUnion`（discriminator `kind="scenario_ref"`）|
+| `SuiteRef`        | 顶层（资产可指向整个 suite）                        | `Suite`             | `RunUnion`（discriminator `kind="suite_ref"`）|
+| `Ref`（通用内联） | `Request.body: dict` 等 free-form dict / list 中    | 任意对象（看仓库内容）| — |
 
 通用 `Ref` 用 dict 形式表达：`{"kind": "ref", "ref": "smoke/cart-line-template:v1"}`。
 识别依据：`obj.get("kind") == "ref" and isinstance(obj.get("ref"), str)`。
@@ -391,6 +433,44 @@ _materialize_ref(ref):
 外层只管"拉下来"，不管内容是什么；内层只管"还原" Ref，不管从哪里来。
 Scenario 文件本身可以是 ref（外层处理），文件内容里也可以再含 ref（内层处理），
 两层互不耦合。
+
+### AssetResolver（外层：CLI/Suite 拉取完整资产）
+
+> 实现位置：`gimbal/core/asset_resolver.py`
+
+```python
+from gimbal.core.asset_resolver import AssetResolver, AssetKind
+
+resolver = AssetResolver(
+    kind=AssetKind.SCENARIO,    # 限制只匹配该 kind
+    asset_store=asset_store,
+    source="auto",              # auto / local / remote
+    registry=None,              # 自定义 registry 根；None = 用默认 ~/.gimbal/registry
+)
+matched = resolver.resolve([
+    "payment/sc-001:v1",     # 单 ref
+    "payment/sc-*",          # 命名空间 + 通配
+    "library/*:latest",      # 多命名空间
+])
+# → list[ResolvedAsset(ref, content: AssetContent)]
+```
+
+`AssetKind` 枚举：
+
+| 值 | 含义 |
+|----|------|
+| `SUITE` | `kind=suite` 的资产 |
+| `SCENARIO` | `kind=scenario` 的资产 |
+| `STEP` / `API` / `REQUEST` / `STRATEGY` | 结构化小粒度资产（物化后被内层用） |
+| `DATA` | 通用数据资产 |
+
+`resolve()` 行为：
+- 通配展开（`*` 在 namespace / name / tag 任何位置）
+- 不存在的 ref → 跳过（warning 日志），不抛异常
+- 去重：相同 digest 多次匹配只保留一份
+- 返回 `list[ResolvedAsset]`，调用方遍历消费
+
+> `AssetResolver` 与 `AssetMaterializer` 的边界：前者**只决定"拉哪些资产"**，后者**只决定"还原图里的 Ref 节点"**。两者都用 `AssetStore` 但职责正交。
 
 ## 典型用法
 

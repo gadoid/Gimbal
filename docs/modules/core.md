@@ -271,11 +271,34 @@ class Plugin(ABC):
 
 ```python
 class Engine:
-    def __init__(self, configuration: Configuration) -> None:
+    def __init__(
+        self,
+        configuration: Configuration,
+        *,
+        asset_store: Any = None,          # 注入供 Phase 0 引用物化使用
+    ) -> None:
         self._ictx = configuration         # 只存引用，不做任何 I/O
+        self._asset_store = asset_store    # 透传给 ScenarioRunner
 
     def run(self, target: Scenario | Suite) -> RunResult:
         """每次 run() 独立创建 FrameworkContext（run_id）"""
+```
+
+`asset_store` 是 keyword-only 参数（默认 `None`）：
+- `None` → 跳过 Phase 0 物化（保持向后兼容，scenario 体内不含 Ref 时足够）
+- 非 `None` → 透传给 `ScenarioRunner` → `ScenarioPreprocessor` → `AssetMaterializer`
+
+CLI 使用示例（见 [cli.md](cli.md#完整执行链路cli--engine--asset-materialization)）：
+
+```python
+from gimbal.core.bootstrap import bootstrap
+from gimbal.core.runner import Engine
+from gimbal.repository import AssetStore, LocalFsContentStore
+
+asset_store = AssetStore(backend=LocalFsContentStore(root=Path("~/.gimbal/registry").expanduser()))
+configuration = bootstrap(cli_ctx)
+engine = Engine(configuration, asset_store=asset_store)
+result = engine.run(scenario)
 ```
 
 `run()` 内部：
@@ -372,13 +395,15 @@ class ScenarioRunResult:
 ## 执行流程
 
 ```
-CLI
+CLI (run_scenario / run_suite)
+  │
+  │  asset_store = _build_default_asset_store(registry)   ← cli/common.py
   │
   ▼
 bootstrap(cli_ctx) → Configuration
   │
   ▼
-Engine(configuration)
+Engine(configuration, asset_store=asset_store)           ← core/runner.py
   │
   ├── run(Scenario | Suite)
   │     │
@@ -389,10 +414,15 @@ Engine(configuration)
   │     │     │
   │     │     ├── derive_suite_context(...)        # suite_id="__default__"
   │     │     │
-  │     │     └── ScenarioRunner.run()
+  │     │     └── ScenarioRunner.run(..., asset_store=asset_store)
   │     │           │
   │     │           ├── derive_scenario_context(...)
-  │     │           ├── ScenarioPreprocessor.run()  # 认证 + 模板展开
+  │     │           ├── ScenarioPreprocessor.run(scenario, ctx, asset_store=asset_store)
+  │     │           │     ├─ Phase 0  引用物化 (AssetMaterializer)         ← core/asset_materializer.py
+  │     │           │     ├─ Phase 1  认证 (AuthManager → AuthRegistry)
+  │     │           │     ├─ Phase 2  构建查询根
+  │     │           │     ├─ Phase 3  模板展开 (${auth.*} ${service.*})
+  │     │           │     └─ Phase 4  提取 base_url
   │     │           ├── 触发 SCENARIO_START
   │     │           │
   │     │           └── StepRunner.run() × n
@@ -404,7 +434,7 @@ Engine(configuration)
   │     └── Suite → _run_suite()
   │           │
   │           ├── derive_suite_context(...)        # 用 Suite 自身信息
-  │           └── for scenario in suite.suite: ScenarioRunner.run()
+  │           └── for scenario in suite.suite: ScenarioRunner.run(..., asset_store=...)
   │                 （fail_fast 时未通过即 break）
   │     │
   │     └── 触发 RUN_END 事件
@@ -419,6 +449,17 @@ shutdown(configuration)
   ├── hook_registry.clear() 兜底                  # 覆盖绕过 Plugin.register_hook 的注册
   └── event_bus.stop()
 ```
+
+`asset_store` 透传链：
+```
+CLI (run_scenario)
+  └─ Engine(configuration, asset_store=asset_store)            [core/runner.py]
+       └─ ScenarioRunner(..., asset_store=asset_store)         [core/scenario_runner.py]
+            └─ ScenarioPreprocessor(..., asset_store=asset_store)
+                 └─ Phase 0: AssetMaterializer(asset_store)   [core/asset_materializer.py]
+```
+
+`asset_store is None` 时 Phase 0 整体跳过（保持向后兼容，scenario 体内不含 Ref 时足够）。
 
 ## 设计原则
 
