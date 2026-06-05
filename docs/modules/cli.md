@@ -235,14 +235,16 @@ gimbal run server --host 0.0.0.0 --port 8765
 
 ### gimbal run launch
 
-直接接收文件信息进行加载执行（不经资产仓库）。
+直接接收文件信息进行加载执行。**走资产仓库**——通过 `--registry` 传入资产库根目录，让 `ScenarioPreprocessor` Phase 0 启用对 `RefBase` 节点的物化。
 
 ```bash
-gimbal run launch --file ./test.yaml
+gimbal run launch ./test.yaml
 gimbal run launch --inline '{"scenarioId": "sc-x", ...}' --format=json
+gimbal run launch ./test.yaml --registry ~/.gimbal/registry   # 显式指定资产库
+cat case.yaml | gimbal run launch - -f yaml                   # stdin 输入
 ```
 
-`run launch` 是 `bootstrap() + Engine.run()` 的最小完整示例，可作为参考实现（见 [run_launch.py](../../src/gimbal/cli/commands/run_launch.py)）。
+`run launch` 是 `bootstrap() + _build_default_asset_store() + Engine(asset_store=...)` 的最小完整示例，可作为参考实现（见 [run_launch.py](../../src/gimbal/cli/commands/run_launch.py)）。
 
 ### gimbal self-check
 

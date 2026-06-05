@@ -12,9 +12,15 @@ import json
 
 from gimbal.core.runner import Engine
 from gimbal.core.bootstrap import bootstrap
-from gimbal.cli.common import DryRunOpt, EnvOpt, LogLevel, LogLevelOpt, InputFormat, FormatOpt,ModeOpt,PluginsOpt
+from gimbal.cli.common import (
+    DryRunOpt, EnvOpt, LogLevel, LogLevelOpt, InputFormat, FormatOpt, ModeOpt,
+    PluginsOpt, RegistryOpt, _build_default_asset_store,
+)
 from gimbal.cli.context import CLIContext
+from gimbal.log import get_logger
 from gimbal.schema.scenario import Scenario
+
+logger = get_logger(__name__)
 
 
 class InputError(typer.BadParameter):
@@ -167,7 +173,8 @@ def launch(
         typer.Option("--report-dir", help="报告输出目录", rich_help_panel="执行控制"),
     ] = "./reports",
     dry_run: DryRunOpt = False,
-    plugins : PluginsOpt = []
+    plugins : PluginsOpt = [],
+    registry: RegistryOpt = None,
 ) -> None:
     """指定标准输入，用例文件或 inline 内容交给框架直接执行。
 
@@ -214,6 +221,9 @@ def launch(
         raise typer.Exit(code=2)
 
     #8. 数据类有效，引用链接有效，执行器启动
-    result = Engine(configuration).run(scenario)
+    #    注入资产仓库，让 ScenarioPreprocessor Phase 0 启用对 RefBase 节点的物化
+    asset_store = _build_default_asset_store(Path(registry) if registry else None)
+    logger.debug("[CLI] asset_store ready: backend={}", asset_store.backend_name)
+    result = Engine(configuration, asset_store=asset_store).run(scenario)
     pprint(result)
     raise typer.Exit(code=0)

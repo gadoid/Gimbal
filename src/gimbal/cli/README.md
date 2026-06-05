@@ -22,7 +22,7 @@
 | `run_suite.py` | `gimbal run suite <ID>...` | 实现（Plan B 完整链路） |
 | `run_match.py` | `gimbal run match <PATTERN>...` | 实现（按本地文件路径执行） |
 | `run_server.py` | `gimbal run server` | 占位（`core/server.py` 待实现） |
-| `run_launch.py` | `gimbal run launch <FILE>` | 实现（`bootstrap + Engine.run` 参考实现） |
+| `run_launch.py` | `gimbal run launch <FILE>` | 实现（`bootstrap + _build_default_asset_store + Engine.run` 参考实现；含 `--registry`） |
 | `self_check.py` | `gimbal self-check` | 实现（集成测试级别） |
 | `compile_case.py` | `gimbal compile_case` | 占位 |
 | `resolve.py` | `gimbal resolve <REF>` | 占位 |

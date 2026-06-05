@@ -1,0 +1,10 @@
+{
+    "kind": "api",
+    "service": "tidb-test-service",
+    "method": "POST",
+    "path": "/api/order/orderEntrust/orderAdd",
+    "headers": {
+        "Authorization": "${auth.codfish.token}"
+    },
+    "timeout": 30
+}
