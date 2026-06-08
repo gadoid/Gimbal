@@ -251,8 +251,8 @@ class ScenarioRunner:
             sid, overall_status,
         )
 
-        # 6. 触发 SCENARIO_END 事件
-        self._emit_scenario_end(sid, overall_status, len(resolved_steps))
+        # 6. 触发 SCENARIO_END 事件（携带 Scenario.meta，让 reporter 可展示 tags/author/priority）
+        self._emit_scenario_end(scenario_schema, sid, overall_status, len(resolved_steps))
 
         return ScenarioRunResult(
             scenario_id=sid,
@@ -276,15 +276,30 @@ class ScenarioRunner:
         except Exception:  # noqa: BLE001
             logger.debug("[ScenarioRunner] emit SCENARIO_START failed")
 
-    def _emit_scenario_end(self, sid: str, status: str, step_count: int) -> None:
+    def _emit_scenario_end(
+        self,
+        scenario: "Scenario",
+        sid: str,
+        status: str,
+        step_count: int,
+    ) -> None:
         if self._bus is None:
             return
         try:
             from gimbal.events.types import ScenarioEndEvent
+            # 把 Scenario.meta 拍平成 dict（tags/author/priority/version/...），
+            # 让订阅方拿到的是 plain dict 而不是 Pydantic 模型，避免序列化耦合。
+            meta_dump: dict = {}
+            try:
+                if scenario.meta is not None:
+                    meta_dump = scenario.meta.model_dump(mode="json")
+            except Exception:  # noqa: BLE001
+                logger.debug("[ScenarioRunner] scenario.meta.model_dump 失败，使用空 dict")
             self._bus.publish(ScenarioEndEvent(
                 scenario_id=sid,
                 status=status,
                 step_count=step_count,
+                meta=meta_dump,
             ))
         except Exception:  # noqa: BLE001
             logger.debug("[ScenarioRunner] emit SCENARIO_END failed")

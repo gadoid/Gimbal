@@ -46,6 +46,8 @@ class EventType(str, Enum):
     # Run 生命周期
     RUN_START = "run.start"
     RUN_END = "run.end"
+    # Run 级元数据（CI/CD / git / 构建上下文等），由 CLI 在 bootstrap 之后 publish
+    RUN_META = "run.meta"
 
     # Suite 生命周期
     SUITE_START = "suite.start"
@@ -112,6 +114,25 @@ class RunEndEvent(FrameworkEvent):
     error: int
 
 
+class RunMetaEvent(FrameworkEvent):
+    """Run 级元数据（CI/CD 上下文 / git 信息 / 触发人 / 业务自定义键值）。
+
+    由 CLI 在 bootstrap() 之后、Engine.run() 之前 publish 一次。
+    所有 reporter 可通过订阅此事件获得本次运行的元信息，而无需直接
+    读取 BootstrapConfig 或 FrameworkContext（保持 reporter 层的
+    "一切皆事件" 架构一致性，且支持事件流重放）。
+
+    设计要点：
+      - meta 字段为开放 dict，允许扩展任意 KV。
+      - 不订阅此事件的 reporter 完全无感。
+      - run_id 可为 None（CLI 此时通常还没拿到真正的 run_id，
+        Engine 后续会发出带 run_id 的 RUN_START 事件，reporter
+        可在 on_event 中按需关联）。
+    """
+    event_type: Literal["run.meta"] = "run.meta"
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 # ── Suite/Scenario 级 ─────────────────────────────────
 class SuiteStartEvent(FrameworkEvent):
     event_type: Literal["suite.start"] = "suite.start"
@@ -141,6 +162,9 @@ class ScenarioEndEvent(FrameworkEvent):
     scenario_id: str
     status: str
     step_count: int
+    # Scenario.meta 的 dump（tags / author / priority / version / description ...）
+    # 默认空 dict 保证向后兼容；ScenarioRunner 在发布时填充
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 # ── Step 级 ───────────────────────────────────────────

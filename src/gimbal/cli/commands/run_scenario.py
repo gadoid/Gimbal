@@ -13,7 +13,7 @@ from gimbal.cli.common import (
     OutputFormat, OutputOpt, ParallelOpt, ModeOpt, RegistryOpt,
     ReportDirOpt, ReporterOpt, RetryOpt, SourceOpt, SourceStrategy, TagOpt,
     TimeoutOpt, VarFileOpt, VarOpt, VersionOpt, YesOpt,
-    _build_default_asset_store, _print_run_report,
+    _build_default_asset_store, _print_run_report, _publish_run_meta,
     parse_parallel, parse_vars, resolve_source,
 )
 from gimbal.cli.context import CLIContext
@@ -144,12 +144,22 @@ def scenario(
     cli_ctx.env = env
     cli_ctx.mode = mode
     cli_ctx.log_level = log_level.value
+    # 把 reporter 选项注入 extras，由 ConfigLoader._from_cli()提取为 BootstrapConfig.reporters
+    if reporter:
+        cli_ctx.extras["reporters"] = list(reporter)
+    if report_dir:
+        cli_ctx.extras["report_dir"] = report_dir
     try:
         configuration = bootstrap(cli_ctx)
     except Exception as exc:  # noqa: BLE001
         logger.exception("[CLI] bootstrap 失败: {}", exc)
         typer.secho(f"Framework bootstrap failed: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=4)
+
+    # 4.5 发布 RunMetaEvent（CI/CD / git / 触发人等上下文），reporter 通过订阅此事件
+    #     获取头部 meta 区。必须在 bootstrap 之后、Engine.run() 之前 publish；
+    #     此时 bus 已存在且 reporter 已订阅。
+    _publish_run_meta(configuration)
 
     # 5. 解析 + 校验每个匹配到的资产
     scenarios: list[tuple[str, Scenario]] = []
@@ -195,6 +205,6 @@ def scenario(
         error=sum(r.error for r in results),
         details=[d for r in results for d in r.details],
     )
-    _print_run_report(merged, output)
+    _print_run_report(merged, output, artifacts=engine.artifacts)
     raise typer.Exit(code=merged.exit_code)
 

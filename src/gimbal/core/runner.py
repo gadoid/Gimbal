@@ -61,10 +61,20 @@ class Engine:
     def __init__(self, configuration: Configuration, *, asset_store: Any = None) -> None:
         self._ictx = configuration
         self._asset_store = asset_store
+        # 最近一次 run() 产出的 ReportArtifact 列表（CLI 用来打印）
+        self._artifacts: list = []
         logger.debug(
             "[Engine] Engine 初始化完成: asset_store={}",
             type(asset_store).__name__ if asset_store is not None else "None",
         )
+
+    @property
+    def artifacts(self) -> list:
+        """最近一次 run() 产出的 ReportArtifact 列表。
+
+        仅在 Engine.run() 完成后非空。
+        """
+        return list(self._artifacts)
 
     def run(self, target: Scenario | Suite) -> RunResult:
         """执行入口。
@@ -87,6 +97,20 @@ class Engine:
         # 2. 触发 RUN_START 事件
         self._emit_run_start(framework_ctx)
 
+        # 2.5 启动所有 reporter（订阅事件 + 准备资源）
+        reporter_runtime = ictx.reporter_runtime
+        if reporter_runtime is not None:
+            try:
+                reporter_runtime.begin_all(
+                    framework_ctx=framework_ctx,
+                    reporter_names=list(ictx.cfg.reporters or ("console",)),
+                    report_dir=ictx.cfg.report_dir,
+                    plugin_configs=dict(ictx.cfg.plugin_configs or {}),
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("[Engine] reporter_runtime.begin_all 失败（已隔离）")
+
+        # 3. 执行
         try:
             if isinstance(target, Scenario):
                 result = self._run_scenario(target, framework_ctx)
@@ -99,8 +123,16 @@ class Engine:
             logger.exception("[Engine] 执行异常: {}", e)
             result = RunResult(exit_code=2, error=1)
 
-        # 3. 触发 RUN_END 事件
+        # 4. 触发 RUN_END 事件
         self._emit_run_end(framework_ctx, result)
+
+        # 5. 终结所有 reporter，产出 ReportArtifact 列表（仅写入 metadata，artifact 本身由 reporter 落盘）
+        self._artifacts: list = []
+        if reporter_runtime is not None:
+            try:
+                self._artifacts = reporter_runtime.finalize_all(result)
+            except Exception:  # noqa: BLE001
+                logger.exception("[Engine] reporter_runtime.finalize_all 失败（已隔离）")
         return result
 
     def _emit_run_start(self, framework_ctx: FrameworkContext) -> None:

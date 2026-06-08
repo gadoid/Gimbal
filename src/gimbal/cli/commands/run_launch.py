@@ -11,10 +11,11 @@ import yaml
 import json
 
 from gimbal.core.runner import Engine
-from gimbal.core.bootstrap import bootstrap
+from gimbal.core.bootstrap import bootstrap, shutdown
 from gimbal.cli.common import (
     DryRunOpt, EnvOpt, LogLevel, LogLevelOpt, InputFormat, FormatOpt, ModeOpt,
-    PluginsOpt, RegistryOpt, _build_default_asset_store,
+    OutputFormat, OutputOpt, PluginsOpt, RegistryOpt, ReportDirOpt, ReporterOpt,
+    _build_default_asset_store, _print_run_report, _publish_run_meta,
 )
 from gimbal.cli.context import CLIContext
 from gimbal.log import get_logger
@@ -168,13 +169,13 @@ def launch(
         bool,
         typer.Option("--fail-fast", help="首个失败即停止", rich_help_panel="执行控制"),
     ] = False,
-    report_dir: Annotated[
-        str,
-        typer.Option("--report-dir", help="报告输出目录", rich_help_panel="执行控制"),
-    ] = "./reports",
     dry_run: DryRunOpt = False,
     plugins : PluginsOpt = [],
     registry: RegistryOpt = None,
+    # ========== 报告与输出 ==========
+    reporter: ReporterOpt = None,
+    report_dir: ReportDirOpt = "./reports",
+    output: OutputOpt = OutputFormat.console,
 ) -> None:
     """指定标准输入，用例文件或 inline 内容交给框架直接执行。
 
@@ -198,10 +199,18 @@ def launch(
     cli_ctx.env = env
     cli_ctx.mode = mode
     cli_ctx.log_level = log_level.value  # LogLevel is a str enum, use .value to get the actual string
+    # 把 report_dir注入 extras，由 ConfigLoader._from_cli()提取为 BootstrapConfig.report_dir
+    if report_dir:
+        cli_ctx.extras["report_dir"] = report_dir
+    # 把 reporter 选项注入 extras，由 ConfigLoader._from_cli()提取为 BootstrapConfig.reporters
+    if reporter:
+        cli_ctx.extras["reporters"] = list(reporter)
 
 
     # 2. 传入ctx, 进行配置信息加载，返回所有信息合并后的上下文信息
     configuration  = bootstrap(cli_ctx)
+    # 2.5 发布 RunMetaEvent（CI/CD / git / 触发人等上下文）
+    _publish_run_meta(configuration)
     # 3. 持有信息后，进行内存总线初始化，插件初始化，资产仓库初始化，
 
     # 4. 归一化输入 → dict
@@ -224,6 +233,11 @@ def launch(
     #    注入资产仓库，让 ScenarioPreprocessor Phase 0 启用对 RefBase 节点的物化
     asset_store = _build_default_asset_store(Path(registry) if registry else None)
     logger.debug("[CLI] asset_store ready: backend={}", asset_store.backend_name)
-    result = Engine(configuration, asset_store=asset_store).run(scenario)
-    pprint(result)
-    raise typer.Exit(code=0)
+    engine = Engine(configuration, asset_store=asset_store)
+    try:
+        result = engine.run(scenario)
+    finally:
+        # 必须 shutdown 才会触发 ReporterRuntime.shutdown()、生成 artifacts
+        shutdown(configuration)
+    _print_run_report(result, output, artifacts=engine.artifacts)
+    raise typer.Exit(code=result.exit_code)

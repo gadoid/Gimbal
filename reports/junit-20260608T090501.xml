@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="1" failures="0" errors="0" skipped="0" time="19.323">
+  <testsuite name="Gimbal.sc_001" tests="1" skipped="0" failures="0" errors="0" time="19.323" timestamp="" hostname="gimbal-runner">
+    <testcase name="sc_001" classname="default" time="19.323" />
+  </testsuite>
+</testsuites>

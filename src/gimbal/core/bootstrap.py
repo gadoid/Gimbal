@@ -23,6 +23,7 @@ class Configuration:
         - 基础设施引用：ctx_manager / dispatcher / event_bus / archive
         - 插件设施：hook_registry / plugin_registry
         - plugins：已激活的插件实例（仅持有引用，不调用其方法）
+        - reporter_runtime：Reporter 调度器，Engine.run() 阶段驱动
 
     不持有任何层级 Context（framework/suite/scenario/step），
     这些在 Engine.run() 时按执行生命周期创建。
@@ -41,6 +42,8 @@ class Configuration:
     hook_registry: "HookRegistry"
     plugin_registry: Any
     plugins: tuple["Plugin", ...] = field(default_factory=tuple)
+    # Reporter 调度器（Engine.run() 时通过 begin_all / finalize_all 驱动）
+    reporter_runtime: Any = None
 
 from gimbal.log import get_logger
 logger = get_logger(__name__)
@@ -116,6 +119,17 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
             init_result.stop_plugin, init_result.stop_reason,
         )
 
+    # 7. 装配 Reporter runtime（自注册所有内置 reporter）
+    from gimbal.reporter.registry import ReporterRegistry
+    from gimbal.reporter.runtime import ReporterRuntime
+    from gimbal.reporter.builtin import register_builtin_reporters
+
+    reporter_registry = ReporterRegistry()
+    register_builtin_reporters(reporter_registry)
+    reporter_runtime = ReporterRuntime(reporter_registry)
+    reporter_runtime.setup(bus=event_bus, config=cfg)
+    logger.info("[bootstrap] Reporter runtime 就绪: builtins={}", reporter_registry.available())
+
     return Configuration(
         cfg=cfg,
         auth_registry=auth_registry,
@@ -126,6 +140,7 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
         hook_registry=hook_registry,
         plugin_registry=plugin_registry,
         plugins=tuple(plugins),
+        reporter_runtime=reporter_runtime,
     )
 
 
