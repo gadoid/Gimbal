@@ -20,9 +20,7 @@
     "services": {
       "tidb-test-service": "https://fin-tidb.21eflag.com/"},
     "vars": {
-      "bl_no":  { "kind": "random_str",    "length": 12, "charset": "alnum" },
-      "etd":    { "kind": "timestamp",     "format": "epoch" },
-      "weight": { "kind": "random_decimal", "min": 50,    "max": 200,  "places": 2 }
+      "bl_no":  "jokervalue"
     },
     "users": {
       "codfish": {
