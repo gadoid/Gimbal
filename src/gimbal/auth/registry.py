@@ -38,28 +38,33 @@ class AuthRegistry:
     __slots__ = ("_sessions",)
 
     def __init__(self) -> None:
+        """构造空的 AuthRegistry，初始化内部 tag→AuthSession 字典。"""
         self._sessions: dict[str, "AuthSession"] = {}
 
     # ── 写入 ──
     def set(self, tag: str, session: "AuthSession") -> None:
-        """注册或覆盖一个 AuthSession。tag 重复时直接覆盖。"""
+        """注册或覆盖一个 AuthSession。tag 重复时直接覆盖，不做唯一性校验。"""
         self._sessions[tag] = session
 
     def remove(self, tag: str) -> bool:
-        """移除一个 tag。返回是否存在。"""
+        """移除指定 tag 的 AuthSession；返回是否原本存在。"""
         return self._sessions.pop(tag, None) is not None
 
     def clear(self) -> None:
+        """清空所有 AuthSession，常用于测试或场景隔离。"""
         self._sessions.clear()
 
     # ── 读取 ──
     def get(self, tag: str) -> Optional["AuthSession"]:
+        """按 tag 取出 AuthSession；不存在则返回 None（不抛异常）。"""
         return self._sessions.get(tag)
 
     def has(self, tag: str) -> bool:
+        """判断指定 tag 是否已注册 AuthSession。"""
         return tag in self._sessions
 
     def tags(self) -> list[str]:
+        """返回当前已注册的所有 tag 列表（浅拷贝，外部修改不会影响内部状态）。"""
         return list(self._sessions.keys())
 
     def snapshot(self) -> dict[str, "AuthSession"]:

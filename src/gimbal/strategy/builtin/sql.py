@@ -24,6 +24,7 @@ class SqlExecutor(StrategyExecutor):
     kind = "sql"
 
     def execute(self, spec: "StrategyBase", view: "StrategyContextView") -> StrategyResult:
+        """执行 SQL 策略（占位实现）：目前仅记录日志并返回 PASSED，未实际连接数据库。"""
         try:
             sql = getattr(spec, "sql", "")
             logger.info("[SqlExecutor] 执行 SQL: {}", sql)

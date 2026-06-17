@@ -20,6 +20,7 @@ class CallExecutor(StrategyExecutor):
     kind = "_call"
 
     def execute(self, spec, view) -> StrategyResult:
+        """执行 HTTP 调用策略：基于 spec.method/url/headers/timeout 发出请求，把响应 status/headers/body 写入 view scratch。"""
         method = spec.method
         url = spec.url
         headers = spec.headers

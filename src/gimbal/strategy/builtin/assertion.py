@@ -15,6 +15,7 @@ class AssertionExecutor(StrategyExecutor):
     kind = "assertion"
 
     def execute(self, spec, view) -> StrategyResult:
+        """执行断言策略：解析 spec.target 的实际值，用 spec.operator 与 spec.expected 比较，结果记入 view 并返回 StrategyResult。"""
         try:
             logger.info(
                 "[AssertionExecutor] 执行断言: target={} operator={} expected={}",

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, TYPE_CHECKING
 from .base import ContextLayer
 from .channels import Channels, ChannelsPolicy, Policies, Promotion
@@ -20,15 +20,17 @@ class ContextManager:
     """Context 生命周期协调器。无业务状态。"""
     
     def __init__(self, archive, event_bus):
+        """初始化 ContextManager;持有 archive(用于持久化)和 event_bus(用于发布事件)两个无业务状态的依赖。"""
         self._archive = archive
         self._event_bus = event_bus
         logger.debug("[ContextManager] Initialized with archive={} event_bus={}", archive, event_bus)
-    
+
     # ── Framework ─────────────────────────────────────
     def create_framework_context(
         self, *, run_id: str, cfg: Configuration,
         channels_policy: Optional[ChannelsPolicy] = None,
     ) -> FrameworkContext:
+        """创建并封存 FrameworkContext:注入 channels(默认 framework_locked policy),挂接 promotion 监听器;返回 sealed 后的 FrameworkContext。"""
         # 增加配置层的初始化
         channels = Channels(
             owner_layer=ContextLayer.FRAMEWORK,
@@ -38,7 +40,7 @@ class ContextManager:
 
         ctx = FrameworkContext(
             run_id=run_id,
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(timezone.utc),
             config=cfg.cfg,
             ctx_manager=cfg.ctx_manager,
             dispatcher=cfg.dispatcher,
@@ -49,7 +51,7 @@ class ContextManager:
         ctx.seal()
         logger.info("[ContextManager] FrameworkContext created: run_id={}", run_id)
         return ctx
-    
+
     # ── Suite ─────────────────────────────────────────
     def derive_suite_context(
         self, framework_ctx: FrameworkContext,
@@ -57,6 +59,7 @@ class ContextManager:
         tags: list[str], plugins: dict[str, dict],
         channels_policy: Optional[ChannelsPolicy] = None,
     ) -> SuiteContext:
+        """基于 framework_ctx 派生 SuiteContext:用 suite_default policy 创建 channels,挂接 promotion 监听器,引用父 context 的 config;返回未 seal 的 SuiteContext。"""
         channels = Channels(
             owner_layer=ContextLayer.SUITE,
             policy=channels_policy or Policies.suite_default(),
@@ -68,7 +71,7 @@ class ContextManager:
             suite_id=suite_id,
             suite_name=suite_name,
             tags=tags,
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(timezone.utc),
             parent=framework_ctx,
             config=framework_ctx.config,  # 引用传递
             plugins=plugins,
@@ -76,14 +79,15 @@ class ContextManager:
         )
 
     def finalize_suite(self, ctx: SuiteContext, status: str = "passed") -> None:
+        """结束 SuiteContext:用 object.__setattr__ 写入 ended_at/status(绕过 seal),seal 后归档;status 默认 "passed"。"""
         # 用 object.__setattr__ 绕过 seal 检查写入终态字段
         # 这是 ContextManager 的特权操作,业务代码无法这样写
-        object.__setattr__(ctx, "ended_at", datetime.utcnow())
+        object.__setattr__(ctx, "ended_at", datetime.now(timezone.utc))
         object.__setattr__(ctx, "status", status)
         ctx.seal()
         self._archive.save_suite(ctx)
         logger.info("[ContextManager] SuiteContext finalized: suite_id={} status={}", ctx.suite_id, status)
-    
+
     # ── Scenario ──────────────────────────────────────
     def derive_scenario_context(
         self, suite_ctx: SuiteContext,
@@ -91,6 +95,7 @@ class ContextManager:
         description: Optional[str] = None,
         channels_policy: Optional[ChannelsPolicy] = None,
     ) -> ScenarioContext:
+        """基于 suite_ctx 派生 ScenarioContext:用 scenario_default policy 创建 channels,挂接 promotion 监听器,发布 scenario.start 事件;返回未 seal 的 ScenarioContext。"""
         channels = Channels(
             owner_layer=ContextLayer.SCENARIO,
             policy=channels_policy or Policies.scenario_default(),
@@ -101,7 +106,7 @@ class ContextManager:
             scenario_id=scenario_id,
             scenario_name=scenario_name,
             description=description,
-            started_at=datetime.utcnow(),
+            started_at=datetime.now(timezone.utc),
             parent=suite_ctx,
             config=suite_ctx.config,  # 引用传递
             channels=channels,
@@ -112,14 +117,15 @@ class ContextManager:
         return ctx
 
     def finalize_scenario(self, ctx: ScenarioContext, status: str) -> None:
-        object.__setattr__(ctx, "ended_at", datetime.utcnow())
+        """结束 ScenarioContext:写入 ended_at/status,seal 后发布 scenario.end 事件并归档。"""
+        object.__setattr__(ctx, "ended_at", datetime.now(timezone.utc))
         object.__setattr__(ctx, "status", status)
         ctx.seal()
         self._event_bus.publish(project_scenario_completed(ctx, ctx.run_id))
         self._archive.save_scenario(ctx)
         logger.info("[ContextManager] ScenarioContext finalized: scenario_id={} status={} step_count={}",
                     ctx.scenario_id, status, len(ctx.step_refs))
-    
+
     # ── Step ──────────────────────────────────────────
     def derive_step_context(
         self, scenario_ctx: ScenarioContext,
@@ -127,6 +133,7 @@ class ContextManager:
         strategy_kind: str, strategy_spec: dict,
         resolved_vars: dict,
     ) -> StepContext:
+        """基于 scenario_ctx 派生 StepContext:构造 StepInputs,发布 step.start 事件;返回未 seal 的 StepContext。"""
         inputs = StepInputs(
             step_id=step_id,
             step_name=step_name,
@@ -136,7 +143,7 @@ class ContextManager:
         )
         ctx = StepContext(
             inputs=inputs,
-            started_at=datetime.now(),
+            started_at=datetime.now(timezone.utc),
             parent=scenario_ctx,
         )
         self._event_bus.publish(project_step_started(ctx, scenario_ctx.run_id))
@@ -145,7 +152,8 @@ class ContextManager:
         return ctx
 
     def finalize_step(self, ctx: StepContext, status: StepStatus) -> None:
-        ended = datetime.now()
+        """结束 StepContext:写入 outcome.status/duration_ms/ended_at,登记到 scenario.step_refs,归档 step 与 exchange,清空 scratch,seal 后发布 step.end 事件。"""
+        ended = datetime.now(timezone.utc)
         # outcome 是 validate_assignment 的可变模型,这些写入是合法的
         ctx.outcome.status = status
         ctx.outcome.duration_ms = (ended - ctx.started_at).total_seconds() * 1000
@@ -170,9 +178,10 @@ class ContextManager:
         self._event_bus.publish(project_step_completed(ctx, ctx.parent.run_id))
         logger.info("[ContextManager] StepContext finalized: step_id={} status={} duration_ms={:.2f}",
                     ctx.step_id, status.value, ctx.outcome.duration_ms)
-    
+
     # ── 内部:把 Channels 的 Promotion 转事件 ──────────
     def _wire_promotion_listener(self, channels: Channels, run_id: str) -> None:
+        """内部辅助:为 channels 注册一个监听器,把每次 Promotion 投影为 VariablePromotedEvent 并发布到 event_bus。"""
         def listener(promotion: Promotion):
             self._event_bus.publish(project_promotion(promotion, run_id))
         channels.add_listener(listener)

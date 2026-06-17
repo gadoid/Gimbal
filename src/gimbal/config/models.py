@@ -1,3 +1,4 @@
+from typing import Any
 from pydantic import BaseModel, Field, ConfigDict
 from ..version import getVersion
 from pathlib import Path
@@ -43,6 +44,12 @@ class BootstrapConfig(BaseModel):
 
     poll_timeout: int = Field(60, description="Poll strategy 默认超时（秒）")
     poll_interval: int = Field(5, description="Poll strategy 默认检查周期（秒）")
+
+    # ── CLI 变量注入（修复 #52 完整链路）──
+    vars: dict[str, Any] = Field(
+        default_factory=dict,
+        description="CLI --var / --var-file 注入的 KV 变量，模板 ${var} 可引用"
+    )
 
     retry_count: int = Field(0, description="失败重试次数")
     retry_interval: int = Field(5, description="重试间隔（秒）")

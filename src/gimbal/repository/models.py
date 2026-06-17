@@ -56,6 +56,7 @@ class AssetRef(BaseModel):
     @field_validator("namespace", "name")
     @classmethod
     def _check_name(cls, v: str) -> str:
+        """校验 namespace / name 字段满足 OCI 兼容的合法字符规则，不符合抛 InvalidAssetRef。"""
         if not _NAME_RE.match(v):
             raise InvalidAssetRef(
                 f"Invalid asset name component: {v!r}",
@@ -67,6 +68,7 @@ class AssetRef(BaseModel):
     @field_validator("tag")
     @classmethod
     def _check_tag(cls, v: str) -> str:
+        """校验 tag 字段满足 [A-Za-z0-9_][A-Za-z0-9._-]{0,127} 规则。"""
         if not _TAG_RE.match(v):
             raise InvalidAssetRef(
                 f"Invalid tag: {v!r}",
@@ -78,6 +80,7 @@ class AssetRef(BaseModel):
     @field_validator("digest")
     @classmethod
     def _check_digest(cls, v: str | None) -> str | None:
+        """校验 digest 字段格式为 sha256: + 64 个十六进制字符；None 直接放行。"""
         if v is None:
             return v
         if not _DIGEST_RE.match(v):
@@ -90,6 +93,7 @@ class AssetRef(BaseModel):
 
     @model_validator(mode="after")
     def _check_mutually_exclusive(self) -> "AssetRef":
+        """校验 tag（非常量）和 digest 不能同时指定；冲突抛 InvalidAssetRef。"""
         # tag 形式 与 digest 形式 互斥
         if self.tag != DEFAULT_TAG and self.digest is not None:
             raise InvalidAssetRef(
@@ -102,13 +106,7 @@ class AssetRef(BaseModel):
     # ── 字符串互转 ──
     @classmethod
     def parse(cls, ref: str) -> "AssetRef":
-        """从 ``namespace/name:tag`` 或 ``namespace/name@digest`` 解析。
-
-        支持简写：
-          - ``name:tag``        → namespace="library"
-          - ``name``            → namespace="library", tag="latest"
-          - ``name@digest``     → namespace="library", digest="..."
-        """
+        """从 ``namespace/name:tag`` 或 ``namespace/name@digest`` 字符串解析为 AssetRef；缺省 namespace 为 'library'，缺省 tag 为 'latest'。"""
         if not ref or not isinstance(ref, str):
             raise InvalidAssetRef(f"Asset reference must be a non-empty string: {ref!r}", value=str(ref))
 
@@ -138,6 +136,7 @@ class AssetRef(BaseModel):
         return cls(namespace=namespace, name=name, tag=tag, digest=digest)
 
     def __str__(self) -> str:  # pragma: no cover
+        """返回 canonical 字符串形式：有 digest 用 @digest，否则用 :tag，缺省 tag 省略。"""
         if self.digest:
             return f"{self.namespace}/{self.name}@{self.digest}"
         if self.tag == DEFAULT_TAG:
@@ -168,6 +167,7 @@ class AssetRecord(BaseModel):
     @field_validator("digest")
     @classmethod
     def _check_digest(cls, v: str) -> str:
+        """校验 AssetRecord.digest 字段为合法 sha256 摘要，失败抛 InvalidAssetRef。"""
         # 与 AssetRef 保持一致：统一接受 sha256:abc... 形式
         if not _DIGEST_RE.match(v):
             raise InvalidAssetRef(

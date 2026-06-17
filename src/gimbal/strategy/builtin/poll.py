@@ -24,6 +24,7 @@ class PollExecutor(StrategyExecutor):
     kind = "poll"
 
     def execute(self, spec: "StrategyBase", view: "StrategyContextView") -> StrategyResult:
+        """执行轮询策略（占位实现）：目前仅记录日志并返回 PASSED，未真正做条件轮询。"""
         try:
             target = getattr(spec, "target", "")
             interval = getattr(spec, "interval", 1.0)

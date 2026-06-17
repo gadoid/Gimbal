@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from gimbal.context.manager import ContextManager
@@ -37,10 +37,12 @@ class ScenarioRunResult:
 
     @property
     def passed(self) -> bool:
+        """便捷属性：status == 'passed' 时为 True。"""
         return self.status == "passed"
 
     @property
     def duration_ms(self) -> float:
+        """便捷属性：以毫秒为单位计算 Scenario 的总耗时（started_at 与 ended_at 之差）。"""
         if self.started_at and self.ended_at:
             return (self.ended_at - self.started_at).total_seconds() * 1000
         return 0.0
@@ -69,6 +71,7 @@ class StepRunner:
         hook_registry: Optional[Any] = None,
         event_bus: Optional[Any] = None,
     ) -> None:
+        """初始化 StepRunner，保存 strategy dispatcher、ctx_manager、service_base_url 以及可选的 hook_registry 与 event_bus。"""
         self._dispatcher = dispatcher
         self._ctx_manager = ctx_manager
         self._service_base_url = service_base_url
@@ -82,6 +85,15 @@ class StepRunner:
         scenario_ctx: ScenarioContext,
         step_index: int,
     ) -> StepRunResult:
+        """执行单个 Step：创建 StepContext、构造状态机、运行并 finalize。
+
+        入参:
+            step_schema: 已由预处理器展开的 Step 数据对象。
+            scenario_ctx: 当前 Scenario 上下文。
+            step_index:   当前 step 在 scenario 中的序号（用于生成 step_id）。
+        返回:
+            状态机产出的 StepRunResult。
+        """
         step_id = f"step-{step_index:03d}"
         logger.debug("[StepRunner] 开始执行 Step: step_id={} scenario_id={}",
                      step_id, scenario_ctx.scenario_id)
@@ -171,7 +183,17 @@ class ScenarioRunner:
         scenario_schema: Scenario,
         suite_ctx: SuiteContext,
     ) -> ScenarioRunResult:
-        started_at = datetime.utcnow()
+        """驱动整个 Scenario 的执行：派生上下文、预处理、按序跑 step、汇总结果、finalize。
+
+        入参:
+            scenario_schema: 已校验的 Scenario 数据对象。
+            suite_ctx:       上层 Suite 上下文。
+        返回:
+            ScenarioRunResult（包含 status、step_results、started_at、ended_at）。
+        副作用:
+            向 ctx_manager 注册 scenario/step 上下文；向 event_bus 发布 SCENARIO_START/END。
+        """
+        started_at = datetime.now(timezone.utc)
         sid = scenario_schema.scenarioId
         logger.info(
             "[ScenarioRunner] 开始执行 Scenario: scenario_id={} scenario_name={} step_count={}",
@@ -204,7 +226,12 @@ class ScenarioRunner:
         )
 
         # 3. 触发 SCENARIO_START 事件
-        self._emit_scenario_start(scenario_schema, sid, len(resolved_steps))
+        #    step_count 用"实际会执行的 step 数"（不含未展开的 StepRef），
+        #    reporter 拿到的数字与最终执行结果一致。
+        executable_count = sum(
+            1 for s in resolved_steps if hasattr(s, "api")
+        )
+        self._emit_scenario_start(scenario_schema, sid, executable_count)
 
         # 4. 逐步执行（使用已展开的 resolved_steps）
         step_runner = StepRunner(
@@ -218,7 +245,65 @@ class ScenarioRunner:
         step_results: list[StepRunResult] = []
         overall_status = "passed"
 
+        # 修复 B3：scenario_timeout 强制执行
+        # 实际是 cooperative timeout：每个 step 前检查 elapsed time
+        cfg_timeout = getattr(scenario_ctx, "_timeout_seconds", None)
+        if cfg_timeout is None:
+            bs_cfg = scenario_ctx.config
+            cfg_timeout = getattr(bs_cfg, "scenario_timeout", None)
+
+        # 修复 B8：cancel flag 检查（移出循环，每 step 多次 sys.modules 查找）
+        try:
+            from gimbal.cli.main import is_cancelled
+        except ImportError:
+            is_cancelled = lambda: False  # noqa: E731 单元测试场景 cli.main 不可用
+
+        total_steps = len(resolved_steps)
+
+        def _append_marker(*, kind: str, next_idx: int, error: str, error_phase: str) -> None:
+            """Append a synthetic StepRunResult for scenario-level interrupts.
+
+            用 `__scenario_<kind>__` 作为保留 step_id 前缀，避免与真实 step 的
+            编号（如 step-002-API-1）冲突；next_idx 写进 error 消息便于定位。
+            """
+            step_results.append(StepRunResult(
+                step_id=f"__scenario_{kind}__",
+                status="error",
+                error=f"{error} (next_step_index={next_idx}/{total_steps})",
+                error_phase=error_phase,
+                duration_ms=0.0,
+            ))
+
         for idx, step_union in enumerate(resolved_steps):
+            # 修复 B3：检查 scenario timeout
+            if cfg_timeout is not None:
+                elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
+                if elapsed > cfg_timeout:
+                    logger.warning(
+                        "[ScenarioRunner] Scenario 超时: scenario_id={} elapsed={:.1f}s limit={}s, "
+                        "停止后续 step",
+                        sid, elapsed, cfg_timeout,
+                    )
+                    overall_status = "error"
+                    _append_marker(
+                        kind="timeout",
+                        next_idx=idx,
+                        error=f"scenario timeout after {elapsed:.1f}s (limit={cfg_timeout}s)",
+                        error_phase="timeout",
+                    )
+                    break
+            # 修复 B8：检查 cancel flag
+            if is_cancelled():
+                logger.warning("[ScenarioRunner] 检测到 cancel signal，停止后续 step")
+                _append_marker(
+                    kind="cancelled",
+                    next_idx=idx,
+                    error="cancelled by user (SIGINT)",
+                    error_phase="cancelled",
+                )
+                overall_status = "error"
+                break
+
             if not hasattr(step_union, "api"):
                 logger.warning("[ScenarioRunner] step[{}] 是未展开的 StepRef，跳过", idx)
                 continue
@@ -259,11 +344,20 @@ class ScenarioRunner:
             status=overall_status,
             step_results=step_results,
             started_at=started_at,
-            ended_at=datetime.utcnow(),
+            ended_at=datetime.now(timezone.utc),
         )
 
     # ── 埋点辅助 ──
     def _emit_scenario_start(self, scenario: Scenario, sid: str, step_count: int) -> None:
+        """向 event_bus 发布 ScenarioStartEvent。
+
+        入参:
+            scenario:   Scenario 数据对象。
+            sid:        scenario 唯一 ID。
+            step_count: 实际会执行的 step 数（不含未展开的 StepRef）。
+        副作用:
+            发布事件，失败仅记 debug 日志。
+        """
         if self._bus is None:
             return
         try:
@@ -283,6 +377,16 @@ class ScenarioRunner:
         status: str,
         step_count: int,
     ) -> None:
+        """向 event_bus 发布 ScenarioEndEvent（携带 scenario.meta 拍平后的 dict）。
+
+        入参:
+            scenario:   Scenario 数据对象。
+            sid:        scenario 唯一 ID。
+            status:     最终状态（passed/failed/error/skipped）。
+            step_count: 已执行 step 数。
+        副作用:
+            发布事件，失败仅记 debug 日志。
+        """
         if self._bus is None:
             return
         try:

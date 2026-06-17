@@ -35,6 +35,7 @@ class PluginSpec:
     enabled: bool = True                 # 用户在 gimbal.yaml 中可关闭
 
     def to_dict(self) -> dict[str, Any]:
+        """将 PluginSpec 转为 dict 形式，便于序列化（list 字段会复制一份以避免外部修改）。"""
         return {
             "name": self.name,
             "version": self.version,

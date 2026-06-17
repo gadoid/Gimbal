@@ -92,6 +92,7 @@ def server(
         typer.Option("--pidfile", help="PID 文件路径，systemd 友好。", rich_help_panel="生命周期", dir_okay=False),
     ] = None,
 ) -> None:
+    """Typer 命令：构造 ServerConfig 后阻塞调用 start_server 启动常驻服务，Ctrl-C 触发优雅关闭。"""
     """作为服务监听端口，接收任务并执行。
 
     [bold]示例：[/bold]

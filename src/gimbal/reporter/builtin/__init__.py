@@ -59,4 +59,5 @@ def register_builtin_reporters(registry: "ReporterRegistry") -> None:
 
 
 def builtin_reporter_names() -> tuple[str, ...]:
+    """返回所有内置 reporter 注册名的元组，便于 CLI 校验和文档展示。"""
     return BUILTIN_NAMES

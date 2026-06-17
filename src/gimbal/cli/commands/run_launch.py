@@ -29,13 +29,14 @@ class InputError(typer.BadParameter):
 
 
 def _read_source(source: str | None, inline: str | None) -> tuple[str, str | None]:
-    """读取原始输入内容。
+    """解析 source/inline 的互斥关系，读取原始文本并返回 (raw, 路径扩展名 hint)；非法组合抛 InputError。
 
     Returns:
         (raw_content, source_hint)
         source_hint 用于 auto 模式下的格式推断，文件路径返回扩展名，
         stdin / inline 返回 None。
     """
+    # 互斥校验
     # 互斥校验
     provided = [x for x in (source, inline) if x is not None]
     if len(provided) == 0:
@@ -68,6 +69,7 @@ def _detect_format(
     source_hint: str | None,
 ) -> InputFormat:
     """auto 模式下推断真实格式。"""
+    """当 fmt 为 auto 时按扩展名或首字符嗅探出真实 InputFormat；显式 fmt 直接透传。"""
     if fmt != InputFormat.auto:
         return fmt
 
@@ -94,6 +96,7 @@ def _detect_format(
 
 
 def _parse_json(raw: str) -> dict:
+    """解析 raw 为 JSON 字典；JSON 失败时回退到 YAML 解析；顶层不是 dict 时抛 InputError。"""
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as e:
@@ -108,6 +111,7 @@ def _parse_json(raw: str) -> dict:
 
 
 def _parse_yaml(raw: str) -> dict:
+    """解析 raw 为 YAML 映射；解析失败/为空/顶层非 dict 时抛 InputError。"""
     try:
         data = yaml.safe_load(raw)
     except yaml.YAMLError as e:
@@ -120,10 +124,7 @@ def _parse_yaml(raw: str) -> dict:
 
 
 def _parse_text(raw: str) -> dict:
-    """text 格式预留：不做任何转换，交给后续专门方法处理。
-
-    当前留空：仅原样包装，后续接入文本检查/解析方法时在此处替换。
-    """
+    """text 格式占位实现：原样把 raw 包装为带 __raw_text__/__pending_parse__ 标记的 dict，等待后续解析器接入。"""
     # TODO: 接入文本检查/解析方法，例如 text_parser.parse(raw) -> dict
     return {"__raw_text__": raw, "__pending_parse__": True}
 
@@ -133,7 +134,7 @@ def normalize_input(
     inline: str | None,
     fmt: InputFormat,
 ) -> dict:
-    """把多种输入源归一化为 dict。"""
+    """把多种输入源（文件路径/'-'/--inline × json/yaml/auto）归一化为单层 dict。"""
     raw, hint = _read_source(source, inline)
     real_fmt = _detect_format(fmt, raw, hint)
     if real_fmt == InputFormat.json:
@@ -177,6 +178,7 @@ def launch(
     report_dir: ReportDirOpt = "./reports",
     output: OutputOpt = OutputFormat.console,
 ) -> None:
+    """Typer 命令：bootstrap 框架 → 归一化输入为 dict → 校验为 Scenario → Engine.run 执行并打印报告。"""
     """指定标准输入，用例文件或 inline 内容交给框架直接执行。
 
     [bold]示例：[/bold]

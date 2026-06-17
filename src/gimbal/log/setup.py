@@ -67,6 +67,7 @@ def setup_logging(config: Optional[LoggingConfig] = None) -> None:
 
 
 def _install_intercept() -> None:
+    """把根 logger 替换为 InterceptHandler，使所有 stdlib logging 重定向到 loguru。"""
     intercept = InterceptHandler()
     root = logging.getLogger()
     root.handlers.clear()
@@ -79,6 +80,7 @@ def _install_intercept() -> None:
 
 
 def _silence_noisy_loggers() -> None:
+    """将 httpx / urllib3 / asyncio 等高频三方库的 DEBUG/INFO 日志静默到 WARNING。"""
     for name in ["httpx", "httpcore", "httpcore.connection", "httpcore.http11", "urllib3", "asyncio"]:
         logging.getLogger(name).setLevel(logging.WARNING)
 

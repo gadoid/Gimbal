@@ -37,6 +37,7 @@ class StrategyDispatcher:
     """
 
     def __init__(self, hook_registry: Optional[Any] = None) -> None:
+        """初始化 dispatcher：空 executor 注册表，可选 hook_registry 用于 STRATEGY_BEFORE/AFTER 埋点。"""
         self._registry: dict[str, StrategyExecutor] = {}
         self._hooks = hook_registry
 

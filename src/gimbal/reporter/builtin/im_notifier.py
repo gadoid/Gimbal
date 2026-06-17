@@ -28,8 +28,10 @@ class IMNotifier(ReporterBase):
 
     name = "im_notifier"
     interested_events = ("step.failed", "scenario.end")
+    is_async = True  # 修复 B9：IM webhook 慢，不阻塞 event pipeline
 
     def __init__(self) -> None:
+        """初始化默认状态：channel/webhook/secret 为空，本地缓存置空，发送开关默认开。"""
         self._channel: str = "dingtalk"
         self._webhook_url: str = ""
         self._secret: str = ""
@@ -39,6 +41,7 @@ class IMNotifier(ReporterBase):
         self._send_immediately: bool = True
 
     def begin(self, ctx) -> None:
+        """从 ctx.user_config 读取 channel/webhook_url/secret/at_mobiles/send_on_step_failed，然后调用 super().begin 触发自动订阅。"""
         self._channel = str(ctx.user("channel", "dingtalk")).lower()
         self._webhook_url = str(ctx.user("webhook_url", ""))
         self._secret = str(ctx.user("secret", ""))
@@ -47,6 +50,7 @@ class IMNotifier(ReporterBase):
         super().begin(ctx)
 
     def on_event(self, event: FrameworkEvent) -> None:
+        """处理 step.failed 与 scenario.end 事件：失败步骤立即推送并去重，失败 scenario 推送警告；任何异常静默吞掉。"""
         if not self._webhook_url or not self._send_immediately:
             return
         try:
@@ -68,6 +72,7 @@ class IMNotifier(ReporterBase):
             pass
 
     def finalize(self, run_result: RunResult, ctx) -> ReportArtifact:
+        """构造 PASS/FAIL 汇总 Markdown 并推送，返回 content-only 的 ReportArtifact（含失败步骤计数）。"""
         title = "PASS" if run_result.failed == 0 and run_result.error == 0 else "FAIL"
         text = f"""{title} {ctx.framework_ctx.environment}/{ctx.framework_ctx.mode}
 Total: {run_result.total}  Passed: {run_result.passed}  Failed: {run_result.failed}  Error: {run_result.error}"""
@@ -84,6 +89,7 @@ Total: {run_result.total}  Passed: {run_result.passed}  Failed: {run_result.fail
         )
 
     def _post(self, text: str) -> None:
+        """向配置的 webhook 异步 POST 文本消息，10s 超时，失败静默吞掉异常。"""
         if not self._webhook_url:
             return
         try:
@@ -102,6 +108,7 @@ Total: {run_result.total}  Passed: {run_result.passed}  Failed: {run_result.fail
             pass
 
     def _build_payload(self, text: str) -> dict:
+        """根据 _channel 构造钉钉/Slack/飞书各自的 webhook payload，未识别 channel 回退为 ``{"text": text}``。"""
         if self._channel == "dingtalk":
             return {
                 "msgtype": "text",
@@ -116,4 +123,5 @@ Total: {run_result.total}  Passed: {run_result.passed}  Failed: {run_result.fail
 
 
 def factory(user_config: dict) -> IMNotifier:
+    """ReporterRegistry 工厂函数：忽略 user_config，直接返回一个新的 IMNotifier 实例。"""
     return IMNotifier()

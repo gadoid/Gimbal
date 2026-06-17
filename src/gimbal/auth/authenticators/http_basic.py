@@ -8,6 +8,7 @@ class HTTPSAuthenticator(Authenticator):
     """HTTPS 通用认证器（OAuth2 / Basic Auth）"""
 
     def authenticate(self, auth, tag: str) -> None:
+        """向 auth.url POST {username, password}，从响应中读取 access_token/token 与 expires_in 并写入会话。"""
         response = httpx.post(
             auth.url,
             json={
@@ -29,6 +30,7 @@ class HTTPAuthenticator(Authenticator):
     """HTTP 通用认证器（OAuth2 / Basic Auth）"""
 
     def authenticate(self, auth, tag: str) -> None:
+        """向 auth.url POST {username, password}，从响应中读取 access_token/token 与 expires_in 并写入会话（HTTP 明文版本）。"""
         response = httpx.post(
             auth.url,
             json={

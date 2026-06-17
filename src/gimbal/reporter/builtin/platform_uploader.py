@@ -22,14 +22,17 @@ class PlatformUploader(ReporterBase):
     """
 
     name = "platform_uploader"
+    is_async = True  # 修复 B9：平台上传可能 100s+ ，不阻塞 finalize
 
     def __init__(self) -> None:
+        """初始化默认配置：URL/token 为空，超时 30s，最多重试 3 次。"""
         self._platform_url: str = ""
         self._api_token: str = ""
         self._timeout: float = 30.0
         self._max_retries: int = 3
 
     def begin(self, ctx) -> None:
+        """从 ctx.user_config 读取 platform_url/api_token/timeout/max_retries，不订阅事件后调用 super().begin。"""
         self._platform_url = str(ctx.user("platform_url", ""))
         self._api_token = str(ctx.user("api_token", ""))
         self._timeout = float(ctx.user("timeout", 30.0))
@@ -38,6 +41,7 @@ class PlatformUploader(ReporterBase):
         super().begin(ctx)
 
     def finalize(self, run_result: RunResult, ctx) -> ReportArtifact:
+        """收集 report_dir 下常见文件并构建 run payload；未配置 URL 时落盘 debug JSON，否则 HTTP 上传并返回 artifact。"""
         # 注意:此处拿不到所有 reporter 产出的 artifact 列表（runtime 暂未提供 collector），
         # 改为扫描 ctx.report_dir 下的常见文件类型（junit-*.xml / *.json / *.html）。
         artifacts = _collect_artifacts(ctx.report_dir)
@@ -82,6 +86,7 @@ class PlatformUploader(ReporterBase):
         )
 
     def _do_upload(self, body: dict) -> str:
+        """以 Bearer token 头 POST body 到 _platform_url，失败指数退避重试 _max_retries 次；返回响应 url 或失败占位字符串。"""
         import urllib.request
         import urllib.error
 
@@ -135,4 +140,5 @@ def _collect_artifacts(report_dir: Path) -> list[dict]:
 
 
 def factory(user_config: dict) -> PlatformUploader:
+    """ReporterRegistry 工厂函数：忽略 user_config，直接返回一个新的 PlatformUploader 实例。"""
     return PlatformUploader()

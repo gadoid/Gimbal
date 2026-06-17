@@ -103,6 +103,7 @@ class AssetStore:
     """
 
     def __init__(self, backend: ContentStore) -> None:
+        """初始化 AssetStore，注入底层 ContentStore 并创建命名 logger。"""
         self._backend = backend
         from gimbal.log import get_logger
         self._logger = get_logger(self.__class__.__name__)
@@ -234,15 +235,16 @@ class AssetStore:
         return existed
 
     def list_tags(self, namespace: str, name: str) -> list[AssetRef]:
-        """列出某个 name 下的所有 tag（按字母序）。"""
+        """列出 (namespace, name) 下所有 tag 对应的 AssetRef（按字母序）。"""
         tags = self._backend.list_tags(namespace, name)
         return [AssetRef(namespace=namespace, name=name, tag=t) for t in sorted(tags)]
 
     def list_assets(self, namespace: str | None = None) -> list[AssetRecord]:
-        """列出某个 namespace 下（或全库）的所有 asset record。"""
+        """列出指定 namespace（或全库，None）下的所有 AssetRecord。"""
         return self._backend.list_assets(namespace=namespace)
 
     def exists(self, ref: AssetRef) -> bool:
+        """判断 ref 对应的 tag 索引是否存在（不下载 blob）。"""
         return self._backend.get_manifest(ref) is not None
 
     def tag(self, src: AssetRef, dst: AssetRef, *, overwrite: bool = False) -> AssetRecord:
@@ -271,9 +273,10 @@ class AssetStore:
 
 
 def _sha256(data: bytes) -> str:
+    """计算 bytes 的 sha256 摘要并加上 'sha256:' 前缀。"""
     return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
 def compute_digest(data: bytes) -> str:
-    """公开的 digest 计算工具，供外部（如 CLI push 时）使用。"""
+    """对外暴露的 sha256 摘要计算工具，CLI / 外部推送场景使用。"""
     return _sha256(data)

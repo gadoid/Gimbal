@@ -1,27 +1,42 @@
 # Suite 模块
 
-> 测试套件管理模块
+> 测试套件管理模块：套件（Suite）加载、选择（Selector）、执行计划（Plan）、环境（Environment）覆盖。
 
-## 目录结构
+## 状态
+
+**当前为预留桩模块**。所有源文件都仅含 docstring，**未实现**具体类与方法：
 
 ```
 gimbal/suite/
-├── __init__.py
-├── manager.py    # SuiteManager
-├── selector.py   # SuiteSelector
-├── plan.py       # TestPlan
-└── environment.py # Environment
+├── __init__.py        # """Suite manager module."""
+├── manager.py         # """SuiteManager main class."""
+├── selector.py        # """ScenarioSelector execution."""
+├── plan.py            # """ExecutionPlan construction."""
+└── environment.py     # """Environment override logic."""
 ```
 
-## 核心组件
+后续填充计划（来自 `suite/README.md` 与目录命名）：
 
-### SuiteManager
+| 文件 | 计划内容 |
+| --- | --- |
+| `manager.py` | `SuiteManager` —— 套件管理器（CRUD） |
+| `selector.py` | `ScenarioSelector` / `SuiteSelector` —— 按 tag / priority / owner / pattern 选择 |
+| `plan.py` | `ExecutionPlan` / `TestPlan` —— 测试计划 |
+| `environment.py` | `Environment` —— 环境变量与配置覆盖 |
 
-套件管理器：
+## 设计原则（预期）
+
+1. **套件层级**: 套件包含多个场景
+2. **选择灵活**: 支持标签、优先级、模式等多种选择方式
+3. **环境隔离**: 不同环境有独立的配置
+
+## 计划中的核心接口（仅作占位说明）
+
+### SuiteManager（计划）
 
 ```python
 class SuiteManager:
-    """套件管理器"""
+    """套件管理器（占位）"""
 
     def __init__(self, repository: Repository):
         self._repository = repository
@@ -47,13 +62,11 @@ class SuiteManager:
         ...
 ```
 
-### SuiteSelector
-
-套件选择器：
+### SuiteSelector（计划）
 
 ```python
 class SuiteSelector:
-    """套件选择器"""
+    """套件选择器（占位）"""
 
     def select(
         self,
@@ -69,13 +82,11 @@ class SuiteSelector:
         ...
 ```
 
-### TestPlan
-
-测试计划：
+### TestPlan（计划）
 
 ```python
 class TestPlan:
-    """测试计划"""
+    """测试计划（占位）"""
 
     suite: Suite
     selected_scenarios: list[Scenario]
@@ -84,13 +95,11 @@ class TestPlan:
     tags: list[str]
 ```
 
-### Environment
-
-测试环境：
+### Environment（计划）
 
 ```python
 class Environment:
-    """测试环境"""
+    """测试环境（占位）"""
 
     name: str
     base_url: str
@@ -102,7 +111,7 @@ class Environment:
         ...
 ```
 
-## 使用示例
+## 计划中的使用示例（占位）
 
 ```python
 from gimbal.suite.manager import SuiteManager
@@ -119,8 +128,4 @@ selector = SuiteSelector()
 selected = selector.select(tags=["smoke", "payment"])
 ```
 
-## 设计原则
-
-1. **套件层级**: 套件包含多个场景
-2. **选择灵活**: 支持标签、优先级、模式等多种选择方式
-3. **环境隔离**: 不同环境有独立的配置
+> 上方所有代码块仅展示预期接口签名，**当前未实现**。调用方不应直接依赖 `gimbal.suite.*`。

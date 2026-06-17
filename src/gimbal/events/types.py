@@ -21,7 +21,7 @@ error_brief、suite_id、reason 等），event_type 字符串统一为 "step.sta
 "scenario.start" / "scenario.end" / "variable.promoted"。
 """
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional, Literal
 from pydantic import BaseModel, ConfigDict, Field
@@ -85,7 +85,7 @@ class FrameworkEvent(BaseModel):
     """
     model_config = ConfigDict(frozen=True, extra="forbid")
     event_type: str = ""
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     run_id: Optional[str] = None
 
 
@@ -112,6 +112,7 @@ class RunEndEvent(FrameworkEvent):
     passed: int
     failed: int
     error: int
+    skipped: int = 0  # 兼容旧订阅者；0 表示无 skip
 
 
 class RunMetaEvent(FrameworkEvent):
@@ -231,10 +232,6 @@ class VariablePromotedEvent(FrameworkEvent):
     by_scenario_id: Optional[str] = None
     overwrote_previous: bool = False
     reason: Optional[str] = None
-
-
-# 旧名：保留以兼容旧订阅代码（已 deprecated，新代码应使用 VariablePromotedEvent）
-ContextPromotionEvent = VariablePromotedEvent  # type: ignore[assignment,misc]
 
 
 # ── 插件生命周期 ─────────────────────────────────────

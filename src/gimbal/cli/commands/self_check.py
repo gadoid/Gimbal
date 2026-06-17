@@ -37,17 +37,21 @@ class SelfCheckContext:
     start_ts: float = 0.0
 
     def check(self, name: str, condition: bool, detail: str = "") -> None:
+        """追加一条名为 name 的检查结果：condition 真值决定 ok 状态，detail 仅作展示用。"""
         ok = bool(condition)
         self.checks.append(CheckResult(name=name, ok=ok, detail=detail))
 
     def passed(self) -> int:
+        """返回 checks 中状态为 ok 的条目数。"""
         return sum(1 for c in self.checks if c.ok)
 
     def total(self) -> int:
+        """返回已收集的检查项总数。"""
         return len(self.checks)
 
 
 def _make_event_handler(ctx: SelfCheckContext, event_type: str) -> Callable[[Any], None]:
+    """工厂：返回一个订阅回调，把收到的 event 抽取 step_id/scenario_id/url 后追加到 ctx.events_received。"""
     def handler(event: Any) -> None:
         label = (
             getattr(event, "step_id", None)
@@ -60,6 +64,7 @@ def _make_event_handler(ctx: SelfCheckContext, event_type: str) -> Callable[[Any
 
 
 def _make_hook(ctx: SelfCheckContext, point: str) -> Callable[[dict], Any]:
+    """工厂：返回一个 hook handler，从 payload 中抽取 url/step_id/strategy_name 后追加到 ctx.hooks_invoked。"""
     def hook(payload: dict) -> None:
         label = str(
             payload.get("url")
@@ -72,6 +77,7 @@ def _make_hook(ctx: SelfCheckContext, point: str) -> Callable[[dict], Any]:
 
 
 def _on_framework_init(ctx: SelfCheckContext) -> Callable[[dict], None]:
+    """工厂：返回一个 FRAMEWORK_INIT hook，校验 payload 含有 cfg/ctx_manager/plugin_registry。"""
     def hook(payload: dict) -> None:
         ctx.check("framework.init hook fired (after activation)", True)
         ctx.check("framework.init payload has 'cfg'", "cfg" in payload)
@@ -81,6 +87,7 @@ def _on_framework_init(ctx: SelfCheckContext) -> Callable[[dict], None]:
 
 
 def _print_report(ctx: SelfCheckContext) -> None:
+    """把 SelfCheckContext 的 checks/events/hooks 汇总成可读报告并打印到 stdout。"""
     duration_ms = (time.monotonic() - ctx.start_ts) * 1000
     typer.echo("")
     typer.echo("=" * 72)
@@ -109,6 +116,7 @@ def _print_report(ctx: SelfCheckContext) -> None:
 
 
 def self_check(ctx: typer.Context) -> None:
+    """Typer 命令：bootstrap 框架后注册订阅/hook，验证 publish→subscribe 与 hook 触发回路，最后统一清理。"""
     """运行框架自检：验证 plugin/event/hook 基础设施工作正常。"""
     # Lazy imports（避开循环）
     from gimbal.cli.params import EXIT_OK, EXIT_SYSTEM_ERROR

@@ -17,6 +17,7 @@ class GitHubAuthenticator(Authenticator):
     """
 
     def authenticate(self, auth, tag: str) -> None:
+        """以 client_id/client_secret 走 GitHub OAuth access_token 端点，拿到 token 后写入会话（默认 8 小时有效期）。"""
         response = httpx.post(
             f"{auth.url}login/oauth/access_token",
             json={
@@ -31,7 +32,7 @@ class GitHubAuthenticator(Authenticator):
         )
         response.raise_for_status()
         data = response.json()
-        logger.debug(f"GitHub OAuth response: {data}")
+        logger.debug("GitHub OAuth response: {}", data)
 
         token = data.get("access_token")
         if not token:

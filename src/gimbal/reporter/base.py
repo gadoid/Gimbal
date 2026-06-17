@@ -47,12 +47,14 @@ class ReportArtifact:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        """校验 path 与 content 至少一项非空，否则抛出 ValueError。"""
         if self.path is None and self.content is None:
             raise ValueError(
                 f"ReportArtifact(name={self.name!r}) 必须有 path 或 content 至少一项非空"
             )
 
     def is_file_based(self) -> bool:
+        """判断当前 artifact 是否为文件型（有 path），content-only 场景返回 False。"""
         return self.path is not None
 
     def to_dict(self) -> dict[str, Any]:
@@ -88,6 +90,12 @@ class ReporterBase(ABC):
     # 留空表示该 reporter 不订阅事件，只在 finalize 时一次性产出
     interested_events: tuple[str, ...] = ()
 
+    # 修复 B9：是否异步订阅
+    # True = 用 SubscriptionMode.ASYNC，慢回调不阻塞 event pipeline
+    # False = SYNC，立即输出（适合 console 实时显示）
+    # 默认 False 保持向后兼容
+    is_async: bool = False
+
     # 子类可选覆盖：是否打印到 stderr（仅 ConsoleReporter 默认 True）
     stream_to_stderr: bool = False
 
@@ -122,4 +130,5 @@ class ReporterBase(ABC):
         raise NotImplementedError
 
     def __repr__(self) -> str:  # pragma: no cover
+        """返回形如 ``<ConsoleReporter name='console'>`` 的可读表示，便于日志与调试。"""
         return f"<{type(self).__name__} name={self.name!r}>"

@@ -52,6 +52,7 @@ class DeactivateReport:
         return not self.failed
 
     def __str__(self) -> str:  # pragma: no cover
+        """返回形如 DeactivateReport(ok=N failed=M failures=[...]) 的可读字符串。"""
         ok = len(self.succeeded)
         bad = len(self.failed)
         if self.all_ok:
@@ -91,6 +92,7 @@ class PluginLoader:
         return self._registry
 
     def is_enabled(self, spec: PluginSpec) -> bool:
+        """综合 enabled_filter（白名单）、disabled_filter（黑名单）和 spec.enabled 判断插件是否启用。"""
         if spec.name in self.disabled_filter:
             return False
         if self.enabled_filter is not None and spec.name not in self.enabled_filter:
@@ -202,6 +204,7 @@ class PluginLoader:
         return plugins
 
     def _load_one(self, spec: PluginSpec) -> Plugin:
+        """根据 spec.entry_point 加载并实例化一个插件，注入 manifest 后调用 instance.load()。"""
         module_name, _, attr = spec.entry_point.partition(":")
         if not module_name or not attr:
             raise ValueError(f"invalid entry_point: {spec.entry_point!r}")
@@ -293,6 +296,7 @@ class PluginLoader:
         return activated
 
     def _resolve_user_config(self, plugin: Plugin, user_cfg: dict[str, Any]) -> dict[str, Any]:
+        """合并插件 spec.default_config 和 user_cfg，user_cfg 优先。返回最终配置 dict。"""
         spec = self._spec_of(plugin)
         merged: dict[str, Any] = {}
         merged.update(spec.default_config or {})
@@ -300,6 +304,7 @@ class PluginLoader:
         return merged
 
     def _spec_of(self, plugin: Plugin) -> PluginSpec:
+        """获取插件对应的 PluginSpec：优先 registry，否则由 plugin.manifest 临时构造一个。"""
         # 优先用 registry 中已存在的 spec（如果已注册）
         s = self._registry.get_spec(plugin.name)
         if s:

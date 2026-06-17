@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Iterable, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -118,15 +118,18 @@ class Channels:
     
     # ── 监听器:ContextManager 注册,用于把 Promotion 转事件 ──
     def add_listener(self, listener: PromotionListener) -> None:
+        """注册一个 Promotion 监听器,在变量提升发生时被调用;用于把 Promotion 转换为事件。"""
         self._listeners.append(listener)
-    
+
     # ── 只读访问 ─────────────────────────────────────────
     def get_variable(self, key: str, default: Any = None) -> Any:
+        """获取指定 key 的变量值;若 key 以 '$.' 开头则按 JSONPath 解析,否则按普通 dict key 查找;未命中时返回 default。"""
         if key.startswith("$."):
             return self._jsonpath_get(key, default)
         return self._variables.get(key, default)
 
     def has_variable(self, key: str) -> bool:
+        """判断指定 key 或 JSONPath 路径是否有对应的变量值;存在返回 True,否则 False。"""
         if key.startswith("$."):
             return self._jsonpath_get(key, default=...) is not ...
         return key in self._variables
@@ -151,34 +154,40 @@ class Channels:
             return value
         # 用剩余 path 继续解析 value
         return jsonpath_get(value, f"$.{remainder}", default)
-    
+
     def variables_snapshot(self) -> dict[str, Any]:
         """返回防御性拷贝。外部修改不会影响内部状态。"""
         return dict(self._variables)
-    
+
     def get_metadata(self, key: str, default: Any = None) -> Any:
+        """按 key 读取 metadata 中的值,未命中返回 default。"""
         return self._metadata.get(key, default)
-    
+
     def metadata_snapshot(self) -> dict[str, Any]:
+        """返回 metadata 字典的防御性拷贝。"""
         return dict(self._metadata)
-    
+
     def get_artifact(self, name: str) -> Optional[ArtifactRef]:
+        """按名称获取 artifact 引用;不存在时返回 None。"""
         return self._artifacts.get(name)
-    
+
     def artifacts_snapshot(self) -> dict[str, ArtifactRef]:
+        """返回 artifacts 字典的防御性拷贝。"""
         return dict(self._artifacts)
-    
+
     @property
     def promotions(self) -> tuple[Promotion, ...]:
         """提升的完整历史,只读。"""
         return tuple(self._promotions)
-    
+
     @property
     def owner_layer(self) -> ContextLayer:
+        """返回本 channels 所属的 context 层(如 scenario/suite/framework)。"""
         return self._owner_layer
-    
+
     @property
     def policy(self) -> ChannelsPolicy:
+        """返回本 channels 当前的 ChannelsPolicy(只读,不可变)。"""
         return self._policy
     
     # ── 写入:promote_from 是唯一入口 ─────────────────────
@@ -213,7 +222,7 @@ class Channels:
             to_layer=self._owner_layer,
             by_step_id=by_step_id,
             by_scenario_id=by_scenario_id,
-            at=datetime.utcnow(),
+            at=datetime.now(timezone.utc),
             reason=reason,
             overwrote_previous=overwrote,
         )
@@ -234,14 +243,14 @@ class Channels:
         from_layer: ContextLayer,
         by_step_id: str,
     ) -> None:
-        """大对象引用的附加(走同样的 policy 检查思路,这里简化)。"""
+        """大对象引用的附加(走同样的 policy 检查思路,这里简化);检查 from_layer 是否在 policy 允许列表中,然后将 ArtifactRef 写入 artifacts 字典。"""
         if from_layer not in self._policy.accept_from_layers:
             raise PromotionRejected(
                 f"{from_layer.value} cannot attach artifact to "
                 f"{self._owner_layer.value}"
             )
         self._artifacts[name] = ref
-    
+
     def write_metadata_from(
         self,
         *,
@@ -253,7 +262,7 @@ class Channels:
         """metadata 用于框架层数据(retry 次数、耗时等),policy 相对宽松。
         但同样必须经过受控接口,不直接暴露字典。"""
         self._metadata[key] = value
-    
+
     # ── 内部:策略检查 ────────────────────────────────────
     def _check_policy(
         self,
@@ -263,8 +272,9 @@ class Channels:
         reason: Optional[str],
         allow_overwrite: bool,
     ) -> None:
+        """校验本次变量提升是否满足 policy:layer 准入、forbidden_keys、allowed_key_prefixes、覆盖、reason 必填等;不满足时抛 PromotionRejected。"""
         p = self._policy
-        
+
         if from_layer not in p.accept_from_layers:
             logger.warning(
                 "[Channels] Promotion rejected: layer not allowed: key={} from_layer={} to_layer={}",
@@ -285,7 +295,7 @@ class Channels:
                 f"Key '{key}' is forbidden by policy on "
                 f"{self._owner_layer.value} channels"
             )
-        
+
         if p.allowed_key_prefixes and not any(
             key.startswith(prefix) for prefix in p.allowed_key_prefixes
         ):
@@ -293,7 +303,7 @@ class Channels:
                 f"Key '{key}' does not match allowed prefixes "
                 f"{list(p.allowed_key_prefixes)}"
             )
-        
+
         if key in self._variables:
             # 已存在:必须调用方声明 allow_overwrite,且 policy 允许
             if not allow_overwrite:
@@ -306,13 +316,14 @@ class Channels:
                     f"Key '{key}' is not in overwritable_keys "
                     f"on {self._owner_layer.value} channels"
                 )
-        
+
         if p.require_reason and not reason:
             raise PromotionRejected(
                 f"Promotion to {self._owner_layer.value} requires a reason"
             )
-    
+
     def _notify(self, record: Promotion) -> None:
+        """同步通知所有已注册的 listener;若 listener 抛异常则记录日志但不中断其他 listener。"""
         for listener in self._listeners:
             try:
                 listener(record)

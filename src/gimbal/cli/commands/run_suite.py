@@ -76,7 +76,7 @@ def suite(
     report_dir: ReportDirOpt = "./reports",
     output: OutputOpt = OutputFormat.console,
 ) -> None:
-    """执行已注册的 Suite 资产。
+    """Typer 命令：解析 suite_ids → bootstrap 框架 → Engine 依次执行每个 Suite，汇总后退出。
 
     [bold]示例：[/bold]
 
@@ -144,6 +144,38 @@ def suite(
         cli_ctx.extras["reporters"] = list(reporter)
     if report_dir:
         cli_ctx.extras["report_dir"] = report_dir
+    # 把 --var / --var-file 注入 extras，供 SpecResolver 模板解析时使用
+    parsed_vars = parse_vars(var)
+    if var_file:
+        import yaml as _yaml
+        for vf in var_file:
+            # 修复 #7：--var-file 错误升级为 Exit(2)，不静默吞。
+            try:
+                with open(vf, "r", encoding="utf-8") as fh:
+                    file_vars = _yaml.safe_load(fh)
+            except Exception as exc:
+                logger.error("[CLI] 加载 --var-file 失败: path={} error={}", vf, exc)
+                typer.secho(
+                    f"Error: failed to load --var-file {vf}: {exc}",
+                    fg=typer.colors.RED, err=True,
+                )
+                raise typer.Exit(code=2)
+            if file_vars is None:
+                file_vars = {}
+            if not isinstance(file_vars, dict):
+                logger.error(
+                    "[CLI] --var-file 根必须是 mapping: path={} got={}",
+                    vf, type(file_vars).__name__,
+                )
+                typer.secho(
+                    f"Error: --var-file {vf} root must be a mapping, "
+                    f"got {type(file_vars).__name__}",
+                    fg=typer.colors.RED, err=True,
+                )
+                raise typer.Exit(code=2)
+            parsed_vars.update(file_vars)
+    if parsed_vars:
+        cli_ctx.extras["vars"] = parsed_vars
     try:
         configuration = bootstrap(cli_ctx)
     except Exception as exc:  # noqa: BLE001

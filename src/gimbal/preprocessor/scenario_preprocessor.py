@@ -90,7 +90,7 @@ class ScenarioPreprocessor:
     # ── 公开入口 ──────────────────────────────────────────────────────────────
 
     def run(self) -> tuple[list["StepUnion"], str]:
-        """执行完整预处理，返回 (resolved_steps, base_url)。
+        """执行完整预处理入口，按顺序执行 0)引用物化、1)认证、2)构建查询根、3)批量展开 steps 模板、4)提取 base_url，返回 (resolved_steps, base_url) 元组。
 
         步骤：
           0. 引用物化（asset_store 不为 None 时）：递归替换 scenario 中所有
@@ -159,8 +159,14 @@ class ScenarioPreprocessor:
     def _setup_auth(self) -> None:
         """从 scenario.config.users 构造 AuthSession 并触发认证。
 
-        认证结果（token）写入 AuthRegistry，
-        后续 _build_resolve_root() 直接从 registry 拿对象引用。
+        回滚 B4 → template 引用的 user 在 preprocess 阶段登录（eager）。
+        原因：模板替换（_resolve_steps）依赖 token 字段值——
+        模板 ${auth.<tag>.token} 必须解析为真实 token 字符串，
+        而非 lazy 模式的 None。
+
+        优化（避免原 B4 修复前的 25min startup）：
+          - 扫描所有 step 模板，提取实际引用的 auth tag
+          - 只登录被引用的 user，未引用的 skip
         """
         from gimbal.schema.auth import AuthSession
         from gimbal.auth import AuthManager
@@ -170,35 +176,51 @@ class ScenarioPreprocessor:
             logger.debug("[Preprocessor] 无 users，跳过认证")
             return
 
+        # 1. 先把 AuthSession 注入 registry
         for tag, entry in auth_dict.items():
             if isinstance(entry, AuthSession):
-                # 已经是 AuthSession 对象，直接认证
-                self._authenticate_one(tag, entry)
+                self._auth_registry.set(tag, entry)
             elif isinstance(entry, dict):
-                # 是 dict，先转成 AuthSession
-                self._authenticate_one(tag, AuthSession(**entry))
+                self._auth_registry.set(tag, AuthSession(**entry))
             else:
-                logger.warning("[Preprocessor] 未知的 users entry 类型: tag={} type={}", tag, type(entry).__name__)
+                logger.warning(
+                    "[Preprocessor] 未知的 users entry 类型: tag={} type={}",
+                    tag, type(entry).__name__,
+                )
 
-    def _authenticate_one(self, tag: str, auth_session) -> None:
-        from gimbal.auth import AuthManager
+        # 2. 扫描模板找出实际引用的 auth tags
+        # 模板格式: ${auth.<tag>.token} / ${auth.<tag>.*}
+        # Fix 2+4：用公共 helper 递归扫描，自动覆盖嵌套 body / 自定义 strategy 字段。
+        from gimbal.utils.jsonpath import find_template_var_refs
 
-        self._auth_registry.set(tag, auth_session)
-        logger.debug("[Preprocessor] AuthSession 注入 registry: tag={}", tag)
+        referenced_tags: set[str] = set()
+        for step_union in self._schema.steps:
+            for tag in find_template_var_refs(step_union, prefix="auth"):
+                referenced_tags.add(tag)
 
+        # 3. 登录：只登录模板引用的（未引用的 skip）
         auth_manager = AuthManager(self._auth_registry)
-        try:
-            auth_manager.get_auth(tag)
-            session = self._auth_registry.get(tag)
-            logger.info(
-                "[Preprocessor] 认证成功: tag={} token={} token_type={}",
-                tag,
-                session.token if session else "?",
-                session.token_type if session else "?",
-            )
-        except Exception as exc:
-            logger.error("[Preprocessor] 认证失败: tag={} error={}", tag, exc)
-            raise
+        for tag in auth_dict:
+            if tag in referenced_tags:
+                try:
+                    auth_manager.get_auth(tag)
+                    logger.info(
+                        "[Preprocessor] 认证成功（模板引用）: tag={}", tag,
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "[Preprocessor] 认证失败: tag={} error={}", tag, exc,
+                    )
+                    raise
+            else:
+                logger.debug(
+                    "[Preprocessor] tag={} 未在模板中引用，skip 登录", tag,
+                )
+
+        logger.info(
+            "[Preprocessor] auth 配置完成: 共 {} 个 user, 引用 {} 个, 实际登录 {} 个",
+            len(auth_dict), len(referenced_tags), len(referenced_tags),
+        )
 
     # ── 第二段：构建查询根 ────────────────────────────────────────────────────
 
@@ -232,10 +254,17 @@ class ScenarioPreprocessor:
         # AuthRegistry.snapshot() 返回浅拷贝字典，下游模板解析只读
         root["auth"] = self._auth_registry.snapshot()
 
+        # --- var（修复 #52 完整链路） ---
+        # CLI --var / --var-file 注入的 KV, 通过 BootstrapConfig.vars 流转
+        # 模板里 ${var.foo} 引用
+        if self._cfg.vars:
+            root["var"] = dict(self._cfg.vars)
+
         logger.debug(
-            "[Preprocessor] 查询根构建完成: service_keys={} auth_tags={}",
+            "[Preprocessor] 查询根构建完成: service_keys={} auth_tags={} var_keys={}",
             list(root["service"].keys()),
             list(root["auth"].keys()),
+            list(root.get("var", {}).keys()),
         )
         return root
 
@@ -270,30 +299,47 @@ class ScenarioPreprocessor:
         return resolved
 
     def _resolve_api(self, api, root: dict):
-        """展开 Api 中的模板字段。"""
+        """展开 Api 中的模板字段：解析 path 和 headers 中的 ${} 占位符；若任一模板变量缺失则抛 ValueError（fail-fast），返回新的 Api 实例（ApiRef 原样返回）。"""
         from gimbal.schema.api import Api, ApiRef
 
         if isinstance(api, ApiRef):
             return api
 
-        resolved_headers = {
-            k: self._resolve_value(v, root)
-            for k, v in (api.headers or {}).items()
-        }
-        # 过滤掉解析失败的 None（模板变量不存在时）
-        resolved_headers = {k: v for k, v in resolved_headers.items() if v is not None}
+        # 修复 B5：先解析所有 header；记录哪些解析失败
+        resolved_headers = {}
+        missing_headers = []
+        for k, v in (api.headers or {}).items():
+            resolved = self._resolve_value(v, root)
+            if resolved is None:
+                missing_headers.append(k)
+            else:
+                resolved_headers[k] = resolved
+
+        if missing_headers:
+            # 修复 B5：header 模板变量未找到时报错，不静默丢弃
+            raise ValueError(
+                f"[Preprocessor] api header 模板变量未找到, header 缺失: {missing_headers}。"
+                "请求会变无认证或缺 header，请检查变量名拼写或 vars 注入"
+            )
+
+        # path 也必须能解析
+        resolved_path = self._resolve_value(api.path, root)
+        if resolved_path is None:
+            raise ValueError(
+                f"[Preprocessor] api.path 模板变量未找到: {api.path!r}"
+            )
 
         return Api(
             kind=api.kind,
             service=api.service,
             method=api.method,
-            path=self._resolve_value(api.path, root),
+            path=resolved_path,
             headers=resolved_headers,
             timeout=api.timeout,
         )
 
     def _resolve_request(self, request, root: dict):
-        """展开 Request 中的模板字段。"""
+        """展开 Request 中的模板字段：递归解析 body 嵌套结构中的所有 ${} 占位符，返回新的 Request 实例（RequestRef 原样返回）。"""
         from gimbal.schema.request import Request, RequestRef
 
         if isinstance(request, RequestRef):
@@ -305,46 +351,96 @@ class ScenarioPreprocessor:
         )
 
     def _resolve_strategy(self, strategy, root: dict):
-        """展开单条策略的模板字段。"""
+        """展开单条策略（Extract/Assign/Assertion）的模板字段，模板变量缺失时 fail-fast（避免 expected=None 误导），返回新的策略实例（StrategyRef 原样返回，未知类型原样返回）。
+
+        修复 #5：与 `_resolve_api` 一致——模板变量缺失时 fail-fast，
+        避免 expected=None 这类误导性断言失败信息。
+        """
         from gimbal.schema.strategy import Extract, Assign, Assertion, StrategyRef
 
         if isinstance(strategy, StrategyRef):
             return strategy
 
         base = self._base_strategy_fields(strategy)
+        owner = f"{type(strategy).__name__}#{strategy.name or '?'}"
 
         if isinstance(strategy, Extract):
             return Extract(
                 **base,
-                expression=self._resolve_value(strategy.expression, root),
+                expression=self._resolve_or_fail(
+                    strategy.expression, root, owner=owner, field="expression",
+                ),
                 target=strategy.target,
                 scope=strategy.scope,
-                default=self._resolve_value(strategy.default, root),
+                default=self._resolve_or_fail(
+                    strategy.default, root, owner=owner, field="default",
+                ),
                 required=strategy.required,
             )
 
         if isinstance(strategy, Assign):
             return Assign(
                 **base,
-                source=self._resolve_value(strategy.source, root),
+                source=self._resolve_or_fail(
+                    strategy.source, root, owner=owner, field="source",
+                ),
                 target=strategy.target,
                 scope=strategy.scope,
-                default=self._resolve_value(strategy.default, root),
+                default=self._resolve_or_fail(
+                    strategy.default, root, owner=owner, field="default",
+                ),
                 required=strategy.required,
             )
 
         if isinstance(strategy, Assertion):
             return Assertion(
                 **base,
-                target=self._resolve_value(strategy.target, root),
+                target=self._resolve_or_fail(
+                    strategy.target, root, owner=owner, field="target",
+                ),
                 operator=strategy.operator,
-                expected=self._resolve_value(strategy.expected, root),
+                expected=self._resolve_or_fail(
+                    strategy.expected, root, owner=owner, field="expected",
+                ),
                 message=strategy.message,
                 soft=strategy.soft,
             )
 
         # 未知策略类型，原样返回
         return strategy
+
+    # ── 核心：单值模板解析（fail-fast 包装）─────────────────────────────────
+
+    def _resolve_or_fail(self, value: Any, root: dict, *, owner: str, field: str) -> Any:
+        """解析模板值；缺失则抛 ValueError（fail-fast），与 `_resolve_api` 一致。
+
+        触发条件（必须同时满足）：
+          - value 是字符串
+          - value 含 ${} 模板（is_template(value)）
+          - resolve_template_strict 返回 _MISSING 哨兵（路径真不存在）
+
+        不触发的情况：
+          - 非字符串 → 原样返回
+          - 无模板字符串 → 原样返回
+          - 合法 None 值（key 存在但值是 None） → 返回 None
+          - 模板解析成功 → 返回解析值
+
+        注意：必须直接调用 resolve_template_strict，不能走 _resolve_value 包装，
+        否则 _resolve_value 会把 _MISSING 折叠成 None，与"合法 None 值"混淆，
+        误报 fail-fast。
+        """
+        from gimbal.utils.jsonpath import is_template, resolve_template_strict, is_missing
+
+        if not isinstance(value, str) or not is_template(value):
+            return value
+
+        resolved = resolve_template_strict(value, root)
+        if is_missing(resolved):
+            raise ValueError(
+                f"[Preprocessor] {owner}.{field} 模板变量未找到: {value!r}。"
+                "请检查变量名拼写或 vars 注入"
+            )
+        return resolved
 
     # ── 核心：单值模板解析 ────────────────────────────────────────────────────
 
@@ -354,24 +450,33 @@ class ScenarioPreprocessor:
         - 非字符串 / 不含模板 → 原样返回
         - 整体是单个 ${} → 保留原始类型（int / dict / AuthSession）
         - 嵌入式 ${} → 字符串拼接
-        - 解析失败（变量不存在） → 返回原始字符串，记录 warning
+        - 解析失败（变量不存在） → 返回 _Missing 哨兵（修复 B5 + Fix 3）
+        - 合法 None 值（key 存在但值为 None） → 正常返回 None / 空串
+
+        Fix 3 修正：
+          区分"路径不存在"（_Missing，触发 fail-fast）与"合法 None 值"
+          （key 存在但值为 None，渲染为空串 / 返回 None）。
         """
-        from gimbal.utils.jsonpath import is_template, resolve_template
+        from gimbal.utils.jsonpath import is_template, resolve_template_strict, is_missing
 
         if not isinstance(value, str) or not is_template(value):
             return value
 
-        resolved = resolve_template(value, root)
+        # 修复 B5 + Fix 3：用 strict 版本
+        # - 路径不存在 → _Missing（让调用方 fail-fast）
+        # - 合法 None → 嵌入式渲染为空串、整体模板返回 None
+        resolved = resolve_template_strict(value, root)
 
-        if resolved is None:
+        if is_missing(resolved):
+            # 路径真不存在 → 返回 None 让 _resolve_api / _resolve_nested 显式处理
             logger.warning("[Preprocessor] 模板变量未找到: {}", value)
-            return value  # 保留原始占位符，不返回 None，避免意外空值
+            return None
 
         logger.debug("[Preprocessor] 模板展开: {!r} → {!r}", value, resolved)
         return resolved
 
     def _resolve_nested(self, data: Any, root: dict) -> Any:
-        """递归展开嵌套结构（dict / list）中的所有模板字段。"""
+        """递归展开嵌套结构（dict / list）中的所有模板字段：dict 递归每个 value、list 递归每个 item、scalar 走 _resolve_value，返回结构（dict/list）或解析后的标量值。"""
         if isinstance(data, dict):
             return {k: self._resolve_nested(v, root) for k, v in data.items()}
         if isinstance(data, list):
@@ -381,23 +486,70 @@ class ScenarioPreprocessor:
     # ── 第四段：提取 base_url ──────────────────────────────────────────────────
 
     def _pick_base_url(self) -> str:
-        """从 services 取第一个 URL 作为 base_url。
+        """按 step 实际引用的 service 提取 base_url（修复 B1）。
 
-        优先取 scenario.config.services，找不到再查 bootstrap.services。
+        解析策略：
+          1. 收集所有 step 引用了哪些 service key
+          2. 如果只有一个 service 被引用：用它（精确匹配）
+          3. 如果多个 service 被引用：当前架构只支持一个 base_url per scenario，
+             取第一个并 warn（让用户知道是 multi-service 降级）
+          4. 如果 step 未引用任何 service：fallback 到 services dict 的第一个
+             （保留旧行为，向后兼容）
+          5. 优先取 scenario.config.services，找不到再查 bootstrap.services
+
+        注：完全多服务支持需要 per-step base_url（架构层面变更），本次
+        修复仅消除"静默错路由"——最坏情况是 warn 而非 silent misroute。
         """
         sd = getattr(self._schema.config, "services", None) or {}
-        if sd:
+        if not sd:
+            sd = self._cfg.services or {}
+
+        if not sd:
+            logger.debug("[Preprocessor] 未找到 base_url，使用空字符串")
+            return ""
+
+        # 收集 step 实际引用的 service key
+        referenced: set[str] = set()
+        for step_union in self._schema.steps:
+            if hasattr(step_union, "api") and hasattr(step_union.api, "service"):
+                ref = step_union.api.service
+                if ref in sd:
+                    referenced.add(ref)
+                elif ref:
+                    # step 引用了 service，但不在 services dict 中
+                    logger.warning(
+                        "[Preprocessor] step api.service={!r} 不在 services dict 中，"
+                        "该 step 将发到空 base_url（触发 #6 修复的 error 报告）",
+                        ref,
+                    )
+
+        if len(referenced) == 1:
+            chosen = next(iter(referenced))
+            url = sd[chosen]
+            logger.debug(
+                "[Preprocessor] base_url（按 step 引用解析）: service={} url={}",
+                chosen, url,
+            )
+            return url
+        elif len(referenced) > 1:
+            # 当前架构不支持 per-step base_url，降级并 warn
+            chosen = next(iter(referenced))
+            url = sd[chosen]
+            logger.warning(
+                "[Preprocessor] multi-service scenario detected: 引用了 {} 个 "
+                "service keys ({})。当前架构只支持一个 base_url per scenario，"
+                "使用 '{}' 作为 fallback。其他 service 的 step 会失败。",
+                len(referenced), sorted(referenced), chosen,
+            )
+            return url
+        else:
+            # step 未引用任何 service（旧行为 fallback）
             url = next(iter(sd.values()), "")
-            logger.debug("[Preprocessor] base_url（来自 services）: {}", url)
+            logger.debug(
+                "[Preprocessor] base_url（无 step 引用，fallback 到 dict 第一个）: {}",
+                url,
+            )
             return url
-
-        if self._cfg.services:
-            url = next(iter(self._cfg.services.values()), "")
-            logger.debug("[Preprocessor] base_url（来自 services）: {}", url)
-            return url
-
-        logger.debug("[Preprocessor] 未找到 base_url，使用空字符串")
-        return ""
 
     # ── 辅助 ──────────────────────────────────────────────────────────────────
 

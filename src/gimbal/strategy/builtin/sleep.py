@@ -25,6 +25,7 @@ class SleepExecutor(StrategyExecutor):
     kind = "sleep"
 
     def execute(self, spec: "StrategyBase", view: "StrategyContextView") -> StrategyResult:
+        """执行等待策略：调用 time.sleep(spec.duration) 等待指定秒数后返回 PASSED。"""
         try:
             duration = getattr(spec, "duration", 1.0)
             logger.info("[SleepExecutor] 等待 {} 秒...", duration)

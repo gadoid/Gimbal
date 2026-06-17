@@ -52,6 +52,7 @@ class LocalFsContentStore:
     """
 
     def __init__(self, root: str | Path) -> None:
+        """初始化本地文件系统 store，展开 ~ 后自动创建 root 目录（若不存在）。"""
         self.root = Path(root).expanduser().resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         logger.debug("[LocalFsContentStore] Initialized: root={}", self.root)
@@ -82,6 +83,7 @@ class LocalFsContentStore:
     # ── Blob 操作 ──
 
     def push_blob(self, digest: str, data: bytes | BinaryIO) -> None:
+        """以 sha256 digest 为键写入 blob；已存在则幂等跳过。写入采用 tmp + os.replace 原子写。"""
         path = self._blob_path(digest)
         if path.exists():
             # 幂等：相同 digest 视为同一内容，不重新写
@@ -115,17 +117,20 @@ class LocalFsContentStore:
         logger.info("[LocalFsContentStore] Blob written: digest={} path={}", digest, path)
 
     def pull_blob(self, digest: str) -> bytes:
+        """按 digest 读取 blob 的原始字节；不存在时抛 AssetNotFound。"""
         path = self._blob_path(digest)
         if not path.exists():
             raise AssetNotFound(f"Blob not found: {digest}", digest=digest)
         return path.read_bytes()
 
     def has_blob(self, digest: str) -> bool:
+        """判断指定 digest 的 blob 是否已存在（按路径检查文件）。"""
         return self._blob_path(digest).exists()
 
     # ── Tag 索引操作 ──
 
     def put_manifest(self, ref: AssetRef, digest: str, record_json: str) -> None:
+        """把 record_json 写入 ref 对应的 tag 索引文件，并同步更新该 name 下的 tag 清单。"""
         manifest_path = self._manifest_path(ref)
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -184,6 +189,7 @@ class LocalFsContentStore:
         )
 
     def get_manifest(self, ref: AssetRef) -> tuple[str, str] | None:
+        """读取 ref 对应的 tag 索引，返回 (digest, record_json)；不存在返回 None。"""
         manifest_path = self._manifest_path(ref)
         if not manifest_path.exists():
             return None
@@ -193,6 +199,7 @@ class LocalFsContentStore:
         return data["digest"], text
 
     def delete_manifest(self, ref: AssetRef) -> bool:
+        """删除 ref 对应的 tag 索引（不含 blob），并从 tag 清单中移除；返回是否真正删除了索引。"""
         manifest_path = self._manifest_path(ref)
         if not manifest_path.exists():
             return False
@@ -224,6 +231,7 @@ class LocalFsContentStore:
         return True
 
     def list_tags(self, namespace: str, name: str) -> list[str]:
+        """返回指定 (namespace, name) 下的所有 tag 列表；无索引则返回空列表。"""
         tag_index = self._tag_index_path(namespace, name)
         if not tag_index.exists():
             return []

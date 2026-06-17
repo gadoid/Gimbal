@@ -44,6 +44,7 @@ class ReportErrorEntry:
     traceback: Optional[str] = None
 
     def short(self) -> str:
+        """返回 ``[phase] reporter_name: ErrorType: message`` 格式的简短描述，用于日志输出。"""
         return f"[{self.phase}] {self.reporter_name}: {self.error_type}: {self.error_message}"
 
 
@@ -59,6 +60,7 @@ class ReportErrorLog:
         phase: str,
         exc: BaseException,
     ) -> None:
+        """记录一次 reporter 错误，自动取异常类型、消息、traceback 追加到 entries。"""
         self.entries.append(ReportErrorEntry(
             reporter_name=reporter_name,
             phase=phase,
@@ -69,9 +71,11 @@ class ReportErrorLog:
 
     @property
     def has_errors(self) -> bool:
+        """是否记录了任何错误（entries 非空时为 True）。"""
         return bool(self.entries)
 
     def summary(self) -> str:
+        """返回多行可读的汇总文本，无错误时返回 ``ReportErrorLog: 0 errors``。"""
         if not self.entries:
             return "ReportErrorLog: 0 errors"
         lines = [f"ReportErrorLog: {len(self.entries)} error(s)"]
@@ -168,6 +172,12 @@ class ReporterRuntime:
 
         for r in self._reporters:
             name = getattr(r, "name", type(r).__name__) or type(r).__name__
+            # 修复 B9：根据 reporter 的 is_async 标志选择订阅模式
+            # 慢 reporter（IM/平台上传）应设为 True 避免阻塞 event pipeline
+            sub_mode = (
+                SubscriptionMode.ASYNC if getattr(r, "is_async", False)
+                else SubscriptionMode.SYNC
+            )
             ctx = ReportContext(
                 framework_ctx=framework_ctx,
                 bus=self._bus,
@@ -175,7 +185,7 @@ class ReporterRuntime:
                 report_dir=report_dir,
                 user_config=(plugin_configs or {}).get(name, {}),
                 artifacts_dir=artifacts_dir,
-                subscription_mode=SubscriptionMode.SYNC,
+                subscription_mode=sub_mode,
             )
             self._contexts[name] = ctx
             try:
@@ -277,12 +287,15 @@ class ReporterRuntime:
 
     @property
     def state(self) -> str:
+        """返回当前状态字符串，取值 ``new``/``ready``/``running``/``finalized``/``closed``。"""
         return self._state
 
     @property
     def error_log(self) -> ReportErrorLog:
+        """返回本次 run 累积的 ReportErrorLog，供上层记录或打印。"""
         return self._error_log
 
     @property
     def reporters(self) -> list[Any]:
+        """返回当前持有的 reporter 实例列表（拷贝），便于只读查询。"""
         return list(self._reporters)
