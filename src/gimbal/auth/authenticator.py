@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 _AUTHENTICATOR_REGISTRY: dict[str, type] = {}
 
 def register_authenticator(url_pattern: str):
-    """装饰器：注册 URL pattern -> 认证器类。
+    """装饰器工厂：返回把认证器类按 url_pattern 注册到全局表的装饰器；get_authenticator 通过精确或前缀匹配查找。
 
     用法:
         @register_authenticator("https://api.github.com/")
@@ -45,7 +45,7 @@ class Authenticator(ABC):
 
     @abstractmethod
     def authenticate(self, auth: "AuthSession", tag: str) -> None:
-        """执行认证，成功则调用 auth.apply_token() 填充 token。
+        """执行该认证器对应的认证流程，成功后必须调用 auth.apply_token() 将新 token 写入会话。
 
         Args:
             auth: AuthSession 对象
@@ -60,11 +60,14 @@ class Authenticator(ABC):
 # ── 路由函数 ────────────────────────────────────────────────
 
 def get_authenticator(url: str) -> Authenticator:
-    """根据 URL 获取对应的认证器。
+    """按 URL 解析应使用的认证器实例。
 
     匹配顺序：
-        1. 精确匹配
+        1. 精确匹配注册表中的 pattern
         2. URL 前缀匹配（注册时使用 URL 前缀）
+        3. 兜底：HTTPSAuthenticator
+
+    url 为空时直接返回 PreTokenAuthenticator（无远程端点的预置 Token 模式）。
 
     Returns:
         匹配的认证器实例

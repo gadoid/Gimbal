@@ -1,4 +1,4 @@
-"""GitHub OAuth2 认证器"""
+"""WLAuthenticator - 物流系统（fin-tidb）专用认证器"""
 import httpx
 # API 库
 from gimbal.auth.authenticator import Authenticator, register_authenticator
@@ -31,6 +31,7 @@ class WLAuthenticator(Authenticator):
     """
 
     def authenticate(self, auth, tag: str ) -> None:
+        """调用物流系统登录接口，从 data.token 取 token 写入会话；未取到则抛 AuthError。"""
         response = httpx.post(
             f"{auth.url}api/home/login/userLogin",
             json={
@@ -48,7 +49,7 @@ class WLAuthenticator(Authenticator):
         response.raise_for_status()
         
         data = response.json()
-        logger.debug(f"Response data: {data}")
+        logger.debug("Response data: {}", data)
 
         # 根据实际响应结构调整 token 提取逻辑
         resp_data = data.get("data")

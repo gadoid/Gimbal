@@ -31,6 +31,7 @@ class GimbalError(Exception):
         code: str | None = None,
         **kwargs: object,
     ) -> None:
+        """初始化异常实例：保存错误消息、可选覆盖错误码，并收集任意附加上下文键值对以供日志/序列化使用。"""
         super().__init__(message)
         self.message = message
         if code is not None:
@@ -39,13 +40,14 @@ class GimbalError(Exception):
         self.context = kwargs
 
     def __str__(self) -> str:
+        """返回带错误码前缀的字符串表示；存在上下文时附加 key=value 形式的尾部，便于日志直接展示。"""
         if self.context:
             ctx_str = " ".join(f"{k}={v!r}" for k, v in self.context.items())
             return f"[{self.code}] {self.message} ({ctx_str})"
         return f"[{self.code}] {self.message}"
 
     def to_dict(self) -> dict:
-        """转换为字典，用于序列化（如 JSON 报告）。"""
+        """将异常序列化为包含 type / code / message / context 的字典，供 JSON 报告或外部系统使用。"""
         return {
             "type": self.__class__.__name__,
             "code": self.code,
@@ -113,6 +115,7 @@ class InvalidTransitionError(StateMachineError):
     code = "STATEMACHINE_INVALID_TRANSITION"
 
     def __init__(self, from_state: str, to_state: str) -> None:
+        """构造非法跃迁异常：记录起始态、目标态到消息及 context，便于定位违规的状态机路径。"""
         super().__init__(
             f"Invalid transition: {from_state!r} → {to_state!r}",
             from_state=from_state,
@@ -127,6 +130,7 @@ class AlreadyTerminalError(StateMachineError):
     code = "STATEMACHINE_ALREADY_TERMINAL"
 
     def __init__(self, state: str) -> None:
+        """构造终态重复跃迁异常：将当前终态名写入消息与 context，明确告知调用方所处状态。"""
         super().__init__(f"State machine is already in terminal state: {state!r}", state=state)
         self.state = state
 

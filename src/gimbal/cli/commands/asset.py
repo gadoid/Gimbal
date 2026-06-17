@@ -73,6 +73,7 @@ DEFAULT_REGISTRY = Path("~/.gimbal/registry")
 
 
 def _opt_registry() -> Any:
+    """构造并返回 --registry 选项的 typer.Option 定义，供多个 asset 子命令共用。"""
     return typer.Option(
         "--registry", "-r",
         help=f"本地注册表根目录。默认 {DEFAULT_REGISTRY}。",
@@ -81,6 +82,7 @@ def _opt_registry() -> Any:
 
 
 def _resolve_registry(registry: Optional[Path]) -> Path:
+    """把 --registry 参数 expanduser+resolve 成绝对路径，必要时创建目录；未指定则用 DEFAULT_REGISTRY。"""
     """解析 --registry 选项，未提供时用默认。"""
     p = (registry or DEFAULT_REGISTRY).expanduser().resolve()
     p.mkdir(parents=True, exist_ok=True)
@@ -88,6 +90,7 @@ def _resolve_registry(registry: Optional[Path]) -> Path:
 
 
 def _build_store(registry: Optional[Path]) -> AssetStore:
+    """按解析后的 registry 路径构造 LocalFsContentStore 并包装为 AssetStore，供各 asset 子命令复用。"""
     backend = LocalFsContentStore(root=_resolve_registry(registry))
     return AssetStore(backend=backend)
 
@@ -145,6 +148,7 @@ def push(
     ] = False,
     registry: Annotated[Optional[Path], _opt_registry()] = None,
 ) -> None:
+    """Typer 命令：从 -f 或 stdin 读取字节流，按 ref 写入本地仓库，返回 digest/size。"""
     """上传资产到本地仓库。"""
     try:
         ref = AssetRef.parse(ref_str)
@@ -230,6 +234,7 @@ def pull(
     ] = False,
     registry: Annotated[Optional[Path], _opt_registry()] = None,
 ) -> None:
+    """Typer 命令：按 ref 取出内容到文件或 stdout，stdout 模式默认尝试 JSON 解析。"""
     """下载资产。"""
     try:
         ref = AssetRef.parse(ref_str)
@@ -281,6 +286,7 @@ def list_(
     ] = "table",
     registry: Annotated[Optional[Path], _opt_registry()] = None,
 ) -> None:
+    """Typer 命令：列出指定 namespace（或全库）的资产记录，支持 table / json 两种输出格式。"""
     """列出资产。"""
     store = _build_store(registry)
     records = store.list_assets(namespace=namespace)
@@ -342,6 +348,7 @@ def inspect(
     ref_str: Annotated[str, typer.Argument(help="资产 ref。", metavar="REF")],
     registry: Annotated[Optional[Path], _opt_registry()] = None,
 ) -> None:
+    """Typer 命令：按 ref 取资产元数据并以 JSON 形式打印到 stdout（不下载内容字节）。"""
     """查看资产元数据（不下载内容）。"""
     try:
         ref = AssetRef.parse(ref_str)
@@ -387,6 +394,7 @@ def remove(
     ] = False,
     registry: Annotated[Optional[Path], _opt_registry()] = None,
 ) -> None:
+    """Typer 命令：删除指定 ref 的 tag（blob 内容留给 gc 回收），TTY 下需 y 确认。"""
     """删除资产的某个 tag（blob 在无引用时自动清理——gc 时）。"""
     try:
         ref = AssetRef.parse(ref_str)
@@ -426,6 +434,7 @@ def tag(
     ] = False,
     registry: Annotated[Optional[Path], _opt_registry()] = None,
 ) -> None:
+    """Typer 命令：把源 ref 指向的 digest 在目标 ref 上创建新 tag，dst 已存在时按 --overwrite 处理。"""
     """给已有 digest 添加新 tag。"""
     try:
         src = AssetRef.parse(src_ref)
@@ -466,6 +475,7 @@ def gc(
         typer.Option("--yes", "-y", help="跳过确认直接清理。"),
     ] = False,
 ) -> None:
+    """Typer 命令：删除仓库内无任何 tag 引用的孤立 blob，并打印清理前后统计。"""
     """清理孤儿 blob（无任何 tag 引用的内容）。"""
     backend = LocalFsContentStore(root=_resolve_registry(registry))
     stats_before = backend.stats()
@@ -490,6 +500,7 @@ def gc(
 
 
 def _human_size(n: int) -> str:
+    """把字节数 n 格式化为带 B/KB/MB/GB/TB 单位的可读字符串。"""
     """字节数 → 人类可读。"""
     for unit in ("B", "KB", "MB", "GB"):
         if n < 1024:

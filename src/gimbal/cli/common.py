@@ -45,11 +45,16 @@ class InputFormat(str, Enum) :
     json = "json"
     yaml = "yaml"
 
-class LogLevel(str, Enum):
+class LogLevelEnum(str, Enum):
+    """日志级别枚举（修复 #40：避免与 params.py 的 Annotated 重名）。"""
     info = "info"
     warning = "warning"
     debug = "debug"
     error = "error"
+
+
+# 旧名兼容（修复 #40：保留 LogLevel 别名指向 enum，便于现有代码迁移）
+LogLevel = LogLevelEnum
 
 
 class OutputFormat(str, Enum):
@@ -94,7 +99,7 @@ ModeOpt = Annotated[
 ]
 
 LogLevelOpt = Annotated[
-    LogLevel,
+    LogLevelEnum,
     typer.Option("--log-level", help="日志级别。", rich_help_panel="环境与日志"),
 ]
 
@@ -315,6 +320,7 @@ def resolve_source(
     no_cache: bool,
     cache_only: bool,
 ) -> SourceStrategy:
+    """把 --source / --no-cache / --cache-only 三个互斥/覆盖关系的标志合并为最终 SourceStrategy。"""
     """协调 --source / --no-cache / --cache-only。"""
     if no_cache and cache_only:
         raise typer.BadParameter("--no-cache 和 --cache-only 互斥。")
@@ -326,6 +332,7 @@ def resolve_source(
 
 
 def parse_vars(var_list: list[str] | None) -> dict[str, str]:
+    """把 ['k=v', ...] 形式的输入拆为 {k: v} 字典；任一项缺 '=' 则抛 BadParameter。"""
     """解析 --var key=value 列表。"""
     if not var_list:
         return {}
@@ -339,6 +346,7 @@ def parse_vars(var_list: list[str] | None) -> dict[str, str]:
 
 
 def parse_parallel(value: str) -> int:
+    """把 --parallel 字符串解析为正整数；'auto' 时回退到 os.cpu_count()，非法值抛 BadParameter。"""
     """解析 --parallel，支持 'auto'。"""
     if value.lower() == "auto":
         import os
@@ -353,6 +361,7 @@ def parse_parallel(value: str) -> int:
 
 
 def _build_default_asset_store(registry: Path | None = None) -> "AssetStore":
+    """按 ~/.gimbal/registry（可被 registry 参数覆盖）路径构造 LocalFsContentStore 并包装为 AssetStore 返回。"""
     """构造默认的本地 AssetStore（registry 路径由 --registry 覆盖）。
 
     供 suite / scenario CLI 子命令共用，避免在两处重复构造。
@@ -363,7 +372,65 @@ def _build_default_asset_store(registry: Path | None = None) -> "AssetStore":
     return AssetStore(backend=LocalFsContentStore(root=root))
 
 
-def _print_run_report(result: Any, fmt: "OutputFormat") -> None:
+def _collect_run_meta() -> dict[str, Any]:
+    """从环境变量和 ~/.gimbal/env / gimbal.toml[run_meta] 汇总本次运行的 CI/Git/触发人上下文，字段缺失时使用空字符串。"""
+    """收集本次运行的元数据（CI/CD 上下文 / git 信息 / 触发人 / 业务扩展）。
+
+    数据来源：
+      - 环境变量：CI 平台约定的标准变量（GitHub Actions / GitLab CI / Jenkins / 通用）
+      - 用户可在 ~/.gimbal/env 或 gimbal.toml 的 [run_meta] 段补充自定义键值
+
+    兼容设计：
+      - 所有字段都有 default；任何环境变量缺失都不会抛错
+      - 字段名为人类可读，与 HTML 报告头部 pill 一一对应
+    """
+    import os
+
+    return {
+        # CI/CD 上下文
+        "ci":              bool(os.environ.get("CI")),
+        "ci_provider":     os.environ.get("CI_PROVIDER", ""),     # 手动指定
+        "build_url":       os.environ.get("BUILD_URL", "") or os.environ.get("CI_BUILD_URL", "") or os.environ.get("GITHUB_SERVER_URL", ""),
+        "build_number":    os.environ.get("BUILD_NUMBER", "") or os.environ.get("GITHUB_RUN_NUMBER", "") or os.environ.get("CI_PIPELINE_ID", ""),
+        "build_id":        os.environ.get("BUILD_ID", "") or os.environ.get("GITHUB_RUN_ID", ""),
+        # Git 上下文（短名：与 HTML 报告头部 pill / JsonReporter dump 对齐）
+        "branch":          os.environ.get("GIT_BRANCH", "") or os.environ.get("GITHUB_REF_NAME", "") or os.environ.get("CI_COMMIT_REF_NAME", ""),
+        "commit":          (os.environ.get("GIT_COMMIT", "") or os.environ.get("GITHUB_SHA", "") or os.environ.get("CI_COMMIT_SHA", ""))[:12],
+        "commit_msg":      (os.environ.get("GIT_COMMIT_MESSAGE", "") or os.environ.get("CI_COMMIT_MESSAGE", ""))[:120],
+        # 触发人
+        "triggered_by":    os.environ.get("GIT_AUTHOR", "") or os.environ.get("GITHUB_ACTOR", "") or os.environ.get("CI_COMMIT_AUTHOR", "") or os.environ.get("USER", "") or os.environ.get("USERNAME", ""),
+    }
+
+
+def _publish_run_meta(configuration: Any) -> None:
+    """bootstrap 后、Engine.run 前调用：把 _collect_run_meta() 的结果包装为 RunMetaEvent 发到 bus；bus 缺失或失败时静默降级。"""
+    """收集并发布 RunMetaEvent 到 EventBus。
+
+    时机：bootstrap() 之后、Engine.run() 之前。
+    此时 bus 已经初始化，reporter 也已订阅过 interested_events。
+
+    容错：bus 不存在或 publish 失败时静默跳过（reporter 拿不到 meta 时
+    应能优雅地降级到空 meta，而不是让 CLI 崩溃）。
+    """
+    import os  # 显式 import，便于工具识别
+
+    bus = getattr(configuration, "event_bus", None)
+    if bus is None:
+        return
+    try:
+        from gimbal.events.types import RunMetaEvent
+        meta = _collect_run_meta()
+        bus.publish(RunMetaEvent(meta=meta))
+    except Exception as exc:  # noqa: BLE001
+        # 元数据发布失败不影响主流程，但要留 trace 供调试
+        logger.warning(
+            "[CLI] RunMetaEvent 发布失败（已隔离）: {}: {}",
+            type(exc).__name__, exc,
+        )
+
+
+def _print_run_report(result: Any, fmt: "OutputFormat", artifacts: list | None = None) -> None:
+    """按 OutputFormat 打印 RunResult：json 时 dump payload，console 时按通过/失败着色并附 artifacts 列表。"""
     """统一格式化输出 RunResult。
 
     console —— 给人看的高亮摘要
@@ -415,5 +482,25 @@ def _print_run_report(result: Any, fmt: "OutputFormat") -> None:
         )
 
 
+    # ── artifacts section ────────────────────────────────────────────────────
+    if artifacts:
+        _typer.secho(
+            f"  Reports ({len(artifacts)}):",
+            fg=_typer.colors.CYAN, bold=True,
+            )
+        for art in artifacts:
+            name = getattr(art, "name", "?")
+            path = getattr(art, "path", None)
+            media = getattr(art, "media_type", None)
+            loc = str(path) if path is not None else "<inline>"
+            meta = ""
+            md = getattr(art, "metadata", None)
+            if isinstance(md, dict) and md:
+                meta = " " + ", ".join(f"{k}={v}" for k, v in md.items())
+            media_tag = f" [{media}]" if media else ""
+            _typer.echo(f"   - {name}{media_tag}: {loc}{meta}")
+
+
 def _total_duration_ms(result: Any) -> float:
+    """汇总 result.details 中所有条目的 duration_ms 字段，返回总毫秒数。"""
     return sum(float(d.get("duration_ms", 0)) for d in result.details)

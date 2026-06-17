@@ -102,6 +102,7 @@ def match(
     report_dir: ReportDirOpt = "./reports",
     output: OutputOpt = OutputFormat.console,
 ) -> None:
+    """Typer 命令：按路径 glob/查询表达式匹配本地未注册的用例文件并执行（不依赖资产注册表）。"""
     """按路径或表达式匹配本地未注册的用例文件并执行。
 
     [bold]示例：[/bold]

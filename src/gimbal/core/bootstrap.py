@@ -23,6 +23,7 @@ class Configuration:
         - 基础设施引用：ctx_manager / dispatcher / event_bus / archive
         - 插件设施：hook_registry / plugin_registry
         - plugins：已激活的插件实例（仅持有引用，不调用其方法）
+        - reporter_runtime：Reporter 调度器，Engine.run() 阶段驱动
 
     不持有任何层级 Context（framework/suite/scenario/step），
     这些在 Engine.run() 时按执行生命周期创建。
@@ -41,6 +42,8 @@ class Configuration:
     hook_registry: "HookRegistry"
     plugin_registry: Any
     plugins: tuple["Plugin", ...] = field(default_factory=tuple)
+    # Reporter 调度器（Engine.run() 时通过 begin_all / finalize_all 驱动）
+    reporter_runtime: Any = None
 
 from gimbal.log import get_logger
 logger = get_logger(__name__)
@@ -62,7 +65,10 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
     """
     # 1. 日志系统（最先，在任何 logger 调用之前）
     from gimbal.log.integration import configure_logging_from_cli
-    configure_logging_from_cli(cli_ctx)
+    try:
+        configure_logging_from_cli(cli_ctx)
+    except Exception:
+        pass  # 日志初始化失败不应阻断 bootstrap 流程
 
     # 2. 配置合并
     cfg = ConfigLoader().load(cli_ctx)
@@ -116,6 +122,23 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
             init_result.stop_plugin, init_result.stop_reason,
         )
 
+    # 7. 装配 Reporter runtime（自注册所有内置 reporter）
+    from gimbal.reporter.registry import ReporterRegistry
+    from gimbal.reporter.runtime import ReporterRuntime
+    from gimbal.reporter.builtin import register_builtin_reporters
+
+    reporter_registry = ReporterRegistry()
+    register_builtin_reporters(reporter_registry)
+    reporter_runtime = ReporterRuntime(reporter_registry)
+    reporter_runtime.setup(bus=event_bus, config=cfg)
+    logger.info("[bootstrap] Reporter runtime 就绪: builtins={}", reporter_registry.available())
+
+    # 8. 构造变量生成器并注入 cfg（cfg 是 frozen=True，只能用 model_copy）
+    from gimbal.generator import Generator, build_default_registry
+    generator = Generator(build_default_registry())
+    cfg = cfg.model_copy(update={"generator": generator})
+    logger.info("[bootstrap] 变量生成器已就绪: kinds={}", generator._registry.kinds())
+
     return Configuration(
         cfg=cfg,
         auth_registry=auth_registry,
@@ -126,6 +149,7 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
         hook_registry=hook_registry,
         plugin_registry=plugin_registry,
         plugins=tuple(plugins),
+        reporter_runtime=reporter_runtime,
     )
 
 
@@ -193,9 +217,18 @@ def shutdown(configuration: Configuration) -> None:
         3. 停 EventBus
 
     卸载的失败/成功以 DeactivateReport 形式报告，调用方按需处理。
+
+    修复 B10：幂等性——重复调用安全，不会重复触发钩子/卸载插件/停 bus。
     """
     from gimbal.core.hooks import HookPoint
     from gimbal.plugins import PluginLoader
+
+    # 修复 B10：幂等性检查
+    # 用一个属性标记是否已 shutdown（不是用 is None，因为 Configuration 是 frozen）
+    if getattr(configuration, "_gimbal_shutdown_done", False):
+        logger.debug("[bootstrap] shutdown() 已调用过，跳过重复执行")
+        return
+    object.__setattr__(configuration, "_gimbal_shutdown_done", True)
 
     # 1. 触发 TEARDOWN 钩子（钩子中可改写 cleanup 顺序或补充清理）
     configuration.hook_registry.trigger(
@@ -235,6 +268,14 @@ def shutdown(configuration: Configuration) -> None:
 
 
 def _configure_logging(cfg: BootstrapConfig) -> None:
+    """根据 cfg.log_level 配置全局 logging。
+
+    入参:
+        cfg: 引导配置，使用其中的 log_level 字段。
+    副作用:
+        调用 logging.basicConfig(force=True) 覆盖既有配置；
+        将 httpx / httpcore 的日志级别强制设为 WARNING，避免噪音。
+    """
     level = {
         "debug":   logging.DEBUG,
         "info":    logging.INFO,

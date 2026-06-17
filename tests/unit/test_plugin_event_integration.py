@@ -78,6 +78,7 @@ try:
                 ctx.register_event("scenario.start", lambda e: self.events.append(e.scenario_id))
                 def h(p):
                     p["seen"] = True
+                    return p  # 修复 #15：in-place 修改需显式 return 才被识别为 modified
                 ctx.register_hook("step.start", h, priority=10)
     """), encoding="utf-8")
 

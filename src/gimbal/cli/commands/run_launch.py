@@ -11,10 +11,11 @@ import yaml
 import json
 
 from gimbal.core.runner import Engine
-from gimbal.core.bootstrap import bootstrap
+from gimbal.core.bootstrap import bootstrap, shutdown
 from gimbal.cli.common import (
     DryRunOpt, EnvOpt, LogLevel, LogLevelOpt, InputFormat, FormatOpt, ModeOpt,
-    PluginsOpt, RegistryOpt, _build_default_asset_store,
+    OutputFormat, OutputOpt, PluginsOpt, RegistryOpt, ReportDirOpt, ReporterOpt,
+    _build_default_asset_store, _print_run_report, _publish_run_meta,
 )
 from gimbal.cli.context import CLIContext
 from gimbal.log import get_logger
@@ -28,13 +29,14 @@ class InputError(typer.BadParameter):
 
 
 def _read_source(source: str | None, inline: str | None) -> tuple[str, str | None]:
-    """读取原始输入内容。
+    """解析 source/inline 的互斥关系，读取原始文本并返回 (raw, 路径扩展名 hint)；非法组合抛 InputError。
 
     Returns:
         (raw_content, source_hint)
         source_hint 用于 auto 模式下的格式推断，文件路径返回扩展名，
         stdin / inline 返回 None。
     """
+    # 互斥校验
     # 互斥校验
     provided = [x for x in (source, inline) if x is not None]
     if len(provided) == 0:
@@ -67,6 +69,7 @@ def _detect_format(
     source_hint: str | None,
 ) -> InputFormat:
     """auto 模式下推断真实格式。"""
+    """当 fmt 为 auto 时按扩展名或首字符嗅探出真实 InputFormat；显式 fmt 直接透传。"""
     if fmt != InputFormat.auto:
         return fmt
 
@@ -93,6 +96,7 @@ def _detect_format(
 
 
 def _parse_json(raw: str) -> dict:
+    """解析 raw 为 JSON 字典；JSON 失败时回退到 YAML 解析；顶层不是 dict 时抛 InputError。"""
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as e:
@@ -107,6 +111,7 @@ def _parse_json(raw: str) -> dict:
 
 
 def _parse_yaml(raw: str) -> dict:
+    """解析 raw 为 YAML 映射；解析失败/为空/顶层非 dict 时抛 InputError。"""
     try:
         data = yaml.safe_load(raw)
     except yaml.YAMLError as e:
@@ -119,10 +124,7 @@ def _parse_yaml(raw: str) -> dict:
 
 
 def _parse_text(raw: str) -> dict:
-    """text 格式预留：不做任何转换，交给后续专门方法处理。
-
-    当前留空：仅原样包装，后续接入文本检查/解析方法时在此处替换。
-    """
+    """text 格式占位实现：原样把 raw 包装为带 __raw_text__/__pending_parse__ 标记的 dict，等待后续解析器接入。"""
     # TODO: 接入文本检查/解析方法，例如 text_parser.parse(raw) -> dict
     return {"__raw_text__": raw, "__pending_parse__": True}
 
@@ -132,7 +134,7 @@ def normalize_input(
     inline: str | None,
     fmt: InputFormat,
 ) -> dict:
-    """把多种输入源归一化为 dict。"""
+    """把多种输入源（文件路径/'-'/--inline × json/yaml/auto）归一化为单层 dict。"""
     raw, hint = _read_source(source, inline)
     real_fmt = _detect_format(fmt, raw, hint)
     if real_fmt == InputFormat.json:
@@ -168,14 +170,15 @@ def launch(
         bool,
         typer.Option("--fail-fast", help="首个失败即停止", rich_help_panel="执行控制"),
     ] = False,
-    report_dir: Annotated[
-        str,
-        typer.Option("--report-dir", help="报告输出目录", rich_help_panel="执行控制"),
-    ] = "./reports",
     dry_run: DryRunOpt = False,
     plugins : PluginsOpt = [],
     registry: RegistryOpt = None,
+    # ========== 报告与输出 ==========
+    reporter: ReporterOpt = None,
+    report_dir: ReportDirOpt = "./reports",
+    output: OutputOpt = OutputFormat.console,
 ) -> None:
+    """Typer 命令：bootstrap 框架 → 归一化输入为 dict → 校验为 Scenario → Engine.run 执行并打印报告。"""
     """指定标准输入，用例文件或 inline 内容交给框架直接执行。
 
     [bold]示例：[/bold]
@@ -198,10 +201,18 @@ def launch(
     cli_ctx.env = env
     cli_ctx.mode = mode
     cli_ctx.log_level = log_level.value  # LogLevel is a str enum, use .value to get the actual string
+    # 把 report_dir注入 extras，由 ConfigLoader._from_cli()提取为 BootstrapConfig.report_dir
+    if report_dir:
+        cli_ctx.extras["report_dir"] = report_dir
+    # 把 reporter 选项注入 extras，由 ConfigLoader._from_cli()提取为 BootstrapConfig.reporters
+    if reporter:
+        cli_ctx.extras["reporters"] = list(reporter)
 
 
     # 2. 传入ctx, 进行配置信息加载，返回所有信息合并后的上下文信息
     configuration  = bootstrap(cli_ctx)
+    # 2.5 发布 RunMetaEvent（CI/CD / git / 触发人等上下文）
+    _publish_run_meta(configuration)
     # 3. 持有信息后，进行内存总线初始化，插件初始化，资产仓库初始化，
 
     # 4. 归一化输入 → dict
@@ -224,6 +235,11 @@ def launch(
     #    注入资产仓库，让 ScenarioPreprocessor Phase 0 启用对 RefBase 节点的物化
     asset_store = _build_default_asset_store(Path(registry) if registry else None)
     logger.debug("[CLI] asset_store ready: backend={}", asset_store.backend_name)
-    result = Engine(configuration, asset_store=asset_store).run(scenario)
-    pprint(result)
-    raise typer.Exit(code=0)
+    engine = Engine(configuration, asset_store=asset_store)
+    try:
+        result = engine.run(scenario)
+    finally:
+        # 必须 shutdown 才会触发 ReporterRuntime.shutdown()、生成 artifacts
+        shutdown(configuration)
+    _print_run_report(result, output, artifacts=engine.artifacts)
+    raise typer.Exit(code=result.exit_code)

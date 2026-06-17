@@ -374,11 +374,14 @@ def _eval_nodes(data: Any, nodes: list[PathNode]) -> list[Any]:
             val = data.get(node.value)
             if val is None and node.value not in data:
                 return []
-        elif hasattr(data, node.value):
-            # 支持 Pydantic 模型字段 和 @property
-            val = getattr(data, node.value)
         else:
-            return []
+            # 修复 #32：显式 try/except 而非 hasattr（hasattr 会触发 __getattr__
+            # 可能产生副作用；AttributeError 安全兜底返回 []）。
+            # 只 catch AttributeError —— getattr 永远不会抛 KeyError。
+            try:
+                val = getattr(data, node.value)
+            except AttributeError:
+                return []
         return _eval_nodes(val, rest)
 
     # ── INDEX ──────────────────────────────
@@ -600,6 +603,24 @@ def exists(data: Any, path: str) -> bool:
 _TEMPLATE_VAR_RE = re.compile(r"\$\{([^}]+)\}")
 
 
+# 模块级哨兵对象：标记"路径不存在"。
+#
+# 与 None 区分：
+#   - None：字段存在但值就是 None（如 AuthSession.expires_at 在登录前）
+#   - _MISSING：字段/路径在 variables 里找不到（fail-fast 触发条件）
+#
+# 用 `object()` 而非自定义类：
+#   - `object()` 不可被实例化（避免用户代码写错 `_Missing()` 仍然能比较）
+#   - identity 比较 (`is`) 比 `__eq__`+`__hash__` 更直接、更不容易被破坏
+#   - 不需要 repr/__eq__/__hash__ 等自定义方法
+_MISSING = object()
+
+
+def is_missing(value: Any) -> bool:
+    """判断 value 是否是 _MISSING 哨兵（路径不存在）。"""
+    return value is _MISSING
+
+
 def _get_nested(variables: dict, var_name: str) -> Any:
     """根据点号分隔的路径获取嵌套值。
 
@@ -607,6 +628,10 @@ def _get_nested(variables: dict, var_name: str) -> Any:
     - dict 嵌套：variables["auth"]["codfish"]
     - 对象属性：variables["auth"]["codfish"].token
     - Pydantic @property
+
+    返回值：
+      - 找到 → 字段值（None 是合法值）
+      - 找不到（key 不存在 / 中间节点 None）→ _MISSING 哨兵
 
     Examples::
 
@@ -616,14 +641,16 @@ def _get_nested(variables: dict, var_name: str) -> Any:
     parts = var_name.split(".")
     current = variables
     for part in parts:
-        if current is None:
-            return None
+        if current is None or current is _MISSING:
+            return _MISSING
         if isinstance(current, dict):
-            current = current.get(part)
+            if part not in current:
+                return _MISSING
+            current = current[part]
         elif hasattr(current, part):
             current = getattr(current, part)
         else:
-            return None
+            return _MISSING
     return current
 
 
@@ -651,11 +678,57 @@ def resolve_template(template: str, variables: dict[str, Any]) -> Any:
     def _replacer(match: re.Match) -> str:
         var_name = match.group(1).strip()
         val = _get_nested(variables, var_name)
-        if val is None:
-            return match.group(0)  # 找不到保留原样
+        if val is _MISSING or val is None:
+            return match.group(0)  # 找不到或合法 None 都保留原样
         return str(val)
 
     return _TEMPLATE_VAR_RE.sub(_replacer, template)
+
+
+def resolve_template_strict(template: str, variables: dict[str, Any]) -> Any:
+    """resolve_template 的 strict 版本（修复 B5 + Fix 3）。
+
+    与 resolve_template 的区别：
+      - resolve_template: 嵌入式变量找不到时返回原 ${...} 字符串
+      - resolve_template_strict: 嵌入式变量找不到时返回 _Missing 哨兵
+        （调用方用 is_missing(result) 检测并 fail-fast）
+
+    与 Fix 3 的修正：
+      - key 缺失（_Missing）→ 触发 fail-fast
+      - key 存在但值为 None → 视为合法值：
+        * 整体是单个 ${} → 返回 None（调用方可区分"非合法"与"合法 None"）
+        * 嵌入式 ${} → 渲染为空字符串 ""
+    """
+    if not isinstance(template, str):
+        return template
+
+    m = _TEMPLATE_VAR_RE.fullmatch(template.strip())
+    if m:
+        # 整体是单个 ${} → 返回原始值（包括合法 None；只有 _Missing 表示真缺失）
+        var_name = m.group(1).strip()
+        return _get_nested(variables, var_name)
+
+    def _replacer(match: re.Match) -> str:
+        var_name = match.group(1).strip()
+        val = _get_nested(variables, var_name)
+        if val is _MISSING:
+            # 用特殊字符串标记"此位置确实缺失"，最后再判定
+            return _MISSING_TOKEN
+        if val is None:
+            # 合法 None → 渲染为空串（保留前后文拼接语义）
+            return ""
+        return str(val)
+
+    result = _TEMPLATE_VAR_RE.sub(_replacer, template)
+    # 任何变量缺失 → 整段模板视为未解析
+    if isinstance(result, str) and _MISSING_TOKEN in result:
+        return _MISSING
+    return result
+
+
+# 嵌入式模板检测用的字符串哨兵（与 _Missing 类实例区分）
+# 用 NUL 字符包围，正常业务场景不可能出现
+_MISSING_TOKEN = "\x00\x00GIMBAL_TEMPLATE_VAR_MISSING\x00\x00"
 
 
 # ── 便捷函数：路径是否是模板变量 ─────────────────────────────────────────────
@@ -668,3 +741,67 @@ def is_template(value: Any) -> bool:
 def is_jsonpath(value: Any) -> bool:
     """判断 value 是否是 JSONPath 表达式（以 $ 开头）。"""
     return isinstance(value, str) and value.startswith("$")
+
+
+# ── 模板变量引用扫描（Fix 4）────────────────────────────────────────────────
+
+def find_template_var_refs(obj: Any, *, prefix: str | None = None) -> Iterator[str]:
+    """递归遍历 obj，yield 所有 ${var.name} 形式的 var 引用。
+
+    用于"找出哪些 auth tag 被实际引用"等优化场景——避免手动逐字段
+    hasattr/getattr 链（容易漏嵌套 body / 自定义 strategy 字段）。
+
+    Args:
+        obj: 任意 Pydantic 模型、dict、list、tuple、scalar
+        prefix: 若指定，只 yield 以 "{prefix}." 开头的 var，
+                并去掉前缀段。例如 prefix="auth" 遇到 ${auth.admin.token}
+                → yield "admin"
+
+    Yields:
+        var 名字符串。纯 ${var} → "var"；${auth.x.token} → "auth.x.token"
+
+    Examples:
+        >>> list(find_template_var_refs({"x": "${a.b}"}))
+        ['a.b']
+        >>> list(find_template_var_refs({"x": "${auth.admin.token}"}, prefix="auth"))
+        ['admin']
+    """
+    # 字符串：扫描所有 ${...}
+    if isinstance(obj, str):
+        for m in _TEMPLATE_VAR_RE.finditer(obj):
+            var_name = m.group(1).strip()
+            if prefix is None:
+                yield var_name
+            elif var_name == prefix:
+                # ${auth} 这种只有前缀没有子段的不算"引用了某个 auth user"
+                continue
+            elif var_name.startswith(prefix + "."):
+                # ${auth.admin.token} → yield "admin"
+                rest = var_name[len(prefix) + 1:]
+                first_seg = rest.split(".", 1)[0]
+                yield first_seg
+        return
+
+    # dict：递归每个 value
+    if isinstance(obj, dict):
+        for v in obj.values():
+            yield from find_template_var_refs(v, prefix=prefix)
+        return
+
+    # list / tuple：递归每个元素
+    if isinstance(obj, (list, tuple)):
+        for v in obj:
+            yield from find_template_var_refs(v, prefix=prefix)
+        return
+
+    # Pydantic 模型：递归每个字段
+    try:
+        from pydantic import BaseModel
+        if isinstance(obj, BaseModel):
+            for field_name in type(obj).model_fields:
+                yield from find_template_var_refs(getattr(obj, field_name), prefix=prefix)
+            return
+    except ImportError:
+        pass
+
+    # scalar / 其他类型 → 无操作

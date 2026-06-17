@@ -20,6 +20,7 @@ class AssignExecutor(StrategyExecutor):
     kind = "assign"
 
     def execute(self, spec: "StrategyBase", view: "StrategyContextView") -> StrategyResult:
+        """执行赋值策略：解析 spec.source 后的值写入 view.scratch 的 spec.target 路径，required 但解析为 None 时返回 FAILED。"""
         from gimbal.schema.strategy import Assign
 
         assert isinstance(spec, Assign)

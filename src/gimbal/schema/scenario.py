@@ -32,6 +32,11 @@ class Config(BaseModel):
     users : dict[str,AuthSession] = Field(default_factory=dict, description= "认证信息字典")
     timePolicy : TimePolicyUnion = Field(default_factory=RecordPolicy, description="时间处理策略:超时检查或耗时记录")
     retry : Optional[RetryPolicy] = None # 定义重试策略
+    # ── 新增：scenario 级变量声明 ──
+    vars : dict[str, Any] = Field(
+        default_factory=dict,
+        description="变量声明；字面量或生成式 spec dict；CLI --var 优先级更高"
+    )
 
 class Scenario(BaseModel):
     """ 用例数据模型 """

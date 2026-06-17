@@ -1,32 +1,51 @@
 # Resource 模块
 
-> 资源管理模块，提供测试所需的资源（Mock、Fixture、File 等）的管理和供给
+> 资源管理模块：测试所需的资源（Mock、Fixture、File、DB Snapshot 等）的管理与供给。
 
-## 目录结构
+## 状态
+
+**当前为预留桩模块**。所有源文件都仅含 docstring，**未实现**具体类与方法：
 
 ```
 gimbal/resource/
-├── __init__.py
-├── manager.py       # ResourceManager
-├── handle.py        # ResourceHandle
-├── provider_base.py # Provider 基类
-└── providers/       # 资源提供者
-    ├── __init__.py
-    ├── mock_provider.py    # Mock 服务提供者
-    ├── fixture_provider.py # Fixture 提供者
-    ├── file_provider.py    # 文件提供者
-    └── db_snapshot_provider.py # 数据库快照提供者
+├── __init__.py           # """Resource manager module."""
+├── handle.py             # """ResourceHandle definition."""
+├── manager.py            # """ResourceManager main class."""
+├── provider_base.py      # """ResourceProvider abstract."""
+└── providers/
+    ├── __init__.py                  # """Resource provider implementations."""
+    ├── mock_provider.py             # """MockProvider implementation."""
+    ├── fixture_provider.py          # """FixtureProvider implementation."""
+    ├── file_provider.py             # """FileProvider implementation."""
+    └── db_snapshot_provider.py      # """DbSnapshotProvider implementation."""
 ```
 
-## 核心组件
+后续填充计划（来自 `resource/README.md` 与目录命名）：
 
-### ResourceManager
+| 文件 | 计划内容 |
+| --- | --- |
+| `manager.py` | `ResourceManager` —— 资源管理器 |
+| `handle.py` | `ResourceHandle` —— 资源句柄 |
+| `provider_base.py` | `ResourceProvider` —— 资源提供者抽象基类 |
+| `providers/mock_provider.py` | `MockProvider` —— 启动 Mock 容器 |
+| `providers/fixture_provider.py` | `FixtureProvider` —— 准备测试数据 |
+| `providers/file_provider.py` | `FileProvider` —— 准备测试文件 |
+| `providers/db_snapshot_provider.py` | `DbSnapshotProvider` —— 恢复数据库快照 |
 
-资源管理器：
+## 设计原则（预期）
+
+1. **供给/销毁生命周期**: 资源有明确的供给和销毁流程
+2. **健康检查**: 支持资源就绪检查
+3. **批量操作**: 支持批量设置和清理
+4. **Provider 可扩展**: 可注册自定义资源提供者
+
+## 计划中的核心接口（仅作占位说明）
+
+### ResourceManager（计划）
 
 ```python
 class ResourceManager:
-    """资源管理器"""
+    """资源管理器（占位）"""
 
     def __init__(self, config: BootstrapConfig):
         self._providers: dict[str, ResourceProvider] = {}
@@ -52,13 +71,11 @@ class ResourceManager:
         ...
 ```
 
-### ResourceHandle
-
-资源句柄：
+### ResourceHandle（计划）
 
 ```python
 class ResourceHandle:
-    """资源句柄"""
+    """资源句柄（占位）"""
 
     resource_id: str
     provider_name: str
@@ -78,11 +95,11 @@ class ResourceHandle:
         ...
 ```
 
-### Provider 基类
+### Provider 基类（计划）
 
 ```python
 class ResourceProvider(ABC):
-    """资源提供者抽象基类"""
+    """资源提供者抽象基类（占位）"""
 
     @property
     def name(self) -> str:
@@ -104,62 +121,27 @@ class ResourceProvider(ABC):
         ...
 ```
 
-## 资源类型
-
-### MockProvider
-
-Mock 服务提供者：
+### 资源类型（计划）
 
 ```python
 class MockProvider(ResourceProvider):
-    """Mock 服务提供者"""
+    """Mock 服务提供者（占位）"""
+    # 启动 Mock 容器 → 返回访问地址
 
-    def provision(self, resource: Resource) -> ResourceHandle:
-        # 启动 Mock 容器
-        # 返回访问地址
-        ...
-```
-
-### FixtureProvider
-
-Fixture 提供者：
-
-```python
 class FixtureProvider(ResourceProvider):
-    """Fixture 提供者"""
+    """Fixture 提供者（占位）"""
+    # 准备测试数据
 
-    def provision(self, resource: Resource) -> ResourceHandle:
-        # 准备测试数据
-        ...
-```
-
-### FileProvider
-
-文件提供者：
-
-```python
 class FileProvider(ResourceProvider):
-    """文件提供者"""
+    """文件提供者（占位）"""
+    # 准备测试文件
 
-    def provision(self, resource: Resource) -> ResourceHandle:
-        # 准备测试文件
-        ...
+class DbSnapshotProvider(ResourceProvider):
+    """数据库快照提供者（占位）"""
+    # 恢复数据库快照
 ```
 
-### DBSnapshotProvider
-
-数据库快照提供者：
-
-```python
-class DBSnapshotProvider(ResourceProvider):
-    """数据库快照提供者"""
-
-    def provision(self, resource: Resource) -> ResourceHandle:
-        # 恢复数据库快照
-        ...
-```
-
-## 使用示例
+## 计划中的使用示例（占位）
 
 ```python
 from gimbal.resource.manager import ResourceManager
@@ -188,9 +170,4 @@ for handle in handles:
 manager.teardown(handles)
 ```
 
-## 设计原则
-
-1. **供给/销毁生命周期**: 资源有明确的供给和销毁流程
-2. **健康检查**: 支持资源就绪检查
-3. **批量操作**: 支持批量设置和清理
-4. **Provider 可扩展**: 可注册自定义资源提供者
+> 上方所有代码块仅展示预期接口签名，**当前未实现**。调用方不应直接依赖 `gimbal.resource.*`。

@@ -1,9 +1,11 @@
 # Repository 模块
 
-> 资产仓库（Asset Registry），仿 Docker Registry v2 的内容寻址存储。
+> 资产仓库（Asset Registry），仿 Docker Registry v2 的内容寻址存储（content-addressable storage）。
 >
-> **当前**：本地文件系统实现（`LocalFsContentStore`）。
-> **未来**：PostgreSQL 实现（`PostgresContentStore`，用于多机/生产）。
+> **当前实现**：`LocalFsContentStore`（本地文件系统）。
+> **未来扩展**：`PostgresContentStore`（用于多机/生产）。
+>
+> `repository/router.py` 与 `repository/base.py` 目前为占位模块，仅包含 docstring。
 
 ## 目录结构
 
@@ -11,17 +13,17 @@
 gimbal/repository/
 ├── __init__.py                # 公共 API 导出
 ├── models.py                  # AssetRef / AssetRecord / AssetContent
-├── store.py                   # ContentStore 协议 + AssetStore 门面
-├── exceptions.py              # 异常 re-export（兼容层）
+├── store.py                   # ContentStore 协议 + AssetStore 门面 + compute_digest
+├── base.py                    # 占位（仅 docstring）
+├── router.py                  # 占位（仅 docstring）
 └── backends/
     ├── __init__.py
-    ├── filesystem.py          # LocalFsContentStore（本地 FS 实现）
-    ├── mysql.py               # 占位（未来 PG 替代）
-    └── python_module.py       # 占位（未来 PG 替代）
+    └── filesystem.py          # LocalFsContentStore（本地 FS 实现）
 ```
 
-> **注**：`core/asset_resolver.py` 是 CLI 桥接层（用 `AssetStore` 解析 ID → `ResolvedAsset`），
+> `core/asset_resolver.py` 是 CLI 桥接层（用 `AssetStore` 解析 ID → `ResolvedAsset`），
 > 文档见 [core.md](core.md#asset_resolver)。
+> `core/asset_materializer.py` 处理 scenario 内 Ref 节点的结构化还原，文档见下文。
 
 ## 设计目标
 
@@ -31,20 +33,19 @@ gimbal/repository/
 | tag 灵活          | tag 索引与 blob 分离，可重写/删除，blob 不变    |
 | 引用统一          | `namespace/name:tag` 或 `namespace/name@digest` |
 | backend 可插拔    | `ContentStore` Protocol，多实现可替换           |
-| 通配解析          | `*` 和 `?` 支持，与 OCI 规范保持一致            |
 | 后续 PG 迁移      | Protocol 设计兼容 SQL 表，迁移零成本             |
 
 ## 公共 API
 
 ```python
 from gimbal.repository import (
-    AssetRef,         # 资产引用（namespace/name:tag 或 @digest）
-    AssetRecord,      # 资产元数据
-    AssetContent,     # 资产内容（record + raw + parsed）
-    ContentStore,     # 底层存储协议
-    AssetStore,       # 业务门面（push/pull/list/...）
+    AssetRef,             # 资产引用（namespace/name:tag 或 @digest）
+    AssetRecord,          # 资产元数据
+    AssetContent,         # 资产内容（record + raw + parsed）
+    ContentStore,         # 底层存储协议
+    AssetStore,           # 业务门面（push/pull/list/...）
     LocalFsContentStore,  # 本地 FS 实现
-    compute_digest,   # 工具：sha256(data) → "sha256:..."
+    compute_digest,       # 工具：sha256(data) → "sha256:..."
 )
 ```
 
@@ -54,10 +55,10 @@ from gimbal.repository import (
 
 资产引用，两种合法形式互斥：
 
-| 形式            | 例子                       | 用途               |
-| --------------- | -------------------------- | ------------------ |
-| `ns/name:tag`   | `customs/declare:v1.0`     | 人类可读，最常用   |
-| `ns/name@digest`| `customs/declare@sha256:abc...` | 不可变版本定位 |
+| 形式             | 例子                          | 用途               |
+| ---------------- | ----------------------------- | ------------------ |
+| `ns/name:tag`    | `customs/declare:v1.2.0`      | 人类可读，最常用   |
+| `ns/name@digest` | `customs/declare@sha256:abc…` | 不可变版本定位     |
 
 ```python
 ref = AssetRef.parse("customs/declare:v1.0")
@@ -67,66 +68,75 @@ ref = AssetRef.parse("customs/declare:v1.0")
 # ref.digest    = None
 
 # digest 形式
-ref2 = AssetRef.parse("library/hello@sha256:abc...64chars")
+ref2 = AssetRef.parse("library/hello@sha256:<64-hex>")
 ```
 
 **合法性规则**（与 OCI distribution spec 对齐）：
-- `namespace` / `name`：``[a-z0-9][a-z0-9._-]{0,127}``
+- `namespace` / `name`：``[a-z0-9][a-z0-9._-]{0,127}``（简记为 ``[a-z0-9._-]+`` 形式）
 - `tag`：``[A-Za-z0-9_][A-Za-z0-9._-]{0,127}``
 - `digest`：`sha256:[a-f0-9]{64}`
 
-非法引用 → 抛 `InvalidAssetRef`。
+非默认 `tag` 与 `digest` **不能同时**指定。namespace 缺省 = `"library"`（类 Docker Hub 官方库），
+tag 缺省 = `"latest"`。非法引用 → 抛 `InvalidAssetRef`。
 
 ### AssetRecord
 
-资产元数据，**指向某个具体 digest**：
+资产元数据，**指向某个具体 digest**（同 digest 视为同一资产的不同 tag 视图）。`frozen`。
 
 ```python
-@dataclass (frozen)
-class AssetRecord:
+class AssetRecord(BaseModel):  # frozen
     ref: AssetRef
-    digest: str
-    size: int
-    kind: Literal["suite", "scenario", "data", "blob"]
-    media_type: str
+    digest: str                                  # sha256:abc…（必填）
+    size: int = Field(ge=0)
+    kind: Literal["suite", "scenario", "data", "blob"] = "blob"
+    media_type: str = "application/octet-stream"
     created_at: datetime
     updated_at: datetime
-    metadata: dict
+    metadata: dict[str, Any] = Field(default_factory=dict)
 ```
 
 ### AssetContent
 
-资产内容（record + 原始 bytes + 解析后的对象）：
+资产内容（record + 原始 bytes + 解析后的对象）。`frozen`，`parsed` 字段不出现在序列化中。
 
 ```python
-@dataclass
-class AssetContent:
+class AssetContent(BaseModel):  # frozen, arbitrary_types_allowed
     record: AssetRecord
-    raw: bytes       # 原始字节
-    parsed: Any      # 当 kind ∈ {suite, scenario, data} 时自动 json.loads
+    raw: bytes
+    parsed: Any = None   # 当 kind ∈ {suite, scenario, data} 且 parse_json=True 时自动 json.loads
+
+    @property
+    def digest(self) -> str: ...   # 代理到 record.digest
+    @property
+    def size(self) -> int: ...     # 代理到 record.size
 ```
 
 ## ContentStore 协议
 
-底层字节+索引的存储协议。**业务方不直接用**，只用于 backend 实现。
+底层字节+索引的存储协议。**业务方不直接用**，只用于 backend 实现。`@runtime_checkable`。
 
 ```python
 class ContentStore(Protocol):
     # Blob（不可变、按 sha256 寻址）
-    def push_blob(self, digest: str, data: bytes | BinaryIO) -> None
-    def pull_blob(self, digest: str) -> bytes
-    def has_blob(self, digest: str) -> bool
+    def push_blob(self, digest: str, data: bytes | BinaryIO) -> None: ...
+    def pull_blob(self, digest: str) -> bytes: ...
+    def has_blob(self, digest: str) -> bool: ...
 
     # Tag 索引（可写、可删）
-    def put_manifest(self, ref: AssetRef, digest: str, record_json: str) -> None
-    def get_manifest(self, ref: AssetRef) -> tuple[str, str] | None
-    def delete_manifest(self, ref: AssetRef) -> bool
-    def list_tags(self, namespace: str, name: str) -> list[str]
+    def put_manifest(self, ref: AssetRef, digest: str, record_json: str) -> None: ...
+    def get_manifest(self, ref: AssetRef) -> tuple[str, str] | None: ...
+    def delete_manifest(self, ref: AssetRef) -> bool: ...
+    def list_tags(self, namespace: str, name: str) -> list[str]: ...
 
     # 资产级查询
-    def list_assets(self, namespace: str | None = None) -> list[AssetRecord]
-    def find_by_digest(self, digest: str) -> list[AssetRecord]
+    def list_assets(self, namespace: str | None = None) -> list[AssetRecord]: ...
+    def find_by_digest(self, digest: str) -> list[AssetRecord]: ...
 ```
+
+实现方需保证：
+- 相同 content → 相同 digest（sha256）
+- 不可变性：digest 一旦写入，其内容永不变化
+- 幂等 push：相同 content 多次 push 不会产生副作用
 
 ### LocalFsContentStore
 
@@ -136,36 +146,51 @@ class ContentStore(Protocol):
 {root}/
 ├── blobs/
 │   └── sha256/
-│       └── {aa}/
+│       └── {aa}/                              # fan-out 前缀
 │           └── {aabbcc...full-64-hex}/
-│               └── content                # 不可变 blob
+│               └── content                    # 不可变 blob
 ├── indexes/
 │   └── {namespace}/
 │       └── {name}/
-│           ├── {tag1}.json                # tag → record
+│           ├── {tag1}.json                    # tag → record
 │           └── {tag2}.json
 └── manifests/
     └── {namespace}/
         └── {name}/
-            └── index.json                 # 该 name 下所有 tag 列表
+            └── index.json                     # 该 name 下所有 tag 列表
 ```
 
+关键方法：
+
+- `push_blob(digest, data)`：tmp + `os.replace` 原子写；已存在则幂等跳过。
+- `pull_blob(digest)`：按路径读 bytes；不存在抛 `AssetNotFound`。
+- `has_blob(digest)`：路径存在性检查。
+- `put_manifest(ref, digest, record_json)`：原子写 tag 索引 + 同步更新 name 级 tag 清单。
+- `get_manifest(ref) -> (digest, record_json) | None`：读 tag 索引。
+- `delete_manifest(ref) -> bool`：删 tag 索引（blob 保留），并从 tag 清单中移除。
+- `list_tags(namespace, name) -> list[str]`：返回该 name 下的 tag 列表。
+- `list_assets(namespace=None)`：O(N) 扫盘 `indexes/`，返回 `AssetRecord` 列表。
+- `find_by_digest(digest)`：遍历 `list_assets()` 过滤。
+- `stats() -> dict`：返回 `root / n_blobs / n_manifests / total_blob_bytes`。
+- `gc() -> int`：扫描 `blobs/sha256/`，删除无 record 引用的孤儿 blob（按路径反推 digest），
+  返回删除的 blob 数量。
+
 **关键特性**：
-- `blobs/sha256/{aa}/` 是 fan-out，避免单目录文件过多
-- tag 索引可重写、删除，blob 本身不可变
-- 原子写：`tempfile + os.replace`（Windows 兼容：先 close 再 replace）
-- O(N) 扫盘 `list_assets`，万级以内可用
+- `blobs/sha256/{aa}/` 是 fan-out，避免单目录文件过多。
+- tag 索引可重写/删除，blob 本身不可变。
+- 原子写：`tempfile + os.replace`（Windows 兼容：先 close 再 replace）。
+- 线程安全：单进程内单实例是线程安全的，但**不**支持跨进程并发写同一 ref。
 
 ### 未来的 PostgresContentStore
 
 接口兼容 Protocol，迁移时只需替换实现：
 
-| LocalFs                  | Postgres                                |
-| ------------------------ | --------------------------------------- |
-| `blobs/sha256/...`       | `blobs (digest PK, content BYTEA)`       |
-| `indexes/ns/name/tag.json` | `tags (ns, name, tag, digest, record_json)` |
-| `manifests/.../index.json` | 同一 `tags` 表的 distinct 查询          |
-| `rglob` 扫盘             | `SELECT ... FROM tags WHERE ...`        |
+| LocalFs                       | Postgres                                       |
+| ----------------------------- | ---------------------------------------------- |
+| `blobs/sha256/...`            | `blobs (digest PK, content BYTEA)`             |
+| `indexes/ns/name/tag.json`    | `tags (ns, name, tag, digest, record_json)`    |
+| `manifests/.../index.json`    | 同一 `tags` 表的 distinct 查询                 |
+| `rglob` 扫盘                  | `SELECT ... FROM tags WHERE ...`               |
 
 ## AssetStore 门面
 
@@ -178,12 +203,15 @@ class ContentStore(Protocol):
 | `push` | `(ref, data, *, kind, media_type, metadata, overwrite=False)` | `AssetRecord` | `AssetAlreadyExists` / `AssetDigestMismatch` |
 | `pull` | `(ref, *, parse_json=True)` | `AssetContent` | `AssetNotFound` |
 | `inspect` | `(ref)` | `AssetRecord`（不下载内容） | `AssetNotFound` |
-| `list_tags` | `(namespace, name)` | `list[AssetRef]` | — |
+| `list_tags` | `(namespace, name)` | `list[AssetRef]`（按字母序） | — |
 | `list_assets` | `(namespace=None)` | `list[AssetRecord]` | — |
-| `find_by_digest` | `(digest)` | `list[AssetRecord]` | — |
 | `tag` | `(src, dst, *, overwrite=False)` | `AssetRecord` | `AssetNotFound` / `AssetAlreadyExists` |
 | `remove` | `(ref, *, delete_blob_if_orphan=True)` | `bool` | `AssetNotFound` |
+| `exists` | `(ref)` | `bool` | — |
 | `backend_name` | `@property` | `str`（如 `"LocalFsContentStore"`） | — |
+
+> `find_by_digest` 属于 `ContentStore` 协议，不暴露在 `AssetStore` 上，调用方通过
+> `store.list_assets()` 自行过滤即可。
 
 ### backend_name
 
@@ -209,9 +237,9 @@ record = store.push(
 # record.size    # N 字节
 ```
 
-- 幂等：相同 content 自动去重（digest 相同 → 同一 blob）
-- `overwrite=False` 时目标 tag 已存在 → 抛 `AssetAlreadyExists`
-- 提供的 `data` 与 `ref.digest` 不一致 → 抛 `AssetDigestMismatch`
+- 幂等：相同 content 自动去重（digest 相同 → 同一 blob）。
+- `overwrite=False` 时目标 tag 已存在 → 抛 `AssetAlreadyExists`。
+- 提供的 `data` 与 `ref.digest` 不一致 → 抛 `AssetDigestMismatch`。
 
 ### pull
 
@@ -224,8 +252,9 @@ content = store.pull(AssetRef.parse("customs/declare:v1.0"))
 ```
 
 `parse_json` 参数：
-- `True`（默认）：当 `kind ∈ {suite, scenario, data}` 时自动 `json.loads` 到 `content.parsed`
-- `False`：`content.parsed` 为 `None`，调用方拿到 raw bytes 自行处理
+- `True`（默认）：当 `kind ∈ {suite, scenario, data}` 时自动 `json.loads` 到 `content.parsed`，
+  解析失败时 `parsed=None`（`raw` 仍可用）。
+- `False`：`content.parsed` 为 `None`，调用方拿到 raw bytes 自行处理。
 
 不存在 → 抛 `AssetNotFound`。
 
@@ -236,10 +265,10 @@ record = store.inspect(AssetRef.parse("customs/declare:v1.0"))
 # record.size, record.digest, record.metadata, ...
 ```
 
-### list_tags / list_assets / find_by_digest
+### list_tags / list_assets
 
 ```python
-# 列出某 name 下所有 tag
+# 列出某 name 下所有 tag（按字母序）
 tags = store.list_tags("customs", "declare")
 # → [AssetRef("customs/declare:v1.0"), AssetRef("customs/declare:latest"), ...]
 
@@ -249,10 +278,6 @@ records = store.list_assets(namespace="customs")
 
 # 列出全库
 all_records = store.list_assets()
-
-# 按 digest 反查（不限于同一 ns/name）
-hits = store.find_by_digest("sha256:abc...")
-# → [AssetRecord(...), ...]
 ```
 
 ### tag（添加新 tag 到已有 digest）
@@ -271,22 +296,37 @@ new_record = store.tag(
 store.remove(AssetRef.parse("customs/declare:v1.0"))
 # tag 索引被删除；
 # 若 delete_blob_if_orphan=True 且 blob 无其它 tag 引用则同步删除（默认）
-# 否则 blob 变孤儿，gc 时清理
+# 否则 blob 变孤儿，gc() 时清理
 ```
 
 `delete_blob_if_orphan` 参数：
-- `True`（默认）：删除 tag 后若 blob 已无任何 tag 引用，**同步**删 blob
-- `False`：保留孤儿 blob，等 `gc()` 阶段清理
+- `True`（默认）：删除 tag 后若 blob 已无任何 tag 引用，**同步**删 blob。
+- `False`：保留孤儿 blob，等 `gc()` 阶段清理。
 
-### gc（清理孤儿 blob）
+> 当前 `ContentStore` 协议未暴露 `delete_blob`，`LocalFsContentStore` 不实现孤儿 blob 的同步
+> 删除（`AssetStore.remove` 内部也只是记 debug 日志），需要等后续 backend 协议扩展。
+
+### LocalFsContentStore.gc
 
 ```python
 removed = backend.gc()
-# 遍历 blobs/，删除无 record 引用的 blob
+# 遍历 blobs/sha256/，删除无 record 引用的孤儿 blob，返回删除数
 ```
 
 > `gc()` 是 `ContentStore` 的方法（在 backend 实例上），**不是** `AssetStore` 的方法。
-> `AssetStore` 不持有 gc 入口。CLI 走 `gimbal asset gc`（`asset.py:gc`）调用。
+> CLI 走 `gimbal asset gc` 调用。
+
+### LocalFsContentStore.stats
+
+```python
+s = backend.stats()
+# {
+#   "root": "/home/x/.gimbal/registry",
+#   "n_blobs": 17,
+#   "n_manifests": 12,
+#   "total_blob_bytes": 482310,
+# }
+```
 
 ## CLI 入口
 
@@ -316,9 +356,7 @@ GimbalError
     └── AssetCycleError                 code=ASSET_CYCLE
 ```
 
-完整定义见 `gimbal/exceptions.py`；`gimbal/repository/exceptions.py` 是 re-export 兼容层。
-
-`AssetMaterializationError` / `AssetCycleError` 由 [`AssetMaterializer`](#assetmaterializer-结构化引用物化) 抛出（见下节）。
+`AssetMaterializationError` / `AssetCycleError` 由 `AssetMaterializer` 抛出（见下节）。
 
 ## AssetMaterializer（结构化引用物化）
 
@@ -409,7 +447,6 @@ _materialize_ref(ref):
 ```
 
 **环检测**：push-pop 模式（`self._seen = previous_seen`）保证：
-
 - 同一 ref 在**祖先路径**上重复出现 → 报错（真环）
 - 同一 ref 在**兄弟分支**上重复出现 → 不报错（共享子图）
 
@@ -513,15 +550,24 @@ for m in matches:
     print(m.ref, m.content.digest)
 ```
 
+### 计算 / 验证 digest
+
+```python
+from gimbal.repository import compute_digest
+
+digest = compute_digest(b"hello world")
+# "sha256:b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+```
+
 ## 设计原则
 
-1. **内容不可变**：blob 一旦写入永不修改，digest 即身份
-2. **tag 可变**：tag 索引可重写，可删除
-3. **去重自动**：相同 content → 同一 digest → 同一 blob 文件
-4. **backend 解耦**：`ContentStore` Protocol；业务方只见 `AssetStore`
-5. **OCI 兼容**：命名/tag 规则与 OCI distribution spec 对齐，可未来对接 Harbor/Distribution
-6. **CLI 友好**：`gimbal asset` 子命令集与 Docker 完全对齐
-7. **未来 PG**：LocalFs 写完即视为协议参考实现，PG backend 是另一实现，不动业务代码
+1. **内容不可变**：blob 一旦写入永不修改，digest 即身份。
+2. **tag 可变**：tag 索引可重写，可删除。
+3. **去重自动**：相同 content → 同一 digest → 同一 blob 文件。
+4. **backend 解耦**：`ContentStore` Protocol；业务方只见 `AssetStore`。
+5. **OCI 兼容**：命名/tag 规则与 OCI distribution spec 对齐，可未来对接 Harbor/Distribution。
+6. **CLI 友好**：`gimbal asset` 子命令集与 Docker 完全对齐。
+7. **未来 PG**：LocalFs 写完即视为协议参考实现，PG backend 是另一实现，不动业务代码。
 
 ## 与 Archive 的区别
 

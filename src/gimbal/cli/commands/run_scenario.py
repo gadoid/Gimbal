@@ -13,7 +13,7 @@ from gimbal.cli.common import (
     OutputFormat, OutputOpt, ParallelOpt, ModeOpt, RegistryOpt,
     ReportDirOpt, ReporterOpt, RetryOpt, SourceOpt, SourceStrategy, TagOpt,
     TimeoutOpt, VarFileOpt, VarOpt, VersionOpt, YesOpt,
-    _build_default_asset_store, _print_run_report,
+    _build_default_asset_store, _print_run_report, _publish_run_meta,
     parse_parallel, parse_vars, resolve_source,
 )
 from gimbal.cli.context import CLIContext
@@ -76,7 +76,7 @@ def scenario(
     report_dir: ReportDirOpt = "./reports",
     output: OutputOpt = OutputFormat.console,
 ) -> None:
-    """执行已注册的 Scenario 资产。
+    """Typer 命令：解析 scenario_ids → bootstrap 框架 → Engine 串行/并行执行每个 Scenario，汇总后退出。
 
     [bold]示例：[/bold]
 
@@ -144,12 +144,63 @@ def scenario(
     cli_ctx.env = env
     cli_ctx.mode = mode
     cli_ctx.log_level = log_level.value
+    # 把 reporter 选项注入 extras，由 ConfigLoader._from_cli()提取为 BootstrapConfig.reporters
+    if reporter:
+        cli_ctx.extras["reporters"] = list(reporter)
+    if report_dir:
+        cli_ctx.extras["report_dir"] = report_dir
+    # 把 --var / --var-file 注入 extras，供 SpecResolver 模板解析时使用
+    parsed_vars = parse_vars(var)
+    if var_file:
+        from pathlib import Path
+        import yaml as _yaml
+        for vf in var_file:
+            from gimbal.utils.jsonpath import _parse_filter_value  # noqa: F401  仅确保 import
+            # 修复 #7：--var-file 错误升级为 Exit(2)，不静默吞。
+            # 用户显式传的参数，YAML 解析错误/IO 错误/根不是 dict 都要快速失败，
+            # 否则后续模板 ${var.x} 全解析为 None，错误信息指向 preprocessor 而不是 --var-file。
+            try:
+                with open(vf, "r", encoding="utf-8") as fh:
+                    file_vars = _yaml.safe_load(fh)
+            except Exception as exc:
+                logger.error("[CLI] 加载 --var-file 失败: path={} error={}", vf, exc)
+                typer.secho(
+                    f"Error: failed to load --var-file {vf}: {exc}",
+                    fg=typer.colors.RED, err=True,
+                )
+                raise typer.Exit(code=2)
+            if file_vars is None:
+                file_vars = {}
+            if not isinstance(file_vars, dict):
+                logger.error(
+                    "[CLI] --var-file 根必须是 mapping: path={} got={}",
+                    vf, type(file_vars).__name__,
+                )
+                typer.secho(
+                    f"Error: --var-file {vf} root must be a mapping, "
+                    f"got {type(file_vars).__name__}",
+                    fg=typer.colors.RED, err=True,
+                )
+                raise typer.Exit(code=2)
+            parsed_vars.update(file_vars)
+    if parsed_vars:
+        cli_ctx.extras["vars"] = parsed_vars
     try:
         configuration = bootstrap(cli_ctx)
     except Exception as exc:  # noqa: BLE001
         logger.exception("[CLI] bootstrap 失败: {}", exc)
         typer.secho(f"Framework bootstrap failed: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=4)
+
+    # 4.5 发布 RunMetaEvent（CI/CD / git / 触发人等上下文），reporter 通过订阅此事件
+    #     获取头部 meta 区。必须在 bootstrap 之后、Engine.run() 之前 publish。
+    #     注意：此时 reporter_runtime 已 setup 但还没 begin_all——内置 reporter
+    #     （console / junit / im_notifier 等）的订阅是在 Engine.run() 内部
+    #     begin_all 时才建立的。所以这里 publish 的 RunMetaEvent 主要被"在
+    #     bootstrap 阶段就通过插件或代码显式订阅的 listener"消费，**不是**被
+    #     内置 reporter 消费（内置 reporter 通过 ScenarioStartEvent / RunEndEvent
+    #     等其他事件拿到 framework_ctx 后再读取 framework_ctx 的 meta）。
+    _publish_run_meta(configuration)
 
     # 5. 解析 + 校验每个匹配到的资产
     scenarios: list[tuple[str, Scenario]] = []
@@ -195,6 +246,6 @@ def scenario(
         error=sum(r.error for r in results),
         details=[d for r in results for d in r.details],
     )
-    _print_run_report(merged, output)
+    _print_run_report(merged, output, artifacts=engine.artifacts)
     raise typer.Exit(code=merged.exit_code)
 

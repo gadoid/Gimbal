@@ -59,12 +59,28 @@ class Engine:
     """
 
     def __init__(self, configuration: Configuration, *, asset_store: Any = None) -> None:
+        """初始化 Engine，仅保存引用，不做任何 I/O 或状态初始化。
+
+        入参:
+            configuration: 由 bootstrap() 产出的不可变配置。
+            asset_store:   可选资产仓库；为 None 时 ScenarioRunner 会跳过引用物化。
+        """
         self._ictx = configuration
         self._asset_store = asset_store
+        # 最近一次 run() 产出的 ReportArtifact 列表（CLI 用来打印）
+        self._artifacts: list = []
         logger.debug(
             "[Engine] Engine 初始化完成: asset_store={}",
             type(asset_store).__name__ if asset_store is not None else "None",
         )
+
+    @property
+    def artifacts(self) -> list:
+        """最近一次 run() 产出的 ReportArtifact 列表。
+
+        仅在 Engine.run() 完成后非空。
+        """
+        return list(self._artifacts)
 
     def run(self, target: Scenario | Suite) -> RunResult:
         """执行入口。
@@ -87,6 +103,20 @@ class Engine:
         # 2. 触发 RUN_START 事件
         self._emit_run_start(framework_ctx)
 
+        # 2.5 启动所有 reporter（订阅事件 + 准备资源）
+        reporter_runtime = ictx.reporter_runtime
+        if reporter_runtime is not None:
+            try:
+                reporter_runtime.begin_all(
+                    framework_ctx=framework_ctx,
+                    reporter_names=list(ictx.cfg.reporters or ("console",)),
+                    report_dir=ictx.cfg.report_dir,
+                    plugin_configs=dict(ictx.cfg.plugin_configs or {}),
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("[Engine] reporter_runtime.begin_all 失败（已隔离）")
+
+        # 3. 执行
         try:
             if isinstance(target, Scenario):
                 result = self._run_scenario(target, framework_ctx)
@@ -99,11 +129,26 @@ class Engine:
             logger.exception("[Engine] 执行异常: {}", e)
             result = RunResult(exit_code=2, error=1)
 
-        # 3. 触发 RUN_END 事件
+        # 4. 触发 RUN_END 事件
         self._emit_run_end(framework_ctx, result)
+
+        # 5. 终结所有 reporter，产出 ReportArtifact 列表（仅写入 metadata，artifact 本身由 reporter 落盘）
+        self._artifacts: list = []
+        if reporter_runtime is not None:
+            try:
+                self._artifacts = reporter_runtime.finalize_all(result)
+            except Exception:  # noqa: BLE001
+                logger.exception("[Engine] reporter_runtime.finalize_all 失败（已隔离）")
         return result
 
     def _emit_run_start(self, framework_ctx: FrameworkContext) -> None:
+        """向 event_bus 发布 RunStartEvent 事件。
+
+        入参:
+            framework_ctx: 本次 run 的 framework 上下文。
+        副作用:
+            发布事件，失败仅记 debug 日志，不影响主流程。
+        """
         bus = self._ictx.event_bus
         if bus is None:
             return
@@ -118,6 +163,14 @@ class Engine:
             logger.debug("[Engine] emit RUN_START failed")
 
     def _emit_run_end(self, framework_ctx: FrameworkContext, result: RunResult) -> None:
+        """向 event_bus 发布 RunEndEvent 事件（带统计信息）。
+
+        入参:
+            framework_ctx: 本次 run 的 framework 上下文。
+            result:        本次 run 的 RunResult 结果。
+        副作用:
+            发布事件，失败仅记 debug 日志。
+        """
         bus = self._ictx.event_bus
         if bus is None:
             return
@@ -129,6 +182,7 @@ class Engine:
                 passed=result.passed,
                 failed=result.failed,
                 error=result.error,
+                skipped=result.skipped,
             ))
         except Exception:  # noqa: BLE001
             logger.debug("[Engine] emit RUN_END failed")
@@ -140,6 +194,14 @@ class Engine:
         scenario: Scenario,
         framework_ctx: FrameworkContext,
     ) -> RunResult:
+        """执行单个 Scenario：派生 __default__ SuiteContext 并调用 ScenarioRunner。
+
+        入参:
+            scenario:      已展开的 Scenario 数据对象。
+            framework_ctx: 本次 run 的 framework 上下文。
+        返回:
+            包装后的 RunResult（含 exit_code、统计与 details）。
+        """
         from gimbal.core.scenario_runner import ScenarioRunner
 
         logger.info("[Engine] 开始执行 Scenario: scenario_id={}", scenario.scenarioId)
@@ -193,6 +255,14 @@ class Engine:
         suite: Suite,
         framework_ctx: FrameworkContext,
     ) -> RunResult:
+        """按序执行 Suite 内全部 Scenario，按 fail_fast 配置决定是否提前终止。
+
+        入参:
+            suite:         Suite 数据对象。
+            framework_ctx: 本次 run 的 framework 上下文。
+        返回:
+            汇总后的 RunResult。
+        """
         from gimbal.core.scenario_runner import ScenarioRunner
 
         suite_id = getattr(suite, "suiteId", "__suite__")
@@ -237,6 +307,14 @@ class Engine:
                 "scenario_id": result.scenario_id,
                 "status":      result.status,
                 "duration_ms": result.duration_ms,
+                "steps": [
+                    {
+                        "step_id":     s.step_id,
+                        "status":      s.status,
+                        "duration_ms": s.duration_ms,
+                    }
+                    for s in result.step_results
+                ],
             })
             logger.info("[Engine] Scenario 完成: scenario_id={} status={} duration_ms={:.2f} ({}/{})",
                         result.scenario_id, result.status, result.duration_ms, idx + 1, len(suite.suite))

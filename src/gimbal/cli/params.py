@@ -45,6 +45,7 @@ starter.command("self-check")(self_check)
 
 
 def _version_callback(value: bool) -> None:
+    """--version 选项的 Typer 回调：打印版本号后通过 typer.Exit() 终止 CLI 进程。"""
     if value:
         typer.echo("gimbal 0.1.0")
         raise typer.Exit()
@@ -78,4 +79,5 @@ OPT_LOGLEVEL = typer.Option(
 ConfigFile = Annotated[Path | None, OPT_CONFIG]
 NoColor = Annotated[bool, OPT_NO_COLOR]
 ShowVersion = Annotated[bool, OPT_VERSION]
-LogLevel = Annotated[str, OPT_LOGLEVEL]
+# 修复 #40：移除 params.py 的 LogLevel = Annotated[str, ...]（与 common.py 的 enum 同名冲突）
+# 现有代码请从 gimbal.cli.common 导入 LogLevel（已重指向 LogLevelEnum）

@@ -18,9 +18,7 @@ def _scope_to_layer(scope):
 
 
 def _jsonpath_simple(data: Any, expression: str) -> Any:
-    """极简 JSONPath 实现，支持 $.a.b.c 和 $.a[0].b 形式。
-    生产环境建议替换为 jsonpath-ng。
-    """
+    """极简 JSONPath 实现，支持 $.a.b.c 与 $.a[0].b 形式；查询不到返回 None。生产环境建议替换为 jsonpath-ng。"""
     if data is None:
         return None
 

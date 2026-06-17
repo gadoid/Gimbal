@@ -21,7 +21,7 @@ error_brief、suite_id、reason 等），event_type 字符串统一为 "step.sta
 "scenario.start" / "scenario.end" / "variable.promoted"。
 """
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional, Literal
 from pydantic import BaseModel, ConfigDict, Field
@@ -46,6 +46,8 @@ class EventType(str, Enum):
     # Run 生命周期
     RUN_START = "run.start"
     RUN_END = "run.end"
+    # Run 级元数据（CI/CD / git / 构建上下文等），由 CLI 在 bootstrap 之后 publish
+    RUN_META = "run.meta"
 
     # Suite 生命周期
     SUITE_START = "suite.start"
@@ -83,7 +85,7 @@ class FrameworkEvent(BaseModel):
     """
     model_config = ConfigDict(frozen=True, extra="forbid")
     event_type: str = ""
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     run_id: Optional[str] = None
 
 
@@ -110,6 +112,26 @@ class RunEndEvent(FrameworkEvent):
     passed: int
     failed: int
     error: int
+    skipped: int = 0  # 兼容旧订阅者；0 表示无 skip
+
+
+class RunMetaEvent(FrameworkEvent):
+    """Run 级元数据（CI/CD 上下文 / git 信息 / 触发人 / 业务自定义键值）。
+
+    由 CLI 在 bootstrap() 之后、Engine.run() 之前 publish 一次。
+    所有 reporter 可通过订阅此事件获得本次运行的元信息，而无需直接
+    读取 BootstrapConfig 或 FrameworkContext（保持 reporter 层的
+    "一切皆事件" 架构一致性，且支持事件流重放）。
+
+    设计要点：
+      - meta 字段为开放 dict，允许扩展任意 KV。
+      - 不订阅此事件的 reporter 完全无感。
+      - run_id 可为 None（CLI 此时通常还没拿到真正的 run_id，
+        Engine 后续会发出带 run_id 的 RUN_START 事件，reporter
+        可在 on_event 中按需关联）。
+    """
+    event_type: Literal["run.meta"] = "run.meta"
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 # ── Suite/Scenario 级 ─────────────────────────────────
@@ -141,6 +163,9 @@ class ScenarioEndEvent(FrameworkEvent):
     scenario_id: str
     status: str
     step_count: int
+    # Scenario.meta 的 dump（tags / author / priority / version / description ...）
+    # 默认空 dict 保证向后兼容；ScenarioRunner 在发布时填充
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 # ── Step 级 ───────────────────────────────────────────
@@ -207,10 +232,6 @@ class VariablePromotedEvent(FrameworkEvent):
     by_scenario_id: Optional[str] = None
     overwrote_previous: bool = False
     reason: Optional[str] = None
-
-
-# 旧名：保留以兼容旧订阅代码（已 deprecated，新代码应使用 VariablePromotedEvent）
-ContextPromotionEvent = VariablePromotedEvent  # type: ignore[assignment,misc]
 
 
 # ── 插件生命周期 ─────────────────────────────────────

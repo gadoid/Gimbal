@@ -24,6 +24,7 @@ class CompositeExecutor(StrategyExecutor):
     kind = "composite"
 
     def execute(self, spec: "StrategyBase", view: "StrategyContextView") -> StrategyResult:
+        """执行组合策略（占位实现）：目前仅记录日志并返回 PASSED，未真正顺序执行子策略。"""
         try:
             name = getattr(spec, "name", "unnamed")
             logger.info("[CompositeExecutor] 执行组合策略: name={}", name)

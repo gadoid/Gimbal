@@ -1,1 +1,0 @@
-"""ReportArtifact definition."""

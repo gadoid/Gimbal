@@ -1,0 +1,1 @@
+{"uuid": "9a77a597ada64111a1e6f91db85616a7", "name": "step-003", "status": "running", "stage": "running", "start": 1780909494597, "labels": [{"name": "framework", "value": "gimbal"}, {"name": "step_id", "value": "step-003"}], "steps": [], "attachments": [], "parameters": []}

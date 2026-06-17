@@ -11,7 +11,7 @@ from .types import (
     ScenarioStartEvent, ScenarioEndEvent,
     StepStartEvent, StepEndEvent, StepFailedEvent,
     HttpRequestEvent, HttpResponseEvent,
-    ContextPromotionEvent, VariablePromotedEvent,
+    VariablePromotedEvent,
     PluginActivatedEvent, PluginFailedEvent, PluginDeactivatedEvent,
 )
 
@@ -27,6 +27,6 @@ __all__ = [
     "ScenarioStartEvent", "ScenarioEndEvent",
     "StepStartEvent", "StepEndEvent", "StepFailedEvent",
     "HttpRequestEvent", "HttpResponseEvent",
-    "ContextPromotionEvent", "VariablePromotedEvent",
+    "VariablePromotedEvent",
     "PluginActivatedEvent", "PluginFailedEvent", "PluginDeactivatedEvent",
 ]

@@ -1,0 +1,3 @@
+POST https://fin-tidb.21eflag.com/api/order/order/orderDetail
+
+{'order_id': '322299939327574016'}

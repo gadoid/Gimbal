@@ -1,34 +1,53 @@
 # Observability 模块
 
-> 可观测性模块，提供日志、追踪、指标功能
+> 可观测性模块：预留的接口位置（tracer / metrics / structured logger / snapshot recorder / 后端实现），目前为占位桩。
 
-## 目录结构
+## 状态
+
+**当前为预留桩模块**。所有源文件都仅含 docstring，**未实现**具体类与方法：
 
 ```
 gimbal/observability/
-├── __init__.py            # 公共 API
-├── logger.py              # StructuredLogger（占位；实际 logger 位于 gimbal.log）
-├── tracer.py              # 分布式追踪
-├── metrics.py             # 指标收集
-├── snapshot_recorder.py   # 快照记录
-└── backends/              # 后端实现
-    ├── __init__.py
-    ├── graylog.py         # Graylog 后端
-    ├── skywalking.py      # SkyWalking 后端
-    └── prometheus.py      # Prometheus 后端
+├── __init__.py            # """Observability module."""
+├── logger.py              # """StructuredLogger."""
+├── metrics.py             # """MetricsCollector."""
+├── snapshot_recorder.py   # """SnapshotRecorder."""
+├── tracer.py              # """Tracer (SkyWalking)."""
+└── backends/
+    ├── __init__.py        # """Backend implementations."""
+    ├── graylog.py         # """Graylog GELF backend."""
+    ├── skywalking.py      # """SkyWalking backend."""
+    └── prometheus.py      # """Prometheus backend."""
 ```
 
-> **注意**：实际日志实现位于 `gimbal/log/`（`get_logger` / `setup_logging`），详见 [log.md](log.md)。`observability/logger.py` 是 StructuredLogger 接口的占位，待 backend 化后填充。
+后续填充计划（来自 `observability/README.md` 与 `backends/` 命名）：
 
-## 核心组件
+| 文件 | 计划内容 |
+| --- | --- |
+| `logger.py` | `StructuredLogger` —— 结构化日志接口（与 `gimbal.log` 互补） |
+| `tracer.py` | `Tracer` —— 分布式追踪接口（参考 SkyWalking 风格） |
+| `metrics.py` | `MetricsCollector` —— 指标收集（counter / histogram / gauge） |
+| `snapshot_recorder.py` | `SnapshotRecorder` —— 测试执行快照记录与查询 |
+| `backends/graylog.py` | Graylog GELF 后端 |
+| `backends/skywalking.py` | SkyWalking 后端 |
+| `backends/prometheus.py` | Prometheus 后端 |
 
-### StructuredLogger
+> **注意**：当前实际日志实现位于 `gimbal/log/`（`get_logger` / `setup_logging`），详见 [log.md](log.md)。`observability/logger.py` 是 StructuredLogger 接口的占位，待 backend 化后填充。
 
-结构化日志记录器：
+## 设计原则（预期）
+
+1. **结构化**: 日志和指标都是结构化的，支持标签
+2. **多后端**: 支持多种后端，可按需启用
+3. **零依赖**: 核心接口无外部依赖，后端按需实现
+4. **可观测性**: 内置日志、追踪、指标三大支柱
+
+## 计划中的核心接口（仅作占位说明）
+
+### StructuredLogger（计划）
 
 ```python
 class StructuredLogger:
-    """结构化日志记录器"""
+    """结构化日志记录器（占位）"""
 
     def log(self, level: str, message: str, **kwargs):
         """记录结构化日志"""
@@ -40,13 +59,11 @@ class StructuredLogger:
     def error(self, message: str, **kwargs): ...
 ```
 
-### Tracer
-
-分布式追踪：
+### Tracer（计划）
 
 ```python
 class Tracer:
-    """分布式追踪"""
+    """分布式追踪（占位，参考 SkyWalking 风格）"""
 
     def start_span(self, name: str, parent: Span | None = None) -> Span:
         """开始一个追踪 span"""
@@ -61,34 +78,22 @@ class Tracer:
         ...
 ```
 
-### Metrics
-
-指标收集：
+### MetricsCollector（计划）
 
 ```python
-class Metrics:
-    """指标收集"""
+class MetricsCollector:
+    """指标收集（占位）"""
 
-    def counter(self, name: str, tags: dict = None) -> Counter:
-        """计数器"""
-        ...
-
-    def histogram(self, name: str, tags: dict = None) -> Histogram:
-        """直方图"""
-        ...
-
-    def gauge(self, name: str, value: float, tags: dict = None):
-        """仪表"""
-        ...
+    def counter(self, name: str, tags: dict = None) -> Counter: ...
+    def histogram(self, name: str, tags: dict = None) -> Histogram: ...
+    def gauge(self, name: str, value: float, tags: dict = None): ...
 ```
 
-### SnapshotRecorder
-
-快照记录器，用于记录测试执行快照：
+### SnapshotRecorder（计划）
 
 ```python
 class SnapshotRecorder:
-    """快照记录器"""
+    """测试执行快照记录（占位）"""
 
     def record(self, data: dict, metadata: dict = None):
         """记录快照"""
@@ -99,54 +104,12 @@ class SnapshotRecorder:
         ...
 ```
 
-## 后端实现
-
-### Graylog
-
-Graylog 日志后端：
+### 后端（计划）
 
 ```python
-class GraylogBackend:
-    """Graylog GELF 后端"""
-    ...
+class GraylogBackend:      """Graylog GELF 后端""" ...
+class SkyWalkingBackend:   """SkyWalking 追踪后端""" ...
+class PrometheusBackend:   """Prometheus 指标后端""" ...
 ```
 
-### SkyWalking
-
-SkyWalking 追踪后端：
-
-```python
-class SkyWalkingBackend:
-    """SkyWalking 追踪后端"""
-    ...
-```
-
-### Prometheus
-
-Prometheus 指标后端：
-
-```python
-class PrometheusBackend:
-    """Prometheus 指标后端"""
-    ...
-```
-
-## 使用示例
-
-```python
-from gimbal.observability.logger import StructuredLogger
-
-# 创建结构化日志
-logger = StructuredLogger("gimbal.test")
-
-# 记录日志
-logger.info("Test started", test_id="sc-001", suite_id="suite-001")
-logger.error("Test failed", test_id="sc-001", error="AssertionError")
-```
-
-## 设计原则
-
-1. **结构化**: 日志和指标都是结构化的，支持标签
-2. **多后端**: 支持多种后端，可按需启用
-3. **零依赖**: 核心接口无外部依赖，后端按需实现
-4. **可观测性**: 内置日志、追踪、指标三大支柱
+> 上方所有代码块仅展示预期接口签名，**当前未实现**。调用方应使用 `gimbal.log` 提供的日志功能，不要引用 `gimbal.observability.*`。

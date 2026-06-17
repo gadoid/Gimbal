@@ -107,6 +107,9 @@ class PlainFormatter:
 # ── JSON sink ─────────────────────────────────────────────────────────────────
 
 def _try_orjson_dumps(obj: Any) -> str:
+    """优先使用 orjson 序列化 obj；不可用时回退到 stdlib json。
+    参数：obj — 任意可序列化对象。返回：序列化后的字符串。
+    """
     try:
         import orjson
         return orjson.dumps(obj).decode()

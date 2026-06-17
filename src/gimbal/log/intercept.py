@@ -35,6 +35,7 @@ class InterceptHandler(logging.Handler):
     """
 
     def emit(self, record: logging.LogRecord) -> None:
+        """把一条 stdlib logging 记录转换为 loguru 调用，保持原始位置和异常信息。"""
         # 将 logging 级别名映射到 loguru 级别名
         try:
             level: str | int = logger.level(record.levelname).name

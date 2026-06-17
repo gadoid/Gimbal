@@ -97,6 +97,12 @@ class AssetMaterializer:
         *,
         max_depth: int = 8,
     ) -> None:
+        """初始化物化器。
+
+        入参:
+            asset_store: 资产仓库，用于根据 Ref 拉取真实数据。
+            max_depth:   递归物化的最大深度，超过则视为环，触发 AssetCycleError。
+        """
         self._store = asset_store
         self._max_depth = max_depth
         # 已处理的 (RefClassName, ref) 集合，用于显式环检测。
@@ -125,7 +131,15 @@ class AssetMaterializer:
     # ── 核心遍历 ──────────────────────────────────────────────────────────────
 
     def _walk(self, obj: Any, *, depth: int, path: str) -> Any:
-        """根据 obj 类型分派到对应的处理方法。"""
+        """根据 obj 类型分派到对应的处理方法（Ref / Pydantic 模型 / dict / list / tuple / 标量）。
+
+        入参:
+            obj:   待遍历的节点。
+            depth: 当前递归深度。
+            path:  当前节点在原对象中的 JSONPath 形式路径，用于错误信息。
+        返回:
+            与入参同构的副本，其中 Ref 节点已被替换为拉取后的内容。
+        """
         # 1. Ref 节点 → pull + 递归
         #    两种识别方式：
         #    a) Pydantic 模型实例（顶层类型化 Ref 一定走这条）
@@ -191,6 +205,11 @@ class AssetMaterializer:
 
         直接修改入参对象并返回 —— 物化是一次性的预处理，不需要保留原图。
         （如需不可变，调用方应在物化前 model.model_copy(deep=True)）
+
+        修复 #17/#31：frozen 模型（frozen=True）的 setattr 会被 Pydantic 拒绝。
+        之前 catch 后仅 warning，节点仍含 RefBase（物化失败）。
+        现在用 object.__setattr__ 绕过 frozen 限制（标准 Pydantic v2 模式），
+        确保物化真正完成。
         """
         for field_name in type(model).model_fields:
             current = getattr(model, field_name)
@@ -202,12 +221,23 @@ class AssetMaterializer:
             if new_value is not current:
                 try:
                     setattr(model, field_name, new_value)
-                except Exception as e:  # noqa: BLE001
-                    # Pydantic v2 frozen 模型可能拒写
-                    logger.warning(
-                        "[AssetMaterializer] 字段替换失败: {}.{} err={}",
-                        type(model).__name__, field_name, e,
-                    )
+                except Exception as setattr_err:  # noqa: BLE001
+                    # 修复 #17/#31：frozen 模型改用 object.__setattr__ 绕过
+                    # 这是 Pydantic v2 推荐的"frozen 但要修改"模式
+                    try:
+                        object.__setattr__(model, field_name, new_value)
+                        logger.debug(
+                            "[AssetMaterializer] frozen 字段已用 __setattr__ 绕过: {}.{}",
+                            type(model).__name__, field_name,
+                        )
+                    except Exception as bypass_err:
+                        # 真的无法 set（极少见，可能是 __slots__ 限制）
+                        logger.warning(
+                            "[AssetMaterializer] 字段无法 set: {}.{} "
+                            "setattr_err={} bypass_err={}",
+                            type(model).__name__, field_name,
+                            setattr_err, bypass_err,
+                        )
         return model
 
     # ── Ref 物化 ──────────────────────────────────────────────────────────────
@@ -306,9 +336,17 @@ class AssetMaterializer:
 
         parsed = getattr(content, "parsed", None)
         if parsed is None:
+            # 修复 #89：错误信息更明确——说明 AssetRecord.kind 必须是什么
+            content_record_kind = getattr(
+                getattr(content, "record", None), "kind", "unknown"
+            )
             raise AssetMaterializationError(
-                f"Typed Ref requires JSON content (parsed is None): {ref.ref!r}",
+                f"Typed Ref requires JSON content (parsed is None): {ref.ref!r}. "
+                f"AssetRecord.kind={content_record_kind!r} — typed refs only support "
+                f"kind in ('suite', 'scenario', 'data'). Either change the ref to "
+                f"a generic Ref (kind='ref') or re-push the asset with a supported kind.",
                 ref=ref.ref, ref_class=type(ref).__name__, path=path,
+                content_kind=content_record_kind,
             )
 
         try:

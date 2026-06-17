@@ -24,6 +24,7 @@ class ChaosExecutor(StrategyExecutor):
     kind = "chaos"
 
     def execute(self, spec: "StrategyBase", view: "StrategyContextView") -> StrategyResult:
+        """执行混沌工程实验（占位实现）：目前仅记录日志并返回 PASSED，未实际注入故障。"""
         try:
             action = getattr(spec, "action", "")
             target = getattr(spec, "target", "")

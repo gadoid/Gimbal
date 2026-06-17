@@ -1,13 +1,13 @@
 # Plugins 模块
 
-> 插件系统模块：发现 → manifest 解析 → 依赖排序 → 加载 → 激活 → 卸载的完整 pipeline
+> 插件系统模块：发现 → manifest 解析 → 依赖排序 → 加载 → 激活 → 卸载的完整 pipeline。
 
 ## 目录结构
 
 ```
 gimbal/plugins/
 ├── __init__.py        # 公共 API + Plugin / PluginContext / PluginManifest re-export
-├── categories.py      # PluginCategory 枚举
+├── categories.py      # PluginCategory 枚举 + 字符串常量
 ├── spec.py            # PluginSpec（运行时描述）
 ├── manifest.py        # find_manifest / parse_manifest_file / ManifestError
 ├── discovery.py       # discover_entry_points（pip entry points）
@@ -15,7 +15,9 @@ gimbal/plugins/
 └── registry.py        # PluginRegistry（按 name / category / capability 查询）
 ```
 
-> `Plugin` / `PluginContext` / `PluginManifest` / `PluginState` 实际定义在 `gimbal.core.plugin`（历史原因），`plugins/__init__.py` 透传导出。**不构成 import 环**——`core.plugin` 不 import 任何 `gimbal.plugins.*`，依赖图是 DAG：
+> `Plugin` / `PluginContext` / `PluginManifest` / `PluginState` 实际定义在 `gimbal.core.plugin`（历史原因），
+> `plugins/__init__.py` 透传导出。**不构成 import 环**——`core.plugin` 不 import 任何 `gimbal.plugins.*`，
+> 依赖图是 DAG：
 > ```
 > core.bootstrap → gimbal.plugins → core.plugin → events/hooks
 > ```
@@ -24,12 +26,12 @@ gimbal/plugins/
 
 ### PluginSpec（运行时描述）
 
-`PluginManifest`（静态声明） vs `PluginSpec`（运行时描述）：
+`PluginManifest`（静态声明，定义在 `gimbal.core.plugin`） vs `PluginSpec`（运行时描述，定义在 `plugins/spec.py`）：
 
 | 类 | 来源 | 关注点 |
 |---|---|---|
 | `PluginManifest` | `gimbal.core.plugin`，子类类属性 | name / version / entry_point / capabilities |
-| `PluginSpec` | `gimbal.plugins.spec`，loader 解析 manifest 后产出 | 上面所有 + `plugin_path` / `manifest_path` / `source` / `enabled` |
+| `PluginSpec` | `gimbal.plugins.spec`，loader 解析 manifest 后产出 | 上面所有 + `plugin_path` / `manifest_path` / `source` / `enabled` / `default_config` |
 
 ```python
 @dataclass
@@ -48,10 +50,12 @@ class PluginSpec:
     default_config: dict[str, Any] = field(default_factory=dict)
 
     # 运行时字段（loader 填充）
-    plugin_path: Optional[str] = None
-    manifest_path: Optional[str] = None
+    plugin_path: Optional[str] = None      # 插件根目录（用于加载本地资源）
+    manifest_path: Optional[str] = None    # plugin.yaml 绝对路径
     source: str = "filesystem"             # "filesystem" | "entry_point" | "inline"
-    enabled: bool = True
+    enabled: bool = True                   # 用户在 gimbal.yaml 中可关闭
+
+    def to_dict(self) -> dict[str, Any]: ...
 ```
 
 ### Manifest 解析
@@ -73,10 +77,12 @@ class ManifestError(Exception): ...
 ### Entry Points 自动发现
 
 ```python
-def discover_entry_points(group=None) -> list[tuple[str, str]]:
+ENTRY_POINT_GROUP = "gimbal.plugins"
+
+def discover_entry_points(group: str | None = None) -> list[tuple[str, str]]:
     """从 Python entry points 中发现插件。
 
-    pip-installed 插件在 pyproject.toml 声明：
+    pip 安装的插件在 pyproject.toml 声明：
         [project.entry-points."gimbal.plugins"]
         html-reporter = "gimbal_html_reporter.plugin:HTMLReporterPlugin"
     """
@@ -86,27 +92,61 @@ def discover_entry_points(group=None) -> list[tuple[str, str]]:
 
 ```python
 class PluginLoader:
-    def __init__(plugins_dir=None, enabled_filter=None, disabled_filter=None) -> ...
+    def __init__(
+        self,
+        plugins_dir: Optional[Union[str, Path]] = None,
+        enabled_filter: Optional[set[str]] = None,    # 白名单（None = 全开）
+        disabled_filter: Optional[set[str]] = None,   # 黑名单
+    ) -> None: ...
 
-    def discover() -> list[PluginSpec]                # 1. 发现
-    def resolve_deps(specs) -> list[PluginSpec]      # 2. 拓扑排序（循环 → ValueError）
-    def load_all(specs) -> list[Plugin]              # 3. import + 实例化 + on_load
-    def activate_all(plugins, *, event_bus, hook_registry,
-                     user_configs=None, plugin_registry=None) -> list[Plugin]
-    def deactivate_all(plugins, *, plugin_registry=None) -> DeactivateReport
+    def discover() -> list[PluginSpec]
+        # 1. 发现：filesystem manifest + entry points（按顺序合并去重）
+
+    def resolve_deps(specs: list[PluginSpec]) -> list[PluginSpec]
+        # 2. 拓扑排序，确保依赖在被依赖者之后加载
+        # 循环依赖 → ValueError
+
+    def load_all(specs: list[PluginSpec]) -> list[Plugin]
+        # 3. import + 实例化 + on_load
+        # 失败的插件被跳过
+
+    def activate_all(
+        plugins: list[Plugin],
+        *,
+        event_bus: Any,
+        hook_registry: Any,
+        user_configs: Optional[dict[str, dict[str, Any]]] = None,
+        plugin_registry: Optional[PluginRegistry] = None,
+    ) -> list[Plugin]
+        # 4. 构造 PluginContext(默认合并 spec.default_config + user_cfg)
+        # 调 plugin.activate(ctx)；成功后 registry.register(plugin, spec)
+
+    def deactivate_all(
+        plugins: list[Plugin],
+        *,
+        plugin_registry: Optional[PluginRegistry] = None,
+    ) -> DeactivateReport
+        # 5. 唯一卸载入口：反序调 plugin.deactivate() + 清理 event/hook/registry
+
+    @property
+    def registry(self) -> PluginRegistry: ...
+
+    def is_enabled(self, spec: PluginSpec) -> bool:
+        """综合白名单 / 黑名单 / spec.enabled 三者判定。"""
 ```
 
 **唯一卸载入口**：`bootstrap.shutdown()` 和测试代码都通过 `deactivate_all()` 走。
 
 #### 发现来源（按顺序）
 
-1. **Filesystem**：`plugins_dir/<plugin_name>/plugin.yaml`
+1. **Filesystem**：`plugins_dir/<plugin_name>/plugin.yaml`（或 `.yml` / `.toml`）
 2. **Entry points**：`gimbal.plugins` group（pip 安装的包）
 3. **Inline**：通过 `loader.registry.register(...)` 程序化注册
 
 #### sys.path 上下文管理（Issue 7 修复）
 
-`_load_one()` 用 try/finally 在 import 期间 `sys.path.insert(0, p)`，import 完立即 LIFO 撤掉。**不再泄漏**插件路径到全局 `sys.path`，避免多次 bootstrap 后路径堆积。
+`_load_one()` 用 try/finally 在 import 期间 `sys.path.insert(0, p)`，import 完立即 LIFO 撤掉。
+**不再泄漏**插件路径到全局 `sys.path`，避免多次 bootstrap 后路径堆积。
 
 #### DeactivateReport
 
@@ -114,13 +154,16 @@ class PluginLoader:
 @dataclass
 class DeactivateReport:
     succeeded: list[str] = field(default_factory=list)
-    failed: list[tuple[str, str]] = field(default_factory=list)  # (name, error)
+    failed: list[tuple[str, str]] = field(default_factory=list)  # (plugin_name, error_message)
 
     @property
     def all_ok(self) -> bool: ...
+
+    def __str__(self) -> str: ...  # DeactivateReport(ok=N failed=M failures=[...])
 ```
 
-**不吞异常**：单个插件失败（包括 `on_deactivate` 抛异常、event/hook 清理失败）都记入 `failed`，不中断后续插件的卸载。调用方读取 `report` 决定后续动作。
+**不吞异常**：单个插件失败（包括 `on_deactivate` 抛异常、event/hook 清理失败）都记入
+`failed`，不中断后续插件的卸载。调用方读取 `report` 决定后续动作。
 
 ### PluginRegistry（运行时注册表）
 
@@ -128,16 +171,20 @@ class DeactivateReport:
 class PluginRegistry:
     """按 name / category / capability 索引已激活插件。"""
 
-    def register(plugin, spec) -> None
-    def unregister(name) -> bool
-    def get(name) -> Optional[Plugin]
-    def get_spec(name) -> Optional[PluginSpec]
-    def has(name) -> bool
-    def list_all() -> list[Plugin]
-    def list_specs() -> list[PluginSpec]
-    def list_by_category(category) -> list[Plugin]
-    def list_by_capability(capability) -> list[Plugin]
-    def clear() -> None
+    def register(self, plugin: Any, spec: PluginSpec) -> None
+        # 同名插件会覆盖并打 warning；同步维护 _by_category 索引
+
+    def unregister(self, name: str) -> bool
+        # 不存在 → False；成功 → True（从所有索引中移除）
+
+    def get(self, name: str) -> Optional[Any]
+    def get_spec(self, name: str) -> Optional[PluginSpec]
+    def has(self, name: str) -> bool
+    def list_all(self) -> list[Any]
+    def list_specs(self) -> list[PluginSpec]
+    def list_by_category(self, category: PluginCategory) -> list[Any]
+    def list_by_capability(self, capability: str) -> list[Any]
+    def clear(self) -> None
 ```
 
 **不拥有生命周期**——只回答 "谁提供 X？"。生命周期归 `PluginLoader`。
@@ -170,17 +217,18 @@ class PluginCategory(str, Enum):
 
 ```python
 def on_activate(self, ctx: PluginContext):
-    ctx.register_event("step.start",  self._on_step_start)   # 通过 event bus
-    ctx.register_hook(HookPoint.HTTP_BEFORE_SEND, self._sign)  # 通过 hook registry
+    ctx.register_event("step.start",  self._on_step_start)    # 通过 event bus
+    ctx.register_hook(HookPoint.HTTP_BEFORE_SEND, self._sign) # 通过 hook registry
 ```
 
-**卸载走 name-based 路径**——`unsubscribe_plugin(name)` / `unregister_plugin(name)`，**不维护 id 列表**。`PluginContext` 内只记 `event_count` / `hook_count` 计数器供日志。
+**卸载走 name-based 路径**——`unsubscribe_plugin(name)` / `unregister_plugin(name)`，**不维护 id 列表**。
+`PluginContext` 内只记 `event_count` / `hook_count` 计数器供日志。
 
 详见 [core.md](core.md) 的 Hook 系统、Plugin 抽象章节。
 
 ## 使用示例
 
-```python
+```yaml
 # plugin.yaml（filesystem 插件）
 name: html-reporter
 version: 1.0.0
@@ -200,9 +248,9 @@ from pathlib import Path
 from gimbal.plugins import PluginLoader
 
 loader = PluginLoader(plugins_dir=Path("./plugins"))
-specs = loader.discover()
-specs = loader.resolve_deps(specs)
-plugins = loader.load_all(specs)
+specs = loader.discover()                   # 1. 发现
+specs = loader.resolve_deps(specs)          # 2. 依赖排序
+plugins = loader.load_all(specs)            # 3. 加载
 activated = loader.activate_all(
     plugins,
     event_bus=event_bus,
@@ -217,7 +265,7 @@ if not report.all_ok:
     print(f"部分插件卸载失败: {report.failed}")
 ```
 
-```python
+```toml
 # 第三方包（pip 安装的插件）
 # pyproject.toml:
 #   [project.entry-points."gimbal.plugins"]

@@ -48,6 +48,12 @@ class ConfigLoadError(Exception):
     """配置加载异常，包含清晰的上下文信息。"""
 
     def __init__(self, stage: str, source: str, original_error: Exception):
+        """初始化 ConfigLoadError，记录加载阶段、配置来源与原始异常。
+
+        :param stage: 配置加载所处的阶段（如 "YAML解析"、"文件读取"）。
+        :param source: 配置来源标识（如文件名或 "defaults"）。
+        :param original_error: 触发该异常的根本原因异常对象。
+        """
         self.stage = stage
         self.source = source
         self.original_error = original_error
@@ -167,7 +173,7 @@ class ConfigLoader:
 
         # extras 中的执行控制参数（由各 CLI 子命令注入）
         extras = dict(cli.extras)
-        for key in ("fail_fast", "reporters", "report_dir", "default_timeout", "default_retry"):
+        for key in ("fail_fast", "reporters", "report_dir", "default_timeout", "default_retry", "vars"):
             if key in extras:
                 result[key] = extras.pop(key)
 

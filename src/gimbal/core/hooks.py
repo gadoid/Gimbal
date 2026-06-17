@@ -110,7 +110,9 @@ class HookResult:
     - stopped:        是否被某个 handler 抛 STOP 中断
     - stop_reason:    停止原因（handler 抛 STOP 时可附带的字符串）
     - stop_plugin:    抛出 STOP 的插件名（用于审计/上报）
-    - modified:       是否有 handler 改写了 payload 或返回了新对象
+    - modified:       是否有 handler 返回了非 None 值（即替换了 payload）
+                      注：in-place 修改（如 dict["k"]=v）需 handler 显式
+                      return payload 才能被识别为 modified
     - errors:         执行期间 handler 异常列表（仅记录，不抛出）
     """
     stopped: bool = False
@@ -120,6 +122,7 @@ class HookResult:
     errors: list[dict[str, Any]] = field(default_factory=list)
 
     def __bool__(self) -> bool:        # 方便 if not triggerer.fire(...): return 这样的写法
+        """支持 `if not result` 这种写法：未中断时为 True（继续主流程）。"""
         return not self.stopped
 
 
@@ -129,6 +132,7 @@ class HookRegistry:
     """Hook 注册表。"""
 
     def __init__(self) -> None:
+        """初始化一个空的 hook 注册表（_hooks 列表）。"""
         self._hooks: list[Hook] = []
 
     # ── 注册 ──
@@ -166,6 +170,7 @@ class HookRegistry:
         return h.hook_id
 
     def unregister(self, hook_id: str) -> bool:
+        """按 hook_id 注销单个 hook。返回是否成功（True = 找到并删除）。"""
         for i, h in enumerate(self._hooks):
             if h.hook_id == hook_id:
                 self._hooks.pop(i)
@@ -174,6 +179,7 @@ class HookRegistry:
         return False
 
     def unregister_plugin(self, plugin_name: str) -> int:
+        """按插件名批量注销其注册的所有 hook。返回被移除的数量。"""
         before = len(self._hooks)
         self._hooks = [h for h in self._hooks if h.plugin_name != plugin_name]
         removed = before - len(self._hooks)
@@ -186,6 +192,14 @@ class HookRegistry:
         point: Optional[HookPoint] = None,
         plugin_name: Optional[str] = None,
     ) -> list[Hook]:
+        """按 point 和/或 plugin_name 过滤查询已注册的 hook 列表。
+
+        入参:
+            point:       可选，按埋点点过滤。
+            plugin_name: 可选，按注册插件名过滤。
+        返回:
+            匹配条件的 Hook 列表（拷贝，原列表不受影响）。
+        """
         out = self._hooks
         if point:
             out = [h for h in out if h.point == point]
@@ -214,8 +228,10 @@ class HookRegistry:
                 if ret is not None and payload is not None:
                     # 如果 handler 返回了新对象，替换 payload
                     payload = ret
-                # 只要 handler 跑过（未抛 STOP），就认为 payload 已被 handler 介入
-                result.modified = True
+                    # 修复 #15：仅当 handler 实际返回新对象（替换 payload）时才标记 modified
+                    # 之前是"任何 handler 跑过就 modified=True"，误导消费者
+                    result.modified = True
+                # in-place 修改（如 dict["k"]=v）需 handler 显式 return payload 才被识别
             except _StopException as sig:
                 result.stopped = True
                 result.stop_reason = str(sig)
@@ -240,6 +256,7 @@ class HookRegistry:
         return result
 
     def clear(self) -> None:
+        """清空所有已注册的 hook（用于 shutdown 兜底清理）。"""
         self._hooks.clear()
 
 
@@ -259,7 +276,9 @@ class HookTriggerer:
     """
 
     def __init__(self, registry: HookRegistry) -> None:
+        """初始化触发器，绑定到一个 HookRegistry 实例。"""
         self._registry = registry
 
     def fire(self, point: HookPoint, payload: Any) -> HookResult:
+        """在绑定的 registry 上触发指定 point 的所有 hook。返回 HookResult。"""
         return self._registry.trigger(point, payload)

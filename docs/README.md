@@ -48,6 +48,7 @@ Engine
 |------|------|
 | [context](modules/context.md) | 层级执行上下文 (Framework→Suite→Scenario→Step) |
 | [config](modules/config.md) | 配置管理，多来源配置合并 |
+| [generator](modules/generator.md) | 变量生成器（7 个内置 kind：uuid / random_str / random_int / random_decimal / timestamp / now / seq） |
 
 ### 支持模块
 

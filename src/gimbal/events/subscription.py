@@ -29,11 +29,13 @@ class EventFilter(BaseModel):
     custom: dict[str, Any] = Field(default_factory=dict)
 
     def matches(self, event: Any) -> bool:
+        """判断 event 是否通过当前过滤规则：依次匹配 event_type、event_type_pattern（re.fullmatch）、run_id、step_id、scenario_id 以及 custom 字典中的键值对，全部通过（或对应字段为 None）返回 True，否则返回 False。参数 event 为带 event_type/run_id/step_id/scenario_id 等属性的事件对象；返回布尔值。"""
         et = getattr(event, "event_type", None)
         if self.event_type and et != self.event_type:
             return False
         if self.event_type_pattern and et is not None:
-            if not re.match(self.event_type_pattern, et):
+            # 用 fullmatch 而非 match：避免 "step.*" 误匹配 "stepper.*"
+            if not re.fullmatch(self.event_type_pattern, et):
                 return False
         if self.run_id and getattr(event, "run_id", None) != self.run_id:
             return False

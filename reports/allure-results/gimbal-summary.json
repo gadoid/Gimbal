@@ -1,0 +1,12 @@
+{
+  "run_id": "9fad4050-ecc4-4ced-bb69-b1d90d912924",
+  "env": "dev",
+  "mode": "local",
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "error": 0,
+    "skipped": 0
+  }
+}
