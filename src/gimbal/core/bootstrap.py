@@ -133,6 +133,12 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
     reporter_runtime.setup(bus=event_bus, config=cfg)
     logger.info("[bootstrap] Reporter runtime 就绪: builtins={}", reporter_registry.available())
 
+    # 8. 构造变量生成器并注入 cfg（cfg 是 frozen=True，只能用 model_copy）
+    from gimbal.generator import Generator, build_default_registry
+    generator = Generator(build_default_registry())
+    cfg = cfg.model_copy(update={"generator": generator})
+    logger.info("[bootstrap] 变量生成器已就绪: kinds={}", generator._registry.kinds())
+
     return Configuration(
         cfg=cfg,
         auth_registry=auth_registry,
