@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 from pydantic import BaseModel, Field, ConfigDict
 from ..version import getVersion
@@ -49,6 +51,15 @@ class BootstrapConfig(BaseModel):
     vars: dict[str, Any] = Field(
         default_factory=dict,
         description="CLI --var / --var-file 注入的 KV 变量，模板 ${var} 可引用"
+    )
+
+    # ── 新增：generator 实例（由 bootstrap() 注入）──
+    # 类型用 Any 以避免 Pydantic 对 Generator 的 schema 生成（Generator 不是 BaseModel），
+    # 逻辑上等价于 "Generator | None"——bootstrap() 注入的就是 Generator 实例；
+    # 想要更强的类型检查可在 TYPE_CHECKING 块中引用 Generator 做 mypy 约束。
+    generator: Any = Field(
+        default=None,
+        description="变量生成器实例（由 bootstrap() 构造并注入；未传则禁用变量生成）",
     )
 
     retry_count: int = Field(0, description="失败重试次数")
