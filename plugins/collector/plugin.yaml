@@ -1,0 +1,8 @@
+name: gimbal-collector
+version: 0.1.0
+entry_point: gimbal_collector.plugin:CollectorPlugin
+category: reporter
+description: Collect run/scenario/step/http/promotion events and emit JSON report.
+capabilities: [reporter]
+default_config:
+  output_dir: ./reports

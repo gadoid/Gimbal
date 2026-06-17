@@ -158,3 +158,9 @@ $.items[?(@.count in [1,2,3])]  # 过滤 count 在列表中的项
 2. **线程安全**: 无模块级可变状态
 3. **异常安全**: 除 `JsonPathError` 外不抛其他异常
 4. **类型保留**: 整体模板返回原始类型（int/dict 等）
+
+## 已知问题
+
+`resolve_template` 内部的 `${}` 解析依赖 `_get_nested`（仅点号路径），与 `get` / `get_all` 暴露的完整 JSONPath 能力**不对齐**。常见遗留缺陷（不支持下标/通配/过滤、嵌入式缺失静默原样保留等）见：
+
+[`docs/known-issues/preprocessor/template-substitution.md`](../known-issues/preprocessor/template-substitution.md)

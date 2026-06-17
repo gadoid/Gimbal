@@ -8,6 +8,8 @@ dependencies = [
     "pydantic>=2.0",
     "rich>=13.0",     
 ]
+[project.scripts]
+gimbal = "gimbal.cli.main:starter"
 
 [project.optional-dependencies]
 dev = [

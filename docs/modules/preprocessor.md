@@ -179,3 +179,9 @@ def _pick_base_url(self) -> str:
 5. **Token 自动刷新**：`AuthManager` 在执行期按需触发刷新，预处理不负责。
 6. **配置/状态分离**：认证结果写入 `AuthRegistry`（运行期容器），不污染 `BootstrapConfig`（frozen）。
 7. **类型保留**：单 `${}` 整体保留对象引用而非 dump，token 刷新后自动可见。
+
+## 已知问题
+
+模板变量替换机制（`_resolve_value` → `resolve_template` → `_get_nested`）当前能覆盖绝大多数用例，但存在若干已知遗留缺陷（`${}` 不支持 JSONPath 高级语法、嵌入式缺失静默原样保留、headers/body 对 None 处理不一致等）。
+
+完整登记与触发修复的信号见：[`docs/known-issues/preprocessor/template-substitution.md`](../known-issues/preprocessor/template-substitution.md)。
