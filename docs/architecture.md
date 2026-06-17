@@ -89,7 +89,7 @@ CLI (Typer)
 | **StepStateMachine** | `statemachine/engine.py` | 状态流转控制，PENDING → BEFORE_REQUEST → CALLING → AFTER_REQUEST → VERIFYING → TEARDOWN |
 | **StrategyDispatcher** | `strategy/dispatcher.py` | 策略分发执行（kind → StrategyExecutor），含 STRATEGY_BEFORE/AFTER 埋点、软失败标记 |
 | **ContextManager** | `context/manager.py` | 层级 Context 生命周期管理（Framework/Suite/Scenario/Step） |
-| **Preprocessor** | `preprocessor/scenario_preprocessor.py` | 引用物化、认证、构建查询根、模板展开、提取 base_url |
+| **Preprocessor** | `preprocessor/scenario_preprocessor.py` | 引用物化、认证、变量生成、构建查询根、模板展开、提取 base_url |
 | **EventBus** | `events/bus.py` | 进程内事件总线（filter / priority / SYNC/ASYNC/BATCH / 插件热卸载） |
 | **HookRegistry** | `core/hooks.py` | Hook 注册表（按 priority 升序、STOP 中断、payload 改写） |
 | **PluginLoader** | `plugins/loader.py` | 插件发现 / 依赖解析 / 加载 / 激活 / 卸载四阶段流水线 |
@@ -319,7 +319,8 @@ class CLIContext(BaseModel):
      │     │   ├── RequestRef  → Request
      │     │   └── StrategyRef → Extract/Assign/Assertion/Call
      │     ├── Phase 1  认证（AuthManager → AuthRegistry）
-     │     ├── Phase 2  构建查询根（services + auth.snapshot）
+     │     ├── Phase 1.5  变量生成（合并 scenario.config.vars + BootstrapConfig.vars；CLI 赢；生成式调 Generator）  ★
+     │     ├── Phase 2  构建查询根（services + auth.snapshot + vars）
      │     ├── Phase 3  模板展开（${auth.*} ${service.*} ${var.*}）
      │     └── Phase 4  提取 base_url
      ├── 遍历已展开的 steps（此时已无 Ref 节点）

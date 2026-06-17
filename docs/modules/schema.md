@@ -106,6 +106,7 @@ class Config(BaseModel):
     users: dict[str, dict[str, AuthSession]] # 认证信息（运行期 token 由 AuthRegistry 接管）
     timePolicy: TimePolicyUnion
     retry: RetryPolicy | None
+    vars: dict[str, Any]                    # 变量声明（字面量或生成式 spec dict）；详见 generator.md
 ```
 
 > `Config.users` 在 Bootstrap 阶段被解析后，token 状态迁移到 `Configuration.auth_registry`，**`BootstrapConfig` 保持 frozen**（详见 `auth.md` 中的"为什么需要 AuthRegistry"）。
