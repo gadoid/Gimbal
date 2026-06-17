@@ -10,7 +10,7 @@
 """
 from __future__ import annotations
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal, Union
 from pydantic import BaseModel, Field, ConfigDict, TypeAdapter
 
 
@@ -88,14 +88,21 @@ _VarSpecUnion = Annotated[
 class VarSpec:
     """VarSpec = discriminated union (by 'kind')，对外暴露 model_validate / model_dump。
 
-    内部用 TypeAdapter 包装 _VarSpecUnion，对外提供与 BaseModel 一致的 model_validate 接口。
+    为什么是 class 而不是裸的 `Annotated[Union[...], Field(discriminator="kind")]`？
+      - 裸 Annotated[...] 是 typing 构造，没有 model_validate 方法
+      - 但下游调用方（Task 5 engine / Task 10 preprocessor）需要 `VarSpec.model_validate(dict)`
+        这样的 BaseModel-like API 来校验 scenario.config.vars 里的 dict 项
+      - 因此在 _VarSpecUnion 之上包一层 TypeAdapter，对外暴露 classmethod
+
+    与 src/gimbal/schema/*Union 的差异：schema 那边是 TypeAdapter 包装在使用方
+    （如 asset_materializer.py:65-74），这里选择在使用方直接调用更省事。
     """
     _adapter: TypeAdapter = TypeAdapter(_VarSpecUnion)
 
     @classmethod
-    def model_validate(cls, data):
+    def model_validate(cls, data: Any) -> Any:
         return cls._adapter.validate_python(data)
 
     @classmethod
-    def model_dump(cls, instance, **kwargs):
+    def model_dump(cls, instance: BaseModel, **kwargs: Any) -> Any:
         return cls._adapter.dump_python(instance, **kwargs)
