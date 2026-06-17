@@ -4,6 +4,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "sr
 
 import pytest
 from unittest.mock import MagicMock
+from pydantic import ValidationError
 from gimbal.config.models import BootstrapConfig
 
 
@@ -24,5 +25,5 @@ def test_generator_field_is_frozen():
     """BootstrapConfig 是 frozen，generator 字段不可重新赋值。"""
     mock_gen = MagicMock()
     cfg = BootstrapConfig(generator=mock_gen)
-    with pytest.raises(Exception):  # Pydantic FrozenError 或 ValidationError
+    with pytest.raises(ValidationError):
         cfg.generator = MagicMock()
