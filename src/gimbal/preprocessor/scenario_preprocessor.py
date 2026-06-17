@@ -86,6 +86,8 @@ class ScenarioPreprocessor:
             auth_registry = AuthRegistry()
         self._auth_registry = auth_registry
         self._asset_store = asset_store
+        self._generator = self._cfg.generator
+        self._resolved_vars: dict[str, Any] = {}   # Phase 1.5 填充
 
     # ── 公开入口 ──────────────────────────────────────────────────────────────
 
@@ -107,6 +109,9 @@ class ScenarioPreprocessor:
 
         # 1. 认证
         self._setup_auth()
+
+        # 1.5 变量生成
+        self._generate_vars()
 
         # 2. 构建查询根
         root = self._build_resolve_root()
@@ -222,6 +227,39 @@ class ScenarioPreprocessor:
             len(auth_dict), len(referenced_tags), len(referenced_tags),
         )
 
+    # ── 第一段半：变量生成（Phase 1.5）───────────────────────────────────────
+
+    def _generate_vars(self) -> None:
+        """Phase 1.5: 合并 scenario + CLI vars，生成或保留字面量。
+
+        合并规则（CLI 赢）：
+            merged = {**scenario_vars, **cli_vars}
+
+        每一项运行时判定：
+            - dict 且含 'kind'：作为生成式，调用 self._generator.generate
+            - str / int / float / bool / None：作为字面量，原样保留
+            - 其它类型：抛 ValueError
+        """
+        from gimbal.generator import VarSpec  # 局部导入避免循环
+
+        cli_vars = self._cfg.vars or {}
+        scenario_vars = getattr(self._schema.config, "vars", None) or {}
+        merged: dict[str, Any] = {**scenario_vars, **cli_vars}
+
+        result: dict[str, Any] = {}
+        for name, spec in merged.items():
+            if isinstance(spec, dict) and "kind" in spec:
+                var_spec = VarSpec.model_validate(spec)
+                result[name] = self._generator.generate(var_spec)
+            elif isinstance(spec, (str, int, float, bool, type(None))):
+                result[name] = spec
+            else:
+                raise ValueError(
+                    f"[Preprocessor] invalid var spec for '{name}': {spec!r} "
+                    f"(expected dict with 'kind' or a primitive literal)"
+                )
+        self._resolved_vars = result
+
     # ── 第二段：构建查询根 ────────────────────────────────────────────────────
 
     def _build_resolve_root(self) -> dict[str, Any]:
@@ -254,11 +292,11 @@ class ScenarioPreprocessor:
         # AuthRegistry.snapshot() 返回浅拷贝字典，下游模板解析只读
         root["auth"] = self._auth_registry.snapshot()
 
-        # --- var（修复 #52 完整链路） ---
-        # CLI --var / --var-file 注入的 KV, 通过 BootstrapConfig.vars 流转
+        # --- var（修复 #52 完整链路 + Phase 1.5 生成式变量） ---
+        # Phase 1.5 合并 scenario + CLI vars，已生成式变量 / 字面量均落到 _resolved_vars
         # 模板里 ${var.foo} 引用
-        if self._cfg.vars:
-            root["var"] = dict(self._cfg.vars)
+        if self._resolved_vars:
+            root["var"] = dict(self._resolved_vars)
 
         logger.debug(
             "[Preprocessor] 查询根构建完成: service_keys={} auth_tags={} var_keys={}",
@@ -450,12 +488,16 @@ class ScenarioPreprocessor:
         - 非字符串 / 不含模板 → 原样返回
         - 整体是单个 ${} → 保留原始类型（int / dict / AuthSession）
         - 嵌入式 ${} → 字符串拼接
-        - 解析失败（变量不存在） → 返回 _Missing 哨兵（修复 B5 + Fix 3）
+        - 解析失败（变量不存在） → 抛 ValueError（fail-fast，与 _resolve_or_fail 一致）
         - 合法 None 值（key 存在但值为 None） → 正常返回 None / 空串
 
         Fix 3 修正：
           区分"路径不存在"（_Missing，触发 fail-fast）与"合法 None 值"
           （key 存在但值为 None，渲染为空串 / 返回 None）。
+
+        Phase 1.5 修正：
+          body 模板（经 _resolve_nested → _resolve_value）也走 fail-fast，
+          防止静默把变量缺失渲染为 None 进入请求体。
         """
         from gimbal.utils.jsonpath import is_template, resolve_template_strict, is_missing
 
@@ -463,14 +505,16 @@ class ScenarioPreprocessor:
             return value
 
         # 修复 B5 + Fix 3：用 strict 版本
-        # - 路径不存在 → _Missing（让调用方 fail-fast）
+        # - 路径不存在 → _Missing（fail-fast 抛 ValueError）
         # - 合法 None → 嵌入式渲染为空串、整体模板返回 None
         resolved = resolve_template_strict(value, root)
 
         if is_missing(resolved):
-            # 路径真不存在 → 返回 None 让 _resolve_api / _resolve_nested 显式处理
-            logger.warning("[Preprocessor] 模板变量未找到: {}", value)
-            return None
+            # 路径真不存在 → fail-fast，避免静默渲染为 None 进入请求体
+            raise ValueError(
+                f"[Preprocessor] 模板变量未找到: {value!r}。"
+                "请检查变量名拼写或 vars 注入"
+            )
 
         logger.debug("[Preprocessor] 模板展开: {!r} → {!r}", value, resolved)
         return resolved
