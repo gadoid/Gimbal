@@ -337,35 +337,21 @@ class ScenarioPreprocessor:
         return resolved
 
     def _resolve_api(self, api, root: dict):
-        """展开 Api 中的模板字段：解析 path 和 headers 中的 ${} 占位符；若任一模板变量缺失则抛 ValueError（fail-fast），返回新的 Api 实例（ApiRef 原样返回）。"""
+        """展开 Api 中的模板字段：解析 path 和 headers 中的 ${} 占位符。
+
+        任一模板变量缺失由 _resolve_value 内部 fail-fast 抛 ValueError（与 body/strategy 一致）。
+        因此不再做"先收集所有缺失再统一报错"的 B5 逻辑——单点失败直接上抛。
+        """
         from gimbal.schema.api import Api, ApiRef
 
         if isinstance(api, ApiRef):
             return api
 
-        # 修复 B5：先解析所有 header；记录哪些解析失败
-        resolved_headers = {}
-        missing_headers = []
-        for k, v in (api.headers or {}).items():
-            resolved = self._resolve_value(v, root)
-            if resolved is None:
-                missing_headers.append(k)
-            else:
-                resolved_headers[k] = resolved
-
-        if missing_headers:
-            # 修复 B5：header 模板变量未找到时报错，不静默丢弃
-            raise ValueError(
-                f"[Preprocessor] api header 模板变量未找到, header 缺失: {missing_headers}。"
-                "请求会变无认证或缺 header，请检查变量名拼写或 vars 注入"
-            )
-
-        # path 也必须能解析
+        resolved_headers = {
+            k: self._resolve_value(v, root)
+            for k, v in (api.headers or {}).items()
+        }
         resolved_path = self._resolve_value(api.path, root)
-        if resolved_path is None:
-            raise ValueError(
-                f"[Preprocessor] api.path 模板变量未找到: {api.path!r}"
-            )
 
         return Api(
             kind=api.kind,
