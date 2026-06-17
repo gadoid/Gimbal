@@ -172,7 +172,7 @@ def _generate_vars(self) -> None:
 |----------|----------|----------|
 | `service` | `scenario.config.services` | `bootstrap.services` |
 | `auth` | `AuthRegistry.snapshot()` | — |
-| `var` | `BootstrapConfig.vars`（CLI --var / --var-file 注入） | — |
+| `var` | `scenario.config.vars` ∪ `BootstrapConfig.vars`（Phase 1.5 合并 + 生成式求值） | — |
 
 ```python
 def _build_resolve_root(self) -> dict[str, Any]:
@@ -197,9 +197,10 @@ def _build_resolve_root(self) -> dict[str, Any]:
     # auth（snapshot 返回浅拷贝）
     root["auth"] = self._auth_registry.snapshot()
 
-    # var（修复 #52 完整链路：CLI --var / --var-file 注入的 KV）
-    if self._cfg.vars:
-        root["var"] = dict(self._cfg.vars)
+    # var（Phase 1.5 已在 self._resolved_vars 中合并 scenario.config.vars 与
+    # BootstrapConfig.vars，并对生成式 spec 求值；此处直接注入）
+    if self._resolved_vars:
+        root["var"] = dict(self._resolved_vars)
 
     return root
 ```

@@ -92,15 +92,18 @@ class BootstrapConfig(BaseModel):
 
 ### BootstrapConfig.generator 字段（★ 新增）
 
-字符串前向引用类型，由 `bootstrap()` 构造并注入：
+由 `bootstrap()` 构造并注入 `Generator` 实例。**类型声明为 `Any`**（不是 `"Generator | None"`），因为 Pydantic v2 无法为非 BaseModel 类型（如 `Generator`）生成 schema。
 
 ```python
-generator: "Generator | None" = Field(default=None, ...)
+generator: Any = Field(
+    default=None,
+    description="变量生成器实例（由 bootstrap() 构造并注入；未传则禁用变量生成）",
+)
 ```
 
 preprocessor Phase 1.5 调用 `self._cfg.generator.generate(spec)`。
 
-注：实际实现中字段类型为 `Any`（不是 `"Generator | None"`），因为 Pydantic v2 无法为非 BaseModel 类型（如 `Generator`）生成 schema。详见 spec §6.2 和 task 8 commit `f035a1f`。
+详见 [spec §6.2](../superpowers/specs/2026-06-17-scenario-vars-and-generator-design.md)。
 
 ---
 
