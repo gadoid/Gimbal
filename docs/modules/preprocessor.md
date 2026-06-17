@@ -142,6 +142,28 @@ def _setup_auth(self) -> None:
 - **按需登录**：未在模板中引用的 user 跳过，节省 25min startup（修复前）
 - **失败传播**：认证失败抛异常上抛，不静默吞掉
 
+### Phase 1.5：变量生成（★ 新增）
+
+合并 `scenario.config.vars` 与 `BootstrapConfig.vars`，调用 Generator 求值生成式 spec，保留字面量，产出 `self._resolved_vars` 供 Phase 2 注入 root。
+
+```python
+def _generate_vars(self) -> None:
+    cli_vars = self._cfg.vars or {}
+    scenario_vars = getattr(self._schema.config, "vars", None) or {}
+    merged = {**scenario_vars, **cli_vars}    # CLI 赢
+
+    for name, spec in merged.items():
+        if isinstance(spec, dict) and "kind" in spec:
+            var_spec = VarSpec.model_validate(spec)
+            result[name] = self._generator.generate(var_spec)
+        elif isinstance(spec, (str, int, float, bool, type(None))):
+            result[name] = spec
+        else:
+            raise ValueError(...)
+```
+
+详见 [spec §6.4](../superpowers/specs/2026-06-17-scenario-vars-and-generator-design.md)。
+
 ### Phase 2：构建查询根
 
 两段查询根对象，优先级（高 → 低）：

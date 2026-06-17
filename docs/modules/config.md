@@ -67,6 +67,15 @@ class BootstrapConfig(BaseModel):
         description="CLI --var / --var-file 注入的 KV 变量，模板 ${var} 可引用",
     )
 
+    # ── 新增：generator 实例（由 bootstrap() 注入）──
+    # 类型用 Any 以避免 Pydantic 对 Generator 的 schema 生成（Generator 不是 BaseModel），
+    # 逻辑上等价于 "Generator | None"——bootstrap() 注入的就是 Generator 实例；
+    # 想要更强的类型检查可在 TYPE_CHECKING 块中引用 Generator 做 mypy 约束。
+    generator: Any = Field(
+        default=None,
+        description="变量生成器实例（由 bootstrap() 构造并注入；未传则禁用变量生成）",
+    )
+
     retry_count: int = Field(0, description="失败重试次数")
     retry_interval: int = Field(5, description="重试间隔（秒）")
 
@@ -78,6 +87,20 @@ class BootstrapConfig(BaseModel):
 **关键约定**：
 - `frozen=True`：产出后任何层都不能修改，只能读。需要「修改」配置的场景（例如单测覆盖某个字段）应重新调用 `ConfigLoader`
 - 运行期可变状态（认证会话、token 等）由独立容器承载，不在 `BootstrapConfig` 范围内。详见 `gimbal.auth.registry.AuthRegistry`
+
+---
+
+### BootstrapConfig.generator 字段（★ 新增）
+
+字符串前向引用类型，由 `bootstrap()` 构造并注入：
+
+```python
+generator: "Generator | None" = Field(default=None, ...)
+```
+
+preprocessor Phase 1.5 调用 `self._cfg.generator.generate(spec)`。
+
+注：实际实现中字段类型为 `Any`（不是 `"Generator | None"`），因为 Pydantic v2 无法为非 BaseModel 类型（如 `Generator`）生成 schema。详见 spec §6.2 和 task 8 commit `f035a1f`。
 
 ---
 
