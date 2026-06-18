@@ -20,7 +20,7 @@
     "services": {
       "tidb-test-service": "https://fin-tidb.21eflag.com/"},
     "vars": {
-      "bl_no":  "jokervalue"
+      "bl_no":  "jokervalue1"
     },
     "users": {
       "codfish": {
