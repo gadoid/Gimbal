@@ -20,7 +20,12 @@
     "services": {
       "tidb-test-service": "https://fin-tidb.21eflag.com/"},
     "vars": {
-      "bl_no":  "jokervalue1"
+      "bl_no":  "jokervalue11130",
+      "invoice_file_id": "1",
+      "finance_id_1": "2896",
+      "finance_id_2": "2895",
+      "bank_ids_1": "78",
+      "bank_ids_2" : "77"
     },
     "users": {
       "codfish": {
@@ -1385,6 +1390,2627 @@
           "target": "response_body",
           "required": true,
           "default": null
+        }
+      ]
+    },{
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderConfirmAccount",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "322933109106409472",
+          "action": "check"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "对账确认(check)应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.order_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "extract",
+          "name": "extract_finance_id_usd",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.customer_currency_finance.USD[0].customer_finance_id",
+          "target": "finance_id_usd",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        },
+        {
+          "kind": "extract",
+          "name": "extract_bank_id_usd",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.main_currency_bank.USD[0].main_bank_id",
+          "target": "bank_id_usd",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        },
+        {
+          "kind": "extract",
+          "name": "extract_bank_id_cny",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.main_currency_bank.CNY[0].main_bank_id",
+          "target": "bank_id_cny",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderConfirmAccount",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "action": "submit",
+          "order_id": "322933109106409472",
+          "finance_ids": [
+            "${var.finance_id_1}_CustomerFinance",
+            "${var.finance_id_2}_CustomerFinance"
+          ],
+          "bank_ids": [
+            "${var.bank_ids_1}_MainBank",
+            "${var.bank_ids_2}_MainBank"
+          ]
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "对账结果提交应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.order_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/changeInvoiceApply",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "audit_note": "",
+          "order_ids": [
+            "322933109106409472"
+          ],
+          "action": "check",
+          "audit_msg": {
+            "title": "业务订单ID",
+            "code": "",
+            "msgs": [
+              "未放款开票申请"
+            ]
+          }
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "未放款开票申请(check)应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.order_ids[0]",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/changeInvoiceApply",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "audit_note": "",
+          "order_ids": [
+            "322933109106409472"
+          ],
+          "action": "audit",
+          "audit_msg": {
+            "title": "业务订单ID",
+            "code": "",
+            "msgs": [
+              "未放款开票申请"
+            ]
+          }
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "未放款开票审批应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.order_ids[0]",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/changeInvoiceApply",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "audit_note": "",
+          "order_ids": [
+            "322933109106409472"
+          ],
+          "action": "submit",
+          "audit_msg": {
+            "title": "业务订单ID",
+            "code": "",
+            "msgs": [
+              "未放款开票申请"
+            ]
+          },
+          "select_node_user": [
+            {
+              "node_sort": "0",
+              "user_id": "828"
+            }
+          ]
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "未放款开票提交应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.order_ids[0]",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/home/audit/auditRecord",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "relation_id": "322933109106409472",
+          "type": "order"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询未放款开票审批记录应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_relation_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.relation_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "extract",
+          "name": "extract_loan_invoice_audit_id",
+          "phase": "after_request",
+          "order": -1,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data[?(@.audit_type=='addLoanBeforeInvoiceApply')].audit_id",
+          "target": "loan_invoice_audit_id",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/home/audit/auditExecute",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "audit_ids": [
+            "322992855406608384"
+          ],
+          "audit_status": 2,
+          "audit_remark": null
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "未放款开票审批批准应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_audit_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.loan_invoice_audit_id",
+          "target": "$.request_body.audit_ids[0]",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/finance/accountFee/financePutList",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page_no": 1,
+          "page_size": 50,
+          "bl_nos": [],
+          "bl_no": "${var.bl_no}",
+          "operate_type": 1,
+          "search_style": "account",
+          "account_simple_name": null,
+          "account_type": "1",
+          "customer_id": [
+            "16"
+          ],
+          "put_settle_object_id": "665",
+          "main_id": "1",
+          "pay_settle_object_id": null
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "对账查询应返回200",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_order_fee_real_id_pen",
+          "phase": "after_request",
+          "order": -1,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.data[0].amount_list[0].order_fee_real_id",
+          "target": "order_fee_real_id_pen",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        },
+        {
+          "kind": "extract",
+          "name": "extract_order_sub_id_pen",
+          "phase": "after_request",
+          "order": -1,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.data[0].order_sub_id",
+          "target": "order_sub_id_pen",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+            "account_simple_name": null,
+            "account_type": "1",
+            "customer_id": [
+                "16"
+            ],
+            "put_settle_object_id": "665",
+            "main_id": "1",
+            "pay_settle_object_id": null,
+            "customer_name": null,
+            "put_settle_object": "青岛易汇智供应链管理有限公司",
+            "main_name_cn": null,
+            "pay_settle_object": null,
+            "selection_time": 1782064271,
+            "action": "check",
+            "operate_type": 1,
+            "receive_account_id": null,
+            "main_name": "青岛易航道物流科技有限公司",
+            "select_list": [
+                {
+                    "order_id": "327128759691902976",
+                    "order_no": "YWDD20260622107224",
+                    "bl_no": "jokervalue11122",
+                    "customer_id": "16",
+                    "customer_name": "兰森玻璃（青岛）有限公司",
+                    "customer_main_id": "31",
+                    "customer_main_name": "青岛易汇智供应链管理有限公司",
+                    "business_main_id": "1",
+                    "business_main_name": "青岛易航道物流科技有限公司",
+                    "policy_type": "JSZX",
+                    "trade_term": "CIF",
+                    "customer_period": "60",
+                    "customer_put_date": "1786291200",
+                    "atd": "1781020800",
+                    "etd": "1781020800",
+                    "create_time": "1782063691",
+                    "finance_date": "1781020800",
+                    "fund_name": "青岛海发商业保理有限公司",
+                    "ship_name": "jokervalue11122",
+                    "voy": "jokervalue11122",
+                    "status": "2",
+                    "is_special_pay": "0",
+                    "pay_status": "0",
+                    "is_loan_before_invoice": "1",
+                    "customer_order_sn": "jokervalue11122",
+                    "order_sub_id": "327128847105392640",
+                    "order_sub_no": "ZDD20260622016345",
+                    "main_id": "1",
+                    "main_name": "青岛易航道物流科技有限公司",
+                    "service_project": "booking_space",
+                    "currency": "USD",
+                    "amount_total": "100.00",
+                    "pay_settle_object_type": "2",
+                    "put_settle_object_id": "665",
+                    "put_settle_object": "青岛易汇智供应链管理有限公司",
+                    "pay_settle_object": "上海华运船务有限公司青岛分公司",
+                    "book_supplier_period": "30",
+                    "book_supplier_pay_date": "1784476800",
+                    "book_supplier_name": "上海华运船务有限公司青岛分公司",
+                    "operable_amount": "100.00",
+                    "un_operable_amount": "0.00",
+                    "operable_flag": "all",
+                    "policy_type_name": "结算业务",
+                    "order_sub_currency": "USD327128847105392640",
+                    "order_main_finance": "青岛银行股份有限公司江西路支行+USD+802051200001568",
+                    "order_error_messages": [],
+                    "order_error_message": "",
+                    "order_error_flag": false,
+                    "amount_list": [
+                        {
+                            "order_id": "327128759691902976",
+                            "order_no": "YWDD20260622107224",
+                            "customer_name": "兰森玻璃（青岛）有限公司",
+                            "bl_no": "jokervalue11122",
+                            "main_name": "青岛易航道物流科技有限公司",
+                            "order_sub_no": "ZDD20260622016345",
+                            "order_sub_id": "327128847105392640",
+                            "order_fee_real_id": "327128861256976384",
+                            "fee_real_no": "FY202606221289654",
+                            "fee_type": "0",
+                            "service_project": "booking_space",
+                            "fee_real_name": "海运费",
+                            "currency": "USD",
+                            "symbol": "1",
+                            "real_amount": "100.00",
+                            "supplier_id": null,
+                            "cost_no": "0001",
+                            "fee_status": "1",
+                            "account_no": "",
+                            "pay_account_no": "",
+                            "account_status": "0",
+                            "pay_account_status": "0",
+                            "invoice_status": "0",
+                            "receive_invoice_batch_no": null,
+                            "pay_invoice_batch_no": null,
+                            "receive_invoice_apply_no": null,
+                            "pay_invoice_apply_no": null,
+                            "put_settle_object_id": "665",
+                            "put_settle_object": "青岛易汇智供应链管理有限公司",
+                            "pay_settle_object_id": "39",
+                            "pay_settle_object": "上海华运船务有限公司青岛分公司",
+                            "writeoff_status": "1",
+                            "un_writeoff_amount": "100.00",
+                            "use_writeoff_amount": "0.00",
+                            "writeoff_nos": "",
+                            "pay_form_no": "",
+                            "pay_demand_no": "",
+                            "amount_error_messages": [],
+                            "amount_error_message": "",
+                            "amount_error_flag": false
+                        }
+                    ]
+                }
+            ]
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "对账提交检查应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.select_list[0].order_id",
+          "scope": "scenario"
+        },        
+        {
+          "kind": "assign",
+          "name": "assign_order_no",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_no",
+          "target": "$.request_body.select_list[0].order_no",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_id_amount",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.select_list[0].amount_list[0].order_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_sub_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_sub_id_pen",
+          "target": "$.request_body.select_list[0].order_sub_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_sub_id_amount",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_sub_id_pen",
+          "target": "$.request_body.select_list[0].amount_list[0].order_sub_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_fee_real_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_fee_real_id_pen",
+          "target": "$.request_body.select_list[0].amount_list[0].order_fee_real_id",
+          "scope": "scenario"
+        },        
+        {
+          "kind": "extract",
+          "name": "extract_receive_check",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body",
+          "target": "step_30_response",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+            "account_simple_name": null,
+            "account_type": "1",
+            "customer_id": [
+                "16"
+            ],
+            "put_settle_object_id": "665",
+            "main_id": "1",
+            "pay_settle_object_id": null,
+            "customer_name": null,
+            "put_settle_object": "青岛易汇智供应链管理有限公司",
+            "main_name_cn": null,
+            "pay_settle_object": null,
+            "selection_time": 1782064271,
+            "action": "submit",
+            "operate_type": 1,
+            "receive_account_id": null,
+            "main_name": "青岛易航道物流科技有限公司",
+            "select_list": [
+                {
+                    "order_id": "327128759691902976",
+                    "order_no": "YWDD20260622107224",
+                    "bl_no": "jokervalue11122",
+                    "customer_id": "16",
+                    "customer_name": "兰森玻璃（青岛）有限公司",
+                    "customer_main_id": "31",
+                    "customer_main_name": "青岛易汇智供应链管理有限公司",
+                    "business_main_id": "1",
+                    "business_main_name": "青岛易航道物流科技有限公司",
+                    "policy_type": "JSZX",
+                    "trade_term": "CIF",
+                    "customer_period": "60",
+                    "customer_put_date": "1786291200",
+                    "atd": "1781020800",
+                    "etd": "1781020800",
+                    "create_time": "1782063691",
+                    "finance_date": "1781020800",
+                    "fund_name": "青岛海发商业保理有限公司",
+                    "ship_name": "jokervalue11122",
+                    "voy": "jokervalue11122",
+                    "status": "2",
+                    "is_special_pay": "0",
+                    "pay_status": "0",
+                    "is_loan_before_invoice": "1",
+                    "customer_order_sn": "jokervalue11122",
+                    "order_sub_id": "327128847105392640",
+                    "order_sub_no": "ZDD20260622016345",
+                    "main_id": "1",
+                    "main_name": "青岛易航道物流科技有限公司",
+                    "service_project": "booking_space",
+                    "currency": "USD",
+                    "amount_total": "100.00",
+                    "pay_settle_object_type": "2",
+                    "put_settle_object_id": "665",
+                    "put_settle_object": "青岛易汇智供应链管理有限公司",
+                    "pay_settle_object": "上海华运船务有限公司青岛分公司",
+                    "book_supplier_period": "30",
+                    "book_supplier_pay_date": "1784476800",
+                    "book_supplier_name": "上海华运船务有限公司青岛分公司",
+                    "operable_amount": "100.00",
+                    "un_operable_amount": "0.00",
+                    "operable_flag": "all",
+                    "policy_type_name": "结算业务",
+                    "order_sub_currency": "USD327128847105392640",
+                    "order_main_finance": "青岛银行股份有限公司江西路支行+USD+802051200001568",
+                    "order_error_messages": [],
+                    "order_error_message": "",
+                    "order_error_flag": false,
+                    "amount_list": [
+                        {
+                            "order_id": "327128759691902976",
+                            "order_no": "YWDD20260622107224",
+                            "customer_name": "兰森玻璃（青岛）有限公司",
+                            "bl_no": "jokervalue11122",
+                            "main_name": "青岛易航道物流科技有限公司",
+                            "order_sub_no": "ZDD20260622016345",
+                            "order_sub_id": "327128847105392640",
+                            "order_fee_real_id": "327128861256976384",
+                            "fee_real_no": "FY202606221289654",
+                            "fee_type": "0",
+                            "service_project": "booking_space",
+                            "fee_real_name": "海运费",
+                            "currency": "USD",
+                            "symbol": "1",
+                            "real_amount": "100.00",
+                            "supplier_id": null,
+                            "cost_no": "0001",
+                            "fee_status": "1",
+                            "account_no": "",
+                            "pay_account_no": "",
+                            "account_status": "0",
+                            "pay_account_status": "0",
+                            "invoice_status": "0",
+                            "receive_invoice_batch_no": null,
+                            "pay_invoice_batch_no": null,
+                            "receive_invoice_apply_no": null,
+                            "pay_invoice_apply_no": null,
+                            "put_settle_object_id": "665",
+                            "put_settle_object": "青岛易汇智供应链管理有限公司",
+                            "pay_settle_object_id": "39",
+                            "pay_settle_object": "上海华运船务有限公司青岛分公司",
+                            "writeoff_status": "1",
+                            "un_writeoff_amount": "100.00",
+                            "use_writeoff_amount": "0.00",
+                            "writeoff_nos": "",
+                            "pay_form_no": "",
+                            "pay_demand_no": "",
+                            "amount_error_messages": [],
+                            "amount_error_message": "",
+                            "amount_error_flag": false
+                        }
+                    ]
+                }
+            ]
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "对账提交应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_no",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_no",
+          "target": "$.request_body.select_list[0].order_no",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.select_list[0].order_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_id_amount",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.select_list[0].amount_list[0].order_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_sub_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_sub_id_pen",
+          "target": "$.request_body.select_list[0].order_sub_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_sub_id_amount",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_sub_id_pen",
+          "target": "$.request_body.select_list[0].amount_list[0].order_sub_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_fee_real_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_fee_real_id_pen",
+          "target": "$.request_body.select_list[0].amount_list[0].order_fee_real_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "extract",
+          "name": "extract_receive_account_id",
+          "phase": "after_request",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.receive_account_id",
+          "target": "receive_account_id",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        },
+        {
+          "kind": "extract",
+          "name": "extract_receive_check",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body",
+          "target": "step_31_response",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/finance/receiveAccount/receiveAccountDetail",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "receive_account_id": "322996617806348288"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "对账查询(detail)应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_receive_account_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.receive_account_id",
+          "target": "$.request_body.receive_account_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/finance/receiveAccount/receiveConfirmList",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "confirm_type": 0,
+          "receive_account_id": "322996617806348288",
+          "order_ids": []
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "对账确认列表应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_receive_account_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.receive_account_id",
+          "target": "$.request_body.receive_account_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "extract",
+          "name": "extract_confirm_list",
+          "phase": "after_request",
+          "order": -1,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data",
+          "target": "confirm_list",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/finance/receiveAccount/accountConfirm",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "confirm_type": 0,
+          "receive_account_id": "322996617806348288",
+          "confirm_list": []
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "对账确认应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_receive_account_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.receive_account_id",
+          "target": "$.request_body.receive_account_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_confirm_list",
+          "phase": "before_request",
+          "order": -1,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.confirm_list",
+          "target": "$.request_body.confirm_list",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/finance/accountFee/financePutList",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page_no": 1,
+          "page_size": 50,
+          "customer_id": "16",
+          "put_settle_object_id": "665",
+          "put_settle_object": "青岛易汇智供应链管理有限公司",
+          "main_id": "1",
+          "bl_no": "${var.bl_no}",
+          "operate_type": 1,
+          "batch_type": 1,
+          "search_style": "invoice",
+          "pay_settle_object_id": [],
+          "account_type": "1",
+          "bl_nos": []
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "开票批次管理查询应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/Finance/ReceiveInvoiceBatch/checkStep1",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "cny_file": [],
+          "usd_file": [],
+          "debitno_file": [],
+          "style": "1",
+          "apply_type": "1",
+          "customer_id": "16",
+          "customer_name": [
+            "兰森玻璃（青岛）有限公司"
+          ],
+          "put_settle_object_id": "665",
+          "main_id": "1",
+          "pay_settle_object_id": [],
+          "turn_rate": "",
+          "merge_with_cny": "2",
+          "selectRadio": "",
+          "receive_invoice_batch_id": "",
+          "batch_apply_name": "",
+          "invoice_form": "",
+          "invoice_type": "",
+          "invoice_items": "",
+          "invoice_rate_type": "",
+          "rate_type": "",
+          "usd_is_turn": "",
+          "order_fee_real_id": [
+            "322978255550285824"
+          ],
+          "usd_require": {
+            "fast_remark": [],
+            "rate_list": []
+          },
+          "cny_require": {
+            "fast_remark": [],
+            "rate_list": []
+          },
+          "usd_file_id": [],
+          "cny_file_id": [],
+          "debitno_file_id": [],
+          "batch_order_remark": [],
+          "batch_type": "1",
+          "cost_usd": "100.00",
+          "cost_cny": "0.00",
+          "put_settle_object": "青岛易汇智供应链管理有限公司",
+          "main_name_cn": "青岛易航道物流科技有限公司",
+          "order_sub_id": [
+            "322978240647921664"
+          ]
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "开票批次检查1应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_fee_real_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_fee_real_id_pen",
+          "target": "$.request_body.order_fee_real_id[0]",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_sub_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_sub_id_pen",
+          "target": "$.request_body.order_sub_id[0]",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/Finance/ReceiveInvoiceBatch/checkStep2",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "cny_file": [],
+          "usd_file": [],
+          "debitno_file": [],
+          "style": "1",
+          "apply_type": "1",
+          "customer_id": "16",
+          "customer_name": [
+            "兰森玻璃（青岛）有限公司"
+          ],
+          "put_settle_object_id": "665",
+          "main_id": "1",
+          "pay_settle_object_id": [],
+          "turn_rate": "7.7",
+          "merge_with_cny": "2",
+          "rate_type": "1",
+          "usd_is_turn": "1",
+          "order_fee_real_id": [
+            "322978255550285824"
+          ],
+          "usd_require": {
+            "fast_remark": [],
+            "currency": "CNY",
+            "amount_total_usd": 100,
+            "rate": 7.7,
+            "turn_amount_total_cny": "770.00",
+            "turn_amount_total": "770.00",
+            "invoice_apply_name": "青岛易航道物流科技有限公司 + 青岛易汇智供应链管理有限公司 + 2026-06 + USD 100.00",
+            "invoice_form": "2",
+            "invoice_type": "1",
+            "purchaser_id": "665",
+            "purchaser_head_cn": "青岛易汇智供应链管理有限公司",
+            "purchaser_tax_number": "91370202MAEWF5RN7G",
+            "seller_id": "10",
+            "seller_name": "224746757829",
+            "seller_info": {
+              "main_bank_id": "10",
+              "main_id": "1",
+              "chinese_header": "青岛易航道物流科技有限公司",
+              "identifier_no": "91370202MABU30PK3F",
+              "currency": "CNY",
+              "is_public": "0",
+              "bank_account": "224746757829",
+              "open_bank_cn": "中国银行青岛市北支行",
+              "value": "10"
+            },
+            "rate_list": [
+              {
+                "cost_name": "海运费",
+                "fee_real_no": "FY202606101285504",
+                "cost_no": "0001",
+                "invoice_rate": "6",
+                "real_amount": "100.00",
+                "currency": "USD",
+                "invoice_item": "2",
+                "amount_error_flag": false,
+                "rowIndex": 0,
+                "invoice_item_name": "国际货物运输代理海运费"
+              }
+            ],
+            "purchaser_name": "青岛易汇智供应链管理有限公司",
+            "fund_name": "青岛海发商业保理有限公司"
+          },
+          "cny_require": {
+            "fast_remark": [],
+            "rate_list": []
+          },
+          "batch_type": "1",
+          "cost_usd": "100.00",
+          "cost_cny": "0.00",
+          "put_settle_object": "青岛易汇智供应链管理有限公司",
+          "main_name_cn": "青岛易航道物流科技有限公司",
+          "order_sub_id": [
+            "322978240647921664"
+          ],
+          "sys_rate": "",
+          "appoint_rate": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "开票批次检查2应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_fee_real_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_fee_real_id_pen",
+          "target": "$.request_body.order_fee_real_id[0]",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_sub_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_sub_id_pen",
+          "target": "$.request_body.order_sub_id[0]",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "cny_file": [],
+          "usd_file": [],
+          "debitno_file": [],
+          "style": "1",
+          "apply_type": "1",
+          "customer_id": "16",
+          "customer_name": [
+            "兰森玻璃（青岛）有限公司"
+          ],
+          "put_settle_object_id": "665",
+          "main_id": "1",
+          "pay_settle_object_id": [],
+          "turn_rate": "7.7",
+          "merge_with_cny": "2",
+          "rate_type": "1",
+          "usd_is_turn": "1",
+          "order_fee_real_id": [
+            "322978255550285824"
+          ],
+          "usd_require": {
+            "fast_remark": "[]",
+            "currency": "CNY",
+            "amount_total_usd": 100,
+            "rate": 7.7,
+            "turn_amount_total_cny": "770.00",
+            "turn_amount_total": "770.00",
+            "invoice_apply_name": "青岛易航道物流科技有限公司 + 青岛易汇智供应链管理有限公司 + 2026-06 + USD 100.00",
+            "invoice_form": "2",
+            "invoice_type": "1",
+            "purchaser_id": "665",
+            "purchaser_head_cn": "青岛易汇智供应链管理有限公司",
+            "purchaser_tax_number": "91370202MAEWF5RN7G",
+            "seller_id": "10",
+            "seller_name": "224746757829",
+            "seller_info": "{\"main_bank_id\":\"10\",\"main_id\":\"1\",\"chinese_header\":\"青岛易航道物流科技有限公司\",\"identifier_no\":\"91370202MABU30PK3F\",\"currency\":\"CNY\",\"is_public\":\"0\",\"bank_account\":\"224746757829\",\"open_bank_cn\":\"中国银行青岛市北支行\",\"value\":\"10\"}",
+            "remark": "青岛海发商业保理有限公司",
+            "rate_list": [
+              {
+                "cost_name": "海运费",
+                "fee_real_no": "FY202606101285504",
+                "cost_no": "0001",
+                "invoice_rate": "6",
+                "real_amount": "100.00",
+                "currency": "USD",
+                "invoice_item": "2",
+                "amount_error_flag": false,
+                "rowIndex": 0,
+                "invoice_item_name": "国际货物运输代理海运费"
+              }
+            ],
+            "purchaser_name": "青岛易汇智供应链管理有限公司",
+            "fund_name": "青岛海发商业保理有限公司"
+          },
+          "cny_require": {
+            "fast_remark": "[]",
+            "remark": "—",
+            "rate_list": []
+          },
+          "batch_order_remark": [
+            {
+              "order_sub_id": "322978240647921664",
+              "currency": "USD"
+            }
+          ],
+          "batch_type": "1",
+          "cost_usd": "100.00",
+          "cost_cny": "0.00",
+          "put_settle_object": "青岛易汇智供应链管理有限公司",
+          "main_name_cn": "青岛易航道物流科技有限公司",
+          "order_sub_id": [
+            "322978240647921664"
+          ],
+          "sys_rate": "",
+          "appoint_rate": "",
+          "action": "check",
+          "fee_currency": "USD",
+          "order_sub_customer_id": [
+            "16"
+          ]
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "开票提交检查应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_fee_real_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_fee_real_id_pen",
+          "target": "$.request_body.order_fee_real_id[0]",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_sub_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_sub_id_pen",
+          "target": "$.request_body.order_sub_id[0]",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_sub_id_remark",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_sub_id_pen",
+          "target": "$.request_body.batch_order_remark[0].order_sub_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "cny_file": [],
+          "usd_file": [],
+          "debitno_file": [],
+          "style": "1",
+          "apply_type": "1",
+          "customer_id": "16",
+          "customer_name": [
+            "兰森玻璃（青岛）有限公司"
+          ],
+          "put_settle_object_id": "665",
+          "main_id": "1",
+          "pay_settle_object_id": [],
+          "turn_rate": "7.7",
+          "merge_with_cny": "2",
+          "rate_type": "1",
+          "usd_is_turn": "1",
+          "order_fee_real_id": [
+            "322978255550285824"
+          ],
+          "usd_require": {
+            "fast_remark": "[]",
+            "currency": "CNY",
+            "amount_total_usd": 100,
+            "rate": 7.7,
+            "turn_amount_total_cny": "770.00",
+            "turn_amount_total": "770.00",
+            "invoice_apply_name": "青岛易航道物流科技有限公司 + 青岛易汇智供应链管理有限公司 + 2026-06 + USD 100.00",
+            "invoice_form": "2",
+            "invoice_type": "1",
+            "purchaser_id": "665",
+            "purchaser_head_cn": "青岛易汇智供应链管理有限公司",
+            "purchaser_tax_number": "91370202MAEWF5RN7G",
+            "seller_id": "10",
+            "seller_name": "224746757829",
+            "seller_info": "{\"main_bank_id\":\"10\",\"main_id\":\"1\",\"chinese_header\":\"青岛易航道物流科技有限公司\",\"identifier_no\":\"91370202MABU30PK3F\",\"currency\":\"CNY\",\"is_public\":\"0\",\"bank_account\":\"224746757829\",\"open_bank_cn\":\"中国银行青岛市北支行\",\"value\":\"10\"}",
+            "remark": "青岛海发商业保理有限公司",
+            "rate_list": [
+              {
+                "cost_name": "海运费",
+                "fee_real_no": "FY202606101285504",
+                "cost_no": "0001",
+                "invoice_rate": "6",
+                "real_amount": "100.00",
+                "currency": "USD",
+                "invoice_item": "2",
+                "amount_error_flag": false,
+                "rowIndex": 0,
+                "invoice_item_name": "国际货物运输代理海运费"
+              }
+            ],
+            "purchaser_name": "青岛易汇智供应链管理有限公司",
+            "fund_name": "青岛海发商业保理有限公司"
+          },
+          "cny_require": {
+            "fast_remark": "[]",
+            "remark": "—",
+            "rate_list": []
+          },
+          "batch_order_remark": [
+            {
+              "order_sub_id": "322978240647921664",
+              "currency": "USD"
+            }
+          ],
+          "batch_type": "1",
+          "cost_usd": "100.00",
+          "cost_cny": "0.00",
+          "put_settle_object": "青岛易汇智供应链管理有限公司",
+          "main_name_cn": "青岛易航道物流科技有限公司",
+          "order_sub_id": [
+            "322978240647921664"
+          ],
+          "sys_rate": "",
+          "appoint_rate": "",
+          "action": "audit",
+          "fee_currency": "USD",
+          "order_sub_customer_id": [
+            "16"
+          ]
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "开票提交审批应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_fee_real_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_fee_real_id_pen",
+          "target": "$.request_body.order_fee_real_id[0]",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_sub_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_sub_id_pen",
+          "target": "$.request_body.order_sub_id[0]",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_sub_id_remark",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_sub_id_pen",
+          "target": "$.request_body.batch_order_remark[0].order_sub_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "cny_file": [],
+          "usd_file": [],
+          "debitno_file": [],
+          "style": "1",
+          "apply_type": "1",
+          "customer_id": "16",
+          "customer_name": [
+            "兰森玻璃（青岛）有限公司"
+          ],
+          "put_settle_object_id": "665",
+          "main_id": "1",
+          "pay_settle_object_id": [],
+          "turn_rate": "7.7",
+          "merge_with_cny": "2",
+          "rate_type": "1",
+          "usd_is_turn": "1",
+          "order_fee_real_id": [
+            "322978255550285824"
+          ],
+          "usd_require": {
+            "fast_remark": "[]",
+            "currency": "CNY",
+            "amount_total_usd": 100,
+            "rate": 7.7,
+            "turn_amount_total_cny": "770.00",
+            "turn_amount_total": "770.00",
+            "invoice_apply_name": "青岛易航道物流科技有限公司 + 青岛易汇智供应链管理有限公司 + 2026-06 + USD 100.00",
+            "invoice_form": "2",
+            "invoice_type": "1",
+            "purchaser_id": "665",
+            "purchaser_head_cn": "青岛易汇智供应链管理有限公司",
+            "purchaser_tax_number": "91370202MAEWF5RN7G",
+            "seller_id": "10",
+            "seller_name": "224746757829",
+            "seller_info": "{\"main_bank_id\":\"10\",\"main_id\":\"1\",\"chinese_header\":\"青岛易航道物流科技有限公司\",\"identifier_no\":\"91370202MABU30PK3F\",\"currency\":\"CNY\",\"is_public\":\"0\",\"bank_account\":\"224746757829\",\"open_bank_cn\":\"中国银行青岛市北支行\",\"value\":\"10\"}",
+            "remark": "青岛海发商业保理有限公司",
+            "rate_list": [
+              {
+                "cost_name": "海运费",
+                "fee_real_no": "FY202606101285504",
+                "cost_no": "0001",
+                "invoice_rate": "6",
+                "real_amount": "100.00",
+                "currency": "USD",
+                "invoice_item": "2",
+                "amount_error_flag": false,
+                "rowIndex": 0,
+                "invoice_item_name": "国际货物运输代理海运费"
+              }
+            ],
+            "purchaser_name": "青岛易汇智供应链管理有限公司",
+            "fund_name": "青岛海发商业保理有限公司"
+          },
+          "cny_require": {
+            "fast_remark": "[]",
+            "remark": "—",
+            "rate_list": []
+          },
+          "batch_order_remark": [
+            {
+              "order_sub_id": "322978240647921664",
+              "currency": "USD"
+            }
+          ],
+          "batch_type": "1",
+          "cost_usd": "100.00",
+          "cost_cny": "0.00",
+          "put_settle_object": "青岛易汇智供应链管理有限公司",
+          "main_name_cn": "青岛易航道物流科技有限公司",
+          "order_sub_id": [
+            "322978240647921664"
+          ],
+          "sys_rate": "",
+          "appoint_rate": "",
+          "action": "submit",
+          "fee_currency": "USD",
+          "order_sub_customer_id": [
+            "16"
+          ],
+          "audit_msg": {
+            "title": "开票批次ID",
+            "code": null,
+            "msgs": [
+              "应收开票批次申请"
+            ]
+          },
+          "select_node_user": []
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "开票提交应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_fee_real_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_fee_real_id_pen",
+          "target": "$.request_body.order_fee_real_id[0]",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_sub_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_sub_id_pen",
+          "target": "$.request_body.order_sub_id[0]",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_sub_id_remark",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_sub_id_pen",
+          "target": "$.request_body.batch_order_remark[0].order_sub_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/Finance/ReceiveInvoiceBatch/applyPage",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page_no": 1,
+          "page_size": 20,
+          "order_no": "",
+          "create_time": [
+            1765296000000,
+            1781107199000
+          ],
+          "cancel_status": [],
+          "bl_nos": [
+            "${var.bl_no}"
+          ],
+          "sort_field": "create_time",
+          "sort_order": "desc",
+          "params": {},
+          "create_time_start": "1765296000",
+          "create_time_end": "1781107199"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询开票应返回200",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_receive_invoice_batch_id",
+          "phase": "after_request",
+          "order": -1,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.data[0].receive_invoice_batch_id",
+          "target": "receive_invoice_batch_id",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/Finance/ReceiveInvoiceBatch/batchDetail",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "receive_invoice_batch_id": "323006563193192448"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询开票详情应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_receive_invoice_batch_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.receive_invoice_batch_id",
+          "target": "$.request_body.receive_invoice_batch_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "extract",
+          "name": "extract_receive_invoice_apply_id",
+          "phase": "after_request",
+          "order": -1,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.usd_require.receive_invoice_apply_id",
+          "target": "receive_invoice_apply_id",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/Finance/ReceiveInvoiceBatch/applyDetail",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "receive_invoice_apply_id": "323008151559340032"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询开票申请详情应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_receive_invoice_apply_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.receive_invoice_apply_id",
+          "target": "$.request_body.receive_invoice_apply_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/finance/receiveInvoice/invoiceAddCheck",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "invoice_number": "25922000000029755889",
+          "invoice_type": "1",
+          "invoice_amount": "50000",
+          "invoice_tax_amount": "0.00",
+          "invoice_date": 1771603200,
+          "currency": "CNY",
+          "usd_amount": "",
+          "invoice_exchange_rate": "1",
+          "invoice_original": {
+            "file_id": "${var.invoice_file_id}",
+            "file_name": "6a2925594f5ea.pdf",
+            "file_type": "pdf",
+            "original_name": "电子发票（普通发票）5.pdf",
+            "file_url": ""
+          },
+          "buyer_chinese_header": "青岛易汇智供应链管理有限公司",
+          "buyer_identifier_no": "91370202MAEWF5RN7G",
+          "buyer_identity": "main",
+          "isbuyer_identity": "main",
+          "seller_chinese_header": "青岛易航道物流科技有限公司",
+          "seller_identifier_no": "91370202MABU30PK3F",
+          "seller_identity": "main",
+          "invoice_image_name": "6a29255d33aca.png",
+          "file_path": "",
+          "main_name": "青岛易航道物流科技有限公司",
+          "invoice_apply_type": "1",
+          "put_settle_object": "青岛易汇智供应链管理有限公司"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "上传发票确认应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/finance/receiveInvoice/invoiceAdd",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+            "invoice_number": "25922000000029755889",
+            "invoice_type": "1",
+            "invoice_type_name": "增值税数电普通发票",
+            "invoice_amount": "50000.00",
+            "invoice_tax_amount": "0.00",
+            "invoice_date": 1771603200,
+            "currency": "CNY",
+            "usd_amount": "",
+            "invoice_exchange_rate": "1.0000",
+            "invoice_original": {
+              "file_id": "${var.invoice_file_id}",
+              "file_name": "6a2925594f5ea.pdf",
+              "file_type": "pdf",
+              "original_name": "电子发票（普通发票）5.pdf",
+              "file_url": ""
+            },
+            "buyer_chinese_header": "青岛易汇智供应链管理有限公司",
+            "buyer_identifier_no": "91370202MAEWF5RN7G",
+            "buyer_identity": "main",
+            "isbuyer_identity": "main",
+            "seller_chinese_header": "青岛易航道物流科技有限公司",
+            "seller_identifier_no": "91370202MABU30PK3F",
+            "seller_identity": "main",
+            "invoice_image_name": "6a29255d33aca.png",
+            "file_path": ""
+          }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "发票添加应返回200",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_receive_invoice_id",
+          "phase": "after_request",
+          "order": -1,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data[0].receive_invoice_id",
+          "target": "receive_invoice_id",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceFee",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "receive_invoice_apply_id": "323008151559340032",
+          "invoice_arr": [
+            {
+              "receive_invoice_id": "323021953671626752",
+              "invoice_amount_use": "770.00"
+            }
+          ],
+          "action": "check"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "发票分配提交检查应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_receive_invoice_apply_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.receive_invoice_apply_id",
+          "target": "$.request_body.receive_invoice_apply_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_receive_invoice_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.receive_invoice_id",
+          "target": "$.request_body.invoice_arr[0].receive_invoice_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceFee",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "receive_invoice_apply_id": "323008151559340032",
+          "invoice_arr": [
+            {
+              "receive_invoice_id": "323021953671626752",
+              "invoice_amount_use": "770.00"
+            }
+          ],
+          "action": "submit"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "发票分配提交确认应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_receive_invoice_apply_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.receive_invoice_apply_id",
+          "target": "$.request_body.receive_invoice_apply_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_receive_invoice_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.receive_invoice_id",
+          "target": "$.request_body.invoice_arr[0].receive_invoice_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/orderFee/putOrderItem",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_no": "",
+          "create_time": [
+            1765296000000,
+            1781107199000
+          ],
+          "main_id": [
+            "31"
+          ],
+          "settle_object_id": [
+            "37"
+          ],
+          "bl_nos": [
+            "${var.bl_no}"
+          ],
+          "sort_field": "order_create_time",
+          "sort_order": "desc",
+          "params": {},
+          "create_time_start": "1765296000",
+          "create_time_end": "1781107199"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "核销查询提单明细应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/finance/receiveWriteoff/feeWriteoffCheck",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_fee_real_ids": [
+            "322978255550285824"
+          ]
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "费用核销检查应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_fee_real_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_fee_real_id_pen",
+          "target": "$.request_body.order_fee_real_ids[0]",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/finance/receiveWriteoff/orderFeePage",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_fee_real_ids": [
+            "322978255550285824"
+          ]
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "核销处理列表应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_fee_real_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_fee_real_id_pen",
+          "target": "$.request_body.order_fee_real_ids[0]",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/finance/receiveWriteoff/writeoffBatch",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "action": "check",
+          "writeoff_object": [
+            {
+              "order_fee_real_id": "322978255550285824",
+              "un_writeoff_amount": "100.00",
+              "use_writeoff_amount": "0.00"
+            }
+          ],
+          "writeoff_name": "",
+          "fee_match_type": "1",
+          "writeoff_type": "1",
+          "writeoff_mode": "order",
+          "currency": "",
+          "un_writeoff_amount_usd_total": "0.00",
+          "un_writeoff_amount_cny_total": "0.00",
+          "use_writeoff_amount_usd_total": "100.00",
+          "use_writeoff_amount_cny_total": "0.00",
+          "statement_amount_cny_total": "770.00",
+          "statement_amount_usd_total": "0.00",
+          "statement": [
+            {
+              "is_exchange": "",
+              "statement_currency": "CNY",
+              "statement_amount": "770",
+              "writeoff_amount_cny": "0.00",
+              "writeoff_amount_usd": "100.00",
+              "exchange_rate": 7.7,
+              "ischangeRate": true,
+              "main_bank_id": "10",
+              "receipt_time": 1781020800,
+              "receipt_voucher": "",
+              "use_statement_amount_cny_total": null,
+              "use_statement_amount_usd_total": null
+            }
+          ],
+          "main_id": "1",
+          "main_name": "青岛易航道物流科技有限公司",
+          "select_node_user": []
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "提交核销检查应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_fee_real_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_fee_real_id_pen",
+          "target": "$.request_body.writeoff_object[0].order_fee_real_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/finance/receiveWriteoff/writeoffBatch",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "action": "submit",
+          "writeoff_object": [
+            {
+              "order_fee_real_id": "322978255550285824",
+              "un_writeoff_amount": "100.00",
+              "use_writeoff_amount": "0.00"
+            }
+          ],
+          "writeoff_name": "",
+          "fee_match_type": "1",
+          "writeoff_type": "1",
+          "writeoff_mode": "order",
+          "currency": "",
+          "un_writeoff_amount_usd_total": "0.00",
+          "un_writeoff_amount_cny_total": "0.00",
+          "use_writeoff_amount_usd_total": "100.00",
+          "use_writeoff_amount_cny_total": "0.00",
+          "statement_amount_cny_total": "770.00",
+          "statement_amount_usd_total": "0.00",
+          "statement": [
+            {
+              "is_exchange": "",
+              "statement_currency": "CNY",
+              "statement_amount": "770",
+              "writeoff_amount_cny": "0.00",
+              "writeoff_amount_usd": "100.00",
+              "exchange_rate": 7.7,
+              "ischangeRate": true,
+              "main_bank_id": "10",
+              "receipt_time": 1781020800,
+              "receipt_voucher": "",
+              "use_statement_amount_cny_total": null,
+              "use_statement_amount_usd_total": null
+            }
+          ],
+          "main_id": "1",
+          "main_name": "青岛易航道物流科技有限公司",
+          "select_node_user": []
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "提交核销应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_fee_real_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_fee_real_id_pen",
+          "target": "$.request_body.writeoff_object[0].order_fee_real_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/finance/receiveWriteoff/writeoffPage",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page_no": 1,
+          "page_size": 20,
+          "create_time": [
+            1765296000000,
+            1781107199000
+          ],
+          "main_id": [],
+          "receive_settle_object_id": [],
+          "bl_nos": [
+            "${var.bl_no}"
+          ],
+          "sort_field": "create_time",
+          "sort_order": "desc",
+          "params": {},
+          "create_time_start": "1765296000",
+          "create_time_end": "1781107199"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_status_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询核销记录应返回200",
+          "soft": false
         }
       ]
     }
