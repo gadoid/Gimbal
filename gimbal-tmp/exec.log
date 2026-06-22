@@ -1,0 +1,744 @@
+2026-06-22 15:11:15.576 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/order/order/orderAdd
+2026-06-22 15:11:24.503 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/order/order/orderAdd -> 200 (8926.4ms)
+2026-06-22 15:11:24.508 | INFO     | [SM step-009] HTTP 响应: status=StrategyStatus.PASSED duration_ms=8931.76
+2026-06-22 15:11:24.510 | INFO     | [SM step-009] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:24.511 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_10={'code': 200, 'msg': '成功', 'data': [], 'request_id': 'adbb7c1cd85961fbbb68fd962502b9cb'}
+2026-06-22 15:11:24.512 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:24.512 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:24.513 | INFO     | [AssertionExecutor] 断言通过: 查询结算单详情应返回200
+2026-06-22 15:11:24.513 | INFO     | [SM step-009] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:24.513 | INFO     | [SM step-009] 状态机执行完成: final_state=passed duration_ms=8937.92
+    ✓ passed   8937.92ms
+    ✓ passed   8938.66ms   asserts=1/1
+2026-06-22 15:11:24.514 | INFO     | [ContextManager] StepContext finalized: step_id=step-009 status=passed duration_ms=8938.66
+2026-06-22 15:11:24.515 | INFO     | [ScenarioRunner] Step 完成: step_id=step-009 status=passed duration_ms=8937.92 (10/56)
+  [e2e订单到应收核销/step-010] start
+2026-06-22 15:11:24.516 | INFO     | [SM step-010] 状态机开始执行
+  [e2e订单到应收核销/step-010] start
+2026-06-22 15:11:24.516 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_id value=327344727462510592
+2026-06-22 15:11:24.517 | INFO     | [SM step-010] 开始 HTTP 请求
+2026-06-22 15:11:24.517 | INFO     | [SM step-010] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/order/orderFee/bookRealAmountEdit timeout=30.0s body_keys=['action', 'order_id', 'discount_ratio', 'service_project', 'import_status', 'to_customer', 'to_supplier']
+2026-06-22 15:11:24.518 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/order/orderFee/bookRealAmountEdit
+2026-06-22 15:11:25.533 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/order/orderFee/bookRealAmountEdit -> 200 (1014.6ms)
+2026-06-22 15:11:25.534 | INFO     | [SM step-010] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1016.48
+2026-06-22 15:11:25.535 | INFO     | [SM step-010] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:25.535 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_11={'code': 200, 'msg': '成功', 'data': [], 'request_id': '655afd3ee9139071a9cad140b8fe7c28'}
+2026-06-22 15:11:25.536 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:25.537 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:25.537 | INFO     | [AssertionExecutor] 断言通过: 查询结算单详情应返回200
+2026-06-22 15:11:25.537 | INFO     | [SM step-010] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:25.537 | INFO     | [SM step-010] 状态机执行完成: final_state=passed duration_ms=1021.94
+    ✓ passed   1021.94ms
+    ✓ passed   1022.92ms   asserts=1/1
+2026-06-22 15:11:25.539 | INFO     | [ContextManager] StepContext finalized: step_id=step-010 status=passed duration_ms=1022.92
+2026-06-22 15:11:25.539 | INFO     | [ScenarioRunner] Step 完成: step_id=step-010 status=passed duration_ms=1021.94 (11/56)
+  [e2e订单到应收核销/step-011] start
+2026-06-22 15:11:25.540 | INFO     | [SM step-011] 状态机开始执行
+  [e2e订单到应收核销/step-011] start
+2026-06-22 15:11:25.540 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_id value=327344727462510592
+2026-06-22 15:11:25.542 | INFO     | [SM step-011] 开始 HTTP 请求
+2026-06-22 15:11:25.542 | INFO     | [SM step-011] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/order/orderFee/bookRealAmountEdit timeout=30.0s body_keys=['action', 'order_id', 'discount_ratio', 'service_project', 'import_status', 'to_customer', 'to_supplier']
+2026-06-22 15:11:25.543 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/order/orderFee/bookRealAmountEdit
+2026-06-22 15:11:27.659 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/order/orderFee/bookRealAmountEdit -> 200 (2115.1ms)
+2026-06-22 15:11:27.663 | INFO     | [SM step-011] HTTP 响应: status=StrategyStatus.PASSED duration_ms=2119.50
+2026-06-22 15:11:27.663 | INFO     | [SM step-011] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:27.663 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_12={'code': 200, 'msg': '成功', 'data': [], 'request_id': 'eed3bb1f5d0ccef9c84fab13da02b19b'}
+2026-06-22 15:11:27.663 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:27.663 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:27.663 | INFO     | [AssertionExecutor] 断言通过: 查询结算单详情应返回200
+2026-06-22 15:11:27.663 | INFO     | [SM step-011] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:27.664 | INFO     | [SM step-011] 状态机执行完成: final_state=passed duration_ms=2124.03
+    ✓ passed   2124.03ms
+    ✓ passed   2124.51ms   asserts=1/1
+2026-06-22 15:11:27.664 | INFO     | [ContextManager] StepContext finalized: step_id=step-011 status=passed duration_ms=2124.51
+2026-06-22 15:11:27.664 | INFO     | [ScenarioRunner] Step 完成: step_id=step-011 status=passed duration_ms=2124.03 (12/56)
+  [e2e订单到应收核销/step-012] start
+2026-06-22 15:11:27.665 | INFO     | [SM step-012] 状态机开始执行
+  [e2e订单到应收核销/step-012] start
+2026-06-22 15:11:27.665 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_id value=327344727462510592
+2026-06-22 15:11:27.666 | INFO     | [SM step-012] 开始 HTTP 请求
+2026-06-22 15:11:27.667 | INFO     | [SM step-012] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/order/order/checkGenerateOrderSub timeout=30.0s body_keys=['order_id']
+2026-06-22 15:11:27.668 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/order/order/checkGenerateOrderSub
+2026-06-22 15:11:31.259 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/order/order/checkGenerateOrderSub -> 200 (3590.9ms)
+2026-06-22 15:11:31.261 | INFO     | [SM step-012] HTTP 响应: status=StrategyStatus.PASSED duration_ms=3592.82
+2026-06-22 15:11:31.261 | INFO     | [SM step-012] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:31.261 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_13={'code': 200, 'msg': '成功', 'data': {'fee': [{'pay_object': '青岛易航道物流科技有限公司', 'put_object': '兰森玻璃（青岛）有限公司', 'put_amount': 'USD 100.00 + CNY 0.00', 'pay_amount': 'USD 100.00 + CNY 0.00', 'main_id': 31, 'main_name': '青岛易汇智供应链管理有限公司'}, {'pay_object': '上海华运船务有限公司青岛分公司', 'put_object': '青岛易汇智供应链管理有限公司', 'put_amount': 'USD 100.00 + CNY 0.00', 'pay_amount': 'USD 100.00 + CNY 0.00', 'main_id': 1, 'main_name': '青岛易航道物流科技有限公司'}], 'order_book': [{'client_company_id': '16', 'client_company_name': '兰森玻璃（青岛）有限公司', 'trustee_company_id': '31', 'trustee_company_name': '青岛易汇智供应链管理有限公司', 'document_type': 'BOOK_CUSTOMER', 'file_url': '6a38e022400b2.pdf', 'file_name': '6a38e022400b2.pdf', 'file_id': '327344834509537280', 'file_type': 'PDF'}, {'client_company_id': '31', 'client_company_name': '青岛易汇智供应链管理有限公司', 'trustee_company_id': '1', 'trustee_company_name': '青岛易航道物流科技有限公司', 'document_type': 'BOOK_MAIN', 'file_url': '6a38e022ec414.pdf', 'file_name': '6a38e022ec414.pdf', 'file_id': '327344837307138048', 'file_type': 'PDF'}, {'client_company_id': '1', 'client_company_name': '青岛易航道物流科技有限公司', 'trustee_company_id': '', 'trustee_company_name': '上海华运船务有限公司青岛分公司', 'document_type': 'BOOK_SUPPLIER', 'file_url': '6a38e02399e34.pdf', 'file_name': '6a38e02399e34.pdf', 'file_id': '327344840146681856', 'file_type': 'PDF'}]}, 'request_id': 'a663d074ee67c3851fdd586f61a2fb73'}
+2026-06-22 15:11:31.261 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:31.261 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:31.262 | INFO     | [AssertionExecutor] 断言通过: 检查生成子订单应返回200
+2026-06-22 15:11:31.262 | INFO     | [SM step-012] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:31.262 | INFO     | [SM step-012] 状态机执行完成: final_state=passed duration_ms=3597.14
+    ✓ passed   3597.14ms
+    ✓ passed   3597.44ms   asserts=1/1
+2026-06-22 15:11:31.262 | INFO     | [ContextManager] StepContext finalized: step_id=step-012 status=passed duration_ms=3597.44
+2026-06-22 15:11:31.262 | INFO     | [ScenarioRunner] Step 完成: step_id=step-012 status=passed duration_ms=3597.14 (13/56)
+  [e2e订单到应收核销/step-013] start
+2026-06-22 15:11:31.263 | INFO     | [SM step-013] 状态机开始执行
+  [e2e订单到应收核销/step-013] start
+2026-06-22 15:11:31.263 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_id value=327344727462510592
+2026-06-22 15:11:31.263 | INFO     | [SM step-013] 开始 HTTP 请求
+2026-06-22 15:11:31.263 | INFO     | [SM step-013] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/order/order/generateOrderSub timeout=30.0s body_keys=['order_id']
+2026-06-22 15:11:31.263 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/order/order/generateOrderSub
+2026-06-22 15:11:36.710 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/order/order/generateOrderSub -> 200 (5447.0ms)
+2026-06-22 15:11:36.711 | INFO     | [SM step-013] HTTP 响应: status=StrategyStatus.PASSED duration_ms=5448.21
+2026-06-22 15:11:36.712 | INFO     | [SM step-013] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:36.712 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_14={'code': 200, 'msg': '成功', 'data': [], 'request_id': 'c62c4f2c1146d9cf1ce226e6a6983a5f'}
+2026-06-22 15:11:36.712 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:36.712 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:36.712 | INFO     | [AssertionExecutor] 断言通过: 生成子订单应返回200
+2026-06-22 15:11:36.712 | INFO     | [SM step-013] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:36.713 | INFO     | [SM step-013] 状态机执行完成: final_state=passed duration_ms=5449.95
+    ✓ passed   5449.95ms
+    ✓ passed   5450.26ms   asserts=1/1
+2026-06-22 15:11:36.713 | INFO     | [ContextManager] StepContext finalized: step_id=step-013 status=passed duration_ms=5450.26
+2026-06-22 15:11:36.713 | INFO     | [ScenarioRunner] Step 完成: step_id=step-013 status=passed duration_ms=5449.95 (14/56)
+  [e2e订单到应收核销/step-014] start
+2026-06-22 15:11:36.713 | INFO     | [SM step-014] 状态机开始执行
+  [e2e订单到应收核销/step-014] start
+2026-06-22 15:11:36.713 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_id value=327344727462510592
+2026-06-22 15:11:36.714 | INFO     | [SM step-014] 开始 HTTP 请求
+2026-06-22 15:11:36.714 | INFO     | [SM step-014] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/order/orderFee/toggleRealAmount timeout=30.0s body_keys=['order_id']
+2026-06-22 15:11:36.714 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/order/orderFee/toggleRealAmount
+2026-06-22 15:11:38.000 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/order/orderFee/toggleRealAmount -> 200 (1286.2ms)
+2026-06-22 15:11:38.006 | INFO     | [SM step-014] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1292.32
+2026-06-22 15:11:38.007 | INFO     | [SM step-014] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:38.008 | INFO     | [ExtractExecutor] 提升变量: order_fee_real_id='327344860249980928' layer=scenario
+2026-06-22 15:11:38.009 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_15={'code': 200, 'msg': '成功', 'data': {'amount_summary': {'order_id': '327344727462510592', 'order_no': 'YWDD20260622107270', 'discount_status': '2', 'discount_ratio': '', 'exchange_rate': '7.7000', 'discount_usd': 0, 'discount_cny': 0, 'real_put_cny': 0, 'real_put_usd': 100, 'real_pay_cny': 0, 'real_pay_usd': 100, 'folde_put_usd': 770, 'folde_put_total': 770, 'folde_pay_usd': 770, 'folde_pay_total': 770, 'gross_margin': 0, 'gross_margin_rate': 0}, 'to_customer': [{'gross_margin': 0, 'gross_margin_rate': 0, 'order_id': '327344727462510592', 'order_sub_id': '327344787873071104', 'order_sub_no': 'ZDD20260622016430', 'order_sub_type': 0, 'main_name': '青岛易汇智供应链管理有限公司', 'put_settle_object': '兰森玻璃（青岛）有限公司', 'pay_settle_object': '', 'pay_settle_object_id': [], 'put_amount': {'standard_list': [{'order_fee_real_id': '327344860249980928', 'order_id': '327344727462510592', 'order_sub_id': '327344787873071104', 'unique_id': '91c9f422-ae3c-4cfe-968e-085a23828cab', 'match': 'semi', 'order_fee_expect_id': None, 'order_fee_expect_no': '', 'finance_fee': '1', 'cost_id': '17', 'cost_no': '0001', 'cost_name': '海运费', 'cost_label': '0', 'service_project': 'booking_space', 'customer_period': '60', 'take_date': '1786291200', 'supplier_period': '30', 'supplier_id': '8', 'pay_date': '1784476800', 'fee_type': '0', 'fee_real_no': 'FY202606221289987', 'settle_object_id': '37', 'settle_object': '兰森玻璃（青岛）有限公司', 'put_settle_object': '兰森玻璃（青岛）有限公司', 'put_settle_object_id': '37', 'pay_settle_object': '青岛易航道物流科技有限公司', 'pay_settle_object_id': '1', 'real_settle_object_id': '39', 'real_settle_object': '上海华运船务有限公司青岛分公司', 'fee_real_name': '海运费', 'version': '', 'symbol': '1', 'currency': 'USD', 'unit': 'box', 'unit_price': '100.00', 'amount': '100.00', 'discount_amount': '100.00', 'real_total': '100.00', 'folde_total': '770.00', 'discount_ratio': '100', 'discount_status': '0', 'exchange_rate': '7.7000', 'specs': '40HQ', 'num': '1', 'pay_account_id': '0', 'pay_account_no': '', 'pay_account_status': '0', 'pay_account_time': '0', 'account_id': None, 'account_no': '', 'account_status': '0', 'account_time': None, 'receive_invoice_batch_id': '0', 'receive_invoice_batch_no': None, 'receive_invoice_apply_id': '0', 'receive_invoice_apply_no': None, 'tax_rate': None, 'tax_value': None, 'invoice_status': '0', 'invoice_ids': '', 'invoice_nos': None, 'invoice_numbers': None, 'invoice_amount': '0.00', 'invoice_exchange_rate': None, 'invoice_time': None, 'writeoff_ids': '', 'writeoff_nos': '', 'writeoff_status': '1', 'writeoff_time': '', 'writeoff_force_audit_status': '0', 'un_writeoff_amount': '100.00', 'use_writeoff_amount': '0.00', 'writeoff_exchange_rate': '', 'writeoff_banks': '', 'pay_demand_id': '0', 'pay_form_id': '', 'fee_status': '0', 'examine_status': '0', 'lock_time': None, 'lock_exchange_rate': '0.0000', 'remark': None, 'create_id': '828', 'create_by': 'GIMBAL', 'create_time': '1782112296', 'update_id': '0', 'update_by': '', 'update_time': '0', 'delete_time': '0', 'cancel_time': '0', 'conduct_ratio': '100', 'pay_invoice_batch_id': '0', 'pay_invoice_batch_no': None, 'pay_invoice_apply_id': '0', 'pay_invoice_apply_no': None, 'is_round': '0', 'invoice_date': None, 'customer_fee': '1', 'supplier_fee': '0', 'policy_sub_id': '365', 'policy_sub_status': '1', 'subsidy_category': '0', 'pay_sync_status': '1', 'pay_form_no': '', 'pay_demand_no': '', 'fee_same_id': '', 'opposite_fee_no': '', 'is_penetrate': '0', 'main_id': '665', 'manual_entry': '0', 'is_confirm': '0', 'fee_sort': '0', 'sys_upttime': '2026-06-22 15:11:36', 'main_name': '青岛易汇智供应链管理有限公司', 'fee_main_id': '31', 'examine_status_name': '创建中', 'fee_status_name': '未锁定', 'policy_sub_name': '100%穿行', 'policy_sub_status_name': '正常', 'conduct_ratio_name': '/', 'subsidy_category_name': '不参与补贴', 'invoice_apply_name': '未申请', 'invoice_status_name': '未开票', 'pay_demand_status_name': '', 'writeoff_status_name': '未核销', 'account_status_name': '未对账', 'invoice_batch_no': '', 'invoice_apply_no': ''}], 'put_cny_amount': '0.00', 'put_usd_amount': '100.00', 'put_folde_amount': '770.00'}, 'pay_amount': {'standard_list': [], 'pay_cny_amount': '0.00', 'pay_usd_amount': '0.00', 'pay_folde_amount': '0.00'}}], 'to_cooperate': [], 'to_supplier': [{'gross_margin': 0, 'gross_margin_rate': 0, 'order_id': '327344727462510592', 'order_sub_id': '327344846685601792', 'order_sub_no': 'ZDD20260622016431', 'order_sub_type': 2, 'main_name': '青岛易航道物流科技有限公司', 'put_settle_object': '', 'pay_settle_object': '上海华运船务有限公司青岛分公司', 'pay_settle_object_id': '39', 'pay_amount': {'standard_list': [{'order_fee_real_id': '327344860249984000', 'order_id': '327344727462510592', 'order_sub_id': '327344846685601792', 'unique_id': '91c9f422-ae3c-4cfe-968e-085a23828cab', 'match': 'semi', 'order_fee_expect_id': None, 'order_fee_expect_no': '', 'finance_fee': '0', 'cost_id': '17', 'cost_no': '0001', 'cost_name': '海运费', 'cost_label': '0', 'service_project': 'booking_space', 'customer_period': '0', 'take_date': '0', 'supplier_period': '30', 'supplier_id': '8', 'pay_date': '1784476800', 'fee_type': '0', 'fee_real_no': 'FY202606221289990', 'settle_object_id': '37', 'settle_object': '兰森玻璃（青岛）有限公司', 'put_settle_object': '青岛易汇智供应链管理有限公司', 'put_settle_object_id': '665', 'pay_settle_object': '上海华运船务有限公司青岛分公司', 'pay_settle_object_id': '39', 'real_settle_object_id': '39', 'real_settle_object': '上海华运船务有限公司青岛分公司', 'fee_real_name': '海运费', 'version': '', 'symbol': '0', 'currency': 'USD', 'unit': 'box', 'unit_price': '100.00', 'amount': '100.00', 'discount_amount': '100.00', 'real_total': '100.00', 'folde_total': '770.00', 'discount_ratio': '100', 'discount_status': '0', 'exchange_rate': '7.7000', 'specs': '40HQ', 'num': '1', 'pay_account_id': '0', 'pay_account_no': '', 'pay_account_status': '0', 'pay_account_time': '0', 'account_id': None, 'account_no': '', 'account_status': '0', 'account_time': None, 'receive_invoice_batch_id': '0', 'receive_invoice_batch_no': None, 'receive_invoice_apply_id': '0', 'receive_invoice_apply_no': None, 'tax_rate': None, 'tax_value': None, 'invoice_status': '0', 'invoice_ids': '', 'invoice_nos': None, 'invoice_numbers': None, 'invoice_amount': '0.00', 'invoice_exchange_rate': None, 'invoice_time': None, 'writeoff_ids': '', 'writeoff_nos': '', 'writeoff_status': '1', 'writeoff_time': '', 'writeoff_force_audit_status': '0', 'un_writeoff_amount': '100.00', 'use_writeoff_amount': '0.00', 'writeoff_exchange_rate': '', 'writeoff_banks': '', 'pay_demand_id': '0', 'pay_form_id': '', 'fee_status': '0', 'examine_status': '0', 'lock_time': None, 'lock_exchange_rate': '0.0000', 'remark': None, 'create_id': '828', 'create_by': 'GIMBAL', 'create_time': '1782112296', 'update_id': '0', 'update_by': '', 'update_time': '0', 'delete_time': '0', 'cancel_time': '0', 'conduct_ratio': '100', 'pay_invoice_batch_id': '0', 'pay_invoice_batch_no': None, 'pay_invoice_apply_id': '0', 'pay_invoice_apply_no': None, 'is_round': '1', 'invoice_date': None, 'customer_fee': '0', 'supplier_fee': '1', 'policy_sub_id': '365', 'policy_sub_status': '1', 'subsidy_category': '0', 'pay_sync_status': '1', 'pay_form_no': '', 'pay_demand_no': '', 'fee_same_id': '', 'opposite_fee_no': '', 'is_penetrate': '0', 'main_id': '1', 'manual_entry': '0', 'is_confirm': '0', 'fee_sort': '0', 'sys_upttime': '2026-06-22 15:11:36', 'main_name': '青岛易航道物流科技有限公司', 'fee_main_id': '1', 'examine_status_name': '创建中', 'fee_status_name': '未锁定', 'policy_sub_name': '100%穿行', 'policy_sub_status_name': '正常', 'conduct_ratio_name': '/', 'subsidy_category_name': '不参与补贴', 'invoice_apply_name': '未申请', 'invoice_status_name': '未开票', 'pay_demand_status_name': '未申请', 'writeoff_status_name': '未核销', 'account_status_name': '未对账', 'invoice_batch_no': '', 'invoice_apply_no': ''}], 'pay_cny_amount': '0.00', 'pay_usd_amount': '100.00', 'pay_folde_amount': '770.00'}, 'put_amount': {'standard_list': [], 'put_cny_amount': '0.00', 'put_usd_amount': '0.00', 'put_folde_amount': '0.00'}}], 'one_main_status': 0, 'is_traverse': '1', 'real_fee_status': '0', 'discount_status_name': '正常', 'amount_lack_status': 0, 'amount_lack_label': '', 'service_items': ['booking_space'], 'customs_clearance_status_text': '', 'insurance_status_text': '', 'manifest_status_text': '', 'confirm_status': '0'}, 'request_id': 'fea2568c4c00e1f7ab7a36e1055bf42e'}
+2026-06-22 15:11:38.011 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:38.011 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:38.012 | INFO     | [AssertionExecutor] 断言通过: 费用详情查询应返回200
+2026-06-22 15:11:38.012 | INFO     | [SM step-014] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:38.013 | INFO     | [SM step-014] 状态机执行完成: final_state=passed duration_ms=1299.43
+    ✓ passed   1299.43ms
+    ✓ passed   1300.52ms   asserts=1/1   promotions=1
+2026-06-22 15:11:38.014 | INFO     | [ContextManager] StepContext finalized: step_id=step-014 status=passed duration_ms=1300.52
+2026-06-22 15:11:38.015 | INFO     | [ScenarioRunner] Step 完成: step_id=step-014 status=passed duration_ms=1299.43 (15/56)
+  [e2e订单到应收核销/step-015] start
+2026-06-22 15:11:38.018 | INFO     | [SM step-015] 状态机开始执行
+  [e2e订单到应收核销/step-015] start
+2026-06-22 15:11:38.021 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_fee_real_ids[0] value=327344860249980928
+2026-06-22 15:11:38.022 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_id value=327344727462510592
+2026-06-22 15:11:38.023 | INFO     | [SM step-015] 开始 HTTP 请求
+2026-06-22 15:11:38.023 | INFO     | [SM step-015] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/order/orderFee/realAmountLockSubmit timeout=30.0s body_keys=['action', 'order_id', 'order_fee_real_ids']
+2026-06-22 15:11:38.024 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/order/orderFee/realAmountLockSubmit
+2026-06-22 15:11:39.281 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/order/orderFee/realAmountLockSubmit -> 200 (1256.9ms)
+2026-06-22 15:11:39.283 | INFO     | [SM step-015] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1258.57
+2026-06-22 15:11:39.283 | INFO     | [SM step-015] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:39.284 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_16={'code': 200, 'msg': '成功', 'data': [], 'request_id': '42cb45129140acbd4926e80f59647116'}
+2026-06-22 15:11:39.284 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:39.284 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:39.284 | INFO     | [AssertionExecutor] 断言通过: 费用锁定校验应返回200
+2026-06-22 15:11:39.284 | INFO     | [SM step-015] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:39.284 | INFO     | [SM step-015] 状态机执行完成: final_state=passed duration_ms=1266.16
+    ✓ passed   1266.16ms
+    ✓ passed   1269.03ms   asserts=1/1
+2026-06-22 15:11:39.285 | INFO     | [ContextManager] StepContext finalized: step_id=step-015 status=passed duration_ms=1269.03
+2026-06-22 15:11:39.285 | INFO     | [ScenarioRunner] Step 完成: step_id=step-015 status=passed duration_ms=1266.16 (16/56)
+  [e2e订单到应收核销/step-016] start
+2026-06-22 15:11:39.285 | INFO     | [SM step-016] 状态机开始执行
+  [e2e订单到应收核销/step-016] start
+2026-06-22 15:11:39.285 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_fee_real_ids[0] value=327344860249980928
+2026-06-22 15:11:39.286 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_id value=327344727462510592
+2026-06-22 15:11:39.286 | INFO     | [SM step-016] 开始 HTTP 请求
+2026-06-22 15:11:39.286 | INFO     | [SM step-016] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/order/orderFee/realAmountLockSubmit timeout=30.0s body_keys=['action', 'order_id', 'order_fee_real_ids']
+2026-06-22 15:11:39.286 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/order/orderFee/realAmountLockSubmit
+2026-06-22 15:11:40.597 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/order/orderFee/realAmountLockSubmit -> 200 (1310.6ms)
+2026-06-22 15:11:40.599 | INFO     | [SM step-016] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1312.43
+2026-06-22 15:11:40.599 | INFO     | [SM step-016] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:40.599 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_17={'code': 200, 'msg': '成功', 'data': {'node_select': 1, 'flow_id': '28', 'flow_type': 'actualCostFeeLockApplication', 'flow_name': '费用锁定', 'flow_desc': '', 'create_by': 'lijinyu', 'create_time': '1740469726', 'update_by': 'admin', 'update_time': '1781231749', 'node_list': [{'node_id': '323651579301330944', 'node_name': '审批节点1', 'node_type': '1', 'node_type_name': '用户选择审批人', 'node_sort': '0', 'node_user_name': '潘珑元,李明丹tidb,孙奉盛,张管理,于佳倩TIDB,刘雨晴,赵菲,王滨恺,陆旭阳,王冠清,杜娟,刘常春TiDB,李金玉,TIDB于佳倩,郝福荣,巨奎,陆履约,句产研,GIMBAL', 'node_user_ids': ['36', '40', '41', '293', '294', '333', '334', '335', '363', '459', '484', '487', '787', '788', '789', '800', '807', '822', '828'], 'node_users': [{'user_id': '36', 'user_name_phone': '潘珑元-15943945010'}, {'user_id': '40', 'user_name_phone': '李明丹tidb-15765599874'}, {'user_id': '41', 'user_name_phone': '孙奉盛-18954119927'}, {'user_id': '293', 'user_name_phone': '张管理-18234337457'}, {'user_id': '294', 'user_name_phone': '于佳倩TIDB-15530217935'}, {'user_id': '333', 'user_name_phone': '刘雨晴-13238155813'}, {'user_id': '334', 'user_name_phone': '赵菲-18512540397'}, {'user_id': '335', 'user_name_phone': '王滨恺-15621092706'}, {'user_id': '363', 'user_name_phone': '陆旭阳-18513379596'}, {'user_id': '459', 'user_name_phone': '王冠清-18639259555'}, {'user_id': '484', 'user_name_phone': '杜娟-18447052627'}, {'user_id': '487', 'user_name_phone': '刘常春TiDB-15942508598'}, {'user_id': '787', 'user_name_phone': '李金玉-15010248179'}, {'user_id': '788', 'user_name_phone': 'TIDB于佳倩-14459887789'}, {'user_id': '789', 'user_name_phone': '郝福荣-13512345678'}, {'user_id': '800', 'user_name_phone': '巨奎-15921943728'}, {'user_id': '807', 'user_name_phone': '陆履约-18513379595'}, {'user_id': '822', 'user_name_phone': '句产研-17895019270'}, {'user_id': '828', 'user_name_phone': 'GIMBAL-18180789652'}]}], 'carbon_copy_list': [{'user_id': '788', 'user_name_phone': 'TIDB于佳倩-14459887789'}, {'user_id': '294', 'user_name_phone': '于佳倩TIDB-15530217935'}]}, 'request_id': 'fddf0963d0f87d658c8dece27622b90f'}
+2026-06-22 15:11:40.599 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:40.599 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:40.600 | INFO     | [AssertionExecutor] 断言通过: 费用审批应返回200
+2026-06-22 15:11:40.600 | INFO     | [SM step-016] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:40.600 | INFO     | [SM step-016] 状态机执行完成: final_state=passed duration_ms=1314.76
+    ✓ passed   1314.76ms
+    ✓ passed   1315.60ms   asserts=1/1
+2026-06-22 15:11:40.601 | INFO     | [ContextManager] StepContext finalized: step_id=step-016 status=passed duration_ms=1315.60
+2026-06-22 15:11:40.601 | INFO     | [ScenarioRunner] Step 完成: step_id=step-016 status=passed duration_ms=1314.76 (17/56)
+  [e2e订单到应收核销/step-017] start
+2026-06-22 15:11:40.603 | INFO     | [SM step-017] 状态机开始执行
+  [e2e订单到应收核销/step-017] start
+2026-06-22 15:11:40.603 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_id value=327344727462510592
+2026-06-22 15:11:40.604 | INFO     | [SM step-017] 开始 HTTP 请求
+2026-06-22 15:11:40.605 | INFO     | [SM step-017] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/order/order/orderDetail timeout=30.0s body_keys=['order_id']
+2026-06-22 15:11:40.605 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/order/order/orderDetail
+2026-06-22 15:11:42.068 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/order/order/orderDetail -> 200 (1462.8ms)
+2026-06-22 15:11:42.077 | INFO     | [SM step-017] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1471.54
+2026-06-22 15:11:42.078 | INFO     | [SM step-017] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:42.079 | INFO     | [ExtractExecutor] 提升变量: order_sub_no='ZDD20260622016430' layer=scenario
+2026-06-22 15:11:42.081 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_18={'code': 200, 'msg': '成功', 'data': {'order_id': '327344727462510592', 'order_no': 'YWDD20260622107270', 'customer_id': '16', 'customer_name': '兰森玻璃（青岛）有限公司', 'customer_category': ',2,', 'customer_tax_number': '91370283591262431N', 'customer_address_cn': '山东省青岛市平度市南村镇东王府庄村', 'sale_id': '', 'sale_name': '', 'service_id': '55', 'client_expand_id': '250', 'client_expand_name': '孙硕', 'service_name': '曲静霞', 'operator_id': '327', 'operator_name': '王晓涵', 'customer_contact_id': '1547', 'customer_contact_name': '周经理', 'customer_contact_phone': '18561657088', 'customer_main_id': '31', 'customer_main_name': '青岛易汇智供应链管理有限公司', 'business_main_id': '1', 'business_main_name': '青岛易航道物流科技有限公司', 'main_sort': '易汇智,易航道', 'bl_no': 'jokervalue11148', 'policy_type': 'JSZX', 'fund_code': '', 'fund_name': None, 'policy_id': '112', 'policy_name': '【SPV对客】易汇智', 'business_type': '1', 'trade_term': 'CIF', 'carrier_id': '1', 'carrier': 'ACL', 'etd': '1781020800', 'atd': '1781020800', 'track_atd': '0', 'finance_date': '1781020800', 'ship_name': 'jokervalue11148', 'voy': 'jokervalue11148', 'pol': 'QINGDAO,CHINA', 'pol_cn': '青岛流亭机场', 'pol_country_id': '1', 'pol_country': 'CHINA', 'pol_country_cn': '中国', 'pod': 'QINGDAO,CHINA', 'pod_cn': '青岛港', 'pot': 'QINGDAO,CHINA', 'pot_cn': '青岛港', 'del': 'QINGDAO,CHINA', 'del_cn': '青岛港', 'country_id': '1', 'country_name': 'CHINA', 'country_name_cn': '中国', 'ocean_type': '近洋', 'airline_type': '中国', 'terms_payment': 'T/T', 'terms_transport': 'CY/CY', 'terms_shipment': 'jokervalue11148', 'pay_type': 'FREIGHT PREPAID', 'customer_order_sn': 'jokervalue11148', 'cargo_type': 'goods', 'num': '1', 'packer': '', 'gross_weight': '100.000', 'bulk': '100.000', 'volume': '1*40HQ', 'volume_desc': '普柜', 'teu': '2', 'sea_trans_cost': '100.00', 'sea_trans_currency': 'USD', 'shipper': 'jokervalue11148', 'consignee': 'jokervalue11148', 'notifier': 'jokervalue11148', 'ship_mark': 'jokervalue11148', 'commodity': 'jokervalue11148', 'notes': 'jokervalue11148', 'customer_period': '60', 'customer_settlement_date': '10', 'period_rule': '1', 'term_rule_name': '标准规则', 'customer_due_date': '0', 'customer_put_date': '1786291200', 'customer_payment_collection_date': None, 'customer_put_date_manual': '0', 'customer_put_writeoff_date': '', 'supplier_due_date': '0', 'discount_start': '0', 'discount_rule': '', 'discount_end': '0', 'discount_ratio': '', 'discount_status': '2', 'discount_currency': '', 'book_upload_date': '0', 'trans_cost_put_preserve_date': '0', 'bl_no_upload_date': '0', 'supplier_invoice_date': '0', 'supplier_invoice_taketime': '', 'real_cost_date': '0', 'customer_invoice_request_date': '0', 'first_financing_doc_ok_date': '0', 'second_financing_doc_ok_date': '0', 'insurance_doc_ok_date': '0', 'customer_confirm_date': '0', 'is_delayed_recovery': '否', 'delayed_recovery_usd': '', 'delayed_recovery_cny': '', 'delayed_time': '', 'expect_fee_status': '0', 'real_fee_status': '0', 'fee_lock_status': '0', 'pay_account_status': '0', 'account_status': '0', 'real_pay_usd': '100.00', 'real_pay_cny': '0.00', 'real_put_usd': '100.00', 'real_put_cny': '0.00', 'real_put_discount_rate': '0.00', 'exchange_rate': '7.7000', 'folde_pay_usd': '770.00', 'folde_put_usd': '770.00', 'folde_pay_total': '770.00', 'folde_put_total': '770.00', 'gross_margin': '0.00', 'gross_margin_rate': '0.00', 'is_special_pay': '0', 'is_loan_before_invoice': '0', 'is_fee_miss': '0', 'fee_miss_name': '', 'service_items': [{'service_item_name': '订舱', 'service_item': 'booking_space', 'self_support': False, 'expect_api': '/order/orderFee/bookExpectAmountEdit', 'real_api': 'order/orderFee/bookRealAmountEdit', 'is_select': 1}, {'service_item_name': '报关', 'service_item': 'customs_clearance', 'self_support': True, 'expect_api': 'order/orderFee/customsExpectAmountEdit', 'real_api': 'order/orderFee/customsRealAmountEdit', 'is_select': 0}, {'service_item_name': '舱单', 'service_item': 'manifest', 'self_support': True, 'expect_api': 'order/orderFee/manifestExpectAmountEdit', 'real_api': 'order/orderFee/manifestRealAmountEdit', 'is_select': 0}, {'service_item_name': '保险', 'service_item': 'insurance', 'self_support': True, 'expect_api': 'order/orderFee/insuranceExpectAmountEdit', 'real_api': 'order/orderFee/insuranceRealAmountEdit', 'is_select': 0}, {'service_item_name': '拖车', 'service_item': 'trucking', 'self_support': True, 'expect_api': 'order/orderFee/trailerExpectAmountEdit', 'real_api': 'order/orderFee/trailerRealAmountEdit', 'is_select': 0}], 'status': '2', 'cancel_remark': '', 'cancel_time': '0', 'effective_id': '828', 'effective_by': 'GIMBAL', 'effective_time': '1782112278', 'create_id': '828', 'create_by': 'GIMBAL', 'create_time': '1782112264', 'update_id': '828', 'update_by': 'GIMBAL', 'update_time': '1782112296', 'delete_time': '0', 'business_time': '1782112278', 'main_ids': ',31,1,', 'reverse_status': '0', 'proprietary_business_status': '0', 'm_delivery_type': '1', 'loan_status': None, 'first_status': None, 'second_status': None, 'loan_pay_status': '', 'change_type': '0', 'copy_order_id': '0', 'real_fee_locked': False, 'is_usd_project': '2', 'pay_status': '0', 'is_sync_es': '0', 'expect_discount_status': '0', 'real_discount_status': '2', 'entrust_status': '2', 'remark': '', 'audit_type': '', 'is_system_generate': '0', 'is_financing': '0', 'confirm_status': '0', 'is_traverse': '1', 'financing_apply_amount': '0.00', 'financing_apply_amount_cny': '0.00', 'financing_apply_amount_usd': '0.00', 'sys_upttime': '2026-06-22 15:11:36', 'reverse_status_name': '否', 'is_delayed_recovery_name': '否', 'order_finance_arr': [], 'order_main_bank_arr': [], 'order_sub': [{'order_sub_id': '327344787873071104', 'order_sub_no': 'ZDD20260622016430', 'order_sub_type': '0', 'main_name': '青岛易汇智供应链管理有限公司', 'order_id': '327344727462510592', 'business_no': 'YHZ20260622032888', 'order_sub_type_name': '对客订单'}, {'order_sub_id': '327344846685601792', 'order_sub_no': 'ZDD20260622016431', 'order_sub_type': '2', 'main_name': '青岛易航道物流科技有限公司', 'order_id': '327344727462510592', 'business_no': 'YHD20260622034280', 'order_sub_type_name': '对商订单'}], 'order_sub_no': '', 'container': [{'order_container_id': '327344785167745024', 'box_type': '40HQ', 'box_num': '1', 'box_no': ['1'], 'seal_number': [''], 'sea_trans_unit_price': 100}], 'service_project': {'booking_space': True, 'customs_clearance': False, 'manifest': False, 'insurance': False, 'trucking': False}, 'service_project_amount': {'booking_space': True, 'customs_clearance': False, 'manifest': False, 'insurance': False, 'trucking': False}, 'finance_status': True, 'main_ids_name': '易汇智,易航道', 'policy_main_arr': [{'fee_main_id': '31', 'main_name': '青岛易汇智供应链管理有限公司'}, {'fee_main_id': '1', 'main_name': '青岛易航道物流科技有限公司'}], 'policy_type_name': '结算业务', 'business_type_name': '海运整箱', 'cargo_type_name': '普货', 'period_rule_name': '25日后订单截转下月计算账期（CIF特殊规则1、FOB结算规则1）', 'trade_term_name': 'CIF', 'carrier_name': '大西洋航运', 'terms_transport_name': 'CY/CY', 'terms_payment_name': 'T/T', 'pay_type_name': 'FREIGHT PREPAID', 'm_delivery_type_name': '正本', 'supplier': [{'order_supplier_id': '327344728804687872', 'order_id': '327344727462510592', 'isset_supplier': '1', 'is_primary': '1', 'supplier_id': '8', 'supplier_name': '上海华运船务有限公司青岛分公司', 'settle_object_id': '39', 'user_id': '16', 'user_name': '荣洋', 'service_item': 'booking_space', 'supplier_period': '30', 'settlement_date': '20', 'supplier_pay_date': '1784476800', 'is_manual': '0', 'sys_upttime': '2026-06-22 15:11:18', 'supplier_label': '上海华运船务有限公司青岛分公司-订舱', 'service_item_name': '订舱', 'isset_fee': True}], 'audit': [], 'enable': '1', 'policy_match': 'semi', 'policy_match_name': '手动选择', 'real_discount_status_name': '—', 'expect_discount_status_name': '—', 'expect_policy_status_name': '', 'policy_status_name': '正常', 'subsidy_category_name': '不参与补贴', 'expect_subsidy_category_name': '不参与补贴', 'real_subsidy_category_name': '不参与补贴'}, 'request_id': 'a5287c5b13eb306244f6ce82daf14dbc'}
+2026-06-22 15:11:42.085 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:42.088 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:42.091 | INFO     | [AssertionExecutor] 断言通过: 查询订单详情应返回200
+2026-06-22 15:11:42.092 | INFO     | [SM step-017] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:42.093 | INFO     | [SM step-017] 状态机执行完成: final_state=passed duration_ms=1490.27
+    ✓ passed   1490.27ms
+    ✓ passed   1493.61ms   asserts=1/1   promotions=1
+2026-06-22 15:11:42.097 | INFO     | [ContextManager] StepContext finalized: step_id=step-017 status=passed duration_ms=1493.61
+2026-06-22 15:11:42.098 | INFO     | [ScenarioRunner] Step 完成: step_id=step-017 status=passed duration_ms=1490.27 (18/56)
+  [e2e订单到应收核销/step-018] start
+2026-06-22 15:11:42.100 | INFO     | [SM step-018] 状态机开始执行
+  [e2e订单到应收核销/step-018] start
+2026-06-22 15:11:42.103 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_fee_real_ids[0] value=327344860249980928
+2026-06-22 15:11:42.105 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.audit_msg.code value=ZDD20260622016430
+2026-06-22 15:11:42.107 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_id value=327344727462510592
+2026-06-22 15:11:42.109 | INFO     | [SM step-018] 开始 HTTP 请求
+2026-06-22 15:11:42.111 | INFO     | [SM step-018] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/order/orderFee/realAmountLockSubmit timeout=30.0s body_keys=['action', 'order_id', 'order_fee_real_ids', 'audit_msg', 'select_node_user']
+2026-06-22 15:11:42.113 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/order/orderFee/realAmountLockSubmit
+2026-06-22 15:11:44.072 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/order/orderFee/realAmountLockSubmit -> 200 (1957.9ms)
+2026-06-22 15:11:44.076 | INFO     | [SM step-018] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1962.82
+2026-06-22 15:11:44.077 | INFO     | [SM step-018] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:44.077 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_19={'code': 200, 'msg': '成功', 'data': [], 'request_id': 'f31e7c010ed8331be99d2e910960ca7b'}
+2026-06-22 15:11:44.078 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:44.078 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:44.079 | INFO     | [AssertionExecutor] 断言通过: 费用提交应返回200
+2026-06-22 15:11:44.080 | INFO     | [SM step-018] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:44.080 | INFO     | [SM step-018] 状态机执行完成: final_state=passed duration_ms=1980.32
+    ✓ passed   1980.32ms
+    ✓ passed   1982.85ms   asserts=1/1
+2026-06-22 15:11:44.082 | INFO     | [ContextManager] StepContext finalized: step_id=step-018 status=passed duration_ms=1982.85
+2026-06-22 15:11:44.083 | INFO     | [ScenarioRunner] Step 完成: step_id=step-018 status=passed duration_ms=1980.32 (19/56)
+  [e2e订单到应收核销/step-019] start
+2026-06-22 15:11:44.084 | INFO     | [SM step-019] 状态机开始执行
+  [e2e订单到应收核销/step-019] start
+2026-06-22 15:11:44.087 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.relation_id value=327344727462510592
+2026-06-22 15:11:44.088 | INFO     | [SM step-019] 开始 HTTP 请求
+2026-06-22 15:11:44.088 | INFO     | [SM step-019] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/home/audit/auditRecord timeout=30.0s body_keys=['relation_id', 'type']
+2026-06-22 15:11:44.089 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/home/audit/auditRecord
+2026-06-22 15:11:45.007 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/home/audit/auditRecord -> 200 (917.2ms)
+2026-06-22 15:11:45.008 | INFO     | [SM step-019] HTTP 响应: status=StrategyStatus.PASSED duration_ms=918.90
+2026-06-22 15:11:45.008 | INFO     | [SM step-019] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:45.008 | INFO     | [ExtractExecutor] 提升变量: audit_id_1='327344892755836928' layer=scenario
+2026-06-22 15:11:45.009 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_20={'code': 200, 'msg': '成功', 'data': [{'audit_id': '327344892755836928', 'audit_no': 'SP20260622003283', 'audit_type': 'actualCostFeeLockApplication', 'audit_name': '费用锁定', 'audit_status': '1', 'create_by': 'GIMBAL', 'create_time': '1782112304', 'current_node_id': '327344892915220480', 'audit_status_name': '审批中', 'node_name': '审批节点1'}], 'request_id': 'a2ee8722b5296ea4042c8657dbd4cc1d'}
+2026-06-22 15:11:45.009 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:45.009 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:45.009 | INFO     | [AssertionExecutor] 断言通过: 查询审批记录应返回200
+2026-06-22 15:11:45.009 | INFO     | [SM step-019] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:45.009 | INFO     | [SM step-019] 状态机执行完成: final_state=passed duration_ms=924.92
+    ✓ passed    924.92ms
+    ✓ passed    925.64ms   asserts=1/1   promotions=1
+2026-06-22 15:11:45.009 | INFO     | [ContextManager] StepContext finalized: step_id=step-019 status=passed duration_ms=925.64
+2026-06-22 15:11:45.010 | INFO     | [ScenarioRunner] Step 完成: step_id=step-019 status=passed duration_ms=924.92 (20/56)
+  [e2e订单到应收核销/step-020] start
+2026-06-22 15:11:45.010 | INFO     | [SM step-020] 状态机开始执行
+  [e2e订单到应收核销/step-020] start
+2026-06-22 15:11:45.010 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.audit_id value=327344892755836928
+2026-06-22 15:11:45.010 | INFO     | [SM step-020] 开始 HTTP 请求
+2026-06-22 15:11:45.010 | INFO     | [SM step-020] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/home/audit/auditDetail timeout=30.0s body_keys=['audit_id']
+2026-06-22 15:11:45.010 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/home/audit/auditDetail
+2026-06-22 15:11:46.246 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/home/audit/auditDetail -> 200 (1235.6ms)
+2026-06-22 15:11:46.248 | INFO     | [SM step-020] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1237.89
+2026-06-22 15:11:46.249 | INFO     | [SM step-020] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:46.249 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_21={'code': 200, 'msg': '成功', 'data': {'audit_basic': {'audit_no': 'SP20260622003283', 'audit_type': 'actualCostFeeLockApplication', 'audit_name': '费用锁定', 'audit_status': '1', 'audit_status_name': '审批中', 'create_by': 'GIMBAL', 'create_time': '1782112304', 'audit_note': ''}, 'audit_content': {'relation_id': '327344727462510592', 'audit_msg': '{"title":"业务订单ID","code":"YWDD20260622107270","msgs":["费用锁定申请"]}'}, 'audit_record': [{'audit_by': 'GIMBAL', 'audit_user_time': '0', 'audit_user_status': '1', 'audit_user_status_name': '审批中', 'audit_remark': '', 'node_name': '审批节点1'}], 'audit_ext': {'customer_name': '兰森玻璃（青岛）有限公司', 'bl_no': 'jokervalue11148', 'pol': 'QINGDAO,CHINA', 'pod': 'QINGDAO,CHINA', 'del': 'QINGDAO,CHINA', 'volume': '1*40HQ', 'put_real_total_usd': '100.00', 'put_real_total_cny': '0.00', 'pay_real_total_usd': '100.00', 'pay_real_total_cny': '0.00', 'old_period_rule_name': '', 'new_period_rule_name': '', 'old_policy_type_name': None, 'new_policy_type_name': None, 'loan_pay_status_name': '未放款', 'customer_account_status_name': None, 'supplier_account_status_name': None}, 'audit_process': [{'audit_type_name': '用户选择审批人', 'audit_user_names': 'GIMBAL', 'audit_status_name': '审批中', 'expedite_num': '0', 'audit_node_time': ''}], 'note_list': [], 'attachment_list': [], 'carbon_copy_list': [{'carbon_copy_id': '788', 'carbon_copy_by': 'TIDB于佳倩'}, {'carbon_copy_id': '294', 'carbon_copy_by': '于佳倩TIDB'}]}, 'request_id': '3662b19549e47d74417b0c3113b2baff'}
+2026-06-22 15:11:46.249 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:46.249 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:46.250 | INFO     | [AssertionExecutor] 断言通过: 查询审批详情应返回200
+2026-06-22 15:11:46.250 | INFO     | [SM step-020] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:46.250 | INFO     | [SM step-020] 状态机执行完成: final_state=passed duration_ms=1240.10
+    ✓ passed   1240.10ms
+    ✓ passed   1240.42ms   asserts=1/1
+2026-06-22 15:11:46.250 | INFO     | [ContextManager] StepContext finalized: step_id=step-020 status=passed duration_ms=1240.42
+2026-06-22 15:11:46.250 | INFO     | [ScenarioRunner] Step 完成: step_id=step-020 status=passed duration_ms=1240.10 (21/56)
+  [e2e订单到应收核销/step-021] start
+2026-06-22 15:11:46.251 | INFO     | [SM step-021] 状态机开始执行
+  [e2e订单到应收核销/step-021] start
+2026-06-22 15:11:46.251 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.audit_ids[0] value=327344892755836928
+2026-06-22 15:11:46.251 | INFO     | [SM step-021] 开始 HTTP 请求
+2026-06-22 15:11:46.252 | INFO     | [SM step-021] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/home/audit/auditExecute timeout=30.0s body_keys=['audit_ids', 'audit_status', 'audit_remark']
+2026-06-22 15:11:46.252 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/home/audit/auditExecute
+2026-06-22 15:11:48.404 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/home/audit/auditExecute -> 200 (2152.0ms)
+2026-06-22 15:11:48.409 | INFO     | [SM step-021] HTTP 响应: status=StrategyStatus.PASSED duration_ms=2157.13
+2026-06-22 15:11:48.410 | INFO     | [SM step-021] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:48.410 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_22={'code': 200, 'msg': '审批成功1条，审批失败0条', 'data': [], 'request_id': '5d28cc903f08340aaae1fd1ebbefad12'}
+2026-06-22 15:11:48.411 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:48.412 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:48.412 | INFO     | [AssertionExecutor] 断言通过: 审批批准应返回200
+2026-06-22 15:11:48.412 | INFO     | [SM step-021] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:48.413 | INFO     | [SM step-021] 状态机执行完成: final_state=passed duration_ms=2162.12
+    ✓ passed   2162.12ms
+    ✓ passed   2162.86ms   asserts=1/1
+2026-06-22 15:11:48.414 | INFO     | [ContextManager] StepContext finalized: step_id=step-021 status=passed duration_ms=2162.86
+2026-06-22 15:11:48.414 | INFO     | [ScenarioRunner] Step 完成: step_id=step-021 status=passed duration_ms=2162.12 (22/56)
+  [e2e订单到应收核销/step-022] start
+2026-06-22 15:11:48.415 | INFO     | [SM step-022] 状态机开始执行
+  [e2e订单到应收核销/step-022] start
+2026-06-22 15:11:48.418 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_id value=327344727462510592
+2026-06-22 15:11:48.419 | INFO     | [SM step-022] 开始 HTTP 请求
+2026-06-22 15:11:48.420 | INFO     | [SM step-022] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/order/order/orderConfirmAccount timeout=30.0s body_keys=['order_id', 'action']
+2026-06-22 15:11:48.420 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/order/order/orderConfirmAccount
+2026-06-22 15:11:50.396 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/order/order/orderConfirmAccount -> 200 (1975.5ms)
+2026-06-22 15:11:50.397 | INFO     | [SM step-022] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1977.00
+2026-06-22 15:11:50.397 | INFO     | [SM step-022] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:50.397 | INFO     | [ExtractExecutor] 提升变量: finance_id_usd='2895' layer=scenario
+2026-06-22 15:11:50.398 | INFO     | [ExtractExecutor] 提升变量: bank_id_usd='77' layer=scenario
+2026-06-22 15:11:50.398 | INFO     | [ExtractExecutor] 提升变量: bank_id_cny='78' layer=scenario
+2026-06-22 15:11:50.398 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_23={'code': 200, 'msg': '成功', 'data': {'customer_currency_finance': {'USD': [{'customer_finance_id': '2895', 'customer_id': '16', 'chinese_header': '兰森玻璃（青岛）有限公司', 'english_header': '', 'identifier_no': '91370283591262431N', 'phone': '15275268026', 'currency': 'USD', 'bank_account': '91370283591262431N', 'swift_code': '', 'register_address': '青岛市平度市南村镇东王府庄村', 'open_bank_cn': '中国银行青岛澳门路支行', 'remark': '', 'update_id': '55', 'update_by': '曲静霞', 'delete_time': '0', 'sys_upttime': '2026-05-15 10:49:36', 'flag': 'CustomerFinance'}], 'CNY': [{'customer_finance_id': '2896', 'customer_id': '16', 'chinese_header': '兰森玻璃（青岛）有限公司', 'english_header': '', 'identifier_no': '91370283591262431N', 'phone': '15275268026', 'currency': 'CNY', 'bank_account': '38-160901040007028', 'swift_code': '', 'register_address': '青岛市平度市南村镇东王府庄村', 'open_bank_cn': ' 中国农业银行股份有限公司平度南村镇分理处', 'remark': '', 'update_id': '55', 'update_by': '曲静霞', 'delete_time': '0', 'sys_upttime': '2026-05-15 10:49:36', 'flag': 'CustomerFinance'}], 'use_usd': False, 'use_cny': False}, 'main_currency_bank': {'USD': [{'main_bank_id': '77', 'main_id': '31', 'chinese_header': '青岛易汇智供应链管理有限公司', 'english_header': '', 'identifier_no': '91370202MAEWF5RN7G', 'currency': 'USD', 'is_public': '1', 'fund_code': '青岛海发商业保理有限公司', 'bank_account': '802051200001568', 'swift_code': 'QCCBCNBQ或 QCCBCNBQXXX', 'register_address_cn': '山东省青岛市市南区江西路89号3号楼乙102-A121', 'register_address_en': '', 'open_bank_no': '', 'open_bank_cn': '青岛银行股份有限公司江西路支行', 'open_bank_en': '', 'bank_address_en': '', 'remark': '', 'create_id': '41', 'create_by': '孙奉盛', 'create_time': '1766743074', 'pay_default': '1', 'put_default': '1', 'sys_upttime': '2026-05-15 10:48:52', 'flag': 'MainBank', 'is_public_name': '是'}], 'CNY': [{'main_bank_id': '78', 'main_id': '31', 'chinese_header': '青岛易汇智供应链管理有限公司', 'english_header': '', 'identifier_no': '91370202MAEWF5RN7G', 'currency': 'CNY', 'is_public': '1', 'fund_code': '青岛海发商业保理有限公司', 'bank_account': '802050200740776', 'swift_code': '', 'register_address_cn': '山东省青岛市市南区江西路89号3号楼乙102-A121', 'register_address_en': '', 'open_bank_no': '', 'open_bank_cn': '青岛银行股份有限公司江西路支行', 'open_bank_en': '', 'bank_address_en': '', 'remark': '', 'create_id': '41', 'create_by': '孙奉盛', 'create_time': '1766743074', 'pay_default': '1', 'put_default': '1', 'sys_upttime': '2026-05-15 10:48:52', 'flag': 'MainBank', 'is_public_name': '是'}], 'disable_usd': True, 'disable_cny': True}, 'main_name': '青岛易汇智供应链管理有限公司'}, 'request_id': '3f501028890dc781457078a98a013711'}
+2026-06-22 15:11:50.398 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:50.398 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:50.398 | INFO     | [AssertionExecutor] 断言通过: 对账确认(check)应返回200
+2026-06-22 15:11:50.398 | INFO     | [SM step-022] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:50.398 | INFO     | [SM step-022] 状态机执行完成: final_state=passed duration_ms=1983.47
+    ✓ passed   1983.47ms
+    ✓ passed   1983.99ms   asserts=1/1   promotions=3
+2026-06-22 15:11:50.399 | INFO     | [ContextManager] StepContext finalized: step_id=step-022 status=passed duration_ms=1983.99
+2026-06-22 15:11:50.399 | INFO     | [ScenarioRunner] Step 完成: step_id=step-022 status=passed duration_ms=1983.47 (23/56)
+  [e2e订单到应收核销/step-023] start
+2026-06-22 15:11:50.399 | INFO     | [SM step-023] 状态机开始执行
+  [e2e订单到应收核销/step-023] start
+2026-06-22 15:11:50.399 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_id value=327344727462510592
+2026-06-22 15:11:50.400 | INFO     | [SM step-023] 开始 HTTP 请求
+2026-06-22 15:11:50.400 | INFO     | [SM step-023] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/order/order/orderConfirmAccount timeout=30.0s body_keys=['action', 'order_id', 'finance_ids', 'bank_ids']
+2026-06-22 15:11:50.400 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/order/order/orderConfirmAccount
+2026-06-22 15:11:53.529 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/order/order/orderConfirmAccount -> 200 (3128.5ms)
+2026-06-22 15:11:53.531 | INFO     | [SM step-023] HTTP 响应: status=StrategyStatus.PASSED duration_ms=3130.47
+2026-06-22 15:11:53.531 | INFO     | [SM step-023] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:53.531 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_24={'code': 200, 'msg': '成功', 'data': {'file_name': {'file_id': '327344933373476864', 'file_name': 'jokervalue11148费用确认单（对账）_202606221511822.pdf', 'file_type': 'PDF', 'file_url': '6a38e039d0e3e.pdf', 'original_name': '6a38e039d0e3e.pdf'}}, 'request_id': 'efda8b2b4ec15cee32384a970984b2cc'}
+2026-06-22 15:11:53.532 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:53.532 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:53.532 | INFO     | [AssertionExecutor] 断言通过: 对账结果提交应返回200
+2026-06-22 15:11:53.532 | INFO     | [SM step-023] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:53.532 | INFO     | [SM step-023] 状态机执行完成: final_state=passed duration_ms=3133.18
+    ✓ passed   3133.18ms
+    ✓ passed   3133.44ms   asserts=1/1
+2026-06-22 15:11:53.532 | INFO     | [ContextManager] StepContext finalized: step_id=step-023 status=passed duration_ms=3133.44
+2026-06-22 15:11:53.533 | INFO     | [ScenarioRunner] Step 完成: step_id=step-023 status=passed duration_ms=3133.18 (24/56)
+  [e2e订单到应收核销/step-024] start
+2026-06-22 15:11:53.533 | INFO     | [SM step-024] 状态机开始执行
+  [e2e订单到应收核销/step-024] start
+2026-06-22 15:11:53.533 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_ids[0] value=327344727462510592
+2026-06-22 15:11:53.534 | INFO     | [SM step-024] 开始 HTTP 请求
+2026-06-22 15:11:53.534 | INFO     | [SM step-024] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/order/order/changeInvoiceApply timeout=30.0s body_keys=['audit_note', 'order_ids', 'action', 'audit_msg']
+2026-06-22 15:11:53.534 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/order/order/changeInvoiceApply
+2026-06-22 15:11:54.574 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/order/order/changeInvoiceApply -> 200 (1039.3ms)
+2026-06-22 15:11:54.578 | INFO     | [SM step-024] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1043.65
+2026-06-22 15:11:54.578 | INFO     | [SM step-024] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:54.579 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_25={'code': 200, 'msg': '成功', 'data': [], 'request_id': 'a51c0942f20cc9fa9734a3fe8715a9ef'}
+2026-06-22 15:11:54.579 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:54.580 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:54.580 | INFO     | [AssertionExecutor] 断言通过: 未放款开票申请(check)应返回200
+2026-06-22 15:11:54.580 | INFO     | [SM step-024] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:54.581 | INFO     | [SM step-024] 状态机执行完成: final_state=passed duration_ms=1047.78
+    ✓ passed   1047.78ms
+    ✓ passed   1048.31ms   asserts=1/1
+2026-06-22 15:11:54.581 | INFO     | [ContextManager] StepContext finalized: step_id=step-024 status=passed duration_ms=1048.31
+2026-06-22 15:11:54.581 | INFO     | [ScenarioRunner] Step 完成: step_id=step-024 status=passed duration_ms=1047.78 (25/56)
+  [e2e订单到应收核销/step-025] start
+2026-06-22 15:11:54.582 | INFO     | [SM step-025] 状态机开始执行
+  [e2e订单到应收核销/step-025] start
+2026-06-22 15:11:54.583 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_ids[0] value=327344727462510592
+2026-06-22 15:11:54.583 | INFO     | [SM step-025] 开始 HTTP 请求
+2026-06-22 15:11:54.583 | INFO     | [SM step-025] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/order/order/changeInvoiceApply timeout=30.0s body_keys=['audit_note', 'order_ids', 'action', 'audit_msg']
+2026-06-22 15:11:54.584 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/order/order/changeInvoiceApply
+2026-06-22 15:11:55.637 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/order/order/changeInvoiceApply -> 200 (1052.9ms)
+2026-06-22 15:11:55.638 | INFO     | [SM step-025] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1054.45
+2026-06-22 15:11:55.639 | INFO     | [SM step-025] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:55.639 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_26={'code': 200, 'msg': '成功', 'data': {'node_select': 1, 'flow_id': '29', 'flow_type': 'addLoanBeforeInvoiceApply', 'flow_name': '未放款开票申请', 'flow_desc': '', 'create_by': 'lijinyu', 'create_time': '1740469726', 'update_by': '李明丹tidb', 'update_time': '1781692737', 'node_list': [{'node_id': '325585102463565824', 'node_name': '未放款开票申请', 'node_type': '1', 'node_type_name': '用户选择审批人', 'node_sort': '0', 'node_user_name': '潘珑元,李明丹tidb,孙奉盛,张乐API,张管理,于佳倩TIDB,赵菲,陆旭阳,王冠清,刘常春TiDB,孙奉盛操作,郝凤鸣,巨奎,陆履约,句产研,GIMBAL', 'node_user_ids': ['36', '40', '41', '60', '293', '294', '334', '363', '459', '487', '786', '798', '800', '807', '822', '828'], 'node_users': [{'user_id': '36', 'user_name_phone': '潘珑元-15943945010'}, {'user_id': '40', 'user_name_phone': '李明丹tidb-15765599874'}, {'user_id': '41', 'user_name_phone': '孙奉盛-18954119927'}, {'user_id': '60', 'user_name_phone': '张乐API-18234337456'}, {'user_id': '293', 'user_name_phone': '张管理-18234337457'}, {'user_id': '294', 'user_name_phone': '于佳倩TIDB-15530217935'}, {'user_id': '334', 'user_name_phone': '赵菲-18512540397'}, {'user_id': '363', 'user_name_phone': '陆旭阳-18513379596'}, {'user_id': '459', 'user_name_phone': '王冠清-18639259555'}, {'user_id': '487', 'user_name_phone': '刘常春TiDB-15942508598'}, {'user_id': '786', 'user_name_phone': '孙奉盛操作-18954119928'}, {'user_id': '798', 'user_name_phone': '郝凤鸣-13206476000'}, {'user_id': '800', 'user_name_phone': '巨奎-15921943728'}, {'user_id': '807', 'user_name_phone': '陆履约-18513379595'}, {'user_id': '822', 'user_name_phone': '句产研-17895019270'}, {'user_id': '828', 'user_name_phone': 'GIMBAL-18180789652'}]}], 'carbon_copy_list': [{'user_id': '788', 'user_name_phone': 'TIDB于佳倩-14459887789'}, {'user_id': '459', 'user_name_phone': '王冠清-18639259555'}, {'user_id': '363', 'user_name_phone': '陆旭阳-18513379596'}, {'user_id': '41', 'user_name_phone': '孙奉盛-18954119927'}, {'user_id': '40', 'user_name_phone': '李明丹tidb-15765599874'}]}, 'request_id': '97e6a142877c704a5507936f3034d6dc'}
+2026-06-22 15:11:55.639 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:55.639 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:55.639 | INFO     | [AssertionExecutor] 断言通过: 未放款开票审批应返回200
+2026-06-22 15:11:55.640 | INFO     | [SM step-025] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:55.640 | INFO     | [SM step-025] 状态机执行完成: final_state=passed duration_ms=1058.02
+    ✓ passed   1058.02ms
+    ✓ passed   1058.28ms   asserts=1/1
+2026-06-22 15:11:55.640 | INFO     | [ContextManager] StepContext finalized: step_id=step-025 status=passed duration_ms=1058.28
+2026-06-22 15:11:55.640 | INFO     | [ScenarioRunner] Step 完成: step_id=step-025 status=passed duration_ms=1058.02 (26/56)
+  [e2e订单到应收核销/step-026] start
+2026-06-22 15:11:55.640 | INFO     | [SM step-026] 状态机开始执行
+  [e2e订单到应收核销/step-026] start
+2026-06-22 15:11:55.640 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_ids[0] value=327344727462510592
+2026-06-22 15:11:55.641 | INFO     | [SM step-026] 开始 HTTP 请求
+2026-06-22 15:11:55.641 | INFO     | [SM step-026] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/order/order/changeInvoiceApply timeout=30.0s body_keys=['audit_note', 'order_ids', 'action', 'audit_msg', 'select_node_user']
+2026-06-22 15:11:55.641 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/order/order/changeInvoiceApply
+2026-06-22 15:11:57.266 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/order/order/changeInvoiceApply -> 200 (1625.5ms)
+2026-06-22 15:11:57.275 | INFO     | [SM step-026] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1633.79
+2026-06-22 15:11:57.276 | INFO     | [SM step-026] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:57.278 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_27={'code': 200, 'msg': '成功', 'data': [], 'request_id': 'a8573d945265673ae27ab862eb70374e'}
+2026-06-22 15:11:57.279 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:57.280 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:57.280 | INFO     | [AssertionExecutor] 断言通过: 未放款开票提交应返回200
+2026-06-22 15:11:57.283 | INFO     | [SM step-026] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:57.287 | INFO     | [SM step-026] 状态机执行完成: final_state=passed duration_ms=1645.39
+    ✓ passed   1645.39ms
+    ✓ passed   1647.92ms   asserts=1/1
+2026-06-22 15:11:57.289 | INFO     | [ContextManager] StepContext finalized: step_id=step-026 status=passed duration_ms=1647.92
+2026-06-22 15:11:57.289 | INFO     | [ScenarioRunner] Step 完成: step_id=step-026 status=passed duration_ms=1645.39 (27/56)
+  [e2e订单到应收核销/step-027] start
+2026-06-22 15:11:57.290 | INFO     | [SM step-027] 状态机开始执行
+  [e2e订单到应收核销/step-027] start
+2026-06-22 15:11:57.290 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.relation_id value=327344727462510592
+2026-06-22 15:11:57.291 | INFO     | [SM step-027] 开始 HTTP 请求
+2026-06-22 15:11:57.291 | INFO     | [SM step-027] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/home/audit/auditRecord timeout=30.0s body_keys=['relation_id', 'type']
+2026-06-22 15:11:57.292 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/home/audit/auditRecord
+2026-06-22 15:11:58.208 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/home/audit/auditRecord -> 200 (916.4ms)
+2026-06-22 15:11:58.212 | INFO     | [SM step-027] HTTP 响应: status=StrategyStatus.PASSED duration_ms=920.18
+2026-06-22 15:11:58.212 | INFO     | [SM step-027] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:58.213 | INFO     | [ExtractExecutor] 提升变量: loan_invoice_audit_id='327344948510720000' layer=scenario
+2026-06-22 15:11:58.213 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_28={'code': 200, 'msg': '成功', 'data': [{'audit_id': '327344892755836928', 'audit_no': 'SP20260622003283', 'audit_type': 'actualCostFeeLockApplication', 'audit_name': '费用锁定', 'audit_status': '2', 'create_by': 'GIMBAL', 'create_time': '1782112304', 'current_node_id': '327344892915220480', 'audit_status_name': '审批通过', 'node_name': '审批节点1'}, {'audit_id': '327344948510720000', 'audit_no': 'SP20260622003284', 'audit_type': 'addLoanBeforeInvoiceApply', 'audit_name': '未放款开票申请', 'audit_status': '1', 'create_by': 'GIMBAL', 'create_time': '1782112317', 'current_node_id': '327344948665909248', 'audit_status_name': '审批中', 'node_name': '未放款开票申请'}], 'request_id': 'e379e1b79a54200667219b6dd8475c48'}
+2026-06-22 15:11:58.214 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:58.214 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:58.214 | INFO     | [AssertionExecutor] 断言通过: 查询未放款开票审批记录应返回200
+2026-06-22 15:11:58.214 | INFO     | [SM step-027] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:58.215 | INFO     | [SM step-027] 状态机执行完成: final_state=passed duration_ms=925.04
+    ✓ passed    925.04ms
+    ✓ passed    925.56ms   asserts=1/1   promotions=1
+2026-06-22 15:11:58.215 | INFO     | [ContextManager] StepContext finalized: step_id=step-027 status=passed duration_ms=925.56
+2026-06-22 15:11:58.216 | INFO     | [ScenarioRunner] Step 完成: step_id=step-027 status=passed duration_ms=925.04 (28/56)
+  [e2e订单到应收核销/step-028] start
+2026-06-22 15:11:58.217 | INFO     | [SM step-028] 状态机开始执行
+  [e2e订单到应收核销/step-028] start
+2026-06-22 15:11:58.220 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.audit_ids[0] value=327344948510720000
+2026-06-22 15:11:58.221 | INFO     | [SM step-028] 开始 HTTP 请求
+2026-06-22 15:11:58.222 | INFO     | [SM step-028] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/home/audit/auditExecute timeout=30.0s body_keys=['audit_ids', 'audit_status', 'audit_remark']
+2026-06-22 15:11:58.223 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/home/audit/auditExecute
+2026-06-22 15:11:59.535 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/home/audit/auditExecute -> 200 (1311.6ms)
+2026-06-22 15:11:59.542 | INFO     | [SM step-028] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1318.60
+2026-06-22 15:11:59.543 | INFO     | [SM step-028] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:11:59.543 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_29={'code': 200, 'msg': '审批成功1条，审批失败0条', 'data': [], 'request_id': 'e47e782f3538600a76932f45255c9e53'}
+2026-06-22 15:11:59.544 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:11:59.545 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:11:59.546 | INFO     | [AssertionExecutor] 断言通过: 未放款开票审批批准应返回200
+2026-06-22 15:11:59.546 | INFO     | [SM step-028] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:11:59.547 | INFO     | [SM step-028] 状态机执行完成: final_state=passed duration_ms=1329.94
+    ✓ passed   1329.94ms
+    ✓ passed   1331.10ms   asserts=1/1
+2026-06-22 15:11:59.548 | INFO     | [ContextManager] StepContext finalized: step_id=step-028 status=passed duration_ms=1331.10
+2026-06-22 15:11:59.548 | INFO     | [ScenarioRunner] Step 完成: step_id=step-028 status=passed duration_ms=1329.94 (29/56)
+  [e2e订单到应收核销/step-029] start
+2026-06-22 15:11:59.550 | INFO     | [SM step-029] 状态机开始执行
+  [e2e订单到应收核销/step-029] start
+2026-06-22 15:11:59.552 | INFO     | [SM step-029] 开始 HTTP 请求
+2026-06-22 15:11:59.553 | INFO     | [SM step-029] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/finance/accountFee/financePutList timeout=30.0s body_keys=['page_no', 'page_size', 'bl_nos', 'bl_no', 'operate_type', 'search_style', 'account_simple_name', 'account_type', 'customer_id', 'put_settle_object_id', 'main_id', 'pay_settle_object_id']
+2026-06-22 15:11:59.554 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/finance/accountFee/financePutList
+2026-06-22 15:12:00.826 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/finance/accountFee/financePutList -> 200 (1270.4ms)
+2026-06-22 15:12:00.827 | INFO     | [SM step-029] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1273.35
+2026-06-22 15:12:00.827 | INFO     | [SM step-029] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:12:00.828 | INFO     | [ExtractExecutor] 提升变量: order_fee_real_id_pen='327344860249982976' layer=scenario
+2026-06-22 15:12:00.828 | INFO     | [ExtractExecutor] 提升变量: order_sub_id_pen='327344846685601792' layer=scenario
+2026-06-22 15:12:00.828 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_30={'code': 200, 'msg': '成功', 'data': {'customer_name': ['兰森玻璃（青岛）有限公司'], 'main_name_cn': ['青岛易航道物流科技有限公司'], 'settle_object': ['青岛易汇智供应链管理有限公司'], 'total': 1, 'data': [{'order_id': '327344727462510592', 'order_no': 'YWDD20260622107270', 'bl_no': 'jokervalue11148', 'customer_id': '16', 'customer_name': '兰森玻璃（青岛）有限公司', 'customer_main_id': '31', 'customer_main_name': '青岛易汇智供应链管理有限公司', 'business_main_id': '1', 'business_main_name': '青岛易航道物流科技有限公司', 'policy_type': 'JSZX', 'trade_term': 'CIF', 'customer_period': '60', 'customer_put_date': '1786291200', 'atd': '1781020800', 'etd': '1781020800', 'create_time': '1782112264', 'finance_date': '1781020800', 'fund_name': '青岛海发商业保理有限公司', 'ship_name': 'jokervalue11148', 'voy': 'jokervalue11148', 'status': '2', 'is_special_pay': '0', 'pay_status': '0', 'is_loan_before_invoice': '1', 'customer_order_sn': 'jokervalue11148', 'order_sub_id': '327344846685601792', 'order_sub_no': 'ZDD20260622016431', 'main_id': '1', 'main_name': '青岛易航道物流科技有限公司', 'service_project': 'booking_space', 'currency': 'USD', 'amount_total': '100.00', 'pay_settle_object_type': '2', 'put_settle_object_id': '665', 'put_settle_object': '青岛易汇智供应链管理有限公司', 'pay_settle_object': '上海华运船务有限公司青岛分公司', 'book_supplier_period': '30', 'book_supplier_pay_date': '1784476800', 'book_supplier_name': '上海华运船务有限公司青岛分公司', 'operable_amount': '100.00', 'un_operable_amount': '0.00', 'operable_flag': 'all', 'policy_type_name': '结算业务', 'order_sub_currency': 'USD327344846685601792', 'order_main_finance': '青岛银行股份有限公司江西路支行+USD+802051200001568', 'order_error_messages': [], 'order_error_message': '', 'order_error_flag': False, 'amount_list': [{'order_id': '327344727462510592', 'order_no': 'YWDD20260622107270', 'customer_name': '兰森玻璃（青岛）有限公司', 'bl_no': 'jokervalue11148', 'main_name': '青岛易航道物流科技有限公司', 'order_sub_no': 'ZDD20260622016431', 'order_sub_id': '327344846685601792', 'order_fee_real_id': '327344860249982976', 'fee_real_no': 'FY202606221289989', 'fee_type': '0', 'service_project': 'booking_space', 'fee_real_name': '海运费', 'currency': 'USD', 'symbol': '1', 'real_amount': '100.00', 'supplier_id': None, 'cost_no': '0001', 'fee_status': '1', 'account_no': '', 'pay_account_no': '', 'account_status': '0', 'pay_account_status': '0', 'invoice_status': '0', 'receive_invoice_batch_no': None, 'pay_invoice_batch_no': None, 'receive_invoice_apply_no': None, 'pay_invoice_apply_no': None, 'put_settle_object_id': '665', 'put_settle_object': '青岛易汇智供应链管理有限公司', 'pay_settle_object_id': '39', 'pay_settle_object': '上海华运船务有限公司青岛分公司', 'writeoff_status': '1', 'un_writeoff_amount': '100.00', 'use_writeoff_amount': '0.00', 'writeoff_nos': '', 'pay_form_no': '', 'pay_demand_no': '', 'amount_error_messages': [], 'amount_error_message': '', 'amount_error_flag': False}]}], 'select_summary': {'total_bl_no_num': 1, 'total_bl_nos': ['jokervalue11148'], 'find_bl_no_num': 1, 'find_bl_nos': ['jokervalue11148'], 'not_find_bl_no_num': 0, 'not_find_bl_nos': [], 'cancel_bl_no_num': 0, 'cancel_bl_nos': []}}, 'request_id': 'fb635f2cb74c0de1e8239fc7466d8684'}
+2026-06-22 15:12:00.828 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:12:00.828 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:12:00.829 | INFO     | [AssertionExecutor] 断言通过: 对账查询应返回200
+2026-06-22 15:12:00.829 | INFO     | [SM step-029] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:12:00.829 | INFO     | [SM step-029] 状态机执行完成: final_state=passed duration_ms=1279.14
+    ✓ passed   1279.14ms
+    ✓ passed   1280.03ms   asserts=1/1   promotions=2
+2026-06-22 15:12:00.829 | INFO     | [ContextManager] StepContext finalized: step_id=step-029 status=passed duration_ms=1280.03
+2026-06-22 15:12:00.829 | INFO     | [ScenarioRunner] Step 完成: step_id=step-029 status=passed duration_ms=1279.14 (30/56)
+  [e2e订单到应收核销/step-030] start
+2026-06-22 15:12:00.829 | INFO     | [SM step-030] 状态机开始执行
+  [e2e订单到应收核销/step-030] start
+2026-06-22 15:12:00.830 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.select_list[0].order_id value=327344727462510592
+2026-06-22 15:12:00.830 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.select_list[0].order_no value=YWDD20260622107270
+2026-06-22 15:12:00.830 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.select_list[0].amount_list[0].order_id value=327344727462510592
+2026-06-22 15:12:00.830 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.select_list[0].order_sub_id value=327344846685601792
+2026-06-22 15:12:00.830 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.select_list[0].amount_list[0].order_sub_id value=327344846685601792
+2026-06-22 15:12:00.830 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.select_list[0].amount_list[0].order_fee_real_id value=327344860249982976
+2026-06-22 15:12:00.830 | INFO     | [SM step-030] 开始 HTTP 请求
+2026-06-22 15:12:00.830 | INFO     | [SM step-030] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/finance/receiveAccount/orderReceiveAccountEdit timeout=30.0s body_keys=['account_simple_name', 'account_type', 'customer_id', 'put_settle_object_id', 'main_id', 'pay_settle_object_id', 'customer_name', 'put_settle_object', 'main_name_cn', 'pay_settle_object', 'selection_time', 'action', 'operate_type', 'receive_account_id', 'main_name', 'select_list']
+2026-06-22 15:12:00.830 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/orderReceiveAccountEdit
+2026-06-22 15:12:02.039 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/orderReceiveAccountEdit -> 200 (1208.7ms)
+2026-06-22 15:12:02.041 | INFO     | [SM step-030] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1210.10
+2026-06-22 15:12:02.041 | INFO     | [SM step-030] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:12:02.041 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_31={'code': 200, 'msg': '成功', 'data': {'receive_account_id': 0, 'receive_account_no': ''}, 'request_id': '8008768d48f44ff00e98b0a90afe164c'}
+2026-06-22 15:12:02.041 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:12:02.041 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:12:02.041 | INFO     | [AssertionExecutor] 断言通过: 对账提交检查应返回200
+2026-06-22 15:12:02.041 | INFO     | [SM step-030] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:12:02.042 | INFO     | [SM step-030] 状态机执行完成: final_state=passed duration_ms=1212.31
+    ✓ passed   1212.31ms
+    ✓ passed   1213.31ms   asserts=1/1
+2026-06-22 15:12:02.043 | INFO     | [ContextManager] StepContext finalized: step_id=step-030 status=passed duration_ms=1213.31
+2026-06-22 15:12:02.043 | INFO     | [ScenarioRunner] Step 完成: step_id=step-030 status=passed duration_ms=1212.31 (31/56)
+  [e2e订单到应收核销/step-031] start
+2026-06-22 15:12:02.044 | INFO     | [SM step-031] 状态机开始执行
+  [e2e订单到应收核销/step-031] start
+2026-06-22 15:12:02.045 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.select_list[0].order_no value=YWDD20260622107270
+2026-06-22 15:12:02.046 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.select_list[0].order_id value=327344727462510592
+2026-06-22 15:12:02.047 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.select_list[0].amount_list[0].order_id value=327344727462510592
+2026-06-22 15:12:02.048 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.select_list[0].order_sub_id value=327344846685601792
+2026-06-22 15:12:02.048 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.select_list[0].amount_list[0].order_sub_id value=327344846685601792
+2026-06-22 15:12:02.049 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.select_list[0].amount_list[0].order_fee_real_id value=327344860249982976
+2026-06-22 15:12:02.049 | INFO     | [SM step-031] 开始 HTTP 请求
+2026-06-22 15:12:02.050 | INFO     | [SM step-031] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/finance/receiveAccount/orderReceiveAccountEdit timeout=30.0s body_keys=['account_simple_name', 'account_type', 'customer_id', 'put_settle_object_id', 'main_id', 'pay_settle_object_id', 'customer_name', 'put_settle_object', 'main_name_cn', 'pay_settle_object', 'selection_time', 'action', 'operate_type', 'receive_account_id', 'main_name', 'select_list']
+2026-06-22 15:12:02.053 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/orderReceiveAccountEdit
+2026-06-22 15:12:03.672 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/orderReceiveAccountEdit -> 200 (1618.2ms)
+2026-06-22 15:12:03.675 | INFO     | [SM step-031] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1621.88
+2026-06-22 15:12:03.676 | INFO     | [SM step-031] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:12:03.676 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_32={'code': 200, 'msg': '成功', 'data': {'receive_account_id': '327344975471706112', 'receive_account_no': 'YSDZPC20260622002892'}, 'request_id': '2f4c372ae5fadd8dfd8818f0e73b7582'}
+2026-06-22 15:12:03.677 | INFO     | [ExtractExecutor] 提升变量: receive_account_id='327344975471706112' layer=scenario
+2026-06-22 15:12:03.677 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:12:03.677 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:12:03.677 | INFO     | [AssertionExecutor] 断言通过: 对账提交应返回200
+2026-06-22 15:12:03.677 | INFO     | [SM step-031] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:12:03.677 | INFO     | [SM step-031] 状态机执行完成: final_state=passed duration_ms=1633.00
+    ✓ passed   1633.00ms
+    ✓ passed   1633.80ms   asserts=1/1   promotions=1
+2026-06-22 15:12:03.678 | INFO     | [ContextManager] StepContext finalized: step_id=step-031 status=passed duration_ms=1633.80
+2026-06-22 15:12:03.679 | INFO     | [ScenarioRunner] Step 完成: step_id=step-031 status=passed duration_ms=1633.00 (32/56)
+  [e2e订单到应收核销/step-032] start
+2026-06-22 15:12:03.680 | INFO     | [SM step-032] 状态机开始执行
+  [e2e订单到应收核销/step-032] start
+2026-06-22 15:12:03.682 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.receive_account_id value=327344975471706112
+2026-06-22 15:12:03.683 | INFO     | [SM step-032] 开始 HTTP 请求
+2026-06-22 15:12:03.684 | INFO     | [SM step-032] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/finance/receiveAccount/receiveAccountDetail timeout=30.0s body_keys=['receive_account_id']
+2026-06-22 15:12:03.688 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/receiveAccountDetail
+2026-06-22 15:12:05.016 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/receiveAccountDetail -> 200 (1326.5ms)
+2026-06-22 15:12:05.023 | INFO     | [SM step-032] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1334.61
+2026-06-22 15:12:05.023 | INFO     | [SM step-032] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:12:05.024 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_33={'code': 200, 'msg': '成功', 'data': {'receive_account': {'receive_account_id': '327344975471706112', 'parent_id': '0', 'order_id': '0', 'receive_account_no': 'YSDZPC20260622002892', 'relation_account_no': None, 'account_batch_name': '青岛易航道物流科技有限公司+青岛易汇智供应链管理有限公司+26.06+USD100', 'account_simple_name': '', 'customer_id': '16', 'customer_ids': '16', 'customer_num': '1', 'customer_main_id': '1', 'customer_main_name': '青岛易航道物流科技有限公司', 'customer_main_num': '1', 'business_main_id': '1', 'business_main_name': '青岛易航道物流科技有限公司', 'business_main_num': '1', 'book_supplier_id': '8', 'book_supplier_ids': '8', 'book_supplier_num': '1', 'pay_settle_object_id': '39', 'pay_settle_object': '上海华运船务有限公司青岛分公司', 'pay_settle_object_num': '1', 'put_settle_object_id': '665', 'put_settle_object': '青岛易汇智供应链管理有限公司', 'put_settle_object_num': '1', 'main_id': '1', 'main_name': '青岛易航道物流科技有限公司', 'account_type': '1', 'batch_status': '1', 'account_status': '1', 'account_num': '1', 'account_cny': '0.00', 'account_usd': '100.00', 'create_id': '828', 'create_time': '1782112323', 'cancel_time': None, 'create_by': 'GIMBAL', 'operate_type': '1', 'etd': '202606', 'atd': '202606', 'account_time': None, 'account_by': None, 'currency': 'USD', 'bl_nos': 'jokervalue11148', 'cancel_remark': None, 'sys_upttime': '2026-06-22 15:12:04', 'account_status_name': '对账中', 'batch_status_name': '已生效', 'account_type_name': '同一客户', 'put_settle_relation_id': '31', 'put_settle_sorce': 'main', 'customer_name': '兰森玻璃（青岛）有限公司', 'customer_remark_show': True, 'customer_remark': '', 'book_supplier_name': '上海华运船务有限公司青岛分公司'}, 'receive_account_orders': {'list': [{'receive_order_id': '327344976004382720', 'receive_account_id': '327344975471706112', 'order_id': '327344727462510592', 'order_sub_id': '327344846685601792', 'order_no': 'YWDD20260622107270', 'order_sub_no': 'ZDD20260622016431', 'bl_no': 'jokervalue11148', 'customer_name': '兰森玻璃（青岛）有限公司', 'put_settle_object': '青岛易汇智供应链管理有限公司', 'ship_name': 'jokervalue11148', 'voy': 'jokervalue11148', 'atd': '1781020800', 'etd': '1781020800', 'account_cny': '0.00', 'account_usd': '100.00', 'delete_id': '0', 'delete_time': '0', 'cancel_time': '0', 'sys_upttime': '2026-06-22 15:12:04', 'trade_term': 'CIF'}], 'usd_total': '100.00', 'cny_total': '0.00', 'contain_amount_status': 'usd'}, 'receive_account_file': []}, 'request_id': '0c976fefeec75be372d63063fa903fa6'}
+2026-06-22 15:12:05.026 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:12:05.026 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:12:05.027 | INFO     | [AssertionExecutor] 断言通过: 对账查询(detail)应返回200
+2026-06-22 15:12:05.028 | INFO     | [SM step-032] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:12:05.028 | INFO     | [SM step-032] 状态机执行完成: final_state=passed duration_ms=1347.73
+    ✓ passed   1347.73ms
+    ✓ passed   1349.38ms   asserts=1/1
+2026-06-22 15:12:05.029 | INFO     | [ContextManager] StepContext finalized: step_id=step-032 status=passed duration_ms=1349.38
+2026-06-22 15:12:05.030 | INFO     | [ScenarioRunner] Step 完成: step_id=step-032 status=passed duration_ms=1347.73 (33/56)
+  [e2e订单到应收核销/step-033] start
+2026-06-22 15:12:05.031 | INFO     | [SM step-033] 状态机开始执行
+  [e2e订单到应收核销/step-033] start
+2026-06-22 15:12:05.033 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.receive_account_id value=327344975471706112
+2026-06-22 15:12:05.034 | INFO     | [SM step-033] 开始 HTTP 请求
+2026-06-22 15:12:05.034 | INFO     | [SM step-033] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/finance/receiveAccount/receiveConfirmList timeout=30.0s body_keys=['confirm_type', 'receive_account_id', 'order_ids']
+2026-06-22 15:12:05.036 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/receiveConfirmList
+2026-06-22 15:12:06.244 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/receiveConfirmList -> 200 (1207.7ms)
+2026-06-22 15:12:06.245 | INFO     | [SM step-033] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1209.77
+2026-06-22 15:12:06.245 | INFO     | [SM step-033] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:12:06.246 | INFO     | [ExtractExecutor] 提升变量: confirm_list=[{'main_id': '31', 'main_name': '青岛易汇智供应链管理有限公司', 'symbol': '0', 'settle_object_id': '1', 'order_ids': '327344727462510592', 'order_sub_ids': '327344787873071104', 'order_sub_types': '0', 'unique_ids': '91c9f422-ae3c-4cfe-968e-085a23828cab', 'receive_account_no': '', 'account_simple_name': '', 'symbol_name': '应付', 'settle_object': '青岛易航道物流科技有限公司', 'account_batch_name': '青岛易汇智供应链管理有限公司+青岛易航道物流科技有限公司+26.06+USD100', 'order_sub_type': 1, 'only_adjust_status': 0, 'real_amount_ids': ['327344860249981952'], 'currency_list': ['USD']}] layer=scenario
+2026-06-22 15:12:06.246 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_34={'code': 200, 'msg': '成功', 'data': [{'main_id': '31', 'main_name': '青岛易汇智供应链管理有限公司', 'symbol': '0', 'settle_object_id': '1', 'order_ids': '327344727462510592', 'order_sub_ids': '327344787873071104', 'order_sub_types': '0', 'unique_ids': '91c9f422-ae3c-4cfe-968e-085a23828cab', 'receive_account_no': '', 'account_simple_name': '', 'symbol_name': '应付', 'settle_object': '青岛易航道物流科技有限公司', 'account_batch_name': '青岛易汇智供应链管理有限公司+青岛易航道物流科技有限公司+26.06+USD100', 'order_sub_type': 1, 'only_adjust_status': 0, 'real_amount_ids': ['327344860249981952'], 'currency_list': ['USD']}], 'request_id': 'f3d480e9d37ed52f96f2030c4912e7d9'}
+2026-06-22 15:12:06.246 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:12:06.246 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:12:06.246 | INFO     | [AssertionExecutor] 断言通过: 对账确认列表应返回200
+2026-06-22 15:12:06.247 | INFO     | [SM step-033] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:12:06.247 | INFO     | [SM step-033] 状态机执行完成: final_state=passed duration_ms=1215.33
+    ✓ passed   1215.33ms
+    ✓ passed   1216.16ms   asserts=1/1   promotions=1
+2026-06-22 15:12:06.247 | INFO     | [ContextManager] StepContext finalized: step_id=step-033 status=passed duration_ms=1216.16
+2026-06-22 15:12:06.247 | INFO     | [ScenarioRunner] Step 完成: step_id=step-033 status=passed duration_ms=1215.33 (34/56)
+  [e2e订单到应收核销/step-034] start
+2026-06-22 15:12:06.247 | INFO     | [SM step-034] 状态机开始执行
+  [e2e订单到应收核销/step-034] start
+2026-06-22 15:12:06.248 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.confirm_list value=[{'main_id': '31', 'main_name': '青岛易汇智供应链管理有限公司', 'symbol': '0', 'settle_object_id': '1', 'order_ids': '327344727462510592', 'order_sub_ids': '327344787873071104', 'order_sub_types': '0', 'unique_ids': '91c9f422-ae3c-4cfe-968e-085a23828cab', 'receive_account_no': '', 'account_simple_name': '', 'symbol_name': '应付', 'settle_object': '青岛易航道物流科技有限公司', 'account_batch_name': '青岛易汇智供应链管理有限公司+青岛易航道物流科技有限公司+26.06+USD100', 'order_sub_type': 1, 'only_adjust_status': 0, 'real_amount_ids': ['327344860249981952'], 'currency_list': ['USD']}]
+2026-06-22 15:12:06.248 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.receive_account_id value=327344975471706112
+2026-06-22 15:12:06.248 | INFO     | [SM step-034] 开始 HTTP 请求
+2026-06-22 15:12:06.248 | INFO     | [SM step-034] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/finance/receiveAccount/accountConfirm timeout=30.0s body_keys=['confirm_type', 'receive_account_id', 'confirm_list']
+2026-06-22 15:12:06.248 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/accountConfirm
+2026-06-22 15:12:08.023 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/accountConfirm -> 200 (1775.2ms)
+2026-06-22 15:12:08.027 | INFO     | [SM step-034] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1779.26
+2026-06-22 15:12:08.028 | INFO     | [SM step-034] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:12:08.028 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_35={'code': 200, 'msg': '成功', 'data': [], 'request_id': '1aa3769e9cff48ecc2c90f9cdb4c4ed1'}
+2026-06-22 15:12:08.029 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:12:08.029 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:12:08.029 | INFO     | [AssertionExecutor] 断言通过: 对账确认应返回200
+2026-06-22 15:12:08.029 | INFO     | [SM step-034] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:12:08.029 | INFO     | [SM step-034] 状态机执行完成: final_state=passed duration_ms=1781.76
+    ✓ passed   1781.76ms
+    ✓ passed   1782.37ms   asserts=1/1
+2026-06-22 15:12:08.031 | INFO     | [ContextManager] StepContext finalized: step_id=step-034 status=passed duration_ms=1782.37
+2026-06-22 15:12:08.031 | INFO     | [ScenarioRunner] Step 完成: step_id=step-034 status=passed duration_ms=1781.76 (35/56)
+  [e2e订单到应收核销/step-035] start
+2026-06-22 15:12:08.032 | INFO     | [SM step-035] 状态机开始执行
+  [e2e订单到应收核销/step-035] start
+2026-06-22 15:12:08.034 | INFO     | [SM step-035] 开始 HTTP 请求
+2026-06-22 15:12:08.034 | INFO     | [SM step-035] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/finance/accountFee/financePutList timeout=30.0s body_keys=['page_no', 'page_size', 'customer_id', 'put_settle_object_id', 'put_settle_object', 'main_id', 'bl_no', 'operate_type', 'batch_type', 'search_style', 'pay_settle_object_id', 'account_type', 'bl_nos']
+2026-06-22 15:12:08.035 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/finance/accountFee/financePutList
+2026-06-22 15:12:09.272 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/finance/accountFee/financePutList -> 200 (1236.8ms)
+2026-06-22 15:12:09.275 | INFO     | [SM step-035] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1239.68
+2026-06-22 15:12:09.275 | INFO     | [SM step-035] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:12:09.275 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_36={'code': 200, 'msg': '成功', 'data': {'customer_name': ['兰森玻璃（青岛）有限公司'], 'main_name_cn': ['青岛易航道物流科技有限公司'], 'settle_object': ['青岛易汇智供应链管理有限公司'], 'total': 1, 'data': [{'order_id': '327344727462510592', 'order_no': 'YWDD20260622107270', 'bl_no': 'jokervalue11148', 'customer_id': '16', 'customer_name': '兰森玻璃（青岛）有限公司', 'customer_main_id': '31', 'customer_main_name': '青岛易汇智供应链管理有限公司', 'business_main_id': '1', 'business_main_name': '青岛易航道物流科技有限公司', 'policy_type': 'JSZX', 'trade_term': 'CIF', 'customer_period': '60', 'customer_put_date': '1786291200', 'atd': '1781020800', 'etd': '1781020800', 'create_time': '1782112264', 'finance_date': '1781020800', 'fund_name': '青岛海发商业保理有限公司', 'ship_name': 'jokervalue11148', 'voy': 'jokervalue11148', 'status': '2', 'is_special_pay': '0', 'pay_status': '0', 'is_loan_before_invoice': '1', 'customer_order_sn': 'jokervalue11148', 'order_sub_id': '327344846685601792', 'order_sub_no': 'ZDD20260622016431', 'main_id': '1', 'main_name': '青岛易航道物流科技有限公司', 'service_project': 'booking_space', 'currency': 'USD', 'amount_total': '100.00', 'pay_settle_object_type': '2', 'put_settle_object_id': '665', 'put_settle_object': '青岛易汇智供应链管理有限公司', 'pay_settle_object': '上海华运船务有限公司青岛分公司', 'book_supplier_period': '30', 'book_supplier_pay_date': '1784476800', 'book_supplier_name': '上海华运船务有限公司青岛分公司', 'operable_amount': '100.00', 'un_operable_amount': '0.00', 'operable_flag': 'all', 'policy_type_name': '结算业务', 'order_sub_currency': 'USD327344846685601792', 'order_main_finance': '青岛银行股份有限公司江西路支行+USD+802051200001568', 'order_error_messages': [], 'order_error_message': '', 'order_error_flag': False, 'amount_list': [{'order_id': '327344727462510592', 'order_no': 'YWDD20260622107270', 'customer_name': '兰森玻璃（青岛）有限公司', 'bl_no': 'jokervalue11148', 'main_name': '青岛易航道物流科技有限公司', 'order_sub_no': 'ZDD20260622016431', 'order_sub_id': '327344846685601792', 'order_fee_real_id': '327344860249982976', 'fee_real_no': 'FY202606221289989', 'fee_type': '0', 'service_project': 'booking_space', 'fee_real_name': '海运费', 'currency': 'USD', 'symbol': '1', 'real_amount': '100.00', 'supplier_id': None, 'cost_no': '0001', 'fee_status': '1', 'account_no': 'YSDZPC20260622002892', 'pay_account_no': '', 'account_status': '2', 'pay_account_status': '0', 'invoice_status': '0', 'receive_invoice_batch_no': None, 'pay_invoice_batch_no': None, 'receive_invoice_apply_no': None, 'pay_invoice_apply_no': None, 'put_settle_object_id': '665', 'put_settle_object': '青岛易汇智供应链管理有限公司', 'pay_settle_object_id': '39', 'pay_settle_object': '上海华运船务有限公司青岛分公司', 'writeoff_status': '1', 'un_writeoff_amount': '100.00', 'use_writeoff_amount': '0.00', 'writeoff_nos': '', 'pay_form_no': '', 'pay_demand_no': '', 'amount_error_messages': [], 'amount_error_message': '', 'amount_error_flag': False}]}], 'select_summary': {'total_bl_no_num': 1, 'total_bl_nos': ['jokervalue11148'], 'find_bl_no_num': 1, 'find_bl_nos': ['jokervalue11148'], 'not_find_bl_no_num': 0, 'not_find_bl_nos': [], 'cancel_bl_no_num': 0, 'cancel_bl_nos': []}}, 'request_id': '6e06309a763822c1cc0653397e2b7b49'}
+2026-06-22 15:12:09.276 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:12:09.276 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:12:09.276 | INFO     | [AssertionExecutor] 断言通过: 开票批次管理查询应返回200
+2026-06-22 15:12:09.276 | INFO     | [SM step-035] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:12:09.276 | INFO     | [SM step-035] 状态机执行完成: final_state=passed duration_ms=1244.04
+    ✓ passed   1244.04ms
+    ✓ passed   1244.77ms   asserts=1/1
+2026-06-22 15:12:09.277 | INFO     | [ContextManager] StepContext finalized: step_id=step-035 status=passed duration_ms=1244.77
+2026-06-22 15:12:09.277 | INFO     | [ScenarioRunner] Step 完成: step_id=step-035 status=passed duration_ms=1244.04 (36/56)
+  [e2e订单到应收核销/step-036] start
+2026-06-22 15:12:09.278 | INFO     | [SM step-036] 状态机开始执行
+  [e2e订单到应收核销/step-036] start
+2026-06-22 15:12:09.278 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_fee_real_id[0] value=327344860249982976
+2026-06-22 15:12:09.278 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_sub_id[0] value=327344846685601792
+2026-06-22 15:12:09.279 | INFO     | [SM step-036] 开始 HTTP 请求
+2026-06-22 15:12:09.279 | INFO     | [SM step-036] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/checkStep1 timeout=30.0s body_keys=['cny_file', 'usd_file', 'debitno_file', 'style', 'apply_type', 'customer_id', 'customer_name', 'put_settle_object_id', 'main_id', 'pay_settle_object_id', 'turn_rate', 'merge_with_cny', 'selectRadio', 'receive_invoice_batch_id', 'batch_apply_name', 'invoice_form', 'invoice_type', 'invoice_items', 'invoice_rate_type', 'rate_type', 'usd_is_turn', 'order_fee_real_id', 'usd_require', 'cny_require', 'usd_file_id', 'cny_file_id', 'debitno_file_id', 'batch_order_remark', 'batch_type', 'cost_usd', 'cost_cny', 'put_settle_object', 'main_name_cn', 'order_sub_id']
+2026-06-22 15:12:09.279 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/checkStep1
+2026-06-22 15:12:10.338 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/checkStep1 -> 200 (1058.5ms)
+2026-06-22 15:12:10.339 | INFO     | [SM step-036] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1059.86
+2026-06-22 15:12:10.339 | INFO     | [SM step-036] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:12:10.339 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_37={'code': 200, 'msg': '成功', 'data': [], 'request_id': 'a71c6a5c94d0ff62340097833dd7a188'}
+2026-06-22 15:12:10.339 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:12:10.340 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:12:10.340 | INFO     | [AssertionExecutor] 断言通过: 开票批次检查1应返回200
+2026-06-22 15:12:10.340 | INFO     | [SM step-036] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:12:10.340 | INFO     | [SM step-036] 状态机执行完成: final_state=passed duration_ms=1062.39
+    ✓ passed   1062.39ms
+    ✓ passed   1062.74ms   asserts=1/1
+2026-06-22 15:12:10.340 | INFO     | [ContextManager] StepContext finalized: step_id=step-036 status=passed duration_ms=1062.74
+2026-06-22 15:12:10.340 | INFO     | [ScenarioRunner] Step 完成: step_id=step-036 status=passed duration_ms=1062.39 (37/56)
+  [e2e订单到应收核销/step-037] start
+2026-06-22 15:12:10.341 | INFO     | [SM step-037] 状态机开始执行
+  [e2e订单到应收核销/step-037] start
+2026-06-22 15:12:10.341 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_fee_real_id[0] value=327344860249982976
+2026-06-22 15:12:10.341 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_sub_id[0] value=327344846685601792
+2026-06-22 15:12:10.341 | INFO     | [SM step-037] 开始 HTTP 请求
+2026-06-22 15:12:10.341 | INFO     | [SM step-037] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/checkStep2 timeout=30.0s body_keys=['cny_file', 'usd_file', 'debitno_file', 'style', 'apply_type', 'customer_id', 'customer_name', 'put_settle_object_id', 'main_id', 'pay_settle_object_id', 'turn_rate', 'merge_with_cny', 'rate_type', 'usd_is_turn', 'order_fee_real_id', 'usd_require', 'cny_require', 'batch_type', 'cost_usd', 'cost_cny', 'put_settle_object', 'main_name_cn', 'order_sub_id', 'sys_rate', 'appoint_rate']
+2026-06-22 15:12:10.341 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/checkStep2
+2026-06-22 15:12:11.238 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/checkStep2 -> 200 (896.8ms)
+2026-06-22 15:12:11.239 | INFO     | [SM step-037] HTTP 响应: status=StrategyStatus.PASSED duration_ms=898.09
+2026-06-22 15:12:11.239 | INFO     | [SM step-037] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:12:11.240 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_38={'code': 200, 'msg': '成功', 'data': [], 'request_id': '0aeafe3555bea96f09d95895b86b2bde'}
+2026-06-22 15:12:11.240 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:12:11.240 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:12:11.240 | INFO     | [AssertionExecutor] 断言通过: 开票批次检查2应返回200
+2026-06-22 15:12:11.240 | INFO     | [SM step-037] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:12:11.240 | INFO     | [SM step-037] 状态机执行完成: final_state=passed duration_ms=899.61
+    ✓ passed    899.61ms
+    ✓ passed    899.87ms   asserts=1/1
+2026-06-22 15:12:11.240 | INFO     | [ContextManager] StepContext finalized: step_id=step-037 status=passed duration_ms=899.87
+2026-06-22 15:12:11.241 | INFO     | [ScenarioRunner] Step 完成: step_id=step-037 status=passed duration_ms=899.61 (38/56)
+  [e2e订单到应收核销/step-038] start
+2026-06-22 15:12:11.241 | INFO     | [SM step-038] 状态机开始执行
+  [e2e订单到应收核销/step-038] start
+2026-06-22 15:12:11.241 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_fee_real_id[0] value=327344860249982976
+2026-06-22 15:12:11.241 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_sub_id[0] value=327344846685601792
+2026-06-22 15:12:11.241 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.batch_order_remark[0].order_sub_id value=327344846685601792
+2026-06-22 15:12:11.241 | INFO     | [SM step-038] 开始 HTTP 请求
+2026-06-22 15:12:11.241 | INFO     | [SM step-038] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/batchOrderEdit timeout=30.0s body_keys=['cny_file', 'usd_file', 'debitno_file', 'style', 'apply_type', 'customer_id', 'customer_name', 'put_settle_object_id', 'main_id', 'pay_settle_object_id', 'turn_rate', 'merge_with_cny', 'rate_type', 'usd_is_turn', 'order_fee_real_id', 'usd_require', 'cny_require', 'batch_order_remark', 'batch_type', 'cost_usd', 'cost_cny', 'put_settle_object', 'main_name_cn', 'order_sub_id', 'sys_rate', 'appoint_rate', 'action', 'fee_currency', 'order_sub_customer_id']
+2026-06-22 15:12:11.241 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/batchOrderEdit
+2026-06-22 15:12:12.532 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/batchOrderEdit -> 200 (1290.8ms)
+2026-06-22 15:12:12.536 | INFO     | [SM step-038] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1294.43
+2026-06-22 15:12:12.536 | INFO     | [SM step-038] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:12:12.537 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_39={'code': 200, 'msg': '成功', 'data': [], 'request_id': '4c698630c2c2217e50cbe700a595ffc5'}
+2026-06-22 15:12:12.537 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:12:12.537 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:12:12.538 | INFO     | [AssertionExecutor] 断言通过: 开票提交检查应返回200
+2026-06-22 15:12:12.538 | INFO     | [SM step-038] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:12:12.538 | INFO     | [SM step-038] 状态机执行完成: final_state=passed duration_ms=1297.65
+    ✓ passed   1297.65ms
+    ✓ passed   1298.28ms   asserts=1/1
+2026-06-22 15:12:12.539 | INFO     | [ContextManager] StepContext finalized: step_id=step-038 status=passed duration_ms=1298.28
+2026-06-22 15:12:12.539 | INFO     | [ScenarioRunner] Step 完成: step_id=step-038 status=passed duration_ms=1297.65 (39/56)
+  [e2e订单到应收核销/step-039] start
+2026-06-22 15:12:12.542 | INFO     | [SM step-039] 状态机开始执行
+  [e2e订单到应收核销/step-039] start
+2026-06-22 15:12:12.543 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_fee_real_id[0] value=327344860249982976
+2026-06-22 15:12:12.544 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_sub_id[0] value=327344846685601792
+2026-06-22 15:12:12.544 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.batch_order_remark[0].order_sub_id value=327344846685601792
+2026-06-22 15:12:12.545 | INFO     | [SM step-039] 开始 HTTP 请求
+2026-06-22 15:12:12.545 | INFO     | [SM step-039] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/batchOrderEdit timeout=30.0s body_keys=['cny_file', 'usd_file', 'debitno_file', 'style', 'apply_type', 'customer_id', 'customer_name', 'put_settle_object_id', 'main_id', 'pay_settle_object_id', 'turn_rate', 'merge_with_cny', 'rate_type', 'usd_is_turn', 'order_fee_real_id', 'usd_require', 'cny_require', 'batch_order_remark', 'batch_type', 'cost_usd', 'cost_cny', 'put_settle_object', 'main_name_cn', 'order_sub_id', 'sys_rate', 'appoint_rate', 'action', 'fee_currency', 'order_sub_customer_id']
+2026-06-22 15:12:12.545 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/batchOrderEdit
+2026-06-22 15:12:13.718 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/batchOrderEdit -> 200 (1172.5ms)
+2026-06-22 15:12:13.722 | INFO     | [SM step-039] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1176.12
+2026-06-22 15:12:13.722 | INFO     | [SM step-039] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:12:13.723 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_40={'code': 200, 'msg': '成功', 'data': {'node_select': 0, 'flow_id': '21', 'flow_type': 'invoiceBatchApplication', 'flow_name': '应收开票批次申请', 'flow_desc': '', 'create_by': 'lijinyu', 'create_time': '1740469726', 'update_by': '郝凤鸣2', 'update_time': '1781512502', 'node_list': [{'node_id': '324829143625629696', 'node_name': '开票批次申请-财务', 'node_type': '2', 'node_type_name': '任一审批通过', 'node_sort': '0', 'node_user_name': '潘珑元,李明丹tidb,孙奉盛,张乐API,张管理,于佳倩TIDB,赵菲,陆旭阳,刘宝龙,刘常春TiDB,TIDB于佳倩,郝凤鸣,陆履约,句产研,郝凤鸣2,GIMBAL', 'node_user_ids': ['36', '40', '41', '60', '293', '294', '334', '363', '364', '487', '788', '798', '807', '822', '824', '828'], 'node_users': [{'user_id': '36', 'user_name_phone': '潘珑元-15943945010'}, {'user_id': '40', 'user_name_phone': '李明丹tidb-15765599874'}, {'user_id': '41', 'user_name_phone': '孙奉盛-18954119927'}, {'user_id': '60', 'user_name_phone': '张乐API-18234337456'}, {'user_id': '293', 'user_name_phone': '张管理-18234337457'}, {'user_id': '294', 'user_name_phone': '于佳倩TIDB-15530217935'}, {'user_id': '334', 'user_name_phone': '赵菲-18512540397'}, {'user_id': '363', 'user_name_phone': '陆旭阳-18513379596'}, {'user_id': '364', 'user_name_phone': '刘宝龙-17660218075'}, {'user_id': '487', 'user_name_phone': '刘常春TiDB-15942508598'}, {'user_id': '788', 'user_name_phone': 'TIDB于佳倩-14459887789'}, {'user_id': '798', 'user_name_phone': '郝凤鸣-13206476000'}, {'user_id': '807', 'user_name_phone': '陆履约-18513379595'}, {'user_id': '822', 'user_name_phone': '句产研-17895019270'}, {'user_id': '824', 'user_name_phone': '郝凤鸣2-13222222222'}, {'user_id': '828', 'user_name_phone': 'GIMBAL-18180789652'}]}], 'carbon_copy_list': [{'user_id': '788', 'user_name_phone': 'TIDB于佳倩-14459887789'}]}, 'request_id': 'a9b17bfdac892f2ec5d22c02edd60115'}
+2026-06-22 15:12:13.723 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:12:13.723 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:12:13.724 | INFO     | [AssertionExecutor] 断言通过: 开票提交审批应返回200
+2026-06-22 15:12:13.724 | INFO     | [SM step-039] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:12:13.724 | INFO     | [SM step-039] 状态机执行完成: final_state=passed duration_ms=1182.37
+    ✓ passed   1182.37ms
+    ✓ passed   1184.86ms   asserts=1/1
+2026-06-22 15:12:13.725 | INFO     | [ContextManager] StepContext finalized: step_id=step-039 status=passed duration_ms=1184.86
+2026-06-22 15:12:13.725 | INFO     | [ScenarioRunner] Step 完成: step_id=step-039 status=passed duration_ms=1182.37 (40/56)
+  [e2e订单到应收核销/step-040] start
+2026-06-22 15:12:13.726 | INFO     | [SM step-040] 状态机开始执行
+  [e2e订单到应收核销/step-040] start
+2026-06-22 15:12:13.726 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_fee_real_id[0] value=327344860249982976
+2026-06-22 15:12:13.726 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.order_sub_id[0] value=327344846685601792
+2026-06-22 15:12:13.726 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.batch_order_remark[0].order_sub_id value=327344846685601792
+2026-06-22 15:12:13.727 | INFO     | [SM step-040] 开始 HTTP 请求
+2026-06-22 15:12:13.727 | INFO     | [SM step-040] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/batchOrderEdit timeout=30.0s body_keys=['cny_file', 'usd_file', 'debitno_file', 'style', 'apply_type', 'customer_id', 'customer_name', 'put_settle_object_id', 'main_id', 'pay_settle_object_id', 'turn_rate', 'merge_with_cny', 'rate_type', 'usd_is_turn', 'order_fee_real_id', 'usd_require', 'cny_require', 'batch_order_remark', 'batch_type', 'cost_usd', 'cost_cny', 'put_settle_object', 'main_name_cn', 'order_sub_id', 'sys_rate', 'appoint_rate', 'action', 'fee_currency', 'order_sub_customer_id', 'audit_msg', 'select_node_user']
+2026-06-22 15:12:13.727 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/batchOrderEdit
+2026-06-22 15:12:15.903 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/batchOrderEdit -> 200 (2176.0ms)
+2026-06-22 15:12:15.904 | INFO     | [SM step-040] HTTP 响应: status=StrategyStatus.PASSED duration_ms=2177.28
+2026-06-22 15:12:15.905 | INFO     | [SM step-040] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:12:15.905 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_41={'code': 200, 'msg': '成功', 'data': [], 'request_id': '68355447ee0cb0731ad817c941270de5'}
+2026-06-22 15:12:15.905 | INFO     | [AssertionExecutor] 执行断言: target=response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:12:15.905 | INFO     | [AssertionExecutor] 实际值: target=response_status actual=200
+2026-06-22 15:12:15.905 | INFO     | [AssertionExecutor] 断言通过: 开票提交应返回200
+2026-06-22 15:12:15.905 | INFO     | [SM step-040] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:12:15.905 | INFO     | [SM step-040] 状态机执行完成: final_state=passed duration_ms=2179.84
+    ✓ passed   2179.84ms
+    ✓ passed   2180.14ms   asserts=1/1
+2026-06-22 15:12:15.906 | INFO     | [ContextManager] StepContext finalized: step_id=step-040 status=passed duration_ms=2180.14
+2026-06-22 15:12:15.906 | INFO     | [ScenarioRunner] Step 完成: step_id=step-040 status=passed duration_ms=2179.84 (41/56)
+  [e2e订单到应收核销/step-041] start
+2026-06-22 15:12:15.906 | INFO     | [SM step-041] 状态机开始执行
+  [e2e订单到应收核销/step-041] start
+2026-06-22 15:12:15.906 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.relation_id value=327344727462510592
+2026-06-22 15:12:15.906 | INFO     | [SM step-041] 开始 HTTP 请求
+2026-06-22 15:12:15.906 | INFO     | [SM step-041] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/home/audit/auditPage timeout=30.0s body_keys=['page_no', 'page_size', 'audit_status', 'audit_no', 'expedite_status', 'create_id', 'bl_nos', 'executor_id', 'active_tab', 'sort_field', 'sort_order', 'params', 'relation_id']
+2026-06-22 15:12:15.906 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/home/audit/auditPage
+2026-06-22 15:12:17.295 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/home/audit/auditPage -> 200 (1389.0ms)
+2026-06-22 15:12:17.297 | INFO     | [SM step-041] HTTP 响应: status=StrategyStatus.PASSED duration_ms=1390.29
+2026-06-22 15:12:17.297 | INFO     | [SM step-041] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:12:17.297 | INFO     | [ExtractExecutor] 提升变量: audit_id_2='327345026809987072' layer=scenario
+2026-06-22 15:12:17.297 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_55={'code': 200, 'msg': '成功', 'data': {'total': '10', 'data': [{'audit_id': '327345026809987072', 'audit_no': 'SP20260622003285', 'audit_type': 'invoiceBatchApplication', 'audit_name': '应收开票批次申请', 'audit_status': '1', 'create_by': 'GIMBAL', 'create_time': '1782112336', 'execute_time': '0', 'relation_id': '327345024519897088', 'audit_note': '', 'expedite_num': '0', 'expedite_time': '0', 'expedite_status': '0', 'executor': '', 'expedite_status_name': '未催办', 'is_expedite': '1', 'audit_status_name': '审批中', 'is_ext': 0, 'old_period_rule_name': '', 'new_period_rule_name': '', 'old_policy_type_name': None, 'new_policy_type_name': None, 'loan_pay_status_name': '未放款', 'customer_account_status_name': None, 'supplier_account_status_name': None}, {'audit_id': '327344222338285568', 'audit_no': 'SP20260622003281', 'audit_type': 'invoiceBatchApplication', 'audit_name': '应收开票批次申请', 'audit_status': '1', 'create_by': 'GIMBAL', 'create_time': '1782112144', 'execute_time': '0', 'relation_id': '327344220283076608', 'audit_note': '', 'expedite_num': '0', 'expedite_time': '0', 'expedite_status': '0', 'executor': '', 'expedite_status_name': '未催办', 'is_expedite': '1', 'audit_status_name': '审批中', 'is_ext': 0, 'old_period_rule_name': '', 'new_period_rule_name': '', 'old_policy_type_name': None, 'new_policy_type_name': None, 'loan_pay_status_name': '未放款', 'customer_account_status_name': None, 'supplier_account_status_name': None}, {'audit_id': '327339364432478208', 'audit_no': 'SP20260622003270', 'audit_type': 'invoiceBatchApplication', 'audit_name': '应收开票批次申请', 'audit_status': '1', 'create_by': 'GIMBAL', 'create_time': '1782110986', 'execute_time': '0', 'relation_id': '327339362259828736', 'audit_note': '', 'expedite_num': '0', 'expedite_time': '0', 'expedite_status': '0', 'executor': '', 'expedite_status_name': '未催办', 'is_expedite': '1', 'audit_status_name': '审批中', 'is_ext': 0, 'old_period_rule_name': '', 'new_period_rule_name': '', 'old_policy_type_name': None, 'new_policy_type_name': None, 'loan_pay_status_name': '未放款', 'customer_account_status_name': None, 'supplier_account_status_name': None}, {'audit_id': '327338219412652032', 'audit_no': 'SP20260622003265', 'audit_type': 'invoiceBatchApplication', 'audit_name': '应收开票批次申请', 'audit_status': '1', 'create_by': 'GIMBAL', 'create_time': '1782110713', 'execute_time': '0', 'relation_id': '327338216971567104', 'audit_note': '', 'expedite_num': '0', 'expedite_time': '0', 'expedite_status': '0', 'executor': '', 'expedite_status_name': '未催办', 'is_expedite': '1', 'audit_status_name': '审批中', 'is_ext': 0, 'old_period_rule_name': '', 'new_period_rule_name': '', 'old_policy_type_name': None, 'new_policy_type_name': None, 'loan_pay_status_name': '未放款', 'customer_account_status_name': None, 'supplier_account_status_name': None}, {'audit_id': '327337603093233664', 'audit_no': 'SP20260622003257', 'audit_type': 'invoiceBatchApplication', 'audit_name': '应收开票批次申请', 'audit_status': '1', 'create_by': 'GIMBAL', 'create_time': '1782110566', 'execute_time': '0', 'relation_id': '327337600450822144', 'audit_note': '', 'expedite_num': '0', 'expedite_time': '0', 'expedite_status': '0', 'executor': '', 'expedite_status_name': '未催办', 'is_expedite': '1', 'audit_status_name': '审批中', 'is_ext': 0, 'old_period_rule_name': '', 'new_period_rule_name': '', 'old_policy_type_name': None, 'new_policy_type_name': None, 'loan_pay_status_name': '未放款', 'customer_account_status_name': None, 'supplier_account_status_name': None}, {'audit_id': '327336972555124736', 'audit_no': 'SP20260622003253', 'audit_type': 'actualCostFeeLockApplication', 'audit_name': '费用锁定', 'audit_status': '1', 'create_by': 'GIMBAL', 'create_time': '1782110415', 'execute_time': '0', 'relation_id': '327336807739949056', 'audit_note': '', 'expedite_num': '0', 'expedite_time': '0', 'expedite_status': '0', 'executor': '', 'expedite_status_name': '未催办', 'is_expedite': '1', 'audit_status_name': '审批中', 'is_ext': 0, 'old_period_rule_name': '', 'new_period_rule_name': '', 'old_policy_type_name': None, 'new_policy_type_name': None, 'loan_pay_status_name': '未放款', 'customer_account_status_name': None, 'supplier_account_status_name': None}, {'audit_id': '327336287180685312', 'audit_no': 'SP20260622003250', 'audit_type': 'actualCostFeeLockApplication', 'audit_name': '费用锁定', 'audit_status': '1', 'create_by': 'GIMBAL', 'create_time': '1782110252', 'execute_time': '0', 'relation_id': '327336131475537920', 'audit_note': '', 'expedite_num': '0', 'expedite_time': '0', 'expedite_status': '0', 'executor': '', 'expedite_status_name': '未催办', 'is_expedite': '1', 'audit_status_name': '审批中', 'is_ext': 0, 'old_period_rule_name': '', 'new_period_rule_name': '', 'old_policy_type_name': None, 'new_policy_type_name': None, 'loan_pay_status_name': '未放款', 'customer_account_status_name': None, 'supplier_account_status_name': None}, {'audit_id': '327334979472195584', 'audit_no': 'SP20260622003249', 'audit_type': 'invoiceBatchApplication', 'audit_name': '应收开票批次申请', 'audit_status': '1', 'create_by': 'GIMBAL', 'create_time': '1782109940', 'execute_time': '0', 'relation_id': '327334977119191040', 'audit_note': '', 'expedite_num': '0', 'expedite_time': '0', 'expedite_status': '0', 'executor': '', 'expedite_status_name': '未催办', 'is_expedite': '1', 'audit_status_name': '审批中', 'is_ext': 0, 'old_period_rule_name': '', 'new_period_rule_name': '', 'old_policy_type_name': None, 'new_policy_type_name': None, 'loan_pay_status_name': '未放款', 'customer_account_status_name': None, 'supplier_account_status_name': None}, {'audit_id': '327334276225826816', 'audit_no': 'SP20260622003246', 'audit_type': 'invoiceBatchApplication', 'audit_name': '应收开票批次申请', 'audit_status': '1', 'create_by': 'GIMBAL', 'create_time': '1782109773', 'execute_time': '0', 'relation_id': '327334273717633024', 'audit_note': '', 'expedite_num': '0', 'expedite_time': '0', 'expedite_status': '0', 'executor': '', 'expedite_status_name': '未催办', 'is_expedite': '1', 'audit_status_name': '审批中', 'is_ext': 0, 'old_period_rule_name': '', 'new_period_rule_name': '', 'old_policy_type_name': None, 'new_policy_type_name': None, 'loan_pay_status_name': '未放款', 'customer_account_status_name': None, 'supplier_account_status_name': None}, {'audit_id': '327332216356995072', 'audit_no': 'SP20260622003241', 'audit_type': 'invoiceBatchApplication', 'audit_name': '应收开票批次申请', 'audit_status': '1', 'create_by': 'GIMBAL', 'create_time': '1782109281', 'execute_time': '0', 'relation_id': '327332214058516480', 'audit_note': '', 'expedite_num': '0', 'expedite_time': '0', 'expedite_status': '0', 'executor': '', 'expedite_status_name': '未催办', 'is_expedite': '1', 'audit_status_name': '审批中', 'is_ext': 0, 'old_period_rule_name': '', 'new_period_rule_name': '', 'old_policy_type_name': None, 'new_policy_type_name': None, 'loan_pay_status_name': '未放款', 'customer_account_status_name': None, 'supplier_account_status_name': None}]}, 'request_id': 'dec5508356430591f8a72b545444e67c'}
+2026-06-22 15:12:17.298 | INFO     | [ExtractExecutor] 写入 scratch: request_body_step_55={'page_no': 1, 'page_size': 20, 'audit_status': ['1'], 'audit_no': '', 'expedite_status': '', 'create_id': '', 'bl_nos': [], 'executor_id': [], 'active_tab': 'examine_send', 'sort_field': 'create_time', 'sort_order': 'desc', 'params': {}, 'relation_id': '327344727462510592'}
+2026-06-22 15:12:17.298 | INFO     | [AssertionExecutor] 执行断言: target=$.response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:12:17.298 | INFO     | [AssertionExecutor] 实际值: target=$.response_status actual=200
+2026-06-22 15:12:17.298 | INFO     | [AssertionExecutor] 断言通过: 查询审批记录应返回200
+2026-06-22 15:12:17.298 | INFO     | [SM step-041] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:12:17.298 | INFO     | [SM step-041] 状态机执行完成: final_state=passed duration_ms=1392.27
+    ✓ passed   1392.27ms
+    ✓ passed   1392.50ms   asserts=1/1   promotions=1
+2026-06-22 15:12:17.298 | INFO     | [ContextManager] StepContext finalized: step_id=step-041 status=passed duration_ms=1392.50
+2026-06-22 15:12:17.299 | INFO     | [ScenarioRunner] Step 完成: step_id=step-041 status=passed duration_ms=1392.27 (42/56)
+  [e2e订单到应收核销/step-042] start
+2026-06-22 15:12:17.299 | INFO     | [SM step-042] 状态机开始执行
+  [e2e订单到应收核销/step-042] start
+2026-06-22 15:12:17.299 | INFO     | [AssignExecutor] 赋值成功: target=$.request_body.audit_ids[0] value=327345026809987072
+2026-06-22 15:12:17.299 | INFO     | [SM step-042] 开始 HTTP 请求
+2026-06-22 15:12:17.299 | INFO     | [SM step-042] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/home/audit/auditExecute timeout=30.0s body_keys=['audit_ids', 'audit_status', 'audit_remark']
+2026-06-22 15:12:17.299 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/home/audit/auditExecute
+2026-06-22 15:12:19.443 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/home/audit/auditExecute -> 200 (2143.6ms)
+2026-06-22 15:12:19.449 | INFO     | [SM step-042] HTTP 响应: status=StrategyStatus.PASSED duration_ms=2149.64
+2026-06-22 15:12:19.450 | INFO     | [SM step-042] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:12:19.451 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_56={'code': 200, 'msg': '审批成功1条，审批失败0条', 'data': [], 'request_id': 'ae66cdff7e406806f0b377dfb043173a'}
+2026-06-22 15:12:19.451 | INFO     | [AssertionExecutor] 执行断言: target=$.response_status operator=AssertOperator.EQ expected=200
+2026-06-22 15:12:19.452 | INFO     | [AssertionExecutor] 实际值: target=$.response_status actual=200
+2026-06-22 15:12:19.454 | INFO     | [AssertionExecutor] 断言通过: 批准审批应返回200
+2026-06-22 15:12:19.454 | INFO     | [SM step-042] VERIFYING 阶段通过 (soft_failures=False)，进入 PASSED
+2026-06-22 15:12:19.455 | INFO     | [SM step-042] 状态机执行完成: final_state=passed duration_ms=2156.12
+    ✓ passed   2156.12ms
+    ✓ passed   2157.02ms   asserts=1/1
+2026-06-22 15:12:19.456 | INFO     | [ContextManager] StepContext finalized: step_id=step-042 status=passed duration_ms=2157.02
+2026-06-22 15:12:19.457 | INFO     | [ScenarioRunner] Step 完成: step_id=step-042 status=passed duration_ms=2156.12 (43/56)
+  [e2e订单到应收核销/step-043] start
+2026-06-22 15:12:19.457 | INFO     | [SM step-043] 状态机开始执行
+  [e2e订单到应收核销/step-043] start
+2026-06-22 15:12:19.458 | INFO     | [SM step-043] 开始 HTTP 请求
+2026-06-22 15:12:19.459 | INFO     | [SM step-043] HTTP 请求: method=POST url=https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/applyPage timeout=30.0s body_keys=['page_no', 'page_size', 'order_no', 'create_time', 'cancel_status', 'bl_nos', 'sort_field', 'sort_order', 'params', 'create_time_start', 'create_time_end']
+2026-06-22 15:12:19.459 | INFO     | [CallExecutor] HTTP 请求: POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/applyPage
+2026-06-22 15:12:20.429 | INFO     | [CallExecutor] HTTP 响应: POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/applyPage -> 200 (969.5ms)
+2026-06-22 15:12:20.431 | INFO     | [SM step-043] HTTP 响应: status=StrategyStatus.PASSED duration_ms=972.13
+2026-06-22 15:12:20.432 | INFO     | [SM step-043] HTTP 请求成功，进入 AFTER_REQUEST
+2026-06-22 15:12:20.432 | INFO     | [ExtractExecutor] 写入 scratch: response_body_step_42={'code': 200, 'msg': '成功', 'data': {'total': 0, 'data': [], 'total_data': {'cost_usd': '0.00', 'cost_cny': '0.00', 'turn_cost_usd': '0.00', 'turn_cost_cny': '0.00', 'amount': 'USD 0.00 + CNY 0.00', 'invoice_used_amount': 'USD 0.00 + CNY 0.00', 'invoice_unused_amount': 'USD 0.00 + CNY 0.00', 'use_writeoff_amount': 'USD 0.00 + CNY 0.00', 'un_writeoff_amount': 'USD 0.00 + CNY 0.00'}}, 'request_id': '7f9b5ac6bddb6f8a0be17e8115632165'}
+2026-06-22 15:12:20.432 | WARNING  | [StrategyDispatcher] Phase aborting due to failure: phase=StrategyPhase.AFTER_REQUEST strategy_id=extract_receive_invoice_batch_id
+2026-06-22 15:12:20.433 | WARNING  | [SM step-043] AFTER_REQUEST 阶段 hard_failed，进入 TEARDOWN
+2026-06-22 15:12:20.433 | WARNING  | [SM step-043] TEARDOWN 阶段完成，业务阶段有硬失败，进入 FAILED
+2026-06-22 15:12:20.434 | INFO     | [SM step-043] 状态机执行完成: final_state=failed duration_ms=976.10
+    ! STEP FAILED phase=failed step_id=step-043 error=final_state=failed
+    ✗ failed    976.77ms
+2026-06-22 15:12:20.434 | INFO     | [ContextManager] StepContext finalized: step_id=step-043 status=failed duration_ms=976.77
+2026-06-22 15:12:20.434 | INFO     | [ScenarioRunner] Step 完成: step_id=step-043 status=failed duration_ms=976.10 (44/56)
+2026-06-22 15:12:20.435 | WARNING  | [ScenarioRunner] Scenario 中断: step_id=step-043 失败，后续 step 不再执行
+2026-06-22 15:12:20.439 | INFO     | [Archive] Scenario saved: scenario_id=e2e订单到应收核销 status=failed step_count=44 total_scenarios=1
+2026-06-22 15:12:20.439 | INFO     | [ContextManager] ScenarioContext finalized: scenario_id=e2e订单到应收核销 status=failed step_count=44
+2026-06-22 15:12:20.440 | INFO     | [Engine] Scenario 执行完成: scenario_id=e2e订单到应收核销 status=failed duration_ms=79725.44
+
+────────────────────────────────────────────────────────────
+FAIL  total=1 passed=0 failed=1 error=0
+  - e2e订单到应收核销: failed (79725.4ms)
+
+Failed steps:
+  - step-043 (phase=failed): final_state=failed
+────────────────────────────────────────────────────────────
+2026-06-22 15:12:20.442 | INFO     | [ReporterRuntime] reporter.finalize 完成: name=console path=None media=text/plain
+2026-06-22 15:12:20.444 | INFO     | [PluginLoader] deactivate_all done: ok=0 failed=0
+FAIL  total=1 passed=0 failed=1 error=0 duration=79725.4ms
+  - e2e订单到应收核销: failed (79725.4ms)
+  Reports (1):
+   - console [text/plain]: <inline> total=1, passed=0, failed=1, error=0, http_count=0, failed_step_count=1
