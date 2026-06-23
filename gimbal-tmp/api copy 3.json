@@ -1,1 +1,29 @@
-{"code": 200, "msg": "成功", "data": [{"audit_id": "327339229522690048", "audit_no": "SP20260622003268", "audit_type": "actualCostFeeLockApplication", "audit_name": "费用锁定", "audit_status": "2", "create_by": "GIMBAL", "create_time": "1782110953", "current_node_id": "327339229677879296", "audit_status_name": "审批通过", "node_name": "审批节点1"}, {"audit_id": "327339284568735744", "audit_no": "SP20260622003269", "audit_type": "addLoanBeforeInvoiceApply", "audit_name": "未放款开票申请", "audit_status": "2", "create_by": "GIMBAL", "create_time": "1782110967", "current_node_id": "327339284757479424", "audit_status_name": "审批通过", "node_name": "未放款开票申请"}], "request_id": "16cc1f2c6b2f704d747d06523b28066b"}
+[
+{
+    "invoice_number": "24922000000029645248",
+    "invoice_type": "1",
+    "invoice_type_name": "增值税数电普通发票",
+    "invoice_amount": "2000.00",
+    "invoice_tax_amount": "0.00",
+    "invoice_date": 1771603200,
+    "currency": "CNY",
+    "usd_amount": "",
+    "invoice_exchange_rate": "1.0000",
+    "invoice_original": {
+    "file_id": "327664535185915904",
+    "file_name": "6a3a09e08cfa9.pdf",
+    "file_type": "pdf",
+    "original_name": "电子发票（普通发票）兰森.pdf",
+    "file_url": "https://gf-yhx.newhopeleasing.com/file/o/Mzc5NTM="
+    },
+    "buyer_chinese_header": "兰森玻璃（青岛）有限公司",
+    "buyer_identifier_no": "91370283591262431N",
+    "buyer_identity": "customer",
+    "isbuyer_identity": "",
+    "seller_chinese_header": "青岛易汇智供应链管理有限公司",
+    "seller_identifier_no": "91370202MAEWF5RN7G",
+    "seller_identity": "main",
+    "invoice_image_name": "6a3a09e56e261.png",
+    "file_path": "https://gf-yhx.newhopeleasing.com/file/o/Mzc5NTM="
+}
+]

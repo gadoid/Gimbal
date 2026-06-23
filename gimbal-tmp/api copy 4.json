@@ -1,113 +1,35 @@
-{
-    "account_simple_name": null,
-    "account_type": "1",
-    "customer_id": [
-        "16"
-    ],
-    "put_settle_object_id": "665",
-    "main_id": "1",
-    "pay_settle_object_id": null,
-    "selection_time": 1781073932,
-    "action": "check",
-    "operate_type": 1,
-    "receive_account_id": null,
-    "main_name": "青岛易汇智供应链管理有限公司",
-    "put_settle_object": "兰森玻璃（青岛）有限公司",
-    "pay_settle_object": null,
-    "select_list": [
-        {
-            "order_id": "322933109106409472",
-            "order_no": "YWDD20260610106678",
-            "bl_no": "codfishe2e1",
-            "customer_id": "16",
-            "customer_name": "兰森玻璃（青岛）有限公司",
-            "customer_main_id": "31",
-            "customer_main_name": "青岛易汇智供应链管理有限公司",
-            "business_main_id": "1",
-            "business_main_name": "青岛易航道物流科技有限公司",
-            "policy_type": "JSZX",
-            "trade_term": "CIF",
-            "customer_period": "60",
-            "customer_put_date": "1786291200",
-            "atd": "1781020800",
-            "etd": "1781020800",
-            "create_time": "1781060453",
-            "finance_date": "1781020800",
-            "fund_name": "青岛海发商业保理有限公司",
-            "ship_name": "codfishe2e1",
-            "voy": "codfishe2e1",
-            "status": "2",
-            "is_special_pay": "0",
-            "pay_status": "0",
-            "is_loan_before_invoice": "1",
-            "customer_order_sn": "codfishe2e1",
-            "order_sub_id": "322978240647921664",
-            "order_sub_no": "ZDD20260610015029",
-            "main_id": "1",
-            "main_name": "青岛易航道物流科技有限公司",
-            "service_project": "booking_space",
-            "currency": "USD",
-            "amount_total": "100.00",
-            "pay_settle_object_type": "2",
-            "put_settle_object_id": "665",
-            "put_settle_object": "青岛易汇智供应链管理有限公司",
-            "pay_settle_object": "上海华运船务有限公司青岛分公司",
-            "book_supplier_period": "30",
-            "book_supplier_pay_date": "1784476800",
-            "book_supplier_name": "上海华运船务有限公司青岛分公司",
-            "operable_amount": "100.00",
-            "un_operable_amount": "0.00",
-            "operable_flag": "all",
-            "policy_type_name": "结算业务",
-            "order_sub_currency": "USD322978240647921664",
-            "order_main_finance": "青岛银行股份有限公司江西路支行+USD+802051200001568",
-            "order_error_messages": [],
-            "order_error_message": "",
-            "order_error_flag": false,
-            "amount_list": [
-                {
-                    "order_id": "322933109106409472",
-                    "order_no": "YWDD20260610106678",
-                    "customer_name": "兰森玻璃（青岛）有限公司",
-                    "bl_no": "codfishe2e1",
-                    "main_name": "青岛易航道物流科技有限公司",
-                    "order_sub_no": "ZDD20260610015029",
-                    "order_sub_id": "322978240647921664",
-                    "order_fee_real_id": "322978255550285824",
-                    "fee_real_no": "FY202606101285504",
-                    "fee_type": "0",
-                    "service_project": "booking_space",
-                    "fee_real_name": "海运费",
-                    "currency": "USD",
-                    "symbol": "1",
-                    "real_amount": "100.00",
-                    "supplier_id": null,
-                    "cost_no": "0001",
-                    "fee_status": "1",
-                    "account_no": "",
-                    "pay_account_no": "",
-                    "account_status": "0",
-                    "pay_account_status": "0",
-                    "invoice_status": "0",
-                    "receive_invoice_batch_no": null,
-                    "pay_invoice_batch_no": null,
-                    "receive_invoice_apply_no": null,
-                    "pay_invoice_apply_no": null,
-                    "put_settle_object_id": "665",
-                    "put_settle_object": "青岛易汇智供应链管理有限公司",
-                    "pay_settle_object_id": "39",
-                    "pay_settle_object": "上海华运船务有限公司青岛分公司",
-                    "writeoff_status": "1",
-                    "un_writeoff_amount": "100.00",
-                    "use_writeoff_amount": "0.00",
-                    "writeoff_nos": "",
-                    "pay_form_no": "",
-                    "pay_demand_no": "",
-                    "amount_error_messages": [],
-                    "amount_error_message": "",
-                    "amount_error_flag": false
-                }
-            ]
+{"order_id": "327683136857047040", "order_no": "YWDD20260623107349", "customer_id": "16", "customer_name": "兰森玻璃（青岛）有限公司", "customer_category": ",
+    2,", "customer_tax_number": "91370283591262431N", "customer_address_cn": "山东省青岛市平度市南村镇东王府庄村", "sale_id": "", "sale_name": "", "service_id": "55", "client_expand_id": "250", "client_expand_name": "孙硕", "service_name": "曲静霞", "operator_id": "67", "operator_name": "律欣怡", "customer_contact_id": "1547", "customer_contact_name": "周经理", "customer_contact_phone": "18561657088", "customer_main_id": "31", "customer_main_name": "青岛易汇智供应链管理有限公司", "business_main_id": "1", "business_main_name": "青岛易航道物流科技有限公司", "main_sort": "易汇智,易航道", "bl_no": "GIMBAL_TEST_6", "policy_type": "JSZX", "fund_code": "", "fund_name": None, "policy_id": "112", "policy_name": "【SPV对客】易汇智", "business_type": "1", "trade_term": "CIF", "carrier_id": "1", "carrier": "ACL", "etd": "1782748800", "atd": "1782144000", "track_atd": "0", "finance_date": "1782748800", "ship_name": "GIMBAL_TEST_6", "voy": "GIMBAL_TEST_6", "pol": "QINGDAO,CHINA", "pol_cn": "青岛流亭机场", "pol_country_id": "1", "pol_country": "CHINA", "pol_country_cn": "中国", "pod": "QINGDAO,CHINA", "pod_cn": "青岛流亭机场", "pot": "QINGYANG,CHINA", "pot_cn": "庆阳机场", "del": "QINGDAO,CHINA", "del_cn": "青岛流亭机场", "country_id": "1", "country_name": "CHINA", "country_name_cn": "中国", "ocean_type": "近洋", "airline_type": "中国", "terms_payment": "T/T", "terms_transport": "CY/CY", "terms_shipment": "GIMBAL_TEST_6", "pay_type": "FREIGHT PREPAID", "customer_order_sn": "GIMBAL_TEST_6", "cargo_type": "goods", "num": "1", "packer": "", "gross_weight": "100.000", "bulk": "10.000", "volume": "1*40HQ", "volume_desc": "普柜", "teu": "2", "sea_trans_cost": "100.00", "sea_trans_currency": "USD", "shipper": "GIMBAL_TEST_6", "consignee": "GIMBAL_TEST_6", "notifier": "GIMBAL_TEST_6", "ship_mark": "GIMBAL_TEST_6", "commodity": "GIMBAL_TEST_6", "notes": "GIMBAL_TEST_6", "customer_period": "60", "customer_settlement_date": "10", "period_rule": "1", "term_rule_name": "标准规则", "customer_due_date": "0", "customer_put_date": "1786291200", "customer_payment_collection_date": None, "customer_put_date_manual": "0", "customer_put_writeoff_date": "", "supplier_due_date": "0", "discount_start": "0", "discount_rule": "", "discount_end": "0", "discount_ratio": "", "discount_status": "2", "discount_currency": "", "book_upload_date": "0", "trans_cost_put_preserve_date": "0", "bl_no_upload_date": "0", "supplier_invoice_date": "0", "supplier_invoice_taketime": "", "real_cost_date": "0", "customer_invoice_request_date": "0", "first_financing_doc_ok_date": "0", "second_financing_doc_ok_date": "0", "insurance_doc_ok_date": "0", "customer_confirm_date": "0", "is_delayed_recovery": "否", "delayed_recovery_usd": "", "delayed_recovery_cny": "", "delayed_time": "", "expect_fee_status": "0", "real_fee_status": "0", "fee_lock_status": "0", "pay_account_status": "0", "account_status": "0", "real_pay_usd": "0.00", "real_pay_cny": "0.00", "real_put_usd": "0.00", "real_put_cny": "0.00", "real_put_discount_rate": "0.00", "exchange_rate": "7.7000", "folde_pay_usd": "0.00", "folde_put_usd": "0.00", "folde_pay_total": "0.00", "folde_put_total": "0.00", "gross_margin": "0.00", "gross_margin_rate": "0.00", "is_special_pay": "0", "is_loan_before_invoice": "0", "is_fee_miss": "1", "fee_miss_name": "booking_space", "service_items": [
+        {"service_item_name": "订舱", "service_item": "booking_space", "self_support": False, "expect_api": "/order/orderFee/bookExpectAmountEdit", "real_api": "order/orderFee/bookRealAmountEdit", "is_select": 1
+        },
+        {"service_item_name": "报关", "service_item": "customs_clearance", "self_support": True, "expect_api": "order/orderFee/customsExpectAmountEdit", "real_api": "order/orderFee/customsRealAmountEdit", "is_select": 0
+        },
+        {"service_item_name": "舱单", "service_item": "manifest", "self_support": True, "expect_api": "order/orderFee/manifestExpectAmountEdit", "real_api": "order/orderFee/manifestRealAmountEdit", "is_select": 0
+        },
+        {"service_item_name": "保险", "service_item": "insurance", "self_support": True, "expect_api": "order/orderFee/insuranceExpectAmountEdit", "real_api": "order/orderFee/insuranceRealAmountEdit", "is_select": 0
+        },
+        {"service_item_name": "拖车", "service_item": "trucking", "self_support": True, "expect_api": "order/orderFee/trailerExpectAmountEdit", "real_api": "order/orderFee/trailerRealAmountEdit", "is_select": 0
         }
-    ]
+    ], "status": "2", "cancel_remark": "", "cancel_time": "0", "effective_id": "828", "effective_by": "GIMBAL", "effective_time": "1782192958", "create_id": "828", "create_by": "GIMBAL", "create_time": "1782192947", "update_id": "828", "update_by": "GIMBAL", "update_time": "1782192959", "delete_time": "0", "business_time": "1782192958", "main_ids": ",
+    31,
+    1,", "reverse_status": "0", "proprietary_business_status": "0", "m_delivery_type": "1", "loan_status": None, "first_status": None, "second_status": None, "loan_pay_status": "", "change_type": "0", "copy_order_id": "0", "real_fee_locked": False, "is_usd_project": "2", "pay_status": "0", "is_sync_es": "0", "expect_discount_status": "0", "real_discount_status": "0", "entrust_status": "1", "remark": "", "audit_type": "", "is_system_generate": "0", "is_financing": "0", "confirm_status": "0", "is_traverse": "0", "financing_apply_amount": "0.00", "financing_apply_amount_cny": "0.00", "financing_apply_amount_usd": "0.00", "sys_upttime": "2026-06-23 13: 36: 04", "reverse_status_name": "否", "is_delayed_recovery_name": "否", "order_finance_arr": [], "order_main_bank_arr": [], "order_sub": [
+        {"order_sub_id": "327683184776970240", "order_sub_no": "ZDD20260623016598", "order_sub_type": "0", "main_name": "青岛易汇智供应链管理有限公司", "order_id": "327683136857047040", "business_no": "YHZ20260623032907", "order_sub_type_name": "对客订单"
+        }
+    ], "order_sub_no": "", "container": [
+        {"order_container_id": "327683182449131520", "box_type": "40HQ", "box_num": "1", "box_no": [""
+            ], "seal_number": [""
+            ], "sea_trans_unit_price": 100
+        }
+    ], "service_project": {"booking_space": False, "customs_clearance": False, "manifest": False, "insurance": False, "trucking": False
+    }, "service_project_amount": {"booking_space": False, "customs_clearance": False, "manifest": False, "insurance": False, "trucking": False
+    }, "finance_status": True, "main_ids_name": "易汇智,易航道", "policy_main_arr": [
+        {"fee_main_id": "31", "main_name": "青岛易汇智供应链管理有限公司"
+        },
+        {"fee_main_id": "1", "main_name": "青岛易航道物流科技有限公司"
+        }
+    ], "policy_type_name": "结算业务", "business_type_name": "海运整箱", "cargo_type_name": "普货", "period_rule_name": "25日后订单截转下月计算账期（CIF特殊规则1、FOB结算规则1）", "trade_term_name": "CIF", "carrier_name": "大西洋航运", "terms_transport_name": "CY/CY", "terms_payment_name": "T/T", "pay_type_name": "FREIGHT PREPAID", "m_delivery_type_name": "正本", "supplier": [
+        {"order_supplier_id": "327683138446688256", "order_id": "327683136857047040", "isset_supplier": "1", "is_primary": "1", "supplier_id": "8", "supplier_name": "上海华运船务有限公司青岛分公司", "settle_object_id": "39", "user_id": "16", "user_name": "荣洋", "service_item": "booking_space", "supplier_period": "30", "settlement_date": "20", "supplier_pay_date": "1784476800", "is_manual": "0", "sys_upttime": "2026-06-23 13: 35: 58", "supplier_label": "上海华运船务有限公司青岛分公司-订舱", "service_item_name": "订舱", "isset_fee": False
+        }
+    ], "audit": [], "enable": "1", "policy_match": "semi", "policy_match_name": "手动选择", "real_discount_status_name": "—", "expect_discount_status_name": "—", "expect_policy_status_name": "", "policy_status_name": "", "subsidy_category_name": "—", "expect_subsidy_category_name": "—", "real_subsidy_category_name": "—"
+}, "request_id": "fb3899d37be8fe2d8cf78cf873365287"
 }

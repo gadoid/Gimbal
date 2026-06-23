@@ -108,9 +108,12 @@ class SpecResolver:
         if isinstance(request, RequestRef):
             return request
 
+        # body 类型从 Dict[str, Any] 扩展为 Union[Dict[str, Any], List[Any]]
+        # 走 _resolve_nested 才能递归到 list 元素里的 ${} 模板；用 _resolve_dict
+        # 在 list body 上只会整体返回 list，内部 ${var.x} 不会被替换。
         return Request(
             kind=request.kind,
-            body=self._resolve_dict(request.body or {}),
+            body=self._resolve_nested(request.body or {}),
         )
 
     def _resolve_strategy(self, strategy: "StrategyUnion") -> "StrategyUnion":

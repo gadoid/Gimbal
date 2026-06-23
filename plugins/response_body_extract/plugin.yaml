@@ -1,0 +1,33 @@
+name: gimbal-response-body-extract
+version: 0.1.0
+entry_point: gimbal_response_body_extract.plugin:ResponseBodyExtractPlugin
+category: generic
+description: |
+  Automatically extract `response_body` from every executed step into a
+  step-scoped scratch variable (default scope = STEP).
+
+  实现原理：
+  - 订阅 HTTP_AFTER_RECV 钩子（在每次 HTTP 调用返回后、AFTER_REQUEST 阶段前触发）。
+  - 在钩子中，从 step 的 scratch 中读取 CallExecutor 写入的 `response_body`，
+    并写到 `target` 指定的 key（默认 `response_body`，可配置）。
+  - scope 默认 STEP：因为 scratch 本就是 per-step 的，所以写入后只在本 step
+    及后续 step（通过 ${var.xxx} 模板）中可读，step 结束时随 scratch 清空。
+
+  这个插件等价于为每个 step 的 strategy 列表追加一条：
+      {
+        "kind": "extract",
+        "name": "<plugin-config.target>",
+        "phase": "after_request",
+        "expression": "$.response_body",
+        "target": "<plugin-config.target>",
+        "scope": "step",            # 默认 scope
+        "enabled": true,
+        "onFailure": "warn"         # 提取失败不阻断 step
+      }
+
+  但不需要修改任何 step 定义，纯插件方式注入。
+capabilities: [generic]
+default_config:
+  target: response_body
+  on_missing: warn
+  overwrite: true

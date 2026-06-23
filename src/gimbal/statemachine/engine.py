@@ -33,7 +33,7 @@ import logging
 import traceback
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union, Dict, List
 
 from gimbal.statemachine.states import StepState, VALID_TRANSITIONS
 from gimbal.statemachine.exceptions import InvalidTransitionError, AlreadyTerminalError
@@ -60,7 +60,9 @@ class _CallSpec:
     method: str = "GET"
     url: str = ""
     headers: dict = field(default_factory=dict)
-    body: dict = field(default_factory=dict)
+    # body 与 schema/request.py:Request.body 保持一致：
+    # Union[Dict[str, Any], List[Any]] —— list body（批量请求等场景）也合法。
+    body: Union[Dict[str, Any], List[Any]] = field(default_factory=dict)
     timeout: float = 30.0
     name: Optional[str] = "http_call"
     phase: Optional[str] = None
@@ -168,7 +170,9 @@ class StepStateMachine:
 
         try:
             # 初始化 scratch.request_body（可能被 Assign 等策略修改）
-            request_body = getattr(self._step_schema.request, "body", None) or {}
+            # body 现在可以是 Dict 或 List —— 不要用 `or {}` 兜底成 dict，
+            # 那样会把 list body 静默改成 dict。
+            request_body = getattr(self._step_schema.request, "body", None)
             if request_body:
                 self._view.write_scratch("request_body", request_body)
 
@@ -373,7 +377,8 @@ class StepStateMachine:
             )
         service_url = self._service_base_url
         request = self._step_schema.request
-        original_body = getattr(request, "body", {}) or {}
+        # body 可以是 Dict 或 List —— 不要用 `or {}` 兜底成 dict，会把 list 静默改成 dict。
+        original_body = getattr(request, "body", None)
 
         # 修复 B2：BEFORE_REQUEST 阶段的 Assign 写到 view.scratch.request_body，
         # 这里优先取 scratch 的值（被 Assign 修改后的），没有则用原 body

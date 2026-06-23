@@ -21,7 +21,7 @@ class ExtractExecutor(StrategyExecutor):
     def execute(self, spec: "Extract", view: "StepContextAdapter") -> StrategyResult:
         """执行提取策略：用 JSONPath spec.expression 从 scratch 取值后按 spec.scope 写入目标层（step/scenario/...）。"""
         try:
-            logger.debug(
+            logger.info(
                 "[ExtractExecutor] 执行提取: expression={} target={} scope={}",
                 spec.expression, spec.target, spec.scope
             )

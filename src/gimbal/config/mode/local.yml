@@ -27,4 +27,5 @@ output:
 
 plugins :
   - aaa
+  - gimbal-response-body-extract
 

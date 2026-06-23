@@ -26,7 +26,9 @@ class CallExecutor(StrategyExecutor):
         headers = spec.headers
         timeout = spec.timeout
         # 如果 scratch 中没有 request_body，先用 spec.body 初始化
-        if not view.read_scratch("request_body"):
+        # 注意：用 `is None` 而非 `not ...` —— 空 dict / 空 list 是合法的 request body，
+        # 不应被 falsy 判定重新覆盖。
+        if view.read_scratch("request_body") is None:
             view.write_scratch("request_body", spec.body)
         # 从 scratch 读取实时渲染的 request_body（可能被 Assign 等策略修改过）
         body = view.read_scratch("request_body")
