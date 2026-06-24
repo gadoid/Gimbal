@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gimbal Report — c11617ec-1ee8-4450-8d7e-441d47dbcb95</title>
+<style>
+  body { font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          margin: 0; padding: 24px; background: #fafafa; color: #222; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  .meta { color: #666; margin-bottom: 4px; font-size: 12px; }
+  .summary { display: flex; gap: 12px; margin: 16px 0; flex-wrap: wrap; }
+  .pill { padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: 13px; }
+  .pill-passed { background: #dcfce7; color: #166534; }
+  .pill-failed { background: #fee2e2; color: #991b1b; }
+  .pill-error  { background: #fef3c7; color: #92400e; }
+  .pill-skipped{ background: #e5e7eb; color: #374151; }
+  .pill-total  { background: #dbeafe; color: #1e40af; }
+  .pill-ci     { background: #ede9fe; color: #5b21b6; }
+  .pill-meta   { background: #f1f5f9; color: #334155; }
+  .pill-tag    { background: #e0e7ff; color: #3730a3; font-weight: 500; }
+  .run-meta    { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+                 padding: 10px 14px; margin: 12px 0; }
+  .run-meta .label { color: #64748b; font-size: 11px; font-weight: 600;
+                      text-transform: uppercase; letter-spacing: 0.5px;
+                      margin-right: 4px; }
+  .scenario-meta-chips { display: inline-flex; gap: 4px; flex-wrap: wrap;
+                          margin-left: 8px; vertical-align: middle; }
+  details.scenario { background: #fff; border: 1px solid #e5e7eb; border-radius: 6px;
+             padding: 10px 14px; margin: 6px 0; }
+  details.scenario[open] { background: #f9fafb; }
+  summary { cursor: pointer; font-weight: 500; }
+  .filterbar { margin: 16px 0; }
+  .filterbar button { background: #fff; border: 1px solid #d1d5db; padding: 4px 10px;
+                       border-radius: 4px; margin-right: 6px; cursor: pointer; }
+  .filterbar button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+  .step-pill { padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;
+                font-size: 12px; display: inline-block; min-width: 1.2em; text-align: center; }
+  .step-pill.passed { background: #dcfce7; color: #166534; }
+  .step-pill.failed { background: #fee2e2; color: #991b1b; }
+  .step-pill.error  { background: #fef3c7; color: #92400e; }
+  .step-pill.skipped{ background: #e5e7eb; color: #374151; }
+  ol.steps { list-style: none; padding-left: 0; margin: 10px 0 4px; }
+  ol.steps > li { padding: 8px 0; border-top: 1px solid #f1f5f9; }
+  ol.steps > li:first-child { border-top: none; }
+  .step-line { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .step-name { font-weight: 500; }
+  .step-id   { font-family: ui-monospace, monospace; color: #64748b; font-size: 12px; }
+  .step-meta { color: #64748b; font-size: 12px; margin-left: auto; }
+  pre { background: #0f172a; color: #e2e8f0; padding: 10px; border-radius: 6px;
+         overflow-x: auto; font-size: 12px; margin: 6px 0 0; white-space: pre-wrap; }
+  .err  { color: #991b1b; font-family: ui-monospace, monospace; }
+  .http-summary { color: #475569; font-size: 11px; margin-top: 4px;
+                   font-family: ui-monospace, monospace; background: #f8fafc;
+                   padding: 4px 8px; border-radius: 4px; line-height: 1.6; }
+  .http-summary .ok  { color: #166534; }
+  .http-summary .bad { color: #991b1b; }
+  footer { margin-top: 32px; color: #999; font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<h1>🛠 Gimbal Report</h1>
+<div class="meta">
+  <div>Run ID: <code>c11617ec-1ee8-4450-8d7e-441d47dbcb95</code></div>
+  <div>Env: <code>dev</code> &nbsp; Mode: <code>local</code> &nbsp;
+       Framework: <code>0.1.0</code></div>
+  <div>Generated at: 2026-06-24 02:54:36 UTC</div>
+</div>
+
+
+
+<div class="summary" id="summary">
+  <span class="pill pill-total">Total: 1</span>
+  <span class="pill pill-passed">Passed: 1</span>
+  <span class="pill pill-failed">Failed: 0</span>
+  <span class="pill pill-error">Error: 0</span>
+  <span class="pill pill-skipped">Skipped: 0</span>
+</div>
+
+<div class="filterbar">
+  Filter:
+  <button data-filter="all" class="active">All</button>
+  <button data-filter="failed">Failed</button>
+  <button data-filter="error">Error</button>
+  <button data-filter="passed">Passed</button>
+  <button data-filter="skipped">Skipped</button>
+</div>
+
+<div id="scenarios">
+  <details class="scenario" data-status="passed" >
+  <summary>
+    <span class="step-pill passed">passed</span>
+    <strong>e2e订单到应收核销</strong>
+    &nbsp;—&nbsp;<span class="meta">全链路-订单创建至应收核销-正常</span>
+    <span class="scenario-meta-chips"><span class="pill pill-tag">smoke</span><span class="pill pill-tag">settlement</span><span class="pill pill-meta">author: codfish</span><span class="pill pill-meta">priority: 1</span><span class="pill pill-meta">version: 1.0.0</span></span>
+    &nbsp;—&nbsp;<span class="meta">0.0ms</span>
+  </summary>
+  <ol class="steps">
+    <li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-000</span>
+    <span class="step-name">step-000</span>
+    <span class="step-meta">674.8ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderEntrust/orderAdd<br>&larr; <span class="bad">0</span> (669.8ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-001</span>
+    <span class="step-name">step-001</span>
+    <span class="step-meta">1577.1ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderEntrust/orderAdd<br>&larr; <span class="bad">0</span> (1572.4ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-002</span>
+    <span class="step-name">step-002</span>
+    <span class="step-meta">571.6ms · multi · asserts=1/1 · promotions=2</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderEntrust/orderPage<br>&larr; <span class="bad">0</span> (563.5ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-003</span>
+    <span class="step-name">step-003</span>
+    <span class="step-meta">934.3ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/orderDetail<br>&larr; <span class="bad">0</span> (930.2ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-004</span>
+    <span class="step-name">step-004</span>
+    <span class="step-meta">667.8ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderEntrust/orderAdd<br>&larr; <span class="bad">0</span> (664.6ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-005</span>
+    <span class="step-name">step-005</span>
+    <span class="step-meta">2067.8ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderEntrust/orderAdd<br>&larr; <span class="bad">0</span> (2059.6ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-006</span>
+    <span class="step-name">step-006</span>
+    <span class="step-meta">596.6ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/orderAdd<br>&larr; <span class="bad">0</span> (590.5ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-007</span>
+    <span class="step-name">step-007</span>
+    <span class="step-meta">2168.2ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/orderBook<br>&larr; <span class="bad">0</span> (2161.9ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-008</span>
+    <span class="step-name">step-008</span>
+    <span class="step-meta">6685.7ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/orderAdd<br>&larr; <span class="bad">0</span> (6680.7ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-009</span>
+    <span class="step-name">step-009</span>
+    <span class="step-meta">918.9ms · multi · asserts=1/1 · promotions=2</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/orderDetail<br>&larr; <span class="bad">0</span> (915.6ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-010</span>
+    <span class="step-name">step-010</span>
+    <span class="step-meta">798.0ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderFee/toggleRealAmount<br>&larr; <span class="bad">0</span> (793.9ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-011</span>
+    <span class="step-name">step-011</span>
+    <span class="step-meta">505.3ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderFee/bookRealAmountEdit<br>&larr; <span class="bad">0</span> (501.2ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-012</span>
+    <span class="step-name">step-012</span>
+    <span class="step-meta">1611.5ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderFee/bookRealAmountEdit<br>&larr; <span class="bad">0</span> (1602.2ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-013</span>
+    <span class="step-name">step-013</span>
+    <span class="step-meta">3822.2ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/checkGenerateOrderSub<br>&larr; <span class="bad">0</span> (3815.5ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-014</span>
+    <span class="step-name">step-014</span>
+    <span class="step-meta">5217.2ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/generateOrderSub<br>&larr; <span class="bad">0</span> (5214.7ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-015</span>
+    <span class="step-name">step-015</span>
+    <span class="step-meta">927.5ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/orderDetail<br>&larr; <span class="bad">0</span> (919.2ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-016</span>
+    <span class="step-name">step-016</span>
+    <span class="step-meta">803.9ms · multi · asserts=1/1 · promotions=2</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderFee/toggleRealAmount<br>&larr; <span class="bad">0</span> (797.4ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-017</span>
+    <span class="step-name">step-017</span>
+    <span class="step-meta">921.4ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderFee/realAmountLockSubmit<br>&larr; <span class="bad">0</span> (919.4ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-018</span>
+    <span class="step-name">step-018</span>
+    <span class="step-meta">872.6ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderFee/realAmountLockSubmit<br>&larr; <span class="bad">0</span> (869.2ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-019</span>
+    <span class="step-name">step-019</span>
+    <span class="step-meta">1427.7ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderFee/realAmountLockSubmit<br>&larr; <span class="bad">0</span> (1425.3ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-020</span>
+    <span class="step-name">step-020</span>
+    <span class="step-meta">933.2ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/orderDetail<br>&larr; <span class="bad">0</span> (929.3ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-021</span>
+    <span class="step-name">step-021</span>
+    <span class="step-meta">1879.2ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/home/audit/auditExecute<br>&larr; <span class="bad">0</span> (1870.8ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-022</span>
+    <span class="step-name">step-022</span>
+    <span class="step-meta">526.8ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/changeInvoiceApply<br>&larr; <span class="bad">0</span> (522.9ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-023</span>
+    <span class="step-name">step-023</span>
+    <span class="step-meta">612.9ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/changeInvoiceApply<br>&larr; <span class="bad">0</span> (608.6ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-024</span>
+    <span class="step-name">step-024</span>
+    <span class="step-meta">1127.4ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/changeInvoiceApply<br>&larr; <span class="bad">0</span> (1122.1ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-025</span>
+    <span class="step-name">step-025</span>
+    <span class="step-meta">754.7ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/home/audit/auditPage<br>&larr; <span class="bad">0</span> (748.9ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-026</span>
+    <span class="step-name">step-026</span>
+    <span class="step-meta">828.5ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/home/audit/auditExecute<br>&larr; <span class="bad">0</span> (824.2ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-027</span>
+    <span class="step-name">step-027</span>
+    <span class="step-meta">1530.9ms · multi · asserts=1/1 · promotions=3</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/orderConfirmAccount<br>&larr; <span class="bad">0</span> (1525.9ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-028</span>
+    <span class="step-name">step-028</span>
+    <span class="step-meta">842.0ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/accountFee/financePutList<br>&larr; <span class="bad">0</span> (837.7ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-029</span>
+    <span class="step-name">step-029</span>
+    <span class="step-meta">609.7ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/orderReceiveAccountEdit<br>&larr; <span class="bad">0</span> (606.2ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-030</span>
+    <span class="step-name">step-030</span>
+    <span class="step-meta">1412.6ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/orderReceiveAccountEdit<br>&larr; <span class="bad">0</span> (1404.3ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-031</span>
+    <span class="step-name">step-031</span>
+    <span class="step-meta">680.9ms · multi · asserts=1/1 · promotions=2</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/receiveConfirmList<br>&larr; <span class="bad">0</span> (677.3ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-032</span>
+    <span class="step-name">step-032</span>
+    <span class="step-meta">1417.2ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/accountConfirm<br>&larr; <span class="bad">0</span> (1413.9ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-033</span>
+    <span class="step-name">step-033</span>
+    <span class="step-meta">744.9ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/batchOrderEdit<br>&larr; <span class="bad">0</span> (740.0ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-034</span>
+    <span class="step-name">step-034</span>
+    <span class="step-meta">833.7ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/batchOrderEdit<br>&larr; <span class="bad">0</span> (824.0ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-035</span>
+    <span class="step-name">step-035</span>
+    <span class="step-meta">1709.6ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/batchOrderEdit<br>&larr; <span class="bad">0</span> (1704.8ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-036</span>
+    <span class="step-name">step-036</span>
+    <span class="step-meta">703.7ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/home/audit/auditPage<br>&larr; <span class="bad">0</span> (699.8ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-037</span>
+    <span class="step-name">step-037</span>
+    <span class="step-meta">1816.8ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/home/audit/auditExecute<br>&larr; <span class="bad">0</span> (1813.6ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-038</span>
+    <span class="step-name">step-038</span>
+    <span class="step-meta">569.2ms · multi · asserts=1/1 · promotions=3</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/applyPage<br>&larr; <span class="bad">0</span> (554.0ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-039</span>
+    <span class="step-name">step-039</span>
+    <span class="step-meta">549.0ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/receiveInvoice/invoiceAddCheck<br>&larr; <span class="bad">0</span> (542.5ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-040</span>
+    <span class="step-name">step-040</span>
+    <span class="step-meta">679.9ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/receiveInvoice/invoiceAdd<br>&larr; <span class="bad">0</span> (676.4ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-041</span>
+    <span class="step-name">step-041</span>
+    <span class="step-meta">455.1ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/allocationInvoiceOrder<br>&larr; <span class="bad">0</span> (452.4ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-042</span>
+    <span class="step-name">step-042</span>
+    <span class="step-meta">2252.8ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/allocationInvoiceOrder<br>&larr; <span class="bad">0</span> (2248.2ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-043</span>
+    <span class="step-name">step-043</span>
+    <span class="step-meta">793.4ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/receiveWriteoff/writeoffBatch<br>&larr; <span class="bad">0</span> (790.5ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-044</span>
+    <span class="step-name">step-044</span>
+    <span class="step-meta">1793.4ms · multi · asserts=1/1</span>
+  </div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/receiveWriteoff/writeoffBatch<br>&larr; <span class="bad">0</span> (1785.4ms)</div>
+  
+</li>
+  </ol>
+  
+</details>
+
+</div>
+
+<footer>Generated by Gimbal Reporter. Embedded data: see <code>#report-data</code> below.</footer>
+
+<script id="report-data" type="application/json">{"run_id": "c11617ec-1ee8-4450-8d7e-441d47dbcb95", "env": "dev", "mode": "local", "framework_version": "0.1.0", "summary": {"total": 1, "passed": 1, "failed": 0, "error": 0, "skipped": 0}, "run_meta": {}, "scenarios": [{"scenario_id": "e2e订单到应收核销", "scenario_name": "全链路-订单创建至应收核销-正常", "status": "passed", "duration_ms": 0.0, "error": null, "meta": {"name": "全链路-订单创建至应收核销-正常", "description": "验证从订单委托创建、订舱、生成子单、费用锁定与审核、变更开票申请审核、收款账户确认、批次开票申请审核、发票录入到应收核销的全链路在正常路径下均返回200且关键业务标识在各环节间正确传递", "module": "settlement", "priority": 1, "author": "codfish", "owner": "codfish", "tags": ["smoke", "settlement"], "version": "1.0.0", "createTime": "2026-06-23T10:00:00", "expire": false, "requirementRef": []}, "steps": [{"scenario_id": "e2e订单到应收核销", "step_id": "step-000", "step_name": "step-000", "strategy_kind": "multi", "status": "passed", "duration_ms": 674.794, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-001", "step_name": "step-001", "strategy_kind": "multi", "status": "passed", "duration_ms": 1577.125, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-002", "step_name": "step-002", "strategy_kind": "multi", "status": "passed", "duration_ms": 571.578, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 2, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-003", "step_name": "step-003", "strategy_kind": "multi", "status": "passed", "duration_ms": 934.3399999999999, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-004", "step_name": "step-004", "strategy_kind": "multi", "status": "passed", "duration_ms": 667.7650000000001, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-005", "step_name": "step-005", "strategy_kind": "multi", "status": "passed", "duration_ms": 2067.786, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-006", "step_name": "step-006", "strategy_kind": "multi", "status": "passed", "duration_ms": 596.555, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-007", "step_name": "step-007", "strategy_kind": "multi", "status": "passed", "duration_ms": 2168.247, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-008", "step_name": "step-008", "strategy_kind": "multi", "status": "passed", "duration_ms": 6685.688, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-009", "step_name": "step-009", "strategy_kind": "multi", "status": "passed", "duration_ms": 918.902, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 2, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-010", "step_name": "step-010", "strategy_kind": "multi", "status": "passed", "duration_ms": 798.024, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-011", "step_name": "step-011", "strategy_kind": "multi", "status": "passed", "duration_ms": 505.32, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-012", "step_name": "step-012", "strategy_kind": "multi", "status": "passed", "duration_ms": 1611.544, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-013", "step_name": "step-013", "strategy_kind": "multi", "status": "passed", "duration_ms": 3822.2360000000003, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-014", "step_name": "step-014", "strategy_kind": "multi", "status": "passed", "duration_ms": 5217.193, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-015", "step_name": "step-015", "strategy_kind": "multi", "status": "passed", "duration_ms": 927.457, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-016", "step_name": "step-016", "strategy_kind": "multi", "status": "passed", "duration_ms": 803.936, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 2, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-017", "step_name": "step-017", "strategy_kind": "multi", "status": "passed", "duration_ms": 921.402, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-018", "step_name": "step-018", "strategy_kind": "multi", "status": "passed", "duration_ms": 872.649, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-019", "step_name": "step-019", "strategy_kind": "multi", "status": "passed", "duration_ms": 1427.749, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-020", "step_name": "step-020", "strategy_kind": "multi", "status": "passed", "duration_ms": 933.226, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-021", "step_name": "step-021", "strategy_kind": "multi", "status": "passed", "duration_ms": 1879.2469999999998, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-022", "step_name": "step-022", "strategy_kind": "multi", "status": "passed", "duration_ms": 526.8249999999999, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-023", "step_name": "step-023", "strategy_kind": "multi", "status": "passed", "duration_ms": 612.9050000000001, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-024", "step_name": "step-024", "strategy_kind": "multi", "status": "passed", "duration_ms": 1127.429, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-025", "step_name": "step-025", "strategy_kind": "multi", "status": "passed", "duration_ms": 754.657, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-026", "step_name": "step-026", "strategy_kind": "multi", "status": "passed", "duration_ms": 828.4820000000001, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-027", "step_name": "step-027", "strategy_kind": "multi", "status": "passed", "duration_ms": 1530.878, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 3, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-028", "step_name": "step-028", "strategy_kind": "multi", "status": "passed", "duration_ms": 841.956, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-029", "step_name": "step-029", "strategy_kind": "multi", "status": "passed", "duration_ms": 609.711, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-030", "step_name": "step-030", "strategy_kind": "multi", "status": "passed", "duration_ms": 1412.578, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-031", "step_name": "step-031", "strategy_kind": "multi", "status": "passed", "duration_ms": 680.947, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 2, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-032", "step_name": "step-032", "strategy_kind": "multi", "status": "passed", "duration_ms": 1417.2359999999999, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-033", "step_name": "step-033", "strategy_kind": "multi", "status": "passed", "duration_ms": 744.915, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-034", "step_name": "step-034", "strategy_kind": "multi", "status": "passed", "duration_ms": 833.723, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-035", "step_name": "step-035", "strategy_kind": "multi", "status": "passed", "duration_ms": 1709.627, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-036", "step_name": "step-036", "strategy_kind": "multi", "status": "passed", "duration_ms": 703.723, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-037", "step_name": "step-037", "strategy_kind": "multi", "status": "passed", "duration_ms": 1816.81, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-038", "step_name": "step-038", "strategy_kind": "multi", "status": "passed", "duration_ms": 569.169, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 3, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-039", "step_name": "step-039", "strategy_kind": "multi", "status": "passed", "duration_ms": 548.9979999999999, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-040", "step_name": "step-040", "strategy_kind": "multi", "status": "passed", "duration_ms": 679.879, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-041", "step_name": "step-041", "strategy_kind": "multi", "status": "passed", "duration_ms": 455.14, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-042", "step_name": "step-042", "strategy_kind": "multi", "status": "passed", "duration_ms": 2252.754, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-043", "step_name": "step-043", "strategy_kind": "multi", "status": "passed", "duration_ms": 793.408, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-044", "step_name": "step-044", "strategy_kind": "multi", "status": "passed", "duration_ms": 1793.4470000000001, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}]}]}</script>
+<script>
+  const filterButtons = document.querySelectorAll('.filterbar button');
+  const scenariosEl = document.getElementById('scenarios');
+  filterButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      filterButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const f = btn.dataset.filter;
+      scenariosEl.querySelectorAll('details.scenario').forEach(d => {
+        d.style.display = (f === 'all' || d.dataset.status === f) ? '' : 'none';
+      });
+    });
+  });
+</script>
+</body>
+</html>

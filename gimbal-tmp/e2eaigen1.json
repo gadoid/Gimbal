@@ -24,9 +24,8 @@
             "tidb-test-service": "https://fin-tidb.21eflag.com/"
         },
         "vars": {
-            "bl_no": "GIMBAL_TEST_20",
+            "bl_no": "GIMBAL_TEST_14",
             "invoice_file_id": "1",
-            "invoice_number": "24922000000029640013",
             "finance_id_1": "2896",
             "finance_id_2": "2895",
             "bank_ids_1": "78",
@@ -5430,7 +5429,7 @@
                     "scope": "scenario"
                 }
             ]
-        },
+        }
         {
             "kind": "step",
             "api": {
@@ -5552,7 +5551,7 @@
                 "kind": "request",
                 "body": [
                     {
-                        "invoice_number": "${var.invoice_number}",
+                        "invoice_number": "24922000000029640004",
                         "invoice_type": "1",
                         "invoice_type_name": "增值税数电普通发票",
                         "invoice_amount": "770.00",
@@ -5627,19 +5626,6 @@
                     "target": "response_body_step_40",
                     "required": true,
                     "default": null
-                },
-                {
-                    "kind": "extract",
-                    "name": "extract_receive_invoice_id_step40",
-                    "phase": "after_request",
-                    "order": 1,
-                    "enabled": true,
-                    "onFailure": "abort",
-                    "expression": "$.response_body.data['${var.invoice_number}']",
-                    "target": "receive_invoice_id",
-                    "required": true,
-                    "default": null,
-                    "scope": "scenario"
                 }
             ]
         },
@@ -5669,64 +5655,7 @@
                 }
             },
             "strategy": [
-                {
-                    "kind": "assign",
-                    "name": "assign_receive_invoice_apply_id_step41",
-                    "phase": "before_request",
-                    "order": 0,
-                    "enabled": true,
-                    "onFailure": "abort",
-                    "source": "$.receive_invoice_apply_id",
-                    "target": "$.request_body.receive_invoice_apply_id",
-                    "scope": "scenario"
-                },
-                {
-                    "kind": "assign",
-                    "name": "assign_order_sub_id_step41",
-                    "phase": "before_request",
-                    "order": 1,
-                    "enabled": true,
-                    "onFailure": "abort",
-                    "source": "$.order_sub_id",
-                    "target": "$.request_body.invoice_arr[0].order_sub_id",
-                    "scope": "scenario"
-                },
-                {
-                    "kind": "assign",
-                    "name": "assign_receive_invoice_id_step41",
-                    "phase": "before_request",
-                    "order": 2,
-                    "enabled": true,
-                    "onFailure": "abort",
-                    "source": "$.receive_invoice_id",
-                    "target": "$.request_body.invoice_arr[0].receive_invoice_id",
-                    "scope": "scenario"
-                },
-                {
-                    "kind": "assertion",
-                    "name": "assert_status_200",
-                    "phase": "verifying",
-                    "order": 0,
-                    "enabled": true,
-                    "onFailure": "abort",
-                    "target": "$.response_status",
-                    "operator": "eq",
-                    "expected": 200,
-                    "message": "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceOrder 应返回200",
-                    "soft": false
-                },
-                {
-                    "kind": "extract",
-                    "name": "extract_response_body_step_41",
-                    "phase": "after_request",
-                    "order": 0,
-                    "enabled": true,
-                    "onFailure": "abort",
-                    "expression": "$.response_body",
-                    "target": "response_body_step_41",
-                    "required": true,
-                    "default": null
-                }
+
             ]
         },
         {
@@ -5755,64 +5684,7 @@
                 }
             },
             "strategy": [
-                {
-                    "kind": "assign",
-                    "name": "assign_receive_invoice_apply_id_step42",
-                    "phase": "before_request",
-                    "order": 0,
-                    "enabled": true,
-                    "onFailure": "abort",
-                    "source": "$.receive_invoice_apply_id",
-                    "target": "$.request_body.receive_invoice_apply_id",
-                    "scope": "scenario"
-                },
-                {
-                    "kind": "assign",
-                    "name": "assign_order_sub_id_step42",
-                    "phase": "before_request",
-                    "order": 1,
-                    "enabled": true,
-                    "onFailure": "abort",
-                    "source": "$.order_sub_id",
-                    "target": "$.request_body.invoice_arr[0].order_sub_id",
-                    "scope": "scenario"
-                },
-                {
-                    "kind": "assign",
-                    "name": "assign_receive_invoice_id_step42",
-                    "phase": "before_request",
-                    "order": 2,
-                    "enabled": true,
-                    "onFailure": "abort",
-                    "source": "$.receive_invoice_id",
-                    "target": "$.request_body.invoice_arr[0].receive_invoice_id",
-                    "scope": "scenario"
-                },
-                {
-                    "kind": "assertion",
-                    "name": "assert_status_200",
-                    "phase": "verifying",
-                    "order": 0,
-                    "enabled": true,
-                    "onFailure": "abort",
-                    "target": "$.response_status",
-                    "operator": "eq",
-                    "expected": 200,
-                    "message": "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceOrder 应返回200",
-                    "soft": false
-                },
-                {
-                    "kind": "extract",
-                    "name": "extract_response_body_step_42",
-                    "phase": "after_request",
-                    "order": 0,
-                    "enabled": true,
-                    "onFailure": "abort",
-                    "expression": "$.response_body",
-                    "target": "response_body_step_42",
-                    "required": true,
-                    "default": null
-                }
+
             ]
         },
         {
