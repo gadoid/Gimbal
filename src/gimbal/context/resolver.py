@@ -70,6 +70,7 @@ class SpecResolver:
 
         resolved = Step(
             kind=step.kind,
+            description=step.description,
             api=self._resolve_api(step.api),
             request=self._resolve_request(step.request),
             strategy=[self._resolve_strategy(s) for s in step.strategy],

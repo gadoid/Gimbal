@@ -84,6 +84,11 @@ class ConsoleReporter(ReporterBase):
                     f"  [{event.scenario_id or self._current_scenario}/{event.step_id}] start",
                     _DIM, not nc,
                 ))
+                if event.description:
+                    self._stream(_color(
+                        f"      {event.description}",
+                        _DIM, not nc,
+                    ))
             elif isinstance(event, StepEndEvent):
                 dur = event.duration_ms
                 marker = "✓" if event.status == "passed" else ("-" if event.status == "skipped" else "✗")

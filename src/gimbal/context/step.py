@@ -80,6 +80,7 @@ class StepInputs(BaseModel):
 
     step_id: str
     step_name: str
+    description: Optional[str] = None
     strategy_kind: str
     strategy_spec: dict
     resolved_vars: dict[str, Any]

@@ -1,16 +1,17 @@
 {
     "kind": "scenario",
-    "scenarioId": "e2e订单到应收核销",
+    "scenarioId": "e2e订单到应收核销_05_批次开票到应收核销",
     "meta": {
-        "name": "全链路-订单创建至应收核销-正常",
-        "description": "验证从订单委托创建、订舱、生成子单、费用锁定与审核、变更开票申请审核、收款账户确认、批次开票申请审核、发票录入到应收核销的全链路在正常路径下均返回200且关键业务标识在各环节间正确传递",
+        "name": "批次开票→发票录入→应收核销",
+        "description": "批次开票编辑→审核→发票录入→分配→应收核销全链路验证：覆盖批次开票三次提交、批次审核通过、收票申请查询、发票添加校验与录入、发票分配订单两次与最终应收核销两次提交。",
         "module": "settlement",
         "priority": 1,
         "author": "codfish",
         "owner": "codfish",
         "tags": [
             "smoke",
-            "settlement"
+            "settlement",
+            "sub-05"
         ],
         "version": "1.0.0",
         "createTime": "2026-06-23T10:00:00",
@@ -24,9 +25,9 @@
             "tidb-test-service": "https://fin-tidb.21eflag.com/"
         },
         "vars": {
-            "bl_no": "GIMBAL_TEST_23",
+            "bl_no": "GIMBAL_TEST_22_BL05",
             "invoice_file_id": "1",
-            "invoice_number": "24920000000029640016",
+            "invoice_number": "24925000000029600016",
             "finance_id_1": "2896",
             "finance_id_2": "2895",
             "bank_ids_1": "78",

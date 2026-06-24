@@ -329,6 +329,7 @@ class ScenarioPreprocessor:
 
         resolved = Step(
             kind=step.kind,
+            description=step.description,
             api=self._resolve_api(step.api, root),
             request=self._resolve_request(step.request, root),
             strategy=[self._resolve_strategy(s, root) for s in step.strategy],

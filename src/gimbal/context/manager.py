@@ -132,11 +132,13 @@ class ContextManager:
         *, step_id: str, step_name: str,
         strategy_kind: str, strategy_spec: dict,
         resolved_vars: dict,
+        description: Optional[str] = None,
     ) -> StepContext:
         """基于 scenario_ctx 派生 StepContext:构造 StepInputs,发布 step.start 事件;返回未 seal 的 StepContext。"""
         inputs = StepInputs(
             step_id=step_id,
             step_name=step_name,
+            description=description,
             strategy_kind=strategy_kind,
             strategy_spec=strategy_spec,
             resolved_vars=resolved_vars,

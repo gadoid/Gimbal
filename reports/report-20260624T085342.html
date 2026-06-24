@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gimbal Report — 98dcb185-27fa-4140-9a8c-721fe242b49b</title>
+<style>
+  body { font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          margin: 0; padding: 24px; background: #fafafa; color: #222; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  .meta { color: #666; margin-bottom: 4px; font-size: 12px; }
+  .summary { display: flex; gap: 12px; margin: 16px 0; flex-wrap: wrap; }
+  .pill { padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: 13px; }
+  .pill-passed { background: #dcfce7; color: #166534; }
+  .pill-failed { background: #fee2e2; color: #991b1b; }
+  .pill-error  { background: #fef3c7; color: #92400e; }
+  .pill-skipped{ background: #e5e7eb; color: #374151; }
+  .pill-total  { background: #dbeafe; color: #1e40af; }
+  .pill-ci     { background: #ede9fe; color: #5b21b6; }
+  .pill-meta   { background: #f1f5f9; color: #334155; }
+  .pill-tag    { background: #e0e7ff; color: #3730a3; font-weight: 500; }
+  .run-meta    { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+                 padding: 10px 14px; margin: 12px 0; }
+  .run-meta .label { color: #64748b; font-size: 11px; font-weight: 600;
+                      text-transform: uppercase; letter-spacing: 0.5px;
+                      margin-right: 4px; }
+  .scenario-meta-chips { display: inline-flex; gap: 4px; flex-wrap: wrap;
+                          margin-left: 8px; vertical-align: middle; }
+  details.scenario { background: #fff; border: 1px solid #e5e7eb; border-radius: 6px;
+             padding: 10px 14px; margin: 6px 0; }
+  details.scenario[open] { background: #f9fafb; }
+  summary { cursor: pointer; font-weight: 500; }
+  .filterbar { margin: 16px 0; }
+  .filterbar button { background: #fff; border: 1px solid #d1d5db; padding: 4px 10px;
+                       border-radius: 4px; margin-right: 6px; cursor: pointer; }
+  .filterbar button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+  .step-pill { padding: 2px 8px; border-radius: 4px; font-family: ui-monospace, monospace;
+                font-size: 12px; display: inline-block; min-width: 1.2em; text-align: center; }
+  .step-pill.passed { background: #dcfce7; color: #166534; }
+  .step-pill.failed { background: #fee2e2; color: #991b1b; }
+  .step-pill.error  { background: #fef3c7; color: #92400e; }
+  .step-pill.skipped{ background: #e5e7eb; color: #374151; }
+  ol.steps { list-style: none; padding-left: 0; margin: 10px 0 4px; }
+  ol.steps > li { padding: 8px 0; border-top: 1px solid #f1f5f9; }
+  ol.steps > li:first-child { border-top: none; }
+  .step-line { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .step-name { font-weight: 500; }
+  .step-id   { font-family: ui-monospace, monospace; color: #64748b; font-size: 12px; }
+  .step-meta { color: #64748b; font-size: 12px; margin-left: auto; }
+  pre { background: #0f172a; color: #e2e8f0; padding: 10px; border-radius: 6px;
+         overflow-x: auto; font-size: 12px; margin: 6px 0 0; white-space: pre-wrap; }
+  .err  { color: #991b1b; font-family: ui-monospace, monospace; }
+  .http-summary { color: #475569; font-size: 11px; margin-top: 4px;
+                   font-family: ui-monospace, monospace; background: #f8fafc;
+                   padding: 4px 8px; border-radius: 4px; line-height: 1.6; }
+  .http-summary .ok  { color: #166534; }
+  .http-summary .bad { color: #991b1b; }
+  footer { margin-top: 32px; color: #999; font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<h1>🛠 Gimbal Report</h1>
+<div class="meta">
+  <div>Run ID: <code>98dcb185-27fa-4140-9a8c-721fe242b49b</code></div>
+  <div>Env: <code>dev</code> &nbsp; Mode: <code>local</code> &nbsp;
+       Framework: <code>0.1.0</code></div>
+  <div>Generated at: 2026-06-24 08:53:42 UTC</div>
+</div>
+
+
+
+<div class="summary" id="summary">
+  <span class="pill pill-total">Total: 1</span>
+  <span class="pill pill-passed">Passed: 1</span>
+  <span class="pill pill-failed">Failed: 0</span>
+  <span class="pill pill-error">Error: 0</span>
+  <span class="pill pill-skipped">Skipped: 0</span>
+</div>
+
+<div class="filterbar">
+  Filter:
+  <button data-filter="all" class="active">All</button>
+  <button data-filter="failed">Failed</button>
+  <button data-filter="error">Error</button>
+  <button data-filter="passed">Passed</button>
+  <button data-filter="skipped">Skipped</button>
+</div>
+
+<div id="scenarios">
+  <details class="scenario" data-status="passed" >
+  <summary>
+    <span class="step-pill passed">passed</span>
+    <strong>e2e订单到应收核销</strong>
+    &nbsp;—&nbsp;<span class="meta">全链路-订单创建至应收核销-正常</span>
+    <span class="scenario-meta-chips"><span class="pill pill-tag">smoke</span><span class="pill pill-tag">settlement</span><span class="pill pill-meta">author: codfish</span><span class="pill pill-meta">priority: 1</span><span class="pill pill-meta">version: 1.0.0</span></span>
+    &nbsp;—&nbsp;<span class="meta">0.0ms</span>
+  </summary>
+  <ol class="steps">
+    <li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-000</span>
+    <span class="step-name">step-000</span>
+    <span class="step-meta">1063.7ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">创建订单委托（客户下单）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderEntrust/orderAdd<br>&larr; <span class="bad">0</span> (1055.1ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-001</span>
+    <span class="step-name">step-001</span>
+    <span class="step-meta">1809.8ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">编辑订单委托（补全委托信息）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderEntrust/orderAdd<br>&larr; <span class="bad">0</span> (1798.1ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-002</span>
+    <span class="step-name">step-002</span>
+    <span class="step-meta">1028.8ms · multi · asserts=1/1 · promotions=2</span>
+  </div>
+<div class="step-desc">分页查询订单委托列表，获取订单 ID 与订单号</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderEntrust/orderPage<br>&larr; <span class="bad">0</span> (1015.1ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-003</span>
+    <span class="step-name">step-003</span>
+    <span class="step-meta">1470.2ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+<div class="step-desc">查询订单详情，验证订单 ID 有效性</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/orderDetail<br>&larr; <span class="bad">0</span> (1466.5ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-004</span>
+    <span class="step-name">step-004</span>
+    <span class="step-meta">1129.0ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">提交订单委托（含订舱供应商信息）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderEntrust/orderAdd<br>&larr; <span class="bad">0</span> (1125.9ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-005</span>
+    <span class="step-name">step-005</span>
+    <span class="step-meta">2703.3ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">再次编辑订单委托（确认提交前的最终修订）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderEntrust/orderAdd<br>&larr; <span class="bad">0</span> (2700.1ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-006</span>
+    <span class="step-name">step-006</span>
+    <span class="step-meta">960.7ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">创建主订单</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/orderAdd<br>&larr; <span class="bad">0</span> (956.2ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-007</span>
+    <span class="step-name">step-007</span>
+    <span class="step-meta">2628.3ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+<div class="step-desc">主订单订舱，上传附件并获取文件 ID</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/orderBook<br>&larr; <span class="bad">0</span> (2624.6ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-008</span>
+    <span class="step-name">step-008</span>
+    <span class="step-meta">6173.3ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">再次创建主订单（关联附件）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/orderAdd<br>&larr; <span class="bad">0</span> (6166.9ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-009</span>
+    <span class="step-name">step-009</span>
+    <span class="step-meta">1487.4ms · multi · asserts=1/1 · promotions=2</span>
+  </div>
+<div class="step-desc">查询订单详情，提取子单 ID 与子单号</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/orderDetail<br>&larr; <span class="bad">0</span> (1482.2ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-010</span>
+    <span class="step-name">step-010</span>
+    <span class="step-meta">1516.0ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">切换订单费用项的实际金额选择</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderFee/toggleRealAmount<br>&larr; <span class="bad">0</span> (1510.4ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-011</span>
+    <span class="step-name">step-011</span>
+    <span class="step-meta">1043.5ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">编辑订舱实际金额</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderFee/bookRealAmountEdit<br>&larr; <span class="bad">0</span> (1037.4ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-012</span>
+    <span class="step-name">step-012</span>
+    <span class="step-meta">2518.4ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">保存订舱实际金额</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderFee/bookRealAmountEdit<br>&larr; <span class="bad">0</span> (2516.0ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-013</span>
+    <span class="step-name">step-013</span>
+    <span class="step-meta">4486.9ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">校验订单是否可生成子单</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/checkGenerateOrderSub<br>&larr; <span class="bad">0</span> (4482.8ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-014</span>
+    <span class="step-name">step-014</span>
+    <span class="step-meta">5931.1ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">生成订单子单</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/generateOrderSub<br>&larr; <span class="bad">0</span> (5928.2ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-015</span>
+    <span class="step-name">step-015</span>
+    <span class="step-meta">1217.5ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+<div class="step-desc">查询订单详情，提取子单 ID（第二轮）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/orderDetail<br>&larr; <span class="bad">0</span> (1211.4ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-016</span>
+    <span class="step-name">step-016</span>
+    <span class="step-meta">1210.8ms · multi · asserts=1/1 · promotions=2</span>
+  </div>
+<div class="step-desc">切换费用项实际金额，提取费用项 ID 与费用单号</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderFee/toggleRealAmount<br>&larr; <span class="bad">0</span> (1206.7ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-017</span>
+    <span class="step-name">step-017</span>
+    <span class="step-meta">1319.9ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">费用锁定提交（第一次）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderFee/realAmountLockSubmit<br>&larr; <span class="bad">0</span> (1317.3ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-018</span>
+    <span class="step-name">step-018</span>
+    <span class="step-meta">1296.4ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">费用锁定提交（第二次）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderFee/realAmountLockSubmit<br>&larr; <span class="bad">0</span> (1293.6ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-019</span>
+    <span class="step-name">step-019</span>
+    <span class="step-meta">1999.6ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">费用锁定提交（第三次）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/orderFee/realAmountLockSubmit<br>&larr; <span class="bad">0</span> (1980.6ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-020</span>
+    <span class="step-name">step-020</span>
+    <span class="step-meta">1484.7ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+<div class="step-desc">查询订单详情，提取费用锁定审核 ID</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/orderDetail<br>&larr; <span class="bad">0</span> (1472.7ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-021</span>
+    <span class="step-name">step-021</span>
+    <span class="step-meta">2447.4ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">执行费用锁定审核</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/home/audit/auditExecute<br>&larr; <span class="bad">0</span> (2442.8ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-022</span>
+    <span class="step-name">step-022</span>
+    <span class="step-meta">981.7ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">变更开票申请提交（第一次）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/changeInvoiceApply<br>&larr; <span class="bad">0</span> (979.3ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-023</span>
+    <span class="step-name">step-023</span>
+    <span class="step-meta">1051.5ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">变更开票申请提交（第二次）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/changeInvoiceApply<br>&larr; <span class="bad">0</span> (1048.9ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-024</span>
+    <span class="step-name">step-024</span>
+    <span class="step-meta">1546.3ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">变更开票申请提交（第三次）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/changeInvoiceApply<br>&larr; <span class="bad">0</span> (1544.0ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-025</span>
+    <span class="step-name">step-025</span>
+    <span class="step-meta">1103.5ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+<div class="step-desc">审核分页查询，提取变更开票审核 ID</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/home/audit/auditPage<br>&larr; <span class="bad">0</span> (1100.9ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-026</span>
+    <span class="step-name">step-026</span>
+    <span class="step-meta">1313.6ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">执行变更开票申请审核</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/home/audit/auditExecute<br>&larr; <span class="bad">0</span> (1311.5ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-027</span>
+    <span class="step-name">step-027</span>
+    <span class="step-meta">2049.8ms · multi · asserts=1/1 · promotions=3</span>
+  </div>
+<div class="step-desc">订单收款账户确认，提取买卖方银行账号与纳税人识别号</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/order/order/orderConfirmAccount<br>&larr; <span class="bad">0</span> (2046.7ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-028</span>
+    <span class="step-name">step-028</span>
+    <span class="step-meta">1324.4ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+<div class="step-desc">查询财务列表，提取子单币种</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/accountFee/financePutList<br>&larr; <span class="bad">0</span> (1319.6ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-029</span>
+    <span class="step-name">step-029</span>
+    <span class="step-meta">1044.3ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">编辑订单收款账户（第一次）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/orderReceiveAccountEdit<br>&larr; <span class="bad">0</span> (1030.0ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-030</span>
+    <span class="step-name">step-030</span>
+    <span class="step-meta">1706.1ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+<div class="step-desc">编辑订单收款账户（第二次），提取收款账户 ID</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/orderReceiveAccountEdit<br>&larr; <span class="bad">0</span> (1684.8ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-031</span>
+    <span class="step-name">step-031</span>
+    <span class="step-meta">1089.2ms · multi · asserts=1/1 · promotions=2</span>
+  </div>
+<div class="step-desc">查询收款确认列表，提取实收金额 ID</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/receiveConfirmList<br>&larr; <span class="bad">0</span> (1085.5ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-032</span>
+    <span class="step-name">step-032</span>
+    <span class="step-meta">1849.3ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">提交账户确认（收款确认）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/receiveAccount/accountConfirm<br>&larr; <span class="bad">0</span> (1846.9ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-033</span>
+    <span class="step-name">step-033</span>
+    <span class="step-meta">1230.3ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">批次开票编辑（第一次）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/batchOrderEdit<br>&larr; <span class="bad">0</span> (1227.5ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-034</span>
+    <span class="step-name">step-034</span>
+    <span class="step-meta">1251.5ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">批次开票编辑（第二次）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/batchOrderEdit<br>&larr; <span class="bad">0</span> (1239.9ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-035</span>
+    <span class="step-name">step-035</span>
+    <span class="step-meta">2170.2ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">批次开票编辑（第三次）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/batchOrderEdit<br>&larr; <span class="bad">0</span> (2163.5ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-036</span>
+    <span class="step-name">step-036</span>
+    <span class="step-meta">1075.9ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+<div class="step-desc">审核分页查询，提取批次开票审核 ID</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/home/audit/auditPage<br>&larr; <span class="bad">0</span> (1065.9ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-037</span>
+    <span class="step-name">step-037</span>
+    <span class="step-meta">2280.5ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">执行批次开票审核</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/home/audit/auditExecute<br>&larr; <span class="bad">0</span> (2275.9ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-038</span>
+    <span class="step-name">step-038</span>
+    <span class="step-meta">1064.9ms · multi · asserts=1/1 · promotions=3</span>
+  </div>
+<div class="step-desc">查询批次开票申请，提取收票申请 ID、批次 ID 与申请号</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/applyPage<br>&larr; <span class="bad">0</span> (1050.9ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-039</span>
+    <span class="step-name">step-039</span>
+    <span class="step-meta">954.9ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">发票添加前置校验</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/receiveInvoice/invoiceAddCheck<br>&larr; <span class="bad">0</span> (950.3ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-040</span>
+    <span class="step-name">step-040</span>
+    <span class="step-meta">1102.9ms · multi · asserts=1/1 · promotions=1</span>
+  </div>
+<div class="step-desc">录入发票，提取收票 ID</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/receiveInvoice/invoiceAdd<br>&larr; <span class="bad">0</span> (1100.7ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-041</span>
+    <span class="step-name">step-041</span>
+    <span class="step-meta">877.6ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">发票分配订单（第一次）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/allocationInvoiceOrder<br>&larr; <span class="bad">0</span> (874.6ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-042</span>
+    <span class="step-name">step-042</span>
+    <span class="step-meta">3015.9ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">发票分配订单（第二次）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/Finance/ReceiveInvoiceBatch/allocationInvoiceOrder<br>&larr; <span class="bad">0</span> (3010.1ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-043</span>
+    <span class="step-name">step-043</span>
+    <span class="step-meta">1192.1ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">应收核销批次提交（第一次）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/receiveWriteoff/writeoffBatch<br>&larr; <span class="bad">0</span> (1189.4ms)</div>
+  
+</li>
+<li class="step-item" data-step-status="passed">
+  <div class="step-line">
+    <span class="step-pill passed">✓</span>
+    <span class="step-id">step-044</span>
+    <span class="step-name">step-044</span>
+    <span class="step-meta">2362.7ms · multi · asserts=1/1</span>
+  </div>
+<div class="step-desc">应收核销批次提交（第二次）</div>
+  <div class="http-summary">&rarr; POST https://fin-tidb.21eflag.com/api/finance/receiveWriteoff/writeoffBatch<br>&larr; <span class="bad">0</span> (2357.1ms)</div>
+  
+</li>
+  </ol>
+  
+</details>
+
+</div>
+
+<footer>Generated by Gimbal Reporter. Embedded data: see <code>#report-data</code> below.</footer>
+
+<script id="report-data" type="application/json">{"run_id": "98dcb185-27fa-4140-9a8c-721fe242b49b", "env": "dev", "mode": "local", "framework_version": "0.1.0", "summary": {"total": 1, "passed": 1, "failed": 0, "error": 0, "skipped": 0}, "run_meta": {}, "scenarios": [{"scenario_id": "e2e订单到应收核销", "scenario_name": "全链路-订单创建至应收核销-正常", "status": "passed", "duration_ms": 0.0, "error": null, "meta": {"name": "全链路-订单创建至应收核销-正常", "description": "验证从订单委托创建、订舱、生成子单、费用锁定与审核、变更开票申请审核、收款账户确认、批次开票申请审核、发票录入到应收核销的全链路在正常路径下均返回200且关键业务标识在各环节间正确传递", "module": "settlement", "priority": 1, "author": "codfish", "owner": "codfish", "tags": ["smoke", "settlement"], "version": "1.0.0", "createTime": "2026-06-23T10:00:00", "expire": false, "requirementRef": []}, "steps": [{"scenario_id": "e2e订单到应收核销", "step_id": "step-000", "step_name": "step-000", "description": "创建订单委托（客户下单）", "strategy_kind": "multi", "status": "passed", "duration_ms": 1063.683, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-001", "step_name": "step-001", "description": "编辑订单委托（补全委托信息）", "strategy_kind": "multi", "status": "passed", "duration_ms": 1809.815, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-002", "step_name": "step-002", "description": "分页查询订单委托列表，获取订单 ID 与订单号", "strategy_kind": "multi", "status": "passed", "duration_ms": 1028.841, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 2, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-003", "step_name": "step-003", "description": "查询订单详情，验证订单 ID 有效性", "strategy_kind": "multi", "status": "passed", "duration_ms": 1470.175, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-004", "step_name": "step-004", "description": "提交订单委托（含订舱供应商信息）", "strategy_kind": "multi", "status": "passed", "duration_ms": 1128.954, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-005", "step_name": "step-005", "description": "再次编辑订单委托（确认提交前的最终修订）", "strategy_kind": "multi", "status": "passed", "duration_ms": 2703.32, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-006", "step_name": "step-006", "description": "创建主订单", "strategy_kind": "multi", "status": "passed", "duration_ms": 960.72, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-007", "step_name": "step-007", "description": "主订单订舱，上传附件并获取文件 ID", "strategy_kind": "multi", "status": "passed", "duration_ms": 2628.3120000000004, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-008", "step_name": "step-008", "description": "再次创建主订单（关联附件）", "strategy_kind": "multi", "status": "passed", "duration_ms": 6173.332, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-009", "step_name": "step-009", "description": "查询订单详情，提取子单 ID 与子单号", "strategy_kind": "multi", "status": "passed", "duration_ms": 1487.44, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 2, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-010", "step_name": "step-010", "description": "切换订单费用项的实际金额选择", "strategy_kind": "multi", "status": "passed", "duration_ms": 1516.041, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-011", "step_name": "step-011", "description": "编辑订舱实际金额", "strategy_kind": "multi", "status": "passed", "duration_ms": 1043.519, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-012", "step_name": "step-012", "description": "保存订舱实际金额", "strategy_kind": "multi", "status": "passed", "duration_ms": 2518.4359999999997, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-013", "step_name": "step-013", "description": "校验订单是否可生成子单", "strategy_kind": "multi", "status": "passed", "duration_ms": 4486.91, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-014", "step_name": "step-014", "description": "生成订单子单", "strategy_kind": "multi", "status": "passed", "duration_ms": 5931.114, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-015", "step_name": "step-015", "description": "查询订单详情，提取子单 ID（第二轮）", "strategy_kind": "multi", "status": "passed", "duration_ms": 1217.516, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-016", "step_name": "step-016", "description": "切换费用项实际金额，提取费用项 ID 与费用单号", "strategy_kind": "multi", "status": "passed", "duration_ms": 1210.803, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 2, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-017", "step_name": "step-017", "description": "费用锁定提交（第一次）", "strategy_kind": "multi", "status": "passed", "duration_ms": 1319.881, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-018", "step_name": "step-018", "description": "费用锁定提交（第二次）", "strategy_kind": "multi", "status": "passed", "duration_ms": 1296.3899999999999, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-019", "step_name": "step-019", "description": "费用锁定提交（第三次）", "strategy_kind": "multi", "status": "passed", "duration_ms": 1999.604, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-020", "step_name": "step-020", "description": "查询订单详情，提取费用锁定审核 ID", "strategy_kind": "multi", "status": "passed", "duration_ms": 1484.7250000000001, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-021", "step_name": "step-021", "description": "执行费用锁定审核", "strategy_kind": "multi", "status": "passed", "duration_ms": 2447.361, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-022", "step_name": "step-022", "description": "变更开票申请提交（第一次）", "strategy_kind": "multi", "status": "passed", "duration_ms": 981.68, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-023", "step_name": "step-023", "description": "变更开票申请提交（第二次）", "strategy_kind": "multi", "status": "passed", "duration_ms": 1051.487, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-024", "step_name": "step-024", "description": "变更开票申请提交（第三次）", "strategy_kind": "multi", "status": "passed", "duration_ms": 1546.27, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-025", "step_name": "step-025", "description": "审核分页查询，提取变更开票审核 ID", "strategy_kind": "multi", "status": "passed", "duration_ms": 1103.4969999999998, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-026", "step_name": "step-026", "description": "执行变更开票申请审核", "strategy_kind": "multi", "status": "passed", "duration_ms": 1313.554, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-027", "step_name": "step-027", "description": "订单收款账户确认，提取买卖方银行账号与纳税人识别号", "strategy_kind": "multi", "status": "passed", "duration_ms": 2049.849, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 3, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-028", "step_name": "step-028", "description": "查询财务列表，提取子单币种", "strategy_kind": "multi", "status": "passed", "duration_ms": 1324.421, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-029", "step_name": "step-029", "description": "编辑订单收款账户（第一次）", "strategy_kind": "multi", "status": "passed", "duration_ms": 1044.2549999999999, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-030", "step_name": "step-030", "description": "编辑订单收款账户（第二次），提取收款账户 ID", "strategy_kind": "multi", "status": "passed", "duration_ms": 1706.106, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-031", "step_name": "step-031", "description": "查询收款确认列表，提取实收金额 ID", "strategy_kind": "multi", "status": "passed", "duration_ms": 1089.209, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 2, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-032", "step_name": "step-032", "description": "提交账户确认（收款确认）", "strategy_kind": "multi", "status": "passed", "duration_ms": 1849.2839999999999, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-033", "step_name": "step-033", "description": "批次开票编辑（第一次）", "strategy_kind": "multi", "status": "passed", "duration_ms": 1230.298, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-034", "step_name": "step-034", "description": "批次开票编辑（第二次）", "strategy_kind": "multi", "status": "passed", "duration_ms": 1251.531, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-035", "step_name": "step-035", "description": "批次开票编辑（第三次）", "strategy_kind": "multi", "status": "passed", "duration_ms": 2170.223, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-036", "step_name": "step-036", "description": "审核分页查询，提取批次开票审核 ID", "strategy_kind": "multi", "status": "passed", "duration_ms": 1075.89, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-037", "step_name": "step-037", "description": "执行批次开票审核", "strategy_kind": "multi", "status": "passed", "duration_ms": 2280.4739999999997, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-038", "step_name": "step-038", "description": "查询批次开票申请，提取收票申请 ID、批次 ID 与申请号", "strategy_kind": "multi", "status": "passed", "duration_ms": 1064.912, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 3, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-039", "step_name": "step-039", "description": "发票添加前置校验", "strategy_kind": "multi", "status": "passed", "duration_ms": 954.875, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-040", "step_name": "step-040", "description": "录入发票，提取收票 ID", "strategy_kind": "multi", "status": "passed", "duration_ms": 1102.932, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 1, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-041", "step_name": "step-041", "description": "发票分配订单（第一次）", "strategy_kind": "multi", "status": "passed", "duration_ms": 877.581, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-042", "step_name": "step-042", "description": "发票分配订单（第二次）", "strategy_kind": "multi", "status": "passed", "duration_ms": 3015.94, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-043", "step_name": "step-043", "description": "应收核销批次提交（第一次）", "strategy_kind": "multi", "status": "passed", "duration_ms": 1192.101, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}, {"scenario_id": "e2e订单到应收核销", "step_id": "step-044", "step_name": "step-044", "description": "应收核销批次提交（第二次）", "strategy_kind": "multi", "status": "passed", "duration_ms": 2362.6969999999997, "assertion_count": 1, "assertion_passed": 1, "promotion_count": 0, "error": null}]}]}</script>
+<script>
+  const filterButtons = document.querySelectorAll('.filterbar button');
+  const scenariosEl = document.getElementById('scenarios');
+  filterButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      filterButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const f = btn.dataset.filter;
+      scenariosEl.querySelectorAll('details.scenario').forEach(d => {
+        d.style.display = (f === 'all' || d.dataset.status === f) ? '' : 'none';
+      });
+    });
+  });
+</script>
+</body>
+</html>

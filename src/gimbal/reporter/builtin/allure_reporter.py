@@ -116,6 +116,8 @@ class AllureReporter(ReporterBase):
             "labels": [{"name": "framework", "value": "gimbal"}, {"name": "step_id", "value": ev.step_id}],
             "steps": [], "attachments": [], "parameters": [],
         }
+        if ev.description:
+            result["description"] = ev.description
         meta = self._scenario_meta.get(ev.scenario_id or "")
         if meta is not None: meta["step_uids"].append(uid)
         self._write_json(f"{uid}-result.json", result)

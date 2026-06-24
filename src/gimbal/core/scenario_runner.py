@@ -106,6 +106,7 @@ class StepRunner:
             strategy_kind="multi",
             strategy_spec=step_schema.model_dump(),
             resolved_vars={},
+            description=getattr(step_schema, "description", None),
         )
         logger.debug("[StepRunner] StepContext 创建完成: step_id={}", step_id)
 

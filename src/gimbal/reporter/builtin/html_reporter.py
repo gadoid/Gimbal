@@ -147,6 +147,7 @@ _STEP_TEMPLATE = """<li class="step-item" data-step-status="{status}">
     <span class="step-name">{step_name}</span>
     <span class="step-meta">{meta}</span>
   </div>
+{description_block}
   {http_block}
   {error_block}
 </li>"""
@@ -230,6 +231,7 @@ class HtmlReporter(ReporterBase):
                     "scenario_id": sc_id,
                     "step_id": event.step_id,
                     "step_name": event.step_name,
+                    "description": event.description,
                     "strategy_kind": event.strategy_kind,
                     "status": "passed",
                     "duration_ms": 0.0,
@@ -519,6 +521,7 @@ def _render_steps(
         marker = {"passed": "✓", "failed": "✗", "error": "!", "skipped": "−"}.get(status, "?")
         step_id = _e(s.get("step_id", "?"))
         step_name = _e(s.get("step_name", "") or "")
+        description = _e(s.get("description", "") or "")
         meta_parts = [f"{float(s.get('duration_ms', 0) or 0):.1f}ms"]
         if s.get("strategy_kind"):
             meta_parts.append(_e(str(s["strategy_kind"])))
@@ -529,6 +532,9 @@ def _render_steps(
         if s.get("promotion_count"):
             meta_parts.append(f"promotions={s.get('promotion_count')}")
         meta = " · ".join(meta_parts)
+        description_block = (
+            f'<div class="step-desc">{description}</div>' if description else ""
+        )
         http_block = _render_http_calls(
             http_calls.get((s.get("scenario_id", ""), s.get("step_id", "")), [])
         )
@@ -542,6 +548,7 @@ def _render_steps(
             step_id=step_id,
             step_name=step_name,
             meta=meta,
+            description_block=description_block,
             http_block=http_block,
             error_block=error_block,
         ))

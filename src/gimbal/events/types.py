@@ -176,6 +176,8 @@ class StepStartEvent(FrameworkEvent):
     step_name: str
     # 由 ContextManager.project_step_started 填充；statemachine 直接发时为空
     strategy_kind: str = ""
+    # 步骤说明(对应 Step.description),可选;为空时 reporter 可降级到 step_name
+    description: Optional[str] = None
 
 
 class StepEndEvent(FrameworkEvent):

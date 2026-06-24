@@ -486,7 +486,7 @@ class StepStateMachine:
         return not result.stopped
 
     def _emit_step_start(self) -> None:
-        """向 event_bus 发送 StepStartEvent 事件（含 step_id 与 step_name）；无 bus 时静默 return，内部异常仅 debug 日志。"""
+        """向 event_bus 发送 StepStartEvent 事件（含 step_id / step_name / description）；无 bus 时静默 return，内部异常仅 debug 日志。"""
         if self._bus is None:
             return
         try:
@@ -494,6 +494,7 @@ class StepStateMachine:
             self._bus.publish(StepStartEvent(
                 step_id=self._step_id,
                 step_name=getattr(self._step_schema, "name", "") or self._step_id,
+                description=getattr(self._step_schema, "description", None),
             ))
         except Exception:  # noqa: BLE001
             logger.debug("[SM {}] emit STEP_START failed", self._step_id)

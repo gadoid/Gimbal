@@ -50,7 +50,7 @@ def project_scenario_completed(scenario_ctx, run_id: str) -> ScenarioEndEvent:
 
 
 def project_step_started(ctx: "StepContext", run_id: str) -> StepStartEvent:
-    """把 StepContext 投影为 StepStartEvent:从 inputs 读取 step_name/strategy_kind,记录 started_at;返回对外事件对象。"""
+    """把 StepContext 投影为 StepStartEvent:从 inputs 读取 step_name/description/strategy_kind,记录 started_at;返回对外事件对象。"""
     return StepStartEvent(
         timestamp=ctx.started_at,
         run_id=run_id,
@@ -58,6 +58,7 @@ def project_step_started(ctx: "StepContext", run_id: str) -> StepStartEvent:
         step_id=ctx.step_id,
         step_name=ctx.inputs.step_name,
         strategy_kind=ctx.inputs.strategy_kind,
+        description=ctx.inputs.description,
     )
 
 
