@@ -30,3 +30,36 @@ line-length = 100
 
 [tool.mypy]
 python_version = "3.11"
+
+# ════════════════════════════════════════════════════════════════════════════
+# Pytest 配置
+# ════════════════════════════════════════════════════════════════════════════
+# 设计目标:让 "pytest tests/" 能干净地收集(无 INTERNALERROR)。
+# 当前仓库还有 print+assert 脚本风格文件(顶层 assert,不在 def test_ 里),
+# 它们在 import 时执行,部分含 sys.exit(1) 或 print 副作用,会破坏 pytest 收集。
+# 本配置通过 collect_ignore 暂排除它们 —— 这些脚本可继续手动:
+#     python tests/<dir>/test_xxx.py
+# 跑(保留原 print+assert 行为),后续 PR 渐进转 pytest。
+#
+# 业务核心(Plate)走独立 testpaths + conftest,与历史 unit 解耦。
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = [
+    "tests/plate",           # 业务核心
+    "tests/unit/reporter",   # 已 pytest 化(无需 ignore)
+    "tests/unit/generator",  # 已 pytest 化(无需 ignore)
+    "tests/unit/config",     # 已 pytest 化(无需 ignore)
+    "tests/unit/scenario",   # 已 pytest 化(无需 ignore)
+]
+# 已 pytest 化的子目录:collector 默认行为,无需 collect_ignore
+# print+assert 脚本风格文件:由 tests/{unit,integration}/conftest.py
+# 用 collect_ignore_glob 排除(见各 conftest)
+addopts = [
+    "-ra",                # 失败时打印所有 summary
+    "--strict-markers",   # 拼错的 marker 报错而非忽略
+    "--tb=short",         # traceback 简短
+]
+# 与现有 asyncio 行为兼容(避免破坏已 pytest 化的 reporter/generator)
+asyncio_mode = "auto"
+# 输出语言:中文测试名易读
+console_output_style = "progress"

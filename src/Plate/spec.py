@@ -1,13 +1,15 @@
 """EndpointSpec 与 hook Protocol 定义。
 
-设计要点(对应 v3 文档 §3.4/§3.5/§3.6):
+设计要点(对应 v3 文档 §3.4/§3.5/§3.6 + PLATE_DESIGN §2.1/§3.2/§3.4):
   - EndpointSpec 是 ``@final`` + ``frozen=True`` 的 dataclass:
       * @final:不允许继承(拉式收集用 ``type(attr) is EndpointSpec`` 严格匹配)
       * frozen=True:实例不可变,锁内取出后到锁外用是安全的(无 TOCTOU 风险)
-  - ``__post_init__`` 强校三件事:
+  - ``__post_init__`` 强校四件事:
       a. 必填字段类型(``request``/``responses`` 必须是 BaseModel 子类或 None)
       b. 契约保真护栏(model_config 必须 ``extra="forbid"``、禁用清单全关)
-      c. 错误信息对作者友好(写明原因 + 修复建议)
+      c. category × mutates_state 交叉校验
+         (QUERY/TOOL ⇒ mutates_state is False,设计 §3.2 / §3.4(c))
+      d. 错误信息对作者友好(写明原因 + 修复建议)
   - 三个 ``runtime_checkable Protocol``(MockHook/ValidateHook/BuildRequestHook)
     本期不实装,签名本期定;实现 hook 的作者用 ``isinstance(spec.mock_hook, MockHook)``
     即可校验协议
@@ -15,9 +17,28 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Protocol, final, runtime_checkable
 
 from pydantic import BaseModel
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# EndpointCategory — 接口分类(PR-B 新增,PLATE_DESIGN §2.1)
+# ════════════════════════════════════════════════════════════════════════════
+
+
+class EndpointCategory(str, Enum):
+    """接口在业务体系中的角色分类。给人 / AI 理解和决策用,不构成强约束。
+
+    对应设计:PLATE_DESIGN.md §2.1
+    选择 ``str, Enum`` 是为了让 category 可序列化(JSON / YAML),
+    与外部系统(MCP / API doc)互通。
+    """
+
+    BUSINESS = "business"   # 主业务流程接口(有业务意义的状态变更)
+    QUERY = "query"         # 查询接口(返回具体业务实体数据,无业务状态变更)
+    TOOL = "tool"           # 工具型接口(系统级能力,与具体业务实体无关)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -81,6 +102,7 @@ class EndpointSpec:
 
     字段分组:
       数据(必填):method / path
+      分类(PR-B 新增):category / mutates_state
       数据(可空):request(GET 类允许 None) / responses(允许空 dict)
       文档元数据(喂 mock / 后期 OpenAPI 导出):summary / description / tags / auth_required
       预留槽位(本期不实装,Optional=None,后期启用零破坏):
@@ -91,6 +113,10 @@ class EndpointSpec:
     # —— 数据(必填)——
     method: str
     path: str
+
+    # —— 分类(PR-B 新增,PLATE_DESIGN §2.1 + §3.2)——
+    category: EndpointCategory = EndpointCategory.BUSINESS
+    mutates_state: bool = True
 
     # —— 数据(可选)——
     request: type[BaseModel] | None = None
@@ -154,7 +180,26 @@ class EndpointSpec:
                     f"(BaseModel 子类, ...) 元组,实际 {models!r}"
                 )
 
-        # (b) 契约保真护栏(v3 §3.6)
+        # (b) category × mutates_state 交叉校验(PR-B / PLATE_DESIGN §3.2 + §3.4(c))
+        #
+        # 业务动机:CT(契约保活)主动探测必须避免触发业务写入。
+        # category 是给消费者用的分类标签,mutates_state 是给 category 背书的可验证事实。
+        # 允许 QUERY/TOOL 类携带 mutates_state=True = 探测脚本可能在生产意外触发
+        # 业务写入(真实事故风险),所以这里 fail-fast。
+        #
+        # 用 ``is False`` 而非 ``not``,防 ``None`` 滑过:
+        #   - ``not None`` 是 True,会让 None 被当成 "符合要求",留下静默不一致
+        #   - ``None is False`` 是 False,会拒绝 None 强制作者显式表态
+        if self.category in (EndpointCategory.QUERY, EndpointCategory.TOOL):
+            if self.mutates_state is not False:
+                raise ValueError(
+                    f"EndpointSpec({self.path!r}): category={self.category.value} "
+                    f"必须 mutates_state=False(否则 CT 主动探测会触发业务写入)。"
+                    f"实际 mutates_state={self.mutates_state!r}。"
+                    f"对应设计:PLATE_DESIGN.md §3.2"
+                )
+
+        # (c) 契约保真护栏(v3 §3.6)
         if self.request is not None:
             _assert_safe_model(self.request, f"EndpointSpec({self.path}).request")
         for code, model in self.responses.items():
@@ -228,6 +273,7 @@ def _assert_safe_model(cls: type[BaseModel], role: str) -> None:
 
 __all__ = [
     "EndpointSpec",
+    "EndpointCategory",
     "MockHook",
     "ValidateHook",
     "BuildRequestHook",

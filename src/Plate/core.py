@@ -63,11 +63,11 @@ class _Registry:
             return
         dir_name = resolve_dir_name(service)
         try:
-            module = importlib.import_module(f"ModelRegistry.{dir_name}")
+            module = importlib.import_module(f"Plate.{dir_name}")
         except ImportError as e:
             raise LookupError(
-                f"[ModelRegistry] service '{service}' 对应的目录 "
-                f"'ModelRegistry/{dir_name}/' 不存在或导入失败: {e}"
+                f"[Plate] service '{service}' 对应的目录 "
+                f"'Plate/{dir_name}/' 不存在或导入失败: {e}"
             ) from e
         for attr in vars(module).values():
             if type(attr) is EndpointSpec:
@@ -93,7 +93,7 @@ class _Registry:
                 # 此检查只用作"作者可能把同名 spec 误写到多个 service"的弱提示。
                 if seen[sub_key] == key.service:
                     raise ValueError(
-                        f"[ModelRegistry] 内部一致性违反:service '{key.service}' 内 "
+                        f"[Plate] 内部一致性违反:service '{key.service}' 内 "
                         f"({key.method} {key.path}) 出现多次。"
                     )
             else:
@@ -123,11 +123,11 @@ class _Registry:
                     f"  {k.method} {k.path}" for k in self._index if k.service == service
                 )
                 hint = (
-                    f"\n请在 ModelRegistry/{resolve_dir_name(service)}/ 下建对应 endpoint 文件,"
+                    f"\n请在 Plate/{resolve_dir_name(service)}/ 下建对应 endpoint 文件,"
                     f"或修正 scenario 中 path 的拼写。"
                 )
                 raise LookupError(
-                    f"[ModelRegistry] 未找到 {service} {method} {path}。\n"
+                    f"[Plate] 未找到 {service} {method} {path}。\n"
                     f"该 service 已注册端点:\n" + "\n".join(registered) + hint
                 )
             return self._index[key]
@@ -152,7 +152,7 @@ class _Registry:
                     issues.append(f"  - {s}: {e}")
             if issues:
                 raise BootstrapError(
-                    f"[ModelRegistry] 预热失败,以下 service 异常:\n" + "\n".join(issues)
+                    f"[Plate] 预热失败,以下 service 异常:\n" + "\n".join(issues)
                 )
             for k, spec in self._index.items():
                 if k.service in services:

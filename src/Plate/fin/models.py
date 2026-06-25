@@ -6,7 +6,7 @@
   * :func:`get_request_model` / :func:`get_response_model` —— 按 path 反查
   * :class:`EndpointBinding` —— 路径 ↔ 模型的强类型表达
 
-设计原则(对齐 :mod:`ModelRegistry.spec` 的契约保真护栏):
+设计原则(对齐 :mod:`Plate.spec` 的契约保真护栏):
   * 全部使用 ``model_config = ConfigDict(extra="forbid")``
   * 关闭 ``str_strip_whitespace`` / ``coerce_numbers_to_str`` / ``use_enum_values``
   * 字段名保持与 wire 字段名一致(snake_case 与原 JSON 一致,不做 camelCase 转换)
