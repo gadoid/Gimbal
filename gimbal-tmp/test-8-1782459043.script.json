@@ -1,0 +1,1447 @@
+{
+  "kind": "script",
+  "source_capture": "gimbal-tmp/test-8-1782459043.ndjson",
+  "business_host": "fin-tidb.21eflag.com",
+  "golden_ref": "gimbal-tmp/e2eaigen.json",
+  "steps": [
+    {
+      "idx": 0,
+      "order": 0,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": []
+      }
+    },
+    {
+      "idx": 1,
+      "order": 1,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": []
+      }
+    },
+    {
+      "idx": 2,
+      "order": 2,
+      "status": "kept",
+      "role": "context_fetch",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderPage",
+      "decision_reason": "produces downstream id(s): bl_no, order_id, order_ids, order_no",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [
+          {
+            "var": "order_id",
+            "expression": "$.response_body.data.data[0].order_id",
+            "scope": "scenario"
+          },
+          {
+            "var": "order_no",
+            "expression": "$.response_body.data.data[0].order_no",
+            "scope": "scenario"
+          },
+          {
+            "var": "order_ids",
+            "expression": "$.response_body.data.data[0].order_id",
+            "scope": "scenario"
+          }
+        ],
+        "assigns": []
+      }
+    },
+    {
+      "idx": 3,
+      "order": 3,
+      "status": "kept",
+      "role": "context_fetch",
+      "method": "POST",
+      "path": "/api/order/order/orderDetail",
+      "decision_reason": "produces downstream id(s): order_supplier_id",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [
+          {
+            "var": "order_supplier_id",
+            "expression": "$.response_body.data.supplier[0].order_supplier_id",
+            "scope": "scenario"
+          }
+        ],
+        "assigns": [
+          {
+            "var": "order_id",
+            "target": "$.request_body.order_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 4,
+      "order": 4,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "bl_no",
+            "target": "$.request_body.bl_no"
+          },
+          {
+            "var": "order_supplier_id",
+            "target": "$.request_body.supplier[0].order_supplier_id"
+          },
+          {
+            "var": "order_id",
+            "target": "$.request_body.supplier[0].order_id"
+          },
+          {
+            "var": "order_no",
+            "target": "$.request_body.order_no"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 5,
+      "order": 5,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "bl_no",
+            "target": "$.request_body.bl_no"
+          },
+          {
+            "var": "order_supplier_id",
+            "target": "$.request_body.supplier[0].order_supplier_id"
+          },
+          {
+            "var": "order_id",
+            "target": "$.request_body.supplier[0].order_id"
+          },
+          {
+            "var": "order_no",
+            "target": "$.request_body.order_no"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 6,
+      "order": 6,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/order/orderAdd",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "bl_no",
+            "target": "$.request_body.bl_no"
+          },
+          {
+            "var": "order_supplier_id",
+            "target": "$.request_body.supplier[0].order_supplier_id"
+          },
+          {
+            "var": "order_id",
+            "target": "$.request_body.supplier[0].order_id"
+          },
+          {
+            "var": "order_no",
+            "target": "$.request_body.order_no"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 7,
+      "order": 7,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/order/orderBook",
+      "decision_reason": "mutation verb; produces downstream id(s): file_id",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [
+          {
+            "var": "file_id",
+            "expression": "$.response_body.data[0].file_id",
+            "scope": "scenario"
+          }
+        ],
+        "assigns": [
+          {
+            "var": "bl_no",
+            "target": "$.request_body.bl_no"
+          },
+          {
+            "var": "order_supplier_id",
+            "target": "$.request_body.supplier[0].order_supplier_id"
+          },
+          {
+            "var": "order_id",
+            "target": "$.request_body.supplier[0].order_id"
+          },
+          {
+            "var": "order_no",
+            "target": "$.request_body.order_no"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 8,
+      "order": 8,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/order/orderAdd",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "bl_no",
+            "target": "$.request_body.bl_no"
+          },
+          {
+            "var": "file_id",
+            "target": "$.request_body.customer_file_list[0].file_id"
+          },
+          {
+            "var": "order_supplier_id",
+            "target": "$.request_body.supplier[0].order_supplier_id"
+          },
+          {
+            "var": "order_id",
+            "target": "$.request_body.supplier[0].order_id"
+          },
+          {
+            "var": "order_no",
+            "target": "$.request_body.order_no"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 9,
+      "order": 9,
+      "status": "kept",
+      "role": "context_fetch",
+      "method": "POST",
+      "path": "/api/order/order/orderDetail",
+      "decision_reason": "produces downstream id(s): code, order_sub_id, order_sub_ids, order_sub_no",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [
+          {
+            "var": "code",
+            "expression": "$.response_body.data.order_sub[0].order_sub_no",
+            "scope": "scenario"
+          },
+          {
+            "var": "order_sub_id",
+            "expression": "$.response_body.data.order_sub[0].order_sub_id",
+            "scope": "scenario"
+          },
+          {
+            "var": "order_sub_no",
+            "expression": "$.response_body.data.order_sub[0].order_sub_no",
+            "scope": "scenario"
+          },
+          {
+            "var": "order_sub_id_first",
+            "expression": "$.response_body.data.order_sub[0].order_sub_id",
+            "scope": "scenario"
+          }
+        ],
+        "assigns": [
+          {
+            "var": "order_id",
+            "target": "$.request_body.order_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 10,
+      "order": 10,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/orderFee/toggleRealAmount",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_id",
+            "target": "$.request_body.order_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 11,
+      "order": 11,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/orderFee/bookRealAmountEdit",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_id",
+            "target": "$.request_body.order_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 12,
+      "order": 12,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/orderFee/bookRealAmountEdit",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_id",
+            "target": "$.request_body.order_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 13,
+      "order": 13,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/order/checkGenerateOrderSub",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_id",
+            "target": "$.request_body.order_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 14,
+      "order": 14,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/order/generateOrderSub",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_id",
+            "target": "$.request_body.order_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 15,
+      "order": 15,
+      "status": "kept",
+      "role": "context_fetch",
+      "method": "POST",
+      "path": "/api/order/order/orderDetail",
+      "decision_reason": "produces downstream id(s): order_sub_ids",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [
+          {
+            "var": "order_sub_id_second",
+            "expression": "$.response_body.data.order_sub[1].order_sub_id",
+            "scope": "scenario"
+          }
+        ],
+        "assigns": [
+          {
+            "var": "order_id",
+            "target": "$.request_body.order_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 16,
+      "order": 16,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/orderFee/toggleRealAmount",
+      "decision_reason": "mutation verb; produces downstream id(s): fee_real_no, order_fee_real_id, order_fee_real_ids, unique_ids",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [
+          {
+            "var": "order_fee_real_ids",
+            "expression": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+            "scope": "scenario"
+          },
+          {
+            "var": "order_fee_real_id",
+            "expression": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+            "scope": "scenario"
+          },
+          {
+            "var": "fee_real_no",
+            "expression": "$.response_body.data.to_customer[0].put_amount.standard_list[0].fee_real_no",
+            "scope": "scenario"
+          },
+          {
+            "var": "unique_ids",
+            "expression": "$.response_body.data.to_customer[0].put_amount.standard_list[0].unique_id",
+            "scope": "scenario"
+          }
+        ],
+        "assigns": [
+          {
+            "var": "order_id",
+            "target": "$.request_body.order_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 17,
+      "order": 17,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/orderFee/realAmountLockSubmit",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_id",
+            "target": "$.request_body.order_id"
+          },
+          {
+            "var": "order_fee_real_ids",
+            "target": "$.request_body.order_fee_real_ids[0]"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 18,
+      "order": 18,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/orderFee/realAmountLockSubmit",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_id",
+            "target": "$.request_body.order_id"
+          },
+          {
+            "var": "order_fee_real_ids",
+            "target": "$.request_body.order_fee_real_ids[0]"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 19,
+      "order": 19,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/orderFee/realAmountLockSubmit",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_id",
+            "target": "$.request_body.order_id"
+          },
+          {
+            "var": "order_fee_real_ids",
+            "target": "$.request_body.order_fee_real_ids[0]"
+          },
+          {
+            "var": "code",
+            "target": "$.request_body.audit_msg.code"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 20,
+      "order": 20,
+      "status": "kept",
+      "role": "context_fetch",
+      "method": "POST",
+      "path": "/api/order/order/orderDetail",
+      "decision_reason": "produces downstream id(s): audit_ids",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [
+          {
+            "var": "audit_id_fee_lock",
+            "expression": "$.response_body.data.audit[0].audit_id",
+            "scope": "scenario"
+          }
+        ],
+        "assigns": [
+          {
+            "var": "order_id",
+            "target": "$.request_body.order_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 21,
+      "order": 21,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/home/audit/auditExecute",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "audit_id_fee_lock",
+            "target": "$.request_body.audit_ids[0]"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 22,
+      "order": 22,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/order/changeInvoiceApply",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_ids",
+            "target": "$.request_body.order_ids[0]"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 23,
+      "order": 23,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/order/changeInvoiceApply",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_ids",
+            "target": "$.request_body.order_ids[0]"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 24,
+      "order": 24,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/order/changeInvoiceApply",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_ids",
+            "target": "$.request_body.order_ids[0]"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 25,
+      "order": 25,
+      "status": "kept",
+      "role": "context_fetch",
+      "method": "POST",
+      "path": "/api/home/audit/auditPage",
+      "decision_reason": "produces downstream id(s): audit_ids",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [
+          {
+            "var": "audit_id_invoice_change",
+            "expression": "$.response_body.data.data[0].audit_id",
+            "scope": "scenario"
+          }
+        ],
+        "assigns": []
+      }
+    },
+    {
+      "idx": 26,
+      "order": 26,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/home/audit/auditExecute",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "audit_id_invoice_change",
+            "target": "$.request_body.audit_ids[0]"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 27,
+      "order": 27,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/order/order/orderConfirmAccount",
+      "decision_reason": "mutation verb; produces downstream id(s): buyer_identifier_no, seller_identifier_no, seller_name",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [
+          {
+            "var": "seller_name",
+            "expression": "$.response_body.data.main_currency_bank.CNY[0].bank_account",
+            "scope": "scenario"
+          },
+          {
+            "var": "buyer_identifier_no",
+            "expression": "$.response_body.data.customer_currency_finance.USD[0].identifier_no",
+            "scope": "scenario"
+          },
+          {
+            "var": "seller_identifier_no",
+            "expression": "$.response_body.data.main_currency_bank.USD[0].identifier_no",
+            "scope": "scenario"
+          }
+        ],
+        "assigns": [
+          {
+            "var": "order_id",
+            "target": "$.request_body.order_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 28,
+      "order": 28,
+      "status": "kept",
+      "role": "context_fetch",
+      "method": "POST",
+      "path": "/api/finance/accountFee/financePutList",
+      "decision_reason": "produces downstream id(s): order_sub_currency",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [
+          {
+            "var": "order_sub_currency",
+            "expression": "$.response_body.data.data[0].order_sub_currency",
+            "scope": "scenario"
+          }
+        ],
+        "assigns": [
+          {
+            "var": "bl_no",
+            "target": "$.request_body.bl_no"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 29,
+      "order": 29,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_id",
+            "target": "$.request_body.select_list[0].order_id"
+          },
+          {
+            "var": "order_no",
+            "target": "$.request_body.select_list[0].order_no"
+          },
+          {
+            "var": "bl_no",
+            "target": "$.request_body.select_list[0].bl_no"
+          },
+          {
+            "var": "order_sub_id",
+            "target": "$.request_body.select_list[0].order_sub_id"
+          },
+          {
+            "var": "order_sub_no",
+            "target": "$.request_body.select_list[0].order_sub_no"
+          },
+          {
+            "var": "order_sub_currency",
+            "target": "$.request_body.select_list[0].order_sub_currency"
+          },
+          {
+            "var": "order_fee_real_id",
+            "target": "$.request_body.select_list[0].amount_list[0].order_fee_real_id"
+          },
+          {
+            "var": "fee_real_no",
+            "target": "$.request_body.select_list[0].amount_list[0].fee_real_no"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 30,
+      "order": 30,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+      "decision_reason": "mutation verb; produces downstream id(s): receive_account_id",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [
+          {
+            "var": "receive_account_id",
+            "expression": "$.response_body.data.receive_account_id",
+            "scope": "scenario"
+          }
+        ],
+        "assigns": [
+          {
+            "var": "order_id",
+            "target": "$.request_body.select_list[0].order_id"
+          },
+          {
+            "var": "order_no",
+            "target": "$.request_body.select_list[0].order_no"
+          },
+          {
+            "var": "bl_no",
+            "target": "$.request_body.select_list[0].bl_no"
+          },
+          {
+            "var": "order_sub_id",
+            "target": "$.request_body.select_list[0].order_sub_id"
+          },
+          {
+            "var": "order_sub_no",
+            "target": "$.request_body.select_list[0].order_sub_no"
+          },
+          {
+            "var": "order_sub_currency",
+            "target": "$.request_body.select_list[0].order_sub_currency"
+          },
+          {
+            "var": "order_fee_real_id",
+            "target": "$.request_body.select_list[0].amount_list[0].order_fee_real_id"
+          },
+          {
+            "var": "fee_real_no",
+            "target": "$.request_body.select_list[0].amount_list[0].fee_real_no"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 31,
+      "order": 31,
+      "status": "kept",
+      "role": "context_fetch",
+      "method": "POST",
+      "path": "/api/finance/receiveAccount/receiveConfirmList",
+      "decision_reason": "produces downstream id(s): real_amount_ids",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [
+          {
+            "var": "real_amount_ids",
+            "expression": "$.response_body.data[0].real_amount_ids[0]",
+            "scope": "scenario"
+          }
+        ],
+        "assigns": [
+          {
+            "var": "receive_account_id",
+            "target": "$.request_body.receive_account_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 32,
+      "order": 32,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/finance/receiveAccount/accountConfirm",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "receive_account_id",
+            "target": "$.request_body.receive_account_id"
+          },
+          {
+            "var": "order_ids",
+            "target": "$.request_body.confirm_list[0].order_ids"
+          },
+          {
+            "var": "order_sub_id_second",
+            "target": "$.request_body.confirm_list[0].order_sub_ids"
+          },
+          {
+            "var": "unique_ids",
+            "target": "$.request_body.confirm_list[0].unique_ids"
+          },
+          {
+            "var": "real_amount_ids",
+            "target": "$.request_body.confirm_list[0].real_amount_ids[0]"
+          },
+          {
+            "var": "order_sub_id_first",
+            "target": "$.request_body.confirm_list[1].order_sub_ids"
+          },
+          {
+            "var": "real_amount_ids",
+            "target": "$.request_body.confirm_list[1].real_amount_ids[0]"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 33,
+      "order": 33,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_fee_real_id",
+            "target": "$.request_body.order_fee_real_id[0]"
+          },
+          {
+            "var": "seller_name",
+            "target": "$.request_body.usd_require.seller_name"
+          },
+          {
+            "var": "fee_real_no",
+            "target": "$.request_body.usd_require.rate_list[0].fee_real_no"
+          },
+          {
+            "var": "order_sub_id",
+            "target": "$.request_body.batch_order_remark[0].order_sub_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 34,
+      "order": 34,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_fee_real_id",
+            "target": "$.request_body.order_fee_real_id[0]"
+          },
+          {
+            "var": "seller_name",
+            "target": "$.request_body.usd_require.seller_name"
+          },
+          {
+            "var": "fee_real_no",
+            "target": "$.request_body.usd_require.rate_list[0].fee_real_no"
+          },
+          {
+            "var": "order_sub_id",
+            "target": "$.request_body.batch_order_remark[0].order_sub_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 35,
+      "order": 35,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_fee_real_id",
+            "target": "$.request_body.order_fee_real_id[0]"
+          },
+          {
+            "var": "seller_name",
+            "target": "$.request_body.usd_require.seller_name"
+          },
+          {
+            "var": "fee_real_no",
+            "target": "$.request_body.usd_require.rate_list[0].fee_real_no"
+          },
+          {
+            "var": "order_sub_id",
+            "target": "$.request_body.batch_order_remark[0].order_sub_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 36,
+      "order": 36,
+      "status": "kept",
+      "role": "context_fetch",
+      "method": "POST",
+      "path": "/api/home/audit/auditPage",
+      "decision_reason": "produces downstream id(s): audit_ids",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [
+          {
+            "var": "audit_id_invoice_batch",
+            "expression": "$.response_body.data.data[0].audit_id",
+            "scope": "scenario"
+          }
+        ],
+        "assigns": []
+      }
+    },
+    {
+      "idx": 37,
+      "order": 37,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/home/audit/auditExecute",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "audit_id_invoice_batch",
+            "target": "$.request_body.audit_ids[0]"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 38,
+      "order": 38,
+      "status": "kept",
+      "role": "context_fetch",
+      "method": "POST",
+      "path": "/api/Finance/ReceiveInvoiceBatch/applyPage",
+      "decision_reason": "produces downstream id(s): receive_invoice_apply_id",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [
+          {
+            "var": "receive_invoice_apply_id",
+            "expression": "$.response_body.data.data[0].receive_invoice_apply_id",
+            "scope": "scenario"
+          }
+        ],
+        "assigns": []
+      }
+    },
+    {
+      "idx": 39,
+      "order": 39,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/finance/receiveInvoice/invoiceAddCheck",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "file_id",
+            "target": "$.request_body.invoice_original.file_id"
+          },
+          {
+            "var": "buyer_identifier_no",
+            "target": "$.request_body.buyer_identifier_no"
+          },
+          {
+            "var": "seller_identifier_no",
+            "target": "$.request_body.seller_identifier_no"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 40,
+      "order": 40,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/finance/receiveInvoice/invoiceAdd",
+      "decision_reason": "mutation verb; produces downstream id(s): receive_invoice_id",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [
+          {
+            "var": "receive_invoice_id",
+            "expression": "$.response_body.data.24920000000029640029",
+            "scope": "scenario"
+          }
+        ],
+        "assigns": [
+          {
+            "var": "buyer_identifier_no",
+            "target": "$.request_body[0].buyer_identifier_no"
+          },
+          {
+            "var": "seller_identifier_no",
+            "target": "$.request_body[0].seller_identifier_no"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 41,
+      "order": 41,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceOrder",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "receive_invoice_apply_id",
+            "target": "$.request_body.receive_invoice_apply_id"
+          },
+          {
+            "var": "order_sub_id",
+            "target": "$.request_body.invoice_arr[0].order_sub_id"
+          },
+          {
+            "var": "receive_invoice_id",
+            "target": "$.request_body.invoice_arr[0].receive_invoice_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 42,
+      "order": 42,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceOrder",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "receive_invoice_apply_id",
+            "target": "$.request_body.receive_invoice_apply_id"
+          },
+          {
+            "var": "order_sub_id",
+            "target": "$.request_body.invoice_arr[0].order_sub_id"
+          },
+          {
+            "var": "receive_invoice_id",
+            "target": "$.request_body.invoice_arr[0].receive_invoice_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 43,
+      "order": 43,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/finance/receiveWriteoff/writeoffBatch",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_fee_real_id",
+            "target": "$.request_body.writeoff_object[0].order_fee_real_id[0]"
+          },
+          {
+            "var": "receive_invoice_id",
+            "target": "$.request_body.writeoff_object[0].receive_invoice_id"
+          }
+        ]
+      }
+    },
+    {
+      "idx": 44,
+      "order": 44,
+      "status": "kept",
+      "role": "mutation",
+      "method": "POST",
+      "path": "/api/finance/receiveWriteoff/writeoffBatch",
+      "decision_reason": "mutation verb",
+      "collapsed_into": null,
+      "bindings": {
+        "extracts": [],
+        "assigns": [
+          {
+            "var": "order_fee_real_id",
+            "target": "$.request_body.writeoff_object[0].order_fee_real_id[0]"
+          },
+          {
+            "var": "receive_invoice_id",
+            "target": "$.request_body.writeoff_object[0].receive_invoice_id"
+          }
+        ]
+      }
+    }
+  ],
+  "open_gaps": [
+    {
+      "field": "bl_no",
+      "value": "GIMBAL_TEST_35",
+      "consumer_idx": 4,
+      "status": "resolved_static",
+      "candidates": [],
+      "resolution": {
+        "kind": "static",
+        "var": "bl_no"
+      }
+    },
+    {
+      "field": "order_id",
+      "value": "327661182355767296",
+      "consumer_idx": 29,
+      "status": "resolved_static",
+      "candidates": [
+        {
+          "endpoint": "/api/order/orderEntrust/orderPage",
+          "path": "$.response_body.data.data[*].order_id",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/order/order/orderDetail",
+          "path": "$.response_body.data.order_id",
+          "inputs": [
+            "order_id"
+          ]
+        },
+        {
+          "endpoint": "/api/order/order/orderPage",
+          "path": "$.response_body.data.data[*].order_id",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/finance/accountFee/financePutList",
+          "path": "$.response_body.data.data[*].order_id",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+          "path": "$.response_body.data.receive_account_orders.list[*].order_id",
+          "inputs": [
+            "receive_account_id"
+          ]
+        }
+      ],
+      "resolution": {
+        "kind": "static",
+        "var": "prior_order_id"
+      }
+    },
+    {
+      "field": "order_no",
+      "value": "YWDD20260623107343",
+      "consumer_idx": 29,
+      "status": "resolved_static",
+      "candidates": [
+        {
+          "endpoint": "/api/order/orderEntrust/orderPage",
+          "path": "$.response_body.data.data[*].order_no",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/order/order/orderDetail",
+          "path": "$.response_body.data.order_no",
+          "inputs": [
+            "order_id"
+          ]
+        },
+        {
+          "endpoint": "/api/order/order/orderPage",
+          "path": "$.response_body.data.data[*].order_no",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/finance/accountFee/financePutList",
+          "path": "$.response_body.data.data[*].order_no",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+          "path": "$.response_body.data.receive_account_orders.list[*].order_no",
+          "inputs": [
+            "receive_account_id"
+          ]
+        }
+      ],
+      "resolution": {
+        "kind": "static",
+        "var": "prior_order_no"
+      }
+    },
+    {
+      "field": "order_sub_no",
+      "value": "ZDD20260623016596",
+      "consumer_idx": 29,
+      "status": "resolved_static",
+      "candidates": [
+        {
+          "endpoint": "/api/order/orderEntrust/orderPage",
+          "path": "$.response_body.data.data[*].order_sub_no",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/order/order/orderDetail",
+          "path": "$.response_body.data.order_sub[*].order_sub_no",
+          "inputs": [
+            "order_id"
+          ]
+        },
+        {
+          "endpoint": "/api/order/order/orderPage",
+          "path": "$.response_body.data.data[*].order_sub_no",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/finance/accountFee/financePutList",
+          "path": "$.response_body.data.data[*].order_sub_no",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+          "path": "$.response_body.data.receive_account_orders.list[*].order_sub_no",
+          "inputs": [
+            "receive_account_id"
+          ]
+        }
+      ],
+      "resolution": {
+        "kind": "static",
+        "var": "prior_order_sub_no"
+      }
+    },
+    {
+      "field": "order_sub_id",
+      "value": "327661743511699456",
+      "consumer_idx": 29,
+      "status": "resolved_static",
+      "candidates": [
+        {
+          "endpoint": "/api/order/order/orderDetail",
+          "path": "$.response_body.data.order_sub[*].order_sub_id",
+          "inputs": [
+            "order_id"
+          ]
+        },
+        {
+          "endpoint": "/api/finance/accountFee/financePutList",
+          "path": "$.response_body.data.data[*].order_sub_id",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+          "path": "$.response_body.data.receive_account_orders.list[*].order_sub_id",
+          "inputs": [
+            "receive_account_id"
+          ]
+        }
+      ],
+      "resolution": {
+        "kind": "static",
+        "var": "prior_order_sub_id"
+      }
+    },
+    {
+      "field": "create_time",
+      "value": "1766505600000",
+      "consumer_idx": 38,
+      "status": "resolved_static",
+      "candidates": [],
+      "resolution": {
+        "kind": "static",
+        "var": "apply_create_time_start"
+      }
+    },
+    {
+      "field": "create_time",
+      "value": "1783416799000",
+      "consumer_idx": 38,
+      "status": "resolved_static",
+      "candidates": [],
+      "resolution": {
+        "kind": "static",
+        "var": "apply_create_time_end"
+      }
+    },
+    {
+      "field": "invoice_number",
+      "value": "24922000000029640004",
+      "consumer_idx": 39,
+      "status": "resolved_static",
+      "candidates": [],
+      "resolution": {
+        "kind": "static",
+        "var": "invoice_number_check"
+      }
+    },
+    {
+      "field": "invoice_number",
+      "value": "24920000000029640029",
+      "consumer_idx": 40,
+      "status": "resolved_static",
+      "candidates": [],
+      "resolution": {
+        "kind": "static",
+        "var": "invoice_number_add"
+      }
+    },
+    {
+      "field": "file_id",
+      "value": "327664535185915904",
+      "consumer_idx": 40,
+      "status": "resolved_static",
+      "candidates": [],
+      "resolution": {
+        "kind": "static",
+        "var": "prior_file_id"
+      }
+    }
+  ]
+}

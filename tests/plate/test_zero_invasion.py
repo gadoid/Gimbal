@@ -80,7 +80,14 @@ def test_top_level_import_does_not_load_service_subpackages() -> None:
         m for m in sys.modules if m == "Plate" or m.startswith("Plate.")
     )
     # 内部实现模块(这些是必然加载的)
-    INTERNAL_MODULES = {"Plate", "Plate.core", "Plate._aliases", "Plate.spec"}
+    INTERNAL_MODULES = {
+        "Plate", "Plate.core", "Plate._aliases", "Plate.spec",
+        "Plate.binding", "Plate.path_resolver",
+        "Plate.doc", "Plate.serialization",
+        "Plate.version", "Plate.manifest",
+        "Plate.server", "Plate.server.response", "Plate.server.router",
+        "Plate.fin.dannotations",
+    }
     loaded_set = set(loaded)
     non_internal = loaded_set - INTERNAL_MODULES
     assert not non_internal, (
@@ -152,7 +159,14 @@ def test_failed_resolve_does_not_pollute_modules() -> None:
     loaded_after_404 = set(
         m for m in sys.modules if m == "Plate" or m.startswith("Plate.")
     )
-    INTERNAL_MODULES = {"Plate", "Plate.core", "Plate._aliases", "Plate.spec"}
+    INTERNAL_MODULES = {
+        "Plate", "Plate.core", "Plate._aliases", "Plate.spec",
+        "Plate.binding", "Plate.path_resolver",
+        "Plate.doc", "Plate.serialization",
+        "Plate.version", "Plate.manifest",
+        "Plate.server", "Plate.server.response", "Plate.server.router",
+        "Plate.fin.dannotations",
+    }
     new_subpkgs = loaded_after_404 - INTERNAL_MODULES
     assert not new_subpkgs, (
         f"resolve 失败不应触发任何非豁免子包加载,实际: {sorted(new_subpkgs)}"

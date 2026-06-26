@@ -1,0 +1,1666 @@
+{
+  "endpoints": {
+    "/api/Customer/Policy/getCustomerPolicy": {
+      "role": "mutation",
+      "seen": 2,
+      "inputs": {},
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "03a3b99a60e73f22984bdc9929abf84e"
+        }
+      }
+    },
+    "/api/customer/customer/customerList": {
+      "role": "read",
+      "seen": 2,
+      "inputs": {},
+      "outputs": {
+        "customer_no": {
+          "path": "$.response_body.data[*].customer_no",
+          "sample": "KH20250623000001"
+        },
+        "tax_number": {
+          "path": "$.response_body.data[*].tax_number",
+          "sample": "913702816825615688"
+        },
+        "address_cn": {
+          "path": "$.response_body.data[*].address_cn",
+          "sample": "111111111111111"
+        },
+        "customer_id": {
+          "path": "$.response_body.data[*].customer_id",
+          "sample": "120934"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "77ee26c58b256673e43727ccbf47cbcb"
+        }
+      }
+    },
+    "/api/customer/customer/customerPart": {
+      "role": "read",
+      "seen": 16,
+      "inputs": {},
+      "outputs": {
+        "identifier_no": {
+          "path": "$.response_body.data.finance[*].identifier_no",
+          "sample": "91370283591262431N"
+        },
+        "customer_no": {
+          "path": "$.response_body.data.info.customer_no",
+          "sample": "KH20250701000016"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "ca97d905b393d49fa6810f73aaec33bf"
+        }
+      }
+    },
+    "/api/customer/customer/getCustomerDiscountProportion": {
+      "role": "mutation",
+      "seen": 2,
+      "inputs": {},
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "7eb95515d515057379aab19851c09b06"
+        }
+      }
+    },
+    "/api/customer/relate/supplierRelate": {
+      "role": "mutation",
+      "seen": 8,
+      "inputs": {},
+      "outputs": {
+        "tax_number": {
+          "path": "$.response_body.data[*].tax_number",
+          "sample": "913702027504138324"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "35ffcd24d670576b8af057ea612a77d8"
+        }
+      }
+    },
+    "/api/finance/accountFee/financePutList": {
+      "role": "read",
+      "seen": 1,
+      "inputs": {
+        "bl_no": "GIMBAL_TEST_1"
+      },
+      "outputs": {
+        "order_id": {
+          "path": "$.response_body.data.data[*].order_id",
+          "sample": "327441944651235328"
+        },
+        "order_no": {
+          "path": "$.response_body.data.data[*].order_no",
+          "sample": "YWDD20260622107305"
+        },
+        "bl_no": {
+          "path": "$.response_body.data.data[*].bl_no",
+          "sample": "GIMBAL_TEST_1"
+        },
+        "customer_order_sn": {
+          "path": "$.response_body.data.data[*].customer_order_sn",
+          "sample": "GIMBAL_TEST_1"
+        },
+        "order_sub_id": {
+          "path": "$.response_body.data.data[*].order_sub_id",
+          "sample": "327442284834455552"
+        },
+        "order_sub_no": {
+          "path": "$.response_body.data.data[*].order_sub_no",
+          "sample": "ZDD20260622016532"
+        },
+        "order_fee_real_id": {
+          "path": "$.response_body.data.data[*].amount_list[*].order_fee_real_id",
+          "sample": "327442587587706880"
+        },
+        "fee_real_no": {
+          "path": "$.response_body.data.data[*].amount_list[*].fee_real_no",
+          "sample": "FY202606221290515"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "38488cf503b15c332a70161c3ba35b92"
+        }
+      }
+    },
+    "/api/finance/accountFee/subSettleList": {
+      "role": "read",
+      "seen": 2,
+      "inputs": {},
+      "outputs": {
+        "tax_number": {
+          "path": "$.response_body.data[*].tax_number",
+          "sample": "914403005990551116"
+        },
+        "settle_object_id": {
+          "path": "$.response_body.data[*].settle_object_id",
+          "sample": "122103"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "3c1a6d0a9dfac4fe3d0ded0c7516f93f"
+        }
+      }
+    },
+    "/api/finance/receiveAccount/accountConfirm": {
+      "role": "mutation",
+      "seen": 1,
+      "inputs": {
+        "receive_account_id": "327443583609077760",
+        "order_ids": "327441944651235328",
+        "order_sub_ids": "327442571108286464",
+        "real_amount_ids": "327442587587708928"
+      },
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "9d5c46b39540cf76a13424e11090873e"
+        }
+      }
+    },
+    "/api/finance/receiveAccount/orderReceiveAccountEdit": {
+      "role": "mutation",
+      "seen": 2,
+      "inputs": {
+        "order_id": "327441944651235328",
+        "order_no": "YWDD20260622107305",
+        "bl_no": "GIMBAL_TEST_1",
+        "customer_order_sn": "GIMBAL_TEST_1",
+        "order_sub_id": "327442284834455552",
+        "order_sub_no": "ZDD20260622016532"
+      },
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "aab8022ede894c91d11db168d5c7b462"
+        },
+        "receive_account_id": {
+          "path": "$.response_body.data.receive_account_id",
+          "sample": "327443583609077760"
+        },
+        "receive_account_no": {
+          "path": "$.response_body.data.receive_account_no",
+          "sample": "YSDZPC20260622002974"
+        }
+      }
+    },
+    "/api/finance/receiveAccount/receiveAccountDetail": {
+      "role": "read",
+      "seen": 1,
+      "inputs": {
+        "receive_account_id": "327443583609077760"
+      },
+      "outputs": {
+        "receive_account_id": {
+          "path": "$.response_body.data.receive_account.receive_account_id",
+          "sample": "327443583609077760"
+        },
+        "receive_account_no": {
+          "path": "$.response_body.data.receive_account.receive_account_no",
+          "sample": "YSDZPC20260622002974"
+        },
+        "receive_order_id": {
+          "path": "$.response_body.data.receive_account_orders.list[*].receive_order_id",
+          "sample": "327443584150142976"
+        },
+        "order_id": {
+          "path": "$.response_body.data.receive_account_orders.list[*].order_id",
+          "sample": "327441944651235328"
+        },
+        "order_sub_id": {
+          "path": "$.response_body.data.receive_account_orders.list[*].order_sub_id",
+          "sample": "327442284834455552"
+        },
+        "order_no": {
+          "path": "$.response_body.data.receive_account_orders.list[*].order_no",
+          "sample": "YWDD20260622107305"
+        },
+        "order_sub_no": {
+          "path": "$.response_body.data.receive_account_orders.list[*].order_sub_no",
+          "sample": "ZDD20260622016532"
+        },
+        "bl_no": {
+          "path": "$.response_body.data.receive_account_orders.list[*].bl_no",
+          "sample": "GIMBAL_TEST_1"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "54be4f2fa61da838f2cab82c18668f70"
+        }
+      }
+    },
+    "/api/finance/receiveAccount/receiveAccountPage": {
+      "role": "read",
+      "seen": 3,
+      "inputs": {},
+      "outputs": {
+        "receive_account_id": {
+          "path": "$.response_body.data.data[*].receive_account_id",
+          "sample": "327387884405391360"
+        },
+        "parent_id": {
+          "path": "$.response_body.data.data[*].parent_id",
+          "sample": "327387875437969408"
+        },
+        "receive_account_no": {
+          "path": "$.response_body.data.data[*].receive_account_no",
+          "sample": "YSDZPC20260622002973"
+        },
+        "bl_nos": {
+          "path": "$.response_body.data.data[*].bl_nos",
+          "sample": "lele_api_link24_20260622180151"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "97bd59a5bf4929f5cd1224af61ce0923"
+        }
+      }
+    },
+    "/api/finance/receiveAccount/receiveConfirmList": {
+      "role": "read",
+      "seen": 1,
+      "inputs": {
+        "receive_account_id": "327443583609077760"
+      },
+      "outputs": {
+        "order_ids": {
+          "path": "$.response_body.data[*].order_ids",
+          "sample": "327441944651235328"
+        },
+        "order_sub_ids": {
+          "path": "$.response_body.data[*].order_sub_ids",
+          "sample": "327442571108286464"
+        },
+        "real_amount_ids": {
+          "path": "$.response_body.data[*].real_amount_ids[*]",
+          "sample": "327442587587708928"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "45eb52071a7b5e76ad7c7812a374b104"
+        }
+      }
+    },
+    "/api/home/audit/auditDetail": {
+      "role": "read",
+      "seen": 4,
+      "inputs": {
+        "audit_id": "327442803082657792"
+      },
+      "outputs": {
+        "audit_no": {
+          "path": "$.response_body.data.audit_basic.audit_no",
+          "sample": "SP20260622003411"
+        },
+        "relation_id": {
+          "path": "$.response_body.data.audit_content.relation_id",
+          "sample": "327441944651235328"
+        },
+        "bl_no": {
+          "path": "$.response_body.data.audit_ext.bl_no",
+          "sample": "GIMBAL_TEST_1"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "21bb9c8f674226ab5b0843a35ca44a9a"
+        }
+      }
+    },
+    "/api/home/audit/auditExecute": {
+      "role": "mutation",
+      "seen": 2,
+      "inputs": {
+        "audit_ids": "327442803082657792"
+      },
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "652ac65734d70dc67a1131aa6685b14f"
+        }
+      }
+    },
+    "/api/home/audit/auditPage": {
+      "role": "read",
+      "seen": 10,
+      "inputs": {},
+      "outputs": {
+        "audit_id": {
+          "path": "$.response_body.data.data[*].audit_id",
+          "sample": "323459990855614464"
+        },
+        "audit_no": {
+          "path": "$.response_body.data.data[*].audit_no",
+          "sample": "SP20260611002577"
+        },
+        "relation_id": {
+          "path": "$.response_body.data.data[*].relation_id",
+          "sample": "323459987919601664"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "9701d3e4feb432aa2490e7c48a7ae537"
+        },
+        "bl_no": {
+          "path": "$.response_body.data.data[*].bl_no",
+          "sample": "GIMBAL_TEST_1"
+        }
+      }
+    },
+    "/api/home/audit/auditTypeList": {
+      "role": "read",
+      "seen": 9,
+      "inputs": {},
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "62f14fe691cc34077587c5c1c3dfaf49"
+        }
+      }
+    },
+    "/api/home/common/attachmentList": {
+      "role": "read",
+      "seen": 5,
+      "inputs": {
+        "relation_id": "327441944651235328"
+      },
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "e6b345c7436a947f2a3f7e7555c85510"
+        }
+      }
+    },
+    "/api/home/common/changeRecordPage": {
+      "role": "read",
+      "seen": 7,
+      "inputs": {
+        "relation_id": "327441944651235328"
+      },
+      "outputs": {
+        "change_record_id": {
+          "path": "$.response_body.data.data[*].change_record_id",
+          "sample": "327441946299596800"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "3a00ae19b23fe93f2189714731e535c9"
+        }
+      }
+    },
+    "/api/home/common/getEnums": {
+      "role": "mutation",
+      "seen": 11,
+      "inputs": {},
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "cce60b4293ddfde4503b91f7bfaedf6b"
+        }
+      }
+    },
+    "/api/home/cost/amountCostList": {
+      "role": "read",
+      "seen": 4,
+      "inputs": {},
+      "outputs": {
+        "cost_id": {
+          "path": "$.response_body.data[*].cost_id",
+          "sample": "290002580392640512"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "59c9dc07684905871bc30df90c638998"
+        }
+      }
+    },
+    "/api/home/dictData/dictDataByType": {
+      "role": "mutation",
+      "seen": 9,
+      "inputs": {},
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "1aa6379ab729311f371a0b5260a7a581"
+        }
+      }
+    },
+    "/api/home/exchangeRate/monthExchangeRate": {
+      "role": "mutation",
+      "seen": 2,
+      "inputs": {},
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "55868d68485d3aa079b4db141db88c3c"
+        }
+      }
+    },
+    "/api/home/main/mainList": {
+      "role": "read",
+      "seen": 1,
+      "inputs": {},
+      "outputs": {
+        "main_no": {
+          "path": "$.response_body.data[*].main_no",
+          "sample": "ZT20250615000044"
+        },
+        "main_id": {
+          "path": "$.response_body.data[*].main_id",
+          "sample": "290004354352545792"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "27d42205d31390a52a2463112b9482b5"
+        }
+      }
+    },
+    "/api/home/main/mainPart": {
+      "role": "read",
+      "seen": 1,
+      "inputs": {},
+      "outputs": {
+        "identifier_no": {
+          "path": "$.response_body.data[*].identifier_no",
+          "sample": "91370202MAEWF5RN7G"
+        },
+        "bank_account": {
+          "path": "$.response_body.data[*].bank_account",
+          "sample": "802051200001568"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "57426ed86fc0925f7e60ae16a58a0b68"
+        }
+      }
+    },
+    "/api/home/message/messageTypeList": {
+      "role": "read",
+      "seen": 2,
+      "inputs": {},
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "684a400f40772a643bccf5fe3b7be8bb"
+        }
+      }
+    },
+    "/api/home/policy/policySubList": {
+      "role": "read",
+      "seen": 4,
+      "inputs": {},
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "3839fe8087a1627be28d7886f2694125"
+        }
+      }
+    },
+    "/api/home/shipCompany/shipCompanyList": {
+      "role": "read",
+      "seen": 5,
+      "inputs": {},
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "89613cbbbea02c38a7737ee5cf251723"
+        }
+      }
+    },
+    "/api/home/user/userList": {
+      "role": "read",
+      "seen": 11,
+      "inputs": {},
+      "outputs": {
+        "king_dee_id": {
+          "path": "$.response_body.data[*].king_dee_id",
+          "sample": "100087"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "3a6c8a3cdfc9ce9612b9cb34d8ad3d11"
+        }
+      }
+    },
+    "/api/order/OrderEntrust/checkOrderCustomerContainer": {
+      "role": "mutation",
+      "seen": 2,
+      "inputs": {
+        "order_id": "327441944651235328",
+        "order_container_id": "327442065388470272"
+      },
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "697408fefd15a74a282d8215d656d89e"
+        }
+      }
+    },
+    "/api/order/order/changeInvoiceApply": {
+      "role": "mutation",
+      "seen": 3,
+      "inputs": {
+        "order_ids": "327441944651235328"
+      },
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "5df95b797902439b3dd5dc0d08bfa0c6"
+        },
+        "node_id": {
+          "path": "$.response_body.data.node_list[*].node_id",
+          "sample": "325585102463565824"
+        }
+      }
+    },
+    "/api/order/order/checkGenerateOrderSub": {
+      "role": "mutation",
+      "seen": 1,
+      "inputs": {
+        "order_id": "327441944651235328"
+      },
+      "outputs": {
+        "file_id": {
+          "path": "$.response_body.data.order_book[*].file_id",
+          "sample": "327442545749524480"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "c19681415c8ccb8e1accbda84b930ca7"
+        }
+      }
+    },
+    "/api/order/order/connOrderList": {
+      "role": "read",
+      "seen": 13,
+      "inputs": {
+        "bl_no": "GIMBAL_TEST_1",
+        "order_id": "327441944651235328"
+      },
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "0f67c09b59a26f7576d5c786c2036e3f"
+        }
+      }
+    },
+    "/api/order/order/generateOrderSub": {
+      "role": "mutation",
+      "seen": 1,
+      "inputs": {
+        "order_id": "327441944651235328"
+      },
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "4a8204ceb9050f060160fbeab523a557"
+        }
+      }
+    },
+    "/api/order/order/orderAdd": {
+      "role": "mutation",
+      "seen": 2,
+      "inputs": {
+        "bl_no": "GIMBAL_TEST_1",
+        "customer_order_sn": "GIMBAL_TEST_1",
+        "order_container_id": "327442125769670656",
+        "order_supplier_id": "327441946060521472",
+        "order_id": "327441944651235328",
+        "order_no": "YWDD20260622107305",
+        "file_id": "327442255923118080"
+      },
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "2212cdc84a8ff357efe96b474f9cbf34"
+        }
+      }
+    },
+    "/api/order/order/orderBook": {
+      "role": "mutation",
+      "seen": 1,
+      "inputs": {
+        "bl_no": "GIMBAL_TEST_1",
+        "customer_order_sn": "GIMBAL_TEST_1",
+        "order_container_id": "327442125769670656",
+        "order_supplier_id": "327441946060521472",
+        "order_id": "327441944651235328",
+        "order_no": "YWDD20260622107305"
+      },
+      "outputs": {
+        "file_id": {
+          "path": "$.response_body.data[*].file_id",
+          "sample": "327442255923118080"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "587ccd0740c0d27c7900ded8992624de"
+        }
+      }
+    },
+    "/api/order/order/orderDetail": {
+      "role": "read",
+      "seen": 13,
+      "inputs": {
+        "order_id": "327441944651235328"
+      },
+      "outputs": {
+        "order_id": {
+          "path": "$.response_body.data.order_id",
+          "sample": "327441944651235328"
+        },
+        "order_no": {
+          "path": "$.response_body.data.order_no",
+          "sample": "YWDD20260622107305"
+        },
+        "bl_no": {
+          "path": "$.response_body.data.bl_no",
+          "sample": "GIMBAL_TEST_1"
+        },
+        "customer_order_sn": {
+          "path": "$.response_body.data.customer_order_sn",
+          "sample": "GIMBAL_TEST_1"
+        },
+        "order_container_id": {
+          "path": "$.response_body.data.container[*].order_container_id",
+          "sample": "327442065388470272"
+        },
+        "order_supplier_id": {
+          "path": "$.response_body.data.supplier[*].order_supplier_id",
+          "sample": "327441946060521472"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "b493ff27bf89e1ab29da6f38c4d355bf"
+        },
+        "order_sub_id": {
+          "path": "$.response_body.data.order_sub[*].order_sub_id",
+          "sample": "327442284834455552"
+        },
+        "order_sub_no": {
+          "path": "$.response_body.data.order_sub[*].order_sub_no",
+          "sample": "ZDD20260622016532"
+        },
+        "business_no": {
+          "path": "$.response_body.data.order_sub[*].business_no",
+          "sample": "YHZ20260622032902"
+        },
+        "audit_id": {
+          "path": "$.response_body.data.audit[*].audit_id",
+          "sample": "327442803082657792"
+        },
+        "audit_no": {
+          "path": "$.response_body.data.audit[*].audit_no",
+          "sample": "SP20260622003411"
+        }
+      }
+    },
+    "/api/order/order/orderPage": {
+      "role": "read",
+      "seen": 4,
+      "inputs": {
+        "bl_no": "GIMBAL_TEST_1"
+      },
+      "outputs": {
+        "order_id": {
+          "path": "$.response_body.data.data[*].order_id",
+          "sample": "327441944651235328"
+        },
+        "order_no": {
+          "path": "$.response_body.data.data[*].order_no",
+          "sample": "YWDD20260622107305"
+        },
+        "bl_no": {
+          "path": "$.response_body.data.data[*].bl_no",
+          "sample": "GIMBAL_TEST_1"
+        },
+        "customer_order_sn": {
+          "path": "$.response_body.data.data[*].customer_order_sn",
+          "sample": "GIMBAL_TEST_1"
+        },
+        "policy_id": {
+          "path": "$.response_body.data.data[*].policy_id",
+          "sample": "296905601001193472"
+        },
+        "supplier_ids": {
+          "path": "$.response_body.data.data[*].supplier_ids[*]",
+          "sample": "289602771739475968"
+        },
+        "customs_clearance_supplier_id": {
+          "path": "$.response_body.data.data[*].customs_clearance_supplier_id",
+          "sample": "289602771739475968"
+        },
+        "copy_order_id": {
+          "path": "$.response_body.data.data[*].copy_order_id",
+          "sample": "327373083725791232"
+        },
+        "order_sub_no": {
+          "path": "$.response_body.data.data[*].order_sub_no",
+          "sample": "ZDD20260622016447"
+        },
+        "business_no": {
+          "path": "$.response_body.data.data[*].business_no",
+          "sample": "YHD20260622034287"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "a2fed1d477abfd13f562a092a2916d4b"
+        }
+      }
+    },
+    "/api/order/order/orderSupplier": {
+      "role": "mutation",
+      "seen": 11,
+      "inputs": {
+        "order_id": "327441944651235328"
+      },
+      "outputs": {
+        "order_supplier_id": {
+          "path": "$.response_body.data[*].order_supplier_id",
+          "sample": "327441946060521472"
+        },
+        "order_id": {
+          "path": "$.response_body.data[*].order_id",
+          "sample": "327441944651235328"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "f53442bb464a0c899147adc8900b5fbb"
+        }
+      }
+    },
+    "/api/order/orderEntrust/orderAdd": {
+      "role": "mutation",
+      "seen": 4,
+      "inputs": {
+        "bl_no": "GIMBAL_TEST_1",
+        "customer_order_sn": "GIMBAL_TEST_1",
+        "order_container_id": "327441945276186624",
+        "order_supplier_id": "327441946060521472",
+        "order_id": "327441944651235328",
+        "order_no": "YWDD20260622107305"
+      },
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "bc51fbd8fef15d7df8f69d91f46e272d"
+        }
+      }
+    },
+    "/api/order/orderEntrust/orderPage": {
+      "role": "read",
+      "seen": 3,
+      "inputs": {
+        "bl_no": "GIMBAL_TEST_1"
+      },
+      "outputs": {
+        "order_id": {
+          "path": "$.response_body.data.data[*].order_id",
+          "sample": "327441944651235328"
+        },
+        "order_no": {
+          "path": "$.response_body.data.data[*].order_no",
+          "sample": "YWDD20260622107305"
+        },
+        "bl_no": {
+          "path": "$.response_body.data.data[*].bl_no",
+          "sample": "GIMBAL_TEST_1"
+        },
+        "customer_order_sn": {
+          "path": "$.response_body.data.data[*].customer_order_sn",
+          "sample": "GIMBAL_TEST_1"
+        },
+        "policy_id": {
+          "path": "$.response_body.data.data[*].policy_id",
+          "sample": "296905601001193472"
+        },
+        "supplier_ids": {
+          "path": "$.response_body.data.data[*].supplier_ids[*]",
+          "sample": "289602771739475968"
+        },
+        "customs_clearance_supplier_id": {
+          "path": "$.response_body.data.data[*].customs_clearance_supplier_id",
+          "sample": "289602771739475968"
+        },
+        "copy_order_id": {
+          "path": "$.response_body.data.data[*].copy_order_id",
+          "sample": "327373083725791232"
+        },
+        "order_sub_no": {
+          "path": "$.response_body.data.data[*].order_sub_no",
+          "sample": "ZDD20260622016447"
+        },
+        "business_no": {
+          "path": "$.response_body.data.data[*].business_no",
+          "sample": "YHD20260622034287"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "72128a1b5cbf9260f15f66915939c464"
+        }
+      }
+    },
+    "/api/order/orderFee/bookRealAmountEdit": {
+      "role": "mutation",
+      "seen": 2,
+      "inputs": {
+        "order_id": "327441944651235328"
+      },
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "d45257abb5a77273bff12d832a0db141"
+        }
+      }
+    },
+    "/api/order/orderFee/realAmountEditDetail": {
+      "role": "read",
+      "seen": 1,
+      "inputs": {
+        "order_id": "327441944651235328"
+      },
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "0f66584acd8c17ebd5dba5a4d7b8859f"
+        }
+      }
+    },
+    "/api/order/orderFee/realAmountLockSubmit": {
+      "role": "mutation",
+      "seen": 3,
+      "inputs": {
+        "order_id": "327441944651235328",
+        "order_fee_real_ids": "327442587587706880"
+      },
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "9932aba1f6fd016b2e22d6be09ed157a"
+        },
+        "node_id": {
+          "path": "$.response_body.data.node_list[*].node_id",
+          "sample": "323651579301330944"
+        }
+      }
+    },
+    "/api/order/orderFee/settleObjectList": {
+      "role": "read",
+      "seen": 1,
+      "inputs": {
+        "order_id": "327441944651235328"
+      },
+      "outputs": {
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "12560157175b52a00f5696bfd42fe061"
+        }
+      }
+    },
+    "/api/order/orderFee/toggleRealAmount": {
+      "role": "mutation",
+      "seen": 4,
+      "inputs": {
+        "order_id": "327441944651235328"
+      },
+      "outputs": {
+        "order_id": {
+          "path": "$.response_body.data.amount_summary.order_id",
+          "sample": "327441944651235328"
+        },
+        "order_no": {
+          "path": "$.response_body.data.amount_summary.order_no",
+          "sample": "YWDD20260622107305"
+        },
+        "order_sub_id": {
+          "path": "$.response_body.data.to_customer[*].order_sub_id",
+          "sample": "327442284834455552"
+        },
+        "request_id": {
+          "path": "$.response_body.request_id",
+          "sample": "808462f064f59d5ae875d2d663f87ca5"
+        },
+        "order_sub_no": {
+          "path": "$.response_body.data.to_customer[*].order_sub_no",
+          "sample": "ZDD20260622016532"
+        },
+        "order_fee_real_id": {
+          "path": "$.response_body.data.to_customer[*].put_amount.standard_list[*].order_fee_real_id",
+          "sample": "327442490581844992"
+        },
+        "fee_real_no": {
+          "path": "$.response_body.data.to_customer[*].put_amount.standard_list[*].fee_real_no",
+          "sample": "FY202606221290514"
+        }
+      }
+    },
+    "/api/v4/users": {
+      "role": "mutation",
+      "seen": 2,
+      "inputs": {},
+      "outputs": {}
+    }
+  },
+  "resolution_index": {
+    "address_cn": [
+      {
+        "endpoint": "/api/customer/customer/customerList",
+        "path": "$.response_body.data[*].address_cn",
+        "inputs": []
+      }
+    ],
+    "audit_id": [
+      {
+        "endpoint": "/api/order/order/orderDetail",
+        "path": "$.response_body.data.audit[*].audit_id",
+        "inputs": [
+          "order_id"
+        ]
+      },
+      {
+        "endpoint": "/api/home/audit/auditPage",
+        "path": "$.response_body.data.data[*].audit_id",
+        "inputs": []
+      }
+    ],
+    "audit_no": [
+      {
+        "endpoint": "/api/order/order/orderDetail",
+        "path": "$.response_body.data.audit[*].audit_no",
+        "inputs": [
+          "order_id"
+        ]
+      },
+      {
+        "endpoint": "/api/home/audit/auditPage",
+        "path": "$.response_body.data.data[*].audit_no",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/home/audit/auditDetail",
+        "path": "$.response_body.data.audit_basic.audit_no",
+        "inputs": [
+          "audit_id"
+        ]
+      }
+    ],
+    "bank_account": [
+      {
+        "endpoint": "/api/home/main/mainPart",
+        "path": "$.response_body.data[*].bank_account",
+        "inputs": []
+      }
+    ],
+    "bl_no": [
+      {
+        "endpoint": "/api/order/orderEntrust/orderPage",
+        "path": "$.response_body.data.data[*].bl_no",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderDetail",
+        "path": "$.response_body.data.bl_no",
+        "inputs": [
+          "order_id"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderPage",
+        "path": "$.response_body.data.data[*].bl_no",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/home/audit/auditPage",
+        "path": "$.response_body.data.data[*].bl_no",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/home/audit/auditDetail",
+        "path": "$.response_body.data.audit_ext.bl_no",
+        "inputs": [
+          "audit_id"
+        ]
+      },
+      {
+        "endpoint": "/api/finance/accountFee/financePutList",
+        "path": "$.response_body.data.data[*].bl_no",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+        "path": "$.response_body.data.receive_account_orders.list[*].bl_no",
+        "inputs": [
+          "receive_account_id"
+        ]
+      }
+    ],
+    "bl_nos": [
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveAccountPage",
+        "path": "$.response_body.data.data[*].bl_nos",
+        "inputs": []
+      }
+    ],
+    "business_no": [
+      {
+        "endpoint": "/api/order/orderEntrust/orderPage",
+        "path": "$.response_body.data.data[*].business_no",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderDetail",
+        "path": "$.response_body.data.order_sub[*].business_no",
+        "inputs": [
+          "order_id"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderPage",
+        "path": "$.response_body.data.data[*].business_no",
+        "inputs": [
+          "bl_no"
+        ]
+      }
+    ],
+    "change_record_id": [
+      {
+        "endpoint": "/api/home/common/changeRecordPage",
+        "path": "$.response_body.data.data[*].change_record_id",
+        "inputs": [
+          "relation_id"
+        ]
+      }
+    ],
+    "copy_order_id": [
+      {
+        "endpoint": "/api/order/orderEntrust/orderPage",
+        "path": "$.response_body.data.data[*].copy_order_id",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderPage",
+        "path": "$.response_body.data.data[*].copy_order_id",
+        "inputs": [
+          "bl_no"
+        ]
+      }
+    ],
+    "cost_id": [
+      {
+        "endpoint": "/api/home/cost/amountCostList",
+        "path": "$.response_body.data[*].cost_id",
+        "inputs": []
+      }
+    ],
+    "customer_id": [
+      {
+        "endpoint": "/api/customer/customer/customerList",
+        "path": "$.response_body.data[*].customer_id",
+        "inputs": []
+      }
+    ],
+    "customer_no": [
+      {
+        "endpoint": "/api/customer/customer/customerList",
+        "path": "$.response_body.data[*].customer_no",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/customer/customer/customerPart",
+        "path": "$.response_body.data.info.customer_no",
+        "inputs": []
+      }
+    ],
+    "customer_order_sn": [
+      {
+        "endpoint": "/api/order/orderEntrust/orderPage",
+        "path": "$.response_body.data.data[*].customer_order_sn",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderDetail",
+        "path": "$.response_body.data.customer_order_sn",
+        "inputs": [
+          "order_id"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderPage",
+        "path": "$.response_body.data.data[*].customer_order_sn",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/finance/accountFee/financePutList",
+        "path": "$.response_body.data.data[*].customer_order_sn",
+        "inputs": [
+          "bl_no"
+        ]
+      }
+    ],
+    "customs_clearance_supplier_id": [
+      {
+        "endpoint": "/api/order/orderEntrust/orderPage",
+        "path": "$.response_body.data.data[*].customs_clearance_supplier_id",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderPage",
+        "path": "$.response_body.data.data[*].customs_clearance_supplier_id",
+        "inputs": [
+          "bl_no"
+        ]
+      }
+    ],
+    "fee_real_no": [
+      {
+        "endpoint": "/api/finance/accountFee/financePutList",
+        "path": "$.response_body.data.data[*].amount_list[*].fee_real_no",
+        "inputs": [
+          "bl_no"
+        ]
+      }
+    ],
+    "identifier_no": [
+      {
+        "endpoint": "/api/customer/customer/customerPart",
+        "path": "$.response_body.data.finance[*].identifier_no",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/home/main/mainPart",
+        "path": "$.response_body.data[*].identifier_no",
+        "inputs": []
+      }
+    ],
+    "king_dee_id": [
+      {
+        "endpoint": "/api/home/user/userList",
+        "path": "$.response_body.data[*].king_dee_id",
+        "inputs": []
+      }
+    ],
+    "main_id": [
+      {
+        "endpoint": "/api/home/main/mainList",
+        "path": "$.response_body.data[*].main_id",
+        "inputs": []
+      }
+    ],
+    "main_no": [
+      {
+        "endpoint": "/api/home/main/mainList",
+        "path": "$.response_body.data[*].main_no",
+        "inputs": []
+      }
+    ],
+    "order_container_id": [
+      {
+        "endpoint": "/api/order/order/orderDetail",
+        "path": "$.response_body.data.container[*].order_container_id",
+        "inputs": [
+          "order_id"
+        ]
+      }
+    ],
+    "order_fee_real_id": [
+      {
+        "endpoint": "/api/finance/accountFee/financePutList",
+        "path": "$.response_body.data.data[*].amount_list[*].order_fee_real_id",
+        "inputs": [
+          "bl_no"
+        ]
+      }
+    ],
+    "order_id": [
+      {
+        "endpoint": "/api/order/orderEntrust/orderPage",
+        "path": "$.response_body.data.data[*].order_id",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderDetail",
+        "path": "$.response_body.data.order_id",
+        "inputs": [
+          "order_id"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderPage",
+        "path": "$.response_body.data.data[*].order_id",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/finance/accountFee/financePutList",
+        "path": "$.response_body.data.data[*].order_id",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+        "path": "$.response_body.data.receive_account_orders.list[*].order_id",
+        "inputs": [
+          "receive_account_id"
+        ]
+      }
+    ],
+    "order_ids": [
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveConfirmList",
+        "path": "$.response_body.data[*].order_ids",
+        "inputs": [
+          "receive_account_id"
+        ]
+      }
+    ],
+    "order_no": [
+      {
+        "endpoint": "/api/order/orderEntrust/orderPage",
+        "path": "$.response_body.data.data[*].order_no",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderDetail",
+        "path": "$.response_body.data.order_no",
+        "inputs": [
+          "order_id"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderPage",
+        "path": "$.response_body.data.data[*].order_no",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/finance/accountFee/financePutList",
+        "path": "$.response_body.data.data[*].order_no",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+        "path": "$.response_body.data.receive_account_orders.list[*].order_no",
+        "inputs": [
+          "receive_account_id"
+        ]
+      }
+    ],
+    "order_sub_id": [
+      {
+        "endpoint": "/api/order/order/orderDetail",
+        "path": "$.response_body.data.order_sub[*].order_sub_id",
+        "inputs": [
+          "order_id"
+        ]
+      },
+      {
+        "endpoint": "/api/finance/accountFee/financePutList",
+        "path": "$.response_body.data.data[*].order_sub_id",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+        "path": "$.response_body.data.receive_account_orders.list[*].order_sub_id",
+        "inputs": [
+          "receive_account_id"
+        ]
+      }
+    ],
+    "order_sub_ids": [
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveConfirmList",
+        "path": "$.response_body.data[*].order_sub_ids",
+        "inputs": [
+          "receive_account_id"
+        ]
+      }
+    ],
+    "order_sub_no": [
+      {
+        "endpoint": "/api/order/orderEntrust/orderPage",
+        "path": "$.response_body.data.data[*].order_sub_no",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderDetail",
+        "path": "$.response_body.data.order_sub[*].order_sub_no",
+        "inputs": [
+          "order_id"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderPage",
+        "path": "$.response_body.data.data[*].order_sub_no",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/finance/accountFee/financePutList",
+        "path": "$.response_body.data.data[*].order_sub_no",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+        "path": "$.response_body.data.receive_account_orders.list[*].order_sub_no",
+        "inputs": [
+          "receive_account_id"
+        ]
+      }
+    ],
+    "order_supplier_id": [
+      {
+        "endpoint": "/api/order/order/orderDetail",
+        "path": "$.response_body.data.supplier[*].order_supplier_id",
+        "inputs": [
+          "order_id"
+        ]
+      }
+    ],
+    "parent_id": [
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveAccountPage",
+        "path": "$.response_body.data.data[*].parent_id",
+        "inputs": []
+      }
+    ],
+    "policy_id": [
+      {
+        "endpoint": "/api/order/orderEntrust/orderPage",
+        "path": "$.response_body.data.data[*].policy_id",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderPage",
+        "path": "$.response_body.data.data[*].policy_id",
+        "inputs": [
+          "bl_no"
+        ]
+      }
+    ],
+    "real_amount_ids": [
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveConfirmList",
+        "path": "$.response_body.data[*].real_amount_ids[*]",
+        "inputs": [
+          "receive_account_id"
+        ]
+      }
+    ],
+    "receive_account_id": [
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveAccountPage",
+        "path": "$.response_body.data.data[*].receive_account_id",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+        "path": "$.response_body.data.receive_account.receive_account_id",
+        "inputs": [
+          "receive_account_id"
+        ]
+      }
+    ],
+    "receive_account_no": [
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveAccountPage",
+        "path": "$.response_body.data.data[*].receive_account_no",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+        "path": "$.response_body.data.receive_account.receive_account_no",
+        "inputs": [
+          "receive_account_id"
+        ]
+      }
+    ],
+    "receive_order_id": [
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+        "path": "$.response_body.data.receive_account_orders.list[*].receive_order_id",
+        "inputs": [
+          "receive_account_id"
+        ]
+      }
+    ],
+    "relation_id": [
+      {
+        "endpoint": "/api/home/audit/auditPage",
+        "path": "$.response_body.data.data[*].relation_id",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/home/audit/auditDetail",
+        "path": "$.response_body.data.audit_content.relation_id",
+        "inputs": [
+          "audit_id"
+        ]
+      }
+    ],
+    "request_id": [
+      {
+        "endpoint": "/api/order/orderEntrust/orderPage",
+        "path": "$.response_body.request_id",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderDetail",
+        "path": "$.response_body.request_id",
+        "inputs": [
+          "order_id"
+        ]
+      },
+      {
+        "endpoint": "/api/home/common/attachmentList",
+        "path": "$.response_body.request_id",
+        "inputs": [
+          "relation_id"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/connOrderList",
+        "path": "$.response_body.request_id",
+        "inputs": [
+          "bl_no",
+          "order_id"
+        ]
+      },
+      {
+        "endpoint": "/api/customer/customer/customerList",
+        "path": "$.response_body.request_id",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/home/user/userList",
+        "path": "$.response_body.request_id",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/customer/customer/customerPart",
+        "path": "$.response_body.request_id",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/order/order/orderPage",
+        "path": "$.response_body.request_id",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/home/common/changeRecordPage",
+        "path": "$.response_body.request_id",
+        "inputs": [
+          "relation_id"
+        ]
+      },
+      {
+        "endpoint": "/api/home/shipCompany/shipCompanyList",
+        "path": "$.response_body.request_id",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/home/cost/amountCostList",
+        "path": "$.response_body.request_id",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/home/policy/policySubList",
+        "path": "$.response_body.request_id",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/order/orderFee/realAmountEditDetail",
+        "path": "$.response_body.request_id",
+        "inputs": [
+          "order_id"
+        ]
+      },
+      {
+        "endpoint": "/api/order/orderFee/settleObjectList",
+        "path": "$.response_body.request_id",
+        "inputs": [
+          "order_id"
+        ]
+      },
+      {
+        "endpoint": "/api/home/message/messageTypeList",
+        "path": "$.response_body.request_id",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/home/audit/auditTypeList",
+        "path": "$.response_body.request_id",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/home/audit/auditPage",
+        "path": "$.response_body.request_id",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/home/audit/auditDetail",
+        "path": "$.response_body.request_id",
+        "inputs": [
+          "audit_id"
+        ]
+      },
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveAccountPage",
+        "path": "$.response_body.request_id",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/home/main/mainList",
+        "path": "$.response_body.request_id",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/finance/accountFee/subSettleList",
+        "path": "$.response_body.request_id",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/finance/accountFee/financePutList",
+        "path": "$.response_body.request_id",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+        "path": "$.response_body.request_id",
+        "inputs": [
+          "receive_account_id"
+        ]
+      },
+      {
+        "endpoint": "/api/home/main/mainPart",
+        "path": "$.response_body.request_id",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/finance/receiveAccount/receiveConfirmList",
+        "path": "$.response_body.request_id",
+        "inputs": [
+          "receive_account_id"
+        ]
+      }
+    ],
+    "settle_object_id": [
+      {
+        "endpoint": "/api/finance/accountFee/subSettleList",
+        "path": "$.response_body.data[*].settle_object_id",
+        "inputs": []
+      }
+    ],
+    "supplier_ids": [
+      {
+        "endpoint": "/api/order/orderEntrust/orderPage",
+        "path": "$.response_body.data.data[*].supplier_ids[*]",
+        "inputs": [
+          "bl_no"
+        ]
+      },
+      {
+        "endpoint": "/api/order/order/orderPage",
+        "path": "$.response_body.data.data[*].supplier_ids[*]",
+        "inputs": [
+          "bl_no"
+        ]
+      }
+    ],
+    "tax_number": [
+      {
+        "endpoint": "/api/customer/customer/customerList",
+        "path": "$.response_body.data[*].tax_number",
+        "inputs": []
+      },
+      {
+        "endpoint": "/api/finance/accountFee/subSettleList",
+        "path": "$.response_body.data[*].tax_number",
+        "inputs": []
+      }
+    ]
+  }
+}

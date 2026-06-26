@@ -153,18 +153,24 @@ def _unwrap(annotation: Any) -> Any:
 
 ### 2.5 真实场景测试样本(来自 PR-C 的 8 个精确建模端点)
 
+> **重要更正**(本节原期望 ``target_type=str, hit_any=False``,落地时**实测**为
+> ``target_type=None, hit_any=True`` —— 根因见 [DECISIONS.md D9](../DECISIONS.md#d9-pr-d1-25-端到端期望修正))。
+
 ```python
 # 真实 4 层穿列表路径(设计 §2.2 端到端示例)
 # data.to_customer.put_amount.standard_list.order_fee_real_id
 # 来自 fin.toggleRealAmount → realAmountLockSubmit 的 FieldBinding
 
-# 期望:target_type=str, hit_any=False
+# 实际:ToggleRealAmountData → to_customer (list[_SettleSideItem]) → _SettleSideItem
+#       → put_amount (_MoneyBlock) → standard_list (list[Any]) → 命中 Any → 软降级
 resolved = resolve_logical_path(
     ToggleRealAmountData,
     "to_customer.put_amount.standard_list.order_fee_real_id"
 )
-assert resolved.target_type is str
-assert resolved.hit_any is False
+# 期望(修正后):target_type=None, hit_any=True, error=None
+assert resolved.target_type is None
+assert resolved.hit_any is True
+assert resolved.error is None
 ```
 
 ---
@@ -398,41 +404,49 @@ def test_descend_into_scalar_returns_error():
 # ════════════════════════════════════════════════════════════════════════════
 
 def test_resolves_fin_toggle_real_amount_real_id():
-    """业务需求:能解析 fin.toggleRealAmount 的 order_fee_real_id 路径。
+    """业务需求:能解析 fin.toggleRealAmount 的 order_fee_real_id 路径(Any 软降级)。
 
-    对应设计:§2.2 端到端示例。
+    对应设计:§2.2 端到端示例(修正:D9)。
     业务影响:realAmountLockSubmit 的 binding 依赖此解析。
+    注:MoneyBlock.standard_list 是 list[Any](permissive 兜底),所以
+        路径末段落在 Any 区域 → 软降级(hit_any=True, target_type=None)。
+        这是设计 §2.2 Any 限制的**预期行为**,不是 bug。
     """
     from Plate.fin.models import ToggleRealAmountData
     resolved = resolve_logical_path(
         ToggleRealAmountData,
         "to_customer.put_amount.standard_list.order_fee_real_id"
     )
-    assert resolved.target_type is str
-    assert resolved.hit_any is False
+    assert resolved.target_type is None
+    assert resolved.hit_any is True
+    assert resolved.error is None
 
 
 def test_resolves_fin_order_confirm_account_cny():
-    """业务需求:能解析 fin.orderConfirmAccount 的 dict 路径。
+    """业务需求:能解析 fin.orderConfirmAccount 的 dict 路径(Any 软降级)。
 
     对应设计:§2.2 main_currency_bank.CNY[0].bank_account 案例。
     业务影响:orderReceiveAccountEdit 的 binding 依赖此解析。
+    注:OrderConfirmAccountData.main_currency_bank: Any(permissive 兜底)
+        → 命中 Any → 软降级。
     """
     from Plate.fin.models import OrderConfirmAccountData
     resolved = resolve_logical_path(
         OrderConfirmAccountData,
         "main_currency_bank.bank_account"
     )
-    # data.main_currency_bank 是 Any(permissive 兜底),所以应该是 hit_any
     assert resolved.hit_any is True
+    assert resolved.target_type is None
     assert resolved.error is None
 
 
 def test_resolves_fin_audit_id():
-    """业务需求:能解析 fin.auditPage 的 audit_id 路径。
+    """业务需求:能解析 fin.auditPage 的 audit_id 路径(精确建模)。
 
     对应设计:§2.2 简例"data[0].audit_id"。
     业务影响:auditDetail / auditExecute 的 binding 依赖此解析。
+    注:AuditPageData.data 是 list[_AuditPageItem](精确建模),所以
+        路径能严格解析到 str(Optional[str] 解 Optional 后是 str)。
     """
     # 注:AuditPageData.data 是 list[AuditPageItem]
     from Plate.fin.models import AuditPageData
@@ -440,11 +454,10 @@ def test_resolves_fin_audit_id():
         AuditPageData,
         "data.audit_id"
     )
-    # 解析到 AuditPageItem.audit_id 类型
+    # 解析到 _AuditPageItem.audit_id 类型(str)
     assert resolved.hit_any is False
-    # audit_id 字段类型是 str | None,可能是 str 也可能是 Union
-    # 接受:str 或含 None 的 Union
-    assert resolved.target_type is not None
+    assert resolved.target_type is str
+    assert resolved.error is None
 ```
 
 ### 3.3 业务核心测试矩阵
@@ -485,7 +498,8 @@ from Plate.path_resolver import resolve_logical_path
 from Plate.fin.models import ToggleRealAmountData
 r = resolve_logical_path(ToggleRealAmountData, 'to_customer.put_amount.standard_list.order_fee_real_id')
 print(f'target_type={r.target_type}, hit_any={r.hit_any}, error={r.error}')
-# 期望: target_type=<class 'str'>, hit_any=False, error=None
+# 期望(修正后,D9): target_type=None, hit_any=True, error=None
+# (路径末段 standard_list 是 list[Any] → 软降级)
 "
 ```
 
@@ -495,7 +509,7 @@ print(f'target_type={r.target_type}, hit_any={r.hit_any}, error={r.error}')
 |---|---|
 | `test_logical_path_resolver.py` 测试数 | ≥ 15 |
 | 失败 | 0 |
-| 端到端命令输出 | `target_type=<class 'str'>, hit_any=False, error=None` |
+| 端到端命令输出(修正后) | `target_type=None, hit_any=True, error=None` |
 
 ### 4.3 风险
 

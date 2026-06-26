@@ -184,7 +184,9 @@ writeoffPage = EndpointSpec(
 | 30 | /api/finance/receiveWriteoff/writeoffBatch | 是(批量核销) | — | BUSINESS | True |
 | 31 | /api/finance/receiveWriteoff/writeoffPage | 否 | 是 | QUERY | False |
 
-**统计**:BUSINESS = 14,QUERY = 17,**TOOL = 0**(`fin` 范围内确认无 TOOL 类)
+**统计**:BUSINESS = 15,QUERY = 16,**TOOL = 0**(`fin` 范围内确认无 TOOL 类)
+> 注:本节统计行原写 `BUSINESS = 14, QUERY = 17`,是算术误差(漏数了 1 个 BUSINESS)。
+> 实际算术 = 15 + 16 = 31。修正依据见 [DECISIONS.md D8](DECISIONS.md#d8-pr-c-24-端点分布统计行算术修正)。
 
 **模糊项**(需业务方确认):
 - 8 号 `checkGenerateOrderSub`:判定"check 不直接改"= QUERY;若 check 实际触发生成子单,改 BUSINESS

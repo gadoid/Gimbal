@@ -1,0 +1,1592 @@
+{
+  "summary": {
+    "total_records": 45,
+    "business_host": "fin-tidb.21eflag.com",
+    "unique_paths": 24,
+    "kept": 45,
+    "dropped": 0,
+    "lineage_edges": 97,
+    "var_candidates": 0,
+    "context_fetch_candidates": 9
+  },
+  "host_counts": {
+    "fin-tidb.21eflag.com": 45
+  },
+  "path_frequency": [
+    [
+      "/api/order/orderEntrust/orderAdd",
+      4
+    ],
+    [
+      "/api/order/order/orderDetail",
+      4
+    ],
+    [
+      "/api/order/orderFee/realAmountLockSubmit",
+      3
+    ],
+    [
+      "/api/home/audit/auditExecute",
+      3
+    ],
+    [
+      "/api/order/order/changeInvoiceApply",
+      3
+    ],
+    [
+      "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
+      3
+    ],
+    [
+      "/api/order/order/orderAdd",
+      2
+    ],
+    [
+      "/api/order/orderFee/toggleRealAmount",
+      2
+    ],
+    [
+      "/api/order/orderFee/bookRealAmountEdit",
+      2
+    ],
+    [
+      "/api/home/audit/auditPage",
+      2
+    ],
+    [
+      "/api/finance/receiveAccount/orderReceiveAccountEdit",
+      2
+    ],
+    [
+      "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceOrder",
+      2
+    ],
+    [
+      "/api/finance/receiveWriteoff/writeoffBatch",
+      2
+    ],
+    [
+      "/api/order/orderEntrust/orderPage",
+      1
+    ],
+    [
+      "/api/order/order/orderBook",
+      1
+    ],
+    [
+      "/api/order/order/checkGenerateOrderSub",
+      1
+    ],
+    [
+      "/api/order/order/generateOrderSub",
+      1
+    ],
+    [
+      "/api/order/order/orderConfirmAccount",
+      1
+    ],
+    [
+      "/api/finance/accountFee/financePutList",
+      1
+    ],
+    [
+      "/api/finance/receiveAccount/receiveConfirmList",
+      1
+    ],
+    [
+      "/api/finance/receiveAccount/accountConfirm",
+      1
+    ],
+    [
+      "/api/Finance/ReceiveInvoiceBatch/applyPage",
+      1
+    ],
+    [
+      "/api/finance/receiveInvoice/invoiceAddCheck",
+      1
+    ],
+    [
+      "/api/finance/receiveInvoice/invoiceAdd",
+      1
+    ]
+  ],
+  "records": [
+    {
+      "idx": 0,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 1,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 2,
+      "path": "/api/order/orderEntrust/orderPage",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "produces downstream id(s): bl_no, order_id, order_ids, order_no"
+    },
+    {
+      "idx": 3,
+      "path": "/api/order/order/orderDetail",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "produces downstream id(s): order_supplier_id"
+    },
+    {
+      "idx": 4,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 5,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 6,
+      "path": "/api/order/order/orderAdd",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 7,
+      "path": "/api/order/order/orderBook",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb; produces downstream id(s): file_id"
+    },
+    {
+      "idx": 8,
+      "path": "/api/order/order/orderAdd",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 9,
+      "path": "/api/order/order/orderDetail",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "produces downstream id(s): code, order_sub_id, order_sub_ids, order_sub_no"
+    },
+    {
+      "idx": 10,
+      "path": "/api/order/orderFee/toggleRealAmount",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 11,
+      "path": "/api/order/orderFee/bookRealAmountEdit",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 12,
+      "path": "/api/order/orderFee/bookRealAmountEdit",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 13,
+      "path": "/api/order/order/checkGenerateOrderSub",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 14,
+      "path": "/api/order/order/generateOrderSub",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 15,
+      "path": "/api/order/order/orderDetail",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "produces downstream id(s): order_sub_ids"
+    },
+    {
+      "idx": 16,
+      "path": "/api/order/orderFee/toggleRealAmount",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb; produces downstream id(s): fee_real_no, order_fee_real_id, order_fee_real_ids, unique_ids"
+    },
+    {
+      "idx": 17,
+      "path": "/api/order/orderFee/realAmountLockSubmit",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 18,
+      "path": "/api/order/orderFee/realAmountLockSubmit",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 19,
+      "path": "/api/order/orderFee/realAmountLockSubmit",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 20,
+      "path": "/api/order/order/orderDetail",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "produces downstream id(s): audit_ids"
+    },
+    {
+      "idx": 21,
+      "path": "/api/home/audit/auditExecute",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 22,
+      "path": "/api/order/order/changeInvoiceApply",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 23,
+      "path": "/api/order/order/changeInvoiceApply",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 24,
+      "path": "/api/order/order/changeInvoiceApply",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 25,
+      "path": "/api/home/audit/auditPage",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "produces downstream id(s): audit_ids"
+    },
+    {
+      "idx": 26,
+      "path": "/api/home/audit/auditExecute",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 27,
+      "path": "/api/order/order/orderConfirmAccount",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb; produces downstream id(s): buyer_identifier_no, seller_identifier_no, seller_name"
+    },
+    {
+      "idx": 28,
+      "path": "/api/finance/accountFee/financePutList",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "produces downstream id(s): order_sub_currency"
+    },
+    {
+      "idx": 29,
+      "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 30,
+      "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb; produces downstream id(s): receive_account_id"
+    },
+    {
+      "idx": 31,
+      "path": "/api/finance/receiveAccount/receiveConfirmList",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "produces downstream id(s): real_amount_ids"
+    },
+    {
+      "idx": 32,
+      "path": "/api/finance/receiveAccount/accountConfirm",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 33,
+      "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 34,
+      "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 35,
+      "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 36,
+      "path": "/api/home/audit/auditPage",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "produces downstream id(s): audit_ids"
+    },
+    {
+      "idx": 37,
+      "path": "/api/home/audit/auditExecute",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 38,
+      "path": "/api/Finance/ReceiveInvoiceBatch/applyPage",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "produces downstream id(s): receive_invoice_apply_id"
+    },
+    {
+      "idx": 39,
+      "path": "/api/finance/receiveInvoice/invoiceAddCheck",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 40,
+      "path": "/api/finance/receiveInvoice/invoiceAdd",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb; produces downstream id(s): receive_invoice_id"
+    },
+    {
+      "idx": 41,
+      "path": "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceOrder",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 42,
+      "path": "/api/Finance/ReceiveInvoiceBatch/allocationInvoiceOrder",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 43,
+      "path": "/api/finance/receiveWriteoff/writeoffBatch",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    },
+    {
+      "idx": 44,
+      "path": "/api/finance/receiveWriteoff/writeoffBatch",
+      "method": "POST",
+      "status": 200,
+      "decision": "KEEP",
+      "reason": "mutation verb"
+    }
+  ],
+  "lineage": [
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 3,
+      "consumer_path": "$.request_body.order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "GIMBAL_TEST_35",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].bl_no",
+      "consumer_idx": 4,
+      "consumer_path": "$.request_body.bl_no",
+      "field": "bl_no"
+    },
+    {
+      "value": "328798389623848960",
+      "producer_idx": 3,
+      "producer_path": "$.response_body.data.supplier[0].order_supplier_id",
+      "consumer_idx": 4,
+      "consumer_path": "$.request_body.supplier[0].order_supplier_id",
+      "field": "order_supplier_id"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 4,
+      "consumer_path": "$.request_body.supplier[0].order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "YWDD20260626107517",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_no",
+      "consumer_idx": 4,
+      "consumer_path": "$.request_body.order_no",
+      "field": "order_no"
+    },
+    {
+      "value": "GIMBAL_TEST_35",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].bl_no",
+      "consumer_idx": 5,
+      "consumer_path": "$.request_body.bl_no",
+      "field": "bl_no"
+    },
+    {
+      "value": "328798389623848960",
+      "producer_idx": 3,
+      "producer_path": "$.response_body.data.supplier[0].order_supplier_id",
+      "consumer_idx": 5,
+      "consumer_path": "$.request_body.supplier[0].order_supplier_id",
+      "field": "order_supplier_id"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 5,
+      "consumer_path": "$.request_body.supplier[0].order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "YWDD20260626107517",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_no",
+      "consumer_idx": 5,
+      "consumer_path": "$.request_body.order_no",
+      "field": "order_no"
+    },
+    {
+      "value": "GIMBAL_TEST_35",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].bl_no",
+      "consumer_idx": 6,
+      "consumer_path": "$.request_body.bl_no",
+      "field": "bl_no"
+    },
+    {
+      "value": "328798389623848960",
+      "producer_idx": 3,
+      "producer_path": "$.response_body.data.supplier[0].order_supplier_id",
+      "consumer_idx": 6,
+      "consumer_path": "$.request_body.supplier[0].order_supplier_id",
+      "field": "order_supplier_id"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 6,
+      "consumer_path": "$.request_body.supplier[0].order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "YWDD20260626107517",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_no",
+      "consumer_idx": 6,
+      "consumer_path": "$.request_body.order_no",
+      "field": "order_no"
+    },
+    {
+      "value": "GIMBAL_TEST_35",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].bl_no",
+      "consumer_idx": 7,
+      "consumer_path": "$.request_body.bl_no",
+      "field": "bl_no"
+    },
+    {
+      "value": "328798389623848960",
+      "producer_idx": 3,
+      "producer_path": "$.response_body.data.supplier[0].order_supplier_id",
+      "consumer_idx": 7,
+      "consumer_path": "$.request_body.supplier[0].order_supplier_id",
+      "field": "order_supplier_id"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 7,
+      "consumer_path": "$.request_body.supplier[0].order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "YWDD20260626107517",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_no",
+      "consumer_idx": 7,
+      "consumer_path": "$.request_body.order_no",
+      "field": "order_no"
+    },
+    {
+      "value": "GIMBAL_TEST_35",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].bl_no",
+      "consumer_idx": 8,
+      "consumer_path": "$.request_body.bl_no",
+      "field": "bl_no"
+    },
+    {
+      "value": "328798435165601792",
+      "producer_idx": 7,
+      "producer_path": "$.response_body.data[0].file_id",
+      "consumer_idx": 8,
+      "consumer_path": "$.request_body.customer_file_list[0].file_id",
+      "field": "file_id"
+    },
+    {
+      "value": "328798389623848960",
+      "producer_idx": 3,
+      "producer_path": "$.response_body.data.supplier[0].order_supplier_id",
+      "consumer_idx": 8,
+      "consumer_path": "$.request_body.supplier[0].order_supplier_id",
+      "field": "order_supplier_id"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 8,
+      "consumer_path": "$.request_body.supplier[0].order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "YWDD20260626107517",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_no",
+      "consumer_idx": 8,
+      "consumer_path": "$.request_body.order_no",
+      "field": "order_no"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 9,
+      "consumer_path": "$.request_body.order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 10,
+      "consumer_path": "$.request_body.order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 11,
+      "consumer_path": "$.request_body.order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 12,
+      "consumer_path": "$.request_body.order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 13,
+      "consumer_path": "$.request_body.order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 14,
+      "consumer_path": "$.request_body.order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 15,
+      "consumer_path": "$.request_body.order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 16,
+      "consumer_path": "$.request_body.order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 17,
+      "consumer_path": "$.request_body.order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "328798527415123968",
+      "producer_idx": 16,
+      "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+      "consumer_idx": 17,
+      "consumer_path": "$.request_body.order_fee_real_ids[0]",
+      "field": "order_fee_real_ids"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 18,
+      "consumer_path": "$.request_body.order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "328798527415123968",
+      "producer_idx": 16,
+      "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+      "consumer_idx": 18,
+      "consumer_path": "$.request_body.order_fee_real_ids[0]",
+      "field": "order_fee_real_ids"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 19,
+      "consumer_path": "$.request_body.order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "328798527415123968",
+      "producer_idx": 16,
+      "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+      "consumer_idx": 19,
+      "consumer_path": "$.request_body.order_fee_real_ids[0]",
+      "field": "order_fee_real_ids"
+    },
+    {
+      "value": "ZDD20260626016831",
+      "producer_idx": 9,
+      "producer_path": "$.response_body.data.order_sub[0].order_sub_no",
+      "consumer_idx": 19,
+      "consumer_path": "$.request_body.audit_msg.code",
+      "field": "code"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 20,
+      "consumer_path": "$.request_body.order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "328798561980383232",
+      "producer_idx": 20,
+      "producer_path": "$.response_body.data.audit[0].audit_id",
+      "consumer_idx": 21,
+      "consumer_path": "$.request_body.audit_ids[0]",
+      "field": "audit_ids"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 22,
+      "consumer_path": "$.request_body.order_ids[0]",
+      "field": "order_ids"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 23,
+      "consumer_path": "$.request_body.order_ids[0]",
+      "field": "order_ids"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 24,
+      "consumer_path": "$.request_body.order_ids[0]",
+      "field": "order_ids"
+    },
+    {
+      "value": "328798596797300736",
+      "producer_idx": 25,
+      "producer_path": "$.response_body.data.data[0].audit_id",
+      "consumer_idx": 26,
+      "consumer_path": "$.request_body.audit_ids[0]",
+      "field": "audit_ids"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 27,
+      "consumer_path": "$.request_body.order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "GIMBAL_TEST_35",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].bl_no",
+      "consumer_idx": 28,
+      "consumer_path": "$.request_body.bl_no",
+      "field": "bl_no"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 29,
+      "consumer_path": "$.request_body.select_list[0].order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "YWDD20260626107517",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_no",
+      "consumer_idx": 29,
+      "consumer_path": "$.request_body.select_list[0].order_no",
+      "field": "order_no"
+    },
+    {
+      "value": "GIMBAL_TEST_35",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].bl_no",
+      "consumer_idx": 29,
+      "consumer_path": "$.request_body.select_list[0].bl_no",
+      "field": "bl_no"
+    },
+    {
+      "value": "328798447375220736",
+      "producer_idx": 9,
+      "producer_path": "$.response_body.data.order_sub[0].order_sub_id",
+      "consumer_idx": 29,
+      "consumer_path": "$.request_body.select_list[0].order_sub_id",
+      "field": "order_sub_id"
+    },
+    {
+      "value": "ZDD20260626016831",
+      "producer_idx": 9,
+      "producer_path": "$.response_body.data.order_sub[0].order_sub_no",
+      "consumer_idx": 29,
+      "consumer_path": "$.request_body.select_list[0].order_sub_no",
+      "field": "order_sub_no"
+    },
+    {
+      "value": "USD328798447375220736",
+      "producer_idx": 28,
+      "producer_path": "$.response_body.data.data[0].order_sub_currency",
+      "consumer_idx": 29,
+      "consumer_path": "$.request_body.select_list[0].order_sub_currency",
+      "field": "order_sub_currency"
+    },
+    {
+      "value": "328798527415123968",
+      "producer_idx": 16,
+      "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+      "consumer_idx": 29,
+      "consumer_path": "$.request_body.select_list[0].amount_list[0].order_fee_real_id",
+      "field": "order_fee_real_id"
+    },
+    {
+      "value": "FY202606261291798",
+      "producer_idx": 16,
+      "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].fee_real_no",
+      "consumer_idx": 29,
+      "consumer_path": "$.request_body.select_list[0].amount_list[0].fee_real_no",
+      "field": "fee_real_no"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 30,
+      "consumer_path": "$.request_body.select_list[0].order_id",
+      "field": "order_id"
+    },
+    {
+      "value": "YWDD20260626107517",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_no",
+      "consumer_idx": 30,
+      "consumer_path": "$.request_body.select_list[0].order_no",
+      "field": "order_no"
+    },
+    {
+      "value": "GIMBAL_TEST_35",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].bl_no",
+      "consumer_idx": 30,
+      "consumer_path": "$.request_body.select_list[0].bl_no",
+      "field": "bl_no"
+    },
+    {
+      "value": "328798447375220736",
+      "producer_idx": 9,
+      "producer_path": "$.response_body.data.order_sub[0].order_sub_id",
+      "consumer_idx": 30,
+      "consumer_path": "$.request_body.select_list[0].order_sub_id",
+      "field": "order_sub_id"
+    },
+    {
+      "value": "ZDD20260626016831",
+      "producer_idx": 9,
+      "producer_path": "$.response_body.data.order_sub[0].order_sub_no",
+      "consumer_idx": 30,
+      "consumer_path": "$.request_body.select_list[0].order_sub_no",
+      "field": "order_sub_no"
+    },
+    {
+      "value": "USD328798447375220736",
+      "producer_idx": 28,
+      "producer_path": "$.response_body.data.data[0].order_sub_currency",
+      "consumer_idx": 30,
+      "consumer_path": "$.request_body.select_list[0].order_sub_currency",
+      "field": "order_sub_currency"
+    },
+    {
+      "value": "328798527415123968",
+      "producer_idx": 16,
+      "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+      "consumer_idx": 30,
+      "consumer_path": "$.request_body.select_list[0].amount_list[0].order_fee_real_id",
+      "field": "order_fee_real_id"
+    },
+    {
+      "value": "FY202606261291798",
+      "producer_idx": 16,
+      "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].fee_real_no",
+      "consumer_idx": 30,
+      "consumer_path": "$.request_body.select_list[0].amount_list[0].fee_real_no",
+      "field": "fee_real_no"
+    },
+    {
+      "value": "328798637733707776",
+      "producer_idx": 30,
+      "producer_path": "$.response_body.data.receive_account_id",
+      "consumer_idx": 31,
+      "consumer_path": "$.request_body.receive_account_id",
+      "field": "receive_account_id"
+    },
+    {
+      "value": "328798637733707776",
+      "producer_idx": 30,
+      "producer_path": "$.response_body.data.receive_account_id",
+      "consumer_idx": 32,
+      "consumer_path": "$.request_body.receive_account_id",
+      "field": "receive_account_id"
+    },
+    {
+      "value": "328798388306837504",
+      "producer_idx": 2,
+      "producer_path": "$.response_body.data.data[0].order_id",
+      "consumer_idx": 32,
+      "consumer_path": "$.request_body.confirm_list[0].order_ids",
+      "field": "order_ids"
+    },
+    {
+      "value": "328798511443214336",
+      "producer_idx": 15,
+      "producer_path": "$.response_body.data.order_sub[1].order_sub_id",
+      "consumer_idx": 32,
+      "consumer_path": "$.request_body.confirm_list[0].order_sub_ids",
+      "field": "order_sub_ids"
+    },
+    {
+      "value": "be31581f-d265-48d9-8f1a-68ae3e3b43ff",
+      "producer_idx": 16,
+      "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].unique_id",
+      "consumer_idx": 32,
+      "consumer_path": "$.request_body.confirm_list[0].unique_ids",
+      "field": "unique_ids"
+    },
+    {
+      "value": "328798527415126016",
+      "producer_idx": 31,
+      "producer_path": "$.response_body.data[0].real_amount_ids[0]",
+      "consumer_idx": 32,
+      "consumer_path": "$.request_body.confirm_list[0].real_amount_ids[0]",
+      "field": "real_amount_ids"
+    },
+    {
+      "value": "328798447375220736",
+      "producer_idx": 9,
+      "producer_path": "$.response_body.data.order_sub[0].order_sub_id",
+      "consumer_idx": 32,
+      "consumer_path": "$.request_body.confirm_list[1].order_sub_ids",
+      "field": "order_sub_ids"
+    },
+    {
+      "value": "328798527415124992",
+      "producer_idx": 31,
+      "producer_path": "$.response_body.data[1].real_amount_ids[0]",
+      "consumer_idx": 32,
+      "consumer_path": "$.request_body.confirm_list[1].real_amount_ids[0]",
+      "field": "real_amount_ids"
+    },
+    {
+      "value": "328798527415123968",
+      "producer_idx": 16,
+      "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+      "consumer_idx": 33,
+      "consumer_path": "$.request_body.order_fee_real_id[0]",
+      "field": "order_fee_real_id"
+    },
+    {
+      "value": "802050200740776",
+      "producer_idx": 27,
+      "producer_path": "$.response_body.data.main_currency_bank.CNY[0].bank_account",
+      "consumer_idx": 33,
+      "consumer_path": "$.request_body.usd_require.seller_name",
+      "field": "seller_name"
+    },
+    {
+      "value": "FY202606261291798",
+      "producer_idx": 16,
+      "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].fee_real_no",
+      "consumer_idx": 33,
+      "consumer_path": "$.request_body.usd_require.rate_list[0].fee_real_no",
+      "field": "fee_real_no"
+    },
+    {
+      "value": "328798447375220736",
+      "producer_idx": 9,
+      "producer_path": "$.response_body.data.order_sub[0].order_sub_id",
+      "consumer_idx": 33,
+      "consumer_path": "$.request_body.batch_order_remark[0].order_sub_id",
+      "field": "order_sub_id"
+    },
+    {
+      "value": "328798527415123968",
+      "producer_idx": 16,
+      "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+      "consumer_idx": 34,
+      "consumer_path": "$.request_body.order_fee_real_id[0]",
+      "field": "order_fee_real_id"
+    },
+    {
+      "value": "802050200740776",
+      "producer_idx": 27,
+      "producer_path": "$.response_body.data.main_currency_bank.CNY[0].bank_account",
+      "consumer_idx": 34,
+      "consumer_path": "$.request_body.usd_require.seller_name",
+      "field": "seller_name"
+    },
+    {
+      "value": "FY202606261291798",
+      "producer_idx": 16,
+      "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].fee_real_no",
+      "consumer_idx": 34,
+      "consumer_path": "$.request_body.usd_require.rate_list[0].fee_real_no",
+      "field": "fee_real_no"
+    },
+    {
+      "value": "328798447375220736",
+      "producer_idx": 9,
+      "producer_path": "$.response_body.data.order_sub[0].order_sub_id",
+      "consumer_idx": 34,
+      "consumer_path": "$.request_body.batch_order_remark[0].order_sub_id",
+      "field": "order_sub_id"
+    },
+    {
+      "value": "328798527415123968",
+      "producer_idx": 16,
+      "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+      "consumer_idx": 35,
+      "consumer_path": "$.request_body.order_fee_real_id[0]",
+      "field": "order_fee_real_id"
+    },
+    {
+      "value": "802050200740776",
+      "producer_idx": 27,
+      "producer_path": "$.response_body.data.main_currency_bank.CNY[0].bank_account",
+      "consumer_idx": 35,
+      "consumer_path": "$.request_body.usd_require.seller_name",
+      "field": "seller_name"
+    },
+    {
+      "value": "FY202606261291798",
+      "producer_idx": 16,
+      "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].fee_real_no",
+      "consumer_idx": 35,
+      "consumer_path": "$.request_body.usd_require.rate_list[0].fee_real_no",
+      "field": "fee_real_no"
+    },
+    {
+      "value": "328798447375220736",
+      "producer_idx": 9,
+      "producer_path": "$.response_body.data.order_sub[0].order_sub_id",
+      "consumer_idx": 35,
+      "consumer_path": "$.request_body.batch_order_remark[0].order_sub_id",
+      "field": "order_sub_id"
+    },
+    {
+      "value": "328798672328327168",
+      "producer_idx": 36,
+      "producer_path": "$.response_body.data.data[0].audit_id",
+      "consumer_idx": 37,
+      "consumer_path": "$.request_body.audit_ids[0]",
+      "field": "audit_ids"
+    },
+    {
+      "value": "328798435165601792",
+      "producer_idx": 7,
+      "producer_path": "$.response_body.data[0].file_id",
+      "consumer_idx": 39,
+      "consumer_path": "$.request_body.invoice_original.file_id",
+      "field": "file_id"
+    },
+    {
+      "value": "91370283591262431N",
+      "producer_idx": 27,
+      "producer_path": "$.response_body.data.customer_currency_finance.USD[0].identifier_no",
+      "consumer_idx": 39,
+      "consumer_path": "$.request_body.buyer_identifier_no",
+      "field": "buyer_identifier_no"
+    },
+    {
+      "value": "91370202MAEWF5RN7G",
+      "producer_idx": 27,
+      "producer_path": "$.response_body.data.main_currency_bank.USD[0].identifier_no",
+      "consumer_idx": 39,
+      "consumer_path": "$.request_body.seller_identifier_no",
+      "field": "seller_identifier_no"
+    },
+    {
+      "value": "91370283591262431N",
+      "producer_idx": 27,
+      "producer_path": "$.response_body.data.customer_currency_finance.USD[0].identifier_no",
+      "consumer_idx": 40,
+      "consumer_path": "$.request_body[0].buyer_identifier_no",
+      "field": "buyer_identifier_no"
+    },
+    {
+      "value": "91370202MAEWF5RN7G",
+      "producer_idx": 27,
+      "producer_path": "$.response_body.data.main_currency_bank.USD[0].identifier_no",
+      "consumer_idx": 40,
+      "consumer_path": "$.request_body[0].seller_identifier_no",
+      "field": "seller_identifier_no"
+    },
+    {
+      "value": "328798686853201920",
+      "producer_idx": 38,
+      "producer_path": "$.response_body.data.data[0].receive_invoice_apply_id",
+      "consumer_idx": 41,
+      "consumer_path": "$.request_body.receive_invoice_apply_id",
+      "field": "receive_invoice_apply_id"
+    },
+    {
+      "value": "328798447375220736",
+      "producer_idx": 9,
+      "producer_path": "$.response_body.data.order_sub[0].order_sub_id",
+      "consumer_idx": 41,
+      "consumer_path": "$.request_body.invoice_arr[0].order_sub_id",
+      "field": "order_sub_id"
+    },
+    {
+      "value": "328798705241030656",
+      "producer_idx": 40,
+      "producer_path": "$.response_body.data.24920000000029640029",
+      "consumer_idx": 41,
+      "consumer_path": "$.request_body.invoice_arr[0].receive_invoice_id",
+      "field": "receive_invoice_id"
+    },
+    {
+      "value": "328798686853201920",
+      "producer_idx": 38,
+      "producer_path": "$.response_body.data.data[0].receive_invoice_apply_id",
+      "consumer_idx": 42,
+      "consumer_path": "$.request_body.receive_invoice_apply_id",
+      "field": "receive_invoice_apply_id"
+    },
+    {
+      "value": "328798447375220736",
+      "producer_idx": 9,
+      "producer_path": "$.response_body.data.order_sub[0].order_sub_id",
+      "consumer_idx": 42,
+      "consumer_path": "$.request_body.invoice_arr[0].order_sub_id",
+      "field": "order_sub_id"
+    },
+    {
+      "value": "328798705241030656",
+      "producer_idx": 40,
+      "producer_path": "$.response_body.data.24920000000029640029",
+      "consumer_idx": 42,
+      "consumer_path": "$.request_body.invoice_arr[0].receive_invoice_id",
+      "field": "receive_invoice_id"
+    },
+    {
+      "value": "328798527415123968",
+      "producer_idx": 16,
+      "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+      "consumer_idx": 43,
+      "consumer_path": "$.request_body.writeoff_object[0].order_fee_real_id[0]",
+      "field": "order_fee_real_id"
+    },
+    {
+      "value": "328798705241030656",
+      "producer_idx": 40,
+      "producer_path": "$.response_body.data.24920000000029640029",
+      "consumer_idx": 43,
+      "consumer_path": "$.request_body.writeoff_object[0].receive_invoice_id",
+      "field": "receive_invoice_id"
+    },
+    {
+      "value": "328798527415123968",
+      "producer_idx": 16,
+      "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+      "consumer_idx": 44,
+      "consumer_path": "$.request_body.writeoff_object[0].order_fee_real_id[0]",
+      "field": "order_fee_real_id"
+    },
+    {
+      "value": "328798705241030656",
+      "producer_idx": 40,
+      "producer_path": "$.response_body.data.24920000000029640029",
+      "consumer_idx": 44,
+      "consumer_path": "$.request_body.writeoff_object[0].receive_invoice_id",
+      "field": "receive_invoice_id"
+    }
+  ],
+  "bulk_extract_candidates": [
+    {
+      "idx": 2,
+      "path": "/api/order/orderEntrust/orderPage",
+      "expression": "$.response_body.data",
+      "shape": "dict with list fields: data"
+    },
+    {
+      "idx": 3,
+      "path": "/api/order/order/orderDetail",
+      "expression": "$.response_body.data",
+      "shape": "dict with list fields: service_items, policy_main_arr, supplier"
+    },
+    {
+      "idx": 7,
+      "path": "/api/order/order/orderBook",
+      "expression": "$.response_body.data",
+      "shape": "list[1]"
+    },
+    {
+      "idx": 9,
+      "path": "/api/order/order/orderDetail",
+      "expression": "$.response_body.data",
+      "shape": "dict with list fields: service_items, order_sub, container, policy_main_arr, supplier"
+    },
+    {
+      "idx": 10,
+      "path": "/api/order/orderFee/toggleRealAmount",
+      "expression": "$.response_body.data",
+      "shape": "dict with list fields: to_customer, to_supplier, service_items"
+    },
+    {
+      "idx": 13,
+      "path": "/api/order/order/checkGenerateOrderSub",
+      "expression": "$.response_body.data",
+      "shape": "dict with list fields: fee, order_book"
+    },
+    {
+      "idx": 15,
+      "path": "/api/order/order/orderDetail",
+      "expression": "$.response_body.data",
+      "shape": "dict with list fields: service_items, order_sub, container, policy_main_arr, supplier"
+    },
+    {
+      "idx": 16,
+      "path": "/api/order/orderFee/toggleRealAmount",
+      "expression": "$.response_body.data",
+      "shape": "dict with list fields: to_customer, to_supplier, service_items"
+    },
+    {
+      "idx": 18,
+      "path": "/api/order/orderFee/realAmountLockSubmit",
+      "expression": "$.response_body.data",
+      "shape": "dict with list fields: node_list, carbon_copy_list"
+    },
+    {
+      "idx": 20,
+      "path": "/api/order/order/orderDetail",
+      "expression": "$.response_body.data",
+      "shape": "dict with list fields: service_items, order_sub, container, policy_main_arr, supplier"
+    },
+    {
+      "idx": 23,
+      "path": "/api/order/order/changeInvoiceApply",
+      "expression": "$.response_body.data",
+      "shape": "dict with list fields: node_list, carbon_copy_list"
+    },
+    {
+      "idx": 25,
+      "path": "/api/home/audit/auditPage",
+      "expression": "$.response_body.data",
+      "shape": "dict with list fields: data"
+    },
+    {
+      "idx": 28,
+      "path": "/api/finance/accountFee/financePutList",
+      "expression": "$.response_body.data",
+      "shape": "dict with list fields: customer_name, main_name_cn, settle_object, data"
+    },
+    {
+      "idx": 31,
+      "path": "/api/finance/receiveAccount/receiveConfirmList",
+      "expression": "$.response_body.data",
+      "shape": "list[2]"
+    },
+    {
+      "idx": 34,
+      "path": "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
+      "expression": "$.response_body.data",
+      "shape": "dict with list fields: node_list, carbon_copy_list"
+    },
+    {
+      "idx": 36,
+      "path": "/api/home/audit/auditPage",
+      "expression": "$.response_body.data",
+      "shape": "dict with list fields: data"
+    },
+    {
+      "idx": 38,
+      "path": "/api/Finance/ReceiveInvoiceBatch/applyPage",
+      "expression": "$.response_body.data",
+      "shape": "dict with list fields: data"
+    }
+  ],
+  "missing_producers": [
+    {
+      "value": "327661182355767296",
+      "consumer_idx": 29,
+      "field": "order_id",
+      "occurrence_count": 2,
+      "occurrence_steps": [
+        29,
+        30
+      ],
+      "suggestions": [
+        {
+          "endpoint": "/api/order/orderEntrust/orderPage",
+          "path": "$.response_body.data.data[*].order_id",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/order/order/orderDetail",
+          "path": "$.response_body.data.order_id",
+          "inputs": [
+            "order_id"
+          ]
+        },
+        {
+          "endpoint": "/api/order/order/orderPage",
+          "path": "$.response_body.data.data[*].order_id",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/finance/accountFee/financePutList",
+          "path": "$.response_body.data.data[*].order_id",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+          "path": "$.response_body.data.receive_account_orders.list[*].order_id",
+          "inputs": [
+            "receive_account_id"
+          ]
+        }
+      ],
+      "static_constant_candidate": false
+    },
+    {
+      "value": "YWDD20260623107343",
+      "consumer_idx": 29,
+      "field": "order_no",
+      "occurrence_count": 2,
+      "occurrence_steps": [
+        29,
+        30
+      ],
+      "suggestions": [
+        {
+          "endpoint": "/api/order/orderEntrust/orderPage",
+          "path": "$.response_body.data.data[*].order_no",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/order/order/orderDetail",
+          "path": "$.response_body.data.order_no",
+          "inputs": [
+            "order_id"
+          ]
+        },
+        {
+          "endpoint": "/api/order/order/orderPage",
+          "path": "$.response_body.data.data[*].order_no",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/finance/accountFee/financePutList",
+          "path": "$.response_body.data.data[*].order_no",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+          "path": "$.response_body.data.receive_account_orders.list[*].order_no",
+          "inputs": [
+            "receive_account_id"
+          ]
+        }
+      ],
+      "static_constant_candidate": false
+    },
+    {
+      "value": "ZDD20260623016596",
+      "consumer_idx": 29,
+      "field": "order_sub_no",
+      "occurrence_count": 2,
+      "occurrence_steps": [
+        29,
+        30
+      ],
+      "suggestions": [
+        {
+          "endpoint": "/api/order/orderEntrust/orderPage",
+          "path": "$.response_body.data.data[*].order_sub_no",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/order/order/orderDetail",
+          "path": "$.response_body.data.order_sub[*].order_sub_no",
+          "inputs": [
+            "order_id"
+          ]
+        },
+        {
+          "endpoint": "/api/order/order/orderPage",
+          "path": "$.response_body.data.data[*].order_sub_no",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/finance/accountFee/financePutList",
+          "path": "$.response_body.data.data[*].order_sub_no",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+          "path": "$.response_body.data.receive_account_orders.list[*].order_sub_no",
+          "inputs": [
+            "receive_account_id"
+          ]
+        }
+      ],
+      "static_constant_candidate": false
+    },
+    {
+      "value": "327661743511699456",
+      "consumer_idx": 29,
+      "field": "order_sub_id",
+      "occurrence_count": 2,
+      "occurrence_steps": [
+        29,
+        30
+      ],
+      "suggestions": [
+        {
+          "endpoint": "/api/order/order/orderDetail",
+          "path": "$.response_body.data.order_sub[*].order_sub_id",
+          "inputs": [
+            "order_id"
+          ]
+        },
+        {
+          "endpoint": "/api/finance/accountFee/financePutList",
+          "path": "$.response_body.data.data[*].order_sub_id",
+          "inputs": [
+            "bl_no"
+          ]
+        },
+        {
+          "endpoint": "/api/finance/receiveAccount/receiveAccountDetail",
+          "path": "$.response_body.data.receive_account_orders.list[*].order_sub_id",
+          "inputs": [
+            "receive_account_id"
+          ]
+        }
+      ],
+      "static_constant_candidate": false
+    },
+    {
+      "value": "1766505600000",
+      "consumer_idx": 38,
+      "field": "create_time",
+      "occurrence_count": 1,
+      "occurrence_steps": [
+        38
+      ],
+      "suggestions": [],
+      "static_constant_candidate": false
+    },
+    {
+      "value": "1783416799000",
+      "consumer_idx": 38,
+      "field": "create_time",
+      "occurrence_count": 1,
+      "occurrence_steps": [
+        38
+      ],
+      "suggestions": [],
+      "static_constant_candidate": false
+    },
+    {
+      "value": "24922000000029640004",
+      "consumer_idx": 39,
+      "field": "invoice_number",
+      "occurrence_count": 1,
+      "occurrence_steps": [
+        39
+      ],
+      "suggestions": [],
+      "static_constant_candidate": false
+    },
+    {
+      "value": "24920000000029640029",
+      "consumer_idx": 40,
+      "field": "invoice_number",
+      "occurrence_count": 1,
+      "occurrence_steps": [
+        40
+      ],
+      "suggestions": [],
+      "static_constant_candidate": false
+    },
+    {
+      "value": "327664535185915904",
+      "consumer_idx": 40,
+      "field": "file_id",
+      "occurrence_count": 1,
+      "occurrence_steps": [
+        40
+      ],
+      "suggestions": [],
+      "static_constant_candidate": false
+    }
+  ]
+}

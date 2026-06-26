@@ -1,10 +1,10 @@
 """fin 服务契约数据模型。
 
 本模块从 ``gimbal-tmp/test-2-1782188725.ndjson`` 中观察到的 31 个 (method, path)
-端点的请求/响应结构,生成对应的 pydantic v2 数据类,并暴露:
-  * :data:`PATH_MODELS` —— ``(method, path)`` → 端点契约映射
-  * :func:`get_request_model` / :func:`get_response_model` —— 按 path 反查
-  * :class:`EndpointBinding` —— 路径 ↔ 模型的强类型表达
+端点的请求/响应结构,生成对应的 pydantic v2 数据类。
+
+权威查询入口请走 :data:`Plate.registry`;31 个 ``EndpointSpec`` 实例见
+:mod:`Plate.fin.endpoints`。
 
 设计原则(对齐 :mod:`Plate.spec` 的契约保真护栏):
   * 全部使用 ``model_config = ConfigDict(extra="forbid")``
@@ -1257,218 +1257,6 @@ class WriteoffPageData(_Base):
     total_data: _WriteoffPageTotalData | None = None
 
 
-# ════════════════════════════════════════════════════════════════════════════
-# 端点 ↔ 模型 映射表
-# ════════════════════════════════════════════════════════════════════════════
-
-
-class EndpointBinding(_Base):
-    """单个端点的契约绑定:``(method, path)`` → 请求/响应模型。"""
-
-    method: str
-    path: str
-    request_model: type[BaseModel] | None = None
-    response_envelope: type[BaseModel] = CommonResponseEnvelope
-    response_data_model: type[BaseModel] | None = None  # ``data`` 字段的内部模型(若可建模)
-
-
-# 注册表:key = (method, path) → EndpointBinding
-PATH_MODELS: dict[tuple[str, str], EndpointBinding] = {
-    ("POST", "/api/order/orderEntrust/orderPage"): EndpointBinding(
-        method="POST",
-        path="/api/order/orderEntrust/orderPage",
-        request_model=OrderEntrustOrderPageRequest,
-        response_data_model=OrderEntrustOrderPageData,
-    ),
-    ("POST", "/api/order/orderEntrust/orderAdd"): EndpointBinding(
-        method="POST",
-        path="/api/order/orderEntrust/orderAdd",
-        request_model=OrderEntrustOrderAddRequest,
-    ),
-    ("POST", "/api/order/order/orderDetail"): EndpointBinding(
-        method="POST",
-        path="/api/order/order/orderDetail",
-        request_model=OrderDetailRequest,
-        response_data_model=OrderDetailData,
-    ),
-    ("POST", "/api/order/order/orderAdd"): EndpointBinding(
-        method="POST",
-        path="/api/order/order/orderAdd",
-        request_model=OrderAddRequest,
-    ),
-    ("POST", "/api/order/order/orderBook"): EndpointBinding(
-        method="POST",
-        path="/api/order/order/orderBook",
-        request_model=OrderBookRequest,
-    ),
-    ("POST", "/api/order/orderFee/toggleRealAmount"): EndpointBinding(
-        method="POST",
-        path="/api/order/orderFee/toggleRealAmount",
-        request_model=ToggleRealAmountRequest,
-        response_data_model=ToggleRealAmountData,
-    ),
-    ("POST", "/api/order/orderFee/bookRealAmountEdit"): EndpointBinding(
-        method="POST",
-        path="/api/order/orderFee/bookRealAmountEdit",
-        request_model=BookRealAmountEditRequest,
-    ),
-    ("POST", "/api/order/order/checkGenerateOrderSub"): EndpointBinding(
-        method="POST",
-        path="/api/order/order/checkGenerateOrderSub",
-        request_model=CheckGenerateOrderSubRequest,
-        response_data_model=CheckGenerateOrderSubData,
-    ),
-    ("POST", "/api/order/order/generateOrderSub"): EndpointBinding(
-        method="POST",
-        path="/api/order/order/generateOrderSub",
-        request_model=GenerateOrderSubRequest,
-    ),
-    ("POST", "/api/order/orderFee/realAmountLockSubmit"): EndpointBinding(
-        method="POST",
-        path="/api/order/orderFee/realAmountLockSubmit",
-        request_model=RealAmountLockSubmitRequest,
-    ),
-    ("POST", "/api/home/audit/auditPage"): EndpointBinding(
-        method="POST",
-        path="/api/home/audit/auditPage",
-        request_model=AuditPageRequest,
-        response_data_model=AuditPageData,
-    ),
-    ("POST", "/api/home/audit/auditDetail"): EndpointBinding(
-        method="POST",
-        path="/api/home/audit/auditDetail",
-        request_model=AuditDetailRequest,
-        response_data_model=AuditDetailData,
-    ),
-    ("POST", "/api/home/audit/auditExecute"): EndpointBinding(
-        method="POST",
-        path="/api/home/audit/auditExecute",
-        request_model=AuditExecuteRequest,
-    ),
-    ("POST", "/api/order/order/changeInvoiceApply"): EndpointBinding(
-        method="POST",
-        path="/api/order/order/changeInvoiceApply",
-        request_model=ChangeInvoiceApplyRequest,
-    ),
-    ("POST", "/api/order/order/orderConfirmAccount"): EndpointBinding(
-        method="POST",
-        path="/api/order/order/orderConfirmAccount",
-        request_model=OrderConfirmAccountRequest,
-        response_data_model=OrderConfirmAccountData,
-    ),
-    ("POST", "/api/finance/accountFee/financePutList"): EndpointBinding(
-        method="POST",
-        path="/api/finance/accountFee/financePutList",
-        request_model=FinancePutListRequest,
-        response_data_model=FinancePutListData,
-    ),
-    ("POST", "/api/finance/receiveAccount/orderReceiveAccountEdit"): EndpointBinding(
-        method="POST",
-        path="/api/finance/receiveAccount/orderReceiveAccountEdit",
-        request_model=OrderReceiveAccountEditRequest,
-        response_data_model=OrderReceiveAccountEditData,
-    ),
-    ("POST", "/api/finance/receiveAccount/receiveAccountDetail"): EndpointBinding(
-        method="POST",
-        path="/api/finance/receiveAccount/receiveAccountDetail",
-        request_model=ReceiveAccountDetailRequest,
-        response_data_model=ReceiveAccountDetailData,
-    ),
-    ("POST", "/api/finance/receiveAccount/receiveConfirmList"): EndpointBinding(
-        method="POST",
-        path="/api/finance/receiveAccount/receiveConfirmList",
-        request_model=ReceiveConfirmListRequest,
-    ),
-    ("POST", "/api/finance/receiveAccount/accountConfirm"): EndpointBinding(
-        method="POST",
-        path="/api/finance/receiveAccount/accountConfirm",
-        request_model=AccountConfirmRequest,
-    ),
-    ("POST", "/api/Finance/ReceiveInvoiceBatch/applyPage"): EndpointBinding(
-        method="POST",
-        path="/api/Finance/ReceiveInvoiceBatch/applyPage",
-        request_model=ApplyPageRequest,
-        response_data_model=ApplyPageData,
-    ),
-    ("POST", "/api/Finance/ReceiveInvoiceBatch/checkStep1"): EndpointBinding(
-        method="POST",
-        path="/api/Finance/ReceiveInvoiceBatch/checkStep1",
-        request_model=CheckStep1Request,
-    ),
-    ("POST", "/api/Finance/ReceiveInvoiceBatch/checkStep2"): EndpointBinding(
-        method="POST",
-        path="/api/Finance/ReceiveInvoiceBatch/checkStep2",
-        request_model=CheckStep2Request,
-    ),
-    ("POST", "/api/Finance/ReceiveInvoiceBatch/batchOrderEdit"): EndpointBinding(
-        method="POST",
-        path="/api/Finance/ReceiveInvoiceBatch/batchOrderEdit",
-        request_model=BatchOrderEditRequest,
-    ),
-    ("POST", "/api/Finance/ReceiveInvoiceBatch/batchDetail"): EndpointBinding(
-        method="POST",
-        path="/api/Finance/ReceiveInvoiceBatch/batchDetail",
-        request_model=BatchDetailRequest,
-    ),
-    ("POST", "/api/Finance/ReceiveInvoiceBatch/applyDetail"): EndpointBinding(
-        method="POST",
-        path="/api/Finance/ReceiveInvoiceBatch/applyDetail",
-        request_model=ApplyDetailRequest,
-    ),
-    ("POST", "/api/finance/receiveInvoice/invoiceAddCheck"): EndpointBinding(
-        method="POST",
-        path="/api/finance/receiveInvoice/invoiceAddCheck",
-        request_model=InvoiceAddCheckRequest,
-    ),
-    ("POST", "/api/finance/receiveInvoice/invoiceAdd"): EndpointBinding(
-        method="POST",
-        path="/api/finance/receiveInvoice/invoiceAdd",
-        request_model=InvoiceAddRequest,
-    ),
-    ("POST", "/api/finance/receiveWriteoff/orderFeePage"): EndpointBinding(
-        method="POST",
-        path="/api/finance/receiveWriteoff/orderFeePage",
-        request_model=OrderFeePageRequest,
-    ),
-    ("POST", "/api/finance/receiveWriteoff/writeoffBatch"): EndpointBinding(
-        method="POST",
-        path="/api/finance/receiveWriteoff/writeoffBatch",
-        request_model=WriteoffBatchRequest,
-    ),
-    ("POST", "/api/finance/receiveWriteoff/writeoffPage"): EndpointBinding(
-        method="POST",
-        path="/api/finance/receiveWriteoff/writeoffPage",
-        request_model=WriteoffPageRequest,
-        response_data_model=WriteoffPageData,
-    ),
-}
-
-
-# ════════════════════════════════════════════════════════════════════════════
-# 查找辅助
-# ════════════════════════════════════════════════════════════════════════════
-
-
-def get_binding(method: str, path: str) -> EndpointBinding | None:
-    """按 ``(method, path)`` 取 :class:`EndpointBinding`,未命中返回 None。"""
-    return PATH_MODELS.get((method, path))
-
-
-def get_request_model(method: str, path: str) -> type[BaseModel] | None:
-    """便捷取请求模型(可能为 None,表示该端点无 body)。"""
-    binding = get_binding(method, path)
-    return binding.request_model if binding else None
-
-
-def get_response_data_model(method: str, path: str) -> type[BaseModel] | None:
-    """便捷取 ``response.data`` 的内部模型(可能为 None,表示 data 结构未建模)。"""
-    binding = get_binding(method, path)
-    return binding.response_data_model if binding else None
-
-
-def list_paths() -> list[tuple[str, str]]:
-    """返回所有已注册的 ``(method, path)`` 列表(按 path 字典序)。"""
-    return sorted(PATH_MODELS.keys(), key=lambda mp: (mp[1], mp[0]))
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -1482,7 +1270,6 @@ __all__ = [
     "_SAFE_CONFIG",
     "CommonResponseEnvelope",
     "Params",
-    "EndpointBinding",
     # 通用
     "PermissiveRequest",
     # 1-31 顺序:orderEntrust
@@ -1540,10 +1327,4 @@ __all__ = [
     "WriteoffBatchRequest",
     "WriteoffPageRequest",
     "WriteoffPageData",
-    # 映射
-    "PATH_MODELS",
-    "get_binding",
-    "get_request_model",
-    "get_response_data_model",
-    "list_paths",
 ]

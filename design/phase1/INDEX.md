@@ -41,17 +41,17 @@ PR-D  字段依赖边与 L2 物理解耦
 | PR | 文件 | 状态 | 关键产出 |
 |---|---|---|---|
 | (前置) | [PR-0.1.md](PR-0.1.md) | **已完成** | pytest 基线 + collect_ignore + 5 个 sanity 测试 |
-| (前置) | [PR-0.2.md](PR-0.2.md) | 待执行 | model_registry 4 测试 pytest 化 + 改名 |
-| 1 | [PR-A.md](PR-A.md) | 与 PR-0.2 合并 | 纯重命名(目录/import/错误信息) |
-| 2 | [PR-B.md](PR-B.md) | 待执行 | `EndpointCategory` enum + `mutates_state` + `__post_init__` 强校 |
-| 3 | [PR-C.md](PR-C.md) | 待执行 | fin 31 端点单轨化 + 业务标注(31 个 `category`) |
-| 4 | [PR-D1.md](PR-D1.md) | 待执行 | 路径解析器(独立基建, ≥20 单测) |
-| 5 | [PR-D2.md](PR-D2.md) | 待执行 | `FieldBinding` dataclass + `EndpointSpec.field_bindings` |
-| 6 | [PR-D3.md](PR-D3.md) | 待执行 | `EndpointDoc` + 独立 L2 存储(零侵入) |
-| 7 | [PR-D4.md](PR-D4.md) | 待执行 | 首批 `field_bindings` 批量化 + referential integrity check |
-| 收口 | [PR-EOP.md](PR-EOP.md) | 待执行 | review pipeline 串联 + 文档同步 |
+| (前置) | [PR-0.2.md](PR-0.2.md) | **已完成** | model_registry 4 测试 pytest 化 + 改名 |
+| 1 | [PR-A.md](PR-A.md) | **已完成** | 纯重命名(目录/import/错误信息) |
+| 2 | [PR-B.md](PR-B.md) | **已完成** | `EndpointCategory` enum + `mutates_state` + `__post_init__` 强校 |
+| 3 | [PR-C.md](PR-C.md) | **已完成** | fin 31 端点单轨化 + 业务标注(15 BUSINESS + 16 QUERY) |
+| 4 | [PR-D1.md](PR-D1.md) | **已完成** | 路径解析器(独立基建, ≥20 单测) |
+| 5 | [PR-D2.md](PR-D2.md) | **已完成** | `FieldBinding` dataclass + `EndpointSpec.bindings` |
+| 6 | [PR-D3.md](PR-D3.md) | **已完成** | `EndpointDoc` + 独立 L2 存储(零侵入) |
+| 7 | [PR-D4.md](PR-D4.md) | **已完成** | 首批 `field_bindings` 批量化(5 个 binding) + referential integrity check |
+| 收口 | [PR-EOP.md](PR-EOP.md) | **已完成** | review pipeline 串联 + 文档同步 + 基线 ≥300 测试 |
 | 配套 | [REVIEW-CHECKLIST.md](REVIEW-CHECKLIST.md) | 已建立 | reviewer 统一视角(每 PR 重点 + 反模式) |
-| 配套 | [DECISIONS.md](DECISIONS.md) | 已建立 | D1-D5 已确认决策 + OQ-1~6 开放问题 |
+| 配套 | [DECISIONS.md](DECISIONS.md) | 已建立 | D1-D14 已确认决策 |
 
 ---
 
@@ -60,15 +60,15 @@ PR-D  字段依赖边与 L2 物理解耦
 | PR | 估计工作量 | 状态 |
 |---|---|---|
 | PR-0.1 | 0.5 PD | ✅ 已完成 |
-| PR-0.2 + PR-A | 1.5 PD | 待执行 |
-| PR-B | 0.5 PD | 待执行 |
-| PR-C | 2–3 PD | 待执行(最大单 PR) |
-| PR-D1 | 1 PD | 待执行 |
-| PR-D2 | 0.5 PD | 待执行 |
-| PR-D3 | 0.5 PD | 待执行(可与 D1/D2 并行) |
-| PR-D4 | 2–3 PD | 待执行 |
-| 收口 | 1 PD | 待执行 |
-| **总计** | **9–12 PD** | |
+| PR-0.2 + PR-A | 1.5 PD | ✅ 已完成 |
+| PR-B | 0.5 PD | ✅ 已完成 |
+| PR-C | 2–3 PD | ✅ 已完成(最大单 PR) |
+| PR-D1 | 1 PD | ✅ 已完成 |
+| PR-D2 | 0.5 PD | ✅ 已完成 |
+| PR-D3 | 0.5 PD | ✅ 已完成 |
+| PR-D4 | 2–3 PD | ✅ 已完成 |
+| 收口 | 1 PD | ✅ 已完成 |
+| **总计** | **9–12 PD** | **Phase 1 全部完成** |
 
 ---
 

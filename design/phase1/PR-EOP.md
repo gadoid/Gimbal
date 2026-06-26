@@ -1,6 +1,6 @@
 # PR-EOP: End-of-Phase 收口(review pipeline + 文档同步 + 基线确认)
 
-> **状态**:待执行
+> **状态**:已完成
 >
 > **PR 范围**:Phase 1 全部 7 个 PR(PR-0.1 / 0.2 / B / C / D1 / D2 / D3 / D4)落地后,做收口:
 > 1. review pipeline CI gate(把 `test_invariants.py` 的不变量做成 CI 必跑)

@@ -221,3 +221,185 @@ def test_mutates_state_field_is_frozen() -> None:
     )
     with pytest.raises((FrozenInstanceError, AttributeError)):
         spec.mutates_state = True  # type: ignore[misc]
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# D6 — 契约保真 role-aware(request 允许 extra=ignore,response 必须 forbid)
+# ════════════════════════════════════════════════════════════════════════════
+
+
+def test_contract_fidelity_request_extra_ignore_allowed() -> None:
+    """业务需求:request 角色 ``extra='ignore'`` 是合法(细粒度宽进)。
+
+    对应设计:D6(PR-C 配套决策,v3 §3.6 role-aware 细化)。
+    业务影响:真实 wire 请求体常含未建模字段(legacy 兼容、客户端扩展),
+             强制 forbid 会把宽容的客户端拒之门外,损害业务兼容性。
+             request 角色允许 ``ignore``,但仍**必须显式**声明 model_config。
+    """
+    class PermissiveRequest(BaseModel):
+        model_config = ConfigDict(extra="ignore")  # type: ignore[typeddict-item]
+        x: str = ""
+
+    # 不应抛 TypeError
+    spec = EndpointSpec(
+        method="POST",
+        path="/api/x",
+        request=PermissiveRequest,
+        responses={200: _good_model()},
+    )
+    assert spec.request is PermissiveRequest
+
+
+def test_contract_fidelity_request_extra_forbid_still_allowed() -> None:
+    """业务需求:request 角色 ``extra='forbid'`` 仍然合法(细粒度严出)。
+
+    对应设计:D6。
+    业务影响:作者对 request 仍可选 forbid(显式建模所有字段),
+             不强制迁移到 ignore(双模式并存)。
+    """
+    class StrictRequest(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        x: str = ""
+
+    spec = EndpointSpec(
+        method="POST",
+        path="/api/x",
+        request=StrictRequest,
+        responses={200: _good_model()},
+    )
+    assert spec.request is StrictRequest
+
+
+def test_contract_fidelity_request_must_explicitly_declare_config() -> None:
+    """业务需求:request 角色**不能**走 pydantic 默认 model_config。
+
+    对应设计:D6 "request 必须显式表态"。
+    业务影响:pydantic 默认 ``extra='ignore'``,但作者可能没意识到就走默认;
+             显式强制声明可暴露"我选了 ignore"的意图,避免隐式行为。
+    """
+    class NoConfig(BaseModel):
+        x: str = ""  # 无 model_config → pydantic 用默认
+
+    with pytest.raises(TypeError) as exc:
+        EndpointSpec(
+            method="POST",
+            path="/api/x",
+            request=NoConfig,
+            responses={200: _good_model()},
+        )
+    assert "model_config" in str(exc.value)
+
+
+def test_contract_fidelity_request_forbidden_list_still_enforced() -> None:
+    """业务需求:request 角色的禁用清单双向生效(wire 改写不分方向)。
+
+    对应设计:D6 + v3 §3.6 禁用清单。
+    业务影响:即便 request 角色放宽 extra,``str_strip_whitespace`` 等
+             仍双向禁止 —— 它们会改写 wire 字符串,与请求方向无关。
+    """
+    class StripOn(BaseModel):
+        model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+        x: str = ""
+
+    with pytest.raises(TypeError) as exc:
+        EndpointSpec(
+            method="POST",
+            path="/api/x",
+            request=StripOn,
+            responses={200: _good_model()},
+        )
+    assert "str_strip_whitespace" in str(exc.value)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# D7 — response_data_models 用 "data" 角色(精细化建模,允许 extra=ignore)
+# ════════════════════════════════════════════════════════════════════════════
+
+
+def test_contract_fidelity_data_role_extra_ignore_allowed() -> None:
+    """业务需求:``response_data_models`` 用 data 角色,允许 ``extra='ignore'``。
+
+    对应设计:D7(PR-C 单轨化时发现,response 角色误伤 data 类)。
+    业务影响:data 是**服务端内部结构**(作者明确知道有哪些字段),不是 wire 响应壳;
+             真实场景中 ES 文档(OrderDetailData 204+ 字段)用 ``ignore``
+             表达"先建容器,后续按需补字段"的演进策略。
+             强制 ``forbid`` 等于逼作者把 200+ 字段全部建模,违背渐进式契约。
+    """
+    class PermissiveData(BaseModel):
+        model_config = ConfigDict(extra="ignore")  # type: ignore[typeddict-item]
+        x: str = ""
+
+    # 不应抛 TypeError
+    spec = EndpointSpec(
+        method="POST",
+        path="/api/x",
+        request=_good_model(),
+        responses={200: _good_model()},
+        response_data_models={200: PermissiveData},
+    )
+    assert spec.response_data_models[200] is PermissiveData
+
+
+def test_contract_fidelity_data_role_extra_forbid_still_allowed() -> None:
+    """业务需求:``response_data_models`` 用 data 角色,``extra='forbid'`` 仍合法。
+
+    对应设计:D7。
+    业务影响:作者对 data 仍可选 forbid(显式建模所有 data 字段),不强制
+             迁移到 ignore —— data 角色与 request 角色共享同一宽松规则。
+    """
+    class StrictData(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        x: str = ""
+
+    spec = EndpointSpec(
+        method="POST",
+        path="/api/x",
+        request=_good_model(),
+        responses={200: _good_model()},
+        response_data_models={200: StrictData},
+    )
+    assert spec.response_data_models[200] is StrictData
+
+
+def test_contract_fidelity_data_role_must_explicitly_declare_config() -> None:
+    """业务需求:``response_data_models`` data 角色**必须显式声明** ``model_config``。
+
+    对应设计:D7 "data 角色必须显式表态"(与 request 角色同)。
+    业务影响:pydantic 默认 ``extra='ignore'``,但作者可能没意识到就走默认;
+             显式强制声明可暴露"我选了 ignore"的意图,避免隐式行为。
+    """
+    class NoConfig(BaseModel):
+        x: str = ""  # 无 model_config → pydantic 用默认
+
+    with pytest.raises(TypeError) as exc:
+        EndpointSpec(
+            method="POST",
+            path="/api/x",
+            request=_good_model(),
+            responses={200: _good_model()},
+            response_data_models={200: NoConfig},
+        )
+    assert "model_config" in str(exc.value)
+
+
+def test_contract_fidelity_data_role_forbidden_list_still_enforced() -> None:
+    """业务需求:``response_data_models`` data 角色,禁用清单仍全部生效。
+
+    对应设计:D7 + v3 §3.6 禁用清单。
+    业务影响:data 角色放宽 extra 是为了"宽容未知 data 字段",不是"放任 wire
+             改写" —— ``str_strip_whitespace`` / ``coerce_numbers_to_str`` /
+             ``use_enum_values`` 仍全部双向禁止(它们改写 wire,与角色无关)。
+    """
+    class StripOn(BaseModel):
+        model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+        x: str = ""
+
+    with pytest.raises(TypeError) as exc:
+        EndpointSpec(
+            method="POST",
+            path="/api/x",
+            request=_good_model(),
+            responses={200: _good_model()},
+            response_data_models={200: StripOn},
+        )
+    assert "str_strip_whitespace" in str(exc.value)

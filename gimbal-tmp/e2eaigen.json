@@ -24,9 +24,9 @@
             "tidb-test-service": "https://fin-tidb.21eflag.com/"
         },
         "vars": {
-            "bl_no": "GIMBAL_TEST_23",
+            "bl_no": "GIMBAL_TEST_35",
             "invoice_file_id": "1",
-            "invoice_number": "24920000000029640016",
+            "invoice_number": "24920000000029640029",
             "finance_id_1": "2896",
             "finance_id_2": "2895",
             "bank_ids_1": "78",
@@ -4466,13 +4466,23 @@
                 },
                 {
                     "kind": "assign",
-                    "name": "assign_order_id",
+                    "name": "assign_order_id_0",
                     "phase": "before_request",
                     "order": 1,
                     "enabled": true,
                     "onFailure": "abort",
                     "source": "$.order_id",
                     "target": "$.request_body.confirm_list[0].order_ids",
+                    "scope": "scenario"
+                },{
+                    "kind": "assign",
+                    "name": "assign_order_id_1",
+                    "phase": "before_request",
+                    "order": 1,
+                    "enabled": true,
+                    "onFailure": "abort",
+                    "source": "$.order_id",
+                    "target": "$.request_body.confirm_list[1].order_ids",
                     "scope": "scenario"
                 },
                 {
@@ -4541,6 +4551,17 @@
                     "onFailure": "abort",
                     "expression": "$.response_body",
                     "target": "response_body_step_33",
+                    "required": true,
+                    "default": null
+                },{
+                    "kind": "extract",
+                    "name": "extract_request_body",
+                    "phase": "after_request",
+                    "order": 0,
+                    "enabled": true,
+                    "onFailure": "abort",
+                    "expression": "$.request_body",
+                    "target": "request_body_step_33",
                     "required": true,
                     "default": null
                 }
@@ -5419,7 +5440,7 @@
                     "order_no": "",
                     "create_time": [
                         1766505600000,
-                        1782316799000
+                        1783416799000
                     ],
                     "cancel_status": [],
                     "bl_nos": [
@@ -5436,7 +5457,7 @@
                     "sort_order": "desc",
                     "params": {},
                     "create_time_start": "1766505600",
-                    "create_time_end": "1782316799"
+                    "create_time_end": "1783416799"
                 }
             },
             "strategy": [
@@ -5488,6 +5509,30 @@
                     "onFailure": "abort",
                     "expression": "$.response_body.data.data[0].receive_invoice_apply_no",
                     "target": "receive_invoice_apply_no",
+                    "required": true,
+                    "default": null,
+                    "scope": "scenario"
+                },{
+                    "kind": "extract",
+                    "name": "extract_receive_invoice_apply_no",
+                    "phase": "after_request",
+                    "order": -1,
+                    "enabled": true,
+                    "onFailure": "abort",
+                    "expression": "$.response_body",
+                    "target": "receive_invoice_apply_no_response",
+                    "required": true,
+                    "default": null,
+                    "scope": "scenario"
+                },{
+                    "kind": "extract",
+                    "name": "extract_receive_invoice_apply_no",
+                    "phase": "after_request",
+                    "order": -1,
+                    "enabled": true,
+                    "onFailure": "abort",
+                    "expression": "$.request_body",
+                    "target": "receive_invoice_apply_no_request",
                     "required": true,
                     "default": null,
                     "scope": "scenario"

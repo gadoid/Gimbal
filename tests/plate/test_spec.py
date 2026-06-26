@@ -173,19 +173,28 @@ def test_contract_fidelity_missing_model_config_rejected() -> None:
     assert "model_config" in str(exc.value)
 
 
-def test_contract_fidelity_extra_not_forbid_rejected() -> None:
-    """业务需求:extra != "forbid" → TypeError(契约保真第二关)。
+def test_contract_fidelity_response_extra_not_forbid_rejected() -> None:
+    """业务需求:response 角色 extra != "forbid" → TypeError(契约保真第二关)。
 
-    对应设计:v3 §3.6。
-    业务影响:违反 = 多余字段被静默吞掉,scenario 误以为字段被识别。
+    对应设计:v3 §3.6 + D6 role-aware 细化。
+    业务影响:违反 = 未知响应字段被静默吞掉,scenario 误以为字段被识别;
+             服务端改 spec 时无法被 fail-fast 捕获。
+    注:request 角色允许 ``extra='ignore'``(见 test_contract_fidelity_request_*),
+        体现"request 宽进 / response 严出"的业务现实。
     """
     class ExtraAllow(BaseModel):
         model_config = ConfigDict(extra="ignore")  # type: ignore[typeddict-item]
         x: str = ""
 
-    M = good_model("M4b")
-    with pytest.raises(TypeError):
-        EndpointSpec(method="GET", path="/api/x", request=ExtraAllow, responses={200: M})
+    M_request = good_model("M4b_req")
+    M_response = good_model("M4b_resp")
+    with pytest.raises(TypeError) as exc:
+        # 把 ExtraAllow 放到 response 角色 → 应被拒
+        EndpointSpec(
+            method="GET", path="/api/x",
+            request=M_request, responses={200: ExtraAllow},
+        )
+    assert "extra" in str(exc.value).lower() or "ignore" in str(exc.value).lower()
 
 
 def test_contract_fidelity_str_strip_whitespace_rejected() -> None:
