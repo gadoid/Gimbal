@@ -244,6 +244,8 @@ class Engine:
                         "step_id":     s.step_id,
                         "status":      s.status,
                         "duration_ms": s.duration_ms,
+                        "error":       s.error,
+                        "error_phase": s.error_phase,
                     }
                     for s in result.step_results
                 ],
@@ -312,6 +314,8 @@ class Engine:
                         "step_id":     s.step_id,
                         "status":      s.status,
                         "duration_ms": s.duration_ms,
+                        "error":       s.error,
+                        "error_phase": s.error_phase,
                     }
                     for s in result.step_results
                 ],

@@ -276,7 +276,17 @@ class StepStateMachine:
 
         # 修复 #9：使用 hard_failed 而非 all_passed，soft 失败不阻断
         if pr.hard_failed:
-            logger.warning("[SM {}] VERIFYING 阶段存在硬失败，进入 FAILED", self._step_id)
+            failed_strategy = next((r for r in pr.results if r.failed), None)
+            self._error_phase = "verifying"
+            self._error = (
+                f"[verifying] {failed_strategy.message}"
+                if failed_strategy and failed_strategy.message
+                else "[verifying] assertion failed"
+            )
+            logger.warning(
+                "[SM {}] VERIFYING 阶段存在硬失败: message={}，进入 FAILED",
+                self._step_id, self._error,
+            )
             return StepState.FAILED
         logger.info(
             "[SM {}] VERIFYING 阶段通过 (soft_failures={})，进入 PASSED",

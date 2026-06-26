@@ -24,9 +24,9 @@
             "tidb-test-service": "https://fin-tidb.21eflag.com/"
         },
         "vars": {
-            "bl_no": "GIMBAL_TEST_35",
+            "bl_no": "GIMBAL_TEST_38",
             "invoice_file_id": "1",
-            "invoice_number": "24920000000029640029",
+            "invoice_number": "24920000000029640032",
             "finance_id_1": "2896",
             "finance_id_2": "2895",
             "bank_ids_1": "78",
