@@ -1,0 +1,59 @@
+{
+    "kind": "scenario",
+    "scenarioId": "e2e订单到应收核销",
+    "meta": {
+        "name": "全链路-订单创建至应收核销-正常",
+        "description": "验证从订单委托创建、订舱、生成子单、费用锁定与审核、变更开票申请审核、收款账户确认、批次开票申请审核、发票录入到应收核销的全链路在正常路径下均返回200且关键业务标识在各环节间正确传递",
+        "module": "settlement",
+        "priority": 1,
+        "author": "codfish",
+        "owner": "codfish",
+        "tags": [
+            "smoke",
+            "settlement"
+        ],
+        "version": "1.0.0",
+        "createTime": "2026-06-23T10:00:00",
+        "expire": false,
+        "requirementRef": []
+    },
+    "config": {
+        "setup": [],
+        "teardown": [],
+        "services": {
+            "tidb-test-service": "https://fin-tidb.21eflag.com/"
+        },
+        "vars": {
+            "bl_no": "GET_TEST_3",
+            "invoice_file_id": "1",
+            "invoice_number": "24920000000029640035",
+            "finance_id_1": "2896",
+            "finance_id_2": "2895",
+            "bank_ids_1": "78",
+            "bank_ids_2": "77",
+            "history_order_id": "327661182355767296",
+            "history_order_no": "YWDD20260623107343",
+            "history_order_sub_id": "327661743511699456",
+            "history_order_sub_no": "ZDD20260623016596",
+            "apply_create_time_start": "1766505600000",
+            "apply_create_time_end": "1783416799000",
+            "invoice_number_check": "24922000000029640004",
+            "invoice_file_id_2": "327664535185915904"
+        },
+        "users": {
+            "codfish": {
+                "url": "https://fin-tidb.21eflag.com/",
+                "username": "18180789652",
+                "password": "yhd123456!",
+                "expires_in": 7200,
+                "token_type": "Authorization"
+            }
+        },
+        "timePolicy": {
+            "kind": "record"
+        },
+        "retry": null
+    },
+    "resource": {},
+    "steps": []
+}

@@ -596,3 +596,116 @@ def test_invariant_server_protocol_byte_equal():
     finally:
         server.stop()
         _reg.reset()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 不变量 #13:facade 字节级 pin(LOCAL_ONLY 模式)
+# 对应设计:PR-2.4 §3.1 + A2 不可变序列化 + A4 本地优先
+# ════════════════════════════════════════════════════════════════════════════
+
+
+def test_invariant_facade_manifest_byte_equal_to_local():
+    """业务不变量:``PlateFacade.manifest()`` 与本地 ``PlateManifest`` 字节级一致。
+
+    对应设计:PR-2.4 §3.1 + A2 不可变序列化 + A4 本地优先远端备份。
+    业务影响:违反 = facade 构造的 manifest 与 registry 直算的不一致,
+             引发下游 SDK 解析失败 / silent 数据漂移。
+    """
+    from Plate import registry as _reg
+    from Plate.facade import PlateFacade
+    from Plate.manifest import PlateManifest
+    from Plate.version import PlateVersion
+
+    _reg.reset()
+    try:
+        _reg.collect("fin")
+        # 本地构造
+        local_services = {
+            svc: [
+                s.to_dict() for k, s in _reg._index.items() if k.service == svc
+            ]
+            for svc in {k.service for k in _reg._index}
+        }
+        local_manifest = PlateManifest.from_services(
+            PlateVersion(1, 0, 0), local_services
+        ).to_dict()
+
+        # facade(LOCAL_ONLY) 构造
+        pf = PlateFacade.from_local()
+        facade_manifest = pf.manifest()
+
+        # 字节级 pin
+        assert facade_manifest["checksum"] == local_manifest["checksum"], (
+            f"facade checksum={facade_manifest['checksum']} != "
+            f"local checksum={local_manifest['checksum']}"
+        )
+        assert facade_manifest["services"] == local_manifest["services"]
+    finally:
+        _reg.reset()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 不变量 #14:旧 API 仍可用(A6 向后兼容)
+# 对应设计:PR-2.4 §3.2 + A6 向后兼容 + D23(DeprecationWarning 但不删)
+# ════════════════════════════════════════════════════════════════════════════
+
+
+def test_invariant_legacy_registry_still_works():
+    """业务不变量:``from Plate import registry`` 仍能拿到 spec(A6 向后兼容)。
+
+    业务影响:违反 = 所有旧调用方在升级 GIMBAL 后 break,大规模回滚。
+    """
+    from Plate import registry
+    registry.collect("fin")
+    spec = registry.resolve("fin", "POST", "/api/order/order/orderDetail")
+    assert spec is not None
+    assert spec.method == "POST"
+    assert spec.path == "/api/order/order/orderDetail"
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 不变量 #15:import 顶层 Plate.facade 不加载 service 子包(扩展不变量 #1)
+# 对应设计:PR-2.4 + A1 零侵入
+# ════════════════════════════════════════════════════════════════════════════
+
+
+def test_invariant_facade_does_not_load_service_subpackages():
+    """业务不变量:``import Plate.facade`` 不触达任何 service 子包。
+
+    对应设计:PR-2.4 + A1 零侵入(扩展不变量 #1 到 facade 层级)。
+    业务影响:违反 = 顶层 facade import 触发重型依赖加载,fade 设计的
+             "按需加载"被破坏。
+    """
+    pkg = _PKG
+    for m in [m for m in sys.modules if m == pkg or m.startswith(pkg + ".")]:
+        del sys.modules[m]
+    importlib.invalidate_caches()
+
+    importlib.import_module(f"{pkg}.facade")
+
+    service_keys = [
+        m for m in sys.modules
+        if m.startswith(pkg + ".") and m not in {
+            f"{pkg}",
+            f"{pkg}.facade",
+            f"{pkg}.facade.client",
+            f"{pkg}.facade.errors",
+            f"{pkg}.facade.legacy",
+            f"{pkg}.facade.switch",
+            f"{pkg}.version",
+            f"{pkg}.manifest",
+            f"{pkg}.spec",
+            f"{pkg}.core",
+            f"{pkg}._aliases",
+            f"{pkg}.binding",
+            f"{pkg}.serialization",
+            f"{pkg}.path_resolver",
+            f"{pkg}.doc",
+            f"{pkg}.server",
+            f"{pkg}.server.response",
+            f"{pkg}.server.router",
+        } and "." not in m[len(pkg) + 1:]
+    ]
+    assert not service_keys, (
+        f"import Plate.facade 触达了 service 子包: {service_keys}"
+    )

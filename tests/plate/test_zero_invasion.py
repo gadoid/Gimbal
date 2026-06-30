@@ -86,6 +86,8 @@ def test_top_level_import_does_not_load_service_subpackages() -> None:
         "Plate.doc", "Plate.serialization",
         "Plate.version", "Plate.manifest",
         "Plate.server", "Plate.server.response", "Plate.server.router",
+        "Plate.facade", "Plate.facade.client", "Plate.facade.errors",
+        "Plate.facade.legacy", "Plate.facade.switch",
         "Plate.fin.dannotations",
     }
     loaded_set = set(loaded)
@@ -165,6 +167,8 @@ def test_failed_resolve_does_not_pollute_modules() -> None:
         "Plate.doc", "Plate.serialization",
         "Plate.version", "Plate.manifest",
         "Plate.server", "Plate.server.response", "Plate.server.router",
+        "Plate.facade", "Plate.facade.client", "Plate.facade.errors",
+        "Plate.facade.legacy", "Plate.facade.switch",
         "Plate.fin.dannotations",
     }
     new_subpkgs = loaded_after_404 - INTERNAL_MODULES

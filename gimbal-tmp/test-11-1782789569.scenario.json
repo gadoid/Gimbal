@@ -2,8 +2,8 @@
   "kind": "scenario",
   "scenarioId": "e2e订单到应收核销",
   "meta": {
-    "name": "查询结算单详情-正常",
-    "description": "验证根据结算单ID查询详情接口返回200且数据非空",
+    "name": "全链路-订单创建至应收核销-正常",
+    "description": "验证从订单委托创建、订舱、生成子单、费用锁定与审核、变更开票申请审核、收款账户确认、批次开票申请审核、发票录入到应收核销的全链路在正常路径下均返回200且关键业务标识在各环节间正确传递",
     "module": "settlement",
     "priority": 1,
     "author": "codfish",
@@ -13,7 +13,7 @@
       "settlement"
     ],
     "version": "1.0.0",
-    "createTime": "2026-05-13T10:00:00",
+    "createTime": "2026-06-23T10:00:00",
     "expire": false,
     "requirementRef": []
   },
@@ -24,8 +24,9 @@
       "tidb-test-service": "https://fin-tidb.21eflag.com/"
     },
     "vars": {
-      "bl_no": "jokervalue11151",
+      "bl_no": "GET_TEST_11",
       "invoice_file_id": "1",
+      "invoice_number": "24920000000029640040",
       "finance_id_1": "2896",
       "finance_id_2": "2895",
       "bank_ids_1": "78",
@@ -35,9 +36,8 @@
       "history_order_sub_id": "327661743511699456",
       "history_order_sub_no": "ZDD20260623016596",
       "apply_create_time_start": "1766505600000",
-      "apply_create_time_end": "1783416799000",
+      "apply_create_time_end": "1793416799000",
       "invoice_number_check": "24922000000029640004",
-      "invoice_number_add": "24920000000029640029",
       "invoice_file_id_2": "327664535185915904"
     },
     "users": {
@@ -95,11 +95,11 @@
           "trade_term": "CIF",
           "carrier": "ACL",
           "carrier_id": "1",
-          "bl_no": "GIMBAL_TEST_35",
+          "bl_no": "${var.bl_no}",
           "etd": 1782748800,
           "atd": 1782144000,
-          "ship_name": "GIMBAL_TEST_35",
-          "voy": "GIMBAL_TEST_35",
+          "ship_name": "${var.bl_no}",
+          "voy": "${var.bl_no}",
           "pol": "QINGDAO,CHINA",
           "pot": "QINGYANG,CHINA",
           "pod": "QINGDAO,CHINA",
@@ -110,14 +110,14 @@
           "terms_payment": "T/T",
           "terms_transport": "CY/CY",
           "pay_type": "FREIGHT PREPAID",
-          "customer_order_sn": "GIMBAL_TEST_35",
-          "terms_shipment": "GIMBAL_TEST_35",
-          "shipper": "GIMBAL_TEST_35",
-          "consignee": "GIMBAL_TEST_35",
-          "notifier": "GIMBAL_TEST_35",
-          "ship_mark": "GIMBAL_TEST_35",
-          "commodity": "GIMBAL_TEST_35",
-          "notes": "GIMBAL_TEST_35",
+          "customer_order_sn": "${var.bl_no}",
+          "terms_shipment": "${var.bl_no}",
+          "shipper": "${var.bl_no}",
+          "consignee": "${var.bl_no}",
+          "notifier": "${var.bl_no}",
+          "ship_mark": "${var.bl_no}",
+          "commodity": "${var.bl_no}",
+          "notes": "${var.bl_no}",
           "cargo_type": "goods",
           "packer": "",
           "num": "1",
@@ -229,11 +229,11 @@
           "trade_term": "CIF",
           "carrier": "ACL",
           "carrier_id": "1",
-          "bl_no": "GIMBAL_TEST_35",
+          "bl_no": "${var.bl_no}",
           "etd": 1782748800,
           "atd": 1782144000,
-          "ship_name": "GIMBAL_TEST_35",
-          "voy": "GIMBAL_TEST_35",
+          "ship_name": "${var.bl_no}",
+          "voy": "${var.bl_no}",
           "pol": "QINGDAO,CHINA",
           "pot": "QINGYANG,CHINA",
           "pod": "QINGDAO,CHINA",
@@ -244,14 +244,14 @@
           "terms_payment": "T/T",
           "terms_transport": "CY/CY",
           "pay_type": "FREIGHT PREPAID",
-          "customer_order_sn": "GIMBAL_TEST_35",
-          "terms_shipment": "GIMBAL_TEST_35",
-          "shipper": "GIMBAL_TEST_35",
-          "consignee": "GIMBAL_TEST_35",
-          "notifier": "GIMBAL_TEST_35",
-          "ship_mark": "GIMBAL_TEST_35",
-          "commodity": "GIMBAL_TEST_35",
-          "notes": "GIMBAL_TEST_35",
+          "customer_order_sn": "${var.bl_no}",
+          "terms_shipment": "${var.bl_no}",
+          "shipper": "${var.bl_no}",
+          "consignee": "${var.bl_no}",
+          "notifier": "${var.bl_no}",
+          "ship_mark": "${var.bl_no}",
+          "commodity": "${var.bl_no}",
+          "notes": "${var.bl_no}",
           "cargo_type": "goods",
           "packer": "",
           "num": "1",
@@ -346,7 +346,7 @@
           "order_no": "",
           "customer_id": "",
           "bl_nos": [],
-          "bl_no": "GIMBAL_TEST_35",
+          "bl_no": "${var.bl_no}",
           "sort_field": "update_time",
           "sort_order": "desc",
           "params": {}
@@ -411,7 +411,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "328798388306837504"
+          "order_id": "330185187394584576"
         }
       },
       "strategy": [
@@ -493,11 +493,11 @@
           "trade_term": "CIF",
           "carrier": "ACL",
           "carrier_id": "1",
-          "bl_no": "GIMBAL_TEST_35",
+          "bl_no": "${var.bl_no}",
           "etd": 1782748800,
           "atd": 1782144000,
-          "ship_name": "GIMBAL_TEST_35",
-          "voy": "GIMBAL_TEST_35",
+          "ship_name": "${var.bl_no}",
+          "voy": "${var.bl_no}",
           "pol": "QINGDAO,CHINA",
           "pot": "QINGYANG,CHINA",
           "pod": "QINGDAO,CHINA",
@@ -508,14 +508,14 @@
           "terms_payment": "T/T",
           "terms_transport": "CY/CY",
           "pay_type": "FREIGHT PREPAID",
-          "customer_order_sn": "GIMBAL_TEST_35",
-          "terms_shipment": "GIMBAL_TEST_35",
-          "shipper": "GIMBAL_TEST_35",
-          "consignee": "GIMBAL_TEST_35",
-          "notifier": "GIMBAL_TEST_35",
-          "ship_mark": "GIMBAL_TEST_35",
-          "commodity": "GIMBAL_TEST_35",
-          "notes": "GIMBAL_TEST_35",
+          "customer_order_sn": "${var.bl_no}",
+          "terms_shipment": "${var.bl_no}",
+          "shipper": "${var.bl_no}",
+          "consignee": "${var.bl_no}",
+          "notifier": "${var.bl_no}",
+          "ship_mark": "${var.bl_no}",
+          "commodity": "${var.bl_no}",
+          "notes": "${var.bl_no}",
           "cargo_type": "goods",
           "packer": "",
           "num": "1",
@@ -533,8 +533,8 @@
           "customer_file_list": [],
           "supplier": [
             {
-              "order_supplier_id": "328798389623848960",
-              "order_id": "328798388306837504",
+              "order_supplier_id": "330185188665458688",
+              "order_id": "330185187394584576",
               "isset_supplier": "1",
               "is_primary": "1",
               "supplier_id": "8",
@@ -554,8 +554,8 @@
             }
           ],
           "remark": "",
-          "order_id": "328798388306837504",
-          "order_no": "YWDD20260626107517",
+          "order_id": "330185187394584576",
+          "order_no": "YWDD20260630107547",
           "customer_category": ",2,",
           "customer_tax_number": "91370283591262431N",
           "customer_address_cn": "山东省青岛市平度市南村镇东王府庄村",
@@ -762,9 +762,20 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_no",
+          "name": "assign_order_id_top",
           "phase": "before_request",
           "order": 2,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.order_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_no",
+          "phase": "before_request",
+          "order": 3,
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
@@ -812,11 +823,11 @@
           "trade_term": "CIF",
           "carrier": "ACL",
           "carrier_id": "1",
-          "bl_no": "GIMBAL_TEST_35",
+          "bl_no": "${var.bl_no}",
           "etd": 1782748800,
           "atd": 1782144000,
-          "ship_name": "GIMBAL_TEST_35",
-          "voy": "GIMBAL_TEST_35",
+          "ship_name": "${var.bl_no}",
+          "voy": "${var.bl_no}",
           "pol": "QINGDAO,CHINA",
           "pot": "QINGYANG,CHINA",
           "pod": "QINGDAO,CHINA",
@@ -827,14 +838,14 @@
           "terms_payment": "T/T",
           "terms_transport": "CY/CY",
           "pay_type": "FREIGHT PREPAID",
-          "customer_order_sn": "GIMBAL_TEST_35",
-          "terms_shipment": "GIMBAL_TEST_35",
-          "shipper": "GIMBAL_TEST_35",
-          "consignee": "GIMBAL_TEST_35",
-          "notifier": "GIMBAL_TEST_35",
-          "ship_mark": "GIMBAL_TEST_35",
-          "commodity": "GIMBAL_TEST_35",
-          "notes": "GIMBAL_TEST_35",
+          "customer_order_sn": "${var.bl_no}",
+          "terms_shipment": "${var.bl_no}",
+          "shipper": "${var.bl_no}",
+          "consignee": "${var.bl_no}",
+          "notifier": "${var.bl_no}",
+          "ship_mark": "${var.bl_no}",
+          "commodity": "${var.bl_no}",
+          "notes": "${var.bl_no}",
           "cargo_type": "goods",
           "packer": "",
           "num": "1",
@@ -852,8 +863,8 @@
           "customer_file_list": [],
           "supplier": [
             {
-              "order_supplier_id": "328798389623848960",
-              "order_id": "328798388306837504",
+              "order_supplier_id": "330185188665458688",
+              "order_id": "330185187394584576",
               "isset_supplier": "1",
               "is_primary": "1",
               "supplier_id": "8",
@@ -873,8 +884,8 @@
             }
           ],
           "remark": "",
-          "order_id": "328798388306837504",
-          "order_no": "YWDD20260626107517",
+          "order_id": "330185187394584576",
+          "order_no": "YWDD20260630107547",
           "customer_category": ",2,",
           "customer_tax_number": "91370283591262431N",
           "customer_address_cn": "山东省青岛市平度市南村镇东王府庄村",
@@ -1081,9 +1092,20 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_no",
+          "name": "assign_order_id_top",
           "phase": "before_request",
           "order": 2,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.order_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_no",
+          "phase": "before_request",
+          "order": 3,
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
@@ -1130,11 +1152,11 @@
           "trade_term": "CIF",
           "carrier": "ACL",
           "carrier_id": "1",
-          "bl_no": "GIMBAL_TEST_35",
+          "bl_no": "${var.bl_no}",
           "etd": 1782748800,
           "atd": 1782144000,
-          "ship_name": "GIMBAL_TEST_35",
-          "voy": "GIMBAL_TEST_35",
+          "ship_name": "${var.bl_no}",
+          "voy": "${var.bl_no}",
           "pol": "QINGDAO,CHINA",
           "pot": "QINGYANG,CHINA",
           "pod": "QINGDAO,CHINA",
@@ -1145,14 +1167,14 @@
           "terms_payment": "T/T",
           "terms_transport": "CY/CY",
           "pay_type": "FREIGHT PREPAID",
-          "customer_order_sn": "GIMBAL_TEST_35",
-          "terms_shipment": "GIMBAL_TEST_35",
-          "shipper": "GIMBAL_TEST_35",
-          "consignee": "GIMBAL_TEST_35",
-          "notifier": "GIMBAL_TEST_35",
-          "ship_mark": "GIMBAL_TEST_35",
-          "commodity": "GIMBAL_TEST_35",
-          "notes": "GIMBAL_TEST_35",
+          "customer_order_sn": "${var.bl_no}",
+          "terms_shipment": "${var.bl_no}",
+          "shipper": "${var.bl_no}",
+          "consignee": "${var.bl_no}",
+          "notifier": "${var.bl_no}",
+          "ship_mark": "${var.bl_no}",
+          "commodity": "${var.bl_no}",
+          "notes": "${var.bl_no}",
           "cargo_type": "goods",
           "packer": "",
           "num": "1",
@@ -1182,8 +1204,8 @@
           "customer_file_list": [],
           "supplier": [
             {
-              "order_supplier_id": "328798389623848960",
-              "order_id": "328798388306837504",
+              "order_supplier_id": "330185188665458688",
+              "order_id": "330185187394584576",
               "isset_supplier": "1",
               "is_primary": "1",
               "supplier_id": "8",
@@ -1202,8 +1224,8 @@
               "isset_fee": false
             }
           ],
-          "order_id": "328798388306837504",
-          "order_no": "YWDD20260626107517",
+          "order_id": "330185187394584576",
+          "order_no": "YWDD20260630107547",
           "customer_category": ",2,",
           "customer_tax_number": "91370283591262431N",
           "customer_address_cn": "山东省青岛市平度市南村镇东王府庄村",
@@ -1412,9 +1434,20 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_no",
+          "name": "assign_order_id_top",
           "phase": "before_request",
           "order": 2,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.order_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_no",
+          "phase": "before_request",
+          "order": 3,
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
@@ -1461,11 +1494,11 @@
           "trade_term": "CIF",
           "carrier": "ACL",
           "carrier_id": "1",
-          "bl_no": "GIMBAL_TEST_35",
+          "bl_no": "${var.bl_no}",
           "etd": 1782748800,
           "atd": 1782144000,
-          "ship_name": "GIMBAL_TEST_35",
-          "voy": "GIMBAL_TEST_35",
+          "ship_name": "${var.bl_no}",
+          "voy": "${var.bl_no}",
           "pol": "QINGDAO,CHINA",
           "pot": "QINGYANG,CHINA",
           "pod": "QINGDAO,CHINA",
@@ -1476,14 +1509,14 @@
           "terms_payment": "T/T",
           "terms_transport": "CY/CY",
           "pay_type": "FREIGHT PREPAID",
-          "customer_order_sn": "GIMBAL_TEST_35",
-          "terms_shipment": "GIMBAL_TEST_35",
-          "shipper": "GIMBAL_TEST_35",
-          "consignee": "GIMBAL_TEST_35",
-          "notifier": "GIMBAL_TEST_35",
-          "ship_mark": "GIMBAL_TEST_35",
-          "commodity": "GIMBAL_TEST_35",
-          "notes": "GIMBAL_TEST_35",
+          "customer_order_sn": "${var.bl_no}",
+          "terms_shipment": "${var.bl_no}",
+          "shipper": "${var.bl_no}",
+          "consignee": "${var.bl_no}",
+          "notifier": "${var.bl_no}",
+          "ship_mark": "${var.bl_no}",
+          "commodity": "${var.bl_no}",
+          "notes": "${var.bl_no}",
           "cargo_type": "goods",
           "packer": "",
           "num": "1",
@@ -1513,8 +1546,8 @@
           "customer_file_list": [],
           "supplier": [
             {
-              "order_supplier_id": "328798389623848960",
-              "order_id": "328798388306837504",
+              "order_supplier_id": "330185188665458688",
+              "order_id": "330185187394584576",
               "isset_supplier": "1",
               "is_primary": "1",
               "supplier_id": "8",
@@ -1533,8 +1566,8 @@
               "isset_fee": false
             }
           ],
-          "order_id": "328798388306837504",
-          "order_no": "YWDD20260626107517",
+          "order_id": "330185187394584576",
+          "order_no": "YWDD20260630107547",
           "customer_category": ",2,",
           "customer_tax_number": "91370283591262431N",
           "customer_address_cn": "山东省青岛市平度市南村镇东王府庄村",
@@ -1805,11 +1838,11 @@
           "trade_term": "CIF",
           "carrier": "ACL",
           "carrier_id": "1",
-          "bl_no": "GIMBAL_TEST_35",
+          "bl_no": "${var.bl_no}",
           "etd": 1782748800,
           "atd": 1782144000,
-          "ship_name": "GIMBAL_TEST_35",
-          "voy": "GIMBAL_TEST_35",
+          "ship_name": "${var.bl_no}",
+          "voy": "${var.bl_no}",
           "pol": "QINGDAO,CHINA",
           "pot": "QINGYANG,CHINA",
           "pod": "QINGDAO,CHINA",
@@ -1820,14 +1853,14 @@
           "terms_payment": "T/T",
           "terms_transport": "CY/CY",
           "pay_type": "FREIGHT PREPAID",
-          "customer_order_sn": "GIMBAL_TEST_35",
-          "terms_shipment": "GIMBAL_TEST_35",
-          "shipper": "GIMBAL_TEST_35",
-          "consignee": "GIMBAL_TEST_35",
-          "notifier": "GIMBAL_TEST_35",
-          "ship_mark": "GIMBAL_TEST_35",
-          "commodity": "GIMBAL_TEST_35",
-          "notes": "GIMBAL_TEST_35",
+          "customer_order_sn": "${var.bl_no}",
+          "terms_shipment": "${var.bl_no}",
+          "shipper": "${var.bl_no}",
+          "consignee": "${var.bl_no}",
+          "notifier": "${var.bl_no}",
+          "ship_mark": "${var.bl_no}",
+          "commodity": "${var.bl_no}",
+          "notes": "${var.bl_no}",
           "cargo_type": "goods",
           "packer": "",
           "num": "1",
@@ -1863,15 +1896,15 @@
               "document_type": "BOOK_CUSTOMER",
               "file_url": "6a3a074371dee.pdf",
               "file_name": "6a3a074371dee.pdf",
-              "file_id": "328798435165601792",
+              "file_id": "330185237004812288",
               "file_type": "PDF",
               "_XID": "row_1263"
             }
           ],
           "supplier": [
             {
-              "order_supplier_id": "328798389623848960",
-              "order_id": "328798388306837504",
+              "order_supplier_id": "330185188665458688",
+              "order_id": "330185187394584576",
               "isset_supplier": "1",
               "is_primary": "1",
               "supplier_id": "8",
@@ -1890,8 +1923,8 @@
               "isset_fee": false
             }
           ],
-          "order_id": "328798388306837504",
-          "order_no": "YWDD20260626107517",
+          "order_id": "330185187394584576",
+          "order_no": "YWDD20260630107547",
           "customer_category": ",2,",
           "customer_tax_number": "91370283591262431N",
           "customer_address_cn": "山东省青岛市平度市南村镇东王府庄村",
@@ -2111,9 +2144,20 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_no",
+          "name": "assign_order_id_top",
           "phase": "before_request",
           "order": 3,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.order_id",
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_no",
+          "phase": "before_request",
+          "order": 4,
           "enabled": true,
           "onFailure": "abort",
           "source": "$.order_no",
@@ -2139,7 +2183,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "328798388306837504"
+          "order_id": "330185187394584576"
         }
       },
       "strategy": [
@@ -2192,6 +2236,18 @@
           "source": "$.order_id",
           "target": "$.request_body.order_id",
           "scope": "scenario"
+        },{
+          "kind": "extract",
+          "name": "extract_order_sub_no",
+          "phase": "after_request",
+          "order": -1,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body",
+          "target": "rp",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
         }
       ]
     },
@@ -2212,7 +2268,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "328798388306837504"
+          "order_id": "330185187394584576"
         }
       },
       "strategy": [
@@ -2260,7 +2316,7 @@
         "kind": "request",
         "body": {
           "action": "check",
-          "order_id": "328798388306837504",
+          "order_id": "330185187394584576",
           "discount_ratio": "",
           "service_project": "booking_space",
           "import_status": 0,
@@ -2371,7 +2427,7 @@
         "kind": "request",
         "body": {
           "action": "submit",
-          "order_id": "328798388306837504",
+          "order_id": "330185187394584576",
           "discount_ratio": "",
           "service_project": "booking_space",
           "import_status": 0,
@@ -2481,7 +2537,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "328798388306837504"
+          "order_id": "330185187394584576"
         }
       },
       "strategy": [
@@ -2528,7 +2584,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "328798388306837504"
+          "order_id": "330185187394584576"
         }
       },
       "strategy": [
@@ -2575,7 +2631,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "328798388306837504"
+          "order_id": "330185187394584576"
         }
       },
       "strategy": [
@@ -2635,7 +2691,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "328798388306837504"
+          "order_id": "330185187394584576"
         }
       },
       "strategy": [
@@ -2709,9 +2765,9 @@
         "kind": "request",
         "body": {
           "action": "check",
-          "order_id": "328798388306837504",
+          "order_id": "330185187394584576",
           "order_fee_real_ids": [
-            "328798527415123968"
+            "330185332941127680"
           ]
         }
       },
@@ -2771,9 +2827,9 @@
         "kind": "request",
         "body": {
           "action": "audit",
-          "order_id": "328798388306837504",
+          "order_id": "330185187394584576",
           "order_fee_real_ids": [
-            "328798527415123968"
+            "330185332941127680"
           ]
         }
       },
@@ -2833,13 +2889,13 @@
         "kind": "request",
         "body": {
           "action": "submit",
-          "order_id": "328798388306837504",
+          "order_id": "330185187394584576",
           "order_fee_real_ids": [
-            "328798527415123968"
+            "330185332941127680"
           ],
           "audit_msg": {
             "title": "业务订单ID",
-            "code": "ZDD20260626016831",
+            "code": "ZDD20260630016876",
             "msgs": [
               "费用锁定申请"
             ]
@@ -2907,7 +2963,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "328798388306837504"
+          "order_id": "330185187394584576"
         }
       },
       "strategy": [
@@ -2968,7 +3024,7 @@
         "kind": "request",
         "body": {
           "audit_ids": [
-            "328798561980383232"
+            "330185365497315328"
           ],
           "audit_status": 2,
           "audit_remark": null
@@ -3020,7 +3076,7 @@
         "body": {
           "audit_note": "",
           "order_ids": [
-            "328798388306837504"
+            "330185187394584576"
           ],
           "action": "check",
           "audit_msg": {
@@ -3078,7 +3134,7 @@
         "body": {
           "audit_note": "",
           "order_ids": [
-            "328798388306837504"
+            "330185187394584576"
           ],
           "action": "audit",
           "audit_msg": {
@@ -3136,7 +3192,7 @@
         "body": {
           "audit_note": "",
           "order_ids": [
-            "328798388306837504"
+            "330185187394584576"
           ],
           "action": "submit",
           "audit_msg": {
@@ -3253,7 +3309,7 @@
         "kind": "request",
         "body": {
           "audit_ids": [
-            "328798596797300736"
+            "330185399395680256"
           ],
           "audit_status": 2,
           "audit_remark": null
@@ -3303,7 +3359,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "328798388306837504",
+          "order_id": "330185187394584576",
           "action": "check"
         }
       },
@@ -3392,7 +3448,7 @@
         "body": {
           "page_no": 1,
           "page_size": 50,
-          "bl_no": "GIMBAL_TEST_35",
+          "bl_no": "${var.bl_no}",
           "operate_type": 1,
           "search_style": "account",
           "account_simple_name": null,
@@ -3470,9 +3526,9 @@
           "main_name": "青岛易汇智供应链管理有限公司",
           "select_list": [
             {
-              "order_id": "328798388306837504",
-              "order_no": "YWDD20260626107517",
-              "bl_no": "GIMBAL_TEST_35",
+              "order_id": "330185187394584576",
+              "order_no": "YWDD20260630107547",
+              "bl_no": "${var.bl_no}",
               "customer_id": "16",
               "customer_name": "兰森玻璃（青岛）有限公司",
               "customer_main_id": "31",
@@ -3488,15 +3544,15 @@
               "create_time": "1782187713",
               "finance_date": "1782748800",
               "fund_name": "青岛海发商业保理有限公司",
-              "ship_name": "GIMBAL_TEST_35",
-              "voy": "GIMBAL_TEST_35",
+              "ship_name": "${var.bl_no}",
+              "voy": "${var.bl_no}",
               "status": "2",
               "is_special_pay": "0",
               "pay_status": "0",
               "is_loan_before_invoice": "1",
-              "customer_order_sn": "GIMBAL_TEST_35",
-              "order_sub_id": "328798447375220736",
-              "order_sub_no": "ZDD20260626016831",
+              "customer_order_sn": "${var.bl_no}",
+              "order_sub_id": "330185250288173056",
+              "order_sub_no": "ZDD20260630016876",
               "main_id": "31",
               "main_name": "青岛易汇智供应链管理有限公司",
               "service_project": "booking_space",
@@ -3513,7 +3569,7 @@
               "un_operable_amount": "0.00",
               "operable_flag": "all",
               "policy_type_name": "结算业务",
-              "order_sub_currency": "USD328798447375220736",
+              "order_sub_currency": "USD330185250288173056",
               "order_main_finance": "",
               "order_error_messages": [],
               "order_error_message": "",
@@ -3523,12 +3579,12 @@
                   "order_id": "${var.history_order_id}",
                   "order_no": "${var.history_order_no}",
                   "customer_name": "兰森玻璃（青岛）有限公司",
-                  "bl_no": "GIMBAL_TEST_35",
+                  "bl_no": "${var.bl_no}",
                   "main_name": "青岛易汇智供应链管理有限公司",
                   "order_sub_no": "${var.history_order_sub_no}",
                   "order_sub_id": "${var.history_order_sub_id}",
-                  "order_fee_real_id": "328798527415123968",
-                  "fee_real_no": "FY202606261291798",
+                  "order_fee_real_id": "330185332941127680",
+                  "fee_real_no": "FY202606301291994",
                   "fee_type": "0",
                   "service_project": "booking_space",
                   "fee_real_name": "海运费",
@@ -3695,9 +3751,9 @@
           "main_name": "青岛易汇智供应链管理有限公司",
           "select_list": [
             {
-              "order_id": "328798388306837504",
-              "order_no": "YWDD20260626107517",
-              "bl_no": "GIMBAL_TEST_35",
+              "order_id": "330185187394584576",
+              "order_no": "YWDD20260630107547",
+              "bl_no": "${var.bl_no}",
               "customer_id": "16",
               "customer_name": "兰森玻璃（青岛）有限公司",
               "customer_main_id": "31",
@@ -3713,15 +3769,15 @@
               "create_time": "1782187713",
               "finance_date": "1782748800",
               "fund_name": "青岛海发商业保理有限公司",
-              "ship_name": "GIMBAL_TEST_35",
-              "voy": "GIMBAL_TEST_35",
+              "ship_name": "${var.bl_no}",
+              "voy": "${var.bl_no}",
               "status": "2",
               "is_special_pay": "0",
               "pay_status": "0",
               "is_loan_before_invoice": "1",
-              "customer_order_sn": "GIMBAL_TEST_35",
-              "order_sub_id": "328798447375220736",
-              "order_sub_no": "ZDD20260626016831",
+              "customer_order_sn": "${var.bl_no}",
+              "order_sub_id": "330185250288173056",
+              "order_sub_no": "ZDD20260630016876",
               "main_id": "31",
               "main_name": "青岛易汇智供应链管理有限公司",
               "service_project": "booking_space",
@@ -3738,7 +3794,7 @@
               "un_operable_amount": "0.00",
               "operable_flag": "all",
               "policy_type_name": "结算业务",
-              "order_sub_currency": "USD328798447375220736",
+              "order_sub_currency": "USD330185250288173056",
               "order_main_finance": "",
               "order_error_messages": [],
               "order_error_message": "",
@@ -3748,12 +3804,12 @@
                   "order_id": "${var.history_order_id}",
                   "order_no": "${var.history_order_no}",
                   "customer_name": "兰森玻璃（青岛）有限公司",
-                  "bl_no": "GIMBAL_TEST_35",
+                  "bl_no": "${var.bl_no}",
                   "main_name": "青岛易汇智供应链管理有限公司",
                   "order_sub_no": "${var.history_order_sub_no}",
                   "order_sub_id": "${var.history_order_sub_id}",
-                  "order_fee_real_id": "328798527415123968",
-                  "fee_real_no": "FY202606261291798",
+                  "order_fee_real_id": "330185332941127680",
+                  "fee_real_no": "FY202606301291994",
                   "fee_type": "0",
                   "service_project": "booking_space",
                   "fee_real_name": "海运费",
@@ -3915,7 +3971,7 @@
         "kind": "request",
         "body": {
           "confirm_type": 0,
-          "receive_account_id": "328798637733707776",
+          "receive_account_id": "330185438172020736",
           "order_ids": []
         }
       },
@@ -3990,15 +4046,15 @@
         "kind": "request",
         "body": {
           "confirm_type": 0,
-          "receive_account_id": "328798637733707776",
+          "receive_account_id": "330185438172020736",
           "confirm_list": [
             {
               "main_id": "1",
               "main_name": "青岛易航道物流科技有限公司",
               "symbol": "1",
               "settle_object_id": "665",
-              "order_ids": "328798388306837504",
-              "order_sub_ids": "328798511443214336",
+              "order_ids": "330185187394584576",
+              "order_sub_ids": "330185315954196480",
               "order_sub_types": "2",
               "unique_ids": "be31581f-d265-48d9-8f1a-68ae3e3b43ff",
               "receive_account_no": "",
@@ -4009,7 +4065,7 @@
               "order_sub_type": 1,
               "only_adjust_status": 0,
               "real_amount_ids": [
-                "328798527415126016"
+                "330185332941129728"
               ],
               "currency_list": [
                 "USD"
@@ -4021,8 +4077,8 @@
               "main_name": "青岛易汇智供应链管理有限公司",
               "symbol": "0",
               "settle_object_id": "1",
-              "order_ids": "328798388306837504",
-              "order_sub_ids": "328798447375220736",
+              "order_ids": "330185187394584576",
+              "order_sub_ids": "330185250288173056",
               "order_sub_types": "0",
               "unique_ids": "be31581f-d265-48d9-8f1a-68ae3e3b43ff",
               "receive_account_no": "",
@@ -4033,7 +4089,7 @@
               "order_sub_type": 1,
               "only_adjust_status": 0,
               "real_amount_ids": [
-                "328798527415124992"
+                "330185332941128704"
               ],
               "currency_list": [
                 "USD"
@@ -4166,7 +4222,7 @@
           "rate_type": "1",
           "usd_is_turn": "1",
           "order_fee_real_id": [
-            "328798527415123968"
+            "330185332941127680"
           ],
           "usd_requireinvoice_form": "",
           "usd_requireinvoice_type": "",
@@ -4213,7 +4269,7 @@
             "rate_list": [
               {
                 "cost_name": "海运费",
-                "fee_real_no": "FY202606261291798",
+                "fee_real_no": "FY202606301291994",
                 "cost_no": "0001",
                 "invoice_rate": "6",
                 "real_amount": "100.00",
@@ -4260,7 +4316,7 @@
           "debitno_file_id": [],
           "batch_order_remark": [
             {
-              "order_sub_id": "328798447375220736",
+              "order_sub_id": "330185250288173056",
               "currency": "USD"
             }
           ],
@@ -4270,7 +4326,7 @@
           "put_settle_object": "兰森玻璃（青岛）有限公司",
           "main_name_cn": "青岛易汇智供应链管理有限公司",
           "order_sub_id": [
-            "328798447375220736"
+            "330185250288173056"
           ],
           "sys_rate": "",
           "appoint_rate": "",
@@ -4383,7 +4439,7 @@
           "rate_type": "1",
           "usd_is_turn": "1",
           "order_fee_real_id": [
-            "328798527415123968"
+            "330185332941127680"
           ],
           "usd_requireinvoice_form": "",
           "usd_requireinvoice_type": "",
@@ -4430,7 +4486,7 @@
             "rate_list": [
               {
                 "cost_name": "海运费",
-                "fee_real_no": "FY202606261291798",
+                "fee_real_no": "FY202606301291994",
                 "cost_no": "0001",
                 "invoice_rate": "6",
                 "real_amount": "100.00",
@@ -4477,7 +4533,7 @@
           "debitno_file_id": [],
           "batch_order_remark": [
             {
-              "order_sub_id": "328798447375220736",
+              "order_sub_id": "330185250288173056",
               "currency": "USD"
             }
           ],
@@ -4487,7 +4543,7 @@
           "put_settle_object": "兰森玻璃（青岛）有限公司",
           "main_name_cn": "青岛易汇智供应链管理有限公司",
           "order_sub_id": [
-            "328798447375220736"
+            "330185250288173056"
           ],
           "sys_rate": "",
           "appoint_rate": "",
@@ -4600,7 +4656,7 @@
           "rate_type": "1",
           "usd_is_turn": "1",
           "order_fee_real_id": [
-            "328798527415123968"
+            "330185332941127680"
           ],
           "usd_requireinvoice_form": "",
           "usd_requireinvoice_type": "",
@@ -4647,7 +4703,7 @@
             "rate_list": [
               {
                 "cost_name": "海运费",
-                "fee_real_no": "FY202606261291798",
+                "fee_real_no": "FY202606301291994",
                 "cost_no": "0001",
                 "invoice_rate": "6",
                 "real_amount": "100.00",
@@ -4694,7 +4750,7 @@
           "debitno_file_id": [],
           "batch_order_remark": [
             {
-              "order_sub_id": "328798447375220736",
+              "order_sub_id": "330185250288173056",
               "currency": "USD"
             }
           ],
@@ -4704,7 +4760,7 @@
           "put_settle_object": "兰森玻璃（青岛）有限公司",
           "main_name_cn": "青岛易汇智供应链管理有限公司",
           "order_sub_id": [
-            "328798447375220736"
+            "330185250288173056"
           ],
           "sys_rate": "",
           "appoint_rate": "",
@@ -4856,7 +4912,7 @@
         "kind": "request",
         "body": {
           "audit_ids": [
-            "328798672328327168"
+            "330185473563557888"
           ],
           "audit_status": 2,
           "audit_remark": null
@@ -4915,7 +4971,7 @@
           ],
           "cancel_status": [],
           "bl_nos": [
-            "GIMBAL_TEST_35"
+            "${var.bl_no}"
           ],
           "customer_id": [],
           "put_settle_object_id": [],
@@ -4986,7 +5042,7 @@
           "usd_amount": "",
           "invoice_exchange_rate": "1",
           "invoice_original": {
-            "file_id": "328798435165601792",
+            "file_id": "330185237004812288",
             "file_name": "6a3a09e08cfa9.pdf",
             "file_type": "pdf",
             "original_name": "电子发票（普通发票）兰森.pdf",
@@ -5073,7 +5129,7 @@
         "kind": "request",
         "body": [
           {
-            "invoice_number": "${var.invoice_number_add}",
+            "invoice_number": "${var.invoice_number}",
             "invoice_type": "1",
             "invoice_type_name": "增值税数电普通发票",
             "invoice_amount": "770.00",
@@ -5122,7 +5178,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.24920000000029640029",
+          "expression": "$.response_body.data.24920000000029640035",
           "target": "receive_invoice_id",
           "required": true,
           "default": null,
@@ -5169,11 +5225,11 @@
       "request": {
         "kind": "request",
         "body": {
-          "receive_invoice_apply_id": "328798686853201920",
+          "receive_invoice_apply_id": "330185486377156608",
           "invoice_arr": [
             {
-              "order_sub_id": "328798447375220736",
-              "receive_invoice_id": "328798705241030656"
+              "order_sub_id": "330185250288173056",
+              "receive_invoice_id": "330185503531859968"
             }
           ],
           "action": "check"
@@ -5245,11 +5301,11 @@
       "request": {
         "kind": "request",
         "body": {
-          "receive_invoice_apply_id": "328798686853201920",
+          "receive_invoice_apply_id": "330185486377156608",
           "invoice_arr": [
             {
-              "order_sub_id": "328798447375220736",
-              "receive_invoice_id": "328798705241030656"
+              "order_sub_id": "330185250288173056",
+              "receive_invoice_id": "330185503531859968"
             }
           ],
           "action": "submit"
@@ -5326,11 +5382,11 @@
           "writeoff_object": [
             {
               "order_fee_real_id": [
-                "328798527415123968"
+                "330185332941127680"
               ],
               "un_writeoff_amount_cny": "0.00",
               "un_writeoff_amount_usd": "100.00",
-              "receive_invoice_id": "328798705241030656"
+              "receive_invoice_id": "330185503531859968"
             }
           ],
           "writeoff_name": "",
@@ -5423,11 +5479,11 @@
           "writeoff_object": [
             {
               "order_fee_real_id": [
-                "328798527415123968"
+                "330185332941127680"
               ],
               "un_writeoff_amount_cny": "0.00",
               "un_writeoff_amount_usd": "100.00",
-              "receive_invoice_id": "328798705241030656"
+              "receive_invoice_id": "330185503531859968"
             }
           ],
           "writeoff_name": "",

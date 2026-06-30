@@ -108,51 +108,13 @@ def handle_manifest_pinned(
             extra={"available_versions": [v.to_dict() for v in SUPPORTED_VERSIONS]},
         )
     # Eagerly collect 每个 supported service(按需加载 — server 是只读视图)。
-    import sys
-    from Plate.spec import EndpointSpec as _ES
-    from Plate.core import EndpointSpec as _ES_CORE
-    print(
-        f"[DEBUG-CORE] _ES id={id(_ES)} _ES_CORE id={id(_ES_CORE)} "
-        f"same={_ES is _ES_CORE}",
-        file=sys.stderr,
-    )
     services: dict[str, list[dict]] = {}
     for svc in SUPPORTED_SERVICES:
-        # DEBUG: 直接调用 _collect_locked 的内循环逻辑(无锁)
-        if "Plate.fin" in sys.modules:
-            fin_mod = sys.modules["Plate.fin"]
-            spec_attrs = [
-                (n, a) for n, a in vars(fin_mod).items()
-                if type(a).__name__ == "EndpointSpec"
-            ]
-            print(
-                f"[DEBUG-LOOP] svc={svc} "
-                f"spec_attrs_n={len(spec_attrs)}",
-                file=sys.stderr,
-            )
-            added_my = 0
-            added_core = 0
-            for name, attr in spec_attrs:
-                if type(attr) is _ES:
-                    added_my += 1
-                if type(attr) is _ES_CORE:
-                    added_core += 1
-            print(
-                f"[DEBUG-LOOP-DONE] my={added_my} core={added_core}",
-                file=sys.stderr,
-            )
         registry.collect(svc)
         svc_specs = [
             s.to_dict() for k, s in registry._index.items() if k.service == svc
         ]
         services[svc] = svc_specs
-        print(
-            f"[DEBUG-AFTER] svc={svc} "
-            f"total index={len(registry._index)} "
-            f"svc_specs={len(svc_specs)} "
-            f"loaded={sorted(registry._loaded)}",
-            file=sys.stderr,
-        )
     manifest = PlateManifest.from_services(version, services)
     return json_response(
         manifest.to_dict(),

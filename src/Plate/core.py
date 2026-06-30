@@ -57,11 +57,20 @@ class _Registry:
     def _collect_locked(self, service: str) -> None:
         """import service 包,遍历模块命名空间,拉式收集所有 ``EndpointSpec`` 实例。
 
-        严格 ``type(attr) is EndpointSpec`` 匹配,排除任何继承(``@final`` 配合)。
+        匹配规则(对应 PR-2.3 P0-1 修复):
+          - 用 ``type(attr).__name__ == "EndpointSpec"`` + ``hasattr(method/path)``
+            判定(而不是 ``type(attr) is EndpointSpec``)。原因:测试场景下
+            invariant 测试可能 del ``Plate.*`` 触发 spec 实例的 ``type()``
+            指向"老"EndpointSpec 类,与当前模块里 ``EndpointSpec`` 不是同一
+            对象 —— ``is`` / ``isinstance`` 会 False,但 ``__name__`` 仍然一致。
+          - ``@final`` 保证没有继承链污染,``__name__`` 匹配足够安全。
+        收集到 0 条时,主动 raise + 回滚 ``_loaded`` —— 不允许"空 service
+        标 loaded"导致后续 collect 早退、错误被永久掩盖。
         """
         if service in self._loaded:
             return
         dir_name = resolve_dir_name(service)
+        importlib.invalidate_caches()
         try:
             module = importlib.import_module(f"Plate.{dir_name}")
         except ImportError as e:
@@ -69,10 +78,24 @@ class _Registry:
                 f"[Plate] service '{service}' 对应的目录 "
                 f"'Plate/{dir_name}/' 不存在或导入失败: {e}"
             ) from e
+        collected = 0
         for attr in vars(module).values():
-            if type(attr) is EndpointSpec:
-                key = EndpointKey(service, attr.method, attr.path)
-                self._index[key] = attr
+            if type(attr).__name__ != "EndpointSpec":
+                continue
+            method = getattr(attr, "method", None)
+            path = getattr(attr, "path", None)
+            if not method or not path:
+                continue
+            key = EndpointKey(service, method, path)
+            self._index[key] = attr
+            collected += 1
+        if collected == 0:
+            raise LookupError(
+                f"[Plate] collect('{service}') 扫到 0 个 EndpointSpec。"
+                f"模块 Plate.{dir_name} 已 import 但无 spec。"
+                f"可能原因:(1) service 名拼错 (2) endpoints.py 未导出 spec "
+                f"(3) 模块结构被外部破坏。"
+            )
         self._loaded.add(service)
 
     def _check_no_duplicate_paths_locked(self, service: str) -> None:

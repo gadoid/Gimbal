@@ -1,6 +1,6 @@
 {
   "kind": "script",
-  "source_capture": "d:\\Gimbal\\Gimbal\\gimbal-tmp\\test-8-1782459043.ndjson",
+  "source_capture": "d:\\Gimbal\\Gimbal\\gimbal-tmp\\test-11-1782789569.ndjson",
   "business_host": "fin-tidb.21eflag.com",
   "scaffold_ref": "d:\\Gimbal\\Gimbal\\gimbal-tmp\\scs.json",
   "steps": [
@@ -17,8 +17,8 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
-        "Content-Length": "2157",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
+        "Content-Length": "2113",
         "Content-Type": "application/json"
       },
       "request_body": {
@@ -44,11 +44,11 @@
         "trade_term": "CIF",
         "carrier": "ACL",
         "carrier_id": "1",
-        "bl_no": "GIMBAL_TEST_35",
+        "bl_no": "GET_TEST_3",
         "etd": 1782748800,
         "atd": 1782144000,
-        "ship_name": "GIMBAL_TEST_35",
-        "voy": "GIMBAL_TEST_35",
+        "ship_name": "GET_TEST_3",
+        "voy": "GET_TEST_3",
         "pol": "QINGDAO,CHINA",
         "pot": "QINGYANG,CHINA",
         "pod": "QINGDAO,CHINA",
@@ -59,14 +59,14 @@
         "terms_payment": "T/T",
         "terms_transport": "CY/CY",
         "pay_type": "FREIGHT PREPAID",
-        "customer_order_sn": "GIMBAL_TEST_35",
-        "terms_shipment": "GIMBAL_TEST_35",
-        "shipper": "GIMBAL_TEST_35",
-        "consignee": "GIMBAL_TEST_35",
-        "notifier": "GIMBAL_TEST_35",
-        "ship_mark": "GIMBAL_TEST_35",
-        "commodity": "GIMBAL_TEST_35",
-        "notes": "GIMBAL_TEST_35",
+        "customer_order_sn": "GET_TEST_3",
+        "terms_shipment": "GET_TEST_3",
+        "shipper": "GET_TEST_3",
+        "consignee": "GET_TEST_3",
+        "notifier": "GET_TEST_3",
+        "ship_mark": "GET_TEST_3",
+        "commodity": "GET_TEST_3",
+        "notes": "GET_TEST_3",
         "cargo_type": "goods",
         "packer": "",
         "num": "1",
@@ -141,8 +141,8 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
-        "Content-Length": "2158",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
+        "Content-Length": "2114",
         "Content-Type": "application/json"
       },
       "request_body": {
@@ -168,11 +168,11 @@
         "trade_term": "CIF",
         "carrier": "ACL",
         "carrier_id": "1",
-        "bl_no": "GIMBAL_TEST_35",
+        "bl_no": "GET_TEST_3",
         "etd": 1782748800,
         "atd": 1782144000,
-        "ship_name": "GIMBAL_TEST_35",
-        "voy": "GIMBAL_TEST_35",
+        "ship_name": "GET_TEST_3",
+        "voy": "GET_TEST_3",
         "pol": "QINGDAO,CHINA",
         "pot": "QINGYANG,CHINA",
         "pod": "QINGDAO,CHINA",
@@ -183,14 +183,14 @@
         "terms_payment": "T/T",
         "terms_transport": "CY/CY",
         "pay_type": "FREIGHT PREPAID",
-        "customer_order_sn": "GIMBAL_TEST_35",
-        "terms_shipment": "GIMBAL_TEST_35",
-        "shipper": "GIMBAL_TEST_35",
-        "consignee": "GIMBAL_TEST_35",
-        "notifier": "GIMBAL_TEST_35",
-        "ship_mark": "GIMBAL_TEST_35",
-        "commodity": "GIMBAL_TEST_35",
-        "notes": "GIMBAL_TEST_35",
+        "customer_order_sn": "GET_TEST_3",
+        "terms_shipment": "GET_TEST_3",
+        "shipper": "GET_TEST_3",
+        "consignee": "GET_TEST_3",
+        "notifier": "GET_TEST_3",
+        "ship_mark": "GET_TEST_3",
+        "commodity": "GET_TEST_3",
+        "notes": "GET_TEST_3",
         "cargo_type": "goods",
         "packer": "",
         "num": "1",
@@ -265,8 +265,8 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
-        "Content-Length": "155",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
+        "Content-Length": "151",
         "Content-Type": "application/json"
       },
       "request_body": {
@@ -275,7 +275,7 @@
         "order_no": "",
         "customer_id": "",
         "bl_nos": [],
-        "bl_no": "GIMBAL_TEST_35",
+        "bl_no": "GET_TEST_3",
         "sort_field": "update_time",
         "sort_order": "desc",
         "params": {}
@@ -312,12 +312,12 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "33",
         "Content-Type": "application/json"
       },
       "request_body": {
-        "order_id": "328798388306837504"
+        "order_id": "330185187394584576"
       },
       "bindings": {
         "extracts": [
@@ -351,8 +351,8 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
-        "Content-Length": "6064",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
+        "Content-Length": "6020",
         "Content-Type": "application/json"
       },
       "request_body": {
@@ -378,11 +378,11 @@
         "trade_term": "CIF",
         "carrier": "ACL",
         "carrier_id": "1",
-        "bl_no": "GIMBAL_TEST_35",
+        "bl_no": "GET_TEST_3",
         "etd": 1782748800,
         "atd": 1782144000,
-        "ship_name": "GIMBAL_TEST_35",
-        "voy": "GIMBAL_TEST_35",
+        "ship_name": "GET_TEST_3",
+        "voy": "GET_TEST_3",
         "pol": "QINGDAO,CHINA",
         "pot": "QINGYANG,CHINA",
         "pod": "QINGDAO,CHINA",
@@ -393,14 +393,14 @@
         "terms_payment": "T/T",
         "terms_transport": "CY/CY",
         "pay_type": "FREIGHT PREPAID",
-        "customer_order_sn": "GIMBAL_TEST_35",
-        "terms_shipment": "GIMBAL_TEST_35",
-        "shipper": "GIMBAL_TEST_35",
-        "consignee": "GIMBAL_TEST_35",
-        "notifier": "GIMBAL_TEST_35",
-        "ship_mark": "GIMBAL_TEST_35",
-        "commodity": "GIMBAL_TEST_35",
-        "notes": "GIMBAL_TEST_35",
+        "customer_order_sn": "GET_TEST_3",
+        "terms_shipment": "GET_TEST_3",
+        "shipper": "GET_TEST_3",
+        "consignee": "GET_TEST_3",
+        "notifier": "GET_TEST_3",
+        "ship_mark": "GET_TEST_3",
+        "commodity": "GET_TEST_3",
+        "notes": "GET_TEST_3",
         "cargo_type": "goods",
         "packer": "",
         "num": "1",
@@ -418,8 +418,8 @@
         "customer_file_list": [],
         "supplier": [
           {
-            "order_supplier_id": "328798389623848960",
-            "order_id": "328798388306837504",
+            "order_supplier_id": "330185188665458688",
+            "order_id": "330185187394584576",
             "isset_supplier": "1",
             "is_primary": "1",
             "supplier_id": "8",
@@ -439,8 +439,8 @@
           }
         ],
         "remark": "",
-        "order_id": "328798388306837504",
-        "order_no": "YWDD20260626107517",
+        "order_id": "330185187394584576",
+        "order_no": "YWDD20260630107547",
         "customer_category": ",2,",
         "customer_tax_number": "91370283591262431N",
         "customer_address_cn": "山东省青岛市平度市南村镇东王府庄村",
@@ -643,8 +643,8 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
-        "Content-Length": "6065",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
+        "Content-Length": "6021",
         "Content-Type": "application/json"
       },
       "request_body": {
@@ -670,11 +670,11 @@
         "trade_term": "CIF",
         "carrier": "ACL",
         "carrier_id": "1",
-        "bl_no": "GIMBAL_TEST_35",
+        "bl_no": "GET_TEST_3",
         "etd": 1782748800,
         "atd": 1782144000,
-        "ship_name": "GIMBAL_TEST_35",
-        "voy": "GIMBAL_TEST_35",
+        "ship_name": "GET_TEST_3",
+        "voy": "GET_TEST_3",
         "pol": "QINGDAO,CHINA",
         "pot": "QINGYANG,CHINA",
         "pod": "QINGDAO,CHINA",
@@ -685,14 +685,14 @@
         "terms_payment": "T/T",
         "terms_transport": "CY/CY",
         "pay_type": "FREIGHT PREPAID",
-        "customer_order_sn": "GIMBAL_TEST_35",
-        "terms_shipment": "GIMBAL_TEST_35",
-        "shipper": "GIMBAL_TEST_35",
-        "consignee": "GIMBAL_TEST_35",
-        "notifier": "GIMBAL_TEST_35",
-        "ship_mark": "GIMBAL_TEST_35",
-        "commodity": "GIMBAL_TEST_35",
-        "notes": "GIMBAL_TEST_35",
+        "customer_order_sn": "GET_TEST_3",
+        "terms_shipment": "GET_TEST_3",
+        "shipper": "GET_TEST_3",
+        "consignee": "GET_TEST_3",
+        "notifier": "GET_TEST_3",
+        "ship_mark": "GET_TEST_3",
+        "commodity": "GET_TEST_3",
+        "notes": "GET_TEST_3",
         "cargo_type": "goods",
         "packer": "",
         "num": "1",
@@ -710,8 +710,8 @@
         "customer_file_list": [],
         "supplier": [
           {
-            "order_supplier_id": "328798389623848960",
-            "order_id": "328798388306837504",
+            "order_supplier_id": "330185188665458688",
+            "order_id": "330185187394584576",
             "isset_supplier": "1",
             "is_primary": "1",
             "supplier_id": "8",
@@ -731,8 +731,8 @@
           }
         ],
         "remark": "",
-        "order_id": "328798388306837504",
-        "order_no": "YWDD20260626107517",
+        "order_id": "330185187394584576",
+        "order_no": "YWDD20260630107547",
         "customer_category": ",2,",
         "customer_tax_number": "91370283591262431N",
         "customer_address_cn": "山东省青岛市平度市南村镇东王府庄村",
@@ -935,8 +935,8 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
-        "Content-Length": "6179",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
+        "Content-Length": "6135",
         "Content-Type": "application/json"
       },
       "request_body": {
@@ -961,11 +961,11 @@
         "trade_term": "CIF",
         "carrier": "ACL",
         "carrier_id": "1",
-        "bl_no": "GIMBAL_TEST_35",
+        "bl_no": "GET_TEST_3",
         "etd": 1782748800,
         "atd": 1782144000,
-        "ship_name": "GIMBAL_TEST_35",
-        "voy": "GIMBAL_TEST_35",
+        "ship_name": "GET_TEST_3",
+        "voy": "GET_TEST_3",
         "pol": "QINGDAO,CHINA",
         "pot": "QINGYANG,CHINA",
         "pod": "QINGDAO,CHINA",
@@ -976,14 +976,14 @@
         "terms_payment": "T/T",
         "terms_transport": "CY/CY",
         "pay_type": "FREIGHT PREPAID",
-        "customer_order_sn": "GIMBAL_TEST_35",
-        "terms_shipment": "GIMBAL_TEST_35",
-        "shipper": "GIMBAL_TEST_35",
-        "consignee": "GIMBAL_TEST_35",
-        "notifier": "GIMBAL_TEST_35",
-        "ship_mark": "GIMBAL_TEST_35",
-        "commodity": "GIMBAL_TEST_35",
-        "notes": "GIMBAL_TEST_35",
+        "customer_order_sn": "GET_TEST_3",
+        "terms_shipment": "GET_TEST_3",
+        "shipper": "GET_TEST_3",
+        "consignee": "GET_TEST_3",
+        "notifier": "GET_TEST_3",
+        "ship_mark": "GET_TEST_3",
+        "commodity": "GET_TEST_3",
+        "notes": "GET_TEST_3",
         "cargo_type": "goods",
         "packer": "",
         "num": "1",
@@ -1013,8 +1013,8 @@
         "customer_file_list": [],
         "supplier": [
           {
-            "order_supplier_id": "328798389623848960",
-            "order_id": "328798388306837504",
+            "order_supplier_id": "330185188665458688",
+            "order_id": "330185187394584576",
             "isset_supplier": "1",
             "is_primary": "1",
             "supplier_id": "8",
@@ -1033,8 +1033,8 @@
             "isset_fee": false
           }
         ],
-        "order_id": "328798388306837504",
-        "order_no": "YWDD20260626107517",
+        "order_id": "330185187394584576",
+        "order_no": "YWDD20260630107547",
         "customer_category": ",2,",
         "customer_tax_number": "91370283591262431N",
         "customer_address_cn": "山东省青岛市平度市南村镇东王府庄村",
@@ -1239,8 +1239,8 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
-        "Content-Length": "6179",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
+        "Content-Length": "6135",
         "Content-Type": "application/json"
       },
       "request_body": {
@@ -1265,11 +1265,11 @@
         "trade_term": "CIF",
         "carrier": "ACL",
         "carrier_id": "1",
-        "bl_no": "GIMBAL_TEST_35",
+        "bl_no": "GET_TEST_3",
         "etd": 1782748800,
         "atd": 1782144000,
-        "ship_name": "GIMBAL_TEST_35",
-        "voy": "GIMBAL_TEST_35",
+        "ship_name": "GET_TEST_3",
+        "voy": "GET_TEST_3",
         "pol": "QINGDAO,CHINA",
         "pot": "QINGYANG,CHINA",
         "pod": "QINGDAO,CHINA",
@@ -1280,14 +1280,14 @@
         "terms_payment": "T/T",
         "terms_transport": "CY/CY",
         "pay_type": "FREIGHT PREPAID",
-        "customer_order_sn": "GIMBAL_TEST_35",
-        "terms_shipment": "GIMBAL_TEST_35",
-        "shipper": "GIMBAL_TEST_35",
-        "consignee": "GIMBAL_TEST_35",
-        "notifier": "GIMBAL_TEST_35",
-        "ship_mark": "GIMBAL_TEST_35",
-        "commodity": "GIMBAL_TEST_35",
-        "notes": "GIMBAL_TEST_35",
+        "customer_order_sn": "GET_TEST_3",
+        "terms_shipment": "GET_TEST_3",
+        "shipper": "GET_TEST_3",
+        "consignee": "GET_TEST_3",
+        "notifier": "GET_TEST_3",
+        "ship_mark": "GET_TEST_3",
+        "commodity": "GET_TEST_3",
+        "notes": "GET_TEST_3",
         "cargo_type": "goods",
         "packer": "",
         "num": "1",
@@ -1317,8 +1317,8 @@
         "customer_file_list": [],
         "supplier": [
           {
-            "order_supplier_id": "328798389623848960",
-            "order_id": "328798388306837504",
+            "order_supplier_id": "330185188665458688",
+            "order_id": "330185187394584576",
             "isset_supplier": "1",
             "is_primary": "1",
             "supplier_id": "8",
@@ -1337,8 +1337,8 @@
             "isset_fee": false
           }
         ],
-        "order_id": "328798388306837504",
-        "order_no": "YWDD20260626107517",
+        "order_id": "330185187394584576",
+        "order_no": "YWDD20260630107547",
         "customer_category": ",2,",
         "customer_tax_number": "91370283591262431N",
         "customer_address_cn": "山东省青岛市平度市南村镇东王府庄村",
@@ -1550,8 +1550,8 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
-        "Content-Length": "6523",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
+        "Content-Length": "6479",
         "Content-Type": "application/json"
       },
       "request_body": {
@@ -1576,11 +1576,11 @@
         "trade_term": "CIF",
         "carrier": "ACL",
         "carrier_id": "1",
-        "bl_no": "GIMBAL_TEST_35",
+        "bl_no": "GET_TEST_3",
         "etd": 1782748800,
         "atd": 1782144000,
-        "ship_name": "GIMBAL_TEST_35",
-        "voy": "GIMBAL_TEST_35",
+        "ship_name": "GET_TEST_3",
+        "voy": "GET_TEST_3",
         "pol": "QINGDAO,CHINA",
         "pot": "QINGYANG,CHINA",
         "pod": "QINGDAO,CHINA",
@@ -1591,14 +1591,14 @@
         "terms_payment": "T/T",
         "terms_transport": "CY/CY",
         "pay_type": "FREIGHT PREPAID",
-        "customer_order_sn": "GIMBAL_TEST_35",
-        "terms_shipment": "GIMBAL_TEST_35",
-        "shipper": "GIMBAL_TEST_35",
-        "consignee": "GIMBAL_TEST_35",
-        "notifier": "GIMBAL_TEST_35",
-        "ship_mark": "GIMBAL_TEST_35",
-        "commodity": "GIMBAL_TEST_35",
-        "notes": "GIMBAL_TEST_35",
+        "customer_order_sn": "GET_TEST_3",
+        "terms_shipment": "GET_TEST_3",
+        "shipper": "GET_TEST_3",
+        "consignee": "GET_TEST_3",
+        "notifier": "GET_TEST_3",
+        "ship_mark": "GET_TEST_3",
+        "commodity": "GET_TEST_3",
+        "notes": "GET_TEST_3",
         "cargo_type": "goods",
         "packer": "",
         "num": "1",
@@ -1634,15 +1634,15 @@
             "document_type": "BOOK_CUSTOMER",
             "file_url": "6a3a074371dee.pdf",
             "file_name": "6a3a074371dee.pdf",
-            "file_id": "328798435165601792",
+            "file_id": "330185237004812288",
             "file_type": "PDF",
             "_XID": "row_1263"
           }
         ],
         "supplier": [
           {
-            "order_supplier_id": "328798389623848960",
-            "order_id": "328798388306837504",
+            "order_supplier_id": "330185188665458688",
+            "order_id": "330185187394584576",
             "isset_supplier": "1",
             "is_primary": "1",
             "supplier_id": "8",
@@ -1661,8 +1661,8 @@
             "isset_fee": false
           }
         ],
-        "order_id": "328798388306837504",
-        "order_no": "YWDD20260626107517",
+        "order_id": "330185187394584576",
+        "order_no": "YWDD20260630107547",
         "customer_category": ",2,",
         "customer_tax_number": "91370283591262431N",
         "customer_address_cn": "山东省青岛市平度市南村镇东王府庄村",
@@ -1872,12 +1872,12 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "33",
         "Content-Type": "application/json"
       },
       "request_body": {
-        "order_id": "328798388306837504"
+        "order_id": "330185187394584576"
       },
       "bindings": {
         "extracts": [
@@ -1917,12 +1917,12 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "33",
         "Content-Type": "application/json"
       },
       "request_body": {
-        "order_id": "328798388306837504"
+        "order_id": "330185187394584576"
       },
       "bindings": {
         "extracts": [],
@@ -1949,13 +1949,13 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "1287",
         "Content-Type": "application/json"
       },
       "request_body": {
         "action": "check",
-        "order_id": "328798388306837504",
+        "order_id": "330185187394584576",
         "discount_ratio": "",
         "service_project": "booking_space",
         "import_status": 0,
@@ -2045,13 +2045,13 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "1288",
         "Content-Type": "application/json"
       },
       "request_body": {
         "action": "submit",
-        "order_id": "328798388306837504",
+        "order_id": "330185187394584576",
         "discount_ratio": "",
         "service_project": "booking_space",
         "import_status": 0,
@@ -2141,12 +2141,12 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "33",
         "Content-Type": "application/json"
       },
       "request_body": {
-        "order_id": "328798388306837504"
+        "order_id": "330185187394584576"
       },
       "bindings": {
         "extracts": [],
@@ -2173,12 +2173,12 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "33",
         "Content-Type": "application/json"
       },
       "request_body": {
-        "order_id": "328798388306837504"
+        "order_id": "330185187394584576"
       },
       "bindings": {
         "extracts": [],
@@ -2205,12 +2205,12 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "33",
         "Content-Type": "application/json"
       },
       "request_body": {
-        "order_id": "328798388306837504"
+        "order_id": "330185187394584576"
       },
       "bindings": {
         "extracts": [
@@ -2244,12 +2244,12 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "33",
         "Content-Type": "application/json"
       },
       "request_body": {
-        "order_id": "328798388306837504"
+        "order_id": "330185187394584576"
       },
       "bindings": {
         "extracts": [
@@ -2289,15 +2289,15 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "94",
         "Content-Type": "application/json"
       },
       "request_body": {
         "action": "check",
-        "order_id": "328798388306837504",
+        "order_id": "330185187394584576",
         "order_fee_real_ids": [
-          "328798527415123968"
+          "330185332941127680"
         ]
       },
       "bindings": {
@@ -2330,15 +2330,15 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "94",
         "Content-Type": "application/json"
       },
       "request_body": {
         "action": "audit",
-        "order_id": "328798388306837504",
+        "order_id": "330185187394584576",
         "order_fee_real_ids": [
-          "328798527415123968"
+          "330185332941127680"
         ]
       },
       "bindings": {
@@ -2371,19 +2371,19 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "246",
         "Content-Type": "application/json"
       },
       "request_body": {
         "action": "submit",
-        "order_id": "328798388306837504",
+        "order_id": "330185187394584576",
         "order_fee_real_ids": [
-          "328798527415123968"
+          "330185332941127680"
         ],
         "audit_msg": {
           "title": "业务订单ID",
-          "code": "ZDD20260626016831",
+          "code": "ZDD20260630016876",
           "msgs": [
             "费用锁定申请"
           ]
@@ -2425,12 +2425,12 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "33",
         "Content-Type": "application/json"
       },
       "request_body": {
-        "order_id": "328798388306837504"
+        "order_id": "330185187394584576"
       },
       "bindings": {
         "extracts": [
@@ -2464,13 +2464,13 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "73",
         "Content-Type": "application/json"
       },
       "request_body": {
         "audit_ids": [
-          "328798561980383232"
+          "330185365497315328"
         ],
         "audit_status": 2,
         "audit_remark": null
@@ -2500,14 +2500,14 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "151",
         "Content-Type": "application/json"
       },
       "request_body": {
         "audit_note": "",
         "order_ids": [
-          "328798388306837504"
+          "330185187394584576"
         ],
         "action": "check",
         "audit_msg": {
@@ -2543,14 +2543,14 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "151",
         "Content-Type": "application/json"
       },
       "request_body": {
         "audit_note": "",
         "order_ids": [
-          "328798388306837504"
+          "330185187394584576"
         ],
         "action": "audit",
         "audit_msg": {
@@ -2586,14 +2586,14 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "207",
         "Content-Type": "application/json"
       },
       "request_body": {
         "audit_note": "",
         "order_ids": [
-          "328798388306837504"
+          "330185187394584576"
         ],
         "action": "submit",
         "audit_msg": {
@@ -2635,7 +2635,7 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "116",
         "Content-Type": "application/json"
       },
@@ -2673,13 +2673,13 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "73",
         "Content-Type": "application/json"
       },
       "request_body": {
         "audit_ids": [
-          "328798596797300736"
+          "330185399395680256"
         ],
         "audit_status": 2,
         "audit_remark": null
@@ -2709,12 +2709,12 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "50",
         "Content-Type": "application/json"
       },
       "request_body": {
-        "order_id": "328798388306837504",
+        "order_id": "330185187394584576",
         "action": "check"
       },
       "bindings": {
@@ -2761,14 +2761,14 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
-        "Content-Length": "233",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
+        "Content-Length": "229",
         "Content-Type": "application/json"
       },
       "request_body": {
         "page_no": 1,
         "page_size": 50,
-        "bl_no": "GIMBAL_TEST_35",
+        "bl_no": "GET_TEST_3",
         "operate_type": 1,
         "search_style": "account",
         "account_simple_name": null,
@@ -2806,8 +2806,8 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
-        "Content-Length": "3123",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
+        "Content-Length": "3103",
         "Content-Type": "application/json"
       },
       "request_body": {
@@ -2830,9 +2830,9 @@
         "main_name": "青岛易汇智供应链管理有限公司",
         "select_list": [
           {
-            "order_id": "328798388306837504",
-            "order_no": "YWDD20260626107517",
-            "bl_no": "GIMBAL_TEST_35",
+            "order_id": "330185187394584576",
+            "order_no": "YWDD20260630107547",
+            "bl_no": "GET_TEST_3",
             "customer_id": "16",
             "customer_name": "兰森玻璃（青岛）有限公司",
             "customer_main_id": "31",
@@ -2848,15 +2848,15 @@
             "create_time": "1782187713",
             "finance_date": "1782748800",
             "fund_name": "青岛海发商业保理有限公司",
-            "ship_name": "GIMBAL_TEST_35",
-            "voy": "GIMBAL_TEST_35",
+            "ship_name": "GET_TEST_3",
+            "voy": "GET_TEST_3",
             "status": "2",
             "is_special_pay": "0",
             "pay_status": "0",
             "is_loan_before_invoice": "1",
-            "customer_order_sn": "GIMBAL_TEST_35",
-            "order_sub_id": "328798447375220736",
-            "order_sub_no": "ZDD20260626016831",
+            "customer_order_sn": "GET_TEST_3",
+            "order_sub_id": "330185250288173056",
+            "order_sub_no": "ZDD20260630016876",
             "main_id": "31",
             "main_name": "青岛易汇智供应链管理有限公司",
             "service_project": "booking_space",
@@ -2873,7 +2873,7 @@
             "un_operable_amount": "0.00",
             "operable_flag": "all",
             "policy_type_name": "结算业务",
-            "order_sub_currency": "USD328798447375220736",
+            "order_sub_currency": "USD330185250288173056",
             "order_main_finance": "",
             "order_error_messages": [],
             "order_error_message": "",
@@ -2883,12 +2883,12 @@
                 "order_id": "327661182355767296",
                 "order_no": "YWDD20260623107343",
                 "customer_name": "兰森玻璃（青岛）有限公司",
-                "bl_no": "GIMBAL_TEST_35",
+                "bl_no": "GET_TEST_3",
                 "main_name": "青岛易汇智供应链管理有限公司",
                 "order_sub_no": "ZDD20260623016596",
                 "order_sub_id": "327661743511699456",
-                "order_fee_real_id": "328798527415123968",
-                "fee_real_no": "FY202606261291798",
+                "order_fee_real_id": "330185332941127680",
+                "fee_real_no": "FY202606301291994",
                 "fee_type": "0",
                 "service_project": "booking_space",
                 "fee_real_name": "海运费",
@@ -2980,8 +2980,8 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
-        "Content-Length": "3124",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
+        "Content-Length": "3104",
         "Content-Type": "application/json"
       },
       "request_body": {
@@ -3004,9 +3004,9 @@
         "main_name": "青岛易汇智供应链管理有限公司",
         "select_list": [
           {
-            "order_id": "328798388306837504",
-            "order_no": "YWDD20260626107517",
-            "bl_no": "GIMBAL_TEST_35",
+            "order_id": "330185187394584576",
+            "order_no": "YWDD20260630107547",
+            "bl_no": "GET_TEST_3",
             "customer_id": "16",
             "customer_name": "兰森玻璃（青岛）有限公司",
             "customer_main_id": "31",
@@ -3022,15 +3022,15 @@
             "create_time": "1782187713",
             "finance_date": "1782748800",
             "fund_name": "青岛海发商业保理有限公司",
-            "ship_name": "GIMBAL_TEST_35",
-            "voy": "GIMBAL_TEST_35",
+            "ship_name": "GET_TEST_3",
+            "voy": "GET_TEST_3",
             "status": "2",
             "is_special_pay": "0",
             "pay_status": "0",
             "is_loan_before_invoice": "1",
-            "customer_order_sn": "GIMBAL_TEST_35",
-            "order_sub_id": "328798447375220736",
-            "order_sub_no": "ZDD20260626016831",
+            "customer_order_sn": "GET_TEST_3",
+            "order_sub_id": "330185250288173056",
+            "order_sub_no": "ZDD20260630016876",
             "main_id": "31",
             "main_name": "青岛易汇智供应链管理有限公司",
             "service_project": "booking_space",
@@ -3047,7 +3047,7 @@
             "un_operable_amount": "0.00",
             "operable_flag": "all",
             "policy_type_name": "结算业务",
-            "order_sub_currency": "USD328798447375220736",
+            "order_sub_currency": "USD330185250288173056",
             "order_main_finance": "",
             "order_error_messages": [],
             "order_error_message": "",
@@ -3057,12 +3057,12 @@
                 "order_id": "327661182355767296",
                 "order_no": "YWDD20260623107343",
                 "customer_name": "兰森玻璃（青岛）有限公司",
-                "bl_no": "GIMBAL_TEST_35",
+                "bl_no": "GET_TEST_3",
                 "main_name": "青岛易汇智供应链管理有限公司",
                 "order_sub_no": "ZDD20260623016596",
                 "order_sub_id": "327661743511699456",
-                "order_fee_real_id": "328798527415123968",
-                "fee_real_no": "FY202606261291798",
+                "order_fee_real_id": "330185332941127680",
+                "fee_real_no": "FY202606301291994",
                 "fee_type": "0",
                 "service_project": "booking_space",
                 "fee_real_name": "海运费",
@@ -3161,13 +3161,13 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "75",
         "Content-Type": "application/json"
       },
       "request_body": {
         "confirm_type": 0,
-        "receive_account_id": "328798637733707776",
+        "receive_account_id": "330185438172020736",
         "order_ids": []
       },
       "bindings": {
@@ -3208,21 +3208,21 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "1334",
         "Content-Type": "application/json"
       },
       "request_body": {
         "confirm_type": 0,
-        "receive_account_id": "328798637733707776",
+        "receive_account_id": "330185438172020736",
         "confirm_list": [
           {
             "main_id": "1",
             "main_name": "青岛易航道物流科技有限公司",
             "symbol": "1",
             "settle_object_id": "665",
-            "order_ids": "328798388306837504",
-            "order_sub_ids": "328798511443214336",
+            "order_ids": "330185187394584576",
+            "order_sub_ids": "330185315954196480",
             "order_sub_types": "2",
             "unique_ids": "be31581f-d265-48d9-8f1a-68ae3e3b43ff",
             "receive_account_no": "",
@@ -3233,7 +3233,7 @@
             "order_sub_type": 1,
             "only_adjust_status": 0,
             "real_amount_ids": [
-              "328798527415126016"
+              "330185332941129728"
             ],
             "currency_list": [
               "USD"
@@ -3245,8 +3245,8 @@
             "main_name": "青岛易汇智供应链管理有限公司",
             "symbol": "0",
             "settle_object_id": "1",
-            "order_ids": "328798388306837504",
-            "order_sub_ids": "328798447375220736",
+            "order_ids": "330185187394584576",
+            "order_sub_ids": "330185250288173056",
             "order_sub_types": "0",
             "unique_ids": "be31581f-d265-48d9-8f1a-68ae3e3b43ff",
             "receive_account_no": "",
@@ -3257,7 +3257,7 @@
             "order_sub_type": 1,
             "only_adjust_status": 0,
             "real_amount_ids": [
-              "328798527415124992"
+              "330185332941128704"
             ],
             "currency_list": [
               "USD"
@@ -3316,7 +3316,7 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "3938",
         "Content-Type": "application/json"
       },
@@ -3345,7 +3345,7 @@
         "rate_type": "1",
         "usd_is_turn": "1",
         "order_fee_real_id": [
-          "328798527415123968"
+          "330185332941127680"
         ],
         "usd_requireinvoice_form": "",
         "usd_requireinvoice_type": "",
@@ -3392,7 +3392,7 @@
           "rate_list": [
             {
               "cost_name": "海运费",
-              "fee_real_no": "FY202606261291798",
+              "fee_real_no": "FY202606301291994",
               "cost_no": "0001",
               "invoice_rate": "6",
               "real_amount": "100.00",
@@ -3439,7 +3439,7 @@
         "debitno_file_id": [],
         "batch_order_remark": [
           {
-            "order_sub_id": "328798447375220736",
+            "order_sub_id": "330185250288173056",
             "currency": "USD"
           }
         ],
@@ -3449,7 +3449,7 @@
         "put_settle_object": "兰森玻璃（青岛）有限公司",
         "main_name_cn": "青岛易汇智供应链管理有限公司",
         "order_sub_id": [
-          "328798447375220736"
+          "330185250288173056"
         ],
         "sys_rate": "",
         "appoint_rate": "",
@@ -3500,7 +3500,7 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "3938",
         "Content-Type": "application/json"
       },
@@ -3529,7 +3529,7 @@
         "rate_type": "1",
         "usd_is_turn": "1",
         "order_fee_real_id": [
-          "328798527415123968"
+          "330185332941127680"
         ],
         "usd_requireinvoice_form": "",
         "usd_requireinvoice_type": "",
@@ -3576,7 +3576,7 @@
           "rate_list": [
             {
               "cost_name": "海运费",
-              "fee_real_no": "FY202606261291798",
+              "fee_real_no": "FY202606301291994",
               "cost_no": "0001",
               "invoice_rate": "6",
               "real_amount": "100.00",
@@ -3623,7 +3623,7 @@
         "debitno_file_id": [],
         "batch_order_remark": [
           {
-            "order_sub_id": "328798447375220736",
+            "order_sub_id": "330185250288173056",
             "currency": "USD"
           }
         ],
@@ -3633,7 +3633,7 @@
         "put_settle_object": "兰森玻璃（青岛）有限公司",
         "main_name_cn": "青岛易汇智供应链管理有限公司",
         "order_sub_id": [
-          "328798447375220736"
+          "330185250288173056"
         ],
         "sys_rate": "",
         "appoint_rate": "",
@@ -3684,7 +3684,7 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "4048",
         "Content-Type": "application/json"
       },
@@ -3713,7 +3713,7 @@
         "rate_type": "1",
         "usd_is_turn": "1",
         "order_fee_real_id": [
-          "328798527415123968"
+          "330185332941127680"
         ],
         "usd_requireinvoice_form": "",
         "usd_requireinvoice_type": "",
@@ -3760,7 +3760,7 @@
           "rate_list": [
             {
               "cost_name": "海运费",
-              "fee_real_no": "FY202606261291798",
+              "fee_real_no": "FY202606301291994",
               "cost_no": "0001",
               "invoice_rate": "6",
               "real_amount": "100.00",
@@ -3807,7 +3807,7 @@
         "debitno_file_id": [],
         "batch_order_remark": [
           {
-            "order_sub_id": "328798447375220736",
+            "order_sub_id": "330185250288173056",
             "currency": "USD"
           }
         ],
@@ -3817,7 +3817,7 @@
         "put_settle_object": "兰森玻璃（青岛）有限公司",
         "main_name_cn": "青岛易汇智供应链管理有限公司",
         "order_sub_id": [
-          "328798447375220736"
+          "330185250288173056"
         ],
         "sys_rate": "",
         "appoint_rate": "",
@@ -3876,7 +3876,7 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "116",
         "Content-Type": "application/json"
       },
@@ -3914,13 +3914,13 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "73",
         "Content-Type": "application/json"
       },
       "request_body": {
         "audit_ids": [
-          "328798672328327168"
+          "330185473563557888"
         ],
         "audit_status": 2,
         "audit_remark": null
@@ -3950,8 +3950,8 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
-        "Content-Length": "382",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
+        "Content-Length": "378",
         "Content-Type": "application/json"
       },
       "request_body": {
@@ -3964,7 +3964,7 @@
         ],
         "cancel_status": [],
         "bl_nos": [
-          "GIMBAL_TEST_35"
+          "GET_TEST_3"
         ],
         "customer_id": [],
         "put_settle_object_id": [],
@@ -4005,7 +4005,7 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "961",
         "Content-Type": "application/json"
       },
@@ -4019,7 +4019,7 @@
         "usd_amount": "",
         "invoice_exchange_rate": "1",
         "invoice_original": {
-          "file_id": "328798435165601792",
+          "file_id": "330185237004812288",
           "file_name": "6a3a09e08cfa9.pdf",
           "file_type": "pdf",
           "original_name": "电子发票（普通发票）兰森.pdf",
@@ -4073,13 +4073,13 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "880",
         "Content-Type": "application/json"
       },
       "request_body": [
         {
-          "invoice_number": "24920000000029640029",
+          "invoice_number": "24920000000029640035",
           "invoice_type": "1",
           "invoice_type_name": "增值税数电普通发票",
           "invoice_amount": "770.00",
@@ -4110,7 +4110,7 @@
         "extracts": [
           {
             "var": "receive_invoice_id",
-            "expression": "$.response_body.data.24920000000029640029",
+            "expression": "$.response_body.data.24920000000029640035",
             "scope": "scenario",
             "source_edge": true
           }
@@ -4143,16 +4143,16 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "162",
         "Content-Type": "application/json"
       },
       "request_body": {
-        "receive_invoice_apply_id": "328798686853201920",
+        "receive_invoice_apply_id": "330185486377156608",
         "invoice_arr": [
           {
-            "order_sub_id": "328798447375220736",
-            "receive_invoice_id": "328798705241030656"
+            "order_sub_id": "330185250288173056",
+            "receive_invoice_id": "330185503531859968"
           }
         ],
         "action": "check"
@@ -4192,16 +4192,16 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "163",
         "Content-Type": "application/json"
       },
       "request_body": {
-        "receive_invoice_apply_id": "328798686853201920",
+        "receive_invoice_apply_id": "330185486377156608",
         "invoice_arr": [
           {
-            "order_sub_id": "328798447375220736",
-            "receive_invoice_id": "328798705241030656"
+            "order_sub_id": "330185250288173056",
+            "receive_invoice_id": "330185503531859968"
           }
         ],
         "action": "submit"
@@ -4241,7 +4241,7 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "928",
         "Content-Type": "application/json"
       },
@@ -4251,11 +4251,11 @@
         "writeoff_object": [
           {
             "order_fee_real_id": [
-              "328798527415123968"
+              "330185332941127680"
             ],
             "un_writeoff_amount_cny": "0.00",
             "un_writeoff_amount_usd": "100.00",
-            "receive_invoice_id": "328798705241030656"
+            "receive_invoice_id": "330185503531859968"
           }
         ],
         "writeoff_name": "",
@@ -4317,7 +4317,7 @@
         "Accept-Encoding": "gzip, deflate",
         "Connection": "keep-alive",
         "User-Agent": "python-httpx/0.28.1",
-        "Authorization": "cuKT96H6zrLOvHYpevTdW2L3SflAyeBbCg+kUBANInE3NZ49tkuaXQTrUza2D4fO",
+        "Authorization": "wdelQYoBosJVTblJWtVJRCvORG0rxksgbZMfAMITFH+lOqV64OHzEq0Ze8V7u0jW",
         "Content-Length": "929",
         "Content-Type": "application/json"
       },
@@ -4327,11 +4327,11 @@
         "writeoff_object": [
           {
             "order_fee_real_id": [
-              "328798527415123968"
+              "330185332941127680"
             ],
             "un_writeoff_amount_cny": "0.00",
             "un_writeoff_amount_usd": "100.00",
-            "receive_invoice_id": "328798705241030656"
+            "receive_invoice_id": "330185503531859968"
           }
         ],
         "writeoff_name": "",
@@ -4488,6 +4488,836 @@
   ],
   "ignored_external": [
     {
+      "idx": 0,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "bl_no",
+      "consumer_path": "$.request_body.bl_no",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 0,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "ship_name",
+      "consumer_path": "$.request_body.ship_name",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 0,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "voy",
+      "consumer_path": "$.request_body.voy",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 0,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "customer_order_sn",
+      "consumer_path": "$.request_body.customer_order_sn",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 0,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "terms_shipment",
+      "consumer_path": "$.request_body.terms_shipment",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 0,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "shipper",
+      "consumer_path": "$.request_body.shipper",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 0,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "consignee",
+      "consumer_path": "$.request_body.consignee",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 0,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "notifier",
+      "consumer_path": "$.request_body.notifier",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 0,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "ship_mark",
+      "consumer_path": "$.request_body.ship_mark",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 0,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "commodity",
+      "consumer_path": "$.request_body.commodity",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 0,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "notes",
+      "consumer_path": "$.request_body.notes",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 1,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "bl_no",
+      "consumer_path": "$.request_body.bl_no",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 1,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "ship_name",
+      "consumer_path": "$.request_body.ship_name",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 1,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "voy",
+      "consumer_path": "$.request_body.voy",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 1,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "customer_order_sn",
+      "consumer_path": "$.request_body.customer_order_sn",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 1,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "terms_shipment",
+      "consumer_path": "$.request_body.terms_shipment",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 1,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "shipper",
+      "consumer_path": "$.request_body.shipper",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 1,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "consignee",
+      "consumer_path": "$.request_body.consignee",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 1,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "notifier",
+      "consumer_path": "$.request_body.notifier",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 1,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "ship_mark",
+      "consumer_path": "$.request_body.ship_mark",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 1,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "commodity",
+      "consumer_path": "$.request_body.commodity",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 1,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "notes",
+      "consumer_path": "$.request_body.notes",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 2,
+      "path": "/api/order/orderEntrust/orderPage",
+      "field": "bl_no",
+      "consumer_path": "$.request_body.bl_no",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 4,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "bl_no",
+      "consumer_path": "$.request_body.bl_no",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 4,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "ship_name",
+      "consumer_path": "$.request_body.ship_name",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 4,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "voy",
+      "consumer_path": "$.request_body.voy",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 4,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "customer_order_sn",
+      "consumer_path": "$.request_body.customer_order_sn",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 4,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "terms_shipment",
+      "consumer_path": "$.request_body.terms_shipment",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 4,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "shipper",
+      "consumer_path": "$.request_body.shipper",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 4,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "consignee",
+      "consumer_path": "$.request_body.consignee",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 4,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "notifier",
+      "consumer_path": "$.request_body.notifier",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 4,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "ship_mark",
+      "consumer_path": "$.request_body.ship_mark",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 4,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "commodity",
+      "consumer_path": "$.request_body.commodity",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 4,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "notes",
+      "consumer_path": "$.request_body.notes",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 5,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "bl_no",
+      "consumer_path": "$.request_body.bl_no",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 5,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "ship_name",
+      "consumer_path": "$.request_body.ship_name",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 5,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "voy",
+      "consumer_path": "$.request_body.voy",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 5,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "customer_order_sn",
+      "consumer_path": "$.request_body.customer_order_sn",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 5,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "terms_shipment",
+      "consumer_path": "$.request_body.terms_shipment",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 5,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "shipper",
+      "consumer_path": "$.request_body.shipper",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 5,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "consignee",
+      "consumer_path": "$.request_body.consignee",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 5,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "notifier",
+      "consumer_path": "$.request_body.notifier",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 5,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "ship_mark",
+      "consumer_path": "$.request_body.ship_mark",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 5,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "commodity",
+      "consumer_path": "$.request_body.commodity",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 5,
+      "path": "/api/order/orderEntrust/orderAdd",
+      "field": "notes",
+      "consumer_path": "$.request_body.notes",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 6,
+      "path": "/api/order/order/orderAdd",
+      "field": "bl_no",
+      "consumer_path": "$.request_body.bl_no",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 6,
+      "path": "/api/order/order/orderAdd",
+      "field": "ship_name",
+      "consumer_path": "$.request_body.ship_name",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 6,
+      "path": "/api/order/order/orderAdd",
+      "field": "voy",
+      "consumer_path": "$.request_body.voy",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 6,
+      "path": "/api/order/order/orderAdd",
+      "field": "customer_order_sn",
+      "consumer_path": "$.request_body.customer_order_sn",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 6,
+      "path": "/api/order/order/orderAdd",
+      "field": "terms_shipment",
+      "consumer_path": "$.request_body.terms_shipment",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 6,
+      "path": "/api/order/order/orderAdd",
+      "field": "shipper",
+      "consumer_path": "$.request_body.shipper",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 6,
+      "path": "/api/order/order/orderAdd",
+      "field": "consignee",
+      "consumer_path": "$.request_body.consignee",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 6,
+      "path": "/api/order/order/orderAdd",
+      "field": "notifier",
+      "consumer_path": "$.request_body.notifier",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 6,
+      "path": "/api/order/order/orderAdd",
+      "field": "ship_mark",
+      "consumer_path": "$.request_body.ship_mark",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 6,
+      "path": "/api/order/order/orderAdd",
+      "field": "commodity",
+      "consumer_path": "$.request_body.commodity",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 6,
+      "path": "/api/order/order/orderAdd",
+      "field": "notes",
+      "consumer_path": "$.request_body.notes",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 7,
+      "path": "/api/order/order/orderBook",
+      "field": "bl_no",
+      "consumer_path": "$.request_body.bl_no",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 7,
+      "path": "/api/order/order/orderBook",
+      "field": "ship_name",
+      "consumer_path": "$.request_body.ship_name",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 7,
+      "path": "/api/order/order/orderBook",
+      "field": "voy",
+      "consumer_path": "$.request_body.voy",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 7,
+      "path": "/api/order/order/orderBook",
+      "field": "customer_order_sn",
+      "consumer_path": "$.request_body.customer_order_sn",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 7,
+      "path": "/api/order/order/orderBook",
+      "field": "terms_shipment",
+      "consumer_path": "$.request_body.terms_shipment",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 7,
+      "path": "/api/order/order/orderBook",
+      "field": "shipper",
+      "consumer_path": "$.request_body.shipper",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 7,
+      "path": "/api/order/order/orderBook",
+      "field": "consignee",
+      "consumer_path": "$.request_body.consignee",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 7,
+      "path": "/api/order/order/orderBook",
+      "field": "notifier",
+      "consumer_path": "$.request_body.notifier",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 7,
+      "path": "/api/order/order/orderBook",
+      "field": "ship_mark",
+      "consumer_path": "$.request_body.ship_mark",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 7,
+      "path": "/api/order/order/orderBook",
+      "field": "commodity",
+      "consumer_path": "$.request_body.commodity",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 7,
+      "path": "/api/order/order/orderBook",
+      "field": "notes",
+      "consumer_path": "$.request_body.notes",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 8,
+      "path": "/api/order/order/orderAdd",
+      "field": "bl_no",
+      "consumer_path": "$.request_body.bl_no",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 8,
+      "path": "/api/order/order/orderAdd",
+      "field": "ship_name",
+      "consumer_path": "$.request_body.ship_name",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 8,
+      "path": "/api/order/order/orderAdd",
+      "field": "voy",
+      "consumer_path": "$.request_body.voy",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 8,
+      "path": "/api/order/order/orderAdd",
+      "field": "customer_order_sn",
+      "consumer_path": "$.request_body.customer_order_sn",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 8,
+      "path": "/api/order/order/orderAdd",
+      "field": "terms_shipment",
+      "consumer_path": "$.request_body.terms_shipment",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 8,
+      "path": "/api/order/order/orderAdd",
+      "field": "shipper",
+      "consumer_path": "$.request_body.shipper",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 8,
+      "path": "/api/order/order/orderAdd",
+      "field": "consignee",
+      "consumer_path": "$.request_body.consignee",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 8,
+      "path": "/api/order/order/orderAdd",
+      "field": "notifier",
+      "consumer_path": "$.request_body.notifier",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 8,
+      "path": "/api/order/order/orderAdd",
+      "field": "ship_mark",
+      "consumer_path": "$.request_body.ship_mark",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 8,
+      "path": "/api/order/order/orderAdd",
+      "field": "commodity",
+      "consumer_path": "$.request_body.commodity",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 8,
+      "path": "/api/order/order/orderAdd",
+      "field": "notes",
+      "consumer_path": "$.request_body.notes",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 28,
+      "path": "/api/finance/accountFee/financePutList",
+      "field": "bl_no",
+      "consumer_path": "$.request_body.bl_no",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 29,
+      "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+      "field": "bl_no",
+      "consumer_path": "$.request_body.select_list[0].bl_no",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 29,
+      "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+      "field": "ship_name",
+      "consumer_path": "$.request_body.select_list[0].ship_name",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 29,
+      "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+      "field": "voy",
+      "consumer_path": "$.request_body.select_list[0].voy",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 29,
+      "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+      "field": "customer_order_sn",
+      "consumer_path": "$.request_body.select_list[0].customer_order_sn",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
       "idx": 29,
       "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
       "field": "order_id",
@@ -4505,6 +5335,16 @@
       "value": "YWDD20260623107343",
       "declared_as": [
         "var.history_order_no"
+      ]
+    },
+    {
+      "idx": 29,
+      "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+      "field": "bl_no",
+      "consumer_path": "$.request_body.select_list[0].amount_list[0].bl_no",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
       ]
     },
     {
@@ -4530,6 +5370,46 @@
     {
       "idx": 30,
       "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+      "field": "bl_no",
+      "consumer_path": "$.request_body.select_list[0].bl_no",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 30,
+      "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+      "field": "ship_name",
+      "consumer_path": "$.request_body.select_list[0].ship_name",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 30,
+      "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+      "field": "voy",
+      "consumer_path": "$.request_body.select_list[0].voy",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 30,
+      "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+      "field": "customer_order_sn",
+      "consumer_path": "$.request_body.select_list[0].customer_order_sn",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
+      "idx": 30,
+      "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
       "field": "order_id",
       "consumer_path": "$.request_body.select_list[0].amount_list[0].order_id",
       "value": "327661182355767296",
@@ -4545,6 +5425,16 @@
       "value": "YWDD20260623107343",
       "declared_as": [
         "var.history_order_no"
+      ]
+    },
+    {
+      "idx": 30,
+      "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+      "field": "bl_no",
+      "consumer_path": "$.request_body.select_list[0].amount_list[0].bl_no",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
       ]
     },
     {
@@ -4588,6 +5478,16 @@
       ]
     },
     {
+      "idx": 38,
+      "path": "/api/Finance/ReceiveInvoiceBatch/applyPage",
+      "field": "bl_nos",
+      "consumer_path": "$.request_body.bl_nos[0]",
+      "value": "GET_TEST_3",
+      "declared_as": [
+        "var.bl_no"
+      ]
+    },
+    {
       "idx": 39,
       "path": "/api/finance/receiveInvoice/invoiceAddCheck",
       "field": "invoice_number",
@@ -4602,9 +5502,9 @@
       "path": "/api/finance/receiveInvoice/invoiceAdd",
       "field": "invoice_number",
       "consumer_path": "$.request_body[0].invoice_number",
-      "value": "24920000000029640029",
+      "value": "24920000000029640035",
       "declared_as": [
-        "var.invoice_number_add"
+        "var.invoice_number"
       ]
     },
     {

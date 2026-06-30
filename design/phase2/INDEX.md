@@ -66,13 +66,13 @@ PR-2.5  Phase 2 收口(review pipeline + 文档同步 + 基线)
 
 | PR | 文件 | 状态 | 关键产出 |
 |---|---|---|---|
-| 1 | [PR-2.0.md](PR-2.0.md) | 待执行 | `PlateManifest` + `to_dict`/`from_dict` + 字节级 pin |
-| 2 | [PR-2.1.md](PR-2.1.md) | 待执行 | HTTP 协议草案(URL 形态 + JSON schema + 错误码) |
-| 3 | [PR-2.2.md](PR-2.2.md) | 待执行 | `plate_client` 子包:fetch + cache + resolver + 离线 fallback |
-| 4 | [PR-2.3.md](PR-2.3.md) | 待执行 | 服务部署形态(进程模式 / 端口 / health check) |
-| 5 | [PR-2.4.md](PR-2.4.md) | 待执行 | GIMBAL 切换到 SDK(向后兼容的双轨期间) |
-| 6 | [PR-2.5.md](PR-2.5.md) | 待执行 | review pipeline 串联 + 文档同步 + 基线 |
-| 配套 | [DECISIONS.md](DECISIONS.md) | 已建立 | D15+ Phase 2 决策 |
+| 1 | [PR-2.0.md](PR-2.0.md) | ✅ 已实现 | `PlateManifest` + `to_dict`/`from_dict` + 字节级 pin |
+| 2 | [PR-2.1.md](PR-2.1.md) | ✅ 已实现 | HTTP 协议草案(URL 形态 + JSON schema + 错误码) |
+| 3 | [PR-2.2.md](PR-2.2.md) | ✅ 已实现 | `plate_client` 子包:fetch + cache + resolver + 离线 fallback |
+| 4 | [PR-2.3.md](PR-2.3.md) | ✅ 已实现 | 服务部署形态(进程模式 / 端口 / health check) |
+| 5 | [PR-2.4.md](PR-2.4.md) | ✅ 已实现 | `Plate/facade/` 子包 + GIMBAL 切换到 SDK(向后兼容的双轨期间) |
+| 6 | [PR-2.5.md](PR-2.5.md) | ✅ 已收口 | review pipeline 串联 + 文档同步 + 基线(BASELINE.md) |
+| 配套 | [DECISIONS.md](DECISIONS.md) | ✅ 已建立 | D15–D27 + D25c–D27c 汇总(本收口 PR 补齐) |
 
 ---
 
@@ -80,13 +80,13 @@ PR-2.5  Phase 2 收口(review pipeline + 文档同步 + 基线)
 
 | PR | 估计工作量 | 状态 |
 |---|---|---|
-| PR-2.0 | 1.5 PD | 待执行(地基,必须最先做) |
-| PR-2.1 | 1 PD | 待执行(协议,后续 SDK 与服务端并行) |
-| PR-2.2 | 2 PD | 待执行(SDK,最复杂) |
-| PR-2.3 | 1 PD | 待执行(部署 + E2E) |
-| PR-2.4 | 1.5 PD | 待执行(GIMBAL 切换,真风险点) |
-| PR-2.5 | 1 PD | 待执行(收口) |
-| **总计** | **8 PD** | |
+| PR-2.0 | 1.5 PD | ✅ 已实现 |
+| PR-2.1 | 1 PD | ✅ 已实现 |
+| PR-2.2 | 2 PD | ✅ 已实现 |
+| PR-2.3 | 1 PD | ✅ 已实现 |
+| PR-2.4 | 1.5 PD | ✅ 已实现 |
+| PR-2.5 | 1 PD | ✅ 已收口(BASELINE.md + DECISIONS.md + INDEX.md 同步) |
+| **总计** | **8 PD** | **全部完成** |
 
 ---
 

@@ -5,7 +5,7 @@
     "unique_paths": 24,
     "kept": 45,
     "dropped": 0,
-    "lineage_edges": 96,
+    "lineage_edges": 87,
     "external_matches": 103,
     "open_gaps": 0,
     "scaffold_used": true,
@@ -500,14 +500,6 @@
       "field": "order_id"
     },
     {
-      "value": "330185187394584576",
-      "producer_idx": 2,
-      "producer_path": "$.response_body.data.data[0].order_id",
-      "consumer_idx": 4,
-      "consumer_path": "$.request_body.order_id",
-      "field": "order_id"
-    },
-    {
       "value": "YWDD20260630107547",
       "producer_idx": 2,
       "producer_path": "$.response_body.data.data[0].order_no",
@@ -532,14 +524,6 @@
       "field": "order_id"
     },
     {
-      "value": "330185187394584576",
-      "producer_idx": 2,
-      "producer_path": "$.response_body.data.data[0].order_id",
-      "consumer_idx": 5,
-      "consumer_path": "$.request_body.order_id",
-      "field": "order_id"
-    },
-    {
       "value": "YWDD20260630107547",
       "producer_idx": 2,
       "producer_path": "$.response_body.data.data[0].order_no",
@@ -564,14 +548,6 @@
       "field": "order_id"
     },
     {
-      "value": "330185187394584576",
-      "producer_idx": 2,
-      "producer_path": "$.response_body.data.data[0].order_id",
-      "consumer_idx": 6,
-      "consumer_path": "$.request_body.order_id",
-      "field": "order_id"
-    },
-    {
       "value": "YWDD20260630107547",
       "producer_idx": 2,
       "producer_path": "$.response_body.data.data[0].order_no",
@@ -593,14 +569,6 @@
       "producer_path": "$.response_body.data.data[0].order_id",
       "consumer_idx": 7,
       "consumer_path": "$.request_body.supplier[0].order_id",
-      "field": "order_id"
-    },
-    {
-      "value": "330185187394584576",
-      "producer_idx": 2,
-      "producer_path": "$.response_body.data.data[0].order_id",
-      "consumer_idx": 7,
-      "consumer_path": "$.request_body.order_id",
       "field": "order_id"
     },
     {
@@ -633,14 +601,6 @@
       "producer_path": "$.response_body.data.data[0].order_id",
       "consumer_idx": 8,
       "consumer_path": "$.request_body.supplier[0].order_id",
-      "field": "order_id"
-    },
-    {
-      "value": "330185187394584576",
-      "producer_idx": 2,
-      "producer_path": "$.response_body.data.data[0].order_id",
-      "consumer_idx": 8,
-      "consumer_path": "$.request_body.order_id",
       "field": "order_id"
     },
     {
@@ -972,14 +932,6 @@
       "field": "real_amount_ids"
     },
     {
-      "value": "330185187394584576",
-      "producer_idx": 2,
-      "producer_path": "$.response_body.data.data[0].order_id",
-      "consumer_idx": 32,
-      "consumer_path": "$.request_body.confirm_list[1].order_ids",
-      "field": "order_ids"
-    },
-    {
       "value": "330185250288173056",
       "producer_idx": 9,
       "producer_path": "$.response_body.data.order_sub[0].order_sub_id",
@@ -1028,14 +980,6 @@
       "field": "order_sub_id"
     },
     {
-      "value": "330185250288173056",
-      "producer_idx": 9,
-      "producer_path": "$.response_body.data.order_sub[0].order_sub_id",
-      "consumer_idx": 33,
-      "consumer_path": "$.request_body.order_sub_id[0]",
-      "field": "order_sub_id"
-    },
-    {
       "value": "330185332941127680",
       "producer_idx": 16,
       "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
@@ -1068,14 +1012,6 @@
       "field": "order_sub_id"
     },
     {
-      "value": "330185250288173056",
-      "producer_idx": 9,
-      "producer_path": "$.response_body.data.order_sub[0].order_sub_id",
-      "consumer_idx": 34,
-      "consumer_path": "$.request_body.order_sub_id[0]",
-      "field": "order_sub_id"
-    },
-    {
       "value": "330185332941127680",
       "producer_idx": 16,
       "producer_path": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
@@ -1105,14 +1041,6 @@
       "producer_path": "$.response_body.data.order_sub[0].order_sub_id",
       "consumer_idx": 35,
       "consumer_path": "$.request_body.batch_order_remark[0].order_sub_id",
-      "field": "order_sub_id"
-    },
-    {
-      "value": "330185250288173056",
-      "producer_idx": 9,
-      "producer_path": "$.response_body.data.order_sub[0].order_sub_id",
-      "consumer_idx": 35,
-      "consumer_path": "$.request_body.order_sub_id[0]",
       "field": "order_sub_id"
     },
     {
