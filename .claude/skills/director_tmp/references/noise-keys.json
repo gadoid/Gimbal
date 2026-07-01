@@ -1,0 +1,17 @@
+{
+  "description": "键级排除清单。命中的字段名（取 JSONPath 最后一段，数组下标已剥离）在 analyze_flow.py 阶段直接被剔除出 lineage 分析——既不作为 producer 候选，也不作为 consumer/gap 候选，无论它的值是什么。这是和值匹配完全独立的判断维度：值匹配解决'这个值是不是外部声明的输入'，这里解决'这个字段本身的语义就不是业务标识，不值得追踪'。允许持续人工补充，新增链路捕获中遇到的链路追踪/审计噪声字段时直接加进来。",
+  "keys": [
+    "request_id",
+    "request_no",
+    "trace_id",
+    "traceId",
+    "msg",
+    "message",
+    "timestamp",
+    "ts",
+    "server_time",
+    "sign",
+    "signature",
+    "nonce"
+  ]
+}

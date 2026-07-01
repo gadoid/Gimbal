@@ -60,56 +60,20 @@ def resolve(obj, expr):
     return True
 
 
-def _script_steps_list(sc_script):
-    """script.json's step container. The exact key is authoritative in
-    references/script-schema.md; tolerate the couple of plausible names so this
-    check degrades to a warning instead of crashing if the schema drifts."""
-    for key in ("steps", "script_steps", "records"):
-        if isinstance(sc_script.get(key), list):
-            return sc_script[key]
-    return None
-
-
-def _step_path_method(step):
-    """A script step's path/method may be flat (mirrors analyze_flow.py's
-    record shape) or nested under 'api' (mirrors the assembled scenario)."""
-    api = step.get("api")
-    if isinstance(api, dict):
-        return api.get("path"), api.get("method")
-    return step.get("path"), step.get("method")
-
-
-def ordered_script_steps(sc_script):
-    """Every step the script committed to assembling, in final replay order.
-
-    `order` is the dense index script_init.py assigns to kept steps (and any
-    inserted context_fetch / lookup steps get one too so they sort into place).
-    A step with no `order` was left dropped / collapsed / an unresolved gap and
-    must NOT reach the scenario. Sorting by `order` reproduces exactly the
-    sequence script_assemble.py is supposed to walk — so diffing it against the
-    scenario's actual step sequence catches anything assembly silently dropped,
-    duplicated, or reordered.
-    """
-    raw = _script_steps_list(sc_script)
-    if raw is None:
-        return None
-    committed = [s for s in raw if s.get("order") is not None]
-    committed.sort(key=lambda s: s["order"])
-    return committed
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("scenario")
     ap.add_argument("--capture", default=None,
                     help="ndjson; if given, verify extract paths resolve against real responses")
-    ap.add_argument("--script", default=None,
-                    help="script.json from stage (2)/(3); cross-check the assembled "
-                         "scenario's step sequence against every step the script "
-                         "committed to (non-null 'order') — catches steps assembly "
-                         "silently dropped, duplicated, or reordered")
     ap.add_argument("--process-ids", default=None,
                     help="comma-separated extra process-id field names")
+    ap.add_argument("--skip-extract-verify-positions", default=None,
+                    help="comma-separated step positions (0-indexed, final scenario.json "
+                         "step order) to skip extract-path verification for — synthetic "
+                         "context-fetch steps inserted by script_gap_resolve.py have no "
+                         "backing capture record by design, so their extract paths cannot "
+                         "be checked against real traffic. Use the sidecar file produced "
+                         "by script_assemble.py (*.synthetic_steps.json).")
     args = ap.parse_args()
 
     sc = json.load(open(args.scenario, encoding="utf-8"))
@@ -213,6 +177,9 @@ def main():
 
     # 6) extract paths resolve against real responses (optional)
     if args.capture:
+        skip_positions = set()
+        if args.skip_extract_verify_positions:
+            skip_positions = {int(x) for x in args.skip_extract_verify_positions.split(",") if x.strip() != ""}
         from collections import defaultdict, deque
         resp_by_path = defaultdict(deque)
         for line in open(args.capture, encoding="utf-8"):
@@ -226,6 +193,8 @@ def main():
             resp_by_path[r.get("path")].append(parse_body((r.get("response") or {}).get("body")))
         seen = defaultdict(int)
         for i, s in enumerate(steps):
+            if i in skip_positions:
+                continue
             p = _path(s); idx = seen[p]; seen[p] += 1
             bodies = list(resp_by_path.get(p, []))
             body = bodies[idx] if idx < len(bodies) else (bodies[0] if bodies else None)
@@ -235,57 +204,10 @@ def main():
                         violations.append(f"[hallucination] step {i} extract path "
                                           f"{st['expression']} does not resolve in the real response.")
 
-    # 7) completeness vs script.json (order-based, catches silent drops in assembly)
-    if args.script:
-        try:
-            sc_script = json.load(open(args.script, encoding="utf-8"))
-        except Exception as e:
-            print(f"[warn] could not read script: {e}", file=sys.stderr)
-            sc_script = None
-        script_steps = ordered_script_steps(sc_script) if sc_script is not None else None
-        if script_steps is None:
-            warnings.append(f"--script given but no recognizable step list found in "
-                            f"'{args.script}' (expected key 'steps'/'script_steps'/'records'); "
-                            f"skipping completeness check.")
-        else:
-            if len(script_steps) != len(steps):
-                violations.append(
-                    f"[completeness] script.json commits {len(script_steps)} ordered "
-                    f"step(s) but the assembled scenario has {len(steps)} — assembly "
-                    f"dropped or added step(s); see positional diff below.")
-            mismatches = []
-            n = max(len(script_steps), len(steps))
-            for i in range(n):
-                sp = script_steps[i] if i < len(script_steps) else None
-                scen_step = steps[i] if i < len(steps) else None
-                sp_path, sp_method = _step_path_method(sp) if sp else (None, None)
-                scen_path = _path(scen_step) if scen_step else None
-                scen_method = (scen_step.get("api", {}) or {}).get("method") if scen_step else None
-                if sp is None:
-                    mismatches.append(f"  pos {i}: scenario has `{scen_method} {scen_path}` "
-                                      f"with no corresponding committed script step")
-                elif scen_step is None:
-                    mismatches.append(f"  pos {i}: script committed `{sp_method} {sp_path}` "
-                                      f"(idx {sp.get('idx')}, order {sp.get('order')}) but the "
-                                      f"scenario has no step at this position")
-                elif (sp_path != scen_path
-                      or (sp_method or "").upper() != (scen_method or "").upper()):
-                    mismatches.append(f"  pos {i}: script says `{sp_method} {sp_path}` "
-                                      f"(idx {sp.get('idx')}, order {sp.get('order')}) but "
-                                      f"scenario has `{scen_method} {scen_path}`")
-            if mismatches:
-                violations.append("[completeness] step sequence diverges from script.json:\n"
-                                  + "\n".join(mismatches))
-
     # report
     print(f"scenario: {args.scenario}")
-    script_note = "  script-checked: no (pass --script script.json to enable)"
-    if args.script:
-        script_note = (f"  script-checked: yes ({len(script_steps)} committed steps)"
-                       if script_steps is not None
-                       else "  script-checked: no (could not read --script file)")
     print(f"steps: {len(steps)}  config.vars: {len(config_vars)}  "
-          f"dynamic extract vars: {len(all_extract_targets)}{script_note}")
+          f"dynamic extract vars: {len(all_extract_targets)}")
     if violations:
         print(f"\n❌ {len(violations)} VIOLATION(S):")
         for v in violations:

@@ -16,25 +16,42 @@
 
 ---
 
-## 0. 全局现象: 空壳化
+## 0. 全局现象: 扩展预留位 (Extension-Reserved)
 
-约 30% (7+ 个) 子包几乎全部由 1 行 docstring 守护的 stub 文件组成:
+> **2026-07-01 修正**: 此前本章把 6 个子包误判为 "100% 空壳 / 未实现"。经用户复核与 `core/*` import 图核对, 这 6 个子包实为**预留扩展位**, Engine 主流程**不依赖**它们。本章修正口径。
 
-| 子包 | 空壳比例 |
-|---|---|
-| `compiler/` (compiler.py / assembler.py / validators.py) | 100% |
-| `suite/` (environment.py / manager.py / plan.py / selector.py) | 100% |
-| `scheduler/` (scheduler.py / retry.py / concurrency.py / dependency.py) | 100% |
-| `observability/` (tracer.py / logger.py / metrics.py / snapshot_recorder.py) | 100% |
-| `observability/backends/` (skywalking/graylog/prometheus.py) | 100% |
-| `resource/` (manager.py / provider_base.py) | 100% |
-| `ai/` (assistant_base.py / providers/anthropic.py) | 100% |
-| `repository/backends/mysql.py` / `python_module.py` | 100% |
+### 0.1 修正后的分类
 
-**Finding 0.A — 空壳子包误导性**: 架构已规划到 README 层级, 但 ~1/3 子包未实现。
-- **P**: P1 结构
-- **PR**: PR-4.6
-- **建议**: `__stub__ = True` + `__getattr__` raise NotImplementedError; 或迁 README 到 `docs/roadmap.md`。
+| 子包 | 文件结构 | 主流程依赖 | 修正后分类 |
+|---|---|---|---|
+| `compiler/` | compiler.py / 3 parsers / assembler / validators | ❌ Engine 不 import | **扩展预留 (phase5+)** |
+| `suite/` | manager / selector / plan / environment | ❌ Engine 不 import | **扩展预留 (phase5+)** |
+| `scheduler/` | scheduler / concurrency / dependency / retry | ❌ Engine 不 import | **扩展预留 (phase5+)** |
+| `observability/` | logger / tracer / metrics / 3 backends | ❌ Engine 不 import (Engine 用 `gimbal.log`) | **扩展预留 + 部分重复实现** |
+| `resource/` | manager / handle / provider_base / 4 providers | ❌ Engine 不 import | **扩展预留 (phase5+)** |
+| `ai/` | assistant_base / anthropic provider / 3 prompts | ❌ Engine 不 import | **扩展预留 (phase5+)** |
+| `repository/backends/mysql.py` / `python_module.py` | backend 文件存在 | 🟡 已注册到 Protocol | **半实现, PR-4.1 收尾** |
+
+### 0.2 修正前的误判
+
+原 Review 把这些子包归类为 "**100% 空壳** / **未实现**", 提议:
+- `__stub__ = True` + `__getattr__` raise NotImplementedError
+- 或迁 README 到 `docs/roadmap.md`
+
+用户反馈("很多空包最多算作后续扩展预留, 而不算未实现, 主要功能框架已经完全跑通了")纠正了这一判断。
+
+### 0.3 修正后的处理
+
+**Finding 0.A — 扩展预留与主流程的边界标注缺失**:
+- **P**: P2 文档(从 P1 结构降级)
+- **PR**: PR-4.6(范围大幅收窄)
+- **建议**:
+  - 6 个子包**保留全部源码**, 不删不退
+  - 子包 `__init__.py` 顶部加 `STATUS = "extension-reserved"` 常量与 `# Extension: 不被 Engine 主流程调用, 见 docs/extensions.md` 注释
+  - 新建 `docs/extensions.md`, 列出 6 个扩展位的 phase5 接入计划
+  - `tools/check_no_extension_leak.py` CI 校验 `gimbal/core/*` 不 import 任何扩展子包
+  - `observability/` 例外: `logger.py` 应**桥接到** `gimbal.log` 的 backend 选项, 避免双重实现
+- **PR 工时修正**: 2.5 PD → **1 PD**
 
 ---
 
@@ -419,12 +436,18 @@ source/inline/normalize 互相拷贝。
 
 ---
 
-## 14. `compiler / scheduler / observability / resource / ai` — 100% 空壳
+## 14. `compiler / scheduler / observability / resource / ai` — 扩展预留位 (修正后)
 
-> 见 §0.
-- **P**: P1 结构
-- **PR**: PR-4.6
-- **建议**: 决策三选一 (delete / stub / move-to-roadmap)
+> **2026-07-01 修正**: 此前标 "100% 空壳" 是误判, 详 §0 与 [DECISIONS.md §D34](DECISIONS.md#d34--扩展预留子包与主流程的边界标注)。
+> 这 6 个子包是预留扩展位, Engine 主流程不依赖, 不构成 P1 结构债。
+- **P**: P2 文档(从 P1 结构降级)
+- **PR**: PR-4.6(范围从 "三选一决策" 收窄为 "加 STATUS 标注 + docs/extensions.md + CI 校验")
+- **建议**:
+  - 全部源码保留, 不删不退
+  - 加 `STATUS = "extension-reserved"` 常量
+  - 加 `docs/extensions.md` 与 phase5 路线对齐
+  - `observability/logger.py` 桥接到 `gimbal.log` backend
+  - CI 校验 `gimbal/core/*` 不 import 扩展子包
 
 ---
 
@@ -547,7 +570,7 @@ Engine 串行 / bus 用 ThreadPoolExecutor / server fork / scheduler 留空, 没
 6. **(P1 重构)** PR-4.4 — preprocessor 拆 5 phase
 7. **(P1 实现)** PR-4.3 — Engine 接入 retry / parallel / timeout
 8. **(P1 测试)** PR-4.5 — 核心模块测试骨架
-9. **(P1 结构)** PR-4.6 — 空壳子包决策
+9. **(P2 文档, 修正后)** PR-4.6 — 扩展预留位标注 (`STATUS = "extension-reserved"` + `docs/extensions.md` + CI 校验)
 10. **(P2 文档)** PR-4.7 — `docs/status.md` + BootstrapConfig 拆分
 11. **(P2 收口)** PR-4.8 — baseline + review pipeline
 
@@ -570,7 +593,7 @@ Engine 串行 / bus 用 ThreadPoolExecutor / server fork / scheduler 留空, 没
 | `auth/` | 6.5 | 5.0 | 0.5 | 4.5 | 5.0 |
 | `cli/` | 7.0 | 5.5 | 1.0 | 5.0 | 6.0 |
 | `config/` | 7.5 | 7.0 | 1.0 | 6.0 | 5.5 |
-| `compiler/scheduler/observability/resource/ai` | — | — | — | — | — |
+| `compiler/scheduler/observability/resource/ai` (扩展预留) | 6.0 (有骨架, 未接入) | 4.0 | 0.0 | 5.0 | 6.0 |
 | `log/ + utils/jsonpath.py` | 8.0 | 8.0 | 2.0 | 5.5 | 6.0 |
 | `exceptions.py` | 8.0 | 8.0 | N/A | 6.0 | 6.0 |
 | `tests/` | 3.0 | 3.5 | — | — | — |
@@ -599,14 +622,26 @@ Engine 串行 / bus 用 ThreadPoolExecutor / server fork / scheduler 留空, 没
 
 ## 附录 C: 结语
 
-GIMBAL 是一个架构意图清晰、实现部分跟上的框架: 底层抽象做得到位, 但**文档 vs 实现差距大、测试覆盖薄、空壳子包多, 外加 1 处明文账号泄露**。
+> **2026-07-01 修正**: 原结语里"空壳子包多"的表述需修正。经用户复核, 6 个 `compiler / suite / scheduler / observability / resource / ai` 子包实为**预留扩展位**, Engine 主流程**不依赖**, 不构成 P1 结构债。详 §0 / §14 与 [DECISIONS.md §D34](DECISIONS.md#d34--扩展预留子包与主流程的边界标注)。
+
+**修正后的总体评价**:
+
+GIMBAL 是一个架构意图清晰、**主流程已跑通**的框架: Engine + ScenarioRunner + StepStateMachine + Strategy + ContextManager + Repository + Reporter + Auth + CLI 全部连成可工作路径。但仍有三块主流程债待补:
+
+1. **🔴 P0 安全** — `auth/wl.py:67-74` 明文生产密码 (`yhd123456!`)
+2. **🔴 P0 数据** — `AssetStore.remove()` 不 GC blob
+3. **🔴 P0 基础** — CLI 模块级 `_cancelled` + `scenario_runner` 反向 import
+4. **🟡 P1 实现** — Engine 缺 retry / parallel / multi-service (README 承诺但未实现)
+5. **🟡 P1 测试** — 核心模块覆盖 ~5%
+
+扩展预留子包(`compiler / suite / scheduler / observability / resource / ai`)不计入债, 是 phase5+ 的扩展点。
 
 后续如果做迭代, 最具杠杆的方向是:
 
 1. 安全 finding (§11.A) 必须立刻清 (PR-4.0)
 2. asset store GC 与多 backend (PR-4.1) — README 承诺却未实现的最大欠债
 3. 测试骨架 (PR-4.5) — 给核心模块铺 fixture, 5 个 module × 5 case 是 25 个文件
-4. 空壳子包决策 (PR-4.6) — 6 个子包是"删 / 写"二选一
-5. 文档 status (PR-4.7) — 固化 feature × status 矩阵
+4. **(修正后)** 扩展预留位标注 (PR-4.6) — 加 `STATUS = "extension-reserved"` + `docs/extensions.md` + CI 校验, **不再做"删/写"决策**
+5. 文档 status (PR-4.7) — 固化 feature × status 矩阵, 主流程 vs 扩展预留分两栏
 
 具体见 [INDEX.md](INDEX.md) 路线与 [DECISIONS.md](DECISIONS.md) 决策。

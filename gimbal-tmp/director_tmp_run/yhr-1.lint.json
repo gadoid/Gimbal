@@ -1,0 +1,19 @@
+{
+  "script": "D:\\Gimbal\\Gimbal\\gimbal-tmp\\director_tmp_run\\yhr-1.script.json",
+  "kept_steps": 25,
+  "extract_vars": [
+    "audit_id",
+    "audit_id_2",
+    "bl_no",
+    "code",
+    "file_id",
+    "order_container_id",
+    "order_fee_real_ids",
+    "order_id",
+    "order_no",
+    "order_supplier_id"
+  ],
+  "violations": [],
+  "warnings": [],
+  "verdict": "pass"
+}

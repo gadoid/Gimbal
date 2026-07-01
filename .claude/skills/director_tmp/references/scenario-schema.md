@@ -17,6 +17,35 @@ example — when in doubt, mirror it.
 }
 ```
 
+## Two variable namespaces (static vs dynamic) — CRITICAL, READ FIRST
+
+GIMBAL resolves values in two distinct phases. Do not mix them. Misplacing
+a single value (e.g. putting `order_id` in `config.vars` instead of wiring
+it through `extract`/`assign`) is the single most common scenario bug.
+
+1. **Static — `${var.x}` / `${auth.x.token}`**: substituted from `config.vars`
+   / `config.users` **before the run starts**. Use ONLY for test inputs known
+   ahead of time and constant for the whole run: `bl_no`, account/login,
+   and master-data ids you merely *select* (customer/policy/supplier/carrier/
+   country id). These never change as the flow executes.
+
+2. **Dynamic — scenario context via `extract` → `assign`**: a value produced
+   by one step's response (`extract` `target` = a context variable) and
+   injected into a later request **at runtime** (`assign` `source: $.x` →
+   `target: $.request_body...`). Use for every value the business process
+   *generates or mutates* as it runs.
+
+**Hard rule:** any id created/changed during the flow — `order_id`, `order_no`,
+`order_sub_id`, `order_sub_no`, `order_fee_real_id`, `audit_id`,
+`receive_account_id`, `finance_id`, `apply_id`, `batch_id`, … — is **dynamic**.
+It MUST be wired through `extract`/`assign` and MUST NOT be placed in
+`config.vars` or referenced as `${var.<that id>}`. A name that appears as an
+`extract` target must never also be a `config.var`. Run
+`scripts/validate_scenario.py` to enforce this mechanically.
+
+Rule of thumb: if the value is the same on every run → `${var.x}`. If it is
+born from a response during the run → `extract`/`assign`.
+
 ## Step
 
 ```jsonc
@@ -120,33 +149,6 @@ The linter flags any scenario field written more than once.
 
 **Pairing rule:** every `assign.source` ($.var) must have a matching upstream
 `extract.target` (var) on an earlier step. No dangling references.
-
-## Two variable namespaces (static vs dynamic) — CRITICAL
-
-GIMBAL resolves values in two distinct phases. Do not mix them.
-
-1. **Static — `${var.x}` / `${auth.x.token}`**: substituted from `config.vars`
-   / `config.users` **before the run starts**. Use ONLY for test inputs known
-   ahead of time and constant for the whole run: `bl_no`, account/login,
-   and master-data ids you merely *select* (customer/policy/supplier/carrier/
-   country id). These never change as the flow executes.
-
-2. **Dynamic — scenario context via `extract` → `assign`**: a value produced
-   by one step's response (`extract` `target` = a context variable) and
-   injected into a later request **at runtime** (`assign` `source: $.x` →
-   `target: $.request_body...`). Use for every value the business process
-   *generates or mutates* as it runs.
-
-**Hard rule:** any id created/changed during the flow — `order_id`, `order_no`,
-`order_sub_id`, `order_sub_no`, `order_fee_real_id`, `audit_id`,
-`receive_account_id`, `finance_id`, `apply_id`, `batch_id`, … — is **dynamic**.
-It MUST be wired through `extract`/`assign` and MUST NOT be placed in
-`config.vars` or referenced as `${var.<that id>}`. A name that appears as an
-`extract` target must never also be a `config.var`. Run
-`scripts/validate_scenario.py` to enforce this mechanically.
-
-Rule of thumb: if the value is the same on every run → `${var.x}`. If it is
-born from a response during the run → `extract`/`assign`.
 
 ## Templating conventions
 
