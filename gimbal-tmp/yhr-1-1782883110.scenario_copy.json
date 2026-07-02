@@ -3,17 +3,18 @@
   "scenarioId": "e2e订单到应收核销",
   "meta": {
     "name": "全链路-订单创建至应收核销-正常",
-    "description": "验证从订单委托创建、订舱、生成子单、费用锁定与审核、变更开票申请审核、收款账户确认、批次开票申请审核、发票录入到应收核销的全链路在正常路径下均返回200且关键业务标识在各环节间正确传递",
+    "description": "从yhr-1-1782883110.ndjson 提取的45个API调用，按场景数据驱动方式重组：订单委托保存与提交、订单与委托分页查询、订单详情、订舱、实付金额切换/编辑/锁定、生成子单、审核分页/详情/执行。各步骤均校验返回200。",
     "module": "settlement",
     "priority": 1,
     "author": "codfish",
     "owner": "codfish",
     "tags": [
       "smoke",
-      "settlement"
+      "settlement",
+      "ndjson-driven"
     ],
     "version": "1.0.0",
-    "createTime": "2026-06-23T10:00:00",
+    "createTime": "2026-07-01T13:30:00",
     "expire": false,
     "requirementRef": []
   },
@@ -24,7 +25,7 @@
       "tidb-test-service": "https://fin-tidb.21eflag.com/"
     },
     "vars": {
-      "bl_no": "YHRGIMBAL00042"
+      "bl_no": "YHRGIMBAL00037"
     },
     "users": {
       "codfish": {
@@ -44,21 +45,15 @@
   "steps": [
     {
       "kind": "step",
-      "description": "mutation verb",
+      "description": "订单委托orderAdd-check",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderEntrust/orderAdd",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -167,7 +162,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_0",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -182,21 +177,15 @@
     },
     {
       "kind": "step",
-      "description": "mutation verb",
+      "description": "订单委托orderAdd-submit",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderEntrust/orderAdd",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -305,7 +294,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_1",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -320,21 +309,15 @@
     },
     {
       "kind": "step",
-      "description": "produces downstream id(s): order_id, order_no",
+      "description": "订单委托分页查询",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderEntrust/orderPage",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -351,7 +334,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_2",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -361,52 +344,64 @@
           "expected": 200,
           "message": "/api/order/orderEntrust/orderPage 应返回200",
           "soft": false
-        },
-        {
-          "kind": "extract",
-          "name": "extract_order_id",
-          "phase": "after_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].order_id",
-          "target": "order_id",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
-        },
-        {
-          "kind": "extract",
-          "name": "extract_order_no",
-          "phase": "after_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].order_no",
-          "target": "order_no",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "produces downstream id(s): order_supplier_id",
+      "description": "订单委托分页查询",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/orderEntrust/orderPage",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page_no": 1,
+          "page_size": 20,
+          "order_no": "",
+          "customer_id": [],
+          "bl_nos": [],
+          "bl_no": "${var.bl_no}",
+          "sort_field": "update_time",
+          "sort_order": "desc",
+          "params": {}
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_3",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/orderEntrust/orderPage 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "订单详情",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/order/orderDetail",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -419,7 +414,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_4",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -429,50 +424,20 @@
           "expected": 200,
           "message": "/api/order/order/orderDetail 应返回200",
           "soft": false
-        },
-        {
-          "kind": "extract",
-          "name": "extract_order_supplier_id",
-          "phase": "after_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.supplier[0].order_supplier_id",
-          "target": "order_supplier_id",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "mutation verb",
+      "description": "订单委托orderAdd-check",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderEntrust/orderAdd",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -751,7 +716,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_5",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -761,70 +726,20 @@
           "expected": 200,
           "message": "/api/order/orderEntrust/orderAdd 应返回200",
           "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_supplier_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_supplier_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 2,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_no",
-          "phase": "before_request",
-          "order": 3,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_no",
-          "target": "$.request_body.order_no",
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "mutation verb",
+      "description": "订单委托orderAdd-submit",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderEntrust/orderAdd",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -1103,7 +1018,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_6",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -1113,70 +1028,144 @@
           "expected": 200,
           "message": "/api/order/orderEntrust/orderAdd 应返回200",
           "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_supplier_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_supplier_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 2,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_no",
-          "phase": "before_request",
-          "order": 3,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_no",
-          "target": "$.request_body.order_no",
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "produces downstream id(s): order_container_id",
+      "description": "订单委托分页查询",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/orderEntrust/orderPage",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page_no": 1,
+          "page_size": 20,
+          "order_no": "",
+          "customer_id": [],
+          "bl_nos": [],
+          "bl_no": "${var.bl_no}",
+          "sort_field": "update_time",
+          "sort_order": "desc",
+          "params": {}
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_7",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/orderEntrust/orderPage 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "订单分页查询",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderPage",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page_no": 1,
+          "page_size": 20,
+          "sort_field": "update_time",
+          "sort_order": "desc",
+          "params": {}
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_8",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/order/orderPage 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "订单分页查询",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderPage",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page_no": 1,
+          "page_size": 20,
+          "sort_field": "update_time",
+          "sort_order": "desc",
+          "params": {}
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_9",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/order/orderPage 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "订单详情",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/order/orderDetail",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -1189,7 +1178,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_10",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -1199,50 +1188,20 @@
           "expected": 200,
           "message": "/api/order/order/orderDetail 应返回200",
           "soft": false
-        },
-        {
-          "kind": "extract",
-          "name": "extract_order_container_id",
-          "phase": "after_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.container[0].order_container_id",
-          "target": "order_container_id",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "mutation verb",
+      "description": "订单委托orderAdd-check",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/order/orderAdd",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -1522,7 +1481,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_11",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -1532,81 +1491,20 @@
           "expected": 200,
           "message": "/api/order/order/orderAdd 应返回200",
           "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_container_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_container_id",
-          "target": "$.request_body.container[0].order_container_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_supplier_id",
-          "phase": "before_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_supplier_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 2,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 3,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_no",
-          "phase": "before_request",
-          "order": 4,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_no",
-          "target": "$.request_body.order_no",
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "mutation verb; produces downstream id(s): file_id",
+      "description": "订单订舱",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/order/orderBook",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -1886,7 +1784,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_12",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -1896,94 +1794,20 @@
           "expected": 200,
           "message": "/api/order/order/orderBook 应返回200",
           "soft": false
-        },
-        {
-          "kind": "extract",
-          "name": "extract_file_id",
-          "phase": "after_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data[0].file_id",
-          "target": "file_id",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_container_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_container_id",
-          "target": "$.request_body.container[0].order_container_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_supplier_id",
-          "phase": "before_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_supplier_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 2,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 3,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_no",
-          "phase": "before_request",
-          "order": 4,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_no",
-          "target": "$.request_body.order_no",
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "mutation verb",
+      "description": "订单委托orderAdd-submit",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/order/orderAdd",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -2276,7 +2100,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_13",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -2286,92 +2110,20 @@
           "expected": 200,
           "message": "/api/order/order/orderAdd 应返回200",
           "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_container_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_container_id",
-          "target": "$.request_body.container[0].order_container_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_file_id",
-          "phase": "before_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.file_id",
-          "target": "$.request_body.customer_file_list[0].file_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_supplier_id",
-          "phase": "before_request",
-          "order": 2,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_supplier_id",
-          "target": "$.request_body.supplier[0].order_supplier_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 3,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.supplier[0].order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 4,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_no",
-          "phase": "before_request",
-          "order": 5,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_no",
-          "target": "$.request_body.order_no",
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "produces downstream id(s): code",
+      "description": "订单分页查询",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/order/orderPage",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -2388,7 +2140,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_14",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -2398,39 +2150,20 @@
           "expected": 200,
           "message": "/api/order/order/orderPage 应返回200",
           "soft": false
-        },
-        {
-          "kind": "extract",
-          "name": "extract_code",
-          "phase": "after_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].order_sub_no",
-          "target": "code",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "mutation verb",
+      "description": "订单详情",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/orderFee/toggleRealAmount",
+        "path": "/api/order/order/orderDetail",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -2443,7 +2176,43 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_15",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/order/orderDetail 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "实付金额切换",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/orderFee/toggleRealAmount",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "330576955302739968"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_16",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -2453,37 +2222,20 @@
           "expected": 200,
           "message": "/api/order/orderFee/toggleRealAmount 应返回200",
           "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "mutation verb",
+      "description": "订舱实付编辑-check",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderFee/bookRealAmountEdit",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -2561,7 +2313,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_17",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -2571,37 +2323,20 @@
           "expected": 200,
           "message": "/api/order/orderFee/bookRealAmountEdit 应返回200",
           "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "mutation verb",
+      "description": "订舱实付编辑-submit",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderFee/bookRealAmountEdit",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -2679,7 +2414,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_18",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -2689,143 +2424,20 @@
           "expected": 200,
           "message": "/api/order/orderFee/bookRealAmountEdit 应返回200",
           "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "mutation verb",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/order/checkGenerateOrderSub",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "order_id": "330576955302739968"
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/order/order/checkGenerateOrderSub 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "mutation verb",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/order/generateOrderSub",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "order_id": "330576955302739968"
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/order/order/generateOrderSub 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "mutation verb; produces downstream id(s): order_fee_real_ids",
+      "description": "实付金额切换",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderFee/toggleRealAmount",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -2838,7 +2450,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_19",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -2848,50 +2460,200 @@
           "expected": 200,
           "message": "/api/order/orderFee/toggleRealAmount 应返回200",
           "soft": false
-        },
-        {
-          "kind": "extract",
-          "name": "extract_order_fee_real_ids",
-          "phase": "after_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
-          "target": "order_fee_real_ids",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "mutation verb",
+      "description": "订单详情",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderDetail",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "330576955302739968"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_20",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/order/orderDetail 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "生成子单预检",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/checkGenerateOrderSub",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "330576955302739968"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_21",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/order/checkGenerateOrderSub 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "生成子单",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/generateOrderSub",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "330576955302739968"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_22",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/order/generateOrderSub 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "订单详情",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderDetail",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "330576955302739968"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_23",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/order/orderDetail 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "实付金额切换",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/orderFee/toggleRealAmount",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "330576955302739968"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_24",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/orderFee/toggleRealAmount 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "实付金额锁定提交",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderFee/realAmountLockSubmit",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -2908,7 +2670,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_25",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -2918,48 +2680,20 @@
           "expected": 200,
           "message": "/api/order/orderFee/realAmountLockSubmit 应返回200",
           "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_fee_real_ids",
-          "phase": "before_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_fee_real_ids",
-          "target": "$.request_body.order_fee_real_ids[0]",
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "mutation verb",
+      "description": "实付金额锁定提交",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderFee/realAmountLockSubmit",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -2976,7 +2710,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_26",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -2986,48 +2720,20 @@
           "expected": 200,
           "message": "/api/order/orderFee/realAmountLockSubmit 应返回200",
           "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_fee_real_ids",
-          "phase": "before_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_fee_real_ids",
-          "target": "$.request_body.order_fee_real_ids[0]",
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "mutation verb",
+      "description": "实付金额锁定提交",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderFee/realAmountLockSubmit",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -3057,7 +2763,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_27",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -3067,59 +2773,20 @@
           "expected": 200,
           "message": "/api/order/orderFee/realAmountLockSubmit 应返回200",
           "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_fee_real_ids",
-          "phase": "before_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_fee_real_ids",
-          "target": "$.request_body.order_fee_real_ids[0]",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_code",
-          "phase": "before_request",
-          "order": 2,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.code",
-          "target": "$.request_body.audit_msg.code",
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "context-fetch: produces order_container_id / box_no / order_supplier_id",
+      "description": "实付金额切换",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderDetail",
+        "path": "/api/order/orderFee/toggleRealAmount",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -3132,7 +2799,43 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_28",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/orderFee/toggleRealAmount 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "订单详情",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderDetail",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "330576955302739968"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_29",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -3142,37 +2845,20 @@
           "expected": 200,
           "message": "/api/order/order/orderDetail 应返回200",
           "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "produces audit_id consumed by auditDetail/auditExecute (real lineage)",
+      "description": "审核分页",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/home/audit/auditPage",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -3190,7 +2876,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_30",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -3200,39 +2886,20 @@
           "expected": 200,
           "message": "/api/home/audit/auditPage 应返回200",
           "soft": false
-        },
-        {
-          "kind": "extract",
-          "name": "extract_audit_id",
-          "phase": "after_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].audit_id",
-          "target": "audit_id",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "consumer of audit_id from auditPage[30]",
+      "description": "审核详情",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/home/audit/auditDetail",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -3245,7 +2912,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_31",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -3255,37 +2922,56 @@
           "expected": 200,
           "message": "/api/home/audit/auditDetail 应返回200",
           "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_audit_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.audit_id",
-          "target": "$.request_body.audit_id",
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "consumer of audit_id from auditPage[30]",
+      "description": "订单详情",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderDetail",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "330576955302739968"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_32",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/order/orderDetail 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "审核执行",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/home/audit/auditExecute",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -3302,7 +2988,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_33",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -3312,49 +2998,101 @@
           "expected": 200,
           "message": "/api/home/audit/auditExecute 应返回200",
           "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_audit_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.audit_id",
-          "target": "$.request_body.audit_ids[0]",
-          "scope": "scenario"
-        },        {
-          "kind": "extract",
-          "name": "extract_audit_id_2_body",
-          "phase": "after_request",
-          "order": -1,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body",
-          "target": "audit_id_1_body",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "context-fetch: produces order_container_id / box_no / order_supplier_id",
+      "description": "审核分页",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/home/audit/auditPage",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page_no": 1,
+          "page_size": 20,
+          "active_tab": "examine_wait",
+          "sort_field": "expedite_num",
+          "sort_order": "desc",
+          "params": {}
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_34",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/home/audit/auditPage 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "订单分页查询",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderPage",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page_no": 1,
+          "page_size": 20,
+          "sort_field": "update_time",
+          "sort_order": "desc",
+          "params": {}
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_35",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/order/orderPage 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "订单详情",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/order/orderDetail",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -3367,7 +3105,7 @@
       "strategy": [
         {
           "kind": "assertion",
-          "name": "assert_http_status_eq_200",
+          "name": "assert_http_status_eq_200_36",
           "phase": "verifying",
           "order": 0,
           "enabled": true,
@@ -3377,30 +3115,308 @@
           "expected": 200,
           "message": "/api/order/order/orderDetail 应返回200",
           "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "实付金额切换",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/orderFee/toggleRealAmount",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
         },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "330576955302739968"
+        }
+      },
+      "strategy": [
         {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_37",
+          "phase": "verifying",
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        },        
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/orderFee/toggleRealAmount 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "订单详情",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderDetail",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "330576955302739968"
+        }
+      },
+      "strategy": [
         {
-          "kind": "extract",
-          "name": "extract_audit_id_2_body",
-          "phase": "after_request",
-          "order": -1,
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_38",
+          "phase": "verifying",
+          "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
-          "target": "audit_id_0_body",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/order/orderDetail 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "审核分页",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/home/audit/auditPage",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page_no": 1,
+          "page_size": 20,
+          "active_tab": "examine_wait",
+          "sort_field": "expedite_num",
+          "sort_order": "desc",
+          "params": {}
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_39",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/home/audit/auditPage 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "审核详情",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/home/audit/auditDetail",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "audit_id": "330577661850025984"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_40",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/home/audit/auditDetail 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "订单详情",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderDetail",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "330576955302739968"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_41",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/order/orderDetail 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "审核执行",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/home/audit/auditExecute",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "audit_ids": [
+            "330577661850025984"
+          ],
+          "audit_status": 2,
+          "audit_remark": null
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_42",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/home/audit/auditExecute 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "审核分页",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/home/audit/auditPage",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page_no": 1,
+          "page_size": 20,
+          "active_tab": "examine_wait",
+          "sort_field": "expedite_num",
+          "sort_order": "desc",
+          "params": {}
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_43",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/home/audit/auditPage 应返回200",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "订单详情",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderDetail",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "330576955302739968"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200_44",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/order/orderDetail 应返回200",
+          "soft": false
         }
       ]
     }

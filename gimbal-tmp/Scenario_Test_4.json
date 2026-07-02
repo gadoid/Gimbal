@@ -24,7 +24,7 @@
       "tidb-test-service": "https://fin-tidb.21eflag.com/"
     },
     "vars": {
-      "bl_no": "YHRGIMBAL00042"
+      "bl_no": "YHRGIMBAL00047"
     },
     "users": {
       "codfish": {
@@ -51,14 +51,8 @@
         "method": "POST",
         "path": "/api/order/orderEntrust/orderAdd",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -189,14 +183,8 @@
         "method": "POST",
         "path": "/api/order/orderEntrust/orderAdd",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -320,21 +308,15 @@
     },
     {
       "kind": "step",
-      "description": "produces downstream id(s): order_id, order_no",
+      "description": "produces downstream id(s): order_id",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderEntrust/orderPage",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -374,46 +356,27 @@
           "required": true,
           "default": null,
           "scope": "scenario"
-        },
-        {
-          "kind": "extract",
-          "name": "extract_order_no",
-          "phase": "after_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].order_no",
-          "target": "order_no",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "produces downstream id(s): order_supplier_id",
+      "description": "produces downstream id(s): order_id, order_no, order_supplier_id",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/order/orderDetail",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "330576955302739968"
+          "order_id": "330970346482040832"
         }
       },
       "strategy": [
@@ -444,6 +407,32 @@
           "scope": "scenario"
         },
         {
+          "kind": "extract",
+          "name": "extract_order_id_redundant_at_step4",
+          "phase": "after_request",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.supplier[0].order_id",
+          "target": "order_id",
+          "required": true,
+          "default": null,
+          "scope": "step"
+        },
+        {
+          "kind": "extract",
+          "name": "extract_order_no",
+          "phase": "after_request",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.order_no",
+          "target": "order_no",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        },
+        {
           "kind": "assign",
           "name": "assign_order_id",
           "phase": "before_request",
@@ -465,14 +454,8 @@
         "method": "POST",
         "path": "/api/order/orderEntrust/orderAdd",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -553,8 +536,8 @@
           "customer_file_list": [],
           "supplier": [
             {
-              "order_supplier_id": "330576956728803328",
-              "order_id": "330576955302739968",
+              "order_supplier_id": "330970347870355456",
+              "order_id": "330970346482040832",
               "isset_supplier": "1",
               "is_primary": "1",
               "supplier_id": "805",
@@ -574,8 +557,8 @@
             }
           ],
           "remark": "",
-          "order_id": "330576955302739968",
-          "order_no": "YWDD20260701107571",
+          "order_id": "330970346482040832",
+          "order_no": "YWDD20260702107628",
           "customer_category": ",1,2,",
           "customer_tax_number": "91370786MA3D6MW35A",
           "customer_address_cn": "山东省潍坊市昌邑市围子街道206国道北(官道郜北)",
@@ -775,7 +758,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_supplier_0_order_id",
           "phase": "before_request",
           "order": 1,
           "enabled": true,
@@ -786,7 +769,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_order_id",
           "phase": "before_request",
           "order": 2,
           "enabled": true,
@@ -817,14 +800,8 @@
         "method": "POST",
         "path": "/api/order/orderEntrust/orderAdd",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -905,8 +882,8 @@
           "customer_file_list": [],
           "supplier": [
             {
-              "order_supplier_id": "330576956728803328",
-              "order_id": "330576955302739968",
+              "order_supplier_id": "330970347870355456",
+              "order_id": "330970346482040832",
               "isset_supplier": "1",
               "is_primary": "1",
               "supplier_id": "805",
@@ -926,8 +903,8 @@
             }
           ],
           "remark": "",
-          "order_id": "330576955302739968",
-          "order_no": "YWDD20260701107571",
+          "order_id": "330970346482040832",
+          "order_no": "YWDD20260702107628",
           "customer_category": ",1,2,",
           "customer_tax_number": "91370786MA3D6MW35A",
           "customer_address_cn": "山东省潍坊市昌邑市围子街道206国道北(官道郜北)",
@@ -1127,7 +1104,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_supplier_0_order_id",
           "phase": "before_request",
           "order": 1,
           "enabled": true,
@@ -1138,7 +1115,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_order_id",
           "phase": "before_request",
           "order": 2,
           "enabled": true,
@@ -1162,28 +1139,22 @@
     },
     {
       "kind": "step",
-      "description": "produces downstream id(s): order_container_id",
+      "description": "produces downstream id(s): order_container_id, order_id, order_no, order_supplier_id",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/order/orderDetail",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "330576955302739968"
+          "order_id": "330970346482040832"
         }
       },
       "strategy": [
@@ -1214,8 +1185,47 @@
           "scope": "scenario"
         },
         {
+          "kind": "extract",
+          "name": "extract_order_supplier_id_redundant_at_step7",
+          "phase": "after_request",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.supplier[0].order_supplier_id",
+          "target": "order_supplier_id",
+          "required": true,
+          "default": null,
+          "scope": "step"
+        },
+        {
+          "kind": "extract",
+          "name": "extract_order_id_redundant_at_step7",
+          "phase": "after_request",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.supplier[0].order_id",
+          "target": "order_id",
+          "required": true,
+          "default": null,
+          "scope": "step"
+        },
+        {
+          "kind": "extract",
+          "name": "extract_order_no_redundant_at_step7",
+          "phase": "after_request",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.order_no",
+          "target": "order_no",
+          "required": true,
+          "default": null,
+          "scope": "step"
+        },
+        {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_order_id",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
@@ -1235,14 +1245,8 @@
         "method": "POST",
         "path": "/api/order/order/orderAdd",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -1307,7 +1311,7 @@
           "sea_trans_currency": "USD",
           "container": [
             {
-              "order_container_id": "330577156688052224",
+              "order_container_id": "330970374348996608",
               "box_type": "40HQ",
               "box_num": "1",
               "box_no": [
@@ -1323,8 +1327,8 @@
           "customer_file_list": [],
           "supplier": [
             {
-              "order_supplier_id": "330576956728803328",
-              "order_id": "330576955302739968",
+              "order_supplier_id": "330970347870355456",
+              "order_id": "330970346482040832",
               "isset_supplier": "1",
               "is_primary": "1",
               "supplier_id": "805",
@@ -1343,8 +1347,8 @@
               "isset_fee": false
             }
           ],
-          "order_id": "330576955302739968",
-          "order_no": "YWDD20260701107571",
+          "order_id": "330970346482040832",
+          "order_no": "YWDD20260702107628",
           "customer_category": ",1,2,",
           "customer_tax_number": "91370786MA3D6MW35A",
           "customer_address_cn": "山东省潍坊市昌邑市围子街道206国道北(官道郜北)",
@@ -1546,7 +1550,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_supplier_id",
+          "name": "assign_order_supplier_id_to_request_body_supplier_0_order_supplier_id",
           "phase": "before_request",
           "order": 1,
           "enabled": true,
@@ -1557,7 +1561,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_supplier_0_order_id",
           "phase": "before_request",
           "order": 2,
           "enabled": true,
@@ -1568,7 +1572,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_order_id",
           "phase": "before_request",
           "order": 3,
           "enabled": true,
@@ -1579,7 +1583,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_no",
+          "name": "assign_order_no_to_request_body_order_no",
           "phase": "before_request",
           "order": 4,
           "enabled": true,
@@ -1599,14 +1603,8 @@
         "method": "POST",
         "path": "/api/order/order/orderBook",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -1671,7 +1669,7 @@
           "sea_trans_currency": "USD",
           "container": [
             {
-              "order_container_id": "330577156688052224",
+              "order_container_id": "330970374348996608",
               "box_type": "40HQ",
               "box_num": "1",
               "box_no": [
@@ -1687,8 +1685,8 @@
           "customer_file_list": [],
           "supplier": [
             {
-              "order_supplier_id": "330576956728803328",
-              "order_id": "330576955302739968",
+              "order_supplier_id": "330970347870355456",
+              "order_id": "330970346482040832",
               "isset_supplier": "1",
               "is_primary": "1",
               "supplier_id": "805",
@@ -1707,8 +1705,8 @@
               "isset_fee": false
             }
           ],
-          "order_id": "330576955302739968",
-          "order_no": "YWDD20260701107571",
+          "order_id": "330970346482040832",
+          "order_no": "YWDD20260702107628",
           "customer_category": ",1,2,",
           "customer_tax_number": "91370786MA3D6MW35A",
           "customer_address_cn": "山东省潍坊市昌邑市围子街道206国道北(官道郜北)",
@@ -1923,7 +1921,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_supplier_id",
+          "name": "assign_order_supplier_id_to_request_body_supplier_0_order_supplier_id",
           "phase": "before_request",
           "order": 1,
           "enabled": true,
@@ -1934,7 +1932,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_supplier_0_order_id",
           "phase": "before_request",
           "order": 2,
           "enabled": true,
@@ -1945,7 +1943,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_order_id",
           "phase": "before_request",
           "order": 3,
           "enabled": true,
@@ -1956,7 +1954,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_no",
+          "name": "assign_order_no_to_request_body_order_no",
           "phase": "before_request",
           "order": 4,
           "enabled": true,
@@ -1976,14 +1974,8 @@
         "method": "POST",
         "path": "/api/order/order/orderAdd",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -2048,7 +2040,7 @@
           "sea_trans_currency": "USD",
           "container": [
             {
-              "order_container_id": "330577156688052224",
+              "order_container_id": "330970374348996608",
               "box_type": "40HQ",
               "box_num": "1",
               "box_no": [
@@ -2070,15 +2062,15 @@
               "document_type": "BOOK_CUSTOMER",
               "file_url": "6a44a28c0c41b.pdf",
               "file_name": "6a44a28c0c41b.pdf",
-              "file_id": "330577242251853824",
+              "file_id": "330970399951028224",
               "file_type": "PDF",
               "_XID": "row_384"
             }
           ],
           "supplier": [
             {
-              "order_supplier_id": "330576956728803328",
-              "order_id": "330576955302739968",
+              "order_supplier_id": "330970347870355456",
+              "order_id": "330970346482040832",
               "isset_supplier": "1",
               "is_primary": "1",
               "supplier_id": "805",
@@ -2097,8 +2089,8 @@
               "isset_fee": false
             }
           ],
-          "order_id": "330576955302739968",
-          "order_no": "YWDD20260701107571",
+          "order_id": "330970346482040832",
+          "order_no": "YWDD20260702107628",
           "customer_category": ",1,2,",
           "customer_tax_number": "91370786MA3D6MW35A",
           "customer_address_cn": "山东省潍坊市昌邑市围子街道206国道北(官道郜北)",
@@ -2311,7 +2303,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_supplier_id",
+          "name": "assign_order_supplier_id_to_request_body_supplier_0_order_supplier_id",
           "phase": "before_request",
           "order": 2,
           "enabled": true,
@@ -2322,7 +2314,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_supplier_0_order_id",
           "phase": "before_request",
           "order": 3,
           "enabled": true,
@@ -2333,7 +2325,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_order_id",
           "phase": "before_request",
           "order": 4,
           "enabled": true,
@@ -2344,7 +2336,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_no",
+          "name": "assign_order_no_to_request_body_order_no",
           "phase": "before_request",
           "order": 5,
           "enabled": true,
@@ -2357,21 +2349,15 @@
     },
     {
       "kind": "step",
-      "description": "produces downstream id(s): code",
+      "description": "produces downstream id(s): order_id",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/order/orderPage",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -2401,43 +2387,37 @@
         },
         {
           "kind": "extract",
-          "name": "extract_code",
+          "name": "extract_order_id_redundant_at_step11",
           "phase": "after_request",
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].order_sub_no",
-          "target": "code",
+          "expression": "$.response_body.data.data[0].order_id",
+          "target": "order_id",
           "required": true,
           "default": null,
-          "scope": "scenario"
+          "scope": "step"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "mutation verb",
+      "description": "mutation verb; produces downstream id(s): order_id",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderFee/toggleRealAmount",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "330576955302739968"
+          "order_id": "330970346482040832"
         }
       },
       "strategy": [
@@ -2455,8 +2435,21 @@
           "soft": false
         },
         {
+          "kind": "extract",
+          "name": "extract_order_id_redundant_at_step12",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.to_supplier[0].order_id",
+          "target": "order_id",
+          "required": true,
+          "default": null,
+          "scope": "step"
+        },
+        {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_order_id",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
@@ -2476,14 +2469,8 @@
         "method": "POST",
         "path": "/api/order/orderFee/bookRealAmountEdit",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -2491,7 +2478,7 @@
         "kind": "request",
         "body": {
           "action": "check",
-          "order_id": "330576955302739968",
+          "order_id": "330970346482040832",
           "discount_ratio": "",
           "service_project": "booking_space",
           "import_status": 0,
@@ -2574,7 +2561,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_order_id",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
@@ -2594,14 +2581,8 @@
         "method": "POST",
         "path": "/api/order/orderFee/bookRealAmountEdit",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -2609,7 +2590,7 @@
         "kind": "request",
         "body": {
           "action": "submit",
-          "order_id": "330576955302739968",
+          "order_id": "330970346482040832",
           "discount_ratio": "",
           "service_project": "booking_space",
           "import_status": 0,
@@ -2692,7 +2673,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_order_id",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
@@ -2712,21 +2693,15 @@
         "method": "POST",
         "path": "/api/order/order/checkGenerateOrderSub",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "330576955302739968"
+          "order_id": "330970346482040832"
         }
       },
       "strategy": [
@@ -2745,7 +2720,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_order_id",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
@@ -2765,21 +2740,15 @@
         "method": "POST",
         "path": "/api/order/order/generateOrderSub",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "330576955302739968"
+          "order_id": "330970346482040832"
         }
       },
       "strategy": [
@@ -2798,7 +2767,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_order_id",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
@@ -2811,28 +2780,22 @@
     },
     {
       "kind": "step",
-      "description": "mutation verb; produces downstream id(s): order_fee_real_ids",
+      "description": "mutation verb; produces downstream id(s): code, order_fee_real_ids, order_id",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/order/orderFee/toggleRealAmount",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "330576955302739968"
+          "order_id": "330970346482040832"
         }
       },
       "strategy": [
@@ -2851,9 +2814,22 @@
         },
         {
           "kind": "extract",
-          "name": "extract_order_fee_real_ids",
+          "name": "extract_order_id_redundant_at_step17",
           "phase": "after_request",
           "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.to_supplier[0].pay_amount.standard_list[0].order_id",
+          "target": "order_id",
+          "required": true,
+          "default": null,
+          "scope": "step"
+        },
+        {
+          "kind": "extract",
+          "name": "extract_order_fee_real_ids",
+          "phase": "after_request",
+          "order": 1,
           "enabled": true,
           "onFailure": "abort",
           "expression": "$.response_body.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
@@ -2863,8 +2839,21 @@
           "scope": "scenario"
         },
         {
+          "kind": "extract",
+          "name": "extract_code",
+          "phase": "after_request",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.to_customer[0].order_sub_no",
+          "target": "code",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        },
+        {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_order_id",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
@@ -2884,14 +2873,8 @@
         "method": "POST",
         "path": "/api/order/orderFee/realAmountLockSubmit",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -2899,9 +2882,9 @@
         "kind": "request",
         "body": {
           "action": "check",
-          "order_id": "330576955302739968",
+          "order_id": "330970346482040832",
           "order_fee_real_ids": [
-            "330577494820257792"
+            "330970500803067904"
           ]
         }
       },
@@ -2921,7 +2904,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_order_id",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
@@ -2952,14 +2935,8 @@
         "method": "POST",
         "path": "/api/order/orderFee/realAmountLockSubmit",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -2967,9 +2944,9 @@
         "kind": "request",
         "body": {
           "action": "audit",
-          "order_id": "330576955302739968",
+          "order_id": "330970346482040832",
           "order_fee_real_ids": [
-            "330577494820257792"
+            "330970500803067904"
           ]
         }
       },
@@ -2989,7 +2966,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_order_id",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
@@ -3020,14 +2997,8 @@
         "method": "POST",
         "path": "/api/order/orderFee/realAmountLockSubmit",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -3035,13 +3006,13 @@
         "kind": "request",
         "body": {
           "action": "submit",
-          "order_id": "330576955302739968",
+          "order_id": "330970346482040832",
           "order_fee_real_ids": [
-            "330577494820257792"
+            "330970500803067904"
           ],
           "audit_msg": {
             "title": "业务订单ID",
-            "code": "ZDD20260701016910",
+            "code": "ZDD20260702017037",
             "msgs": [
               "费用锁定申请"
             ]
@@ -3070,7 +3041,7 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_order_id",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
@@ -3105,74 +3076,15 @@
     },
     {
       "kind": "step",
-      "description": "context-fetch: produces order_container_id / box_no / order_supplier_id",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/order/orderDetail",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "order_id": "330576955302739968"
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/order/order/orderDetail 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "produces audit_id consumed by auditDetail/auditExecute (real lineage)",
+      "description": "produces downstream id(s): audit_id, audit_ids",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/home/audit/auditPage",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -3213,33 +3125,40 @@
           "required": true,
           "default": null,
           "scope": "scenario"
+        },
+        {
+          "kind": "extract",
+          "name": "extract_audit_ids",
+          "phase": "after_request",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.data[0].audit_id",
+          "target": "audit_ids",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "consumer of audit_id from auditPage[30]",
+      "description": "produces downstream id(s): order_id",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/home/audit/auditDetail",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
       "request": {
         "kind": "request",
         "body": {
-          "audit_id": "330577547932729344"
+          "audit_id": "330970527495618560"
         }
       },
       "strategy": [
@@ -3257,6 +3176,19 @@
           "soft": false
         },
         {
+          "kind": "extract",
+          "name": "extract_order_id_redundant_at_step22",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.audit_content.relation_id",
+          "target": "order_id",
+          "required": true,
+          "default": null,
+          "scope": "step"
+        },
+        {
           "kind": "assign",
           "name": "assign_audit_id",
           "phase": "before_request",
@@ -3271,21 +3203,15 @@
     },
     {
       "kind": "step",
-      "description": "consumer of audit_id from auditPage[30]",
+      "description": "mutation verb",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
         "path": "/api/home/audit/auditExecute",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
@@ -3293,7 +3219,7 @@
         "kind": "request",
         "body": {
           "audit_ids": [
-            "330577547932729344"
+            "330970527495618560"
           ],
           "audit_status": 2,
           "audit_remark": null
@@ -3315,53 +3241,88 @@
         },
         {
           "kind": "assign",
-          "name": "assign_audit_id",
+          "name": "assign_audit_ids",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "source": "$.audit_id",
+          "source": "$.audit_ids",
           "target": "$.request_body.audit_ids[0]",
-          "scope": "scenario"
-        },        {
-          "kind": "extract",
-          "name": "extract_audit_id_2_body",
-          "phase": "after_request",
-          "order": -1,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body",
-          "target": "audit_id_1_body",
-          "required": true,
-          "default": null,
           "scope": "scenario"
         }
       ]
     },
     {
       "kind": "step",
-      "description": "context-fetch: produces order_container_id / box_no / order_supplier_id",
+      "description": "produces downstream id(s): order_id",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/orderDetail",
+        "path": "/api/order/order/orderPage",
         "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
+          "Content-Type": "application/json;charset=UTF-8"
         },
         "timeout": 30
       },
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "330576955302739968"
+          "page_no": 1,
+          "page_size": 20,
+          "sort_field": "update_time",
+          "sort_order": "desc",
+          "params": {}
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/order/orderPage 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_order_id_redundant_at_step24",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.data[0].order_id",
+          "target": "order_id",
+          "required": true,
+          "default": null,
+          "scope": "step"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "produces downstream id(s): order_id",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderDetail",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "330970346482040832"
         }
       },
       "strategy": [
@@ -3379,8 +3340,21 @@
           "soft": false
         },
         {
+          "kind": "extract",
+          "name": "extract_order_id_redundant_at_step25",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.supplier[0].order_id",
+          "target": "order_id",
+          "required": true,
+          "default": null,
+          "scope": "step"
+        },
+        {
           "kind": "assign",
-          "name": "assign_order_id",
+          "name": "assign_order_id_to_request_body_order_id",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
@@ -3388,18 +3362,363 @@
           "source": "$.order_id",
           "target": "$.request_body.order_id",
           "scope": "scenario"
-        },        
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "mutation verb; produces downstream id(s): code, order_id",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/orderFee/toggleRealAmount",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "330970346482040832"
+        }
+      },
+      "strategy": [
         {
-          "kind": "extract",
-          "name": "extract_audit_id_2_body",
-          "phase": "after_request",
-          "order": -1,
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
-          "target": "audit_id_0_body",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/orderFee/toggleRealAmount 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_order_id_redundant_at_step26",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.to_supplier[0].pay_amount.standard_list[0].order_id",
+          "target": "order_id",
           "required": true,
           "default": null,
+          "scope": "step"
+        },
+        {
+          "kind": "extract",
+          "name": "extract_code_redundant_at_step26",
+          "phase": "after_request",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.to_customer[0].order_sub_no",
+          "target": "code",
+          "required": true,
+          "default": null,
+          "scope": "step"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_id_to_request_body_order_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.order_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "mutation verb; produces downstream id(s): order_id",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/orderFee/toggleRealAmount",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "330970346482040832"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/orderFee/toggleRealAmount 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_order_id_redundant_at_step27",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.to_supplier[0].pay_amount.standard_list[0].order_id",
+          "target": "order_id",
+          "required": true,
+          "default": null,
+          "scope": "step"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_id_to_request_body_order_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.order_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "produces downstream id(s): audit_id",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/home/audit/auditPage",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page_no": 1,
+          "page_size": 20,
+          "active_tab": "examine_wait",
+          "sort_field": "expedite_num",
+          "sort_order": "desc",
+          "params": {}
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/home/audit/auditPage 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_audit_id_2",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.data[0].audit_id",
+          "target": "audit_id_2",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "produces downstream id(s): order_id",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/home/audit/auditDetail",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "audit_id": "330970779179024384"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/home/audit/auditDetail 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_order_id_redundant_at_step29",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.audit_content.relation_id",
+          "target": "order_id",
+          "required": true,
+          "default": null,
+          "scope": "step"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_audit_id_2",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.audit_id_2",
+          "target": "$.request_body.audit_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "produces downstream id(s): audit_ids",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderDetail",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "330970346482040832"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/order/orderDetail 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_audit_ids_2",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.audit[0].audit_id",
+          "target": "audit_ids_2",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_id_to_request_body_order_id",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id",
+          "target": "$.request_body.order_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "mutation verb",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/home/audit/auditExecute",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "audit_ids": [
+            "330970779179024384"
+          ],
+          "audit_status": 2,
+          "audit_remark": null
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/home/audit/auditExecute 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_audit_ids_2",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.audit_ids_2",
+          "target": "$.request_body.audit_ids[0]",
           "scope": "scenario"
         }
       ]
