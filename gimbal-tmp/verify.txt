@@ -1,0 +1,8 @@
+client_expand_name repr: '������'
+customer_name      repr: ''
+service_name       repr: '����ϼ'
+main_sort          repr: '�\u05fa���'
+policy_name        repr: '���\u05fa����Կ͡��\u05fa�������Ӫҵ��+�ϳ�ҵ��'
+bl_no              repr: 'YHR_��ϣ��_GIMBAL_00001'
+airline_type       repr: '���к�'
+ocean_type         repr: 'Զ��'

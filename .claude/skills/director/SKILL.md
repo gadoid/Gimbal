@@ -59,6 +59,52 @@ basis of the last output.
 
 ## Workflow
 
+### Platform & encoding (READ FIRST)
+
+The pipeline is **encoding-fragile on Windows**. Python 3.14's default
+`sys.stdout.encoding` is GBK, and the lint/assemble scripts `print()`
+Unicode characters (em dash `——`, ellipsis `…`, etc.) that GBK cannot
+represent. When that happens mid-run, the I/O error handler
+**silently replaces characters already loaded into memory** (the
+parsed request bodies) with U+FFFD (`\ufffd`). The contaminated
+strings then land in `scenario.json` via `json.dump(ensure_ascii=False)`
+— the final file looks like mojibake in every Chinese field even
+though every stage reported `[OK]`. The `UnicodeDecodeError: ... byte
+0xa1` you may see in stderr is a *symptom* of this; the contamination
+that just happened is the real problem.
+
+**Always export these in your shell BEFORE running any stage**:
+
+```bash
+# bash / WSL / macOS / Linux
+export PYTHONIOENCODING=utf-8
+export PYTHONUTF8=1
+```
+
+```bat
+:: Windows cmd
+set PYTHONIOENCODING=utf-8
+set PYTHONUTF8=1
+```
+
+```powershell
+# Windows PowerShell
+$env:PYTHONIOENCODING = "utf-8"
+$env:PYTHONUTF8 = "1"
+```
+
+All `python scripts/...` commands in Stages 0–4 and Final lint
+inherit these. The scripts themselves open files with
+`encoding="utf-8"` correctly, so this single env var is enough.
+
+**Verify before continuing.** If the first stage's stdout shows
+`UnicodeDecodeError: ... byte 0xa1` or you see U+FFFD replacement
+characters (rendered as `?` or empty boxes) where a Chinese field
+should be, the env vars did not take effect — **stop and re-export**,
+do not proceed (a contaminated `scenario.json` will be produced and
+you will not notice the issue until you re-read the file later). On
+Linux/macOS the env vars are no-ops and the commands run unchanged.
+
 **Working directory convention (cleanup contract):** every intermediate this
 pipeline produces — `flow.json`, `flow.md`, `script.json`, and the assemble
 sidecars (`*.capture_map.json`, `*.synthetic_steps.json`) — goes into a
@@ -73,6 +119,10 @@ intermediates are exactly what's needed to debug — and tell the user it was
 kept and where.
 
 ### Stage 0 — `analyze_flow.py` (剪辑链, always run first)
+
+> **Encoding note**: `PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1` must
+> be exported in this shell before the next command (see
+> "Platform & encoding" above). If you forgot, fix and re-run.
 
 ```bash
 mkdir -p _director_work
@@ -178,6 +228,9 @@ Read `flow.md` for the human-readable view.
 
 ### Stage 1 — `script_init.py` (剪辑链, mechanical fold)
 
+> **Encoding note**: `PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1` must
+> be exported in this shell (see "Platform & encoding" above).
+
 ```bash
 python scripts/script_init.py _director_work/flow.json --capture <capture>.ndjson \
     --scaffold <scaffold>.json --out _director_work/script.json
@@ -206,6 +259,9 @@ Edit `script.json` directly:
   auto-wire all of them — most are noise.
 - **resolve every open_gap** via the dedicated tool (never by hand):
 
+  > **Encoding note**: `PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1` must
+  > be exported in this shell (see "Platform & encoding" above).
+
   ```bash
   python scripts/script_gap_resolve.py _director_work/script.json --list
   python scripts/script_gap_resolve.py _director_work/script.json \
@@ -223,6 +279,9 @@ Edit `script.json` directly:
   but a clear distinct name (`order_id_sub`, not `order_id`) avoids rework.
 
 ### Stage 3 — `script_lint.py` (剪辑层终检)
+
+> **Encoding note**: `PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1` must
+> be exported in this shell (see "Platform & encoding" above).
 
 ```bash
 python scripts/script_lint.py _director_work/script.json
@@ -247,6 +306,9 @@ config/resource/templating — that's out of scope for this layer):
 Exit code 0 = clean. Fix every violation before assembling.
 
 ### Stage 4 — `script_assemble.py` (发版链, mechanical, the only templating stage)
+
+> **Encoding note**: `PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1` must
+> be exported in this shell (see "Platform & encoding" above).
 
 ```bash
 python scripts/script_assemble.py _director_work/script.json --scaffold <scaffold>.json \
@@ -282,6 +344,9 @@ kept-vs-dropped occurrences don't line up 1:1 with capture order (e.g. the
 first of two identical-looking calls got dropped, the second kept).
 
 ### Final lint — `validate_scenario.py`
+
+> **Encoding note**: `PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1` must
+> be exported in this shell (see "Platform & encoding" above).
 
 ```bash
 python scripts/validate_scenario.py _director_work/scenario.json --capture <capture>.ndjson \

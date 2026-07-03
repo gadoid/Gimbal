@@ -24,7 +24,11 @@
             "tidb-test-service": "https://fin-tidb.21eflag.com/"
         },
         "vars": {
-            "bl_no": "YHR_NEWHOPE_GIMBAL_00005"
+            "bl_no": "YHRGIMBAL00061",
+            "bank_id_0" : "319666690256273408_MainBank",
+            "bank_id_1" : "319666690256274432_MainBank",
+            "finance_id_0" : "4416_CustomerFinance",
+            "finance_id_1" : "4415_CustomerFinance"
         },
         "users": {
             "codfish": {
