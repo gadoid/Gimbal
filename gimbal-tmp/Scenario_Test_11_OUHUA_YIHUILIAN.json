@@ -2,8 +2,8 @@
   "kind": "scenario",
   "scenarioId": "e2e订单到应收核销",
   "meta": {
-    "name": "山东悦慕-易航道-汇鑫商业保理",
-    "description": "山东悦慕-易航道-汇鑫商业保理",
+    "name": "欧华-易汇联-资产推送",
+    "description": "欧华-易汇联-资产推送",
     "module": "settlement",
     "priority": 1,
     "author": "codfish",
@@ -24,11 +24,11 @@
       "tidb-test-service": "https://fin-tidb.21eflag.com/"
     },
     "vars": {
-      "bl_no": "YUEMU-YIHANGDAO-00016",
-      "finance_id_1": "4416_CustomerFinance",
-      "finance_id_2" : "4415_CustomerFinance",
-      "bank_id_1" : "12_MainBank",
-      "bank_id_2" : "13_MainBank"
+      "bl_no": "OUHUA-YIHUILIAN-00010",
+      "finance_id_1": "332819945995894784_CustomerFinance",
+      "finance_id_2": "332819945903620096_CustomerFinance",
+      "bank_id_1": "16_MainBank",
+      "bank_id_2": "19_MainBank"
     },
     "users": {
       "codfish": {
@@ -69,56 +69,56 @@
       "request": {
         "kind": "request",
         "body": {
-          "client_expand_name": "唐欣雨",
-          "client_expand_id": "261",
+          "client_expand_name": "张珈诺",
+          "client_expand_id": "249",
           "m_delivery_type": "",
-          "customer_id": "320",
+          "customer_id": "411",
           "customer_name": "",
-          "service_id": "55",
-          "service_name": "曲静霞",
-          "operator_id": "336",
+          "service_id": "326",
+          "service_name": "王雪莹",
+          "operator_id": "66",
           "operator_name": "",
-          "customer_contact_id": "",
+          "customer_contact_id": "2543",
           "customer_contact_name": "",
-          "main_sort": "易航道",
-          "policy_id": "22",
-          "policy_name": "【易航道对客】易航道：自营业务+拖车业务",
+          "main_sort": "易汇联-易汇洋-易海-易航道",
+          "policy_id": "132",
+          "policy_name": "【SPV对客】易汇联：非美元项目",
           "policy_type": "JSZX",
           "service_items": [
             "booking_space"
           ],
           "business_type": "1",
           "trade_term": "CIF",
-          "carrier": "COSCO",
-          "carrier_id": "16",
+          "carrier": "HMM",
+          "carrier_id": "33",
           "bl_no": "${var.bl_no}",
-          "etd": 1781884800,
-          "atd": 1783008000,
-          "ship_name": "OOCL FRANCE",
-          "voy": "068E",
+          "etd": 1770048000,
+          "atd": 1783353600,
+          "ship_name": "HMM GDANSK",
+          "voy": "0018W",
           "pol": "QINGDAO,CHINA",
           "pot": "",
-          "pod": "ALEXANDRIA,AUSTRALIA",
-          "del": "ALEXANDRIA,AUSTRALIA",
-          "country_name": "AUSTRALIA",
-          "airline_type": "地中海",
+          "pod": "HAMBURG,DE,GERMANY",
+          "del": "HAMBURG,DE,GERMANY",
+          "country_name": "GERMANY",
+          "airline_type": "欧洲",
           "ocean_type": "远洋",
           "terms_payment": "T/T",
           "terms_transport": "CY/CY",
           "pay_type": "FREIGHT PREPAID",
           "customer_order_sn": "",
           "terms_shipment": "",
-          "shipper": "SHANDONG YUEMU FOODS CO LTD 206 NATIONAL ROAD NORTH WEIZI STREET WEIFANG, SHANDONG\n",
-          "consignee": "CENTRAL POINT TRADE INC\n",
-          "notifier": "CENTRAL POINT TRADE INC\n",
+          "shipper": "SHANDONG OUHUA IMP.AND EXP. CO., LTD. DAWENHE TOURISM DEVELOPMENT ZONE 262100 ANQIU CITY SHANDONG/ CHINA\n",
+          "consignee": "RAPS FRESH GMBH ROTHENFELDER STRASSE.57 DE-33775 VERSMOLD PHONE NO.:+49 9221 807 176 EMAIL ADDRESS:martina.linke-muenchmeyer@raps.com\n",
+          "notifier": "CONTIBRIDGE I.A. KAY-THOMAS FRANKE SCHIFFAHRT UND SPEDITION GMBH GRUSONSTR.59, 22113 HAMBURG, GERMANY TEL. +49 40/73 10 79-21 FAX +49 40/73 10 79-20\n",
           "ship_mark": "N/M\n",
-          "commodity": "Fresh ginger\n",
+          "commodity": "IQF GARLIC SEGMENTS\n",
           "notes": "",
           "cargo_type": "",
           "packer": "",
-          "num": "1872",
-          "gross_weight": "26800.000",
-          "bulk": "60.000",
+          "num": "2400",
+          "gross_weight": "25500.000",
+          "bulk": "55.000",
           "sea_trans_cost": "",
           "teu": "",
           "volume": "",
@@ -141,28 +141,28 @@
               "service_item_name": "订舱",
               "settle_object_id": "",
               "settlement_date": null,
-              "supplier_id": "805",
-              "supplier_name": "青岛雅然国际物流有限公司",
+              "supplier_id": "26",
+              "supplier_name": "青岛艾克国际物流有限公司",
               "supplier_pay_date": null,
               "supplier_period": null,
-              "user_id": "336",
-              "user_name": "闫航"
+              "user_id": "66",
+              "user_name": "张翔道"
             }
           ],
           "remark": "",
           "policy_type_name": "",
-          "main_ids": "1",
+          "main_ids": "3,28,16,1",
           "pol_cn": "青岛港",
           "pol_port_name": "QINGDAO,CHINA",
           "pol_country_id": "1",
           "pol_country": "CHINA",
           "pol_country_cn": "中国",
-          "pod_cn": null,
-          "pod_port_name": "ALEXANDRIA,AUSTRALIA",
-          "del_cn": null,
-          "del_port_name": "ALEXANDRIA,AUSTRALIA",
-          "country_id": "673",
-          "country_name_cn": "澳大利亚",
+          "pod_cn": "汉堡",
+          "pod_port_name": "HAMBURG,DE,GERMANY",
+          "del_cn": "汉堡",
+          "del_port_name": "HAMBURG,DE,GERMANY",
+          "country_id": "741",
+          "country_name_cn": "德国",
           "action": "check",
           "entrust_status": 2,
           "order_file": []
@@ -207,56 +207,56 @@
       "request": {
         "kind": "request",
         "body": {
-          "client_expand_name": "唐欣雨",
-          "client_expand_id": "261",
+          "client_expand_name": "张珈诺",
+          "client_expand_id": "249",
           "m_delivery_type": "",
-          "customer_id": "320",
+          "customer_id": "411",
           "customer_name": "",
-          "service_id": "55",
-          "service_name": "曲静霞",
-          "operator_id": "336",
+          "service_id": "326",
+          "service_name": "王雪莹",
+          "operator_id": "66",
           "operator_name": "",
-          "customer_contact_id": "",
+          "customer_contact_id": "2543",
           "customer_contact_name": "",
-          "main_sort": "易航道",
-          "policy_id": "22",
-          "policy_name": "【易航道对客】易航道：自营业务+拖车业务",
+          "main_sort": "易汇联-易汇洋-易海-易航道",
+          "policy_id": "132",
+          "policy_name": "【SPV对客】易汇联：非美元项目",
           "policy_type": "JSZX",
           "service_items": [
             "booking_space"
           ],
           "business_type": "1",
           "trade_term": "CIF",
-          "carrier": "COSCO",
-          "carrier_id": "16",
+          "carrier": "HMM",
+          "carrier_id": "33",
           "bl_no": "${var.bl_no}",
-          "etd": 1781884800,
-          "atd": 1783008000,
-          "ship_name": "OOCL FRANCE",
-          "voy": "068E",
+          "etd": 1770048000,
+          "atd": 1783353600,
+          "ship_name": "HMM GDANSK",
+          "voy": "0018W",
           "pol": "QINGDAO,CHINA",
           "pot": "",
-          "pod": "ALEXANDRIA,AUSTRALIA",
-          "del": "ALEXANDRIA,AUSTRALIA",
-          "country_name": "AUSTRALIA",
-          "airline_type": "地中海",
+          "pod": "HAMBURG,DE,GERMANY",
+          "del": "HAMBURG,DE,GERMANY",
+          "country_name": "GERMANY",
+          "airline_type": "欧洲",
           "ocean_type": "远洋",
           "terms_payment": "T/T",
           "terms_transport": "CY/CY",
           "pay_type": "FREIGHT PREPAID",
           "customer_order_sn": "",
           "terms_shipment": "",
-          "shipper": "SHANDONG YUEMU FOODS CO LTD 206 NATIONAL ROAD NORTH WEIZI STREET WEIFANG, SHANDONG\n",
-          "consignee": "CENTRAL POINT TRADE INC\n",
-          "notifier": "CENTRAL POINT TRADE INC\n",
+          "shipper": "SHANDONG OUHUA IMP.AND EXP. CO., LTD. DAWENHE TOURISM DEVELOPMENT ZONE 262100 ANQIU CITY SHANDONG/ CHINA\n",
+          "consignee": "RAPS FRESH GMBH ROTHENFELDER STRASSE.57 DE-33775 VERSMOLD PHONE NO.:+49 9221 807 176 EMAIL ADDRESS:martina.linke-muenchmeyer@raps.com\n",
+          "notifier": "CONTIBRIDGE I.A. KAY-THOMAS FRANKE SCHIFFAHRT UND SPEDITION GMBH GRUSONSTR.59, 22113 HAMBURG, GERMANY TEL. +49 40/73 10 79-21 FAX +49 40/73 10 79-20\n",
           "ship_mark": "N/M\n",
-          "commodity": "Fresh ginger\n",
+          "commodity": "IQF GARLIC SEGMENTS\n",
           "notes": "",
           "cargo_type": "",
           "packer": "",
-          "num": "1872",
-          "gross_weight": "26800.000",
-          "bulk": "60.000",
+          "num": "2400",
+          "gross_weight": "25500.000",
+          "bulk": "55.000",
           "sea_trans_cost": "",
           "teu": "",
           "volume": "",
@@ -279,28 +279,28 @@
               "service_item_name": "订舱",
               "settle_object_id": "",
               "settlement_date": null,
-              "supplier_id": "805",
-              "supplier_name": "青岛雅然国际物流有限公司",
+              "supplier_id": "26",
+              "supplier_name": "青岛艾克国际物流有限公司",
               "supplier_pay_date": null,
               "supplier_period": null,
-              "user_id": "336",
-              "user_name": "闫航"
+              "user_id": "66",
+              "user_name": "张翔道"
             }
           ],
           "remark": "",
           "policy_type_name": "",
-          "main_ids": "1",
+          "main_ids": "3,28,16,1",
           "pol_cn": "青岛港",
           "pol_port_name": "QINGDAO,CHINA",
           "pol_country_id": "1",
           "pol_country": "CHINA",
           "pol_country_cn": "中国",
-          "pod_cn": null,
-          "pod_port_name": "ALEXANDRIA,AUSTRALIA",
-          "del_cn": null,
-          "del_port_name": "ALEXANDRIA,AUSTRALIA",
-          "country_id": "673",
-          "country_name_cn": "澳大利亚",
+          "pod_cn": "汉堡",
+          "pod_port_name": "HAMBURG,DE,GERMANY",
+          "del_cn": "汉堡",
+          "del_port_name": "HAMBURG,DE,GERMANY",
+          "country_id": "741",
+          "country_name_cn": "德国",
           "action": "submit",
           "entrust_status": 2,
           "order_file": []
@@ -404,7 +404,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "331309247201542144"
+          "order_id": "333120422704840704"
         }
       },
       "strategy": [
@@ -496,65 +496,65 @@
       "request": {
         "kind": "request",
         "body": {
-          "client_expand_name": "唐欣雨",
+          "client_expand_name": "张珈诺",
           "m_delivery_type": "",
-          "customer_id": "320",
-          "customer_name": "山东悦慕食品有限公司",
-          "service_id": "55",
-          "service_name": "曲静霞",
-          "operator_id": "336",
-          "operator_name": "闫航",
-          "customer_contact_id": "",
-          "customer_contact_name": "",
-          "main_sort": "易航道",
-          "policy_id": "22",
-          "policy_name": "【易航道对客】易航道：自营业务+拖车业务",
+          "customer_id": "411",
+          "customer_name": "山东欧华进出口有限公司",
+          "service_id": "326",
+          "service_name": "王雪莹",
+          "operator_id": "66",
+          "operator_name": "张翔道",
+          "customer_contact_id": "2543",
+          "customer_contact_name": "郑经理",
+          "main_sort": "易汇联,易汇洋,易海,易航道",
+          "policy_id": "132",
+          "policy_name": "【SPV对客】易汇联：非美元项目",
           "policy_type": "JSZX",
           "service_items": [
             "booking_space"
           ],
           "business_type": "1",
           "trade_term": "CIF",
-          "carrier": "COSCO",
-          "carrier_id": "16",
+          "carrier": "HMM",
+          "carrier_id": "33",
           "bl_no": "${var.bl_no}",
-          "etd": 1781884800,
-          "atd": 1783008000,
-          "ship_name": "OOCL FRANCE",
-          "voy": "068E",
+          "etd": 1770048000,
+          "atd": 1783353600,
+          "ship_name": "HMM GDANSK",
+          "voy": "0018W",
           "pol": "QINGDAO,CHINA",
           "pot": "",
-          "pod": "ALEXANDRIA,AUSTRALIA",
-          "del": "ALEXANDRIA,AUSTRALIA",
-          "country_name": "AUSTRALIA",
-          "airline_type": "地中海",
+          "pod": "HAMBURG,DE,GERMANY",
+          "del": "HAMBURG,DE,GERMANY",
+          "country_name": "GERMANY",
+          "airline_type": "欧洲",
           "ocean_type": "远洋",
           "terms_payment": "T/T",
           "terms_transport": "CY/CY",
           "pay_type": "FREIGHT PREPAID",
           "customer_order_sn": "",
           "terms_shipment": "",
-          "shipper": "SHANDONG YUEMU FOODS CO LTD 206 NATIONAL ROAD NORTH WEIZI STREET WEIFANG, SHANDONG\n",
-          "consignee": "CENTRAL POINT TRADE INC\n",
-          "notifier": "CENTRAL POINT TRADE INC\n",
+          "shipper": "SHANDONG OUHUA IMP.AND EXP. CO., LTD. DAWENHE TOURISM DEVELOPMENT ZONE 262100 ANQIU CITY SHANDONG/ CHINA\n",
+          "consignee": "RAPS FRESH GMBH ROTHENFELDER STRASSE.57 DE-33775 VERSMOLD PHONE NO.:+49 9221 807 176 EMAIL ADDRESS:martina.linke-muenchmeyer@raps.com\n",
+          "notifier": "CONTIBRIDGE I.A. KAY-THOMAS FRANKE SCHIFFAHRT UND SPEDITION GMBH GRUSONSTR.59, 22113 HAMBURG, GERMANY TEL. +49 40/73 10 79-21 FAX +49 40/73 10 79-20\n",
           "ship_mark": "N/M\n",
-          "commodity": "Fresh ginger\n",
+          "commodity": "IQF GARLIC SEGMENTS\n",
           "notes": "",
           "cargo_type": "",
           "packer": "",
-          "num": "1872",
-          "gross_weight": "26800.000",
-          "bulk": "60.000",
-          "sea_trans_cost": "100.00",
+          "num": "2400",
+          "gross_weight": "25500.000",
+          "bulk": "55.000",
+          "sea_trans_cost": "2180.00",
           "teu": "",
-          "volume": "1*40HQ",
-          "volume_desc": "普柜",
+          "volume": "1*40RH",
+          "volume_desc": "特种柜",
           "order_sn": "",
           "status": 2,
           "sea_trans_currency": "USD",
           "container": [
             {
-              "box_type": "40HQ",
+              "box_type": "40RH",
               "box_num": "1",
               "box_no": [
                 ""
@@ -562,57 +562,57 @@
               "seal_number": [
                 ""
               ],
-              "sea_trans_unit_price": "100"
+              "sea_trans_unit_price": "2180"
             }
           ],
           "message_board": [],
           "customer_file_list": [],
           "supplier": [
             {
-              "order_supplier_id": "331309248761823232",
-              "order_id": "331309247201542144",
+              "order_supplier_id": "333120423984103424",
+              "order_id": "333120422704840704",
               "isset_supplier": "1",
               "is_primary": "1",
-              "supplier_id": "805",
-              "supplier_name": "青岛雅然国际物流有限公司",
-              "settle_object_id": "1384",
-              "user_id": "336",
-              "user_name": "闫航",
+              "supplier_id": "26",
+              "supplier_name": "青岛艾克国际物流有限公司",
+              "settle_object_id": "85",
+              "user_id": "66",
+              "user_name": "张翔道",
               "service_item": "booking_space",
               "supplier_period": "60",
               "settlement_date": "20",
               "supplier_pay_date": "0",
               "is_manual": "0",
-              "sys_upttime": "2026-07-03 11:21:48",
-              "supplier_label": "青岛雅然国际物流有限公司-订舱",
+              "sys_upttime": "2026-07-08 13:41:38",
+              "supplier_label": "青岛艾克国际物流有限公司-订舱",
               "service_item_name": "订舱",
               "isset_fee": false
             }
           ],
-          "order_id": "331309247201542144",
-          "order_no": "YWDD20260703107665",
-          "customer_category": ",1,2,",
-          "customer_tax_number": "91370786MA3D6MW35A",
-          "customer_address_cn": "山东省潍坊市昌邑市围子街道206国道北(官道郜北)",
-          "client_expand_id": "261",
-          "customer_contact_phone": "",
-          "customer_main_id": "1",
-          "customer_main_name": "青岛易航道物流科技有限公司",
+          "order_id": "333120422704840704",
+          "order_no": "YWDD20260708108134",
+          "customer_category": ",1,",
+          "customer_tax_number": "91370784MA3CBA6P3K",
+          "customer_address_cn": "",
+          "client_expand_id": "249",
+          "customer_contact_phone": "0536-4267385",
+          "customer_main_id": "3",
+          "customer_main_name": "青岛易汇联供应链管理有限公司",
           "business_main_id": "1",
           "business_main_name": "青岛易航道物流科技有限公司",
           "fund_code": "",
           "fund_name": null,
           "track_atd": "0",
-          "finance_date": "1781884800",
+          "finance_date": "1770048000",
           "pol_cn": "青岛港",
           "pol_country_id": "1",
           "pol_country": "CHINA",
           "pol_country_cn": "中国",
-          "pod_cn": "",
+          "pod_cn": "汉堡",
           "pot_cn": "",
-          "del_cn": "",
-          "country_id": "673",
-          "country_name_cn": "澳大利亚",
+          "del_cn": "汉堡",
+          "country_id": "741",
+          "country_name_cn": "德国",
           "customer_period": "120",
           "customer_settlement_date": "10",
           "period_rule": "0",
@@ -672,13 +672,13 @@
           "effective_time": "0",
           "create_id": "828",
           "create_by": "GIMBAL",
-          "create_time": "1783048908",
+          "create_time": "1783489297",
           "update_id": "828",
           "update_by": "GIMBAL",
-          "update_time": "1783048908",
+          "update_time": "1783489298",
           "delete_time": "0",
           "business_time": "0",
-          "main_ids": "1",
+          "main_ids": "3,28,16,1",
           "reverse_status": "0",
           "proprietary_business_status": "0",
           "loan_status": null,
@@ -703,7 +703,7 @@
           "financing_apply_amount": "0.00",
           "financing_apply_amount_cny": "0.00",
           "financing_apply_amount_usd": "0.00",
-          "sys_upttime": "2026-07-03 11:21:48",
+          "sys_upttime": "2026-07-08 13:41:38",
           "reverse_status_name": "否",
           "is_delayed_recovery_name": "否",
           "order_finance_arr": [],
@@ -725,8 +725,20 @@
             "trucking": false
           },
           "finance_status": true,
-          "main_ids_name": "易航道",
+          "main_ids_name": "易汇联,易汇洋,易海,易航道",
           "policy_main_arr": [
+            {
+              "fee_main_id": "3",
+              "main_name": "青岛易汇联供应链管理有限公司"
+            },
+            {
+              "fee_main_id": "28",
+              "main_name": "青岛易汇洋供应链管理有限公司"
+            },
+            {
+              "fee_main_id": "16",
+              "main_name": "青岛易海供应链管理有限公司"
+            },
             {
               "fee_main_id": "1",
               "main_name": "青岛易航道物流科技有限公司"
@@ -737,15 +749,15 @@
           "cargo_type_name": "",
           "period_rule_name": "",
           "trade_term_name": "CIF",
-          "carrier_name": "中国远洋运输（集团）总公司",
+          "carrier_name": "现代商船",
           "terms_transport_name": "CY/CY",
           "terms_payment_name": "T/T",
           "pay_type_name": "FREIGHT PREPAID",
           "m_delivery_type_name": "",
           "audit": [],
           "enable": "1",
-          "policy_match": "auto",
-          "policy_match_name": "自动匹配",
+          "policy_match": "semi",
+          "policy_match_name": "手动选择",
           "real_discount_status_name": "—",
           "expect_discount_status_name": "—",
           "expect_policy_status_name": "",
@@ -840,65 +852,65 @@
       "request": {
         "kind": "request",
         "body": {
-          "client_expand_name": "唐欣雨",
+          "client_expand_name": "张珈诺",
           "m_delivery_type": "",
-          "customer_id": "320",
-          "customer_name": "山东悦慕食品有限公司",
-          "service_id": "55",
-          "service_name": "曲静霞",
-          "operator_id": "336",
-          "operator_name": "闫航",
-          "customer_contact_id": "",
-          "customer_contact_name": "",
-          "main_sort": "易航道",
-          "policy_id": "22",
-          "policy_name": "【易航道对客】易航道：自营业务+拖车业务",
+          "customer_id": "411",
+          "customer_name": "山东欧华进出口有限公司",
+          "service_id": "326",
+          "service_name": "王雪莹",
+          "operator_id": "66",
+          "operator_name": "张翔道",
+          "customer_contact_id": "2543",
+          "customer_contact_name": "郑经理",
+          "main_sort": "易汇联,易汇洋,易海,易航道",
+          "policy_id": "132",
+          "policy_name": "【SPV对客】易汇联：非美元项目",
           "policy_type": "JSZX",
           "service_items": [
             "booking_space"
           ],
           "business_type": "1",
           "trade_term": "CIF",
-          "carrier": "COSCO",
-          "carrier_id": "16",
+          "carrier": "HMM",
+          "carrier_id": "33",
           "bl_no": "${var.bl_no}",
-          "etd": 1781884800,
-          "atd": 1783008000,
-          "ship_name": "OOCL FRANCE",
-          "voy": "068E",
+          "etd": 1770048000,
+          "atd": 1783353600,
+          "ship_name": "HMM GDANSK",
+          "voy": "0018W",
           "pol": "QINGDAO,CHINA",
           "pot": "",
-          "pod": "ALEXANDRIA,AUSTRALIA",
-          "del": "ALEXANDRIA,AUSTRALIA",
-          "country_name": "AUSTRALIA",
-          "airline_type": "地中海",
+          "pod": "HAMBURG,DE,GERMANY",
+          "del": "HAMBURG,DE,GERMANY",
+          "country_name": "GERMANY",
+          "airline_type": "欧洲",
           "ocean_type": "远洋",
           "terms_payment": "T/T",
           "terms_transport": "CY/CY",
           "pay_type": "FREIGHT PREPAID",
           "customer_order_sn": "",
           "terms_shipment": "",
-          "shipper": "SHANDONG YUEMU FOODS CO LTD 206 NATIONAL ROAD NORTH WEIZI STREET WEIFANG, SHANDONG\n",
-          "consignee": "CENTRAL POINT TRADE INC\n",
-          "notifier": "CENTRAL POINT TRADE INC\n",
+          "shipper": "SHANDONG OUHUA IMP.AND EXP. CO., LTD. DAWENHE TOURISM DEVELOPMENT ZONE 262100 ANQIU CITY SHANDONG/ CHINA\n",
+          "consignee": "RAPS FRESH GMBH ROTHENFELDER STRASSE.57 DE-33775 VERSMOLD PHONE NO.:+49 9221 807 176 EMAIL ADDRESS:martina.linke-muenchmeyer@raps.com\n",
+          "notifier": "CONTIBRIDGE I.A. KAY-THOMAS FRANKE SCHIFFAHRT UND SPEDITION GMBH GRUSONSTR.59, 22113 HAMBURG, GERMANY TEL. +49 40/73 10 79-21 FAX +49 40/73 10 79-20\n",
           "ship_mark": "N/M\n",
-          "commodity": "Fresh ginger\n",
+          "commodity": "IQF GARLIC SEGMENTS\n",
           "notes": "",
           "cargo_type": "",
           "packer": "",
-          "num": "1872",
-          "gross_weight": "26800.000",
-          "bulk": "60.000",
-          "sea_trans_cost": "100.00",
+          "num": "2400",
+          "gross_weight": "25500.000",
+          "bulk": "55.000",
+          "sea_trans_cost": "2180.00",
           "teu": "",
-          "volume": "1*40HQ",
-          "volume_desc": "普柜",
+          "volume": "1*40RH",
+          "volume_desc": "特种柜",
           "order_sn": "",
           "status": 2,
           "sea_trans_currency": "USD",
           "container": [
             {
-              "box_type": "40HQ",
+              "box_type": "40RH",
               "box_num": "1",
               "box_no": [
                 ""
@@ -906,57 +918,57 @@
               "seal_number": [
                 ""
               ],
-              "sea_trans_unit_price": "100"
+              "sea_trans_unit_price": "2180"
             }
           ],
           "message_board": [],
           "customer_file_list": [],
           "supplier": [
             {
-              "order_supplier_id": "331309248761823232",
-              "order_id": "331309247201542144",
+              "order_supplier_id": "333120423984103424",
+              "order_id": "333120422704840704",
               "isset_supplier": "1",
               "is_primary": "1",
-              "supplier_id": "805",
-              "supplier_name": "青岛雅然国际物流有限公司",
-              "settle_object_id": "1384",
-              "user_id": "336",
-              "user_name": "闫航",
+              "supplier_id": "26",
+              "supplier_name": "青岛艾克国际物流有限公司",
+              "settle_object_id": "85",
+              "user_id": "66",
+              "user_name": "张翔道",
               "service_item": "booking_space",
               "supplier_period": "60",
               "settlement_date": "20",
               "supplier_pay_date": "0",
               "is_manual": "0",
-              "sys_upttime": "2026-07-03 11:21:48",
-              "supplier_label": "青岛雅然国际物流有限公司-订舱",
+              "sys_upttime": "2026-07-08 13:41:38",
+              "supplier_label": "青岛艾克国际物流有限公司-订舱",
               "service_item_name": "订舱",
               "isset_fee": false
             }
           ],
-          "order_id": "331309247201542144",
-          "order_no": "YWDD20260703107665",
-          "customer_category": ",1,2,",
-          "customer_tax_number": "91370786MA3D6MW35A",
-          "customer_address_cn": "山东省潍坊市昌邑市围子街道206国道北(官道郜北)",
-          "client_expand_id": "261",
-          "customer_contact_phone": "",
-          "customer_main_id": "1",
-          "customer_main_name": "青岛易航道物流科技有限公司",
+          "order_id": "333120422704840704",
+          "order_no": "YWDD20260708108134",
+          "customer_category": ",1,",
+          "customer_tax_number": "91370784MA3CBA6P3K",
+          "customer_address_cn": "",
+          "client_expand_id": "249",
+          "customer_contact_phone": "0536-4267385",
+          "customer_main_id": "3",
+          "customer_main_name": "青岛易汇联供应链管理有限公司",
           "business_main_id": "1",
           "business_main_name": "青岛易航道物流科技有限公司",
           "fund_code": "",
           "fund_name": null,
           "track_atd": "0",
-          "finance_date": "1781884800",
+          "finance_date": "1770048000",
           "pol_cn": "青岛港",
           "pol_country_id": "1",
           "pol_country": "CHINA",
           "pol_country_cn": "中国",
-          "pod_cn": "",
+          "pod_cn": "汉堡",
           "pot_cn": "",
-          "del_cn": "",
-          "country_id": "673",
-          "country_name_cn": "澳大利亚",
+          "del_cn": "汉堡",
+          "country_id": "741",
+          "country_name_cn": "德国",
           "customer_period": "120",
           "customer_settlement_date": "10",
           "period_rule": "0",
@@ -1016,13 +1028,13 @@
           "effective_time": "0",
           "create_id": "828",
           "create_by": "GIMBAL",
-          "create_time": "1783048908",
+          "create_time": "1783489297",
           "update_id": "828",
           "update_by": "GIMBAL",
-          "update_time": "1783048908",
+          "update_time": "1783489298",
           "delete_time": "0",
           "business_time": "0",
-          "main_ids": "1",
+          "main_ids": "3,28,16,1",
           "reverse_status": "0",
           "proprietary_business_status": "0",
           "loan_status": null,
@@ -1047,7 +1059,7 @@
           "financing_apply_amount": "0.00",
           "financing_apply_amount_cny": "0.00",
           "financing_apply_amount_usd": "0.00",
-          "sys_upttime": "2026-07-03 11:21:48",
+          "sys_upttime": "2026-07-08 13:41:38",
           "reverse_status_name": "否",
           "is_delayed_recovery_name": "否",
           "order_finance_arr": [],
@@ -1069,8 +1081,20 @@
             "trucking": false
           },
           "finance_status": true,
-          "main_ids_name": "易航道",
+          "main_ids_name": "易汇联,易汇洋,易海,易航道",
           "policy_main_arr": [
+            {
+              "fee_main_id": "3",
+              "main_name": "青岛易汇联供应链管理有限公司"
+            },
+            {
+              "fee_main_id": "28",
+              "main_name": "青岛易汇洋供应链管理有限公司"
+            },
+            {
+              "fee_main_id": "16",
+              "main_name": "青岛易海供应链管理有限公司"
+            },
             {
               "fee_main_id": "1",
               "main_name": "青岛易航道物流科技有限公司"
@@ -1081,15 +1105,15 @@
           "cargo_type_name": "",
           "period_rule_name": "",
           "trade_term_name": "CIF",
-          "carrier_name": "中国远洋运输（集团）总公司",
+          "carrier_name": "现代商船",
           "terms_transport_name": "CY/CY",
           "terms_payment_name": "T/T",
           "pay_type_name": "FREIGHT PREPAID",
           "m_delivery_type_name": "",
           "audit": [],
           "enable": "1",
-          "policy_match": "auto",
-          "policy_match_name": "自动匹配",
+          "policy_match": "semi",
+          "policy_match_name": "手动选择",
           "real_discount_status_name": "—",
           "expect_discount_status_name": "—",
           "expect_policy_status_name": "",
@@ -1197,65 +1221,65 @@
       "request": {
         "kind": "request",
         "body": {
-          "client_expand_name": "唐欣雨",
+          "client_expand_name": "张珈诺",
           "m_delivery_type": "",
-          "customer_id": "320",
-          "customer_name": "山东悦慕食品有限公司",
-          "service_id": "55",
-          "service_name": "曲静霞",
-          "operator_id": "336",
-          "operator_name": "闫航",
-          "customer_contact_id": "",
-          "customer_contact_name": "",
-          "main_sort": "易航道",
-          "policy_id": "22",
-          "policy_name": "【易航道对客】易航道：自营业务+拖车业务",
+          "customer_id": "411",
+          "customer_name": "山东欧华进出口有限公司",
+          "service_id": "326",
+          "service_name": "王雪莹",
+          "operator_id": "66",
+          "operator_name": "张翔道",
+          "customer_contact_id": "2543",
+          "customer_contact_name": "郑经理",
+          "main_sort": "易汇联,易汇洋,易海,易航道",
+          "policy_id": "132",
+          "policy_name": "【SPV对客】易汇联：非美元项目",
           "policy_type": "JSZX",
           "service_items": [
             "booking_space"
           ],
           "business_type": "1",
           "trade_term": "CIF",
-          "carrier": "COSCO",
-          "carrier_id": "16",
+          "carrier": "HMM",
+          "carrier_id": "33",
           "bl_no": "${var.bl_no}",
-          "etd": 1781884800,
-          "atd": 1783008000,
-          "ship_name": "OOCL FRANCE",
-          "voy": "068E",
+          "etd": 1770048000,
+          "atd": 1783353600,
+          "ship_name": "HMM GDANSK",
+          "voy": "0018W",
           "pol": "QINGDAO,CHINA",
           "pot": "",
-          "pod": "ALEXANDRIA,AUSTRALIA",
-          "del": "ALEXANDRIA,AUSTRALIA",
-          "country_name": "AUSTRALIA",
-          "airline_type": "地中海",
+          "pod": "HAMBURG,DE,GERMANY",
+          "del": "HAMBURG,DE,GERMANY",
+          "country_name": "GERMANY",
+          "airline_type": "欧洲",
           "ocean_type": "远洋",
           "terms_payment": "T/T",
           "terms_transport": "CY/CY",
           "pay_type": "FREIGHT PREPAID",
           "customer_order_sn": "",
           "terms_shipment": "",
-          "shipper": "SHANDONG YUEMU FOODS CO LTD 206 NATIONAL ROAD NORTH WEIZI STREET WEIFANG, SHANDONG\n",
-          "consignee": "CENTRAL POINT TRADE INC\n",
-          "notifier": "CENTRAL POINT TRADE INC\n",
+          "shipper": "SHANDONG OUHUA IMP.AND EXP. CO., LTD. DAWENHE TOURISM DEVELOPMENT ZONE 262100 ANQIU CITY SHANDONG/ CHINA\n",
+          "consignee": "RAPS FRESH GMBH ROTHENFELDER STRASSE.57 DE-33775 VERSMOLD PHONE NO.:+49 9221 807 176 EMAIL ADDRESS:martina.linke-muenchmeyer@raps.com\n",
+          "notifier": "CONTIBRIDGE I.A. KAY-THOMAS FRANKE SCHIFFAHRT UND SPEDITION GMBH GRUSONSTR.59, 22113 HAMBURG, GERMANY TEL. +49 40/73 10 79-21 FAX +49 40/73 10 79-20\n",
           "ship_mark": "N/M\n",
-          "commodity": "Fresh ginger\n",
+          "commodity": "IQF GARLIC SEGMENTS\n",
           "notes": "",
           "cargo_type": "",
           "packer": "",
-          "num": "1872",
-          "gross_weight": "26800.000",
-          "bulk": "60.000",
-          "sea_trans_cost": "100.00",
+          "num": "2400",
+          "gross_weight": "25500.000",
+          "bulk": "55.000",
+          "sea_trans_cost": "2180.00",
           "teu": "",
-          "volume": "1*40HQ",
-          "volume_desc": "普柜",
+          "volume": "1*40RH",
+          "volume_desc": "特种柜",
           "order_sn": "",
           "status": 2,
           "sea_trans_currency": "USD",
           "container": [
             {
-              "box_type": "40HQ",
+              "box_type": "40RH",
               "box_num": "1",
               "box_no": [
                 ""
@@ -1263,70 +1287,70 @@
               "seal_number": [
                 ""
               ],
-              "sea_trans_unit_price": "100"
+              "sea_trans_unit_price": "2180"
             }
           ],
           "message_board": [],
           "customer_file_list": [
             {
-              "client_company_id": "320",
-              "client_company_name": "山东悦慕食品有限公司",
-              "trustee_company_id": "1",
-              "trustee_company_name": "青岛易航道物流科技有限公司",
+              "client_company_id": "411",
+              "client_company_name": "山东欧华进出口有限公司",
+              "trustee_company_id": "3",
+              "trustee_company_name": "青岛易汇联供应链管理有限公司",
               "document_type": "BOOK_CUSTOMER",
-              "file_url": "6a472af86b867.pdf",
-              "file_name": "6a472af86b867.pdf",
-              "file_id": "331309278126145536",
+              "file_url": "6a4de33a1bfcf.pdf",
+              "file_name": "6a4de33a1bfcf.pdf",
+              "file_id": "333120593060691968",
               "file_type": "PDF",
-              "_XID": "row_363"
+              "_XID": "row_923"
             }
           ],
           "supplier": [
             {
-              "order_supplier_id": "331309248761823232",
-              "order_id": "331309247201542144",
+              "order_supplier_id": "333120423984103424",
+              "order_id": "333120422704840704",
               "isset_supplier": "1",
               "is_primary": "1",
-              "supplier_id": "805",
-              "supplier_name": "青岛雅然国际物流有限公司",
-              "settle_object_id": "1384",
-              "user_id": "336",
-              "user_name": "闫航",
+              "supplier_id": "26",
+              "supplier_name": "青岛艾克国际物流有限公司",
+              "settle_object_id": "85",
+              "user_id": "66",
+              "user_name": "张翔道",
               "service_item": "booking_space",
               "supplier_period": "60",
               "settlement_date": "20",
               "supplier_pay_date": "0",
               "is_manual": "0",
-              "sys_upttime": "2026-07-03 11:21:48",
-              "supplier_label": "青岛雅然国际物流有限公司-订舱",
+              "sys_upttime": "2026-07-08 13:41:38",
+              "supplier_label": "青岛艾克国际物流有限公司-订舱",
               "service_item_name": "订舱",
               "isset_fee": false
             }
           ],
-          "order_id": "331309247201542144",
-          "order_no": "YWDD20260703107665",
-          "customer_category": ",1,2,",
-          "customer_tax_number": "91370786MA3D6MW35A",
-          "customer_address_cn": "山东省潍坊市昌邑市围子街道206国道北(官道郜北)",
-          "client_expand_id": "261",
-          "customer_contact_phone": "",
-          "customer_main_id": "1",
-          "customer_main_name": "青岛易航道物流科技有限公司",
+          "order_id": "333120422704840704",
+          "order_no": "YWDD20260708108134",
+          "customer_category": ",1,",
+          "customer_tax_number": "91370784MA3CBA6P3K",
+          "customer_address_cn": "",
+          "client_expand_id": "249",
+          "customer_contact_phone": "0536-4267385",
+          "customer_main_id": "3",
+          "customer_main_name": "青岛易汇联供应链管理有限公司",
           "business_main_id": "1",
           "business_main_name": "青岛易航道物流科技有限公司",
           "fund_code": "",
           "fund_name": null,
           "track_atd": "0",
-          "finance_date": "1781884800",
+          "finance_date": "1770048000",
           "pol_cn": "青岛港",
           "pol_country_id": "1",
           "pol_country": "CHINA",
           "pol_country_cn": "中国",
-          "pod_cn": "",
+          "pod_cn": "汉堡",
           "pot_cn": "",
-          "del_cn": "",
-          "country_id": "673",
-          "country_name_cn": "澳大利亚",
+          "del_cn": "汉堡",
+          "country_id": "741",
+          "country_name_cn": "德国",
           "customer_period": "120",
           "customer_settlement_date": "10",
           "period_rule": "0",
@@ -1386,13 +1410,13 @@
           "effective_time": "0",
           "create_id": "828",
           "create_by": "GIMBAL",
-          "create_time": "1783048908",
+          "create_time": "1783489297",
           "update_id": "828",
           "update_by": "GIMBAL",
-          "update_time": "1783048908",
+          "update_time": "1783489298",
           "delete_time": "0",
           "business_time": "0",
-          "main_ids": "1",
+          "main_ids": "3,28,16,1",
           "reverse_status": "0",
           "proprietary_business_status": "0",
           "loan_status": null,
@@ -1417,7 +1441,7 @@
           "financing_apply_amount": "0.00",
           "financing_apply_amount_cny": "0.00",
           "financing_apply_amount_usd": "0.00",
-          "sys_upttime": "2026-07-03 11:21:48",
+          "sys_upttime": "2026-07-08 13:41:38",
           "reverse_status_name": "否",
           "is_delayed_recovery_name": "否",
           "order_finance_arr": [],
@@ -1439,8 +1463,20 @@
             "trucking": false
           },
           "finance_status": true,
-          "main_ids_name": "易航道",
+          "main_ids_name": "易汇联,易汇洋,易海,易航道",
           "policy_main_arr": [
+            {
+              "fee_main_id": "3",
+              "main_name": "青岛易汇联供应链管理有限公司"
+            },
+            {
+              "fee_main_id": "28",
+              "main_name": "青岛易汇洋供应链管理有限公司"
+            },
+            {
+              "fee_main_id": "16",
+              "main_name": "青岛易海供应链管理有限公司"
+            },
             {
               "fee_main_id": "1",
               "main_name": "青岛易航道物流科技有限公司"
@@ -1451,15 +1487,15 @@
           "cargo_type_name": "",
           "period_rule_name": "",
           "trade_term_name": "CIF",
-          "carrier_name": "中国远洋运输（集团）总公司",
+          "carrier_name": "现代商船",
           "terms_transport_name": "CY/CY",
           "terms_payment_name": "T/T",
           "pay_type_name": "FREIGHT PREPAID",
           "m_delivery_type_name": "",
           "audit": [],
           "enable": "1",
-          "policy_match": "auto",
-          "policy_match_name": "自动匹配",
+          "policy_match": "semi",
+          "policy_match_name": "手动选择",
           "real_discount_status_name": "—",
           "expect_discount_status_name": "—",
           "expect_policy_status_name": "",
@@ -1624,7 +1660,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "331309247201542144"
+          "order_id": "333120422704840704"
         }
       },
       "strategy": [
@@ -1690,7 +1726,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "331309247201542144"
+          "order_id": "333120422704840704"
         }
       },
       "strategy": [
@@ -1757,7 +1793,7 @@
         "kind": "request",
         "body": {
           "action": "check",
-          "order_id": "331309247201542144",
+          "order_id": "333120422704840704",
           "discount_ratio": "",
           "service_project": "booking_space",
           "import_status": 0,
@@ -1767,49 +1803,49 @@
                 {
                   "order_fee_real_id": null,
                   "fee_type": 0,
-                  "policy_sub_id": null,
+                  "policy_sub_id": "462",
                   "service_project": "booking_space",
                   "cost_id": "17",
-                  "settle_object_id": "829",
+                  "settle_object_id": "918",
                   "subsidy_category": "0",
                   "currency": "USD",
-                  "unit_price": "100",
-                  "unit": "box",
-                  "specs": "40HQ",
-                  "num": "1",
+                  "unit_price": "2180",
+                  "unit": "vote",
+                  "specs": "",
+                  "num": 1,
                   "remark": null,
                   "discount_ratio": 100,
-                  "discount_amount": "100.00",
+                  "discount_amount": "2180.00",
                   "discount_status": "0",
-                  "policy_sub_status_name": "异常",
+                  "policy_sub_status_name": "正常",
                   "pay_sync_status": 1,
-                  "unique_id": "b49c2b4c-79bd-4038-b07c-cbe3f8d89c20",
-                  "init_main_name": "青岛易航道物流科技有限公司",
-                  "main_name": "青岛易航道物流科技有限公司",
+                  "unique_id": "d861e31c-266f-463b-8e03-0d3af0ef2928",
+                  "init_main_name": "青岛易汇联供应链管理有限公司",
+                  "main_name": "青岛易汇联供应链管理有限公司",
                   "rowIndex": 0
                 },
                 {
                   "order_fee_real_id": null,
                   "fee_type": 0,
-                  "policy_sub_id": null,
+                  "policy_sub_id": "462",
                   "service_project": "booking_space",
-                  "cost_id": "18",
-                  "settle_object_id": "829",
-                  "subsidy_category": "1",
-                  "currency": "USD",
-                  "unit_price": "100",
+                  "cost_id": "22",
+                  "settle_object_id": "918",
+                  "subsidy_category": "0",
+                  "currency": "CNY",
+                  "unit_price": "1.68",
                   "unit": "vote",
                   "specs": "",
                   "num": 1,
                   "remark": null,
-                  "discount_ratio": 97.5,
-                  "discount_amount": "97.50",
+                  "discount_ratio": 100,
+                  "discount_amount": "1.68",
                   "discount_status": "0",
-                  "policy_sub_status_name": "异常",
+                  "policy_sub_status_name": "正常",
                   "pay_sync_status": 1,
-                  "unique_id": "692124b6-e269-4495-85a0-25975700d8ea",
-                  "init_main_name": "青岛易航道物流科技有限公司",
-                  "main_name": "青岛易航道物流科技有限公司",
+                  "unique_id": "019c9a4d-a5b5-4671-9497-38f19e7e18ef",
+                  "init_main_name": "青岛易汇联供应链管理有限公司",
+                  "main_name": "青岛易汇联供应链管理有限公司",
                   "rowIndex": 1
                 }
               ]
@@ -1821,51 +1857,51 @@
                 {
                   "order_fee_real_id": null,
                   "fee_type": 0,
-                  "policy_sub_id": null,
+                  "policy_sub_id": "462",
                   "service_project": "booking_space",
                   "cost_id": "17",
-                  "settle_object_id": "1384",
+                  "settle_object_id": "85",
                   "subsidy_category": "0",
                   "currency": "USD",
-                  "unit_price": "100",
-                  "unit": "box",
-                  "specs": "40HQ",
-                  "num": "1",
-                  "remark": null,
-                  "discount_ratio": 100,
-                  "discount_amount": "100.00",
-                  "discount_status": "0",
-                  "policy_sub_status_name": "异常",
-                  "pay_sync_status": 1,
-                  "unique_id": "b49c2b4c-79bd-4038-b07c-cbe3f8d89c20",
-                  "init_main_name": "青岛易航道物流科技有限公司",
-                  "main_name": null,
-                  "related_unique_id": "b49c2b4c-79bd-4038-b07c-cbe3f8d89c20",
-                  "rowIndex": 0
-                },
-                {
-                  "order_fee_real_id": null,
-                  "fee_type": 0,
-                  "policy_sub_id": null,
-                  "service_project": "booking_space",
-                  "cost_id": "18",
-                  "settle_object_id": "1384",
-                  "subsidy_category": "0",
-                  "currency": "USD",
-                  "unit_price": "100",
+                  "unit_price": "2180",
                   "unit": "vote",
                   "specs": "",
                   "num": 1,
                   "remark": null,
                   "discount_ratio": 100,
-                  "discount_amount": "100.00",
+                  "discount_amount": "2180.00",
                   "discount_status": "0",
                   "policy_sub_status_name": "异常",
                   "pay_sync_status": 1,
-                  "unique_id": "692124b6-e269-4495-85a0-25975700d8ea",
-                  "init_main_name": "青岛易航道物流科技有限公司",
-                  "main_name": null,
-                  "related_unique_id": "692124b6-e269-4495-85a0-25975700d8ea",
+                  "unique_id": "d861e31c-266f-463b-8e03-0d3af0ef2928",
+                  "init_main_name": "—",
+                  "main_name": "青岛易汇联供应链管理有限公司",
+                  "related_unique_id": "d861e31c-266f-463b-8e03-0d3af0ef2928",
+                  "rowIndex": 0
+                },
+                {
+                  "order_fee_real_id": null,
+                  "fee_type": 0,
+                  "policy_sub_id": "462",
+                  "service_project": "booking_space",
+                  "cost_id": "22",
+                  "settle_object_id": "85",
+                  "subsidy_category": "0",
+                  "currency": "CNY",
+                  "unit_price": "1.68",
+                  "unit": "vote",
+                  "specs": "",
+                  "num": 1,
+                  "remark": null,
+                  "discount_ratio": 100,
+                  "discount_amount": "1.68",
+                  "discount_status": "0",
+                  "policy_sub_status_name": "异常",
+                  "pay_sync_status": 1,
+                  "unique_id": "019c9a4d-a5b5-4671-9497-38f19e7e18ef",
+                  "init_main_name": "—",
+                  "main_name": "青岛易汇联供应链管理有限公司",
+                  "related_unique_id": "019c9a4d-a5b5-4671-9497-38f19e7e18ef",
                   "rowIndex": 1
                 }
               ]
@@ -1924,7 +1960,7 @@
         "kind": "request",
         "body": {
           "action": "submit",
-          "order_id": "331309247201542144",
+          "order_id": "333120422704840704",
           "discount_ratio": "",
           "service_project": "booking_space",
           "import_status": 0,
@@ -1934,49 +1970,49 @@
                 {
                   "order_fee_real_id": null,
                   "fee_type": 0,
-                  "policy_sub_id": null,
+                  "policy_sub_id": "462",
                   "service_project": "booking_space",
                   "cost_id": "17",
-                  "settle_object_id": "829",
+                  "settle_object_id": "918",
                   "subsidy_category": "0",
                   "currency": "USD",
-                  "unit_price": "100",
-                  "unit": "box",
-                  "specs": "40HQ",
-                  "num": "1",
+                  "unit_price": "2180",
+                  "unit": "vote",
+                  "specs": "",
+                  "num": 1,
                   "remark": null,
                   "discount_ratio": 100,
-                  "discount_amount": "100.00",
+                  "discount_amount": "2180.00",
                   "discount_status": "0",
-                  "policy_sub_status_name": "异常",
+                  "policy_sub_status_name": "正常",
                   "pay_sync_status": 1,
-                  "unique_id": "b49c2b4c-79bd-4038-b07c-cbe3f8d89c20",
-                  "init_main_name": "青岛易航道物流科技有限公司",
-                  "main_name": "青岛易航道物流科技有限公司",
+                  "unique_id": "d861e31c-266f-463b-8e03-0d3af0ef2928",
+                  "init_main_name": "青岛易汇联供应链管理有限公司",
+                  "main_name": "青岛易汇联供应链管理有限公司",
                   "rowIndex": 0
                 },
                 {
                   "order_fee_real_id": null,
                   "fee_type": 0,
-                  "policy_sub_id": null,
+                  "policy_sub_id": "462",
                   "service_project": "booking_space",
-                  "cost_id": "18",
-                  "settle_object_id": "829",
-                  "subsidy_category": "1",
-                  "currency": "USD",
-                  "unit_price": "100",
+                  "cost_id": "22",
+                  "settle_object_id": "918",
+                  "subsidy_category": "0",
+                  "currency": "CNY",
+                  "unit_price": "1.68",
                   "unit": "vote",
                   "specs": "",
                   "num": 1,
                   "remark": null,
-                  "discount_ratio": 97.5,
-                  "discount_amount": "97.50",
+                  "discount_ratio": 100,
+                  "discount_amount": "1.68",
                   "discount_status": "0",
-                  "policy_sub_status_name": "异常",
+                  "policy_sub_status_name": "正常",
                   "pay_sync_status": 1,
-                  "unique_id": "692124b6-e269-4495-85a0-25975700d8ea",
-                  "init_main_name": "青岛易航道物流科技有限公司",
-                  "main_name": "青岛易航道物流科技有限公司",
+                  "unique_id": "019c9a4d-a5b5-4671-9497-38f19e7e18ef",
+                  "init_main_name": "青岛易汇联供应链管理有限公司",
+                  "main_name": "青岛易汇联供应链管理有限公司",
                   "rowIndex": 1
                 }
               ]
@@ -1988,51 +2024,51 @@
                 {
                   "order_fee_real_id": null,
                   "fee_type": 0,
-                  "policy_sub_id": null,
+                  "policy_sub_id": "462",
                   "service_project": "booking_space",
                   "cost_id": "17",
-                  "settle_object_id": "1384",
+                  "settle_object_id": "85",
                   "subsidy_category": "0",
                   "currency": "USD",
-                  "unit_price": "100",
-                  "unit": "box",
-                  "specs": "40HQ",
-                  "num": "1",
-                  "remark": null,
-                  "discount_ratio": 100,
-                  "discount_amount": "100.00",
-                  "discount_status": "0",
-                  "policy_sub_status_name": "异常",
-                  "pay_sync_status": 1,
-                  "unique_id": "b49c2b4c-79bd-4038-b07c-cbe3f8d89c20",
-                  "init_main_name": "青岛易航道物流科技有限公司",
-                  "main_name": null,
-                  "related_unique_id": "b49c2b4c-79bd-4038-b07c-cbe3f8d89c20",
-                  "rowIndex": 0
-                },
-                {
-                  "order_fee_real_id": null,
-                  "fee_type": 0,
-                  "policy_sub_id": null,
-                  "service_project": "booking_space",
-                  "cost_id": "18",
-                  "settle_object_id": "1384",
-                  "subsidy_category": "0",
-                  "currency": "USD",
-                  "unit_price": "100",
+                  "unit_price": "2180",
                   "unit": "vote",
                   "specs": "",
                   "num": 1,
                   "remark": null,
                   "discount_ratio": 100,
-                  "discount_amount": "100.00",
+                  "discount_amount": "2180.00",
                   "discount_status": "0",
                   "policy_sub_status_name": "异常",
                   "pay_sync_status": 1,
-                  "unique_id": "692124b6-e269-4495-85a0-25975700d8ea",
-                  "init_main_name": "青岛易航道物流科技有限公司",
-                  "main_name": null,
-                  "related_unique_id": "692124b6-e269-4495-85a0-25975700d8ea",
+                  "unique_id": "d861e31c-266f-463b-8e03-0d3af0ef2928",
+                  "init_main_name": "—",
+                  "main_name": "青岛易汇联供应链管理有限公司",
+                  "related_unique_id": "d861e31c-266f-463b-8e03-0d3af0ef2928",
+                  "rowIndex": 0
+                },
+                {
+                  "order_fee_real_id": null,
+                  "fee_type": 0,
+                  "policy_sub_id": "462",
+                  "service_project": "booking_space",
+                  "cost_id": "22",
+                  "settle_object_id": "85",
+                  "subsidy_category": "0",
+                  "currency": "CNY",
+                  "unit_price": "1.68",
+                  "unit": "vote",
+                  "specs": "",
+                  "num": 1,
+                  "remark": null,
+                  "discount_ratio": 100,
+                  "discount_amount": "1.68",
+                  "discount_status": "0",
+                  "policy_sub_status_name": "异常",
+                  "pay_sync_status": 1,
+                  "unique_id": "019c9a4d-a5b5-4671-9497-38f19e7e18ef",
+                  "init_main_name": "—",
+                  "main_name": "青岛易汇联供应链管理有限公司",
+                  "related_unique_id": "019c9a4d-a5b5-4671-9497-38f19e7e18ef",
                   "rowIndex": 1
                 }
               ]
@@ -2090,7 +2126,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "331309247201542144"
+          "order_id": "333120422704840704"
         }
       },
       "strategy": [
@@ -2135,7 +2171,7 @@
     },
     {
       "kind": "step",
-      "description": "produces downstream id(s): order_id",
+      "description": "produces downstream id(s): code, order_id",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
@@ -2156,7 +2192,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "331309247201542144"
+          "order_id": "333120422704840704"
         }
       },
       "strategy": [
@@ -2187,6 +2223,19 @@
           "scope": "scenario"
         },
         {
+          "kind": "extract",
+          "name": "extract_code",
+          "phase": "after_request",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.order_sub[0].order_sub_no",
+          "target": "code",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        },
+        {
           "kind": "assign",
           "name": "assign_order_id_6",
           "phase": "before_request",
@@ -2206,271 +2255,7 @@
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/order/checkGenerateOrderSub",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "order_id": "331309247201542144"
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/order/order/checkGenerateOrderSub 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id_7",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id_7",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "mutation verb",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/order/generateOrderSub",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "order_id": "331309247201542144"
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/order/order/generateOrderSub 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id_7",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id_7",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "produces downstream id(s): order_id",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/order/orderDetail",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "order_id": "331309247201542144"
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/order/order/orderDetail 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "extract",
-          "name": "extract_order_id_8",
-          "phase": "after_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.order_id",
-          "target": "order_id_8",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id_7",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id_7",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "mutation verb; produces downstream id(s): code, order_fee_real_ids, order_id",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/orderFee/toggleRealAmount",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "order_id": "331309247201542144"
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/order/orderFee/toggleRealAmount 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "extract",
-          "name": "extract_order_id_9",
-          "phase": "after_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.amount_summary.order_id",
-          "target": "order_id_9",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
-        },
-        {
-          "kind": "extract",
-          "name": "extract_order_fee_real_ids",
-          "phase": "after_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.to_customer_supplier[0].put_amount.standard_list[0].order_fee_real_id",
-          "target": "order_fee_real_ids",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
-        },
-        {
-          "kind": "extract",
-          "name": "extract_code",
-          "phase": "after_request",
-          "order": 2,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.to_customer_supplier[0].order_sub_no",
-          "target": "code",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id_8",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id_8",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "mutation verb",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/orderFee/realAmountLockSubmit",
+        "path": "/api/order/orderFee/assetPush",
         "headers": {
           "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
@@ -2487,11 +2272,7 @@
         "kind": "request",
         "body": {
           "action": "check",
-          "order_id": "331309247201542144",
-          "order_fee_real_ids": [
-            "331309335617471488",
-            "331309335617471488"
-          ]
+          "order_id": "333120422704840704"
         }
       },
       "strategy": [
@@ -2505,40 +2286,18 @@
           "target": "$.response_status",
           "operator": "eq",
           "expected": 200,
-          "message": "/api/order/orderFee/realAmountLockSubmit 应返回200",
+          "message": "/api/order/orderFee/assetPush 应返回200",
           "soft": false
         },
         {
           "kind": "assign",
-          "name": "assign_order_id_9",
+          "name": "assign_order_id_7",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "source": "$.order_id_9",
+          "source": "$.order_id_7",
           "target": "$.request_body.order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_fee_real_ids",
-          "phase": "before_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_fee_real_ids",
-          "target": "$.request_body.order_fee_real_ids[0]",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_fee_real_ids",
-          "phase": "before_request",
-          "order": 2,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_fee_real_ids",
-          "target": "$.request_body.order_fee_real_ids[1]",
           "scope": "scenario"
         }
       ]
@@ -2550,7 +2309,7 @@
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/orderFee/realAmountLockSubmit",
+        "path": "/api/order/orderFee/assetPush",
         "headers": {
           "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
@@ -2567,11 +2326,7 @@
         "kind": "request",
         "body": {
           "action": "audit",
-          "order_id": "331309247201542144",
-          "order_fee_real_ids": [
-            "331309335617471488",
-            "331309335617471488"
-          ]
+          "order_id": "333120422704840704"
         }
       },
       "strategy": [
@@ -2585,40 +2340,18 @@
           "target": "$.response_status",
           "operator": "eq",
           "expected": 200,
-          "message": "/api/order/orderFee/realAmountLockSubmit 应返回200",
+          "message": "/api/order/orderFee/assetPush 应返回200",
           "soft": false
         },
         {
           "kind": "assign",
-          "name": "assign_order_id_9",
+          "name": "assign_order_id_7",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "source": "$.order_id_9",
+          "source": "$.order_id_7",
           "target": "$.request_body.order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_fee_real_ids",
-          "phase": "before_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_fee_real_ids",
-          "target": "$.request_body.order_fee_real_ids[0]",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_fee_real_ids",
-          "phase": "before_request",
-          "order": 2,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_fee_real_ids",
-          "target": "$.request_body.order_fee_real_ids[1]",
           "scope": "scenario"
         }
       ]
@@ -2630,7 +2363,7 @@
         "kind": "api",
         "service": "tidb-test-service",
         "method": "POST",
-        "path": "/api/order/orderFee/realAmountLockSubmit",
+        "path": "/api/order/orderFee/assetPush",
         "headers": {
           "sec-ch-ua-platform": "\"Windows\"",
           "Authorization": "${auth.codfish.token}",
@@ -2647,16 +2380,12 @@
         "kind": "request",
         "body": {
           "action": "submit",
-          "order_id": "331309247201542144",
-          "order_fee_real_ids": [
-            "331309335617471488",
-            "331309335617471488"
-          ],
+          "order_id": "333120422704840704",
           "audit_msg": {
-            "title": "业务订单ID",
-            "code": "ZDD20260703017128",
+            "title": "资产推送申请",
+            "code": "ZDD20260708018052",
             "msgs": [
-              "费用锁定申请"
+              "资产推送申请"
             ]
           },
           "select_node_user": [
@@ -2678,47 +2407,25 @@
           "target": "$.response_status",
           "operator": "eq",
           "expected": 200,
-          "message": "/api/order/orderFee/realAmountLockSubmit 应返回200",
+          "message": "/api/order/orderFee/assetPush 应返回200",
           "soft": false
         },
         {
           "kind": "assign",
-          "name": "assign_order_id_9",
+          "name": "assign_order_id_7",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "source": "$.order_id_9",
+          "source": "$.order_id_7",
           "target": "$.request_body.order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_fee_real_ids",
-          "phase": "before_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_fee_real_ids",
-          "target": "$.request_body.order_fee_real_ids[0]",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_fee_real_ids",
-          "phase": "before_request",
-          "order": 2,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_fee_real_ids",
-          "target": "$.request_body.order_fee_real_ids[1]",
           "scope": "scenario"
         },
         {
           "kind": "assign",
           "name": "assign_code",
           "phase": "before_request",
-          "order": 3,
+          "order": 1,
           "enabled": true,
           "onFailure": "abort",
           "source": "$.code",
@@ -2729,7 +2436,7 @@
     },
     {
       "kind": "step",
-      "description": "mutation verb",
+      "description": "mutation verb; produces downstream id(s): order_id",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
@@ -2750,7 +2457,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "331309247201542144"
+          "order_id": "333120422704840704"
         }
       },
       "strategy": [
@@ -2769,12 +2476,12 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id_9",
+          "name": "assign_order_id_7",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "source": "$.order_id_9",
+          "source": "$.order_id_7",
           "target": "$.request_body.order_id",
           "scope": "scenario"
         }
@@ -2782,7 +2489,7 @@
     },
     {
       "kind": "step",
-      "description": "produces downstream id(s): audit_id, audit_ids",
+      "description": "produces downstream id(s): audit_id",
       "api": {
         "kind": "api",
         "service": "tidb-test-service",
@@ -2837,19 +2544,6 @@
           "required": true,
           "default": null,
           "scope": "scenario"
-        },
-        {
-          "kind": "extract",
-          "name": "extract_audit_ids",
-          "phase": "after_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].audit_id",
-          "target": "audit_ids",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
         }
       ]
     },
@@ -2876,7 +2570,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "audit_id": "331309409298808832"
+          "audit_id": "333120868873928704"
         }
       },
       "strategy": [
@@ -2895,13 +2589,13 @@
         },
         {
           "kind": "extract",
-          "name": "extract_order_id_10",
+          "name": "extract_order_id_9",
           "phase": "after_request",
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
           "expression": "$.response_body.data.audit_content.relation_id",
-          "target": "order_id_10",
+          "target": "order_id_9",
           "required": true,
           "default": null,
           "scope": "scenario"
@@ -2915,6 +2609,188 @@
           "onFailure": "abort",
           "source": "$.audit_id",
           "target": "$.request_body.audit_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "produces downstream id(s): audit_ids",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderDetail",
+        "headers": {
+          "sec-ch-ua-platform": "\"Windows\"",
+          "Authorization": "${auth.codfish.token}",
+          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+          "Content-Type": "application/json;charset=UTF-8",
+          "sec-ch-ua-mobile": "?0",
+          "Sec-Fetch-Site": "same-origin",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Dest": "empty"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "order_id": "333120422704840704"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/order/orderDetail 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_audit_ids",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.audit[0].audit_id",
+          "target": "audit_ids",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        },
+        {
+          "kind": "assign",
+          "name": "assign_order_id_9",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.order_id_9",
+          "target": "$.request_body.order_id",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "mutation verb",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/home/audit/auditExecute",
+        "headers": {
+          "sec-ch-ua-platform": "\"Windows\"",
+          "Authorization": "${auth.codfish.token}",
+          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+          "Content-Type": "application/json;charset=UTF-8",
+          "sec-ch-ua-mobile": "?0",
+          "Sec-Fetch-Site": "same-origin",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Dest": "empty"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "audit_ids": [
+            "333120868873928704"
+          ],
+          "audit_status": 2,
+          "audit_remark": null
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/home/audit/auditExecute 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assign",
+          "name": "assign_audit_ids",
+          "phase": "before_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "source": "$.audit_ids",
+          "target": "$.request_body.audit_ids[0]",
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "produces downstream id(s): order_id",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/order/orderPage",
+        "headers": {
+          "sec-ch-ua-platform": "\"Windows\"",
+          "Authorization": "${auth.codfish.token}",
+          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
+          "Content-Type": "application/json;charset=UTF-8",
+          "sec-ch-ua-mobile": "?0",
+          "Sec-Fetch-Site": "same-origin",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Dest": "empty"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page_no": 1,
+          "page_size": 20,
+          "sort_field": "update_time",
+          "sort_order": "desc",
+          "params": {}
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/order/orderPage 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_order_id_10",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body.data.data[0].order_id",
+          "target": "order_id_10",
+          "required": true,
+          "default": null,
           "scope": "scenario"
         }
       ]
@@ -2942,7 +2818,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "331309247201542144"
+          "order_id": "333120422704840704"
         }
       },
       "strategy": [
@@ -2987,757 +2863,6 @@
     },
     {
       "kind": "step",
-      "description": "mutation verb",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/home/audit/auditExecute",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "audit_ids": [
-            "331309409298808832"
-          ],
-          "audit_status": 2,
-          "audit_remark": null
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/home/audit/auditExecute 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_audit_ids",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.audit_ids",
-          "target": "$.request_body.audit_ids[0]",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "produces downstream id(s): order_id",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/order/orderDetail",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "order_id": "331309247201542144"
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/order/order/orderDetail 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "extract",
-          "name": "extract_order_id_12",
-          "phase": "after_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.order_id",
-          "target": "order_id_12",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id_11",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id_11",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "mutation verb",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/orderFee/assetPush",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "action": "check",
-          "order_id": "331309247201542144"
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/order/orderFee/assetPush 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id_12",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id_12",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "mutation verb",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/orderFee/assetPush",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "action": "audit",
-          "order_id": "331309247201542144"
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/order/orderFee/assetPush 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id_12",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id_12",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "mutation verb",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/orderFee/assetPush",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "action": "submit",
-          "order_id": "331309247201542144",
-          "audit_msg": {
-            "title": "资产推送申请",
-            "code": "ZDD20260703017128",
-            "msgs": [
-              "资产推送申请"
-            ]
-          },
-          "select_node_user": [
-            {
-              "node_sort": "0",
-              "user_id": "828"
-            }
-          ]
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/order/orderFee/assetPush 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id_12",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id_12",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_code",
-          "phase": "before_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.code",
-          "target": "$.request_body.audit_msg.code",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "mutation verb",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/orderFee/toggleRealAmount",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "order_id": "331309247201542144"
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/order/orderFee/toggleRealAmount 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id_12",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id_12",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "produces downstream id(s): audit_id, audit_ids",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/home/audit/auditPage",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "page_no": 1,
-          "page_size": 20,
-          "active_tab": "examine_wait",
-          "sort_field": "expedite_num",
-          "sort_order": "desc",
-          "params": {}
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/home/audit/auditPage 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "extract",
-          "name": "extract_audit_id_2",
-          "phase": "after_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].audit_id",
-          "target": "audit_id_2",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
-        },
-        {
-          "kind": "extract",
-          "name": "extract_audit_ids_2",
-          "phase": "after_request",
-          "order": 1,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].audit_id",
-          "target": "audit_ids_2",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "produces downstream id(s): order_id",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/home/audit/auditDetail",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "audit_id": "331309459257163776"
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/home/audit/auditDetail 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "extract",
-          "name": "extract_order_id_13",
-          "phase": "after_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.audit_content.relation_id",
-          "target": "order_id_13",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_audit_id_2",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.audit_id_2",
-          "target": "$.request_body.audit_id",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "mutation verb",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/home/audit/auditExecute",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "audit_ids": [
-            "331309459257163776"
-          ],
-          "audit_status": 2,
-          "audit_remark": null
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/home/audit/auditExecute 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "assign",
-          "name": "assign_audit_ids_2",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.audit_ids_2",
-          "target": "$.request_body.audit_ids[0]",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "produces downstream id(s): order_id",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/orderEntrust/orderPage",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "page_no": 1,
-          "page_size": 20,
-          "order_no": "",
-          "customer_id": [],
-          "sort_field": "update_time",
-          "sort_order": "desc",
-          "params": {}
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/order/orderEntrust/orderPage 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "extract",
-          "name": "extract_order_id_14",
-          "phase": "after_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.data[0].order_id",
-          "target": "order_id_14",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "produces downstream id(s): order_id",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/order/orderDetail",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "order_id": "331309247201542144"
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/order/order/orderDetail 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "extract",
-          "name": "extract_order_id_15",
-          "phase": "after_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.order_id",
-          "target": "order_id_15",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id_14",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id_14",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
-      "description": "mutation verb; produces downstream id(s): order_id",
-      "api": {
-        "kind": "api",
-        "service": "tidb-test-service",
-        "method": "POST",
-        "path": "/api/order/orderFee/toggleRealAmount",
-        "headers": {
-          "sec-ch-ua-platform": "\"Windows\"",
-          "Authorization": "${auth.codfish.token}",
-          "sec-ch-ua": "\"Microsoft Edge\";v=\"149\", \"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-          "Content-Type": "application/json;charset=UTF-8",
-          "sec-ch-ua-mobile": "?0",
-          "Sec-Fetch-Site": "same-origin",
-          "Sec-Fetch-Mode": "cors",
-          "Sec-Fetch-Dest": "empty"
-        },
-        "timeout": 30
-      },
-      "request": {
-        "kind": "request",
-        "body": {
-          "order_id": "331309247201542144"
-        }
-      },
-      "strategy": [
-        {
-          "kind": "assertion",
-          "name": "assert_http_status_eq_200",
-          "phase": "verifying",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "target": "$.response_status",
-          "operator": "eq",
-          "expected": 200,
-          "message": "/api/order/orderFee/toggleRealAmount 应返回200",
-          "soft": false
-        },
-        {
-          "kind": "extract",
-          "name": "extract_order_id_16",
-          "phase": "after_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.data.amount_summary.order_id",
-          "target": "order_id_16",
-          "required": true,
-          "default": null,
-          "scope": "scenario"
-        },
-        {
-          "kind": "assign",
-          "name": "assign_order_id_15",
-          "phase": "before_request",
-          "order": 0,
-          "enabled": true,
-          "onFailure": "abort",
-          "source": "$.order_id_15",
-          "target": "$.request_body.order_id",
-          "scope": "scenario"
-        }
-      ]
-    },
-    {
-      "kind": "step",
       "description": "[WARN] unrecognized verb 'ordernotice' — kept conservatively as a possible state change; extend MUTATION_VERBS or READ_SUFFIX to classify it properly",
       "api": {
         "kind": "api",
@@ -3759,7 +2884,7 @@
       "request": {
         "kind": "request",
         "body": {
-          "order_id": "331309247201542144",
+          "order_id": "333120422704840704",
           "action": "check"
         }
       },
@@ -3779,12 +2904,12 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id_16",
+          "name": "assign_order_id_11",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "source": "$.order_id_16",
+          "source": "$.order_id_11",
           "target": "$.request_body.order_id",
           "scope": "scenario"
         }
@@ -3814,7 +2939,7 @@
         "kind": "request",
         "body": {
           "action": "submit",
-          "order_id": "331309247201542144",
+          "order_id": "333120422704840704",
           "finance_ids": [
             "${var.finance_id_1}",
             "${var.finance_id_2}"
@@ -3841,12 +2966,12 @@
         },
         {
           "kind": "assign",
-          "name": "assign_order_id_16",
+          "name": "assign_order_id_11",
           "phase": "before_request",
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "source": "$.order_id_16",
+          "source": "$.order_id_11",
           "target": "$.request_body.order_id",
           "scope": "scenario"
         }
