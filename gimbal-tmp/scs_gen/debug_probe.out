@@ -1,0 +1,7 @@
+https://test.21eline.com/
+<gimbal.auth.authenticators.yhr.YHRAuthenticator object at 0x0000026DF6A59160>
+[debug] exit=0 total=1 passed=1 failed=0
+[debug] captured 1 http.response events:
+--- [0] step_id=step-000 status=0 duration=1574ms
+    body_keys=NoneType
+    body_head=None

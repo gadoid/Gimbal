@@ -1,0 +1,118 @@
+{
+  "generated": "2026-07-09T16:39:22.672073+08:00",
+  "baseline_url": "https://test.21eline.com/newshopadmin-tidb/SyncLogorder/ajaxGetList.html?page=1&size=15&wd=&search_company=&order_terminated_shutout_status=1&bulk_query_type=1&bulk_query=0&release_status=&financing_status=&sale=&ship_company=&search_time%5Bcharge_pay_date%5D%5B0%5D=&search_time%5Bcharge_pay_date%5D%5B1%5D=",
+  "baseline_count": 540,
+  "page_size": 5,
+  "cases": [
+    {
+      "case_id": "release_status__0",
+      "param": "release_status",
+      "cn_name": "放款状态",
+      "category": "ENUM",
+      "response_field": "release_status",
+      "response_fields": [],
+      "query_override": {
+        "release_status": "1"
+      },
+      "expect": {
+        "count_op": "le",
+        "count_baseline": 540,
+        "anchor_row_id": "ROW-1",
+        "anchor_order_id": "ORD-1",
+        "rows_display_value": "已放款",
+        "rows_canon_value": "已放款"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "release_status__1",
+      "param": "release_status",
+      "cn_name": "放款状态",
+      "category": "ENUM",
+      "response_field": "release_status",
+      "response_fields": [],
+      "query_override": {
+        "release_status": "0"
+      },
+      "expect": {
+        "count_op": "le",
+        "count_baseline": 540,
+        "anchor_row_id": "ROW-2",
+        "anchor_order_id": "ORD-2",
+        "rows_display_value": "未放款",
+        "rows_canon_value": "未放款"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "financing_status__0",
+      "param": "financing_status",
+      "cn_name": "融资状态",
+      "category": "ENUM",
+      "response_field": "financing_status",
+      "response_fields": [],
+      "query_override": {
+        "financing_status": "finished"
+      },
+      "expect": {
+        "count_op": "le",
+        "count_baseline": 540,
+        "anchor_row_id": "ROW-3",
+        "anchor_order_id": "ORD-3",
+        "rows_display_value": "已融资",
+        "rows_canon_value": "已融资"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "sale__0",
+      "param": "sale",
+      "cn_name": "销售员",
+      "category": "FUZZY",
+      "response_field": "order_opt_sales",
+      "response_fields": [
+        "order_opt_sales"
+      ],
+      "query_override": {
+        "sale": "银小忠"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 540,
+        "anchor_row_id": "ROW-4",
+        "anchor_order_id": "ORD-4",
+        "rows_display_value": "银小忠",
+        "rows_canon_value": "银小忠"
+      },
+      "negative": {
+        "query_value": "银小忠_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "ship_company__0",
+      "param": "ship_company",
+      "cn_name": "船公司",
+      "category": "FUZZY",
+      "response_field": "schedule_carrier",
+      "response_fields": [
+        "schedule_carrier"
+      ],
+      "query_override": {
+        "ship_company": "COSCO"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 540,
+        "anchor_row_id": "ROW-5",
+        "anchor_order_id": "ORD-5",
+        "rows_display_value": "COSCO",
+        "rows_canon_value": "COSCO"
+      },
+      "negative": {
+        "query_value": "COSCO_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    }
+  ]
+}

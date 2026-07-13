@@ -1,0 +1,82 @@
+{
+  "kind": "scenario",
+  "scenarioId": "e2e订单到应收核销",
+  "meta": {
+    "name": "全链路-订单创建至应收核销-正常",
+    "description": "scs_gen working copy — seeded with one steps[0] so build_scenario.py can read the api template. The user's scs.json itself is untouched (steps:[]); once they fill in their real first step, this seed is no longer needed.",
+    "module": "settlement",
+    "priority": 1,
+    "author": "codfish",
+    "owner": "codfish",
+    "tags": [
+      "smoke",
+      "settlement"
+    ],
+    "version": "1.0.0",
+    "createTime": "2026-06-23T10:00:00",
+    "expire": false,
+    "requirementRef": []
+  },
+  "config": {
+    "setup": [],
+    "teardown": [],
+    "services": {
+      "tidb-test-service": "https://test.21eline.com/"
+    },
+    "vars": {
+      "bl_no": "OH202607070003"
+    },
+    "users": {
+      "codfish": {
+        "url": "https://test.21eline.com/",
+        "username": "yhxjsx",
+        "password": "Codfish1234!",
+        "expires_in": 7200,
+        "token_type": "Cookie"
+      }
+    },
+    "timePolicy": {
+      "kind": "record"
+    },
+    "retry": null
+  },
+  "resource": {},
+  "steps": [
+    {
+      "kind": "step",
+      "enabled": false,
+      "description": "ajaxGetList baseline (seed; inert — see SKILL.md scaffold-seeding-contract)",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": []
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+2026-07-09 18:29:39.117 | WARNING  | [ConfigLoader] ÏîÄ¿¸ùÄ¿Â¼: D:\Gimbal\Gimbal
+{"timestamp":"2026-07-09T10:29:39.125300+00:00","level":"INFO","logger":"gimbal.core.bootstrap","function":"bootstrap","line":79,"message":"[bootstrap] ÅäÖÃ¼ÓÔØÍê³É: env=dev mode=local"}
+{"timestamp":"2026-07-09T10:29:39.126724+00:00","level":"INFO","logger":"gimbal.core.bootstrap","function":"bootstrap","line":82,"message":"[bootstrap] ³õÊ¼»¯»ù´¡ÉèÊ©..."}
+{"timestamp":"2026-07-09T10:29:39.255812+00:00","level":"INFO","logger":"gimbal.core.bootstrap","function":"bootstrap","line":99,"message":"[bootstrap] »ù´¡ÉèÊ©³õÊ¼»¯Íê³É: EventBus, Archive, ContextManager, Dispatcher, HookRegistry, PluginRegistry"}
+{"timestamp":"2026-07-09T10:29:39.278563+00:00","level":"INFO","logger":"logging","function":"callHandlers","line":1737,"message":"[PluginLoader] discovered 2 plugin(s): ['gimbal-collector', 'gimbal-response-body-extract']"}
+{"timestamp":"2026-07-09T10:29:39.278879+00:00","level":"INFO","logger":"logging","function":"callHandlers","line":1737,"message":"[PluginLoader] skip disabled plugin: gimbal-collector"}
+{"timestamp":"2026-07-09T10:29:39.280454+00:00","level":"INFO","logger":"logging","function":"callHandlers","line":1737,"message":"[Plugin:gimbal-response-body-extract] loaded (v0.1.0)"}
+{"timestamp":"2026-07-09T10:29:39.280819+00:00","level":"INFO","logger":"logging","function":"callHandlers","line":1737,"message":"[ResponseBodyExtractPlugin] activated: target='response_body' on_missing='warn' overwrite=True"}
+{"timestamp":"2026-07-09T10:29:39.280963+00:00","level":"INFO","logger":"logging","function":"callHandlers","line":1737,"message":"[Plugin:gimbal-response-body-extract] activated (events=2 hooks=1)"}
+{"timestamp":"2026-07-09T10:29:39.281115+00:00","level":"INFO","logger":"logging","function":"callHandlers","line":1737,"message":"[PluginLoader] activated 1 / 1 plugin(s)"}
+{"timestamp":"2026-07-09T10:29:39.281207+00:00","level":"INFO","logger":"gimbal.core.bootstrap","function":"bootstrap","line":111,"message":"[bootstrap] ²å¼þ¼ÓÔØÍê³É: count=1"}
+{"timestamp":"2026-07-09T10:29:39.313308+00:00","level":"INFO","logger":"gimbal.reporter.runtime","function":"setup","line":137,"message":"[ReporterRuntime] setup Íê³É: bus=InMemoryEventBus"}
+{"timestamp":"2026-07-09T10:29:39.313457+00:00","level":"INFO","logger":"gimbal.core.bootstrap","function":"bootstrap","line":134,"message":"[bootstrap] Reporter runtime ¾ÍÐ÷: builtins=['console', 'json', 'junit', 'allure', 'html', 'im_notifier', 'platform_uploader']"}
+{"timestamp":"2026-07-09T10:29:39.319609+00:00","level":"INFO","logger":"gimbal.core.bootstrap","function":"bootstrap","line":140,"message":"[bootstrap] ±äÁ¿Éú³ÉÆ÷ÒÑ¾ÍÐ÷: kinds=['uuid', 'random_str', 'random_int', 'random_decimal', 'timestamp', 'now', 'seq']"}
+{"timestamp":"2026-07-09T10:29:39.319935+00:00","level":"INFO","logger":"gimbal.context.manager","function":"create_framework_context","line":52,"message":"[ContextManager] FrameworkContext created: run_id=63b62ecd-593f-4aed-91e8-482335726da8"}
+{"timestamp":"2026-07-09T10:29:39.320039+00:00","level":"INFO","logger":"gimbal.core.runner","function":"run","line":100,"message":"[Engine] Ö´ÐÐ¿ªÊ¼: run_id=63b62ecd-593f-4aed-91e8-482335726da8 env=dev mode=local target=Scenario"}
+{"timestamp":"2026-07-09T10:29:39.320518+00:00","level":"INFO","logger":"gimbal.reporter.runtime","function":"begin_all","line":198,"message":"[ReporterRuntime] begin_all: reporters=['console'] subscriptions=5"}
+{"timestamp":"2026-07-09T10:29:39.336201+00:00","level":"INFO","logger":"gimbal.core.runner","function":"_run_scenario","line":207,"message":"[Engine] ¿ªÊ¼Ö´ÐÐ Scenario: scenario_id=e2e¶©µ¥µ½Ó¦ÊÕºËÏú"}
+{"timestamp":"2026-07-09T10:29:39.336468+00:00","level":"INFO","logger":"gimbal.core.scenario_runner","function":"run","line":199,"message":"[ScenarioRunner] ¿ªÊ¼Ö´ÐÐ Scenario: scenario_id=e2e¶©µ¥µ½Ó¦ÊÕºËÏú scenario_name=È«Á´Â·-¶©µ¥´´½¨ÖÁÓ¦ÊÕºËÏú-Õý³£ step_count=1"}
+[1m[36m
+[e2e¶©µ¥µ½Ó¦ÊÕºËÏú] \u25b6  È«Á´Â·-¶©µ¥´´½¨ÖÁÓ¦ÊÕºËÏú-Õý³£ (steps=0)[0m
+{"timestamp":"2026-07-09T10:29:39.336694+00:00","level":"INFO","logger":"gimbal.context.manager","function":"derive_scenario_context","line":115,"message":"[ContextManager] ScenarioContext created: scenario_id=e2e¶©µ¥µ½Ó¦ÊÕºËÏú suite_id=__default__"}
+{"timestamp":"2026-07-09T10:29:39.338326+00:00","level":"INFO","logger":"gimbal.auth.manager","function":"get_auth","line":75,"message":"[AuthManager] µÇÂ¼ÈÏÖ¤: tag=codfish"}
+{"timestamp":"2026-07-09T10:29:40.649949+00:00","level":"INFO","logger":"gimbal.auth.manager","function":"_login","line":116,"message":"[AuthManager] µÇÂ¼³É¹¦: tag=codfish"}
+{"timestamp":"2026-07-09T10:29:40.650185+00:00","level":"INFO","logger":"gimbal.preprocessor.scenario_preprocessor","function":"_setup_auth","line":212,"message":"[Preprocessor] ÈÏÖ¤³É¹¦£¨Ä£°åÒýÓÃ£©: tag=codfish"}
+{"timestamp":"2026-07-09T10:29:40.650301+00:00","level":"INFO","logger":"gimbal.preprocessor.scenario_preprocessor","function":"_setup_auth","line":225,"message":"[Preprocessor] auth ÅäÖÃÍê³É: ¹² 1 ¸ö user, ÒýÓÃ 1 ¸ö, Êµ¼ÊµÇÂ¼ 1 ¸ö"}
+{"timestamp":"2026-07-09T10:29:40.650638+00:00","level":"INFO","logger":"gimbal.preprocessor.scenario_preprocessor","function":"run","line":125,"message":"[Preprocessor] Ô¤´¦ÀíÍê³É: scenario_id=e2e¶©µ¥µ½Ó¦ÊÕºËÏú steps=1 base_url=https://test.21eline.com/"}
+[1m[36m
+[e2e¶©µ¥µ½Ó¦ÊÕºËÏú] \u25b6  È«Á´Â·-¶©µ¥´´½¨ÖÁÓ¦ÊÕºËÏú-Õý³£ (steps=1)[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-000] start[0m
+[2m      ajaxGetList baseline (seed; inert ¡ª see SKILL.md scaffold-seeding-contract)[0m
+{"timestamp":"2026-07-09T10:29:40.695419+00:00","level":"INFO","logger":"gimbal.statemachine.engine","function":"run","line":166,"message":"[SM step-000] ×´Ì¬»ú¿ªÊ¼Ö´ÐÐ"}
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-000] start[0m
+[2m      ajaxGetList baseline (seed; inert ¡ª see SKILL.md scaffold-seeding-contract)[0m
+{"timestamp":"2026-07-09T10:29:40.695655+00:00","level":"INFO","logger":"gimbal.statemachine.engine","function":"_handle_calling","line":235,"message":"[SM step-000] ¿ªÊ¼ HTTP ÇëÇó"}
+{"timestamp":"2026-07-09T10:29:40.695751+00:00","level":"INFO","logger":"gimbal.statemachine.engine","function":"_do_http_call","line":408,"message":"[SM step-000] HTTP ÇëÇó: method=GET url=https://test.21eline.com/newshopadmin-tidb/SyncLogorder/ajaxGetList.html timeout=30.0s body_keys=['page', 'size', 'wd', 'search_company', 'work_no', 'order_customer_real', 'booking_agent_bp', 'booking_agent_bp_real', 'order_business_no', 'order_terminated_shutout_status', 'bulk_query_type', 'bulk_shutout_status', 'bulk_query', 'batch_exchange_query']"}
+{"timestamp":"2026-07-09T10:29:40.695863+00:00","level":"INFO","logger":"gimbal.strategy.builtin.call","function":"execute","line":40,"message":"[CallExecutor] HTTP ÇëÇó: GET https://test.21eline.com/newshopadmin-tidb/SyncLogorder/ajaxGetList.html"}
+{"timestamp":"2026-07-09T10:29:42.267060+00:00","level":"INFO","logger":"gimbal.strategy.builtin.call","function":"execute","line":59,"message":"[CallExecutor] HTTP ÏìÓ¦: GET https://test.21eline.com/newshopadmin-tidb/SyncLogorder/ajaxGetList.html -> 200 (1571.1ms)"}
+{"timestamp":"2026-07-09T10:29:42.269716+00:00","level":"INFO","logger":"gimbal.statemachine.engine","function":"_do_http_call","line":430,"message":"[SM step-000] HTTP ÏìÓ¦: status=StrategyStatus.PASSED duration_ms=1573.83"}
+{"timestamp":"2026-07-09T10:29:42.270026+00:00","level":"INFO","logger":"gimbal.statemachine.engine","function":"_handle_calling","line":247,"message":"[SM step-000] HTTP ÇëÇó³É¹¦£¬½øÈë AFTER_REQUEST"}
+{"timestamp":"2026-07-09T10:29:42.270166+00:00","level":"INFO","logger":"gimbal.strategy.builtin.assertion","function":"execute","line":20,"message":"[AssertionExecutor] Ö´ÐÐ¶ÏÑÔ: target=$.response_status operator=AssertOperator.EQ expected=200"}
+{"timestamp":"2026-07-09T10:29:42.270282+00:00","level":"INFO","logger":"gimbal.strategy.builtin.assertion","function":"execute","line":42,"message":"[AssertionExecutor] Êµ¼ÊÖµ: target=$.response_status actual=200"}
+{"timestamp":"2026-07-09T10:29:42.270363+00:00","level":"INFO","logger":"gimbal.strategy.builtin.assertion","function":"execute","line":61,"message":"[AssertionExecutor] ¶ÏÑÔÍ¨¹ý: probe"}
+{"timestamp":"2026-07-09T10:29:42.270636+00:00","level":"INFO","logger":"gimbal.statemachine.engine","function":"_handle_verifying","line":291,"message":"[SM step-000] VERIFYING ½×¶ÎÍ¨¹ý (soft_failures=False)£¬½øÈë PASSED"}
+{"timestamp":"2026-07-09T10:29:42.271069+00:00","level":"INFO","logger":"gimbal.statemachine.engine","function":"run","line":199,"message":"[SM step-000] ×´Ì¬»úÖ´ÐÐÍê³É: final_state=passed duration_ms=1575.63"}
+[32m    \u2713 passed   1575.63ms[0m
+[32m    \u2713 passed   1576.70ms   asserts=1/1[0m
+{"timestamp":"2026-07-09T10:29:42.272810+00:00","level":"INFO","logger":"gimbal.context.manager","function":"finalize_step","line":181,"message":"[ContextManager] StepContext finalized: step_id=step-000 status=passed duration_ms=1576.70"}
+{"timestamp":"2026-07-09T10:29:42.273289+00:00","level":"INFO","logger":"gimbal.core.scenario_runner","function":"run","line":319,"message":"[ScenarioRunner] Step Íê³É: step_id=step-000 status=passed duration_ms=1575.63 (1/1)"}
+{"timestamp":"2026-07-09T10:29:42.273760+00:00","level":"INFO","logger":"gimbal.context.archive","function":"save_scenario","line":66,"message":"[Archive] Scenario saved: scenario_id=e2e¶©µ¥µ½Ó¦ÊÕºËÏú status=passed step_count=1 total_scenarios=1"}
+{"timestamp":"2026-07-09T10:29:42.273998+00:00","level":"INFO","logger":"gimbal.context.manager","function":"finalize_scenario","line":126,"message":"[ContextManager] ScenarioContext finalized: scenario_id=e2e¶©µ¥µ½Ó¦ÊÕºËÏú status=passed step_count=1"}
+{"timestamp":"2026-07-09T10:29:42.274368+00:00","level":"INFO","logger":"gimbal.core.runner","function":"_run_scenario","line":230,"message":"[Engine] Scenario Ö´ÐÐÍê³É: scenario_id=e2e¶©µ¥µ½Ó¦ÊÕºËÏú status=passed duration_ms=2937.89"}
+
+[2m©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤[0m
+[32m[1mPASS  total=1 passed=1[0m
+[32m  - e2e¶©µ¥µ½Ó¦ÊÕºËÏú: passed (2937.9ms)[0m
+[2m©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤[0m
+{"timestamp":"2026-07-09T10:29:42.274671+00:00","level":"INFO","logger":"gimbal.reporter.runtime","function":"finalize_all","line":253,"message":"[ReporterRuntime] reporter.finalize Íê³É: name=console path=None media=text/plain"}
+{"timestamp":"2026-07-09T10:29:42.275114+00:00","level":"INFO","logger":"logging","function":"callHandlers","line":1737,"message":"[ResponseBodyExtractPlugin] deactivated: stats={'extracted': 1, 'missing': 0, 'overwritten': 1, 'raised': 0}"}
+{"timestamp":"2026-07-09T10:29:42.275249+00:00","level":"INFO","logger":"logging","function":"callHandlers","line":1737,"message":"[Plugin:gimbal-response-body-extract] deactivated"}
+{"timestamp":"2026-07-09T10:29:42.275346+00:00","level":"INFO","logger":"logging","function":"callHandlers","line":1737,"message":"[HookRegistry] Plugin hooks removed: plugin=gimbal-response-body-extract removed=1"}
+{"timestamp":"2026-07-09T10:29:42.275447+00:00","level":"INFO","logger":"logging","function":"callHandlers","line":1737,"message":"[PluginLoader] deactivate_all done: ok=1 failed=0"}

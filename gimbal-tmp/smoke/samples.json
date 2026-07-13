@@ -1,0 +1,48 @@
+{
+  "scanned_rows": 100,
+  "baseline_count": 540,
+  "scan_ts": "2026-07-09T15:30:00+08:00",
+  "fields": {
+    "release_status": {
+      "samples": [
+        {"value": "已放款",         "canon": "已放款",         "query_code": "1", "order_id": "ORD-1", "row_id": "ROW-1"},
+        {"value": "未放款",         "canon": "未放款",         "query_code": "0", "order_id": "ORD-2", "row_id": "ROW-2"}
+      ],
+      "distinct_seen": 2,
+      "status": "SAMPLED"
+    },
+    "financing_status": {
+      "samples": [
+        {"value": "已融资",         "canon": "已融资",         "query_code": "finished", "order_id": "ORD-3", "row_id": "ROW-3"}
+      ],
+      "distinct_seen": 1,
+      "status": "SAMPLED"
+    },
+    "sale": {
+      "samples": [
+        {"value": "银小忠",         "canon": "银小忠",         "query_code": "银小忠", "order_id": "ORD-4", "row_id": "ROW-4"}
+      ],
+      "distinct_seen": 1,
+      "status": "SAMPLED"
+    },
+    "ship_company": {
+      "samples": [
+        {"value": "COSCO",         "canon": "COSCO",         "query_code": "COSCO", "order_id": "ORD-5", "row_id": "ROW-5"}
+      ],
+      "distinct_seen": 1,
+      "status": "SAMPLED"
+    },
+    "search_time[charge_pay_date]": {
+      "samples": [
+        {"value": "2026-01-15",    "canon": "2026-01-15",    "query_code": "2026-01-15", "order_id": "ORD-6", "row_id": "ROW-6"}
+      ],
+      "distinct_seen": 1,
+      "status": "SAMPLED"
+    },
+    "wd": {
+      "samples": [],
+      "status": "NO_SAMPLE",
+      "scanned": 100
+    }
+  }
+}

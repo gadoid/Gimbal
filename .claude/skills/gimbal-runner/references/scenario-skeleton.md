@@ -1,9 +1,12 @@
-# Scenario / Suite skeleton
+# Scenario skeleton
 
-These are minimal schema-valid examples you can paste as a starting
-point. They pass `Scenario.model_validate` / `Suite.model_validate`
-(`src/gimbal/schema/scenario.py`) and run through `gimbal run launch
---dry-run` with exit 0.
+Minimal schema-valid examples you can paste as a starting point. They
+pass `Scenario.model_validate` (`src/gimbal/schema/scenario.py`) and run
+through `gimbal run launch --dry-run` with exit 0.
+
+> Suite files (`kind: suite`) are part of the planned `run suite`
+> feature and **cannot be executed yet** — see `planned-commands.md`.
+> Only single-scenario files work with `run launch`.
 
 ## Minimal scenario (`scenario.yaml`)
 
@@ -107,36 +110,21 @@ steps:
         expected: 200
 ```
 
-## Suite (`suite.yaml`)
-
-```yaml
-kind: suite
-suite:
-  - kind: scenario
-    scenarioId: sc-hello-001
-    meta: { ... }            # full meta per scenario (omitted here for brevity)
-    config: { ... }
-    resource: {}
-    steps: [ ... ]
-  - kind: scenario
-    scenarioId: sc-login-query-001
-    meta: { ... }
-    config: { ... }
-    resource: {}
-    steps: [ ... ]
-```
-
-## Templating namespaces
+## Templating namespaces (single source of truth)
 
 Inside `request.path`, `request.headers`, `request.body`, etc. the
 preprocessor expands:
 
-| Placeholder | Resolves from |
+| Placeholder | Resolves from (priority order where applicable) |
 |---|---|
-| `${var.<name>}` | CLI `--var` → scenario `config.vars` → var-file |
-| `${auth.<user>.<field>}` | `config.users.<user>` |
+| `${var.<name>}` | CLI `--var` → scenario `config.vars` → `--var-file` |
+| `${auth.<user>.<field>}` | `config.users.<user>` — typically `.token` |
 | `${service.<name>}` | `config.services.<name>` (URL) |
-| `${resource.<name>.<field>}` | `resource.<name>` block |
+| `${resource.<name>.<field>}` | `resource.<name>` block in the scenario |
+
+If a template fails to resolve, the error points at the
+**preprocessor**, not at your `--var-file`. Check the variable name and
+the priority order above before chasing schema bugs.
 
 ## Required top-level fields
 
@@ -144,18 +132,15 @@ preprocessor expands:
 
 - `kind: "scenario"` (literal discriminator)
 - `scenarioId: str`
-- `meta`: full `Meta` block (name, description, module, priority, author, owner, tags, version, createTime, expire, requirementRef)
-- `config`: full `Config` block (setup, teardown, services, users, timePolicy, retry, vars)
+- `meta`: full `Meta` block (name, description, module, priority,
+  author, owner, tags, version, createTime, expire, requirementRef)
+- `config`: full `Config` block (setup, teardown, services, users,
+  timePolicy, retry, vars)
 - `resource: dict[str, ResourceUnion]`
-- `steps: list[StepUnion]` (must be non-empty for a real run)
+- `steps: list[StepUnion]` (non-empty for a real run)
 
-`Suite`:
-
-- `kind: "suite"`
-- `suite: list[Scenario]` (each item is a full scenario)
-
-If you skip a field, pydantic will tell you exactly which one — read the
-exit-2 stderr verbatim; it almost always names the missing key.
+If you skip a field, pydantic will tell you exactly which one — read
+the exit-2 stderr verbatim; it almost always names the missing key.
 
 ## Strategy kinds (common)
 
@@ -164,9 +149,8 @@ Inside `step.strategy` (executed in order during `VERIFYING`):
 | Kind | Purpose |
 |---|---|
 | `assertion` | Compare `target` (`status`, `header.<name>`, `body.<jsonpath>`, ...) against `expected` |
-| `extract` | Read `expression` (JSONPath) from response, store in `var`, optionally `scope: scenario\|step` |
+| `extract` | Read `expression` (JSONPath) from response, store in `var`, optional `scope: scenario\|step` |
 | `assign` | Set a context var before request (`BEFORE_REQUEST` phase) |
 
-The framework also understands Plugin-defined strategy kinds (registered
-via `StrategyExecutor`). Stick to the three above unless you wrote the
-executor yourself.
+Plugin-defined strategy kinds exist (via `StrategyExecutor`), but stick
+to the three above unless you wrote the executor yourself.

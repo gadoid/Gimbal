@@ -1,0 +1,1 @@
+emit=steps-only cases=36 steps=36 fields_covered=14/16 skipped=2 out=gimbal-tmp/scs_gen/steps.json  [extract_response_body suppressed ¡ª scaffold already has one]

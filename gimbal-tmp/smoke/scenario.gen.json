@@ -1,0 +1,603 @@
+{
+  "kind": "scenario",
+  "scenarioId": "亿海融物流订单查询",
+  "meta": {
+    "name": "亿海融物流订单查询",
+    "description": "亿海融物流订单查询",
+    "module": "settlement",
+    "priority": 1,
+    "author": "codfish",
+    "owner": "codfish",
+    "tags": [
+      "smoke",
+      "settlement"
+    ],
+    "version": "1.0.0",
+    "createTime": "2026-06-23T10:00:00",
+    "expire": false,
+    "requirementRef": [],
+    "source": "gimbal-query-field-verify skill (v2)",
+    "baseline_count": 540
+  },
+  "config": {
+    "setup": [],
+    "teardown": [],
+    "services": {
+      "yhr-test-service": "https://test.21eline.com"
+    },
+    "vars": {
+      "bl_no": "YHRGIMBAL00034"
+    },
+    "users": {
+      "yhxjsx": {
+        "url": "https://test.21eline.com/",
+        "username": "yhxjsx",
+        "password": "Codfish1234!",
+        "expires_in": 7200,
+        "token_type": "Cookie"
+      }
+    },
+    "timePolicy": {
+      "kind": "record"
+    },
+    "retry": null
+  },
+  "resource": {},
+  "steps": [
+    {
+      "kind": "step",
+      "description": "查询[放款状态]=已放款",
+      "api": {
+        "kind": "api",
+        "service": "yhr-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.yhxjsx.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_query": "0",
+          "financing_status": "",
+          "sale": "",
+          "ship_company": "",
+          "search_time[charge_pay_date][0]": "",
+          "search_time[charge_pay_date][1]": "",
+          "release_status": "1"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[放款状态]=已放款 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.count",
+          "operator": "<=",
+          "expected": 540,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "ROW-1",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_first_page_rows_match",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.list",
+          "operator": "row_match",
+          "expected_canon": "已放款",
+          "expected_display": "已放款",
+          "response_field": "release_status",
+          "response_fields": [],
+          "page_size": 5,
+          "category": "ENUM",
+          "message": "③rows_match: 首页每行满足条件(canonicalize 后)",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_response_body",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body",
+          "target": "response_body",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[放款状态]=未放款",
+      "api": {
+        "kind": "api",
+        "service": "yhr-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.yhxjsx.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_query": "0",
+          "financing_status": "",
+          "sale": "",
+          "ship_company": "",
+          "search_time[charge_pay_date][0]": "",
+          "search_time[charge_pay_date][1]": "",
+          "release_status": "0"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[放款状态]=未放款 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.count",
+          "operator": "<=",
+          "expected": 540,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "ROW-2",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_first_page_rows_match",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.list",
+          "operator": "row_match",
+          "expected_canon": "未放款",
+          "expected_display": "未放款",
+          "response_field": "release_status",
+          "response_fields": [],
+          "page_size": 5,
+          "category": "ENUM",
+          "message": "③rows_match: 首页每行满足条件(canonicalize 后)",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_response_body",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body",
+          "target": "response_body",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[融资状态]=已融资",
+      "api": {
+        "kind": "api",
+        "service": "yhr-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.yhxjsx.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_query": "0",
+          "release_status": "",
+          "sale": "",
+          "ship_company": "",
+          "search_time[charge_pay_date][0]": "",
+          "search_time[charge_pay_date][1]": "",
+          "financing_status": "finished"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[融资状态]=已融资 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.count",
+          "operator": "<=",
+          "expected": 540,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "ROW-3",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_first_page_rows_match",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.list",
+          "operator": "row_match",
+          "expected_canon": "已融资",
+          "expected_display": "已融资",
+          "response_field": "financing_status",
+          "response_fields": [],
+          "page_size": 5,
+          "category": "ENUM",
+          "message": "③rows_match: 首页每行满足条件(canonicalize 后)",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_response_body",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body",
+          "target": "response_body",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[销售员]=银小忠",
+      "api": {
+        "kind": "api",
+        "service": "yhr-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.yhxjsx.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_query": "0",
+          "release_status": "",
+          "financing_status": "",
+          "ship_company": "",
+          "search_time[charge_pay_date][0]": "",
+          "search_time[charge_pay_date][1]": "",
+          "sale": "银小忠"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[销售员]=银小忠 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.count",
+          "operator": "<",
+          "expected": 540,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "ROW-4",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_first_page_rows_match",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.list",
+          "operator": "row_match",
+          "expected_canon": "银小忠",
+          "expected_display": "银小忠",
+          "response_field": "order_opt_sales",
+          "response_fields": [
+            "order_opt_sales"
+          ],
+          "page_size": 5,
+          "category": "FUZZY",
+          "message": "③rows_match: 首页每行满足条件(canonicalize 后)",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_response_body",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body",
+          "target": "response_body",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[船公司]=COSCO",
+      "api": {
+        "kind": "api",
+        "service": "yhr-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.yhxjsx.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_query": "0",
+          "release_status": "",
+          "financing_status": "",
+          "sale": "",
+          "search_time[charge_pay_date][0]": "",
+          "search_time[charge_pay_date][1]": "",
+          "ship_company": "COSCO"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[船公司]=COSCO 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.count",
+          "operator": "<",
+          "expected": 540,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "ROW-5",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_first_page_rows_match",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.list",
+          "operator": "row_match",
+          "expected_canon": "COSCO",
+          "expected_display": "COSCO",
+          "response_field": "schedule_carrier",
+          "response_fields": [
+            "schedule_carrier"
+          ],
+          "page_size": 5,
+          "category": "FUZZY",
+          "message": "③rows_match: 首页每行满足条件(canonicalize 后)",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_response_body",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body",
+          "target": "response_body",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
+        }
+      ]
+    }
+  ]
+}

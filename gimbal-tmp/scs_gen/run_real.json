@@ -1,0 +1,278 @@
+https://test.21eline.com/
+<gimbal.auth.authenticators.yhr.YHRAuthenticator object at 0x0000020F8C12BB60>
+{
+  "exit_code": 0,
+  "total": 1,
+  "passed": 1,
+  "failed": 0,
+  "skipped": 0,
+  "error": 0,
+  "details": [
+    {
+      "scenario_id": "e2e订单到应收核销",
+      "status": "passed",
+      "duration_ms": 53917.573,
+      "steps": [
+        {
+          "step_id": "step-000",
+          "status": "passed",
+          "duration_ms": 1342.013,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-001",
+          "status": "passed",
+          "duration_ms": 1095.106,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-002",
+          "status": "passed",
+          "duration_ms": 1496.035,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-003",
+          "status": "passed",
+          "duration_ms": 1537.592,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-004",
+          "status": "passed",
+          "duration_ms": 1503.835,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-005",
+          "status": "passed",
+          "duration_ms": 1609.427,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-006",
+          "status": "passed",
+          "duration_ms": 1616.4270000000001,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-007",
+          "status": "passed",
+          "duration_ms": 1493.28,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-008",
+          "status": "passed",
+          "duration_ms": 1199.144,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-009",
+          "status": "passed",
+          "duration_ms": 1625.136,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-010",
+          "status": "passed",
+          "duration_ms": 1687.581,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-011",
+          "status": "passed",
+          "duration_ms": 1544.964,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-012",
+          "status": "passed",
+          "duration_ms": 1617.764,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-013",
+          "status": "passed",
+          "duration_ms": 1542.392,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-014",
+          "status": "passed",
+          "duration_ms": 1532.496,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-015",
+          "status": "passed",
+          "duration_ms": 1103.4409999999998,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-016",
+          "status": "passed",
+          "duration_ms": 1107.226,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-017",
+          "status": "passed",
+          "duration_ms": 1223.215,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-018",
+          "status": "passed",
+          "duration_ms": 1314.961,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-019",
+          "status": "passed",
+          "duration_ms": 1613.275,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-020",
+          "status": "passed",
+          "duration_ms": 1474.686,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-021",
+          "status": "passed",
+          "duration_ms": 1761.395,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-022",
+          "status": "passed",
+          "duration_ms": 1087.014,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-023",
+          "status": "passed",
+          "duration_ms": 1051.612,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-024",
+          "status": "passed",
+          "duration_ms": 1272.7189999999998,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-025",
+          "status": "passed",
+          "duration_ms": 1614.842,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-026",
+          "status": "passed",
+          "duration_ms": 1235.985,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-027",
+          "status": "passed",
+          "duration_ms": 1578.806,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-028",
+          "status": "passed",
+          "duration_ms": 1472.888,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-029",
+          "status": "passed",
+          "duration_ms": 1437.5610000000001,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-030",
+          "status": "passed",
+          "duration_ms": 1057.52,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-031",
+          "status": "passed",
+          "duration_ms": 1770.724,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-032",
+          "status": "passed",
+          "duration_ms": 1525.6989999999998,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-033",
+          "status": "passed",
+          "duration_ms": 1397.68,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-034",
+          "status": "passed",
+          "duration_ms": 1386.919,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-035",
+          "status": "passed",
+          "duration_ms": 1396.9560000000001,
+          "error": null,
+          "error_phase": null
+        },
+        {
+          "step_id": "step-036",
+          "status": "passed",
+          "duration_ms": 1385.9289999999999,
+          "error": null,
+          "error_phase": null
+        }
+      ]
+    }
+  ]
+}

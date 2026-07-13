@@ -1,0 +1,208 @@
+{
+  "_comment": "Synthetic mapping for scs.json (settlement module). Generated from the HTML form tags provided in the user request. baseline_url is a placeholder — replace with the real ajaxGetList.html URL when running. name-overrides.json is consulted for sale/client/operator/ship_company/booking_mbl_delivery_mode/service_types/order_remarks so the response_field resolution is exact.",
+
+  "endpoint": "https://fin-tidb.21eflag.com/newshopadmin-tidb/OrderSettlement/ajaxGetList.html",
+  "baseline_url": "https://fin-tidb.21eflag.com/newshopadmin-tidb/OrderSettlement/ajaxGetList.html?page=1&size=15&wd=&search_company=&work_no=&order_customer_real=&booking_agent_bp=&booking_agent_bp_real=&order_business_no=&order_terminated_shutout_status=1&bulk_query_type=1&bulk_shutout_status=&bulk_query=0&batch_exchange_query=&ship_company=&booking_mbl_delivery_mode=&service_types=&order_remarks=&sale=&client=&operator=&search_time%5Bcharge_pay_date%5D%5B%5D=&search_time%5Bcharge_pay_date%5D%5B%5D=&search_time%5Bcharge_rec_date%5D%5B%5D=&search_time%5Bcharge_rec_date%5D%5B%5D=",
+  "baseline_defaults": {
+    "order_terminated_shutout_status": "1",
+    "bulk_query_type": "1",
+    "bulk_query": "0"
+  },
+  "params": [
+    {
+      "param": "wd",
+      "response_fields": ["order_no", "bl_no"],
+      "cn_name": "模糊搜索(订单号/提单号/工作号等)",
+      "category": "FUZZY",
+      "status": "TESTABLE",
+      "source": {"auth": true, "hidden": false, "mapped_by": "builtin-fuzzy"}
+    },
+    {
+      "param": "search_company",
+      "response_fields": ["order_company_name"],
+      "cn_name": "模糊-委托公司",
+      "category": "FUZZY",
+      "status": "TESTABLE",
+      "source": {"auth": true, "hidden": false, "mapped_by": "builtin-fuzzy"}
+    },
+    {
+      "param": "work_no",
+      "response_field": "work_no",
+      "cn_name": "工作号",
+      "category": "FUZZY",
+      "status": "TESTABLE",
+      "source": {"auth": true, "hidden": false, "mapped_by": "builtin-fuzzy"}
+    },
+    {
+      "param": "order_customer_real",
+      "response_field": "order_customer_real",
+      "cn_name": "客户(实际)",
+      "category": "FUZZY",
+      "status": "TESTABLE",
+      "source": {"auth": true, "hidden": false, "mapped_by": "builtin-fuzzy"}
+    },
+    {
+      "param": "booking_agent_bp",
+      "response_field": "booking_agent_bp",
+      "cn_name": "订舱代理BP",
+      "category": "FUZZY",
+      "status": "TESTABLE",
+      "source": {"auth": true, "hidden": false, "mapped_by": "builtin-fuzzy"}
+    },
+    {
+      "param": "booking_agent_bp_real",
+      "response_field": "booking_agent_bp_real",
+      "cn_name": "订舱代理BP(实际)",
+      "category": "FUZZY",
+      "status": "TESTABLE",
+      "source": {"auth": true, "hidden": false, "mapped_by": "builtin-fuzzy"}
+    },
+    {
+      "param": "order_business_no",
+      "response_field": "order_business_no",
+      "cn_name": "业务单号",
+      "category": "FUZZY",
+      "status": "TESTABLE",
+      "source": {"auth": true, "hidden": false, "mapped_by": "builtin-fuzzy"}
+    },
+
+    {
+      "param": "ship_company",
+      "response_field": "schedule_carrier",
+      "cn_name": "船公司",
+      "category": "ENUM",
+      "multi": false,
+      "value_map": {
+        "COSCO": "COSCO", "MSK": "MSK", "EMC": "EMC", "CMA": "CMA",
+        "ONE": "ONE", "HMM": "HMM", "YML": "YML", "EVER": "EVER",
+        "OOCL": "OOCL", "ZIM": "ZIM"
+      },
+      "status": "TESTABLE",
+      "source": {"auth": true, "hidden": false, "mapped_by": "name-overrides"}
+    },
+
+    {
+      "param": "booking_mbl_delivery_mode",
+      "response_field": "booking_mbl_delivery_mode",
+      "cn_name": "MBL放单方式",
+      "category": "ENUM",
+      "multi": false,
+      "value_map": {
+        "1": "正本", "2": "电放", "3": "异地放单",
+        "4": "SEAWAYBILL", "5": "目放", "6": "事前电放"
+      },
+      "status": "TESTABLE",
+      "source": {"auth": true, "hidden": false, "mapped_by": "same_name"}
+    },
+
+    {
+      "param": "service_types",
+      "response_fields": ["order_service_types"],
+      "cn_name": "服务类型(多选)",
+      "category": "ENUM",
+      "multi": true,
+      "value_map": {
+        "1": "订舱", "2": "拖车", "3": "内装", "4": "报关",
+        "5": "保险", "6": "国内舱单", "7": "反恐舱单", "8": "舱单"
+      },
+      "status": "TESTABLE",
+      "source": {"auth": true, "hidden": false, "mapped_by": "name-overrides"}
+    },
+
+    {
+      "param": "order_remarks",
+      "response_field": "order_remarks",
+      "cn_name": "订单备注",
+      "category": "ENUM",
+      "multi": false,
+      "value_map": {
+        "1": "结算业务", "2": "即时补贴", "3": "仅报关",
+        "4": "包干", "5": "无", "6": "代理",
+        "7": "出口", "8": "进口", "9": "其他"
+      },
+      "status": "TESTABLE",
+      "source": {"auth": true, "hidden": false, "mapped_by": "same_name"}
+    },
+
+    {
+      "param": "sale",
+      "response_field": "order_opt_sales",
+      "cn_name": "销售员",
+      "category": "ENUM",
+      "multi": false,
+      "value_map": {"auto-resolve-from-auth": "auto-resolve-from-auth"},
+      "status": "TESTABLE",
+      "source": {"auth": true, "hidden": false, "mapped_by": "name-overrides"}
+    },
+
+    {
+      "param": "client",
+      "response_field": "order_opt_client",
+      "cn_name": "客户(委托方)",
+      "category": "ENUM",
+      "multi": false,
+      "value_map": {"auto-resolve-from-auth": "auto-resolve-from-auth"},
+      "status": "TESTABLE",
+      "source": {"auth": true, "hidden": false, "mapped_by": "name-overrides"}
+    },
+
+    {
+      "param": "operator",
+      "response_field": "order_opt_operation",
+      "cn_name": "操作员(多选)",
+      "category": "ENUM",
+      "multi": true,
+      "value_map": {"auto-resolve-from-auth": "auto-resolve-from-auth"},
+      "status": "TESTABLE",
+      "source": {"auth": true, "hidden": false, "mapped_by": "name-overrides"}
+    },
+
+    {
+      "param": "search_time[charge_pay_date]",
+      "response_field": "charge_pay_date",
+      "cn_name": "应付日期",
+      "category": "DATE_RANGE",
+      "granularity": "date",
+      "status": "TESTABLE"
+    },
+    {
+      "param": "search_time[charge_rec_date]",
+      "response_field": "charge_rec_date",
+      "cn_name": "应收日期",
+      "category": "DATE_RANGE",
+      "granularity": "date",
+      "status": "TESTABLE"
+    },
+
+    {
+      "param": "page",
+      "status": "EXCLUDED",
+      "source": {"auth": true, "hidden": false, "mapped_by": "excluded-params"}
+    },
+    {
+      "param": "size",
+      "status": "EXCLUDED",
+      "source": {"auth": true, "hidden": false, "mapped_by": "excluded-params"}
+    },
+    {
+      "param": "bulk_query_type",
+      "status": "EXCLUDED",
+      "source": {"auth": true, "hidden": false, "mapped_by": "excluded-params"}
+    },
+    {
+      "param": "bulk_shutout_status",
+      "status": "EXCLUDED",
+      "source": {"auth": true, "hidden": false, "mapped_by": "excluded-params"}
+    },
+    {
+      "param": "bulk_query",
+      "status": "EXCLUDED",
+      "source": {"auth": true, "hidden": false, "mapped_by": "excluded-params"}
+    },
+    {
+      "param": "batch_exchange_query",
+      "status": "EXCLUDED",
+      "source": {"auth": true, "hidden": false, "mapped_by": "excluded-params"}
+    }
+  ]
+}

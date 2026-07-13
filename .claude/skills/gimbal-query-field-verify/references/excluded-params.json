@@ -1,0 +1,12 @@
+{
+  "description": "键级排除清单。命中的 param 名称直接被 Stage 1 的 parse_form.py 判为 EXCLUDED，不进入 TESTABLE 分析——既不作为 producer 候选，也不作为 consumer/gap 候选。代表的就是'非业务字段级过滤'那一类：分页、cursor、批量操作等。这是与映射表 (name-overrides.json) 完全独立的判断维度。注意：scripts/parse_form.py 当前还有一份硬编码 EXCLUDED_PARAMS 常量，两份双轨维护，编辑本文件后还需要同步脚本。",
+  "keys": [
+    "page",
+    "size",
+    "order_ids",
+    "bulk_query_type",
+    "bulk_shutout_status",
+    "bulk_query",
+    "batch_exchange_query"
+  ]
+}

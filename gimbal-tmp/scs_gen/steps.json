@@ -1,0 +1,3535 @@
+{
+  "steps": [
+    {
+      "kind": "step",
+      "description": "查询[模糊搜索(订单号/提单号/工作号等)]=YHD20260709034960",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "YHD20260709034960",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[模糊搜索(订单号/提单号/工作号等)]=YHD20260709034960 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546859752587999",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_no_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_no",
+          "operator": "contains",
+          "expected": "YHD20260709034960",
+          "message": "③rows_match: 首页 list[*].order_no 应包含 YHD20260709034960",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_bl_no_contains_canon",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].bl_no",
+          "operator": "contains",
+          "expected": "YHD20260709034960",
+          "message": "③rows_match: 首页 list[*].bl_no 应包含 YHD20260709034960",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 5,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[模糊搜索(订单号/提单号/工作号等)]=YH20260709032912",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "YH20260709032912",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[模糊搜索(订单号/提单号/工作号等)]=YH20260709032912 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546857961620191",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_no_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_no",
+          "operator": "contains",
+          "expected": "YH20260709032912",
+          "message": "③rows_match: 首页 list[*].order_no 应包含 YH20260709032912",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_bl_no_contains_canon",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].bl_no",
+          "operator": "contains",
+          "expected": "YH20260709032912",
+          "message": "③rows_match: 首页 list[*].bl_no 应包含 YH20260709032912",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 5,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[模糊搜索(订单号/提单号/工作号等)]=HZCJ20260709032772",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "HZCJ20260709032772",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[模糊搜索(订单号/提单号/工作号等)]=HZCJ20260709032772 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546856090960607",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_no_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_no",
+          "operator": "contains",
+          "expected": "HZCJ20260709032772",
+          "message": "③rows_match: 首页 list[*].order_no 应包含 HZCJ20260709032772",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_bl_no_contains_canon",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].bl_no",
+          "operator": "contains",
+          "expected": "HZCJ20260709032772",
+          "message": "③rows_match: 首页 list[*].bl_no 应包含 HZCJ20260709032772",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 5,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[工作号]=GF50262800099",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "GF50262800099",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[工作号]=GF50262800099 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546859752587999",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_work_no_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].work_no",
+          "operator": "contains",
+          "expected": "GF50262800099",
+          "message": "③rows_match: 首页 list[*].work_no 应包含 GF50262800099",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[客户(实际)]=山东佳农国际贸易有限公司",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "山东佳农国际贸易有限公司",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[客户(实际)]=山东佳农国际贸易有限公司 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546859752587999",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_customer_real_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_customer_real",
+          "operator": "contains",
+          "expected": "山东佳农国际贸易有限公司",
+          "message": "③rows_match: 首页 list[*].order_customer_real 应包含 山东佳农国际贸易有限公司",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[客户(实际)]=北京火山引擎科技有限公司",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "北京火山引擎科技有限公司",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[客户(实际)]=北京火山引擎科技有限公司 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333539174730695391",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_customer_real_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_customer_real",
+          "operator": "contains",
+          "expected": "北京火山引擎科技有限公司",
+          "message": "③rows_match: 首页 list[*].order_customer_real 应包含 北京火山引擎科技有限公司",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[客户(实际)]=曹县融悦木业有限公司",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "曹县融悦木业有限公司",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[客户(实际)]=曹县融悦木业有限公司 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333537838811316959",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_customer_real_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_customer_real",
+          "operator": "contains",
+          "expected": "曹县融悦木业有限公司",
+          "message": "③rows_match: 首页 list[*].order_customer_real 应包含 曹县融悦木业有限公司",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[订舱代理BP]=青岛经汉物流服务有限公司",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "青岛经汉物流服务有限公司",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[订舱代理BP]=青岛经汉物流服务有限公司 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546859752587999",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_booking_agent_bp_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].booking_agent_bp",
+          "operator": "contains",
+          "expected": "青岛经汉物流服务有限公司",
+          "message": "③rows_match: 首页 list[*].booking_agent_bp 应包含 青岛经汉物流服务有限公司",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[订舱代理BP]=青岛易航道物流科技有限公司",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "青岛易航道物流科技有限公司",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[订舱代理BP]=青岛易航道物流科技有限公司 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546857961620191",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_booking_agent_bp_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].booking_agent_bp",
+          "operator": "contains",
+          "expected": "青岛易航道物流科技有限公司",
+          "message": "③rows_match: 首页 list[*].booking_agent_bp 应包含 青岛易航道物流科技有限公司",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[订舱代理BP]=青岛易海供应链管理有限公司",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "青岛易海供应链管理有限公司",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[订舱代理BP]=青岛易海供应链管理有限公司 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546856090960607",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_booking_agent_bp_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].booking_agent_bp",
+          "operator": "contains",
+          "expected": "青岛易海供应链管理有限公司",
+          "message": "③rows_match: 首页 list[*].booking_agent_bp 应包含 青岛易海供应链管理有限公司",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[订舱代理BP(实际)]=青岛经汉物流服务有限公司",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "青岛经汉物流服务有限公司",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[订舱代理BP(实际)]=青岛经汉物流服务有限公司 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546859752587999",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_booking_agent_bp_real_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].booking_agent_bp_real",
+          "operator": "contains",
+          "expected": "青岛经汉物流服务有限公司",
+          "message": "③rows_match: 首页 list[*].booking_agent_bp_real 应包含 青岛经汉物流服务有限公司",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[订舱代理BP(实际)]=芜湖长信科技股份有限公司",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "芜湖长信科技股份有限公司",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[订舱代理BP(实际)]=芜湖长信科技股份有限公司 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333539174730695391",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_booking_agent_bp_real_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].booking_agent_bp_real",
+          "operator": "contains",
+          "expected": "芜湖长信科技股份有限公司",
+          "message": "③rows_match: 首页 list[*].booking_agent_bp_real 应包含 芜湖长信科技股份有限公司",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[订舱代理BP(实际)]=青岛阔运国际物流有限公司",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "青岛阔运国际物流有限公司",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[订舱代理BP(实际)]=青岛阔运国际物流有限公司 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333537838811316959",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_booking_agent_bp_real_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].booking_agent_bp_real",
+          "operator": "contains",
+          "expected": "青岛阔运国际物流有限公司",
+          "message": "③rows_match: 首页 list[*].booking_agent_bp_real 应包含 青岛阔运国际物流有限公司",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[业务单号]=YWDD20260709108277",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "YWDD20260709108277",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[业务单号]=YWDD20260709108277 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546859752587999",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_business_no_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_business_no",
+          "operator": "contains",
+          "expected": "YWDD20260709108277",
+          "message": "③rows_match: 首页 list[*].order_business_no 应包含 YWDD20260709108277",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[业务单号]=YWDD20260709108275",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "YWDD20260709108275",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[业务单号]=YWDD20260709108275 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333539174730695391",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_business_no_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_business_no",
+          "operator": "contains",
+          "expected": "YWDD20260709108275",
+          "message": "③rows_match: 首页 list[*].order_business_no 应包含 YWDD20260709108275",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[业务单号]=YWDD20260709108274",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "YWDD20260709108274",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[业务单号]=YWDD20260709108274 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333537838811316959",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_business_no_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_business_no",
+          "operator": "contains",
+          "expected": "YWDD20260709108274",
+          "message": "③rows_match: 首页 list[*].order_business_no 应包含 YWDD20260709108274",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[船公司]=CMA",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "ship_company": "CMA"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[船公司]=CMA 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546859752587999",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_schedule_carrier_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].schedule_carrier",
+          "operator": "contains",
+          "expected": "CMA",
+          "message": "③rows_match: 首页 list[*].schedule_carrier 应包含 CMA",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[船公司]=ACL",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "ship_company": "ACL"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[船公司]=ACL 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333539174730695391",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_schedule_carrier_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].schedule_carrier",
+          "operator": "contains",
+          "expected": "ACL",
+          "message": "③rows_match: 首页 list[*].schedule_carrier 应包含 ACL",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[船公司]=MAERSK",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "ship_company": "MAERSK"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[船公司]=MAERSK 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333537838811316959",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_schedule_carrier_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].schedule_carrier",
+          "operator": "contains",
+          "expected": "MAERSK",
+          "message": "③rows_match: 首页 list[*].schedule_carrier 应包含 MAERSK",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[服务类型(多选)]=订舱,报关",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "service_types": "订舱,报关"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[服务类型(多选)]=订舱,报关 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546859752587999",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_service_types_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_service_types",
+          "operator": "contains",
+          "expected": "订舱,报关",
+          "message": "③rows_match: 首页 list[*].order_service_types 应包含 订舱,报关",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[服务类型(多选)]=订舱",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "service_types": "1"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[服务类型(多选)]=订舱 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333539174730695391",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_service_types_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_service_types",
+          "operator": "contains",
+          "expected": "订舱",
+          "message": "③rows_match: 首页 list[*].order_service_types 应包含 订舱",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[服务类型(多选)]=订舱,报关,保险",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "service_types": "订舱,报关,保险"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[服务类型(多选)]=订舱,报关,保险 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333536120031675103",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_service_types_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_service_types",
+          "operator": "contains",
+          "expected": "订舱,报关,保险",
+          "message": "③rows_match: 首页 list[*].order_service_types 应包含 订舱,报关,保险",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[订单备注]=结算业务",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "order_remarks": "1"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[订单备注]=结算业务 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546859752587999",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_remarks_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_remarks",
+          "operator": "contains",
+          "expected": "结算业务",
+          "message": "③rows_match: 首页 list[*].order_remarks 应包含 结算业务",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[销售员]=王欣宇",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "sale": "王欣宇"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[销售员]=王欣宇 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lte",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546859752587999",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_opt_sales_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_opt_sales",
+          "operator": "contains",
+          "expected": "王欣宇",
+          "message": "③rows_match: 首页 list[*].order_opt_sales 应包含 王欣宇",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[销售员]=荣洋",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "sale": "荣洋"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[销售员]=荣洋 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lte",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333539174730695391",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_opt_sales_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_opt_sales",
+          "operator": "contains",
+          "expected": "荣洋",
+          "message": "③rows_match: 首页 list[*].order_opt_sales 应包含 荣洋",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[销售员]=韩博文",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "sale": "韩博文"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[销售员]=韩博文 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lte",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333537838811316959",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_opt_sales_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_opt_sales",
+          "operator": "contains",
+          "expected": "韩博文",
+          "message": "③rows_match: 首页 list[*].order_opt_sales 应包含 韩博文",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[客户(委托方)]=李明丹tidb",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "client": "李明丹tidb"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[客户(委托方)]=李明丹tidb 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lte",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333528911218475743",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_opt_client_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_opt_client",
+          "operator": "contains",
+          "expected": "李明丹tidb",
+          "message": "③rows_match: 首页 list[*].order_opt_client 应包含 李明丹tidb",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[操作员(多选)]=宋为",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "operator": "宋为"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[操作员(多选)]=宋为 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lte",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546859752587999",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_opt_operation_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_opt_operation",
+          "operator": "contains",
+          "expected": "宋为",
+          "message": "③rows_match: 首页 list[*].order_opt_operation 应包含 宋为",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[操作员(多选)]=张管理",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "operator": "张管理"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[操作员(多选)]=张管理 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lte",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333539174730695391",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_opt_operation_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_opt_operation",
+          "operator": "contains",
+          "expected": "张管理",
+          "message": "③rows_match: 首页 list[*].order_opt_operation 应包含 张管理",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[操作员(多选)]=朱文韬",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "operator": "朱文韬"
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[操作员(多选)]=朱文韬 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lte",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333537838811316959",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_order_opt_operation_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].order_opt_operation",
+          "operator": "contains",
+          "expected": "朱文韬",
+          "message": "③rows_match: 首页 list[*].order_opt_operation 应包含 朱文韬",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[应付日期]=2026-09-20",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "search_time[charge_pay_date]": [
+            "2026-09-20",
+            "2026-09-20"
+          ]
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[应付日期]=2026-09-20 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546859752587999",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_charge_pay_date_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].charge_pay_date",
+          "operator": "contains",
+          "expected": "2026-09-20",
+          "message": "③rows_match: 首页 list[*].charge_pay_date 应包含 2026-09-20",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[应付日期]=2026-07-20",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "search_time[charge_pay_date]": [
+            "2026-07-20",
+            "2026-07-20"
+          ]
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[应付日期]=2026-07-20 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333539174730695391",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_charge_pay_date_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].charge_pay_date",
+          "operator": "contains",
+          "expected": "2026-07-20",
+          "message": "③rows_match: 首页 list[*].charge_pay_date 应包含 2026-07-20",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[应付日期]=2026-04-20",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "search_time[charge_pay_date]": [
+            "2026-04-20",
+            "2026-04-20"
+          ]
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[应付日期]=2026-04-20 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333537838811316959",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_charge_pay_date_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].charge_pay_date",
+          "operator": "contains",
+          "expected": "2026-04-20",
+          "message": "③rows_match: 首页 list[*].charge_pay_date 应包含 2026-04-20",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[应收日期]=2026-11-03",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "search_time[charge_rec_date]": [
+            "2026-11-03",
+            "2026-11-03"
+          ]
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[应收日期]=2026-11-03 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333546859752587999",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_charge_rec_date_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].charge_rec_date",
+          "operator": "contains",
+          "expected": "2026-11-03",
+          "message": "③rows_match: 首页 list[*].charge_rec_date 应包含 2026-11-03",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[应收日期]=2026-08-10",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "search_time[charge_rec_date]": [
+            "2026-08-10",
+            "2026-08-10"
+          ]
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[应收日期]=2026-08-10 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333539174730695391",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_charge_rec_date_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].charge_rec_date",
+          "operator": "contains",
+          "expected": "2026-08-10",
+          "message": "③rows_match: 首页 list[*].charge_rec_date 应包含 2026-08-10",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "查询[应收日期]=2026-05-10",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.codfish.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": "1",
+          "size": "15",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "order_terminated_shutout_status": "1",
+          "bulk_query_type": "1",
+          "bulk_shutout_status": "",
+          "bulk_query": "0",
+          "batch_exchange_query": "",
+          "search_time[charge_rec_date]": [
+            "2026-05-10",
+            "2026-05-10"
+          ]
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "查询[应收日期]=2026-05-10 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_count_shrinks",
+          "phase": "verifying",
+          "order": 1,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "lt",
+          "expected": 23033,
+          "message": "①count_shrinks: 相等意味着过滤参数被后端忽略",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_anchor_present",
+          "phase": "verifying",
+          "order": 2,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].id",
+          "operator": "contains",
+          "expected": "333537838811316959",
+          "message": "②anchor_present: 已知记录必须可查到",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_field_charge_rec_date_contains_canon",
+          "phase": "verifying",
+          "order": 3,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.list[*].charge_rec_date",
+          "operator": "contains",
+          "expected": "2026-05-10",
+          "message": "③rows_match: 首页 list[*].charge_rec_date 应包含 2026-05-10",
+          "soft": true
+        },
+        {
+          "kind": "assertion",
+          "name": "assert_negative_count_zero",
+          "phase": "verifying",
+          "order": 4,
+          "enabled": true,
+          "onFailure": "continue",
+          "target": "$.response_body.count",
+          "operator": "eq",
+          "expected": 0,
+          "message": "④negative: 不存在的值应返回 0 条",
+          "soft": true
+        }
+      ]
+    }
+  ]
+}
