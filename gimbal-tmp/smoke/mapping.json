@@ -1,0 +1,70 @@
+{
+  "endpoint": "https://test.21eline.com/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+  "baseline_url": "https://test.21eline.com/newshopadmin-tidb/SyncLogorder/ajaxGetList.html?page=1&size=15&wd=&search_company=&order_terminated_shutout_status=1&bulk_query_type=1&bulk_query=0&release_status=&financing_status=&sale=&ship_company=&search_time%5Bcharge_pay_date%5D%5B0%5D=&search_time%5Bcharge_pay_date%5D%5B1%5D=",
+  "baseline_defaults": {
+    "order_terminated_shutout_status": "1",
+    "bulk_query_type": "1",
+    "bulk_query": "0"
+  },
+  "params": [
+    {
+      "param": "release_status",
+      "response_field": "release_status",
+      "cn_name": "放款状态",
+      "category": "ENUM",
+      "multi": false,
+      "value_map": {"0": "未放款", "1": "已放款", "2": "拒绝"},
+      "status": "TESTABLE"
+    },
+    {
+      "param": "financing_status",
+      "response_field": "financing_status",
+      "cn_name": "融资状态",
+      "category": "ENUM",
+      "multi": false,
+      "value_map": {"unfinanced": "未融资", "financing": "融资中", "finished": "已融资"},
+      "status": "TESTABLE"
+    },
+    {
+      "param": "sale",
+      "response_field": "order_opt_sales",
+      "cn_name": "销售员",
+      "category": "FUZZY",
+      "response_fields": ["order_opt_sales"],
+      "status": "TESTABLE"
+    },
+    {
+      "param": "ship_company",
+      "response_field": "schedule_carrier",
+      "cn_name": "船公司",
+      "category": "FUZZY",
+      "response_fields": ["schedule_carrier"],
+      "status": "TESTABLE"
+    },
+    {
+      "param": "search_time[charge_pay_date]",
+      "response_field": "charge_pay_date",
+      "cn_name": "应付日期",
+      "category": "DATE_RANGE",
+      "granularity": "date",
+      "status": "TESTABLE"
+    },
+    {
+      "param": "wd",
+      "response_fields": ["order_no", "bl_no"],
+      "cn_name": "订单号/提单号",
+      "category": "FUZZY",
+      "status": "TESTABLE"
+    },
+    {
+      "param": "page",
+      "category": "EXACT",
+      "status": "EXCLUDED"
+    },
+    {
+      "param": "size",
+      "category": "EXACT",
+      "status": "EXCLUDED"
+    }
+  ]
+}

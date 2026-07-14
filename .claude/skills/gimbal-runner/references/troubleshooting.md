@@ -1,118 +1,107 @@
-# Troubleshooting
+# Troubleshooting (launch path)
 
-Quick triage map for "I ran gimbal and got exit code N". Match the exit
-code first, then walk the **first** fix that matches.
+Quick triage for "I ran `gimbal run launch` and got exit code N".
+Match the exit code first, then walk the **first** fix that matches.
 
-## Exit 0 but nothing ran
-
-You almost certainly passed `--allow-empty`, or your pattern matched
-zero scenarios and the `--yes` prompt was suppressed (non-TTY).
-
-- Re-run with `-o json` and inspect `result.total`.
-- Re-run *without* `--allow-empty` to confirm; expect exit 5 instead.
-- Check `gimbal asset list <namespace>` to verify the ref really exists.
-
-## Exit 1 — tests failed
-
-The scenario/suite ran end-to-end but at least one assertion failed.
-
-1. Re-run with `--log-level debug` to see HTTP request/response bodies.
-2. Re-run with `--output json` to machine-parse which step failed.
-3. If the failure is mid-chain, isolate: `--step-from N --step-to N`
-   (only on `run scenario`; for `run launch`, edit the YAML).
-4. For an interactive pause, add `--breakpoint=<step>` to drop into the
-   debugger at that step.
-5. Check `--reporter html` and open the report — it usually points at
-   the failing assertion in one click.
-
-Common root causes (in order of frequency):
-
-- **Wrong env** — `--env=staging` but `config.users.<u>.token` was set
-  for dev. Try `--env=prod` to confirm.
-- **Stale var-file** — `--var-file` overrides scenario `config.vars`.
-  Delete the override or pass `--var` explicitly.
-- **Time-sensitive assertions** — token TTL, OTP, idempotency keys.
-  Replace with `${var.<name>}` and inject fresh values per run.
-
-## Exit 2 — usage / validation
-
-The CLI rejected your input. Read stderr carefully; pydantic errors name
-the exact field.
-
-| Stderr pattern | Fix |
-|---|---|
-| `invalid ref 'foo-bar'` | Refs are `ns/name:tag`. Use `/` and `:`, not `-`. |
-| `--var-file root must be a mapping` | The YAML root is a list/scalar; wrap in a map. |
-| `Scenario validation failed for ...` | A required field is missing — see `references/scenario-skeleton.md`. |
-| `--step-from 不能大于 --step-to` | Swap the bounds. |
-| `--parallel foo` | Use integer or `auto`. |
-| `--auth=token needs --token-file` | Provide both, or use `--auth=none`. |
-
-If `--dry-run` exits 2 but `run launch` (without `--dry-run`) appears to
-work, that's a false positive — `--dry-run` parses with
-`Scenario.model_validate`; the live path may have already failed before
-reaching validation. Re-check with `--log-level debug`.
-
-## Exit 3 — asset not found / engine exception
-
-Two distinct causes share the code:
-
-1. **Asset not found.** Registry ref doesn't exist.
-   - `gimbal asset list <ns>` to confirm.
-   - `gimbal asset inspect <ref>` to see metadata.
-   - Check `--registry` — is the agent looking at the right root?
-2. **`Engine.run()` raised.** Look at the traceback.
-   - `gimbal self-check` first; if it also fails with non-zero, bootstrap is broken (exit 4 territory).
-   - `--log-level debug` to capture the full stack.
-   - Look for "AssetMaterializer" / "RefBase" — that means a `${ref.*}`
-     placeholder couldn't be resolved. Either the registry is empty or
-     the ref is misspelled.
-
-## Exit 4 — bootstrap failure
-
-The framework itself couldn't come up. Almost never recoverable by the
-agent; surface to the user.
-
-1. `gimbal self-check` to confirm.
-2. If self-check is also 4, the install is broken — re-install.
-3. Check `--log-level debug` for the offending plugin/extension.
-4. Try `--config gimbal.yaml` with a known-good config (or no config)
-   to rule out config corruption.
-
-## Exit 5 — no match
-
-Pattern matched zero scenarios. Either broaden the pattern or pass
-`--allow-empty` if "no work today" is a valid outcome.
-
-```bash
-gimbal run scenario "demo/*" --yes           # interactive prompt if TTY
-gimbal run scenario "demo/*" --yes --allow-empty  # always silent
-```
-
-## Common runtime errors that aren't exit codes
-
-These surface as stderr text but gimbal still exits 0 — they're logged,
-not raised:
-
-| Symptom | Likely cause |
-|---|---|
-| `[preprocessor] ${var.foo} resolved to None` | `foo` not in `config.vars` and not in `--var`/`--var-file` |
-| `AssetMaterializer: ref customs/declare not found` | push the asset first, or fix the ref spelling |
-| `Service '<name>' not in config.services` | add it to `config.services` in the YAML |
-| `hook ... not registered` | a plugin failed to activate; check `gimbal self-check` |
-| `Reporter ... raised during finalize` | reporter bug; report still written, just incomplete |
-
-## When in doubt
-
-Run the canonical sanity loop:
+## The canonical sanity loop
 
 ```bash
 gimbal --version                          # is it installed at all?
-gimbal self-check                         # is the framework infra OK?
-gimbal asset list                         # is the registry readable?
 gimbal run launch <file> --dry-run        # does the YAML parse?
 gimbal run launch <file> -o json          # does the full pipeline work?
 ```
 
-Each step has a clear pass/fail; once you find the first non-zero exit,
-the corresponding step above tells you what to try next.
+Stop at the first non-zero exit; the sections below tell you what to do
+next. (`self-check` and `asset list` from the design docs are **not
+implemented** — never insert them into this loop.)
+
+## Exit 1 — tests failed
+
+The scenario ran end-to-end but at least one assertion failed.
+
+1. Re-run with `--log-level debug` to see HTTP request/response bodies.
+2. Re-run with `-o json` to machine-parse which step failed.
+3. **To isolate a mid-chain step** (there is no `--step-from` /
+   `--breakpoint` on launch):
+   - copy the YAML to a temp file,
+   - delete (or comment out) the steps *after* the failing one,
+   - for steps *before* it that only produce context vars, replace the
+     dependency with a `--var` injection (e.g. skip the login step and
+     pass `--var session_token=...` directly),
+   - re-run the temp file. Never edit the user's original in place.
+4. `--reporter html` and open the report — it usually points at the
+   failing assertion in one click.
+
+Common root causes (in order of frequency):
+
+- **Wrong env** — `--env=staging` but the token in `config.users` was
+  set for dev. Confirm which env the credentials belong to.
+- **Stale --var-file** — remember the priority: CLI `--var` →
+  `config.vars` → `--var-file`. Pass `--var` explicitly to override.
+- **Time-sensitive assertions** — token TTL, OTP, idempotency keys.
+  Replace hardcoded values with `${var.<name>}` and inject fresh ones
+  per run.
+
+## Exit 2 — usage / validation
+
+The CLI rejected the input. Read stderr carefully; pydantic errors name
+the exact field. **First check: did you invoke an unimplemented
+subcommand?** `run scenario`, `run suite`, `run match`, `run server`,
+`asset *`, and `self-check` all fail this way on the current build —
+that's not an argument problem, stop and tell the user the feature
+doesn't exist yet.
+
+| Stderr pattern | Fix |
+|---|---|
+| unknown command / no such subcommand | Unimplemented feature — see above. Do not retry with different args. |
+| `Scenario validation failed for ...` | Required field missing — see `scenario-skeleton.md`. |
+| `--var-file root must be a mapping` | The YAML root is a list/scalar; wrap it in a map. |
+| `--inline` + `SOURCE` both given | They're mutually exclusive; pick one. |
+| stdin read refused | `SOURCE="-"` needs a pipe, not a TTY. |
+
+If `--dry-run` exits 2 but a full `run launch` appears to work, that's
+a false positive — `--dry-run` uses `Scenario.model_validate`; the live
+path may have failed before reaching validation. Re-check with
+`--log-level debug`.
+
+## Exit 3 — engine exception
+
+On this build there is no asset registry, so exit 3 means
+**`Engine.run()` raised**. Do not "re-list assets and retry" — there
+are no assets.
+
+1. `--log-level debug` to capture the full stack; read the traceback.
+2. `AssetMaterializer` / `RefBase` in the trace → the scenario contains
+   a `${ref.*}` placeholder, which depends on the unimplemented
+   registry. Tell the user that scenario can't run on this build.
+3. Otherwise it's a framework bug — capture the trace and surface it.
+
+## Exit 4 — bootstrap failure
+
+The framework itself couldn't come up. Not recoverable by the agent.
+
+1. `--log-level debug` for the offending plugin/extension.
+2. Try `--config` pointing at a known-good `gimbal.yaml` (or no config)
+   to rule out config corruption.
+3. If it persists, the install is broken — surface to the user;
+   suggest reinstalling from the working tree.
+
+## Exit 124 / 127 (wrapper `scripts/gimbal_cli.py` only)
+
+- `127` — gimbal binary not found. Try `python -m gimbal` from the
+  source tree, or set `GIMBAL_BIN`. If neither exists, ask the user
+  where the GIMBAL working tree is.
+- `124` — subprocess timeout. Raise `--timeout` or investigate a hung
+  HTTP call with `--log-level debug`.
+
+## Runtime errors that don't change the exit code
+
+These surface in stderr but gimbal still exits 0 — logged, not raised.
+**Never conclude success from exit 0 alone; skim stderr.**
+
+| Symptom | Likely cause |
+|---|---|
+| `[preprocessor] ${var.foo} resolved to None` | `foo` not in `config.vars` and not injected via `--var`/`--var-file` |
+| `Service '<name>' not in config.services` | add it to `config.services` in the YAML |
+| `hook ... not registered` | a plugin failed to activate; check `-P` flags and the bootstrap log |
+| `Reporter ... raised during finalize` | reporter bug; report written but incomplete |

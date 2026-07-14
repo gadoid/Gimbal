@@ -1,0 +1,116 @@
+[probe] steps=17 (1 seed + 16 field probes)
+2026-07-09 18:34:33.869 | WARNING  | [ConfigLoader] ÏîÄ¿¸ùÄ¿Â¼: D:\Gimbal\Gimbal
+[probe] registered HTTP_AFTER_RECV hook (id=eb60f7df-09b9-47af-b6c5-82031e6016d5)
+[1m[36m
+[e2e¶©µ¥µ½Ó¦ÊÕºËÏú] \u25b6  È«Á´Â·-¶©µ¥´´½¨ÖÁÓ¦ÊÕºËÏú-Õý³£ (steps=0)[0m
+[1m[36m
+[e2e¶©µ¥µ½Ó¦ÊÕºËÏú] \u25b6  È«Á´Â·-¶©µ¥´´½¨ÖÁÓ¦ÊÕºËÏú-Õý³£ (steps=17)[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-000] start[0m
+[2m      ajaxGetList baseline (seed; inert ¡ª see SKILL.md scaffold-seeding-contract)[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-000] start[0m
+[2m      ajaxGetList baseline (seed; inert ¡ª see SKILL.md scaffold-seeding-contract)[0m
+[32m    \u2713 passed   1401.87ms[0m
+[32m    \u2713 passed   1402.15ms   asserts=1/1[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-001] start[0m
+[2m      probe field=wd[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-001] start[0m
+[2m      probe field=wd[0m
+[32m    \u2713 passed   1492.67ms[0m
+[32m    \u2713 passed   1492.96ms   asserts=1/1[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-002] start[0m
+[2m      probe field=search_company[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-002] start[0m
+[2m      probe field=search_company[0m
+[32m    \u2713 passed   1671.22ms[0m
+[32m    \u2713 passed   1671.45ms   asserts=1/1[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-003] start[0m
+[2m      probe field=work_no[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-003] start[0m
+[2m      probe field=work_no[0m
+[32m    \u2713 passed   1130.87ms[0m
+[32m    \u2713 passed   1131.10ms   asserts=1/1[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-004] start[0m
+[2m      probe field=order_customer_real[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-004] start[0m
+[2m      probe field=order_customer_real[0m
+[32m    \u2713 passed   1517.35ms[0m
+[32m    \u2713 passed   1517.61ms   asserts=1/1[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-005] start[0m
+[2m      probe field=booking_agent_bp[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-005] start[0m
+[2m      probe field=booking_agent_bp[0m
+[32m    \u2713 passed   1478.98ms[0m
+[32m    \u2713 passed   1479.29ms   asserts=1/1[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-006] start[0m
+[2m      probe field=booking_agent_bp_real[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-006] start[0m
+[2m      probe field=booking_agent_bp_real[0m
+[32m    \u2713 passed   1470.67ms[0m
+[32m    \u2713 passed   1470.86ms   asserts=1/1[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-007] start[0m
+[2m      probe field=order_business_no[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-007] start[0m
+[2m      probe field=order_business_no[0m
+[32m    \u2713 passed   1452.27ms[0m
+[32m    \u2713 passed   1452.55ms   asserts=1/1[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-008] start[0m
+[2m      probe field=ship_company[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-008] start[0m
+[2m      probe field=ship_company[0m
+[32m    \u2713 passed   1432.99ms[0m
+[32m    \u2713 passed   1433.29ms   asserts=1/1[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-009] start[0m
+[2m      probe field=booking_mbl_delivery_mode[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-009] start[0m
+[2m      probe field=booking_mbl_delivery_mode[0m
+[32m    \u2713 passed   1714.52ms[0m
+[32m    \u2713 passed   1714.81ms   asserts=1/1[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-010] start[0m
+[2m      probe field=service_types[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-010] start[0m
+[2m      probe field=service_types[0m
+[32m    \u2713 passed   1484.71ms[0m
+[32m    \u2713 passed   1484.95ms   asserts=1/1[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-011] start[0m
+[2m      probe field=order_remarks[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-011] start[0m
+[2m      probe field=order_remarks[0m
+[32m    \u2713 passed   1067.58ms[0m
+[32m    \u2713 passed   1067.80ms   asserts=1/1[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-012] start[0m
+[2m      probe field=sale[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-012] start[0m
+[2m      probe field=sale[0m
+[32m    \u2713 passed   1081.90ms[0m
+[32m    \u2713 passed   1082.15ms   asserts=1/1[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-013] start[0m
+[2m      probe field=client[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-013] start[0m
+[2m      probe field=client[0m
+[32m    \u2713 passed   1442.66ms[0m
+[32m    \u2713 passed   1442.89ms   asserts=1/1[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-014] start[0m
+[2m      probe field=operator[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-014] start[0m
+[2m      probe field=operator[0m
+[32m    \u2713 passed   1461.86ms[0m
+[32m    \u2713 passed   1462.07ms   asserts=1/1[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-015] start[0m
+[2m      probe field=search_time[charge_pay_date][0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-015] start[0m
+[2m      probe field=search_time[charge_pay_date][0m
+[32m    \u2713 passed   1394.75ms[0m
+[32m    \u2713 passed   1394.97ms   asserts=1/1[0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-016] start[0m
+[2m      probe field=search_time[charge_rec_date][0m
+[2m  [e2e¶©µ¥µ½Ó¦ÊÕºËÏú/step-016] start[0m
+[2m      probe field=search_time[charge_rec_date][0m
+[32m    \u2713 passed   1358.21ms[0m
+[32m    \u2713 passed   1358.45ms   asserts=1/1[0m
+
+[2m©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤[0m
+[32m[1mPASS  total=1 passed=1[0m
+[32m  - e2e¶©µ¥µ½Ó¦ÊÕºËÏú: passed (25272.6ms)[0m
+[2m©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤[0m
+[probe] engine.run() -> exit=0 total=1 passed=1 failed=0 error=0
+[probe] baseline_count=23033 rows_collected=15 hook_events=17

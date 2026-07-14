@@ -1,0 +1,13 @@
+{
+  "description": "FUZZY 分类的响应字段映射。param → response_fields[] 表示该参数的查询值会同时匹配响应行的若干列。Stage 1 命中这里或 name-overrides 的 'response_fields' 都会把字段分类为 FUZZY。允许持续人工补充，新增'按 … 搜索'型 input 直接加进来。注意：scripts/parse_form.py 当前还有一份硬编码 BUILTIN_FUZZY，两份双轨维护，编辑本文件后还需要同步脚本。",
+  "fuzzy_fields": {
+    "wd": ["order_no", "bl_no"],
+    "port": ["schedule_from_terminal", "schedule_to_terminal"],
+    "search_company": ["order_customer", "social_code"],
+    "work_no": ["work_no"],
+    "order_customer_real": ["order_customer_real"],
+    "booking_agent_bp": ["booking_agent_bp"],
+    "booking_agent_bp_real": ["booking_agent_bp_real"],
+    "order_business_no": ["order_business_no"]
+  }
+}

@@ -109,7 +109,9 @@ class AuthManager:
     def _login(self, auth: AuthSession, tag: str) -> None:
         """根据 auth.url 选择已注册的 Authenticator 并调用其 authenticate 完成登录；失败统一抛出 AuthLoginFailed。"""
         try:
+            print(auth.url)
             authenticator = get_authenticator(auth.url)
+            print(authenticator)
             authenticator.authenticate(auth, tag)
             logger.info("[AuthManager] 登录成功: tag={}", tag)
 

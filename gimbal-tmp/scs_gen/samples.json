@@ -1,0 +1,354 @@
+{
+  "_comment": "REAL sampling via gimbal engine + HTTP_AFTER_RECV hook. row_id anchors the assertion against the backend's actual response.",
+  "scanned_rows": 15,
+  "baseline_count": 23033,
+  "scan_ts": "2026-07-09T18:34:59.306252+08:00",
+  "fields": {
+    "wd": {
+      "samples": [
+        {
+          "value": "YHD20260709034960",
+          "canon": "YHD20260709034960",
+          "query_code": "YHD20260709034960",
+          "order_id": "333546806514286592",
+          "row_id": "333546859752587999"
+        },
+        {
+          "value": "YH20260709032912",
+          "canon": "YH20260709032912",
+          "query_code": "YH20260709032912",
+          "order_id": "333546806224879616",
+          "row_id": "333546857961620191"
+        },
+        {
+          "value": "HZCJ20260709032772",
+          "canon": "HZCJ20260709032772",
+          "query_code": "HZCJ20260709032772",
+          "order_id": "333546805931278336",
+          "row_id": "333546856090960607"
+        }
+      ],
+      "distinct_seen": 3,
+      "status": "REAL_SAMPLED"
+    },
+    "search_company": {
+      "samples": [],
+      "status": "NO_SAMPLE",
+      "scanned": 15
+    },
+    "work_no": {
+      "samples": [
+        {
+          "value": "GF50262800099",
+          "canon": "GF50262800099",
+          "query_code": "GF50262800099",
+          "order_id": "333546806514286592",
+          "row_id": "333546859752587999"
+        }
+      ],
+      "distinct_seen": 1,
+      "status": "REAL_SAMPLED"
+    },
+    "order_customer_real": {
+      "samples": [
+        {
+          "value": "山东佳农国际贸易有限公司",
+          "canon": "山东佳农国际贸易有限公司",
+          "query_code": "山东佳农国际贸易有限公司",
+          "order_id": "333546806514286592",
+          "row_id": "333546859752587999"
+        },
+        {
+          "value": "北京火山引擎科技有限公司",
+          "canon": "北京火山引擎科技有限公司",
+          "query_code": "北京火山引擎科技有限公司",
+          "order_id": "333539153595596800",
+          "row_id": "333539174730695391"
+        },
+        {
+          "value": "曹县融悦木业有限公司",
+          "canon": "曹县融悦木业有限公司",
+          "query_code": "曹县融悦木业有限公司",
+          "order_id": "333537813347696640",
+          "row_id": "333537838811316959"
+        }
+      ],
+      "distinct_seen": 3,
+      "status": "REAL_SAMPLED"
+    },
+    "booking_agent_bp": {
+      "samples": [
+        {
+          "value": "青岛经汉物流服务有限公司",
+          "canon": "青岛经汉物流服务有限公司",
+          "query_code": "青岛经汉物流服务有限公司",
+          "order_id": "333546806514286592",
+          "row_id": "333546859752587999"
+        },
+        {
+          "value": "青岛易航道物流科技有限公司",
+          "canon": "青岛易航道物流科技有限公司",
+          "query_code": "青岛易航道物流科技有限公司",
+          "order_id": "333546806224879616",
+          "row_id": "333546857961620191"
+        },
+        {
+          "value": "青岛易海供应链管理有限公司",
+          "canon": "青岛易海供应链管理有限公司",
+          "query_code": "青岛易海供应链管理有限公司",
+          "order_id": "333546805931278336",
+          "row_id": "333546856090960607"
+        }
+      ],
+      "distinct_seen": 3,
+      "status": "REAL_SAMPLED"
+    },
+    "booking_agent_bp_real": {
+      "samples": [
+        {
+          "value": "青岛经汉物流服务有限公司",
+          "canon": "青岛经汉物流服务有限公司",
+          "query_code": "青岛经汉物流服务有限公司",
+          "order_id": "333546806514286592",
+          "row_id": "333546859752587999"
+        },
+        {
+          "value": "芜湖长信科技股份有限公司",
+          "canon": "芜湖长信科技股份有限公司",
+          "query_code": "芜湖长信科技股份有限公司",
+          "order_id": "333539153595596800",
+          "row_id": "333539174730695391"
+        },
+        {
+          "value": "青岛阔运国际物流有限公司",
+          "canon": "青岛阔运国际物流有限公司",
+          "query_code": "青岛阔运国际物流有限公司",
+          "order_id": "333537813347696640",
+          "row_id": "333537838811316959"
+        }
+      ],
+      "distinct_seen": 3,
+      "status": "REAL_SAMPLED"
+    },
+    "order_business_no": {
+      "samples": [
+        {
+          "value": "YWDD20260709108277",
+          "canon": "YWDD20260709108277",
+          "query_code": "YWDD20260709108277",
+          "order_id": "333546806514286592",
+          "row_id": "333546859752587999"
+        },
+        {
+          "value": "YWDD20260709108275",
+          "canon": "YWDD20260709108275",
+          "query_code": "YWDD20260709108275",
+          "order_id": "333539153595596800",
+          "row_id": "333539174730695391"
+        },
+        {
+          "value": "YWDD20260709108274",
+          "canon": "YWDD20260709108274",
+          "query_code": "YWDD20260709108274",
+          "order_id": "333537813347696640",
+          "row_id": "333537838811316959"
+        }
+      ],
+      "distinct_seen": 3,
+      "status": "REAL_SAMPLED"
+    },
+    "ship_company": {
+      "samples": [
+        {
+          "value": "CMA",
+          "canon": "CMA",
+          "query_code": "CMA",
+          "order_id": "333546806514286592",
+          "row_id": "333546859752587999"
+        },
+        {
+          "value": "ACL",
+          "canon": "ACL",
+          "query_code": "ACL",
+          "order_id": "333539153595596800",
+          "row_id": "333539174730695391"
+        },
+        {
+          "value": "MAERSK",
+          "canon": "MAERSK",
+          "query_code": "MAERSK",
+          "order_id": "333537813347696640",
+          "row_id": "333537838811316959"
+        }
+      ],
+      "distinct_seen": 3,
+      "status": "REAL_SAMPLED"
+    },
+    "booking_mbl_delivery_mode": {
+      "samples": [],
+      "status": "NO_SAMPLE",
+      "scanned": 15
+    },
+    "service_types": {
+      "samples": [
+        {
+          "value": "订舱,报关",
+          "canon": "订舱,报关",
+          "query_code": "订舱,报关",
+          "order_id": "333546806514286592",
+          "row_id": "333546859752587999"
+        },
+        {
+          "value": "订舱",
+          "canon": "订舱",
+          "query_code": "1",
+          "order_id": "333539153595596800",
+          "row_id": "333539174730695391"
+        },
+        {
+          "value": "订舱,报关,保险",
+          "canon": "订舱,报关,保险",
+          "query_code": "订舱,报关,保险",
+          "order_id": "333536101731926016",
+          "row_id": "333536120031675103"
+        }
+      ],
+      "distinct_seen": 3,
+      "status": "REAL_SAMPLED"
+    },
+    "order_remarks": {
+      "samples": [
+        {
+          "value": "结算业务",
+          "canon": "结算业务",
+          "query_code": "1",
+          "order_id": "333546806514286592",
+          "row_id": "333546859752587999"
+        }
+      ],
+      "distinct_seen": 1,
+      "status": "REAL_SAMPLED"
+    },
+    "sale": {
+      "samples": [
+        {
+          "value": "王欣宇",
+          "canon": "王欣宇",
+          "query_code": "王欣宇",
+          "order_id": "333546806514286592",
+          "row_id": "333546859752587999"
+        },
+        {
+          "value": "荣洋",
+          "canon": "荣洋",
+          "query_code": "荣洋",
+          "order_id": "333539153595596800",
+          "row_id": "333539174730695391"
+        },
+        {
+          "value": "韩博文",
+          "canon": "韩博文",
+          "query_code": "韩博文",
+          "order_id": "333537813347696640",
+          "row_id": "333537838811316959"
+        }
+      ],
+      "distinct_seen": 3,
+      "status": "REAL_SAMPLED"
+    },
+    "client": {
+      "samples": [
+        {
+          "value": "李明丹tidb",
+          "canon": "李明丹tidb",
+          "query_code": "李明丹tidb",
+          "order_id": "333528886694379520",
+          "row_id": "333528911218475743"
+        }
+      ],
+      "distinct_seen": 1,
+      "status": "REAL_SAMPLED"
+    },
+    "operator": {
+      "samples": [
+        {
+          "value": "宋为",
+          "canon": "宋为",
+          "query_code": "宋为",
+          "order_id": "333546806514286592",
+          "row_id": "333546859752587999"
+        },
+        {
+          "value": "张管理",
+          "canon": "张管理",
+          "query_code": "张管理",
+          "order_id": "333539153595596800",
+          "row_id": "333539174730695391"
+        },
+        {
+          "value": "朱文韬",
+          "canon": "朱文韬",
+          "query_code": "朱文韬",
+          "order_id": "333537813347696640",
+          "row_id": "333537838811316959"
+        }
+      ],
+      "distinct_seen": 3,
+      "status": "REAL_SAMPLED"
+    },
+    "search_time[charge_pay_date]": {
+      "samples": [
+        {
+          "value": "2026-09-20",
+          "canon": "2026-09-20",
+          "query_code": "2026-09-20",
+          "order_id": "333546806514286592",
+          "row_id": "333546859752587999"
+        },
+        {
+          "value": "2026-07-20",
+          "canon": "2026-07-20",
+          "query_code": "2026-07-20",
+          "order_id": "333539153595596800",
+          "row_id": "333539174730695391"
+        },
+        {
+          "value": "2026-04-20",
+          "canon": "2026-04-20",
+          "query_code": "2026-04-20",
+          "order_id": "333537813347696640",
+          "row_id": "333537838811316959"
+        }
+      ],
+      "distinct_seen": 3,
+      "status": "REAL_SAMPLED"
+    },
+    "search_time[charge_rec_date]": {
+      "samples": [
+        {
+          "value": "2026-11-03",
+          "canon": "2026-11-03",
+          "query_code": "2026-11-03",
+          "order_id": "333546806514286592",
+          "row_id": "333546859752587999"
+        },
+        {
+          "value": "2026-08-10",
+          "canon": "2026-08-10",
+          "query_code": "2026-08-10",
+          "order_id": "333539153595596800",
+          "row_id": "333539174730695391"
+        },
+        {
+          "value": "2026-05-10",
+          "canon": "2026-05-10",
+          "query_code": "2026-05-10",
+          "order_id": "333537813347696640",
+          "row_id": "333537838811316959"
+        }
+      ],
+      "distinct_seen": 3,
+      "status": "REAL_SAMPLED"
+    }
+  }
+}

@@ -76,3 +76,75 @@ def seq(prefix: str = "", width: int = 6, start: int = 1) -> str:
 def reset_seq_counter() -> None:
     """重置 seq 计数器（多进程跑前 / 测试隔离用）。"""
     _seq_counter.clear()
+
+
+def random_decorated_str(
+    length: int = 8,
+    charset: str = "alnum",
+    head: str = "",
+    tail: str = "",
+    separator: str = "",
+) -> str:
+    """带前后缀与连接符的随机字符串。
+
+    用"高基数随机"——一个独立的 random.choices 调用，避免复用 random_str 时的
+    任何状态耦合。
+
+    输出形式：head + separator + 核心随机串 + separator + tail
+
+    Examples::
+
+        random_decorated_str(length=4, charset="alnum", head="BL", tail="CN", separator="-")
+        # → "BL-a3kP-CN"
+
+        random_decorated_str(length=8, charset="digit")  # head/tail/sep 全空
+        # → "a3kPm2xQ"（等价于 random_str(length=8, charset="digit")）
+    """
+    # 复用 random_str 的 charset→pool 映射，保证 charset 校验口径一致
+    core = random_str(length=length, charset=charset)
+    return f"{head}{separator}{core}{separator}{tail}"
+
+
+# time_offset 单位 → timedelta 关键字参数的映射
+# 注意：milliseconds 在 Python 3.10+ 的 datetime 中并未作为 timedelta 关键字直接支持，
+# 我们用 seconds=msec/1000 来表达。
+_TIMEDELTA_UNIT_KEYWORD = {
+    "seconds": "seconds",
+    "minutes": "minutes",
+    "hours": "hours",
+    "days": "days",
+    "weeks": "weeks",
+}
+
+
+def time_offset(
+    unit: str = "seconds",
+    value: int = 0,
+    direction: str = "future",
+) -> int:
+    """当前 unix 秒 + 单位化偏移量。
+
+    输出恒为 int（unix 秒）。format 由下游 strategy / render 决定，本函数
+    不参与字符串格式化。
+
+    Examples::
+
+        time_offset(unit="days", value=30, direction="future")
+        time_offset(unit="hours", value=2, direction="past")
+        time_offset(unit="milliseconds", value=500)
+        time_offset()  # 当前 unix 秒
+    """
+    if unit not in _TIMEDELTA_UNIT_KEYWORD and unit != "milliseconds":
+        raise ValueError(f"invalid unit: {unit!r}")
+
+    sign = 1 if direction == "future" else -1
+
+    if unit == "milliseconds":
+        # timedelta 不直接接收 milliseconds 关键字，转 seconds
+        seconds_offset = (value * sign) / 1000.0
+        target = datetime.now() + timedelta(seconds=seconds_offset)
+    else:
+        kwarg = {f"{_TIMEDELTA_UNIT_KEYWORD[unit]}": value * sign}
+        target = datetime.now() + timedelta(**kwarg)
+
+    return int(target.timestamp())

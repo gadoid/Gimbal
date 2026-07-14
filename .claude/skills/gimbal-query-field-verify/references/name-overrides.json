@@ -1,0 +1,13 @@
+{
+  "_comment": "param → resolution. Grows per endpoint family; persist to Plate when available. 'container' remaps the form div id when it differs from the param name; 'auth_key' remaps the auth-block key.",
+  "sale":         {"response_field": "order_opt_sales",   "auth_key": "order_opt_sales"},
+  "client":       {"response_field": "order_opt_client",  "auth_key": "order_opt_client"},
+  "ship_company": {"response_field": "schedule_carrier"},
+  "operator":     {"response_field": "order_opt_operation", "auth_key": "order_opt_operation"},
+  "service":      {"response_field": "order_opt_customers_service", "auth_key": "order_opt_customers_service"},
+  "service_types": {"response_field": "order_service_types", "container": "service_types"},
+  "receivables_invoice_status":   {"response_field": "charge_rec_invoice_status"},
+  "receivables_write_off_status": {"response_field": "charge_rec_writeoff_status"},
+  "search_time[asset_pass_time_first]": {"granularity": "datetime"},
+  "release_status": {"_todo": "response_field unresolved — confirm against backend, then fill in"}
+}

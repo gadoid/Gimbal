@@ -14,7 +14,7 @@ from gimbal.generator.exceptions import GeneratorError, UnknownGeneratorError
 from gimbal.generator.registry import GeneratorRegistry, build_default_registry
 from gimbal.generator.specs import (
     VarSpec, UuidSpec, RandomStrSpec, RandomIntSpec, RandomDecimalSpec,
-    TimestampSpec, NowSpec, SeqSpec,
+    TimestampSpec, NowSpec, SeqSpec, RandomDecoratedSpec, TimeOffsetSpec,
 )
 
 __all__ = [
@@ -23,6 +23,6 @@ __all__ = [
     "build_default_registry",
     "VarSpec",
     "UuidSpec", "RandomStrSpec", "RandomIntSpec", "RandomDecimalSpec",
-    "TimestampSpec", "NowSpec", "SeqSpec",
+    "TimestampSpec", "NowSpec", "SeqSpec", "RandomDecoratedSpec", "TimeOffsetSpec",
     "GeneratorError", "UnknownGeneratorError",
 ]

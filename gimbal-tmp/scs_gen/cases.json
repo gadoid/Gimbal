@@ -1,0 +1,827 @@
+{
+  "generated": "2026-07-09T18:50:02.834294+08:00",
+  "baseline_url": "https://test.21eline.com/newshopadmin-tidb/SyncLogorder/ajaxGetList.html?page=1&size=15&wd=&search_company=&work_no=&order_customer_real=&booking_agent_bp=&booking_agent_bp_real=&order_business_no=&order_terminated_shutout_status=1&bulk_query_type=1&bulk_shutout_status=&bulk_query=0&batch_exchange_query=",
+  "baseline_count": 23033,
+  "page_size": 5,
+  "cases": [
+    {
+      "case_id": "wd__0",
+      "param": "wd",
+      "cn_name": "模糊搜索(订单号/提单号/工作号等)",
+      "category": "FUZZY",
+      "response_field": null,
+      "response_fields": [
+        "order_no",
+        "bl_no"
+      ],
+      "query_override": {
+        "wd": "YHD20260709034960"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546859752587999",
+        "anchor_order_id": "333546806514286592",
+        "rows_display_value": "YHD20260709034960",
+        "rows_canon_value": "YHD20260709034960"
+      },
+      "negative": {
+        "query_value": "YHD20260709034960_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "wd__1",
+      "param": "wd",
+      "cn_name": "模糊搜索(订单号/提单号/工作号等)",
+      "category": "FUZZY",
+      "response_field": null,
+      "response_fields": [
+        "order_no",
+        "bl_no"
+      ],
+      "query_override": {
+        "wd": "YH20260709032912"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546857961620191",
+        "anchor_order_id": "333546806224879616",
+        "rows_display_value": "YH20260709032912",
+        "rows_canon_value": "YH20260709032912"
+      },
+      "negative": {
+        "query_value": "YH20260709032912_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "wd__2",
+      "param": "wd",
+      "cn_name": "模糊搜索(订单号/提单号/工作号等)",
+      "category": "FUZZY",
+      "response_field": null,
+      "response_fields": [
+        "order_no",
+        "bl_no"
+      ],
+      "query_override": {
+        "wd": "HZCJ20260709032772"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546856090960607",
+        "anchor_order_id": "333546805931278336",
+        "rows_display_value": "HZCJ20260709032772",
+        "rows_canon_value": "HZCJ20260709032772"
+      },
+      "negative": {
+        "query_value": "HZCJ20260709032772_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "work_no__0",
+      "param": "work_no",
+      "cn_name": "工作号",
+      "category": "FUZZY",
+      "response_field": "work_no",
+      "response_fields": [],
+      "query_override": {
+        "work_no": "GF50262800099"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546859752587999",
+        "anchor_order_id": "333546806514286592",
+        "rows_display_value": "GF50262800099",
+        "rows_canon_value": "GF50262800099"
+      },
+      "negative": {
+        "query_value": "GF50262800099_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "order_customer_real__0",
+      "param": "order_customer_real",
+      "cn_name": "客户(实际)",
+      "category": "FUZZY",
+      "response_field": "order_customer_real",
+      "response_fields": [],
+      "query_override": {
+        "order_customer_real": "山东佳农国际贸易有限公司"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546859752587999",
+        "anchor_order_id": "333546806514286592",
+        "rows_display_value": "山东佳农国际贸易有限公司",
+        "rows_canon_value": "山东佳农国际贸易有限公司"
+      },
+      "negative": {
+        "query_value": "山东佳农国际贸易有限公司_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "order_customer_real__1",
+      "param": "order_customer_real",
+      "cn_name": "客户(实际)",
+      "category": "FUZZY",
+      "response_field": "order_customer_real",
+      "response_fields": [],
+      "query_override": {
+        "order_customer_real": "北京火山引擎科技有限公司"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333539174730695391",
+        "anchor_order_id": "333539153595596800",
+        "rows_display_value": "北京火山引擎科技有限公司",
+        "rows_canon_value": "北京火山引擎科技有限公司"
+      },
+      "negative": {
+        "query_value": "北京火山引擎科技有限公司_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "order_customer_real__2",
+      "param": "order_customer_real",
+      "cn_name": "客户(实际)",
+      "category": "FUZZY",
+      "response_field": "order_customer_real",
+      "response_fields": [],
+      "query_override": {
+        "order_customer_real": "曹县融悦木业有限公司"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333537838811316959",
+        "anchor_order_id": "333537813347696640",
+        "rows_display_value": "曹县融悦木业有限公司",
+        "rows_canon_value": "曹县融悦木业有限公司"
+      },
+      "negative": {
+        "query_value": "曹县融悦木业有限公司_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "booking_agent_bp__0",
+      "param": "booking_agent_bp",
+      "cn_name": "订舱代理BP",
+      "category": "FUZZY",
+      "response_field": "booking_agent_bp",
+      "response_fields": [],
+      "query_override": {
+        "booking_agent_bp": "青岛经汉物流服务有限公司"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546859752587999",
+        "anchor_order_id": "333546806514286592",
+        "rows_display_value": "青岛经汉物流服务有限公司",
+        "rows_canon_value": "青岛经汉物流服务有限公司"
+      },
+      "negative": {
+        "query_value": "青岛经汉物流服务有限公司_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "booking_agent_bp__1",
+      "param": "booking_agent_bp",
+      "cn_name": "订舱代理BP",
+      "category": "FUZZY",
+      "response_field": "booking_agent_bp",
+      "response_fields": [],
+      "query_override": {
+        "booking_agent_bp": "青岛易航道物流科技有限公司"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546857961620191",
+        "anchor_order_id": "333546806224879616",
+        "rows_display_value": "青岛易航道物流科技有限公司",
+        "rows_canon_value": "青岛易航道物流科技有限公司"
+      },
+      "negative": {
+        "query_value": "青岛易航道物流科技有限公司_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "booking_agent_bp__2",
+      "param": "booking_agent_bp",
+      "cn_name": "订舱代理BP",
+      "category": "FUZZY",
+      "response_field": "booking_agent_bp",
+      "response_fields": [],
+      "query_override": {
+        "booking_agent_bp": "青岛易海供应链管理有限公司"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546856090960607",
+        "anchor_order_id": "333546805931278336",
+        "rows_display_value": "青岛易海供应链管理有限公司",
+        "rows_canon_value": "青岛易海供应链管理有限公司"
+      },
+      "negative": {
+        "query_value": "青岛易海供应链管理有限公司_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "booking_agent_bp_real__0",
+      "param": "booking_agent_bp_real",
+      "cn_name": "订舱代理BP(实际)",
+      "category": "FUZZY",
+      "response_field": "booking_agent_bp_real",
+      "response_fields": [],
+      "query_override": {
+        "booking_agent_bp_real": "青岛经汉物流服务有限公司"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546859752587999",
+        "anchor_order_id": "333546806514286592",
+        "rows_display_value": "青岛经汉物流服务有限公司",
+        "rows_canon_value": "青岛经汉物流服务有限公司"
+      },
+      "negative": {
+        "query_value": "青岛经汉物流服务有限公司_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "booking_agent_bp_real__1",
+      "param": "booking_agent_bp_real",
+      "cn_name": "订舱代理BP(实际)",
+      "category": "FUZZY",
+      "response_field": "booking_agent_bp_real",
+      "response_fields": [],
+      "query_override": {
+        "booking_agent_bp_real": "芜湖长信科技股份有限公司"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333539174730695391",
+        "anchor_order_id": "333539153595596800",
+        "rows_display_value": "芜湖长信科技股份有限公司",
+        "rows_canon_value": "芜湖长信科技股份有限公司"
+      },
+      "negative": {
+        "query_value": "芜湖长信科技股份有限公司_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "booking_agent_bp_real__2",
+      "param": "booking_agent_bp_real",
+      "cn_name": "订舱代理BP(实际)",
+      "category": "FUZZY",
+      "response_field": "booking_agent_bp_real",
+      "response_fields": [],
+      "query_override": {
+        "booking_agent_bp_real": "青岛阔运国际物流有限公司"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333537838811316959",
+        "anchor_order_id": "333537813347696640",
+        "rows_display_value": "青岛阔运国际物流有限公司",
+        "rows_canon_value": "青岛阔运国际物流有限公司"
+      },
+      "negative": {
+        "query_value": "青岛阔运国际物流有限公司_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "order_business_no__0",
+      "param": "order_business_no",
+      "cn_name": "业务单号",
+      "category": "FUZZY",
+      "response_field": "order_business_no",
+      "response_fields": [],
+      "query_override": {
+        "order_business_no": "YWDD20260709108277"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546859752587999",
+        "anchor_order_id": "333546806514286592",
+        "rows_display_value": "YWDD20260709108277",
+        "rows_canon_value": "YWDD20260709108277"
+      },
+      "negative": {
+        "query_value": "YWDD20260709108277_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "order_business_no__1",
+      "param": "order_business_no",
+      "cn_name": "业务单号",
+      "category": "FUZZY",
+      "response_field": "order_business_no",
+      "response_fields": [],
+      "query_override": {
+        "order_business_no": "YWDD20260709108275"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333539174730695391",
+        "anchor_order_id": "333539153595596800",
+        "rows_display_value": "YWDD20260709108275",
+        "rows_canon_value": "YWDD20260709108275"
+      },
+      "negative": {
+        "query_value": "YWDD20260709108275_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "order_business_no__2",
+      "param": "order_business_no",
+      "cn_name": "业务单号",
+      "category": "FUZZY",
+      "response_field": "order_business_no",
+      "response_fields": [],
+      "query_override": {
+        "order_business_no": "YWDD20260709108274"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333537838811316959",
+        "anchor_order_id": "333537813347696640",
+        "rows_display_value": "YWDD20260709108274",
+        "rows_canon_value": "YWDD20260709108274"
+      },
+      "negative": {
+        "query_value": "YWDD20260709108274_NOTEXIST_gimbal",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "ship_company__0",
+      "param": "ship_company",
+      "cn_name": "船公司",
+      "category": "ENUM",
+      "response_field": "schedule_carrier",
+      "response_fields": [],
+      "query_override": {
+        "ship_company": "CMA"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546859752587999",
+        "anchor_order_id": "333546806514286592",
+        "rows_display_value": "CMA",
+        "rows_canon_value": "CMA"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "ship_company__1",
+      "param": "ship_company",
+      "cn_name": "船公司",
+      "category": "ENUM",
+      "response_field": "schedule_carrier",
+      "response_fields": [],
+      "query_override": {
+        "ship_company": "ACL"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333539174730695391",
+        "anchor_order_id": "333539153595596800",
+        "rows_display_value": "ACL",
+        "rows_canon_value": "ACL"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "ship_company__2",
+      "param": "ship_company",
+      "cn_name": "船公司",
+      "category": "ENUM",
+      "response_field": "schedule_carrier",
+      "response_fields": [],
+      "query_override": {
+        "ship_company": "MAERSK"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333537838811316959",
+        "anchor_order_id": "333537813347696640",
+        "rows_display_value": "MAERSK",
+        "rows_canon_value": "MAERSK"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "service_types__0",
+      "param": "service_types",
+      "cn_name": "服务类型(多选)",
+      "category": "ENUM",
+      "response_field": null,
+      "response_fields": [
+        "order_service_types"
+      ],
+      "query_override": {
+        "service_types": "订舱,报关"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546859752587999",
+        "anchor_order_id": "333546806514286592",
+        "rows_display_value": "订舱,报关",
+        "rows_canon_value": "订舱,报关"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "service_types__1",
+      "param": "service_types",
+      "cn_name": "服务类型(多选)",
+      "category": "ENUM",
+      "response_field": null,
+      "response_fields": [
+        "order_service_types"
+      ],
+      "query_override": {
+        "service_types": "1"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333539174730695391",
+        "anchor_order_id": "333539153595596800",
+        "rows_display_value": "订舱",
+        "rows_canon_value": "订舱"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "service_types__2",
+      "param": "service_types",
+      "cn_name": "服务类型(多选)",
+      "category": "ENUM",
+      "response_field": null,
+      "response_fields": [
+        "order_service_types"
+      ],
+      "query_override": {
+        "service_types": "订舱,报关,保险"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333536120031675103",
+        "anchor_order_id": "333536101731926016",
+        "rows_display_value": "订舱,报关,保险",
+        "rows_canon_value": "订舱,报关,保险"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "order_remarks__0",
+      "param": "order_remarks",
+      "cn_name": "订单备注",
+      "category": "ENUM",
+      "response_field": "order_remarks",
+      "response_fields": [],
+      "query_override": {
+        "order_remarks": "1"
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546859752587999",
+        "anchor_order_id": "333546806514286592",
+        "rows_display_value": "结算业务",
+        "rows_canon_value": "结算业务"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "sale__0",
+      "param": "sale",
+      "cn_name": "销售员",
+      "category": "ENUM",
+      "response_field": "order_opt_sales",
+      "response_fields": [],
+      "query_override": {
+        "sale": "王欣宇"
+      },
+      "expect": {
+        "count_op": "le",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546859752587999",
+        "anchor_order_id": "333546806514286592",
+        "rows_display_value": "王欣宇",
+        "rows_canon_value": "王欣宇"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "sale__1",
+      "param": "sale",
+      "cn_name": "销售员",
+      "category": "ENUM",
+      "response_field": "order_opt_sales",
+      "response_fields": [],
+      "query_override": {
+        "sale": "荣洋"
+      },
+      "expect": {
+        "count_op": "le",
+        "count_baseline": 23033,
+        "anchor_row_id": "333539174730695391",
+        "anchor_order_id": "333539153595596800",
+        "rows_display_value": "荣洋",
+        "rows_canon_value": "荣洋"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "sale__2",
+      "param": "sale",
+      "cn_name": "销售员",
+      "category": "ENUM",
+      "response_field": "order_opt_sales",
+      "response_fields": [],
+      "query_override": {
+        "sale": "韩博文"
+      },
+      "expect": {
+        "count_op": "le",
+        "count_baseline": 23033,
+        "anchor_row_id": "333537838811316959",
+        "anchor_order_id": "333537813347696640",
+        "rows_display_value": "韩博文",
+        "rows_canon_value": "韩博文"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "client__0",
+      "param": "client",
+      "cn_name": "客户(委托方)",
+      "category": "ENUM",
+      "response_field": "order_opt_client",
+      "response_fields": [],
+      "query_override": {
+        "client": "李明丹tidb"
+      },
+      "expect": {
+        "count_op": "le",
+        "count_baseline": 23033,
+        "anchor_row_id": "333528911218475743",
+        "anchor_order_id": "333528886694379520",
+        "rows_display_value": "李明丹tidb",
+        "rows_canon_value": "李明丹tidb"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "operator__0",
+      "param": "operator",
+      "cn_name": "操作员(多选)",
+      "category": "ENUM",
+      "response_field": "order_opt_operation",
+      "response_fields": [],
+      "query_override": {
+        "operator": "宋为"
+      },
+      "expect": {
+        "count_op": "le",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546859752587999",
+        "anchor_order_id": "333546806514286592",
+        "rows_display_value": "宋为",
+        "rows_canon_value": "宋为"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "operator__1",
+      "param": "operator",
+      "cn_name": "操作员(多选)",
+      "category": "ENUM",
+      "response_field": "order_opt_operation",
+      "response_fields": [],
+      "query_override": {
+        "operator": "张管理"
+      },
+      "expect": {
+        "count_op": "le",
+        "count_baseline": 23033,
+        "anchor_row_id": "333539174730695391",
+        "anchor_order_id": "333539153595596800",
+        "rows_display_value": "张管理",
+        "rows_canon_value": "张管理"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "operator__2",
+      "param": "operator",
+      "cn_name": "操作员(多选)",
+      "category": "ENUM",
+      "response_field": "order_opt_operation",
+      "response_fields": [],
+      "query_override": {
+        "operator": "朱文韬"
+      },
+      "expect": {
+        "count_op": "le",
+        "count_baseline": 23033,
+        "anchor_row_id": "333537838811316959",
+        "anchor_order_id": "333537813347696640",
+        "rows_display_value": "朱文韬",
+        "rows_canon_value": "朱文韬"
+      },
+      "negative": null
+    },
+    {
+      "case_id": "search_time[charge_pay_date]__0",
+      "param": "search_time[charge_pay_date]",
+      "cn_name": "应付日期",
+      "category": "DATE_RANGE",
+      "response_field": "charge_pay_date",
+      "response_fields": [],
+      "query_override": {
+        "search_time[charge_pay_date]": [
+          "2026-09-20",
+          "2026-09-20"
+        ]
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546859752587999",
+        "anchor_order_id": "333546806514286592",
+        "rows_display_value": "2026-09-20",
+        "rows_canon_value": "2026-09-20"
+      },
+      "negative": {
+        "query_value": "1970-01-01",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "search_time[charge_pay_date]__1",
+      "param": "search_time[charge_pay_date]",
+      "cn_name": "应付日期",
+      "category": "DATE_RANGE",
+      "response_field": "charge_pay_date",
+      "response_fields": [],
+      "query_override": {
+        "search_time[charge_pay_date]": [
+          "2026-07-20",
+          "2026-07-20"
+        ]
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333539174730695391",
+        "anchor_order_id": "333539153595596800",
+        "rows_display_value": "2026-07-20",
+        "rows_canon_value": "2026-07-20"
+      },
+      "negative": {
+        "query_value": "1970-01-01",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "search_time[charge_pay_date]__2",
+      "param": "search_time[charge_pay_date]",
+      "cn_name": "应付日期",
+      "category": "DATE_RANGE",
+      "response_field": "charge_pay_date",
+      "response_fields": [],
+      "query_override": {
+        "search_time[charge_pay_date]": [
+          "2026-04-20",
+          "2026-04-20"
+        ]
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333537838811316959",
+        "anchor_order_id": "333537813347696640",
+        "rows_display_value": "2026-04-20",
+        "rows_canon_value": "2026-04-20"
+      },
+      "negative": {
+        "query_value": "1970-01-01",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "search_time[charge_rec_date]__0",
+      "param": "search_time[charge_rec_date]",
+      "cn_name": "应收日期",
+      "category": "DATE_RANGE",
+      "response_field": "charge_rec_date",
+      "response_fields": [],
+      "query_override": {
+        "search_time[charge_rec_date]": [
+          "2026-11-03",
+          "2026-11-03"
+        ]
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333546859752587999",
+        "anchor_order_id": "333546806514286592",
+        "rows_display_value": "2026-11-03",
+        "rows_canon_value": "2026-11-03"
+      },
+      "negative": {
+        "query_value": "1970-01-01",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "search_time[charge_rec_date]__1",
+      "param": "search_time[charge_rec_date]",
+      "cn_name": "应收日期",
+      "category": "DATE_RANGE",
+      "response_field": "charge_rec_date",
+      "response_fields": [],
+      "query_override": {
+        "search_time[charge_rec_date]": [
+          "2026-08-10",
+          "2026-08-10"
+        ]
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333539174730695391",
+        "anchor_order_id": "333539153595596800",
+        "rows_display_value": "2026-08-10",
+        "rows_canon_value": "2026-08-10"
+      },
+      "negative": {
+        "query_value": "1970-01-01",
+        "expect_count": 0
+      }
+    },
+    {
+      "case_id": "search_time[charge_rec_date]__2",
+      "param": "search_time[charge_rec_date]",
+      "cn_name": "应收日期",
+      "category": "DATE_RANGE",
+      "response_field": "charge_rec_date",
+      "response_fields": [],
+      "query_override": {
+        "search_time[charge_rec_date]": [
+          "2026-05-10",
+          "2026-05-10"
+        ]
+      },
+      "expect": {
+        "count_op": "lt",
+        "count_baseline": 23033,
+        "anchor_row_id": "333537838811316959",
+        "anchor_order_id": "333537813347696640",
+        "rows_display_value": "2026-05-10",
+        "rows_canon_value": "2026-05-10"
+      },
+      "negative": {
+        "query_value": "1970-01-01",
+        "expect_count": 0
+      }
+    }
+  ]
+}
