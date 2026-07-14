@@ -24,11 +24,7 @@
             "tidb-test-service": "https://fin-tidb.21eflag.com/"
         },
         "vars": {
-            "bl_no": "OH202607070003",
-            "finance_id_1": "332819945995894784_CustomerFinance",
-            "finance_id_2": "332819945903620096_CustomerFinance",
-            "bank_id_1": "12_MainBank",
-            "bank_id_2": "13_MainBank"
+            "bl_no": "OUHUA-YIHANGDAO-00027"
         },
         "users": {
             "codfish": {

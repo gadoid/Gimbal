@@ -6037,7 +6037,7 @@
         },
         {
             "kind": "step",
-            "description": "应收核销批次提交（第二次）",
+            "description": "55",
             "api": {
                 "kind": "api",
                 "service": "tidb-test-service",

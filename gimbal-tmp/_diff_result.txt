@@ -1,0 +1,2017 @@
+================================================================================
+Test_8 总字段数: 2878
+Test_9 总字段数: 2950
+共同字段数: 2235
+仅 Test_8 存在: 643
+仅 Test_9 存在: 715
+================================================================================
+
+>>> 仅 Test_8 存在(且为非空值)的字段:
+  steps[10].strategy[1].expression = '$.response_body.data.amount_summary.order_id'
+  steps[10].strategy[1].required = True
+  steps[10].strategy[2].enabled = True
+  steps[10].strategy[2].kind = 'assign'
+  steps[10].strategy[2].name = 'assign_order_id_4'
+  steps[10].strategy[2].onFailure = 'abort'
+  steps[10].strategy[2].order = 0
+  steps[10].strategy[2].phase = 'before_request'
+  steps[10].strategy[2].scope = 'scenario'
+  steps[10].strategy[2].source = '$.order_id_4'
+  steps[10].strategy[2].target = '$.request_body.order_id'
+  steps[12].request.body.action = 'submit'
+  steps[12].request.body.import_status = 0
+  steps[12].request.body.service_project = 'booking_space'
+  steps[12].request.body.to_customer.put_amount.standard_list[0].cost_id = '17'
+  steps[12].request.body.to_customer.put_amount.standard_list[0].currency = 'USD'
+  steps[12].request.body.to_customer.put_amount.standard_list[0].discount_amount = '100.00'
+  steps[12].request.body.to_customer.put_amount.standard_list[0].discount_ratio = 100
+  steps[12].request.body.to_customer.put_amount.standard_list[0].discount_status = '0'
+  steps[12].request.body.to_customer.put_amount.standard_list[0].fee_type = 0
+  steps[12].request.body.to_customer.put_amount.standard_list[0].init_main_name = '青岛易航道物流科技有限公司'
+  steps[12].request.body.to_customer.put_amount.standard_list[0].main_name = '青岛易航道物流科技有限公司'
+  steps[12].request.body.to_customer.put_amount.standard_list[0].num = '1'
+  steps[12].request.body.to_customer.put_amount.standard_list[0].pay_sync_status = 1
+  steps[12].request.body.to_customer.put_amount.standard_list[0].policy_sub_status_name = '异常'
+  steps[12].request.body.to_customer.put_amount.standard_list[0].rowIndex = 0
+  steps[12].request.body.to_customer.put_amount.standard_list[0].service_project = 'booking_space'
+  steps[12].request.body.to_customer.put_amount.standard_list[0].settle_object_id = '829'
+  steps[12].request.body.to_customer.put_amount.standard_list[0].specs = '40HQ'
+  steps[12].request.body.to_customer.put_amount.standard_list[0].subsidy_category = '0'
+  steps[12].request.body.to_customer.put_amount.standard_list[0].unique_id = 'b49c2b4c-79bd-4038-b07c-cbe3f8d89c20'
+  steps[12].request.body.to_customer.put_amount.standard_list[0].unit = 'box'
+  steps[12].request.body.to_customer.put_amount.standard_list[0].unit_price = '100'
+  steps[12].request.body.to_customer.put_amount.standard_list[1].cost_id = '18'
+  steps[12].request.body.to_customer.put_amount.standard_list[1].currency = 'USD'
+  steps[12].request.body.to_customer.put_amount.standard_list[1].discount_amount = '97.50'
+  steps[12].request.body.to_customer.put_amount.standard_list[1].discount_ratio = 97.5
+  steps[12].request.body.to_customer.put_amount.standard_list[1].discount_status = '0'
+  steps[12].request.body.to_customer.put_amount.standard_list[1].fee_type = 0
+  steps[12].request.body.to_customer.put_amount.standard_list[1].init_main_name = '青岛易航道物流科技有限公司'
+  steps[12].request.body.to_customer.put_amount.standard_list[1].main_name = '青岛易航道物流科技有限公司'
+  steps[12].request.body.to_customer.put_amount.standard_list[1].num = 1
+  steps[12].request.body.to_customer.put_amount.standard_list[1].pay_sync_status = 1
+  steps[12].request.body.to_customer.put_amount.standard_list[1].policy_sub_status_name = '异常'
+  steps[12].request.body.to_customer.put_amount.standard_list[1].rowIndex = 1
+  steps[12].request.body.to_customer.put_amount.standard_list[1].service_project = 'booking_space'
+  steps[12].request.body.to_customer.put_amount.standard_list[1].settle_object_id = '829'
+  steps[12].request.body.to_customer.put_amount.standard_list[1].subsidy_category = '1'
+  steps[12].request.body.to_customer.put_amount.standard_list[1].unique_id = '692124b6-e269-4495-85a0-25975700d8ea'
+  steps[12].request.body.to_customer.put_amount.standard_list[1].unit = 'vote'
+  steps[12].request.body.to_customer.put_amount.standard_list[1].unit_price = '100'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].cost_id = '17'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].currency = 'USD'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].discount_amount = '100.00'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].discount_ratio = 100
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].discount_status = '0'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].fee_type = 0
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].init_main_name = '青岛易航道物流科技有限公司'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].num = '1'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].pay_sync_status = 1
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].policy_sub_status_name = '异常'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].related_unique_id = 'b49c2b4c-79bd-4038-b07c-cbe3f8d89c20'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].rowIndex = 0
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].service_project = 'booking_space'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].settle_object_id = '1384'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].specs = '40HQ'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].subsidy_category = '0'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].unique_id = 'b49c2b4c-79bd-4038-b07c-cbe3f8d89c20'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].unit = 'box'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[0].unit_price = '100'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].cost_id = '18'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].currency = 'USD'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].discount_amount = '100.00'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].discount_ratio = 100
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].discount_status = '0'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].fee_type = 0
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].init_main_name = '青岛易航道物流科技有限公司'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].num = 1
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].pay_sync_status = 1
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].policy_sub_status_name = '异常'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].related_unique_id = '692124b6-e269-4495-85a0-25975700d8ea'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].rowIndex = 1
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].service_project = 'booking_space'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].settle_object_id = '1384'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].subsidy_category = '0'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].unique_id = '692124b6-e269-4495-85a0-25975700d8ea'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].unit = 'vote'
+  steps[12].request.body.to_supplier.pay_amount.standard_list[1].unit_price = '100'
+  steps[12].strategy[1].source = '$.order_id_5'
+  steps[14].strategy[1].expression = '$.response_body.data.order_id'
+  steps[14].strategy[1].required = True
+  steps[14].strategy[2].enabled = True
+  steps[14].strategy[2].kind = 'assign'
+  steps[14].strategy[2].name = 'assign_order_id_6'
+  steps[14].strategy[2].onFailure = 'abort'
+  steps[14].strategy[2].order = 0
+  steps[14].strategy[2].phase = 'before_request'
+  steps[14].strategy[2].scope = 'scenario'
+  steps[14].strategy[2].source = '$.order_id_6'
+  steps[14].strategy[2].target = '$.request_body.order_id'
+  steps[16].strategy[1].source = '$.order_id_7'
+  steps[17].strategy[2].source = '$.order_id_7'
+  steps[18].strategy[1].expression = '$.response_body.data.amount_summary.order_id'
+  steps[18].strategy[1].required = True
+  steps[18].strategy[2].expression = '$.response_body.data.to_customer_supplier[0].put_amount.standard_list[0].order_fee_real_id'
+  steps[18].strategy[2].required = True
+  steps[18].strategy[3].expression = '$.response_body.data.to_customer_supplier[0].order_sub_no'
+  steps[18].strategy[3].required = True
+  steps[18].strategy[4].enabled = True
+  steps[18].strategy[4].kind = 'assign'
+  steps[18].strategy[4].name = 'assign_order_id_8'
+  steps[18].strategy[4].onFailure = 'abort'
+  steps[18].strategy[4].order = 0
+  steps[18].strategy[4].phase = 'before_request'
+  steps[18].strategy[4].scope = 'scenario'
+  steps[18].strategy[4].source = '$.order_id_8'
+  steps[18].strategy[4].target = '$.request_body.order_id'
+  steps[21].request.body.action = 'submit'
+  steps[21].request.body.audit_msg.code = 'ZDD20260703017120'
+  steps[21].request.body.audit_msg.msgs[0] = '费用锁定申请'
+  steps[21].request.body.audit_msg.title = '业务订单ID'
+  steps[21].request.body.order_fee_real_ids[0] = '331273797107713024'
+  steps[21].request.body.order_fee_real_ids[1] = '331273797111907328'
+  steps[21].request.body.select_node_user[0].node_sort = '0'
+  steps[21].request.body.select_node_user[0].user_id = '828'
+  steps[21].strategy[2].enabled = True
+  steps[21].strategy[2].kind = 'assign'
+  steps[21].strategy[2].name = 'assign_order_fee_real_ids'
+  steps[21].strategy[2].onFailure = 'abort'
+  steps[21].strategy[2].order = 1
+  steps[21].strategy[2].phase = 'before_request'
+  steps[21].strategy[2].scope = 'scenario'
+  steps[21].strategy[2].source = '$.order_fee_real_ids'
+  steps[21].strategy[2].target = '$.request_body.order_fee_real_ids[0]'
+  steps[21].strategy[3].enabled = True
+  steps[21].strategy[3].kind = 'assign'
+  steps[21].strategy[3].name = 'assign_order_fee_real_ids'
+  steps[21].strategy[3].onFailure = 'abort'
+  steps[21].strategy[3].order = 2
+  steps[21].strategy[3].phase = 'before_request'
+  steps[21].strategy[3].scope = 'scenario'
+  steps[21].strategy[3].source = '$.order_fee_real_ids'
+  steps[21].strategy[3].target = '$.request_body.order_fee_real_ids[1]'
+  steps[21].strategy[4].enabled = True
+  steps[21].strategy[4].kind = 'assign'
+  steps[21].strategy[4].name = 'assign_code'
+  steps[21].strategy[4].onFailure = 'abort'
+  steps[21].strategy[4].order = 3
+  steps[21].strategy[4].phase = 'before_request'
+  steps[21].strategy[4].scope = 'scenario'
+  steps[21].strategy[4].source = '$.code'
+  steps[21].strategy[4].target = '$.request_body.audit_msg.code'
+  steps[22].request.body.order_id = '331273296010018816'
+  steps[22].strategy[1].source = '$.order_id_9'
+  steps[23].request.body.active_tab = 'examine_wait'
+  steps[23].request.body.page_no = 1
+  steps[23].request.body.page_size = 20
+  steps[23].request.body.sort_field = 'expedite_num'
+  steps[23].request.body.sort_order = 'desc'
+  steps[23].strategy[2].expression = '$.response_body.data.data[0].audit_id'
+  steps[23].strategy[2].required = True
+  steps[24].request.body.audit_id = '331273916091727872'
+  steps[25].request.body.order_id = '331273296010018816'
+  steps[25].strategy[1].expression = '$.response_body.data.order_id'
+  steps[25].strategy[1].required = True
+  steps[25].strategy[2].enabled = True
+  steps[25].strategy[2].kind = 'assign'
+  steps[25].strategy[2].name = 'assign_order_id_11'
+  steps[25].strategy[2].onFailure = 'abort'
+  steps[25].strategy[2].order = 0
+  steps[25].strategy[2].phase = 'before_request'
+  steps[25].strategy[2].scope = 'scenario'
+  steps[25].strategy[2].source = '$.order_id_11'
+  steps[25].strategy[2].target = '$.request_body.order_id'
+  steps[26].request.body.audit_ids[0] = '331273916091727872'
+  steps[26].request.body.audit_status = 2
+  steps[26].strategy[1].source = '$.audit_ids'
+  steps[27].strategy[1].expression = '$.response_body.data.order_id'
+  steps[27].strategy[1].required = True
+  steps[27].strategy[2].enabled = True
+  steps[27].strategy[2].kind = 'assign'
+  steps[27].strategy[2].name = 'assign_order_id_12'
+  steps[27].strategy[2].onFailure = 'abort'
+  steps[27].strategy[2].order = 0
+  steps[27].strategy[2].phase = 'before_request'
+  steps[27].strategy[2].scope = 'scenario'
+  steps[27].strategy[2].source = '$.order_id_12'
+  steps[27].strategy[2].target = '$.request_body.order_id'
+  steps[2].request.body.action = 'submit'
+  steps[2].request.body.airline_type = '地中海'
+  steps[2].request.body.atd = 1783008000
+  steps[2].request.body.bl_no = '${var.bl_no}'
+  steps[2].request.body.bulk = '60.000'
+  steps[2].request.body.business_type = '1'
+  steps[2].request.body.carrier = 'COSCO'
+  steps[2].request.body.carrier_id = '16'
+  steps[2].request.body.client_expand_id = '261'
+  steps[2].request.body.client_expand_name = '唐欣雨'
+  steps[2].request.body.commodity = 'Fresh ginger\n'
+  steps[2].request.body.consignee = 'CENTRAL POINT TRADE INC\n'
+  steps[2].request.body.country_id = '673'
+  steps[2].request.body.country_name = 'AUSTRALIA'
+  steps[2].request.body.country_name_cn = '澳大利亚'
+  steps[2].request.body.customer_id = '320'
+  steps[2].request.body.del = 'ALEXANDRIA,AUSTRALIA'
+  steps[2].request.body.del_port_name = 'ALEXANDRIA,AUSTRALIA'
+  steps[2].request.body.entrust_status = 2
+  steps[2].request.body.etd = 1781884800
+  steps[2].request.body.gross_weight = '26800.000'
+  steps[2].request.body.main_ids = '1'
+  steps[2].request.body.main_sort = '易航道'
+  steps[2].request.body.notifier = 'CENTRAL POINT TRADE INC\n'
+  steps[2].request.body.num = '1872'
+  steps[2].request.body.ocean_type = '远洋'
+  steps[2].request.body.operator_id = '336'
+  steps[2].request.body.pay_type = 'FREIGHT PREPAID'
+  steps[2].request.body.pod = 'ALEXANDRIA,AUSTRALIA'
+  steps[2].request.body.pod_port_name = 'ALEXANDRIA,AUSTRALIA'
+  steps[2].request.body.pol = 'QINGDAO,CHINA'
+  steps[2].request.body.pol_cn = '青岛港'
+  steps[2].request.body.pol_country = 'CHINA'
+  steps[2].request.body.pol_country_cn = '中国'
+  steps[2].request.body.pol_country_id = '1'
+  steps[2].request.body.pol_port_name = 'QINGDAO,CHINA'
+  steps[2].request.body.policy_id = '22'
+  steps[2].request.body.policy_name = '【易航道对客】易航道：自营业务+拖车业务'
+  steps[2].request.body.policy_type = 'JSZX'
+  steps[2].request.body.sea_trans_currency = 'USD'
+  steps[2].request.body.service_id = '55'
+  steps[2].request.body.service_items[0] = 'booking_space'
+  steps[2].request.body.service_name = '曲静霞'
+  steps[2].request.body.ship_mark = 'N/M\n'
+  steps[2].request.body.ship_name = 'OOCL FRANCE'
+  steps[2].request.body.shipper = 'SHANDONG YUEMU FOODS CO LTD 206 NATIONAL ROAD NORTH WEIZI STREET WEIFANG, SHANDONG\n'
+  steps[2].request.body.status = '1'
+  steps[2].request.body.supplier[0].is_primary = '1'
+  steps[2].request.body.supplier[0].isset_fee = '0'
+  steps[2].request.body.supplier[0].isset_supplier = '1'
+  steps[2].request.body.supplier[0].service_item = 'booking_space'
+  steps[2].request.body.supplier[0].service_item_name = '订舱'
+  steps[2].request.body.supplier[0].supplier_id = '805'
+  steps[2].request.body.supplier[0].supplier_name = '青岛雅然国际物流有限公司'
+  steps[2].request.body.supplier[0].user_id = '336'
+  steps[2].request.body.supplier[0].user_name = '闫航'
+  steps[2].request.body.terms_payment = 'T/T'
+  steps[2].request.body.terms_transport = 'CY/CY'
+  steps[2].request.body.trade_term = 'CIF'
+  steps[2].request.body.voy = '068E'
+  steps[30].request.body.action = 'submit'
+  steps[30].request.body.audit_msg.code = 'ZDD20260703017120'
+  steps[30].request.body.audit_msg.msgs[0] = '资产推送申请'
+  steps[30].request.body.audit_msg.title = '资产推送申请'
+  steps[30].request.body.select_node_user[0].node_sort = '0'
+  steps[30].request.body.select_node_user[0].user_id = '828'
+  steps[30].strategy[2].enabled = True
+  steps[30].strategy[2].kind = 'assign'
+  steps[30].strategy[2].name = 'assign_code'
+  steps[30].strategy[2].onFailure = 'abort'
+  steps[30].strategy[2].order = 1
+  steps[30].strategy[2].phase = 'before_request'
+  steps[30].strategy[2].scope = 'scenario'
+  steps[30].strategy[2].source = '$.code'
+  steps[30].strategy[2].target = '$.request_body.audit_msg.code'
+  steps[31].request.body.order_id = '331273296010018816'
+  steps[31].strategy[1].source = '$.order_id_13'
+  steps[32].request.body.active_tab = 'examine_wait'
+  steps[32].request.body.page_no = 1
+  steps[32].request.body.page_size = 20
+  steps[32].request.body.sort_field = 'expedite_num'
+  steps[32].request.body.sort_order = 'desc'
+  steps[32].strategy[2].expression = '$.response_body.data.data[0].audit_id'
+  steps[32].strategy[2].required = True
+  steps[33].request.body.audit_id = '331274027630854144'
+  steps[33].strategy[1].expression = '$.response_body.data.audit_content.relation_id'
+  steps[33].strategy[1].required = True
+  steps[33].strategy[2].enabled = True
+  steps[33].strategy[2].kind = 'assign'
+  steps[33].strategy[2].name = 'assign_audit_id_2'
+  steps[33].strategy[2].onFailure = 'abort'
+  steps[33].strategy[2].order = 0
+  steps[33].strategy[2].phase = 'before_request'
+  steps[33].strategy[2].scope = 'scenario'
+  steps[33].strategy[2].source = '$.audit_id_2'
+  steps[33].strategy[2].target = '$.request_body.audit_id'
+  steps[34].request.body.order_id = '331273296010018816'
+  steps[34].strategy[1].source = '$.order_id_15'
+  steps[35].request.body.audit_ids[0] = '331274027630854144'
+  steps[35].request.body.audit_status = 2
+  steps[35].strategy[1].source = '$.audit_ids_2'
+  steps[3].request.body.page_no = 1
+  steps[3].request.body.page_size = 20
+  steps[3].request.body.sort_field = 'update_time'
+  steps[3].request.body.sort_order = 'desc'
+  steps[4].strategy[1].expression = '$.response_body.data.supplier[0].order_supplier_id'
+  steps[4].strategy[1].required = True
+  steps[4].strategy[2].expression = '$.response_body.data.order_id'
+  steps[4].strategy[2].required = True
+  steps[4].strategy[3].expression = '$.response_body.data.order_no'
+  steps[4].strategy[3].required = True
+  steps[5].strategy[1].source = '$.order_supplier_id'
+  steps[6].strategy[1].expression = '$.response_body.data[0].file_id'
+  steps[6].strategy[1].required = True
+  steps[7].request.body.account_status = '0'
+  steps[7].request.body.action = 'submit'
+  steps[7].request.body.airline_type = '地中海'
+  steps[7].request.body.atd = 1783008000
+  steps[7].request.body.bl_no = '${var.bl_no}'
+  steps[7].request.body.bl_no_upload_date = '0'
+  steps[7].request.body.book_upload_date = '0'
+  steps[7].request.body.bulk = '60.000'
+  steps[7].request.body.business_main_id = '1'
+  steps[7].request.body.business_main_name = '青岛易航道物流科技有限公司'
+  steps[7].request.body.business_time = '0'
+  steps[7].request.body.business_type = '1'
+  steps[7].request.body.business_type_name = '海运整箱'
+  steps[7].request.body.cancel_time = '0'
+  steps[7].request.body.carrier = 'COSCO'
+  steps[7].request.body.carrier_id = '16'
+  steps[7].request.body.carrier_name = '中国远洋运输（集团）总公司'
+  steps[7].request.body.change_type = '0'
+  steps[7].request.body.client_expand_id = '261'
+  steps[7].request.body.client_expand_name = '唐欣雨'
+  steps[7].request.body.commodity = 'Fresh ginger\n'
+  steps[7].request.body.confirm_status = '0'
+  steps[7].request.body.consignee = 'CENTRAL POINT TRADE INC\n'
+  steps[7].request.body.container[0].box_num = '1'
+  steps[7].request.body.container[0].box_type = '40HQ'
+  steps[7].request.body.container[0].sea_trans_unit_price = '100'
+  steps[7].request.body.copy_order_id = '0'
+  steps[7].request.body.country_id = '673'
+  steps[7].request.body.country_name = 'AUSTRALIA'
+  steps[7].request.body.country_name_cn = '澳大利亚'
+  steps[7].request.body.create_by = 'GIMBAL'
+  steps[7].request.body.create_id = '828'
+  steps[7].request.body.create_time = '1783048908'
+  steps[7].request.body.customer_address_cn = '山东省潍坊市昌邑市围子街道206国道北(官道郜北)'
+  steps[7].request.body.customer_category = ',1,2,'
+  steps[7].request.body.customer_confirm_date = '0'
+  steps[7].request.body.customer_due_date = '0'
+  steps[7].request.body.customer_file_list[0]._XID = 'row_363'
+  steps[7].request.body.customer_file_list[0].client_company_id = '320'
+  steps[7].request.body.customer_file_list[0].client_company_name = '山东悦慕食品有限公司'
+  steps[7].request.body.customer_file_list[0].document_type = 'BOOK_CUSTOMER'
+  steps[7].request.body.customer_file_list[0].file_id = '331273481473753088'
+  steps[7].request.body.customer_file_list[0].file_name = '6a472af86b867.pdf'
+  steps[7].request.body.customer_file_list[0].file_type = 'PDF'
+  steps[7].request.body.customer_file_list[0].file_url = '6a472af86b867.pdf'
+  steps[7].request.body.customer_file_list[0].trustee_company_id = '1'
+  steps[7].request.body.customer_file_list[0].trustee_company_name = '青岛易航道物流科技有限公司'
+  steps[7].request.body.customer_id = '320'
+  steps[7].request.body.customer_invoice_request_date = '0'
+  steps[7].request.body.customer_main_id = '1'
+  steps[7].request.body.customer_main_name = '青岛易航道物流科技有限公司'
+  steps[7].request.body.customer_name = '山东悦慕食品有限公司'
+  steps[7].request.body.customer_period = '120'
+  steps[7].request.body.customer_put_date = '0'
+  steps[7].request.body.customer_put_date_manual = '0'
+  steps[7].request.body.customer_settlement_date = '10'
+  steps[7].request.body.customer_tax_number = '91370786MA3D6MW35A'
+  steps[7].request.body.del = 'ALEXANDRIA,AUSTRALIA'
+  steps[7].request.body.delete_time = '0'
+  steps[7].request.body.discount_end = '0'
+  steps[7].request.body.discount_start = '0'
+  steps[7].request.body.discount_status = '2'
+  steps[7].request.body.effective_id = '0'
+  steps[7].request.body.effective_time = '0'
+  steps[7].request.body.enable = '1'
+  steps[7].request.body.entrust_status = '2'
+  steps[7].request.body.etd = 1781884800
+  steps[7].request.body.exchange_rate = '0.0000'
+  steps[7].request.body.expect_discount_status = '0'
+  steps[7].request.body.expect_discount_status_name = '—'
+  steps[7].request.body.expect_fee_status = '0'
+  steps[7].request.body.expect_subsidy_category_name = '—'
+  steps[7].request.body.fee_lock_status = '0'
+  steps[7].request.body.finance_date = '1781884800'
+  steps[7].request.body.finance_status = True
+  steps[7].request.body.financing_apply_amount = '0.00'
+  steps[7].request.body.financing_apply_amount_cny = '0.00'
+  steps[7].request.body.financing_apply_amount_usd = '0.00'
+  steps[7].request.body.first_financing_doc_ok_date = '0'
+  steps[7].request.body.folde_pay_total = '0.00'
+  steps[7].request.body.folde_pay_usd = '0.00'
+  steps[7].request.body.folde_put_total = '0.00'
+  steps[7].request.body.folde_put_usd = '0.00'
+  steps[7].request.body.gross_margin = '0.00'
+  steps[7].request.body.gross_margin_rate = '0.00'
+  steps[7].request.body.gross_weight = '26800.000'
+  steps[7].request.body.insurance_doc_ok_date = '0'
+  steps[7].request.body.is_delayed_recovery = '否'
+  steps[7].request.body.is_delayed_recovery_name = '否'
+  steps[7].request.body.is_fee_miss = '0'
+  steps[7].request.body.is_financing = '0'
+  steps[7].request.body.is_loan_before_invoice = '0'
+  steps[7].request.body.is_special_pay = '0'
+  steps[7].request.body.is_sync_es = '0'
+  steps[7].request.body.is_system_generate = '0'
+  steps[7].request.body.is_traverse = '0'
+  steps[7].request.body.is_usd_project = '2'
+  steps[7].request.body.main_ids = '1'
+  steps[7].request.body.main_ids_name = '易航道'
+  steps[7].request.body.main_sort = '易航道'
+  steps[7].request.body.notifier = 'CENTRAL POINT TRADE INC\n'
+  steps[7].request.body.num = '1872'
+  steps[7].request.body.ocean_type = '远洋'
+  steps[7].request.body.operator_id = '336'
+  steps[7].request.body.operator_name = '闫航'
+  steps[7].request.body.order_id = '331273296010018816'
+  steps[7].request.body.order_no = 'YWDD20260703107660'
+  steps[7].request.body.pay_account_status = '0'
+  steps[7].request.body.pay_status = '1'
+  steps[7].request.body.pay_type = 'FREIGHT PREPAID'
+  steps[7].request.body.pay_type_name = 'FREIGHT PREPAID'
+  steps[7].request.body.period_rule = '0'
+  steps[7].request.body.pod = 'ALEXANDRIA,AUSTRALIA'
+  steps[7].request.body.pol = 'QINGDAO,CHINA'
+  steps[7].request.body.pol_cn = '青岛港'
+  steps[7].request.body.pol_country = 'CHINA'
+  steps[7].request.body.pol_country_cn = '中国'
+  steps[7].request.body.pol_country_id = '1'
+  steps[7].request.body.policy_id = '22'
+  steps[7].request.body.policy_main_arr[0].fee_main_id = '1'
+  steps[7].request.body.policy_main_arr[0].main_name = '青岛易航道物流科技有限公司'
+  steps[7].request.body.policy_match = 'auto'
+  steps[7].request.body.policy_match_name = '自动匹配'
+  steps[7].request.body.policy_name = '【易航道对客】易航道：自营业务+拖车业务'
+  steps[7].request.body.policy_type = 'JSZX'
+  steps[7].request.body.policy_type_name = '结算业务'
+  steps[7].request.body.proprietary_business_status = '0'
+  steps[7].request.body.real_cost_date = '0'
+  steps[7].request.body.real_discount_status = '0'
+  steps[7].request.body.real_discount_status_name = '—'
+  steps[7].request.body.real_fee_locked = False
+  steps[7].request.body.real_fee_status = '0'
+  steps[7].request.body.real_pay_cny = '0.00'
+  steps[7].request.body.real_pay_usd = '0.00'
+  steps[7].request.body.real_put_cny = '0.00'
+  steps[7].request.body.real_put_discount_rate = '0.00'
+  steps[7].request.body.real_put_usd = '0.00'
+  steps[7].request.body.real_subsidy_category_name = '—'
+  steps[7].request.body.reverse_status = '0'
+  steps[7].request.body.reverse_status_name = '否'
+  steps[7].request.body.sea_trans_cost = '100.00'
+  steps[7].request.body.sea_trans_currency = 'USD'
+  steps[7].request.body.second_financing_doc_ok_date = '0'
+  steps[7].request.body.service_id = '55'
+  steps[7].request.body.service_items[0] = 'booking_space'
+  steps[7].request.body.service_name = '曲静霞'
+  steps[7].request.body.service_project.booking_space = False
+  steps[7].request.body.service_project.customs_clearance = False
+  steps[7].request.body.service_project.insurance = False
+  steps[7].request.body.service_project.manifest = False
+  steps[7].request.body.service_project.trucking = False
+  steps[7].request.body.service_project_amount.booking_space = False
+  steps[7].request.body.service_project_amount.customs_clearance = False
+  steps[7].request.body.service_project_amount.insurance = False
+  steps[7].request.body.service_project_amount.manifest = False
+  steps[7].request.body.service_project_amount.trucking = False
+  steps[7].request.body.ship_mark = 'N/M\n'
+  steps[7].request.body.ship_name = 'OOCL FRANCE'
+  steps[7].request.body.shipper = 'SHANDONG YUEMU FOODS CO LTD 206 NATIONAL ROAD NORTH WEIZI STREET WEIFANG, SHANDONG\n'
+  steps[7].request.body.status = 2
+  steps[7].request.body.subsidy_category_name = '—'
+  steps[7].request.body.supplier[0].is_manual = '0'
+  steps[7].request.body.supplier[0].is_primary = '1'
+  steps[7].request.body.supplier[0].isset_fee = False
+  steps[7].request.body.supplier[0].isset_supplier = '1'
+  steps[7].request.body.supplier[0].order_id = '331273296010018816'
+  steps[7].request.body.supplier[0].order_supplier_id = '331273297419304960'
+  steps[7].request.body.supplier[0].service_item = 'booking_space'
+  steps[7].request.body.supplier[0].service_item_name = '订舱'
+  steps[7].request.body.supplier[0].settle_object_id = '1384'
+  steps[7].request.body.supplier[0].settlement_date = '20'
+  steps[7].request.body.supplier[0].supplier_id = '805'
+  steps[7].request.body.supplier[0].supplier_label = '青岛雅然国际物流有限公司-订舱'
+  steps[7].request.body.supplier[0].supplier_name = '青岛雅然国际物流有限公司'
+  steps[7].request.body.supplier[0].supplier_pay_date = '0'
+  steps[7].request.body.supplier[0].supplier_period = '60'
+  steps[7].request.body.supplier[0].sys_upttime = '2026-07-03 11:21:48'
+  steps[7].request.body.supplier[0].user_id = '336'
+  steps[7].request.body.supplier[0].user_name = '闫航'
+  steps[7].request.body.supplier_due_date = '0'
+  steps[7].request.body.supplier_invoice_date = '0'
+  steps[7].request.body.sys_upttime = '2026-07-03 11:21:48'
+  steps[7].request.body.terms_payment = 'T/T'
+  steps[7].request.body.terms_payment_name = 'T/T'
+  steps[7].request.body.terms_transport = 'CY/CY'
+  steps[7].request.body.terms_transport_name = 'CY/CY'
+  steps[7].request.body.track_atd = '0'
+  steps[7].request.body.trade_term = 'CIF'
+  steps[7].request.body.trade_term_name = 'CIF'
+  steps[7].request.body.trans_cost_put_preserve_date = '0'
+  steps[7].request.body.update_by = 'GIMBAL'
+  steps[7].request.body.update_id = '828'
+  steps[7].request.body.update_time = '1783048908'
+  steps[7].request.body.volume = '1*40HQ'
+  steps[7].request.body.volume_desc = '普柜'
+  steps[7].request.body.voy = '068E'
+  steps[7].strategy[1].source = '$.file_id'
+  steps[7].strategy[2].enabled = True
+  steps[7].strategy[2].kind = 'assign'
+  steps[7].strategy[2].name = 'assign_order_supplier_id'
+  steps[7].strategy[2].onFailure = 'abort'
+  steps[7].strategy[2].order = 1
+  steps[7].strategy[2].phase = 'before_request'
+  steps[7].strategy[2].scope = 'scenario'
+  steps[7].strategy[2].source = '$.order_supplier_id'
+  steps[7].strategy[2].target = '$.request_body.supplier[0].order_supplier_id'
+  steps[7].strategy[3].enabled = True
+  steps[7].strategy[3].kind = 'assign'
+  steps[7].strategy[3].name = 'assign_order_id_2'
+  steps[7].strategy[3].onFailure = 'abort'
+  steps[7].strategy[3].order = 2
+  steps[7].strategy[3].phase = 'before_request'
+  steps[7].strategy[3].scope = 'scenario'
+  steps[7].strategy[3].source = '$.order_id_2'
+  steps[7].strategy[3].target = '$.request_body.supplier[0].order_id'
+  steps[7].strategy[4].enabled = True
+  steps[7].strategy[4].kind = 'assign'
+  steps[7].strategy[4].name = 'assign_order_id_2'
+  steps[7].strategy[4].onFailure = 'abort'
+  steps[7].strategy[4].order = 3
+  steps[7].strategy[4].phase = 'before_request'
+  steps[7].strategy[4].scope = 'scenario'
+  steps[7].strategy[4].source = '$.order_id_2'
+  steps[7].strategy[4].target = '$.request_body.order_id'
+  steps[7].strategy[5].enabled = True
+  steps[7].strategy[5].kind = 'assign'
+  steps[7].strategy[5].name = 'assign_order_no'
+  steps[7].strategy[5].onFailure = 'abort'
+  steps[7].strategy[5].order = 4
+  steps[7].strategy[5].phase = 'before_request'
+  steps[7].strategy[5].scope = 'scenario'
+  steps[7].strategy[5].source = '$.order_no'
+  steps[7].strategy[5].target = '$.request_body.order_no'
+  steps[8].request.body.page_no = 1
+  steps[8].request.body.page_size = 20
+  steps[8].request.body.sort_field = 'update_time'
+  steps[8].request.body.sort_order = 'desc'
+  (共 539 个非空字段)
+
+>>> 仅 Test_9 存在(且为非空值)的字段:
+  config.vars.bank_id_1 = '12_MainBank'
+  config.vars.bank_id_2 = '13_MainBank'
+  config.vars.finance_id_1 = '4416_CustomerFinance'
+  config.vars.finance_id_2 = '4415_CustomerFinance'
+  steps[10].request.body.action = 'check'
+  steps[10].request.body.import_status = 0
+  steps[10].request.body.service_project = 'booking_space'
+  steps[10].request.body.to_customer.put_amount.standard_list[0].cost_id = '17'
+  steps[10].request.body.to_customer.put_amount.standard_list[0].currency = 'USD'
+  steps[10].request.body.to_customer.put_amount.standard_list[0].discount_amount = '100.00'
+  steps[10].request.body.to_customer.put_amount.standard_list[0].discount_ratio = 100
+  steps[10].request.body.to_customer.put_amount.standard_list[0].discount_status = '0'
+  steps[10].request.body.to_customer.put_amount.standard_list[0].fee_type = 0
+  steps[10].request.body.to_customer.put_amount.standard_list[0].init_main_name = '青岛易航道物流科技有限公司'
+  steps[10].request.body.to_customer.put_amount.standard_list[0].main_name = '青岛易航道物流科技有限公司'
+  steps[10].request.body.to_customer.put_amount.standard_list[0].num = '1'
+  steps[10].request.body.to_customer.put_amount.standard_list[0].pay_sync_status = 1
+  steps[10].request.body.to_customer.put_amount.standard_list[0].policy_sub_status_name = '异常'
+  steps[10].request.body.to_customer.put_amount.standard_list[0].rowIndex = 0
+  steps[10].request.body.to_customer.put_amount.standard_list[0].service_project = 'booking_space'
+  steps[10].request.body.to_customer.put_amount.standard_list[0].settle_object_id = '829'
+  steps[10].request.body.to_customer.put_amount.standard_list[0].specs = '40HQ'
+  steps[10].request.body.to_customer.put_amount.standard_list[0].subsidy_category = '0'
+  steps[10].request.body.to_customer.put_amount.standard_list[0].unique_id = 'b49c2b4c-79bd-4038-b07c-cbe3f8d89c20'
+  steps[10].request.body.to_customer.put_amount.standard_list[0].unit = 'box'
+  steps[10].request.body.to_customer.put_amount.standard_list[0].unit_price = '100'
+  steps[10].request.body.to_customer.put_amount.standard_list[1].cost_id = '18'
+  steps[10].request.body.to_customer.put_amount.standard_list[1].currency = 'USD'
+  steps[10].request.body.to_customer.put_amount.standard_list[1].discount_amount = '97.50'
+  steps[10].request.body.to_customer.put_amount.standard_list[1].discount_ratio = 97.5
+  steps[10].request.body.to_customer.put_amount.standard_list[1].discount_status = '0'
+  steps[10].request.body.to_customer.put_amount.standard_list[1].fee_type = 0
+  steps[10].request.body.to_customer.put_amount.standard_list[1].init_main_name = '青岛易航道物流科技有限公司'
+  steps[10].request.body.to_customer.put_amount.standard_list[1].main_name = '青岛易航道物流科技有限公司'
+  steps[10].request.body.to_customer.put_amount.standard_list[1].num = 1
+  steps[10].request.body.to_customer.put_amount.standard_list[1].pay_sync_status = 1
+  steps[10].request.body.to_customer.put_amount.standard_list[1].policy_sub_status_name = '异常'
+  steps[10].request.body.to_customer.put_amount.standard_list[1].rowIndex = 1
+  steps[10].request.body.to_customer.put_amount.standard_list[1].service_project = 'booking_space'
+  steps[10].request.body.to_customer.put_amount.standard_list[1].settle_object_id = '829'
+  steps[10].request.body.to_customer.put_amount.standard_list[1].subsidy_category = '1'
+  steps[10].request.body.to_customer.put_amount.standard_list[1].unique_id = '692124b6-e269-4495-85a0-25975700d8ea'
+  steps[10].request.body.to_customer.put_amount.standard_list[1].unit = 'vote'
+  steps[10].request.body.to_customer.put_amount.standard_list[1].unit_price = '100'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].cost_id = '17'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].currency = 'USD'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].discount_amount = '100.00'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].discount_ratio = 100
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].discount_status = '0'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].fee_type = 0
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].init_main_name = '青岛易航道物流科技有限公司'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].num = '1'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].pay_sync_status = 1
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].policy_sub_status_name = '异常'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].related_unique_id = 'b49c2b4c-79bd-4038-b07c-cbe3f8d89c20'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].rowIndex = 0
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].service_project = 'booking_space'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].settle_object_id = '1384'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].specs = '40HQ'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].subsidy_category = '0'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].unique_id = 'b49c2b4c-79bd-4038-b07c-cbe3f8d89c20'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].unit = 'box'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[0].unit_price = '100'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].cost_id = '18'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].currency = 'USD'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].discount_amount = '100.00'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].discount_ratio = 100
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].discount_status = '0'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].fee_type = 0
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].init_main_name = '青岛易航道物流科技有限公司'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].num = 1
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].pay_sync_status = 1
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].policy_sub_status_name = '异常'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].related_unique_id = '692124b6-e269-4495-85a0-25975700d8ea'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].rowIndex = 1
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].service_project = 'booking_space'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].settle_object_id = '1384'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].subsidy_category = '0'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].unique_id = '692124b6-e269-4495-85a0-25975700d8ea'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].unit = 'vote'
+  steps[10].request.body.to_supplier.pay_amount.standard_list[1].unit_price = '100'
+  steps[10].strategy[1].source = '$.order_id_5'
+  steps[12].strategy[1].expression = '$.response_body.data.amount_summary.order_id'
+  steps[12].strategy[1].required = True
+  steps[12].strategy[2].enabled = True
+  steps[12].strategy[2].kind = 'assign'
+  steps[12].strategy[2].name = 'assign_order_id_5'
+  steps[12].strategy[2].onFailure = 'abort'
+  steps[12].strategy[2].order = 0
+  steps[12].strategy[2].phase = 'before_request'
+  steps[12].strategy[2].scope = 'scenario'
+  steps[12].strategy[2].source = '$.order_id_5'
+  steps[12].strategy[2].target = '$.request_body.order_id'
+  steps[14].strategy[1].source = '$.order_id_7'
+  steps[16].strategy[1].expression = '$.response_body.data.order_id'
+  steps[16].strategy[1].required = True
+  steps[16].strategy[2].enabled = True
+  steps[16].strategy[2].kind = 'assign'
+  steps[16].strategy[2].name = 'assign_order_id_7'
+  steps[16].strategy[2].onFailure = 'abort'
+  steps[16].strategy[2].order = 0
+  steps[16].strategy[2].phase = 'before_request'
+  steps[16].strategy[2].scope = 'scenario'
+  steps[16].strategy[2].source = '$.order_id_7'
+  steps[16].strategy[2].target = '$.request_body.order_id'
+  steps[17].strategy[2].expression = '$.response_body.data.to_customer_supplier[0].put_amount.standard_list[0].order_fee_real_id'
+  steps[17].strategy[2].required = True
+  steps[17].strategy[3].enabled = True
+  steps[17].strategy[3].expression = '$.response_body.data.to_customer_supplier[0].order_sub_no'
+  steps[17].strategy[3].kind = 'extract'
+  steps[17].strategy[3].name = 'extract_code'
+  steps[17].strategy[3].onFailure = 'abort'
+  steps[17].strategy[3].order = 2
+  steps[17].strategy[3].phase = 'after_request'
+  steps[17].strategy[3].required = True
+  steps[17].strategy[3].scope = 'scenario'
+  steps[17].strategy[3].target = 'code'
+  steps[17].strategy[4].enabled = True
+  steps[17].strategy[4].kind = 'assign'
+  steps[17].strategy[4].name = 'assign_order_id_8'
+  steps[17].strategy[4].onFailure = 'abort'
+  steps[17].strategy[4].order = 0
+  steps[17].strategy[4].phase = 'before_request'
+  steps[17].strategy[4].scope = 'scenario'
+  steps[17].strategy[4].source = '$.order_id_8'
+  steps[17].strategy[4].target = '$.request_body.order_id'
+  steps[18].request.body.action = 'check'
+  steps[18].request.body.order_fee_real_ids[0] = '331309335617471488'
+  steps[18].request.body.order_fee_real_ids[1] = '331309335617471488'
+  steps[18].strategy[1].source = '$.order_id_9'
+  steps[18].strategy[2].source = '$.order_fee_real_ids'
+  steps[18].strategy[3].source = '$.order_fee_real_ids'
+  steps[20].request.body.audit_msg.code = 'ZDD20260703017128'
+  steps[20].request.body.audit_msg.msgs[0] = '费用锁定申请'
+  steps[20].request.body.audit_msg.title = '业务订单ID'
+  steps[20].request.body.select_node_user[0].node_sort = '0'
+  steps[20].request.body.select_node_user[0].user_id = '828'
+  steps[20].strategy[4].enabled = True
+  steps[20].strategy[4].kind = 'assign'
+  steps[20].strategy[4].name = 'assign_code'
+  steps[20].strategy[4].onFailure = 'abort'
+  steps[20].strategy[4].order = 3
+  steps[20].strategy[4].phase = 'before_request'
+  steps[20].strategy[4].scope = 'scenario'
+  steps[20].strategy[4].source = '$.code'
+  steps[20].strategy[4].target = '$.request_body.audit_msg.code'
+  steps[22].request.body.active_tab = 'examine_wait'
+  steps[22].request.body.page_no = 1
+  steps[22].request.body.page_size = 20
+  steps[22].request.body.sort_field = 'expedite_num'
+  steps[22].request.body.sort_order = 'desc'
+  steps[22].strategy[1].expression = '$.response_body.data.data[0].audit_id'
+  steps[22].strategy[1].required = True
+  steps[22].strategy[2].enabled = True
+  steps[22].strategy[2].expression = '$.response_body.data.data[0].audit_id'
+  steps[22].strategy[2].kind = 'extract'
+  steps[22].strategy[2].name = 'extract_audit_ids'
+  steps[22].strategy[2].onFailure = 'abort'
+  steps[22].strategy[2].order = 1
+  steps[22].strategy[2].phase = 'after_request'
+  steps[22].strategy[2].required = True
+  steps[22].strategy[2].scope = 'scenario'
+  steps[22].strategy[2].target = 'audit_ids'
+  steps[23].request.body.audit_id = '331309409298808832'
+  steps[23].strategy[2].source = '$.audit_id'
+  steps[24].request.body.order_id = '331309247201542144'
+  steps[25].request.body.audit_ids[0] = '331309409298808832'
+  steps[25].request.body.audit_status = 2
+  steps[25].strategy[1].source = '$.audit_ids'
+  steps[26].request.body.order_id = '331309247201542144'
+  steps[26].strategy[1].expression = '$.response_body.data.order_id'
+  steps[26].strategy[1].required = True
+  steps[26].strategy[2].enabled = True
+  steps[26].strategy[2].kind = 'assign'
+  steps[26].strategy[2].name = 'assign_order_id_11'
+  steps[26].strategy[2].onFailure = 'abort'
+  steps[26].strategy[2].order = 0
+  steps[26].strategy[2].phase = 'before_request'
+  steps[26].strategy[2].scope = 'scenario'
+  steps[26].strategy[2].source = '$.order_id_11'
+  steps[26].strategy[2].target = '$.request_body.order_id'
+  steps[27].request.body.action = 'check'
+  steps[27].strategy[1].source = '$.order_id_12'
+  steps[29].request.body.audit_msg.code = 'ZDD20260703017128'
+  steps[29].request.body.audit_msg.msgs[0] = '资产推送申请'
+  steps[29].request.body.audit_msg.title = '资产推送申请'
+  steps[29].request.body.select_node_user[0].node_sort = '0'
+  steps[29].request.body.select_node_user[0].user_id = '828'
+  steps[29].strategy[2].enabled = True
+  steps[29].strategy[2].kind = 'assign'
+  steps[29].strategy[2].name = 'assign_code'
+  steps[29].strategy[2].onFailure = 'abort'
+  steps[29].strategy[2].order = 1
+  steps[29].strategy[2].phase = 'before_request'
+  steps[29].strategy[2].scope = 'scenario'
+  steps[29].strategy[2].source = '$.code'
+  steps[29].strategy[2].target = '$.request_body.audit_msg.code'
+  steps[2].request.body.page_no = 1
+  steps[2].request.body.page_size = 20
+  steps[2].request.body.sort_field = 'update_time'
+  steps[2].request.body.sort_order = 'desc'
+  steps[2].strategy[1].enabled = True
+  steps[2].strategy[1].expression = '$.response_body.data.data[0].order_id'
+  steps[2].strategy[1].kind = 'extract'
+  steps[2].strategy[1].name = 'extract_order_id'
+  steps[2].strategy[1].onFailure = 'abort'
+  steps[2].strategy[1].order = 0
+  steps[2].strategy[1].phase = 'after_request'
+  steps[2].strategy[1].required = True
+  steps[2].strategy[1].scope = 'scenario'
+  steps[2].strategy[1].target = 'order_id'
+  steps[31].request.body.active_tab = 'examine_wait'
+  steps[31].request.body.page_no = 1
+  steps[31].request.body.page_size = 20
+  steps[31].request.body.sort_field = 'expedite_num'
+  steps[31].request.body.sort_order = 'desc'
+  steps[31].strategy[1].expression = '$.response_body.data.data[0].audit_id'
+  steps[31].strategy[1].required = True
+  steps[31].strategy[2].enabled = True
+  steps[31].strategy[2].expression = '$.response_body.data.data[0].audit_id'
+  steps[31].strategy[2].kind = 'extract'
+  steps[31].strategy[2].name = 'extract_audit_ids_2'
+  steps[31].strategy[2].onFailure = 'abort'
+  steps[31].strategy[2].order = 1
+  steps[31].strategy[2].phase = 'after_request'
+  steps[31].strategy[2].required = True
+  steps[31].strategy[2].scope = 'scenario'
+  steps[31].strategy[2].target = 'audit_ids_2'
+  steps[32].request.body.audit_id = '331309459257163776'
+  steps[32].strategy[2].source = '$.audit_id_2'
+  steps[33].request.body.audit_ids[0] = '331309459257163776'
+  steps[33].request.body.audit_status = 2
+  steps[33].strategy[1].source = '$.audit_ids_2'
+  steps[34].request.body.page_no = 1
+  steps[34].request.body.page_size = 20
+  steps[34].request.body.sort_field = 'update_time'
+  steps[34].request.body.sort_order = 'desc'
+  steps[34].strategy[1].expression = '$.response_body.data.data[0].order_id'
+  steps[34].strategy[1].required = True
+  steps[35].request.body.order_id = '331309247201542144'
+  steps[35].strategy[1].expression = '$.response_body.data.order_id'
+  steps[35].strategy[1].required = True
+  steps[35].strategy[2].enabled = True
+  steps[35].strategy[2].kind = 'assign'
+  steps[35].strategy[2].name = 'assign_order_id_14'
+  steps[35].strategy[2].onFailure = 'abort'
+  steps[35].strategy[2].order = 0
+  steps[35].strategy[2].phase = 'before_request'
+  steps[35].strategy[2].scope = 'scenario'
+  steps[35].strategy[2].source = '$.order_id_14'
+  steps[35].strategy[2].target = '$.request_body.order_id'
+  steps[36].api.headers.Authorization = '${auth.codfish.token}'
+  steps[36].api.headers.Content-Type = 'application/json;charset=UTF-8'
+  steps[36].api.headers.Sec-Fetch-Dest = 'empty'
+  steps[36].api.headers.Sec-Fetch-Mode = 'cors'
+  steps[36].api.headers.Sec-Fetch-Site = 'same-origin'
+  steps[36].api.headers.sec-ch-ua = '"Microsoft Edge";v="149", "Chromium";v="149", "Not)A;Brand";v="24"'
+  steps[36].api.headers.sec-ch-ua-mobile = '?0'
+  steps[36].api.headers.sec-ch-ua-platform = '"Windows"'
+  steps[36].api.kind = 'api'
+  steps[36].api.method = 'POST'
+  steps[36].api.path = '/api/order/orderFee/toggleRealAmount'
+  steps[36].api.service = 'tidb-test-service'
+  steps[36].api.timeout = 30
+  steps[36].description = 'mutation verb; produces downstream id(s): order_id'
+  steps[36].kind = 'step'
+  steps[36].request.body.order_id = '331309247201542144'
+  steps[36].request.kind = 'request'
+  steps[36].strategy[0].enabled = True
+  steps[36].strategy[0].expected = 200
+  steps[36].strategy[0].kind = 'assertion'
+  steps[36].strategy[0].message = '/api/order/orderFee/toggleRealAmount 应返回200'
+  steps[36].strategy[0].name = 'assert_http_status_eq_200'
+  steps[36].strategy[0].onFailure = 'abort'
+  steps[36].strategy[0].operator = 'eq'
+  steps[36].strategy[0].order = 0
+  steps[36].strategy[0].phase = 'verifying'
+  steps[36].strategy[0].soft = False
+  steps[36].strategy[0].target = '$.response_status'
+  steps[36].strategy[1].enabled = True
+  steps[36].strategy[1].expression = '$.response_body.data.amount_summary.order_id'
+  steps[36].strategy[1].kind = 'extract'
+  steps[36].strategy[1].name = 'extract_order_id_16'
+  steps[36].strategy[1].onFailure = 'abort'
+  steps[36].strategy[1].order = 0
+  steps[36].strategy[1].phase = 'after_request'
+  steps[36].strategy[1].required = True
+  steps[36].strategy[1].scope = 'scenario'
+  steps[36].strategy[1].target = 'order_id_16'
+  steps[36].strategy[2].enabled = True
+  steps[36].strategy[2].kind = 'assign'
+  steps[36].strategy[2].name = 'assign_order_id_15'
+  steps[36].strategy[2].onFailure = 'abort'
+  steps[36].strategy[2].order = 0
+  steps[36].strategy[2].phase = 'before_request'
+  steps[36].strategy[2].scope = 'scenario'
+  steps[36].strategy[2].source = '$.order_id_15'
+  steps[36].strategy[2].target = '$.request_body.order_id'
+  steps[37].api.headers.Authorization = '${auth.codfish.token}'
+  steps[37].api.headers.Content-Type = 'application/json;charset=UTF-8'
+  steps[37].api.headers.Sec-Fetch-Dest = 'empty'
+  steps[37].api.headers.Sec-Fetch-Mode = 'cors'
+  steps[37].api.headers.Sec-Fetch-Site = 'same-origin'
+  steps[37].api.headers.sec-ch-ua = '"Microsoft Edge";v="149", "Chromium";v="149", "Not)A;Brand";v="24"'
+  steps[37].api.headers.sec-ch-ua-mobile = '?0'
+  steps[37].api.headers.sec-ch-ua-platform = '"Windows"'
+  steps[37].api.kind = 'api'
+  steps[37].api.method = 'POST'
+  steps[37].api.path = '/api/order/order/orderNotice'
+  steps[37].api.service = 'tidb-test-service'
+  steps[37].api.timeout = 30
+  steps[37].description = "[WARN] unrecognized verb 'ordernotice' — kept conservatively as a possible state change; extend MUTATION_VERBS or READ_SUFFIX to classify it properly"
+  steps[37].kind = 'step'
+  steps[37].request.body.action = 'check'
+  steps[37].request.body.order_id = '331309247201542144'
+  steps[37].request.kind = 'request'
+  steps[37].strategy[0].enabled = True
+  steps[37].strategy[0].expected = 200
+  steps[37].strategy[0].kind = 'assertion'
+  steps[37].strategy[0].message = '/api/order/order/orderNotice 应返回200'
+  steps[37].strategy[0].name = 'assert_http_status_eq_200'
+  steps[37].strategy[0].onFailure = 'abort'
+  steps[37].strategy[0].operator = 'eq'
+  steps[37].strategy[0].order = 0
+  steps[37].strategy[0].phase = 'verifying'
+  steps[37].strategy[0].soft = False
+  steps[37].strategy[0].target = '$.response_status'
+  steps[37].strategy[1].enabled = True
+  steps[37].strategy[1].kind = 'assign'
+  steps[37].strategy[1].name = 'assign_order_id_16'
+  steps[37].strategy[1].onFailure = 'abort'
+  steps[37].strategy[1].order = 0
+  steps[37].strategy[1].phase = 'before_request'
+  steps[37].strategy[1].scope = 'scenario'
+  steps[37].strategy[1].source = '$.order_id_16'
+  steps[37].strategy[1].target = '$.request_body.order_id'
+  steps[38].api.headers.Authorization = '${auth.codfish.token}'
+  steps[38].api.headers.Content-Type = 'application/json;charset=UTF-8'
+  steps[38].api.headers.Sec-Fetch-Dest = 'empty'
+  steps[38].api.headers.Sec-Fetch-Mode = 'cors'
+  steps[38].api.headers.Sec-Fetch-Site = 'same-origin'
+  steps[38].api.headers.sec-ch-ua = '"Microsoft Edge";v="149", "Chromium";v="149", "Not)A;Brand";v="24"'
+  steps[38].api.headers.sec-ch-ua-mobile = '?0'
+  steps[38].api.headers.sec-ch-ua-platform = '"Windows"'
+  steps[38].api.kind = 'api'
+  steps[38].api.method = 'POST'
+  steps[38].api.path = '/api/order/order/orderNotice'
+  steps[38].api.service = 'tidb-test-service'
+  steps[38].api.timeout = 30
+  steps[38].description = "[WARN] unrecognized verb 'ordernotice' — kept conservatively as a possible state change; extend MUTATION_VERBS or READ_SUFFIX to classify it properly"
+  steps[38].kind = 'step'
+  steps[38].request.body.action = 'submit'
+  steps[38].request.body.bank_ids[0] = '${var.bank_id_1}'
+  steps[38].request.body.bank_ids[1] = '${var.bank_id_2}'
+  steps[38].request.body.finance_ids[0] = '${var.finance_id_1}'
+  steps[38].request.body.finance_ids[1] = '${var.finance_id_2}'
+  steps[38].request.body.order_id = '331309247201542144'
+  steps[38].request.kind = 'request'
+  steps[38].strategy[0].enabled = True
+  steps[38].strategy[0].expected = 200
+  steps[38].strategy[0].kind = 'assertion'
+  steps[38].strategy[0].message = '/api/order/order/orderNotice 应返回200'
+  steps[38].strategy[0].name = 'assert_http_status_eq_200'
+  steps[38].strategy[0].onFailure = 'abort'
+  steps[38].strategy[0].operator = 'eq'
+  steps[38].strategy[0].order = 0
+  steps[38].strategy[0].phase = 'verifying'
+  steps[38].strategy[0].soft = False
+  steps[38].strategy[0].target = '$.response_status'
+  steps[38].strategy[1].enabled = True
+  steps[38].strategy[1].kind = 'assign'
+  steps[38].strategy[1].name = 'assign_order_id_16'
+  steps[38].strategy[1].onFailure = 'abort'
+  steps[38].strategy[1].order = 0
+  steps[38].strategy[1].phase = 'before_request'
+  steps[38].strategy[1].scope = 'scenario'
+  steps[38].strategy[1].source = '$.order_id_16'
+  steps[38].strategy[1].target = '$.request_body.order_id'
+  steps[3].request.body.order_id = '331309247201542144'
+  steps[3].strategy[2].enabled = True
+  steps[3].strategy[2].expression = '$.response_body.data.order_id'
+  steps[3].strategy[2].kind = 'extract'
+  steps[3].strategy[2].name = 'extract_order_id_2'
+  steps[3].strategy[2].onFailure = 'abort'
+  steps[3].strategy[2].order = 1
+  steps[3].strategy[2].phase = 'after_request'
+  steps[3].strategy[2].required = True
+  steps[3].strategy[2].scope = 'scenario'
+  steps[3].strategy[2].target = 'order_id_2'
+  steps[3].strategy[3].enabled = True
+  steps[3].strategy[3].expression = '$.response_body.data.order_no'
+  steps[3].strategy[3].kind = 'extract'
+  steps[3].strategy[3].name = 'extract_order_no'
+  steps[3].strategy[3].onFailure = 'abort'
+  steps[3].strategy[3].order = 2
+  steps[3].strategy[3].phase = 'after_request'
+  steps[3].strategy[3].required = True
+  steps[3].strategy[3].scope = 'scenario'
+  steps[3].strategy[3].target = 'order_no'
+  steps[3].strategy[4].enabled = True
+  steps[3].strategy[4].kind = 'assign'
+  steps[3].strategy[4].name = 'assign_order_id'
+  steps[3].strategy[4].onFailure = 'abort'
+  steps[3].strategy[4].order = 0
+  steps[3].strategy[4].phase = 'before_request'
+  steps[3].strategy[4].scope = 'scenario'
+  steps[3].strategy[4].source = '$.order_id'
+  steps[3].strategy[4].target = '$.request_body.order_id'
+  steps[4].request.body.account_status = '0'
+  steps[4].request.body.action = 'check'
+  steps[4].request.body.airline_type = '地中海'
+  steps[4].request.body.atd = 1783008000
+  steps[4].request.body.bl_no = '${var.bl_no}'
+  steps[4].request.body.bl_no_upload_date = '0'
+  steps[4].request.body.book_upload_date = '0'
+  steps[4].request.body.bulk = '60.000'
+  steps[4].request.body.business_main_id = '1'
+  steps[4].request.body.business_main_name = '青岛易航道物流科技有限公司'
+  steps[4].request.body.business_time = '0'
+  steps[4].request.body.business_type = '1'
+  steps[4].request.body.business_type_name = '海运整箱'
+  steps[4].request.body.cancel_time = '0'
+  steps[4].request.body.carrier = 'COSCO'
+  steps[4].request.body.carrier_id = '16'
+  steps[4].request.body.carrier_name = '中国远洋运输（集团）总公司'
+  steps[4].request.body.change_type = '0'
+  steps[4].request.body.client_expand_id = '261'
+  steps[4].request.body.client_expand_name = '唐欣雨'
+  steps[4].request.body.commodity = 'Fresh ginger\n'
+  steps[4].request.body.confirm_status = '0'
+  steps[4].request.body.consignee = 'CENTRAL POINT TRADE INC\n'
+  steps[4].request.body.container[0].box_num = '1'
+  steps[4].request.body.container[0].box_type = '40HQ'
+  steps[4].request.body.container[0].sea_trans_unit_price = '100'
+  steps[4].request.body.copy_order_id = '0'
+  steps[4].request.body.country_id = '673'
+  steps[4].request.body.country_name = 'AUSTRALIA'
+  steps[4].request.body.country_name_cn = '澳大利亚'
+  steps[4].request.body.create_by = 'GIMBAL'
+  steps[4].request.body.create_id = '828'
+  steps[4].request.body.create_time = '1783048908'
+  steps[4].request.body.customer_address_cn = '山东省潍坊市昌邑市围子街道206国道北(官道郜北)'
+  steps[4].request.body.customer_category = ',1,2,'
+  steps[4].request.body.customer_confirm_date = '0'
+  steps[4].request.body.customer_due_date = '0'
+  steps[4].request.body.customer_id = '320'
+  steps[4].request.body.customer_invoice_request_date = '0'
+  steps[4].request.body.customer_main_id = '1'
+  steps[4].request.body.customer_main_name = '青岛易航道物流科技有限公司'
+  steps[4].request.body.customer_name = '山东悦慕食品有限公司'
+  steps[4].request.body.customer_period = '120'
+  steps[4].request.body.customer_put_date = '0'
+  steps[4].request.body.customer_put_date_manual = '0'
+  steps[4].request.body.customer_settlement_date = '10'
+  steps[4].request.body.customer_tax_number = '91370786MA3D6MW35A'
+  steps[4].request.body.del = 'ALEXANDRIA,AUSTRALIA'
+  steps[4].request.body.delete_time = '0'
+  steps[4].request.body.discount_end = '0'
+  steps[4].request.body.discount_start = '0'
+  steps[4].request.body.discount_status = '2'
+  steps[4].request.body.effective_id = '0'
+  steps[4].request.body.effective_time = '0'
+  steps[4].request.body.enable = '1'
+  steps[4].request.body.entrust_status = '2'
+  steps[4].request.body.etd = 1781884800
+  steps[4].request.body.exchange_rate = '0.0000'
+  steps[4].request.body.expect_discount_status = '0'
+  steps[4].request.body.expect_discount_status_name = '—'
+  steps[4].request.body.expect_fee_status = '0'
+  steps[4].request.body.expect_subsidy_category_name = '—'
+  steps[4].request.body.fee_lock_status = '0'
+  steps[4].request.body.finance_date = '1781884800'
+  steps[4].request.body.finance_status = True
+  steps[4].request.body.financing_apply_amount = '0.00'
+  steps[4].request.body.financing_apply_amount_cny = '0.00'
+  steps[4].request.body.financing_apply_amount_usd = '0.00'
+  steps[4].request.body.first_financing_doc_ok_date = '0'
+  steps[4].request.body.folde_pay_total = '0.00'
+  steps[4].request.body.folde_pay_usd = '0.00'
+  steps[4].request.body.folde_put_total = '0.00'
+  steps[4].request.body.folde_put_usd = '0.00'
+  steps[4].request.body.gross_margin = '0.00'
+  steps[4].request.body.gross_margin_rate = '0.00'
+  steps[4].request.body.gross_weight = '26800.000'
+  steps[4].request.body.insurance_doc_ok_date = '0'
+  steps[4].request.body.is_delayed_recovery = '否'
+  steps[4].request.body.is_delayed_recovery_name = '否'
+  steps[4].request.body.is_fee_miss = '0'
+  steps[4].request.body.is_financing = '0'
+  steps[4].request.body.is_loan_before_invoice = '0'
+  steps[4].request.body.is_special_pay = '0'
+  steps[4].request.body.is_sync_es = '0'
+  steps[4].request.body.is_system_generate = '0'
+  steps[4].request.body.is_traverse = '0'
+  steps[4].request.body.is_usd_project = '2'
+  steps[4].request.body.main_ids = '1'
+  steps[4].request.body.main_ids_name = '易航道'
+  steps[4].request.body.main_sort = '易航道'
+  steps[4].request.body.notifier = 'CENTRAL POINT TRADE INC\n'
+  steps[4].request.body.num = '1872'
+  steps[4].request.body.ocean_type = '远洋'
+  steps[4].request.body.operator_id = '336'
+  steps[4].request.body.operator_name = '闫航'
+  steps[4].request.body.order_no = 'YWDD20260703107665'
+  steps[4].request.body.pay_account_status = '0'
+  steps[4].request.body.pay_status = '1'
+  steps[4].request.body.pay_type = 'FREIGHT PREPAID'
+  steps[4].request.body.pay_type_name = 'FREIGHT PREPAID'
+  steps[4].request.body.period_rule = '0'
+  steps[4].request.body.pod = 'ALEXANDRIA,AUSTRALIA'
+  steps[4].request.body.pol = 'QINGDAO,CHINA'
+  steps[4].request.body.pol_cn = '青岛港'
+  steps[4].request.body.pol_country = 'CHINA'
+  steps[4].request.body.pol_country_cn = '中国'
+  steps[4].request.body.pol_country_id = '1'
+  steps[4].request.body.policy_id = '22'
+  steps[4].request.body.policy_main_arr[0].fee_main_id = '1'
+  steps[4].request.body.policy_main_arr[0].main_name = '青岛易航道物流科技有限公司'
+  steps[4].request.body.policy_match = 'auto'
+  steps[4].request.body.policy_match_name = '自动匹配'
+  steps[4].request.body.policy_name = '【易航道对客】易航道：自营业务+拖车业务'
+  steps[4].request.body.policy_type = 'JSZX'
+  steps[4].request.body.policy_type_name = '结算业务'
+  steps[4].request.body.proprietary_business_status = '0'
+  steps[4].request.body.real_cost_date = '0'
+  steps[4].request.body.real_discount_status = '0'
+  steps[4].request.body.real_discount_status_name = '—'
+  steps[4].request.body.real_fee_locked = False
+  steps[4].request.body.real_fee_status = '0'
+  steps[4].request.body.real_pay_cny = '0.00'
+  steps[4].request.body.real_pay_usd = '0.00'
+  steps[4].request.body.real_put_cny = '0.00'
+  steps[4].request.body.real_put_discount_rate = '0.00'
+  steps[4].request.body.real_put_usd = '0.00'
+  steps[4].request.body.real_subsidy_category_name = '—'
+  steps[4].request.body.reverse_status = '0'
+  steps[4].request.body.reverse_status_name = '否'
+  steps[4].request.body.sea_trans_cost = '100.00'
+  steps[4].request.body.sea_trans_currency = 'USD'
+  steps[4].request.body.second_financing_doc_ok_date = '0'
+  steps[4].request.body.service_id = '55'
+  steps[4].request.body.service_items[0] = 'booking_space'
+  steps[4].request.body.service_name = '曲静霞'
+  steps[4].request.body.service_project.booking_space = False
+  steps[4].request.body.service_project.customs_clearance = False
+  steps[4].request.body.service_project.insurance = False
+  steps[4].request.body.service_project.manifest = False
+  steps[4].request.body.service_project.trucking = False
+  steps[4].request.body.service_project_amount.booking_space = False
+  steps[4].request.body.service_project_amount.customs_clearance = False
+  steps[4].request.body.service_project_amount.insurance = False
+  steps[4].request.body.service_project_amount.manifest = False
+  steps[4].request.body.service_project_amount.trucking = False
+  steps[4].request.body.ship_mark = 'N/M\n'
+  steps[4].request.body.ship_name = 'OOCL FRANCE'
+  steps[4].request.body.shipper = 'SHANDONG YUEMU FOODS CO LTD 206 NATIONAL ROAD NORTH WEIZI STREET WEIFANG, SHANDONG\n'
+  steps[4].request.body.status = 2
+  steps[4].request.body.subsidy_category_name = '—'
+  steps[4].request.body.supplier[0].is_manual = '0'
+  steps[4].request.body.supplier[0].is_primary = '1'
+  steps[4].request.body.supplier[0].isset_fee = False
+  steps[4].request.body.supplier[0].isset_supplier = '1'
+  steps[4].request.body.supplier[0].order_id = '331309247201542144'
+  steps[4].request.body.supplier[0].order_supplier_id = '331309248761823232'
+  steps[4].request.body.supplier[0].service_item = 'booking_space'
+  steps[4].request.body.supplier[0].service_item_name = '订舱'
+  steps[4].request.body.supplier[0].settle_object_id = '1384'
+  steps[4].request.body.supplier[0].settlement_date = '20'
+  steps[4].request.body.supplier[0].supplier_id = '805'
+  steps[4].request.body.supplier[0].supplier_label = '青岛雅然国际物流有限公司-订舱'
+  steps[4].request.body.supplier[0].supplier_name = '青岛雅然国际物流有限公司'
+  steps[4].request.body.supplier[0].supplier_pay_date = '0'
+  steps[4].request.body.supplier[0].supplier_period = '60'
+  steps[4].request.body.supplier[0].sys_upttime = '2026-07-03 11:21:48'
+  steps[4].request.body.supplier[0].user_id = '336'
+  steps[4].request.body.supplier[0].user_name = '闫航'
+  steps[4].request.body.supplier_due_date = '0'
+  steps[4].request.body.supplier_invoice_date = '0'
+  steps[4].request.body.sys_upttime = '2026-07-03 11:21:48'
+  steps[4].request.body.terms_payment = 'T/T'
+  steps[4].request.body.terms_payment_name = 'T/T'
+  steps[4].request.body.terms_transport = 'CY/CY'
+  steps[4].request.body.terms_transport_name = 'CY/CY'
+  steps[4].request.body.track_atd = '0'
+  steps[4].request.body.trade_term = 'CIF'
+  steps[4].request.body.trade_term_name = 'CIF'
+  steps[4].request.body.trans_cost_put_preserve_date = '0'
+  steps[4].request.body.update_by = 'GIMBAL'
+  steps[4].request.body.update_id = '828'
+  steps[4].request.body.update_time = '1783048908'
+  steps[4].request.body.volume = '1*40HQ'
+  steps[4].request.body.volume_desc = '普柜'
+  steps[4].request.body.voy = '068E'
+  steps[4].strategy[1].source = '$.order_supplier_id'
+  steps[4].strategy[2].source = '$.order_id_2'
+  steps[4].strategy[3].source = '$.order_id_2'
+  steps[5].strategy[1].expression = '$.response_body.data[0].file_id'
+  steps[5].strategy[1].required = True
+  steps[5].strategy[5].enabled = True
+  steps[5].strategy[5].kind = 'assign'
+  steps[5].strategy[5].name = 'assign_order_no'
+  steps[5].strategy[5].onFailure = 'abort'
+  steps[5].strategy[5].order = 3
+  steps[5].strategy[5].phase = 'before_request'
+  steps[5].strategy[5].scope = 'scenario'
+  steps[5].strategy[5].source = '$.order_no'
+  steps[5].strategy[5].target = '$.request_body.order_no'
+  steps[6].request.body.customer_file_list[0]._XID = 'row_363'
+  steps[6].request.body.customer_file_list[0].client_company_id = '320'
+  steps[6].request.body.customer_file_list[0].client_company_name = '山东悦慕食品有限公司'
+  steps[6].request.body.customer_file_list[0].document_type = 'BOOK_CUSTOMER'
+  steps[6].request.body.customer_file_list[0].file_id = '331309278126145536'
+  steps[6].request.body.customer_file_list[0].file_name = '6a472af86b867.pdf'
+  steps[6].request.body.customer_file_list[0].file_type = 'PDF'
+  steps[6].request.body.customer_file_list[0].file_url = '6a472af86b867.pdf'
+  steps[6].request.body.customer_file_list[0].trustee_company_id = '1'
+  steps[6].request.body.customer_file_list[0].trustee_company_name = '青岛易航道物流科技有限公司'
+  steps[6].strategy[1].source = '$.file_id'
+  steps[7].request.body.page_no = 1
+  steps[7].request.body.page_size = 20
+  steps[7].request.body.sort_field = 'update_time'
+  steps[7].request.body.sort_order = 'desc'
+  steps[7].strategy[1].expression = '$.response_body.data.data[0].order_id'
+  steps[7].strategy[1].required = True
+  steps[8].request.body.order_id = '331309247201542144'
+  steps[8].strategy[2].enabled = True
+  steps[8].strategy[2].kind = 'assign'
+  steps[8].strategy[2].name = 'assign_order_id_3'
+  steps[8].strategy[2].onFailure = 'abort'
+  steps[8].strategy[2].order = 0
+  steps[8].strategy[2].phase = 'before_request'
+  steps[8].strategy[2].scope = 'scenario'
+  steps[8].strategy[2].source = '$.order_id_3'
+  steps[8].strategy[2].target = '$.request_body.order_id'
+  (共 634 个非空字段)
+
+>>> 共同字段中值不同的:
+  不同: 274, 相同: 1961
+
+>>> 不同字段按类型分布:
+  str: 263 个
+  int: 11 个
+
+>>> 所有差异字段 (路径 -> 8值 / 9值):
+  config.vars.bl_no
+    8: 'YHR_NEWHOPE_GIMBAL_00006'
+    9: 'YUEMU-YIHANGDAO-00016'
+  meta.description
+    8: '验证从订单委托创建、订舱、生成子单、费用锁定与审核、变更开票申请审核、收款账户确认、批次开票申请审核、发票录入到应收核销的全链路在正常路径下均返回200且关键业务标识在各环节间正确传递'
+    9: '山东悦慕-易航道-汇鑫商业保理'
+  meta.name
+    8: '全链路-订单创建至应收核销-正常'
+    9: '山东悦慕-易航道-汇鑫商业保理'
+  steps[0].description
+    8: 'mutation verb; [WARN] business code=403 in response — verify this call actually succeeded'
+    9: 'mutation verb'
+  steps[10].api.path
+    8: '/api/order/orderFee/toggleRealAmount'
+    9: '/api/order/orderFee/bookRealAmountEdit'
+  steps[10].description
+    8: 'mutation verb; produces downstream id(s): order_id'
+    9: 'mutation verb'
+  steps[10].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[10].strategy[0].message
+    8: '/api/order/orderFee/toggleRealAmount 应返回200'
+    9: '/api/order/orderFee/bookRealAmountEdit 应返回200'
+  steps[10].strategy[1].kind
+    8: 'extract'
+    9: 'assign'
+  steps[10].strategy[1].name
+    8: 'extract_order_id_5'
+    9: 'assign_order_id_5'
+  steps[10].strategy[1].phase
+    8: 'after_request'
+    9: 'before_request'
+  steps[10].strategy[1].target
+    8: 'order_id_5'
+    9: '$.request_body.order_id'
+  steps[11].request.body.action
+    8: 'check'
+    9: 'submit'
+  steps[11].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[12].api.path
+    8: '/api/order/orderFee/bookRealAmountEdit'
+    9: '/api/order/orderFee/toggleRealAmount'
+  steps[12].description
+    8: 'mutation verb'
+    9: 'mutation verb; produces downstream id(s): order_id'
+  steps[12].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[12].strategy[0].message
+    8: '/api/order/orderFee/bookRealAmountEdit 应返回200'
+    9: '/api/order/orderFee/toggleRealAmount 应返回200'
+  steps[12].strategy[1].kind
+    8: 'assign'
+    9: 'extract'
+  steps[12].strategy[1].name
+    8: 'assign_order_id_5'
+    9: 'extract_order_id_6'
+  steps[12].strategy[1].phase
+    8: 'before_request'
+    9: 'after_request'
+  steps[12].strategy[1].target
+    8: '$.request_body.order_id'
+    9: 'order_id_6'
+  steps[13].api.path
+    8: '/api/order/orderFee/toggleRealAmount'
+    9: '/api/order/order/orderDetail'
+  steps[13].description
+    8: 'mutation verb; produces downstream id(s): order_id'
+    9: 'produces downstream id(s): order_id'
+  steps[13].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[13].strategy[0].message
+    8: '/api/order/orderFee/toggleRealAmount 应返回200'
+    9: '/api/order/order/orderDetail 应返回200'
+  steps[13].strategy[1].expression
+    8: '$.response_body.data.amount_summary.order_id'
+    9: '$.response_body.data.order_id'
+  steps[13].strategy[1].name
+    8: 'extract_order_id_6'
+    9: 'extract_order_id_7'
+  steps[13].strategy[1].target
+    8: 'order_id_6'
+    9: 'order_id_7'
+  steps[13].strategy[2].name
+    8: 'assign_order_id_5'
+    9: 'assign_order_id_6'
+  steps[13].strategy[2].source
+    8: '$.order_id_5'
+    9: '$.order_id_6'
+  steps[14].api.path
+    8: '/api/order/order/orderDetail'
+    9: '/api/order/order/checkGenerateOrderSub'
+  steps[14].description
+    8: 'produces downstream id(s): order_id'
+    9: 'mutation verb'
+  steps[14].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[14].strategy[0].message
+    8: '/api/order/order/orderDetail 应返回200'
+    9: '/api/order/order/checkGenerateOrderSub 应返回200'
+  steps[14].strategy[1].kind
+    8: 'extract'
+    9: 'assign'
+  steps[14].strategy[1].name
+    8: 'extract_order_id_7'
+    9: 'assign_order_id_7'
+  steps[14].strategy[1].phase
+    8: 'after_request'
+    9: 'before_request'
+  steps[14].strategy[1].target
+    8: 'order_id_7'
+    9: '$.request_body.order_id'
+  steps[15].api.path
+    8: '/api/order/order/checkGenerateOrderSub'
+    9: '/api/order/order/generateOrderSub'
+  steps[15].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[15].strategy[0].message
+    8: '/api/order/order/checkGenerateOrderSub 应返回200'
+    9: '/api/order/order/generateOrderSub 应返回200'
+  steps[16].api.path
+    8: '/api/order/order/generateOrderSub'
+    9: '/api/order/order/orderDetail'
+  steps[16].description
+    8: 'mutation verb'
+    9: 'produces downstream id(s): order_id'
+  steps[16].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[16].strategy[0].message
+    8: '/api/order/order/generateOrderSub 应返回200'
+    9: '/api/order/order/orderDetail 应返回200'
+  steps[16].strategy[1].kind
+    8: 'assign'
+    9: 'extract'
+  steps[16].strategy[1].name
+    8: 'assign_order_id_7'
+    9: 'extract_order_id_8'
+  steps[16].strategy[1].phase
+    8: 'before_request'
+    9: 'after_request'
+  steps[16].strategy[1].target
+    8: '$.request_body.order_id'
+    9: 'order_id_8'
+  steps[17].api.path
+    8: '/api/order/order/orderDetail'
+    9: '/api/order/orderFee/toggleRealAmount'
+  steps[17].description
+    8: 'produces downstream id(s): order_id'
+    9: 'mutation verb; produces downstream id(s): code, order_fee_real_ids, order_id'
+  steps[17].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[17].strategy[0].message
+    8: '/api/order/order/orderDetail 应返回200'
+    9: '/api/order/orderFee/toggleRealAmount 应返回200'
+  steps[17].strategy[1].expression
+    8: '$.response_body.data.order_id'
+    9: '$.response_body.data.amount_summary.order_id'
+  steps[17].strategy[1].name
+    8: 'extract_order_id_8'
+    9: 'extract_order_id_9'
+  steps[17].strategy[1].target
+    8: 'order_id_8'
+    9: 'order_id_9'
+  steps[17].strategy[2].kind
+    8: 'assign'
+    9: 'extract'
+  steps[17].strategy[2].name
+    8: 'assign_order_id_7'
+    9: 'extract_order_fee_real_ids'
+  steps[17].strategy[2].order
+    8: 0
+    9: 1
+  steps[17].strategy[2].phase
+    8: 'before_request'
+    9: 'after_request'
+  steps[17].strategy[2].target
+    8: '$.request_body.order_id'
+    9: 'order_fee_real_ids'
+  steps[18].api.path
+    8: '/api/order/orderFee/toggleRealAmount'
+    9: '/api/order/orderFee/realAmountLockSubmit'
+  steps[18].description
+    8: 'mutation verb; produces downstream id(s): code, order_fee_real_ids, order_id'
+    9: 'mutation verb'
+  steps[18].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[18].strategy[0].message
+    8: '/api/order/orderFee/toggleRealAmount 应返回200'
+    9: '/api/order/orderFee/realAmountLockSubmit 应返回200'
+  steps[18].strategy[1].kind
+    8: 'extract'
+    9: 'assign'
+  steps[18].strategy[1].name
+    8: 'extract_order_id_9'
+    9: 'assign_order_id_9'
+  steps[18].strategy[1].phase
+    8: 'after_request'
+    9: 'before_request'
+  steps[18].strategy[1].target
+    8: 'order_id_9'
+    9: '$.request_body.order_id'
+  steps[18].strategy[2].kind
+    8: 'extract'
+    9: 'assign'
+  steps[18].strategy[2].name
+    8: 'extract_order_fee_real_ids'
+    9: 'assign_order_fee_real_ids'
+  steps[18].strategy[2].phase
+    8: 'after_request'
+    9: 'before_request'
+  steps[18].strategy[2].target
+    8: 'order_fee_real_ids'
+    9: '$.request_body.order_fee_real_ids[0]'
+  steps[18].strategy[3].kind
+    8: 'extract'
+    9: 'assign'
+  steps[18].strategy[3].name
+    8: 'extract_code'
+    9: 'assign_order_fee_real_ids'
+  steps[18].strategy[3].phase
+    8: 'after_request'
+    9: 'before_request'
+  steps[18].strategy[3].target
+    8: 'code'
+    9: '$.request_body.order_fee_real_ids[1]'
+  steps[19].request.body.action
+    8: 'check'
+    9: 'audit'
+  steps[19].request.body.order_fee_real_ids[0]
+    8: '331273797107713024'
+    9: '331309335617471488'
+  steps[19].request.body.order_fee_real_ids[1]
+    8: '331273797111907328'
+    9: '331309335617471488'
+  steps[19].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[1].request.body.action
+    8: 'check'
+    9: 'submit'
+  steps[20].request.body.action
+    8: 'audit'
+    9: 'submit'
+  steps[20].request.body.order_fee_real_ids[0]
+    8: '331273797107713024'
+    9: '331309335617471488'
+  steps[20].request.body.order_fee_real_ids[1]
+    8: '331273797111907328'
+    9: '331309335617471488'
+  steps[20].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[21].api.path
+    8: '/api/order/orderFee/realAmountLockSubmit'
+    9: '/api/order/orderFee/toggleRealAmount'
+  steps[21].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[21].strategy[0].message
+    8: '/api/order/orderFee/realAmountLockSubmit 应返回200'
+    9: '/api/order/orderFee/toggleRealAmount 应返回200'
+  steps[22].api.path
+    8: '/api/order/orderFee/toggleRealAmount'
+    9: '/api/home/audit/auditPage'
+  steps[22].description
+    8: 'mutation verb; produces downstream id(s): order_id'
+    9: 'produces downstream id(s): audit_id, audit_ids'
+  steps[22].strategy[0].message
+    8: '/api/order/orderFee/toggleRealAmount 应返回200'
+    9: '/api/home/audit/auditPage 应返回200'
+  steps[22].strategy[1].kind
+    8: 'assign'
+    9: 'extract'
+  steps[22].strategy[1].name
+    8: 'assign_order_id_9'
+    9: 'extract_audit_id'
+  steps[22].strategy[1].phase
+    8: 'before_request'
+    9: 'after_request'
+  steps[22].strategy[1].target
+    8: '$.request_body.order_id'
+    9: 'audit_id'
+  steps[23].api.path
+    8: '/api/home/audit/auditPage'
+    9: '/api/home/audit/auditDetail'
+  steps[23].description
+    8: 'produces downstream id(s): audit_id, audit_ids'
+    9: 'produces downstream id(s): order_id'
+  steps[23].strategy[0].message
+    8: '/api/home/audit/auditPage 应返回200'
+    9: '/api/home/audit/auditDetail 应返回200'
+  steps[23].strategy[1].expression
+    8: '$.response_body.data.data[0].audit_id'
+    9: '$.response_body.data.audit_content.relation_id'
+  steps[23].strategy[1].name
+    8: 'extract_audit_id'
+    9: 'extract_order_id_10'
+  steps[23].strategy[1].target
+    8: 'audit_id'
+    9: 'order_id_10'
+  steps[23].strategy[2].kind
+    8: 'extract'
+    9: 'assign'
+  steps[23].strategy[2].name
+    8: 'extract_audit_ids'
+    9: 'assign_audit_id'
+  steps[23].strategy[2].order
+    8: 1
+    9: 0
+  steps[23].strategy[2].phase
+    8: 'after_request'
+    9: 'before_request'
+  steps[23].strategy[2].target
+    8: 'audit_ids'
+    9: '$.request_body.audit_id'
+  steps[24].api.path
+    8: '/api/home/audit/auditDetail'
+    9: '/api/order/order/orderDetail'
+  steps[24].strategy[0].message
+    8: '/api/home/audit/auditDetail 应返回200'
+    9: '/api/order/order/orderDetail 应返回200'
+  steps[24].strategy[1].expression
+    8: '$.response_body.data.audit_content.relation_id'
+    9: '$.response_body.data.order_id'
+  steps[24].strategy[2].name
+    8: 'assign_audit_id'
+    9: 'assign_order_id_10'
+  steps[24].strategy[2].source
+    8: '$.audit_id'
+    9: '$.order_id_10'
+  steps[24].strategy[2].target
+    8: '$.request_body.audit_id'
+    9: '$.request_body.order_id'
+  steps[25].api.path
+    8: '/api/order/order/orderDetail'
+    9: '/api/home/audit/auditExecute'
+  steps[25].description
+    8: 'produces downstream id(s): order_id'
+    9: 'mutation verb'
+  steps[25].strategy[0].message
+    8: '/api/order/order/orderDetail 应返回200'
+    9: '/api/home/audit/auditExecute 应返回200'
+  steps[25].strategy[1].kind
+    8: 'extract'
+    9: 'assign'
+  steps[25].strategy[1].name
+    8: 'extract_order_id_12'
+    9: 'assign_audit_ids'
+  steps[25].strategy[1].phase
+    8: 'after_request'
+    9: 'before_request'
+  steps[25].strategy[1].target
+    8: 'order_id_12'
+    9: '$.request_body.audit_ids[0]'
+  steps[26].api.path
+    8: '/api/home/audit/auditExecute'
+    9: '/api/order/order/orderDetail'
+  steps[26].description
+    8: 'mutation verb'
+    9: 'produces downstream id(s): order_id'
+  steps[26].strategy[0].message
+    8: '/api/home/audit/auditExecute 应返回200'
+    9: '/api/order/order/orderDetail 应返回200'
+  steps[26].strategy[1].kind
+    8: 'assign'
+    9: 'extract'
+  steps[26].strategy[1].name
+    8: 'assign_audit_ids'
+    9: 'extract_order_id_12'
+  steps[26].strategy[1].phase
+    8: 'before_request'
+    9: 'after_request'
+  steps[26].strategy[1].target
+    8: '$.request_body.audit_ids[0]'
+    9: 'order_id_12'
+  steps[27].api.path
+    8: '/api/order/order/orderDetail'
+    9: '/api/order/orderFee/assetPush'
+  steps[27].description
+    8: 'produces downstream id(s): order_id'
+    9: 'mutation verb'
+  steps[27].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[27].strategy[0].message
+    8: '/api/order/order/orderDetail 应返回200'
+    9: '/api/order/orderFee/assetPush 应返回200'
+  steps[27].strategy[1].kind
+    8: 'extract'
+    9: 'assign'
+  steps[27].strategy[1].name
+    8: 'extract_order_id_13'
+    9: 'assign_order_id_12'
+  steps[27].strategy[1].phase
+    8: 'after_request'
+    9: 'before_request'
+  steps[27].strategy[1].target
+    8: 'order_id_13'
+    9: '$.request_body.order_id'
+  steps[28].request.body.action
+    8: 'check'
+    9: 'audit'
+  steps[28].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[28].strategy[1].name
+    8: 'assign_order_id_13'
+    9: 'assign_order_id_12'
+  steps[28].strategy[1].source
+    8: '$.order_id_13'
+    9: '$.order_id_12'
+  steps[29].request.body.action
+    8: 'audit'
+    9: 'submit'
+  steps[29].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[29].strategy[1].name
+    8: 'assign_order_id_13'
+    9: 'assign_order_id_12'
+  steps[29].strategy[1].source
+    8: '$.order_id_13'
+    9: '$.order_id_12'
+  steps[2].api.path
+    8: '/api/order/orderEntrust/orderAdd'
+    9: '/api/order/order/orderPage'
+  steps[2].description
+    8: 'mutation verb'
+    9: 'produces downstream id(s): order_id'
+  steps[2].strategy[0].message
+    8: '/api/order/orderEntrust/orderAdd 应返回200'
+    9: '/api/order/order/orderPage 应返回200'
+  steps[30].api.path
+    8: '/api/order/orderFee/assetPush'
+    9: '/api/order/orderFee/toggleRealAmount'
+  steps[30].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[30].strategy[0].message
+    8: '/api/order/orderFee/assetPush 应返回200'
+    9: '/api/order/orderFee/toggleRealAmount 应返回200'
+  steps[30].strategy[1].name
+    8: 'assign_order_id_13'
+    9: 'assign_order_id_12'
+  steps[30].strategy[1].source
+    8: '$.order_id_13'
+    9: '$.order_id_12'
+  steps[31].api.path
+    8: '/api/order/orderFee/toggleRealAmount'
+    9: '/api/home/audit/auditPage'
+  steps[31].description
+    8: 'mutation verb; produces downstream id(s): order_id'
+    9: 'produces downstream id(s): audit_id, audit_ids'
+  steps[31].strategy[0].message
+    8: '/api/order/orderFee/toggleRealAmount 应返回200'
+    9: '/api/home/audit/auditPage 应返回200'
+  steps[31].strategy[1].kind
+    8: 'assign'
+    9: 'extract'
+  steps[31].strategy[1].name
+    8: 'assign_order_id_13'
+    9: 'extract_audit_id_2'
+  steps[31].strategy[1].phase
+    8: 'before_request'
+    9: 'after_request'
+  steps[31].strategy[1].target
+    8: '$.request_body.order_id'
+    9: 'audit_id_2'
+  steps[32].api.path
+    8: '/api/home/audit/auditPage'
+    9: '/api/home/audit/auditDetail'
+  steps[32].description
+    8: 'produces downstream id(s): audit_id, audit_ids'
+    9: 'produces downstream id(s): order_id'
+  steps[32].strategy[0].message
+    8: '/api/home/audit/auditPage 应返回200'
+    9: '/api/home/audit/auditDetail 应返回200'
+  steps[32].strategy[1].expression
+    8: '$.response_body.data.data[0].audit_id'
+    9: '$.response_body.data.audit_content.relation_id'
+  steps[32].strategy[1].name
+    8: 'extract_audit_id_2'
+    9: 'extract_order_id_13'
+  steps[32].strategy[1].target
+    8: 'audit_id_2'
+    9: 'order_id_13'
+  steps[32].strategy[2].kind
+    8: 'extract'
+    9: 'assign'
+  steps[32].strategy[2].name
+    8: 'extract_audit_ids_2'
+    9: 'assign_audit_id_2'
+  steps[32].strategy[2].order
+    8: 1
+    9: 0
+  steps[32].strategy[2].phase
+    8: 'after_request'
+    9: 'before_request'
+  steps[32].strategy[2].target
+    8: 'audit_ids_2'
+    9: '$.request_body.audit_id'
+  steps[33].api.path
+    8: '/api/home/audit/auditDetail'
+    9: '/api/home/audit/auditExecute'
+  steps[33].description
+    8: 'produces downstream id(s): order_id'
+    9: 'mutation verb'
+  steps[33].strategy[0].message
+    8: '/api/home/audit/auditDetail 应返回200'
+    9: '/api/home/audit/auditExecute 应返回200'
+  steps[33].strategy[1].kind
+    8: 'extract'
+    9: 'assign'
+  steps[33].strategy[1].name
+    8: 'extract_order_id_15'
+    9: 'assign_audit_ids_2'
+  steps[33].strategy[1].phase
+    8: 'after_request'
+    9: 'before_request'
+  steps[33].strategy[1].target
+    8: 'order_id_15'
+    9: '$.request_body.audit_ids[0]'
+  steps[34].api.path
+    8: '/api/order/order/orderDetail'
+    9: '/api/order/orderEntrust/orderPage'
+  steps[34].strategy[0].message
+    8: '/api/order/order/orderDetail 应返回200'
+    9: '/api/order/orderEntrust/orderPage 应返回200'
+  steps[34].strategy[1].kind
+    8: 'assign'
+    9: 'extract'
+  steps[34].strategy[1].name
+    8: 'assign_order_id_15'
+    9: 'extract_order_id_14'
+  steps[34].strategy[1].phase
+    8: 'before_request'
+    9: 'after_request'
+  steps[34].strategy[1].target
+    8: '$.request_body.order_id'
+    9: 'order_id_14'
+  steps[35].api.path
+    8: '/api/home/audit/auditExecute'
+    9: '/api/order/order/orderDetail'
+  steps[35].description
+    8: 'mutation verb'
+    9: 'produces downstream id(s): order_id'
+  steps[35].strategy[0].message
+    8: '/api/home/audit/auditExecute 应返回200'
+    9: '/api/order/order/orderDetail 应返回200'
+  steps[35].strategy[1].kind
+    8: 'assign'
+    9: 'extract'
+  steps[35].strategy[1].name
+    8: 'assign_audit_ids_2'
+    9: 'extract_order_id_15'
+  steps[35].strategy[1].phase
+    8: 'before_request'
+    9: 'after_request'
+  steps[35].strategy[1].target
+    8: '$.request_body.audit_ids[0]'
+    9: 'order_id_15'
+  steps[3].api.path
+    8: '/api/order/order/orderPage'
+    9: '/api/order/order/orderDetail'
+  steps[3].description
+    8: 'produces downstream id(s): order_id'
+    9: 'produces downstream id(s): order_id, order_no, order_supplier_id'
+  steps[3].strategy[0].message
+    8: '/api/order/order/orderPage 应返回200'
+    9: '/api/order/order/orderDetail 应返回200'
+  steps[3].strategy[1].expression
+    8: '$.response_body.data.data[0].order_id'
+    9: '$.response_body.data.supplier[0].order_supplier_id'
+  steps[3].strategy[1].name
+    8: 'extract_order_id'
+    9: 'extract_order_supplier_id'
+  steps[3].strategy[1].target
+    8: 'order_id'
+    9: 'order_supplier_id'
+  steps[4].api.path
+    8: '/api/order/order/orderDetail'
+    9: '/api/order/order/orderAdd'
+  steps[4].description
+    8: 'produces downstream id(s): order_id, order_no, order_supplier_id'
+    9: 'mutation verb'
+  steps[4].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[4].strategy[0].message
+    8: '/api/order/order/orderDetail 应返回200'
+    9: '/api/order/order/orderAdd 应返回200'
+  steps[4].strategy[1].kind
+    8: 'extract'
+    9: 'assign'
+  steps[4].strategy[1].name
+    8: 'extract_order_supplier_id'
+    9: 'assign_order_supplier_id'
+  steps[4].strategy[1].phase
+    8: 'after_request'
+    9: 'before_request'
+  steps[4].strategy[1].target
+    8: 'order_supplier_id'
+    9: '$.request_body.supplier[0].order_supplier_id'
+  steps[4].strategy[2].kind
+    8: 'extract'
+    9: 'assign'
+  steps[4].strategy[2].name
+    8: 'extract_order_id_2'
+    9: 'assign_order_id_2'
+  steps[4].strategy[2].phase
+    8: 'after_request'
+    9: 'before_request'
+  steps[4].strategy[2].target
+    8: 'order_id_2'
+    9: '$.request_body.supplier[0].order_id'
+  steps[4].strategy[3].kind
+    8: 'extract'
+    9: 'assign'
+  steps[4].strategy[3].name
+    8: 'extract_order_no'
+    9: 'assign_order_id_2'
+  steps[4].strategy[3].phase
+    8: 'after_request'
+    9: 'before_request'
+  steps[4].strategy[3].target
+    8: 'order_no'
+    9: '$.request_body.order_id'
+  steps[4].strategy[4].name
+    8: 'assign_order_id'
+    9: 'assign_order_no'
+  steps[4].strategy[4].order
+    8: 0
+    9: 3
+  steps[4].strategy[4].source
+    8: '$.order_id'
+    9: '$.order_no'
+  steps[4].strategy[4].target
+    8: '$.request_body.order_id'
+    9: '$.request_body.order_no'
+  steps[5].api.path
+    8: '/api/order/order/orderAdd'
+    9: '/api/order/order/orderBook'
+  steps[5].description
+    8: 'mutation verb'
+    9: 'mutation verb; produces downstream id(s): file_id'
+  steps[5].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[5].request.body.order_no
+    8: 'YWDD20260703107660'
+    9: 'YWDD20260703107665'
+  steps[5].request.body.supplier[0].order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[5].request.body.supplier[0].order_supplier_id
+    8: '331273297419304960'
+    9: '331309248761823232'
+  steps[5].strategy[0].message
+    8: '/api/order/order/orderAdd 应返回200'
+    9: '/api/order/order/orderBook 应返回200'
+  steps[5].strategy[1].kind
+    8: 'assign'
+    9: 'extract'
+  steps[5].strategy[1].name
+    8: 'assign_order_supplier_id'
+    9: 'extract_file_id'
+  steps[5].strategy[1].phase
+    8: 'before_request'
+    9: 'after_request'
+  steps[5].strategy[1].target
+    8: '$.request_body.supplier[0].order_supplier_id'
+    9: 'file_id'
+  steps[5].strategy[2].name
+    8: 'assign_order_id_2'
+    9: 'assign_order_supplier_id'
+  steps[5].strategy[2].order
+    8: 1
+    9: 0
+  steps[5].strategy[2].source
+    8: '$.order_id_2'
+    9: '$.order_supplier_id'
+  steps[5].strategy[2].target
+    8: '$.request_body.supplier[0].order_id'
+    9: '$.request_body.supplier[0].order_supplier_id'
+  steps[5].strategy[3].order
+    8: 2
+    9: 1
+  steps[5].strategy[3].target
+    8: '$.request_body.order_id'
+    9: '$.request_body.supplier[0].order_id'
+  steps[5].strategy[4].name
+    8: 'assign_order_no'
+    9: 'assign_order_id_2'
+  steps[5].strategy[4].order
+    8: 3
+    9: 2
+  steps[5].strategy[4].source
+    8: '$.order_no'
+    9: '$.order_id_2'
+  steps[5].strategy[4].target
+    8: '$.request_body.order_no'
+    9: '$.request_body.order_id'
+  steps[6].api.path
+    8: '/api/order/order/orderBook'
+    9: '/api/order/order/orderAdd'
+  steps[6].description
+    8: 'mutation verb; produces downstream id(s): file_id'
+    9: 'mutation verb'
+  steps[6].request.body.action
+    8: 'check'
+    9: 'submit'
+  steps[6].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[6].request.body.order_no
+    8: 'YWDD20260703107660'
+    9: 'YWDD20260703107665'
+  steps[6].request.body.supplier[0].order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[6].request.body.supplier[0].order_supplier_id
+    8: '331273297419304960'
+    9: '331309248761823232'
+  steps[6].strategy[0].message
+    8: '/api/order/order/orderBook 应返回200'
+    9: '/api/order/order/orderAdd 应返回200'
+  steps[6].strategy[1].kind
+    8: 'extract'
+    9: 'assign'
+  steps[6].strategy[1].name
+    8: 'extract_file_id'
+    9: 'assign_file_id'
+  steps[6].strategy[1].phase
+    8: 'after_request'
+    9: 'before_request'
+  steps[6].strategy[1].target
+    8: 'file_id'
+    9: '$.request_body.customer_file_list[0].file_id'
+  steps[6].strategy[2].order
+    8: 0
+    9: 1
+  steps[6].strategy[3].order
+    8: 1
+    9: 2
+  steps[6].strategy[4].order
+    8: 2
+    9: 3
+  steps[6].strategy[5].order
+    8: 3
+    9: 4
+  steps[7].api.path
+    8: '/api/order/order/orderAdd'
+    9: '/api/order/order/orderPage'
+  steps[7].description
+    8: 'mutation verb'
+    9: 'produces downstream id(s): order_id'
+  steps[7].strategy[0].message
+    8: '/api/order/order/orderAdd 应返回200'
+    9: '/api/order/order/orderPage 应返回200'
+  steps[7].strategy[1].kind
+    8: 'assign'
+    9: 'extract'
+  steps[7].strategy[1].name
+    8: 'assign_file_id'
+    9: 'extract_order_id_3'
+  steps[7].strategy[1].phase
+    8: 'before_request'
+    9: 'after_request'
+  steps[7].strategy[1].target
+    8: '$.request_body.customer_file_list[0].file_id'
+    9: 'order_id_3'
+  steps[8].api.path
+    8: '/api/order/order/orderPage'
+    9: '/api/order/order/orderDetail'
+  steps[8].strategy[0].message
+    8: '/api/order/order/orderPage 应返回200'
+    9: '/api/order/order/orderDetail 应返回200'
+  steps[8].strategy[1].expression
+    8: '$.response_body.data.data[0].order_id'
+    9: '$.response_body.data.order_id'
+  steps[8].strategy[1].name
+    8: 'extract_order_id_3'
+    9: 'extract_order_id_4'
+  steps[8].strategy[1].target
+    8: 'order_id_3'
+    9: 'order_id_4'
+  steps[9].api.path
+    8: '/api/order/order/orderDetail'
+    9: '/api/order/orderFee/toggleRealAmount'
+  steps[9].description
+    8: 'produces downstream id(s): order_id'
+    9: 'mutation verb; produces downstream id(s): order_id'
+  steps[9].request.body.order_id
+    8: '331273296010018816'
+    9: '331309247201542144'
+  steps[9].strategy[0].message
+    8: '/api/order/order/orderDetail 应返回200'
+    9: '/api/order/orderFee/toggleRealAmount 应返回200'
+  steps[9].strategy[1].expression
+    8: '$.response_body.data.order_id'
+    9: '$.response_body.data.amount_summary.order_id'
+  steps[9].strategy[1].name
+    8: 'extract_order_id_4'
+    9: 'extract_order_id_5'
+  steps[9].strategy[1].target
+    8: 'order_id_4'
+    9: 'order_id_5'
+  steps[9].strategy[2].name
+    8: 'assign_order_id_3'
+    9: 'assign_order_id_4'
+  steps[9].strategy[2].source
+    8: '$.order_id_3'
+    9: '$.order_id_4'

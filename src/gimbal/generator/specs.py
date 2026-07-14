@@ -7,11 +7,13 @@
   - 用 Literal 限定 enum 字段（charset / format）
   - 用 Field(ge=, le=) 限定数值范围
   - VarSpec = Annotated[Union[...], Field(discriminator="kind")]
+  - ``SeqSpec`` 兼容 ``kind: "sequence"``（gimbal-platform 早期文档与历史
+    yaml 一直用这个名字），自动规范化为 ``"seq"``，避免 union_tag_invalid。
 """
 from __future__ import annotations
 
 from typing import Annotated, Any, Literal, Union
-from pydantic import BaseModel, Field, ConfigDict, TypeAdapter
+from pydantic import BaseModel, Field, ConfigDict, TypeAdapter, model_validator
 
 
 class UuidSpec(BaseModel):
@@ -68,6 +70,20 @@ class SeqSpec(BaseModel):
     width: int = Field(default=6, ge=1, le=20, description="序号位数（不足补 0）")
     start: int = Field(default=1, description="起始值")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_sequence_alias(cls, data: Any) -> Any:
+        """Accept ``{"kind": "sequence", ...}`` as an alias for ``"seq"``.
+
+        Background: gimbal-platform's old documentation and rendered
+        yamls (pre-2026-07) used ``kind: sequence``.  This shim lets
+        existing case files load without manual rewrites while the
+        canonical key remains ``"seq"`` going forward.
+        """
+        if isinstance(data, dict) and data.get("kind") == "sequence":
+            data = {**data, "kind": "seq"}
+        return data
+
 
 # ── 联合体（discriminated by 'kind'）──
 
@@ -96,12 +112,25 @@ class VarSpec:
 
     与 src/gimbal/schema/*Union 的差异：schema 那边是 TypeAdapter 包装在使用方
     （如 asset_materializer.py:65-74），这里选择在使用方直接调用更省事。
+
+    Aliases: ``"sequence"`` is mapped to ``"seq"`` here BEFORE the union
+    discriminator runs (per-model ``mode='before'`` validators fire AFTER
+    the tag is selected, so they cannot catch an unknown tag).
     """
     _adapter: TypeAdapter = TypeAdapter(_VarSpecUnion)
+    _KIND_ALIASES: dict[str, str] = {"sequence": "seq"}
+
+    @classmethod
+    def _normalize_kind(cls, data: Any) -> Any:
+        if isinstance(data, dict) and isinstance(data.get("kind"), str):
+            aliased = cls._KIND_ALIASES.get(data["kind"])
+            if aliased is not None:
+                data = {**data, "kind": aliased}
+        return data
 
     @classmethod
     def model_validate(cls, data: Any) -> Any:
-        return cls._adapter.validate_python(data)
+        return cls._adapter.validate_python(cls._normalize_kind(data))
 
     @classmethod
     def model_dump(cls, instance: BaseModel, **kwargs: Any) -> Any:
