@@ -24,7 +24,7 @@
       "tidb-test-service": "https://fin-tidb.21eflag.com/"
     },
     "vars": {
-      "bl_no": "YUEMU-YIHUIHAN-KONGGANG-00017",
+      "bl_no": {"kind": "random_decorated",  "charset": "alnum", "length": 6, "head": "GIMBAL", "separator": "-" },
       "bank_id_0": "319666690256273408_MainBank",
       "bank_id_1": "319666690256274432_MainBank",
       "finance_id_0": "4416_CustomerFinance",

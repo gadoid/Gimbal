@@ -24,7 +24,7 @@
       "tidb-test-service": "https://fin-tidb.21eflag.com/"
     },
     "vars": {
-      "bl_no": "GET_TEST_24",
+      "bl_no": "GET_TEST_30",
       "invoice_file_id": "1",
       "invoice_number": "24920000000029640035",
       "finance_id_1": "2896",
@@ -182,7 +182,7 @@
               "supplier_pay_date": "0",
               "is_manual": "0",
               "sys_upttime": "2026-07-13 13:45:06",
-              "pay_time_limit": "",
+              "pay_time_limit": "5",
               "supplier_pay_date_desc": "",
               "supplier_label": "青岛泰瑞达国际货运代理有限公司-订舱",
               "service_item_name": "订舱",
@@ -221,9 +221,11 @@
           "country_id": "893",
           "country_name_cn": "美国",
           "main_ids": ",31,1,",
-          "action": "check",
+          "action": "submit",
           "order_file": [],
-          "entrust_status": 1
+          "entrust_status": 2,
+          "payment_time_limit": "",
+          "pay_time_limit_desc": ""
         }
       },
       "strategy": [
@@ -388,7 +390,7 @@
               "supplier_pay_date": "0",
               "is_manual": "0",
               "sys_upttime": "2026-07-13 13:45:06",
-              "pay_time_limit": "",
+              "pay_time_limit": "5",
               "supplier_pay_date_desc": "",
               "supplier_label": "青岛泰瑞达国际货运代理有限公司-订舱",
               "service_item_name": "订舱",
@@ -429,7 +431,9 @@
           "main_ids": ",31,1,",
           "action": "submit",
           "order_file": [],
-          "entrust_status": 1
+          "entrust_status": 1,
+          "payment_time_limit": "",
+          "pay_time_limit_desc": ""
         }
       },
       "strategy": [
@@ -746,7 +750,7 @@
               "supplier_pay_date": "0",
               "is_manual": "0",
               "sys_upttime": "2026-07-13 13:45:06",
-              "pay_time_limit": "",
+              "pay_time_limit": "5",
               "supplier_pay_date_desc": "",
               "supplier_label": "青岛泰瑞达国际货运代理有限公司-订舱",
               "service_item_name": "订舱",
@@ -785,9 +789,13 @@
           "country_id": "893",
           "country_name_cn": "美国",
           "main_ids": ",31,1,",
-          "action": "check",
+          "action": "submit",
           "order_file": [],
-          "entrust_status": 1
+          "entrust_status": 2,
+          "payment_time_limit": "",
+          "pay_time_limit_desc": "",
+          "order_id": "",
+          "order_no": ""
         }
       },
       "strategy": [
@@ -996,7 +1004,7 @@
               "supplier_pay_date": "0",
               "is_manual": "0",
               "sys_upttime": "2026-07-13 13:45:06",
-              "pay_time_limit": "",
+              "pay_time_limit": "5",
               "supplier_pay_date_desc": "",
               "supplier_label": "青岛泰瑞达国际货运代理有限公司-订舱",
               "service_item_name": "订舱",
@@ -1037,7 +1045,11 @@
           "main_ids": ",31,1,",
           "action": "submit",
           "order_file": [],
-          "entrust_status": 1
+          "entrust_status": 1,
+          "payment_time_limit": "",
+          "pay_time_limit_desc": "",
+          "order_id": "",
+          "order_no": ""
         }
       },
       "strategy": [
@@ -1245,7 +1257,7 @@
               "supplier_pay_date": "0",
               "is_manual": "0",
               "sys_upttime": "2026-07-13 13:45:06",
-              "pay_time_limit": "",
+              "pay_time_limit": "5",
               "supplier_pay_date_desc": "",
               "supplier_label": "青岛泰瑞达国际货运代理有限公司-订舱",
               "service_item_name": "订舱",
@@ -1451,7 +1463,9 @@
           "action": "check",
           "order_file": [],
           "order_id": "",
-          "order_no": ""
+          "order_no": "",
+          "payment_time_limit": "",
+          "pay_time_limit_desc": ""
         }
       },
       "strategy": [
@@ -1632,7 +1646,9 @@
               "sys_upttime": "2026-06-23 12:08:33",
               "supplier_label": "上海华运船务有限公司青岛分公司-订舱",
               "service_item_name": "订舱",
-              "isset_fee": false
+              "isset_fee": false,
+              "pay_time_limit": "5",
+              "supplier_pay_date_desc": ""
             }
           ],
           "order_id": "327661182355767296",
@@ -1719,10 +1735,10 @@
           "effective_time": "0",
           "create_id": "828",
           "create_by": "GIMBAL",
-          "create_time": "1782187713",
+          "create_time": "1783930623",
           "update_id": "828",
           "update_by": "GIMBAL",
-          "update_time": "1782187735",
+          "update_time": "1783948623",
           "delete_time": "0",
           "business_time": "0",
           "main_ids": ",31,1,",
@@ -1825,7 +1841,9 @@
           "customer_put_date_desc": "",
           "deposit_refund_month": null,
           "payment_type": "1",
-          "payment_type_name": "确定性付款"
+          "payment_type_name": "确定性付款",
+          "payment_time_limit": "",
+          "pay_time_limit_desc": ""
         }
       },
       "strategy": [
@@ -2059,7 +2077,7 @@
               "supplier_pay_date": "0",
               "is_manual": "0",
               "sys_upttime": "2026-07-13 13:45:06",
-              "pay_time_limit": "",
+              "pay_time_limit": "5",
               "supplier_pay_date_desc": "",
               "supplier_label": "青岛泰瑞达国际货运代理有限公司-订舱",
               "service_item_name": "订舱",
@@ -2265,7 +2283,9 @@
           "action": "submit",
           "order_file": [],
           "order_id": "",
-          "order_no": ""
+          "order_no": "",
+          "payment_time_limit": "",
+          "pay_time_limit_desc": ""
         }
       },
       "strategy": [
@@ -2341,7 +2361,7 @@
           "kind": "extract",
           "name": "extract_response_body",
           "phase": "after_request",
-          "order": 0,
+          "order": -1,
           "enabled": true,
           "onFailure": "abort",
           "expression": "$.response_body",
@@ -2425,7 +2445,7 @@
           "kind": "extract",
           "name": "extract_response_body",
           "phase": "after_request",
-          "order": 0,
+          "order": -1,
           "enabled": true,
           "onFailure": "abort",
           "expression": "$.response_body",

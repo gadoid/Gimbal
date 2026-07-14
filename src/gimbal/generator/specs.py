@@ -69,6 +69,66 @@ class SeqSpec(BaseModel):
     start: int = Field(default=1, description="起始值")
 
 
+class RandomDecoratedSpec(BaseModel):
+    """kind=random_decorated：用高基数随机生成器作为内容，前后各加 head/tail，并以 separator 拼接。
+
+    用途：例如把一个 random_str 生成为 "BL-a3kP-CN"，避免在 body 模板里反复做
+    '${var.head}-${var.inner}-${var.tail}' 之类的字符串拼接；以及让
+    bl_no / order_no 这类业务编号"看一眼就能猜到结构"。
+
+    行为：
+      - 若 head / tail 都为空（或未传）→ 等价于 random_str(charset, length)
+      - 否则输出：head + sep + 随机内容 + sep + tail
+      - separator 缺省为空串（直接拼接）；显式传 "" 也走同一语义
+
+    兼容性：
+      - extra='forbid' 仍然生效
+      - 不传 head/tail → 返回 str，行为退化为普通 random_str
+    """
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["random_decorated"] = "random_decorated"
+    length: int = Field(default=8, ge=1, le=1024, description="随机核心长度")
+    charset: Literal["alpha", "digit", "alnum"] = Field(default="alnum", description="核心字符集")
+    head: str = Field(default="", description="前置装饰串；可空")
+    tail: str = Field(default="", description="后置装饰串；可空")
+    separator: str = Field(default="", description="连接符；缺省直接拼接")
+
+
+class TimeOffsetSpec(BaseModel):
+    """kind=time_offset：当前 unix 时间 + 单位化偏移量（输出恒为 int 秒）。
+
+    设计目的：
+      - 现存 timestamp(offset_seconds=...) 只支持秒级，且需要心算换算
+      - 新 spec 让用户用业务自然语言写偏移量（30 天 / 2 小时 / 500 毫秒）
+      - 输出固定为 unix 秒（int），不参与字符串格式化
+
+    字段语义：
+      - unit        时间单位，含 "milliseconds" 以便对接毫秒时间戳（如 JS / 日志）
+      - value       偏移量（int，非零），正数=未来 负数=过去（与 direction 互斥共识方向）
+      - direction   仅作为可读性标识，不影响未来/过去的换算结果
+
+    Examples::
+
+        # 30 天后（1755071025 这种 int 秒）
+        {"kind":"time_offset","unit":"days","value":30,"direction":"future"}
+
+        # 2 小时前
+        {"kind":"time_offset","unit":"hours","value":2,"direction":"past"}
+
+        # 不传 value → 等价于"现在的 unix 秒"
+        {"kind":"time_offset"}
+    """
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["time_offset"] = "time_offset"
+    unit: Literal["milliseconds", "seconds", "minutes", "hours", "days", "weeks"] = Field(
+        default="seconds", description="时间单位（含毫秒）"
+    )
+    value: int = Field(default=0, description="偏移量（int；正数=未来/与 direction 共同描述)")
+    direction: Literal["future", "past"] = Field(
+        default="future", description="相对当前时间的方向标识，仅作可读性，不改 value"
+    )
+
+
 # ── 联合体（discriminated by 'kind'）──
 
 _VarSpecUnion = Annotated[
@@ -80,6 +140,8 @@ _VarSpecUnion = Annotated[
         TimestampSpec,
         NowSpec,
         SeqSpec,
+        RandomDecoratedSpec,
+        TimeOffsetSpec,
     ],
     Field(discriminator="kind"),
 ]

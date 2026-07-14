@@ -29,14 +29,16 @@ class GeneratorRegistry:
 
 
 def build_default_registry() -> GeneratorRegistry:
-    """构造注册了 7 个内置函数的注册表。"""
+    """构造注册了 9 个内置函数的注册表（含 random_decorated / time_offset）。"""
     from gimbal.generator import functions
     r = GeneratorRegistry()
-    r.register("uuid",           functions.uuid)
-    r.register("random_str",     functions.random_str)
-    r.register("random_int",     functions.random_int)
-    r.register("random_decimal", functions.random_decimal)
-    r.register("timestamp",      functions.timestamp)
-    r.register("now",            functions.now)
-    r.register("seq",            functions.seq)
+    r.register("uuid",              functions.uuid)
+    r.register("random_str",        functions.random_str)
+    r.register("random_int",        functions.random_int)
+    r.register("random_decimal",    functions.random_decimal)
+    r.register("timestamp",         functions.timestamp)
+    r.register("now",               functions.now)
+    r.register("seq",               functions.seq)
+    r.register("random_decorated",  functions.random_decorated_str)
+    r.register("time_offset",       functions.time_offset)
     return r
