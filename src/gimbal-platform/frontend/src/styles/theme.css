@@ -1,0 +1,54 @@
+/* ──────────────────────────────────────────────────────────────────
+ * theme.css — Spec-1 design tokens.
+ *
+ * Single source of truth for the gimbal-platform palette, typography,
+ * and a few semantic accents.  All Element-Plus primary-color overrides
+ * live in override.css and reference these variables.
+ * ────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* surfaces */
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f5f3ee;
+
+  /* text */
+  --color-text-primary: #1f2933;
+  --color-text-secondary: #64748b;
+  --color-text-tertiary: #94a3b8;
+
+  /* borders */
+  --color-border-tertiary: #e2e8f0;
+  --color-border-secondary: #cbd5e1;
+
+  /* typography — system mono stack so we don't ship a webfont in spec-1 */
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  /* accent (indigo) */
+  --accent: #4338ca;
+  --accent-hover: #3730a3;
+  --accent-soft: #eef2ff;
+  --accent-soft-border: #c7d2fe;
+
+  /* status */
+  --red: #e24b4a;
+  --green: #22c55e;
+  --amber: #f59e0b;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background: var(--color-bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  min-height: 100vh;
+}

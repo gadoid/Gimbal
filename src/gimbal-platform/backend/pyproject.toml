@@ -1,0 +1,37 @@
+[project]
+name = "gimbal-platform-backend"
+version = "0.1.0"
+description = "Gimbal Platform backend (FastAPI)"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.0",
+    "PyYAML>=6.0",
+    "cryptography>=42.0",
+    "python-jose[cryptography]>=3.3",
+    "passlib[bcrypt]>=1.7",
+    "bcrypt>=3.1,<4.1",  # passlib 1.7.4 incompatible with bcrypt 4.1+ (no __about__)
+    "python-multipart>=0.0.9",
+    "aiosqlite>=0.20",
+    "python-dotenv>=1.0",
+    "loguru>=0.7",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]
+
+# ── pytest ────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+# Treat every ``async def test_*`` as an asyncio test (no per-test decorator).
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
