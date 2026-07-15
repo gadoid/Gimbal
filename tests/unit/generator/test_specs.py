@@ -3,11 +3,13 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
 
 import pytest
+from datetime import datetime
 from pydantic import ValidationError
 from gimbal.generator.specs import (
     UuidSpec, RandomStrSpec, RandomIntSpec, RandomDecimalSpec,
-    TimestampSpec, NowSpec, SeqSpec, VarSpec,
+    TimestampSpec, NowSpec, SeqSpec, VarSpec, TimeOffsetSpec,
 )
+from gimbal.generator.functions import time_offset, _shift_months
 
 
 class TestUuidSpec:
@@ -178,3 +180,127 @@ class TestVarSpecUnion:
         """在 union 输入层面 extra 字段也被拒绝。"""
         with pytest.raises(ValidationError):
             VarSpec.model_validate({"kind": "random_str", "length": 8, "foo": "bar"})
+
+
+class TestTimeOffsetSpec:
+    def test_default_values(self):
+        """默认 unit=seconds / value=0 / direction=future。"""
+        s = TimeOffsetSpec()
+        assert s.kind == "time_offset"
+        assert s.unit == "seconds"
+        assert s.value == 0
+        assert s.direction == "future"
+
+    def test_months_unit_accepted(self):
+        s = TimeOffsetSpec(unit="months", value=6, direction="future")
+        assert s.unit == "months"
+        assert s.value == 6
+
+    def test_years_unit_accepted(self):
+        s = TimeOffsetSpec(unit="years", value=1)
+        assert s.unit == "years"
+
+    def test_invalid_unit_rejected(self):
+        """不支持的单位（如 quarters）被 Literal 拒绝。"""
+        with pytest.raises(ValidationError):
+            TimeOffsetSpec(unit="quarters")
+
+    def test_extra_field_forbidden(self):
+        with pytest.raises(ValidationError):
+            TimeOffsetSpec(unit="months", value=1, extra="x")
+
+    def test_dispatched_via_varspec_union(self):
+        """通过 VarSpec.model_validate 也能正确分发到 TimeOffsetSpec。"""
+        spec = VarSpec.model_validate({
+            "kind": "time_offset", "unit": "years", "value": 1, "direction": "future"
+        })
+        assert isinstance(spec, TimeOffsetSpec)
+        assert spec.unit == "years"
+
+
+class TestShiftMonths:
+    """_shift_months 的日历算术单测，覆盖跨年 / 闰年 / 月末溢出。"""
+
+    def test_basic_month(self):
+        assert _shift_months(datetime(2026, 1, 15), 1) == datetime(2026, 2, 15)
+
+    def test_month_end_clamp_non_leap(self):
+        """Jan 31 + 1 month → Feb 28（非闰年）."""
+        assert _shift_months(datetime(2026, 1, 31), 1) == datetime(2026, 2, 28)
+
+    def test_month_end_clamp_leap(self):
+        """2024 是闰年：Mar 31 + (-1) month → Feb 29。"""
+        assert _shift_months(datetime(2024, 3, 31), -1) == datetime(2024, 2, 29)
+
+    def test_year_wrap(self):
+        """11 月 + 3 个月跨年。"""
+        assert _shift_months(datetime(2026, 11, 10), 3) == datetime(2027, 2, 10)
+
+    def test_multi_year(self):
+        """超过 12 个月的偏移。"""
+        assert _shift_months(datetime(2026, 6, 1), 14) == datetime(2027, 8, 1)
+
+    def test_zero_months(self):
+        """0 个月应原样返回（除时区外）。"""
+        dt = datetime(2026, 6, 15)
+        assert _shift_months(dt, 0) == dt
+
+    def test_backward_across_year(self):
+        """向前 / 向后都按日历月算。"""
+        assert _shift_months(datetime(2026, 2, 1), -1) == datetime(2026, 1, 1)
+
+
+class TestTimeOffsetFunction:
+    """time_offset() 行为测试：months / years / direction / 单位校验。"""
+
+    def test_returns_int(self):
+        result = time_offset(unit="months", value=6, direction="future")
+        assert isinstance(result, int)
+
+    def test_months_forward_is_larger_than_now(self):
+        before = int(datetime.now().timestamp())
+        result = time_offset(unit="months", value=6, direction="future")
+        assert result > before
+
+    def test_years_forward_is_larger_than_now(self):
+        before = int(datetime.now().timestamp())
+        result = time_offset(unit="years", value=1, direction="future")
+        assert result > before
+
+    def test_past_smaller_than_future(self):
+        future = time_offset(unit="months", value=6, direction="future")
+        past = time_offset(unit="months", value=6, direction="past")
+        assert future > past
+
+    def test_invalid_unit_raises(self):
+        with pytest.raises(ValueError):
+            time_offset(unit="quarters", value=1)
+
+    def test_years_value_one_roughly_365_days(self):
+        """value=1 年应大致比现在多 365 天（允许 ±2 天差异，跨 2/29）。"""
+        before = datetime.now()
+        result = time_offset(unit="years", value=1, direction="future")
+        after = datetime.fromtimestamp(result)
+        delta_days = (after - before).total_seconds() / 86400
+        assert 360 <= delta_days <= 370
+
+    def test_months_value_six_roughly_180_days(self):
+        """value=6 月应大致比现在多 180 天（允许 ±31 天差异，跨 2/29 与月长差）。"""
+        before = datetime.now()
+        result = time_offset(unit="months", value=6, direction="future")
+        after = datetime.fromtimestamp(result)
+        delta_days = (after - before).total_seconds() / 86400
+        # 6 个日历月：最少 181 天 (Jul→Dec 都是 31)，最多 184 天；当前季节浮动
+        assert 170 <= delta_days <= 195
+
+    def test_default_unit_seconds(self):
+        """不传 unit → 默认 seconds。"""
+        before = int(datetime.now().timestamp())
+        result = time_offset(value=60)
+        assert before + 60 <= result <= before + 61
+
+    def test_value_zero(self):
+        """value=0 → 当前 unix 秒（允许 1 秒误差，跨 now() 调用）。"""
+        before = int(datetime.now().timestamp())
+        result = time_offset(value=0)
+        assert abs(result - before) <= 1
