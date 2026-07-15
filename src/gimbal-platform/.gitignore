@@ -1,0 +1,21 @@
+# Backend
+backend/data/
+*.db
+*.sqlite
+*.tmp.yaml
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Spec / Mockup artifacts (NOT business artifacts)
+.superpowers/
+
+# OS
+.DS_Store
+Thumbs.db
