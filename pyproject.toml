@@ -53,6 +53,7 @@ testpaths = [
     "tests/unit/generator",  # 已 pytest 化(无需 ignore)
     "tests/unit/config",     # 已 pytest 化(无需 ignore)
     "tests/unit/scenario",   # 已 pytest 化(无需 ignore)
+    "tests/unit/runtime_control",  # 阶段 1: RuntimeControl (step-control 最小子集)
 ]
 # 已 pytest 化的子目录:collector 默认行为,无需 collect_ignore
 # print+assert 脚本风格文件:由 tests/{unit,integration}/conftest.py

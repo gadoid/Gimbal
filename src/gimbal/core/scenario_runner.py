@@ -25,6 +25,34 @@ from gimbal.log import get_logger
 logger = get_logger(__name__)
 
 
+# ── RuntimeControl ────────────────────────────────────────────────────────────
+#
+# Scenario 级的运行时控制参数（不入配置、不入 schema、不入 RuntimeControl
+# 之外的 dataclass）。是 stage 1 最小子集中的"最小"：只允许按 step index
+# 提前跳出 for 循环。其它控制（条件分支、循环某个 step 等）仍走插件层。
+#
+# 设计原则：
+#   - 纯 dataclass，无 IO、无副作用：可在任意场景构造
+#   - Step index 语义：0-based，对应 resolved_steps 列表位置
+#   - halt_at 是"执行到该 index 后停止"语义，与 Python range(stop) 一致
+#   - halt_reason 是给人看的，会写进 step_results 末尾的 marker，便于复盘
+#   - 与 ScenarioRunResult.halted/halt_reason 字段对齐，reporter 据此渲染
+
+@dataclass
+class RuntimeControl:
+    """Scenario 级运行时控制。
+
+    Attributes:
+        halt_at:       0-based step index；执行到该 index 后停止。
+                       None 表示不主动停止（仅依赖现有 timeout/cancel/failure 路径）。
+        halt_reason:   halt 触发原因，写入标记 step 的 error 字段，便于日志/UI 区分。
+                       默认 "user-requested"；CLI 通过 --step-to/--breakpoint 触发时使用默认；
+                       编程式调用（如插件通过 EventBus 探测外部信号）应自定义 reason。
+    """
+    halt_at: Optional[int] = None
+    halt_reason: str = "user-requested"
+
+
 # ── ScenarioRunResult ─────────────────────────────────────────────────────────
 
 @dataclass
@@ -34,6 +62,12 @@ class ScenarioRunResult:
     step_results: list[StepRunResult] = field(default_factory=list)
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
+    # 当 status == "halted" 时为 True；reporter 据此渲染 "⏸ HALTED" 而非 "✗ FAILED"。
+    # 通过 RuntimeControl.halt_at 触发；用户主动中止与业务失败可明确区分。
+    halted: bool = False
+    # 触发 halt 的具体原因（来自 RuntimeControl.halt_reason），便于审计。
+    # 仅在 halted=True 时有值。
+    halt_reason: Optional[str] = None
 
     @property
     def passed(self) -> bool:
@@ -183,14 +217,18 @@ class ScenarioRunner:
         self,
         scenario_schema: Scenario,
         suite_ctx: SuiteContext,
+        runtime_control: Optional[RuntimeControl] = None,
     ) -> ScenarioRunResult:
         """驱动整个 Scenario 的执行：派生上下文、预处理、按序跑 step、汇总结果、finalize。
 
         入参:
-            scenario_schema: 已校验的 Scenario 数据对象。
-            suite_ctx:       上层 Suite 上下文。
+            scenario_schema:  已校验的 Scenario 数据对象。
+            suite_ctx:        上层 Suite 上下文。
+            runtime_control:  可选运行时控制（阶段 1 最小子集：按 step index 提前跳出
+                              for 循环）。None 时退化为现有行为（仅 timeout/cancel/failure 中断）。
         返回:
-            ScenarioRunResult（包含 status、step_results、started_at、ended_at）。
+            ScenarioRunResult（包含 status、step_results、started_at、ended_at；
+                              当触发 halt 时 halted=True 且 halt_reason 写入）。
         副作用:
             向 ctx_manager 注册 scenario/step 上下文；向 event_bus 发布 SCENARIO_START/END。
         """
@@ -245,6 +283,9 @@ class ScenarioRunner:
 
         step_results: list[StepRunResult] = []
         overall_status = "passed"
+        # 阶段 1 最小子集：runtime-controlled halt 信号
+        halted = False
+        halt_reason_out: Optional[str] = None
 
         # 修复 B3：scenario_timeout 强制执行
         # 实际是 cooperative timeout：每个 step 前检查 elapsed time
@@ -261,21 +302,47 @@ class ScenarioRunner:
 
         total_steps = len(resolved_steps)
 
-        def _append_marker(*, kind: str, next_idx: int, error: str, error_phase: str) -> None:
+        def _append_marker(*, kind: str, next_idx: int, error: str, error_phase: str, status: str = "error") -> None:
             """Append a synthetic StepRunResult for scenario-level interrupts.
 
             用 `__scenario_<kind>__` 作为保留 step_id 前缀，避免与真实 step 的
             编号（如 step-002-API-1）冲突；next_idx 写进 error 消息便于定位。
+
+            Args:
+                kind:        标记种类（timeout/cancelled/halted/...），最终落到 step_id。
+                next_idx:    触发中断时尚未执行的 step 索引，便于定位。
+                error:       写入 StepRunResult.error 的描述。
+                error_phase: 写入 StepRunResult.error_phase（区分 timeout/cancelled/halted）。
+                status:      写入 StepRunResult.status；halted 分支使用 "halted" 与业务失败区分。
             """
             step_results.append(StepRunResult(
                 step_id=f"__scenario_{kind}__",
-                status="error",
+                status=status,
                 error=f"{error} (next_step_index={next_idx}/{total_steps})",
                 error_phase=error_phase,
                 duration_ms=0.0,
             ))
 
         for idx, step_union in enumerate(resolved_steps):
+            # 阶段 1 最小子集：runtime-controlled halt 检查（在 timeout/cancel 之前）
+            # halt_at 语义类似 range(stop)：执行到该 idx 后停止；与现有逻辑正交。
+            if runtime_control is not None and runtime_control.halt_at is not None and idx >= runtime_control.halt_at:
+                logger.warning(
+                    "[ScenarioRunner] Runtime halt 触发: scenario_id={} current_idx={} halt_at={} reason={!r}, "
+                    "停止后续 step（不影响已执行结果）",
+                    sid, idx, runtime_control.halt_at, runtime_control.halt_reason,
+                )
+                halted = True
+                halt_reason_out = runtime_control.halt_reason
+                overall_status = "halted"
+                _append_marker(
+                    kind="halted",
+                    next_idx=idx,
+                    error=f"halted: {runtime_control.halt_reason}",
+                    error_phase="halted",
+                    status="halted",
+                )
+                break
             # 修复 B3：检查 scenario timeout
             if cfg_timeout is not None:
                 elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
@@ -346,6 +413,8 @@ class ScenarioRunner:
             step_results=step_results,
             started_at=started_at,
             ended_at=datetime.now(timezone.utc),
+            halted=halted,
+            halt_reason=halt_reason_out,
         )
 
     # ── 埋点辅助 ──

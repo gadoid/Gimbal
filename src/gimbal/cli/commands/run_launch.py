@@ -170,6 +170,19 @@ def launch(
         bool,
         typer.Option("--fail-fast", help="首个失败即停止", rich_help_panel="执行控制"),
     ] = False,
+    # ========== 步骤级控制（与 gimbal run scenario 对齐；阶段 1 最小子集）==========
+    step_from: Annotated[
+        int | None,
+        typer.Option("--step-from", help="从指定 step 开始执行（阶段 2 引入 StepResolver 后生效；当前仅提示警告）。", rich_help_panel="步骤控制"),
+    ] = None,
+    step_to: Annotated[
+        int | None,
+        typer.Option("--step-to", help="执行到指定 step 停止（0-based）。", rich_help_panel="步骤控制"),
+    ] = None,
+    breakpoint_at: Annotated[
+        list[int] | None,
+        typer.Option("--breakpoint", help="在指定 step 暂停（暂以首个为准；交互模式在阶段 2 完整支持）。", rich_help_panel="步骤控制"),
+    ] = None,
     dry_run: DryRunOpt = False,
     plugins : PluginsOpt = [],
     registry: RegistryOpt = None,
@@ -190,7 +203,20 @@ def launch(
 
         标准输入(stdin):
         cat case.yaml | gimbal run launch - -f yaml
+
+        阶段控制（最小子集）：
+        cat case.yaml | gimbal run launch - --step-to=3
+        gimbal run launch ./debug.yaml --breakpoint=5
     """
+    # 0. 步骤级控制参数互斥校验（与 run_scenario 对齐）
+    if step_from is not None and step_to is not None and step_from > step_to:
+        raise InputError("--step-from 不能大于 --step-to。")
+    if breakpoint_at is not None and step_to is not None:
+        logger.warning(
+            "[CLI] --step-to={} 与 --breakpoint={} 同时设置；优先使用 --step-to",
+            step_to, breakpoint_at,
+        )
+
     # 1. 将传入参数 注入到 ctx上下文中
     cli_ctx : CLIContext = ctx.obj
     # cli_ctx.extras["fail_fast"] = fail_fast
@@ -231,13 +257,35 @@ def launch(
         typer.secho(f"用例格式校验失败: {exc}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2)
 
+    # 7.5 构造 RuntimeControl（与 run_scenario 同一套优先级）
+    from gimbal.core.scenario_runner import RuntimeControl
+
+    runtime_control: RuntimeControl | None = None
+    if step_to is not None:
+        runtime_control = RuntimeControl(
+            halt_at=step_to,
+            halt_reason=f"cli --step-to={step_to}",
+        )
+    elif breakpoint_at is not None and breakpoint_at:
+        runtime_control = RuntimeControl(
+            halt_at=breakpoint_at[0],
+            halt_reason=f"cli --breakpoint={breakpoint_at[0]}",
+        )
+    if step_from is not None:
+        # 当前 ScenarioRunner 未实现 step_from；显示警告，不静默吞掉
+        typer.secho(
+            f"[warn] --step-from={step_from} 当前版本暂未生效（将在阶段 2 引入 StepResolver 后支持）。\n"
+            f"       当前阶段 1 仅支持 --step-to 与 --breakpoint。",
+            fg=typer.colors.YELLOW, err=True,
+        )
+
     #8. 数据类有效，引用链接有效，执行器启动
     #    注入资产仓库，让 ScenarioPreprocessor Phase 0 启用对 RefBase 节点的物化
     asset_store = _build_default_asset_store(Path(registry) if registry else None)
     logger.debug("[CLI] asset_store ready: backend={}", asset_store.backend_name)
     engine = Engine(configuration, asset_store=asset_store)
     try:
-        result = engine.run(scenario)
+        result = engine.run(scenario, runtime_control=runtime_control)
     finally:
         # 必须 shutdown 才会触发 ReporterRuntime.shutdown()、生成 artifacts
         shutdown(configuration)

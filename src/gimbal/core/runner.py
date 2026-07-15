@@ -45,6 +45,9 @@ class RunResult:
     failed: int = 0
     skipped: int = 0
     error: int = 0
+    # 阶段 1 最小子集：被 runtime halt 触发的 scenario 数。
+    # 与 failed/error 区分（halted 算作"未通过"但有独立标记，便于 reporter 渲染）。
+    halted: int = 0
     details: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -82,13 +85,18 @@ class Engine:
         """
         return list(self._artifacts)
 
-    def run(self, target: Scenario | Suite) -> RunResult:
+    def run(self, target: Scenario | Suite, runtime_control: Any = None) -> RunResult:
         """执行入口。
 
         在此方法内创建本次执行的层级 context：
             1. FrameworkContext  —— 全量配置写入，run_id 在此生成
             2. SuiteContext      —— 单 scenario 执行时用 __default__ 占位
         然后分发到 ScenarioRunner。
+
+        入参:
+            target:           要执行的 Scenario 或 Suite 数据对象。
+            runtime_control:  可选 RuntimeControl（阶段 1 最小子集）。透传给 ScenarioRunner，
+                              允许 CLI/调用方按 step index 提前跳出 for 循环。
         """
         ictx = self._ictx
 
@@ -119,9 +127,9 @@ class Engine:
         # 3. 执行
         try:
             if isinstance(target, Scenario):
-                result = self._run_scenario(target, framework_ctx)
+                result = self._run_scenario(target, framework_ctx, runtime_control=runtime_control)
             elif isinstance(target, Suite):
-                result = self._run_suite(target, framework_ctx)
+                result = self._run_suite(target, framework_ctx, runtime_control=runtime_control)
             else:
                 logger.error("[Engine] 收到未展开的 Ref: {}", type(target).__name__)
                 result = RunResult(exit_code=3, error=1)
@@ -193,14 +201,17 @@ class Engine:
         self,
         scenario: Scenario,
         framework_ctx: FrameworkContext,
+        runtime_control: Any = None,
     ) -> RunResult:
         """执行单个 Scenario：派生 __default__ SuiteContext 并调用 ScenarioRunner。
 
         入参:
-            scenario:      已展开的 Scenario 数据对象。
-            framework_ctx: 本次 run 的 framework 上下文。
+            scenario:         已展开的 Scenario 数据对象。
+            framework_ctx:    本次 run 的 framework 上下文。
+            runtime_control:  可选 RuntimeControl（透传给 ScenarioRunner）。
         返回:
-            包装后的 RunResult（含 exit_code、统计与 details）。
+            包装后的 RunResult（含 exit_code、统计与 details；halted 不计入 exit_code=1，
+            而是单独走 halted=1，让外部能区分"业务失败"与"被中止"）。
         """
         from gimbal.core.scenario_runner import ScenarioRunner
 
@@ -224,21 +235,27 @@ class Engine:
             auth_registry=self._ictx.auth_registry,
             asset_store=self._asset_store,
         ).run(
-            scenario, suite_ctx
+            scenario, suite_ctx, runtime_control=runtime_control,
         )
 
-        logger.info("[Engine] Scenario 执行完成: scenario_id={} status={} duration_ms={:.2f}",
-                    scenario.scenarioId, result.status, result.duration_ms)
+        logger.info(
+            "[Engine] Scenario 执行完成: scenario_id={} status={} duration_ms={:.2f} halted={}",
+            scenario.scenarioId, result.status, result.duration_ms, result.halted,
+        )
 
+        # 阶段 1 最小子集：halted 单独累加，不并入 failed（halted 算"未通过"但语义独立）。
         return RunResult(
             exit_code=0 if result.passed else 1,
             total=1,
             passed=1 if result.passed else 0,
             failed=0 if result.passed else 1,
+            halted=1 if result.halted else 0,
             details=[{
                 "scenario_id": result.scenario_id,
                 "status":      result.status,
                 "duration_ms": result.duration_ms,
+                "halted":      result.halted,
+                "halt_reason": result.halt_reason,
                 "steps": [
                     {
                         "step_id":     s.step_id,
@@ -256,14 +273,18 @@ class Engine:
         self,
         suite: Suite,
         framework_ctx: FrameworkContext,
+        runtime_control: Any = None,
     ) -> RunResult:
         """按序执行 Suite 内全部 Scenario，按 fail_fast 配置决定是否提前终止。
 
         入参:
-            suite:         Suite 数据对象。
-            framework_ctx: 本次 run 的 framework 上下文。
+            suite:            Suite 数据对象。
+            framework_ctx:    本次 run 的 framework 上下文。
+            runtime_control:  可选 RuntimeControl（透传给每个 ScenarioRunner）。
+                              注意：suite 级 runtime_control 对所有子 scenario 一视同仁，
+                              若需 per-scenario 控制请调用方拆分。
         返回:
-            汇总后的 RunResult。
+            汇总后的 RunResult（含 halted 累加）。
         """
         from gimbal.core.scenario_runner import ScenarioRunner
 
@@ -291,15 +312,18 @@ class Engine:
             asset_store=self._asset_store,
         )
         cfg = framework_ctx.config
-        total = passed = failed = error = 0
+        total = passed = failed = error = halted = 0
         details: list[dict[str, Any]] = []
 
         for idx, scenario in enumerate(suite.suite):
             logger.debug("[Engine] 开始执行 Suite 中第 {}/{} 个 Scenario: scenario_id={}",
                          idx + 1, len(suite.suite), scenario.scenarioId)
-            result = runner.run(scenario, suite_ctx)
+            result = runner.run(scenario, suite_ctx, runtime_control=runtime_control)
             total += 1
-            if result.passed:
+            if result.halted:
+                # 阶段 1：halted 单独计，不并入 failed/error；reporter 据此渲染。
+                halted += 1
+            elif result.passed:
                 passed += 1
             elif result.status == "error":
                 error += 1
@@ -309,6 +333,8 @@ class Engine:
                 "scenario_id": result.scenario_id,
                 "status":      result.status,
                 "duration_ms": result.duration_ms,
+                "halted":      result.halted,
+                "halt_reason": result.halt_reason,
                 "steps": [
                     {
                         "step_id":     s.step_id,
@@ -320,19 +346,24 @@ class Engine:
                     for s in result.step_results
                 ],
             })
-            logger.info("[Engine] Scenario 完成: scenario_id={} status={} duration_ms={:.2f} ({}/{})",
-                        result.scenario_id, result.status, result.duration_ms, idx + 1, len(suite.suite))
+            logger.info(
+                "[Engine] Scenario 完成: scenario_id={} status={} duration_ms={:.2f} ({}/{}) halted={}",
+                result.scenario_id, result.status, result.duration_ms,
+                idx + 1, len(suite.suite), result.halted,
+            )
             if cfg.fail_fast and not result.passed:
                 logger.warning("[Engine] fail_fast 触发：在 {} 后停止执行", result.scenario_id)
                 break
 
-        logger.info("[Engine] Suite 执行完成: suite_id={} total={} passed={} failed={} error={} exit_code={}",
-                    suite_id, total, passed, failed, error, 0 if (failed + error) == 0 else 1)
+        logger.info(
+            "[Engine] Suite 执行完成: suite_id={} total={} passed={} failed={} error={} halted={} exit_code={}",
+            suite_id, total, passed, failed, error, halted, 0 if (failed + error) == 0 else 1,
+        )
 
         return RunResult(
             exit_code=0 if (failed + error) == 0 else 1,
             total=total, passed=passed,
-            failed=failed, error=error,
+            failed=failed, error=error, halted=halted,
             details=details,
         )
 
