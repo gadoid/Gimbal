@@ -131,13 +131,22 @@ class TimeOffsetSpec(BaseModel):
         # 2 小时前
         {"kind":"time_offset","unit":"hours","value":2,"direction":"past"}
 
+        # 6 个月后（按日历月，Jan 31 + 6 months = Jul 31）
+        {"kind":"time_offset","unit":"months","value":6,"direction":"future"}
+
+        # 1 年后（按日历月 = 12 个月，月末日溢出夹到目标月最后一天）
+        {"kind":"time_offset","unit":"years","value":1,"direction":"future"}
+
         # 不传 value → 等价于"现在的 unix 秒"
         {"kind":"time_offset"}
     """
     model_config = ConfigDict(extra="forbid")
     kind: Literal["time_offset"] = "time_offset"
-    unit: Literal["milliseconds", "seconds", "minutes", "hours", "days", "weeks"] = Field(
-        default="seconds", description="时间单位（含毫秒）"
+    unit: Literal[
+        "milliseconds", "seconds", "minutes", "hours",
+        "days", "weeks", "months", "years",
+    ] = Field(
+        default="seconds", description="时间单位（含毫秒、月、年）"
     )
     value: int = Field(default=0, description="偏移量（int；正数=未来/与 direction 共同描述)")
     direction: Literal["future", "past"] = Field(

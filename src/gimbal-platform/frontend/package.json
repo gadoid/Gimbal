@@ -19,7 +19,11 @@
     "vue-router": "^4.4.0"
   },
   "devDependencies": {
+<<<<<<< HEAD
     "@pinia/testing": "^0.1.7",
+=======
+    "@pinia/testing": "^1.0.3",
+>>>>>>> 54cce2e0d5d222830bf4e1f693399e86d43e233c
     "@types/js-yaml": "^4.0.9",
     "@vitejs/plugin-vue": "^5.1.0",
     "@vue/test-utils": "^2.4.11",

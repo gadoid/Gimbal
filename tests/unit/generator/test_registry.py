@@ -40,11 +40,12 @@ class TestGeneratorRegistry:
 
 
 class TestBuildDefaultRegistry:
-    def test_contains_all_7_kinds(self):
-        """默认注册表包含全部 7 个内置 kind。"""
+    def test_contains_all_9_kinds(self):
+        """默认注册表包含全部 9 个内置 kind。"""
         r = build_default_registry()
         expected = {"uuid", "random_str", "random_int", "random_decimal",
-                    "timestamp", "now", "seq"}
+                    "timestamp", "now", "seq",
+                    "random_decorated", "time_offset"}
         assert set(r.kinds()) == expected
 
     def test_each_function_callable(self):
