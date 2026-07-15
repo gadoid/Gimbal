@@ -1,0 +1,152 @@
+/**
+ * auth.ts — Pinia store for auth state.
+ *
+ * State: tokens + currentUser + status ('unknown' | 'authenticated' | 'guest').
+ * Persistence: tokens auto-written to localStorage.gimbal-auth on change.
+ * On init: rehydrate tokens from localStorage if present.
+ *
+ * Note: fetchMe() is what proves the access token is still valid; the
+ * status only flips to 'authenticated' once /auth/me succeeds. Until
+ * then we sit in 'unknown' even if a token is in localStorage.
+ */
+import { defineStore } from 'pinia'
+import { ref, computed, watch } from 'vue'
+import * as authApi from '@/api/auth'
+import type { UserPublic } from '@/api/auth'
+
+const STORAGE_KEY = 'gimbal-auth'
+
+interface Persisted {
+  accessToken: string
+  refreshToken: string
+}
+
+function readPersisted(): Persisted | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    const obj = JSON.parse(raw) as Partial<Persisted>
+    if (
+      typeof obj.accessToken === 'string' &&
+      typeof obj.refreshToken === 'string'
+    ) {
+      return { accessToken: obj.accessToken, refreshToken: obj.refreshToken }
+    }
+  } catch {
+    // ignore corrupt storage
+  }
+  return null
+}
+
+function writePersisted(p: Persisted | null) {
+  try {
+    if (p === null) {
+      localStorage.removeItem(STORAGE_KEY)
+    } else {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(p))
+    }
+  } catch {
+    // storage may be disabled (private mode, quota) — silently no-op.
+  }
+}
+
+export const useAuthStore = defineStore('auth', () => {
+  const persisted = readPersisted()
+  const accessToken = ref<string>(persisted?.accessToken ?? '')
+  const refreshToken = ref<string>(persisted?.refreshToken ?? '')
+  const currentUser = ref<UserPublic | null>(null)
+  const status = ref<'unknown' | 'authenticated' | 'guest'>('unknown')
+
+  const isAuthenticated = computed(() => !!accessToken.value)
+  // 单一来源 —— 视图 / 抽屉 / 路由 guard 都从这里读,
+  // 未来加 is_super_admin / is_auditor 等位时只改这里。
+  const isAdmin = computed(() => Boolean(currentUser.value?.is_admin))
+
+  // Persist whenever tokens change.  watch runs on the .value mutations
+  // we make below (setTokens / clear) and on initial assignment.
+  watch(
+    [accessToken, refreshToken],
+    ([a, r]) => {
+      if (a && r) {
+        writePersisted({ accessToken: a, refreshToken: r })
+      } else {
+        writePersisted(null)
+      }
+    },
+    { immediate: false },
+  )
+
+  function setTokens(a: string, r: string) {
+    accessToken.value = a
+    refreshToken.value = r
+  }
+
+  function setUser(u: UserPublic) {
+    currentUser.value = u
+    status.value = 'authenticated'
+  }
+
+  function clear() {
+    accessToken.value = ''
+    refreshToken.value = ''
+    currentUser.value = null
+    status.value = 'guest'
+  }
+
+  async function login(username: string, password: string) {
+    const out = await authApi.login({ username, password })
+    setTokens(out.access_token, out.refresh_token)
+    setUser(out.user)
+    return out
+  }
+
+  async function register(
+    username: string,
+    password: string,
+    display_name: string = '',
+  ) {
+    const out = await authApi.register({
+      username,
+      password,
+      display_name,
+    })
+    setTokens(out.access_token, out.refresh_token)
+    setUser(out.user)
+    return out
+  }
+
+  async function logout() {
+    clear()
+  }
+
+  async function fetchMe() {
+    if (!accessToken.value) {
+      status.value = 'guest'
+      return null
+    }
+    try {
+      const out = await authApi.me()
+      setUser(out.user)
+      return out.user
+    } catch {
+      clear()
+      return null
+    }
+  }
+
+  return {
+    accessToken,
+    refreshToken,
+    currentUser,
+    status,
+    isAuthenticated,
+    isAdmin,
+    setTokens,
+    setUser,
+    clear,
+    login,
+    register,
+    logout,
+    fetchMe,
+  }
+})

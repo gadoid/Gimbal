@@ -1,0 +1,20 @@
+/* ──────────────────────────────────────────────────────────────────
+ * override.css — Element-Plus primary palette override.
+ *
+ * Element Plus ships its own --el-color-primary etc. baked in.  We
+ * redirect them to our accent variables so EP buttons / links /
+ * form-active states match the gimbal theme.
+ *
+ * Lighter shades 3-9 are derived from --accent via color-mix so that
+ * swapping --accent in theme.css re-themes the whole EP surface.
+ * ────────────────────────────────────────────────────────────────── */
+
+:root {
+  --el-color-primary: var(--accent);
+  --el-color-primary-light-3: color-mix(in srgb, var(--accent) 80%, white);
+  --el-color-primary-light-5: color-mix(in srgb, var(--accent) 60%, white);
+  --el-color-primary-light-7: color-mix(in srgb, var(--accent) 40%, white);
+  --el-color-primary-light-8: color-mix(in srgb, var(--accent) 25%, white);
+  --el-color-primary-light-9: color-mix(in srgb, var(--accent) 10%, white);
+  --el-color-primary-dark-2: color-mix(in srgb, var(--accent) 90%, black);
+}
