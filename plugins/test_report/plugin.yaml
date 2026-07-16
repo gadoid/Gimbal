@@ -1,0 +1,37 @@
+name: gimbal-test-report
+version: 0.2.0
+entry_point: test_report.plugin:ReportPlugin
+category: reporter
+description: |
+  Auto-loads on framework bootstrap and emits a single-file HTML test
+  report at ``run.end``.  No CLI flags required — only the plugin
+  config below.
+
+  v2 collects **full process information**: framework version, run meta,
+  suite grouping, scenario meta (tags / author / priority / version),
+  HTTP exchanges (request/response/headers/body/duration/status),
+  variable promotions (step → scenario / scenario → suite),
+  step failures (phase + error_brief + traceback).
+
+  Zero third-party dependencies: pure stdlib (``html.escape`` + f-strings).
+
+  Output location is fully controlled by ``gimbal.yaml::plugin_configs``::
+
+      plugin_configs:
+        gimbal-test-report:
+          output_path: ./reports/test-report.html
+          title: "My Suite"
+          include_passed: true
+          include_http_body: false   # set true to render request/response bodies
+          max_body_chars: 4096       # truncate body to this many chars
+capabilities: [reporter]
+default_config:
+  # Defaults shown below; override via gimbal.yaml.plugin_configs
+  output_path: ./reports/test/test-report.html
+  title: "Gimbal Test Report"
+  # 是否在 summary 中显示 passed 的 case（false 时只展示失败/错误）
+  include_passed: true
+  # v2: 是否在 HTTP exchange 子表里额外渲染 request/response body（可能很大）
+  include_http_body: false
+  # v2: request/response body / error / traceback 截断字符数
+  max_body_chars: 4096

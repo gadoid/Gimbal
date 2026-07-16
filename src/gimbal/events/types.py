@@ -176,6 +176,10 @@ class StepStartEvent(FrameworkEvent):
     step_name: str
     # 由 ContextManager.project_step_started 填充；statemachine 直接发时为空
     strategy_kind: str = ""
+    # 策略 spec（结构化 DSL 描述：assertions / requests / transforms / etc.），
+    # 由 ContextManager 从 StepInputs.strategy_spec 投影；statemachine 直接发时为空 dict。
+    # reporter 可用于在报告里展示"这个 step 实际配置的策略参数"。
+    strategy_spec: dict = Field(default_factory=dict)
     # 步骤说明(对应 Step.description),可选;为空时 reporter 可降级到 step_name
     description: Optional[str] = None
 
@@ -190,6 +194,8 @@ class StepEndEvent(FrameworkEvent):
     assertion_count: int = 0
     assertion_passed: int = 0
     promotion_count: int = 0
+    # 实际执行的重试次数（来自 StepOutcome.retry_count）。0 表示一次成功。
+    retry_count: int = 0
     error_brief: Optional[str] = None
 
 
