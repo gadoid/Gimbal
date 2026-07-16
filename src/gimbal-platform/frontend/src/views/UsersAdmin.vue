@@ -261,6 +261,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useListSearch } from '@/utils/useListSearch'
 import { ElMessage, type FormInstance } from 'element-plus'
+import { showError } from '@/utils/errorFallback'
 import { useUsersStore } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
 import * as usersApi from '@/api/users'
@@ -275,7 +276,7 @@ type RoleFilter = 'all' | 'admin' | 'member'
 // matching, the role filter stays as a separate predicate so the
 // composable stays generic.
 const { query: searchQuery, filtered: searchFiltered } = useListSearch(
-  usersStore.list,
+  () => usersStore.list,
   ['username', 'display_name'],
 )
 const roleFilter = ref<RoleFilter>('all')
@@ -345,7 +346,7 @@ async function toggleRole(row: UserOut): Promise<void> {
     await usersStore.patchUser(row.id, { is_admin: !row.is_admin })
     ElMessage.success(`已${row.is_admin ? '降级' : '升级'} ${row.username}`)
   } catch {
-    ElMessage.error(usersStore.lastError || '角色变更失败')
+    showError('修改', undefined, usersStore.lastError)
   }
 }
 
@@ -354,7 +355,7 @@ async function setActive(row: UserOut, active: boolean): Promise<void> {
     await usersStore.patchUser(row.id, { is_active: active })
     ElMessage.success(`已${active ? '启用' : '停用'} ${row.username}`)
   } catch {
-    ElMessage.error(usersStore.lastError || '状态变更失败')
+    showError('修改', undefined, usersStore.lastError)
   }
 }
 
@@ -368,7 +369,7 @@ async function resetPassword(row: UserOut): Promise<void> {
     resetResult.value = out
     resetOpen.value = true
   } catch {
-    ElMessage.error(usersStore.lastError || '重置密码失败')
+    showError('修改', undefined, usersStore.lastError)
   }
 }
 
@@ -453,7 +454,7 @@ async function submitCreate() {
     ElMessage.success(`已创建用户 ${createForm.username}`)
     createOpen.value = false
   } catch {
-    ElMessage.error(usersStore.lastError || '创建失败')
+    showError('创建', undefined, usersStore.lastError)
   } finally {
     createSubmitting.value = false
   }
@@ -481,7 +482,7 @@ async function submitEdit() {
     ElMessage.success(`已更新 ${editTarget.value.username}`)
     editOpen.value = false
   } catch {
-    ElMessage.error(usersStore.lastError || '保存失败')
+    showError('保存', undefined, usersStore.lastError)
   } finally {
     editSubmitting.value = false
   }
@@ -511,7 +512,7 @@ async function submitDelete() {
     ElMessage.success(`已删除 ${deleteTarget.value.username}`)
     deleteOpen.value = false
   } catch {
-    ElMessage.error(usersStore.lastError || '删除失败')
+    showError('删除', undefined, usersStore.lastError)
   } finally {
     deleteSubmitting.value = false
   }
@@ -522,7 +523,7 @@ onMounted(async () => {
   try {
     await usersStore.fetchAll()
   } catch {
-    ElMessage.error(usersStore.lastError || '加载用户失败')
+    showError('加载', undefined, usersStore.lastError)
   }
 })
 </script>

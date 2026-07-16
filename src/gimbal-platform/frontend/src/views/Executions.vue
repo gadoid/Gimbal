@@ -86,7 +86,7 @@
             :type="isSelectedForLog(row) ? 'primary' : undefined"
             @click="toggleLog(row)"
           >{{ isSelectedForLog(row) ? '收起日志' : '查看日志' }}</el-button>
-          <el-button link @click="rerunRun(row)" :loading="row.rerunning">重跑</el-button>
+          <el-button link @click="rerunRun(row)" :loading="isRerunning(row.id)">重跑</el-button>
           <el-button link type="danger" @click="deleteRun(row)">删除</el-button>
         </template>
       </el-table-column>
@@ -184,6 +184,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElNotification } from 'element-plus'
+import { showError } from '@/utils/errorFallback'
 import { useExecutionsStore } from '@/stores/executions'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -332,6 +333,7 @@ async function startLog(row: ExecRun) {
  *  — falls back to the legacy ``getRunLog`` endpoint if SSE fails so
  *  the user always sees something. */
 async function drainStreamInBackground(row: ExecRun, stream: LogStream): Promise<void> {
+  let reconnected = false
   try {
     for (;;) {
       const event = await stream.next()
@@ -350,6 +352,11 @@ async function drainStreamInBackground(row: ExecRun, stream: LogStream): Promise
             { lastEventId: lastSeq },
           )
           logStream.value = resumed
+          // Flag so the outer finally skips the legacy fetch — the
+          // tail-call's own finally will handle the post-stream fetch
+          // (avoids the previous double-fetch bug where both the
+          // outer and the inner drain called fetchLegacyFullLog).
+          reconnected = true
           // Tail-call: continue consuming from the resumed stream.
           await drainStreamInBackground(row, resumed)
           return
@@ -376,7 +383,13 @@ async function drainStreamInBackground(row: ExecRun, stream: LogStream): Promise
     // Stream aborted or transient error — fall back to legacy fetch.
   } finally {
     logLoading.value = false
-    await fetchLegacyFullLog(row)
+    // Skip the legacy fetch when the inner drain successfully
+    // reconnected — the inner call's own finally will fetch the
+    // full log once the resumed stream ends.  Without this guard
+    // the log file is fetched twice (the previous bug).
+    if (!reconnected) {
+      await fetchLegacyFullLog(row)
+    }
   }
 }
 
@@ -440,7 +453,7 @@ async function confirmDeleteRun() {
     void execStore.fetchDetail(execStore.detail.id)
     ElMessage.success(`run #${removed.idx} 已删除`)
   } catch {
-    ElMessage.error('删除失败')
+    showError('删除')
   } finally {
     deleteSubmitting.value = false
   }
@@ -448,7 +461,11 @@ async function confirmDeleteRun() {
 
 async function rerunRun(row: ExecRun) {
   if (!execStore.detail) return
-  row.rerunning = true
+  // Mark on the store (NOT on the row).  The 1s polling wholesale-
+  // replaces detail on every tick, so any per-row mutation gets wiped
+  // and the button stops showing :loading while the rerun is still
+  // in flight.  The store-managed Set survives polling.
+  execStore.markRerunning(row.id, true)
   try {
     // POST /rerun blocks server-side until the subprocess finishes; the
     // returned ExecRunOut already has the post-subprocess state.
@@ -467,10 +484,14 @@ async function rerunRun(row: ExecRun) {
       duration: 4500,
     })
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '重跑失败')
+    showError('执行', e)
   } finally {
-    row.rerunning = false
+    execStore.markRerunning(row.id, false)
   }
+}
+
+function isRerunning(runId: number): boolean {
+  return execStore.isRerunning(runId)
 }
 
 // ── lifecycle ─────────────────────────────────────────────

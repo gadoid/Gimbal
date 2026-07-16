@@ -891,6 +891,69 @@ async def test_rerun_preserves_old_run_log_and_report(
         assert run2.log_path.endswith(f"run_{new_run_id_2}.log")
 
 
+
+
+async def test_concurrent_reruns_dedup_via_unique_constraint(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """The UNIQUE (execution_id, idx) constraint on exec_runs
+    forces a concurrent rerun collision into an IntegrityError, which
+    the rerun handler catches and retries with a fresh idx.  Simulated
+    by pre-inserting a row at the idx our rerun will pick, forcing
+    the rerun into the retry path without actually racing two HTTP
+    calls (which is brittle on aiosqlite + the connection pool)."""
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=3)
+    await _login_alice(client)
+    eid = await _create_execution_directly(
+        client, case_id=case_id, n_runs=1, parallel=1,
+    )
+    cap = _CapturedCmd()
+    cap.install(monkeypatch)
+
+    from app.core.db import SessionLocal
+    from app.models import ExecRun, Execution
+    from sqlalchemy import select
+
+    async with SessionLocal() as s:
+        target = (await s.execute(
+            select(ExecRun).where(ExecRun.execution_id == eid)
+        )).scalars().first()
+        # Pre-insert a "phantom" row at the idx the rerun would pick
+        # next (max(existing idx) + 1 == 2 here, since the original row
+        # is at idx=1).  This forces the INSERT to fail with
+        # UNIQUE-constraint violation so the handler's retry path
+        # runs; the retry then picks idx=3 and succeeds.
+        s.add(ExecRun(execution_id=eid, idx=2, status="failed"))
+        await s.commit()
+        # Bump total_runs manually so the parent counter matches
+        # what the retry will write (the failing INSERT also bumped).
+        ex = await s.get(Execution, eid)
+        ex.total_runs = (ex.total_runs or 0) + 1
+        await s.commit()
+
+    login = await client.post("/api/auth/login", json={"username":"alice","password":"alicepass123"})
+    H = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    # The rerun handler should: hit idx=2 (collision) → IntegrityError
+    # → rollback → retry with idx=3 → success.
+    r = await client.post(f"/api/executions/{eid}/runs/{target.id}/rerun", headers=H)
+    assert r.status_code == 200, r.text
+
+    async with SessionLocal() as s:
+        new_rows = (await s.execute(
+            select(ExecRun).where(
+                ExecRun.execution_id == eid,
+                ExecRun.id != target.id,
+            )
+        )).scalars().all()
+    idxs = sorted(r.idx for r in new_rows)
+    assert idxs == [2, 3], f"expected [2, 3], got {idxs}"
+    # The rerun should land on idx=3, not collide with the phantom.
+    assert any(r.idx == 3 for r in new_rows)
+    assert not any(r.idx == 4 for r in new_rows)
+
+
+
 async def test_rerun_replays_step_to_from_execution_config(
     client: AsyncClient, tmp_path: Path, monkeypatch
 ) -> None:

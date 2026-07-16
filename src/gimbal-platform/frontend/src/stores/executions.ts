@@ -102,6 +102,24 @@ export const useExecutionsStore = defineStore('executions', () => {
   }
 
   /**
+   * Per-row "rerunning" markers.  Stored as a Set on the store (NOT
+   * on the run row object) because the 1s polling wholesale-replaces
+   * ``detail`` on every tick, wiping any per-row mutation.  Tracking
+   * on the store lets the button stay in :loading state across
+   * polling refreshes.
+   */
+  const rerunningIds = ref<Set<number>>(new Set())
+  function markRerunning(runId: number, on: boolean) {
+    const next = new Set(rerunningIds.value)
+    if (on) next.add(runId)
+    else next.delete(runId)
+    rerunningIds.value = next
+  }
+  function isRerunning(runId: number): boolean {
+    return rerunningIds.value.has(runId)
+  }
+
+  /**
    * Poll /api/executions/{id} every 1s until status is done/failed.
    * Returns a stop function the caller invokes on unmount.
    */
@@ -134,6 +152,9 @@ export const useExecutionsStore = defineStore('executions', () => {
     detail,
     loading,
     lastError,
+    rerunningIds,
+    isRerunning,
+    markRerunning,
     fetchList,
     fetchDetail,
     create,

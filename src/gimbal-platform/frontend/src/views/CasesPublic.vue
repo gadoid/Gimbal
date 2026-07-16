@@ -327,6 +327,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useListSearch } from '@/utils/useListSearch'
 import { ElMessage } from 'element-plus'
+import { showError } from '@/utils/errorFallback'
 import { useRouter } from 'vue-router'
 import * as casesApi from '@/api/cases'
 import { useCasesStore } from '@/stores/cases'
@@ -380,7 +381,7 @@ const isAdmin = computed(() => authStore.isAdmin)
 // Search matches any of name/case_id/module/description/tags; advanced
 // filters layer on top via applyFiltersToList.
 const { query: searchQuery, filtered: searchFiltered } = useListSearch(
-  casesStore.publicLibrary,
+  () => casesStore.publicLibrary,
   ['name', 'case_id', 'module', 'description', 'tags'],
 )
 const visibleCases = computed(() =>
@@ -396,7 +397,7 @@ onMounted(async () => {
   try {
     await casesStore.fetchPublic(true)
   } catch {
-    ElMessage.error(casesStore.lastError || '加载公共用例失败')
+    showError('加载', undefined, casesStore.lastError)
   }
 })
 
@@ -418,7 +419,7 @@ async function toggleFavorite(row: CaseSummary): Promise<void> {
   try {
     await casesStore.toggleFavorite(row.case_id)
   } catch {
-    ElMessage.error(casesStore.lastError || '收藏操作失败')
+    showError('收藏', undefined, casesStore.lastError)
   }
 }
 
@@ -443,11 +444,7 @@ async function onRenameSubmit(newName: string | null): Promise<void> {
     await casesStore.fetchMine()
     casesStore.fetchPublic(true).catch(() => {})
   } catch (e) {
-    ElMessage.error(
-      (e as { msg?: string; message?: string }).msg ||
-        (e as { message?: string }).message ||
-        '操作失败',
-    )
+    showError('操作', e)
   } finally {
     renameTarget.value = null
   }
@@ -460,7 +457,7 @@ async function handlePublicSubmit(file: File): Promise<boolean> {
     await casesStore.fetchPublic(true)
   } catch (e) {
     const err = e as { msg?: string; message?: string }
-    ElMessage.error(err.msg || err.message || casesStore.lastError || '提交失败')
+    showError('提交', err, casesStore.lastError)
   }
   return false
 }
@@ -481,7 +478,7 @@ async function confirmDelete(): Promise<void> {
     deleteTarget.value = null
   } catch (e) {
     const err = e as { msg?: string; message?: string }
-    ElMessage.error(err.msg || err.message || casesStore.lastError || '删除失败')
+    showError('删除', err, casesStore.lastError)
   } finally {
     deleteSubmitting.value = false
   }
@@ -532,7 +529,7 @@ async function onCommand(cmd: string, row: CaseSummary): Promise<void> {
         return
     }
   } catch {
-    ElMessage.error(casesStore.lastError || `${cmd} 操作失败`)
+    showError('操作', undefined, casesStore.lastError)
   }
 }
 </script>
@@ -679,21 +676,6 @@ async function onCommand(cmd: string, row: CaseSummary): Promise<void> {
   font-weight: 700;
   line-height: 16px;
   border-radius: 10px;
-}
-
-.priority-1 {
-  color: #991b1b;
-  background: #fee2e2;
-}
-
-.priority-2 {
-  color: #9a3412;
-  background: #ffedd5;
-}
-
-.priority-3 {
-  color: #5b21b6;
-  background: #ede9fe;
 }
 
 .audit-tag {

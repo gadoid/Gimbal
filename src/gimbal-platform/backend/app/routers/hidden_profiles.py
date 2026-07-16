@@ -44,7 +44,7 @@ async def get_hidden(
 ) -> HiddenProfileOut:
     row = await _get_profile(session, user.id, case_id)
     if row is None:
-        return HiddenProfileOut(case_id=case_id, hidden_paths=[], scope="case")
+        return HiddenProfileOut(case_id=case_id, hidden_paths=[])
     return HiddenProfileOut.model_validate(row)
 
 
@@ -61,12 +61,10 @@ async def put_hidden(
             user_id=user.id,
             case_id=case_id,
             hidden_paths=payload.hidden_paths,
-            scope=payload.scope,
         )
         session.add(row)
     else:
         row.hidden_paths = payload.hidden_paths
-        row.scope = payload.scope
     await session.commit()
     await session.refresh(row)
     return HiddenProfileOut.model_validate(row)

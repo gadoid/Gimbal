@@ -38,7 +38,7 @@ from typing import Any, NamedTuple
 
 import yaml
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core import db as db_module
@@ -627,17 +627,49 @@ async def _run_one(
         run.command_line = command_line
         await session.commit()
 
-        # Update Execution counters
-        ex = await session.get(Execution, execution_id)
-        if ex:
-            if status == "passed":
-                ex.passed += 1
-            else:
-                ex.failed += 1
-            if ex.passed + ex.failed >= ex.total_runs:
-                ex.status = "done" if ex.failed == 0 else "failed"
-                ex.finished_at = datetime.utcnow()
+        # Update Execution counters.  The +1 must be an atomic SQL
+        # expression — two concurrent _run_one completions reading the
+        # same `ex` and writing back `passed + 1` would clobber each
+        # other ("lost update").  The atomic UPDATE below happens
+        # entirely inside the DB and is safe under N parallel runs.
+        column = "passed" if status == "passed" else "failed"
+        async with db() as session:
+            row = await session.execute(
+                text(
+                    f"UPDATE executions SET {column} = {column} + 1 "
+                    "WHERE id = :eid"
+                ),
+                {"eid": execution_id},
+            )
             await session.commit()
+            if row.rowcount:
+                # Re-read fresh counters + total to decide terminal
+                # state.  Cheap (single-row lookup) and avoids the
+                # race-window where two concurrent passes both see
+                # ``passed + failed < total_runs`` and skip the
+                # ``done`` transition.
+                fresh = (await session.execute(
+                    text(
+                        "SELECT passed, failed, total_runs FROM executions "
+                        "WHERE id = :eid"
+                    ),
+                    {"eid": execution_id},
+                )).one()
+                p, f, t = fresh.passed, fresh.failed, fresh.total_runs
+                if p + f >= t:
+                    await session.execute(
+                        text(
+                            "UPDATE executions "
+                            "SET status = :st, finished_at = :ts "
+                            "WHERE id = :eid"
+                        ),
+                        {
+                            "st": "done" if f == 0 else "failed",
+                            "ts": datetime.utcnow(),
+                            "eid": execution_id,
+                        },
+                    )
+                    await session.commit()
 
 
 # ── main orchestrator ─────────────────────────────────────────

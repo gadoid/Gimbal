@@ -5,6 +5,7 @@ import 'element-plus/dist/index.css'
 import './styles/theme.css'
 import './styles/override.css'
 import './styles/_destructive-dialog.css'
+import './styles/priority.css'
 
 import App from './App.vue'
 import router from './router'

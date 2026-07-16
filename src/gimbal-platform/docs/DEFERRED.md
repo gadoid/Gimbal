@@ -18,7 +18,7 @@ Items that don't meet one of these two criteria are deferred.
 
 | # | Location | Issue | Why deferred |
 |---|---|---|---|
-| 1 | `backend/app/models/case.py:37-46` | `CaseFavorite` table defined but unused (favorites are in `favorites.json`) | **Design decision**: drop the table (low impact) OR migrate favorites to the table (higher impact).  Needs product call, not a code-only fix. |
+| 1 | `backend/app/models/case.py:37-46` | ~~`CaseFavorite` table defined but unused (favorites are in `favorites.json`)~~ **FIXED 2026-07-16**: class removed from ORM, `__init__.py` import removed, live DB table dropped via `DROP TABLE IF EXISTS case_favorites`. |
 | 2 | `backend/app/routers/executions.py:540-542` | `next_idx = max(idx) + 1` has a SELECT-then-INSERT race window | **Concurrency fix**: needs `SELECT ... FOR UPDATE` row lock or a unique constraint fallback.  Changes concurrent rerun semantics — must be tested under load. |
 | 3 | `backend/app/routers/executions.py:254` | `asyncio.create_task(_safe_run(...))` is fire-and-forget | **Lifecycle fix**: needs task handles + shutdown hooks to ensure subprocess cleanup.  Touches FastAPI startup/shutdown. |
 | 5 | `backend/app/routers/executions.py:546,604` | `ex.total_runs += 1` (rerun) and `ex.passed/failed += 1` (`_run_one`) write to the same row in two different sessions | **Race fix**: needs a single transaction boundary or atomic update.  Higher blast radius — could surface a real bug. |

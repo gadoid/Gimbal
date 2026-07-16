@@ -194,6 +194,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useListSearch } from '@/utils/useListSearch'
 import { ElMessage, type FormInstance } from 'element-plus'
+import { showError } from '@/utils/errorFallback'
 import { useAuthSessionsStore } from '@/stores/auth_sessions'
 import type { AuthSession, TestResult } from '@/api/auth_sessions'
 
@@ -203,7 +204,7 @@ const store = useAuthSessionsStore()
 // Search via the shared composable; the token-type chip filter is
 // applied on top so the two concerns stay orthogonal.
 const { query: searchQuery, filtered: searchFiltered } = useListSearch(
-  store.list,
+  () => store.list,
   ['alias', 'username', 'url'],
 )
 const tokenTypeFilter = ref<'all' | 'Bearer' | 'Basic' | 'Cookie' | 'Authorization'>('all')
@@ -316,7 +317,7 @@ async function submitForm() {
     }
     createOpen.value = false
   } catch {
-    ElMessage.error(store.lastError || '保存失败')
+    showError('保存', undefined, store.lastError)
   } finally {
     submitting.value = false
   }
@@ -364,7 +365,7 @@ async function submitDelete() {
     ElMessage.success(`已删除 ${deleteTarget.value.alias}`)
     deleteOpen.value = false
   } catch {
-    ElMessage.error(store.lastError || '删除失败')
+    showError('删除', undefined, store.lastError)
   } finally {
     deleteSubmitting.value = false
   }
@@ -375,7 +376,7 @@ onMounted(async () => {
   try {
     await store.fetchAll()
   } catch {
-    ElMessage.error(store.lastError || '加载失败')
+    showError('加载', undefined, store.lastError)
   }
 })
 </script>

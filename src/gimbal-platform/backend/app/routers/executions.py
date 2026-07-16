@@ -9,7 +9,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Path as PathParam, Request, status
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core import db as db_module
@@ -29,6 +29,60 @@ from ..services.case_loader import loader
 from ..services.log_hub import EndEvent, KeepAlive, RunLogLine, hub
 
 router = APIRouter(prefix="/executions", tags=["executions"])
+
+# ── in-flight orchestrator tracking ──────────────────────────────
+# The create_execution handler used to fire ``asyncio.create_task``
+# without retaining the handle.  On FastAPI shutdown (uvicorn
+# graceful-stop, OOM kill, --reload restart) the event loop is
+# cancelled and any un-tracked task is killed mid-subprocess, leaving
+# ``executions.status='running'`` orphan rows until the next worker's
+# ``reconcile_orphan_runs`` (5-minute grace window) catches it.
+#
+# Track the handles here so the lifespan teardown can await/cancel
+# them all before exit, and refuse to spawn new tasks during shutdown
+# so the user never gets a task that vanishes a moment later.
+_in_flight_runners: set[asyncio.Task] = set()
+_shutting_down: bool = False
+
+
+def is_shutting_down() -> bool:
+    return _shutting_down
+
+
+def spawn_safe_run(execution_id: int) -> "asyncio.Task | None":
+    """Spawn the orchestrator for ``execution_id`` and track the handle.
+
+    Returns ``None`` (without spawning) when the app is shutting down —
+    the caller should mark the row as failed and return a structured
+    error to the client so the user isn't left waiting on a task
+    that will never complete.
+    """
+    if _shutting_down:
+        return None
+    task = asyncio.create_task(_safe_run(execution_id))
+    _in_flight_runners.add(task)
+    task.add_done_callback(_in_flight_runners.discard)
+    return task
+
+
+async def drain_in_flight_runners() -> int:
+    """Cancel and await all running orchestrators.  Called from the
+    app lifespan teardown.  Returns the number of tasks drained so
+    the operator log shows what was in flight at shutdown."""
+    global _shutting_down
+    _shutting_down = True
+    n = len(_in_flight_runners)
+    if n == 0:
+        return 0
+    for t in list(_in_flight_runners):
+        t.cancel()
+    # Wait for them to finish cancellation; bound so a stuck subprocess
+    # can't keep the loop alive forever.  Each ``_safe_run`` already
+    # has its own try/except that catches CancelledError, so the
+    # in-flight subprocess gets a clean kill via ``proc.kill()`` in
+    # ``_subprocess_run_streaming``'s finally block.
+    await asyncio.gather(*_in_flight_runners, return_exceptions=True)
+    return n
 
 
 # Anything queued/running in the DB at startup with no fresh activity in
@@ -251,7 +305,15 @@ async def create_execution(
 
     # Fire the orchestrator in the background. The response returns
     # immediately so the UI can navigate to the live status page.
-    asyncio.create_task(_safe_run(ex.id))
+    # ``spawn_safe_run`` tracks the task handle so the lifespan
+    # teardown can cancel + await it; ``None`` is returned when the
+    # app is already shutting down (graceful stop) — we mark the row
+    # failed so the user isn't waiting on a task that will never start.
+    task = spawn_safe_run(ex.id)
+    if task is None:
+        ex.status = "failed"
+        ex.finished_at = datetime.utcnow()
+        await session.commit()
 
     return _exec_out(ex)
 
@@ -493,14 +555,32 @@ async def delete_run(
         raise HTTPException(status_code=404, detail="run not found")
     # Counter delta: only completed runs (passed/failed) had a counter
     # increment at _run_one completion; pending/running rows never did.
-    # Decrementing when the run was completed keeps the parent's
-    # passed/failed aligned with the surviving row set.
+    # Use atomic ``MAX(0, col - 1)`` UPDATEs so a concurrent rerun
+    # doing ``passed += 1`` doesn't clobber the decrement.
     if run.status == "passed":
-        ex.passed = max(0, (ex.passed or 0) - 1)
+        await session.execute(
+            text(
+                "UPDATE executions SET passed = MAX(0, passed - 1) "
+                "WHERE id = :eid"
+            ),
+            {"eid": ex.id},
+        )
     elif run.status == "failed":
-        ex.failed = max(0, (ex.failed or 0) - 1)
+        await session.execute(
+            text(
+                "UPDATE executions SET failed = MAX(0, failed - 1) "
+                "WHERE id = :eid"
+            ),
+            {"eid": ex.id},
+        )
     # total_runs counts row presence; deleting always decrements.
-    ex.total_runs = max(0, (ex.total_runs or 0) - 1)
+    await session.execute(
+        text(
+            "UPDATE executions SET total_runs = MAX(0, total_runs - 1) "
+            "WHERE id = :eid"
+        ),
+        {"eid": ex.id},
+    )
     await session.delete(run)
     await session.commit()
 
@@ -530,22 +610,48 @@ async def rerun_run(
         raise HTTPException(status_code=404, detail="run not found")
 
     from sqlalchemy import func, select
+    from sqlalchemy.exc import IntegrityError
 
-    # Compute next idx from the live set.  Concurrent reruns are rare
-    # enough that the worst-case race is a duplicate idx — accepted as
-    # a known limitation rather than a hard transactional lock.
-    max_idx_row = (
+    # Two concurrent reruns could both compute the same next_idx from
+    # ``SELECT MAX(idx)`` and then both INSERT — a logical duplicate.
+    # Mitigations:
+    #   1. UNIQUE (execution_id, idx) constraint on exec_runs — the
+    #      second INSERT raises IntegrityError.
+    #   2. On IntegrityError, retry once with a freshly-computed idx
+    #      (the first rerun's row is now visible to MAX).
+    #   3. total_runs is bumped via an atomic ``+ 1`` SQL UPDATE so
+    #      the counter doesn't clobber under concurrent writes.
+    async def _do_rerun_insert() -> ExecRun:
+        max_idx_row = (
+            await session.execute(
+                select(func.max(ExecRun.idx)).where(ExecRun.execution_id == ex.id)
+            )
+        ).scalar()
+        next_idx = (max_idx_row or 0) + 1
+        new_run = ExecRun(execution_id=ex.id, idx=next_idx, status="pending")
+        session.add(new_run)
+        # Bump parent counters in a single atomic SQL — two concurrent
+        # reruns don't clobber each other.
         await session.execute(
-            select(func.max(ExecRun.idx)).where(ExecRun.execution_id == ex.id)
+            text(
+                "UPDATE executions SET total_runs = total_runs + 1 "
+                "WHERE id = :eid"
+            ),
+            {"eid": ex.id},
         )
-    ).scalar()
-    next_idx = (max_idx_row or 0) + 1
+        await session.commit()
+        # ``new_run.id`` and other columns are populated by the INSERT
+        # during commit; no need for a separate refresh that would
+        # round-trip again (and races with the connection pool under
+        # concurrent requests).
+        return new_run
 
-    new_run = ExecRun(execution_id=ex.id, idx=next_idx, status="pending")
-    session.add(new_run)
-    ex.total_runs = (ex.total_runs or 0) + 1
-    await session.commit()
-    await session.refresh(new_run)
+    try:
+        new_run = await _do_rerun_insert()
+    except IntegrityError:
+        # Another concurrent rerun stole our idx; refresh and retry once.
+        await session.rollback()
+        new_run = await _do_rerun_insert()
 
     from ..services.executor import _run_one
 

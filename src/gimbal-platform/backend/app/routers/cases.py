@@ -4,10 +4,10 @@ Spec-1 simplifications (intentional):
 * ``cases`` table is NOT written by the auth/users/cases routers in spec-1, so
   private-case scanning for ``/mine`` is empty.  ``/mine`` therefore returns
   the user's *favorited public* cases.
-* favorites are persisted to ``data/favorites.json`` (instead of in-memory)
-  so they survive ``uvicorn --reload`` restarts.  The ``case_favorites``
-  table exists in the ORM schema but is unused here because the case-id
-  key is the on-disk scenarioId (not the integer ``cases.id``).
+* favorites are persisted to ``data/favorites.json`` (instead of in-memory
+  or in a DB table) so they survive ``uvicorn --reload`` restarts.  The
+  case-id key is the on-disk scenarioId string (not an integer ``cases.id``,
+  since the ``cases`` table itself is never written).
 * ``/copy`` writes a YAML clone to disk and returns ``{case_id, path}``.
 """
 from __future__ import annotations
@@ -61,7 +61,12 @@ def _save_favorites(fav: dict[int, set[str]]) -> None:
     )
 
 
-_FAVORITES: dict[int, set[str]] = _load_favorites()
+# Initial load happens under the same lock used by later writes.
+# Without this, a concurrent fork or a fast writer could mutate
+# _FAV_PATH between the read and the first write, producing a
+# silent loss of the in-memory state.
+with _fav_lock:
+    _FAVORITES: dict[int, set[str]] = _load_favorites()
 
 
 def _summary_out(s: CaseSummary, *, favorited: bool = False, copied: bool = False) -> CaseSummaryOut:

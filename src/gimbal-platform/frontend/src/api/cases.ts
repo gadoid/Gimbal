@@ -104,7 +104,6 @@ export function patch(
 export interface HiddenProfile {
   case_id: string
   hidden_paths: string[]
-  scope: string
   updated_at: string | null
 }
 
@@ -116,7 +115,7 @@ export function getHidden(caseId: string) {
 
 export function putHidden(
   caseId: string,
-  payload: { hidden_paths: string[]; scope?: string },
+  payload: { hidden_paths: string[] },
 ) {
   return http
     .put<HiddenProfile>(

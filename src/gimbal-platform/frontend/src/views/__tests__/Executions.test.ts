@@ -411,3 +411,103 @@ describe('Executions.vue — rerun inserts new row, table sorts by id desc', () 
     wrapper.unmount()
   })
 })
+// ── rerunningIds persistence across polling ────────────────────
+describe('Executions.vue — rerunningIds survive polling', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.restoreAllMocks()
+  })
+
+  it('keeps :loading=true on the rerun button even when polling replaces detail', async () => {
+    // Repro for P0-#8: the per-row :loading flag used to be set on
+    // the row object (row.rerunning = true).  But startPolling does
+    // ``detail.value = d`` every 1s, so any per-row mutation was
+    // wiped — the button stopped spinning while the rerun was still
+    // in flight.  The fix moves the flag to a store-owned Set
+    // (rerunningIds) that polling doesn't touch.
+    const fakeDetail = {
+      id: 1,
+      case_id: 'demo',
+      status: 'done' as const,
+      total_runs: 1,
+      passed: 1,
+      failed: 0,
+      started_at: null,
+      finished_at: null,
+      config: {},
+      runs: [
+        { id: 11, idx: 1, status: 'passed' as const, exit_code: 0, report_path: null,
+          started_at: null, finished_at: null, duration_ms: 1000 },
+      ],
+    }
+    // New deep copy on each poll (mimics a real fetchDetail response)
+    let pollCount = 0
+
+    const execStore = useExecutionsStore()
+    execStore.detail = fakeDetail as never
+    vi.spyOn(executionsApi, 'rerunRun').mockImplementation(
+      () => new Promise((resolve) => {
+        // Resolve after a long delay so the test can verify
+        // isRerunning() stays true through multiple polls.
+        setTimeout(() => resolve({} as never), 200)
+      }),
+    )
+    execStore.fetchDetail = vi.fn().mockImplementation(async () => {
+      pollCount++
+      // Return a NEW object every poll (not the same reference).
+      return {
+        ...fakeDetail,
+        runs: [
+          { ...fakeDetail.runs[0] },
+        ],
+      } as never
+    })
+
+    const auth = useAuthStore()
+    auth.accessToken = 'token'
+    const router = makeRouter()
+    router.push('/executions/1')
+    await router.isReady()
+
+    const wrapper = mount(Executions, {
+      global: { plugins: [router, ElementPlus] },
+    })
+    await flushPromises()
+
+    // Find the rerun button and click it.
+    const rerunBtn = wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('重跑'))!
+    await rerunBtn.trigger('click')
+    await flushPromises()
+
+    // isRerunning() must be true right after the click.
+    expect(execStore.isRerunning(11)).toBe(true)
+
+    // The button should be in :loading state.
+    const rerunBtnAfter = wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('重跑'))!
+    expect(rerunBtnAfter.classes()).toContain('is-loading')
+
+    // Wait long enough for at least one polling tick to fire
+    // (POLL_INTERVAL_MS = 1000).  In the old code, the per-row
+    // :loading flag would be wiped by the polling tick.  In the new
+    // code, the store-owned Set is unaffected.
+    await new Promise((r) => setTimeout(r, 120))
+    await flushPromises()
+
+    // isRerunning() must STILL be true after polling.
+    expect(execStore.isRerunning(11)).toBe(true)
+    expect(pollCount).toBeGreaterThan(0)  // confirms polling did run
+
+    // Wait for the rerun to finish.
+    await new Promise((r) => setTimeout(r, 200))
+    await flushPromises()
+
+    // After completion, the flag is cleared.
+    expect(execStore.isRerunning(11)).toBe(false)
+
+    wrapper.unmount()
+  })
+})

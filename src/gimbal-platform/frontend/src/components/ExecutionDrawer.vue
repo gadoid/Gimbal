@@ -706,9 +706,6 @@ onMounted(async () => {
   line-height: 16px;
   border-radius: 10px;
 }
-.priority-1 { color: #991b1b; background: #fee2e2; }
-.priority-2 { color: #9a3412; background: #ffedd5; }
-.priority-3 { color: #5b21b6; background: #ede9fe; }
 
 .exdraw-tags {
   display: flex;
