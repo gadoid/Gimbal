@@ -26,6 +26,6 @@ output:
   no_color : false
 
 plugins :
-  - aaa
   - gimbal-response-body-extract
+  - gimbal-test-report
 

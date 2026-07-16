@@ -50,7 +50,7 @@ def project_scenario_completed(scenario_ctx, run_id: str) -> ScenarioEndEvent:
 
 
 def project_step_started(ctx: "StepContext", run_id: str) -> StepStartEvent:
-    """把 StepContext 投影为 StepStartEvent:从 inputs 读取 step_name/description/strategy_kind,记录 started_at;返回对外事件对象。"""
+    """把 StepContext 投影为 StepStartEvent:从 inputs 读取 step_name/description/strategy_kind/strategy_spec,记录 started_at;返回对外事件对象。"""
     return StepStartEvent(
         timestamp=ctx.started_at,
         run_id=run_id,
@@ -58,12 +58,13 @@ def project_step_started(ctx: "StepContext", run_id: str) -> StepStartEvent:
         step_id=ctx.step_id,
         step_name=ctx.inputs.step_name,
         strategy_kind=ctx.inputs.strategy_kind,
+        strategy_spec=dict(ctx.inputs.strategy_spec or {}),
         description=ctx.inputs.description,
     )
 
 
 def project_step_completed(ctx: "StepContext", run_id: str) -> StepEndEvent:
-    """把 StepContext 投影为 StepEndEvent:统计 assertion_passed,汇总 status/duration_ms/assertion_count/promotion_count/error_brief;返回对外事件对象。"""
+    """把 StepContext 投影为 StepEndEvent:统计 assertion_passed,汇总 status/duration_ms/assertion_count/promotion_count/retry_count/error_brief;返回对外事件对象。"""
     passed = sum(1 for a in ctx.outcome.assertions if a.passed)
     return StepEndEvent(
         timestamp=ctx.ended_at or datetime.now(timezone.utc),
@@ -75,6 +76,7 @@ def project_step_completed(ctx: "StepContext", run_id: str) -> StepEndEvent:
         assertion_count=len(ctx.outcome.assertions),
         assertion_passed=passed,
         promotion_count=len(ctx.outcome.promotions_made),
+        retry_count=ctx.outcome.retry_count,
         error_brief=ctx.outcome.error_info.message if ctx.outcome.error_info else None,
     )
 

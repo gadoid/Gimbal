@@ -28,7 +28,7 @@
         "kind": "random_decorated",
         "charset": "alnum",
         "length": 6,
-        "head": "GIMBAL",
+        "head": "GIMBAL716",
         "separator": "-"
       },
       "bank_id_0": "319666690256273408_MainBank",
