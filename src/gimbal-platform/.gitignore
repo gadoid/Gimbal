@@ -1,5 +1,9 @@
 # Backend
 backend/data/
+<<<<<<< HEAD
+backend/.env
+=======
+>>>>>>> 54cce2e0d5d222830bf4e1f693399e86d43e233c
 *.db
 *.sqlite
 *.tmp.yaml
@@ -15,6 +19,10 @@ frontend/.vite/
 
 # Spec / Mockup artifacts (NOT business artifacts)
 .superpowers/
+<<<<<<< HEAD
+allure-results/
+=======
+>>>>>>> 54cce2e0d5d222830bf4e1f693399e86d43e233c
 
 # OS
 .DS_Store
