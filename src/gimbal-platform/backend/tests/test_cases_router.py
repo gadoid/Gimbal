@@ -23,7 +23,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
 from httpx import AsyncClient
 
 from app.services.case_loader import loader  # noqa: F401  imported for safety
@@ -230,21 +229,21 @@ async def test_copy_with_invalid_new_name_400(
     )
     auth = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
-    # Slashes → 400
+    # Slashes → 422 (validation)
     r = await client.post(
         f"/api/cases/{seed_public_case}/copy",
         headers=auth,
         json={"new_name": "ok/bad"},
     )
-    assert r.status_code == 400
+    assert r.status_code == 422
 
-    # 200 chars → 400
+    # 200 chars → 422 (validation)
     r = await client.post(
         f"/api/cases/{seed_public_case}/copy",
         headers=auth,
         json={"new_name": "x" * 200},
     )
-    assert r.status_code == 400
+    assert r.status_code == 422
 
 
 async def test_copy_with_colliding_new_name_falls_back(

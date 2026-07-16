@@ -177,10 +177,9 @@ function addHeader() {
 }
 
 function removeHeader(key: string) {
+  // Vue 3's reactive proxy tracks per-key changes; `delete` is
+  // sufficient — no need for the key-clear / re-assign dance.
   delete headers[key]
-  // Trigger reactivity
-  Object.keys(headers).forEach((kk) => delete headers[kk])
-  Object.assign(headers, JSON.parse(JSON.stringify(headers)))
 }
 
 function updateHeaderKey(oldKey: string, newKey: string) {

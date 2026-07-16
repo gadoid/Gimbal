@@ -192,6 +192,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useListSearch } from '@/utils/useListSearch'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { useAuthSessionsStore } from '@/stores/auth_sessions'
 import type { AuthSession, TestResult } from '@/api/auth_sessions'
@@ -199,21 +200,19 @@ import type { AuthSession, TestResult } from '@/api/auth_sessions'
 const store = useAuthSessionsStore()
 
 // ── filters ────────────────────────────────────────────────────
-const searchQuery = ref('')
+// Search via the shared composable; the token-type chip filter is
+// applied on top so the two concerns stay orthogonal.
+const { query: searchQuery, filtered: searchFiltered } = useListSearch(
+  store.list,
+  ['alias', 'username', 'url'],
+)
 const tokenTypeFilter = ref<'all' | 'Bearer' | 'Basic' | 'Cookie' | 'Authorization'>('all')
 
-const visibleAuths = computed(() => {
-  const q = searchQuery.value.trim().toLocaleLowerCase()
-  return store.list.filter((a) => {
-    if (tokenTypeFilter.value !== 'all' && a.token_type !== tokenTypeFilter.value) return false
-    if (!q) return true
-    return (
-      a.alias.toLocaleLowerCase().includes(q) ||
-      a.username.toLocaleLowerCase().includes(q) ||
-      a.url.toLocaleLowerCase().includes(q)
-    )
-  })
-})
+const visibleAuths = computed(() =>
+  searchFiltered.value.filter(
+    (a) => tokenTypeFilter.value === 'all' || a.token_type === tokenTypeFilter.value,
+  ),
+)
 
 const metaText = computed(() => {
   const total = store.list.length

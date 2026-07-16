@@ -60,6 +60,11 @@ export interface ExecutionCreateIn {
    *  argv.  Each list element is one argv entry.  Server rejects with 403 if
    *  the caller isn't an admin.  ``undefined`` → use the default command. */
   command_line?: string[]
+  /** 0-based inclusive halt index forwarded to
+   *  ``gimbal run launch --step-to <N>``.  ``null``/``undefined`` = run all
+   *  steps (legacy / default).  Backend validates ``step_to < step_count``
+   *  and returns 400 with descriptive detail if out of range. */
+  step_to?: number | null
 }
 
 export function list() {

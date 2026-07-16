@@ -129,7 +129,7 @@ async def test_upload_json_creates_case(client: AsyncClient, tmp_path) -> None:
     assert (tmp_path / "users" / "1" / "json_case.json").exists()
 
 
-async def test_upload_invalid_yaml_400(client: AsyncClient) -> None:
+async def test_upload_invalid_yaml_422(client: AsyncClient) -> None:
     auth = await _login_alice(client)
     r = await client.post(
         "/api/cases/upload",
@@ -137,13 +137,13 @@ async def test_upload_invalid_yaml_400(client: AsyncClient) -> None:
         data={"visibility": "private"},
         files={"file": ("bad.yaml", io.BytesIO(b":not valid\n  :yaml: ["), "application/x-yaml")},
     )
-    assert r.status_code == 400
+    assert r.status_code == 422
 
 
 async def test_upload_missing_scenario_id_private_auto_generates_default(
     client: AsyncClient, tmp_path
 ) -> None:
-    """Private uploads with no ``scenarioId`` get a clean ``场景用例-N`` default
+    """Private uploads with no ``scenarioId`` get a clean ``scenario-N`` default
     (per-user counter, scanned off the user's existing files).
     """
     auth = await _login_alice(client)
@@ -155,7 +155,7 @@ async def test_upload_missing_scenario_id_private_auto_generates_default(
         files={"file": ("x.json", io.BytesIO(body.encode()), "application/json")},
     )
     assert r.status_code == 201, r.text
-    assert r.json()["case_id"] == "场景用例-1"
+    assert r.json()["case_id"] == "scenario-1"
 
     # Second upload with no scenarioId → next free number
     body2 = json.dumps({"kind": "scenario", "meta": {"name": "B"}})
@@ -166,12 +166,12 @@ async def test_upload_missing_scenario_id_private_auto_generates_default(
         files={"file": ("y.json", io.BytesIO(body2.encode()), "application/json")},
     )
     assert r2.status_code == 201
-    assert r2.json()["case_id"] == "场景用例-2"
+    assert r2.json()["case_id"] == "scenario-2"
 
     # Disk reflects both files
     user_dir = tmp_path / "users" / "1"
-    assert (user_dir / "场景用例-1.json").exists()
-    assert (user_dir / "场景用例-2.json").exists()
+    assert (user_dir / "scenario-1.json").exists()
+    assert (user_dir / "scenario-2.json").exists()
 
 
 async def test_upload_empty_scenario_id_private_auto_generates_default(
@@ -187,7 +187,7 @@ async def test_upload_empty_scenario_id_private_auto_generates_default(
         files={"file": ("x.json", io.BytesIO(body.encode()), "application/json")},
     )
     assert r.status_code == 201
-    assert r.json()["case_id"] == "场景用例-1"
+    assert r.json()["case_id"] == "scenario-1"
 
 
 async def test_upload_missing_scenario_id_public_still_400(
@@ -357,7 +357,7 @@ async def test_patch_replaces_case_file(
     assert written["meta"]["name"] == "Updated"
 
 
-async def test_patch_scenario_id_mismatch_400(
+async def test_patch_scenario_id_mismatch_422(
     client: AsyncClient, seed_public_case: str
 ) -> None:
     auth = await _login_alice(client)
@@ -366,7 +366,7 @@ async def test_patch_scenario_id_mismatch_400(
         headers=auth,
         json={"payload": {"scenarioId": "DIFFERENT", "meta": {}, "config": {}, "steps": []}},
     )
-    assert r.status_code == 400
+    assert r.status_code == 422
     assert "mismatch" in r.json()["detail"].lower()
 
 
@@ -841,7 +841,7 @@ async def test_rename_collision_409(client: AsyncClient, tmp_path) -> None:
     assert r2.status_code == 409
 
 
-async def test_rename_invalid_stem_400(client: AsyncClient, tmp_path) -> None:
+async def test_rename_invalid_stem_422(client: AsyncClient, tmp_path) -> None:
     auth = await _login_alice(client)
     body = json.dumps(
         {"kind": "scenario", "scenarioId": "good", "meta": {"name": "X"}}
@@ -859,7 +859,7 @@ async def test_rename_invalid_stem_400(client: AsyncClient, tmp_path) -> None:
         headers=auth,
         json={"new_case_id": "../etc/passwd"},
     )
-    assert r2.status_code == 400
+    assert r2.status_code == 422
 
 
 async def test_rename_non_owner_forbidden(client: AsyncClient, tmp_path) -> None:
@@ -897,7 +897,7 @@ async def test_rename_non_owner_forbidden(client: AsyncClient, tmp_path) -> None
 async def test_upload_default_then_rename_flow(
     client: AsyncClient, tmp_path
 ) -> None:
-    """End-to-end: upload a file with NO scenarioId (auto → 场景用例-1),
+    """End-to-end: upload a file with NO scenarioId (auto → scenario-1),
     then rename to a meaningful name.  Verify disk + API agree at every step."""
     auth = await _login_alice(client)
     body = json.dumps({"kind": "scenario", "meta": {"name": "Login"}})
@@ -908,9 +908,9 @@ async def test_upload_default_then_rename_flow(
         files={"file": ("x.json", io.BytesIO(body.encode()), "application/json")},
     )
     assert r.status_code == 201
-    assert r.json()["case_id"] == "场景用例-1"
+    assert r.json()["case_id"] == "scenario-1"
 
-    # The default-naming counter skips 场景用例-1 for the next upload
+    # The default-naming counter skips scenario-1 for the next upload
     body2 = json.dumps({"kind": "scenario", "meta": {"name": "Logout"}})
     r2 = await client.post(
         "/api/cases/upload",
@@ -918,12 +918,12 @@ async def test_upload_default_then_rename_flow(
         data={"visibility": "private"},
         files={"file": ("y.json", io.BytesIO(body2.encode()), "application/json")},
     )
-    assert r2.json()["case_id"] == "场景用例-2"
+    assert r2.json()["case_id"] == "scenario-2"
 
-    # Rename 场景用例-1 → login-flow.  File content's scenarioId must
+    # Rename scenario-1 → login-flow.  File content's scenarioId must
     # track the rename so the loader cache key stays consistent.
     r3 = await client.post(
-        "/api/cases/场景用例-1/rename",
+        "/api/cases/scenario-1/rename",
         headers=auth,
         json={"new_case_id": "login-flow"},
     )
@@ -936,8 +936,8 @@ async def test_upload_default_then_rename_flow(
     assert renamed["scenarioId"] == "login-flow"
 
     # The default-naming counter is unaffected by the rename — the
-    # in-file scenarioId left behind is no longer "场景用例-1" so a fresh
-    # upload goes back to 场景用例-1.
+    # in-file scenarioId left behind is no longer "scenario-1" so a fresh
+    # upload goes back to scenario-1.
     body3 = json.dumps({"kind": "scenario", "meta": {"name": "Search"}})
     r4 = await client.post(
         "/api/cases/upload",
@@ -945,4 +945,4 @@ async def test_upload_default_then_rename_flow(
         data={"visibility": "private"},
         files={"file": ("z.json", io.BytesIO(body3.encode()), "application/json")},
     )
-    assert r4.json()["case_id"] == "场景用例-1"
+    assert r4.json()["case_id"] == "scenario-1"

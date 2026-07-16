@@ -9,18 +9,11 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as usersApi from '@/api/users'
 import type { UserOut, UserCreateIn, UserPatchIn } from '@/api/users'
-
-export type FetchStatus = 'idle' | 'loading' | 'error'
+import { useSetStatus } from '@/utils/useSetStatus'
 
 export const useUsersStore = defineStore('users', () => {
   const list = ref<UserOut[]>([])
-  const fetchStatus = ref<FetchStatus>('idle')
-  const lastError = ref<string>('')
-
-  function setStatus(s: FetchStatus, err: string = '') {
-    fetchStatus.value = s
-    lastError.value = err
-  }
+  const { fetchStatus, lastError, setStatus } = useSetStatus()
 
   async function fetchAll(): Promise<UserOut[]> {
     setStatus('loading')

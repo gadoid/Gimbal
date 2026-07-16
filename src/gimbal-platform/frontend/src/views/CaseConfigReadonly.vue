@@ -611,9 +611,19 @@ watch(() => route.params.caseId, load)
 
 // Keyboard: `?` toggles help modal
 function onKeydown(e: KeyboardEvent) {
-  // Don't intercept while typing in an input
-  const tag = (e.target as HTMLElement)?.tagName
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) {
+  // Don't intercept while typing in any editable surface — includes
+  // INPUT, TEXTAREA, native <select>, contenteditable, and Element
+  // Plus dropdowns which mount their popper inside the document body
+  // and rely on the original focused element to drive key events.
+  const target = e.target as HTMLElement | null
+  if (!target) return
+  const tag = target.tagName
+  if (
+    tag === 'INPUT' ||
+    tag === 'TEXTAREA' ||
+    tag === 'SELECT' ||
+    target.isContentEditable
+  ) {
     return
   }
   if (e.key === '?' || (e.shiftKey && e.key === '/')) {

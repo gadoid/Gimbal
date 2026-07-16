@@ -259,6 +259,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useListSearch } from '@/utils/useListSearch'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { useUsersStore } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
@@ -270,21 +271,22 @@ const authStore = useAuthStore()
 
 // ── filters & visible rows ──────────────────────────────
 type RoleFilter = 'all' | 'admin' | 'member'
-const searchQuery = ref('')
+// Search + role filter split: useListSearch handles substring
+// matching, the role filter stays as a separate predicate so the
+// composable stays generic.
+const { query: searchQuery, filtered: searchFiltered } = useListSearch(
+  usersStore.list,
+  ['username', 'display_name'],
+)
 const roleFilter = ref<RoleFilter>('all')
 
-const visibleUsers = computed(() => {
-  const q = searchQuery.value.trim().toLocaleLowerCase()
-  return usersStore.list.filter((u) => {
+const visibleUsers = computed(() =>
+  searchFiltered.value.filter((u) => {
     if (roleFilter.value === 'admin' && !u.is_admin) return false
     if (roleFilter.value === 'member' && u.is_admin) return false
-    if (!q) return true
-    return (
-      u.username.toLocaleLowerCase().includes(q) ||
-      (u.display_name ?? '').toLocaleLowerCase().includes(q)
-    )
-  })
-})
+    return true
+  }),
+)
 
 const adminCount = computed(() => usersStore.list.filter((u) => u.is_admin).length)
 const activeCount = computed(() => usersStore.list.filter((u) => u.is_active).length)

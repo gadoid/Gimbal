@@ -28,7 +28,6 @@ from ..core.db import get_db
 from ..core.deps import CurrentUser
 from ..core.security import fernet_decrypt, fernet_encrypt
 from ..models import AuthSession
-from ..models.user import User
 from ..schemas.auth_session import (
     AuthSessionCreateIn,
     AuthSessionOut,
@@ -149,7 +148,7 @@ async def patch_auth(
     except IntegrityError:
         await session.rollback()
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="conflict on update"
+            status_code=status.HTTP_409_CONFLICT, detail="更新冲突"
         )
     await session.refresh(a)
     return _to_out(a)

@@ -169,9 +169,6 @@
                 <el-dropdown-item command="execute">
                   执行
                 </el-dropdown-item>
-                <el-dropdown-item divided command="open-yaml">
-                  打开源 YAML
-                </el-dropdown-item>
                 <el-dropdown-item
                   v-if="canDelete(row)"
                   divided
@@ -328,6 +325,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useListSearch } from '@/utils/useListSearch'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import * as casesApi from '@/api/cases'
@@ -352,7 +350,6 @@ import {
 const casesStore = useCasesStore()
 const authStore = useAuthStore()
 const router = useRouter()
-const searchQuery = ref('')
 const executeOpen = ref(false)
 const executeTarget = ref<CaseSummary | null>(null)
 
@@ -380,17 +377,15 @@ const deleteFileName = computed(() => {
 // 当前登录用户是否为 admin —— 单一来源是 auth store
 const isAdmin = computed(() => authStore.isAdmin)
 
-const visibleCases = computed(() => {
-  const all = applyFiltersToList(casesStore.publicLibrary, filters.value)
-  const q = searchQuery.value.trim().toLocaleLowerCase()
-  if (!q) return all
-  return all.filter((item) =>
-    [item.name, item.case_id, item.module, item.description, ...item.tags]
-      .join(' ')
-      .toLocaleLowerCase()
-      .includes(q),
-  )
-})
+// Search matches any of name/case_id/module/description/tags; advanced
+// filters layer on top via applyFiltersToList.
+const { query: searchQuery, filtered: searchFiltered } = useListSearch(
+  casesStore.publicLibrary,
+  ['name', 'case_id', 'module', 'description', 'tags'],
+)
+const visibleCases = computed(() =>
+  applyFiltersToList(searchFiltered.value, filters.value),
+)
 
 const metaText = computed(() => {
   const total = casesStore.publicLibrary.length
@@ -520,11 +515,6 @@ async function onCommand(cmd: string, row: CaseSummary): Promise<void> {
         renameTitle.value = `另存为：${row.name || row.case_id}`
         renameOpen.value = true
         return
-      case 'open-yaml': {
-        // Spec-1 stub: 跳详情页（实际"打开源 yaml"是 V1+ feature；路由占位先复用详情页）
-        router.push(`/cases/${encodeURIComponent(row.case_id)}/config`)
-        return
-      }
       case 'execute': {
         // Spec-2-2: open execution drawer
         executeTarget.value = row

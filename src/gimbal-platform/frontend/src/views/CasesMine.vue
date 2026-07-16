@@ -412,6 +412,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useListSearch } from '@/utils/useListSearch'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import * as casesApi from '@/api/cases'
@@ -440,7 +441,6 @@ const authStore = useAuthStore()
 const router = useRouter()
 
 const activeTab = ref<MineTab>('uploads')
-const searchQuery = ref('')
 const executeOpen = ref(false)
 const executeTarget = ref<CaseSummary | null>(null)
 const deleteOpen = ref(false)
@@ -473,17 +473,18 @@ const currentCases = computed<CaseSummary[]>(() =>
     : casesStore.mineFavorites,
 )
 
-const visibleCases = computed(() => {
-  const filtered = applyFiltersToList(currentCases.value, filters.value)
-  const q = searchQuery.value.trim().toLocaleLowerCase()
-  if (!q) return filtered
-  return filtered.filter((item) =>
-    [item.name, item.case_id, item.module, item.description, ...item.tags]
-      .join(' ')
-      .toLocaleLowerCase()
-      .includes(q),
-  )
-})
+// `useListSearch` returns the query ref — the same object instance
+// is bound to the search input via v-model, so the composable and
+// the input share state.  The search matches any of name/case_id/
+// module/description/author/tags; advanced filters are layered on
+// top via applyFiltersToList.
+const { query: searchQuery, filtered: searchFiltered } = useListSearch(
+  currentCases,
+  ['name', 'case_id', 'module', 'description', 'author', 'tags'],
+)
+const visibleCases = computed(() =>
+  applyFiltersToList(searchFiltered.value, filters.value),
+)
 
 const metaText = computed(() => {
   const uploads = casesStore.mineUploads.length

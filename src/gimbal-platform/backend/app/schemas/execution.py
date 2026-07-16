@@ -33,6 +33,13 @@ class ExecutionCreateIn(BaseModel):
     # executor falls back to its default
     # ``gimbal run launch <yaml> --env <env> --report-dir <dir>``.
     command_line: list[str] | None = Field(default=None, max_length=64)
+    # 0-based inclusive halt index forwarded to
+    # ``gimbal run launch --step-to <N>``.  ``None`` (default) means
+    # "run all steps" — preserves legacy payloads.  Lower bound ``ge=0``
+    # is enforced here; upper bound (``< step_count`` of the referenced
+    # case) is enforced at the router layer so the error message can
+    # include the actual step_count.
+    step_to: int | None = Field(default=None, ge=0)
 
 
 # ── outputs ────────────────────────────────────────────────────

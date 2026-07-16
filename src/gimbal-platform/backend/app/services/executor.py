@@ -29,7 +29,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import shutil
 import subprocess
 import threading
 import time
@@ -46,7 +45,6 @@ from ..core import db as db_module
 from ..core.config import settings
 from ..models import ExecRun, Execution
 from ..models.auth_session import AuthSession
-from ..models.case import Case  # for fetching case payload
 from ..services.case_loader import loader
 
 
@@ -137,6 +135,43 @@ def _write_temp_yaml(payload: dict[str, Any], dest: Path) -> None:
         yaml.safe_dump(payload, f, allow_unicode=True, sort_keys=False)
 
 
+async def render_execution_yaml(
+    *,
+    case_id: str,
+    owner_id: int,
+    cfg: dict[str, Any],
+    idx: int,
+) -> dict[str, Any]:
+    """Render a temp-yaml for one execution run: fetch case payload,
+    decrypt auths (if needed), inject users/vars.
+
+    Returns the rendered dict.  Caller is responsible for persisting
+    the result to disk (see ``_write_temp_yaml``).  Raises ``KeyError``
+    when the case file vanished and ``ValueError`` on a render-config
+    conflict.
+    """
+    inject_credentials = cfg.get("inject_credentials", True)
+    if inject_credentials:
+        # Late import to avoid a circular at module load time.
+        from ..core import db as db_module
+
+        async with db_module.SessionLocal() as s2:
+            exec_auths = await _decrypt_auths(
+                s2, owner_id, cfg.get("exec_auth_alias", []),
+            )
+    else:
+        exec_auths = []
+    payload = await _fetch_case_payload(case_id)
+    return _render_temp_yaml(
+        payload,
+        exec_auths=exec_auths,
+        merge_policy=cfg.get("merge_policy", "override"),
+        prefix=cfg.get("prefix"),
+        idx=idx,
+        inject_credentials=inject_credentials,
+    )
+
+
 async def _decrypt_auths(
     session: AsyncSession, owner_id: int, aliases: list[str]
 ) -> list[AuthSession]:
@@ -167,6 +202,12 @@ async def _decrypt_auths(
 # Cap on captured stdout / stderr per run — prevents a runaway `gimbal`
 # from OOM'ing the FastAPI worker if the process forgets to terminate.
 _LOG_CAPTURE_BYTES = 256 * 1024  # 256 KiB
+
+# Bound on `gimbal run show --from-path …` invocations from the platform.
+# A well-formed scenario file resolves in milliseconds; the cap exists so
+# a pathological input (huge yaml, or a hung subprocess) can't tie up a
+# FastAPI worker indefinitely.
+_SHOW_TIMEOUT_SEC = 10
 
 
 class _StreamRunResult(NamedTuple):
@@ -239,38 +280,9 @@ def _subprocess_run_streaming(
     safe cross-platform fallback.
     """
     proc: subprocess.Popen[bytes] | None = None
-    # Force UTF-8 + unbuffered in the child.  Four layers of defense:
-    #   1. PYTHONUTF8=1              — PEP 540: enables UTF-8 mode at
-    #                                  Python startup (equivalent to -X utf8).
-    #                                  sys.stdout/stderr default to UTF-8.
-    #   2. PYTHONIOENCODING=utf-8    — explicit backup; respects PEP 686
-    #                                  override of locale-derived encoding.
-    #   3. PYTHONCOERCECLOCALE=0     — disable the Windows-ASCII coerce path
-    #                                  that PEP 540 also covers but that some
-    #                                  zipapp shims (e.g. gimbal.exe) ignore.
-    #   4. PYTHONUNBUFFERED=1        — disables stdout/stderr block buffering
-    #                                  in Python child processes so our
-    #                                  readline() loop actually sees lines
-    #                                  as they're written.  Without this
-    #                                  we'd only get output at flush points
-    #                                  (typically the 4 KiB buffer fill or
-    #                                  process exit).
-    # Inheriting the parent env otherwise so PATH / VIRTUAL_ENV carry over.
-    sub_env = {
-        **os.environ,
-        "PYTHONUTF8": "1",
-        "PYTHONIOENCODING": "utf-8",
-        "PYTHONCOERCECLOCALE": "0",
-        "PYTHONLEGACYWINDOWSSTDIO": "0",
-        "PYTHONUNBUFFERED": "1",
-    }
-    # gimbal's ConfigLoader._find_base_dir() walks upward from cwd looking
-    # for the FIRST pyproject.toml.  If we launch from the platform's
-    # backend dir, it stops at the platform's own pyproject.toml and
-    # fails to find <gimbal_root>/src/gimbal/config/gimbal.yaml.
-    # Set cwd = gimbal's project root (resolved at startup in core.config)
-    # so it finds the right config dir.
-    sub_cwd = settings.GIMBAL_PROJECT_ROOT
+    # Centralized env/cwd policy — see _gimbal_sub_env_cwd for the
+    # rationale on each PYTHON* override + cwd = gimbal project root.
+    sub_env, sub_cwd = _gimbal_sub_env_cwd()
 
     log_path.parent.mkdir(parents=True, exist_ok=True)
     # Truncate-or-create.  Each run writes a fresh file.
@@ -319,10 +331,11 @@ def _subprocess_run_streaming(
             exit_code = -1
             logger.warning("exec subprocess timed out after {}s", timeout)
 
-        # Let the readline threads drain whatever was buffered before
-        # the kill.  Bound the wait so a stuck child can't block us forever.
-        t_out.join(timeout=5)
-        t_err.join(timeout=5)
+        # proc.wait() above (or the TimeoutExpired path's kill+wait) has
+        # already closed the child's stdout/stderr pipes.  The reader
+        # threads each see EOF on their next readline and exit on their
+        # own; the daemon=True thread is GC'd when the function returns.
+        # No explicit join needed here.
         return _StreamRunResult(
             exit_code=exit_code if exit_code is not None else 0,
             file_not_found=False,
@@ -330,19 +343,95 @@ def _subprocess_run_streaming(
     finally:
         # Log file handle is owned by _run_one (it needs to write the
         # exit_code footer after we return).  We do NOT close here.
-        # Ensure pump threads are stopped before returning to keep the
-        # contract clean.
-        if t_out is not None and t_out.is_alive():
-            # Shouldn't happen — join above should have reaped them —
-            # but if it does, give the daemon a chance to exit.
-            t_out.join(timeout=1)
-        if t_err is not None and t_err.is_alive():
-            t_err.join(timeout=1)
+        # Defensive kill: if proc is somehow still alive (e.g. exception
+        # thrown before wait()), reap it.
         if proc is not None and proc.poll() is None:
             try:
                 proc.kill()
             except Exception:  # noqa: BLE001
                 pass
+
+
+def _gimbal_sub_env_cwd() -> tuple[dict, Path]:
+    """Return ``(sub_env, sub_cwd)`` for spawning ``gimbal`` subprocesses.
+
+    Centralizes the env / cwd policy shared by every helper in this module:
+
+    * **env**: inherit the parent, plus five ``PYTHON*`` / ``PYTHONUNBUFFERED``
+      overrides (see `_subprocess_run_streaming` for the rationale on each).
+      Without these, the child uses the parent's stdio encoding which on
+      Windows defaults to GBK and corrupts non-ASCII output.
+    * **cwd**: must be gimbal's project root (not the platform's backend
+      dir), otherwise gimbal's ``ConfigLoader._find_base_dir()`` stops at
+      gimbal-platform's ``pyproject.toml`` and fails to find
+      ``<root>/src/gimbal/config/gimbal.yaml``.  Resolved at startup in
+      ``core.config``.
+
+    Callers MUST use this helper instead of re-deriving the dict/path
+    themselves so the policy stays in one place.
+    """
+    sub_env = {
+        **os.environ,
+        "PYTHONUTF8": "1",
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONCOERCECLOCALE": "0",
+        "PYTHONLEGACYWINDOWSSTDIO": "0",
+        "PYTHONUNBUFFERED": "1",
+    }
+    return sub_env, settings.GIMBAL_PROJECT_ROOT
+
+
+def _run_gimbal_capture_sync(cmd_args: list[str], *, timeout: int) -> tuple[int, str]:
+    """Sync helper: run ``cmd_args`` once, return ``(returncode, stdout)``.
+
+    Unlike ``_subprocess_run_streaming`` this helper is for **non-streaming
+    read-only** subcommands (e.g. ``gimbal run show --from-path --format=json``).
+    It captures stdout to a single string in one go and silently discards
+    stderr — callers map the returncode to a structured HTTP error.  No
+    LogHub, no disk log file.
+
+    Uses ``subprocess.run(capture_output=True)`` (not ``Popen``) for the
+    simpler API; still bound by ``timeout`` so a hung subprocess can't
+    pin a worker.
+
+    Errors:
+      * ``FileNotFoundError`` → returns ``(127, "")`` (gimbal not on PATH).
+      * ``subprocess.TimeoutExpired`` → returns ``(-1, "")``.
+      * Any other exception → returns ``(-2, "")``.
+    """
+    sub_env, sub_cwd = _gimbal_sub_env_cwd()
+    try:
+        proc = subprocess.run(
+            cmd_args,
+            capture_output=True,
+            env=sub_env,
+            cwd=str(sub_cwd),
+            timeout=timeout,
+            check=False,
+        )
+    except FileNotFoundError:
+        logger.warning("_run_gimbal_capture: gimbal binary not on PATH ({})", cmd_args[0])
+        return (127, "")
+    except subprocess.TimeoutExpired:
+        logger.warning("_run_gimbal_capture: subprocess timed out after {}s", timeout)
+        return (-1, "")
+    except Exception as e:  # noqa: BLE001 — never let capture crash the caller
+        logger.warning("_run_gimbal_capture: unexpected error: {}", e)
+        return (-2, "")
+
+    stdout = proc.stdout.decode("utf-8", errors="replace") if proc.stdout else ""
+    return (proc.returncode, stdout)
+
+
+async def _run_gimbal_capture(cmd_args: list[str], *, timeout: int = _SHOW_TIMEOUT_SEC) -> tuple[int, str]:
+    """Async wrapper around ``_run_gimbal_capture_sync``.
+
+    Routes through ``asyncio.to_thread`` for the same reason as
+    ``_subprocess_run_streaming``: on Python 3.14 + SelectorEventLoop +
+    Windows, asyncio-based subprocess APIs raise ``NotImplementedError``.
+    See module docstring lines 6-17.
+    """
+    return await asyncio.to_thread(_run_gimbal_capture_sync, cmd_args, timeout=timeout)
 
 
 def _build_command_line(args: list[str]) -> str:
@@ -394,6 +483,7 @@ async def _run_one(
     report_dir: Path,
     timeout: int = 300,
     override_cmd_args: list[str] | None = None,
+    step_to: int | None = None,
 ) -> None:
     """Fire one ``gimbal run launch`` and record the outcome.
 
@@ -407,6 +497,11 @@ async def _run_one(
     default ``gimbal run launch <yaml> ...`` argv entirely.  The yaml
     file is still rendered server-side so report paths / log files stay
     consistent, but the override decides what actually runs.
+
+    ``step_to`` (0-based inclusive halt index) appends ``--step-to <N>``
+    to the *default* argv only — never to an admin override.  Admin argv
+    is treated as RCE trust: the operator can add the flag themselves if
+    they want it.
     """
     db = db_module.SessionLocal
     started_at = datetime.utcnow()
@@ -443,11 +538,16 @@ async def _run_one(
         except ValueError:
             yaml_arg = str(yaml_path)
         cmd_args = [
-            "gimbal",
+            settings.GIMBAL_BIN,
             "run",
             "launch",
             yaml_arg,
         ]
+        if step_to is not None:
+            # ``gimbal run launch --step-to <N>`` halts after step N
+            # (0-based, inclusive).  See RuntimeControl.halt_at in
+            # gimbal/core/scenario_runner.py.
+            cmd_args += ["--step-to", str(int(step_to))]
     command_line = _build_command_line(cmd_args)
     log_path = report_dir / f"run_{run_id}.log"
 
@@ -566,53 +666,47 @@ async def run_execution(execution_id: int) -> None:
         # the rendered yaml is left as the case yaml defines it).  The UI
         # represents this state as the "origin" radio item.
         inject_credentials = cfg.get("inject_credentials", True)
+        # 0-based inclusive halt index forwarded to ``gimbal run launch
+        # --step-to <N>``.  ``None`` (= key absent) means "run all steps".
+        # Range-checked against the case's step_count at the router layer
+        # (see routers/executions.py::create_execution), so by the time we
+        # get here the value is either None or in-range.
+        step_to = cfg.get("step_to")
 
-    # Hydrate auths — only when injection is enabled.  Skipping avoids a
-    # roundtrip to the DB and ignores any alias the client might have left
-    # in the payload by mistake.
-    if inject_credentials:
-        async with db() as session:
-            exec_auths = await _decrypt_auths(session, owner_id, exec_aliases)
-    else:
-        exec_auths = []
-
-    # Read case payload
-    try:
-        payload = await _fetch_case_payload(case_id)
-    except KeyError:
-        async with db() as session:
-            ex = await session.get(Execution, execution_id)
-            ex.status = "failed"
-            await session.commit()
-        return
-
-    # Render N temp yamls (each can have a different ${var.seq} starting point)
+    # Render N temp yamls.  Each call to render_execution_yaml fetches the
+    # case payload, decrypts auths, and produces a render-config-aware
+    # copy with the per-idx seq/vars injected.  The yaml files share a
+    # per-execution tmp dir; their seq counters advance independently.
     tmp_dir = settings.DATA_DIR / "tmp"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     report_dir = settings.DATA_DIR / "reports" / f"exec_{execution_id}"
     report_dir.mkdir(parents=True, exist_ok=True)
 
     yaml_paths: list[Path] = []
-    async with db() as session:
-        for idx in range(1, n + 1):
-            try:
-                rendered = _render_temp_yaml(
-                    payload,
-                    exec_auths=exec_auths,
-                    merge_policy=merge_policy,
-                    prefix=prefix,
-                    idx=idx,
-                    inject_credentials=inject_credentials,
-                )
-            except ValueError as e:
-                logger.error("exec {} yaml render failed: {}", execution_id, e)
+    for idx in range(1, n + 1):
+        try:
+            rendered = await render_execution_yaml(
+                case_id=case_id,
+                owner_id=owner_id,
+                cfg=cfg,
+                idx=idx,
+            )
+        except KeyError:
+            async with db() as session:
                 ex = await session.get(Execution, execution_id)
                 ex.status = "failed"
                 await session.commit()
-                return
-            yp = tmp_dir / f"exec_{execution_id}_{idx}.yaml"
-            _write_temp_yaml(rendered, yp)
-            yaml_paths.append(yp)
+            return
+        except ValueError as e:
+            logger.error("exec {} yaml render failed: {}", execution_id, e)
+            async with db() as session:
+                ex = await session.get(Execution, execution_id)
+                ex.status = "failed"
+                await session.commit()
+            return
+        yp = tmp_dir / f"exec_{execution_id}_{idx}.yaml"
+        _write_temp_yaml(rendered, yp)
+        yaml_paths.append(yp)
 
     # Mark execution as running
     async with db() as session:
@@ -646,6 +740,7 @@ async def run_execution(execution_id: int) -> None:
                 env=env,
                 report_dir=report_dir,
                 override_cmd_args=override_cmd_args,
+                step_to=step_to,
             )
 
     await asyncio.gather(

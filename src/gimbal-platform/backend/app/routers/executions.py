@@ -25,6 +25,7 @@ from ..schemas.execution import (
     ExecutionOut,
 )
 from ..services.executor import run_execution
+from ..services.case_loader import loader
 from ..services.log_hub import EndEvent, KeepAlive, RunLogLine, hub
 
 router = APIRouter(prefix="/executions", tags=["executions"])
@@ -206,6 +207,32 @@ async def create_execution(
     }
     if payload.command_line is not None:
         cfg["command_line"] = payload.command_line
+    if payload.step_to is not None:
+        # Validate against the case's step count BEFORE writing to DB —
+        # this gives the client a precise error (with the actual range)
+        # rather than letting the subprocess start and exit early.
+        try:
+            case_payload = loader.read(payload.case_id)
+        except KeyError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"case not found: {payload.case_id}",
+            )
+        steps = case_payload.get("steps") or []
+        if not steps:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="case has no steps; step_to cannot be set",
+            )
+        if payload.step_to >= len(steps):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"step_to={payload.step_to} out of range "
+                    f"(case has {len(steps)} steps, indices 0..{len(steps)-1})"
+                ),
+            )
+        cfg["step_to"] = payload.step_to
     ex = Execution(
         case_id=payload.case_id,
         owner_id=user.id,
@@ -464,6 +491,16 @@ async def delete_run(
     run = await session.get(ExecRun, run_id)
     if run is None or run.execution_id != ex.id:
         raise HTTPException(status_code=404, detail="run not found")
+    # Counter delta: only completed runs (passed/failed) had a counter
+    # increment at _run_one completion; pending/running rows never did.
+    # Decrementing when the run was completed keeps the parent's
+    # passed/failed aligned with the surviving row set.
+    if run.status == "passed":
+        ex.passed = max(0, (ex.passed or 0) - 1)
+    elif run.status == "failed":
+        ex.failed = max(0, (ex.failed or 0) - 1)
+    # total_runs counts row presence; deleting always decrements.
+    ex.total_runs = max(0, (ex.total_runs or 0) - 1)
     await session.delete(run)
     await session.commit()
 
@@ -476,69 +513,79 @@ async def rerun_run(
     ex: OwnedExecution,
     session: DbSession,
 ) -> ExecRunOut:
-    """Re-fire a single run; updates its status/duration/exit_code.
+    """Re-fire a run by INSERTING a new ExecRun row (B-model semantics).
 
-    Best-effort: if `gimbal` isn't on PATH (Spec-2 dev), the run will
-    be marked failed (exit 127).  The execution's passed/failed counters
-    are NOT adjusted — the operator can delete + re-run for accurate
-    bookkeeping.
+    Each rerun creates a fresh row with ``idx = max(idx) + 1`` so the
+    full history is preserved — failures + retries stay visible.  The
+    parent execution's ``total_runs`` grows by 1 per rerun.
+
+    The new row's ``log_path`` / ``report_path`` are derived from the
+    fresh ``run_id`` so they don't clobber the previous attempt's
+    artifacts.  ``_run_one`` increments ``Execution.passed`` /
+    ``Execution.failed`` exactly once per completed attempt — no
+    double-counting even when the prior attempt was already passed.
     """
-    run = await session.get(ExecRun, run_id)
-    if run is None or run.execution_id != ex.id:
+    src_run = await session.get(ExecRun, run_id)
+    if src_run is None or src_run.execution_id != ex.id:
         raise HTTPException(status_code=404, detail="run not found")
+
+    from sqlalchemy import func, select
+
+    # Compute next idx from the live set.  Concurrent reruns are rare
+    # enough that the worst-case race is a duplicate idx — accepted as
+    # a known limitation rather than a hard transactional lock.
+    max_idx_row = (
+        await session.execute(
+            select(func.max(ExecRun.idx)).where(ExecRun.execution_id == ex.id)
+        )
+    ).scalar()
+    next_idx = (max_idx_row or 0) + 1
+
+    new_run = ExecRun(execution_id=ex.id, idx=next_idx, status="pending")
+    session.add(new_run)
+    ex.total_runs = (ex.total_runs or 0) + 1
+    await session.commit()
+    await session.refresh(new_run)
 
     from ..services.executor import _run_one
 
     report_dir = settings.DATA_DIR / "reports" / f"exec_{execution_id}"
     report_dir.mkdir(parents=True, exist_ok=True)
-    # Reuse the existing yaml path if any; otherwise we need to re-render.
-    yaml_path = report_dir / f"run_{run_id}.yaml"
-    if not yaml_path.exists():
-        from ..services.executor import _render_temp_yaml, _fetch_case_payload, _decrypt_auths
+    yaml_path = report_dir / f"run_{new_run.id}.yaml"
+    # Always render fresh — the new run id means the yaml must be
+    # regenerated (no chance of clashing with a previous attempt's file).
+    from ..services.executor import _write_temp_yaml, render_execution_yaml
 
-        cfg = ex.config_json or {}
-        inject_credentials = cfg.get("inject_credentials", True)
-        # Skip the auth decrypt roundtrip when the original run was set up
-        # in "origin" mode (no credential injection).
-        if inject_credentials:
-            async with db_module.SessionLocal() as s2:
-                exec_auths = await _decrypt_auths(
-                    s2, ex.owner_id, cfg.get("exec_auth_alias", []),
-                )
-        else:
-            exec_auths = []
-        try:
-            payload = await _fetch_case_payload(ex.case_id)
-        except KeyError:
-            raise HTTPException(status_code=404, detail="case file vanished")
-        try:
-            rendered = _render_temp_yaml(
-                payload,
-                exec_auths=exec_auths,
-                merge_policy=cfg.get("merge_policy", "override"),
-                prefix=cfg.get("prefix"),
-                idx=run.idx,
-                inject_credentials=inject_credentials,
-            )
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"render failed: {e}")
-        yaml_path.parent.mkdir(parents=True, exist_ok=True)
-        import yaml as _yaml
-        with yaml_path.open("w", encoding="utf-8") as f:
-            _yaml.safe_dump(rendered, f, allow_unicode=True, sort_keys=False)
+    cfg = ex.config_json or {}
+    try:
+        rendered = await render_execution_yaml(
+            case_id=ex.case_id,
+            owner_id=ex.owner_id,
+            cfg=cfg,
+            idx=new_run.idx,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"case file vanished: {ex.case_id}")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=f"render failed: {e}")
+    _write_temp_yaml(rendered, yaml_path)
 
     await _run_one(
         execution_id=execution_id,
-        run_id=run_id,
+        run_id=new_run.id,
         yaml_path=yaml_path,
         env=cfg.get("env", "dev"),
         report_dir=report_dir,
+        # Rerun replays the original execution's config — including step_to
+        # so the new attempt honors the same halt-at semantics.
+        step_to=cfg.get("step_to"),
     )
 
-    # Re-fetch
-    session.expire_all()
-    fresh = await session.get(ExecRun, run_id)
-    return _run_out(fresh)
+    # Re-fetch the new row so the response reflects post-subprocess
+    # state (status, exit_code, duration, log_path, command_line).
+    # _run_one commits via its own session; refresh here hits the DB.
+    await session.refresh(new_run)
+    return _run_out(new_run)
 
 
 # ── delete ─────────────────────────────────────────────────────

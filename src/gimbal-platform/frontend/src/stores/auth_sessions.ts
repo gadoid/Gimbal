@@ -14,18 +14,11 @@ import type {
   AuthSessionPatchIn,
   TestResult,
 } from '@/api/auth_sessions'
-
-export type FetchStatus = 'idle' | 'loading' | 'error'
+import { useSetStatus } from '@/utils/useSetStatus'
 
 export const useAuthSessionsStore = defineStore('authSessions', () => {
   const list = ref<AuthSession[]>([])
-  const fetchStatus = ref<FetchStatus>('idle')
-  const lastError = ref<string>('')
-
-  function setStatus(s: FetchStatus, err: string = '') {
-    fetchStatus.value = s
-    lastError.value = err
-  }
+  const { fetchStatus, lastError, setStatus } = useSetStatus()
 
   async function fetchAll(): Promise<AuthSession[]> {
     setStatus('loading')
@@ -64,10 +57,6 @@ export const useAuthSessionsStore = defineStore('authSessions', () => {
     return await authSessionsApi.testConnection(id)
   }
 
-  async function fetchToken(id: number) {
-    return await authSessionsApi.fetchToken(id)
-  }
-
   return {
     list,
     fetchStatus,
@@ -77,6 +66,5 @@ export const useAuthSessionsStore = defineStore('authSessions', () => {
     patchAuth,
     deleteAuth,
     testConnection,
-    fetchToken,
   }
 })

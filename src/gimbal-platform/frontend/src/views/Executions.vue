@@ -5,7 +5,16 @@
     <header class="page-header">
       <div>
         <h2>执行 #{{ execStore.detail.id }}</h2>
-        <p>{{ execStore.detail.case_id }} · 状态 {{ statusText }}</p>
+        <p>
+          {{ execStore.detail.case_id }} · 状态 {{ statusText }}
+          <el-tag
+            v-if="stepToLabel"
+            type="info"
+            size="small"
+            class="step-to-pill"
+            title="本次执行在 --step-to 模式下运行（仅跑到第 N 步后停止）"
+          >执行到第 {{ stepToLabel }} 步</el-tag>
+        </p>
       </div>
       <div class="header-actions">
         <span :class="['status-tag', `status-${execStore.detail.status}`]">
@@ -38,8 +47,12 @@
     </div>
 
     <h3 class="runs-title">运行明细</h3>
-    <el-table :data="execStore.detail.runs" class="runs-table">
-      <el-table-column label="#" prop="idx" width="60" />
+    <el-table
+      :data="execStore.detail.runs"
+      class="runs-table"
+      :default-sort="{ prop: 'id', order: 'descending' }"
+    >
+      <el-table-column label="#" prop="idx" width="60" sortable />
       <el-table-column label="状态" width="120">
         <template #default="{ row }">
           <span :class="['run-tag', `run-${row.status}`]">{{ statusLabel(row.status) }}</span>
@@ -170,7 +183,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElNotification } from 'element-plus'
 import { useExecutionsStore } from '@/stores/executions'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -189,15 +202,35 @@ const execStore = useExecutionsStore()
 
 const executionId = computed(() => Number(route.params.id))
 
+// Status labels.  Execution has its own status vocabulary
+// (queued / running / done / failed); ExecRun reuses a near-identical
+// set with "pending" / "passed" instead.  One map per surface, both
+// rendered through the same lookup helper.
+const EXEC_LABELS: Record<string, string> = {
+  queued: '排队', running: '运行中', done: '完成', failed: '失败',
+}
+const RUN_LABELS: Record<string, string> = {
+  pending: '排队', running: '运行中', passed: '通过', failed: '失败',
+}
 const statusText = computed(() => {
   const s = execStore.detail?.status
-  if (!s) return ''
-  return ({ queued: '排队', running: '运行中', done: '完成', failed: '失败' } as Record<string, string>)[s] ?? s
+  return s ? (EXEC_LABELS[s] ?? s) : ''
 })
-
 function statusLabel(s: string): string {
-  return ({ pending: '排队', running: '运行中', passed: '通过', failed: '失败' } as Record<string, string>)[s] ?? s
+  return RUN_LABELS[s] ?? s
 }
+
+// ``step_to`` is a 0-based inclusive halt index stored in
+// Execution.config_json by the create endpoint.  Display as
+// 1-based "执行到第 N 步" only when the field is present and non-null
+// (legacy rows without the key render exactly as before — no pill).
+const stepToLabel = computed(() => {
+  const v = execStore.detail?.config?.step_to
+  if (v === null || v === undefined) return ''
+  const n = Number(v)
+  if (!Number.isFinite(n) || n < 0) return ''
+  return String(Math.floor(n) + 1)
+})
 
 function exitClass(code: number | null): string {
   if (code === null) return ''
@@ -240,12 +273,7 @@ const logStream = ref<LogStream | null>(null)
 const authStore = useAuthStore()
 
 function runStatusLabel(s: string): string {
-  return (
-    { pending: '排队', running: '运行中', passed: '通过', failed: '失败' } as Record<
-      string,
-      string
-    >
-  )[s] ?? s
+  return statusLabel(s)
 }
 
 /** True when the row is the one currently displayed in the inline panel. */
@@ -402,10 +430,15 @@ async function confirmDeleteRun() {
   if (!deleteTarget.value || !execStore.detail) return
   deleteSubmitting.value = true
   try {
-    await apiDeleteRun(execStore.detail.id, deleteTarget.value.id)
-    ElMessage.success('已删除')
+    const removed = deleteTarget.value
+    await apiDeleteRun(execStore.detail.id, removed.id)
+    // Optimistic remove — row disappears immediately + counters
+    // decrement in the header.  Background fetchDetail keeps the
+    // canonical state in sync for concurrent operators.
+    execStore.removeRun(removed.id)
     deleteOpen.value = false
-    await execStore.fetchDetail(execStore.detail.id)
+    void execStore.fetchDetail(execStore.detail.id)
+    ElMessage.success(`run #${removed.idx} 已删除`)
   } catch {
     ElMessage.error('删除失败')
   } finally {
@@ -415,12 +448,28 @@ async function confirmDeleteRun() {
 
 async function rerunRun(row: ExecRun) {
   if (!execStore.detail) return
+  row.rerunning = true
   try {
-    await apiRerun(execStore.detail.id, row.id)
-    ElMessage.success(`run #${row.idx} 重跑已提交`)
-    await execStore.fetchDetail(execStore.detail.id)
-  } catch {
-    ElMessage.error('重跑失败')
+    // POST /rerun blocks server-side until the subprocess finishes; the
+    // returned ExecRunOut already has the post-subprocess state.
+    const newRun = await apiRerun(execStore.detail.id, row.id)
+    // Optimistic append — the new row appears in the table
+    // immediately without waiting for a full fetchDetail roundtrip.
+    // The ElTable's :default-sort by id desc puts it at the top.
+    execStore.appendRun(newRun)
+    // Background sync so subsequent polls / counters stay consistent
+    // (catches any side-effect updates from concurrent reruns or
+    // other operators hitting the same execution).
+    void execStore.fetchDetail(execStore.detail.id)
+    ElNotification.success({
+      title: '重跑完成',
+      message: `新 run #${newRun.idx} (id=${newRun.id}) 已生成 · exit=${newRun.exit_code ?? '—'}`,
+      duration: 4500,
+    })
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '重跑失败')
+  } finally {
+    row.rerunning = false
   }
 }
 
@@ -477,6 +526,10 @@ onUnmounted(() => {
   margin: 5px 0 0;
   color: var(--color-text-secondary);
   font-size: 12px;
+}
+.step-to-pill {
+  margin-left: 8px;
+  vertical-align: middle;
 }
 
 .header-actions {

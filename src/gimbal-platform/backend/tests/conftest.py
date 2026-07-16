@@ -49,12 +49,6 @@ async def fresh_db(monkeypatch, tmp_path) -> AsyncGenerator[None, None]:
 
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    # Sanity check: list tables in the new sqlite file
-    async with test_engine.connect() as conn:
-        from sqlalchemy import text
-
-        rows = (await conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))).all()
-        logger.info("fresh_db created tables: %s", [r[0] for r in rows])
 
     try:
         yield

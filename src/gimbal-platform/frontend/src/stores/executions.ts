@@ -6,12 +6,13 @@
  * a terminal state (done/failed).
  */
 import { defineStore } from 'pinia'
-import { ref, onUnmounted } from 'vue'
+import { ref } from 'vue'
 import * as api from '@/api/executions'
 import type {
   Execution,
   ExecutionCreateIn,
   ExecutionDetail,
+  ExecRun,
 } from '@/api/executions'
 
 const POLL_INTERVAL_MS = 1000
@@ -59,6 +60,41 @@ export const useExecutionsStore = defineStore('executions', () => {
     return ex
   }
 
+  /**
+   * Optimistically append a newly-created run row to detail.runs so the
+   * table updates immediately, no fetchDetail roundtrip required.  Used
+   * by the rerun handler in Executions.vue — the API already returns
+   * the full post-subprocess ExecRunOut, so this is safe (no
+   * placeholder data).
+   */
+  function appendRun(run: ExecRun): void {
+    if (!detail.value) return
+    // Replace if already present (defensive — should not happen, but
+    // guards against a double-click in the same tick).
+    const idx = detail.value.runs.findIndex((r) => r.id === run.id)
+    if (idx >= 0) {
+      detail.value.runs[idx] = run
+    } else {
+      detail.value.runs = [...detail.value.runs, run]
+    }
+    // total_runs also grew by 1 (B-model: rerun inserts a new row).
+    // Keep the parent's count in sync so the header counters update.
+    detail.value.total_runs = (detail.value.total_runs || 0) + 1
+  }
+
+  /** Optimistically drop a deleted run + decrement parent counters. */
+  function removeRun(runId: number): void {
+    if (!detail.value) return
+    const removed = detail.value.runs.find((r) => r.id === runId)
+    detail.value.runs = detail.value.runs.filter((r) => r.id !== runId)
+    detail.value.total_runs = Math.max(0, (detail.value.total_runs || 0) - 1)
+    if (removed?.status === 'passed') {
+      detail.value.passed = Math.max(0, (detail.value.passed || 0) - 1)
+    } else if (removed?.status === 'failed') {
+      detail.value.failed = Math.max(0, (detail.value.failed || 0) - 1)
+    }
+  }
+
   async function remove(id: number): Promise<void> {
     await api.remove(id)
     list.value = list.value.filter((e) => e.id !== id)
@@ -93,8 +129,6 @@ export const useExecutionsStore = defineStore('executions', () => {
     }
   }
 
-  onUnmounted(stopPolling)
-
   return {
     list,
     detail,
@@ -104,6 +138,8 @@ export const useExecutionsStore = defineStore('executions', () => {
     fetchDetail,
     create,
     remove,
+    appendRun,
+    removeRun,
     startPolling,
     stopPolling,
   }
