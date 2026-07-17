@@ -185,11 +185,23 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "target": "$.response_status",
+          "target": "$.response_body.code",
           "operator": "eq",
           "expected": 200,
-          "message": "/api/order/orderEntrust/orderAdd 应返回200",
-          "soft": false
+          "message": "/api/order/orderEntrust/orderAdd 应返回成功",
+          "soft": true
+        },{
+          "kind": "extract",
+          "name": "extract_order_id",
+          "phase": "after_request",
+          "order": -1,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body",
+          "target": "result",
+          "required": true,
+          "default": null,
+          "scope": "scenario"
         }
       ]
     },

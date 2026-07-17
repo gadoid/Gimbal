@@ -1,19 +1,19 @@
 {
   "kind": "scenario",
-  "scenarioId": "亿海融物流订单查询",
+  "scenarioId": "case_p075",
   "meta": {
-    "name": "亿海融物流订单查询",
-    "description": "亿海融物流订单查询",
+    "name": "case_p075",
+    "description": "keyword_negative | work_no=不存在的工号 | field=work_no value='NOT_EXIST_WORK_999'",
     "module": "settlement",
     "priority": 1,
-    "author": "codfish",
-    "owner": "codfish",
+    "author": "explore",
+    "owner": "explore",
     "tags": [
       "smoke",
       "settlement"
     ],
     "version": "1.0.0",
-    "createTime": "2026-06-23T10:00:00",
+    "createTime": "2026-07-17T16:04:15",
     "expire": false,
     "requirementRef": []
   },
@@ -41,7 +41,7 @@
   "steps": [
     {
       "kind": "step",
-      "description": "mutation verb",
+      "description": "keyword_negative | work_no=不存在的工号 | field=work_no value='NOT_EXIST_WORK_999'",
       "api": {
         "kind": "api",
         "service": "yhr-test-service",
@@ -54,13 +54,13 @@
         "timeout": 30
       },
       "request": {
-          "kind": "request",
-          "body": {          
+        "kind": "request",
+        "body": {
           "page": 1,
           "port": "",
           "wd": "",
           "search_company": "",
-          "work_no": "",
+          "work_no": "NOT_EXIST_WORK_999",
           "order_customer_real": "",
           "booking_agent_bp": "",
           "booking_agent_bp_real": "",
@@ -139,21 +139,23 @@
           "target": "$.response_status",
           "operator": "eq",
           "expected": 200,
-          "message": "/api/order/orderEntrust/orderAdd 应返回200",
+          "message": "case_p075 应返回200",
           "soft": false
-        }, {
+        },
+        {
           "kind": "extract",
-          "name": "extract_response_body",
+          "name": "extract_list_len",
           "phase": "after_request",
           "order": 0,
           "enabled": true,
-          "onFailure": "abort",
-          "expression": "$.response_body.list[0]",
-          "target": "response_body",
-          "required": true,
+          "onFailure": "continue",
+          "expression": "$.response_body.list",
+          "target": "list",
+          "required": false,
           "default": null,
           "scope": "scenario"
         }
       ]
-    }]
+    }
+  ]
 }
