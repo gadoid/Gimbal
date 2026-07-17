@@ -412,7 +412,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useListSearch } from '@/utils/useListSearch'
 import { ElMessage } from 'element-plus'
+import { showError } from '@/utils/errorFallback'
 import { useRouter } from 'vue-router'
 import * as casesApi from '@/api/cases'
 import { useCasesStore } from '@/stores/cases'
@@ -440,7 +442,6 @@ const authStore = useAuthStore()
 const router = useRouter()
 
 const activeTab = ref<MineTab>('uploads')
-const searchQuery = ref('')
 const executeOpen = ref(false)
 const executeTarget = ref<CaseSummary | null>(null)
 const deleteOpen = ref(false)
@@ -473,17 +474,18 @@ const currentCases = computed<CaseSummary[]>(() =>
     : casesStore.mineFavorites,
 )
 
-const visibleCases = computed(() => {
-  const filtered = applyFiltersToList(currentCases.value, filters.value)
-  const q = searchQuery.value.trim().toLocaleLowerCase()
-  if (!q) return filtered
-  return filtered.filter((item) =>
-    [item.name, item.case_id, item.module, item.description, ...item.tags]
-      .join(' ')
-      .toLocaleLowerCase()
-      .includes(q),
-  )
-})
+// `useListSearch` returns the query ref — the same object instance
+// is bound to the search input via v-model, so the composable and
+// the input share state.  The search matches any of name/case_id/
+// module/description/author/tags; advanced filters are layered on
+// top via applyFiltersToList.
+const { query: searchQuery, filtered: searchFiltered } = useListSearch(
+  () => currentCases.value,
+  ['name', 'case_id', 'module', 'description', 'author', 'tags'],
+)
+const visibleCases = computed(() =>
+  applyFiltersToList(searchFiltered.value, filters.value),
+)
 
 const metaText = computed(() => {
   const uploads = casesStore.mineUploads.length
@@ -495,7 +497,7 @@ onMounted(async () => {
   try {
     await casesStore.fetchMine()
   } catch {
-    ElMessage.error(casesStore.lastError || '加载用例失败')
+    showError('加载', undefined, casesStore.lastError)
   }
 })
 
@@ -526,7 +528,7 @@ async function toggleFavorite(row: CaseSummary): Promise<void> {
   try {
     await casesStore.toggleFavorite(row.case_id)
   } catch {
-    ElMessage.error(casesStore.lastError || '收藏操作失败')
+    showError('收藏', undefined, casesStore.lastError)
   }
 }
 
@@ -540,7 +542,7 @@ async function onCommand(cmd: string, row: CaseSummary): Promise<void> {
       try {
         await casesStore.toggleFavorite(row.case_id)
       } catch {
-        ElMessage.error(casesStore.lastError || '收藏操作失败')
+        showError('收藏', undefined, casesStore.lastError)
       }
       return
     case 'execute':
@@ -567,7 +569,7 @@ async function confirmDelete(): Promise<void> {
     deleteOpen.value = false
     deleteTarget.value = null
   } catch {
-    ElMessage.error(casesStore.lastError || '删除失败')
+    showError('删除', undefined, casesStore.lastError)
   } finally {
     deleteSubmitting.value = false
   }
@@ -584,7 +586,7 @@ async function confirmPublish(): Promise<void> {
     // Refresh /mine (item is now removed) and /public in background
     casesStore.fetchPublic(true).catch(() => {})
   } catch {
-    ElMessage.error(casesStore.lastError || '分享失败')
+    showError('发布', undefined, casesStore.lastError)
   } finally {
     publishSubmitting.value = false
   }
@@ -596,7 +598,7 @@ async function handleUpload(file: File): Promise<boolean> {
     ElMessage.success(`已上传：${created.case_id}`)
     await casesStore.fetchMine()
   } catch {
-    ElMessage.error(casesStore.lastError || '上传失败')
+    showError('上传', undefined, casesStore.lastError)
   }
   return false
 }
@@ -768,19 +770,6 @@ function twoDigits(value: number): string {
   font-weight: 700;
   line-height: 16px;
   border-radius: 10px;
-}
-
-.priority-1 {
-  color: #991b1b;
-  background: #fee2e2;
-}
-.priority-2 {
-  color: #9a3412;
-  background: #ffedd5;
-}
-.priority-3 {
-  color: #5b21b6;
-  background: #ede9fe;
 }
 
 .tag-list {

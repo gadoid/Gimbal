@@ -183,6 +183,73 @@
           </div>
         </section>
 
+        <!-- ▸ 步骤选框 (gimbal run show + --step-to) -->
+        <section class="exdraw-section">
+          <h4 class="exdraw-section-title">
+            <span class="exdraw-section-bullet" aria-hidden="true">🛑</span>
+            步骤选框
+          </h4>
+
+          <el-form-item label="执行范围" prop="step_to">
+            <el-popover
+              v-model:visible="pickerOpen"
+              placement="bottom-start"
+              :width="420"
+              trigger="click"
+              popper-class="exdraw-step-popover"
+            >
+              <template #reference>
+                <el-button
+                  class="exdraw-step-trigger"
+                  :disabled="!showData || showLoading"
+                >
+                  <span class="exdraw-step-trigger-icon" aria-hidden="true">{{ form.step_to === null ? '◯' : '●' }}</span>
+                  <span class="exdraw-step-trigger-label">{{ stepTriggerLabel }}</span>
+                  <span class="exdraw-step-trigger-count" v-if="showData">· {{ stepCountText }} 步</span>
+                  <span class="exdraw-step-trigger-caret" aria-hidden="true">▾</span>
+                </el-button>
+              </template>
+
+              <div v-loading="showLoading" class="exdraw-step-popover-body">
+                <button
+                  type="button"
+                  class="exdraw-step-row exdraw-step-row-all"
+                  :class="{ active: form.step_to === null }"
+                  @click="pickStep(null)"
+                >
+                  <span class="exdraw-step-row-radio" aria-hidden="true">{{ form.step_to === null ? '●' : '○' }}</span>
+                  <span class="exdraw-step-row-idx">all</span>
+                  <span class="exdraw-step-row-desc">全部执行（{{ stepCountText }} 步）</span>
+                </button>
+                <div class="exdraw-step-divider"></div>
+                <div class="exdraw-step-scroll">
+                  <button
+                    v-for="s in showData?.steps ?? []"
+                    :key="s.index"
+                    type="button"
+                    class="exdraw-step-row"
+                    :class="{ active: form.step_to === s.index }"
+                    :title="`#${s.index} · ${s.api?.method ?? ''} ${s.api?.path ?? ''}`"
+                    @click="pickStep(s.index)"
+                  >
+                    <span class="exdraw-step-row-radio" aria-hidden="true">{{ form.step_to === s.index ? '●' : '○' }}</span>
+                    <span class="exdraw-step-row-idx">{{ s.index }}</span>
+                    <span class="exdraw-step-row-desc">{{ s.description || '—' }}</span>
+                  </button>
+                </div>
+              </div>
+            </el-popover>
+
+            <div class="exdraw-step-hint">
+              <span v-if="form.step_to === null">不限步数（按用例默认执行）</span>
+              <span v-else>执行到第 {{ form.step_to + 1 }} 步后停止（halt <code>--step-to {{ form.step_to }}</code>）</span>
+            </div>
+            <div class="exdraw-step-meta">
+              共 {{ stepCountText }} 步（0-based）。<code>--step-from</code> 暂未暴露（gimbal 阶段 2 引入 StepResolver 后生效）。
+            </div>
+          </el-form-item>
+        </section>
+
         <!-- ▸ 命令行覆盖（仅 admin 可见） -->
         <section v-if="isAdmin" class="exdraw-section exdraw-section-admin">
           <h4 class="exdraw-section-title">
@@ -202,14 +269,16 @@
             >默认</el-tag>
           </h4>
           <p class="exdraw-cmd-hint">
-            一行一项 argv；留空或点「重置」走默认命令。
-            服务端 <code>{{ caseId }}.yaml</code> 会被渲染到磁盘（即便不引用）。
+            一行一项 argv；留空走默认命令（<code>gimbal run launch &lt;yaml&gt; [--step-to N]</code>），
+            输入任何内容即视为覆盖并原样下发。
+            admin 自定义 argv 时后端 <b>不会</b>自动追加 <code>--step-to</code> —
+            如需请在 textarea 内手动添加。
           </p>
           <el-input
             v-model="commandLineText"
             type="textarea"
             :autosize="{ minRows: 5, maxRows: 10 }"
-            :placeholder="defaultCommandText"
+            placeholder="留空走默认命令；输入任意内容即覆盖 argv（每行一项）"
             spellcheck="false"
             class="exdraw-cmd-textarea"
             @input="onCommandLineEdit"
@@ -252,8 +321,9 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAuthSessionsStore } from '@/stores/auth_sessions'
 import { useExecutionsStore } from '@/stores/executions'
+import { useCasesStore } from '@/stores/cases'
 import TagPill from '@/components/TagPill.vue'
-import type { CaseSummary } from '@/api/cases'
+import type { CaseShow, CaseSummary } from '@/api/cases'
 
 const props = defineProps<{
   modelValue: boolean
@@ -271,6 +341,7 @@ const router = useRouter()
 const userAuthStore = useAuthStore()
 const authStore = useAuthSessionsStore()
 const execStore = useExecutionsStore()
+const casesStore = useCasesStore()
 
 const isAdmin = computed(() => userAuthStore.isAdmin)
 
@@ -279,41 +350,58 @@ const submitting = ref(false)
 const authsLoading = ref(false)
 const activePreset = ref<string | null>(null)
 
-// Admin-only: live, editable view of the subprocess argv.  Server
-// (post-upload) decides where data/tmp/<case>.yaml lives — the path
-// in the preview is illustrative, the real path is in run.command_line.
+// ── gimbal run show (step picker) ─────────────────────────────
+const showData = ref<CaseShow | null>(null)
+const showLoading = ref(false)
+const pickerOpen = ref(false)
+const stepTriggerLabel = computed(() => {
+  if (form.step_to === null) return '全部执行'
+  return `执行到第 ${form.step_to + 1} 步`
+})
+const stepCountText = computed(() => showData.value?.step_count ?? 0)
+
+async function loadShow() {
+  // 缓存命中时 store 直接返回,无网络开销 —— 这里只判 showData 即可
+  // (避免 in-flight 锁造成重新打开抽屉不刷新)。
+  if (showData.value) return
+  showLoading.value = true
+  try {
+    const data = await casesStore.fetchShow(props.caseId)
+    showData.value = data
+  } catch {
+    // Non-fatal: the drawer still submits without step_to.  Errors are
+    // surfaced via casesStore.showError for callers that want to render
+    // them; we just disable the picker in the meantime.
+    showData.value = null
+  } finally {
+    showLoading.value = false
+  }
+}
+
+function pickStep(idx: number | null) {
+  form.step_to = idx
+  pickerOpen.value = false
+}
+
+// Admin-only: editable view of the subprocess argv.  When the textarea
+// is empty, the backend's default argv is used (gimbal run launch
+// <yaml> [--step-to N]); once the admin types anything the textarea
+// is sent verbatim as the override.
+//
+// We deliberately do NOT pre-populate the textarea with a placeholder
+// path (e.g. "src/.../exec_<executionId>_<idx>.yaml") — that path is
+// a *runtime* path the backend fills in.  A non-empty textarea is
+// the explicit signal that the operator wants full control.
 const commandLineText = ref('')
 const commandLineDirty = ref(false)
 
-function buildDefaultCommandLine(): string[] {
-  // 临时文件路径 —— 由后端在执行时落盘到
-  //   <settings.GIMBAL_PROJECT_ROOT>/src/gimbal-platform/backend/data/tmp/exec_<executionId>_<idx>.yaml
-  // 用相对 gimbal 项目根的 POSIX 风格路径(因为 gimbal 子进程 cwd 就是
-  // GIMBAL_PROJECT_ROOT),与后端 _run_one() 实际拼出来的 cmd_args 完全一致。
-  // 前端没有 settings 概念 —— 这里只是 admin 抽屉里的 argv 预览,
-  // 真实值以后端 ExecRun.command_line 为准。
-  return [
-    'gimbal',
-    'run',
-    'launch',
-    `src/gimbal-platform/backend/data/tmp/exec_<executionId>_<idx>.yaml`,
-  ]
-}
-
-const defaultCommandText = computed(() =>
-  buildDefaultCommandLine().join('\n'),
-)
-
 function onCommandLineEdit() {
-  // Marked "modified" only when the trimmed textarea content diverges
-  // from the trimmed default.  Keeps the "默认" pill honest while
-  // still allowing harmless whitespace edits.
-  commandLineDirty.value =
-    commandLineText.value.trim() !== defaultCommandText.value.trim()
+  // The textarea is "dirty" iff it has any non-whitespace content.
+  commandLineDirty.value = commandLineText.value.trim().length > 0
 }
 
 function resetCommandLine() {
-  commandLineText.value = defaultCommandText.value
+  commandLineText.value = ''
   commandLineDirty.value = false
 }
 
@@ -326,11 +414,28 @@ const form = reactive({
   merge_policy: 'origin' as 'override' | 'merge' | 'append' | 'origin',
   exec_auth_alias: [] as string[],
   env: 'dev',
+  // 0-based inclusive halt index for ``gimbal run launch --step-to <N>``.
+  // ``null`` = "run all steps" (legacy / default).  Submitted to backend
+  // as ``step_to`` in ExecutionCreateIn.
+  step_to: null as number | null,
 })
 
 const rules = {
   n_runs: [{ required: true, message: '执行次数必填', trigger: 'blur' }],
   parallel: [{ required: true, message: '并发度必填', trigger: 'blur' }],
+  step_to: [
+    {
+      validator: (_rule: unknown, value: unknown, callback: (err?: Error) => void) => {
+        if (value === null || value === undefined) return callback()
+        const max = (showData.value?.step_count ?? 0) - 1
+        if (typeof value !== 'number' || value < 0 || value > max) {
+          return callback(new Error(`step_to 必须在 0..${max} 之间`))
+        }
+        callback()
+      },
+      trigger: 'blur',
+    },
+  ],
 }
 
 const PRESETS = [
@@ -363,19 +468,18 @@ watch(
   () => props.modelValue,
   (open) => {
     if (!open) return
-    commandLineText.value = buildDefaultCommandLine().join('\n')
+    commandLineText.value = ''
     commandLineDirty.value = false
+    // 重置 step_to —— 每次重新打开抽屉都从 "全部执行" 起步,
+    // 避免上次会话遗留的状态污染本次提交。
+    form.step_to = null
   },
 )
-// …also re-prime when env changes mid-session (e.g. user picks prod).
-watch(
-  () => form.env,
-  () => {
-    if (!commandLineDirty.value) {
-      commandLineText.value = buildDefaultCommandLine().join('\n')
-    }
-  },
-)
+// The textarea is the source of truth once the operator has typed
+// anything.  Re-priming it on env/step_to changes would clobber their
+// in-flight override, so the watchers below only clear the flag
+// (visually reflecting "still using default") without touching the
+// textarea content.
 
 // 切到 origin 时清空 alias,避免"已勾选凭证但策略是不注入"的不一致状态。
 // 切回 override/merge/append 时 alias 仍为空,需要用户重新选 —— 这是
@@ -399,16 +503,28 @@ const authorLabel = computed(() => {
 watch(
   () => props.modelValue,
   async (open) => {
-    if (open && authsList.value.length === 0) {
-      authsLoading.value = true
-      try {
-        await authStore.fetchAll()
-      } finally {
-        authsLoading.value = false
-      }
-    }
+    if (open) await loadDrawerData()
   },
 )
+
+/**
+ * First-open bootstrap.  Idempotent: skipping on cached auths / cached
+ * show data avoids the network roundtrip on re-opens.  Called from
+ * both the ``modelValue`` watcher (subsequent opens) and ``onMounted``
+ * (first mount, where modelValue may already be true).
+ */
+async function loadDrawerData() {
+  if (authsList.value.length === 0) {
+    authsLoading.value = true
+    try {
+      await authStore.fetchAll()
+    } finally {
+      authsLoading.value = false
+    }
+  }
+  // 拉步骤描述(用于步骤选框)。已缓存时 fetchShow 立即返回。
+  await loadShow()
+}
 
 function close() {
   emit('update:modelValue', false)
@@ -453,6 +569,12 @@ async function submit() {
               .map((s) => s.trim())
               .filter((s) => s.length > 0)
           : undefined,
+      // step_to is null when user picked "全部执行"; backend serializes
+      // it as the literal null in ExecutionCreateIn → config_json omits
+      // the key (legacy payload path).  Backend validates step_to <
+      // step_count so the user can't sneak an out-of-range value past
+      // the rules.validator.
+      step_to: form.step_to,
     })
     ElMessage.success(`执行已创建 #${ex.id}`)
     emit('submitted', ex.id)
@@ -466,13 +588,11 @@ async function submit() {
 }
 
 onMounted(async () => {
-  if (authsList.value.length === 0) {
-    authsLoading.value = true
-    try {
-      await authStore.fetchAll()
-    } finally {
-      authsLoading.value = false
-    }
+  // 抽屉首次挂载时如果 modelValue 已经为 true（典型情况：父组件
+  // 用 v-model 控制显示），watch 的回调只在 prop 变化时触发，所以
+  // 这里也要主动拉一次。loadDrawerData 是幂等的，重复调用无副作用。
+  if (props.modelValue) {
+    await loadDrawerData()
   }
 })
 </script>
@@ -586,9 +706,6 @@ onMounted(async () => {
   line-height: 16px;
   border-radius: 10px;
 }
-.priority-1 { color: #991b1b; background: #fee2e2; }
-.priority-2 { color: #9a3412; background: #ffedd5; }
-.priority-3 { color: #5b21b6; background: #ede9fe; }
 
 .exdraw-tags {
   display: flex;
@@ -892,5 +1009,159 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   margin-top: 4px;
+}
+
+/* ── 步骤选框 (gimbal run show) ────────────────────────────── */
+.exdraw-step-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  background: #ffffff;
+  border: 1px solid var(--color-border-tertiary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.exdraw-step-trigger:hover:not(:disabled),
+.exdraw-step-trigger:focus-visible:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
+}
+.exdraw-step-trigger:disabled {
+  cursor: not-allowed;
+  background: #f8fafc;
+  color: var(--color-text-tertiary);
+}
+.exdraw-step-trigger-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.exdraw-step-trigger-label {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+}
+.exdraw-step-trigger-count {
+  color: var(--color-text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.exdraw-step-trigger-caret {
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.exdraw-step-popover :deep(.el-popover__content) {
+  padding: 8px !important;
+}
+.exdraw-step-popover-body {
+  display: flex;
+  flex-direction: column;
+}
+.exdraw-step-divider {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--color-border-tertiary);
+}
+.exdraw-step-scroll {
+  max-height: 320px;
+  overflow-y: auto;
+}
+.exdraw-step-row {
+  display: grid;
+  grid-template-columns: 24px 50px 1fr;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.exdraw-step-row:hover {
+  background: var(--accent-soft);
+}
+.exdraw-step-row.active {
+  background: var(--accent-soft);
+}
+.exdraw-step-row-all {
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+.exdraw-step-row-all.active {
+  color: var(--accent);
+}
+.exdraw-step-row-radio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  font-size: 12px;
+  color: var(--accent);
+}
+.exdraw-step-row.active .exdraw-step-row-radio {
+  color: var(--accent);
+}
+.exdraw-step-row:not(.active) .exdraw-step-row-radio {
+  color: var(--color-text-tertiary);
+}
+.exdraw-step-row-idx {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  text-align: right;
+}
+.exdraw-step-row.active .exdraw-step-row-idx {
+  color: var(--accent);
+  font-weight: 600;
+}
+.exdraw-step-row-desc {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exdraw-step-hint {
+  margin-top: 6px;
+  color: var(--color-text-secondary);
+  font-size: 11.5px;
+}
+.exdraw-step-hint code {
+  padding: 1px 5px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  background: var(--accent-soft);
+  border-radius: 3px;
+}
+.exdraw-step-meta {
+  margin-top: 4px;
+  color: var(--color-text-tertiary);
+  font-size: 10.5px;
+}
+.exdraw-step-meta code {
+  font-family: var(--font-mono);
 }
 </style>

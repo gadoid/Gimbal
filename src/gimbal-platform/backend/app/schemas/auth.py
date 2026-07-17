@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 
 class RegisterIn(BaseModel):
@@ -46,15 +45,12 @@ class UserPublic(BaseModel):
     display_name: str
     is_admin: bool
     is_active: bool
-    created_at: str
+    created_at: datetime
 
-    @field_validator("created_at", mode="before")
-    @classmethod
-    def _coerce_datetime(cls, v: Any) -> Any:
-        """Accept either a datetime object (from ORM) or an ISO string (from dict)."""
-        if isinstance(v, datetime):
-            return v.isoformat()
-        return v
+    @field_serializer("created_at")
+    def _iso(self, v: datetime | None) -> str | None:
+        """Serialize as ISO 8601 string for the JSON wire format."""
+        return v.isoformat() if v is not None else None
 
 
 class TokenOut(BaseModel):

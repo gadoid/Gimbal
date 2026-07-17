@@ -87,10 +87,40 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function clear() {
+    // Idempotent: short-circuit when the store is already cleared so
+    // repeated triggers (e.g. 5 concurrent 401s, each calling
+    // auth.clear() before redirect) don't fire spurious persist +
+    // watch updates for an already-empty state.
+    if (status.value === 'guest' && !accessToken.value) return
     accessToken.value = ''
     refreshToken.value = ''
     currentUser.value = null
     status.value = 'guest'
+  }
+
+  /**
+   * Single-flight refresh-on-401 helper.  Concurrent 401s share one
+   * in-flight refresh; subsequent calls await the same promise.
+   * Lives on the store (not a module-level singleton in api/http.ts)
+   * so the lifecycle is owned by the same Pinia instance that owns
+   * the access/refresh tokens.
+   */
+  let refreshInFlight: Promise<string | null> | null = null
+  async function refreshOnce(): Promise<string | null> {
+    if (refreshInFlight) return refreshInFlight
+    if (!refreshToken.value) return null
+    refreshInFlight = (async () => {
+      try {
+        const data = await authApi.refresh({ refresh_token: refreshToken.value })
+        setTokens(data.access_token, data.refresh_token)
+        return data.access_token
+      } catch {
+        return null
+      } finally {
+        refreshInFlight = null
+      }
+    })()
+    return refreshInFlight
   }
 
   async function login(username: string, password: string) {
@@ -141,9 +171,8 @@ export const useAuthStore = defineStore('auth', () => {
     status,
     isAuthenticated,
     isAdmin,
-    setTokens,
-    setUser,
     clear,
+    refreshOnce,
     login,
     register,
     logout,

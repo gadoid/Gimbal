@@ -103,7 +103,6 @@ interface UserRow {
 
 const props = defineProps<{
   config: Record<string, unknown>
-  auths: Array<{ alias: string }>
 }>()
 
 const emit = defineEmits<{

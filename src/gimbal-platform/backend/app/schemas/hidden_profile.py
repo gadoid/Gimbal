@@ -11,10 +11,8 @@ class HiddenProfileOut(BaseModel):
 
     case_id: str
     hidden_paths: list[str] = Field(default_factory=list)
-    scope: str = "case"
     updated_at: datetime | None = None
 
 
 class HiddenProfilePatchIn(BaseModel):
     hidden_paths: list[str]
-    scope: str = Field(default="case")

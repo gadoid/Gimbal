@@ -4,10 +4,10 @@ Spec-1 simplifications (intentional):
 * ``cases`` table is NOT written by the auth/users/cases routers in spec-1, so
   private-case scanning for ``/mine`` is empty.  ``/mine`` therefore returns
   the user's *favorited public* cases.
-* favorites are persisted to ``data/favorites.json`` (instead of in-memory)
-  so they survive ``uvicorn --reload`` restarts.  The ``case_favorites``
-  table exists in the ORM schema but is unused here because the case-id
-  key is the on-disk scenarioId (not the integer ``cases.id``).
+* favorites are persisted to ``data/favorites.json`` (instead of in-memory
+  or in a DB table) so they survive ``uvicorn --reload`` restarts.  The
+  case-id key is the on-disk scenarioId string (not an integer ``cases.id``,
+  since the ``cases`` table itself is never written).
 * ``/copy`` writes a YAML clone to disk and returns ``{case_id, path}``.
 """
 from __future__ import annotations
@@ -27,14 +27,9 @@ from pydantic import BaseModel
 
 from ..core.config import settings
 from ..core.deps import CurrentUser
-from ..schemas.case import CaseDetailOut, CaseListOut, CaseSummaryOut
-from ..services.case_loader import (
-    CaseSummary,
-    _as_author,
-    _as_priority,
-    _as_tag_list,
-    loader,
-)
+from ..schemas.case import CaseDetailOut, CaseListOut, CaseShowOut, CaseSummaryOut
+from ..services.case_loader import CaseSummary, loader
+from ..services.executor import _SHOW_TIMEOUT_SEC, _run_gimbal_capture
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
@@ -66,7 +61,12 @@ def _save_favorites(fav: dict[int, set[str]]) -> None:
     )
 
 
-_FAVORITES: dict[int, set[str]] = _load_favorites()
+# Initial load happens under the same lock used by later writes.
+# Without this, a concurrent fork or a fast writer could mutate
+# _FAV_PATH between the read and the first write, producing a
+# silent loss of the in-memory state.
+with _fav_lock:
+    _FAVORITES: dict[int, set[str]] = _load_favorites()
 
 
 def _summary_out(s: CaseSummary, *, favorited: bool = False, copied: bool = False) -> CaseSummaryOut:
@@ -164,19 +164,19 @@ def _next_copy_name(user_dir: Path, stem: str, ext: str) -> Path:
 
 
 # Default scenarioId prefix for "无 scenarioId" / "空 scenarioId" uploads.
-# Each user gets their own counter so 场景用例-1 doesn't collide between
+# Each user gets their own counter so scenario-1 doesn't collide between
 # users; the counter scans existing files in that user's dir.
-_DEFAULT_SCENARIO_PREFIX = "场景用例"
+_DEFAULT_SCENARIO_PREFIX = "scenario"
 _DEFAULT_SCENARIO_RE = re.compile(
     rf"^{re.escape(_DEFAULT_SCENARIO_PREFIX)}-(\d+)$"
 )
 
 
 def _next_default_scenario_id(user_dir: Path) -> str:
-    """Return the smallest unused ``场景用例-N`` for ``user_dir``.
+    """Return the smallest unused ``scenario-N`` for ``user_dir``.
 
     Scans both file stems and the on-disk scenarios whose ``scenarioId``
-    field follows the pattern (so renames to/from 场景用例-N stay unique).
+    field follows the pattern (so renames to/from scenario-N stay unique).
     """
     used: set[int] = set()
     if user_dir.exists():
@@ -190,7 +190,7 @@ def _next_default_scenario_id(user_dir: Path) -> str:
                 except ValueError:
                     pass
             # Also peek inside the file — a stem may have been renamed
-            # (e.g. via the rename endpoint) away from 场景用例-N while
+            # (e.g. via the rename endpoint) away from scenario-N while
             # the inner scenarioId still claims that number.
             try:
                 if p.suffix.lower() == ".json":
@@ -277,6 +277,111 @@ async def list_public(user: CurrentUser) -> CaseListOut:
             )
         )
     return CaseListOut(items=items, total=len(items))
+
+
+# ── GET /{case_id}/show ───────────────────────────────────────────────
+# IMPORTANT: must be registered BEFORE the catch-all `/{case_id:path}`
+# below — otherwise the `path` converter greedily captures the
+# ``/show`` suffix and resolves to a non-existent case_id.
+@router.get("/{case_id:path}/show", response_model=CaseShowOut)
+async def get_case_show(
+    user: CurrentUser,
+    case_id: Annotated[str, PathParam(min_length=1)],
+) -> CaseShowOut:
+    """Return ``gimbal run show --from-path <yaml> --format=json`` output.
+
+    Used by the frontend ExecutionDrawer step picker.  Auth policy mirrors
+    ``GET /{case_id}``: owner-only for private cases, anyone authenticated
+    for public cases; non-authorized callers get a 404 (intentional merge
+    of 403/404 — see ``get_owned_execution`` in core/deps.py for the
+    rationale on hiding existence).
+
+    Implementation shells out to ``gimbal run show`` via
+    :func:`_run_gimbal_capture` (no streaming, no LogHub, no disk log —
+    this is a one-shot read-only call).  Errors are mapped to structured
+    HTTP responses; non-zero exit codes become 502 with a stdout snippet
+    so operators can diagnose without re-running gimbal themselves.
+    """
+    summary = _find_summary(case_id)
+    if summary is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"case not found: {case_id}",
+        )
+    # Mirror the access rule from get_case: private cases are owner-only,
+    # public cases are open to any logged-in user.
+    if summary.visibility == "private" and summary.owner_id != user.id:
+        # Intentionally 404 (not 403) so we don't leak which case_ids
+        # exist.  Matches the "existence-hiding" policy used elsewhere
+        # in the platform.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"case not found: {case_id}",
+        )
+
+    yaml_path = Path(summary.file_path)
+    if not yaml_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"case file missing on disk: {yaml_path}",
+        )
+
+    cmd_args = [
+        settings.GIMBAL_BIN,
+        "run",
+        "show",
+        "--from-path",
+        str(yaml_path),
+        "--format=json",
+    ]
+    returncode, stdout = await _run_gimbal_capture(cmd_args, timeout=_SHOW_TIMEOUT_SEC)
+
+    if returncode != 0:
+        snippet = (stdout or "").strip()[:200]
+        logger.warning(
+            "gimbal run show failed for {} (exit={}): {}",
+            case_id, returncode, snippet,
+        )
+        # Special-case the binary-not-found exit so the error message
+        # is actionable for the operator.
+        if returncode == 127:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="gimbal binary not on PATH on the server",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"gimbal run show failed (exit={returncode}): {snippet}",
+        )
+    if not stdout.strip():
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="gimbal run show returned no output",
+        )
+
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError as e:
+        logger.warning("gimbal run show returned non-JSON for {}: {}", case_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"gimbal run show returned invalid JSON: {e}",
+        )
+
+    # `gimbal run show` emits a JSON ARRAY (one entry per scenario in
+    # the file).  Cases today always carry a single scenario, so take
+    # [0]; a multi-scenario file would log a debug note.
+    if not isinstance(payload, list) or not payload:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="gimbal run show returned empty/unexpected payload shape",
+        )
+    if len(payload) > 1:
+        logger.debug(
+            "case {} contains {} scenarios; showing the first",
+            case_id, len(payload),
+        )
+    return CaseShowOut.model_validate(payload[0])
 
 
 # ── GET /{case_id} ────────────────────────────────────────────────────
@@ -383,7 +488,7 @@ async def copy_case(
     if new_name is not None:
         if _is_invalid_stem(new_name):
             raise HTTPException(
-                status_code=400,
+                status_code=422,
                 detail="new_name 不能为空、超过 128 字符、或包含 / \\ : * ? \" < > |",
             )
         target = user_dir / f"{new_name}{ext}"
@@ -447,11 +552,11 @@ async def upload_case(
     audit is a future spec).
     """
     if visibility not in ("public", "private"):
-        raise HTTPException(status_code=400, detail="visibility must be public or private")
+        raise HTTPException(status_code=422, detail="visibility must be public or private")
 
     raw = await file.read()
     if not raw:
-        raise HTTPException(status_code=400, detail="empty file")
+        raise HTTPException(status_code=422, detail="empty file")
 
     try:
         if (file.filename or "").lower().endswith(".json"):
@@ -459,10 +564,10 @@ async def upload_case(
         else:
             payload = yaml.safe_load(raw.decode("utf-8"))
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"parse failed: {e}")
+        raise HTTPException(status_code=422, detail=f"parse failed: {e}")
 
     if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="top-level must be an object")
+        raise HTTPException(status_code=422, detail="top-level must be an object")
 
     # Pick the destination dir + the "-<tag>-N" suffix style.
     if visibility == "public":
@@ -477,7 +582,7 @@ async def upload_case(
     #   1. A non-empty ``scenarioId`` field in the file → use as-is
     #      (subject to the collision suffix below).
     #   2. Missing/empty ``scenarioId`` in a private upload → generate the
-    #      next free "场景用例-N" for this user (see
+    #      next free "scenario-N" for this user (see
     #      ``_next_default_scenario_id``).  This gives uploaded cases a
     #      clean, predictable default name instead of leaking things like
     #      ``e2e订单到应收核销-pub-3`` into the workbench.
@@ -490,6 +595,8 @@ async def upload_case(
     elif visibility == "private":
         case_id = _next_default_scenario_id(target_dir)
     else:
+        # Public uploads require admin-chosen naming (business rule, not
+        # input validation) — keep at 400 to signal "policy requirement".
         raise HTTPException(status_code=400, detail="scenarioId is required")
     ext = ".json" if (file.filename or "").lower().endswith(".json") else ".yaml"
     # Avoid scenarioId collision (the loader uses scenarioId as the cache
@@ -589,12 +696,12 @@ async def patch_case(
     _require_modify_access(user, summary)
 
     if not isinstance(payload.payload, dict):
-        raise HTTPException(status_code=400, detail="payload must be object")
+        raise HTTPException(status_code=422, detail="payload must be object")
     if "scenarioId" not in payload.payload:
-        raise HTTPException(status_code=400, detail="scenarioId is required")
+        raise HTTPException(status_code=422, detail="scenarioId is required")
     if str(payload.payload["scenarioId"]) != case_id:
         raise HTTPException(
-            status_code=400,
+            status_code=422,
             detail=f"scenarioId mismatch: {payload.payload['scenarioId']} != {case_id}",
         )
 
@@ -634,7 +741,7 @@ async def rename_case(
     new_stem = (payload.new_case_id or "").strip()
     if _is_invalid_stem(new_stem):
         raise HTTPException(
-            status_code=400,
+            status_code=422,
             detail="new_case_id 不能为空、超过 128 字符、或包含 / \\ : * ? \" < > |",
         )
     if new_stem == case_id:
@@ -656,7 +763,7 @@ async def rename_case(
         parsed = json.loads(raw) if ext == ".json" else yaml.safe_load(raw)
         if not isinstance(parsed, dict):
             raise HTTPException(
-                status_code=400,
+                status_code=422,
                 detail="case file top-level must be an object",
             )
         parsed["scenarioId"] = new_stem

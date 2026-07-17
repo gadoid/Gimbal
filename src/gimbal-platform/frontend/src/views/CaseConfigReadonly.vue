@@ -243,6 +243,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { showError } from '@/utils/errorFallback'
 import { useCasesStore } from '@/stores/cases'
 import { useHideStore } from '@/stores/hide'
 import { useEditModeStore } from '@/stores/editMode'
@@ -407,7 +408,7 @@ async function saveVars(nextVars: Record<string, unknown>) {
     payload.value =
       (casesStore.detail as unknown as CaseDetailOut | null) ?? payload.value
   } catch {
-    ElMessage.error('vars 保存失败')
+    showError('保存')
   } finally {
     varsSaving.value = false
   }
@@ -470,7 +471,7 @@ function scheduleSave() {
     try {
       await casesApi.putHidden(caseId.value, { hidden_paths: userPaths })
     } catch {
-      ElMessage.error('保存隐藏字段失败')
+      showError('保存')
     }
   }, 500)
 }
@@ -491,8 +492,8 @@ async function load() {
     payload.value = await casesStore.fetchOne(caseId.value)
     await loadHiddenProfile()
   } catch {
-    errorMsg.value = casesStore.lastError || '加载用例失败'
-    ElMessage.error(errorMsg.value)
+    errorMsg.value = casesStore.lastError || '加载失败'
+    showError('加载', undefined, casesStore.lastError)
   }
 }
 
@@ -521,7 +522,7 @@ async function saveEdit() {
     editStore.cancelEdit()
     await casesStore.fetchOne(caseId.value)
   } catch {
-    ElMessage.error(editStore.lastError || '保存失败')
+    showError('保存', undefined, editStore.lastError)
   } finally {
     editStore.saving = false
   }
@@ -567,11 +568,7 @@ async function onRenameSubmit(newCaseId: string) {
     // The http interceptor rejects with ApiError whose ``.message`` is
     // FastAPI's ``detail`` (e.g. "目标 scenarioId 已存在", "only owner
     // can rename private case").  Surface that instead of a generic toast.
-    const msg =
-      (err instanceof Error && err.message) ||
-      casesStore.lastError ||
-      '重命名失败'
-    ElMessage.error(msg)
+    showError('重命名', err, casesStore.lastError)
   } finally {
     renameSubmitting.value = false
   }
@@ -611,9 +608,19 @@ watch(() => route.params.caseId, load)
 
 // Keyboard: `?` toggles help modal
 function onKeydown(e: KeyboardEvent) {
-  // Don't intercept while typing in an input
-  const tag = (e.target as HTMLElement)?.tagName
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) {
+  // Don't intercept while typing in any editable surface — includes
+  // INPUT, TEXTAREA, native <select>, contenteditable, and Element
+  // Plus dropdowns which mount their popper inside the document body
+  // and rely on the original focused element to drive key events.
+  const target = e.target as HTMLElement | null
+  if (!target) return
+  const tag = target.tagName
+  if (
+    tag === 'INPUT' ||
+    tag === 'TEXTAREA' ||
+    tag === 'SELECT' ||
+    target.isContentEditable
+  ) {
     return
   }
   if (e.key === '?' || (e.shiftKey && e.key === '/')) {

@@ -12,10 +12,9 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as casesApi from '@/api/cases'
-import type { CaseSummary, CaseDetailOut, CopyOut } from '@/api/cases'
+import type { CaseSummary, CaseDetailOut, CaseShow, CopyOut } from '@/api/cases'
 import { useAuthStore } from '@/stores/auth'
-
-export type FetchStatus = 'idle' | 'loading' | 'error'
+import { useSetStatus } from '@/utils/useSetStatus'
 
 const PUBLIC_CACHE_MS = 5_000
 
@@ -23,14 +22,8 @@ export const useCasesStore = defineStore('cases', () => {
   const publicLibrary = ref<CaseSummary[]>([])
   const mineUploads = ref<CaseSummary[]>([])
   const mineFavorites = ref<CaseSummary[]>([])
-  const fetchStatus = ref<FetchStatus>('idle')
   const lastFetchedPublic = ref<number>(0)
-  const lastError = ref<string>('')
-
-  function setStatus(s: FetchStatus, err: string = '') {
-    fetchStatus.value = s
-    lastError.value = err
-  }
+  const { fetchStatus, lastError, setStatus } = useSetStatus()
 
   async function fetchPublic(force = false): Promise<CaseSummary[]> {
     const now = Date.now()
@@ -160,6 +153,11 @@ export const useCasesStore = defineStore('cases', () => {
       mineUploads.value = mineUploads.value.map(swap)
       mineFavorites.value = mineFavorites.value.map(swap)
       publicLibrary.value = publicLibrary.value.map(swap)
+      // Drop cached show data for the old case_id (the new one won't
+      // share the cache key — the case_id changes via rename).
+      delete showCache.value[caseId]
+      delete showLoading.value[caseId]
+      delete showError.value[caseId]
       setStatus('idle')
       return out
     } catch (e) {
@@ -167,6 +165,38 @@ export const useCasesStore = defineStore('cases', () => {
       // letting the view fall back to a generic toast.
       setStatus('error', e instanceof Error ? e.message : 'rename failed')
       throw e
+    }
+  }
+
+  // ── gimbal run show cache ─────────────────────────────────
+  // Per-caseId cache for ``getShow()``.  The step picker is opened
+  // repeatedly from the same ExecutionDrawer; caching avoids a fresh
+  // subprocess per open.  ``removeCase`` / ``renameCase`` bust entries
+  // (above).  ``force=true`` re-fetches (used after a file upload that
+  // changes the on-disk yaml).
+  const showCache = ref<Record<string, CaseShow>>({})
+  const showLoading = ref<Record<string, boolean>>({})
+  const showError = ref<Record<string, string>>({})
+
+  async function fetchShow(
+    caseId: string,
+    force = false,
+  ): Promise<CaseShow> {
+    if (!force && showCache.value[caseId]) {
+      return showCache.value[caseId]
+    }
+    showLoading.value[caseId] = true
+    showError.value[caseId] = ''
+    try {
+      const out = await casesApi.getShow(caseId)
+      showCache.value[caseId] = out
+      return out
+    } catch (e) {
+      showError.value[caseId] =
+        e instanceof Error ? e.message : 'show fetch failed'
+      throw e
+    } finally {
+      showLoading.value[caseId] = false
     }
   }
 
@@ -184,5 +214,10 @@ export const useCasesStore = defineStore('cases', () => {
     removeCase,
     publishCase,
     renameCase,
+    // show (gimbal run show) API
+    showCache,
+    showLoading,
+    showError,
+    fetchShow,
   }
 })

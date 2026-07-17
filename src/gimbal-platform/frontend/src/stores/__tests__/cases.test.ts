@@ -87,3 +87,72 @@ describe('cases store — fetchMine split', () => {
     expect(s.mineFavorites).toEqual([])
   })
 })
+
+describe('cases store — fetchShow cache', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.restoreAllMocks()
+  })
+
+  function mkShow(step_count: number) {
+    return {
+      scenario_id: 'sc',
+      name: 'sc',
+      description: null,
+      tags: [],
+      module: null,
+      priority: null,
+      author: null,
+      step_count,
+      steps: Array.from({ length: step_count }, (_, i) => ({
+        index: i,
+        kind: 'step',
+        description: `step ${i}`,
+        strategy_kinds: [],
+        strategy_count: 0,
+        ref: null,
+      })),
+      usage_hint: null,
+    }
+  }
+
+  it('returns cached show on second call without re-fetching', async () => {
+    const spy = vi.spyOn(casesApi, 'getShow').mockResolvedValue(mkShow(3))
+    const s = useCasesStore()
+    await s.fetchShow('sc_a')
+    await s.fetchShow('sc_a')
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('force=true bypasses the cache', async () => {
+    const spy = vi.spyOn(casesApi, 'getShow').mockResolvedValue(mkShow(3))
+    const s = useCasesStore()
+    await s.fetchShow('sc_b')
+    await s.fetchShow('sc_b', true)
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
+
+  it('captures errors in showError and re-throws', async () => {
+    vi.spyOn(casesApi, 'getShow').mockRejectedValue(new Error('boom'))
+    const s = useCasesStore()
+    await expect(s.fetchShow('sc_c')).rejects.toThrow('boom')
+    expect(s.showError['sc_c']).toBe('boom')
+  })
+
+  it('clears show cache on rename', async () => {
+    vi.spyOn(casesApi, 'getShow').mockResolvedValue(mkShow(2))
+    const s = useCasesStore()
+    await s.fetchShow('old_id')
+    expect(s.showCache['old_id']).toBeDefined()
+
+    // Rename swaps the local cache keys; fetchShow should re-hit the API
+    // because the new case_id is fresh.
+    vi.spyOn(casesApi, 'rename').mockResolvedValue({
+      ...mkCase('old_id', 'private', 1, false),
+      case_id: 'new_id',
+    })
+    await s.renameCase('old_id', 'new_id')
+    expect(s.showCache['old_id']).toBeUndefined()
+    expect(s.showError['old_id']).toBeUndefined()
+  })
+})

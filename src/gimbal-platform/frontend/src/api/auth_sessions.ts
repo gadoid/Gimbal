@@ -59,7 +59,3 @@ export function remove(id: number) {
 export function testConnection(id: number) {
   return http.post<TestResult>(`/auths/${id}/test`).then((r) => r.data)
 }
-
-export function fetchToken(id: number) {
-  return http.post(`/auths/${id}/fetch-token`).then((r) => r.data)
-}

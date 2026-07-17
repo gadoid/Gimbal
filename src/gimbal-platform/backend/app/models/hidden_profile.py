@@ -27,8 +27,10 @@ class HiddenFieldProfile(Base):
     case_id: Mapped[str] = mapped_column(String(256), index=True)
     # List of dot-paths the user has hidden (L1 + L2 + their L3 toggles)
     hidden_paths: Mapped[list] = mapped_column(JSON, default=list)
-    # User-chosen scope: 'global' applies across all cases; 'case' is per-case
-    scope: Mapped[str] = mapped_column(String(16), default="case")
+    # NOTE: a previous ``scope`` column ('case' | 'global') lived here.
+    # The field was never read as a discriminator (every caller wrote
+    # 'case'), so we drop it; reintroduce later if 'global' scope
+    # actually ships.
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()
     )

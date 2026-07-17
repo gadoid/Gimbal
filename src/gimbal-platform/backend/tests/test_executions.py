@@ -12,7 +12,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-import yaml
 from httpx import AsyncClient
 from sqlalchemy import select
 
@@ -759,6 +758,315 @@ async def test_reconcile_orphan_runs_leaves_active_runs_alone(
         assert ex.status == "running"
 
 
+# ── rerun-as-insert (B-model: rerun creates a new ExecRun row) ────
+# Tests for the new semantics where each /rerun INSERTs a new ExecRun
+# row with idx = max(idx) + 1, preserving full attempt history.  This
+# replaces the old "update-in-place" behavior that double-counted
+# passed/failed across attempts.
+
+
+async def test_rerun_inserts_new_run_row_with_next_idx(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """Rerun must INSERT (not UPDATE) — old row keeps its id, new row
+    gets idx = max(idx) + 1."""
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=3)
+    await _login_alice(client)
+    eid = await _create_execution_directly(
+        client, case_id=case_id, n_runs=2, parallel=1,
+    )
+    # Capture command line via the existing pattern.
+    cap = _CapturedCmd()
+    cap.install(monkeypatch)
+
+    # First rerun of an existing run.
+    from app.core.db import SessionLocal
+    from app.models import ExecRun
+    from sqlalchemy import select as _sel
+
+    async with SessionLocal() as s:
+        first_run = (await s.execute(
+            _sel(ExecRun).where(ExecRun.execution_id == eid)
+        )).scalars().first()
+        first_run_id = first_run.id
+        first_idx = first_run.idx
+
+    r = await client.post(
+        f"/api/executions/{eid}/runs/{first_run_id}/rerun",
+        headers={"Authorization": f"Bearer {(await client.post('/api/auth/login', json={'username':'alice','password':'alicepass123'})).json()['access_token']}"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # New row must have a different id from the original.
+    assert body["id"] != first_run_id
+    # And idx must be max+1 of the previous set.
+    async with SessionLocal() as s:
+        rows = (await s.execute(
+            _sel(ExecRun).where(ExecRun.execution_id == eid).order_by(ExecRun.idx)
+        )).scalars().all()
+    assert len(rows) == 3  # original 2 + 1 new
+    assert [r.idx for r in rows] == [1, 2, 3]
+    # The original row is untouched.
+    assert rows[0].id == first_run_id
+    assert rows[0].idx == first_idx
+
+
+async def test_rerun_increments_total_runs(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """Each rerun increments execution.total_runs by 1 (B2 natural growth)."""
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=3)
+    await _login_alice(client)
+    eid = await _create_execution_directly(
+        client, case_id=case_id, n_runs=2, parallel=1,
+    )
+    cap = _CapturedCmd()
+    cap.install(monkeypatch)
+
+    from app.core.db import SessionLocal
+    from app.models import ExecRun, Execution
+    from sqlalchemy import select as _sel
+
+    async with SessionLocal() as s:
+        ex0 = await s.get(Execution, eid)
+        assert ex0.total_runs == 2
+        target = (await s.execute(
+            _sel(ExecRun).where(ExecRun.execution_id == eid)
+        )).scalars().first()
+
+    login = await client.post("/api/auth/login", json={"username":"alice","password":"alicepass123"})
+    token = login.json()["access_token"]
+    H = {"Authorization": f"Bearer {token}"}
+
+    # Two reruns — total_runs must go from 2 to 4.
+    await client.post(f"/api/executions/{eid}/runs/{target.id}/rerun", headers=H)
+    await client.post(f"/api/executions/{eid}/runs/{target.id}/rerun", headers=H)
+
+    async with SessionLocal() as s:
+        ex = await s.get(Execution, eid)
+        assert ex.total_runs == 4, f"expected 4, got {ex.total_runs}"
+
+
+async def test_rerun_preserves_old_run_log_and_report(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """Each rerun gets its OWN log_path + report_path derived from the
+    new run_id — old attempts' artifacts stay intact (no overwrite)."""
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=3)
+    await _login_alice(client)
+    eid = await _create_execution_directly(
+        client, case_id=case_id, n_runs=1, parallel=1,
+    )
+    cap = _CapturedCmd()
+    cap.install(monkeypatch)
+
+    from app.core.db import SessionLocal
+    from app.models import ExecRun
+    from sqlalchemy import select as _sel
+
+    async with SessionLocal() as s:
+        target = (await s.execute(
+            _sel(ExecRun).where(ExecRun.execution_id == eid)
+        )).scalars().first()
+
+    login = await client.post("/api/auth/login", json={"username":"alice","password":"alicepass123"})
+    H = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    # First rerun
+    r1 = await client.post(f"/api/executions/{eid}/runs/{target.id}/rerun", headers=H)
+    new_run_id_1 = r1.json()["id"]
+    # Second rerun of the same original run
+    r2 = await client.post(f"/api/executions/{eid}/runs/{target.id}/rerun", headers=H)
+    new_run_id_2 = r2.json()["id"]
+
+    async with SessionLocal() as s:
+        run1 = await s.get(ExecRun, new_run_id_1)
+        run2 = await s.get(ExecRun, new_run_id_2)
+        # Each run's log_path references its own id (no shared file).
+        assert run1.log_path is not None
+        assert run2.log_path is not None
+        assert run1.log_path != run2.log_path
+        # Both end in their own run_<id>.log filename.
+        assert run1.log_path.endswith(f"run_{new_run_id_1}.log")
+        assert run2.log_path.endswith(f"run_{new_run_id_2}.log")
+
+
+
+
+async def test_concurrent_reruns_dedup_via_unique_constraint(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """The UNIQUE (execution_id, idx) constraint on exec_runs
+    forces a concurrent rerun collision into an IntegrityError, which
+    the rerun handler catches and retries with a fresh idx.  Simulated
+    by pre-inserting a row at the idx our rerun will pick, forcing
+    the rerun into the retry path without actually racing two HTTP
+    calls (which is brittle on aiosqlite + the connection pool)."""
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=3)
+    await _login_alice(client)
+    eid = await _create_execution_directly(
+        client, case_id=case_id, n_runs=1, parallel=1,
+    )
+    cap = _CapturedCmd()
+    cap.install(monkeypatch)
+
+    from app.core.db import SessionLocal
+    from app.models import ExecRun, Execution
+    from sqlalchemy import select
+
+    async with SessionLocal() as s:
+        target = (await s.execute(
+            select(ExecRun).where(ExecRun.execution_id == eid)
+        )).scalars().first()
+        # Pre-insert a "phantom" row at the idx the rerun would pick
+        # next (max(existing idx) + 1 == 2 here, since the original row
+        # is at idx=1).  This forces the INSERT to fail with
+        # UNIQUE-constraint violation so the handler's retry path
+        # runs; the retry then picks idx=3 and succeeds.
+        s.add(ExecRun(execution_id=eid, idx=2, status="failed"))
+        await s.commit()
+        # Bump total_runs manually so the parent counter matches
+        # what the retry will write (the failing INSERT also bumped).
+        ex = await s.get(Execution, eid)
+        ex.total_runs = (ex.total_runs or 0) + 1
+        await s.commit()
+
+    login = await client.post("/api/auth/login", json={"username":"alice","password":"alicepass123"})
+    H = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    # The rerun handler should: hit idx=2 (collision) → IntegrityError
+    # → rollback → retry with idx=3 → success.
+    r = await client.post(f"/api/executions/{eid}/runs/{target.id}/rerun", headers=H)
+    assert r.status_code == 200, r.text
+
+    async with SessionLocal() as s:
+        new_rows = (await s.execute(
+            select(ExecRun).where(
+                ExecRun.execution_id == eid,
+                ExecRun.id != target.id,
+            )
+        )).scalars().all()
+    idxs = sorted(r.idx for r in new_rows)
+    assert idxs == [2, 3], f"expected [2, 3], got {idxs}"
+    # The rerun should land on idx=3, not collide with the phantom.
+    assert any(r.idx == 3 for r in new_rows)
+    assert not any(r.idx == 4 for r in new_rows)
+
+
+
+async def test_rerun_replays_step_to_from_execution_config(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """Rerun honors the original execution's step_to (regression: B-model
+    still threads step_to into argv even though rerun uses a new row)."""
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=5)
+    await _login_alice(client)
+    eid = await _create_execution_directly(
+        client, case_id=case_id, n_runs=1, parallel=1, step_to=2,
+    )
+    cap = _CapturedCmd()
+    cap.install(monkeypatch)
+
+    from app.core.db import SessionLocal
+    from app.models import ExecRun
+    from sqlalchemy import select as _sel
+
+    async with SessionLocal() as s:
+        target = (await s.execute(
+            _sel(ExecRun).where(ExecRun.execution_id == eid)
+        )).scalars().first()
+
+    login = await client.post("/api/auth/login", json={"username":"alice","password":"alicepass123"})
+    H = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    r = await client.post(f"/api/executions/{eid}/runs/{target.id}/rerun", headers=H)
+    assert r.status_code == 200
+
+    argv = cap.captured[-1]
+    assert "--step-to" in argv
+    assert argv[argv.index("--step-to") + 1] == "2"
+
+
+async def test_delete_completed_run_decrements_passed_counter(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """Deleting a passed run must decrement execution.passed (B-model
+    counter consistency)."""
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=3)
+    await _login_alice(client)
+    eid = await _create_execution_directly(
+        client, case_id=case_id, n_runs=1, parallel=1,
+    )
+    cap = _CapturedCmd()
+    cap.install(monkeypatch)
+
+    from app.services.executor import run_execution
+    await run_execution(eid)
+
+    from app.core.db import SessionLocal
+    from app.models import ExecRun, Execution
+    from sqlalchemy import select as _sel
+
+    async with SessionLocal() as s:
+        ex = await s.get(Execution, eid)
+        run = (await s.execute(
+            _sel(ExecRun).where(ExecRun.execution_id == eid)
+        )).scalars().first()
+        assert run.status == "passed"
+        assert ex.passed == 1
+        run_id = run.id
+
+    login = await client.post("/api/auth/login", json={"username":"alice","password":"alicepass123"})
+    H = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    r = await client.delete(f"/api/executions/{eid}/runs/{run_id}", headers=H)
+    assert r.status_code == 204
+
+    async with SessionLocal() as s:
+        ex = await s.get(Execution, eid)
+        assert ex.passed == 0, f"expected 0 after delete, got {ex.passed}"
+        assert ex.total_runs == 0
+
+
+async def test_delete_pending_run_only_decrements_total_runs(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """A pending/running run never incremented passed/failed, so delete
+    must only decrement total_runs."""
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=3)
+    await _login_alice(client)
+    eid = await _create_execution_directly(
+        client, case_id=case_id, n_runs=1, parallel=1,
+    )
+
+    from app.core.db import SessionLocal
+    from app.models import ExecRun, Execution
+    from sqlalchemy import select as _sel
+
+    async with SessionLocal() as s:
+        ex = await s.get(Execution, eid)
+        # Counter is 0/0/1 (one pending run, no completed).
+        assert ex.passed == 0
+        assert ex.failed == 0
+        assert ex.total_runs == 1
+        run = (await s.execute(
+            _sel(ExecRun).where(ExecRun.execution_id == eid)
+        )).scalars().first()
+        run_id = run.id
+
+    login = await client.post("/api/auth/login", json={"username":"alice","password":"alicepass123"})
+    H = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    r = await client.delete(f"/api/executions/{eid}/runs/{run_id}", headers=H)
+    assert r.status_code == 204
+
+    async with SessionLocal() as s:
+        ex = await s.get(Execution, eid)
+        assert ex.passed == 0
+        assert ex.failed == 0
+        assert ex.total_runs == 0
+
+
 # ── command_line override (admin-only) ──────────────────────
 async def test_command_line_override_requires_admin(
     client: AsyncClient
@@ -914,3 +1222,568 @@ async def test_auto_migrate_adds_missing_exec_runs_columns(tmp_path) -> None:
     chk.close()
     assert "log_path" in cols
     assert "command_line" in cols
+
+
+# ── gimbal run show endpoint ────────────────────────────────────
+# Tests for GET /api/cases/{case_id}/show.  All subprocess calls are
+# replaced with ``monkeypatch`` against ``_run_gimbal_capture`` so no
+# real ``gimbal`` binary needs to be on PATH during CI.
+
+
+def _fake_show_payload(step_count: int = 3) -> str:
+    """Synthesize the JSON output of ``gimbal run show --format=json``."""
+    steps = [
+        {
+            "index": i,
+            "kind": "step",
+            "description": f"step {i} desc",
+            "api": {"service": "svc", "method": "POST", "path": f"/api/{i}"},
+            "strategy_kinds": ["assertion"],
+            "strategy_count": 1,
+        }
+        for i in range(step_count)
+    ]
+    payload = [
+        {
+            "scenario_id": "sc_e2e",
+            "name": "E2E Test",
+            "description": "test scenario",
+            "tags": ["smoke"],
+            "module": "settlement",
+            "priority": 1,
+            "author": "alice",
+            "step_count": step_count,
+            "steps": steps,
+            "usage_hint": {"run": "gimbal run scenario sc_e2e"},
+        }
+    ]
+    return json.dumps(payload, ensure_ascii=False)
+
+
+async def test_case_show_happy_path(
+    client: AsyncClient, monkeypatch, seed_public_case: str
+) -> None:
+    """GET /cases/{case_id}/show shells out to gimbal and returns the
+    first scenario parsed from its JSON stdout."""
+    auth = await _login_alice(client)
+
+    # Stub subprocess: succeed with the standard gimbal run show shape.
+    async def fake_capture(cmd_args, *, timeout):
+        return (0, _fake_show_payload(step_count=3))
+
+    from app.routers import cases as cases_router
+
+    monkeypatch.setattr(cases_router, "_run_gimbal_capture", fake_capture)
+
+    r = await client.get(f"/api/cases/{seed_public_case}/show", headers=auth)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["scenario_id"] == "sc_e2e"
+    assert body["step_count"] == 3
+    assert len(body["steps"]) == 3
+    assert body["steps"][0]["index"] == 0
+    assert body["steps"][0]["description"] == "step 0 desc"
+    assert body["steps"][0]["api"]["method"] == "POST"
+
+
+async def test_case_show_unknown_case_404(
+    client: AsyncClient, monkeypatch
+) -> None:
+    auth = await _login_alice(client)
+
+    async def fake_capture(cmd_args, *, timeout):
+        return (0, _fake_show_payload())
+
+    from app.routers import cases as cases_router
+
+    monkeypatch.setattr(cases_router, "_run_gimbal_capture", fake_capture)
+
+    r = await client.get("/api/cases/nonexistent_case/show", headers=auth)
+    assert r.status_code == 404
+
+
+async def test_case_show_gimbal_exit_nonzero_returns_502(
+    client: AsyncClient, monkeypatch, seed_public_case: str
+) -> None:
+    """Non-zero subprocess exit → 502 with a stdout snippet in detail."""
+    auth = await _login_alice(client)
+
+    async def fake_capture(cmd_args, *, timeout):
+        return (2, "Error: malformed scenario file")
+
+    from app.routers import cases as cases_router
+
+    monkeypatch.setattr(cases_router, "_run_gimbal_capture", fake_capture)
+
+    r = await client.get(f"/api/cases/{seed_public_case}/show", headers=auth)
+    assert r.status_code == 502
+    detail = r.json()["detail"]
+    assert "exit=2" in detail
+    assert "malformed" in detail
+
+
+async def test_case_show_gimbal_binary_missing_returns_500(
+    client: AsyncClient, monkeypatch, seed_public_case: str
+) -> None:
+    """``returncode == 127`` (binary not on PATH) → 500 with actionable
+    message so operators can diagnose without log-diving."""
+    auth = await _login_alice(client)
+
+    async def fake_capture(cmd_args, *, timeout):
+        return (127, "")
+
+    from app.routers import cases as cases_router
+
+    monkeypatch.setattr(cases_router, "_run_gimbal_capture", fake_capture)
+
+    r = await client.get(f"/api/cases/{seed_public_case}/show", headers=auth)
+    assert r.status_code == 500
+    assert "gimbal binary not on PATH" in r.json()["detail"]
+
+
+async def test_case_show_file_missing_returns_400(
+    client: AsyncClient, monkeypatch, seed_public_case: str, tmp_path: Path
+) -> None:
+    """If the on-disk yaml is gone but the cache summary still resolves,
+    return 400 (not 502) — this is operator-fixable by re-uploading."""
+    auth = await _login_alice(client)
+
+    # Make the capture function a no-op; the 400 check fires before we
+    # get to subprocess.
+    async def fake_capture(cmd_args, *, timeout):
+        pytest.fail("subprocess must not be invoked when yaml is missing")
+
+    from app.routers import cases as cases_router
+
+    monkeypatch.setattr(cases_router, "_run_gimbal_capture", fake_capture)
+
+    # Force the loader to populate its cache NOW (before we delete the
+    # file) so the endpoint can still resolve the case summary from cache
+    # and reach the file-existence check.
+    from app.services.case_loader import loader
+
+    loader.scan(owner_id=None)
+
+    # Locate the seeded file and delete it.
+    pub_dir = tmp_path / "public"
+    target = pub_dir / f"{seed_public_case}.json"
+    target.unlink()
+
+    r = await client.get(f"/api/cases/{seed_public_case}/show", headers=auth)
+    assert r.status_code == 400
+    assert "missing on disk" in r.json()["detail"]
+
+
+async def test_case_show_private_cross_user_returns_404(
+    client: AsyncClient, monkeypatch, tmp_path
+) -> None:
+    """Private case owned by alice → bob's GET returns 404 (existence-hiding)."""
+    # Seed a private case directory for alice (owner_id resolved from her user.id).
+    user_dir = tmp_path / "users" / "9999"
+    user_dir.mkdir(parents=True)
+    (user_dir / "alice_private.json").write_text(
+        json.dumps(
+            {
+                "kind": "scenario",
+                "scenarioId": "alice_private",
+                "meta": {"name": "Alice's private case"},
+                "config": {"services": {}, "users": {}, "vars": {}},
+                "steps": [],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    pub_dir = tmp_path / "public"
+    pub_dir.mkdir()
+    (pub_dir / "_placeholder.json").write_text(
+        json.dumps(
+            {
+                "kind": "scenario",
+                "scenarioId": "_placeholder",
+                "meta": {"name": "placeholder"},
+                "config": {"services": {}, "users": {}, "vars": {}},
+                "steps": [],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    from app.core import config as cfg
+
+    monkeypatch.setattr(cfg.settings, "PUBLIC_CASES_DIR", pub_dir)
+    monkeypatch.setattr(cfg.settings, "USERS_CASES_DIR", tmp_path / "users")
+    monkeypatch.setattr(cfg.settings, "DATA_DIR", tmp_path)
+    from app.services.case_loader import loader
+
+    loader._cache.clear()
+    loader._last_full_scan = 0
+
+    # Register alice + bob
+    await client.post(
+        "/api/auth/register", json={"username": "alice", "password": "alicepass123"}
+    )
+    await client.post(
+        "/api/auth/register", json={"username": "bob", "password": "bobpass123"}
+    )
+    al = (await client.post(
+        "/api/auth/login", json={"username": "alice", "password": "alicepass123"}
+    )).json()["access_token"]
+    bl = (await client.post(
+        "/api/auth/login", json={"username": "bob", "password": "bobpass123"}
+    )).json()["access_token"]
+
+    # After alice logs in, the loader has indexed her private dir under
+    # her user.id — but we built the user_dir with a literal "9999" name.
+    # Inspect what id alice actually got and rename if needed.
+    from app.core.db import SessionLocal
+    from app.models import User
+    from sqlalchemy import select as _sel
+
+    async with SessionLocal() as s:
+        alice_row = (await s.execute(_sel(User).where(User.username == "alice"))).scalar_one()
+        real_id = alice_row.id
+    real_user_dir = tmp_path / "users" / str(real_id)
+    if real_user_dir != user_dir:
+        user_dir.rename(real_user_dir)
+        loader._cache.clear()
+        loader._last_full_scan = 0
+
+    # Alice can see it (own private case).
+    # Stub the subprocess — we don't want to depend on a real gimbal
+    # binary being present in CI; the auth + 404 paths are what we're
+    # actually testing.
+    async def fake_capture(cmd_args, *, timeout):
+        return (0, _fake_show_payload(step_count=2))
+
+    from app.routers import cases as cases_router
+
+    monkeypatch.setattr(cases_router, "_run_gimbal_capture", fake_capture)
+
+    r = await client.get(
+        "/api/cases/alice_private/show", headers={"Authorization": f"Bearer {al}"}
+    )
+    assert r.status_code == 200, r.text
+
+    # Bob gets a 404 — the case exists but is hidden from him.
+    r = await client.get(
+        "/api/cases/alice_private/show", headers={"Authorization": f"Bearer {bl}"}
+    )
+    assert r.status_code == 404
+
+
+# ── step_to argv construction (executor unit) ──────────────────
+# These tests bypass the subprocess side entirely by stubbing the
+# streaming helper at module level.  They verify the argv the executor
+# would have passed to gimbal.
+
+
+class _CapturedCmd:
+    """Helper: replace ``_subprocess_run_streaming`` with one that records
+    the cmd_args it was called with and returns a synthetic successful
+    result.  Returns the captured cmd_args via a closure."""
+
+    def __init__(self) -> None:
+        self.captured: list[list[str]] = []
+
+    def install(self, monkeypatch) -> None:
+        from app.services import executor as ex
+
+        def fake_stream(cmd_args, *, timeout, log_path, channel, loop):
+            # NOTE: must be a sync function (not async).  The real helper
+            # is invoked via ``await asyncio.to_thread(...)``; an async
+            # function would just return a coroutine that the threadpool
+            # never awaits, leaving ``result`` to be the bare coroutine
+            # and the caller would then blow up at ``result.exit_code``.
+            self.captured.append(list(cmd_args))
+            return ex._StreamRunResult(exit_code=0, file_not_found=False)
+
+        monkeypatch.setattr(ex, "_subprocess_run_streaming", fake_stream)
+
+
+async def _seed_steps_case(tmp_path: Path, monkeypatch, n_steps: int = 3) -> str:
+    """Same as ``seed_public_case`` but with ``n_steps`` real step entries."""
+    pub_dir = tmp_path / "public"
+    pub_dir.mkdir()
+    case_id = "sc_steps"
+    seed = pub_dir / f"{case_id}.json"
+    seed.write_text(
+        json.dumps(
+            {
+                "kind": "scenario",
+                "scenarioId": case_id,
+                "meta": {"name": "Steps Test"},
+                "config": {
+                    "services": {"svc": "http://x"},
+                    "users": {},
+                    "vars": {},
+                },
+                "steps": [
+                    {"description": f"step {i}", "api": {}, "request": {"body": {}}}
+                    for i in range(n_steps)
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    from app.core import config as cfg
+
+    monkeypatch.setattr(cfg.settings, "PUBLIC_CASES_DIR", pub_dir)
+    monkeypatch.setattr(cfg.settings, "USERS_CASES_DIR", tmp_path / "users")
+    monkeypatch.setattr(cfg.settings, "DATA_DIR", tmp_path)
+    (tmp_path / "users").mkdir()
+    from app.services.case_loader import loader
+
+    loader._cache.clear()
+    loader._last_full_scan = 0
+    return case_id
+
+
+async def test_create_execution_persists_step_to(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """``step_to`` is persisted into ``config_json`` so rerun / show endpoints
+    can honor the original halt intent."""
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=5)
+    auth = await _login_alice(client)
+    r = await client.post(
+        "/api/executions",
+        headers=auth,
+        json={
+            "case_id": case_id,
+            "n_runs": 1,
+            "parallel": 1,
+            "env": "dev",
+            "step_to": 2,
+        },
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["config"]["step_to"] == 2
+
+
+async def test_create_execution_legacy_payload_omits_step_to(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """Payload without ``step_to`` → config_json does NOT have the key
+    (preserves on-disk shape of legacy rows; ``run_execution`` falls back
+    to ``cfg.get("step_to")`` → None)."""
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=3)
+    auth = await _login_alice(client)
+    r = await client.post(
+        "/api/executions",
+        headers=auth,
+        json={
+            "case_id": case_id,
+            "n_runs": 1,
+            "parallel": 1,
+            "env": "dev",
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert "step_to" not in r.json()["config"]
+
+
+async def test_create_execution_rejects_step_to_out_of_range(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """step_to >= len(steps) → 400 with descriptive detail (range info)."""
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=3)
+    auth = await _login_alice(client)
+    r = await client.post(
+        "/api/executions",
+        headers=auth,
+        json={
+            "case_id": case_id,
+            "n_runs": 1,
+            "parallel": 1,
+            "env": "dev",
+            "step_to": 99,
+        },
+    )
+    assert r.status_code == 400, r.text
+    detail = r.json()["detail"]
+    assert "step_to=99" in detail
+    assert "indices 0..2" in detail
+
+
+async def test_create_execution_rejects_step_to_on_stepless_case(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """step_to on a case with no steps → 400 (cannot halt nothing)."""
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=0)
+    auth = await _login_alice(client)
+    r = await client.post(
+        "/api/executions",
+        headers=auth,
+        json={
+            "case_id": case_id,
+            "n_runs": 1,
+            "parallel": 1,
+            "env": "dev",
+            "step_to": 0,
+        },
+    )
+    assert r.status_code == 400
+    assert "no steps" in r.json()["detail"]
+
+
+async def test_create_execution_rejects_negative_step_to_at_schema(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """``step_to=-1`` is rejected by the Pydantic ``ge=0`` validator
+    BEFORE we hit the router — returns 422, not 400."""
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=3)
+    auth = await _login_alice(client)
+    r = await client.post(
+        "/api/executions",
+        headers=auth,
+        json={
+            "case_id": case_id,
+            "n_runs": 1,
+            "parallel": 1,
+            "env": "dev",
+            "step_to": -1,
+        },
+    )
+    assert r.status_code == 422
+
+
+async def test_step_to_argv_appended_when_set(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """End-to-end: create with step_to, run, verify ``--step-to <N>``
+    appears at the tail of the captured argv."""
+    from app.services.executor import run_execution
+
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=5)
+    await _login_alice(client)  # ensures alice exists in DB
+    # Insert the Execution + ExecRun rows directly so the test owns
+    # the lifecycle (avoids the create_execution background task racing
+    # with our explicit ``run_execution`` call below).
+    eid = await _create_execution_directly(
+        client, case_id=case_id, n_runs=1, parallel=1, step_to=3
+    )
+
+    cap = _CapturedCmd()
+    cap.install(monkeypatch)
+    await run_execution(eid)
+
+    assert len(cap.captured) == 1, "expected exactly one subprocess spawn"
+    argv = cap.captured[0]
+    assert "--step-to" in argv
+    # The index of "--step-to" is followed by the value as a string.
+    idx = argv.index("--step-to")
+    assert argv[idx + 1] == "3"
+
+
+async def test_step_to_argv_omitted_when_none(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """Legacy payload: no step_to → argv has no --step-to flag (4 elements:
+    gimbal + run + launch + yaml)."""
+    from app.services.executor import run_execution
+
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=5)
+    await _login_alice(client)
+    eid = await _create_execution_directly(
+        client, case_id=case_id, n_runs=1, parallel=1, step_to=None
+    )
+
+    cap = _CapturedCmd()
+    cap.install(monkeypatch)
+    await run_execution(eid)
+
+    argv = cap.captured[0]
+    assert "--step-to" not in argv
+    assert len(argv) == 4  # gimbal / run / launch / yaml
+
+
+async def test_step_to_argv_skipped_on_admin_override(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """When ``command_line`` admin override is set, the executor must NOT
+    silently append ``--step-to`` — admin argv is RCE-trust verbatim."""
+    from app.services.executor import run_execution
+
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=5)
+    # Promote alice to admin so she can pass command_line.
+    from app.core.db import SessionLocal
+    from app.models import User
+    from sqlalchemy import select as _sel
+
+    await _login_alice(client)
+    async with SessionLocal() as s:
+        alice = (await s.execute(_sel(User).where(User.username == "alice"))).scalar_one()
+        alice.is_admin = True
+        await s.commit()
+
+    eid = await _create_execution_directly(
+        client,
+        case_id=case_id,
+        n_runs=1,
+        parallel=1,
+        step_to=3,
+        command_line=["custom-gimbal", "run", "launch", "/tmp/x.yaml"],
+    )
+
+    cap = _CapturedCmd()
+    cap.install(monkeypatch)
+    await run_execution(eid)
+
+    argv = cap.captured[0]
+    # Admin override is preserved verbatim — no --step-to injection.
+    assert argv == ["custom-gimbal", "run", "launch", "/tmp/x.yaml"]
+    assert "--step-to" not in argv
+
+
+async def _create_execution_directly(
+    client: AsyncClient,
+    *,
+    case_id: str,
+    n_runs: int,
+    parallel: int,
+    step_to: int | None = None,
+    command_line: list[str] | None = None,
+) -> int:
+    """Insert an Execution + ExecRun rows directly, bypassing the router.
+
+    The router's create_execution fires ``asyncio.create_task(_safe_run)``
+    which races with any direct ``run_execution`` call the test makes.
+    Tests that want to drive the orchestrator synchronously should use
+    this helper instead of POST /executions.
+    """
+    from app.core.db import SessionLocal
+    from app.models import ExecRun, Execution, User
+    from sqlalchemy import select as _sel
+
+    async with SessionLocal() as s:
+        alice = (await s.execute(_sel(User).where(User.username == "alice"))).scalar_one()
+        cfg: dict = {
+            "n_runs": n_runs,
+            "parallel": parallel,
+            "env": "dev",
+            "prefix": None,
+            "exec_auth_alias": [],
+            "merge_policy": "override",
+            "inject_credentials": True,
+        }
+        if step_to is not None:
+            cfg["step_to"] = step_to
+        if command_line is not None:
+            cfg["command_line"] = command_line
+        ex = Execution(
+            case_id=case_id,
+            owner_id=alice.id,
+            status="queued",
+            total_runs=n_runs,
+            config_json=cfg,
+        )
+        s.add(ex)
+        await s.commit()
+        await s.refresh(ex)
+        for idx in range(1, n_runs + 1):
+            s.add(ExecRun(execution_id=ex.id, idx=idx, status="pending"))
+        await s.commit()
+        return ex.id

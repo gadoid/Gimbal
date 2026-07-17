@@ -13,3 +13,9 @@ build/
 .coverage
 htmlcov/
 *.egg
+
+# Local runtime artifacts (empty / overwritten on every run)
+run.out
+run.err
+collect.err.log
+*.log

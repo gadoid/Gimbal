@@ -15,6 +15,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -44,6 +45,13 @@ class Execution(Base):
 
 class ExecRun(Base):
     __tablename__ = "exec_runs"
+    # `(execution_id, idx)` is the natural key for run history.
+    # Rerun semantics create new rows with idx = max+1; the constraint
+    # turns the SELECT-then-INSERT race into an IntegrityError that
+    # the rerun handler catches and retries with a fresh idx.
+    __table_args__ = (
+        UniqueConstraint("execution_id", "idx", name="uq_run_idx"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     execution_id: Mapped[int] = mapped_column(

@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CaseSummaryOut(BaseModel):
@@ -70,3 +70,46 @@ class CaseDetailOut(BaseModel):
 
     payload: dict[str, Any]
     summary: CaseSummaryOut
+
+
+# ── Step description (gimbal run show) ───────────────────────────
+# Mirrors the JSON shape produced by ``gimbal run show --from-path
+# <yaml> --format=json`` (see src/gimbal/cli/commands/run_show.py).  The
+# frontend ExecutionDrawer calls this endpoint to render the step picker
+# popover; it does NOT receive the raw payload, so we keep the shape
+# narrow on purpose (no bodies, no headers, no strategy bodies — just
+# enough to display a one-line description per step).
+
+
+class CaseShowStepOut(BaseModel):
+    """One row in the gimbal run show steps array."""
+
+    index: int
+    kind: str
+    description: str
+    # ``api`` is optional: setup/teardown/ref steps don't have one.
+    api: dict[str, str] | None = None
+    strategy_kinds: list[str] = Field(default_factory=list)
+    strategy_count: int = 0
+    # ``ref`` is the asset-ref string for StepRef nodes; null otherwise.
+    ref: str | None = None
+
+
+class CaseShowOut(BaseModel):
+    """Response shape for GET /cases/{case_id}/show.
+
+    Top-level metadata plus the step list.  ``usage_hint`` is gimbal's
+    runtime hint (e.g. "未注册到资产仓库"); we pass it through so the
+    frontend can show it as a hint chip without a second roundtrip.
+    """
+
+    scenario_id: str
+    name: str | None = None
+    description: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    module: str | None = None
+    priority: int | None = None
+    author: str | None = None
+    step_count: int
+    steps: list[CaseShowStepOut] = Field(default_factory=list)
+    usage_hint: dict[str, str] | None = None

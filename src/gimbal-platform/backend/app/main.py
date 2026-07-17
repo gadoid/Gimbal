@@ -50,12 +50,25 @@ async def lifespan(app: FastAPI):
     left behind by a previous worker instance (uvicorn --reload restarts,
     OOMs, …) so /executions doesn't display permanently-stuck rows."""
     await init_db()
-    from .routers.executions import reconcile_orphan_runs
+    from .routers.executions import (
+        drain_in_flight_runners,
+        reconcile_orphan_runs,
+    )
     await reconcile_orphan_runs()
     sweeper_task = asyncio.create_task(_log_hub_sweeper())
     try:
         yield
     finally:
+        # Cancel + await all in-flight orchestrators so subprocess
+        # children get a clean kill (each _safe_run already has
+        # try/except that catches CancelledError) before the event
+        # loop is torn down.  ``drain_in_flight_runners`` also flips
+        # the module's ``_shutting_down`` flag so any in-flight
+        # ``create_execution`` request returns a structured error
+        # instead of starting a task that would vanish a moment later.
+        n_drained = await drain_in_flight_runners()
+        if n_drained:
+            logger.info("lifespan: drained {} in-flight execution runner(s)", n_drained)
         sweeper_task.cancel()
         try:
             await sweeper_task

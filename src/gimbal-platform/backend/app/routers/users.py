@@ -118,7 +118,7 @@ async def patch_user(
     if target is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": 4041, "msg": "user not found"},
+            detail={"code": 4041, "msg": "用户不存在"},
         )
 
     data = payload.model_dump(exclude_unset=True)
@@ -171,7 +171,7 @@ async def reset_password(
     if target is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": 4041, "msg": "user not found"},
+            detail={"code": 4041, "msg": "用户不存在"},
         )
 
     new_pw = _gen_random_password(12)
@@ -206,7 +206,7 @@ async def delete_user(
     if target is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": 4041, "msg": "user not found"},
+            detail={"code": 4041, "msg": "用户不存在"},
         )
 
     if target.id == caller.id:

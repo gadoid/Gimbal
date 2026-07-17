@@ -43,7 +43,6 @@ export const useEditModeStore = defineStore('editMode', () => {
   const original = ref<Record<string, unknown> | null>(null)
   const current = ref<Record<string, unknown> | null>(null)
   const saving = ref(false)
-  const lastError = ref('')
 
   const dirty = computed(() => {
     if (!original.value || !current.value) return false
@@ -80,7 +79,6 @@ export const useEditModeStore = defineStore('editMode', () => {
     original,
     current,
     saving,
-    lastError,
     dirty,
     enterEdit,
     cancelEdit,

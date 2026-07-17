@@ -1,0 +1,20 @@
+/* priority.css — shared pill styling for case priority badges.
+ *
+ * Used by CasesMine, CasesPublic (case list rows) and ExecutionDrawer
+ * (drawer header).  Centralizing here avoids drifting color/font
+ * definitions across three files.
+ *
+ * Three levels map to P1 / P2 / P3 (high / medium / low).
+ */
+.priority-1 {
+  color: #991b1b;
+  background: #fee2e2;
+}
+.priority-2 {
+  color: #9a3412;
+  background: #ffedd5;
+}
+.priority-3 {
+  color: #5b21b6;
+  background: #ede9fe;
+}

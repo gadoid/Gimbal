@@ -79,31 +79,12 @@ http.interceptors.request.use((config) => {
 })
 
 // ── Response: refresh-once on 401 ───────────────────────────────
-let refreshInFlight: Promise<string | null> | null = null
+//
+// Refresh lives on the auth store (not a module-level singleton) so the
+// lifecycle is owned by the same Pinia instance that owns the tokens.
+// Concurrent 401s share one in-flight refresh via the store's
+// ``refreshOnce()``; subsequent calls await the same promise.
 
-async function refreshAccessToken(): Promise<string | null> {
-  if (refreshInFlight) return refreshInFlight
-  const auth = useAuthStore()
-  if (!auth.refreshToken) return null
-  refreshInFlight = (async () => {
-    try {
-      const resp = await axios.post('/api/auth/refresh', {
-        refresh_token: auth.refreshToken,
-      })
-      const data = resp.data as {
-        access_token: string
-        refresh_token: string
-      }
-      auth.setTokens(data.access_token, data.refresh_token)
-      return data.access_token
-    } catch {
-      return null
-    } finally {
-      refreshInFlight = null
-    }
-  })()
-  return refreshInFlight
-}
 
 http.interceptors.response.use(
   (resp: AxiosResponse) => resp,
@@ -113,15 +94,17 @@ http.interceptors.response.use(
 
     if (status === 401 && original && !original._retry) {
       original._retry = true
-      const fresh = await refreshAccessToken()
+      const auth = useAuthStore()
+      const fresh = await auth.refreshOnce()
       if (fresh) {
         original.headers = original.headers ?? {}
         ;(original.headers as Record<string, string>).Authorization = `Bearer ${fresh}`
         return http.request(original)
       }
-      // refresh failed — clear + redirect
+      // refresh failed — clear + redirect.  Both are idempotent:
+      // ``auth.clear()`` is a no-op on an already-cleared store; the
+      // path check guards against duplicate ``router.replace`` calls.
       try {
-        const auth = useAuthStore()
         auth.clear()
       } catch {
         // ignore
@@ -135,5 +118,6 @@ http.interceptors.response.use(
     return Promise.reject(normalizeError(err))
   },
 )
+
 
 export default http

@@ -28,6 +28,37 @@ export interface CaseDetailOut {
   summary: CaseSummary
 }
 
+// ── Step description (gimbal run show) ───────────────────────────
+// Backend shells out to ``gimbal run show --from-path <yaml>
+// --format=json`` and returns the first scenario parsed from stdout.
+// Narrow shape — bodies / headers / strategy details are NOT
+// forwarded; the ExecutionDrawer step picker only needs one-line
+// descriptions per step to render the popover list.
+
+export interface CaseShowStep {
+  index: number
+  kind: string
+  description: string
+  // ``api`` is optional: setup/teardown/ref steps don't have one.
+  api?: { service: string; method: string; path: string }
+  strategy_kinds: string[]
+  strategy_count: number
+  ref?: string | null
+}
+
+export interface CaseShow {
+  scenario_id: string
+  name: string | null
+  description: string | null
+  tags: string[]
+  module: string | null
+  priority: number | null
+  author: string | null
+  step_count: number
+  steps: CaseShowStep[]
+  usage_hint?: Record<string, string> | null
+}
+
 export interface CopyOut {
   case_id: string
   path: string
@@ -53,6 +84,14 @@ export function get(caseId: string) {
     .then((r) => r.data)
 }
 
+/** Fetch the per-step description array via ``gimbal run show``.
+ *  Used by ExecutionDrawer to render the step picker popover. */
+export function getShow(caseId: string) {
+  return http
+    .get<CaseShow>(`/cases/${encodeURI(caseId)}/show`)
+    .then((r) => r.data)
+}
+
 export function patch(
   caseId: string,
   payload: { payload: Record<string, unknown> },
@@ -65,7 +104,6 @@ export function patch(
 export interface HiddenProfile {
   case_id: string
   hidden_paths: string[]
-  scope: string
   updated_at: string | null
 }
 
@@ -77,7 +115,7 @@ export function getHidden(caseId: string) {
 
 export function putHidden(
   caseId: string,
-  payload: { hidden_paths: string[]; scope?: string },
+  payload: { hidden_paths: string[] },
 ) {
   return http
     .put<HiddenProfile>(

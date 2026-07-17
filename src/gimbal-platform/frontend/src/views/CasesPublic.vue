@@ -169,9 +169,6 @@
                 <el-dropdown-item command="execute">
                   执行
                 </el-dropdown-item>
-                <el-dropdown-item divided command="open-yaml">
-                  打开源 YAML
-                </el-dropdown-item>
                 <el-dropdown-item
                   v-if="canDelete(row)"
                   divided
@@ -328,7 +325,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useListSearch } from '@/utils/useListSearch'
 import { ElMessage } from 'element-plus'
+import { showError } from '@/utils/errorFallback'
 import { useRouter } from 'vue-router'
 import * as casesApi from '@/api/cases'
 import { useCasesStore } from '@/stores/cases'
@@ -352,7 +351,6 @@ import {
 const casesStore = useCasesStore()
 const authStore = useAuthStore()
 const router = useRouter()
-const searchQuery = ref('')
 const executeOpen = ref(false)
 const executeTarget = ref<CaseSummary | null>(null)
 
@@ -380,17 +378,15 @@ const deleteFileName = computed(() => {
 // 当前登录用户是否为 admin —— 单一来源是 auth store
 const isAdmin = computed(() => authStore.isAdmin)
 
-const visibleCases = computed(() => {
-  const all = applyFiltersToList(casesStore.publicLibrary, filters.value)
-  const q = searchQuery.value.trim().toLocaleLowerCase()
-  if (!q) return all
-  return all.filter((item) =>
-    [item.name, item.case_id, item.module, item.description, ...item.tags]
-      .join(' ')
-      .toLocaleLowerCase()
-      .includes(q),
-  )
-})
+// Search matches any of name/case_id/module/description/tags; advanced
+// filters layer on top via applyFiltersToList.
+const { query: searchQuery, filtered: searchFiltered } = useListSearch(
+  () => casesStore.publicLibrary,
+  ['name', 'case_id', 'module', 'description', 'tags'],
+)
+const visibleCases = computed(() =>
+  applyFiltersToList(searchFiltered.value, filters.value),
+)
 
 const metaText = computed(() => {
   const total = casesStore.publicLibrary.length
@@ -401,7 +397,7 @@ onMounted(async () => {
   try {
     await casesStore.fetchPublic(true)
   } catch {
-    ElMessage.error(casesStore.lastError || '加载公共用例失败')
+    showError('加载', undefined, casesStore.lastError)
   }
 })
 
@@ -423,7 +419,7 @@ async function toggleFavorite(row: CaseSummary): Promise<void> {
   try {
     await casesStore.toggleFavorite(row.case_id)
   } catch {
-    ElMessage.error(casesStore.lastError || '收藏操作失败')
+    showError('收藏', undefined, casesStore.lastError)
   }
 }
 
@@ -448,11 +444,7 @@ async function onRenameSubmit(newName: string | null): Promise<void> {
     await casesStore.fetchMine()
     casesStore.fetchPublic(true).catch(() => {})
   } catch (e) {
-    ElMessage.error(
-      (e as { msg?: string; message?: string }).msg ||
-        (e as { message?: string }).message ||
-        '操作失败',
-    )
+    showError('操作', e)
   } finally {
     renameTarget.value = null
   }
@@ -465,7 +457,7 @@ async function handlePublicSubmit(file: File): Promise<boolean> {
     await casesStore.fetchPublic(true)
   } catch (e) {
     const err = e as { msg?: string; message?: string }
-    ElMessage.error(err.msg || err.message || casesStore.lastError || '提交失败')
+    showError('提交', err, casesStore.lastError)
   }
   return false
 }
@@ -486,7 +478,7 @@ async function confirmDelete(): Promise<void> {
     deleteTarget.value = null
   } catch (e) {
     const err = e as { msg?: string; message?: string }
-    ElMessage.error(err.msg || err.message || casesStore.lastError || '删除失败')
+    showError('删除', err, casesStore.lastError)
   } finally {
     deleteSubmitting.value = false
   }
@@ -520,11 +512,6 @@ async function onCommand(cmd: string, row: CaseSummary): Promise<void> {
         renameTitle.value = `另存为：${row.name || row.case_id}`
         renameOpen.value = true
         return
-      case 'open-yaml': {
-        // Spec-1 stub: 跳详情页（实际"打开源 yaml"是 V1+ feature；路由占位先复用详情页）
-        router.push(`/cases/${encodeURIComponent(row.case_id)}/config`)
-        return
-      }
       case 'execute': {
         // Spec-2-2: open execution drawer
         executeTarget.value = row
@@ -542,7 +529,7 @@ async function onCommand(cmd: string, row: CaseSummary): Promise<void> {
         return
     }
   } catch {
-    ElMessage.error(casesStore.lastError || `${cmd} 操作失败`)
+    showError('操作', undefined, casesStore.lastError)
   }
 }
 </script>
@@ -689,21 +676,6 @@ async function onCommand(cmd: string, row: CaseSummary): Promise<void> {
   font-weight: 700;
   line-height: 16px;
   border-radius: 10px;
-}
-
-.priority-1 {
-  color: #991b1b;
-  background: #fee2e2;
-}
-
-.priority-2 {
-  color: #9a3412;
-  background: #ffedd5;
-}
-
-.priority-3 {
-  color: #5b21b6;
-  background: #ede9fe;
 }
 
 .audit-tag {

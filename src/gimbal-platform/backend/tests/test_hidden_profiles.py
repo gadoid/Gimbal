@@ -58,7 +58,8 @@ async def test_get_hidden_returns_empty_when_no_profile(
     body = r.json()
     assert body["case_id"] == seed_public_case
     assert body["hidden_paths"] == []
-    assert body["scope"] == "case"
+    # ``scope`` was a per-(user, case) row field that every caller
+    # always wrote as 'case' — removed in P0-#7.
 
 
 # ── PUT creates profile ──────────────────────────────────────
@@ -74,12 +75,11 @@ async def test_put_hidden_creates_profile(
     r = await client.put(
         f"/api/cases/{seed_public_case}/hidden",
         headers=auth,
-        json={"hidden_paths": paths, "scope": "case"},
+        json={"hidden_paths": paths},
     )
     assert r.status_code == 200
     body = r.json()
     assert body["hidden_paths"] == paths
-    assert body["scope"] == "case"
 
 
 # ── PUT updates existing ─────────────────────────────────────
