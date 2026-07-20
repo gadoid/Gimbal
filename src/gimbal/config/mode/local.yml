@@ -28,4 +28,5 @@ output:
 plugins :
   - gimbal-response-body-extract
   - gimbal-test-report
+  - gimbal-auth-headers
 

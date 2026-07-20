@@ -1,0 +1,12 @@
+name: gimbal-auth-headers
+version: 0.1.0
+entry_point: gimbal_auth_headers.plugin:AuthHeadersPlugin
+category: generic
+description: |
+  Inject token and timestamp headers into outgoing requests.
+  The token header is md5(auth_token + timestamp), and the auth token is
+  read from the configured AuthRegistry session.
+capabilities: [generic]
+default_config:
+  auth_tag: ""
+

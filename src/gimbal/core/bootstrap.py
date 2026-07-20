@@ -107,6 +107,7 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
         event_bus=event_bus,
         hook_registry=hook_registry,
         plugin_registry=plugin_registry,
+        auth_registry=auth_registry,
     )
     logger.info("[bootstrap] 插件加载完成: count={}", len(plugins))
 
@@ -159,6 +160,7 @@ def _load_plugins(
     event_bus: Any,
     hook_registry: Any,
     plugin_registry: Any,
+    auth_registry: Any,
 ) -> list["Plugin"]:
     """插件发现 → 解析依赖 → 加载 → 激活。
 
@@ -203,6 +205,7 @@ def _load_plugins(
         hook_registry=hook_registry,
         user_configs=cfg.plugin_configs or {},
         plugin_registry=plugin_registry,
+        auth_registry=auth_registry,
     )
     return activated
 

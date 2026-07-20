@@ -262,6 +262,7 @@ class PluginLoader:
         hook_registry: Any,
         user_configs: Optional[dict[str, dict[str, Any]]] = None,
         plugin_registry: Optional[PluginRegistry] = None,
+        auth_registry: Any = None,
     ) -> list[Plugin]:
         """激活所有已加载的插件。
 
@@ -282,6 +283,7 @@ class PluginLoader:
                 event_bus=event_bus,
                 hook_registry=hook_registry,
                 plugin_registry=registry,
+                auth_registry=auth_registry,
             )
             try:
                 plugin.activate(ctx)

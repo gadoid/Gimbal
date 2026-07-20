@@ -1,0 +1,92 @@
+{
+    "kind": "scenario",
+    "scenarioId": "运综轨迹查询",
+    "meta": {
+        "name": "运综-轨迹查询接口",
+        "description": "运综-轨迹查询接口",
+        "module": "settlement",
+        "priority": 1,
+        "author": "codfish",
+        "owner": "codfish",
+        "tags": [
+            "smoke",
+            "settlement"
+        ],
+        "version": "1.0.0",
+        "createTime": "2026-07-20T10:00:00",
+        "expire": false,
+        "requirementRef": []
+    },
+    "resource": {},
+    "config": {
+        "setup": [],
+        "teardown": [],
+        "services": {
+            "track-trace-service": "https://track-test.21eline.com"
+        },
+        "users": {
+            "admin": {
+                "token":"urbzxwu47463vcwkwures75jbuzjp745"
+            }
+        },
+        "vars": {
+            "bl_no": "OUHUA-YIHANGDAO-00027",
+        },
+        "timePolicy": {
+            "kind": "record"
+        },
+        "retry": null
+    },
+    "steps": [    {
+      "kind": "step",
+      "description": "轨迹查询接口",
+      "api": {
+        "kind": "api",
+        "service": "track-trace-service",
+        "method": "POST",
+        "path": "/api/v1/trace/trajectory/query",
+        "headers": {
+          "Content-Type": "application/json",
+          "token": "",
+          "subscribeSource" : "4"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+            "requestId": "req_2026051512345670",
+            "businessNo": "BUS20260515001",
+            "vehicleNo": "鲁K57338",
+            "vehicleColor": 2,
+            "startTime": "2026-06-10 08:00:01",
+            "endTime": "2026-06-14 11:00:01"
+            }
+      },
+      "strategy":[ {
+          "kind": "extract",
+          "name": "extract_request",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.request_headers",
+          "target": "request",
+          "required": true,
+          "default": null,
+          "scope": "step"
+        },{
+          "kind": "extract",
+          "name": "extract_response",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body",
+          "target": "resp",
+          "required": true,
+          "default": null,
+          "scope": "step"
+        }]
+    }]
+}

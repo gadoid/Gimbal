@@ -66,3 +66,5 @@ plugin_configs:
     output_path: ./reports/test-report.html
     title: "Gimbal Test Report"
     include_passed: true
+  gimbal-auth-headers:
+    auth_tag: admin
