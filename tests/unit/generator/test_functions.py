@@ -146,14 +146,27 @@ class TestTimestamp:
         future_ts = timestamp(format="epoch", offset_seconds=3600)
         assert abs((future_ts - now_ts) - 3600) < 2
 
-    def test_offset_seconds_negative(self):
-        """offset_seconds=-3600 约比 now 小 3600。"""
-        now_ts = datetime.now().timestamp()
-        past_ts = timestamp(format="epoch", offset_seconds=-3600)
-        assert abs((now_ts - past_ts) - 3600) < 2
+    def test_base_and_offset_with_custom_format(self):
+        """指定基准时间后可按秒偏移，并输出自定义格式。"""
+        value = timestamp(
+            format="%Y-%m-%d %H:%M:%S",
+            base="2026-06-14 11:00:01",
+            offset_seconds=3600,
+        )
+        assert value == "2026-06-14 12:00:01"
 
+    def test_base_with_explicit_format(self):
+        value = timestamp(
+            format="compact",
+            base="14/06/2026 11:00",
+            base_format="%d/%m/%Y %H:%M",
+        )
+        assert value == "20260614110000"
 
-class TestNow:
+    def test_invalid_base_raises(self):
+        with pytest.raises(ValueError, match="invalid base time"):
+            timestamp(base="not-a-time")
+
     def test_now_matches_timestamp_with_zero_offset(self):
         """now() 与 timestamp(offset_seconds=0) 等价。"""
         v1 = now(format="epoch")

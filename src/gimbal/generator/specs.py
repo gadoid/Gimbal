@@ -48,11 +48,15 @@ class RandomDecimalSpec(BaseModel):
 
 
 class TimestampSpec(BaseModel):
-    """kind=timestamp：当前时间 + 偏移"""
+    """kind=timestamp：基准时间 + 秒级偏移。"""
     model_config = ConfigDict(extra="forbid")
     kind: Literal["timestamp"] = "timestamp"
-    format: Literal["epoch", "iso", "compact"] = Field(default="iso")
-    offset_seconds: int = Field(default=0, description="相对 now 的偏移（正=未来）")
+    format: str = Field(default="iso", description="epoch、iso、compact 或 strftime 格式")
+    offset_seconds: int = Field(default=0, description="相对 base 的偏移（正=未来）")
+    base: str | None = Field(default=None, description="基准时间；缺省为当前时间")
+    base_format: str | None = Field(
+        default=None, description="基准时间的 strptime 格式；缺省自动解析 ISO 或 YYYY-MM-DD HH:MM:SS"
+    )
 
 
 class NowSpec(BaseModel):
@@ -150,7 +154,11 @@ class TimeOffsetSpec(BaseModel):
     )
     value: int = Field(default=0, description="偏移量（int；正数=未来/与 direction 共同描述)")
     direction: Literal["future", "past"] = Field(
-        default="future", description="相对当前时间的方向标识，仅作可读性，不改 value"
+        default="future", description="相对 base 的方向标识，仅作可读性，不改 value"
+    )
+    base: str | None = Field(default=None, description="基准时间；缺省为当前时间")
+    base_format: str | None = Field(
+        default=None, description="基准时间的 strptime 格式；缺省自动解析 ISO 或 YYYY-MM-DD HH:MM:SS"
     )
 
 

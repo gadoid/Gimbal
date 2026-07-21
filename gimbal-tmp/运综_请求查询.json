@@ -30,7 +30,26 @@
             }
         },
         "vars": {
-            "bl_no": "OUHUA-YIHANGDAO-00027",
+            "requestId": {
+                "kind": "random_decorated",
+                "charset": "alnum",
+                "length": 8,
+                "head": "perf",
+                "separator": "-"
+            },  
+            "vehicleNo": "鲁B18832",
+            "startTime": {
+                "kind": "timestamp",
+                "base": "2026-06-14 11:00:01",
+                "offset_seconds": 3600,
+                "format": "%Y-%m-%d %H:%M:%S"
+            },
+            "endTime": {
+                "kind": "timestamp",
+                "base": "2026-06-14 12:00:01",
+                "offset_seconds": 3600,
+                "format": "%Y-%m-%d %H:%M:%S"   
+            }            
         },
         "timePolicy": {
             "kind": "record"
@@ -55,12 +74,12 @@
       "request": {
         "kind": "request",
         "body": {
-            "requestId": "req_2026051512345670",
-            "businessNo": "BUS20260515001",
-            "vehicleNo": "鲁K57338",
+            "requestId": "${var.requestId}",
+            "businessNo": "${var.requestId}",
+            "vehicleNo": "${var.vehicleNo}",
             "vehicleColor": 2,
-            "startTime": "2026-06-10 08:00:01",
-            "endTime": "2026-06-14 11:00:01"
+            "startTime": "${var.startTime}",
+            "endTime": "${var.endTime}"
             }
       },
       "strategy":[ {

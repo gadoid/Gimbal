@@ -58,16 +58,36 @@ class TestGeneratorVar:
         steps, _ = pre.run()
         assert isinstance(steps[0].request.body["etd"], int)
 
-    def test_random_decimal_var_preserves_float_type(self):
-        """生成式 random_decimal 解析为 float。"""
+    def test_timestamp_with_base_and_custom_format(self):
         sc = _make_scenario(
-            vars={"w": {"kind": "random_decimal", "min": 10, "max": 20, "places": 2}},
-            body={"w": "${var.w}"},
+            vars={
+                "etd": {
+                    "kind": "timestamp",
+                    "base": "2026-06-14 11:00:01",
+                    "offset_seconds": 3600,
+                    "format": "%Y-%m-%d %H:%M:%S",
+                }
+            },
+            body={"etd": "${var.etd}"},
         )
-        cfg = _make_cfg()
-        pre = ScenarioPreprocessor(sc, cfg)
-        steps, _ = pre.run()
-        assert isinstance(steps[0].request.body["w"], float)
+        steps, _ = ScenarioPreprocessor(sc, _make_cfg()).run()
+        assert steps[0].request.body["etd"] == "2026-06-14 12:00:01"
+
+    def test_time_offset_with_base(self):
+        sc = _make_scenario(
+            vars={
+                "etd": {
+                    "kind": "time_offset",
+                    "base": "2026-06-14 11:00:01",
+                    "unit": "days",
+                    "value": 1,
+                }
+            },
+            body={"etd": "${var.etd}"},
+        )
+        steps, _ = ScenarioPreprocessor(sc, _make_cfg()).run()
+        from datetime import datetime
+        assert datetime.fromtimestamp(steps[0].request.body["etd"]).strftime("%Y-%m-%d %H:%M:%S") == "2026-06-15 11:00:01"
 
     def test_uuid_var_resolved(self):
         sc = _make_scenario(

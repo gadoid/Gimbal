@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "run_id": "b074b803-8289-4b50-9ea3-4e57eec858af",
+    "env": "dev",
+    "mode": "local",
+    "framework_version": "0.1.0",
+    "generated_at": "2026-07-21T02:28:35.014730+00:00"
+  },
+  "summary": {
+    "exit_code": 0,
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "error": 0,
+    "skipped": 0
+  },
+  "details": [
+    {
+      "scenario_id": "运综轨迹查询",
+      "status": "passed",
+      "duration_ms": 1656.931,
+      "halted": false,
+      "halt_reason": null,
+      "steps": [
+        {
+          "step_id": "step-000",
+          "status": "passed",
+          "duration_ms": 1651.397,
+          "error": null,
+          "error_phase": null
+        }
+      ]
+    }
+  ]
+}

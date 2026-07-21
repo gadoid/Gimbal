@@ -61,8 +61,9 @@ class _CallSpec:
     url: str = ""
     headers: dict = field(default_factory=dict)
     # body 与 schema/request.py:Request.body 保持一致：
-    # Union[Dict[str, Any], List[Any]] —— list body（批量请求等场景）也合法。
-    body: Union[Dict[str, Any], List[Any]] = field(default_factory=dict)
+    # Union[str, Dict[str, Any], List[Any]] —— str body（text/xml、text/plain）、
+    # list body（批量请求等场景）都合法。
+    body: Union[str, Dict[str, Any], List[Any]] = field(default_factory=dict)
     timeout: float = 30.0
     name: Optional[str] = "http_call"
     phase: Optional[str] = None
@@ -337,6 +338,22 @@ class StepStateMachine:
 
     # ── 内部辅助 ──────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _body_shape(body: Any) -> str:
+        """把 body 形态压缩成一行可读字符串，供日志展示。
+
+        阶段 1 引入 str body 后，单纯用 keys()/str 会丢失形态信息。
+        这里给出形态 + 长度（str 用字符数、list 用元素数、dict 用 key 数），
+        便于排查时一眼区分。
+        """
+        if isinstance(body, dict):
+            return f"dict[{len(body)}]"
+        if isinstance(body, list):
+            return f"list[{len(body)}]"
+        if isinstance(body, str):
+            return f"str[{len(body)}]"
+        return type(body).__name__
+
     def _run_phase(self, phase: str) -> PhaseResult:
         """通过 dispatcher 分发执行指定 phase 的所有策略，返回聚合的 PhaseResult（包含所有 StrategyResult）。"""
         logger.debug("[SM {}] 执行策略阶段: phase={}", self._step_id, phase)
@@ -405,9 +422,9 @@ class StepStateMachine:
             body=body,
             timeout=api.timeout,
         )
-        logger.info("[SM {}] HTTP 请求: method={} url={} timeout={:.1f}s body_keys={}",
+        logger.info("[SM {}] HTTP 请求: method={} url={} timeout={:.1f}s body_shape={}",
                     self._step_id, api.method, call_spec.url, api.timeout,
-                    list(body.keys()) if isinstance(body, dict) else "?")
+                    self._body_shape(body))
 
         # 埋点：HTTP_REQUEST 事件 + HTTP_BEFORE_SEND hook（可改写 call_spec）
         self._emit_http_request(call_spec)

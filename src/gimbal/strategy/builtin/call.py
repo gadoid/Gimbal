@@ -47,13 +47,44 @@ class CallExecutor(StrategyExecutor):
 
             t_start = time.monotonic()
             with httpx.Client(timeout=timeout) as client:
-                response = client.request(
-                    method=method,
-                    url=url,
-                    headers=headers,
-                    json=body if method.upper() not in ("GET", "HEAD") else None,
-                    params=body if method.upper() in ("GET", "HEAD") else None,
-                )
+                # body 形态分发（阶段 1：新增 str 形态支持）：
+                #   GET/HEAD  → params=  （向后兼容：dict/list/str 都走 query string）
+                #   str body  → content= （原始文本通道，Content-Type 由 api.headers 控制）
+                #   dict/list  → json=    （Content-Type: application/json，httpx 兜底）
+                # 互斥传递：httpx 接受同时传 json= 和 content= 但后者会覆盖前者，
+                # 所以必须 if/elif/else 分发，不能传多个参数。
+                method_upper = method.upper()
+                if method_upper in ("GET", "HEAD"):
+                    response = client.request(
+                        method=method,
+                        url=url,
+                        headers=headers,
+                        params=body,
+                    )
+                elif isinstance(body, str):
+                    # str body：原始文本通道
+                    # Content-Type 完全由调用方在 api.headers 显式声明；
+                    # 若未声明，httpx 默认 text/plain，建议显式。
+                    if not headers or "Content-Type" not in headers:
+                        logger.warning(
+                            "[CallExecutor] str body 但 headers 缺少 Content-Type，"
+                            "httpx 将使用 text/plain 兜底；"
+                            "建议在 api.headers 显式声明（如 text/xml、application/xml）"
+                        )
+                    response = client.request(
+                        method=method,
+                        url=url,
+                        headers=headers,
+                        content=body.encode("utf-8"),
+                    )
+                else:
+                    # dict/list：JSON 通道
+                    response = client.request(
+                        method=method,
+                        url=url,
+                        headers=headers,
+                        json=body,
+                    )
             duration_ms = (time.monotonic() - t_start) * 1000
 
             logger.info(

@@ -117,12 +117,16 @@ class TestTimestampSpec:
         assert s.format == "epoch"
         assert s.offset_seconds == 3600
 
-    def test_invalid_format(self):
-        with pytest.raises(ValidationError):
-            TimestampSpec(format="xx")
+    def test_custom_base(self):
+        s = TimestampSpec(
+            base="2026-06-14 11:00:01",
+            base_format="%Y-%m-%d %H:%M:%S",
+            format="%Y/%m/%d",
+        )
+        assert s.base == "2026-06-14 11:00:01"
+        assert s.base_format == "%Y-%m-%d %H:%M:%S"
+        assert s.format == "%Y/%m/%d"
 
-
-class TestNowSpec:
     def test_default_format(self):
         s = NowSpec()
         assert s.format == "iso"
@@ -161,6 +165,7 @@ class TestVarSpecUnion:
         ("timestamp",      TimestampSpec),
         ("now",            NowSpec),
         ("seq",            SeqSpec),
+        ("time_offset",    TimeOffsetSpec),
     ])
     def test_dispatches_to_correct_subclass(self, kind, expected_class):
         spec = VarSpec.model_validate({"kind": kind})
@@ -208,6 +213,16 @@ class TestTimeOffsetSpec:
     def test_extra_field_forbidden(self):
         with pytest.raises(ValidationError):
             TimeOffsetSpec(unit="months", value=1, extra="x")
+
+    def test_custom_base(self):
+        s = TimeOffsetSpec(
+            base="2026-06-14 11:00:01",
+            base_format="%Y-%m-%d %H:%M:%S",
+            unit="days",
+            value=1,
+        )
+        assert s.base == "2026-06-14 11:00:01"
+        assert s.base_format == "%Y-%m-%d %H:%M:%S"
 
     def test_dispatched_via_varspec_union(self):
         """通过 VarSpec.model_validate 也能正确分发到 TimeOffsetSpec。"""
