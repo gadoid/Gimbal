@@ -1,4 +1,14 @@
-"""多维度索引:为 PlateRegistry 提供 O(1) 查询。"""
+"""多维度索引:为 PlateRegistry 的查询提供加速。
+
+覆盖维度与复杂度:
+    - ``by_id``         O(1) — id → EndpointSpec
+    - ``by_service``    O(1) — service → {id}
+    - ``by_tag``        O(1) — tag → {id}
+    - ``by_route``      O(1) — (service, method, path) → id
+
+未覆盖的维度（当前为线性扫描，由调用方承担）:
+    - ``by_system``     O(N) — ``list_systems()`` / ``_services_for_system()`` 遍历 ``by_id.values()``
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -10,11 +20,13 @@ from gimbal_plate.schema.endpoint import EndpointSpec
 class _Index:
     """内存索引。
 
-    三个维度独立维护:
+    四个维度独立维护:
         - ``by_id``         id → EndpointSpec
         - ``by_service``    service → {id}
         - ``by_tag``        tag → {id}
         - ``by_route``      (service, method, path) → id
+
+    注: ``system`` 维度未建索引,见模块 docstring。
     """
 
     by_id: dict[str, EndpointSpec] = field(default_factory=dict)

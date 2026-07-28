@@ -73,7 +73,7 @@ class EndpointSpec(BaseModel):
 | `name` | 非空 |
 | `api` | 必填 |
 | `responses` | `200` 状态码必填 |
-| `version` | 符合 semver |
+| `version` | 非空字符串；本期不校验 semver 格式（二期评估，见 §7） |
 | `updated_at` | `version` 变更时必填 |
 
 ### 2.3 序列化
@@ -205,8 +205,10 @@ class RequestSpec(BaseModel):
 
 约束：
 
-- `body_type="none"` 时 `model` 与 `schema_` 均为 None。
-- `body_type` ∈ `{json, form, multipart, raw, binary}` 时 `model` 或 `schema_` 至少一个非空。
+- **`body_type="none"` 时 `model` 与 `schema_` 均为 None** — 规划约束，本期**未实装**（见 §7）。
+- **`body_type` ∈ `{json, form, multipart, raw, binary}` 时 `model` 或 `schema_` 至少一个非空** — 规划约束，本期**未实装**（见 §7）。
+
+> 本期 `RequestSpec` 仅由调用方按需填充 `model` / `schema_`；模型层不做互斥校验。
 
 ### 4.2 ResponseSpec
 
@@ -227,7 +229,8 @@ class ResponseSpec(BaseModel):
 约束：
 
 - `status` ∈ [100, 599]。
-- `assertable_fields` 中每个字段路径必须在 `fields` 中存在。
+- **`assertable_fields` 中每个字段路径必须在 `fields` 中存在** — 规划约束，本期**未实装**（见 §7）。
+  > 本期不校验 `assertable_fields` 与 `fields` 的路径一致性；待 `path` 语法（JSONPath / dot-path）确认后再实装。
 
 ### 4.3 IOFieldBinding
 
@@ -250,8 +253,10 @@ class IOFieldBinding(BaseModel):
 
 约束：
 
-- `name` 与 `path` 不可同时为空。
-- `enum` 非空时，所有 `default` / `example` 必须在 `enum` 中。
+- **`name` 与 `path` 不可同时为空** — 规划约束，本期**未实装**（见 §7）。
+  > 本期允许 `name` / `path` 同时为空；实装前需先确定 `name` 与 `path` 的语义边界（业务名 vs JSONPath）。
+- **`enum` 非空时，所有 `default` / `example` 必须在 `enum` 中** — 规划约束，本期**未实装**（见 §7）。
+  > 本期不校验枚举成员一致性；调用方自行保证。
 
 ---
 
@@ -308,8 +313,22 @@ registry.find_endpoints(service="settlement", method="POST", path="/api/v1/order
 case = EndpointCase(name="正常下单", parameters={"order_no": "ORD-001"}, expected={...})
 exporter = EndpointCaseExporter(ep)
 step = exporter.to_gimbal_step(case)
-scenario = exporter.to_gimbal_scenario(EndpointCaseDataset(endpoint_id=ep.id, cases=[case]))
+steps = exporter.to_gimbal_scenario_steps(
+    EndpointCaseDataset(endpoint_id=ep.id, cases=[case])
+)
+scenario_fragment = exporter.to_gimbal_scenario_dict(
+    EndpointCaseDataset(endpoint_id=ep.id, cases=[case]),
+    scenario_id="sc_demo",
+)
 ```
+
+`EndpointCaseExporter` 不直接产出 `gimbal.schema.Scenario` 实例。原因：`Scenario` 必填字段很多（`Meta` / `Config` 等），由调用方组合。本期 Exporter 只产出两段 dict：
+
+- `to_gimbal_step(case)` → 单个 `gimbal.schema.Step` 形态 dict。
+- `to_gimbal_scenario_steps(dataset)` → `Step` dict 列表（不含 Scenario 包装）。
+- `to_gimbal_scenario_dict(dataset, *, scenario_id=...)` → 带 `scenarioId` / `endpoint` 摘要 / `steps` 列表的 Scenario 片段 dict。
+
+调用方根据需要用 `gimbal.schema.Step(**dict)` / `gimbal.schema.Scenario(**dict)` 实例化。
 
 `EndpointCase` / `EndpointCaseDataset` / `EndpointCaseExporter` 全部定义在 `case/exporter.py` 单一文件里——变量直接用 `dict[str, Any]`，不引入独立 `CaseVariable` 类。
 
@@ -317,11 +336,26 @@ scenario = exporter.to_gimbal_scenario(EndpointCaseDataset(endpoint_id=ep.id, ca
 
 ## 7. 不做
 
+### 7.1 不引入的概念
+
 - 旧字段 / 旧方法：直接删除。
 - `FieldBinding` / `EndpointDoc` / `EndpointCategory` / `mutates_state`：不做。
 - `frozen dataclass`：不做。
 - `EndpointKey` / `Protocol hook` / `server` / `SDK` / `MCP`：不做。
 - **C3 平台渲染视图**（`RenderingView` / `RenderingService`）：不做。前端直接 `EndpointSpec.model_dump()`。
+
+### 7.2 二期评估的字段约束（本期未实装）
+
+下列约束在 §4 / §5 出现但本期**不实装**——避免留下"规范声明却无对应校验"的伪契约。二期启动时须先决定 `path` 语法（JSONPath / dot-path）与 `enum` 元素类型语义，再实装。
+
+| 字段 / 约束 | 推迟原因 |
+|---|---|
+| `EndpointSpec.version` 符合 semver | 待定格式严格度（`x.y.z` 还是允许 pre-release 标签） |
+| `RequestSpec.body_type="none"` 时 `model` / `schema_` 均为 None | 调用方目前保证互斥；模型层暂不强制 |
+| `RequestSpec.body_type ∈ {json, form, ...}` 时 `model` 或 `schema_` 至少一个非空 | 同上 |
+| `ResponseSpec.assertable_fields` 路径必须在 `fields` 中存在 | 依赖 `path` 语法决策 |
+| `IOFieldBinding.name` 与 `path` 不可同时为空 | 需先确定 `name` / `path` 语义边界（业务名 vs JSONPath） |
+| `IOFieldBinding.enum` 非空时 `default` / `example` 必须在 `enum` 中 | 需先确定 `enum` 元素类型比较语义 |
 
 ---
 

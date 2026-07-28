@@ -68,7 +68,7 @@
 
 - `case/exporter.py` 单文件，含 `EndpointCase` / `EndpointCaseDataset` / `EndpointCaseExporter`。
 - 不拆 `interpolation.py` / `assertions.py` / `endpoint_case.py`。
-- `EndpointCaseExporter.to_gimbal_step` / `to_gimbal_scenario`。
+- `EndpointCaseExporter.to_gimbal_step` / `to_gimbal_scenario_steps` / `to_gimbal_scenario_dict`（不直接产出 `gimbal.schema.Scenario`，由调用方组合 `Meta` / `Config`）。
 - 变量直接用 `dict[str, Any]`，不引入 `CaseVariable` 类。
 
 **验收**：
@@ -115,5 +115,11 @@
 - `Protocol hook` / `server` / `SDK` / `MCP`：二期评估。
 - 线程安全 / 异步：二期评估。
 - 与 Platform 集成：二期。
+- 未实装的字段约束（详见 [ENDPOINT_SPEC_V1.md §7.2](ENDPOINT_SPEC_V1.md)）：
+  - `EndpointSpec.version` semver 格式校验。
+  - `RequestSpec.body_type` 与 `model` / `schema_` 的互斥约束。
+  - `ResponseSpec.assertable_fields` 路径必须在 `fields` 中存在。
+  - `IOFieldBinding.name` / `path` 互斥校验。
+  - `IOFieldBinding.enum` 成员一致性校验。
 
 任何二期需求在 PR 中讨论，决定是否扩大一期范围。仅在 [README.md §4](README.md) 列表中明确列为"纳入"的项目才进入一期。
