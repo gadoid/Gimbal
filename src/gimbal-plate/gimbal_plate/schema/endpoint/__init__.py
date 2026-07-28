@@ -1,18 +1,18 @@
-"""gimbal_plate.endpoint —— 被测接口的全量描述。
-
-核心类型:
-    - ``ApiSpec``       接口坐标(service / method / path / headers / timeout)
-    - ``EndpointInfo``  业务自然语言信息(不进产物)
-    - ``EndpointSpec``  一个接口的全量描述:坐标 + 请求/响应体形状 + 业务信息
-"""
-from gimbal_plate.schema.endpoint.endpoint import (
-    ApiSpec,
-    EndpointInfo,
-    EndpointSpec,
+"""gimbal_plate.schema.endpoint —— 被测接口契约的 V1 形态。"""
+from gimbal_plate.schema.endpoint.api_spec import ApiSpec
+from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
+from gimbal_plate.schema.endpoint.io_spec import (
+    IOFieldBinding,
+    RequestSpec,
+    ResponseSpec,
 )
+from gimbal_plate.schema.endpoint.metadata import EndpointMetadata
 
 __all__ = [
     "ApiSpec",
-    "EndpointInfo",
     "EndpointSpec",
+    "IOFieldBinding",
+    "RequestSpec",
+    "ResponseSpec",
+    "EndpointMetadata",
 ]

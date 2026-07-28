@@ -1,37 +1,26 @@
-"""gimbal_plate.registry —— 服务/接口注册与查询 facade。
-
-第一期最小可用 API:
-    - ``register_service(service)``              注册服务定义
-    - ``register_endpoint(endpoint)``            注册接口定义
-    - ``list_services() -> list[ServiceDefinition]``
-    - ``list_endpoints(service=None) -> list[EndpointSpec]``
-    - ``get_endpoint(endpoint_id) -> EndpointSpec``
-    - ``reset()``                                清空注册(便于测试)
-
-后续阶段将补:
-    - 线程安全
-    - 懒加载
-    - checksum 失效
-    - 远程同步
-"""
+"""gimbal_plate.registry —— 被测接口的多维度内存注册表。"""
 from gimbal_plate.registry.registry import (
-    ServiceRegistry,
-    registry as default_registry,
-    register_service,
-    register_endpoint,
-    list_services,
-    list_endpoints,
+    PlateRegistry,
+    find_endpoints,
     get_endpoint,
+    list_endpoints,
+    list_services,
+    list_systems,
+    register_endpoint,
+    register_service,
+    registry,
     reset,
 )
 
 __all__ = [
-    "ServiceRegistry",
+    "PlateRegistry",
     "registry",
-    "register_service",
     "register_endpoint",
+    "register_service",
+    "list_systems",
     "list_services",
     "list_endpoints",
     "get_endpoint",
+    "find_endpoints",
     "reset",
 ]

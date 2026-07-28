@@ -1,69 +1,82 @@
-"""gimbal_plate.endpoint —— 被测接口的全量描述。
-
-``EndpointSpec`` 同时承载:
-    - 坐标 (``ApiSpec``:service / method / path / headers / timeout)
-    - 请求/响应体形状 (直接持有 Pydantic 类引用)
-    - 业务自然语言信息 (``EndpointInfo``,不进产物)
-
-提供四个输出方法:
-    - ``to_api()``              编译为 Gimbal Api 字段
-    - ``to_request(values)``    编译为 Gimbal Request 字段
-    - ``request_schema()``      返回请求 JSON Schema(给 Platform)
-    - ``response_schema(status)`` 返回指定状态码的响应 JSON Schema
-"""
+"""EndpointSpec:被测系统一个接口的完整契约。"""
 from __future__ import annotations
 
-from typing import Any, Literal
-from pydantic import BaseModel, ConfigDict, Field
+import re
+from datetime import UTC, datetime
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .api_spec import ApiSpec
+from .io_spec import RequestSpec, ResponseSpec
+from .metadata import EndpointMetadata
 
 
-class ApiSpec(BaseModel):
-    """接口坐标,对应 gimbal 的 Api。"""
-    model_config = ConfigDict(extra="forbid")
-
-    service: str
-    method: Literal["GET", "POST", "PUT", "DELETE", "PATCH"]
-    path: str
-    headers: dict[str, str] = Field(default_factory=dict)
-    timeout: float = 30
-
-
-class EndpointInfo(BaseModel):
-    """业务自然语言信息,人和 agent 读,不进产物。"""
-    model_config = ConfigDict(extra="forbid")
-
-    summary: str = ""
-    businessModule: str = ""
-    preconditions: list[str] = Field(default_factory=list)
-    successCriteria: str = ""
+_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_.\-]{1,63}$")
 
 
 class EndpointSpec(BaseModel):
-    """一个接口的全量描述:坐标 + 请求/响应体形状 + 业务信息。"""
-    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+    """被测系统的一个接口契约。
 
-    id: str                                    # 稳定标识,如 "settlement.order.add"
-    name: str                                  # 接口短名,如 "新增订单"
+    一期承担:
+        C1 结构定义(系统-服务-接口-字段层级)
+        C2 用例导出(由 ``EndpointCaseExporter`` 消费)
+
+    一期不做:
+        C3 平台渲染视图 — 前端直接 ``model_dump()`` 即可。
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        arbitrary_types_allowed=True,
+    )
+
+    # ── 唯一标识 ──
+    id: str
+    system: str
+    service: str
+    name: str
+    description: str = ""
+
+    # ── 接口坐标 ──
     api: ApiSpec
-    RequestBody: type[BaseModel] | None = None
-    ResponseBody: dict[str, type[BaseModel]] = Field(default_factory=dict)   # 状态码 -> 模型,如 {"200": ..., "400": ...}
-    info: EndpointInfo = Field(default_factory=EndpointInfo)
 
-    def to_api(self) -> dict[str, Any]:
-        return {"kind": "api", **self.api.model_dump()}
+    # ── 输入输出形态 ──
+    request: RequestSpec | None = None
+    responses: dict[int, ResponseSpec] = Field(default_factory=dict)
 
-    def to_request(self, values: str | dict[str, Any] | list[Any]) -> dict[str, Any]:
-        if self.RequestBody is None or isinstance(values, str):
-            body = values          # str 形态(XML/text)或未声明结构,原样透传
-        elif isinstance(values, list):
-            body = values          # list 形态,本期不做逐项校验
-        else:
-            body = self.RequestBody(**values).model_dump()
-        return {"kind": "request", "body": body}
+    # ── 业务元信息 ──
+    metadata: EndpointMetadata = Field(default_factory=EndpointMetadata)
 
-    def request_schema(self) -> dict[str, Any] | None:
-        return self.RequestBody.model_json_schema() if self.RequestBody else None
+    # ── 完整性 ──
+    version: str = "1.0.0"
+    updated_at: datetime | None = None
 
-    def response_schema(self, status: str = "200") -> dict[str, Any] | None:
-        model = self.ResponseBody.get(status)
-        return model.model_json_schema() if model else None
+    @model_validator(mode="after")
+    def _validate_integrity(self) -> "EndpointSpec":
+        # id
+        if not self.id:
+            raise ValueError("EndpointSpec.id 不可为空")
+        if not _ID_PATTERN.match(self.id):
+            raise ValueError(
+                f"EndpointSpec.id={self.id!r} 不合法(需匹配 ^[a-z][a-z0-9_.\\-]{{1,63}}$)"
+            )
+        # system / service
+        if not self.system:
+            raise ValueError("EndpointSpec.system 不可为空")
+        if not self.service:
+            raise ValueError("EndpointSpec.service 不可为空")
+        if self.api.service != self.service:
+            raise ValueError(
+                f"EndpointSpec.service={self.service!r} 与 api.service="
+                f"{self.api.service!r} 不一致"
+            )
+        # name
+        if not self.name:
+            raise ValueError("EndpointSpec.name 不可为空")
+        # 200 响应必填(业务约定)
+        if 200 not in self.responses:
+            raise ValueError("EndpointSpec.responses 必须包含 200 状态码")
+        # updated_at 与 version 一致性
+        if self.updated_at is None:
+            self.updated_at = datetime.now(UTC)
+        return self
