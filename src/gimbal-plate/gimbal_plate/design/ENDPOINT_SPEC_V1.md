@@ -1,7 +1,7 @@
 # EndpointSpec V1 详细规格
 
 > 状态：评审中
-> 最近修订：2026-07-28
+> 最近修订：2026-07-29
 > 影响范围：`gimbal_plate/schema/endpoint/**` · `gimbal_plate/registry/**` · `gimbal_plate/__init__.py`
 
 ---
@@ -91,7 +91,7 @@ class EndpointSpec(BaseModel):
   - `responses[200].status` / `responses[200].assertable_fields`
   - `metadata.module` / `metadata.tags` / `metadata.priority` / `metadata.owner`
 - **不参与断言的字段**：`updated_at`（时间精度敏感）、`request.model_schema` / `responses[*].model_schema`（来自 `model_serializer` 的派生输出，调试字段）。
-- **`version` 变更属于契约升级**：不在本测试覆盖范围内；后续若引入 `1.x → 2.0` 兼容分支，应新增 `Migrations` 章节。
+- **`version` 变更属于契约升级**：不在本测试覆盖范围内；`1.x → 2.0` 兼容分支（v2 阶段承接，详见 [ENDPOINT_SPEC_V2.md](ENDPOINT_SPEC_V2.md) §1）。
 
 ```json
 {
@@ -205,10 +205,14 @@ class RequestSpec(BaseModel):
 
 约束：
 
-- **`body_type="none"` 时 `model` 与 `schema_` 均为 None** — 规划约束，本期**未实装**（见 §7）。
-- **`body_type` ∈ `{json, form, multipart, raw, binary}` 时 `model` 或 `schema_` 至少一个非空** — 规划约束，本期**未实装**（见 §7）。
+- **`body_type="none"` 时 `model` 与 `schema_` 均为 None** — **已实装**。
+  > 实装于 `RequestSpec._validate()`：构造期校验。`model` 非 None 拒、`schema_` 非 None 拒。
+- **`body_type` ∈ `{json, form, multipart, raw, binary}` 时 `model` 或 `schema_` 至少一个非空** — **已实装**。
+  > 实装于 `RequestSpec._validate()`：构造期校验。两者都 None 时拒。`schema_` 是空 dict `{}` 时**视为"已声明"**（类型非 None 即满足），不视为契约残缺（决策 Q-B=b1）。
 
-> 本期 `RequestSpec` 仅由调用方按需填充 `model` / `schema_`；模型层不做互斥校验。
+**`model` 与 `schema_` 可并存**（决策 Q3=b，不强制互斥）：并存场景在工程中真实存在但概率较低，模型层不互斥。语义上以 `model` 优先：`RequestSpec.json_schema()` 优先返回 `model.model_json_schema()`；`RequestSpec.validate_body()` 仅用 `model` 做字段校验；`schema_` 仅作为序列化/前端展示的补充信息。若 `model` 与 `schema_` 同时非空，序列化产物会同时含 `model_schema` / `model_name`（来自 `model`）和 `schema`（来自 `schema_`）三组键，跨进程消费者按需取用。
+
+> `schema_` 字段在 Python 构造端使用字段名 `schema_=...`（受 `populate_by_name=True` 启用），跨进程 JSON 形式使用 `"schema"` 作为 alias；二者由 pydantic 自动桥接，无需在调用方手动转换。
 
 ### 4.2 ResponseSpec
 
@@ -229,8 +233,9 @@ class ResponseSpec(BaseModel):
 约束：
 
 - `status` ∈ [100, 599]。
-- **`assertable_fields` 中每个字段路径必须在 `fields` 中存在** — 规划约束，本期**未实装**（见 §7）。
-  > 本期不校验 `assertable_fields` 与 `fields` 的路径一致性；待 `path` 语法（JSONPath / dot-path）确认后再实装。
+- **`assertable_fields` 中每个字段路径必须在 `fields` 中存在** — **已实装**。
+  > 实装于 [ENDPOINT_SPEC_V2.md §2.3](ENDPOINT_SPEC_V2.md) §2.3 决策拍板后，逻辑见 `ResponseSpec._validate()`：每个 `assertable_fields[i]` 经 `plate.utils.path.normalize()` 归一为 `$.xxx` 后与 `{fields[j].path 归一}` 求交，缺失项整体报一条 `ValueError`。
+  > `path` 语法（JSONPath / 双形态并存）与 `name` 同末段约束详见 [§4.3](#43-iofieldbinding) 与 [plate/utils/path.py](../../gimbal_plate/utils/path.py)。
 
 ### 4.3 IOFieldBinding
 
@@ -249,14 +254,42 @@ class IOFieldBinding(BaseModel):
         "text", "number", "boolean", "select",
         "textarea", "json", "file", "binary", "unknown",
     ] = "unknown"
+
+    source_kind: Literal["independent", "lookup", "generated"] = "independent"
 ```
 
-约束：
+**`source_kind` 语义**：
 
-- **`name` 与 `path` 不可同时为空** — 规划约束，本期**未实装**（见 §7）。
-  > 本期允许 `name` / `path` 同时为空；实装前需先确定 `name` 与 `path` 的语义边界（业务名 vs JSONPath）。
-- **`enum` 非空时，所有 `default` / `example` 必须在 `enum` 中** — 规划约束，本期**未实装**（见 §7）。
-  > 本期不校验枚举成员一致性；调用方自行保证。
+字段自述"这个字段的值从哪来"，仅描述方向性提示，不含任何跨接口的具体指针（不设 `endpoint_id` / `field_path` 一类的强引用）。
+
+| 取值 | 含义 |
+|---|---|
+| `independent` | 该字段在本接口请求时自行配置，无前置依赖（如枚举选项、开关值） |
+| `lookup` | 值能从某个查询类接口的响应中直接查到，不依赖任何前置业务操作（如客户 ID 来自客户查询接口） |
+| `generated` | 值依赖某个前置的写/操作类接口执行后才动态产生，查询前该值尚不存在（如订单创建后才有 `order_id`） |
+
+**请求字段 / 响应字段的语义差异**：
+
+`IOFieldBinding` 同时用于 `RequestSpec.fields` 与 `ResponseSpec.fields`，但 `source_kind` 的语义只对**请求字段**成立——它描述的是"待填的槽位该去哪找值"。响应字段本身就是接口的产出、是可直接获得的信息，不存在"这个值从哪来"的问题，因此响应字段上的 `source_kind` 不需要额外描述，保留默认值 `independent` 即可，不代表该字段真的"无前置依赖"，只是这个属性对响应字段不适用。
+
+**设计取舍（不做什么）**：
+
+刻意不引入 `endpoint_id` / `field_path` 这类跨接口硬引用来精确定位"这个字段该去哪个接口的哪个字段查"。理由：
+
+1. `schema/endpoint/` 依据 `FILE_LAYOUT.md` 的依赖规则不允许依赖 `registry/`，无法在构造时校验这类引用的有效性；
+2. 精确指针在接口改名、字段路径变更时会静默失效，属于易腐烂的强绑定；
+3. 在 LLM 参与用例组装的场景下，具体的"哪个接口能提供这个字段"应交给 LLM 基于全量 `EndpointSpec` 的 `name` / `description` / `tags` 语料做语义检索，`source_kind` 只负责给出检索方向（去查询类接口找，还是去写类接口找，还是不用查），不承担精确匹配的职责。
+
+**约束**：
+
+- `path` 必须合法（JSONPath 形式 `$.xxx` 或合法短名 `xxx`；非法 JSONPath / 非法短名直接拒）；详见 [`plate/utils/path.py`](../../gimbal_plate/utils/path.py)。**已实装**。
+- `name` 必须等于 `path` 的末段标识符（末段是 FIELD 时）。当 `path` 以数组下标 / 通配 / 过滤 / 递归下降结尾时，无末段标识符，`name` 不与之强约束。**已实装**。
+- `enum` 非空时，所有 `default` / `example` 必须在 `enum` 中 — **已实装**。
+  > 实装于 `IOFieldBinding._validate()`：构造期校验。`enum` 为 `None` 或 `[]` 视为"未声明可选值清单"，跳过校验（填空风格自由，见 V2 §2.5 决策 Q2=a）。`enum` 非空时,逐项校验 `default` / `example` 是否 `==` 某个 enum 元素；任一不在则拒。
+  > 严格 `==`（决策 Q1=b）：Pythonic 默认行为，bool/int 互认（如 `True == 1`）、float/int 互认（如 `1.0 == 1`）均视为"在 enum 中"。工程意义：enum 的真实生效点是字符串传输阶段，前端会把 bool/int 统一转字符串，plate 不替用户管 Pythonic 类型互认语义。
+  > `enum` 元素可为任意 Python 值（含 list / dict 等可变容器），用 `==` 比对内容（决策 Q3=b），不强制冻结。`enum` 中允许重复元素（决策 Q6=a），不去重。
+  > `default` / `example` 字段值是 `None`（默认值）时跳过该项校验，避免 `default=None` 误拒。
+- `source_kind` 无跨字段/跨接口一致性校验（弱关系，刻意不做强校验）。
 
 ---
 
@@ -273,6 +306,7 @@ class EndpointMetadata(BaseModel):
 
     preconditions: list[str] = Field(default_factory=list)
     success_criteria: str = ""
+    failed_criteria: list[str] = Field(default_factory=list)
     business_notes: str = ""
 
     deprecated: bool = False
@@ -283,6 +317,23 @@ class EndpointMetadata(BaseModel):
 
 - `priority` ∈ {1, 2, 3} 或 None。
 - `tags` 元素去重。
+
+**`failed_criteria` 说明**：
+
+自由文本列表，每一项描述该接口的一种失败判定，与 `success_criteria` 呼应（后者仍为单个字符串，因为"什么样算成功"通常只有一种口径；"什么样算失败"通常有多种）。示例：
+
+```python
+EndpointMetadata(
+    success_criteria="返回 code=200",
+    failed_criteria=[
+        "code=400 时表示参数错误,msg 中给出具体校验失败字段",
+        "code=403 时表示权限不足,当前账号无该客户/服务人员数据权限",
+        "code=500 时表示系统异常,需重试或联系运维",
+    ],
+)
+```
+
+**未结构化的取舍**：列表内每一项仍是自由文本，未把 `condition`（如 `code=400`）与 `description`（如"参数错误"）拆成结构化字段分别存储。这意味着如果后续需要让代码（而非人/LLM）直接读取"这个接口有哪些失败码、各自该断言什么"去自动生成负向用例，现在的形式还不足以支撑，需要解析文本或改造成结构化条目。是否要做这一步留待真实需求出现时再评估，不在本次变更范围内。
 
 旧 `EndpointInfo` 直接删除。
 
@@ -344,18 +395,9 @@ scenario_fragment = exporter.to_gimbal_scenario_dict(
 - `EndpointKey` / `Protocol hook` / `server` / `SDK` / `MCP`：不做。
 - **C3 平台渲染视图**（`RenderingView` / `RenderingService`）：不做。前端直接 `EndpointSpec.model_dump()`。
 
-### 7.2 二期评估的字段约束（本期未实装）
+### 7.2 二期评估的项目（已迁移）
 
-下列约束在 §4 / §5 出现但本期**不实装**——避免留下"规范声明却无对应校验"的伪契约。二期启动时须先决定 `path` 语法（JSONPath / dot-path）与 `enum` 元素类型语义，再实装。
-
-| 字段 / 约束 | 推迟原因 |
-|---|---|
-| `EndpointSpec.version` 符合 semver | 待定格式严格度（`x.y.z` 还是允许 pre-release 标签） |
-| `RequestSpec.body_type="none"` 时 `model` / `schema_` 均为 None | 调用方目前保证互斥；模型层暂不强制 |
-| `RequestSpec.body_type ∈ {json, form, ...}` 时 `model` 或 `schema_` 至少一个非空 | 同上 |
-| `ResponseSpec.assertable_fields` 路径必须在 `fields` 中存在 | 依赖 `path` 语法决策 |
-| `IOFieldBinding.name` 与 `path` 不可同时为空 | 需先确定 `name` / `path` 语义边界（业务名 vs JSONPath） |
-| `IOFieldBinding.enum` 非空时 `default` / `example` 必须在 `enum` 中 | 需先确定 `enum` 元素类型比较语义 |
+原 §7.2 的 5 项字段约束与 §2.3 中的 `version` 兼容分支占位说明，已迁移到 [ENDPOINT_SPEC_V2.md](ENDPOINT_SPEC_V2.md)。本节不再维护，所有推迟项目以 V2 文档为单点源。
 
 ---
 

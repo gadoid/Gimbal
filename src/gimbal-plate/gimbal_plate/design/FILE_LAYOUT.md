@@ -14,6 +14,7 @@ src/gimbal-plate/gimbal_plate/
 ├── design/                        # 设计文档(不进入运行时)
 │   ├── README.md
 │   ├── ENDPOINT_SPEC_V1.md
+│   ├── ENDPOINT_SPEC_V2.md
 │   ├── FILE_LAYOUT.md
 │   ├── MIGRATION_PLAN.md
 │   └── ROADMAP.md

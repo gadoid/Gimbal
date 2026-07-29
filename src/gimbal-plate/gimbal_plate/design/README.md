@@ -33,6 +33,7 @@
 |---|---|
 | [README.md](README.md) | 本页：能力、术语、文档清单 |
 | [ENDPOINT_SPEC_V1.md](ENDPOINT_SPEC_V1.md) | EndpointSpec / 子模型字段、约束、序列化 |
+| [ENDPOINT_SPEC_V2.md](ENDPOINT_SPEC_V2.md) | V2 待启动项（V1 §7.2 / §2.3 中未实装内容的单点源） |
 | [FILE_LAYOUT.md](FILE_LAYOUT.md) | 目录结构、模块职责、依赖图 |
 | [MIGRATION_PLAN.md](MIGRATION_PLAN.md) | 一次性重构步骤 |
 | [ROADMAP.md](ROADMAP.md) | 里程碑、验收、推迟事项 |

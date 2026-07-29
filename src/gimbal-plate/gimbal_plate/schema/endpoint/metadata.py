@@ -16,6 +16,7 @@ class EndpointMetadata(BaseModel):
 
     preconditions: list[str] = Field(default_factory=list)
     success_criteria: str = ""
+    failed_criteria: list[str] = Field(default_factory=list)
     business_notes: str = ""
 
     deprecated: bool = False

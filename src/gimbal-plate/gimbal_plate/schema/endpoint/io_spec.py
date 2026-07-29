@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
+from ...utils import path as _path
+
 
 class IOFieldBinding(BaseModel):
     """请求或响应 body 中的一个字段元信息。"""
@@ -23,16 +25,80 @@ class IOFieldBinding(BaseModel):
         "textarea", "json", "file", "binary", "unknown",
     ] = "unknown"
 
+    source_kind: Literal["independent", "lookup", "generated"] = "independent"
+
+    @model_validator(mode="after")
+    def _validate(self) -> "IOFieldBinding":
+        # path 合法性（双形态并存：短名合法，但非法 JSONPath / 空串直接拒）
+        if not _path.is_valid_path(self.path):
+            raise ValueError(
+                f"IOFieldBinding.path={self.path!r} 不是合法 path"
+                f"（须为 JSONPath 形式或合法短名）"
+            )
+        # name 与 path 末段：末段是 FIELD 时 name 必须等于该标识符
+        seg = _path.last_segment(self.path)
+        if seg is not None and self.name != seg:
+            raise ValueError(
+                f"IOFieldBinding.name={self.name!r} 与 path={self.path!r} 的末段 {seg!r} 不一致"
+            )
+        # enum 成员一致性：enum 非空时 default / example 必须在 enum 中
+        #   Q2=a:enum 为 None 或 [] 视为"未声明可选值清单",跳过校验(填空风格自由)
+        #   Q1=b:严格 ==(Pythonic 默认,bool/int 互认由用户负责语义)
+        #   Q4=a:default 与 example 同等严格
+        #   Q3=b:enum 元素可以是任意类型(含 list/dict),直接用 == 比对
+        if self.enum:
+            for label, value in (("default", self.default), ("example", self.example)):
+                if value is not None and not any(value == e for e in self.enum):
+                    raise ValueError(
+                        f"IOFieldBinding.{label}={value!r} 不在 enum={self.enum!r} 中"
+                    )
+        return self
+
 
 class RequestSpec(BaseModel):
     """接口请求 body 的形态定义。"""
 
-    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        arbitrary_types_allowed=True,
+        populate_by_name=True,
+    )
 
     body_type: Literal["none", "json", "form", "multipart", "raw", "binary"] = "json"
     model: type[BaseModel] | None = None
     schema_: dict[str, Any] | None = Field(default=None, alias="schema")
     fields: list[IOFieldBinding] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate(self) -> "RequestSpec":
+        # 规则 A:body_type="none" 时 model 与 schema_ 必须都为 None
+        if self.body_type == "none":
+            if self.model is not None:
+                raise ValueError(
+                    f"RequestSpec.body_type='none' 时 model 必须为 None,"
+                    f"实际为 {self.model.__name__}"
+                )
+            if self.schema_ is not None:
+                raise ValueError(
+                    f"RequestSpec.body_type='none' 时 schema_ 必须为 None,"
+                    f"实际为 {self.schema_!r}"
+                )
+        # 规则 B:body_type != "none" 时 model 或 schema_ 至少一个非 None
+        # 注:此处 schema_ 是空 dict {} 视为"已声明"(类型非 None),
+        #     即使内容为空也算"声明了 schema";空 dict 与 None 等价的语义
+        #     仅在规则 A 的"必须为空"上下文中不强制(见 Q-A a2)。
+        else:
+            has_model = self.model is not None
+            has_schema = self.schema_ is not None
+            if not (has_model or has_schema):
+                raise ValueError(
+                    f"RequestSpec.body_type={self.body_type!r} 时 model 或 schema_"
+                    f" 至少一个非空"
+                )
+        # 规则 C(model 与 schema_ 可并存)不强制:见 V2 §2.2 决策 Q3 b。
+        # model 优先语义已在 validate_body() 中隐含(model 非 None 时
+        # 只用 model 校验,schema_ 仅作序列化/展示补充);见 V1 §4.1。
+        return self
 
     def json_schema(self) -> dict[str, Any] | None:
         """返回请求体的 JSON Schema,供跨进程传输与平台渲染使用。
@@ -69,7 +135,11 @@ class RequestSpec(BaseModel):
 class ResponseSpec(BaseModel):
     """接口某状态码响应的形态定义。"""
 
-    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        arbitrary_types_allowed=True,
+        populate_by_name=True,
+    )
 
     status: int
     description: str = ""
@@ -87,6 +157,25 @@ class ResponseSpec(BaseModel):
     def _validate(self) -> "ResponseSpec":
         if not (100 <= self.status <= 599):
             raise ValueError(f"ResponseSpec.status={self.status} 必须在 [100, 599]")
+        # assertable_fields 中每个 path 归一后必须在 fields[*].path 归一集合里
+        if self.assertable_fields:
+            known = {_path.normalize(f.path) for f in self.fields}
+            missing: list[str] = []
+            for raw in self.assertable_fields:
+                try:
+                    norm = _path.normalize(raw)
+                except ValueError as exc:
+                    raise ValueError(
+                        f"ResponseSpec[status={self.status}].assertable_fields"
+                        f" 中存在非法 path {raw!r}: {exc}"
+                    ) from exc
+                if norm not in known:
+                    missing.append(raw)
+            if missing:
+                raise ValueError(
+                    f"ResponseSpec[status={self.status}].assertable_fields"
+                    f" 中存在未声明字段: {missing}"
+                )
         return self
 
     @model_serializer

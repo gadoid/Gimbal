@@ -115,11 +115,6 @@
 - `Protocol hook` / `server` / `SDK` / `MCP`：二期评估。
 - 线程安全 / 异步：二期评估。
 - 与 Platform 集成：二期。
-- 未实装的字段约束（详见 [ENDPOINT_SPEC_V1.md §7.2](ENDPOINT_SPEC_V1.md)）：
-  - `EndpointSpec.version` semver 格式校验。
-  - `RequestSpec.body_type` 与 `model` / `schema_` 的互斥约束。
-  - `ResponseSpec.assertable_fields` 路径必须在 `fields` 中存在。
-  - `IOFieldBinding.name` / `path` 互斥校验。
-  - `IOFieldBinding.enum` 成员一致性校验。
+- 未实装的字段约束与 `version` 兼容分支：单点源为 [ENDPOINT_SPEC_V2.md](ENDPOINT_SPEC_V2.md)（从 V1 §7.2 与 §2.3 迁移而来），本节不再重复枚举。
 
 任何二期需求在 PR 中讨论，决定是否扩大一期范围。仅在 [README.md §4](README.md) 列表中明确列为"纳入"的项目才进入一期。
