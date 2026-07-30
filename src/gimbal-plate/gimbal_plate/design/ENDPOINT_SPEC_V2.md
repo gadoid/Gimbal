@@ -1,50 +1,70 @@
 # EndpointSpec V2 待启动项
 
-> 状态：草稿（未启动）
-> 最近修订：2026-07-29
-> 影响范围：`gimbal_plate/schema/endpoint/**`
+> 状态：§1 / §2.1 已实装;§2.2-§2.5 已实装;剩余"跨 version 兼容机制"列为远期 YAGNI
+> 最近修订：2026-07-30
+> 影响范围：`gimbal_plate/schema/endpoint/**` · `gimbal_plate/service/**`
 > 关联：[ENDPOINT_SPEC_V1.md](ENDPOINT_SPEC_V1.md) · [ROADMAP.md](ROADMAP.md) · [FILE_LAYOUT.md](FILE_LAYOUT.md) · [MIGRATION_PLAN.md](MIGRATION_PLAN.md) · [README.md](README.md)
 
 ---
 
 ## 0. 说明
 
-本文档承载 V1 规格中已声明但本期未实装、推迟到二期评估的项目。来源是 [ENDPOINT_SPEC_V1.md §7.2](ENDPOINT_SPEC_V1.md) 与该文档 §2.3 关于 `version` 兼容分支的占位说明。
+本文档原承载 V1 规格中已声明但本期未实装、推迟到二期评估的项目。来源是 [ENDPOINT_SPEC_V1.md §7.2](ENDPOINT_SPEC_V1.md) 与该文档 §2.3 关于 `version` 兼容分支的占位说明。
 
-V1 本期不再维护"待实装"清单。所有推迟项以本文档为单点源；`ENDPOINT_SPEC_V1.md §7.2`、`ROADMAP.md §4` 末尾重复声明已删除，改为指向本文档。
+V1 本期不再维护"待实装"清单。所有推迟项以本文档为单点源;`ENDPOINT_SPEC_V1.md §7.2`、`ROADMAP.md §4` 末尾重复声明已删除,改为指向本文档。
 
-实现前置已分别挂在每一条下；启动任一条之前须先解决其前置。
-
----
-
-## 1. version 与兼容性
-
-V1 `EndpointSpec.version` 默认 `"1.0.0"`，字符串自由（无 semver 校验）。V2 启动时需先决定以下两件事的边界，再立项实装：
-
-- **version 格式严格度**：`x.y.z` 三段，还是允许 pre-release / build metadata（如 `1.2.0-rc.1`）。
-- **跨 version 的兼容机制**：当 `version` 从 `1.x` 走到 `2.0.0`，旧 EndpointSpec 数据如何被新代码识别与转换——是否需要 `EndpointSpec.from_v1(...)` 之类的工厂、`schemaVersion` 顶层 discriminator、迁移脚本。
-
-V1 §2.3 提到的 "Migrations 章节" 不在 V1 中实装；它属于本文档的课题范围（`version` 1.x → 2.0 兼容分支），不属于数据迁移。`plate` 不存在存量 yaml/json 使用方（[MIGRATION_PLAN.md §4](../MIGRATION_PLAN.md) 已声明），无历史内容需要搬迁。
-
-实现前置：
-
-1. 确认 `version` 形态学（semver 是否含 pre-release）。
-2. 确认"跨 version 数据转换"是否有真实需求；若没有，本条降级为"只实装 semver 格式校验"，兼容分支保持"不做"。
+截至 2026-07-30,§1 version形态与 §2.1-§2.5 字段约束均已实装;§1 中"跨 version 兼容机制"经评估为 YAGNI,保留为远期占位,不立项。
 
 ---
 
-## 2. 字段约束（从 V1 §7.2 迁移）
+## 1. version 与兼容性 — 部分已实装
+
+### 1.1 两处 version 字段的语义分工(已实装)
+
+代码中存在两个 `version` 字段,语义正交,不可混用:
+
+| 字段 | 所属语义 | 含义 | 校验 | 默认值 |
+|---|---|---|---|---|
+| `EndpointSpec.version` | plate 契约版本 | plate ↔ platform ↔ gimbal 三方协调的契约版本号;旧版本结构定义被平台渲染时,版本号必须取自 spec 自身字段,不可取自任何全局常量 | semver `^\d+\.\d+\.\d+$`(纯三段,不含 pre-release / build metadata) | `"1.0.0"` |
+| `ServiceDefinition.version` | 被测系统绑定 | 被测系统部署版本,人维护,字面与被测系统版本保持一致;被测系统用什么版本号方案是被测系统自己的事,plate 不强加 semver | 仅非空,不校验格式 | `"1.0.0"` |
+
+**关键设计取舍**:
+
+- **不引入全局 `CURRENT_CONTRACT_VERSION` 常量**。理由:全局可变状态会破坏旧版本渲染语义——若通过修改常量来 bump 版本,所有已归档的旧版本结构定义在重新解析时会被错误地打上新版本号,契约追溯链断裂。版本号必须由 spec 自身字段携带,每个 EndpointSpec 独立持有自己的 `version`。
+- **`ServiceDefinition.version` 不做格式校验**。理由:该字段是被测系统部署版本的字面副本,被测系统的版本号方案(date-based / semver / build number / 自定义)由被测系统决定,plate 无权也无需强加 semver。版本迁移靠人维护即可——出了新版本就整体迁移到新版本号,不需要额外的"被测系统版本号 vs plate 内部版本号"的双轨制。
+- **不做归档/快照/bump 机制**。理由:本期 plate 只描述当前级别的接口结构一致性,旧版本归档是远期需求;远期如确有跨版本回溯需求,再单独立项设计 VersionedArchive,不在 V2 范围内。
+
+### 1.2 跨 version 兼容机制(远期 YAGNI,不立项)
+
+当 `EndpointSpec.version` 从 `1.x` 走到 `2.0.0` 时,旧 EndpointSpec 数据如何被新代码识别与转换——`EndpointSpec.from_v1(...)` 之类的工厂、`schemaVersion` 顶层 discriminator、迁移脚本等机制——经评估列为 YAGNI:
+
+- plate 不存在存量 yaml/json 使用方([MIGRATION_PLAN.md §4](../MIGRATION_PLAN.md) 已声明),无历史内容需要搬迁。
+- 跨 version 转换无真实需求触发。当前所有 EndpointSpec 均以最新契约版本 `"1.0.0"` 编写,不存在 `1.x → 2.0` 的存量转换场景。
+- 若未来确有跨版本需求,本条降级解除,重新立项;在此之前,本条目保持"不做"。
+
+V1 §2.3 提到的 "Migrations 章节" 属于本条的课题范围(`version` 1.x → 2.0 兼容分支),不属于数据迁移。
+
+---
+
+## 2. 字段约束(从 V1 §7.2 迁移)
 
 下列 5 条均为 V1 规格里 §4 / §5 已经声明、§7.2 表中归入"未实装"的字段约束。每条挂"为何推迟"与"实现前置"——前置不解决前不动代码。
 
-### 2.1 `EndpointSpec.version` 符合 semver
+### 2.1 `EndpointSpec.version` 符合 semver — **已实装**
 
-- **V1 出处**：[ENDPOINT_SPEC_V1.md §2.2](ENDPOINT_SPEC_V1.md) 表格最后一行；§7.2 表第 1 行。
-- **V1 现状**：`version: str = "1.0.0"`，接受任意非空字符串，未做格式校验。
-- **实现前置**：
-  1. 完成本文档 §1 第 1 步（决定 semver 是否含 pre-release）。
-  2. 决定校验是 Pydantic `field_validator`（构造期）还是序列化期（`model_serializer`）。
-  3. 锁测试：合法/非法各一组；序列化往返需保留合法 version。
+- **V1 出处**:[ENDPOINT_SPEC_V1.md §2.2](ENDPOINT_SPEC_V1.md) 表格最后一行;§7.2 表第 1 行。
+- **V1 现状(实装前)**:`version: str = "1.0.0"`,接受任意非空字符串,未做格式校验。
+- **决策拍板**:
+  - **semver 形态 = 纯三段 `x.y.z`**,不含 pre-release / build metadata。理由:plate 契约版本由 plate 自己掌控,不需要 pre-release 通道;纯三段足够承载"主版本.次版本.补丁"语义。
+  - **校验时机 = 构造期**(`model_validator(mode="after")`),与 §2.2 / §2.3 / §2.4 / §2.5 风格一致。
+  - **默认值 = 字面 `"1.0.0"`**,不引入全局常量(详见 §1.1 关键设计取舍)。
+- **实装落点**:`schema/endpoint/endpoint.py`
+  - 模块级常量 `_SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")`。
+  - 在 `EndpointSpec._validate_integrity` 内追加 version 校验块:`_SEMVER_PATTERN.match(self.version)` 不通过则抛 `ValueError`,错误消息含具体非法值与期望 pattern。
+- **测试覆盖**(`tests/plate/test_schema_endpoint.py::TestVersion`):
+  - 合法:`"1.0.0"`(默认)/ `"1.2.0"` / `"2.0.0"` / `"0.0.1"` 通过。
+  - 非法:`"2.0"`(两段)/ `"v1.0.0"`(前缀)/ `"1.0"`(两段)/ `"1.0.0-rc1"`(含 pre-release)/ `""`(空)/ `"1.2.3.4"`(四段)拒绝。
+- **V1 §2.2 对应"未实装"标记已翻为"已实装"**。
 
 ### 2.2 `RequestSpec.body_type` / `model` / `schema_` 的互斥约束 — **已实装**
 
@@ -132,25 +152,24 @@ V1 §2.3 提到的 "Migrations 章节" 不在 V1 中实装；它属于本文档�
 
 ---
 
-## 3. 实现顺序建议（剩余项）
+## 3. 实现顺序建议
 
-仅作启动参考；任何一条单独启动都必须先把该条的前置解决掉。§2.2 / §2.3 / §2.4 / §2.5 已实装，退出待办队列。
-
-1. **§1 version 与兼容性** —— 单独立项，先定 version 形态，再决定 §2.1 是否并入同一 PR。
-2. **§2.1 `version` semver 校验** —— 跟随 §1 决策启动。
+所有"待启动"项均已实装(§1.1 version 形态 + §2.1-§2.5 字段约束)。§1.2 跨 version 兼容机制列为远期 YAGNI,不立项,无实现顺序。
 
 ---
 
-## 4. 验收（同 V1 §8 风格；待启动时逐项打勾）
+## 4. 验收(同 V1 §8 风格)
 
-- [x] §2.3 启动：`assertable_fields` 路径一致性校验生效。
-- [x] §2.4 启动：`name` / `path` 互斥生效。
-- [x] §2.2 启动：`RequestSpec.body_type` / `model` / `schema_` 互斥生效。
-- [x] §2.5 启动：`enum` 成员一致性生效。
-- [ ] §1 启动：`version` 形态与兼容机制拍板（文档化）。
-- [ ] §2.1 启动：`version` semver 校验生效。
+- [x] §2.3 启动:`assertable_fields` 路径一致性校验生效。
+- [x] §2.4 启动:`name` / `path` 互斥生效。
+- [x] §2.2 启动:`RequestSpec.body_type` / `model` / `schema_` 互斥生效。
+- [x] §2.5 启动:`enum` 成员一致性生效。
+- [x] §1.1 启动:两处 `version` 字段语义分工拍板(文档化 + 实装校验)。
+- [x] §2.1 启动:`EndpointSpec.version` semver `x.y.z` 校验生效。
+- [x] `ServiceDefinition.version` 非空校验生效。
 - [x] V1 §4 / §5 中 path 相关约束行的"未实装"标记全部移除。
-- [x] `tests/plate` 用例在 V2 实施范围内对应更新，回归通过。
+- [x] `tests/plate` 用例在 V2 实施范围内对应更新,回归通过。
+- [ ] §1.2 跨 version 兼容机制(远期 YAGNI,不立项)。
 
 ---
 

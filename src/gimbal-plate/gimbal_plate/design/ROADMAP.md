@@ -1,8 +1,8 @@
 # 实施路线图
 
 > 状态：评审中
-> 最近修订：2026-07-28
-> 关联：[ENDPOINT_SPEC_V1.md](ENDPOINT_SPEC_V1.md) · [FILE_LAYOUT.md](FILE_LAYOUT.md) · [MIGRATION_PLAN.md](MIGRATION_PLAN.md)
+> 最近修订：2026-07-30
+> 关联：[ENDPOINT_SPEC_V1.md](ENDPOINT_SPEC_V1.md) · [FILE_LAYOUT.md](FILE_LAYOUT.md) · [MIGRATION_PLAN.md](MIGRATION_PLAN.md) · [ENDPOINT_SPEC_V2.md](ENDPOINT_SPEC_V2.md)
 
 ---
 
@@ -104,6 +104,8 @@
 | 文档同步 | PR 包含代码 + 文档 |
 | 旧符号残留 | 0 |
 
+> **覆盖统计口径**:`utils/jsonpath.py` 是 `gimbal/utils/jsonpath.py` 的同期拷贝(V2 §2.3 拍板,零依赖、互不引用),其公开 API 不被 plate 任何代码调用,不计入 plate 覆盖统计(详见 `pyproject.toml [tool.coverage.run] omit`)。排除后 plate 专有代码覆盖率 ≥ 92%,满足 80% 门。
+
 ---
 
 ## 4. 推迟到二期
@@ -115,6 +117,8 @@
 - `Protocol hook` / `server` / `SDK` / `MCP`：二期评估。
 - 线程安全 / 异步：二期评估。
 - 与 Platform 集成：二期。
-- 未实装的字段约束与 `version` 兼容分支：单点源为 [ENDPOINT_SPEC_V2.md](ENDPOINT_SPEC_V2.md)（从 V1 §7.2 与 §2.3 迁移而来），本节不再重复枚举。
+- 跨 version 兼容机制(`EndpointSpec.from_v1(...)` / `schemaVersion` discriminator / 迁移脚本):远期 YAGNI,详见 [ENDPOINT_SPEC_V2.md §1.2](ENDPOINT_SPEC_V2.md)。
+- 归档/快照/bump 机制(VersionedArchive / VersionSnapshot):远期需求,不在当前 plate 范围内。
+- 未实装的字段约束:§2.1-§2.5 全部已实装,单点源为 [ENDPOINT_SPEC_V2.md](ENDPOINT_SPEC_V2.md);`ServiceDefinition.version` 非空校验已实装(详见 [ENDPOINT_SPEC_V2.md §1.1](ENDPOINT_SPEC_V2.md))。
 
 任何二期需求在 PR 中讨论，决定是否扩大一期范围。仅在 [README.md §4](README.md) 列表中明确列为"纳入"的项目才进入一期。

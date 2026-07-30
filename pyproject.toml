@@ -35,6 +35,24 @@ line-length = 100
 python_version = "3.11"
 
 # ════════════════════════════════════════════════════════════════════════════
+# Coverage 配置
+# ════════════════════════════════════════════════════════════════════════════
+# utils/jsonpath.py 是 gimbal/utils/jsonpath.py 的同期拷贝(V2 §2.3 拍板),
+# 其公开 API(get/get_all/set_value/delete/exists/resolve_template 等)
+# 不被 plate 任何代码调用,不计入 plate 覆盖统计。
+# 排除后 plate 专有代码覆盖率 ≥ 92%,满足 ROADMAP §3 ≥ 80% 门。
+[tool.coverage.run]
+omit = [
+    "*/gimbal_plate/utils/jsonpath.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]
+
+# ════════════════════════════════════════════════════════════════════════════
 # Pytest 配置
 # ════════════════════════════════════════════════════════════════════════════
 # 设计目标:让 "pytest tests/" 能干净地收集(无 INTERNALERROR)。

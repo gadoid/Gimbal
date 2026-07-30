@@ -1,8 +1,8 @@
 # EndpointSpec V1 详细规格
 
 > 状态：评审中
-> 最近修订：2026-07-29
-> 影响范围：`gimbal_plate/schema/endpoint/**` · `gimbal_plate/registry/**` · `gimbal_plate/__init__.py`
+> 最近修订：2026-07-30
+> 影响范围：`gimbal_plate/schema/endpoint/**` · `gimbal_plate/registry/**` · `gimbal_plate/service/**` · `gimbal_plate/__init__.py`
 
 ---
 
@@ -73,8 +73,8 @@ class EndpointSpec(BaseModel):
 | `name` | 非空 |
 | `api` | 必填 |
 | `responses` | `200` 状态码必填 |
-| `version` | 非空字符串；本期不校验 semver 格式（二期评估，见 §7） |
-| `updated_at` | `version` 变更时必填 |
+| `version` | 非空,匹配 `^\d+\.\d+\.\d+$`(semver 纯三段,不含 pre-release / build metadata) — **已实装**(详见 [V2 §2.1](ENDPOINT_SPEC_V2.md)) |
+| `updated_at` | 可选;未传时自动填充 `datetime.now(UTC)`。`version` 变更不由 `updated_at` 控制(版本字段自身携带版本号,变更即整体迁移) |
 
 ### 2.3 序列化
 
@@ -91,7 +91,7 @@ class EndpointSpec(BaseModel):
   - `responses[200].status` / `responses[200].assertable_fields`
   - `metadata.module` / `metadata.tags` / `metadata.priority` / `metadata.owner`
 - **不参与断言的字段**：`updated_at`（时间精度敏感）、`request.model_schema` / `responses[*].model_schema`（来自 `model_serializer` 的派生输出，调试字段）。
-- **`version` 变更属于契约升级**：不在本测试覆盖范围内；`1.x → 2.0` 兼容分支（v2 阶段承接，详见 [ENDPOINT_SPEC_V2.md](ENDPOINT_SPEC_V2.md) §1）。
+- **`version` 变更属于契约升级**：不在本测试覆盖范围内；`1.x → 2.0` 兼容分支在 V2 §1 评估后列为远期 YAGNI(详见 [ENDPOINT_SPEC_V2.md §1.2](ENDPOINT_SPEC_V2.md))。
 
 ```json
 {
@@ -403,9 +403,11 @@ scenario_fragment = exporter.to_gimbal_scenario_dict(
 
 ## 8. 验收清单
 
-- [ ] 字段命名 snake_case。
-- [ ] `responses` key 为 `int`。
-- [ ] 所有子模型独立文件。
-- [ ] `EndpointCaseExporter.to_gimbal_step` 至少 1 个真实接口的端到端测试通过。
-- [ ] Registry 多维度查询命中。
-- [ ] 序列化基于 `version` 的语义等价校验（同版本下关键字段集合相等，`updated_at` 不参与断言）。
+- [x] 字段命名 snake_case。
+- [x] `responses` key 为 `int`。
+- [x] 所有子模型独立文件。
+- [x] `EndpointCaseExporter.to_gimbal_step` 至少 1 个真实接口的端到端测试通过。
+- [x] Registry 多维度查询命中。
+- [x] 序列化基于 `version` 的语义等价校验（同版本下关键字段集合相等，`updated_at` 不参与断言）。
+
+> 全部通过(149 tests passed,详见 `tests/plate/`)。

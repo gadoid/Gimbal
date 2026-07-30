@@ -12,6 +12,8 @@ from .metadata import EndpointMetadata
 
 
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_.\-]{1,63}$")
+# EndpointSpec.version (plate 契约版本) semver:纯 x.y.z 三段,不含 pre-release / build metadata。
+_SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 class EndpointSpec(BaseModel):
@@ -73,6 +75,12 @@ class EndpointSpec(BaseModel):
         # name
         if not self.name:
             raise ValueError("EndpointSpec.name 不可为空")
+        # version — plate 契约版本,semver x.y.z 三段
+        if not _SEMVER_PATTERN.match(self.version):
+            raise ValueError(
+                f"EndpointSpec.version={self.version!r} 不合法"
+                f"(需匹配 ^\\d+\\.\\d+\\.\\d+$)"
+            )
         # 200 响应必填(业务约定)
         if 200 not in self.responses:
             raise ValueError("EndpointSpec.responses 必须包含 200 状态码")

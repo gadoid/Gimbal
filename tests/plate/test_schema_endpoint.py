@@ -13,6 +13,7 @@ from gimbal_plate import (
     IOFieldBinding,
     RequestSpec,
     ResponseSpec,
+    ServiceDefinition,
 )
 
 
@@ -40,6 +41,39 @@ class TestApiSpec:
         # 文档依据:V1 §3 ApiSpec 约束"path 必须以 / 开头"。
         with pytest.raises(Exception):
             ApiSpec(service="svc", method="GET", path="no-slash")
+
+    def test_service_empty_rejected(self) -> None:
+        # 测试点:service="" 必须拒(非空约束)。
+        # 文档依据:V1 §3 ApiSpec 约束"service 非空"。
+        with pytest.raises(Exception) as exc_info:
+            ApiSpec(service="", method="GET", path="/x")
+        assert "service" in str(exc_info.value).lower()
+
+    # ── timeout_seconds ∈ (0, 600] 边界(V1 §3) ────────────────────
+
+    def test_timeout_seconds_zero_rejected(self) -> None:
+        # 测试点:timeout_seconds=0 必须拒(开区间,0 不含)。
+        # 文档依据:V1 §3 ApiSpec 约束"timeout_seconds ∈ (0, 600]"。
+        with pytest.raises(Exception):
+            ApiSpec(service="svc", method="GET", path="/x", timeout_seconds=0)
+
+    def test_timeout_seconds_600_passes(self) -> None:
+        # 测试点:timeout_seconds=600 必须通过(闭区间,600 含)。
+        # 文档依据:V1 §3 ApiSpec 约束"timeout_seconds ∈ (0, 600]"。
+        api = ApiSpec(service="svc", method="GET", path="/x", timeout_seconds=600)
+        assert api.timeout_seconds == 600
+
+    def test_timeout_seconds_negative_rejected(self) -> None:
+        # 测试点:timeout_seconds=-1 必须拒(负数不满足 > 0)。
+        # 文档依据:V1 §3 ApiSpec 约束"timeout_seconds ∈ (0, 600]"。
+        with pytest.raises(Exception):
+            ApiSpec(service="svc", method="GET", path="/x", timeout_seconds=-1)
+
+    def test_timeout_seconds_above_600_rejected(self) -> None:
+        # 测试点:timeout_seconds=601 必须拒(超过上界 600)。
+        # 文档依据:V1 §3 ApiSpec 约束"timeout_seconds ∈ (0, 600]"。
+        with pytest.raises(Exception):
+            ApiSpec(service="svc", method="GET", path="/x", timeout_seconds=601)
 
 
 class TestIOSpec:
@@ -383,6 +417,47 @@ class TestEndpointSpec:
                 responses={200: ResponseSpec(status=200)},
             )
 
+    # ── system / name / service 非空反向边界(V1 §2.2) ──────────────
+
+    def test_system_empty_rejected(self) -> None:
+        # 测试点:system="" 必须拒(非空约束)。
+        # 文档依据:V1 §2.2 表格"system 非空"。
+        with pytest.raises(Exception):
+            EndpointSpec(
+                id="svc.x",
+                system="",
+                service="svc",
+                name="x",
+                api=ApiSpec(service="svc", method="GET", path="/x"),
+                responses={200: ResponseSpec(status=200)},
+            )
+
+    def test_name_empty_rejected(self) -> None:
+        # 测试点:name="" 必须拒(非空约束)。
+        # 文档依据:V1 §2.2 表格"name 非空"。
+        with pytest.raises(Exception):
+            EndpointSpec(
+                id="svc.x",
+                system="sys",
+                service="svc",
+                name="",
+                api=ApiSpec(service="svc", method="GET", path="/x"),
+                responses={200: ResponseSpec(status=200)},
+            )
+
+    def test_service_empty_rejected(self) -> None:
+        # 测试点:service="" 必须拒(非空约束,与 api.service 相等约束独立触发)。
+        # 文档依据:V1 §2.2 表格"service 非空,且与 api.service 相等"。
+        with pytest.raises(Exception):
+            EndpointSpec(
+                id="svc.x",
+                system="sys",
+                service="",
+                name="x",
+                api=ApiSpec(service="svc", method="GET", path="/x"),
+                responses={200: ResponseSpec(status=200)},
+            )
+
     def test_200_required(self) -> None:
         # 测试点:responses 字典中必须包含 200 状态码(业务约定)。
         # 文档依据:V1 §2.2 表格"responses:200 状态码必填"。
@@ -428,6 +503,18 @@ class TestEndpointMetadata:
         EndpointMetadata(priority=None)
         with pytest.raises(Exception):
             EndpointMetadata(priority=4)
+
+    def test_tags_deduplicated(self) -> None:
+        # 测试点:tags 列表中重复元素必须被去重,保留首次出现的顺序。
+        # 文档依据:V1 §5 约束"tags 元素去重"。
+        m = EndpointMetadata(tags=["冒烟", "冒烟", "结算", "冒烟", "结算", "冒烟"])
+        assert m.tags == ["冒烟", "结算"]
+
+    def test_tags_empty_and_single_pass(self) -> None:
+        # 测试点:空 tags 与单元素 tags 都合法,不做任何变更。
+        # 文档依据:V1 §5 tags 默认空 list,去重逻辑对单元素无副作用。
+        assert EndpointMetadata().tags == []
+        assert EndpointMetadata(tags=["only"]).tags == ["only"]
 
     def test_failed_criteria_default_empty_list(self) -> None:
         # 测试点:不显式指定时,failed_criteria 默认为空 list(用户/调用方初始化时必能给空集合)。
@@ -564,14 +651,15 @@ class TestSerialization:
 
 
 class TestVersion:
-    """锁定 ``EndpointSpec.version`` 的初始基线与序列化版本字段。
+    """锁定 ``EndpointSpec.version`` 的基线、序列化与 semver 校验。
 
-    本期(V2 §2.1 未启动)不做 semver 校验,仅测默认值、显式 override、序列化保留、稳定性。
+    V2 §2.1 已实装:``version`` 必须匹配 ``^\\d+\\.\\d+\\.\\d+$``(纯三段,无 pre-release / build metadata)。
+    本类覆盖:默认值、显式 override、序列化保留、稳定性,以及 semver 合法/非法边界。
     """
 
     def test_version_default_is_1_0_0(self) -> None:
         # 测试点:不显式指定 version 时,默认值为 "1.0.0"。
-        # 文档依据:V1 §2.2 表格(version 默认 "1.0.0") + V2 §2.1(本期不校验 semver)。
+        # 文档依据:V1 §2.2 表格(version 默认 "1.0.0") + V2 §2.1(semver 合法三段)。
         ep = EndpointSpec(
             id="svc.x",
             system="sys",
@@ -590,7 +678,7 @@ class TestVersion:
 
     def test_version_preserved_under_explicit_override(self) -> None:
         # 测试点:显式 override 后,内存值 + dump 值均保持 override。
-        # 文档依据:V2 §2.1(本期无 semver 校验,任何非空字符串均接受)。
+        # 文档依据:V2 §2.1 已实装 semver 校验,合法三段值通过。
         ep = EndpointSpec(
             id="svc.x",
             system="sys",
@@ -616,6 +704,111 @@ class TestVersion:
         assert d1["updated_at"] != d2["updated_at"]
         # version 没改(稳定字段)
         assert d1["version"] == d2["version"] == "1.0.0"
+
+    # ── semver 合法值(V2 §2.1) ─────────────────────────────────
+
+    @pytest.mark.parametrize("legal_version", [
+        "1.0.0",   # 默认基线
+        "1.2.0",   # 次版本递增
+        "2.0.0",   # 主版本递增
+        "0.0.1",   # 早期补丁
+        "10.20.30",  # 多位数
+        "0.1.0",   # 早期开发
+    ])
+    def test_version_semver_legal_passes(self, legal_version: str) -> None:
+        # 测试点:匹配 ^\d+\.\d+\.\d+$ 的合法 semver 三段值必须通过校验。
+        # 文档依据:V2 §2.1"决策拍板:semver 形态 = 纯三段 x.y.z,不含 pre-release / build metadata"。
+        ep = EndpointSpec(
+            id="svc.x",
+            system="sys",
+            service="svc",
+            name="x",
+            version=legal_version,
+            api=ApiSpec(service="svc", method="GET", path="/x"),
+            responses={200: ResponseSpec(status=200)},
+        )
+        assert ep.version == legal_version
+        assert ep.model_dump(mode="json")["version"] == legal_version
+
+    # ── semver 非法值(V2 §2.1) ─────────────────────────────────
+
+    @pytest.mark.parametrize("illegal_version,reason", [
+        ("2.0", "两段(缺补丁)"),
+        ("1.0", "两段(缺补丁)"),
+        ("v1.0.0", "前缀 v"),
+        ("1.0.0-rc1", "含 pre-release"),
+        ("1.0.0+build", "含 build metadata"),
+        ("1.0.0-rc.1", "含 pre-release 点号"),
+        ("", "空字符串"),
+        ("1.2.3.4", "四段"),
+        ("1.2.", "尾点"),
+        (".1.2.3", "前点"),
+        ("1..2.3", "中段空"),
+        ("abc", "非数字"),
+        ("1.x.0", "非数字段"),
+    ])
+    def test_version_semver_illegal_rejected(self, illegal_version: str, reason: str) -> None:
+        # 测试点:不匹配 ^\d+\.\d+\.\d+$ 的非法 version 必须在构造期被拒。
+        # 文档依据:V2 §2.1"实装落点:EndpointSpec._validate_integrity 内 version 校验块,
+        #          _SEMVER_PATTERN.match 不通过则抛 ValueError"。
+        with pytest.raises(Exception) as exc_info:
+            EndpointSpec(
+                id="svc.x",
+                system="sys",
+                service="svc",
+                name="x",
+                version=illegal_version,
+                api=ApiSpec(service="svc", method="GET", path="/x"),
+                responses={200: ResponseSpec(status=200)},
+            )
+        # 错误消息含期望 pattern,便于排错
+        assert "version" in str(exc_info.value).lower() or "semver" in str(exc_info.value).lower(), (
+            f"illegal version={illegal_version!r} (reason: {reason}) 被拒,但错误消息未提及 version/semver: "
+            f"{exc_info.value!s}"
+        )
+
+
+class TestServiceDefinitionVersion:
+    """``ServiceDefinition.version`` 的非空校验测试。
+
+    V2 §1.1 已实装:``ServiceDefinition.version`` 是被测系统部署版本,人维护,
+    字面与被测系统版本保持一致,**不校验格式**(被测系统的版本号方案自由),
+    仅校验非空。
+    """
+
+    def test_version_default_is_1_0_0(self) -> None:
+        # 测试点:不显式指定 version 时,默认值为 "1.0.0"。
+        # 文档依据:V2 §1.1 "默认值 = 字面 "1.0.0""。
+        svc = ServiceDefinition(name="fin", title="fin")
+        assert svc.version == "1.0.0"
+
+    def test_version_empty_rejected(self) -> None:
+        # 测试点:version="" 必须被拒(非空校验)。
+        # 文档依据:V2 §1.1 "校验 = 仅非空,不校验格式"。
+        with pytest.raises(Exception) as exc_info:
+            ServiceDefinition(name="fin", title="fin", version="")
+        assert "version" in str(exc_info.value).lower()
+
+    @pytest.mark.parametrize("free_form_version", [
+        "1.0.0",                # semver 形态(虽不校验,但接受)
+        "2024-Q3-build-17",     # date-based
+        "v2.5",                 # 前缀 + 两段
+        "release-2026-07-30",   # 长串
+        "0",                    # 单段
+        "1.2.3-rc1+build.7",    # 含 pre-release/build metadata
+    ])
+    def test_version_free_form_passes_no_format_check(self, free_form_version: str) -> None:
+        # 测试点:被测系统版本号方案自由——任意非空字符串都通过(不做 semver 校验)。
+        # 文档依据:V2 §1.1 "被测系统用什么版本号方案是被测系统自己的事,plate 不强加 semver"。
+        svc = ServiceDefinition(name="fin", title="fin", version=free_form_version)
+        assert svc.version == free_form_version
+        assert svc.model_dump(mode="json")["version"] == free_form_version
+
+    def test_version_preserved_in_dump(self) -> None:
+        # 测试点:version 字段在 JSON dump 中以字符串形式保留。
+        # 文档依据:V1 §2.3 同风格的序列化保留语义(适用 ServiceDefinition 同型字段)。
+        svc = ServiceDefinition(name="fin", title="fin", version="2024.3.0")
+        assert svc.model_dump(mode="json")["version"] == "2024.3.0"
 
 
 class TestPathUtils:

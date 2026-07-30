@@ -1,7 +1,7 @@
 # 重构迁移计划
 
 > 状态：评审中
-> 最近修订：2026-07-28
+> 最近修订：2026-07-30
 > 影响范围：`gimbal_plate` 整个包
 
 ---
@@ -103,8 +103,8 @@
 
 ## 5. 验收
 
-- [ ] `from gimbal_plate import EndpointSpec, ApiSpec, RequestSpec, ResponseSpec, IOFieldBinding, EndpointMetadata, ServiceDefinition, PlateRegistry, EndpointCase, EndpointCaseDataset, EndpointCaseExporter, registry` 全部可用。
-- [ ] `from gimbal_plate import EndpointInfo, RequestBody, ResponseBody, ServiceRegistry` 全部 ImportError。
-- [ ] `pytest tests/plate -v` 全绿。
-- [ ] 至少 1 个端到端用例贯穿 C1 → C2。
-- [ ] 文档与代码一致。
+- [x] `from gimbal_plate import EndpointSpec, ApiSpec, RequestSpec, ResponseSpec, IOFieldBinding, EndpointMetadata, ServiceDefinition, PlateRegistry, EndpointCase, EndpointCaseDataset, EndpointCaseExporter, registry` 全部可用。
+- [x] `from gimbal_plate import EndpointInfo, RequestBody, ResponseBody, ServiceRegistry` 全部 ImportError。
+- [x] `pytest tests/plate -v` 全绿。
+- [x] 至少 1 个端到端用例贯穿 C1 → C2。
+- [x] 文档与代码一致。
