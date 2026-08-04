@@ -1,0 +1,256 @@
+{
+  "_comment": "改完 IOFieldBinding._validate + platform._render_endpoint_view 之后产出的 platform dict。源数据里 request_fields/response_fields 的 path 故意混入短名('order_id' / 'ship_name'),加载时由 IOFieldBinding._validate 调 _path.normalize() 收敛为 JSONPath;_render_endpoint_view 再做一次防御性归一作为兜底。",
+
+  "kind": "platform_scenario",
+  "scenarioId": "e2e订单到应收核销",
+  "meta": {
+    "name": "山东悦慕-易汇瀚-成都空港",
+    "description": "山东悦慕-易汇瀚-成都空港",
+    "module": "settlement",
+    "priority": 1,
+    "author": "codfish",
+    "owner": "codfish",
+    "tags": ["smoke", "settlement"],
+    "version": "1.0.0",
+    "createTime": "2026-06-23T10:00:00",
+    "expire": false,
+    "requirementRef": [],
+    "system": ""
+  },
+  "config": {
+    "setup": [],
+    "teardown": [],
+    "services": {
+      "tidb-test-service": "https://fin-tidb.21eflag.com/"
+    },
+    "users": {
+      "codfish": {
+        "url": "https://fin-tidb.21eflag.com/",
+        "username": "18180789652",
+        "password": "yhd123456!",
+        "expires_in": 7200,
+        "token_type": "Authorization"
+      }
+    },
+    "timePolicy": {"kind": "record"},
+    "vars": {
+      "bl_no": {
+        "kind": "random_decorated",
+        "charset": "alnum",
+        "length": 6,
+        "head": "GIMBAL728",
+        "separator": "-"
+      },
+      "bank_id_0": "319666690256273408_MainBank",
+      "bank_id_1": "319666690256274432_MainBank",
+      "finance_id_0": "4416_CustomerFinance",
+      "finance_id_1": "4415_CustomerFinance"
+    }
+  },
+  "resource": {},
+
+  "steps": [
+    {
+      "kind": "step",
+      "description": "校验新建委托订舱单（验价）",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/orderEntrust/orderAdd",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30,
+        "view_hints": {
+          "endpoint_id": "ep_order_add",
+          "module": "order",
+          "tags": ["order", "entrust"]
+        }
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "client_expand_name": "唐欣雨",
+          "customer_id": "320",
+          "m_delivery_type": "",
+          "bl_no": "${var.bl_no}",
+          "ship_name": "OOCL FRANCE",
+          "action": "check"
+        },
+        "fields_meta": {
+          "client_expand_name": {
+            "name": "client_expand_name",
+            "path": "$.client_expand_name",
+            "required": false,
+            "description": "客户拓展人姓名",
+            "enum": [],
+            "ui_kind": "text",
+            "source_kind": "independent"
+          },
+          "customer_id": {
+            "name": "customer_id",
+            "path": "$.customer_id",
+            "required": true,
+            "example": "320",
+            "description": "客户ID",
+            "enum": [],
+            "ui_kind": "text",
+            "source_kind": "independent"
+          },
+          "m_delivery_type": {
+            "name": "m_delivery_type",
+            "path": "$.m_delivery_type",
+            "required": false,
+            "default": "",
+            "description": "交付方式",
+            "enum": [],
+            "ui_kind": "text",
+            "source_kind": "independent"
+          },
+          "bl_no": {
+            "name": "bl_no",
+            "path": "$.bl_no",
+            "required": true,
+            "description": "提单号,引用场景变量",
+            "enum": [],
+            "ui_kind": "text",
+            "source_kind": "lookup"
+          },
+          "ship_name": {
+            "name": "ship_name",
+            "path": "$.ship_name",
+            "required": false,
+            "example": "OOCL FRANCE",
+            "description": "船名",
+            "enum": [],
+            "ui_kind": "text",
+            "source_kind": "independent"
+          },
+          "action": {
+            "name": "action",
+            "path": "$.action",
+            "required": true,
+            "example": "submit",
+            "description": "动作:check/submit",
+            "enum": ["check", "submit"],
+            "ui_kind": "select",
+            "source_kind": "independent"
+          }
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "tags": [],
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/orderEntrust/orderAdd 应返回200",
+          "soft": false,
+          "view_note": "$.response_status eq 200"
+        }
+      ]
+    }
+  ],
+
+  "endpoints": [
+    {
+      "id": "ep_order_add",
+      "system": "fin",
+      "service": "tidb-test-service",
+      "name": "新建委托订舱单",
+      "description": "委托订舱单的新建/验价接口",
+      "method": "POST",
+      "path": "/api/order/orderEntrust/orderAdd",
+      "auth": "bearer",
+      "timeout_seconds": 30,
+      "version": "1.0.0",
+      "module": "order",
+      "tags": ["order", "entrust"],
+      "owner": "codfish",
+      "priority": 1,
+      "preconditions": [],
+      "success_criteria": "返回HTTP 200,业务码成功",
+      "business_notes": "支持action=check/submit两种语义",
+
+      "request_fields": [
+        {"name": "client_expand_name", "path": "$.client_expand_name", "required": false, "ui_kind": "text",   "example": "张三",       "description": "客户拓展人姓名", "enum": [],             "source_kind": "independent"},
+        {"name": "customer_id",        "path": "$.customer_id",        "required": true,  "ui_kind": "text",   "example": "320",         "description": "客户ID",         "enum": [],             "source_kind": "independent"},
+        {"name": "m_delivery_type",    "path": "$.m_delivery_type",    "required": false, "ui_kind": "text",   "example": null,          "description": "交付方式",       "enum": [],             "source_kind": "independent"},
+        {"name": "bl_no",              "path": "$.bl_no",              "required": true,  "ui_kind": "text",   "example": null,          "description": "提单号",         "enum": [],             "source_kind": "lookup"},
+        {"name": "ship_name",          "path": "$.ship_name",          "required": false, "ui_kind": "text",   "example": "OOCL FRANCE", "description": "船名",          "enum": [],             "source_kind": "independent"},
+        {"name": "action",             "path": "$.action",             "required": true,  "ui_kind": "select", "example": "submit",       "description": "动作",           "enum": ["check","submit"], "source_kind": "independent"}
+      ],
+
+      "response_fields": [
+        {"status": 200, "name": "code",     "path": "$.code",           "required": true,  "ui_kind": "number", "example": 0},
+        {"status": 200, "name": "message",  "path": "$.message",        "required": false, "ui_kind": "text",   "example": "ok"},
+        {"status": 200, "name": "data",     "path": "$.data",           "required": false, "ui_kind": "json",   "example": null},
+        {"status": 200, "name": "order_id", "path": "$.data.order_id",  "required": false, "ui_kind": "text",   "example": null}
+      ],
+
+      "assertable_paths": [
+        "$.code",
+        "$.message",
+        "$.data.order_id"
+      ],
+
+      "request_body_sample": {
+        "client_expand_name": "唐欣雨",
+        "customer_id": "320",
+        "m_delivery_type": "",
+        "bl_no": "${var.bl_no}",
+        "ship_name": "OOCL FRANCE",
+        "action": "check"
+      },
+      "request_body_samples": [
+        {
+          "client_expand_name": "唐欣雨",
+          "customer_id": "320",
+          "m_delivery_type": "",
+          "bl_no": "${var.bl_no}",
+          "ship_name": "OOCL FRANCE",
+          "action": "check"
+        }
+      ],
+
+      "deep_link": "/platform/endpoints/ep_order_add"
+    }
+  ],
+
+  "navigation": {
+    "tidb-test-service": [
+      {
+        "id": "ep_order_add",
+        "name": "新建委托订舱单",
+        "description": "委托订舱单的新建/验价接口",
+        "method": "POST",
+        "path": "/api/order/orderEntrust/orderAdd",
+        "deep_link": "/platform/endpoints/ep_order_add"
+      }
+    ]
+  },
+
+  "config_summary": {
+    "services": [
+      {"name": "tidb-test-service", "url": "https://fin-tidb.21eflag.com/"}
+    ],
+    "users": [
+      {"name": "codfish", "username": "18180789652", "password_source": "literal"}
+    ],
+    "vars": [
+      {"name": "bl_no",        "kind": "random_decorated", "value": {"kind": "random_decorated", "charset": "alnum", "length": 6, "head": "GIMBAL728", "separator": "-"}},
+      {"name": "bank_id_0",    "kind": "literal",          "value": "319666690256273408_MainBank"},
+      {"name": "bank_id_1",    "kind": "literal",          "value": "319666690256274432_MainBank"},
+      {"name": "finance_id_0", "kind": "literal",          "value": "4416_CustomerFinance"},
+      {"name": "finance_id_1", "kind": "literal",          "value": "4415_CustomerFinance"}
+    ]
+  }
+}

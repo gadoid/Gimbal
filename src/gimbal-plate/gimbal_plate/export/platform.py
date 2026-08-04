@@ -32,6 +32,7 @@ from gimbal_plate.schema.interface.api import Api
 from gimbal_plate.schema.interface.request import Request
 from gimbal_plate.schema.interface.scenario import Scenario as ScenarioModel
 from gimbal_plate.schema.interface.strategy import Assertion, Assign, Extract
+from gimbal_plate.utils import path as _path_utils
 
 
 # ── 视图输出模型 ──────────────────────────────────────────────────
@@ -217,7 +218,7 @@ def _render_endpoint_view(
         for f in ep.request.fields:
             request_fields.append({
                 "name": f.name,
-                "path": f.path,
+                "path": _path_utils.normalize(f.path),
                 "required": f.required,
                 "ui_kind": f.ui_kind,
                 "example": f.example,
@@ -233,7 +234,7 @@ def _render_endpoint_view(
             response_fields.append({
                 "status": status,
                 "name": f.name,
-                "path": f.path,
+                "path": _path_utils.normalize(f.path),
                 "required": f.required,
                 "ui_kind": f.ui_kind,
                 "example": f.example,

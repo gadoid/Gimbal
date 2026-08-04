@@ -35,6 +35,11 @@ class IOFieldBinding(BaseModel):
                 f"IOFieldBinding.path={self.path!r} 不是合法 path"
                 f"（须为 JSONPath 形式或合法短名）"
             )
+        # 归一化：统一收敛为 JSONPath 形态（$.xxx）。request/response 的
+        # IOFieldBinding.path 与 strategy[*].target、ResponseSpec.assertable_fields
+        # 保持一致;避免 request_fields / response_fields 在 platform dict 中出现
+        # 短名 vs JSONPath 混用。normalize() 对已经是 JSONPath 的 path 是 no-op。
+        self.path = _path.normalize(self.path)
         # name 与 path 末段：末段是 FIELD 时 name 必须等于该标识符
         seg = _path.last_segment(self.path)
         if seg is not None and self.name != seg:
