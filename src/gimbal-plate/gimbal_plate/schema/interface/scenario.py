@@ -34,6 +34,9 @@ class Meta(BaseModel):
     createTime: datetime = Field(description="创建时间")
     expire: bool = Field(description="过期标志位")
     requirementRef: list[RefBase] = Field(description="需求,用例关联链接")
+    # V3 新增:归属被测系统标识。V3 PLATE_V3_DESIGN.md §3 要求"该系统的 Meta
+    # 默认模板",必须携带 system 信息。默认值为空串保持向后兼容。
+    system: str = Field(default="", description="[V3] 归属被测系统标识(如 fin/mall)")
 
 
 class Config(BaseModel):
@@ -57,7 +60,14 @@ class Config(BaseModel):
 
 
 class Scenario(BaseModel):
-    """用例数据模型。"""
+    """用例数据模型。
+
+    V3.1 平台视图扩展字段（PLATE_V3_DESIGN.md §7.2）:
+    - endpoints: 平台后端消费的 endpoint 渲染视图列表（PlatformEndpointView dict 列表）
+    - navigation: 平台前端按 service 分组的导航树
+    - config_summary: 配置项分类提示（env_placeholder / scenario_var_placeholder / auth_placeholder / literal）
+    默认值均为 None,不携带时 GimbalScenarioExporter.to_dict() 通过 model_dump(exclude=...) 过滤掉。
+    """
 
     kind: Literal["scenario"] = "scenario"
     scenarioId: str = Field(..., description="场景,用例ID,前缀为sc")
@@ -67,6 +77,20 @@ class Scenario(BaseModel):
         description="存放用例需要执行的相关资源信息"
     )
     steps: list[StepUnion] = Field(..., description="存放具体的执行过程")
+
+    # ── 平台视图扩展字段（PLATE_V3_DESIGN.md §7.2） ────────────────
+    endpoints: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="[V3.1 平台视图] endpoint 渲染视图列表（PlatformEndpointView dict）",
+    )
+    navigation: dict[str, Any] | None = Field(
+        default=None,
+        description="[V3.1 平台视图] 按 service 分组的导航树",
+    )
+    config_summary: dict[str, Any] | None = Field(
+        default=None,
+        description="[V3.1 平台视图] 配置项分类提示(env_placeholder/var_placeholder/...)",
+    )
 
 
 class ScenarioRef(RefBase):

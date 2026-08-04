@@ -56,6 +56,12 @@ class StrategyBase(BaseModel):
     timeout: Optional[float] = None  # 策略执行超时
     tags: List[str] = Field(default_factory=list)  # 标签
 
+    # ── 平台视图扩展字段（PLATE_V3_DESIGN.md §7.2） ────────────────
+    view_note: Optional[str] = Field(
+        default=None,
+        description="[V3.1 平台视图] 人类语言策略摘要,如 'response.code eq 0'",
+    )
+
 
 class Extract(StrategyBase):
     kind: Literal["extract"] = "extract"
