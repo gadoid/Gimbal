@@ -1,4 +1,4 @@
-"""gimbal_plate.base.timepolicy —— 用例时间策略(超时/记录)。"""
+"""schema.time_policy —— 用例时间策略(超时/记录)。"""
 from __future__ import annotations
 
 from typing import Literal, Annotated, Union

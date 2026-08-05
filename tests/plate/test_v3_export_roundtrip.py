@@ -16,7 +16,7 @@ import pytest
 
 from gimbal_plate.export.gimbal import GimbalScenarioExporter
 from gimbal_plate.export.platform import PlatformScenarioExporter
-from gimbal_plate.schema.interface.scenario import Scenario as ScenarioModel
+from gimbal_plate.schema.scenario import Scenario as ScenarioModel
 from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
 
 
@@ -26,7 +26,7 @@ SCENARIO_PATH = REPO / "gimbal-tmp" / "Scenario_Test_14_copy.json"
 
 def _load_scenario() -> ScenarioModel:
     raw = json.loads(SCENARIO_PATH.read_text(encoding="utf-8"))
-    raw["meta"]["system"] = "fin"
+    raw["meta"]["system"] = ["fin"]
     raw.setdefault("resource", {})
     raw["kind"] = "scenario"
     return ScenarioModel.model_validate(raw)

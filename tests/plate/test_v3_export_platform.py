@@ -9,7 +9,7 @@ from gimbal_plate.export.platform import (
     PlatformScenarioView,
     PlatformStepView,
 )
-from gimbal_plate.schema.interface.scenario import Scenario as ScenarioModel
+from gimbal_plate.schema.scenario import Scenario as ScenarioModel
 from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
 
 
@@ -19,7 +19,7 @@ SCENARIO = REPO / "gimbal-tmp" / "Scenario_Test_14_copy.json"
 
 def _load_scenario() -> ScenarioModel:
     raw = json.loads(SCENARIO.read_text(encoding="utf-8"))
-    raw["meta"]["system"] = "fin"
+    raw["meta"]["system"] = ["fin"]
     raw.setdefault("resource", {})
     raw["kind"] = "scenario"
     return ScenarioModel.model_validate(raw)

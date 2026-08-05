@@ -1,4 +1,4 @@
-"""gimbal_plate.interface.scenario —— Scenario/Suite 与 Meta/Config。
+"""schema.scenario —— Scenario/Suite 与 Meta/Config。
 
 迁移自 ``gimbal.schema.scenario``,字段命名与可选性保持兼容;
 ``Meta`` 中除 ``requirementRef`` 外的字段保留 ``...`` 必填,匹配现有 Scenario
@@ -10,14 +10,14 @@ from datetime import datetime
 from typing import Any, Optional, Literal, Annotated, Union
 from pydantic import BaseModel, Field
 
-from gimbal_plate.schema.base.ref import RefBase
-from gimbal_plate.schema.base.retrypolicy import RetryPolicy
-from gimbal_plate.schema.base.timepolicy import TimePolicyUnion, RecordPolicy
-from gimbal_plate.schema.base.auth import AuthSession
-from gimbal_plate.schema.interface.resource import ResourceUnion
-from gimbal_plate.schema.interface.step import StepUnion
-from gimbal_plate.schema.interface.setup import SetupUnion
-from gimbal_plate.schema.interface.teardown import TeardownUnion
+from gimbal_plate.schema.auth import AuthSession
+from gimbal_plate.schema.ref import RefBase
+from gimbal_plate.schema.resource import ResourceUnion
+from gimbal_plate.schema.retry_policy import RetryPolicy
+from gimbal_plate.schema.setup import SetupUnion
+from gimbal_plate.schema.step import StepUnion
+from gimbal_plate.schema.teardown import TeardownUnion
+from gimbal_plate.schema.time_policy import TimePolicyUnion, RecordPolicy
 
 
 class Meta(BaseModel):
@@ -35,8 +35,13 @@ class Meta(BaseModel):
     expire: bool = Field(description="过期标志位")
     requirementRef: list[RefBase] = Field(description="需求,用例关联链接")
     # V3 新增:归属被测系统标识。V3 PLATE_V3_DESIGN.md §3 要求"该系统的 Meta
-    # 默认模板",必须携带 system 信息。默认值为空串保持向后兼容。
-    system: str = Field(default="", description="[V3] 归属被测系统标识(如 fin/mall)")
+    # 默认模板",必须携带 system 信息。
+    # V3.2 变更为 list[str]:一条用例可同时归属多个被测系统(如"fin 与 mall
+    # 共用的资金链路用例")。默认空 list 保持向后兼容。
+    system: list[str] = Field(
+        default_factory=list,
+        description="[V3] 归属被测系统标识列表(如 ['fin'] 或 ['fin', 'mall'])",
+    )
 
 
 class Config(BaseModel):

@@ -1,4 +1,4 @@
-"""V3 阶段 0:基线测试 —— 验证现有 schema/endpoint、schema/interface、case/exporter 的现状。
+"""V3 阶段 0:基线测试 —— 验证现有 schema/endpoint、schema/(扁平后),case/exporter 的现状。
 
 目的:V3 不修改这三处,只确认它们能 import / 实例化 / 序列化。这是后续阶段
 验证"未引入回归"的对照基线。
@@ -10,17 +10,15 @@ from datetime import datetime
 import pytest
 from pydantic import BaseModel
 
-from gimbal_plate.schema.endpoint import (
+from gimbal_plate.schema import (
     ApiSpec,
+    Config,
     EndpointMetadata,
     EndpointSpec,
     IOFieldBinding,
+    Meta,
     RequestSpec,
     ResponseSpec,
-)
-from gimbal_plate.schema.interface import (
-    Config,
-    Meta,
     Scenario,
     Step,
 )
@@ -74,9 +72,6 @@ def _meta_full(name: str = "baseline") -> Meta:
 class TestSchemaEndpointImportable:
     """schema/endpoint/* 全部可 import 并实例化。"""
 
-    def test_endpoint_spec_class_exists(self) -> None:
-        assert isinstance(EndpointSpec, type)
-
     def test_endpoint_spec_instantiable(self, sample_endpoint: EndpointSpec) -> None:
         assert sample_endpoint.id == "baseline.sample.endpoint"
         assert sample_endpoint.system == "baseline"
@@ -96,7 +91,7 @@ class TestSchemaEndpointImportable:
 
 
 class TestSchemaInterfaceImportable:
-    """schema/interface/* 全部可 import 并实例化。"""
+    """schema/(扁平化后)Step/Config/Meta 等接口类型 全部可 import 并实例化。"""
 
     def test_meta_instantiable(self) -> None:
         m = _meta_full()
@@ -109,7 +104,7 @@ class TestSchemaInterfaceImportable:
         assert c.vars == {}
 
     def test_step_instantiable(self) -> None:
-        from gimbal_plate.schema.interface import Api, Request
+        from gimbal_plate.schema import Api, Request
 
         s = Step(
             api=Api(service="sample", method="GET", path="/baseline/sample"),
@@ -119,16 +114,7 @@ class TestSchemaInterfaceImportable:
 
 
 class TestCaseExporterImportable:
-    """case/exporter.py 的三个核心类型可 import。"""
-
-    def test_endpoint_case_class_exists(self) -> None:
-        assert isinstance(EndpointCase, type)
-
-    def test_endpoint_case_dataset_class_exists(self) -> None:
-        assert isinstance(EndpointCaseDataset, type)
-
-    def test_endpoint_case_exporter_class_exists(self) -> None:
-        assert isinstance(EndpointCaseExporter, type)
+    """case/exporter.py 核心类型可 import 且基本翻译方法可用。"""
 
     def test_exporter_to_gimbal_step(
         self, sample_endpoint: EndpointSpec

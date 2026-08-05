@@ -1,4 +1,4 @@
-"""gimbal_plate.base.retrypolicy —— 用例级重试策略。"""
+"""schema.retry_policy —— 用例级重试策略。"""
 from __future__ import annotations
 
 from typing import Literal, List

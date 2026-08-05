@@ -1,4 +1,4 @@
-"""gimbal_plate.base.auth —— 认证会话数据类。
+"""schema.auth —— 认证会话数据类。
 
 迁移自 ``gimbal.schema.auth.AuthSession``,完整保留:
     - 控制字符安全检查(防止 HTTP header 注入,CWE-93)

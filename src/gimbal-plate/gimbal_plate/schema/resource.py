@@ -1,10 +1,10 @@
-"""gimbal_plate.interface.resource —— 用例级资源(Mock/File)及引用。"""
+"""schema.resource —— 用例级资源(Mock/File)及引用。"""
 from __future__ import annotations
 
 from typing import Any, Literal, Annotated, Union
 from pydantic import BaseModel, Field
 
-from gimbal_plate.schema.base.ref import RefBase
+from gimbal_plate.schema.ref import RefBase
 
 
 class Resource(BaseModel):

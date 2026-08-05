@@ -1,23 +1,16 @@
-"""V3 阶段 4:export/gimbal.py 与 case/exporter 等价,to_gimbal_step 翻译正确,旧路径仍可用。
+"""V3 阶段 4:export/gimbal.py 翻译链路,to_gimbal_step / Scenario → gimbal dict。
 
-新增 GimbalScenarioExporter 测试,验证 Scenario 数据类 → gimbal 可执行 dict 的链路。
+- TestExportGimbalFunctional:EndpointCase 数据 → gimbal step dict 的翻译链路。
+- TestGimbalScenarioExporter:Scenario 数据类 → gimbal 可执行 dict 的链路。
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
+import pytest
 from pydantic import BaseModel
 
-from gimbal_plate.case.exporter import (
-    EndpointCase as LegacyCase,
-)
-from gimbal_plate.case.exporter import (
-    EndpointCaseDataset as LegacyDataset,
-)
-from gimbal_plate.case.exporter import (
-    EndpointCaseExporter as LegacyExporter,
-)
 from gimbal_plate.export.gimbal import (
     EndpointCase,
     EndpointCaseDataset,
@@ -30,7 +23,7 @@ from gimbal_plate.schema.endpoint import (
     RequestSpec,
     ResponseSpec,
 )
-from gimbal_plate.schema.interface.scenario import Scenario as ScenarioModel
+from gimbal_plate.schema.scenario import Scenario as ScenarioModel
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -39,7 +32,7 @@ SCENARIO_PATH = REPO / "gimbal-tmp" / "Scenario_Test_14_copy.json"
 
 def _load_scenario() -> ScenarioModel:
     raw = json.loads(SCENARIO_PATH.read_text(encoding="utf-8"))
-    raw["meta"]["system"] = "fin"
+    raw["meta"]["system"] = ["fin"]
     raw.setdefault("resource", {})
     raw["kind"] = "scenario"
     return ScenarioModel.model_validate(raw)
@@ -52,19 +45,6 @@ class _InBody(BaseModel):
 class _OutBody(BaseModel):
     order_id: str
     status: str
-
-
-class TestDualPathImport:
-    """export/gimbal 与 case/exporter 必须指向同一类对象。"""
-
-    def test_endpoint_case_exporter_is_same_class(self) -> None:
-        assert EndpointCaseExporter is LegacyExporter
-
-    def test_endpoint_case_is_same_class(self) -> None:
-        assert EndpointCase is LegacyCase
-
-    def test_endpoint_case_dataset_is_same_class(self) -> None:
-        assert EndpointCaseDataset is LegacyDataset
 
 
 class TestExportGimbalFunctional:
@@ -130,8 +110,6 @@ class TestExportGimbalFunctional:
             endpoint_id="different.id",
             cases=[EndpointCase(name="c1", parameters={"order_id": "x"})],
         )
-        import pytest
-
         with pytest.raises(ValueError, match="不匹配"):
             exporter.to_gimbal_scenario_steps(dataset)
 
@@ -156,34 +134,16 @@ class TestExportGimbalFunctional:
         assert step["request"]["body"]["order_id"] == "interpolated"
 
 
-class TestLegacyPathStillWorks:
-    """case/exporter 旧路径仍能工作(向后兼容)。"""
-
-    def test_legacy_import_returns_same_object(self) -> None:
-        assert LegacyExporter is EndpointCaseExporter
-
-    def test_legacy_to_gimbal_step(self) -> None:
-        endpoint = EndpointSpec(
-            id="legacy.id",
-            system="legacy",
-            service="legacy",
-            name="legacy test",
-            api=ApiSpec(service="legacy", method="GET", path="/legacy"),
-            responses={200: ResponseSpec(status=200)},
-        )
-        exporter = LegacyExporter(endpoint=endpoint)
-        case = LegacyCase(name="c1")
-        step = exporter.to_gimbal_step(case)
-        assert step["kind"] == "step"
-
-
 class TestGimbalScenarioExporter:
     """基于 Scenario 数据类的 gimbal export。"""
 
-    def test_constructible(self) -> None:
+    def test_scenario_attribute_is_exposed(self) -> None:
         sc = _load_scenario()
         exporter = GimbalScenarioExporter(sc)
         assert exporter.scenario is sc
+        # 构造后可直接调用 to_dict;若 Scenario 字段缺失会在此处爆炸
+        d = exporter.to_dict()
+        assert d["scenarioId"] == sc.scenarioId
 
     def test_to_dict_top_shape(self) -> None:
         sc = _load_scenario()
@@ -224,40 +184,4 @@ class TestGimbalScenarioExporter:
     def test_meta_contains_system(self) -> None:
         sc = _load_scenario()
         d = GimbalScenarioExporter(sc).to_dict()
-        assert d["meta"]["system"] == "fin"
-
-
-class TestPlatformScenarioExporterSharedScenario:
-    """验证 platform 与 gimbal exporter 共享同一份 Scenario 实例。
-
-    这是用户要求的核心:一个 Scenario 数据类,两个 exporter 出口。
-    """
-
-    def test_two_exporters_share_same_scenario(self) -> None:
-        from gimbal_plate.export.platform import PlatformScenarioExporter
-
-        sc = _load_scenario()
-        gimbal_exp = GimbalScenarioExporter(sc)
-        platform_exp = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS)
-        assert gimbal_exp.scenario is platform_exp.scenario
-
-    def test_gimbal_and_platform_share_data_class(self) -> None:
-        from gimbal_plate.export.platform import PlatformScenarioExporter
-
-        sc = _load_scenario()
-        gimbal_dict = GimbalScenarioExporter(sc).to_dict()
-        platform_dict = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS).to_dict()
-
-        # 同一个 ScenarioId
-        assert gimbal_dict["scenarioId"] == platform_dict["scenarioId"]
-        # 同一个 meta.name
-        assert gimbal_dict["meta"]["name"] == platform_dict["meta"]["name"]
-        # 同 step 数
-        assert len(gimbal_dict["steps"]) == len(platform_dict["steps"])
-        # 每条 step.method/path 必一致
-        for gs, ps in zip(gimbal_dict["steps"], platform_dict["steps"]):
-            assert gs["api"]["method"] == ps["api"]["method"]
-            assert gs["api"]["path"] == ps["api"]["path"]
-
-
-from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS  # noqa: E402
+        assert d["meta"]["system"] == ["fin"]

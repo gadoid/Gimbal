@@ -1,11 +1,11 @@
-"""gimbal_plate.interface.strategy —— 策略抽象基类与三种实现。"""
+"""schema.strategy —— 策略抽象基类与三种实现。"""
 from __future__ import annotations
 
 from typing import Any, Optional, Literal, Union, Annotated, List
 from enum import Enum
 from pydantic import BaseModel, Field
 
-from gimbal_plate.schema.base.ref import RefBase
+from gimbal_plate.schema.ref import RefBase
 
 
 class Scope(str, Enum):

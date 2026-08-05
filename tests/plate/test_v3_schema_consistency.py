@@ -21,10 +21,10 @@ from pathlib import Path
 
 from gimbal_plate.export.gimbal import GimbalScenarioExporter
 from gimbal_plate.export.platform import PlatformScenarioExporter
-from gimbal_plate.schema.interface.api import Api
-from gimbal_plate.schema.interface.request import Request
-from gimbal_plate.schema.interface.scenario import Scenario as ScenarioModel
-from gimbal_plate.schema.interface.strategy import (
+from gimbal_plate.schema.api import Api
+from gimbal_plate.schema.request import Request
+from gimbal_plate.schema.scenario import Scenario as ScenarioModel
+from gimbal_plate.schema.strategy import (
     Assign,
     Assertion,
     Extract,
@@ -42,7 +42,7 @@ SCENARIO_PATH = REPO / "gimbal-tmp" / "Scenario_Test_14_copy.json"
 
 def _load_scenario() -> ScenarioModel:
     raw = json.loads(SCENARIO_PATH.read_text(encoding="utf-8"))
-    raw["meta"]["system"] = "fin"
+    raw["meta"]["system"] = ["fin"]
     raw.setdefault("resource", {})
     raw["kind"] = "scenario"
     return ScenarioModel.model_validate(raw)
@@ -231,7 +231,6 @@ class TestGimbalDictExcludesPlatformFields:
     def test_gimbal_dict_no_view_hints_in_api(self) -> None:
         sc = _load_scenario()
         # 直接通过 scenario 注入
-        from gimbal_plate.schema.interface.api import Api
         sc.steps[0].api.view_hints = {"endpoint_id": "fin.x"}
         gd = GimbalScenarioExporter(sc).to_dict()
         assert "view_hints" not in gd["steps"][0]["api"]
@@ -245,7 +244,6 @@ class TestGimbalDictExcludesPlatformFields:
     def test_gimbal_dict_no_view_note_in_strategy(self) -> None:
         sc = _load_scenario()
         # 给第一条 strategy 设置 view_note
-        from gimbal_plate.schema.interface.strategy import Assertion as A
         # 直接用 model_copy 替换 strategy[0]
         new_strategy = []
         for st in sc.steps[0].strategy:

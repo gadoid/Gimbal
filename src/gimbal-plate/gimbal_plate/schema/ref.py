@@ -1,4 +1,4 @@
-"""gimbal_plate.base.ref —— 所有引用模型的基类 + 通用内联引用。
+"""schema.ref —— 所有引用模型的基类 + 通用内联引用。
 
 与 ``gimbal.schema.ref`` 行为一致;仅做物理迁移,不修改 ``kind`` 命名。
 """

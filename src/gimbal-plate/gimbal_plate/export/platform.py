@@ -7,7 +7,7 @@
     PlatformEndpointView
 
 V3.1 设计(PLATE_V3_DESIGN.md §7,与 gimbal export 共享同一个 Scenario 数据类):
-- 真相源是 gimbal_plate.schema.interface.Scenario(中性数据类)
+- 真相源是 gimbal_plate.schema.Scenario(中性数据类)
 - PlatformScenarioExporter 接收 Scenario,产出 platform 渲染视图 dict
 - 顶层与 gimbal 对齐(kind/scenarioId/meta/config/resource/steps),
   再附加 platform 视图扩展字段(endpoints / navigation / config_summary)
@@ -27,11 +27,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from gimbal_plate.schema.api import Api
 from gimbal_plate.schema.endpoint import EndpointSpec
-from gimbal_plate.schema.interface.api import Api
-from gimbal_plate.schema.interface.request import Request
-from gimbal_plate.schema.interface.scenario import Scenario as ScenarioModel
-from gimbal_plate.schema.interface.strategy import Assertion, Assign, Extract
+from gimbal_plate.schema.request import Request
+from gimbal_plate.schema.scenario import Scenario as ScenarioModel
+from gimbal_plate.schema.strategy import Assertion, Assign, Extract
 from gimbal_plate.utils import path as _path_utils
 
 
@@ -312,7 +312,7 @@ class PlatformScenarioExporter:
 
     反向(platform 落库 dict → gimbal 可执行 dict,V3.1 无 strip):
         from gimbal_plate.export.gimbal import GimbalScenarioExporter
-        from gimbal_plate.schema.interface.scenario import Scenario
+        from gimbal_plate.schema.scenario import Scenario
 
         platform_dict = json.loads(平台后端落库的 JSON)
         platform_dict["kind"] = "scenario"   # 唯一需要的预处理

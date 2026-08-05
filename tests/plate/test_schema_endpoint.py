@@ -51,29 +51,30 @@ class TestApiSpec:
 
     # ── timeout_seconds ∈ (0, 600] 边界(V1 §3) ────────────────────
 
-    def test_timeout_seconds_zero_rejected(self) -> None:
-        # 测试点:timeout_seconds=0 必须拒(开区间,0 不含)。
-        # 文档依据:V1 §3 ApiSpec 约束"timeout_seconds ∈ (0, 600]"。
-        with pytest.raises(Exception):
-            ApiSpec(service="svc", method="GET", path="/x", timeout_seconds=0)
+    @pytest.mark.parametrize(
+        "value, should_pass",
+        [
+            (-1, False),   # 负数,下界之外
+            (0, False),    # 0,开区间下界(不含)
+            (0.001, True),  # 最小合法值
+            (30.0, True),   # 默认值
+            (599.999, True),  # 上界之内
+            (600, True),    # 上界(含)
+            (600.001, False),  # 上界之外
+        ],
+    )
+    def test_timeout_seconds_bounds(self, value: float, should_pass: bool) -> None:
+        """timeout_seconds ∈ (0, 600] 边界全集。
 
-    def test_timeout_seconds_600_passes(self) -> None:
-        # 测试点:timeout_seconds=600 必须通过(闭区间,600 含)。
-        # 文档依据:V1 §3 ApiSpec 约束"timeout_seconds ∈ (0, 600]"。
-        api = ApiSpec(service="svc", method="GET", path="/x", timeout_seconds=600)
-        assert api.timeout_seconds == 600
-
-    def test_timeout_seconds_negative_rejected(self) -> None:
-        # 测试点:timeout_seconds=-1 必须拒(负数不满足 > 0)。
-        # 文档依据:V1 §3 ApiSpec 约束"timeout_seconds ∈ (0, 600]"。
-        with pytest.raises(Exception):
-            ApiSpec(service="svc", method="GET", path="/x", timeout_seconds=-1)
-
-    def test_timeout_seconds_above_600_rejected(self) -> None:
-        # 测试点:timeout_seconds=601 必须拒(超过上界 600)。
-        # 文档依据:V1 §3 ApiSpec 约束"timeout_seconds ∈ (0, 600]"。
-        with pytest.raises(Exception):
-            ApiSpec(service="svc", method="GET", path="/x", timeout_seconds=601)
+        V1 §3 ApiSpec 约束"timeout_seconds ∈ (0, 600]"。
+        0 与 600 分别作为开/闭区间端点必须分别被拒与接受;负数与超 600 同理。
+        """
+        if should_pass:
+            api = ApiSpec(service="svc", method="GET", path="/x", timeout_seconds=value)
+            assert api.timeout_seconds == value
+        else:
+            with pytest.raises(Exception):
+                ApiSpec(service="svc", method="GET", path="/x", timeout_seconds=value)
 
 
 class TestIOSpec:
@@ -942,17 +943,20 @@ class TestIOFieldBindingPathValidation:
     文档依据:V2 §2.3 / §2.4 已实装。
     """
 
-    def test_short_name_passes(self) -> None:
-        # 测试点:短名形态 path 必须被接受,name = 短名。
-        # 文档依据:V2 §2.3 双形态并存。
-        fb = IOFieldBinding(name="order_id", path="order_id")
-        assert fb.path == "order_id"  # IOFieldBinding.path 内存值保留原值,不归一
-
     def test_jsonpath_passes(self) -> None:
         # 测试点:`$.xxx` JSONPath 形态 path 必须被接受。
-        # 文档依据:V2 §2.3 JSONPath 风格 + V2 §2.4 name = last_segment 校验通过。
+        # 文档依据:V3 决策:path 统一为 JSONPath,代码层 _path.normalize 归一化。
         fb = IOFieldBinding(name="order_id", path="$.order_id")
         assert fb.path == "$.order_id"
+
+    def test_short_name_normalized_to_jsonpath(self) -> None:
+        # V3 决策:短名形态 path 构造时自动归一化为 JSONPath,避免
+        # IOFieldBinding.path / ResponseSpec.assertable_fields / strategy[*].target
+        # 在 platform dict 中出现短名 vs JSONPath 混用。
+        fb = IOFieldBinding(name="order_id", path="order_id")
+        assert fb.path == "$.order_id", (
+            "V3 要求 IOFieldBinding.path 构造后必须是 JSONPath 形态"
+        )
 
     def test_nested_path_last_segment_must_match_name(self) -> None:
         # 测试点:嵌套 path `$.a.b.c` 末段是 "c",name = "c" 必须通过。
@@ -1039,27 +1043,29 @@ class TestResponseSpecAssertableFields:
         with pytest.raises(Exception):
             ResponseSpec(status=200, assertable_fields=["$.anything"])
 
-    def test_dual_form_passes(self) -> None:
-        # 测试点:fields 用短名,assertable 用 JSONPath 形式,归一后等价 → 通过。
-        # 文档依据:V2 §2.3 双形态并存:归一后比较,所见即所得的内存 path 不被修改。
+    def test_short_name_iofield_normalized_within_response(self) -> None:
+        # V3 决策:ResponseSpec 构造时,IOFieldBinding.path 与 assertable_fields 都
+        # 会被归一化为 JSONPath。"双形态并存"已废弃,内存值不再保留短名。
         rs = ResponseSpec(
             status=200,
             fields=[IOFieldBinding(name="order_id", path="order_id")],
             assertable_fields=["$.order_id"],
         )
+        assert rs.fields[0].path == "$.order_id"
         assert rs.assertable_fields == ["$.order_id"]
-        # IOFieldBinding.path 仍保留短名形态(未在构造时被改写)
-        assert rs.fields[0].path == "order_id"
 
     def test_dual_form_reverse_passes(self) -> None:
-        # 测试点:fields 用 JSONPath,assertable 用短名,反向双形态并存也要通过。
-        # 文档依据:V2 §2.3 双形态并存。
+        # V3 决策:assertable_fields 内存值保留原值,但比较时归一化(IOFieldBinding.path
+        # 是构造期归一,assertable_fields 是使用期归一,见 io_spec.py:_validate 注释)
         rs = ResponseSpec(
             status=200,
             fields=[IOFieldBinding(name="order_id", path="$.order_id")],
             assertable_fields=["order_id"],
         )
+        # 内存值保留原值(短名),但断言校验通过(归一化等价)
         assert rs.assertable_fields == ["order_id"]
+        # IOFieldBinding.path 已经是 JSONPath,不变
+        assert rs.fields[0].path == "$.order_id"
 
     def test_nested_path_in_assertable_passes(self) -> None:
         # 测试点:`$.a.b.c` 嵌套形式的 assertable 与同名末段 fields 等价 → 通过。

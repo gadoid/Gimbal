@@ -7,7 +7,7 @@
     EndpointCaseExporter           (单 endpoint 翻译器,被 ScenarioExporter 调用)
 
 V3.1 设计(PLATE_V3_DESIGN.md §7):
-- 真相源是 gimbal_plate.schema.interface.Scenario(中性数据类)
+- 真相源是 gimbal_plate.schema.Scenario(中性数据类)
 - GimbalScenarioExporter 接收 Scenario,产出 gimbal 可执行 dict
 - 通过 model_dump(exclude=...) 过滤掉平台视图扩展字段(endpoints/navigation/
   config_summary/api.view_hints/request.fields_meta/strategy[*].view_note)
@@ -23,7 +23,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from gimbal_plate.schema.endpoint import EndpointSpec
-from gimbal_plate.schema.interface.scenario import Scenario as ScenarioModel
+from gimbal_plate.schema.scenario import Scenario as ScenarioModel
 
 
 # ── 数据驱动用例模型 ──────────────────────────────────────────────

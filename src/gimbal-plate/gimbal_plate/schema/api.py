@@ -1,10 +1,10 @@
-"""gimbal_plate.interface.api —— 接口描述(transport)与引用。"""
+"""schema.api —— 接口描述(transport)与引用。"""
 from __future__ import annotations
 
 from typing import Any, Literal, Union, Annotated
 from pydantic import BaseModel, Field
 
-from gimbal_plate.schema.base.ref import RefBase
+from gimbal_plate.schema.ref import RefBase
 
 
 class Api(BaseModel):

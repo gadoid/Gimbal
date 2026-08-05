@@ -1,4 +1,4 @@
-"""StepState 枚举定义(从 gimbal.schema.states 平移)。"""
+"""schema.states —— StepState 枚举定义(从 gimbal.schema.states 平移)。"""
 from __future__ import annotations
 
 from enum import Enum
