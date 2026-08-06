@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Iterable
 
 from gimbal_plate.schema.endpoint import EndpointSpec
-from gimbal_plate.service import ServiceDefinition
+from gimbal_plate.schema.service_definition import ServiceDefinition
 
 from .index import _Index
 

@@ -15,13 +15,17 @@ V3.1 设计(PLATE_V3_DESIGN.md §7):
   GimbalScenarioExporter.to_dict() → gimbal 可执行 dict(无需任何预处理)
 - EndpointCaseExporter 仍可独立使用(供单 endpoint 维度的精细控制)
 - 与 export/platform.py 共享同一个 Scenario 实例
+
+V3.1.1 抽象化(V3.1.1):继承 ``gimbal_plate.export._protocol.ScenarioExporter``,
+获得统一 consumer_id / to_dict 契约 + Step 2 声明式 dispatch 的预留能力。
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, override
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from gimbal_plate.export._protocol import ExporterCapabilities, ScenarioExporter
 from gimbal_plate.schema.endpoint import EndpointSpec
 from gimbal_plate.schema.scenario import Scenario as ScenarioModel
 
@@ -209,20 +213,28 @@ class EndpointCaseExporter:
 
 # ── ScenarioExporter(消费 Scenario 数据类) ─────────────────────────
 
-class GimbalScenarioExporter:
+class GimbalScenarioExporter(ScenarioExporter):
     """把 Scenario(中性数据类)翻译为 gimbal 可执行 dict。
 
-    使用方式:
+    使用方式(向后兼容):
         scenario = Scenario.model_validate(raw_dict)
         exporter = GimbalScenarioExporter(scenario)
         gimbal_dict = exporter.to_dict()
+
+    V3.1.1 继承 ``ScenarioExporter``:
+        - ``consumer_id`` = "gimbal"
+        - ``to_dict()`` 形态不变(向后兼容)
+        - ABC 契约通过 ``render()`` 满足(Step 2 dispatcher 调用入口)
+        - ``capabilities`` 声明:无 sections、needs_endpoints=False
     """
+
+    consumer_id: str = "gimbal"
 
     def __init__(self, scenario: ScenarioModel) -> None:
         self.scenario = scenario
 
     def to_dict(self) -> dict[str, Any]:
-        """整 scenario → gimbal 可执行 dict。
+        """整 scenario → gimbal 可执行 dict(向后兼容入口)。
 
         通过 model_dump(exclude=...) 过滤掉平台视图扩展字段
         (PLATE_V3_DESIGN.md §7.3.2):
@@ -231,6 +243,23 @@ class GimbalScenarioExporter:
         - steps[*].request: fields_meta
         - steps[*].strategy[*]: view_note
         """
+        return self.render(self.scenario, endpoints=None)
+
+    @override
+    def render(
+        self,
+        scenario: ScenarioModel,
+        *,
+        endpoints: list[EndpointSpec] | None = None,
+    ) -> dict[str, Any]:
+        """Step 2 dispatcher 入口。
+
+        本 consumer 不需要 endpoints(显式忽略,便于统一 dispatcher 调用)。
+
+        C3/C4 实现:入口处校验 scenario 是 ``ScenarioModel``,
+        出口处自检返回 dict 可被 ``json.dumps`` 序列化。
+        """
+        self._validate_scenario(scenario)
         # exclude 嵌套结构:Pydantic v2 接受 set 或 dict。
         # set 字面量不能与 dict 字面量混用,所以全部用 dict 表达。
         # 顶层 3 个字段用 {"name": True} 的形式(Pydantic 把 value 当 bool/None,
@@ -247,8 +276,23 @@ class GimbalScenarioExporter:
                 }
             },
         }
-        return self.scenario.model_dump(
+        out = scenario.model_dump(
             mode="json", exclude_none=True, exclude=exclude
+        )
+        return self._validate_serializable(out)
+
+    @property
+    @override
+    def capabilities(self) -> ExporterCapabilities:
+        """本 consumer 的能力声明(C5/C13)。"""
+        return ExporterCapabilities(
+            consumer=self.consumer_id,
+            sections=(),
+            needs_endpoints=False,
+            description=(
+                "把 Scenario 翻译为 gimbal 引擎可执行 dict,丢弃平台视图扩展字段"
+            ),
+            output_schema_kind="scenario",
         )
 
 

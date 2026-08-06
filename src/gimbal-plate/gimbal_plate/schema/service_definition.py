@@ -1,4 +1,13 @@
-"""gimbal_plate.service.service —— 被测服务定义。"""
+"""gimbal_plate.schema.service_definition —— 被测服务定义(M2 不可变域)。
+
+本文件原位于 ``gimbal_plate.service.service``,于 V3.1 架构重构中迁入
+``schema/``。归位理由:
+    - ``ServiceDefinition`` 是 Pydantic ``BaseModel``,与其他 schema/* 同类
+      (``EndpointSpec`` / ``ApiSpec`` / ``IOFieldBinding`` …);
+    - ``service/`` 包当前承担"服务层纯函数"职责,与数据模型语义不符;
+    - V3 设计文档 PLATE_V3_DESIGN.md §V4 已质疑 ``service/service.py``
+      的位置与字段用途,本迁入为后续 V4 评估做准备。
+"""
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -39,4 +48,3 @@ class ServiceDefinition(BaseModel):
         if not self.version:
             raise ValueError("ServiceDefinition.version 不可为空")
         return self
-

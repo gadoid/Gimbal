@@ -5,7 +5,8 @@
         EndpointSpec, ApiSpec, RequestSpec, ResponseSpec,
         IOFieldBinding, EndpointMetadata, ServiceDefinition
     能力提供:
-        EndpointCase, EndpointCaseDataset, EndpointCaseExporter
+        EndpointCase, EndpointCaseDataset, EndpointCaseExporter,
+        GimbalScenarioExporter
     注册表:
         PlateRegistry, registry
 """
@@ -19,15 +20,14 @@ from gimbal_plate.schema.endpoint import (
     RequestSpec,
     ResponseSpec,
 )
+from gimbal_plate.schema.service_definition import ServiceDefinition
 
-# 服务定义层
-from gimbal_plate.service import ServiceDefinition
-
-# C2 用例导出
-from gimbal_plate.case import (
+# C2 用例导出(从 export.gimbal 提供,case/ 旧模块已删除)
+from gimbal_plate.export.gimbal import (
     EndpointCase,
     EndpointCaseDataset,
     EndpointCaseExporter,
+    GimbalScenarioExporter,
 )
 
 # Registry facade
@@ -49,6 +49,7 @@ __all__ = [
     "EndpointCase",
     "EndpointCaseDataset",
     "EndpointCaseExporter",
+    "GimbalScenarioExporter",
     # Registry
     "PlateRegistry",
     "registry",

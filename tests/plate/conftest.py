@@ -22,6 +22,27 @@ from gimbal_plate import (
     ResponseSpec,
     registry,
 )
+from gimbal_plate.http import create_app
+from gimbal_plate.registry import PlateRegistry
+from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
+
+
+@pytest.fixture
+def fresh_registry() -> PlateRegistry:
+    """A fresh in-memory registry pre-loaded with the bundled fin system."""
+    reg = PlateRegistry()
+    for ep in ALL_ENDPOINTS:
+        reg.register_endpoint(ep)
+    return reg
+
+
+@pytest.fixture
+def http_client(fresh_registry: PlateRegistry):
+    """A ``TestClient`` bound to a plate app using ``fresh_registry``."""
+    from fastapi.testclient import TestClient  # local import keeps top of file stable
+
+    with TestClient(create_app(registry=fresh_registry)) as client:
+        yield client
 
 
 # ── 示例 Pydantic 模型 ──────────────────────────────────────────────

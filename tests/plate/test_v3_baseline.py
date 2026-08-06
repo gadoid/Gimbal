@@ -1,4 +1,4 @@
-"""V3 阶段 0:基线测试 —— 验证现有 schema/endpoint、schema/(扁平后),case/exporter 的现状。
+"""V3 阶段 0:基线测试 —— 验证现有 schema/endpoint、schema/(扁平后),export/gimbal 的现状。
 
 目的:V3 不修改这三处,只确认它们能 import / 实例化 / 序列化。这是后续阶段
 验证"未引入回归"的对照基线。
@@ -10,6 +10,11 @@ from datetime import datetime
 import pytest
 from pydantic import BaseModel
 
+from gimbal_plate.export.gimbal import (
+    EndpointCase,
+    EndpointCaseDataset,
+    EndpointCaseExporter,
+)
 from gimbal_plate.schema import (
     ApiSpec,
     Config,
@@ -21,11 +26,6 @@ from gimbal_plate.schema import (
     ResponseSpec,
     Scenario,
     Step,
-)
-from gimbal_plate.case.exporter import (
-    EndpointCase,
-    EndpointCaseDataset,
-    EndpointCaseExporter,
 )
 
 

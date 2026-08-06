@@ -139,7 +139,7 @@ expect_accept(
 print()
 print("=== §6 描述层 ===")
 try:
-    from gimbal_plate.case.exporter import EndpointCaseExporter
+    from gimbal_plate.export.gimbal import EndpointCaseExporter
     print("ACCEPT_OK  | EndpointCaseExporter 可导入")
 except Exception as e:
     print(f"ERROR      | {type(e).__name__}: {e}")

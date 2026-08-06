@@ -20,13 +20,17 @@ V3.1 设计(PLATE_V3_DESIGN.md §7,与 gimbal export 共享同一个 Scenario �
   → GimbalScenarioExporter.to_dict() 得到 gimbal 可执行 dict
 - V3.1 删除 strip_platform_view_fields():所有平台视图字段都已在 schema 上声明,
   Scenario.model_validate 直接接受,不再需要预处理函数
+
+V3.1.1 抽象化:继承 ``gimbal_plate.export._protocol.ScenarioExporter``,
+获得统一 consumer_id / render 契约 + Step 2 声明式 dispatch 的预留能力。
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, override
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from gimbal_plate.export._protocol import ExporterCapabilities, ScenarioExporter
 from gimbal_plate.schema.api import Api
 from gimbal_plate.schema.endpoint import EndpointSpec
 from gimbal_plate.schema.request import Request
@@ -285,6 +289,20 @@ def _classify_placeholder(value: Any) -> str:
     return "literal"
 
 
+def _resource_dict_for(scenario: ScenarioModel) -> dict[str, Any]:
+    """resource 字段统一为 dict[str, Any](V3.1.1 提升为模块级函数)。
+
+    由 ``PlatformScenarioExporter._resource_dict`` 与 ``render()`` 共享。
+    """
+    out: dict[str, Any] = {}
+    for k, v in scenario.resource.items():
+        if hasattr(v, "model_dump"):
+            out[k] = v.model_dump(mode="json", exclude_none=True)
+        else:
+            out[k] = v
+    return out
+
+
 def _classify_var(value: Any) -> str:
     if isinstance(value, dict):
         if "kind" in value:
@@ -300,10 +318,10 @@ def _classify_var(value: Any) -> str:
 
 # ── ScenarioExporter(消费 Scenario 数据类) ─────────────────────────
 
-class PlatformScenarioExporter:
+class PlatformScenarioExporter(ScenarioExporter):
     """把 Scenario(中性数据类)翻译为 platform 渲染视图 dict。
 
-    使用方式:
+    使用方式(向后兼容):
         scenario = Scenario.model_validate(raw_dict)
         exporter = PlatformScenarioExporter(scenario, endpoints=ALL_ENDPOINTS)
         platform_dict = exporter.to_dict()
@@ -318,7 +336,16 @@ class PlatformScenarioExporter:
         platform_dict["kind"] = "scenario"   # 唯一需要的预处理
         scenario = Scenario.model_validate(platform_dict)
         gimbal_dict = GimbalScenarioExporter(scenario).to_dict()
+
+    V3.1.1 继承 ``ScenarioExporter``:
+        - ``consumer_id`` = "platform"
+        - ``to_dict()`` / ``to_view()`` 形态不变(向后兼容)
+        - ABC 契约通过 ``render()`` 满足(Step 2 dispatcher 调用入口)
+        - ``capabilities`` 声明:支持 sections=("endpoints","navigation",
+          "config_summary")、needs_endpoints=True
     """
+
+    consumer_id: str = "platform"
 
     def __init__(
         self,
@@ -333,16 +360,79 @@ class PlatformScenarioExporter:
         }
 
     def to_dict(self) -> dict[str, Any]:
-        """整 scenario → platform 落库 dict。"""
+        """整 scenario → platform 落库 dict(向后兼容入口)。"""
         view = self.to_view()
         return view.model_dump(mode="json", exclude_none=True)
 
-    def to_view(self) -> PlatformScenarioView:
-        """整 scenario → PlatformScenarioView。"""
+    @override
+    def render(
+        self,
+        scenario: ScenarioModel,
+        *,
+        endpoints: list[EndpointSpec] | None = None,
+    ) -> dict[str, Any]:
+        """Step 2 dispatcher 入口。
+
+        与 ``__init__`` 不同:本方法**忽略** self.endpoints,使用调用方
+        传入的 ``endpoints``,便于 dispatcher 自由切换 endpoint 集合。
+
+        C3/C4/C7 实现:校验 scenario 是 ``ScenarioModel``;当
+        ``capabilities.needs_endpoints=True`` 时校验 endpoints 元素类型;
+        出口处自检返回 dict 可被 ``json.dumps`` 序列化。
+        """
+        self._validate_scenario(scenario)
+        ep_list = self._validate_endpoints(endpoints)
+        ep_by_key: dict[tuple[str, str], EndpointSpec] = {
+            (ep.api.method, ep.api.path): ep for ep in ep_list
+        }
+        view = self.to_view(
+            scenario=scenario,
+            endpoints=ep_list,
+            ep_by_key=ep_by_key,
+        )
+        out = view.model_dump(mode="json", exclude_none=True)
+        return self._validate_serializable(out)
+
+    @property
+    @override
+    def capabilities(self) -> ExporterCapabilities:
+        """本 consumer 的能力声明(C5/C13)。
+
+        未来 Step 2 时,``supports(request)`` 可根据 ``request.sections``
+        是否为以下子集做精确判断。
+        """
+        return ExporterCapabilities(
+            consumer=self.consumer_id,
+            sections=("endpoints", "navigation", "config_summary"),
+            needs_endpoints=True,
+            description=(
+                "把 Scenario 翻译为 platform 后端消费的渲染视图 dict;"
+                "支持 endpoints / navigation / config_summary 切片"
+            ),
+            output_schema_kind="platform_scenario",
+        )
+
+    def to_view(
+        self,
+        *,
+        scenario: ScenarioModel | None = None,
+        endpoints: list[EndpointSpec] | None = None,
+        ep_by_key: dict[tuple[str, str], EndpointSpec] | None = None,
+    ) -> PlatformScenarioView:
+        """整 scenario → PlatformScenarioView。
+
+        向后兼容:无参调用时使用 ``self.scenario`` / ``self.endpoints`` /
+        ``self._ep_by_key``。Step 2 ``render()`` 调用时传入显式参数,跳过
+        self 状态。
+        """
+        sc = scenario if scenario is not None else self.scenario
+        eps = endpoints if endpoints is not None else self.endpoints
+        keys = ep_by_key if ep_by_key is not None else self._ep_by_key
+
         # 1. 按 (method, path) 聚合每个 endpoint 引用过的 step body
         bodies_by_ep: dict[str, list[dict[str, Any]]] = {}
-        for s in self.scenario.steps:
-            ep = self._ep_by_key.get((s.api.method, s.api.path))
+        for s in sc.steps:
+            ep = keys.get((s.api.method, s.api.path))
             if ep is None:
                 continue
             body = s.request.body
@@ -352,13 +442,13 @@ class PlatformScenarioExporter:
         # 2. 构造 endpoint 视图
         endpoint_views = [
             _render_endpoint_view(ep, bodies_by_ep.get(ep.id, []))
-            for ep in self.endpoints
+            for ep in eps
         ]
 
         # 3. 构造 step 视图(注入 view_hints / source_kind / field_count / field_names / view_note)
         step_views: list[PlatformStepView] = []
-        for s in self.scenario.steps:
-            ep = self._ep_by_key.get((s.api.method, s.api.path))
+        for s in sc.steps:
+            ep = keys.get((s.api.method, s.api.path))
             api_dict = _render_api_view(s.api, ep)
             request_dict = _render_request_view(s.request, ep)
             strategy_list = _render_strategy_view(s.strategy)  # type: ignore[arg-type]
@@ -382,7 +472,7 @@ class PlatformScenarioExporter:
             })
 
         # 5. config_summary:从 scenario.config 中分类
-        config_dict = self.scenario.config.model_dump(mode="json", exclude_none=True)
+        config_dict = sc.config.model_dump(mode="json", exclude_none=True)
         config_summary = {
             "services": [
                 {"name": k, "url": v}
@@ -406,10 +496,10 @@ class PlatformScenarioExporter:
 
         return PlatformScenarioView(
             kind="platform_scenario",
-            scenarioId=self.scenario.scenarioId,
-            meta=self.scenario.meta.model_dump(mode="json", exclude_none=True),
+            scenarioId=sc.scenarioId,
+            meta=sc.meta.model_dump(mode="json", exclude_none=True),
             config=config_dict,
-            resource=self._resource_dict(),
+            resource=_resource_dict_for(sc),
             steps=step_views,
             endpoints=endpoint_views,
             navigation=navigation,
@@ -418,13 +508,7 @@ class PlatformScenarioExporter:
 
     def _resource_dict(self) -> dict[str, Any]:
         """resource 字段统一为 dict[str, Any]。"""
-        out: dict[str, Any] = {}
-        for k, v in self.scenario.resource.items():
-            if hasattr(v, "model_dump"):
-                out[k] = v.model_dump(mode="json", exclude_none=True)
-            else:
-                out[k] = v
-        return out
+        return _resource_dict_for(self.scenario)
 
 
 __all__ = [
