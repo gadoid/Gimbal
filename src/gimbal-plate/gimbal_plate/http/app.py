@@ -24,6 +24,11 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     When an external registry is injected via ``create_app(registry=...)`` this
     step is skipped so the caller controls its own state.
+
+    注册完毕后,做 system 字段自检:确保所有已注册 endpoint 的 ``system``
+    等于 ``system_info.FIN_SYSTEM``。这是 Commit 6 引入的轻量校验 —
+    若有人误改了某个 endpoint 文件但忘了改 system_info(或反过来),
+    服务启动即失败,便于尽早暴露问题。
     """
     if getattr(app.state, "registry_owned", True):
         try:
@@ -32,6 +37,21 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             ALL_ENDPOINTS = ()
         for ep in ALL_ENDPOINTS:
             default_registry.register_endpoint(ep)
+
+        # system 自检:仅在 owned 默认 registry 时执行,尊重外部注入。
+        from gimbal_plate.systems.fin.system_info import FIN_SYSTEM
+        wrong = [
+            ep for ep in default_registry.list_endpoints()
+            if ep.system != FIN_SYSTEM
+        ]
+        if wrong:
+            ids = ", ".join(repr(ep.id) for ep in wrong[:5])
+            raise RuntimeError(
+                f"plate lifespan sanity check failed: "
+                f"{len(wrong)} endpoint(s) have system != FIN_SYSTEM "
+                f"(first: {ids}). "
+                f"请检查 fin/endpoint/*.py 是否与 system_info.FIN_SYSTEM 一致。"
+            )
     yield
 
 

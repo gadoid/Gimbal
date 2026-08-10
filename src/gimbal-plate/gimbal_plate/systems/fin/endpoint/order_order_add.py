@@ -1,16 +1,29 @@
 """fin.order.order_add —— 委托订舱下单接口契约。在 scen_test_14 中出现2次。"""
+
+from typing import Final
+
+from gimbal_plate.systems.fin.system_info import (
+    FIN_DEFAULT_AUTHOR,
+    FIN_DEFAULT_MODULE,
+    FIN_DEFAULT_OWNER,
+    FIN_DEFAULT_PRIORITY,
+    FIN_DEFAULT_TAGS,
+    FIN_DEFAULT_VERSION,
+    FIN_SYSTEM,
+)
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
     EndpointSpec,
     IOFieldBinding,
     RequestSpec,
     ResponseSpec,
+    EndpointMetadata,
 )
 
 
-ORDER_ORDER_ADD = EndpointSpec(
+ORDER_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
     id="fin.order.order_add",
-    system="fin",
+    system=FIN_SYSTEM,
     service="order",
     name="委托订舱下单",
     description="由 Scenario_Test_14 提取: 委托订舱下单",
@@ -255,5 +268,10 @@ ORDER_ORDER_ADD = EndpointSpec(
             description="成功",
         ),
     },
-    version="1.0.0",
+    version=FIN_DEFAULT_VERSION,
+    metadata=EndpointMetadata(
+        module=FIN_DEFAULT_MODULE,
+        owner=FIN_DEFAULT_OWNER,
+        tags=list(FIN_DEFAULT_TAGS),
+    ),
 )

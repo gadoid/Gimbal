@@ -87,4 +87,12 @@ class EndpointSpec(BaseModel):
         # updated_at 与 version 一致性
         if self.updated_at is None:
             self.updated_at = datetime.now(UTC)
+        # id 必须以 system 字段作为 prefix,确保 id 与 system 字段保持契约一致。
+        # 这样客户系统拿到 endpoint id 后无需先拉 system 列表就能反查其归属。
+        if not self.id.startswith(f"{self.system}."):
+            raise ValueError(
+                f"EndpointSpec.id={self.id!r} 必须以 system 字段 "
+                f"'{self.system}' 作为 prefix,"
+                f"完整期望 prefix='{self.system}.'"
+            )
         return self

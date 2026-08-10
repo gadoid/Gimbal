@@ -1,16 +1,29 @@
 """fin.audit.audit_execute —— 执行审批接口契约。在 scen_test_14 中出现2次。"""
+
+from typing import Final
+
+from gimbal_plate.systems.fin.system_info import (
+    FIN_DEFAULT_AUTHOR,
+    FIN_DEFAULT_MODULE,
+    FIN_DEFAULT_OWNER,
+    FIN_DEFAULT_PRIORITY,
+    FIN_DEFAULT_TAGS,
+    FIN_DEFAULT_VERSION,
+    FIN_SYSTEM,
+)
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
     EndpointSpec,
     IOFieldBinding,
     RequestSpec,
     ResponseSpec,
+    EndpointMetadata,
 )
 
 
-AUDIT_AUDIT_EXECUTE = EndpointSpec(
+AUDIT_AUDIT_EXECUTE: Final[EndpointSpec] = EndpointSpec(
     id="fin.audit.audit_execute",
-    system="fin",
+    system=FIN_SYSTEM,
     service="audit",
     name="执行审批",
     description="由 Scenario_Test_14 提取: 执行审批",
@@ -30,5 +43,10 @@ AUDIT_AUDIT_EXECUTE = EndpointSpec(
             description="成功",
         ),
     },
-    version="1.0.0",
+    version=FIN_DEFAULT_VERSION,
+    metadata=EndpointMetadata(
+        module=FIN_DEFAULT_MODULE,
+        owner=FIN_DEFAULT_OWNER,
+        tags=list(FIN_DEFAULT_TAGS),
+    ),
 )

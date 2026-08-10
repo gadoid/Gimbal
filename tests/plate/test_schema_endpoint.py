@@ -372,7 +372,7 @@ class TestEndpointSpec:
         # 测试点:fixture `order_endpoint` 能被正常构造并保留关键字段值。
         # 文档依据:V1 §2.1 字段定义 + conftest.py fixture 数据样本。
         ep = order_endpoint
-        assert ep.id == "settlement.order.add"
+        assert ep.id == "finas.order.add"
         assert ep.system == "finas"
         assert ep.service == "settlement"
         assert ep.api.service == "settlement"
@@ -410,7 +410,7 @@ class TestEndpointSpec:
         # 文档依据:V1 §2.2 表格 service 约束"非空,且与 api.service 相等"。
         with pytest.raises(Exception):
             EndpointSpec(
-                id="svc.x",
+                id="sys.svc.x",
                 system="sys",
                 service="svc1",
                 name="x",
@@ -438,7 +438,7 @@ class TestEndpointSpec:
         # 文档依据:V1 §2.2 表格"name 非空"。
         with pytest.raises(Exception):
             EndpointSpec(
-                id="svc.x",
+                id="sys.svc.x",
                 system="sys",
                 service="svc",
                 name="",
@@ -451,7 +451,7 @@ class TestEndpointSpec:
         # 文档依据:V1 §2.2 表格"service 非空,且与 api.service 相等"。
         with pytest.raises(Exception):
             EndpointSpec(
-                id="svc.x",
+                id="sys.svc.x",
                 system="sys",
                 service="",
                 name="x",
@@ -464,7 +464,7 @@ class TestEndpointSpec:
         # 文档依据:V1 §2.2 表格"responses:200 状态码必填"。
         with pytest.raises(Exception):
             EndpointSpec(
-                id="svc.x",
+                id="sys.svc.x",
                 system="sys",
                 service="svc",
                 name="x",
@@ -477,7 +477,7 @@ class TestEndpointSpec:
         # 文档依据:V1 §2.1 ConfigDict(extra="forbid")。
         with pytest.raises(Exception):
             EndpointSpec(
-                id="svc.x",
+                id="sys.svc.x",
                 system="sys",
                 service="svc",
                 name="x",
@@ -623,7 +623,7 @@ class TestSerialization:
         # IO 节点需把 Pydantic class 引用替换成内嵌 JSON Schema(model_schema + model_name)。
         # 文档依据:V1 §2.3 + schema/endpoint/io_spec.py RequestSpec._serialize / ResponseSpec._serialize。
         data = order_endpoint.model_dump(mode="json")
-        assert data["id"] == "settlement.order.add"
+        assert data["id"] == "finas.order.add"
         assert data["api"]["method"] == "POST"
         assert data["responses"]["200"]["status"] == 200
         assert "model_schema" in data["request"]
@@ -662,7 +662,7 @@ class TestVersion:
         # 测试点:不显式指定 version 时,默认值为 "1.0.0"。
         # 文档依据:V1 §2.2 表格(version 默认 "1.0.0") + V2 §2.1(semver 合法三段)。
         ep = EndpointSpec(
-            id="svc.x",
+            id="sys.svc.x",
             system="sys",
             service="svc",
             name="x",
@@ -681,7 +681,7 @@ class TestVersion:
         # 测试点:显式 override 后,内存值 + dump 值均保持 override。
         # 文档依据:V2 §2.1 已实装 semver 校验,合法三段值通过。
         ep = EndpointSpec(
-            id="svc.x",
+            id="sys.svc.x",
             system="sys",
             service="svc",
             name="x",
@@ -720,7 +720,7 @@ class TestVersion:
         # 测试点:匹配 ^\d+\.\d+\.\d+$ 的合法 semver 三段值必须通过校验。
         # 文档依据:V2 §2.1"决策拍板:semver 形态 = 纯三段 x.y.z,不含 pre-release / build metadata"。
         ep = EndpointSpec(
-            id="svc.x",
+            id="sys.svc.x",
             system="sys",
             service="svc",
             name="x",
@@ -754,7 +754,7 @@ class TestVersion:
         #          _SEMVER_PATTERN.match 不通过则抛 ValueError"。
         with pytest.raises(Exception) as exc_info:
             EndpointSpec(
-                id="svc.x",
+                id="sys.svc.x",
                 system="sys",
                 service="svc",
                 name="x",

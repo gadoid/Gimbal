@@ -1,16 +1,29 @@
 """fin.order.order_detail —— 查询订单详情接口契约。在 scen_test_14 中出现4次。"""
+
+from typing import Final
+
+from gimbal_plate.systems.fin.system_info import (
+    FIN_DEFAULT_AUTHOR,
+    FIN_DEFAULT_MODULE,
+    FIN_DEFAULT_OWNER,
+    FIN_DEFAULT_PRIORITY,
+    FIN_DEFAULT_TAGS,
+    FIN_DEFAULT_VERSION,
+    FIN_SYSTEM,
+)
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
     EndpointSpec,
     IOFieldBinding,
     RequestSpec,
     ResponseSpec,
+    EndpointMetadata,
 )
 
 
-ORDER_ORDER_DETAIL = EndpointSpec(
+ORDER_ORDER_DETAIL: Final[EndpointSpec] = EndpointSpec(
     id="fin.order.order_detail",
-    system="fin",
+    system=FIN_SYSTEM,
     service="order",
     name="查询订单详情",
     description="由 Scenario_Test_14 提取: 查询订单详情",
@@ -36,5 +49,10 @@ ORDER_ORDER_DETAIL = EndpointSpec(
             assertable_fields=['$.data.supplier[0].order_supplier_id', '$.data.order_id', '$.data.order_no', '$.data.container[0].order_container_id', '$'],
         ),
     },
-    version="1.0.0",
+    version=FIN_DEFAULT_VERSION,
+    metadata=EndpointMetadata(
+        module=FIN_DEFAULT_MODULE,
+        owner=FIN_DEFAULT_OWNER,
+        tags=list(FIN_DEFAULT_TAGS),
+    ),
 )

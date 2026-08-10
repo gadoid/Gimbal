@@ -76,7 +76,7 @@ def reset_registry() -> None:
 def order_endpoint() -> EndpointSpec:
     """一个示例 EndpointSpec:新增订单(POST /api/v1/orders)。"""
     return EndpointSpec(
-        id="settlement.order.add",
+        id="finas.order.add",
         system="finas",
         service="settlement",
         name="新增订单",
@@ -129,7 +129,7 @@ def order_endpoint() -> EndpointSpec:
 def order_patch_endpoint() -> EndpointSpec:
     """第二个示例 EndpointSpec:更新订单(POST /api/v1/orders/patch)。"""
     return EndpointSpec(
-        id="settlement.order.patch",
+        id="finas.order.patch",
         system="finas",
         service="settlement",
         name="更新订单",

@@ -69,6 +69,16 @@ Engine
 | [utils](modules/utils.md) | 工具函数（JSONPath） |
 | [ai](modules/ai.md) | AI 辅助功能 |
 
+### Plate(API 契约 / 用例编排)
+
+plate 是 gimbal 的姐妹服务,提供 `EndpointSpec` 数据模型与 HTTP 接口,
+供外部系统查询系统下注册的接口、生成用例。
+
+| 文档 | 说明 |
+|------|------|
+| [modules/fin-system-info](modules/fin-system-info.md) | fin 系统 `system_info` 模块 — 12 个系统级公共常量(FIN_SYSTEM / FIN_DEFAULT_*)的单一来源 |
+| [adr/0001](adr/0001-endpoint-id-system-prefix.md) | ADR:`EndpointSpec.id` 必须以 `system` 字段作为 prefix |
+
 ## 状态机流程
 
 ```
