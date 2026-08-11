@@ -1,7 +1,7 @@
 """PlateRegistry:被测接口的多维度内存注册表。"""
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Any, Iterable
 
 from gimbal_plate.schema.endpoint import EndpointSpec
 from gimbal_plate.schema.service_definition import ServiceDefinition
@@ -15,6 +15,8 @@ class PlateRegistry:
     一期职责:
         - 注册 ServiceDefinition / EndpointSpec
         - 多维度查询:by_id / by_system / by_service / by_tag / by_route
+        - 按 dim 注册(ADR 0002 §D-D3):通过 ``register_dim(name, spec)``
+          让 HTTP generic handler 通过 ``index_for(dim)`` 拿到 DimSpec。
         - reset() 便于测试
 
     一期不做:
@@ -25,6 +27,10 @@ class PlateRegistry:
     def __init__(self) -> None:
         self._services: dict[str, ServiceDefinition] = {}
         self._index = _Index()
+        # ADR 0002 §D-D3: dim registry. Keyed by dim name (e.g. "endpoint",
+        # "config", "meta"). Each value is a DimSpec exposing the index, the
+        # view factory, and the per-dim actions.
+        self.dims: dict[str, Any] = {}
 
     # ── 注册 ──────────────────────────────────────────────────
     def register_service(self, service: ServiceDefinition) -> None:
@@ -101,10 +107,29 @@ class PlateRegistry:
     def _services_for_system(self, system: str) -> set[str]:
         return {ep.service for ep in self._index.by_id.values() if ep.system == system}
 
+    # ── Dim 注册(ADR 0002 §D-D3) ──────────────────────────────
+    def register_dim(self, name: str, spec: Any) -> None:
+        """Register a dim's ``DimSpec`` under ``name``.
+
+        ``spec`` is intentionally typed as ``Any`` to avoid an import cycle
+        with ``gimbal_plate.http.grammar.DimSpec``; callers should pass a
+        ``DimSpec`` instance.
+        """
+        if not name:
+            raise ValueError("dim name 不可为空")
+        if name in self.dims:
+            raise ValueError(f"dim '{name}' 已注册")
+        self.dims[name] = spec
+
+    def index_for(self, dim: str) -> Any | None:
+        """Return the :class:`DimSpec` registered under ``dim`` or ``None``."""
+        return self.dims.get(dim)
+
     # ── 测试支持 ──────────────────────────────────────────────
     def reset(self) -> None:
         self._services.clear()
         self._index.clear()
+        self.dims.clear()
 
 
 # 全局默认注册表

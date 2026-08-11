@@ -29,10 +29,102 @@ from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
 
 @pytest.fixture
 def fresh_registry() -> PlateRegistry:
-    """A fresh in-memory registry pre-loaded with the bundled fin system."""
+    """A fresh in-memory registry pre-loaded with the bundled fin system + M6 dims.
+
+    Mirror of :func:`gimbal_plate.http.app._register_fin_dims` for the test
+    harness. Tests pass this registry to ``create_app(registry=...)``, which
+    means the production ``_lifespan`` will skip its owned-mode setup. To
+    keep both paths in sync we duplicate the dim registration here verbatim
+    (per the Phase α decision: no shared helper between app and conftest).
+    """
     reg = PlateRegistry()
     for ep in ALL_ENDPOINTS:
         reg.register_endpoint(ep)
+
+    # M6 grammar mirror — 7 dims + 4 seeds.
+    from gimbal_plate.http.grammar import (
+        ConfigIndex, DimSpec, EndpointIndex, MetaIndex, ResourceIndex,
+        ScenarioIndex, ServiceIndex, SystemIndex,
+    )
+    from gimbal_plate.http.routes_grammar import (
+        action_endpoint_failed_criteria, action_endpoint_field_defaults,
+        action_endpoint_find, action_endpoint_resolve_paths,
+        action_system_from_service, action_system_register, action_system_sync,
+    )
+    from gimbal_plate.http.views import (
+        ConfigDetailView, ConfigView, EndpointDetailView, EndpointView,
+        MetaDetailView, MetaView, ResourceDetailView, ResourceView,
+        ScenarioDetailView, ScenarioView, ServiceDetailView, ServiceView,
+        SystemDetailView, SystemView,
+    )
+    from gimbal_plate.systems.fin.config import fin_config_template
+    from gimbal_plate.systems.fin.meta import fin_meta_template
+    from gimbal_plate.systems.fin.resource import fin_resource_template
+    from gimbal_plate.systems.fin.scenario import fin_scenario_template
+    from gimbal_plate.systems.fin.system_info import FIN_SYSTEM
+
+    reg.register_dim("endpoint", DimSpec(
+        name="endpoint",
+        index=EndpointIndex(registry=reg),
+        view_factory=EndpointView.from_spec,
+        full_view_factory=EndpointDetailView.from_spec,
+        actions={
+            "field-defaults":  action_endpoint_field_defaults,
+            "resolve-paths":   action_endpoint_resolve_paths,
+            "failed-criteria": action_endpoint_failed_criteria,
+            "find":            action_endpoint_find,
+        },
+    ))
+    reg.register_dim("service", DimSpec(
+        name="service",
+        index=ServiceIndex(registry=reg),
+        view_factory=ServiceView.from_definition,
+        full_view_factory=ServiceDetailView.from_definition,
+        actions={},
+    ))
+    reg.register_dim("system", DimSpec(
+        name="system",
+        index=SystemIndex(registry=reg),
+        view_factory=SystemView.from_summary,
+        full_view_factory=SystemDetailView.from_summary,
+        actions={
+            "from-service": action_system_from_service,
+            "register":     action_system_register,
+            "sync":         action_system_sync,
+        },
+    ))
+    cfg_idx  = ConfigIndex(registry=reg)
+    meta_idx = MetaIndex(registry=reg)
+    res_idx  = ResourceIndex(registry=reg)
+    scen_idx = ScenarioIndex(registry=reg)
+    reg.register_dim("config",   DimSpec(
+        name="config", index=cfg_idx,
+        view_factory=ConfigView.from_config,
+        full_view_factory=ConfigDetailView.from_config,
+        actions={},
+    ))
+    reg.register_dim("meta",     DimSpec(
+        name="meta", index=meta_idx,
+        view_factory=MetaView.from_meta,
+        full_view_factory=MetaDetailView.from_meta,
+        actions={},
+    ))
+    reg.register_dim("resource", DimSpec(
+        name="resource", index=res_idx,
+        view_factory=ResourceView.from_resource,
+        full_view_factory=ResourceDetailView.from_resource,
+        actions={},
+    ))
+    reg.register_dim("scenario", DimSpec(
+        name="scenario", index=scen_idx,
+        view_factory=ScenarioView.minimal,
+        full_view_factory=ScenarioDetailView.from_scenario,
+        actions={},
+    ))
+    cfg_idx.register(fin_config_template(),    item_id=f"{FIN_SYSTEM}.default")
+    meta_idx.register(fin_meta_template(),     item_id=f"{FIN_SYSTEM}.default")
+    res_idx.register(fin_resource_template(),  item_id=f"{FIN_SYSTEM}.tidb_test")
+    scen_idx.register(fin_scenario_template())
     return reg
 
 

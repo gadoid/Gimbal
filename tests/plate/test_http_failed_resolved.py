@@ -1,11 +1,16 @@
-"""B2: failed_criteria × assertable_fields linkage analysis."""
+"""B2: failed_criteria × assertable_fields linkage analysis (M6 grammar).
 
+M6 mapping (ADR 0002 §D1):
+    POST /api/endpoints/{id}/failed-criteria-resolved
+        → POST /api/endpoint/{id}/action/failed-criteria
+"""
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from gimbal_plate.http import create_app
+from gimbal_plate.http.app import _register_fin_dims
 from gimbal_plate.registry import PlateRegistry
 from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
 from gimbal_plate.schema.endpoint.io_spec import IOFieldBinding, RequestSpec, ResponseSpec
@@ -52,12 +57,16 @@ def _build_endpoint() -> EndpointSpec:
 def test_failed_criteria_resolved() -> None:
     reg = PlateRegistry()
     reg.register_endpoint(_build_endpoint())
+    _register_fin_dims(reg)
     with TestClient(create_app(registry=reg)) as client:
         resp = client.post(
-            "/api/endpoints/sample.failed/failed-criteria-resolved"
+            "/api/endpoint/sample.failed/action/failed-criteria",
         )
     assert resp.status_code == 200
-    items = resp.json()["data"]["failed_criteria"]
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["dim"] == "endpoint"
+    items = body["data"]["failed_criteria"]
     assert len(items) == 3
     by_code = {it["code"]: it for it in items}
     assert by_code[401]["assertable"] is True

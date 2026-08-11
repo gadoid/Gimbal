@@ -1,5 +1,9 @@
-"""A5: field default suggestions for the field editor."""
+"""A5: field default suggestions for the field editor (M6 grammar).
 
+M6 mapping (ADR 0002 §D1):
+    GET /api/endpoints/{id}/field-defaults
+        → GET /api/endpoint/{id}/action/field-defaults
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -8,6 +12,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from gimbal_plate.http import create_app
+from gimbal_plate.http.app import _register_fin_dims
 from gimbal_plate.registry import PlateRegistry
 from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
 from gimbal_plate.schema.endpoint.io_spec import (
@@ -74,14 +79,19 @@ def _build_endpoint() -> EndpointSpec:
 def _client() -> TestClient:
     reg = PlateRegistry()
     reg.register_endpoint(_build_endpoint())
+    # M6 grammar — wire endpoint dim (only endpoint is needed for field-defaults).
+    _register_fin_dims(reg)
     return TestClient(create_app(registry=reg))
 
 
 def test_field_defaults_kinds() -> None:
     with _client() as client:
-        resp = client.get("/api/endpoints/sample.fields/field-defaults")
+        resp = client.get("/api/endpoint/sample.fields/action/field-defaults")
     assert resp.status_code == 200
-    data: dict[str, Any] = resp.json()["data"]
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["dim"] == "endpoint"
+    data: dict[str, Any] = body["data"]
     by_name = {f["name"]: f for f in data["field_defaults"]}
     assert by_name["client_expand_name"]["kind"] == "literal"
     assert by_name["client_expand_name"]["value"] == "张三"
@@ -103,8 +113,9 @@ def test_field_defaults_carry_fields_from_response() -> None:
     ]
     reg = PlateRegistry()
     reg.register_endpoint(endpoint)
+    _register_fin_dims(reg)
     with TestClient(create_app(registry=reg)) as client:
-        resp = client.get("/api/endpoints/sample.fields/field-defaults")
+        resp = client.get("/api/endpoint/sample.fields/action/field-defaults")
     assert resp.status_code == 200
     carry = resp.json()["data"]["carry_fields"]
     assert carry and carry[0]["name"] == "internal_note"
