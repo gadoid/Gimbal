@@ -55,10 +55,7 @@ def _registry(request: Request) -> PlateRegistry:
 
 def _resolve_system(reg: PlateRegistry, system: str) -> None:
     """Raise SYSTEM_NOT_FOUND if no endpoint under ``system`` exists."""
-    if not any(
-        ep.system == system
-        for ep in reg._index.by_id.values()  # noqa: SLF001
-    ):
+    if not reg.has_system(system):
         raise PlateHTTPError(
             http_status=404,
             code=ErrorCode.SYSTEM_NOT_FOUND,
@@ -421,6 +418,91 @@ def get_full_dim_item_global(
         {"item": _to_full_view(spec, item), "total": 1},
         dim=dim,
     )
+
+
+# ── /references (Phase β, ADR 0002 §D-D2) ─────────────────────────
+#
+# Answers "who references this item" without inventing a full cross-dim
+# edge graph (Phase γ candidate). For each dim the answers we can give
+# *reliably* from existing registry data are listed in
+# ``_references_for_dim``. A 404 is returned if the item doesn't exist;
+# otherwise we return whatever signals the dim exposes (may be empty
+# for dims where references aren't tracked, e.g. ``system``).
+
+
+@router.get("/{dim}/{id}/references")
+def get_dim_item_references(
+    dim: str, id: str, request: Request  # noqa: A002
+) -> dict[str, Any]:
+    """Reverse-lookup: which systems / cross-dim signals reference this item."""
+    reg = _registry(request)
+    spec = reg.index_for(dim)
+    if spec is None:
+        raise PlateHTTPError(
+            http_status=404,
+            code=ErrorCode.DIM_NOT_FOUND,
+            message=f"unknown dim '{dim}'",
+        )
+    item = spec.index.get(id)
+    if item is None:
+        raise PlateHTTPError(
+            http_status=404,
+            code=ErrorCode.DIM_ITEM_NOT_FOUND,
+            message=f"{dim} '{id}' not found",
+        )
+    references = _references_for_dim(dim, item, id, reg)
+    return ok_response(
+        {"item": {"dim": dim, "id": id}, "references": references},
+        dim=dim,
+    )
+
+
+def _references_for_dim(
+    dim: str, item: Any, item_id: str, reg: PlateRegistry
+) -> dict[str, Any]:
+    """Return the per-dim reference signals we can answer from registry data.
+
+    Phase β honest scope (ADR 0002 §D-D2):
+        - systems: which systems own this item
+        - service / module / tags / endpoint_count: dim-specific metadata
+          signals already available without building a new edge index
+        - scenarios: empty for now; Phase γ will scan scenario.config /
+          scenario.resource refs to populate it.
+    """
+    out: dict[str, Any] = {"systems": [], "dim": dim}
+    if dim == "endpoint":
+        out["systems"] = [item.system]
+        out["service"] = item.service
+        out["module"] = item.metadata.module
+        out["tags"] = list(item.metadata.tags or [])
+    elif dim == "service":
+        s = reg.system_of_service(item.name)
+        out["systems"] = [s] if s else []
+        out["endpoint_count"] = reg.count_endpoints_for_service(item.name)
+    elif dim == "system":
+        # ``SystemIndex.get`` returns a summary dict (not a model), so we
+        # address its fields by key. System dim items don't have inbound
+        # references — they're containers, not targets.
+        out["systems"] = [item["id"]]
+        out["endpoint_count"] = item["endpoint_count"]
+        out["service_count"] = item["service_count"]
+    elif dim == "config":
+        # Item id is ``{system}.{name}``; the system is the leading segment.
+        out["systems"] = [item_id.split(".", 1)[0]] if "." in item_id else []
+        out["service_count"] = len(item.services or {})
+    elif dim == "meta":
+        out["systems"] = list(item.system or [])
+    elif dim == "resource":
+        # Item id is ``{system}.{name}`` — same prefix trick as config.
+        out["systems"] = [item_id.split(".", 1)[0]] if "." in item_id else []
+        out["kind"] = str(item.kind)
+    elif dim == "scenario":
+        out["systems"] = list(item.meta.system or [])
+        # scenarios referencing a config / resource via id: future Phase γ.
+        out["scenarios_referenced_by"] = []
+    else:
+        out["systems"] = []
+    return out
 
 
 # ── Handlers — global ────────────────────────────────────────────

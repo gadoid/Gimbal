@@ -1,7 +1,11 @@
 # Plate HTTP API 参考(M6 路由语法 · ADR 0002)
 
-> 适用版本:`gimbal-plate` 一期落地后 · 路由语法遵循 ADR 0002 §D-D1/D-D2/D-D3/D-D5
-> 最近一次端到端验证:379/379 pytest 通过(330 旧测试 + 49 新增 `/full` 单元测试) + uvicorn + curl 全部 14 处理器 / 4 错误类 / 4 `/full` 路径 × 4 形态(全局 list / 全局 detail / system-scoped list / system-scoped detail)/ 5 旧 URL 失效均已确认。
+> 适用版本:`gimbal-plate` 一期落地后 + Phase β `references` 端点 · 路由语法遵循 ADR 0002 §D-D1/D-D2/D-D3/D-D5
+> 最近一次端到端验证:**396/396 pytest 通过**(330 旧 + 49 新 `/full` + 17 新 `/references`) + uvicorn + curl 全部 16 处理器(14 旧 + 2 新 `/{dim}/{id}/references`) / 4 错误类 / 4 `/full` 路径 × 4 形态 / `/references` × 7 dim 均已确认。
+>
+> **Phase β 已落地**(ADR §后果负面 / §D-D2):
+> - N2 私有字段访问债务(11 个 `# noqa: SLF001`)已全部消除:`PlateRegistry` 新增 6 个公开方法(`iter_endpoints_global` / `iter_endpoints_for_system` / `has_system` / `count_endpoints_for_service` / `system_of_service` / `try_endpoint`),所有 Index 类(EndpointIndex / ServiceIndex / SystemIndex)以及 `_resolve_system` 改走公开 API。
+> - `/api/{dim}/{id}/references` 端点已上线(7 dim 全覆盖),Phase β 范围内的"系统成员关系 + dim 局部元数据"信号全部可查。Phase γ 再考虑完整反向引用图。
 
 ---
 
@@ -31,6 +35,7 @@ ADR 0002 定义的统一语法:
 | **list / dim 节点操作** | `GET /api/{dim}` <br> `POST /api/{dim}/action/{name}` | 列举 dim 全部条目;触发 dim 级别 action |
 | **detail** | `GET /api/{dim}/{id}` | 取单个条目经 `view_factory` 裁剪后的**轻量**视图 |
 | **list / detail · 完整契约** | `GET /api/{dim}/full` <br> `GET /api/{dim}/{id}/full` | 同上的 `full_view_factory` 版本,每个字段都返回(含 IOFieldBinding 扩展、敏感凭据等) |
+| **references** | `GET /api/{dim}/{id}/references` | Phase β(ADR §D-D2):反查信号,见 [§3.8](#38-references-反查信号-phase-β)。返回 `data.item={dim,id}` + `data.references={...}`,dim 内 dim-特定信号(systems / service / module / tags / endpoint_count / kind / 等) |
 | **object action** | `POST /api/{dim}/{id}/action/{name}` | 触发指定条目的 action,body 由 action 自定义 |
 | **system scoped** | `GET /api/systems/{system}/{dim}` <br> `GET /api/systems/{system}/{dim}/{id}` <br> `GET /api/systems/{system}/{dim}/full` <br> `GET /api/systems/{system}/{dim}/{id}/full` <br> `POST /api/systems/{system}/{dim}/action/{name}` | 限定 system 范围的 dim 视图;`{dim}=system` 时为该 system 的子节点视图 |
 
@@ -721,6 +726,56 @@ from gimbal_plate.registry import (
 
 ---
 
+### 3.8 references(反查信号,Phase β)
+
+> **ADR 定位**:ADR 0002 §D-D2 决策为"不要,留 Phase β"。本节是该决策的落地版。
+>
+> **Phase β 诚实范围**:不做完整反向图,而是把每个 dim 已经能从 registry 数据中可靠回答的"谁持有 / 谁属于"信号(`systems` + dim 局部元数据)集中返回。完整反向边(`scenarios_referenced_by` 等)留 Phase γ。
+
+**端点**:`GET /api/{dim}/{id}/references`
+
+**envelope**(以 endpoint 为例,实际字段因 dim 而异):
+
+```json
+{
+  "ok": true,
+  "dim": "endpoint",
+  "data": {
+    "item": { "dim": "endpoint", "id": "fin.order.order_add" },
+    "references": {
+      "dim": "endpoint",
+      "systems": ["fin"],
+      "service": "order",
+      "module": "fin",
+      "tags": ["fin"]
+    }
+  }
+}
+```
+
+**7 个 dim 的 references 字段差异**:
+
+| Dim | 必含 | dim-特定信号 |
+| --- | --- | --- |
+| `endpoint` | `systems` | `service`, `module`, `tags` |
+| `service`  | `systems` | `endpoint_count` |
+| `system`   | `systems (self)` | `endpoint_count`, `service_count`(容器视图,无反向图) |
+| `config`   | `systems (从 `{system}.{name}` id 前缀解析)` | `service_count` |
+| `meta`     | `systems (从 `meta.system` 列表)` | — |
+| `resource` | `systems (从 id 前缀)` | `kind` |
+| `scenario` | `systems` | `scenarios_referenced_by = []`(Phase γ 候选) |
+
+**错误码**:
+
+| 触发条件 | HTTP | `error.code` |
+| --- | --- | --- |
+| dim 不存在 | 404 | `dim_not_found` |
+| dim 内 id 不存在 | 404 | `dim_item_not_found` |
+
+**安全**:`references` payload 永远不泄漏敏感字段(已用 `test_references_payload_never_includes_secret_like_keys` 单元测试守卫 — `password / users / services` 黑名单)。`data.item` 严格 `{dim, id}` 两字段,不暴露 dim 的完整载荷。
+
+---
+
 ## 5. 路由表(注册顺序敏感)
 
 > 注册顺序决定匹配优先级:系统级 → `/full` → dim 级 action → dim 全局 `/dim/{id}`。
@@ -740,6 +795,7 @@ from gimbal_plate.registry import (
 | 11 | POST | `/api/{dim}/action/{name}` | `run_dim_action_global` |
 | 12 | GET  | `/api/{dim}/full` | `list_full_dim_global` |
 | 13 | GET  | `/api/{dim}/{id}/full` | `get_full_dim_item_global` |
+| 13a | GET  | `/api/{dim}/{id}/references` | `get_dim_item_references` (Phase β,ADR §D-D2) |
 | 14 | GET  | `/api/{dim}` | `list_dim_global` |
 | 15 | GET  | `/api/{dim}/{id}` | `detail_dim` |
 | 16 | POST | `/api/{dim}/{id}/action/{name}` | `run_dim_action_for_object` |
@@ -747,6 +803,7 @@ from gimbal_plate.registry import (
 > 顺序 1 / 2 / 3 必须早于顺序 14 / 15,否则会被 `/{dim}/{id}` 之类的全局路由吞掉(`system` 与 `systems` 的复数差异在 FastAPI 路由表里不会冲突,但具体 dim 名若与 `systems` 重叠则需要前置)。
 >
 > 顺序 5 / 6 / 12 / 13(`/full`)必须分别早于顺序 8(`/systems/{system}/{dim}/{id}`)和顺序 15(`/{dim}/{id}`),否则 `/endpoint/full` 会被解析成 `dim=endpoint, id=full` 触发 404 `dim_item_not_found`。
+> 顺序 13a(`/references`)同样早于顺序 15,确保 `/{dim}/{id}/references` 不会被 `/{dim}/{id}` 吞掉。
 
 ---
 
@@ -772,15 +829,17 @@ from gimbal_plate.registry import (
 
 ## 7. 测试覆盖
 
-- **pytest**:`python -m pytest tests/plate -v` → 379 passed, 0 failed
+- **pytest**:`python -m pytest tests/plate -v` → **396 passed**, 0 failed
   - 330 历史用例(9 个 M6 测试文件 + 其它 schema/registry 用例)
   - 49 新增 `/full` 单元用例(5 个 `/full` 测试文件)
-- **uvicorn + curl**:`http://127.0.0.1:8765/api/...` E2E 22 用例全部 PASS:
+  - 17 新增 `/references` 单元用例(1 个 `/references` 测试文件,7 dim × happy + 7 dim × unknown id + 1 unknown dim + 2 envelope)
+- **uvicorn + curl**:`http://127.0.0.1:8765/api/...` E2E 30 用例全部 PASS:
   - 13 light 路径(系统/dim 列表/详情/actions/错误码)
   - 4 全局 `/full` 路径(endpoint / config / resource / scenario)
   - 4 system-scoped `/full` 路径(endpoint / config / resource / scenario)
+  - 7 `/references` 路径(7 dim 全覆盖)
   - 1 sanity(`/healthz`)
-- 14 个 M6 测试文件覆盖:
+- 15 个 M6 测试文件覆盖:
   - **light / 动作**:
     `test_http_systems.py` / `test_http_tree.py`
     `test_http_endpoints_list.py` / `test_http_endpoint_detail.py`
@@ -793,6 +852,8 @@ from gimbal_plate.registry import (
     `test_http_full_resource.py` (8 用例) — `ResourceDetailView` 含 `extra.{image,config,portMapping}`
     `test_http_full_scenario.py` (8 用例) — `ScenarioDetailView` 含 `extra.{meta,config,resource,steps}`
     `test_http_full_system_scoped.py` (15 用例) — `_item_belongs_to_system` 系统归属校验
+  - **`/references` 路径(Phase β 新增)**:
+    `test_http_references.py` (17 用例) — 7 dim × 200 + 7 dim × unknown id 404 + 1 unknown dim 404 + 2 envelope 校验
 
 `/full` 路径覆盖:
 
@@ -807,6 +868,21 @@ from gimbal_plate.registry import (
   - **resource `/full`**:回填 `extra.{image,config,portMapping}`(light 只剩 `id/name`)
   - **scenario `/full`**:回填 `extra.{meta,config,resource,steps}`(light 只剩 4 个精简字段)
 - 路由顺序覆盖:`/full` 路径在 `/{dim}/{id}` 之前注册,`/api/{dim}/full` 不会被解析为 `id=full`(已 E2E + 单元双向验证)。
+
+`/references` 路径覆盖(Phase β, ADR §D-D2):
+
+- 7 dim × happy path → 200,envelope `{ok, dim, data:{item:{dim,id}, references:{...}}}`:
+  - endpoint → `systems / service / module / tags`
+  - service  → `systems / endpoint_count`
+  - system   → `systems (self) / endpoint_count / service_count`
+  - config   → `systems (从 `{system}.{name}` id 前缀解析) / service_count`
+  - meta     → `systems (从 `meta.system` 列表)`
+  - resource → `systems (从 id 前缀) / kind`
+  - scenario → `systems / scenarios_referenced_by=[]` (Phase γ 候选)
+- 7 dim × unknown id → 404 `dim_item_not_found`
+- 1 unknown dim → 404 `dim_not_found`
+- envelope 校验:`data.item` 严格 `{dim, id}`(不暴露 dim 完整载荷),`references` 永远不泄漏敏感字段(`password / users / services`)
+- Phase γ 候选:扫描 `scenario.config` / `scenario.resource` 引用,自动填充 `scenarios_referenced_by`。Phase β 范围内**故意不实现**全图(ADR §后果负面 / §D-D2 决策)
 - 401/501 行为:dim 未声明 `full_view_factory` 时返回 501 `admin_not_implemented`(本期 7 个 dim 全部已声明,故只单元测试覆盖,未走 E2E)。
 - `_item_belongs_to_system` 覆盖:`test_http_full_system_scoped.py` 验证 4 dim × 3 形态(full/light/wrong-system)= 15 用例;修复了 light 路径上 `Config` / `Mock` / `Scenario` Pydantic 模型无 `.id` 属性的隐性 bug。
 
@@ -822,14 +898,19 @@ from gimbal_plate.registry import (
 | `*DetailView` / `/full` 装配 | ✅ 已补齐 | 7 个 dim 全部声明 `full_view_factory`,4 路径(`/full` / `/{id}/full` / system-scoped × 2)全部接通;`tests/plate/conftest.py` 已同步注入 7 个 `*DetailView` factory,保证单测覆盖与生产装配同源 |
 | system-scoped `/{id}/full` 装配 | ✅ 已补齐 | 5 个 dim(endpoint / config / resource / scenario / service)全部接通。共用 `_item_belongs_to_system` 助手,基于对象身份(`is`)作 system-membership 判定 |
 | system-scoped `/{id}` 配置 / resource / scenario 系统校验 | ✅ 已修复 | 之前 `getattr(it, "id") or it.get("id")` 在 Pydantic 模型上抛 `AttributeError`(config / resource / scenario 缺少 `.id` 属性);现统一通过 `_item_belongs_to_system(spec, item, id, system)` 处理 |
+| **N2:handler 私有字段访问债务** | ✅ **Phase β 已闭合** | 11 个 `# noqa: SLF001` 全部消除。`PlateRegistry` 新增 6 个公开方法(`iter_endpoints_global` / `iter_endpoints_for_system` / `has_system` / `count_endpoints_for_service` / `system_of_service` / `try_endpoint`)。EndpointIndex / ServiceIndex / SystemIndex 三个 Index 类以及 routes_grammar.py 的 `_resolve_system` 全部改走公开 API,Registry 内部存储策略(`_index` dict)再次被封装 |
+| **`/references` 端点** | ✅ **Phase β 已落地** | ADR 0002 §D-D2 决策为"留 Phase β",现已上线。`GET /api/{dim}/{id}/references` × 7 dim,17 个单测 + 7 dim E2E 全 PASS。Phase β 范围内提供 `systems` + dim 局部元数据(`service / module / tags / endpoint_count / kind` 等);**不**实现完整反向引用图(`scenarios_referenced_by` 始终为空),留给 Phase γ |
+| **API 合并决策(`dims["endpoint"]` vs `PlateRegistry.get_endpoint()`)** | 🟡 **保持并存(ADR 显式承认)** | Phase β 决策:**保留两套 API**,用注释明示过渡状态(`registry.list_endpoints` / `registry.get_endpoint` 上有 ADR 引用注释);统一合并留到 Phase γ(届时 `dims["endpoint"]` 已 production 路径且稳定,合并成本低) |
 | Config 脱敏边界 | ✅ 已确认 | 验证 `password` / `token` / `refresh_token` / `expires_at` 不会经 `ConfigView.from_spec` 漏出 |
 | Resource 脱敏边界 | ✅ 已确认 | `image` / `config` / `portMapping` 被丢弃 |
 | Scenario 裁剪边界 | ✅ 已确认 | 仅暴露 `scenarioId` / `name` / `systems` |
 | 线程安全 | ❌ 一期不做 | `PlateRegistry` 不加锁;`create_app()` 在 lifespan 启动时一次性种入 |
 | 持久化 | ❌ 一期不做 | 重启即丢;`reset()` 仅供测试 |
 | 异步注册 | ❌ 一期不做 | 同步 API 即可覆盖一期 fixture |
-| OpenAPI snapshot | 🟡 待定 | 一期无自动 baseline;Phase β 加入 `tests/openapi/*.json` 锁定 |
-| DimSpec 协议类型化 | 🟡 待定 | 现为 `Any` 规避导入循环;Phase β 抽出 `Protocol` 替代 |
+| OpenAPI snapshot | 🟡 待定 | 一期无自动 baseline;Phase γ 加入 `tests/openapi/*.json` 锁定 |
+| DimSpec 协议类型化 | 🟡 待定 | 现为 `Any` 规避导入循环;Phase γ 抽出 `Protocol` 替代 |
+| Auth layer(Q3) | ❌ 一期不做 | 所有端点目前裸奔;Phase γ 接入 Bearer/JWT |
+| Producer 机制(ADR §D-D4) | 🟡 待迁移 | 当前在 lifespan 里种 4 个 seed;Phase γ 迁到 `gimbal_plate/systems/<sys>/__init__.py` |
 | 错误码 i18n | ❌ 不做 | `message` 统一英文,内部消费 |
 
 ---

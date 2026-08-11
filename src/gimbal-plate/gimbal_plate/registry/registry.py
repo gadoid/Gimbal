@@ -75,6 +75,11 @@ class PlateRegistry:
         service: str | None = None,
         tag: str | None = None,
     ) -> list[EndpointSpec]:
+        # NOTE (ADR 0002 §后果负面, Phase β transition): this convenience API
+        # coexists with the dim-based ``dims["endpoint"].list_*`` surface.
+        # Phase β will decide whether to keep both or unify. See
+        # docs/adr/0002-plate-http-routing-grammar.md §后果负面 for the
+        # documented rationale.
         ids: set[str] | None = None
         if system is not None:
             ids = {ep.id for ep in self._index.by_id.values() if ep.system == system}
@@ -89,10 +94,20 @@ class PlateRegistry:
         return [self._index.by_id[eid] for eid in sorted(ids)]
 
     def get_endpoint(self, endpoint_id: str) -> EndpointSpec:
+        # NOTE (ADR 0002 §后果负面): transitional — see list_endpoints note.
         ep = self._index.by_id.get(endpoint_id)
         if ep is None:
             raise KeyError(f"Endpoint '{endpoint_id}' 未注册")
         return ep
+
+    def try_endpoint(self, endpoint_id: str) -> EndpointSpec | None:
+        """Return the endpoint by id, or ``None`` if missing.
+
+        Non-raising variant of :meth:`get_endpoint`. Used by index
+        implementations that need to return ``None`` for a missing key
+        without converting the lookup into an exception path.
+        """
+        return self._index.by_id.get(endpoint_id)
 
     def find_endpoints(self, service: str, method: str, path: str) -> list[EndpointSpec]:
         ep_id = self._index.by_route.get((service, method, path))
@@ -102,6 +117,42 @@ class PlateRegistry:
 
     def has_endpoint(self, endpoint_id: str) -> bool:
         return endpoint_id in self._index.by_id
+
+    # ── N2 cleanup (ADR 0002 §N2): public API replacing private access ─
+    #
+    # ``EndpointIndex`` / ``ServiceIndex`` / ``SystemIndex`` / ``_resolve_system``
+    # used to reach into ``_index.by_id.values()`` with ``# noqa: SLF001``.
+    # Those accesses are now routed through these public methods so the
+    # registry's internal storage strategy (in-memory dict today, possibly
+    # a database-backed index tomorrow) is fully encapsulated behind a
+    # stable contract.
+
+    def iter_endpoints_global(self) -> Iterable[EndpointSpec]:
+        """Yield every registered :class:`EndpointSpec` (read-only iteration)."""
+        return list(self._index.by_id.values())
+
+    def iter_endpoints_for_system(self, system: str) -> Iterable[EndpointSpec]:
+        """Yield every :class:`EndpointSpec` whose ``system == system``."""
+        return [ep for ep in self._index.by_id.values() if ep.system == system]
+
+    def has_system(self, system: str) -> bool:
+        """Whether any endpoint is registered under ``system``."""
+        return any(ep.system == system for ep in self._index.by_id.values())
+
+    def count_endpoints_for_service(self, service: str) -> int:
+        """Number of endpoints belonging to ``service``."""
+        return sum(1 for ep in self._index.by_id.values() if ep.service == service)
+
+    def system_of_service(self, service_name: str) -> str | None:
+        """First system found that hosts ``service_name`` (or ``None``).
+
+        Used by ``ServiceIndex.system_of`` — service-level ownership is
+        derived from the endpoint registry.
+        """
+        for ep in self._index.by_id.values():
+            if ep.service == service_name:
+                return ep.system
+        return None
 
     # ── 内部辅助 ──────────────────────────────────────────────
     def _services_for_system(self, system: str) -> set[str]:

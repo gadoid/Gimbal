@@ -97,21 +97,17 @@ class EndpointIndex(BaseIndex):
     def list_global(
         self, *, filters: dict[str, Any] | None = None
     ) -> list[EndpointSpec]:
-        items = list(self.registry._index.by_id.values())  # noqa: SLF001
+        items = list(self.registry.iter_endpoints_global())
         return _apply_endpoint_filters(items, filters or {})
 
     def list_for_system(
         self, system: str, *, filters: dict[str, Any] | None = None
     ) -> list[EndpointSpec]:
-        items = [
-            ep
-            for ep in self.registry._index.by_id.values()  # noqa: SLF001
-            if ep.system == system
-        ]
+        items = list(self.registry.iter_endpoints_for_system(system))
         return _apply_endpoint_filters(items, filters or {})
 
     def get(self, item_id: str) -> EndpointSpec | None:
-        return self.registry._index.by_id.get(item_id)  # noqa: SLF001
+        return self.registry.try_endpoint(item_id)
 
     def to_view(self, item: EndpointSpec) -> dict[str, Any]:
         return EndpointView.from_spec(item).model_dump(mode="json", exclude_none=True)
@@ -119,10 +115,8 @@ class EndpointIndex(BaseIndex):
     def find_by_route(
         self, *, service: str, method: str, path: str
     ) -> EndpointSpec | None:
-        ep_id = self.registry._index.by_route.get((service, method, path))  # noqa: SLF001
-        if ep_id is None:
-            return None
-        return self.registry._index.by_id.get(ep_id)  # noqa: SLF001
+        eps = self.registry.find_endpoints(service=service, method=method, path=path)
+        return eps[0] if eps else None
 
 
 def _apply_endpoint_filters(
@@ -174,29 +168,21 @@ class ServiceIndex(BaseIndex):
     def list_for_system(
         self, system: str, *, filters: dict[str, Any] | None = None
     ) -> list[ServiceDefinition]:
-        names = {ep.service for ep in self.registry._index.by_id.values()  # noqa: SLF001
-                 if ep.system == system}
+        names = {ep.service for ep in self.registry.iter_endpoints_for_system(system)}
         return [s for s in self.registry._services.values() if s.name in names]
 
     def get(self, item_id: str) -> ServiceDefinition | None:
         return self.registry._services.get(item_id)
 
     def to_view(self, item: ServiceDefinition) -> dict[str, Any]:
-        # Count endpoints for this service.
-        count = sum(
-            1
-            for ep in self.registry._index.by_id.values()  # noqa: SLF001
-            if ep.service == item.name
-        )
+        # Count endpoints for this service (public API).
+        count = self.registry.count_endpoints_for_service(item.name)
         return ServiceView.from_definition(item, endpoint_count=count).model_dump(
             mode="json", exclude_none=True
         )
 
     def system_of(self, item: ServiceDefinition) -> str | None:
-        for ep in self.registry._index.by_id.values():  # noqa: SLF001
-            if ep.service == item.name:
-                return ep.system
-        return None
+        return self.registry.system_of_service(item.name)
 
 
 # ── SystemIndex ────────────────────────────────────────────────────
@@ -210,7 +196,7 @@ class SystemIndex(BaseIndex):
 
     def _systems(self) -> list[str]:
         seen: set[str] = set()
-        for ep in self.registry._index.by_id.values():  # noqa: SLF001
+        for ep in self.registry.iter_endpoints_global():
             seen.add(ep.system)
         return sorted(seen)
 
@@ -239,17 +225,10 @@ class SystemIndex(BaseIndex):
         return SystemView.from_summary(item).model_dump(mode="json", exclude_none=True)
 
     def has_system(self, system: str) -> bool:
-        return any(
-            ep.system == system
-            for ep in self.registry._index.by_id.values()  # noqa: SLF001
-        )
+        return self.registry.has_system(system)
 
     def _summary(self, system: str) -> dict[str, Any]:
-        eps = [
-            ep
-            for ep in self.registry._index.by_id.values()  # noqa: SLF001
-            if ep.system == system
-        ]
+        eps = list(self.registry.iter_endpoints_for_system(system))
         services = {ep.service for ep in eps}
         latest = None
         for ep in eps:
