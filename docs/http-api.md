@@ -1,7 +1,7 @@
 # Plate HTTP API 参考(M6 路由语法 · ADR 0002)
 
 > 适用版本:`gimbal-plate` 一期落地后 · 路由语法遵循 ADR 0002 §D-D1/D-D2/D-D3/D-D5
-> 最近一次端到端验证:330/330 pytest 通过 + uvicorn + curl 全部 14 处理器 / 4 错误类 / 4 `/full` 路径 × 4 形态(全局 list / 全局 detail / system-scoped list / system-scoped detail)/ 5 旧 URL 失效均已确认。
+> 最近一次端到端验证:379/379 pytest 通过(330 旧测试 + 49 新增 `/full` 单元测试) + uvicorn + curl 全部 14 处理器 / 4 错误类 / 4 `/full` 路径 × 4 形态(全局 list / 全局 detail / system-scoped list / system-scoped detail)/ 5 旧 URL 失效均已确认。
 
 ---
 
@@ -772,17 +772,27 @@ from gimbal_plate.registry import (
 
 ## 7. 测试覆盖
 
-- **pytest**:`python -m pytest tests/plate -v` → 330 passed, 0 failed
+- **pytest**:`python -m pytest tests/plate -v` → 379 passed, 0 failed
+  - 330 历史用例(9 个 M6 测试文件 + 其它 schema/registry 用例)
+  - 49 新增 `/full` 单元用例(5 个 `/full` 测试文件)
 - **uvicorn + curl**:`http://127.0.0.1:8765/api/...` E2E 22 用例全部 PASS:
   - 13 light 路径(系统/dim 列表/详情/actions/错误码)
   - 4 全局 `/full` 路径(endpoint / config / resource / scenario)
   - 4 system-scoped `/full` 路径(endpoint / config / resource / scenario)
   - 1 sanity(`/healthz`)
-- 9 个 M6 测试文件覆盖:
-  - `test_http_systems.py` / `test_http_tree.py`
-  - `test_http_endpoints_list.py` / `test_http_endpoint_detail.py`
-  - `test_http_field_defaults.py` / `test_http_resolve_paths.py` / `test_http_failed_resolved.py`
-  - `test_http_system_from_service.py` / `test_http_admin_not_implemented.py`
+- 14 个 M6 测试文件覆盖:
+  - **light / 动作**:
+    `test_http_systems.py` / `test_http_tree.py`
+    `test_http_endpoints_list.py` / `test_http_endpoint_detail.py`
+    `test_http_field_defaults.py` / `test_http_resolve_paths.py` / `test_http_failed_resolved.py`
+    `test_http_system_from_service.py` / `test_http_admin_not_implemented.py`
+    `test_http_envelope.py` / `test_http_health.py`
+  - **`/full` 路径(新增)**:
+    `test_http_full_endpoint.py` (8 用例) — `EndpointDetailView` 完整契约 + light 对照
+    `test_http_full_config.py` (10 用例) — `ConfigDetailView` 含 `users[].password` / `extra`
+    `test_http_full_resource.py` (8 用例) — `ResourceDetailView` 含 `extra.{image,config,portMapping}`
+    `test_http_full_scenario.py` (8 用例) — `ScenarioDetailView` 含 `extra.{meta,config,resource,steps}`
+    `test_http_full_system_scoped.py` (15 用例) — `_item_belongs_to_system` 系统归属校验
 
 `/full` 路径覆盖:
 
@@ -796,8 +806,9 @@ from gimbal_plate.registry import (
   - **config `/full`**:回填 `services` / `users[].password` / `vars`(light 已被裁剪)
   - **resource `/full`**:回填 `extra.{image,config,portMapping}`(light 只剩 `id/name`)
   - **scenario `/full`**:回填 `extra.{meta,config,resource,steps}`(light 只剩 4 个精简字段)
-- 路由顺序覆盖:`/full` 路径在 `/{dim}/{id}` 之前注册,`/api/{dim}/full` 不会被解析为 `id=full`(已 E2E 验证)。
+- 路由顺序覆盖:`/full` 路径在 `/{dim}/{id}` 之前注册,`/api/{dim}/full` 不会被解析为 `id=full`(已 E2E + 单元双向验证)。
 - 401/501 行为:dim 未声明 `full_view_factory` 时返回 501 `admin_not_implemented`(本期 7 个 dim 全部已声明,故只单元测试覆盖,未走 E2E)。
+- `_item_belongs_to_system` 覆盖:`test_http_full_system_scoped.py` 验证 4 dim × 3 形态(full/light/wrong-system)= 15 用例;修复了 light 路径上 `Config` / `Mock` / `Scenario` Pydantic 模型无 `.id` 属性的隐性 bug。
 
 未覆盖(Phase β 候选):跨 dim 复合查询、并发注册、DimSpec 协议文档化、OpenAPI schema baseline、`/full` 的 501 路径 E2E。
 
@@ -808,7 +819,7 @@ from gimbal_plate.registry import (
 | 项目 | 状态 | 备注 |
 | --- | --- | --- |
 | `action_endpoint_find` 索引来源 | ✅ 已修复 | 之前错误地 `idx = item`,现已改为 `idx = reg.dims["endpoint"].index` |
-| `*DetailView` / `/full` 装配 | ✅ 已补齐 | 7 个 dim 全部声明 `full_view_factory`,4 路径(`/full` / `/{id}/full` / system-scoped × 2)全部接通 |
+| `*DetailView` / `/full` 装配 | ✅ 已补齐 | 7 个 dim 全部声明 `full_view_factory`,4 路径(`/full` / `/{id}/full` / system-scoped × 2)全部接通;`tests/plate/conftest.py` 已同步注入 7 个 `*DetailView` factory,保证单测覆盖与生产装配同源 |
 | system-scoped `/{id}/full` 装配 | ✅ 已补齐 | 5 个 dim(endpoint / config / resource / scenario / service)全部接通。共用 `_item_belongs_to_system` 助手,基于对象身份(`is`)作 system-membership 判定 |
 | system-scoped `/{id}` 配置 / resource / scenario 系统校验 | ✅ 已修复 | 之前 `getattr(it, "id") or it.get("id")` 在 Pydantic 模型上抛 `AttributeError`(config / resource / scenario 缺少 `.id` 属性);现统一通过 `_item_belongs_to_system(spec, item, id, system)` 处理 |
 | Config 脱敏边界 | ✅ 已确认 | 验证 `password` / `token` / `refresh_token` / `expires_at` 不会经 `ConfigView.from_spec` 漏出 |
