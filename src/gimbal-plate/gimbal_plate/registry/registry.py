@@ -68,6 +68,36 @@ class PlateRegistry:
         svc_names = self._services_for_system(system)
         return [s for s in self._services.values() if s.name in svc_names]
 
+    # ── N2 cleanup (ADR 0002 §N2): service accessors ─
+    #
+    # Same rationale as the endpoint accessors above: ``ServiceIndex`` used
+    # to reach into ``self.registry._services`` directly. These public
+    # methods encapsulate the storage strategy so the index can stay
+    # registry-agnostic.
+
+    def iter_services_global(self) -> list[ServiceDefinition]:
+        """Return every registered :class:`ServiceDefinition` (read-only)."""
+        return list(self._services.values())
+
+    def get_service(self, service_name: str) -> ServiceDefinition | None:
+        """Return the service by name, or ``None`` if missing."""
+        return self._services.get(service_name)
+
+    def has_service(self, service_name: str) -> bool:
+        """Whether a service with ``service_name`` is registered."""
+        return service_name in self._services
+
+    def iter_services_for_system(self, system: str) -> list[ServiceDefinition]:
+        """Return every service whose endpoints all belong to ``system``.
+
+        A service is "for system X" iff every endpoint registered with
+        ``service == svc.name`` has ``ep.system == X``. This avoids
+        leaking services that are cross-system (which is a misregistration
+        we still want to surface, not silently hide).
+        """
+        names = {ep.service for ep in self.iter_endpoints_for_system(system)}
+        return [s for s in self._services.values() if s.name in names]
+
     def list_endpoints(
         self,
         *,

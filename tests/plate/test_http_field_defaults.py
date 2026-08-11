@@ -12,8 +12,8 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
 from gimbal_plate.http import create_app
-from gimbal_plate.http.app import _register_fin_dims
 from gimbal_plate.registry import PlateRegistry
+from gimbal_plate.systems.fin.dimensions import register_fin_dims
 from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
 from gimbal_plate.schema.endpoint.io_spec import (
     IOFieldBinding,
@@ -80,7 +80,7 @@ def _client() -> TestClient:
     reg = PlateRegistry()
     reg.register_endpoint(_build_endpoint())
     # M6 grammar — wire endpoint dim (only endpoint is needed for field-defaults).
-    _register_fin_dims(reg)
+    register_fin_dims(reg)
     return TestClient(create_app(registry=reg))
 
 
@@ -113,7 +113,7 @@ def test_field_defaults_carry_fields_from_response() -> None:
     ]
     reg = PlateRegistry()
     reg.register_endpoint(endpoint)
-    _register_fin_dims(reg)
+    register_fin_dims(reg)
     with TestClient(create_app(registry=reg)) as client:
         resp = client.get("/api/endpoint/sample.fields/action/field-defaults")
     assert resp.status_code == 200

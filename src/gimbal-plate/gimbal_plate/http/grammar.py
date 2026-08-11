@@ -163,16 +163,15 @@ class ServiceIndex(BaseIndex):
     def list_global(
         self, *, filters: dict[str, Any] | None = None
     ) -> list[ServiceDefinition]:
-        return list(self.registry._services.values())
+        return self.registry.iter_services_global()
 
     def list_for_system(
         self, system: str, *, filters: dict[str, Any] | None = None
     ) -> list[ServiceDefinition]:
-        names = {ep.service for ep in self.registry.iter_endpoints_for_system(system)}
-        return [s for s in self.registry._services.values() if s.name in names]
+        return self.registry.iter_services_for_system(system)
 
     def get(self, item_id: str) -> ServiceDefinition | None:
-        return self.registry._services.get(item_id)
+        return self.registry.get_service(item_id)
 
     def to_view(self, item: ServiceDefinition) -> dict[str, Any]:
         # Count endpoints for this service (public API).

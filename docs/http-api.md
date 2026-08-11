@@ -898,7 +898,7 @@ from gimbal_plate.registry import (
 | `*DetailView` / `/full` 装配 | ✅ 已补齐 | 7 个 dim 全部声明 `full_view_factory`,4 路径(`/full` / `/{id}/full` / system-scoped × 2)全部接通;`tests/plate/conftest.py` 已同步注入 7 个 `*DetailView` factory,保证单测覆盖与生产装配同源 |
 | system-scoped `/{id}/full` 装配 | ✅ 已补齐 | 5 个 dim(endpoint / config / resource / scenario / service)全部接通。共用 `_item_belongs_to_system` 助手,基于对象身份(`is`)作 system-membership 判定 |
 | system-scoped `/{id}` 配置 / resource / scenario 系统校验 | ✅ 已修复 | 之前 `getattr(it, "id") or it.get("id")` 在 Pydantic 模型上抛 `AttributeError`(config / resource / scenario 缺少 `.id` 属性);现统一通过 `_item_belongs_to_system(spec, item, id, system)` 处理 |
-| **N2:handler 私有字段访问债务** | ✅ **Phase β 已闭合** | 11 个 `# noqa: SLF001` 全部消除。`PlateRegistry` 新增 6 个公开方法(`iter_endpoints_global` / `iter_endpoints_for_system` / `has_system` / `count_endpoints_for_service` / `system_of_service` / `try_endpoint`)。EndpointIndex / ServiceIndex / SystemIndex 三个 Index 类以及 routes_grammar.py 的 `_resolve_system` 全部改走公开 API,Registry 内部存储策略(`_index` dict)再次被封装 |
+| **N2:handler 私有字段访问债务** | ✅ **Phase β 已闭合** | endpoint 维度 11 个 + service 维度 3 个私有属性访问全部消除,合计 ~14 个访问点。`PlateRegistry` 新增 10 个公开方法:`iter_endpoints_global` / `iter_endpoints_for_system` / `has_system` / `count_endpoints_for_service` / `system_of_service` / `try_endpoint`(endpoint 系列),`iter_services_global` / `get_service` / `has_service` / `iter_services_for_system`(service 系列)。EndpointIndex / ServiceIndex / SystemIndex 三个 Index 类以及 routes_grammar.py 的 `_resolve_system` 全部改走公开 API,Registry 内部存储策略(`_index` / `_services` dict)再次被封装 |
 | **`/references` 端点** | ✅ **Phase β 已落地** | ADR 0002 §D-D2 决策为"留 Phase β",现已上线。`GET /api/{dim}/{id}/references` × 7 dim,17 个单测 + 7 dim E2E 全 PASS。Phase β 范围内提供 `systems` + dim 局部元数据(`service / module / tags / endpoint_count / kind` 等);**不**实现完整反向引用图(`scenarios_referenced_by` 始终为空),留给 Phase γ |
 | **API 合并决策(`dims["endpoint"]` vs `PlateRegistry.get_endpoint()`)** | 🟡 **保持并存(ADR 显式承认)** | Phase β 决策:**保留两套 API**,用注释明示过渡状态(`registry.list_endpoints` / `registry.get_endpoint` 上有 ADR 引用注释);统一合并留到 Phase γ(届时 `dims["endpoint"]` 已 production 路径且稳定,合并成本低) |
 | Config 脱敏边界 | ✅ 已确认 | 验证 `password` / `token` / `refresh_token` / `expires_at` 不会经 `ConfigView.from_spec` 漏出 |
@@ -910,7 +910,7 @@ from gimbal_plate.registry import (
 | OpenAPI snapshot | 🟡 待定 | 一期无自动 baseline;Phase γ 加入 `tests/openapi/*.json` 锁定 |
 | DimSpec 协议类型化 | 🟡 待定 | 现为 `Any` 规避导入循环;Phase γ 抽出 `Protocol` 替代 |
 | Auth layer(Q3) | ❌ 一期不做 | 所有端点目前裸奔;Phase γ 接入 Bearer/JWT |
-| Producer 机制(ADR §D-D4) | 🟡 待迁移 | 当前在 lifespan 里种 4 个 seed;Phase γ 迁到 `gimbal_plate/systems/<sys>/__init__.py` |
+| Producer 机制(ADR §D-D4) | ✅ **Phase β 已落地(提前)** | 共享入口 `gimbal_plate.systems.fin.dimensions.register_fin_dims()` 同时被 `app._lifespan` 和 `tests/plate/conftest.py:fresh_registry` 调用;`test_http_failed_resolved.py` / `test_http_field_defaults.py` 也已迁移。生产 / 测试双路径不再各自维护 dim 注册代码,drift 不可能再发生。ADR §D-D4 原计划 Phase γ 才迁到 `systems/<sys>/__init__.py`,但 lifespan 入口已足够干净 — 留 Phase γ 把入口下沉到 `__init__.py` 即可,接口形状不再变 |
 | 错误码 i18n | ❌ 不做 | `message` 统一英文,内部消费 |
 
 ---
