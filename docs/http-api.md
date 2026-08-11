@@ -668,6 +668,77 @@ GET /api/scenario/sc-fin-default/full HTTP/1.1
 }
 ```
 
+#### `POST /api/scenario/action/convert` — 结构转换(dim-node action)
+
+调用方传入一份 Scenario dict(平台组装的完整数据)和服务端目前已注册的 consumer 名(`gimbal` / `platform`),服务端先做 `Scenario.model_validate` 校验,再交给 `gimbal_plate.export.dispatch()` 路由到对应 exporter(GimbalScenarioExporter / PlatformScenarioExporter),把中性 Scenario 翻译成目标 consumer 期望的 dict。这条端点把 `export/` 模块已实现但 HTTP 层未暴露的转换能力挂到了 M6 grammar 上。
+
+**为什么是 dim-node action(无 `{id}`)?** 转换操作的目标是**调用方传入的整份 Scenario**,不是 plate registry 里已注册的某条 scenario 记录 —— 跟 `system.action.from-service` 是同一类(对"调用方传入的入参"做转换 / 解析)。
+
+**复用而非重写**:handler 直接调 `export.dispatch()`,不重新实现任何转换逻辑。任何在 `export/` 下加的 consumer(新增 `ConsumerRequest` + exporter 实现 + 在 `_REQUEST_REGISTRY` 注册一行)自动通过这个 HTTP 端点对外可用 —— 零 HTTP 层修改。
+
+请求体:
+
+```json
+{
+  "consumer": "gimbal",
+  "scenario": { ...平台组装的 Scenario dict... },
+  "endpoints": [...],     // 可选,仅 platform consumer 使用
+  "sections": [...]       // 可选,仅 platform consumer 使用(Literal 校验)
+}
+```
+
+- `scenario` 缺失 → **400** `invalid_action`
+- `Scenario.model_validate` 失败(字段缺失 / 类型不对)→ **400** `invalid_action`,错误信息包含 pydantic 校验详情;**关键**:不让非法结构进入 dispatch
+- `consumer` 未注册 → **400** `invalid_action`,错误信息会列出 `available_consumers()`
+- consumer 不接受的 kwargs(如给 `gimbal` 传 `endpoints`) → **400** `invalid_action`(consumer request model 的 `extra="forbid"` 拦截)
+
+`consumer` 缺省时默认为 `"gimbal"`。
+
+请求示例(gimbal):
+
+```http
+POST /api/scenario/action/convert HTTP/1.1
+Content-Type: application/json
+
+{
+  "consumer": "gimbal",
+  "scenario": { ...完整 Scenario... }
+}
+```
+
+响应:
+
+```json
+{
+  "ok": true,
+  "dim": "scenario",
+  "data": {
+    "consumer": "gimbal",
+    "converted": {
+      "kind": "scenario",
+      "scenarioId": "...",
+      ...
+    }
+  }
+}
+```
+
+请求示例(platform,带 sections 切片):
+
+```http
+POST /api/scenario/action/convert HTTP/1.1
+Content-Type: application/json
+
+{
+  "consumer": "platform",
+  "scenario": { ... },
+  "endpoints": [...],
+  "sections": ["endpoints"]
+}
+```
+
+响应 `converted` 字段会包含 `endpoints` / `navigation` / `config_summary` 等 platform 视图字段(由 `PlatformScenarioExporter.render()` 输出)。
+
 ---
 
 ## 4. Python 注册 API
@@ -900,6 +971,7 @@ from gimbal_plate.registry import (
 | system-scoped `/{id}` 配置 / resource / scenario 系统校验 | ✅ 已修复 | 之前 `getattr(it, "id") or it.get("id")` 在 Pydantic 模型上抛 `AttributeError`(config / resource / scenario 缺少 `.id` 属性);现统一通过 `_item_belongs_to_system(spec, item, id, system)` 处理 |
 | **N2:handler 私有字段访问债务** | ✅ **Phase β 已闭合** | endpoint 维度 11 个 + service 维度 3 个私有属性访问全部消除,合计 ~14 个访问点。`PlateRegistry` 新增 10 个公开方法:`iter_endpoints_global` / `iter_endpoints_for_system` / `has_system` / `count_endpoints_for_service` / `system_of_service` / `try_endpoint`(endpoint 系列),`iter_services_global` / `get_service` / `has_service` / `iter_services_for_system`(service 系列)。EndpointIndex / ServiceIndex / SystemIndex 三个 Index 类以及 routes_grammar.py 的 `_resolve_system` 全部改走公开 API,Registry 内部存储策略(`_index` / `_services` dict)再次被封装 |
 | **`/references` 端点** | ✅ **Phase β 已落地** | ADR 0002 §D-D2 决策为"留 Phase β",现已上线。`GET /api/{dim}/{id}/references` × 7 dim,17 个单测 + 7 dim E2E 全 PASS。Phase β 范围内提供 `systems` + dim 局部元数据(`service / module / tags / endpoint_count / kind` 等);**不**实现完整反向引用图(`scenarios_referenced_by` 始终为空),留给 Phase γ |
+| **`POST /api/scenario/action/convert` 结构转换端点** | ✅ **Phase β 已落地** | 把 `export/` 模块已实现的 `dispatch(consumer, scenario, **kwargs)` 声明式入口挂到 M6 grammar。dim-node action(无 `{id}`,调用方传整份 Scenario);handler 内部先 `Scenario.model_validate`(拦截非法结构 → 400)再 `export.dispatch()`(复用现成 GimbalScenarioExporter / PlatformScenarioExporter,零重写)。`available_consumers` 现在是 `['gimbal', 'platform']`;后续新增 consumer 只需在 `export/` 下加 `ConsumerRequest` + exporter + 在 `_REQUEST_REGISTRY` 挂一行,HTTP 层零修改自动可用。15 个单测覆盖正常路径 + 4 类 400(缺 scenario / schema 校验失败 / 未知 consumer / kwargs 越界) |
 | **API 合并决策(`dims["endpoint"]` vs `PlateRegistry.get_endpoint()`)** | 🟡 **保持并存(ADR 显式承认)** | Phase β 决策:**保留两套 API**,用注释明示过渡状态(`registry.list_endpoints` / `registry.get_endpoint` 上有 ADR 引用注释);统一合并留到 Phase γ(届时 `dims["endpoint"]` 已 production 路径且稳定,合并成本低) |
 | Config 脱敏边界 | ✅ 已确认 | 验证 `password` / `token` / `refresh_token` / `expires_at` 不会经 `ConfigView.from_spec` 漏出 |
 | Resource 脱敏边界 | ✅ 已确认 | `image` / `config` / `portMapping` 被丢弃 |

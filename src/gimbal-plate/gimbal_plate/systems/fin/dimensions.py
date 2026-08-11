@@ -33,6 +33,7 @@ from gimbal_plate.http.routes_grammar import (
     action_endpoint_field_defaults,
     action_endpoint_find,
     action_endpoint_resolve_paths,
+    action_scenario_convert,
     action_system_from_service,
     action_system_register,
     action_system_sync,
@@ -155,7 +156,12 @@ def register_fin_dims(reg: PlateRegistry) -> None:
             index=scen_idx,
             view_factory=ScenarioView.minimal,
             full_view_factory=ScenarioDetailView.from_scenario,
-            actions={},
+            actions={
+                # 结构转换 —— 把调用方传入的 Scenario dict 通过
+                # export.dispatch() 转成不同 consumer 需要的 dict。
+                # 路由自动是 POST /api/scenario/action/convert。
+                "convert": action_scenario_convert,
+            },
         ),
     )
 

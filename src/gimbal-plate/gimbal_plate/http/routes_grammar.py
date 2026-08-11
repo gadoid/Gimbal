@@ -23,13 +23,16 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Query, Request
+from pydantic import ValidationError
 
+from gimbal_plate import export
 from gimbal_plate.http.envelope import (
     ErrorCode,
     PlateHTTPError,
     ok_response,
 )
 from gimbal_plate.registry import PlateRegistry
+from gimbal_plate.schema.scenario import Scenario
 from gimbal_plate.service.field_defaults import compute_field_defaults
 from gimbal_plate.service.failed_resolver import resolve_failed_criteria
 from gimbal_plate.service.paths_resolver import resolve_paths
@@ -61,6 +64,21 @@ def _resolve_system(reg: PlateRegistry, system: str) -> None:
             code=ErrorCode.SYSTEM_NOT_FOUND,
             message=f"system '{system}' has no registered endpoints",
         )
+
+
+def _pass_through_kwargs(body: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
+    """Return a subset of ``body`` containing only the keys explicitly present.
+
+    Why not ``{k: body.get(k) for k in keys}``?
+        Some consumer request models use ``extra="forbid"`` and reject keys
+        whose value is ``None`` (e.g. ``GimbalConsumerRequest`` forbids
+        ``endpoints=None`` even though the field is absent by default).
+        ``body.get(k)`` returns ``None`` for missing keys, which would then
+        be forwarded to the consumer model and trip validation. Using
+        ``k in body`` keeps the contract: "the caller explicitly sent this
+        field, so we forward it as-is".
+    """
+    return {k: body[k] for k in keys if k in body}
 
 
 # ── Handlers — system-scoped first (registration order matters) ──
@@ -777,6 +795,80 @@ def action_system_sync(
     )
 
 
+def action_scenario_convert(
+    *, item: Any, body: Any, index: Any, request: Any
+) -> dict[str, Any]:
+    """结构转换 —— 把调用方传入的 Scenario dict 转换为目标 consumer 的 dict。
+
+    这是一个 dim-node action(不针对已注册的 scenario id),挂载在 ``scenario``
+    dim 下面。**复用** ``gimbal_plate.export.dispatch`` 现有的声明式 dispatch
+    入口,不再重新实现任何转换逻辑。
+
+    Body (dict):
+        ``{"consumer": "gimbal" | "platform", "scenario": {...平台组装的
+        Scenario dict...}, "endpoints": [...]?, "sections": [...]?}``
+
+    - 缺失 ``scenario`` 字段 → 400 ``invalid_action``
+    - ``Scenario.model_validate`` 失败 → 400 ``invalid_action``
+    - ``consumer`` 未注册 → 400 ``invalid_action``(export.dispatch 抛
+      ``ValueError``,错误信息会列出可用 consumer)
+    - 未知 ``**kwargs``(如 ``endpoints`` 给 gimbal 用)→ 400
+      ``invalid_action``(consumer request model 的 ``extra="forbid"`` 校验)
+
+    Returns
+    -------
+    dict
+        ``{"consumer": <str>, "converted": <dict>}`` —— 由 envelope 层包
+        上标准 ``ok`` 信封。
+    """
+    _ = item, index, request  # dim-node action -- no item id involved
+    body = body or {}
+
+    # Step 1: validate the incoming dict and coerce it to the neutral Scenario
+    # model. A failure here (missing field / wrong type) is a 400; we never
+    # let an invalid structure reach export.dispatch(). Scenario-level
+    # model_validators (id consistency, etc.) also kick in naturally here.
+    raw_scenario = body.get("scenario")
+    if raw_scenario is None:
+        raise PlateHTTPError(
+            http_status=400,
+            code=ErrorCode.INVALID_ACTION,
+            message="'convert' action requires body.scenario",
+        )
+    try:
+        scenario = Scenario.model_validate(raw_scenario)
+    except ValidationError as exc:
+        raise PlateHTTPError(
+            http_status=400,
+            code=ErrorCode.INVALID_ACTION,
+            message=f"scenario payload failed validation: {exc}",
+        ) from exc
+
+    # Step 2: dispatch via export.dispatch(), forwarding only the consumer-
+    # specific kwargs the caller actually sent (see _pass_through_kwargs).
+    consumer = body.get("consumer", "gimbal")
+    extra_kwargs = _pass_through_kwargs(body, ("endpoints", "sections"))
+    try:
+        result = export.dispatch(consumer, scenario, **extra_kwargs)
+    except ValueError as exc:  # unknown consumer
+        raise PlateHTTPError(
+            http_status=400,
+            code=ErrorCode.INVALID_ACTION,
+            message=str(exc),
+        ) from exc
+    except ValidationError as exc:  # bad kwargs for the consumer (e.g. unknown section)
+        raise PlateHTTPError(
+            http_status=400,
+            code=ErrorCode.INVALID_ACTION,
+            message=f"convert kwargs failed validation for consumer {consumer!r}: {exc}",
+        ) from exc
+
+    return ok_response(
+        {"consumer": consumer, "converted": result},
+        dim="scenario",
+    )
+
+
 # Public exports.
 __all__ = [
     "router",
@@ -787,4 +879,5 @@ __all__ = [
     "action_system_from_service",
     "action_system_register",
     "action_system_sync",
+    "action_scenario_convert",
 ]
