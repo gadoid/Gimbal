@@ -254,6 +254,24 @@ async def test_run_dispatch_calls_convert_per_row(
         await asyncio.sleep(0.05)
     assert len(plate_mock.convert_calls) == 3
 
+    # Regression guard: the per-row payload handed to plate /convert is the
+    # UNWRAPPED definition — never the container. orchestration / caseMeta
+    # are platform-only and must not leak; plate-required fields survive.
+    # (Covers run_dispatcher._compose_scenario's container unwrap, which the
+    # call-count assertion above does not.)
+    # convert_calls[i] is the full wire envelope plate_client posts:
+    #   {"consumer": "gimbal", "scenario": <composed dict>}
+    scenario_payload = plate_mock.convert_calls[0]["scenario"]
+    assert "orchestration" not in scenario_payload
+    assert "caseMeta" not in scenario_payload
+    assert scenario_payload["kind"] == "scenario"
+    assert scenario_payload["scenarioId"] == "sc-test"
+    assert scenario_payload["meta"]["name"] == "Test"
+    # the row's vars are layered into config.vars, and the scenario-level
+    # config is preserved through the unwrap
+    assert scenario_payload["config"]["timePolicy"] == {"kind": "record"}
+    assert scenario_payload["config"]["vars"]["qty"] == 0  # first row {qty: 0}
+
 
 async def test_run_dispatch_records_failure_when_plate_down(
     client: AsyncClient, plate_mock: PlateMock

@@ -1,9 +1,11 @@
 """SQLAlchemy model for the V3 Scenario Composer Scenario row.
 
 A Scenario is the "structural definition layer" — 1:1 with a Case, which
-in turn owns 1:N DataSets.  The full ``steps[]`` lives in a JSON column
-because the per-step shape (ScenarioStep) is heterogeneous and we never
-query into individual step fields from SQL.
+in turn owns 1:N DataSets.  ``payload`` carries the full draft container
+``{definition, orchestration, caseMeta}``; ``definition`` is the plate
+Scenario structure (steps included) and lives in a JSON column because
+the per-step shape is heterogeneous and we never query into individual
+step fields from SQL.
 
 The legacy ``Case`` model in ``app/models/case.py`` (Spec-1 file-backed
 cases) is unrelated; the V3 scenario composer lives in its own table
@@ -38,8 +40,8 @@ class ComposerScenario(Base):
     system: Mapped[list] = mapped_column(JSON, default=list)
     version: Mapped[str] = mapped_column(String(32), default="v0.1.0")
     expire: Mapped[bool] = mapped_column(default=False)
-    # Full draft: {meta, steps, caseMeta?} — kept so we can rebuild the
-    # response without losing anything the user typed.
+    # Full draft container: {definition, orchestration, caseMeta} — kept
+    # so we can rebuild the response without losing anything the user typed.
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     # Step count is denormalized for fast list-side rendering.
     step_count: Mapped[int] = mapped_column(Integer, default=0)
