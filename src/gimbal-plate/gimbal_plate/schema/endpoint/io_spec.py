@@ -25,7 +25,13 @@ class IOFieldBinding(BaseModel):
         "textarea", "json", "file", "binary", "unknown",
     ] = "unknown"
 
-    source_kind: Literal["independent", "lookup", "generated"] = "independent"
+    # 字段来源语义，决定平台前端的渲染方式与默认值推导：
+    # - independent: 独立字面量，用户在表单直接填（默认）
+    # - lookup:      静态引用，如 ${var.xxx} / ${env.xxx}，表单只读展示
+    # - generated:   运行时动态生成（如 Assign 时间戳），表单提示"由策略产出"
+    # - hidden:      schema 中存在但不在表单展示（PRD §5.4 Type C），
+    #                运行时按 default/example 透传，前端将其排除出可见字段集
+    source_kind: Literal["independent", "lookup", "generated", "hidden"] = "independent"
 
     @model_validator(mode="after")
     def _validate(self) -> "IOFieldBinding":

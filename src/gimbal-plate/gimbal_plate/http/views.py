@@ -16,7 +16,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from gimbal_plate.schema.endpoint.api_spec import ApiSpec
 from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
+from gimbal_plate.schema.endpoint.io_spec import RequestSpec, ResponseSpec
+from gimbal_plate.schema.endpoint.metadata import EndpointMetadata
 from gimbal_plate.schema.resource import ResourceUnion
 from gimbal_plate.schema.scenario import Config, Meta, Scenario
 from gimbal_plate.schema.service_definition import ServiceDefinition
@@ -174,12 +177,26 @@ class EndpointView(BaseModel):
 
 
 class EndpointDetailView(BaseModel):
-    """Full :class:`EndpointSpec` contract as JSON-serialisable dict.
+    """Full :class:`EndpointSpec` contract as a *strict* view.
 
-    Re-uses Pydantic's ``model_dump`` for full-fidelity output (the spec is
-    already serialisation-safe). Exposes ``api`` / ``request`` / ``responses``
-    / ``metadata`` — including every :class:`IOFieldBinding` (name / path /
-    required / ui_kind / source_kind / example / assertable).
+    This view is the rendering contract consumed by the platform frontend
+    (via ``GET /api/endpoint/{id}/full``). It is therefore a **complete,
+    explicit** mirror of :class:`EndpointSpec` — not a loose ``model_dump``
+    pass-through:
+
+    - Every field is declared with its real schema type (``ApiSpec`` /
+      ``EndpointMetadata`` / ``RequestSpec`` / ``ResponseSpec``), reusing the
+      source definitions which are themselves ``extra="forbid"``.
+    - ``extra="forbid"`` on this view means: if ``EndpointSpec`` grows a new
+      field and this view is not updated in lock-step, plate fails loudly
+      (here / in tests) rather than letting the frontend silently miss a
+      field. Adding a field is a contract change that *must* touch both the
+      definition side and the platform side — by design.
+
+    Output shape on the wire is unchanged from the previous pass-through:
+    ``request`` / ``responses`` still serialise their ``@model_serializer``
+    keys (``model_schema`` / ``schema`` …) because those are produced by the
+    source types' own serializers, not by this view.
 
     Light :class:`EndpointView` returns only id / method / path /
     description / module / tags. The ``/full`` endpoint surfaces the full
@@ -187,23 +204,39 @@ class EndpointDetailView(BaseModel):
     need the IOFieldBinding metadata.
     """
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     id: str
     system: str
     service: str
     name: str
     description: str = ""
-    api: dict[str, Any]
-    request: dict[str, Any] | None = None
-    responses: dict[str, Any] = Field(default_factory=dict)
-    metadata: dict[str, Any]
+    api: ApiSpec
+    request: RequestSpec | None = None
+    responses: dict[int, ResponseSpec] = Field(default_factory=dict)
+    metadata: EndpointMetadata
     version: str = "1.0.0"
     updated_at: datetime | None = None
 
     @classmethod
     def from_spec(cls, ep: EndpointSpec) -> "EndpointDetailView":
-        return cls.model_validate(ep.model_dump(mode="json", exclude_none=True))
+        # No model_dump round-trip: the view now mirrors EndpointSpec field
+        # for field, so the source instance is handed over directly. The
+        # field types (ApiSpec / RequestSpec / …) are *the same* objects,
+        # which is what guarantees the wire shape stays identical.
+        return cls(
+            id=ep.id,
+            system=ep.system,
+            service=ep.service,
+            name=ep.name,
+            description=ep.description,
+            api=ep.api,
+            request=ep.request,
+            responses=ep.responses,
+            metadata=ep.metadata,
+            version=ep.version,
+            updated_at=ep.updated_at,
+        )
 
 
 # ── ConfigView (with redaction) ────────────────────────────────────
