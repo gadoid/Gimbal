@@ -254,24 +254,15 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getFullEndpoint } from '@/api/scenario-composer'
+import type { EndpointFullView } from '@/types/plate'
 
 const props = defineProps<{ nextStepIdx?: number; adding?: boolean }>()
 const emit = defineEmits<{ back: []; add: [any] }>()
 
-interface Endpoint {
-  id: string; system: string; service: string; name: string; description: string
-  api: { method: string; path: string; headers?: Record<string, string> }
-  request?: { fields: Array<{ name: string; path: string; required: boolean; ui_kind: string; description: string; example: any }>; body_type?: string }
-  responses?: Record<string, { fields: any[]; assertable_fields: string[] }>
-  metadata?: {
-    module: string; tags: string[]
-    preconditions?: string[]
-    success_criteria?: string
-    failed_criteria?: string[]
-    business_notes?: string
-  }
-  version: string
-}
+// 列表项与详情项都是 plate endpoint dict 的前端表述(真源 @/types/plate)。
+// 列表视图(Plate /api/endpoint)裁剪过部分字段,故用 Partial 表达"可能不完整的
+// 完整结构";详情视图(/full)是完整的 EndpointFullView。两者共用同一组字段名,
+// template 的可选链(selected.api?.method …)天然兼容二者。
 
 const SYS_ORDER = ['common', 'fin', 'logi', 'wms', 'mall']
 const SYS_LABELS: Record<string, string> = {
@@ -279,7 +270,7 @@ const SYS_LABELS: Record<string, string> = {
 }
 function systemLabel(s: string) { return SYS_LABELS[s] || s }
 
-const all = ref<Endpoint[]>([])
+const all = ref<Partial<EndpointFullView>[]>([])
 const loading = ref(false)
 const filterSystem = ref<string | null>(null)
 const filterService = ref<string | null>(null)
@@ -383,9 +374,9 @@ function selectService(s: string, svc: string) {
 }
 
 // ── 选中时拉 full 定义(列表不带 request.fields / responses / metadata) ──
-const selectedFull = ref<any>(null)
+const selectedFull = ref<EndpointFullView | null>(null)
 const detailLoading = ref(false)
-async function selectEndpoint(ep: Endpoint) {
+async function selectEndpoint(ep: Partial<EndpointFullView>) {
   selectedId.value = ep.id
   selectedFull.value = null
   detailLoading.value = true

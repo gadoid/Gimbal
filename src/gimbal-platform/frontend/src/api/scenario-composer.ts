@@ -9,6 +9,7 @@ import type {
   Scenario, Case, DataSet, DataSetSummary,
   ScenarioDraft, DataSetDraft, RunEnv,
 } from '@/types/scenario-composer'
+import type { EndpointFullView } from '@/types/plate'
 
 // ── scenarios ────────────────────────────────────────────────
 export async function listScenarios(params: {
@@ -145,57 +146,12 @@ export async function previewPlateDraft(draft: ScenarioDraft): Promise<PreviewPl
 }
 
 // ── endpoint catalog (proxy → Plate /api/endpoint/{id}/full) ────────
-export interface IOFieldBinding {
-  name: string
-  path: string
-  required: boolean
-  default: any
-  example: any
-  description: string
-  enum: any[] | null
-  ui_kind: 'text' | 'number' | 'boolean' | 'select' | 'textarea' | 'json' | 'file' | 'binary' | 'unknown'
-  source_kind: 'independent' | 'lookup' | 'generated'
-}
+//
+// 端点契约类型(EndpointFullView / IOFieldBinding / ...)已收敛到 @/types/plate,
+// 它是 plate 对外契约的前端完整结构表述;本文件不再重复声明。
+// 详见 @/types/plate.ts 头注释。
 
-export interface EndpointFull {
-  id: string
-  system: string
-  service: string
-  name: string
-  description: string
-  api: {
-    service: string
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
-    path: string
-    headers: Record<string, string>
-    timeout_seconds: number
-    auth: string
-    produces: string[]
-    consumes: string[]
-  }
-  request: {
-    body_type: 'none' | 'json' | 'form' | 'multipart' | 'raw' | 'binary'
-    fields: IOFieldBinding[]
-  }
-  responses: Record<string, {
-    status: number
-    description: string
-    fields: IOFieldBinding[]
-    assertable_fields: string[]
-  }>
-  metadata: {
-    module: string
-    tags: string[]
-    owner: string
-    preconditions: string[]
-    success_criteria: string
-    failed_criteria: string[]
-    business_notes: string
-  }
-  version: string
-}
-
-export async function getFullEndpoint(endpointId: string): Promise<EndpointFull> {
-  const { data } = await http.get<EndpointFull>(`/endpoint-catalog/${encodeURIComponent(endpointId)}/full`)
+export async function getFullEndpoint(endpointId: string): Promise<EndpointFullView> {
+  const { data } = await http.get<EndpointFullView>(`/endpoint-catalog/${encodeURIComponent(endpointId)}/full`)
   return data
 }

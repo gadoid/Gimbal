@@ -108,7 +108,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { IOFieldBinding } from '@/api/scenario-composer'
+import type { IOFieldBinding } from '@/types/plate'
 import { getByPath, setByPath } from '@/utils/jsonpath'
 
 const props = defineProps<{

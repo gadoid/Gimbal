@@ -227,7 +227,7 @@ import CaseComposerCatalog from './CaseComposerCatalog.vue'
 import FieldForm from './FieldForm.vue'
 import { getFullEndpoint } from '@/api/scenario-composer'
 import { deepDefaults } from '@/utils/jsonpath'
-import type { ScenarioStep, IOFieldBinding } from '@/types/scenario-composer'
+import type { ScenarioStep } from '@/types/scenario-composer'
 
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 
