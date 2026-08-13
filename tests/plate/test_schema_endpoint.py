@@ -103,12 +103,11 @@ class TestIOSpec:
         assert f.source_kind == "independent"
 
     def test_io_field_binding_source_kind_enum_values(self) -> None:
-        # 测试点:四个合法取值(independent / lookup / generated / hidden)都被接受。
-        # 文档依据:V1 §4.3 IOFieldBinding.source_kind Literal。
+        # 测试点:三个合法取值(independent / lookup / generated)都被接受。
+        # 文档依据:FIELD-UI-MAPPING.md §source_kind（与 PRD §5.4 三类型正交）。
         IOFieldBinding(name="a", path="a", source_kind="independent")
         IOFieldBinding(name="b", path="b", source_kind="lookup")
         IOFieldBinding(name="c", path="c", source_kind="generated")
-        IOFieldBinding(name="d", path="d", source_kind="hidden")
 
     def test_io_field_binding_source_kind_invalid_rejected(self) -> None:
         # 测试点:不在 Literal 集合内的值必须拒。

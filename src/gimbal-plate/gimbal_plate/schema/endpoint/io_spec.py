@@ -25,13 +25,15 @@ class IOFieldBinding(BaseModel):
         "textarea", "json", "file", "binary", "unknown",
     ] = "unknown"
 
-    # 字段来源语义，决定平台前端的渲染方式与默认值推导：
-    # - independent: 独立字面量，用户在表单直接填（默认）
-    # - lookup:      静态引用，如 ${var.xxx} / ${env.xxx}，表单只读展示
-    # - generated:   运行时动态生成（如 Assign 时间戳），表单提示"由策略产出"
-    # - hidden:      schema 中存在但不在表单展示（PRD §5.4 Type C），
-    #                运行时按 default/example 透传，前端将其排除出可见字段集
-    source_kind: Literal["independent", "lookup", "generated", "hidden"] = "independent"
+    # 字段来源语义（provenance），回答"这个值从哪来"，决定平台前端的渲染方式
+    # 与默认值推导。注意：这是值来源维度，与"是否在表单展示"是正交的两个维度——
+    # 没有 IOFieldBinding 的 schema-only 字段（PRD §5.4 Type C）压根不会出现在
+    # fields[] 里，因此碰不到 source_kind；它们的"隐藏"属于平台侧渲染模型，
+    # 不应混入来源语义。详见 FIELD-UI-MAPPING.md / PRD §5.4。
+    # - independent: 独立字面量，与上下文无关联，用户在表单直接填（默认）
+    # - lookup:      可经接口/变量查询得到，如 ${var.xxx} / ${env.xxx}，表单只读展示
+    # - generated:   运行时基于其他接口处理结果动态生成（如 Assign 时间戳），表单提示"由策略产出"
+    source_kind: Literal["independent", "lookup", "generated"] = "independent"
 
     @model_validator(mode="after")
     def _validate(self) -> "IOFieldBinding":
