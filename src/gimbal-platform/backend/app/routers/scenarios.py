@@ -21,6 +21,7 @@ from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
@@ -72,14 +73,7 @@ def _require_owner(user: CurrentUser, row: ComposerScenario) -> None:
 def _draft_to_full_scenario_dict(
     draft: ScenarioDraft, owner: str
 ) -> dict:
-    """Compose the Platform view of a Scenario dict for Plate.
-
-    Mirrors docs/PLATFORM-SCENARIO-COMPOSER-API.md §4.7 step 1.  The
-    frontend only fills ``meta`` + ``steps`` + an optional ``caseMeta``;
-    we synthesise ``config`` and ``resource`` so Plate's
-    ``Scenario.model_validate`` accepts the dict.  ``caseMeta.env``
-    becomes a placeholder in ``config.services['__env__']`` so the
-    frontend can run the preview without having to author services.
+    """Translate Platform ``ScenarioDraft`` → Plate /convert input dict.
 
     Platform 与 Plate 的 schema 翻译 (这是 V3 平台 → 板桥的边界):
 
@@ -90,6 +84,7 @@ def _draft_to_full_scenario_dict(
     * ``Meta.createTime``: 平台可空 → Plate 必填,缺省填 ``utcnow()``
     * ``Meta.requirementRef``: 平台无 → Plate 必填 ``list``,默认 ``[]``
     """
+    payload = draft.model_dump(by_alias=True, mode="json")
     payload = draft.model_dump(by_alias=True, mode="json")
     cfg = payload.setdefault("config", {})
     if not isinstance(cfg, dict):
@@ -266,9 +261,13 @@ async def get_scenario_draft(
     try:
         return ScenarioDraft.model_validate(payload)
     except Exception as e:  # noqa: BLE001
+        # 内部错误信息只记到日志,对外只暴露最小可读描述
+        logger.exception(
+            "get_scenario_draft: scenario_id=%s payload corrupted", scenario_id,
+        )
         raise HTTPException(
             status_code=500,
-            detail=f"draft_corrupt: {type(e).__name__}: {e}",
+            detail="draft_corrupt: 存储的 ScenarioDraft 与 schema 不一致",
         )
 
 

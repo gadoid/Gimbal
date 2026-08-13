@@ -1,6 +1,7 @@
 <!--
-  CaseComposerCatalog.vue — 嵌入式接口目录
+  CaseComposerCatalog.vue — 嵌入式接口目录 (合并了原 Detail 页)
   严格按原型图 content.png 渲染:filter row + 左侧系统树 + 右侧 endpoint 详情
+  单击 "+ 加入编排画布" 直接落盘,不再有中间页。
   修复: 过滤 ACTUALLY 过滤 (之前 filtered 计算属性定义了但模板没用)
   修复: 过滤参数也传到 Plate 后端 (?service=&tag=)
   修复: 过滤结果数实时显示
@@ -100,49 +101,136 @@
         </div>
       </aside>
 
-      <!-- 右侧:endpoint 详情 -->
+      <!-- 右侧:endpoint 详情 (原 Detail 页内容合入) -->
       <main class="endpoint-detail">
-        <div v-if="selected" class="detail-card">
-          <div class="detail-header">
-            <div>
-              <div class="detail-path">
-                <span :class="`sys-dot s-${selected.system}`">●</span>
-                <span>{{ selected.system }} / {{ selected.service }} / {{ selected.name }}</span>
-                <span class="version">契约 v{{ selected.version }}</span>
+        <div v-if="detailLoading && !selectedFull" class="empty-card">
+          <el-icon class="is-loading"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg></el-icon>
+          <p class="muted">加载接口详情...</p>
+        </div>
+        <div v-else-if="selected" class="detail-card">
+          <!-- Hero -->
+          <div class="hero">
+            <div class="title-row">
+              <span class="hero-method-badge" :class="`m-${(selected.api?.method || 'get').toLowerCase()}`">{{ selected.api?.method }}</span>
+              <h2>{{ selected.name }}</h2>
+            </div>
+            <div class="path-line">
+              <code class="sys-tag">{{ selected.system }}</code>
+              <span class="path-sep">/</span>
+              <code class="svc-tag">{{ selected.service }}</code>
+              <code class="path">{{ selected.api?.path }}</code>
+              <span class="muted">v{{ selected.version }}</span>
+            </div>
+            <p v-if="selected.description" class="desc">{{ selected.description }}</p>
+            <div v-if="selected.metadata" class="meta">
+              <el-tag v-for="t in selected.metadata.tags || []" :key="t" size="small" type="info">{{ t }}</el-tag>
+              <span v-if="selected.metadata.module" class="muted">module: {{ selected.metadata.module }}</span>
+            </div>
+          </div>
+
+          <!-- 4 色业务卡 (合并自 Detail) -->
+          <div v-if="hasBusiness" class="biz-grid">
+            <div v-if="selected.metadata?.preconditions?.length" class="biz-card c-blue">
+              <div class="biz-head">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>前置条件</span>
+              </div>
+              <ul><li v-for="p in selected.metadata.preconditions" :key="p">{{ p }}</li></ul>
+            </div>
+            <div v-if="selected.metadata?.success_criteria" class="biz-card c-green">
+              <div class="biz-head">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>成功标准</span>
+              </div>
+              <p>{{ selected.metadata.success_criteria }}</p>
+            </div>
+            <div v-if="selected.metadata?.failed_criteria?.length" class="biz-card c-red">
+              <div class="biz-head">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                <span>失败参考</span>
+              </div>
+              <ul>
+                <li v-for="f in selected.metadata.failed_criteria" :key="f">{{ f }}</li>
+              </ul>
+            </div>
+            <div v-if="selected.metadata?.business_notes" class="biz-card c-purple">
+              <div class="biz-head">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <span>业务备注</span>
+              </div>
+              <p>{{ truncateNotes(selected.metadata.business_notes) }}</p>
+            </div>
+          </div>
+
+          <!-- Summary stats -->
+          <div class="summary">
+            <div class="summary-grid">
+              <div class="summary-cell">
+                <span class="cell-num">{{ selected.request?.fields?.length || 0 }}</span>
+                <span class="cell-lbl">请求字段</span>
+              </div>
+              <div class="summary-cell">
+                <span class="cell-num">{{ primaryResponse?.assertable_fields?.length || 0 }}</span>
+                <span class="cell-lbl">响应可断言字段</span>
+              </div>
+              <div class="summary-cell">
+                <span class="cell-num">{{ selected.request?.body_type || 'json' }}</span>
+                <span class="cell-lbl">请求体类型</span>
+              </div>
+              <div class="summary-cell">
+                <span class="cell-num">{{ selected.metadata?.failed_criteria?.length || 0 }}</span>
+                <span class="cell-lbl">失败参考</span>
               </div>
             </div>
-            <el-button type="primary" @click="$emit('select', selected)">+ 加入编排画布</el-button>
           </div>
-          <div class="detail-method">
-            <span class="method-badge" :class="`m-${(selected.api?.method || 'get').toLowerCase()}`">{{ selected.api?.method }}</span>
-            <code class="path-text">{{ selected.api?.path }}</code>
-          </div>
-          <div v-if="selected.description" class="description">{{ selected.description }}</div>
-          <div v-if="selected.metadata" class="meta-row">
-            <el-tag v-for="t in selected.metadata.tags || []" :key="t" size="small" type="info">{{ t }}</el-tag>
-            <span v-if="selected.metadata.module" class="muted">module: {{ selected.metadata.module }}</span>
-          </div>
-          <div v-if="selected.request?.fields?.length" class="section">
-            <h4>请求字段 ({{ selected.request.fields.length }})</h4>
-            <table>
-              <thead>
-                <tr><th>name</th><th>path</th><th>required</th><th>ui_kind</th><th>description</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="f in selected.request.fields.slice(0, 25)" :key="f.path">
-                  <td><code>{{ f.name }}</code></td>
-                  <td><code>{{ f.path }}</code></td>
-                  <td>{{ f.required ? '✓' : '' }}</td>
-                  <td><span class="ui-tag" :class="`k-${f.ui_kind}`">{{ f.ui_kind }}</span></td>
-                  <td>{{ f.description }}</td>
-                </tr>
-              </tbody>
-            </table>
-            <p v-if="selected.request.fields.length > 25" class="more-hint">
-              还有 {{ selected.request.fields.length - 25 }} 个字段未显示
-            </p>
+
+          <!-- 字段表 (请求 + 响应) -->
+          <el-tabs class="tabs">
+            <el-tab-pane label="请求字段" v-if="selected.request?.fields?.length">
+              <el-table :data="selected.request.fields" stripe size="small">
+                <el-table-column prop="name" label="name" width="160" />
+                <el-table-column prop="path" label="path" width="200" />
+                <el-table-column label="required" width="80">
+                  <template #default="{ row }">
+                    <el-tag v-if="row.required" type="danger" size="small">required</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="ui_kind" label="ui" width="80" />
+                <el-table-column prop="description" label="description" />
+                <el-table-column label="example" width="160">
+                  <template #default="{ row }">
+                    <code v-if="row.example !== undefined">{{ JSON.stringify(row.example) }}</code>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </el-tab-pane>
+            <el-tab-pane label="响应字段" v-if="primaryResponse?.fields?.length">
+              <el-table :data="primaryResponse.fields" stripe size="small">
+                <el-table-column prop="name" label="name" width="160" />
+                <el-table-column prop="path" label="path" width="200" />
+                <el-table-column prop="description" label="description" />
+                <el-table-column label="assertable" width="100">
+                  <template #default="{ row }">
+                    <el-tag v-if="primaryResponse?.assertable_fields?.includes(row.path)" type="success" size="small">✓ assertable</el-tag>
+                    <el-tag v-else size="small" type="info">○ 未声明</el-tag>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </el-tab-pane>
+          </el-tabs>
+
+          <!-- 单击加入按钮: 直接落盘, 不再有中间页 -->
+          <div class="add-bar">
+            <el-button type="primary" size="large" :loading="adding" @click="$emit('add', selected)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              加入编排画布
+            </el-button>
+            <span class="add-hint">
+              直接落盘为 step #{{ nextStepIdx }} · 字段编辑器按 IOFieldBinding 渲染
+            </span>
           </div>
         </div>
+
         <div v-else-if="!filtered.length" class="empty-card">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
@@ -155,7 +243,7 @@
             <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
           </svg>
           <p class="empty-title">选一个接口查看详情</p>
-          <p class="muted">左侧选某接口, 右侧查看字段 + 加入编排</p>
+          <p class="muted">左侧选某接口, 右侧查看字段 + 直接加入编排</p>
         </div>
       </main>
     </div>
@@ -165,14 +253,23 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { getFullEndpoint } from '@/api/scenario-composer'
 
-const emit = defineEmits<{ back: []; select: [any] }>()
+const props = defineProps<{ nextStepIdx?: number; adding?: boolean }>()
+const emit = defineEmits<{ back: []; add: [any] }>()
 
 interface Endpoint {
   id: string; system: string; service: string; name: string; description: string
   api: { method: string; path: string; headers?: Record<string, string> }
-  request?: { fields: Array<{ name: string; path: string; required: boolean; ui_kind: string; description: string; example: any }> }
-  metadata?: { module: string; tags: string[] }
+  request?: { fields: Array<{ name: string; path: string; required: boolean; ui_kind: string; description: string; example: any }>; body_type?: string }
+  responses?: Record<string, { fields: any[]; assertable_fields: string[] }>
+  metadata?: {
+    module: string; tags: string[]
+    preconditions?: string[]
+    success_criteria?: string
+    failed_criteria?: string[]
+    business_notes?: string
+  }
   version: string
 }
 
@@ -244,7 +341,21 @@ const servicesForFilteredSystem = (sys: string) =>
 const endpointsForFilteredService = (sys: string, svc: string) =>
   filtered.value.filter(e => e.system === sys && e.service === svc)
 
-const selected = computed(() => all.value.find(e => e.id === selectedId.value) || null)
+const primaryResponse = computed(() => {
+  const r = selected.value?.responses?.[200] ||
+    selected.value?.responses?.[Object.keys(selected.value?.responses || {})[0]]
+  return r
+})
+
+const hasBusiness = computed(() => {
+  const m = selected.value?.metadata
+  return !!(m && (m.preconditions?.length || m.success_criteria || m.failed_criteria?.length || m.business_notes))
+})
+
+function truncateNotes(s: string): string {
+  if (!s) return ''
+  return s.length > 80 ? s.substring(0, 80) + '…' : s
+}
 
 function isSystemOpen(s: string) { return openSystems.value.includes(s) }
 function isServiceOpen(s: string, svc: string) { return openServices.value.includes(`${s}.${svc}`) }
@@ -258,6 +369,8 @@ function selectSystem(s: string) {
     openSystems.value = [...openSystems.value, s]
   }
   selectedId.value = null
+  selectedFull.value = null
+  detailLoading.value = false
 }
 function selectService(s: string, svc: string) {
   filterService.value = filterService.value === svc ? null : svc
@@ -268,7 +381,31 @@ function selectService(s: string, svc: string) {
     openServices.value = [...openServices.value, key]
   }
 }
-function selectEndpoint(ep: Endpoint) { selectedId.value = ep.id }
+
+// ── 选中时拉 full 定义(列表不带 request.fields / responses / metadata) ──
+const selectedFull = ref<any>(null)
+const detailLoading = ref(false)
+async function selectEndpoint(ep: Endpoint) {
+  selectedId.value = ep.id
+  selectedFull.value = null
+  detailLoading.value = true
+  try {
+    selectedFull.value = await getFullEndpoint(ep.id)
+  } catch (e) {
+    ElMessage.error('加载接口详情失败: ' + (e as Error).message)
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+// 详情区优先用 full 数据(有 fields / metadata / responses),否则回退到 list 数据
+const selected = computed(() => {
+  if (!selectedId.value) return null
+  if (selectedFull.value && selectedFull.value.id === selectedId.value) {
+    return selectedFull.value
+  }
+  return all.value.find(e => e.id === selectedId.value) || null
+})
 
 function clearSystem() { filterSystem.value = null; filterService.value = null; onFilterChanged() }
 function clearAllFilters() {
@@ -304,7 +441,8 @@ async function refetch() {
       const items = data?.data?.items || data?.items || (Array.isArray(data) ? data : [])
       all.value = items.map((e: any) => ({
         id: e.id, system: e.system, service: e.service, name: e.name,
-        description: e.description, api: e.api, request: e.request, metadata: e.metadata, version: e.version,
+        description: e.description, api: e.api, request: e.request,
+        responses: e.responses, metadata: e.metadata, version: e.version,
       }))
       // 默认展开第一个 system + 它所有的 services (避免用户多点 6 次)
       if (systemsInFiltered.value.length > 0 && openSystems.value.length === 0) {
@@ -393,41 +531,75 @@ onMounted(refetch)
 .link-btn { background: transparent; border: none; color: #4f46e5; cursor: pointer; font-size: 12px; }
 .link-btn:hover { text-decoration: underline; }
 
+/* ── Endpoint detail panel (合并了原 Detail 页) ── */
 .endpoint-detail { min-height: 500px; }
 .detail-card {
   background: #fff; border: 1px solid #e6e8ec; border-radius: 12px;
   padding: 18px 22px;
 }
-.detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #f1f5f9; }
-.detail-path { font-size: 13px; color: #1a1d24; display: flex; align-items: center; gap: 6px; }
-.detail-path .version { color: #94a3b8; font-size: 11px; }
-.detail-method {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 14px; background: #fafbfc; border-radius: 8px; margin-bottom: 12px;
-}
-.method-badge { display: inline-block; color: #fff; padding: 3px 12px; border-radius: 4px; font-size: 11px; font-weight: 700; }
-.method-badge.m-get { background: #1e40af; }
-.method-badge.m-post { background: #065f46; }
-.method-badge.m-put { background: #92400e; }
-.method-badge.m-delete { background: #991b1b; }
-.method-badge.m-patch { background: #6b21a8; }
-.path-text { font-family: var(--font-mono); font-size: 13px; color: #1a1d24; }
-.description { color: #5a6273; font-size: 12px; margin: 8px 0; line-height: 1.5; }
-.meta-row { display: flex; gap: 6px; align-items: center; margin: 6px 0 12px; flex-wrap: wrap; }
 
-.section { margin-top: 14px; }
-.section h4 { font-size: 12px; color: #5a6273; margin-bottom: 8px; }
-.section table { width: 100%; border-collapse: collapse; font-size: 11px; }
-.section th, .section td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #f1f5f9; }
-.section th { color: #94a3b8; font-weight: 500; }
-.section code { font-family: var(--font-mono); font-size: 10px; background: #f1f5f9; padding: 1px 4px; border-radius: 2px; }
-.ui-tag { font-size: 9px; font-weight: 700; text-transform: uppercase; padding: 1px 4px; border-radius: 3px; background: #eef2ff; color: #4f46e5; }
-.ui-tag.k-number { background: #fef3c7; color: #92400e; }
-.ui-tag.k-boolean { background: #d1fae5; color: #065f46; }
-.ui-tag.k-select { background: #f3e8ff; color: #6b21a8; }
-.ui-tag.k-textarea { background: #fce7f3; color: #9d174d; }
-.ui-tag.k-json { background: #1e1e2e; color: #a6e3a1; }
-.more-hint { color: #94a3b8; font-size: 11px; margin: 6px 0 0; }
+/* hero */
+.hero { padding-bottom: 14px; margin-bottom: 16px; border-bottom: 1px solid #f1f5f9; }
+.title-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.title-row h2 { margin: 0; font-size: 18px; }
+.hero-method-badge {
+  display: inline-block; color: #fff; padding: 3px 12px;
+  border-radius: 4px; font-size: 11px; font-weight: 700;
+}
+.hero-method-badge.m-get { background: #1e40af; }
+.hero-method-badge.m-post { background: #065f46; }
+.hero-method-badge.m-put { background: #92400e; }
+.hero-method-badge.m-delete { background: #991b1b; }
+.hero-method-badge.m-patch { background: #6b21a8; }
+.path-line { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 12px; flex-wrap: wrap; }
+.path-line code { background: #f1f5f9; padding: 2px 6px; border-radius: 3px; font-family: var(--font-mono); }
+.path-line .sys-tag { color: #475569; }
+.path-line .svc-tag { color: #475569; }
+.path-line .path { color: #4f46e5; font-weight: 600; }
+.path-sep { color: #cbd5e1; }
+.desc { color: #5a6273; font-size: 13px; margin: 8px 0; line-height: 1.5; }
+.meta { display: flex; gap: 6px; align-items: center; margin: 8px 0 0; flex-wrap: wrap; }
+
+/* 4 色业务卡 */
+.biz-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.biz-card { padding: 12px 14px; border-radius: 10px; }
+.biz-card.c-blue { background: #eff6ff; border: 1px solid #bfdbfe; }
+.biz-card.c-green { background: #f0fdf4; border: 1px solid #bbf7d0; }
+.biz-card.c-red { background: #fef2f2; border: 1px solid #fecaca; }
+.biz-card.c-purple { background: #faf5ff; border: 1px solid #e9d5ff; }
+.biz-head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 700; margin-bottom: 6px;
+}
+.biz-card.c-blue .biz-head { color: #1e40af; }
+.biz-card.c-green .biz-head { color: #065f46; }
+.biz-card.c-red .biz-head { color: #991b1b; }
+.biz-card.c-purple .biz-head { color: #6b21a8; }
+.biz-card ul { margin: 0; padding-left: 20px; }
+.biz-card li { font-size: 11px; padding: 2px 0; line-height: 1.4; }
+.biz-card p { margin: 0; font-size: 11px; line-height: 1.4; }
+
+/* Summary */
+.summary { margin-bottom: 14px; padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
+.summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.summary-cell { text-align: center; padding: 10px 4px; background: #fafbfc; border-radius: 8px; }
+.cell-num { display: block; font-size: 18px; font-weight: 700; color: #4f46e5; }
+.cell-lbl { display: block; font-size: 11px; color: #5a6273; margin-top: 2px; }
+
+/* Tabs */
+.tabs { margin-top: 4px; }
+.tabs :deep(.el-tabs__nav-wrap::after) { background: #f1f5f9; }
+.tabs :deep(.el-tabs__item) { font-size: 12px; }
+.tabs :deep(.el-table) { font-size: 11px; }
+.tabs :deep(.el-table th) { background: #fafbfc; font-weight: 600; color: #5a6273; }
+
+/* 单击加入按钮 bar */
+.add-bar {
+  display: flex; align-items: center; gap: 14px;
+  margin-top: 16px; padding-top: 16px;
+  border-top: 1px dashed #c7d2fe;
+}
+.add-hint { color: #94a3b8; font-size: 11px; }
 
 .empty-card {
   display: flex; flex-direction: column; align-items: center; gap: 8px;
@@ -436,4 +608,6 @@ onMounted(refetch)
 }
 .empty-card svg { color: #cbd5e1; }
 .empty-title { margin: 0; font-size: 14px; font-weight: 600; color: #1a1d24; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>

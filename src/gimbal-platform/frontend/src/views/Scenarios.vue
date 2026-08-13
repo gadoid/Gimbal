@@ -187,6 +187,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
+import { previewPlateDraft, getScenarioDraft } from '@/api/scenario-composer'
 import { useListSearch } from '@/utils/useListSearch'
 import { showError } from '@/utils/errorFallback'
 import FilterPopover from '@/components/FilterPopover.vue'
@@ -251,17 +252,44 @@ function onCreate() {
   router.push('/composer/new?step=1')
 }
 
-/** 行级导出 — 把已保存场景的整稿加载到 draft store,弹出菜单 */
-const draftStore = useScenarioDraftStore()
+/** 行级导出 — 不污染共享 store 的"进行中"对象。
+ *
+ * 之前实现是先 loadFromSaved → exportJson,会把 store 当前持有的草稿覆盖掉,
+ * 导致用户在 CaseComposer 里改了一半的其它场景被静默丢失。
+ *
+ * 这里直接走 plate preview-plate + 自己下载,store 状态完全不变。
+ */
 const exportingRowId = ref<string | null>(null)
 async function exportRow(row: Scenario) {
   exportingRowId.value = row.meta.scenarioId
   try {
-    await draftStore.loadFromSaved(row.meta.scenarioId)
-    // 复用 store 的 export 方法,直接弹下载 — 用户也可以再去 Scenarios 工具栏的"导出"按 JSON/YAML
-    await draftStore.exportJson()
+    const draft = await getScenarioDraft(row.meta.scenarioId)
+    const res = await previewPlateDraft(draft)
+    if (!res.ok) {
+      const errMsg = res.errors?.length
+        ? res.errors.map(e => `${e.path}: ${e.message}`).join('; ')
+        : 'plate 拒绝该草稿'
+      ElMessage.error(`导出失败: ${errMsg}`)
+      return
+    }
+    if (!res.converted) {
+      ElMessage.error('plate 未返回转换结果')
+      return
+    }
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const filename = `${row.meta.scenarioId}-${ts}.json`
+    const blob = new Blob([JSON.stringify(res.converted, null, 2)], { type: 'application/json;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    ElMessage.success(`已导出 ${filename}`)
   } catch (e) {
-    ElMessage.error(`加载草稿失败: ${(e as Error).message}`)
+    ElMessage.error(`导出失败: ${(e as Error).message}`)
   } finally {
     exportingRowId.value = null
   }

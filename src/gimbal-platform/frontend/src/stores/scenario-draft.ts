@@ -20,7 +20,7 @@ import * as yaml from 'js-yaml'
 import { previewPlateDraft, getScenarioDraft } from '@/api/scenario-composer'
 import { ElMessage } from 'element-plus'
 import type {
-  ScenarioMeta, ScenarioStep, ScenarioConfig, ScenarioResource,
+  ScenarioDraft, ScenarioMeta, ScenarioStep, ScenarioConfig, ScenarioResource,
 } from '@/types/scenario-composer'
 
 interface DraftSnapshot {
@@ -77,15 +77,12 @@ export const useScenarioDraftStore = defineStore('scenario-draft', () => {
       throw new Error('当前没有可导出的草稿')
     }
     const { meta, steps, config, resource } = draft.value
-    const res = await previewPlateDraft({
-      meta,
-      steps,
-      config,
-      resource,
-    } as any)
+    // 走 ScenarioDraft 类型,后端 schema 变更时编译期就能发现
+    const draftForPlate: ScenarioDraft = { meta, steps, config, resource }
+    const res = await previewPlateDraft(draftForPlate)
     if (!res.ok) {
       const errMsg = res.errors?.length
-        ? res.errors.map((e: any) => `${e.path}: ${e.message}`).join('; ')
+        ? res.errors.map((e) => `${e.path}: ${e.message}`).join('; ')
         : 'plate 拒绝该草稿'
       throw new Error(`plate 转换失败 — ${errMsg}`)
     }

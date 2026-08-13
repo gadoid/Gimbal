@@ -7,14 +7,10 @@
     <!-- 子流程:覆盖右两栏 -->
     <CaseComposerCatalog
       v-if="subView === 'catalog'"
-      @select="onSelectFromCatalog"
-      @back="subView = null"
-    />
-    <CaseComposerDetail
-      v-else-if="subView === 'detail' && selectedEndpoint"
-      :endpoint="selectedEndpoint"
+      :next-step-idx="local.length + 1"
+      :adding="adding"
       @add="onAddEndpoint"
-      @back="subView = 'catalog'"
+      @back="subView = null"
     />
 
     <!-- 主页:3 栏 -->
@@ -228,7 +224,6 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import CaseComposerCatalog from './CaseComposerCatalog.vue'
-import CaseComposerDetail from './CaseComposerDetail.vue'
 import FieldForm from './FieldForm.vue'
 import { getFullEndpoint } from '@/api/scenario-composer'
 import { deepDefaults } from '@/utils/jsonpath'
@@ -241,9 +236,9 @@ const emit = defineEmits<{ 'update:modelValue': [ScenarioStep[]] }>()
 
 const local = reactive<ScenarioStep[]>([...(props.modelValue || [])])
 const activeStepIdx = ref(0)
-const subView = ref<null | 'catalog' | 'detail'>(null)
-const selectedEndpoint = ref<any>(null)
+const subView = ref<null | 'catalog'>(null)
 const hiddenOpen = ref(false)
+const adding = ref(false)
 
 const hiddenFieldCount = computed(() =>
   currentStep.value?.endpointRef?.hiddenFields
@@ -261,52 +256,50 @@ watch(local, (v) => {
 
 const currentStep = computed(() => local[activeStepIdx.value])
 
-function onSelectFromCatalog(endpoint: any) {
-  selectedEndpoint.value = endpoint
-  subView.value = 'detail'
-}
-
-async function onAddEndpoint() {
-  if (!selectedEndpoint.value) return
-  const ep = selectedEndpoint.value
-  // Fetch the FULL endpoint definition from Plate so the form editor
-  // has the IOFieldBinding list. Without this, the step has no
-  // schema — just raw JSON, which is what the user complained about.
-  let endpointRef: any = undefined
+async function onAddEndpoint(ep: any) {
+  if (!ep) return
+  adding.value = true
   try {
-    const full = await getFullEndpoint(ep.id)
-    endpointRef = {
-      endpointId: full.id,
-      bindings: full.request?.fields || [],
-      hiddenFields: {},
+    // Fetch the FULL endpoint definition from Plate so the form editor
+    // has the IOFieldBinding list. Without this, the step has no
+    // schema — just raw JSON, which is what the user complained about.
+    let endpointRef: any = undefined
+    try {
+      const full = await getFullEndpoint(ep.id)
+      endpointRef = {
+        endpointId: full.id,
+        bindings: full.request?.fields || [],
+        hiddenFields: {},
+      }
+    } catch (e) {
+      ElMessage.warning('拉取完整接口定义失败, 仍以原始信息加入: ' + (e as Error).message)
     }
-  } catch (e) {
-    ElMessage.warning('拉取完整接口定义失败, 仍以原始信息加入: ' + (e as Error).message)
+    // Pre-populate body from defaults/examples so the form has values.
+    const initialBody = endpointRef
+      ? deepDefaults(endpointRef.bindings)
+      : null
+    const newStep: ScenarioStep = {
+      id: ep.id?.split('.').pop() || `step-${local.length + 1}`,
+      name: ep.name,
+      kind: 'http',
+      service: ep.service,
+      endpoint: ep.api?.path,
+      method: ep.api?.method as any,
+      headers: ep.api?.headers || {},
+      body: initialBody,
+      expectStatus: 200,
+      extractBindings: [],
+      dependsOn: [],
+      enabled: true,
+      endpointRef,
+    }
+    local.push(newStep)
+    activeStepIdx.value = local.length - 1
+    subView.value = null  // 直接落盘, 关闭目录回到画布
+    ElMessage.success(`已加入 step: ${newStep.name} (${endpointRef?.bindings?.length || 0} 字段)`)
+  } finally {
+    adding.value = false
   }
-  // Pre-populate body from defaults/examples so the form has values.
-  const initialBody = endpointRef
-    ? deepDefaults(endpointRef.bindings)
-    : null
-  const newStep: ScenarioStep = {
-    id: ep.id?.split('.').pop() || `step-${local.length + 1}`,
-    name: ep.name,
-    kind: 'http',
-    service: ep.service,
-    endpoint: ep.api?.path,
-    method: ep.api?.method as any,
-    headers: ep.api?.headers || {},
-    body: initialBody,
-    expectStatus: 200,
-    extractBindings: [],
-    dependsOn: [],
-    enabled: true,
-    endpointRef,
-  }
-  local.push(newStep)
-  activeStepIdx.value = local.length - 1
-  selectedEndpoint.value = null
-  subView.value = null
-  ElMessage.success(`已加入 step: ${newStep.name} (${endpointRef?.bindings?.length || 0} 字段)`)
 }
 
 function mergeBody(formValues: any, hiddenFields: any): any {

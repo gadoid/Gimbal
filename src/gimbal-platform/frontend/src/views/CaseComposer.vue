@@ -136,10 +136,6 @@
           v-else-if="stepIdx === 2"
           key="config"
           v-model="config"
-          :meta="meta"
-          :steps="steps"
-          :resource="resource"
-          :case-meta="caseMeta"
         />
 
         <!-- ④ Canvas -->
@@ -250,14 +246,6 @@ const scenario = ref<Scenario | null>(null)
 const caseData = ref<Case | null>(null)
 const dataSets = ref<DataSetSummary[]>([])
 const envs = ref<RunEnv[]>([])
-
-// caseMeta: 与 scenario 绑定的 case-level override (auth / dataSetIds / env)
-// 默认值在 caseData 加载后填充;没有 caseData 时给一个空对象
-const caseMeta = ref<{ env: string; auth: any; dataSetIds: string[] }>({
-  env: '',
-  auth: { name: 'default', type: 'bearer' },
-  dataSetIds: [],
-})
 
 // Local draft state
 const meta = ref<ScenarioMeta>({

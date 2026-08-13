@@ -13,9 +13,8 @@
     trigger="click"
     :disabled="!hasDraft"
     @command="onCommand"
-    @visible-change="onVisibleChange"
   >
-    <component :is="triggerTag" :class="['se-trigger', `se-${variant}`, { 'se-disabled': !hasDraft }]">
+    <button type="button" :class="['se-trigger', `se-${variant}`, { 'se-disabled': !hasDraft }]">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
         <polyline points="7 10 12 15 17 10"/>
@@ -25,7 +24,7 @@
       <svg v-if="!hideArrow" class="se-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <polyline points="6 9 12 15 18 9"/>
       </svg>
-    </component>
+    </button>
     <template #dropdown>
       <el-dropdown-menu>
         <el-dropdown-item command="json" :disabled="exporting">
@@ -46,12 +45,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, h } from 'vue'
+import { computed, ref } from 'vue'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { ElMessage } from 'element-plus'
 
 const props = withDefaults(defineProps<{
-  variant?: 'topbar' | 'row' | 'ghost'
+  variant?: 'topbar' | 'ghost'
   hideArrow?: boolean
 }>(), { variant: 'topbar', hideArrow: false })
 
@@ -60,9 +59,6 @@ const exporting = ref(false)
 
 const hasDraft = computed(() => !!store.draft)
 const labelText = computed(() => hasDraft.value ? '导出' : '导出 (无草稿)')
-
-// 顶栏/行/ghost 三种变体 — 用 render function 切标签
-const triggerTag = computed(() => (props.variant === 'row' ? 'button' : 'button'))
 
 async function onCommand(cmd: string) {
   if (!hasDraft.value) {
@@ -79,10 +75,6 @@ async function onCommand(cmd: string) {
   } finally {
     exporting.value = false
   }
-}
-
-function onVisibleChange(_visible: boolean) {
-  // 占位 — 留作未来埋点
 }
 </script>
 

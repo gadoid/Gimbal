@@ -202,10 +202,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import type {
-  ScenarioConfig, ScenarioMeta, ScenarioStep,
-  ScenarioResource, Case,
-} from '@/types/scenario-composer'
+import type { ScenarioConfig } from '@/types/scenario-composer'
 
 const TIME_OPTS = [
   { value: 'record',        name: 'record',       desc: '记录每个 step 的耗时和响应' },
@@ -218,17 +215,8 @@ const SYS_LABELS: Record<string, string> = {
 }
 function systemLabel(s: string) { return SYS_LABELS[s] || s }
 
-// props 仍接受上游 meta/steps/resource/caseMeta — 配置页用,但导出已统一到 scenario-draft store + topbar 入口
-const props = withDefaults(
-  defineProps<{
-    modelValue: ScenarioConfig
-    meta?: ScenarioMeta
-    steps?: ScenarioStep[]
-    resource?: ScenarioResource
-    caseMeta?: Pick<Case, 'env' | 'auth' | 'dataSetIds'>
-  }>(),
-  { meta: undefined, steps: () => [], resource: undefined, caseMeta: undefined },
-)
+// 单一 props: modelConfig — 配置页只关心 config,其它字段(导出、上游联动)已统一到 scenario-draft store
+const props = defineProps<{ modelValue: ScenarioConfig }>()
 const emit = defineEmits<{ 'update:modelValue': [ScenarioConfig] }>()
 
 const local = reactive<ScenarioConfig>({
