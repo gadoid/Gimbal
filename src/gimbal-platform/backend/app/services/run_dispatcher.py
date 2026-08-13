@@ -275,13 +275,23 @@ def _compose_scenario(
     """Build a per-row Scenario dict for Plate.
 
     The shape Plate expects is the V3.2 ``Scenario`` model.  We deep-copy
-    the stored draft, then layer the row's key/value pairs into
+    the stored scenario, then layer the row's key/value pairs into
     ``config.vars`` so Plate's runtime can resolve them.  This is
     best-effort: we do not implement a full templating engine; the row
     values are serialised as strings, which is what most
     ``${var.x}`` substitutions in the existing fixtures rely on.
+
+    ``scenario_payload`` is the persisted ``ComposerScenario.payload``.
+    Since the container refactor that is ``{definition, orchestration,
+    caseMeta}``; plate only wants the ``definition`` (orchestration /
+    caseMeta are platform-only).  Legacy rows that predate the container
+    are passed through as-is.
     """
-    out = copy.deepcopy(scenario_payload or {})
+    raw = scenario_payload or {}
+    # Unwrap the container: plate must never see orchestration/caseMeta.
+    if isinstance(raw.get("definition"), dict):
+        raw = raw["definition"]
+    out = copy.deepcopy(raw)
     out.setdefault("kind", "scenario")
     cfg = out.setdefault("config", {})
     if not isinstance(cfg, dict):

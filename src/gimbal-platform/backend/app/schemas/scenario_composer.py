@@ -116,62 +116,6 @@ class ScenarioMeta(BaseModel):
         return cleaned
 
 
-class ExtractBinding(BaseModel):
-    model_config = _CAMEL
-
-    name: str = Field(min_length=1, max_length=64)
-    path: str = Field(min_length=1, max_length=512)
-
-
-class IOFieldBindingSpec(BaseModel):
-    """Subset of Plate's IOFieldBinding that Platform stores per-step
-    so the form editor can render the right ui_kind for each field."""
-
-    model_config = _CAMEL
-
-    name: str
-    path: str
-    required: bool = False
-    default: Any = None
-    example: Any = None
-    description: str = ""
-    enum: list[Any] | None = None
-    ui_kind: str = "text"
-    source_kind: str = "independent"
-
-
-class EndpointRef(BaseModel):
-    """V3: link from a step to its source endpoint so the form editor
-    can drive request-body fields from IOFieldBinding (Type A) while
-    carrying schema-only fields (Type C) invisibly."""
-
-    model_config = _CAMEL
-
-    endpoint_id: str = Field(alias="endpointId")
-    bindings: list[IOFieldBindingSpec] = Field(default_factory=list)
-    hidden_fields: dict[str, Any] = Field(default_factory=dict, alias="hiddenFields")
-
-
-class ScenarioStep(BaseModel):
-    model_config = _CAMEL
-
-    id: str = Field(min_length=1, max_length=64)
-    name: str = Field(min_length=1, max_length=128)
-    kind: StepKind = "http"
-    service: str | None = None
-    endpoint: str | None = None
-    method: HttpMethod | None = None
-    headers: dict[str, str] = Field(default_factory=dict)
-    body: Any = None
-    expect_status: int | list[int] | None = Field(default=None, alias="expectStatus")
-    extract_bindings: list[ExtractBinding] = Field(
-        default_factory=list, alias="extractBindings"
-    )
-    depends_on: list[str] = Field(default_factory=list, alias="dependsOn")
-    enabled: bool = True
-    endpoint_ref: EndpointRef | None = Field(default=None, alias="endpointRef")
-
-
 # ─── draft (request body) ──────────────────────────────────────────
 class CaseOverride(BaseModel):
     """Subset of Case used to carry case-level overrides on a draft."""
@@ -183,48 +127,41 @@ class CaseOverride(BaseModel):
     data_set_ids: list[str] = Field(default_factory=list, alias="dataSetIds")
 
 
-class ScenarioConfig(BaseModel):
-    """Case-level runtime config (V3 composer step ③)."""
-
+class StepOrchestration(BaseModel):
+    """Platform-side fields for one step, index-aligned with definition.steps[i]."""
     model_config = _CAMEL
 
-    time_policy_kind: Literal["record", "cost-collect", "timeout-check"] = Field(
-        default="record", alias="timePolicyKind"
-    )
-    retry_max_attempts: int = Field(default=0, ge=0, le=10, alias="retryMaxAttempts")
-    retry_interval_ms: int = Field(default=500, ge=0, alias="retryIntervalMs")
-    vars: list[dict[str, Any]] = Field(default_factory=list)
-    services: dict[str, str] = Field(default_factory=dict)
-    users: dict[str, dict[str, Any]] = Field(default_factory=dict)
-    setup: list[dict[str, Any]] = Field(default_factory=list)
-    teardown: list[dict[str, Any]] = Field(default_factory=list)
+    enabled: bool = True
+    name: str = ""
 
 
-class ScenarioResource(BaseModel):
-    """Case-level resources (V3 composer step ②)."""
+class Orchestration(BaseModel):
+    """Platform rendering/orchestration container.
 
+    steps is index-aligned with definition.steps (same order, same length).
+    resourceMeta is name-aligned with definition.resource keys.
+    """
     model_config = _CAMEL
 
-    items: list[dict[str, Any]] = Field(default_factory=list)
-    # items[i] shape: {kind: 'mock'|'file'|'http'|'custom', name, description, payload}
+    steps: list[StepOrchestration] = Field(default_factory=list)
+    resourceMeta: dict[str, str] = Field(default_factory=dict)
 
 
 class ScenarioDraft(BaseModel):
-    """Request body for POST/PUT /scenarios and POST /scenarios/preview-plate.
+    """Platform draft container.
 
-    The backend derives ``caseCount / dataSetCount / stepCount / tags /
-    starred`` from this draft + DB state on response.
-
-    V3 composer (Step ② ③ ④): the full draft carries config + resource +
-    steps so a single save round-trips the entire editor state.
+    definition: the plate Scenario structure as a free-form dict. Backend does
+                not model plate's internal types — plate /convert is the single
+                validation authority ("plate outputs a neutral dict; consumers
+                model it themselves").
+    orchestration: platform-only rendering/orchestration fields, never sent
+                   to plate (plate doesn't know about them).
+    caseMeta: case-level runtime overrides (env/auth/dataset).
     """
-
     model_config = _CAMEL
 
-    meta: ScenarioMeta
-    steps: list[ScenarioStep] = Field(default_factory=list, max_length=512)
-    config: ScenarioConfig = Field(default_factory=ScenarioConfig)
-    resource: ScenarioResource = Field(default_factory=ScenarioResource)
+    definition: dict[str, Any]
+    orchestration: Orchestration = Field(default_factory=Orchestration)
     case_meta: CaseOverride | None = Field(default=None, alias="caseMeta")
 
 
@@ -426,7 +363,7 @@ class Scenario(BaseModel):
     model_config = _CAMEL
 
     meta: ScenarioMeta
-    steps: list[ScenarioStep] = Field(default_factory=list)
+    steps: list[dict[str, Any]] = Field(default_factory=list)  # plate step dicts
     case_count: int = Field(default=0, ge=0, alias="caseCount")
     data_set_count: int = Field(default=0, ge=0, alias="dataSetCount")
     step_count: int = Field(default=0, ge=0, alias="stepCount")
@@ -444,10 +381,8 @@ __all__ = [
     "DataSetDraft",
     "DataSetRow",
     "DataSetSummary",
-    "EndpointRef",
-    "ExtractBinding",
     "HttpMethod",
-    "IOFieldBindingSpec",
+    "Orchestration",
     "PreviewPlateError",
     "PreviewPlateResponse",
     "Priority",
@@ -457,11 +392,9 @@ __all__ = [
     "RunResponse",
     "RunStatus",
     "Scenario",
-    "ScenarioConfig",
     "ScenarioDraft",
     "ScenarioMeta",
-    "ScenarioResource",
-    "ScenarioStep",
     "StarIn",
     "StepKind",
+    "StepOrchestration",
 ]

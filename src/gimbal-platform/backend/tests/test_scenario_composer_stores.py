@@ -16,7 +16,6 @@ from app.schemas.scenario_composer import (
     DataSetDraft,
     ScenarioDraft,
     ScenarioMeta,
-    ScenarioStep,
 )
 from app.services import case_store, data_set_store, scenario_store
 
@@ -48,8 +47,29 @@ def _make_meta(**over) -> ScenarioMeta:
     return ScenarioMeta.model_validate(base)
 
 
-def _make_draft(steps: list[ScenarioStep] | None = None, **meta_over) -> ScenarioDraft:
-    return ScenarioDraft(meta=_make_meta(**meta_over), steps=steps or [])
+def _make_draft(steps: list[dict] | None = None, **meta_over) -> ScenarioDraft:
+    """Build a container-shaped ScenarioDraft.
+
+    ``meta_over`` carries scenarioId / system / module / priority / name /
+    tags overrides — the same kwargs the store tests have always used. We
+    validate them through ``ScenarioMeta`` so a regression in meta shape
+    still surfaces, then fold the resulting camelCase dict into the
+    plate-shaped ``definition.meta``.
+    """
+    meta_model = _make_meta(**meta_over)
+    meta_dict = meta_model.model_dump(by_alias=True, mode="json")
+    scenario_id = meta_dict.get("scenarioId") or "sc-test"
+    return ScenarioDraft.model_validate({
+        "definition": {
+            "kind": "scenario",
+            "scenarioId": scenario_id,
+            "meta": meta_dict,
+            "config": {"timePolicy": {"kind": "record"}},
+            "resource": {},
+            "steps": steps or [],
+        },
+        "orchestration": {"steps": [], "resourceMeta": {}},
+    })
 
 
 def _make_case(case_id: str, scenario_id: str, created_by: str = "alice") -> Case:

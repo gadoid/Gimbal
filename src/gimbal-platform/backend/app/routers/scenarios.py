@@ -18,7 +18,7 @@ their suffix and the static handler would never fire.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
@@ -73,73 +73,32 @@ def _require_owner(user: CurrentUser, row: ComposerScenario) -> None:
 def _draft_to_full_scenario_dict(
     draft: ScenarioDraft, owner: str
 ) -> dict:
-    """Translate Platform ``ScenarioDraft`` → Plate /convert input dict.
+    """Build a plate-valid Scenario dict from the platform container.
 
-    Platform 与 Plate 的 schema 翻译 (这是 V3 平台 → 板桥的边界):
+    definition is already plate-shaped (it's the authoritative structure);
+    this only fills plate-required defaults that the platform UI doesn't
+    collect. orchestration / caseMeta are platform-only and never sent.
 
-    * ``ScenarioConfig.vars``: 平台 ``list[{key, value}]`` → Plate
-      ``dict[key, value]``(按 key 索引;同名后写覆盖前写)
-    * ``ScenarioResource.items``: 平台 ``list[{kind, name, ...}]`` → Plate
-      ``dict[name, ResourceUnion]``(按 name 索引)
-    * ``Meta.createTime``: 平台可空 → Plate 必填,缺省填 ``utcnow()``
-    * ``Meta.requirementRef``: 平台无 → Plate 必填 ``list``,默认 ``[]``
+    Defaults filled:
+    * kind:"scenario"
+    * scenarioId (top-level, mirror from definition.meta if absent)
+    * meta.createTime (plate requires it; UI doesn't collect → now())
+    * meta.requirementRef (plate requires list; UI doesn't collect → [])
+    * meta.owner (from authenticated user, if definition left it empty)
     """
-    payload = draft.model_dump(by_alias=True, mode="json")
-    payload = draft.model_dump(by_alias=True, mode="json")
-    cfg = payload.setdefault("config", {})
-    if not isinstance(cfg, dict):
-        cfg = {}
-        payload["config"] = cfg
-    cfg.setdefault("services", {})
-    cfg.setdefault("users", {})
-    cfg.setdefault("setup", [])
-    cfg.setdefault("teardown", [])
-    # Default time policy mirrors Plate's RecordPolicy default.
-    cfg.setdefault("timePolicy", {"kind": "record"})
+    payload = {k: v for k, v in draft.definition.items()}
 
-    # ── vars: list → dict ──────────────────────────────────────
-    raw_vars = cfg.get("vars", [])
-    if isinstance(raw_vars, list):
-        vars_dict: dict[str, Any] = {}
-        for entry in raw_vars:
-            if not isinstance(entry, dict):
-                continue
-            key = entry.get("key")
-            if not key:
-                continue
-            vars_dict[str(key)] = entry.get("value")
-        cfg["vars"] = vars_dict
+    payload.setdefault("kind", "scenario")
 
-    # ── resource.items: list → flat dict keyed by name (Plate 期望 `dict[str, ResourceUnion]`) ──
-    res = payload.get("resource")
-    if isinstance(res, dict) and "items" in res and isinstance(res.get("items"), list):
-        items = res.get("items") or []
-        if items:
-            flat: dict[str, Any] = {}
-            for it in items:
-                if not isinstance(it, dict):
-                    continue
-                name = it.get("name")
-                if not name:
-                    continue
-                flat[str(name)] = it
-            # Plate 的 Scenario.resource 是 dict[str, ResourceUnion],不要套 items 壳
-            payload["resource"] = flat
-        else:
-            payload["resource"] = {}
-    elif not isinstance(res, dict):
-        payload["resource"] = {}
-
-    # ── meta 缺省值补齐 ─────────────────────────────────────────
     meta = payload.setdefault("meta", {})
     if not meta.get("createTime"):
         meta["createTime"] = datetime.utcnow().isoformat() + "Z"
     meta.setdefault("requirementRef", [])
-
-    payload["kind"] = "scenario"
-    payload.setdefault("scenarioId", draft.meta.scenario_id)
     if owner and not meta.get("owner"):
         meta["owner"] = owner
+
+    payload.setdefault("scenarioId", meta.get("scenarioId", ""))
+
     return payload
 
 

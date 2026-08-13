@@ -10,9 +10,6 @@ concurrent requests see consistent reads/writes.
 """
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any, Iterable
-
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -21,7 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..models.composer_scenario import ComposerScenario
 from ..models.composer_case import ComposerCase
 from ..models.composer_data_set import ComposerDataSet
-from ..schemas.scenario_composer import Scenario, ScenarioDraft, ScenarioMeta, ScenarioStep
+# 删除 ScenarioStep;ScenarioMeta 仍保留(读侧用)
+from ..schemas.scenario_composer import Scenario, ScenarioDraft, ScenarioMeta
 from .stars_store import is_starred as stars_is_starred
 
 
@@ -39,12 +37,25 @@ async def create(
     caller cannot spoof the owner field by sending a different value in
     the request body.
     """
+    def_meta = draft.definition.get("meta") or {}
+    scenario_id = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
     server_owned = ScenarioMeta.model_validate({
-        **draft.meta.model_dump(by_alias=True, mode="json"),
-        "owner": owner or draft.meta.owner,
+        **def_meta,
+        "scenarioId": scenario_id,
+        "owner": owner or def_meta.get("owner", ""),
     })
+    # Write the server-owned meta back into the stored definition so the
+    # owner override (and any server-side meta normalization) survives a
+    # read-back via _meta_from_row, which reads definition.meta.
+    stored_definition = {
+        **draft.definition,
+        "scenarioId": server_owned.scenario_id,
+        "meta": server_owned.model_dump(by_alias=True, mode="json"),
+    }
     payload = ScenarioDraft(
-        meta=server_owned, steps=draft.steps, caseMeta=draft.case_meta
+        definition=stored_definition,
+        orchestration=draft.orchestration,
+        caseMeta=draft.case_meta,
     ).model_dump(by_alias=True, mode="json")
     row = ComposerScenario(
         scenario_id=server_owned.scenario_id,
@@ -58,7 +69,7 @@ async def create(
         system=server_owned.system,
         version=server_owned.version,
         expire=server_owned.expire,
-        step_count=len(draft.steps),
+        step_count=len(draft.definition.get("steps") or []),
         payload=payload,
     )
     db.add(row)
@@ -66,7 +77,7 @@ async def create(
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
-        raise ValueError(f"scenario_id_exists: {draft.meta.scenario_id}") from e
+        raise ValueError(f"scenario_id_exists: {scenario_id}") from e
     await db.refresh(row)
     return await _to_read_shape(db, row)
 
@@ -85,17 +96,26 @@ async def update(
     and the unique identity the rest of the system uses).
 
     Server-side override: if ``new_owner`` is supplied, it's used in
-    place of ``draft.meta.owner`` so the caller can't re-assign the
-    scenario to a different user mid-edit.
+    place of ``draft.definition["meta"]["owner"]`` so the caller can't
+    re-assign the scenario to a different user mid-edit.
     """
     row = await _get_row(db, scenario_id)
-    if draft.meta.scenario_id != scenario_id:
+    def_meta = draft.definition.get("meta") or {}
+    req_sid = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
+    if req_sid != scenario_id:
         raise ValueError("scenario_id_changed: cannot rename scenarioId")
-    effective_owner = new_owner or draft.meta.owner or row.owner
+    effective_owner = new_owner or def_meta.get("owner") or row.owner
     server_owned = ScenarioMeta.model_validate({
-        **draft.meta.model_dump(by_alias=True, mode="json"),
-        "owner": effective_owner,
+        **def_meta, "scenarioId": scenario_id, "owner": effective_owner,
     })
+    # Write the server-owned meta back into the stored definition so the
+    # owner override (and any server-side meta normalization) survives a
+    # read-back via _meta_from_row, which reads definition.meta.
+    stored_definition = {
+        **draft.definition,
+        "scenarioId": server_owned.scenario_id,
+        "meta": server_owned.model_dump(by_alias=True, mode="json"),
+    }
     row.name = server_owned.name
     row.description = server_owned.description
     row.module = server_owned.module
@@ -106,9 +126,11 @@ async def update(
     row.system = server_owned.system
     row.version = server_owned.version
     row.expire = server_owned.expire
-    row.step_count = len(draft.steps)
+    row.step_count = len(draft.definition.get("steps") or [])
     row.payload = ScenarioDraft(
-        meta=server_owned, steps=draft.steps, caseMeta=draft.case_meta
+        definition=stored_definition,
+        orchestration=draft.orchestration,
+        caseMeta=draft.case_meta,
     ).model_dump(by_alias=True, mode="json")
     await db.commit()
     await db.refresh(row)
@@ -248,7 +270,8 @@ async def _to_read_shape(
 
 def _meta_from_row(row: ComposerScenario) -> ScenarioMeta:
     payload = row.payload or {}
-    meta_dict = payload.get("meta") or {}
+    definition = payload.get("definition") or {}
+    meta_dict = definition.get("meta") or {}
     if meta_dict:
         return ScenarioMeta.model_validate(meta_dict)
     # Fallback: rebuild from column projection.
@@ -267,15 +290,11 @@ def _meta_from_row(row: ComposerScenario) -> ScenarioMeta:
     )
 
 
-def _steps_from_payload(payload: dict) -> list[ScenarioStep]:
-    raw = payload.get("steps") or []
-    out: list[ScenarioStep] = []
-    for s in raw:
-        try:
-            out.append(ScenarioStep.model_validate(s))
-        except Exception:  # noqa: BLE001  defensive — bad row in payload
-            continue
-    return out
+def _steps_from_payload(payload: dict) -> list[dict]:
+    """Steps live inside the container's definition now (plate-shaped dicts)."""
+    definition = (payload or {}).get("definition") or {}
+    raw = definition.get("steps") or []
+    return [s for s in raw if isinstance(s, dict)]
 
 
 def _passes_filters(

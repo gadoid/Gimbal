@@ -48,7 +48,17 @@ def _draft(scenario_id: str = "sc-test", **meta_over) -> dict:
         "system": ["fin"],
     }
     meta.update(meta_over)
-    return {"meta": meta, "steps": []}
+    return {
+        "definition": {
+            "kind": "scenario",
+            "scenarioId": scenario_id,
+            "meta": meta,
+            "config": {"timePolicy": {"kind": "record"}},
+            "resource": {},
+            "steps": [],
+        },
+        "orchestration": {"steps": [], "resourceMeta": {}},
+    }
 
 
 # ── Plate mock helpers ─────────────────────────────────────────────

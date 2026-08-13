@@ -40,7 +40,17 @@ def _make_draft(scenario_id: str = "sc-test", **meta_over) -> dict:
         "system": ["fin"],
     }
     meta.update(meta_over)
-    return {"meta": meta, "steps": []}
+    return {
+        "definition": {
+            "kind": "scenario",
+            "scenarioId": scenario_id,
+            "meta": meta,
+            "config": {"timePolicy": {"kind": "record"}},
+            "resource": {},
+            "steps": [],
+        },
+        "orchestration": {"steps": [], "resourceMeta": {}},
+    }
 
 
 # ── envs ───────────────────────────────────────────────────────────
@@ -75,7 +85,11 @@ async def test_create_scenario_invalid_id_400(client: AsyncClient) -> None:
         headers=headers,
         json=_make_draft(scenario_id="INVALID"),
     )
-    assert r.status_code == 422  # Pydantic pattern validation
+    # definition is a free-form dict, so scenarioId is no longer validated
+    # at the Pydantic boundary (422). It is reified + validated inside the
+    # store via ScenarioMeta.model_validate, whose ValueError the router
+    # maps to 400.
+    assert r.status_code == 400
 
 
 async def test_create_scenario_conflict_409(client: AsyncClient) -> None:
