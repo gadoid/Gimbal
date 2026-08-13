@@ -1,0 +1,11 @@
+# Bundled default env list (V3 composer /api/envs).
+# Override by writing data/envs.yaml in the platform DATA_DIR.
+- envId: dev-local
+  name: dev-local
+  baseUrl: http://127.0.0.1:8000
+- envId: test-env-A
+  name: test-env-A
+  baseUrl: http://test-a.fin.local:8000
+- envId: test-env-B
+  name: test-env-B
+  baseUrl: http://test-b.fin.local:8000

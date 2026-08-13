@@ -33,6 +33,10 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     4. 给 4 个 storage-backed dim 写入 1 条 seed,保证 ``GET /api/config`` 等返回非空。
     """
     if getattr(app.state, "registry_owned", True):
+        # Reset the default registry before re-registering so a stale
+        # singleton from a prior process / test session doesn't raise
+        # "endpoint already registered" on restart.
+        default_registry.reset()
         try:
             from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
         except Exception:  # pragma: no cover - defensive: lazy import guard

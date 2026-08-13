@@ -54,6 +54,7 @@ interface NavEntry {
 const navEntries: NavEntry[] = [
   { path: '/cases/mine', label: '📋 我的工作台' },
   { path: '/cases/public', label: '🌐 公共用例库' },
+  { path: '/scenarios', label: '📚 场景库' },
   { path: '/executions', label: '📊 执行历史' },
   { path: '/auths', label: '🔐 认证管理' },
   { path: '/admin/users', label: '⚙️ 用户管理' },

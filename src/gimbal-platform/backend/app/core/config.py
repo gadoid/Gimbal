@@ -63,6 +63,16 @@ class Settings(BaseSettings):
     # ── CORS ──────────────────────────────────────────────
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
 
+    # ── Plate integration (V3 scenario composer) ──────────
+    # Base URL of the gimbal-plate FastAPI service.  Default port 8765 to
+    # stay out of Platform's 8000 + Vite's 5173 footprint.
+    PLATE_BASE_URL: str = "http://127.0.0.1:8765"
+    PLATE_TIMEOUT_SEC: float = 30.0
+    # When False, the run dispatcher records intent but does NOT POST
+    # to Plate's /run endpoint (D2 not yet shipped on the Plate side).
+    # Flip to True once Plate exposes /api/scenario/action/run.
+    PLATE_RUN_ROUTE_ENABLED: bool = False
+
     def model_post_init(self, __context) -> None:
         if not self.JWT_SECRET:
             self.JWT_SECRET = secrets.token_urlsafe(48)

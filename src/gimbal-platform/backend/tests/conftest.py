@@ -64,11 +64,14 @@ def _isolate_favorites(tmp_path, monkeypatch):
     same pytest run (and any local ``data/favorites.json`` from prior runs).
     """
     from app.routers import cases as cases_router
+    from app.services import stars_store
 
     monkeypatch.setattr(cases_router, "_FAV_PATH", tmp_path / "favorites.json")
     cases_router._FAVORITES.clear()
+    stars_store.clear_for_tests()
     yield
     cases_router._FAVORITES.clear()
+    stars_store.clear_for_tests()
 
 
 @pytest.fixture

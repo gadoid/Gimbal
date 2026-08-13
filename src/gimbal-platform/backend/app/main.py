@@ -12,10 +12,46 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
+from starlette.convertors import Convertor, register_url_convertor
+
+
+# ── V3 case_id path-converter ────────────────────────────────────
+# The V3 composer uses ``case-`` prefixed ids (e.g. ``case-001``).  We
+# register a custom path-converter so the composer's GET/PATCH/DELETE
+# /{case_id} only matches V3 ids, and the legacy ``app.routers.cases``
+# ``/{case_id:path}`` catch-all (registered AFTER the composer) still
+# serves legacy paths like ``/mine`` / ``/public`` / ``/upload`` /
+# free-form ids.
+class _V3CaseIdConverter(Convertor[str]):
+    # 接受 case- 前缀 (手动命名) 或 sc- 前缀 (自动命名 `${scenarioId}-case-001`)
+    # 不接受 legacy 静态路径 mine/public/upload (都不以 case-/sc- 开头)
+    regex = r"(?:case|sc)-[a-z0-9-]+"
+
+    def convert(self, value: str) -> str:
+        return value
+
+    def to_string(self, value: str) -> str:
+        return value
+
+
+register_url_convertor("v3_case_id", _V3CaseIdConverter())
 
 from .core.config import settings
 from .core.db import init_db
-from .routers import auth, auth_sessions, cases, executions, hidden_profiles, users
+from .routers import (
+    auth,
+    auth_sessions,
+    cases,
+    cases_composer,
+    data_sets,
+    endpoint_catalog,
+    envs,
+    executions,
+    hidden_profiles,
+    runs,
+    scenarios,
+    users,
+)
 
 
 async def _log_hub_sweeper() -> None:
@@ -54,6 +90,9 @@ async def lifespan(app: FastAPI):
         drain_in_flight_runners,
         reconcile_orphan_runs,
     )
+    from .services import plate_client as plate_client_module
+    from .services.run_dispatcher import drain_in_flight_dispatches
+
     await reconcile_orphan_runs()
     sweeper_task = asyncio.create_task(_log_hub_sweeper())
     try:
@@ -69,6 +108,15 @@ async def lifespan(app: FastAPI):
         n_drained = await drain_in_flight_runners()
         if n_drained:
             logger.info("lifespan: drained {} in-flight execution runner(s)", n_drained)
+        # V3 scenario composer: also drain the per-row dispatch tasks.
+        n_dispatched = await drain_in_flight_dispatches()
+        if n_dispatched:
+            logger.info("lifespan: drained {} in-flight dispatcher(s)", n_dispatched)
+        # Close the shared Plate httpx client (graceful socket close).
+        try:
+            await plate_client_module.aclose()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("lifespan: plate_client.aclose raised {}", e)
         sweeper_task.cancel()
         try:
             await sweeper_task
@@ -99,9 +147,24 @@ def create_app() -> FastAPI:
     # hidden_profiles MUST come before cases (cases owns {case_id:path} which
     # would otherwise shadow the more-specific /hidden suffix route).
     app.include_router(hidden_profiles.router, prefix="/api")
+    # V3 composer cases MUST be registered BEFORE the legacy cases
+    # router: the composer's GET/PATCH/DELETE /{case_id} all require
+    # the V3 ``case-`` pattern (Path(pattern=...)), so a request to
+    # /api/cases/mine, /public, /upload falls through to the legacy
+    # router, but a request to /api/cases/case-001 hits the composer
+    # first.  Same for POST /cases/{case_id}/data-sets which has no
+    # legacy equivalent.
+    app.include_router(cases_composer.router, prefix="/api")
     app.include_router(cases.router, prefix="/api")
     app.include_router(executions.router, prefix="/api")
     app.include_router(users.router, prefix="/api")
+    # New V3 composer routers (registered in order so static suffixes
+    # precede ``/{id}`` catch-alls).
+    app.include_router(envs.router, prefix="/api")
+    app.include_router(runs.router, prefix="/api")
+    app.include_router(data_sets.router, prefix="/api")
+    app.include_router(endpoint_catalog.router, prefix="/api")
+    app.include_router(scenarios.router, prefix="/api")  # MUST be last — has /{scenario_id}
 
     @app.get("/api/health")
     async def health() -> dict:

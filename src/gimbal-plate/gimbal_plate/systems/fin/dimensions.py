@@ -71,10 +71,11 @@ def register_fin_dims(reg: PlateRegistry) -> None:
     (:func:`tests.plate.conftest.fresh_registry`). Callers must pass
     in a registry that already has all ``ALL_ENDPOINTS`` registered
     (or call :meth:`PlateRegistry.register_endpoint` for each).
-    """
-    for ep in ALL_ENDPOINTS:
-        reg.register_endpoint(ep)
 
+    Note: this function does NOT re-register endpoints; that's the
+    caller's job (per the docstring).  Re-registering would raise
+    ``ValueError("Endpoint '...' 已注册")`` on the second pass.
+    """
     reg.register_dim(
         "endpoint",
         DimSpec(

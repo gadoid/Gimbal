@@ -39,6 +39,29 @@ function extractErrorPayload(err: AxiosError): ApiErrorPayload {
   return {}
 }
 
+function summarizeValidationErrors(
+  detail: unknown[],
+): { code: number; msg: string } {
+  // Pydantic v2: detail is an array of {type, loc, msg, input, ctx}.
+  // Surface up to 3 field-level errors so the user can see what's wrong.
+  const parts: string[] = []
+  for (const item of detail) {
+    if (!item || typeof item !== 'object') continue
+    const loc = Array.isArray((item as { loc?: unknown }).loc)
+      ? ((item as { loc: unknown[] }).loc as unknown[])
+          .filter((p) => p !== 'body')
+          .join('.')
+      : ''
+    const msg = (item as { msg?: string }).msg || ''
+    parts.push(loc ? `${loc}: ${msg}` : msg)
+    if (parts.length >= 3) break
+  }
+  return {
+    code: 422,
+    msg: parts.length ? parts.join('; ') : '请求参数校验失败',
+  }
+}
+
 function normalizeError(err: AxiosError): ApiError {
   const status = err.response?.status ?? 0
   const payload = extractErrorPayload(err)
@@ -46,7 +69,12 @@ function normalizeError(err: AxiosError): ApiError {
   const detail = payload.detail
   let code = 0
   let msg = err.message || 'Network error'
-  if (detail && typeof detail === 'object') {
+  if (Array.isArray(detail)) {
+    // Pydantic ValidationError → 422 {detail: [{loc, msg, type, ...}]}
+    const v = summarizeValidationErrors(detail)
+    code = v.code
+    msg = v.msg
+  } else if (detail && typeof detail === 'object') {
     code = typeof detail.code === 'number' ? detail.code : code
     msg = detail.msg ?? msg
   } else if (typeof detail === 'string') {

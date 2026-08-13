@@ -1,0 +1,191 @@
+{
+  "kind": "scenario",
+  "scenarioId": "e2e订单到应收核销",
+  "meta": {
+    "name": "山东悦慕-易汇瀚-成都空港",
+    "description": "山东悦慕-易汇瀚-成都空港",
+    "module": "settlement",
+    "priority": 1,
+    "author": "codfish",
+    "owner": "codfish",
+    "tags": ["smoke", "settlement"],
+    "version": "1.0.0",
+    "createTime": "2026-06-23T10:00:00",
+    "expire": false,
+    "requirementRef": [],
+    "system": "fin"
+  },
+  "config": {
+    "setup": [],
+    "teardown": [],
+    "services": {
+      "tidb-test-service": "https://fin-tidb.21eflag.com/"
+    },
+    "users": {
+      "codfish": {
+        "url": "https://fin-tidb.21eflag.com/",
+        "username": "18180789652",
+        "password": "yhd123456!",
+        "expires_in": 7200,
+        "token_type": "Authorization"
+      }
+    },
+    "timePolicy": { "kind": "record" },
+    "retry": null,
+    "vars": {
+      "bl_no": {
+        "kind": "random_decorated",
+        "charset": "alnum",
+        "length": 6,
+        "head": "GIMBAL728",
+        "separator": "-"
+      },
+      "bank_id_0": "319666690256273408_MainBank",
+      "bank_id_1": "319666690256274432_MainBank",
+      "finance_id_0": "4416_CustomerFinance",
+      "finance_id_1": "4415_CustomerFinance"
+    }
+  },
+  "resource": {},
+  "steps": [
+    {
+      "kind": "step",
+      "description": "校验新建委托订舱单（验价）",
+      "api": {
+        "kind": "api",
+        "service": "tidb-test-service",
+        "method": "POST",
+        "path": "/api/order/orderEntrust/orderAdd",
+        "headers": {
+          "Authorization": "${auth.codfish.token}",
+          "Content-Type": "application/json;charset=UTF-8"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "client_expand_name": "唐欣雨",
+          "client_expand_id": "261",
+          "m_delivery_type": "",
+          "customer_id": "320",
+          "customer_name": "山东悦慕食品有限公司",
+          "receive_time_limit": "20",
+          "deposit_refund_day": "180",
+          "deposit_settlement_date": "30",
+          "service_id": "55",
+          "service_name": "曲静霞",
+          "operator_id": "336",
+          "operator_name": "闫航",
+          "customer_contact_id": "",
+          "customer_contact_name": "",
+          "main_sort": "易汇瀚,易海,易航道",
+          "policy_id": "134",
+          "policy_name": "【SPV对客】易汇瀚（仅人民币）",
+          "policy_type": "JSZX",
+          "settle_type": "1",
+          "settle_type_name": "月结",
+          "product_id": "4",
+          "product_name": "月结-延长-保证金",
+          "deposit_type": "1",
+          "deposit_type_name": "有",
+          "period_delay_type": "1",
+          "period_delay_type_name": "延长",
+          "service_items": ["booking_space"],
+          "business_type": "1",
+          "trade_term": "CIF",
+          "carrier": "COSCO",
+          "carrier_id": "16",
+          "bl_no": "${var.bl_no}",
+          "track_bl_no": "${var.bl_no}",
+          "etd": 1782316800,
+          "atd": 1782835200,
+          "ship_name": "OOCL FRANCE",
+          "voy": "068E",
+          "pol": "QINGDAO,CHINA",
+          "pot": "",
+          "pod": "ANTING,CHINA",
+          "del": "ANTING,CHINA",
+          "country_name": "CHINA",
+          "airline_type": "中国",
+          "ocean_type": "近洋",
+          "terms_payment": "T/T",
+          "terms_transport": "CY/CY",
+          "pay_type": "FREIGHT PREPAID",
+          "customer_order_sn": "",
+          "terms_shipment": "",
+          "shipper": "",
+          "consignee": "",
+          "notifier": "",
+          "ship_mark": "",
+          "commodity": "",
+          "notes": "",
+          "cargo_type": "",
+          "packer": "",
+          "num": "1872",
+          "gross_weight": "26800.000",
+          "bulk": "60.000",
+          "sea_trans_cost": "",
+          "teu": "",
+          "volume": "",
+          "volume_desc": "",
+          "order_sn": "",
+          "status": "1",
+          "sea_trans_currency": "USD",
+          "container": [],
+          "message_board": [],
+          "customer_file_list": [],
+          "supplier": [
+            {
+              "is_manual": "",
+              "is_primary": "1",
+              "isset_fee": "0",
+              "isset_supplier": "1",
+              "order_id": "",
+              "order_supplier_id": "",
+              "service_item": "booking_space",
+              "service_item_name": "订舱",
+              "settle_object_id": "",
+              "settlement_date": null,
+              "supplier_id": "805",
+              "supplier_name": "青岛雅然国际物流有限公司",
+              "supplier_pay_date": null,
+              "supplier_period": null,
+              "user_id": "336",
+              "user_name": "闫航"
+            }
+          ],
+          "remark": "",
+          "policy_type_name": "",
+          "main_ids": "15,16,1",
+          "pol_cn": "青岛流亭机场",
+          "pol_country_id": "1",
+          "pol_country": "CHINA",
+          "pol_country_cn": "中国",
+          "pod_cn": null,
+          "del_cn": null,
+          "country_id": "1",
+          "country_name_cn": "中国",
+          "action": "check",
+          "entrust_status": 1,
+          "order_file": []
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "/api/order/orderEntrust/orderAdd 应返回200",
+          "soft": false
+        }
+      ]
+    }
+  ]
+}
