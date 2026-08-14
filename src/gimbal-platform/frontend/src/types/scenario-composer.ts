@@ -76,6 +76,8 @@ export interface Scenario {
   /** 读侧可能附带 plate 的 config/resource(透传,非表单化) */
   config?: Record<string, unknown>
   resource?: Record<string, unknown>
+  /** 平台编排态(平台渲染字段),round-trip 用于 composer reload;缺省时前端回退默认 */
+  orchestration?: Orchestration
   caseCount: number
   dataSetCount: number
   stepCount: number

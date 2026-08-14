@@ -395,11 +395,18 @@ async function loadScenario() {
       resource: (s as any).resource ?? {},
       steps: (s.steps || []) as unknown as StepView[],
     }
-    // orchestration 与 definition.steps 同序同长 (缺省全启用,展示名空)
-    orchestration.value = {
-      steps: definition.value.steps.map(() => ({ enabled: true, name: '' })),
-      resourceMeta: {},
-    }
+    // orchestration 与 definition.steps 同序同长。
+    // 优先用持久化值 (s.orchestration);缺失或长度不齐 (编辑过步骤后过期)
+    // 时回退到默认重建 (全启用、展示名空、resourceMeta 空),保证 index 对齐。
+    const persistedOrch = s.orchestration
+    const inSync = persistedOrch
+      && persistedOrch.steps.length === definition.value.steps.length
+    orchestration.value = inSync
+      ? { steps: persistedOrch!.steps, resourceMeta: persistedOrch!.resourceMeta ?? {} }
+      : {
+          steps: definition.value.steps.map(() => ({ enabled: true, name: '' })),
+          resourceMeta: {},
+        }
     await loadCase()
     saveState.value = 'clean'
   } catch (e) {

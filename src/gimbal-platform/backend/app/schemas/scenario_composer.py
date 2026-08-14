@@ -364,6 +364,12 @@ class Scenario(BaseModel):
 
     meta: ScenarioMeta
     steps: list[dict[str, Any]] = Field(default_factory=list)  # plate step dicts
+    # Optional round-trip of the persisted sub-structure for composer reload.
+    # All absent on legacy rows → frontend rebuilds defaults; present on rows
+    # saved by the container schema (definition/orchestration/caseMeta).
+    config: dict[str, Any] | None = None
+    resource: dict[str, Any] | None = None
+    orchestration: Orchestration | None = None
     case_count: int = Field(default=0, ge=0, alias="caseCount")
     data_set_count: int = Field(default=0, ge=0, alias="dataSetCount")
     step_count: int = Field(default=0, ge=0, alias="stepCount")

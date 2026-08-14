@@ -19,7 +19,12 @@ from ..models.composer_scenario import ComposerScenario
 from ..models.composer_case import ComposerCase
 from ..models.composer_data_set import ComposerDataSet
 # 删除 ScenarioStep;ScenarioMeta 仍保留(读侧用)
-from ..schemas.scenario_composer import Scenario, ScenarioDraft, ScenarioMeta
+from ..schemas.scenario_composer import (
+    Orchestration,
+    Scenario,
+    ScenarioDraft,
+    ScenarioMeta,
+)
 from .stars_store import is_starred as stars_is_starred
 
 
@@ -252,6 +257,7 @@ async def _to_read_shape(
 
     meta = _meta_from_row(row)
     steps = _steps_from_payload(row.payload)
+    config, resource, orchestration = _extras_from_payload(row.payload)
     starred = (
         stars_is_starred(user_id, row.scenario_id)
         if user_id is not None
@@ -260,6 +266,9 @@ async def _to_read_shape(
     return Scenario(
         meta=meta,
         steps=steps,
+        config=config,
+        resource=resource,
+        orchestration=orchestration,
         caseCount=case_count_n,
         dataSetCount=data_set_count,
         stepCount=row.step_count or len(steps),
@@ -295,6 +304,34 @@ def _steps_from_payload(payload: dict) -> list[dict]:
     definition = (payload or {}).get("definition") or {}
     raw = definition.get("steps") or []
     return [s for s in raw if isinstance(s, dict)]
+
+
+def _extras_from_payload(
+    payload: dict | None,
+) -> tuple[dict | None, dict | None, Orchestration | None]:
+    """Round-trip the persisted container's render-side sub-structure.
+
+    The payload is the container ``{definition, orchestration, caseMeta}``.
+    config/resource live under ``definition`` (plate-shaped); orchestration
+    is a sibling of definition (platform render state). Returns ``(None,
+    None, None)`` when absent so the frontend's default-rebuild fallback
+    kicks in. Guards every read so a malformed legacy row never 500s.
+    """
+    definition = (payload or {}).get("definition") or {}
+    config = definition.get("config") if isinstance(definition, dict) else None
+    if not isinstance(config, dict):
+        config = None
+    resource = definition.get("resource") if isinstance(definition, dict) else None
+    if not isinstance(resource, dict):
+        resource = None
+    orch_raw = (payload or {}).get("orchestration")
+    orchestration: Orchestration | None = None
+    if isinstance(orch_raw, dict):
+        try:
+            orchestration = Orchestration.model_validate(orch_raw)
+        except Exception:
+            orchestration = None
+    return config, resource, orchestration
 
 
 def _passes_filters(
