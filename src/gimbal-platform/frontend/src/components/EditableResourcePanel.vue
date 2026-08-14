@@ -1,12 +1,12 @@
 <!-- EditableResourcePanel.vue — Edit-mode resource editor.
-     V0.1 supports {kind: variable} (most common) and {kind: <string>, url: <string>}
-     as a generic passthrough.  Edit via inline JSON for non-trivial kinds. -->
+     Plate resource kinds: {kind: mock} and {kind: file}.  Non-plate kinds
+     round-trip via the __custom__ JSON freeform escape hatch. -->
 <template>
   <div class="eresource">
     <h4 class="eresource-title">✏️ Resource</h4>
     <p class="eresource-hint">
-      资源池：db / mock / file / variable 等。<br>
-      V0.1 支持 <code>kind: variable</code>（最常用）+ 任意 JSON 透传。
+      资源池：mock / file。<br>
+      非 plate 资源 kind 走自定义 JSON 透传。
     </p>
 
     <draggable
@@ -26,11 +26,8 @@
             class="res-key"
           />
           <el-select v-model="rows[index].kind" size="small" class="res-kind">
-            <el-option label="variable" value="variable" />
-            <el-option label="db" value="db" />
             <el-option label="mock" value="mock" />
             <el-option label="file" value="file" />
-            <el-option label="http" value="http" />
             <el-option label="custom…" value="__custom__" />
           </el-select>
           <el-input
@@ -87,7 +84,7 @@ function loadFromProps() {
   rows.value = Object.entries(props.resource ?? {}).map(([k, v]) => {
     const obj = (typeof v === 'object' && v !== null) ? v as Record<string, unknown> : null
     const kind = obj?.kind
-    const knownKinds = ['variable', 'db', 'mock', 'file', 'http']
+    const knownKinds = ['mock', 'file']
     return {
       key: k,
       kind: knownKinds.includes(String(kind)) ? String(kind) : '__custom__',
@@ -123,7 +120,8 @@ watch(
       } else {
         value = r.value
       }
-      // for `kind: variable` we serialize as { kind, default: value }
+      // generic passthrough: object value spreads into { kind, ...value },
+      // scalar value wraps as { kind, value } — correct for any kind
       const payload =
         typeof value === 'object' && value !== null
           ? { kind, ...(value as Record<string, unknown>) }
@@ -136,7 +134,7 @@ watch(
 )
 
 function addRow() {
-  rows.value.push({ key: '', kind: 'variable', customKind: '', value: '' })
+  rows.value.push({ key: '', kind: 'mock', customKind: '', value: '' })
 }
 </script>
 
