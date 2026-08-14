@@ -222,9 +222,9 @@ import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { showError } from '@/utils/errorFallback'
 import * as api from '@/api/scenario-composer'
 import type {
-  Scenario, Case, DataSetSummary, RunEnv,
+  Scenario, Case, DataSetSummary, RunEnv, Orchestration, ScenarioDraft,
 } from '@/types/scenario-composer'
-import type { ScenarioView, Orchestration, StepView } from '@/types/plate'
+import type { ScenarioView, StepView } from '@/types/plate'
 
 const STEPS = [
   { key: 'meta',     label: '基本信息',    hint: 'scenarioId / name / system / owner' },
@@ -476,15 +476,15 @@ async function saveDraft(advance = false) {
   saveState.value = 'saving'
   try {
     // 容器草稿:definition(plate) + orchestration(平台渲染)
-    const draft = {
+    const draft: ScenarioDraft = {
       definition: definition.value,
       orchestration: orchestration.value,
     }
     let saved: Scenario
     if (scenario.value) {
-      saved = await store.saveScenario(scenario.value.meta.scenarioId, draft as any)
+      saved = await store.saveScenario(scenario.value.meta.scenarioId, draft)
     } else {
-      saved = await store.saveScenario(null, draft as any)
+      saved = await store.saveScenario(null, draft)
     }
     scenario.value = saved
     // 1:1 case: ensure a case exists
@@ -536,8 +536,8 @@ async function onDuplicate() {
       scenarioId: newId,
       meta: { ...definition.value.meta, name: `${scenario.value.meta.name} (副本)` },
     }
-    const draft = { definition: newDef, orchestration: orchestration.value }
-    const saved = await store.saveScenario(null, draft as any)
+    const draft: ScenarioDraft = { definition: newDef, orchestration: orchestration.value }
+    const saved = await store.saveScenario(null, draft)
     ElMessage.success('已复制')
     router.push(`/composer/${saved.meta.scenarioId}?step=1`)
   } catch (e) {
@@ -570,11 +570,11 @@ async function onPreview() {
   }
   saving.value = true
   try {
-    const draft = {
+    const draft: ScenarioDraft = {
       definition: definition.value,
       orchestration: orchestration.value,
     }
-    const res = await api.previewPlateDraft(draft as any)
+    const res = await api.previewPlateDraft(draft)
     if (res.ok) {
       ElMessage.success('Plate 预校验通过 ✓')
     } else {

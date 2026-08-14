@@ -195,8 +195,12 @@ function syncPortMapping(name: string) {
   const rows = portRows[name] || []
   const out: Record<number, number> = {}
   for (const r of rows) {
-    const h = Number(r.host)
-    const c = Number(r.container)
+    if (!r.host || !r.container) continue
+    const trimmedHost = String(r.host).trim()
+    const trimmedContainer = String(r.container).trim()
+    if (!trimmedHost || !trimmedContainer) continue
+    const h = Number(trimmedHost)
+    const c = Number(trimmedContainer)
     if (!isNaN(h) && !isNaN(c)) out[h] = c
   }
   // 直接改 local 内的 mock 对象 — 深度 watch 会回传父
