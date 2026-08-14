@@ -216,9 +216,34 @@ interface ScenarioDraft {
 
 ## 4. 前端落地记录
 
-> 前端 Task 3-10 完成后回填此节:每 task 的实际改动文件、是否偏离上述要点(及裁决)、`vite build` 结果。
+> 全部 task + review fix round 完成后的真实落地(commit、是否偏离要点、裁决、build)。
 
-(待回填)
+### 提交链(branch `strbody_avaliable`,BASE `a1f3c6d`)
+
+| Commit | 内容 |
+|---|---|
+| `62ebab6` | Task 3 — `types/plate.ts` 末尾追加 15 个 plate 视图类型(`ScenarioView`/`StepView`/`MetaView`/`ConfigView`/`ResourceView`/`MockView`/`FileView`/`TimePolicyView`/`RetryPolicyView`/`ApiView`/`RequestView`/`StrategyView` 三变体)。+134 行,append-only。 |
+| `4967a6b` | Task 4-8 — 7 文件容器化:`types/scenario-composer.ts`(重写编排四件套,删 6 个扁平类型)、`stores/scenario-draft.ts`、`views/CaseComposer.vue`、`CaseComposerMeta/Config/Resource/Canvas.vue`。`+673/-448`。 |
+| `6ad22ac` | Fix R1 — review findings I-1(Orchestration 导入模块错)、I-3(portMapping 空行→port 0)、I-4(去 4 处冗余 `as any`,改 `ScenarioDraft` 显式标注)。 |
+| `921a545` | Fix R2 — review finding I-2(读侧 orchestration round-trip):后端 `Scenario` 读形加可选 `config/resource/orchestration` + `_extras_from_payload` 容错还原;前端 `loadScenario` 优先用持久化值(长度不齐回退默认)。+2 回归测试。 |
+| `b9db8bb` | Task 9 — `EditableResourcePanel.vue` 资源 kind 砍到 mock/file(custom JSON 透传保留);删 2 个 dead views(`ScenarioEditorMeta/Steps.vue`,router 已 redirect 无引用)。 |
+| `2bae465` | 预存修复 — `DataSetEditor.vue:38` 列头 `v-model on v-for` 编译错误(此前是唯一 build blocker),按 index 绑定。 |
+
+### 偏离与裁决
+
+- **T4 `ScenarioStepRead = StepView` re-export 未做**:brief 草拟了该 re-export,但 `StepView` import 位置在其声明之后(顺序问题)且无消费者,故不导出。无功能影响。
+- **T5 `Orchestration` 导入源**:brief 写 `@/types/plate`,但 plate.ts 无此导出,改为 `@/types/scenario-composer`(store/Canvas 正确;CaseComposer 初版跟 brief 写错 → I-1 修复)。
+- **T6 `loadScenario` 默认重建 orchestration**:brief 明确写了默认全启用重建;**但这导致 reload 丢持久化值**(I-2)。根因是后端读形不带 orchestration。Fix R2 从后端读侧修复(而非改 brief 的重建逻辑),前端加 `inSync`(steps 长度对齐)守卫优先用持久化值。
+- **T7 portMapping 序列化(pre-flight ruling #2)**:UI 维持 `[{host,container}]` 行编辑(按 mock.name 存 portRows),边界 `syncPortMapping` 折叠为 `Record<number,number>`。**I-3 发现空行 `Number('')===0` 误入 → Fix R1 加 empty/whitespace 守卫**。
+- **T9 `__custom__` 透传保留(裁决)**:plan 写"删 custom",但该面板服务于 legacy Spec-1 case 编辑器(仍路由),删透传会破坏既有数据。裁决:命名选项只留 mock/file,JSON freeform 透传保留,legacy variable/db/http 数据降级为 `__custom__` round-trip。
+- **T9 `CaseEditorBasic/CaseRunConfig` 出范围(裁决)**:这两个 view 用扁平 `cost-collect`/`intervalMs`,但是独立路由的 Spec-1 run-config 子系统(router/index.ts:69/93,live),plan Task 9 未列。剪裁 = 重设计 Spec-1 UI,超出"字段对齐"。出范围,记入最终 review 可见性。
+- **`Case.retry {maxAttempts,intervalMs}` 保留**:case 层运行重试语义,与 scenario 的 plate `RetryPolicyView` 不同概念,不统一(plate 不管 case 层重试)。
+
+### 验证结果
+
+- **后端**:`python -m pytest tests/` → **206 passed**。新增 2 个 I-2 回归测试(save→get round-trip orchestration)+ 1 个 T1+2 的 plate 非泄漏断言(`convert_calls[0]["scenario"]` 无 orchestration/caseMeta)。
+- **前端**:`npx vite build` → **`✓ built in 7.99s`**(修 `DataSetEditor.vue` 预存后)。此前该预存错误是唯一 build blocker。CaseComposer chunk(74 kB,含 4 子组件+view)构建正常。
+- **导出链(Task 10 Step 3)**:需 live backend+plate 环境,记录预期断言供手测:`steps[0].kind==='step'`、`config.retry`/`timePolicy` 保留、`meta.expire/createTime/requirementRef` 存在、无 `orchestration`/`caseMeta`/`view_hints`/`fields_meta`(plate 剥离)、过 `plate Scenario.model_validate()`。**待用户手测**。
 
 ---
 
@@ -226,15 +251,17 @@ interface ScenarioDraft {
 
 | 设计 § | 落地位置 | 状态 |
 |---|---|---|
-| §3.1 后端容器 | schema: `ScenarioDraft`/`Orchestration`/`StepOrchestration` | ✅ 后端 |
-| §3.3 翻译层归零 | router `_draft_to_full_scenario_dict` | ✅ 后端 |
-| store 读 definition | `scenario_store` create/update/_meta_from_row/_steps_from_payload | ✅ 后端 |
-| 运行路径不泄漏 | `run_dispatcher._compose_scenario` 解包 | ✅ 后端 |
-| §3.2 前端容器 + plate 视图类型 | `types/plate.ts` + `types/scenario-composer.ts` | ⏳ Task 3-4 |
-| §4.1 step(enabled/name 进 orch, inferProtocol) | `CaseComposerCanvas.vue` | ⏳ Task 8 |
-| §4.2 meta(scenarioId 顶层) | `CaseComposerMeta.vue` + `CaseComposer.vue` | ⏳ Task 6-7 |
-| §4.3 config(砍 cost-collect/intervalMs) | `CaseComposerConfig.vue` | ⏳ Task 7 |
-| §4.4 resource(砍 http/custom, description 进 resourceMeta) | `CaseComposerResource.vue` | ⏳ Task 7 |
-| §6 旧体系收口 | `Editable*.vue` / `CaseConfigReadonly.vue` | ⏳ Task 9 |
-| draft store | `stores/scenario-draft.ts` | ⏳ Task 5 |
-| §8 验证 | 全测试 + vite build + 导出手测 | ⏳ Task 10 |
+| §3.1 后端容器 | schema: `ScenarioDraft`/`Orchestration`/`StepOrchestration` | ✅ 后端 (`4c23ef1`) |
+| §3.3 翻译层归零 | router `_draft_to_full_scenario_dict` | ✅ 后端 (`4c23ef1`) |
+| store 读 definition | `scenario_store` create/update/_meta_from_row/_steps_from_payload | ✅ 后端 (`4c23ef1` + `921a545` 读侧 extras) |
+| 运行路径不泄漏 | `run_dispatcher._compose_scenario` 解包 | ✅ 后端 (`698d989` 加回归断言) |
+| §3.2 前端容器 + plate 视图类型 | `types/plate.ts` + `types/scenario-composer.ts` | ✅ (`62ebab6` + `4967a6b`) |
+| §4.1 step(enabled/name 进 orch, inferProtocol) | `CaseComposerCanvas.vue` | ✅ (`4967a6b`) |
+| §4.2 meta(scenarioId 顶层) | `CaseComposerMeta.vue` + `CaseComposer.vue` | ✅ (`4967a6b`) |
+| §4.3 config(砍 cost-collect/intervalMs) | `CaseComposerConfig.vue` | ✅ (`4967a6b`) |
+| §4.4 resource(砍 http/custom, description 进 resourceMeta) | `CaseComposerResource.vue` | ✅ (`4967a6b`) |
+| §6 旧体系收口 | `Editable*.vue` / `CaseConfigReadonly.vue` | ✅ (`b9db8bb`,后者已对齐无需改) |
+| draft store | `stores/scenario-draft.ts` | ✅ (`4967a6b`) |
+| §8 验证 | 全测试 + vite build + 导出手测 | ✅ 自动化全绿;导出手测待用户 |
+| 读侧 round-trip(spec 隐含:reload 不丢编辑态) | `_extras_from_payload` + `loadScenario` inSync 守卫 | ✅ (`921a545`,review-driven 补强) |
+
