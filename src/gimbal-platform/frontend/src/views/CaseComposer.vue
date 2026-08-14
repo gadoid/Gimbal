@@ -28,7 +28,7 @@
           <div class="crumb">
             <span @click="$router.push('/scenarios')">场景库</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
-            <span class="scenario-id">{{ meta.scenarioId }}</span>
+            <span class="scenario-id">{{ definition.scenarioId }}</span>
           </div>
           <h1 class="title">
             {{ meta.name || '未命名编排' }}
@@ -469,16 +469,33 @@ function onStepClick(idx: number) {
 }
 
 // ── save / load / delete ──
+
+/** 新建场景时生成唯一 scenarioId(满足后端正则 ^sc-[a-z0-9-]+$,3–128)。
+ *  格式: sc-<name-slug>-<6位base36时间戳><3位随机>。
+ *  slug 取 name 转小写、非 [a-z0-9] 替换为 -,合并去首尾;为空用 'scenario'。
+ *  后端把此 id 作 DB 主键原样采用;撞了返 409,调用方捕获后重生成。 */
+function genScenarioId(name: string): string {
+  const slug = (name || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'scenario'
+  const ts = Date.now().toString(36).slice(-6)
+  const rnd = Math.floor(Math.random() * 36 * 36 * 36).toString(36).padStart(3, '0')
+  const id = `sc-${slug}-${ts}${rnd}`
+  return id.length > 128 ? id.slice(0, 128) : id
+}
+
 async function saveDraft(advance = false) {
-  if (!meta.value.scenarioId || !meta.value.name) {
-    ElMessage.warning('请先在 ① 基本信息 中填写 scenarioId 和 name')
+  if (!meta.value.name) {
+    // scenarioId 不再前端必填校验:新建时自动生成,编辑时由路由回填并锁定。
+    ElMessage.warning('请先在 ① 基本信息 中填写 name')
     onStepClick(0)
     return
   }
-  if (!/^sc-[a-z0-9-]+$/.test(meta.value.scenarioId)) {
-    ElMessage.error('scenarioId 必须匹配 ^sc-[a-z0-9-]+$')
-    onStepClick(0)
-    return
+  // 新建场景:生成唯一 id 替换占位 'sc-new'。后端以此 id 作 DB 主键原样采用。
+  // 编辑场景:definition.scenarioId 已由 loadScenario 从路由回填,update 时锁定不变。
+  if (!scenario.value && definition.value.scenarioId === 'sc-new') {
+    definition.value.scenarioId = genScenarioId(meta.value.name)
   }
   saving.value = true
   saveState.value = 'saving'
@@ -492,7 +509,21 @@ async function saveDraft(advance = false) {
     if (scenario.value) {
       saved = await store.saveScenario(scenario.value.meta.scenarioId, draft)
     } else {
-      saved = await store.saveScenario(null, draft)
+      // create:撞 id 时后端返 409 (scenario_id_exists),重生成 id 重试(最多 2 次)。
+      saved = undefined as unknown as Scenario
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          saved = await store.saveScenario(null, draft)
+          break
+        } catch (e: any) {
+          if (attempt < 2 && /scenario_id_exists|409/.test(String(e?.message || e))) {
+            definition.value.scenarioId = genScenarioId(meta.value.name)
+            draft.definition = definition.value
+            continue
+          }
+          throw e
+        }
+      }
     }
     scenario.value = saved
     // 1:1 case: ensure a case exists
@@ -572,9 +603,13 @@ async function onDelete() {
 }
 
 async function onPreview() {
-  if (!meta.value.scenarioId || !meta.value.name) {
-    ElMessage.warning('请先填写 scenarioId 和 name')
+  if (!meta.value.name) {
+    ElMessage.warning('请先填写 name')
     return
+  }
+  // 新建场景:预校验也要发真实 id 给 plate /convert(替换占位 'sc-new')。
+  if (!scenario.value && definition.value.scenarioId === 'sc-new') {
+    definition.value.scenarioId = genScenarioId(meta.value.name)
   }
   saving.value = true
   try {
