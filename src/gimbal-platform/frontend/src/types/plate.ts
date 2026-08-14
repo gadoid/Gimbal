@@ -157,3 +157,137 @@ export interface EndpointFullView {
   version: string
   updated_at: string | null
 }
+
+// ─── plate Scenario 视图(编排用,对齐 gimbal_plate/schema/scenario.py + step/api/request/strategy)──
+
+/** plate Api(step 内)。对齐 gimbal_plate/schema/api.py Api + view_hints 扩展。 */
+export interface ApiView {
+  kind: 'api'
+  service: string
+  method: HttpMethod
+  path: string
+  headers?: Record<string, string>
+  timeout?: number
+  /** 平台视图扩展:endpoint_id/module/tags(GimbalScenarioExporter 导出时剥离) */
+  view_hints?: { endpoint_id?: string; module?: string; tags?: string[] }
+}
+
+/** plate Request(step 内)。对齐 gimbal_plate/schema/request.py Request + fields_meta 扩展。 */
+export interface RequestView {
+  kind: 'request'
+  body: unknown
+  /** 平台视图扩展:字段名→IOFieldBinding(平台前端渲染用) */
+  fields_meta?: Record<string, IOFieldBinding>
+}
+
+/** plate strategy 三种变体。对齐 gimbal_plate/schema/strategy.py。 */
+export interface ExtractView {
+  kind: 'extract'
+  name?: string
+  expression: string       // JSONPath
+  target: string
+  scope?: string
+  default?: unknown
+  required?: boolean
+  view_note?: string       // 平台视图扩展
+}
+export interface AssignView {
+  kind: 'assign'
+  name?: string
+  source: unknown
+  target: string
+  scope?: string
+  default?: unknown
+  required?: boolean
+  view_note?: string
+}
+export interface AssertionView {
+  kind: 'assertion'
+  name?: string
+  target: string
+  operator: string
+  expected?: unknown
+  message?: string
+  soft?: boolean
+  view_note?: string
+}
+export type StrategyView = ExtractView | AssignView | AssertionView
+
+/** plate Step。对齐 gimbal_plate/schema/step.py Step。 */
+export interface StepView {
+  kind: 'step'
+  description?: string
+  api: ApiView
+  request: RequestView
+  strategy: StrategyView[]
+}
+
+/** plate Meta。对齐 gimbal_plate/schema/scenario.py Meta。 */
+export interface MetaView {
+  name: string
+  description: string
+  module: string
+  priority: number
+  author: string
+  owner: string
+  tags: string[]
+  version: string
+  createTime: string
+  expire: boolean
+  requirementRef: unknown[]
+  system: string[]
+}
+
+/** plate 时间策略判别对象。对齐 gimbal_plate/schema/time_policy.py。 */
+export type TimePolicyView =
+  | { kind: 'record' }
+  | { kind: 'timeout'; seconds: number }
+
+/** plate 重试策略。对齐 gimbal_plate/schema/retry_policy.py RetryPolicy。 */
+export interface RetryPolicyView {
+  kind: 'retry_policy'
+  maxAttempts: number
+  backoffSeconds: number
+  retryOn: string[]
+}
+
+/** plate Config。对齐 gimbal_plate/schema/scenario.py Config。 */
+export interface ConfigView {
+  setup: unknown[]
+  teardown: unknown[]
+  services: Record<string, string>
+  users: Record<string, unknown>
+  timePolicy: TimePolicyView
+  retry: RetryPolicyView | null
+  vars: Record<string, unknown>
+}
+
+/** plate Resource 变体。对齐 gimbal_plate/schema/resource.py。 */
+export interface MockView {
+  kind: 'mock'
+  name: string
+  image: string
+  config: Record<string, unknown>
+  portMapping: Record<number, number>
+}
+export interface FileView {
+  kind: 'file'
+  name: string
+  path: string
+}
+export type ResourceView = MockView | FileView
+
+/** plate Scenario 完整视图。对齐 gimbal_plate/schema/scenario.py Scenario。
+ *  这就是容器 definition 的形状。 */
+export interface ScenarioView {
+  kind: 'scenario'
+  scenarioId: string
+  meta: MetaView
+  config: ConfigView
+  resource: Record<string, ResourceView>
+  steps: StepView[]
+  /** 平台视图扩展(可选,来自 PlatformScenarioExporter) */
+  endpoints?: unknown[]
+  navigation?: unknown
+  config_summary?: unknown
+}
