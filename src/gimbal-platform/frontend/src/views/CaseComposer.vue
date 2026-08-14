@@ -374,6 +374,7 @@ async function loadScenario() {
     scenario.value = s
     // 读侧返回 {meta, steps(plate dict), ...};重建 definition(plate 结构)
     const prevConfig = definition.value.config
+    const prevResource = definition.value.resource
     definition.value = {
       kind: 'scenario',
       scenarioId: s.meta.scenarioId,
@@ -392,7 +393,7 @@ async function loadScenario() {
         system: s.meta.system || ['fin'],
       },
       config: (s as any).config ?? prevConfig,
-      resource: (s as any).resource ?? {},
+      resource: (s as any).resource ?? prevResource,
       steps: (s.steps || []) as unknown as StepView[],
     }
     // orchestration 与 definition.steps 同序同长。

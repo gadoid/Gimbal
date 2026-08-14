@@ -191,18 +191,30 @@ const runCount = computed(() => {
   return ds.reduce((s, d) => s + d.rowCount, 0)
 })
 
-const draft = computed(() => ({
-  scenarioId: scenarioId.value,
-  meta: store.scenarioById(scenarioId.value)?.meta ?? {},
-  steps: store.scenarioById(scenarioId.value)?.steps ?? [],
-  config: {
-    services: { [scenarioId.value.split('.')[0] || 'default']: selectedEnv.value },
-    users: authName.value ? { [authName.value]: 'bearer-***' } : {},
-    retry: { maxAttempts: retryMaxAttempts.value, intervalMs: retryIntervalMs.value },
-    timePolicy: 'cost-collect',
-  },
-  dataSetIds: selectedDataSets.value,
-}))
+// 容器形 {definition, orchestration} — 满足后端 ScenarioDraft 契约(必填 definition)。
+// definition 取自读侧 scenario(其 config/resource 已是 plate 形,由 composer 持久化);
+// 不再注入 case 级 run-config(cost-collect / {intervalMs} —— plate 拒绝这些 scenario 级字段)。
+// 读侧 Scenario 把 config/resource/orchestration 类型化为 Record<string,unknown> / Orchestration?,
+// 而 ScenarioView 需要 ConfigView,故在此局部 `as` 转换(运行时确为 plate 形,见 scenario-composer.ts 注释)。
+const draft = computed(() => {
+  const s = store.scenarioById(scenarioId.value)
+  const definition = {
+    kind: 'scenario' as const,
+    scenarioId: scenarioId.value,
+    meta: s?.meta ?? {},
+    config: (s?.config ?? {
+      setup: [], teardown: [], services: {}, users: {},
+      timePolicy: { kind: 'record' }, retry: null, vars: {},
+    }) as any,
+    resource: s?.resource ?? {},
+    steps: s?.steps ?? [],
+  }
+  const orchestration = s?.orchestration ?? {
+    steps: (s?.steps ?? []).map(() => ({ enabled: true, name: '' })),
+    resourceMeta: {},
+  }
+  return { definition, orchestration }
+})
 
 onMounted(async () => {
   try {

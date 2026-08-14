@@ -61,7 +61,7 @@ export const useScenarioDraftStore = defineStore('scenario-draft', () => {
         setup: [], teardown: [], services: {}, users: {},
         timePolicy: { kind: 'record' }, retry: null, vars: {},
       },
-      resource: {},
+      resource: saved.resource ?? {},
       steps: saved.steps ?? [],
     } as ScenarioView
     const orch: Orchestration = saved.orchestration ?? {
