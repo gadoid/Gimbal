@@ -34,8 +34,8 @@
       <!-- 列头 -->
       <div class="row head">
         <div class="c c-idx">#</div>
-        <div v-for="col in columns" :key="col" class="c c-field">
-          <el-input v-model="col" size="small" placeholder="字段名" />
+        <div v-for="(col, idx) in columns" :key="idx" class="c c-field">
+          <el-input v-model="columns[idx]" size="small" placeholder="字段名" />
         </div>
         <div class="c c-action">
           <el-button size="small" plain @click="addColumn">+ 列</el-button>
