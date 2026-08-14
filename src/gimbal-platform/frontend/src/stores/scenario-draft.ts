@@ -19,15 +19,12 @@ import { ref } from 'vue'
 import * as yaml from 'js-yaml'
 import { previewPlateDraft, getScenarioDraft } from '@/api/scenario-composer'
 import { ElMessage } from 'element-plus'
-import type {
-  ScenarioDraft, ScenarioMeta, ScenarioStep, ScenarioConfig, ScenarioResource,
-} from '@/types/scenario-composer'
+import type { ScenarioDraft, Orchestration } from '@/types/scenario-composer'
+import type { ScenarioView } from '@/types/plate'
 
 interface DraftSnapshot {
-  meta: ScenarioMeta
-  steps: ScenarioStep[]
-  config: ScenarioConfig
-  resource: ScenarioResource
+  definition: ScenarioView
+  orchestration: Orchestration
   /** 编辑中场景的 id (新建时为 null) — 决定导出文件名 */
   scenarioId: string | null
 }
@@ -44,25 +41,34 @@ export const useScenarioDraftStore = defineStore('scenario-draft', () => {
     draft.value = null
   }
 
-  /** 从场景库点行级导出时,把已保存 scenario 的整稿拉进来,然后正常 export* */
+  /** 从场景库点行级导出时,把已保存 scenario 的整稿拉进来,然后正常 export*
+   *
+   * 后端容器形返回 {definition, orchestration, caseMeta};若后端仍返回旧扁平
+   * 形(meta/steps/...),则容错重建 definition。orchestration 缺省时按
+   * definition.steps 长度补全为全启用。 */
   async function loadFromSaved(scenarioId: string): Promise<void> {
-    const saved = await getScenarioDraft(scenarioId)
-    draft.value = {
-      meta: saved.meta,
-      steps: saved.steps ?? [],
-      config: saved.config ?? ({
-        timePolicyKind: 'record',
-        retryMaxAttempts: 0,
-        retryIntervalMs: 500,
-        vars: [],
-        services: {},
-        users: {},
-        setup: [],
-        teardown: [],
-      } as ScenarioConfig),
-      resource: saved.resource ?? { items: [] } as ScenarioResource,
+    const saved = await getScenarioDraft(scenarioId) as any
+    const def: ScenarioView = saved.definition ?? {
+      kind: 'scenario',
       scenarioId,
-    }
+      meta: saved.meta ?? {
+        name: '', description: '', module: '', priority: 1,
+        author: '', owner: '', tags: [], version: 'v0.1.0',
+        createTime: new Date().toISOString(), expire: false,
+        requirementRef: [], system: ['fin'],
+      },
+      config: saved.config ?? {
+        setup: [], teardown: [], services: {}, users: {},
+        timePolicy: { kind: 'record' }, retry: null, vars: {},
+      },
+      resource: {},
+      steps: saved.steps ?? [],
+    } as ScenarioView
+    const orch: Orchestration = saved.orchestration ?? {
+      steps: (def.steps || []).map(() => ({ enabled: true, name: '' })),
+      resourceMeta: {},
+    } as Orchestration
+    draft.value = { definition: def, orchestration: orch, scenarioId }
   }
 
   /** 平台 → Plate /convert (consumer="gimbal") → 返回纯可执行结构
@@ -76,9 +82,9 @@ export const useScenarioDraftStore = defineStore('scenario-draft', () => {
     if (!draft.value) {
       throw new Error('当前没有可导出的草稿')
     }
-    const { meta, steps, config, resource } = draft.value
-    // 走 ScenarioDraft 类型,后端 schema 变更时编译期就能发现
-    const draftForPlate: ScenarioDraft = { meta, steps, config, resource }
+    // 容器形:definition 原样透传 plate /convert;orchestration/caseMeta 不进 plate。
+    const { definition, orchestration } = draft.value
+    const draftForPlate: ScenarioDraft = { definition, orchestration }
     const res = await previewPlateDraft(draftForPlate)
     if (!res.ok) {
       const errMsg = res.errors?.length
@@ -93,7 +99,9 @@ export const useScenarioDraftStore = defineStore('scenario-draft', () => {
   }
 
   function fileBase(): string {
-    const id = draft.value?.scenarioId || draft.value?.meta?.scenarioId || 'scenario'
+    const id = draft.value?.scenarioId
+      || draft.value?.definition?.scenarioId
+      || 'scenario'
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
     return `${id}-${ts}`
   }

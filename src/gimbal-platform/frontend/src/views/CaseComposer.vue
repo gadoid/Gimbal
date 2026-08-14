@@ -121,28 +121,30 @@
         <CaseComposerMeta
           v-if="stepIdx === 0"
           key="meta"
-          v-model="meta"
+          v-model="definition.meta"
         />
 
         <!-- ② Resource -->
         <CaseComposerResource
           v-else-if="stepIdx === 1"
           key="resource"
-          v-model="resource"
+          v-model:resource="definition.resource"
+          v-model:resource-meta="orchestration.resourceMeta"
         />
 
         <!-- ③ Config -->
         <CaseComposerConfig
           v-else-if="stepIdx === 2"
           key="config"
-          v-model="config"
+          v-model="definition.config"
         />
 
         <!-- ④ Canvas -->
         <CaseComposerCanvas
           v-else
           key="canvas"
-          v-model="steps"
+          v-model:steps="definition.steps"
+          v-model:orchestration="orchestration"
           :scenario="scenario"
         />
       </transition>
@@ -220,13 +222,13 @@ import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { showError } from '@/utils/errorFallback'
 import * as api from '@/api/scenario-composer'
 import type {
-  Scenario, ScenarioMeta, ScenarioStep, ScenarioConfig, ScenarioResource,
-  Case, DataSetSummary, RunEnv,
+  Scenario, Case, DataSetSummary, RunEnv,
 } from '@/types/scenario-composer'
+import type { ScenarioView, Orchestration, StepView } from '@/types/plate'
 
 const STEPS = [
   { key: 'meta',     label: '基本信息',    hint: 'scenarioId / name / system / owner' },
-  { key: 'resource', label: '资源',        hint: 'mock / file / http / custom' },
+  { key: 'resource', label: '资源',        hint: 'mock / file' },
   { key: 'config',   label: '配置',        hint: 'timePolicy / retry / services / vars' },
   { key: 'canvas',   label: '步骤编辑',    hint: '从接口目录选接口, 编排业务流程' },
 ] as const
@@ -247,32 +249,44 @@ const caseData = ref<Case | null>(null)
 const dataSets = ref<DataSetSummary[]>([])
 const envs = ref<RunEnv[]>([])
 
-// Local draft state
-const meta = ref<ScenarioMeta>({
+// Local draft state — 容器: definition(plate) + orchestration(平台)
+const definition = ref<ScenarioView>({
+  kind: 'scenario',
   scenarioId: 'sc-new',
-  name: '',
-  description: '',
-  module: '',
-  priority: 1,
-  author: '',
-  owner: '',
-  tags: [],
-  system: ['fin'],
-  version: 'v0.1.0',
-  expire: false,
+  meta: {
+    name: '',
+    description: '',
+    module: '',
+    priority: 1,
+    author: '',
+    owner: '',
+    tags: [],
+    version: 'v0.1.0',
+    createTime: new Date().toISOString(),
+    expire: false,
+    requirementRef: [],
+    system: ['fin'],
+  },
+  config: {
+    setup: [],
+    teardown: [],
+    services: {},
+    users: {},
+    timePolicy: { kind: 'record' },
+    retry: null,
+    vars: {},
+  },
+  resource: {},
+  steps: [],
 })
-const resource = ref<ScenarioResource>({ items: [] })
-const config = ref<ScenarioConfig>({
-  timePolicyKind: 'record',
-  retryMaxAttempts: 0,
-  retryIntervalMs: 500,
-  vars: [],
-  services: {},
-  users: {},
-  setup: [],
-  teardown: [],
+const orchestration = ref<Orchestration>({
+  steps: [],
+  resourceMeta: {},
 })
-const steps = ref<ScenarioStep[]>([])
+
+// 便利 getter (模板顶部 crumb / 标题 / canRun 用)
+const meta = computed(() => definition.value.meta)
+const steps = computed(() => definition.value.steps)
 
 // Run dialog
 const runDialogOpen = ref(false)
@@ -290,7 +304,7 @@ const progressPct = computed(() => {
 })
 
 // Mark dirty on any draft change
-watch([meta, resource, config, steps], () => {
+watch([definition, orchestration], () => {
   if (saveState.value !== 'saving') {
     dirty.value = true
     saveState.value = 'dirty'
@@ -300,13 +314,11 @@ watch([meta, resource, config, steps], () => {
 // ── 把进行中对象同步到共享 draft store (任意 step / 任意时刻都可达) ──
 const draftStore = useScenarioDraftStore()
 watch(
-  [meta, resource, config, steps, scenario],
+  [definition, orchestration, scenario],
   () => {
     draftStore.setDraft({
-      meta: meta.value,
-      steps: steps.value,
-      config: config.value,
-      resource: resource.value,
+      definition: definition.value,
+      orchestration: orchestration.value,
       scenarioId: scenario.value?.meta?.scenarioId ?? null,
     })
   },
@@ -336,8 +348,8 @@ function checkSystemMismatch() {
   if (!scenario.value) return
   const declared = new Set(scenario.value.meta.system || [])
   const actual = new Set<string>()
-  for (const s of scenario.value.steps) {
-    const svc = s.service || ''
+  for (const s of scenario.value.steps as any[]) {
+    const svc = (s.api && s.api.service) || ''
     if (svc.includes('.')) actual.add(svc.split('.')[0])
     else if (svc) actual.add(svc)
   }
@@ -360,13 +372,34 @@ async function loadScenario() {
   try {
     const s = await api.getScenario(scenarioId.value!)
     scenario.value = s
-    meta.value = { ...s.meta }
-    steps.value = [...s.steps]
-    // Load config + resource from the persisted payload if present
-    const payload = s as any
-    if (payload.config) config.value = { ...config.value, ...payload.config }
-    if (payload.resource) resource.value = { ...payload.resource }
-    // Load case + data-sets (1:1)
+    // 读侧返回 {meta, steps(plate dict), ...};重建 definition(plate 结构)
+    const prevConfig = definition.value.config
+    definition.value = {
+      kind: 'scenario',
+      scenarioId: s.meta.scenarioId,
+      meta: {
+        name: s.meta.name,
+        description: s.meta.description,
+        module: s.meta.module,
+        priority: s.meta.priority,
+        author: s.meta.author,
+        owner: s.meta.owner,
+        tags: s.meta.tags || [],
+        version: s.meta.version || 'v0.1.0',
+        createTime: s.meta.createTime || new Date().toISOString(),
+        expire: s.meta.expire ?? false,
+        requirementRef: [],
+        system: s.meta.system || ['fin'],
+      },
+      config: (s as any).config ?? prevConfig,
+      resource: (s as any).resource ?? {},
+      steps: (s.steps || []) as unknown as StepView[],
+    }
+    // orchestration 与 definition.steps 同序同长 (缺省全启用,展示名空)
+    orchestration.value = {
+      steps: definition.value.steps.map(() => ({ enabled: true, name: '' })),
+      resourceMeta: {},
+    }
     await loadCase()
     saveState.value = 'clean'
   } catch (e) {
@@ -391,7 +424,7 @@ async function loadCase() {
   }
 }
 
-async function autoCreateCase(scenarioMeta: ScenarioMeta): Promise<Case> {
+async function autoCreateCase(scenarioMeta: Scenario['meta']): Promise<Case> {
   const caseId = `${scenarioMeta.scenarioId}-case-001`
   const draft: Case = {
     caseId,
@@ -442,12 +475,16 @@ async function saveDraft(advance = false) {
   saving.value = true
   saveState.value = 'saving'
   try {
-    const draft = { meta: meta.value, steps: steps.value, config: config.value, resource: resource.value }
+    // 容器草稿:definition(plate) + orchestration(平台渲染)
+    const draft = {
+      definition: definition.value,
+      orchestration: orchestration.value,
+    }
     let saved: Scenario
     if (scenario.value) {
-      saved = await store.saveScenario(scenario.value.meta.scenarioId, draft)
+      saved = await store.saveScenario(scenario.value.meta.scenarioId, draft as any)
     } else {
-      saved = await store.saveScenario(null, draft)
+      saved = await store.saveScenario(null, draft as any)
     }
     scenario.value = saved
     // 1:1 case: ensure a case exists
@@ -494,8 +531,12 @@ async function onDuplicate() {
       { type: 'info' }
     )
     const newId = `${scenario.value.meta.scenarioId}-copy`
-    const newMeta = { ...scenario.value.meta, scenarioId: newId, name: `${scenario.value.meta.name} (副本)` }
-    const draft = { meta: newMeta, steps: scenario.value.steps, config: config.value, resource: resource.value }
+    const newDef: ScenarioView = {
+      ...definition.value,
+      scenarioId: newId,
+      meta: { ...definition.value.meta, name: `${scenario.value.meta.name} (副本)` },
+    }
+    const draft = { definition: newDef, orchestration: orchestration.value }
     const saved = await store.saveScenario(null, draft as any)
     ElMessage.success('已复制')
     router.push(`/composer/${saved.meta.scenarioId}?step=1`)
@@ -529,7 +570,10 @@ async function onPreview() {
   }
   saving.value = true
   try {
-    const draft = { meta: meta.value, steps: steps.value, config: config.value, resource: resource.value }
+    const draft = {
+      definition: definition.value,
+      orchestration: orchestration.value,
+    }
     const res = await api.previewPlateDraft(draft as any)
     if (res.ok) {
       ElMessage.success('Plate 预校验通过 ✓')

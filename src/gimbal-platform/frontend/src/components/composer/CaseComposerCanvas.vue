@@ -28,19 +28,19 @@
           </button>
         </div>
         <div class="step-list">
-          <div v-for="(s, i) in local" :key="s.id" class="step-row"
-               :class="{ active: i === activeStepIdx, disabled: !s.enabled }"
+          <div v-for="(s, i) in local" :key="i" class="step-row"
+               :class="{ active: i === activeStepIdx, disabled: !orch.steps[i]?.enabled }"
                @click="activeStepIdx = i">
             <div class="step-idx">{{ i + 1 }}</div>
             <div class="step-info">
-              <div class="step-name">{{ s.name || s.id }}</div>
+              <div class="step-name">{{ orch.steps[i]?.name || s.api?.path || 'step' }}</div>
               <div class="step-meta">
-                <span v-if="s.method" class="method-badge" :class="`m-${s.method.toLowerCase()}`">{{ s.method }}</span>
-                <span v-if="s.service" class="svc-tag">{{ s.service }}</span>
-                <span v-if="s.endpoint" class="ep-path">{{ s.endpoint }}</span>
+                <span v-if="s.api?.method" class="method-badge" :class="`m-${s.api.method.toLowerCase()}`">{{ s.api.method }}</span>
+                <span v-if="s.api?.service" class="svc-tag">{{ s.api.service }}</span>
+                <span v-if="s.api?.path" class="ep-path">{{ s.api.path }}</span>
               </div>
             </div>
-            <el-switch v-model="s.enabled" size="small" @click.stop />
+            <el-switch v-if="orch.steps[i]" v-model="orch.steps[i].enabled" size="small" @click.stop />
             <button class="step-del" @click.stop="removeStep(i)" title="删除">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg>
             </button>
@@ -63,105 +63,86 @@
               <span class="title-num">{{ activeStepIdx + 1 }}</span>
               <input
                 class="title-input"
-                :value="currentStep.name"
-                @input="(e: any) => currentStep.name = e.target.value"
+                :value="currentOrch?.name ?? ''"
+                @input="(e: any) => { if (currentOrch) currentOrch.name = e.target.value }"
                 placeholder="step 名称"
               />
             </div>
-            <span class="step-kind">{{ currentStep.kind }}</span>
+            <span class="step-kind">{{ inferProtocol(currentStep) }}</span>
           </div>
           <el-form label-position="top" size="small" class="modern-form">
-            <div class="grid-2">
-              <el-form-item label="id">
-                <el-input v-model="currentStep.id" />
-              </el-form-item>
-              <el-form-item label="kind">
-                <el-select v-model="currentStep.kind" class="modern-select">
-                  <el-option value="http" label="http" />
-                  <el-option value="rpc" label="rpc" />
-                  <el-option value="sql" label="sql" />
-                  <el-option value="script" label="script" />
-                  <el-option value="wait" label="wait" />
-                  <el-option value="extract" label="extract" />
-                </el-select>
-              </el-form-item>
-            </div>
             <div class="grid-3">
               <el-form-item label="method">
-                <el-select v-model="currentStep.method" class="modern-select" allow-clear>
+                <el-select v-model="currentStep.api.method" class="modern-select" allow-clear>
                   <el-option v-for="m in METHODS" :key="m" :value="m" :label="m" />
                 </el-select>
               </el-form-item>
               <el-form-item label="service">
-                <el-input v-model="currentStep.service" placeholder="tidb-test-service" />
+                <el-input v-model="currentStep.api.service" placeholder="tidb-test-service" />
               </el-form-item>
-              <el-form-item label="expectStatus">
-                <el-input-number v-model="currentStep.expectStatus as any" :min="100" :max="599" class="modern-number" />
+              <el-form-item label="description">
+                <el-input v-model="currentStep.description" placeholder="step 描述 (plate)" />
               </el-form-item>
             </div>
-            <el-form-item label="endpoint">
-              <el-input v-model="currentStep.endpoint" placeholder="/api/v1/orders">
+            <el-form-item label="endpoint (path)">
+              <el-input v-model="currentStep.api.path" placeholder="/api/v1/orders">
                 <template #prefix><span class="input-tag">URL</span></template>
               </el-input>
             </el-form-item>
             <el-form-item label="headers (JSON)">
               <el-input
-                :model-value="JSON.stringify(currentStep.headers || {}, null, 2)"
-                @update:model-value="v => currentStep.headers = parseJson(v, {})"
+                :model-value="JSON.stringify(currentStep.api.headers || {}, null, 2)"
+                @update:model-value="v => currentStep.api.headers = parseJson(v, {})"
                 type="textarea"
                 :rows="3"
                 class="code-input"
               />
             </el-form-item>
-            <!-- V3: body 由 IOFieldBinding 驱动 — 表单字段 (Type A) 自动渲染, schema-only (Type C) 隐藏携带 -->
-            <el-form-item v-if="currentStep.endpointRef" label="请求体 (由 IOFieldBinding 驱动)">
+            <!-- body: 优先由 request.fields_meta (IOFieldBinding) 驱动表单 -->
+            <el-form-item v-if="fieldBindings(currentStep).length" label="请求体 (由 IOFieldBinding 驱动)">
               <div class="field-form-wrap">
                 <FieldForm
-                  :bindings="currentStep.endpointRef.bindings"
-                  :body="currentStep.body || {}"
-                  @update:body="v => currentStep.body = mergeBody(v, currentStep.endpointRef?.hiddenFields)"
+                  :bindings="fieldBindings(currentStep)"
+                  :body="currentStep.request.body || {}"
+                  @update:body="v => currentStep.request.body = mergeBody(v, {})"
                 />
                 <p class="field-form-hint">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                  来自 <code>Plate /api/endpoint/{{ currentStep.endpointRef.endpointId }}/full</code> 的 IOFieldBinding
-                  · {{ currentStep.endpointRef.bindings.length }} 个字段, 全部 schema 字段会随 step 一起序列化 (含隐藏字段)
+                  来自 plate <code>/api/endpoint/.../full</code> 的 IOFieldBinding
+                  · {{ fieldBindings(currentStep).length }} 个字段, plate 是结构权威源
                 </p>
-                <!-- 附带字段 (Type C, schema-only) 折叠区 (PRD §5.9) -->
-                <div v-if="hiddenFieldCount" class="extra-fields">
-                  <div class="extra-head" @click="hiddenOpen = !hiddenOpen">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" :class="{ open: hiddenOpen }"><polyline points="6 9 12 15 18 9"/></svg>
-                    <span>附带字段 · {{ hiddenFieldCount }} (从 schema 自动携带)</span>
-                    <span class="extra-hint">运行时全量发出, 默认开启</span>
-                  </div>
-                  <div v-if="hiddenOpen" class="extra-body">
-                    <div v-for="(v, k) in currentStep.endpointRef.hiddenFields" :key="k" class="extra-row">
-                      <code class="extra-key">{{ k }}</code>
-                      <span class="extra-arrow">→</span>
-                      <code class="extra-val">{{ JSON.stringify(v) }}</code>
-                      <span class="extra-tag t-c">Type C · hidden</span>
-                    </div>
-                  </div>
-                </div>
               </div>
             </el-form-item>
             <el-form-item v-else label="body (JSON)">
               <el-input
-                :model-value="JSON.stringify(currentStep.body || {}, null, 2)"
-                @update:model-value="v => currentStep.body = parseJson(v, {})"
+                :model-value="JSON.stringify(currentStep.request.body || {}, null, 2)"
+                @update:model-value="v => currentStep.request.body = parseJson(v, {})"
                 type="textarea"
                 :rows="5"
                 class="code-input"
               />
               <span class="hint">提示: 从接口目录添加 step 后, body 将由 IOFieldBinding 自动渲染</span>
             </el-form-item>
-            <el-form-item label="extract bindings (从响应提取变量)">
-              <div v-for="(b, j) in currentStep.extractBindings" :key="j" class="extract-row">
-                <el-input v-model="b.name" placeholder="变量名" size="small" class="ex-name" />
+            <el-form-item label="extract (从响应提取变量 → strategy)">
+              <div v-for="(ex, j) in extractStrategies(currentStep)" :key="j" class="extract-row">
+                <el-input
+                  :model-value="ex.target"
+                  @update:model-value="v => ex.target = v"
+                  placeholder="变量名 (target)"
+                  size="small"
+                  class="ex-name"
+                />
                 <span class="ex-arrow">←</span>
-                <el-input v-model="b.path" placeholder="$.data.orderId" size="small" class="ex-path" />
-                <button class="ex-del" @click="currentStep.extractBindings.splice(j, 1)">×</button>
+                <el-input
+                  :model-value="ex.expression"
+                  @update:model-value="v => ex.expression = v"
+                  placeholder="$.data.orderId"
+                  size="small"
+                  class="ex-path"
+                />
+                <button class="ex-del" @click="removeExtract(currentStep, ex)">×</button>
               </div>
-              <button class="add-extract" @click="currentStep.extractBindings.push({ name: '', path: '' })">
+              <button class="add-extract" @click="addExtract(currentStep)">
                 + 添加 extract
               </button>
             </el-form-item>
@@ -185,31 +166,31 @@
           <div class="info-block">
             <div class="info-k">HTTP</div>
             <div class="info-v">
-              <span v-if="currentStep.method" class="method-badge" :class="`m-${currentStep.method.toLowerCase()}`">{{ currentStep.method }}</span>
-              <code>{{ currentStep.endpoint || '—' }}</code>
+              <span v-if="currentStep.api?.method" class="method-badge" :class="`m-${currentStep.api.method.toLowerCase()}`">{{ currentStep.api.method }}</span>
+              <code>{{ currentStep.api?.path || '—' }}</code>
             </div>
           </div>
           <div class="info-block">
             <div class="info-k">service</div>
-            <div class="info-v"><code>{{ currentStep.service || '—' }}</code></div>
+            <div class="info-v"><code>{{ currentStep.api?.service || '—' }}</code></div>
           </div>
           <div class="info-block">
             <div class="info-k">kind</div>
-            <div class="info-v"><span class="badge">{{ currentStep.kind }}</span></div>
+            <div class="info-v"><span class="badge">{{ inferProtocol(currentStep) }}</span></div>
           </div>
           <div class="info-block">
             <div class="info-k">enabled</div>
             <div class="info-v">
-              <span :class="['status-pill', currentStep.enabled ? 'on' : 'off']">
-                {{ currentStep.enabled ? '✓ 启用' : '✗ 禁用' }}
+              <span :class="['status-pill', currentOrch?.enabled ? 'on' : 'off']">
+                {{ currentOrch?.enabled ? '✓ 启用' : '✗ 禁用' }}
               </span>
             </div>
           </div>
-          <div v-if="currentStep.extractBindings?.length" class="info-block">
+          <div v-if="extractStrategies(currentStep).length" class="info-block">
             <div class="info-k">extracts</div>
             <div class="info-v">
-              <div v-for="(b, i) in currentStep.extractBindings" :key="i" class="extract-line">
-                <code>{{ b.name || '?' }}</code> ← <code>{{ b.path || '?' }}</code>
+              <div v-for="(ex, i) in extractStrategies(currentStep)" :key="i" class="extract-line">
+                <code>{{ ex.target || '?' }}</code> ← <code>{{ ex.expression || '?' }}</code>
               </div>
             </div>
           </div>
@@ -227,91 +208,128 @@ import CaseComposerCatalog from './CaseComposerCatalog.vue'
 import FieldForm from './FieldForm.vue'
 import { getFullEndpoint } from '@/api/scenario-composer'
 import { deepDefaults } from '@/utils/jsonpath'
-import type { ScenarioStep } from '@/types/scenario-composer'
+import type { StepView, ExtractView, IOFieldBinding } from '@/types/plate'
+import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
 
 const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 
-const props = defineProps<{ modelValue: ScenarioStep[] }>()
-const emit = defineEmits<{ 'update:modelValue': [ScenarioStep[]] }>()
+const props = defineProps<{
+  steps: StepView[]
+  orchestration: Orchestration
+}>()
+const emit = defineEmits<{
+  'update:steps': [StepView[]]
+  'update:orchestration': [Orchestration]
+}>()
 
-const local = reactive<ScenarioStep[]>([...(props.modelValue || [])])
+const local = reactive<StepView[]>([...(props.steps || [])])
+const orch = reactive<Orchestration>(
+  props.orchestration || { steps: [], resourceMeta: {} }
+)
 const activeStepIdx = ref(0)
 const subView = ref<null | 'catalog'>(null)
-const hiddenOpen = ref(false)
 const adding = ref(false)
 
-const hiddenFieldCount = computed(() =>
-  currentStep.value?.endpointRef?.hiddenFields
-    ? Object.keys(currentStep.value.endpointRef.hiddenFields).length
-    : 0
-)
+const currentStep = computed(() => local[activeStepIdx.value])
+const currentOrch = computed<StepOrchestration | undefined>(() => orch.steps[activeStepIdx.value])
 
-watch(() => props.modelValue, (v) => {
+/** plate Step 无顶层协议 kind;从 api 形状推断展示标签 (http/...) */
+function inferProtocol(step: StepView | undefined): string {
+  if (step?.api && step.api.method) return 'http'
+  return 'step'
+}
+
+/** 从 request.fields_meta 派生 FieldForm 需要的 IOFieldBinding[] */
+function fieldBindings(step: StepView | undefined): IOFieldBinding[] {
+  const fm = step?.request?.fields_meta
+  return fm ? Object.values(fm) : []
+}
+
+/** strategy 里提取 extract 变体 */
+function extractStrategies(step: StepView | undefined): ExtractView[] {
+  if (!step?.strategy) return []
+  return step.strategy.filter((s): s is ExtractView => s.kind === 'extract')
+}
+function addExtract(step: StepView) {
+  step.strategy.push({
+    kind: 'extract', expression: '', target: '',
+    scope: 'step', required: true,
+  })
+}
+function removeExtract(step: StepView, ex: ExtractView) {
+  const idx = step.strategy.indexOf(ex)
+  if (idx >= 0) step.strategy.splice(idx, 1)
+}
+
+watch(() => props.steps, (v) => {
   local.splice(0, local.length, ...(v || []))
 }, { deep: true })
 
-watch(local, (v) => {
-  emit('update:modelValue', [...v])
+watch(() => props.orchestration, (v) => {
+  orch.steps.splice(0, orch.steps.length, ...(v?.steps || []))
+  orch.resourceMeta = v?.resourceMeta || {}
 }, { deep: true })
 
-const currentStep = computed(() => local[activeStepIdx.value])
+watch([local, orch], () => {
+  emit('update:steps', [...local])
+  emit('update:orchestration', { steps: [...orch.steps], resourceMeta: { ...orch.resourceMeta } })
+}, { deep: true })
 
 async function onAddEndpoint(ep: any) {
   if (!ep) return
   adding.value = true
   try {
-    // Fetch the FULL endpoint definition from Plate so the form editor
-    // has the IOFieldBinding list. Without this, the step has no
-    // schema — just raw JSON, which is what the user complained about.
-    let endpointRef: any = undefined
+    // 拉 plate /api/endpoint/{id}/full 取 IOFieldBinding,驱动表单渲染;
+    // 失败则仍以原始信息加入 (用户投诉过的"裸 JSON"兜底)。
+    let fieldsMeta: Record<string, IOFieldBinding> | undefined
     try {
       const full = await getFullEndpoint(ep.id)
-      endpointRef = {
-        endpointId: full.id,
-        bindings: full.request?.fields || [],
-        hiddenFields: {},
-      }
+      fieldsMeta = Object.fromEntries(
+        (full.request?.fields || []).map((f: IOFieldBinding) => [f.name, f])
+      )
     } catch (e) {
       ElMessage.warning('拉取完整接口定义失败, 仍以原始信息加入: ' + (e as Error).message)
     }
-    // Pre-populate body from defaults/examples so the form has values.
-    const initialBody = endpointRef
-      ? deepDefaults(endpointRef.bindings)
-      : null
-    const newStep: ScenarioStep = {
-      id: ep.id?.split('.').pop() || `step-${local.length + 1}`,
-      name: ep.name,
-      kind: 'http',
-      service: ep.service,
-      endpoint: ep.api?.path,
-      method: ep.api?.method as any,
-      headers: ep.api?.headers || {},
-      body: initialBody,
-      expectStatus: 200,
-      extractBindings: [],
-      dependsOn: [],
-      enabled: true,
-      endpointRef,
+    const initialBody = fieldsMeta ? deepDefaults(Object.values(fieldsMeta)) : {}
+    const newStep: StepView = {
+      kind: 'step',
+      description: ep.name,
+      api: {
+        kind: 'api',
+        service: ep.service,
+        method: ep.api?.method || 'GET',
+        path: ep.api?.path || '',
+        headers: ep.api?.headers || {},
+      },
+      request: {
+        kind: 'request',
+        body: initialBody,
+        ...(fieldsMeta ? { fields_meta: fieldsMeta } : {}),
+      },
+      strategy: [
+        { kind: 'assertion', target: '$.status', operator: 'eq', expected: 200, message: '', soft: false },
+      ],
     }
     local.push(newStep)
+    // 同步 orchestration (保持 index 对齐)
+    orch.steps.push({ enabled: true, name: ep.name })
     activeStepIdx.value = local.length - 1
     subView.value = null  // 直接落盘, 关闭目录回到画布
-    ElMessage.success(`已加入 step: ${newStep.name} (${endpointRef?.bindings?.length || 0} 字段)`)
+    ElMessage.success(`已加入 step: ${ep.name} (${fieldsMeta ? Object.keys(fieldsMeta).length : 0} 字段)`)
   } finally {
     adding.value = false
   }
 }
 
-function mergeBody(formValues: any, hiddenFields: any): any {
-  // Form values come from IOFieldBinding-driven controls; hidden
-  // fields come from the schema (Type C) and are carried through
-  // untouched. The merged body is what the dispatch serialises to
-  // Plate — so it matches the contract schema field-for-field.
-  return { ...(hiddenFields || {}), ...(formValues || {}) }
+function mergeBody(formValues: any, _hiddenFields: any): any {
+  // Form values come from IOFieldBinding-driven controls; plate 已是结构权威,
+  // 平台不再派生 Type C 隐藏字段, 直接以表单值为准。
+  return { ...(_hiddenFields || {}), ...(formValues || {}) }
 }
 
 function removeStep(i: number) {
   local.splice(i, 1)
+  orch.steps.splice(i, 1)  // 保持与 local 同序同长
   if (activeStepIdx.value >= local.length) activeStepIdx.value = Math.max(0, local.length - 1)
 }
 

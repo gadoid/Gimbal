@@ -1,11 +1,15 @@
 <!--
-  CaseComposerResource.vue — ② 资源 (PRD §6.3 完整实现)
+  CaseComposerResource.vue — ② 资源 (plate 结构对齐版)
 
-  两类资源 (与现有资源类型一一对应):
-  - Mock 服务: 镜像 image + 服务配置 config + 端口映射 portMapping (PRD §5.8 ImageWhitelist)
-  - 文件引用: 路径 path
+  只保留 plate 的两类资源 (mock / file),砍掉 http/custom/variable/db。
+  - resource: Record<string, ResourceView> — plate 形,key = name
+  - resourceMeta: Record<string, string> — 平台渲染字段(资源描述),
+    与 resource 按名字对齐,不发给 plate
 
-  资源被 step 引用 (resource.mock_id / resource.file_id 形式) 用于 step-level override
+  MockView 是扁平结构 {kind:'mock', name, image, config, portMapping};
+  portMapping: Record<number, number> (host→container 数字映射)。
+  UI 仍以 [{host,container}] 字符串行编辑,在 emit/load 时与 dict 互转
+  (pre-flight ruling #2)。改名时同步 dict key 与内层 .name (#3)。
 -->
 <template>
   <div class="resource-grid">
@@ -29,18 +33,29 @@
     <div v-if="mocks.length" class="resource-list">
       <div class="list-head">
         <h3>🎭 Mock 服务 <span class="count">{{ mocks.length }}</span></h3>
-        <span class="muted">在 step 中通过 <code>resource.mock_id</code> 引用</span>
+        <span class="muted">在 step 中通过 <code>resource.&lt;name&gt;</code> 引用</span>
       </div>
-      <div v-for="(m, i) in mocks" :key="i" class="resource-row mock-row">
+      <div v-for="m in mocks" :key="m.name" class="resource-row mock-row">
         <div class="row-header">
-          <el-input v-model="m.name" placeholder="mock 名称 (例: fin-mock-default)" size="small" class="row-name" />
+          <el-input
+            :model-value="m.name"
+            @update:model-value="val => renameResource(m.name, val)"
+            placeholder="mock 名称 (例: fin-mock-default)"
+            size="small"
+            class="row-name"
+          />
           <span class="kind-tag t-mock">mock</span>
-          <button class="row-del" @click="removeResource('mocks', i)">×</button>
+          <button class="row-del" @click="removeResource(m.name)">×</button>
         </div>
         <div class="row-grid">
           <div class="row-field">
             <label>镜像 (image)</label>
-            <el-input v-model="m.image" placeholder="harbor.example.com/fin-mock:1.0.0" size="small" />
+            <el-input
+              :model-value="m.image"
+              @update:model-value="val => m.image = val"
+              placeholder="harbor.example.com/fin-mock:1.0.0"
+              size="small"
+            />
             <span class="hint">格式: registry/repo:tag, 仅 Plate ImageWhitelist 内的镜像可启动</span>
           </div>
           <div class="row-field">
@@ -55,14 +70,26 @@
           </div>
         </div>
         <div class="row-field port-mapping">
-          <label>端口映射 (portMapping · host:container)</label>
-          <div v-for="(pm, j) in (m.portMapping || [])" :key="j" class="port-row">
-            <el-input v-model="pm.host" placeholder="8080" size="small" class="port-host" />
+          <label>端口映射 (portMapping · host→container)</label>
+          <div v-for="(pm, j) in (portRows[m.name] || [])" :key="j" class="port-row">
+            <el-input
+              :model-value="pm.host"
+              @update:model-value="val => (pm.host = val, syncPortMapping(m.name))"
+              placeholder="8080"
+              size="small"
+              class="port-host"
+            />
             <span class="port-arrow">→</span>
-            <el-input v-model="pm.container" placeholder="8080" size="small" class="port-container" />
-            <button class="port-del" @click="m.portMapping.splice(j, 1)">×</button>
+            <el-input
+              :model-value="pm.container"
+              @update:model-value="val => (pm.container = val, syncPortMapping(m.name))"
+              placeholder="8080"
+              size="small"
+              class="port-container"
+            />
+            <button class="port-del" @click="portRows[m.name].splice(j, 1); syncPortMapping(m.name)">×</button>
           </div>
-          <button class="add-port" @click="m.portMapping = m.portMapping || []; m.portMapping.push({ host: '', container: '' })">+ 添加端口映射</button>
+          <button class="add-port" @click="addPortRow(m.name)">+ 添加端口映射</button>
         </div>
       </div>
     </div>
@@ -71,21 +98,37 @@
     <div v-if="files.length" class="resource-list">
       <div class="list-head">
         <h3>📁 文件引用 <span class="count">{{ files.length }}</span></h3>
-        <span class="muted">在 step 中通过 <code>resource.file_id</code> 引用</span>
+        <span class="muted">在 step 中通过 <code>resource.&lt;name&gt;</code> 引用</span>
       </div>
-      <div v-for="(f, i) in files" :key="i" class="resource-row file-row">
+      <div v-for="f in files" :key="f.name" class="resource-row file-row">
         <div class="row-header">
-          <el-input v-model="f.name" placeholder="file 名称 (例: order-sample.json)" size="small" class="row-name" />
+          <el-input
+            :model-value="f.name"
+            @update:model-value="val => renameResource(f.name, val)"
+            placeholder="file 名称 (例: order-sample.json)"
+            size="small"
+            class="row-name"
+          />
           <span class="kind-tag t-file">file</span>
-          <button class="row-del" @click="removeResource('files', i)">×</button>
+          <button class="row-del" @click="removeResource(f.name)">×</button>
         </div>
         <div class="row-field">
           <label>路径 (path)</label>
-          <el-input v-model="f.path" placeholder="/data/files/order-sample.json" size="small" />
+          <el-input
+            :model-value="f.path"
+            @update:model-value="val => f.path = val"
+            placeholder="/data/files/order-sample.json"
+            size="small"
+          />
         </div>
         <div class="row-field">
-          <label>描述 (可选)</label>
-          <el-input v-model="f.description" placeholder="JSON / CSV / PEM" size="small" />
+          <label>描述 (可选 · 进 resourceMeta, 不进 plate)</label>
+          <el-input
+            :model-value="props.resourceMeta[f.name] || ''"
+            @update:model-value="val => updateResourceMeta(f.name, val)"
+            placeholder="JSON / CSV / PEM"
+            size="small"
+          />
         </div>
       </div>
     </div>
@@ -105,27 +148,62 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import type { ScenarioResource } from '@/types/scenario-composer'
+import type { ResourceView, MockView, FileView } from '@/types/plate'
 
-const props = defineProps<{ modelValue: ScenarioResource }>()
-const emit = defineEmits<{ 'update:modelValue': [ScenarioResource] }>()
+const props = defineProps<{
+  resource: Record<string, ResourceView>
+  resourceMeta: Record<string, string>
+}>()
+const emit = defineEmits<{
+  'update:resource': [Record<string, ResourceView>]
+  'update:resourceMeta': [Record<string, string>]
+}>()
 
-const local = reactive<ScenarioResource>({
-  items: [...(props.modelValue?.items || [])],
-})
+// local 是 plate 形 dict 的可变镜像;watch 后写回父。
+const local = reactive<Record<string, ResourceView>>({ ...(props.resource || {}) })
 const addingKind = ref<string | null>(null)
 
-const mocks = computed(() => (local.items || []).filter(r => r.kind === 'mock'))
-const files = computed(() => (local.items || []).filter(r => r.kind === 'file'))
+const mocks = computed(() => Object.values(local).filter((r): r is MockView => r.kind === 'mock'))
+const files = computed(() => Object.values(local).filter((r): r is FileView => r.kind === 'file'))
 
-watch(() => props.modelValue, (v) => {
-  local.items = [...(v?.items || [])]
-}, { deep: true })
+// ── portMapping 边界 (pre-flight ruling #2) ──
+// plate 形: Record<number, number> (host→container)
+// UI 编辑: 按 mock.name 维护 [{host, container}] 字符串行,边界互转。
+interface PortRow { host: string; container: string }
+const portRows = reactive<Record<string, PortRow[]>>({})
 
-watch(local, (v) => {
-  emit('update:modelValue', { items: [...(v.items || [])] })
-}, { deep: true })
+function loadPortRows() {
+  for (const m of mocks.value) {
+    const pm = (m as MockView).portMapping || {}
+    portRows[m.name] = Object.entries(pm).map(([host, container]) => ({
+      host: String(host),
+      container: String(container),
+    }))
+  }
+}
+loadPortRows()
 
+function addPortRow(name: string) {
+  if (!portRows[name]) portRows[name] = []
+  portRows[name].push({ host: '', container: '' })
+}
+
+/** 把 [{host,container}] 字符串行折叠回 Record<number,number>,写进 MockView.portMapping */
+function syncPortMapping(name: string) {
+  const m = local[name]
+  if (!m || m.kind !== 'mock') return
+  const rows = portRows[name] || []
+  const out: Record<number, number> = {}
+  for (const r of rows) {
+    const h = Number(r.host)
+    const c = Number(r.container)
+    if (!isNaN(h) && !isNaN(c)) out[h] = c
+  }
+  // 直接改 local 内的 mock 对象 — 深度 watch 会回传父
+  ;(m as MockView).portMapping = out
+}
+
+// ── resource 操作 ──
 function onAddKind(kind: 'mock' | 'file') {
   if (addingKind.value === kind) {
     addingKind.value = null
@@ -133,38 +211,84 @@ function onAddKind(kind: 'mock' | 'file') {
   }
   addingKind.value = kind
   setTimeout(() => {
-    const idx = (local.items || []).length + 1
+    const idx = Object.keys(local).length + 1
     if (kind === 'mock') {
-      local.items = [
-        ...(local.items || []),
-        {
-          kind: 'mock',
-          name: `mock-${idx}`,
-          description: '',
-          payload: {
-            image: '',
-            config: { PORT: 8080 },
-            portMapping: [{ host: '8080', container: '8080' }],
-          } as any,
-        },
-      ]
+      const name = `mock-${idx}`
+      const m: MockView = {
+        kind: 'mock',
+        name,
+        image: '',
+        config: { PORT: 8080 },
+        portMapping: { 8080: 8080 },
+      }
+      local[name] = m
+      portRows[name] = [{ host: '8080', container: '8080' }]
     } else {
-      local.items = [
-        ...(local.items || []),
-        { kind: 'file', name: `file-${idx}`, description: '', payload: { path: '' } as any },
-      ]
+      const name = `file-${idx}`
+      local[name] = { kind: 'file', name, path: '' }
     }
     addingKind.value = null
   }, 100)
 }
 
-function removeResource(kind: 'mocks' | 'files', i: number) {
-  const list = kind === 'mocks' ? mocks.value : files.value
-  const target = list[i]
-  local.items = (local.items || []).filter(x => x !== target)
+function removeResource(name: string) {
+  delete local[name]
+  delete portRows[name]
+  // 同步删除 resourceMeta 里对应的描述
+  if (props.resourceMeta[name] !== undefined) {
+    const meta = { ...props.resourceMeta }
+    delete meta[name]
+    emit('update:resourceMeta', meta)
+  }
 }
 
-function parseJson(s: string, fallback: any) {
+/** 改名:同步 dict key 与内层 .name (pre-flight ruling #3);重名 last-wins */
+function renameResource(oldName: string, newName: string) {
+  if (!newName || oldName === newName) return
+  const r = local[oldName]
+  if (!r) return
+  const rebuilt: Record<string, ResourceView> = {}
+  for (const [k, v] of Object.entries(local)) {
+    if (k === oldName) {
+      rebuilt[newName] = { ...v, name: newName }
+    } else {
+      rebuilt[k] = v
+    }
+  }
+  // 重建 local (清空再写,保持 key 集合精确)
+  for (const k of Object.keys(local)) delete local[k]
+  Object.assign(local, rebuilt)
+  // portRows 跟随
+  if (portRows[oldName]) {
+    portRows[newName] = portRows[oldName]
+    delete portRows[oldName]
+  }
+  // resourceMeta 跟随
+  if (props.resourceMeta[oldName] !== undefined) {
+    const meta = { ...props.resourceMeta }
+    meta[newName] = meta[oldName]
+    delete meta[oldName]
+    emit('update:resourceMeta', meta)
+  }
+}
+
+function updateResourceMeta(name: string, val: string) {
+  emit('update:resourceMeta', { ...props.resourceMeta, [name]: val })
+}
+
+// ── 父 → local 同步 ──
+watch(() => props.resource, (v) => {
+  for (const k of Object.keys(local)) delete local[k]
+  Object.assign(local, { ...(v || {}) })
+  loadPortRows()
+}, { deep: true })
+
+// local 变更(字段级编辑 / 增删 / 改名 / portMapping 序列化)回传父
+watch(local, () => {
+  emit('update:resource', { ...local })
+}, { deep: true })
+
+function parseJson(s: string, fallback: unknown) {
   if (!s || !s.trim()) return fallback
   try { return JSON.parse(s) } catch { return fallback }
 }

@@ -17,7 +17,6 @@
       <div class="hero-content">
         <h2>{{ local.name || '未命名编排' }}</h2>
         <p class="muted">
-          <span class="id-pill">{{ local.scenarioId }}</span>
           <span v-if="local.system.length" class="system-chips">
             <span v-for="s in local.system" :key="s" class="system-chip" :class="`s-${s}`">
               {{ systemLabel(s) }}
@@ -30,20 +29,12 @@
     <div class="meta-card">
       <div class="card-head">
         <h3>核心信息</h3>
-        <span class="card-hint">scenarioId 是 1:1 用例 / 数据集绑定的外键</span>
+        <span class="card-hint">scenarioId 由顶层 definition.scenarioId 管理 (新建时设定, 顶部 crumb 可见)</span>
       </div>
       <el-form :model="local" label-position="top" class="modern-form">
-        <div class="grid-2">
-          <el-form-item label="scenarioId" required>
-            <el-input v-model="local.scenarioId" placeholder="sc-order-create">
-              <template #prefix><span class="input-tag">ID</span></template>
-            </el-input>
-            <span class="hint"><code>^sc-[a-z0-9-]+$</code> 必填</span>
-          </el-form-item>
-          <el-form-item label="名称" required>
-            <el-input v-model="local.name" placeholder="订单创建 e2e" maxlength="64" show-word-limit />
-          </el-form-item>
-        </div>
+        <el-form-item label="名称" required>
+          <el-input v-model="local.name" placeholder="订单创建 e2e" maxlength="64" show-word-limit />
+        </el-form-item>
         <el-form-item label="描述">
           <el-input
             v-model="local.description"
@@ -115,7 +106,7 @@
 <script setup lang="ts">
 import { reactive, watch } from 'vue'
 import TagInput from '@/components/TagInput.vue'
-import type { ScenarioMeta } from '@/types/scenario-composer'
+import type { MetaView } from '@/types/plate'
 
 const KNOWN_SYSTEMS = ['fin', 'logi', 'wms', 'mall', 'common']
 const SYS_LABELS: Record<string, string> = {
@@ -126,10 +117,11 @@ function systemLabel(s: string) {
   return s === 'common' ? `common (${v})` : `${s} (${v})`
 }
 
-const props = defineProps<{ modelValue: ScenarioMeta }>()
-const emit = defineEmits<{ 'update:modelValue': [ScenarioMeta] }>()
+// scenarioId 已上移到 definition.scenarioId (顶层),MetaView 不再含该字段。
+const props = defineProps<{ modelValue: MetaView }>()
+const emit = defineEmits<{ 'update:modelValue': [MetaView] }>()
 
-const local = reactive<ScenarioMeta>({ ...props.modelValue })
+const local = reactive<MetaView>({ ...props.modelValue })
 
 watch(() => props.modelValue, (v) => {
   Object.assign(local, v)

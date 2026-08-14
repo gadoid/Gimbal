@@ -18,12 +18,22 @@
           v-for="opt in TIME_OPTS"
           :key="opt.value"
           class="time-tile"
-          :class="{ active: local.timePolicyKind === opt.value }"
-          @click="local.timePolicyKind = opt.value as any"
+          :class="{ active: local.timePolicy.kind === opt.value }"
+          @click="selectTimePolicy(opt.value)"
         >
           <div class="time-name">{{ opt.name }}</div>
           <div class="time-desc">{{ opt.desc }}</div>
         </button>
+      </div>
+      <div v-if="local.timePolicy.kind === 'timeout'" class="time-seconds">
+        <label class="seconds-label">超时秒数 (seconds)</label>
+        <el-input-number
+          :model-value="(local.timePolicy as any).seconds"
+          @update:model-value="(v: any) => (local.timePolicy as any).seconds = v"
+          :min="1"
+          :max="3600"
+          class="modern-number"
+        />
       </div>
     </div>
 
@@ -37,15 +47,37 @@
         </div>
       </div>
       <div class="retry-row">
-        <div class="retry-field">
-          <label>最大尝试次数</label>
-          <el-input-number v-model="local.retryMaxAttempts" :min="0" :max="10" :step="1" class="modern-number" />
+        <div class="retry-field retry-toggle">
+          <label>启用重试</label>
+          <el-switch
+            :model-value="local.retry !== null"
+            @update:model-value="(v: any) => onRetryToggle(!!v)"
+          />
         </div>
-        <div class="retry-field">
-          <label>重试间隔 (ms)</label>
-          <el-input-number v-model="local.retryIntervalMs" :min="0" :max="60000" :step="100" class="modern-number" />
-        </div>
+        <template v-if="local.retry">
+          <div class="retry-field">
+            <label>最大尝试次数 (maxAttempts)</label>
+            <el-input-number
+              v-model="local.retry.maxAttempts"
+              :min="1"
+              :max="10"
+              :step="1"
+              class="modern-number"
+            />
+          </div>
+          <div class="retry-field">
+            <label>退避秒数 (backoffSeconds)</label>
+            <el-input-number
+              v-model="local.retry.backoffSeconds"
+              :min="0"
+              :max="600"
+              :step="1"
+              class="modern-number"
+            />
+          </div>
+        </template>
       </div>
+      <p v-if="local.retry" class="muted hint-line">retryOn: {{ local.retry.retryOn.length ? local.retry.retryOn.join(', ') : '(空 — 默认不限定)' }}</p>
     </div>
 
     <!-- PRD §6.4 setup: 用例前置 (phase=before_request) -->
@@ -117,7 +149,7 @@
           <p class="muted">用例级共享 — 在 ④ 步骤编辑 中可用 <code>${var.x}</code> 引用</p>
         </div>
       </div>
-      <div v-if="!local.vars?.length" class="empty-small">
+      <div v-if="!varsRows.length" class="empty-small">
         <p class="muted">还没有变量</p>
       </div>
       <div v-else class="ns-grid">
@@ -142,7 +174,7 @@
               size="small"
               class="var-value"
             />
-            <button class="var-del" @click="removeVar(j)">×</button>
+            <button class="var-del" @click="removeVar(v)">×</button>
           </div>
         </div>
       </div>
@@ -202,12 +234,13 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import type { ScenarioConfig } from '@/types/scenario-composer'
+import type { ConfigView, RetryPolicyView } from '@/types/plate'
 
+// plate TimePolicy 只有两态:record / timeout(带 seconds)。
+// 砍掉原 cost-collect / intervalMs — 不在 plate 契约内。
 const TIME_OPTS = [
-  { value: 'record',        name: 'record',       desc: '记录每个 step 的耗时和响应' },
-  { value: 'cost-collect',  name: 'cost-collect', desc: '汇总总耗时, 不记录单步' },
-  { value: 'timeout-check', name: 'timeout-check', desc: '强制检测每个 step 是否超时' },
+  { value: 'record',  name: 'record',  desc: '记录每个 step 的耗时和响应' },
+  { value: 'timeout', name: 'timeout', desc: '强制检测每个 step 是否超时(需秒数)' },
 ] as const
 
 const SYS_LABELS: Record<string, string> = {
@@ -215,27 +248,40 @@ const SYS_LABELS: Record<string, string> = {
 }
 function systemLabel(s: string) { return SYS_LABELS[s] || s }
 
-// 单一 props: modelConfig — 配置页只关心 config,其它字段(导出、上游联动)已统一到 scenario-draft store
-const props = defineProps<{ modelValue: ScenarioConfig }>()
-const emit = defineEmits<{ 'update:modelValue': [ScenarioConfig] }>()
+// 单一 props: modelValue 绑 plate ConfigView
+const props = defineProps<{ modelValue: ConfigView }>()
+const emit = defineEmits<{ 'update:modelValue': [ConfigView] }>()
 
-const local = reactive<ScenarioConfig>({
-  timePolicyKind: props.modelValue?.timePolicyKind ?? 'record',
-  retryMaxAttempts: props.modelValue?.retryMaxAttempts ?? 0,
-  retryIntervalMs: props.modelValue?.retryIntervalMs ?? 500,
-  vars: [...(props.modelValue?.vars ?? [])],
+const local = reactive<ConfigView>({
+  setup: [...(props.modelValue?.setup || [])],
+  teardown: [...(props.modelValue?.teardown || [])],
+  services: { ...(props.modelValue?.services || {}) },
+  users: { ...(props.modelValue?.users || {}) },
+  timePolicy: props.modelValue?.timePolicy?.kind === 'timeout'
+    ? { kind: 'timeout', seconds: (props.modelValue.timePolicy as any).seconds ?? 30 }
+    : { kind: 'record' },
+  retry: props.modelValue?.retry ?? null,
+  vars: { ...(props.modelValue?.vars || {}) },
 })
 
 // setup / teardown 列表 (PRD §6.4)
 const setupList = ref<Array<{ name: string; kind: string; payload: any }>>(
-  (props.modelValue as any)?.setup || []
+  ((props.modelValue as any)?.setup as any[]) || []
 )
 const teardownList = ref<Array<{ name: string; kind: string; payload: any }>>(
-  (props.modelValue as any)?.teardown || []
+  ((props.modelValue as any)?.teardown as any[]) || []
 )
 
 const serviceRows = ref<Array<{ alias: string; baseUrl: string }>>(
-  Object.entries(props.modelValue?.services ?? {}).map(([alias, baseUrl]) => ({ alias, baseUrl }))
+  Object.entries(props.modelValue?.services ?? {}).map(([alias, baseUrl]) => ({ alias, baseUrl: baseUrl as string }))
+)
+
+// ── vars list<->dict 边界 (pre-flight ruling #1) ──
+// plate vars 是 Record<string, unknown>;UI 维护按命名空间分组的 rows 编辑,
+// 在 load/emit 时与 dict 互转。
+interface VarRow { key: string; value: unknown }
+const varsRows = ref<VarRow[]>(
+  Object.entries(props.modelValue?.vars ?? {}).map(([key, value]) => ({ key, value }))
 )
 
 // 按 <system>.key 命名空间分组 (PRD §5.3)
@@ -244,8 +290,8 @@ function namespaceOf(key: string): string {
   return dot > 0 ? key.substring(0, dot) : 'common'
 }
 const varsBySystem = computed(() => {
-  const out: Record<string, any[]> = {}
-  for (const v of (local.vars || [])) {
+  const out: Record<string, VarRow[]> = {}
+  for (const v of varsRows.value) {
     const sys = namespaceOf(v.key || '')
     if (!out[sys]) out[sys] = []
     out[sys].push(v)
@@ -253,7 +299,7 @@ const varsBySystem = computed(() => {
   return out
 })
 const servicesBySystem = computed(() => {
-  const out: Record<string, any[]> = {}
+  const out: Record<string, Array<{ alias: string; baseUrl: string }>> = {}
   for (const s of serviceRows.value) {
     const sys = namespaceOf(s.alias || 'common')
     if (!out[sys]) out[sys] = []
@@ -264,39 +310,65 @@ const servicesBySystem = computed(() => {
 
 watch(() => props.modelValue, (v) => {
   if (!v) return
-  Object.assign(local, {
-    timePolicyKind: v.timePolicyKind,
-    retryMaxAttempts: v.retryMaxAttempts,
-    retryIntervalMs: v.retryIntervalMs,
-    vars: v.vars,
-  })
-  serviceRows.value = Object.entries(v.services || {}).map(([alias, baseUrl]) => ({ alias, baseUrl }))
-  setupList.value = (v as any).setup || []
-  teardownList.value = (v as any).teardown || []
+  local.setup = [...(v.setup || [])]
+  local.teardown = [...(v.teardown || [])]
+  local.services = { ...(v.services || {}) }
+  local.users = { ...(v.users || {}) }
+  local.timePolicy = v.timePolicy?.kind === 'timeout'
+    ? { kind: 'timeout', seconds: (v.timePolicy as any).seconds ?? 30 }
+    : { kind: 'record' }
+  local.retry = v.retry ?? null
+  local.vars = { ...(v.vars || {}) }
+  serviceRows.value = Object.entries(v.services || {}).map(([alias, baseUrl]) => ({ alias, baseUrl: baseUrl as string }))
+  setupList.value = ((v as any).setup as any[]) || []
+  teardownList.value = ((v as any).teardown as any[]) || []
+  varsRows.value = Object.entries(v.vars || {}).map(([key, value]) => ({ key, value }))
 }, { deep: true })
 
-watch([local, serviceRows, setupList, teardownList], () => {
+watch([local, serviceRows, setupList, teardownList, varsRows], () => {
+  // 把 vars rows 折叠回 dict (同名 last-wins)
+  const varsDict: Record<string, unknown> = {}
+  for (const r of varsRows.value) {
+    if (r.key) varsDict[r.key] = r.value
+  }
   emit('update:modelValue', {
-    timePolicyKind: local.timePolicyKind,
-    retryMaxAttempts: local.retryMaxAttempts,
-    retryIntervalMs: local.retryIntervalMs,
-    vars: [...(local.vars || [])],
+    setup: [...setupList.value],
+    teardown: [...teardownList.value],
     services: Object.fromEntries(
       serviceRows.value.filter(r => r.alias).map(r => [r.alias, r.baseUrl])
     ),
-    setup: [...setupList.value],
-    teardown: [...teardownList.value],
-  } as any)
+    users: local.users || {},
+    timePolicy: local.timePolicy,
+    retry: local.retry,
+    vars: varsDict,
+  })
 }, { deep: true })
 
-function addVar() { local.vars = local.vars || []; local.vars.push({ key: '', value: '' }) }
-function removeVar(i: number) { local.vars?.splice(i, 1) }
-function formatVarValue(v: any) {
+// ── timePolicy 切换 ──
+function selectTimePolicy(kind: 'record' | 'timeout') {
+  local.timePolicy = kind === 'timeout'
+    ? { kind: 'timeout', seconds: 30 }
+    : { kind: 'record' }
+}
+
+// ── retry 开关 ──
+function onRetryToggle(on: boolean) {
+  local.retry = on
+    ? { kind: 'retry_policy', maxAttempts: 1, backoffSeconds: 20, retryOn: [] } as RetryPolicyView
+    : null
+}
+
+// ── vars 编辑 (操作 varsRows,emit 时折叠回 dict) ──
+function addVar() { varsRows.value.push({ key: '', value: '' }) }
+function removeVar(row: VarRow) {
+  varsRows.value = varsRows.value.filter(r => r !== row)
+}
+function formatVarValue(v: unknown) {
   if (v === null || v === undefined) return ''
   if (typeof v === 'string') return v
   return JSON.stringify(v)
 }
-function parseVarValue(s: string) {
+function parseVarValue(s: string): unknown {
   if (!s) return ''
   if (/^-?\d+(\.\d+)?$/.test(s)) return Number(s)
   if (s === 'true' || s === 'false') return s === 'true'
@@ -314,7 +386,7 @@ function removeService(sys: string, i: number) {
 }
 function addSetup() { setupList.value.push({ name: '', kind: '', payload: {} }) }
 function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: {} }) }
-function parseJson(s: string, fallback: any) {
+function parseJson(s: string, fallback: unknown) {
   try { return JSON.parse(s) } catch { return fallback }
 }
 </script>
@@ -363,7 +435,7 @@ function parseJson(s: string, fallback: any) {
 }
 
 /* time policy */
-.time-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.time-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .time-tile {
   background: #fafbfc;
   border: 1.5px solid #e6e8ec;
@@ -380,11 +452,20 @@ function parseJson(s: string, fallback: any) {
 }
 .time-name { font-weight: 700; font-size: 13px; font-family: var(--font-mono); color: #4f46e5; }
 .time-desc { font-size: 11px; color: #5a6273; margin-top: 4px; line-height: 1.4; }
+.time-seconds {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 10px; padding: 8px 10px;
+  background: #fafbfc; border-radius: 8px; border: 1px solid #e6e8ec;
+}
+.seconds-label { font-size: 12px; color: #5a6273; font-weight: 500; }
+.time-seconds .modern-number { width: 140px; }
 
 /* retry */
-.retry-row { display: flex; gap: 16px; }
-.retry-field { flex: 1; }
+.retry-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+.retry-field { flex: 1; min-width: 140px; }
+.retry-toggle { flex: 0 0 auto; }
 .retry-field label { display: block; font-size: 12px; color: #5a6273; margin-bottom: 6px; }
+.hint-line { margin: 8px 0 0; font-size: 11px; }
 .modern-number { width: 100%; }
 .modern-number :deep(.el-input-number__decrease),
 .modern-number :deep(.el-input-number__increase) { background: #f5f6fa; }
