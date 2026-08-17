@@ -59,36 +59,32 @@
       <main class="col col-fields">
         <div v-if="currentStep" class="fields-shell">
           <div class="fields-head">
-            <div class="fields-title">
-              <span class="title-num">{{ activeStepIdx + 1 }}</span>
-              <input
-                class="title-input"
-                :value="currentOrch?.name ?? ''"
-                @input="(e: any) => { if (currentOrch) currentOrch.name = e.target.value }"
-                placeholder="step 名称"
-              />
+            <div class="fields-head-row">
+              <div class="fields-title">
+                <span class="title-num">{{ activeStepIdx + 1 }}</span>
+                <input
+                  class="title-input"
+                  :value="currentOrch?.name ?? ''"
+                  @input="(e: any) => { if (currentOrch) currentOrch.name = e.target.value }"
+                  placeholder="step 名称"
+                />
+              </div>
+              <span class="step-kind">{{ inferProtocol(currentStep) }}</span>
             </div>
-            <span class="step-kind">{{ inferProtocol(currentStep) }}</span>
+            <!-- 接口事实只读缩略: method/service/path 来自接口目录 (plate), 是选定接口的属性,
+                 不是用例配置项。要换接口 → 删 step 从目录重选。 -->
+            <div class="api-summary">
+              <span v-if="currentStep.api?.method" class="method-badge" :class="`m-${currentStep.api.method.toLowerCase()}`">{{ currentStep.api.method }}</span>
+              <span v-if="currentStep.api?.service" class="svc-tag">{{ currentStep.api.service }}</span>
+              <span v-if="currentStep.api?.path" class="ep-path">{{ currentStep.api.path }}</span>
+            </div>
           </div>
-          <el-form label-position="top" size="small" class="modern-form">
-            <div class="grid-3">
-              <el-form-item label="method">
-                <el-select v-model="currentStep.api.method" class="modern-select" allow-clear>
-                  <el-option v-for="m in METHODS" :key="m" :value="m" :label="m" />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="service">
-                <el-input v-model="currentStep.api.service" placeholder="tidb-test-service" />
-              </el-form-item>
-              <el-form-item label="description">
-                <el-input v-model="currentStep.description" placeholder="step 描述 (plate)" />
-              </el-form-item>
-            </div>
-            <el-form-item label="endpoint (path)">
-              <el-input v-model="currentStep.api.path" placeholder="/api/v1/orders">
-                <template #prefix><span class="input-tag">URL</span></template>
-              </el-input>
+          <el-form label-position="top" size="small" class="c-form">
+            <!-- description 来自接口目录 (ep.name/desc), 同为选定接口的事实 — 只读展示 -->
+            <el-form-item label="description">
+              <p class="desc-readonly">{{ currentStep.description || '—' }}</p>
             </el-form-item>
+            <!-- headers 之后: body 由 IOFieldBinding 驱动 (字段描述渲染见 FieldForm) -->
             <el-form-item label="headers (JSON)">
               <el-input
                 :model-value="JSON.stringify(currentStep.api.headers || {}, null, 2)"
@@ -123,16 +119,45 @@
               />
               <span class="hint">提示: 从接口目录添加 step 后, body 将由 IOFieldBinding 自动渲染</span>
             </el-form-item>
-            <el-form-item label="extract (从响应提取变量 → strategy)">
-              <div v-for="(ex, j) in extractStrategies(currentStep)" :key="j" class="extract-row">
+            <!-- 策略区: plate 策略语法 dim 驱动(kinds 懒加载);失败降级 extract 专用 UI -->
+            <el-form-item v-if="strategyKinds.length" label="策略 (plate 语法 dim 驱动)">
+              <div class="strategy-area">
+                <StrategyForm
+                  v-for="(s, j) in currentStep.strategy"
+                  :key="j"
+                  :strategy="s"
+                  :detail="strategyDetail(s)"
+                  @remove="removeStrategy(currentStep, s)"
+                />
+                <el-dropdown trigger="click" @command="addStrategy(currentStep, $event as string)">
+                  <!-- type="button": el-form 渲染原生 form,无 type 的按钮是 submit,
+                       点击会触发整页表单提交丢掉 ?step= query -->
+                  <button type="button" class="c-add add-strategy">
+                    + 添加策略 ▾
+                  </button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item
+                        v-for="k in strategyKinds"
+                        :key="k.kind"
+                        :command="k.kind"
+                      >
+                        {{ k.label }}<span class="strat-kind-tag">{{ k.kind }}</span>
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
+            </el-form-item>
+            <el-form-item v-else label="extract (从响应提取变量 → strategy)">
+              <div v-for="(ex, j) in extractStrategies(currentStep)" :key="j" class="extract-row c-kv-row">
                 <el-input
                   :model-value="ex.target"
                   @update:model-value="v => ex.target = v"
                   placeholder="变量名 (target)"
                   size="small"
-                  class="ex-name"
                 />
-                <span class="ex-arrow">←</span>
+                <span class="c-kv-sep">←</span>
                 <el-input
                   :model-value="ex.expression"
                   @update:model-value="v => ex.expression = v"
@@ -140,9 +165,9 @@
                   size="small"
                   class="ex-path"
                 />
-                <button class="ex-del" @click="removeExtract(currentStep, ex)">×</button>
+                <button type="button" class="c-kv-del" @click="removeExtract(currentStep, ex)">×</button>
               </div>
-              <button class="add-extract" @click="addExtract(currentStep)">
+              <button type="button" class="c-add add-extract" @click="addExtract(currentStep)">
                 + 添加 extract
               </button>
             </el-form-item>
@@ -202,16 +227,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import CaseComposerCatalog from './CaseComposerCatalog.vue'
 import FieldForm from './FieldForm.vue'
-import { getFullEndpoint } from '@/api/scenario-composer'
+import StrategyForm from './StrategyForm.vue'
+import { getFullEndpoint, listStrategyKinds, getStrategyKindFull } from '@/api/scenario-composer'
 import { deepDefaults } from '@/utils/jsonpath'
-import type { StepView, ExtractView, IOFieldBinding } from '@/types/plate'
+import type {
+  StepView, ExtractView, IOFieldBinding, EndpointFullView,
+  StrategyView, StrategyKindView, StrategyKindDetailView,
+} from '@/types/plate'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
-
-const METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 
 const props = defineProps<{
   steps: StepView[]
@@ -261,11 +288,79 @@ function removeExtract(step: StepView, ex: ExtractView) {
   if (idx >= 0) step.strategy.splice(idx, 1)
 }
 
+// ── 策略区(plate 语法 dim 驱动) ─────────────────────────────────
+// kinds 加载失败 → strategyKinds 留空 → 模板降级到上方 extract 专用 UI。
+
+const strategyKinds = ref<StrategyKindView[]>([])
+/** detail 按 kind 懒加载 + 会话级缓存(语法全局不变)。ref 包对象 → 命中后模板自动重渲染 */
+const strategyDetailCache = ref<Record<string, StrategyKindDetailView>>({})
+let strategyDetailPrefetch = false
+
+async function loadStrategyKinds() {
+  try {
+    strategyKinds.value = await listStrategyKinds()
+  } catch {
+    // 降级:模板 v-if 落到 extract 专用 UI,不阻塞编排
+  }
+}
+async function ensureStrategyDetail(kind: string): Promise<StrategyKindDetailView | undefined> {
+  if (strategyDetailCache.value[kind]) return strategyDetailCache.value[kind]
+  try {
+    const d = await getStrategyKindFull(kind)
+    strategyDetailCache.value = { ...strategyDetailCache.value, [kind]: d }
+    return d
+  } catch {
+    return undefined
+  }
+}
+/** 渲染期同步取 detail(缓存未命中返回 placeholder 并触发懒加载,完成后响应式刷新) */
+function strategyDetail(s: StrategyView): StrategyKindDetailView {
+  const hit = strategyDetailCache.value[s.kind]
+  if (hit) return hit
+  void ensureStrategyDetail(s.kind)
+  return { kind: s.kind, label: s.kind, phase: 'verifying', fields: [], base_fields: [] }
+}
+
+async function addStrategy(step: StepView, kind: string) {
+  const d = await ensureStrategyDetail(kind)
+  if (!d) {
+    ElMessage.error(`拉取策略 ${kind} 结构失败, 请重试`)
+    return
+  }
+  // 骨架 = {kind 判别字段 + 按 detail.fields 的 default 展开}
+  const inst: Record<string, unknown> = { kind }
+  for (const f of d.fields) {
+    if (f.default !== null && f.default !== undefined) inst[f.name] = f.default
+  }
+  step.strategy.push(inst as unknown as StrategyView)
+}
+
+function removeStrategy(step: StepView, s: StrategyView) {
+  const idx = step.strategy.indexOf(s)
+  if (idx >= 0) step.strategy.splice(idx, 1)
+}
+
+onMounted(() => {
+  void loadStrategyKinds()
+  // 首次进入策略区前预热三个 kind 的 detail(共 3 个请求,一次性)
+  if (!strategyDetailPrefetch) {
+    strategyDetailPrefetch = true
+    void loadStrategyKinds().then(() => {
+      for (const k of strategyKinds.value) void ensureStrategyDetail(k.kind)
+    })
+  }
+})
+
 watch(() => props.steps, (v) => {
+  // 父组件回写的是 emit 出去的同一份内容(引用不同)。deep-equal 时跳过,
+  // 避免与下方 emit watch 互触形成递归更新环(Maximum recursive updates)。
+  if (sameSteps(v, local)) return
   local.splice(0, local.length, ...(v || []))
 }, { deep: true })
 
 watch(() => props.orchestration, (v) => {
+  if (v && v.steps.length === orch.steps.length && sameSteps(v.steps, orch.steps)
+    && JSON.stringify(v.resourceMeta) === JSON.stringify(orch.resourceMeta)) return
   orch.steps.splice(0, orch.steps.length, ...(v?.steps || []))
   orch.resourceMeta = v?.resourceMeta || {}
 }, { deep: true })
@@ -275,21 +370,72 @@ watch([local, orch], () => {
   emit('update:orchestration', { steps: [...orch.steps], resourceMeta: { ...orch.resourceMeta } })
 }, { deep: true })
 
+/** 两份 step 数组内容是否一致(浅比较 + 关键字段;step 对象在同步链上会被克隆,不能比引用) */
+function sameSteps(a: StepView[] | undefined, b: StepView[]): boolean {
+  if (!a) return false
+  if (a.length !== b.length) return false
+  return a.every((s, i) => {
+    const t = b[i]
+    return s === t || JSON.stringify(s) === JSON.stringify(t)
+  })
+}
+
+/**
+ * 预填的 code 断言 target 探测顺序 —— 仅当 assertable_fields 命中其一
+ * 才追加业务码断言,避免给没有 code 语义的接口塞无效断言。
+ */
+const CODE_TARGET_CANDIDATES = ['$.code', '$.data.code'] as const
+
+/**
+ * endpoint_id → 200 响应 assertable_fields(本期只存不消费,
+ * 供后续断言 target / extract expression 的下拉候选)。
+ */
+const assertableByEndpoint = new Map<string, string[]>()
+
+/** 由 endpoint 契约(/full 原料)构造初始策略,替代硬编码 $.status eq 200 */
+function buildInitialStrategies(full: EndpointFullView | undefined): StrategyView[] {
+  // 保底第一条: HTTP 层状态断言(与旧行为一致)
+  const strategies: StrategyView[] = [
+    { kind: 'assertion', target: '$.status', operator: 'eq', expected: 200, message: '', soft: false },
+  ]
+  if (!full) return strategies
+  const r200 = full.responses?.['200']
+  const assertable = r200?.assertable_fields || []
+  const successCriteria = full.metadata?.success_criteria || ''
+  // 契约驱动追加: success_criteria 非空 且 响应确有 code 断言位
+  if (successCriteria) {
+    const codeTarget = CODE_TARGET_CANDIDATES.find((c) => assertable.includes(c))
+    if (codeTarget) {
+      strategies.push({
+        kind: 'assertion', target: codeTarget, operator: 'eq', expected: 0,
+        message: successCriteria, soft: false,
+      })
+    }
+  }
+  return strategies
+}
+
 async function onAddEndpoint(ep: any) {
   if (!ep) return
   adding.value = true
   try {
-    // 拉 plate /api/endpoint/{id}/full 取 IOFieldBinding,驱动表单渲染;
-    // 失败则仍以原始信息加入 (用户投诉过的"裸 JSON"兜底)。
+    // 拉 plate /api/endpoint/{id}/full 取 IOFieldBinding + 策略原料
+    // (assertable_fields / success_criteria);失败仍以原始信息加入
+    // (用户投诉过的"裸 JSON"兜底)。
     let fieldsMeta: Record<string, IOFieldBinding> | undefined
+    let full: EndpointFullView | undefined
     try {
-      const full = await getFullEndpoint(ep.id)
+      full = await getFullEndpoint(ep.id)
       fieldsMeta = Object.fromEntries(
         (full.request?.fields || []).map((f: IOFieldBinding) => [f.name, f])
       )
     } catch (e) {
       ElMessage.warning('拉取完整接口定义失败, 仍以原始信息加入: ' + (e as Error).message)
     }
+    // assertable_fields 存 step 级 view_hints(本期只存不消费,供后续
+    // target/expression 下拉候选使用)
+    const assertable = full?.responses?.['200']?.assertable_fields
+    const strategy = buildInitialStrategies(full)
     const initialBody = fieldsMeta ? deepDefaults(Object.values(fieldsMeta)) : {}
     const newStep: StepView = {
       kind: 'step',
@@ -306,10 +452,11 @@ async function onAddEndpoint(ep: any) {
         body: initialBody,
         ...(fieldsMeta ? { fields_meta: fieldsMeta } : {}),
       },
-      strategy: [
-        { kind: 'assertion', target: '$.status', operator: 'eq', expected: 200, message: '', soft: false },
-      ],
+      strategy,
     }
+    // assertable_fields 存 Canvas 本地 Map(引用数据不进 draft,容器原则;
+    // StepView 顶层无 view_hints 声明,塞 step 会泄漏进 /convert 导出)
+    if (assertable?.length) assertableByEndpoint.set(ep.id, assertable)
     local.push(newStep)
     // 同步 orchestration (保持 index 对齐)
     orch.steps.push({ enabled: true, name: ep.name })
@@ -339,69 +486,84 @@ function parseJson(s: string, fallback: unknown) {
 </script>
 
 <style scoped>
+/* 表单控件统一外观走 composer.css (.c-form) */
 .canvas-shell { width: 100%; }
+
+/* 三栏自适应: 宽屏 3 栏, 中屏两栏 (信息面板下移), 窄屏单列 */
 .three-col {
   display: grid;
-  grid-template-columns: 360px 1fr 320px;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(240px, 300px);
   gap: 12px;
   min-height: 600px;
+  align-items: start;
 }
+@media (max-width: 1280px) {
+  .three-col { grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); }
+  .col-info { grid-column: 1 / -1; }
+}
+@media (max-width: 860px) {
+  .three-col { grid-template-columns: minmax(0, 1fr); }
+}
+
 .col {
-  background: #fff;
-  border: 1px solid #e6e8ec;
-  border-radius: 16px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
   padding: 16px 18px;
   display: flex; flex-direction: column;
 }
 
-.col-head { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #f1f5f9; }
-.col-head h3 { margin: 0 0 2px; font-size: 14px; font-weight: 700; }
-.col-head .muted { margin: 0; font-size: 11px; color: #94a3b8; }
-.col-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.col-head {
+  margin-bottom: 14px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--c-divider);
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
+}
+.col-head h3 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
+.col-head .muted { margin: 0; font-size: 11px; color: var(--c-text-tertiary); }
 
 .add-step {
   display: inline-flex; align-items: center; gap: 4px;
-  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
-  color: #fff; border: none; border-radius: 8px;
+  background: var(--c-accent);
+  color: #fff; border: none; border-radius: 6px;
   padding: 6px 12px; font-size: 12px; font-weight: 600;
-  cursor: pointer; transition: all 0.15s;
+  cursor: pointer; transition: background 0.15s;
   white-space: nowrap;
 }
-.add-step:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3); }
+.add-step:hover { background: var(--accent-hover, #3730a3); }
 
 /* step list */
 .step-list { display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; }
 .step-row {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 12px;
-  background: #fafbfc;
-  border: 1.5px solid transparent;
-  border-radius: 10px;
+  background: var(--c-bg-secondary);
+  border: 1px solid transparent;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s;
 }
-.step-row:hover { background: #fff; border-color: #e6e8ec; }
+.step-row:hover { background: var(--c-surface); border-color: var(--c-border); }
 .step-row.active {
-  background: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%);
-  border-color: #c7d2fe;
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.08);
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent-soft-border);
 }
 .step-row.disabled { opacity: 0.55; }
 .step-idx {
   width: 26px; height: 26px; border-radius: 50%;
-  background: #fff; color: #5a6273; font-size: 12px; font-weight: 700;
+  background: var(--c-surface); color: var(--c-text-secondary);
+  font-size: 12px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
-  border: 1.5px solid #e6e8ec;
+  border: 1px solid var(--c-border);
   flex-shrink: 0;
 }
 .step-row.active .step-idx {
-  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  background: var(--c-accent);
   color: #fff; border-color: transparent;
 }
 .step-info { flex: 1; min-width: 0; }
-.step-name { font-size: 13px; font-weight: 600; color: #1a1d24; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.step-row.active .step-name { color: #4f46e5; }
-.step-meta { display: flex; gap: 4px; align-items: center; margin-top: 3px; font-size: 10px; color: #5a6273; flex-wrap: wrap; }
+.step-name { font-size: 13px; font-weight: 600; color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.step-row.active .step-name { color: var(--c-accent); }
+.step-meta { display: flex; gap: 4px; align-items: center; margin-top: 3px; font-size: 10px; color: var(--c-text-secondary); flex-wrap: wrap; }
 .method-badge {
   font-family: var(--font-mono); font-weight: 700;
   padding: 1px 5px; border-radius: 3px;
@@ -413,11 +575,11 @@ function parseJson(s: string, fallback: unknown) {
 .method-badge.m-delete { background: #fee2e2; color: #991b1b; }
 .method-badge.m-patch { background: #f3e8ff; color: #6b21a8; }
 .svc-tag { background: #f1f5f9; color: #475569; padding: 1px 5px; border-radius: 3px; font-size: 9px; }
-.ep-path { font-family: var(--font-mono); font-size: 10px; color: #94a3b8; }
+.ep-path { font-family: var(--font-mono); font-size: 10px; color: var(--c-text-tertiary); }
 .step-row :deep(.el-switch) { transform: scale(0.8); }
 .step-del {
   width: 24px; height: 24px; background: transparent; border: none;
-  border-radius: 4px; color: #94a3b8; cursor: pointer;
+  border-radius: 4px; color: var(--c-text-tertiary); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: all 0.15s; opacity: 0;
 }
@@ -426,60 +588,64 @@ function parseJson(s: string, fallback: unknown) {
 
 .step-empty {
   display: flex; flex-direction: column; align-items: center; gap: 12px;
-  padding: 40px 16px; text-align: center; color: #94a3b8;
+  padding: 40px 16px; text-align: center; color: var(--c-text-tertiary);
 }
-.step-empty svg { color: #cbd5e1; }
+.step-empty svg { color: var(--c-border-strong); }
 .step-empty p { margin: 0; font-size: 13px; }
 .empty-cta {
   display: inline-flex; align-items: center; gap: 4px;
-  background: #4f46e5; color: #fff; border: none; border-radius: 8px;
+  background: var(--c-accent); color: #fff; border: none; border-radius: 6px;
   padding: 8px 16px; font-size: 12px; font-weight: 600;
   cursor: pointer;
 }
-.empty-cta:hover { background: #6366f1; }
+.empty-cta:hover { background: var(--accent-hover, #3730a3); }
 
 /* fields editor */
 .fields-shell { flex: 1; }
 .fields-head {
-  display: flex; align-items: center; gap: 10px;
   padding-bottom: 14px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--c-divider);
   margin-bottom: 16px;
+}
+.fields-head-row { display: flex; align-items: center; gap: 10px; }
+.api-summary {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin-top: 8px; padding: 6px 10px;
+  background: var(--c-bg-secondary);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+}
+.api-summary .ep-path { font-size: 11px; }
+.desc-readonly {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--c-text-secondary);
+  line-height: 1.7;
 }
 .fields-title { display: flex; align-items: center; gap: 8px; flex: 1; }
 .title-num {
-  width: 28px; height: 28px; border-radius: 8px;
-  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  width: 28px; height: 28px; border-radius: 6px;
+  background: var(--c-accent);
   color: #fff; font-size: 13px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
 }
 .title-input {
   border: none; background: transparent;
-  font-size: 18px; font-weight: 700; color: #1a1d24;
+  font-size: 18px; font-weight: 700; color: var(--c-text);
   flex: 1; outline: none;
   padding: 4px 0;
   border-bottom: 2px solid transparent;
+  min-width: 0;
 }
-.title-input:focus { border-bottom-color: #4f46e5; }
+.title-input:focus { border-bottom-color: var(--c-accent); }
 .step-kind {
   padding: 4px 10px; border-radius: 999px;
   background: #f3e8ff; color: #6b21a8;
   font-size: 11px; font-weight: 600;
 }
 
-.modern-form :deep(.el-form-item__label) { font-weight: 500; color: #1a1d24; font-size: 12px; }
-.modern-form :deep(.el-input__wrapper) {
-  border-radius: 8px; background: #fafbfc; box-shadow: 0 0 0 1px #e6e8ec;
-  transition: all 0.15s;
-}
-.modern-form :deep(.el-input__wrapper:hover) { box-shadow: 0 0 0 1px #c7d2fe; }
-.modern-form :deep(.el-input__wrapper.is-focus) { background: #fff; box-shadow: 0 0 0 2px #4f46e5; }
-.modern-form :deep(.el-select__wrapper) { background: #fafbfc; box-shadow: 0 0 0 1px #e6e8ec; border-radius: 8px; }
-.modern-number { width: 100%; }
-.modern-number :deep(.el-input__wrapper) { background: #fafbfc; box-shadow: 0 0 0 1px #e6e8ec; border-radius: 8px; }
-
 .input-tag {
-  display: inline-block; background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  display: inline-block; background: var(--c-accent);
   color: #fff; font-size: 10px; font-weight: 700;
   padding: 2px 6px; border-radius: 4px; margin-right: 4px;
 }
@@ -487,15 +653,16 @@ function parseJson(s: string, fallback: unknown) {
 .code-input :deep(.el-textarea__inner) {
   font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
   background: #1e1e2e; color: #a6e3a1;
-  border-radius: 8px; box-shadow: 0 0 0 1px #313244;
+  border-radius: 6px; box-shadow: 0 0 0 1px #313244;
   padding: 10px 12px;
 }
+.code-input :deep(.el-textarea__inner::placeholder) { color: #6c7086; }
 
-/* 附带字段 (Type C) 折叠区 */
+/* 附带字段 (Type C) 折叠区 — 平面化: 去渐变,保留琥珀色语义 */
 .extra-fields {
   margin-top: 10px;
   border: 1px solid #fde68a; border-radius: 8px;
-  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  background: #fffbeb;
 }
 .extra-head {
   display: flex; align-items: center; gap: 8px;
@@ -512,43 +679,38 @@ function parseJson(s: string, fallback: unknown) {
   font-size: 11px;
 }
 .extra-key { color: #4338ca; font-weight: 600; }
-.extra-arrow { color: #94a3b8; }
+.extra-arrow { color: var(--c-text-tertiary); }
 .extra-val { color: #15803d; }
 .extra-tag {
   margin-left: auto; padding: 1px 6px; border-radius: 3px;
   font-size: 9px; font-weight: 700; text-transform: uppercase;
 }
 .t-c { background: #fde68a; color: #92400e; }
-.code-input :deep(.el-textarea__inner::placeholder) { color: #6c7086; }
 
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
-.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 14px; }
+/* 字段栅格自适应 */
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 14px; }
+.grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0 14px; }
 
-.extract-row {
-  display: flex; align-items: center; gap: 6px;
-  margin-bottom: 4px; padding: 4px 6px;
-  background: #fafbfc; border-radius: 6px;
+/* extract 行 — 走共享 kv 栅格 */
+.extract-row { margin-bottom: 4px; }
+.ex-path :deep(.el-input__wrapper) { font-family: var(--font-mono); }
+.add-extract { width: 100%; }
+
+/* 策略区(语法 dim 驱动) */
+.strategy-area { width: 100%; }
+.add-strategy { width: 100%; }
+.strat-kind-tag {
+  margin-left: 8px;
+  font-family: var(--font-mono); font-size: 10px;
+  color: #94a3b8;
 }
-.ex-name { width: 140px; }
-.ex-path { flex: 1; font-family: var(--font-mono); }
-.ex-arrow { color: #94a3b8; }
-.ex-del { width: 24px; height: 24px; background: transparent; border: none; color: #94a3b8; cursor: pointer; }
-.ex-del:hover { color: #ef4444; }
-.extract-row :deep(.el-input__wrapper) { background: #fff; box-shadow: 0 0 0 1px #e6e8ec; border-radius: 4px; }
-.add-extract {
-  margin-top: 6px;
-  background: #fafbfc; border: 1.5px dashed #cbd5e1; border-radius: 6px;
-  color: #5a6273; font-size: 12px; padding: 6px;
-  cursor: pointer; width: 100%;
-}
-.add-extract:hover { background: #eef2ff; border-color: #c7d2fe; color: #4f46e5; }
 
 /* fields empty */
 .fields-empty {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 8px; color: #94a3b8;
+  gap: 8px; color: var(--c-text-tertiary);
 }
-.fields-empty svg { color: #cbd5e1; }
+.fields-empty svg { color: var(--c-border-strong); }
 .fields-empty p { margin: 0; font-size: 13px; }
 .fields-empty .muted { font-size: 12px; }
 
@@ -556,14 +718,14 @@ function parseJson(s: string, fallback: unknown) {
 .info-body { display: flex; flex-direction: column; gap: 12px; }
 .info-block {
   display: flex; gap: 8px; align-items: flex-start;
-  padding: 10px 12px; background: #fafbfc; border-radius: 8px;
+  padding: 10px 12px; background: var(--c-bg-secondary); border-radius: 8px;
 }
 .info-k {
   width: 50px; flex-shrink: 0;
-  font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 600;
+  font-size: 11px; color: var(--c-text-tertiary); text-transform: uppercase; font-weight: 600;
 }
 .info-v { flex: 1; font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.info-v code { font-family: var(--font-mono); font-size: 11px; color: #4f46e5; background: #fff; padding: 1px 4px; border-radius: 3px; word-break: break-all; }
+.info-v code { font-family: var(--font-mono); font-size: 11px; color: var(--c-accent); background: var(--c-surface); padding: 1px 4px; border-radius: 3px; word-break: break-all; }
 .badge { background: #f3e8ff; color: #6b21a8; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
 .status-pill { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
 .status-pill.on { background: #d1fae5; color: #065f46; }

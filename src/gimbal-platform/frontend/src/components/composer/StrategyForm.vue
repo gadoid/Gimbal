@@ -16,7 +16,8 @@
     <div class="sf-head">
       <span class="sf-badge" :class="`ph-${detail.phase}`">{{ detail.label }}</span>
       <span class="sf-kind">{{ detail.kind }}</span>
-      <button class="sf-del" title="删除这条策略" @click="emit('remove')">×</button>
+      <!-- type="button": 渲染在 el-form 原生 form 内,无 type 的按钮是 submit -->
+      <button type="button" class="sf-del" title="删除这条策略" @click="emit('remove')">×</button>
     </div>
     <FieldForm
       :bindings="fieldBindings"
