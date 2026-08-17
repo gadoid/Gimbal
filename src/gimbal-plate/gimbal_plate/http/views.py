@@ -638,3 +638,71 @@ class ScenarioDetailView(BaseModel):
 
 # Re-export with the names referenced by grammar.py
 ScenarioView = ScenarioMinimalView  # alias used by grammar.py
+
+
+# ── StrategyKindView (语法级 dim,2026-08-17) ──────────────────────
+
+
+class StrategyFieldDesc(BaseModel):
+    """策略 kind 的一个字段描述符 —— 词汇表对齐 IOFieldBinding 但独立建模。
+
+    独立而非直接复用 :class:`IOFieldBinding` 的原因:策略字段不是接口
+    body 字段,``source_kind``(字段值来源语义)对策略无意义,且 name/path
+    强一致校验是 endpoint 契约的规则。映射规则(enum→select / bool→boolean
+    / string→text / …)与 ``_bindings_from_model`` 保持一致。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    path: str = ""  # 归一为 $.<name>;校验规则宽松(仅描述用途)
+    required: bool = False
+    default: Any | None = None
+    description: str = ""
+    enum: list[Any] | None = None
+    ui_kind: Literal[
+        "text", "number", "boolean", "select",
+        "textarea", "json", "file", "binary", "unknown",
+    ] = "unknown"
+
+
+class StrategyKindView(BaseModel):
+    """strategy dim 的 light view —— 给"添加策略"下拉用(kind/label/phase)。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str
+    label: str
+    phase: str
+
+    @classmethod
+    def from_descriptor(cls, d: Any) -> "StrategyKindView":
+        return cls(kind=d.kind, label=d.label, phase=d.phase)
+
+
+class StrategyKindDetailView(BaseModel):
+    """strategy dim 的 full view —— 给表单渲染用。
+
+    ``fields`` 是该 kind 的业务字段(extract 的 expression/target/scope/…),
+    ``base_fields`` 是 StrategyBase 继承的公共字段(order/onFailure/timeout/
+    tags/…,第一版前端不渲染,默认值生效)。``strategy_ref`` 预埋字段不在
+    本 dim 的输出中(用户 2026-08-17 拍板,待重设计)。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str
+    label: str
+    phase: str
+    fields: list[StrategyFieldDesc] = Field(default_factory=list)
+    base_fields: list[StrategyFieldDesc] = Field(default_factory=list)
+
+    @classmethod
+    def from_descriptor(cls, d: Any) -> "StrategyKindDetailView":
+        return cls(
+            kind=d.kind,
+            label=d.label,
+            phase=d.phase,
+            fields=[StrategyFieldDesc.model_validate(f) for f in d.fields],
+            base_fields=[StrategyFieldDesc.model_validate(f) for f in d.base_fields],
+        )

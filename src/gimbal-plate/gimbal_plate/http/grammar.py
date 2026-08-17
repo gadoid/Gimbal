@@ -28,6 +28,7 @@ from gimbal_plate.http.views import (
     ServiceView,
     SystemView,
 )
+from gimbal_plate.http.strategy_dim import StrategyIndex
 from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
 from gimbal_plate.schema.resource import ResourceUnion
 from gimbal_plate.schema.scenario import Config, Meta, Scenario
@@ -45,6 +46,7 @@ __all__ = [
     "MetaIndex",
     "ResourceIndex",
     "ScenarioIndex",
+    "StrategyIndex",
 ]
 
 
