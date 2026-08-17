@@ -2,7 +2,7 @@
 
 > 调研笔记。回答一个核心问题：**平台为了渲染 14 屏原型 + PRD v1.0 中的字段，需要向 plate 发起哪些结构请求？**
 >
-> 版本：v2.0（与 http-api.md M6 对齐：11 个直接可用 + 6 个 v2.x 待实现）
+> 版本：v2.1（与 http-api.md M6 对齐：13 个直接可用 + 6 个 v2.x 待实现；v2.1 新增 strategy 语法 dim 两接口）
 >
 > **重要边界**：
 > - **Plate 提供**「**EndpointSpec 抽象**」 — 一个被测系统接口的结构定义（method / path / 请求字段 / 响应字段 / 失败参考 / 业务备注）
@@ -75,9 +75,10 @@
 | **A. 结构拉取（per-endpoint）** | 4 | 启动 / 刷新 / 进入目录 / 进入详情 / 字段编辑 |
 | **B. 结构计算（per-endpoint）** | 3 | @ 浮层 / 跨系统校验 / 自动提取路径 |
 | **C. 系统管理** | 2 | 注册被测系统 / 同步结构版本 |
+| **S. 策略语法（grammar-level）** | 2 | Canvas 策略区渲染 / "添加策略"下拉 |
 | **D. v2.x 待实现** | 6 | 聚合视图 / 白名单 / 预设集 / Scenario 转换 / 联动计算 |
 
-**总计 11 个直接可用 + 6 个 v2.x 待实现**（A 组 4 + B 组 3 + C 组 2 + D 组 0 + 6 v2.x）。
+**总计 13 个直接可用 + 6 个 v2.x 待实现**（A 组 4 + B 组 3 + C 组 2 + S 组 2 + 6 v2.x）。
 
 > v2.0 起：11 个接口与 http-api.md M6 现状完全对齐。
 > v2.x 待实现：6 个需要 Plate 抽象扩展（聚合 / 白名单 / 预设集 / Scenario 转换 / 联动计算）。
@@ -309,6 +310,76 @@
 
 ---
 
+## 5S. S 组 — 策略语法（grammar-level dim）
+
+> v2.1 新增。strategy 是 M6 的第 8 个 dim —— 与 endpoint/system 等**数据 dim 不同**，它是**语法级**的：
+> items 不是数据实例，而是从 `StrategyUnion`（plate schema）内省出的 kind 描述符。
+> 回答的问题是："策略有哪些 kind、每个 kind 有哪些字段" —— 策略*实例*仍存在 Scenario 的
+> `steps[].strategy` 里（Platform 存储），本组接口只提供"添加策略"的结构渲染契约。
+>
+> `strategy_ref` 是预埋字段（待重设计），**不在** dim 输出中。
+
+### S1. 列出策略 kind
+- **触发**：`CaseComposerCanvas` 挂载（策略区初始化）→ 失败则降级 extract 专用 UI
+- **请求**：`GET /api/strategy`
+- **响应**：
+  ```json
+  {
+    "ok": true,
+    "dim": "strategy",
+    "data": {
+      "items": [
+        {"kind": "extract",   "label": "从响应提取变量", "phase": "after_request"},
+        {"kind": "assign",    "label": "准备入参赋值",   "phase": "before_request"},
+        {"kind": "assertion", "label": "响应断言",       "phase": "verifying"}
+      ],
+      "total": 3
+    }
+  }
+  ```
+- **缓存**：会话级（语法全局不变）
+- **平台代理**：`GET /api/strategy-catalog`（unwrap `data.items` 后返回 list）
+
+### S2. 获取单个策略 kind 的字段契约
+- **触发**：选中某 kind 渲染表单（懒加载 + 会话缓存）；Canvas 挂载时预取全部 3 个
+- **请求**：`GET /api/strategy/{kind}/full`
+- **响应**（assertion 示例，fields 是该 kind 的业务字段，base_fields 是 StrategyBase 公共字段）：
+  ```json
+  {
+    "ok": true,
+    "dim": "strategy",
+    "data": {
+      "item": {
+        "kind": "assertion",
+        "label": "响应断言",
+        "phase": "verifying",
+        "fields": [
+          {"name": "target",    "path": "$.target",    "required": true,  "default": null,  "description": "断言目标 (JSONPath)",     "enum": null,           "ui_kind": "text"},
+          {"name": "operator",  "path": "$.operator",  "required": true,  "default": "eq", "description": "比较符",                    "enum": ["eq","ne","gt","gte","lt","lte","in","not_in","contains","not_contains","exists","empty","length_eq","schema"], "ui_kind": "select"},
+          {"name": "expected",  "path": "$.expected",  "required": false, "default": null,  "description": "期望值",                   "enum": null,           "ui_kind": "unknown"},
+          {"name": "message",   "path": "$.message",   "required": false, "default": null,  "description": "失败信息",                 "enum": null,           "ui_kind": "text"},
+          {"name": "soft",      "path": "$.soft",      "required": false, "default": false, "description": "软断言 (仅告警不中断)",     "enum": null,           "ui_kind": "boolean"}
+        ],
+        "base_fields": [
+          {"name": "name",      "path": "$.name",      "required": false, "default": null,             "description": "策略名",        "enum": null,  "ui_kind": "text"},
+          {"name": "phase",     "path": "$.phase",     "required": false, "default": "verifying",      "description": "执行阶段",      "enum": null,  "ui_kind": "text"},
+          {"name": "order",     "path": "$.order",     "required": false, "default": 0,                "description": "执行顺序",      "enum": null,  "ui_kind": "number"},
+          {"name": "enabled",   "path": "$.enabled",   "required": false, "default": true,             "description": "是否启用",      "enum": null,  "ui_kind": "boolean"},
+          {"name": "onFailure", "path": "$.onFailure", "required": false, "default": "abort",          "description": "失败策略",      "enum": null,  "ui_kind": "text"},
+          {"name": "timeout",   "path": "$.timeout",   "required": false, "default": null,             "description": "超时秒数",      "enum": null,  "ui_kind": "number"},
+          {"name": "tags",      "path": "$.tags",      "required": false, "default": null,             "description": "标签",          "enum": null,  "ui_kind": "json"},
+          {"name": "view_note", "path": "$.view_note", "required": false, "default": null,             "description": "视图注释",      "enum": null,  "ui_kind": "text"}
+        ]
+      }
+    }
+  }
+  ```
+- **词汇表**：与 `IOFieldBinding` 同名同义（name/path/required/default/description/enum/ui_kind），但**无 `source_kind`**（值来源语义对策略无意义）。前端 StrategyForm 补 `'independent'` 默认值即可复用 FieldForm。
+- **base_fields 第一版不渲染**：添加策略骨架 = `{kind}` + 按 `fields` 的 `default` 展开；base 字段走默认值。
+- **平台代理**：`GET /api/strategy-catalog/{kind}/full`（unwrap `data.item`）；plate 不可达 → `502 plate_unavailable`，404 → `strategy_kind_not_found`
+
+---
+
 
 
 ---
@@ -333,6 +404,8 @@
 | B3 跨系统归属计算 | `CaseComposerMeta` 归属系统 chip · `CaseComposerCanvas` 步骤流系统着色 |
 | C1 注册被测系统 | 管理员 `EndpointCatalog` 顶部 |
 | C2 同步结构版本 | 管理员 系统管理 |
+| **S1** 列出策略 kind | `CaseComposerCanvas` 挂载（策略区 kinds）→ "添加策略"下拉 |
+| **S2** 策略 kind 字段契约 | `CaseComposerCanvas` 策略表单渲染（懒加载 + 挂载预取） |
 | **D1** Scenario → 执行体转换 | `CaseComposerCanvasRunner` "▶ 运行"按钮 |
 
 ---

@@ -266,6 +266,34 @@
 | users | `Config.users` | dict[str, AuthSession] |
 | vars | `Config.vars` | dict[str, Any] |
 
+### 2.9 策略表单（plate 策略语法 dim 驱动）
+
+Canvas 策略区 v2：不再 extract 专用，由 `GET /api/strategy/{kind}/full` 的
+`StrategyKindDetailView.fields` 驱动通用渲染（StrategyForm → FieldForm 复用）。
+
+| 视觉 | 字段 | 触发条件 |
+|---|---|---|
+| kind 徽章（响应断言 等） | `StrategyKindDetailView.label` | phase 4 色左边框（before_request 橙 / after_request 绿 / verifying 紫） |
+| kind mono 标签 | `StrategyKindDetailView.kind` | — |
+| "添加策略 ▾" 下拉项 | `items[].label` + `kind`（S1 列表） | kinds 懒加载；失败降级旧 extract UI |
+| 策略字段控件 | `fields[].ui_kind` + `enum` | 词汇表同 §2.2 FieldEditor（text/number/boolean/select/...） |
+| operator 下拉 14 项 | assertion kind 的 `fields[operator].enum` | `ui_kind == "select"` |
+| 添加骨架默认值 | `fields[].default` 非 null 展开 | `{kind}` + defaults |
+| base 公共字段 | `base_fields` | **第一版不渲染**，默认值生效（name/order/enabled/onFailure/...） |
+| 删除按钮 × | — | `strategy.splice` |
+
+**词汇适配**（前端 StrategyForm 内完成，不改 FieldForm 本体）：
+`StrategyFieldDescView` 无 `source_kind`（值来源语义对策略无意义）→ 补
+`source_kind: 'independent'` + `example: null` 后按 `IOFieldBinding` 消费。
+
+**初始策略预填（endpoint 契约驱动，替代硬编码）**：加入 endpoint 时由
+`/full` 的 `metadata.success_criteria` + `responses[200].assertable_fields` 构造：
+- 保底第一条：`assertion {target: $.status, operator: eq, expected: 200}`（HTTP 层，恒有）
+- 契约驱动追加：`success_criteria` 非空 **且** assertable_fields 含
+  `$.code` / `$.data.code` 之一 → 追加 `assertion {target: <codeTarget>, operator: eq, expected: 0, message: success_criteria}`
+
+`strategy_ref`（预埋字段，待重设计）不出现在 dim 输出与策略表单中。
+
 ---
 
 ## 3. 渲染缺口与边界
