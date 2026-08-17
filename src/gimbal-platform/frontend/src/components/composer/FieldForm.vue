@@ -101,7 +101,10 @@
           @input="e => setValue(f, (e.target as HTMLInputElement).value)"
         />
       </div>
-      <p v-if="f.description" class="field-desc">{{ f.description }}</p>
+      <p v-if="f.description" class="field-desc">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        {{ f.description }}
+      </p>
     </div>
   </div>
 </template>
@@ -227,5 +230,10 @@ function parseJson(s: string): unknown {
 .file-tag { font-weight: 700; color: #475569; }
 .file-hint { font-size: 11px; }
 
-.field-desc { margin: 0; font-size: 11px; color: #94a3b8; }
+.field-desc {
+  display: flex; align-items: flex-start; gap: 5px;
+  margin: 1px 0 0;
+  font-size: 11.5px; color: #64748b; line-height: 1.5;
+}
+.field-desc svg { flex-shrink: 0; margin-top: 2px; color: #94a3b8; }
 </style>

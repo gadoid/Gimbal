@@ -1,16 +1,17 @@
 <!--
-  CaseComposerConfig.vue — ③ 配置 (现代化设计)
-  4 个子区块: 时间策略 / 重试 / 变量 / 服务
+  CaseComposerConfig.vue — ③ 配置 (平面风统一)
+  样式走 composer.css 共享层; 6 个子区块:
+  时间策略 / 重试 / 前置 / 后置 / 变量 / 服务
 -->
 <template>
-  <div class="config-grid">
+  <div class="c-page c-form">
     <!-- 时间策略 -->
-    <div class="config-card">
-      <div class="card-head">
-        <div class="head-icon time"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+    <div class="c-card">
+      <div class="c-card-head">
+        <svg class="c-head-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <div>
           <h3>时间策略</h3>
-          <p class="muted">控制步骤执行的耗时采集与超时检测</p>
+          <p class="c-head-desc">控制步骤执行的耗时采集与超时检测</p>
         </div>
       </div>
       <div class="time-grid">
@@ -25,189 +26,202 @@
           <div class="time-desc">{{ opt.desc }}</div>
         </button>
       </div>
-      <div v-if="local.timePolicy.kind === 'timeout'" class="time-seconds">
-        <label class="seconds-label">超时秒数 (seconds)</label>
-        <el-input-number
-          :model-value="(local.timePolicy as any).seconds"
-          @update:model-value="(v: any) => (local.timePolicy as any).seconds = v"
-          :min="1"
-          :max="3600"
-          class="modern-number"
-        />
+      <div v-if="local.timePolicy.kind === 'timeout'" class="c-inline-row" style="margin-top: 8px;">
+        <span class="c-inline-label">超时秒数 (seconds)</span>
+        <span class="c-inline-ctrl">
+          <el-input-number
+            :model-value="(local.timePolicy as any).seconds"
+            @update:model-value="(v: any) => (local.timePolicy as any).seconds = v"
+            :min="1"
+            :max="3600"
+            size="small"
+          />
+        </span>
       </div>
     </div>
 
     <!-- 重试 -->
-    <div class="config-card">
-      <div class="card-head">
-        <div class="head-icon retry"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><polyline points="21 3 21 8 16 8"/></svg></div>
+    <div class="c-card">
+      <div class="c-card-head">
+        <svg class="c-head-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><polyline points="21 3 21 8 16 8"/></svg>
         <div>
           <h3>重试策略</h3>
-          <p class="muted">失败步骤的重试 — 默认 0 次</p>
+          <p class="c-head-desc">失败步骤的重试 — 默认 0 次</p>
         </div>
       </div>
-      <div class="retry-row">
-        <div class="retry-field retry-toggle">
-          <label>启用重试</label>
-          <el-switch
-            :model-value="local.retry !== null"
-            @update:model-value="(v: any) => onRetryToggle(!!v)"
-          />
+      <div class="c-inline-stack">
+        <div class="c-inline-row">
+          <span class="c-inline-label">启用重试</span>
+          <span class="c-inline-ctrl">
+            <el-switch
+              :model-value="local.retry !== null"
+              @update:model-value="(v: any) => onRetryToggle(!!v)"
+            />
+          </span>
         </div>
         <template v-if="local.retry">
-          <div class="retry-field">
-            <label>最大尝试次数 (maxAttempts)</label>
-            <el-input-number
-              v-model="local.retry.maxAttempts"
-              :min="1"
-              :max="10"
-              :step="1"
-              class="modern-number"
-            />
+          <div class="c-inline-row">
+            <span class="c-inline-label">最大尝试次数 (maxAttempts)</span>
+            <span class="c-inline-ctrl">
+              <el-input-number
+                v-model="local.retry.maxAttempts"
+                :min="1"
+                :max="10"
+                :step="1"
+                size="small"
+              />
+            </span>
           </div>
-          <div class="retry-field">
-            <label>退避秒数 (backoffSeconds)</label>
-            <el-input-number
-              v-model="local.retry.backoffSeconds"
-              :min="0"
-              :max="600"
-              :step="1"
-              class="modern-number"
-            />
+          <div class="c-inline-row">
+            <span class="c-inline-label">退避秒数 (backoffSeconds)</span>
+            <span class="c-inline-ctrl">
+              <el-input-number
+                v-model="local.retry.backoffSeconds"
+                :min="0"
+                :max="600"
+                :step="1"
+                size="small"
+              />
+            </span>
           </div>
+          <p class="c-inline-hint">retryOn: {{ local.retry.retryOn.length ? local.retry.retryOn.join(', ') : '(空 — 默认不限定)' }}</p>
         </template>
       </div>
-      <p v-if="local.retry" class="muted hint-line">retryOn: {{ local.retry.retryOn.length ? local.retry.retryOn.join(', ') : '(空 — 默认不限定)' }}</p>
     </div>
 
     <!-- PRD §6.4 setup: 用例前置 (phase=before_request) -->
-    <div class="config-card">
-      <div class="card-head">
-        <div class="head-icon setup"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
+    <div class="c-card">
+      <div class="c-card-head">
+        <svg class="c-head-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
         <div>
           <h3>用例前置 (setup)</h3>
-          <p class="muted">用例开始前执行 — 准备数据 / 启动 mock / 清理状态</p>
+          <p class="c-head-desc">用例开始前执行 — 准备数据 / 启动 mock / 清理状态</p>
         </div>
       </div>
-      <div v-if="!setupList.length" class="empty-small">
-        <p class="muted">还没有前置动作</p>
+      <div v-if="!setupList.length" class="c-empty">
+        <p>还没有前置动作</p>
       </div>
       <div v-else class="action-list">
         <div v-for="(s, i) in setupList" :key="i" class="action-row">
-          <span class="phase-tag setup">before_request</span>
-          <el-input v-model="s.name" placeholder="动作名 (例: clear-cache)" size="small" class="action-name" />
-          <el-input v-model="s.kind" placeholder="类型 (mock_seed / db_seed / ...)" size="small" class="action-kind" />
+          <div class="action-row-head">
+            <span class="phase-tag setup">before_request</span>
+            <button class="action-del" @click="setupList.splice(i, 1)">×</button>
+          </div>
+          <div class="action-row-grid">
+            <el-input v-model="s.name" placeholder="动作名 (例: clear-cache)" size="small" />
+            <el-input v-model="s.kind" placeholder="类型 (mock_seed / db_seed / ...)" size="small" />
+          </div>
           <textarea
             :value="JSON.stringify(s.payload || {}, null, 2)"
             @input="e => s.payload = parseJson((e.target as HTMLTextAreaElement).value, {})"
-            class="json-input"
+            class="c-json"
             rows="2"
             placeholder="动作参数 (JSON)"
           />
-          <button class="action-del" @click="setupList.splice(i, 1)">×</button>
         </div>
       </div>
-      <button class="add-var more" @click="addSetup">+ 添加前置</button>
+      <button class="c-add" @click="addSetup">+ 添加前置</button>
     </div>
 
     <!-- PRD §6.4 teardown: 用例后置 (phase=teardown) -->
-    <div class="config-card">
-      <div class="card-head">
-        <div class="head-icon teardown"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg></div>
+    <div class="c-card">
+      <div class="c-card-head">
+        <svg class="c-head-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg>
         <div>
           <h3>用例后置 (teardown)</h3>
-          <p class="muted">用例结束后执行 — 清理数据 / 关闭 mock</p>
+          <p class="c-head-desc">用例结束后执行 — 清理数据 / 关闭 mock</p>
         </div>
       </div>
-      <div v-if="!teardownList.length" class="empty-small">
-        <p class="muted">还没有后置动作</p>
+      <div v-if="!teardownList.length" class="c-empty">
+        <p>还没有后置动作</p>
       </div>
       <div v-else class="action-list">
         <div v-for="(s, i) in teardownList" :key="i" class="action-row">
-          <span class="phase-tag teardown">teardown</span>
-          <el-input v-model="s.name" placeholder="动作名 (例: cleanup-mock)" size="small" class="action-name" />
-          <el-input v-model="s.kind" placeholder="类型" size="small" class="action-kind" />
+          <div class="action-row-head">
+            <span class="phase-tag teardown">teardown</span>
+            <button class="action-del" @click="teardownList.splice(i, 1)">×</button>
+          </div>
+          <div class="action-row-grid">
+            <el-input v-model="s.name" placeholder="动作名 (例: cleanup-mock)" size="small" />
+            <el-input v-model="s.kind" placeholder="类型" size="small" />
+          </div>
           <textarea
             :value="JSON.stringify(s.payload || {}, null, 2)"
             @input="e => s.payload = parseJson((e.target as HTMLTextAreaElement).value, {})"
-            class="json-input"
+            class="c-json"
             rows="2"
             placeholder="动作参数 (JSON)"
           />
-          <button class="action-del" @click="teardownList.splice(i, 1)">×</button>
         </div>
       </div>
-      <button class="add-var more" @click="addTeardown">+ 添加后置</button>
+      <button class="c-add" @click="addTeardown">+ 添加后置</button>
     </div>
 
     <!-- 共享变量 -->
-    <div class="config-card vars-card">
-      <div class="card-head">
-        <div class="head-icon vars"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+    <div class="c-card vars-card">
+      <div class="c-card-head">
+        <svg class="c-head-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         <div>
-          <h3>共享变量 (vars) — 按 <code>&lt;system&gt;.key</code> 命名空间分组</h3>
-          <p class="muted">用例级共享 — 在 ④ 步骤编辑 中可用 <code>${var.x}</code> 引用</p>
+          <h3>共享变量 (vars) — 按 <code class="c-code">&lt;system&gt;.key</code> 命名空间分组</h3>
+          <p class="c-head-desc">用例级共享 — 在 ④ 步骤编辑 中可用 <code class="c-code">${var.x}</code> 引用</p>
         </div>
       </div>
-      <div v-if="!varsRows.length" class="empty-small">
-        <p class="muted">还没有变量</p>
+      <div v-if="!varsRows.length" class="c-empty">
+        <p>还没有变量</p>
       </div>
-      <div v-else class="ns-grid">
-        <div v-for="(group, sys) in varsBySystem" :key="sys" class="ns-group">
-          <div class="ns-head">
-            <span class="ns-sys" :class="`s-${sys}`">{{ systemLabel(sys) }}</span>
-            <span class="ns-count">{{ group.length }} keys</span>
+      <div v-else class="c-ns-grid">
+        <div v-for="(group, sys) in varsBySystem" :key="sys" class="c-ns-group">
+          <div class="c-ns-head">
+            <span class="c-ns-sys" :class="`s-${sys}`">{{ systemLabel(sys) }}</span>
+            <span class="c-ns-count">{{ group.length }} keys</span>
           </div>
-          <div v-for="(v, j) in group" :key="j" class="var-row">
+          <div v-for="(v, j) in group" :key="j" class="c-kv-row">
             <el-input
               :model-value="v.key"
               @update:model-value="val => v.key = val"
               placeholder="变量名"
               size="small"
-              class="var-key"
             />
-            <span class="var-eq">=</span>
+            <span class="c-kv-sep">=</span>
             <el-input
               :model-value="formatVarValue(v.value)"
               @update:model-value="val => v.value = parseVarValue(val)"
               placeholder="值 / 引用"
               size="small"
-              class="var-value"
             />
-            <button class="var-del" @click="removeVar(v)">×</button>
+            <button class="c-kv-del" @click="removeVar(v)">×</button>
           </div>
         </div>
       </div>
-      <button class="add-var more" @click="addVar">+ 添加变量</button>
+      <button class="c-add" @click="addVar">+ 添加变量</button>
     </div>
 
     <!-- 服务 -->
-    <div class="config-card">
-      <div class="card-head">
-        <div class="head-icon svc"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M2 8h20M8 2v20"/></svg></div>
+    <div class="c-card svc-card">
+      <div class="c-card-head">
+        <svg class="c-head-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M2 8h20M8 2v20"/></svg>
         <div>
           <h3>服务映射 (services) — 按系统分组</h3>
-          <p class="muted">步骤的 <code>service</code> 字段会从这里查找 baseUrl (例: <code>fin.tidb-test</code>)</p>
+          <p class="c-head-desc">步骤的 <code class="c-code">service</code> 字段会从这里查找 baseUrl (例: <code class="c-code">fin.tidb-test</code>)</p>
         </div>
       </div>
-      <div v-if="!serviceRows.length" class="empty-small">
-        <p class="muted">还没有服务映射</p>
+      <div v-if="!serviceRows.length" class="c-empty">
+        <p>还没有服务映射</p>
       </div>
-      <div v-else class="ns-grid">
-        <div v-for="(group, sys) in servicesBySystem" :key="sys" class="ns-group">
-          <div class="ns-head">
-            <span class="ns-sys" :class="`s-${sys}`">{{ systemLabel(sys) }}</span>
-            <span class="ns-count">{{ group.length }} services</span>
+      <div v-else class="c-ns-grid">
+        <div v-for="(group, sys) in servicesBySystem" :key="sys" class="c-ns-group">
+          <div class="c-ns-head">
+            <span class="c-ns-sys" :class="`s-${sys}`">{{ systemLabel(sys) }}</span>
+            <span class="c-ns-count">{{ group.length }} services</span>
           </div>
-          <div v-for="(s, i) in group" :key="i" class="svc-row">
+          <div v-for="(s, i) in group" :key="i" class="c-kv-row svc-row">
             <el-input
               :model-value="s.alias"
               @update:model-value="val => s.alias = val"
               placeholder="alias (例: tidb-test-service)"
               size="small"
-              class="svc-alias"
             />
-            <span class="svc-arrow">→</span>
+            <span class="c-kv-sep">→</span>
             <el-input
               :model-value="s.baseUrl"
               @update:model-value="val => s.baseUrl = val"
@@ -215,11 +229,11 @@
               size="small"
               class="svc-url"
             />
-            <button class="var-del" @click="removeService(sys, i)">×</button>
+            <button class="c-kv-del" @click="removeService(sys, i)">×</button>
           </div>
         </div>
       </div>
-      <button class="add-var more" @click="addService">+ 添加服务</button>
+      <button class="c-add" @click="addService">+ 添加服务</button>
     </div>
 
     <!--
@@ -392,165 +406,68 @@ function parseJson(s: string, fallback: unknown) {
 </script>
 
 <style scoped>
-.config-grid {
-  display: grid;
-  /* 自适应: 屏宽够时 3 列 (1920+), 默认 2 列 (1366+), 窄屏 1 列 */
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px;
-  max-width: min(100%, 1800px);
-  margin: 0 auto;
+/* 大部分样式来自 composer.css 共享层 (.c-page/.c-card/.c-kv-row/.c-ns-group/.c-empty/.c-add/.c-json/.c-inline-row) */
+/* 确定性 2 列栅格: 时间|重试 / 前置|后置 / 变量+服务通栏。
+ * auto-fit 在 1280px 内容宽下会排 3 列 → 6 卡出现 3+1+1+1 的行空洞,
+ * 改为显式 2 列 (窄屏 1 列), 每行卡片成对对齐。 */
+.c-page {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-.config-card {
-  background: #fff;
-  border: 1px solid #e6e8ec;
-  border-radius: 16px;
-  padding: 22px 24px;
-  transition: box-shadow 0.15s;
-}
-.config-card:hover { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04); }
-.vars-card { grid-column: 1 / -1; }
-
-.card-head {
-  display: flex; align-items: flex-start; gap: 12px;
-  margin-bottom: 16px;
-}
-.head-icon {
-  width: 36px; height: 36px;
-  border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.head-icon.time { background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); color: #1e40af; }
-.head-icon.retry { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #92400e; }
-.head-icon.setup { background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); color: #065f46; }
-.head-icon.teardown { background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%); color: #9d174d; }
-.head-icon.vars { background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%); color: #6b21a8; }
-.head-icon.svc { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #92400e; }
-
-.card-head h3 { margin: 0 0 2px; font-size: 15px; font-weight: 700; }
-.card-head .muted { margin: 0; font-size: 12px; color: #5a6273; }
-.card-head .muted code {
-  font-family: var(--font-mono); background: #f1f5f9;
-  padding: 1px 4px; border-radius: 3px; color: #4f46e5; font-size: 11px;
+.vars-card, .svc-card { grid-column: 1 / -1; }
+@media (max-width: 960px) {
+  .c-page { grid-template-columns: 1fr; }
 }
 
 /* time policy */
-.time-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.time-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .time-tile {
-  background: #fafbfc;
-  border: 1.5px solid #e6e8ec;
-  border-radius: 10px;
+  background: var(--c-bg-secondary);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
   padding: 10px 12px;
   text-align: left;
   cursor: pointer;
   transition: all 0.15s;
 }
-.time-tile:hover { border-color: #c7d2fe; }
+.time-tile:hover { border-color: var(--c-accent-soft-border); }
 .time-tile.active {
-  border-color: #4f46e5;
-  background: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%);
+  border-color: var(--c-accent);
+  background: var(--c-accent-soft);
 }
-.time-name { font-weight: 700; font-size: 13px; font-family: var(--font-mono); color: #4f46e5; }
-.time-desc { font-size: 11px; color: #5a6273; margin-top: 4px; line-height: 1.4; }
-.time-seconds {
-  display: flex; align-items: center; gap: 12px;
-  margin-top: 10px; padding: 8px 10px;
-  background: #fafbfc; border-radius: 8px; border: 1px solid #e6e8ec;
-}
-.seconds-label { font-size: 12px; color: #5a6273; font-weight: 500; }
-.time-seconds .modern-number { width: 140px; }
+.time-name { font-weight: 600; font-size: 13px; font-family: var(--font-mono); color: var(--c-accent); }
+.time-desc { font-size: 11px; color: var(--c-text-secondary); margin-top: 4px; line-height: 1.4; }
 
-/* retry */
-.retry-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
-.retry-field { flex: 1; min-width: 140px; }
-.retry-toggle { flex: 0 0 auto; }
-.retry-field label { display: block; font-size: 12px; color: #5a6273; margin-bottom: 6px; }
-.hint-line { margin: 8px 0 0; font-size: 11px; }
-.modern-number { width: 100%; }
-.modern-number :deep(.el-input-number__decrease),
-.modern-number :deep(.el-input-number__increase) { background: #f5f6fa; }
-.modern-number :deep(.el-input__wrapper) { background: #fafbfc; box-shadow: 0 0 0 1px #e6e8ec; border-radius: 8px; }
-
-/* empty state */
-.empty-small {
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
-  padding: 20px;
-  border: 1.5px dashed #cbd5e1; border-radius: 10px;
-  text-align: center;
-}
-.empty-small p { margin: 0; font-size: 13px; }
-.empty-small .muted { color: #94a3b8; font-size: 12px; }
-
-.add-var {
-  background: #fafbfc; border: 1.5px dashed #cbd5e1; border-radius: 8px;
-  color: #5a6273; font-size: 12px; padding: 8px 16px;
-  cursor: pointer; transition: all 0.15s;
-  width: 100%;
-}
-.add-var:hover { background: #eef2ff; border-color: #c7d2fe; color: #4f46e5; }
-.add-var.more { margin-top: 4px; }
-
-.var-list, .svc-list { display: flex; flex-direction: column; gap: 6px; }
-.var-row, .svc-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px; background: #fafbfc; border-radius: 8px;
-}
-.var-key { width: 200px; }
-.var-value { flex: 1; }
-.var-eq, .svc-arrow { color: #94a3b8; font-weight: 700; padding: 0 4px; }
-.svc-alias { width: 200px; }
-.svc-url { flex: 1; font-family: var(--font-mono); }
-.var-row :deep(.el-input__wrapper),
-.svc-row :deep(.el-input__wrapper) { background: #fff; box-shadow: 0 0 0 1px #e6e8ec; border-radius: 6px; }
-
-.var-del {
-  width: 28px; height: 28px; background: transparent; border: none;
-  border-radius: 4px; color: #94a3b8; font-size: 18px; cursor: pointer;
-}
-.var-del:hover { background: #fef2f2; color: #ef4444; }
-
-/* namespace grouping (PRD §5.3) */
-.ns-grid { display: flex; flex-direction: column; gap: 12px; }
-.ns-group {
-  border: 1px solid #e6e8ec; border-radius: 10px; padding: 10px 12px;
-  background: #fafbfc;
-}
-.ns-head {
-  display: flex; align-items: center; gap: 8px;
-  margin-bottom: 8px; padding-bottom: 6px;
-  border-bottom: 1px solid #e6e8ec;
-}
-.ns-sys {
-  padding: 2px 8px; border-radius: 4px;
-  font-size: 11px; font-weight: 700;
-  background: #f1f5f9; color: #475569;
-}
-.ns-sys.s-fin { background: #eef2ff; color: #4338ca; }
-.ns-sys.s-logi { background: #cffafe; color: #0e7490; }
-.ns-sys.s-wms { background: #f3e8ff; color: #6b21a8; }
-.ns-sys.s-mall { background: #fce7f3; color: #9d174d; }
-.ns-sys.s-common { background: #f1f5f9; color: #475569; }
-.ns-count { font-size: 11px; color: #94a3b8; }
-
-/* setup / teardown actions */
+/* setup / teardown actions — 纵向堆叠: tag 头行 + 双字段栅格 + JSON 通栏,
+ * 卡片窄至 320px 也不溢出 (原 5 列 grid 最小轨道 658px 在 2 列布局下必溢出) */
 .action-list { display: flex; flex-direction: column; gap: 8px; }
 .action-row {
-  display: grid; grid-template-columns: auto 140px 140px 1fr auto; gap: 6px;
-  padding: 6px; background: #fafbfc; border-radius: 8px;
-  align-items: start;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px; background: var(--c-bg-secondary); border-radius: 6px;
 }
+.action-row-head {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.action-row-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px;
+}
+.action-row :deep(.el-input__wrapper) { background: var(--c-surface); }
 .phase-tag {
-  padding: 4px 6px; border-radius: 4px;
+  padding: 2px 6px; border-radius: 4px;
   font-family: var(--font-mono); font-size: 9px; font-weight: 700;
-  align-self: center;
 }
 .phase-tag.setup { background: #d1fae5; color: #065f46; }
 .phase-tag.teardown { background: #fce7f3; color: #9d174d; }
-.action-row .json-input { min-height: 36px; }
 .action-del {
-  width: 24px; height: 24px; background: transparent; border: none;
-  color: #94a3b8; cursor: pointer; align-self: center;
+  width: 24px; height: 24px; background: transparent; border: none; border-radius: 4px;
+  color: var(--c-text-tertiary); cursor: pointer; font-size: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
 }
-.action-del:hover { color: #ef4444; }
-.action-row :deep(.el-input__wrapper) { background: #fff; box-shadow: 0 0 0 1px #e6e8ec; border-radius: 6px; }
+.action-del:hover { background: #fef2f2; color: #ef4444; }
+
+/* vars / services 行 (c-kv-row 共享栅格) */
+.c-kv-row { margin-bottom: 4px; }
+.c-kv-row :deep(.el-input__wrapper) { background: var(--c-surface); }
+.svc-row .svc-url :deep(.el-input__wrapper) { font-family: var(--font-mono); }
+.c-ns-grid { display: flex; flex-direction: column; gap: 12px; }
+.c-ns-group .c-kv-row:last-child { margin-bottom: 0; }
 </style>

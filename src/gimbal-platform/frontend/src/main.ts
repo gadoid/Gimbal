@@ -6,6 +6,7 @@ import './styles/theme.css'
 import './styles/override.css'
 import './styles/_destructive-dialog.css'
 import './styles/priority.css'
+import './styles/composer.css'
 
 import App from './App.vue'
 import router from './router'
