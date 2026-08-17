@@ -9,7 +9,9 @@ import type {
   Scenario, Case, DataSet, DataSetSummary,
   ScenarioDraft, DataSetDraft, RunEnv,
 } from '@/types/scenario-composer'
-import type { EndpointFullView } from '@/types/plate'
+import type {
+  EndpointFullView, StrategyKindView, StrategyKindDetailView,
+} from '@/types/plate'
 
 // ── scenarios ────────────────────────────────────────────────
 export async function listScenarios(params: {
@@ -153,5 +155,20 @@ export async function previewPlateDraft(draft: ScenarioDraft): Promise<PreviewPl
 
 export async function getFullEndpoint(endpointId: string): Promise<EndpointFullView> {
   const { data } = await http.get<EndpointFullView>(`/endpoint-catalog/${encodeURIComponent(endpointId)}/full`)
+  return data
+}
+
+// ── strategy catalog (proxy → Plate /api/strategy 语法 dim) ────────
+//
+// 策略语法(M6 第 8 dim)的引用数据:哪些 kind、每个 kind 哪些字段。
+// 只用于"添加策略"的结构渲染,不进 draft —— 策略实例是 StepView.strategy。
+
+export async function listStrategyKinds(): Promise<StrategyKindView[]> {
+  const { data } = await http.get<StrategyKindView[]>('/strategy-catalog')
+  return data
+}
+
+export async function getStrategyKindFull(kind: string): Promise<StrategyKindDetailView> {
+  const { data } = await http.get<StrategyKindDetailView>(`/strategy-catalog/${encodeURIComponent(kind)}/full`)
   return data
 }

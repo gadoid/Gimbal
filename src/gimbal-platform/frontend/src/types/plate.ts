@@ -158,6 +158,42 @@ export interface EndpointFullView {
   updated_at: string | null
 }
 
+// ─── 策略语法 dim 视图(对齐 plate http/views.py StrategyKindView/DetailView)──
+
+/**
+ * 策略语法引用数据 —— plate `GET /api/strategy`(M6 第 8 dim,语法级)。
+ *
+ * items 不是数据实例,而是从 StrategyUnion 内省出的 kind 描述符:
+ * 回答"策略有哪些 kind、每个 kind 有哪些字段"。策略*实例*仍在
+ * StepView.strategy 里(上方 StrategyView),本节类型只用于"添加策略"
+ * 的结构渲染,不进 draft。strategy_ref 预埋字段不在 dim 输出中。
+ */
+export interface StrategyKindView {
+  kind: string
+  label: string
+  phase: string
+}
+
+/**
+ * 单个策略字段的描述符。词汇表对齐 IOFieldBinding(上方)但独立建模:
+ * 无 source_kind(字段值来源语义对策略无意义),name/path 无强一致校验。
+ */
+export interface StrategyFieldDescView {
+  name: string
+  path: string
+  required: boolean
+  default: unknown
+  description: string
+  enum: unknown[] | null
+  ui_kind: UiKind
+}
+
+/** plate `GET /api/strategy/{kind}/full` —— 表单渲染契约。base_fields 第一版不渲染,默认值生效。 */
+export interface StrategyKindDetailView extends StrategyKindView {
+  fields: StrategyFieldDescView[]
+  base_fields: StrategyFieldDescView[]
+}
+
 // ─── plate Scenario 视图(编排用,对齐 gimbal_plate/schema/scenario.py + step/api/request/strategy)──
 
 /** plate Api(step 内)。对齐 gimbal_plate/schema/api.py Api + view_hints 扩展。 */
