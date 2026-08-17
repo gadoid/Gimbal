@@ -50,6 +50,7 @@ from .routers import (
     hidden_profiles,
     runs,
     scenarios,
+    strategy_catalog,
     users,
 )
 
@@ -164,6 +165,7 @@ def create_app() -> FastAPI:
     app.include_router(runs.router, prefix="/api")
     app.include_router(data_sets.router, prefix="/api")
     app.include_router(endpoint_catalog.router, prefix="/api")
+    app.include_router(strategy_catalog.router, prefix="/api")
     app.include_router(scenarios.router, prefix="/api")  # MUST be last — has /{scenario_id}
 
     @app.get("/api/health")
