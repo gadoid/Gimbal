@@ -275,12 +275,26 @@ Canvas 策略区 v2：不再 extract 专用，由 `GET /api/strategy/{kind}/full
 |---|---|---|
 | kind 徽章（响应断言 等） | `StrategyKindDetailView.label` | phase 4 色左边框（before_request 橙 / after_request 绿 / verifying 紫） |
 | kind mono 标签 | `StrategyKindDetailView.kind` | — |
+| 头行单行摘要 | 实例字段值（见下方摘要规则） | 溢出 ellipsis；title 悬停看全文 |
 | "添加策略 ▾" 下拉项 | `items[].label` + `kind`（S1 列表） | kinds 懒加载；失败降级旧 extract UI |
 | 策略字段控件 | `fields[].ui_kind` + `enum` | 词汇表同 §2.2 FieldEditor（text/number/boolean/select/...） |
 | operator 下拉 14 项 | assertion kind 的 `fields[operator].enum` | `ui_kind == "select"` |
 | 添加骨架默认值 | `fields[].default` 非 null 展开 | `{kind}` + defaults |
 | base 公共字段 | `base_fields` | **第一版不渲染**，默认值生效（name/order/enabled/onFailure/...） |
-| 删除按钮 × | — | `strategy.splice` |
+| 删除按钮 × | — | `strategy.splice`（`@click.stop`，不冒泡到头行折叠） |
+
+**折叠-展开交互**（v2.1）：策略卡默认折叠为单头行（徽章 + kind + 摘要 + 箭头 + ×），
+点头行任意处（× 除外）切换 `v-show` 字段区。**新添加的策略自动展开**引导填写；
+预填/加载的保持折叠降噪。切 step 后"刚添加"标记重置（下标在新 step 语境无意义）。
+
+**头行摘要规则**（按 kind 取最有辨识度的 1-3 个值拼一句，空显"未配置"）：
+
+| kind | 摘要 |
+|---|---|
+| `extract` | `{target} ← {expression}` |
+| `assign` | `{target} = {source}` |
+| `assertion` | `{target} {operator} {expected} · {message}`（message 空则省） |
+| 未知 kind | 前两个非 kind 非空字段的 `k=v` |
 
 **词汇适配**（前端 StrategyForm 内完成，不改 FieldForm 本体）：
 `StrategyFieldDescView` 无 `source_kind`（值来源语义对策略无意义）→ 补

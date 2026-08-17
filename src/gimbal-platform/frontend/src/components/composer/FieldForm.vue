@@ -199,6 +199,8 @@ function parseJson(s: string): unknown {
 
 .ctl {
   width: 100%;
+  /* border-box: content-box 下 100% + padding + 边框会超出策略卡/字段行容器 */
+  box-sizing: border-box;
   background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 8px;
   padding: 7px 10px;
   font-size: 13px; color: #1a1d24; font-family: inherit;

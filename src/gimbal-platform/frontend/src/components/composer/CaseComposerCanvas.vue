@@ -124,9 +124,10 @@
               <div class="strategy-area">
                 <StrategyForm
                   v-for="(s, j) in currentStep.strategy"
-                  :key="j"
+                  :key="`${activeStepIdx}-${j}`"
                   :strategy="s"
                   :detail="strategyDetail(s)"
+                  :start-expanded="j === justAddedStrategyIdx"
                   @remove="removeStrategy(currentStep, s)"
                 />
                 <el-dropdown trigger="click" @command="addStrategy(currentStep, $event as string)">
@@ -295,6 +296,10 @@ const strategyKinds = ref<StrategyKindView[]>([])
 /** detail 按 kind 懒加载 + 会话级缓存(语法全局不变)。ref 包对象 → 命中后模板自动重渲染 */
 const strategyDetailCache = ref<Record<string, StrategyKindDetailView>>({})
 let strategyDetailPrefetch = false
+/** 刚通过"添加策略"下拉新建的实例下标(渲染为展开引导填写);-1 = 无 */
+const justAddedStrategyIdx = ref(-1)
+// 切 step 时清"刚添加"标记(下标在新 step 语境无意义,防误展开)
+watch(activeStepIdx, () => { justAddedStrategyIdx.value = -1 })
 
 async function loadStrategyKinds() {
   try {
@@ -333,6 +338,8 @@ async function addStrategy(step: StepView, kind: string) {
     if (f.default !== null && f.default !== undefined) inst[f.name] = f.default
   }
   step.strategy.push(inst as unknown as StrategyView)
+  // 新实例引导填写 → 展开(仅最新的;预填/加载的保持折叠降噪)
+  justAddedStrategyIdx.value = step.strategy.length - 1
 }
 
 function removeStrategy(step: StepView, s: StrategyView) {

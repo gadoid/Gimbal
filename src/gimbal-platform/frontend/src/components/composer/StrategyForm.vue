@@ -10,35 +10,48 @@
 
   变异语义:FieldForm @update:body 直接替换 props.strategy 引用对象
   的字段(与 Canvas 现有 extract 行为一致的直接变异模式)。
+
+  折叠交互:头行常显(badge + kind + 单行摘要 + 箭头),字段区 v-show。
+  新添加的策略默认展开引导填写;预填/加载的默认折叠降噪。
 -->
 <template>
   <div class="strategy-form" :class="`ph-${detail.phase}`">
-    <div class="sf-head">
+    <div class="sf-head" @click="toggle">
       <span class="sf-badge" :class="`ph-${detail.phase}`">{{ detail.label }}</span>
       <span class="sf-kind">{{ detail.kind }}</span>
-      <!-- type="button": 渲染在 el-form 原生 form 内,无 type 的按钮是 submit -->
-      <button type="button" class="sf-del" title="删除这条策略" @click="emit('remove')">×</button>
+      <span class="sf-summary" :title="summary">{{ summary }}</span>
+      <button type="button" class="sf-toggle" title="展开/折叠">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" :class="{ open: expanded }"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <button type="button" class="sf-del" title="删除这条策略" @click.stop="emit('remove')">×</button>
     </div>
-    <FieldForm
-      :bindings="fieldBindings"
-      :body="strategy"
-      @update:body="onUpdateBody"
-    />
+    <div v-show="expanded" class="sf-body">
+      <FieldForm
+        :bindings="fieldBindings"
+        :body="strategy"
+        @update:body="onUpdateBody"
+      />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import FieldForm from './FieldForm.vue'
 import type { StrategyView, StrategyKindDetailView, StrategyFieldDescView, IOFieldBinding } from '@/types/plate'
 
 const props = defineProps<{
   strategy: StrategyView
   detail: StrategyKindDetailView
+  /** 新添加的策略引导填写 → 初始展开;预填/加载的默认折叠降噪 */
+  startExpanded?: boolean
 }>()
 const emit = defineEmits<{
   remove: []
 }>()
+
+const expanded = ref(!!props.startExpanded)
+function toggle() { expanded.value = !expanded.value }
 
 /** 词汇适配:StrategyFieldDescView → FieldForm 需要的 IOFieldBinding 形状 */
 const fieldBindings = computed<IOFieldBinding[]>(() =>
@@ -56,11 +69,39 @@ function onUpdateBody(next: any) {
     ;(props.strategy as any)[k] = next[k]
   })
 }
+
+/**
+ * 头行单行摘要:按 kind 取最有辨识度的 1-3 个值拼一句。
+ * 空/折叠态显示占位。截断由 CSS ellipsis 兜底。
+ */
+const summary = computed<string>(() => {
+  const s = props.strategy as any
+  switch (props.detail.kind) {
+    case 'extract':
+      return [s.target, s.expression].filter(Boolean).join(' ← ') || '未配置'
+    case 'assign':
+      return [s.target, s.source].filter((v) => v !== undefined && v !== null && v !== '').join(' = ') || '未配置'
+    case 'assertion': {
+      const parts = [s.target, s.operator, s.expected]
+        .filter((v: unknown) => v !== undefined && v !== null && v !== '')
+        .map(String)
+      if (!parts.length) return '未配置'
+      const msg = s.message ? ` · ${s.message}` : ''
+      return parts.join(' ') + msg
+    }
+    default:
+      // 未知 kind:退化为前两个非 kind 字段的 k=v
+      const kv = Object.entries(s)
+        .filter(([k, v]) => k !== 'kind' && v !== null && v !== undefined && v !== '')
+        .slice(0, 2)
+        .map(([k, v]) => `${k}=${String(v)}`)
+      return kv.join(' ') || props.detail.kind
+  }
+})
 </script>
 
 <style scoped>
 .strategy-form {
-  padding: 8px 10px;
   background: #fafbfc;
   border: 1.5px solid #e6e8ec;
   border-left-width: 3px;
@@ -74,9 +115,15 @@ function onUpdateBody(next: any) {
 
 .sf-head {
   display: flex; align-items: center; gap: 8px;
-  margin-bottom: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  user-select: none;
+  min-width: 0; /* 摘要 ellipsis 生效的前提 */
 }
+.sf-head:hover { background: #f1f5f9; }
+
 .sf-badge {
+  flex-shrink: 0;
   font-size: 11px; font-weight: 700;
   padding: 2px 8px; border-radius: 4px;
 }
@@ -85,16 +132,44 @@ function onUpdateBody(next: any) {
 .sf-badge.ph-verifying      { background: #f3e8ff; color: #6b21a8; }
 
 .sf-kind {
+  flex-shrink: 0;
   font-family: var(--font-mono); font-size: 10px;
   color: #94a3b8; background: #f1f5f9;
   padding: 1px 5px; border-radius: 3px;
 }
+
+/* 单行摘要: 吸收剩余宽度, 溢出 ellipsis */
+.sf-summary {
+  flex: 1; min-width: 0;
+  font-family: var(--font-mono); font-size: 11px;
+  color: #64748b;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.sf-toggle {
+  flex-shrink: 0;
+  width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 4px;
+  background: transparent; color: #94a3b8;
+  cursor: pointer; padding: 0;
+}
+.sf-toggle svg { transition: transform 0.15s; }
+.sf-toggle svg.open { transform: rotate(180deg); }
+.sf-toggle:hover { background: #e2e8f0; color: #475569; }
+
 .sf-del {
-  margin-left: auto;
+  flex-shrink: 0;
   width: 20px; height: 20px;
   border: none; border-radius: 4px;
   background: transparent; color: #94a3b8;
   font-size: 14px; line-height: 1; cursor: pointer;
 }
 .sf-del:hover { background: #fee2e2; color: #dc2626; }
+
+/* 展开的字段区: 内衬底色与头行分隔 */
+.sf-body {
+  padding: 8px 10px 10px;
+  border-top: 1px dashed #e6e8ec;
+}
 </style>

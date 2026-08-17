@@ -35,7 +35,7 @@ ADR 0002 定义的统一语法:
 | **list / dim 节点操作** | `GET /api/{dim}` <br> `POST /api/{dim}/action/{name}` | 列举 dim 全部条目;触发 dim 级别 action |
 | **detail** | `GET /api/{dim}/{id}` | 取单个条目经 `view_factory` 裁剪后的**轻量**视图 |
 | **list / detail · 完整契约** | `GET /api/{dim}/full` <br> `GET /api/{dim}/{id}/full` | 同上的 `full_view_factory` 版本,每个字段都返回(含 IOFieldBinding 扩展、敏感凭据等) |
-| **references** | `GET /api/{dim}/{id}/references` | Phase β(ADR §D-D2):反查信号,见 [§3.8](#38-references-反查信号-phase-β)。返回 `data.item={dim,id}` + `data.references={...}`,dim 内 dim-特定信号(systems / service / module / tags / endpoint_count / kind / 等) |
+| **references** | `GET /api/{dim}/{id}/references` | Phase β(ADR §D-D2):反查信号,见 [§3.9](#39-references-反查信号-phase-β)。返回 `data.item={dim,id}` + `data.references={...}`,dim 内 dim-特定信号(systems / service / module / tags / endpoint_count / kind / 等) |
 | **object action** | `POST /api/{dim}/{id}/action/{name}` | 触发指定条目的 action,body 由 action 自定义 |
 | **system scoped** | `GET /api/systems/{system}/{dim}` <br> `GET /api/systems/{system}/{dim}/{id}` <br> `GET /api/systems/{system}/{dim}/full` <br> `GET /api/systems/{system}/{dim}/{id}/full` <br> `POST /api/systems/{system}/{dim}/action/{name}` | 限定 system 范围的 dim 视图;`{dim}=system` 时为该 system 的子节点视图 |
 
@@ -118,6 +118,7 @@ ADR 0002 定义的统一语法:
 | `meta` | list + detail | 全字段 | — | 1 条:`fin.default` |
 | `resource` | list + detail | **脱敏**:丢弃 `image` / `config` / `portMapping` | — | 1 条:`fin.tidb_test` |
 | `scenario` | list + detail | **裁剪**:只暴露 `scenarioId` / `name` / `systems` | — | 1 条:`sc-fin-default` |
+| `strategy` | list + detail(语法 dim,§3.8) | 内省 `StrategyUnion` 出 kind 描述符 | — | 3 条 kind:extract / assign / assertion(非存储数据) |
 
 存储型 dim(config / meta / resource / scenario)的注册模板位于 `gimbal_plate.systems.fin.*`,可作为新 system 的种子蓝本。
 
@@ -741,6 +742,71 @@ Content-Type: application/json
 
 ---
 
+### 3.8 strategy(语法 dim,非数据)
+
+> M6 的第 8 个 dim。与上面 7 个**数据 dim** 不同:items 不是存储的数据实例,而是
+> 从 `StrategyUnion`(plate schema)内省出的 kind 描述符 —— 回答"策略有哪些 kind、
+> 每个 kind 有哪些字段"。策略**实例**存在 Scenario 的 `steps[].strategy` 里(scenario dim),
+> 本 dim 只提供"添加策略"的结构渲染契约(平台 Canvas 策略区)。
+>
+> `strategy_ref` 是预埋字段(待重设计),**不在** dim 输出中。
+> 无 system-scoped 变体(语法全局,不随系统变化)。
+
+#### `GET /api/strategy`
+
+```json
+{
+  "ok": true,
+  "dim": "strategy",
+  "data": {
+    "items": [
+      {"kind": "extract",   "label": "从响应提取变量", "phase": "after_request"},
+      {"kind": "assign",    "label": "准备入参赋值",   "phase": "before_request"},
+      {"kind": "assertion", "label": "响应断言",       "phase": "verifying"}
+    ],
+    "total": 3
+  }
+}
+```
+
+#### `GET /api/strategy/{kind}/full`
+
+`fields` = 该 kind 的业务字段;`base_fields` = `StrategyBase` 公共字段(name / phase /
+order / enabled / onFailure / timeout / tags / view_note)。字段描述符词汇表与
+`IOFieldBinding` 同名同义(name / path / required / default / description / enum /
+ui_kind),但**无 `source_kind`**(值来源语义对策略无意义)。
+
+assertion 的 `operator` 字段 `enum` = 14 个 AssertOperator、`ui_kind = "select"`。
+
+```json
+{
+  "ok": true,
+  "dim": "strategy",
+  "data": {
+    "item": {
+      "kind": "assertion",
+      "label": "响应断言",
+      "phase": "verifying",
+      "fields": [
+        {"name": "target",   "path": "$.target",   "required": true,  "default": null,  "description": "断言目标 (JSONPath)", "enum": null, "ui_kind": "text"},
+        {"name": "operator", "path": "$.operator", "required": true,  "default": "eq", "description": "比较符", "enum": ["eq","ne","gt","gte","lt","lte","in","not_in","contains","not_contains","exists","empty","length_eq","schema"], "ui_kind": "select"}
+      ],
+      "base_fields": [
+        {"name": "name",      "path": "$.name",      "required": false, "default": null,        "description": "策略名",   "enum": null, "ui_kind": "text"},
+        {"name": "order",     "path": "$.order",     "required": false, "default": 0,           "description": "执行顺序", "enum": null, "ui_kind": "number"}
+      ]
+    }
+  }
+}
+```
+
+(fields / base_fields 示例有截断,完整字段以 `/full` 实际响应为准)
+
+- 未知 kind → `404 dim_item_not_found`。
+- 平台代理:`/api/strategy-catalog` · `/api/strategy-catalog/{kind}/full`(unwrap envelope;plate 不可达 → `502 plate_unavailable`)。
+
+---
+
 ## 4. Python 注册 API
 
 ### 4.1 注册自定义 dim
@@ -797,7 +863,7 @@ from gimbal_plate.registry import (
 
 ---
 
-### 3.8 references(反查信号,Phase β)
+### 3.9 references(反查信号,Phase β)
 
 > **ADR 定位**:ADR 0002 §D-D2 决策为"不要,留 Phase β"。本节是该决策的落地版。
 >
