@@ -29,7 +29,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     1. ``ALL_ENDPOINTS`` 注册到默认 registry(产生 system / service / endpoint 三个 dim 的数据)。
     2. ``system == FIN_SYSTEM`` 自检:若有人改了某个 endpoint 但忘了同步 system_info,
        服务启动即失败,便于尽早暴露问题。
-    3. ``register_dim`` 7 个 dim(endpoint / service / system / config / meta / resource / scenario)。
+    3. ``register_dim`` 8 个 dim(7 数据: endpoint / service / system / config / meta /
+           resource / scenario;1 语法: strategy —— kind 描述符,2026-08-17)。
     4. 给 4 个 storage-backed dim 写入 1 条 seed,保证 ``GET /api/config`` 等返回非空。
     """
     if getattr(app.state, "registry_owned", True):
@@ -59,7 +60,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
                 f"请检查 fin/endpoint/*.py 是否与 system_info.FIN_SYSTEM 一致。"
             )
 
-        # M6 grammar: 注册 7 个 dim + 4 条 seed(ADR 0002 §D-D4,
+        # M6 grammar: 注册 8 个 dim(7 数据 + 1 语法 strategy)+ 4 条 seed(ADR 0002 §D-D4,
         # 共享入口见 ``gimbal_plate.systems.fin.dimensions``)。
         register_fin_dims(default_registry)
     yield

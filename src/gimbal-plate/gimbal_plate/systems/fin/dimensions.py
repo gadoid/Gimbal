@@ -26,6 +26,7 @@ from gimbal_plate.http.grammar import (
     ResourceIndex,
     ScenarioIndex,
     ServiceIndex,
+    StrategyIndex,
     SystemIndex,
 )
 from gimbal_plate.http.routes_grammar import (
@@ -51,6 +52,8 @@ from gimbal_plate.http.views import (
     ScenarioView,
     ServiceDetailView,
     ServiceView,
+    StrategyKindDetailView,
+    StrategyKindView,
     SystemDetailView,
     SystemView,
 )
@@ -163,6 +166,22 @@ def register_fin_dims(reg: PlateRegistry) -> None:
                 # 路由自动是 POST /api/scenario/action/convert。
                 "convert": action_scenario_convert,
             },
+        ),
+    )
+
+    # strategy: 语法级 dim(第 8 个),非 fin 数据 —— 注册在 fin 装配点是
+    # pragmatic 拍板(2026-08-17):本函数是生产/测试共用的唯一 dim 装配入口,
+    # 单开第二条装配路径会导致 drift(dimensions.py 模块 docstring 警告过)。
+    # items 是从 StrategyUnion 内省的 kind 描述符;strategy_ref 预埋字段
+    # 整条排除,待重设计。语法全局,任意 system 作用域返回全量。
+    reg.register_dim(
+        "strategy",
+        DimSpec(
+            name="strategy",
+            index=StrategyIndex(registry=reg),
+            view_factory=StrategyKindView.from_descriptor,
+            full_view_factory=StrategyKindDetailView.from_descriptor,
+            actions={},
         ),
     )
 
