@@ -43,6 +43,15 @@
               title="从候选值选择"
               @click="candOpenField = candOpenField === f ? null : f"
             >▾</button>
+            <!-- 字段动作菜单(#4/#5 变量工作台):引用/提取/注入/断言。
+                 fieldActions 门控 — 仅 Canvas 请求体场景传 -->
+            <button
+              v-if="fieldActions"
+              type="button"
+              class="cand-btn fa-menu-btn"
+              title="变量与策略动作"
+              @click="toggleMenu(f)"
+            >☰</button>
             <div v-if="candOpenField === f" class="cand-list">
               <button
                 v-for="c in candidatesFor(f)"
@@ -54,46 +63,114 @@
                 <code>{{ c }}</code>
               </button>
             </div>
+            <FieldActionMenu
+              v-if="fieldActions && menuField === f.name"
+              :field="f"
+              :value="String(getValue(f) ?? '')"
+              :var-choices="varChoices ?? []"
+              :inject-choices="injectChoices ?? []"
+              @close="menuField = null"
+              @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
+              @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
+              @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+              @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
+            />
           </div>
-          <button
-            v-if="varEntries.length"
-            type="button"
-            class="var-btn"
-            title="插入变量引用 ${var.<name>}"
-            @click="openVarPicker(f)"
-          >Ⓥ</button>
         </div>
 
         <!-- number -->
-        <input
-          v-else-if="f.ui_kind === 'number'"
-          type="number"
-          class="ctl"
-          :value="getValue(f) as number | string"
-          :placeholder="placeholderFor(f)"
-          @input="e => setValue(f, Number((e.target as HTMLInputElement).value))"
-        />
+        <div v-else-if="f.ui_kind === 'number'" class="ctl-with-var">
+          <div class="ctl-cand-wrap">
+            <input
+              type="number"
+              class="ctl"
+              :value="getValue(f) as number | string"
+              :placeholder="placeholderFor(f)"
+              @input="e => setValue(f, Number((e.target as HTMLInputElement).value))"
+            />
+            <button
+              v-if="fieldActions"
+              type="button"
+              class="cand-btn fa-menu-btn"
+              title="变量与策略动作"
+              @click="toggleMenu(f)"
+            >☰</button>
+            <FieldActionMenu
+              v-if="fieldActions && menuField === f.name"
+              :field="f"
+              :value="String(getValue(f) ?? '')"
+              :var-choices="varChoices ?? []"
+              :inject-choices="injectChoices ?? []"
+              @close="menuField = null"
+              @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
+              @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
+              @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+              @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
+            />
+          </div>
+        </div>
 
         <!-- boolean -->
-        <label v-else-if="f.ui_kind === 'boolean'" class="ctl-bool">
-          <input
-            type="checkbox"
-            :checked="Boolean(getValue(f))"
-            @change="e => setValue(f, (e.target as HTMLInputElement).checked)"
+        <div v-else-if="f.ui_kind === 'boolean'" class="ctl-with-var">
+          <label class="ctl-bool">
+            <input
+              type="checkbox"
+              :checked="Boolean(getValue(f))"
+              @change="e => setValue(f, (e.target as HTMLInputElement).checked)"
+            />
+            <span>{{ getValue(f) ? 'true' : 'false' }}</span>
+          </label>
+          <button
+            v-if="fieldActions"
+            type="button"
+            class="cand-btn fa-menu-btn"
+            title="变量与策略动作"
+            @click="toggleMenu(f)"
+          >☰</button>
+          <FieldActionMenu
+            v-if="fieldActions && menuField === f.name"
+            :field="f"
+            :value="String(getValue(f) ?? '')"
+            :var-choices="varChoices ?? []"
+            :inject-choices="injectChoices ?? []"
+            @close="menuField = null"
+            @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
+            @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
+            @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+            @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
           />
-          <span>{{ getValue(f) ? 'true' : 'false' }}</span>
-        </label>
+        </div>
 
         <!-- select -->
-        <select
-          v-else-if="f.ui_kind === 'select' && f.enum"
-          class="ctl"
-          :value="getValue(f) as string"
-          @change="e => setValue(f, (e.target as HTMLSelectElement).value)"
-        >
-          <option value="">— select —</option>
-          <option v-for="opt in f.enum" :key="String(opt)" :value="String(opt)">{{ String(opt) }}</option>
-        </select>
+        <div v-else-if="f.ui_kind === 'select' && f.enum" class="ctl-with-var">
+          <select
+            class="ctl"
+            :value="getValue(f) as string"
+            @change="e => setValue(f, (e.target as HTMLSelectElement).value)"
+          >
+            <option value="">— select —</option>
+            <option v-for="opt in f.enum" :key="String(opt)" :value="String(opt)">{{ String(opt) }}</option>
+          </select>
+          <button
+            v-if="fieldActions"
+            type="button"
+            class="cand-btn fa-menu-btn"
+            title="变量与策略动作"
+            @click="toggleMenu(f)"
+          >☰</button>
+          <FieldActionMenu
+            v-if="fieldActions && menuField === f.name"
+            :field="f"
+            :value="String(getValue(f) ?? '')"
+            :var-choices="varChoices ?? []"
+            :inject-choices="injectChoices ?? []"
+            @close="menuField = null"
+            @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
+            @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
+            @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+            @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
+          />
+        </div>
 
         <!-- textarea -->
         <div v-else-if="f.ui_kind === 'textarea'" class="ctl-with-var col">
@@ -105,12 +182,24 @@
             @input="e => setValue(f, (e.target as HTMLTextAreaElement).value)"
           />
           <button
-            v-if="varEntries.length"
+            v-if="fieldActions"
             type="button"
-            class="var-btn"
-            title="插入变量引用 ${var.<name>}"
-            @click="openVarPicker(f)"
-          >Ⓥ</button>
+            class="cand-btn fa-menu-btn"
+            title="变量与策略动作"
+            @click="toggleMenu(f)"
+          >☰</button>
+          <FieldActionMenu
+            v-if="fieldActions && menuField === f.name"
+            :field="f"
+            :value="String(getValue(f) ?? '')"
+            :var-choices="varChoices ?? []"
+            :inject-choices="injectChoices ?? []"
+            @close="menuField = null"
+            @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
+            @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
+            @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+            @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
+          />
         </div>
 
         <!-- json (dark code editor) -->
@@ -123,12 +212,24 @@
             @input="e => setValue(f, parseJson((e.target as HTMLTextAreaElement).value))"
           />
           <button
-            v-if="varEntries.length"
+            v-if="fieldActions"
             type="button"
-            class="var-btn dark"
-            title="插入变量引用 ${var.<name>}"
-            @click="openVarPicker(f)"
-          >Ⓥ</button>
+            class="cand-btn fa-menu-btn dark"
+            title="变量与策略动作"
+            @click="toggleMenu(f)"
+          >☰</button>
+          <FieldActionMenu
+            v-if="fieldActions && menuField === f.name"
+            :field="f"
+            :value="String(getValue(f) ?? '')"
+            :var-choices="varChoices ?? []"
+            :inject-choices="injectChoices ?? []"
+            @close="menuField = null"
+            @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
+            @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
+            @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+            @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
+          />
         </div>
 
         <!-- file (placeholder) -->
@@ -152,36 +253,6 @@
         {{ f.description }}
       </p>
     </div>
-
-    <!-- Ⓥ 变量选择 popover(text/textarea/json 控件插入 ${var.<name>},#3) -->
-    <el-popover
-      :visible="varPickerField === f"
-      placement="right"
-      :width="280"
-      trigger="manual"
-    >
-      <template #reference>
-        <span />
-      </template>
-      <div class="var-pop">
-        <p class="var-pop-title">选择变量 → 插入 var 引用</p>
-        <div v-if="!varEntries.length" class="var-pop-empty">注册表为空</div>
-        <button
-          v-for="e in varEntries"
-          :key="e.name"
-          type="button"
-          class="var-pop-item"
-          @click="insertVarRef(e)"
-        >
-          <span class="var-pop-name">{{ e.name }}</span>
-          <span class="var-pop-badge" :class="e.origin">{{ e.origin }}</span>
-          <span class="var-pop-src">
-            <template v-if="e.origin === 'config'">共享变量</template>
-            <template v-else>步骤 {{ (e.stepIdx ?? 0) + 1 }}</template>
-          </span>
-        </button>
-      </div>
-    </el-popover>
   </div>
 </template>
 
@@ -190,12 +261,21 @@ import { computed, ref } from 'vue'
 import type { IOFieldBinding } from '@/types/plate'
 import type { VarEntry } from '@/utils/var-registry'
 import { getByPath, setByPath } from '@/utils/jsonpath'
+import FieldActionMenu from './FieldActionMenu.vue'
 
 const props = defineProps<{
   bindings: IOFieldBinding[]
   body: any
-  /** 变量注册表(#3):Ⓥ 插入 ${var.<name>};缺省不渲染 Ⓥ */
-  varEntries?: VarEntry[]
+  /**
+   * 字段动作菜单门控(#4/#5 变量工作台):仅 Canvas 请求体场景传。
+   * 开启后每个字段控件挂 ☰ 菜单(引用/提取/注入/断言);
+   * StrategyForm 复用本组件处不传 → 模板零变化。
+   */
+  fieldActions?: boolean
+  /** 引用子列表(config/数据集出身,插 ${var.x} 文本)— Canvas 传入 */
+  varChoices?: VarEntry[]
+  /** 注入子列表(extract 出身 + 时序门控 disabled 标记)— Canvas 传入 */
+  injectChoices?: Array<VarEntry & { disabled?: boolean }>
   /**
    * 候选值映射(#2 策略改造):字段名 → 候选 JSONPath 列表。
    * 策略表单场景:assertion.target / extract.expression 从响应
@@ -205,9 +285,13 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   'update:body': [any]
+  /** 快捷策略创建(菜单动作,Canvas 落地为策略骨架) */
+  'fieldExtract': [field: IOFieldBinding]
+  'fieldAssign': [field: IOFieldBinding, varName: string]
+  'fieldAssert': [field: IOFieldBinding]
+  /** 插入 ${var.<name>} 文本(原 Ⓥ 行为,Canvas 可用于引导提示) */
+  'varInsert': [field: IOFieldBinding, name: string]
 }>()
-
-const varEntries = computed(() => props.varEntries ?? [])
 
 /** 候选下拉开合状态(同屏至多一个) */
 const candOpenField = ref<IOFieldBinding | null>(null)
@@ -217,6 +301,17 @@ function candidatesFor(f: IOFieldBinding): string[] {
 function applyCandidate(f: IOFieldBinding, c: string) {
   setValue(f, c)
   candOpenField.value = null
+}
+
+/**
+ * 字段动作菜单开合状态(同屏至多一个;与候选下拉互斥)。
+ * 存字段名而非对象引用 — props.bindings 会被 Vue 包 reactive proxy,
+ * v-for 元素与调用方原始对象引用不等(=== 失败,菜单不开)。
+ */
+const menuField = ref<string | null>(null)
+function toggleMenu(f: IOFieldBinding) {
+  candOpenField.value = null
+  menuField.value = menuField.value === f.name ? null : f.name
 }
 
 // Type A + Type B: 有 binding 的都显示; Type C (无 binding 的 schema 字段) 走 hiddenFields 不在此显示
@@ -249,19 +344,6 @@ function formatJson(v: unknown): string {
 function parseJson(s: string): unknown {
   if (!s || !s.trim()) return null
   try { return JSON.parse(s) } catch { return s }
-}
-
-// ── Ⓥ 变量插入(#3):追加到当前值尾(不覆盖已输入内容) ─────────────
-const varPickerField = ref<IOFieldBinding | null>(null)
-function openVarPicker(f: IOFieldBinding) {
-  varPickerField.value = varPickerField.value === f ? null : f
-}
-function insertVarRef(e: VarEntry) {
-  const f = varPickerField.value
-  if (!f) return
-  const cur = String(getValue(f) ?? '')
-  setValue(f, cur + `\${var.${e.name}}`)
-  varPickerField.value = null
 }
 </script>
 
@@ -317,31 +399,9 @@ function insertVarRef(e: VarEntry) {
   font-family: var(--font-mono); font-size: 11px; color: #334155;
 }
 
-/* Ⓥ 变量 popover 列表 */
-.var-pop { display: flex; flex-direction: column; gap: 3px; }
-.var-pop-title {
-  margin: 0 0 6px; font-size: 11px; color: #64748b;
-  font-family: var(--font-mono);
-}
-.var-pop-empty { font-size: 12px; color: #94a3b8; padding: 6px 0; }
-.var-pop-item {
-  display: grid; grid-template-columns: 1.2fr 56px 64px; gap: 6px;
-  align-items: center; text-align: left;
-  padding: 5px 8px; border: 1px solid transparent; border-radius: 6px;
-  background: transparent; cursor: pointer; font-size: 12px;
-}
-.var-pop-item:hover { background: #f1f5f9; border-color: #e2e8f0; }
-.var-pop-name {
-  font-family: var(--font-mono); font-weight: 600;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.var-pop-badge {
-  padding: 1px 5px; border-radius: 4px; text-align: center;
-  font-family: var(--font-mono); font-size: 9px; font-weight: 700;
-}
-.var-pop-badge.extract { background: #d1fae5; color: #065f46; }
-.var-pop-badge.config { background: #eef2ff; color: #4338ca; }
-.var-pop-src { font-size: 10px; color: #94a3b8; }
+/* ☰ 字段动作菜单按钮(#4/#5):与候选 ▾ 同位同尺寸 */
+.fa-menu-btn { color: #4f46e5; }
+.fa-menu-btn:hover { background: #e0e7ff; color: #3730a3; }
 
 .field-label {
   display: flex; align-items: center; gap: 6px;
