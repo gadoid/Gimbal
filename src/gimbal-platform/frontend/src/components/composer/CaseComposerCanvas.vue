@@ -107,14 +107,20 @@
             <div class="io-tabs">
               <button
                 type="button"
-                :class="['io-tab', { active: activeIoTab === 'request' }]"
+                :class="['io-tab', 'io-tab-req', { active: activeIoTab === 'request' }]"
                 @click="activeIoTab = 'request'"
-              >⬅ Request</button>
+              >
+                <span class="io-tab-arrow">→</span> Request
+                <span v-if="fieldBindings(currentStep).length" class="io-tab-count">{{ fieldBindings(currentStep).length }}</span>
+              </button>
               <button
                 type="button"
-                :class="['io-tab', { active: activeIoTab === 'response' }]"
+                :class="['io-tab', 'io-tab-resp', { active: activeIoTab === 'response' }]"
                 @click="activeIoTab = 'response'"
-              >Response ➡</button>
+              >
+                <span class="io-tab-arrow">←</span> Response
+                <span v-if="currentRespSpecs.length" class="io-tab-count">{{ currentRespSpecs.length }}</span>
+              </button>
             </div>
             <div class="io-card">
             <!-- headers: KV 行编辑。value 支持 ${auth.<alias>.<field>} 模板 —
@@ -227,12 +233,12 @@
             </template>
             </div><!-- /io-card -->
 
-            <!-- 策略区: plate 策略语法 dim 驱动(kinds 懒加载);按签页 phase 过滤;
-                 失败降级 extract 专用 UI(Response 页) -->
-            <el-form-item v-if="strategyKinds.length" :label="`策略 (${activeIoTab === 'request' ? 'request 域 · before_request' : 'response 域 · after_request/verifying'})`">
+            <!-- 策略区: plate 策略语法 dim 驱动;request/response 共用同一列表
+                 (执行序即数组序,不按签页过滤 — 添加即见);失败降级 extract 专用 UI -->
+            <el-form-item v-if="strategyKinds.length" label="策略 (request · response 共用)">
               <div class="strategy-area">
                 <StrategyForm
-                  v-for="({ s, idx }, j) in visibleStrategies"
+                  v-for="(s, idx) in currentStep.strategy"
                   :key="`${activeStepIdx}-${idx}`"
                   :strategy="s"
                   :detail="strategyDetail(s)"
@@ -260,7 +266,7 @@
                 </el-dropdown>
               </div>
             </el-form-item>
-            <el-form-item v-else-if="activeIoTab === 'response'" label="extract (从响应提取变量 → strategy)">
+            <el-form-item v-else label="extract (从响应提取变量 → strategy)">
               <div v-for="(ex, j) in extractStrategies(currentStep)" :key="j" class="extract-row c-kv-row">
                 <el-input
                   :model-value="ex.target"
@@ -859,29 +865,9 @@ watch(() => currentStep.value?.api?.view_hints?.endpoint_id, (eid) => {
   if (eid) ensureRespFields(eid)
 }, { immediate: true })
 
-// ── 策略 phase 分域(设计 §2.3):存储仍是单数组,视图层按签页过滤 ──────
-/** 降级兜底:detail 拉取失败时按 kind 名硬映射(与 plate _KIND_LABELS 一致) */
-const KIND_PHASE_FALLBACK: Record<string, string> = {
-  assign: 'before_request',
-  extract: 'after_request',
-  assertion: 'verifying',
-}
-/** 策略归属 phase;detail 未加载用 kind 兜底,仍未识别 → 'unknown'(两页都显示) */
-function strategyPhase(s: StrategyView): string {
-  const hit = strategyDetailCache.value[s.kind]
-  if (hit?.phase) return hit.phase
-  return KIND_PHASE_FALLBACK[s.kind] ?? 'unknown'
-}
-const REQUEST_PHASES = ['before_request', 'unknown']
-const RESPONSE_PHASES = ['after_request', 'verifying', 'unknown']
-/** 签页内可见策略(带原始下标,justAddedStrategyIdx 引导展开用) */
-const visibleStrategies = computed<Array<{ s: StrategyView; idx: number }>>(() => {
-  const all = currentStep.value?.strategy ?? []
-  const phases = activeIoTab.value === 'request' ? REQUEST_PHASES : RESPONSE_PHASES
-  return all
-    .map((s, idx) => ({ s, idx }))
-    .filter(({ s }) => phases.includes(strategyPhase(s)))
-})
+// ── 策略区说明:request/response 共用 step.strategy 单数组(执行序即数组
+//    序,plate Step 契约不变);不按签页过滤,避免"Request 页添加的策略
+//    只在 Response 侧可见"的割裂。phase 分域仅保留在 detail 数据里。
 
 // ── Type C 查看入口(设计 §3.5):schema 有、binding 无的隐藏字段差集 ───
 interface TypeCField { name: string; type: string; path: string }
@@ -1357,22 +1343,39 @@ function parseJson(s: string, fallback: unknown) {
 }
 .info-empty { padding: 40px 0; text-align: center; font-size: 12px; }
 
-/* ── IO 双签卡片(设计 §3.1):两签共用一壳 ─────────────────────── */
+/* ── IO 双签卡片(设计 §3.1):segmented control 页签,两签共用一壳 ── */
 .io-tabs {
-  display: flex; gap: 6px;
-  margin-bottom: 10px;
+  position: relative; display: inline-flex; align-items: center;
+  padding: 3px; gap: 2px; margin-bottom: 12px;
+  background: #eef0f4; border-radius: 10px;
 }
 .io-tab {
-  flex: 1; padding: 7px 10px;
-  border: 1.5px solid var(--c-border, #e6e8ec); border-radius: 8px;
-  background: var(--c-surface, #fafbfc);
-  font-size: 12px; font-weight: 600; color: #5a6273;
-  cursor: pointer; transition: all 0.15s;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 16px;
+  border: none; border-radius: 8px;
+  background: transparent;
+  font-size: 12.5px; font-weight: 600; color: #64748b;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
-.io-tab:hover { border-color: #c7d2fe; }
+.io-tab:hover { color: #334155; }
 .io-tab.active {
-  background: #eef2ff; border-color: #4f46e5; color: #3730a3;
+  background: #fff; color: #3730a3;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
 }
+/* 域色:请求 indigo / 响应 emerald(仅箭头与计数,激活态底色统一白) */
+.io-tab-arrow { font-size: 12px; transition: color 0.2s; }
+.io-tab-req .io-tab-arrow { color: #6366f1; }
+.io-tab-resp .io-tab-arrow { color: #10b981; }
+.io-tab-count {
+  min-width: 16px; padding: 0 5px;
+  border-radius: 8px;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  background: #e2e8f0; color: #475569;
+  transition: background 0.2s, color 0.2s;
+}
+.io-tab-req.active .io-tab-count { background: #e0e7ff; color: #4338ca; }
+.io-tab-resp.active .io-tab-count { background: #d1fae5; color: #047857; }
 .io-card {
   border: 1.5px solid var(--c-border, #e6e8ec); border-radius: 10px;
   padding: 12px 12px 4px; margin-bottom: 18px;

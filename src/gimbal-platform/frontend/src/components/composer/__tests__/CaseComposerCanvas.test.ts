@@ -233,10 +233,7 @@ describe('CaseComposerCanvas — addExtract scope(#8)', () => {
     const steps = [mkStep()]
     const { w } = mountCanvas(steps)
     await flushPromises()
-    // 降级 extract UI 在 Response 签页(响应域策略)
-    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))
-    await respTab!.trigger('click')
-    await flush()
+    // 降级 extract UI 与签页无关(策略区共用)
     const btn = w.findAll('button').find((b) => b.text().includes('添加 extract'))
     expect(btn).toBeTruthy()
     await btn!.trigger('click')
@@ -279,7 +276,7 @@ describe('CaseComposerCanvas — IO 双签卡片(C2)', () => {
     expect(ex.expression).toBe('$.response_body.data.orderId')
   })
 
-  it('T14: 策略 phase 过滤 — request 页 assign,response 页 extract+assertion', async () => {
+  it('T14: 策略区 request/response 共用 — 两签均显示全部策略', async () => {
     const { listStrategyKinds } = await import('@/api/scenario-composer')
     const StrategyForm = (await import('@/components/composer/StrategyForm.vue')).default
     // onMounted 会调 loadStrategyKinds 两次,Once 会被第二次的默认 [] 覆盖 → 持续 mock
@@ -299,14 +296,13 @@ describe('CaseComposerCanvas — IO 双签卡片(C2)', () => {
     })]
     const { w } = mountCanvas(steps)
     await flushPromises()
-    // request 签(默认):仅 assign
-    expect(w.findAllComponents(StrategyForm).length).toBe(1)
-    expect(w.findAllComponents(StrategyForm)[0].props('strategy').kind).toBe('assign')
-    // response 签:extract + assertion
+    // request 签(默认):三种策略全显示(共用,不按签页过滤)
+    expect(w.findAllComponents(StrategyForm).length).toBe(3)
+    // response 签:同样全部显示
     const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
     await respTab.trigger('click')
     await flush()
-    expect(w.findAllComponents(StrategyForm).length).toBe(2)
+    expect(w.findAllComponents(StrategyForm).length).toBe(3)
     } finally {
       ;(listStrategyKinds as any).mockImplementation(kindsMock)
     }
