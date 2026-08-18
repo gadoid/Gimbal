@@ -14,13 +14,13 @@
   <div class="fa-menu" @click.stop>
     <!-- 主菜单(未展开子列表时) -->
     <template v-if="!subOpen">
-      <button type="button" class="fa-item" @click="subOpen = 'ref'">
+      <button v-if="domain !== 'response'" type="button" class="fa-item" @click="subOpen = 'ref'">
         <span class="fa-label">引用共享变量</span><span class="fa-note">Reference</span>
       </button>
       <button type="button" class="fa-item" @click="emitExtract">
         <span class="fa-label">从响应提取</span><span class="fa-note">Extract</span>
       </button>
-      <button type="button" class="fa-item" @click="subOpen = 'inject'">
+      <button v-if="domain !== 'response'" type="button" class="fa-item" @click="subOpen = 'inject'">
         <span class="fa-label">注入响应变量</span><span class="fa-note">DynamicAssign</span>
       </button>
       <button type="button" class="fa-item" @click="emitAssert">
@@ -87,6 +87,11 @@ const props = defineProps<{
   varChoices: VarEntry[]
   /** 注入子列表:extract 出身 + 时序门控 disabled */
   injectChoices: Array<VarEntry & { disabled?: boolean }>
+  /**
+   * 字段域(IO 双签卡片):'request'(默认,四项菜单)|
+   * 'response'(契约参考,仅 提取/断言 两项 — 无值可插、无 request_body 可写)
+   */
+  domain?: 'request' | 'response'
 }>()
 
 const emit = defineEmits<{

@@ -37,10 +37,13 @@ const EXTRACT_VAR: VarEntry = { name: 'token', origin: 'extract', stepIdx: 0, ex
 /** 生产用法镜像:父持 body ref,子 update:body 双向 */
 function mountWithParent(opts: {
   bindings: IOFieldBinding[]
-  body?: Record<string, unknown>
+  body?: Record<string, unknown> | null
   fieldActions?: boolean
   varChoices?: VarEntry[]
   injectChoices?: Array<VarEntry & { disabled?: boolean }>
+  readonly?: boolean
+  domain?: 'request' | 'response'
+  assertable?: string[]
 }) {
   const body = ref<Record<string, unknown>>(opts.body ?? { order_id: 'ord-1' })
   const received: Record<string, unknown[]> = {
@@ -50,10 +53,13 @@ function mountWithParent(opts: {
     setup() {
       return () => h(FieldForm, {
         bindings: opts.bindings,
-        body: body.value,
+        body: opts.body === null ? null : body.value,
         fieldActions: opts.fieldActions,
         varChoices: opts.varChoices,
         injectChoices: opts.injectChoices,
+        readonly: opts.readonly,
+        domain: opts.domain,
+        assertable: opts.assertable,
         'onUpdate:body': (v: Record<string, unknown>) => { body.value = v },
         onFieldExtract: (f: IOFieldBinding) => received.fieldExtract.push(f),
         onFieldAssign: (f: IOFieldBinding, name: string) => received.fieldAssign.push([f, name]),
@@ -161,5 +167,63 @@ describe('FieldForm — 字段下拉菜单(fieldActions 门控)', () => {
     await refItem!.trigger('click')
     await flush()
     expect(w.text()).toContain('没有可用变量')
+  })
+})
+
+describe('FieldForm — IO 双签卡片 props(C2)', () => {
+  it('T16: readonly → 控件 disabled、输入不发 update:body;☰ 菜单保留', async () => {
+    const { w, body } = mountWithParent({
+      bindings: [mkBinding()],
+      fieldActions: true,
+      readonly: true,
+    })
+    const ctl = w.find('input.ctl')
+    expect((ctl.element as HTMLInputElement).disabled).toBe(true)
+    await ctl.setValue('hacked')
+    await flush()
+    expect(body.value.order_id).toBe('ord-1')
+    // 菜单按钮仍在(提取/断言可用)
+    expect(w.findAll('.fa-menu-btn').length).toBe(1)
+  })
+
+  it('T17: domain=response → 菜单仅 提取/断言 两项', async () => {
+    const { w } = mountWithParent({
+      bindings: [mkBinding()],
+      fieldActions: true,
+      domain: 'response',
+      varChoices: [CONFIG_VAR],
+      injectChoices: [{ ...EXTRACT_VAR, disabled: false }],
+    })
+    await w.find('.fa-menu-btn').trigger('click')
+    await flush()
+    const items = w.findAll('.fa-item')
+    expect(items.length).toBe(2)
+    expect(w.text()).toContain('从响应提取')
+    expect(w.text()).toContain('断言该字段')
+    expect(w.text()).not.toContain('引用共享变量')
+    expect(w.text()).not.toContain('注入响应变量')
+  })
+
+  it('T18: assertable 命中 path → ✓ 标;不传 assertable → 无标', () => {
+    const hit = mountWithParent({
+      bindings: [mkBinding()],
+      assertable: ['$.order_id'],
+    })
+    expect(hit.w.find('.assertable-mark').exists()).toBe(true)
+    const miss = mountWithParent({
+      bindings: [mkBinding()],
+      assertable: ['$.other'],
+    })
+    expect(miss.w.find('.assertable-mark').exists()).toBe(false)
+  })
+
+  it('T19: body=null + example fallback → 契约参考值展示', () => {
+    const { w } = mountWithParent({
+      bindings: [mkBinding({ example: 'ord-9', required: false })],
+      body: null,
+      readonly: true,
+    })
+    const ctl = w.find('input.ctl')
+    expect((ctl.element as HTMLInputElement).value).toBe('ord-9')
   })
 })

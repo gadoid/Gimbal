@@ -101,10 +101,26 @@
             <el-form-item label="description">
               <p class="desc-readonly">{{ currentStep.description || '—' }}</p>
             </el-form-item>
+
+            <!-- IO 双签卡片(设计 §3.1):两签共用一壳,内容按 activeIoTab 切;
+                 值在 request.body / strategy 数组,切换只切视图不切数据 -->
+            <div class="io-tabs">
+              <button
+                type="button"
+                :class="['io-tab', { active: activeIoTab === 'request' }]"
+                @click="activeIoTab = 'request'"
+              >⬅ Request</button>
+              <button
+                type="button"
+                :class="['io-tab', { active: activeIoTab === 'response' }]"
+                @click="activeIoTab = 'response'"
+              >Response ➡</button>
+            </div>
+            <div class="io-card">
             <!-- headers: KV 行编辑。value 支持 ${auth.<alias>.<field>} 模板 —
                  点 ⓘ 从认证列表选(草稿只存引用,token 明文永不进前端),
                  引用徽章提示悬空(alias 不在 /api/auths) -->
-            <el-form-item label="headers (点 ⓘ 注入 ${auth.<alias>.<field>})">
+            <el-form-item v-if="activeIoTab === 'request'" label="headers (点 ⓘ 注入 ${auth.<alias>.<field>})">
               <div class="hdr-rows">
                 <div v-for="(value, key) in currentStep.api.headers" :key="String(key)" class="hdr-row">
                   <el-input
@@ -135,7 +151,7 @@
               </div>
             </el-form-item>
             <!-- body: 优先由 request.fields_meta (IOFieldBinding) 驱动表单 -->
-            <el-form-item v-if="fieldBindings(currentStep).length" label="请求体 (由 IOFieldBinding 驱动)">
+            <el-form-item v-if="activeIoTab === 'request' && fieldBindings(currentStep).length" label="请求体 (由 IOFieldBinding 驱动)">
               <div class="field-form-wrap">
                 <FieldForm
                   :bindings="fieldBindings(currentStep)"
@@ -156,7 +172,7 @@
                 </p>
               </div>
             </el-form-item>
-            <el-form-item v-else label="body (JSON)">
+            <el-form-item v-else-if="activeIoTab === 'request'" label="body (JSON)">
               <el-input
                 :model-value="JSON.stringify(currentStep.request.body || {}, null, 2)"
                 @update:model-value="v => currentStep.request.body = parseJson(v, {})"
@@ -166,15 +182,43 @@
               />
               <span class="hint">提示: 从接口目录添加 step 后, body 将由 IOFieldBinding 自动渲染</span>
             </el-form-item>
-            <!-- 策略区: plate 策略语法 dim 驱动(kinds 懒加载);失败降级 extract 专用 UI -->
-            <el-form-item v-if="strategyKinds.length" label="策略 (plate 语法 dim 驱动)">
+            <!-- Response 页:/full responses 全状态码契约,只读参考(设计 §3.1)。
+                 ☰ 菜单仅 提取/断言 两项,路径经 respPathFor → toScratchPath -->
+            <template v-else>
+              <div v-if="currentRespSpecs.length" class="resp-specs">
+                <div v-for="spec in currentRespSpecs" :key="spec.status" class="resp-spec">
+                  <div class="resp-spec-head">
+                    <span class="resp-status-badge" :class="spec.status < 400 ? 'ok' : 'err'">{{ spec.status }}</span>
+                    <span class="resp-spec-desc">{{ spec.description || '—' }}</span>
+                  </div>
+                  <FieldForm
+                    v-if="spec.fields.length"
+                    :bindings="spec.fields"
+                    :body="null"
+                    :readonly="true"
+                    :domain="'response'"
+                    :field-actions="true"
+                    :assertable="spec.assertable"
+                    @field-extract="onFieldExtract"
+                    @field-assert="onFieldAssert"
+                  />
+                  <p v-else class="resp-spec-empty">该状态码未声明字段契约</p>
+                </div>
+              </div>
+              <p v-else class="resp-spec-empty">该接口未声明响应契约(或拉取中)</p>
+            </template>
+            </div><!-- /io-card -->
+
+            <!-- 策略区: plate 策略语法 dim 驱动(kinds 懒加载);按签页 phase 过滤;
+                 失败降级 extract 专用 UI(Response 页) -->
+            <el-form-item v-if="strategyKinds.length" :label="`策略 (${activeIoTab === 'request' ? 'request 域 · before_request' : 'response 域 · after_request/verifying'})`">
               <div class="strategy-area">
                 <StrategyForm
-                  v-for="(s, j) in currentStep.strategy"
-                  :key="`${activeStepIdx}-${j}`"
+                  v-for="({ s, idx }, j) in visibleStrategies"
+                  :key="`${activeStepIdx}-${idx}`"
                   :strategy="s"
                   :detail="strategyDetail(s)"
-                  :start-expanded="j === justAddedStrategyIdx"
+                  :start-expanded="idx === justAddedStrategyIdx"
                   :candidates="strategyCandidates(s)"
                   @remove="removeStrategy(currentStep, s)"
                 />
@@ -198,7 +242,7 @@
                 </el-dropdown>
               </div>
             </el-form-item>
-            <el-form-item v-else label="extract (从响应提取变量 → strategy)">
+            <el-form-item v-else-if="activeIoTab === 'response'" label="extract (从响应提取变量 → strategy)">
               <div v-for="(ex, j) in extractStrategies(currentStep)" :key="j" class="extract-row c-kv-row">
                 <el-input
                   :model-value="ex.target"
@@ -347,6 +391,12 @@ const orch = reactive<Orchestration>(
 const activeStepIdx = ref(0)
 const subView = ref<null | 'catalog'>(null)
 const adding = ref(false)
+/**
+ * IO 双签卡片当前签页(request=请求体编辑 / response=响应契约参考)。
+ * 切 step 重置回 request(设计 §3.1);值都在 request.body/strategy 数组,
+ * 切换只切视图不切数据。
+ */
+const activeIoTab = ref<'request' | 'response'>('request')
 
 const currentStep = computed(() => local[activeStepIdx.value])
 const currentOrch = computed<StepOrchestration | undefined>(() => orch.steps[activeStepIdx.value])
@@ -390,8 +440,8 @@ const strategyDetailCache = ref<Record<string, StrategyKindDetailView>>({})
 let strategyDetailPrefetch = false
 /** 刚通过"添加策略"下拉新建的实例下标(渲染为展开引导填写);-1 = 无 */
 const justAddedStrategyIdx = ref(-1)
-// 切 step 时清"刚添加"标记(下标在新 step 语境无意义,防误展开)
-watch(activeStepIdx, () => { justAddedStrategyIdx.value = -1 })
+// 切 step 时清"刚添加"标记(下标在新 step 语境无意义,防误展开);签页回 request
+watch(activeStepIdx, () => { justAddedStrategyIdx.value = -1; activeIoTab.value = 'request' })
 
 async function loadStrategyKinds() {
   try {
@@ -704,11 +754,19 @@ function ensureAssertable(endpointId: string) {
     .finally(() => assertableFetching.delete(endpointId))
 }
 
-// ── 响应字段渲染(#2):step 信息面板展示 200 响应字段清单 ───────────
-// 与 assertable 同源(/full),共用懒拉;名字+类型一行一档,断言/extract
-// 的目标从面板直接抄 JSONPath。空 200 契约 → 块不渲染。
+// ── 响应契约渲染(IO 双签卡片 Response 页 + 右栏):与 assertable 同源
+// (/full),共用懒拉。respSpecs 全状态码;respFields(200)为右栏兼容保留。
 interface RespField { name: string; ui_kind: string }
+/** /full responses[status] 轻量投影(设计 §2.4);引用数据不进 draft */
+interface RespSpecLite {
+  status: number
+  description: string
+  fields: IOFieldBinding[]
+  /** plate 域路径,渲染 ✓ 标用;写策略时过 toScratchPath */
+  assertable: string[]
+}
 const respFieldsByEndpoint = new Map<string, RespField[]>()
+const respSpecsByEndpoint = new Map<string, RespSpecLite[]>()
 /** 响应式触发器:Map 变更不会触发 computed,用版本号 bump */
 const respFieldsVersion = ref(0)
 const currentRespFields = computed<RespField[]>(() => {
@@ -718,6 +776,14 @@ const currentRespFields = computed<RespField[]>(() => {
   ensureRespFields(eid)
   return respFieldsByEndpoint.get(eid) ?? []
 })
+/** 当前 step 的全状态码响应契约(状态码字典序) */
+const currentRespSpecs = computed<RespSpecLite[]>(() => {
+  void respFieldsVersion.value
+  const eid = currentStep.value?.api?.view_hints?.endpoint_id
+  if (!eid) return []
+  ensureRespFields(eid)
+  return respSpecsByEndpoint.get(eid) ?? []
+})
 function ensureRespFields(endpointId: string) {
   if (respFieldsByEndpoint.has(endpointId) || assertableFetching.has(endpointId)) return
   assertableFetching.add(endpointId)
@@ -726,11 +792,45 @@ function ensureRespFields(endpointId: string) {
       const r200 = full.responses?.['200']
       const fields = (r200?.fields || []).map((f) => ({ name: f.name, ui_kind: f.ui_kind }))
       respFieldsByEndpoint.set(endpointId, fields)
+      // 全状态码契约:responses 原样投影(含 4xx/5xx),字典序展示
+      const specs = Object.entries(full.responses || {})
+        .map(([status, spec]) => ({
+          status: Number(status),
+          description: spec.description || '',
+          fields: spec.fields || [],
+          assertable: spec.assertable_fields || [],
+        }))
+        .sort((a, b) => a.status - b.status)
+      respSpecsByEndpoint.set(endpointId, specs)
       respFieldsVersion.value++
     })
     .catch(() => {})
     .finally(() => assertableFetching.delete(endpointId))
 }
+
+// ── 策略 phase 分域(设计 §2.3):存储仍是单数组,视图层按签页过滤 ──────
+/** 降级兜底:detail 拉取失败时按 kind 名硬映射(与 plate _KIND_LABELS 一致) */
+const KIND_PHASE_FALLBACK: Record<string, string> = {
+  assign: 'before_request',
+  extract: 'after_request',
+  assertion: 'verifying',
+}
+/** 策略归属 phase;detail 未加载用 kind 兜底,仍未识别 → 'unknown'(两页都显示) */
+function strategyPhase(s: StrategyView): string {
+  const hit = strategyDetailCache.value[s.kind]
+  if (hit?.phase) return hit.phase
+  return KIND_PHASE_FALLBACK[s.kind] ?? 'unknown'
+}
+const REQUEST_PHASES = ['before_request', 'unknown']
+const RESPONSE_PHASES = ['after_request', 'verifying', 'unknown']
+/** 签页内可见策略(带原始下标,justAddedStrategyIdx 引导展开用) */
+const visibleStrategies = computed<Array<{ s: StrategyView; idx: number }>>(() => {
+  const all = currentStep.value?.strategy ?? []
+  const phases = activeIoTab.value === 'request' ? REQUEST_PHASES : RESPONSE_PHASES
+  return all
+    .map((s, idx) => ({ s, idx }))
+    .filter(({ s }) => phases.includes(strategyPhase(s)))
+})
 
 /** 策略表单候选映射(#2):kind 定字段名 — assertion 用 target,extract 用 expression */
 function strategyCandidates(s: StrategyView): Record<string, string[]> {
@@ -1174,4 +1274,38 @@ function parseJson(s: string, fallback: unknown) {
   padding: 0 4px; border-radius: 3px;
 }
 .info-empty { padding: 40px 0; text-align: center; font-size: 12px; }
+
+/* ── IO 双签卡片(设计 §3.1):两签共用一壳 ─────────────────────── */
+.io-tabs {
+  display: flex; gap: 6px;
+  margin-bottom: 10px;
+}
+.io-tab {
+  flex: 1; padding: 7px 10px;
+  border: 1.5px solid var(--c-border, #e6e8ec); border-radius: 8px;
+  background: var(--c-surface, #fafbfc);
+  font-size: 12px; font-weight: 600; color: #5a6273;
+  cursor: pointer; transition: all 0.15s;
+}
+.io-tab:hover { border-color: #c7d2fe; }
+.io-tab.active {
+  background: #eef2ff; border-color: #4f46e5; color: #3730a3;
+}
+.io-card {
+  border: 1.5px solid var(--c-border, #e6e8ec); border-radius: 10px;
+  padding: 12px 12px 4px; margin-bottom: 18px;
+  background: #fff;
+}
+/* Response 页状态码分组 */
+.resp-specs { display: flex; flex-direction: column; gap: 14px; }
+.resp-spec { display: flex; flex-direction: column; gap: 8px; }
+.resp-spec-head { display: flex; align-items: center; gap: 8px; }
+.resp-status-badge {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  padding: 1px 8px; border-radius: 4px;
+}
+.resp-status-badge.ok { background: #d1fae5; color: #065f46; }
+.resp-status-badge.err { background: #fee2e2; color: #991b1b; }
+.resp-spec-desc { font-size: 11px; color: #64748b; }
+.resp-spec-empty { font-size: 11.5px; color: #94a3b8; padding: 6px 0; }
 </style>

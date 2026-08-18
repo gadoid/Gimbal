@@ -21,12 +21,25 @@ import { useScenarioDraftStore } from '@/stores/scenario-draft'
 // ── plate 代理 API mock(挂载即触发的:listStrategyKinds/listAuths) ──
 vi.mock('@/api/scenario-composer', () => ({
   listStrategyKinds: vi.fn().mockResolvedValue([]),
-  getStrategyKindFull: vi.fn().mockResolvedValue({
-    kind: 'extract', label: '从响应提取变量', phase: 'after_request', fields: [], base_fields: [],
-  }),
+  getStrategyKindFull: vi.fn().mockImplementation((kind: string) => Promise.resolve({
+    extract: { kind: 'extract', label: '从响应提取变量', phase: 'after_request', fields: [], base_fields: [] },
+    assertion: { kind: 'assertion', label: '断言', phase: 'verifying', fields: [], base_fields: [] },
+    assign: { kind: 'assign', label: '注入响应变量', phase: 'before_request', fields: [], base_fields: [] },
+  }[kind] ?? { kind, label: kind, phase: 'after_request', fields: [], base_fields: [] })),
   getFullEndpoint: vi.fn().mockResolvedValue({
     request: { fields: [] },
-    responses: { '200': { assertable_fields: ['$.data.orderId', '$.code'], fields: [] } },
+    responses: {
+      '200': {
+        assertable_fields: ['$.data.orderId', '$.code'],
+        description: 'OK',
+        fields: [{
+          name: 'orderId', path: '$.data.orderId', ui_kind: 'text',
+          source_kind: 'independent', required: true,
+          description: null, example: 'ord-9', default: null, enum: null,
+        } as any],
+      },
+      '401': { assertable_fields: [], description: '未认证', fields: [] },
+    },
   }),
 }))
 vi.mock('@/api/auth_sessions', () => ({
@@ -216,13 +229,96 @@ describe('CaseComposerCanvas — addExtract scope(#8)', () => {
     const steps = [mkStep()]
     const { w } = mountCanvas(steps)
     await flushPromises()
-    // strategyKinds mock 为空数组 → 降级 UI 渲染
+    // 降级 extract UI 在 Response 签页(响应域策略)
+    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))
+    await respTab!.trigger('click')
+    await flush()
     const btn = w.findAll('button').find((b) => b.text().includes('添加 extract'))
     expect(btn).toBeTruthy()
     await btn!.trigger('click')
     const ex = steps[0].strategy.find((s: any) => s.kind === 'extract') as any
     expect(ex).toBeTruthy()
     expect(ex.scope).toBe('scenario')
+  })
+})
+
+describe('CaseComposerCanvas — IO 双签卡片(C2)', () => {
+  it('T13: 切 Response 签 → 全状态码契约渲染;菜单两项;提取落 scratch 域', async () => {
+    const steps = [mkStep()]
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))
+    await respTab!.trigger('click')
+    await flushPromises()
+    // 全状态码分组(200 + 401),描述渲染
+    expect(w.findAll('.resp-spec').length).toBe(2)
+    expect(w.text()).toContain('未认证')
+    // assertable 字段有 ✓ 标;契约参考值(example)只读展示
+    expect(w.find('.assertable-mark').exists()).toBe(true)
+    const ctl = w.find('.io-card input.ctl')
+    expect((ctl.element as HTMLInputElement).disabled).toBe(true)
+    expect((ctl.element as HTMLInputElement).value).toBe('ord-9')
+    // 菜单仅 提取/断言 两项
+    await w.find('.fa-menu-btn').trigger('click')
+    await flush()
+    const items = w.findAll('.fa-item')
+    expect(items.length).toBe(2)
+    expect(w.text()).toContain('从响应提取')
+    expect(w.text()).toContain('断言该字段')
+    expect(w.text()).not.toContain('引用共享变量')
+    expect(w.text()).not.toContain('注入响应变量')
+    // 点提取 → strategy 落 scratch 域路径
+    const exItem = items.find((b) => b.text().includes('从响应提取'))!
+    await exItem.trigger('click')
+    await flush()
+    const ex = steps[0].strategy.find((s: any) => s.kind === 'extract') as any
+    expect(ex.expression).toBe('$.response_body.data.orderId')
+  })
+
+  it('T14: 策略 phase 过滤 — request 页 assign,response 页 extract+assertion', async () => {
+    const { listStrategyKinds } = await import('@/api/scenario-composer')
+    const StrategyForm = (await import('@/components/composer/StrategyForm.vue')).default
+    // onMounted 会调 loadStrategyKinds 两次,Once 会被第二次的默认 [] 覆盖 → 持续 mock
+    const kindsMock = (listStrategyKinds as any).getMockImplementation()
+    ;(listStrategyKinds as any).mockResolvedValue([
+      { kind: 'extract', label: '从响应提取' },
+      { kind: 'assertion', label: '断言' },
+      { kind: 'assign', label: '注入' },
+    ])
+    try {
+    const steps = [mkStep({
+      strategy: [
+        { kind: 'assign', source: '$.t', target: '$.request_body.x' } as any,
+        { kind: 'extract', target: 't', expression: '$.response_body.data.t' } as any,
+        { kind: 'assertion', target: '$.response_status', operator: 'eq', expected: 200 } as any,
+      ],
+    })]
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    // request 签(默认):仅 assign
+    expect(w.findAllComponents(StrategyForm).length).toBe(1)
+    expect(w.findAllComponents(StrategyForm)[0].props('strategy').kind).toBe('assign')
+    // response 签:extract + assertion
+    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
+    await respTab.trigger('click')
+    await flush()
+    expect(w.findAllComponents(StrategyForm).length).toBe(2)
+    } finally {
+      ;(listStrategyKinds as any).mockImplementation(kindsMock)
+    }
+  })
+
+  it('T15: 切 step → 签页重置回 request', async () => {
+    const { w } = mountCanvas([mkStep(), mkStep()])
+    await flushPromises()
+    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
+    await respTab.trigger('click')
+    await flush()
+    expect(w.text()).not.toContain('请求体')
+    const rows = w.findAll('.step-row')
+    await rows[1].trigger('click')
+    await flush()
+    expect(w.text()).toContain('请求体')
   })
 })
 

@@ -16,6 +16,7 @@
         <span v-if="f.required" class="req-mark">*</span>
         <span class="field-path">{{ f.path }}</span>
         <span class="ui-tag" :class="`k-${f.ui_kind}`">{{ f.ui_kind }}</span>
+        <span v-if="assertable?.includes(f.path)" class="assertable-mark" title="可断言字段">✓</span>
         <span class="src-tag" :class="`s-${f.source_kind}`">
           <template v-if="f.source_kind === 'independent'">literal</template>
           <template v-else-if="f.source_kind === 'lookup'">static · ${ var }</template>
@@ -32,6 +33,7 @@
               class="ctl"
               :value="getValue(f) as string"
               :placeholder="placeholderFor(f)"
+              :disabled="readonly"
               @input="e => setValue(f, (e.target as HTMLInputElement).value)"
             />
             <!-- 候选下拉(#2 策略改造):assertion.target / extract.expression
@@ -69,6 +71,7 @@
               :value="String(getValue(f) ?? '')"
               :var-choices="varChoices ?? []"
               :inject-choices="injectChoices ?? []"
+              :domain="domain"
               @close="menuField = null"
               @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
               @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
@@ -86,6 +89,7 @@
               class="ctl"
               :value="getValue(f) as number | string"
               :placeholder="placeholderFor(f)"
+              :disabled="readonly"
               @input="e => setValue(f, Number((e.target as HTMLInputElement).value))"
             />
             <button
@@ -101,6 +105,7 @@
               :value="String(getValue(f) ?? '')"
               :var-choices="varChoices ?? []"
               :inject-choices="injectChoices ?? []"
+              :domain="domain"
               @close="menuField = null"
               @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
               @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
@@ -116,6 +121,7 @@
             <input
               type="checkbox"
               :checked="Boolean(getValue(f))"
+              :disabled="readonly"
               @change="e => setValue(f, (e.target as HTMLInputElement).checked)"
             />
             <span>{{ getValue(f) ? 'true' : 'false' }}</span>
@@ -146,6 +152,7 @@
           <select
             class="ctl"
             :value="getValue(f) as string"
+            :disabled="readonly"
             @change="e => setValue(f, (e.target as HTMLSelectElement).value)"
           >
             <option value="">— select —</option>
@@ -179,6 +186,7 @@
             rows="3"
             :value="getValue(f) as string"
             :placeholder="placeholderFor(f)"
+            :disabled="readonly"
             @input="e => setValue(f, (e.target as HTMLTextAreaElement).value)"
           />
           <button
@@ -209,6 +217,7 @@
             rows="4"
             :value="formatJson(getValue(f))"
             placeholder="JSON object"
+            :disabled="readonly"
             @input="e => setValue(f, parseJson((e.target as HTMLTextAreaElement).value))"
           />
           <button
@@ -282,6 +291,18 @@ const props = defineProps<{
    * assertable_fields 选,不手打;缺省无候选按钮。
    */
   candidates?: Record<string, string[]>
+  /**
+   * 只读门控(IO 双签卡片 Response 页):契约参考用 — 控件 disabled、
+   * 不发 update:body;☰ 菜单保留(提取/断言仍可用)。
+   */
+  readonly?: boolean
+  /**
+   * 字段域(IO 双签卡片):'request'(默认四项菜单)|
+   * 'response'(契约参考,菜单仅 提取/断言 两项)。
+   */
+  domain?: 'request' | 'response'
+  /** 可断言字段的 plate 域路径列表(Response 页 ✓ 标线) */
+  assertable?: string[]
 }>()
 const emit = defineEmits<{
   'update:body': [any]
@@ -323,6 +344,7 @@ function getValue(f: IOFieldBinding): unknown {
 }
 
 function setValue(f: IOFieldBinding, val: unknown) {
+  if (props.readonly) return
   const next = { ...(props.body || {}) }
   setByPath(next, f.path.replace(/^\$\./, ''), val)
   emit('update:body', next)
@@ -425,6 +447,10 @@ function parseJson(s: string): unknown {
 .ui-tag.k-json { background: #1e1e2e; color: #a6e3a1; }
 .ui-tag.k-file, .ui-tag.k-binary { background: #f1f5f9; color: #475569; }
 .ui-tag.k-unknown { background: #fee2e2; color: #991b1b; }
+/* assertable ✓ 标(Response 页契约参考线) */
+.assertable-mark {
+  font-size: 11px; font-weight: 700; color: #059669;
+}
 /* PRD §5.6 4 色 source_kind 视觉区分 (literal / static / dynamic / auto) */
 .src-tag {
   font-size: 9px; font-weight: 600;
