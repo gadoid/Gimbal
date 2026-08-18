@@ -1352,15 +1352,15 @@ function parseJson(s: string, fallback: unknown) {
 .io-tabs {
   display: flex;
   align-items: flex-end;
-  padding: 0 4px;
   position: relative;
-  z-index: 6;
   margin-bottom: -1px;               /* 压住面板上缘边框,连体 */
 }
 .io-tab {
   position: relative;
+  box-sizing: border-box;
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  flex: 1 1 50%;                     /* 两签均分各占 1/2 */
+  flex: none;
+  width: calc(50% + 8px);            /* 两签各占 1/2 + 中缝重叠各让 8px,与面板左右缘对齐 */
   height: 36px;
   padding: 0 18px;
   margin-right: -16px;               /* 重叠量 */
@@ -1374,6 +1374,7 @@ function parseJson(s: string, fallback: unknown) {
   transition: background 0.15s, color 0.15s;
 }
 .io-tab:hover { background: #e6e9f4; z-index: 2; }
+.io-tab:last-child { margin-right: 0; }
 .io-tab:focus-visible { outline: 2px solid #4f46e5; outline-offset: -2px; z-index: 8; }
 /* 计数徽章:idle 灰;active 域色(request indigo / response emerald) */
 .io-tab .count {
