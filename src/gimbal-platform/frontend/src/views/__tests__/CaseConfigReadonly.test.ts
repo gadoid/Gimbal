@@ -196,8 +196,8 @@ describe('CaseConfigReadonly — bug fixes', () => {
     expect(casesApi.patch).toHaveBeenCalledTimes(1)
     expect(editStore.isEditMode, 'should exit edit mode after save').toBe(false)
 
-    // And the readonly meta tab's "✏️ 编辑" button is back.
-    expect(topbar.text()).toContain('✏️ 编辑')
+    // And the readonly meta tab's "编辑" button is back (with Edit icon).
+    expect(topbar.text()).toContain('编辑')
   })
 
   // ── Bug 2: VarsEditor save ships a clean inner-payload body ───

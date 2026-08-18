@@ -6,11 +6,11 @@
   <section class="cases-of">
     <header class="page-header">
       <div>
-        <h2>📚 场景编辑 · {{ scenario?.meta.name || scenarioId }}</h2>
+        <h2 class="page-title"><el-icon><Collection /></el-icon>场景编辑 · {{ scenario?.meta.name || scenarioId }}</h2>
         <p>{{ scenarioId }} · ③ 用例管理</p>
       </div>
       <div class="header-actions">
-        <el-button @click="router.push(`/scenarios/${scenarioId}/steps`)">← ② 步骤编排</el-button>
+        <el-button :icon="ArrowBack" @click="router.push(`/scenarios/${scenarioId}/steps`)">② 步骤编排</el-button>
         <el-button type="primary" @click="onCreateCase">+ 新建用例</el-button>
       </div>
     </header>
@@ -127,8 +127,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
+import { ArrowBack, Collection } from '@element-plus/icons-vue'
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import HeadStepper from '@/components/HeadStepper.vue'
 import PriorityPill from '@/components/PriorityPill.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
@@ -141,18 +142,27 @@ const router = useRouter()
 const store = useScenarioComposerStore()
 const scenarioId = route.params.scenarioId as string
 
-const steps = [
-  { key: 'meta',  label: '① 基本信息', to: `/scenarios/${scenarioId}/edit` as RouteLocationRaw },
-  { key: 'steps', label: '② 步骤编排', to: `/scenarios/${scenarioId}/steps` as RouteLocationRaw },
-  { key: 'cases', label: '③ 用例管理', to: '' as RouteLocationRaw },
-  { key: 'data',  label: '④ 数据集',   to: `/scenarios/${scenarioId}/data-sets` as RouteLocationRaw },
-]
-
 const scenario = computed(() => store.scenarioById(scenarioId))
 const caseList = computed(() => store.casesOfScenario(scenarioId))
 const totalDataSets = computed(() =>
   caseList.value.reduce((sum, c) => sum + c.dataSetIds.length, 0),
 )
+
+// ④ 数据集：不存在场景级 data-sets 路由 — 数据集挂在用例下 (1:N)，
+// 因此指向场景下第一个用例的数据集列表；场景还没有用例时回到本页。
+// （此前硬编码 /scenarios/:id/data-sets 是死链接，点击无任何反应。）
+const steps = computed(() => [
+  { key: 'meta',  label: '① 基本信息', to: `/scenarios/${scenarioId}/edit` as RouteLocationRaw },
+  { key: 'steps', label: '② 步骤编排', to: `/scenarios/${scenarioId}/steps` as RouteLocationRaw },
+  { key: 'cases', label: '③ 用例管理', to: '' as RouteLocationRaw },
+  {
+    key: 'data',
+    label: '④ 数据集',
+    to: (caseList.value[0]
+      ? `/cases/${caseList.value[0].caseId}/data-sets`
+      : `/scenarios/${scenarioId}/cases`) as RouteLocationRaw,
+  },
+])
 
 onMounted(async () => {
   try {
@@ -178,6 +188,15 @@ async function onCmd(cmd: string, row: Case) {
   if (cmd === 'datasets') return router.push(`/cases/${row.caseId}/data-sets`)
   if (cmd === 'run')    return router.push(`/cases/${row.caseId}/run`)
   if (cmd === 'delete') {
+    try {
+      await ElMessageBox.confirm(
+        `确认删除用例 ${row.caseId}？其数据集将一并删除，操作不可撤销。`,
+        '删除用例',
+        { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+      )
+    } catch {
+      return // 用户取消
+    }
     try {
       await store.removeCase(row.caseId)
       ElMessage.success(`已删除：${row.caseId}`)

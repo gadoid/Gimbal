@@ -119,8 +119,15 @@ http.interceptors.response.use(
   async (err: AxiosError) => {
     const original = err.config as (AxiosRequestConfig & { _retry?: boolean }) | undefined
     const status = err.response?.status
+    // The refresh call itself must never trigger another refresh: the
+    // inner 401 would await refreshOnce() → which returns the very same
+    // in-flight outer promise (its finally only runs after resolution)
+    // → self-deadlock, the original request hangs forever and the user
+    // is never logged out.
+    const isRefreshCall =
+      !!original && typeof original.url === 'string' && original.url.includes('/auth/refresh')
 
-    if (status === 401 && original && !original._retry) {
+    if (status === 401 && original && !original._retry && !isRefreshCall) {
       original._retry = true
       const auth = useAuthStore()
       const fresh = await auth.refreshOnce()

@@ -205,9 +205,10 @@ async def test_preview_plate_ok(client: AsyncClient, plate_mock: PlateMock) -> N
     assert len(plate_mock.convert_calls) == 1
 
 
-async def test_preview_plate_4xx_returns_502(
+async def test_preview_plate_4xx_returns_422(
     client: AsyncClient, plate_mock: PlateMock
 ) -> None:
+    """Upstream 4xx = verdict on the client's draft → 422 (not 502)."""
     plate_mock.behaviour = "4xx"
     headers = await _register_and_login(client)
     r = await client.post(
@@ -215,7 +216,7 @@ async def test_preview_plate_4xx_returns_502(
         headers=headers,
         json=_draft(),
     )
-    assert r.status_code == 502
+    assert r.status_code == 422
     detail = r.json()["detail"]
     assert detail["code"] == "plate_rejected"
     assert detail["errors"][0]["path"] == "steps[0].expectStatus"

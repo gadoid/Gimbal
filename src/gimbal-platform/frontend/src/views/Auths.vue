@@ -13,7 +13,8 @@
           v-model="searchQuery"
           class="search-input"
           clearable
-          placeholder="🔍 搜索 alias / username / url"
+          :prefix-icon="Search"
+          placeholder="搜索 alias / username / url"
         />
         <el-select v-model="tokenTypeFilter" class="tt-filter">
           <el-option label="全部 token_type" value="all" />
@@ -135,7 +136,7 @@
     <!-- ── Test result dialog ────────────────────────── -->
     <el-dialog
       v-model="testOpen"
-      :title="testResult?.ok ? '✓ 连通成功' : '✗ 连通失败'"
+      :title="testResult?.ok ? '连通成功' : '连通失败'"
       width="460px"
     >
       <div v-if="testResult" class="test-result">
@@ -162,7 +163,7 @@
     <!-- ── Delete confirm ───────────────────────────── -->
     <el-dialog
       v-model="deleteOpen"
-      title="⚠ 删除认证"
+      title="删除认证"
       width="420px"
       :close-on-click-modal="false"
     >
@@ -192,6 +193,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { Search } from '@element-plus/icons-vue'
 import { useListSearch } from '@/utils/useListSearch'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { showError } from '@/utils/errorFallback'
@@ -316,8 +318,10 @@ async function submitForm() {
       ElMessage.success(`已创建 ${form.alias}`)
     }
     createOpen.value = false
-  } catch {
-    showError('保存', undefined, store.lastError)
+  } catch (e) {
+    // store 的 mutation 不维护 lastError — 必须用捕获到的错误本身，
+    // 否则会显示上一次 fetch 的陈旧错误。
+    showError('保存', undefined, (e as Error).message)
   } finally {
     submitting.value = false
   }
@@ -332,11 +336,11 @@ async function runTest(row: AuthSession) {
   testOpen.value = true
   try {
     testResult.value = await store.testConnection(row.id)
-  } catch {
+  } catch (e) {
     testResult.value = {
       ok: false,
       status_code: null,
-      message: store.lastError || '请求失败',
+      message: (e as Error).message || '请求失败',
     }
   }
 }

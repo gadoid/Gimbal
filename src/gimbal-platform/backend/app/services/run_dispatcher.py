@@ -23,6 +23,7 @@ from uuid import uuid4
 
 from loguru import logger
 from sqlalchemy import select
+from sqlalchemy import update as sqlalchemy_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
@@ -36,7 +37,7 @@ from . import data_set_store, env_store, gimbal_client, plate_client, scenario_s
 
 
 # ─── in-flight tracking ───────────────────────────────────────────
-# Same pattern as ``app/routers/executions.py``'s _in_flight_runners /
+# Same pattern as ``app/services/run_lifecycle.py``'s _in_flight_runners /
 # drain_in_flight_runners: the app lifespan calls
 # ``drain_in_flight_dispatches()`` to wait for cancellation.
 _in_flight: set[asyncio.Task] = set()
@@ -172,7 +173,7 @@ async def dispatch_run(
         task.add_done_callback(_log_task_exception)
         _track(task)
 
-    return RunResponse(runId=run_id)
+    return RunResponse(runId=run_id, executionId=execution.id)
 
 
 # ─── background fan-out ──────────────────────────────────────────
@@ -290,14 +291,37 @@ async def _fanout(
             except Exception:  # noqa: BLE001
                 pass
 
-    # Update the Execution row counters (Spec-2 ``Execution`` shape).
+            # Atomic per-row counter bump.  The old pattern (absolute
+            # write-back of plate_ok/plate_failed at fan-out end) silently
+            # clobbered concurrent atomic deltas — e.g. the user deleting
+            # failed run rows mid-fan-out (MAX(0, col-1) SQL).  Deltas
+            # compose correctly with those.
+            ok = 1 if log_line["status"] == "passed" else 0
+            bad = 1 - ok
+            try:
+                async with db_factory() as session:
+                    await session.execute(
+                        sqlalchemy_update(Execution)
+                        .where(Execution.id == execution_id)
+                        .values(
+                            passed=Execution.passed + ok,
+                            failed=Execution.failed + bad,
+                        )
+                    )
+                    await session.commit()
+            except Exception as e:  # noqa: BLE001
+                logger.warning(
+                    "run_dispatcher: counter bump failed for execution {}: {}",
+                    execution_id, e,
+                )
+
+    # Terminal status + timestamps only (counters already maintained
+    # incrementally above).
     try:
         async with db_factory() as session:
             ex = await session.get(Execution, execution_id)
             if ex is not None:
-                ex.passed = plate_ok
-                ex.failed = plate_failed
-                ex.status = "failed" if plate_failed and not plate_ok else "done"
+                ex.status = "failed" if ex.failed and not ex.passed else "done"
                 if ex.started_at is None:
                     ex.started_at = datetime.utcnow()
                 ex.finished_at = datetime.utcnow()

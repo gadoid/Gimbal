@@ -207,10 +207,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import TopNav from '@/components/TopNav.vue'
 import ScenarioExportMenu from '@/components/ScenarioExportMenu.vue'
 import CaseComposerMeta from '@/components/composer/CaseComposerMeta.vue'
 import CaseComposerResource from '@/components/composer/CaseComposerResource.vue'
@@ -337,6 +336,16 @@ onMounted(async () => {
   // Auto-compute system warning (PRD §5.1 §9): declared systems vs
   // services actually called by steps.
   if (scenario.value) checkSystemMismatch()
+})
+
+// 运行成功后跳详情页的延迟定时器 — 组件卸载时必须清除，否则用户在
+// 800ms 内手动离开后仍会被强行拉去 /executions/{id}。
+let runNavTimer: ReturnType<typeof setTimeout> | null = null
+onUnmounted(() => {
+  if (runNavTimer !== null) {
+    clearTimeout(runNavTimer)
+    runNavTimer = null
+  }
 })
 
 /** Compare meta.system (declared) with the union of step services
@@ -536,7 +545,11 @@ async function saveDraft(advance = false) {
           auth: caseData.value.auth,
           dataSetIds: caseData.value.dataSetIds,
         })
-      } catch { /* best-effort */ }
+      } catch (e) {
+        // Case persistence failing must not be silent — the user would see
+        // "保存成功" while env / auth / dataSetIds were never written.
+        showError('用例覆盖项保存失败（场景本身已保存）', undefined, (e as Error).message)
+      }
     }
     lastSavedAt.value = new Date()
     dirty.value = false
@@ -647,11 +660,19 @@ async function onRunConfirm(envId: string, dataSetIds: string[]) {
     lastRunId.value = resp.runId
     ElMessage.success(`运行已发起: ${resp.runId}`)
     runDialogOpen.value = false
-    setTimeout(() => router.push('/executions'), 800)
+    // Jump straight to the execution detail page. Older backends don't
+    // return executionId — fall back to the list. runDispatching stays
+    // true until navigation so the confirm button can't double-fire in
+    // the 800ms toast window.
+    runNavTimer = setTimeout(() => {
+      runNavTimer = null
+      runDispatching.value = false
+      if (resp.executionId != null) router.push(`/executions/${resp.executionId}`)
+      else router.push('/executions')
+    }, 800)
   } catch (e) {
     lastRunError.value = (e as Error).message
     showError('运行失败', undefined, (e as Error).message)
-  } finally {
     runDispatching.value = false
   }
 }

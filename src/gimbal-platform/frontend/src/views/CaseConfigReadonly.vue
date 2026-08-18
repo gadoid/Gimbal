@@ -15,14 +15,14 @@
         type="button"
         title="重命名 scenarioId"
         @click="openRename"
-      >✎ 重命名</button>
+      ><el-icon :size="12"><EditPen /></el-icon>重命名</button>
       <span class="spacer" />
       <button
         v-if="!editStore.isEditMode"
         class="topbar-btn"
         type="button"
         @click="enterEditMode"
-      >✏️ 编辑</button>
+      ><el-icon :size="12"><Edit /></el-icon>编辑</button>
       <template v-else>
         <span :class="['dirty-tag', { visible: editStore.dirty }]">
           {{ editStore.dirty ? '● 未保存' : '✓ 已保存' }}
@@ -37,7 +37,8 @@
       </template>
       <label class="show-hidden-toggle">
         <input v-model="hideStore.showHidden" type="checkbox" />
-        <span>👁 显示隐藏</span>
+        <el-icon :size="12"><View /></el-icon>
+        <span>显示隐藏</span>
       </label>
       <button class="topbar-btn" type="button" @click="yamlOpen = true">
         只读 YAML
@@ -58,7 +59,8 @@
         type="button"
         @click="activeTab = tab.key"
       >
-        {{ tab.icon }} {{ String(tab.idx).padStart(2, '0') }} · {{ tab.label }}
+        <el-icon :size="13" class="tab-ic"><component :is="tab.icon" /></el-icon>
+        {{ String(tab.idx).padStart(2, '0') }} · {{ tab.label }}
       </button>
       <span class="spacer" />
       <span class="tab-summary">{{ summaryText }}</span>
@@ -68,7 +70,7 @@
     <article class="card">
       <!-- ── meta ──────────────────────────────────────────── -->
       <div v-if="activeTab === 'meta'" class="tab-panel">
-        <PanelHeader icon="📝" title="01 · META" subtitle="用例元数据" />
+        <PanelHeader :icon="EditPen" title="01 · META" subtitle="用例元数据" />
         <EditableMetaPanel
           v-if="editStore.isEditMode"
           :case-id="caseId"
@@ -101,7 +103,7 @@
 
       <!-- ── config ────────────────────────────────────────── -->
       <div v-else-if="activeTab === 'config'" class="tab-panel">
-        <PanelHeader icon="⚙️" title="02 · CONFIG" subtitle="服务 / 用户 / 变量 / 重试" />
+        <PanelHeader :icon="Setting" title="02 · CONFIG" subtitle="服务 / 用户 / 变量 / 重试" />
 
         <EditableConfigPanel
           v-if="editStore.isEditMode"
@@ -149,7 +151,7 @@
 
       <!-- ── resource ──────────────────────────────────────── -->
       <div v-else-if="activeTab === 'resource'" class="tab-panel">
-        <PanelHeader icon="🗂️" title="03 · RESOURCE" subtitle="附加资源（db / mock / file / variable）" />
+        <PanelHeader :icon="Files" title="03 · RESOURCE" subtitle="附加资源（db / mock / file / variable）" />
         <EditableResourcePanel
           v-if="editStore.isEditMode"
           :resource="(editStore.current?.resource as Record<string, unknown>) || {}"
@@ -170,7 +172,7 @@
       <!-- ── steps ─────────────────────────────────────────── -->
       <div v-else class="tab-panel">
         <PanelHeader
-          icon="📋"
+          :icon="Tickets"
           title="04 · STEPS"
           subtitle="用例步骤（默认折叠，点 step 行展开）"
         />
@@ -178,7 +180,7 @@
         <div v-if="l3Hint" class="l3-banner">
           <b>L3 预设已应用：</b>{{ l3Hint }}
           <router-link to="#" class="banner-link" @click.prevent>
-            顶部「👁 显示隐藏」切换可见
+            顶部「显示隐藏」切换可见
           </router-link>
         </div>
 
@@ -240,9 +242,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { EditPen, Edit, Setting, Files, Tickets, View } from '@element-plus/icons-vue'
 import { showError } from '@/utils/errorFallback'
 import { useCasesStore } from '@/stores/cases'
 import { useHideStore } from '@/stores/hide'
@@ -271,15 +274,15 @@ interface TabSpec {
   key: TabKey
   idx: number
   label: string
-  icon: string
+  icon: Component
   color: 'purple' | 'green' | 'yellow' | 'blue'
 }
 
 const TABS: readonly TabSpec[] = [
-  { key: 'meta',     idx: 1, label: 'meta',     icon: '📝', color: 'purple' },
-  { key: 'config',   idx: 2, label: 'config',   icon: '⚙️', color: 'green'  },
-  { key: 'resource', idx: 3, label: 'resource', icon: '🗂️', color: 'yellow' },
-  { key: 'steps',    idx: 4, label: 'steps',    icon: '📋', color: 'blue'   },
+  { key: 'meta',     idx: 1, label: 'meta',     icon: EditPen, color: 'purple' },
+  { key: 'config',   idx: 2, label: 'config',   icon: Setting, color: 'green'  },
+  { key: 'resource', idx: 3, label: 'resource', icon: Files,   color: 'yellow' },
+  { key: 'steps',    idx: 4, label: 'steps',    icon: Tickets, color: 'blue'   },
 ]
 
 const route = useRoute()
@@ -694,6 +697,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 }
 
 .topbar-btn {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
   height: 28px;
   padding: 0 12px;
   color: inherit;
@@ -751,6 +757,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 .tab {
   display: inline-flex;
+  gap: 5px;
   align-items: center;
   height: 28px;
   padding: 0 12px;

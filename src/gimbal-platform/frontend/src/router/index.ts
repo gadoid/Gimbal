@@ -82,12 +82,6 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    // 跨场景用例总览
-    path: '/cases-overview',
-    component: () => import('@/views/Cases.vue'),
-    meta: { requiresAuth: true },
-  },
-  {
     // /cases/:caseId/run（运行配置）
     path: '/cases/:caseId/run',
     component: () => import('@/views/CaseRunConfig.vue'),
@@ -96,7 +90,7 @@ const routes = [
   {
     path: '/admin/users',
     component: () => import('@/views/UsersAdmin.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, requiresAdmin: true },
   },
   {
     path: '/auths',
@@ -124,6 +118,11 @@ router.beforeEach((to) => {
   const auth = useAuthStore()
   if (to.meta.requiresAuth && !auth.accessToken) {
     return { path: '/login', query: { redirect: to.fullPath } }
+  }
+  if (to.meta.requiresAdmin && !auth.isAdmin) {
+    // Backend enforces admin-only on these endpoints too; this is the
+    // UX-side guard so members never land on a page that 403s.
+    return { path: '/cases/mine' }
   }
   if ((to.path === '/login' || to.path === '/register') && auth.accessToken) {
     return { path: '/cases/mine' }

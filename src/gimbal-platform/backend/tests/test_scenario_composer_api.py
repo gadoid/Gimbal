@@ -392,6 +392,74 @@ async def test_run_dispatch_env_not_found_404(client: AsyncClient) -> None:
     assert r.json()["detail"]["code"] == "env_not_found"
 
 
+# ── access control on POST /runs + data-set reads ─────────────────
+async def test_member_cannot_run_another_users_case(client: AsyncClient) -> None:
+    """Bob must not be able to dispatch Alice's case — running has real
+    side effects (subprocesses hitting the configured env services)."""
+    alice = await _register_and_login(client)
+    await client.post("/api/scenarios", headers=alice, json=_make_draft())
+    await client.post(
+        "/api/cases",
+        headers=alice,
+        json={
+            "caseId": "case-alice",
+            "scenarioId": "sc-test",
+            "name": "c",
+            "env": "dev",
+            "auth": {"name": "a", "type": "bearer"},
+            "dataSetIds": [],
+            "createdBy": "alice",
+        },
+    )
+    bob = await _register_and_login(client, "bob", "bobpass456")
+    r = await client.post(
+        "/api/runs",
+        headers=bob,
+        json={
+            "caseId": "case-alice",
+            "dataSetIds": ["ds-001"],
+            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+        },
+    )
+    assert r.status_code == 403
+    assert r.json()["detail"]["code"] == "not_owner"
+
+
+async def test_member_cannot_read_another_users_datasets(client: AsyncClient) -> None:
+    """Data-set rows are business data: Bob must not list Alice's
+    summaries nor fetch her full rows."""
+    alice = await _register_and_login(client)
+    await client.post("/api/scenarios", headers=alice, json=_make_draft())
+    await client.post(
+        "/api/cases",
+        headers=alice,
+        json={
+            "caseId": "case-alice",
+            "scenarioId": "sc-test",
+            "name": "c",
+            "env": "dev",
+            "auth": {"name": "a", "type": "bearer"},
+            "dataSetIds": [],
+            "createdBy": "alice",
+        },
+    )
+    await client.post(
+        "/api/cases/case-alice/data-sets",
+        headers=alice,
+        json={"name": "ds", "rows": [{"x": 1}]},
+    )
+    ds_id = (await client.get("/api/data-sets?caseId=case-alice", headers=alice)).json()[0]["datasetId"]
+
+    bob = await _register_and_login(client, "bob", "bobpass456")
+    # List scoped to Bob → empty
+    assert (await client.get("/api/data-sets", headers=bob)).json() == []
+    # Direct fetch → 403/404, never the rows
+    r = await client.get(f"/api/data-sets/{ds_id}", headers=bob)
+    assert r.status_code in (403, 404)
+    # Alice still sees her own
+    assert len((await client.get("/api/data-sets", headers=alice)).json()) == 1
+
+
 # ── scenario-ownership check on POST /api/cases ────────────────────
 async def test_create_case_requires_scenario_ownership(client: AsyncClient) -> None:
     """Bob cannot create a case under Alice's scenario."""
@@ -459,19 +527,19 @@ async def test_stars_store_atomic_write_no_partial_corruption(
     """A crash mid-write leaves the previous good file intact (the
     temp file is cleaned up).  We simulate the crash by patching
     ``os.replace`` to raise."""
-    from app.services import stars_store
+    from app.services.marks_store import stars
 
     # Point the store at a fresh tmp dir + clear the in-memory dict.
-    monkeypatch.setattr(stars_store, "_STARS_PATH", tmp_path / "stars.json")
-    stars_store._STARS.clear()
+    stars.path = tmp_path / "stars.json"
+    stars.clear_for_tests()
     monkeypatch.setattr(
         "os.replace", lambda *a, **kw: (_ for _ in ()).throw(OSError("simulated crash"))
     )
     with pytest.raises(OSError, match="simulated crash"):
-        stars_store.star(1, "sc-x", True)
+        stars.set_mark(1, "sc-x", True)
     # In-memory dict still updated (so the next successful write will
     # persist both the old and new entry).
-    assert stars_store.is_starred(1, "sc-x") is True
+    assert stars.has(1, "sc-x") is True
     # No orphan temp files left in the dir.
-    leftovers = list(tmp_path.glob("*.stars.*.json.tmp"))
+    leftovers = list(tmp_path.glob("*.marks.*.json.tmp"))
     assert leftovers == []

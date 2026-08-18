@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
     "@vueuse/core": "^11.0.0",
     "axios": "^1.7.0",
     "element-plus": "^2.8.0",

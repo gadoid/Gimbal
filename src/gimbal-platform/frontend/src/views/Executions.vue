@@ -2,6 +2,16 @@
      V0.1 用 1s 轮询；WebSocket 实时推送留 V1+. -->
 <template>
   <section class="executions" v-if="execStore.detail">
+    <!-- Poller gave up (failure budget) while the last detail snapshot
+         stays rendered — tell the user the data may be stale. -->
+    <el-alert
+      v-if="execStore.pollError"
+      :title="execStore.pollError"
+      type="warning"
+      :closable="false"
+      show-icon
+      class="poll-warn"
+    />
     <header class="page-header">
       <div>
         <h2>执行 #{{ execStore.detail.id }}</h2>
@@ -163,7 +173,7 @@
     <!-- 删除确认 -->
     <el-dialog
       v-model="deleteOpen"
-      title="⚠ 删除 run"
+      title="删除 run"
       width="420px"
     >
       <p>确认删除 run #{{ deleteTarget?.idx }} 的记录？<br>
@@ -175,6 +185,19 @@
     </el-dialog>
   </section>
 
+  <section v-else-if="execStore.pollError" class="state error-state">
+    <el-alert
+      :title="execStore.pollError"
+      type="error"
+      :closable="false"
+      show-icon
+    />
+    <div class="error-actions">
+      <el-button type="primary" @click="refreshNow">重新加载</el-button>
+      <el-button @click="router.push('/executions')">返回执行列表</el-button>
+    </div>
+  </section>
+
   <section v-else class="state loading-state">
     <el-skeleton :rows="5" animated />
   </section>
@@ -183,7 +206,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElNotification } from 'element-plus'
+import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import { showError } from '@/utils/errorFallback'
 import { useExecutionsStore } from '@/stores/executions'
 import { useAuthStore } from '@/stores/auth'
@@ -498,19 +521,55 @@ function isRerunning(runId: number): boolean {
 let stop: (() => void) | null = null
 
 async function refreshNow() {
-  if (executionId.value) await execStore.fetchDetail(executionId.value)
+  if (!executionId.value) return
+  try {
+    await execStore.fetchDetail(executionId.value)
+    // If the poller had given up (404-blip / failure budget), bring it
+    // back for non-terminal executions — a manual click is the natural
+    // "resume" gesture after the pollError banner.
+    const st = execStore.detail?.status
+    if (st && st !== 'done' && st !== 'failed') {
+      stop = execStore.startPolling(executionId.value)
+    }
+  } catch (e) {
+    showError('刷新', e)
+  }
 }
 
 async function removeExec() {
   if (!execStore.detail) return
-  await execStore.remove(execStore.detail.id)
+  try {
+    await ElMessageBox.confirm(
+      `确认删除 execution #${execStore.detail.id}？其下所有 run 记录与报告文件将一并删除，操作不可撤销。`,
+      '删除 execution',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return // 用户取消
+  }
+  try {
+    await execStore.remove(execStore.detail.id)
+  } catch (e) {
+    showError('删除', e)
+    return
+  }
   ElMessage.success('已删除')
   router.push('/executions')
 }
 
 onMounted(async () => {
   if (!executionId.value) return
-  await execStore.fetchDetail(executionId.value)
+  try {
+    await execStore.fetchDetail(executionId.value)
+  } catch (e) {
+    // Surface load failure instead of an infinite skeleton (fetchDetail
+    // rethrows and detail stays null).
+    const status = (e as { status?: number }).status
+    execStore.pollError = status === 404
+      ? '该执行记录不存在（可能已被删除）'
+      : `加载失败：${(e as Error).message}`
+    return
+  }
   stop = execStore.startPolling(executionId.value)
 })
 
@@ -705,6 +764,22 @@ onUnmounted(() => {
   max-width: 720px;
   padding: 80px 20px;
   margin: 0 auto;
+}
+
+.error-state {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.error-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.poll-warn {
+  margin-bottom: 12px;
 }
 
 /* ─── Inline log panel (same level as execution detail) ───

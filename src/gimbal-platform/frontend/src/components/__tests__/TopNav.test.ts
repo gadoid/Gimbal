@@ -65,7 +65,7 @@ describe('TopNav', () => {
   it('highlights the active route', async () => {
     const auth = useAuthStore()
     auth.accessToken = 'tok'
-    auth.currentUser = { id: 1, username: 'alice', is_admin: false } as never
+    auth.currentUser = { id: 1, username: 'alice', is_admin: true } as never
 
     const router = makeRouter()
     router.push('/admin/users')
@@ -78,6 +78,24 @@ describe('TopNav', () => {
     const active = w.findAll('a.nav-entry.active')
     expect(active.length).toBe(1)
     expect(active[0].attributes('href')).toBe('/admin/users')
+  })
+
+  it('hides the admin-only 用户管理 entry from members', async () => {
+    const auth = useAuthStore()
+    auth.accessToken = 'tok'
+    auth.currentUser = { id: 1, username: 'alice', is_admin: false } as never
+
+    const router = makeRouter()
+    router.push('/cases/mine')
+    await router.isReady()
+
+    const w = mount(TopNav, {
+      global: { plugins: [router, ElementPlus] },
+    })
+
+    const hrefs = w.findAll('a.nav-entry').map((l) => l.attributes('href'))
+    expect(hrefs).not.toContain('/admin/users')
+    expect(hrefs.length).toBe(5)
   })
 
   it('does not show nav entries when not authenticated', () => {

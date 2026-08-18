@@ -15,7 +15,8 @@
           v-model="searchQuery"
           class="search-input"
           clearable
-          placeholder="🔍 按名 / 模块 / tags 搜索"
+          :prefix-icon="Search"
+          placeholder="按名 / 模块 / tags 搜索"
         />
         <FilterPopover
           v-model="filters"
@@ -34,11 +35,11 @@
 
     <el-tabs v-model="activeTab" class="case-tabs">
       <el-tab-pane
-        :label="`📁 我的副本 (${casesStore.mineUploads.length})`"
+        :label="`我的副本 (${casesStore.mineUploads.length})`"
         name="uploads"
       />
       <el-tab-pane
-        :label="`⭐ 我的收藏 (${casesStore.mineFavorites.length})`"
+        :label="`我的收藏 (${casesStore.mineFavorites.length})`"
         name="favorites"
       />
     </el-tabs>
@@ -52,7 +53,7 @@
       class="cases-table"
       @row-click="openCase"
     >
-      <el-table-column label="⭐" width="54" align="center">
+      <el-table-column label="收藏" width="54" align="center">
         <template #default="{ row }">
           <button
             class="favorite-button"
@@ -61,7 +62,7 @@
             :aria-label="isFavorited(row) ? '取消收藏' : '收藏用例'"
             :title="isFavorited(row) ? '取消收藏' : '收藏用例'"
             @click.stop="toggleFavorite(row)"
-          >{{ isFavorited(row) ? '★' : '☆' }}</button>
+          ><el-icon :size="18"><StarFilled v-if="isFavorited(row)" /><Star v-else /></el-icon></button>
         </template>
       </el-table-column>
 
@@ -194,7 +195,7 @@
 
     <el-empty
       v-else-if="casesStore.fetchStatus !== 'loading'"
-      description="暂无用例 — 去 🌐 公共用例库 ⭐ 收藏或 ⋯ → 复制到我的"
+      description="暂无用例 — 去公共用例库收藏或 ⋯ → 复制到我的"
     >
       <el-button type="primary" plain @click="router.push('/cases/public')">
         前往公共用例库
@@ -268,7 +269,7 @@
 
         <!-- 影响列表 -->
         <h4 class="del-section-title">
-          <span class="del-section-bullet" aria-hidden="true">⚠</span>
+          <span class="del-section-bullet" aria-hidden="true"><el-icon :size="12"><Warning /></el-icon></span>
           将发生什么
         </h4>
         <ul class="del-impact">
@@ -305,7 +306,7 @@
               class="del-confirm"
               @click="confirmDelete"
             >
-              <span class="del-confirm-icon" aria-hidden="true">🗑</span>
+              <span class="del-confirm-icon" aria-hidden="true"><el-icon :size="12"><Delete /></el-icon></span>
               确认删除
             </el-button>
           </div>
@@ -322,7 +323,7 @@
     >
       <template #header>
         <div class="pub-head">
-          <div class="pub-head-icon" aria-hidden="true">⇪</div>
+          <div class="pub-head-icon" aria-hidden="true"><el-icon :size="20"><Top /></el-icon></div>
           <div class="pub-head-text">
             <div class="pub-head-eyebrow">Promote to public · 不可逆变更</div>
             <h3 class="pub-head-title">分享到公共用例库</h3>
@@ -400,7 +401,7 @@
               class="pub-confirm"
               @click="confirmPublish"
             >
-              <span class="pub-confirm-icon" aria-hidden="true">⇪</span>
+              <span class="pub-confirm-icon" aria-hidden="true"><el-icon :size="12"><Top /></el-icon></span>
               确认分享
             </el-button>
           </div>
@@ -412,6 +413,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { Delete, Search, Star, StarFilled, Top, Warning } from '@element-plus/icons-vue'
 import { useListSearch } from '@/utils/useListSearch'
 import { ElMessage } from 'element-plus'
 import { showError } from '@/utils/errorFallback'
@@ -429,6 +431,7 @@ import {
   authorOf,
   isMyPrivateCopy,
   isSelfRow,
+  MAX_VISIBLE_TAGS,
   priorityOf,
   rowClassName,
   rowKey,
@@ -436,7 +439,6 @@ import {
 
 type MineTab = 'uploads' | 'favorites'
 
-const MAX_VISIBLE_TAGS = 3
 const casesStore = useCasesStore()
 const authStore = useAuthStore()
 const router = useRouter()
@@ -490,7 +492,7 @@ const visibleCases = computed(() =>
 const metaText = computed(() => {
   const uploads = casesStore.mineUploads.length
   const favorites = casesStore.mineFavorites.length
-  return `共 ${uploads + favorites} 个用例（${uploads} 副本 · ${favorites} 收藏）— 副本来自「+ 上传」或从 🌐 公共用例库复制`
+  return `共 ${uploads + favorites} 个用例（${uploads} 副本 · ${favorites} 收藏）— 副本来自「+ 上传」或从公共用例库复制`
 })
 
 onMounted(async () => {
@@ -759,18 +761,8 @@ function twoDigits(value: number): string {
   outline: none;
 }
 
-.priority-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 31px;
-  padding: 2px 6px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 16px;
-  border-radius: 10px;
-}
+/* .priority-pill base + .priority-N colors live in styles/priority.css
+   (imported globally via main.ts). */
 
 .tag-list {
   display: flex;

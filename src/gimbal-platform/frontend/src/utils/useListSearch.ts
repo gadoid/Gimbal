@@ -34,11 +34,40 @@ export interface UseListSearchApi<T> {
 
 export type ItemsSource<T> = Ref<T[]> | T[] | (() => T[])
 
+/** Resolve a field specifier against ``item``.
+ *
+ * Supports two shapes:
+ *   - plain key:      ``'name'``            → item.name
+ *   - dot path:       ``'meta.name'``       → item.meta?.name (any depth,
+ *     short-circuits on ``undefined``/``null`` intermediates)
+ *
+ * Dot-path support exists because the V3 ``Scenario`` type keeps its
+ * searchable strings nested under ``meta`` (Scenarios.vue searches
+ * ``meta.name`` / ``meta.module`` / …).
+ */
+export function resolveField(item: Record<string, unknown>, field: string): unknown {
+  if (!field.includes('.')) return item[field]
+  let cur: unknown = item
+  for (const key of field.split('.')) {
+    if (cur == null || typeof cur !== 'object') return undefined
+    cur = (cur as Record<string, unknown>)[key]
+  }
+  return cur
+}
+
 export function useListSearch<T extends Record<string, unknown>>(
   items: ItemsSource<T>,
-  fields: (keyof T & string)[],
+  fields: string[],
+  /**
+   * Optional externally-owned query ref.  When given, the composable
+   * binds to it instead of creating its own — for callers that declare
+   * the input's ``v-model`` ref before/elsewhere (Scenarios.vue pattern:
+   * ``const q = ref('')`` + ``useListSearch(src, fields, q)``).
+   * Omitted by every existing caller, so behavior is unchanged there.
+   */
+  queryOverride?: Ref<string>,
 ): UseListSearchApi<T> {
-  const query = ref('')
+  const query = queryOverride ?? ref('')
 
   // Normalize to a getter so the filtered computed always has a
   // reactive dependency.  Vue 3 tracks function calls inside a
@@ -55,7 +84,7 @@ export function useListSearch<T extends Record<string, unknown>>(
     if (!q) return list
     return list.filter((item) =>
       fields.some((f) => {
-        const v = item[f]
+        const v = resolveField(item, f)
         return v != null && String(v).toLocaleLowerCase().includes(q)
       }),
     )

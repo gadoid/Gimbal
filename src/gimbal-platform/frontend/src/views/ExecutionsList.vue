@@ -45,6 +45,14 @@
       </el-table-column>
     </el-table>
 
+    <el-alert
+      v-else-if="store.lastError"
+      :title="`加载执行历史失败：${store.lastError}`"
+      type="error"
+      :closable="false"
+      show-icon
+      class="load-error"
+    />
     <el-empty
       v-else-if="!store.loading"
       description="暂无执行记录 — 从用例页点击 ⋯ → 执行"
@@ -55,7 +63,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useExecutionsStore } from '@/stores/executions'
 
 const router = useRouter()
@@ -70,16 +78,32 @@ function open(id: number) {
 }
 
 async function remove(id: number) {
-  await store.remove(id)
+  try {
+    await ElMessageBox.confirm(
+      `确认删除 execution #${id}？其下所有 run 记录与报告文件将一并删除，操作不可撤销。`,
+      '删除 execution',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return // 用户取消
+  }
+  try {
+    await store.remove(id)
+  } catch (e) {
+    ElMessage.error(`删除失败：${(e as Error).message}`)
+    return
+  }
   ElMessage.success('已删除')
 }
 
 let handle: ReturnType<typeof setInterval> | null = null
 
 onMounted(async () => {
-  await store.fetchList()
-  // Refresh list every 3s while on the page (cheap; list is small)
-  handle = setInterval(() => store.fetchList(), 3000)
+  await store.fetchList().catch(() => undefined)
+  // Refresh list every 3s while on the page (cheap; list is small).
+  // fetchList rethrows — swallow here so a down backend / expired
+  // session doesn't emit an unhandled rejection every tick.
+  handle = setInterval(() => store.fetchList().catch(() => undefined), 3000)
 })
 
 onUnmounted(() => {
@@ -111,6 +135,10 @@ onUnmounted(() => {
   margin-top: 14px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
+}
+
+.load-error {
+  margin-top: 14px;
 }
 
 .mono {

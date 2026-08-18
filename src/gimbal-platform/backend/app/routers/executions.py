@@ -2,17 +2,16 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path as PathParam, Request, status
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from loguru import logger
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core import db as db_module
 from ..core.config import settings
 from ..core.db import get_db
 from ..core.deps import CurrentUser, get_owned_execution
@@ -24,173 +23,16 @@ from ..schemas.execution import (
     ExecutionListOut,
     ExecutionOut,
 )
-from ..services.executor import run_execution
 from ..services.case_loader import loader
 from ..services.log_hub import EndEvent, KeepAlive, RunLogLine, hub
+from ..services.rerun import rerun_single_run
+from ..services.run_lifecycle import spawn_safe_run
 
 router = APIRouter(prefix="/executions", tags=["executions"])
-
-# ── in-flight orchestrator tracking ──────────────────────────────
-# The create_execution handler used to fire ``asyncio.create_task``
-# without retaining the handle.  On FastAPI shutdown (uvicorn
-# graceful-stop, OOM kill, --reload restart) the event loop is
-# cancelled and any un-tracked task is killed mid-subprocess, leaving
-# ``executions.status='running'`` orphan rows until the next worker's
-# ``reconcile_orphan_runs`` (5-minute grace window) catches it.
-#
-# Track the handles here so the lifespan teardown can await/cancel
-# them all before exit, and refuse to spawn new tasks during shutdown
-# so the user never gets a task that vanishes a moment later.
-_in_flight_runners: set[asyncio.Task] = set()
-_shutting_down: bool = False
-
-
-def is_shutting_down() -> bool:
-    return _shutting_down
-
-
-def spawn_safe_run(execution_id: int) -> "asyncio.Task | None":
-    """Spawn the orchestrator for ``execution_id`` and track the handle.
-
-    Returns ``None`` (without spawning) when the app is shutting down —
-    the caller should mark the row as failed and return a structured
-    error to the client so the user isn't left waiting on a task
-    that will never complete.
-    """
-    if _shutting_down:
-        return None
-    task = asyncio.create_task(_safe_run(execution_id))
-    _in_flight_runners.add(task)
-    task.add_done_callback(_in_flight_runners.discard)
-    return task
-
-
-async def drain_in_flight_runners() -> int:
-    """Cancel and await all running orchestrators.  Called from the
-    app lifespan teardown.  Returns the number of tasks drained so
-    the operator log shows what was in flight at shutdown."""
-    global _shutting_down
-    _shutting_down = True
-    n = len(_in_flight_runners)
-    if n == 0:
-        return 0
-    for t in list(_in_flight_runners):
-        t.cancel()
-    # Wait for them to finish cancellation; bound so a stuck subprocess
-    # can't keep the loop alive forever.  Each ``_safe_run`` already
-    # has its own try/except that catches CancelledError, so the
-    # in-flight subprocess gets a clean kill via ``proc.kill()`` in
-    # ``_subprocess_run_streaming``'s finally block.
-    await asyncio.gather(*_in_flight_runners, return_exceptions=True)
-    return n
-
-
-# Anything queued/running in the DB at startup with no fresh activity in
-# the last ``ORPHAN_GRACE_MIN`` is presumed to belong to a worker that
-# died (uvicorn --reload restarts, OOM, SIGTERM).  Mark its child runs
-# + execution as ``failed`` so /executions doesn't display permanently
-# pending rows.
-ORPHAN_GRACE_MIN = 5
 
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 OwnedExecution = Annotated[Execution, Depends(get_owned_execution)]
-
-
-async def reconcile_orphan_runs() -> None:
-    """Failure-recovery: clear out half-finished runs left by a
-    previous worker instance.  Called from app lifespan."""
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=ORPHAN_GRACE_MIN)
-    async with db_module.SessionLocal() as session:
-        # 1. Stuck child runs (have started_at but no finished_at)
-        stuck_runs = (
-            await session.execute(
-                select(ExecRun)
-                .where(
-                    ExecRun.status.in_(["pending", "running"]),
-                    ExecRun.started_at != None,  # noqa: E711
-                    ExecRun.started_at < cutoff,
-                )
-            )
-        ).scalars().all()
-
-        # 2. Orphan executions themselves (no fresh row update from a live worker)
-        stuck_execs = (
-            await session.execute(
-                select(Execution)
-                .where(
-                    Execution.status.in_(["queued", "running"]),
-                    Execution.started_at != None,  # noqa: E711
-                    Execution.started_at < cutoff,
-                )
-            )
-        ).scalars().all()
-
-        # DB columns are naive-UTC; use naive ``datetime.utcnow()`` so
-        # subtraction with the stored ``started_at`` is consistent.  Both
-        # are naive-UTC — no TypeError about offset-aware/naive mix.
-        now = datetime.utcnow()
-        affected: list[str] = []
-        for run in stuck_runs:
-            run.status = "failed"
-            run.exit_code = run.exit_code if run.exit_code is not None else -1
-            run.finished_at = now
-            if run.duration_ms is None and run.started_at is not None:
-                started = run.started_at
-                if started.tzinfo is not None:
-                    # Defensive: a tz-aware stored value would also need
-                    # ``.replace(tzinfo=None)`` before subtracting.
-                    started = started.replace(tzinfo=None)
-                run.duration_ms = max(
-                    0, int((now - started).total_seconds() * 1000)
-                )
-            # Synthesize a log_path + command_line so the UI log dialog
-            # doesn't 404 on these recovered rows.
-            if not run.log_path:
-                run.log_path = "recovered-at-startup"
-            run.command_line = run.command_line or "(recovered by reconciler)"
-            affected.append(f"run#{run.id} (exec={run.execution_id})")
-
-        # Roll up counters on the parent executions whose stuck runs
-        # have been reaped.  This re-reads ``passed/failed`` after the
-        # updates above and re-derives ``status``/``finished_at``.
-        for ex in stuck_execs:
-            ex.status = "failed"
-            ex.finished_at = now
-            affected.append(f"exec#{ex.id}")
-
-        # Also reconcile parent execution counters for runs whose status
-        # was patched above but whose Execution row might still show
-        # passed/failed short of ``total_runs``.  Without this the UI
-        # would render a permanently-stuck "0 / 0 / 5" status badge.
-        if stuck_runs:
-            exec_ids = {r.execution_id for r in stuck_runs}
-            for ex_id in exec_ids:
-                ex = await session.get(Execution, ex_id)
-                if ex is None or ex.status not in ("queued", "running", "done", "failed"):
-                    continue
-                # Count actual rows (post-patch) instead of relying on
-                # the live counter that was never updated.
-                rows = (
-                    await session.execute(
-                        select(ExecRun).where(ExecRun.execution_id == ex_id)
-                    )
-                ).scalars().all()
-                passed = sum(1 for r in rows if r.status == "passed")
-                failed = sum(1 for r in rows if r.status == "failed")
-                ex.passed = passed
-                ex.failed = failed
-                if passed + failed >= ex.total_runs:
-                    ex.status = "done" if failed == 0 else "failed"
-                    ex.finished_at = ex.finished_at or now
-
-        if affected:
-            await session.commit()
-            logger.warning(
-                "reconcile_orphan_runs: reaped {} row(s): {}",
-                len(affected),
-                ", ".join(affected[:10]) + (" ..." if len(affected) > 10 else ""),
-            )
 
 
 def _exec_out(e: Execution) -> ExecutionOut:
@@ -246,6 +88,28 @@ async def create_execution(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="command_line override requires admin",
+        )
+
+    # Access check on the target case (same rule as GET /api/cases/{id}):
+    # private cases are owner-only. Without this, a member could execute
+    # another user's private case and read its output via the run log /
+    # report endpoints (which only check the Execution's owner).
+    # scan(owner_id=user.id) returns exactly "public + this user's
+    # private" — anyone else's private case simply isn't in the list.
+    summary = None
+    for s in loader.scan(owner_id=user.id):
+        if s.case_id == payload.case_id:
+            summary = s
+            break
+    if summary is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"case not found: {payload.case_id}",
+        )
+    if summary.visibility == "private" and summary.owner_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"case not found: {payload.case_id}",
         )
 
     cfg: dict[str, Any] = {
@@ -316,19 +180,6 @@ async def create_execution(
         await session.commit()
 
     return _exec_out(ex)
-
-
-async def _safe_run(execution_id: int) -> None:
-    try:
-        await run_execution(execution_id)
-    except Exception as e:
-        logger.exception("execution {} crashed: {}", execution_id, e)
-        async with db_module.SessionLocal() as session:
-            ex = await session.get(Execution, execution_id)
-            if ex:
-                ex.status = "failed"
-                ex.finished_at = datetime.utcnow()
-                await session.commit()
 
 
 # ── detail (with runs) ─────────────────────────────────────────
@@ -599,98 +450,10 @@ async def rerun_run(
     full history is preserved — failures + retries stay visible.  The
     parent execution's ``total_runs`` grows by 1 per rerun.
 
-    The new row's ``log_path`` / ``report_path`` are derived from the
-    fresh ``run_id`` so they don't clobber the previous attempt's
-    artifacts.  ``_run_one`` increments ``Execution.passed`` /
-    ``Execution.failed`` exactly once per completed attempt — no
-    double-counting even when the prior attempt was already passed.
+    Orchestration lives in :func:`app.services.rerun.rerun_single_run`
+    (single place that composes insert / render / execute).
     """
-    src_run = await session.get(ExecRun, run_id)
-    if src_run is None or src_run.execution_id != ex.id:
-        raise HTTPException(status_code=404, detail="run not found")
-
-    from sqlalchemy import func, select
-    from sqlalchemy.exc import IntegrityError
-
-    # Two concurrent reruns could both compute the same next_idx from
-    # ``SELECT MAX(idx)`` and then both INSERT — a logical duplicate.
-    # Mitigations:
-    #   1. UNIQUE (execution_id, idx) constraint on exec_runs — the
-    #      second INSERT raises IntegrityError.
-    #   2. On IntegrityError, retry once with a freshly-computed idx
-    #      (the first rerun's row is now visible to MAX).
-    #   3. total_runs is bumped via an atomic ``+ 1`` SQL UPDATE so
-    #      the counter doesn't clobber under concurrent writes.
-    async def _do_rerun_insert() -> ExecRun:
-        max_idx_row = (
-            await session.execute(
-                select(func.max(ExecRun.idx)).where(ExecRun.execution_id == ex.id)
-            )
-        ).scalar()
-        next_idx = (max_idx_row or 0) + 1
-        new_run = ExecRun(execution_id=ex.id, idx=next_idx, status="pending")
-        session.add(new_run)
-        # Bump parent counters in a single atomic SQL — two concurrent
-        # reruns don't clobber each other.
-        await session.execute(
-            text(
-                "UPDATE executions SET total_runs = total_runs + 1 "
-                "WHERE id = :eid"
-            ),
-            {"eid": ex.id},
-        )
-        await session.commit()
-        # ``new_run.id`` and other columns are populated by the INSERT
-        # during commit; no need for a separate refresh that would
-        # round-trip again (and races with the connection pool under
-        # concurrent requests).
-        return new_run
-
-    try:
-        new_run = await _do_rerun_insert()
-    except IntegrityError:
-        # Another concurrent rerun stole our idx; refresh and retry once.
-        await session.rollback()
-        new_run = await _do_rerun_insert()
-
-    from ..services.executor import _run_one
-
-    report_dir = settings.DATA_DIR / "reports" / f"exec_{execution_id}"
-    report_dir.mkdir(parents=True, exist_ok=True)
-    yaml_path = report_dir / f"run_{new_run.id}.yaml"
-    # Always render fresh — the new run id means the yaml must be
-    # regenerated (no chance of clashing with a previous attempt's file).
-    from ..services.executor import _write_temp_yaml, render_execution_yaml
-
-    cfg = ex.config_json or {}
-    try:
-        rendered = await render_execution_yaml(
-            case_id=ex.case_id,
-            owner_id=ex.owner_id,
-            cfg=cfg,
-            idx=new_run.idx,
-        )
-    except KeyError:
-        raise HTTPException(status_code=404, detail=f"case file vanished: {ex.case_id}")
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=f"render failed: {e}")
-    _write_temp_yaml(rendered, yaml_path)
-
-    await _run_one(
-        execution_id=execution_id,
-        run_id=new_run.id,
-        yaml_path=yaml_path,
-        env=cfg.get("env", "dev"),
-        report_dir=report_dir,
-        # Rerun replays the original execution's config — including step_to
-        # so the new attempt honors the same halt-at semantics.
-        step_to=cfg.get("step_to"),
-    )
-
-    # Re-fetch the new row so the response reflects post-subprocess
-    # state (status, exit_code, duration, log_path, command_line).
-    # _run_one commits via its own session; refresh here hits the DB.
-    await session.refresh(new_run)
+    new_run = await rerun_single_run(session, ex, run_id)
     return _run_out(new_run)
 
 
@@ -700,5 +463,9 @@ async def delete_execution(
     ex: OwnedExecution,
     session: DbSession,
 ) -> None:
+    # SQLite runs with FK enforcement OFF (aiosqlite default, no PRAGMA),
+    # so the schema's ON DELETE CASCADE never fires — delete the child
+    # run rows explicitly or they're orphaned forever.
+    await session.execute(delete(ExecRun).where(ExecRun.execution_id == ex.id))
     await session.delete(ex)
     await session.commit()

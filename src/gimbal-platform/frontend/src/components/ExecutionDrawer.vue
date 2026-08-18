@@ -70,7 +70,7 @@
         <!-- ▸ 执行控制 -->
         <section class="exdraw-section">
           <h4 class="exdraw-section-title">
-            <span class="exdraw-section-bullet" aria-hidden="true">⚡</span>
+            <span class="exdraw-section-bullet" aria-hidden="true"><el-icon :size="12"><Lightning /></el-icon></span>
             执行控制
           </h4>
           <div class="exdraw-grid-2">
@@ -86,7 +86,7 @@
         <!-- ▸ 凭证注入 -->
         <section class="exdraw-section">
           <h4 class="exdraw-section-title">
-            <span class="exdraw-section-bullet" aria-hidden="true">🔐</span>
+            <span class="exdraw-section-bullet" aria-hidden="true"><el-icon :size="12"><Lock /></el-icon></span>
             凭证注入
           </h4>
           <el-form-item label="合并策略" prop="merge_policy">
@@ -135,7 +135,7 @@
               class="exdraw-auths-empty"
             >
               <div class="exdraw-auths-empty-body">
-                <span class="exdraw-auths-empty-icon" aria-hidden="true">🔐</span>
+                <span class="exdraw-auths-empty-icon" aria-hidden="true"><el-icon :size="18"><Lock /></el-icon></span>
                 <div class="exdraw-auths-empty-text">
                   <strong>还没有认证</strong>
                   <span>认证来自「认证管理」页面 · 你自己的凭证池</span>
@@ -164,7 +164,7 @@
         <!-- ▸ 环境 -->
         <section class="exdraw-section">
           <h4 class="exdraw-section-title">
-            <span class="exdraw-section-bullet" aria-hidden="true">🌱</span>
+            <span class="exdraw-section-bullet" aria-hidden="true"><el-icon :size="12"><Monitor /></el-icon></span>
             环境
           </h4>
           <div class="exdraw-grid-2">
@@ -186,7 +186,7 @@
         <!-- ▸ 步骤选框 (gimbal run show + --step-to) -->
         <section class="exdraw-section">
           <h4 class="exdraw-section-title">
-            <span class="exdraw-section-bullet" aria-hidden="true">🛑</span>
+            <span class="exdraw-section-bullet" aria-hidden="true"><el-icon :size="12"><VideoPause /></el-icon></span>
             步骤选框
           </h4>
 
@@ -305,7 +305,7 @@
             class="exdraw-launch"
             @click="submit"
           >
-            <span class="exdraw-launch-icon" aria-hidden="true">▶</span>
+            <span class="exdraw-launch-icon" aria-hidden="true"><el-icon :size="12"><VideoPlay /></el-icon></span>
             开始执行
           </el-button>
         </div>
@@ -316,6 +316,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { Lightning, Lock, Monitor, VideoPause, VideoPlay } from '@element-plus/icons-vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -439,9 +440,9 @@ const rules = {
 }
 
 const PRESETS = [
-  { id: 'smoke', label: '🔥 烟囱 · 1/1', n: 1, p: 1 },
-  { id: 'mini', label: '🌤 小批量 · 5/3', n: 5, p: 3 },
-  { id: 'load', label: '📈 压测 · 50/10', n: 50, p: 10 },
+  { id: 'smoke', label: '烟囱 · 1/1', n: 1, p: 1 },
+  { id: 'mini', label: '小批量 · 5/3', n: 5, p: 3 },
+  { id: 'load', label: '压测 · 50/10', n: 50, p: 10 },
 ]
 
 function applyPreset(id: string) {
@@ -694,18 +695,8 @@ onMounted(async () => {
   font-weight: 600;
 }
 
-.priority-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 31px;
-  padding: 2px 6px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 16px;
-  border-radius: 10px;
-}
+/* .priority-pill base + .priority-N colors live in styles/priority.css
+   (imported globally via main.ts). */
 
 .exdraw-tags {
   display: flex;

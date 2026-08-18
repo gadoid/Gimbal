@@ -78,11 +78,12 @@ describe('FieldRow', () => {
     expect(withEye.find('.eye-button').exists()).toBe(true)
   })
 
-  it('eye button toggles between ◉ (hidden) and 👁 (visible)', async () => {
+  it('eye button toggles between Hide (hidden) and View (visible) icons', async () => {
     const w = mountRow({ label: 'k', value: 'v', eye: true, hidden: true })
-    expect(w.find('.eye-button').text()).toBe('◉')
+    // Icons are SVG components — assert on the rendered component name.
+    expect(w.findComponent({ name: 'Hide' }).exists()).toBe(true)
     await w.setProps({ hidden: false })
-    expect(w.find('.eye-button').text()).toBe('👁')
+    expect(w.findComponent({ name: 'View' }).exists()).toBe(true)
   })
 
   it('emits toggle-eye on eye click', async () => {

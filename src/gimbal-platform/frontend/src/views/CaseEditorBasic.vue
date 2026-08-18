@@ -6,12 +6,12 @@
   <section class="case-editor">
     <header class="page-header">
       <div>
-        <h2>📋 用例编辑</h2>
+        <h2 class="page-title"><el-icon><Tickets /></el-icon>用例编辑</h2>
         <p>{{ caseId === 'new' ? '新建用例' : caseId }}</p>
       </div>
       <div class="header-actions">
-        <el-button @click="router.back()">← 返回</el-button>
-        <el-button :loading="validating" plain @click="onValidate">🔍 预校验 Scenario 草稿</el-button>
+        <el-button :icon="ArrowBack" @click="router.back()">返回</el-button>
+        <el-button :loading="validating" plain :icon="Search" @click="onValidate">预校验 Scenario 草稿</el-button>
         <el-button type="primary" :loading="saving" @click="onSave">保存</el-button>
       </div>
     </header>
@@ -78,7 +78,7 @@
       <aside class="side">
         <h3>校验状态</h3>
         <div v-if="!validationResult" class="valid-empty">
-          点击右上角 <code>🔍 预校验 Scenario 草稿</code> 调用 Plate /convert
+          点击右上角 <code>预校验 Scenario 草稿</code> 调用 Plate /convert
         </div>
         <div v-else class="valid-result" :class="validationResult.ok ? 'ok' : 'fail'">
           <div class="valid-head">
@@ -102,11 +102,13 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { ArrowBack, Search, Tickets } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import SystemChip from '@/components/SystemChip.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
+import { createCase } from '@/api/scenario-composer'
 import { showError } from '@/utils/errorFallback'
 
 const route = useRoute()
@@ -181,13 +183,57 @@ onMounted(async () => {
 })
 
 async function onSave() {
-  saving.value = true
-  try {
-    if (caseId === 'new') {
-      // 调后端创建（router 回跳到编辑）
-      ElMessage.info('请等待后端 createCase 接口 · 当前仅做本地校验')
+  if (caseId === 'new') {
+    if (!scenarioId.value) {
+      ElMessage.warning('缺少 scenarioId — 请从场景的「③ 用例管理」进入新建用例')
       return
     }
+    if (!form.name.trim()) {
+      ElMessage.warning('请填写用例名')
+      return
+    }
+    saving.value = true
+    try {
+      // P0 修复：新建用例此前是死表单（仅弹提示不落库）。
+      // 后端 createCase (POST /cases) 已存在，此处直接接通。
+      // 注意两点：
+      // 1. caseId 必须带 `case-` 前缀 — 后端 v3_case_id 路由转换器的
+      //    regex 是 (?:case|sc)-[a-z0-9-]+，无前缀的 id 创建后无法
+      //    再被 GET/PATCH/DELETE 命中（会落到 legacy 路由 404）。
+      // 2. updatedAt 不能传空字符串 — 后端 updated_at: datetime|None
+      //    校验会 422。createdBy 由服务端无条件覆盖，传空串无害。
+      const slug = form.name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '') || 'case'
+      const suffix = Date.now().toString(36).slice(-4)
+      const created = await createCase({
+        caseId: `case-${slug}-${suffix}`,
+        scenarioId: scenarioId.value,
+        name: form.name.trim(),
+        description: form.description,
+        env: form.env,
+        auth: { name: form.authName, type: form.authType },
+        retry: { maxAttempts: form.retryMaxAttempts, intervalMs: form.retryIntervalMs },
+        dataSetIds: form.dataSetIds,
+        createdBy: '',
+        updatedAt: undefined as unknown as string,
+      })
+      ElMessage.success(`已创建：${created.caseId}`)
+      await store.fetchCases()
+      // router.replace 到同路由不同参数不会重挂载本组件（caseId 常量
+      // 会停留在 'new'，再次点保存会重复创建）— 整页跳转强制重挂载。
+      window.location.assign(`/cases/${created.caseId}/edit`)
+    } catch (e) {
+      showError('创建用例', undefined, (e as Error).message)
+    } finally {
+      saving.value = false
+    }
+    return
+  }
+  saving.value = true
+  try {
     await store.saveCase(caseId, {
       name: form.name,
       description: form.description,

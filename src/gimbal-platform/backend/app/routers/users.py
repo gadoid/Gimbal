@@ -1,10 +1,13 @@
 """User-management endpoints: list / create / patch / delete / reset-password.
 
-Spec-1 simplifications (intentional):
-* All routes are gated only by ``Depends(get_current_user)`` — no ``require_admin``
-  enforcement (spec §7.6.6 — admin gating intentionally deferred to a later
-  spec).  This means a regular member can ``PATCH`` / ``DELETE`` other users
-  *subject to the hard business constraints below*.
+Authorization (hardened):
+* ``DELETE /{user_id}`` — admin only (a member can never delete another
+  account; self-delete is separately refused with 409/code 4091).
+* ``PATCH /{user_id}``  — admin may patch anyone; a member may only patch
+  **themselves** and may NOT touch the ``is_admin`` flag (403/code 4032).
+* ``reset-password``    — admin (for anyone) or the target user (for
+  themselves); a member resetting *someone else's* password is refused
+  (403/code 4033) — this used to be a full account-takeover vector.
 * All endpoints require a Bearer token; missing/invalid → 401 (handled by
   :func:`app.core.deps.get_current_user`).
 
@@ -78,6 +81,9 @@ async def create_user(
 ) -> UserOut:
     """Create a new user.  Spec-1: always created as member (is_admin=False)
     regardless of the ``is_admin`` field on the payload."""
+    # Normalize display_name like patch_user: it doubles as composer
+    # ownership identity, so " Bob " / "Bob" must not coexist.
+    payload.display_name = (payload.display_name or "").strip()
     existing = (
         await db.execute(select(User).where(User.username == payload.username))
     ).scalar_one_or_none()
@@ -85,6 +91,37 @@ async def create_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": 4093, "msg": "用户名已被占用"},
+        )
+    # display_name doubles as the composer-ownership identity (scenario /
+    # case / data-set rows store it as ``owner`` / ``created_by``). It must
+    # be globally unique AND not collide with any username — otherwise a
+    # member could impersonate another user's ownership by adopting their
+    # display_name (privilege-escalation vector).
+    if payload.display_name:
+        clash = (
+            await db.execute(
+                select(User).where(
+                    (User.display_name == payload.display_name)
+                    | (User.username == payload.display_name)
+                )
+            )
+        ).scalar_one_or_none()
+        if clash is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": 4093, "msg": "显示名已被占用（作为资源归属标识必须唯一）"},
+            )
+    # Conversely: the new username must not collide with an existing
+    # display_name (ownership checks match ``display_name or username``).
+    name_clash = (
+        await db.execute(
+            select(User).where(User.display_name == payload.username)
+        )
+    ).scalar_one_or_none()
+    if name_clash is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": 4093, "msg": "用户名与已有显示名冲突（作为资源归属标识必须唯一）"},
         )
     new_user = User(
         username=payload.username,
@@ -109,6 +146,11 @@ async def patch_user(
 ) -> UserOut:
     """Update ``display_name`` / ``is_admin`` / ``is_active`` / ``new_password``.
 
+    Authorization:
+    * admin caller — may patch any user, any field.
+    * member caller — may only patch **themselves** (403/4032 on other
+      targets) and may never touch ``is_admin`` (privilege-escalation fix).
+
     Constraint: demoting an admin (``is_admin: false`` on a target whose current
     flag is ``True``) may not leave the system with zero admins.
     """
@@ -122,6 +164,20 @@ async def patch_user(
         )
 
     data = payload.model_dump(exclude_unset=True)
+
+    # ── authorization (privilege-escalation fix) ──
+    if not caller.is_admin:
+        if target.id != caller.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": 4032, "msg": "普通用户只能修改自己的资料"},
+            )
+        if "is_admin" in data:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": 4032, "msg": "只有管理员可以变更管理员标志"},
+            )
+
     demoting_admin = (
         "is_admin" in data
         and data["is_admin"] is False
@@ -136,7 +192,25 @@ async def patch_user(
             )
 
     if "display_name" in data:
-        target.display_name = data["display_name"]
+        new_name = (data["display_name"] or "").strip()
+        if new_name and new_name != (target.display_name or ""):
+            # Ownership-identity uniqueness (see create_user). A member must
+            # not be able to adopt another user's display_name to hijack
+            # their scenarios / cases / data-sets.
+            clash = (
+                await db.execute(
+                    select(User).where(
+                        (User.display_name == new_name) | (User.username == new_name),
+                        User.id != target.id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if clash is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"code": 4093, "msg": "显示名已被占用（作为资源归属标识必须唯一）"},
+                )
+        target.display_name = new_name
     if "is_admin" in data:
         target.is_admin = data["is_admin"]
     if "is_active" in data:
@@ -162,8 +236,10 @@ async def reset_password(
 ) -> dict:
     """Generate a fresh random password for ``user_id`` and persist its hash.
 
-    The plaintext password is returned **once** in the response and is never
-    stored on the server.
+    Authorization: admin (any target) or the target user themselves
+    (account-takeover fix: a member can no longer reset *someone else's*
+    password and receive the plaintext).  The plaintext password is
+    returned **once** in the response and is never stored on the server.
     """
     target = (
         await db.execute(select(User).where(User.id == user_id))
@@ -172,6 +248,11 @@ async def reset_password(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": 4041, "msg": "用户不存在"},
+        )
+    if not caller.is_admin and caller.id != target.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": 4033, "msg": "只有管理员或本人可以重置该密码"},
         )
 
     new_pw = _gen_random_password(12)
@@ -196,6 +277,10 @@ async def delete_user(
 ):
     """Delete ``user_id``.
 
+    Authorization: admin only — a member can never delete another account
+    (403/4031).  Self-delete is separately refused below (409/code 4091),
+    so effectively "admin deleting someone else".
+
     Constraints (both 409):
     * caller cannot delete themselves (code 4091).
     * cannot delete the last remaining admin (code 4092).
@@ -213,6 +298,12 @@ async def delete_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": 4091, "msg": "不能删除自己"},
+        )
+
+    if not caller.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": 4031, "msg": "需要管理员权限"},
         )
 
     if target.is_admin:

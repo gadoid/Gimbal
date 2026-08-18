@@ -2,7 +2,7 @@
      Tags support drag-reorder (vuedraggable). -->
 <template>
   <div class="emeta">
-    <h4 class="emeta-title">✏️ Meta · {{ caseId }}</h4>
+    <h4 class="emeta-title"><el-icon style="margin-right:5px"><EditPen /></el-icon>Meta · {{ caseId }}</h4>
     <el-form label-position="top" class="emeta-form">
       <el-form-item label="name" required>
         <el-input v-model="form.name" placeholder="用例名称" />
@@ -67,6 +67,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
+import { EditPen } from '@element-plus/icons-vue'
 import draggable from 'vuedraggable'
 
 const props = defineProps<{

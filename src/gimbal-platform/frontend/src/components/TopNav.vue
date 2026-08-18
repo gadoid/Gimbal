@@ -17,7 +17,7 @@
         :to="entry.path"
         class="nav-entry"
         :class="{ active: isActive(entry.path) }"
-      >{{ entry.label }}</router-link>
+      ><el-icon style="margin-right:5px"><component :is="entry.icon" /></el-icon>{{ entry.label }}</router-link>
     </nav>
 
     <!-- Right: user identity + logout -->
@@ -38,8 +38,18 @@
 </template>
 
 <script setup lang="ts">
+import type { Component } from 'vue'
+import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import {
+  Collection,
+  DataAnalysis,
+  Files,
+  Lock,
+  Setting,
+  Tickets,
+} from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -49,16 +59,25 @@ const route = useRoute()
 interface NavEntry {
   path: string
   label: string
+  icon: Component
+  /** Render only for admins (route guard would bounce members anyway). */
+  adminOnly?: boolean
 }
 
-const navEntries: NavEntry[] = [
-  { path: '/cases/mine', label: '📋 我的工作台' },
-  { path: '/cases/public', label: '🌐 公共用例库' },
-  { path: '/scenarios', label: '📚 场景库' },
-  { path: '/executions', label: '📊 执行历史' },
-  { path: '/auths', label: '🔐 认证管理' },
-  { path: '/admin/users', label: '⚙️ 用户管理' },
+const allEntries: NavEntry[] = [
+  { path: '/cases/mine', label: '我的工作台', icon: Tickets },
+  { path: '/cases/public', label: '公共用例库', icon: Files },
+  { path: '/scenarios', label: '场景库', icon: Collection },
+  { path: '/executions', label: '执行历史', icon: DataAnalysis },
+  { path: '/auths', label: '认证管理', icon: Lock },
+  { path: '/admin/users', label: '用户管理', icon: Setting, adminOnly: true },
 ]
+
+// Hide the admin entry from members entirely (previously it rendered for
+// everyone and clicking it bounced off the router guard).
+const navEntries = computed(() =>
+  allEntries.filter((e) => !e.adminOnly || auth.currentUser?.is_admin),
+)
 
 function isActive(path: string): boolean {
   return route.path === path || route.path.startsWith(path + '/')

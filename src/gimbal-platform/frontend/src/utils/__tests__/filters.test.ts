@@ -93,3 +93,63 @@ describe('applyFiltersToList', () => {
     ])
   })
 })
+
+// ── defensive against partially-shaped rows (2026-08 pass) ──────────
+// The V3 composer's Case rows (Cases.vue overview pool) lack the legacy
+// tags/module/author fields; the filter must tolerate them, not throw.
+describe('applyFiltersToList with partial rows (V3 Case shape)', () => {
+  const partial = [
+    { case_id: 'case-001', name: 'V3 One' },
+    { case_id: 'case-002', name: 'V3 Two', tags: ['smoke'] },
+  ] as Partial<CaseSummary>[]
+
+  it('no-op filters keep all partial rows without throwing', () => {
+    expect(applyFiltersToList(partial, emptyFilters())).toHaveLength(2)
+  })
+
+  it('tag filter does not crash on rows missing tags', () => {
+    const f: CaseFilters = { ...emptyFilters(), tags: ['smoke'] }
+    expect(applyFiltersToList(partial, f).map((c) => c.case_id)).toEqual(['case-002'])
+  })
+
+  it('module filter excludes rows without a module', () => {
+    const f: CaseFilters = { ...emptyFilters(), modules: ['billing'] }
+    expect(applyFiltersToList(partial, f)).toEqual([])
+  })
+
+  it('updatedWithin filter keeps rows missing updated_at (no false drop)', () => {
+    const f: CaseFilters = { ...emptyFilters(), updatedWithin: '24h' }
+    // missing updated_at → NaN → kept by design (can't prove it's old)
+    expect(applyFiltersToList(partial, f)).toHaveLength(2)
+  })
+})
+
+// ── system filter (场景库系统字段过滤, 2026-08) ──────────────────────
+describe('applyFiltersToList system filter', () => {
+  const rows = [
+    { case_id: 's1', name: 'Fin scenario', system: ['fin', 'common'] },
+    { case_id: 's2', name: 'Logi scenario', system: ['logi'] },
+    { case_id: 's3', name: 'Legacy row' }, // no system field
+  ] as Partial<import('@/utils/filters').FilterRow>[]
+
+  it('empty systems selection keeps all rows (legacy default)', () => {
+    expect(applyFiltersToList(rows, emptyFilters())).toHaveLength(3)
+  })
+
+  it('single system tag matches rows carrying it', () => {
+    const f: CaseFilters = { ...emptyFilters(), systems: ['fin'] }
+    expect(applyFiltersToList(rows, f).map((c) => c.case_id)).toEqual(['s1'])
+  })
+
+  it('multiple system tags use OR semantics', () => {
+    const f: CaseFilters = { ...emptyFilters(), systems: ['fin', 'logi'] }
+    expect(applyFiltersToList(rows, f).map((c) => c.case_id)).toEqual(['s1', 's2'])
+  })
+
+  it('rows without a system field are excluded when filtering by system', () => {
+    const f: CaseFilters = { ...emptyFilters(), systems: ['fin'] }
+    expect(applyFiltersToList(rows, f)).not.toContainEqual(
+      expect.objectContaining({ case_id: 's3' }),
+    )
+  })
+})

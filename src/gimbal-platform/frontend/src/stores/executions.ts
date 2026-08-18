@@ -22,6 +22,8 @@ export const useExecutionsStore = defineStore('executions', () => {
   const detail = ref<ExecutionDetail | null>(null)
   const loading = ref(false)
   const lastError = ref('')
+  /** Set when the detail poller gives up (404 / repeated failures). */
+  const pollError = ref('')
   let pollHandle: ReturnType<typeof setInterval> | null = null
 
   async function fetchList(): Promise<Execution[]> {
@@ -45,6 +47,8 @@ export const useExecutionsStore = defineStore('executions', () => {
       const d = await api.get(id)
       detail.value = d
       lastError.value = ''
+      // Manual refresh succeeded — clear any stale poll-gave-up message.
+      pollError.value = ''
       return d
     } catch (e) {
       lastError.value = e instanceof Error ? e.message : 'fetch failed'
@@ -125,15 +129,33 @@ export const useExecutionsStore = defineStore('executions', () => {
    */
   function startPolling(id: number): () => void {
     stopPolling()
+    pollError.value = ''
+    // Soft-fail budget: transient network hiccups shouldn't kill the
+    // poller, but a deleted execution (404 forever) or a dead backend
+    // must not poll at 1 req/s indefinitely while the page sits open.
+    let consecutiveFailures = 0
+    const MAX_CONSECUTIVE_FAILURES = 10
     const tick = async () => {
       try {
         const d = await api.get(id)
+        consecutiveFailures = 0
         detail.value = d
         if (d.status === 'done' || d.status === 'failed') {
           stopPolling()
         }
-      } catch {
-        // soft-fail: keep polling on transient errors
+      } catch (e) {
+        consecutiveFailures += 1
+        const status = (e as { status?: number }).status
+        if (status === 404) {
+          // Execution was deleted (other tab / another user) — stop and
+          // surface it instead of silently polling a corpse.
+          stopPolling()
+          detail.value = null
+          pollError.value = '该执行记录已不存在（可能已被删除）'
+        } else if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          stopPolling()
+          pollError.value = '轮询连续失败，已停止刷新 — 请手动刷新重试'
+        }
       }
     }
     pollHandle = setInterval(tick, POLL_INTERVAL_MS)
@@ -152,6 +174,7 @@ export const useExecutionsStore = defineStore('executions', () => {
     detail,
     loading,
     lastError,
+    pollError,
     rerunningIds,
     isRerunning,
     markRerunning,

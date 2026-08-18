@@ -25,7 +25,7 @@ from ..schemas.scenario_composer import (
     ScenarioDraft,
     ScenarioMeta,
 )
-from .stars_store import is_starred as stars_is_starred
+from .marks_store import stars
 
 
 # ─── write side ───────────────────────────────────────────────────
@@ -259,7 +259,7 @@ async def _to_read_shape(
     steps = _steps_from_payload(row.payload)
     config, resource, orchestration = _extras_from_payload(row.payload)
     starred = (
-        stars_is_starred(user_id, row.scenario_id)
+        stars.has(user_id, row.scenario_id)
         if user_id is not None
         else False
     )

@@ -650,7 +650,7 @@ async def test_run_log_stream_skips_lines_before_last_event_id(
 
 # ── reconciler (orphan-run recovery at startup) ───────────────
 async def test_reconcile_orphan_runs_marks_stuck_failed(
-    client: AsyncClient
+    client: AsyncClient, tmp_path: Path, monkeypatch
 ) -> None:
     """Runs marked 'running' for > ORPHAN_GRACE_MIN with no finished_at
     must be flipped to 'failed' when reconcile_orphan_runs() runs.
@@ -659,16 +659,17 @@ async def test_reconcile_orphan_runs_marks_stuck_failed(
     """
     from app.core import db as db_module
     from app.models import ExecRun, Execution
-    from app.routers.executions import (
+    from app.services.run_lifecycle import (
         ORPHAN_GRACE_MIN,
         reconcile_orphan_runs,
     )
 
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=1)
     auth = await _login_alice(client)
     r = await client.post(
         "/api/executions",
         headers=auth,
-        json={"case_id": "sc_e2e", "n_runs": 1, "parallel": 1},
+        json={"case_id": case_id, "n_runs": 1, "parallel": 1},
     )
     eid = r.json()["id"]
 
@@ -714,20 +715,21 @@ async def test_reconcile_orphan_runs_marks_stuck_failed(
 
 
 async def test_reconcile_orphan_runs_leaves_active_runs_alone(
-    client: AsyncClient
+    client: AsyncClient, tmp_path: Path, monkeypatch
 ) -> None:
     """Runs that ARE active (started_at within grace window) must NOT be
     touched — the reconciler must only reap STALE state, not anything
     in flight."""
     from app.core import db as db_module
     from app.models import ExecRun, Execution
-    from app.routers.executions import reconcile_orphan_runs
+    from app.services.run_lifecycle import reconcile_orphan_runs
 
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=1)
     auth = await _login_alice(client)
     r = await client.post(
         "/api/executions",
         headers=auth,
-        json={"case_id": "sc_e2e", "n_runs": 1, "parallel": 1},
+        json={"case_id": case_id, "n_runs": 1, "parallel": 1},
     )
     eid = r.json()["id"]
 
@@ -1113,12 +1115,13 @@ async def test_command_line_override_requires_admin(
 
 
 async def test_admin_command_line_override_persists(
-    client: AsyncClient
+    client: AsyncClient, tmp_path: Path, monkeypatch
 ) -> None:
     """When an admin sets ``command_line``, the orchestrator must use it
     (overriding the default ``gimbal run launch <yaml> ...`` argv).  We
     verify this by inspecting the persisted ``config_json``.command_line
     on the resulting Execution row."""
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=1)
     await client.post(
         "/api/auth/register",
         json={"username": "adminuser", "password": "adminpass789"},
@@ -1136,7 +1139,7 @@ async def test_admin_command_line_override_persists(
         "/api/executions",
         headers=adm_auth,
         json={
-            "case_id": "sc_e2e",
+            "case_id": case_id,
             "n_runs": 1,
             "parallel": 1,
             "command_line": custom_cmd,
@@ -1787,3 +1790,41 @@ async def _create_execution_directly(
             s.add(ExecRun(execution_id=ex.id, idx=idx, status="pending"))
         await s.commit()
         return ex.id
+
+# ── cross-user execution (security round) ──────────────────────
+async def test_member_cannot_execute_other_users_private_case(
+    client: AsyncClient, tmp_path: Path, monkeypatch
+) -> None:
+    """POST /executions previously had no case-visibility check: a member
+    who knew another user's private case_id could execute it AND read the
+    run output via /runs/{id}/log|report (those only check the Execution
+    owner). Must 404 with the same existence-hiding policy as GET /cases."""
+    case_id = await _seed_steps_case(tmp_path, monkeypatch, n_steps=1)
+    a_auth = await _login_alice(client)
+    # alice takes a private copy of the seeded public case
+    a_copy = await client.post(f"/api/cases/{case_id}/copy", headers=a_auth)
+    assert a_copy.status_code == 200
+    private_id = a_copy.json()["case_id"]
+
+    await client.post(
+        "/api/auth/register", json={"username": "bob", "password": "bobpass456"}
+    )
+    b_login = await client.post(
+        "/api/auth/login", json={"username": "bob", "password": "bobpass456"}
+    )
+    b_auth = {"Authorization": f"Bearer {b_login.json()['access_token']}"}
+
+    r = await client.post(
+        "/api/executions",
+        headers=b_auth,
+        json={"case_id": private_id, "n_runs": 1, "parallel": 1},
+    )
+    assert r.status_code == 404, r.text
+
+    # Sanity: the owner may still execute it.
+    r_owner = await client.post(
+        "/api/executions",
+        headers=a_auth,
+        json={"case_id": private_id, "n_runs": 1, "parallel": 1},
+    )
+    assert r_owner.status_code == 201, r_owner.text

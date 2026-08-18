@@ -18,7 +18,7 @@
           </span>
         </p>
       </div>
-      <a class="back-link" @click="$emit('back')">← 返回步骤编辑</a>
+      <a class="back-link" @click="$emit('back')"><el-icon style="margin-right:3px;vertical-align:-2px"><ArrowLeft /></el-icon>返回步骤编辑</a>
     </header>
 
     <div class="filter-row">
@@ -35,7 +35,7 @@
         @input="onFilterChanged"
         class="filter-input"
       >
-        <template #prefix>🔍</template>
+        <template #prefix><el-icon><Search /></el-icon></template>
       </el-input>
     </div>
 
@@ -252,6 +252,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { ArrowLeft, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getFullEndpoint } from '@/api/scenario-composer'
 import type { EndpointFullView } from '@/types/plate'

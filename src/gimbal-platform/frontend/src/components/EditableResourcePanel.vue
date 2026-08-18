@@ -3,7 +3,7 @@
      round-trip via the __custom__ JSON freeform escape hatch. -->
 <template>
   <div class="eresource">
-    <h4 class="eresource-title">✏️ Resource</h4>
+    <h4 class="eresource-title"><el-icon style="margin-right:5px"><EditPen /></el-icon>Resource</h4>
     <p class="eresource-hint">
       资源池：mock / file。<br>
       非 plate 资源 kind 走自定义 JSON 透传。
@@ -61,6 +61,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
+import { EditPen } from '@element-plus/icons-vue'
 import draggable from 'vuedraggable'
 
 interface ResourceRow {

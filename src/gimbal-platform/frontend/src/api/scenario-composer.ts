@@ -4,7 +4,7 @@
  * 与现有 cases.ts 同等级别，提供 scenarios / cases / data-sets 三个领域
  * 的 REST 调用。请求路径对齐 Plate V3.2 的资源命名（snake_case + s 复数）。
  */
-import { http } from '@/utils/http'
+import http from '@/api/http'
 import type {
   Scenario, Case, DataSet, DataSetSummary,
   ScenarioDraft, DataSetDraft, RunEnv,
@@ -123,8 +123,14 @@ export interface RunRequest {
   retry?: { maxAttempts: number; intervalMs: number }
 }
 
-export async function runCase(req: RunRequest): Promise<{ runId: string }> {
-  const { data } = await http.post<{ runId: string }>('/runs', req)
+export interface RunCaseResult {
+  runId: string
+  /** Numeric Execution row — the only id with a detail route. */
+  executionId?: number
+}
+
+export async function runCase(req: RunRequest): Promise<RunCaseResult> {
+  const { data } = await http.post<RunCaseResult>('/runs', req)
   return data
 }
 

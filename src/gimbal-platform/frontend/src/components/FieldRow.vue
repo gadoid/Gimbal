@@ -11,12 +11,13 @@
       :aria-label="hidden ? `显示 ${label}` : `隐藏 ${label}`"
       :title="hidden ? '显示字段' : '隐藏字段'"
       @click="$emit('toggle-eye')"
-    >{{ hidden ? '◉' : '👁' }}</button>
+    ><el-icon :size="14"><Hide v-if="hidden" /><View v-else /></el-icon></button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Hide, View } from '@element-plus/icons-vue'
 import { useHideStore } from '@/stores/hide'
 
 const props = withDefaults(

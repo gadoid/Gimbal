@@ -12,7 +12,7 @@ These lock in the bugs surfaced during AC-7 walkthrough (task-15):
    - Serve the original public case unchanged
 
 3. POST /cases/{id}/favorite + DELETE must:
-   - Toggle the in-memory _FAVORITES bucket
+   - Toggle the marks-store favorites bucket
    - Surface via GET /cases/mine (which returns favorites as mine)
 
 All assertions go through the public HTTP surface so they catch
@@ -385,17 +385,16 @@ async def test_favorite_persists_across_in_memory_reload(
     assert fav.status_code == 200
 
     # Snapshot favorites.json existence + content (path is redirected to
-    # tmp_path by the autouse _isolate_favorites conftest fixture)
-    from app.routers import cases as cases_router
-    fav_path = cases_router._FAV_PATH
+    # tmp_path by the autouse _isolate_marks conftest fixture)
+    from app.services.marks_store import favorites
+
+    fav_path = favorites.path
     assert fav_path.exists(), "favorites.json must be written by add_favorite"
     disk_blob = fav_path.read_text(encoding="utf-8")
     assert seed_public_case in disk_blob
 
     # Simulate process restart by reloading from disk
-    from app.routers.cases import _FAVORITES, _load_favorites
-    _FAVORITES.clear()
-    _FAVORITES.update(_load_favorites())
+    favorites.reload()
 
     # Still flagged as favorited_by_me=True on /mine
     r = await client.get("/api/cases/mine", headers=auth)

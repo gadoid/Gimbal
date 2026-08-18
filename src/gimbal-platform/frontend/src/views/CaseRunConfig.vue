@@ -6,14 +6,14 @@
   <section class="run-config">
     <header class="page-header">
       <div>
-        <h2>▶ 运行用例</h2>
+        <h2 class="page-title"><el-icon><VideoPlay /></el-icon>运行用例</h2>
         <p>{{ caseName || caseId }} · 选择数据集 × 环境，组装 Scenario 草稿后提交 Plate</p>
       </div>
       <div class="header-actions">
-        <el-button @click="router.back()">← 返回</el-button>
-        <el-button :loading="validating" plain @click="onValidate">🔍 预校验草稿</el-button>
-        <el-button type="primary" :loading="running" @click="onRun">
-          ▶ 提交运行（{{ runCount }} 次）
+        <el-button :icon="ArrowBack" @click="router.back()">返回</el-button>
+        <el-button :loading="validating" plain :icon="Search" @click="onValidate">预校验草稿</el-button>
+        <el-button type="primary" :loading="running" :icon="VideoPlay" @click="onRun">
+          提交运行（{{ runCount }} 次）
         </el-button>
       </div>
     </header>
@@ -143,19 +143,19 @@
         <!-- 组装预览 -->
         <section class="card preview-card">
           <header class="card-head">
-            <h3>📦 即将提交给 Plate 的 Scenario 草稿</h3>
+            <h3 class="inline-h"><el-icon><Box /></el-icon>即将提交给 Plate 的 Scenario 草稿</h3>
             <span class="badge">{{ runCount }} 次运行</span>
           </header>
           <pre>{{ JSON.stringify(draft, null, 2) }}</pre>
         </section>
 
         <div class="actions">
-          <el-checkbox v-model="saveAsTemplate">💾 保存为运行模板</el-checkbox>
+          <span class="muted">提交后自动跳转执行详情页</span>
           <div class="right">
             <el-button @click="router.back()">返回</el-button>
-            <el-button :loading="validating" plain @click="onValidate">🔍 预校验</el-button>
-            <el-button type="primary" :loading="running" @click="onRun">
-              ▶ 提交运行（{{ runCount }} 次）
+            <el-button :loading="validating" plain :icon="Search" @click="onValidate">预校验</el-button>
+            <el-button type="primary" :loading="running" :icon="VideoPlay" @click="onRun">
+              提交运行（{{ runCount }} 次）
             </el-button>
           </div>
         </div>
@@ -166,6 +166,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { ArrowBack, Box, Search, VideoPlay } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import StatusBadge from '@/components/StatusBadge.vue'
@@ -187,8 +188,8 @@ const presetDataSetId = (route.query.dataSetId as string) || ''
 const presetDataSetIds = (route.query.dataSetIds as string) || ''
 
 const selectedDataSets = ref<string[]>(
-  presetDataSetId ? [presetDataSetId] :
-  presetDataSetIds ? presetDataSetIds.split(',').filter(Boolean) : [],
+  presetDataSetId ? [presetDataSetId.trim()] :
+  presetDataSetIds ? presetDataSetIds.split(',').map((s) => s.trim()).filter(Boolean) : [],
 )
 const selectedEnv = ref<string>('')
 /** 执行用认证(多选)。替换旧 AUTH_LIST 硬编码 — 数据源 /api/auths(owner 级) */
@@ -196,7 +197,6 @@ const authAliases = ref<string[]>([])
 const authSessions = ref<AuthSessionDTO[]>([])
 const retryMaxAttempts = ref(0)
 const retryIntervalMs = ref(500)
-const saveAsTemplate = ref(false)
 const validating = ref(false)
 const running = ref(false)
 
@@ -242,10 +242,25 @@ onMounted(async () => {
   try {
     if (!store.scenarios.length) await store.fetchScenarios()
     if (!store.cases.length)      await store.fetchCases()
-    if (!store.dataSets.length)   await store.fetchDataSets()
+    // Always re-fetch ALL data-sets (no caseId): the shared store cache
+    // may hold a case-scoped partial list left by CaseDataSetsList /
+    // DataSetEditor (fetchDataSets(caseId) replaces the whole array),
+    // which would empty this case's grid and wrongly drop all presets.
+    await store.fetchDataSets()
     if (!store.envs.length)       await store.fetchEnvs()
     if (envs.value[0])            selectedEnv.value = envs.value[0].envId
     authSessions.value = await listAuths()
+    // Drop preset ids that don't resolve to a real data-set of this case
+    // (e.g. ?dataSetIds=new or stale links) — otherwise they'd ride along
+    // into the /runs dispatch and 404 the whole run.
+    const valid = new Set(dataSets.value.map((d) => d.datasetId))
+    const kept = selectedDataSets.value.filter((id) => valid.has(id))
+    if (kept.length !== selectedDataSets.value.length) {
+      ElMessage.warning(
+        `已忽略 ${selectedDataSets.value.length - kept.length} 个无效的预选数据集（不存在或不属于该用例）`,
+      )
+      selectedDataSets.value = kept
+    }
   } catch (e) {
     showError('加载运行配置', undefined, (e as Error).message)
   }
@@ -349,15 +364,18 @@ async function onRun() {
   try {
     const env = envs.value.find((e) => e.envId === selectedEnv.value)
     if (!env) throw new Error('环境不存在')
-    const { runId } = await store.runCase({
+    const resp = await store.runCase({
       caseId,
       dataSetIds: selectedDataSets.value,
       env,
       auths: authAliases.value,
       retry: { maxAttempts: retryMaxAttempts.value, intervalMs: retryIntervalMs.value },
     })
-    ElMessage.success(`已启动运行 · ${runId}`)
-    router.push(`/executions/${runId}`)
+    ElMessage.success(`已启动运行 · ${resp.runId}`)
+    // executionId is the only id with a detail route (the string runId
+    // doesn't match /executions/:id(\d+)).
+    if (resp.executionId != null) router.push(`/executions/${resp.executionId}`)
+    else router.push('/executions')
   } catch (e) {
     showError('提交运行', undefined, (e as Error).message)
   } finally {
@@ -367,6 +385,11 @@ async function onRun() {
 </script>
 
 <style scoped>
+.inline-h {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
 .run-config {
   max-width: 1480px;
   min-height: calc(100vh - 48px);

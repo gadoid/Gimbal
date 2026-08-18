@@ -87,13 +87,29 @@ async def lifespan(app: FastAPI):
     left behind by a previous worker instance (uvicorn --reload restarts,
     OOMs, …) so /executions doesn't display permanently-stuck rows."""
     await init_db()
-    from .routers.executions import (
-        drain_in_flight_runners,
-        reconcile_orphan_runs,
-    )
+    # Loud, actionable warnings when crypto secrets are ephemeral — every
+    # restart silently rotates them otherwise (all sessions dropped, all
+    # Fernet-encrypted credentials undecryptable).
+    if settings.JWT_SECRET_EPHEMERAL:
+        logger.warning(
+            "JWT_SECRET not configured — generated a random secret for THIS "
+            "process only. Every restart invalidates all issued tokens. "
+            "Set JWT_SECRET in backend/.env for persistent sessions."
+        )
+    if settings.FERNET_KEY_EPHEMERAL:
+        logger.warning(
+            "FERNET_KEY not configured — generated a random key for THIS "
+            "process only. Every restart makes previously stored auth-"
+            "session ciphertexts undecryptable. Set FERNET_KEY in "
+            "backend/.env (keep a backup)."
+        )
     from .services import gimbal_client as gimbal_client_module
     from .services import plate_client as plate_client_module
     from .services.run_dispatcher import drain_in_flight_dispatches
+    from .services.run_lifecycle import (
+        drain_in_flight_runners,
+        reconcile_orphan_runs,
+    )
 
     await reconcile_orphan_runs()
     sweeper_task = asyncio.create_task(_log_hub_sweeper())
@@ -135,15 +151,17 @@ def create_app() -> FastAPI:
     """Build a fresh FastAPI app.  Safe to call multiple times (e.g. in tests)."""
     app = FastAPI(title="Gimbal Platform", version="0.1.0", lifespan=lifespan)
 
-    # ── TEMP: CORS 全放开 (局域网调试) ────────────────────────────────
-    # 原配置: 从 .env 读取 allow_origins, allow_credentials=True
-    # 注意: Starlette 不允许 allow_origins=["*"] 与 credentials=True 共存,
-    #       因此这里显式把 credentials 关掉。JWT 走 Authorization 头,
-    #       不会被 CORS 视为 credentials,不受影响。
-    # 恢复生产请改回上面的 env 读取 + allow_credentials=True。
+    # ── CORS ─────────────────────────────────────────────────────
+    # Origins come from .env (CORS_ORIGINS, comma-separated); the
+    # Vite dev server (5173) is allowed by default.  JWT rides the
+    # Authorization header, not cookies, so ``allow_credentials`` is
+    # kept False — Starlette rejects ``origins=["*"]`` together with
+    # ``credentials=True`` and we never need cookie-mode CORS here.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=[
+            o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()
+        ],
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],

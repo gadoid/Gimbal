@@ -65,13 +65,15 @@ describe('CasesPublic', () => {
 
     const star = w.find('button.favorite-button')
     expect(star.exists()).toBe(true)
-    expect(star.text()).toBe('☆')
+    // Star renders as an SVG icon (StarFilled when favorited, Star otherwise).
+    expect(star.findComponent({ name: 'Star' }).exists()).toBe(true)
+    expect(star.findComponent({ name: 'StarFilled' }).exists()).toBe(false)
 
     await star.trigger('click')
     expect(casesStore.toggleFavorite).toHaveBeenCalledWith('sc_demo')
   })
 
-  it('star shows ★ + active class when favorited', async () => {
+  it('star shows StarFilled + active class when favorited', async () => {
     const casesStore = useCasesStore()
     casesStore.publicLibrary = [{ ...fakeCase, favorited_by_me: true }]
 
@@ -85,7 +87,7 @@ describe('CasesPublic', () => {
     await flushPromises()
 
     const star = w.find('button.favorite-button')
-    expect(star.text()).toBe('★')
+    expect(star.findComponent({ name: 'StarFilled' }).exists()).toBe(true)
     expect(star.classes()).toContain('active')
   })
 

@@ -127,7 +127,7 @@
             >
               <svg v-if="!running" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               <svg v-else class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
-              {{ running ? '运行中…' : '▶ 发起运行' }}
+              {{ running ? '运行中…' : '发起运行' }}
             </button>
           </div>
         </footer>
@@ -204,12 +204,23 @@ async function onCreateDataSet() {
         confirmButtonText: '创建',
       }
     )
-    let rows: any[] = []
-    try { rows = JSON.parse(rowsStr || '[]') } catch { rows = [] }
+    let rows: any[]
+    try {
+      rows = JSON.parse(rowsStr || '[]')
+    } catch {
+      // 解析失败必须中止：静默按 [] 创建会把用户输入整组丢掉。
+      ElMessage.error('JSON 解析失败，未创建数据集 — 请检查格式后重试')
+      return
+    }
+    if (!Array.isArray(rows)) {
+      ElMessage.error('数据集内容必须是 JSON 数组（如 [{"qty": 1}]），未创建')
+      return
+    }
     await api.createDataSet(props.caseData.caseId, { name, rows })
     ElMessage.success('已创建, 请重新打开运行对话框')
   } catch (e) {
-    if ((e as any) === 'cancel') return
+    // 'cancel' = 取消按钮; 'close' = ESC / 右上角关闭 — 都不是错误
+    if ((e as any) === 'cancel' || (e as any) === 'close') return
     ElMessage.error('创建失败: ' + (e as Error).message)
   }
 }

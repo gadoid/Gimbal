@@ -91,8 +91,13 @@ export function reportUrl(id: number, idx: number): string {
 }
 
 export function rerunRun(executionId: number, runId: number) {
+  // rerun is synchronous on the server (waits for the subprocess to finish,
+  // up to ~300s) — the shared 30s axios timeout would report a false
+  // failure while the rerun is still in progress server-side.
   return http
-    .post<ExecRun>(`/executions/${executionId}/runs/${runId}/rerun`)
+    .post<ExecRun>(`/executions/${executionId}/runs/${runId}/rerun`, undefined, {
+      timeout: 330_000,
+    })
     .then((r) => r.data)
 }
 

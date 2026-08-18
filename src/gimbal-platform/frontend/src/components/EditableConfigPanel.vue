@@ -2,7 +2,7 @@
      headers 引 auth 选择器：点 "ⓘ" 弹 AuthSelectorModal。-->
 <template>
   <div class="econf">
-    <h4 class="econf-title">✏️ Config</h4>
+    <h4 class="econf-title"><el-icon style="margin-right:5px"><EditPen /></el-icon>Config</h4>
 
     <!-- services -->
     <section class="econf-section">
@@ -88,6 +88,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
+import { EditPen } from '@element-plus/icons-vue'
 import draggable from 'vuedraggable'
 import VarsEditor from './VarsEditor.vue'
 

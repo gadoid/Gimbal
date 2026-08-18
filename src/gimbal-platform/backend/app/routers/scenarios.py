@@ -34,7 +34,8 @@ from ..schemas.scenario_composer import (
     ScenarioDraft,
     StarIn,
 )
-from ..services import plate_client, scenario_store, stars_store
+from ..services import plate_client, scenario_store
+from ..services.marks_store import stars
 from sqlalchemy import select
 
 
@@ -63,7 +64,11 @@ async def _load_row(
 def _require_owner(user: CurrentUser, row: ComposerScenario) -> None:
     owner_name = row.owner or ""
     user_name = user.display_name or user.username
-    if owner_name and not user.is_admin and user_name != owner_name:
+    # An empty owner (legacy / migrated / plate-synced rows) means "locked":
+    # nobody except an admin may modify it. This matches cases_composer's
+    # semantics — previously an empty owner made the scenario writable by
+    # ANY member.
+    if not user.is_admin and user_name != owner_name:
         raise HTTPException(
             status_code=403,
             detail="not_owner: only the scenario's owner (or admin) can modify it",
@@ -127,8 +132,11 @@ async def preview_plate(
             detail={"code": "plate_unavailable", "message": e.message},
         )
     except plate_client.PlateRejectedError as e:
+        # The upstream 4xx is a verdict on the *client's draft*, not a
+        # gateway failure — surface it as 422 (input rejected) instead of
+        # 502 so operators don't chase a phantom Plate outage.
         raise HTTPException(
-            status_code=502,
+            status_code=422,
             detail={
                 "code": "plate_rejected",
                 "message": e.message,
@@ -194,7 +202,7 @@ async def star_scenario(
 ) -> None:
     # Verify the scenario exists (404 instead of silently no-op).
     await _load_row(db, scenario_id)
-    stars_store.star(user.id, scenario_id, body.starred)
+    stars.set_mark(user.id, scenario_id, body.starred)
 
 
 # ── 5) GET /{id} ───────────────────────────────────────────────────

@@ -158,8 +158,17 @@ export const useAuthStore = defineStore('auth', () => {
       const out = await authApi.me()
       setUser(out.user)
       return out.user
-    } catch {
-      clear()
+    } catch (e) {
+      // Only a definitive auth rejection (401) invalidates the session.
+      // Network failures / backend 5xx / timeouts must NOT log the user
+      // out — a transient backend hiccup used to wipe stored tokens and
+      // force a re-login for no reason.
+      if (e && typeof e === 'object' && 'response' in e &&
+          (e as { response?: { status?: number } }).response?.status === 401) {
+        clear()
+        return null
+      }
+      // Keep status unknown — the next successful fetchMe will resolve it.
       return null
     }
   }

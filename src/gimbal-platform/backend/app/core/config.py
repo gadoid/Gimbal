@@ -74,7 +74,22 @@ class Settings(BaseSettings):
     PLATE_BASE_URL: str = "http://127.0.0.1:8765"
     PLATE_TIMEOUT_SEC: float = 30.0
 
+    # Set in model_post_init — True when the corresponding secret was
+    # freshly generated because env/.env didn't provide one.  Not part of
+    # the serialized settings; read-only diagnostics for the startup
+    # warning in main.lifespan.
+    JWT_SECRET_EPHEMERAL: bool = False
+    FERNET_KEY_EPHEMERAL: bool = False
+
     def model_post_init(self, __context) -> None:
+        # Ephemeral-key flags: True when the secret was freshly generated
+        # because the env/.env didn't provide one.  A restart then rotates
+        # the key (all JWT sessions invalidated / all Fernet ciphertexts
+        # undecryptable) — the app logs a loud warning at startup (see
+        # main.lifespan) so operators notice instead of debugging phantom
+        # "401 every morning" incidents.
+        self.JWT_SECRET_EPHEMERAL = not self.JWT_SECRET
+        self.FERNET_KEY_EPHEMERAL = not self.FERNET_KEY
         if not self.JWT_SECRET:
             self.JWT_SECRET = secrets.token_urlsafe(48)
         if not self.FERNET_KEY:

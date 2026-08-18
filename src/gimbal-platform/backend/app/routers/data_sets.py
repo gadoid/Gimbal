@@ -72,13 +72,42 @@ async def list_data_sets(
     db: DbSession,
     caseId: str | None = None,
 ) -> list[DataSetSummary]:
-    return await data_set_store.list_summaries(db, case_id=caseId)
+    """List summaries scoped to the caller.
+
+    Data-set rows are business parameter matrices — listing every user's
+    data (the previous behaviour) is a cross-user disclosure, so non-admin
+    callers only see data-sets whose parent case they created.
+    """
+    if user.is_admin:
+        return await data_set_store.list_summaries(db, case_id=caseId)
+    user_name = user.display_name or user.username
+    own_case_ids = set(
+        (
+            await db.execute(
+                select(ComposerCase.case_id).where(
+                    ComposerCase.created_by == user_name
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not own_case_ids:
+        return []
+    summaries = await data_set_store.list_summaries(db, case_id=None)
+    out = [s for s in summaries if s.case_id in own_case_ids]
+    if caseId is not None:
+        out = [s for s in out if s.case_id == caseId]
+    return out
 
 
 @router.get("/{dataset_id}", response_model=DataSet)
 async def get_data_set(
     user: CurrentUser, db: DbSession, dataset_id: str
 ) -> DataSet:
+    # Same ownership rule as the write endpoints: full rows are business
+    # data, not a shared library.
+    await _require_owner(db, user, dataset_id)
     try:
         return await data_set_store.get(db, dataset_id)
     except KeyError as e:

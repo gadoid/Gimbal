@@ -2,10 +2,23 @@
  *
  * Used by CasesMine, CasesPublic (case list rows) and ExecutionDrawer
  * (drawer header).  Centralizing here avoids drifting color/font
- * definitions across three files.
+ * definitions across three files.  Import globally via main.ts; the
+ * consumers only markup ``<span class="priority-pill priority-N">``.
  *
  * Three levels map to P1 / P2 / P3 (high / medium / low).
  */
+.priority-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 31px;
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  border-radius: 10px;
+}
 .priority-1 {
   color: #991b1b;
   background: #fee2e2;

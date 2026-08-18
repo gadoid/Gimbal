@@ -15,9 +15,10 @@
       <el-button
         :type="activeCount > 0 ? 'primary' : ''"
         :plain="activeCount === 0"
+        :icon="Operation"
         @click.stop
       >
-        🔧 高级过滤
+        高级过滤
         <span v-if="activeCount > 0" class="filter-badge">{{ activeCount }}</span>
       </el-button>
     </template>
@@ -49,6 +50,26 @@
               :key="m"
               :value="m"
               :label="m"
+            />
+          </el-select>
+        </el-form-item>
+
+        <!-- 系统 (scenario library rows carry meta.system flattened) -->
+        <el-form-item v-if="availableSystems.length > 0" label="系统">
+          <el-select
+            v-model="local.filters.systems"
+            multiple
+            filterable
+            collapse-tags
+            collapse-tags-tooltip
+            placeholder="全选"
+            class="filter-full"
+          >
+            <el-option
+              v-for="s in availableSystems"
+              :key="s"
+              :value="s"
+              :label="s"
             />
           </el-select>
         </el-form-item>
@@ -146,12 +167,16 @@
 
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
-import type { CaseSummary } from '@/api/cases'
-import { emptyFilters, applyFiltersToList, type CaseFilters } from '@/utils/filters'
+import { Operation } from '@element-plus/icons-vue'
+import { emptyFilters, applyFiltersToList, type CaseFilters, type FilterRow } from '@/utils/filters'
 
 const props = defineProps<{
   modelValue: CaseFilters
-  pool: CaseSummary[]
+  /** ``FilterRow`` = ``Partial<CaseSummary>`` + optional ``system`` —
+   *  the V3 composer rows (Cases.vue / Scenarios.vue pools) legitimately
+   *  lack the legacy tags/module/author fields; missing fields simply
+   *  don't produce filter options. */
+  pool: readonly FilterRow[]
   showVisibility?: boolean
   showAudited?: boolean
 }>()
@@ -178,8 +203,11 @@ watch(
 const availableModules = computed(() =>
   unique(props.pool.map((c) => c.module).filter(Boolean)),
 )
+const availableSystems = computed(() =>
+  unique(props.pool.flatMap((c) => c.system ?? []).filter(Boolean)),
+)
 const availableTags = computed(() =>
-  unique(props.pool.flatMap((c) => c.tags).filter(Boolean)),
+  unique(props.pool.flatMap((c) => c.tags ?? []).filter(Boolean)),
 )
 const availableAuthors = computed(() =>
   unique(
@@ -191,6 +219,7 @@ const availableAuthors = computed(() =>
 
 const isActive = (f: CaseFilters) =>
   f.modules.length > 0 ||
+  f.systems.length > 0 ||
   f.tags.length > 0 ||
   f.authors.length > 0 ||
   f.priorities.length > 0 ||
@@ -202,6 +231,7 @@ const activeCount = computed(() => {
   let n = 0
   const f = local.filters
   if (f.modules.length) n++
+  if (f.systems.length) n++
   if (f.tags.length) n++
   if (f.authors.length) n++
   if (f.priorities.length) n++

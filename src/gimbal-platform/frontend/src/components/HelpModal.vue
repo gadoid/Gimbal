@@ -15,7 +15,7 @@
 
     <h4 class="help-h">编辑模式</h4>
     <p>
-      顶部 <b>✏️ 编辑</b> 切换整体页面进入编辑态；编辑过程中顶部出现 <b>● 未保存</b> 标记。
+      顶部 <b>编辑</b> 切换整体页面进入编辑态；编辑过程中顶部出现 <b>● 未保存</b> 标记。
       改完点 <b>保存</b> 写回 yaml（PATCH <code>/api/cases/{id}</code>）；
       <b>取消</b> 丢弃改动。
     </p>
@@ -23,7 +23,7 @@
     <h4 class="help-h">隐藏字段三层</h4>
     <ul class="help-list">
       <li><b>L3 默认</b>：浏览器嗅探 header（sec-chua-* / Sec-Fetch-*） + meta.requirementRef — 全用户共享</li>
-      <li><b>L1 字段👁</b>：单字段隐藏（per user / per case，存到 <code>hidden_field_profiles</code> 表）</li>
+      <li><b>L1 字段隐藏</b>：单字段隐藏（per user / per case，存到 <code>hidden_field_profiles</code> 表）</li>
       <li><b>L2 路径模式</b>：<i>规划中</i>（按 glob 匹配批量隐藏）</li>
     </ul>
 

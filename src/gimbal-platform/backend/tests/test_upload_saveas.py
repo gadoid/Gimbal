@@ -507,10 +507,10 @@ async def test_delete_clears_favorites_for_all_users(
     assert r.status_code == 204
 
     # Both users' favorites must no longer show it as favorited
-    from app.routers.cases import _FAVORITES
+    from app.services.marks_store import favorites
 
-    assert seed_public_case not in _FAVORITES.get(1, set())
-    assert seed_public_case not in _FAVORITES.get(2, set())
+    assert seed_public_case not in favorites.list_for_user(1)
+    assert seed_public_case not in favorites.list_for_user(2)
 
 
 async def test_delete_other_users_case_forbidden(
@@ -946,3 +946,126 @@ async def test_upload_default_then_rename_flow(
         files={"file": ("z.json", io.BytesIO(body3.encode()), "application/json")},
     )
     assert r4.json()["case_id"] == "scenario-1"
+
+
+# ── security regressions (2026-08 hardening pass) ─────────────────
+async def test_upload_scenario_id_path_traversal_422(
+    client: AsyncClient, tmp_path
+) -> None:
+    """A ``scenarioId`` containing ``../`` must be rejected (422) — the
+    scenarioId becomes the on-disk filename stem, so an unchecked value
+    is a path-traversal write primitive."""
+    auth = await _login_alice(client)
+    for evil_sid in ("../escape", "..\\escape", "a/b", "a\\b", ".."):
+        body = json.dumps(
+            {"kind": "scenario", "scenarioId": evil_sid, "meta": {"name": "X"}}
+        )
+        r = await client.post(
+            "/api/cases/upload",
+            headers=auth,
+            data={"visibility": "private"},
+            files={"file": ("x.json", io.BytesIO(body.encode()), "application/json")},
+        )
+        assert r.status_code == 422, f"scenarioId={evil_sid!r} must be rejected"
+    # Nothing escaped the user dir
+    assert not (tmp_path / "escape.json").exists()
+    assert list((tmp_path / "users" / "1").iterdir()) == []
+
+
+async def test_upload_public_scenario_id_path_traversal_422(
+    client: AsyncClient, tmp_path
+) -> None:
+    """Same traversal guard applies to public uploads."""
+    auth = await _login_alice(client)
+    body = json.dumps(
+        {"kind": "scenario", "scenarioId": "../pwn_public", "meta": {"name": "X"}}
+    )
+    r = await client.post(
+        "/api/cases/upload",
+        headers=auth,
+        data={"visibility": "public"},
+        files={"file": ("x.json", io.BytesIO(body.encode()), "application/json")},
+    )
+    assert r.status_code == 422
+    assert not (tmp_path / "pwn_public.json").exists()
+
+
+async def test_save_as_new_name_path_traversal_422(
+    client: AsyncClient, seed_public_case: str, tmp_path
+) -> None:
+    """``save-as`` ``new_name`` must pass the same stem validation — an
+    unchecked name writes outside the user dir."""
+    auth = await _login_alice(client)
+    for evil_name in ("../stolen", "..\\stolen", "sub/dir", ".."):
+        r = await client.post(
+            f"/api/cases/{seed_public_case}/save-as",
+            headers=auth,
+            json={"new_name": evil_name, "visibility": "private"},
+        )
+        assert r.status_code == 422, f"new_name={evil_name!r} must be rejected"
+    assert not (tmp_path / "stolen.json").exists()
+    user_dir = tmp_path / "users" / "1"
+    # The dir may not even exist yet (no successful copy ever ran) — fine.
+    assert not user_dir.exists() or list(user_dir.iterdir()) == []
+
+
+async def test_get_case_other_users_private_404(
+    client: AsyncClient, seed_public_case: str
+) -> None:
+    """Bob must not read Alice's PRIVATE case via GET /cases/{id} —
+    the existence-hiding 404 (same policy as /show)."""
+    a_auth = await _login_alice(client)
+    a_copy = await client.post(f"/api/cases/{seed_public_case}/copy", headers=a_auth)
+    assert a_copy.status_code == 200
+    private_id = a_copy.json()["case_id"]
+
+    await client.post(
+        "/api/auth/register", json={"username": "bob", "password": "bobpass456"}
+    )
+    b_login = await client.post(
+        "/api/auth/login", json={"username": "bob", "password": "bobpass456"}
+    )
+    b_auth = {"Authorization": f"Bearer {b_login.json()['access_token']}"}
+
+    r = await client.get(f"/api/cases/{private_id}", headers=b_auth)
+    assert r.status_code == 404
+
+    # Sanity: the owner still reads it fine.
+    r_owner = await client.get(f"/api/cases/{private_id}", headers=a_auth)
+    assert r_owner.status_code == 200
+
+# ── save-as cross-user exfiltration (security round) ────────────
+async def test_save_as_cannot_copy_other_users_private_case(
+    client: AsyncClient, seed_public_case: str
+) -> None:
+    """save-as previously had NO visibility check (unlike /copy and GET):
+    any member who knew another user's private case_id could copy the
+    full file into their own dir. Must 404 with the same
+    existence-hiding policy as GET."""
+    a_auth = await _login_alice(client)
+    a_copy = await client.post(f"/api/cases/{seed_public_case}/copy", headers=a_auth)
+    assert a_copy.status_code == 200
+    private_id = a_copy.json()["case_id"]
+
+    await client.post(
+        "/api/auth/register", json={"username": "bob", "password": "bobpass456"}
+    )
+    b_login = await client.post(
+        "/api/auth/login", json={"username": "bob", "password": "bobpass456"}
+    )
+    b_auth = {"Authorization": f"Bearer {b_login.json()['access_token']}"}
+
+    r = await client.post(
+        f"/api/cases/{private_id}/save-as",
+        headers=b_auth,
+        json={"new_name": "stolen"},
+    )
+    assert r.status_code == 404, r.text
+
+    # Sanity: the owner can still save-as their own private case.
+    r_owner = await client.post(
+        f"/api/cases/{private_id}/save-as",
+        headers=a_auth,
+        json={"new_name": "own-save"},
+    )
+    assert r_owner.status_code == 200

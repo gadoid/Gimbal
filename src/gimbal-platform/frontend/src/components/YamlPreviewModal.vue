@@ -11,7 +11,7 @@
   >
     <div class="yaml-bar">
       <el-tag size="small">{{ lines.length }} 行</el-tag>
-      <el-button size="small" @click="copyYaml">📋 复制到剪贴板</el-button>
+      <el-button size="small" :icon="DocumentCopy" @click="copyYaml">复制到剪贴板</el-button>
     </div>
     <pre v-if="yamlText" class="yaml-pre"><code>{{ yamlText }}</code></pre>
     <el-empty v-else description="加载中…" :image-size="60" />
@@ -20,6 +20,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { DocumentCopy } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import * as yaml from 'js-yaml'
 import * as casesApi from '@/api/cases'

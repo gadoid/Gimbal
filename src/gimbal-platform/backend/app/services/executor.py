@@ -34,7 +34,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 import yaml
 from loguru import logger
@@ -217,6 +217,34 @@ class _StreamRunResult(NamedTuple):
     file_not_found: bool
 
 
+# Registry of live subprocess handles, so shutdown/cancel paths can kill
+# orphaned children (the ``asyncio.to_thread`` wrapper can't be cancelled —
+# cancelling the awaiting task abandons the thread AND its child).
+_live_procs: set[subprocess.Popen[bytes]] = set()
+_live_procs_lock = threading.Lock()
+
+
+def kill_all_live_subprocesses() -> int:
+    """Best-effort SIGKILL of every tracked live subprocess.
+
+    Called from the lifespan shutdown drain so a server restart doesn't
+    leave ``gimbal run launch`` children running unattended.  Returns the
+    number of processes signalled.
+    """
+    killed = 0
+    with _live_procs_lock:
+        procs = list(_live_procs)
+        _live_procs.clear()
+    for p in procs:
+        if p.poll() is None:
+            try:
+                p.kill()
+                killed += 1
+            except Exception:  # noqa: BLE001  best-effort teardown
+                pass
+    return killed
+
+
 def _pump_stream_lines(
     stream: "subprocess._Stream[bytes]",
     kind: Literal["stdout", "stderr"],
@@ -308,6 +336,11 @@ def _subprocess_run_streaming(
             log_file.close()
             return _StreamRunResult(exit_code=127, file_not_found=True)
 
+        # Track the child so shutdown/cancel can kill orphans (see
+        # ``kill_all_live_subprocesses``).
+        with _live_procs_lock:
+            _live_procs.add(proc)
+
         t_out = threading.Thread(
             target=_pump_stream_lines,
             args=(proc.stdout, "stdout", log_file, disk_lock, channel, loop, bytes_seen),
@@ -334,22 +367,34 @@ def _subprocess_run_streaming(
         # proc.wait() above (or the TimeoutExpired path's kill+wait) has
         # already closed the child's stdout/stderr pipes.  The reader
         # threads each see EOF on their next readline and exit on their
-        # own; the daemon=True thread is GC'd when the function returns.
-        # No explicit join needed here.
+        # own — but give them a brief grace join so the log_file close
+        # below can't race an in-flight write.
+        if t_out is not None:
+            t_out.join(timeout=5)
+        if t_err is not None:
+            t_err.join(timeout=5)
         return _StreamRunResult(
             exit_code=exit_code if exit_code is not None else 0,
             file_not_found=False,
         )
     finally:
-        # Log file handle is owned by _run_one (it needs to write the
-        # exit_code footer after we return).  We do NOT close here.
-        # Defensive kill: if proc is somehow still alive (e.g. exception
-        # thrown before wait()), reap it.
-        if proc is not None and proc.poll() is None:
-            try:
-                proc.kill()
-            except Exception:  # noqa: BLE001
-                pass
+        # Untrack + defensive kill: if proc is somehow still alive (e.g.
+        # exception thrown before wait()), reap it.
+        if proc is not None:
+            with _live_procs_lock:
+                _live_procs.discard(proc)
+            if proc.poll() is None:
+                try:
+                    proc.kill()
+                except Exception:  # noqa: BLE001
+                    pass
+        # Always close the log file handle — the exit_code footer is
+        # appended by ``_write_run_log_footer`` which opens the path
+        # itself in append mode.  This used to leak one fd per run.
+        try:
+            log_file.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _gimbal_sub_env_cwd() -> tuple[dict, Path]:

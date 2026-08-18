@@ -69,6 +69,16 @@ export interface FavoriteOut {
   favorited: boolean
 }
 
+// ── URL encoding policy ──────────────────────────────────────────
+// case_id may contain slashes (path-style case ids) that must stay
+// real path separators — hence encodeURI (keeps "/"), NOT
+// encodeURIComponent (would turn "/" into %2F and break the backend's
+// ``{case_id:path}`` routing).  Every endpoint below MUST go through
+// this single helper so the policy can't drift per-function again.
+function encodeCaseId(caseId: string): string {
+  return encodeURI(caseId)
+}
+
 export function mine() {
   return http.get<CaseListOut>('/cases/mine').then((r) => r.data)
 }
@@ -78,9 +88,8 @@ export function publicList() {
 }
 
 export function get(caseId: string) {
-  // case_id may contain slashes (path-style case ids), so URL-encode.
   return http
-    .get<CaseDetailOut>(`/cases/${encodeURI(caseId)}`)
+    .get<CaseDetailOut>(`/cases/${encodeCaseId(caseId)}`)
     .then((r) => r.data)
 }
 
@@ -88,7 +97,7 @@ export function get(caseId: string) {
  *  Used by ExecutionDrawer to render the step picker popover. */
 export function getShow(caseId: string) {
   return http
-    .get<CaseShow>(`/cases/${encodeURI(caseId)}/show`)
+    .get<CaseShow>(`/cases/${encodeCaseId(caseId)}/show`)
     .then((r) => r.data)
 }
 
@@ -97,7 +106,7 @@ export function patch(
   payload: { payload: Record<string, unknown> },
 ) {
   return http
-    .patch<CaseSummary>(`/cases/${encodeURI(caseId)}`, payload)
+    .patch<CaseSummary>(`/cases/${encodeCaseId(caseId)}`, payload)
     .then((r) => r.data)
 }
 
@@ -109,7 +118,7 @@ export interface HiddenProfile {
 
 export function getHidden(caseId: string) {
   return http
-    .get<HiddenProfile>(`/cases/${encodeURIComponent(caseId)}/hidden`)
+    .get<HiddenProfile>(`/cases/${encodeCaseId(caseId)}/hidden`)
     .then((r) => r.data)
 }
 
@@ -119,7 +128,7 @@ export function putHidden(
 ) {
   return http
     .put<HiddenProfile>(
-      `/cases/${encodeURIComponent(caseId)}/hidden`,
+      `/cases/${encodeCaseId(caseId)}/hidden`,
       payload,
     )
     .then((r) => r.data)
@@ -127,17 +136,17 @@ export function putHidden(
 
 export function favorite(caseId: string) {
   return http
-    .post<FavoriteOut>(`/cases/${encodeURI(caseId)}/favorite`)
+    .post<FavoriteOut>(`/cases/${encodeCaseId(caseId)}/favorite`)
     .then((r) => r.data)
 }
 
 export function unfavorite(caseId: string) {
-  return http.delete(`/cases/${encodeURI(caseId)}/favorite`).then(() => undefined)
+  return http.delete(`/cases/${encodeCaseId(caseId)}/favorite`).then(() => undefined)
 }
 
 export function copy(caseId: string, payload: { new_name?: string } = {}) {
   return http
-    .post<CopyOut>(`/cases/${encodeURI(caseId)}/copy`, payload)
+    .post<CopyOut>(`/cases/${encodeCaseId(caseId)}/copy`, payload)
     .then((r) => r.data)
 }
 
@@ -147,7 +156,7 @@ export function saveAs(
 ) {
   return http
     .post<CopyOut>(
-      `/cases/${encodeURI(caseId)}/save-as`,
+      `/cases/${encodeCaseId(caseId)}/save-as`,
       payload,
     )
     .then((r) => r.data)
@@ -166,19 +175,19 @@ export function upload(file: File, visibility: 'private' | 'public' = 'private')
 
 export function remove(caseId: string) {
   return http
-    .delete(`/cases/${encodeURIComponent(caseId)}`)
+    .delete(`/cases/${encodeCaseId(caseId)}`)
     .then(() => undefined)
 }
 
 export function publish(caseId: string) {
   return http
-    .post<CaseSummary>(`/cases/${encodeURIComponent(caseId)}/publish`)
+    .post<CaseSummary>(`/cases/${encodeCaseId(caseId)}/publish`)
     .then((r) => r.data)
 }
 
 export function rename(caseId: string, newCaseId: string) {
   return http
-    .post<CaseSummary>(`/cases/${encodeURI(caseId)}/rename`, {
+    .post<CaseSummary>(`/cases/${encodeCaseId(caseId)}/rename`, {
       new_case_id: newCaseId,
     })
     .then((r) => r.data)

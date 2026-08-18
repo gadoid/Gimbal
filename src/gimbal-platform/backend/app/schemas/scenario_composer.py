@@ -326,6 +326,9 @@ class RunResponse(BaseModel):
     model_config = _CAMEL
 
     run_id: str = Field(alias="runId", min_length=1)
+    # Numeric Execution row backing this dispatch — lets the frontend jump
+    # straight to /executions/{id} (the string runId alone has no route).
+    execution_id: int = Field(alias="executionId")
 
 
 # ─── preview-plate ─────────────────────────────────────────────────

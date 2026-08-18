@@ -55,6 +55,9 @@ async def register(
     payload: RegisterIn,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenOut:
+    # Normalize display_name the same way patch_user does: it doubles as
+    # composer-ownership identity, so " Bob " / "Bob" must not coexist.
+    payload.display_name = (payload.display_name or "").strip()
     existing = (
         await db.execute(select(User).where(User.username == payload.username))
     ).scalar_one_or_none()
@@ -62,6 +65,36 @@ async def register(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": 4003, "msg": "用户名已被占用"},
+        )
+    # display_name uniqueness — it doubles as composer-ownership identity
+    # (see users.create_user). Registered names must not collide either.
+    if payload.display_name:
+        clash = (
+            await db.execute(
+                select(User).where(
+                    (User.display_name == payload.display_name)
+                    | (User.username == payload.display_name)
+                )
+            )
+        ).scalar_one_or_none()
+        if clash is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": 4003, "msg": "显示名已被占用（作为资源归属标识必须唯一）"},
+            )
+    # Conversely, the new USERNAME must not collide with an existing
+    # display_name: ownership checks match ``display_name or username``
+    # against the stored owner string, so a username equal to someone's
+    # display_name would grant ownership of their resources.
+    name_clash = (
+        await db.execute(
+            select(User).where(User.display_name == payload.username)
+        )
+    ).scalar_one_or_none()
+    if name_clash is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": 4003, "msg": "用户名与已有显示名冲突（作为资源归属标识必须唯一）"},
         )
     # First registered user becomes admin.
     count = (await db.execute(select(func.count()).select_from(User))).scalar_one()

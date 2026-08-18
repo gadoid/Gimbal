@@ -6,11 +6,11 @@
   <section class="ds-list">
     <header class="page-header">
       <div>
-        <h2>📊 数据集列表</h2>
+        <h2 class="page-title"><el-icon><DataAnalysis /></el-icon>数据集列表</h2>
         <p>用例 <code class="sid">{{ caseId }}</code> · 共 {{ dataSets.length }} 个数据集 · 1 : N</p>
       </div>
       <div class="header-actions">
-        <el-button @click="router.push(`/cases/${caseId}/edit`)">← 用例编辑</el-button>
+        <el-button :icon="ArrowBack" @click="router.push(`/cases/${caseId}/edit`)">用例编辑</el-button>
         <el-button type="primary" @click="onCreate">+ 新建数据集</el-button>
       </div>
     </header>
@@ -41,7 +41,7 @@
           </span>
           <div class="ops" @click.stop>
             <el-button size="small" plain @click="copy(d)">复制</el-button>
-            <el-button size="small" type="primary" plain @click="runOne(d)">▶ 单条</el-button>
+            <el-button size="small" type="primary" plain @click="runOne(d)"><el-icon style="margin-right:3px"><VideoPlay /></el-icon>单条</el-button>
           </div>
         </footer>
       </article>
@@ -63,6 +63,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
+import { ArrowBack, DataAnalysis, VideoPlay } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import StatusBadge from '@/components/StatusBadge.vue'

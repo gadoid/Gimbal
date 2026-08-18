@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
@@ -30,43 +29,9 @@ from ..core.deps import CurrentUser
 from ..schemas.case import CaseDetailOut, CaseListOut, CaseShowOut, CaseSummaryOut
 from ..services.case_loader import CaseSummary, loader
 from ..services.executor import _SHOW_TIMEOUT_SEC, _run_gimbal_capture
+from ..services.marks_store import favorites
 
 router = APIRouter(prefix="/cases", tags=["cases"])
-
-
-# ── favorites: JSON-file backed store (survives uvicorn --reload) ──────
-_FAV_PATH = Path(settings.DATA_DIR) / "favorites.json"
-_fav_lock = threading.Lock()
-
-
-def _load_favorites() -> dict[int, set[str]]:
-    """Read favorites from disk.  Missing / corrupt file → empty dict."""
-    if not _FAV_PATH.exists():
-        return {}
-    try:
-        raw = json.loads(_FAV_PATH.read_text(encoding="utf-8"))
-        return {int(k): set(v) for k, v in raw.items()}
-    except Exception as e:  # noqa: BLE001
-        logger.warning("favorites: failed to parse {} ({}); starting empty", _FAV_PATH, e)
-        return {}
-
-
-def _save_favorites(fav: dict[int, set[str]]) -> None:
-    """Atomically persist favorites to disk."""
-    _FAV_PATH.parent.mkdir(parents=True, exist_ok=True)
-    payload = {str(k): sorted(v) for k, v in fav.items()}
-    _FAV_PATH.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-
-# Initial load happens under the same lock used by later writes.
-# Without this, a concurrent fork or a fast writer could mutate
-# _FAV_PATH between the read and the first write, producing a
-# silent loss of the in-memory state.
-with _fav_lock:
-    _FAVORITES: dict[int, set[str]] = _load_favorites()
 
 
 def _summary_out(s: CaseSummary, *, favorited: bool = False, copied: bool = False) -> CaseSummaryOut:
@@ -245,7 +210,7 @@ async def list_mine(user: CurrentUser) -> CaseListOut:
     - PLUS the user's favorited public cases
     Each item is marked ``favorited_by_me=True`` if it's in the favorites set.
     """
-    fav_ids = _FAVORITES.get(user.id, set())
+    fav_ids = favorites.list_for_user(user.id)
     summaries = loader.scan(owner_id=user.id)  # public + private (owned)
     items = [
         _summary_out(s, favorited=s.case_id in fav_ids, copied=False)
@@ -262,7 +227,7 @@ async def list_public(user: CurrentUser) -> CaseListOut:
     ``copied_by_me`` covers both ``-copy-N`` and the user-renamed
     ``__suffix`` pattern (see ``_user_has_copy_of``).
     """
-    fav_ids = _FAVORITES.get(user.id, set())
+    fav_ids = favorites.list_for_user(user.id)
     summaries = loader.scan(owner_id=None)
     user_dir = settings.USERS_CASES_DIR / str(user.id)
 
@@ -404,7 +369,14 @@ async def get_case(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"case not found: {case_id}",
         )
-    fav_ids = _FAVORITES.get(user.id, set())
+    # Same access rule as get_case_show: private cases are owner-only.
+    # Intentionally 404 (not 403) so we don't leak which case_ids exist.
+    if summary.visibility == "private" and summary.owner_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"case not found: {case_id}",
+        )
+    fav_ids = favorites.list_for_user(user.id)
     return CaseDetailOut(
         payload=payload,
         summary=_summary_out(summary, favorited=summary.case_id in fav_ids),
@@ -426,9 +398,7 @@ async def add_favorite(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"case not found: {case_id}",
         )
-    with _fav_lock:
-        _FAVORITES.setdefault(user.id, set()).add(case_id)
-        _save_favorites(_FAVORITES)
+    favorites.set_mark(user.id, case_id, True)
     return {"case_id": case_id, "favorited": True}
 
 
@@ -442,9 +412,7 @@ async def remove_favorite(
     case_id: Annotated[str, PathParam(min_length=1)],
 ):
     """Unmark ``case_id`` as favorited by ``user`` (persisted to favorites.json)."""
-    with _fav_lock:
-        _FAVORITES.get(user.id, set()).discard(case_id)
-        _save_favorites(_FAVORITES)
+    favorites.set_mark(user.id, case_id, False)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -553,6 +521,13 @@ async def upload_case(
     """
     if visibility not in ("public", "private"):
         raise HTTPException(status_code=422, detail="visibility must be public or private")
+    # NOTE (policy, intentionally open): member submissions to the public
+    # library are a designed feature (the "+ 提交公共用例" button in
+    # CasesPublic is offered to every member).  The scenarioId-stem
+    # validation below is the security boundary here — no path traversal
+    # and no shadow-overwrite (collisions get a ``-pub-N`` suffix).
+    # Moving public uploads behind an admin audit queue is tracked as a
+    # policy item in DEFERRED.md.
 
     raw = await file.read()
     if not raw:
@@ -591,6 +566,14 @@ async def upload_case(
     raw_sid = payload.get("scenarioId")
     sid_str = raw_sid.strip() if isinstance(raw_sid, str) else raw_sid
     if isinstance(sid_str, str) and sid_str:
+        # Path-traversal fix: the scenarioId becomes the on-disk filename
+        # stem, so it must pass the same stem validation as /rename and
+        # /copy ``new_name`` (rejects ``../``, separators, NUL, …).
+        if _is_invalid_stem(sid_str):
+            raise HTTPException(
+                status_code=422,
+                detail="scenarioId 不能为空、超过 128 字符、或包含 / \\ : * ? \" < > |",
+            )
         case_id = sid_str
     elif visibility == "private":
         case_id = _next_default_scenario_id(target_dir)
@@ -655,10 +638,21 @@ async def save_as_case(
     summary = _find_summary(case_id)
     if summary is None:
         raise HTTPException(status_code=404, detail=f"case not found: {case_id}")
+    # Access check — same rule as GET /{case_id}: private cases are
+    # owner-only. Without this, save-as could be used to copy another
+    # user's private case into one's own dir (data exfiltration).
+    if summary.visibility == "private" and summary.owner_id != user.id:
+        raise HTTPException(status_code=404, detail=f"case not found: {case_id}")
 
     src = summary.file_path
     ext = src.suffix or ".yaml"
-    new_id = payload.new_name or f"{summary.case_id}-save"
+    new_id = (payload.new_name or "").strip() or f"{summary.case_id}-save"
+    # Path-traversal fix: same stem validation as /rename and /copy.
+    if _is_invalid_stem(new_id):
+        raise HTTPException(
+            status_code=422,
+            detail="new_name 不能为空、超过 128 字符、或包含 / \\ : * ? \" < > |",
+        )
 
     target_dir = settings.USERS_CASES_DIR / str(user.id)
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -787,15 +781,7 @@ async def rename_case(
 
     # Migrate every user's favorite set from old case_id to new case_id so
     # favorited rows keep following the case under its new name.
-    with _fav_lock:
-        changed = False
-        for fav_set in _FAVORITES.values():
-            if case_id in fav_set:
-                fav_set.discard(case_id)
-                fav_set.add(new_stem)
-                changed = True
-        if changed:
-            _save_favorites(_FAVORITES)
+    favorites.rename_item(case_id, new_stem)
 
     loader.invalidate()
     fresh = _find_summary(new_stem)
@@ -903,14 +889,7 @@ async def delete_case(
         raise HTTPException(status_code=500, detail=f"unlink failed: {e}") from e
 
     # Drop the case_id from every user's favorite set.
-    with _fav_lock:
-        changed = False
-        for fav_set in _FAVORITES.values():
-            if case_id in fav_set:
-                fav_set.discard(case_id)
-                changed = True
-        if changed:
-            _save_favorites(_FAVORITES)
+    favorites.remove_item(case_id)
 
     loader.invalidate()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

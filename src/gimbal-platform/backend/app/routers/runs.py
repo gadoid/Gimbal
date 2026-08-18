@@ -20,10 +20,12 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
+from ..models.composer_case import ComposerCase
 from ..schemas.scenario_composer import RunRequest, RunResponse
 from ..services import run_dispatcher
 
@@ -40,6 +42,30 @@ async def post_run(
     db: DbSession,
     body: RunRequest,
 ) -> RunResponse:
+    # Access check (mirrors V1 executions create / composer _require_owner):
+    # dispatching a run has real side effects (subprocesses hitting the
+    # configured env services), so it must not be open to every member —
+    # only the case's creator (or an admin) may run it.
+    case = (
+        await db.execute(
+            select(ComposerCase).where(ComposerCase.case_id == body.case_id)
+        )
+    ).scalar_one_or_none()
+    if case is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "case_not_found", "message": f"case not found: {body.case_id}"},
+        )
+    owner_name = case.created_by or ""
+    user_name = user.display_name or user.username
+    if not user.is_admin and user_name != owner_name:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "not_owner",
+                "message": "only the case's creator (or admin) can run this case",
+            },
+        )
     try:
         return await run_dispatcher.dispatch_run(
             db,

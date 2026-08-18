@@ -18,7 +18,7 @@
       <span v-if="step.description" class="step-desc">({{ step.description }})</span>
       <span class="step-meta">
         <span v-if="strategyCount > 0" class="strategy-badge">STRATEGY {{ strategyCount }}</span>
-        <span class="toggle">{{ expanded ? '▼ 收起' : '▶ 展开' }}</span>
+        <span class="toggle"><el-icon :size="11"><ArrowDown v-if="expanded" /><CaretRight v-else /></el-icon>{{ expanded ? '收起' : '展开' }}</span>
       </span>
     </button>
 
@@ -47,7 +47,7 @@
         <FieldRow label="method" :value="api.method || '—'" />
         <FieldRow label="path" :value="api.path || '—'" />
         <FieldRow label="timeout" :value="api.timeout != null ? String(api.timeout) : '—'" />
-        <h5 class="sub-h">🔐 Headers</h5>
+        <h5 class="sub-h"><el-icon :size="12" style="margin-right:4px"><Lock /></el-icon>Headers</h5>
         <FieldRow
           v-for="(value, key) in api.headers || {}"
           :key="String(key)"
@@ -63,7 +63,7 @@
       </div>
 
       <div v-else-if="subTab === 'request'" class="sub-panel">
-        <h5 class="sub-h">📦 body</h5>
+        <h5 class="sub-h"><el-icon :size="12" style="margin-right:4px"><Box /></el-icon>body</h5>
         <pre class="body-block"><code>{{ requestBodyText }}</code></pre>
       </div>
 
@@ -80,6 +80,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { ArrowDown, Box, CaretRight, Lock } from '@element-plus/icons-vue'
 import MethodPill from './MethodPill.vue'
 import FieldRow from './FieldRow.vue'
 import { useHideStore } from '@/stores/hide'
@@ -220,6 +221,9 @@ function headerPath(key: string): string {
 }
 
 .toggle {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
   color: #4338ca;
   font-size: 10.5px;
 }

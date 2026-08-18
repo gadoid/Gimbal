@@ -13,7 +13,8 @@
           v-model="searchQuery"
           class="search-input"
           clearable
-          placeholder="🔍 按名 / 模块 / tags 搜索"
+          :prefix-icon="Search"
+          placeholder="按名 / 模块 / tags 搜索"
         />
         <FilterPopover
           v-model="filters"
@@ -39,7 +40,7 @@
       class="cases-table"
       @row-click="openCase"
     >
-      <el-table-column label="⭐" width="54" align="center">
+      <el-table-column label="收藏" width="54" align="center">
         <template #default="{ row }">
           <button
             class="favorite-button"
@@ -48,7 +49,7 @@
             :aria-label="row.favorited_by_me ? '取消收藏' : '收藏用例'"
             :title="row.favorited_by_me ? '取消收藏' : '收藏用例'"
             @click.stop="toggleFavorite(row)"
-          >{{ row.favorited_by_me ? '★' : '☆' }}</button>
+          ><el-icon :size="18"><StarFilled v-if="row.favorited_by_me" /><Star v-else /></el-icon></button>
         </template>
       </el-table-column>
 
@@ -124,7 +125,8 @@
       <el-table-column label="审核" width="100">
         <template #default="{ row }">
           <span class="audit-tag" :class="row.audited ? 'audited' : 'pending'">
-            {{ row.audited ? '✓ 已审核' : '⏳ 待审' }}
+            <el-icon :size="11" style="margin-right:3px"><CircleCheckFilled v-if="row.audited" /><Clock v-else /></el-icon>
+            {{ row.audited ? '已审核' : '待审' }}
           </span>
         </template>
       </el-table-column>
@@ -272,7 +274,7 @@
         </div>
 
         <h4 class="del-section-title">
-          <span class="del-section-bullet" aria-hidden="true">⚠</span>
+          <span class="del-section-bullet" aria-hidden="true"><el-icon :size="12"><Warning /></el-icon></span>
           将发生什么
         </h4>
         <ul class="del-impact">
@@ -313,7 +315,7 @@
               class="del-confirm"
               @click="confirmDelete"
             >
-              <span class="del-confirm-icon" aria-hidden="true">🗑</span>
+              <span class="del-confirm-icon" aria-hidden="true"><el-icon :size="12"><Delete /></el-icon></span>
               确认删除
             </el-button>
           </div>
@@ -325,6 +327,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { CircleCheckFilled, Clock, Delete, Search, Star, StarFilled, Warning } from '@element-plus/icons-vue'
 import { useListSearch } from '@/utils/useListSearch'
 import { ElMessage } from 'element-plus'
 import { showError } from '@/utils/errorFallback'
@@ -665,18 +668,8 @@ async function onCommand(cmd: string, row: CaseSummary): Promise<void> {
   border-radius: 3px;
 }
 
-.priority-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 31px;
-  padding: 2px 6px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 16px;
-  border-radius: 10px;
-}
+/* .priority-pill base + .priority-N colors live in styles/priority.css
+   (imported globally via main.ts). */
 
 .audit-tag {
   display: inline-flex;

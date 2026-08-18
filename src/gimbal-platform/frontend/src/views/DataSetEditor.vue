@@ -6,13 +6,13 @@
   <section class="ds-editor">
     <header class="page-header">
       <div>
-        <h2>📊 数据集编辑</h2>
+        <h2 class="page-title"><el-icon><DataAnalysis /></el-icon>数据集编辑</h2>
         <p>用例 <code class="sid">{{ caseId }}</code> · {{ datasetId === 'new' ? '新建数据集' : datasetId }}</p>
       </div>
       <div class="header-actions">
-        <el-button @click="router.push(`/cases/${caseId}/data-sets`)">← 返回列表</el-button>
-        <el-button :loading="saving" plain @click="onSave">保存</el-button>
-        <el-button type="primary" @click="onBatchRun" :disabled="!rows.length">▶ 批量运行 {{ rows.length }} 条</el-button>
+        <el-button :icon="ArrowBack" @click="router.push(`/cases/${caseId}/data-sets`)">返回列表</el-button>
+        <el-button :loading="saving" plain :disabled="loadFailed" @click="onSave">保存</el-button>
+        <el-button type="primary" :icon="VideoPlay" @click="onBatchRun" :disabled="!rows.length">批量运行 {{ rows.length }} 条</el-button>
       </div>
     </header>
 
@@ -54,13 +54,10 @@
             :placeholder="col"
           />
         </div>
-        <div class="c c-status">
-          <StatusBadge :status="['PASS','FAIL','SKIP'][i % 3] as any" />
-        </div>
         <div class="c c-action">
           <el-button size="small" plain @click="cloneRow(i)">复制</el-button>
-          <el-button size="small" plain @click="runRow(i)">▶</el-button>
-          <el-button size="small" plain @click="removeRow(i)">🗑</el-button>
+          <el-button size="small" plain :icon="VideoPlay" @click="runRow(i)" aria-label="运行此行" />
+          <el-button size="small" plain :icon="Delete" @click="removeRow(i)" aria-label="删除此行" />
         </div>
       </div>
 
@@ -76,10 +73,11 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { ArrowBack, DataAnalysis, Delete, VideoPlay } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import StatusBadge from '@/components/StatusBadge.vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
+import { getDataSet } from '@/api/scenario-composer'
 import { showError } from '@/utils/errorFallback'
 
 const route = useRoute()
@@ -89,6 +87,9 @@ const caseId = route.params.caseId as string
 const datasetId = route.params.datasetId as string
 
 const saving = ref(false)
+// 已有 datasetId 加载失败（被删除 / 网络错误）时禁止保存，避免把
+// 空行 PUT 到一个可能不存在的 id 上。
+const loadFailed = ref(false)
 
 const form = reactive({ name: '', description: '' })
 const columns = ref<string[]>(['customer_id', 'qty', 'expected_status'])
@@ -105,9 +106,32 @@ onMounted(async () => {
     if (ds) {
       form.name = ds.name
       form.description = ds.description ?? ''
-      rows.value = ds.preview.map((r) => ({ ...r }))
+      // P0 修复：store 里的 preview 被截为前 3 行，直接编辑保存会静默
+      // 丢弃第 4 行起的数据。必须用 getDataSet 拉全量 rows。
+      let fullRows = ds.preview
+      try {
+        const full = await getDataSet(ds.datasetId)
+        fullRows = full.rows
+      } catch {
+        showError('加载完整行数据失败，当前仅为前 3 行预览 — 保存将丢失其余行', undefined)
+      }
+      rows.value = fullRows.map((r) => ({ ...r }))
       // 推断列：第一行 keys
       if (rows.value[0]) columns.value = Object.keys(rows.value[0])
+    } else if (datasetId !== 'new') {
+      // datasetId 存在但列表里没有（fetch 失败 / 已被删除）：
+      // 直接拉一次全量，仍失败才按新建处理，避免误把空行 PUT 到该 id。
+      try {
+        const full = await getDataSet(datasetId)
+        form.name = full.name
+        form.description = full.description ?? ''
+        rows.value = full.rows.map((r) => ({ ...r }))
+        if (rows.value[0]) columns.value = Object.keys(rows.value[0])
+      } catch {
+        showError('数据集不存在或已被删除', undefined)
+        loadFailed.value = true
+        addRow()
+      }
     } else {
       addRow()
     }
@@ -117,7 +141,47 @@ onMounted(async () => {
 })
 
 // 列变化时给所有行补上空字段
+let prevColumns: string[] = [...columns.value]
 watch(columns, (cols) => {
+  // 非法表头态直接回滚：清空列名会让数据"失联"（rows 里旧 key 仍在
+  // 但不再渲染，且会写入 '' 键）；改成已有列名会静默覆盖/合并两列
+  // 数据。两种都还原为上一个合法名并提示。
+  if (cols.length === prevColumns.length) {
+    for (let i = 0; i < cols.length; i++) {
+      const oldName = prevColumns[i]
+      const newName = cols[i]
+      if (oldName && newName === '') {
+        columns.value[i] = oldName
+        ElMessage.warning('列名不能为空')
+        return
+      }
+      if (
+        newName && oldName && newName !== oldName &&
+        cols.filter((c) => c === newName).length > 1
+      ) {
+        columns.value[i] = oldName
+        ElMessage.warning(`列名 "${newName}" 已存在`)
+        return
+      }
+    }
+  }
+  // 列重命名（表头 el-input 直接改 columns[idx]）：旧 key 下的数据必须
+  // 迁到新 key，否则 rows 仍按旧 key 存值、保存 payload 携带旧键 +
+  // 空新键 — 重命名等于静默丢列数据。
+  if (cols.length === prevColumns.length) {
+    for (let i = 0; i < cols.length; i++) {
+      const oldName = prevColumns[i]
+      const newName = cols[i]
+      if (oldName && newName && oldName !== newName && !cols.includes(oldName)) {
+        for (const r of rows.value) {
+          r[newName] = r[oldName]
+          delete r[oldName]
+        }
+      }
+    }
+  }
+  prevColumns = [...cols]
+  // 新增列 / 加载后的补空
   for (const r of rows.value) {
     for (const c of cols) if (!(c in r)) r[c] = ''
   }
@@ -166,6 +230,10 @@ async function onSave() {
 }
 
 function onBatchRun() {
+  if (datasetId === 'new') {
+    ElMessage.warning('请先保存数据集，再批量运行')
+    return
+  }
   router.push(`/cases/${caseId}/run?dataSetIds=${datasetId}&rows=${rows.value.length}`)
 }
 </script>

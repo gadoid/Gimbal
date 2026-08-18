@@ -70,6 +70,8 @@ export interface Scenario {
     version?: string
     expire?: boolean
     createTime?: string
+    /** 最后编辑时间（编排态透传；“最后编辑”列已在使用） */
+    updateTime?: string
   }
   /** plate step dicts (读侧透传) */
   steps: Record<string, unknown>[]

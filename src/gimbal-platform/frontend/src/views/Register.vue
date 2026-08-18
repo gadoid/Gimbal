@@ -54,7 +54,7 @@
           <el-input v-model="form.password" :type="showPassword ? 'text' : 'password'" placeholder="请输入密码" autocomplete="new-password">
             <template #suffix>
               <el-button type="primary" link class="eye-btn" :title="showPassword ? '隐藏密码' : '显示密码'" @click="showPassword = !showPassword">
-                {{ showPassword ? '🙈' : '👁' }}
+              <el-icon><Hide v-if="showPassword" /><View v-else /></el-icon>
               </el-button>
             </template>
           </el-input>
@@ -106,6 +106,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onBeforeUnmount } from 'vue'
+import { Hide, View } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'

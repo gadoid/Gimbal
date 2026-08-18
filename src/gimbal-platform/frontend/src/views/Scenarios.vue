@@ -1,12 +1,12 @@
 <!-- Scenarios.vue — 场景库 v1
      场景 = 1:1 绑定用例的"结构定义层" · 与 cases 的关系是 scenario 1 → case 1 → dataSets N
-     表格列对齐 pencil 原型：⭐ / 场景名 / 系统 / 模块 / 优先级 / 用例数 / 数据集数 / 步骤数 / 标签 / 更新时间
+     表格列对齐 pencil 原型：收藏 / 场景名 / 系统 / 模块 / 优先级 / 用例数 / 数据集数 / 步骤数 / 标签 / 更新时间
 -->
 <template>
   <section class="scenarios">
     <header class="page-header">
       <div>
-        <h2>📚 场景库</h2>
+        <h2 class="page-title"><el-icon><Collection /></el-icon>场景库</h2>
         <p>共 {{ store.scenarios.length }} 个场景 · 1:1 绑定用例 · 1:N 数据集</p>
       </div>
       <div class="header-actions">
@@ -14,15 +14,11 @@
           v-model="q"
           class="search-input"
           clearable
-          placeholder="🔍 按名 / 模块 / scenarioId / tag 搜索"
+          :prefix-icon="Search"
+          placeholder="按名 / 模块 / 系统 / scenarioId / tag 搜索"
         />
-        <FilterPopover
-          v-model="filters"
-          :pool="store.scenarios"
-          show-system show-module show-priority
-        />
-        <!-- 平台侧始终持有的进行中草稿入口 (来自 CaseComposer) — 任意 step 都可触发 -->
-        <ScenarioExportMenu variant="ghost" />
+        <!-- pool = filterableRows：module/author/priority 已从 meta.* 摊平的形状 -->
+        <FilterPopover v-model="filters" :pool="filterableRows" />
         <el-button type="primary" @click="onCreate">+ 新建场景</el-button>
       </div>
     </header>
@@ -37,19 +33,19 @@
     <el-table
       v-if="visible.length > 0"
       v-loading="store.scenariosStatus === 'loading'"
-      :data="visible"
+      :data="paged"
       :row-key="rowKey"
       class="scenarios-table"
       @row-click="openScenario"
     >
-      <el-table-column label="⭐" width="54" align="center">
+      <el-table-column label="收藏" width="54" align="center">
         <template #default="{ row }">
           <button
             class="star-btn"
             :class="{ active: row.starred }"
             :aria-label="row.starred ? '取消收藏' : '收藏场景'"
             @click.stop="toggleStar(row)"
-          >{{ row.starred ? '★' : '☆' }}</button>
+          ><el-icon :size="18"><StarFilled v-if="row.starred" /><Star v-else /></el-icon></button>
         </template>
       </el-table-column>
 
@@ -107,7 +103,9 @@
 
       <el-table-column label="变量" width="62" align="center">
         <template #default="{ row }">
-          <span class="num">{{ (row.config?.vars || []).length }}</span>
+          <!-- config.vars 是对象（生成式 spec 映射），不是数组 —
+               用 Object.keys 计数（旧写法 [].length 恒为空）。 -->
+          <span class="num">{{ Object.keys(row.config?.vars || {}).length }}</span>
         </template>
       </el-table-column>
 
@@ -182,9 +180,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Collection, Search, Star, StarFilled } from '@element-plus/icons-vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { previewPlateDraft, getScenarioDraft } from '@/api/scenario-composer'
@@ -194,7 +193,6 @@ import FilterPopover from '@/components/FilterPopover.vue'
 import TagPill from '@/components/TagPill.vue'
 import SystemChip from '@/components/SystemChip.vue'
 import PriorityPill from '@/components/PriorityPill.vue'
-import ScenarioExportMenu from '@/components/ScenarioExportMenu.vue'
 import { applyFiltersToList, emptyFilters, type CaseFilters } from '@/utils/filters'
 import type { Scenario } from '@/types/scenario-composer'
 
@@ -208,22 +206,67 @@ const filters = ref<CaseFilters>(emptyFilters())
 const page = ref(1)
 const activeTab = ref<'mine' | 'public' | 'favorite'>('mine')
 
-const { filtered } = useListSearch(() => store.scenarios, [
-  'meta.name',
-  'meta.scenarioId',
-  'meta.module',
-  'meta.description',
-  'tags',
-])
-
-const visible = computed(() =>
-  applyFiltersToList(filtered.value, filters.value),
+// Bind the header search box (v-model="q") INTO the composable — the
+// old `{ filtered }`-only destructure left the composable's internal
+// query permanently empty, so the search box was dead.
+const { filtered } = useListSearch(
+  () => store.scenarios,
+  [
+    'meta.name',
+    'meta.scenarioId',
+    'meta.module',
+    'meta.description',
+    'meta.system',
+    'tags',
+  ],
+  q,
 )
 
+// Scenario keeps module/author/priority/updateTime nested under
+// ``meta``, but the filter layer reads flat top-level fields.  Map each
+// row once so FilterPopover's option lists and applyFiltersToList both
+// see the expected shape (spread keeps every other field intact, so the
+// table's row.meta.* bindings are unaffected).
+const filterableRows = computed(() =>
+  filtered.value.map((s) => ({
+    ...s,
+    module: s.meta.module,
+    author: s.meta.author || s.meta.owner,
+    priority: s.meta.priority,
+    updated_at: s.meta.updateTime,
+    system: s.meta.system,
+    tags: s.tags ?? s.meta.tags,
+  })),
+)
+
+const visible = computed(() => {
+  const rows = applyFiltersToList(filterableRows.value, filters.value)
+  // Tabs previously rendered but never filtered — the list was identical
+  // on every tab. 'mine' shows everything the API returns (the composer
+  // API v1 has no per-user scope yet), 'favorite' filters to starred rows.
+  // 'public' is not distinguishable server-side in v1 — keep it as the
+  // full list with an honest badge instead of a hardcoded 0.
+  if (activeTab.value === 'favorite') return rows.filter((r) => r.starred)
+  return rows
+})
 const total = computed(() => visible.value.length)
 
-const myCount = computed(() => store.scenarios.filter(s => true).length)
-const publicCount = computed(() => 0)  // v1: 暂未实现
+// Real pagination — slice for the current page (the pager used to
+// render but never slice, so every page showed all rows).
+const paged = computed(() => {
+  const start = (page.value - 1) * pageSize
+  return visible.value.slice(start, start + pageSize)
+})
+
+// Clamp the page when the filtered result shrinks (search/filter/delete)
+// so we never sit on an empty page.
+watch(total, () => {
+  const maxPage = Math.max(1, Math.ceil(total.value / pageSize))
+  if (page.value > maxPage) page.value = maxPage
+})
+
+const myCount = computed(() => store.scenarios.length)
+const publicCount = computed(() => store.scenarios.length) // v1: 服务端无可见性区分
 const favoriteCount = computed(() => store.starredScenarios.length)
 
 onMounted(async () => {
@@ -312,6 +355,15 @@ async function onCmd(cmd: string, row: Scenario) {
   }
   if (cmd === 'export') return exportRow(row)
   if (cmd === 'delete') {
+    try {
+      await ElMessageBox.confirm(
+        `确认删除场景 ${row.meta.scenarioId}？其下所有用例与数据集将一并删除，操作不可撤销。`,
+        '删除场景',
+        { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+      )
+    } catch {
+      return // 用户取消
+    }
     try {
       await store.removeScenario(row.meta.scenarioId)
       ElMessage.success(`已删除：${row.meta.scenarioId}`)

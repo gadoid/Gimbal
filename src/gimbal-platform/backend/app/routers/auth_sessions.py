@@ -42,13 +42,28 @@ router = APIRouter(prefix="/auths", tags=["auths"])
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
+def _safe_decrypt(encrypted: str) -> str:
+    """Decrypt, degrading gracefully after a FERNET_KEY rotation.
+
+    Rows encrypted under a previous (ephemeral) key become
+    undecryptable; blowing up with ValueError → HTTP 500 on every
+    GET would take the whole auth list down.  Masked placeholder
+    instead — the row is still visible/editable so the user can
+    re-enter the credential.
+    """
+    try:
+        return fernet_decrypt(encrypted)
+    except ValueError:
+        return "<无法解密：密钥已轮换，请重新编辑保存>"
+
+
 def _to_out(a: AuthSession) -> AuthSessionOut:
     """Decrypt username for the response (password stays masked)."""
     return AuthSessionOut(
         id=a.id,
         alias=a.alias,
         url=a.url,
-        username=fernet_decrypt(a.username_enc),
+        username=_safe_decrypt(a.username_enc),
         token_type=a.token_type,
         expires_in=a.expires_in,
         created_at=a.created_at,
@@ -243,8 +258,16 @@ async def fetch_token(
     the executor will hit ``url`` to mint a fresh token.
     """
     a = await _get_owned(session, auth_id, user.id)
-    username = fernet_decrypt(a.username_enc)
-    password = fernet_decrypt(a.password_enc)
+    try:
+        username = fernet_decrypt(a.username_enc)
+        password = fernet_decrypt(a.password_enc)
+    except ValueError:
+        # Post-key-rotation row — surface a clear error instead of a 500.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="credential_undecryptable: encryption key has changed; "
+            "re-edit and save this credential first",
+        )
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=a.expires_in)
     return FetchTokenOut(
         alias=a.alias,
