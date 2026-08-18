@@ -29,8 +29,26 @@
       <FieldForm
         :bindings="fieldBindings"
         :body="strategy"
+        :candidates="candidates"
         @update:body="onUpdateBody"
       />
+      <!-- onFailure 入口(#2):base_fields 第一版整体不渲染,但失败处理
+           是编排高频诉求 → 单独露出这一个;其余 base 字段仍走默认值 -->
+      <div v-if="onFailureBinding" class="sf-onfail">
+        <label class="sf-onfail-label">
+          失败处理 (onFailure)
+          <span class="sf-onfail-hint">策略失败时的行为 — 默认 abort 中止本 step</span>
+        </label>
+        <select
+          class="sf-onfail-select"
+          :value="(strategy as any).onFailure ?? onFailureBinding.default ?? 'abort'"
+          @change="e => onUpdateBody({ ...props.strategy, onFailure: (e.target as HTMLSelectElement).value })"
+        >
+          <option v-for="o in onFailureBinding.enum || []" :key="String(o)" :value="String(o)">
+            {{ o }}{{ ON_FAILURE_LABELS[String(o)] ? ` — ${ON_FAILURE_LABELS[String(o)]}` : '' }}
+          </option>
+        </select>
+      </div>
     </div>
   </div>
 </template>
@@ -45,6 +63,11 @@ const props = defineProps<{
   detail: StrategyKindDetailView
   /** 新添加的策略引导填写 → 初始展开;预填/加载的默认折叠降噪 */
   startExpanded?: boolean
+  /**
+   * 候选值映射(#2):断言 target / extract expression 的下拉候选,
+   * 由 Canvas 从 step 的 endpoint 响应契约推导后传入;缺省无候选按钮。
+   */
+  candidates?: Record<string, string[]>
 }>()
 const emit = defineEmits<{
   remove: []
@@ -52,6 +75,18 @@ const emit = defineEmits<{
 
 const expanded = ref(!!props.startExpanded)
 function toggle() { expanded.value = !expanded.value }
+
+/** onFailure 的字段描述符(plate base_fields 内省产物;无则不渲染入口) */
+const onFailureBinding = computed(() =>
+  props.detail.base_fields.find((f: StrategyFieldDescView) => f.name === 'onFailure')
+)
+
+const ON_FAILURE_LABELS: Record<string, string> = {
+  abort: '中止本 step',
+  continue: '记录错误继续',
+  warn: '仅警告',
+  retry: '配合重试',
+}
 
 /** 词汇适配:StrategyFieldDescView → FieldForm 需要的 IOFieldBinding 形状 */
 const fieldBindings = computed<IOFieldBinding[]>(() =>
@@ -172,4 +207,24 @@ const summary = computed<string>(() => {
   padding: 8px 10px 10px;
   border-top: 1px dashed #e6e8ec;
 }
+
+/* onFailure 入口(#2):字段区底部一行,label + select 紧凑排 */
+.sf-onfail {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 10px; padding-top: 8px;
+  border-top: 1px dashed #e6e8ec;
+}
+.sf-onfail-label {
+  display: flex; flex-direction: column; gap: 1px;
+  font-size: 11px; font-weight: 600; color: #475569;
+  flex-shrink: 0;
+}
+.sf-onfail-hint { font-size: 10px; font-weight: 400; color: #94a3b8; }
+.sf-onfail-select {
+  flex: 1; box-sizing: border-box;
+  background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 8px;
+  padding: 6px 10px; font-size: 12px; color: #1a1d24;
+  outline: none;
+}
+.sf-onfail-select:focus { border-color: #4f46e5; background: #fff; }
 </style>

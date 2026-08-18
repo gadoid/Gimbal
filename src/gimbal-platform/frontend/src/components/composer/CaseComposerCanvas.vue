@@ -152,6 +152,7 @@
                   :strategy="s"
                   :detail="strategyDetail(s)"
                   :start-expanded="j === justAddedStrategyIdx"
+                  :candidates="strategyCandidates(s)"
                   @remove="removeStrategy(currentStep, s)"
                 />
                 <el-dropdown trigger="click" @command="addStrategy(currentStep, $event as string)">
@@ -241,6 +242,16 @@
             <div class="info-v">
               <div v-for="(ex, i) in extractStrategies(currentStep)" :key="i" class="extract-line">
                 <code>{{ ex.target || '?' }}</code> ← <code>{{ ex.expression || '?' }}</code>
+              </div>
+            </div>
+          </div>
+          <!-- 响应字段(#2):200 响应契约字段清单,断言/extract 的目标参考 -->
+          <div v-if="currentRespFields.length" class="info-block">
+            <div class="info-k">响应字段 (200)</div>
+            <div class="info-v">
+              <div v-for="rf in currentRespFields" :key="rf.name" class="resp-field-line">
+                <code>{{ rf.name }}</code>
+                <span class="resp-field-kind">{{ rf.ui_kind }}</span>
               </div>
             </div>
           </div>
@@ -553,10 +564,69 @@ function sameSteps(a: StepView[] | undefined, b: StepView[]): boolean {
 const CODE_TARGET_CANDIDATES = ['$.code', '$.data.code'] as const
 
 /**
- * endpoint_id → 200 响应 assertable_fields(本期只存不消费,
- * 供后续断言 target / extract expression 的下拉候选)。
+ * endpoint_id → 200 响应 assertable_fields(#2 起被消费:断言 target /
+ * extract expression 的下拉候选)。step 经 api.view_hints.endpoint_id
+ * 持久化接口身份,缓存 miss 时懒拉 /full 回填 — 刷新后候选不丢。
  */
 const assertableByEndpoint = new Map<string, string[]>()
+/** 正在懒拉的 endpoint_id(防重复并发) */
+const assertableFetching = new Set<string>()
+
+/** 当前 step 的断言候选列表;endpoint 未知/拉取中 → 空(不渲染 ▾) */
+const currentAssertable = computed<string[]>(() => {
+  const eid = currentStep.value?.api?.view_hints?.endpoint_id
+  if (!eid) return []
+  ensureAssertable(eid)
+  return assertableByEndpoint.get(eid) ?? []
+})
+
+/** 缓存 miss 时懒拉 /full 回填 assertable(fail-soft:拉不到就无候选) */
+function ensureAssertable(endpointId: string) {
+  if (assertableByEndpoint.has(endpointId) || assertableFetching.has(endpointId)) return
+  assertableFetching.add(endpointId)
+  getFullEndpoint(endpointId)
+    .then((full) => {
+      const a = full.responses?.['200']?.assertable_fields
+      if (a?.length) assertableByEndpoint.set(endpointId, a)
+    })
+    .catch(() => {})
+    .finally(() => assertableFetching.delete(endpointId))
+}
+
+// ── 响应字段渲染(#2):step 信息面板展示 200 响应字段清单 ───────────
+// 与 assertable 同源(/full),共用懒拉;名字+类型一行一档,断言/extract
+// 的目标从面板直接抄 JSONPath。空 200 契约 → 块不渲染。
+interface RespField { name: string; ui_kind: string }
+const respFieldsByEndpoint = new Map<string, RespField[]>()
+/** 响应式触发器:Map 变更不会触发 computed,用版本号 bump */
+const respFieldsVersion = ref(0)
+const currentRespFields = computed<RespField[]>(() => {
+  void respFieldsVersion.value
+  const eid = currentStep.value?.api?.view_hints?.endpoint_id
+  if (!eid) return []
+  ensureRespFields(eid)
+  return respFieldsByEndpoint.get(eid) ?? []
+})
+function ensureRespFields(endpointId: string) {
+  if (respFieldsByEndpoint.has(endpointId) || assertableFetching.has(endpointId)) return
+  assertableFetching.add(endpointId)
+  getFullEndpoint(endpointId)
+    .then((full) => {
+      const r200 = full.responses?.['200']
+      const fields = (r200?.fields || []).map((f) => ({ name: f.name, ui_kind: f.ui_kind }))
+      respFieldsByEndpoint.set(endpointId, fields)
+      respFieldsVersion.value++
+    })
+    .catch(() => {})
+    .finally(() => assertableFetching.delete(endpointId))
+}
+
+/** 策略表单候选映射(#2):kind 定字段名 — assertion 用 target,extract 用 expression */
+function strategyCandidates(s: StrategyView): Record<string, string[]> {
+  const fields = s.kind === 'assertion' ? ['target'] : s.kind === 'extract' ? ['expression'] : []
+  if (!fields.length || !currentAssertable.value.length) return {}
+  return Object.fromEntries(fields.map((f) => [f, currentAssertable.value]))
+}
 
 /** 由 endpoint 契约(/full 原料)构造初始策略,替代硬编码 $.status eq 200 */
 function buildInitialStrategies(full: EndpointFullView | undefined): StrategyView[] {
@@ -612,6 +682,9 @@ async function onAddEndpoint(ep: any) {
         method: ep.api?.method || 'GET',
         path: ep.api?.path || '',
         headers: ep.api?.headers || {},
+        // 接口身份持久化(#2):断言/extract 候选懒拉 /full 的 key;
+        // view_hints 是平台视图扩展,GimbalScenarioExporter 导出时剥离
+        view_hints: { endpoint_id: ep.id },
       },
       request: {
         kind: 'request',
@@ -927,5 +1000,15 @@ function parseJson(s: string, fallback: unknown) {
 .status-pill.on { background: #d1fae5; color: #065f46; }
 .status-pill.off { background: #fee2e2; color: #991b1b; }
 .extract-line { font-size: 10px; width: 100%; }
+/* 响应字段行(#2):字段名 + ui_kind 小标,断言/extract 目标参考 */
+.resp-field-line {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; width: 100%;
+}
+.resp-field-kind {
+  font-family: var(--font-mono); font-size: 9px;
+  color: #94a3b8; background: #f1f5f9;
+  padding: 0 4px; border-radius: 3px;
+}
 .info-empty { padding: 40px 0; text-align: center; font-size: 12px; }
 </style>

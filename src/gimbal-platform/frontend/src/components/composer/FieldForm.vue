@@ -26,13 +26,35 @@
       <div class="field-control">
         <!-- text / unknown (Type B fallback) -->
         <div v-if="f.ui_kind === 'text' || f.ui_kind === 'unknown'" class="ctl-with-var">
-          <input
-            type="text"
-            class="ctl"
-            :value="getValue(f) as string"
-            :placeholder="placeholderFor(f)"
-            @input="e => setValue(f, (e.target as HTMLInputElement).value)"
-          />
+          <div class="ctl-cand-wrap">
+            <input
+              type="text"
+              class="ctl"
+              :value="getValue(f) as string"
+              :placeholder="placeholderFor(f)"
+              @input="e => setValue(f, (e.target as HTMLInputElement).value)"
+            />
+            <!-- 候选下拉(#2 策略改造):assertion.target / extract.expression
+                 从响应字段选 JSONPath,不手打。候选由调用方按字段名映射传入 -->
+            <button
+              v-if="candidatesFor(f).length"
+              type="button"
+              class="cand-btn"
+              title="从候选值选择"
+              @click="candOpenField = candOpenField === f ? null : f"
+            >▾</button>
+            <div v-if="candOpenField === f" class="cand-list">
+              <button
+                v-for="c in candidatesFor(f)"
+                :key="c"
+                type="button"
+                class="cand-item"
+                @click="applyCandidate(f, c)"
+              >
+                <code>{{ c }}</code>
+              </button>
+            </div>
+          </div>
           <button
             v-if="varEntries.length"
             type="button"
@@ -174,12 +196,28 @@ const props = defineProps<{
   body: any
   /** 变量注册表(#3):Ⓥ 插入 ${var.<name>};缺省不渲染 Ⓥ */
   varEntries?: VarEntry[]
+  /**
+   * 候选值映射(#2 策略改造):字段名 → 候选 JSONPath 列表。
+   * 策略表单场景:assertion.target / extract.expression 从响应
+   * assertable_fields 选,不手打;缺省无候选按钮。
+   */
+  candidates?: Record<string, string[]>
 }>()
 const emit = defineEmits<{
   'update:body': [any]
 }>()
 
 const varEntries = computed(() => props.varEntries ?? [])
+
+/** 候选下拉开合状态(同屏至多一个) */
+const candOpenField = ref<IOFieldBinding | null>(null)
+function candidatesFor(f: IOFieldBinding): string[] {
+  return props.candidates?.[f.name] ?? []
+}
+function applyCandidate(f: IOFieldBinding, c: string) {
+  setValue(f, c)
+  candOpenField.value = null
+}
 
 // Type A + Type B: 有 binding 的都显示; Type C (无 binding 的 schema 字段) 走 hiddenFields 不在此显示
 const visibleFields = computed(() => props.bindings)
@@ -249,6 +287,35 @@ function insertVarRef(e: VarEntry) {
 .var-btn:hover { border-color: #6ee7b7; background: #d1fae5; }
 .var-btn.dark { background: #313244; border-color: #45475a; color: #a6e3a1; }
 .var-btn.dark:hover { border-color: #6ee7b7; }
+
+/* 候选下拉(#2):输入框内嵌 ▾ + 绝对定位候选列表 */
+.ctl-cand-wrap { position: relative; flex: 1; min-width: 0; display: flex; }
+.ctl-cand-wrap .ctl { flex: 1; }
+.cand-btn {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px;
+  border: none; border-radius: 4px; background: transparent;
+  color: #94a3b8; cursor: pointer; font-size: 10px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.cand-btn:hover { background: #e2e8f0; color: #475569; }
+.cand-list {
+  position: absolute; top: calc(100% + 2px); left: 0; right: 0;
+  z-index: 30;
+  max-height: 200px; overflow-y: auto;
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+  padding: 3px;
+}
+.cand-item {
+  display: block; width: 100%; text-align: left;
+  padding: 5px 8px; border: none; border-radius: 4px;
+  background: transparent; cursor: pointer;
+}
+.cand-item:hover { background: #f1f5f9; }
+.cand-item code {
+  font-family: var(--font-mono); font-size: 11px; color: #334155;
+}
 
 /* Ⓥ 变量 popover 列表 */
 .var-pop { display: flex; flex-direction: column; gap: 3px; }
