@@ -105,10 +105,13 @@
                     @update:model-value="v => updateHeaderValue(currentStep, String(key), v)"
                   />
                   <button type="button" class="c-kv-del hdr-pick" title="选择认证" @click="openAuthPicker(String(key), String(value))">ⓘ</button>
+                  <button type="button" class="c-kv-del hdr-pick hdr-var" title="选择变量" @click="openVarPicker(String(key), String(value))">Ⓥ</button>
                   <button type="button" class="c-kv-del" title="删除" @click="removeHeader(currentStep, String(key))">×</button>
-                  <div v-for="r in hdrRefs(String(value))" :key="r.raw" class="ref-chip" :class="refStatus(r, authAliases)">
+                  <div v-for="r in hdrRefs(String(value))" :key="r.raw" class="ref-chip" :class="hdrRefStatus(r)">
                     <span class="ref-chip-dot" />{{ r.raw }}
-                    <span v-if="refStatus(r, authAliases) === 'dangling'" class="ref-chip-note">认证 {{ r.alias }} 不存在</span>
+                    <span v-if="hdrRefStatus(r) === 'dangling'" class="ref-chip-note">
+                      {{ r.domain === 'var' ? `变量 ${r.alias} 未注册` : `认证 ${r.alias} 不存在` }}
+                    </span>
                   </div>
                 </div>
                 <button type="button" class="c-add" @click="addHeader(currentStep)">+ 新增 header</button>
@@ -120,6 +123,7 @@
                 <FieldForm
                   :bindings="fieldBindings(currentStep)"
                   :body="currentStep.request.body || {}"
+                  :var-entries="varRegistryEntries"
                   @update:body="v => currentStep.request.body = mergeBody(v, {})"
                 />
                 <p class="field-form-hint">
@@ -252,6 +256,13 @@
       :auths="auths"
       @select="onAuthPicked"
     />
+    <!-- 变量选择器(headers value 注入 ${var.<name>},#3) -->
+    <VarSelectorModal
+      v-if="varPickerOpen"
+      v-model="varPickerOpen"
+      :entries="varRegistryEntries"
+      @select="onVarPicked"
+    />
   </div>
 </template>
 
@@ -262,6 +273,9 @@ import CaseComposerCatalog from './CaseComposerCatalog.vue'
 import FieldForm from './FieldForm.vue'
 import StrategyForm from './StrategyForm.vue'
 import AuthSelectorModal from '../AuthSelectorModal.vue'
+import VarSelectorModal from './VarSelectorModal.vue'
+import { useScenarioDraftStore } from '@/stores/scenario-draft'
+import { deriveVarRegistry } from '@/utils/var-registry'
 import { getFullEndpoint, listStrategyKinds, getStrategyKindFull } from '@/api/scenario-composer'
 import { list as listAuths } from '@/api/auth_sessions'
 import { parseTplRefs, refStatus } from '@/utils/tpl-refs'
@@ -439,9 +453,52 @@ function onAuthPicked(tpl: string) {
   authPickerStep.value = null
 }
 
-/** header value 的引用徽章数据(悬空判定对 /api/auths 列表) */
+/** header value 的引用徽章数据(auth + var 两域;var 为 #3 增) */
 function hdrRefs(value: string): TplRef[] {
-  return parseTplRefs(value).filter((r) => r.domain === 'auth')
+  return parseTplRefs(value).filter((r) => r.domain === 'auth' || r.domain === 'var')
+}
+
+/** 徽章悬空判定:auth 对 /api/auths 列表,var 对注册表(数据集列运行期
+ *  注入,不在编辑期注册表 — 悬空提示核对拼写,不硬阻断) */
+function hdrRefStatus(ref: TplRef): 'ok' | 'dangling' {
+  if (ref.domain === 'var') {
+    return varRegistryEntries.value.some((e) => e.name === ref.alias) ? 'ok' : 'dangling'
+  }
+  return refStatus(ref, authAliases.value)
+}
+
+// ── 变量选择器(#3):Ⓥ 从注册表选 ${var.<name>},不手打 ─────────────
+// 注册表 = 共享 vars(config) + 全部 step 的 extract;config 来自共享
+// draft store(CaseComposer watch 同步,含本页未编辑的最新值)。
+const draftStore = useScenarioDraftStore()
+const varPickerOpen = ref(false)
+const varPickerKey = ref<string | null>(null)
+const varPickerVal = ref<string | null>(null)
+
+const varRegistryEntries = computed(() =>
+  deriveVarRegistry(local, draftStore.draft?.definition?.config?.vars).entries)
+
+/** 同 openAuthPicker:key 在弹窗期间可能被改,落注入时按 key 或唯一 value 定位 */
+function openVarPicker(key: string, value: string) {
+  if (!currentStep.value) return
+  varPickerKey.value = key
+  varPickerVal.value = value
+  varPickerOpen.value = true
+}
+function onVarPicked(tpl: string) {
+  const key = varPickerKey.value
+  const val = varPickerVal.value
+  const headers = currentStep.value?.api?.headers
+  if (headers) {
+    if (key && key in headers) {
+      headers[key] = tpl
+    } else {
+      const hits = Object.entries(headers).filter(([, v]) => v === val)
+      if (hits.length === 1) headers[hits[0][0]] = tpl
+    }
+  }
+  varPickerKey.value = null
+  varPickerVal.value = null
 }
 
 /** 模板里 refStatus 的第二参:已知 alias 列表 */
@@ -827,6 +884,9 @@ function parseJson(s: string, fallback: unknown) {
 .hdr-val { flex: 1; min-width: 200px; }
 .hdr-pick { color: #4f46e5; flex-shrink: 0; }
 .hdr-pick:hover { background: #e0e7ff; color: #3730a3; }
+/* Ⓥ 变量选择器:绿系,与 ⓘ(认证,靛蓝)区分 */
+.hdr-var { color: #047857; }
+.hdr-var:hover { background: #d1fae5; color: #065f46; }
 .hdr-row .c-kv-del { flex-shrink: 0; }
 .ref-chip { margin-top: 2px; }
 

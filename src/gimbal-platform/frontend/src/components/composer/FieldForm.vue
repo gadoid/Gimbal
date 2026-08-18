@@ -25,14 +25,22 @@
       </label>
       <div class="field-control">
         <!-- text / unknown (Type B fallback) -->
-        <input
-          v-if="f.ui_kind === 'text' || f.ui_kind === 'unknown'"
-          type="text"
-          class="ctl"
-          :value="getValue(f) as string"
-          :placeholder="placeholderFor(f)"
-          @input="e => setValue(f, (e.target as HTMLInputElement).value)"
-        />
+        <div v-if="f.ui_kind === 'text' || f.ui_kind === 'unknown'" class="ctl-with-var">
+          <input
+            type="text"
+            class="ctl"
+            :value="getValue(f) as string"
+            :placeholder="placeholderFor(f)"
+            @input="e => setValue(f, (e.target as HTMLInputElement).value)"
+          />
+          <button
+            v-if="varEntries.length"
+            type="button"
+            class="var-btn"
+            title="插入变量引用 ${var.<name>}"
+            @click="openVarPicker(f)"
+          >Ⓥ</button>
+        </div>
 
         <!-- number -->
         <input
@@ -66,24 +74,40 @@
         </select>
 
         <!-- textarea -->
-        <textarea
-          v-else-if="f.ui_kind === 'textarea'"
-          class="ctl ctl-area"
-          rows="3"
-          :value="getValue(f) as string"
-          :placeholder="placeholderFor(f)"
-          @input="e => setValue(f, (e.target as HTMLTextAreaElement).value)"
-        />
+        <div v-else-if="f.ui_kind === 'textarea'" class="ctl-with-var col">
+          <textarea
+            class="ctl ctl-area"
+            rows="3"
+            :value="getValue(f) as string"
+            :placeholder="placeholderFor(f)"
+            @input="e => setValue(f, (e.target as HTMLTextAreaElement).value)"
+          />
+          <button
+            v-if="varEntries.length"
+            type="button"
+            class="var-btn"
+            title="插入变量引用 ${var.<name>}"
+            @click="openVarPicker(f)"
+          >Ⓥ</button>
+        </div>
 
         <!-- json (dark code editor) -->
-        <textarea
-          v-else-if="f.ui_kind === 'json'"
-          class="ctl ctl-code"
-          rows="4"
-          :value="formatJson(getValue(f))"
-          placeholder="JSON object"
-          @input="e => setValue(f, parseJson((e.target as HTMLTextAreaElement).value))"
-        />
+        <div v-else-if="f.ui_kind === 'json'" class="ctl-with-var col">
+          <textarea
+            class="ctl ctl-code"
+            rows="4"
+            :value="formatJson(getValue(f))"
+            placeholder="JSON object"
+            @input="e => setValue(f, parseJson((e.target as HTMLTextAreaElement).value))"
+          />
+          <button
+            v-if="varEntries.length"
+            type="button"
+            class="var-btn dark"
+            title="插入变量引用 ${var.<name>}"
+            @click="openVarPicker(f)"
+          >Ⓥ</button>
+        </div>
 
         <!-- file (placeholder) -->
         <div v-else-if="f.ui_kind === 'file' || f.ui_kind === 'binary'" class="ctl-file">
@@ -106,21 +130,56 @@
         {{ f.description }}
       </p>
     </div>
+
+    <!-- Ⓥ 变量选择 popover(text/textarea/json 控件插入 ${var.<name>},#3) -->
+    <el-popover
+      :visible="varPickerField === f"
+      placement="right"
+      :width="280"
+      trigger="manual"
+    >
+      <template #reference>
+        <span />
+      </template>
+      <div class="var-pop">
+        <p class="var-pop-title">选择变量 → 插入 var 引用</p>
+        <div v-if="!varEntries.length" class="var-pop-empty">注册表为空</div>
+        <button
+          v-for="e in varEntries"
+          :key="e.name"
+          type="button"
+          class="var-pop-item"
+          @click="insertVarRef(e)"
+        >
+          <span class="var-pop-name">{{ e.name }}</span>
+          <span class="var-pop-badge" :class="e.origin">{{ e.origin }}</span>
+          <span class="var-pop-src">
+            <template v-if="e.origin === 'config'">共享变量</template>
+            <template v-else>步骤 {{ (e.stepIdx ?? 0) + 1 }}</template>
+          </span>
+        </button>
+      </div>
+    </el-popover>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { IOFieldBinding } from '@/types/plate'
+import type { VarEntry } from '@/utils/var-registry'
 import { getByPath, setByPath } from '@/utils/jsonpath'
 
 const props = defineProps<{
   bindings: IOFieldBinding[]
   body: any
+  /** 变量注册表(#3):Ⓥ 插入 ${var.<name>};缺省不渲染 Ⓥ */
+  varEntries?: VarEntry[]
 }>()
 const emit = defineEmits<{
   'update:body': [any]
 }>()
+
+const varEntries = computed(() => props.varEntries ?? [])
 
 // Type A + Type B: 有 binding 的都显示; Type C (无 binding 的 schema 字段) 走 hiddenFields 不在此显示
 const visibleFields = computed(() => props.bindings)
@@ -153,6 +212,19 @@ function parseJson(s: string): unknown {
   if (!s || !s.trim()) return null
   try { return JSON.parse(s) } catch { return s }
 }
+
+// ── Ⓥ 变量插入(#3):追加到当前值尾(不覆盖已输入内容) ─────────────
+const varPickerField = ref<IOFieldBinding | null>(null)
+function openVarPicker(f: IOFieldBinding) {
+  varPickerField.value = varPickerField.value === f ? null : f
+}
+function insertVarRef(e: VarEntry) {
+  const f = varPickerField.value
+  if (!f) return
+  const cur = String(getValue(f) ?? '')
+  setValue(f, cur + `\${var.${e.name}}`)
+  varPickerField.value = null
+}
 </script>
 
 <style scoped>
@@ -161,6 +233,48 @@ function parseJson(s: string): unknown {
 }
 .field { display: flex; flex-direction: column; gap: 4px; padding-left: 6px; }
 .field.required .label-text { color: #1a1d24; }
+
+/* 控件 + Ⓥ 按钮同排(text)/叠排(textarea/json) */
+.ctl-with-var { display: flex; gap: 6px; align-items: stretch; }
+.ctl-with-var .ctl { flex: 1; min-width: 0; }
+.ctl-with-var.col { flex-direction: column; align-items: flex-end; }
+.var-btn {
+  flex-shrink: 0;
+  width: 30px;
+  background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 8px;
+  color: #047857; cursor: pointer; font-size: 13px;
+  transition: all 0.15s;
+}
+.ctl-with-var.col .var-btn { width: 30px; height: 24px; font-size: 11px; }
+.var-btn:hover { border-color: #6ee7b7; background: #d1fae5; }
+.var-btn.dark { background: #313244; border-color: #45475a; color: #a6e3a1; }
+.var-btn.dark:hover { border-color: #6ee7b7; }
+
+/* Ⓥ 变量 popover 列表 */
+.var-pop { display: flex; flex-direction: column; gap: 3px; }
+.var-pop-title {
+  margin: 0 0 6px; font-size: 11px; color: #64748b;
+  font-family: var(--font-mono);
+}
+.var-pop-empty { font-size: 12px; color: #94a3b8; padding: 6px 0; }
+.var-pop-item {
+  display: grid; grid-template-columns: 1.2fr 56px 64px; gap: 6px;
+  align-items: center; text-align: left;
+  padding: 5px 8px; border: 1px solid transparent; border-radius: 6px;
+  background: transparent; cursor: pointer; font-size: 12px;
+}
+.var-pop-item:hover { background: #f1f5f9; border-color: #e2e8f0; }
+.var-pop-name {
+  font-family: var(--font-mono); font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.var-pop-badge {
+  padding: 1px 5px; border-radius: 4px; text-align: center;
+  font-family: var(--font-mono); font-size: 9px; font-weight: 700;
+}
+.var-pop-badge.extract { background: #d1fae5; color: #065f46; }
+.var-pop-badge.config { background: #eef2ff; color: #4338ca; }
+.var-pop-src { font-size: 10px; color: #94a3b8; }
 
 .field-label {
   display: flex; align-items: center; gap: 6px;

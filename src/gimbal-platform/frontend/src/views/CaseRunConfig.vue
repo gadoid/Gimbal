@@ -174,6 +174,7 @@ import { showError } from '@/utils/errorFallback'
 import { list as listAuths } from '@/api/auth_sessions'
 import type { AuthSession as AuthSessionDTO } from '@/api/auth_sessions'
 import { authAliasesIn } from '@/utils/tpl-refs'
+import { deriveVarRegistry, checkVarRefs, type StepLike } from '@/utils/var-registry'
 import type { DataSetSummary } from '@/types/scenario-composer'
 
 const AUTH_HINT_MAX = 3
@@ -275,19 +276,54 @@ async function onValidate() {
 }
 
 /**
- * 悬空认证扫描:场景全部 step headers 里的 ${auth.X} 引用 vs 已选 aliases。
+ * 悬空认证扫描:全部 step 的 headers + body(深扫,字段值可能是任意嵌套)
+ * 里的 ${auth.X} 引用 vs 已选 aliases。
  * 仅警告放行 — Gimbal 解析失败会在步骤级报错,与运行语义一致(定案)。
  */
 function danglingAuthRefs(): string[] {
   const referenced = new Set<string>()
   for (const s of draft.value.definition.steps ?? []) {
     const headers = (s as { api?: { headers?: Record<string, string> } })?.api?.headers
-    if (!headers) continue
-    for (const v of Object.values(headers)) {
-      for (const a of authAliasesIn(String(v))) referenced.add(a)
+    if (headers) {
+      for (const v of Object.values(headers)) {
+        for (const a of authAliasesIn(String(v))) referenced.add(a)
+      }
     }
+    // body 深扫:auth 引用可埋在任意嵌套层(#1 遗留欠账,此处补齐)
+    deepAuthRefs((s as { request?: { body?: unknown } })?.request?.body, referenced)
   }
   return [...referenced].filter((a) => !authAliases.value.includes(a))
+}
+
+/** 深扫一个值里的 ${auth.X}(对象/数组/字符串递归) */
+function deepAuthRefs(value: unknown, out: Set<string>) {
+  if (typeof value === 'string') {
+    for (const a of authAliasesIn(value)) out.add(a)
+  } else if (Array.isArray(value)) {
+    value.forEach((v) => deepAuthRefs(v, out))
+  } else if (value && typeof value === 'object') {
+    Object.values(value).forEach((v) => deepAuthRefs(v, out))
+  }
+}
+
+/** #3 三类变量校验(悬空/时序/数据集缺列)。悬空语义与认证一致:仅警告放行。 */
+const varIssues = computed(() => {
+  const steps = (draft.value.definition.steps ?? []) as StepLike[]
+  const registry = deriveVarRegistry(steps, draft.value.definition.config?.vars)
+  const cols = datasetColumnUnion()
+  return checkVarRefs(steps, registry, cols)
+})
+
+/** 已选数据集的列名并集(preview 行的 keys;dispatcher 运行期按列 layer 进 vars) */
+function datasetColumnUnion(): string[] {
+  const cols = new Set<string>()
+  for (const d of dataSets.value) {
+    if (!selectedDataSets.value.includes(d.datasetId)) continue
+    for (const row of d.preview ?? []) {
+      for (const k of Object.keys(row)) cols.add(k)
+    }
+  }
+  return [...cols]
 }
 
 async function onRun() {
@@ -300,8 +336,14 @@ async function onRun() {
     const shown = dangling.slice(0, AUTH_HINT_MAX).join('、')
     const more = dangling.length > AUTH_HINT_MAX ? ` 等 ${dangling.length} 个` : ''
     ElMessage.warning(
-      `headers 引用了未勾选的认证: ${shown}${more} — 运行时将解析失败,建议勾选或移除引用(本次仍会提交)`,
+      `headers/body 引用了未勾选的认证: ${shown}${more} — 运行时将解析失败,建议勾选或移除引用(本次仍会提交)`,
     )
+  }
+  const issues = varIssues.value
+  if (issues.length) {
+    const shown = issues.slice(0, AUTH_HINT_MAX).map((i) => i.message).join('；')
+    const more = issues.length > AUTH_HINT_MAX ? ` 等 ${issues.length} 条` : ''
+    ElMessage.warning(`变量引用问题: ${shown}${more} (本次仍会提交)`)
   }
   running.value = true
   try {

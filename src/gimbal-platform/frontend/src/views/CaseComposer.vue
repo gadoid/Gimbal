@@ -137,6 +137,7 @@
           v-else-if="stepIdx === 2"
           key="config"
           v-model="definition.config"
+          :steps="definition.steps"
         />
 
         <!-- ④ Canvas -->
