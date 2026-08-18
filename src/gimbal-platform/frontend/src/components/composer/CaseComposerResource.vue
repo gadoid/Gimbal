@@ -311,7 +311,12 @@ function updateResourceMeta(name: string, val: string) {
 }
 
 // ── 父 → local 同步 ──
+// 回声守卫:父级 v-model 回写的是我们刚 emit 的内容(引用不同、内容相同)。
+// 回灌是 delete 全部再 assign — delete+ADD 恒触发 deep watch,无条件重建
+// 会与 emit watch 互触成 Maximum recursive updates(与 Config/Canvas 同病)。
+// deep-equal 时跳过;真外部变更(loadScenario)才重建。
 watch(() => props.resource, (v) => {
+  if (JSON.stringify(v || {}) === JSON.stringify({ ...local })) return
   for (const k of Object.keys(local)) delete local[k]
   Object.assign(local, { ...(v || {}) })
   loadPortRows()
