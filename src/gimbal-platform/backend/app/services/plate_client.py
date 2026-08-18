@@ -12,17 +12,14 @@ the platform's preview / run use-case.  This wrapper:
   vs 502 ``plate_rejected`` per docs/PLATFORM-SCENARIO-COMPOSER-API.md
   §4.7.
 
-Run D2 (``/api/scenario/action/run``) is **not yet implemented on
-Plate**.  When ``settings.PLATE_RUN_ROUTE_ENABLED`` is False the run
-dispatcher records intent but doesn't POST; flip the flag once Plate
-ships D2.
+Run 执行不走 Plate(#4 起):dispatcher convert 成功后改调
+``gimbal_client.run``(GIMBAL_BASE_URL,gimbal 引擎常驻服务)。
 """
 from __future__ import annotations
 
 from typing import Any
 
 import httpx
-from loguru import logger
 
 from ..core.config import settings
 
@@ -133,31 +130,6 @@ async def convert(
             errors=[],
         )
     return envelope.get("data") or {}
-
-
-async def run(scenario_dict: dict[str, Any]) -> dict[str, Any]:
-    """POST /api/scenario/action/run (D2 — not yet shipped on Plate).
-
-    Until ``settings.PLATE_RUN_ROUTE_ENABLED`` is True this returns a
-    stub ``{"dispatched": False, "reason": "plate_d2_pending"}`` and
-    logs the intent.  When D2 lands, this should POST to the run route
-    the same way ``convert`` does.
-    """
-    if not settings.PLATE_RUN_ROUTE_ENABLED:
-        logger.info(
-            "plate_client.run: stubbed (PLATE_RUN_ROUTE_ENABLED=False); "
-            "scenarioId={}",
-            scenario_dict.get("scenarioId") or scenario_dict.get("meta", {}).get("scenarioId"),
-        )
-        return {"dispatched": False, "reason": "plate_d2_pending"}
-    # When D2 ships, the actual call shape will mirror convert():
-    #   body = {"consumer": "gimbal", "scenario": scenario_dict}
-    #   resp = await client.post("/api/scenario/action/run", json=body)
-    #   handle 4xx/5xx identically.
-    raise NotImplementedError(
-        "plate_client.run: D2 not yet implemented on the Plate side; "
-        "flip PLATE_RUN_ROUTE_ENABLED once /api/scenario/action/run ships"
-    )
 
 
 # ─── helpers ──────────────────────────────────────────────────────

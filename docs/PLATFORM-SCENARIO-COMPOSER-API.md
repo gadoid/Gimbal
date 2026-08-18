@@ -550,10 +550,10 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 
 1. 校验 `caseId` 存在、所属 `env` 在 `/api/envs` 中、`dataSetIds[]` 都属于该 case。
 2. 计算 `totalRuns = Σ dataSet.rowCount`。
-3. 对每行调用 Plate：
+3. 对每行调用：
    - 拼完整 `Scenario` dict（含行值替换 `vars`）
-   - 调 Plate `POST /api/scenario/action/convert`
-   - 调 Plate `POST /api/scenario/action/run`（异步；带解密注入的 `Config.users` 副本，见 §2.6 注）
+   - 调 Plate `POST /api/scenario/action/convert`（结构校验 + 翻译为 gimbal 可执行 dict）
+   - 调 Gimbal runner `POST /run`（`GIMBAL_BASE_URL`，默认 127.0.0.1:8766，`gimbal run server` 启动；body 为 convert 产物 `converted` + 解密注入的 `Config.users` 副本，见 §2.6 注。同步返回 RunResult，`exitCode` 决定该行 pass/fail 计数）
 4. 汇总 `runId` 返回。
 5. 在 `executions` 表创建一行 `status=pending`。
 
@@ -630,7 +630,7 @@ rows:
 | Platform 端 | Plate 端 | 协议 |
 | --- | --- | --- |
 | `POST /api/scenarios/preview-plate` | `POST /api/scenario/action/convert` | 拼 dict + 一次性校验 |
-| `POST /api/runs` | `POST /api/scenario/action/convert` + `POST /api/scenario/action/run` | 每行 1 次 convert + 1 次 run |
+| `POST /api/runs` | `POST /api/scenario/action/convert`（Plate）+ `POST /run`（Gimbal runner） | 每行 1 次 convert + 1 次 run |
 | 列表 `/scenarios` | `GET /api/scenario/full` | 全量结构 + Platform 元数据合并 |
 | 详情 `/scenarios/{id}` | `GET /api/scenario/{id}/full` | 同上 |
 

@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     #   <gimbal>/src/gimbal-platform/backend/app/core/config.py
     # i.e. parents[5] == gimbal root.  Override via env GIMBAL_PROJECT_ROOT.
     GIMBAL_PROJECT_ROOT: Path | None = None
+    # ── Gimbal runner HTTP service (#4 run 最小链路) ──────
+    # ``gimbal run server`` 默认监听 127.0.0.1:8766(8765 被 plate 实占)。
+    # run dispatcher 每行 convert 成功后 POST /run 到这里执行。
+    GIMBAL_BASE_URL: str = "http://127.0.0.1:8766"
+    GIMBAL_TIMEOUT_SEC: float = 300.0
 
     # ── LogHub retention ──────────────────────────────────
     # Channels in DONE state older than this are evicted by the
@@ -68,10 +73,6 @@ class Settings(BaseSettings):
     # stay out of Platform's 8000 + Vite's 5173 footprint.
     PLATE_BASE_URL: str = "http://127.0.0.1:8765"
     PLATE_TIMEOUT_SEC: float = 30.0
-    # When False, the run dispatcher records intent but does NOT POST
-    # to Plate's /run endpoint (D2 not yet shipped on the Plate side).
-    # Flip to True once Plate exposes /api/scenario/action/run.
-    PLATE_RUN_ROUTE_ENABLED: bool = False
 
     def model_post_init(self, __context) -> None:
         if not self.JWT_SECRET:

@@ -91,6 +91,7 @@ async def lifespan(app: FastAPI):
         drain_in_flight_runners,
         reconcile_orphan_runs,
     )
+    from .services import gimbal_client as gimbal_client_module
     from .services import plate_client as plate_client_module
     from .services.run_dispatcher import drain_in_flight_dispatches
 
@@ -118,6 +119,11 @@ async def lifespan(app: FastAPI):
             await plate_client_module.aclose()
         except Exception as e:  # noqa: BLE001
             logger.debug("lifespan: plate_client.aclose raised {}", e)
+        # …and the Gimbal runner client (#4 run chain).
+        try:
+            await gimbal_client_module.aclose()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("lifespan: gimbal_client.aclose raised {}", e)
         sweeper_task.cancel()
         try:
             await sweeper_task

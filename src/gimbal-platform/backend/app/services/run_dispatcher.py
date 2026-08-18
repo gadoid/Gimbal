@@ -32,7 +32,7 @@ from ..models.composer_case import ComposerCase
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import RunRequest, RunResponse
-from . import data_set_store, env_store, plate_client, scenario_store
+from . import data_set_store, env_store, gimbal_client, plate_client, scenario_store
 
 
 # ─── in-flight tracking ───────────────────────────────────────────
@@ -226,9 +226,45 @@ async def _fanout(
                 )
 
             try:
-                await plate_client.convert(composed)
-                plate_ok += 1
-                log_line["status"] = "convert_ok"
+                convert_data = await plate_client.convert(composed)
+                # Convert succeeded — hand the gimbal-shaped product to the
+                # engine. 明文 users 只进 run 副本(convert 那份不带,防明文
+                # 流进 plate 校验/日志);注入形状同 V1 executor 生产路径。
+                # convert_data = {consumer, converted};converted 是
+                # GimbalScenarioExporter 的产物(已剥平台视图扩展字段)。
+                converted = convert_data.get("converted") or {}
+                composed_exec = _inject_exec_users(converted, exec_auths)
+                try:
+                    run_out = await gimbal_client.run(composed_exec)
+                except gimbal_client.GimbalUnavailableError as e:
+                    # convert 已过(结构合法),引擎不可达是执行层故障:
+                    # 记失败但不中断后续行(fan-out 永不因单行崩溃)。
+                    plate_failed += 1
+                    log_line["status"] = "gimbal_unavailable"
+                    log_line["runError"] = str(e)
+                    logger.warning("run_dispatcher: gimbal unavailable for row {}/{}: {}", ds["datasetId"], row_idx, e)
+                except gimbal_client.GimbalRejectedError as e:
+                    plate_failed += 1
+                    log_line["status"] = "gimbal_rejected"
+                    log_line["runError"] = e.message
+                    logger.warning("run_dispatcher: gimbal rejected row {}/{}: {}", ds["datasetId"], row_idx, e.message)
+                else:
+                    exit_code = int(run_out.get("exitCode", 2))
+                    if exit_code == 0:
+                        plate_ok += 1
+                        log_line["status"] = "passed"
+                    else:
+                        plate_failed += 1
+                        log_line["status"] = "failed"
+                    log_line["runResult"] = {
+                        k: run_out.get(k)
+                        for k in ("exitCode", "total", "passed", "failed", "skipped", "halted")
+                    }
+                    logger.info(
+                        "run_dispatcher: row {}/{} executed: exit={} passed={} failed={}",
+                        ds["datasetId"], row_idx, exit_code,
+                        run_out.get("passed"), run_out.get("failed"),
+                    )
             except plate_client.PlateUnavailableError as e:
                 plate_failed += 1
                 log_line["status"] = "plate_unavailable"
@@ -245,17 +281,6 @@ async def _fanout(
                 log_line["status"] = "dispatcher_error"
                 log_line["error"] = repr(e)
                 logger.exception("run_dispatcher: unexpected error row {}/{}", ds["datasetId"], row_idx)
-            else:
-                # Convert succeeded — try the optional D2 run call.
-                # 明文 users 只进 run 副本(convert 那份不带,防明文流进
-                # plate 校验/日志);注入形状同 V1 executor 生产路径。
-                composed_exec = _inject_exec_users(composed, exec_auths)
-                try:
-                    await plate_client.run(composed_exec)
-                except Exception as e:  # noqa: BLE001
-                    log_line["status"] = "run_stub_or_failed"
-                    log_line["runError"] = repr(e)
-                    logger.info("run_dispatcher: D2 stub for row {}/{}: {}", ds["datasetId"], row_idx, e)
 
             # Append the final log line for this row (covers all
             # success / failure branches — previously the rejected
@@ -289,10 +314,10 @@ def _compose_scenario(
 
     The shape Plate expects is the V3.2 ``Scenario`` model.  We deep-copy
     the stored scenario, then layer the row's key/value pairs into
-    ``config.vars`` so Plate's runtime can resolve them.  This is
-    best-effort: we do not implement a full templating engine; the row
-    values are serialised as strings, which is what most
-    ``${var.x}`` substitutions in the existing fixtures rely on.
+    ``config.vars`` so Plate's runtime can resolve them.  Row values keep
+    their JSON types (int stays int, bool stays bool) — ``vars`` is
+    ``dict[str, Any]`` on both sides and assertions like
+    ``expected: 0`` would break on a stringified ``"0"``.
 
     ``scenario_payload`` is the persisted ``ComposerScenario.payload``.
     Since the container refactor that is ``{definition, orchestration,

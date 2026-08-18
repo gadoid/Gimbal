@@ -146,6 +146,50 @@ def plate_mock():
         mock.uninstall()
 
 
+# ── Gimbal mock(#4 run 链路)───────────────────────────────────────
+@pytest.fixture
+def gimbal_mock():
+    """MockTransport 版 gimbal 服务:捕获 /run 入参,可编程回包。
+
+    真实 gimbal server 的 RunResponse 形状见
+    src/gimbal/core/server.py RunResponse。
+    """
+    state = {
+        "calls": [],
+        "exit_code": 0,  # 测试可改
+    }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/run":
+            state["calls"].append(json.loads(request.content))
+            return httpx.Response(
+                200,
+                json={
+                    "exitCode": state["exit_code"],
+                    "total": 1,
+                    "passed": 1 if state["exit_code"] == 0 else 0,
+                    "failed": 0 if state["exit_code"] == 0 else 1,
+                    "skipped": 0,
+                    "halted": 0,
+                    "details": [],
+                    "runId": "",
+                },
+            )
+        return httpx.Response(404)
+
+    from app.services import gimbal_client
+
+    gimbal_client.set_client_for_tests(
+        httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), base_url="http://gimbal-test"
+        )
+    )
+    try:
+        yield state
+    finally:
+        gimbal_client.set_client_for_tests(None)
+
+
 # ── preview-plate ──────────────────────────────────────────────────
 async def test_preview_plate_ok(client: AsyncClient, plate_mock: PlateMock) -> None:
     headers = await _register_and_login(client)
@@ -233,7 +277,7 @@ async def _seed_scenario_case_and_dataset(
 
 
 async def test_run_dispatch_calls_convert_per_row(
-    client: AsyncClient, plate_mock: PlateMock
+    client: AsyncClient, plate_mock: PlateMock, gimbal_mock: dict
 ) -> None:
     headers = await _register_and_login(client)
     rows = [{"qty": i} for i in range(3)]
@@ -281,6 +325,151 @@ async def test_run_dispatch_calls_convert_per_row(
     assert scenario_payload["config"]["vars"]["qty"] == 0  # first row {qty: 0}
 
 
+async def test_run_dispatch_preserves_row_value_types(
+    client: AsyncClient, plate_mock: PlateMock, gimbal_mock: dict
+) -> None:
+    """行值进 config.vars 保类型(int/bool/float 不字符串化)。
+
+    vars 两侧都是 dict[str, Any];断言 expected: 0 对 "0" 会错,
+    #4 run 链路后这是 Gimbal 断言正确性的前置。
+    """
+    headers = await _register_and_login(client)
+    rows = [{"qty": 7, "ok": True, "ratio": 1.5}]
+    await _seed_scenario_case_and_dataset(client, headers, rows=rows)
+
+    r = await client.post(
+        "/api/runs",
+        headers=headers,
+        json={
+            "caseId": "case-001",
+            "dataSetIds": ["ds-001"],
+            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+        },
+    )
+    assert r.status_code == 201
+
+    for _ in range(50):
+        if len(plate_mock.convert_calls) >= 1:
+            break
+        await asyncio.sleep(0.05)
+    assert len(plate_mock.convert_calls) == 1
+
+    vars_out = plate_mock.convert_calls[0]["scenario"]["config"]["vars"]
+    assert vars_out["qty"] == 7
+    assert vars_out["qty"] is not "7"  # noqa: F632 — 类型守卫,防回归字符串化
+    assert vars_out["ok"] is True
+    assert vars_out["ratio"] == 1.5
+
+
+async def _wait_execution_final(client_run_id: str | None = None) -> "Execution":
+    """等 fan-out 把 Execution 行写到终态(done/failed)。
+
+    gimbal 调用到达 ≠ 计数已落库(行级循环全部结束后才 update),
+    直接读会撞到 queued 初始态。
+    """
+    import sqlalchemy as sa
+
+    from app.core import db as db_module
+    from app.models import Execution
+
+    for _ in range(100):
+        async with db_module.SessionLocal() as s:
+            ex = (
+                (await s.execute(sa.select(Execution).order_by(Execution.id.desc())))
+                .scalars()
+                .first()
+            )
+            if ex is not None and ex.status in ("done", "failed"):
+                return ex
+        await asyncio.sleep(0.05)
+    raise AssertionError(f"execution never reached final state: {ex!r}")
+
+
+async def test_run_chain_convert_then_gimbal_execute(
+    client: AsyncClient, plate_mock: PlateMock, gimbal_mock: dict
+) -> None:
+    """#4 最小运行链路:每行 convert(plate) → run(gimbal),接线正确。
+
+    锁四件事:
+      1. gimbal /run 收到的 body.scenario 是 convert 的 **converted
+         产物**(PlateMock 回 {"kind": "platform_scenario"}),不是平台
+         原始 dict;
+      2. 行值在 converted 之前已 merge 进 config.vars(保类型);
+      3. exitCode=0 → 该行计 passed;Execution.status=done;
+      4. Execution passed/failed 计数 = 行数(引擎计数被消费)。
+    """
+    headers = await _register_and_login(client)
+    rows = [{"qty": 1}, {"qty": 2}]
+    await _seed_scenario_case_and_dataset(client, headers, rows=rows)
+
+    r = await client.post(
+        "/api/runs",
+        headers=headers,
+        json={
+            "caseId": "case-001",
+            "dataSetIds": ["ds-001"],
+            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+        },
+    )
+    assert r.status_code == 201
+
+    for _ in range(50):
+        if len(gimbal_mock["calls"]) >= 2:
+            break
+        await asyncio.sleep(0.05)
+    assert len(gimbal_mock["calls"]) == 2
+    assert len(plate_mock.convert_calls) == 2
+
+    # 1. 载体是 converted 产物
+    body0 = gimbal_mock["calls"][0]
+    assert body0["scenario"]["kind"] == "platform_scenario"
+    # halt 参数不传(阶段 1 不用调试)
+    assert "halt_at" not in body0
+
+    # 2. convert 拿到的是平台原始 dict(vars 已 layer)
+    conv_scenario = plate_mock.convert_calls[0]["scenario"]
+    assert conv_scenario["config"]["vars"]["qty"] == 1
+    assert conv_scenario["kind"] == "scenario"
+
+    # 3+4. exitCode=0 两行 → passed=2 / failed=0 / done
+    ex = await _wait_execution_final()
+    assert ex.passed == 2
+    assert ex.failed == 0
+    assert ex.status == "done"
+
+
+async def test_run_chain_gimbal_failure_counts_row_failed(
+    client: AsyncClient, plate_mock: PlateMock, gimbal_mock: dict
+) -> None:
+    """引擎判败(exitCode=1)→ 该行计 failed;convert 本身没问题。"""
+    gimbal_mock["exit_code"] = 1
+    headers = await _register_and_login(client)
+    await _seed_scenario_case_and_dataset(client, headers, rows=[{"qty": 1}])
+
+    r = await client.post(
+        "/api/runs",
+        headers=headers,
+        json={
+            "caseId": "case-001",
+            "dataSetIds": ["ds-001"],
+            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+        },
+    )
+    assert r.status_code == 201
+
+    for _ in range(50):
+        if len(gimbal_mock["calls"]) >= 1:
+            break
+        await asyncio.sleep(0.05)
+    assert len(gimbal_mock["calls"]) == 1
+
+    ex = await _wait_execution_final()
+    # convert 过了(结构合法),但引擎判败 → failed 计数
+    assert ex.passed == 0
+    assert ex.failed == 1
+    assert ex.status == "failed"
+
+
 async def test_run_dispatch_records_failure_when_plate_down(
     client: AsyncClient, plate_mock: PlateMock
 ) -> None:
@@ -313,13 +502,13 @@ async def test_run_injects_exec_auths_into_run_copy_only(
 ) -> None:
     """执行用认证多选:解密注入只进 run 副本,convert 永不带明文。
 
-    锁三条边界(#1 改造的安全契约):
+    锁三条边界(#1 改造的安全契约 + #4 run 链路接线):
       1. convert 收到的 scenario.config.users 不含所选 alias 的明文凭据;
-      2. dispatcher 传给 plate_client.run 的副本 config.users[alias] 含
+      2. dispatcher 发给 gimbal_client.run 的副本 config.users[alias] 含
          解密后的 url/username/password/token_type/expires_in(形状同
-         V1 executor 生产路径)。plate_client.run 自身是 stub(真链路
-         是 #4 gimbal_client 的事),故 monkeypatch 捕获入参 — 验证的
-         是 dispatcher 侧接线,不越权测 plate_client 内部;
+         V1 executor 生产路径),且载体是 convert 的 **converted 产物**
+         不是平台原始 dict。gimbal 服务不在测试里起,monkeypatch 捕获
+         入参 — 验证的是 dispatcher 侧接线;
       3. Execution.config_json 用读侧契约 key ``exec_auth_alias``(数组),
          不再是旧的 "auth" 单选 key。
     """
@@ -340,16 +529,17 @@ async def test_run_injects_exec_auths_into_run_copy_only(
     )
     assert r.status_code == 201
 
-    # 捕获 dispatcher → plate_client.run 的入参
-    from app.services import plate_client as pc
+    # 捕获 dispatcher → gimbal_client.run 的入参
+    from app.services import gimbal_client as gc
 
     run_payloads: list[dict] = []
 
-    async def _capture_run(scenario_dict: dict) -> dict:
+    async def _capture_run(scenario_dict: dict, **_kw: object) -> dict:
         run_payloads.append(scenario_dict)
-        return {"dispatched": True}
+        return {"exitCode": 0, "total": 1, "passed": 1, "failed": 0,
+                "skipped": 0, "halted": 0, "details": []}
 
-    monkeypatch.setattr(pc, "run", _capture_run)
+    monkeypatch.setattr(gc, "run", _capture_run)
 
     r = await client.post(
         "/api/runs",
@@ -377,7 +567,8 @@ async def test_run_injects_exec_auths_into_run_copy_only(
     conv_scenario = plate_mock.convert_calls[0]["scenario"]
     assert "qa1" not in (conv_scenario.get("config", {}).get("users") or {})
 
-    # 2. run 副本注入解密凭据
+    # 2. run 副本注入解密凭据(载体是 converted 产物:PlateMock 的 convert
+    #    回包 converted = {"kind": "platform_scenario", ...})
     injected = run_payloads[0]["config"]["users"]["qa1"]
     assert injected["username"] == "qa-user"
     assert injected["password"] == "qa-pass"
@@ -438,15 +629,16 @@ async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
     bob_headers = await _register_and_login(client, username="bob")
     await _create_auth(bob_headers, "bob")
 
-    from app.services import plate_client as pc
+    from app.services import gimbal_client as gc
 
     run_payloads: list[dict] = []
 
-    async def _capture_run(scenario_dict: dict) -> dict:
+    async def _capture_run(scenario_dict: dict, **_kw: object) -> dict:
         run_payloads.append(scenario_dict)
-        return {"dispatched": True}
+        return {"exitCode": 0, "total": 1, "passed": 1, "failed": 0,
+                "skipped": 0, "halted": 0, "details": []}
 
-    monkeypatch.setattr(pc, "run", _capture_run)
+    monkeypatch.setattr(gc, "run", _capture_run)
 
     # alice 发起运行,选撞名 alias
     r = await client.post(
