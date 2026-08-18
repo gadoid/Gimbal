@@ -1415,7 +1415,7 @@ function parseJson(s: string, fallback: unknown) {
   z-index: 5;
   background: #fbfbfe;
   border: 1px solid var(--c-border, #e7e9f2);
-  border-radius: 12px;
+  border-radius: 0 0 12px 12px;      /* 上方下圆:上缘由选中页签收口,与签宽天然对齐 */
   padding: 16px 18px 4px;
   margin-bottom: 18px;
 }
