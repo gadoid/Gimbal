@@ -327,8 +327,36 @@ const servicesBySystem = computed(() => {
   return out
 })
 
+/**
+ * 当前编辑态折叠成的 ConfigView(emit watch 发出的同一形状)。
+ * 提取成单一函数供两处共用:emit 直接发;入向 watch 用它做
+ * deep-equal 跳过 — 父级 v-model 回写的是我们刚 emit 的内容
+ * (对象身份不同、内容相同),无条件重建 rows 会把用户刚 push 的
+ * 空 row 引用吞掉并与 emit watch 互触成递归回灌
+ * (Maximum recursive updates)。与 Canvas 的 sameSteps 同一模式。
+ */
+function emitShape(): ConfigView {
+  const varsDict: Record<string, unknown> = {}
+  for (const r of varsRows.value) {
+    if (r.key) varsDict[r.key] = r.value
+  }
+  return {
+    setup: [...setupList.value],
+    teardown: [...teardownList.value],
+    services: Object.fromEntries(
+      serviceRows.value.filter(r => r.alias).map(r => [r.alias, r.baseUrl])
+    ),
+    users: local.users || {},
+    timePolicy: local.timePolicy,
+    retry: local.retry,
+    vars: varsDict,
+  }
+}
+
 watch(() => props.modelValue, (v) => {
   if (!v) return
+  // 回声(自己 emit 的内容回写)→ 跳过;真外部变更(loadScenario)才重建
+  if (JSON.stringify(emitShape()) === JSON.stringify(v)) return
   local.setup = [...(v.setup || [])]
   local.teardown = [...(v.teardown || [])]
   local.services = { ...(v.services || {}) }
@@ -345,22 +373,7 @@ watch(() => props.modelValue, (v) => {
 }, { deep: true })
 
 watch([local, serviceRows, setupList, teardownList, varsRows], () => {
-  // 把 vars rows 折叠回 dict (同名 last-wins)
-  const varsDict: Record<string, unknown> = {}
-  for (const r of varsRows.value) {
-    if (r.key) varsDict[r.key] = r.value
-  }
-  emit('update:modelValue', {
-    setup: [...setupList.value],
-    teardown: [...teardownList.value],
-    services: Object.fromEntries(
-      serviceRows.value.filter(r => r.alias).map(r => [r.alias, r.baseUrl])
-    ),
-    users: local.users || {},
-    timePolicy: local.timePolicy,
-    retry: local.retry,
-    vars: varsDict,
-  })
+  emit('update:modelValue', emitShape())
 }, { deep: true })
 
 // ── 变量注册表面板 (#3):折叠后的 vars dict,实时反映 rows 编辑 ──
