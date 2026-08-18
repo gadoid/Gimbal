@@ -39,7 +39,6 @@ function mountWithParent(initial: ConfigView) {
       return () => h(CaseComposerConfig, {
         modelValue: config.value,
         'onUpdate:modelValue': (v: ConfigView) => { config.value = v },
-        steps: [],
       })
     },
   })
@@ -82,5 +81,12 @@ describe('CaseComposerConfig — 添加行与父级 v-model 共存', () => {
     await val.setValue('new')
     await flush()
     expect(config.value.vars['fin.api']).toBe('new')
+  })
+})
+
+describe('CaseComposerConfig — 变量注册表已迁 Canvas(#11 摘除)', () => {
+  it('渲染文本不再含"变量注册表"(配置步只管编辑,总览在步骤编辑页)', () => {
+    const { w } = mountWithParent(makeConfig())
+    expect(w.text()).not.toContain('变量注册表')
   })
 })

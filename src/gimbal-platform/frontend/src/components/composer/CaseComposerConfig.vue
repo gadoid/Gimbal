@@ -196,9 +196,6 @@
       <button class="c-add" @click="addVar">+ 添加变量</button>
     </div>
 
-    <!-- 变量注册表 (#3 变量全局化):vars + extract 出身 / 消费处总览 -->
-    <VariableRegistryPanel :steps="steps" :config-vars="varsDict" />
-
     <!-- 服务 -->
     <div class="c-card svc-card">
       <div class="c-card-head">
@@ -251,8 +248,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import type { ConfigView, RetryPolicyView, StepView } from '@/types/plate'
-import VariableRegistryPanel from './VariableRegistryPanel.vue'
+import type { ConfigView, RetryPolicyView } from '@/types/plate'
 
 // plate TimePolicy 只有两态:record / timeout(带 seconds)。
 // 砍掉原 cost-collect / intervalMs — 不在 plate 契约内。
@@ -267,8 +263,7 @@ const SYS_LABELS: Record<string, string> = {
 function systemLabel(s: string) { return SYS_LABELS[s] || s }
 
 // 单一 props: modelValue 绑 plate ConfigView
-// steps 仅给 VariableRegistryPanel 做推导(extract 出身/消费处),本组件不改它
-const props = defineProps<{ modelValue: ConfigView; steps?: StepView[] }>()
+const props = defineProps<{ modelValue: ConfigView }>()
 const emit = defineEmits<{ 'update:modelValue': [ConfigView] }>()
 
 const local = reactive<ConfigView>({
@@ -375,15 +370,6 @@ watch(() => props.modelValue, (v) => {
 watch([local, serviceRows, setupList, teardownList, varsRows], () => {
   emit('update:modelValue', emitShape())
 }, { deep: true })
-
-// ── 变量注册表面板 (#3):折叠后的 vars dict,实时反映 rows 编辑 ──
-const varsDict = computed(() => {
-  const out: Record<string, unknown> = {}
-  for (const r of varsRows.value) {
-    if (r.key) out[r.key] = r.value
-  }
-  return out
-})
 
 // ── timePolicy 切换 ──
 function selectTimePolicy(kind: 'record' | 'timeout') {
