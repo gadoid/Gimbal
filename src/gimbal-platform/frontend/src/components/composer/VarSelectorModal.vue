@@ -29,8 +29,10 @@
           :key="e.name"
           type="button"
           class="var-item"
-          :class="{ active: selected === e }"
-          @click="selected = e"
+          :class="{ active: selected === e, disabled: e.origin === 'extract' }"
+          :disabled="e.origin === 'extract'"
+          :title="e.origin === 'extract' ? '响应变量不能进 headers,请在请求体字段上注入' : undefined"
+          @click="e.origin !== 'extract' && (selected = e)"
         >
           <span class="var-name">{{ e.name }}</span>
           <span class="var-badge" :class="e.origin">{{ e.origin }}</span>
@@ -40,6 +42,11 @@
           </span>
         </button>
       </div>
+      <!-- #7 分流:extract 变量运行期才有,${var.x} 启动前展开查不到 → 禁选 -->
+      <p v-if="hasExtractEntries" class="split-hint">
+        Ⓥ 插入的是启动前展开的 \${var.x} 模板 — extract 产出的响应变量不在此列,
+        请在请求体字段菜单选"注入响应变量"(运行期 assign 通路)
+      </p>
       <p v-if="selected" class="preview-hint">
         将插入 <code class="mono preview">${{ 'var.' + selected.name }}</code>
         <template v-if="selected.origin === 'extract'">
@@ -90,6 +97,10 @@ const filtered = computed(() => {
   return props.entries.filter((e) => e.name.toLowerCase().includes(q))
 })
 
+/** 含 extract 出身条目 → 展示分流提示(#7) */
+const hasExtractEntries = computed(() =>
+  props.entries.some((e) => e.origin === 'extract'))
+
 function confirm() {
   if (!selected.value) return
   emit('select', `\${var.${selected.value.name}}`)
@@ -126,6 +137,14 @@ function confirm() {
 }
 .var-item:hover { border-color: var(--c-accent-soft-border, #c7d2fe); }
 .var-item.active { border-color: #4f46e5; background: #eef2ff; }
+/* extract 出身禁选(#7 分流):headers 无运行期注入通路 */
+.var-item.disabled { opacity: 0.5; cursor: not-allowed; }
+.var-item.disabled:hover { border-color: var(--c-border); }
+.split-hint {
+  margin: 10px 0 0; padding: 6px 10px; border-radius: 6px;
+  background: #fffbeb; border: 1px solid #fde68a;
+  color: #92400e; font-size: 11px; line-height: 1.6;
+}
 .var-name {
   font-family: var(--font-mono);
   font-weight: 600;

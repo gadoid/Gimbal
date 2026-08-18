@@ -140,8 +140,14 @@
                 <FieldForm
                   :bindings="fieldBindings(currentStep)"
                   :body="currentStep.request.body || {}"
-                  :var-entries="varRegistryEntries"
+                  :field-actions="true"
+                  :var-choices="referenceVarChoices"
+                  :inject-choices="injectVarChoices"
                   @update:body="v => currentStep.request.body = mergeBody(v, {})"
+                  @field-extract="onFieldExtract"
+                  @field-assign="(f, name) => onFieldAssign(f, name)"
+                  @field-assert="onFieldAssert"
+                  @var-insert="onVarInsert"
                 />
                 <p class="field-form-hint">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -272,6 +278,12 @@
               </div>
             </div>
           </div>
+          <!-- 变量注册表(#1 变量工作台):从 ③ 配置步迁入 — 变量的生产与
+               消费都发生在本页,就近总览 -->
+          <VariableRegistryPanel
+            :steps="local"
+            :config-vars="draftStore.draft?.definition?.config?.vars"
+          />
         </div>
         <div v-else class="info-empty muted">无选中 step</div>
       </aside>
@@ -301,6 +313,7 @@ import draggable from 'vuedraggable'
 import CaseComposerCatalog from './CaseComposerCatalog.vue'
 import FieldForm from './FieldForm.vue'
 import StrategyForm from './StrategyForm.vue'
+import VariableRegistryPanel from './VariableRegistryPanel.vue'
 import AuthSelectorModal from '../AuthSelectorModal.vue'
 import VarSelectorModal from './VarSelectorModal.vue'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
@@ -357,7 +370,9 @@ function extractStrategies(step: StepView | undefined): ExtractView[] {
 function addExtract(step: StepView) {
   step.strategy.push({
     kind: 'extract', expression: '', target: '',
-    scope: 'step', required: true,
+    // scope=step 只写本 step scratch(step 结束清),跨步消费必死;
+    // 手动入口默认 scenario promote(#8)
+    scope: 'scenario', required: true,
   })
 }
 function removeExtract(step: StepView, ex: ExtractView) {
@@ -506,6 +521,82 @@ const varPickerVal = ref<string | null>(null)
 
 const varRegistryEntries = computed(() =>
   deriveVarRegistry(local, draftStore.draft?.definition?.config?.vars).entries)
+
+// ── 字段动作菜单(#4/#5 变量工作台):子列表分流 + 快捷策略骨架 ──────
+
+/** 引用子列表:仅 config/数据集出身(${var.x} 静态展开的合法来源) */
+const referenceVarChoices = computed(() =>
+  varRegistryEntries.value.filter((e) => e.origin === 'config'))
+
+/**
+ * 注入子列表:仅 extract 出身($.name 运行期语域的唯一入口是 assign)。
+ * 时序门控:产出步 ≥ 当前步 → disabled(after_request 产出 vs
+ * before_request 消费,同 step 不可用)。
+ */
+const injectVarChoices = computed(() => {
+  const cur = activeStepIdx.value
+  return varRegistryEntries.value
+    .filter((e) => e.origin === 'extract')
+    .map((e) => ({ ...e, disabled: (e.stepIdx ?? 0) >= cur }))
+})
+
+/**
+ * 字段名 → 响应 JSONPath:assertable 精确匹配($.data.<字段> 优先,
+ * 其次 $.<字段>),命中才用;未命中返回 $.data.<字段> 兜底(策略卡
+ * 展开引导改)。
+ */
+function respPathFor(fieldName: string): string {
+  const preferred = `$.data.${fieldName}`
+  const alt = `$.${fieldName}`
+  if (currentAssertable.value.includes(preferred)) return preferred
+  if (currentAssertable.value.includes(alt)) return alt
+  return preferred
+}
+
+/** 菜单"从响应提取":extract 骨架(target=字段名,scope=scenario) */
+function onFieldExtract(f: IOFieldBinding) {
+  if (!currentStep.value) return
+  currentStep.value.strategy.push({
+    kind: 'extract',
+    target: f.name,
+    expression: respPathFor(f.name),
+    scope: 'scenario',
+    required: true,
+  } as unknown as ExtractView)
+  justAddedStrategyIdx.value = currentStep.value.strategy.length - 1
+}
+
+/** 菜单"注入响应变量":assign 骨架(source=$.<name>,target=request_body.<path>) */
+function onFieldAssign(f: IOFieldBinding, name: string) {
+  if (!currentStep.value) return
+  currentStep.value.strategy.push({
+    kind: 'assign',
+    source: `$.${name}`,
+    target: f.path.replace(/^\$\./, '$.request_body.'),
+    scope: 'scenario',
+    required: true,
+  } as unknown as ExtractView)
+  justAddedStrategyIdx.value = currentStep.value.strategy.length - 1
+}
+
+/** 菜单"断言该字段":assertion 骨架(exists 起步,策略卡改 operator) */
+function onFieldAssert(f: IOFieldBinding) {
+  if (!currentStep.value) return
+  currentStep.value.strategy.push({
+    kind: 'assertion',
+    target: respPathFor(f.name),
+    operator: 'exists',
+    expected: null,
+    message: '',
+    soft: false,
+  } as unknown as ExtractView)
+  justAddedStrategyIdx.value = currentStep.value.strategy.length - 1
+}
+
+/** 菜单"引用共享变量":值追加已由 FieldForm 完成,此处给引导提示 */
+function onVarInsert(_f: IOFieldBinding, name: string) {
+  ElMessage.success(`已插入 \${var.${name}}(启动前展开,查不到将拒启)`)
+}
 
 /** 同 openAuthPicker:key 在弹窗期间可能被改,落注入时按 key 或唯一 value 定位 */
 function openVarPicker(key: string, value: string) {
