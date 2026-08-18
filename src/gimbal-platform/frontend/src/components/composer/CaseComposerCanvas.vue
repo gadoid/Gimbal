@@ -182,9 +182,18 @@
               />
               <span class="hint">提示: 从接口目录添加 step 后, body 将由 IOFieldBinding 自动渲染</span>
             </el-form-item>
+            <!-- Type C 查看入口(设计 §3.5):schema 有、binding 无 — 纯查看 -->
+            <details v-if="activeIoTab === 'request' && reqTypeC.length" class="typec-block">
+              <summary>Schema 未绑定字段 ({{ reqTypeC.length }})</summary>
+              <div v-for="tf in reqTypeC" :key="tf.name" class="typec-line">
+                <code>{{ tf.name }}</code>
+                <span class="resp-field-kind">{{ tf.type }}</span>
+                <span class="typec-path">{{ tf.path }}</span>
+              </div>
+            </details>
             <!-- Response 页:/full responses 全状态码契约,只读参考(设计 §3.1)。
                  ☰ 菜单仅 提取/断言 两项,路径经 respPathFor → toScratchPath -->
-            <template v-else>
+            <template v-if="activeIoTab === 'response'">
               <div v-if="currentRespSpecs.length" class="resp-specs">
                 <div v-for="spec in currentRespSpecs" :key="spec.status" class="resp-spec">
                   <div class="resp-spec-head">
@@ -206,6 +215,15 @@
                 </div>
               </div>
               <p v-else class="resp-spec-empty">该接口未声明响应契约(或拉取中)</p>
+              <!-- Type C 查看入口(响应侧,200 契约 schema 差集) -->
+              <details v-if="respTypeC.length" class="typec-block">
+                <summary>Schema 未绑定字段 ({{ respTypeC.length }})</summary>
+                <div v-for="tf in respTypeC" :key="tf.name" class="typec-line">
+                  <code>{{ tf.name }}</code>
+                  <span class="resp-field-kind">{{ tf.type }}</span>
+                  <span class="typec-path">{{ tf.path }}</span>
+                </div>
+              </details>
             </template>
             </div><!-- /io-card -->
 
@@ -304,24 +322,43 @@
               </span>
             </div>
           </div>
-          <div v-if="extractStrategies(currentStep).length" class="info-block">
-            <div class="info-k">extracts</div>
-            <div class="info-v">
-              <div v-for="(ex, i) in extractStrategies(currentStep)" :key="i" class="extract-line">
-                <code>{{ ex.target || '?' }}</code> ← <code>{{ ex.expression || '?' }}</code>
+          <!-- 右栏按签页分流(设计 §3.4):Request 页请求侧统计;
+               Response 页 extracts + 响应契约(全状态码,含 ✓ 标) -->
+          <template v-if="activeIoTab === 'request'">
+            <div class="info-block">
+              <div class="info-k">请求侧</div>
+              <div class="info-v">
+                <span class="badge">{{ fieldBindings(currentStep).length }} 字段</span>
+                <span class="badge">{{ Object.keys(currentStep.api?.headers || {}).length }} headers</span>
               </div>
             </div>
-          </div>
-          <!-- 响应字段(#2):200 响应契约字段清单,断言/extract 的目标参考 -->
-          <div v-if="currentRespFields.length" class="info-block">
-            <div class="info-k">响应字段 (200)</div>
-            <div class="info-v">
-              <div v-for="rf in currentRespFields" :key="rf.name" class="resp-field-line">
-                <code>{{ rf.name }}</code>
-                <span class="resp-field-kind">{{ rf.ui_kind }}</span>
+          </template>
+          <template v-else>
+            <div v-if="extractStrategies(currentStep).length" class="info-block">
+              <div class="info-k">extracts</div>
+              <div class="info-v">
+                <div v-for="(ex, i) in extractStrategies(currentStep)" :key="i" class="extract-line">
+                  <code>{{ ex.target || '?' }}</code> ← <code>{{ ex.expression || '?' }}</code>
+                </div>
               </div>
             </div>
-          </div>
+            <!-- 响应契约:全状态码(升级自旧"响应字段 (200)"块) -->
+            <div v-if="currentRespSpecs.length" class="info-block">
+              <div class="info-k">响应契约 (全状态码)</div>
+              <div class="info-v">
+                <div v-for="spec in currentRespSpecs" :key="spec.status" class="resp-contract-group">
+                  <span class="resp-status-badge" :class="spec.status < 400 ? 'ok' : 'err'">{{ spec.status }}</span>
+                  <div class="resp-contract-fields">
+                    <div v-for="rf in spec.fields" :key="rf.name" class="resp-field-line">
+                      <code>{{ rf.name }}</code>
+                      <span v-if="spec.assertable.includes(rf.path)" class="assertable-mark" title="可断言字段">✓</span>
+                      <span class="resp-field-kind">{{ rf.ui_kind }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
           <!-- 变量注册表(#1 变量工作台):从 ③ 配置步迁入 — 变量的生产与
                消费都发生在本页,就近总览 -->
           <VariableRegistryPanel
@@ -764,9 +801,13 @@ interface RespSpecLite {
   fields: IOFieldBinding[]
   /** plate 域路径,渲染 ✓ 标用;写策略时过 toScratchPath */
   assertable: string[]
+  /** 200 契约的 model_schema(Type C 差集源);非 200 恒 undefined */
+  model_schema?: Record<string, unknown>
 }
 const respFieldsByEndpoint = new Map<string, RespField[]>()
 const respSpecsByEndpoint = new Map<string, RespSpecLite[]>()
+/** 请求侧 model_schema(Type C 差集源;request.model_schema fallback schema) */
+const reqSchemaByEndpoint = new Map<string, Record<string, unknown> | undefined>()
 /** 响应式触发器:Map 变更不会触发 computed,用版本号 bump */
 const respFieldsVersion = ref(0)
 const currentRespFields = computed<RespField[]>(() => {
@@ -799,14 +840,24 @@ function ensureRespFields(endpointId: string) {
           description: spec.description || '',
           fields: spec.fields || [],
           assertable: spec.assertable_fields || [],
+          model_schema: status === '200'
+            ? (spec.model_schema ?? spec.schema)
+            : undefined,
         }))
         .sort((a, b) => a.status - b.status)
       respSpecsByEndpoint.set(endpointId, specs)
+      const req = full.request as any
+      reqSchemaByEndpoint.set(endpointId, req?.model_schema ?? req?.schema)
       respFieldsVersion.value++
     })
     .catch(() => {})
     .finally(() => assertableFetching.delete(endpointId))
 }
+
+/** 选中 step 即预拉契约(Type C / 候选 / Response 页共用;不等到切签) */
+watch(() => currentStep.value?.api?.view_hints?.endpoint_id, (eid) => {
+  if (eid) ensureRespFields(eid)
+}, { immediate: true })
 
 // ── 策略 phase 分域(设计 §2.3):存储仍是单数组,视图层按签页过滤 ──────
 /** 降级兜底:detail 拉取失败时按 kind 名硬映射(与 plate _KIND_LABELS 一致) */
@@ -830,6 +881,37 @@ const visibleStrategies = computed<Array<{ s: StrategyView; idx: number }>>(() =
   return all
     .map((s, idx) => ({ s, idx }))
     .filter(({ s }) => phases.includes(strategyPhase(s)))
+})
+
+// ── Type C 查看入口(设计 §3.5):schema 有、binding 无的隐藏字段差集 ───
+interface TypeCField { name: string; type: string; path: string }
+/**
+ * schema.properties 键集 与 已绑定 fields[].path(掐头 `$.`)求差集。
+ * 纯查看 — 不进 draft、不进任何结构。
+ */
+function typeCFields(
+  schema: Record<string, unknown> | undefined,
+  knownPaths: string[]
+): TypeCField[] {
+  const props = (schema?.properties ?? {}) as Record<string, { type?: string }>
+  const known = new Set(knownPaths.map((p) => p.replace(/^\$\./, '')))
+  return Object.keys(props)
+    .filter((k) => !known.has(k))
+    .map((k) => ({ name: k, type: props[k]?.type ?? 'unknown', path: `$.${k}` }))
+}
+/** 请求侧 Type C(挂 Request 签页底部) */
+const reqTypeC = computed<TypeCField[]>(() => {
+  void respFieldsVersion.value
+  const eid = currentStep.value?.api?.view_hints?.endpoint_id
+  if (!eid) return []
+  return typeCFields(reqSchemaByEndpoint.get(eid), fieldBindings(currentStep.value!).map((f) => f.path))
+})
+/** 响应侧 Type C(200 契约 schema 差集,挂 Response 签页底部) */
+const respTypeC = computed<TypeCField[]>(() => {
+  void respFieldsVersion.value
+  const spec200 = currentRespSpecs.value.find((s) => s.status === 200)
+  if (!spec200) return []
+  return typeCFields(spec200.model_schema, spec200.fields.map((f) => f.path))
 })
 
 /** 策略表单候选映射(#2):kind 定字段名 — assertion 用 target,extract 用 expression */
@@ -1308,4 +1390,17 @@ function parseJson(s: string, fallback: unknown) {
 .resp-status-badge.err { background: #fee2e2; color: #991b1b; }
 .resp-spec-desc { font-size: 11px; color: #64748b; }
 .resp-spec-empty { font-size: 11.5px; color: #94a3b8; padding: 6px 0; }
+/* 右栏响应契约分组 */
+.resp-contract-group { display: flex; align-items: flex-start; gap: 6px; width: 100%; margin-bottom: 4px; }
+.resp-contract-fields { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+/* Type C 折叠块(schema 未绑定字段) */
+.typec-block {
+  margin-top: 10px; padding: 6px 10px;
+  border: 1px dashed #cbd5e1; border-radius: 8px;
+  font-size: 11.5px; color: #64748b;
+}
+.typec-block summary { cursor: pointer; font-weight: 600; color: #475569; }
+.typec-line { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+.typec-line code { font-family: var(--font-mono); font-size: 11px; color: #334155; }
+.typec-path { font-family: var(--font-mono); font-size: 10px; color: #94a3b8; }
 </style>

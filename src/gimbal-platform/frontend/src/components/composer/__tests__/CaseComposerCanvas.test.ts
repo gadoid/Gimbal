@@ -27,11 +27,15 @@ vi.mock('@/api/scenario-composer', () => ({
     assign: { kind: 'assign', label: '注入响应变量', phase: 'before_request', fields: [], base_fields: [] },
   }[kind] ?? { kind, label: kind, phase: 'after_request', fields: [], base_fields: [] })),
   getFullEndpoint: vi.fn().mockResolvedValue({
-    request: { fields: [] },
+    request: {
+      fields: [],
+      model_schema: { properties: { hidden_req: { type: 'string' } } },
+    },
     responses: {
       '200': {
         assertable_fields: ['$.data.orderId', '$.code'],
         description: 'OK',
+        model_schema: { properties: { trace_id: { type: 'string' } } },
         fields: [{
           name: 'orderId', path: '$.data.orderId', ui_kind: 'text',
           source_kind: 'independent', required: true,
@@ -319,6 +323,42 @@ describe('CaseComposerCanvas — IO 双签卡片(C2)', () => {
     await rows[1].trigger('click')
     await flush()
     expect(w.text()).toContain('请求体')
+  })
+})
+
+describe('CaseComposerCanvas — 右栏分流 + Type C(C3)', () => {
+  it('T20: 右栏按签页分流 — request 页请求侧统计,response 页响应契约全状态码', async () => {
+    const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.response_body.data.t' } as any] })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    const info = w.find('.col-info')
+    // request 签(默认):请求侧统计,无 extracts/响应契约
+    expect(info.text()).toContain('请求侧')
+    expect(info.text()).toContain('字段')
+    expect(info.text()).not.toContain('响应契约')
+    // response 签:extracts + 响应契约(200 + 401)
+    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
+    await respTab.trigger('click')
+    await flush()
+    expect(info.text()).toContain('token')
+    expect(info.text()).toContain('响应契约')
+    expect(info.findAll('.resp-contract-group').length).toBe(2)
+    // assertable 字段(命中 $.data.orderId)带 ✓ 标
+    expect(info.find('.assertable-mark').exists()).toBe(true)
+  })
+
+  it('T21: Type C 折叠块 — 请求侧 hidden_req / 响应侧 trace_id 差集展示', async () => {
+    const { w } = mountCanvas([mkStep()])
+    await flushPromises()
+    // request 签:请求 schema 差集(fields_meta 只有 orderId,schema 另有 hidden_req)
+    expect(w.findAll('.typec-block').length).toBe(1)
+    expect(w.find('.typec-block').text()).toContain('hidden_req')
+    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
+    await respTab.trigger('click')
+    await flush()
+    // response 签:200 契约 schema 差集 trace_id
+    expect(w.findAll('.typec-block').length).toBe(1)
+    expect(w.find('.typec-block').text()).toContain('trace_id')
   })
 })
 
