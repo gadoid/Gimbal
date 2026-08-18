@@ -162,6 +162,17 @@
             </div>
           </div>
 
+          <!-- 加入按钮:放在 summary 统计列上方 — 描述再长也无需滚到底部 -->
+          <div class="add-bar">
+            <el-button type="primary" size="large" :loading="adding" @click="$emit('add', selected)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              加入编排画布
+            </el-button>
+            <span class="add-hint">
+              直接落盘为 step #{{ nextStepIdx }} · 字段编辑器按 IOFieldBinding 渲染
+            </span>
+          </div>
+
           <!-- Summary stats -->
           <div class="summary">
             <div class="summary-grid">
@@ -218,17 +229,6 @@
               </el-table>
             </el-tab-pane>
           </el-tabs>
-
-          <!-- 单击加入按钮: 直接落盘, 不再有中间页 -->
-          <div class="add-bar">
-            <el-button type="primary" size="large" :loading="adding" @click="$emit('add', selected)">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              加入编排画布
-            </el-button>
-            <span class="add-hint">
-              直接落盘为 step #{{ nextStepIdx }} · 字段编辑器按 IOFieldBinding 渲染
-            </span>
-          </div>
         </div>
 
         <div v-else-if="!filtered.length" class="empty-card">
@@ -588,11 +588,13 @@ onMounted(refetch)
 .tabs :deep(.el-table) { font-size: 11px; }
 .tabs :deep(.el-table th) { background: var(--c-bg-secondary); font-weight: 600; color: var(--c-text-secondary); }
 
-/* 单击加入按钮 bar */
+/* 加入按钮 bar:位于 summary 统计列上方(hero/业务卡之后) */
 .add-bar {
   display: flex; align-items: center; gap: 14px;
-  margin-top: 16px; padding-top: 16px;
-  border-top: 1px dashed var(--c-accent-soft-border);
+  margin: 4px 0 16px; padding: 12px 14px;
+  background: var(--c-accent-soft);
+  border: 1px dashed var(--c-accent-soft-border);
+  border-radius: 8px;
 }
 .add-hint { color: var(--c-text-tertiary); font-size: 11px; }
 
