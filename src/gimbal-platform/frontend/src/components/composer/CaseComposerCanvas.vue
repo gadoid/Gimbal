@@ -324,6 +324,7 @@ import { parseTplRefs, refStatus } from '@/utils/tpl-refs'
 import type { TplRef } from '@/utils/tpl-refs'
 import type { AuthSession } from '@/api/auth_sessions'
 import { deepDefaults } from '@/utils/jsonpath'
+import { toScratchPath } from '@/utils/scratch-path'
 import type {
   StepView, ExtractView, IOFieldBinding, EndpointFullView,
   StrategyView, StrategyKindView, StrategyKindDetailView,
@@ -548,9 +549,10 @@ const injectVarChoices = computed(() => {
 function respPathFor(fieldName: string): string {
   const preferred = `$.data.${fieldName}`
   const alt = `$.${fieldName}`
-  if (currentAssertable.value.includes(preferred)) return preferred
-  if (currentAssertable.value.includes(alt)) return alt
-  return preferred
+  let platePath = preferred
+  if (currentAssertable.value.includes(alt)) platePath = alt
+  // plate /full 域 → 引擎 scratch 域($.data.x → $.response_body.data.x)
+  return toScratchPath(platePath)
 }
 
 /** 菜单"从响应提取":extract 骨架(target=字段名,scope=scenario) */
@@ -734,14 +736,17 @@ function ensureRespFields(endpointId: string) {
 function strategyCandidates(s: StrategyView): Record<string, string[]> {
   const fields = s.kind === 'assertion' ? ['target'] : s.kind === 'extract' ? ['expression'] : []
   if (!fields.length || !currentAssertable.value.length) return {}
-  return Object.fromEntries(fields.map((f) => [f, currentAssertable.value]))
+  // 候选列表 = 运行期真实语义(scratch 域),用户选了即正确
+  return Object.fromEntries(
+    fields.map((f) => [f, currentAssertable.value.map(toScratchPath)])
+  )
 }
 
 /** 由 endpoint 契约(/full 原料)构造初始策略,替代硬编码 $.status eq 200 */
 function buildInitialStrategies(full: EndpointFullView | undefined): StrategyView[] {
   // 保底第一条: HTTP 层状态断言(与旧行为一致)
   const strategies: StrategyView[] = [
-    { kind: 'assertion', target: '$.status', operator: 'eq', expected: 200, message: '', soft: false },
+    { kind: 'assertion', target: toScratchPath('$.status'), operator: 'eq', expected: 200, message: '', soft: false },
   ]
   if (!full) return strategies
   const r200 = full.responses?.['200']
@@ -752,7 +757,7 @@ function buildInitialStrategies(full: EndpointFullView | undefined): StrategyVie
     const codeTarget = CODE_TARGET_CANDIDATES.find((c) => assertable.includes(c))
     if (codeTarget) {
       strategies.push({
-        kind: 'assertion', target: codeTarget, operator: 'eq', expected: 0,
+        kind: 'assertion', target: toScratchPath(codeTarget), operator: 'eq', expected: 0,
         message: successCriteria, soft: false,
       })
     }

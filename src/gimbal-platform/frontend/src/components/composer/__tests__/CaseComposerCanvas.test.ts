@@ -136,8 +136,8 @@ describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
     expect(ex).toBeTruthy()
     expect(ex.target).toBe('orderId')
     expect(ex.scope).toBe('scenario')
-    // expression 匹配 assertable($.data.orderId 优先命中)
-    expect(ex.expression).toBe('$.data.orderId')
+    // expression 匹配 assertable 且已转 scratch 域($.data.orderId → 前缀 response_body)
+    expect(ex.expression).toBe('$.response_body.data.orderId')
   })
 
   it('T6: 注入 → push assign{source=$.<name>, target=$.request_body.<path>}', async () => {
@@ -204,9 +204,9 @@ describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
     const item = w.findAll('.fa-item').find((b) => b.text().includes('断言该字段'))
     await item!.trigger('click')
     await flush()
-    const as = steps[0].strategy.find((s: any) => s.kind === 'assertion' && (s as any).target !== '$.status') as any
+    const as = steps[0].strategy.find((s: any) => s.kind === 'assertion' && (s as any).target !== '$.response_status') as any
     expect(as).toBeTruthy()
-    expect(as.target).toBe('$.data.orderId')
+    expect(as.target).toBe('$.response_body.data.orderId')
     expect(as.operator).toBe('exists')
   })
 })
