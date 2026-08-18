@@ -28,23 +28,40 @@
           </button>
         </div>
         <div class="step-list">
-          <div v-for="(s, i) in local" :key="i" class="step-row"
-               :class="{ active: i === activeStepIdx, disabled: !orch.steps[i]?.enabled }"
-               @click="activeStepIdx = i">
-            <div class="step-idx">{{ i + 1 }}</div>
-            <div class="step-info">
-              <div class="step-name">{{ orch.steps[i]?.name || s.api?.path || 'step' }}</div>
-              <div class="step-meta">
-                <span v-if="s.api?.method" class="method-badge" :class="`m-${s.api.method.toLowerCase()}`">{{ s.api.method }}</span>
-                <span v-if="s.api?.service" class="svc-tag">{{ s.api.service }}</span>
-                <span v-if="s.api?.path" class="ep-path">{{ s.api.path }}</span>
+          <!-- vuedraggable 上下拖拽重排(#5):纵向手柄拖,不做 DAG。
+               item-key 用 WeakMap 侧挂的稳定 key(step 数据本体不能加字段 —
+               草稿原样进 /convert);local 已被 draggable 重排,onStepReordered
+               同步 orch.steps 并让选中项跟随 -->
+          <draggable
+            :list="local"
+            :item-key="stepKey"
+            handle=".step-handle"
+            :animation="150"
+            tag="div"
+            class="step-drag-area"
+            @end="onStepReordered"
+          >
+            <template #item="{ element: s, index: i }">
+              <div class="step-row"
+                   :class="{ active: i === activeStepIdx, disabled: !orch.steps[i]?.enabled }"
+                   @click="activeStepIdx = i">
+                <span class="step-handle" title="拖拽调整顺序">⠿</span>
+                <div class="step-idx">{{ i + 1 }}</div>
+                <div class="step-info">
+                  <div class="step-name">{{ orch.steps[i]?.name || s.api?.path || 'step' }}</div>
+                  <div class="step-meta">
+                    <span v-if="s.api?.method" class="method-badge" :class="`m-${s.api.method.toLowerCase()}`">{{ s.api.method }}</span>
+                    <span v-if="s.api?.service" class="svc-tag">{{ s.api.service }}</span>
+                    <span v-if="s.api?.path" class="ep-path">{{ s.api.path }}</span>
+                  </div>
+                </div>
+                <el-switch v-if="orch.steps[i]" v-model="orch.steps[i].enabled" size="small" @click.stop />
+                <button class="step-del" @click.stop="removeStep(i)" title="删除">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg>
+                </button>
               </div>
-            </div>
-            <el-switch v-if="orch.steps[i]" v-model="orch.steps[i].enabled" size="small" @click.stop />
-            <button class="step-del" @click.stop="removeStep(i)" title="删除">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg>
-            </button>
-          </div>
+            </template>
+          </draggable>
           <div v-if="!local.length" class="step-empty">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
@@ -280,6 +297,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import draggable from 'vuedraggable'
 import CaseComposerCatalog from './CaseComposerCatalog.vue'
 import FieldForm from './FieldForm.vue'
 import StrategyForm from './StrategyForm.vue'
@@ -719,6 +737,38 @@ function removeStep(i: number) {
   if (activeStepIdx.value >= local.length) activeStepIdx.value = Math.max(0, local.length - 1)
 }
 
+// ── 步骤拖拽重排(#5) ─────────────────────────────────────────────
+// item-key 不能写进 step 数据本体(草稿原样进 /convert,不能加字段),
+// 用 WeakMap 给对象侧挂稳定 key — key 生命周期与对象引用一致,天然免清理。
+const stepKeys = new WeakMap<object, number>()
+let stepKeySeq = 0
+function stepKey(s: object): number {
+  let k = stepKeys.get(s)
+  if (k === undefined) {
+    k = ++stepKeySeq
+    stepKeys.set(s, k)
+  }
+  return k
+}
+
+/**
+ * draggable @end:同步 orch.steps(same splice)并让 activeStepIdx 跟随
+ * 被拖动的 step。选中项身份从 orch.steps 取 — local 此刻是否已被
+ * vuedraggable 重排取决于 sortable 内部事件序,而 orch 只有本函数一处写,
+ * 时序自定;且 orch 与重排前的 local 下标对齐,activeStepIdx 正是旧下标。
+ */
+function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
+  const { oldIndex, newIndex } = evt
+  if (oldIndex == null || newIndex == null || oldIndex === newIndex) return
+  const selected = orch.steps[activeStepIdx.value]
+  const moved = orch.steps.splice(oldIndex, 1)[0]
+  orch.steps.splice(newIndex, 0, moved)
+  if (selected) {
+    const next = orch.steps.indexOf(selected)
+    if (next >= 0) activeStepIdx.value = next
+  }
+}
+
 function parseJson(s: string, fallback: unknown) {
   try { return JSON.parse(s) } catch { return fallback }
 }
@@ -772,6 +822,23 @@ function parseJson(s: string, fallback: unknown) {
 
 /* step list */
 .step-list { display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; }
+/* draggable 容器接管行布局与行间距(行现在挂在这一层,不再直接挂 .step-list) */
+.step-drag-area { display: flex; flex-direction: column; gap: 6px; }
+/* 拖拽手柄:竖排点阵,grab 光标;仅手柄可发起拖拽(handle 限定),
+   行其余区域仍是点击选中 */
+.step-handle {
+  flex-shrink: 0;
+  width: 14px;
+  color: var(--c-border-strong, #cbd5e1);
+  cursor: grab;
+  font-size: 13px;
+  line-height: 1;
+  user-select: none;
+  text-align: center;
+}
+.step-handle:active { cursor: grabbing; }
+.step-row:hover .step-handle { color: var(--c-text-tertiary); }
+.step-row.sortable-ghost { opacity: 0.4; border-style: dashed; }
 .step-row {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 12px;
