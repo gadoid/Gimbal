@@ -588,13 +588,10 @@ onMounted(refetch)
 .tabs :deep(.el-table) { font-size: 11px; }
 .tabs :deep(.el-table th) { background: var(--c-bg-secondary); font-weight: 600; color: var(--c-text-secondary); }
 
-/* 加入按钮 bar:位于 summary 统计列上方(hero/业务卡之后) */
+/* 加入按钮 bar:位于 summary 统计列上方(hero/业务卡之后),无底色 */
 .add-bar {
   display: flex; align-items: center; gap: 14px;
-  margin: 4px 0 16px; padding: 12px 14px;
-  background: var(--c-accent-soft);
-  border: 1px dashed var(--c-accent-soft-border);
-  border-radius: 8px;
+  margin: 4px 0 16px; padding: 0;
 }
 .add-hint { color: var(--c-text-tertiary); font-size: 11px; }
 
