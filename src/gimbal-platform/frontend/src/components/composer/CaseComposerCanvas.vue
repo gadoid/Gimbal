@@ -102,24 +102,29 @@
               <p class="desc-readonly">{{ currentStep.description || '—' }}</p>
             </el-form-item>
 
-            <!-- IO 双签卡片(设计 §3.1):两签共用一壳,内容按 activeIoTab 切;
-                 值在 request.body / strategy 数组,切换只切视图不切数据 -->
-            <div class="io-tabs">
+            <!-- IO 重叠页签(Chrome 造型):选中签与下方 io-card 面板连体;
+                 内容按 activeIoTab 切,值在 request.body / strategy 数组,
+                 切换只切视图不切数据 -->
+            <div class="io-tabs" role="tablist">
               <button
                 type="button"
-                :class="['io-tab', 'io-tab-req', { active: activeIoTab === 'request' }]"
+                :class="['io-tab', 'req', { active: activeIoTab === 'request' }]"
+                role="tab"
+                :aria-selected="activeIoTab === 'request'"
                 @click="activeIoTab = 'request'"
               >
-                <span class="io-tab-arrow">→</span> Request
-                <span v-if="fieldBindings(currentStep).length" class="io-tab-count">{{ fieldBindings(currentStep).length }}</span>
+                Request
+                <span v-if="fieldBindings(currentStep).length" class="count">{{ fieldBindings(currentStep).length }}</span>
               </button>
               <button
                 type="button"
-                :class="['io-tab', 'io-tab-resp', { active: activeIoTab === 'response' }]"
+                :class="['io-tab', 'res', { active: activeIoTab === 'response' }]"
+                role="tab"
+                :aria-selected="activeIoTab === 'response'"
                 @click="activeIoTab = 'response'"
               >
-                <span class="io-tab-arrow">←</span> Response
-                <span v-if="currentRespSpecs.length" class="io-tab-count">{{ currentRespSpecs.length }}</span>
+                Response
+                <span v-if="currentRespSpecs.length" class="count">{{ currentRespSpecs.length }}</span>
               </button>
             </div>
             <div class="io-card">
@@ -1343,43 +1348,74 @@ function parseJson(s: string, fallback: unknown) {
 }
 .info-empty { padding: 40px 0; text-align: center; font-size: 12px; }
 
-/* ── IO 双签卡片(设计 §3.1):segmented control 页签,两签共用一壳 ── */
+/* ── IO 重叠页签(Chrome 造型):选中签与面板连体,相邻签被压在下面 ── */
 .io-tabs {
-  position: relative; display: inline-flex; align-items: center;
-  padding: 3px; gap: 2px; margin-bottom: 12px;
-  background: #eef0f4; border-radius: 10px;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 4px;
+  position: relative;
+  z-index: 6;
+  margin-bottom: -1px;               /* 压住面板上缘边框,连体 */
 }
 .io-tab {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 16px;
-  border: none; border-radius: 8px;
-  background: transparent;
-  font-size: 12.5px; font-weight: 600; color: #64748b;
+  position: relative;
+  display: flex; align-items: center; gap: 8px;
+  height: 36px;
+  padding: 0 18px;
+  margin-right: -16px;               /* 重叠量 */
+  border-radius: 10px 10px 0 0;
+  background: #eef0f7;
+  border: 1px solid var(--c-border, #e7e9f2);
+  border-bottom: none;
+  color: #8a90a3;
+  font-size: 12.5px; font-weight: 600; font-family: inherit;
   cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  transition: background 0.15s, color 0.15s;
 }
-.io-tab:hover { color: #334155; }
-.io-tab.active {
-  background: #fff; color: #3730a3;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
-}
-/* 域色:请求 indigo / 响应 emerald(仅箭头与计数,激活态底色统一白) */
-.io-tab-arrow { font-size: 12px; transition: color 0.2s; }
-.io-tab-req .io-tab-arrow { color: #6366f1; }
-.io-tab-resp .io-tab-arrow { color: #10b981; }
-.io-tab-count {
-  min-width: 16px; padding: 0 5px;
-  border-radius: 8px;
+.io-tab:hover { background: #e6e9f4; z-index: 2; }
+.io-tab:focus-visible { outline: 2px solid #4f46e5; outline-offset: -2px; z-index: 8; }
+/* 计数徽章:idle 灰;active 域色(request indigo / response emerald) */
+.io-tab .count {
+  min-width: 18px; height: 18px; padding: 0 6px;
+  border-radius: 999px; display: grid; place-items: center;
+  background: rgba(120, 128, 160, 0.16); color: #8a90a3;
   font-family: var(--font-mono); font-size: 10px; font-weight: 700;
-  background: #e2e8f0; color: #475569;
-  transition: background 0.2s, color 0.2s;
+  transition: background 0.15s, color 0.15s;
 }
-.io-tab-req.active .io-tab-count { background: #e0e7ff; color: #4338ca; }
-.io-tab-resp.active .io-tab-count { background: #d1fae5; color: #047857; }
+/* 选中态:浮到最上层,与面板同色连体 */
+.io-tab.active {
+  background: #fbfbfe;
+  color: #1f2430;
+  z-index: 6;
+  box-shadow: 0 1px 0 0 #fbfbfe;     /* 遮住面板上缘边框 */
+}
+.io-tab.active .count { background: #4f46e5; color: #fff; }
+.io-tab.res.active .count { background: #16a34a; }
+/* 底部外弧(Chrome 造型),颜色随页签背景走 */
+.io-tab::before, .io-tab::after {
+  content: ""; position: absolute; bottom: 0;
+  width: 10px; height: 10px;
+  color: transparent; transition: color 0.15s;
+  pointer-events: none;
+}
+.io-tab.active::before, .io-tab.active::after { color: #fbfbfe; }
+.io-tab::before {
+  left: -10px;
+  background: radial-gradient(circle at 0 0, transparent 10px, currentColor 10.5px);
+}
+.io-tab::after {
+  right: -10px;
+  background: radial-gradient(circle at 100% 0, transparent 10px, currentColor 10.5px);
+}
+/* 内容面板:与选中页签连体 */
 .io-card {
-  border: 1.5px solid var(--c-border, #e6e8ec); border-radius: 10px;
-  padding: 12px 12px 4px; margin-bottom: 18px;
-  background: #fff;
+  position: relative;
+  z-index: 5;
+  background: #fbfbfe;
+  border: 1px solid var(--c-border, #e7e9f2);
+  border-radius: 12px;
+  padding: 16px 18px 4px;
+  margin-bottom: 18px;
 }
 /* Response 页状态码分组 */
 .resp-specs { display: flex; flex-direction: column; gap: 14px; }
