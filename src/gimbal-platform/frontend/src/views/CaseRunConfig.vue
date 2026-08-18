@@ -110,10 +110,26 @@
         <section class="card">
           <header class="card-head"><h3>③ 认证 / 重试 / 调度</h3></header>
           <div class="grid-3">
-            <el-form-item label="认证会话">
-              <el-select v-model="authName" placeholder="选择认证">
-                <el-option v-for="a in AUTH_LIST" :key="a" :value="a" :label="a" />
+            <el-form-item label="执行用认证（多选）">
+              <el-select
+                v-model="authAliases"
+                multiple
+                filterable
+                placeholder="选择 0..n 个凭证"
+                style="width:100%"
+              >
+                <el-option
+                  v-for="a in authSessions"
+                  :key="a.id"
+                  :value="a.alias"
+                  :label="`${a.alias} · ${a.username} · ${a.token_type}`"
+                />
               </el-select>
+              <!-- &lt;alias&gt; 实体:裸尖括号会被 Vue 模板解析器当标签 -->
+              <p class="auth-hint">
+                场景 headers 里 <code v-pre>${auth.&lt;alias&gt;.*}</code> 引用的 alias 须包含在此，
+                运行时由 executor 解密注入 — 明文不落草稿。
+              </p>
             </el-form-item>
             <el-form-item label="重试次数">
               <el-input-number v-model="retryMaxAttempts" :min="0" :max="10" />
@@ -155,9 +171,12 @@ import { ElMessage } from 'element-plus'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { showError } from '@/utils/errorFallback'
+import { list as listAuths } from '@/api/auth_sessions'
+import type { AuthSession as AuthSessionDTO } from '@/api/auth_sessions'
+import { authAliasesIn } from '@/utils/tpl-refs'
 import type { DataSetSummary } from '@/types/scenario-composer'
 
-const AUTH_LIST = ['admin@fin', 'admin@logi', 'admin@wms', 'admin@mall', 'admin']
+const AUTH_HINT_MAX = 3
 
 const route = useRoute()
 const router = useRouter()
@@ -171,7 +190,9 @@ const selectedDataSets = ref<string[]>(
   presetDataSetIds ? presetDataSetIds.split(',').filter(Boolean) : [],
 )
 const selectedEnv = ref<string>('')
-const authName = ref('admin@fin')
+/** 执行用认证(多选)。替换旧 AUTH_LIST 硬编码 — 数据源 /api/auths(owner 级) */
+const authAliases = ref<string[]>([])
+const authSessions = ref<AuthSessionDTO[]>([])
 const retryMaxAttempts = ref(0)
 const retryIntervalMs = ref(500)
 const saveAsTemplate = ref(false)
@@ -223,6 +244,7 @@ onMounted(async () => {
     if (!store.dataSets.length)   await store.fetchDataSets()
     if (!store.envs.length)       await store.fetchEnvs()
     if (envs.value[0])            selectedEnv.value = envs.value[0].envId
+    authSessions.value = await listAuths()
   } catch (e) {
     showError('加载运行配置', undefined, (e as Error).message)
   }
@@ -252,10 +274,34 @@ async function onValidate() {
   }
 }
 
+/**
+ * 悬空认证扫描:场景全部 step headers 里的 ${auth.X} 引用 vs 已选 aliases。
+ * 仅警告放行 — Gimbal 解析失败会在步骤级报错,与运行语义一致(定案)。
+ */
+function danglingAuthRefs(): string[] {
+  const referenced = new Set<string>()
+  for (const s of draft.value.definition.steps ?? []) {
+    const headers = (s as { api?: { headers?: Record<string, string> } })?.api?.headers
+    if (!headers) continue
+    for (const v of Object.values(headers)) {
+      for (const a of authAliasesIn(String(v))) referenced.add(a)
+    }
+  }
+  return [...referenced].filter((a) => !authAliases.value.includes(a))
+}
+
 async function onRun() {
   if (!runCount.value) {
     ElMessage.warning('请先选择数据集和环境')
     return
+  }
+  const dangling = danglingAuthRefs()
+  if (dangling.length) {
+    const shown = dangling.slice(0, AUTH_HINT_MAX).join('、')
+    const more = dangling.length > AUTH_HINT_MAX ? ` 等 ${dangling.length} 个` : ''
+    ElMessage.warning(
+      `headers 引用了未勾选的认证: ${shown}${more} — 运行时将解析失败,建议勾选或移除引用(本次仍会提交)`,
+    )
   }
   running.value = true
   try {
@@ -265,7 +311,7 @@ async function onRun() {
       caseId,
       dataSetIds: selectedDataSets.value,
       env,
-      auth: authName.value,
+      auths: authAliases.value,
       retry: { maxAttempts: retryMaxAttempts.value, intervalMs: retryIntervalMs.value },
     })
     ElMessage.success(`已启动运行 · ${runId}`)
@@ -297,6 +343,18 @@ async function onRun() {
 .page-header h2 { margin: 0; font-size: 22px; color: var(--color-text-primary); }
 .page-header p  { margin: 5px 0 0; font-size: 12px; color: var(--color-text-secondary); }
 .header-actions { display: flex; gap: 8px; }
+.auth-hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+.auth-hint code {
+  font-family: var(--font-mono);
+  background: var(--color-bg-secondary, #f1f5f9);
+  padding: 0 3px;
+  border-radius: 3px;
+}
 
 .body {
   display: grid;

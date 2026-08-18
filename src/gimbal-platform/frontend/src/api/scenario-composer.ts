@@ -118,7 +118,8 @@ export interface RunRequest {
   caseId: string
   dataSetIds: string[]
   env: RunEnv
-  auth?: string
+  /** 执行用认证 alias 多选(原 auth 单选已废);dispatcher 解密注入 Config.users */
+  auths?: string[]
   retry?: { maxAttempts: number; intervalMs: number }
 }
 

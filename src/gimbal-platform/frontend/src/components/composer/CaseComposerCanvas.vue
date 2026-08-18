@@ -84,15 +84,35 @@
             <el-form-item label="description">
               <p class="desc-readonly">{{ currentStep.description || '—' }}</p>
             </el-form-item>
-            <!-- headers 之后: body 由 IOFieldBinding 驱动 (字段描述渲染见 FieldForm) -->
-            <el-form-item label="headers (JSON)">
-              <el-input
-                :model-value="JSON.stringify(currentStep.api.headers || {}, null, 2)"
-                @update:model-value="v => currentStep.api.headers = parseJson(v, {})"
-                type="textarea"
-                :rows="3"
-                class="code-input"
-              />
+            <!-- headers: KV 行编辑。value 支持 ${auth.<alias>.<field>} 模板 —
+                 点 ⓘ 从认证列表选(草稿只存引用,token 明文永不进前端),
+                 引用徽章提示悬空(alias 不在 /api/auths) -->
+            <el-form-item label="headers (点 ⓘ 注入 ${auth.<alias>.<field>})">
+              <div class="hdr-rows">
+                <div v-for="(value, key) in currentStep.api.headers" :key="String(key)" class="hdr-row">
+                  <el-input
+                    :model-value="String(key)"
+                    size="small"
+                    placeholder="header name"
+                    class="hdr-key"
+                    @update:model-value="v => updateHeaderKey(currentStep, String(key), v)"
+                  />
+                  <el-input
+                    :model-value="String(value)"
+                    size="small"
+                    placeholder="value (如 ${auth.qa1.token})"
+                    class="hdr-val"
+                    @update:model-value="v => updateHeaderValue(currentStep, String(key), v)"
+                  />
+                  <button type="button" class="c-kv-del hdr-pick" title="选择认证" @click="openAuthPicker(String(key), String(value))">ⓘ</button>
+                  <button type="button" class="c-kv-del" title="删除" @click="removeHeader(currentStep, String(key))">×</button>
+                  <div v-for="r in hdrRefs(String(value))" :key="r.raw" class="ref-chip" :class="refStatus(r, authAliases)">
+                    <span class="ref-chip-dot" />{{ r.raw }}
+                    <span v-if="refStatus(r, authAliases) === 'dangling'" class="ref-chip-note">认证 {{ r.alias }} 不存在</span>
+                  </div>
+                </div>
+                <button type="button" class="c-add" @click="addHeader(currentStep)">+ 新增 header</button>
+              </div>
             </el-form-item>
             <!-- body: 优先由 request.fields_meta (IOFieldBinding) 驱动表单 -->
             <el-form-item v-if="fieldBindings(currentStep).length" label="请求体 (由 IOFieldBinding 驱动)">
@@ -224,6 +244,14 @@
         <div v-else class="info-empty muted">无选中 step</div>
       </aside>
     </div>
+
+    <!-- 认证选择器(headers value 注入 ${auth.<alias>.<field>}) -->
+    <AuthSelectorModal
+      v-if="authPickerOpen"
+      v-model="authPickerOpen"
+      :auths="auths"
+      @select="onAuthPicked"
+    />
   </div>
 </template>
 
@@ -233,7 +261,12 @@ import { ElMessage } from 'element-plus'
 import CaseComposerCatalog from './CaseComposerCatalog.vue'
 import FieldForm from './FieldForm.vue'
 import StrategyForm from './StrategyForm.vue'
+import AuthSelectorModal from '../AuthSelectorModal.vue'
 import { getFullEndpoint, listStrategyKinds, getStrategyKindFull } from '@/api/scenario-composer'
+import { list as listAuths } from '@/api/auth_sessions'
+import { parseTplRefs, refStatus } from '@/utils/tpl-refs'
+import type { TplRef } from '@/utils/tpl-refs'
+import type { AuthSession } from '@/api/auth_sessions'
 import { deepDefaults } from '@/utils/jsonpath'
 import type {
   StepView, ExtractView, IOFieldBinding, EndpointFullView,
@@ -347,6 +380,73 @@ function removeStrategy(step: StepView, s: StrategyView) {
   if (idx >= 0) step.strategy.splice(idx, 1)
 }
 
+// ── headers KV 行 + 认证引用(模式照搬 EditableStepCard 成熟实现) ────
+// headers 本就是 Record<string, string>;KV 行只是编辑形态,草稿/导出形状不变。
+
+const auths = ref<AuthSession[]>([])
+const authPickerOpen = ref(false)
+const authPickerKey = ref<string | null>(null)
+const authPickerVal = ref<string | null>(null)
+const authPickerStep = ref<StepView | null>(null)
+
+function addHeader(step: StepView) {
+  const h = (step.api.headers ||= {})
+  let k = 'X-Header'
+  while (k in h) k += '1'
+  h[k] = ''
+}
+function removeHeader(step: StepView, key: string) {
+  delete step.api.headers?.[key]
+}
+function updateHeaderKey(step: StepView, oldKey: string, newKey: string) {
+  if (oldKey === newKey || !step.api.headers) return
+  const v = step.api.headers[oldKey]
+  delete step.api.headers[oldKey]
+  step.api.headers[newKey] = v ?? ''
+}
+function updateHeaderValue(step: StepView, key: string, value: string) {
+  if (step.api.headers) step.api.headers[key] = value
+}
+
+/**
+ * 打开选择器时记 key + 当时 value。key 在弹窗期间可能被改名
+ * (rename 是 delete+set,弹窗里拿不到新 key),所以落注入时:
+ * key 仍在 → 注入该 key;key 没了 → 找 value 等于当时 value 的唯一行。
+ */
+function openAuthPicker(key: string, value: string) {
+  authPickerStep.value = currentStep.value ?? null
+  if (!authPickerStep.value) return
+  authPickerKey.value = key
+  authPickerVal.value = value
+  authPickerOpen.value = true
+}
+function onAuthPicked(tpl: string) {
+  const step = authPickerStep.value
+  const key = authPickerKey.value
+  const val = authPickerVal.value
+  const headers = step?.api?.headers
+  if (step && headers) {
+    if (key && key in headers) {
+      headers[key] = tpl
+    } else {
+      // key 被改:按当时 value 定位(唯一匹配才注入,防误写)
+      const hits = Object.entries(headers).filter(([, v]) => v === val)
+      if (hits.length === 1) headers[hits[0][0]] = tpl
+    }
+  }
+  authPickerKey.value = null
+  authPickerVal.value = null
+  authPickerStep.value = null
+}
+
+/** header value 的引用徽章数据(悬空判定对 /api/auths 列表) */
+function hdrRefs(value: string): TplRef[] {
+  return parseTplRefs(value).filter((r) => r.domain === 'auth')
+}
+
+/** 模板里 refStatus 的第二参:已知 alias 列表 */
+const authAliases = computed(() => auths.value.map((a) => a.alias))
+
 onMounted(() => {
   void loadStrategyKinds()
   // 首次进入策略区前预热三个 kind 的 detail(共 3 个请求,一次性)
@@ -356,6 +456,8 @@ onMounted(() => {
       for (const k of strategyKinds.value) void ensureStrategyDetail(k.kind)
     })
   }
+  // 认证列表:ⓘ 选择器 + 悬空徽章判定共用。失败静默(ⓘ 打开时列表为空,可重进)
+  listAuths().then((a) => { auths.value = a }).catch(() => {})
 })
 
 watch(() => props.steps, (v) => {
@@ -711,6 +813,33 @@ function parseJson(s: string, fallback: unknown) {
   font-family: var(--font-mono); font-size: 10px;
   color: #94a3b8;
 }
+
+/* headers KV 行 — 独立 flex 布局(元素数可变: key/val/ⓘ/×/chips,
+   不能用 .c-kv-row 的固定 4 列 grid,多出的子元素会溢出格子叠层) */
+.hdr-rows { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+.hdr-row {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 6px;
+  background: var(--c-bg-secondary);
+  border-radius: 6px;
+}
+.hdr-key { width: 170px; flex-shrink: 0; }
+.hdr-val { flex: 1; min-width: 200px; }
+.hdr-pick { color: #4f46e5; flex-shrink: 0; }
+.hdr-pick:hover { background: #e0e7ff; color: #3730a3; }
+.hdr-row .c-kv-del { flex-shrink: 0; }
+.ref-chip { margin-top: 2px; }
+
+/* ${auth.*} 引用徽章:绿=可解析 / 红=悬空 */
+.ref-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 10px;
+  padding: 1px 7px; border-radius: 3px;
+  background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;
+}
+.ref-chip.dangling { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.ref-chip-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.ref-chip-note { font-family: inherit; opacity: 0.85; }
 
 /* fields empty */
 .fields-empty {

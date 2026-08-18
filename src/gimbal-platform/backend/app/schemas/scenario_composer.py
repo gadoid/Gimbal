@@ -315,7 +315,10 @@ class RunRequest(BaseModel):
     case_id: str = Field(alias="caseId", min_length=1, max_length=128)
     data_set_ids: list[str] = Field(alias="dataSetIds", min_length=1)
     env: RunEnv
-    auth: str | None = None
+    # 执行用认证 alias 多选(原 ``auth`` 单选已废):dispatcher 按 owner
+    # 解密后注入 composed scenario 的 Config.users,headers 里的
+    # ``${auth.<alias>.<field>}`` 在 Gimbal 运行期解析。
+    auths: list[str] = Field(alias="auths", default_factory=list)
     retry: RetryRef | None = None
 
 

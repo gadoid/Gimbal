@@ -68,6 +68,7 @@ class PlateMock:
 
     def __init__(self) -> None:
         self.convert_calls: list[dict] = []
+        self.run_calls: list[dict] = []  # D2 run bodies (stubbed upstream)
         self.behaviour: str = "ok"  # ok | 4xx | 5xx | unavailable
 
     def install(self) -> None:
@@ -112,6 +113,13 @@ class PlateMock:
                     return httpx.Response(500, text="plate crashed")
                 if self.behaviour == "unavailable":
                     raise httpx.ConnectError("connection refused", request=request)
+            if path.endswith("/api/scenario/action/run"):
+                self.run_calls.append(json.loads(request.content))
+                # D2 stays stubbed upstream; mirror its future shape.
+                return httpx.Response(
+                    200,
+                    json={"ok": True, "dim": "scenario", "data": {"dispatched": True}},
+                )
             return httpx.Response(404)
 
         from app.services import plate_client
@@ -298,3 +306,131 @@ async def test_run_dispatch_records_failure_when_plate_down(
     assert r.status_code == 201
     run_id = r.json()["runId"]
     assert run_id.startswith("run-")
+
+
+async def test_run_injects_exec_auths_into_run_copy_only(
+    client: AsyncClient, plate_mock: PlateMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """执行用认证多选:解密注入只进 run 副本,convert 永不带明文。
+
+    锁三条边界(#1 改造的安全契约):
+      1. convert 收到的 scenario.config.users 不含所选 alias 的明文凭据;
+      2. dispatcher 传给 plate_client.run 的副本 config.users[alias] 含
+         解密后的 url/username/password/token_type/expires_in(形状同
+         V1 executor 生产路径)。plate_client.run 自身是 stub(真链路
+         是 #4 gimbal_client 的事),故 monkeypatch 捕获入参 — 验证的
+         是 dispatcher 侧接线,不越权测 plate_client 内部;
+      3. Execution.config_json 用读侧契约 key ``exec_auth_alias``(数组),
+         不再是旧的 "auth" 单选 key。
+    """
+    headers = await _register_and_login(client)
+    await _seed_scenario_case_and_dataset(client, headers, rows=[{"qty": 1}])
+
+    # 建一个执行用认证(fernet 加密存储,与 /api/auths 生产路径一致)
+    r = await client.post(
+        "/api/auths",
+        headers=headers,
+        json={
+            "alias": "qa1",
+            "url": "http://auth.example/login",
+            "username": "qa-user",
+            "password": "qa-pass",
+            "token_type": "bearer",
+        },
+    )
+    assert r.status_code == 201
+
+    # 捕获 dispatcher → plate_client.run 的入参
+    from app.services import plate_client as pc
+
+    run_payloads: list[dict] = []
+
+    async def _capture_run(scenario_dict: dict) -> dict:
+        run_payloads.append(scenario_dict)
+        return {"dispatched": True}
+
+    monkeypatch.setattr(pc, "run", _capture_run)
+
+    r = await client.post(
+        "/api/runs",
+        headers=headers,
+        json={
+            "caseId": "case-001",
+            "dataSetIds": ["ds-001"],
+            "env": {
+                "envId": "test-env-A",
+                "name": "test-env-A",
+                "baseUrl": "http://x",
+            },
+            "auths": ["qa1"],
+        },
+    )
+    assert r.status_code == 201
+
+    for _ in range(50):
+        if len(run_payloads) >= 1:
+            break
+        await asyncio.sleep(0.05)
+    assert len(run_payloads) == 1
+
+    # 1. convert 无明文(users 里没有 qa1 条目)
+    conv_scenario = plate_mock.convert_calls[0]["scenario"]
+    assert "qa1" not in (conv_scenario.get("config", {}).get("users") or {})
+
+    # 2. run 副本注入解密凭据
+    injected = run_payloads[0]["config"]["users"]["qa1"]
+    assert injected["username"] == "qa-user"
+    assert injected["password"] == "qa-pass"
+    assert injected["url"] == "http://auth.example/login"
+    assert injected["token_type"] == "bearer"
+
+    # 3. Execution.config_json key 对齐读侧契约
+    import sqlalchemy as sa
+
+    from app.core import db as db_module
+    from app.models import Execution
+
+    async with db_module.SessionLocal() as s:
+        ex = (
+            (
+                await s.execute(
+                    sa.select(Execution).order_by(Execution.id.desc())
+                )
+            )
+            .scalars()
+            .first()
+        )
+        assert ex is not None
+        assert ex.config_json["exec_auth_alias"] == ["qa1"]
+        assert "auth" not in ex.config_json
+
+
+def test_inject_exec_users_shape_and_no_mutation() -> None:
+    """_inject_exec_users: 同名覆盖 + 不改入参 + 空列表原样返回(单元级)。"""
+    from copy import deepcopy
+
+    from app.models.auth_session import AuthSession
+    from app.services.run_dispatcher import _inject_exec_users
+
+    a = AuthSession(
+        alias="qa1",
+        url="http://x",
+        username_enc="enc",
+        password_enc="enc",
+        token_type="bearer",
+        expires_in=3600,
+    )
+    a.username = "u"
+    a.password = "p"
+
+    composed = {"kind": "scenario", "config": {"users": {"keep": {"url": "k"}}}}
+    snapshot = deepcopy(composed)
+
+    out = _inject_exec_users(composed, [a])
+    # 同名覆盖 + 保留既有 users
+    assert out["config"]["users"]["keep"] == {"url": "k"}
+    assert out["config"]["users"]["qa1"]["username"] == "u"
+    # 入参未被改动(明文不回渗 compose 结果)
+    assert composed == snapshot
+    # 空列表 → 同一引用(无注入面)
+    assert _inject_exec_users(composed, []) is composed

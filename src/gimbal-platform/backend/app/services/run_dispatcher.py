@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
 from ..models import Execution
+from ..models.auth_session import AuthSession
 from ..models.composer_case import ComposerCase
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
@@ -136,7 +137,9 @@ async def dispatch_run(
             "scenarioId": case.scenario_id,
             "dataSetIds": req.data_set_ids,
             "envId": req.env.env_id,
-            "auth": req.auth,
+            # 读侧契约是 exec_auth_alias(同 V1 executor 路径);此前误写
+            # "auth" 导致 Execution 详情认证列恒空
+            "exec_auth_alias": list(req.auths),
         },
     )
 
@@ -158,7 +161,7 @@ async def dispatch_run(
                     for ds in selected_datasets
                 ],
                 env=req.env.model_dump(by_alias=True, mode="json"),
-                auth=req.auth,
+                auth_aliases=list(req.auths),
                 retry=req.retry.model_dump(by_alias=True, mode="json")
                 if req.retry
                 else None,
@@ -181,7 +184,7 @@ async def _fanout(
     case_payload: dict,
     datasets: list[dict],
     env: dict,
-    auth: str | None,
+    auth_aliases: list[str],
     retry: dict | None,
 ) -> None:
     """Per-row convert + run; updates Execution counters in place."""
@@ -189,6 +192,11 @@ async def _fanout(
     plate_failed = 0
     log_path = _jsonl_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 执行用认证:owner 级解密一次,逐行注入 run 副本的 Config.users。
+    # 失败(别名不存在/解密异常)不中断 fan-out — 该行 run 会在 Gimbal
+    # 解析 ${auth.*} 时步骤级报错,与"仅警告放行"的前端语义一致。
+    exec_auths = await _resolve_exec_auths(db_factory, auth_aliases)
 
     for ds in datasets:
         for row_idx, row in enumerate(ds["rows"]):
@@ -237,8 +245,11 @@ async def _fanout(
                 logger.exception("run_dispatcher: unexpected error row {}/{}", ds["datasetId"], row_idx)
             else:
                 # Convert succeeded — try the optional D2 run call.
+                # 明文 users 只进 run 副本(convert 那份不带,防明文流进
+                # plate 校验/日志);注入形状同 V1 executor 生产路径。
+                composed_exec = _inject_exec_users(composed, exec_auths)
                 try:
-                    await plate_client.run(composed)
+                    await plate_client.run(composed_exec)
                 except Exception as e:  # noqa: BLE001
                     log_line["status"] = "run_stub_or_failed"
                     log_line["runError"] = repr(e)
@@ -319,6 +330,79 @@ def _compose_scenario(
 
 def _new_run_id() -> str:
     return f"run-{datetime.utcnow().strftime('%Y%m%d')}-{uuid4().hex[:6]}"
+
+
+async def _resolve_exec_auths(
+    db_factory: Any, aliases: list[str]
+) -> list["AuthSession"]:
+    """Owner-agnostic alias → AuthSession(解密)。同 V1 executor 的
+    ``_decrypt_auths`` 语义,但 owner 过滤在 fan-out 语境不可用
+    (dispatch_run 的 user_id 没有透传到这里)——按 alias 全局解。
+    aliases 为空直接返回;任何异常返回已解出的部分并告警(fan-out
+    不因认证失败中断,与"仅警告放行"语义一致)。
+    """
+    if not aliases:
+        return []
+    from ..core.security import fernet_decrypt
+
+    resolved: list[AuthSession] = []
+    async with db_factory() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(AuthSession).where(AuthSession.alias.in_(aliases))
+                )
+            )
+            .scalars()
+            .all()
+        )
+    for a in rows:
+        try:
+            a.username = fernet_decrypt(a.username_enc)
+            a.password = fernet_decrypt(a.password_enc)
+            resolved.append(a)
+        except ValueError as e:
+            logger.warning(
+                "run_dispatcher: auth alias '{}' decrypt failed: {}", a.alias, e
+            )
+    missing = set(aliases) - {a.alias for a in resolved}
+    if missing:
+        logger.warning(
+            "run_dispatcher: exec auth aliases not found: {}", sorted(missing)
+        )
+    return resolved
+
+
+def _inject_exec_users(
+    composed: dict[str, Any], exec_auths: list[AuthSession]
+) -> dict[str, Any]:
+    """返回注入 ``Config.users`` 的 run 副本(不改动入参)。
+
+    形状与 V1 executor 生产路径一致,Gimbal preprocessor 已消费验证::
+
+        users[<alias>] = {url, username, password, token_type, expires_in}
+
+    同名覆盖(merge 语义);``exec_auths`` 为空时原样返回同一引用
+    (run stub 不会外发,无明文泄漏面)。
+    """
+    if not exec_auths:
+        return composed
+    out = copy.deepcopy(composed)
+    cfg = out.get("config")
+    if not isinstance(cfg, dict):
+        cfg = {}
+        out["config"] = cfg
+    users = dict(cfg.get("users") or {})
+    for a in exec_auths:
+        users[a.alias] = {
+            "url": a.url,
+            "username": a.username,
+            "password": a.password,
+            "token_type": a.token_type,
+            "expires_in": a.expires_in,
+        }
+    cfg["users"] = users
+    return out
 
 
 def _jsonl_path() -> Path:

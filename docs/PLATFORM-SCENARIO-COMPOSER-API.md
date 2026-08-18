@@ -206,10 +206,17 @@ Authorization: Bearer <access_token>
   "caseId": "case-001",
   "dataSetIds": ["ds-001"],
   "env": { "envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://..." },
-  "auth": "admin@fin",
+  "auths": ["admin@fin", "qa1"],
   "retry": { "maxAttempts": 0, "intervalMs": 500 }
 }
 ```
+
+> `auths`（数组）是执行用认证多选，替代旧的 `auth`（单选字符串，已废）。
+> dispatcher 按 alias 解密（fernet）后注入**仅 run 副本**的 `Config.users` —
+> convert 那份不带明文（防凭据流进 plate 校验/日志）。headers 里的
+> `${auth.<alias>.<field>}` 在 Gimbal 运行期解析。执行记录写
+> `Execution.config_json.exec_auth_alias`（与读侧契约对齐；此前误写 `"auth"`
+> 导致详情页认证列恒空，已修）。
 
 ### 2.7 RunResponse
 
@@ -546,7 +553,7 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 3. 对每行调用 Plate：
    - 拼完整 `Scenario` dict（含行值替换 `vars`）
    - 调 Plate `POST /api/scenario/action/convert`
-   - 调 Plate `POST /api/scenario/action/run`（异步）
+   - 调 Plate `POST /api/scenario/action/run`（异步；带解密注入的 `Config.users` 副本，见 §2.6 注）
 4. 汇总 `runId` 返回。
 5. 在 `executions` 表创建一行 `status=pending`。
 
