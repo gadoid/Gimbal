@@ -68,6 +68,47 @@ class IOFieldBinding(BaseModel):
         return self
 
 
+def _bindings_from_model(model: type[BaseModel]) -> list[IOFieldBinding]:
+    """从 Pydantic model 的 JSON Schema 派生顶层字段的 IOFieldBinding。
+
+    description / default / required / enum 单一维护在 model 上,此处物化为
+    fields 输出(plate 是结构权威源,平台前端按 binding 渲染表单)。仅覆盖
+    顶层属性;嵌套结构以 ui_kind=json 整体编辑,不展开。
+    """
+    schema = model.model_json_schema()
+    props = schema.get("properties") or {}
+    required = set(schema.get("required") or [])
+    out: list[IOFieldBinding] = []
+    for name, prop in props.items():
+        if not isinstance(prop, dict):
+            continue
+        t = prop.get("type")
+        if "enum" in prop:
+            ui: str = "select"
+        elif t in ("integer", "number"):
+            ui = "number"
+        elif t == "boolean":
+            ui = "boolean"
+        elif t == "string":
+            ui = "text"
+        elif t in ("array", "object"):
+            ui = "json"
+        else:
+            ui = "unknown"
+        out.append(
+            IOFieldBinding(
+                name=name,
+                path=f"$.{name}",
+                required=name in required,
+                default=prop.get("default"),
+                description=str(prop.get("description") or ""),
+                enum=prop["enum"] if "enum" in prop else None,
+                ui_kind=ui,  # type: ignore[arg-type]
+            )
+        )
+    return out
+
+
 class RequestSpec(BaseModel):
     """接口请求 body 的形态定义。"""
 
@@ -111,6 +152,12 @@ class RequestSpec(BaseModel):
         # 规则 C(model 与 schema_ 可并存)不强制:见 V2 §2.2 决策 Q3 b。
         # model 优先语义已在 validate_body() 中隐含(model 非 None 时
         # 只用 model 校验,schema_ 仅作序列化/展示补充);见 V1 §4.1。
+        #
+        # 派生规则:fields 为空且 model 存在时,从 model JSON Schema 自动派生
+        # IOFieldBinding(description/default/required 全量带出)。手写 fields
+        # 优先,不被动过 —— 派生只兜"只声明 model"的接口。
+        if not self.fields and self.model is not None:
+            self.fields = _bindings_from_model(self.model)
         return self
 
     def json_schema(self) -> dict[str, Any] | None:

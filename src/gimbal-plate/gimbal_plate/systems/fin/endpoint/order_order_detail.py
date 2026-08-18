@@ -31,7 +31,7 @@ ORDER_ORDER_DETAIL: Final[EndpointSpec] = EndpointSpec(
     request=RequestSpec(
         body_type="json",
         fields=[
-        IOFieldBinding(name='order_id', path='order_id', required=True, example='', ui_kind='text'),
+        IOFieldBinding(name='order_id', path='order_id', required=True, example='', ui_kind='text', description='订单主键 ID,可取上一步 extract 的 ${var.order_id}'),
         ],
         schema_={},
     ),

@@ -31,12 +31,12 @@ AUDIT_AUDIT_PAGE: Final[EndpointSpec] = EndpointSpec(
     request=RequestSpec(
         body_type="json",
         fields=[
-        IOFieldBinding(name='page_no', path='page_no', required=True, example=1, ui_kind='number'),
-        IOFieldBinding(name='page_size', path='page_size', required=True, example=20, ui_kind='number'),
-        IOFieldBinding(name='active_tab', path='active_tab', required=True, example='examine_wait', ui_kind='text'),
-        IOFieldBinding(name='sort_field', path='sort_field', required=True, example='expedite_num', ui_kind='text'),
-        IOFieldBinding(name='sort_order', path='sort_order', required=True, example='desc', ui_kind='text'),
-        IOFieldBinding(name='params', path='params', required=True, example={}, ui_kind='json'),
+        IOFieldBinding(name='page_no', path='page_no', required=True, example=1, ui_kind='number', description='页码,从 1 开始'),
+        IOFieldBinding(name='page_size', path='page_size', required=True, example=20, ui_kind='number', description='每页条数,默认 20'),
+        IOFieldBinding(name='active_tab', path='active_tab', required=True, example='examine_wait', ui_kind='text', description='审批页签: examine_wait=待审批 / examine_done=已审批'),
+        IOFieldBinding(name='sort_field', path='sort_field', required=True, example='expedite_num', ui_kind='text', description='排序字段,如 expedite_num(催办次数)'),
+        IOFieldBinding(name='sort_order', path='sort_order', required=True, example='desc', ui_kind='text', description='排序方向: asc / desc', enum=['asc', 'desc']),
+        IOFieldBinding(name='params', path='params', required=True, example={}, ui_kind='json', description='业务过滤条件,如单号/客户/日期范围'),
         ],
         schema_={},
     ),
