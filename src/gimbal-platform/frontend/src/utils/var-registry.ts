@@ -93,7 +93,7 @@ export function varRefsIn(value: unknown, out: Set<string> = new Set()): Set<str
 
 /** StepView 的最小结构签名(避免 import 类型带来的循环依赖) */
 export interface StepLike {
-  strategy?: { kind?: string; target?: string; expression?: string }[]
+  strategy?: { kind?: string; target?: string; expression?: string; source?: string }[]
   api?: { headers?: Record<string, string> }
   request?: { body?: unknown }
 }
@@ -124,6 +124,37 @@ export function collectVarRefs(steps: StepLike[]): VarRefSite[] {
   return sites
 }
 
+// ── assign source 引用($.name 语域)──────────────────────────────
+
+/** assign 策略 `$.<name>` source 的引用位置(域 B:scenario context) */
+export interface AssignVarSite {
+  /** 被引用的变量名(source 的顶层 key) */
+  name: string
+  /** 消费者 step 序号(0-based) */
+  stepIdx: number
+  where: 'strategy'
+  detail: string
+}
+
+/**
+ * 收集全部 assign 策略 source 里的 `$.<name>` 引用(带位置)。
+ *
+ * 只匹配**恰好 `$.<name>` 整体形状** — 变量提升(extract promote)都是
+ * scenario context 顶层 key;嵌套读法(`$.data.x`)属于响应原文路径,
+ * 不是提升变量,不收。字面量/模板串同样不收。
+ */
+export function assignVarRefs(steps: StepLike[]): AssignVarSite[] {
+  const sites: AssignVarSite[] = []
+  steps.forEach((s, i) => {
+    (s.strategy || []).forEach((st, j) => {
+      if (st.kind !== 'assign' || typeof st.source !== 'string') return
+      const m = /^\$\.([A-Za-z0-9_]+)$/.exec(st.source)
+      if (m) sites.push({ name: m[1], stepIdx: i, where: 'strategy', detail: `strategy[${j}].source` })
+    })
+  })
+  return sites
+}
+
 // ── 校验 ──────────────────────────────────────────────────────────
 
 export type VarIssueKind = 'dangling' | 'order' | 'missing_column'
@@ -145,10 +176,11 @@ export interface VarIssue {
  * 三类引用校验:
  *
  * 1. dangling — 引用的变量名不在注册表(不含数据集列)。
- * 2. order — extract 产出被更早的 step 消费(时序冲突):headers/body
- *    在请求发出前求值,要求 producer < consumer;strategy 里 extract
- *    (after_request)可以引用本 step 产出的变量,要求 producer ≤
- *    consumer。
+ * 2. order — **assign source 的 `$.<name>` 引用**被同 step 或更晚 step
+ *    产出的 extract 变量(before_request 消费 vs after_request 产出,
+ *    要求 producer < consumer 严格小于)。`${var.x}` 是 preprocess 启动
+ *    前静态展开,不参与时序,不做 order 判定(查不到自然落 dangling/
+ *    missing_column)。
  * 3. missing_column — 引用既不在注册表,也不在所选数据集列并集
  *    (运行期 dispatcher 会把列 layer 进 vars;列名对不上就是解不出)。
  *
@@ -163,24 +195,24 @@ export function checkVarRefs(
 ): VarIssue[] {
   const dsCols = new Set(datasetColumns)
   const issues: VarIssue[] = []
+  for (const site of assignVarRefs(steps)) {
+    const entry = registry.byName.get(site.name)
+    if (entry && entry.origin === 'extract') {
+      const producer = entry.stepIdx!
+      if (producer >= site.stepIdx) {
+        issues.push({
+          kind: 'order',
+          name: site.name, stepIdx: site.stepIdx, where: site.where, detail: site.detail,
+          producerIdx: producer,
+          message: `步骤 ${site.stepIdx + 1} 的 assign 引用 \${$.${site.name}},但它在步骤 ${producer + 1} 才产出(after_request)`,
+        })
+      }
+    }
+  }
   for (const site of collectVarRefs(steps)) {
     const name = site.ref.alias!
     const entry = registry.byName.get(name)
-    if (entry && entry.origin === 'extract') {
-      // 时序:extract 产出必须早于消费(headers/body 严格小于;
-      // strategy 允许同 step —— 本 step 的 after_request extract
-      // 产出可被本 step 后续策略消费)
-      const producer = entry.stepIdx!
-      const ok = site.where === 'strategy' ? producer <= site.stepIdx : producer < site.stepIdx
-      if (!ok) {
-        issues.push({
-          kind: 'order',
-          name, stepIdx: site.stepIdx, where: site.where, detail: site.detail,
-          producerIdx: producer,
-          message: `步骤 ${site.stepIdx + 1} 的 ${site.where} 引用 \${var.${name}},但它在步骤 ${producer + 1} 才产出`,
-        })
-      }
-    } else if (!entry) {
+    if (!entry) {
       // 注册表落空 → 数据集列兜底
       if (dsCols.size && !dsCols.has(name)) {
         issues.push({

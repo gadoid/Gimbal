@@ -6,6 +6,7 @@ import {
   collectVarRefs,
   checkVarRefs,
   varUsages,
+  assignVarRefs,
   type StepLike,
 } from '@/utils/var-registry'
 
@@ -111,18 +112,15 @@ describe('checkVarRefs — 三类校验', () => {
     expect(checkVarRefs(steps, reg, ['qty'])).toHaveLength(0)
   })
 
-  it('order: headers 消费 extract 要求 producer < consumer', () => {
-    // step0 消费、step1 产出 → 时序冲突
+  it('headers 消费 extract 出身变量 → 新语义不报 order(静态展开不参与时序)', () => {
+    // 旧语义:${var.token} 判 order。新语义(#10):${var.x} 是 preprocess
+    // 静态展开,时序锚点改为 assign 的 $.source;此处名字已注册,不报
     const steps = [
       mkStep({ api: { headers: { H: '${var.token}' } } }),
       token,
     ]
     const reg = deriveVarRegistry(steps, {})
-    const issues = checkVarRefs(steps, reg, [])
-    expect(issues).toHaveLength(1)
-    expect(issues[0].kind).toBe('order')
-    expect(issues[0].producerIdx).toBe(1)
-    expect(issues[0].stepIdx).toBe(0)
+    expect(checkVarRefs(steps, reg, [])).toHaveLength(0)
   })
 
   it('order: strategy 允许同 step 消费(producer ≤ consumer)', () => {
@@ -147,16 +145,83 @@ describe('checkVarRefs — 三类校验', () => {
     expect(checkVarRefs(steps, reg, [])).toHaveLength(0)
   })
 
-  it('body 深扫 + 时序', () => {
+  it('body 深扫引用已注册变量 → 不报(order 判定已重定向到 assign source)', () => {
     const steps = [
       mkStep({ request: { body: { deep: { deeper: ['${var.token}'] } } } }),
       token,
     ]
     const reg = deriveVarRegistry(steps, {})
+    expect(checkVarRefs(steps, reg, [])).toHaveLength(0)
+  })
+})
+
+describe('assignVarRefs — assign source $.name 收集', () => {
+  it('T1: 收集整体 $.<name> source(带位置),忽略嵌套/字面量/${var.x}', () => {
+    const steps = [
+      mkStep({
+        strategy: [
+          { kind: 'assign', source: '$.token', target: '$.request_body.a' },
+          { kind: 'assign', source: '$.data.deep.x', target: '$.request_body.b' }, // 嵌套 — 不收
+          { kind: 'assign', source: 'literal', target: '$.request_body.c' },        // 字面量 — 不收
+          { kind: 'extract', target: 't', expression: '${var.x}$.q' },              // 模板 — 不收
+        ],
+      }),
+      mkStep({
+        strategy: [{ kind: 'assign', source: '$.order_id', target: '$.request_body.d' }],
+      }),
+    ]
+    const sites = assignVarRefs(steps)
+    expect(sites).toHaveLength(2)
+    expect(sites[0]).toMatchObject({ name: 'token', stepIdx: 0, where: 'strategy', detail: 'strategy[0].source' })
+    expect(sites[1]).toMatchObject({ name: 'order_id', stepIdx: 1, where: 'strategy', detail: 'strategy[0].source' })
+  })
+
+  it('T2: order — step2 assign 引用 step3 产出的 extract 变量 → issue;引用 step1 → 无', () => {
+    const late = mkStep({ strategy: [{ kind: 'extract', target: 'x', expression: '$.x' }] })
+    // step1 产出 y;step2 assign 引用 y(合法);step2 assign 引用 step3 的 x(非法)
+    const steps = [
+      mkStep({ strategy: [{ kind: 'extract', target: 'y', expression: '$.y' }] }),
+      mkStep({ strategy: [{ kind: 'assign', source: '$.y', target: '$.request_body.a' }] }),
+      mkStep({ strategy: [{ kind: 'assign', source: '$.x', target: '$.request_body.b' }] }),
+      late,
+    ]
+    const reg = deriveVarRegistry(steps, {})
     const issues = checkVarRefs(steps, reg, [])
     expect(issues).toHaveLength(1)
     expect(issues[0].kind).toBe('order')
-    expect(issues[0].where).toBe('body')
+    expect(issues[0].name).toBe('x')
+    expect(issues[0].stepIdx).toBe(2)
+    expect(issues[0].producerIdx).toBe(3)
+  })
+
+  it('T2b: 同 step assign 引用本 step extract 变量 → issue(after_request 产出 vs before_request 消费)', () => {
+    const steps = [
+      mkStep({
+        strategy: [
+          { kind: 'extract', target: 'x', expression: '$.x' },
+          { kind: 'assign', source: '$.x', target: '$.request_body.a' },
+        ],
+      }),
+    ]
+    const reg = deriveVarRegistry(steps, {})
+    const issues = checkVarRefs(steps, reg, [])
+    expect(issues).toHaveLength(1)
+    expect(issues[0].kind).toBe('order')
+    expect(issues[0].producerIdx).toBe(0)
+    expect(issues[0].stepIdx).toBe(0)
+  })
+
+  it('T3: ${var.x} 引用不再产生 order issue(静态展开不参与时序)', () => {
+    // step0 headers 引用 step1 产出的 extract 变量 — 旧逻辑报 order,
+    // 新语义:${var.x} 是 preprocess 静态展开,extract 产物不在其命名空间,
+    // 这属于"名字撞车"而非时序问题,不再挂 order(落 dangling/missing_column 语义见前)
+    const steps = [
+      mkStep({ api: { headers: { H: '${var.token}' } } }),
+      mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' }] }),
+    ]
+    const reg = deriveVarRegistry(steps, {})
+    const issues = checkVarRefs(steps, reg, [])
+    expect(issues.filter((i) => i.kind === 'order')).toHaveLength(0)
   })
 })
 
