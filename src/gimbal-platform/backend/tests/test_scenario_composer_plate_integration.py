@@ -405,6 +405,75 @@ async def test_run_injects_exec_auths_into_run_copy_only(
         assert "auth" not in ex.config_json
 
 
+async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
+    client: AsyncClient, plate_mock: PlateMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """跨 owner 撞名 alias:只解发起人自己的凭证。
+
+    alias 唯一性是 owner 级(UniqueConstraint(owner_id, alias)),bob
+    可以建与 alice 同名的 "qa1"。若无 owner 过滤,
+    ``alias.in_(["qa1"])`` 会同时命中两行,注入谁的凭证取决于行序
+    — 跨 owner 解错凭证的口子。锁:alice 发起 run,注入的必须是
+    alice 的 username(且只有一行注入)。
+    """
+    headers = await _register_and_login(client)  # alice
+    await _seed_scenario_case_and_dataset(client, headers, rows=[{"qty": 1}])
+
+    async def _create_auth(h: dict, username: str) -> None:
+        r = await client.post(
+            "/api/auths",
+            headers=h,
+            json={
+                "alias": "qa1",
+                "url": f"http://{username}-auth/login",
+                "username": f"{username}-user",
+                "password": f"{username}-pass",
+                "token_type": "bearer",
+            },
+        )
+        assert r.status_code == 201, r.text
+
+    await _create_auth(headers, "alice")
+    # bob 建同名 alias(owner 级唯一约束允许)
+    bob_headers = await _register_and_login(client, username="bob")
+    await _create_auth(bob_headers, "bob")
+
+    from app.services import plate_client as pc
+
+    run_payloads: list[dict] = []
+
+    async def _capture_run(scenario_dict: dict) -> dict:
+        run_payloads.append(scenario_dict)
+        return {"dispatched": True}
+
+    monkeypatch.setattr(pc, "run", _capture_run)
+
+    # alice 发起运行,选撞名 alias
+    r = await client.post(
+        "/api/runs",
+        headers=headers,
+        json={
+            "caseId": "case-001",
+            "dataSetIds": ["ds-001"],
+            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+            "auths": ["qa1"],
+        },
+    )
+    assert r.status_code == 201
+
+    for _ in range(50):
+        if len(run_payloads) >= 1:
+            break
+        await asyncio.sleep(0.05)
+    assert len(run_payloads) == 1
+
+    users = run_payloads[0]["config"]["users"]
+    # 恰好一个 qa1 条目,且是 alice 的凭证 — bob 的同名行绝不能被解入
+    assert users["qa1"]["username"] == "alice-user"
+    assert users["qa1"]["password"] == "alice-pass"
+    assert users["qa1"]["url"] == "http://alice-auth/login"
+
+
 def test_inject_exec_users_shape_and_no_mutation() -> None:
     """_inject_exec_users: 同名覆盖 + 不改入参 + 空列表原样返回(单元级)。"""
     from copy import deepcopy

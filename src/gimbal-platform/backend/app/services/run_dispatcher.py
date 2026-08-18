@@ -161,6 +161,7 @@ async def dispatch_run(
                     for ds in selected_datasets
                 ],
                 env=req.env.model_dump(by_alias=True, mode="json"),
+                owner_id=user_id,
                 auth_aliases=list(req.auths),
                 retry=req.retry.model_dump(by_alias=True, mode="json")
                 if req.retry
@@ -184,6 +185,7 @@ async def _fanout(
     case_payload: dict,
     datasets: list[dict],
     env: dict,
+    owner_id: int,
     auth_aliases: list[str],
     retry: dict | None,
 ) -> None:
@@ -196,7 +198,7 @@ async def _fanout(
     # 执行用认证:owner 级解密一次,逐行注入 run 副本的 Config.users。
     # 失败(别名不存在/解密异常)不中断 fan-out — 该行 run 会在 Gimbal
     # 解析 ${auth.*} 时步骤级报错,与"仅警告放行"的前端语义一致。
-    exec_auths = await _resolve_exec_auths(db_factory, auth_aliases)
+    exec_auths = await _resolve_exec_auths(db_factory, owner_id, auth_aliases)
 
     for ds in datasets:
         for row_idx, row in enumerate(ds["rows"]):
@@ -333,13 +335,13 @@ def _new_run_id() -> str:
 
 
 async def _resolve_exec_auths(
-    db_factory: Any, aliases: list[str]
+    db_factory: Any, owner_id: int, aliases: list[str]
 ) -> list["AuthSession"]:
-    """Owner-agnostic alias → AuthSession(解密)。同 V1 executor 的
-    ``_decrypt_auths`` 语义,但 owner 过滤在 fan-out 语境不可用
-    (dispatch_run 的 user_id 没有透传到这里)——按 alias 全局解。
-    aliases 为空直接返回;任何异常返回已解出的部分并告警(fan-out
-    不因认证失败中断,与"仅警告放行"语义一致)。
+    """Owner 级 alias → AuthSession(解密)。同 V1 executor 的
+    ``_decrypt_auths`` 语义(owner 过滤防跨 owner 同名 alias 解错
+    凭证)。aliases 为空直接返回;alias 不属于该 owner 时解不到 —
+    告警后继续(fan-out 不因认证失败中断,该行 run 会在 Gimbal
+    解析 ${auth.*} 时步骤级报错,与"仅警告放行"语义一致)。
     """
     if not aliases:
         return []
@@ -350,7 +352,10 @@ async def _resolve_exec_auths(
         rows = (
             (
                 await session.execute(
-                    select(AuthSession).where(AuthSession.alias.in_(aliases))
+                    select(AuthSession).where(
+                        AuthSession.owner_id == owner_id,
+                        AuthSession.alias.in_(aliases),
+                    )
                 )
             )
             .scalars()
