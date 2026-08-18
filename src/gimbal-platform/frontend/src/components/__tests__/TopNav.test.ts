@@ -22,6 +22,8 @@ function makeRouter() {
     routes: [
       { path: '/cases/mine', component: { template: '<div/>' } },
       { path: '/cases/public', component: { template: '<div/>' } },
+      { path: '/scenarios', component: { template: '<div/>' } },
+      { path: '/executions', component: { template: '<div/>' } },
       { path: '/auths', component: { template: '<div/>' } },
       { path: '/admin/users', component: { template: '<div/>' } },
       { path: '/cases/:caseId/config', component: { template: '<div/>' } },
@@ -34,7 +36,7 @@ describe('TopNav', () => {
     setActivePinia(createPinia())
   })
 
-  it('renders five real router-link anchors', async () => {
+  it('renders six real router-link anchors', async () => {
     const auth = useAuthStore()
     auth.accessToken = 'tok'
     auth.currentUser = { id: 1, username: 'alice', is_admin: true } as never
@@ -48,12 +50,13 @@ describe('TopNav', () => {
     })
 
     const links = w.findAll('a.nav-entry')
-    expect(links.length).toBe(5)
+    expect(links.length).toBe(6)
 
     // Each link points to the right path
     const hrefs = links.map((l) => l.attributes('href'))
     expect(hrefs).toContain('/cases/mine')
     expect(hrefs).toContain('/cases/public')
+    expect(hrefs).toContain('/scenarios')
     expect(hrefs).toContain('/executions')
     expect(hrefs).toContain('/auths')
     expect(hrefs).toContain('/admin/users')
