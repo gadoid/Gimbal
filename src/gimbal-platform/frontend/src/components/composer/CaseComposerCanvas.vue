@@ -1359,7 +1359,8 @@ function parseJson(s: string, fallback: unknown) {
 }
 .io-tab {
   position: relative;
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  flex: 1 1 50%;                     /* 两签均分各占 1/2 */
   height: 36px;
   padding: 0 18px;
   margin-right: -16px;               /* 重叠量 */
