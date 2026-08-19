@@ -36,6 +36,14 @@ class ComposerScenario(Base):
     priority: Mapped[int] = mapped_column(Integer, default=1, index=True)
     author: Mapped[str] = mapped_column(String(128), default="")
     owner: Mapped[str] = mapped_column(String(128), default="", index=True)
+    # 稳定属主(int user.id)。``owner`` 字符串保留为展示快照;归属判断
+    # 以 owner_id 为准,owner_id==0 的存量行走 owner 名字回退(P2 迁移
+    # 脚本会批量回填)。visibility: private(默认,仅 owner/admin 可读)
+    # | public(所有登录用户可读)——取代 V1 的目录即真相模型。
+    owner_id: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    visibility: Mapped[str] = mapped_column(
+        String(16), default="private", index=True
+    )
     tags: Mapped[list] = mapped_column(JSON, default=list)
     system: Mapped[list] = mapped_column(JSON, default=list)
     version: Mapped[str] = mapped_column(String(32), default="v0.1.0")

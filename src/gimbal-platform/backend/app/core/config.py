@@ -39,19 +39,6 @@ class Settings(BaseSettings):
     PUBLIC_CASES_DIR: Path = (Path("./data") / "public").resolve()
     USERS_CASES_DIR: Path = (Path("./data") / "users").resolve()
 
-    # ── Gimbal runner ─────────────────────────────────────
-    GIMBAL_BIN: str = "gimbal"
-    # Project root for the gimbal CLI subprocess.  After the directory
-    # reshuffle ``gimbal-platform`` lives at
-    # ``<gimbal>/src/gimbal-platform``, so the gimbal CLI's
-    # ``ConfigLoader._find_base_dir()`` (which walks upward from cwd
-    # looking for ``pyproject.toml``) must be launched with cwd =
-    # gimbal's own root — otherwise it stops at gimbal-platform's own
-    # pyproject.toml and fails to load ``src/gimbal/config/*.yml``.
-    # Default is derived from this file's location assuming the layout
-    #   <gimbal>/src/gimbal-platform/backend/app/core/config.py
-    # i.e. parents[5] == gimbal root.  Override via env GIMBAL_PROJECT_ROOT.
-    GIMBAL_PROJECT_ROOT: Path | None = None
     # ── Gimbal runner HTTP service (#4 run 最小链路) ──────
     # ``gimbal run server`` 默认监听 127.0.0.1:8766(8765 被 plate 实占)。
     # run dispatcher 每行 convert 成功后 POST /run 到这里执行。
@@ -101,14 +88,6 @@ class Settings(BaseSettings):
         self.DATA_DIR = self.DATA_DIR.resolve()
         self.PUBLIC_CASES_DIR = self.PUBLIC_CASES_DIR.resolve()
         self.USERS_CASES_DIR = self.USERS_CASES_DIR.resolve()
-        # Resolve the gimbal project root: prefer env override, else
-        # compute from this file's location (assumes
-        #   gimbal/src/gimbal-platform/backend/app/core/config.py
-        # → parents[5] is the gimbal root).
-        if self.GIMBAL_PROJECT_ROOT is None:
-            self.GIMBAL_PROJECT_ROOT = Path(__file__).resolve().parents[5]
-        else:
-            self.GIMBAL_PROJECT_ROOT = Path(self.GIMBAL_PROJECT_ROOT).resolve()
         for p in (
             self.DATA_DIR,
             self.PUBLIC_CASES_DIR,

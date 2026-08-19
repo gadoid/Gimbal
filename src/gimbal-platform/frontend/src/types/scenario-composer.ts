@@ -85,6 +85,8 @@ export interface Scenario {
   stepCount: number
   tags: string[]
   starred?: boolean
+  /** P1 读侧收紧:'private' 仅 owner/admin 可读;'public' 全员可读 */
+  visibility?: 'private' | 'public'
 }
 
 // ─── 用例(case)/ 数据集 / 执行环境(与编排无关,保持原样)─────────────

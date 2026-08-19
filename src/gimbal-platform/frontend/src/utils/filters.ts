@@ -1,10 +1,22 @@
-/** filter.ts — advanced filter helpers shared by CasesMine / CasesPublic.
- *
+/** filter.ts — advanced filter helpers shared by the scenario library.
+
  * Pulled out of FilterPopover.vue so consumers can import them from
  * a plain .ts file (Vue <script setup> doesn't allow runtime exports
  * from .vue SFCs).
  */
-import type { CaseSummary } from '@/api/cases'
+
+/** Minimal row shape the filter layer understands (was CaseSummary
+ * from the retired api/cases.ts; inlined here in P4). */
+export interface CaseSummary {
+  module?: string
+  tags?: string[]
+  author?: string
+  owner_id?: number
+  priority?: number
+  updated_at?: string
+  visibility?: 'public' | 'private'
+  audited?: boolean
+}
 
 export interface CaseFilters {
   modules: string[]

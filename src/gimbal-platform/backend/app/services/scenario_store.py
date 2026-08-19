@@ -34,13 +34,17 @@ async def create(
     draft: ScenarioDraft,
     *,
     owner: str = "",
+    owner_id: int = 0,
+    visibility: str = "private",
 ) -> Scenario:
     """Insert a new scenario.  Raises ValueError on duplicate scenarioId.
 
     Server-side override: ``owner`` is always taken from the router's
     ``owner`` parameter (the authenticated user's display_name), so a
     caller cannot spoof the owner field by sending a different value in
-    the request body.
+    the request body.  ``owner_id`` 同理由路由层传入(int user.id,
+    P1 起为归属判断主键)。普通创建恒为 private;``visibility``
+    参数仅供 P2 迁移复用(公共目录导入 → public)。
     """
     def_meta = draft.definition.get("meta") or {}
     scenario_id = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
@@ -75,6 +79,8 @@ async def create(
         version=server_owned.version,
         expire=server_owned.expire,
         step_count=len(draft.definition.get("steps") or []),
+        owner_id=owner_id,
+        visibility=visibility,
         payload=payload,
     )
     db.add(row)
@@ -163,6 +169,104 @@ async def delete(db: AsyncSession, scenario_id: str) -> None:
     )
     await db.delete(row)
     await db.commit()
+    # 场景删除后清理所有用户的 star 标记,避免 stars.json 里留下
+    # 指向不存在场景的孤儿 id(列表侧 starred 永远解析不到)。
+    stars.remove_item(scenario_id)
+
+
+async def set_visibility(
+    db: AsyncSession, scenario_id: str, visibility: str
+) -> Scenario:
+    """发布/下架:翻转 visibility(public ↔ private)。KeyError on miss."""
+    if visibility not in ("public", "private"):
+        raise ValueError(f"bad_visibility: {visibility}")
+    row = await _get_row(db, scenario_id)
+    row.visibility = visibility
+    await db.commit()
+    await db.refresh(row)
+    return await _to_read_shape(db, row)
+
+
+async def copy_scenario(
+    db: AsyncSession,
+    scenario_id: str,
+    *,
+    new_owner: str,
+    new_owner_id: int,
+) -> Scenario:
+    """深拷贝场景 + 用例 + 数据集(替代 V1 公共库"复制到我的")。
+
+    新 id = 原 id + ``-copy-<6hex>``;属主 = 调用者;visibility 恒为
+    private(复制来的公共场景也要先归自己再自行发布)。
+    """
+    import copy as _copy
+    from uuid import uuid4 as _uuid4
+
+    src = await _get_row(db, scenario_id)
+    suffix = _uuid4().hex[:6]
+    new_sid = f"{scenario_id}-copy-{suffix}"[:128]
+
+    payload = _copy.deepcopy(src.payload or {})
+    definition = payload.get("definition")
+    if isinstance(definition, dict):
+        definition["scenarioId"] = new_sid
+        meta = definition.setdefault("meta", {})
+        if isinstance(meta, dict):
+            meta["scenarioId"] = new_sid
+            meta["name"] = f"{src.name} (副本)"
+            meta["owner"] = new_owner
+    draft = ScenarioDraft.model_validate(payload)
+    await create(db, draft, owner=new_owner, owner_id=new_owner_id)
+
+    # cases + data_sets 级联拷贝
+    cases = (
+        await db.execute(
+            select(ComposerCase).where(ComposerCase.scenario_id == scenario_id)
+        )
+    ).scalars().all()
+    for c in cases:
+        new_cid = f"{c.case_id}-copy-{suffix}"[:128]
+        new_payload = _copy.deepcopy(c.payload or {})
+        dss = (
+            await db.execute(
+                select(ComposerDataSet).where(ComposerDataSet.case_id == c.case_id)
+            )
+        ).scalars().all()
+        # 以实际拷贝的数据集为准回填 dataSetIds(源行的 data_set_ids
+        # 列在数据集创建路径不回填,直接沿用会丢引用)。
+        new_ds_ids: list[str] = []
+        for ds in dss:
+            new_dsid = f"{ds.dataset_id}-copy-{suffix}"[:128]
+            new_ds_ids.append(new_dsid)
+            db.add(ComposerDataSet(
+                dataset_id=new_dsid,
+                case_id=new_cid,
+                name=ds.name,
+                description=ds.description,
+                rows=_copy.deepcopy(ds.rows or []),
+                row_count=ds.row_count,
+            ))
+        if isinstance(new_payload, dict):
+            new_payload["caseId"] = new_cid
+            new_payload["scenarioId"] = new_sid
+            new_payload["createdBy"] = new_owner
+            new_payload["name"] = f"{c.name} (副本)"
+            new_payload["dataSetIds"] = new_ds_ids
+        db.add(ComposerCase(
+            case_id=new_cid,
+            scenario_id=new_sid,
+            name=f"{c.name} (副本)",
+            description=c.description,
+            env=c.env,
+            auth=c.auth,
+            retry=c.retry,
+            data_set_ids=new_ds_ids,
+            created_by=new_owner,
+            payload=new_payload,
+        ))
+    await db.commit()
+    # create() 返回时用例尚未插入,重新投影拿真实 caseCount
+    return await _to_read_shape(db, await _get_row(db, new_sid))
 
 
 async def get(
@@ -274,6 +378,7 @@ async def _to_read_shape(
         stepCount=row.step_count or len(steps),
         tags=list(row.tags or []),
         starred=starred,
+        visibility=row.visibility or "private",
     )
 
 

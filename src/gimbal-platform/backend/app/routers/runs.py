@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
+from ._ownership import ensure_owner
 from ..models.composer_case import ComposerCase
 from ..schemas.scenario_composer import RunRequest, RunResponse
 from ..services import run_dispatcher
@@ -56,21 +57,20 @@ async def post_run(
             status_code=404,
             detail={"code": "case_not_found", "message": f"case not found: {body.case_id}"},
         )
-    owner_name = case.created_by or ""
-    user_name = user.display_name or user.username
-    if not user.is_admin and user_name != owner_name:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "code": "not_owner",
-                "message": "only the case's creator (or admin) can run this case",
-            },
-        )
+    ensure_owner(
+        user,
+        case.created_by,
+        {
+            "code": "not_owner",
+            "message": "only the case's creator (or admin) can run this case",
+        },
+    )
     try:
         return await run_dispatcher.dispatch_run(
             db,
             user_id=user.id,
             req=body,
+            preloaded_case=case,  # 已为归属检查加载,不再二次查询
         )
     except run_dispatcher._NotFound as e:
         raise HTTPException(status_code=404, detail={"code": e.code, "message": e.message})

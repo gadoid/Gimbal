@@ -80,6 +80,68 @@
             </div>
           </section>
 
+          <!-- 高级选项 (V1 能力移植) -->
+          <section class="run-section">
+            <label class="run-label">高级选项 <span class="muted small">(V1 兼容:步进调试 / 凭证策略 / 批量执行)</span></label>
+            <div class="adv-grid">
+              <div class="adv-field">
+                <span class="adv-name">停止于步骤</span>
+                <select v-model.number="stepTo" class="adv-select" :disabled="stepCount === 0">
+                  <option :value="null" :disabled="stepCount === 0">运行全部步骤</option>
+                  <option v-for="i in stepCount" :key="i" :value="i - 1">
+                    第 {{ i }} 步后停止{{ stepName(i - 1) }}
+                  </option>
+                </select>
+              </div>
+              <div class="adv-field">
+                <span class="adv-name">凭证合并策略</span>
+                <div class="policy-group">
+                  <label
+                    v-for="p in POLICIES"
+                    :key="p.value"
+                    class="policy-opt"
+                    :class="{ active: mergePolicy === p.value }"
+                  >
+                    <input type="radio" :value="p.value" v-model="mergePolicy" />
+                    <span>{{ p.label }}</span>
+                  </label>
+                </div>
+                <div class="muted small policy-hint">{{ policyHint }}</div>
+              </div>
+              <div class="adv-field">
+                <span class="adv-name">执行次数 / 并发度</span>
+                <div class="num-row">
+                  <input type="number" v-model.number="nRuns" class="adv-input" min="1" max="1000" />
+                  <span class="num-sep">次 ×</span>
+                  <input type="number" v-model.number="parallel" class="adv-input" min="1" max="200" />
+                  <span class="num-sep">并发</span>
+                </div>
+              </div>
+              <div class="adv-field">
+                <span class="adv-name">提单号前缀</span>
+                <input
+                  type="text"
+                  v-model.trim="prefix"
+                  class="adv-input"
+                  maxlength="64"
+                  placeholder="留空 = 不注入 order_no 变量"
+                />
+              </div>
+            </div>
+            <div class="preset-row">
+              <span class="muted small">快捷预设:</span>
+              <button
+                v-for="p in PRESETS"
+                :key="p.label"
+                type="button"
+                class="preset-btn"
+                :class="{ active: nRuns === p.nRuns && parallel === p.parallel }"
+                @click="applyPreset(p)"
+              >{{ p.label }}</button>
+            </div>
+            <div v-if="stepCount === 0" class="muted small">场景暂无步骤,停止于步骤不可用</div>
+          </section>
+
           <!-- 错误显示 -->
           <div v-if="lastRunError" class="run-error">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -117,6 +179,9 @@
             <span class="summary-chip total">
               {{ totalRuns }} 次运行
             </span>
+            <span v-if="parallel > 1" class="summary-chip">
+              并发 {{ parallel }}
+            </span>
           </div>
           <div class="run-actions">
             <button class="ghost-btn" @click="$emit('close')">取消</button>
@@ -138,7 +203,8 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { promptAction } from '@/utils/confirmAction'
 import * as api from '@/api/scenario-composer'
 import type { Scenario, DataSetSummary, RunEnv } from '@/types/scenario-composer'
 
@@ -153,11 +219,68 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   close: []
-  confirm: [envId: string, dataSetIds: string[]]
+  confirm: [
+    envId: string,
+    dataSetIds: string[],
+    opts?: {
+      stepTo?: number | null
+      injectCredentials: boolean
+      nRuns?: number
+      parallel?: number
+      prefix?: string
+      mergePolicy?: 'override' | 'merge' | 'append'
+    },
+  ]
 }>()
 
 const selectedEnv = ref<string>(props.envs[0]?.envId || '')
 const selectedDatasets = ref<string[]>([])
+// V1 能力移植:stepTo = 0-based 含端点(引擎 halt_at);null = 全量运行
+const stepTo = ref<number | null>(null)
+// M1 执行能力(V1 ExecutionDrawer 语义):origin 在此表达"不注入"
+// (上送 injectCredentials=false),其余三选一映射后端 merge_policy。
+const POLICIES = [
+  { value: 'origin', label: 'origin · 不注入' },
+  { value: 'override', label: 'override · 替换' },
+  { value: 'merge', label: 'merge · 合并' },
+  { value: 'append', label: 'append · 追加' },
+] as const
+const mergePolicy = ref<'origin' | 'override' | 'merge' | 'append'>('merge')
+const nRuns = ref(1)
+const parallel = ref(1)
+const prefix = ref('')
+const PRESETS = [
+  { label: '烟囱 1/1', nRuns: 1, parallel: 1 },
+  { label: '小批量 5/3', nRuns: 5, parallel: 3 },
+  { label: '压测 50/10', nRuns: 50, parallel: 10 },
+] as const
+
+function applyPreset(p: { nRuns: number; parallel: number }) {
+  nRuns.value = p.nRuns
+  parallel.value = p.parallel
+}
+
+const policyHint = computed(() => {
+  switch (mergePolicy.value) {
+    case 'origin':
+      return '跳过凭证注入,以场景 yaml 自带的 Config.users 原样运行'
+    case 'override':
+      return 'Config.users 整块替换为所选执行认证'
+    case 'append':
+      return '合并注入;与场景内置 users 别名冲突时整单拒绝(409)'
+    default:
+      return '同名覆盖、场景内置其余认证保留(默认)'
+  }
+})
+
+const stepCount = computed(() => props.scenario?.stepCount ?? 0)
+
+/** 下拉里附上步骤名(有 name/id 时),便于定位 */
+function stepName(i: number): string {
+  const s = props.scenario?.steps?.[i] as { name?: string; id?: string } | undefined
+  const n = s?.name || s?.id
+  return n ? ` · ${n}` : ''
+}
 
 watch(() => props.envs, (envs) => {
   if (!selectedEnv.value && envs.length > 0) {
@@ -173,7 +296,7 @@ watch(() => props.dataSets, (ds) => {
 const totalRuns = computed(() => {
   return props.dataSets
     .filter(d => selectedDatasets.value.includes(d.datasetId))
-    .reduce((sum, d) => sum + (d.rowCount || 0), 0)
+    .reduce((sum, d) => sum + (d.rowCount || 0), 0) * (nRuns.value || 1)
 })
 
 function onConfirm() {
@@ -181,7 +304,18 @@ function onConfirm() {
     ElMessage.warning('请选择执行环境')
     return
   }
-  emit('confirm', selectedEnv.value, selectedDatasets.value)
+  // 输入钳位(与后端 schema 上限一致,防 422)
+  nRuns.value = Math.min(1000, Math.max(1, Math.floor(nRuns.value || 1)))
+  parallel.value = Math.min(200, Math.max(1, Math.floor(parallel.value || 1)))
+  const origin = mergePolicy.value === 'origin'
+  emit('confirm', selectedEnv.value, selectedDatasets.value, {
+    stepTo: stepTo.value,
+    injectCredentials: !origin,
+    ...(origin ? {} : { mergePolicy: mergePolicy.value }),
+    ...(nRuns.value > 1 ? { nRuns: nRuns.value } : {}),
+    ...(parallel.value > 1 ? { parallel: parallel.value } : {}),
+    ...(prefix.value ? { prefix: prefix.value } : {}),
+  })
 }
 
 async function onCreateDataSet() {
@@ -190,12 +324,12 @@ async function onCreateDataSet() {
     return
   }
   try {
-    const { value: name } = await ElMessageBox.prompt('数据集名称', '新建数据集', {
+    const name = await promptAction('数据集名称', '新建数据集', {
       inputValue: '默认数据集',
       confirmButtonText: '创建',
     })
-    if (!name) return
-    const { value: rowsStr } = await ElMessageBox.prompt(
+    if (name === null || !name) return
+    const rowsStr = await promptAction(
       'JSON 数组格式, 如 [{"qty": 1}, {"qty": 2}]',
       '数据集内容',
       {
@@ -204,6 +338,7 @@ async function onCreateDataSet() {
         confirmButtonText: '创建',
       }
     )
+    if (rowsStr === null) return
     let rows: any[]
     try {
       rows = JSON.parse(rowsStr || '[]')
@@ -219,8 +354,6 @@ async function onCreateDataSet() {
     await api.createDataSet(props.caseData.caseId, { name, rows })
     ElMessage.success('已创建, 请重新打开运行对话框')
   } catch (e) {
-    // 'cancel' = 取消按钮; 'close' = ESC / 右上角关闭 — 都不是错误
-    if ((e as any) === 'cancel' || (e as any) === 'close') return
     ElMessage.error('创建失败: ' + (e as Error).message)
   }
 }
@@ -323,6 +456,65 @@ async function onCreateDataSet() {
   color: #5a6273; text-align: center;
 }
 .empty-data p { margin: 0; font-size: 13px; }
+
+/* advanced options */
+.adv-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+.adv-field {
+  padding: 10px 12px;
+  border: 1.5px solid #e6e8ec; border-radius: 10px;
+}
+.adv-name {
+  display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px;
+}
+.adv-select {
+  width: 100%; padding: 6px 8px;
+  border: 1px solid #e6e8ec; border-radius: 6px;
+  font-size: 12px; background: #fff;
+}
+.adv-check {
+  display: flex; gap: 6px; align-items: flex-start;
+  font-size: 12px; color: #5a6273; cursor: pointer;
+}
+.adv-check input { margin-top: 2px; }
+
+/* M1: merge-policy radio group + nRuns/parallel/prefix inputs + presets */
+.policy-group {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.policy-opt {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 8px; border: 1px solid #e6e8ec; border-radius: 999px;
+  font-size: 11px; color: #5a6273; cursor: pointer; transition: all 0.15s;
+}
+.policy-opt.active {
+  border-color: #4f46e5; background: #eef2ff; color: #4f46e5;
+}
+.policy-opt input { margin: 0; accent-color: #4f46e5; }
+.policy-hint { margin-top: 6px; }
+.num-row {
+  display: flex; align-items: center; gap: 6px;
+}
+.adv-input {
+  width: 100%; padding: 6px 8px;
+  border: 1px solid #e6e8ec; border-radius: 6px;
+  font-size: 12px; background: #fff;
+}
+.num-row .adv-input { width: 72px; }
+.num-sep { font-size: 11px; color: #94a3b8; }
+.preset-row {
+  display: flex; align-items: center; gap: 6px; margin-top: 10px;
+}
+.preset-btn {
+  padding: 4px 10px; border: 1px solid #e6e8ec; border-radius: 6px;
+  background: #fff; font-size: 11px; color: #5a6273;
+  cursor: pointer; transition: all 0.15s;
+}
+.preset-btn:hover { border-color: #c7d2fe; }
+.preset-btn.active {
+  border-color: #4f46e5; background: #eef2ff; color: #4f46e5;
+}
 
 .run-error, .run-success {
   display: flex; gap: 10px; align-items: flex-start;

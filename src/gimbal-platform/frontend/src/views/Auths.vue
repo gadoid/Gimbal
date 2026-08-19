@@ -368,8 +368,9 @@ async function submitDelete() {
     await store.deleteAuth(deleteTarget.value.id)
     ElMessage.success(`已删除 ${deleteTarget.value.alias}`)
     deleteOpen.value = false
-  } catch {
-    showError('删除', undefined, store.lastError)
+  } catch (e) {
+    // deleteAuth 直连 api 并 rethrow — store 没有 lastError, 必须用真实错误
+    showError('删除', undefined, (e as Error).message)
   } finally {
     deleteSubmitting.value = false
   }

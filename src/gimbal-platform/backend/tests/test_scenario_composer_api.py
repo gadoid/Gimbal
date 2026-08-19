@@ -461,6 +461,48 @@ async def test_member_cannot_read_another_users_datasets(client: AsyncClient) ->
 
 
 # ── scenario-ownership check on POST /api/cases ────────────────────
+async def test_member_cannot_attach_case_to_unowned_scenario(
+    client: AsyncClient, fresh_db
+) -> None:
+    """Empty-owner (legacy/plate-synced) scenarios are locked, matching
+    scenarios._require_owner — the old `scen.owner and ...` guard let any
+    member attach cases to them."""
+    from app.core.db import SessionLocal
+    from app.models.composer_scenario import ComposerScenario
+
+    async with SessionLocal() as db:
+        db.add(
+            ComposerScenario(
+                scenario_id="sc-orphan",
+                name="orphan",
+                owner="",
+                payload={"definition": {"kind": "scenario", "meta": {}}},
+            )
+        )
+        await db.commit()
+
+    # The first registered user is bootstrapped as admin — register
+    # alice first so bob is a plain member.
+    await _register_and_login(client, "alice", "alicepass123")
+    bob = await _register_and_login(client, "bob", "bobpass456")
+    r = await client.post(
+        "/api/cases",
+        headers=bob,
+        json={
+            "caseId": "case-bob",
+            "scenarioId": "sc-orphan",
+            "name": "c",
+            "env": "dev",
+            "auth": {"name": "a", "type": "bearer"},
+            "dataSetIds": [],
+            "createdBy": "bob",
+        },
+    )
+    assert r.status_code == 403
+    assert "not_owner" in r.json()["detail"]
+
+
+
 async def test_create_case_requires_scenario_ownership(client: AsyncClient) -> None:
     """Bob cannot create a case under Alice's scenario."""
     alice = await _register_and_login(client, "alice")

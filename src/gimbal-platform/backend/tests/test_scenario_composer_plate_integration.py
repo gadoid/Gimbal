@@ -471,6 +471,129 @@ async def test_run_chain_gimbal_failure_counts_row_failed(
     assert ex.status == "failed"
 
 
+async def test_run_partial_failure_marks_execution_failed(
+    client: AsyncClient, plate_mock: PlateMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """严格终态规则(与 V1 executor / run_lifecycle reconcile 一致):
+    1 过 1 败 → execution = failed。
+
+    旧 V3 规则 ``failed and not passed`` 会把部分失败标成 done,
+    与 V1 在同一张 /executions 表里显示矛盾状态。
+    """
+    from app.services import gimbal_client as gc
+
+    calls = {"n": 0}
+
+    async def _run(scenario_dict: dict, **_kw: object) -> dict:
+        calls["n"] += 1
+        ok = calls["n"] == 1  # 第一行过,第二行败
+        return {
+            "exitCode": 0 if ok else 1,
+            "total": 1,
+            "passed": 1 if ok else 0,
+            "failed": 0 if ok else 1,
+            "skipped": 0,
+            "halted": 0,
+            "details": [],
+        }
+
+    monkeypatch.setattr(gc, "run", _run)
+
+    headers = await _register_and_login(client)
+    await _seed_scenario_case_and_dataset(
+        client, headers, rows=[{"qty": 1}, {"qty": 2}]
+    )
+
+    r = await client.post(
+        "/api/runs",
+        headers=headers,
+        json={
+            "caseId": "case-001",
+            "dataSetIds": ["ds-001"],
+            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+        },
+    )
+    assert r.status_code == 201
+
+    ex = await _wait_execution_final()
+    assert ex.passed == 1
+    assert ex.failed == 1
+    # 严格规则:只要有一行失败,整单 failed(不再是 done)
+    assert ex.status == "failed"
+
+
+async def test_run_auth_decrypt_failure_fails_execution(
+    client: AsyncClient, plate_mock: PlateMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """凭证解密失败 = fail-fast(V1 严格语义)。
+
+    整单 execution 记为 failed、所有行计入 failed 计数、一行都不
+    分发执行(不带着空/坏凭证打环境)。旧行为是仅告警后继续跑。
+    """
+    headers = await _register_and_login(client)
+    await _seed_scenario_case_and_dataset(
+        client, headers, rows=[{"qty": 1}, {"qty": 2}]
+    )
+
+    r = await client.post(
+        "/api/auths",
+        headers=headers,
+        json={
+            "alias": "corrupt1",
+            "url": "http://auth.example/login",
+            "username": "u",
+            "password": "p",
+            "token_type": "bearer",
+        },
+    )
+    assert r.status_code == 201
+
+    # 腐化密文 → fernet_decrypt 抛 ValueError
+    import sqlalchemy as sa
+
+    from app.core import db as db_module
+    from app.models import AuthSession
+
+    async with db_module.SessionLocal() as s:
+        row = (
+            (
+                await s.execute(
+                    sa.select(AuthSession).where(AuthSession.alias == "corrupt1")
+                )
+            )
+            .scalars()
+            .one()
+        )
+        row.username_enc = "not-valid-fernet-ciphertext"
+        await s.commit()
+
+    from app.services import gimbal_client as gc
+
+    async def _must_not_run(*_a: object, **_k: object) -> dict:
+        raise AssertionError("解密失败后不得分发执行")
+
+    monkeypatch.setattr(gc, "run", _must_not_run)
+
+    r = await client.post(
+        "/api/runs",
+        headers=headers,
+        json={
+            "caseId": "case-001",
+            "dataSetIds": ["ds-001"],
+            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+            "auths": ["corrupt1"],
+        },
+    )
+    assert r.status_code == 201
+
+    ex = await _wait_execution_final()
+    assert ex.status == "failed"
+    assert ex.failed == 2
+    assert ex.passed == 0
+    # 一行都没到 plate / gimbal
+    assert len(plate_mock.convert_calls) == 0
+
+
 async def test_run_dispatch_records_failure_when_plate_down(
     client: AsyncClient, plate_mock: PlateMock
 ) -> None:

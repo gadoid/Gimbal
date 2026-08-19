@@ -96,7 +96,6 @@
             :type="isSelectedForLog(row) ? 'primary' : undefined"
             @click="toggleLog(row)"
           >{{ isSelectedForLog(row) ? '收起日志' : '查看日志' }}</el-button>
-          <el-button link @click="rerunRun(row)" :loading="isRerunning(row.id)">重跑</el-button>
           <el-button link type="danger" @click="deleteRun(row)">删除</el-button>
         </template>
       </el-table-column>
@@ -206,13 +205,15 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { showError } from '@/utils/errorFallback'
+import { confirmAction } from '@/utils/confirmAction'
+import { executionStatusText, runStatusText } from '@/utils/executionStatus'
+import { executionUrl } from '@/utils/links'
 import { useExecutionsStore } from '@/stores/executions'
 import { useAuthStore } from '@/stores/auth'
 import {
   reportUrl,
-  rerunRun as apiRerun,
   deleteRun as apiDeleteRun,
   getRunLog,
   openRunLogStream,
@@ -226,22 +227,14 @@ const execStore = useExecutionsStore()
 
 const executionId = computed(() => Number(route.params.id))
 
-// Status labels.  Execution has its own status vocabulary
-// (queued / running / done / failed); ExecRun reuses a near-identical
-// set with "pending" / "passed" instead.  One map per surface, both
-// rendered through the same lookup helper.
-const EXEC_LABELS: Record<string, string> = {
-  queued: '排队', running: '运行中', done: '完成', failed: '失败',
-}
-const RUN_LABELS: Record<string, string> = {
-  pending: '排队', running: '运行中', passed: '通过', failed: '失败',
-}
+// Status labels — shared maps (utils/executionStatus.ts); ExecRun uses
+// pending/passed where the Execution surface uses queued/done.
 const statusText = computed(() => {
   const s = execStore.detail?.status
-  return s ? (EXEC_LABELS[s] ?? s) : ''
+  return s ? executionStatusText(s) : ''
 })
 function statusLabel(s: string): string {
-  return RUN_LABELS[s] ?? s
+  return runStatusText(s)
 }
 
 // ``step_to`` is a 0-based inclusive halt index stored in
@@ -482,41 +475,6 @@ async function confirmDeleteRun() {
   }
 }
 
-async function rerunRun(row: ExecRun) {
-  if (!execStore.detail) return
-  // Mark on the store (NOT on the row).  The 1s polling wholesale-
-  // replaces detail on every tick, so any per-row mutation gets wiped
-  // and the button stops showing :loading while the rerun is still
-  // in flight.  The store-managed Set survives polling.
-  execStore.markRerunning(row.id, true)
-  try {
-    // POST /rerun blocks server-side until the subprocess finishes; the
-    // returned ExecRunOut already has the post-subprocess state.
-    const newRun = await apiRerun(execStore.detail.id, row.id)
-    // Optimistic append — the new row appears in the table
-    // immediately without waiting for a full fetchDetail roundtrip.
-    // The ElTable's :default-sort by id desc puts it at the top.
-    execStore.appendRun(newRun)
-    // Background sync so subsequent polls / counters stay consistent
-    // (catches any side-effect updates from concurrent reruns or
-    // other operators hitting the same execution).
-    void execStore.fetchDetail(execStore.detail.id)
-    ElNotification.success({
-      title: '重跑完成',
-      message: `新 run #${newRun.idx} (id=${newRun.id}) 已生成 · exit=${newRun.exit_code ?? '—'}`,
-      duration: 4500,
-    })
-  } catch (e) {
-    showError('执行', e)
-  } finally {
-    execStore.markRerunning(row.id, false)
-  }
-}
-
-function isRerunning(runId: number): boolean {
-  return execStore.isRerunning(runId)
-}
-
 // ── lifecycle ─────────────────────────────────────────────
 let stop: (() => void) | null = null
 
@@ -538,15 +496,12 @@ async function refreshNow() {
 
 async function removeExec() {
   if (!execStore.detail) return
-  try {
-    await ElMessageBox.confirm(
-      `确认删除 execution #${execStore.detail.id}？其下所有 run 记录与报告文件将一并删除，操作不可撤销。`,
-      '删除 execution',
-      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
-    )
-  } catch {
-    return // 用户取消
-  }
+  const ok = await confirmAction(
+    `确认删除 execution #${execStore.detail.id}？其下所有 run 记录与报告文件将一并删除，操作不可撤销。`,
+    '删除 execution',
+    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+  )
+  if (!ok) return
   try {
     await execStore.remove(execStore.detail.id)
   } catch (e) {
@@ -625,25 +580,7 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
-.status-queued {
-  color: #4338ca;
-  background: #eef2ff;
-}
-
-.status-running {
-  color: #854d0e;
-  background: #fef9c3;
-}
-
-.status-done {
-  color: #166534;
-  background: #dcfce7;
-}
-
-.status-failed {
-  color: #991b1b;
-  background: #fee2e2;
-}
+/* 状态配色统一在 @/styles/status-colors.css（见文件末尾引入） */
 
 .counters {
   display: grid;
@@ -699,25 +636,7 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
-.run-pending {
-  color: #4338ca;
-  background: #eef2ff;
-}
-
-.run-running {
-  color: #854d0e;
-  background: #fef9c3;
-}
-
-.run-passed {
-  color: #166534;
-  background: #dcfce7;
-}
-
-.run-failed {
-  color: #991b1b;
-  background: #fee2e2;
-}
+/* run-* 配色统一在 @/styles/status-colors.css */
 
 .mono {
   font-family: var(--font-mono);
@@ -904,3 +823,5 @@ onUnmounted(() => {
   overflow: auto;
 }
 </style>
+
+<style src="@/styles/status-colors.css"></style>

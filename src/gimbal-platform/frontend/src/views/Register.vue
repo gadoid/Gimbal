@@ -259,7 +259,7 @@ function startCountdown() {
     redirectCountdown -= 1
     if (redirectCountdown <= 0) {
       if (countdownTimer) clearInterval(countdownTimer)
-      router.push('/cases/mine')
+      router.push('/scenarios')
     } else {
       successMsg.value = `注册成功！${redirectCountdown} 秒后跳转…`
     }

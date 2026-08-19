@@ -39,6 +39,10 @@ _COLUMN_ADDITIONS: dict[str, dict[str, str]] = {
         "log_path": "TEXT",
         "command_line": "TEXT",
     },
+    "composer_scenarios": {
+        "owner_id": "INTEGER DEFAULT 0",
+        "visibility": "TEXT DEFAULT 'private'",
+    },
 }
 
 

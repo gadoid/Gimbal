@@ -1,32 +1,31 @@
-"""Executions API (Spec-2 §4.5 E)."""
+"""Executions API — 共享读侧 + 行/单删除。
+
+P4 起 V1 子进程创建链路(POST /executions 与 rerun,经 executor.py 的
+gimbal CLI 子进程)已退役;V3 场景执行的创建入口是 ``POST /api/runs``
+(run_dispatcher → gimbal HTTP service)。本路由只剩两个引擎共用的
+executions/exec_runs 表的读侧与删除。
+"""
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path as PathParam, Request, status
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
-from loguru import logger
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.config import settings
 from ..core.db import get_db
 from ..core.deps import CurrentUser, get_owned_execution
 from ..models import ExecRun, Execution
 from ..schemas.execution import (
     ExecRunOut,
-    ExecutionCreateIn,
     ExecutionDetailOut,
     ExecutionListOut,
     ExecutionOut,
 )
-from ..services.case_loader import loader
 from ..services.log_hub import EndEvent, KeepAlive, RunLogLine, hub
-from ..services.rerun import rerun_single_run
-from ..services.run_lifecycle import spawn_safe_run
 
 router = APIRouter(prefix="/executions", tags=["executions"])
 
@@ -71,115 +70,6 @@ async def list_executions(
     )
     items = [_exec_out(e) for e in rows]
     return ExecutionListOut(items=items, total=len(items))
-
-
-# ── create ──────────────────────────────────────────────────────
-@router.post("", response_model=ExecutionOut, status_code=status.HTTP_201_CREATED)
-async def create_execution(
-    payload: ExecutionCreateIn,
-    user: CurrentUser,
-    session: DbSession,
-) -> ExecutionOut:
-    # ``command_line`` override is an authenticated RCE surface — see the
-    # security note in ``ExecutionCreateIn``.  Only admins may set it;
-    # silently ignored if a non-admin happens to send it (defence in
-    # depth — the field validator rejects empty / overlong).
-    if payload.command_line is not None and not user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="command_line override requires admin",
-        )
-
-    # Access check on the target case (same rule as GET /api/cases/{id}):
-    # private cases are owner-only. Without this, a member could execute
-    # another user's private case and read its output via the run log /
-    # report endpoints (which only check the Execution's owner).
-    # scan(owner_id=user.id) returns exactly "public + this user's
-    # private" — anyone else's private case simply isn't in the list.
-    summary = None
-    for s in loader.scan(owner_id=user.id):
-        if s.case_id == payload.case_id:
-            summary = s
-            break
-    if summary is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"case not found: {payload.case_id}",
-        )
-    if summary.visibility == "private" and summary.owner_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"case not found: {payload.case_id}",
-        )
-
-    cfg: dict[str, Any] = {
-        "n_runs": payload.n_runs,
-        "parallel": payload.parallel,
-        "env": payload.env,
-        "prefix": payload.prefix,
-        "exec_auth_alias": payload.exec_auth_alias,
-        "merge_policy": payload.merge_policy,
-        # Persisted so rerun can honor the original "no injection" intent;
-        # the executor skips credential injection when this is False.
-        "inject_credentials": payload.inject_credentials,
-    }
-    if payload.command_line is not None:
-        cfg["command_line"] = payload.command_line
-    if payload.step_to is not None:
-        # Validate against the case's step count BEFORE writing to DB —
-        # this gives the client a precise error (with the actual range)
-        # rather than letting the subprocess start and exit early.
-        try:
-            case_payload = loader.read(payload.case_id)
-        except KeyError:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"case not found: {payload.case_id}",
-            )
-        steps = case_payload.get("steps") or []
-        if not steps:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="case has no steps; step_to cannot be set",
-            )
-        if payload.step_to >= len(steps):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"step_to={payload.step_to} out of range "
-                    f"(case has {len(steps)} steps, indices 0..{len(steps)-1})"
-                ),
-            )
-        cfg["step_to"] = payload.step_to
-    ex = Execution(
-        case_id=payload.case_id,
-        owner_id=user.id,
-        status="queued",
-        total_runs=payload.n_runs,
-        config_json=cfg,
-    )
-    session.add(ex)
-    await session.commit()
-    await session.refresh(ex)
-
-    # Pre-create ExecRun rows so polling has IDs immediately
-    for idx in range(1, payload.n_runs + 1):
-        session.add(ExecRun(execution_id=ex.id, idx=idx, status="pending"))
-    await session.commit()
-
-    # Fire the orchestrator in the background. The response returns
-    # immediately so the UI can navigate to the live status page.
-    # ``spawn_safe_run`` tracks the task handle so the lifespan
-    # teardown can cancel + await it; ``None`` is returned when the
-    # app is already shutting down (graceful stop) — we mark the row
-    # failed so the user isn't waiting on a task that will never start.
-    task = spawn_safe_run(ex.id)
-    if task is None:
-        ex.status = "failed"
-        ex.finished_at = datetime.utcnow()
-        await session.commit()
-
-    return _exec_out(ex)
 
 
 # ── detail (with runs) ─────────────────────────────────────────
@@ -434,27 +324,6 @@ async def delete_run(
     )
     await session.delete(run)
     await session.commit()
-
-
-# ── single-run rerun (Spec-2-7) ────────────────────────────────
-@router.post("/{execution_id}/runs/{run_id}/rerun", response_model=ExecRunOut)
-async def rerun_run(
-    execution_id: Annotated[int, PathParam(ge=1)],
-    run_id: Annotated[int, PathParam(ge=1)],
-    ex: OwnedExecution,
-    session: DbSession,
-) -> ExecRunOut:
-    """Re-fire a run by INSERTING a new ExecRun row (B-model semantics).
-
-    Each rerun creates a fresh row with ``idx = max(idx) + 1`` so the
-    full history is preserved — failures + retries stay visible.  The
-    parent execution's ``total_runs`` grows by 1 per rerun.
-
-    Orchestration lives in :func:`app.services.rerun.rerun_single_run`
-    (single place that composes insert / render / execute).
-    """
-    new_run = await rerun_single_run(session, ex, run_id)
-    return _run_out(new_run)
 
 
 # ── delete ─────────────────────────────────────────────────────

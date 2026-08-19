@@ -39,9 +39,9 @@ register_url_convertor("v3_case_id", _V3CaseIdConverter())
 from .core.config import settings
 from .core.db import init_db
 from .routers import (
+    admin_migrate,
     auth,
     auth_sessions,
-    cases,
     cases_composer,
     data_sets,
     endpoint_catalog,
@@ -106,27 +106,13 @@ async def lifespan(app: FastAPI):
     from .services import gimbal_client as gimbal_client_module
     from .services import plate_client as plate_client_module
     from .services.run_dispatcher import drain_in_flight_dispatches
-    from .services.run_lifecycle import (
-        drain_in_flight_runners,
-        reconcile_orphan_runs,
-    )
 
-    await reconcile_orphan_runs()
     sweeper_task = asyncio.create_task(_log_hub_sweeper())
     try:
         yield
     finally:
-        # Cancel + await all in-flight orchestrators so subprocess
-        # children get a clean kill (each _safe_run already has
-        # try/except that catches CancelledError) before the event
-        # loop is torn down.  ``drain_in_flight_runners`` also flips
-        # the module's ``_shutting_down`` flag so any in-flight
-        # ``create_execution`` request returns a structured error
-        # instead of starting a task that would vanish a moment later.
-        n_drained = await drain_in_flight_runners()
-        if n_drained:
-            logger.info("lifespan: drained {} in-flight execution runner(s)", n_drained)
-        # V3 scenario composer: also drain the per-row dispatch tasks.
+        # V3 场景编排:取消并等待所有在途的逐行 dispatch 任务。
+        # (P4 起 V1 子进程 orchestrator/孤儿回收已随 executor.py 退役)
         n_dispatched = await drain_in_flight_dispatches()
         if n_dispatched:
             logger.info("lifespan: drained {} in-flight dispatcher(s)", n_dispatched)
@@ -169,20 +155,14 @@ def create_app() -> FastAPI:
 
     app.include_router(auth.router, prefix="/api")
     app.include_router(auth_sessions.router, prefix="/api")
-    # hidden_profiles MUST come before cases (cases owns {case_id:path} which
-    # would otherwise shadow the more-specific /hidden suffix route).
+    # hidden_profiles:DB 表操作,与 V1 cases 无依赖(P4 已退役 legacy cases)
     app.include_router(hidden_profiles.router, prefix="/api")
-    # V3 composer cases MUST be registered BEFORE the legacy cases
-    # router: the composer's GET/PATCH/DELETE /{case_id} all require
-    # the V3 ``case-`` pattern (Path(pattern=...)), so a request to
-    # /api/cases/mine, /public, /upload falls through to the legacy
-    # router, but a request to /api/cases/case-001 hits the composer
-    # first.  Same for POST /cases/{case_id}/data-sets which has no
-    # legacy equivalent.
+    # V3 composer cases 是唯一的 /api/cases* 路由:
+    # GET/PATCH/DELETE /{case_id} 只匹配 v3_case_id pattern(case-/sc- 前缀)。
     app.include_router(cases_composer.router, prefix="/api")
-    app.include_router(cases.router, prefix="/api")
     app.include_router(executions.router, prefix="/api")
     app.include_router(users.router, prefix="/api")
+    app.include_router(admin_migrate.router, prefix="/api")
     # New V3 composer routers (registered in order so static suffixes
     # precede ``/{id}`` catch-alls).
     app.include_router(envs.router, prefix="/api")

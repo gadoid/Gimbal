@@ -54,6 +54,11 @@
           <button class="name" @click.stop="openScenario(row)">
             {{ row.meta.name || row.meta.scenarioId }}
           </button>
+          <span
+            v-if="row.visibility === 'public'"
+            class="vis-tag vis-public"
+            title="公共:所有登录用户可读"
+          >公共</span>
           <div class="sid">{{ row.meta.scenarioId }}</div>
           <div class="desc">{{ row.meta.description }}</div>
         </template>
@@ -151,8 +156,20 @@
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                   导出 (JSON/YAML)
                 </el-dropdown-item>
-                <el-dropdown-item command="clone">克隆为副本</el-dropdown-item>
-                <el-dropdown-item command="delete" class="is-danger">删除</el-dropdown-item>
+                <el-dropdown-item command="copy">复制到我的</el-dropdown-item>
+                <el-dropdown-item
+                  v-if="isMine(row) && row.visibility !== 'public'"
+                  command="publish"
+                >发布到公共库</el-dropdown-item>
+                <el-dropdown-item
+                  v-if="isMine(row) && row.visibility === 'public'"
+                  command="unpublish"
+                >下架为私有</el-dropdown-item>
+                <el-dropdown-item
+                  v-if="isMine(row)"
+                  command="delete"
+                  class="is-danger"
+                >删除</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -182,12 +199,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Collection, Search, Star, StarFilled } from '@element-plus/icons-vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
+import { useAuthStore } from '@/stores/auth'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { previewPlateDraft, getScenarioDraft } from '@/api/scenario-composer'
 import { useListSearch } from '@/utils/useListSearch'
+import { confirmAction } from '@/utils/confirmAction'
+import { composerUrl, caseViewUrl } from '@/utils/links'
 import { showError } from '@/utils/errorFallback'
 import FilterPopover from '@/components/FilterPopover.vue'
 import TagPill from '@/components/TagPill.vue'
@@ -197,6 +217,7 @@ import { applyFiltersToList, emptyFilters, type CaseFilters } from '@/utils/filt
 import type { Scenario } from '@/types/scenario-composer'
 
 const store = useScenarioComposerStore()
+const auth = useAuthStore()
 const router = useRouter()
 const MAX = 3
 const pageSize = 20
@@ -239,15 +260,13 @@ const filterableRows = computed(() =>
   })),
 )
 
+// P1 读侧收紧后:服务端只返回 public + 自己的;tab 在此基础上分桶。
+// 'mine' = 私有(自己的),'public' = 公共,'favorite' = 星标。
 const visible = computed(() => {
   const rows = applyFiltersToList(filterableRows.value, filters.value)
-  // Tabs previously rendered but never filtered — the list was identical
-  // on every tab. 'mine' shows everything the API returns (the composer
-  // API v1 has no per-user scope yet), 'favorite' filters to starred rows.
-  // 'public' is not distinguishable server-side in v1 — keep it as the
-  // full list with an honest badge instead of a hardcoded 0.
   if (activeTab.value === 'favorite') return rows.filter((r) => r.starred)
-  return rows
+  if (activeTab.value === 'public') return rows.filter((r) => r.visibility === 'public')
+  return rows.filter((r) => r.visibility !== 'public')
 })
 const total = computed(() => visible.value.length)
 
@@ -265,9 +284,22 @@ watch(total, () => {
   if (page.value > maxPage) page.value = maxPage
 })
 
-const myCount = computed(() => store.scenarios.length)
-const publicCount = computed(() => store.scenarios.length) // v1: 服务端无可见性区分
+const myCount = computed(
+  () => store.scenarios.filter((s) => s.visibility !== 'public').length,
+)
+const publicCount = computed(
+  () => store.scenarios.filter((s) => s.visibility === 'public').length,
+)
 const favoriteCount = computed(() => store.starredScenarios.length)
+
+/** 属主判断(admin 全量;owner 与当前用户 display_name/username 名字比对,
+ * 与后端 _ownership 的存量行回退规则一致;P2 回填 owner_id 后服务端
+ * 比对为准,这里只是菜单显隐,服务端仍会 403 兜底)。 */
+function isMine(row: Scenario): boolean {
+  if (auth.isAdmin) return true
+  const me = auth.currentUser?.display_name || auth.currentUser?.username || ''
+  return !!me && me === (row.meta.owner || '')
+}
 
 onMounted(async () => {
   try {
@@ -288,7 +320,7 @@ function formatTime(t?: string | Date) {
 
 function openScenario(row: Scenario) {
   // 跳转到新的统一 CaseComposer 页面 (从 ① 基本信息 开始)
-  router.push(`/composer/${encodeURIComponent(row.meta.scenarioId)}?step=1`)
+  router.push(composerUrl(row.meta.scenarioId))
 }
 
 function onCreate() {
@@ -348,22 +380,65 @@ async function toggleStar(row: Scenario) {
 
 async function onCmd(cmd: string, row: Scenario) {
   if (cmd === 'edit') return openScenario(row)
-  if (cmd === 'cases') return router.push(`/scenarios/${row.meta.scenarioId}/cases`)
-  if (cmd === 'clone') {
-    ElMessage.info(`克隆 ${row.meta.scenarioId} (待后端支持)`)
+  if (cmd === 'cases') {
+    // 场景:用例 = 1:1 — 直接打开该场景绑定用例的说明书页
+    try {
+      await store.fetchCases({ scenarioId: row.meta.scenarioId })
+      const c = store.casesOfScenario(row.meta.scenarioId)[0]
+      if (c) return router.push(caseViewUrl(c.caseId))
+      ElMessage.info('该场景还没有绑定用例,已打开编排器')
+      return router.push(composerUrl(row.meta.scenarioId))
+    } catch (e) {
+      return showError('查看用例', undefined, (e as Error).message)
+    }
+  }
+  if (cmd === 'copy') {
+    try {
+      const saved = await store.copyScenario(row.meta.scenarioId)
+      ElMessage.success(`已复制到我的场景：${saved.meta.scenarioId}`)
+    } catch (e) {
+      showError('复制', undefined, (e as Error).message)
+    }
+    return
+  }
+  if (cmd === 'publish') {
+    const ok = await confirmAction(
+      `确认发布场景 ${row.meta.name || row.meta.scenarioId} 到公共库？发布后所有登录用户可见。`,
+      '发布到公共库',
+      { type: 'info', confirmButtonText: '发布', cancelButtonText: '取消' },
+    )
+    if (!ok) return
+    try {
+      await store.publishScenario(row.meta.scenarioId)
+      ElMessage.success('已发布')
+    } catch (e) {
+      showError('发布', undefined, (e as Error).message)
+    }
+    return
+  }
+  if (cmd === 'unpublish') {
+    const ok = await confirmAction(
+      `确认下架场景 ${row.meta.name || row.meta.scenarioId}？下架后仅自己可见,他人列表将立即移除。`,
+      '下架为私有',
+      { type: 'warning', confirmButtonText: '下架', cancelButtonText: '取消' },
+    )
+    if (!ok) return
+    try {
+      await store.unpublishScenario(row.meta.scenarioId)
+      ElMessage.success('已下架为私有')
+    } catch (e) {
+      showError('下架', undefined, (e as Error).message)
+    }
     return
   }
   if (cmd === 'export') return exportRow(row)
   if (cmd === 'delete') {
-    try {
-      await ElMessageBox.confirm(
-        `确认删除场景 ${row.meta.scenarioId}？其下所有用例与数据集将一并删除，操作不可撤销。`,
-        '删除场景',
-        { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
-      )
-    } catch {
-      return // 用户取消
-    }
+    const ok = await confirmAction(
+      `确认删除场景 ${row.meta.scenarioId}？其下所有用例与数据集将一并删除，操作不可撤销。`,
+      '删除场景',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+    if (!ok) return // 用户取消
     try {
       await store.removeScenario(row.meta.scenarioId)
       ElMessage.success(`已删除：${row.meta.scenarioId}`)
@@ -455,6 +530,20 @@ async function onCmd(cmd: string, row: Scenario) {
   cursor: pointer;
 }
 .name:hover { color: var(--accent); }
+
+.vis-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  font-size: 10px;
+  line-height: 16px;
+  vertical-align: 1px;
+  border-radius: 3px;
+}
+.vis-public {
+  color: #047857;
+  background: #d1fae5;
+}
 
 .sid {
   margin-top: 2px;

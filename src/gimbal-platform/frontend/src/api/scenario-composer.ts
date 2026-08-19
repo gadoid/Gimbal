@@ -1,8 +1,8 @@
 /**
  * api/scenario-composer.ts — 场景编排 API client
  *
- * 与现有 cases.ts 同等级别，提供 scenarios / cases / data-sets 三个领域
- * 的 REST 调用。请求路径对齐 Plate V3.2 的资源命名（snake_case + s 复数）。
+ * 提供 scenarios / cases / data-sets 三个领域的 REST 调用。
+ * 请求路径对齐 Plate V3.2 的资源命名（snake_case + s 复数）。
  */
 import http from '@/api/http'
 import type {
@@ -16,18 +16,27 @@ import type {
 // ── scenarios ────────────────────────────────────────────────
 export async function listScenarios(params: {
   q?: string; system?: string; module?: string; priority?: number;
+  /** P1 读侧收紧后的分桶过滤:public=仅公共;private=仅私有(自己的) */
+  visibility?: 'public' | 'private';
 }): Promise<Scenario[]> {
   const { data } = await http.get<Scenario[]>('/scenarios', { params })
   return data
 }
 
 export async function getScenario(scenarioId: string): Promise<Scenario> {
-  const { data } = await http.get<Scenario>(`/scenarios/${scenarioId}`)
+  const { data } = await http.get<Scenario>(`/scenarios/${enc(scenarioId)}`)
   return data
 }
 
+// ── URL encoding policy ──────────────────────────────────────────
+// ids ride real path segments, so encodeURI (keeps "/") —
+// raw interpolation breaks on spaces / non-ASCII ids.
+function enc(id: string): string {
+  return encodeURI(id)
+}
+
 export async function getScenarioDraft(scenarioId: string): Promise<ScenarioDraft> {
-  const { data } = await http.get<ScenarioDraft>(`/scenarios/${scenarioId}/draft`)
+  const { data } = await http.get<ScenarioDraft>(`/scenarios/${enc(scenarioId)}/draft`)
   return data
 }
 
@@ -39,18 +48,35 @@ export async function createScenario(draft: ScenarioDraft): Promise<Scenario> {
 export async function updateScenario(
   scenarioId: string, draft: ScenarioDraft,
 ): Promise<Scenario> {
-  const { data } = await http.put<Scenario>(`/scenarios/${scenarioId}`, draft)
+  const { data } = await http.put<Scenario>(`/scenarios/${enc(scenarioId)}`, draft)
   return data
 }
 
 export async function deleteScenario(scenarioId: string): Promise<void> {
-  await http.delete(`/scenarios/${scenarioId}`)
+  await http.delete(`/scenarios/${enc(scenarioId)}`)
 }
 
 export async function starScenario(
   scenarioId: string, starred: boolean,
 ): Promise<void> {
-  await http.post(`/scenarios/${scenarioId}/star`, { starred })
+  await http.post(`/scenarios/${enc(scenarioId)}/star`, { starred })
+}
+
+// ── 发布 / 下架 / 复制(P1:取代 V1 公共库能力)─────────────────
+export async function publishScenario(scenarioId: string): Promise<Scenario> {
+  const { data } = await http.post<Scenario>(`/scenarios/${enc(scenarioId)}/publish`)
+  return data
+}
+
+export async function unpublishScenario(scenarioId: string): Promise<Scenario> {
+  const { data } = await http.post<Scenario>(`/scenarios/${enc(scenarioId)}/unpublish`)
+  return data
+}
+
+/** 深拷贝场景+用例+数据集到自己名下(新 id,恒 private) */
+export async function copyScenario(scenarioId: string): Promise<Scenario> {
+  const { data } = await http.post<Scenario>(`/scenarios/${enc(scenarioId)}/copy`)
+  return data
 }
 
 // ── cases ──────────────────────────────────────────────────────
@@ -58,11 +84,6 @@ export async function listCases(params: {
   scenarioId?: string; q?: string; system?: string; module?: string;
 }): Promise<Case[]> {
   const { data } = await http.get<Case[]>('/cases', { params })
-  return data
-}
-
-export async function getCase(caseId: string): Promise<Case> {
-  const { data } = await http.get<Case>(`/cases/${caseId}`)
   return data
 }
 
@@ -74,12 +95,8 @@ export async function createCase(draft: Case): Promise<Case> {
 export async function updateCase(
   caseId: string, patch: Partial<Case>,
 ): Promise<Case> {
-  const { data } = await http.patch<Case>(`/cases/${caseId}`, patch)
+  const { data } = await http.patch<Case>(`/cases/${enc(caseId)}`, patch)
   return data
-}
-
-export async function deleteCase(caseId: string): Promise<void> {
-  await http.delete(`/cases/${caseId}`)
 }
 
 // ── data-sets ─────────────────────────────────────────────────
@@ -91,26 +108,22 @@ export async function listDataSets(params: {
 }
 
 export async function getDataSet(datasetId: string): Promise<DataSet> {
-  const { data } = await http.get<DataSet>(`/data-sets/${datasetId}`)
+  const { data } = await http.get<DataSet>(`/data-sets/${enc(datasetId)}`)
   return data
 }
 
 export async function createDataSet(
   caseId: string, draft: DataSetDraft,
 ): Promise<DataSet> {
-  const { data } = await http.post<DataSet>(`/cases/${caseId}/data-sets`, draft)
+  const { data } = await http.post<DataSet>(`/cases/${enc(caseId)}/data-sets`, draft)
   return data
 }
 
 export async function updateDataSet(
   datasetId: string, draft: DataSetDraft,
 ): Promise<DataSet> {
-  const { data } = await http.put<DataSet>(`/data-sets/${datasetId}`, draft)
+  const { data } = await http.put<DataSet>(`/data-sets/${enc(datasetId)}`, draft)
   return data
-}
-
-export async function deleteDataSet(datasetId: string): Promise<void> {
-  await http.delete(`/data-sets/${datasetId}`)
 }
 
 // ── run ────────────────────────────────────────────────────────
@@ -121,6 +134,18 @@ export interface RunRequest {
   /** 执行用认证 alias 多选(原 auth 单选已废);dispatcher 解密注入 Config.users */
   auths?: string[]
   retry?: { maxAttempts: number; intervalMs: number }
+  /** V1 能力移植:0-based 含端点,透传引擎 halt_at,在该步后停 */
+  stepTo?: number
+  /** V1 能力移植:false = 跳过执行凭证解析/注入 */
+  injectCredentials?: boolean
+  /** M1 执行能力:每行数据的重复执行次数(total = Σrows × nRuns) */
+  nRuns?: number
+  /** M1 执行能力:fan-out 并发度(1–200) */
+  parallel?: number
+  /** M1 执行能力:提单号前缀,注入 vars.order_no / order_no_prefix / seq */
+  prefix?: string
+  /** M1 执行能力:执行认证合并策略(override|merge|append) */
+  mergePolicy?: 'override' | 'merge' | 'append'
 }
 
 export interface RunCaseResult {

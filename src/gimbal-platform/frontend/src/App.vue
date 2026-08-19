@@ -17,7 +17,7 @@ import TopNav from '@/components/TopNav.vue'
 const auth = useAuthStore()
 
 // 页面刷新后只恢复了 accessToken，currentUser 是 null。
-// 依赖 currentUser.id 过滤的页面（如 /cases/mine 的 mineUploads）需要先确认身份。
+// 依赖 currentUser 的页面(如按 owner 过滤的场景库)需要先确认身份。
 // 这里懒拉一次，避免后续 store 拿到 undefined。
 onMounted(async () => {
   if (auth.accessToken && !auth.currentUser) {

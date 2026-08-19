@@ -2,8 +2,8 @@
  * Regression test for TopNav.vue — Spec-1 sign-off bug.
  *
  * The original `<router-link custom v-slot="{ navigate }">` pattern silently
- * failed to navigate from /cases/:id/config to other routes. After the fix
- * we use plain `<router-link :to="path">` and vue-router handles href/click.
+ * failed to navigate between routes. After the fix we use plain
+ * `<router-link :to="path">` and vue-router handles href/click.
  *
  * This test mounts the TopNav (which expects an authenticated user via the
  * auth store) and asserts each nav entry renders as a real `<a href>` link.
@@ -20,13 +20,10 @@ function makeRouter() {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/cases/mine', component: { template: '<div/>' } },
-      { path: '/cases/public', component: { template: '<div/>' } },
       { path: '/scenarios', component: { template: '<div/>' } },
       { path: '/executions', component: { template: '<div/>' } },
       { path: '/auths', component: { template: '<div/>' } },
       { path: '/admin/users', component: { template: '<div/>' } },
-      { path: '/cases/:caseId/config', component: { template: '<div/>' } },
     ],
   })
 }
@@ -36,13 +33,13 @@ describe('TopNav', () => {
     setActivePinia(createPinia())
   })
 
-  it('renders six real router-link anchors', async () => {
+  it('renders four real router-link anchors', async () => {
     const auth = useAuthStore()
     auth.accessToken = 'tok'
     auth.currentUser = { id: 1, username: 'alice', is_admin: true } as never
 
     const router = makeRouter()
-    router.push('/cases/mine')
+    router.push('/scenarios')
     await router.isReady()
 
     const w = mount(TopNav, {
@@ -50,12 +47,10 @@ describe('TopNav', () => {
     })
 
     const links = w.findAll('a.nav-entry')
-    expect(links.length).toBe(6)
+    expect(links.length).toBe(4)
 
-    // Each link points to the right path
+    // Each link points to the right path(P3:工作台/公共库已并入场景库)
     const hrefs = links.map((l) => l.attributes('href'))
-    expect(hrefs).toContain('/cases/mine')
-    expect(hrefs).toContain('/cases/public')
     expect(hrefs).toContain('/scenarios')
     expect(hrefs).toContain('/executions')
     expect(hrefs).toContain('/auths')
@@ -86,7 +81,7 @@ describe('TopNav', () => {
     auth.currentUser = { id: 1, username: 'alice', is_admin: false } as never
 
     const router = makeRouter()
-    router.push('/cases/mine')
+    router.push('/scenarios')
     await router.isReady()
 
     const w = mount(TopNav, {
@@ -95,7 +90,7 @@ describe('TopNav', () => {
 
     const hrefs = w.findAll('a.nav-entry').map((l) => l.attributes('href'))
     expect(hrefs).not.toContain('/admin/users')
-    expect(hrefs.length).toBe(5)
+    expect(hrefs.length).toBe(3)
   })
 
   it('does not show nav entries when not authenticated', () => {

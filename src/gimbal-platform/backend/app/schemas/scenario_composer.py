@@ -320,6 +320,29 @@ class RunRequest(BaseModel):
     # ``${auth.<alias>.<field>}`` 在 Gimbal 运行期解析。
     auths: list[str] = Field(alias="auths", default_factory=list)
     retry: RetryRef | None = None
+    # V1 高级能力移植:``stepTo`` 0-based 含端点(与 V1 executions 的
+    # step_to 同语义),dispatcher 透传 gimbal HTTP ``halt_at``。
+    step_to: int | None = Field(default=None, ge=0, alias="stepTo")
+    # False = 跳过执行凭证解析/注入(V1 inject_credentials 同语义)。
+    inject_credentials: bool = Field(default=True, alias="injectCredentials")
+    # ── M1 执行能力补齐(V1 executor 语义移植)────────────────────
+    # 每行数据的重复执行次数;total_runs = Σ(rows) × nRuns。
+    n_runs: int = Field(default=1, ge=1, le=1000, alias="nRuns")
+    # fan-out 并发度(asyncio.Semaphore 上限)。
+    parallel: int = Field(default=1, ge=1, le=200, alias="parallel")
+    # 提单号前缀:注入 vars.order_no_prefix / order_no("<P>-{{ seq }}") /
+    # seq({"kind":"seq"}) — 同 V1 _render_temp_yaml。
+    prefix: str | None = Field(
+        default=None, min_length=1, max_length=64, alias="prefix"
+    )
+    # 执行认证合并策略(V1 merge_policy 同语义):
+    #   override — Config.users 整块替换为所选认证
+    #   merge    — 同名覆盖、其余保留(默认)
+    #   append   — 合并,但与场景内置 users 别名冲突时拒绝(409)
+    # origin("不注入")由 inject_credentials=False 表达,不在此枚举。
+    merge_policy: Literal["override", "merge", "append"] = Field(
+        default="merge", alias="mergePolicy"
+    )
 
 
 class RunResponse(BaseModel):
@@ -381,6 +404,8 @@ class Scenario(BaseModel):
     step_count: int = Field(default=0, ge=0, alias="stepCount")
     tags: list[str] = Field(default_factory=list)
     starred: bool = False
+    # private(默认,仅 owner/admin 可读)| public(所有登录用户可读)
+    visibility: str = Field(default="private")
 
 
 __all__ = [

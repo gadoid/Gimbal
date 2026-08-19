@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 
 import pytest
 
@@ -252,8 +253,10 @@ async def test_sweep_drops_done_channels_past_ttl(hub: LogHub) -> None:
     ch = hub.get_or_create(50, 500)
     ch.publish_from_thread("stdout", "x\n", loop)
     ch.mark_done_from_thread(exit_code=0, loop=loop)
-    # Backdate the done timestamp so the channel looks ancient.
-    ch._done_at -= 9999  # noqa: SLF001
+    # Backdate the done timestamp so the channel looks ancient.  Clamp
+    # to a small positive value: sweep() treats done_at <= 0 as "unset"
+    # and monotonic() can be < 9999 on a freshly booted machine.
+    ch._done_at = max(1.0, time.monotonic() - 9999)  # noqa: SLF001
     evicted = hub.sweep(ttl_seconds=1.0)
     assert evicted == 1
     assert (50, 500) not in hub._channels  # noqa: SLF001
@@ -280,7 +283,7 @@ async def test_sweep_preserves_in_flight_channels(hub: LogHub) -> None:
     ch = hub.get_or_create(70, 700)
     ch.publish_from_thread("stdout", "x\n", loop)
     ch.mark_done_from_thread(exit_code=0, loop=loop)
-    ch._done_at -= 9999  # noqa: SLF001 — backdate
+    ch._done_at = max(1.0, time.monotonic() - 9999)  # noqa: SLF001 — backdate
     # Attach a live subscriber.
     sub_q, _replay, _done = ch.subscribe(loop)
     try:
@@ -297,7 +300,7 @@ async def test_sweep_preserves_not_done_channels(hub: LogHub) -> None:
     ch = hub.get_or_create(80, 800)
     ch.publish_from_thread("stdout", "x\n", loop)
     # Do NOT mark done — channel is still in flight.
-    ch._done_at -= 9999  # noqa: SLF001
+    ch._done_at = max(1.0, time.monotonic() - 9999)  # noqa: SLF001
     evicted = hub.sweep(ttl_seconds=1.0)
     assert evicted == 0
     assert (80, 800) in hub._channels  # noqa: SLF001
@@ -309,7 +312,7 @@ async def test_sweep_zero_ttl_is_noop(hub: LogHub) -> None:
     ch = hub.get_or_create(90, 900)
     ch.publish_from_thread("stdout", "x\n", loop)
     ch.mark_done_from_thread(exit_code=0, loop=loop)
-    ch._done_at -= 9999  # noqa: SLF001
+    ch._done_at = max(1.0, time.monotonic() - 9999)  # noqa: SLF001
     evicted = hub.sweep(ttl_seconds=0)
     assert evicted == 0
     evicted = hub.sweep(ttl_seconds=-1)

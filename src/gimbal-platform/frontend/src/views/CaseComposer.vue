@@ -2,7 +2,7 @@
   CaseComposer.vue — V3 用例编排专用页面 (现代化设计版)
   严格按 PRD-case-composer.md §4 实现:
   - 一个页面承载 4 步流程 (Meta / Resource / Config / Canvas)
-  - TopNav + HeadStepper + NavBar 三段式布局 (4 步共享同一 head)
+  - TopNav + 页内 stepper-bar + footer 导航三段式布局 (4 步共享同一 head)
   - ④ Canvas 内嵌选接口的 Catalog Panel (匹配原型图 content.png)
   - V3 composer 1:1 模型: Scenario 自动创建配套 Case + DataSet
   - 顶部 action 区: 收藏 / 复制 / 删除 / 运行
@@ -209,7 +209,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import ScenarioExportMenu from '@/components/ScenarioExportMenu.vue'
 import CaseComposerMeta from '@/components/composer/CaseComposerMeta.vue'
 import CaseComposerResource from '@/components/composer/CaseComposerResource.vue'
@@ -219,6 +219,8 @@ import RunDialog from '@/components/composer/RunDialog.vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { showError } from '@/utils/errorFallback'
+import { executionUrl, composerUrl } from '@/utils/links'
+import { confirmAction } from '@/utils/confirmAction'
 import * as api from '@/api/scenario-composer'
 import type {
   Scenario, Case, DataSetSummary, RunEnv, Orchestration, ScenarioDraft,
@@ -576,12 +578,13 @@ async function onToggleStar() {
 
 async function onDuplicate() {
   if (!scenario.value) return
+  const ok = await confirmAction(
+    `复制 "${scenario.value.meta.name}" 为新场景?`,
+    '复制场景',
+    { type: 'info' },
+  )
+  if (!ok) return // 用户取消或 ESC 关闭
   try {
-    await ElMessageBox.confirm(
-      `复制 "${scenario.value.meta.name}" 为新场景?`,
-      '复制场景',
-      { type: 'info' }
-    )
     const newId = `${scenario.value.meta.scenarioId}-copy`
     const newDef: ScenarioView = {
       ...definition.value,
@@ -591,26 +594,25 @@ async function onDuplicate() {
     const draft: ScenarioDraft = { definition: newDef, orchestration: orchestration.value }
     const saved = await store.saveScenario(null, draft)
     ElMessage.success('已复制')
-    router.push(`/composer/${saved.meta.scenarioId}?step=1`)
+    router.push(composerUrl(saved.meta.scenarioId))
   } catch (e) {
-    if ((e as any) === 'cancel') return
     showError('复制失败', undefined, (e as Error).message)
   }
 }
 
 async function onDelete() {
   if (!scenario.value) return
+  const ok = await confirmAction(
+    `确定删除场景 "${scenario.value.meta.name}"? 此操作不可恢复。`,
+    '删除场景',
+    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消', confirmButtonClass: 'el-button--danger' },
+  )
+  if (!ok) return // 用户取消或 ESC 关闭
   try {
-    await ElMessageBox.confirm(
-      `确定删除场景 "${scenario.value.meta.name}"? 此操作不可恢复。`,
-      '删除场景',
-      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消', confirmButtonClass: 'el-button--danger' }
-    )
     await store.removeScenario(scenario.value.meta.scenarioId)
     ElMessage.success('已删除')
     router.push('/scenarios')
   } catch (e) {
-    if ((e as any) === 'cancel') return
     showError('删除失败', undefined, (e as Error).message)
   }
 }
@@ -643,7 +645,18 @@ async function onPreview() {
   }
 }
 
-async function onRunConfirm(envId: string, dataSetIds: string[]) {
+async function onRunConfirm(
+  envId: string,
+  dataSetIds: string[],
+  opts?: {
+    stepTo?: number | null
+    injectCredentials: boolean
+    nRuns?: number
+    parallel?: number
+    prefix?: string
+    mergePolicy?: 'override' | 'merge' | 'append'
+  },
+) {
   if (!caseData.value) {
     ElMessage.warning('请先保存草稿以创建配套用例')
     return
@@ -656,6 +669,17 @@ async function onRunConfirm(envId: string, dataSetIds: string[]) {
       caseId: caseData.value.caseId,
       dataSetIds,
       env,
+      // V1 能力移植:stepTo(引擎 halt_at)与凭证注入开关;仅在
+      // 非默认时上送,保持旧后端兼容。
+      ...(opts?.stepTo != null ? { stepTo: opts.stepTo } : {}),
+      ...(opts && opts.injectCredentials === false
+        ? { injectCredentials: false } : {}),
+      // M1 执行能力:nRuns/parallel/prefix/mergePolicy,同样仅在
+      // 非默认时上送。
+      ...(opts?.mergePolicy ? { mergePolicy: opts.mergePolicy } : {}),
+      ...(opts?.nRuns && opts.nRuns > 1 ? { nRuns: opts.nRuns } : {}),
+      ...(opts?.parallel && opts.parallel > 1 ? { parallel: opts.parallel } : {}),
+      ...(opts?.prefix ? { prefix: opts.prefix } : {}),
     } as any)
     lastRunId.value = resp.runId
     ElMessage.success(`运行已发起: ${resp.runId}`)
@@ -667,7 +691,7 @@ async function onRunConfirm(envId: string, dataSetIds: string[]) {
     runNavTimer = setTimeout(() => {
       runNavTimer = null
       runDispatching.value = false
-      if (resp.executionId != null) router.push(`/executions/${resp.executionId}`)
+      if (resp.executionId != null) router.push(executionUrl(resp.executionId))
       else router.push('/executions')
     }, 800)
   } catch (e) {

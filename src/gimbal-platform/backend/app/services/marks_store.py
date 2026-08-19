@@ -48,6 +48,11 @@ class MarkStore:
         with self._lock:
             return set(self._marks.get(user_id, set()))
 
+    def all_user_ids(self) -> list[int]:
+        """有任意标记的 user id 列表(P2 favorites→stars 迁移遍历用)。"""
+        with self._lock:
+            return list(self._marks.keys())
+
     # ── mutations ──────────────────────────────────────────────
     def set_mark(self, user_id: int, item_id: str, value: bool) -> None:
         with self._lock:

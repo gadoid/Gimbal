@@ -28,6 +28,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
+from ._ownership import can_read_scenario, ensure_owner
+from ._error_mapping import key_error_404, value_error_http
 from ..models.composer_case import ComposerCase
 from ..schemas.scenario_composer import (
     Case,
@@ -81,12 +83,26 @@ def _require_owner(
     user: CurrentUser, row: ComposerCase
 ) -> None:
     """403 unless the user is the creator or an admin."""
-    owner_name = row.created_by or ""
-    user_name = user.display_name or user.username
-    if not user.is_admin and user_name != owner_name:
+    ensure_owner(
+        user,
+        row.created_by,
+        "not_owner: only the case's creator (or admin) can modify this case",
+    )
+
+
+async def _require_case_reader(
+    db: AsyncSession, user: CurrentUser, row: ComposerCase
+) -> None:
+    """用例读权限跟随父场景(404 而非 403,不泄露存在性)。"""
+    scen = await _load_scenario(db, row.scenario_id)
+    if not can_read_scenario(
+        user,
+        scen.owner,
+        owner_id=scen.owner_id,
+        visibility=scen.visibility or "private",
+    ):
         raise HTTPException(
-            status_code=403,
-            detail="not_owner: only the case's creator (or admin) can modify this case",
+            status_code=404, detail=f"case_not_found: {row.case_id}"
         )
 
 
@@ -101,26 +117,22 @@ async def create_case(
     the caller must own the scenario (or be an admin).  Prevents a
     logged-in user from creating cases under another user's scenario.
     """
-    # Load the parent scenario to verify ownership.
+    # Load the parent scenario to verify ownership.  Empty owner =
+    # locked (canonical rule in _ownership): the old `scen.owner and ...`
+    # guard skipped the check entirely for legacy/un-owned scenarios.
     scen = await _load_scenario(db, body.scenario_id)
-    user_name = user.display_name or user.username
-    if not user.is_admin and scen.owner and scen.owner != user_name:
-        raise HTTPException(
-            status_code=403,
-            detail="not_owner: only the scenario's owner (or admin) can create cases under it",
-        )
+    ensure_owner(
+        user,
+        scen.owner,
+        "not_owner: only the scenario's owner (or admin) can create cases under it",
+        owner_id=scen.owner_id,
+    )
     try:
         return await case_store.create(
             db, body, created_by=user.display_name or user.username
         )
     except ValueError as e:
-        msg = str(e)
-        code = msg.split(":", 1)[0]
-        if code == "case_id_exists":
-            raise HTTPException(status_code=409, detail=msg)
-        if code == "scenario_not_found":
-            raise HTTPException(status_code=404, detail=msg)
-        raise HTTPException(status_code=400, detail=msg)
+        raise value_error_http(e, {"case_id_exists": 409, "scenario_not_found": 404})
 
 
 @router.get("", response_model=list[Case], operation_id="composer_list_cases")
@@ -132,13 +144,33 @@ async def list_cases(
     system: str | None = None,
     module: str | None = None,
 ) -> list[Case]:
-    return await case_store.list_cases(
+    """读侧收紧:用例可见性跟随父场景(admin 全量;public + 自己的)。"""
+    from app.models.composer_scenario import ComposerScenario as _CS
+
+    readable_ids = {
+        r.scenario_id
+        for r in (
+            await db.execute(
+                select(
+                    _CS.scenario_id,
+                    _CS.owner,
+                    _CS.owner_id,
+                    _CS.visibility,
+                )
+            )
+        )
+        if can_read_scenario(
+            user, r.owner, owner_id=r.owner_id, visibility=r.visibility or "private"
+        )
+    }
+    cases = await case_store.list_cases(
         db,
         scenario_id=scenarioId,
         q=q,
         system=system,
         module=module,
     )
+    return [c for c in cases if c.scenario_id in readable_ids]
 
 
 # NOTE on routing: the legacy ``app.routers.cases`` has
@@ -155,10 +187,12 @@ async def get_case(
     db: DbSession,
     case_id: str,
 ) -> Case:
+    row = await _load_case(db, case_id)
+    await _require_case_reader(db, user, row)
     try:
         return await case_store.get(db, case_id)
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e).split(": ", 1)[-1])
+        raise key_error_404(e)
 
 
 @router.patch("/{case_id:v3_case_id}", response_model=Case, operation_id="composer_patch_case")
@@ -173,7 +207,7 @@ async def patch_case(
     try:
         return await case_store.patch(db, case_id, body)
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e).split(": ", 1)[-1])
+        raise key_error_404(e)
 
 
 @router.delete("/{case_id:v3_case_id}", status_code=status.HTTP_204_NO_CONTENT, operation_id="composer_delete_case")
@@ -187,7 +221,7 @@ async def delete_case(
     try:
         await case_store.delete(db, case_id)
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e).split(": ", 1)[-1])
+        raise key_error_404(e)
 
 
 # ── data-set create (POST /api/cases/{caseId}/data-sets) ──────────
@@ -208,10 +242,4 @@ async def create_data_set(
     try:
         return await data_set_store.create(db, case_id, body)
     except ValueError as e:
-        msg = str(e)
-        code = msg.split(":", 1)[0]
-        if code == "case_not_found":
-            raise HTTPException(status_code=404, detail=msg)
-        if code == "inconsistent_row_columns":
-            raise HTTPException(status_code=422, detail=msg)
-        raise HTTPException(status_code=400, detail=msg)
+        raise value_error_http(e, {"case_not_found": 404, "inconsistent_row_columns": 422})

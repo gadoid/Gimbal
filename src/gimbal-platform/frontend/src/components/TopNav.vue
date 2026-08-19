@@ -45,10 +45,8 @@ import { ElMessage } from 'element-plus'
 import {
   Collection,
   DataAnalysis,
-  Files,
   Lock,
   Setting,
-  Tickets,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -65,8 +63,7 @@ interface NavEntry {
 }
 
 const allEntries: NavEntry[] = [
-  { path: '/cases/mine', label: '我的工作台', icon: Tickets },
-  { path: '/cases/public', label: '公共用例库', icon: Files },
+  // P3:我的工作台/公共用例库已并入场景库(我的/公共/收藏三 tab)
   { path: '/scenarios', label: '场景库', icon: Collection },
   { path: '/executions', label: '执行历史', icon: DataAnalysis },
   { path: '/auths', label: '认证管理', icon: Lock },

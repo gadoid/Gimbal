@@ -55,7 +55,7 @@
     />
     <el-empty
       v-else-if="!store.loading"
-      description="暂无执行记录 — 从用例页点击 ⋯ → 执行"
+      description="暂无执行记录 — 在场景编排页点击「运行」发起执行"
     />
   </section>
 </template>
@@ -63,30 +63,30 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { useExecutionsStore } from '@/stores/executions'
+import { confirmAction } from '@/utils/confirmAction'
+import { executionStatusText } from '@/utils/executionStatus'
+import { executionUrl } from '@/utils/links'
 
 const router = useRouter()
 const store = useExecutionsStore()
 
 function statusText(s: string): string {
-  return ({ queued: '排队', running: '运行中', done: '完成', failed: '失败' } as Record<string, string>)[s] ?? s
+  return executionStatusText(s)
 }
 
 function open(id: number) {
-  router.push(`/executions/${id}`)
+  router.push(executionUrl(id))
 }
 
 async function remove(id: number) {
-  try {
-    await ElMessageBox.confirm(
-      `确认删除 execution #${id}？其下所有 run 记录与报告文件将一并删除，操作不可撤销。`,
-      '删除 execution',
-      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
-    )
-  } catch {
-    return // 用户取消
-  }
+  const ok = await confirmAction(
+    `确认删除 execution #${id}？其下所有 run 记录与报告文件将一并删除，操作不可撤销。`,
+    '删除 execution',
+    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+  )
+  if (!ok) return
   try {
     await store.remove(id)
   } catch (e) {
@@ -158,23 +158,7 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
-.status-queued {
-  color: #4338ca;
-  background: #eef2ff;
-}
-
-.status-running {
-  color: #854d0e;
-  background: #fef9c3;
-}
-
-.status-done {
-  color: #166534;
-  background: #dcfce7;
-}
-
-.status-failed {
-  color: #991b1b;
-  background: #fee2e2;
-}
+/* 状态配色统一在 @/styles/status-colors.css（见文件末尾引入） */
 </style>
+
+<style src="@/styles/status-colors.css"></style>

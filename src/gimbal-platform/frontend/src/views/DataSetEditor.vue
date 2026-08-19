@@ -10,7 +10,7 @@
         <p>用例 <code class="sid">{{ caseId }}</code> · {{ datasetId === 'new' ? '新建数据集' : datasetId }}</p>
       </div>
       <div class="header-actions">
-        <el-button :icon="ArrowBack" @click="router.push(`/cases/${caseId}/data-sets`)">返回列表</el-button>
+        <el-button :icon="Back" @click="router.push(caseDataSetsUrl(caseId))">返回列表</el-button>
         <el-button :loading="saving" plain :disabled="loadFailed" @click="onSave">保存</el-button>
         <el-button type="primary" :icon="VideoPlay" @click="onBatchRun" :disabled="!rows.length">批量运行 {{ rows.length }} 条</el-button>
       </div>
@@ -73,12 +73,13 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ArrowBack, DataAnalysis, Delete, VideoPlay } from '@element-plus/icons-vue'
+import { Back, DataAnalysis, Delete, VideoPlay } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { getDataSet } from '@/api/scenario-composer'
 import { showError } from '@/utils/errorFallback'
+import { caseDataSetsUrl, caseViewUrl, composerUrl } from '@/utils/links'
 
 const route = useRoute()
 const router = useRouter()
@@ -221,7 +222,7 @@ async function onSave() {
       rows: rows.value,
     })
     ElMessage.success('已保存')
-    router.push(`/cases/${caseId}/data-sets`)
+    router.push(caseDataSetsUrl(caseId))
   } catch (e) {
     showError('保存', undefined, (e as Error).message)
   } finally {
@@ -229,12 +230,18 @@ async function onSave() {
   }
 }
 
-function onBatchRun() {
+/** 批量运行统一走编排器的 RunDialog(先保存,再到运行对话框勾选本数据集) */
+async function onBatchRun() {
   if (datasetId === 'new') {
     ElMessage.warning('请先保存数据集，再批量运行')
     return
   }
-  router.push(`/cases/${caseId}/run?dataSetIds=${datasetId}&rows=${rows.value.length}`)
+  let sid = store.caseById(caseId)?.scenarioId
+  if (!sid) {
+    try { await store.fetchCases() } catch { /* 忽略,回退到详情页 */ }
+    sid = store.caseById(caseId)?.scenarioId
+  }
+  router.push(sid ? composerUrl(sid) : caseViewUrl(caseId))
 }
 </script>
 

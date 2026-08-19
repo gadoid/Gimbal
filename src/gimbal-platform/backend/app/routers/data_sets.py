@@ -21,6 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
+from ._ownership import ensure_owner
+from ._error_mapping import key_error_404, value_error_http
 from ..models.composer_case import ComposerCase
 from ..models.composer_data_set import ComposerDataSet
 from ..schemas.scenario_composer import DataSet, DataSetDraft, DataSetSummary
@@ -57,11 +59,11 @@ async def _require_owner(
     )
     case_row = case.scalar_one_or_none()
     owner_name = case_row.created_by if case_row is not None else ""
-    if not user.is_admin and (user.display_name or user.username) != owner_name:
-        raise HTTPException(
-            status_code=403,
-            detail="not_owner: only the case's creator (or admin) can modify this data set",
-        )
+    ensure_owner(
+        user,
+        owner_name,
+        "not_owner: only the case's creator (or admin) can modify this data set",
+    )
     return row
 
 
@@ -111,7 +113,7 @@ async def get_data_set(
     try:
         return await data_set_store.get(db, dataset_id)
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e).split(": ", 1)[-1])
+        raise key_error_404(e)
 
 
 @router.put("/{dataset_id}", response_model=DataSet)
@@ -125,7 +127,7 @@ async def put_data_set(
     try:
         return await data_set_store.update(db, dataset_id, body)
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e).split(": ", 1)[-1])
+        raise key_error_404(e)
 
 
 @router.delete("/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -136,4 +138,4 @@ async def delete_data_set(
     try:
         await data_set_store.delete(db, dataset_id)
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e).split(": ", 1)[-1])
+        raise key_error_404(e)

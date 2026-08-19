@@ -10,7 +10,7 @@
         <p>用例 <code class="sid">{{ caseId }}</code> · 共 {{ dataSets.length }} 个数据集 · 1 : N</p>
       </div>
       <div class="header-actions">
-        <el-button :icon="ArrowBack" @click="router.push(`/cases/${caseId}/edit`)">用例编辑</el-button>
+        <el-button :icon="Back" @click="router.push(caseViewUrl(caseId))">用例详情</el-button>
         <el-button type="primary" @click="onCreate">+ 新建数据集</el-button>
       </div>
     </header>
@@ -63,12 +63,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { ArrowBack, DataAnalysis, VideoPlay } from '@element-plus/icons-vue'
+import { Back, DataAnalysis, VideoPlay } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { showError } from '@/utils/errorFallback'
+import { caseViewUrl, caseDataSetUrl, composerUrl } from '@/utils/links'
+import { relTime } from '@/utils/datetime'
 import type { DataSetSummary } from '@/types/scenario-composer'
 
 const route = useRoute()
@@ -87,19 +89,26 @@ onMounted(async () => {
 })
 
 function open(d: DataSetSummary) {
-  router.push(`/cases/${caseId}/data-sets/${d.datasetId}`)
+  router.push(caseDataSetUrl(caseId, d.datasetId))
 }
 
 function onCreate() {
-  router.push(`/cases/${caseId}/data-sets/new`)
+  router.push(caseDataSetUrl(caseId, 'new'))
 }
 
 async function copy(d: DataSetSummary) {
   ElMessage.info(`复制 ${d.name} (待后端支持)`)
 }
 
-function runOne(d: DataSetSummary) {
-  router.push(`/cases/${caseId}/run?dataSetId=${d.datasetId}`)
+/** 运行统一走编排器的 RunDialog(可在其中勾选该数据集发起运行) */
+async function runOne(_d: DataSetSummary) {
+  let c = store.caseById(caseId)
+  if (!c) {
+    try { await store.fetchCases() } catch { /* 忽略,回退到详情页 */ }
+    c = store.caseById(caseId)
+  }
+  if (c?.scenarioId) router.push(composerUrl(c.scenarioId))
+  else router.push(caseViewUrl(caseId))
 }
 
 function previewLabel(rows: Record<string, any>[]) {
@@ -109,18 +118,6 @@ function previewLabel(rows: Record<string, any>[]) {
     cols.slice(0, 3).map((c) => String(r[c])).join('  '),
   ).join(' / ')
   return `${head}\n${tail}`
-}
-
-function relTime(v: string) {
-  const d = new Date(v)
-  if (Number.isNaN(d.getTime())) return ''
-  const diff = Date.now() - d.getTime()
-  const min = Math.floor(diff / 60_000)
-  if (min < 1) return '刚刚'
-  if (min < 60) return `${min}m 前`
-  const hr = Math.floor(min / 60)
-  if (hr < 24) return `${hr}h 前`
-  return `${Math.floor(hr / 24)}d 前`
 }
 </script>
 

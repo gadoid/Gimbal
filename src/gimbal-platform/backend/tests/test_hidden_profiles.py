@@ -1,38 +1,16 @@
-"""Tests for the /api/cases/{id}/hidden routes (Spec-2 §4.3 C2)."""
-from __future__ import annotations
+"""Tests for the /api/cases/{id}/hidden routes (Spec-2 §4.3 C2).
 
-import json
+P4 note: hidden_profiles is a pure-DB feature (per-(user, case_id) rows,
+no case-existence validation), so the fixture is just an id string.
+"""
+from __future__ import annotations
 
 import pytest
 from httpx import AsyncClient
 
 
 @pytest.fixture
-async def seed_public_case(tmp_path, monkeypatch) -> str:
-    pub_dir = tmp_path / "public"
-    pub_dir.mkdir()
-    seed = pub_dir / "sc_e2e.json"
-    seed.write_text(
-        json.dumps(
-            {
-                "kind": "scenario",
-                "scenarioId": "sc_e2e",
-                "meta": {"name": "E2E"},
-                "config": {"services": {}, "users": {}, "vars": {}},
-                "steps": [],
-            }
-        ),
-        encoding="utf-8",
-    )
-    from app.core import config as cfg
-
-    monkeypatch.setattr(cfg.settings, "PUBLIC_CASES_DIR", pub_dir)
-    monkeypatch.setattr(cfg.settings, "USERS_CASES_DIR", tmp_path / "users")
-    (tmp_path / "users").mkdir(exist_ok=True)
-    from app.services.case_loader import loader
-
-    loader._cache.clear()
-    loader._last_full_scan = 0
+def seed_public_case() -> str:
     return "sc_e2e"
 
 

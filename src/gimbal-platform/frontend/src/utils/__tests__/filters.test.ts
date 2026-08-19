@@ -5,24 +5,18 @@ import {
   emptyFilters,
   type CaseFilters,
 } from '@/utils/filters'
-import type { CaseSummary } from '@/api/cases'
+import type { CaseSummary } from '@/utils/filters'
 
 function mkCase(overrides: Partial<CaseSummary> = {}): CaseSummary {
   return {
-    case_id: 'x',
-    name: 'X',
     module: 'm',
-    description: '',
     visibility: 'public',
-    owner_id: null,
+    owner_id: 1,
     audited: true,
-    file_path: 'data/public/x.json',
     updated_at: new Date().toISOString(),
     tags: ['t1'],
     priority: 2,
     author: 'alice',
-    favorited_by_me: false,
-    copied_by_me: false,
     ...overrides,
   }
 }

@@ -26,6 +26,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
+from ._ownership import can_read_scenario, ensure_owner
+from ._error_mapping import key_error_404, value_error_http
 from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import (
     PreviewPlateError,
@@ -62,16 +64,27 @@ async def _load_row(
 
 
 def _require_owner(user: CurrentUser, row: ComposerScenario) -> None:
-    owner_name = row.owner or ""
-    user_name = user.display_name or user.username
     # An empty owner (legacy / migrated / plate-synced rows) means "locked":
-    # nobody except an admin may modify it. This matches cases_composer's
-    # semantics — previously an empty owner made the scenario writable by
-    # ANY member.
-    if not user.is_admin and user_name != owner_name:
+    # nobody except an admin may modify it (canonical rule in _ownership).
+    # P1 起优先比对 owner_id(int user.id);存量行 owner_id==0 回退名字。
+    ensure_owner(
+        user,
+        row.owner,
+        "not_owner: only the scenario's owner (or admin) can modify it",
+        owner_id=row.owner_id,
+    )
+
+
+def _require_reader(user: CurrentUser, row: ComposerScenario) -> None:
+    """读侧收紧(404 而非 403,不向非读者泄露场景存在性)。"""
+    if not can_read_scenario(
+        user,
+        row.owner,
+        owner_id=row.owner_id,
+        visibility=row.visibility or "private",
+    ):
         raise HTTPException(
-            status_code=403,
-            detail="not_owner: only the scenario's owner (or admin) can modify it",
+            status_code=404, detail=f"scenario_not_found: {row.scenario_id}"
         )
 
 
@@ -163,14 +176,12 @@ async def create_scenario(
 ) -> Scenario:
     owner = user.display_name or user.username
     try:
-        return await scenario_store.create(db, body, owner=owner)
+        return await scenario_store.create(
+            db, body, owner=owner, owner_id=user.id
+        )
     except ValueError as e:
-        msg = str(e)
-        code = msg.split(":", 1)[0]
-        if code == "scenario_id_exists":
-            raise HTTPException(status_code=409, detail=msg)
         # Pydantic validation errors already translated to 422 by FastAPI.
-        raise HTTPException(status_code=400, detail=msg)
+        raise value_error_http(e, {"scenario_id_exists": 409})
 
 
 # ── 3) GET / (list) ────────────────────────────────────────────────
@@ -182,8 +193,12 @@ async def list_scenarios(
     system: str | None = None,
     module: str | None = None,
     priority: int | None = None,
+    visibility: str | None = None,
 ) -> list[Scenario]:
-    return await scenario_store.list_scenarios(
+    """读侧收紧:admin 全量;普通用户 = public + 自己的(存量行按
+    owner 名字回退)。可选 ``visibility=public|private`` 再过滤一层,
+    供前端"公共 / 我的"分组标签使用。"""
+    all_scenarios = await scenario_store.list_scenarios(
         db,
         q=q,
         system=system,
@@ -191,6 +206,26 @@ async def list_scenarios(
         priority=priority,
         user_id=user.id,
     )
+    readable_ids = {
+        r.scenario_id
+        for r in (
+            await db.execute(
+                select(
+                    ComposerScenario.scenario_id,
+                    ComposerScenario.owner,
+                    ComposerScenario.owner_id,
+                    ComposerScenario.visibility,
+                )
+            )
+        )
+        if can_read_scenario(
+            user, r.owner, owner_id=r.owner_id, visibility=r.visibility or "private"
+        )
+    }
+    out = [s for s in all_scenarios if s.meta.scenario_id in readable_ids]
+    if visibility:
+        out = [s for s in out if s.visibility == visibility]
+    return out
 
 
 # ── 4) POST /{id}/star (static suffix — before /{id}) ──────────────
@@ -200,9 +235,62 @@ async def list_scenarios(
 async def star_scenario(
     user: CurrentUser, db: DbSession, scenario_id: str, body: StarIn
 ) -> None:
-    # Verify the scenario exists (404 instead of silently no-op).
-    await _load_row(db, scenario_id)
+    # Verify the scenario exists AND is readable (404 instead of a
+    # silent no-op — and no starring other users' private scenarios).
+    row = await _load_row(db, scenario_id)
+    _require_reader(user, row)
     stars.set_mark(user.id, scenario_id, body.starred)
+
+
+# ── 4.1) POST /{id}/publish | /unpublish — 发布 / 下架 ─────────────
+@router.post("/{scenario_id}/publish", response_model=Scenario)
+async def publish_scenario(
+    user: CurrentUser, db: DbSession, scenario_id: str
+) -> Scenario:
+    """发布:visibility → public,所有登录用户可读(取代 V1 公共库)。"""
+    row = await _load_row(db, scenario_id)
+    _require_owner(user, row)
+    try:
+        return await scenario_store.set_visibility(db, scenario_id, "public")
+    except KeyError as e:
+        raise key_error_404(e)
+
+
+@router.post("/{scenario_id}/unpublish", response_model=Scenario)
+async def unpublish_scenario(
+    user: CurrentUser, db: DbSession, scenario_id: str
+) -> Scenario:
+    """下架:visibility → private,仅 owner/admin 可读。"""
+    row = await _load_row(db, scenario_id)
+    _require_owner(user, row)
+    try:
+        return await scenario_store.set_visibility(db, scenario_id, "private")
+    except KeyError as e:
+        raise key_error_404(e)
+
+
+# ── 4.2) POST /{id}/copy — 深拷贝到我的(取代 V1 公共库"复制") ─────
+@router.post(
+    "/{scenario_id}/copy", response_model=Scenario, status_code=status.HTTP_201_CREATED
+)
+async def copy_scenario_to_me(
+    user: CurrentUser, db: DbSession, scenario_id: str
+) -> Scenario:
+    """深拷贝场景+用例+数据集;新属主 = 调用者,visibility=private。
+    需要读权限(public 或自己的场景才可复制)。"""
+    row = await _load_row(db, scenario_id)
+    _require_reader(user, row)
+    try:
+        return await scenario_store.copy_scenario(
+            db,
+            scenario_id,
+            new_owner=user.display_name or user.username,
+            new_owner_id=user.id,
+        )
+    except KeyError as e:
+        raise key_error_404(e)
+    except ValueError as e:
+        raise value_error_http(e, {"scenario_id_exists": 409})
 
 
 # ── 5) GET /{id} ───────────────────────────────────────────────────
@@ -210,10 +298,12 @@ async def star_scenario(
 async def get_scenario(
     user: CurrentUser, db: DbSession, scenario_id: str
 ) -> Scenario:
+    row = await _load_row(db, scenario_id)
+    _require_reader(user, row)
     try:
         return await scenario_store.get(db, scenario_id, user_id=user.id)
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e).split(": ", 1)[-1])
+        raise key_error_404(e)
 
 
 # ── 5.1) GET /{id}/draft — 返回完整 ScenarioDraft (含 config/resource) ───
@@ -224,6 +314,7 @@ async def get_scenario_draft(
     user: CurrentUser, db: DbSession, scenario_id: str
 ) -> ScenarioDraft:
     row = await _load_row(db, scenario_id)
+    _require_reader(user, row)
     payload = row.payload or {}
     try:
         return ScenarioDraft.model_validate(payload)
@@ -257,13 +348,9 @@ async def put_scenario(
             new_owner=user.display_name or user.username,
         )
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e).split(": ", 1)[-1])
+        raise key_error_404(e)
     except ValueError as e:
-        msg = str(e)
-        code = msg.split(":", 1)[0]
-        if code == "scenario_id_changed":
-            raise HTTPException(status_code=409, detail=msg)
-        raise HTTPException(status_code=400, detail=msg)
+        raise value_error_http(e, {"scenario_id_changed": 409})
 
 
 # ── 7) DELETE /{id} ────────────────────────────────────────────────
@@ -278,4 +365,4 @@ async def delete_scenario(
     try:
         await scenario_store.delete(db, scenario_id)
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e).split(": ", 1)[-1])
+        raise key_error_404(e)

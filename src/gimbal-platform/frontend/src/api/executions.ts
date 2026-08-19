@@ -43,30 +43,6 @@ export interface ExecutionDetail extends Execution {
   runs: ExecRun[]
 }
 
-export interface ExecutionCreateIn {
-  case_id: string
-  n_runs: number
-  parallel: number
-  env: string
-  prefix?: string
-  exec_auth_alias?: string[]
-  merge_policy?: MergePolicy
-  /** When false, skip credential injection entirely: ``Config.users`` in
-   *  the rendered yaml is left exactly as the case yaml defines it (the
-   *  UI calls this state "origin").  Backend default is true so legacy
-   *  clients sending only ``merge_policy`` keep working. */
-  inject_credentials?: boolean
-  /** Admin-only: replace the executor's default ``gimbal run launch <yaml>``
-   *  argv.  Each list element is one argv entry.  Server rejects with 403 if
-   *  the caller isn't an admin.  ``undefined`` → use the default command. */
-  command_line?: string[]
-  /** 0-based inclusive halt index forwarded to
-   *  ``gimbal run launch --step-to <N>``.  ``null``/``undefined`` = run all
-   *  steps (legacy / default).  Backend validates ``step_to < step_count``
-   *  and returns 400 with descriptive detail if out of range. */
-  step_to?: number | null
-}
-
 export function list() {
   return http
     .get<{ items: Execution[]; total: number }>('/executions')
@@ -77,10 +53,6 @@ export function get(id: number) {
   return http.get<ExecutionDetail>(`/executions/${id}`).then((r) => r.data)
 }
 
-export function create(payload: ExecutionCreateIn) {
-  return http.post<Execution>('/executions', payload).then((r) => r.data)
-}
-
 export function remove(id: number) {
   return http.delete(`/executions/${id}`).then(() => undefined)
 }
@@ -88,17 +60,6 @@ export function remove(id: number) {
 export function reportUrl(id: number, idx: number): string {
   // Same-origin so the browser can load it inside Executions page.
   return `/api/executions/${id}/report/${idx}`
-}
-
-export function rerunRun(executionId: number, runId: number) {
-  // rerun is synchronous on the server (waits for the subprocess to finish,
-  // up to ~300s) — the shared 30s axios timeout would report a false
-  // failure while the rerun is still in progress server-side.
-  return http
-    .post<ExecRun>(`/executions/${executionId}/runs/${runId}/rerun`, undefined, {
-      timeout: 330_000,
-    })
-    .then((r) => r.data)
 }
 
 export function deleteRun(executionId: number, runId: number) {

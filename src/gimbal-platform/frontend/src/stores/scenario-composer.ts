@@ -8,7 +8,7 @@ import { defineStore } from 'pinia'
 import * as api from '@/api/scenario-composer'
 import type {
   Scenario, Case, DataSet, DataSetSummary,
-  ScenarioDraft, DataSetDraft, RunEnv,
+  ScenarioDraft, DataSetDraft,
 } from '@/types/scenario-composer'
 
 type FetchStatus = 'idle' | 'loading' | 'error'
@@ -18,7 +18,6 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
     scenarios: [] as Scenario[],
     cases: [] as Case[],
     dataSets: [] as DataSetSummary[],
-    envs: [] as RunEnv[],
 
     scenariosStatus: 'idle' as FetchStatus,
     casesStatus: 'idle' as FetchStatus,
@@ -95,6 +94,32 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
       )
     },
 
+    // ── 发布 / 下架 / 复制(P1)──────────────────────────────
+    async publishScenario(scenarioId: string) {
+      const saved = await api.publishScenario(scenarioId)
+      const idx = this.scenarios.findIndex(
+        (x) => x.meta.scenarioId === saved.meta.scenarioId,
+      )
+      if (idx >= 0) this.scenarios.splice(idx, 1, saved)
+      return saved
+    },
+
+    async unpublishScenario(scenarioId: string) {
+      const saved = await api.unpublishScenario(scenarioId)
+      const idx = this.scenarios.findIndex(
+        (x) => x.meta.scenarioId === saved.meta.scenarioId,
+      )
+      if (idx >= 0) this.scenarios.splice(idx, 1, saved)
+      return saved
+    },
+
+    async copyScenario(scenarioId: string) {
+      // 深拷贝返回新场景(恒 private),插到列表头
+      const saved = await api.copyScenario(scenarioId)
+      this.scenarios.unshift(saved)
+      return saved
+    },
+
     // ── cases ───────────────────────────────────────────────
     async fetchCases(params?: Parameters<typeof api.listCases>[0]) {
       this.casesStatus = 'loading'
@@ -105,18 +130,6 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
         this.casesStatus = 'error'
         this.lastError = (e as Error).message
       }
-    },
-
-    async saveCase(caseId: string, patch: Partial<Case>) {
-      const saved = await api.updateCase(caseId, patch)
-      const idx = this.cases.findIndex((c) => c.caseId === caseId)
-      if (idx >= 0) this.cases.splice(idx, 1, saved)
-      return saved
-    },
-
-    async removeCase(caseId: string) {
-      await api.deleteCase(caseId)
-      this.cases = this.cases.filter((c) => c.caseId !== caseId)
     },
 
     // ── data-sets ───────────────────────────────────────────
@@ -152,24 +165,6 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
         preview: saved.rows.slice(0, 3),
       })
       return saved
-    },
-
-    async removeDataSet(datasetId: string) {
-      await api.deleteDataSet(datasetId)
-      this.dataSets = this.dataSets.filter((d) => d.datasetId !== datasetId)
-    },
-
-    // ── envs / run ──────────────────────────────────────────
-    async fetchEnvs() {
-      this.envs = await api.listEnvs()
-    },
-
-    async runCase(req: Parameters<typeof api.runCase>[0]) {
-      return api.runCase(req)
-    },
-
-    async previewPlate(draft: ScenarioDraft) {
-      return api.previewPlateDraft(draft)
     },
   },
 })

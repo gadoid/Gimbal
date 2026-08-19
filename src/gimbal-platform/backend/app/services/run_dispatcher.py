@@ -88,6 +88,8 @@ async def dispatch_run(
     db: AsyncSession,
     user_id: int,
     req: RunRequest,
+    *,
+    preloaded_case: ComposerCase | None = None,
 ) -> RunResponse:
     """Validate + fan out + return runId.
 
@@ -95,9 +97,13 @@ async def dispatch_run(
     function NEVER raises for "Plate is down" — it records the failure
     and returns the runId so the user can still see the run in
     ``/executions`` (per the agreed run-failure semantics).
+
+    ``preloaded_case``: the runs router already loads the case row for
+    the ownership check — pass it here to avoid querying the same row
+    twice (and keep a single source for the case_not_found 404).
     """
     # 1. Load the case + scenario (PK is the string case_id, not the int id)
-    case = await _find_case_by_id(db, req.case_id)
+    case = preloaded_case if preloaded_case is not None else await _find_case_by_id(db, req.case_id)
     if case is None:
         raise _NotFound("case_not_found", f"case not found: {req.case_id}")
     scen = await _find_scenario_by_id(db, case.scenario_id)
@@ -115,6 +121,17 @@ async def dispatch_run(
     if not req.data_set_ids:
         raise _Conflict("no_data_selected", "no data sets selected")
 
+    # step_to 校验(同 V1 executions:与场景 steps 数比对,越界 409)
+    steps = ((scen.payload or {}).get("definition") or {}).get("steps") or []
+    if req.step_to is not None:
+        if not steps:
+            raise _NotFound("no_steps", "case has no steps; step_to cannot be set")
+        if req.step_to >= len(steps):
+            raise _Conflict(
+                "step_to_out_of_range",
+                f"step_to={req.step_to} out of range (0..{len(steps) - 1})",
+            )
+
     selected_datasets: list[ComposerDataSet] = []
     for ds_id in req.data_set_ids:
         ds = await _find_dataset_by_id(db, ds_id)
@@ -124,9 +141,24 @@ async def dispatch_run(
             )
         selected_datasets.append(ds)
 
+    # append 合并策略冲突预检(V1 executor 同语义):所选认证 alias 与
+    # 场景内置 Config.users 同名 → 409 拒绝整单(而不是行级静默覆盖)。
+    if req.inject_credentials and req.merge_policy == "append" and req.auths:
+        raw = scen.payload or {}
+        defn = raw.get("definition") if isinstance(raw.get("definition"), dict) else raw
+        def_cfg = (defn or {}).get("config") or {}
+        built_in_users = def_cfg.get("users") if isinstance(def_cfg.get("users"), dict) else {}
+        collisions = sorted(set(req.auths) & set(built_in_users.keys()))
+        if collisions:
+            raise _Conflict(
+                "append_policy_conflict",
+                f"append policy conflict: auth alias {collisions} already "
+                f"defined in scenario config.users",
+            )
+
     # 3. Allocate runId + Execution row
     run_id = _new_run_id()
-    total_runs = sum(int(ds.row_count or 0) for ds in selected_datasets)
+    total_runs = sum(int(ds.row_count or 0) for ds in selected_datasets) * req.n_runs
     execution = await _create_execution(
         db,
         case_id=case.case_id,
@@ -141,6 +173,12 @@ async def dispatch_run(
             # 读侧契约是 exec_auth_alias(同 V1 executor 路径);此前误写
             # "auth" 导致 Execution 详情认证列恒空
             "exec_auth_alias": list(req.auths),
+            "stepTo": req.step_to,
+            "injectCredentials": req.inject_credentials,
+            "nRuns": req.n_runs,
+            "parallel": req.parallel,
+            "prefix": req.prefix,
+            "mergePolicy": req.merge_policy,
         },
     )
 
@@ -163,7 +201,12 @@ async def dispatch_run(
                 ],
                 env=req.env.model_dump(by_alias=True, mode="json"),
                 owner_id=user_id,
-                auth_aliases=list(req.auths),
+                auth_aliases=list(req.auths) if req.inject_credentials else [],
+                halt_at=req.step_to,
+                n_runs=req.n_runs,
+                parallel=req.parallel,
+                prefix=req.prefix,
+                merge_policy=req.merge_policy,
                 retry=req.retry.model_dump(by_alias=True, mode="json")
                 if req.retry
                 else None,
@@ -189,21 +232,82 @@ async def _fanout(
     owner_id: int,
     auth_aliases: list[str],
     retry: dict | None,
+    halt_at: int | None = None,
+    n_runs: int = 1,
+    parallel: int = 1,
+    prefix: str | None = None,
+    merge_policy: str = "merge",
 ) -> None:
-    """Per-row convert + run; updates Execution counters in place."""
-    plate_ok = 0
-    plate_failed = 0
+    """Per-row × per-repeat convert + run; updates Execution counters in place.
+
+    ``halt_at``(V1 step_to 移植):0-based 含端点,透传 gimbal HTTP
+    ``halt_at`` —— RuntimeControl 在该步后停(剩余步显示 skipped)。
+
+    M1(V1 executor 移植):``n_runs`` 每行重复次数、``parallel`` 并发度
+    (asyncio.Semaphore)、``prefix`` 提单号前缀变量注入、``merge_policy``
+    执行认证合并策略(override/merge/append;append 冲突已在 dispatch
+    侧预检拒绝)。
+    """
     log_path = _jsonl_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     # 执行用认证:owner 级解密一次,逐行注入 run 副本的 Config.users。
-    # 失败(别名不存在/解密异常)不中断 fan-out — 该行 run 会在 Gimbal
-    # 解析 ${auth.*} 时步骤级报错,与"仅警告放行"的前端语义一致。
-    exec_auths = await _resolve_exec_auths(db_factory, owner_id, auth_aliases)
+    # 解密失败 = fail-fast(V1 严格语义):整单 execution 记为
+    # failed,所有行计入 failed 计数,不带着空/坏凭证打环境。
+    try:
+        # injectCredentials=False 时 dispatch 侧已清空 aliases,这里直接
+        # 跳过解析(与 V1 executor 的 inject_credentials=False 同语义)。
+        exec_auths = (
+            await _resolve_exec_auths(db_factory, owner_id, auth_aliases)
+            if auth_aliases
+            else []
+        )
+    except _AuthResolveError as e:
+        logger.error(
+            "run_dispatcher: auth resolve failed for execution {}: {}",
+            execution_id, e,
+        )
+        total_rows = sum(len(ds["rows"]) for ds in datasets) * n_runs
+        try:
+            _append_jsonl(log_path, {
+                "ts": datetime.utcnow().isoformat() + "Z",
+                "runId": run_id,
+                "executionId": execution_id,
+                "status": "auth_resolve_failed",
+                "error": str(e),
+            })
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            async with db_factory() as session:
+                await session.execute(
+                    sqlalchemy_update(Execution)
+                    .where(Execution.id == execution_id)
+                    .values(failed=Execution.failed + total_rows)
+                )
+                await session.commit()
+        except Exception as ex:  # noqa: BLE001
+            logger.warning(
+                "run_dispatcher: counter bump failed for execution {}: {}",
+                execution_id, ex,
+            )
+        await _finalize_execution(db_factory, execution_id)
+        return
 
-    for ds in datasets:
-        for row_idx, row in enumerate(ds["rows"]):
-            row_dict = dict(row or {})
+    sem = asyncio.Semaphore(max(1, parallel))
+
+    # 内置认证(definition.config.users)merge 策略的保留基座 —— plate
+    # /convert 的产物可能剥掉平台视图字段,凭证合并不依赖 converted
+    # 自带 users,而是以场景定义为源(与 V1 在原始 yaml 上渲染同语义)。
+    raw_def = scenario_payload or {}
+    defn = raw_def.get("definition") if isinstance(raw_def.get("definition"), dict) else raw_def
+    def_cfg = (defn or {}).get("config") or {}
+    built_in_users = dict(def_cfg.get("users") or {}) if isinstance(def_cfg.get("users"), dict) else {}
+
+    async def _row(ds: dict, row_idx: int, rep: int) -> None:
+        """One (dataset row × repeat) entry — convert + run + counters."""
+        async with sem:
+            row_dict = dict(ds["rows"][row_idx] or {})
             composed = _compose_scenario(
                 scenario_payload, case_payload, row_dict
             )
@@ -215,6 +319,7 @@ async def _fanout(
                 "scenarioId": composed.get("scenarioId"),
                 "datasetId": ds["datasetId"],
                 "rowIndex": row_idx,
+                "rep": rep,
                 "env": env,
                 "status": "dispatched",
             }
@@ -234,54 +339,52 @@ async def _fanout(
                 # convert_data = {consumer, converted};converted 是
                 # GimbalScenarioExporter 的产物(已剥平台视图扩展字段)。
                 converted = convert_data.get("converted") or {}
-                composed_exec = _inject_exec_users(converted, exec_auths)
+                composed_exec = _inject_exec_users(
+                    converted,
+                    exec_auths,
+                    merge_policy=merge_policy,
+                    built_in_users=built_in_users,
+                )
+                if prefix:
+                    # 前缀变量注入进 run 副本(post-convert,防 plate 剥掉)。
+                    _inject_prefix_vars(composed_exec, prefix)
                 try:
-                    run_out = await gimbal_client.run(composed_exec)
+                    run_out = await gimbal_client.run(composed_exec, halt_at=halt_at)
                 except gimbal_client.GimbalUnavailableError as e:
                     # convert 已过(结构合法),引擎不可达是执行层故障:
                     # 记失败但不中断后续行(fan-out 永不因单行崩溃)。
-                    plate_failed += 1
                     log_line["status"] = "gimbal_unavailable"
                     log_line["runError"] = str(e)
-                    logger.warning("run_dispatcher: gimbal unavailable for row {}/{}: {}", ds["datasetId"], row_idx, e)
+                    logger.warning("run_dispatcher: gimbal unavailable for row {}/{}#{}: {}", ds["datasetId"], row_idx, rep, e)
                 except gimbal_client.GimbalRejectedError as e:
-                    plate_failed += 1
                     log_line["status"] = "gimbal_rejected"
                     log_line["runError"] = e.message
-                    logger.warning("run_dispatcher: gimbal rejected row {}/{}: {}", ds["datasetId"], row_idx, e.message)
+                    logger.warning("run_dispatcher: gimbal rejected row {}/{}#{}: {}", ds["datasetId"], row_idx, rep, e.message)
                 else:
                     exit_code = int(run_out.get("exitCode", 2))
-                    if exit_code == 0:
-                        plate_ok += 1
-                        log_line["status"] = "passed"
-                    else:
-                        plate_failed += 1
-                        log_line["status"] = "failed"
+                    log_line["status"] = "passed" if exit_code == 0 else "failed"
                     log_line["runResult"] = {
                         k: run_out.get(k)
                         for k in ("exitCode", "total", "passed", "failed", "skipped", "halted")
                     }
                     logger.info(
-                        "run_dispatcher: row {}/{} executed: exit={} passed={} failed={}",
-                        ds["datasetId"], row_idx, exit_code,
+                        "run_dispatcher: row {}/{}#{} executed: exit={} passed={} failed={}",
+                        ds["datasetId"], row_idx, rep, exit_code,
                         run_out.get("passed"), run_out.get("failed"),
                     )
             except plate_client.PlateUnavailableError as e:
-                plate_failed += 1
                 log_line["status"] = "plate_unavailable"
                 log_line["error"] = str(e)
-                logger.warning("run_dispatcher: plate unavailable for row {}/{}: {}", ds["datasetId"], row_idx, e)
+                logger.warning("run_dispatcher: plate unavailable for row {}/{}#{}: {}", ds["datasetId"], row_idx, rep, e)
             except plate_client.PlateRejectedError as e:
-                plate_failed += 1
                 log_line["status"] = "plate_rejected"
                 log_line["error"] = e.message
                 log_line["errors"] = list(e.errors or [])
-                logger.warning("run_dispatcher: plate rejected row {}/{}: {}", ds["datasetId"], row_idx, e.message)
+                logger.warning("run_dispatcher: plate rejected row {}/{}#{}: {}", ds["datasetId"], row_idx, rep, e.message)
             except Exception as e:  # noqa: BLE001  defensive — never let a row kill the fan-out
-                plate_failed += 1
                 log_line["status"] = "dispatcher_error"
                 log_line["error"] = repr(e)
-                logger.exception("run_dispatcher: unexpected error row {}/{}", ds["datasetId"], row_idx)
+                logger.exception("run_dispatcher: unexpected error row {}/{}#{}", ds["datasetId"], row_idx, rep)
 
             # Append the final log line for this row (covers all
             # success / failure branches — previously the rejected
@@ -291,11 +394,9 @@ async def _fanout(
             except Exception:  # noqa: BLE001
                 pass
 
-            # Atomic per-row counter bump.  The old pattern (absolute
-            # write-back of plate_ok/plate_failed at fan-out end) silently
-            # clobbered concurrent atomic deltas — e.g. the user deleting
-            # failed run rows mid-fan-out (MAX(0, col-1) SQL).  Deltas
-            # compose correctly with those.
+            # Atomic per-row counter bump.  Deltas (not absolute
+            # write-backs) so concurrent rows and concurrent UI
+            # deletions (MAX(0, col-1) SQL) compose correctly.
             ok = 1 if log_line["status"] == "passed" else 0
             bad = 1 - ok
             try:
@@ -315,13 +416,33 @@ async def _fanout(
                     execution_id, e,
                 )
 
+    # (dataset, row, repeat) 笛卡尔积;n_runs=1 时与旧逐行行为完全一致。
+    entries = [
+        (ds, row_idx, rep)
+        for ds in datasets
+        for row_idx in range(len(ds["rows"]))
+        for rep in range(n_runs)
+    ]
+    await asyncio.gather(*(_row(ds, i, r) for ds, i, r in entries))
+
     # Terminal status + timestamps only (counters already maintained
     # incrementally above).
+    await _finalize_execution(db_factory, execution_id)
+
+
+async def _finalize_execution(db_factory: Any, execution_id: int) -> None:
+    """终态收尾:只写 status + 时间戳(计数器由上方增量维护)。
+
+    严格规则(与 V1 executor / run_lifecycle reconcile 一致):
+    ``failed > 0 → failed`` — 任何一个 run 失败即整单失败,部分
+    通过不再被标成 done(此前 ``failed and not passed`` 会让
+    3 过 1 败显示为"完成")。
+    """
     try:
         async with db_factory() as session:
             ex = await session.get(Execution, execution_id)
             if ex is not None:
-                ex.status = "failed" if ex.failed and not ex.passed else "done"
+                ex.status = "failed" if ex.failed else "done"
                 if ex.started_at is None:
                     ex.started_at = datetime.utcnow()
                 ex.finished_at = datetime.utcnow()
@@ -383,14 +504,22 @@ def _new_run_id() -> str:
     return f"run-{datetime.utcnow().strftime('%Y%m%d')}-{uuid4().hex[:6]}"
 
 
+class _AuthResolveError(RuntimeError):
+    """执行认证解密失败 — fail-fast,同 V1 executor 的 ``_decrypt_auths``
+    语义(解密失败上抛使整个 run 失败,而不是带着空/坏凭证静默打环境)。"""
+
+
 async def _resolve_exec_auths(
     db_factory: Any, owner_id: int, aliases: list[str]
 ) -> list["AuthSession"]:
-    """Owner 级 alias → AuthSession(解密)。同 V1 executor 的
-    ``_decrypt_auths`` 语义(owner 过滤防跨 owner 同名 alias 解错
-    凭证)。aliases 为空直接返回;alias 不属于该 owner 时解不到 —
-    告警后继续(fan-out 不因认证失败中断,该行 run 会在 Gimbal
-    解析 ${auth.*} 时步骤级报错,与"仅警告放行"语义一致)。
+    """Owner 级 alias → AuthSession(解密)。owner 过滤防跨 owner 同名
+    alias 解错凭证。
+
+    * 解密失败 → 抛 :class:`_AuthResolveError`(V1 严格语义:
+      凭证路径 fail-fast,不静默降级)。
+    * alias 不属于该 owner 时解不到 → 告警后继续(与 V1 一致:
+      缺 alias 只是注入不到 users,该行 run 在 Gimbal 解析
+      ``${auth.*}`` 时步骤级报错)。
     """
     if not aliases:
         return []
@@ -416,9 +545,9 @@ async def _resolve_exec_auths(
             a.password = fernet_decrypt(a.password_enc)
             resolved.append(a)
         except ValueError as e:
-            logger.warning(
-                "run_dispatcher: auth alias '{}' decrypt failed: {}", a.alias, e
-            )
+            raise _AuthResolveError(
+                f"auth alias '{a.alias}' decrypt failed: {e}"
+            ) from e
     missing = set(aliases) - {a.alias for a in resolved}
     if missing:
         logger.warning(
@@ -427,8 +556,31 @@ async def _resolve_exec_auths(
     return resolved
 
 
+def _inject_prefix_vars(composed: dict[str, Any], prefix: str) -> None:
+    """提单号前缀变量注入(就地修改 composed.config.vars;V1
+    ``_render_temp_yaml`` 同语义):
+
+    * ``vars.order_no_prefix = prefix`` — 步骤里可用 `${var.order_no_prefix}` 拼前缀
+    * ``vars.order_no = "<prefix>-{{ seq }}"`` — 引擎渲染期展开为 ``P-1 / P-2 / …``
+    * ``vars.seq = {"kind": "seq"}`` — 序列生成器声明(幂等覆盖)
+    """
+    cfg = composed.get("config")
+    if not isinstance(cfg, dict):
+        cfg = {}
+        composed["config"] = cfg
+    vars_map = dict(cfg.get("vars") or {})
+    vars_map["order_no_prefix"] = prefix
+    vars_map["order_no"] = f"{prefix}-{{{{ seq }}}}"
+    vars_map["seq"] = {"kind": "seq"}
+    cfg["vars"] = vars_map
+
+
 def _inject_exec_users(
-    composed: dict[str, Any], exec_auths: list[AuthSession]
+    composed: dict[str, Any],
+    exec_auths: list[AuthSession],
+    *,
+    merge_policy: str = "merge",
+    built_in_users: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """返回注入 ``Config.users`` 的 run 副本(不改动入参)。
 
@@ -436,8 +588,16 @@ def _inject_exec_users(
 
         users[<alias>] = {url, username, password, token_type, expires_in}
 
-    同名覆盖(merge 语义);``exec_auths`` 为空时原样返回同一引用
-    (run stub 不会外发,无明文泄漏面)。
+    ``merge_policy``(V1 merge_policy 移植):
+      * ``merge``(默认)— 同名覆盖、场景内置其余保留。保留基座是
+        ``built_in_users``(场景 definition.config.users)而非 converted
+        自带的 users —— plate /convert 会剥平台视图字段,内置认证以
+        场景定义为唯一可信源。
+      * ``override`` — 整块替换为所选认证(内置 users 丢弃)
+      * ``append`` — 同 merge;与内置 users 的别名冲突已在 dispatch
+        侧预检拒绝(409),此处不再重复校验
+    ``exec_auths`` 为空时原样返回同一引用(run stub 不会外发,无明文
+    泄漏面)。
     """
     if not exec_auths:
         return composed
@@ -446,7 +606,10 @@ def _inject_exec_users(
     if not isinstance(cfg, dict):
         cfg = {}
         out["config"] = cfg
-    users = dict(cfg.get("users") or {})
+    if merge_policy == "override":
+        users: dict[str, Any] = {}
+    else:
+        users = {**(built_in_users or {}), **(cfg.get("users") or {})}
     for a in exec_auths:
         users[a.alias] = {
             "url": a.url,

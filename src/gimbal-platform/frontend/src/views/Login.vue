@@ -135,7 +135,7 @@ async function onSubmit() {
   try {
     await auth.login(form.username, form.password)
     ElMessage.success('登录成功')
-    const redirect = (route.query.redirect as string) || '/cases/mine'
+    const redirect = (route.query.redirect as string) || '/scenarios'
     router.push(redirect)
   } catch (e) {
     const msg = (e as { msg?: string; message?: string }).msg
