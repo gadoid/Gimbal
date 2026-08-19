@@ -2,7 +2,7 @@
 
 Exposes ``create_app()`` for tests + ASGI servers, plus a ``uvicorn``-friendly
 ``app`` module-level instance.  Wires CORS, the lifespan that runs ``init_db``
-on startup, and the spec-1 router set (``auth`` + ``cases`` + ``users``).
+on startup, and the V3 router set (auth/scenarios/cases/runs/executions/…).
 """
 from __future__ import annotations
 
@@ -18,13 +18,10 @@ from starlette.convertors import Convertor, register_url_convertor
 # ── V3 case_id path-converter ────────────────────────────────────
 # The V3 composer uses ``case-`` prefixed ids (e.g. ``case-001``).  We
 # register a custom path-converter so the composer's GET/PATCH/DELETE
-# /{case_id} only matches V3 ids, and the legacy ``app.routers.cases``
-# ``/{case_id:path}`` catch-all (registered AFTER the composer) still
-# serves legacy paths like ``/mine`` / ``/public`` / ``/upload`` /
-# free-form ids.
+# /{case_id} only matches V3 ids (case-/sc- 前缀),不吞掉同前缀段的
+# 其它静态路由。
 class _V3CaseIdConverter(Convertor[str]):
     # 接受 case- 前缀 (手动命名) 或 sc- 前缀 (自动命名 `${scenarioId}-case-001`)
-    # 不接受 legacy 静态路径 mine/public/upload (都不以 case-/sc- 开头)
     regex = r"(?:case|sc)-[a-z0-9-]+"
 
     def convert(self, value: str) -> str:
@@ -39,7 +36,6 @@ register_url_convertor("v3_case_id", _V3CaseIdConverter())
 from .core.config import settings
 from .core.db import init_db
 from .routers import (
-    admin_migrate,
     auth,
     auth_sessions,
     cases_composer,
@@ -47,7 +43,6 @@ from .routers import (
     endpoint_catalog,
     envs,
     executions,
-    hidden_profiles,
     runs,
     scenarios,
     strategy_catalog,
@@ -155,14 +150,11 @@ def create_app() -> FastAPI:
 
     app.include_router(auth.router, prefix="/api")
     app.include_router(auth_sessions.router, prefix="/api")
-    # hidden_profiles:DB 表操作,与 V1 cases 无依赖(P4 已退役 legacy cases)
-    app.include_router(hidden_profiles.router, prefix="/api")
     # V3 composer cases 是唯一的 /api/cases* 路由:
     # GET/PATCH/DELETE /{case_id} 只匹配 v3_case_id pattern(case-/sc- 前缀)。
     app.include_router(cases_composer.router, prefix="/api")
     app.include_router(executions.router, prefix="/api")
     app.include_router(users.router, prefix="/api")
-    app.include_router(admin_migrate.router, prefix="/api")
     # New V3 composer routers (registered in order so static suffixes
     # precede ``/{id}`` catch-alls).
     app.include_router(envs.router, prefix="/api")

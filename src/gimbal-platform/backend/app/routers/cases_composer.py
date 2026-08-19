@@ -10,14 +10,10 @@ the create-data-set sibling at §4.14):
 * ``DELETE /api/cases/{caseId}``                       — cascade-delete
 * ``POST   /api/cases/{caseId}/data-sets``             — create data set
 
-**Routing co-existence with the legacy ``app.routers.cases``:** the
-legacy router has GET/PATCH/DELETE on ``/{case_id:path}`` which would
-otherwise shadow ours.  We restrict matching to the V3 ``case-`` id
-pattern via a Starlette custom path-converter
-(``register_url_convertor("v3_case_id", ...)``) — see ``main.py``.
-Anything else (``mine``, ``public``, ``upload``, free-form legacy
-ids) falls through to the legacy router, which is registered after
-this one.
+The ``/{case_id}`` routes use the ``v3_case_id`` custom path-converter
+(registered in ``main.py``) so only composer-style ids (``case-…`` /
+``sc-…-case-…``) match — other segments simply 404 instead of being
+swallowed by a catch-all.
 """
 from __future__ import annotations
 
@@ -118,8 +114,7 @@ async def create_case(
     logged-in user from creating cases under another user's scenario.
     """
     # Load the parent scenario to verify ownership.  Empty owner =
-    # locked (canonical rule in _ownership): the old `scen.owner and ...`
-    # guard skipped the check entirely for legacy/un-owned scenarios.
+    # locked (canonical rule in _ownership).
     scen = await _load_scenario(db, body.scenario_id)
     ensure_owner(
         user,
@@ -173,12 +168,9 @@ async def list_cases(
     return [c for c in cases if c.scenario_id in readable_ids]
 
 
-# NOTE on routing: the legacy ``app.routers.cases`` has
-# ``GET/PATCH/DELETE /{case_id:path}`` which would shadow these routes.
-# We use a custom Starlette path-converter (``v3_case_id``) registered
-# in ``main.py`` to restrict matching to the V3 ``case-`` pattern.
-# Anything else falls through to the legacy router registered after
-# this one.
+# NOTE on routing: we use a custom Starlette path-converter
+# (``v3_case_id``, registered in ``main.py``) to restrict ``/{case_id}``
+# matching to the composer id pattern (``case-`` / ``sc-`` prefixes).
 
 
 @router.get("/{case_id:v3_case_id}", response_model=Case, operation_id="composer_get_case")

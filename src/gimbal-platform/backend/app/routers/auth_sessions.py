@@ -191,8 +191,7 @@ async def test_auth(
     """POST {url} with {username, password} and check that it succeeds.
 
     Spec-2 keeps the response parser simple: look for ``access_token``,
-    ``token``, or ``data.token`` in the JSON body.  Per-target custom
-    parsing is deferred to V1.
+    ``token``, or ``data.token`` in the JSON body.
     """
     a = await _get_owned(session, auth_id, user.id)
     try:

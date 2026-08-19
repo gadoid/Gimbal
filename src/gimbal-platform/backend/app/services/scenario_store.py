@@ -1,8 +1,6 @@
 """DB-backed CRUD for the V3 Scenario Composer Scenario rows.
 
-Mirrors the patterns from ``app/routers/cases.py`` (JSON-file favorites)
-and ``app/services/case_loader.py`` (file-backed), but uses SQLAlchemy
-async sessions against the existing ``composer_scenarios`` table.
+Uses SQLAlchemy async sessions against the ``composer_scenarios`` table.
 
 All public methods take an ``AsyncSession`` (or use the default from
 ``get_db`` via the routers); they never hold module-level state, so

@@ -58,20 +58,16 @@ async def fresh_db(monkeypatch, tmp_path) -> AsyncGenerator[None, None]:
 
 @pytest.fixture(autouse=True)
 def _isolate_marks(tmp_path, monkeypatch):
-    """Point the marks stores (favorites + stars) at the per-test tmp dir.
+    """Point the marks store (stars) at the per-test tmp dir.
 
     Without this, marks written by one test pollute the next test in the
-    same pytest run (and any local ``data/favorites.json`` / ``data/stars.json``
-    from prior runs).
+    same pytest run (and any local ``data/stars.json`` from prior runs).
     """
-    from app.services.marks_store import favorites, stars
+    from app.services.marks_store import stars
 
-    favorites.path = tmp_path / "favorites.json"
     stars.path = tmp_path / "stars.json"
-    favorites.clear_for_tests()
     stars.clear_for_tests()
     yield
-    favorites.clear_for_tests()
     stars.clear_for_tests()
 
 

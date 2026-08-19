@@ -1,13 +1,7 @@
-"""Per-user "marked items" stores (favorites / stars).
+"""Per-user "marked items" store (scenario stars).
 
-One implementation serves both markers that follow the exact same
-shape — ``{user_id: set[item_id]}`` persisted to a JSON file under
-``DATA_DIR``:
-
-* ``favorites`` — legacy file-based cases (``favorites.json``),
-  toggled from 我的工作台 / 公共用例库.
-* ``stars``      — V3 scenario composer scenarios (``stars.json``),
-  toggled from the 场景库.
+``stars`` — 场景库的收藏标记 (``stars.json``),shape 为
+``{user_id: set[item_id]}``,持久化到 ``DATA_DIR`` 下的 JSON 文件。
 
 Writes are atomic: serialise to ``<path>.tmp`` first, fsync, then
 ``os.replace`` into place.  A crash mid-write leaves the previous
@@ -49,7 +43,7 @@ class MarkStore:
             return set(self._marks.get(user_id, set()))
 
     def all_user_ids(self) -> list[int]:
-        """有任意标记的 user id 列表(P2 favorites→stars 迁移遍历用)。"""
+        """有任意标记的 user id 列表。"""
         with self._lock:
             return list(self._marks.keys())
 
@@ -64,8 +58,7 @@ class MarkStore:
             self._save_atomic(self._marks)
 
     def rename_item(self, old_id: str, new_id: str) -> bool:
-        """Repoint every user's mark from ``old_id`` to ``new_id``
-        (case rename keeps favorited rows following the case).
+        """Repoint every user's mark from ``old_id`` to ``new_id``.
         Returns True when anything changed."""
         with self._lock:
             changed = False
@@ -149,5 +142,4 @@ class MarkStore:
 
 
 # ── singletons ─────────────────────────────────────────────────
-favorites = MarkStore(settings.DATA_DIR / "favorites.json")
 stars = MarkStore(settings.DATA_DIR / "stars.json")

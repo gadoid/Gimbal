@@ -6,10 +6,6 @@ in turn owns 1:N DataSets.  ``payload`` carries the full draft container
 Scenario structure (steps included) and lives in a JSON column because
 the per-step shape is heterogeneous and we never query into individual
 step fields from SQL.
-
-The legacy ``Case`` model in ``app/models/case.py`` (Spec-1 file-backed
-cases) is unrelated; the V3 scenario composer lives in its own table
-namespace to keep concerns isolated.
 """
 from __future__ import annotations
 
