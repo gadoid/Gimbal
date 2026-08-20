@@ -25,40 +25,9 @@ from httpx import AsyncClient
 
 
 # ── shared fixture: register + login + seed scenario/case/ds ───────
-async def _register_and_login(
-    client: AsyncClient, username: str = "alice", password: str = "alicepass123"
-) -> dict[str, str]:
-    await client.post(
-        "/api/auth/register",
-        json={"username": username, "password": password, "display_name": username},
-    )
-    r = await client.post(
-        "/api/auth/login",
-        json={"username": username, "password": password},
-    )
-    return {"Authorization": f"Bearer {r.json()['access_token']}"}
-
-
-def _draft(scenario_id: str = "sc-test", **meta_over) -> dict:
-    meta = {
-        "scenarioId": scenario_id,
-        "name": "Test",
-        "module": "order",
-        "priority": 1,
-        "system": ["fin"],
-    }
-    meta.update(meta_over)
-    return {
-        "definition": {
-            "kind": "scenario",
-            "scenarioId": scenario_id,
-            "meta": meta,
-            "config": {"timePolicy": {"kind": "record"}},
-            "resource": {},
-            "steps": [],
-        },
-        "orchestration": {"steps": [], "resourceMeta": {}},
-    }
+from .helpers import make_draft as _draft
+from .helpers import register_and_login as _register_and_login
+from .helpers import test_env
 
 
 # ── Plate mock helpers ─────────────────────────────────────────────
@@ -331,7 +300,7 @@ async def test_run_dispatch_preserves_row_value_types(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+            "env": test_env(),
         },
     )
     assert r.status_code == 201
@@ -396,7 +365,7 @@ async def test_run_chain_convert_then_gimbal_execute(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+            "env": test_env(),
         },
     )
     assert r.status_code == 201
@@ -440,7 +409,7 @@ async def test_run_chain_gimbal_failure_counts_row_failed(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+            "env": test_env(),
         },
     )
     assert r.status_code == 201
@@ -497,7 +466,7 @@ async def test_run_partial_failure_marks_execution_failed(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+            "env": test_env(),
         },
     )
     assert r.status_code == 201
@@ -567,7 +536,7 @@ async def test_run_auth_decrypt_failure_fails_execution(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+            "env": test_env(),
             "auths": ["corrupt1"],
         },
     )
@@ -758,7 +727,7 @@ async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+            "env": test_env(),
             "auths": ["qa1"],
         },
     )

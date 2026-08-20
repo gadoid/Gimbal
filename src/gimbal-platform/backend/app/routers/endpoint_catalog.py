@@ -5,17 +5,18 @@ each endpoint so it can render the request body form correctly.  The
 canonical view lives on Plate (``GET /api/endpoint/{id}/full``); this
 module proxies the call so the front-end can hit a single API surface
 (Platform) and not have to know the Plate URL.
+
+与 strategy_catalog.py 共用错误映射 helper 与 plate_client 的进程级
+AsyncClient 单例(共享连接池,MockTransport 测试替换随之生效)。
 """
 from __future__ import annotations
 
-from typing import Annotated
-
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException
 
-from ..core.config import settings
 from ..core.deps import CurrentUser
-
+from ..services.plate_client import get_client
+from .strategy_catalog import proxy_error, unavailable
 
 router = APIRouter(prefix="/endpoint-catalog", tags=["endpoint-catalog"])
 
@@ -31,35 +32,17 @@ async def get_full_endpoint(
     ``IOFieldBinding`` shape and the 200-response ``assertable_fields``).
     Surfaces Plate's status code + error envelope to the client.
     """
-    url = f"{settings.PLATE_BASE_URL}/api/endpoint/{endpoint_id}/full"
+    client = get_client()
     try:
-        async with httpx.AsyncClient(timeout=settings.PLATE_TIMEOUT_SEC) as client:
-            resp = await client.get(url)
+        resp = await client.get(f"/api/endpoint/{endpoint_id}/full")
     except httpx.HTTPError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"code": "plate_unavailable", "message": str(e)},
-        ) from e
-
-    if resp.status_code >= 500:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"code": "plate_unavailable", "message": resp.text[:200]},
-        )
-    if resp.status_code == 404:
-        raise HTTPException(
-            status_code=404,
-            detail={"code": "endpoint_not_found", "message": f"endpoint not found: {endpoint_id}"},
-        )
-    if resp.status_code >= 400:
-        # Surface the envelope message verbatim.
-        try:
-            env = resp.json()
-        except Exception:  # noqa: BLE001
-            env = {"ok": False, "error": {"message": resp.text[:200]}}
-        raise HTTPException(
-            status_code=resp.status_code,
-            detail=env.get("error") or {"code": "plate_error", "message": resp.text[:200]},
+        raise unavailable(e) from e
+    if resp.status_code != 200:
+        raise proxy_error(
+            resp,
+            context=endpoint_id,
+            not_found_code="endpoint_not_found",
+            not_found_msg="endpoint not found",
         )
 
     envelope = resp.json()

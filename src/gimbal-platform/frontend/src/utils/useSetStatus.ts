@@ -1,6 +1,6 @@
 /**
- * useSetStatus — small composable used by the three list-view stores
- * (cases / users / auth_sessions).  Bundles `fetchStatus` + `lastError`
+ * useSetStatus — small composable used by the list-view stores
+ * (scenarios / executions / users / auth_sessions).  Bundles `fetchStatus` + `lastError`
  * refs and a `setStatus(s, err?)` writer so each store stops inlining
  * the same 3-line helper.
  *

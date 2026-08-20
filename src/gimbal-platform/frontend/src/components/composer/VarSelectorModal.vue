@@ -186,5 +186,5 @@ function confirm() {
   background: #ecfdf5;
   color: #047857;
 }
-.mono { font-family: var(--font-mono); }
+
 </style>

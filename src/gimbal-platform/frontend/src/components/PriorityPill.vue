@@ -25,5 +25,5 @@ defineProps<{ priority: number | null | undefined }>()
 .p1 { color: #b45309; background: #fef3c7; }
 .p2 { color: #475569; background: #f1f5f9; }
 .p3 { color: #94a3b8; background: #f8fafc; }
-.muted { color: var(--color-text-secondary); font-size: 11px; }
+
 </style>

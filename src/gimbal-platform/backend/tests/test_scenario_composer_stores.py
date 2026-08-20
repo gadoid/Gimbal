@@ -3,7 +3,7 @@
 Hits the store functions directly (bypassing the HTTP layer) so a
 regression in the service code surfaces without going through the whole
 FastAPI stack.  Per-test SQLite isolation is provided by the
-``fresh_db`` autouse-style fixture in conftest.
+``fresh_db`` fixture (explicitly requested) in conftest.
 
 The Case layer was dissolved — datasets hang directly off scenarios,
 and the run recipe lives in RunRequest (pure values).
@@ -231,6 +231,28 @@ async def test_scenario_data_set_count_sums_row_counts(fresh_db) -> None:
         )
         fetched = await scenario_store.get(db, "sc-test")
         assert fetched.data_set_count == 3
+
+        # The LIST path must agree with the single-row path — it goes
+        # through the batched GROUP BY (dataset_counts), so a regression
+        # in the join key / zero-dataset default would only show here.
+        listed = await scenario_store.list_scenarios(db)
+        assert [s.data_set_count for s in listed] == [3]
+
+
+async def test_scenario_list_data_set_count_defaults_to_zero(fresh_db) -> None:
+    """Zero-dataset scenarios must survive the GROUP BY (LEFT-join-less
+    dict lookup defaults to 0, and the row still appears in the list)."""
+    async with _session() as db:
+        await scenario_store.create(db, _make_draft(), owner="alice")
+        await scenario_store.create(
+            db, _make_draft(scenarioId="sc-empty"), owner="alice"
+        )
+        await data_set_store.create(
+            db, "sc-test", DataSetDraft(name="a", rows=[{"x": 1}])
+        )
+        listed = await scenario_store.list_scenarios(db)
+        by_id = {s.meta.scenario_id: s.data_set_count for s in listed}
+        assert by_id == {"sc-test": 1, "sc-empty": 0}
 
 
 # ── data_set_store ─────────────────────────────────────────────────

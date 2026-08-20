@@ -1,25 +1,9 @@
-"""Schemas for executions + runs (Spec-2 §4.5 E)."""
+"""Schemas for executions (V3 — 每-run 明细已随 exec_runs 表退役)。"""
 from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
-
-
-# ── outputs ────────────────────────────────────────────────────
-class ExecRunOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    idx: int
-    status: str
-    exit_code: int | None
-    report_path: str | None
-    log_path: str | None
-    command_line: str | None
-    started_at: datetime | None
-    finished_at: datetime | None
-    duration_ms: int | None
+from pydantic import BaseModel, ConfigDict
 
 
 class ExecutionOut(BaseModel):
@@ -34,10 +18,6 @@ class ExecutionOut(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     config: dict
-
-
-class ExecutionDetailOut(ExecutionOut):
-    runs: list[ExecRunOut]
 
 
 class ExecutionListOut(BaseModel):

@@ -28,7 +28,7 @@
           <dd v-if="metaTags.length">{{ metaTags.join(' · ') }}</dd>
           <dd v-else>—</dd>
         </div>
-        <div><dt>编制人</dt><dd>{{ scenario?.meta?.owner || scenario?.meta?.author || '—' }}</dd></div>
+        <div><dt>编制人</dt><dd>{{ scenario?.meta?.author || scenario?.meta?.owner || '—' }}</dd></div>
         <div><dt>数据规模</dt><dd>数据集 {{ dataSets.length }} 组 · {{ totalRows }} 行</dd></div>
         <div><dt>最后编辑</dt><dd>{{ updateTimeText }}</dd></div>
       </dl>
@@ -205,10 +205,10 @@ const strategiesOf = (s: unknown) => (pick<unknown[]>(s, 'strategy') || []) as A
 
 // ── 摘要:全部由数据统计 ─────────────────────────────────────
 const assertionCount = computed(() =>
-  steps.value.reduce((n, s) => n + strategiesOf(s).filter(t => t.kind === 'assertion').length, 0),
+  steps.value.reduce((n: number, s) => n + strategiesOf(s).filter(t => t.kind === 'assertion').length, 0),
 )
 const extractCount = computed(() =>
-  steps.value.reduce((n, s) => n + strategiesOf(s).filter(t => t.kind === 'extract').length, 0),
+  steps.value.reduce((n: number, s) => n + strategiesOf(s).filter(t => t.kind === 'extract').length, 0),
 )
 const summaryStats = computed(() => {
   const items: { label: string; value: number | string }[] = [
@@ -285,7 +285,7 @@ function strategyText(t: Record<string, unknown>): string {
 function strategyNote(t: Record<string, unknown>): string {
   const parts: string[] = []
   if (t.name) parts.push(String(t.name))
-  if (t.kind === 'assertion' && (t as AssertionView).soft) parts.push('soft')
+  if (t.kind === 'assertion' && (t as unknown as AssertionView).soft) parts.push('soft')
   if (t.message) parts.push(String(t.message))
   return parts.join(' · ')
 }
@@ -408,7 +408,6 @@ onMounted(async () => {
   color: #6b7280;
 }
 .hint { margin: 4px 0 8px; font-size: 12px; }
-.dim { color: #9ca3af; }
 
 /* 表格 */
 .kv-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
@@ -567,7 +566,4 @@ onMounted(async () => {
   color: #9ca3af;
 }
 
-.mono {
-  font-family: var(--font-mono, monospace);
-}
 </style>

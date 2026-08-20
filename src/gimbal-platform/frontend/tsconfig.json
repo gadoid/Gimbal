@@ -12,7 +12,7 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "noEmit": true,
-    "baseUrl": "src",
+    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     },
@@ -21,8 +21,7 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
-    "src/**/*.vue",
-    "vite.config.ts"
+    "src/**/*.vue"
   ],
   "references": [
     { "path": "./tsconfig.node.json" }

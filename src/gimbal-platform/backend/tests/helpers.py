@@ -1,0 +1,75 @@
+"""Shared HTTP-layer test helpers (converged from per-file copies).
+
+Anything exercised through the ASGI ``client`` fixture by more than one
+test module belongs here instead of being copy-pasted — the copies had
+already drifted once (defaults, meta fields).
+"""
+from __future__ import annotations
+
+import asyncio
+from typing import Any, Callable
+
+from httpx import AsyncClient
+
+
+async def register_and_login(
+    client: AsyncClient,
+    username: str = "alice",
+    password: str = "alicepass123",
+) -> dict[str, str]:
+    """Register (ignoring duplicate) + login → Bearer headers."""
+    await client.post(
+        "/api/auth/register",
+        json={"username": username, "password": password, "display_name": username},
+    )
+    r = await client.post(
+        "/api/auth/login",
+        json={"username": username, "password": password},
+    )
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
+def make_draft(
+    scenario_id: str = "sc-test", *, steps: list | None = None, **meta_over: Any
+) -> dict:
+    """Minimal plate-valid ScenarioDraft container (meta via ``meta_over``)."""
+    meta = {
+        "scenarioId": scenario_id,
+        "name": "Test",
+        "module": "order",
+        "priority": 1,
+        "system": ["fin"],
+    }
+    meta.update(meta_over)
+    return {
+        "definition": {
+            "kind": "scenario",
+            "scenarioId": scenario_id,
+            "meta": meta,
+            "config": {"timePolicy": {"kind": "record"}},
+            "resource": {},
+            "steps": steps if steps is not None else [],
+        },
+        "orchestration": {"steps": [], "resourceMeta": {}},
+    }
+
+
+def test_env() -> dict:
+    """The bundled ``test-env-A`` env dict (fresh copy per call)."""
+    return {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"}
+
+
+def gimbal_ok() -> dict:
+    """A passing Gimbal /run result (per-row counters all green)."""
+    return {"exitCode": 0, "total": 1, "passed": 1, "failed": 0,
+            "skipped": 0, "halted": 0, "details": []}
+
+
+async def wait_until(
+    predicate: Callable[[], bool], timeout_s: float = 5.0, interval: float = 0.05
+) -> None:
+    """Poll ``predicate`` until true or timeout (async fan-out tests)."""
+    for _ in range(int(timeout_s / interval)):
+        if predicate():
+            return
+        await asyncio.sleep(interval)

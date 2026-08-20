@@ -38,15 +38,6 @@ class MarkStore:
         with self._lock:
             return item_id in self._marks.get(user_id, set())
 
-    def list_for_user(self, user_id: int) -> set[str]:
-        with self._lock:
-            return set(self._marks.get(user_id, set()))
-
-    def all_user_ids(self) -> list[int]:
-        """有任意标记的 user id 列表。"""
-        with self._lock:
-            return list(self._marks.keys())
-
     # ── mutations ──────────────────────────────────────────────
     def set_mark(self, user_id: int, item_id: str, value: bool) -> None:
         with self._lock:
@@ -57,22 +48,8 @@ class MarkStore:
                 cur.discard(item_id)
             self._save_atomic(self._marks)
 
-    def rename_item(self, old_id: str, new_id: str) -> bool:
-        """Repoint every user's mark from ``old_id`` to ``new_id``.
-        Returns True when anything changed."""
-        with self._lock:
-            changed = False
-            for marks in self._marks.values():
-                if old_id in marks:
-                    marks.discard(old_id)
-                    marks.add(new_id)
-                    changed = True
-            if changed:
-                self._save_atomic(self._marks)
-            return changed
-
     def remove_item(self, item_id: str) -> bool:
-        """Drop ``item_id`` from every user's set (case deletion).
+        """Drop ``item_id`` from every user's set (scenario deletion).
         Returns True when anything changed."""
         with self._lock:
             changed = False

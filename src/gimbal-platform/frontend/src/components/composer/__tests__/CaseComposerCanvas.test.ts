@@ -14,8 +14,8 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import CaseComposerCanvas from '@/components/composer/CaseComposerCanvas.vue'
-import type { StepView, OrchestrationStep } from '@/types/plate'
-import type { Orchestration } from '@/types/scenario-composer'
+import type { StepView } from '@/types/plate'
+import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 
 // ── plate 代理 API mock(挂载即触发的:listStrategyKinds/listAuths) ──
@@ -83,7 +83,7 @@ function mkStep(over: Partial<StepView> = {}): StepView {
 
 function mkOrch(n: number): Orchestration {
   return {
-    steps: Array.from({ length: n }, (_, i) => ({ enabled: true, name: `s${i + 1}` })) as OrchestrationStep[],
+    steps: Array.from({ length: n }, (_, i) => ({ enabled: true, name: `s${i + 1}` })) as StepOrchestration[],
     resourceMeta: {},
   }
 }
@@ -278,7 +278,8 @@ describe('CaseComposerCanvas — IO 双签卡片(C2)', () => {
   it('T14: 策略区 request/response 共用 — 两签均显示全部策略', async () => {
     const { listStrategyKinds } = await import('@/api/scenario-composer')
     const StrategyForm = (await import('@/components/composer/StrategyForm.vue')).default
-    // onMounted 会调 loadStrategyKinds 两次,Once 会被第二次的默认 [] 覆盖 → 持续 mock
+    // onMounted 会调一次 loadStrategyKinds;此处持续 mock 以防
+    // 其它用例留下的实现污染本用例的 kinds 列表。
     const kindsMock = (listStrategyKinds as any).getMockImplementation()
     ;(listStrategyKinds as any).mockResolvedValue([
       { kind: 'extract', label: '从响应提取' },

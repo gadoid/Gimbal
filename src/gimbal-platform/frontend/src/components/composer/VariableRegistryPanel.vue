@@ -50,8 +50,8 @@ import { deriveVarRegistry, varUsages, type StepLike, type VarOrigin } from '@/u
 const props = defineProps<{
   /** 草稿 steps(extract 出身 + ${var.*} 引用位置) */
   steps: StepLike[]
-  /** definition.config.vars 折叠后的 dict(config 出身) */
-  configVars: Record<string, unknown>
+  /** definition.config.vars 折叠后的 dict(config 出身);草稿尚无 config 时缺省 */
+  configVars?: Record<string, unknown>
 }>()
 
 /** 聚合行:同名 entries 折一行,producers 收全部产出步 */

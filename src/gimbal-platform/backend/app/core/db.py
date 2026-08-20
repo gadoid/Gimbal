@@ -26,19 +26,12 @@ SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSe
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with SessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+        yield session
 
 
 # Schema-only changes that need ALTER TABLE ADD COLUMN when an existing
 # DB predates the new column.  Append-only — never edit a released entry.
 _COLUMN_ADDITIONS: dict[str, dict[str, str]] = {
-    "exec_runs": {
-        "log_path": "TEXT",
-        "command_line": "TEXT",
-    },
     "composer_scenarios": {
         "owner_id": "INTEGER DEFAULT 0",
         "visibility": "TEXT DEFAULT 'private'",
@@ -157,6 +150,34 @@ async def _retire_scenario_mirror_columns() -> None:
                     },
                 )
         for col in present:
+            # SQLite refuses DROP COLUMN while any (non-auto) index still
+            # names the column — drop the V1-era indexes on the mirror
+            # columns first (the model no longer declares them, so they'd
+            # be dead weight even if the drop were allowed).
+            idx_rows = await conn.run_sync(
+                lambda c: list(
+                    c.execute(
+                        text("PRAGMA index_list(composer_scenarios)")  # noqa: S608
+                    ).fetchall()
+                )
+            )
+            for idx in idx_rows:
+                idx_name = str(idx[1])
+                if idx_name.startswith("sqlite_autoindex"):
+                    continue
+                idx_cols = await conn.run_sync(
+                    lambda c, n=idx_name: list(
+                        c.execute(text(f"PRAGMA index_info({n})")).fetchall()
+                    )
+                )
+                if any(str(r[2]) == col for r in idx_cols):
+                    await conn.execute(
+                        text(f"DROP INDEX IF EXISTS {idx_name}")  # noqa: S608
+                    )
+                    logger.info(
+                        "migrate: dropped index {} (mirror column {})",
+                        idx_name, col,
+                    )
             await conn.execute(
                 text(
                     f"ALTER TABLE composer_scenarios "  # noqa: S608
@@ -237,7 +258,7 @@ async def _drop_dataset_last_run_columns() -> None:
     """composer_data_sets.last_run_* 假 UI 列删除。
 
     V1 有"用例上次运行状态"概念,V3 从未接上回写 — 列恒 NULL,
-    前端徽章永远渲染不出。执行状态的真实源在 executions/exec_runs。
+    前端徽章永远渲染不出。执行状态的真实源在 executions 表。
     """
     drop_cols = ["last_run_status", "last_run_at"]
     async with engine.begin() as conn:
@@ -287,6 +308,18 @@ async def _rename_execution_case_id() -> None:
             logger.info("migrate: executions.case_id renamed to scenario_id")
 
 
+async def _drop_exec_runs() -> None:
+    """V1 遗留表退役(exec_runs / cases / hidden_field_profiles)。
+
+    V3 执行的可观测面是 executions 计数器 + ``data/runs/<date>.jsonl``
+    调度日志(运维直读文件,不经 API);Case 层与字段隐藏配置已随
+    场景编排解散。开发版直接 DROP,不保数据;新库从未建表,幂等跳过。
+    """
+    async with engine.begin() as conn:
+        for legacy in ("exec_runs", "cases", "hidden_field_profiles"):
+            await conn.execute(text(f"DROP TABLE IF EXISTS {legacy}"))
+
+
 async def init_db() -> None:
     """Create tables; idempotent.  Also back-fills any new columns
     declared in ``_COLUMN_ADDITIONS`` so existing DBs don't need a wipe."""
@@ -299,3 +332,4 @@ async def init_db() -> None:
     await _migrate_datasets_to_scenario()
     await _drop_dataset_last_run_columns()
     await _rename_execution_case_id()
+    await _drop_exec_runs()

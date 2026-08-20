@@ -6,13 +6,19 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
+# 账号字段约束的唯一权威(register 与 admin-create 共用;此前两处
+# 逐字节复制,收紧密码策略时极易只改一处)。
+UsernameField = Field(pattern=r"^[A-Za-z0-9_]+$", min_length=3, max_length=32)
+PasswordField = Field(min_length=8, max_length=128)
+DisplayNameField = Field(default="", max_length=128)
+
 
 class RegisterIn(BaseModel):
     """Payload for POST /auth/register."""
 
-    username: str = Field(pattern=r"^[A-Za-z0-9_]+$", min_length=3, max_length=32)
-    password: str = Field(min_length=8, max_length=128)
-    display_name: str = Field(default="", max_length=128)
+    username: str = UsernameField
+    password: str = PasswordField
+    display_name: str = DisplayNameField
 
     @field_validator("password")
     @classmethod

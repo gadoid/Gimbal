@@ -39,8 +39,10 @@ class PlateUnavailableError(Exception):
 class PlateRejectedError(Exception):
     """Plate validated the call but rejected the payload (4xx).
 
-    Maps to HTTP 502 ``plate_rejected`` carrying the upstream
-    ``errors[]`` array so the frontend can render field-level hints.
+    Routers map this to HTTP 422 ``plate_rejected`` (preview: the
+    verdict is on the *client's draft*, not a gateway failure) carrying
+    the upstream ``errors[]`` array so the frontend can render
+    field-level hints.
     """
 
     def __init__(
@@ -62,7 +64,7 @@ class PlateRejectedError(Exception):
 _client: httpx.AsyncClient | None = None
 
 
-def _get_client() -> httpx.AsyncClient:
+def get_client() -> httpx.AsyncClient:
     global _client
     if _client is None:
         _client = httpx.AsyncClient(
@@ -80,28 +82,22 @@ def set_client_for_tests(client: httpx.AsyncClient | None) -> None:
 
 
 # ─── public surface ───────────────────────────────────────────────
-async def convert(
-    scenario_dict: dict[str, Any],
-    *,
-    consumer: str = "gimbal",
-) -> dict[str, Any]:
-    """POST /api/scenario/action/convert with the given ``consumer``.
+async def convert(scenario_dict: dict[str, Any]) -> dict[str, Any]:
+    """POST /api/scenario/action/convert(consumer 固定 "gimbal")。
 
-    Consumer 选择:
-    * ``"gimbal"`` (默认) — GimbalScenarioExporter,返回可执行 dict,
-      自动 model_dump(exclude=...) 剥掉平台视图扩展字段
-      (endpoints / navigation / config_summary / steps[*].api.view_hints
-      / steps[*].request.fields_meta / steps[*].strategy[*].view_note)。
-      这是「导出用例」「运行用例」等场景的正确 consumer。
-    * ``"platform"`` — PlatformScenarioExporter,返回带平台视图扩展字段
-      的 dict,只用于 Platform UI 渲染。不要把它当成"导出"用。
+    Plate 侧由 GimbalScenarioExporter 导出可执行 dict,自动
+    model_dump(exclude=...) 剥掉平台视图扩展字段(endpoints /
+    navigation / config_summary / steps[*].api.view_hints /
+    steps[*].request.fields_meta / steps[*].strategy[*].view_note)。
+    (plate 契约还支持 consumer="platform" 供 UI 渲染,但平台目前
+    不消费 —— 需要时再加回该参数。)
 
     Returns Plate's ``data`` payload (``{consumer, converted}``) on
     success.  Raises :class:`PlateUnavailableError` on connect / 5xx,
     :class:`PlateRejectedError` on 4xx.
     """
-    body = {"consumer": consumer, "scenario": scenario_dict}
-    client = _get_client()
+    body = {"consumer": "gimbal", "scenario": scenario_dict}
+    client = get_client()
     try:
         resp = await client.post("/api/scenario/action/convert", json=body)
     except httpx.HTTPError as e:

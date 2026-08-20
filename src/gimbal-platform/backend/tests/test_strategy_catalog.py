@@ -17,6 +17,8 @@ import httpx
 import pytest
 from httpx import AsyncClient
 
+from .helpers import register_and_login
+
 # plate /api/strategy 的标准信封(实测形状,Task 2 活体验证过)
 _LIST_ENVELOPE: dict[str, Any] = {
     "ok": True,
@@ -121,18 +123,7 @@ def strategy_plate_mock():
 
 
 async def _login(client: AsyncClient) -> dict[str, str]:
-    await client.post(
-        "/api/auth/register",
-        json={
-            "username": "alice",
-            "password": "alicepass123",
-            "display_name": "alice",
-        },
-    )
-    r = await client.post(
-        "/api/auth/login", json={"username": "alice", "password": "alicepass123"}
-    )
-    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+    return await register_and_login(client)
 
 
 # ── list ───────────────────────────────────────────────────────────

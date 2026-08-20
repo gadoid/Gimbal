@@ -59,8 +59,3 @@ export function refStatus(ref: TplRef, knownAliases: string[] = []): RefStatus {
   }
   return 'ok'
 }
-
-/** 便捷:文本里全部 auth 域引用的 alias 去重列表(运行前悬空扫描用) */
-export function authAliasesIn(text: string): string[] {
-  return [...new Set(parseTplRefs(text).filter((r) => r.domain === 'auth' && r.alias).map((r) => r.alias!))]
-}

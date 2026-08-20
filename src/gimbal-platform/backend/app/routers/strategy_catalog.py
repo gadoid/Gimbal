@@ -9,21 +9,27 @@ Platform 一个 API 面。
 差异:
 * list 路由解 ``data.items`` 返回数组(前端下拉直接用);
 * 复用 ``app.services.plate_client`` 的进程级 AsyncClient 单例
-  (endpoint_catalog 自建 client 是历史形态,这里走共享连接池,
-  MockTransport 测试替换也随之生效)。
+  (endpoint_catalog 也已统一到共享连接池,MockTransport 测试替换
+  随之生效)。
 """
 from __future__ import annotations
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 
 from ..core.deps import CurrentUser
-from ..services.plate_client import _get_client
+from ..services.plate_client import get_client
 
 router = APIRouter(prefix="/strategy-catalog", tags=["strategy-catalog"])
 
 
-def _proxy_error(resp: httpx.Response, *, context: str) -> HTTPException:
+def proxy_error(
+    resp: httpx.Response,
+    *,
+    context: str,
+    not_found_code: str = "strategy_kind_not_found",
+    not_found_msg: str = "strategy kind not found",
+) -> HTTPException:
     """Map a plate non-2xx response onto the platform error model."""
     if resp.status_code >= 500:
         return HTTPException(
@@ -34,8 +40,8 @@ def _proxy_error(resp: httpx.Response, *, context: str) -> HTTPException:
         return HTTPException(
             status_code=404,
             detail={
-                "code": "strategy_kind_not_found",
-                "message": f"strategy kind not found: {context}",
+                "code": not_found_code,
+                "message": f"{not_found_msg}: {context}",
             },
         )
     try:
@@ -48,7 +54,7 @@ def _proxy_error(resp: httpx.Response, *, context: str) -> HTTPException:
     )
 
 
-def _unavailable(e: Exception) -> HTTPException:
+def unavailable(e: Exception) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_502_BAD_GATEWAY,
         detail={"code": "plate_unavailable", "message": str(e)},
@@ -58,13 +64,13 @@ def _unavailable(e: Exception) -> HTTPException:
 @router.get("")
 async def list_strategy_kinds(user: CurrentUser) -> list[dict]:
     """Proxy ``GET {plate}/api/strategy`` and unwrap ``data.items``."""
-    client = _get_client()
+    client = get_client()
     try:
         resp = await client.get("/api/strategy")
     except httpx.HTTPError as e:
-        raise _unavailable(e) from e
+        raise unavailable(e) from e
     if resp.status_code != 200:
-        raise _proxy_error(resp, context="list")
+        raise proxy_error(resp, context="list")
     items = (resp.json().get("data") or {}).get("items")
     if not isinstance(items, list):
         raise HTTPException(
@@ -77,13 +83,13 @@ async def list_strategy_kinds(user: CurrentUser) -> list[dict]:
 @router.get("/{kind}/full")
 async def get_strategy_kind_full(user: CurrentUser, kind: str) -> dict:
     """Proxy ``GET {plate}/api/strategy/{kind}/full`` and unwrap ``data.item``."""
-    client = _get_client()
+    client = get_client()
     try:
         resp = await client.get(f"/api/strategy/{kind}/full")
     except httpx.HTTPError as e:
-        raise _unavailable(e) from e
+        raise unavailable(e) from e
     if resp.status_code != 200:
-        raise _proxy_error(resp, context=kind)
+        raise proxy_error(resp, context=kind)
     item = (resp.json().get("data") or {}).get("item")
     if not item:
         raise HTTPException(

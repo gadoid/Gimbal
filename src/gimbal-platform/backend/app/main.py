@@ -29,37 +29,11 @@ from .routers import (
 )
 
 
-async def _log_hub_sweeper() -> None:
-    """Background task: every ``LOG_HUB_SWEEP_INTERVAL_MIN`` minutes,
-    drop DONE channels whose age exceeds ``LOG_HUB_TTL_HOURS``.
-
-    Stops cleanly when the event loop is cancelled (lifespan teardown).
-    """
-    from .services.log_hub import hub
-
-    interval = max(60, settings.LOG_HUB_SWEEP_INTERVAL_MIN * 60)
-    ttl_seconds = settings.LOG_HUB_TTL_HOURS * 3600
-    while True:
-        try:
-            await asyncio.sleep(interval)
-        except asyncio.CancelledError:
-            return
-        try:
-            evicted = hub.sweep(ttl_seconds)
-            if evicted:
-                logger.info(
-                    "log_hub: swept {} expired channel(s) (TTL={}h)",
-                    evicted, settings.LOG_HUB_TTL_HOURS,
-                )
-        except Exception as e:  # noqa: BLE001  never let the sweeper die silently
-            logger.warning("log_hub sweeper error: {}", e)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Run schema creation on startup.  Also reconcile orphan exec rows
-    left behind by a previous worker instance (uvicorn --reload restarts,
-    OOMs, …) so /executions doesn't display permanently-stuck rows."""
+    """Startup: run schema creation and warn on ephemeral crypto secrets.
+    Shutdown: drain in-flight dispatches and close the shared Plate /
+    Gimbal httpx clients."""
     await init_db()
     # Loud, actionable warnings when crypto secrets are ephemeral — every
     # restart silently rotates them otherwise (all sessions dropped, all
@@ -79,9 +53,14 @@ async def lifespan(app: FastAPI):
         )
     from .services import gimbal_client as gimbal_client_module
     from .services import plate_client as plate_client_module
-    from .services.run_dispatcher import drain_in_flight_dispatches
+    from .services.run_dispatcher import (
+        drain_in_flight_dispatches,
+        reset_shutdown_state,
+    )
 
-    sweeper_task = asyncio.create_task(_log_hub_sweeper())
+    # Same-process app reuse (tests) needs the shutdown flag cleared,
+    # or dispatches silently skip their fan-out.
+    reset_shutdown_state()
     try:
         yield
     finally:
@@ -100,11 +79,6 @@ async def lifespan(app: FastAPI):
             await gimbal_client_module.aclose()
         except Exception as e:  # noqa: BLE001
             logger.debug("lifespan: gimbal_client.aclose raised {}", e)
-        sweeper_task.cancel()
-        try:
-            await sweeper_task
-        except asyncio.CancelledError:
-            pass
 
 
 def create_app() -> FastAPI:

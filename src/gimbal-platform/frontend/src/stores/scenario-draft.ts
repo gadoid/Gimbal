@@ -1,23 +1,24 @@
 /**
  * stores/scenario-draft.ts — 平台侧共享的"进行中"场景草稿
  *
- * 目的: 让 CaseComposer 在编辑过程中随时把当前 meta/steps/config/resource
- *       同步到这里,任何其他视图(场景库 / 执行历史 / ...)都能读取并导出。
+ * 目的: 让 CaseComposer 在编辑过程中随时把当前 definition/orchestration
+ *       同步到这里,任何其他视图(顶栏导出菜单等)都能读取并导出。
  *
  * 设计:
  * - 模块级单例 (Pinia store): 跨组件、跨路由保持同一份草稿。
  * - 单一 setDraft() 入口: CaseComposer 每次变更整体覆盖,避免字段漂移。
- * - exportDraft() 封装 plate /convert → download / copy。
+ * - fetchConverted() 封装 plate /convert → download / copy。
  *
  * 调用方:
- *   CaseComposer.vue   → watch 同步 (meta/steps/config/resource)
- *   Scenarios.vue      → 顶部 "导出当前编辑" 按钮
- *   ScenarioExportMenu → 行级 / 顶栏 触发
+ *   CaseComposer.vue   → watch 同步 (definition/orchestration)
+ *   ScenarioExportMenu → 顶栏触发
  */
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as yaml from 'js-yaml'
 import { previewPlateDraft } from '@/api/scenario-composer'
+import { downloadFile } from '@/utils/download'
+import { exportTimestamp } from '@/utils/datetime'
 import { ElMessage } from 'element-plus'
 import type { ScenarioDraft, Orchestration } from '@/types/scenario-composer'
 import type { ScenarioView } from '@/types/plate'
@@ -29,16 +30,27 @@ interface DraftSnapshot {
   scenarioId: string | null
 }
 
+/** 草稿 → plate /convert → 纯可执行结构(store 无关,列表页行级导出复用)。 */
+export async function convertDraftToExecutable(draft: ScenarioDraft): Promise<Record<string, any>> {
+  const res = await previewPlateDraft(draft)
+  if (!res.ok) {
+    const errMsg = res.errors?.length
+      ? res.errors.map((e) => `${e.path}: ${e.message}`).join('; ')
+      : 'plate 拒绝该草稿'
+    throw new Error(`plate 转换失败 — ${errMsg}`)
+  }
+  if (!res.converted) {
+    throw new Error('plate 未返回转换结果')
+  }
+  return res.converted
+}
+
 export const useScenarioDraftStore = defineStore('scenario-draft', () => {
   // ── 平台侧始终持有的进行中对象 ────────────────────────────────
   const draft = ref<DraftSnapshot | null>(null)
 
   function setDraft(snapshot: DraftSnapshot) {
     draft.value = snapshot
-  }
-
-  function clearDraft() {
-    draft.value = null
   }
 
   /** 平台 → Plate /convert (consumer="gimbal") → 返回纯可执行结构
@@ -54,38 +66,15 @@ export const useScenarioDraftStore = defineStore('scenario-draft', () => {
     }
     // 容器形:definition 原样透传 plate /convert;orchestration 不进 plate。
     const { definition, orchestration } = draft.value
-    const draftForPlate: ScenarioDraft = { definition, orchestration }
-    const res = await previewPlateDraft(draftForPlate)
-    if (!res.ok) {
-      const errMsg = res.errors?.length
-        ? res.errors.map((e) => `${e.path}: ${e.message}`).join('; ')
-        : 'plate 拒绝该草稿'
-      throw new Error(`plate 转换失败 — ${errMsg}`)
-    }
-    if (!res.converted) {
-      throw new Error('plate 未返回转换结果')
-    }
-    return res.converted
+    return convertDraftToExecutable({ definition, orchestration })
   }
 
   function fileBase(): string {
     const id = draft.value?.scenarioId
       || draft.value?.definition?.scenarioId
       || 'scenario'
-    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const ts = exportTimestamp()
     return `${id}-${ts}`
-  }
-
-  function downloadFile(filename: string, content: string, mime: string) {
-    const blob = new Blob([content], { type: `${mime};charset=utf-8` })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
   async function exportJson(): Promise<void> {
@@ -123,7 +112,6 @@ export const useScenarioDraftStore = defineStore('scenario-draft', () => {
   return {
     draft,
     setDraft,
-    clearDraft,
     fetchConverted,
     exportJson,
     exportYaml,

@@ -1,5 +1,31 @@
 # GIMBAL Platform · 用例配置 & 执行平台 · 需求规格说明书 V0.1
 
+> ⚠️ **V3 现状说明（以本节为准，覆盖下文 V0.1 描述）**
+>
+> 本文档写于 V0.1 立项期，§3/§4.5/§5/§6/§10 中与执行链路、数据模型相关的
+> 描述已被 V3 架构取代。当前实现（V3 场景编排版）：
+>
+> - **Case 层已解散**：场景（Scenario）是唯一挂载点。数据表
+>   `composer_scenarios`（payload JSON 为唯一权威）、`composer_data_sets`、
+>   `composer_envs`、`executions`；`cases` / `case_favorites` /
+>   `hidden_field_profiles` 等表已随迁移删除。
+> - **执行链路（V3）**：`POST /api/runs` → `run_dispatcher` 逐行 fan-out →
+>   `gimbal run server` HTTP 服务（`POST /run`，默认 127.0.0.1:8766）。
+>   **不再起子进程**，不再落临时 yaml；`executor.py` 子进程链路已退役。
+> - **可观测面**：`executions` 表计数器（total/passed/failed/status）+
+>   `data/runs/<date>.jsonl` 调度日志（运维直读文件，不经 API）。
+>   **`exec_runs` 表、单 run 报告/日志/SSE 端点、run 级 rerun 均已退役**
+>   （重跑 = 重新发起一次 `POST /api/runs`，by design）。
+> - **服务拓扑**：gimbal-plate（8765，场景/策略语法服务）、gimbal run
+>   server（8766，执行器）、backend（8000，uvicorn）、frontend（5173，Vite，
+>   代理 `/api`→8000、`/plate`→8765）。
+> - `executions.config_json` 存 V3 调度配方（camelCase）：
+>   `{runId, scenarioId, dataSetIds, envId, exec_auth_alias, stepTo,
+>   injectCredentials, nRuns, parallel, prefix, mergePolicy}`。
+>
+> 下文保留为历史设计记录，除本节所述覆盖项外，认证/用户管理（模块 A）、
+> 认证管理（模块 D）等描述仍大体适用。
+
 > 项目代号：**GimbalPlatform**
 > 后端：FastAPI（Python 3.11+）
 > 前端：Vue 3 + Vite + Element Plus / 自研组件（视觉接近 Prism）
@@ -439,16 +465,16 @@ default_hidden:
 5. **报告聚合**：每份 `--report-dir/yyyymmdd/exec_<executionId>_<idx>.html` 是 Gimbal 原生输出；后端把 `report_dir` 路径存到 `execution_record.report_dir`，前端通过 `GET /api/executions/{id}/report/{idx}` 静态拉 HTML 渲染。
 6. **资源清理**：临时 yaml 保留到执行结束，7 天后清理（`data/tmp`）。
 
-#### E4 实时进度（WebSocket 或轮询）
-- `WS /ws/executions/{id}` 推送每个 run 的 start / end / step 状态；
-- 简化 V0.1：使用**轮询** `GET /api/executions/{id}/runs?limit=N&offset=` 替代 WS；前端 1s 轮询；
-- 行内：✅ / ❌ / ⏳ / 跳过 四种状态徽章 + 单次耗时；
-- 显示 Gimbal 原生 report HTML 链接（弹窗打开）。
+#### E4 实时进度（V3：轮询计数器）
+- 前端 1s 轮询 `GET /api/executions/{id}`（计数器快照）；
+- **V3 起 run 级状态徽章 / 报告链接 / WS / SSE 已全部退役**；每-run
+  调度明细在 `data/runs/<date>.jsonl`（服务端文件，不经 API）。
 
 #### E5 结果保留
-- DB 表 `executions(id, case_id, owner_id, started_at, finished_at, total_runs, passed, failed, status, report_dir)`；
-- `exec_runs(id, execution_id, idx, started_at, finished_at, exit_code, status, report_path)`；
-- 默认保留 30 天，admin 设置可调。
+- DB 表 `executions(id, scenario_id, owner_id, status, total_runs, passed,
+  failed, config_json, started_at, finished_at, created_at)`；
+- **`exec_runs` 表已随 V3 退役**（init_db 幂等 DROP）；
+- 每-run 调度日志 `data/runs/<date>.jsonl` 按需创建、追加写入。
 
 ---
 

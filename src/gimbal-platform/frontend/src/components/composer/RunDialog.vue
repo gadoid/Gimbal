@@ -203,6 +203,7 @@ import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { promptAction } from '@/utils/confirmAction'
 import * as api from '@/api/scenario-composer'
+import type { MergePolicy } from '@/api/executions'
 import type { Scenario, DataSetSummary, RunEnv } from '@/types/scenario-composer'
 
 const props = defineProps<{
@@ -224,7 +225,7 @@ const emit = defineEmits<{
       nRuns?: number
       parallel?: number
       prefix?: string
-      mergePolicy?: 'override' | 'merge' | 'append'
+      mergePolicy?: MergePolicy
     },
   ]
 }>()
@@ -241,7 +242,7 @@ const POLICIES = [
   { value: 'merge', label: 'merge · 合并' },
   { value: 'append', label: 'append · 追加' },
 ] as const
-const mergePolicy = ref<'origin' | 'override' | 'merge' | 'append'>('merge')
+const mergePolicy = ref<'origin' | MergePolicy>('merge')
 const nRuns = ref(1)
 const parallel = ref(1)
 const prefix = ref('')
@@ -307,7 +308,9 @@ function onConfirm() {
   emit('confirm', selectedEnv.value, selectedDatasets.value, {
     stepTo: stepTo.value,
     injectCredentials: !origin,
-    ...(origin ? {} : { mergePolicy: mergePolicy.value }),
+    // 'origin'(保持 plate 原文)只在本地用于翻转 injectCredentials,
+    // 不是后端 RunRequest 的合法 merge_policy,不随 confirm 下发。
+    ...(origin ? {} : { mergePolicy: mergePolicy.value as Exclude<(typeof mergePolicy)['value'], 'origin'> }),
     ...(nRuns.value > 1 ? { nRuns: nRuns.value } : {}),
     ...(parallel.value > 1 ? { parallel: parallel.value } : {}),
     ...(prefix.value ? { prefix: prefix.value } : {}),
@@ -561,5 +564,5 @@ async function onCreateDataSet() {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .small { font-size: 11px; }
-.muted { color: #5a6273; }
+
 </style>

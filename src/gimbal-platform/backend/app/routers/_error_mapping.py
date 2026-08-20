@@ -17,8 +17,23 @@ from fastapi import HTTPException
 
 
 def key_error_404(e: KeyError) -> HTTPException:
-    """``KeyError("code: message")`` → 404 with the message part."""
-    return HTTPException(status_code=404, detail=str(e).split(": ", 1)[-1])
+    """``KeyError("code: message")`` → 404 with the message part.
+
+    Note ``e.args[0]`` (not ``str(e)``) — ``str(KeyError(...))`` reprs its
+    argument, so it would leak a stray trailing quote into the detail.
+    """
+    msg = e.args[0] if e.args else str(e)
+    return HTTPException(status_code=404, detail=str(msg).split(": ", 1)[-1])
+
+
+def not_found_404(kind: str, ident: str) -> HTTPException:
+    """Uniform miss-404: ``detail = "<kind>_not_found: <ident>"``.
+
+    The single constructor for row-miss 404s in composer routers —
+    previously hand-raised at 3+ sites in 3 detail shapes that could
+    drift (scenarios / data_sets / runs).
+    """
+    return HTTPException(status_code=404, detail=f"{kind}_not_found: {ident}")
 
 
 def value_error_http(

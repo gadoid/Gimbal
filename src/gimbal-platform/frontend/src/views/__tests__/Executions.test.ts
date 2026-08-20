@@ -1,13 +1,12 @@
 /**
- * Executions.vue — focus on the inline log panel behaviour.
+ * Executions.vue — V3 detail page (counters + recipe, no per-run UI).
  *
  * Verifies that:
- *  1. Clicking the row's "查看日志" button opens the inline panel
- *     (NOT a dialog).
- *  2. Clicking the same button again collapses it.
- *  3. Switching to a different run's button opens that run's panel.
- *  4. The panel is rendered as a sibling of the runs table, not
- *     inside an el-dialog overlay.
+ *  1. The four counter cards render from the detail snapshot.
+ *  2. The config recipe (config_json) renders as a definition list.
+ *  3. The stepTo pill renders as 1-based "执行到第 N 步".
+ *  4. No V1 per-run surface (runs table / log panel / report dialog)
+ *     is present.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -16,45 +15,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import ElementPlus from 'element-plus'
 import Executions from '@/views/Executions.vue'
 import { useExecutionsStore } from '@/stores/executions'
-import { useAuthStore } from '@/stores/auth'
-import * as executionsApi from '@/api/executions'
-
-// Stub the SSE stream so opening a log doesn't actually hit the backend.
-// Returns a terminal ``end`` event on the very first ``next()`` call so
-// the drain loop cleanly breaks — avoids the reconnect cascade that
-// would otherwise leave pending promises after unmount.  Also stubs
-// ``getRunLog`` (the legacy fallback) so the ``finally`` block in
-// ``drainStreamInBackground`` returns immediately.  The ``get`` stub
-// prevents the on-mount polling (startPolling) from hitting the network
-// in tests that don't explicitly wire it.
-vi.mock('@/api/executions', async (importOriginal) => {
-  const actual = await importOriginal<typeof executionsApi>()
-  return {
-    ...actual,
-    get: vi.fn().mockImplementation(async (id: number) => {
-      // Return a minimal placeholder; tests that need detail content
-      // should set ``execStore.detail`` directly.
-      return {
-        id,
-        scenario_id: 'mock',
-        status: 'done',
-        total_runs: 0,
-        passed: 0,
-        failed: 0,
-        started_at: null,
-        finished_at: null,
-        config: {},
-        runs: [],
-      }
-    }),
-    openRunLogStream: vi.fn().mockImplementation(async () => ({
-      next: vi.fn().mockResolvedValue({ kind: 'end', exit_code: 0 } as never),
-      lastSeq: vi.fn().mockReturnValue(0),
-      close: vi.fn(),
-    })),
-    getRunLog: vi.fn().mockResolvedValue(''),
-  }
-})
+import type { Execution } from '@/api/executions'
 
 function makeRouter() {
   return createRouter({
@@ -68,144 +29,91 @@ function makeRouter() {
 
 const fakeDetail = {
   id: 1,
-  scenario_id: 'demo-case',
+  scenario_id: 'sc_demo',
   status: 'done' as const,
-  total_runs: 2,
-  passed: 1,
+  total_runs: 4,
+  passed: 3,
   failed: 1,
   started_at: null,
   finished_at: null,
-  config: {},
-  runs: [
-    {
-      id: 11,
-      idx: 1,
-      status: 'passed' as const,
-      exit_code: 0,
-      report_path: null,
-      started_at: null,
-      finished_at: null,
-      duration_ms: 1200,
-    },
-    {
-      id: 12,
-      idx: 2,
-      status: 'failed' as const,
-      exit_code: 2,
-      report_path: null,
-      started_at: null,
-      finished_at: null,
-      duration_ms: 800,
-    },
-  ],
+  config: {
+    runId: 'run-42',
+    scenarioId: 'sc_demo',
+    envId: 'env_dev',
+    stepTo: 2,
+    nRuns: 4,
+    parallel: 2,
+  },
+} satisfies Execution
+
+async function mountPage() {
+  const router = makeRouter()
+  router.push('/executions/1')
+  await router.isReady()
+  const wrapper = mount(Executions, {
+    global: { plugins: [router, ElementPlus] },
+  })
+  await flushPromises()
+  return wrapper
 }
 
-describe('Executions.vue — inline log panel', () => {
+describe('Executions.vue — V3 detail page', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.restoreAllMocks()
   })
 
-  it('opens an inline panel (not a dialog) when "查看日志" is clicked', async () => {
+  it('renders counters from the detail snapshot', async () => {
     const execStore = useExecutionsStore()
-    execStore.detail = fakeDetail as never
-    execStore.fetchDetail = vi.fn().mockResolvedValue(fakeDetail as never)
+    execStore.detail = { ...fakeDetail }
+    execStore.fetchDetail = vi.fn().mockResolvedValue(fakeDetail)
 
-    const auth = useAuthStore()
-    auth.accessToken = 'token'
+    const wrapper = await mountPage()
 
-    const router = makeRouter()
-    router.push('/executions/1')
-    await router.isReady()
-
-    const wrapper = mount(Executions, {
-      global: { plugins: [router, ElementPlus] },
-    })
-    await flushPromises()
-
-    // Before click: no inline panel mounted.
-    expect(wrapper.find('.log-panel').exists()).toBe(false)
-
-    // Find the first run's "查看日志" button.  ``el-button`` with link
-    // renders as a <button> with the text inside; query by text.
-    const buttons = wrapper.findAll('button').filter((b) => b.text().includes('查看日志'))
-    expect(buttons.length).toBeGreaterThanOrEqual(2)
-    await buttons[0].trigger('click')
-    await flushPromises()
-
-    // After click: inline panel appears, NO log dialog overlay.
-    expect(wrapper.find('.log-panel').exists()).toBe(true)
-    expect(wrapper.find('.el-dialog__wrapper').exists()).toBe(false)
+    const values = wrapper.findAll('.counter-value').map((c) => c.text())
+    expect(values).toEqual(['4', '3', '1', '0']) // total/passed/failed/未开始
+    expect(wrapper.find('h2').text()).toContain('#1')
 
     wrapper.unmount()
   })
 
-  it('collapses the panel when the same run button is clicked twice', async () => {
+  it('renders the config recipe as a definition list', async () => {
     const execStore = useExecutionsStore()
-    execStore.detail = fakeDetail as never
-    execStore.fetchDetail = vi.fn().mockResolvedValue(fakeDetail as never)
+    execStore.detail = { ...fakeDetail }
+    execStore.fetchDetail = vi.fn().mockResolvedValue(fakeDetail)
 
-    const auth = useAuthStore()
-    auth.accessToken = 'token'
+    const wrapper = await mountPage()
 
-    const router = makeRouter()
-    router.push('/executions/1')
-    await router.isReady()
-
-    const wrapper = mount(Executions, {
-      global: { plugins: [router, ElementPlus] },
-    })
-    await flushPromises()
-
-    const buttons = wrapper.findAll('button').filter((b) => b.text().includes('查看日志'))
-    await buttons[0].trigger('click')
-    await flushPromises()
-    expect(wrapper.find('.log-panel').exists()).toBe(true)
-
-    // The button text should now be "收起日志" for that row.
-    const buttonAfterOpen = wrapper
-      .findAll('button')
-      .filter((b) => b.text().includes('收起日志'))
-    expect(buttonAfterOpen.length).toBeGreaterThanOrEqual(1)
-
-    // Click again → collapse.
-    await buttonAfterOpen[0].trigger('click')
-    await flushPromises()
-    expect(wrapper.find('.log-panel').exists()).toBe(false)
+    const recipe = wrapper.find('.recipe')
+    expect(recipe.exists()).toBe(true)
+    expect(recipe.text()).toContain('run-42')
+    expect(recipe.text()).toContain('env_dev')
 
     wrapper.unmount()
   })
 
-  it('switches the panel to a different run when its button is clicked', async () => {
+  it('renders the stepTo pill as 1-based step number', async () => {
     const execStore = useExecutionsStore()
-    execStore.detail = fakeDetail as never
-    execStore.fetchDetail = vi.fn().mockResolvedValue(fakeDetail as never)
+    execStore.detail = { ...fakeDetail }
+    execStore.fetchDetail = vi.fn().mockResolvedValue(fakeDetail)
 
-    const auth = useAuthStore()
-    auth.accessToken = 'token'
+    const wrapper = await mountPage()
 
-    const router = makeRouter()
-    router.push('/executions/1')
-    await router.isReady()
+    expect(wrapper.find('.step-to-pill').text()).toBe('执行到第 3 步')
 
-    const wrapper = mount(Executions, {
-      global: { plugins: [router, ElementPlus] },
-    })
-    await flushPromises()
+    wrapper.unmount()
+  })
 
-    const openButtons = wrapper.findAll('button').filter((b) => b.text().includes('查看日志'))
-    // Click run 1's button.
-    await openButtons[0].trigger('click')
-    await flushPromises()
-    expect(wrapper.find('.log-panel-id').text()).toContain('run #1')
+  it('has no V1 per-run surface (runs table / log panel / report dialog)', async () => {
+    const execStore = useExecutionsStore()
+    execStore.detail = { ...fakeDetail }
+    execStore.fetchDetail = vi.fn().mockResolvedValue(fakeDetail)
 
-    // Click run 2's button — the panel should now show run #2.
-    const stillOpen = wrapper
-      .findAll('button')
-      .filter((b) => b.text().includes('查看日志'))
-    await stillOpen[0].trigger('click')
-    await flushPromises()
-    expect(wrapper.find('.log-panel-id').text()).toContain('run #2')
+    const wrapper = await mountPage()
+
+    expect(wrapper.find('.runs-table').exists()).toBe(false)
+    expect(wrapper.find('.log-panel').exists()).toBe(false)
+    expect(wrapper.find('.report-frame').exists()).toBe(false)
 
     wrapper.unmount()
   })

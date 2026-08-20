@@ -34,6 +34,17 @@ from ..core.deps import CurrentUser
 from ..core.security import hash_password
 from ..models.user import User
 from ..schemas.user import UserCreateIn, UserOut, UserPatchIn
+from ._codes import (
+    ADMIN_REQUIRED,
+    LAST_ADMIN,
+    MEMBER_PATCH_FORBIDDEN,
+    NAME_TAKEN,
+    RESET_OTHER_PASSWORD,
+    SELF_DELETE,
+    USER_NOT_FOUND,
+    code_detail,
+)
+from ._name_checks import assert_name_available
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -84,45 +95,14 @@ async def create_user(
     # Normalize display_name like patch_user: it doubles as composer
     # ownership identity, so " Bob " / "Bob" must not coexist.
     payload.display_name = (payload.display_name or "").strip()
-    existing = (
-        await db.execute(select(User).where(User.username == payload.username))
-    ).scalar_one_or_none()
-    if existing is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": 4093, "msg": "用户名已被占用"},
-        )
-    # display_name doubles as the composer-ownership identity (scenario /
-    # case / data-set rows store it as ``owner`` / ``created_by``). It must
-    # be globally unique AND not collide with any username — otherwise a
-    # member could impersonate another user's ownership by adopting their
-    # display_name (privilege-escalation vector).
-    if payload.display_name:
-        clash = (
-            await db.execute(
-                select(User).where(
-                    (User.display_name == payload.display_name)
-                    | (User.username == payload.display_name)
-                )
-            )
-        ).scalar_one_or_none()
-        if clash is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={"code": 4093, "msg": "显示名已被占用（作为资源归属标识必须唯一）"},
-            )
-    # Conversely: the new username must not collide with an existing
-    # display_name (ownership checks match ``display_name or username``).
-    name_clash = (
-        await db.execute(
-            select(User).where(User.display_name == payload.username)
-        )
-    ).scalar_one_or_none()
-    if name_clash is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": 4093, "msg": "用户名与已有显示名冲突（作为资源归属标识必须唯一）"},
-        )
+    # 用户名/display_name 查重 + 双向冲突检查(见 _name_checks):
+    # display_name 兼作归属标识,冒用他人显示名 = 提权接管其资源。
+    await assert_name_available(
+        db,
+        username=payload.username,
+        display_name=payload.display_name or None,
+        code=NAME_TAKEN,
+    )
     new_user = User(
         username=payload.username,
         display_name=payload.display_name,
@@ -160,7 +140,7 @@ async def patch_user(
     if target is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": 4041, "msg": "用户不存在"},
+            detail=code_detail(USER_NOT_FOUND, "用户不存在"),
         )
 
     data = payload.model_dump(exclude_unset=True)
@@ -170,12 +150,12 @@ async def patch_user(
         if target.id != caller.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail={"code": 4032, "msg": "普通用户只能修改自己的资料"},
+                detail=code_detail(MEMBER_PATCH_FORBIDDEN, "普通用户只能修改自己的资料"),
             )
         if "is_admin" in data:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail={"code": 4032, "msg": "只有管理员可以变更管理员标志"},
+                detail=code_detail(MEMBER_PATCH_FORBIDDEN, "只有管理员可以变更管理员标志"),
             )
 
     demoting_admin = (
@@ -188,28 +168,16 @@ async def patch_user(
         if admin_total <= 1:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={"code": 4092, "msg": "不能降级最后一个管理员"},
+                detail=code_detail(LAST_ADMIN, "不能降级最后一个管理员"),
             )
 
     if "display_name" in data:
         new_name = (data["display_name"] or "").strip()
         if new_name and new_name != (target.display_name or ""):
-            # Ownership-identity uniqueness (see create_user). A member must
-            # not be able to adopt another user's display_name to hijack
-            # their scenarios / cases / data-sets.
-            clash = (
-                await db.execute(
-                    select(User).where(
-                        (User.display_name == new_name) | (User.username == new_name),
-                        User.id != target.id,
-                    )
-                )
-            ).scalar_one_or_none()
-            if clash is not None:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail={"code": 4093, "msg": "显示名已被占用（作为资源归属标识必须唯一）"},
-                )
+            # Ownership-identity uniqueness (see _name_checks).
+            await assert_name_available(
+                db, display_name=new_name, code=NAME_TAKEN, exclude_id=target.id
+            )
         target.display_name = new_name
     if "is_admin" in data:
         target.is_admin = data["is_admin"]
@@ -247,12 +215,12 @@ async def reset_password(
     if target is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": 4041, "msg": "用户不存在"},
+            detail=code_detail(USER_NOT_FOUND, "用户不存在"),
         )
     if not caller.is_admin and caller.id != target.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": 4033, "msg": "只有管理员或本人可以重置该密码"},
+            detail=code_detail(RESET_OTHER_PASSWORD, "只有管理员或本人可以重置该密码"),
         )
 
     new_pw = _gen_random_password(12)
@@ -291,19 +259,19 @@ async def delete_user(
     if target is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": 4041, "msg": "用户不存在"},
+            detail=code_detail(USER_NOT_FOUND, "用户不存在"),
         )
 
     if target.id == caller.id:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": 4091, "msg": "不能删除自己"},
+            detail=code_detail(SELF_DELETE, "不能删除自己"),
         )
 
     if not caller.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": 4031, "msg": "需要管理员权限"},
+            detail=code_detail(ADMIN_REQUIRED, "需要管理员权限"),
         )
 
     if target.is_admin:
@@ -311,7 +279,7 @@ async def delete_user(
         if admin_total <= 1:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={"code": 4092, "msg": "不能删除最后一个管理员"},
+                detail=code_detail(LAST_ADMIN, "不能删除最后一个管理员"),
             )
 
     await db.delete(target)

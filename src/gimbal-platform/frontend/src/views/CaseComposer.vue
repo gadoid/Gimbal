@@ -46,7 +46,7 @@
             <span class="label">
               <template v-if="saveState === 'saving'">保存中…</template>
               <template v-else-if="saveState === 'dirty'">未保存</template>
-              <template v-else-if="lastSavedAt">{{ formatTime(lastSavedAt) }} 已保存</template>
+              <template v-else-if="lastSavedAt">{{ relTime(lastSavedAt) }} 已保存</template>
               <template v-else>草稿</template>
             </span>
           </div>
@@ -218,9 +218,11 @@ import RunDialog from '@/components/composer/RunDialog.vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { showError } from '@/utils/errorFallback'
+import { relTime } from '@/utils/datetime'
 import { executionUrl, composerUrl } from '@/utils/links'
 import { confirmAction } from '@/utils/confirmAction'
 import * as api from '@/api/scenario-composer'
+import type { MergePolicy } from '@/api/executions'
 import type {
   Scenario, DataSetSummary, RunEnv, Orchestration, ScenarioDraft,
 } from '@/types/scenario-composer'
@@ -420,7 +422,7 @@ async function loadScenario() {
     await loadDataSets()
     saveState.value = 'clean'
   } catch (e) {
-    showError('加载场景失败', undefined, (e as Error).message)
+    showError('加载场景', undefined, (e as Error).message)
   }
 }
 
@@ -432,7 +434,7 @@ async function loadDataSets() {
       scenarioId: scenario.value.meta.scenarioId,
     })
   } catch (e) {
-    showError('加载数据集失败', undefined, (e as Error).message)
+    showError('加载数据集', undefined, (e as Error).message)
   }
 }
 
@@ -493,12 +495,11 @@ async function saveDraft(advance = false) {
       definition: definition.value,
       orchestration: orchestration.value,
     }
-    let saved: Scenario
+    let saved: Scenario | undefined
     if (scenario.value) {
       saved = await store.saveScenario(scenario.value.meta.scenarioId, draft)
     } else {
       // create:撞 id 时后端返 409 (scenario_id_exists),重生成 id 重试(最多 2 次)。
-      saved = undefined as unknown as Scenario
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           saved = await store.saveScenario(null, draft)
@@ -512,6 +513,7 @@ async function saveDraft(advance = false) {
           throw e
         }
       }
+      if (!saved) throw new Error('create failed: id 撞号重试耗尽')
     }
     scenario.value = saved
     // 新建场景后拉一次数据集列表(空列表,但保持状态一致)
@@ -523,7 +525,7 @@ async function saveDraft(advance = false) {
       onStepClick(Math.min(STEPS.length - 1, stepIdx.value + 1))
     }
   } catch (e) {
-    showError('保存失败', undefined, (e as Error).message)
+    showError('保存', undefined, (e as Error).message)
   } finally {
     saving.value = false
   }
@@ -535,7 +537,7 @@ async function onToggleStar() {
     await store.toggleStar(scenario.value.meta.scenarioId)
     scenario.value = { ...scenario.value, starred: !scenario.value.starred }
   } catch (e) {
-    showError('操作失败', undefined, (e as Error).message)
+    showError('操作', undefined, (e as Error).message)
   }
 }
 
@@ -548,18 +550,13 @@ async function onDuplicate() {
   )
   if (!ok) return // 用户取消或 ESC 关闭
   try {
-    const newId = `${scenario.value.meta.scenarioId}-copy`
-    const newDef: ScenarioView = {
-      ...definition.value,
-      scenarioId: newId,
-      meta: { ...definition.value.meta, name: `${scenario.value.meta.name} (副本)` },
-    }
-    const draft: ScenarioDraft = { definition: newDef, orchestration: orchestration.value }
-    const saved = await store.saveScenario(null, draft)
+    // 复制统一走服务端 copyScenario(生成唯一新 id),
+    // 不再本地拼 `${id}-copy`(重复复制会撞号)。
+    const saved = await store.copyScenario(scenario.value.meta.scenarioId)
     ElMessage.success('已复制')
     router.push(composerUrl(saved.meta.scenarioId))
   } catch (e) {
-    showError('复制失败', undefined, (e as Error).message)
+    showError('复制', undefined, (e as Error).message)
   }
 }
 
@@ -576,7 +573,7 @@ async function onDelete() {
     ElMessage.success('已删除')
     router.push('/scenarios')
   } catch (e) {
-    showError('删除失败', undefined, (e as Error).message)
+    showError('删除', undefined, (e as Error).message)
   }
 }
 
@@ -602,7 +599,7 @@ async function onPreview() {
       ElMessage.warning(`Plate 校验失败: ${res.errors?.length || 0} 个错误`)
     }
   } catch (e) {
-    showError('预校验失败', undefined, (e as Error).message)
+    showError('预校验', undefined, (e as Error).message)
   } finally {
     saving.value = false
   }
@@ -617,7 +614,7 @@ async function onRunConfirm(
     nRuns?: number
     parallel?: number
     prefix?: string
-    mergePolicy?: 'override' | 'merge' | 'append'
+    mergePolicy?: MergePolicy
   },
 ) {
   if (!scenario.value) {
@@ -643,7 +640,7 @@ async function onRunConfirm(
       ...(opts?.nRuns && opts.nRuns > 1 ? { nRuns: opts.nRuns } : {}),
       ...(opts?.parallel && opts.parallel > 1 ? { parallel: opts.parallel } : {}),
       ...(opts?.prefix ? { prefix: opts.prefix } : {}),
-    } as any)
+    })
     lastRunId.value = resp.runId
     ElMessage.success(`运行已发起: ${resp.runId}`)
     runDialogOpen.value = false
@@ -659,17 +656,9 @@ async function onRunConfirm(
     }, 800)
   } catch (e) {
     lastRunError.value = (e as Error).message
-    showError('运行失败', undefined, (e as Error).message)
+    showError('运行', undefined, (e as Error).message)
     runDispatching.value = false
   }
-}
-
-function formatTime(d: Date) {
-  const now = Date.now()
-  const diff = Math.floor((now - d.getTime()) / 1000)
-  if (diff < 60) return `${diff} 秒前`
-  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 </script>
 

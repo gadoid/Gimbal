@@ -255,10 +255,13 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { ArrowLeft, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getFullEndpoint } from '@/api/scenario-composer'
+import { useAuthStore } from '@/stores/auth'
 import type { EndpointFullView } from '@/types/plate'
 
 const props = defineProps<{ nextStepIdx?: number; adding?: boolean }>()
 const emit = defineEmits<{ back: []; add: [any] }>()
+
+const authStore = useAuthStore()
 
 // 列表项与详情项都是 plate endpoint dict 的前端表述(真源 @/types/plate)。
 // 列表视图(Plate /api/endpoint)裁剪过部分字段,故用 Partial 表达"可能不完整的
@@ -271,7 +274,10 @@ const SYS_LABELS: Record<string, string> = {
 }
 function systemLabel(s: string) { return SYS_LABELS[s] || s }
 
-const all = ref<Partial<EndpointFullView>[]>([])
+/** 目录行:树渲染/过滤依赖的关键字段必有;full 级字段(request/responses/metadata)可缺。 */
+type CatalogRow = Pick<EndpointFullView, 'id' | 'system' | 'service' | 'name'> &
+  Partial<EndpointFullView>
+const all = ref<CatalogRow[]>([])
 const loading = ref(false)
 const filterSystem = ref<string | null>(null)
 const filterService = ref<string | null>(null)
@@ -377,7 +383,7 @@ function selectService(s: string, svc: string) {
 // ── 选中时拉 full 定义(列表不带 request.fields / responses / metadata) ──
 const selectedFull = ref<EndpointFullView | null>(null)
 const detailLoading = ref(false)
-async function selectEndpoint(ep: Partial<EndpointFullView>) {
+async function selectEndpoint(ep: CatalogRow) {
   selectedId.value = ep.id
   selectedFull.value = null
   detailLoading.value = true
@@ -424,7 +430,8 @@ async function refetch() {
     if (filterQuery.value.trim()) params.set('q', filterQuery.value.trim())
     params.set('per_page', '500')
     const url = '/plate/api/endpoint' + (params.toString() ? '?' + params.toString() : '')
-    const token = JSON.parse(localStorage.getItem('gimbal-auth') || '{}').accessToken || ''
+    // token 统一取自 auth store(唯一权威),不再手解 localStorage。
+    const token = authStore.accessToken || ''
     const r = await fetch(url, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     })

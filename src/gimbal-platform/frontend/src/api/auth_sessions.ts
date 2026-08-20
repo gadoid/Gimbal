@@ -44,10 +44,6 @@ export function create(payload: AuthSessionCreateIn) {
   return http.post<AuthSession>('/auths', payload).then((r) => r.data)
 }
 
-export function get(id: number) {
-  return http.get<AuthSession>(`/auths/${id}`).then((r) => r.data)
-}
-
 export function patch(id: number, payload: AuthSessionPatchIn) {
   return http.patch<AuthSession>(`/auths/${id}`, payload).then((r) => r.data)
 }

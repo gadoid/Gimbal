@@ -35,19 +35,6 @@ async def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
-async def _require_admin(user: CurrentUser) -> User:
-    """Gate: caller must hold ``is_admin=True`` → else 403 (code 4031)."""
-    if not user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": 4031, "msg": "需要管理员权限"},
-        )
-    return user
-
-
-AdminUser = Annotated[User, Depends(_require_admin)]
-
-
 async def get_owned_execution(
     user: CurrentUser,
     session: Annotated[AsyncSession, Depends(get_db)],

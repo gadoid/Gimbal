@@ -32,25 +32,15 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/app.db"
 
     # ── Data dir ──────────────────────────────────────────
-    # Resolved to absolute at startup so subprocess argv / DB log paths
-    # never land as relative ``./data\...`` which then shows up in the
-    # admin "command preview" as e.g. ``data\tmp\exec_17_1.yaml``.
+    # Resolved to absolute at startup so JSONL run-log / DB paths
+    # never land as relative ``./data\...`` in logs.
     DATA_DIR: Path = Path("./data").resolve()
-    PUBLIC_CASES_DIR: Path = (Path("./data") / "public").resolve()
-    USERS_CASES_DIR: Path = (Path("./data") / "users").resolve()
 
     # ── Gimbal runner HTTP service (#4 run 最小链路) ──────
     # ``gimbal run server`` 默认监听 127.0.0.1:8766(8765 被 plate 实占)。
     # run dispatcher 每行 convert 成功后 POST /run 到这里执行。
     GIMBAL_BASE_URL: str = "http://127.0.0.1:8766"
     GIMBAL_TIMEOUT_SEC: float = 300.0
-
-    # ── LogHub retention ──────────────────────────────────
-    # Channels in DONE state older than this are evicted by the
-    # background sweeper in main.lifespan.  Set to 0 to disable
-    # eviction (channels kept until process exit).
-    LOG_HUB_TTL_HOURS: int = 24
-    LOG_HUB_SWEEP_INTERVAL_MIN: int = 60
 
     # ── CORS ──────────────────────────────────────────────
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
@@ -83,19 +73,12 @@ class Settings(BaseSettings):
             self.FERNET_KEY = _generate_fernet_key()
         # Force-absolute.  pydantic-settings re-coerces from env vars which
         # may hand us back a relative ``./data``; normalize again here so
-        # every downstream consumer (subprocess argv, DB log paths, UI
-        # preview) sees e.g. ``D:\Gimbal\Gimbal\gimbal-platform\data\tmp\...``.
+        # every downstream consumer (JSONL run logs, DB paths, UI preview)
+        # sees e.g. ``D:\Gimbal\Gimbal\gimbal-platform\data\...``.
+        # (tmp/ and reports/ were the retired V1 executor's paths — V3
+        # only writes data/runs/<date>.jsonl, created on demand.)
         self.DATA_DIR = self.DATA_DIR.resolve()
-        self.PUBLIC_CASES_DIR = self.PUBLIC_CASES_DIR.resolve()
-        self.USERS_CASES_DIR = self.USERS_CASES_DIR.resolve()
-        for p in (
-            self.DATA_DIR,
-            self.PUBLIC_CASES_DIR,
-            self.USERS_CASES_DIR,
-            self.DATA_DIR / "tmp",
-            self.DATA_DIR / "reports",
-        ):
-            p.mkdir(parents=True, exist_ok=True)
+        self.DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 settings = Settings()

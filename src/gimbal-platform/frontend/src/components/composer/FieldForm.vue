@@ -218,7 +218,7 @@
             :value="formatJson(getValue(f))"
             placeholder="JSON object"
             :disabled="readonly"
-            @input="e => setValue(f, parseJson((e.target as HTMLTextAreaElement).value))"
+            @input="e => setValue(f, parseJsonOrRaw((e.target as HTMLTextAreaElement).value))"
           />
           <button
             v-if="fieldActions"
@@ -271,6 +271,7 @@ import type { IOFieldBinding } from '@/types/plate'
 import type { VarEntry } from '@/utils/var-registry'
 import { getByPath, setByPath } from '@/utils/jsonpath'
 import FieldActionMenu from './FieldActionMenu.vue'
+import { parseJson } from '../../utils/json'
 
 const props = defineProps<{
   bindings: IOFieldBinding[]
@@ -357,15 +358,15 @@ function placeholderFor(f: IOFieldBinding): string {
   return f.required ? `${f.name} (必填)` : f.name
 }
 
+/** JSON field semantics: empty → null, non-JSON → raw string (user is typing). */
+function parseJsonOrRaw(s: string): unknown {
+  return s.trim() ? parseJson(s, s) : null
+}
+
 function formatJson(v: unknown): string {
   if (v === null || v === undefined || v === '') return ''
   if (typeof v === 'string') return v
   return JSON.stringify(v, null, 2)
-}
-
-function parseJson(s: string): unknown {
-  if (!s || !s.trim()) return null
-  try { return JSON.parse(s) } catch { return s }
 }
 </script>
 

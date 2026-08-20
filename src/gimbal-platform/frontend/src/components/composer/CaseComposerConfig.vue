@@ -178,14 +178,14 @@
           <div v-for="(v, j) in group" :key="j" class="c-kv-row">
             <el-input
               :model-value="v.key"
-              @update:model-value="val => v.key = val"
+              @update:model-value="(val: string) => v.key = val"
               placeholder="变量名"
               size="small"
             />
             <span class="c-kv-sep">=</span>
             <el-input
               :model-value="formatVarValue(v.value)"
-              @update:model-value="val => v.value = parseVarValue(val)"
+              @update:model-value="(val: string) => v.value = parseVarValue(val)"
               placeholder="值 / 引用"
               size="small"
             />
@@ -217,14 +217,14 @@
           <div v-for="(s, i) in group" :key="i" class="c-kv-row svc-row">
             <el-input
               :model-value="s.alias"
-              @update:model-value="val => s.alias = val"
+              @update:model-value="(val: string) => s.alias = val"
               placeholder="alias (例: tidb-test-service)"
               size="small"
             />
             <span class="c-kv-sep">→</span>
             <el-input
               :model-value="s.baseUrl"
-              @update:model-value="val => s.baseUrl = val"
+              @update:model-value="(val: string) => s.baseUrl = val"
               placeholder="baseUrl"
               size="small"
               class="svc-url"
@@ -249,6 +249,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import type { ConfigView, RetryPolicyView } from '@/types/plate'
+import { parseJson } from '../../utils/json'
 
 // plate TimePolicy 只有两态:record / timeout(带 seconds)。
 // 砍掉原 cost-collect / intervalMs — 不在 plate 契约内。
@@ -413,9 +414,6 @@ function removeService(sys: string, i: number) {
 }
 function addSetup() { setupList.value.push({ name: '', kind: '', payload: {} }) }
 function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: {} }) }
-function parseJson(s: string, fallback: unknown) {
-  try { return JSON.parse(s) } catch { return fallback }
-}
 </script>
 
 <style scoped>

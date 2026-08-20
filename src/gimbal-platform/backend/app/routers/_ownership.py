@@ -1,11 +1,12 @@
 """Shared composer ownership check.
 
-One canonical rule for the V3 composer routers (scenarios, cases,
-data-sets, runs):
+One canonical rule for the V3 composer routers (scenarios, data-sets,
+runs):
 
 * caller identity  = ``display_name or username`` (string match — the
-  composer tables store the display name, unlike V1 which uses int ids)
-* row ownership    = ``owner`` / ``created_by`` column
+  composer tables store the display name, unlike V1 which uses int ids);
+  ``owner_id`` (int user id) is the authoritative match where present
+* row ownership    = ``owner`` / ``owner_id`` columns
 * empty owner      = LOCKED (legacy / migrated / plate-synced rows);
   only an admin may touch it
 * admins bypass everything

@@ -41,7 +41,6 @@
 import type { Component } from 'vue'
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import {
   Collection,
   DataAnalysis,
@@ -166,16 +165,6 @@ async function onLogout() {
 .nav-entry.active:hover {
   background: #ede9fe;
   color: #1f2933;
-}
-
-.nav-entry.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.nav-entry.disabled:hover {
-  background: transparent;
-  color: #cbd5e1;
 }
 
 .topnav-right {

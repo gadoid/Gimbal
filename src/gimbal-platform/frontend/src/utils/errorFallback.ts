@@ -10,6 +10,8 @@
  */
 import { ElMessage } from 'element-plus'
 
+/** 常用操作标签(仅文档作用;``op`` 实际接受任意短标签,
+ *  传时**不带**"失败"后缀 —— 后缀由 showError 拼接)。 */
 export type OpKind =
   | '保存'
   | '加载'
@@ -24,6 +26,7 @@ export type OpKind =
   | '发布'
   | '收藏'
   | '操作'
+  | (string & {})
 
 export interface ErrorLike {
   message?: string
@@ -38,7 +41,7 @@ export interface ErrorLike {
 export function showError(
   op: OpKind,
   err?: unknown,
-  storeLastError: string = '',
+  storeLastError: string | null = '',
 ): void {
   const detail =
     (err as ErrorLike | null | undefined)?.msg ||

@@ -450,15 +450,6 @@ onMounted(async () => {
   font-size: 11px;
 }
 
-.mono {
-  font-family: var(--font-mono);
-}
-
-.muted {
-  color: var(--color-text-secondary);
-  font-size: 11px;
-}
-
 .tt-badge {
   display: inline-flex;
   align-items: center;

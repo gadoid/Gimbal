@@ -11,9 +11,10 @@ import asyncio
 import pytest
 from httpx import AsyncClient
 
+from .helpers import register_and_login as _register_and_login
+from .helpers import make_draft as _draft, test_env
 from .test_scenario_composer_plate_integration import (
     PlateMock,
-    _register_and_login,
     plate_mock,  # noqa: F401  pytest fixture re-export
 )
 
@@ -26,26 +27,6 @@ async def _member(
     return await _register_and_login(client, username, password)
 
 
-def _draft(scenario_id: str = "sc-test", *, steps: list | None = None, **meta_over) -> dict:
-    meta = {
-        "scenarioId": scenario_id,
-        "name": "Test",
-        "module": "order",
-        "priority": 1,
-        "system": ["fin"],
-    }
-    meta.update(meta_over)
-    return {
-        "definition": {
-            "kind": "scenario",
-            "scenarioId": scenario_id,
-            "meta": meta,
-            "config": {"timePolicy": {"kind": "record"}},
-            "resource": {},
-            "steps": steps if steps is not None else [],
-        },
-        "orchestration": {"steps": [], "resourceMeta": {}},
-    }
 
 
 async def _seed_ds(
@@ -210,7 +191,7 @@ async def test_run_step_to_out_of_range_409(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+            "env": test_env(),
             "stepTo": 5,
         },
     )
@@ -247,7 +228,7 @@ async def test_run_step_to_passes_halt_at(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+            "env": test_env(),
             "stepTo": 1,
         },
     )
@@ -298,7 +279,7 @@ async def test_run_inject_credentials_false_skips_auth_resolution(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+            "env": test_env(),
             "auths": ["qa1"],
             "injectCredentials": False,
         },

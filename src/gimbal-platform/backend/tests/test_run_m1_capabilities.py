@@ -12,38 +12,28 @@ import asyncio
 import pytest
 from httpx import AsyncClient
 
+from .helpers import (
+    gimbal_ok as _ok,
+    make_draft as _draft,
+    register_and_login as _register_and_login,
+    test_env,
+    wait_until as _wait,
+)
 from .test_scenario_composer_plate_integration import (
     PlateMock,
-    _register_and_login,
     plate_mock,  # noqa: F401  pytest fixture re-export
 )
-from .test_scenario_visibility_and_copy import (
-    _draft,
-    _member,
-    _seed_ds,
-)
+from .test_scenario_visibility_and_copy import _member, _seed_ds
 
 
 def _run_payload(**extra: object) -> dict:
     payload = {
         "scenarioId": "sc-test",
         "dataSetIds": ["ds-001"],
-        "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+        "env": test_env(),
     }
     payload.update(extra)
     return payload
-
-
-def _ok() -> dict:
-    return {"exitCode": 0, "total": 1, "passed": 1, "failed": 0,
-            "skipped": 0, "halted": 0, "details": []}
-
-
-async def _wait(predicate, timeout_s: float = 5.0) -> None:
-    for _ in range(int(timeout_s / 0.05)):
-        if predicate():
-            return
-        await asyncio.sleep(0.05)
 
 
 # ── nRuns / parallel fan-out ──────────────────────────────────────

@@ -29,17 +29,9 @@ _CAMEL = ConfigDict(populate_by_name=True, str_strip_whitespace=True)
 
 
 # ─── enums / small refs ─────────────────────────────────────────────
-AuthType = Literal["bearer", "cookie", "oauth2", "apikey"]
-StepKind = Literal["http", "rpc", "sql", "script", "wait", "extract"]
-HttpMethod = Literal["GET", "POST", "PUT", "DELETE", "PATCH"]
-Priority = Literal[0, 1, 2, 3]
-
-
-class RetryRef(BaseModel):
-    model_config = _CAMEL
-
-    max_attempts: int = Field(default=0, ge=0, alias="maxAttempts")
-    interval_ms: int = Field(default=500, ge=0, alias="intervalMs")
+# NOTE: 运行级 retry 已按设计决策移除(PLATFORM_REQUIREMENTS.md #13:
+# "N 次之间不做重试"——step 级重试由场景 Config.retry 承担,平台不叠加
+# 重试层)。
 
 
 # ─── scenario meta + steps ─────────────────────────────────────────
@@ -94,14 +86,6 @@ class ScenarioMeta(BaseModel):
             if not s:
                 raise ValueError("system tag must be non-empty")
             cleaned.append(s)
-        # Allow well-known tags + any custom string
-        allowed = {"fin", "logi", "wms", "mall", "common"}
-        for s in cleaned:
-            if s != "common" and s in {"fin", "logi", "wms", "mall"}:
-                continue
-            if s == "common":
-                continue
-            # accept any other (custom) system tag
         return cleaned
 
 
@@ -143,15 +127,6 @@ class ScenarioDraft(BaseModel):
 
 
 # ─── data-set ──────────────────────────────────────────────────────
-class DataSetRow(BaseModel):
-    """One row of a DataSet; keys are field names, values are scalars.
-
-    Stored as a plain dict on the wire (extra keys per row allowed).
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-
 class DataSet(BaseModel):
     model_config = _CAMEL
 
@@ -233,7 +208,7 @@ class RunEnv(BaseModel):
 
 
 class RunRequest(BaseModel):
-    """一次执行的配方(recipe):env/数据集/认证/重试等全是纯值。
+    """一次执行的配方(recipe):env/数据集/认证等全是纯值。
 
     Case 层已解散 — RunRequest 即配方本身,直接挂在 scenario 上。
     """
@@ -252,7 +227,6 @@ class RunRequest(BaseModel):
     # 解密后注入 composed scenario 的 Config.users,headers 里的
     # ``${auth.<alias>.<field>}`` 在 Gimbal 运行期解析。
     auths: list[str] = Field(alias="auths", default_factory=list)
-    retry: RetryRef | None = None
     # V1 高级能力移植:``stepTo`` 0-based 含端点(与 V1 executions 的
     # step_to 同语义),dispatcher 透传 gimbal HTTP ``halt_at``。
     step_to: int | None = Field(default=None, ge=0, alias="stepTo")
@@ -341,17 +315,12 @@ class Scenario(BaseModel):
 
 
 __all__ = [
-    "AuthType",
     "DataSet",
     "DataSetDraft",
-    "DataSetRow",
     "DataSetSummary",
-    "HttpMethod",
     "Orchestration",
     "PreviewPlateError",
     "PreviewPlateResponse",
-    "Priority",
-    "RetryRef",
     "RunEnv",
     "RunRequest",
     "RunResponse",
@@ -359,6 +328,5 @@ __all__ = [
     "ScenarioDraft",
     "ScenarioMeta",
     "StarIn",
-    "StepKind",
     "StepOrchestration",
 ]

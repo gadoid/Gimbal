@@ -5,31 +5,27 @@
  * from .vue SFCs).
  */
 
-/** Minimal row shape the filter layer understands (was CaseSummary
- * from the retired api/cases.ts; inlined here in P4). */
-export interface CaseSummary {
+/** Minimal row shape the filter layer understands (was ScenarioFilterRow
+ * from the retired api/cases.ts; inlined here in P4)。Cases 时代的
+ * visibility / audited / owner_id 随 CasesMine/CasesPublic 退役移除。 */
+export interface ScenarioFilterRow {
   module?: string
   tags?: string[]
   author?: string
-  owner_id?: number
   priority?: number
   updated_at?: string
-  visibility?: 'public' | 'private'
-  audited?: boolean
 }
 
-export interface CaseFilters {
+export interface ScenarioFilters {
   modules: string[]
   tags: string[]
   authors: string[]
   priorities: number[]
   systems: string[]
   updatedWithin: 'all' | '24h' | '7d' | '30d'
-  visibility: 'all' | 'public' | 'private'
-  audited: 'all' | 'audited' | 'pending'
 }
 
-export function emptyFilters(): CaseFilters {
+export function emptyFilters(): ScenarioFilters {
   return {
     modules: [],
     tags: [],
@@ -37,31 +33,26 @@ export function emptyFilters(): CaseFilters {
     priorities: [],
     systems: [],
     updatedWithin: 'all',
-    visibility: 'all',
-    audited: 'all',
   }
 }
 
-/** A row the filter layer understands.
- *
- * ``Partial<CaseSummary>`` covers the legacy case lists; the optional
- * ``system`` array extends it for the scenario library (Scenarios.vue
- * flattens ``meta.system`` into it).  Legacy pools simply omit the
- * field, and a system filter then matches nothing — which is why the
- * system UI is gated on ``availableSystems.length > 0``.
- */
-export type FilterRow = Partial<CaseSummary> & { system?: string[] }
+/** A row the filter layer understands: ``Partial<ScenarioFilterRow>``
+ * plus the optional ``system`` array (Scenarios.vue flattens
+ * ``meta.system`` into it).  Rows that omit the field match no system
+ * filter — which is why the system UI is gated on
+ * ``availableSystems.length > 0``. */
+export type FilterRow = Partial<ScenarioFilterRow> & { system?: string[] }
 
 /** Pure filter — exported for parents and tests.
  *
  * Defensive against partially-shaped rows: the V3 scenario-composer
- * ``Case`` (used by the Cases.vue overview pool) lacks the legacy
- * ``tags`` / ``module`` / ``updated_at`` fields, so every field access
- * below must tolerate ``undefined`` instead of throwing mid-filter.
+ * rows flattened by Scenarios.vue may lack ``tags`` / ``module`` /
+ * ``updated_at`` fields, so every field access below must tolerate
+ * ``undefined`` instead of throwing mid-filter.
  */
 export function applyFiltersToList(
   pool: readonly FilterRow[],
-  f: CaseFilters,
+  f: ScenarioFilters,
 ): FilterRow[] {
   const now = Date.now()
   const cutoff = (() => {
@@ -85,11 +76,7 @@ export function applyFiltersToList(
       return false
     }
     if (f.tags.length && !(c.tags ?? []).some((t) => f.tags.includes(t))) return false
-    if (f.authors.length) {
-      const authorName =
-        c.author || (c.owner_id ? `用户 #${c.owner_id}` : '')
-      if (!f.authors.includes(authorName)) return false
-    }
+    if (f.authors.length && !f.authors.includes(c.author || '')) return false
     if (
       f.priorities.length &&
       (!c.priority || !f.priorities.includes(c.priority))
@@ -99,11 +86,6 @@ export function applyFiltersToList(
     if (f.updatedWithin !== 'all') {
       const ts = c.updated_at ? Date.parse(c.updated_at) : NaN
       if (!Number.isNaN(ts) && ts < cutoff) return false
-    }
-    if (f.visibility !== 'all' && c.visibility !== f.visibility) return false
-    if (f.audited !== 'all') {
-      if (f.audited === 'audited' && !c.audited) return false
-      if (f.audited === 'pending' && c.audited) return false
     }
     return true
   })

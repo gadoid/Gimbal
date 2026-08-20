@@ -116,7 +116,7 @@
 
       <el-table-column label="最后编辑" width="110">
         <template #default="{ row }">
-          <span class="muted small">{{ formatTime(row.meta?.updateTime || row.scenario?.updateTime) }}</span>
+          <span class="muted">{{ formatTime(row.meta?.updateTime) }}</span>
         </template>
       </el-table-column>
 
@@ -140,7 +140,7 @@
 
       <el-table-column label="操作" width="80" align="center" fixed="right">
         <template #default="{ row }">
-          <el-dropdown trigger="click" @command="(c) => onCmd(c, row)">
+          <el-dropdown trigger="click" @command="(c: string) => onCmd(c, row)">
             <button class="more-btn" @click.stop>⋯</button>
             <template #dropdown>
               <el-dropdown-menu>
@@ -186,7 +186,7 @@
       :total="total"
       layout="prev, pager, next, total"
       background
-      @current-change="(p) => (page = p)"
+      @current-change="(p: number) => (page = p)"
     />
   </section>
 </template>
@@ -198,17 +198,19 @@ import { ElMessage } from 'element-plus'
 import { Collection, Search, Star, StarFilled } from '@element-plus/icons-vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useAuthStore } from '@/stores/auth'
-import { useScenarioDraftStore } from '@/stores/scenario-draft'
-import { previewPlateDraft, getScenarioDraft } from '@/api/scenario-composer'
+import { getScenarioDraft } from '@/api/scenario-composer'
+import { convertDraftToExecutable } from '@/stores/scenario-draft'
+import { downloadFile } from '@/utils/download'
 import { useListSearch } from '@/utils/useListSearch'
 import { confirmAction } from '@/utils/confirmAction'
 import { composerUrl, scenarioDataSetsUrl, scenarioDetailUrl } from '@/utils/links'
 import { showError } from '@/utils/errorFallback'
+import { shortDateTime, exportTimestamp } from '@/utils/datetime'
 import FilterPopover from '@/components/FilterPopover.vue'
 import TagPill from '@/components/TagPill.vue'
 import SystemChip from '@/components/SystemChip.vue'
 import PriorityPill from '@/components/PriorityPill.vue'
-import { applyFiltersToList, emptyFilters, type CaseFilters } from '@/utils/filters'
+import { applyFiltersToList, emptyFilters, type ScenarioFilters } from '@/utils/filters'
 import type { Scenario } from '@/types/scenario-composer'
 
 const store = useScenarioComposerStore()
@@ -218,7 +220,7 @@ const MAX = 3
 const pageSize = 20
 
 const q = ref('')
-const filters = ref<CaseFilters>(emptyFilters())
+const filters = ref<ScenarioFilters>(emptyFilters())
 const page = ref(1)
 const activeTab = ref<'mine' | 'public' | 'favorite'>('mine')
 
@@ -251,14 +253,16 @@ const filterableRows = computed(() =>
     priority: s.meta.priority,
     updated_at: s.meta.updateTime,
     system: s.meta.system,
-    tags: s.tags ?? s.meta.tags,
+    tags: s.meta.tags, // 真源 meta.tags(顶层 tags 是恒等镜像)
   })),
 )
 
 // P1 读侧收紧后:服务端只返回 public + 自己的;tab 在此基础上分桶。
 // 'mine' = 私有(自己的),'public' = 公共,'favorite' = 星标。
 const visible = computed(() => {
-  const rows = applyFiltersToList(filterableRows.value, filters.value)
+  // filter 层的 FilterRow 是最小形状;实际行是 Scenario 摊平超集
+  // (starred/visibility 供 tab 分桶),收回窄类型。
+  const rows = applyFiltersToList(filterableRows.value, filters.value) as typeof filterableRows.value
   if (activeTab.value === 'favorite') return rows.filter((r) => r.starred)
   if (activeTab.value === 'public') return rows.filter((r) => r.visibility === 'public')
   return rows.filter((r) => r.visibility !== 'public')
@@ -306,12 +310,7 @@ onMounted(async () => {
 
 function rowKey(row: Scenario) { return row.meta.scenarioId }
 
-function formatTime(t?: string | Date) {
-  if (!t) return '—'
-  const d = typeof t === 'string' ? new Date(t) : t
-  if (isNaN(d.getTime())) return '—'
-  return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-}
+const formatTime = shortDateTime
 
 function openScenario(row: Scenario) {
   // 跳转到新的统一 CaseComposer 页面 (从 ① 基本信息 开始)
@@ -329,39 +328,16 @@ function onCreate() {
  *
  * 这里直接走 plate preview-plate + 自己下载,store 状态完全不变。
  */
-const exportingRowId = ref<string | null>(null)
 async function exportRow(row: Scenario) {
-  exportingRowId.value = row.meta.scenarioId
   try {
     const draft = await getScenarioDraft(row.meta.scenarioId)
-    const res = await previewPlateDraft(draft)
-    if (!res.ok) {
-      const errMsg = res.errors?.length
-        ? res.errors.map(e => `${e.path}: ${e.message}`).join('; ')
-        : 'plate 拒绝该草稿'
-      ElMessage.error(`导出失败: ${errMsg}`)
-      return
-    }
-    if (!res.converted) {
-      ElMessage.error('plate 未返回转换结果')
-      return
-    }
-    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const converted = await convertDraftToExecutable(draft)
+    const ts = exportTimestamp()
     const filename = `${row.meta.scenarioId}-${ts}.json`
-    const blob = new Blob([JSON.stringify(res.converted, null, 2)], { type: 'application/json;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    downloadFile(filename, JSON.stringify(converted, null, 2), 'application/json')
     ElMessage.success(`已导出 ${filename}`)
   } catch (e) {
     ElMessage.error(`导出失败: ${(e as Error).message}`)
-  } finally {
-    exportingRowId.value = null
   }
 }
 
@@ -561,7 +537,6 @@ async function onCmd(cmd: string, row: Scenario) {
   color: var(--color-text-primary);
 }
 
-.muted { color: var(--color-text-secondary); font-size: 11px; }
 .more-btn {
   padding: 3px 9px;
   font-size: 14px;

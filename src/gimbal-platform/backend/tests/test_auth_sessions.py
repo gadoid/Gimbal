@@ -6,41 +6,24 @@ Covers:
 - alias uniqueness per owner (owner_id+alias UNIQUE constraint)
 - cross-owner isolation: alice can't see/edit bob's auths
 - /test endpoint: success + 4xx + network failure
-- /fetch-token: decrypts credentials, no auth leakage
 """
 from __future__ import annotations
 
-import pytest
 from httpx import AsyncClient
+
+from .helpers import register_and_login
 
 
 # ── lifecycle ────────────────────────────────────────────────────
 async def test_list_initially_empty(client: AsyncClient) -> None:
-    await client.post(
-        "/api/auth/register",
-        json={"username": "alice", "password": "alicepass123"},
-    )
-    login = await client.post(
-        "/api/auth/login",
-        json={"username": "alice", "password": "alicepass123"},
-    )
-    token = login.json()["access_token"]
-    auth = {"Authorization": f"Bearer {token}"}
-
+    auth = await register_and_login(client)
     r = await client.get("/api/auths", headers=auth)
     assert r.status_code == 200
     assert r.json() == []
 
 
 async def test_create_then_list_returns_one(client: AsyncClient) -> None:
-    await client.post(
-        "/api/auth/register", json={"username": "alice", "password": "alicepass123"}
-    )
-    login = await client.post(
-        "/api/auth/login", json={"username": "alice", "password": "alicepass123"}
-    )
-    token = login.json()["access_token"]
-    auth = {"Authorization": f"Bearer {token}"}
+    auth = await register_and_login(client)
 
     r = await client.post(
         "/api/auths",
@@ -70,14 +53,7 @@ async def test_create_then_list_returns_one(client: AsyncClient) -> None:
 
 async def test_password_is_encrypted_at_rest(client: AsyncClient) -> None:
     """Direct DB introspection — the password column must NOT contain the plaintext."""
-    await client.post(
-        "/api/auth/register", json={"username": "alice", "password": "alicepass123"}
-    )
-    login = await client.post(
-        "/api/auth/login", json={"username": "alice", "password": "alicepass123"}
-    )
-    token = login.json()["access_token"]
-    auth = {"Authorization": f"Bearer {token}"}
+    auth = await register_and_login(client)
 
     await client.post(
         "/api/auths",
@@ -108,14 +84,7 @@ async def test_password_is_encrypted_at_rest(client: AsyncClient) -> None:
 
 # ── alias uniqueness ─────────────────────────────────────────────
 async def test_alias_must_be_unique_per_owner(client: AsyncClient) -> None:
-    await client.post(
-        "/api/auth/register", json={"username": "alice", "password": "alicepass123"}
-    )
-    login = await client.post(
-        "/api/auth/login", json={"username": "alice", "password": "alicepass123"}
-    )
-    token = login.json()["access_token"]
-    auth = {"Authorization": f"Bearer {token}"}
+    auth = await register_and_login(client)
 
     payload = {
         "alias": "qa1",
@@ -133,13 +102,7 @@ async def test_alias_must_be_unique_per_owner(client: AsyncClient) -> None:
 async def test_same_alias_different_owners_is_ok(client: AsyncClient) -> None:
     """The UNIQUE constraint is (owner_id, alias), so two users can share aliases."""
     # alice
-    await client.post(
-        "/api/auth/register", json={"username": "alice", "password": "alicepass123"}
-    )
-    alice_login = await client.post(
-        "/api/auth/login", json={"username": "alice", "password": "alicepass123"}
-    )
-    a_auth = {"Authorization": f"Bearer {alice_login.json()['access_token']}"}
+    a_auth = await register_and_login(client)
 
     # bob (registered by alice as admin — Spec-1 self-register is admin; we
     # need bob to NOT be admin to verify cross-owner isolation doesn't leak
@@ -147,13 +110,7 @@ async def test_same_alias_different_owners_is_ok(client: AsyncClient) -> None:
     # default to non-admin. But in Spec-1 register, EVERY user is admin
     # (intentional — Spec-2 admin/role split is deferred). So bob is also
     # admin but is a *different user* with a *different user_id*.
-    await client.post(
-        "/api/auth/register", json={"username": "bob", "password": "bobpass456"}
-    )
-    bob_login = await client.post(
-        "/api/auth/login", json={"username": "bob", "password": "bobpass456"}
-    )
-    b_auth = {"Authorization": f"Bearer {bob_login.json()['access_token']}"}
+    b_auth = await register_and_login(client, "bob", "bobpass456")
 
     # Both create alias="qa1" — both must succeed (different owner_id).
     for headers in (a_auth, b_auth):
@@ -178,13 +135,7 @@ async def test_same_alias_different_owners_is_ok(client: AsyncClient) -> None:
 
 # ── cross-owner isolation ─────────────────────────────────────────
 async def test_cannot_get_other_owners_auth(client: AsyncClient) -> None:
-    await client.post(
-        "/api/auth/register", json={"username": "alice", "password": "alicepass123"}
-    )
-    a_login = await client.post(
-        "/api/auth/login", json={"username": "alice", "password": "alicepass123"}
-    )
-    a_auth = {"Authorization": f"Bearer {a_login.json()['access_token']}"}
+    a_auth = await register_and_login(client)
 
     r = await client.post(
         "/api/auths",
@@ -194,13 +145,7 @@ async def test_cannot_get_other_owners_auth(client: AsyncClient) -> None:
     alice_id = r.json()["id"]
 
     # Bob registers and tries to GET / PATCH / DELETE alice's auth.
-    await client.post(
-        "/api/auth/register", json={"username": "bob", "password": "bobpass456"}
-    )
-    b_login = await client.post(
-        "/api/auth/login", json={"username": "bob", "password": "bobpass456"}
-    )
-    b_auth = {"Authorization": f"Bearer {b_login.json()['access_token']}"}
+    b_auth = await register_and_login(client, "bob", "bobpass456")
 
     r = await client.get(f"/api/auths/{alice_id}", headers=b_auth)
     assert r.status_code == 404, r.text
@@ -214,13 +159,7 @@ async def test_cannot_get_other_owners_auth(client: AsyncClient) -> None:
 
 # ── patch ────────────────────────────────────────────────────────
 async def test_patch_updates_individual_fields(client: AsyncClient) -> None:
-    await client.post(
-        "/api/auth/register", json={"username": "alice", "password": "alicepass123"}
-    )
-    login = await client.post(
-        "/api/auth/login", json={"username": "alice", "password": "alicepass123"}
-    )
-    auth = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    auth = await register_and_login(client)
 
     r = await client.post(
         "/api/auths",
@@ -236,26 +175,16 @@ async def test_patch_updates_individual_fields(client: AsyncClient) -> None:
     assert body["url"] == "https://new"
     assert body["alias"] == "qa1"  # unchanged
 
-    # Update password — must be re-encrypted (verified by next GET)
+    # Update password — must be re-encrypted
     r = await client.patch(
         f"/api/auths/{aid}", headers=auth, json={"password": "new-pw-999"}
     )
     assert r.status_code == 200
-    # /fetch-token decrypts with new password
-    r = await client.post(f"/api/auths/{aid}/fetch-token", headers=auth)
-    assert r.status_code == 200
-    assert r.json()["password"] == "new-pw-999"
 
 
 # ── delete ───────────────────────────────────────────────────────
 async def test_delete_returns_204(client: AsyncClient) -> None:
-    await client.post(
-        "/api/auth/register", json={"username": "alice", "password": "alicepass123"}
-    )
-    login = await client.post(
-        "/api/auth/login", json={"username": "alice", "password": "alicepass123"}
-    )
-    auth = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    auth = await register_and_login(client)
     r = await client.post(
         "/api/auths",
         headers=auth,
@@ -293,13 +222,7 @@ async def test_test_endpoint_returns_token_preview(
 
     monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
 
-    await client.post(
-        "/api/auth/register", json={"username": "alice", "password": "alicepass123"}
-    )
-    login = await client.post(
-        "/api/auth/login", json={"username": "alice", "password": "alicepass123"}
-    )
-    auth = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    auth = await register_and_login(client)
     r = await client.post(
         "/api/auths",
         headers=auth,
@@ -338,13 +261,7 @@ async def test_test_endpoint_4xx_returns_failure(
 
     monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
 
-    await client.post(
-        "/api/auth/register", json={"username": "alice", "password": "alicepass123"}
-    )
-    login = await client.post(
-        "/api/auth/login", json={"username": "alice", "password": "alicepass123"}
-    )
-    auth = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    auth = await register_and_login(client)
     r = await client.post(
         "/api/auths",
         headers=auth,
@@ -357,41 +274,6 @@ async def test_test_endpoint_4xx_returns_failure(
     body = r.json()
     assert body["ok"] is False
     assert body["status_code"] == 401
-
-
-# ── /fetch-token ───────────────────────────────────────────────
-async def test_fetch_token_decrypts_credentials(client: AsyncClient) -> None:
-    await client.post(
-        "/api/auth/register", json={"username": "alice", "password": "alicepass123"}
-    )
-    login = await client.post(
-        "/api/auth/login", json={"username": "alice", "password": "alicepass123"}
-    )
-    auth = {"Authorization": f"Bearer {login.json()['access_token']}"}
-
-    r = await client.post(
-        "/api/auths",
-        headers=auth,
-        json={
-            "alias": "qa1",
-            "url": "https://x",
-            "username": "alice_user",
-            "password": "s3cret-pw",
-            "token_type": "Authorization",
-            "expires_in": 1800,
-        },
-    )
-    aid = r.json()["id"]
-
-    r = await client.post(f"/api/auths/{aid}/fetch-token", headers=auth)
-    assert r.status_code == 200
-    body = r.json()
-    assert body["alias"] == "qa1"
-    assert body["username"] == "alice_user"
-    assert body["password"] == "s3cret-pw"
-    assert body["token_type"] == "Authorization"
-    assert body["token"] == ""  # executor fills this
-    assert body["expires_at"] is not None
 
 
 # ── unauthenticated ─────────────────────────────────────────────

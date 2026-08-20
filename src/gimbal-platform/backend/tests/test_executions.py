@@ -1,75 +1,53 @@
-"""Read-side tests for the executions API (P4 scope).
+"""Read-side tests for the executions API (V3 scope).
 
-P4 retired the V1 subprocess creation chain (POST /api/executions +
-/…/rerun — creation now lives at POST /api/runs via run_dispatcher).
-These tests cover the shared read surface that survives: list/detail
-isolation, run deletion counter consistency, execution deletion, the
-log endpoint, SSE log-stream replay, and the auto-migration of new
-exec_runs columns.  Rows are inserted directly via SQLAlchemy — no
-subprocess, no loader.
+V3 retired the V1 subprocess chain AND the per-run exec_runs cluster
+(detail runs / report / log / SSE / run deletion).  Creation lives at
+POST /api/runs via run_dispatcher; observability is the Execution
+counters + ``data/runs/<date>.jsonl`` dispatch logs (file-based, not
+API).  These tests cover the surviving read surface: list/detail
+isolation, execution deletion, retired endpoints, and the dev-version
+``exec_runs`` table drop migration.  Rows are inserted directly via
+SQLAlchemy — no subprocess, no loader.
 """
 from __future__ import annotations
-
-import asyncio
-from pathlib import Path
 
 from httpx import AsyncClient
 from sqlalchemy import select
 
+from .helpers import register_and_login
+
 
 async def _login_alice(client: AsyncClient) -> dict:
-    await client.post(
-        "/api/auth/register",
-        json={"username": "alice", "password": "alicepass123"},
-    )
-    r = await client.post(
-        "/api/auth/login",
-        json={"username": "alice", "password": "alicepass123"},
-    )
-    return {"Authorization": f"Bearer {r.json()['access_token']}"}
-
-
-async def _alice_id() -> int:
-    from app.core.db import SessionLocal
-    from app.models import User
-
-    async with SessionLocal() as s:
-        alice = (
-            await s.execute(select(User).where(User.username == "alice"))
-        ).scalar_one()
-        return alice.id
+    return await register_and_login(client)
 
 
 async def _insert_execution(
     *,
     scenario_id: str = "sc_e2e",
-    runs: list[dict] | None = None,
-    total_runs: int | None = None,
+    total_runs: int = 1,
     passed: int = 0,
     failed: int = 0,
     status: str = "done",
 ) -> int:
-    """Insert an Execution (+ optional ExecRun rows) for alice."""
+    """Insert an Execution for alice."""
     from app.core.db import SessionLocal
-    from app.models import ExecRun, Execution
+    from app.models import Execution, User
 
-    runs = runs if runs is not None else [{"idx": 1, "status": "pending"}]
-    owner_id = await _alice_id()
     async with SessionLocal() as s:
+        alice = (
+            await s.execute(select(User).where(User.username == "alice"))
+        ).scalar_one()
         ex = Execution(
             scenario_id=scenario_id,
-            owner_id=owner_id,
+            owner_id=alice.id,
             status=status,
-            total_runs=total_runs if total_runs is not None else len(runs),
+            total_runs=total_runs,
             passed=passed,
             failed=failed,
         )
         s.add(ex)
         await s.commit()
         await s.refresh(ex)
-        for r in runs:
-            s.add(ExecRun(execution_id=ex.id, **r))
-        await s.commit()
         return ex.id
 
 
@@ -98,6 +76,12 @@ async def test_list_executions_only_returns_owners(client: AsyncClient) -> None:
     r = await client.get(f"/api/executions/{eid}", headers=b_auth)
     assert r.status_code == 404
 
+    # Detail is the same shape as the list item (no more runs/report/log).
+    d = await client.get(f"/api/executions/{eid}", headers=a_auth)
+    assert d.status_code == 200
+    assert d.json()["scenario_id"] == "sc_a"
+    assert "runs" not in d.json()
+
 
 async def test_unknown_execution_404(client: AsyncClient) -> None:
     auth = await _login_alice(client)
@@ -108,219 +92,11 @@ async def test_unknown_execution_404(client: AsyncClient) -> None:
 # ── delete execution ───────────────────────────────────────────
 async def test_delete_execution_removes_rows(client: AsyncClient) -> None:
     auth = await _login_alice(client)
-    eid = await _insert_execution(
-        runs=[{"idx": 1, "status": "passed", "exit_code": 0}]
-    )
+    eid = await _insert_execution(total_runs=1, passed=1)
     d = await client.delete(f"/api/executions/{eid}", headers=auth)
     assert d.status_code == 204
     g = await client.get(f"/api/executions/{eid}", headers=auth)
     assert g.status_code == 404
-
-
-# ── delete run counter consistency ─────────────────────────────
-async def test_delete_completed_run_decrements_passed_counter(
-    client: AsyncClient,
-) -> None:
-    auth = await _login_alice(client)
-    eid = await _insert_execution(
-        runs=[{"idx": 1, "status": "passed", "exit_code": 0}],
-        passed=1,
-    )
-    from app.core.db import SessionLocal
-    from app.models import ExecRun
-
-    async with SessionLocal() as s:
-        run = (
-            await s.execute(select(ExecRun).where(ExecRun.execution_id == eid))
-        ).scalars().first()
-        run_id = run.id
-
-    r = await client.delete(f"/api/executions/{eid}/runs/{run_id}", headers=auth)
-    assert r.status_code == 204
-
-    from app.models import Execution
-
-    async with SessionLocal() as s:
-        ex = await s.get(Execution, eid)
-        assert ex.passed == 0
-        assert ex.total_runs == 0
-
-
-async def test_delete_pending_run_only_decrements_total_runs(
-    client: AsyncClient,
-) -> None:
-    auth = await _login_alice(client)
-    eid = await _insert_execution(runs=[{"idx": 1, "status": "pending"}])
-    from app.core.db import SessionLocal
-    from app.models import ExecRun
-
-    async with SessionLocal() as s:
-        run = (
-            await s.execute(select(ExecRun).where(ExecRun.execution_id == eid))
-        ).scalars().first()
-        run_id = run.id
-
-    r = await client.delete(f"/api/executions/{eid}/runs/{run_id}", headers=auth)
-    assert r.status_code == 204
-
-    from app.models import Execution
-
-    async with SessionLocal() as s:
-        ex = await s.get(Execution, eid)
-        assert ex.passed == 0
-        assert ex.failed == 0
-        assert ex.total_runs == 0
-
-
-# ── run log endpoint ───────────────────────────────────────────
-async def test_run_log_endpoint_returns_file_text(
-    client: AsyncClient, tmp_path: Path
-) -> None:
-    auth = await _login_alice(client)
-    eid = await _insert_execution()
-
-    fake_log = tmp_path / "run_X.log"
-    fake_log.write_text(
-        "# gimbal run log\n"
-        "# command:\ngimbal run launch tmp.yaml --env dev --report-dir reports\n"
-        "# exit_code: 0\n\n"
-        "===== STDOUT =====\nhello stdout\n"
-        "===== STDERR =====\nhello stderr\n\n",
-        encoding="utf-8",
-    )
-    from app.core.db import SessionLocal
-    from app.models import ExecRun
-
-    async with SessionLocal() as s:
-        run = (
-            await s.execute(select(ExecRun).where(ExecRun.execution_id == eid))
-        ).scalars().first()
-        run.log_path = str(fake_log)
-        run.command_line = "gimbal run launch tmp.yaml --env dev --report-dir reports"
-        await s.commit()
-        rid = run.id
-
-    r = await client.get(f"/api/executions/{eid}/runs/{rid}/log", headers=auth)
-    assert r.status_code == 200
-    assert "text/plain" in r.headers["content-type"]
-    assert "gimbal run launch" in r.text
-    assert "hello stdout" in r.text
-    assert "hello stderr" in r.text
-
-    # log_path / command_line flow through the detail endpoint
-    d = await client.get(f"/api/executions/{eid}", headers=auth)
-    items = d.json()["runs"]
-    assert items[0]["log_path"].endswith("run_X.log")
-    assert "gimbal run launch" in items[0]["command_line"]
-
-
-async def test_run_log_endpoint_returns_404_for_unknown_run(
-    client: AsyncClient,
-) -> None:
-    auth = await _login_alice(client)
-    r = await client.get("/api/executions/999999/runs/999999/log", headers=auth)
-    assert r.status_code == 404
-
-
-# ── SSE log stream ─────────────────────────────────────────────
-async def test_run_log_stream_replays_history_for_late_subscriber(
-    client: AsyncClient,
-) -> None:
-    from app.services.log_hub import hub
-
-    auth = await _login_alice(client)
-    eid = 999_001
-    rid = 888_001
-    from app.core.db import SessionLocal
-    from app.models import ExecRun, Execution
-
-    async with SessionLocal() as s:
-        s.add(Execution(
-            id=eid, scenario_id="stream-test", owner_id=await _alice_id(),
-            status="done", total_runs=1, passed=1, failed=0,
-        ))
-        s.add(ExecRun(id=rid, execution_id=eid, idx=1, status="passed", exit_code=0))
-        await s.commit()
-
-    channel = hub.get_or_create(eid, rid)
-    loop = asyncio.get_running_loop()
-    channel.publish_from_thread("stdout", "first-line\n", loop)
-    channel.publish_from_thread("stderr", "warning-line\n", loop)
-    channel.mark_done_from_thread(exit_code=0, loop=loop)
-
-    try:
-        async with client.stream(
-            "GET", f"/api/executions/{eid}/runs/{rid}/log/stream", headers=auth
-        ) as resp:
-            assert resp.status_code == 200
-            assert resp.headers["content-type"].startswith("text/event-stream")
-            collected: list[str] = []
-            async for chunk in resp.aiter_text():
-                collected.append(chunk)
-                if "event: end" in "".join(collected):
-                    break
-        body = "".join(collected)
-        assert "first-line" in body
-        assert "event: stdout" in body
-        assert "event: end" in body
-        assert '"exit_code": 0' in body
-    finally:
-        async with SessionLocal() as s:
-            await s.execute(ExecRun.__table__.delete().where(ExecRun.id == rid))
-            await s.execute(Execution.__table__.delete().where(Execution.id == eid))
-            await s.commit()
-        hub.drop(eid, rid)
-
-
-async def test_run_log_stream_skips_lines_before_last_event_id(
-    client: AsyncClient,
-) -> None:
-    from app.services.log_hub import hub
-
-    auth = await _login_alice(client)
-    eid = 999_002
-    rid = 888_002
-    from app.core.db import SessionLocal
-    from app.models import ExecRun, Execution
-
-    async with SessionLocal() as s:
-        s.add(Execution(
-            id=eid, scenario_id="resume-test", owner_id=await _alice_id(),
-            status="done", total_runs=1, passed=1, failed=0,
-        ))
-        s.add(ExecRun(id=rid, execution_id=eid, idx=1, status="passed", exit_code=0))
-        await s.commit()
-
-    channel = hub.get_or_create(eid, rid)
-    loop = asyncio.get_running_loop()
-    for i in range(1, 6):
-        channel.publish_from_thread("stdout", f"line-{i}\n", loop)
-    channel.mark_done_from_thread(exit_code=0, loop=loop)
-
-    try:
-        async with client.stream(
-            "GET",
-            f"/api/executions/{eid}/runs/{rid}/log/stream",
-            headers={**auth, "Last-Event-ID": "3"},
-        ) as resp:
-            assert resp.status_code == 200
-            chunks: list[str] = []
-            async for chunk in resp.aiter_text():
-                chunks.append(chunk)
-                if "event: end" in "".join(chunks):
-                    break
-        body = "".join(chunks)
-        for gone in ("line-1", "line-2", "line-3"):
-            assert gone not in body
-        assert "line-4" in body
-        assert "line-5" in body
-        assert "event: end" in body
-    finally:
-        async with SessionLocal() as s:
-            await s.execute(ExecRun.__table__.delete().where(ExecRun.id == rid))
-            await s.execute(Execution.__table__.delete().where(Execution.id == eid))
-            await s.commit()
-        hub.drop(eid, rid)
 
 
 # ── V1 creation endpoints retired (P4) ─────────────────────────
@@ -338,8 +114,21 @@ async def test_post_execution_and_rerun_are_gone(client: AsyncClient) -> None:
     assert r.status_code in (404, 405)
 
 
-# ── auto-migration of new columns ─────────────────────────────
-async def test_auto_migrate_adds_missing_exec_runs_columns(tmp_path) -> None:
+# ── V1 per-run cluster retired (exec_runs drop migration) ──────
+async def test_v1_run_endpoints_are_gone(client: AsyncClient) -> None:
+    auth = await _login_alice(client)
+    eid = await _insert_execution()
+    r = await client.get(f"/api/executions/{eid}/runs/1/log", headers=auth)
+    assert r.status_code == 404
+    r = await client.get(f"/api/executions/{eid}/runs/1/log/stream", headers=auth)
+    assert r.status_code == 404
+    r = await client.delete(f"/api/executions/{eid}/runs/1", headers=auth)
+    assert r.status_code in (404, 405)  # only /api/executions/{id} DELETE exists
+
+
+async def test_init_db_drops_legacy_exec_runs_table(tmp_path) -> None:
+    """A dev DB that still carries the V1 exec_runs table must have it
+    dropped by init_db (dev-version data purge, idempotent)."""
     import sqlite3
 
     from app.core import db as db_module
@@ -378,6 +167,8 @@ async def test_auto_migrate_adds_missing_exec_runs_columns(tmp_path) -> None:
             status VARCHAR(16),
             exit_code INTEGER,
             report_path TEXT,
+            log_path TEXT,
+            command_line TEXT,
             started_at TIMESTAMP,
             finished_at TIMESTAMP,
             duration_ms INTEGER
@@ -395,13 +186,20 @@ async def test_auto_migrate_adds_missing_exec_runs_columns(tmp_path) -> None:
     db_module.SessionLocal = async_sessionmaker(test_engine, expire_on_commit=False)
     try:
         await db_module.init_db()
+        # Idempotency: a second run must not fail on the missing table.
+        await db_module.init_db()
     finally:
         await test_engine.dispose()
         db_module.engine = orig_engine
         db_module.SessionLocal = orig_session
 
     chk = sqlite3.connect(db_file)
-    cols = {r[1] for r in chk.execute("PRAGMA table_info(exec_runs)").fetchall()}
+    tables = {
+        r[0]
+        for r in chk.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
     chk.close()
-    assert "log_path" in cols
-    assert "command_line" in cols
+    assert "exec_runs" not in tables
+    assert "executions" in tables

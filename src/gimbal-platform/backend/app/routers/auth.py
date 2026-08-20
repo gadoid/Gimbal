@@ -25,6 +25,8 @@ from ..schemas.auth import (
     TokenOut,
     UserPublic,
 )
+from ._codes import BAD_CREDENTIALS, ACCOUNT_DISABLED, NAME_TAKEN_ON_REGISTER, code_detail
+from ._name_checks import assert_name_available
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -58,44 +60,13 @@ async def register(
     # Normalize display_name the same way patch_user does: it doubles as
     # composer-ownership identity, so " Bob " / "Bob" must not coexist.
     payload.display_name = (payload.display_name or "").strip()
-    existing = (
-        await db.execute(select(User).where(User.username == payload.username))
-    ).scalar_one_or_none()
-    if existing is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": 4003, "msg": "用户名已被占用"},
-        )
-    # display_name uniqueness — it doubles as composer-ownership identity
-    # (see users.create_user). Registered names must not collide either.
-    if payload.display_name:
-        clash = (
-            await db.execute(
-                select(User).where(
-                    (User.display_name == payload.display_name)
-                    | (User.username == payload.display_name)
-                )
-            )
-        ).scalar_one_or_none()
-        if clash is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={"code": 4003, "msg": "显示名已被占用（作为资源归属标识必须唯一）"},
-            )
-    # Conversely, the new USERNAME must not collide with an existing
-    # display_name: ownership checks match ``display_name or username``
-    # against the stored owner string, so a username equal to someone's
-    # display_name would grant ownership of their resources.
-    name_clash = (
-        await db.execute(
-            select(User).where(User.display_name == payload.username)
-        )
-    ).scalar_one_or_none()
-    if name_clash is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": 4003, "msg": "用户名与已有显示名冲突（作为资源归属标识必须唯一）"},
-        )
+    # 用户名/display_name 查重 + 双向冲突检查(见 _name_checks)。
+    await assert_name_available(
+        db,
+        username=payload.username,
+        display_name=payload.display_name or None,
+        code=NAME_TAKEN_ON_REGISTER,
+    )
     # First registered user becomes admin.
     count = (await db.execute(select(func.count()).select_from(User))).scalar_one()
     is_admin = count == 0
@@ -124,12 +95,12 @@ async def login(
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": 4004, "msg": "用户名或密码错误"},
+            detail=code_detail(BAD_CREDENTIALS, "用户名或密码错误"),
         )
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": 4005, "msg": "账号已停用"},
+            detail=code_detail(ACCOUNT_DISABLED, "账号已停用"),
         )
     return _token_out(user)
 

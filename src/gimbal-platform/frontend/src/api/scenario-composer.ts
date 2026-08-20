@@ -6,6 +6,7 @@
  * Case 层已解散 — RunRequest 即执行配方,直接挂 scenario。
  */
 import http from '@/api/http'
+import type { MergePolicy } from '@/api/executions'
 import type {
   Scenario, DataSet, DataSetSummary,
   ScenarioDraft, DataSetDraft, RunEnv,
@@ -115,7 +116,6 @@ export interface RunRequest {
   env: RunEnv
   /** 执行用认证 alias 多选(原 auth 单选已废);dispatcher 解密注入 Config.users */
   auths?: string[]
-  retry?: { maxAttempts: number; intervalMs: number }
   /** V1 能力移植:0-based 含端点,透传引擎 halt_at,在该步后停 */
   stepTo?: number
   /** V1 能力移植:false = 跳过执行凭证解析/注入 */
@@ -126,18 +126,18 @@ export interface RunRequest {
   parallel?: number
   /** M1 执行能力:提单号前缀,注入 vars.order_no / order_no_prefix / seq */
   prefix?: string
-  /** M1 执行能力:执行认证合并策略(override|merge|append) */
-  mergePolicy?: 'override' | 'merge' | 'append'
+  /** M1 执行能力:执行认证合并策略(真源 @/api/executions 的 MergePolicy) */
+  mergePolicy?: MergePolicy
 }
 
-export interface RunCaseResult {
+export interface RunScenarioResult {
   runId: string
   /** Numeric Execution row — the only id with a detail route. */
   executionId?: number
 }
 
-export async function runScenario(req: RunRequest): Promise<RunCaseResult> {
-  const { data } = await http.post<RunCaseResult>('/runs', req)
+export async function runScenario(req: RunRequest): Promise<RunScenarioResult> {
+  const { data } = await http.post<RunScenarioResult>('/runs', req)
   return data
 }
 

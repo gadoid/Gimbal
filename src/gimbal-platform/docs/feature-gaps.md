@@ -38,9 +38,10 @@
 
 > 背景:执行、存储与执行器连接方式即将重构,以下项与执行存储强耦合,现在做会返工。
 
-### 5. 重跑(re-run)
-- V1:执行历史可重放。
-- 方案(重构后):`POST /api/runs/{id}/rerun`,重放 config_json 走新 dispatcher。
+### 5. 重跑(re-run)——已决策不做
+- V1 曾有执行历史重放;V3 执行链重构后 **run 级重跑按设计移除**:
+  重跑语义 = 用同一配方重新发起 `POST /api/runs`(前端表单仍保留
+  上次参数即可),不需要专用 rerun 端点。
 
 ### 6. 僵尸派发对账(stale reconcile)
 - 现状:服务重启后 running 状态的派发永远挂起,只记 `gimbal_unavailable`。

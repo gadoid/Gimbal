@@ -71,12 +71,6 @@ async def update(
     return _to_full_shape(row)
 
 
-async def delete(db: AsyncSession, dataset_id: str) -> None:
-    row = await _get_row(db, dataset_id)
-    await db.delete(row)
-    await db.commit()
-
-
 async def get(
     db: AsyncSession, dataset_id: str
 ) -> DataSet:
@@ -85,12 +79,23 @@ async def get(
 
 
 async def list_summaries(
-    db: AsyncSession, *, scenario_id: str | None = None
+    db: AsyncSession,
+    *,
+    scenario_id: str | None = None,
+    scenario_ids: list[str] | set[str] | None = None,
 ) -> list[DataSetSummary]:
-    """Return DataSetSummary (preview[3]) for list views."""
+    """Return DataSetSummary (preview[3]) for list views.
+
+    ``scenario_ids`` pushes the caller's ownership filter down as a SQL
+    ``IN``(non-admin data-sets list);空集合直接短路为 []。
+    """
     stmt = select(ComposerDataSet).order_by(ComposerDataSet.updated_at.desc())
     if scenario_id:
         stmt = stmt.where(ComposerDataSet.scenario_id == scenario_id)
+    if scenario_ids is not None:
+        if not scenario_ids:
+            return []
+        stmt = stmt.where(ComposerDataSet.scenario_id.in_(scenario_ids))
     rows = (await db.execute(stmt)).scalars().all()
     return [_to_summary_shape(r) for r in rows]
 
@@ -98,7 +103,7 @@ async def list_summaries(
 async def list_for_scenario(
     db: AsyncSession, scenario_id: str
 ) -> list[DataSet]:
-    """Full DataSet rows (used by the run dispatcher)."""
+    """Full DataSet rows for one scenario(测试/诊断用;dispatcher 直查模型)。"""
     res = await db.execute(
         select(ComposerDataSet).where(ComposerDataSet.scenario_id == scenario_id)
     )
@@ -106,13 +111,25 @@ async def list_for_scenario(
 
 
 # ─── helpers ──────────────────────────────────────────────────────
-async def _get_row(db: AsyncSession, dataset_id: str) -> ComposerDataSet:
+async def get_row(
+    db: AsyncSession, dataset_id: str
+) -> ComposerDataSet | None:
+    """单行查询(dataset_id 是 string PK)— 全后端唯一实现。
+
+    data_sets 路由的属主检查与 run_dispatcher 的数据集解析都收敛到
+    这里(镜像 scenario_store.get_row 的收敛约定),避免多份拷贝在
+    加 scope/soft-delete 过滤时各自漂移。
+    """
     res = await db.execute(
         select(ComposerDataSet).where(
             ComposerDataSet.dataset_id == dataset_id
         )
     )
-    row = res.scalar_one_or_none()
+    return res.scalar_one_or_none()
+
+
+async def _get_row(db: AsyncSession, dataset_id: str) -> ComposerDataSet:
+    row = await get_row(db, dataset_id)
     if row is None:
         raise KeyError(f"data_set_not_found: {dataset_id}")
     return row

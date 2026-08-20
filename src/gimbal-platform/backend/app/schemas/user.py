@@ -1,9 +1,10 @@
 """User-management Pydantic schemas (request/response DTOs)."""
 from __future__ import annotations
 
-from datetime import datetime
+from pydantic import BaseModel, Field
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+# 字段约束与 RegisterIn 同源(auth.py 是唯一权威)。
+from .auth import DisplayNameField, PasswordField, UsernameField
 
 
 class UserCreateIn(BaseModel):
@@ -13,9 +14,9 @@ class UserCreateIn(BaseModel):
     by the router regardless of caller intent (no admin-only enforcement).
     """
 
-    username: str = Field(pattern=r"^[A-Za-z0-9_]+$", min_length=3, max_length=32)
-    password: str = Field(min_length=8, max_length=128)
-    display_name: str = Field(default="", max_length=128)
+    username: str = UsernameField
+    password: str = PasswordField
+    display_name: str = DisplayNameField
     is_admin: bool = False
 
 
@@ -28,24 +29,8 @@ class UserPatchIn(BaseModel):
     new_password: str | None = Field(default=None, min_length=8, max_length=128)
 
 
-class UserOut(BaseModel):
-    """Public-facing user view (mirrors :class:`app.schemas.auth.UserPublic`).
+# UserOut 曾是 UserPublic 的逐字段拷贝("独立演化"从未发生,只留下
+# 双份漂移风险)— 收敛为同一 schema 的别名。
+from .auth import UserPublic  # noqa: E402
 
-    Defined independently in spec-1 so that the users router can evolve
-    independently of the auth router (e.g. add ``updated_at`` later without
-    touching the auth DTO surface).
-    """
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    username: str
-    display_name: str
-    is_admin: bool
-    is_active: bool
-    created_at: datetime
-
-    @field_serializer("created_at")
-    def _iso(self, v: datetime | None) -> str | None:
-        """Serialize as ISO 8601 string for the JSON wire format."""
-        return v.isoformat() if v is not None else None
+UserOut = UserPublic

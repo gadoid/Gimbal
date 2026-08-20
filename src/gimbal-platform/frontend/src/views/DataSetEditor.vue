@@ -114,7 +114,7 @@ onMounted(async () => {
         const full = await getDataSet(ds.datasetId)
         fullRows = full.rows
       } catch {
-        showError('加载完整行数据失败，当前仅为前 3 行预览 — 保存将丢失其余行', undefined)
+        showError('加载完整行数据（当前仅为前 3 行预览 — 保存将丢失其余行）', undefined)
       }
       rows.value = fullRows.map((r) => ({ ...r }))
       // 推断列：第一行 keys

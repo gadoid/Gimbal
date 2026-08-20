@@ -66,6 +66,8 @@ export interface Scenario {
   orchestration?: Orchestration
   dataSetCount: number
   stepCount: number
+  /** 兼容镜像:后端恒等于 meta.tags(scenario_store 序列化时逐字拷贝)。
+   *  真源是 meta.tags,新代码请读 meta.tags;此字段仅服务既有列表/过滤消费方。 */
   tags: string[]
   starred?: boolean
   /** P1 读侧收紧:'private' 仅 owner/admin 可读;'public' 全员可读 */
@@ -88,6 +90,8 @@ export interface DataSetSummary {
   datasetId: string
   scenarioId: string
   name: string
+  /** list 端不带;编辑页如需展示从 getDataSet 全量取 */
+  description?: string
   rowCount: number
   preview: DataSetRow[]
 }

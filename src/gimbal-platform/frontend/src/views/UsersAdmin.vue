@@ -615,19 +615,6 @@ onMounted(async () => {
   border-radius: 3px;
 }
 
-.muted {
-  color: var(--color-text-tertiary);
-}
-
-.mono {
-  font-family: var(--font-mono);
-}
-
-.dim {
-  color: var(--color-text-secondary);
-  font-size: 11px;
-}
-
 .role-badge {
   display: inline-flex;
   align-items: center;

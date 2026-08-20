@@ -17,7 +17,6 @@ their suffix and the static handler would never fire.
 """
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -26,8 +25,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
+from ..core.timeutil import utcnow as _utcnow
 from ._ownership import can_read_scenario, ensure_owner
-from ._error_mapping import key_error_404, value_error_http
+from ._error_mapping import key_error_404, not_found_404, value_error_http
 from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import (
     PreviewPlateError,
@@ -38,7 +38,6 @@ from ..schemas.scenario_composer import (
 )
 from ..services import plate_client, scenario_store
 from ..services.marks_store import stars
-from sqlalchemy import select
 
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
@@ -50,16 +49,9 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 async def _load_row(
     db: AsyncSession, scenario_id: str
 ) -> ComposerScenario:
-    res = await db.execute(
-        select(ComposerScenario).where(
-            ComposerScenario.scenario_id == scenario_id
-        )
-    )
-    row = res.scalar_one_or_none()
+    row = await scenario_store.get_row(db, scenario_id)
     if row is None:
-        raise HTTPException(
-            status_code=404, detail=f"scenario_not_found: {scenario_id}"
-        )
+        raise not_found_404("scenario", scenario_id)
     return row
 
 
@@ -110,7 +102,7 @@ def _draft_to_full_scenario_dict(
 
     meta = payload.setdefault("meta", {})
     if not meta.get("createTime"):
-        meta["createTime"] = datetime.utcnow().isoformat() + "Z"
+        meta["createTime"] = _utcnow().isoformat() + "Z"
     meta.setdefault("requirementRef", [])
     if owner and not meta.get("owner"):
         meta["owner"] = owner
@@ -197,35 +189,28 @@ async def list_scenarios(
 ) -> list[Scenario]:
     """读侧收紧:admin 全量;普通用户 = public + 自己的(存量行按
     owner 名字回退)。可选 ``visibility=public|private`` 再过滤一层,
-    供前端"公共 / 我的"分组标签使用。"""
-    all_scenarios = await scenario_store.list_scenarios(
-        db,
-        q=q,
-        system=system,
-        module=module,
-        priority=priority,
-        user_id=user.id,
+    供前端"公共 / 我的"分组标签使用。
+
+    属主过滤直接在 store 已加载的行上做(此前为 readable_ids 再跑
+    一趟全表投影,单请求双全表扫描)。"""
+    rows = await scenario_store.list_rows(
+        db, q=q, system=system, module=module, priority=priority
     )
-    readable_ids = {
-        r.scenario_id
-        for r in (
-            await db.execute(
-                select(
-                    ComposerScenario.scenario_id,
-                    ComposerScenario.owner,
-                    ComposerScenario.owner_id,
-                    ComposerScenario.visibility,
-                )
-            )
-        )
+    readable = [
+        r for r in rows
         if can_read_scenario(
             user, r.owner, owner_id=r.owner_id, visibility=r.visibility or "private"
         )
-    }
-    out = [s for s in all_scenarios if s.meta.scenario_id in readable_ids]
+    ]
     if visibility:
-        out = [s for s in out if s.visibility == visibility]
-    return out
+        readable = [r for r in readable if (r.visibility or "private") == visibility]
+    ds_counts = await scenario_store.dataset_counts(db)
+    return [
+        await scenario_store.to_read_shape(
+            db, r, user_id=user.id, data_set_count=ds_counts.get(r.scenario_id, 0)
+        )
+        for r in readable
+    ]
 
 
 # ── 4) POST /{id}/star (static suffix — before /{id}) ──────────────

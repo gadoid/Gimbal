@@ -9,6 +9,7 @@ concurrent requests see consistent reads/writes.
 from __future__ import annotations
 
 from sqlalchemy import delete as sa_delete
+from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -76,7 +77,7 @@ async def create(
         await db.rollback()
         raise ValueError(f"scenario_id_exists: {scenario_id}") from e
     await db.refresh(row)
-    return await _to_read_shape(db, row)
+    return await to_read_shape(db, row)
 
 
 async def update(
@@ -120,7 +121,7 @@ async def update(
     ).model_dump(by_alias=True, mode="json")
     await db.commit()
     await db.refresh(row)
-    return await _to_read_shape(db, row, user_id=user_id)
+    return await to_read_shape(db, row, user_id=user_id)
 
 
 async def delete(db: AsyncSession, scenario_id: str) -> None:
@@ -153,7 +154,7 @@ async def set_visibility(
     row.visibility = visibility
     await db.commit()
     await db.refresh(row)
-    return await _to_read_shape(db, row)
+    return await to_read_shape(db, row)
 
 
 async def copy_scenario(
@@ -206,23 +207,14 @@ async def copy_scenario(
             row_count=ds.row_count,
         ))
     await db.commit()
-    return await _to_read_shape(db, await _get_row(db, new_sid))
+    return await to_read_shape(db, await _get_row(db, new_sid))
 
 
 async def get(
     db: AsyncSession, scenario_id: str, *, user_id: int | None = None
 ) -> Scenario:
     row = await _get_row(db, scenario_id)
-    return await _to_read_shape(db, row, user_id=user_id)
-
-
-async def exists(db: AsyncSession, scenario_id: str) -> bool:
-    res = await db.execute(
-        select(ComposerScenario.scenario_id).where(
-            ComposerScenario.scenario_id == scenario_id
-        )
-    )
-    return res.scalar_one_or_none() is not None
+    return await to_read_shape(db, row, user_id=user_id)
 
 
 # ─── read side ────────────────────────────────────────────────────
@@ -235,60 +227,149 @@ async def list_scenarios(
     priority: int | None = None,
     user_id: int | None = None,
 ) -> list[Scenario]:
-    """List scenarios with optional filters.
+    """List scenarios with optional filters — **tests only**.
+
+    生产 list 端点(scenarios 路由)自行组合 ``list_rows`` → 属主过滤
+    → ``dataset_counts`` → ``to_read_shape``,不再经过本函数;这里保留
+    供 store 单测做纯过滤断言。注意本函数**不做**可见性/属主过滤,
+    不要在新路由里复用。
 
     ``q`` is a case-insensitive substring against scenarioId / name /
     module / description / tags.  ``system`` is a single-tag match
     (any of the scenario's ``system[]``).  ``priority`` and ``module``
     are exact matches.  ``user_id`` enables per-user ``starred`` flag.
     """
+    rows = await list_rows(db, q=q, system=system, module=module, priority=priority)
+    ds_counts = await dataset_counts(db)
+    return [
+        await to_read_shape(
+            db, r, user_id=user_id, data_set_count=ds_counts.get(r.scenario_id, 0)
+        )
+        for r in rows
+    ]
+
+
+async def list_rows(
+    db: AsyncSession,
+    *,
+    q: str | None = None,
+    system: str | None = None,
+    module: str | None = None,
+    priority: int | None = None,
+) -> list[ComposerScenario]:
+    """Filtered rows (updated_at desc) — 调用方在已加载的行上做属主/
+    可见性过滤,避免 list 端点为 readable_ids 再跑一趟全表扫描。"""
     stmt = select(ComposerScenario).order_by(ComposerScenario.updated_at.desc())
     rows = (await db.execute(stmt)).scalars().all()
+    return [
+        r for r in rows
+        if _passes_filters(
+            _meta_from_row(r), r, q=q, system=system, module=module, priority=priority
+        )
+    ]
 
-    out: list[Scenario] = []
-    for r in rows:
-        meta = _meta_from_row(r)
-        if not _passes_filters(meta, r, q=q, system=system, module=module, priority=priority):
-            continue
-        scenario = await _to_read_shape(db, r, user_id=user_id)
-        out.append(scenario)
-    return out
+
+async def dataset_counts(db: AsyncSession) -> dict[str, int]:
+    """Batched per-scenario ΣrowCount (one GROUP BY instead of a per-row
+    query — list endpoints were N+1 here)."""
+    count_rows = (
+        await db.execute(
+            select(
+                ComposerDataSet.scenario_id,
+                func.sum(ComposerDataSet.row_count),
+            ).group_by(ComposerDataSet.scenario_id)
+        )
+    ).all()
+    return {sid: int(total or 0) for sid, total in count_rows}
+
+
+async def owned_scenario_ids(db: AsyncSession, user) -> set[str]:
+    """The set of scenario_ids ``user`` owns.
+
+    Set-based SQL projection of the same ownership rule as
+    ``routers/_ownership._user_matches``: ``owner_id`` (int user id) is
+    authoritative; legacy rows (``owner_id == 0``) fall back to the
+    owner display-name snapshot so pre-migration scenarios remain
+    visible to their creators.
+    """
+    own_ids = set(
+        (
+            await db.execute(
+                select(ComposerScenario.scenario_id).where(
+                    ComposerScenario.owner_id == user.id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    name_rows = (
+        (
+            await db.execute(
+                select(ComposerScenario.scenario_id).where(
+                    ComposerScenario.owner_id == 0,
+                    ComposerScenario.owner.in_(
+                        {user.display_name or user.username}
+                    ),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    own_ids.update(name_rows)
+    return own_ids
 
 
 # ─── helpers ──────────────────────────────────────────────────────
-async def _get_row(db: AsyncSession, scenario_id: str) -> ComposerScenario:
+async def get_row(
+    db: AsyncSession, scenario_id: str
+) -> ComposerScenario | None:
+    """单行查询(scenario_id 是 string PK)。
+
+    全后端唯一实现 — scenarios/_load_row、data_sets/_load_scenario、
+    run_dispatcher/_find_scenario_by_id、runs.post_run 的内联查询都
+    收敛到这里,避免多份拷贝各自漂移。
+    """
     res = await db.execute(
         select(ComposerScenario).where(
             ComposerScenario.scenario_id == scenario_id
         )
     )
-    row = res.scalar_one_or_none()
+    return res.scalar_one_or_none()
+
+
+async def _get_row(db: AsyncSession, scenario_id: str) -> ComposerScenario:
+    row = await get_row(db, scenario_id)
     if row is None:
         raise KeyError(f"scenario_not_found: {scenario_id}")
     return row
 
 
-async def _to_read_shape(
+async def to_read_shape(
     db: AsyncSession,
     row: ComposerScenario,
     *,
     user_id: int | None = None,
+    data_set_count: int | None = None,
 ) -> Scenario:
     """Reconstruct the full Scenario response shape from DB row + joins.
 
-    Counts come from aggregate queries; meta/tags project from the
+    ``data_set_count`` may be precomputed by batch callers(list_scenarios
+    的 GROUP BY);单行调用方缺省时这里现查。meta/tags project from the
     payload (mirror columns retired); starred is per-user.
     """
-    # dataSetCount (sum of rowCount across datasets under the scenario)
-    ds_res = await db.execute(
-        select(ComposerDataSet.row_count).where(
-            ComposerDataSet.scenario_id == row.scenario_id
+    if data_set_count is None:
+        # dataSetCount (sum of rowCount across datasets under the scenario)
+        ds_res = await db.execute(
+            select(ComposerDataSet.row_count).where(
+                ComposerDataSet.scenario_id == row.scenario_id
+            )
         )
-    )
-    data_set_count = sum(int(r[0] or 0) for r in ds_res.all())
+        data_set_count = sum(int(r[0] or 0) for r in ds_res.all())
 
     meta = _meta_from_row(row)
-    steps = _steps_from_payload(row.payload)
+    steps = steps_from_payload(row.payload)
     # stepCount is derived from the payload (the mirror column was
     # retired); len() of the persisted steps list is authoritative.
     config, resource, orchestration = _extras_from_payload(row.payload)
@@ -322,10 +403,21 @@ def _meta_from_row(row: ComposerScenario) -> ScenarioMeta:
     return ScenarioMeta.model_validate(meta_dict)
 
 
-def _steps_from_payload(payload: dict) -> list[dict]:
+def definition_from_payload(payload: dict | None) -> dict:
+    """容器解包:``payload {definition, orchestration}`` → definition。
+
+    全后端唯一的容器形状知识。容器化之前的 legacy 行(无 definition
+    键)原样透传。run_dispatcher 的 steps 投影 / users 读取 / 组装
+    均复用本函数,容器形状再变时只改这里。
+    """
+    raw = payload or {}
+    defn = raw.get("definition")
+    return defn if isinstance(defn, dict) else raw
+
+
+def steps_from_payload(payload: dict | None) -> list[dict]:
     """Steps live inside the container's definition now (plate-shaped dicts)."""
-    definition = (payload or {}).get("definition") or {}
-    raw = definition.get("steps") or []
+    raw = definition_from_payload(payload).get("steps") or []
     return [s for s in raw if isinstance(s, dict)]
 
 

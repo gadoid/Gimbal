@@ -7,7 +7,7 @@ calls.  Mirrors the in-flight task pattern in
 shut down cleanly.
 
 The former Case layer was dissolved — ``RunRequest`` IS the recipe
-(env / dataSetIds / auths / retry / …, pure values) applied directly to
+(env / dataSetIds / auths / …, pure values) applied directly to
 the scenario by :func:`_compose_scenario` (the 配置器/transformer).
 
 Returns ``RunResponse(runId)`` to the caller immediately, and the
@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -31,7 +32,9 @@ from sqlalchemy import update as sqlalchemy_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
+from ..core.timeutil import utcnow as _utcnow
 from ..models import Execution
+from ..models.execution import STATUS_DONE, STATUS_FAILED, STATUS_QUEUED
 from ..models.auth_session import AuthSession
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
@@ -39,10 +42,26 @@ from ..schemas.scenario_composer import RunRequest, RunResponse
 from . import env_store, gimbal_client, plate_client
 
 
+@dataclass(frozen=True, slots=True)
+class ResolvedAuth:
+    """解密后的执行认证(轻量值对象)。
+
+    明文凭证只存在于该对象的生命周期内,不落在 AuthSession ORM 行
+    上 — 避免任何意外 commit 把明文写回数据库。
+    """
+
+    alias: str
+    url: str
+    username: str
+    password: str
+    token_type: str
+    expires_in: int
+
+
 # ─── in-flight tracking ───────────────────────────────────────────
-# Same pattern as ``app/services/run_lifecycle.py``'s _in_flight_runners /
-# drain_in_flight_runners: the app lifespan calls
-# ``drain_in_flight_dispatches()`` to wait for cancellation.
+# 与 routers/executions.py 相同的 task 跟踪模式(tracked
+# ``set[asyncio.Task]`` + ``_shutting_down`` flag):app lifespan 调用
+# ``drain_in_flight_dispatches()`` 等待取消。
 _in_flight: set[asyncio.Task] = set()
 _shutting_down: bool = False
 
@@ -86,6 +105,17 @@ async def drain_in_flight_dispatches() -> int:
     return n
 
 
+def reset_shutdown_state() -> None:
+    """Clear the shutdown flag (lifespan startup).
+
+    ``_shutting_down`` 只在 drain 时置位;不复位的话,同一进程复用模块
+    (测试直接调 drain 后再来一次 app lifespan)时 dispatch 会静默跳过
+    fan-out,Execution 永远停在 queued。
+    """
+    global _shutting_down
+    _shutting_down = False
+
+
 # ─── main entry point ─────────────────────────────────────────────
 async def dispatch_run(
     db: AsyncSession,
@@ -110,27 +140,27 @@ async def dispatch_run(
     scen = (
         preloaded_scenario
         if preloaded_scenario is not None
-        else await _find_scenario_by_id(db, req.scenario_id)
+        else await get_row(db, req.scenario_id)
     )
     if scen is None:
-        raise _NotFound("scenario_not_found", f"scenario not found: {req.scenario_id}")
+        raise NotFound("scenario_not_found", f"scenario not found: {req.scenario_id}")
 
     # 2. Validate env + datasets.  list_envs() is sync (cached) — safe to
     # call inline here because it returns from an lru_cache on the
     # happy path; the first call does a one-shot YAML parse.
     env_ids = {e.env_id for e in env_store.list_envs()}
     if req.env.env_id not in env_ids:
-        raise _NotFound("env_not_found", f"env not found: {req.env.env_id}")
+        raise NotFound("env_not_found", f"env not found: {req.env.env_id}")
     if not req.data_set_ids:
-        raise _Conflict("no_data_selected", "no data sets selected")
+        raise Conflict("no_data_selected", "no data sets selected")
 
     # step_to 校验(同 V1 executions:与场景 steps 数比对,越界 409)
-    steps = ((scen.payload or {}).get("definition") or {}).get("steps") or []
+    steps = steps_from_payload(scen.payload)
     if req.step_to is not None:
         if not steps:
-            raise _NotFound("no_steps", "scenario has no steps; step_to cannot be set")
+            raise NotFound("no_steps", "scenario has no steps; step_to cannot be set")
         if req.step_to >= len(steps):
-            raise _Conflict(
+            raise Conflict(
                 "step_to_out_of_range",
                 f"step_to={req.step_to} out of range (0..{len(steps) - 1})",
             )
@@ -139,7 +169,7 @@ async def dispatch_run(
     for ds_id in req.data_set_ids:
         ds = await _find_dataset_by_id(db, ds_id)
         if ds is None or ds.scenario_id != scen.scenario_id:
-            raise _NotFound(
+            raise NotFound(
                 "data_set_not_found", f"data set not found: {ds_id}"
             )
         selected_datasets.append(ds)
@@ -150,15 +180,18 @@ async def dispatch_run(
         built_in_users = _built_in_users(scen.payload)
         collisions = sorted(set(req.auths) & set(built_in_users.keys()))
         if collisions:
-            raise _Conflict(
+            raise Conflict(
                 "append_policy_conflict",
                 f"append policy conflict: auth alias {collisions} already "
                 f"defined in scenario config.users",
             )
 
     # 3. Allocate runId + Execution row
+    # total_runs 必须按实际行数算(与 _fanout 的迭代口径一致)— 旧的
+    # row_count 列在 raw-SQL 迁移路径下不回填,NULL/过期会让计数器
+    # 超过 total_runs 出现 failed > total 的怪状态。
     run_id = _new_run_id()
-    total_runs = sum(int(ds.row_count or 0) for ds in selected_datasets) * req.n_runs
+    total_runs = sum(len(ds.rows or []) for ds in selected_datasets) * req.n_runs
     execution = await _create_execution(
         db,
         # (Case 层解散后执行的挂载点就是场景)。
@@ -171,8 +204,9 @@ async def dispatch_run(
             "dataSetIds": req.data_set_ids,
             "envId": req.env.env_id,
             # 读侧契约是 exec_auth_alias(同 V1 executor 路径);此前误写
-            # "auth" 导致 Execution 详情认证列恒空
-            "exec_auth_alias": list(req.auths),
+            # "auth" 导致 Execution 详情认证列恒空。injectCredentials=false
+            # 时 aliases 根本不会被解析/注入,记录原始选择会误导详情页。
+            "exec_auth_alias": list(req.auths) if req.inject_credentials else [],
             "stepTo": req.step_to,
             "injectCredentials": req.inject_credentials,
             "nRuns": req.n_runs,
@@ -205,9 +239,6 @@ async def dispatch_run(
                 parallel=req.parallel,
                 prefix=req.prefix,
                 merge_policy=req.merge_policy,
-                retry=req.retry.model_dump(by_alias=True, mode="json")
-                if req.retry
-                else None,
             ),
             name=f"v3-dispatch-{run_id}",
         )
@@ -228,7 +259,6 @@ async def _fanout(
     env: dict,
     owner_id: int,
     auth_aliases: list[str],
-    retry: dict | None,
     halt_at: int | None = None,
     n_runs: int = 1,
     parallel: int = 1,
@@ -265,30 +295,10 @@ async def _fanout(
             execution_id, e,
         )
         total_rows = sum(len(ds["rows"]) for ds in datasets) * n_runs
-        try:
-            _append_jsonl(log_path, {
-                "ts": datetime.utcnow().isoformat() + "Z",
-                "runId": run_id,
-                "executionId": execution_id,
-                "status": "auth_resolve_failed",
-                "error": str(e),
-            })
-        except Exception:  # noqa: BLE001
-            pass
-        try:
-            async with db_factory() as session:
-                await session.execute(
-                    sqlalchemy_update(Execution)
-                    .where(Execution.id == execution_id)
-                    .values(failed=Execution.failed + total_rows)
-                )
-                await session.commit()
-        except Exception as ex:  # noqa: BLE001
-            logger.warning(
-                "run_dispatcher: counter bump failed for execution {}: {}",
-                execution_id, ex,
-            )
-        await _finalize_execution(db_factory, execution_id)
+        await _fail_whole_execution(
+            db_factory, log_path, execution_id=execution_id, run_id=run_id,
+            total_rows=total_rows, error=str(e),
+        )
         return
 
     sem = asyncio.Semaphore(max(1, parallel))
@@ -304,7 +314,7 @@ async def _fanout(
             row_dict = dict(ds["rows"][row_idx] or {})
             composed = _compose_scenario(scenario_payload, row_dict)
             log_line = {
-                "ts": datetime.utcnow().isoformat() + "Z",
+                "ts": _utcnow().isoformat() + "Z",
                 "runId": run_id,
                 "executionId": execution_id,
                 "scenarioId": composed.get("scenarioId"),
@@ -314,13 +324,7 @@ async def _fanout(
                 "env": env,
                 "status": "dispatched",
             }
-            try:
-                _append_jsonl(log_path, log_line)
-            except Exception as e:  # noqa: BLE001
-                logger.warning(
-                    "run_dispatcher: failed to write JSONL log line for {}: {}",
-                    log_line, e,
-                )
+            _append_log_quietly(log_path, log_line)
 
             try:
                 convert_data = await plate_client.convert(composed)
@@ -380,32 +384,15 @@ async def _fanout(
             # Append the final log line for this row (covers all
             # success / failure branches — previously the rejected
             # branches ``continue``'d before this and lost the line).
-            try:
-                _append_jsonl(log_path, log_line)
-            except Exception:  # noqa: BLE001
-                pass
+            _append_log_quietly(log_path, log_line)
 
             # Atomic per-row counter bump.  Deltas (not absolute
             # write-backs) so concurrent rows and concurrent UI
             # deletions (MAX(0, col-1) SQL) compose correctly.
-            ok = 1 if log_line["status"] == "passed" else 0
-            bad = 1 - ok
-            try:
-                async with db_factory() as session:
-                    await session.execute(
-                        sqlalchemy_update(Execution)
-                        .where(Execution.id == execution_id)
-                        .values(
-                            passed=Execution.passed + ok,
-                            failed=Execution.failed + bad,
-                        )
-                    )
-                    await session.commit()
-            except Exception as e:  # noqa: BLE001
-                logger.warning(
-                    "run_dispatcher: counter bump failed for execution {}: {}",
-                    execution_id, e,
-                )
+            passed = 1 if log_line["status"] == "passed" else 0
+            await _bump_counters(
+                db_factory, execution_id, passed=passed, failed=1 - passed
+            )
 
     # (dataset, row, repeat) 笛卡尔积;n_runs=1 时与旧逐行行为完全一致。
     entries = [
@@ -421,6 +408,68 @@ async def _fanout(
     await _finalize_execution(db_factory, execution_id)
 
 
+async def _fail_whole_execution(
+    db_factory: Any,
+    log_path: Path,
+    *,
+    execution_id: int,
+    run_id: str,
+    total_rows: int,
+    error: str,
+) -> None:
+    """Auth fail-fast path: log once, count every row as failed, finalize.
+
+    解密失败 = fail-fast(V1 严格语义):整单 execution 记为 failed,
+    所有行计入 failed 计数,不带着空/坏凭证打环境。
+    """
+    _append_log_quietly(log_path, {
+        "ts": _utcnow().isoformat() + "Z",
+        "runId": run_id,
+        "executionId": execution_id,
+        "status": "auth_resolve_failed",
+        "error": error,
+    })
+    await _bump_counters(db_factory, execution_id, passed=0, failed=total_rows)
+    await _finalize_execution(db_factory, execution_id)
+
+
+def _append_log_quietly(path: Path, payload: dict) -> None:
+    """Best-effort JSONL append — log failures never break the fan-out."""
+    try:
+        _append_jsonl(path, payload)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "run_dispatcher: failed to write JSONL log line for {}: {}",
+            payload, e,
+        )
+
+
+async def _bump_counters(
+    db_factory: Any, execution_id: int, *, passed: int, failed: int
+) -> None:
+    """Atomic Execution counter bump.
+
+    Deltas (not absolute write-backs) so concurrent rows and concurrent
+    UI deletions (MAX(0, col-1) SQL) compose correctly.
+    """
+    try:
+        async with db_factory() as session:
+            await session.execute(
+                sqlalchemy_update(Execution)
+                .where(Execution.id == execution_id)
+                .values(
+                    passed=Execution.passed + passed,
+                    failed=Execution.failed + failed,
+                )
+            )
+            await session.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "run_dispatcher: counter bump failed for execution {}: {}",
+            execution_id, e,
+        )
+
+
 async def _finalize_execution(db_factory: Any, execution_id: int) -> None:
     """终态收尾:只写 status + 时间戳(计数器由上方增量维护)。
 
@@ -433,10 +482,10 @@ async def _finalize_execution(db_factory: Any, execution_id: int) -> None:
         async with db_factory() as session:
             ex = await session.get(Execution, execution_id)
             if ex is not None:
-                ex.status = "failed" if ex.failed else "done"
+                ex.status = STATUS_FAILED if ex.failed else STATUS_DONE
                 if ex.started_at is None:
-                    ex.started_at = datetime.utcnow()
-                ex.finished_at = datetime.utcnow()
+                    ex.started_at = _utcnow()
+                ex.finished_at = _utcnow()
                 await session.commit()
     except Exception as e:  # noqa: BLE001
         logger.warning("run_dispatcher: failed to update execution {}: {}", execution_id, e)
@@ -445,9 +494,7 @@ async def _finalize_execution(db_factory: Any, execution_id: int) -> None:
 # ─── helpers ──────────────────────────────────────────────────────
 def _built_in_users(scenario_payload: dict | None) -> dict[str, Any]:
     """场景 definition.config.users(merge 策略保留基座)。"""
-    raw = scenario_payload or {}
-    defn = raw.get("definition") if isinstance(raw.get("definition"), dict) else raw
-    def_cfg = (defn or {}).get("config") or {}
+    def_cfg = definition_from_payload(scenario_payload).get("config") or {}
     users = def_cfg.get("users") if isinstance(def_cfg.get("users"), dict) else {}
     return dict(users or {})
 
@@ -470,9 +517,7 @@ def _compose_scenario(
     """
     raw = scenario_payload or {}
     # Unwrap the container: plate must never see orchestration.
-    if isinstance(raw.get("definition"), dict):
-        raw = raw["definition"]
-    out = copy.deepcopy(raw)
+    out = copy.deepcopy(definition_from_payload(raw))
     out.setdefault("kind", "scenario")
     cfg = out.setdefault("config", {})
     if not isinstance(cfg, dict):
@@ -487,7 +532,7 @@ def _compose_scenario(
 
 
 def _new_run_id() -> str:
-    return f"run-{datetime.utcnow().strftime('%Y%m%d')}-{uuid4().hex[:6]}"
+    return f"run-{_utcnow().strftime('%Y%m%d')}-{uuid4().hex[:6]}"
 
 
 class _AuthResolveError(RuntimeError):
@@ -497,21 +542,24 @@ class _AuthResolveError(RuntimeError):
 
 async def _resolve_exec_auths(
     db_factory: Any, owner_id: int, aliases: list[str]
-) -> list["AuthSession"]:
-    """Owner 级 alias → AuthSession(解密)。owner 过滤防跨 owner 同名
-    alias 解错凭证。
+) -> list["ResolvedAuth"]:
+    """Owner 级 alias → ResolvedAuth(解密后的轻量值对象)。owner 过滤
+    防跨 owner 同名 alias 解错凭证。
 
     * 解密失败 → 抛 :class:`_AuthResolveError`(V1 严格语义:
       凭证路径 fail-fast,不静默降级)。
     * alias 不属于该 owner 时解不到 → 告警后继续(与 V1 一致:
       缺 alias 只是注入不到 users,该行 run 在 Gimbal 解析
       ``${auth.*}`` 时步骤级报错)。
+    * 明文只存在于返回的值对象上 — 绝不写回 ORM 行(此前
+      ``a.username = ...`` 会把明文挂到 session 里的 AuthSession
+      实例上,任何一次意外 commit 都会把明文持久化进库)。
     """
     if not aliases:
         return []
     from ..core.security import fernet_decrypt
 
-    resolved: list[AuthSession] = []
+    resolved: list[ResolvedAuth] = []
     async with db_factory() as session:
         rows = (
             (
@@ -527,9 +575,14 @@ async def _resolve_exec_auths(
         )
     for a in rows:
         try:
-            a.username = fernet_decrypt(a.username_enc)
-            a.password = fernet_decrypt(a.password_enc)
-            resolved.append(a)
+            resolved.append(ResolvedAuth(
+                alias=a.alias,
+                url=a.url,
+                username=fernet_decrypt(a.username_enc),
+                password=fernet_decrypt(a.password_enc),
+                token_type=a.token_type,
+                expires_in=a.expires_in,
+            ))
         except ValueError as e:
             raise _AuthResolveError(
                 f"auth alias '{a.alias}' decrypt failed: {e}"
@@ -563,7 +616,7 @@ def _inject_prefix_vars(composed: dict[str, Any], prefix: str) -> None:
 
 def _inject_exec_users(
     composed: dict[str, Any],
-    exec_auths: list[AuthSession],
+    exec_auths: list[ResolvedAuth],
     *,
     merge_policy: str = "merge",
     built_in_users: dict[str, Any] | None = None,
@@ -609,7 +662,7 @@ def _inject_exec_users(
 
 
 def _jsonl_path() -> Path:
-    return settings.DATA_DIR / "runs" / f"{datetime.utcnow().strftime('%Y-%m-%d')}.jsonl"
+    return settings.DATA_DIR / "runs" / f"{_utcnow().strftime('%Y-%m-%d')}.jsonl"
 
 
 def _append_jsonl(path: Path, payload: dict) -> None:
@@ -630,7 +683,7 @@ async def _create_execution(
     ex = Execution(
         scenario_id=scenario_id,
         owner_id=owner_id,
-        status="queued",
+        status=STATUS_QUEUED,
         total_runs=total_runs,
         passed=0,
         failed=0,
@@ -643,26 +696,15 @@ async def _create_execution(
 
 
 # ─── ad-hoc lookups (scenario_id is the string PK) ────────────────
-async def _find_scenario_by_id(
-    db: AsyncSession, scenario_id: str
-) -> ComposerScenario | None:
-    res = await db.execute(
-        select(ComposerScenario).where(
-            ComposerScenario.scenario_id == scenario_id
-        )
-    )
-    return res.scalar_one_or_none()
+# 单行场景/数据集查询收敛到各自 store 的 get_row(全后端唯一实现)。
+from .scenario_store import get_row, steps_from_payload, definition_from_payload
+from .data_set_store import get_row as get_dataset_row
 
 
 async def _find_dataset_by_id(
     db: AsyncSession, dataset_id: str
 ) -> ComposerDataSet | None:
-    res = await db.execute(
-        select(ComposerDataSet).where(
-            ComposerDataSet.dataset_id == dataset_id
-        )
-    )
-    return res.scalar_one_or_none()
+    return await get_dataset_row(db, dataset_id)
 
 
 # ─── session factory (for the background task) ───────────────────
@@ -674,14 +716,14 @@ def _session_factory() -> AsyncSession:
 
 
 # ─── error sentinels (router translates to HTTPException) ─────────
-class _NotFound(Exception):
+class NotFound(Exception):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
 
 
-class _Conflict(Exception):
+class Conflict(Exception):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code

@@ -14,6 +14,13 @@ import type {
 
 type FetchStatus = 'idle' | 'loading' | 'error'
 
+/** 列表内 upsert:命中即位替换,未命中插到表头。 */
+function upsertBy<T>(list: T[], match: (x: T) => boolean, item: T): void {
+  const idx = list.findIndex(match)
+  if (idx >= 0) list.splice(idx, 1, item)
+  else list.unshift(item)
+}
+
 export const useScenarioComposerStore = defineStore('scenario-composer', {
   state: () => ({
     scenarios: [] as Scenario[],
@@ -58,11 +65,11 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
       const saved = scenarioId
         ? await api.updateScenario(scenarioId, draft)
         : await api.createScenario(draft)
-      const idx = this.scenarios.findIndex(
+      upsertBy(
+        this.scenarios,
         (x) => x.meta.scenarioId === saved.meta.scenarioId,
+        saved,
       )
-      if (idx >= 0) this.scenarios.splice(idx, 1, saved)
-      else this.scenarios.unshift(saved)
       return saved
     },
 
@@ -88,19 +95,13 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
     // ── 发布 / 下架 / 复制(P1)──────────────────────────────
     async publishScenario(scenarioId: string) {
       const saved = await api.publishScenario(scenarioId)
-      const idx = this.scenarios.findIndex(
-        (x) => x.meta.scenarioId === saved.meta.scenarioId,
-      )
-      if (idx >= 0) this.scenarios.splice(idx, 1, saved)
+      upsertBy(this.scenarios, (x) => x.meta.scenarioId === saved.meta.scenarioId, saved)
       return saved
     },
 
     async unpublishScenario(scenarioId: string) {
       const saved = await api.unpublishScenario(scenarioId)
-      const idx = this.scenarios.findIndex(
-        (x) => x.meta.scenarioId === saved.meta.scenarioId,
-      )
-      if (idx >= 0) this.scenarios.splice(idx, 1, saved)
+      upsertBy(this.scenarios, (x) => x.meta.scenarioId === saved.meta.scenarioId, saved)
       return saved
     },
 
@@ -127,19 +128,13 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
       const saved = datasetId
         ? await api.updateDataSet(datasetId, draft)
         : await api.createDataSet(scenarioId, draft)
-      const idx = this.dataSets.findIndex((d) => d.datasetId === saved.datasetId)
-      if (idx >= 0) this.dataSets.splice(idx, 1, {
-        ...this.dataSets[idx],
+      const toSummary = (base: Partial<DataSetSummary>) => ({
+        ...base,
         ...saved,
-        preview: saved.rows.slice(0, 3),
-      })
-      else this.dataSets.unshift({
-        datasetId: saved.datasetId,
-        scenarioId: saved.scenarioId,
-        name: saved.name,
         rowCount: saved.rows.length,
         preview: saved.rows.slice(0, 3),
       })
+      upsertBy(this.dataSets, (d) => d.datasetId === saved.datasetId, toSummary({}))
       return saved
     },
   },

@@ -8,13 +8,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as api from '@/api/executions'
-import type { Execution, ExecutionDetail } from '@/api/executions'
+import type { Execution } from '@/api/executions'
 
 const POLL_INTERVAL_MS = 1000
 
 export const useExecutionsStore = defineStore('executions', () => {
   const list = ref<Execution[]>([])
-  const detail = ref<ExecutionDetail | null>(null)
+  const detail = ref<Execution | null>(null)
   const loading = ref(false)
   const lastError = ref('')
   /** Set when the detail poller gives up (404 / repeated failures). */
@@ -36,7 +36,7 @@ export const useExecutionsStore = defineStore('executions', () => {
     }
   }
 
-  async function fetchDetail(id: number): Promise<ExecutionDetail> {
+  async function fetchDetail(id: number): Promise<Execution> {
     loading.value = true
     try {
       const d = await api.get(id)
@@ -50,19 +50,6 @@ export const useExecutionsStore = defineStore('executions', () => {
       throw e
     } finally {
       loading.value = false
-    }
-  }
-
-  /** Optimistically drop a deleted run + decrement parent counters. */
-  function removeRun(runId: number): void {
-    if (!detail.value) return
-    const removed = detail.value.runs.find((r) => r.id === runId)
-    detail.value.runs = detail.value.runs.filter((r) => r.id !== runId)
-    detail.value.total_runs = Math.max(0, (detail.value.total_runs || 0) - 1)
-    if (removed?.status === 'passed') {
-      detail.value.passed = Math.max(0, (detail.value.passed || 0) - 1)
-    } else if (removed?.status === 'failed') {
-      detail.value.failed = Math.max(0, (detail.value.failed || 0) - 1)
     }
   }
 
@@ -127,7 +114,6 @@ export const useExecutionsStore = defineStore('executions', () => {
     fetchList,
     fetchDetail,
     remove,
-    removeRun,
     startPolling,
     stopPolling,
   }

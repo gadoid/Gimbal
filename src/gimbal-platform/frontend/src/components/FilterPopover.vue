@@ -1,5 +1,5 @@
 <!-- FilterPopover.vue — 高级过滤面板
-     通用筛选 popover：模块 / Tags / 作者 / 优先级 / 更新时间 / Visibility / Audited
+     通用筛选 popover：模块 / 系统 / Tags / 作者 / 优先级 / 更新时间
      触发器由父组件传入（高级过滤按钮），通过 v-model:open 控制开关
 -->
 <template>
@@ -132,24 +132,6 @@
             <el-radio-button value="30d">30 天</el-radio-button>
           </el-radio-group>
         </el-form-item>
-
-        <!-- Visibility (only on mine page) -->
-        <el-form-item v-if="showVisibility" label="可见性">
-          <el-radio-group v-model="local.filters.visibility">
-            <el-radio-button value="all">全部</el-radio-button>
-            <el-radio-button value="public">公共</el-radio-button>
-            <el-radio-button value="private">私有</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-
-        <!-- Audited (only on public page) -->
-        <el-form-item v-if="showAudited" label="审核状态">
-          <el-radio-group v-model="local.filters.audited">
-            <el-radio-button value="all">全部</el-radio-button>
-            <el-radio-button value="audited">已审核</el-radio-button>
-            <el-radio-button value="pending">待审核</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
       </el-form>
 
       <footer class="filter-panel-foot">
@@ -168,27 +150,25 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
 import { Operation } from '@element-plus/icons-vue'
-import { emptyFilters, applyFiltersToList, type CaseFilters, type FilterRow } from '@/utils/filters'
+import { emptyFilters, applyFiltersToList, type ScenarioFilters, type FilterRow } from '@/utils/filters'
 
 const props = defineProps<{
-  modelValue: CaseFilters
-  /** ``FilterRow`` = ``Partial<CaseSummary>`` + optional ``system`` —
-   *  the V3 composer rows (Cases.vue / Scenarios.vue pools) legitimately
+  modelValue: ScenarioFilters
+  /** ``FilterRow`` = ``Partial<ScenarioFilterRow>`` + optional ``system`` —
+   *  the V3 composer rows (Scenarios.vue pool) legitimately
    *  lack the legacy tags/module/author fields; missing fields simply
    *  don't produce filter options. */
   pool: readonly FilterRow[]
-  showVisibility?: boolean
-  showAudited?: boolean
 }>()
 
 const emit = defineEmits<{
-  'update:modelValue': [v: CaseFilters]
+  'update:modelValue': [v: ScenarioFilters]
 }>()
 
 const open = defineModel<boolean>('open', { default: false })
 
 // Local copy for editing — commit on "应用"
-const local = reactive<{ filters: CaseFilters }>({
+const local = reactive<{ filters: ScenarioFilters }>({
   filters: { ...emptyFilters(), ...props.modelValue },
 })
 
@@ -210,22 +190,16 @@ const availableTags = computed(() =>
   unique(props.pool.flatMap((c) => c.tags ?? []).filter(Boolean)),
 )
 const availableAuthors = computed(() =>
-  unique(
-    props.pool
-      .map((c) => c.author || (c.owner_id ? `用户 #${c.owner_id}` : ''))
-      .filter(Boolean),
-  ),
+  unique(props.pool.map((c) => c.author).filter(Boolean)),
 )
 
-const isActive = (f: CaseFilters) =>
+const isActive = (f: ScenarioFilters) =>
   f.modules.length > 0 ||
   f.systems.length > 0 ||
   f.tags.length > 0 ||
   f.authors.length > 0 ||
   f.priorities.length > 0 ||
-  f.updatedWithin !== 'all' ||
-  f.visibility !== 'all' ||
-  f.audited !== 'all'
+  f.updatedWithin !== 'all'
 
 const activeCount = computed(() => {
   let n = 0
@@ -236,8 +210,6 @@ const activeCount = computed(() => {
   if (f.authors.length) n++
   if (f.priorities.length) n++
   if (f.updatedWithin !== 'all') n++
-  if (f.visibility !== 'all') n++
-  if (f.audited !== 'all') n++
   return n
 })
 

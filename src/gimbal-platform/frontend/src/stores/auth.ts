@@ -163,8 +163,9 @@ export const useAuthStore = defineStore('auth', () => {
       // Network failures / backend 5xx / timeouts must NOT log the user
       // out — a transient backend hiccup used to wipe stored tokens and
       // force a re-login for no reason.
-      if (e && typeof e === 'object' && 'response' in e &&
-          (e as { response?: { status?: number } }).response?.status === 401) {
+      // http.ts 的拦截器 reject 的是 ApiError(属性为 .status),
+      // 不是 axios 原生错误(那才有 .response.status)。
+      if ((e as { status?: number } | null)?.status === 401) {
         clear()
         return null
       }

@@ -23,10 +23,6 @@
         <el-alert type="error" :closable="false" show-icon :title="errorMsg" />
       </div>
 
-      <!-- TODO(spec-1): dev-mode strip ("admin / admin 自动建好") skipped —
-           backend guarantees first registration becomes admin, so the hint
-           adds no value here. Revisit in spec-2 if needed. -->
-
       <!-- Form -->
       <el-form
         ref="formRef"

@@ -9,11 +9,9 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import * as authApi from '@/api/auth'
 
-function axiosLikeError(status?: number) {
-  return Object.assign(new Error('boom'), {
-    isAxiosError: true,
-    response: status === undefined ? undefined : { status },
-  })
+// http.ts 拦截器 reject 的是 ApiError:{ status, code, msg }(无 .response)。
+function apiError(status?: number) {
+  return Object.assign(new Error('boom'), { status })
 }
 
 describe('auth store — fetchMe', () => {
@@ -32,7 +30,7 @@ describe('auth store — fetchMe', () => {
   it('401 clears the session', async () => {
     const store = useAuthStore()
     seedToken(store)
-    vi.spyOn(authApi, 'me').mockRejectedValue(axiosLikeError(401))
+    vi.spyOn(authApi, 'me').mockRejectedValue(apiError(401))
 
     const out = await store.fetchMe()
 
@@ -44,7 +42,7 @@ describe('auth store — fetchMe', () => {
   it('network error (no response) keeps the session', async () => {
     const store = useAuthStore()
     seedToken(store)
-    vi.spyOn(authApi, 'me').mockRejectedValue(axiosLikeError())
+    vi.spyOn(authApi, 'me').mockRejectedValue(apiError())
 
     const out = await store.fetchMe()
 
@@ -56,7 +54,7 @@ describe('auth store — fetchMe', () => {
   it('backend 503 keeps the session', async () => {
     const store = useAuthStore()
     seedToken(store)
-    vi.spyOn(authApi, 'me').mockRejectedValue(axiosLikeError(503))
+    vi.spyOn(authApi, 'me').mockRejectedValue(apiError(503))
 
     await store.fetchMe()
 

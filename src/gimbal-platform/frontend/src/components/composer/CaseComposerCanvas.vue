@@ -139,14 +139,14 @@
                     size="small"
                     placeholder="header name"
                     class="hdr-key"
-                    @update:model-value="v => updateHeaderKey(currentStep, String(key), v)"
+                    @update:model-value="(v: string) => updateHeaderKey(currentStep, String(key), v)"
                   />
                   <el-input
                     :model-value="String(value)"
                     size="small"
                     placeholder="value (如 ${auth.qa1.token})"
                     class="hdr-val"
-                    @update:model-value="v => updateHeaderValue(currentStep, String(key), v)"
+                    @update:model-value="(v: string) => updateHeaderValue(currentStep, String(key), v)"
                   />
                   <button type="button" class="c-kv-del hdr-pick" title="选择认证" @click="openAuthPicker(String(key), String(value))">ⓘ</button>
                   <button type="button" class="c-kv-del hdr-pick hdr-var" title="选择变量" @click="openVarPicker(String(key), String(value))">Ⓥ</button>
@@ -170,7 +170,7 @@
                   :field-actions="true"
                   :var-choices="referenceVarChoices"
                   :inject-choices="injectVarChoices"
-                  @update:body="v => currentStep.request.body = mergeBody(v, {})"
+                  @update:body="(v: unknown) => currentStep.request.body = v"
                   @field-extract="onFieldExtract"
                   @field-assign="(f, name) => onFieldAssign(f, name)"
                   @field-assert="onFieldAssert"
@@ -189,7 +189,7 @@
             <el-form-item v-else-if="activeIoTab === 'request'" label="body (JSON)">
               <el-input
                 :model-value="JSON.stringify(currentStep.request.body || {}, null, 2)"
-                @update:model-value="v => currentStep.request.body = parseJson(v, {})"
+                @update:model-value="(v: string) => currentStep.request.body = parseJson(v, {})"
                 type="textarea"
                 :rows="5"
                 class="code-input"
@@ -279,14 +279,14 @@
               <div v-for="(ex, j) in extractStrategies(currentStep)" :key="j" class="extract-row c-kv-row">
                 <el-input
                   :model-value="ex.target"
-                  @update:model-value="v => ex.target = v"
+                  @update:model-value="(v: string) => ex.target = v"
                   placeholder="变量名 (target)"
                   size="small"
                 />
                 <span class="c-kv-sep">←</span>
                 <el-input
                   :model-value="ex.expression"
-                  @update:model-value="v => ex.expression = v"
+                  @update:model-value="(v: string) => ex.expression = v"
                   placeholder="$.data.orderId"
                   size="small"
                   class="ex-path"
@@ -426,6 +426,7 @@ import type {
   StrategyView, StrategyKindView, StrategyKindDetailView,
 } from '@/types/plate'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
+import { parseJson } from '../../utils/json'
 
 const props = defineProps<{
   steps: StepView[]
@@ -499,7 +500,6 @@ function removeExtract(step: StepView, ex: ExtractView) {
 const strategyKinds = ref<StrategyKindView[]>([])
 /** detail 按 kind 懒加载 + 会话级缓存(语法全局不变)。ref 包对象 → 命中后模板自动重渲染 */
 const strategyDetailCache = ref<Record<string, StrategyKindDetailView>>({})
-let strategyDetailPrefetch = false
 /** 刚通过"添加策略"下拉新建的实例下标(渲染为展开引导填写);-1 = 无 */
 const justAddedStrategyIdx = ref(-1)
 // 切 step 时清"刚添加"标记(下标在新 step 语境无意义,防误展开);签页回 request
@@ -591,20 +591,25 @@ function openAuthPicker(key: string, value: string) {
   authPickerVal.value = value
   authPickerOpen.value = true
 }
-function onAuthPicked(tpl: string) {
-  const step = authPickerStep.value
-  const key = authPickerKey.value
-  const val = authPickerVal.value
-  const headers = step?.api?.headers
-  if (step && headers) {
-    if (key && key in headers) {
-      headers[key] = tpl
-    } else {
-      // key 被改:按当时 value 定位(唯一匹配才注入,防误写)
-      const hits = Object.entries(headers).filter(([, v]) => v === val)
-      if (hits.length === 1) headers[hits[0][0]] = tpl
-    }
+/** 头部注入共用:按 key(或唯一 value 定位)写入模板串。 */
+function injectHeaderTpl(
+  headers: Record<string, string> | undefined,
+  key: string | null,
+  val: string | null,
+  tpl: string,
+): void {
+  if (!headers) return
+  if (key && key in headers) {
+    headers[key] = tpl
+  } else {
+    // key 被改:按当时 value 定位(唯一匹配才注入,防误写)
+    const hits = Object.entries(headers).filter(([, v]) => v === val)
+    if (hits.length === 1) headers[hits[0][0]] = tpl
   }
+}
+
+function onAuthPicked(tpl: string) {
+  injectHeaderTpl(authPickerStep.value?.api?.headers, authPickerKey.value, authPickerVal.value, tpl)
   authPickerKey.value = null
   authPickerVal.value = null
   authPickerStep.value = null
@@ -676,7 +681,7 @@ function onFieldExtract(f: IOFieldBinding) {
     expression: respPathFor(f.name),
     scope: 'scenario',
     required: true,
-  } as unknown as ExtractView)
+  })
   justAddedStrategyIdx.value = currentStep.value.strategy.length - 1
 }
 
@@ -689,7 +694,7 @@ function onFieldAssign(f: IOFieldBinding, name: string) {
     target: f.path.replace(/^\$\./, '$.request_body.'),
     scope: 'scenario',
     required: true,
-  } as unknown as ExtractView)
+  })
   justAddedStrategyIdx.value = currentStep.value.strategy.length - 1
 }
 
@@ -703,7 +708,7 @@ function onFieldAssert(f: IOFieldBinding) {
     expected: null,
     message: '',
     soft: false,
-  } as unknown as ExtractView)
+  })
   justAddedStrategyIdx.value = currentStep.value.strategy.length - 1
 }
 
@@ -720,17 +725,7 @@ function openVarPicker(key: string, value: string) {
   varPickerOpen.value = true
 }
 function onVarPicked(tpl: string) {
-  const key = varPickerKey.value
-  const val = varPickerVal.value
-  const headers = currentStep.value?.api?.headers
-  if (headers) {
-    if (key && key in headers) {
-      headers[key] = tpl
-    } else {
-      const hits = Object.entries(headers).filter(([, v]) => v === val)
-      if (hits.length === 1) headers[hits[0][0]] = tpl
-    }
-  }
+  injectHeaderTpl(currentStep.value?.api?.headers, varPickerKey.value, varPickerVal.value, tpl)
   varPickerKey.value = null
   varPickerVal.value = null
 }
@@ -739,14 +734,11 @@ function onVarPicked(tpl: string) {
 const authAliases = computed(() => auths.value.map((a) => a.alias))
 
 onMounted(() => {
-  void loadStrategyKinds()
-  // 首次进入策略区前预热三个 kind 的 detail(共 3 个请求,一次性)
-  if (!strategyDetailPrefetch) {
-    strategyDetailPrefetch = true
-    void loadStrategyKinds().then(() => {
-      for (const k of strategyKinds.value) void ensureStrategyDetail(k.kind)
-    })
-  }
+  // 首次进入策略区前预热:策略 kinds + 各 kind 的 detail(一次性)。
+  // (onMounted 每实例只跑一次,无需 once-guard。)
+  void loadStrategyKinds().then(() => {
+    for (const k of strategyKinds.value) void ensureStrategyDetail(k.kind)
+  })
   // 认证列表:ⓘ 选择器 + 悬空徽章判定共用。失败静默(ⓘ 打开时列表为空,可重进)
   listAuths().then((a) => { auths.value = a }).catch(() => {})
 })
@@ -770,8 +762,9 @@ watch([local, orch], () => {
   emit('update:orchestration', { steps: [...orch.steps], resourceMeta: { ...orch.resourceMeta } })
 }, { deep: true })
 
-/** 两份 step 数组内容是否一致(浅比较 + 关键字段;step 对象在同步链上会被克隆,不能比引用) */
-function sameSteps(a: StepView[] | undefined, b: StepView[]): boolean {
+/** 两份 step 数组内容是否一致(浅比较 + 关键字段;step 对象在同步链上会被克隆,不能比引用)。
+ *  参数是结构无关的 — steps watch 传 StepView[],orchestration watch 传 StepOrchestration[]。 */
+function sameSteps(a: readonly unknown[] | undefined, b: readonly unknown[]): boolean {
   if (!a) return false
   if (a.length !== b.length) return false
   return a.every((s, i) => {
@@ -975,12 +968,6 @@ async function onAddEndpoint(ep: any) {
   }
 }
 
-function mergeBody(formValues: any, _hiddenFields: any): any {
-  // Form values come from IOFieldBinding-driven controls; plate 已是结构权威,
-  // 平台不再派生 Type C 隐藏字段, 直接以表单值为准。
-  return { ...(_hiddenFields || {}), ...(formValues || {}) }
-}
-
 function removeStep(i: number) {
   local.splice(i, 1)
   orch.steps.splice(i, 1)  // 保持与 local 同序同长
@@ -1019,9 +1006,6 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
   }
 }
 
-function parseJson(s: string, fallback: unknown) {
-  try { return JSON.parse(s) } catch { return fallback }
-}
 </script>
 
 <style scoped>

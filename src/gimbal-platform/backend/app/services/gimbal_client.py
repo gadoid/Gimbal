@@ -61,13 +61,12 @@ async def run(
     scenario_dict: dict[str, Any],
     *,
     halt_at: int | None = None,
-    halt_reason: str = "platform-dispatch",
 ) -> dict[str, Any]:
     """POST /run — 执行一个 gimbal 可执行 dict,同步返回 RunResult。
 
     ``scenario_dict`` 必须是 plate convert(consumer="gimbal")的产物
-    (已剥离平台视图扩展字段)。``halt_at`` / ``halt_reason`` 透传
-    RuntimeControl(调试暂停语义,阶段 1 不用)。
+    (已剥离平台视图扩展字段)。``halt_at`` 透传 RuntimeControl
+    (调试暂停语义)。
 
     Returns gimbal server 的 ``RunResponse`` dict::
 
@@ -79,7 +78,6 @@ async def run(
     body: dict[str, Any] = {"scenario": scenario_dict}
     if halt_at is not None:
         body["halt_at"] = halt_at
-        body["halt_reason"] = halt_reason
     client = _get_client()
     try:
         resp = await client.post("/run", json=body)

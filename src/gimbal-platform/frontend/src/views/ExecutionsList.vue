@@ -23,7 +23,7 @@
       <el-table-column label="状态" width="120">
         <template #default="{ row }">
           <span :class="['status-tag', `status-${row.status}`]">
-            {{ statusText(row.status) }}
+            {{ executionStatusText(row.status) }}
           </span>
         </template>
       </el-table-column>
@@ -63,37 +63,20 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { useExecutionsStore } from '@/stores/executions'
-import { confirmAction } from '@/utils/confirmAction'
 import { executionStatusText } from '@/utils/executionStatus'
 import { executionUrl } from '@/utils/links'
+import { removeExecution } from '@/utils/removeExecution'
 
 const router = useRouter()
 const store = useExecutionsStore()
-
-function statusText(s: string): string {
-  return executionStatusText(s)
-}
 
 function open(id: number) {
   router.push(executionUrl(id))
 }
 
 async function remove(id: number) {
-  const ok = await confirmAction(
-    `确认删除 execution #${id}？其下所有 run 记录与报告文件将一并删除，操作不可撤销。`,
-    '删除 execution',
-    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
-  )
-  if (!ok) return
-  try {
-    await store.remove(id)
-  } catch (e) {
-    ElMessage.error(`删除失败：${(e as Error).message}`)
-    return
-  }
-  ElMessage.success('已删除')
+  await removeExecution(id, (i) => store.remove(i))
 }
 
 let handle: ReturnType<typeof setInterval> | null = null
@@ -139,15 +122,6 @@ onUnmounted(() => {
 
 .load-error {
   margin-top: 14px;
-}
-
-.mono {
-  font-family: var(--font-mono);
-}
-
-.dim {
-  color: var(--color-text-secondary);
-  font-size: 11px;
 }
 
 .status-tag {

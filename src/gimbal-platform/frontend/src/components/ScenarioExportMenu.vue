@@ -5,8 +5,6 @@
   - 没有进行中草稿时,菜单禁用并提示
   - 用法:
       <ScenarioExportMenu variant="topbar" />     <!-- 顶栏,中等大小按钮 -->
-      <ScenarioExportMenu variant="row"    />     <!-- 表格行内,小尺寸 -->
-      <ScenarioExportMenu variant="ghost"  />     <!-- 透明背景 -->
 -->
 <template>
   <el-dropdown
@@ -21,7 +19,7 @@
         <line x1="12" y1="15" x2="12" y2="3"/>
       </svg>
       <span>{{ labelText }}</span>
-      <svg v-if="!hideArrow" class="se-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <svg class="se-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <polyline points="6 9 12 15 18 9"/>
       </svg>
     </button>
@@ -49,10 +47,9 @@ import { computed, ref } from 'vue'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { ElMessage } from 'element-plus'
 
-const props = withDefaults(defineProps<{
-  variant?: 'topbar' | 'ghost'
-  hideArrow?: boolean
-}>(), { variant: 'topbar', hideArrow: false })
+withDefaults(defineProps<{
+  variant?: 'topbar'
+}>(), { variant: 'topbar' })
 
 const store = useScenarioDraftStore()
 const exporting = ref(false)
@@ -100,24 +97,6 @@ async function onCommand(cmd: string) {
   font-size: 13px;
 }
 .se-topbar:hover:not(.se-disabled) { background: #f5f6fa; color: #1a1d24; }
-
-.se-row {
-  background: transparent;
-  border: 1px solid transparent;
-  color: #5a6273;
-  padding: 4px 8px;
-  font-size: 12px;
-}
-.se-row:hover:not(.se-disabled) { background: #eef2ff; color: #4f46e5; border-color: #c7d2fe; }
-
-.se-ghost {
-  background: transparent;
-  border: 1px dashed #c7d2fe;
-  color: #4f46e5;
-  padding: 8px 14px;
-  font-size: 13px;
-}
-.se-ghost:hover:not(.se-disabled) { background: #eef2ff; }
 
 .se-arrow { margin-left: 2px; opacity: 0.6; }
 </style>

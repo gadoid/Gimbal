@@ -61,7 +61,7 @@
         <div class="row-header">
           <el-input
             :model-value="m.name"
-            @update:model-value="val => renameResource(m.name, val)"
+            @update:model-value="(val: string) => renameResource(m.name, val)"
             placeholder="mock 名称 (例: fin-mock-default)"
             size="small"
             class="row-name"
@@ -74,7 +74,7 @@
             <label>镜像 (image)</label>
             <el-input
               :model-value="m.image"
-              @update:model-value="val => m.image = val"
+              @update:model-value="(val: string) => m.image = val"
               placeholder="harbor.example.com/fin-mock:1.0.0"
               size="small"
             />
@@ -96,14 +96,14 @@
           <div v-for="(pm, j) in (portRows[m.name] || [])" :key="j" class="c-kv-row port-row">
             <el-input
               :model-value="pm.host"
-              @update:model-value="val => (pm.host = val, syncPortMapping(m.name))"
+              @update:model-value="(val: string) => (pm.host = val, syncPortMapping(m.name))"
               placeholder="8080"
               size="small"
             />
             <span class="c-kv-sep">→</span>
             <el-input
               :model-value="pm.container"
-              @update:model-value="val => (pm.container = val, syncPortMapping(m.name))"
+              @update:model-value="(val: string) => (pm.container = val, syncPortMapping(m.name))"
               placeholder="8080"
               size="small"
             />
@@ -132,7 +132,7 @@
         <div class="row-header">
           <el-input
             :model-value="f.name"
-            @update:model-value="val => renameResource(f.name, val)"
+            @update:model-value="(val: string) => renameResource(f.name, val)"
             placeholder="file 名称 (例: order-sample.json)"
             size="small"
             class="row-name"
@@ -145,7 +145,7 @@
             <label>路径 (path)</label>
             <el-input
               :model-value="f.path"
-              @update:model-value="val => f.path = val"
+              @update:model-value="(val: string) => f.path = val"
               placeholder="/data/files/order-sample.json"
               size="small"
             />
@@ -154,7 +154,7 @@
             <label>描述 (可选 · 进 resourceMeta, 不进 plate)</label>
             <el-input
               :model-value="props.resourceMeta[f.name] || ''"
-              @update:model-value="val => updateResourceMeta(f.name, val)"
+              @update:model-value="(val: string) => updateResourceMeta(f.name, val)"
               placeholder="JSON / CSV / PEM"
               size="small"
             />
@@ -179,6 +179,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import type { ResourceView, MockView, FileView } from '@/types/plate'
+import { parseJson } from '../../utils/json'
 
 const props = defineProps<{
   resource: Record<string, ResourceView>
@@ -327,10 +328,6 @@ watch(local, () => {
   emit('update:resource', { ...local })
 }, { deep: true })
 
-function parseJson(s: string, fallback: unknown) {
-  if (!s || !s.trim()) return fallback
-  try { return JSON.parse(s) } catch { return fallback }
-}
 </script>
 
 <style scoped>

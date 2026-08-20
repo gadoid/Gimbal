@@ -16,45 +16,20 @@ from httpx import AsyncClient
 
 
 # ── helpers ────────────────────────────────────────────────────────
-async def _register_and_login(
-    client: AsyncClient, username: str = "alice", password: str = "alicepass123"
-) -> dict[str, str]:
-    await client.post(
-        "/api/auth/register",
-        json={"username": username, "password": password, "display_name": username},
-    )
-    r = await client.post(
-        "/api/auth/login",
-        json={"username": username, "password": password},
-    )
-    token = r.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+from .helpers import make_draft, register_and_login as _register_and_login, test_env
 
 
 def _make_draft(scenario_id: str = "sc-test", **meta_over) -> dict:
-    meta = {
-        "scenarioId": scenario_id,
-        "name": "Test",
+    # Richer meta than the shared minimal builder (description/tags/owner…).
+    # ``owner`` may be overridden by the caller (spoofing tests).
+    defaults: dict = {
         "description": "smoke",
-        "module": "order",
-        "priority": 1,
         "author": "alice",
         "owner": "alice",
         "tags": ["smoke"],
-        "system": ["fin"],
     }
-    meta.update(meta_over)
-    return {
-        "definition": {
-            "kind": "scenario",
-            "scenarioId": scenario_id,
-            "meta": meta,
-            "config": {"timePolicy": {"kind": "record"}},
-            "resource": {},
-            "steps": [],
-        },
-        "orchestration": {"steps": [], "resourceMeta": {}},
-    }
+    defaults.update(meta_over)
+    return make_draft(scenario_id, **defaults)
 
 
 # ── envs ───────────────────────────────────────────────────────────
@@ -281,7 +256,7 @@ async def test_run_dispatch_scenario_not_found_404(client: AsyncClient) -> None:
         json={
             "scenarioId": "sc-nope",
             "dataSetIds": ["ds-001"],
-            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+            "env": test_env(),
         },
     )
     assert r.status_code == 404
@@ -318,7 +293,7 @@ async def test_member_cannot_run_another_users_scenario(client: AsyncClient) -> 
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
+            "env": test_env(),
         },
     )
     assert r.status_code == 403

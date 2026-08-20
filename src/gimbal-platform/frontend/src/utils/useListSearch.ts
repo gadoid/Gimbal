@@ -1,7 +1,7 @@
 /**
  * useListSearch — case-insensitive multi-field substring search.
  *
- * Used by 4 list views (CasesMine, CasesPublic, Auths, UsersAdmin) that
+ * Used by list views (Scenarios, Auths, UsersAdmin, …) that
  * share the same shape: a reactive `query` ref + a list of records,
  * filtering by any of `fields` whose stringified value contains the
  * query (locale-lowercased).
