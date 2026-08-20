@@ -161,7 +161,7 @@
                 <button type="button" class="c-add" @click="addHeader(currentStep)">+ 新增 header</button>
               </div>
             </el-form-item>
-            <!-- body: 优先由 request.fields_meta (IOFieldBinding) 驱动表单 -->
+            <!-- body: 由 plate /full 的 IOFieldBinding 实时驱动表单(会话级现拉,非持久快照) -->
             <el-form-item v-if="activeIoTab === 'request' && fieldBindings(currentStep).length" label="请求体 (由 IOFieldBinding 驱动)">
               <div class="field-form-wrap">
                 <FieldForm
@@ -183,6 +183,9 @@
                 </p>
               </div>
             </el-form-item>
+            <el-form-item v-else-if="activeIoTab === 'request' && fullState === 'loading' && hasEndpointRef(currentStep)" label="请求体">
+              <p class="resp-spec-empty">正在从 plate 拉取接口字段契约…</p>
+            </el-form-item>
             <el-form-item v-else-if="activeIoTab === 'request'" label="body (JSON)">
               <el-input
                 :model-value="JSON.stringify(currentStep.request.body || {}, null, 2)"
@@ -191,7 +194,8 @@
                 :rows="5"
                 class="code-input"
               />
-              <span class="hint">提示: 从接口目录添加 step 后, body 将由 IOFieldBinding 自动渲染</span>
+              <span v-if="fullState === 'failed' && hasEndpointRef(currentStep)" class="hint">plate 不可达,字段表单暂不可用 — 已降级为 JSON 编辑</span>
+              <span v-else class="hint">提示: 该接口未声明请求字段契约,或 plate 拉取中</span>
             </el-form-item>
             <!-- Type C 查看入口(设计 §3.5):schema 有、binding 无 — 纯查看 -->
             <details v-if="activeIoTab === 'request' && reqTypeC.length" class="typec-block">
@@ -455,10 +459,20 @@ function inferProtocol(step: StepView | undefined): string {
   return 'step'
 }
 
-/** 从 request.fields_meta 派生 FieldForm 需要的 IOFieldBinding[] */
+/** FieldForm 需要的 IOFieldBinding[] — 会话级按 endpoint_id 现拉 /full,
+ *  不读持久化快照(旧 step.request.fields_meta 已废弃,不再作为数据源)。
+ *  读 fullVersion 建立响应依赖:回填后模板/reqTypeC 自动重算。 */
 function fieldBindings(step: StepView | undefined): IOFieldBinding[] {
-  const fm = step?.request?.fields_meta
-  return fm ? Object.values(fm) : []
+  void fullVersion.value
+  const eid = step?.api?.view_hints?.endpoint_id
+  if (!eid) return []
+  void ensureEndpointFull(eid)
+  return endpointFullByEndpoint.get(eid)?.request?.fields || []
+}
+
+/** step 是否携带接口身份引用(决定 loading/failed 占位是否适用) */
+function hasEndpointRef(step: StepView | undefined): boolean {
+  return !!step?.api?.view_hints?.endpoint_id
 }
 
 /** strategy 里提取 extract 变体 */
@@ -772,39 +786,56 @@ function sameSteps(a: StepView[] | undefined, b: StepView[]): boolean {
  */
 const CODE_TARGET_CANDIDATES = ['$.code', '$.data.code'] as const
 
-/**
- * endpoint_id → 200 响应 assertable_fields(#2 起被消费:断言 target /
- * extract expression 的下拉候选)。step 经 api.view_hints.endpoint_id
- * 持久化接口身份,缓存 miss 时懒拉 /full 回填 — 刷新后候选不丢。
- */
-const assertableByEndpoint = new Map<string, string[]>()
-/** 正在懒拉的 endpoint_id(防重复并发) */
-const assertableFetching = new Set<string>()
+// ── /full 结构契约:单一会话缓存(容器原则) ─────────────────────────
+// endpoint_id → plate /full 响应整包。所有结构渲染(请求字段表单/断言
+// 候选/响应契约/Type C 差集)都是这份缓存的 computed 切片 — 每个 endpoint
+// 会话内恰好一次请求。不随 draft 持久化:plate 是结构权威源,每次进
+// 编辑器都拿最新结构,发版后零迁移。
+const endpointFullByEndpoint = new Map<string, EndpointFullView>()
+/** 进行中的 /full 请求(同 endpoint 并发收敛为同一 Promise) */
+const fullInFlight = new Map<string, Promise<EndpointFullView | undefined>>()
+/** 响应式触发器:Map 变更不触发 computed,版本号 bump */
+const fullVersion = ref(0)
+/** 最近一次拉取状态(控制表单 loading/失败占位) */
+const fullState = ref<'loading' | 'failed' | ''>('')
 
-/** 当前 step 的断言候选列表;endpoint 未知/拉取中 → 空(不渲染 ▾) */
-const currentAssertable = computed<string[]>(() => {
-  const eid = currentStep.value?.api?.view_hints?.endpoint_id
-  if (!eid) return []
-  ensureAssertable(eid)
-  return assertableByEndpoint.get(eid) ?? []
-})
-
-/** 缓存 miss 时懒拉 /full 回填 assertable(fail-soft:拉不到就无候选) */
-function ensureAssertable(endpointId: string) {
-  if (assertableByEndpoint.has(endpointId) || assertableFetching.has(endpointId)) return
-  assertableFetching.add(endpointId)
-  getFullEndpoint(endpointId)
+/** 缓存 miss 时拉 /full 并回填(fail-soft:失败返回 undefined,消费方各自降级) */
+function ensureEndpointFull(endpointId: string): Promise<EndpointFullView | undefined> {
+  const cached = endpointFullByEndpoint.get(endpointId)
+  if (cached) return Promise.resolve(cached)
+  const inFlight = fullInFlight.get(endpointId)
+  if (inFlight) return inFlight
+  fullState.value = 'loading'
+  const p = getFullEndpoint(endpointId)
     .then((full) => {
-      const a = full.responses?.['200']?.assertable_fields
-      if (a?.length) assertableByEndpoint.set(endpointId, a)
+      endpointFullByEndpoint.set(endpointId, full)
+      fullVersion.value++
+      fullState.value = ''
+      return full
     })
-    .catch(() => {})
-    .finally(() => assertableFetching.delete(endpointId))
+    .catch(() => {
+      fullState.value = 'failed'
+      return undefined
+    })
+    .finally(() => fullInFlight.delete(endpointId))
+  fullInFlight.set(endpointId, p)
+  return p
 }
 
-// ── 响应契约渲染(IO 双签卡片 Response 页 + 右栏):与 assertable 同源
-// (/full),共用懒拉。respSpecs 全状态码;respFields(200)为右栏兼容保留。
-interface RespField { name: string; ui_kind: string }
+/** 当前 step 的 /full 结构契约(拉取中/失败 → undefined) */
+const currentFull = computed<EndpointFullView | undefined>(() => {
+  void fullVersion.value
+  const eid = currentStep.value?.api?.view_hints?.endpoint_id
+  if (!eid) return undefined
+  void ensureEndpointFull(eid)
+  return endpointFullByEndpoint.get(eid)
+})
+
+/** 当前 step 的断言候选列表;未知/拉取中 → 空(不渲染 ▾) */
+const currentAssertable = computed<string[]>(
+  () => currentFull.value?.responses?.['200']?.assertable_fields || []
+)
+
 /** /full responses[status] 轻量投影(设计 §2.4);引用数据不进 draft */
 interface RespSpecLite {
   status: number
@@ -815,60 +846,28 @@ interface RespSpecLite {
   /** 200 契约的 model_schema(Type C 差集源);非 200 恒 undefined */
   model_schema?: Record<string, unknown>
 }
-const respFieldsByEndpoint = new Map<string, RespField[]>()
-const respSpecsByEndpoint = new Map<string, RespSpecLite[]>()
-/** 请求侧 model_schema(Type C 差集源;request.model_schema fallback schema) */
-const reqSchemaByEndpoint = new Map<string, Record<string, unknown> | undefined>()
-/** 响应式触发器:Map 变更不会触发 computed,用版本号 bump */
-const respFieldsVersion = ref(0)
-const currentRespFields = computed<RespField[]>(() => {
-  void respFieldsVersion.value
-  const eid = currentStep.value?.api?.view_hints?.endpoint_id
-  if (!eid) return []
-  ensureRespFields(eid)
-  return respFieldsByEndpoint.get(eid) ?? []
-})
 /** 当前 step 的全状态码响应契约(状态码字典序) */
 const currentRespSpecs = computed<RespSpecLite[]>(() => {
-  void respFieldsVersion.value
-  const eid = currentStep.value?.api?.view_hints?.endpoint_id
-  if (!eid) return []
-  ensureRespFields(eid)
-  return respSpecsByEndpoint.get(eid) ?? []
+  const full = currentFull.value
+  if (!full) return []
+  return Object.entries(full.responses || {})
+    .map(([status, spec]) => ({
+      status: Number(status),
+      description: spec.description || '',
+      fields: spec.fields || [],
+      assertable: spec.assertable_fields || [],
+      model_schema: status === '200'
+        ? (spec.model_schema ?? spec.schema)
+        : undefined,
+    }))
+    .sort((a, b) => a.status - b.status)
 })
-function ensureRespFields(endpointId: string) {
-  if (respFieldsByEndpoint.has(endpointId) || assertableFetching.has(endpointId)) return
-  assertableFetching.add(endpointId)
-  getFullEndpoint(endpointId)
-    .then((full) => {
-      const r200 = full.responses?.['200']
-      const fields = (r200?.fields || []).map((f) => ({ name: f.name, ui_kind: f.ui_kind }))
-      respFieldsByEndpoint.set(endpointId, fields)
-      // 全状态码契约:responses 原样投影(含 4xx/5xx),字典序展示
-      const specs = Object.entries(full.responses || {})
-        .map(([status, spec]) => ({
-          status: Number(status),
-          description: spec.description || '',
-          fields: spec.fields || [],
-          assertable: spec.assertable_fields || [],
-          model_schema: status === '200'
-            ? (spec.model_schema ?? spec.schema)
-            : undefined,
-        }))
-        .sort((a, b) => a.status - b.status)
-      respSpecsByEndpoint.set(endpointId, specs)
-      const req = full.request as any
-      reqSchemaByEndpoint.set(endpointId, req?.model_schema ?? req?.schema)
-      respFieldsVersion.value++
-    })
-    .catch(() => {})
-    .finally(() => assertableFetching.delete(endpointId))
-}
 
-/** 选中 step 即预拉契约(Type C / 候选 / Response 页共用;不等到切签) */
-watch(() => currentStep.value?.api?.view_hints?.endpoint_id, (eid) => {
-  if (eid) ensureRespFields(eid)
-}, { immediate: true })
+/** 请求侧 model_schema(Type C 差集源;request.model_schema fallback schema) */
+const currentReqSchema = computed<Record<string, unknown> | undefined>(() => {
+  const req = currentFull.value?.request as any
+  return req?.model_schema ?? req?.schema
+})
 
 // ── 策略区说明:request/response 共用 step.strategy 单数组(执行序即数组
 //    序,plate Step 契约不变);不按签页过滤,避免"Request 页添加的策略
@@ -891,15 +890,11 @@ function typeCFields(
     .map((k) => ({ name: k, type: props[k]?.type ?? 'unknown', path: `$.${k}` }))
 }
 /** 请求侧 Type C(挂 Request 签页底部) */
-const reqTypeC = computed<TypeCField[]>(() => {
-  void respFieldsVersion.value
-  const eid = currentStep.value?.api?.view_hints?.endpoint_id
-  if (!eid) return []
-  return typeCFields(reqSchemaByEndpoint.get(eid), fieldBindings(currentStep.value!).map((f) => f.path))
-})
+const reqTypeC = computed<TypeCField[]>(() =>
+  typeCFields(currentReqSchema.value, fieldBindings(currentStep.value).map((f) => f.path))
+)
 /** 响应侧 Type C(200 契约 schema 差集,挂 Response 签页底部) */
 const respTypeC = computed<TypeCField[]>(() => {
-  void respFieldsVersion.value
   const spec200 = currentRespSpecs.value.find((s) => s.status === 200)
   if (!spec200) return []
   return typeCFields(spec200.model_schema, spec200.fields.map((f) => f.path))
@@ -945,21 +940,11 @@ async function onAddEndpoint(ep: any) {
     // 拉 plate /api/endpoint/{id}/full 取 IOFieldBinding + 策略原料
     // (assertable_fields / success_criteria);失败仍以原始信息加入
     // (用户投诉过的"裸 JSON"兜底)。
-    let fieldsMeta: Record<string, IOFieldBinding> | undefined
-    let full: EndpointFullView | undefined
-    try {
-      full = await getFullEndpoint(ep.id)
-      fieldsMeta = Object.fromEntries(
-        (full.request?.fields || []).map((f: IOFieldBinding) => [f.name, f])
-      )
-    } catch (e) {
-      ElMessage.warning('拉取完整接口定义失败, 仍以原始信息加入: ' + (e as Error).message)
-    }
-    // assertable_fields 存 step 级 view_hints(本期只存不消费,供后续
-    // target/expression 下拉候选使用)
-    const assertable = full?.responses?.['200']?.assertable_fields
+    const full = await ensureEndpointFull(ep.id)
+    if (!full) ElMessage.warning('拉取完整接口定义失败, 仍以原始信息加入')
+    const fields = full?.request?.fields || []
     const strategy = buildInitialStrategies(full)
-    const initialBody = fieldsMeta ? deepDefaults(Object.values(fieldsMeta)) : {}
+    const initialBody = deepDefaults(fields)
     const newStep: StepView = {
       kind: 'step',
       description: ep.name,
@@ -969,26 +954,22 @@ async function onAddEndpoint(ep: any) {
         method: ep.api?.method || 'GET',
         path: ep.api?.path || '',
         headers: ep.api?.headers || {},
-        // 接口身份持久化(#2):断言/extract 候选懒拉 /full 的 key;
+        // 接口身份持久化(#2):字段契约/断言/extract 候选懒拉 /full 的 key;
         // view_hints 是平台视图扩展,GimbalScenarioExporter 导出时剥离
         view_hints: { endpoint_id: ep.id },
       },
       request: {
         kind: 'request',
         body: initialBody,
-        ...(fieldsMeta ? { fields_meta: fieldsMeta } : {}),
       },
       strategy,
     }
-    // assertable_fields 存 Canvas 本地 Map(引用数据不进 draft,容器原则;
-    // StepView 顶层无 view_hints 声明,塞 step 会泄漏进 /convert 导出)
-    if (assertable?.length) assertableByEndpoint.set(ep.id, assertable)
     local.push(newStep)
     // 同步 orchestration (保持 index 对齐)
     orch.steps.push({ enabled: true, name: ep.name })
     activeStepIdx.value = local.length - 1
     subView.value = null  // 直接落盘, 关闭目录回到画布
-    ElMessage.success(`已加入 step: ${ep.name} (${fieldsMeta ? Object.keys(fieldsMeta).length : 0} 字段)`)
+    ElMessage.success(`已加入 step: ${ep.name} (${fields.length} 字段)`)
   } finally {
     adding.value = false
   }

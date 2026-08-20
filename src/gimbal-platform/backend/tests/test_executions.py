@@ -42,7 +42,7 @@ async def _alice_id() -> int:
 
 async def _insert_execution(
     *,
-    case_id: str = "sc_e2e",
+    scenario_id: str = "sc_e2e",
     runs: list[dict] | None = None,
     total_runs: int | None = None,
     passed: int = 0,
@@ -57,7 +57,7 @@ async def _insert_execution(
     owner_id = await _alice_id()
     async with SessionLocal() as s:
         ex = Execution(
-            case_id=case_id,
+            scenario_id=scenario_id,
             owner_id=owner_id,
             status=status,
             total_runs=total_runs if total_runs is not None else len(runs),
@@ -76,7 +76,7 @@ async def _insert_execution(
 # ── list / detail isolation ────────────────────────────────────
 async def test_list_executions_only_returns_owners(client: AsyncClient) -> None:
     a_auth = await _login_alice(client)
-    await _insert_execution(case_id="sc_a")
+    await _insert_execution(scenario_id="sc_a")
     await client.post(
         "/api/auth/register", json={"username": "bob", "password": "bobpass456"}
     )
@@ -91,7 +91,7 @@ async def test_list_executions_only_returns_owners(client: AsyncClient) -> None:
 
     a_list = await client.get("/api/executions", headers=a_auth)
     assert a_list.json()["total"] == 1
-    assert a_list.json()["items"][0]["case_id"] == "sc_a"
+    assert a_list.json()["items"][0]["scenario_id"] == "sc_a"
 
     # Cross-owner detail access: bob can't read alice's execution.
     eid = a_list.json()["items"][0]["id"]
@@ -236,7 +236,7 @@ async def test_run_log_stream_replays_history_for_late_subscriber(
 
     async with SessionLocal() as s:
         s.add(Execution(
-            id=eid, case_id="stream-test", owner_id=await _alice_id(),
+            id=eid, scenario_id="stream-test", owner_id=await _alice_id(),
             status="done", total_runs=1, passed=1, failed=0,
         ))
         s.add(ExecRun(id=rid, execution_id=eid, idx=1, status="passed", exit_code=0))
@@ -285,7 +285,7 @@ async def test_run_log_stream_skips_lines_before_last_event_id(
 
     async with SessionLocal() as s:
         s.add(Execution(
-            id=eid, case_id="resume-test", owner_id=await _alice_id(),
+            id=eid, scenario_id="resume-test", owner_id=await _alice_id(),
             status="done", total_runs=1, passed=1, failed=0,
         ))
         s.add(ExecRun(id=rid, execution_id=eid, idx=1, status="passed", exit_code=0))
@@ -331,7 +331,7 @@ async def test_post_execution_and_rerun_are_gone(client: AsyncClient) -> None:
     r = await client.post(
         "/api/executions",
         headers=auth,
-        json={"case_id": "sc_x", "n_runs": 1, "parallel": 1},
+        json={"scenario_id": "sc_x", "n_runs": 1, "parallel": 1},
     )
     assert r.status_code == 405
     r = await client.post(f"/api/executions/{eid}/runs/1/rerun", headers=auth)
@@ -360,7 +360,7 @@ async def test_auto_migrate_adds_missing_exec_runs_columns(tmp_path) -> None:
         );
         CREATE TABLE executions (
             id INTEGER PRIMARY KEY,
-            case_id VARCHAR(256),
+            scenario_id VARCHAR(128),
             owner_id INTEGER,
             status VARCHAR(16),
             total_runs INTEGER,

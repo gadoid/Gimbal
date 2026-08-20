@@ -17,7 +17,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as yaml from 'js-yaml'
-import { previewPlateDraft, getScenarioDraft } from '@/api/scenario-composer'
+import { previewPlateDraft } from '@/api/scenario-composer'
 import { ElMessage } from 'element-plus'
 import type { ScenarioDraft, Orchestration } from '@/types/scenario-composer'
 import type { ScenarioView } from '@/types/plate'
@@ -41,36 +41,6 @@ export const useScenarioDraftStore = defineStore('scenario-draft', () => {
     draft.value = null
   }
 
-  /** 从场景库点行级导出时,把已保存 scenario 的整稿拉进来,然后正常 export*
-   *
-   * 后端容器形返回 {definition, orchestration, caseMeta};若后端仍返回旧扁平
-   * 形(meta/steps/...),则容错重建 definition。orchestration 缺省时按
-   * definition.steps 长度补全为全启用。 */
-  async function loadFromSaved(scenarioId: string): Promise<void> {
-    const saved = await getScenarioDraft(scenarioId) as any
-    const def: ScenarioView = saved.definition ?? {
-      kind: 'scenario',
-      scenarioId,
-      meta: saved.meta ?? {
-        name: '', description: '', module: '', priority: 1,
-        author: '', owner: '', tags: [], version: 'v0.1.0',
-        createTime: new Date().toISOString(), expire: false,
-        requirementRef: [], system: ['fin'],
-      },
-      config: saved.config ?? {
-        setup: [], teardown: [], services: {}, users: {},
-        timePolicy: { kind: 'record' }, retry: null, vars: {},
-      },
-      resource: saved.resource ?? {},
-      steps: saved.steps ?? [],
-    } as ScenarioView
-    const orch: Orchestration = saved.orchestration ?? {
-      steps: (def.steps || []).map(() => ({ enabled: true, name: '' })),
-      resourceMeta: {},
-    } as Orchestration
-    draft.value = { definition: def, orchestration: orch, scenarioId }
-  }
-
   /** 平台 → Plate /convert (consumer="gimbal") → 返回纯可执行结构
    *
    * 后端 plate_client.convert() 默认 consumer="gimbal",走
@@ -82,7 +52,7 @@ export const useScenarioDraftStore = defineStore('scenario-draft', () => {
     if (!draft.value) {
       throw new Error('当前没有可导出的草稿')
     }
-    // 容器形:definition 原样透传 plate /convert;orchestration/caseMeta 不进 plate。
+    // 容器形:definition 原样透传 plate /convert;orchestration 不进 plate。
     const { definition, orchestration } = draft.value
     const draftForPlate: ScenarioDraft = { definition, orchestration }
     const res = await previewPlateDraft(draftForPlate)
@@ -154,7 +124,6 @@ export const useScenarioDraftStore = defineStore('scenario-draft', () => {
     draft,
     setDraft,
     clearDraft,
-    loadFromSaved,
     fetchConverted,
     exportJson,
     exportYaml,

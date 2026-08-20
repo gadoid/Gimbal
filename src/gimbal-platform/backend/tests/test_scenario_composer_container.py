@@ -21,8 +21,6 @@ def test_draft_accepts_definition_dict_plus_orchestration() -> None:
     })
     assert draft.definition["scenarioId"] == "sc-order-create"
     assert draft.orchestration.steps == []
-    # caseMeta optional
-    assert draft.case_meta is None
 
 
 def test_step_orchestration_defaults() -> None:

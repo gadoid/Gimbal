@@ -1,13 +1,13 @@
 <!-- Scenarios.vue — 场景库 v1
-     场景 = 1:1 绑定用例的"结构定义层" · 与 cases 的关系是 scenario 1 → case 1 → dataSets N
-     表格列对齐 pencil 原型：收藏 / 场景名 / 系统 / 模块 / 优先级 / 用例数 / 数据集数 / 步骤数 / 标签 / 更新时间
+     场景即执行主体(Case 层已解散)· 与数据集的关系是 scenario 1 → dataSets N
+     表格列对齐 pencil 原型：收藏 / 场景名 / 系统 / 模块 / 优先级 / 数据集数 / 步骤数 / 标签 / 更新时间
 -->
 <template>
   <section class="scenarios">
     <header class="page-header">
       <div>
         <h2 class="page-title"><el-icon><Collection /></el-icon>场景库</h2>
-        <p>共 {{ store.scenarios.length }} 个场景 · 1:1 绑定用例 · 1:N 数据集</p>
+        <p>共 {{ store.scenarios.length }} 个场景 · 1:N 数据集</p>
       </div>
       <div class="header-actions">
         <el-input
@@ -88,12 +88,6 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="用例" width="62" align="center">
-        <template #default="{ row }">
-          <span class="num">{{ row.caseCount }}</span>
-        </template>
-      </el-table-column>
-
       <el-table-column label="数据集" width="70" align="center">
         <template #default="{ row }">
           <span class="num">{{ row.dataSetCount }}</span>
@@ -150,8 +144,9 @@
             <button class="more-btn" @click.stop>⋯</button>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item command="detail">查看详情</el-dropdown-item>
                 <el-dropdown-item command="edit">编辑场景</el-dropdown-item>
-                <el-dropdown-item command="cases">查看用例</el-dropdown-item>
+                <el-dropdown-item command="datasets">查看数据集</el-dropdown-item>
                 <el-dropdown-item command="export" divided>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                   导出 (JSON/YAML)
@@ -207,7 +202,7 @@ import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { previewPlateDraft, getScenarioDraft } from '@/api/scenario-composer'
 import { useListSearch } from '@/utils/useListSearch'
 import { confirmAction } from '@/utils/confirmAction'
-import { composerUrl, caseViewUrl } from '@/utils/links'
+import { composerUrl, scenarioDataSetsUrl, scenarioDetailUrl } from '@/utils/links'
 import { showError } from '@/utils/errorFallback'
 import FilterPopover from '@/components/FilterPopover.vue'
 import TagPill from '@/components/TagPill.vue'
@@ -379,18 +374,11 @@ async function toggleStar(row: Scenario) {
 }
 
 async function onCmd(cmd: string, row: Scenario) {
+  if (cmd === 'detail') return router.push(scenarioDetailUrl(row.meta.scenarioId))
   if (cmd === 'edit') return openScenario(row)
-  if (cmd === 'cases') {
-    // 场景:用例 = 1:1 — 直接打开该场景绑定用例的说明书页
-    try {
-      await store.fetchCases({ scenarioId: row.meta.scenarioId })
-      const c = store.casesOfScenario(row.meta.scenarioId)[0]
-      if (c) return router.push(caseViewUrl(c.caseId))
-      ElMessage.info('该场景还没有绑定用例,已打开编排器')
-      return router.push(composerUrl(row.meta.scenarioId))
-    } catch (e) {
-      return showError('查看用例', undefined, (e as Error).message)
-    }
+  if (cmd === 'datasets') {
+    // 数据集直接挂场景(Case 层已解散)— 打开场景的数据集列表页
+    return router.push(scenarioDataSetsUrl(row.meta.scenarioId))
   }
   if (cmd === 'copy') {
     try {

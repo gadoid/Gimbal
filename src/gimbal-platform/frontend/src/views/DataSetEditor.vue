@@ -7,10 +7,10 @@
     <header class="page-header">
       <div>
         <h2 class="page-title"><el-icon><DataAnalysis /></el-icon>数据集编辑</h2>
-        <p>用例 <code class="sid">{{ caseId }}</code> · {{ datasetId === 'new' ? '新建数据集' : datasetId }}</p>
+        <p>场景 <code class="sid">{{ scenarioId }}</code> · {{ datasetId === 'new' ? '新建数据集' : datasetId }}</p>
       </div>
       <div class="header-actions">
-        <el-button :icon="Back" @click="router.push(caseDataSetsUrl(caseId))">返回列表</el-button>
+        <el-button :icon="Back" @click="router.push(scenarioDataSetsUrl(scenarioId))">返回列表</el-button>
         <el-button :loading="saving" plain :disabled="loadFailed" @click="onSave">保存</el-button>
         <el-button type="primary" :icon="VideoPlay" @click="onBatchRun" :disabled="!rows.length">批量运行 {{ rows.length }} 条</el-button>
       </div>
@@ -79,12 +79,12 @@ import { ElMessage } from 'element-plus'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { getDataSet } from '@/api/scenario-composer'
 import { showError } from '@/utils/errorFallback'
-import { caseDataSetsUrl, caseViewUrl, composerUrl } from '@/utils/links'
+import { scenarioDataSetsUrl, composerUrl } from '@/utils/links'
 
 const route = useRoute()
 const router = useRouter()
 const store = useScenarioComposerStore()
-const caseId = route.params.caseId as string
+const scenarioId = route.params.scenarioId as string
 const datasetId = route.params.datasetId as string
 
 const saving = ref(false)
@@ -102,7 +102,7 @@ const current = computed(() =>
 
 onMounted(async () => {
   try {
-    if (!store.dataSets.length) await store.fetchDataSets(caseId)
+    if (!store.dataSets.length) await store.fetchDataSets(scenarioId)
     const ds = current.value
     if (ds) {
       form.name = ds.name
@@ -216,13 +216,13 @@ function runRow(i: number) {
 async function onSave() {
   saving.value = true
   try {
-    await store.saveDataSet(caseId, datasetId === 'new' ? null : datasetId, {
+    await store.saveDataSet(scenarioId, datasetId === 'new' ? null : datasetId, {
       name: form.name,
       description: form.description,
       rows: rows.value,
     })
     ElMessage.success('已保存')
-    router.push(caseDataSetsUrl(caseId))
+    router.push(scenarioDataSetsUrl(scenarioId))
   } catch (e) {
     showError('保存', undefined, (e as Error).message)
   } finally {
@@ -236,12 +236,7 @@ async function onBatchRun() {
     ElMessage.warning('请先保存数据集，再批量运行')
     return
   }
-  let sid = store.caseById(caseId)?.scenarioId
-  if (!sid) {
-    try { await store.fetchCases() } catch { /* 忽略,回退到详情页 */ }
-    sid = store.caseById(caseId)?.scenarioId
-  }
-  router.push(sid ? composerUrl(sid) : caseViewUrl(caseId))
+  router.push(composerUrl(scenarioId))
 }
 </script>
 

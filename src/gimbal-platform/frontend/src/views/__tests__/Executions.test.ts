@@ -36,7 +36,7 @@ vi.mock('@/api/executions', async (importOriginal) => {
       // should set ``execStore.detail`` directly.
       return {
         id,
-        case_id: 'mock',
+        scenario_id: 'mock',
         status: 'done',
         total_runs: 0,
         passed: 0,
@@ -68,7 +68,7 @@ function makeRouter() {
 
 const fakeDetail = {
   id: 1,
-  case_id: 'demo-case',
+  scenario_id: 'demo-case',
   status: 'done' as const,
   total_runs: 2,
   passed: 1,

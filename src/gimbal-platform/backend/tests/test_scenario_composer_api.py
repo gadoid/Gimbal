@@ -4,6 +4,10 @@ Goes through the HTTP layer using the conftest ``client`` fixture so
 router + auth + store + schema integration is exercised as one.  Plate
 calls are NOT exercised here (see test_scenario_composer_plate_integration
 for that — those tests replace the httpx client with a MockTransport).
+
+The Case layer was dissolved — datasets hang directly off scenarios
+(``POST /api/scenarios/{id}/data-sets``), and POST /api/runs keys on
+``scenarioId``.
 """
 from __future__ import annotations
 
@@ -72,7 +76,7 @@ async def test_create_scenario_ok(client: AsyncClient) -> None:
     assert r.status_code == 201
     body = r.json()
     assert body["meta"]["scenarioId"] == "sc-test"
-    assert body["caseCount"] == 0
+    assert body["dataSetCount"] == 0
     assert body["stepCount"] == 0
     # Starred defaults to false.
     assert body["starred"] is False
@@ -173,49 +177,11 @@ async def test_update_scenario_owner_cannot_be_reassigned(
     assert r.json()["meta"]["owner"] == "alice"
 
 
-async def test_create_case_created_by_cannot_be_spoofed(
-    client: AsyncClient,
-) -> None:
-    """A client cannot create a case claiming a different createdBy."""
-    alice = await _register_and_login(client, "alice")
-    await client.post("/api/scenarios", headers=alice, json=_make_draft())
-    r = await client.post(
-        "/api/cases",
-        headers=alice,
-        json={
-            "caseId": "case-001",
-            "scenarioId": "sc-test",
-            "name": "c",
-            "env": "dev",
-            "auth": {"name": "a", "type": "bearer"},
-            "dataSetIds": [],
-            "createdBy": "admin",  # spoofed
-        },
-    )
-    assert r.status_code == 201
-    # The server uses the authenticated user's display_name, not the body.
-    assert r.json()["createdBy"] == "alice"
-
-
 async def test_delete_scenario_cascades(client: AsyncClient) -> None:
     headers = await _register_and_login(client)
     await client.post("/api/scenarios", headers=headers, json=_make_draft())
-    # Add a case + data set
-    await client.post(
-        "/api/cases",
-        headers=headers,
-        json={
-            "caseId": "case-001",
-            "scenarioId": "sc-test",
-            "name": "c",
-            "env": "dev",
-            "auth": {"name": "a", "type": "bearer"},
-            "dataSetIds": [],
-            "createdBy": "alice",
-        },
-    )
     r_ds = await client.post(
-        "/api/cases/case-001/data-sets",
+        "/api/scenarios/sc-test/data-sets",
         headers=headers,
         json={"name": "ds", "rows": [{"x": 1}]},
     )
@@ -223,10 +189,8 @@ async def test_delete_scenario_cascades(client: AsyncClient) -> None:
     # Delete scenario
     r_del = await client.delete("/api/scenarios/sc-test", headers=headers)
     assert r_del.status_code == 204
-    # Both case and data set are gone
-    r_case = await client.get("/api/cases/case-001", headers=headers)
-    assert r_case.status_code == 404
-    r_list = await client.get("/api/data-sets?caseId=case-001", headers=headers)
+    # Data set is gone
+    r_list = await client.get("/api/data-sets?scenarioId=sc-test", headers=headers)
     assert r_list.json() == []
 
 
@@ -269,121 +233,69 @@ async def test_preview_plate_unavailable_502(
     assert r.json()["detail"]["code"] == "plate_unavailable"
 
 
-# ── cases + data-sets ─────────────────────────────────────────────
+# ── data-sets ─────────────────────────────────────────────────────
 async def test_data_set_inconsistent_rows_422(client: AsyncClient) -> None:
     headers = await _register_and_login(client)
     await client.post("/api/scenarios", headers=headers, json=_make_draft())
-    await client.post(
-        "/api/cases",
-        headers=headers,
-        json={
-            "caseId": "case-001",
-            "scenarioId": "sc-test",
-            "name": "c",
-            "env": "dev",
-            "auth": {"name": "a", "type": "bearer"},
-            "dataSetIds": [],
-            "createdBy": "alice",
-        },
-    )
     r = await client.post(
-        "/api/cases/case-001/data-sets",
+        "/api/scenarios/sc-test/data-sets",
         headers=headers,
         json={"name": "ds", "rows": [{"x": 1, "y": 2}, {"x": 1}]},
     )
     assert r.status_code == 422
 
 
-async def test_patch_case_rejects_immutable_fields(client: AsyncClient) -> None:
+async def test_data_set_create_unknown_scenario_404(client: AsyncClient) -> None:
     headers = await _register_and_login(client)
-    await client.post("/api/scenarios", headers=headers, json=_make_draft())
-    await client.post(
-        "/api/cases",
+    r = await client.post(
+        "/api/scenarios/sc-nope/data-sets",
         headers=headers,
-        json={
-            "caseId": "case-001",
-            "scenarioId": "sc-test",
-            "name": "c",
-            "env": "dev",
-            "auth": {"name": "a", "type": "bearer"},
-            "dataSetIds": [],
-            "createdBy": "alice",
-        },
+        json={"name": "ds", "rows": [{"x": 1}]},
     )
-    r = await client.patch(
-        "/api/cases/case-001",
-        headers=headers,
-        json={"scenarioId": "sc-other"},
-    )
-    assert r.status_code == 422  # Pydantic model_validator rejects immutable
+    assert r.status_code == 404
 
 
 async def test_data_set_summary_preview_truncated(client: AsyncClient) -> None:
     headers = await _register_and_login(client)
     await client.post("/api/scenarios", headers=headers, json=_make_draft())
-    await client.post(
-        "/api/cases",
-        headers=headers,
-        json={
-            "caseId": "case-001",
-            "scenarioId": "sc-test",
-            "name": "c",
-            "env": "dev",
-            "auth": {"name": "a", "type": "bearer"},
-            "dataSetIds": [],
-            "createdBy": "alice",
-        },
-    )
     rows = [{"x": i} for i in range(10)]
     await client.post(
-        "/api/cases/case-001/data-sets",
+        "/api/scenarios/sc-test/data-sets",
         headers=headers,
         json={"name": "ds", "rows": rows},
     )
-    r = await client.get("/api/data-sets?caseId=case-001", headers=headers)
+    r = await client.get("/api/data-sets?scenarioId=sc-test", headers=headers)
     summaries = r.json()
     assert len(summaries) == 1
+    assert summaries[0]["scenarioId"] == "sc-test"
     assert summaries[0]["rowCount"] == 10
     assert len(summaries[0]["preview"]) == 3
 
 
 # ── runs (Plate mocked, so we only test the 404 paths here) ───────
-async def test_run_dispatch_case_not_found_404(client: AsyncClient) -> None:
+async def test_run_dispatch_scenario_not_found_404(client: AsyncClient) -> None:
     headers = await _register_and_login(client)
     r = await client.post(
         "/api/runs",
         headers=headers,
         json={
-            "caseId": "case-nope",
+            "scenarioId": "sc-nope",
             "dataSetIds": ["ds-001"],
             "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
         },
     )
     assert r.status_code == 404
-    assert r.json()["detail"]["code"] == "case_not_found"
+    assert r.json()["detail"]["code"] == "scenario_not_found"
 
 
 async def test_run_dispatch_env_not_found_404(client: AsyncClient) -> None:
     headers = await _register_and_login(client)
     await client.post("/api/scenarios", headers=headers, json=_make_draft())
-    await client.post(
-        "/api/cases",
-        headers=headers,
-        json={
-            "caseId": "case-001",
-            "scenarioId": "sc-test",
-            "name": "c",
-            "env": "dev",
-            "auth": {"name": "a", "type": "bearer"},
-            "dataSetIds": [],
-            "createdBy": "alice",
-        },
-    )
     r = await client.post(
         "/api/runs",
         headers=headers,
         json={
-            "caseId": "case-001",
+            "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
             "env": {"envId": "nope", "name": "nope", "baseUrl": "http://x"},
         },
@@ -393,30 +305,18 @@ async def test_run_dispatch_env_not_found_404(client: AsyncClient) -> None:
 
 
 # ── access control on POST /runs + data-set reads ─────────────────
-async def test_member_cannot_run_another_users_case(client: AsyncClient) -> None:
-    """Bob must not be able to dispatch Alice's case — running has real
-    side effects (subprocesses hitting the configured env services)."""
+async def test_member_cannot_run_another_users_scenario(client: AsyncClient) -> None:
+    """Bob must not be able to dispatch Alice's scenario — running has
+    real side effects (subprocesses hitting the configured env
+    services)."""
     alice = await _register_and_login(client)
     await client.post("/api/scenarios", headers=alice, json=_make_draft())
-    await client.post(
-        "/api/cases",
-        headers=alice,
-        json={
-            "caseId": "case-alice",
-            "scenarioId": "sc-test",
-            "name": "c",
-            "env": "dev",
-            "auth": {"name": "a", "type": "bearer"},
-            "dataSetIds": [],
-            "createdBy": "alice",
-        },
-    )
     bob = await _register_and_login(client, "bob", "bobpass456")
     r = await client.post(
         "/api/runs",
         headers=bob,
         json={
-            "caseId": "case-alice",
+            "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
             "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
         },
@@ -431,24 +331,11 @@ async def test_member_cannot_read_another_users_datasets(client: AsyncClient) ->
     alice = await _register_and_login(client)
     await client.post("/api/scenarios", headers=alice, json=_make_draft())
     await client.post(
-        "/api/cases",
-        headers=alice,
-        json={
-            "caseId": "case-alice",
-            "scenarioId": "sc-test",
-            "name": "c",
-            "env": "dev",
-            "auth": {"name": "a", "type": "bearer"},
-            "dataSetIds": [],
-            "createdBy": "alice",
-        },
-    )
-    await client.post(
-        "/api/cases/case-alice/data-sets",
+        "/api/scenarios/sc-test/data-sets",
         headers=alice,
         json={"name": "ds", "rows": [{"x": 1}]},
     )
-    ds_id = (await client.get("/api/data-sets?caseId=case-alice", headers=alice)).json()[0]["datasetId"]
+    ds_id = (await client.get("/api/data-sets?scenarioId=sc-test", headers=alice)).json()[0]["datasetId"]
 
     bob = await _register_and_login(client, "bob", "bobpass456")
     # List scoped to Bob → empty
@@ -460,13 +347,12 @@ async def test_member_cannot_read_another_users_datasets(client: AsyncClient) ->
     assert len((await client.get("/api/data-sets", headers=alice)).json()) == 1
 
 
-# ── scenario-ownership check on POST /api/cases ────────────────────
-async def test_member_cannot_attach_case_to_unowned_scenario(
+# ── dataset-create ownership on POST /api/scenarios/{id}/data-sets ─
+async def test_member_cannot_attach_dataset_to_unowned_scenario(
     client: AsyncClient, fresh_db
 ) -> None:
     """Empty-owner (legacy/plate-synced) scenarios are locked, matching
-    scenarios._require_owner — the old `scen.owner and ...` guard let any
-    member attach cases to them."""
+    scenarios._require_owner."""
     from app.core.db import SessionLocal
     from app.models.composer_scenario import ComposerScenario
 
@@ -474,9 +360,18 @@ async def test_member_cannot_attach_case_to_unowned_scenario(
         db.add(
             ComposerScenario(
                 scenario_id="sc-orphan",
-                name="orphan",
                 owner="",
-                payload={"definition": {"kind": "scenario", "meta": {}}},
+                payload={
+                    "definition": {
+                        "kind": "scenario",
+                        "meta": {
+                            "scenarioId": "sc-orphan",
+                            "name": "orphan",
+                            "module": "order",
+                            "system": ["fin"],
+                        },
+                    }
+                },
             )
         )
         await db.commit()
@@ -486,51 +381,32 @@ async def test_member_cannot_attach_case_to_unowned_scenario(
     await _register_and_login(client, "alice", "alicepass123")
     bob = await _register_and_login(client, "bob", "bobpass456")
     r = await client.post(
-        "/api/cases",
+        "/api/scenarios/sc-orphan/data-sets",
         headers=bob,
-        json={
-            "caseId": "case-bob",
-            "scenarioId": "sc-orphan",
-            "name": "c",
-            "env": "dev",
-            "auth": {"name": "a", "type": "bearer"},
-            "dataSetIds": [],
-            "createdBy": "bob",
-        },
+        json={"name": "ds", "rows": [{"x": 1}]},
     )
     assert r.status_code == 403
     assert "not_owner" in r.json()["detail"]
 
 
-
-async def test_create_case_requires_scenario_ownership(client: AsyncClient) -> None:
-    """Bob cannot create a case under Alice's scenario."""
+async def test_create_dataset_requires_scenario_ownership(client: AsyncClient) -> None:
+    """Bob cannot create a dataset under Alice's scenario."""
     alice = await _register_and_login(client, "alice")
     await client.post("/api/scenarios", headers=alice, json=_make_draft())
     bob = await _register_and_login(client, "bob", "bobpass456")
     r = await client.post(
-        "/api/cases",
+        "/api/scenarios/sc-test/data-sets",
         headers=bob,
-        json={
-            "caseId": "case-001",
-            "scenarioId": "sc-test",
-            "name": "case by bob",
-            "env": "dev",
-            "auth": {"name": "a", "type": "bearer"},
-            "dataSetIds": [],
-            "createdBy": "bob",
-        },
+        json={"name": "ds by bob", "rows": [{"x": 1}]},
     )
     assert r.status_code == 403
     assert "not_owner" in r.json()["detail"]
 
 
-async def test_create_case_admin_can_create_under_any_scenario(
+async def test_create_dataset_admin_can_create_under_any_scenario(
     client: AsyncClient,
 ) -> None:
-    """An admin user can create cases under any scenario."""
-    # Mark alice as admin via the user admin endpoint (best-effort: a
-    # fresh registration gives is_admin=False; we patch the DB row).
+    """An admin user can create datasets under any scenario."""
     from app.core import db as db_module
     from app.models import User
     from sqlalchemy import update
@@ -543,22 +419,10 @@ async def test_create_case_admin_can_create_under_any_scenario(
 
     alice = await _register_and_login(client, "alice")
     await client.post("/api/scenarios", headers=alice, json=_make_draft())
-    # Bob is not admin but also not the owner; should still 403.
-    bob = await _register_and_login(client, "bob", "bobpass456")
-    # Re-fetch alice to pick up the admin flag; the token is the same so
-    # we just re-use it.
     r = await client.post(
-        "/api/cases",
+        "/api/scenarios/sc-test/data-sets",
         headers=alice,  # alice is admin now
-        json={
-            "caseId": "case-001",
-            "scenarioId": "sc-test",
-            "name": "case by admin",
-            "env": "dev",
-            "auth": {"name": "a", "type": "bearer"},
-            "dataSetIds": [],
-            "createdBy": "alice",
-        },
+        json={"name": "ds by admin", "rows": [{"x": 1}]},
     )
     assert r.status_code == 201
 

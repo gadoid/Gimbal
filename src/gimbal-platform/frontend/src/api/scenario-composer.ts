@@ -1,12 +1,13 @@
 /**
  * api/scenario-composer.ts — 场景编排 API client
  *
- * 提供 scenarios / cases / data-sets 三个领域的 REST 调用。
+ * 提供 scenarios / data-sets 两个领域的 REST 调用。
  * 请求路径对齐 Plate V3.2 的资源命名（snake_case + s 复数）。
+ * Case 层已解散 — RunRequest 即执行配方,直接挂 scenario。
  */
 import http from '@/api/http'
 import type {
-  Scenario, Case, DataSet, DataSetSummary,
+  Scenario, DataSet, DataSetSummary,
   ScenarioDraft, DataSetDraft, RunEnv,
 } from '@/types/scenario-composer'
 import type {
@@ -73,35 +74,15 @@ export async function unpublishScenario(scenarioId: string): Promise<Scenario> {
   return data
 }
 
-/** 深拷贝场景+用例+数据集到自己名下(新 id,恒 private) */
+/** 深拷贝场景+数据集到自己名下(新 id,恒 private) */
 export async function copyScenario(scenarioId: string): Promise<Scenario> {
   const { data } = await http.post<Scenario>(`/scenarios/${enc(scenarioId)}/copy`)
   return data
 }
 
-// ── cases ──────────────────────────────────────────────────────
-export async function listCases(params: {
-  scenarioId?: string; q?: string; system?: string; module?: string;
-}): Promise<Case[]> {
-  const { data } = await http.get<Case[]>('/cases', { params })
-  return data
-}
-
-export async function createCase(draft: Case): Promise<Case> {
-  const { data } = await http.post<Case>('/cases', draft)
-  return data
-}
-
-export async function updateCase(
-  caseId: string, patch: Partial<Case>,
-): Promise<Case> {
-  const { data } = await http.patch<Case>(`/cases/${enc(caseId)}`, patch)
-  return data
-}
-
 // ── data-sets ─────────────────────────────────────────────────
 export async function listDataSets(params: {
-  caseId?: string;
+  scenarioId?: string;
 }): Promise<DataSetSummary[]> {
   const { data } = await http.get<DataSetSummary[]>('/data-sets', { params })
   return data
@@ -113,9 +94,9 @@ export async function getDataSet(datasetId: string): Promise<DataSet> {
 }
 
 export async function createDataSet(
-  caseId: string, draft: DataSetDraft,
+  scenarioId: string, draft: DataSetDraft,
 ): Promise<DataSet> {
-  const { data } = await http.post<DataSet>(`/cases/${enc(caseId)}/data-sets`, draft)
+  const { data } = await http.post<DataSet>(`/scenarios/${enc(scenarioId)}/data-sets`, draft)
   return data
 }
 
@@ -127,8 +108,9 @@ export async function updateDataSet(
 }
 
 // ── run ────────────────────────────────────────────────────────
+/** 执行配方(recipe):Case 层解散后 RunRequest 即配方本身,直接挂 scenario */
 export interface RunRequest {
-  caseId: string
+  scenarioId: string
   dataSetIds: string[]
   env: RunEnv
   /** 执行用认证 alias 多选(原 auth 单选已废);dispatcher 解密注入 Config.users */
@@ -154,7 +136,7 @@ export interface RunCaseResult {
   executionId?: number
 }
 
-export async function runCase(req: RunRequest): Promise<RunCaseResult> {
+export async function runScenario(req: RunRequest): Promise<RunCaseResult> {
   const { data } = await http.post<RunCaseResult>('/runs', req)
   return data
 }

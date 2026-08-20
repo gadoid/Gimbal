@@ -2,7 +2,7 @@
 
 Exposes ``create_app()`` for tests + ASGI servers, plus a ``uvicorn``-friendly
 ``app`` module-level instance.  Wires CORS, the lifespan that runs ``init_db``
-on startup, and the V3 router set (auth/scenarios/cases/runs/executions/…).
+on startup, and the V3 router set (auth/scenarios/runs/executions/…).
 """
 from __future__ import annotations
 
@@ -12,33 +12,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
-from starlette.convertors import Convertor, register_url_convertor
-
-
-# ── V3 case_id path-converter ────────────────────────────────────
-# The V3 composer uses ``case-`` prefixed ids (e.g. ``case-001``).  We
-# register a custom path-converter so the composer's GET/PATCH/DELETE
-# /{case_id} only matches V3 ids (case-/sc- 前缀),不吞掉同前缀段的
-# 其它静态路由。
-class _V3CaseIdConverter(Convertor[str]):
-    # 接受 case- 前缀 (手动命名) 或 sc- 前缀 (自动命名 `${scenarioId}-case-001`)
-    regex = r"(?:case|sc)-[a-z0-9-]+"
-
-    def convert(self, value: str) -> str:
-        return value
-
-    def to_string(self, value: str) -> str:
-        return value
-
-
-register_url_convertor("v3_case_id", _V3CaseIdConverter())
 
 from .core.config import settings
 from .core.db import init_db
 from .routers import (
     auth,
     auth_sessions,
-    cases_composer,
     data_sets,
     endpoint_catalog,
     envs,
@@ -150,9 +129,6 @@ def create_app() -> FastAPI:
 
     app.include_router(auth.router, prefix="/api")
     app.include_router(auth_sessions.router, prefix="/api")
-    # V3 composer cases 是唯一的 /api/cases* 路由:
-    # GET/PATCH/DELETE /{case_id} 只匹配 v3_case_id pattern(case-/sc- 前缀)。
-    app.include_router(cases_composer.router, prefix="/api")
     app.include_router(executions.router, prefix="/api")
     app.include_router(users.router, prefix="/api")
     # New V3 composer routers (registered in order so static suffixes
@@ -160,6 +136,10 @@ def create_app() -> FastAPI:
     app.include_router(envs.router, prefix="/api")
     app.include_router(runs.router, prefix="/api")
     app.include_router(data_sets.router, prefix="/api")
+    # Dataset-create lives on a scenario-nested path but in the
+    # data_sets module; register BEFORE scenarios' /{scenario_id}
+    # catch-all.
+    app.include_router(data_sets.create_router, prefix="/api")
     app.include_router(endpoint_catalog.router, prefix="/api")
     app.include_router(strategy_catalog.router, prefix="/api")
     app.include_router(scenarios.router, prefix="/api")  # MUST be last — has /{scenario_id}

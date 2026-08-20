@@ -95,7 +95,7 @@ def _draft_to_full_scenario_dict(
 
     definition is already plate-shaped (it's the authoritative structure);
     this only fills plate-required defaults that the platform UI doesn't
-    collect. orchestration / caseMeta are platform-only and never sent.
+    collect. orchestration is platform-only and never sent.
 
     Defaults filled:
     * kind:"scenario"

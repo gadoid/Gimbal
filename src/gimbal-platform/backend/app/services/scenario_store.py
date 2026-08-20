@@ -14,7 +14,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.composer_scenario import ComposerScenario
-from ..models.composer_case import ComposerCase
 from ..models.composer_data_set import ComposerDataSet
 # 删除 ScenarioStep;ScenarioMeta 仍保留(读侧用)
 from ..schemas.scenario_composer import (
@@ -62,21 +61,10 @@ async def create(
     payload = ScenarioDraft(
         definition=stored_definition,
         orchestration=draft.orchestration,
-        caseMeta=draft.case_meta,
     ).model_dump(by_alias=True, mode="json")
     row = ComposerScenario(
         scenario_id=server_owned.scenario_id,
-        name=server_owned.name,
-        description=server_owned.description,
-        module=server_owned.module,
-        priority=server_owned.priority,
-        author=server_owned.author,
         owner=server_owned.owner,
-        tags=server_owned.tags,
-        system=server_owned.system,
-        version=server_owned.version,
-        expire=server_owned.expire,
-        step_count=len(draft.definition.get("steps") or []),
         owner_id=owner_id,
         visibility=visibility,
         payload=payload,
@@ -125,21 +113,10 @@ async def update(
         "scenarioId": server_owned.scenario_id,
         "meta": server_owned.model_dump(by_alias=True, mode="json"),
     }
-    row.name = server_owned.name
-    row.description = server_owned.description
-    row.module = server_owned.module
-    row.priority = server_owned.priority
-    row.author = server_owned.author
     row.owner = effective_owner
-    row.tags = server_owned.tags
-    row.system = server_owned.system
-    row.version = server_owned.version
-    row.expire = server_owned.expire
-    row.step_count = len(draft.definition.get("steps") or [])
     row.payload = ScenarioDraft(
         definition=stored_definition,
         orchestration=draft.orchestration,
-        caseMeta=draft.case_meta,
     ).model_dump(by_alias=True, mode="json")
     await db.commit()
     await db.refresh(row)
@@ -147,23 +124,17 @@ async def update(
 
 
 async def delete(db: AsyncSession, scenario_id: str) -> None:
-    """Delete a scenario and cascade its cases + datasets.
+    """Delete a scenario and cascade its datasets.
 
     Raises KeyError on miss.  Uses a single transaction so a failure
     mid-cascade rolls everything back.
     """
     row = await _get_row(db, scenario_id)
-    # Cascade order: data_sets → cases → scenario (reverse FK).
-    case_ids_subq = select(ComposerCase.case_id).where(
-        ComposerCase.scenario_id == scenario_id
-    )
+    # Cascade order: data_sets → scenario (reverse FK).
     await db.execute(
         sa_delete(ComposerDataSet).where(
-            ComposerDataSet.case_id.in_(case_ids_subq)
+            ComposerDataSet.scenario_id == scenario_id
         )
-    )
-    await db.execute(
-        sa_delete(ComposerCase).where(ComposerCase.scenario_id == scenario_id)
     )
     await db.delete(row)
     await db.commit()
@@ -192,7 +163,7 @@ async def copy_scenario(
     new_owner: str,
     new_owner_id: int,
 ) -> Scenario:
-    """深拷贝场景 + 用例 + 数据集(替代 V1 公共库"复制到我的")。
+    """深拷贝场景 + 数据集(替代 V1 公共库"复制到我的")。
 
     新 id = 原 id + ``-copy-<6hex>``;属主 = 调用者;visibility 恒为
     private(复制来的公共场景也要先归自己再自行发布)。
@@ -211,59 +182,30 @@ async def copy_scenario(
         meta = definition.setdefault("meta", {})
         if isinstance(meta, dict):
             meta["scenarioId"] = new_sid
-            meta["name"] = f"{src.name} (副本)"
+            meta["name"] = f"{meta.get('name') or src.scenario_id} (副本)"
             meta["owner"] = new_owner
     draft = ScenarioDraft.model_validate(payload)
     await create(db, draft, owner=new_owner, owner_id=new_owner_id)
 
-    # cases + data_sets 级联拷贝
-    cases = (
+    # data_sets 级联拷贝(Case 层已解散,数据集直接挂场景)
+    dss = (
         await db.execute(
-            select(ComposerCase).where(ComposerCase.scenario_id == scenario_id)
+            select(ComposerDataSet).where(
+                ComposerDataSet.scenario_id == scenario_id
+            )
         )
     ).scalars().all()
-    for c in cases:
-        new_cid = f"{c.case_id}-copy-{suffix}"[:128]
-        new_payload = _copy.deepcopy(c.payload or {})
-        dss = (
-            await db.execute(
-                select(ComposerDataSet).where(ComposerDataSet.case_id == c.case_id)
-            )
-        ).scalars().all()
-        # 以实际拷贝的数据集为准回填 dataSetIds(源行的 data_set_ids
-        # 列在数据集创建路径不回填,直接沿用会丢引用)。
-        new_ds_ids: list[str] = []
-        for ds in dss:
-            new_dsid = f"{ds.dataset_id}-copy-{suffix}"[:128]
-            new_ds_ids.append(new_dsid)
-            db.add(ComposerDataSet(
-                dataset_id=new_dsid,
-                case_id=new_cid,
-                name=ds.name,
-                description=ds.description,
-                rows=_copy.deepcopy(ds.rows or []),
-                row_count=ds.row_count,
-            ))
-        if isinstance(new_payload, dict):
-            new_payload["caseId"] = new_cid
-            new_payload["scenarioId"] = new_sid
-            new_payload["createdBy"] = new_owner
-            new_payload["name"] = f"{c.name} (副本)"
-            new_payload["dataSetIds"] = new_ds_ids
-        db.add(ComposerCase(
-            case_id=new_cid,
+    for ds in dss:
+        new_dsid = f"{ds.dataset_id}-copy-{suffix}"[:128]
+        db.add(ComposerDataSet(
+            dataset_id=new_dsid,
             scenario_id=new_sid,
-            name=f"{c.name} (副本)",
-            description=c.description,
-            env=c.env,
-            auth=c.auth,
-            retry=c.retry,
-            data_set_ids=new_ds_ids,
-            created_by=new_owner,
-            payload=new_payload,
+            name=ds.name,
+            description=ds.description,
+            rows=_copy.deepcopy(ds.rows or []),
+            row_count=ds.row_count,
         ))
     await db.commit()
-    # create() 返回时用例尚未插入,重新投影拿真实 caseCount
     return await _to_read_shape(db, await _get_row(db, new_sid))
 
 
@@ -334,31 +276,21 @@ async def _to_read_shape(
 ) -> Scenario:
     """Reconstruct the full Scenario response shape from DB row + joins.
 
-    Counts come from aggregate queries; tags come from the row; starred
-    is per-user.
+    Counts come from aggregate queries; meta/tags project from the
+    payload (mirror columns retired); starred is per-user.
     """
-    # caseCount
-    case_count = (
-        await db.execute(
-            select(ComposerCase.case_id).where(
-                ComposerCase.scenario_id == row.scenario_id
-            )
+    # dataSetCount (sum of rowCount across datasets under the scenario)
+    ds_res = await db.execute(
+        select(ComposerDataSet.row_count).where(
+            ComposerDataSet.scenario_id == row.scenario_id
         )
-    ).all()
-    case_count_n = len(case_count)
-    # dataSetCount (sum of rowCount across datasets under those cases)
-    data_set_count = 0
-    if case_count_n:
-        case_ids = [c[0] for c in case_count]
-        ds_res = await db.execute(
-            select(ComposerDataSet.row_count).where(
-                ComposerDataSet.case_id.in_(case_ids)
-            )
-        )
-        data_set_count = sum(int(r[0] or 0) for r in ds_res.all())
+    )
+    data_set_count = sum(int(r[0] or 0) for r in ds_res.all())
 
     meta = _meta_from_row(row)
     steps = _steps_from_payload(row.payload)
+    # stepCount is derived from the payload (the mirror column was
+    # retired); len() of the persisted steps list is authoritative.
     config, resource, orchestration = _extras_from_payload(row.payload)
     starred = (
         stars.has(user_id, row.scenario_id)
@@ -371,35 +303,23 @@ async def _to_read_shape(
         config=config,
         resource=resource,
         orchestration=orchestration,
-        caseCount=case_count_n,
         dataSetCount=data_set_count,
-        stepCount=row.step_count or len(steps),
-        tags=list(row.tags or []),
+        stepCount=len(steps),
+        tags=list(meta.tags or []),
         starred=starred,
         visibility=row.visibility or "private",
     )
 
 
 def _meta_from_row(row: ComposerScenario) -> ScenarioMeta:
+    """Meta 投影:唯一权威是 payload.definition.meta。
+
+    镜像列已退役 — 老库行由 init_db 的回填迁移统一改写 payload 后,
+    这里不再需要列回退分支。"""
     payload = row.payload or {}
     definition = payload.get("definition") or {}
     meta_dict = definition.get("meta") or {}
-    if meta_dict:
-        return ScenarioMeta.model_validate(meta_dict)
-    # Fallback: rebuild from column projection.
-    return ScenarioMeta(
-        scenarioId=row.scenario_id,
-        name=row.name,
-        description=row.description,
-        module=row.module,
-        priority=row.priority,
-        author=row.author,
-        owner=row.owner,
-        tags=list(row.tags or []),
-        system=list(row.system or ["fin"]),
-        version=row.version or "v0.1.0",
-        expire=bool(row.expire),
-    )
+    return ScenarioMeta.model_validate(meta_dict)
 
 
 def _steps_from_payload(payload: dict) -> list[dict]:
@@ -414,7 +334,7 @@ def _extras_from_payload(
 ) -> tuple[dict | None, dict | None, Orchestration | None]:
     """Round-trip the persisted container's render-side sub-structure.
 
-    The payload is the container ``{definition, orchestration, caseMeta}``.
+    The payload is the container ``{definition, orchestration}``.
     config/resource live under ``definition`` (plate-shaped); orchestration
     is a sibling of definition (platform render state). Returns ``(None,
     None, None)`` when absent so the frontend's default-rebuild fallback
@@ -446,21 +366,23 @@ def _passes_filters(
     module: str | None,
     priority: int | None,
 ) -> bool:
-    if system and system not in (row.system or []):
+    # Filters read the payload's meta projection — the mirror columns
+    # were retired, so this is a method over the source, not over a copy.
+    if system and system not in (meta.system or []):
         return False
-    if module and (row.module or "") != module:
+    if module and (meta.module or "") != module:
         return False
-    if priority is not None and row.priority != priority:
+    if priority is not None and meta.priority != priority:
         return False
     if q:
         ql = q.lower()
         haystacks = [
             row.scenario_id or "",
-            row.name or "",
-            row.module or "",
-            row.description or "",
+            meta.name or "",
+            meta.module or "",
+            meta.description or "",
         ]
-        haystacks.extend(row.tags or [])
+        haystacks.extend(meta.tags or [])
         if not any(ql in (h or "").lower() for h in haystacks):
             return False
     return True

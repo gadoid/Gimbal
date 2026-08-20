@@ -4,6 +4,9 @@ Hits the store functions directly (bypassing the HTTP layer) so a
 regression in the service code surfaces without going through the whole
 FastAPI stack.  Per-test SQLite isolation is provided by the
 ``fresh_db`` autouse-style fixture in conftest.
+
+The Case layer was dissolved — datasets hang directly off scenarios,
+and the run recipe lives in RunRequest (pure values).
 """
 from __future__ import annotations
 
@@ -12,12 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core import db as db_module
 from app.schemas.scenario_composer import (
-    Case,
     DataSetDraft,
     ScenarioDraft,
     ScenarioMeta,
 )
-from app.services import case_store, data_set_store, scenario_store
+from app.services import data_set_store, scenario_store
 
 
 def _session() -> AsyncSession:
@@ -72,25 +74,12 @@ def _make_draft(steps: list[dict] | None = None, **meta_over) -> ScenarioDraft:
     })
 
 
-def _make_case(case_id: str, scenario_id: str, created_by: str = "alice") -> Case:
-    return Case.model_validate({
-        "caseId": case_id,
-        "scenarioId": scenario_id,
-        "name": case_id,
-        "env": "dev",
-        "auth": {"name": "a", "type": "bearer"},
-        "dataSetIds": [],
-        "createdBy": created_by,
-    })
-
-
 # ── scenario_store ─────────────────────────────────────────────────
 async def test_scenario_create_then_get(fresh_db) -> None:
     async with _session() as db:
         draft = _make_draft()
         scen = await scenario_store.create(db, draft, owner="alice")
         assert scen.meta.scenario_id == "sc-test"
-        assert scen.case_count == 0
         assert scen.data_set_count == 0
         assert scen.step_count == 0
         fetched = await scenario_store.get(db, "sc-test")
@@ -112,18 +101,15 @@ async def test_scenario_update_blocks_rename(fresh_db) -> None:
             await scenario_store.update(db, "sc-test", renamed)
 
 
-async def test_scenario_delete_cascades_cases_and_datasets(fresh_db) -> None:
+async def test_scenario_delete_cascades_datasets(fresh_db) -> None:
     async with _session() as db:
         await scenario_store.create(db, _make_draft(), owner="alice")
-        await case_store.create(db, _make_case("case-001", "sc-test"), created_by="alice")
         await data_set_store.create(
-            db, "case-001", DataSetDraft(name="ds", rows=[{"a": 1}, {"a": 2}])
+            db, "sc-test", DataSetDraft(name="ds", rows=[{"a": 1}, {"a": 2}])
         )
-        assert len(await case_store.list_for_scenario(db, "sc-test")) == 1
-        assert len(await data_set_store.list_for_case(db, "case-001")) == 1
+        assert len(await data_set_store.list_for_scenario(db, "sc-test")) == 1
         await scenario_store.delete(db, "sc-test")
-        assert len(await case_store.list_for_scenario(db, "sc-test")) == 0
-        assert len(await data_set_store.list_for_case(db, "case-001")) == 0
+        assert len(await data_set_store.list_for_scenario(db, "sc-test")) == 0
         with pytest.raises(KeyError):
             await scenario_store.get(db, "sc-test")
 
@@ -232,101 +218,53 @@ async def test_scenario_read_legacy_payload_yields_none_extras(fresh_db) -> None
         assert fetched.resource is not None
 
 
-# ── case_store ─────────────────────────────────────────────────────
-async def test_case_patch_only_allows_mutable_fields(fresh_db) -> None:
+async def test_scenario_data_set_count_sums_row_counts(fresh_db) -> None:
+    """dataSetCount = Σ rowCount across the scenario's datasets (not
+    the dataset count)."""
     async with _session() as db:
         await scenario_store.create(db, _make_draft(), owner="alice")
-        await case_store.create(
-            db, _make_case("case-001", "sc-test"), created_by="alice"
-        )
-        from app.schemas.scenario_composer import CasePatch
-
-        patch = CasePatch.model_validate({"name": "renamed", "env": "prod"})
-        updated = await case_store.patch(db, "case-001", patch)
-        assert updated.name == "renamed"
-        assert updated.env == "prod"
-        assert updated.scenario_id == "sc-test"  # immutable
-
-
-async def test_case_delete_cascades_datasets(fresh_db) -> None:
-    async with _session() as db:
-        await scenario_store.create(db, _make_draft(), owner="alice")
-        await case_store.create(
-            db, _make_case("case-001", "sc-test"), created_by="alice"
+        await data_set_store.create(
+            db, "sc-test", DataSetDraft(name="a", rows=[{"x": 1}, {"x": 2}])
         )
         await data_set_store.create(
-            db, "case-001", DataSetDraft(name="ds", rows=[{"a": 1}])
+            db, "sc-test", DataSetDraft(name="b", rows=[{"x": 3}])
         )
-        assert len(await data_set_store.list_for_case(db, "case-001")) == 1
-        await case_store.delete(db, "case-001")
-        assert len(await data_set_store.list_for_case(db, "case-001")) == 0
-
-
-async def test_case_list_joins_scenario_for_system_filter(fresh_db) -> None:
-    async with _session() as db:
-        await scenario_store.create(
-            db, _make_draft(scenarioId="sc-fin"), owner="alice"
-        )
-        await scenario_store.create(
-            db, _make_draft(scenarioId="sc-logi", system=["logi"]), owner="bob"
-        )
-        for sid in ("sc-fin", "sc-logi"):
-            await case_store.create(
-                db, _make_case(f"case-{sid}", sid), created_by="alice"
-            )
-        fin_only = await case_store.list_cases(db, system="fin")
-        assert {c.case_id for c in fin_only} == {"case-sc-fin"}
-        logi_only = await case_store.list_cases(db, system="logi")
-        assert {c.case_id for c in logi_only} == {"case-sc-logi"}
+        fetched = await scenario_store.get(db, "sc-test")
+        assert fetched.data_set_count == 3
 
 
 # ── data_set_store ─────────────────────────────────────────────────
-async def test_data_set_validate_rows_raises_on_inconsistent_keys() -> None:
-    with pytest.raises(ValueError, match="inconsistent_row_columns"):
-        data_set_store.validate_rows([{"a": 1, "b": 2}, {"a": 1}])
-
-
-async def test_data_set_validate_rows_passes_on_consistent() -> None:
-    data_set_store.validate_rows([{"a": 1}, {"a": 2}])  # no raise
-    data_set_store.validate_rows([])  # empty is OK
-
-
 async def test_data_set_create_assigns_incremental_id(fresh_db) -> None:
     async with _session() as db:
         await scenario_store.create(db, _make_draft(), owner="alice")
-        await case_store.create(
-            db, _make_case("case-001", "sc-test"), created_by="alice"
-        )
         ds1 = await data_set_store.create(
-            db, "case-001", DataSetDraft(name="a", rows=[{"x": 1}])
+            db, "sc-test", DataSetDraft(name="a", rows=[{"x": 1}])
         )
         ds2 = await data_set_store.create(
-            db, "case-001", DataSetDraft(name="b", rows=[{"x": 2}])
+            db, "sc-test", DataSetDraft(name="b", rows=[{"x": 2}])
         )
         assert ds1.dataset_id == "ds-001"
         assert ds2.dataset_id == "ds-002"
+        assert ds1.scenario_id == "sc-test"
+
+
+async def test_data_set_create_unknown_scenario_raises(fresh_db) -> None:
+    async with _session() as db:
+        with pytest.raises(ValueError, match="scenario_not_found"):
+            await data_set_store.create(
+                db, "sc-nope", DataSetDraft(name="a", rows=[{"x": 1}])
+            )
 
 
 async def test_data_set_summary_preview_truncated_to_3(fresh_db) -> None:
     async with _session() as db:
         await scenario_store.create(db, _make_draft(), owner="alice")
-        # Use a custom case with a distinctive name to test caseName join.
-        c = Case.model_validate({
-            "caseId": "case-001",
-            "scenarioId": "sc-test",
-            "name": "CaseA",
-            "env": "dev",
-            "auth": {"name": "a", "type": "bearer"},
-            "dataSetIds": [],
-            "createdBy": "alice",
-        })
-        await case_store.create(db, c, created_by="alice")
         rows = [{"x": i} for i in range(5)]
         await data_set_store.create(
-            db, "case-001", DataSetDraft(name="ds", rows=rows)
+            db, "sc-test", DataSetDraft(name="ds", rows=rows)
         )
-        summaries = await data_set_store.list_summaries(db, case_id="case-001")
+        summaries = await data_set_store.list_summaries(db, scenario_id="sc-test")
         assert len(summaries) == 1
-        assert summaries[0].case_name == "CaseA"
+        assert summaries[0].scenario_id == "sc-test"
         assert summaries[0].row_count == 5
         assert len(summaries[0].preview) == 3  # truncated

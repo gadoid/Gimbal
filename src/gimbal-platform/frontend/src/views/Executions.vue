@@ -16,7 +16,7 @@
       <div>
         <h2>执行 #{{ execStore.detail.id }}</h2>
         <p>
-          {{ execStore.detail.case_id }} · 状态 {{ statusText }}
+          {{ execStore.detail.scenario_id }} · 状态 {{ statusText }}
           <el-tag
             v-if="stepToLabel"
             type="info"

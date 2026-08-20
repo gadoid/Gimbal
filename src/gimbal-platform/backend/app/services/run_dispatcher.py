@@ -1,10 +1,14 @@
 """Run dispatcher (V3 Scenario Composer).
 
-Per-row fan-out of a Case's selected DataSets into Plate ``/convert``
+Per-row fan-out of a Scenario's selected DataSets into Plate ``/convert``
 calls.  Mirrors the in-flight task pattern in
 ``app/routers/executions.py`` (tracked ``set[asyncio.Task]`` +
 ``_shutting_down`` flag + ``drain_*`` helper) so the app lifespan can
 shut down cleanly.
+
+The former Case layer was dissolved — ``RunRequest`` IS the recipe
+(env / dataSetIds / auths / retry / …, pure values) applied directly to
+the scenario by :func:`_compose_scenario` (the 配置器/transformer).
 
 Returns ``RunResponse(runId)`` to the caller immediately, and the
 ``Execution`` row (re-used from Spec-2) holds the aggregate counters
@@ -29,11 +33,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.config import settings
 from ..models import Execution
 from ..models.auth_session import AuthSession
-from ..models.composer_case import ComposerCase
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import RunRequest, RunResponse
-from . import data_set_store, env_store, gimbal_client, plate_client, scenario_store
+from . import env_store, gimbal_client, plate_client
 
 
 # ─── in-flight tracking ───────────────────────────────────────────
@@ -89,7 +92,7 @@ async def dispatch_run(
     user_id: int,
     req: RunRequest,
     *,
-    preloaded_case: ComposerCase | None = None,
+    preloaded_scenario: ComposerScenario | None = None,
 ) -> RunResponse:
     """Validate + fan out + return runId.
 
@@ -98,19 +101,19 @@ async def dispatch_run(
     and returns the runId so the user can still see the run in
     ``/executions`` (per the agreed run-failure semantics).
 
-    ``preloaded_case``: the runs router already loads the case row for
-    the ownership check — pass it here to avoid querying the same row
-    twice (and keep a single source for the case_not_found 404).
+    ``preloaded_scenario``: the runs router already loads the scenario
+    row for the ownership check — pass it here to avoid querying the
+    same row twice (and keep a single source for the
+    scenario_not_found 404).
     """
-    # 1. Load the case + scenario (PK is the string case_id, not the int id)
-    case = preloaded_case if preloaded_case is not None else await _find_case_by_id(db, req.case_id)
-    if case is None:
-        raise _NotFound("case_not_found", f"case not found: {req.case_id}")
-    scen = await _find_scenario_by_id(db, case.scenario_id)
+    # 1. Load the scenario (PK is the string scenario_id, not the int id)
+    scen = (
+        preloaded_scenario
+        if preloaded_scenario is not None
+        else await _find_scenario_by_id(db, req.scenario_id)
+    )
     if scen is None:
-        raise _NotFound(
-            "scenario_not_found", f"scenario not found: {case.scenario_id}"
-        )
+        raise _NotFound("scenario_not_found", f"scenario not found: {req.scenario_id}")
 
     # 2. Validate env + datasets.  list_envs() is sync (cached) — safe to
     # call inline here because it returns from an lru_cache on the
@@ -125,7 +128,7 @@ async def dispatch_run(
     steps = ((scen.payload or {}).get("definition") or {}).get("steps") or []
     if req.step_to is not None:
         if not steps:
-            raise _NotFound("no_steps", "case has no steps; step_to cannot be set")
+            raise _NotFound("no_steps", "scenario has no steps; step_to cannot be set")
         if req.step_to >= len(steps):
             raise _Conflict(
                 "step_to_out_of_range",
@@ -135,7 +138,7 @@ async def dispatch_run(
     selected_datasets: list[ComposerDataSet] = []
     for ds_id in req.data_set_ids:
         ds = await _find_dataset_by_id(db, ds_id)
-        if ds is None or ds.case_id != case.case_id:
+        if ds is None or ds.scenario_id != scen.scenario_id:
             raise _NotFound(
                 "data_set_not_found", f"data set not found: {ds_id}"
             )
@@ -144,10 +147,7 @@ async def dispatch_run(
     # append 合并策略冲突预检(V1 executor 同语义):所选认证 alias 与
     # 场景内置 Config.users 同名 → 409 拒绝整单(而不是行级静默覆盖)。
     if req.inject_credentials and req.merge_policy == "append" and req.auths:
-        raw = scen.payload or {}
-        defn = raw.get("definition") if isinstance(raw.get("definition"), dict) else raw
-        def_cfg = (defn or {}).get("config") or {}
-        built_in_users = def_cfg.get("users") if isinstance(def_cfg.get("users"), dict) else {}
+        built_in_users = _built_in_users(scen.payload)
         collisions = sorted(set(req.auths) & set(built_in_users.keys()))
         if collisions:
             raise _Conflict(
@@ -161,13 +161,13 @@ async def dispatch_run(
     total_runs = sum(int(ds.row_count or 0) for ds in selected_datasets) * req.n_runs
     execution = await _create_execution(
         db,
-        case_id=case.case_id,
+        # (Case 层解散后执行的挂载点就是场景)。
+        scenario_id=scen.scenario_id,
         owner_id=user_id,
         total_runs=total_runs,
         config_json={
             "runId": run_id,
-            "caseId": case.case_id,
-            "scenarioId": case.scenario_id,
+            "scenarioId": scen.scenario_id,
             "dataSetIds": req.data_set_ids,
             "envId": req.env.env_id,
             # 读侧契约是 exec_auth_alias(同 V1 executor 路径);此前误写
@@ -190,11 +190,9 @@ async def dispatch_run(
                 execution_id=execution.id,
                 run_id=run_id,
                 scenario_payload=dict(scen.payload or {}),
-                case_payload=dict(case.payload or {}),
                 datasets=[
                     {
                         "datasetId": ds.dataset_id,
-                        "caseId": ds.case_id,
                         "rows": list(ds.rows or []),
                     }
                     for ds in selected_datasets
@@ -226,7 +224,6 @@ async def _fanout(
     execution_id: int,
     run_id: str,
     scenario_payload: dict,
-    case_payload: dict,
     datasets: list[dict],
     env: dict,
     owner_id: int,
@@ -299,23 +296,17 @@ async def _fanout(
     # 内置认证(definition.config.users)merge 策略的保留基座 —— plate
     # /convert 的产物可能剥掉平台视图字段,凭证合并不依赖 converted
     # 自带 users,而是以场景定义为源(与 V1 在原始 yaml 上渲染同语义)。
-    raw_def = scenario_payload or {}
-    defn = raw_def.get("definition") if isinstance(raw_def.get("definition"), dict) else raw_def
-    def_cfg = (defn or {}).get("config") or {}
-    built_in_users = dict(def_cfg.get("users") or {}) if isinstance(def_cfg.get("users"), dict) else {}
+    built_in_users = _built_in_users(scenario_payload)
 
     async def _row(ds: dict, row_idx: int, rep: int) -> None:
         """One (dataset row × repeat) entry — convert + run + counters."""
         async with sem:
             row_dict = dict(ds["rows"][row_idx] or {})
-            composed = _compose_scenario(
-                scenario_payload, case_payload, row_dict
-            )
+            composed = _compose_scenario(scenario_payload, row_dict)
             log_line = {
                 "ts": datetime.utcnow().isoformat() + "Z",
                 "runId": run_id,
                 "executionId": execution_id,
-                "caseId": case_payload.get("caseId"),
                 "scenarioId": composed.get("scenarioId"),
                 "datasetId": ds["datasetId"],
                 "rowIndex": row_idx,
@@ -452,26 +443,33 @@ async def _finalize_execution(db_factory: Any, execution_id: int) -> None:
 
 
 # ─── helpers ──────────────────────────────────────────────────────
+def _built_in_users(scenario_payload: dict | None) -> dict[str, Any]:
+    """场景 definition.config.users(merge 策略保留基座)。"""
+    raw = scenario_payload or {}
+    defn = raw.get("definition") if isinstance(raw.get("definition"), dict) else raw
+    def_cfg = (defn or {}).get("config") or {}
+    users = def_cfg.get("users") if isinstance(def_cfg.get("users"), dict) else {}
+    return dict(users or {})
+
+
 def _compose_scenario(
-    scenario_payload: dict, case_payload: dict, row_dict: dict
+    scenario_payload: dict, row_dict: dict
 ) -> dict[str, Any]:
-    """Build a per-row Scenario dict for Plate.
+    """配置器:把存储的 Scenario + 一行数据 变换成 Plate 输入。
 
-    The shape Plate expects is the V3.2 ``Scenario`` model.  We deep-copy
-    the stored scenario, then layer the row's key/value pairs into
-    ``config.vars`` so Plate's runtime can resolve them.  Row values keep
-    their JSON types (int stays int, bool stays bool) — ``vars`` is
-    ``dict[str, Any]`` on both sides and assertions like
-    ``expected: 0`` would break on a stringified ``"0"``.
+    源存果算 — 这里是唯一的变换点:存储里只有场景定义(源)与
+    数据行(纯值),每个 run 的形态由本函数即时计算:
 
-    ``scenario_payload`` is the persisted ``ComposerScenario.payload``.
-    Since the container refactor that is ``{definition, orchestration,
-    caseMeta}``; plate only wants the ``definition`` (orchestration /
-    caseMeta are platform-only).  Legacy rows that predate the container
-    are passed through as-is.
+    * deep-copy 场景定义,行键值合入 ``config.vars``(行值覆盖同名
+      场景级 var;JSON 类型原样保留 — int 还是 int,断言
+      ``expected: 0`` 不会被字符串化破坏)。
+    * ``scenario_payload`` 是持久化的 ``ComposerScenario.payload``。
+      容器化重构后为 ``{definition, orchestration}``;plate 只吃
+      ``definition``(orchestration 是平台侧投影,绝不外发)。
+      容器化之前的 legacy 行原样透传。
     """
     raw = scenario_payload or {}
-    # Unwrap the container: plate must never see orchestration/caseMeta.
+    # Unwrap the container: plate must never see orchestration.
     if isinstance(raw.get("definition"), dict):
         raw = raw["definition"]
     out = copy.deepcopy(raw)
@@ -485,18 +483,6 @@ def _compose_scenario(
     for k, v in (row_dict or {}).items():
         vars_map[k] = v
     cfg["vars"] = vars_map
-    # Carry the env's baseUrl into services so Plate can resolve
-    # ${tidb-test-service} → https://test-a.fin.local/... later.
-    if case_payload:
-        env_base = case_payload.get("env") or case_payload.get("envId")
-        if env_base and isinstance(env_base, str):
-            services = dict(cfg.get("services") or {})
-            # Only auto-fill for the common dev-local case where the
-            # services map is empty; real services should be set in the
-            # scenario editor.
-            if not services:
-                services["__env__"] = env_base
-                cfg["services"] = services
     return out
 
 
@@ -635,14 +621,14 @@ def _append_jsonl(path: Path, payload: dict) -> None:
 async def _create_execution(
     db: AsyncSession,
     *,
-    case_id: str,
+    scenario_id: str,
     owner_id: int,
     total_runs: int,
     config_json: dict,
 ) -> Execution:
-    """Insert an Execution row (Spec-2 shape)."""
+    """Insert an Execution row."""
     ex = Execution(
-        case_id=case_id,
+        scenario_id=scenario_id,
         owner_id=owner_id,
         status="queued",
         total_runs=total_runs,
@@ -656,14 +642,7 @@ async def _create_execution(
     return ex
 
 
-# ─── ad-hoc lookups (since case_id / scenario_id are string PKs) ──
-async def _find_case_by_id(db: AsyncSession, case_id: str) -> ComposerCase | None:
-    res = await db.execute(
-        select(ComposerCase).where(ComposerCase.case_id == case_id)
-    )
-    return res.scalar_one_or_none()
-
-
+# ─── ad-hoc lookups (scenario_id is the string PK) ────────────────
 async def _find_scenario_by_id(
     db: AsyncSession, scenario_id: str
 ) -> ComposerScenario | None:

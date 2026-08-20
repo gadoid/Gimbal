@@ -254,23 +254,10 @@ async def test_preview_plate_connect_error_returns_502(
 async def _seed_scenario_case_and_dataset(
     client: AsyncClient, headers: dict, *, rows: list[dict]
 ) -> None:
-    """Create scenario + case + 1 dataset with the given rows."""
+    """Create scenario + 1 dataset with the given rows (Case layer dissolved)."""
     await client.post("/api/scenarios", headers=headers, json=_draft())
-    await client.post(
-        "/api/cases",
-        headers=headers,
-        json={
-            "caseId": "case-001",
-            "scenarioId": "sc-test",
-            "name": "c",
-            "env": "dev",
-            "auth": {"name": "a", "type": "bearer"},
-            "dataSetIds": [],
-            "createdBy": "alice",
-        },
-    )
     r = await client.post(
-        "/api/cases/case-001/data-sets",
+        "/api/scenarios/sc-test/data-sets",
         headers=headers,
         json={"name": "ds", "rows": rows},
     )
@@ -288,7 +275,7 @@ async def test_run_dispatch_calls_convert_per_row(
         "/api/runs",
         headers=headers,
         json={
-            "caseId": "case-001",
+            "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
             "env": {
                 "envId": "test-env-A",
@@ -308,8 +295,8 @@ async def test_run_dispatch_calls_convert_per_row(
     assert len(plate_mock.convert_calls) == 3
 
     # Regression guard: the per-row payload handed to plate /convert is the
-    # UNWRAPPED definition — never the container. orchestration / caseMeta
-    # are platform-only and must not leak; plate-required fields survive.
+    # UNWRAPPED definition — never the container. orchestration is
+    # platform-only and must not leak; plate-required fields survive.
     # (Covers run_dispatcher._compose_scenario's container unwrap, which the
     # call-count assertion above does not.)
     # convert_calls[i] is the full wire envelope plate_client posts:
@@ -342,7 +329,7 @@ async def test_run_dispatch_preserves_row_value_types(
         "/api/runs",
         headers=headers,
         json={
-            "caseId": "case-001",
+            "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
             "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
         },
@@ -407,7 +394,7 @@ async def test_run_chain_convert_then_gimbal_execute(
         "/api/runs",
         headers=headers,
         json={
-            "caseId": "case-001",
+            "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
             "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
         },
@@ -451,7 +438,7 @@ async def test_run_chain_gimbal_failure_counts_row_failed(
         "/api/runs",
         headers=headers,
         json={
-            "caseId": "case-001",
+            "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
             "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
         },
@@ -508,7 +495,7 @@ async def test_run_partial_failure_marks_execution_failed(
         "/api/runs",
         headers=headers,
         json={
-            "caseId": "case-001",
+            "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
             "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
         },
@@ -578,7 +565,7 @@ async def test_run_auth_decrypt_failure_fails_execution(
         "/api/runs",
         headers=headers,
         json={
-            "caseId": "case-001",
+            "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
             "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
             "auths": ["corrupt1"],
@@ -607,7 +594,7 @@ async def test_run_dispatch_records_failure_when_plate_down(
         "/api/runs",
         headers=headers,
         json={
-            "caseId": "case-001",
+            "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
             "env": {
                 "envId": "test-env-A",
@@ -669,7 +656,7 @@ async def test_run_injects_exec_auths_into_run_copy_only(
         "/api/runs",
         headers=headers,
         json={
-            "caseId": "case-001",
+            "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
             "env": {
                 "envId": "test-env-A",
@@ -769,7 +756,7 @@ async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
         "/api/runs",
         headers=headers,
         json={
-            "caseId": "case-001",
+            "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
             "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
             "auths": ["qa1"],

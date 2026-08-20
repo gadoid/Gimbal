@@ -26,9 +26,21 @@ vi.mock('@/api/scenario-composer', () => ({
     assertion: { kind: 'assertion', label: '断言', phase: 'verifying', fields: [], base_fields: [] },
     assign: { kind: 'assign', label: '注入响应变量', phase: 'before_request', fields: [], base_fields: [] },
   }[kind] ?? { kind, label: kind, phase: 'after_request', fields: [], base_fields: [] })),
-  getFullEndpoint: vi.fn().mockResolvedValue({
+  getFullEndpoint: vi.fn().mockImplementation((endpointId: string) => Promise.resolve({
     request: {
-      fields: [],
+      // /full 请求字段契约(现拉渲染的主数据源)。ep-1: orderId 平铺;
+      // ep-2(T6 嵌套注入用): nested.oid
+      fields: endpointId === 'ep-2'
+        ? [{
+            name: 'oid', path: '$.nested.oid', ui_kind: 'text',
+            source_kind: 'independent', required: true,
+            description: null, example: null, default: null, enum: null,
+          } as any]
+        : [{
+            name: 'orderId', path: '$.orderId', ui_kind: 'text',
+            source_kind: 'independent', required: true,
+            description: null, example: null, default: null, enum: null,
+          } as any],
       model_schema: { properties: { hidden_req: { type: 'string' } } },
     },
     responses: {
@@ -44,7 +56,7 @@ vi.mock('@/api/scenario-composer', () => ({
       },
       '401': { assertable_fields: [], description: '未认证', fields: [] },
     },
-  }),
+  })),
 }))
 vi.mock('@/api/auth_sessions', () => ({
   list: vi.fn().mockResolvedValue([]),
@@ -63,13 +75,6 @@ function mkStep(over: Partial<StepView> = {}): StepView {
     request: {
       kind: 'request',
       body: { orderId: 'ord-1' },
-      fields_meta: {
-        orderId: {
-          name: 'orderId', path: '$.orderId', ui_kind: 'text',
-          source_kind: 'independent', required: true,
-          description: null, example: null, default: null, enum: null,
-        } as any,
-      },
     },
     strategy: [],
     ...over,
@@ -160,16 +165,10 @@ describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
   it('T6: 注入 → push assign{source=$.<name>, target=$.request_body.<path>}', async () => {
     const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' } as any] })
     const s1 = mkStep({
+      api: { kind: 'api', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-2' } },
       request: {
         kind: 'request',
         body: { nested: { oid: '' } },
-        fields_meta: {
-          oid: {
-            name: 'oid', path: '$.nested.oid', ui_kind: 'text',
-            source_kind: 'independent', required: true,
-            description: null, example: null, default: null, enum: null,
-          } as any,
-        },
       },
     })
     const { w } = mountCanvas([s0, s1])
@@ -346,7 +345,7 @@ describe('CaseComposerCanvas — 右栏分流 + Type C(C3)', () => {
   it('T21: Type C 折叠块 — 请求侧 hidden_req / 响应侧 trace_id 差集展示', async () => {
     const { w } = mountCanvas([mkStep()])
     await flushPromises()
-    // request 签:请求 schema 差集(fields_meta 只有 orderId,schema 另有 hidden_req)
+    // request 签:请求 schema 差集(/full 绑定字段只有 orderId,schema 另有 hidden_req)
     expect(w.findAll('.typec-block').length).toBe(1)
     expect(w.find('.typec-block').text()).toContain('hidden_req')
     const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!

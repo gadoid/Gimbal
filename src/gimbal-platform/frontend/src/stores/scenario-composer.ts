@@ -1,13 +1,14 @@
 /**
  * stores/scenario-composer.ts — 场景编排 Pinia store
  *
- * 字段命名: store 持有全部场景 / 用例 / 数据集,提供读、写、过滤。
+ * 字段命名: store 持有全部场景 / 数据集,提供读、写、过滤。
  * 写操作后保持乐观更新 + 错误回滚(失败时 refetch)。
+ * Case 层已解散 — 数据集直接挂场景,执行配方在 RunRequest(纯值)。
  */
 import { defineStore } from 'pinia'
 import * as api from '@/api/scenario-composer'
 import type {
-  Scenario, Case, DataSet, DataSetSummary,
+  Scenario, DataSet, DataSetSummary,
   ScenarioDraft, DataSetDraft,
 } from '@/types/scenario-composer'
 
@@ -16,11 +17,9 @@ type FetchStatus = 'idle' | 'loading' | 'error'
 export const useScenarioComposerStore = defineStore('scenario-composer', {
   state: () => ({
     scenarios: [] as Scenario[],
-    cases: [] as Case[],
     dataSets: [] as DataSetSummary[],
 
     scenariosStatus: 'idle' as FetchStatus,
-    casesStatus: 'idle' as FetchStatus,
     dataSetsStatus: 'idle' as FetchStatus,
 
     lastError: null as string | null,
@@ -29,21 +28,13 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
   getters: {
     starredScenarios: (s) => s.scenarios.filter((x) => x.starred),
 
-    casesOfScenario:
+    dataSetsOfScenario:
       (s) => (scenarioId: string) =>
-        s.cases.filter((c) => c.scenarioId === scenarioId),
-
-    dataSetsOfCase:
-      (s) => (caseId: string) =>
-        s.dataSets.filter((d) => d.caseId === caseId),
+        s.dataSets.filter((d) => d.scenarioId === scenarioId),
 
     scenarioById:
       (s) => (scenarioId: string) =>
         s.scenarios.find((x) => x.meta.scenarioId === scenarioId),
-
-    caseById:
-      (s) => (caseId: string) =>
-        s.cases.find((c) => c.caseId === caseId),
 
     dataSetById:
       (s) => (datasetId: string) =>
@@ -120,23 +111,11 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
       return saved
     },
 
-    // ── cases ───────────────────────────────────────────────
-    async fetchCases(params?: Parameters<typeof api.listCases>[0]) {
-      this.casesStatus = 'loading'
-      try {
-        this.cases = await api.listCases(params ?? {})
-        this.casesStatus = 'idle'
-      } catch (e) {
-        this.casesStatus = 'error'
-        this.lastError = (e as Error).message
-      }
-    },
-
     // ── data-sets ───────────────────────────────────────────
-    async fetchDataSets(caseId?: string) {
+    async fetchDataSets(scenarioId?: string) {
       this.dataSetsStatus = 'loading'
       try {
-        this.dataSets = await api.listDataSets({ caseId })
+        this.dataSets = await api.listDataSets({ scenarioId })
         this.dataSetsStatus = 'idle'
       } catch (e) {
         this.dataSetsStatus = 'error'
@@ -144,10 +123,10 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
       }
     },
 
-    async saveDataSet(caseId: string, datasetId: string | null, draft: DataSetDraft) {
+    async saveDataSet(scenarioId: string, datasetId: string | null, draft: DataSetDraft) {
       const saved = datasetId
         ? await api.updateDataSet(datasetId, draft)
-        : await api.createDataSet(caseId, draft)
+        : await api.createDataSet(scenarioId, draft)
       const idx = this.dataSets.findIndex((d) => d.datasetId === saved.datasetId)
       if (idx >= 0) this.dataSets.splice(idx, 1, {
         ...this.dataSets[idx],
@@ -156,12 +135,9 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
       })
       else this.dataSets.unshift({
         datasetId: saved.datasetId,
-        caseId: saved.caseId,
-        caseName: '',
+        scenarioId: saved.scenarioId,
         name: saved.name,
         rowCount: saved.rows.length,
-        lastRunStatus: saved.lastRunStatus,
-        lastRunAt: saved.lastRunAt,
         preview: saved.rows.slice(0, 3),
       })
       return saved

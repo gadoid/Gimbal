@@ -1,4 +1,4 @@
-<!-- CaseDataSetsList.vue — 用例 · ④ 数据集列表
+<!-- CaseDataSetsList.vue — 场景 · 数据集列表
      卡片网格：每个数据集 = 一组独立运行的字段值
      卡片显示：名称 / 行数 / 预览前 3 行 / 最近运行 / 单条运行入口
 -->
@@ -7,10 +7,10 @@
     <header class="page-header">
       <div>
         <h2 class="page-title"><el-icon><DataAnalysis /></el-icon>数据集列表</h2>
-        <p>用例 <code class="sid">{{ caseId }}</code> · 共 {{ dataSets.length }} 个数据集 · 1 : N</p>
+        <p>场景 <code class="sid">{{ scenarioId }}</code> · 共 {{ dataSets.length }} 个数据集 · 1 : N</p>
       </div>
       <div class="header-actions">
-        <el-button :icon="Back" @click="router.push(caseViewUrl(caseId))">用例详情</el-button>
+        <el-button :icon="Back" @click="router.push(composerUrl(scenarioId))">编排器</el-button>
         <el-button type="primary" @click="onCreate">+ 新建数据集</el-button>
       </div>
     </header>
@@ -27,7 +27,6 @@
             <h3>{{ d.name }}</h3>
             <span class="row-count">{{ d.rowCount }} 条记录</span>
           </div>
-          <StatusBadge v-if="d.lastRunStatus" :status="d.lastRunStatus" />
         </header>
 
         <p v-if="d.preview.length" class="preview">
@@ -36,9 +35,6 @@
         <p v-else class="preview empty">还没有行数据</p>
 
         <footer class="card-foot">
-          <span class="last-run">
-            最近 · {{ d.lastRunAt ? relTime(d.lastRunAt) : '从未运行' }}
-          </span>
           <div class="ops" @click.stop>
             <el-button size="small" plain @click="copy(d)">复制</el-button>
             <el-button size="small" type="primary" plain @click="runOne(d)"><el-icon style="margin-right:3px"><VideoPlay /></el-icon>单条</el-button>
@@ -54,7 +50,7 @@
 
     <el-empty
       v-if="dataSets.length === 0 && store.dataSetsStatus !== 'loading'"
-      description="此用例还没有数据集 · 新建数据集开始数据驱动"
+      description="此场景还没有数据集 · 新建数据集开始数据驱动"
     >
       <el-button type="primary" plain @click="onCreate">+ 新建数据集</el-button>
     </el-empty>
@@ -66,34 +62,32 @@ import { computed, onMounted } from 'vue'
 import { Back, DataAnalysis, VideoPlay } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import StatusBadge from '@/components/StatusBadge.vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { showError } from '@/utils/errorFallback'
-import { caseViewUrl, caseDataSetUrl, composerUrl } from '@/utils/links'
-import { relTime } from '@/utils/datetime'
+import { scenarioDataSetUrl, composerUrl } from '@/utils/links'
 import type { DataSetSummary } from '@/types/scenario-composer'
 
 const route = useRoute()
 const router = useRouter()
 const store = useScenarioComposerStore()
-const caseId = route.params.caseId as string
+const scenarioId = route.params.scenarioId as string
 
-const dataSets = computed(() => store.dataSetsOfCase(caseId))
+const dataSets = computed(() => store.dataSetsOfScenario(scenarioId))
 
 onMounted(async () => {
   try {
-    await store.fetchDataSets(caseId)
+    await store.fetchDataSets(scenarioId)
   } catch (e) {
     showError('加载数据集', undefined, (e as Error).message)
   }
 })
 
 function open(d: DataSetSummary) {
-  router.push(caseDataSetUrl(caseId, d.datasetId))
+  router.push(scenarioDataSetUrl(scenarioId, d.datasetId))
 }
 
 function onCreate() {
-  router.push(caseDataSetUrl(caseId, 'new'))
+  router.push(scenarioDataSetUrl(scenarioId, 'new'))
 }
 
 async function copy(d: DataSetSummary) {
@@ -102,13 +96,7 @@ async function copy(d: DataSetSummary) {
 
 /** 运行统一走编排器的 RunDialog(可在其中勾选该数据集发起运行) */
 async function runOne(_d: DataSetSummary) {
-  let c = store.caseById(caseId)
-  if (!c) {
-    try { await store.fetchCases() } catch { /* 忽略,回退到详情页 */ }
-    c = store.caseById(caseId)
-  }
-  if (c?.scenarioId) router.push(composerUrl(c.scenarioId))
-  else router.push(caseViewUrl(caseId))
+  router.push(composerUrl(scenarioId))
 }
 
 function previewLabel(rows: Record<string, any>[]) {
@@ -213,7 +201,6 @@ function previewLabel(rows: Record<string, any>[]) {
   padding-top: 10px;
   border-top: 1px solid var(--color-border-tertiary);
 }
-.last-run { font-size: 11px; color: var(--color-text-secondary); }
 .ops { display: flex; gap: 6px; }
 
 .add-card {

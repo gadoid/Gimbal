@@ -4,7 +4,7 @@
   - 一个页面承载 4 步流程 (Meta / Resource / Config / Canvas)
   - TopNav + 页内 stepper-bar + footer 导航三段式布局 (4 步共享同一 head)
   - ④ Canvas 内嵌选接口的 Catalog Panel (匹配原型图 content.png)
-  - V3 composer 1:1 模型: Scenario 自动创建配套 Case + DataSet
+  - Case 层已解散: Scenario 即执行主体,数据集直接挂场景
   - 顶部 action 区: 收藏 / 复制 / 删除 / 运行
 
   视觉规范:
@@ -194,7 +194,6 @@
     <RunDialog
       v-if="runDialogOpen"
       :scenario="scenario"
-      :case-data="caseData"
       :data-sets="dataSets"
       :envs="envs"
       :running="runDispatching"
@@ -223,7 +222,7 @@ import { executionUrl, composerUrl } from '@/utils/links'
 import { confirmAction } from '@/utils/confirmAction'
 import * as api from '@/api/scenario-composer'
 import type {
-  Scenario, Case, DataSetSummary, RunEnv, Orchestration, ScenarioDraft,
+  Scenario, DataSetSummary, RunEnv, Orchestration, ScenarioDraft,
 } from '@/types/scenario-composer'
 import type { ScenarioView, StepView } from '@/types/plate'
 
@@ -246,7 +245,6 @@ const lastSavedAt = ref<Date | null>(null)
 const saveState = ref<'clean' | 'dirty' | 'saving'>('clean')
 
 const scenario = ref<Scenario | null>(null)
-const caseData = ref<Case | null>(null)
 const dataSets = ref<DataSetSummary[]>([])
 const envs = ref<RunEnv[]>([])
 
@@ -419,44 +417,23 @@ async function loadScenario() {
           steps: definition.value.steps.map(() => ({ enabled: true, name: '' })),
           resourceMeta: {},
         }
-    await loadCase()
+    await loadDataSets()
     saveState.value = 'clean'
   } catch (e) {
     showError('加载场景失败', undefined, (e as Error).message)
   }
 }
 
-async function loadCase() {
+/** 数据集直接挂场景(Case 层已解散)— 只需拉列表,无需自动建 1:1 配套行 */
+async function loadDataSets() {
   if (!scenario.value) return
   try {
-    const cases = await api.listCases({ scenarioId: scenario.value.meta.scenarioId })
-    if (cases.length > 0) {
-      caseData.value = cases[0]
-      dataSets.value = await api.listDataSets({ caseId: cases[0].caseId })
-    } else {
-      // Auto-create 1:1 case on first load
-      caseData.value = await autoCreateCase(scenario.value.meta)
-      dataSets.value = []
-    }
+    dataSets.value = await api.listDataSets({
+      scenarioId: scenario.value.meta.scenarioId,
+    })
   } catch (e) {
-    showError('加载用例失败', undefined, (e as Error).message)
+    showError('加载数据集失败', undefined, (e as Error).message)
   }
-}
-
-async function autoCreateCase(scenarioMeta: Scenario['meta']): Promise<Case> {
-  const caseId = `${scenarioMeta.scenarioId}-case-001`
-  const draft: Case = {
-    caseId,
-    scenarioId: scenarioMeta.scenarioId,
-    name: `${scenarioMeta.name} 默认用例`,
-    description: '由 composer 自动创建 (1:1 绑定)',
-    env: 'dev-local',
-    auth: { name: 'default', type: 'bearer' },
-    dataSetIds: [],
-    createdBy: scenarioMeta.owner || '',
-    updatedAt: new Date().toISOString(),
-  } as Case
-  return await api.createCase(draft)
 }
 
 async function loadEnvs() {
@@ -537,22 +514,8 @@ async function saveDraft(advance = false) {
       }
     }
     scenario.value = saved
-    // 1:1 case: ensure a case exists
-    if (!caseData.value) await loadCase()
-    // Persist case if changed
-    if (caseData.value && (caseData.value.env || caseData.value.auth)) {
-      try {
-        caseData.value = await api.updateCase(caseData.value.caseId, {
-          env: caseData.value.env,
-          auth: caseData.value.auth,
-          dataSetIds: caseData.value.dataSetIds,
-        })
-      } catch (e) {
-        // Case persistence failing must not be silent — the user would see
-        // "保存成功" while env / auth / dataSetIds were never written.
-        showError('用例覆盖项保存失败（场景本身已保存）', undefined, (e as Error).message)
-      }
-    }
+    // 新建场景后拉一次数据集列表(空列表,但保持状态一致)
+    if (!dataSets.value.length) await loadDataSets()
     lastSavedAt.value = new Date()
     dirty.value = false
     saveState.value = 'clean'
@@ -657,16 +620,16 @@ async function onRunConfirm(
     mergePolicy?: 'override' | 'merge' | 'append'
   },
 ) {
-  if (!caseData.value) {
-    ElMessage.warning('请先保存草稿以创建配套用例')
+  if (!scenario.value) {
+    ElMessage.warning('请先保存草稿')
     return
   }
   runDispatching.value = true
   lastRunError.value = null
   try {
     const env = envs.value.find(e => e.envId === envId) || { envId, name: envId, baseUrl: '' }
-    const resp = await api.runCase({
-      caseId: caseData.value.caseId,
+    const resp = await api.runScenario({
+      scenarioId: scenario.value.meta.scenarioId,
       dataSetIds,
       env,
       // V1 能力移植:stepTo(引擎 halt_at)与凭证注入开关;仅在

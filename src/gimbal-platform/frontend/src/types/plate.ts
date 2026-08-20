@@ -208,11 +208,13 @@ export interface ApiView {
   view_hints?: { endpoint_id?: string; module?: string; tags?: string[] }
 }
 
-/** plate Request(step 内)。对齐 gimbal_plate/schema/request.py Request + fields_meta 扩展。 */
+/** plate Request(step 内)。对齐 gimbal_plate/schema/request.py Request。 */
 export interface RequestView {
   kind: 'request'
   body: unknown
-  /** 平台视图扩展:字段名→IOFieldBinding(平台前端渲染用) */
+  /** @deprecated 结构快照不再持久化(容器原则:引用数据不进 payload,
+   *  渲染时按 api.view_hints.endpoint_id 现拉 /full)。仅为读存量 payload
+   *  保留的类型;新代码禁止写入。 */
   fields_meta?: Record<string, IOFieldBinding>
 }
 

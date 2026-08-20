@@ -68,9 +68,6 @@
                   <div class="ds-name">{{ ds.name }}</div>
                   <div class="ds-meta">
                     <span class="ds-rows">{{ ds.rowCount }} 行</span>
-                    <span v-if="ds.lastRunStatus" class="ds-status" :class="ds.lastRunStatus.toLowerCase()">
-                      {{ ds.lastRunStatus }}
-                    </span>
                   </div>
                   <div v-if="ds.preview.length" class="ds-preview">
                     <code>{{ JSON.stringify(ds.preview[0]) }}</code>
@@ -210,7 +207,6 @@ import type { Scenario, DataSetSummary, RunEnv } from '@/types/scenario-composer
 
 const props = defineProps<{
   scenario: Scenario | null
-  caseData: any
   dataSets: DataSetSummary[]
   envs: RunEnv[]
   running: boolean
@@ -319,8 +315,8 @@ function onConfirm() {
 }
 
 async function onCreateDataSet() {
-  if (!props.caseData) {
-    ElMessage.warning('请先保存草稿以创建配套用例')
+  if (!props.scenario) {
+    ElMessage.warning('请先保存草稿')
     return
   }
   try {
@@ -351,7 +347,7 @@ async function onCreateDataSet() {
       ElMessage.error('数据集内容必须是 JSON 数组（如 [{"qty": 1}]），未创建')
       return
     }
-    await api.createDataSet(props.caseData.caseId, { name, rows })
+    await api.createDataSet(props.scenario.meta.scenarioId, { name, rows })
     ElMessage.success('已创建, 请重新打开运行对话框')
   } catch (e) {
     ElMessage.error('创建失败: ' + (e as Error).message)
@@ -443,10 +439,6 @@ async function onCreateDataSet() {
 .ds-info { flex: 1; min-width: 0; }
 .ds-name { font-weight: 600; font-size: 13px; }
 .ds-meta { display: flex; gap: 8px; margin-top: 2px; font-size: 11px; color: #5a6273; }
-.ds-status { padding: 0 6px; border-radius: 3px; font-weight: 600; }
-.ds-status.pass { background: #d1fae5; color: #065f46; }
-.ds-status.fail { background: #fee2e2; color: #991b1b; }
-.ds-status.skip { background: #f1f5f9; color: #475569; }
 .ds-preview { margin-top: 4px; font-size: 10px; }
 .ds-preview code { background: #f1f5f9; padding: 1px 4px; border-radius: 2px; }
 

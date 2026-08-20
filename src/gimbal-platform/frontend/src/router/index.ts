@@ -32,20 +32,22 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    // /cases/:caseId 用例只读详情页(查看 · 说明书)
-    path: '/cases/:caseId',
-    component: () => import('@/views/CaseDetailView.vue'),
+    // /scenarios/:scenarioId/detail — 场景详情页(数据驱动的可读渲染,
+    // 数据源 = composer_scenarios 读侧结构)
+    path: '/scenarios/:scenarioId/detail',
+    component: () => import('@/views/ScenarioDetailView.vue'),
     meta: { requiresAuth: true },
   },
   {
-    // /cases/:caseId/data-sets (数据集列表 — 数据集挂在用例下 1:N)
-    path: '/cases/:caseId/data-sets',
+    // /scenarios/:scenarioId/data-sets (数据集列表 — 数据集直接挂场景 1:N;
+    // Case 层已解散)
+    path: '/scenarios/:scenarioId/data-sets',
     component: () => import('@/views/CaseDataSetsList.vue'),
     meta: { requiresAuth: true },
   },
   {
-    // /cases/:caseId/data-sets/new 或 /:datasetId
-    path: '/cases/:caseId/data-sets/:datasetId',
+    // /scenarios/:scenarioId/data-sets/new 或 /:datasetId
+    path: '/scenarios/:scenarioId/data-sets/:datasetId',
     component: () => import('@/views/DataSetEditor.vue'),
     meta: { requiresAuth: true },
   },

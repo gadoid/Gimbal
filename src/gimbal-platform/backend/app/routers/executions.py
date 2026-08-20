@@ -37,7 +37,7 @@ OwnedExecution = Annotated[Execution, Depends(get_owned_execution)]
 def _exec_out(e: Execution) -> ExecutionOut:
     return ExecutionOut(
         id=e.id,
-        case_id=e.case_id,
+        scenario_id=e.scenario_id,
         status=e.status,
         total_runs=e.total_runs,
         passed=e.passed,
@@ -91,7 +91,7 @@ async def get_execution(
     )
     return ExecutionDetailOut(
         id=ex.id,
-        case_id=ex.case_id,
+        scenario_id=ex.scenario_id,
         status=ex.status,
         total_runs=ex.total_runs,
         passed=ex.passed,

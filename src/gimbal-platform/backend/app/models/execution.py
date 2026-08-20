@@ -1,8 +1,12 @@
 """Execution + ExecRun models (Spec-2 §4.5 E).
 
-Executions are user-triggered runs of a case with N parallel/concurrent
+Executions are user-triggered runs of a scenario with N parallel/concurrent
 subprocess calls to ``gimbal run launch``.  Each run produces one HTML
 report file; the parent Execution row aggregates counters.
+
+``case_id`` keeps its Spec-2 column name but now carries the
+``scenario_id`` — the Case layer was dissolved, the scenario is the
+execution's mount point.
 """
 from __future__ import annotations
 
@@ -27,7 +31,7 @@ class Execution(Base):
     __tablename__ = "executions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    case_id: Mapped[str] = mapped_column(String(256), index=True)
+    scenario_id: Mapped[str] = mapped_column(String(128), index=True)
     owner_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )

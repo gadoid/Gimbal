@@ -20,13 +20,13 @@ from .test_scenario_composer_plate_integration import (
 from .test_scenario_visibility_and_copy import (
     _draft,
     _member,
-    _seed_case_and_ds,
+    _seed_ds,
 )
 
 
 def _run_payload(**extra: object) -> dict:
     payload = {
-        "caseId": "case-001",
+        "scenarioId": "sc-test",
         "dataSetIds": ["ds-001"],
         "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
     }
@@ -57,7 +57,7 @@ async def test_n_runs_multiplies_total_and_gimbal_calls(
     await client.post(
         "/api/scenarios", headers=bob, json=_draft(steps=[{"id": "s1"}])
     )
-    await _seed_case_and_ds(client, bob)
+    await _seed_ds(client, bob)
     # 追加一行:ds-001 共 2 行
     r = await client.put(
         "/api/data-sets/ds-001",
@@ -110,7 +110,7 @@ async def test_parallel_limits_concurrency(
     await client.post(
         "/api/scenarios", headers=bob, json=_draft(steps=[{"id": "s1"}])
     )
-    await _seed_case_and_ds(client, bob)
+    await _seed_ds(client, bob)
     r = await client.put(
         "/api/data-sets/ds-001",
         headers=bob,
@@ -156,7 +156,7 @@ async def test_prefix_injects_order_no_vars(
     await client.post(
         "/api/scenarios", headers=bob, json=_draft(steps=[{"id": "s1"}])
     )
-    await _seed_case_and_ds(client, bob)
+    await _seed_ds(client, bob)
 
     from app.services import gimbal_client as gc
 
@@ -189,7 +189,7 @@ async def _seed_built_in_user(client: AsyncClient, headers: dict) -> None:
     }
     r = await client.post("/api/scenarios", headers=headers, json=draft)
     assert r.status_code == 201, r.text
-    await _seed_case_and_ds(client, headers)
+    await _seed_ds(client, headers)
 
 
 class _FakeAuth:

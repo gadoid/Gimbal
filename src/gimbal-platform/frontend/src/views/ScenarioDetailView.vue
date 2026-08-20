@@ -1,84 +1,52 @@
-<!-- CaseDetailView.vue — 用例详情页(数据驱动的可读渲染)
-     /cases/:caseId
+<!-- ScenarioDetailView.vue — 场景详情页(数据驱动的可读渲染)
+     /scenarios/:scenarioId/detail
 
-     定位:不做任何固定文案的"说明书",而是把该用例的真实数据
-     (场景 meta/config.vars/retry · case env/auth · 数据集 rows ·
-      每步的 api/request/strategy)完整、按人阅读友好的排版渲染出来。
-     数据里有什么就渲染什么;没有的块不出现。
+     定位:不做任何固定文案的"说明书",而是把该场景的真实数据
+     (meta/config.vars/retry · 数据集 rows · 每步的 api/request/strategy)
+     完整、按人阅读友好的排版渲染出来。数据里有什么就渲染什么;
+     没有的块不出现。
+
+     数据源全部为 composer_scenarios 的读侧结构(Scenario):
+     meta / steps / config / resource + 场景名下 1:N 的数据集。
+     Case 层解散后,"执行规格"(env/认证/重试)是运行时配方
+     (RunDialog 中选择),不在本页持久化渲染。
 -->
 <template>
   <section class="doc" v-loading="loading">
     <!-- ── 题头 ───────────────────────────────────────────── -->
     <header class="head">
       <div class="head-top">
-        <h1 class="title">{{ currentCase?.name || '未命名用例' }}</h1>
+        <h1 class="title">{{ scenario?.meta?.name || '未命名场景' }}</h1>
         <span class="doc-no mono">{{ shortId }}</span>
       </div>
       <p v-if="scenario?.meta?.description" class="desc">{{ scenario.meta.description }}</p>
       <dl class="meta-grid">
-        <div><dt>用例编号</dt><dd class="mono">{{ caseId }}</dd></div>
-        <div><dt>所属场景</dt>
-          <dd>
-            <button class="linklike" @click="goScenario()">{{ scenario?.meta?.name || scenarioId || '—' }}</button>
-          </dd>
-        </div>
+        <div><dt>场景编号</dt><dd class="mono">{{ scenarioId }}</dd></div>
         <div><dt>模块 / 系统</dt><dd>{{ moduleText }}</dd></div>
         <div><dt>优先级</dt><dd>{{ priorityText }}</dd></div>
         <div><dt>标签</dt>
           <dd v-if="metaTags.length">{{ metaTags.join(' · ') }}</dd>
           <dd v-else>—</dd>
         </div>
-        <div><dt>编制人</dt><dd>{{ scenario?.meta?.owner || scenario?.meta?.author || currentCase?.createdBy || '—' }}</dd></div>
-        <div><dt>最后运行</dt><dd>{{ lastRunText }}</dd></div>
-        <div><dt>更新时间</dt><dd>{{ updateTimeText }}</dd></div>
+        <div><dt>编制人</dt><dd>{{ scenario?.meta?.owner || scenario?.meta?.author || '—' }}</dd></div>
+        <div><dt>数据规模</dt><dd>数据集 {{ dataSets.length }} 组 · {{ totalRows }} 行</dd></div>
+        <div><dt>最后编辑</dt><dd>{{ updateTimeText }}</dd></div>
       </dl>
       <div class="head-actions">
         <button class="btn primary" @click="goRun">▶ 立即运行</button>
-        <button class="btn" @click="goScenario(2)">修改执行规格</button>
-        <button class="btn" @click="router.push(caseDataSetsUrl(caseId))">管理数据集</button>
+        <button class="btn" @click="goScenario(4)">修改编排</button>
+        <button class="btn" @click="router.push(scenarioDataSetsUrl(scenarioId))">管理数据集</button>
         <button class="btn ghost" @click="router.back()">返回</button>
       </div>
     </header>
 
-    <template v-if="currentCase">
+    <template v-if="scenario">
       <!-- ── 摘要(由数据统计生成)──────────────────────────── -->
       <section class="summary">
         <span v-for="s in summaryStats" :key="s.label" class="sum-item">
           <b class="mono">{{ s.value }}</b> {{ s.label }}
         </span>
       </section>
-
-      <!-- ── 执行规格 ─────────────────────────────────────── -->
-      <article class="chapter">
-        <h2>执行规格</h2>
-        <table class="spec-table">
-          <tbody>
-            <tr>
-              <th>执行环境</th>
-              <td><code class="mono">{{ currentCase.env || '（未指定）' }}</code></td>
-            </tr>
-            <tr>
-              <th>登录身份</th>
-              <td>
-                <code class="mono">{{ currentCase.auth?.name || '（无）' }}</code>
-                <span v-if="currentCase.auth?.type" class="dim"> · {{ currentCase.auth.type }}</span>
-              </td>
-            </tr>
-            <tr v-if="retryText">
-              <th>失败重试</th>
-              <td>{{ retryText }}</td>
-            </tr>
-            <tr v-if="timePolicyText">
-              <th>时间策略</th>
-              <td>{{ timePolicyText }}</td>
-            </tr>
-            <tr>
-              <th>输入规模</th>
-              <td>数据集 {{ dataSets.length }} 组 · {{ totalRows }} 行 · 每行 1 次完整执行</td>
-            </tr>
-          </tbody>
-        </table>
-      </article>
 
       <!-- ── 变量(仅当有变量)────────────────────────────── -->
       <article v-if="varEntries.length" class="chapter">
@@ -105,7 +73,6 @@
             <span class="ds-idx">{{ i + 1 }}</span>
             <b>{{ d.name }}</b>
             <span class="ds-count">{{ d.rowCount }} 行</span>
-            <StatusBadge v-if="d.lastRunStatus" :status="d.lastRunStatus" />
             <span class="mono dim ds-id">{{ d.datasetId }}</span>
           </div>
           <p v-if="dsFields(d).length" class="hint dim">字段:{{ dsFields(d).join(' · ') }}</p>
@@ -114,7 +81,7 @@
         </div>
         <p v-if="!dataSets.length" class="notice warn">
           ⚠ 尚无数据集。请先
-          <button class="linklike" @click="router.push(caseDataSetsUrl(caseId))">创建一组数据</button>。
+          <button class="linklike" @click="router.push(scenarioDataSetsUrl(scenarioId))">创建一组数据</button>。
         </p>
       </article>
 
@@ -125,7 +92,7 @@
           <li v-for="(s, i) in steps" :key="i" class="proc-step">
             <div class="proc-head">
               <span class="proc-no">{{ i + 1 }}</span>
-              <b class="proc-name">{{ stepName(s) }}</b>
+              <b class="proc-name">{{ stepName(s, i) }}</b>
               <span v-if="methodOf(s)" class="proc-method" :class="(methodOf(s) || '').toLowerCase()">{{ methodOf(s) }}</span>
               <span v-if="serviceOf(s)" class="proc-service mono">{{ serviceOf(s) }}</span>
               <span v-if="pathOf(s)" class="mono proc-path">{{ pathOf(s) }}</span>
@@ -155,7 +122,7 @@
           </li>
         </ol>
         <p v-if="!steps.length" class="notice warn">
-          ⚠ 所属场景暂无编排步骤。请先到
+          ⚠ 该场景暂无编排步骤。请先到
           <button class="linklike" @click="goScenario()">场景编排器</button> 完成步骤设计。
         </p>
       </article>
@@ -171,7 +138,7 @@
     </template>
 
     <div v-else-if="!loading" class="notice fatal">
-      用例不存在或无权查看。
+      场景不存在或无权查看。
       <button class="linklike" @click="router.push('/scenarios')">返回场景库</button>
     </div>
   </section>
@@ -180,24 +147,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import StatusBadge from '@/components/StatusBadge.vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { showError } from '@/utils/errorFallback'
-import { caseDataSetsUrl, composerUrl } from '@/utils/links'
+import { composerUrl, scenarioDataSetsUrl } from '@/utils/links'
 import { relTime } from '@/utils/datetime'
 import type { ExtractView, AssignView, AssertionView } from '@/types/plate'
 
 const route = useRoute()
 const router = useRouter()
 const store = useScenarioComposerStore()
-const caseId = route.params.caseId as string
+const scenarioId = route.params.scenarioId as string
 
 const loading = ref(false)
 
-const currentCase = computed(() => store.caseById(caseId))
-const scenarioId = computed(() => currentCase.value?.scenarioId ?? '')
-const scenario = computed(() => store.scenarioById(scenarioId.value))
-const dataSets = computed(() => store.dataSetsOfCase(caseId))
+const scenario = computed(() => store.scenarioById(scenarioId))
+const dataSets = computed(() => store.dataSetsOfScenario(scenarioId))
 const totalRows = computed(() => dataSets.value.reduce((s, d) => s + d.rowCount, 0))
 const steps = computed(() => (scenario.value?.steps ?? []) as unknown[])
 
@@ -210,7 +174,8 @@ function pick<T = unknown>(s: unknown, ...path: string[]): T | undefined {
   }
   return cur as T | undefined
 }
-const stepName = (s: unknown) => pick<string>(s, 'name') || pick<string>(s, 'id') || `步骤 ${(steps.value.indexOf(s) + 1) || '·'}`
+const stepName = (s: unknown, i: number) =>
+  pick<string>(s, 'name') || pick<string>(s, 'id') || `步骤 ${i + 1}`
 const methodOf = (s: unknown) => pick<string>(s, 'api', 'method') || pick<string>(s, 'request', 'method')
 const pathOf = (s: unknown) => pick<string>(s, 'api', 'path') || pick<string>(s, 'request', 'path')
 const serviceOf = (s: unknown) => pick<string>(s, 'api', 'service')
@@ -260,7 +225,7 @@ const summaryStats = computed(() => {
 })
 
 // ── 文案推导 ────────────────────────────────────────────────
-const shortId = computed(() => (caseId.length > 18 ? `${caseId.slice(0, 18)}…` : caseId))
+const shortId = computed(() => (scenarioId.length > 18 ? `${scenarioId.slice(0, 18)}…` : scenarioId))
 const moduleText = computed(() => {
   const m = scenario.value?.meta
   if (!m) return '—'
@@ -274,30 +239,9 @@ const priorityText = computed(() => {
   if (p === 3) return 'P3 · 低频'
   return p != null ? `P${p}` : '未定级'
 })
-const lastRunText = computed(() => {
-  const c = currentCase.value
-  if (!c?.lastRunStatus) return '从未运行'
-  const label = c.lastRunStatus === 'PASS' ? '通过' : c.lastRunStatus === 'FAIL' ? '失败' : '跳过'
-  return `${label} · ${relTime(c.lastRunAt)}`
-})
 const updateTimeText = computed(() => {
-  const t = (scenario.value as unknown as { updateTime?: string } | undefined)?.updateTime
-    || scenario.value?.meta?.createTime
+  const t = scenario.value?.meta?.updateTime || scenario.value?.meta?.createTime
   return t ? relTime(t) : '—'
-})
-const retryText = computed(() => {
-  // case 自身 retry 优先;否则展示场景级 config.retry
-  const r = (currentCase.value as unknown as { retry?: { maxAttempts?: number; intervalMs?: number } } | undefined)?.retry
-    || (scenario.value?.config as { retry?: { maxAttempts?: number; backoffSeconds?: number } } | undefined)?.retry
-  if (!r?.maxAttempts) return ''
-  const interval = (r as { intervalMs?: number; backoffSeconds?: number }).intervalMs
-    ?? ((r as { backoffSeconds?: number }).backoffSeconds != null ? `${(r as { backoffSeconds?: number }).backoffSeconds}s` : undefined)
-  return `失败后重试 ${r.maxAttempts} 次${interval != null ? ` · 间隔 ${interval}` : ''}`
-})
-const timePolicyText = computed(() => {
-  const tp = (scenario.value?.config as { timePolicy?: { kind?: string; seconds?: number } } | undefined)?.timePolicy
-  if (!tp) return ''
-  return tp.kind === 'timeout' ? `超时上限 ${tp.seconds}s` : '仅记录耗时'
 })
 
 // ── 变量清单 ────────────────────────────────────────────────
@@ -348,21 +292,20 @@ function strategyNote(t: Record<string, unknown>): string {
 
 // ── 跳转 ────────────────────────────────────────────────────
 function goScenario(step = 4) {
-  if (scenarioId.value) router.push(composerUrl(scenarioId.value, step))
+  router.push(composerUrl(scenarioId, step))
 }
 /** 运行统一走编排器的 RunDialog(数据集选择/次数/并发/凭证合并策略) */
 function goRun() {
-  if (scenarioId.value) router.push(composerUrl(scenarioId.value))
+  router.push(composerUrl(scenarioId))
 }
 
 onMounted(async () => {
   loading.value = true
   try {
-    if (!store.cases.length) await store.fetchCases()
-    if (currentCase.value && !store.scenarios.length) await store.fetchScenarios()
-    await store.fetchDataSets()
+    if (!store.scenarios.length) await store.fetchScenarios()
+    await store.fetchDataSets(scenarioId)
   } catch (e) {
-    showError('加载用例详情', undefined, (e as Error).message)
+    showError('加载场景详情', undefined, (e as Error).message)
   } finally {
     loading.value = false
   }
@@ -418,231 +361,213 @@ onMounted(async () => {
   border-radius: 3px;
   cursor: pointer;
 }
-.btn:hover { border-color: #111827; }
-.btn.primary { color: #fff; background: #111827; border-color: #111827; }
-.btn.primary:hover { background: #1f2937; }
+.btn:hover { color: #111827; border-color: #9ca3af; }
+.btn.primary {
+  color: #fff;
+  background: #111827;
+  border-color: #111827;
+}
+.btn.primary:hover { background: #374151; }
 .btn.ghost { border-color: transparent; color: #6b7280; }
+.btn.ghost:hover { color: #374151; border-color: #d1d5db; }
+.linklike {
+  padding: 0;
+  font: inherit;
+  color: #4338ca;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
 
-/* 摘要条 */
+/* 摘要 */
 .summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 28px;
-  padding: 12px 2px;
+  gap: 6px 28px;
+  padding: 14px 0;
+  font-size: 12px;
+  color: #4b5563;
   border-bottom: 1px solid #f3f4f6;
 }
-.sum-item { font-size: 12px; color: #6b7280; }
-.sum-item b { font-size: 15px; color: #111827; }
+.sum-item b { font-size: 16px; font-weight: 700; color: #111827; margin-right: 4px; }
 
 /* 章节 */
-.chapter { padding: 22px 0 4px; }
-.chapter h2 {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
+.chapter { padding: 22px 0 6px; }
+.chapter > h2 {
   margin: 0 0 10px;
-  font-family: 'Noto Serif SC', 'Songti SC', serif;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: #111827;
-}
-.chapter h2::before {
-  content: "";
-  display: inline-block;
-  width: 4px;
-  height: 14px;
-  background: #111827;
-  transform: translateY(1px);
+  border-left: 3px solid #111827;
+  padding-left: 10px;
 }
 .count {
-  font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 400;
-  color: #9ca3af;
+  font-weight: 600;
+  color: #6b7280;
 }
-.hint { margin: 0 0 6px; font-size: 12px; }
+.hint { margin: 4px 0 8px; font-size: 12px; }
 .dim { color: #9ca3af; }
 
 /* 表格 */
-.spec-table, .kv-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12.5px;
-}
-.spec-table th, .spec-table td,
+.kv-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .kv-table th, .kv-table td {
   padding: 7px 12px;
-  border: 1px solid #e5e7eb;
-  vertical-align: top;
   text-align: left;
+  vertical-align: top;
+  border: 1px solid #f3f4f6;
 }
-.spec-table th, .kv-table th {
+.kv-table th {
+  width: 220px;
+  font-weight: 500;
+  color: #6b7280;
+  background: #fafafa;
+}
+
+/* 数据集 */
+.ds-entry {
+  margin: 10px 0;
+  padding: 10px 14px;
+  border: 1px solid #f3f4f6;
+  border-radius: 4px;
+}
+.ds-title { display: flex; gap: 8px; align-items: center; }
+.ds-idx {
+  font-size: 11px;
+  color: #fff;
+  background: #111827;
+  border-radius: 2px;
+  padding: 1px 6px;
+}
+.ds-count {
+  font-size: 11px;
+  color: #6b7280;
+  font-family: var(--font-mono, monospace);
+}
+.ds-id { font-size: 10px; margin-left: auto; }
+
+/* 业务过程 */
+.proc { margin: 0; padding: 0; list-style: none; }
+.proc-step {
+  margin: 14px 0;
+  padding: 12px 16px;
+  border: 1px solid #f3f4f6;
+  border-radius: 4px;
+}
+.proc-head {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.proc-no {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: #9ca3af;
+}
+.proc-name { font-size: 13px; }
+.proc-method {
+  padding: 1px 6px;
+  font-size: 10px;
   font-weight: 700;
-  color: #374151;
-  background: #f9fafb;
-  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  border-radius: 2px;
+  color: #fff;
 }
-.spec-table th { width: 96px; }
-.kv-table.tight th, .kv-table.tight td { padding: 4px 10px; font-size: 12px; }
-.kv-table th { width: 200px; }
+.proc-method.get { background: #0ea5e9; }
+.proc-method.post { background: #22c55e; }
+.proc-method.put { background: #f59e0b; }
+.proc-method.delete { background: #ef4444; }
+.proc-method.patch { background: #8b5cf6; }
+.proc-service {
+  font-size: 11px;
+  color: #4338ca;
+}
+.proc-path {
+  font-size: 11px;
+  color: #6b7280;
+  word-break: break-all;
+}
+.proc-desc { margin: 6px 0 0; font-size: 12px; color: #4b5563; }
+
+.sub { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #f3f4f6; }
+.sub-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+.st-list { margin: 0; padding: 0; list-style: none; }
+.st-item {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 0;
+  font-size: 12px;
+}
+.st-kind {
+  font-size: 10px;
+  color: #9ca3af;
+}
+.st-expr { font-size: 11.5px; word-break: break-all; }
+.st-note { font-size: 11px; }
 
 /* 代码块 */
 .code {
   margin: 6px 0;
   padding: 10px 12px;
-  overflow: auto;
-  max-height: 220px;
-  font-family: var(--font-mono);
+  font-family: var(--font-mono, monospace);
   font-size: 11px;
   line-height: 1.6;
-  color: #374151;
-  background: #f9fafb;
-  border: 1px solid #f3f4f6;
-  border-radius: 3px;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 4px;
+  overflow-x: auto;
 }
-
-/* 数据集条目 */
-.ds-entry { padding: 10px 0; border-bottom: 1px dashed #e5e7eb; }
-.ds-entry:last-of-type { border-bottom: 0; }
-.ds-title { display: flex; gap: 10px; align-items: center; font-size: 12.5px; flex-wrap: wrap; }
-.ds-idx {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: #111827;
-  border: 1px solid #111827;
-  border-radius: 50%;
-}
-.ds-count {
-  padding: 0 6px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  background: #f3f4f6;
-  border-radius: 2px;
-}
-.ds-id { margin-left: auto; font-size: 10px; }
-
-/* 步骤 */
-.proc { padding: 0; margin: 0; list-style: none; }
-.proc-step { padding: 12px 0; border-bottom: 1px dotted #f3f4f6; }
-.proc-step:last-of-type { border-bottom: 0; }
-.proc-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; min-width: 0; }
-.proc-no {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  color: #fff;
-  background: #374151;
-  border-radius: 50%;
-}
-.proc-name { font-size: 13px; }
-.proc-method {
-  padding: 0 6px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  color: #fff;
-  background: #6b7280;
-  border-radius: 2px;
-  line-height: 16px;
-}
-.proc-method.get { background: #1d4ed8; }
-.proc-method.post { background: #047857; }
-.proc-method.put, .proc-method.patch { background: #b45309; }
-.proc-method.delete { background: #b91c1c; }
-.proc-service {
-  padding: 0 6px;
-  font-size: 10.5px;
-  color: #4b5563;
-  background: #f3f4f6;
-  border-radius: 2px;
-  line-height: 16px;
-}
-.proc-path { font-size: 11px; color: #6b7280; word-break: break-all; }
-.proc-desc { margin: 4px 0 0 30px; font-size: 12px; color: #4b5563; }
-
-/* 步骤内子块(入参/策略) */
-.sub { margin: 8px 0 0 30px; }
-.req-detail { margin-top: 2px; }
 .req-detail summary {
   font-size: 11px;
-  color: #1d4ed8;
+  color: #4338ca;
   cursor: pointer;
   user-select: none;
 }
-.req-detail summary:hover { text-decoration: underline; }
-.req-detail[open] summary { margin-bottom: 2px; }
-.sub-title {
-  margin-bottom: 4px;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: #6b7280;
-  letter-spacing: 0.08em;
-}
-.st-list { padding: 0; margin: 0; list-style: none; }
-.st-item {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  flex-wrap: wrap;
-  padding: 3px 0;
-  font-size: 12px;
-}
-.st-kind {
-  flex-shrink: 0;
-  padding: 0 5px;
-  font-size: 10px;
-  color: #4b5563;
-  background: #f3f4f6;
-  border-radius: 2px;
-}
-.st-expr { word-break: break-all; }
-.st-note { font-size: 11px; }
+.req-detail[open] summary { margin-bottom: 4px; }
 
-/* 提示框 */
+/* 提示条 */
 .notice {
+  margin: 12px 0;
   padding: 10px 14px;
   font-size: 12px;
+  border-radius: 4px;
+}
+.notice.warn {
+  color: #92400e;
   background: #fffbeb;
   border: 1px solid #fde68a;
-  border-radius: 3px;
 }
 .notice.fatal {
-  margin-top: 32px;
-  background: #fef2f2;
-  border-color: #fecaca;
+  max-width: 400px;
+  margin: 80px auto;
+  text-align: center;
+  color: #6b7280;
+  background: #fafafa;
+  border: 1px solid #f3f4f6;
 }
 
 /* 附注 */
-.colophon { padding-top: 20px; margin-top: 16px; border-top: 1px solid #e5e7eb; }
-.colophon-line { margin: 0; font-size: 11px; color: #9ca3af; text-align: right; }
-
-.mono { font-family: var(--font-mono); }
-.linklike {
-  padding: 0;
-  font: inherit;
-  color: #1d4ed8;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
+.colophon {
+  padding-top: 20px;
+  margin-top: 10px;
+  border-top: 1px solid #f3f4f6;
 }
-.linklike:hover { text-decoration: underline; }
+.colophon-line {
+  margin: 0;
+  font-size: 10.5px;
+  color: #9ca3af;
+}
 
-@media (max-width: 720px) {
-  .doc { padding: 22px 16px 48px; }
-  .meta-grid { grid-template-columns: 1fr 1fr; }
-  .title { font-size: 20px; }
-  .sub { margin-left: 0; }
-  .proc-desc { margin-left: 0; }
+.mono {
+  font-family: var(--font-mono, monospace);
 }
 </style>

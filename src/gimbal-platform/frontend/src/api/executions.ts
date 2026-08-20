@@ -7,7 +7,7 @@ export type RunStatus = 'pending' | 'running' | 'passed' | 'failed'
 
 export interface Execution {
   id: number
-  case_id: string
+  scenario_id: string
   status: ExecutionStatus
   total_runs: number
   passed: number

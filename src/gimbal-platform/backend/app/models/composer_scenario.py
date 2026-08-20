@@ -1,8 +1,8 @@
 """SQLAlchemy model for the V3 Scenario Composer Scenario row.
 
-A Scenario is the "structural definition layer" — 1:1 with a Case, which
-in turn owns 1:N DataSets.  ``payload`` carries the full draft container
-``{definition, orchestration, caseMeta}``; ``definition`` is the plate
+A Scenario is the "structural definition layer" and owns 1:N DataSets.
+``payload`` carries the full draft container
+``{definition, orchestration}``; ``definition`` is the plate
 Scenario structure (steps included) and lives in a JSON column because
 the per-step shape is heterogeneous and we never query into individual
 step fields from SQL.
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Integer, String, Text, func
+from sqlalchemy import JSON, DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -26,11 +26,8 @@ class ComposerScenario(Base):
     scenario_id: Mapped[str] = mapped_column(
         String(128), unique=True, index=True
     )  # matches meta.scenarioId
-    name: Mapped[str] = mapped_column(String(255), default="")
-    description: Mapped[str] = mapped_column(Text, default="")
-    module: Mapped[str] = mapped_column(String(128), default="", index=True)
-    priority: Mapped[int] = mapped_column(Integer, default=1, index=True)
-    author: Mapped[str] = mapped_column(String(128), default="")
+    # Display-name snapshot of the owner (legacy owner_id==0 rows fall
+    # back to matching it); ownership itself is owner_id below.
     owner: Mapped[str] = mapped_column(String(128), default="", index=True)
     # 稳定属主(int user.id)。``owner`` 字符串保留为展示快照;归属判断
     # 以 owner_id 为准,owner_id==0 的存量行走 owner 名字回退(P2 迁移
@@ -40,15 +37,11 @@ class ComposerScenario(Base):
     visibility: Mapped[str] = mapped_column(
         String(16), default="private", index=True
     )
-    tags: Mapped[list] = mapped_column(JSON, default=list)
-    system: Mapped[list] = mapped_column(JSON, default=list)
-    version: Mapped[str] = mapped_column(String(32), default="v0.1.0")
-    expire: Mapped[bool] = mapped_column(default=False)
-    # Full draft container: {definition, orchestration, caseMeta} — kept
-    # so we can rebuild the response without losing anything the user typed.
+    # Full draft container: {definition, orchestration} — the single
+    # source of truth for meta/steps/config/resource.  Column mirrors
+    # (name/module/tags/…) were retired: 源存果算 — the payload is the
+    # source; list-side meta/filters are methods over it.
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
-    # Step count is denormalized for fast list-side rendering.
-    step_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()
     )

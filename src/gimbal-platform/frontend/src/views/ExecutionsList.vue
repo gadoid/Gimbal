@@ -15,9 +15,9 @@
       class="exec-table"
     >
       <el-table-column label="#" prop="id" width="60" />
-      <el-table-column label="case_id" min-width="180">
+      <el-table-column label="scenario_id" min-width="180">
         <template #default="{ row }">
-          <code class="mono">{{ row.case_id }}</code>
+          <code class="mono">{{ row.scenario_id }}</code>
         </template>
       </el-table-column>
       <el-table-column label="状态" width="120">

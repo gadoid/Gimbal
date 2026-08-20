@@ -1,7 +1,9 @@
 """SQLAlchemy model for the V3 Scenario Composer DataSet row.
 
-A DataSet is a tabular payload of ``rows[]`` attached to a Case.  Used
-to fan out the same Scenario into N parameterised runs.
+A DataSet is a tabular payload of ``rows[]`` attached to a Scenario.  Used
+to fan out the same Scenario into N parameterised runs.  (Formerly hung
+off a 1:1 Case row; the Case layer was dissolved — datasets parameterise
+the scenario's ``config.vars`` directly.)
 """
 from __future__ import annotations
 
@@ -22,16 +24,15 @@ class ComposerDataSet(Base):
     dataset_id: Mapped[str] = mapped_column(
         String(128), unique=True, index=True
     )  # matches DataSet.datasetId
-    case_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("composer_cases.case_id", ondelete="CASCADE"),
+    scenario_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("composer_scenarios.scenario_id", ondelete="CASCADE"),
         index=True,
     )
     name: Mapped[str] = mapped_column(String(255), default="")
     description: Mapped[str] = mapped_column(Text, default="")
     rows: Mapped[list] = mapped_column(JSON, default=list)
     row_count: Mapped[int] = mapped_column(Integer, default=0)
-    last_run_status: Mapped[str] = mapped_column(String(16), nullable=True)
-    last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()
     )

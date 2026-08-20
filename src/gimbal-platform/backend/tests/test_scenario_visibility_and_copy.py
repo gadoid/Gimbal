@@ -48,24 +48,11 @@ def _draft(scenario_id: str = "sc-test", *, steps: list | None = None, **meta_ov
     }
 
 
-async def _seed_case_and_ds(
+async def _seed_ds(
     client: AsyncClient, headers: dict, *, scenario_id: str = "sc-test"
 ) -> None:
     r = await client.post(
-        "/api/cases",
-        headers=headers,
-        json={
-            "caseId": "case-001",
-            "scenarioId": scenario_id,
-            "name": "c",
-            "env": "dev",
-            "auth": {"name": "a", "type": "bearer"},
-            "dataSetIds": [],
-        },
-    )
-    assert r.status_code == 201, r.text
-    r = await client.post(
-        "/api/cases/case-001/data-sets",
+        f"/api/scenarios/{scenario_id}/data-sets",
         headers=headers,
         json={"name": "ds", "rows": [{"qty": 1}]},
     )
@@ -103,21 +90,18 @@ async def test_private_scenario_hidden_from_other_member(client: AsyncClient) ->
     ).status_code == 200
 
 
-async def test_cases_follow_scenario_visibility(client: AsyncClient) -> None:
+async def test_datasets_follow_scenario_visibility(client: AsyncClient) -> None:
     bob = await _member(client, "bob")
     carol = await _register_and_login(client, "carol", "carolpass123")
     await client.post("/api/scenarios", headers=bob, json=_draft())
-    await _seed_case_and_ds(client, bob)
+    await _seed_ds(client, bob)
 
-    # carol 列不出 bob 场景下的用例;详情 404
-    r = await client.get("/api/cases?scenarioId=sc-test", headers=carol)
+    # carol 列不出 bob 场景下的数据集;详情 404
+    r = await client.get("/api/data-sets?scenarioId=sc-test", headers=carol)
     assert r.json() == []
-    assert (
-        await client.get("/api/cases/case-001", headers=carol)
-    ).status_code == 404
     # bob 自己正常
-    r = await client.get("/api/cases?scenarioId=sc-test", headers=bob)
-    assert {c["caseId"] for c in r.json()} == {"case-001"}
+    r = await client.get("/api/data-sets?scenarioId=sc-test", headers=bob)
+    assert len(r.json()) == 1
 
 
 # ── 发布 / 下架 ───────────────────────────────────────────────────
@@ -151,7 +135,7 @@ async def test_publish_unpublish_cycle(client: AsyncClient) -> None:
 
 
 # ── 深拷贝 ────────────────────────────────────────────────────────
-async def test_copy_deep_copies_scenario_cases_datasets(client: AsyncClient) -> None:
+async def test_copy_deep_copies_scenario_datasets(client: AsyncClient) -> None:
     bob = await _member(client, "bob")
     carol = await _register_and_login(client, "carol", "carolpass123")
     await client.post(
@@ -159,7 +143,7 @@ async def test_copy_deep_copies_scenario_cases_datasets(client: AsyncClient) -> 
         headers=bob,
         json=_draft(steps=[{"id": "s1"}, {"id": "s2"}]),
     )
-    await _seed_case_and_ds(client, bob)
+    await _seed_ds(client, bob)
 
     # 私有场景不可被复制
     r = await client.post("/api/scenarios/sc-test/copy", headers=carol)
@@ -175,16 +159,13 @@ async def test_copy_deep_copies_scenario_cases_datasets(client: AsyncClient) -> 
     assert body["meta"]["owner"] == "carol"
     assert body["visibility"] == "private"
     assert body["stepCount"] == 2
-    assert body["caseCount"] == 1
+    assert body["dataSetCount"] == 1
 
-    # 拷贝出的用例/数据集归属 carol,可列出、可运行前置齐备
-    r = await client.get(f"/api/cases?scenarioId={new_sid}", headers=carol)
-    cases = r.json()
-    assert len(cases) == 1
-    assert cases[0]["caseId"].startswith("case-001-copy-")
-    assert cases[0]["dataSetIds"]
-    ds_id = cases[0]["dataSetIds"][0]
-    assert ds_id.startswith("ds-001-copy-")
+    # 拷贝出的数据集归属 carol,可列出
+    r = await client.get(f"/api/data-sets?scenarioId={new_sid}", headers=carol)
+    dss = r.json()
+    assert len(dss) == 1
+    assert dss[0]["datasetId"].startswith("ds-001-copy-")
     # carol 是拷贝场景的属主(owner_id),可以改名
     r = await client.put(
         f"/api/scenarios/{new_sid}",
@@ -221,13 +202,13 @@ async def test_run_step_to_out_of_range_409(
     await client.post(
         "/api/scenarios", headers=bob, json=_draft(steps=[{"id": "s1"}, {"id": "s2"}])
     )
-    await _seed_case_and_ds(client, bob)
+    await _seed_ds(client, bob)
 
     r = await client.post(
         "/api/runs",
         headers=bob,
         json={
-            "caseId": "case-001",
+            "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
             "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
             "stepTo": 5,
@@ -247,7 +228,7 @@ async def test_run_step_to_passes_halt_at(
     await client.post(
         "/api/scenarios", headers=bob, json=_draft(steps=[{"id": "s1"}, {"id": "s2"}])
     )
-    await _seed_case_and_ds(client, bob)
+    await _seed_ds(client, bob)
 
     from app.services import gimbal_client as gc
 
@@ -264,7 +245,7 @@ async def test_run_step_to_passes_halt_at(
         "/api/runs",
         headers=bob,
         json={
-            "caseId": "case-001",
+            "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
             "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
             "stepTo": 1,
@@ -291,7 +272,7 @@ async def test_run_inject_credentials_false_skips_auth_resolution(
     await client.post(
         "/api/scenarios", headers=bob, json=_draft(steps=[{"id": "s1"}])
     )
-    await _seed_case_and_ds(client, bob)
+    await _seed_ds(client, bob)
 
     from app.services import gimbal_client as gc
     from app.services import run_dispatcher as rd
@@ -315,7 +296,7 @@ async def test_run_inject_credentials_false_skips_auth_resolution(
         "/api/runs",
         headers=bob,
         json={
-            "caseId": "case-001",
+            "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
             "env": {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"},
             "auths": ["qa1"],

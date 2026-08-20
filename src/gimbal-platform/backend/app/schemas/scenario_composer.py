@@ -32,18 +32,7 @@ _CAMEL = ConfigDict(populate_by_name=True, str_strip_whitespace=True)
 AuthType = Literal["bearer", "cookie", "oauth2", "apikey"]
 StepKind = Literal["http", "rpc", "sql", "script", "wait", "extract"]
 HttpMethod = Literal["GET", "POST", "PUT", "DELETE", "PATCH"]
-RunStatus = Literal["PASS", "FAIL", "SKIP"]
 Priority = Literal[0, 1, 2, 3]
-
-
-class AuthSessionRef(BaseModel):
-    """A reference to a pre-defined AuthSession; matches frontend type."""
-
-    model_config = _CAMEL
-
-    name: str = Field(min_length=1, max_length=128)
-    type: AuthType
-    ref: str | None = None
 
 
 class RetryRef(BaseModel):
@@ -117,16 +106,6 @@ class ScenarioMeta(BaseModel):
 
 
 # ─── draft (request body) ──────────────────────────────────────────
-class CaseOverride(BaseModel):
-    """Subset of Case used to carry case-level overrides on a draft."""
-
-    model_config = _CAMEL
-
-    env: str = ""
-    auth: AuthSessionRef
-    data_set_ids: list[str] = Field(default_factory=list, alias="dataSetIds")
-
-
 class StepOrchestration(BaseModel):
     """Platform-side fields for one step, index-aligned with definition.steps[i]."""
     model_config = _CAMEL
@@ -156,72 +135,11 @@ class ScenarioDraft(BaseModel):
                 model it themselves").
     orchestration: platform-only rendering/orchestration fields, never sent
                    to plate (plate doesn't know about them).
-    caseMeta: case-level runtime overrides (env/auth/dataset).
     """
     model_config = _CAMEL
 
     definition: dict[str, Any]
     orchestration: Orchestration = Field(default_factory=Orchestration)
-    case_meta: CaseOverride | None = Field(default=None, alias="caseMeta")
-
-
-# ─── case ──────────────────────────────────────────────────────────
-class Case(BaseModel):
-    model_config = _CAMEL
-
-    case_id: str = Field(
-        alias="caseId", min_length=1, max_length=128
-    )
-    scenario_id: str = Field(alias="scenarioId", min_length=1, max_length=128)
-    name: str = Field(min_length=1, max_length=128)
-    description: str = Field(default="", max_length=2048)
-    env: str = Field(default="", max_length=64)
-    auth: AuthSessionRef
-    retry: RetryRef | None = None
-    data_set_ids: list[str] = Field(default_factory=list, alias="dataSetIds")
-    last_run_status: RunStatus | None = Field(default=None, alias="lastRunStatus")
-    last_run_at: datetime | None = Field(default=None, alias="lastRunAt")
-    created_by: str = Field(default="", alias="createdBy", max_length=128)
-    updated_at: datetime | None = Field(default=None, alias="updatedAt")
-    starred: bool = False
-
-
-class CasePatch(BaseModel):
-    """Subset of Case allowed in PATCH /cases/{id}.
-
-    Immutable fields (caseId / scenarioId / createdBy / updatedAt /
-    lastRunStatus / lastRunAt) are NOT included; supplying them is a
-    400.  All other Case fields are optional.
-    """
-
-    model_config = _CAMEL
-
-    name: str | None = Field(default=None, min_length=1, max_length=128)
-    description: str | None = Field(default=None, max_length=2048)
-    env: str | None = Field(default=None, max_length=64)
-    auth: AuthSessionRef | None = None
-    retry: RetryRef | None = None
-    data_set_ids: list[str] | None = Field(default=None, alias="dataSetIds")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _reject_immutable(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            forbidden = {
-                "caseId",
-                "scenarioId",
-                "createdBy",
-                "updatedAt",
-                "lastRunStatus",
-                "lastRunAt",
-                "starred",
-            }
-            bad = forbidden & set(data.keys())
-            if bad:
-                raise ValueError(
-                    f"case patch does not allow fields: {sorted(bad)}"
-                )
-        return data
 
 
 # ─── data-set ──────────────────────────────────────────────────────
@@ -240,13 +158,16 @@ class DataSet(BaseModel):
     dataset_id: str = Field(
         alias="datasetId", pattern=r"^ds-[a-z0-9-]+$", min_length=3, max_length=128
     )
-    case_id: str = Field(alias="caseId", min_length=1, max_length=128)
+    scenario_id: str = Field(
+        alias="scenarioId",
+        pattern=r"^sc-[a-z0-9-]+$",
+        min_length=3,
+        max_length=128,
+    )
     name: str = Field(min_length=1, max_length=128)
     description: str = Field(default="", max_length=2048)
     row_count: int = Field(default=0, ge=0, alias="rowCount")
     rows: list[dict[str, Any]] = Field(default_factory=list)
-    last_run_status: RunStatus | None = Field(default=None, alias="lastRunStatus")
-    last_run_at: datetime | None = Field(default=None, alias="lastRunAt")
 
     @model_validator(mode="after")
     def _check_rows_consistent(self) -> "DataSet":
@@ -268,17 +189,19 @@ class DataSetSummary(BaseModel):
     model_config = _CAMEL
 
     dataset_id: str = Field(alias="datasetId", min_length=1)
-    case_id: str = Field(alias="caseId", min_length=1)
-    case_name: str = Field(default="", alias="caseName", max_length=128)
+    scenario_id: str = Field(
+        alias="scenarioId",
+        pattern=r"^sc-[a-z0-9-]+$",
+        min_length=3,
+        max_length=128,
+    )
     name: str = Field(min_length=1, max_length=128)
     row_count: int = Field(default=0, ge=0, alias="rowCount")
-    last_run_status: RunStatus | None = Field(default=None, alias="lastRunStatus")
-    last_run_at: datetime | None = Field(default=None, alias="lastRunAt")
     preview: list[dict[str, Any]] = Field(default_factory=list, max_length=3)
 
 
 class DataSetDraft(BaseModel):
-    """Request body for POST /cases/{caseId}/data-sets and PUT /data-sets/{id}."""
+    """Request body for POST /scenarios/{scenarioId}/data-sets and PUT /data-sets/{id}."""
 
     model_config = _CAMEL
 
@@ -310,9 +233,19 @@ class RunEnv(BaseModel):
 
 
 class RunRequest(BaseModel):
+    """一次执行的配方(recipe):env/数据集/认证/重试等全是纯值。
+
+    Case 层已解散 — RunRequest 即配方本身,直接挂在 scenario 上。
+    """
+
     model_config = _CAMEL
 
-    case_id: str = Field(alias="caseId", min_length=1, max_length=128)
+    scenario_id: str = Field(
+        alias="scenarioId",
+        pattern=r"^sc-[a-z0-9-]+$",
+        min_length=3,
+        max_length=128,
+    )
     data_set_ids: list[str] = Field(alias="dataSetIds", min_length=1)
     env: RunEnv
     # 执行用认证 alias 多选(原 ``auth`` 单选已废):dispatcher 按 owner
@@ -395,11 +328,10 @@ class Scenario(BaseModel):
     steps: list[dict[str, Any]] = Field(default_factory=list)  # plate step dicts
     # Optional round-trip of the persisted sub-structure for composer reload.
     # All absent on legacy rows → frontend rebuilds defaults; present on rows
-    # saved by the container schema (definition/orchestration/caseMeta).
+    # saved by the container schema (definition/orchestration).
     config: dict[str, Any] | None = None
     resource: dict[str, Any] | None = None
     orchestration: Orchestration | None = None
-    case_count: int = Field(default=0, ge=0, alias="caseCount")
     data_set_count: int = Field(default=0, ge=0, alias="dataSetCount")
     step_count: int = Field(default=0, ge=0, alias="stepCount")
     tags: list[str] = Field(default_factory=list)
@@ -409,11 +341,7 @@ class Scenario(BaseModel):
 
 
 __all__ = [
-    "AuthSessionRef",
     "AuthType",
-    "Case",
-    "CaseOverride",
-    "CasePatch",
     "DataSet",
     "DataSetDraft",
     "DataSetRow",
@@ -427,7 +355,6 @@ __all__ = [
     "RunEnv",
     "RunRequest",
     "RunResponse",
-    "RunStatus",
     "Scenario",
     "ScenarioDraft",
     "ScenarioMeta",
