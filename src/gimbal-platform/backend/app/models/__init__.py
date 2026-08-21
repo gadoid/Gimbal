@@ -7,6 +7,7 @@ from .scenario_endpoint_ref import ScenarioEndpointRef
 from .catalog_version import CatalogVersion
 from .adaptation_batch import AdaptationBatch
 from .adaptation_snapshot import AdaptationSnapshot
+from .adaptation_op import AdaptationOp
 
 __all__ = [
     "User",
@@ -18,4 +19,5 @@ __all__ = [
     "CatalogVersion",
     "AdaptationBatch",
     "AdaptationSnapshot",
+    "AdaptationOp",
 ]
