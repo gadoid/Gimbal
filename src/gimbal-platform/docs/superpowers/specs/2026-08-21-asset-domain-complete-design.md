@@ -279,14 +279,36 @@ WHERE r.endpoint_id = :X AND r.field_name = :F
 
 | 期 | 内容 | 验证标准 |
 |---|---|---|
-| P1 | 四表 ORM + 建表;索引写路径挂钩(同事务)+ rebuild(附未索引步骤报告) | 单测:建/改/删场景后索引一致;rebuild 与逐行维护结果全等;缺 endpoint_id 的步骤进报告 |
-| P2 | 数据集重做:校验替换、调色板 422、DELETE、编辑器(行 0/提升/提取首行)、RunDialog 基线项 + D12 校验放宽 | 单测:稀疏行接受、超集 422、DELETE;集成:行 0 编辑路由场景更新、空数据集执行 = 基线 |
+| P1 ✅(2026-08-21 完成) | 四表 ORM + 建表;索引写路径挂钩(同事务)+ rebuild(附未索引步骤报告) | 单测:建/改/删场景后索引一致;rebuild 与逐行维护结果全等;缺 endpoint_id 的步骤进报告 |
+| P2 ✅(2026-08-21 完成) | 数据集重做:校验替换、调色板 422、DELETE、编辑器(行 0/提升/提取首行)、RunDialog 基线项 + D12 校验放宽 | 单测:稀疏行接受、超集 422、DELETE;集成:行 0 编辑路由场景更新、空数据集执行 = 基线 |
 | P3 | 目录 diff + 影响查询 API(可选:updated_at 异常提醒) | 单测:构造 `${var}` 绑定场景,反查清单含数据集列;直填字段命中 |
 | P4 | 批次:存档 / 8 种 op 应用 / 乐观回滚 / 应用期重验 / 推进戳 | 单测:每种 op 语义与幂等;改后回滚还原;批次后实体被编辑 → 回滚标冲突;步骤重排后应用 → 标冲突跳过 |
 | P5 | 前端适配闭环:变更提醒、影响清单、逐条应用、批次管理、owner 只读批次视图 | 手动全流程 + 前端测试 |
 | P6(未来) | plate 适配插件协议 + auto-apply(方案1) | 插件端到端 |
 
 P2 与 P1 无依赖(调色板只需 payload 的 vars,不需索引),可并行。测试基础设施复用现有 conftest(per-test SQLite fresh_db/client)。
+
+### 实施进度(2026-08-21 交接)
+
+**P1+P2 已完成并推送** — 分支 `strbody_avaliable`,提交区间 `cafa46d..afdb602`(16 个提交)。实施计划:`docs/superpowers/plans/2026-08-21-asset-domain-p1-p2.md`(11 任务全部通过任务评审 + 最终全分支评审 + 修复批次复审)。验证基线:后端 pytest **133 passed**、前端 vitest **18 文件 113 tests**、`npm run build` 干净。
+
+**接手 P3 前的代码状态:**
+
+- **活**:倒排索引 `scenario_endpoint_refs` 随场景 create/update/delete 同事务维护(`services/endpoint_ref_index.py`),`rebuild()` / `unindexed_steps()` 可对账(P3 影响查询的数据源已实时就绪);数据集域全量落地(稀疏行 D10、调色板 422、行 0 基线 D9、字段提升 D8、基线执行 D12)。
+- **休眠**:`catalog_versions` / `adaptation_snapshots` / `adaptation_batches` 三表已建已注册(`models/`),无任何服务读写 — **P3 第一步即在它们之上接 `adaptation_service`**。
+- **缺**:`services/adaptation_service.py`、`routers/adaptations.py`(契约见 §5/§6)、前端适配中心(P5)。
+
+**实施期裁定的语义(计划原文与此有出入时以此为准):**
+
+1. 场景 `create()` 的索引挂钩位于既有 try 块**内**(autoflush 会使重复 PK 的 IntegrityError 提前浮出;见 `scenario_store.py` 代码注释);
+2. `rowFromBaseline` 为结构性两遍规则:整串 `${var.x}` 模板定义基线(first-writer-wins),纯组合模板变量不入行(D10 稀疏语义);
+3. RunDialog 空数据集选择按基线显示运行数(`totalRuns` 与磁贴,`onConfirm` 仍原样派发空数组)。
+
+**最终评审遗留(已裁定接受,后续顺手清):**
+
+`helpers.test_env` 幽灵收集改名(独立卫生项,会改测试计数基线);FieldActionMenu 4 处 `:domain` 透传(基线既有,无伤害);`renderTemplate` 非全局正则(行 0 显示尾部场景);空调色板提示文案(§4.2);§4.3 其余 lint 项(URL 漂移等,随 P3/P5 补)。
+
+**下一步**:为 P3(目录 diff + 影响查询 API)出实施计划,§5 即需求源;P3+P4 可合并规划。本地起服务:后端 `cd src/gimbal-platform/backend && python -m app.main`(8000),前端 `cd src/gimbal-platform/frontend && npm run dev`(5173,/plate 代理→8765)。
 
 ## 8. 范围外(明确不做)
 

@@ -1,5 +1,7 @@
 # 资产域 P1+P2 实施计划(索引基底 + 数据集重做)
 
+> **状态:✅ 已完成(2026-08-21)** — 11 任务全部执行并通过评审,提交区间 `cafa46d..afdb602`(分支 `strbody_avaliable`,已推送)。实施期裁定与遗留事项见 spec「§7 实施进度(2026-08-21 交接)」。后续:P3-P5 另立计划。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 落地资产域设计的 P1(倒排索引基底,四张派生表)与 P2(数据集重做:稀疏行 + 调色板校验 + DELETE + 基线执行 + 前端编辑器/提升交互)。
