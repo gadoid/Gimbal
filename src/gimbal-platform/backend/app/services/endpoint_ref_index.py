@@ -5,6 +5,7 @@
 * ``sync_scenario`` 写路径同事务维护(删旧插新,不 commit)
 * ``drop_scenario`` 场景删除时清索引行
 * ``rebuild``      全量重建 + 报告(Task 3)
+* ``unindexed_steps`` 未索引步骤只读清单(P5 适配中心挂牌)
 
 注意:本模块**不得** import scenario_store(那里反向 import 本模块挂
 钩子,会成环)—— steps 提取用本地 walker,3 行,接受这点重复。
@@ -16,7 +17,7 @@ import re
 from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.composer_scenario import ComposerScenario  # noqa: F401(PG/类型引用)
+from ..models.composer_scenario import ComposerScenario
 from ..models.scenario_endpoint_ref import ScenarioEndpointRef
 
 # 变量名允许 "."(③ 配置步的 <system>.key 命名空间键含点)
@@ -93,3 +94,39 @@ async def drop_scenario(db: AsyncSession, scenario_id: str) -> None:
             ScenarioEndpointRef.scenario_id == scenario_id
         )
     )
+
+
+async def rebuild(db: AsyncSession) -> dict:
+    """全量重建索引 + 未索引步骤报告(spec §3.2/C10)。
+
+    对账 / 灾后重建 / 升级迁移共用。确定性 ≠ 完备性:缺
+    view_hints.endpoint_id 的步骤不进索引,必须在报告里显式可见。
+    """
+    from sqlalchemy import select  # 局部 import 避免与模块头冲突
+
+    rows = (await db.execute(select(ComposerScenario))).scalars().all()
+    await db.execute(sa_delete(ScenarioEndpointRef))
+    refs_total = 0
+    unindexed: list[dict] = []
+    for row in rows:
+        refs, un = parse_refs(row.scenario_id, row.payload)
+        unindexed.extend(un)
+        refs_total += len(refs)
+        for r in refs:
+            db.add(r)
+    await db.commit()
+    return {
+        "scenarios": len(rows), "refs": refs_total, "unindexed_steps": unindexed,
+    }
+
+
+async def unindexed_steps(db: AsyncSession) -> list[dict]:
+    """当前库的未索引步骤清单(P5 适配中心挂牌;rebuild 的只读子集)。"""
+    from sqlalchemy import select
+
+    rows = (await db.execute(select(ComposerScenario))).scalars().all()
+    out: list[dict] = []
+    for row in rows:
+        _, un = parse_refs(row.scenario_id, row.payload)
+        out.extend(un)
+    return out

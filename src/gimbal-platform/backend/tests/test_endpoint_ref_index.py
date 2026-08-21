@@ -68,3 +68,36 @@ async def test_delete_clears_index(fresh_db):
         await scenario_store.create(s, _draft("sc-ix", STEPS), owner="alice")
         await scenario_store.delete(s, "sc-ix")
     assert await _refs() == set()
+
+
+async def test_rebuild_equivalent_and_reports_unindexed(fresh_db):
+    from app.services import endpoint_ref_index as idx
+
+    async with db_module.SessionLocal() as s:
+        await scenario_store.create(s, _draft("sc-ix", STEPS), owner="alice")
+    before = await _refs()
+
+    async with db_module.SessionLocal() as s:
+        # 破坏派生层模拟灾后:清空索引行
+        from sqlalchemy import delete as sa_delete
+        await s.execute(sa_delete(ScenarioEndpointRef))
+        await s.commit()
+        report = await idx.rebuild(s)
+
+    assert await _refs() == before            # rebuild 结果与逐行维护全等
+    assert report["scenarios"] == 1
+    assert report["refs"] == len(before)
+    assert report["unindexed_steps"] == [
+        {"scenario_id": "sc-ix", "step_index": 1, "reason": "no_endpoint_id"},
+    ]
+
+
+async def test_rebuild_idempotent(fresh_db):
+    from app.services import endpoint_ref_index as idx
+
+    async with db_module.SessionLocal() as s:
+        await scenario_store.create(s, _draft("sc-ix", STEPS), owner="alice")
+    async with db_module.SessionLocal() as s:
+        r1 = await idx.rebuild(s)
+        r2 = await idx.rebuild(s)
+    assert (r1["refs"], len(r1["unindexed_steps"])) == (r2["refs"], len(r2["unindexed_steps"]))
