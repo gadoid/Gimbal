@@ -151,8 +151,6 @@ async def dispatch_run(
     env_ids = {e.env_id for e in env_store.list_envs()}
     if req.env.env_id not in env_ids:
         raise NotFound("env_not_found", f"env not found: {req.env.env_id}")
-    if not req.data_set_ids:
-        raise Conflict("no_data_selected", "no data sets selected")
 
     # step_to 校验(同 V1 executions:与场景 steps 数比对,越界 409)
     steps = steps_from_payload(scen.payload)
@@ -191,7 +189,13 @@ async def dispatch_run(
     # row_count 列在 raw-SQL 迁移路径下不回填,NULL/过期会让计数器
     # 超过 total_runs 出现 failed > total 的怪状态。
     run_id = _new_run_id()
-    total_runs = sum(len(ds.rows or []) for ds in selected_datasets) * req.n_runs
+    # D12 基线执行:未选数据集 = 一个隐式空覆盖行(纯基线,行键空集
+    # 全部回落 config.vars)。datasetId=None 在 JSONL 里如实记录。
+    fanout_datasets = [
+        {"datasetId": ds.dataset_id, "rows": list(ds.rows or [])}
+        for ds in selected_datasets
+    ] or [{"datasetId": None, "rows": [{}]}]
+    total_runs = sum(len(d["rows"]) for d in fanout_datasets) * req.n_runs
     execution = await _create_execution(
         db,
         # (Case 层解散后执行的挂载点就是场景)。
@@ -224,13 +228,7 @@ async def dispatch_run(
                 execution_id=execution.id,
                 run_id=run_id,
                 scenario_payload=dict(scen.payload or {}),
-                datasets=[
-                    {
-                        "datasetId": ds.dataset_id,
-                        "rows": list(ds.rows or []),
-                    }
-                    for ds in selected_datasets
-                ],
+                datasets=fanout_datasets,
                 env=req.env.model_dump(by_alias=True, mode="json"),
                 owner_id=user_id,
                 auth_aliases=list(req.auths) if req.inject_credentials else [],

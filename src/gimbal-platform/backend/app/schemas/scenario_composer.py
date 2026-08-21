@@ -195,7 +195,8 @@ class RunRequest(BaseModel):
         min_length=3,
         max_length=128,
     )
-    data_set_ids: list[str] = Field(alias="dataSetIds", min_length=1)
+    # D12:空列表 = 基线执行(一个隐式空覆盖行),不再强制 min_length=1
+    data_set_ids: list[str] = Field(alias="dataSetIds", default_factory=list)
     env: RunEnv
     # 执行用认证 alias 多选(原 ``auth`` 单选已废):dispatcher 按 owner
     # 解密后注入 composed scenario 的 Config.users,headers 里的
