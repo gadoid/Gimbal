@@ -16,6 +16,7 @@ from loguru import logger
 from .core.config import settings
 from .core.db import init_db
 from .routers import (
+    adaptations,
     auth,
     auth_sessions,
     data_sets,
@@ -116,6 +117,7 @@ def create_app() -> FastAPI:
     app.include_router(data_sets.create_router, prefix="/api")
     app.include_router(endpoint_catalog.router, prefix="/api")
     app.include_router(strategy_catalog.router, prefix="/api")
+    app.include_router(adaptations.router, prefix="/api")
     app.include_router(scenarios.router, prefix="/api")  # MUST be last — has /{scenario_id}
 
     @app.get("/api/health")
