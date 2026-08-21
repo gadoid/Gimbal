@@ -24,6 +24,7 @@ from ..models.scenario_endpoint_ref import ScenarioEndpointRef
 from ..schemas.scenario_composer import DataSetDraft, ScenarioDraft
 from . import data_set_store, plate_client, scenario_store
 from .adaptation_ops import (
+    ALL_OPS,
     DATASET_OPS,
     STEP_OPS,
     apply_to_definition,
@@ -674,4 +675,98 @@ async def _rollback_dataset(
         name=before.get("name") or d.name,
         description=before.get("description") or "",
         rows=before.get("rows") or [],
+    ))
+
+
+# ─── 批次查询与人工 op(spec §5.3/§5.4)──────────────────────────
+async def list_batches(db: AsyncSession) -> list[dict]:
+    """批次列表(新→旧)。MVP 全量返回,分页留待 P5 前端需要时再加。"""
+    batches = (await db.execute(
+        select(AdaptationBatch).order_by(AdaptationBatch.created_at.desc())
+    )).scalars().all()
+    return [await _batch_detail(db, b.batch_id) for b in batches]
+
+
+async def get_batch_detail(db: AsyncSession, batch_id: str) -> dict:
+    return await _batch_detail(db, batch_id)
+
+
+async def create_op(
+    db: AsyncSession, batch_id: str, *,
+    op_type: str, scenario_id: str,
+    dataset_id: str | None, payload: dict,
+) -> dict:
+    """人工补一条 op(renameVar / 数据集 op 不在自动草案内,§5.4)。
+
+    仅批次 open(尚未应用任何 op)时可加 —— 此时现场补录的快照就是
+    真 before 像;payload 剥掉可能的 "op" 键(类型在 op_type 列)。
+    """
+    if op_type not in ALL_OPS:
+        raise ValueError(f"bad_op_type: {op_type} not in {ALL_OPS}")
+    if op_type in DATASET_OPS and not dataset_id:
+        raise ValueError(f"op_needs_dataset: {op_type} requires datasetId")
+    batch = await _get_batch(db, batch_id)
+    if batch.status != "open":
+        raise ValueError(
+            f"batch_not_active: {batch.status} (ops can only be added while open)"
+        )
+    if op_type in DATASET_OPS:
+        await _ensure_dataset_snapshot(db, batch_id, dataset_id)
+    else:
+        await _ensure_scenario_snapshot(db, batch_id, scenario_id)
+    op = AdaptationOp(
+        batch_id=batch_id, scenario_id=scenario_id, dataset_id=dataset_id,
+        op_type=op_type,
+        payload={k: v for k, v in payload.items() if k != "op"},
+        status="pending",
+    )
+    db.add(op)
+    await db.commit()
+    return _op_out(op)
+
+
+async def _ensure_scenario_snapshot(
+    db: AsyncSession, batch_id: str, scenario_id: str
+) -> None:
+    """批次打开时没存档到的场景(不在受影响面内)→ 现场补 before 像。"""
+    existing = (await db.execute(
+        select(AdaptationSnapshot).where(
+            AdaptationSnapshot.batch_id == batch_id,
+            AdaptationSnapshot.entity_type == "scenario",
+            AdaptationSnapshot.entity_id == scenario_id,
+        ).limit(1)
+    )).scalar_one_or_none()
+    if existing is not None:
+        return
+    row = await scenario_store.get_row(db, scenario_id)
+    if row is None:
+        raise KeyError(f"scenario_not_found: {scenario_id}")
+    db.add(AdaptationSnapshot(
+        batch_id=batch_id, entity_type="scenario", entity_id=scenario_id,
+        before_json={"payload": copy.deepcopy(row.payload or {})},
+    ))
+
+
+async def _ensure_dataset_snapshot(
+    db: AsyncSession, batch_id: str, dataset_id: str
+) -> None:
+    existing = (await db.execute(
+        select(AdaptationSnapshot).where(
+            AdaptationSnapshot.batch_id == batch_id,
+            AdaptationSnapshot.entity_type == "dataset",
+            AdaptationSnapshot.entity_id == dataset_id,
+        ).limit(1)
+    )).scalar_one_or_none()
+    if existing is not None:
+        return
+    d = await data_set_store.get_row(db, dataset_id)
+    if d is None:
+        raise KeyError(f"data_set_not_found: {dataset_id}")
+    db.add(AdaptationSnapshot(
+        batch_id=batch_id, entity_type="dataset", entity_id=dataset_id,
+        before_json={
+            "scenarioId": d.scenario_id, "name": d.name,
+            "description": d.description,
+            "rows": copy.deepcopy(d.rows or []),
+        },
     ))
