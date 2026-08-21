@@ -112,6 +112,13 @@ async def get(
     return _to_full_shape(row)
 
 
+async def delete(db: AsyncSession, dataset_id: str) -> None:
+    """Delete a dataset row.  Raises KeyError on miss."""
+    row = await _get_row(db, dataset_id)
+    await db.delete(row)
+    await db.commit()
+
+
 async def list_summaries(
     db: AsyncSession,
     *,

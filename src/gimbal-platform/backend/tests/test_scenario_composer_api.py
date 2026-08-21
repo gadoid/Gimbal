@@ -303,6 +303,37 @@ async def test_data_set_summary_preview_truncated(client: AsyncClient) -> None:
     assert len(summaries[0]["preview"]) == 3
 
 
+async def test_delete_dataset_owner_204_and_gone(client: AsyncClient) -> None:
+    headers = await _register_and_login(client)
+    await client.post("/api/scenarios", headers=headers, json=make_draft("sc-del"))
+    r = await client.post(
+        "/api/scenarios/sc-del/data-sets", headers=headers,
+        json={"name": "t", "rows": []},
+    )
+    ds_id = r.json()["datasetId"]
+    r2 = await client.delete(f"/api/data-sets/{ds_id}", headers=headers)
+    assert r2.status_code == 204
+    assert (await client.get("/api/data-sets", headers=headers)).json() == []
+
+
+async def test_delete_dataset_requires_ownership(client: AsyncClient) -> None:
+    alice = await _register_and_login(client)
+    bob = await _register_and_login(client, "bob", "bobpass123")
+    await client.post("/api/scenarios", headers=alice, json=make_draft("sc-del"))
+    r = await client.post(
+        "/api/scenarios/sc-del/data-sets", headers=alice,
+        json={"name": "t", "rows": []},
+    )
+    ds_id = r.json()["datasetId"]
+    assert (await client.delete(f"/api/data-sets/{ds_id}", headers=bob)).status_code == 403
+    assert (await client.delete(f"/api/data-sets/{ds_id}", headers=alice)).status_code == 204
+
+
+async def test_delete_dataset_missing_404(client: AsyncClient) -> None:
+    headers = await _register_and_login(client)
+    assert (await client.delete("/api/data-sets/ds-999", headers=headers)).status_code == 404
+
+
 # ── runs (Plate mocked, so we only test the 404 paths here) ───────
 async def test_run_dispatch_scenario_not_found_404(client: AsyncClient) -> None:
     headers = await _register_and_login(client)

@@ -1,13 +1,14 @@
-"""DataSet endpoints (V3 composer) — create / read / update.
+"""DataSet endpoints (V3 composer) — create / read / update / delete.
 
 Path layout:
 
 * ``GET    /api/data-sets?scenarioId=``         — list summaries
 * ``GET    /api/data-sets/{datasetId}``         — full row
 * ``PUT    /api/data-sets/{datasetId}``         — full update
+* ``DELETE /api/data-sets/{datasetId}``         — delete
 * ``POST   /api/scenarios/{scenarioId}/data-sets`` — **create**
 
-(DELETE 曾存在但零消费者已移除;数据集随场景删除或由 PUT 覆盖。)
+(DELETE 随数据集编辑器重做回归(C9)。)
 
 Ownership: writes require the row's parent scenario's owner to match
 the caller (``owner_id`` is authoritative) or ``user.is_admin``.
@@ -125,6 +126,17 @@ async def put_data_set(
         raise key_error_404(e)
     except ValueError as e:
         raise value_error_http(e, {"undeclared_var": 422})
+
+
+@router.delete("/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_data_set(
+    user: CurrentUser, db: DbSession, dataset_id: str
+) -> None:
+    await _require_dataset_owner(db, user, dataset_id)
+    try:
+        await data_set_store.delete(db, dataset_id)
+    except KeyError as e:
+        raise key_error_404(e)
 
 
 # ── create (scenario-nested path) ──────────────────────────────────
