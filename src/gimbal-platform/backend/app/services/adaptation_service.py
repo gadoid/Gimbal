@@ -6,16 +6,23 @@ plate 目录是接口契约权威;本模块把"plate 现状"与平台基线戳
 """
 from __future__ import annotations
 
+import copy
 from datetime import datetime, timezone
+from uuid import uuid4
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..models.adaptation_batch import AdaptationBatch
+from ..models.adaptation_op import AdaptationOp
+from ..models.adaptation_snapshot import AdaptationSnapshot
 from ..models.catalog_version import CatalogVersion
 from ..models.composer_data_set import ComposerDataSet
+from ..models.composer_scenario import ComposerScenario
 from ..models.scenario_endpoint_ref import ScenarioEndpointRef
-from . import plate_client
+from . import plate_client, scenario_store
+from .adaptation_ops import diff_field_specs
 from .plate_client import PlateUnavailableError
 
 
@@ -215,3 +222,177 @@ async def impact(
         if not hit_any:  # 变量默认值通路(vars 扁平值),不挂数据集
             out.append(entry)
     return out
+
+
+# ─── 批次生命周期:开批次(spec §5.3)────────────────────────────
+async def open_batch(
+    db: AsyncSession, *, endpoint_id: str, operator_id: int
+) -> dict:
+    """开适配批次:校验有基线且版本确实前进 → 存档受影响实体 →
+    生成自动草案 → 建 batch + ops(全部 pending)。
+
+    * 无基线戳 → ValueError("no_baseline")(先 POST /adaptations/catalog/diff);
+    * plate 版本未前进 / 端点已下架 → ValueError("no_pending_change");
+    * 草案展开:addField → 该 endpoint 全部 (scenario, step) 引用对;
+      removeField/mapValue → 仅实际引用该字段的引用对(集合去重);
+    * 零 op(无引用或形状无 diff)→ 直接 completed + 推进戳。
+    """
+    stamp = (await db.execute(
+        select(CatalogVersion).where(CatalogVersion.endpoint_id == endpoint_id)
+    )).scalar_one_or_none()
+    if stamp is None:
+        raise ValueError(
+            f"no_baseline: {endpoint_id} — run POST /adaptations/catalog/diff first"
+        )
+    full = await _plate_full_endpoint(endpoint_id)
+    if full is None:
+        raise ValueError(f"no_pending_change: {endpoint_id} missing on plate")
+    to_version = str(full.get("version") or "")
+    if not _semver_gt(to_version, stamp.version):
+        raise ValueError(
+            f"no_pending_change: plate {to_version} not ahead of {stamp.version}"
+        )
+
+    refs = (await db.execute(
+        select(ScenarioEndpointRef).where(
+            ScenarioEndpointRef.endpoint_id == endpoint_id
+        ).order_by(
+            ScenarioEndpointRef.scenario_id, ScenarioEndpointRef.step_index,
+            ScenarioEndpointRef.source, ScenarioEndpointRef.field_name,
+        )
+    )).scalars().all()
+
+    scenario_rows: dict[str, ComposerScenario] = {}
+    for sid in sorted({r.scenario_id for r in refs}):
+        row = await scenario_store.get_row(db, sid)
+        if row is not None:
+            scenario_rows[sid] = row
+
+    batch_id = f"bt-{uuid4().hex[:12]}"
+    db.add(AdaptationBatch(
+        batch_id=batch_id, endpoint_id=endpoint_id,
+        from_version=stamp.version, to_version=to_version,
+        status="open", operator_id=operator_id,
+    ))
+    # 存档:受影响场景的完整容器 payload + 其全部数据集(回滚安全网)
+    for sid, row in scenario_rows.items():
+        db.add(AdaptationSnapshot(
+            batch_id=batch_id, entity_type="scenario", entity_id=sid,
+            before_json={"payload": copy.deepcopy(row.payload or {})},
+        ))
+    if scenario_rows:
+        ds_rows = (await db.execute(
+            select(ComposerDataSet).where(
+                ComposerDataSet.scenario_id.in_(sorted(scenario_rows))
+            )
+        )).scalars().all()
+    else:
+        ds_rows = []
+    for d in ds_rows:
+        db.add(AdaptationSnapshot(
+            batch_id=batch_id, entity_type="dataset", entity_id=d.dataset_id,
+            before_json={
+                "scenarioId": d.scenario_id, "name": d.name,
+                "description": d.description,
+                "rows": copy.deepcopy(d.rows or []),
+            },
+        ))
+
+    # 自动草案展开(§5.4 收窄):payload 不含 "op"(类型在 op_type 列)
+    drafts = diff_field_specs(stamp.spec_json or {}, full)
+    pairs = sorted({(r.scenario_id, r.step_index) for r in refs})
+    op_count = 0
+    for draft in drafts:
+        kind, field = draft["op"], draft.get("field")
+        if kind == "addField":
+            targets = pairs  # 新字段:全部引用位都要补
+        else:  # removeField / mapValue:仅实际引用该字段的 step
+            targets = sorted({(r.scenario_id, r.step_index)
+                              for r in refs if r.field_name == field})
+        for sid, step_index in targets:
+            db.add(AdaptationOp(
+                batch_id=batch_id, scenario_id=sid, dataset_id=None,
+                op_type=kind,
+                payload={k: v for k, v in draft.items() if k != "op"}
+                | {"step": step_index},
+                status="pending",
+            ))
+            op_count += 1
+
+    if op_count == 0:  # 零 op:直接完成并推进戳
+        batch = await _get_batch(db, batch_id)
+        batch.status = "completed"
+        batch.closed_at = _utcnow()
+        await _advance_stamp(
+            db, endpoint_id=endpoint_id, to_version=to_version, full=full,
+        )
+    await db.commit()
+    return await _batch_detail(db, batch_id)
+
+
+async def _get_batch(db: AsyncSession, batch_id: str) -> AdaptationBatch:
+    batch = (await db.execute(
+        select(AdaptationBatch).where(AdaptationBatch.batch_id == batch_id)
+    )).scalar_one_or_none()
+    if batch is None:
+        raise KeyError(f"batch_not_found: {batch_id}")
+    return batch
+
+
+def _op_out(op: AdaptationOp) -> dict:
+    return {
+        "id": op.id, "batchId": op.batch_id, "scenarioId": op.scenario_id,
+        "datasetId": op.dataset_id, "opType": op.op_type,
+        "payload": op.payload or {}, "status": op.status,
+        "appliedAt": op.applied_at, "note": op.note,
+    }
+
+
+async def _batch_detail(db: AsyncSession, batch_id: str) -> dict:
+    """批次详情 dict(camelCase)—— open_batch / get_batch_detail 共用,
+    Task 10 的 BatchDetail 响应模型按此形状校验。"""
+    batch = await _get_batch(db, batch_id)
+    ops = (await db.execute(
+        select(AdaptationOp).where(AdaptationOp.batch_id == batch_id)
+        .order_by(AdaptationOp.id)
+    )).scalars().all()
+    snapshots = (await db.execute(
+        select(AdaptationSnapshot).where(
+            AdaptationSnapshot.batch_id == batch_id
+        ).order_by(AdaptationSnapshot.id)
+    )).scalars().all()
+    counts: dict[str, int] = {}
+    for op in ops:
+        counts[op.status] = counts.get(op.status, 0) + 1
+    return {
+        "batchId": batch.batch_id, "endpointId": batch.endpoint_id,
+        "fromVersion": batch.from_version, "toVersion": batch.to_version,
+        "status": batch.status, "operatorId": batch.operator_id,
+        "createdAt": batch.created_at, "closedAt": batch.closed_at,
+        "opCounts": counts,
+        "ops": [_op_out(op) for op in ops],
+        "snapshots": [
+            {"entityType": s.entity_type, "entityId": s.entity_id}
+            for s in snapshots
+        ],
+    }
+
+
+async def _advance_stamp(
+    db: AsyncSession, *, endpoint_id: str, to_version: str, full: dict | None
+) -> None:
+    """批次完成时推进基线戳(spec §3.3)。调用方负责 commit。
+
+    full=None(完成时 plate 拉取失败)→ 只推进 version + synced_at,
+    spec_json 留旧 —— 形状基准滞后由下一次 diff 的版本/C12 语义自愈。
+    """
+    stamp = (await db.execute(
+        select(CatalogVersion).where(CatalogVersion.endpoint_id == endpoint_id)
+    )).scalar_one_or_none()
+    if stamp is None:  # 理论不可达(开批次前必须有戳);防御性兜底
+        stamp = CatalogVersion(endpoint_id=endpoint_id, version="", spec_json={})
+        db.add(stamp)
+    stamp.version = to_version
+    if full is not None:
+        stamp.spec_json = full
+    stamp.synced_at = _utcnow()
