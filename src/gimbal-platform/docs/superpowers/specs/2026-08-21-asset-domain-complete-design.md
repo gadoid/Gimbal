@@ -86,11 +86,14 @@ CREATE INDEX ix_ser_endpoint ON scenario_endpoint_refs (endpoint_id);
 CREATE TABLE catalog_versions (
     endpoint_id TEXT PRIMARY KEY,
     version     TEXT NOT NULL,     -- plate EndpointSpec.version (semver)
-    synced_at   DATETIME NOT NULL  -- 最后一次适配完成到的版本
+    synced_at   DATETIME NOT NULL, -- 最后一次适配完成到的版本
+    spec_json   JSON NOT NULL      -- 该戳所指版本的完整 plate spec(字段形状缓存)
 );
 ```
 
 检测 = 拉 plate 目录列表,逐 endpoint 对戳。`synced_at` 只在**适配批次完成**时推进 —— 目录版本高于戳 = 有未适配变更。
+
+**spec_json(P3+P4 规划裁定,2026-08-21)**:plate 只存当前 spec,平台做字段级 diff必须有"上次同步时的字段形状"基准 —— `spec_json` 即该基准,存戳所指版本的完整 spec。冷启动语义:**首见 endpoint 自动落基线戳 + spec_json**(幂等,无批次不算待适配);戳推进时与 spec_json 同步刷新。派生缓存,可随时重拉 plate 重建。
 
 ### 3.4 `adaptation_batches` + `adaptation_snapshots` —— 批次与存档
 
@@ -118,6 +121,23 @@ CREATE INDEX ix_snap_batch ON adaptation_snapshots (batch_id);
 ```
 
 批次状态机:`open(已存档未应用) → applying(逐条应用中) → completed`;任意完成前状态可 → `rolled_back`。(老方案的"批次注册信息落哪"开放项就此定为独立小表。)
+
+**`adaptation_ops` —— op 逐条状态(P3+P4 规划裁定,2026-08-21)**:ops 草案"逐条确认应用"要求每条 op 的状态跨会话持久化,batches 表无此结构,新增:
+
+```sql
+CREATE TABLE adaptation_ops (
+    id          INTEGER PRIMARY KEY,
+    batch_id    TEXT NOT NULL,             -- FK adaptation_batches
+    scenario_id TEXT NOT NULL,             -- 数据集类 op 亦填所属场景(回滚寻址)
+    dataset_id  TEXT,                      -- 仅 dataset 类 op(renameDatasetColumn/mapDatasetValues)
+    op_type     TEXT NOT NULL,             -- §5.4 八种
+    payload     JSON NOT NULL,             -- op 参数(step/from/to/map…)
+    status      TEXT NOT NULL,             -- pending|applied|conflict|skipped
+    applied_at  DATETIME,
+    note        TEXT                       -- conflict/skipped 原因
+);
+CREATE INDEX ix_aop_batch ON adaptation_ops (batch_id);
+```
 
 ### 3.5 PG 可移植性纪律(硬约束)
 
@@ -198,7 +218,8 @@ CREATE INDEX ix_snap_batch ON adaptation_snapshots (batch_id);
 
 - 版本高于戳 → 记入"待适配"提醒(前端导航徽章 + 适配中心列表);
 - 提醒是**拉取时计算**,不后台轮询(管理员打开适配中心时 diff);
-- (可选半步,P3)同次拉取顺带比对 `updated_at`:"plate 侧已更新但 version 未动"标为**异常提醒**,不自动适配 —— 抓"忘 bump"(列表接口若不携带 `updated_at` 则此半步顺延);内容哈希兜底明确**不做**:plate 与平台同仓同队,单系统信任边界内版本纪律归 plate;方案1 插件生态/外部目录源出现时再议(C12)。
+- ~~(可选半步,P3)~~ **C12 半步确认纳入 P3(2026-08-21 裁定)**:同次拉取顺带比对 `updated_at`(plate 轻量列表 `GET /api/endpoint` 自带 version + updated_at,一次调用双用):"plate 侧已更新但 version 未动"标为**异常提醒**,不自动适配、不建批次 —— 抓"忘 bump";内容哈希兜底明确**不做**:plate 与平台同仓同队,单系统信任边界内版本纪律归 plate;方案1 插件生态/外部目录源出现时再议(C12)。
+- **冷启动基线(2026-08-21 裁定)**:diff 对首见 endpoint(库内无戳)自动落基线戳 + `spec_json`(拉 `/full`,幂等,不算待适配、不建批次);diff 端点为 `POST`(如实承载该副作用)。
 
 ### 5.2 影响分析
 
@@ -252,7 +273,7 @@ WHERE r.endpoint_id = :X AND r.field_name = :F
 - `renameField`:改 step 字段键 + 索引行,不动数据;
 - `renameVar`:改场景内全部 `${var.from}` 引用(body/headers/query/strategy 文本)+ 数据集列名 + via_var;
 - `mapValue`(值域变更,直填)/ `mapDatasetValues`(值域变更,经 var 来自数据集)—— D8 下两条通路并存,影响清单按 via_var 是否为空自动选路;
-- **草案生成规则**(初版):rename/remove/add/mapValue 四类由 diff 自动生成草案;其余 op(rebind/renameVar/renameDatasetColumn/mapDatasetValues)由人工在 UI 构造。
+- **草案生成规则**(2026-08-21 裁定,较初版收窄):形状 diff(spec_json 旧形状 vs plate 当前 full spec)**只能可靠产出** `addField`(新增字段,默认值空)/ `removeField`(字段消失)两类全自动草案 + `mapValue` **骨架**(两侧值域可枚举时建草案但 map 留空,人工补目标值);`renameField` **不可**从形状 diff 推断(旧 `{a,b,c}` vs 新 `{a,b,d}` 无法区分"改名"与"删 c 增 d"),自动草案退化为 remove+add 对,需保留值绑定时由人工在 UI 合并为 rename;其余 op(rebind/renameVar/renameDatasetColumn/mapDatasetValues)由人工在 UI 构造。
 
 ### 5.5 方案2 UI 流(本期)与方案1 预留(未来)
 
@@ -265,9 +286,9 @@ WHERE r.endpoint_id = :X AND r.field_name = :F
 
 | 组件 | 内容 |
 |---|---|
-| `models/scenario_endpoint_ref.py` `catalog_version.py` `adaptation_batch.py` `adaptation_snapshot.py` | 四张新表 ORM |
+| `models/scenario_endpoint_ref.py` `catalog_version.py` `adaptation_batch.py` `adaptation_snapshot.py` `adaptation_op.py` | 五张新表 ORM(P3+P4 裁定增 `adaptation_ops` 表;`catalog_versions` 增 `spec_json` 列) |
 | `services/endpoint_ref_index.py` | payload → 索引行解析;写路径同事务挂钩;rebuild(附未索引步骤报告) |
-| `services/adaptation_service.py` | 目录 diff、影响查询、批次(存档/ops 应用/回滚/推进戳) |
+| `services/adaptation_service.py` | 目录 diff(冷启动基线/C12 异常)、影响查询、批次(存档/草案生成/ops 应用/回滚/推进戳) |
 | `services/data_set_store.py` | 扩展:调色板校验(422 教学)、DELETE |
 | `schemas/scenario_composer.py` | `_check_rows_consistent` 替换为行键 ⊆ 调色板校验 |
 | `routers/adaptations.py` | catalog-diff / impact / batches / apply / rollback(admin-only) |
@@ -309,6 +330,23 @@ P2 与 P1 无依赖(调色板只需 payload 的 vars,不需索引),可并行。�
 `helpers.test_env` 幽灵收集改名(独立卫生项,会改测试计数基线);FieldActionMenu 4 处 `:domain` 透传(基线既有,无伤害);`renderTemplate` 非全局正则(行 0 显示尾部场景);空调色板提示文案(§4.2);§4.3 其余 lint 项(URL 漂移等,随 P3/P5 补)。
 
 **下一步**:为 P3(目录 diff + 影响查询 API)出实施计划,§5 即需求源;P3+P4 可合并规划。本地起服务:后端 `cd src/gimbal-platform/backend && python -m app.main`(8000),前端 `cd src/gimbal-platform/frontend && npm run dev`(5173,/plate 代理→8765)。
+
+### P3+P4 规划裁定(2026-08-21 brainstorm,用户已确认)
+
+范围与存储四项裁定 + 草案规则收窄,均已写入上文对应章节,此处汇总:
+
+1. **范围**:P3+P4 合并一个实施计划(后端),P5 前端适配闭环另立计划;
+2. **`catalog_versions` 增 `spec_json` 列**(§3.3):字段级 diff 的旧形状基准;冷启动首见自动落基线;
+3. **新增 `adaptation_ops` 表**(§3.4):op 逐条状态(pending|applied|conflict|skipped)跨会话持久化;
+4. **C12 纳入 P3**(§5.1):updated_at 异常提醒,仅展示不建批次;
+5. **草案规则收窄**(§5.4):addField/removeField 全自动 + mapValue 骨架;renameField 形状不可推断,退化为 remove+add 对由人工合并。
+
+实施要点(设计增量,写入计划时展开):
+
+- **应用路径复用既有 store**:场景类 op 走 `scenario_store.update`(倒排索引同事务维护自动生效),数据集类走 `data_set_store.update`(调色板 422 校验天然兜底);不另写 payload 直改通道;
+- **admin 门控**:`core/deps.py` 增 `require_admin` 依赖(仿 users.py 内联判定收敛),`routers/adaptations.py` 全路由挂靠;
+- **diff 端点为 `POST`**(冷启动基线是写副作用,POST 如实承载);影响查询为只读 `GET`;
+- plate 侧零改动:轻量列表 `GET /api/endpoint` 自带 version/updated_at,full spec 走既有 `GET /api/endpoint/{id}/full`。
 
 ## 8. 范围外(明确不做)
 
