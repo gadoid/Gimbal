@@ -76,7 +76,7 @@ CREATE TABLE scenario_endpoint_refs (
 CREATE INDEX ix_ser_endpoint ON scenario_endpoint_refs (endpoint_id);
 ```
 
-**维护**:scenario create/update/delete 在**同一事务**内删旧插新(解析 payload);`rebuild_endpoint_refs(db)` 全量重建 —— 对账、灾后重建、升级迁移共用。派生不变量:任何时刻 drop 后重建,结果与逐行维护一致。
+**维护**:scenario create/update/delete 在**同一事务**内删旧插新(解析 payload);`rebuild_endpoint_refs(db)` 全量重建 —— 对账、灾后重建、升级迁移共用。派生不变量:任何时刻 drop 后重建,结果与逐行维护一致。rebuild 同时产出**未索引步骤报告**(缺 `view_hints.endpoint_id` 的步骤清单)—— 确定性 ≠ 完备性:rebuild 只保证与逐行维护一致,不保证覆盖全部步骤;漏索引 = 适配清单静默漏保,必须显式可见(C10)。适配中心挂牌展示该报告。
 
 **范围注(第一批不做)**:strategy(断言/提取/赋值)中 `${var.*}` 引用的索引覆盖是第二批扩展点 —— 索引结构不变(加行即可),解析器扩展。影响见 §9 自检 C7。
 
@@ -161,7 +161,7 @@ CREATE INDEX ix_snap_batch ON adaptation_snapshots (batch_id);
 - **调色板** = `{ name ∈ config.vars : 值为标量(str/num/bool) }` —— 排除结构化引擎声明(如 `{"kind":"seq"}`,数据集覆盖会破坏生成器语义);
 - 行键 ⊆ 调色板,否则 422,错误信息直接教学:`undeclared_var: "qty2" — 该字段未声明为变量;在编排中"设为变量"后即可作为数据集列`;
 - **放开 `_check_rows_consistent`**(现网 `scenario_composer.py` DataSet/DataSetDraft 双处):删除"行间列集必须一致"校验,替换为上述子集校验。运行时语义本就支持稀疏(`_compose_scenario` 缺键回落),旧校验是 JSON 粘贴时代的防御,与新模型冲突;
-- 死数据 lint(保存时告警,不阻断):声明未引用 / 引用未声明 / 数据集列无任何字段引用。
+- 死数据 lint(保存时告警,不阻断):声明未引用 / 引用未声明 / 数据集列无任何字段引用 / 步骤缺 `endpoint_id`(不参与变更适配)/ `endpoint_id` 与 api URL 疑似漂移 —— 后两条即索引完备性 lint(C10)。
 
 ### 4.4 提升交互
 
@@ -197,7 +197,8 @@ CREATE INDEX ix_snap_batch ON adaptation_snapshots (batch_id);
 拉取 plate 目录列表(全目录,接口量级为几十,一次列表足够 —— 老开放项就此定为全量拉取),逐 endpoint 比对 `catalog_versions`:
 
 - 版本高于戳 → 记入"待适配"提醒(前端导航徽章 + 适配中心列表);
-- 提醒是**拉取时计算**,不后台轮询(管理员打开适配中心时 diff)。
+- 提醒是**拉取时计算**,不后台轮询(管理员打开适配中心时 diff);
+- (可选半步,P3)同次拉取顺带比对 `updated_at`:"plate 侧已更新但 version 未动"标为**异常提醒**,不自动适配 —— 抓"忘 bump"(列表接口若不携带 `updated_at` 则此半步顺延);内容哈希兜底明确**不做**:plate 与平台同仓同队,单系统信任边界内版本纪律归 plate;方案1 插件生态/外部目录源出现时再议(C12)。
 
 ### 5.2 影响分析
 
@@ -257,14 +258,15 @@ WHERE r.endpoint_id = :X AND r.field_name = :F
 
 - **本期(方案2,人工确认)**:目录变更提醒 → 适配中心(批次列表/待适配清单)→ 影响清单(按 endpoint/字段分组,含直填/模板、数据集列标注)→ 逐条预览 op diff → 确认应用 → 批次详情可整批回滚;
 - **未来(方案1,插件自动)**:`POST /api/adaptations/batches/{id}/auto-apply` 接受 plate 插件生成的 ops 集,存档后批量应用。契约即 §5.4,无新概念 —— 过渡 = 换驱动器,基底零改;
-- **权限**:批量适配会改他人场景,adaptation 路由**仅 admin**(复用现有 is_admin 判定)。
+- **权限**:批量适配会改他人场景,adaptation 路由**仅 admin**(复用现有 is_admin 判定);
+- **所有者知情(P5)**:批次列表提供按 owner 过滤的只读视图("我的场景被适配记录"),零新基础设施(平台无通知系统,不为此新建);所有者**确认流程**明确不做 —— 与单管理员 MVP 假设冲突(C13);真正的安全网 = 快照 + 整批回滚(已有)。
 
 ## 6. 服务与实施映射
 
 | 组件 | 内容 |
 |---|---|
 | `models/scenario_endpoint_ref.py` `catalog_version.py` `adaptation_batch.py` `adaptation_snapshot.py` | 四张新表 ORM |
-| `services/endpoint_ref_index.py` | payload → 索引行解析;写路径同事务挂钩;rebuild |
+| `services/endpoint_ref_index.py` | payload → 索引行解析;写路径同事务挂钩;rebuild(附未索引步骤报告) |
 | `services/adaptation_service.py` | 目录 diff、影响查询、批次(存档/ops 应用/回滚/推进戳) |
 | `services/data_set_store.py` | 扩展:调色板校验(422 教学)、DELETE |
 | `schemas/scenario_composer.py` | `_check_rows_consistent` 替换为行键 ⊆ 调色板校验 |
@@ -277,11 +279,11 @@ WHERE r.endpoint_id = :X AND r.field_name = :F
 
 | 期 | 内容 | 验证标准 |
 |---|---|---|
-| P1 | 四表 ORM + 建表;索引写路径挂钩(同事务)+ rebuild | 单测:建/改/删场景后索引一致;rebuild 与逐行维护结果全等 |
+| P1 | 四表 ORM + 建表;索引写路径挂钩(同事务)+ rebuild(附未索引步骤报告) | 单测:建/改/删场景后索引一致;rebuild 与逐行维护结果全等;缺 endpoint_id 的步骤进报告 |
 | P2 | 数据集重做:校验替换、调色板 422、DELETE、编辑器(行 0/提升/提取首行)、RunDialog 基线项 + D12 校验放宽 | 单测:稀疏行接受、超集 422、DELETE;集成:行 0 编辑路由场景更新、空数据集执行 = 基线 |
-| P3 | 目录 diff + 影响查询 API | 单测:构造 `${var}` 绑定场景,反查清单含数据集列;直填字段命中 |
+| P3 | 目录 diff + 影响查询 API(可选:updated_at 异常提醒) | 单测:构造 `${var}` 绑定场景,反查清单含数据集列;直填字段命中 |
 | P4 | 批次:存档 / 8 种 op 应用 / 乐观回滚 / 应用期重验 / 推进戳 | 单测:每种 op 语义与幂等;改后回滚还原;批次后实体被编辑 → 回滚标冲突;步骤重排后应用 → 标冲突跳过 |
-| P5 | 前端适配闭环:变更提醒、影响清单、逐条应用、批次管理 | 手动全流程 + 前端测试 |
+| P5 | 前端适配闭环:变更提醒、影响清单、逐条应用、批次管理、owner 只读批次视图 | 手动全流程 + 前端测试 |
 | P6(未来) | plate 适配插件协议 + auto-apply(方案1) | 插件端到端 |
 
 P2 与 P1 无依赖(调色板只需 payload 的 vars,不需索引),可并行。测试基础设施复用现有 conftest(per-test SQLite fresh_db/client)。
@@ -293,11 +295,13 @@ P2 与 P1 无依赖(调色板只需 payload 的 vars,不需索引),可并行。�
 - `dataset_columns` 派生表(触发条件:数据集规模使内存列存在性判定变慢);
 - Alembic 接入与 PG 迁移本身(迁库前专项);
 - 多场景并发适配的批间锁(单管理员串行操作,MVP 假设);
+- 场景所有者的适配确认流程(知情走只读视图,§5.5);
+- 版本检测的内容哈希兜底(单系统信任边界,方案1/外部目录源出现时再议,§5.1);
 - 粘贴导入 UI(数据模型已预留,本期只做手动录入)。
 
 ## 9. 自检报告(冲突检查)
 
-编写本稿时对三部分(存储/适配/数据集)与**现网代码**交叉核对,发现并处理以下冲突:
+编写本稿时对三部分(存储/适配/数据集)与**现网代码**交叉核对,发现并处理以下冲突(C1-C9);C10-C13 为评审轮对用户提出的设计层问题的处置记录:
 
 | # | 冲突 | 处置 |
 |---|---|---|
@@ -310,5 +314,9 @@ P2 与 P1 无依赖(调色板只需 payload 的 vars,不需索引),可并行。�
 | C7 | 调色板含"仅在 strategy 引用的变量"(可被行覆盖)但索引第一批不覆盖 strategy 引用 → 此类列可跑不可反查 | 已知缺口,非矛盾:P 第二批扩展索引解析器后闭合;影响清单对无字段绑定的列不误报 |
 | C8 | 老文档开放项三项(批次注册落哪 / diff 拉取粒度 / ops 草案生成规则)悬而未决 | 本稿全部落定:独立 `adaptation_batches` 表 / 全目录列表拉取 / rename-remove-add-mapValue 四类自动草案 |
 | C9 | DELETE 数据集端点曾因零消费者移除(路由注释明示),本方案重新引入 | 有意为之:编辑器重做产生真实消费者;ownership 复用既有 `_require_dataset_owner`,无新权限面 |
+| C10 | ①索引完备性依赖 `view_hints.endpoint_id`,手工/API 编辑路径漏带即**静默漏保**(rebuild 只保证确定性不保证完备性,漏索引场景在适配清单中消失) | P1 rebuild 附未索引步骤报告 + 编辑器 lint 两条(缺 endpoint_id / 与 URL 疑似漂移)+ 适配中心挂牌(§3.2/§4.3);判定:四项中唯一立即做 —— 核心机制的信任缺口 × 保险最便宜 |
+| C11 | ②自动草案仅覆盖四类 op,复杂变更需人工构造 | 判定:**非缺口** —— 人工构造即方案2 本体,自动草案只是便利层;复杂变更多可分解为简单 op 序列(字段挪位 = remove + add);op 库按真实使用频率增长,不预穷举(§5.4) |
+| C12 | ③版本检测完全信任 plate semver,无内容哈希兜底 | 单系统信任边界内可接受,哈希兜底明确不做(§8);P3 可选半步:diff 同次比对 `updated_at`,"改了但 version 未动"标异常提醒不自动适配(§5.1) |
+| C13 | ④批量适配仅 admin 门槛,场景所有者无知情/确认 | 确认流程与单管理员 MVP 假设冲突,范围外(§8);知情走 P5 批次列表按 owner 过滤的只读视图(§5.5);安全网 = 快照 + 整批回滚(已有) |
 
 其余交叉点核对无冲突:mapValue/mapDatasetValues 双通路与 D8 一致(§5.4);renameVar 联动数据集列名与调色板定义一致;数据集表零改与 D1 权威层不动一致;快照表覆盖 scenario.payload 与 dataset.rows 与 D2 贯通范围一致。
