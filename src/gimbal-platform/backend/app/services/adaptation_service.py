@@ -526,3 +526,152 @@ async def _maybe_complete(db: AsyncSession, batch: AdaptationBatch) -> None:
         db, endpoint_id=batch.endpoint_id,
         to_version=batch.to_version, full=full,
     )
+
+
+# ─── 批次生命周期:整批回滚(spec §5.3 乐观冲突)─────────────────
+class _RollbackConflict(Exception):
+    """回滚乐观冲突:实体被批次外编辑 / 重放失败 / 实体消失。"""
+
+
+async def rollback_batch(db: AsyncSession, batch_id: str) -> dict:
+    """整批回滚:期望态 = before + applied ops 内存重放(收敛幂等 ⇒ 重放可行)。
+
+    场景先于数据集恢复(renameVar 对称序);当前态 ≠ 期望态 → 该实体
+    conflict 跳过不盲写;pending ops → skipped;戳不推进。
+    """
+    batch = await _get_batch(db, batch_id)
+    if batch.status not in ("open", "applying"):
+        raise ValueError(f"batch_not_rollbackable: {batch.status}")
+
+    applied_ops = (await db.execute(
+        select(AdaptationOp).where(
+            AdaptationOp.batch_id == batch_id,
+            AdaptationOp.status == "applied",
+        ).order_by(AdaptationOp.id)
+    )).scalars().all()
+    snapshots = (await db.execute(
+        select(AdaptationSnapshot).where(
+            AdaptationSnapshot.batch_id == batch_id
+        ).order_by(AdaptationSnapshot.id)
+    )).scalars().all()
+
+    restored: list[dict] = []
+    conflicts: list[dict] = []
+
+    def _snap(kind: str):
+        return [s for s in snapshots if s.entity_type == kind]
+
+    for snap in _snap("scenario"):  # 场景先恢复
+        try:
+            await _rollback_scenario(db, batch, snap, applied_ops)
+            restored.append(
+                {"entityType": "scenario", "entityId": snap.entity_id}
+            )
+        except _RollbackConflict as e:
+            conflicts.append({
+                "entityType": "scenario", "entityId": snap.entity_id,
+                "note": str(e),
+            })
+    for snap in _snap("dataset"):
+        try:
+            await _rollback_dataset(db, snap, applied_ops)
+            restored.append(
+                {"entityType": "dataset", "entityId": snap.entity_id}
+            )
+        except _RollbackConflict as e:
+            conflicts.append({
+                "entityType": "dataset", "entityId": snap.entity_id,
+                "note": str(e),
+            })
+
+    for op in (await db.execute(
+        select(AdaptationOp).where(
+            AdaptationOp.batch_id == batch_id,
+            AdaptationOp.status == "pending",
+        )
+    )).scalars():
+        op.status = "skipped"
+        op.note = "batch rolled back"
+    batch.status = "rolled_back"
+    batch.closed_at = _utcnow()
+    await db.commit()
+    return {
+        "batchId": batch_id, "status": "rolled_back",
+        "restored": restored, "conflicts": conflicts,
+    }
+
+
+async def _rollback_scenario(
+    db: AsyncSession, batch: AdaptationBatch,
+    snap: AdaptationSnapshot, applied_ops: list[AdaptationOp],
+) -> None:
+    row = await scenario_store.get_row(db, snap.entity_id)
+    if row is None:
+        raise _RollbackConflict(
+            "scenario_missing: entity deleted after batch opened"
+        )
+    before = copy.deepcopy((snap.before_json or {}).get("payload") or {})
+    expected = copy.deepcopy(before)
+    try:
+        for op in applied_ops:
+            if op.op_type in DATASET_OPS or op.scenario_id != snap.entity_id:
+                continue
+            op_view = {"op": op.op_type, **(op.payload or {})}
+            if op.op_type in STEP_OPS:
+                conflict = check_step_addressable(
+                    scenario_store.definition_from_payload(expected), op_view,
+                    batch.endpoint_id,
+                )
+                if conflict is not None:
+                    raise _RollbackConflict(
+                        f"replay_failed: op {op.id}: {conflict}"
+                    )
+            apply_to_definition(
+                scenario_store.definition_from_payload(expected), op_view,
+            )
+    except (KeyError, ValueError, IndexError) as e:
+        raise _RollbackConflict(f"replay_failed: {e}") from e
+    if (row.payload or {}) != expected:
+        raise _RollbackConflict(
+            "edited_beyond_batch: current != before+ops replay"
+        )
+    await scenario_store.update(
+        db, snap.entity_id, ScenarioDraft.model_validate(before)
+    )
+
+
+async def _rollback_dataset(
+    db: AsyncSession,
+    snap: AdaptationSnapshot,
+    applied_ops: list[AdaptationOp],
+) -> None:
+    d = await data_set_store.get_row(db, snap.entity_id)
+    if d is None:
+        raise _RollbackConflict(
+            "dataset_missing: entity deleted after batch opened"
+        )
+    before = snap.before_json or {}
+    expected_rows = copy.deepcopy(before.get("rows") or [])
+    try:
+        for op in applied_ops:
+            op_view = {"op": op.op_type, **(op.payload or {})}
+            if (op.op_type == "renameVar"
+                    and op.scenario_id == before.get("scenarioId")):
+                expected_rows = apply_to_rows(expected_rows, op_view)
+            elif op.op_type in DATASET_OPS and op.dataset_id == snap.entity_id:
+                expected_rows = apply_to_rows(expected_rows, op_view)
+    except (KeyError, ValueError) as e:
+        raise _RollbackConflict(f"replay_failed: {e}") from e
+    current = {"name": d.name, "description": d.description,
+               "rows": d.rows or []}
+    if current != {"name": before.get("name"),
+                   "description": before.get("description"),
+                   "rows": expected_rows}:
+        raise _RollbackConflict(
+            "edited_beyond_batch: current != before+ops replay"
+        )
+    await data_set_store.update(db, snap.entity_id, DataSetDraft(
+        name=before.get("name") or d.name,
+        description=before.get("description") or "",
+        rows=before.get("rows") or [],
+    ))

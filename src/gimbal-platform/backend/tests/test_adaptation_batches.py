@@ -314,3 +314,98 @@ async def test_apply_rejects_terminal_and_inactive(fresh_db, plate):
     async with await _session() as s:
         with pytest.raises(KeyError, match="op_not_found"):
             await adaptation_service.apply_op(s, 99999)
+
+
+# ─── rollback_batch(Task 9)───────────────────────────────────────
+async def test_rollback_restores_after_partial_apply(fresh_db, plate):
+    await _seed_scenario()
+    await _seed_stamp()
+    _install_plate(plate)
+    async with await _session() as s:
+        detail = await adaptation_service.open_batch(s, endpoint_id=EP, operator_id=1)
+        await adaptation_service.apply_op(s, detail["ops"][0]["id"])  # 只应用第一条
+        report = await adaptation_service.rollback_batch(s, detail["batchId"])
+        scenario = await scenario_store.get_row(s, "sc-batch")
+        ops = (await s.execute(select(AdaptationOp))).scalars().all()
+        stamp = (await s.execute(select(CatalogVersion))).scalar_one()
+    assert report["status"] == "rolled_back"
+    assert report["restored"] == [
+        {"entityType": "scenario", "entityId": "sc-batch"},
+    ]
+    assert report["conflicts"] == []
+    # payload 完全回到 before(第一条 op 的改动被撤销)
+    assert scenario.payload["definition"]["steps"][0]["request"]["body"] == {
+        "amount": "${var.amount}", "legacy_field": "L", "settle_type": "1",
+    }
+    by_status: dict[str, int] = {}
+    for o in ops:
+        by_status[o.status] = by_status.get(o.status, 0) + 1
+    assert by_status == {"applied": 1, "skipped": 2}  # applied 保持历史事实
+    assert stamp.version == "1.0.0"  # 戳不推进
+
+
+async def test_rollback_conflict_when_edited_beyond_batch(fresh_db, plate):
+    """批次打开后被用户额外编辑(超出本批次 ops)→ 该实体跳过回滚标冲突。"""
+    import copy as _copy
+
+    await _seed_scenario()
+    await _seed_stamp()
+    _install_plate(plate)
+    async with await _session() as s:
+        detail = await adaptation_service.open_batch(s, endpoint_id=EP, operator_id=1)
+        await adaptation_service.apply_op(s, detail["ops"][0]["id"])
+        # 用户在批次之外改了 payload(加一个无关字段)
+        row = await scenario_store.get_row(s, "sc-batch")
+        payload = _copy.deepcopy(row.payload)
+        payload["definition"]["meta"]["description"] = "user edit after batch"
+        await scenario_store.update(s, "sc-batch", ScenarioDraft.model_validate(payload))
+
+        report = await adaptation_service.rollback_batch(s, detail["batchId"])
+    assert report["restored"] == []
+    (conflict,) = report["conflicts"]
+    assert conflict["entityId"] == "sc-batch"
+    assert "edited_beyond_batch" in conflict["note"]
+
+
+async def test_rollback_rename_var_with_dataset(fresh_db, plate):
+    """renameVar 两侧(场景 + 数据集)应用后回滚:场景先恢复(vars 旧名就位),
+    数据集写回 before 行(旧列名)—— 调色板校验全程通过。"""
+    await _seed_scenario(with_dataset=True)
+    await _seed_stamp()
+    _install_plate(plate)
+    async with await _session() as s:
+        detail = await adaptation_service.open_batch(s, endpoint_id=EP, operator_id=1)
+        s.add(AdaptationOp(
+            batch_id=detail["batchId"], scenario_id="sc-batch", dataset_id=None,
+            op_type="renameVar", payload={"from": "amount", "to": "amt"},
+            status="pending",
+        ))
+        await s.commit()
+        rename_id = (await s.execute(
+            select(AdaptationOp).where(AdaptationOp.op_type == "renameVar")
+        )).scalar_one().id
+        await adaptation_service.apply_op(s, rename_id)
+
+        report = await adaptation_service.rollback_batch(s, detail["batchId"])
+        scenario = await scenario_store.get_row(s, "sc-batch")
+        ds = await data_set_store.get_row(s, "ds-001")
+    assert {"entityType": "scenario", "entityId": "sc-batch"} in report["restored"]
+    assert {"entityType": "dataset", "entityId": "ds-001"} in report["restored"]
+    assert report["conflicts"] == []
+    body = scenario.payload["definition"]["steps"][0]["request"]["body"]
+    assert body["amount"] == "${var.amount}"
+    assert scenario.payload["definition"]["config"]["vars"] == {"amount": 100}
+    assert ds.rows == [{"amount": 5}, {"amount": 6}]
+
+
+async def test_rollback_only_open_or_applying(fresh_db, plate):
+    await _seed_stamp()
+    _install_plate(plate)
+    async with await _session() as s:
+        detail = await adaptation_service.open_batch(s, endpoint_id=EP, operator_id=1)
+        assert detail["status"] == "completed"  # 零引用 → 自动完成
+        with pytest.raises(ValueError, match="batch_not_rollbackable"):
+            await adaptation_service.rollback_batch(s, detail["batchId"])
+    async with await _session() as s:
+        with pytest.raises(KeyError, match="batch_not_found"):
+            await adaptation_service.rollback_batch(s, "bt-none")
