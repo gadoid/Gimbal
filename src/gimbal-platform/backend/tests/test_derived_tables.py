@@ -16,6 +16,7 @@ async def _session():
     return db_module.SessionLocal()
 
 
+@pytest.mark.filterwarnings("ignore:New instance.*:sqlalchemy.exc.SAWarning")
 async def test_endpoint_ref_roundtrip_and_pk(fresh_db):
     async with await _session() as s:
         s.add(ScenarioEndpointRef(
