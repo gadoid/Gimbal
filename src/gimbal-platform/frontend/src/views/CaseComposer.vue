@@ -222,6 +222,7 @@ import { showError } from '@/utils/errorFallback'
 import { relTime } from '@/utils/datetime'
 import { executionUrl, composerUrl } from '@/utils/links'
 import { confirmAction } from '@/utils/confirmAction'
+import { lintDraft } from '@/utils/draft-lint'
 import * as api from '@/api/scenario-composer'
 import type { MergePolicy } from '@/api/executions'
 import type {
@@ -491,6 +492,11 @@ async function saveDraft(advance = false) {
     ElMessage.warning('请先在 ① 基本信息 中填写 name')
     onStepClick(0)
     return
+  }
+  // 保存前 lint(C10/§4.3):不拦截保存,只提醒
+  const lintWarns = lintDraft(definition.value as Parameters<typeof lintDraft>[0])
+  if (lintWarns.length) {
+    ElMessage.warning({ message: `草稿提醒:${lintWarns.join(';')}`, duration: 6000 })
   }
   // 新建场景:生成唯一 id 替换占位 'sc-new'。后端以此 id 作 DB 主键原样采用。
   // 编辑场景:definition.scenarioId 已由 loadScenario 从路由回填,update 时锁定不变。

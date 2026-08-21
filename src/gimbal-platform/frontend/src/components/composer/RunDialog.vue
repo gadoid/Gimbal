@@ -45,6 +45,21 @@
               <label class="run-label">数据集 <span class="muted small">(可多选, 不选则该数据集的行不参与运行)</span></label>
               <button class="link-btn" @click="onCreateDataSet" type="button">+ 新建数据集</button>
             </div>
+            <div class="ds-grid ds-grid-baseline">
+              <label class="ds-tile baseline" :class="{ active: useBaseline }">
+                <input
+                  type="checkbox"
+                  data-test="baseline"
+                  :checked="useBaseline"
+                  @change="toggleBaseline"
+                />
+                <div class="ds-info">
+                  <div class="ds-name">默认配置(基线)</div>
+                  <div class="ds-meta"><span class="ds-rows">1 次运行</span></div>
+                  <div class="ds-preview"><code>不选数据集 — 步骤直填值 + 共享变量默认值</code></div>
+                </div>
+              </label>
+            </div>
             <div v-if="dataSets.length === 0" class="empty-data">
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/>
@@ -164,6 +179,7 @@
 
         <footer class="run-footer">
           <div class="run-summary">
+            <span v-if="useBaseline" class="summary-chip">基线 ×1</span>
             <span v-if="selectedDatasets.length" class="summary-chip">
               {{ selectedDatasets.length }} 数据集
             </span>
@@ -232,6 +248,8 @@ const emit = defineEmits<{
 
 const selectedEnv = ref<string>(props.envs[0]?.envId || '')
 const selectedDatasets = ref<string[]>([])
+// D12 基线执行:不选数据集 = 直填值 + 共享变量默认值跑一次(一个隐式空覆盖行)
+const useBaseline = ref(false)
 // V1 能力移植:stepTo = 0-based 含端点(引擎 halt_at);null = 全量运行
 const stepTo = ref<number | null>(null)
 // M1 执行能力(V1 ExecutionDrawer 语义):origin 在此表达"不注入"
@@ -286,11 +304,24 @@ watch(() => props.envs, (envs) => {
 }, { immediate: true })
 
 watch(() => props.dataSets, (ds) => {
-  // 默认全选
-  selectedDatasets.value = ds.map(d => d.datasetId)
+  if (ds.length) {
+    selectedDatasets.value = ds.map(d => d.datasetId)  // 默认全选(基线关)
+  } else {
+    useBaseline.value = true   // 无数据集:唯一可跑的就是基线
+    selectedDatasets.value = []
+  }
 }, { immediate: true })
 
+// 勾回任一数据集 → 退出基线(基线与数据集互斥:基线 = 空覆盖行)
+watch(selectedDatasets, (v) => { if (v.length) useBaseline.value = false })
+
+function toggleBaseline() {
+  useBaseline.value = !useBaseline.value
+  if (useBaseline.value) selectedDatasets.value = []
+}
+
 const totalRuns = computed(() => {
+  if (useBaseline.value) return 1 * (nRuns.value || 1)   // 基线 = 一个隐式空行
   return props.dataSets
     .filter(d => selectedDatasets.value.includes(d.datasetId))
     .reduce((sum, d) => sum + (d.rowCount || 0), 0) * (nRuns.value || 1)
@@ -444,6 +475,9 @@ async function onCreateDataSet() {
 .ds-meta { display: flex; gap: 8px; margin-top: 2px; font-size: 11px; color: #5a6273; }
 .ds-preview { margin-top: 4px; font-size: 10px; }
 .ds-preview code { background: #f1f5f9; padding: 1px 4px; border-radius: 2px; }
+
+.ds-grid-baseline { margin-bottom: 8px; }
+.ds-tile.baseline { border-style: dashed; }
 
 .empty-data {
   display: flex; flex-direction: column; align-items: center; gap: 12px;
