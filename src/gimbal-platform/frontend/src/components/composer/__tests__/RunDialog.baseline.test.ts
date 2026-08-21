@@ -30,3 +30,20 @@ it('默认全选数据集;切基线后 confirm 发空 dataSetIds', async () => {
   const evt = w.emitted('confirm')!
   expect(evt[evt.length - 1][1]).toEqual([])   // dataSetIds = [] → D12 基线执行
 })
+
+it('全取消数据集(基线未勾)也按基线显示:基线 ×1 / 1 次运行', async () => {
+  const w = mountDialog()
+  expect(w.find('.summary-chip.total').text()).toBe('5 次运行')
+  // Vue 数组 v-model 把 modelValue 缓存在元素上、补丁期才同步,补丁还可能
+  // 重建输入元素 — 每个取消动作都必须重新查找当前 DOM 里的勾选框,
+  // 否则第二个 change 事件会读到过期数组(实测会串选)。
+  const dsBoxes = () => w.findAll('input[type="checkbox"]')
+    .filter((i) => i.attributes('data-test') !== 'baseline')
+  expect(dsBoxes().length).toBe(2)   // 两个数据集卡片,基线伪卡片已排除
+  for (let i = 0; i < 2; i++) {
+    await dsBoxes()[i].setValue(false)
+  }
+  // 空选择 = 一个隐式空覆盖行(D12 显示对齐):显示如实反映 confirm 将派发 []
+  expect(w.find('.summary-chip.total').text()).toBe('1 次运行')
+  expect(w.text()).toContain('基线 ×1')
+})

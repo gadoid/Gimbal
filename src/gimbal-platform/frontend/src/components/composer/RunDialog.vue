@@ -179,7 +179,7 @@
 
         <footer class="run-footer">
           <div class="run-summary">
-            <span v-if="useBaseline" class="summary-chip">基线 ×1</span>
+            <span v-if="useBaseline || selectedDatasets.length === 0" class="summary-chip">基线 ×1</span>
             <span v-if="selectedDatasets.length" class="summary-chip">
               {{ selectedDatasets.length }} 数据集
             </span>
@@ -321,7 +321,9 @@ function toggleBaseline() {
 }
 
 const totalRuns = computed(() => {
-  if (useBaseline.value) return 1 * (nRuns.value || 1)   // 基线 = 一个隐式空行
+  // 基线或空选择都按一个隐式空行计(D12:confirm 原样透传空 dataSetIds 即基线,
+  // 显示必须与派发语义一致,不能谎报 0 次)
+  if (useBaseline.value || selectedDatasets.value.length === 0) return 1 * (nRuns.value || 1)
   return props.dataSets
     .filter(d => selectedDatasets.value.includes(d.datasetId))
     .reduce((sum, d) => sum + (d.rowCount || 0), 0) * (nRuns.value || 1)
