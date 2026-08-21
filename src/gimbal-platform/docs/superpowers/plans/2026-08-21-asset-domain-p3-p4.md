@@ -1335,8 +1335,8 @@ def test_rename_var_deep_replace():
     d["steps"][0]["api"]["headers"]["Note"] = "amt=${var.amount}!"
     op = {"op": "renameVar", "from": "amount", "to": "amt"}
     apply_to_definition(d, op)
-    assert "amount" not in d["steps"][0]["request"]["body"]
-    assert d["steps"][0]["request"]["body"]["amt"] == "${var.amt}"
+    assert d["steps"][0]["request"]["body"]["amount"] == "${var.amt}"
+    assert "amt" not in d["steps"][0]["request"]["body"]
     assert d["steps"][0]["api"]["headers"]["Note"] == "amt=${var.amt}!"
     assert "amount" not in d["config"]["vars"]
     assert d["config"]["vars"]["amt"] == 100
@@ -2065,7 +2065,7 @@ async def test_rename_var_updates_scenario_and_datasets(fresh_db, plate):
         ds = await data_set_store.get_row(s, "ds-001")
     assert res["status"] == "applied"
     body = scenario.payload["definition"]["steps"][0]["request"]["body"]
-    assert body["amt"] == "${var.amt}" and "amount" not in body
+    assert body["amount"] == "${var.amt}" and "amt" not in body
     assert scenario.payload["definition"]["config"]["vars"] == {"amt": 100}
     assert ds.rows == [{"amt": 5}, {"amt": 6}]  # 调色板先就位 → 列改名通过
 
