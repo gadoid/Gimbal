@@ -44,13 +44,19 @@ function fieldsOf(step: any, source: BaselineColumn['source']): Record<string, u
   return fields as Record<string, unknown>
 }
 
+/** 内部派生标记:步骤原值恰为整串模板(value === `${var.NAME}`)。
+ *  结构性判据,与字段出现顺序无关;不导出,公开签名不变。 */
+interface MarkedColumn extends BaselineColumn {
+  wholeValue: boolean
+}
+
 /** 场景 definition → 行 0 列全集(变量列在前由调用方自行分组;此处保持步骤序) */
 export function deriveBaselineColumns(definition: {
   steps?: any[]
   config?: { vars?: Record<string, unknown> }
 }): BaselineColumn[] {
   const vars = definition.config?.vars ?? {}
-  const out: BaselineColumn[] = []
+  const out: MarkedColumn[] = []
   ;(definition.steps ?? []).forEach((step, stepIndex) => {
     if (!step?.api?.view_hints?.endpoint_id) return
     for (const source of ['body', 'headers', 'query'] as const) {
@@ -65,6 +71,9 @@ export function deriveBaselineColumns(definition: {
           baseline: varName
             ? renderTemplate(String(value), vars)
             : value === null || value === undefined ? '' : String(value),
+          wholeValue:
+            typeof value === 'string' && varName !== null
+            && value === '${var.' + varName + '}',
         })
       }
     }
@@ -72,13 +81,20 @@ export function deriveBaselineColumns(definition: {
   return out
 }
 
-/** "从基线提取首行":每个变量列取行 0 渲染默认值,生成一条真实数据行。
- *  同一变量被多列引用时取**首个出现列**的基线:内嵌模板列的组合串
- *  (如 "p-100-s")不是变量默认值,不得覆盖整串模板列("100")。 */
+/** "从基线提取首行"(结构性两遍,顺序无关):
+ *  Pass 1 — 步骤原值恰为整串模板(value === `${var.NAME}`)的列定义该
+ *  变量的行 0 值;仅内嵌模板引用的组合串(如 "p-100-s")不是变量默认
+ *  值,无论出现先后都不定义基线。
+ *  Pass 2 — 无任何整串绑定的变量整行省略该键(D10 稀疏行语义:不写入
+ *  显式空串覆盖)。 */
 export function rowFromBaseline(columns: BaselineColumn[]): Record<string, string> {
   const row: Record<string, string> = {}
   for (const c of columns) {
-    if (c.kind === 'var' && c.varName && row[c.varName] === undefined) {
+    if (
+      c.kind === 'var' && c.varName
+      && (c as MarkedColumn).wholeValue
+      && row[c.varName] === undefined
+    ) {
       row[c.varName] = c.baseline
     }
   }

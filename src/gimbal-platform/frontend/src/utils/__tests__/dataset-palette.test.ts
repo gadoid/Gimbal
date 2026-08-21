@@ -55,3 +55,25 @@ it('rowFromBaseline:仅变量列,取行 0 渲染默认值(从基线提取首行)
 it('scalarVarNames:标量键进调色板,结构化声明剔除(镜像后端 _scalar_vars)', () => {
   expect(scalarVarNames(DEF.config.vars)).toEqual(['amount', 'qty', 'fin.customer_id'])
 })
+
+it('rowFromBaseline 顺序无关:整串模板列在后仍定义基线(结构性优先)', () => {
+  const def = {
+    config: { vars: { amount: 100 } },
+    steps: [{
+      api: { view_hints: { endpoint_id: 'fin.order.add' }, headers: {}, query: {} },
+      request: { body: { mix: 'p-${var.amount}-s', amount: '${var.amount}' } },
+    }],
+  }
+  expect(rowFromBaseline(deriveBaselineColumns(def))).toEqual({ amount: '100' })
+})
+
+it('rowFromBaseline Pass 2:仅内嵌模板引用的变量整行省略(D10 稀疏行)', () => {
+  const def = {
+    config: { vars: { tag: 'T1' } },
+    steps: [{
+      api: { view_hints: { endpoint_id: 'fin.order.add' }, headers: {}, query: {} },
+      request: { body: { note: 'n-${var.tag}-s' } },
+    }],
+  }
+  expect(rowFromBaseline(deriveBaselineColumns(def))).toEqual({})
+})
