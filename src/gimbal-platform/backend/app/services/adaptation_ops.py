@@ -163,9 +163,8 @@ def _apply_step_op(step: dict, op: dict, definition: dict) -> None:
 
 def _apply_rename_var(definition: dict, op: dict) -> None:
     """renameVar:definition 内全部 ``${var.from}`` → ``${var.to}``
-    (深走字符串替换,body/headers/query/strategy 文本通吃)+ 同名字段键
-    跟随改名(与 apply_to_rows 的列改名对齐)+ config.vars 键改名。
-    数据集列联动走 apply_to_rows(另一通路,由 service 编排)。"""
+    (深走字符串替换,body/headers/query/strategy 文本通吃)+ config.vars
+    键改名。数据集列联动走 apply_to_rows(另一通路,由 service 编排)。"""
     src, dst = op["from"], op["to"]
     pattern = f"${{var.{src}}}"
     replacement = f"${{var.{dst}}}"
@@ -183,15 +182,6 @@ def _apply_rename_var(definition: dict, op: dict) -> None:
                 walk(item)
 
     walk(definition)
-    # 同名字段键跟随改名:body/headers/query 里键 == src 的字段改为 dst
-    # (字段名与变量名同源;apply_to_rows 同步改数据集列,两侧对齐)
-    steps = definition.get("steps")
-    if isinstance(steps, list):
-        for step in steps:
-            if isinstance(step, dict):
-                for c in _containers(step).values():
-                    if src in c and dst not in c:
-                        c[dst] = c.pop(src)
     vars_map = (definition.get("config") or {}).get("vars")
     if isinstance(vars_map, dict) and src in vars_map and dst not in vars_map:
         vars_map[dst] = vars_map.pop(src)
