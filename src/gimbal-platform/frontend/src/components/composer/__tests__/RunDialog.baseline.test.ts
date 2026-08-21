@@ -1,5 +1,5 @@
 /** RunDialog 默认配置(基线)选项:D12 空 dataSetIds 前端入口。 */
-import { describe, expect, it } from 'vitest'
+import { expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import RunDialog from '../RunDialog.vue'

@@ -1,5 +1,5 @@
 /** "设为变量"提升交互(D8):整串替换 + 同名后缀 + 原值上抛。 */
-import { describe, expect, it } from 'vitest'
+import { expect, it } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { mount } from '@vue/test-utils'
 import FieldForm from '../FieldForm.vue'

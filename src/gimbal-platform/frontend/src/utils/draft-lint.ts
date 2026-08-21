@@ -16,7 +16,8 @@ export function lintDraft(definition: {
   const steps = (definition.steps ?? []).map((s: any) => s ?? {})
 
   steps.forEach((s: any, i: number) => {
-    if (s?.api && !s.api?.view_hints?.endpoint_id) {
+    // 无 api 的步骤同样算未索引(与后端 parse_refs 对齐)
+    if (!s.api?.view_hints?.endpoint_id) {
       warns.push(`步骤 ${i + 1} 未绑定接口目录(endpoint_id 缺失,不进反向索引)`)
     }
   })

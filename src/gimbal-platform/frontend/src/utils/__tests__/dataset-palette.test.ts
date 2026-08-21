@@ -1,5 +1,5 @@
 /** 列调色板/行 0 投影(spec §4):与后端 parse_refs 同一 traversal 规则。 */
-import { describe, expect, it } from 'vitest'
+import { expect, it } from 'vitest'
 import {
   deriveBaselineColumns, renderTemplate, rowFromBaseline,
   scalarVarNames, varNameOf,

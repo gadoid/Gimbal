@@ -106,7 +106,7 @@ import { Back, DataAnalysis, Delete } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
-import { deleteDataSet, getDataSet, getScenarioDraft, updateScenario } from '@/api/scenario-composer'
+import { getDataSet, getScenarioDraft, updateScenario } from '@/api/scenario-composer'
 import { showError } from '@/utils/errorFallback'
 import { confirmAction } from '@/utils/confirmAction'
 import { scenarioDataSetsUrl } from '@/utils/links'
@@ -226,7 +226,8 @@ async function onDelete() {
   )
   if (!ok) return
   try {
-    await deleteDataSet(datasetId)
+    // 共用删除路径:与 CaseDataSetsList 一致走 store(删后统一刷新列表缓存)
+    await store.removeDataSet(scenarioId, datasetId)
     ElMessage.success('已删除')
     router.push(scenarioDataSetsUrl(scenarioId))
   } catch (e) {

@@ -459,8 +459,8 @@ async function loadEnvs() {
 function onStepClick(idx: number) {
   if (idx === stepIdx.value) return
   if (idx > stepIdx.value && dirty.value) {
-    // Auto-save before advancing
-    saveDraft(false)
+    // Auto-save before advancing(manual=false:自动保存不弹 lint 提醒,防步步弹窗)
+    saveDraft(false, false)
   }
   stepIdx.value = idx
   router.replace({
@@ -486,16 +486,16 @@ function genScenarioId(name: string): string {
   return id.length > 128 ? id.slice(0, 128) : id
 }
 
-async function saveDraft(advance = false) {
+async function saveDraft(advance = false, manual = true) {
   if (!meta.value.name) {
     // scenarioId 不再前端必填校验:新建时自动生成,编辑时由路由回填并锁定。
     ElMessage.warning('请先在 ① 基本信息 中填写 name')
     onStepClick(0)
     return
   }
-  // 保存前 lint(C10/§4.3):不拦截保存,只提醒
+  // 保存前 lint(C10/§4.3):不拦截保存,只提醒;自动保存(步进)不弹 toast
   const lintWarns = lintDraft(definition.value as Parameters<typeof lintDraft>[0])
-  if (lintWarns.length) {
+  if (lintWarns.length && manual) {
     ElMessage.warning({ message: `草稿提醒:${lintWarns.join(';')}`, duration: 6000 })
   }
   // 新建场景:生成唯一 id 替换占位 'sc-new'。后端以此 id 作 DB 主键原样采用。

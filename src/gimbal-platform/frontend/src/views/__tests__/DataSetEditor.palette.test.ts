@@ -1,5 +1,5 @@
 /** DataSetEditor 重做(spec §4):行 0 虚行两组列 + 稀疏行 + 从基线提取首行。 */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { createPinia, setActivePinia } from 'pinia'

@@ -46,7 +46,7 @@
               <button class="link-btn" @click="onCreateDataSet" type="button">+ 新建数据集</button>
             </div>
             <div class="ds-grid ds-grid-baseline">
-              <label class="ds-tile baseline" :class="{ active: useBaseline }">
+              <label class="ds-tile baseline" :class="{ active: useBaseline || selectedDatasets.length === 0 }">
                 <input
                   type="checkbox"
                   data-test="baseline"

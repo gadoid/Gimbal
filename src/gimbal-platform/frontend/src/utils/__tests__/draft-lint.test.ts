@@ -1,5 +1,5 @@
 /** 保存前非阻断 lint(C10 前端半 + §4.3 死数据)。 */
-import { describe, expect, it } from 'vitest'
+import { expect, it } from 'vitest'
 import { lintDraft } from '../draft-lint'
 
 it('缺 endpoint_id 的步骤与声明未引用的变量都告警', () => {
