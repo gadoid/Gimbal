@@ -101,3 +101,19 @@ async def test_rebuild_idempotent(fresh_db):
         r1 = await idx.rebuild(s)
         r2 = await idx.rebuild(s)
     assert (r1["refs"], len(r1["unindexed_steps"])) == (r2["refs"], len(r2["unindexed_steps"]))
+
+
+async def test_unindexed_steps_reports_api_less_step(fresh_db):
+    from app.services import endpoint_ref_index as idx
+
+    steps = [
+        {"api": {"view_hints": {"endpoint_id": "fin.order.add"}}},
+        {"request": {"body": {"x": "1"}}},   # 无 api → 无 endpoint_id
+    ]
+    async with db_module.SessionLocal() as s:
+        await scenario_store.create(s, _draft("sc-un", steps), owner="alice")
+    async with db_module.SessionLocal() as s:
+        report = await idx.unindexed_steps(s)
+    assert report == [
+        {"scenario_id": "sc-un", "step_index": 1, "reason": "no_endpoint_id"},
+    ]

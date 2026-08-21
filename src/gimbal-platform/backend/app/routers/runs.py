@@ -9,7 +9,8 @@ auths / …) lives entirely in ``RunRequest``.
 
 Error mapping (per the agreed run-failure semantics):
 * scenario / env / data_set missing → 404
-* no data sets selected       → 409
+* empty dataSetIds is legal (D12 baseline run: one implicit empty
+  override row — direct-fill values + shared-var defaults)
 * plate unavailable mid-fan-out → the Execution row is marked
   ``status='failed'`` and the JSONL log records the error, but the
   response is **201 with runId** (so the UI can navigate to

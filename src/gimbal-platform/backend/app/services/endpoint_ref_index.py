@@ -104,7 +104,10 @@ async def rebuild(db: AsyncSession) -> dict:
     """
     from sqlalchemy import select  # 局部 import 避免与模块头冲突
 
-    rows = (await db.execute(select(ComposerScenario))).scalars().all()
+    # order_by:PG 无隐式行序,报告喂 P5 适配中心须确定性
+    rows = (await db.execute(
+        select(ComposerScenario).order_by(ComposerScenario.scenario_id)
+    )).scalars().all()
     await db.execute(sa_delete(ScenarioEndpointRef))
     refs_total = 0
     unindexed: list[dict] = []
@@ -124,7 +127,9 @@ async def unindexed_steps(db: AsyncSession) -> list[dict]:
     """当前库的未索引步骤清单(P5 适配中心挂牌;rebuild 的只读子集)。"""
     from sqlalchemy import select
 
-    rows = (await db.execute(select(ComposerScenario))).scalars().all()
+    rows = (await db.execute(
+        select(ComposerScenario).order_by(ComposerScenario.scenario_id)
+    )).scalars().all()
     out: list[dict] = []
     for row in rows:
         _, un = parse_refs(row.scenario_id, row.payload)
