@@ -21,8 +21,16 @@ from ..models.catalog_version import CatalogVersion
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..models.scenario_endpoint_ref import ScenarioEndpointRef
-from . import plate_client, scenario_store
-from .adaptation_ops import diff_field_specs
+from ..schemas.scenario_composer import DataSetDraft, ScenarioDraft
+from . import data_set_store, plate_client, scenario_store
+from .adaptation_ops import (
+    DATASET_OPS,
+    STEP_OPS,
+    apply_to_definition,
+    apply_to_rows,
+    check_step_addressable,
+    diff_field_specs,
+)
 from .plate_client import PlateUnavailableError
 
 
@@ -396,3 +404,125 @@ async def _advance_stamp(
     if full is not None:
         stamp.spec_json = full
     stamp.synced_at = _utcnow()
+
+
+# ─── 批次生命周期:逐条应用(spec §5.3 / §9 C5)─────────────────
+class _OpConflict(ValueError):
+    """可预期冲突(C5 寻址失败等)—— 归并进 op 的 conflict 捕获路径。"""
+
+
+async def apply_op(db: AsyncSession, op_id: int) -> dict:
+    """应用一条 pending op;applied 重放幂等返回终态。
+
+    * applied → 原样返回(幂等);
+    * conflict/skipped → ValueError("op_not_applicable");
+    * 批次非 open/applying → ValueError("batch_not_active");
+    * 应用走既有 store(scenario_store/data_set_store)—— 倒排索引同事务
+      维护、调色板校验天然生效;
+    * store 抛 KeyError/ValueError(实体消失、调色板 422…)→ db.rollback
+      后该 op 标 conflict + note,不中断批次其余 op;
+    * 首次成功应用 open → applying;无 pending 剩余 → completed + 推进戳
+      (plate 拉取失败也推 version,spec_json 留旧自愈)。
+    """
+    op = (await db.execute(
+        select(AdaptationOp).where(AdaptationOp.id == op_id)
+    )).scalar_one_or_none()
+    if op is None:
+        raise KeyError(f"op_not_found: {op_id}")
+    if op.status == "applied":
+        return _op_out(op)
+    if op.status in ("conflict", "skipped"):
+        raise ValueError(f"op_not_applicable: op {op_id} is {op.status}")
+    batch = await _get_batch(db, op.batch_id)
+    if batch.status not in ("open", "applying"):
+        raise ValueError(f"batch_not_active: {batch.status}")
+
+    payload = {**(op.payload or {})}
+    try:
+        if op.op_type in DATASET_OPS:
+            await _apply_dataset_op(db, op, payload)
+        else:  # STEP_OPS + renameVar:场景 definition(renameVar 联动数据集)
+            await _apply_scenario_op(db, op, batch, payload)
+    except (KeyError, ValueError) as e:
+        await db.rollback()
+        op = (await db.execute(  # rollback 后 ORM 实例过期,重取
+            select(AdaptationOp).where(AdaptationOp.id == op_id)
+        )).scalar_one()
+        op.status = "conflict"
+        op.note = str(e)[:500]
+        await db.commit()
+        return _op_out(op)
+
+    op.status = "applied"
+    op.applied_at = _utcnow()
+    op.note = None
+    if batch.status == "open":
+        batch.status = "applying"
+    await _maybe_complete(db, batch)
+    await db.commit()
+    return _op_out(op)
+
+
+async def _apply_scenario_op(
+    db: AsyncSession, op: AdaptationOp, batch: AdaptationBatch, payload: dict
+) -> None:
+    row = await scenario_store.get_row(db, op.scenario_id)
+    if row is None:
+        raise KeyError(f"scenario_not_found: {op.scenario_id}")
+    definition = copy.deepcopy(scenario_store.definition_from_payload(row.payload))
+    op_view = {"op": op.op_type, **payload}
+    if op.op_type in STEP_OPS:
+        conflict = check_step_addressable(definition, op_view, batch.endpoint_id)
+        if conflict is not None:
+            raise _OpConflict(conflict)
+    apply_to_definition(definition, op_view)
+    await scenario_store.update(db, op.scenario_id, ScenarioDraft(
+        definition=definition,
+        orchestration=(row.payload or {}).get("orchestration") or {},
+    ))
+    if op.op_type == "renameVar":
+        # 联动:该场景全部数据集列改名(场景先落库 → 调色板已含新键)
+        ds_rows = (await db.execute(
+            select(ComposerDataSet).where(
+                ComposerDataSet.scenario_id == op.scenario_id
+            )
+        )).scalars().all()
+        for d in ds_rows:
+            rows = apply_to_rows(copy.deepcopy(d.rows or []), op_view)
+            await data_set_store.update(db, d.dataset_id, DataSetDraft(
+                name=d.name, description=d.description, rows=rows,
+            ))
+
+
+async def _apply_dataset_op(db: AsyncSession, op: AdaptationOp, payload: dict) -> None:
+    if not op.dataset_id:
+        raise ValueError(f"op_needs_dataset: {op.op_type} requires dataset_id")
+    d = await data_set_store.get_row(db, op.dataset_id)
+    if d is None:
+        raise KeyError(f"data_set_not_found: {op.dataset_id}")
+    rows = apply_to_rows(copy.deepcopy(d.rows or []), {"op": op.op_type, **payload})
+    await data_set_store.update(db, op.dataset_id, DataSetDraft(
+        name=d.name, description=d.description, rows=rows,
+    ))
+
+
+async def _maybe_complete(db: AsyncSession, batch: AdaptationBatch) -> None:
+    """无 pending 剩余 → completed + 推进戳。plate full 拉取 best-effort。"""
+    pending_left = (await db.execute(
+        select(AdaptationOp.id).where(
+            AdaptationOp.batch_id == batch.batch_id,
+            AdaptationOp.status == "pending",
+        ).limit(1)
+    )).scalar_one_or_none()
+    if pending_left is not None:
+        return
+    batch.status = "completed"
+    batch.closed_at = _utcnow()
+    try:
+        full = await _plate_full_endpoint(batch.endpoint_id)
+    except PlateUnavailableError:
+        full = None
+    await _advance_stamp(
+        db, endpoint_id=batch.endpoint_id,
+        to_version=batch.to_version, full=full,
+    )
