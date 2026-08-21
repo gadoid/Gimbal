@@ -409,3 +409,87 @@ async def test_rollback_only_open_or_applying(fresh_db, plate):
     async with await _session() as s:
         with pytest.raises(KeyError, match="batch_not_found"):
             await adaptation_service.rollback_batch(s, "bt-none")
+
+
+async def test_rollback_restore_failure_becomes_conflict(fresh_db, plate):
+    """场景恢复被冲突跳过后,数据集恢复写会撞上仍处于改名后状态的调色板
+    (undeclared_var)→ 必须归并为该实体的 restore_failed 冲突,而不是让
+    ValueError 逃逸把批次永远卡在 applying。"""
+    import copy as _copy
+
+    await _seed_scenario(with_dataset=True)
+    await _seed_stamp()
+    _install_plate(plate)
+    async with await _session() as s:
+        detail = await adaptation_service.open_batch(s, endpoint_id=EP, operator_id=1)
+        op = await adaptation_service.create_op(  # 人工 renameVar(§5.4)
+            s, detail["batchId"], op_type="renameVar",
+            scenario_id="sc-batch", dataset_id=None,
+            payload={"from": "amount", "to": "amt"},
+        )
+        await adaptation_service.apply_op(s, op["id"])  # 调色板 + 数据集列 → "amt"
+
+        # 批次外编辑场景(orchestration)→ 回滚时场景恢复被 edited_beyond_batch 跳过,
+        # 调色板保持 "amt",数据集恢复写 before 行({"amount"})即触发调色板校验
+        row = await scenario_store.get_row(s, "sc-batch")
+        payload = _copy.deepcopy(row.payload)
+        payload["orchestration"]["resourceMeta"] = {"res-1": "edited-after-batch"}
+        await scenario_store.update(s, "sc-batch", ScenarioDraft.model_validate(payload))
+
+        report = await adaptation_service.rollback_batch(s, detail["batchId"])
+        batch = (await s.execute(select(AdaptationBatch))).scalar_one()
+        ds = await data_set_store.get_row(s, "ds-001")
+    assert report["status"] == "rolled_back"
+    assert report["restored"] == []
+    notes = {c["entityId"]: c["note"] for c in report["conflicts"]}
+    assert "edited_beyond_batch" in notes["sc-batch"]  # 场景:批次外编辑 → 跳过
+    assert notes["ds-001"].startswith("restore_failed:")  # 数据集:恢复写被拒
+    assert "undeclared_var" in notes["ds-001"]
+    assert batch.status == "rolled_back"  # 回滚走完,不再卡 applying
+    assert ds.rows == [{"amt": 5}, {"amt": 6}]  # 写被拒 → 列仍是改名后的键
+
+
+async def test_manual_rename_var_snapshots_datasets(fresh_db, plate):
+    """人工 renameVar 的 apply 面含该场景全部数据集列 → create_op 必须与
+    open_batch 一样为这些数据集补 before 快照,否则回滚只还原调色板、
+    数据集列孤儿化(后续保存永久 422)且 conflicts 报不出。"""
+    await _seed_scenario()  # A:绑定 EP(批次受影响面),无数据集
+    async with await _session() as s:
+        await scenario_store.create(  # B:不在受影响面内(未绑 EP),自带数据集
+            s,
+            ScenarioDraft.model_validate(
+                make_draft("sc-other", vars_map={"amount": 100})
+            ),
+            owner="alice", owner_id=1,
+        )
+        await data_set_store.create(s, "sc-other", DataSetDraft(
+            name="B数据集", rows=[{"amount": 7}],
+        ))
+    await _seed_stamp()
+    _install_plate(plate)
+    async with await _session() as s:
+        detail = await adaptation_service.open_batch(s, endpoint_id=EP, operator_id=1)
+        op = await adaptation_service.create_op(  # 人工 renameVar 打在不相关场景 B 上
+            s, detail["batchId"], op_type="renameVar",
+            scenario_id="sc-other", dataset_id=None,
+            payload={"from": "amount", "to": "amt"},
+        )
+        await adaptation_service.apply_op(s, op["id"])
+
+        detail = await adaptation_service.get_batch_detail(s, detail["batchId"])
+        assert {"entityType": "dataset", "entityId": "ds-001"} in detail["snapshots"]
+
+        report = await adaptation_service.rollback_batch(s, detail["batchId"])
+        scenario_b = await scenario_store.get_row(s, "sc-other")
+        # 先取值再试保存:同一 ORM 行会被后续 update 原地改写
+        restored_rows = list((await data_set_store.get_row(s, "ds-001")).rows or [])
+        # 调色板已回旧名 → 旧列名行可直接再保存(不再 undeclared_var)
+        saved = await data_set_store.update(s, "ds-001", DataSetDraft(
+            name="B数据集", rows=[{"amount": 8}],
+        ))
+    assert report["conflicts"] == []
+    assert {"entityType": "scenario", "entityId": "sc-other"} in report["restored"]
+    assert {"entityType": "dataset", "entityId": "ds-001"} in report["restored"]
+    assert scenario_b.payload["definition"]["config"]["vars"] == {"amount": 100}
+    assert restored_rows == [{"amount": 7}]  # 列名随快照还原
+    assert saved.rows == [{"amount": 8}]

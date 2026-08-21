@@ -26,6 +26,7 @@ from . import data_set_store, plate_client, scenario_store
 from .adaptation_ops import (
     ALL_OPS,
     DATASET_OPS,
+    GLOBAL_OPS,
     STEP_OPS,
     apply_to_definition,
     apply_to_rows,
@@ -636,9 +637,12 @@ async def _rollback_scenario(
         raise _RollbackConflict(
             "edited_beyond_batch: current != before+ops replay"
         )
-    await scenario_store.update(
-        db, snap.entity_id, ScenarioDraft.model_validate(before)
-    )
+    try:  # 恢复写也可能撞调色板(场景侧被冲突跳过、改名键未还原)→ 同归冲突
+        await scenario_store.update(
+            db, snap.entity_id, ScenarioDraft.model_validate(before)
+        )
+    except ValueError as e:
+        raise _RollbackConflict(f"restore_failed: {e}") from e
 
 
 async def _rollback_dataset(
@@ -671,11 +675,14 @@ async def _rollback_dataset(
         raise _RollbackConflict(
             "edited_beyond_batch: current != before+ops replay"
         )
-    await data_set_store.update(db, snap.entity_id, DataSetDraft(
-        name=before.get("name") or d.name,
-        description=before.get("description") or "",
-        rows=before.get("rows") or [],
-    ))
+    try:  # before 行键可能已不在调色板(场景侧被冲突跳过)→ 拒写并归冲突
+        await data_set_store.update(db, snap.entity_id, DataSetDraft(
+            name=before.get("name") or d.name,
+            description=before.get("description") or "",
+            rows=before.get("rows") or [],
+        ))
+    except ValueError as e:
+        raise _RollbackConflict(f"restore_failed: {e}") from e
 
 
 # ─── 批次查询与人工 op(spec §5.3/§5.4)──────────────────────────
@@ -714,6 +721,14 @@ async def create_op(
         await _ensure_dataset_snapshot(db, batch_id, dataset_id)
     else:
         await _ensure_scenario_snapshot(db, batch_id, scenario_id)
+        if op_type in GLOBAL_OPS:  # renameVar 联动全部数据集列 → 快照对齐 apply 面
+            ds_rows = (await db.execute(
+                select(ComposerDataSet).where(
+                    ComposerDataSet.scenario_id == scenario_id
+                )
+            )).scalars().all()
+            for d in ds_rows:
+                await _ensure_dataset_snapshot(db, batch_id, d.dataset_id)
     op = AdaptationOp(
         batch_id=batch_id, scenario_id=scenario_id, dataset_id=dataset_id,
         op_type=op_type,
