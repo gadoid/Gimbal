@@ -123,6 +123,8 @@ async def put_data_set(
         return await data_set_store.update(db, dataset_id, body)
     except KeyError as e:
         raise key_error_404(e)
+    except ValueError as e:
+        raise value_error_http(e, {"undeclared_var": 422})
 
 
 # ── create (scenario-nested path) ──────────────────────────────────
@@ -148,5 +150,6 @@ async def create_data_set(
         return await data_set_store.create(db, scenario_id, body)
     except ValueError as e:
         raise value_error_http(
-            e, {"scenario_not_found": 404, "dataset_id_exists": 409}
+            e, {"scenario_not_found": 404, "dataset_id_exists": 409,
+                "undeclared_var": 422}
         )

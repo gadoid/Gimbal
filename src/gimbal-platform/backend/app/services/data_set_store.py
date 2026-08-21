@@ -19,6 +19,35 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import DataSet, DataSetDraft, DataSetSummary
+from .scenario_store import get_row as get_scenario_row
+
+
+def _scalar_vars(payload: dict | None) -> set[str]:
+    """列调色板:definition.config.vars 中值为标量的键(spec §4.3)。
+
+    结构化声明(如 {"kind": "seq"})不进调色板 —— 行覆盖会破坏
+    引擎生成器语义。
+    """
+    definition = (payload or {}).get("definition")
+    config = definition.get("config") if isinstance(definition, dict) else None
+    vars_map = config.get("vars") if isinstance(config, dict) else None
+    if not isinstance(vars_map, dict):
+        return set()
+    return {
+        k for k, v in vars_map.items()
+        if v is None or isinstance(v, (str, int, float, bool))
+    }
+
+
+def _validate_rows(scenario_payload: dict | None, rows: list[dict]) -> None:
+    """行键 ⊆ 调色板,否则 ValueError("undeclared_var: …")(路由映射 422)。"""
+    palette = _scalar_vars(scenario_payload)
+    bad = sorted({k for row in rows for k in row if k not in palette})
+    if bad:
+        raise ValueError(
+            f"undeclared_var: {', '.join(bad)} — 字段未声明为变量;"
+            f"在编排中\"设为变量\"后即可作为数据集列"
+        )
 
 
 async def create(
@@ -27,15 +56,16 @@ async def create(
     draft: DataSetDraft,
 ) -> DataSet:
     """Insert a new dataset.  Raises ValueError on unknown scenario or duplicate id."""
-    scenario_row = (
+    scenario = (
         await db.execute(
-            select(ComposerScenario.scenario_id).where(
+            select(ComposerScenario).where(
                 ComposerScenario.scenario_id == scenario_id
             )
         )
     ).scalar_one_or_none()
-    if scenario_row is None:
+    if scenario is None:
         raise ValueError(f"scenario_not_found: {scenario_id}")
+    _validate_rows(scenario.payload, list(draft.rows or []))
 
     dataset_id = await _next_dataset_id(db)
     row = ComposerDataSet(
@@ -62,6 +92,10 @@ async def update(
     draft: DataSetDraft,
 ) -> DataSet:
     row = await _get_row(db, dataset_id)
+    scenario = await get_scenario_row(db, row.scenario_id)
+    if scenario is None:  # 理论不可达(FK 在);防御孤儿行
+        raise KeyError(f"data_set_not_found: {dataset_id}")
+    _validate_rows(scenario.payload, list(draft.rows or []))
     row.name = draft.name
     row.description = draft.description or ""
     row.rows = list(draft.rows or [])

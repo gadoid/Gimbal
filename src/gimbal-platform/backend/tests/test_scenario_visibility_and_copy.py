@@ -74,7 +74,9 @@ async def test_private_scenario_hidden_from_other_member(client: AsyncClient) ->
 async def test_datasets_follow_scenario_visibility(client: AsyncClient) -> None:
     bob = await _member(client, "bob")
     carol = await _register_and_login(client, "carol", "carolpass123")
-    await client.post("/api/scenarios", headers=bob, json=_draft())
+    await client.post(
+        "/api/scenarios", headers=bob, json=_draft(vars_map={"qty": 1})
+    )
     await _seed_ds(client, bob)
 
     # carol 列不出 bob 场景下的数据集;详情 404
@@ -122,7 +124,7 @@ async def test_copy_deep_copies_scenario_datasets(client: AsyncClient) -> None:
     await client.post(
         "/api/scenarios",
         headers=bob,
-        json=_draft(steps=[{"id": "s1"}, {"id": "s2"}]),
+        json=_draft(steps=[{"id": "s1"}, {"id": "s2"}], vars_map={"qty": 1}),
     )
     await _seed_ds(client, bob)
 
@@ -181,7 +183,9 @@ async def test_run_step_to_out_of_range_409(
 ) -> None:
     bob = await _member(client, "bob")
     await client.post(
-        "/api/scenarios", headers=bob, json=_draft(steps=[{"id": "s1"}, {"id": "s2"}])
+        "/api/scenarios",
+        headers=bob,
+        json=_draft(steps=[{"id": "s1"}, {"id": "s2"}], vars_map={"qty": 1}),
     )
     await _seed_ds(client, bob)
 
@@ -207,7 +211,9 @@ async def test_run_step_to_passes_halt_at(
     """stepTo=1(0-based 含端点)→ gimbal /run body 带 halt_at=1。"""
     bob = await _member(client, "bob")
     await client.post(
-        "/api/scenarios", headers=bob, json=_draft(steps=[{"id": "s1"}, {"id": "s2"}])
+        "/api/scenarios",
+        headers=bob,
+        json=_draft(steps=[{"id": "s1"}, {"id": "s2"}], vars_map={"qty": 1}),
     )
     await _seed_ds(client, bob)
 
@@ -251,7 +257,7 @@ async def test_run_inject_credentials_false_skips_auth_resolution(
     gimbal 收到的副本不带 users 注入。"""
     bob = await _member(client, "bob")
     await client.post(
-        "/api/scenarios", headers=bob, json=_draft(steps=[{"id": "s1"}])
+        "/api/scenarios", headers=bob, json=_draft(steps=[{"id": "s1"}], vars_map={"qty": 1})
     )
     await _seed_ds(client, bob)
 

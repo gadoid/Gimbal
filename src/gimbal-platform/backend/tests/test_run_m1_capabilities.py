@@ -45,7 +45,9 @@ async def test_n_runs_multiplies_total_and_gimbal_calls(
     """2 行数据 × nRuns=3 → total_runs=6,gimbal /run 被调 6 次。"""
     bob = await _member(client, "bob")
     await client.post(
-        "/api/scenarios", headers=bob, json=_draft(steps=[{"id": "s1"}])
+        "/api/scenarios",
+        headers=bob,
+        json=_draft(steps=[{"id": "s1"}], vars_map={"qty": 1}),
     )
     await _seed_ds(client, bob)
     # 追加一行:ds-001 共 2 行
@@ -98,7 +100,9 @@ async def test_parallel_limits_concurrency(
     """parallel=2 → gimbal /run 同时在飞的数量永不超过 2。"""
     bob = await _member(client, "bob")
     await client.post(
-        "/api/scenarios", headers=bob, json=_draft(steps=[{"id": "s1"}])
+        "/api/scenarios",
+        headers=bob,
+        json=_draft(steps=[{"id": "s1"}], vars_map={"qty": 1, "i": 0}),
     )
     await _seed_ds(client, bob)
     r = await client.put(
@@ -144,7 +148,9 @@ async def test_prefix_injects_order_no_vars(
     """prefix="ORD" → composed.config.vars 带 order_no_prefix / order_no / seq。"""
     bob = await _member(client, "bob")
     await client.post(
-        "/api/scenarios", headers=bob, json=_draft(steps=[{"id": "s1"}])
+        "/api/scenarios",
+        headers=bob,
+        json=_draft(steps=[{"id": "s1"}], vars_map={"qty": 1}),
     )
     await _seed_ds(client, bob)
 
@@ -177,6 +183,7 @@ async def _seed_built_in_user(client: AsyncClient, headers: dict) -> None:
     draft["definition"]["config"]["users"] = {
         "qa1": {"url": "http://builtin", "username": "u0", "password": "p0"}
     }
+    draft["definition"]["config"]["vars"] = {"qty": 1}  # C1:行键须 ⊆ 标量 vars
     r = await client.post("/api/scenarios", headers=headers, json=draft)
     assert r.status_code == 201, r.text
     await _seed_ds(client, headers)

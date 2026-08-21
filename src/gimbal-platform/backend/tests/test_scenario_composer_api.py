@@ -154,7 +154,9 @@ async def test_update_scenario_owner_cannot_be_reassigned(
 
 async def test_delete_scenario_cascades(client: AsyncClient) -> None:
     headers = await _register_and_login(client)
-    await client.post("/api/scenarios", headers=headers, json=_make_draft())
+    draft = _make_draft()
+    draft["definition"]["config"]["vars"] = {"x": 0}  # C1:行键须 ⊆ 标量 vars
+    await client.post("/api/scenarios", headers=headers, json=draft)
     r_ds = await client.post(
         "/api/scenarios/sc-test/data-sets",
         headers=headers,
@@ -209,15 +211,67 @@ async def test_preview_plate_unavailable_502(
 
 
 # ── data-sets ─────────────────────────────────────────────────────
-async def test_data_set_inconsistent_rows_422(client: AsyncClient) -> None:
+async def test_data_set_sparse_rows_accepted(client: AsyncClient) -> None:
+    """C1:行间列集不要求一致(稀疏行);行键 ⊆ 标量声明变量。"""
     headers = await _register_and_login(client)
-    await client.post("/api/scenarios", headers=headers, json=_make_draft())
+    draft = make_draft("sc-ds")
+    draft["definition"]["config"] = {"vars": {
+        "amount": 100, "qty": 2, "engine": {"kind": "seq"},  # engine 非标量
+    }}
+    await client.post("/api/scenarios", headers=headers, json=draft)
     r = await client.post(
-        "/api/scenarios/sc-test/data-sets",
-        headers=headers,
-        json={"name": "ds", "rows": [{"x": 1, "y": 2}, {"x": 1}]},
+        "/api/scenarios/sc-ds/data-sets", headers=headers,
+        json={"name": "变体", "rows": [
+            {"amount": 300},                    # 稀疏:只覆盖 amount
+            {"amount": 400, "qty": 9},          # 与上行列集不同 → 合法
+            {},                                  # 空行 = 纯基线
+        ]},
+    )
+    assert r.status_code == 201
+
+
+async def test_data_set_undeclared_var_422(client: AsyncClient) -> None:
+    headers = await _register_and_login(client)
+    draft = make_draft("sc-ds")
+    draft["definition"]["config"] = {"vars": {"amount": 100}}
+    await client.post("/api/scenarios", headers=headers, json=draft)
+    r = await client.post(
+        "/api/scenarios/sc-ds/data-sets", headers=headers,
+        json={"name": "bad", "rows": [{"nope": 1}]},
     )
     assert r.status_code == 422
+    assert "undeclared_var" in r.json()["detail"]
+    assert "nope" in r.json()["detail"]
+
+
+async def test_data_set_structured_var_not_in_palette(client: AsyncClient) -> None:
+    """结构化引擎声明({"kind": "seq"})不进调色板,行键命中 → 422。"""
+    headers = await _register_and_login(client)
+    draft = make_draft("sc-ds")
+    draft["definition"]["config"] = {"vars": {"engine": {"kind": "seq"}}}
+    await client.post("/api/scenarios", headers=headers, json=draft)
+    r = await client.post(
+        "/api/scenarios/sc-ds/data-sets", headers=headers,
+        json={"name": "bad", "rows": [{"engine": 5}]},
+    )
+    assert r.status_code == 422
+
+
+async def test_data_set_put_validates_palette_too(client: AsyncClient) -> None:
+    headers = await _register_and_login(client)
+    draft = make_draft("sc-ds")
+    draft["definition"]["config"] = {"vars": {"amount": 100}}
+    await client.post("/api/scenarios", headers=headers, json=draft)
+    r = await client.post(
+        "/api/scenarios/sc-ds/data-sets", headers=headers,
+        json={"name": "ok", "rows": [{"amount": 1}]},
+    )
+    ds_id = r.json()["datasetId"]
+    r2 = await client.put(
+        f"/api/data-sets/{ds_id}", headers=headers,
+        json={"name": "ok", "rows": [{"ghost": 2}]},
+    )
+    assert r2.status_code == 422
 
 
 async def test_data_set_create_unknown_scenario_404(client: AsyncClient) -> None:
@@ -232,7 +286,9 @@ async def test_data_set_create_unknown_scenario_404(client: AsyncClient) -> None
 
 async def test_data_set_summary_preview_truncated(client: AsyncClient) -> None:
     headers = await _register_and_login(client)
-    await client.post("/api/scenarios", headers=headers, json=_make_draft())
+    draft = _make_draft()
+    draft["definition"]["config"]["vars"] = {"x": 0}  # C1:行键须 ⊆ 标量 vars
+    await client.post("/api/scenarios", headers=headers, json=draft)
     rows = [{"x": i} for i in range(10)]
     await client.post(
         "/api/scenarios/sc-test/data-sets",
@@ -304,7 +360,9 @@ async def test_member_cannot_read_another_users_datasets(client: AsyncClient) ->
     """Data-set rows are business data: Bob must not list Alice's
     summaries nor fetch her full rows."""
     alice = await _register_and_login(client)
-    await client.post("/api/scenarios", headers=alice, json=_make_draft())
+    draft = _make_draft()
+    draft["definition"]["config"]["vars"] = {"x": 0}  # C1:行键须 ⊆ 标量 vars
+    await client.post("/api/scenarios", headers=alice, json=draft)
     await client.post(
         "/api/scenarios/sc-test/data-sets",
         headers=alice,
@@ -393,7 +451,9 @@ async def test_create_dataset_admin_can_create_under_any_scenario(
         await session.commit()
 
     alice = await _register_and_login(client, "alice")
-    await client.post("/api/scenarios", headers=alice, json=_make_draft())
+    draft = _make_draft()
+    draft["definition"]["config"]["vars"] = {"x": 0}  # C1:行键须 ⊆ 标量 vars
+    await client.post("/api/scenarios", headers=alice, json=draft)
     r = await client.post(
         "/api/scenarios/sc-test/data-sets",
         headers=alice,  # alice is admin now

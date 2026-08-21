@@ -49,7 +49,12 @@ def _make_meta(**over) -> ScenarioMeta:
     return ScenarioMeta.model_validate(base)
 
 
-def _make_draft(steps: list[dict] | None = None, **meta_over) -> ScenarioDraft:
+def _make_draft(
+    steps: list[dict] | None = None,
+    *,
+    config_vars: dict | None = None,
+    **meta_over,
+) -> ScenarioDraft:
     """Build a container-shaped ScenarioDraft.
 
     ``meta_over`` carries scenarioId / system / module / priority / name /
@@ -57,16 +62,21 @@ def _make_draft(steps: list[dict] | None = None, **meta_over) -> ScenarioDraft:
     validate them through ``ScenarioMeta`` so a regression in meta shape
     still surfaces, then fold the resulting camelCase dict into the
     plate-shaped ``definition.meta``.
+
+    ``config_vars`` 声明 config.vars(C1:数据集行键须 ⊆ 标量声明变量)。
     """
     meta_model = _make_meta(**meta_over)
     meta_dict = meta_model.model_dump(by_alias=True, mode="json")
     scenario_id = meta_dict.get("scenarioId") or "sc-test"
+    config: dict = {"timePolicy": {"kind": "record"}}
+    if config_vars is not None:
+        config["vars"] = config_vars
     return ScenarioDraft.model_validate({
         "definition": {
             "kind": "scenario",
             "scenarioId": scenario_id,
             "meta": meta_dict,
-            "config": {"timePolicy": {"kind": "record"}},
+            "config": config,
             "resource": {},
             "steps": steps or [],
         },
@@ -103,7 +113,9 @@ async def test_scenario_update_blocks_rename(fresh_db) -> None:
 
 async def test_scenario_delete_cascades_datasets(fresh_db) -> None:
     async with _session() as db:
-        await scenario_store.create(db, _make_draft(), owner="alice")
+        await scenario_store.create(
+            db, _make_draft(config_vars={"a": 0}), owner="alice"
+        )
         await data_set_store.create(
             db, "sc-test", DataSetDraft(name="ds", rows=[{"a": 1}, {"a": 2}])
         )
@@ -222,7 +234,9 @@ async def test_scenario_data_set_count_sums_row_counts(fresh_db) -> None:
     """dataSetCount = Σ rowCount across the scenario's datasets (not
     the dataset count)."""
     async with _session() as db:
-        await scenario_store.create(db, _make_draft(), owner="alice")
+        await scenario_store.create(
+            db, _make_draft(config_vars={"x": 0}), owner="alice"
+        )
         await data_set_store.create(
             db, "sc-test", DataSetDraft(name="a", rows=[{"x": 1}, {"x": 2}])
         )
@@ -243,7 +257,9 @@ async def test_scenario_list_data_set_count_defaults_to_zero(fresh_db) -> None:
     """Zero-dataset scenarios must survive the GROUP BY (LEFT-join-less
     dict lookup defaults to 0, and the row still appears in the list)."""
     async with _session() as db:
-        await scenario_store.create(db, _make_draft(), owner="alice")
+        await scenario_store.create(
+            db, _make_draft(config_vars={"x": 0}), owner="alice"
+        )
         await scenario_store.create(
             db, _make_draft(scenarioId="sc-empty"), owner="alice"
         )
@@ -258,7 +274,9 @@ async def test_scenario_list_data_set_count_defaults_to_zero(fresh_db) -> None:
 # ── data_set_store ─────────────────────────────────────────────────
 async def test_data_set_create_assigns_incremental_id(fresh_db) -> None:
     async with _session() as db:
-        await scenario_store.create(db, _make_draft(), owner="alice")
+        await scenario_store.create(
+            db, _make_draft(config_vars={"x": 0}), owner="alice"
+        )
         ds1 = await data_set_store.create(
             db, "sc-test", DataSetDraft(name="a", rows=[{"x": 1}])
         )
@@ -280,7 +298,9 @@ async def test_data_set_create_unknown_scenario_raises(fresh_db) -> None:
 
 async def test_data_set_summary_preview_truncated_to_3(fresh_db) -> None:
     async with _session() as db:
-        await scenario_store.create(db, _make_draft(), owner="alice")
+        await scenario_store.create(
+            db, _make_draft(config_vars={"x": 0}), owner="alice"
+        )
         rows = [{"x": i} for i in range(5)]
         await data_set_store.create(
             db, "sc-test", DataSetDraft(name="ds", rows=rows)

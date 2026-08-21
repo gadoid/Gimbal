@@ -224,7 +224,12 @@ async def _seed_scenario_case_and_dataset(
     client: AsyncClient, headers: dict, *, rows: list[dict]
 ) -> None:
     """Create scenario + 1 dataset with the given rows (Case layer dissolved)."""
-    await client.post("/api/scenarios", headers=headers, json=_draft())
+    # C1:数据集行键须 ⊆ 场景标量声明变量 — 把行键声明为标量 vars。
+    await client.post(
+        "/api/scenarios",
+        headers=headers,
+        json=_draft(vars_map={k: 0 for row in rows for k in row}),
+    )
     r = await client.post(
         "/api/scenarios/sc-test/data-sets",
         headers=headers,

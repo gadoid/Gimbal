@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # ─── helpers ────────────────────────────────────────────────────────
@@ -144,19 +144,6 @@ class DataSet(BaseModel):
     row_count: int = Field(default=0, ge=0, alias="rowCount")
     rows: list[dict[str, Any]] = Field(default_factory=list)
 
-    @model_validator(mode="after")
-    def _check_rows_consistent(self) -> "DataSet":
-        if not self.rows:
-            return self
-        keys = set(self.rows[0].keys())
-        for i, row in enumerate(self.rows[1:], start=1):
-            if set(row.keys()) != keys:
-                raise ValueError(
-                    f"inconsistent_row_columns: row {i} has keys "
-                    f"{sorted(set(row.keys()))} but row 0 has {sorted(keys)}"
-                )
-        return self
-
 
 class DataSetSummary(BaseModel):
     """Lightweight view used in list endpoints (preview[0:3])."""
@@ -183,19 +170,6 @@ class DataSetDraft(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     description: str = Field(default="", max_length=2048)
     rows: list[dict[str, Any]] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def _check_rows_consistent(self) -> "DataSetDraft":
-        if not self.rows:
-            return self
-        keys = set(self.rows[0].keys())
-        for i, row in enumerate(self.rows[1:], start=1):
-            if set(row.keys()) != keys:
-                raise ValueError(
-                    f"inconsistent_row_columns: row {i} has keys "
-                    f"{sorted(set(row.keys()))} but row 0 has {sorted(keys)}"
-                )
-        return self
 
 
 # ─── envs / runs ───────────────────────────────────────────────────

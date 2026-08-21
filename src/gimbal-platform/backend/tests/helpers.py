@@ -30,9 +30,17 @@ async def register_and_login(
 
 
 def make_draft(
-    scenario_id: str = "sc-test", *, steps: list | None = None, **meta_over: Any
+    scenario_id: str = "sc-test",
+    *,
+    steps: list | None = None,
+    vars_map: dict | None = None,
+    **meta_over: Any,
 ) -> dict:
-    """Minimal plate-valid ScenarioDraft container (meta via ``meta_over``)."""
+    """Minimal plate-valid ScenarioDraft container (meta via ``meta_over``).
+
+    ``vars_map`` 声明 config.vars(P2/C1 数据集行键须 ⊆ 标量声明变量);
+    缺省不写 vars,保持旧调用行为不变。
+    """
     meta = {
         "scenarioId": scenario_id,
         "name": "Test",
@@ -41,12 +49,15 @@ def make_draft(
         "system": ["fin"],
     }
     meta.update(meta_over)
+    config: dict = {"timePolicy": {"kind": "record"}}
+    if vars_map is not None:
+        config["vars"] = vars_map
     return {
         "definition": {
             "kind": "scenario",
             "scenarioId": scenario_id,
             "meta": meta,
-            "config": {"timePolicy": {"kind": "record"}},
+            "config": config,
             "resource": {},
             "steps": steps if steps is not None else [],
         },
