@@ -116,6 +116,7 @@ export async function deleteDataSet(datasetId: string): Promise<void> {
 /** 执行配方(recipe):Case 层解散后 RunRequest 即配方本身,直接挂 scenario */
 export interface RunRequest {
   scenarioId: string
+  /** D12:空数组合法 = 基线执行(一个隐式空覆盖行);非空 = 选中数据集 */
   dataSetIds: string[]
   env: RunEnv
   /** 执行用认证 alias 多选(原 auth 单选已废);dispatcher 解密注入 Config.users */
