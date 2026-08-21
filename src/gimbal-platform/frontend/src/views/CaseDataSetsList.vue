@@ -36,7 +36,8 @@
 
         <footer class="card-foot">
           <div class="ops" @click.stop>
-            <el-button size="small" plain @click="copy(d)">复制</el-button>
+            <el-button size="small" plain @click="open(d)">编辑</el-button>
+            <el-button size="small" type="danger" plain @click="remove(d)">删除</el-button>
             <el-button size="small" type="primary" plain @click="runOne(d)"><el-icon style="margin-right:3px"><VideoPlay /></el-icon>单条</el-button>
           </div>
         </footer>
@@ -64,6 +65,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { showError } from '@/utils/errorFallback'
+import { confirmAction } from '@/utils/confirmAction'
 import { scenarioDataSetUrl, composerUrl } from '@/utils/links'
 import type { DataSetSummary } from '@/types/scenario-composer'
 
@@ -90,8 +92,18 @@ function onCreate() {
   router.push(scenarioDataSetUrl(scenarioId, 'new'))
 }
 
-async function copy(d: DataSetSummary) {
-  ElMessage.info(`复制 ${d.name} (待后端支持)`)
+async function remove(d: DataSetSummary) {
+  const ok = await confirmAction(
+    `删除数据集「${d.name}」?此操作不可恢复。`, '删除数据集',
+    { confirmButtonText: '删除' },
+  )
+  if (!ok) return
+  try {
+    await store.removeDataSet(scenarioId, d.datasetId)
+    ElMessage.success('已删除')
+  } catch (e) {
+    showError('删除数据集', undefined, (e as Error).message)
+  }
 }
 
 /** 运行统一走编排器的 RunDialog(可在其中勾选该数据集发起运行) */
