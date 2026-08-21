@@ -13,6 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.catalog_version import CatalogVersion
+from ..models.composer_data_set import ComposerDataSet
+from ..models.scenario_endpoint_ref import ScenarioEndpointRef
 from . import plate_client
 from .plate_client import PlateUnavailableError
 
@@ -158,3 +160,58 @@ async def catalog_diff(db: AsyncSession) -> dict:
         })
     await db.commit()
     return {"pending": pending, "anomalies": anomalies, "baselinedNow": baselined}
+
+
+# ─── 影响查询(spec §5.2)────────────────────────────────────────
+async def impact(
+    db: AsyncSession, endpoint_id: str, field_name: str | None = None
+) -> list[dict]:
+    """endpoint(可选再按 field)→ 受影响清单条目(spec §5.2)。
+
+    直填字段同样命中(索引行按字段键存在,与值是否模板无关);
+    via_var 条目按数据集行实际含键(内存列存在性,D5 —— 不建
+    dataset_columns 表)配对;无数据集命中时仍出一条 datasetId=None
+    (变量默认值通路,D9 基线 = 直填 ∪ vars 扁平值)。
+    """
+    stmt = select(ScenarioEndpointRef).where(
+        ScenarioEndpointRef.endpoint_id == endpoint_id
+    )
+    if field_name:
+        stmt = stmt.where(ScenarioEndpointRef.field_name == field_name)
+    stmt = stmt.order_by(
+        ScenarioEndpointRef.scenario_id, ScenarioEndpointRef.step_index,
+        ScenarioEndpointRef.source, ScenarioEndpointRef.field_name,
+    )
+    refs = (await db.execute(stmt)).scalars().all()
+    if not refs:
+        return []
+    scenario_ids = sorted({r.scenario_id for r in refs})
+    ds_rows = (await db.execute(
+        select(ComposerDataSet).where(
+            ComposerDataSet.scenario_id.in_(scenario_ids)
+        )
+    )).scalars().all()
+    by_scenario: dict[str, list[ComposerDataSet]] = {}
+    for d in ds_rows:
+        by_scenario.setdefault(d.scenario_id, []).append(d)
+
+    out: list[dict] = []
+    for r in refs:
+        entry = {
+            "scenarioId": r.scenario_id, "stepIndex": r.step_index,
+            "source": r.source, "field": r.field_name, "viaVar": r.via_var,
+            "datasetId": None, "datasetColumn": None,
+        }
+        if not r.via_var:  # 直填
+            out.append(entry)
+            continue
+        entry["datasetColumn"] = r.via_var
+        hit_any = False
+        for d in by_scenario.get(r.scenario_id, []):
+            if any(isinstance(row, dict) and r.via_var in row
+                   for row in (d.rows or [])):
+                out.append({**entry, "datasetId": d.dataset_id})
+                hit_any = True
+        if not hit_any:  # 变量默认值通路(vars 扁平值),不挂数据集
+            out.append(entry)
+    return out
