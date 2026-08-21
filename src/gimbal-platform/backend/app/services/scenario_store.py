@@ -23,6 +23,7 @@ from ..schemas.scenario_composer import (
     ScenarioDraft,
     ScenarioMeta,
 )
+from . import endpoint_ref_index
 from .marks_store import stars
 
 
@@ -72,6 +73,9 @@ async def create(
     )
     db.add(row)
     try:
+        # 挂钩在 try 内:sync 的 DELETE 会 autoflush 待插行,重复
+        # scenario_id 的 IntegrityError 由此仍映射为 ValueError(契约不变)。
+        await endpoint_ref_index.sync_scenario(db, server_owned.scenario_id, payload)
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
@@ -119,6 +123,7 @@ async def update(
         definition=stored_definition,
         orchestration=draft.orchestration,
     ).model_dump(by_alias=True, mode="json")
+    await endpoint_ref_index.sync_scenario(db, scenario_id, row.payload)
     await db.commit()
     await db.refresh(row)
     return await to_read_shape(db, row, user_id=user_id)
@@ -132,6 +137,7 @@ async def delete(db: AsyncSession, scenario_id: str) -> None:
     """
     row = await _get_row(db, scenario_id)
     # Cascade order: data_sets → scenario (reverse FK).
+    await endpoint_ref_index.drop_scenario(db, scenario_id)
     await db.execute(
         sa_delete(ComposerDataSet).where(
             ComposerDataSet.scenario_id == scenario_id
