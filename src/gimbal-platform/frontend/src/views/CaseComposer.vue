@@ -146,6 +146,7 @@
           v-model:steps="definition.steps"
           v-model:orchestration="orchestration"
           :scenario="scenario"
+          @var-promote="onVarPromote"
         />
       </transition>
     </main>
@@ -325,6 +326,15 @@ watch(
   },
   { deep: true, immediate: true },
 )
+
+/** Canvas"设为变量"上报:登记共享变量默认值(D8;vars 扁平 name→value,零 schema 变化) */
+function onVarPromote(name: string, value: unknown) {
+  const config = definition.value.config ?? { vars: {} }
+  definition.value = {
+    ...definition.value,
+    config: { ...config, vars: { ...(config.vars ?? {}), [name]: value } },
+  }
+}
 
 // ── lifecycle ──
 onMounted(async () => {

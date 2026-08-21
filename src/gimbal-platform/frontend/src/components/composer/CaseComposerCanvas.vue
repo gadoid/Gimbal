@@ -175,6 +175,7 @@
                   @field-assign="(f, name) => onFieldAssign(f, name)"
                   @field-assert="onFieldAssert"
                   @var-insert="onVarInsert"
+                  @var-promote="onVarPromote"
                 />
                 <p class="field-form-hint">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -435,6 +436,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:steps': [StepView[]]
   'update:orchestration': [Orchestration]
+  'varPromote': [name: string, value: unknown]
 }>()
 
 const local = reactive<StepView[]>([...(props.steps || [])])
@@ -715,6 +717,12 @@ function onFieldAssert(f: IOFieldBinding) {
 /** 菜单"引用共享变量":值追加已由 FieldForm 完成,此处给引导提示 */
 function onVarInsert(_f: IOFieldBinding, name: string) {
   ElMessage.success(`已插入 \${var.${name}}(启动前展开,查不到将拒启)`)
+}
+
+/** 菜单"设为变量":FieldForm 已完成值替换与命名,默认值上报 CaseComposer 登记 config.vars */
+function onVarPromote(_f: IOFieldBinding, name: string, value: unknown) {
+  emit('varPromote', name, value)
+  ElMessage.success(`已设为变量 ${name} — 默认值登记到 ③ 共享变量,保存草稿后生效`)
 }
 
 /** 同 openAuthPicker:key 在弹窗期间可能被改,落注入时按 key 或唯一 value 定位 */

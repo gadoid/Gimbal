@@ -108,6 +108,10 @@ export async function updateDataSet(
   return data
 }
 
+export async function deleteDataSet(datasetId: string): Promise<void> {
+  await http.delete(`/data-sets/${enc(datasetId)}`)
+}
+
 // ── run ────────────────────────────────────────────────────────
 /** 执行配方(recipe):Case 层解散后 RunRequest 即配方本身,直接挂 scenario */
 export interface RunRequest {

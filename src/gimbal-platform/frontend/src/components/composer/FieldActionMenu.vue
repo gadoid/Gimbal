@@ -3,6 +3,7 @@
 
   FieldForm 每个字段控件尾部的 ☰ 菜单(fieldActions 门控开启时渲染):
     ├─ 引用共享变量 (Reference)     → 子列表 config 出身 → 插 ${var.x} 文本
+    ├─ 设为变量 (Promote)          → emit fieldPromote(直填值提升为 ${var.x},命名/替换在 FieldForm 完成)
     ├─ 从响应提取 (Extract)         → emit fieldExtract(快捷 extract 策略)
     ├─ 注入响应变量 (DynamicAssign) → 子列表 extract 出身 → emit fieldAssign
     └─ 断言该字段 (Assertion)       → emit fieldAssert(快捷断言策略)
@@ -16,6 +17,14 @@
     <template v-if="!subOpen">
       <button v-if="domain !== 'response'" type="button" class="fa-item" @click="subOpen = 'ref'">
         <span class="fa-label">引用共享变量</span><span class="fa-note">Reference</span>
+      </button>
+      <button
+        v-if="domain !== 'response' && !/\$\{var\./.test(value ?? '')"
+        type="button"
+        class="fa-item fa-promote"
+        @click="emitPromote"
+      >
+        <span class="fa-label">设为变量</span><span class="fa-note">Promote</span>
       </button>
       <button type="button" class="fa-item" @click="emitExtract">
         <span class="fa-label">从响应提取</span><span class="fa-note">Extract</span>
@@ -101,6 +110,8 @@ const emit = defineEmits<{
   'fieldExtract': [field: IOFieldBinding]
   'fieldAssign': [field: IOFieldBinding, varName: string]
   'fieldAssert': [field: IOFieldBinding]
+  /** 设为变量(D8 提升):直填值 → ${var.<name>};命名/替换在 FieldForm 完成 */
+  'fieldPromote': [field: IOFieldBinding]
 }>()
 
 /** 子列表开合:null=主菜单 / 'ref'=引用 / 'inject'=注入 */
@@ -108,6 +119,7 @@ const subOpen = ref<null | 'ref' | 'inject'>(null)
 
 function emitExtract() { emit('fieldExtract', props.field); emit('close') }
 function emitAssert() { emit('fieldAssert', props.field); emit('close') }
+function emitPromote() { emit('fieldPromote', props.field); emit('close') }
 </script>
 
 <style scoped>

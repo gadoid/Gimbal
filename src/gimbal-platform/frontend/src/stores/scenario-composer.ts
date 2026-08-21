@@ -137,5 +137,11 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
       upsertBy(this.dataSets, (d) => d.datasetId === saved.datasetId, toSummary({}))
       return saved
     },
+
+    /** 删除数据集:204 后刷新该场景的数据集列表(编辑器/列表卡片共用)。 */
+    async removeDataSet(scenarioId: string, datasetId: string) {
+      await api.deleteDataSet(datasetId)
+      await this.fetchDataSets(scenarioId)
+    },
   },
 })

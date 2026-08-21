@@ -76,6 +76,7 @@
               @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
               @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
               @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+              @field-promote="(field) => onFieldPromote(field)"
               @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
             />
           </div>
@@ -110,6 +111,7 @@
               @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
               @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
               @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+              @field-promote="(field) => onFieldPromote(field)"
               @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
             />
           </div>
@@ -143,6 +145,7 @@
             @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
             @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
             @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+            @field-promote="(field) => onFieldPromote(field)"
             @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
           />
         </div>
@@ -175,6 +178,7 @@
             @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
             @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
             @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+            @field-promote="(field) => onFieldPromote(field)"
             @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
           />
         </div>
@@ -206,6 +210,7 @@
             @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
             @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
             @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+            @field-promote="(field) => onFieldPromote(field)"
             @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
           />
         </div>
@@ -237,6 +242,7 @@
             @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
             @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
             @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+            @field-promote="(field) => onFieldPromote(field)"
             @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
           />
         </div>
@@ -313,6 +319,8 @@ const emit = defineEmits<{
   'fieldAssert': [field: IOFieldBinding]
   /** 插入 ${var.<name>} 文本(原 Ⓥ 行为,Canvas 可用于引导提示) */
   'varInsert': [field: IOFieldBinding, name: string]
+  /** 设为变量(D8 提升):值整串替换为 ${var.<name>},原值随事件上抛登记默认值 */
+  'varPromote': [field: IOFieldBinding, name: string, value: unknown]
 }>()
 
 /** 候选下拉开合状态(同屏至多一个) */
@@ -334,6 +342,27 @@ const menuField = ref<string | null>(null)
 function toggleMenu(f: IOFieldBinding) {
   candOpenField.value = null
   menuField.value = menuField.value === f.name ? null : f.name
+}
+
+/**
+ * 菜单"设为变量"(D8 提升语义):与"引用共享变量"的**追加**不同 —
+ * ① 值整串替换为 ${var.<name>};② 变量名默认取字段名,同名(共享
+ * 变量/extract 任一出身)自动加 _2/_3 后缀;③ 原值随 varPromote
+ * 上抛,由 Canvas → CaseComposer 登记进 definition.config.vars。
+ */
+function onFieldPromote(f: IOFieldBinding) {
+  const original = getValue(f)
+  const base = f.name.replace(/[^A-Za-z0-9_.]/g, '_').replace(/^_+|_+$/g, '') || 'var'
+  const taken = new Set([
+    ...(props.varChoices ?? []).map((v) => v.name),
+    ...(props.injectChoices ?? []).map((v) => v.name),
+  ])
+  let name = base
+  let n = 2
+  while (taken.has(name)) name = `${base}_${n++}`
+  setValue(f, `\${var.${name}}`)
+  emit('varPromote', f, name, original)
+  menuField.value = null
 }
 
 // Type A + Type B: 有 binding 的都显示; Type C (无 binding 的 schema 字段) 走 hiddenFields 不在此显示
