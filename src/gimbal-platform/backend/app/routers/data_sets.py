@@ -54,9 +54,8 @@ async def _require_scenario_owner(
         raise not_found_404("scenario", scenario_id)
     ensure_owner(
         user,
-        scen.owner,
+        scen.owner_id,
         "not_owner: only the scenario's owner (or admin) can manage its data sets",
-        owner_id=scen.owner_id,
     )
     return scen
 

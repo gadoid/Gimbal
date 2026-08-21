@@ -56,14 +56,12 @@ async def _load_row(
 
 
 def _require_owner(user: CurrentUser, row: ComposerScenario) -> None:
-    # An empty owner (legacy / migrated / plate-synced rows) means "locked":
-    # nobody except an admin may modify it (canonical rule in _ownership).
-    # P1 起优先比对 owner_id(int user.id);存量行 owner_id==0 回退名字。
+    # owner_id (int user.id) is the single ownership authority
+    # (canonical rule in _ownership).
     ensure_owner(
         user,
-        row.owner,
+        row.owner_id,
         "not_owner: only the scenario's owner (or admin) can modify it",
-        owner_id=row.owner_id,
     )
 
 
@@ -71,7 +69,6 @@ def _require_reader(user: CurrentUser, row: ComposerScenario) -> None:
     """读侧收紧(404 而非 403,不向非读者泄露场景存在性)。"""
     if not can_read_scenario(
         user,
-        row.owner,
         owner_id=row.owner_id,
         visibility=row.visibility or "private",
     ):
@@ -187,9 +184,9 @@ async def list_scenarios(
     priority: int | None = None,
     visibility: str | None = None,
 ) -> list[Scenario]:
-    """读侧收紧:admin 全量;普通用户 = public + 自己的(存量行按
-    owner 名字回退)。可选 ``visibility=public|private`` 再过滤一层,
-    供前端"公共 / 我的"分组标签使用。
+    """读侧收紧:admin 全量;普通用户 = public + 自己的。可选
+    ``visibility=public|private`` 再过滤一层,供前端"公共 / 我的"分组
+    标签使用。
 
     属主过滤直接在 store 已加载的行上做(此前为 readable_ids 再跑
     一趟全表投影,单请求双全表扫描)。"""
@@ -199,7 +196,7 @@ async def list_scenarios(
     readable = [
         r for r in rows
         if can_read_scenario(
-            user, r.owner, owner_id=r.owner_id, visibility=r.visibility or "private"
+            user, owner_id=r.owner_id, visibility=r.visibility or "private"
         )
     ]
     if visibility:

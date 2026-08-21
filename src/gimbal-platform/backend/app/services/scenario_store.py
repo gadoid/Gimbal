@@ -288,11 +288,9 @@ async def owned_scenario_ids(db: AsyncSession, user) -> set[str]:
 
     Set-based SQL projection of the same ownership rule as
     ``routers/_ownership._user_matches``: ``owner_id`` (int user id) is
-    authoritative; legacy rows (``owner_id == 0``) fall back to the
-    owner display-name snapshot so pre-migration scenarios remain
-    visible to their creators.
+    the single authority.
     """
-    own_ids = set(
+    return set(
         (
             await db.execute(
                 select(ComposerScenario.scenario_id).where(
@@ -303,22 +301,6 @@ async def owned_scenario_ids(db: AsyncSession, user) -> set[str]:
         .scalars()
         .all()
     )
-    name_rows = (
-        (
-            await db.execute(
-                select(ComposerScenario.scenario_id).where(
-                    ComposerScenario.owner_id == 0,
-                    ComposerScenario.owner.in_(
-                        {user.display_name or user.username}
-                    ),
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    own_ids.update(name_rows)
-    return own_ids
 
 
 # ─── helpers ──────────────────────────────────────────────────────
@@ -393,10 +375,7 @@ async def to_read_shape(
 
 
 def _meta_from_row(row: ComposerScenario) -> ScenarioMeta:
-    """Meta 投影:唯一权威是 payload.definition.meta。
-
-    镜像列已退役 — 老库行由 init_db 的回填迁移统一改写 payload 后,
-    这里不再需要列回退分支。"""
+    """Meta 投影:唯一权威是 payload.definition.meta。"""
     payload = row.payload or {}
     definition = payload.get("definition") or {}
     meta_dict = definition.get("meta") or {}
@@ -406,13 +385,11 @@ def _meta_from_row(row: ComposerScenario) -> ScenarioMeta:
 def definition_from_payload(payload: dict | None) -> dict:
     """容器解包:``payload {definition, orchestration}`` → definition。
 
-    全后端唯一的容器形状知识。容器化之前的 legacy 行(无 definition
-    键)原样透传。run_dispatcher 的 steps 投影 / users 读取 / 组装
-    均复用本函数,容器形状再变时只改这里。
+    全后端唯一的容器形状知识。run_dispatcher 的 steps 投影 / users
+    读取 / 组装均复用本函数,容器形状再变时只改这里。
     """
-    raw = payload or {}
-    defn = raw.get("definition")
-    return defn if isinstance(defn, dict) else raw
+    defn = (payload or {}).get("definition")
+    return defn if isinstance(defn, dict) else {}
 
 
 def steps_from_payload(payload: dict | None) -> list[dict]:
@@ -430,7 +407,7 @@ def _extras_from_payload(
     config/resource live under ``definition`` (plate-shaped); orchestration
     is a sibling of definition (platform render state). Returns ``(None,
     None, None)`` when absent so the frontend's default-rebuild fallback
-    kicks in. Guards every read so a malformed legacy row never 500s.
+    kicks in. Guards every read so a malformed row never 500s.
     """
     definition = (payload or {}).get("definition") or {}
     config = definition.get("config") if isinstance(definition, dict) else None

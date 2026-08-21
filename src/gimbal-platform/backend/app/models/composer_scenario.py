@@ -26,12 +26,11 @@ class ComposerScenario(Base):
     scenario_id: Mapped[str] = mapped_column(
         String(128), unique=True, index=True
     )  # matches meta.scenarioId
-    # Display-name snapshot of the owner (legacy owner_id==0 rows fall
-    # back to matching it); ownership itself is owner_id below.
+    # Display-name snapshot of the owner (display only); ownership
+    # itself is owner_id below.
     owner: Mapped[str] = mapped_column(String(128), default="", index=True)
-    # 稳定属主(int user.id)。``owner`` 字符串保留为展示快照;归属判断
-    # 以 owner_id 为准,owner_id==0 的存量行走 owner 名字回退(P2 迁移
-    # 脚本会批量回填)。visibility: private(默认,仅 owner/admin 可读)
+    # 稳定属主(int user.id)——归属判断的唯一权威。``owner`` 字符串仅为
+    # 展示快照。visibility: private(默认,仅 owner/admin 可读)
     # | public(所有登录用户可读)——取代 V1 的目录即真相模型。
     owner_id: Mapped[int] = mapped_column(Integer, default=0, index=True)
     visibility: Mapped[str] = mapped_column(

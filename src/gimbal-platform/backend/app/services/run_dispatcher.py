@@ -513,7 +513,6 @@ def _compose_scenario(
     * ``scenario_payload`` 是持久化的 ``ComposerScenario.payload``。
       容器化重构后为 ``{definition, orchestration}``;plate 只吃
       ``definition``(orchestration 是平台侧投影,绝不外发)。
-      容器化之前的 legacy 行原样透传。
     """
     raw = scenario_payload or {}
     # Unwrap the container: plate must never see orchestration.

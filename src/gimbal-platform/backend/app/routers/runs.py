@@ -53,16 +53,13 @@ async def post_run(
             raise run_dispatcher.NotFound(
                 "scenario_not_found", f"scenario not found: {body.scenario_id}"
             )
-        # owner_id is authoritative; legacy rows (owner_id == 0) fall back
-        # to matching the owner display-name snapshot.
         ensure_owner(
             user,
-            scen.owner,
+            scen.owner_id,
             {
                 "code": "not_owner",
                 "message": "only the scenario's owner (or admin) can run this scenario",
             },
-            owner_id=scen.owner_id,
         )
         return await run_dispatcher.dispatch_run(
             db,

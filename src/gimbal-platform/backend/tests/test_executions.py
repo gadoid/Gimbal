@@ -5,9 +5,8 @@ V3 retired the V1 subprocess chain AND the per-run exec_runs cluster
 POST /api/runs via run_dispatcher; observability is the Execution
 counters + ``data/runs/<date>.jsonl`` dispatch logs (file-based, not
 API).  These tests cover the surviving read surface: list/detail
-isolation, execution deletion, retired endpoints, and the dev-version
-``exec_runs`` table drop migration.  Rows are inserted directly via
-SQLAlchemy — no subprocess, no loader.
+isolation, execution deletion, and retired endpoints.  Rows are
+inserted directly via SQLAlchemy — no subprocess, no loader.
 """
 from __future__ import annotations
 
@@ -114,7 +113,7 @@ async def test_post_execution_and_rerun_are_gone(client: AsyncClient) -> None:
     assert r.status_code in (404, 405)
 
 
-# ── V1 per-run cluster retired (exec_runs drop migration) ──────
+# ── V1 per-run cluster retired ─────────────────────────────────
 async def test_v1_run_endpoints_are_gone(client: AsyncClient) -> None:
     auth = await _login_alice(client)
     eid = await _insert_execution()
@@ -125,81 +124,3 @@ async def test_v1_run_endpoints_are_gone(client: AsyncClient) -> None:
     r = await client.delete(f"/api/executions/{eid}/runs/1", headers=auth)
     assert r.status_code in (404, 405)  # only /api/executions/{id} DELETE exists
 
-
-async def test_init_db_drops_legacy_exec_runs_table(tmp_path) -> None:
-    """A dev DB that still carries the V1 exec_runs table must have it
-    dropped by init_db (dev-version data purge, idempotent)."""
-    import sqlite3
-
-    from app.core import db as db_module
-
-    db_file = tmp_path / "legacy.db"
-    conn = sqlite3.connect(db_file)
-    conn.executescript(
-        """
-        CREATE TABLE users (
-            id INTEGER PRIMARY KEY,
-            username VARCHAR(64) NOT NULL,
-            display_name VARCHAR(128),
-            password_hash VARCHAR(256),
-            is_admin BOOLEAN,
-            is_active BOOLEAN,
-            created_at TIMESTAMP,
-            updated_at TIMESTAMP
-        );
-        CREATE TABLE executions (
-            id INTEGER PRIMARY KEY,
-            scenario_id VARCHAR(128),
-            owner_id INTEGER,
-            status VARCHAR(16),
-            total_runs INTEGER,
-            passed INTEGER,
-            failed INTEGER,
-            config_json TEXT,
-            started_at TIMESTAMP,
-            finished_at TIMESTAMP,
-            created_at TIMESTAMP
-        );
-        CREATE TABLE exec_runs (
-            id INTEGER PRIMARY KEY,
-            execution_id INTEGER,
-            idx INTEGER,
-            status VARCHAR(16),
-            exit_code INTEGER,
-            report_path TEXT,
-            log_path TEXT,
-            command_line TEXT,
-            started_at TIMESTAMP,
-            finished_at TIMESTAMP,
-            duration_ms INTEGER
-        );
-        """
-    )
-    conn.close()
-
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-    test_engine = create_async_engine(f"sqlite+aiosqlite:///{db_file}")
-    orig_engine = db_module.engine
-    orig_session = db_module.SessionLocal
-    db_module.engine = test_engine
-    db_module.SessionLocal = async_sessionmaker(test_engine, expire_on_commit=False)
-    try:
-        await db_module.init_db()
-        # Idempotency: a second run must not fail on the missing table.
-        await db_module.init_db()
-    finally:
-        await test_engine.dispose()
-        db_module.engine = orig_engine
-        db_module.SessionLocal = orig_session
-
-    chk = sqlite3.connect(db_file)
-    tables = {
-        r[0]
-        for r in chk.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
-    }
-    chk.close()
-    assert "exec_runs" not in tables
-    assert "executions" in tables

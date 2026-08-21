@@ -301,8 +301,8 @@ class Scenario(BaseModel):
     meta: ScenarioMeta
     steps: list[dict[str, Any]] = Field(default_factory=list)  # plate step dicts
     # Optional round-trip of the persisted sub-structure for composer reload.
-    # All absent on legacy rows → frontend rebuilds defaults; present on rows
-    # saved by the container schema (definition/orchestration).
+    # Absent → frontend rebuilds defaults; present on rows saved by the
+    # container schema (definition/orchestration).
     config: dict[str, Any] | None = None
     resource: dict[str, Any] | None = None
     orchestration: Orchestration | None = None
