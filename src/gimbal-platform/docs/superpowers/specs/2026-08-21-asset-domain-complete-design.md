@@ -313,6 +313,8 @@ P2 与 P1 无依赖(调色板只需 payload 的 vars,不需索引),可并行。�
 
 **P1+P2 已完成并推送** — 分支 `strbody_avaliable`,提交区间 `cafa46d..afdb602`(16 个提交)。实施计划:`docs/superpowers/plans/2026-08-21-asset-domain-p1-p2.md`(11 任务全部通过任务评审 + 最终全分支评审 + 修复批次复审)。验证基线:后端 pytest **133 passed**、前端 vitest **18 文件 113 tests**、`npm run build` 干净。
 
+**P3+P4 已完成** — 分支 `strbody_avaliable`,提交区间为计划 Task 1 至本任务的实际提交(以 `git log --oneline` 为准:计划提交 `934c6aa` 之后 12 个提交 = 10 feat + 1 fix + 1 docs 裁定回写)。实施计划:`docs/superpowers/plans/2026-08-21-asset-domain-p3-p4.md`。落地:`catalog_versions.spec_json` 列 + `adaptation_ops` 表;`adaptation_service`(catalog_diff / impact / open_batch / apply_op / rollback_batch / create_op)与 `adaptation_ops` 纯引擎(草案生成 + 收敛应用 + C5 寻址校验);`routers/adaptations.py` 八端点全 admin-only。验证基线:后端 pytest 全绿(133 既有 + 新增 50,共 **183 passed**;diff 5 / impact 3 / API 8 / drafts 7 / ops 引擎 10 / batches 16 / ORM 1)、前端 vitest 113 不回归、`npm run build` 干净。P5(前端适配中心)另立计划。
+
 **接手 P3 前的代码状态:**
 
 - **活**:倒排索引 `scenario_endpoint_refs` 随场景 create/update/delete 同事务维护(`services/endpoint_ref_index.py`),`rebuild()` / `unindexed_steps()` 可对账(P3 影响查询的数据源已实时就绪);数据集域全量落地(稀疏行 D10、调色板 422、行 0 基线 D9、字段提升 D8、基线执行 D12)。

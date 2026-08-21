@@ -64,7 +64,7 @@ backend/tests/test_adaptation_batches.py         [C] Task 7/8/9 服务层
 - Consumes: 既有 `CatalogVersion`(endpoint_id PK / version / synced_at)、`Base`(core.db)。
 - Produces: `CatalogVersion.spec_json: Mapped[dict]`(JSON 非空,缺省 dict);`AdaptationOp`(表 `adaptation_ops`,列 `id` PK 自增 / `batch_id` str / `scenario_id` str / `dataset_id` str|None / `op_type` str / `payload` JSON / `status` str 缺省 "pending" / `applied_at` datetime|None / `note` str|None;索引 `ix_aop_batch`)。Task 2 起经 `from ..models.catalog_version import CatalogVersion` / `from ..models.adaptation_op import AdaptationOp` 使用。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `backend/tests/test_derived_tables.py` —— 修改既有 `test_catalog_batch_snapshot_roundtrip` 的 CatalogVersion 插入(加 spec_json)并在 commit 后断言往返;文件头 import 区加 `from app.models.adaptation_op import AdaptationOp`;文件末尾追加 op 表往返测试:
 
@@ -117,12 +117,12 @@ async def test_adaptation_op_roundtrip(fresh_db):
         assert {o.op_type for o in ops} == {"addField", "renameDatasetColumn"}
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cd backend && python -m pytest tests/test_derived_tables.py -v`
 Expected: FAIL —— `ImportError: cannot import name 'AdaptationOp'`(以及 spec_json 非列)。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 `backend/app/models/catalog_version.py` 全量替换为:
 
@@ -216,12 +216,12 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `cd backend && python -m pytest tests/test_derived_tables.py -v`
 Expected: PASS(含既有 3 个测试 —— spec_json 列对旧查询无破坏)。
 
-- [ ] **Step 5: 开发库一次性 DROP(手工,不入库)**
+- [x] **Step 5: 开发库一次性 DROP(手工,不入库)**
 
 对 dev 库执行一次(当前 0 行、休眠表,drop 无损):
 
@@ -232,7 +232,7 @@ DROP TABLE catalog_versions;
 
 之后重启后端,`init_db` 的 `create_all` 按新定义(含 spec_json)重建。测试/CI 库每次全新建表,不需要此步。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add backend/app/models/catalog_version.py backend/app/models/adaptation_op.py backend/app/models/__init__.py backend/tests/test_derived_tables.py
@@ -254,7 +254,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: Task 1 的 `CatalogVersion`(含 spec_json);`plate_client.get_client()` / `set_client_for_tests()` / `PlateUnavailableError(.message)`。
 - Produces: `async def catalog_diff(db: AsyncSession) -> dict` → `{"pending": [{"endpointId","fromVersion","toVersion"}], "anomalies": [{"endpointId","reason","detail"}], "baselinedNow": int}`(camelCase 键,直接喂 Task 4 的 CatalogDiffReport);模块级 helper `async def _plate_list_endpoints() -> list[dict]`、`async def _plate_full_endpoint(endpoint_id) -> dict | None`(plate 404 → None,其余失败 → PlateUnavailableError)、`def _semver_gt(a: str, b: str) -> bool`、`def _parse_dt(value) -> datetime | None`、`def _utcnow() -> datetime` —— Task 7/8 复用。conftest 新增 fixture `plate`(EndpointPlateMock 实例,可编程 items/fulls/down)供全部适配测试文件使用。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `backend/tests/conftest.py` —— 头部 import 区把 `from httpx import ASGITransport, AsyncClient` 改为 `import httpx` + `from httpx import ASGITransport, AsyncClient`;文件末尾(mock 复用既有风格:仿 test_strategy_catalog.py 的 install/uninstall)追加:
 
@@ -431,12 +431,12 @@ async def test_plate_unavailable(fresh_db, plate):
             await catalog_diff(s)
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cd backend && python -m pytest tests/test_adaptation_diff.py -v`
 Expected: FAIL —— `ModuleNotFoundError: No module named 'app.services.adaptation_service'`。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 `backend/app/services/adaptation_service.py` 新建(Task 3/7/8/9/10 会向本文件追加):
 
@@ -603,12 +603,12 @@ async def catalog_diff(db: AsyncSession) -> dict:
     return {"pending": pending, "anomalies": anomalies, "baselinedNow": baselined}
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `cd backend && python -m pytest tests/test_adaptation_diff.py -v`
 Expected: PASS(5 个测试)。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add backend/app/services/adaptation_service.py backend/tests/conftest.py backend/tests/test_adaptation_diff.py
@@ -629,7 +629,8 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: `ScenarioEndpointRef`(scenario_id/step_index/source/field_name/endpoint_id/via_var)、`ComposerDataSet`(dataset_id/scenario_id/name/rows);`scenario_store.create` / `data_set_store.create` 造数。
 - Produces: `async def impact(db: AsyncSession, endpoint_id: str, field_name: str | None = None) -> list[dict]` → 条目 `{"scenarioId","stepIndex","source","field","viaVar","datasetId","datasetColumn"}`(camelCase 键,喂 Task 4 的 ImpactItem)。条目规则:**直填字段**(via_var 为空)同样命中,出一条无数据集标注的条目;via_var 条目按"数据集行实际含该键"(D5 内存列存在性)逐数据集配对,无任何数据集命中时仍出一条 datasetId=None(变量默认值通路 —— D9:基线 = 直填 ∪ vars 扁平值)。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
+  > 执行备注:简报种子代码的两处机械问题落地时已修正 —— ① `async with await db_module.SessionLocal()` 的多余 `await` 去除(`SessionLocal()` 返回 AsyncSession,可直接 `async with`);② `_seed()` 的 `vars_map` 补 `"other": 0` 声明(「无列」数据集行键 `other` 需已在变量调色板中声明,否则 create 走 C1 422)。
 
 `backend/tests/test_adaptation_impact.py` 新建:
 
@@ -720,12 +721,12 @@ async def test_impact_var_default_path_when_no_dataset_has_column(fresh_db):
     }]
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cd backend && python -m pytest tests/test_adaptation_impact.py -v`
 Expected: FAIL —— `ImportError: cannot import name 'impact'`。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 `backend/app/services/adaptation_service.py` —— 头部 import 区追加两行(放在 `from ..models.catalog_version import CatalogVersion` 之后):
 
@@ -792,12 +793,12 @@ async def impact(
     return out
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `cd backend && python -m pytest tests/test_adaptation_impact.py -v`
 Expected: PASS(3 个测试)。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add backend/app/services/adaptation_service.py backend/tests/test_adaptation_impact.py
@@ -821,7 +822,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: Task 2 `catalog_diff`、Task 3 `impact`(均 camelCase dict);`CurrentUser`(deps.py 既有);`PlateUnavailableError.message`。
 - Produces: `AdminUser = Annotated[User, Depends(require_admin)]`(deps.py,403 detail="admin_only: ..." —— Task 10 的批次路由同样挂);schemas:`CatalogDiffReport` / `PendingChange` / `CatalogAnomaly` / `ImpactItem`(Task 10 扩同文件);路由 `POST /api/adaptations/catalog/diff`(502 plate_unavailable)与 `GET /api/adaptations/impact?endpointId=&field=`。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `backend/tests/test_adaptations_api.py` 新建:
 
@@ -876,12 +877,12 @@ async def test_impact_readonly_and_admin_only(client, plate):
 
 注意:`register_and_login` 重复注册同名用户安全(忽略 409 重复);`test_impact_readonly_and_admin_only` 里第二次登录 "boss" 返回同一 admin 账号的 token。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cd backend && python -m pytest tests/test_adaptations_api.py -v`
 Expected: FAIL —— 404(路由不存在)。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 `backend/app/core/deps.py` —— 在 `CurrentUser = Annotated[...]` 行之后追加:
 
@@ -1013,12 +1014,12 @@ async def impact(
     app.include_router(adaptations.router, prefix="/api")
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `cd backend && python -m pytest tests/test_adaptations_api.py tests/test_strategy_catalog.py -v`
 Expected: PASS(本文件 4 个;strategy_catalog 回归无破坏 —— plate mock 替换的是同一单例)。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add backend/app/core/deps.py backend/app/schemas/adaptations.py backend/app/routers/adaptations.py backend/app/main.py backend/tests/test_adaptations_api.py
@@ -1039,7 +1040,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: plate full spec 形状(`spec.request.fields: list[IOFieldBinding]`,每项含 name/default/enum 等,均为 JSON dict 键访问)。
 - Produces: 常量 `STEP_OPS = ("renameField", "addField", "removeField", "rebindField", "mapValue")`、`DATASET_OPS = ("renameDatasetColumn", "mapDatasetValues")`、`GLOBAL_OPS = ("renameVar",)`、`ALL_OPS = STEP_OPS + DATASET_OPS + GLOBAL_OPS`(Task 6/8/10 消费);`def diff_field_specs(old_spec: dict | None, new_spec: dict | None) -> list[dict]` → 自动草案 op 列表,形如 `{"op": "addField", "field": "x", "value": ""}` / `{"op": "removeField", "field": "y"}` / `{"op": "mapValue", "field": "z", "map": {}}`(无 "step" 键 —— Task 7 展开时按引用对补 step)。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `backend/tests/test_adaptation_drafts.py` 新建:
 
@@ -1108,12 +1109,12 @@ def test_request_missing_treated_as_empty():
     assert diff_field_specs({"id": "e", "version": "1.0.0"}, None) == []
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cd backend && python -m pytest tests/test_adaptation_drafts.py -v`
 Expected: FAIL —— `ModuleNotFoundError: No module named 'app.services.adaptation_ops'`。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 `backend/app/services/adaptation_ops.py` 新建:
 
@@ -1193,12 +1194,12 @@ def diff_field_specs(old_spec: dict | None, new_spec: dict | None) -> list[dict]
     return drafts
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `cd backend && python -m pytest tests/test_adaptation_drafts.py -v`
 Expected: PASS(7 个测试)。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add backend/app/services/adaptation_ops.py backend/tests/test_adaptation_drafts.py
@@ -1223,7 +1224,8 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
   - `def apply_to_rows(rows: list[dict], op: dict) -> list[dict]` —— 数据集侧(renameVar / renameDatasetColumn 改列名,mapDatasetValues 值映射);非数据集类 op → `ValueError("not_a_dataset_op: …")`。
   - op 视图约定:`{"op": <op_type>, **payload}`(op 类型来自列,payload 不含 "op" 键)。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
+  > 执行备注:renameVar 断言按控制器裁定修正 —— renameVar 只替换 `${var.from}` 引用并改 vars 键/数据集列名,不改 body/headers/query 的字典键(键改名归 renameField,spec §5.3 语义);执行中发现原断言与此不符,代码修正于提交 2383fc4,计划原文已随提交 0e6a0db 回写为裁定后语义(与实际测试一致)。
 
 `backend/tests/test_adaptation_ops.py` 新建:
 
@@ -1379,12 +1381,12 @@ def test_apply_to_rows_rejects_step_op():
         raise AssertionError("expected ValueError")
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cd backend && python -m pytest tests/test_adaptation_ops.py -v`
 Expected: FAIL —— `ImportError: cannot import name 'apply_to_definition'`。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 `backend/app/services/adaptation_ops.py` 末尾追加:
 
@@ -1525,12 +1527,12 @@ def apply_to_rows(rows: list[dict], op: dict) -> list[dict]:
     return rows
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `cd backend && python -m pytest tests/test_adaptation_ops.py -v`
 Expected: PASS(10 个测试)。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add backend/app/services/adaptation_ops.py backend/tests/test_adaptation_ops.py
@@ -1554,7 +1556,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
   - `async def _get_batch(db, batch_id) -> AdaptationBatch`(KeyError("batch_not_found: …"))、`async def _batch_detail(db, batch_id) -> dict`、`def _op_out(op) -> dict`、`async def _advance_stamp(db, *, endpoint_id, to_version, full) -> None`。
   - batch_id 格式:`bt-{uuid4().hex[:12]}`;snapshot before_json:scenario=`{"payload": <完整容器>}`、dataset=`{"scenarioId","name","description","rows"}`;op 行 payload **不含** "op" 键(op 类型在 op_type 列),step 展开后含 "step"。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `backend/tests/test_adaptation_batches.py` 新建(Task 8/9 向本文件追加):
 
@@ -1708,12 +1710,12 @@ async def test_open_batch_zero_refs_autocompletes(fresh_db, plate):
     assert stamp.spec_json == NEW_FULL
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cd backend && python -m pytest tests/test_adaptation_batches.py -v`
 Expected: FAIL —— `AttributeError: module 'app.services.adaptation_service' has no attribute 'open_batch'`。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 `backend/app/services/adaptation_service.py` —— 头部 import 区调整:
 
@@ -1911,12 +1913,12 @@ async def _advance_stamp(
 
 注意:`scenario_store` 已在文件头 import 区(`from . import plate_client` 同层加 `from . import scenario_store`);`_batch_detail` 内 `db.refresh` 缺省不调 —— `open_batch` 返回前 ops/snapshots 经 autoflush 后再 select,读到的即本轮写入。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `cd backend && python -m pytest tests/test_adaptation_batches.py -v`
 Expected: PASS(4 个测试)。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add backend/app/services/adaptation_service.py backend/tests/test_adaptation_batches.py
@@ -1938,7 +1940,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Produces: `async def apply_op(db: AsyncSession, op_id: int) -> dict`(→ `_op_out` 形状 dict;Task 10 路由直接用)。错误:`KeyError("op_not_found: …")`;`ValueError("op_not_applicable: …")`(conflict/skipped 终态);`ValueError("batch_not_active: …")`(completed/rolled_back)。**store 层** KeyError/ValueError(实体消失 / 调色板 422 等)不外抛 —— 归并为该 op `status=conflict` + `note`。
 - 编排语义:首次成功应用把批次 `open → applying`;每条 op 应用后若批次内无 pending 剩余 → `completed` + `closed_at` + 推进戳(plate full 拉取 best-effort,失败只推 version)。renameVar:先场景(vars 键改名先行,调色板先就位)后逐数据集改列。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `backend/tests/test_adaptation_batches.py` 末尾追加:
 
@@ -2112,12 +2114,12 @@ async def test_apply_rejects_terminal_and_inactive(fresh_db, plate):
             await adaptation_service.apply_op(s, 99999)
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cd backend && python -m pytest tests/test_adaptation_batches.py -v`
 Expected: 新增 8 个测试 FAIL —— `AttributeError: … has no attribute 'apply_op'`。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 `backend/app/services/adaptation_service.py` —— 头部 import 区追加:
 
@@ -2267,12 +2269,12 @@ async def _maybe_complete(db: AsyncSession, batch: AdaptationBatch) -> None:
 - renameVar 的场景/数据集两侧**各自经 store 提交**;若数据集侧中途异常,场景侧已落库而 op 标 conflict —— 该半应用态是已知极端边界(单管理员串行 + 失败概率极低),由整批回滚的 conflict 报告暴露给人工核对,不在本期补分布式事务。
 - `test_apply_op_idempotent_replay` 里第二个 `apply_op` 走 `op.status == "applied"` 早退分支,不触库不重复落行。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `cd backend && python -m pytest tests/test_adaptation_batches.py -v`
 Expected: PASS(4 + 8 = 12 个测试)。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add backend/app/services/adaptation_service.py backend/tests/test_adaptation_batches.py
@@ -2294,7 +2296,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Produces: `async def rollback_batch(db: AsyncSession, batch_id: str) -> dict` → `{"batchId","status":"rolled_back","restored":[{"entityType","entityId"}],"conflicts":[{"entityType","entityId","note"}]}`。错误:`KeyError("batch_not_found: …")`;`ValueError("batch_not_rollbackable: …")`(completed/rolled_back)。
 - 语义:期望态 = before_json + 本批次 applied ops **内存重放**(op 收敛幂等 ⇒ 重放可行);当前态 == 期望态 → 写回 before;≠ → 该实体 conflict 跳过(不盲写)。场景先于数据集恢复(renameVar 对称序:场景 vars 先回旧名,数据集行再写回旧列才能过调色板)。pending ops → `skipped("batch rolled back")`;**戳不推进**(回滚 ≠ 适配完成)。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `backend/tests/test_adaptation_batches.py` 末尾追加:
 
@@ -2394,12 +2396,12 @@ async def test_rollback_only_open_or_applying(fresh_db, plate):
             await adaptation_service.rollback_batch(s, "bt-none")
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cd backend && python -m pytest tests/test_adaptation_batches.py -v`
 Expected: 新增 4 个测试 FAIL —— `AttributeError: … has no attribute 'rollback_batch'`。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 `backend/app/services/adaptation_service.py` 末尾追加:
 
@@ -2553,12 +2555,13 @@ async def _rollback_dataset(
     ))
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `cd backend && python -m pytest tests/test_adaptation_batches.py -v`
 Expected: PASS(12 + 4 = 16 个测试)。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
+  > 执行备注:实际提交在仓库根执行,暂存路径为 `src/gimbal-platform/backend/…`(计划中为 `backend/…`)—— 机械路径修正,暂存内容一致(提交 675d3a3)。
 
 ```bash
 git add backend/app/services/adaptation_service.py backend/tests/test_adaptation_batches.py
@@ -2588,7 +2591,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
   - `POST /batches/{batch_id}/rollback` → `RollbackReport`;409 `batch_not_rollbackable`;404。
 - 服务层签名:`async def create_op(db, batch_id: str, *, op_type: str, scenario_id: str, dataset_id: str | None, payload: dict) -> dict`;`async def list_batches(db) -> list[dict]`;`async def get_batch_detail(db, batch_id: str) -> dict`。人工 op 仅批次 `open` 时可加(未应用过 ⇒ 现场补录快照即真 before 像)。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `backend/tests/test_adaptations_api.py` 头部 import 区调整为:
 
@@ -2782,12 +2785,12 @@ async def test_batch_routes_admin_only(client, plate):
 
 注意:路由签名依赖参数(`user`/`db`)声明在 body 之前 —— FastAPI 先解子依赖再解析 body,member 的 403 在 body 422 之前触发,上面六条裸 POST 断言才是纯 403。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cd backend && python -m pytest tests/test_adaptations_api.py -v`
 Expected: 新增 4 个测试 FAIL —— 新路由 404(不存在)。
 
-- [ ] **Step 3: 写最小实现**
+- [x] **Step 3: 写最小实现**
 
 `backend/app/services/adaptation_service.py` —— 头部 `from .adaptation_ops import (…)` 再扩一项 `ALL_OPS`。文件末尾追加:
 
@@ -3068,12 +3071,13 @@ async def rollback_batch(
     return RollbackReport.model_validate(report)
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `cd backend && python -m pytest tests/test_adaptations_api.py tests/test_adaptation_batches.py -v`
 Expected: PASS(API 文件 4+4;批次服务文件 16 回归无破坏)。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
+  > 执行备注:同 Task 9 Step 5 —— 实际暂存路径为仓库根相对的 `src/gimbal-platform/backend/…`,机械路径修正,暂存内容一致(提交 8063db9)。
 
 ```bash
 git add backend/app/services/adaptation_service.py backend/app/schemas/adaptations.py backend/app/routers/adaptations.py backend/tests/test_adaptations_api.py
@@ -3094,17 +3098,17 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: Task 1-10 全部产出。
 - Produces: P3+P4 完成基线(全绿测试数、提交区间)写入 spec,P5 接手状态就绪。
 
-- [ ] **Step 1: 后端全量测试**
+- [x] **Step 1: 后端全量测试**
 
 Run: `cd backend && python -m pytest tests/ -v`
 Expected: 全绿 —— 既有 133 + 本计划新增约 50(diff 5 / impact 3 / API 8 / drafts 7 / ops 引擎 10 / batches 服务 16 / ORM 1),以实际数为基线记录。
 
-- [ ] **Step 2: 前端回归(P3+P4 不动前端,守住不回归)**
+- [x] **Step 2: 前端回归(P3+P4 不动前端,守住不回归)**
 
 Run: `cd frontend && npm test -- --run && npm run build`
 Expected: vitest 113 tests 全绿;build 干净退出。
 
-- [ ] **Step 3: spec §7 实施进度回写**
+- [x] **Step 3: spec §7 实施进度回写**
 
 `docs/superpowers/specs/2026-08-21-asset-domain-complete-design.md` §7 —— 在 "**P1+P2 已完成并推送**" 段落(`…npm run build\` 干净。`)之后新起一段插入:
 
@@ -3112,11 +3116,11 @@ Expected: vitest 113 tests 全绿;build 干净退出。
 **P3+P4 已完成** — 分支 `strbody_avaliable`,提交区间为计划 Task 1 至本任务的实际提交(以 `git log --oneline` 为准,11 个 feat 提交)。实施计划:`docs/superpowers/plans/2026-08-21-asset-domain-p3-p4.md`。落地:`catalog_versions.spec_json` 列 + `adaptation_ops` 表;`adaptation_service`(catalog_diff / impact / open_batch / apply_op / rollback_batch / create_op)与 `adaptation_ops` 纯引擎(草案生成 + 收敛应用 + C5 寻址校验);`routers/adaptations.py` 八端点全 admin-only。验证基线:后端 pytest 全绿(133 既有 + 新增)、前端 vitest 113 不回归、`npm run build` 干净。P5(前端适配中心)另立计划。
 ```
 
-- [ ] **Step 4: 核对计划 checkbox**
+- [x] **Step 4: 核对计划 checkbox**
 
 通读本计划文件,确认 11 个任务的全部 step checkbox 已勾选(`- [x]`);执行中若跳过或改动了某 step,在该 step 下补一行说明原因。
 
-- [ ] **Step 5: 提交文档回写**
+- [x] **Step 5: 提交文档回写**
 
 ```bash
 git add docs/superpowers/specs/2026-08-21-asset-domain-complete-design.md docs/superpowers/plans/2026-08-21-asset-domain-p3-p4.md
