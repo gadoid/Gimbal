@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 from typing import AsyncGenerator
 
+import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import (
@@ -83,3 +84,59 @@ async def client(fresh_db) -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+class EndpointPlateMock:
+    """Programmable plate mock for the endpoint dim(适配域测试共享)。
+
+    ``items``:GET /api/endpoint 轻量列表(id/version/updated_at);
+    ``fulls``:endpoint_id → full spec(GET /api/endpoint/{id}/full);
+    ``down=True``:一切请求抛 ConnectError(plate 不可达)。
+    """
+
+    def __init__(self) -> None:
+        self.items: list[dict] = []
+        self.fulls: dict[str, dict] = {}
+        self.down = False
+
+    def install(self) -> None:
+        mock = self
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if mock.down:
+                raise httpx.ConnectError("connection refused", request=request)
+            path = request.url.path
+            if path == "/api/endpoint":
+                return httpx.Response(200, json={
+                    "ok": True, "dim": "endpoint",
+                    "data": {"items": mock.items, "total": len(mock.items)},
+                })
+            if path.endswith("/full"):
+                eid = path.rsplit("/", 2)[-2]
+                if eid in mock.fulls:
+                    return httpx.Response(200, json={
+                        "ok": True, "dim": "endpoint",
+                        "data": {"item": mock.fulls[eid], "total": 1},
+                    })
+            return httpx.Response(404, json={"ok": False})
+
+        from app.services import plate_client
+
+        plate_client.set_client_for_tests(httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), base_url="http://plate-test",
+        ))
+
+    def uninstall(self) -> None:
+        from app.services import plate_client
+
+        plate_client.set_client_for_tests(None)
+
+
+@pytest.fixture
+def plate():
+    mock = EndpointPlateMock()
+    mock.install()
+    try:
+        yield mock
+    finally:
+        mock.uninstall()
