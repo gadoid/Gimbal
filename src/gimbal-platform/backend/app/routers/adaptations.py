@@ -1,4 +1,5 @@
-"""适配中心路由(spec §5/§7 P3+P4 裁定):全路由 admin-only。
+"""适配中心路由(spec §5/§7 P3+P4 裁定):admin-only,唯 ``GET /batches?scope=mine``
+member 可访问(C13 owner 知情视图)。
 
 * ``POST /adaptations/catalog/diff`` —— 冷启动基线是写副作用,POST 如实承载;
 * ``GET  /adaptations/impact`` —— 只读影响查询。
@@ -22,6 +23,7 @@ from ..schemas.adaptations import (
     OpenBatchIn,
     OpCreateIn,
     OpOut,
+    OpPatchIn,
     RollbackReport,
     UnindexedStepOut,
 )
@@ -155,6 +157,34 @@ async def apply_op(user: AdminUser, op_id: int, db: DbSession) -> OpOut:
         raise value_error_http(e, codes={
             "op_not_applicable": 409, "batch_not_active": 409,
         }) from e
+    return OpOut.model_validate(op)
+
+
+@router.post("/ops/{op_id}/skip", response_model=OpOut)
+async def skip_op(user: AdminUser, op_id: int, db: DbSession) -> OpOut:
+    """跳过一条 pending op(末条跳过同样收敛 completed + 推戳)。"""
+    try:
+        op = await adaptation_service.skip_op(db, op_id)
+    except KeyError as e:
+        raise key_error_404(e) from e
+    except ValueError as e:
+        raise value_error_http(e, codes={
+            "op_not_applicable": 409, "batch_not_active": 409,
+        }) from e
+    return OpOut.model_validate(op)
+
+
+@router.patch("/ops/{op_id}", response_model=OpOut)
+async def patch_op(
+    user: AdminUser, op_id: int, body: OpPatchIn, db: DbSession,
+) -> OpOut:
+    """仅 pending 可整包替换 payload(mapValue 骨架补值 / 参数修正)。"""
+    try:
+        op = await adaptation_service.update_op(db, op_id, body.payload)
+    except KeyError as e:
+        raise key_error_404(e) from e
+    except ValueError as e:
+        raise value_error_http(e, codes={"op_not_applicable": 409}) from e
     return OpOut.model_validate(op)
 
 

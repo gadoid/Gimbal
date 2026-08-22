@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlalchemy import select
+
 from app.core import db as db_module
 from app.models.catalog_version import CatalogVersion
 from app.schemas.scenario_composer import ScenarioDraft
@@ -312,3 +314,108 @@ async def test_batches_member_without_scope_403_admin_full(client, plate):
     full = await client.get("/api/adaptations/batches", headers=admin)
     assert full.status_code == 200
     assert [b["batchId"] for b in full.json()] == [detail["batchId"]]
+
+
+# ─── skip / patch op(P5 Task 3)─────────────────────────────────
+async def _opened_with_ops(client, plate) -> tuple[dict, str]:
+    admin = await register_and_login(client, "boss", "bosspass123")
+    await _api_seed_scenario()
+    await _api_seed_stamp()
+    _api_plate_ahead(plate)
+    detail = await _open_batch_ok(client, admin)
+    return detail, admin
+
+
+async def test_skip_marks_skipped_and_idempotent(client, plate):
+    detail, admin = await _opened_with_ops(client, plate)
+    op = detail["ops"][0]
+
+    first = await client.post(f"/api/adaptations/ops/{op['id']}/skip",
+                              headers=admin)
+    assert first.status_code == 200
+    body = first.json()
+    assert body["status"] == "skipped"
+    assert body["note"] == "skipped by operator"
+
+    again = await client.post(f"/api/adaptations/ops/{op['id']}/skip",
+                              headers=admin)
+    assert again.status_code == 200          # 幂等:skipped 再调原样返回
+    assert again.json()["status"] == "skipped"
+
+    mid = await client.get(
+        f"/api/adaptations/batches/{detail['batchId']}", headers=admin)
+    assert mid.json()["status"] == "open"    # 还有 2 条 pending → 不收敛
+    assert mid.json()["opCounts"] == {"pending": 2, "skipped": 1}
+
+
+async def test_skip_op_error_mappings(client, plate):
+    detail, admin = await _opened_with_ops(client, plate)
+    applied_op = detail["ops"][0]
+    await client.post(f"/api/adaptations/ops/{applied_op['id']}/apply",
+                      headers=admin)
+
+    conflict = await client.post(
+        f"/api/adaptations/ops/{applied_op['id']}/skip", headers=admin)
+    assert conflict.status_code == 409
+    assert "op_not_applicable" in conflict.json()["detail"]
+
+    missing = await client.post("/api/adaptations/ops/99999/skip",
+                                headers=admin)
+    assert missing.status_code == 404
+
+    member = await register_and_login(client, "peon", "peonpass123")  # uid 2
+    denied = await client.post(
+        f"/api/adaptations/ops/{detail['ops'][1]['id']}/skip", headers=member)
+    assert denied.status_code == 403
+
+
+async def test_skip_last_pending_completes_batch(client, plate):
+    detail, admin = await _opened_with_ops(client, plate)
+    for op in detail["ops"]:                 # 3 条全跳 → 跳过也是决策
+        r = await client.post(f"/api/adaptations/ops/{op['id']}/skip",
+                              headers=admin)
+        assert r.status_code == 200
+
+    final = await client.get(
+        f"/api/adaptations/batches/{detail['batchId']}", headers=admin)
+    assert final.json()["status"] == "completed"
+    assert final.json()["opCounts"] == {"skipped": 3}
+
+    async with await _session() as s:        # 推戳:stamp 前进到 1.1.0
+        stamp = (await s.execute(
+            select(CatalogVersion).where(CatalogVersion.endpoint_id == EP)
+        )).scalar_one()
+        assert stamp.version == "1.1.0"
+
+
+async def test_patch_replaces_payload_and_strips_op_key(client, plate):
+    detail, admin = await _opened_with_ops(client, plate)
+    map_op = next(o for o in detail["ops"] if o["opType"] == "mapValue")
+    assert map_op["payload"]["map"] == {}    # 骨架:map 为空,等补值
+
+    r = await client.patch(
+        f"/api/adaptations/ops/{map_op['id']}",
+        json={"payload": {"op": "mapValue", "step": 0,
+                          "field": "settle_type", "map": {"1": "2"}}},
+        headers=admin)
+    assert r.status_code == 200
+    assert r.json()["payload"] == {"step": 0, "field": "settle_type",
+                                   "map": {"1": "2"}}   # "op" 键被剥
+
+    reread = await client.get(
+        f"/api/adaptations/batches/{detail['batchId']}", headers=admin)
+    persisted = next(o for o in reread.json()["ops"] if o["id"] == map_op["id"])
+    assert persisted["payload"]["map"] == {"1": "2"}
+
+
+async def test_patch_non_pending_409(client, plate):
+    detail, admin = await _opened_with_ops(client, plate)
+    applied_op = detail["ops"][0]
+    await client.post(f"/api/adaptations/ops/{applied_op['id']}/apply",
+                      headers=admin)
+
+    r = await client.patch(
+        f"/api/adaptations/ops/{applied_op['id']}",
+        json={"payload": {"step": 0, "field": "x"}}, headers=admin)
+    assert r.status_code == 409
+    assert "op_not_applicable" in r.json()["detail"]

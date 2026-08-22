@@ -128,3 +128,11 @@ class UnindexedStepOut(BaseModel):
     scenario_id: str = Field(alias="scenarioId")
     step_index: int = Field(alias="stepIndex")
     reason: str
+
+
+class OpPatchIn(BaseModel):
+    """PATCH /ops/{id} 请求体:payload 整包替换(仅 pending 可改)。"""
+
+    model_config = _CAMEL
+
+    payload: dict[str, Any] = Field(default_factory=dict)

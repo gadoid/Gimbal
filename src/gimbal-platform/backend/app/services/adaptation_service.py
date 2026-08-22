@@ -465,6 +465,50 @@ async def apply_op(db: AsyncSession, op_id: int) -> dict:
     return _op_out(op)
 
 
+async def skip_op(db: AsyncSession, op_id: int) -> dict:
+    """跳过一条 pending op(逐条确认的"跳过"决策);幂等。
+
+    * skipped → 原样返回(幂等,合并 renameField 后跳过两条源 op 走这里);
+    * applied/conflict → ValueError("op_not_applicable");
+    * 批次非 open/applying → ValueError("batch_not_active")(防御性,与
+      apply_op 对称;正常不变量下 completed/rolled_back 批次无 pending op);
+    * 跳过也是决策:无 pending 剩余时同样收敛 completed + 推戳。
+    """
+    op = (await db.execute(
+        select(AdaptationOp).where(AdaptationOp.id == op_id)
+    )).scalar_one_or_none()
+    if op is None:
+        raise KeyError(f"op_not_found: {op_id}")
+    if op.status == "skipped":
+        return _op_out(op)
+    if op.status in ("applied", "conflict"):
+        raise ValueError(f"op_not_applicable: op {op_id} is {op.status}")
+    batch = await _get_batch(db, op.batch_id)
+    if batch.status not in ("open", "applying"):
+        raise ValueError(f"batch_not_active: {batch.status}")
+
+    op.status = "skipped"
+    op.note = "skipped by operator"
+    await _maybe_complete(db, batch)
+    await db.commit()
+    return _op_out(op)
+
+
+async def update_op(db: AsyncSession, op_id: int, payload: dict) -> dict:
+    """仅 pending 可整包替换 payload(剥 "op" 键)—— mapValue 骨架补值/参数修正。"""
+    op = (await db.execute(
+        select(AdaptationOp).where(AdaptationOp.id == op_id)
+    )).scalar_one_or_none()
+    if op is None:
+        raise KeyError(f"op_not_found: {op_id}")
+    if op.status != "pending":
+        raise ValueError(f"op_not_applicable: op {op_id} is {op.status}")
+
+    op.payload = {k: v for k, v in payload.items() if k != "op"}
+    await db.commit()
+    return _op_out(op)
+
+
 async def _apply_scenario_op(
     db: AsyncSession, op: AdaptationOp, batch: AdaptationBatch, payload: dict
 ) -> None:
