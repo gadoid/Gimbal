@@ -2,7 +2,8 @@
  * api/adaptations.ts —— 适配中心 API client(P5)。
  *
  * 契约照后端 app/schemas/adaptations.py(camelCase 显式 alias);
- * 错误形状为 http.ts 归一后的 ApiError { status, code, msg }。
+ * 错误形状为 http.ts 归一后的 ApiError { status, code }:文案在 Error 继承的
+ * .message 上(运行时不赋 .msg)。
  */
 import http, { ApiError } from '@/api/http'
 
@@ -104,7 +105,7 @@ export interface MergeSeed {
   to: string
 }
 
-/** ApiError { status, code, msg } → 展示文案;plate 502 等场景的兜底。 */
+/** ApiError → 展示文案:文案在 Error 继承的 .message(运行时不赋 .msg);plate 502 等场景的兜底。 */
 export function errMsg(e: unknown, fallback: string): string {
   if (e instanceof ApiError) return e.message || fallback
   const msg = (e as { msg?: string } | null)?.msg
