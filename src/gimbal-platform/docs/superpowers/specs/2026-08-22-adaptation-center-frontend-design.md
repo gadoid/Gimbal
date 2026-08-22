@@ -48,8 +48,8 @@
 ```
 src/api/adaptations.ts               typed 客户端(契约照 §7 与后端 schemas camelCase)
 src/stores/adaptations.ts            pinia:pendingCount + diffReport 缓存 + refresh()
-src/pages/AdaptationCenter.vue       总览页
-src/pages/AdaptationBatchDetail.vue  工作台
+src/views/AdaptationCenter.vue       总览页(视图沿既有 src/views/ 目录,非 pages)
+src/views/AdaptationBatchDetail.vue  工作台
 src/components/adaptations/
   ImpactDrawer.vue                   影响清单抽屉(按字段分组,直填/模板/数据集列标注)
   OpPreview.vue                      单条 op 预览(§6.2)
