@@ -135,6 +135,8 @@ describe('TopNav', () => {
 
     // member:不发 diff,手工置数也不显示徽章(v-if isAdmin)
     setActivePinia(createPinia())
+    // 同一 it 内 admin 半场已调过一次;清计数后断言 member 挂载零调用
+    vi.mocked(adaptationsApi.catalogDiff).mockClear()
     const auth2 = useAuthStore()
     auth2.accessToken = 'tok'
     auth2.currentUser = { id: 2, username: 'peon', is_admin: false } as never
@@ -142,6 +144,7 @@ describe('TopNav', () => {
     w = mount(TopNav, { global: { plugins: [router, ElementPlus] } })
     await flushPromises()
     expect(w.find('.nav-badge').exists()).toBe(false)
+    expect(adaptationsApi.catalogDiff).not.toHaveBeenCalled()
     w.unmount()
   })
 })
