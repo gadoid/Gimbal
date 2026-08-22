@@ -23,8 +23,10 @@ from ..schemas.adaptations import (
     OpCreateIn,
     OpOut,
     RollbackReport,
+    UnindexedStepOut,
 )
 from ..services import adaptation_service
+from ..services.endpoint_ref_index import unindexed_steps as collect_unindexed
 from ..services.plate_client import PlateUnavailableError
 from ._error_mapping import key_error_404, value_error_http
 
@@ -60,6 +62,19 @@ async def impact(
     """endpoint(可选 field)→ 受影响清单(直填/模板、数据集列标注)。"""
     items = await adaptation_service.impact(db, endpointId, field or None)
     return [ImpactItem.model_validate(i) for i in items]
+
+
+@router.get("/unindexed-steps", response_model=list[UnindexedStepOut])
+async def unindexed_steps(user: AdminUser, db: DbSession) -> list[UnindexedStepOut]:
+    """C10:缺 endpoint_id 的步骤清单(只读警示,不产生任何写)。"""
+    return [
+        UnindexedStepOut.model_validate({
+            "scenarioId": i["scenario_id"],
+            "stepIndex": i["step_index"],
+            "reason": i["reason"],
+        })
+        for i in await collect_unindexed(db)
+    ]
 
 
 @router.post("/batches", response_model=BatchDetail, status_code=201)

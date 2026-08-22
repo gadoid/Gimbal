@@ -222,3 +222,38 @@ async def test_batch_routes_admin_only(client, plate):
     ]:
         r = await client.request(method, url, headers=member)
         assert r.status_code == 403, (method, url, r.status_code)
+
+
+# ─── unindexed-steps(P5 Task 1)──────────────────────────────────
+UNBOUND_STEPS = [{
+    "api": {"view_hints": {}, "headers": {}, "query": {}},
+    "request": {"body": {"x": "1"}},
+}]
+
+
+async def _seed_unindexed_scenario(sid: str = "sc-unbound"):
+    async with await _session() as s:
+        await scenario_store.create(
+            s,
+            ScenarioDraft.model_validate(
+                make_draft(sid, steps=UNBOUND_STEPS, vars_map={})),
+            owner="alice", owner_id=1,
+        )
+
+
+async def test_unindexed_steps_lists_gap(client, plate):
+    admin = await register_and_login(client, "boss", "bosspass123")
+    await _api_seed_scenario()          # sc-api:步骤已挂 endpoint_id → 不在清单
+    await _seed_unindexed_scenario()    # sc-unbound:缺 endpoint_id → 在清单
+    r = await client.get("/api/adaptations/unindexed-steps", headers=admin)
+    assert r.status_code == 200
+    assert r.json() == [{"scenarioId": "sc-unbound", "stepIndex": 0,
+                         "reason": "no_endpoint_id"}]
+
+
+async def test_unindexed_steps_admin_only(client, plate):
+    await register_and_login(client, "boss", "bosspass123")   # uid 1 admin
+    member = await register_and_login(client, "peon", "peonpass123")
+    denied = await client.get("/api/adaptations/unindexed-steps",
+                              headers=member)
+    assert denied.status_code == 403

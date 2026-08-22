@@ -118,3 +118,13 @@ class RollbackReport(BaseModel):
     status: str
     restored: list[RestoredEntity] = Field(default_factory=list)
     conflicts: list[RollbackConflictItem] = Field(default_factory=list)
+
+
+class UnindexedStepOut(BaseModel):
+    """C10 未索引步骤(缺 endpoint_id)—— 适配保护缺口警示条数据。"""
+
+    model_config = _CAMEL
+
+    scenario_id: str = Field(alias="scenarioId")
+    step_index: int = Field(alias="stepIndex")
+    reason: str
