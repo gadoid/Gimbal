@@ -76,6 +76,8 @@ describe('AdaptationCenter', () => {
     expect(anomaly.text()).toContain('fin.order.cancel')
     expect(anomaly.find('button').exists()).toBe(false)   // C12:异常卡无开批次
     expect(w.text()).toContain('bt-1')
+    // 详情链接(admin-only 入口)对 admin 渲染
+    expect(w.find('a[href="/adaptations/batches/bt-1"]').exists()).toBe(true)
     w.unmount()
   })
 
@@ -113,6 +115,9 @@ describe('AdaptationCenter', () => {
     expect(w.find('.unindexed-alert').exists()).toBe(false)
     expect(w.findAll('.card').length).toBe(0)
     expect(w.text()).toContain('仅显示触碰你场景的批次')
+    // 详情列不渲染:工作台为 admin-only,member 链接只会 403(死链)
+    expect(w.find('a[href="/adaptations/batches/bt-1"]').exists()).toBe(false)
+    expect(w.text()).not.toContain('详情')
     w.unmount()
   })
 

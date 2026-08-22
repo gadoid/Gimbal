@@ -1,6 +1,7 @@
-<!-- AdaptationBatchDetail —— 批次工作台(spec §6):
+<!-- AdaptationBatchDetail —— 批次工作台(spec §6,admin-only):
      头部(版本/状态/回滚)→ ops 列表(预览 + 状态驱动操作组 + 合并勾选)
-     → 构造对话框 → 快照折叠。member 全只读。 -->
+     → 构造对话框 → 快照折叠。member 直入 → 403「仅管理员」占位(§8);
+     页内 isAdmin 只读分支保留作双保险。 -->
 <template>
   <section v-if="detail" class="batch-detail">
     <header class="page-header">
@@ -131,17 +132,24 @@
       </ul>
     </el-dialog>
   </section>
+  <el-empty
+    v-else-if="adminOnly"
+    description="仅管理员:批次工作台为管理员专用"
+  >
+    <router-link to="/adaptations" class="link">返回适配中心</router-link>
+  </el-empty>
   <el-empty v-else-if="loaded" description="批次不存在或已清理">
     <router-link to="/adaptations" class="link">返回适配中心</router-link>
   </el-empty>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as api from '@/api/adaptations'
 import type { OpOut, RollbackReport } from '@/api/adaptations'
+import { ApiError } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import OpPreview from '@/components/adaptations/OpPreview.vue'
 import OpConstructDialog from '@/components/adaptations/OpConstructDialog.vue'
@@ -152,9 +160,13 @@ const route = useRoute()
 
 const detail = ref<api.BatchDetail | null>(null)
 const loaded = ref(false)
+const adminOnly = ref(false)
 const selectedOps = ref<OpOut[]>([])
 const constructOpen = ref(false)
 const activeSeed = ref<api.MergeSeed | null>(null)
+// F2:onCreated 是否已消费合并种子 —— 关闭对话框时的清理据此避让,
+// 防止清掉正在被 onCreated 串联 skip 消费的 seed/勾选。
+let seedConsumed = false
 const editOpen = ref(false)
 const editJson = ref('')
 const editingOp = ref<OpOut | null>(null)
@@ -183,11 +195,19 @@ function statusTagType(s: string): 'success' | 'danger' | 'info' | 'warning' {
   return 'warning'
 }
 
+// F1:member 直入本页 → GET /batches/{id} 为 admin-only,403 detail 含
+// admin_only(http.ts 归一后 status=403)→ 渲染 §8「仅管理员」占位而非误报 404。
+function isAdminOnly(e: unknown): boolean {
+  return e instanceof ApiError
+    && (e.status === 403 || e.message.includes('admin_only'))
+}
+
 async function reload(): Promise<void> {
   try {
     detail.value = await api.getBatch(String(route.params.batchId))
   } catch (e) {
-    ElMessage.error(api.errMsg(e, '批次加载失败'))
+    if (isAdminOnly(e)) adminOnly.value = true
+    else ElMessage.error(api.errMsg(e, '批次加载失败'))
   } finally {
     loaded.value = true
   }
@@ -240,17 +260,40 @@ function startMerge(): void {
   constructOpen.value = true
 }
 
-async function onCreated(op: OpOut): Promise<void> {
-  // 合并流:构造成功后跳过两条源 op(前端串联,§6.3)
-  if (activeSeed.value) {
-    for (const src of selectedOps.value) {
-      await api.skipOp(src.id)
-    }
-    selectedOps.value = []
+// F2:构造对话框关闭且并非「创建成功」收尾 → 合并被取消,清种子与勾选,
+// 否则下一次普通构造仍被 mergeSeed 锁类型/预填,并静默 skip 两条源 op。
+// seedConsumed 在 onCreated 入口同步置位(v-model 关闭 emit 发生在其后,
+// watch 默认 pre-flush 异步执行),清理不会抢跑创建流。
+watch(constructOpen, (open) => {
+  if (open) return
+  if (!seedConsumed) {
     activeSeed.value = null
+    selectedOps.value = []
   }
-  void op
-  await reload()
+  seedConsumed = false
+})
+
+async function onCreated(op: OpOut): Promise<void> {
+  seedConsumed = true
+  const seed = activeSeed.value
+  try {
+    // 合并流:构造成功后跳过两条源 op(前端串联,§6.3)
+    if (seed) {
+      for (const src of selectedOps.value) {
+        await api.skipOp(src.id)
+      }
+    }
+  } catch (e) {
+    // F3:skip 串联失败 → 报错兜底,下方 finally 重载以真实状态示人
+    ElMessage.error(api.errMsg(e, '跳过原草案失败'))
+  } finally {
+    if (seed) {
+      selectedOps.value = []
+      activeSeed.value = null
+    }
+    void op
+    await reload()
+  }
 }
 
 async function onRollback(): Promise<void> {

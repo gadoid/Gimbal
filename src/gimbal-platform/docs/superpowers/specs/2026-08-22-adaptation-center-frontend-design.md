@@ -8,7 +8,10 @@
 `../plans/2026-08-22-adaptation-center-frontend.md`;errata:§4 首发误写
 src/pages/,视图实际为 src/views/,已于当日修正;§5.2 待适配卡片的
 「变更徽标(字段增/删/值域)」随实现裁剪 —— CatalogDiffReport 仅含
-endpoint 级 pending,无字段数据,字段级信息由影响抽屉承担)
+endpoint 级 pending,无字段数据,字段级信息由影响抽屉承担;终审追记:
+批次工作台为 admin-only(member 不可达 —— §3/§6.2/§10.2 的 member
+只读工作台形态裁撤,详情链接仅 admin 渲染,member 直入得 403「仅管理员」
+占位;owner 知情权止于列表 scope=mine,与上位 spec C13 一致))
 **前置**:P1-P4 已完成(后端 185 tests 绿;`routers/adaptations.py` 八端点 admin-only)
 
 ## 1. 目标与范围
@@ -136,8 +139,8 @@ member:全部只读(仅预览 + 状态)。
 |---|---|---|---|
 | `GET /api/adaptations/unindexed-steps` | admin | 包 `endpoint_ref_index.unindexed_steps()`;响应 `[{scenarioId, stepIndex, reason}]`(camelCase,沿 `_CAMEL` 模式) | — |
 | `GET /api/adaptations/batches?scope=mine` | **放宽**:普通用户可调 | `scope=mine` → 批次集合 = ops/snapshots 涉及的场景中存在 `owner_id == 当前用户` 的批次(去重,新→旧);无 scope 或 `scope=all` → 仍 admin-only(member → 403 admin_only) | 403 admin_only |
-| `POST /api/adaptations/ops/{id}/skip` | admin | pending → status="skipped", note="skipped by operator";幂等(skipped 再调原样返回) | 404 op_not_found;400 op_not_applicable(applied/conflict 不可跳) |
-| `PATCH /api/adaptations/ops/{id}` | admin | body = payload 局部更新;仅 pending 可改(否则 400 op_not_applicable);合并后整包替换 payload(仍剥 "op" 键) | 404;400 |
+| `POST /api/adaptations/ops/{id}/skip` | admin | pending → status="skipped", note="skipped by operator";幂等(skipped 再调原样返回) | 404 op_not_found;409 op_not_applicable(applied/conflict 不可跳) |
+| `PATCH /api/adaptations/ops/{id}` | admin | body = payload 整包替换(仍剥 "op" 键);仅 pending 可改(否则 409 op_not_applicable) | 404;409 |
 
 owner 过滤实现注记:`owner_id` 是归属唯一权威(`ComposerScenario.owner_id`,int user.id);
 `owner` 字符串列仅展示快照,过滤不得使用。批次的"涉及场景"取

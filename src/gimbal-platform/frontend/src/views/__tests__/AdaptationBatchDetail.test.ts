@@ -1,9 +1,9 @@
 /**
- * AdaptationBatchDetail —— 批次工作台(§6):
+ * AdaptationBatchDetail —— 批次工作台(§6,admin-only):
  *   - ops 按状态渲染(pending 有操作组,applied/conflict 无);
  *   - 应用 → applyOp + 重载;
- *   - member 全只读(无任何操作按钮);
- *   - 合并:selection → 种子 → 构造成功后 skip 两条源 op;
+ *   - member 直入 → getBatch 403 admin_only → 「仅管理员」占位(§8);
+ *   - 合并:selection → 种子 → 构造成功后 skip 两条源 op;取消 → 清种子;
  *   - 回滚:确认 → rollbackBatch → restored/conflicts 面板。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -15,6 +15,7 @@ import AdaptationBatchDetail from '@/views/AdaptationBatchDetail.vue'
 import OpConstructDialog from '@/components/adaptations/OpConstructDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import * as api from '@/api/adaptations'
+import { ApiError } from '@/api/http'
 import * as scenarioApi from '@/api/scenario-composer'
 
 const scenario = {
@@ -113,15 +114,18 @@ describe('AdaptationBatchDetail', () => {
     w.unmount()
   })
 
-  it('member:全部只读(无操作按钮/构造/合并/回滚)', async () => {
+  it('member:getBatch 403 admin_only → 「仅管理员」占位(工作台不可达)', async () => {
     login(false)
+    // 真实 member 路径:GET /batches/{id} 为 admin-only → 403 admin_only
+    // (后端 detail 为字符串,http.ts 归一为 status=403,code=0)
+    vi.mocked(api.getBatch).mockRejectedValue(
+      new ApiError(403, 0, 'admin_only: adaptation routes require an administrator'))
     const w = await mountPage()
 
-    expect(w.find('[data-action="rollback"]').exists()).toBe(false)
-    expect(w.find('[data-action="construct"]').exists()).toBe(false)
-    expect(w.find('[data-action="merge"]').exists()).toBe(false)
-    expect(w.findAll('.op-action').length).toBe(0)
-    expect(w.text()).toContain('bt-1')     // 内容本身可见(知情)
+    expect(w.text()).toContain('仅管理员')
+    expect(w.find('.op-row').exists()).toBe(false)     // 工作台不渲染
+    expect(w.text()).not.toContain('批次不存在或已清理')  // 非 404 空态
+    expect(w.text()).not.toContain('fin.order.add')
     w.unmount()
   })
 

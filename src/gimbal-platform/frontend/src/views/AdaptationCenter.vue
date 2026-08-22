@@ -1,6 +1,7 @@
 <!-- AdaptationCenter —— P5 适配中心总览(spec §3/§5)。
      admin:未索引警示 + 待适配卡片(C12 异常卡不可开批次)+ 全量批次表;
-     member:自动只读 owner 视图(仅批次表,scope=mine)。 -->
+     member:自动只读 owner 视图(仅批次表,scope=mine,无详情列 ——
+     批次工作台为 admin-only,member 直入得 403)。 -->
 <template>
   <section class="adaptation-center">
     <header class="page-header">
@@ -89,7 +90,9 @@
         </template>
       </el-table-column>
       <el-table-column prop="createdAt" label="创建时间" min-width="170" />
-      <el-table-column label="操作" width="80">
+      <!-- 详情入口仅 admin:GET /batches/{id} 为 admin-only,
+           member 点击只会得 403(死链),故整列不渲染。 -->
+      <el-table-column v-if="auth.isAdmin" label="操作" width="80">
         <template #default="{ row }">
           <router-link
             :to="`/adaptations/batches/${row.batchId}`"
