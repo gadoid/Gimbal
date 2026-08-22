@@ -17,7 +17,10 @@
         :to="entry.path"
         class="nav-entry"
         :class="{ active: isActive(entry.path) }"
-      ><el-icon style="margin-right:5px"><component :is="entry.icon" /></el-icon>{{ entry.label }}</router-link>
+      ><el-icon style="margin-right:5px"><component :is="entry.icon" /></el-icon>{{ entry.label }}<span
+          v-if="entry.path === '/adaptations' && auth.isAdmin && adaptations.pendingCount > 0"
+          class="nav-badge"
+        >{{ adaptations.pendingCount }}</span></router-link>
     </nav>
 
     <!-- Right: user identity + logout -->
@@ -39,19 +42,32 @@
 
 <script setup lang="ts">
 import type { Component } from 'vue'
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   Collection,
+  Connection,
   DataAnalysis,
   Lock,
   Setting,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+import { useAdaptationsStore } from '@/stores/adaptations'
 
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
+
+const adaptations = useAdaptationsStore()
+
+// D3:admin 登录/刷新后静默拉一次 diff(幂等,冷启动落基线属预期副作用)
+watch(
+  () => auth.currentUser?.is_admin,
+  (isAdmin) => {
+    if (isAdmin) void adaptations.ensureBadgeLoaded()
+  },
+  { immediate: true },
+)
 
 interface NavEntry {
   path: string
@@ -65,6 +81,7 @@ const allEntries: NavEntry[] = [
   // P3:我的工作台/公共用例库已并入场景库(我的/公共/收藏三 tab)
   { path: '/scenarios', label: '场景库', icon: Collection },
   { path: '/executions', label: '执行历史', icon: DataAnalysis },
+  { path: '/adaptations', label: '适配中心', icon: Connection },
   { path: '/auths', label: '认证管理', icon: Lock },
   { path: '/admin/users', label: '用户管理', icon: Setting, adminOnly: true },
 ]
@@ -197,5 +214,18 @@ async function onLogout() {
   height: 28px;
   padding: 0 12px;
   font-size: 12px;
+}
+
+.nav-badge {
+  margin-left: 6px;
+  padding: 0 6px;
+  min-width: 18px;
+  height: 18px;
+  line-height: 18px;
+  border-radius: 9px;
+  background: #f56c6c;
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
 }
 </style>

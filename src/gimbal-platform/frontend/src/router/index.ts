@@ -62,6 +62,17 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    // P5 适配中心 —— admin 全量视图;member 自动只读 owner 视图(页内 scope=mine)
+    path: '/adaptations',
+    component: () => import('@/views/AdaptationCenter.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/adaptations/batches/:batchId',
+    component: () => import('@/views/AdaptationBatchDetail.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/executions',
     component: () => import('@/views/ExecutionsList.vue'),
     meta: { requiresAuth: true },
