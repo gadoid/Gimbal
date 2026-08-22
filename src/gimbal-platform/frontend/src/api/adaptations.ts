@@ -4,7 +4,7 @@
  * 契约照后端 app/schemas/adaptations.py(camelCase 显式 alias);
  * 错误形状为 http.ts 归一后的 ApiError { status, code, msg }。
  */
-import http from '@/api/http'
+import http, { ApiError } from '@/api/http'
 
 export interface PendingChange {
   endpointId: string
@@ -106,6 +106,7 @@ export interface MergeSeed {
 
 /** ApiError { status, code, msg } → 展示文案;plate 502 等场景的兜底。 */
 export function errMsg(e: unknown, fallback: string): string {
+  if (e instanceof ApiError) return e.message || fallback
   const msg = (e as { msg?: string } | null)?.msg
   return msg || fallback
 }
