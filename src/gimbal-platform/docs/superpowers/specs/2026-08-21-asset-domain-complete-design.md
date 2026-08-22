@@ -350,6 +350,18 @@ P2 与 P1 无依赖(调色板只需 payload 的 vars,不需索引),可并行。�
 - **diff 端点为 `POST`**(冷启动基线是写副作用,POST 如实承载);影响查询为只读 `GET`;
 - plate 侧零改动:轻量列表 `GET /api/endpoint` 自带 version/updated_at,full spec 走既有 `GET /api/endpoint/{id}/full`。
 
+### P5:前端适配闭环(2026-08-22 完成)
+
+- 前端:`/adaptations` 总览(徽章/未索引警示/待适配卡片/批次表,member
+  自动 `scope=mine` 只读)+ `/adaptations/batches/:id` 工作台(预览/应用/
+  跳过/编辑补值/8 类构造/remove+add 合并 renameField/整批回滚/快照)。
+- 后端增量:`GET /adaptations/unindexed-steps`(admin);
+  `GET /adaptations/batches?scope=mine`(member owner 知情视图,
+  owner_id 唯一权威过滤);`POST /adaptations/ops/{id}/skip`(幂等,末条
+  跳过同样收敛 completed+推戳);`PATCH /adaptations/ops/{id}`(仅 pending
+  整包替换 payload)。
+- 测试:后端 185→195;前端 113→140。
+
 ## 8. 范围外(明确不做)
 
 - 执行域重构(runs/明细/队列/JSONL —— 另案;D12 仅一处校验放宽);

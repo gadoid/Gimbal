@@ -71,7 +71,7 @@ frontend/src/views/__tests__/AdaptationBatchDetail.test.ts 新建(5 测试)
 - Consumes: `app/services/endpoint_ref_index.py` 的 `async def unindexed_steps(db) -> list[dict]`,返回 snake_case `[{scenario_id, step_index, reason}]`(reason 目前恒为 `"no_endpoint_id"`)。
 - Produces: 路由 `GET /adaptations/unindexed-steps`,AdminUser,响应 `list[UnindexedStepOut]`(camelCase)。前端 Task 4 的 `unindexedSteps()` 依赖此形状。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `backend/tests/test_adaptations_api.py` 末尾追加(`register_and_login`/`_api_seed_scenario`/`_session` 已在文件头部;首个注册用户 uid 1 自动 admin):
 
@@ -111,12 +111,12 @@ async def test_unindexed_steps_admin_only(client, plate):
     assert denied.status_code == 403
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `/d/Gimbal/Scripts/python.exe -m pytest tests/test_adaptations_api.py -q -k unindexed`(backend 目录下)
 Expected: 2 failed / 2 errors(404 Not Found,路由不存在)
 
-- [ ] **Step 3: schema + 路由实现**
+- [x] **Step 3: schema + 路由实现**
 
 `backend/app/schemas/adaptations.py` 末尾追加:
 
@@ -153,12 +153,12 @@ async def unindexed_steps(user: AdminUser, db: DbSession) -> list[UnindexedStepO
     ]
 ```
 
-- [ ] **Step 4: 跑测试确认通过 + 全量回归**
+- [x] **Step 4: 跑测试确认通过 + 全量回归**
 
 Run: `/d/Gimbal/Scripts/python.exe -m pytest tests/test_adaptations_api.py -q -k unindexed` → 2 passed
 Run: `/d/Gimbal/Scripts/python.exe -m pytest tests/ -q` → 187 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/schemas/adaptations.py backend/app/routers/adaptations.py backend/tests/test_adaptations_api.py
@@ -180,7 +180,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: 既有 `_get_batch`/`_batch_detail`、模型 `ComposerScenario.owner_id`(归属唯一权威;`owner` 字符串列仅展示,**过滤不得使用**)。
 - Produces: `async def list_batches_for_owner(db: AsyncSession, owner_id: int) -> list[dict]`(dict 形状同 `_batch_detail`,新→旧);路由 `scope=mine` 对普通用户开放,无 scope/admin 全量不变(member 无 scope → 403 `admin_only`)。前端 Task 4 的 `listBatches('mine')` 依赖。
 
-- [ ] **Step 1: 修改 seed helper + 写失败测试**
+- [x] **Step 1: 修改 seed helper + 写失败测试**
 
 `_api_seed_scenario` 改签名(默认值保持既有 4 个调用不变):
 
@@ -254,12 +254,12 @@ async def test_batches_member_without_scope_403_admin_full(client, plate):
     assert [b["batchId"] for b in full.json()] == [detail["batchId"]]
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `/d/Gimbal/Scripts/python.exe -m pytest tests/test_adaptations_api.py -q -k "scope_mine or without_scope"`
 Expected: 3 failed(member 请求得到 403,`scope_mine_lists_owned` 断言失败;`without_scope` 的 denied 断言失败)
 
-- [ ] **Step 3: service + 路由实现**
+- [x] **Step 3: service + 路由实现**
 
 `adaptation_service.py` 在 `list_batches` 之后追加:
 
@@ -321,12 +321,12 @@ async def list_batches(
     return [BatchOut.model_validate(b) for b in rows]
 ```
 
-- [ ] **Step 4: 跑测试确认通过 + 全量回归**
+- [x] **Step 4: 跑测试确认通过 + 全量回归**
 
 Run: `/d/Gimbal/Scripts/python.exe -m pytest tests/test_adaptations_api.py -q` → 既有全过 + 5 新过
 Run: `/d/Gimbal/Scripts/python.exe -m pytest tests/ -q` → 190 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/services/adaptation_service.py backend/app/routers/adaptations.py backend/tests/test_adaptations_api.py
@@ -349,7 +349,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: `apply_op` 的门禁模式(applied 幂等返回 / conflict+skipped 抛 `op_not_applicable` / batch 非 open+applying 抛 `batch_not_active`)、`_maybe_complete`(末条收敛 completed + 推戳)、`_op_out`。
 - Produces: `skip_op(db, op_id) -> dict`(pending→skipped,幂等,末条 skip 同样收敛 completed+推戳)、`update_op(db, op_id, payload) -> dict`(仅 pending,整包替换,剥 "op" 键);路由错误码 `{"op_not_applicable": 409, "batch_not_active": 409}`。前端 Task 4 的 `skipOp`/`patchOp`、Task 10 合并交互、Task 11 编辑补值依赖。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```python
 # ─── skip / patch op(P5 Task 3)─────────────────────────────────
@@ -459,12 +459,12 @@ async def test_patch_non_pending_409(client, plate):
 
 (`CatalogVersion` 已在该测试文件 import;`select` **没有** —— 文件头部追加 `from sqlalchemy import select`。`plate` fixture 参数沿既有测试。)
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `/d/Gimbal/Scripts/python.exe -m pytest tests/test_adaptations_api.py -q -k "skip or patch"`
 Expected: 5 failed(404 Not Found,路由不存在)
 
-- [ ] **Step 3: schema + service + 路由实现**
+- [x] **Step 3: schema + service + 路由实现**
 
 `schemas/adaptations.py` 末尾追加(确认文件已 `from typing import Any`,缺则补):
 
@@ -555,12 +555,12 @@ async def patch_op(
     return OpOut.model_validate(op)
 ```
 
-- [ ] **Step 4: 跑测试确认通过 + 全量回归**
+- [x] **Step 4: 跑测试确认通过 + 全量回归**
 
 Run: `/d/Gimbal/Scripts/python.exe -m pytest tests/test_adaptations_api.py -q` → 全过(含 10 个新测试)
 Run: `/d/Gimbal/Scripts/python.exe -m pytest tests/ -q` → **195 passed**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/schemas/adaptations.py backend/app/services/adaptation_service.py backend/app/routers/adaptations.py backend/tests/test_adaptations_api.py
@@ -581,7 +581,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Produces(后续所有前端任务的唯一后端入口):类型 `PendingChange/CatalogAnomaly/CatalogDiffReport/ImpactItem/OpOut/SnapshotRef/BatchOut/BatchDetail/RestoredEntity/RollbackConflictItem/RollbackReport/UnindexedStep/OpCreateIn/MergeSeed`;函数 `catalogDiff/impact/unindexedSteps/listBatches/getBatch/openBatch/createOp/applyOp/skipOp/patchOp/rollbackBatch`;helper `errMsg(e, fallback)`。
 - 本任务不写测试(仓库惯例:api/*.ts 为薄透传层,由 store/视图测试经 `vi.spyOn` 覆盖;`src/api/` 下无直接测试先例)。
 
-- [ ] **Step 1: 写客户端**
+- [x] **Step 1: 写客户端**
 
 `frontend/src/api/adaptations.ts` 全文:
 
@@ -767,12 +767,12 @@ export async function rollbackBatch(batchId: string): Promise<RollbackReport> {
 }
 ```
 
-- [ ] **Step 2: 类型检查通过**
+- [x] **Step 2: 类型检查通过**
 
 Run(在 `frontend` 下):`npm run build`
 Expected: 无类型错误退出 0(vite build 含 vue-tsc/类型检查,以仓库实际脚本为准;若 build 不含类型检查,跑 `npx vue-tsc --noEmit`)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/api/adaptations.ts
@@ -793,7 +793,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: Task 4 的 `catalogDiff`/`errMsg`。
 - Produces: `useAdaptationsStore()` → `{ pendingCount: Ref<number>, diffReport: Ref<CatalogDiffReport | null>, lastError: Ref<string>, refreshing: Ref<boolean>, refreshDiff(force?: boolean): Promise<void>, ensureBadgeLoaded(): Promise<void> }`。语义(spec D3):`ensureBadgeLoaded` 幂等(已有缓存不再发请求);`refreshDiff(true)` 强制重拉(适配中心打开时用);并发调用合并为一次 in-flight;失败保留旧数据只记 `lastError`。Task 6 TopNav、Task 8 总览页依赖。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `frontend/src/stores/__tests__/adaptations.test.ts` 全文:
 
@@ -873,12 +873,12 @@ describe('adaptations store', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test -- --run src/stores/__tests__/adaptations.test.ts`
 Expected: FAIL(模块 `@/stores/adaptations` 不存在)
 
-- [ ] **Step 3: 写 store**
+- [x] **Step 3: 写 store**
 
 `frontend/src/stores/adaptations.ts` 全文:
 
@@ -933,11 +933,11 @@ export const useAdaptationsStore = defineStore('adaptations', () => {
 })
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test -- --run src/stores/__tests__/adaptations.test.ts` → 4 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/stores/adaptations.ts frontend/src/stores/__tests__/adaptations.test.ts
@@ -959,7 +959,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: Task 5 的 `useAdaptationsStore`(ensureBadgeLoaded/pendingCount);Task 4 无直接依赖。
 - Produces: 路由 `/adaptations`(总览)与 `/adaptations/batches/:batchId`(工作台),均 `meta: { requiresAuth: true }`;TopNav 全员可见入口「适配中心」+ admin 徽章 `.nav-badge`(数字 = pendingCount>0 时渲染)。Task 8/11 的视图经路由懒加载挂载。
 
-- [ ] **Step 1: 更新既有测试 + 新增徽章测试(先红)**
+- [x] **Step 1: 更新既有测试 + 新增徽章测试(先红)**
 
 `TopNav.test.ts` 修改点:
 
@@ -1028,12 +1028,12 @@ import { useAdaptationsStore } from '@/stores/adaptations'
   })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test -- --run src/components/__tests__/TopNav.test.ts`
 Expected: FAIL(计数 4≠5;`.nav-badge` 不存在;新路由缺失)
 
-- [ ] **Step 3: 实现路由与 TopNav**
+- [x] **Step 3: 实现路由与 TopNav**
 
 `frontend/src/router/index.ts` 在 `/auths` 路由对象之后追加(注释风格沿文件既有中文注释):
 
@@ -1106,12 +1106,12 @@ watch(
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过 + 全量**
+- [x] **Step 4: 跑测试确认通过 + 全量**
 
 Run: `npm run test -- --run src/components/__tests__/TopNav.test.ts` → 5 passed(4 改 1 增)
 Run: `npm run test -- --run` → 118 passed(113 + 4 store + 1 新 TopNav)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/router/index.ts frontend/src/components/TopNav.vue frontend/src/components/__tests__/TopNav.test.ts
@@ -1136,7 +1136,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
   - `UnindexedAlert` props `{ steps: UnindexedStep[] }`(纯展示,零 emit);清单项链接 `/scenarios/:scenarioId/detail`(路由已存在)。
   - `ImpactDrawer` props `{ modelValue: boolean; endpointId: string; fromVersion?: string; toVersion?: string }`,emits `update:modelValue` 与 `openBatch`;抽屉打开(@open)时拉 `impact(endpointId)` 并按 field 分组。Task 8 消费两者。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `__tests__/UnindexedAlert.test.ts` 全文:
 
@@ -1264,12 +1264,12 @@ describe('ImpactDrawer', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test -- --run src/components/adaptations`
 Expected: FAIL(两个组件文件不存在)
 
-- [ ] **Step 3: 写组件**
+- [x] **Step 3: 写组件**
 
 `UnindexedAlert.vue` 全文:
 
@@ -1422,11 +1422,11 @@ async function load(): Promise<void> {
 </style>
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test -- --run src/components/adaptations` → 4 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/adaptations
@@ -1447,7 +1447,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: Task 4 `api.adaptations`(catalogDiff 经 store、unindexedSteps、listBatches、openBatch、errMsg);Task 5 store(`refreshDiff(true)`/`pendingCount`/`lastError`);Task 7 两组件;`useAuthStore().isAdmin`。
 - Produces: 路由视图 `/adaptations`。member 形态:仅批次表(`listBatches('mine')`)+ 表头提示;admin 形态:未索引警示 + 待适配卡片(C12 异常卡**无**开批次入口)+ 批次表全量。抽屉 [开批次] → `openBatch(endpointId)` → `router.push('/adaptations/batches/' + batchId)`。Task 6 路由懒加载本文件。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `frontend/src/views/__tests__/AdaptationCenter.test.ts` 全文:
 
@@ -1623,12 +1623,12 @@ describe('AdaptationCenter', () => {
 
 (以此字面量为准。)
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test -- --run src/views/__tests__/AdaptationCenter.test.ts`
 Expected: FAIL(视图文件不存在,路由懒加载报错)
 
-- [ ] **Step 3: 写视图**
+- [x] **Step 3: 写视图**
 
 `frontend/src/views/AdaptationCenter.vue` 全文:
 
@@ -1844,12 +1844,12 @@ h3 { margin: 22px 0 10px; }
 </style>
 ```
 
-- [ ] **Step 4: 跑测试确认通过 + 全量**
+- [x] **Step 4: 跑测试确认通过 + 全量**
 
 Run: `npm run test -- --run src/views/__tests__/AdaptationCenter.test.ts` → 5 passed
 Run: `npm run test -- --run` → 127 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/views/AdaptationCenter.vue frontend/src/views/__tests__/AdaptationCenter.test.ts
@@ -1870,7 +1870,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: Task 4 的 `OpOut`;`@/api/scenario-composer` 的 `getScenario(id) -> Scenario`(场景 steps 为 plate step dict 透传:`step.request.body` / `step.api.headers` / `step.api.query`)。
 - Produces: `OpPreview` props `{ op: OpOut }`,零 emit;按 opType 渲染三类预览(spec §6.2):STEP_OPS(步骤容器片段)、renameVar(`from→to` + 引用计数)、数据集 op(列名/map 表)。场景按 scenarioId 模块级缓存,每场景只拉一次。Task 11 的 ops 列表每行内嵌本组件。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `__tests__/OpPreview.test.ts` 全文:
 
@@ -1972,12 +1972,12 @@ describe('OpPreview', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test -- --run src/components/adaptations/__tests__/OpPreview.test.ts`
 Expected: FAIL(组件不存在)
 
-- [ ] **Step 3: 写组件**
+- [x] **Step 3: 写组件**
 
 `OpPreview.vue` 全文:
 
@@ -2134,11 +2134,11 @@ onMounted(async () => {
 
 (实现注意:1) renameVar 分支 `${{ 'var' }}` 的写法是为了避免模板把 `${var.xxx}` 当插值——保持渲染结果为 `${var.amount}` 纯文本;2) 上面 `<script setup>` 里 `scenario` 用的是普通变量,`step`/`refCount` 两个 computed 读它会导致依赖收集丢失——**实现时把 `scenario` 声明为 `const scenario = ref<Awaited<ReturnType<typeof getScenario>> | null>(null)`,赋值处写 `scenario.value = ...`,`step`/`refCount`/`onMounted` 全部读 `.value`**;3) `onMounted` 的取场景条件:数据集 op(renameDatasetColumn/mapDatasetValues)不需要场景,直接 return;其余类型(renameVar 引用计数 + STEP_OPS 容器片段)拉场景并写模块级 `scenarioCache`。)
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test -- --run src/components/adaptations/__tests__/OpPreview.test.ts` → 3 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/adaptations/OpPreview.vue frontend/src/components/adaptations/__tests__/OpPreview.test.ts
@@ -2159,7 +2159,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: Task 4 `createOp`/`errMsg`/`OpOut`/`OpCreateIn`/`MergeSeed`;`@/api/scenario-composer` 的 `getScenario`(vars 下拉:`Object.keys(scenario.config?.vars ?? {})` —— config 为 definition 透传,vars 在 `config.vars`;实现时以 `getScenario` 实际返回为准)与 `listDataSets(scenarioId)`(数据集下拉;签名以 `@/api/scenario-composer` 现有导出为准,若名称不同用现名)。场景下拉数据 `GET /scenarios` 的既有 list 函数(同文件,用现名;mock 测试时不触网)。
 - Produces: props `{ modelValue: boolean; batchId: string; mergeSeed?: MergeSeed | null }`,emits `update:modelValue` 与 `created(op: OpOut)`;`defineExpose({ form, submit })` 供测试驱动。mergeSeed 非空 → 类型锁 renameField 并预填 step/from/to。payload 构造规则见 Global Constraints 的 op 契约表。Task 11 的 [构造]/[合并] 按钮挂本组件。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `__tests__/OpConstructDialog.test.ts` 全文(用 `defineExpose` 的 form/submit 驱动,避开 el-select 弹层 DOM 交互):
 
@@ -2293,12 +2293,12 @@ describe('OpConstructDialog', () => {
 
 (实现前先看 `@/api/scenario-composer` 实际导出:`listScenarios`/`listDataSets` 名称或返回形状若与上文不同,组件与测试统一改成实际签名——mock 打在同名函数上即可。下方组件代码同样按实际签名对齐。)
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npm run test -- --run src/components/adaptations/__tests__/OpConstructDialog.test.ts`
 Expected: FAIL(组件不存在)
 
-- [ ] **Step 3: 写组件**
+- [x] **Step 3: 写组件**
 
 `OpConstructDialog.vue` 全文:
 
@@ -2603,11 +2603,11 @@ defineExpose({ form, submit })
 
 (实现注意:1) `listScenarios()`/`listDataSets(sid)` 的返回形状以 `@/api/scenario-composer` 实际类型为准——`list.map((s) => ({ scenarioId: s.meta.scenarioId }))` 与 `d.datasetId` 两处映射按实际字段名对齐;2) watch immediate + `@open` 双入口都幂等(`resetForm` + 空才拉清单),不会重复请求清单。)
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npm run test -- --run src/components/adaptations/__tests__/OpConstructDialog.test.ts` → 3 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/adaptations/OpConstructDialog.vue frontend/src/components/adaptations/__tests__/OpConstructDialog.test.ts
@@ -2630,7 +2630,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: Task 4 全部函数;Task 9 `OpPreview`;Task 10 `OpConstructDialog`(props `modelValue/batchId/mergeSeed`,emits `created`,`defineExpose({form, submit})`);`useAuthStore().isAdmin`;`ElMessageBox.confirm`(回滚二次确认)。
 - Produces: `mergeSeedFrom(selected: OpOut[]): MergeSeed | null`(恰好 2 条 pending、同 step、一 removeField 一 addField → `{step, from: 被删字段, to: 新增字段}`,否则 null);路由视图 `/adaptations/batches/:batchId`(头部 + ops 列表 + 构造/合并/编辑/回滚 + 快照折叠 + member 只读)。
 
-- [ ] **Step 1: 写 mergeSeedFrom 失败测试**
+- [x] **Step 1: 写 mergeSeedFrom 失败测试**
 
 `frontend/src/utils/__tests__/adaptation-merge.test.ts` 全文:
 
@@ -2677,7 +2677,7 @@ describe('mergeSeedFrom', () => {
 })
 ```
 
-- [ ] **Step 2: 写 mergeSeedFrom 使其通过**
+- [x] **Step 2: 写 mergeSeedFrom 使其通过**
 
 `frontend/src/utils/adaptation-merge.ts` 全文:
 
@@ -2711,7 +2711,7 @@ export function mergeSeedFrom(selected: OpOut[]): MergeSeed | null {
 
 Run: `npm run test -- --run src/utils/__tests__/adaptation-merge.test.ts` → 2 passed
 
-- [ ] **Step 3: 写工作台失败测试**
+- [x] **Step 3: 写工作台失败测试**
 
 `frontend/src/views/__tests__/AdaptationBatchDetail.test.ts` 全文:
 
@@ -2892,12 +2892,12 @@ describe('AdaptationBatchDetail', () => {
 })
 ```
 
-- [ ] **Step 4: 跑测试确认失败**
+- [x] **Step 4: 跑测试确认失败**
 
 Run: `npm run test -- --run src/views/__tests__/AdaptationBatchDetail.test.ts`
 Expected: FAIL(视图不存在)
 
-- [ ] **Step 5: 写工作台视图**
+- [x] **Step 5: 写工作台视图**
 
 `frontend/src/views/AdaptationBatchDetail.vue` 全文:
 
@@ -3208,13 +3208,13 @@ onMounted(reload)
 </style>
 ```
 
-- [ ] **Step 6: 跑测试确认通过 + 全量**
+- [x] **Step 6: 跑测试确认通过 + 全量**
 
 Run: `npm run test -- --run src/views/__tests__/AdaptationBatchDetail.test.ts src/utils/__tests__/adaptation-merge.test.ts` → 7 passed
 Run: `npm run test -- --run` → **140 passed**(123 + 2 merge + 5 工作台;含此前任务)
 Run: `npm run build` → 干净退出
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/utils/adaptation-merge.ts frontend/src/utils/__tests__/adaptation-merge.test.ts frontend/src/views/AdaptationBatchDetail.vue frontend/src/views/__tests__/AdaptationBatchDetail.test.ts
@@ -3236,7 +3236,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: Tasks 1-11 全部产出。
 - Produces: 全绿的验证记录与已回写的文档。
 
-- [ ] **Step 1: 全量验证**
+- [x] **Step 1: 全量验证**
 
 ```bash
 # backend(在 src/gimbal-platform/backend)
@@ -3248,7 +3248,7 @@ npm run build                                              # 期望干净退出
 
 任一不符 → 回对应任务修复后重跑,禁止带病收尾。
 
-- [ ] **Step 2: spec 回写**
+- [x] **Step 2: spec 回写**
 
 `2026-08-21-asset-domain-complete-design.md` §7(P5 段落,沿既有 P3/P4 段落格式)追加:
 
@@ -3276,11 +3276,11 @@ src/pages/,视图实际为 src/views/,已于当日修正;§5.2 待适配卡片�
 endpoint 级 pending,无字段数据,字段级信息由影响抽屉承担)
 ```
 
-- [ ] **Step 3: 勾选本计划全部 checkbox**
+- [x] **Step 3: 勾选本计划全部 checkbox**
 
 把本计划文件中所有 `- [ ] **Step` 改为 `- [x] **Step`。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-08-21-asset-domain-complete-design.md docs/superpowers/specs/2026-08-22-adaptation-center-frontend-design.md docs/superpowers/plans/2026-08-22-adaptation-center-frontend.md

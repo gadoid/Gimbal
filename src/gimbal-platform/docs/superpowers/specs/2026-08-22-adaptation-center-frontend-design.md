@@ -4,7 +4,11 @@
 > §9 C10/C12/C13 为权威)。本文档是 P5(前端适配闭环)的实现设计,冲突时以上位 spec 为准。
 
 **日期**:2026-08-22
-**状态**:待用户审阅
+**状态**:已实现(2026-08-22;实施计划见
+`../plans/2026-08-22-adaptation-center-frontend.md`;errata:§4 首发误写
+src/pages/,视图实际为 src/views/,已于当日修正;§5.2 待适配卡片的
+「变更徽标(字段增/删/值域)」随实现裁剪 —— CatalogDiffReport 仅含
+endpoint 级 pending,无字段数据,字段级信息由影响抽屉承担)
 **前置**:P1-P4 已完成(后端 185 tests 绿;`routers/adaptations.py` 八端点 admin-only)
 
 ## 1. 目标与范围
