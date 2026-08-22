@@ -694,6 +694,39 @@ async def list_batches(db: AsyncSession) -> list[dict]:
     return [await _batch_detail(db, b.batch_id) for b in batches]
 
 
+async def list_batches_for_owner(db: AsyncSession, owner_id: int) -> list[dict]:
+    """owner 视图(C13):批次涉及场景中存在本人场景的批次(新→旧)。
+
+    归属唯一权威是 ``ComposerScenario.owner_id``;``owner`` 字符串列仅展示
+    快照,过滤不得使用。涉及场景 = ops.scenario_id ∪ scenario 快照
+    entity_id(快照兜底:批次回滚后 ops 仍在,场景删除时仅剩快照记录)。
+    """
+    owned_ids = set((await db.execute(
+        select(ComposerScenario.scenario_id).where(
+            ComposerScenario.owner_id == owner_id
+        )
+    )).scalars())
+    if not owned_ids:
+        return []
+    hit = set((await db.execute(
+        select(AdaptationOp.batch_id).where(
+            AdaptationOp.scenario_id.in_(owned_ids))
+    )).scalars())
+    hit |= set((await db.execute(
+        select(AdaptationSnapshot.batch_id).where(
+            AdaptationSnapshot.entity_type == "scenario",
+            AdaptationSnapshot.entity_id.in_(owned_ids),
+        )
+    )).scalars())
+    if not hit:
+        return []
+    batches = (await db.execute(
+        select(AdaptationBatch).where(AdaptationBatch.batch_id.in_(hit))
+        .order_by(AdaptationBatch.created_at.desc())
+    )).scalars().all()
+    return [await _batch_detail(db, b.batch_id) for b in batches]
+
+
 async def get_batch_detail(db: AsyncSession, batch_id: str) -> dict:
     return await _batch_detail(db, batch_id)
 

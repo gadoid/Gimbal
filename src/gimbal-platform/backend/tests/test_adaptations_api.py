@@ -42,14 +42,14 @@ async def _session():
     return db_module.SessionLocal()
 
 
-async def _api_seed_scenario(sid: str = "sc-api"):
+async def _api_seed_scenario(sid: str = "sc-api", owner_id: int = 1):
     async with await _session() as s:
         await scenario_store.create(
             s,
             ScenarioDraft.model_validate(
                 make_draft(sid, steps=_steps(), vars_map={"amount": 100})
             ),
-            owner="alice", owner_id=1,
+            owner=f"u{owner_id}", owner_id=owner_id,
         )
 
 
@@ -257,3 +257,58 @@ async def test_unindexed_steps_admin_only(client, plate):
     denied = await client.get("/api/adaptations/unindexed-steps",
                               headers=member)
     assert denied.status_code == 403
+
+
+# ─── batches scope=mine(P5 Task 2,C13 owner 视图)───────────────
+async def _open_batch_ok(client, headers) -> dict:
+    r = await client.post("/api/adaptations/batches",
+                          json={"endpointId": EP}, headers=headers)
+    assert r.status_code == 201
+    return r.json()
+
+
+async def test_batches_scope_mine_lists_owned(client, plate):
+    admin = await register_and_login(client, "boss", "bosspass123")   # uid 1
+    member = await register_and_login(client, "peon", "peonpass123")  # uid 2
+    await _api_seed_scenario("sc-peon", owner_id=2)
+    await _api_seed_stamp()
+    _api_plate_ahead(plate)
+    detail = await _open_batch_ok(client, admin)
+
+    mine = await client.get("/api/adaptations/batches",
+                            params={"scope": "mine"}, headers=member)
+    assert mine.status_code == 200
+    assert [b["batchId"] for b in mine.json()] == [detail["batchId"]]
+    # owner 视图不泄漏场景细节,但批次元数据 + opCounts 可见(知情)
+    assert mine.json()[0]["opCounts"] == {"pending": 3}
+
+
+async def test_batches_scope_mine_excludes_others(client, plate):
+    admin = await register_and_login(client, "boss", "bosspass123")
+    member = await register_and_login(client, "peon", "peonpass123")
+    await _api_seed_scenario("sc-alice", owner_id=1)   # admin 自己的场景
+    await _api_seed_stamp()
+    _api_plate_ahead(plate)
+    await _open_batch_ok(client, admin)
+
+    mine = await client.get("/api/adaptations/batches",
+                            params={"scope": "mine"}, headers=member)
+    assert mine.status_code == 200
+    assert mine.json() == []
+
+
+async def test_batches_member_without_scope_403_admin_full(client, plate):
+    admin = await register_and_login(client, "boss", "bosspass123")
+    member = await register_and_login(client, "peon", "peonpass123")
+    await _api_seed_scenario()
+    await _api_seed_stamp()
+    _api_plate_ahead(plate)
+    detail = await _open_batch_ok(client, admin)
+
+    denied = await client.get("/api/adaptations/batches", headers=member)
+    assert denied.status_code == 403
+    assert "admin_only" in denied.json()["detail"]
+
+    full = await client.get("/api/adaptations/batches", headers=admin)
+    assert full.status_code == 200
+    assert [b["batchId"] for b in full.json()] == [detail["batchId"]]

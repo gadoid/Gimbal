@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
-from ..core.deps import AdminUser
+from ..core.deps import AdminUser, CurrentUser
 from ..schemas.adaptations import (
     BatchDetail,
     BatchOut,
@@ -96,10 +96,22 @@ async def open_batch(
 
 
 @router.get("/batches", response_model=list[BatchOut])
-async def list_batches(user: AdminUser, db: DbSession) -> list[BatchOut]:
-    return [
-        BatchOut.model_validate(b) for b in await adaptation_service.list_batches(db)
-    ]
+async def list_batches(
+    user: CurrentUser, db: DbSession,
+    scope: str | None = Query(default=None),
+) -> list[BatchOut]:
+    """批次列表:admin 全量;member 仅 ``scope=mine``(C13 owner 知情视图)。"""
+    if scope != "mine" and not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="admin_only: members must use ?scope=mine",
+        )
+    rows = (
+        await adaptation_service.list_batches_for_owner(db, user.id)
+        if scope == "mine"
+        else await adaptation_service.list_batches(db)
+    )
+    return [BatchOut.model_validate(b) for b in rows]
 
 
 @router.get("/batches/{batch_id}", response_model=BatchDetail)
