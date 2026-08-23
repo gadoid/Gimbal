@@ -208,7 +208,7 @@ async def test_run_step_to_passes_halt_at(
     plate_mock: PlateMock,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """stepTo=1(0-based 含端点)→ gimbal /run body 带 halt_at=1。"""
+    """stepTo=1(0-based 含端点)→ gimbal launch 透传 --step-to(step_to=1)。"""
     bob = await _member(client, "bob")
     await client.post(
         "/api/scenarios",
@@ -217,16 +217,16 @@ async def test_run_step_to_passes_halt_at(
     )
     await _seed_ds(client, bob)
 
-    from app.services import gimbal_client as gc
+    from app.services import gimbal_launcher as gl
 
     calls: list[dict] = []
 
-    async def _capture(scenario_dict: dict, **kw: object) -> dict:
+    async def _capture(case_path, **kw: object):
         calls.append(kw)
-        return {"exitCode": 0, "total": 1, "passed": 1, "failed": 0,
-                "skipped": 0, "halted": 0, "details": []}
+        return gl.LaunchResult(launch_status="ok", exit_code=0,
+                               total=1, passed=1)
 
-    monkeypatch.setattr(gc, "run", _capture)
+    monkeypatch.setattr(gl, "launch", _capture)
 
     r = await client.post(
         "/api/runs",
@@ -245,7 +245,7 @@ async def test_run_step_to_passes_halt_at(
             break
         await asyncio.sleep(0.05)
     assert len(calls) == 1
-    assert calls[0].get("halt_at") == 1
+    assert calls[0].get("step_to") == 1
 
 
 async def test_run_inject_credentials_false_skips_auth_resolution(
@@ -254,29 +254,34 @@ async def test_run_inject_credentials_false_skips_auth_resolution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """injectCredentials=False → 不解析执行凭证(缺 alias 也不影响),
-    gimbal 收到的副本不带 users 注入。"""
+    gimbal 收到的 case.json 不带 users 注入。"""
     bob = await _member(client, "bob")
     await client.post(
         "/api/scenarios", headers=bob, json=_draft(steps=[{"id": "s1"}], vars_map={"qty": 1})
     )
     await _seed_ds(client, bob)
 
-    from app.services import gimbal_client as gc
+    import json as _json
+    from pathlib import Path
+
+    from app.services import gimbal_launcher as gl
     from app.services import run_dispatcher as rd
 
     run_payloads: list[dict] = []
     resolved: list[list] = []
 
-    async def _capture(scenario_dict: dict, **kw: object) -> dict:
-        run_payloads.append(scenario_dict)
-        return {"exitCode": 0, "total": 1, "passed": 1, "failed": 0,
-                "skipped": 0, "halted": 0, "details": []}
+    async def _capture(case_path, **kw: object):
+        run_payloads.append(
+            _json.loads(Path(case_path).read_text(encoding="utf-8"))
+        )
+        return gl.LaunchResult(launch_status="ok", exit_code=0,
+                               total=1, passed=1)
 
     async def _spy_resolve(db_factory, owner_id, aliases):
         resolved.append(list(aliases))
         return []
 
-    monkeypatch.setattr(gc, "run", _capture)
+    monkeypatch.setattr(gl, "launch", _capture)
     monkeypatch.setattr(rd, "_resolve_exec_auths", _spy_resolve)
 
     r = await client.post(

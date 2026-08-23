@@ -12,8 +12,8 @@ the platform's preview / run use-case.  This wrapper:
   vs 502 ``plate_rejected`` per docs/PLATFORM-SCENARIO-COMPOSER-API.md
   §4.7.
 
-Run 执行不走 Plate(#4 起):dispatcher convert 成功后改调
-``gimbal_client.run``(GIMBAL_BASE_URL,gimbal 引擎常驻服务)。
+Run 执行链(V3.2):dispatcher convert 成功后把注入完成的用例落盘,
+交 ``gimbal_launcher.launch`` 子进程(``gimbal run launch``)执行。
 """
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from typing import Any
 import httpx
 
 from ..core.config import settings
+from ..core.timeutil import utcnow as _utcnow
 
 
 # ─── typed errors ──────────────────────────────────────────────────
@@ -79,6 +80,43 @@ def set_client_for_tests(client: httpx.AsyncClient | None) -> None:
     fixture in test_scenario_composer_plate_integration.py."""
     global _client
     _client = client
+
+
+# ─── plate 契约归一化 ──────────────────────────────────────────────
+def fill_plate_defaults(
+    payload: dict[str, Any], *, owner: str = ""
+) -> dict[str, Any]:
+    """就地补 plate /convert 必填而平台 UI 不采集的字段。
+
+    Plate 的 Scenario 校验要求 meta 若干字段必填(requirementRef 等),
+    平台编辑器不采集它们 —— preview/export 路由一直在发送前补默认,
+    run 执行链曾漏做(存量场景 plate_rejected:meta.requirementRef
+    Field required,2026-08-24 sc-test-5nhvaloj6)。归一化收敛在本
+    模块:plate_client 拥有 plate 契约知识,preview 与 run 两条路径
+    共用同一份默认值,不再各写一套。
+
+    填充项(仅 setdefault 语义,已存在的值一律不动):
+    * kind:"scenario"
+    * scenarioId(顶层,缺失时镜像 meta.scenarioId)
+    * meta.createTime(plate 必填;缺失时取当前时刻)
+    * meta.requirementRef(plate 必填 list;UI 不采集 → [])
+    * meta.owner(为空且调用方给了 owner 时填)
+    """
+    payload.setdefault("kind", "scenario")
+
+    meta = payload.setdefault("meta", {})
+    if not meta.get("createTime"):
+        meta["createTime"] = _now_iso()
+    meta.setdefault("requirementRef", [])
+    if owner and not meta.get("owner"):
+        meta["owner"] = owner
+
+    payload.setdefault("scenarioId", meta.get("scenarioId", ""))
+    return payload
+
+
+def _now_iso() -> str:
+    return _utcnow().isoformat() + "Z"
 
 
 # ─── public surface ───────────────────────────────────────────────

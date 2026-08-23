@@ -52,7 +52,6 @@ async def lifespan(app: FastAPI):
             "session ciphertexts undecryptable. Set FERNET_KEY in "
             "backend/.env (keep a backup)."
         )
-    from .services import gimbal_client as gimbal_client_module
     from .services import plate_client as plate_client_module
     from .services.run_dispatcher import (
         drain_in_flight_dispatches,
@@ -66,7 +65,8 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         # V3 场景编排:取消并等待所有在途的逐行 dispatch 任务。
-        # (P4 起 V1 子进程 orchestrator/孤儿回收已随 executor.py 退役)
+        # (P4 起 V1 子进程 orchestrator/孤儿回收已随 executor.py 退役;
+        #  V3.2 起执行调用走 gimbal_launcher 子进程,无 HTTP 引擎客户端。)
         n_dispatched = await drain_in_flight_dispatches()
         if n_dispatched:
             logger.info("lifespan: drained {} in-flight dispatcher(s)", n_dispatched)
@@ -75,11 +75,6 @@ async def lifespan(app: FastAPI):
             await plate_client_module.aclose()
         except Exception as e:  # noqa: BLE001
             logger.debug("lifespan: plate_client.aclose raised {}", e)
-        # …and the Gimbal runner client (#4 run chain).
-        try:
-            await gimbal_client_module.aclose()
-        except Exception as e:  # noqa: BLE001
-            logger.debug("lifespan: gimbal_client.aclose raised {}", e)
 
 
 def create_app() -> FastAPI:

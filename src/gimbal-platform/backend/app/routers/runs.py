@@ -2,7 +2,8 @@
 
 Thin wrapper around :func:`app.services.run_dispatcher.dispatch_run`
 (which creates the Execution row and spawns the per-(dataset × row)
-fan-out: Plate /convert → Gimbal runner execute).
+fan-out: compose → Plate /convert → case 落盘 → ``gimbal run launch``
+子进程执行).
 
 The former Case layer was dissolved — the run recipe (env / dataSetIds /
 auths / …) lives entirely in ``RunRequest``.
@@ -11,7 +12,7 @@ Error mapping (per the agreed run-failure semantics):
 * scenario / env / data_set missing → 404
 * empty dataSetIds is legal (D12 baseline run: one implicit empty
   override row — direct-fill values + shared-var defaults)
-* plate unavailable mid-fan-out → the Execution row is marked
+* plate / launcher 故障 mid-fan-out → the Execution row is marked
   ``status='failed'`` and the JSONL log records the error, but the
   response is **201 with runId** (so the UI can navigate to
   ``/executions`` and see what happened).

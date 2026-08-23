@@ -70,10 +70,11 @@ def test_env() -> dict:
     return {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"}
 
 
-def gimbal_ok() -> dict:
-    """A passing Gimbal /run result (per-row counters all green)."""
-    return {"exitCode": 0, "total": 1, "passed": 1, "failed": 0,
-            "skipped": 0, "halted": 0, "details": []}
+def launch_ok() -> "Any":
+    """A passing ``gimbal run launch`` result (per-row counters all green)."""
+    from app.services.gimbal_launcher import LaunchResult
+
+    return LaunchResult(launch_status="ok", exit_code=0, total=1, passed=1)
 
 
 async def wait_until(

@@ -25,7 +25,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
-from ..core.timeutil import utcnow as _utcnow
 from ._ownership import can_read_scenario, ensure_owner
 from ._error_mapping import key_error_404, not_found_404, value_error_http
 from ..models.composer_scenario import ComposerScenario
@@ -86,27 +85,12 @@ def _draft_to_full_scenario_dict(
     this only fills plate-required defaults that the platform UI doesn't
     collect. orchestration is platform-only and never sent.
 
-    Defaults filled:
-    * kind:"scenario"
-    * scenarioId (top-level, mirror from definition.meta if absent)
-    * meta.createTime (plate requires it; UI doesn't collect → now())
-    * meta.requirementRef (plate requires list; UI doesn't collect → [])
-    * meta.owner (from authenticated user, if definition left it empty)
+    Defaults: see :func:`plate_client.fill_plate_defaults` (shared with
+    the run path — preview/export 与执行链共用同一份 plate 必填默认,
+    防两路漂移).
     """
     payload = {k: v for k, v in draft.definition.items()}
-
-    payload.setdefault("kind", "scenario")
-
-    meta = payload.setdefault("meta", {})
-    if not meta.get("createTime"):
-        meta["createTime"] = _utcnow().isoformat() + "Z"
-    meta.setdefault("requirementRef", [])
-    if owner and not meta.get("owner"):
-        meta["owner"] = owner
-
-    payload.setdefault("scenarioId", meta.get("scenarioId", ""))
-
-    return payload
+    return plate_client.fill_plate_defaults(payload, owner=owner)
 
 
 # ── 1) POST /preview-plate (static — must precede /{scenario_id}) ──

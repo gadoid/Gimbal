@@ -1,19 +1,24 @@
 """M1 执行能力补齐测试(V1 executor 语义移植):
 
-* nRuns/parallel fan-out —— total = Σrows × nRuns,gimbal 调用次数一致
+* nRuns/parallel fan-out —— total = Σrows × nRuns,launch 调用次数一致
 * prefix 提单号前缀 —— vars.order_no_prefix / order_no / seq 注入
 * mergePolicy 认证合并策略 —— override 整块替换 / merge 保留内置 /
   append 与内置冲突 409 / origin(injectCredentials=false)不注入
+
+V3.2:执行 mock 从 gimbal HTTP /run 改为 ``gimbal_launcher.launch`` —
+capture 读落盘的 case.json(引擎子进程的真实输入)。
 """
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 
 import pytest
 from httpx import AsyncClient
 
 from .helpers import (
-    gimbal_ok as _ok,
+    launch_ok as _ok,
     make_draft as _draft,
     register_and_login as _register_and_login,
     test_env,
@@ -36,13 +41,27 @@ def _run_payload(**extra: object) -> dict:
     return payload
 
 
+def _patch_launch_capture(
+    monkeypatch: pytest.MonkeyPatch, sink: list[dict]
+) -> None:
+    """把 ``gimbal_launcher.launch`` 换成读 case.json 并捕获的假实现。"""
+
+    async def _capture(case_path, *, step_to=None, report_dir=None,
+                       cwd=None, timeout=None):
+        sink.append(json.loads(Path(case_path).read_text(encoding="utf-8")))
+        return _ok()
+
+    from app.services import gimbal_launcher as gl
+    monkeypatch.setattr(gl, "launch", _capture)
+
+
 # ── nRuns / parallel fan-out ──────────────────────────────────────
 async def test_n_runs_multiplies_total_and_gimbal_calls(
     client: AsyncClient,
     plate_mock: PlateMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """2 行数据 × nRuns=3 → total_runs=6,gimbal /run 被调 6 次。"""
+    """2 行数据 × nRuns=3 → total_runs=6,gimbal launch 被调 6 次。"""
     bob = await _member(client, "bob")
     await client.post(
         "/api/scenarios",
@@ -58,15 +77,8 @@ async def test_n_runs_multiplies_total_and_gimbal_calls(
     )
     assert r.status_code == 200, r.text
 
-    from app.services import gimbal_client as gc
-
     calls: list[dict] = []
-
-    async def _capture(scenario_dict: dict, **kw: object) -> dict:
-        calls.append(scenario_dict)
-        return _ok()
-
-    monkeypatch.setattr(gc, "run", _capture)
+    _patch_launch_capture(monkeypatch, calls)
 
     r = await client.post(
         "/api/runs", headers=bob, json=_run_payload(nRuns=3, parallel=2)
@@ -97,7 +109,7 @@ async def test_parallel_limits_concurrency(
     plate_mock: PlateMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """parallel=2 → gimbal /run 同时在飞的数量永不超过 2。"""
+    """parallel=2 → gimbal launch 同时在飞的数量永不超过 2。"""
     bob = await _member(client, "bob")
     await client.post(
         "/api/scenarios",
@@ -112,13 +124,12 @@ async def test_parallel_limits_concurrency(
     )
     assert r.status_code == 200, r.text
 
-    from app.services import gimbal_client as gc
-
     in_flight = 0
     max_in_flight = 0
     done = 0
 
-    async def _capture(scenario_dict: dict, **kw: object) -> dict:
+    async def _capture(case_path, *, step_to=None, report_dir=None,
+                       cwd=None, timeout=None):
         nonlocal in_flight, max_in_flight, done
         in_flight += 1
         max_in_flight = max(max_in_flight, in_flight)
@@ -127,7 +138,8 @@ async def test_parallel_limits_concurrency(
         done += 1
         return _ok()
 
-    monkeypatch.setattr(gc, "run", _capture)
+    from app.services import gimbal_launcher as gl
+    monkeypatch.setattr(gl, "launch", _capture)
 
     r = await client.post(
         "/api/runs", headers=bob, json=_run_payload(nRuns=2, parallel=2)
@@ -145,7 +157,7 @@ async def test_prefix_injects_order_no_vars(
     plate_mock: PlateMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """prefix="ORD" → composed.config.vars 带 order_no_prefix / order_no / seq。"""
+    """prefix="ORD" → case.json 的 config.vars 带 order_no_prefix / order_no / seq。"""
     bob = await _member(client, "bob")
     await client.post(
         "/api/scenarios",
@@ -154,15 +166,8 @@ async def test_prefix_injects_order_no_vars(
     )
     await _seed_ds(client, bob)
 
-    from app.services import gimbal_client as gc
-
     payloads: list[dict] = []
-
-    async def _capture(scenario_dict: dict, **kw: object) -> dict:
-        payloads.append(scenario_dict)
-        return _ok()
-
-    monkeypatch.setattr(gc, "run", _capture)
+    _patch_launch_capture(monkeypatch, payloads)
 
     r = await client.post(
         "/api/runs", headers=bob, json=_run_payload(prefix="ORD")
@@ -174,6 +179,72 @@ async def test_prefix_injects_order_no_vars(
     assert vars_map["order_no_prefix"] == "ORD"
     assert vars_map["order_no"] == "ORD-{{ seq }}"
     assert vars_map["seq"] == {"kind": "seq"}
+
+
+# ── services 物化(env.baseUrl → 未映射服务名)────────────────────
+async def test_env_base_url_materializes_unmapped_services(
+    client: AsyncClient,
+    plate_mock: PlateMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """步骤引用 config.services 未映射的服务名 → case.json 注入选定
+    环境 baseUrl;authored 映射不覆盖(环境只补缺口)。"""
+    bob = await _member(client, "bob")
+    draft = _draft(
+        steps=[
+            {"api": {"service": "audit"}},
+            {"api": {"service": "order_fee"}},
+        ],
+        vars_map={"qty": 1},
+    )
+    draft["definition"]["config"]["services"] = {"mock": "http://self"}
+    await client.post("/api/scenarios", headers=bob, json=draft)
+    await _seed_ds(client, bob)
+
+    payloads: list[dict] = []
+    _patch_launch_capture(monkeypatch, payloads)
+
+    async def _fake_convert(scenario):
+        return {"consumer": "platform", "converted": dict(scenario)}
+
+    from app.services import plate_client as pc
+    monkeypatch.setattr(pc, "convert", _fake_convert)
+
+    r = await client.post(
+        "/api/runs",
+        headers=bob,
+        json=_run_payload(env={
+            "envId": "dev-local", "name": "dev-local",
+            "baseUrl": "http://127.0.0.1:9000",
+        }),
+    )
+    assert r.status_code == 201, r.text
+
+    await _wait(lambda: len(payloads) >= 1)
+    services = (payloads[0].get("config") or {}).get("services") or {}
+    assert services["audit"] == "http://127.0.0.1:9000"      # 补缺口
+    assert services["order_fee"] == "http://127.0.0.1:9000"
+    assert services["mock"] == "http://self"                 # authored 不覆盖
+
+
+def test_inject_services_unit_semantics() -> None:
+    """_inject_services 纯函数:baseUrl 空 → 不注入;config 缺失 → 建出来。"""
+    from app.services.run_dispatcher import _inject_services
+
+    # baseUrl 为空:保持不注入(引擎侧报错可见,不造假 URL)
+    scenario = {"steps": [{"api": {"service": "audit"}}], "config": {}}
+    _inject_services(scenario, {"baseUrl": ""})
+    assert scenario["config"].get("services") in (None, {})
+
+    # config 整个缺失也能注入
+    scenario = {"steps": [{"api": {"service": "audit"}}]}
+    _inject_services(scenario, {"baseUrl": "http://h:1"})
+    assert scenario["config"]["services"] == {"audit": "http://h:1"}
+
+    # 无 service 引用 → 不动 config
+    scenario = {"steps": [{"request": {}}], "config": {"services": {}}}
+    _inject_services(scenario, {"baseUrl": "http://h:1"})
+    assert scenario["config"]["services"] == {}
 
 
 # ── mergePolicy 认证合并策略 ─────────────────────────────────────
@@ -214,19 +285,14 @@ async def test_merge_policy_override_replaces_built_in_users(
     bob = await _member(client, "bob")
     await _seed_built_in_user(client, bob)
 
-    from app.services import gimbal_client as gc
     from app.services import run_dispatcher as rd
 
     payloads: list[dict] = []
-
-    async def _capture(scenario_dict: dict, **kw: object) -> dict:
-        payloads.append(scenario_dict)
-        return _ok()
+    _patch_launch_capture(monkeypatch, payloads)
 
     async def _fake_resolve(db_factory, owner_id, aliases):
         return [_FakeAuth(a) for a in aliases]
 
-    monkeypatch.setattr(gc, "run", _capture)
     monkeypatch.setattr(rd, "_resolve_exec_auths", _fake_resolve)
 
     r = await _post_run(
@@ -248,19 +314,14 @@ async def test_merge_policy_merge_keeps_built_in_users(
     bob = await _member(client, "bob")
     await _seed_built_in_user(client, bob)
 
-    from app.services import gimbal_client as gc
     from app.services import run_dispatcher as rd
 
     payloads: list[dict] = []
-
-    async def _capture(scenario_dict: dict, **kw: object) -> dict:
-        payloads.append(scenario_dict)
-        return _ok()
+    _patch_launch_capture(monkeypatch, payloads)
 
     async def _fake_resolve(db_factory, owner_id, aliases):
         return [_FakeAuth(a) for a in aliases]
 
-    monkeypatch.setattr(gc, "run", _capture)
     monkeypatch.setattr(rd, "_resolve_exec_auths", _fake_resolve)
 
     r = await _post_run(client, bob, auths=["qa9"], mergePolicy="merge")

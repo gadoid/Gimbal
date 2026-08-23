@@ -1,10 +1,18 @@
-"""Run dispatcher (V3 Scenario Composer).
+"""Run dispatcher (V3.2 Scenario Composer — ``gimbal run launch`` 执行链).
 
-Per-row fan-out of a Scenario's selected DataSets into Plate ``/convert``
-calls.  Mirrors the in-flight task pattern in
-``app/routers/executions.py`` (tracked ``set[asyncio.Task]`` +
-``_shutting_down`` flag + ``drain_*`` helper) so the app lifespan can
-shut down cleanly.
+Per-row fan-out of a Scenario's selected DataSets:
+
+1. :func:`_compose_scenario` — 场景 definition + 一行数据集 → 数据驱动的
+   gimbal scenario dict(行键注入 ``config.vars``,按基线类型还原)。
+2. Plate ``/convert`` — 校验 + 剥平台视图字段(orchestration 绝不外发)。
+3. 执行认证/前缀注入 convert 产物(明文不流经 plate)。
+4. 落盘 case 文件(``DATA_DIR/runs/cases/<runId>/``)。
+5. ``gimbal_launcher.launch`` 子进程执行 ``gimbal run launch <case>``,
+   stdout JSON RunResult 驱动行级计数。
+
+Mirrors the in-flight task pattern in ``app/routers/executions.py``
+(tracked ``set[asyncio.Task]`` + ``_shutting_down`` flag + ``drain_*``
+helper) so the app lifespan can shut down cleanly.
 
 The former Case layer was dissolved — ``RunRequest`` IS the recipe
 (env / dataSetIds / auths / …, pure values) applied directly to
@@ -39,7 +47,7 @@ from ..models.auth_session import AuthSession
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import RunRequest, RunResponse
-from . import env_store, gimbal_client, plate_client
+from . import env_store, gimbal_launcher, plate_client
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,8 +199,10 @@ async def dispatch_run(
     run_id = _new_run_id()
     # D12 基线执行:未选数据集 = 一个隐式空覆盖行(纯基线,行键空集
     # 全部回落 config.vars)。datasetId=None 在 JSONL 里如实记录。
+    # 新编辑器里行 0 基线虚行不落库 → 0 行数据集 = "只有基线",同样
+    # 回退一个隐式空覆盖行(否则 entries 为空,执行 0/0/0 秒完结)。
     fanout_datasets = [
-        {"datasetId": ds.dataset_id, "rows": list(ds.rows or [])}
+        {"datasetId": ds.dataset_id, "rows": list(ds.rows or []) or [{}]}
         for ds in selected_datasets
     ] or [{"datasetId": None, "rows": [{}]}]
     total_runs = sum(len(d["rows"]) for d in fanout_datasets) * req.n_runs
@@ -263,18 +273,26 @@ async def _fanout(
     prefix: str | None = None,
     merge_policy: str = "merge",
 ) -> None:
-    """Per-row × per-repeat convert + run; updates Execution counters in place.
+    """Per-row × per-repeat compose + convert + ``gimbal run launch`` 子进程。
 
-    ``halt_at``(V1 step_to 移植):0-based 含端点,透传 gimbal HTTP
-    ``halt_at`` —— RuntimeControl 在该步后停(剩余步显示 skipped)。
+    ``halt_at``(V1 step_to 移植):0-based 含端点,透传 CLI
+    ``--step-to`` —— RuntimeControl 在该步后停(剩余步显示 skipped)。
 
     M1(V1 executor 移植):``n_runs`` 每行重复次数、``parallel`` 并发度
     (asyncio.Semaphore)、``prefix`` 提单号前缀变量注入、``merge_policy``
     执行认证合并策略(override/merge/append;append 冲突已在 dispatch
     侧预检拒绝)。
+
+    V3.2:执行调用从 gimbal HTTP POST /run 改为落盘 case 文件后
+    ``gimbal run launch <case>`` 子进程(设计:2026-08-24 spec)。
+    case 文件即数据驱动用例快照(含注入后的明文 users —— 与 V1 临时
+    yaml 同语义,落在平台 DATA_DIR 权限域内)。
     """
     log_path = _jsonl_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    # 每个 run 一个 case 目录:case 文件 + 引擎原生报告,并发 fan-out
+    # 互不互踩;与 JSONL 同域构成执行审计面(什么数据真的打给了引擎)。
+    run_dir = _run_dir(run_id)
 
     # 执行用认证:owner 级解密一次,逐行注入 run 副本的 Config.users。
     # 解密失败 = fail-fast(V1 严格语义):整单 execution 记为
@@ -306,11 +324,18 @@ async def _fanout(
     # 自带 users,而是以场景定义为源(与 V1 在原始 yaml 上渲染同语义)。
     built_in_users = _built_in_users(scenario_payload)
 
-    async def _row(ds: dict, row_idx: int, rep: int) -> None:
-        """One (dataset row × repeat) entry — convert + run + counters."""
+    async def _row(ds: dict, row_idx: int, rep: int, seq: int) -> None:
+        """One (dataset row × repeat) entry — compose + convert + launch."""
         async with sem:
             row_dict = dict(ds["rows"][row_idx] or {})
             composed = _compose_scenario(scenario_payload, row_dict)
+            # 每个 case 独立子目录:case.json(数据驱动用例快照)+ 引擎
+            # 原生报告目录;stem 带 dataset/row/rep 定位,便于事后审计。
+            stem = (
+                f"case-{seq:03d}-{ds['datasetId'] or 'baseline'}"
+                f"-r{row_idx}-n{rep}"
+            )
+            case_dir = run_dir / stem
             log_line = {
                 "ts": _utcnow().isoformat() + "Z",
                 "runId": run_id,
@@ -321,6 +346,8 @@ async def _fanout(
                 "rep": rep,
                 "env": env,
                 "status": "dispatched",
+                "casePath": str((case_dir / "case.json")),
+                "reportDir": str((case_dir / "reports")),
             }
             _append_log_quietly(log_path, log_line)
 
@@ -341,29 +368,54 @@ async def _fanout(
                 if prefix:
                     # 前缀变量注入进 run 副本(post-convert,防 plate 剥掉)。
                     _inject_prefix_vars(composed_exec, prefix)
-                try:
-                    run_out = await gimbal_client.run(composed_exec, halt_at=halt_at)
-                except gimbal_client.GimbalUnavailableError as e:
-                    # convert 已过(结构合法),引擎不可达是执行层故障:
-                    # 记失败但不中断后续行(fan-out 永不因单行崩溃)。
-                    log_line["status"] = "gimbal_unavailable"
-                    log_line["runError"] = str(e)
-                    logger.warning("run_dispatcher: gimbal unavailable for row {}/{}#{}: {}", ds["datasetId"], row_idx, rep, e)
-                except gimbal_client.GimbalRejectedError as e:
+                # services 物化:未映射服务名 → env.baseUrl(见函数 docstring)。
+                _inject_services(composed_exec, env)
+                # 落盘数据驱动用例快照后交给 CLI 子进程执行。
+                case_path = _write_case_file(case_dir, composed_exec)
+                result = await gimbal_launcher.launch(
+                    case_path,
+                    step_to=halt_at,
+                    report_dir=case_dir / "reports",
+                    cwd=case_dir,
+                )
+                log_line["runResult"] = result.run_result
+                if result.launch_status != "ok":
+                    # 子进程层故障(超时 kill / spawn 失败):记失败但
+                    # 不中断后续行(fan-out 永不因单行崩溃)。
+                    log_line["status"] = (
+                        "launch_timeout"
+                        if result.launch_status == "timeout"
+                        else "launch_error"
+                    )
+                    log_line["runError"] = result.error
+                    logger.warning(
+                        "run_dispatcher: launch {} for row {}/{}#{}: {}",
+                        result.launch_status, ds["datasetId"], row_idx, rep,
+                        result.error,
+                    )
+                elif result.exit_code == 0:
+                    log_line["status"] = "passed"
+                    logger.info(
+                        "run_dispatcher: row {}/{}#{} executed: exit=0 passed={} failed={}",
+                        ds["datasetId"], row_idx, rep,
+                        result.passed, result.failed,
+                    )
+                elif result.exit_code == 2:
+                    # 引擎 Scenario 校验拒绝(与 HTTP 422 同源)。
                     log_line["status"] = "gimbal_rejected"
-                    log_line["runError"] = e.message
-                    logger.warning("run_dispatcher: gimbal rejected row {}/{}#{}: {}", ds["datasetId"], row_idx, rep, e.message)
+                    log_line["runError"] = result.error
+                    logger.warning(
+                        "run_dispatcher: gimbal rejected row {}/{}#{}: {}",
+                        ds["datasetId"], row_idx, rep, result.error,
+                    )
                 else:
-                    exit_code = int(run_out.get("exitCode", 2))
-                    log_line["status"] = "passed" if exit_code == 0 else "failed"
-                    log_line["runResult"] = {
-                        k: run_out.get(k)
-                        for k in ("exitCode", "total", "passed", "failed", "skipped", "halted")
-                    }
+                    # exit 1 = 测试失败(正常业务结果);>=3 = 引擎侧错误。
+                    log_line["status"] = "failed"
+                    log_line["runError"] = result.error
                     logger.info(
                         "run_dispatcher: row {}/{}#{} executed: exit={} passed={} failed={}",
-                        ds["datasetId"], row_idx, rep, exit_code,
-                        run_out.get("passed"), run_out.get("failed"),
+                        ds["datasetId"], row_idx, rep, result.exit_code,
+                        result.passed, result.failed,
                     )
             except plate_client.PlateUnavailableError as e:
                 log_line["status"] = "plate_unavailable"
@@ -393,13 +445,16 @@ async def _fanout(
             )
 
     # (dataset, row, repeat) 笛卡尔积;n_runs=1 时与旧逐行行为完全一致。
+    # seq 为 case 文件名里的全局序号(与 entries 顺序一致,单测可断言)。
     entries = [
         (ds, row_idx, rep)
         for ds in datasets
         for row_idx in range(len(ds["rows"]))
         for rep in range(n_runs)
     ]
-    await asyncio.gather(*(_row(ds, i, r) for ds, i, r in entries))
+    await asyncio.gather(
+        *(_row(ds, i, r, seq) for seq, (ds, i, r) in enumerate(entries))
+    )
 
     # Terminal status + timestamps only (counters already maintained
     # incrementally above).
@@ -506,16 +561,25 @@ def _compose_scenario(
     数据行(纯值),每个 run 的形态由本函数即时计算:
 
     * deep-copy 场景定义,行键值合入 ``config.vars``(行值覆盖同名
-      场景级 var;JSON 类型原样保留 — int 还是 int,断言
+      场景级 var)。行值按基线类型还原(新数据集编辑器全字符串落库,
+      ``_coerce_row_value`` 恢复"int 还是 int"的旧语义,断言
       ``expected: 0`` 不会被字符串化破坏)。
+    * 数据集行是稀疏覆盖(缺键 = 继承基线,即场景级 vars 原值;
+      ``""`` = 显式空覆盖),与行 0 基线虚行/三态单元格的编辑器
+      契约一致 —— 基线行本身不落库,由场景 vars 承担。
     * ``scenario_payload`` 是持久化的 ``ComposerScenario.payload``。
       容器化重构后为 ``{definition, orchestration}``;plate 只吃
       ``definition``(orchestration 是平台侧投影,绝不外发)。
+    * plate 必填默认由 :func:`plate_client.fill_plate_defaults` 就地
+      补齐(仅 setdefault,不覆盖已有值)—— 与 preview/export 同源。
     """
     raw = scenario_payload or {}
     # Unwrap the container: plate must never see orchestration.
     out = copy.deepcopy(definition_from_payload(raw))
-    out.setdefault("kind", "scenario")
+    # plate 必填默认(与 preview/export 路径共用同一份):存量场景
+    # meta 可能缺 requirementRef/createTime 等 UI 不采集的字段,
+    # 不补会在 plate /convert 处 4xx(plate_rejected 整单失败)。
+    plate_client.fill_plate_defaults(out)
     cfg = out.setdefault("config", {})
     if not isinstance(cfg, dict):
         cfg = {}
@@ -523,7 +587,7 @@ def _compose_scenario(
     vars_map = dict(cfg.get("vars") or {})
     # Row wins: a row's `qty` overrides a scenario-level `vars.qty`.
     for k, v in (row_dict or {}).items():
-        vars_map[k] = v
+        vars_map[k] = _coerce_row_value(vars_map.get(k), v)
     cfg["vars"] = vars_map
     return out
 
@@ -611,6 +675,43 @@ def _inject_prefix_vars(composed: dict[str, Any], prefix: str) -> None:
     cfg["vars"] = vars_map
 
 
+def _inject_services(composed: dict[str, Any], env: dict[str, Any]) -> None:
+    """services 物化:steps 引用而 config.services 未映射的服务名 →
+    注入选定环境的 baseUrl(就地修改)。
+
+    plate 的端点模型没有 host 概念(service = 业务域,如 fin 下的
+    audit/order_fee),部署主机只存在于执行环境(RunEnv.baseUrl)——
+    引擎侧 URL 解析需要的 service→base_url 映射只能由运行时环境补:
+
+    * 只补缺口:场景显式写过的 services(如自建 mock)原样保留,
+      环境不覆盖 authored 映射;
+    * env.baseUrl 为空(RunDialog 兜底构造/环境配置缺失)时不注入,
+      保持"步骤无映射"的引擎报错可见,不静默造出假 URL;
+    * post-convert 注入 run 副本,与凭证/前缀同一模式(convert 的
+      输入始终是 authored 原文,审计面不失真)。
+    """
+    base_url = (env or {}).get("baseUrl") or ""
+    if not base_url:
+        return
+    referenced: set[str] = {
+        api["service"]
+        for step in composed.get("steps") or []
+        if isinstance(step, dict)
+        and isinstance(api := step.get("api"), dict)
+        and api.get("service")
+    }
+    if not referenced:
+        return
+    cfg = composed.get("config")
+    if not isinstance(cfg, dict):
+        cfg = {}
+        composed["config"] = cfg
+    services = dict(cfg.get("services") or {})
+    for name in sorted(referenced):
+        services.setdefault(name, base_url)
+    cfg["services"] = services
+
+
 def _inject_exec_users(
     composed: dict[str, Any],
     exec_auths: list[ResolvedAuth],
@@ -660,6 +761,58 @@ def _inject_exec_users(
 
 def _jsonl_path() -> Path:
     return settings.DATA_DIR / "runs" / f"{_utcnow().strftime('%Y-%m-%d')}.jsonl"
+
+
+def _run_dir(run_id: str) -> Path:
+    """一个 run 的 case 文件根目录(与 JSONL 同域的执行审计面)。"""
+    return settings.DATA_DIR / "runs" / "cases" / run_id
+
+
+def _write_case_file(case_dir: Path, scenario_dict: dict[str, Any]) -> Path:
+    """把注入完成的数据驱动用例落盘为 gimbal 可执行 case.json。
+
+    文件内容 = ``gimbal run launch`` 的唯一输入快照(含明文 users,与
+    V1 临时 yaml 同语义);落盘失败(磁盘满等)抛 OSError,由 _row 的
+    兜底 except 记 dispatcher_error。
+    """
+    case_dir.mkdir(parents=True, exist_ok=True)
+    case_path = case_dir / "case.json"
+    case_path.write_text(
+        json.dumps(scenario_dict, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+    return case_path
+
+
+def _coerce_row_value(base_val: Any, row_val: Any) -> Any:
+    """行值按基线类型还原(新数据集编辑器把所有值存成字符串)。
+
+    转置表格/CSV 导入统一 ``String(v)`` 落库,直接合入会把整型基线
+    覆盖成字符串,破坏 ``Assertion{expected: 0}`` 这类强类型断言
+    (旧链路"int 还是 int"的语义)。规则:
+
+    * 基线是 bool  → ``"true"/"false"``(大小写不敏感)还原,其余原样;
+    * 基线是 int   → ``int(row_val)`` 可解析则还原(int("2.0") 会抛
+      ValueError,正好保留原串);
+    * 基线是 float → ``float(row_val)`` 可解析则还原;
+    * 其余(str/生成式 dict/基线不存在)→ 原样合入 —— 空串仍是显式
+      空覆盖,生成式 spec 不受行值影响。
+    """
+    if not isinstance(row_val, str) or not isinstance(base_val, (bool, int, float)):
+        return row_val
+    if isinstance(base_val, bool):
+        lowered = row_val.strip().lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        return row_val
+    try:
+        if isinstance(base_val, int):
+            return int(row_val)
+        return float(row_val)
+    except ValueError:
+        return row_val
 
 
 def _append_jsonl(path: Path, payload: dict) -> None:

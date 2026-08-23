@@ -36,10 +36,11 @@ class Settings(BaseSettings):
     # never land as relative ``./data\...`` in logs.
     DATA_DIR: Path = Path("./data").resolve()
 
-    # ── Gimbal runner HTTP service (#4 run 最小链路) ──────
-    # ``gimbal run server`` 默认监听 127.0.0.1:8766(8765 被 plate 实占)。
-    # run dispatcher 每行 convert 成功后 POST /run 到这里执行。
-    GIMBAL_BASE_URL: str = "http://127.0.0.1:8766"
+    # ── Gimbal 执行链(V3.2 ``gimbal run launch`` 子进程) ──
+    # GIMBAL_BIN: gimbal 可执行文件(如 D:\Gimbal\Scripts\gimbal.exe);
+    # 空值回退同解释器 ``python -m gimbal``(同 venv 部署最稳)。
+    GIMBAL_BIN: str = ""
+    # 单次 launch 子进程超时(秒)。
     GIMBAL_TIMEOUT_SEC: float = 300.0
 
     # ── CORS ──────────────────────────────────────────────

@@ -115,48 +115,41 @@ def plate_mock():
         mock.uninstall()
 
 
-# ── Gimbal mock(#4 run 链路)───────────────────────────────────────
+# ── Gimbal launcher mock(V3.2 run 链路)─────────────────────────────
 @pytest.fixture
-def gimbal_mock():
-    """MockTransport 版 gimbal 服务:捕获 /run 入参,可编程回包。
+def gimbal_mock(monkeypatch: pytest.MonkeyPatch) -> dict:
+    """把 ``gimbal_launcher.launch`` 换成读 case.json 的假实现。
 
-    真实 gimbal server 的 RunResponse 形状见
-    src/gimbal/core/server.py RunResponse。
+    * ``state["calls"]``  — 每次 launch 的 case.json 内容(dict,
+      即引擎子进程的真实输入快照);
+    * ``state["kwargs"]`` — launch 的关键字参数(step_to/report_dir);
+    * ``state["exit_code"]`` — 可编程回包(默认 0;1=引擎判败)。
     """
-    state = {
-        "calls": [],
-        "exit_code": 0,  # 测试可改
-    }
+    from pathlib import Path
 
-    async def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/run":
-            state["calls"].append(json.loads(request.content))
-            return httpx.Response(
-                200,
-                json={
-                    "exitCode": state["exit_code"],
-                    "total": 1,
-                    "passed": 1 if state["exit_code"] == 0 else 0,
-                    "failed": 0 if state["exit_code"] == 0 else 1,
-                    "skipped": 0,
-                    "halted": 0,
-                    "details": [],
-                    "runId": "",
-                },
-            )
-        return httpx.Response(404)
+    from app.services.gimbal_launcher import LaunchResult
 
-    from app.services import gimbal_client
+    state: dict[str, Any] = {"calls": [], "kwargs": [], "exit_code": 0}
 
-    gimbal_client.set_client_for_tests(
-        httpx.AsyncClient(
-            transport=httpx.MockTransport(handler), base_url="http://gimbal-test"
+    async def _fake_launch(case_path, *, step_to=None, report_dir=None,
+                           cwd=None, timeout=None):
+        state["calls"].append(
+            json.loads(Path(case_path).read_text(encoding="utf-8"))
         )
-    )
-    try:
-        yield state
-    finally:
-        gimbal_client.set_client_for_tests(None)
+        state["kwargs"].append({"step_to": step_to, "report_dir": report_dir})
+        code = state["exit_code"]
+        return LaunchResult(
+            launch_status="ok",
+            exit_code=code,
+            total=1,
+            passed=1 if code == 0 else 0,
+            failed=0 if code == 0 else 1,
+        )
+
+    from app.services import gimbal_launcher as gl
+
+    monkeypatch.setattr(gl, "launch", _fake_launch)
+    return state
 
 
 # ── preview-plate ──────────────────────────────────────────────────
@@ -350,14 +343,13 @@ async def _wait_execution_final(client_run_id: str | None = None) -> "Execution"
 async def test_run_chain_convert_then_gimbal_execute(
     client: AsyncClient, plate_mock: PlateMock, gimbal_mock: dict
 ) -> None:
-    """#4 最小运行链路:每行 convert(plate) → run(gimbal),接线正确。
+    """V3.2 运行链路:每行 convert(plate) → case 落盘 → launch(子进程 mock)。
 
     锁四件事:
-      1. gimbal /run 收到的 body.scenario 是 convert 的 **converted
-         产物**(PlateMock 回 {"kind": "platform_scenario"}),不是平台
-         原始 dict;
+      1. launch 收到的 case.json 是 convert 的 **converted 产物**
+         (PlateMock 回 {"kind": "platform_scenario"}),不是平台原始 dict;
       2. 行值在 converted 之前已 merge 进 config.vars(保类型);
-      3. exitCode=0 → 该行计 passed;Execution.status=done;
+      3. exit_code=0 → 该行计 passed;Execution.status=done;
       4. Execution passed/failed 计数 = 行数(引擎计数被消费)。
     """
     headers = await _register_and_login(client)
@@ -382,11 +374,10 @@ async def test_run_chain_convert_then_gimbal_execute(
     assert len(gimbal_mock["calls"]) == 2
     assert len(plate_mock.convert_calls) == 2
 
-    # 1. 载体是 converted 产物
-    body0 = gimbal_mock["calls"][0]
-    assert body0["scenario"]["kind"] == "platform_scenario"
-    # halt 参数不传(阶段 1 不用调试)
-    assert "halt_at" not in body0
+    # 1. 载体是 converted 产物(case.json 即引擎输入快照)
+    assert gimbal_mock["calls"][0]["kind"] == "platform_scenario"
+    # step_to 不传(阶段 1 不用调试)
+    assert gimbal_mock["kwargs"][0]["step_to"] is None
 
     # 2. convert 拿到的是平台原始 dict(vars 已 layer)
     conv_scenario = plate_mock.convert_calls[0]["scenario"]
@@ -403,7 +394,7 @@ async def test_run_chain_convert_then_gimbal_execute(
 async def test_run_chain_gimbal_failure_counts_row_failed(
     client: AsyncClient, plate_mock: PlateMock, gimbal_mock: dict
 ) -> None:
-    """引擎判败(exitCode=1)→ 该行计 failed;convert 本身没问题。"""
+    """引擎判败(exit_code=1)→ 该行计 failed;convert 本身没问题。"""
     gimbal_mock["exit_code"] = 1
     headers = await _register_and_login(client)
     await _seed_scenario_case_and_dataset(client, headers, rows=[{"qty": 1}])
@@ -441,24 +432,20 @@ async def test_run_partial_failure_marks_execution_failed(
     旧 V3 规则 ``failed and not passed`` 会把部分失败标成 done,
     与 V1 在同一张 /executions 表里显示矛盾状态。
     """
-    from app.services import gimbal_client as gc
+    from app.services import gimbal_launcher as gl
 
     calls = {"n": 0}
 
-    async def _run(scenario_dict: dict, **_kw: object) -> dict:
+    async def _run(case_path, **_kw: object):
         calls["n"] += 1
         ok = calls["n"] == 1  # 第一行过,第二行败
-        return {
-            "exitCode": 0 if ok else 1,
-            "total": 1,
-            "passed": 1 if ok else 0,
-            "failed": 0 if ok else 1,
-            "skipped": 0,
-            "halted": 0,
-            "details": [],
-        }
+        code = 0 if ok else 1
+        return gl.LaunchResult(
+            launch_status="ok", exit_code=code, total=1,
+            passed=1 if ok else 0, failed=0 if ok else 1,
+        )
 
-    monkeypatch.setattr(gc, "run", _run)
+    monkeypatch.setattr(gl, "launch", _run)
 
     headers = await _register_and_login(client)
     await _seed_scenario_case_and_dataset(
@@ -528,12 +515,12 @@ async def test_run_auth_decrypt_failure_fails_execution(
         row.username_enc = "not-valid-fernet-ciphertext"
         await s.commit()
 
-    from app.services import gimbal_client as gc
+    from app.services import gimbal_launcher as gl
 
-    async def _must_not_run(*_a: object, **_k: object) -> dict:
+    async def _must_not_run(*_a: object, **_k: object):
         raise AssertionError("解密失败后不得分发执行")
 
-    monkeypatch.setattr(gc, "run", _must_not_run)
+    monkeypatch.setattr(gl, "launch", _must_not_run)
 
     r = await client.post(
         "/api/runs",
@@ -587,13 +574,13 @@ async def test_run_injects_exec_auths_into_run_copy_only(
 ) -> None:
     """执行用认证多选:解密注入只进 run 副本,convert 永不带明文。
 
-    锁三条边界(#1 改造的安全契约 + #4 run 链路接线):
+    锁三条边界(#1 改造的安全契约 + V3.2 run 链路接线):
       1. convert 收到的 scenario.config.users 不含所选 alias 的明文凭据;
-      2. dispatcher 发给 gimbal_client.run 的副本 config.users[alias] 含
-         解密后的 url/username/password/token_type/expires_in(形状同
+      2. dispatcher 落盘的 case.json(引擎子进程输入)config.users[alias]
+         含解密后的 url/username/password/token_type/expires_in(形状同
          V1 executor 生产路径),且载体是 convert 的 **converted 产物**
-         不是平台原始 dict。gimbal 服务不在测试里起,monkeypatch 捕获
-         入参 — 验证的是 dispatcher 侧接线;
+         不是平台原始 dict。gimbal 子进程不在测试里真跑,monkeypatch
+         捕获 launch 入参 — 验证的是 dispatcher 侧接线;
       3. Execution.config_json 用读侧契约 key ``exec_auth_alias``(数组),
          不再是旧的 "auth" 单选 key。
     """
@@ -614,17 +601,21 @@ async def test_run_injects_exec_auths_into_run_copy_only(
     )
     assert r.status_code == 201
 
-    # 捕获 dispatcher → gimbal_client.run 的入参
-    from app.services import gimbal_client as gc
+    # 捕获 dispatcher → gimbal_launcher.launch 的入参(读落盘 case.json)
+    from pathlib import Path
+
+    from app.services import gimbal_launcher as gl
 
     run_payloads: list[dict] = []
 
-    async def _capture_run(scenario_dict: dict, **_kw: object) -> dict:
-        run_payloads.append(scenario_dict)
-        return {"exitCode": 0, "total": 1, "passed": 1, "failed": 0,
-                "skipped": 0, "halted": 0, "details": []}
+    async def _capture_run(case_path, **_kw: object):
+        run_payloads.append(
+            json.loads(Path(case_path).read_text(encoding="utf-8"))
+        )
+        return gl.LaunchResult(launch_status="ok", exit_code=0,
+                               total=1, passed=1)
 
-    monkeypatch.setattr(gc, "run", _capture_run)
+    monkeypatch.setattr(gl, "launch", _capture_run)
 
     r = await client.post(
         "/api/runs",
@@ -714,16 +705,20 @@ async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
     bob_headers = await _register_and_login(client, username="bob")
     await _create_auth(bob_headers, "bob")
 
-    from app.services import gimbal_client as gc
+    from pathlib import Path
+
+    from app.services import gimbal_launcher as gl
 
     run_payloads: list[dict] = []
 
-    async def _capture_run(scenario_dict: dict, **_kw: object) -> dict:
-        run_payloads.append(scenario_dict)
-        return {"exitCode": 0, "total": 1, "passed": 1, "failed": 0,
-                "skipped": 0, "halted": 0, "details": []}
+    async def _capture_run(case_path, **_kw: object):
+        run_payloads.append(
+            json.loads(Path(case_path).read_text(encoding="utf-8"))
+        )
+        return gl.LaunchResult(launch_status="ok", exit_code=0,
+                               total=1, passed=1)
 
-    monkeypatch.setattr(gc, "run", _capture_run)
+    monkeypatch.setattr(gl, "launch", _capture_run)
 
     # alice 发起运行,选撞名 alias
     r = await client.post(
