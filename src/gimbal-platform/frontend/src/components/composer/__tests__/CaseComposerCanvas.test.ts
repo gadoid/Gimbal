@@ -41,7 +41,7 @@ vi.mock('@/api/scenario-composer', () => ({
             source_kind: 'independent', required: true,
             description: null, example: null, default: null, enum: null,
           } as any],
-      model_schema: { properties: { hidden_req: { type: 'string' } } },
+      model_schema: { properties: { hidden_req: { type: 'string', default: 'hd-default' } } },
     },
     responses: {
       '200': {
@@ -343,16 +343,24 @@ describe('CaseComposerCanvas — 右栏分流 + Type C(C3)', () => {
     expect(info.find('.assertable-mark').exists()).toBe(true)
   })
 
-  it('T21: Type C 折叠块 — 请求侧 hidden_req / 响应侧 trace_id 差集展示', async () => {
+  it('T21: Type C — 请求侧 hidden_req 并入「其他字段」可编辑 / 响应侧 trace_id 只读块', async () => {
     const { w } = mountCanvas([mkStep()])
     await flushPromises()
     // request 签:请求 schema 差集(/full 绑定字段只有 orderId,schema 另有 hidden_req)
-    expect(w.findAll('.typec-block').length).toBe(1)
-    expect(w.find('.typec-block').text()).toContain('hidden_req')
+    // → 不再有只读 typec-block,并入 FieldForm「其他字段」折叠区(契约行,可编辑)
+    expect(w.findAll('.typec-block').length).toBe(0)
+    const extras = w.find('[data-testid="extra-fields"]')
+    expect(extras.exists()).toBe(true)
+    await w.find('.extras-toggle').trigger('click')
+    expect(extras.text()).toContain('hidden_req')
+    expect(extras.find('.extra-src.schema').exists()).toBe(true)
+    // schema default 以 placeholder 透出(未写入 body,不随请求发送)
+    const input = extras.find('input.ctl')
+    expect((input.element as HTMLInputElement).placeholder).toBe('hd-default')
     const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
     await respTab.trigger('click')
     await flush()
-    // response 签:200 契约 schema 差集 trace_id
+    // response 签:200 契约 schema 差集 trace_id(响应侧仍为只读块)
     expect(w.findAll('.typec-block').length).toBe(1)
     expect(w.find('.typec-block').text()).toContain('trace_id')
   })

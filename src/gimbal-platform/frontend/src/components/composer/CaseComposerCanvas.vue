@@ -170,6 +170,7 @@
                   :field-actions="true"
                   :var-choices="referenceVarChoices"
                   :inject-choices="injectVarChoices"
+                  :unbound-fields="reqTypeC"
                   @update:body="(v: unknown) => currentStep.request.body = v"
                   @field-extract="onFieldExtract"
                   @field-assign="(f, name) => onFieldAssign(f, name)"
@@ -198,15 +199,8 @@
               <span v-if="fullState === 'failed' && hasEndpointRef(currentStep)" class="hint">plate 不可达,字段表单暂不可用 — 已降级为 JSON 编辑</span>
               <span v-else class="hint">提示: 该接口未声明请求字段契约,或 plate 拉取中</span>
             </el-form-item>
-            <!-- Type C 查看入口(设计 §3.5):schema 有、binding 无 — 纯查看 -->
-            <details v-if="activeIoTab === 'request' && reqTypeC.length" class="typec-block">
-              <summary>Schema 未绑定字段 ({{ reqTypeC.length }})</summary>
-              <div v-for="tf in reqTypeC" :key="tf.name" class="typec-line">
-                <code>{{ tf.name }}</code>
-                <span class="resp-field-kind">{{ tf.type }}</span>
-                <span class="typec-path">{{ tf.path }}</span>
-              </div>
-            </details>
+            <!-- 请求侧 Type C(schema 有、binding 无)已并入 FieldForm「其他字段」
+                 折叠区(unbound-fields) — 可见可编辑,不再单独设只读块。 -->
             <!-- Response 页:/full responses 全状态码契约,只读参考(设计 §3.1)。
                  ☰ 菜单仅 提取/断言 两项,路径经 respPathFor → toScratchPath -->
             <template v-if="activeIoTab === 'response'">
@@ -875,20 +869,26 @@ const currentReqSchema = computed<Record<string, unknown> | undefined>(() => {
 //    只在 Response 侧可见"的割裂。phase 分域仅保留在 detail 数据里。
 
 // ── Type C 查看入口(设计 §3.5):schema 有、binding 无的隐藏字段差集 ───
-interface TypeCField { name: string; type: string; path: string }
+interface TypeCField { name: string; type: string; path: string; default?: unknown }
 /**
  * schema.properties 键集 与 已绑定 fields[].path(掐头 `$.`)求差集。
- * 纯查看 — 不进 draft、不进任何结构。
+ * 响应侧仍为纯查看;请求侧经 reqTypeC 传入 FieldForm「其他字段」,
+ * default 作契约行 placeholder(编辑写入 body)。
  */
 function typeCFields(
   schema: Record<string, unknown> | undefined,
   knownPaths: string[]
 ): TypeCField[] {
-  const props = (schema?.properties ?? {}) as Record<string, { type?: string }>
+  const props = (schema?.properties ?? {}) as Record<string, { type?: string; default?: unknown }>
   const known = new Set(knownPaths.map((p) => p.replace(/^\$\./, '')))
   return Object.keys(props)
     .filter((k) => !known.has(k))
-    .map((k) => ({ name: k, type: props[k]?.type ?? 'unknown', path: `$.${k}` }))
+    .map((k) => ({
+      name: k,
+      type: props[k]?.type ?? 'unknown',
+      path: `$.${k}`,
+      default: props[k]?.default,
+    }))
 }
 /** 请求侧 Type C(挂 Request 签页底部) */
 const reqTypeC = computed<TypeCField[]>(() =>
@@ -945,7 +945,10 @@ async function onAddEndpoint(ep: any) {
     if (!full) ElMessage.warning('拉取完整接口定义失败, 仍以原始信息加入')
     const fields = full?.request?.fields || []
     const strategy = buildInitialStrategies(full)
-    const initialBody = deepDefaults(fields)
+    // 初始 body:绑定 default/example + 契约字段(schema 非绑定)配了 default 的一并写入
+    const req = full?.request as any
+    const contracts = typeCFields(req?.model_schema ?? req?.schema, fields.map((f) => f.path))
+    const initialBody = deepDefaults(fields, contracts)
     const newStep: StepView = {
       kind: 'step',
       description: ep.name,

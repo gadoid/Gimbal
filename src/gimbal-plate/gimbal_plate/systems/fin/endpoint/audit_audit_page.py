@@ -38,7 +38,18 @@ AUDIT_AUDIT_PAGE: Final[EndpointSpec] = EndpointSpec(
         IOFieldBinding(name='sort_order', path='sort_order', required=True, example='desc', ui_kind='text', description='排序方向: asc / desc', enum=['asc', 'desc']),
         IOFieldBinding(name='params', path='params', required=True, example={}, ui_kind='json', description='业务过滤条件,如单号/客户/日期范围'),
         ],
-        schema_={},
+        # schema 携带的非绑定字段(Type C):不设 IOFieldBinding,
+        # 前端「其他字段」折叠区以「契约」行渲染 — 可编辑,编辑后随请求发送。
+        schema_={
+            "type": "object",
+            "properties": {
+                "risk_note": {
+                    "type": "string",
+                    "description": "演示:plate 契约携带的非绑定字段",
+                    "default": "正常",
+                },
+            },
+        },
     ),
     responses={
         200: ResponseSpec(

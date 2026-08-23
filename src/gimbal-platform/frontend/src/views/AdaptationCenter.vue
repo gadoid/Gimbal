@@ -5,12 +5,13 @@
 <template>
   <section class="adaptation-center">
     <header class="page-header">
-      <div>
+      <div class="header-text">
         <h2>适配中心</h2>
         <p>{{ auth.isAdmin ? '目录变更检测与批次适配' : '仅显示触碰你场景的批次(只读)' }}</p>
       </div>
       <el-button
         v-if="auth.isAdmin"
+        type="primary"
         :loading="adaptations.refreshing"
         @click="refreshAll"
       >检查更新</el-button>
@@ -19,7 +20,13 @@
     <template v-if="auth.isAdmin">
       <UnindexedAlert :steps="unindexed" />
 
-      <h3>待适配</h3>
+      <div class="section-head">
+        <span class="section-title">待适配</span>
+        <span
+          v-if="pendingCards.length + anomalies.length > 0"
+          class="section-count"
+        >{{ pendingCards.length + anomalies.length }} 个端点</span>
+      </div>
       <el-alert
         v-if="adaptations.lastError"
         type="error"
@@ -35,9 +42,13 @@
           v-for="a in anomalies"
           :key="a.endpointId"
           class="card anomaly"
+          data-testid="anomaly-card"
         >
-          <b class="mono">{{ a.endpointId }}</b>
-          <el-tag type="warning" size="small">异常</el-tag>
+          <div class="card-top">
+            <span class="dot" />
+            <b class="mono endpoint">{{ a.endpointId }}</b>
+            <el-tag type="warning" size="small" effect="plain">异常</el-tag>
+          </div>
           <p class="detail">{{ a.detail }}</p>
           <p class="hint">版本未动不会自动适配 —— 请在 plate 侧确认是否忘 bump</p>
         </div>
@@ -48,9 +59,16 @@
           data-testid="pending-card"
           @click="openDrawer(p)"
         >
-          <b class="mono">{{ p.endpointId }}</b>
-          <span class="ver">{{ p.fromVersion }} → {{ p.toVersion }}</span>
-          <p class="hint">点击查看影响清单</p>
+          <div class="card-top">
+            <span class="dot" />
+            <b class="mono endpoint">{{ p.endpointId }}</b>
+          </div>
+          <div class="card-bottom">
+            <span class="ver-chip from">{{ p.fromVersion }}</span>
+            <span class="ver-arrow">→</span>
+            <span class="ver-chip to">{{ p.toVersion }}</span>
+            <span class="view">查看影响 →</span>
+          </div>
         </div>
       </div>
 
@@ -63,19 +81,31 @@
       />
     </template>
 
-    <h3>批次</h3>
+    <div class="section-head">
+      <span class="section-title">批次</span>
+    </div>
     <p v-if="!auth.isAdmin" class="hint mine-hint">仅显示触碰你场景的批次</p>
     <el-table v-loading="batchesLoading" :data="batchRows">
-      <el-table-column prop="batchId" label="批次" min-width="140" />
-      <el-table-column prop="endpointId" label="Endpoint" min-width="180" />
+      <el-table-column prop="batchId" label="批次" min-width="140">
+        <template #default="{ row }">
+          <span class="mono">{{ row.batchId }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="endpointId" label="Endpoint" min-width="180">
+        <template #default="{ row }">
+          <span class="mono endpoint-cell">{{ row.endpointId }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="版本" min-width="130">
         <template #default="{ row }">
-          {{ row.fromVersion }} → {{ row.toVersion }}
+          <span class="ver-chip from">{{ row.fromVersion }}</span>
+          <span class="ver-arrow">→</span>
+          <span class="ver-chip to">{{ row.toVersion }}</span>
         </template>
       </el-table-column>
       <el-table-column label="状态" width="120">
         <template #default="{ row }">
-          <el-tag size="small">{{ row.status }}</el-tag>
+          <el-tag size="small" :type="batchTagType(row.status)">{{ row.status }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="ops" min-width="200">
@@ -86,6 +116,7 @@
             size="small"
             :type="opTagType(String(s))"
             class="op-tag"
+            effect="plain"
           >{{ s }} {{ n }}</el-tag>
         </template>
       </el-table-column>
@@ -139,6 +170,15 @@ function opTagType(status: string): 'success' | 'info' | 'danger' | 'warning' {
   return 'warning' // pending
 }
 
+function batchTagType(
+  status: string
+): 'success' | 'info' | 'warning' | 'danger' | 'primary' {
+  if (status === 'completed') return 'success'
+  if (status === 'applying') return 'primary'
+  if (status === 'open') return 'warning'
+  return 'info' // rolled_back
+}
+
 async function loadBatches(scope?: 'mine'): Promise<void> {
   batchesLoading.value = true
   try {
@@ -185,27 +225,118 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 页面容器:对齐 CaseDataSetsList 的页面规范(居中 + 大边距)。 */
+.adaptation-center {
+  max-width: 1480px;
+  min-height: calc(100vh - 48px);
+  padding: 28px 32px 48px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* ── 页头 ── */
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
-.page-header p { margin: 4px 0 0; color: #909399; font-size: 13px; }
-h3 { margin: 22px 0 10px; }
-.cards { display: flex; flex-wrap: wrap; gap: 12px; }
+.page-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #303133;
+}
+.header-text p { margin: 6px 0 0; color: #909399; font-size: 13px; }
+
+/* ── 小节头:标签 + 计数,与内容拉开层级 ── */
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 26px 0 12px;
+}
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #606266;
+}
+.section-count { font-size: 12px; color: #909399; }
+
+/* ── 待适配卡片网格 ── */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
 .card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   border: 1px solid #e4e7ed;
-  border-radius: 6px;
-  padding: 12px 16px;
-  min-width: 260px;
+  border-radius: 8px;
+  padding: 14px 16px;
+  transition: border-color 0.2s, background-color 0.2s;
 }
-.card.pending { cursor: pointer; border-color: #409eff; }
-.card.anomaly { border-color: #e6a23c; background: #fdf6ec; }
-.card .ver { margin-left: 8px; color: #909399; }
-.card .detail { margin: 8px 0 0; font-size: 13px; }
-.hint { margin: 4px 0 0; color: #909399; font-size: 12px; }
-.mine-hint { color: #909399; font-size: 13px; }
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #409eff;
+}
+.card.anomaly .dot { background: #e6a23c; }
+.endpoint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+.card-bottom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+}
+.card.pending { cursor: pointer; }
+.card.pending:hover {
+  border-color: #409eff;
+  background: #f5faff;
+}
+.card.anomaly {
+  border-color: #f3d19e;
+  background: #fdf6ec;
+}
+.card .detail { margin: 0; font-size: 13px; color: #606266; }
+.hint { margin: 0; color: #909399; font-size: 12px; }
+.view { margin-left: auto; font-size: 12px; color: #909399; }
+
+/* ── 版本 chip(卡片与批次表共用) ── */
+.ver-chip {
+  display: inline-block;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.ver-chip.from { background: #f4f4f5; color: #909399; }
+.ver-chip.to { background: #ecf5ff; color: #409eff; }
+.ver-arrow { color: #c0c4cc; font-size: 12px; }
+
+/* ── 批次表 ── */
+.endpoint-cell { font-size: 13px; color: #303133; }
+.mine-hint { margin: 0 0 10px; }
 .op-tag { margin-right: 4px; }
 .link { color: #409eff; }
 .mono { font-family: monospace; }

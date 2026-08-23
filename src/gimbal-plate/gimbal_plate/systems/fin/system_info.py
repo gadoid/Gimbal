@@ -39,7 +39,7 @@ FIN_SYSTEM: Final[str] = "fin"
 
 
 # ── B. 默认值(供 endpoint / meta / config 读取) ──────────────────
-FIN_DEFAULT_VERSION: Final[str] = "1.0.0"
+FIN_DEFAULT_VERSION: Final[str] = "1.1.0"
 FIN_DEFAULT_MODULE: Final[str] = "fin"
 FIN_DEFAULT_OWNER: Final[str] = "fin-team"
 FIN_DEFAULT_AUTHOR: Final[str] = "fin-team"

@@ -268,6 +268,77 @@
         {{ f.description }}
       </p>
     </div>
+
+    <!-- 其他字段(Type C 逆向面):body 实有键 + plate schema 非绑定字段,合并去重。
+         实有键随请求发送;契约字段编辑即写入 body — 默认折叠。 -->
+    <div v-if="extraRows.length" class="extras" data-testid="extra-fields">
+      <button type="button" class="extras-toggle" @click="extrasOpen = !extrasOpen">
+        <span class="extras-arrow" :class="{ open: extrasOpen }">▸</span>
+        <span class="extras-title">其他字段 · {{ extraRows.length }}</span>
+        <span class="extras-hint">不在接口绑定中 · 已写入的随请求发送</span>
+      </button>
+      <div v-if="extrasOpen" class="extras-body">
+        <div v-for="row in extraRows" :key="row.key" class="extra-row">
+          <label class="extra-label">
+            <span class="label-text">{{ row.key }}</span>
+            <span class="field-path">$.{{ row.key }}</span>
+            <span
+              class="extra-src"
+              :class="row.source"
+              :title="row.source === 'schema'
+                ? (row.inBody ? 'plate 契约声明,已写入请求体' : 'plate 契约声明;编辑后写入请求体')
+                : '请求体实有键,随请求发送'"
+            >{{ row.source === 'schema' ? '契约' : '实有' }}</span>
+          </label>
+          <div class="extra-control">
+            <textarea
+              v-if="isStructured(extraValue(row.key)) || row.type === 'object' || row.type === 'array'"
+              class="ctl ctl-code"
+              rows="3"
+              :value="formatJson(extraValue(row.key))"
+              :placeholder="extraPlaceholder(row)"
+              :disabled="readonly"
+              @input="e => setExtra(row.key, parseJsonOrRaw((e.target as HTMLTextAreaElement).value))"
+            />
+            <label v-else-if="row.type === 'boolean'" class="ctl-bool">
+              <input
+                type="checkbox"
+                :checked="Boolean(extraValue(row.key))"
+                :disabled="readonly"
+                @change="e => setExtra(row.key, (e.target as HTMLInputElement).checked)"
+              />
+              <span>{{ extraValue(row.key) ? 'true' : 'false' }}</span>
+            </label>
+            <input
+              v-else-if="row.type === 'number'"
+              type="number"
+              class="ctl"
+              :value="extraValue(row.key) ?? ''"
+              :placeholder="extraPlaceholder(row)"
+              :disabled="readonly"
+              @input="e => setExtra(row.key, (e.target as HTMLInputElement).value === '' ? '' : Number((e.target as HTMLInputElement).value))"
+            />
+            <input
+              v-else
+              type="text"
+              class="ctl"
+              :value="String(extraValue(row.key) ?? '')"
+              :placeholder="extraPlaceholder(row)"
+              :disabled="readonly"
+              @input="e => setExtra(row.key, (e.target as HTMLInputElement).value)"
+            />
+            <button
+              v-if="row.inBody"
+              type="button"
+              class="extra-del"
+              title="从请求体移除该字段"
+              :disabled="readonly"
+              @click="removeExtra(row.key)"
+            >×</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -310,6 +381,11 @@ const props = defineProps<{
   domain?: 'request' | 'response'
   /** 可断言字段的 plate 域路径列表(Response 页 ✓ 标线) */
   assertable?: string[]
+  /**
+   * plate 非绑定字段(请求 schema 有、binding 无 — Canvas 的 reqTypeC):
+   * 并入「其他字段」折叠区,可编辑;编辑即写入 body(未编辑不随请求发送)。
+   */
+  unboundFields?: Array<{ name: string; path: string; type?: string; default?: unknown }>
 }>()
 const emit = defineEmits<{
   'update:body': [any]
@@ -367,6 +443,96 @@ function onFieldPromote(f: IOFieldBinding) {
 
 // Type A + Type B: 有 binding 的都显示; Type C (无 binding 的 schema 字段) 走 hiddenFields 不在此显示
 const visibleFields = computed(() => props.bindings)
+
+/**
+ * 其他字段(Type C 逆向面)行视图,两个来源合并去重:
+ * ① body 实有键(body 顶层键 − binding 根段;binding $.cfg.timeout 覆盖键 cfg)
+ * ② plate schema 声明但无 binding 的字段(unboundFields,请求侧 Canvas 传入)
+ * source=行来源标签;inBody=是否已写入 body(决定随请求发送 + 可删除)。
+ * ② 未编辑前不进 body → 不发送;编辑即写入(setExtra)转为实有。
+ */
+interface ExtraRowView {
+  key: string
+  source: 'body' | 'schema'
+  inBody: boolean
+  /** schema 声明类型(body 实有行无) — 控件按此渲染:boolean 勾选/number 数字框/object·array JSON 域 */
+  type?: string
+  /** schema 默认值(契约行):未写入 body 时以 placeholder 透出,编辑写入 */
+  default?: unknown
+}
+
+const extraRows = computed<ExtraRowView[]>(() => {
+  const bodyObj =
+    props.body && typeof props.body === 'object' && !Array.isArray(props.body)
+      ? (props.body as Record<string, unknown>)
+      : null
+  const roots = new Set(
+    props.bindings.map((b) => b.path.replace(/^\$\./, '').split('.')[0])
+  )
+  const schemaTypes = new Map(
+    (props.unboundFields ?? []).map((f) => [f.name, f.type ?? 'string'])
+  )
+  const rows: ExtraRowView[] = []
+  // ① body 实有且未绑定的键(schema 已声明的标 契约,与 ② 去重)
+  for (const k of bodyObj ? Object.keys(bodyObj) : []) {
+    if (roots.has(k)) continue
+    rows.push({
+      key: k,
+      source: schemaTypes.has(k) ? 'schema' : 'body',
+      inBody: true,
+      type: schemaTypes.get(k),
+    })
+  }
+  // ② plate 契约声明但未写入 body 的(编辑后转实有;默认值 placeholder 透出)
+  const schemaDefaults = new Map(
+    (props.unboundFields ?? []).map((f) => [f.name, f.default])
+  )
+  for (const f of props.unboundFields ?? []) {
+    if (bodyObj && f.name in bodyObj) continue
+    if (roots.has(f.name)) continue
+    rows.push({
+      key: f.name,
+      source: 'schema',
+      inBody: false,
+      type: f.type ?? 'string',
+      default: schemaDefaults.get(f.name),
+    })
+  }
+  return rows
+})
+
+/** 折叠区默认收起(挂载即折叠,不跨步骤记忆) */
+const extrasOpen = ref(false)
+
+function extraValue(k: string): unknown {
+  return props.body?.[k]
+}
+
+/** 结构值(对象/数组)走 JSON 域,其余按原始值文本编辑(未声明 → 类型未知,text 是诚实兜底) */
+function isStructured(v: unknown): boolean {
+  return typeof v === 'object' && v !== null
+}
+
+function setExtra(k: string, val: unknown) {
+  if (props.readonly) return
+  const next = { ...(props.body || {}) }
+  next[k] = val
+  emit('update:body', next)
+}
+
+function removeExtra(k: string) {
+  if (props.readonly) return
+  const next = { ...(props.body || {}) }
+  delete next[k]
+  emit('update:body', next)
+}
+
+/** 契约行未写入时以 schema 默认值作 placeholder(灰字提示 ≠ 值,不随请求发送) */
+function extraPlaceholder(row: ExtraRowView): string {
+  if (row.inBody || row.default === undefined || row.default === null) return ''
+  if (typeof row.default === 'object') return JSON.stringify(row.default, null, 2)
+  return String(row.default)
+}
 
 function getValue(f: IOFieldBinding): unknown {
   if (!props.body) return f.default ?? f.example ?? ''
@@ -535,4 +701,44 @@ function formatJson(v: unknown): string {
   font-size: 11.5px; color: #64748b; line-height: 1.5;
 }
 .field-desc svg { flex-shrink: 0; margin-top: 2px; color: #94a3b8; }
+
+/* ── 其他字段折叠区:琥珀警示(浅底 + 左条),与 sk-generated 橙同族 ── */
+.extras {
+  padding: 8px 10px 8px 12px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-left: 3px solid #f59e0b;
+  border-radius: 8px;
+}
+.extras-toggle {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; padding: 0; border: none; background: transparent;
+  font-size: 12px; text-align: left; cursor: pointer;
+}
+.extras-arrow {
+  display: inline-block; font-size: 10px; color: #b45309;
+  transition: transform 0.15s;
+}
+.extras-arrow.open { transform: rotate(90deg); }
+.extras-title { font-weight: 600; color: #92400e; }
+.extras-hint { margin-left: auto; font-size: 11px; color: #b45309; }
+.extras-body { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.extra-row { display: flex; flex-direction: column; gap: 4px; padding-left: 6px; }
+.extra-label { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+/* 来源标签:实有(body 键,随请求发送)/ 契约(plate schema 声明) */
+.extra-src {
+  font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
+  background: #fef3c7; color: #92400e; cursor: default;
+}
+.extra-src.schema { background: #ecf5ff; color: #409eff; }
+.extra-control { display: flex; gap: 6px; align-items: flex-start; }
+.extra-control .ctl { flex: 1; min-width: 0; }
+.extra-del {
+  flex-shrink: 0; width: 26px; height: 32px;
+  background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 8px;
+  color: #94a3b8; cursor: pointer; font-size: 14px; line-height: 1;
+  transition: all 0.15s;
+}
+.extra-del:hover:not(:disabled) { border-color: #fca5a5; background: #fef2f2; color: #ef4444; }
+.extra-del:disabled { cursor: not-allowed; opacity: 0.5; }
 </style>
