@@ -37,26 +37,42 @@ export function renderTemplate(value: string, vars: Record<string, unknown>): st
   })
 }
 
-function fieldsOf(step: any, source: BaselineColumn['source']): Record<string, unknown> | null {
-  const container = source === 'body' ? step?.request : step?.api
-  const fields = container?.[source]
+/** 场景 step 的最小形状(deriveBaselineColumns / fieldsOf 共用)。
+ *  只声明我们实际读到的字段(view_hints.endpoint_id / request.body /
+ *  api.{query,headers});其他字段不强类型 — 后端定义在 ScenarioSpec.ts。 */
+export interface ScenarioStepShape {
+  api?: { view_hints?: { endpoint_id?: string }; query?: unknown; headers?: unknown }
+  request?: { body?: unknown }
+}
+
+/** 场景 definition 的最小投影 — 仅声明本模块要读的字段。
+ *  真实定义见后端 ScenarioSpec / 前端 ScenarioDefinition,本模块只
+ *  做列调色板推导,不依赖完整类型。 */
+export interface ScenarioDefinitionShape {
+  steps?: ScenarioStepShape[]
+  config?: { vars?: Record<string, unknown> }
+}
+
+/** 取某 step 内某 source 的 fields dict;非对象(空 / 数组)返 null。
+ *  导出给 DataSetEditor 共用 — 该逻辑在 promote / demote / setDirectBaseline /
+ *  isPromotableVar / directBaselineValue 都重复过,集中后改一处生效。 */
+export function fieldsOf(
+  step: ScenarioStepShape | undefined | null,
+  source: BaselineColumn['source'],
+): Record<string, unknown> | null {
+  // body 在 step.request 下,headers/query 在 step.api 下 — 两类容器用 union
+  // 表示后索引会有歧义,所以分两路。
+  const fields: unknown = source === 'body'
+    ? (step?.request as { body?: unknown } | undefined)?.body
+    : (step?.api as { query?: unknown; headers?: unknown } | undefined)?.[source]
   if (!fields || typeof fields !== 'object' || Array.isArray(fields)) return null
   return fields as Record<string, unknown>
 }
 
-/** 内部派生标记:步骤原值恰为整串模板(value === `${var.NAME}`)。
- *  结构性判据,与字段出现顺序无关;不导出,公开签名不变。 */
-interface MarkedColumn extends BaselineColumn {
-  wholeValue: boolean
-}
-
 /** 场景 definition → 行 0 列全集(变量列在前由调用方自行分组;此处保持步骤序) */
-export function deriveBaselineColumns(definition: {
-  steps?: any[]
-  config?: { vars?: Record<string, unknown> }
-}): BaselineColumn[] {
+export function deriveBaselineColumns(definition: ScenarioDefinitionShape): BaselineColumn[] {
   const vars = definition.config?.vars ?? {}
-  const out: MarkedColumn[] = []
+  const out: BaselineColumn[] = []
   ;(definition.steps ?? []).forEach((step, stepIndex) => {
     if (!step?.api?.view_hints?.endpoint_id) return
     for (const source of ['body', 'headers', 'query'] as const) {
@@ -71,39 +87,9 @@ export function deriveBaselineColumns(definition: {
           baseline: varName
             ? renderTemplate(String(value), vars)
             : value === null || value === undefined ? '' : String(value),
-          wholeValue:
-            typeof value === 'string' && varName !== null
-            && value === '${var.' + varName + '}',
         })
       }
     }
   })
   return out
-}
-
-/** "从基线提取首行"(结构性两遍,顺序无关):
- *  Pass 1 — 步骤原值恰为整串模板(value === `${var.NAME}`)的列定义该
- *  变量的行 0 值;仅内嵌模板引用的组合串(如 "p-100-s")不是变量默认
- *  值,无论出现先后都不定义基线。
- *  Pass 2 — 无任何整串绑定的变量整行省略该键(D10 稀疏行语义:不写入
- *  显式空串覆盖)。 */
-export function rowFromBaseline(columns: BaselineColumn[]): Record<string, string> {
-  const row: Record<string, string> = {}
-  for (const c of columns) {
-    if (
-      c.kind === 'var' && c.varName
-      && (c as MarkedColumn).wholeValue
-      && row[c.varName] === undefined
-    ) {
-      row[c.varName] = c.baseline
-    }
-  }
-  return row
-}
-
-/** 列调色板(后端 _scalar_vars 的前端镜像):vars 中值为标量的键。 */
-export function scalarVarNames(vars: Record<string, unknown> | undefined): string[] {
-  return Object.entries(vars ?? {})
-    .filter(([, v]) => v === null || ['string', 'number', 'boolean'].includes(typeof v))
-    .map(([k]) => k)
 }

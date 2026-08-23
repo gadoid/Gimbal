@@ -106,9 +106,19 @@ async def update(
     req_sid = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
     if req_sid != scenario_id:
         raise ValueError("scenario_id_changed: cannot rename scenarioId")
+    # Repair empty meta fields before validation: legacy / partially-edited
+    # scenarios may carry an empty `module` or empty `system`, and we don't
+    # want a routine save (e.g. baseline / dataset save) to fail on
+    # metadata. ``create()`` mirrors this normalization, so a write
+    # round-trip never widens the surface area of validation.
+    repaired_meta = {
+        **def_meta,
+        "module": (def_meta.get("module") or "").strip() or "default",
+        "system": list(def_meta.get("system") or []) or ["default"],
+    }
     effective_owner = new_owner or def_meta.get("owner") or row.owner
     server_owned = ScenarioMeta.model_validate({
-        **def_meta, "scenarioId": scenario_id, "owner": effective_owner,
+        **repaired_meta, "scenarioId": scenario_id, "owner": effective_owner,
     })
     # Write the server-owned meta back into the stored definition so the
     # owner override (and any server-side meta normalization) survives a
@@ -381,10 +391,19 @@ async def to_read_shape(
 
 
 def _meta_from_row(row: ComposerScenario) -> ScenarioMeta:
-    """Meta 投影:唯一权威是 payload.definition.meta。"""
+    """Meta 投影:唯一权威是 payload.definition.meta。
+
+    Repair legacy rows whose ``module`` / ``system`` are empty — same
+    defaults as ``update()`` / ``create()`` — so a list / detail call
+    doesn't 500 on a row that was written before the meta became strict.
+    """
     payload = row.payload or {}
     definition = payload.get("definition") or {}
-    meta_dict = definition.get("meta") or {}
+    meta_dict = dict(definition.get("meta") or {})
+    if not (meta_dict.get("module") or "").strip():
+        meta_dict["module"] = "default"
+    if not list(meta_dict.get("system") or []):
+        meta_dict["system"] = ["default"]
     return ScenarioMeta.model_validate(meta_dict)
 
 

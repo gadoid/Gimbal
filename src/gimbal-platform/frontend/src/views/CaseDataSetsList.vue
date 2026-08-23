@@ -67,7 +67,7 @@ import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { showError } from '@/utils/errorFallback'
 import { confirmAction } from '@/utils/confirmAction'
 import { scenarioDataSetUrl, composerUrl } from '@/utils/links'
-import type { DataSetSummary } from '@/types/scenario-composer'
+import type { DataSetRow, DataSetSummary } from '@/types/scenario-composer'
 
 const route = useRoute()
 const router = useRouter()
@@ -80,7 +80,7 @@ onMounted(async () => {
   try {
     await store.fetchDataSets(scenarioId)
   } catch (e) {
-    showError('加载数据集', undefined, (e as Error).message)
+    showError('加载数据集', e)
   }
 })
 
@@ -102,7 +102,7 @@ async function remove(d: DataSetSummary) {
     await store.removeDataSet(scenarioId, d.datasetId)
     ElMessage.success('已删除')
   } catch (e) {
-    showError('删除数据集', undefined, (e as Error).message)
+    showError('删除数据集', e)
   }
 }
 
@@ -111,11 +111,13 @@ async function runOne(_d: DataSetSummary) {
   router.push(composerUrl(scenarioId))
 }
 
-function previewLabel(rows: Record<string, any>[]) {
-  const cols = Object.keys(rows[0] ?? {})
+/** 把首 3 行的首 3 列拼成预览文案。模板层 `v-if="d.preview.length"` 已守卫,
+ *  此处不再做空检查(死分支,且多一层模板拼字符串的浪费)。 */
+function previewLabel(rows: DataSetRow[]) {
+  const cols = Object.keys(rows[0])
   const head = cols.slice(0, 3).join('  ')
   const tail = rows.slice(0, 3).map((r) =>
-    cols.slice(0, 3).map((c) => String(r[c])).join('  '),
+    cols.slice(0, 3).map((c) => r[c] === undefined ? '' : String(r[c])).join('  '),
   ).join(' / ')
   return `${head}\n${tail}`
 }

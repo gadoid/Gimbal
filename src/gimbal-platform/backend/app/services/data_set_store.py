@@ -81,7 +81,14 @@ async def create(
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
-        raise ValueError(f"dataset_id_exists: {dataset_id}") from e
+        # Only treat as a duplicate-id collision when SQLite reports it
+        # through the dataset_id unique index. Without this scope check
+        # the catch-all used to mask schema-level errors (e.g. a stale
+        # `case_id NOT NULL` column) behind a misleading "dataset_id_exists"
+        # message that pointed the operator at the wrong fix.
+        if _is_dataset_id_collision(e):
+            raise ValueError(f"dataset_id_exists: {dataset_id}") from e
+        raise
     await db.refresh(row)
     return _to_full_shape(row)
 
@@ -199,6 +206,28 @@ def _to_summary_shape(row: ComposerDataSet) -> DataSetSummary:
 
 
 _NNN_RE = re.compile(r"^ds-(\d+)$")
+
+
+def _is_dataset_id_collision(err: IntegrityError) -> bool:
+    """True iff the IntegrityError is the dataset_id unique-index collision.
+
+    SQLite puts the constraint / index name in the message; we accept any
+    form that mentions ``dataset_id`` *and* isn't a NOT NULL / FK
+    violation, so genuine schema-level bugs surface with their real
+    message instead of being flattened into "dataset_id_exists".
+    """
+    msg = str(getattr(err, "orig", err) or "")
+    if not msg:
+        return False
+    if "dataset_id" not in msg:
+        return False
+    # Filter out the unrelated IntegrityError flavours we don't want to
+    # mis-classify as a duplicate id. Note: we don't blacklist
+    # "UNIQUE constraint failed: composer_data_sets." itself — SQLite's
+    # unique-index collision message starts with that prefix, and the
+    # `dataset_id` substring check above already scopes the match.
+    bad = ("NOT NULL", "FOREIGN KEY", "CHECK constraint")
+    return not any(token in msg for token in bad)
 
 
 async def _next_dataset_id(db: AsyncSession) -> str:
