@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import hashlib
 import json
 import shutil
 import time
@@ -429,6 +430,24 @@ async def _fanout(
 
     sem = asyncio.Semaphore(max(1, parallel))
 
+    # P6:整单固定一次 compose 时间戳 — fill_plate_defaults 对缺失的
+    # meta.createTime 注入"当前时刻"(微秒精度),同一行 n_runs 次重复
+    # 的 convert 输入会逐次不同,memo 键永不命中。deepcopy 隔离存储
+    # payload(防写穿 ORM 行)后预填一次,compose 内 setdefault 语义
+    # 即复用同一值 → 同一行重复输入完全一致。
+    scenario_payload = copy.deepcopy(scenario_payload)
+    plate_client.fill_plate_defaults(definition_from_payload(scenario_payload))
+
+    # P6:fan-out 级 convert memo + plate 连续不可用熔断计数。
+    convert_cache: dict[str, dict] = {}
+    plate_state = {"consecutive_unavailable": 0}
+
+    def _breaker_open() -> bool:
+        return (
+            plate_state["consecutive_unavailable"]
+            >= settings.PLATE_BREAKER_THRESHOLD
+        )
+
     # 内置认证(definition.config.users)merge 策略的保留基座 —— plate
     # /convert 的产物可能剥掉平台视图字段,凭证合并不依赖 converted
     # 自带 users,而是以场景定义为源(与 V1 在原始 yaml 上渲染同语义)。
@@ -477,72 +496,89 @@ async def _fanout(
             await _append_log(log_path, log_line)
 
             try:
-                convert_data = await plate_client.convert(composed)
-                # Convert succeeded — hand the gimbal-shaped product to the
-                # engine. 明文 users 只进 run 副本(convert 那份不带,防明文
-                # 流进 plate 校验/日志);注入形状同 V1 executor 生产路径。
-                # convert_data = {consumer, converted};converted 是
-                # GimbalScenarioExporter 的产物(已剥平台视图扩展字段)。
-                converted = convert_data.get("converted") or {}
-                composed_exec = _inject_exec_users(
-                    converted,
-                    exec_auths,
-                    merge_policy=merge_policy,
-                    built_in_users=built_in_users,
-                )
-                if prefix:
-                    # 前缀变量注入进 run 副本(post-convert,防 plate 剥掉)。
-                    _inject_prefix_vars(composed_exec, prefix)
-                # services 物化:未映射服务名 → env.baseUrl(见函数 docstring)。
-                _inject_services(composed_exec, env)
-                # 落盘数据驱动用例快照后交给 CLI 子进程执行。
-                case_path = _write_case_file(case_dir, composed_exec)
-                result = await gimbal_launcher.launch(
-                    case_path,
-                    step_to=halt_at,
-                    report_dir=case_dir / "reports",
-                    cwd=case_dir,
-                )
-                log_line["runResult"] = result.run_result
-                if result.launch_status != "ok":
-                    # 子进程层故障(超时 kill / spawn 失败):记失败但
-                    # 不中断后续行(fan-out 永不因单行崩溃)。
-                    log_line["status"] = (
-                        "launch_timeout"
-                        if result.launch_status == "timeout"
-                        else "launch_error"
-                    )
-                    log_line["runError"] = result.error
-                    logger.warning(
-                        "run_dispatcher: launch {} for row {}/{}#{}: {}",
-                        result.launch_status, ds["datasetId"], row_idx, rep,
-                        result.error,
-                    )
-                elif result.exit_code == 0:
-                    log_line["status"] = "passed"
-                    logger.info(
-                        "run_dispatcher: row {}/{}#{} executed: exit=0 passed={} failed={}",
-                        ds["datasetId"], row_idx, rep,
-                        result.passed, result.failed,
-                    )
-                elif result.exit_code == 2:
-                    # 引擎 Scenario 校验拒绝(与 HTTP 422 同源)。
-                    log_line["status"] = "gimbal_rejected"
-                    log_line["runError"] = result.error
-                    logger.warning(
-                        "run_dispatcher: gimbal rejected row {}/{}#{}: {}",
-                        ds["datasetId"], row_idx, rep, result.error,
+                if _breaker_open():
+                    # 熔断开路:不再调用 plate,行快速失败(落到下方
+                    # 公共尾部:记日志行 + failed 计数)。
+                    log_line["status"] = "plate_unavailable"
+                    log_line["error"] = (
+                        "plate circuit open: "
+                        f"{plate_state['consecutive_unavailable']} "
+                        "consecutive unavailable"
                     )
                 else:
-                    # exit 1 = 测试失败(正常业务结果);>=3 = 引擎侧错误。
-                    log_line["status"] = "failed"
-                    log_line["runError"] = result.error
-                    logger.info(
-                        "run_dispatcher: row {}/{}#{} executed: exit={} passed={} failed={}",
-                        ds["datasetId"], row_idx, rep, result.exit_code,
-                        result.passed, result.failed,
+                    cache_key = _convert_cache_key(composed)
+                    if cache_key in convert_cache:
+                        convert_data = convert_cache[cache_key]
+                    else:
+                        convert_data = await plate_client.convert(composed)
+                        convert_cache[cache_key] = convert_data
+                    plate_state["consecutive_unavailable"] = 0
+                    # Convert succeeded — hand the gimbal-shaped product to the
+                    # engine. 明文 users 只进 run 副本(convert 那份不带,防明文
+                    # 流进 plate 校验/日志);注入形状同 V1 executor 生产路径。
+                    # convert_data = {consumer, converted};converted 是
+                    # GimbalScenarioExporter 的产物(已剥平台视图扩展字段)。
+                    converted = convert_data.get("converted") or {}
+                    composed_exec = _inject_exec_users(
+                        converted,
+                        exec_auths,
+                        merge_policy=merge_policy,
+                        built_in_users=built_in_users,
                     )
+                    if prefix:
+                        # 前缀变量注入进 run 副本(post-convert,防 plate 剥掉)。
+                        _inject_prefix_vars(composed_exec, prefix)
+                    # services 物化:未映射服务名 → env.baseUrl(见函数 docstring)。
+                    _inject_services(composed_exec, env)
+                    # 落盘数据驱动用例快照后交给 CLI 子进程执行。
+                    case_path = _write_case_file(case_dir, composed_exec)
+                    result = await gimbal_launcher.launch(
+                        case_path,
+                        step_to=halt_at,
+                        report_dir=case_dir / "reports",
+                        cwd=case_dir,
+                    )
+                    log_line["runResult"] = result.run_result
+                    if result.launch_status != "ok":
+                        # 子进程层故障(超时 kill / spawn 失败):记失败但
+                        # 不中断后续行(fan-out 永不因单行崩溃)。
+                        log_line["status"] = (
+                            "launch_timeout"
+                            if result.launch_status == "timeout"
+                            else "launch_error"
+                        )
+                        log_line["runError"] = result.error
+                        logger.warning(
+                            "run_dispatcher: launch {} for row {}/{}#{}: {}",
+                            result.launch_status, ds["datasetId"], row_idx, rep,
+                            result.error,
+                        )
+                    elif result.exit_code == 0:
+                        log_line["status"] = "passed"
+                        logger.info(
+                            "run_dispatcher: row {}/{}#{} executed: exit=0 passed={} failed={}",
+                            ds["datasetId"], row_idx, rep,
+                            result.passed, result.failed,
+                        )
+                    elif result.exit_code == 2:
+                        # 引擎 Scenario 校验拒绝(与 HTTP 422 同源)。
+                        log_line["status"] = "gimbal_rejected"
+                        log_line["runError"] = result.error
+                        logger.warning(
+                            "run_dispatcher: gimbal rejected row {}/{}#{}: {}",
+                            ds["datasetId"], row_idx, rep, result.error,
+                        )
+                    else:
+                        # exit 1 = 测试失败(正常业务结果);>=3 = 引擎侧错误。
+                        log_line["status"] = "failed"
+                        log_line["runError"] = result.error
+                        logger.info(
+                            "run_dispatcher: row {}/{}#{} executed: exit={} passed={} failed={}",
+                            ds["datasetId"], row_idx, rep, result.exit_code,
+                            result.passed, result.failed,
+                        )
             except plate_client.PlateUnavailableError as e:
+                plate_state["consecutive_unavailable"] += 1
                 log_line["status"] = "plate_unavailable"
                 log_line["error"] = str(e)
                 logger.warning("run_dispatcher: plate unavailable for row {}/{}#{}: {}", ds["datasetId"], row_idx, rep, e)
@@ -796,6 +832,17 @@ def _compose_scenario(
 
 def _new_run_id() -> str:
     return f"run-{_utcnow().strftime('%Y%m%d')}-{uuid4().hex[:6]}"
+
+
+def _convert_cache_key(payload: dict) -> str:
+    """convert memo 键:合成场景的规范化 JSON 摘要。
+
+    同一行 n_runs 次重复输入完全一致(P6:此前重复打 plate)。
+    """
+    return hashlib.sha1(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+        .encode("utf-8")
+    ).hexdigest()
 
 
 class _AuthResolveError(RuntimeError):

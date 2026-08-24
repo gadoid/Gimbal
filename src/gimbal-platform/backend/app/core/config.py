@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     # stay out of Platform's 8000 + Vite's 5173 footprint.
     PLATE_BASE_URL: str = "http://127.0.0.1:8765"
     PLATE_TIMEOUT_SEC: float = 30.0
+    # 连续 PlateUnavailable 达到该次数后熔断:本轮 fan-out 剩余行不再
+    # 调用 plate,直接记 plate_unavailable(P6:plate 宕机时避免逐行
+    # 全超时等待)。
+    PLATE_BREAKER_THRESHOLD: int = 3
 
     # Set in model_post_init — True when the corresponding secret was
     # freshly generated because env/.env didn't provide one.  Not part of
