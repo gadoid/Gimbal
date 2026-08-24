@@ -51,19 +51,27 @@ from ..models.execution import (
     STATUS_FAILED,
     STATUS_QUEUED,
 )
-from ..models.auth_session import AuthSession
+from ..models.auth_session import AuthSession as DBAuthSession
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import RunRequest, RunResponse
 from . import env_store, gimbal_launcher, plate_client
 
+# 物理迁移自 gimbal 后:用平台侧标准 AuthSession 替代自创 ResolvedAuth dataclass。
+# 下游 _inject_exec_users 仍消费 username/password/url/token_type/expires_in 这几个
+# 字段,与标准 AuthSession 完全对齐(后者字段更多但不影响注入逻辑)。
+# 保留 ResolvedAuth 作为兼容 shim,免改下游 _inject_exec_users 的字段引用。
+from app.auth.schema import AuthSession as RuntimeAuthSession  # noqa: E402
+
 
 @dataclass(frozen=True, slots=True)
 class ResolvedAuth:
-    """解密后的执行认证(轻量值对象)。
+    """解密后的执行认证(轻量值对象,保留兼容 shim)。
 
     明文凭证只存在于该对象的生命周期内,不落在 AuthSession ORM 行
     上 — 避免任何意外 commit 把明文写回数据库。
+
+    内部委托给标准 RuntimeAuthSession(物理迁移自 gimbal),字段对齐下游消费者。
     """
 
     alias: str
@@ -72,6 +80,18 @@ class ResolvedAuth:
     password: str
     token_type: str
     expires_in: int
+
+    @classmethod
+    def from_runtime(cls, runtime: "RuntimeAuthSession", alias: str) -> "ResolvedAuth":
+        """从标准 RuntimeAuthSession 构造,供 _resolve_exec_auths 内部使用。"""
+        return cls(
+            alias=alias,
+            url=runtime.url,
+            username=runtime.username,
+            password=runtime.password,
+            token_type=runtime.token_type,
+            expires_in=runtime.expires_in or 0,
+        )
 
 
 # ─── in-flight tracking ───────────────────────────────────────────
@@ -899,6 +919,10 @@ async def _resolve_exec_auths(
     * 明文只存在于返回的值对象上 — 绝不写回 ORM 行(此前
       ``a.username = ...`` 会把明文挂到 session 里的 AuthSession
       实例上,任何一次意外 commit 都会把明文持久化进库)。
+
+    Phase 3 改造:内部先用平台侧标准 RuntimeAuthSession(物理迁移自 gimbal)
+    接收解密后的字段,然后通过 ``ResolvedAuth.from_runtime`` 转为兼容 shim。
+    这样下游 ``_inject_exec_users`` 不动,未来可直接消费 ``RuntimeAuthSession``。
     """
     if not aliases:
         return []
@@ -909,9 +933,9 @@ async def _resolve_exec_auths(
         rows = (
             (
                 await session.execute(
-                    select(AuthSession).where(
-                        AuthSession.owner_id == owner_id,
-                        AuthSession.alias.in_(aliases),
+                    select(DBAuthSession).where(
+                        DBAuthSession.owner_id == owner_id,
+                        DBAuthSession.alias.in_(aliases),
                     )
                 )
             )
@@ -920,14 +944,16 @@ async def _resolve_exec_auths(
         )
     for a in rows:
         try:
-            resolved.append(ResolvedAuth(
-                alias=a.alias,
+            # 先构造标准 RuntimeAuthSession(字段对齐 gimbal 侧 AuthSession)
+            runtime = RuntimeAuthSession(
                 url=a.url,
                 username=fernet_decrypt(a.username_enc),
                 password=fernet_decrypt(a.password_enc),
                 token_type=a.token_type,
                 expires_in=a.expires_in,
-            ))
+            )
+            # 转兼容 shim(下游 _inject_exec_users 字段不变)
+            resolved.append(ResolvedAuth.from_runtime(runtime, alias=a.alias))
         except ValueError as e:
             raise _AuthResolveError(
                 f"auth alias '{a.alias}' decrypt failed: {e}"
