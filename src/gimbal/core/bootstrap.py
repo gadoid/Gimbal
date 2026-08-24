@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, TYPE_CHECKING, Optional
 
 from gimbal.cli.context import CLIContext
@@ -177,7 +178,10 @@ def _load_plugins(
     """
     from gimbal.plugins import PluginLoader
 
-    plugins_dir = cfg.base_dir / cfg.plugins_dir
+    # plugins_dir 为绝对路径时直用(平台侧 GIMBAL_PLUGINS_DIR 注入);
+    # 相对路径保持既有语义:相对 base_dir。
+    pdir = Path(cfg.plugins_dir)
+    plugins_dir = pdir if pdir.is_absolute() else cfg.base_dir / pdir
     white = set(cfg.plugins) if cfg.plugins else None   # 空 = 全部启用
     loader = PluginLoader(plugins_dir=plugins_dir, enabled_filter=white)
 

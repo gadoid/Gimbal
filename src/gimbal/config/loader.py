@@ -40,6 +40,13 @@ _ENV_MAP: dict[str, str] = {
     "GIMBAL_MONGO_URI":      "mongo_uri",
     "GIMBAL_MINIO_ENDPOINT": "minio_endpoint",
     "GIMBAL_REPORT_DIR":     "report_dir",
+    # ── 插件执行注入(平台侧 gimbal_launcher 透传)─────────────
+    # GIMBAL_PLUGINS_DIR:   文件系统插件目录(绝对路径直用,绕开 base_dir 推导)
+    "GIMBAL_PLUGINS_DIR":    "plugins_dir",
+    # GIMBAL_PLUGINS:       插件白名单,逗号分隔(空 = 全部启用)
+    "GIMBAL_PLUGINS":        "plugins",
+    # GIMBAL_PLUGIN_CONFIGS: 按插件名配置,JSON 串,如 {"im-notifier":{"webhook":"..."}}
+    "GIMBAL_PLUGIN_CONFIGS": "plugin_configs",
 }
 RELATIVE_PATH = Path("src") / "gimbal" / "config"
 
@@ -247,6 +254,18 @@ class ConfigLoader:
                 return raw
         if field in list_fields:
             return [s.strip() for s in raw.split(",") if s.strip()]
+        if field == "plugin_configs":
+            # JSON 串 → dict;解析失败视为空配置(告警不阻断,插件用 default_config)
+            import json as _json
+            try:
+                parsed = _json.loads(raw)
+                return parsed if isinstance(parsed, dict) else {}
+            except (ValueError, TypeError):
+                logger.warning(
+                    "[ConfigLoader] GIMBAL_PLUGIN_CONFIGS 不是合法 JSON,忽略: {}",
+                    raw[:200],
+                )
+                return {}
         return raw
 
     @staticmethod

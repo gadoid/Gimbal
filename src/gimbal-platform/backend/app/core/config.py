@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     # 进程内 launch 子进程同时在飞上限(跨 execution 合并生效)。
     MAX_RUNS_PER_EXECUTION: int = 200
     MAX_CONCURRENT_LAUNCHES: int = 8
+    # ── Gimbal 插件注入(透传给执行子进程;空值 = 现状零变化) ──
+    # GIMBAL_PLUGINS_DIR:文件系统插件目录(绝对路径;空 = 引擎默认 base_dir/plugins)
+    GIMBAL_PLUGINS_DIR: str = ""
+    # GIMBAL_PLUGINS:插件白名单,逗号分隔(空 = 引擎侧全部启用)
+    GIMBAL_PLUGINS: str = ""
+    # GIMBAL_PLUGIN_CONFIGS:按插件名配置,JSON 串(空 = 全走插件 default_config)
+    GIMBAL_PLUGIN_CONFIGS: str = ""
 
     # ── CORS ──────────────────────────────────────────────
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"

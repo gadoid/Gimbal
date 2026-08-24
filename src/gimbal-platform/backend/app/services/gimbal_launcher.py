@@ -166,6 +166,15 @@ async def launch(
     # 子进程 stdio 强制 UTF-8:引擎 JSON 报告 ensure_ascii=False、错误信息
     # 含中文,Windows 管道缺省走 locale 码页(GBK),不强制则会乱码。
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    # 插件注入(平台 Settings → 引擎 ConfigLoader 的 GIMBAL_* 环境变量):
+    # 空值不设置 → 引擎走默认(base_dir/plugins、全启用、default_config),
+    # 与未加此机制前的行为完全一致。
+    if settings.GIMBAL_PLUGINS_DIR:
+        env["GIMBAL_PLUGINS_DIR"] = settings.GIMBAL_PLUGINS_DIR
+    if settings.GIMBAL_PLUGINS:
+        env["GIMBAL_PLUGINS"] = settings.GIMBAL_PLUGINS
+    if settings.GIMBAL_PLUGIN_CONFIGS:
+        env["GIMBAL_PLUGIN_CONFIGS"] = settings.GIMBAL_PLUGIN_CONFIGS
 
     try:
         proc = await asyncio.create_subprocess_exec(
