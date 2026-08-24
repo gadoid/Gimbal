@@ -431,6 +431,11 @@ async def _fanout(
                 log_line["error"] = repr(e)
                 logger.exception("run_dispatcher: unexpected error row {}/{}#{}", ds["datasetId"], row_idx, rep)
 
+            # P1:引擎结果全量证据落盘(仅真实拿到 LaunchResult 的路径;
+            # plate 异常分支不设 runResult,短路跳过)。
+            if "runResult" in log_line:
+                _write_result_evidence(case_dir, result, log_line["status"])
+
             # Append the final log line for this row (covers all
             # success / failure branches — previously the rejected
             # branches ``continue``'d before this and lost the line).
@@ -494,6 +499,40 @@ def _append_log_quietly(path: Path, payload: dict) -> None:
         logger.warning(
             "run_dispatcher: failed to write JSONL log line for {}: {}",
             payload, e,
+        )
+
+
+def _write_result_evidence(
+    case_dir: Path, result: gimbal_launcher.LaunchResult, status: str
+) -> None:
+    """P1 证据落盘:per-case result.json(步骤级 details 完整保留)。
+
+    JSONL 保持 counts-only(运维索引);完整证据(含 details[] / 兜底
+    stdout 原文)落在本文件,与 case.json 同目录构成审计面。
+    Best-effort:写失败只告警,绝不打断行执行。
+    """
+    payload: dict[str, Any] = {
+        "launchStatus": result.launch_status,
+        "exitCode": result.exit_code,
+        "status": status,
+        "total": result.total,
+        "passed": result.passed,
+        "failed": result.failed,
+        "skipped": result.skipped,
+        "details": result.details,
+        "error": result.error,
+    }
+    if not result.details and result.stdout:
+        # 引擎未给出可解析 JSON 报告(如 exit 2 走 typer err)时保留原文。
+        payload["stdout"] = result.stdout
+    try:
+        (case_dir / "result.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "run_dispatcher: failed to write result.json for {}: {}",
+            case_dir, e,
         )
 
 

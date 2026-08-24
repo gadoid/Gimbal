@@ -58,6 +58,7 @@ def test_parse_run_result_clean_json() -> None:
     })
     assert parse_run_result(stdout) == {
         "exit_code": 1, "total": 3, "passed": 2, "failed": 1, "skipped": 0,
+        "details": [],
     }
 
 
@@ -69,12 +70,32 @@ def test_parse_run_result_survives_noise_prefix() -> None:
     stdout = "some noise line\n" + json.dumps(payload, indent=2) + "\n"
     assert parse_run_result(stdout) == {
         "exit_code": 0, "total": 1, "passed": 1, "failed": 0, "skipped": 0,
+        "details": [],
     }
 
 
 @pytest.mark.parametrize("stdout", ["", "   \n", "not json at all", '{"total": 1}'])
 def test_parse_run_result_returns_none_when_unusable(stdout: str) -> None:
     assert parse_run_result(stdout) is None
+
+
+def test_parse_run_result_extracts_details():
+    stdout = (
+        '{"exit_code": 1, "total": 2, "passed": 1, "failed": 1, "skipped": 0, '
+        '"details": [{"step_id": "s1", "status": "failed", "error": "boom", '
+        '"error_phase": "verifying"}]}'
+    )
+    counts = parse_run_result(stdout)
+    assert counts is not None
+    assert counts["details"] == [
+        {"step_id": "s1", "status": "failed", "error": "boom", "error_phase": "verifying"}
+    ]
+
+
+def test_parse_run_result_details_missing_defaults_empty():
+    counts = parse_run_result('{"exit_code": 0, "total": 1, "passed": 1}')
+    assert counts is not None
+    assert counts["details"] == []
 
 
 # ── 子进程往返(假命令)───────────────────────────────────────────

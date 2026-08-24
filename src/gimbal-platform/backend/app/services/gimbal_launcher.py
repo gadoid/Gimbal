@@ -57,6 +57,8 @@ class LaunchResult:
     passed: int = 0
     failed: int = 0
     skipped: int = 0
+    # 步骤级明细(-o json stdout 里的 details[];解析失败/兜底路径为 [])。
+    details: list[dict[str, Any]] = field(default_factory=list)
     error: str = ""
     # stdout 原文(诊断用;引擎日志走 stderr,stdout 只有 JSON 报告,
     # 但防御性保留原文以防未来混入噪声)。
@@ -106,7 +108,7 @@ def build_argv(
 
 
 # ─── stdout parsing ───────────────────────────────────────────────
-def parse_run_result(stdout: str) -> dict[str, int] | None:
+def parse_run_result(stdout: str) -> dict[str, Any] | None:
     """解析 ``-o json`` 的 stdout 为计数 dict;失败返回 None。
 
     引擎 typer.echo 把 JSON 写在 stdout 末尾;正常情况 stdout 就是
@@ -134,6 +136,7 @@ def parse_run_result(stdout: str) -> dict[str, int] | None:
                 "passed": int(data.get("passed") or 0),
                 "failed": int(data.get("failed") or 0),
                 "skipped": int(data.get("skipped") or 0),
+                "details": [d for d in (data.get("details") or []) if isinstance(d, dict)],
             }
     return None
 
@@ -231,6 +234,7 @@ async def launch(
         passed=counts["passed"],
         failed=counts["failed"],
         skipped=counts["skipped"],
+        details=counts["details"],
         stdout=stdout,
         argv=argv,
     )
