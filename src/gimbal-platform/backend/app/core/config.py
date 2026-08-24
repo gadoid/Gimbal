@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     GIMBAL_BIN: str = ""
     # 单次 launch 子进程超时(秒)。
     GIMBAL_TIMEOUT_SEC: float = 300.0
+    # P7 资源闸:单次执行总行数上限(行数 × nRuns,409 拒单)与
+    # 进程内 launch 子进程同时在飞上限(跨 execution 合并生效)。
+    MAX_RUNS_PER_EXECUTION: int = 200
+    MAX_CONCURRENT_LAUNCHES: int = 8
 
     # ── CORS ──────────────────────────────────────────────
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"

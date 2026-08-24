@@ -132,6 +132,27 @@ def reset_shutdown_state() -> None:
     _shutting_down = False
 
 
+# ─── global launch concurrency gate (P7) ──────────────────────────
+# 全局 launch 并发闸(P7):按事件循环缓存 Semaphore——asyncio 原语
+# 绑定创建时的 loop,pytest 每用例新 loop,进程级单例会跨 loop 复用
+# 报 "attached to a different loop"。
+_launch_sems: dict[int, asyncio.Semaphore] = {}
+
+
+def _global_launch_sem() -> asyncio.Semaphore:
+    loop_id = id(asyncio.get_running_loop())
+    sem = _launch_sems.get(loop_id)
+    if sem is None:
+        sem = asyncio.Semaphore(max(1, settings.MAX_CONCURRENT_LAUNCHES))
+        _launch_sems[loop_id] = sem
+    return sem
+
+
+def reset_concurrency_state() -> None:
+    """测试隔离:清空按 loop 缓存的信号量(换上限后重建)。"""
+    _launch_sems.clear()
+
+
 # ─── cooperative cancel registry (P4) ─────────────────────────────
 # 取消注册表(P4 协作式取消):取消请求集合 + 在飞 fanout task 索引。
 # 取消语义:协作式 —— 只在未来行边界生效,在飞子进程自然跑完
@@ -306,6 +327,14 @@ async def dispatch_run(
         for ds in selected_datasets
     ] or [{"datasetId": None, "rows": [{}]}]
     total_runs = sum(len(d["rows"]) for d in fanout_datasets) * req.n_runs
+    # P7:总量闸——行数 × nRuns 无上限时,万行数据集 × n_runs 会派生
+    # 出十万级子进程。
+    if total_runs > settings.MAX_RUNS_PER_EXECUTION:
+        raise Conflict(
+            "too_many_runs",
+            f"total runs {total_runs} exceed platform cap "
+            f"{settings.MAX_RUNS_PER_EXECUTION} (rows x nRuns)",
+        )
     execution = await _create_execution(
         db,
         # (Case 层解散后执行的挂载点就是场景)。
@@ -532,12 +561,15 @@ async def _fanout(
                     _inject_services(composed_exec, env)
                     # 落盘数据驱动用例快照后交给 CLI 子进程执行。
                     case_path = _write_case_file(case_dir, composed_exec)
-                    result = await gimbal_launcher.launch(
-                        case_path,
-                        step_to=halt_at,
-                        report_dir=case_dir / "reports",
-                        cwd=case_dir,
-                    )
+                    # P7 全局并发闸:进程级 launch 在飞上限(跨 execution
+                    # 合并生效;行级 sem 只管单 execution 的 parallel)。
+                    async with _global_launch_sem():
+                        result = await gimbal_launcher.launch(
+                            case_path,
+                            step_to=halt_at,
+                            report_dir=case_dir / "reports",
+                            cwd=case_dir,
+                        )
                     log_line["runResult"] = result.run_result
                     if result.launch_status != "ok":
                         # 子进程层故障(超时 kill / spawn 失败):记失败但
