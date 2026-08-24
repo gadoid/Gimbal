@@ -129,6 +129,52 @@ def reset_shutdown_state() -> None:
     _shutting_down = False
 
 
+# ─── startup reconcile (P3) ────────────────────────────────────────
+async def reconcile_stale_executions(db_factory: Any) -> int:
+    """启动期 reconcile:进程内 _fanout 随重启丢失,queued 即僵尸。
+
+    全部标 failed + ``config_json.reconciled`` 记录(P3:此前永远
+    停在 queued,UI 无从得知)。返回处理行数。
+    """
+    count = 0
+    async with db_factory() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(Execution).where(Execution.status == STATUS_QUEUED)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for ex in rows:
+            ex.status = STATUS_FAILED
+            if ex.started_at is None:
+                ex.started_at = ex.created_at or _utcnow()
+            ex.finished_at = _utcnow()
+            cfg = dict(ex.config_json or {})
+            cfg["reconciled"] = {
+                "at": _utcnow().isoformat() + "Z",
+                "reason": "backend restarted mid-dispatch",
+            }
+            ex.config_json = cfg
+            count += 1
+        await session.commit()
+    if count:
+        logger.warning(
+            "run_dispatcher: reconciled {} stale queued execution(s) after restart",
+            count,
+        )
+    return count
+
+
+async def startup_recovery() -> tuple[int, int]:
+    """启动恢复:reconcile 僵尸执行 + 清扫过期 case 目录(Task 5 接入)。"""
+    stale = await reconcile_stale_executions(_session_factory)
+    swept = 0  # Task 5: swept = sweep_stale_case_dirs()
+    return stale, swept
+
+
 # ─── main entry point ─────────────────────────────────────────────
 async def dispatch_run(
     db: AsyncSession,
@@ -946,6 +992,10 @@ def _session_factory() -> AsyncSession:
     request-scoped session the router passed in."""
     from ..core.db import SessionLocal
     return SessionLocal()
+
+
+# 公开别名:启动恢复等模块外调用方不必触私有名。
+session_factory = _session_factory
 
 
 # ─── error sentinels (router translates to HTTPException) ─────────

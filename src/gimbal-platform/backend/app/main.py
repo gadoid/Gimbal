@@ -56,11 +56,19 @@ async def lifespan(app: FastAPI):
     from .services.run_dispatcher import (
         drain_in_flight_dispatches,
         reset_shutdown_state,
+        startup_recovery,
     )
 
     # Same-process app reuse (tests) needs the shutdown flag cleared,
     # or dispatches silently skip their fan-out.
     reset_shutdown_state()
+    # P3:重启后把丢失 _fanout 的 queued 僵尸单收敛为 failed。
+    try:
+        n_stale, _swept = await startup_recovery()
+        if n_stale:
+            logger.warning("lifespan: reconciled {} stale execution(s)", n_stale)
+    except Exception as e:  # noqa: BLE001
+        logger.error("lifespan: startup recovery failed: {}", e)
     try:
         yield
     finally:

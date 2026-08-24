@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 # ``db_module.SessionLocal`` 即满足 db_factory 契约(``async with
 # factory() as session``);由 conftest 的 fresh_db fixture 换成每测库。
 async def _seed_execution(
-    owner_id: int, *, status: str, total_runs: int,
+    owner_id: int, *, status: str, total_runs: int = 1,
     passed: int = 0, failed: int = 0,
 ) -> int:
     """Insert one Execution row; return its id."""
@@ -164,3 +164,27 @@ async def test_dispatch_rejects_when_shutting_down(client, monkeypatch):
         assert n == 0                      # 不留 Execution 行
     finally:
         run_dispatcher._shutting_down = False
+
+
+# ─── P3b:启动期 reconcile(queued 僵尸单收敛为 failed)───────────────
+async def test_reconcile_marks_stale_queued_failed(fresh_db):
+    from app.core import db as db_module
+    from app.services import run_dispatcher
+
+    eid = await _seed_execution(1, status="queued")
+    n = await run_dispatcher.reconcile_stale_executions(db_module.SessionLocal)
+    assert n == 1
+    row = await _get_execution(eid)
+    assert row.status == "failed"
+    assert row.finished_at is not None
+    assert row.config_json["reconciled"]["reason"] == "backend restarted mid-dispatch"
+
+
+async def test_reconcile_ignores_terminal(fresh_db):
+    from app.core import db as db_module
+    from app.services import run_dispatcher
+
+    eid = await _seed_execution(1, status="done")
+    n = await run_dispatcher.reconcile_stale_executions(db_module.SessionLocal)
+    assert n == 0
+    assert (await _get_execution(eid)).status == "done"
