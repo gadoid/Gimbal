@@ -42,7 +42,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.config import settings
 from ..core.timeutil import utcnow as _utcnow
 from ..models import Execution
-from ..models.execution import STATUS_DONE, STATUS_FAILED, STATUS_QUEUED
+from ..models.execution import (
+    STATUS_CANCELED,
+    STATUS_DONE,
+    STATUS_FAILED,
+    STATUS_QUEUED,
+)
 from ..models.auth_session import AuthSession
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
@@ -349,7 +354,7 @@ async def _fanout(
                 "casePath": str((case_dir / "case.json")),
                 "reportDir": str((case_dir / "reports")),
             }
-            _append_log_quietly(log_path, log_line)
+            await _append_log(log_path, log_line)
 
             try:
                 convert_data = await plate_client.convert(composed)
@@ -439,7 +444,7 @@ async def _fanout(
             # Append the final log line for this row (covers all
             # success / failure branches — previously the rejected
             # branches ``continue``'d before this and lost the line).
-            _append_log_quietly(log_path, log_line)
+            await _append_log(log_path, log_line)
 
             # Atomic per-row counter bump.  Deltas (not absolute
             # write-backs) so concurrent rows and concurrent UI
@@ -480,7 +485,7 @@ async def _fail_whole_execution(
     解密失败 = fail-fast(V1 严格语义):整单 execution 记为 failed,
     所有行计入 failed 计数,不带着空/坏凭证打环境。
     """
-    _append_log_quietly(log_path, {
+    await _append_log(log_path, {
         "ts": _utcnow().isoformat() + "Z",
         "runId": run_id,
         "executionId": execution_id,
@@ -491,14 +496,18 @@ async def _fail_whole_execution(
     await _finalize_execution(db_factory, execution_id)
 
 
-def _append_log_quietly(path: Path, payload: dict) -> None:
-    """Best-effort JSONL append — log failures never break the fan-out."""
+async def _append_log(path: Path, payload: dict) -> None:
+    """Best-effort JSONL append(to_thread 异步写,不阻塞事件循环)。
+
+    写失败只告警,绝不打断 fan-out(P9:原同步写在逐行大单下会
+    阻塞 loop)。
+    """
     try:
-        _append_jsonl(path, payload)
+        await asyncio.to_thread(_append_jsonl, path, payload)
     except Exception as e:  # noqa: BLE001
         logger.warning(
             "run_dispatcher: failed to write JSONL log line for {}: {}",
-            payload, e,
+            payload.get("runId"), e,
         )
 
 
@@ -539,45 +548,72 @@ def _write_result_evidence(
 async def _bump_counters(
     db_factory: Any, execution_id: int, *, passed: int, failed: int
 ) -> None:
-    """Atomic Execution counter bump.
+    """Atomic Execution counter bump(P8:失败重试一次,双败 JSONL 记账)。
 
-    Deltas (not absolute write-backs) so concurrent rows and concurrent
-    UI deletions (MAX(0, col-1) SQL) compose correctly.
+    Deltas(not absolute write-backs)so concurrent rows and concurrent
+    UI deletions compose correctly.
     """
-    try:
-        async with db_factory() as session:
-            await session.execute(
-                sqlalchemy_update(Execution)
-                .where(Execution.id == execution_id)
-                .values(
-                    passed=Execution.passed + passed,
-                    failed=Execution.failed + failed,
+    for attempt in (1, 2):
+        try:
+            async with db_factory() as session:
+                await session.execute(
+                    sqlalchemy_update(Execution)
+                    .where(Execution.id == execution_id)
+                    .values(
+                        passed=Execution.passed + passed,
+                        failed=Execution.failed + failed,
+                    )
                 )
-            )
-            await session.commit()
-    except Exception as e:  # noqa: BLE001
-        logger.warning(
-            "run_dispatcher: counter bump failed for execution {}: {}",
-            execution_id, e,
-        )
+                await session.commit()
+            return
+        except Exception as e:  # noqa: BLE001
+            if attempt == 2:
+                logger.error(
+                    "run_dispatcher: counter bump failed twice for execution {}: {}",
+                    execution_id, e,
+                )
+                await _append_log(_jsonl_path(), {
+                    "ts": _utcnow().isoformat() + "Z",
+                    "executionId": execution_id,
+                    "status": "counter_bump_failed",
+                    "error": repr(e),
+                    "deltas": {"passed": passed, "failed": failed},
+                })
 
 
-async def _finalize_execution(db_factory: Any, execution_id: int) -> None:
+async def _finalize_execution(
+    db_factory: Any, execution_id: int, *, status: str | None = None
+) -> None:
     """终态收尾:只写 status + 时间戳(计数器由上方增量维护)。
 
-    严格规则(与 V1 executor / run_lifecycle reconcile 一致):
-    ``failed > 0 → failed`` — 任何一个 run 失败即整单失败,部分
-    通过不再被标成 done(此前 ``failed and not passed`` 会让
-    3 过 1 败显示为"完成")。
+    ``status`` 显式覆盖用于取消终态(canceled);缺省沿用严格规则
+    ``failed > 0 → failed``。P8:非 canceled 终态校账
+    ``passed + failed == total_runs``,漂移只标记不修正(counterDrift
+    供读侧发现"数字对不上",真值以 JSONL 为准)。
     """
     try:
         async with db_factory() as session:
             ex = await session.get(Execution, execution_id)
             if ex is not None:
-                ex.status = STATUS_FAILED if ex.failed else STATUS_DONE
+                final_status = status or (
+                    STATUS_FAILED if ex.failed else STATUS_DONE
+                )
+                ex.status = final_status
                 if ex.started_at is None:
                     ex.started_at = _utcnow()
                 ex.finished_at = _utcnow()
+                if (
+                    final_status != STATUS_CANCELED
+                    and ex.passed + ex.failed != ex.total_runs
+                ):
+                    logger.error(
+                        "run_dispatcher: counter drift execution {}: "
+                        "total={} passed+failed={}",
+                        execution_id, ex.total_runs, ex.passed + ex.failed,
+                    )
+                    cfg = dict(ex.config_json or {})
+                    cfg["counterDrift"] = True
+                    ex.config_json = cfg
                 await session.commit()
     except Exception as e:  # noqa: BLE001
         logger.warning("run_dispatcher: failed to update execution {}: {}", execution_id, e)

@@ -1,7 +1,7 @@
 """P1 证据落盘:每个 case 目录写 result.json(details/兜底 stdout)。"""
 import json
 
-from tests.helpers import make_draft, register_and_login, test_env
+from tests.helpers import make_draft, register_and_login, test_env, wait_until
 
 
 async def test_row_writes_result_json_with_details(client, monkeypatch):
@@ -32,6 +32,11 @@ async def test_row_writes_result_json_with_details(client, monkeypatch):
     assert r.status_code == 201, r.text
     run_id = r.json()["runId"]
 
+    # P9:JSONL 写异步化(to_thread)后 fan-out 有真实挂起点,轮询等
+    # result.json 落盘(同 test_run_baseline 的 wait_until 模式)。
+    await wait_until(
+        lambda: list(run_dispatcher._run_dir(run_id).rglob("result.json"))
+    )
     result_files = list(run_dispatcher._run_dir(run_id).rglob("result.json"))
     assert len(result_files) == 1
     payload = json.loads(result_files[0].read_text(encoding="utf-8"))
@@ -69,6 +74,9 @@ async def test_row_writes_result_json_stdout_fallback(client, monkeypatch):
     assert r.status_code == 201, r.text
     run_id = r.json()["runId"]
 
+    await wait_until(
+        lambda: list(run_dispatcher._run_dir(run_id).rglob("result.json"))
+    )
     result_files = list(run_dispatcher._run_dir(run_id).rglob("result.json"))
     assert len(result_files) == 1
     payload = json.loads(result_files[0].read_text(encoding="utf-8"))
