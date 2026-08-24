@@ -136,3 +136,31 @@ async def test_finalize_no_drift_when_consistent(fresh_db):
     # marks_execution_failed 一致;1+1=2 对账一致,本例只验无漂移标记)
     assert row.status == "failed"
     assert "counterDrift" not in (row.config_json or {})
+
+
+async def test_dispatch_rejects_when_shutting_down(client, monkeypatch):
+    import sqlalchemy as sa
+
+    from app.core import db as db_module
+    from app.models.execution import Execution
+    from app.services import run_dispatcher
+    from tests.helpers import make_draft, register_and_login, test_env
+
+    headers = await register_and_login(client)
+    await client.post("/api/scenarios", headers=headers,
+                      json=make_draft("sc-shutdown"))
+
+    run_dispatcher._shutting_down = True
+    try:
+        r = await client.post("/api/runs", headers=headers, json={
+            "scenarioId": "sc-shutdown", "dataSetIds": [], "env": test_env(),
+        })
+        assert r.status_code == 409, r.text
+        assert r.json()["detail"]["code"] == "shutting_down"
+        async with db_module.SessionLocal() as s:
+            n = (await s.execute(
+                sa.select(sa.func.count()).select_from(Execution)
+            )).scalar_one()
+        assert n == 0                      # 不留 Execution 行
+    finally:
+        run_dispatcher._shutting_down = False

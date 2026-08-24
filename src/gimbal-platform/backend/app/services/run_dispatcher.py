@@ -149,6 +149,14 @@ async def dispatch_run(
     same row twice (and keep a single source for the
     scenario_not_found 404).
     """
+    # P3:优雅关闭窗口内不再"建行但不 spawn"(那会制造一条 201 返回、
+    # 永远停在 queued 的僵尸单)。直接拒单,客户端重启后重试。
+    if is_shutting_down():
+        raise Conflict(
+            "shutting_down",
+            "platform is shutting down; retry after the backend restarts",
+        )
+
     # 1. Load the scenario (PK is the string scenario_id, not the int id)
     scen = (
         preloaded_scenario
