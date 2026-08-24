@@ -1,8 +1,8 @@
 """Execution model(V3)。
 
 Execution 是用户触发的场景执行:run_dispatcher 逐行 fan-out 调
-gimbal HTTP 服务,只更新本表计数器;每-run 明细的 exec_runs 表
-(V1 子进程时代)已随存量数据清理退役。
+gimbal_launcher 子进程(``gimbal run launch``),只更新本表计数器;
+每-run 明细的 exec_runs 表(V1 子进程时代)已随存量数据清理退役。
 
 DB 列 ``scenario_id`` 由 Spec-2 时代的 ``case_id`` 迁移改名而来
 (Case 层已解散,场景即挂载点;迁移见 core/db.py)。

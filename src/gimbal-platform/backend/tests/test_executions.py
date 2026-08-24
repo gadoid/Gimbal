@@ -124,3 +124,27 @@ async def test_v1_run_endpoints_are_gone(client: AsyncClient) -> None:
     r = await client.delete(f"/api/executions/{eid}/runs/1", headers=auth)
     assert r.status_code in (404, 405)  # only /api/executions/{id} DELETE exists
 
+
+# ── list pagination ─────────────────────────────────────────────
+async def test_list_pagination(client: AsyncClient) -> None:
+    auth = await _login_alice(client)
+    for _ in range(5):
+        await _insert_execution(status="done")
+
+    r = await client.get("/api/executions?limit=2&offset=1", headers=auth)
+    body = r.json()
+    assert body["total"] == 5
+    assert len(body["items"]) == 2
+    ids = [it["id"] for it in body["items"]]
+    assert ids == sorted(ids, reverse=True)  # id 倒序,offset=1 跳过最新
+
+
+async def test_list_limit_bounds(client: AsyncClient) -> None:
+    auth = await _login_alice(client)
+    assert (
+        await client.get("/api/executions?limit=0", headers=auth)
+    ).status_code == 422
+    assert (
+        await client.get("/api/executions?limit=501", headers=auth)
+    ).status_code == 422
+
