@@ -90,7 +90,7 @@ const mapEntries = computed<[string, string][]>(() => {
   return Object.entries(m as Record<string, string>)
 })
 
-// 命中字段的容器(body/headers/query);addField 目标默认 body
+// 命中字段的容器(body/headers);addField 目标默认 body
 const fragmentText = computed(() => {
   if (!step.value) return ''
   const st = step.value as {
@@ -100,7 +100,6 @@ const fragmentText = computed(() => {
   const containers: Record<string, Record<string, unknown>> = {
     body: st.request?.body ?? {},
     headers: st.api?.headers ?? {},
-    query: st.api?.query ?? {},
   }
   const field = fieldLabel.value
   const hit = Object.values(containers).find((c) => field in c)

@@ -18,7 +18,7 @@ class ScenarioEndpointRef(Base):
 
     scenario_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     step_index: Mapped[int] = mapped_column(Integer, primary_key=True)
-    source: Mapped[str] = mapped_column(String(16), primary_key=True)  # body|headers|query
+    source: Mapped[str] = mapped_column(String(16), primary_key=True)  # body|headers
     field_name: Mapped[str] = mapped_column(String(255), primary_key=True)
     endpoint_id: Mapped[str] = mapped_column(String(255), nullable=False)
     # 值含 ${var.NAME} 模板时记 NAME(取第一个匹配);直填为 NULL

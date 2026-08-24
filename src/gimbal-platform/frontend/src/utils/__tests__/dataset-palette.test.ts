@@ -10,7 +10,6 @@ const DEF = {
     api: {
       view_hints: { endpoint_id: 'fin.order.add' },
       headers: { 'X-Token': '${var.tok}' },
-      query: { page: 1 },
     },
     request: { body: {
       customer_id: '261',             // 直填
@@ -41,7 +40,6 @@ it('deriveBaselineColumns:var/direct 两组列 + 行 0 基线;跳过无 endpoint
     ['body', 'amount', 'var', 'amount'],
     ['body', 'mix', 'var', 'amount'],
     ['headers', 'X-Token', 'var', 'tok'],
-    ['query', 'page', 'direct', null],
   ])
   expect(cols[0].baseline).toBe('261')   // 直填:字面值
   expect(cols[1].baseline).toBe('100')   // 模板:按 vars 渲染

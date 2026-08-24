@@ -20,11 +20,9 @@ const DRAFT = {
       request: { body: { amount: '${var.amount}', customer_id: '261', remark: '' } },
     },
     {
-      api: {
-        view_hints: { endpoint_id: 'fin.order.query' },
-        query: { page: '${var.page}', size: '20' },
-      },
-      request: {},
+      // GET 风格步骤:引擎约定查询参数放 request.body(executor 映射为 params=)
+      api: { view_hints: { endpoint_id: 'fin.order.query' } },
+      request: { body: { page: '${var.page}', size: '20' } },
     },
   ],
   config: { vars: { amount: '100', page: '1' } },
@@ -46,7 +44,7 @@ describe('varOnlyPalette', () => {
 describe('groupByStepLocation', () => {
   it('按 (stepIndex, source) 分组;同组 fields 保持步骤内顺序', () => {
     const g = groupByStepLocation(cols)
-    expect(g.map((x) => `${x.stepIndex}:${x.source}`)).toEqual(['0:body', '1:query'])
+    expect(g.map((x) => `${x.stepIndex}:${x.source}`)).toEqual(['0:body', '1:body'])
     expect(g[0].fields.map((f) => f.field)).toEqual(['amount', 'customer_id', 'remark'])
     expect(g[1].fields.map((f) => f.field)).toEqual(['page', 'size'])
   })

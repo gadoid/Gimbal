@@ -74,11 +74,12 @@ def diff_field_specs(old_spec: dict | None, new_spec: dict | None) -> list[dict]
 
 
 # ─── 步骤寻址与字段容器(spec §9 C5 / §3.2)─────────────────────
-_SOURCES = ("body", "headers", "query")
+# 无 query 容器:plate Api schema 无此字段,引擎 GET 参数约定走 request.body。
+_SOURCES = ("body", "headers")
 
 
 def _containers(step: dict) -> dict[str, dict]:
-    """step 的三个字段容器(可变引用):body 在 request 下,headers/query 在 api 下。"""
+    """step 的两个字段容器(可变引用):body 在 request 下,headers 在 api 下。"""
     request = step.get("request") if isinstance(step.get("request"), dict) else {}
     api = step.get("api") if isinstance(step.get("api"), dict) else {}
     out: dict[str, dict] = {}
@@ -136,7 +137,7 @@ def _apply_step_op(step: dict, op: dict, definition: dict) -> None:
             if op["from"] in c and op["to"] not in c:
                 c[op["to"]] = c.pop(op["from"])
     elif kind == "addField":
-        # 默认落 body(请求字段主体场景);需落 headers/query 由人工改 op payload
+        # 默认落 body(请求字段主体场景);需落 headers 由人工改 op payload
         body = step.setdefault("request", {}).setdefault("body", {})
         if isinstance(body, dict) and op["field"] not in body:
             body[op["field"]] = op.get("value", "")
@@ -163,7 +164,7 @@ def _apply_step_op(step: dict, op: dict, definition: dict) -> None:
 
 def _apply_rename_var(definition: dict, op: dict) -> None:
     """renameVar:definition 内全部 ``${var.from}`` → ``${var.to}``
-    (深走字符串替换,body/headers/query/strategy 文本通吃)+ config.vars
+    (深走字符串替换,body/headers/strategy 文本通吃)+ config.vars
     键改名。数据集列联动走 apply_to_rows(另一通路,由 service 编排)。"""
     src, dst = op["from"], op["to"]
     pattern = f"${{var.{src}}}"

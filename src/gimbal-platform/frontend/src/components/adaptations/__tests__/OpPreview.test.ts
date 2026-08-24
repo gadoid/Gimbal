@@ -1,6 +1,6 @@
 /**
  * OpPreview —— 单条 op 预览(§6.2,零后端改动):
- *   - STEP_OPS:getScenario 取 steps[step] 的容器片段,body/headers/query;
+ *   - STEP_OPS:getScenario 取 steps[step] 的容器片段,body/headers;
  *   - renameVar:from→to + 场景内 ${var.from} 引用计数;
  *   - mapValue:map 键值表;
  *   - 数据集 op:datasetId + 列名(+ map 表)。
@@ -16,8 +16,7 @@ const scenario = {
   meta: { scenarioId: 'sc-1', name: 'T', module: 'order', priority: 1,
           system: ['fin'] },
   steps: [{
-    api: { view_hints: { endpoint_id: 'fin.order.add' }, headers: {},
-           query: {} },
+    api: { view_hints: { endpoint_id: 'fin.order.add' }, headers: {} },
     request: { body: { amount: '${var.amount}', legacy_field: 'L',
                        settle_type: '1' } },
   }],

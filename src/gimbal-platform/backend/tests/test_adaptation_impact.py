@@ -13,7 +13,7 @@ EP = "fin.order.add"
 
 def _steps():
     return [{
-        "api": {"view_hints": {"endpoint_id": EP}, "headers": {}, "query": {}},
+        "api": {"view_hints": {"endpoint_id": EP}, "headers": {}},
         "request": {"body": {"amount": "${var.amount}", "fixed": "X"}},
     }]
 

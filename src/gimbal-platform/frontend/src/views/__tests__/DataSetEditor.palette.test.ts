@@ -19,11 +19,12 @@ const DRAFT = {
     kind: 'scenario', scenarioId: 'sc-ds', meta: {},
     config: { vars: { amount: '100', page: '1' } },
     steps: [{
-      api: { view_hints: { endpoint_id: 'fin.order.add' }, query: {} },
+      api: { view_hints: { endpoint_id: 'fin.order.add' } },
       request: { body: { amount: '${var.amount}', customer_id: '261' } },
     }, {
-      api: { view_hints: { endpoint_id: 'fin.order.q' }, query: { page: '${var.page}', size: '20' } },
-      request: {},
+      // GET 风格步骤:引擎约定查询参数放 request.body(executor 映射为 params=)
+      api: { view_hints: { endpoint_id: 'fin.order.q' } },
+      request: { body: { page: '${var.page}', size: '20' } },
     }],
   },
   orchestration: { steps: [], resourceMeta: {} },
@@ -42,7 +43,7 @@ beforeEach(() => {
         { name: 'amount', description: '订单金额(分)', required: true, default: null, example: null, enum: null, ui_kind: 'number', source_kind: 'literal' },
         { name: 'customer_id', description: '客户编号', required: true, default: null, example: null, enum: null, ui_kind: 'text', source_kind: 'literal' },
         { name: 'page', description: '页码', required: false, default: 1, example: null, enum: null, ui_kind: 'number', source_kind: 'literal' },
-        { name: 'size', description: '每页条数', required: false, default: 20, example: null, enum: null, ui_kind: 'number', source_kind: 'literal' },
+        { name: 'size', description: null, required: false, default: 20, example: null, enum: null, ui_kind: 'number', source_kind: 'literal' },
       ],
     },
   } as any))
@@ -169,10 +170,11 @@ it('row-desc 渲染所有字段的 description;空则显示 —', async () => {
   const descRow = w.find('.data-table tr.row-desc')
   expect(descRow.exists()).toBe(true)
   expect(descRow.text()).toContain('描述')
-  // amount / customer_id 有 description
+  // amount / customer_id / page 有 description
   expect(descRow.text()).toContain('订单金额(分)')
   expect(descRow.text()).toContain('客户编号')
-  // page / size 无 description → 显示 —
+  expect(descRow.text()).toContain('页码')
+  // size 无 description → 显示 —
   expect(descRow.text()).toContain('—')
 })
 
@@ -565,7 +567,7 @@ it('thead 全选 checkbox:勾上 → 全部行被选中;取消 → 全部清空'
 
 // ── CSV 导出 ───────────────────────────────────────────────
 
-it('CSV 导出带 (description) 行;只有 body var 有描述,query var 降级为空串', async () => {
+it('CSV 导出带 (description) 行;body var 有描述(IOFieldBinding 命中)', async () => {
   const w = mountEditor()
   await flushPromises()
   await flushPromises()
@@ -581,10 +583,10 @@ it('CSV 导出带 (description) 行;只有 body var 有描述,query var 降级�
   expect(exportSpy).toHaveBeenCalled()
   const args = exportSpy.mock.calls[0][0] as any
   expect(args.descriptions).toBeDefined()
-  // amount + page 是 var 列;只有 body var 有描述,query 降级为空串
+  // amount + page 是 var 列;两者均为 body 字段,IOFieldBinding 均命中
   expect(args.descriptions.length).toBe(2)
   expect(args.descriptions[0]).toBe('订单金额(分)')  // step0.body.amount
-  expect(args.descriptions[1]).toBe('')              // step1.query.page 无 IOFieldBinding
+  expect(args.descriptions[1]).toBe('页码')          // step1.body.page
 })
 
 // ── 提升为变量 + 撤销提升 ──────────────────────────────────────────
@@ -828,9 +830,9 @@ it('点顶栏「撤销提升」→ LIFO 弹出最近一次提升,字段变回 di
   expect(w.text()).toMatch(/变量\s*3\s*·\s*直填\s*1/)
   // promotedOrder 现在剩 1 项(取自 vm)
   expect((w.vm as any).promotedOrder.length).toBe(1)
-  // step1.api.query.size 已经还原为 '20'
+  // step1.request.body.size 已经还原为 '20'
   const draft = (w.vm as any).draft
-  expect(draft.definition.steps[1].api.query.size).toBe('20')
+  expect(draft.definition.steps[1].request.body.size).toBe('20')
   // 顶栏按钮依然存在(还有 1 个待撤销)— 用 button 的 span 内容校验
   const headerUndoBtn2 = w.findAll('.header-actions button').find((b) => b.text().includes('撤销提升'))
   expect(headerUndoBtn2).toBeTruthy()

@@ -23,8 +23,10 @@ from ..models.scenario_endpoint_ref import ScenarioEndpointRef
 # 变量名允许 "."(③ 配置步的 <system>.key 命名空间键含点)
 _VAR_RE = re.compile(r"\$\{var\.([A-Za-z0-9_.]+)\}")
 
-# field 容器:body 在 step.request 下,headers/query 在 step.api 下(spec §3.2)
-_SOURCES = ("body", "headers", "query")
+# field 容器:body 在 step.request 下,headers 在 step.api 下(spec §3.2)。
+# 无 query 容器 —— plate Api schema 无此字段(convert 会静默吞掉),引擎的
+# GET 查询参数约定放 request.body(executor 映射为 params=),body 管道天然覆盖。
+_SOURCES = ("body", "headers")
 
 
 def _steps(payload: dict | None) -> list[dict]:

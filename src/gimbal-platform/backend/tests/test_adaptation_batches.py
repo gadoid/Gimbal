@@ -41,7 +41,7 @@ NEW_FULL = {
 
 def _steps():
     return [{
-        "api": {"view_hints": {"endpoint_id": EP}, "headers": {}, "query": {}},
+        "api": {"view_hints": {"endpoint_id": EP}, "headers": {}},
         "request": {"body": {"amount": "${var.amount}", "legacy_field": "L",
                              "settle_type": "1"}},
     }]
@@ -215,7 +215,7 @@ async def test_apply_conflict_when_step_reordered(fresh_db, plate):
         payload = _copy.deepcopy(row.payload)
         payload["definition"]["steps"].insert(0, {
             "api": {"view_hints": {"endpoint_id": "fin.order.book"},
-                    "headers": {}, "query": {}},
+                    "headers": {}},
             "request": {"body": {}},
         })
         await scenario_store.update(s, "sc-batch", ScenarioDraft.model_validate(payload))

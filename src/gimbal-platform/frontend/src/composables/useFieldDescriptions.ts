@@ -4,7 +4,7 @@
  * 「字段说明」行。
  *
  * 设计要点:
- *   - 仅 body 字段有 IOFieldBinding;query / headers 优雅降级为空串。
+ *   - 仅 body 字段有 IOFieldBinding;headers 优雅降级为空串。
  *   - 复用 CaseComposerCanvas.vue:795-824 的会话级 Map + 并发收敛模式。
  *     共享模块级缓存,所以两个组件同时打开同一 scenario 也只拉一次。
  *   - 零持久化:Plate 是结构权威源,每次进编辑器拿最新结构(发版后零迁移)。

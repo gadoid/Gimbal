@@ -34,7 +34,7 @@ NEW_FULL = {
 
 def _steps():
     return [{
-        "api": {"view_hints": {"endpoint_id": EP}, "headers": {}, "query": {}},
+        "api": {"view_hints": {"endpoint_id": EP}, "headers": {}},
         "request": {"body": {"amount": "${var.amount}", "legacy_field": "L",
                              "settle_type": "1"}},
     }]
@@ -228,7 +228,7 @@ async def test_batch_routes_admin_only(client, plate):
 
 # ─── unindexed-steps(P5 Task 1)──────────────────────────────────
 UNBOUND_STEPS = [{
-    "api": {"view_hints": {}, "headers": {}, "query": {}},
+    "api": {"view_hints": {}, "headers": {}},
     "request": {"body": {"x": "1"}},
 }]
 

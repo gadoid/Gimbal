@@ -16,7 +16,7 @@ const items = [
     viaVar: 'amount', datasetId: 'ds-1', datasetColumn: 'amount' },
   { scenarioId: 'sc-b', stepIndex: 1, source: 'body', field: 'amount',
     viaVar: null, datasetId: null, datasetColumn: null },
-  { scenarioId: 'sc-c', stepIndex: 0, source: 'query', field: 'q1',
+  { scenarioId: 'sc-c', stepIndex: 0, source: 'headers', field: 'q1',
     viaVar: null, datasetId: null, datasetColumn: null },
 ]
 

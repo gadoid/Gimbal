@@ -13,7 +13,6 @@ STEPS = [{
     "api": {
         "view_hints": {"endpoint_id": "fin.order.add"},
         "headers": {"X-Token": "${var.tok}"},
-        "query": {"page": 1},
     },
     "request": {"body": {
         "customer_id": "261",             # 直填 → via_var None
@@ -50,7 +49,6 @@ async def test_create_populates_index(fresh_db):
         ("sc-ix", 0, "body", "amount", "fin.order.add", "amount"),
         ("sc-ix", 0, "body", "mix", "fin.order.add", "amount"),
         ("sc-ix", 0, "headers", "X-Token", "fin.order.add", "tok"),
-        ("sc-ix", 0, "query", "page", "fin.order.add", None),
     }  # step 1(无 endpoint_id)不产生行
 
 

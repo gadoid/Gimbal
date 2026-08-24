@@ -25,7 +25,7 @@ def _definition() -> dict:
         "resource": {},
         "steps": [
             {"api": {"view_hints": {"endpoint_id": EP},
-                     "headers": {"Token": "t"}, "query": {"seq": "1"}},
+                     "headers": {"Token": "t"}},
              "request": {"body": {"amount": "${var.amount}", "fixed": "X",
                                   "settle_type": "1", "cust_id": "7"}}},
         ],

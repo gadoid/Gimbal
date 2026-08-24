@@ -2,7 +2,8 @@
  * dataset-palette.ts — 数据集列调色板 / 行 0 投影(纯推导,spec §4)
  *
  * 与后端 endpoint_ref_index.parse_refs 同一 traversal 规则:
- * body 在 step.request 下,headers/query 在 step.api 下;无
+ * body 在 step.request 下,headers 在 step.api 下(无 query 容器 —
+ * plate Api schema 无此字段,引擎 GET 参数约定放 body);无
  * view_hints.endpoint_id 的步骤不进投影。变量名正则同后端
  * ([A-Za-z0-9_.]+ — ③ 配置步的 <system>.key 命名空间键含点)。
  * 本模块零 IO,数据全部来自场景 definition。
@@ -11,7 +12,7 @@
 /** 行 0 / 列头的最小列描述 */
 export interface BaselineColumn {
   stepIndex: number
-  source: 'body' | 'headers' | 'query'
+  source: 'body' | 'headers'
   field: string
   /** var = 步骤值含 ${var.NAME}(可被数据集列覆盖);direct = 直填 */
   kind: 'var' | 'direct'
@@ -39,9 +40,9 @@ export function renderTemplate(value: string, vars: Record<string, unknown>): st
 
 /** 场景 step 的最小形状(deriveBaselineColumns / fieldsOf 共用)。
  *  只声明我们实际读到的字段(view_hints.endpoint_id / request.body /
- *  api.{query,headers});其他字段不强类型 — 后端定义在 ScenarioSpec.ts。 */
+ *  api.headers);其他字段不强类型 — 后端定义在 ScenarioSpec.ts。 */
 export interface ScenarioStepShape {
-  api?: { view_hints?: { endpoint_id?: string }; query?: unknown; headers?: unknown }
+  api?: { view_hints?: { endpoint_id?: string }; headers?: unknown }
   request?: { body?: unknown }
 }
 
@@ -60,11 +61,11 @@ export function fieldsOf(
   step: ScenarioStepShape | undefined | null,
   source: BaselineColumn['source'],
 ): Record<string, unknown> | null {
-  // body 在 step.request 下,headers/query 在 step.api 下 — 两类容器用 union
+  // body 在 step.request 下,headers 在 step.api 下 — 两类容器用 union
   // 表示后索引会有歧义,所以分两路。
   const fields: unknown = source === 'body'
     ? (step?.request as { body?: unknown } | undefined)?.body
-    : (step?.api as { query?: unknown; headers?: unknown } | undefined)?.[source]
+    : (step?.api as { headers?: unknown } | undefined)?.[source]
   if (!fields || typeof fields !== 'object' || Array.isArray(fields)) return null
   return fields as Record<string, unknown>
 }
@@ -75,7 +76,7 @@ export function deriveBaselineColumns(definition: ScenarioDefinitionShape): Base
   const out: BaselineColumn[] = []
   ;(definition.steps ?? []).forEach((step, stepIndex) => {
     if (!step?.api?.view_hints?.endpoint_id) return
-    for (const source of ['body', 'headers', 'query'] as const) {
+    for (const source of ['body', 'headers'] as const) {
       const fields = fieldsOf(step, source)
       if (!fields) continue
       for (const [field, value] of Object.entries(fields)) {

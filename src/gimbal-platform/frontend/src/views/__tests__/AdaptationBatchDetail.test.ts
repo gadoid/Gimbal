@@ -21,7 +21,7 @@ import * as scenarioApi from '@/api/scenario-composer'
 const scenario = {
   meta: { scenarioId: 'sc-1', name: 'T', module: 'order', priority: 1,
           system: ['fin'] },
-  steps: [{ api: { view_hints: {}, headers: {}, query: {} },
+  steps: [{ api: { view_hints: {}, headers: {} },
             request: { body: { amount: '${var.amount}', legacy_field: 'L',
                                settle_type: '1' } } }],
   config: { vars: { amount: 100 } },
