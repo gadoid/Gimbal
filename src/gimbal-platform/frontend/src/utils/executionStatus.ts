@@ -10,8 +10,14 @@ export const EXECUTION_STATUS_LABELS: Record<string, string> = {
   queued: '排队',
   done: '完成',
   failed: '失败',
+  canceled: '已取消',
 }
 
 export function executionStatusText(s: string): string {
   return EXECUTION_STATUS_LABELS[s] ?? s
+}
+
+/** canceled 与 done/failed 同为终态(轮询停止条件)。 */
+export function isTerminalExecutionStatus(s: string): boolean {
+  return s === 'done' || s === 'failed' || s === 'canceled'
 }

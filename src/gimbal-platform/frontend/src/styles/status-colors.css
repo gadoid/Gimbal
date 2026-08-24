@@ -3,9 +3,9 @@
  *
  * 原 3 份逐字拷贝（ExecutionsList 的 .status-*、Executions 的
  * .status-* 与 .run-*）收敛于此。新增状态时只改这里。
- * V3 的 Execution 状态集是 queued/done/failed（后端从不写 running，
- * run 级状态已随 exec_runs 退役）。
- * 颜色语义：queued 靛、done 绿、failed 红。
+ * V3 的 Execution 状态集是 queued/done/failed/canceled（后端从不写
+ * running，run 级状态已随 exec_runs 退役）。
+ * 颜色语义：queued 靛、done 绿、failed 红、canceled 灰。
  */
 .status-queued {
   color: #4338ca;
@@ -20,4 +20,9 @@
 .status-failed {
   color: #991b1b;
   background: #fee2e2;
+}
+
+.status-canceled {
+  color: #64748b;
+  background: #f1f5f9;
 }

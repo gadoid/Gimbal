@@ -37,9 +37,16 @@
           <span class="mono dim">{{ row.started_at?.slice(0, 19).replace('T', ' ') || '—' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="120" align="center" fixed="right">
+      <el-table-column label="操作" width="160" align="center" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="open(row.id)">详情</el-button>
+          <el-button
+            v-if="row.status === 'queued'"
+            link
+            type="warning"
+            @click="cancel(row.id)"
+            >取消</el-button
+          >
           <el-button link type="danger" @click="remove(row.id)">删除</el-button>
         </template>
       </el-table-column>
@@ -63,10 +70,13 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { useExecutionsStore } from '@/stores/executions'
+import { cancelExecution } from '@/api/executions'
 import { executionStatusText } from '@/utils/executionStatus'
 import { executionUrl } from '@/utils/links'
 import { removeExecution } from '@/utils/removeExecution'
+import { showError } from '@/utils/errorFallback'
 
 const router = useRouter()
 const store = useExecutionsStore()
@@ -77,6 +87,23 @@ function open(id: number) {
 
 async function remove(id: number) {
   await removeExecution(id, (i) => store.remove(i))
+}
+
+/** P4 协作式取消:仅 queued 行可见;409 = 点击时单子已终态(竞态)。 */
+async function cancel(id: number) {
+  try {
+    await cancelExecution(id)
+    ElMessage.success('已请求取消')
+  } catch (e) {
+    if ((e as { status?: number }).status === 409) {
+      // 终态竞态:刷新让取消按钮消失即可,不算失败。
+      ElMessage.info('该执行已结束,无法取消')
+    } else {
+      showError('取消', e)
+      return
+    }
+  }
+  await store.fetchList().catch(() => undefined)
 }
 
 let handle: ReturnType<typeof setInterval> | null = null

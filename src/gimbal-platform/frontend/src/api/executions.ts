@@ -2,7 +2,7 @@
 import http from './http'
 
 export type MergePolicy = 'override' | 'merge' | 'append'
-export type ExecutionStatus = 'queued' | 'done' | 'failed'
+export type ExecutionStatus = 'queued' | 'done' | 'failed' | 'canceled'
 
 export interface Execution {
   id: number
@@ -43,4 +43,9 @@ export function get(id: number) {
 
 export function remove(id: number) {
   return http.delete(`/executions/${id}`).then(() => undefined)
+}
+
+/** P4 协作式取消:queued 单登记取消,canceled 为终态。 */
+export function cancelExecution(id: number): Promise<Execution> {
+  return http.post<Execution>(`/executions/${id}/cancel`).then((r) => r.data)
 }

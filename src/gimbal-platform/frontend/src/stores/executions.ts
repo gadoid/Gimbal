@@ -3,12 +3,13 @@
  *
  * The store proxies /api/executions/* and exposes a `startPolling(id)`
  * helper that auto-refreshes detail every second until status reaches
- * a terminal state (done/failed).
+ * a terminal state (done/failed/canceled).
  */
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as api from '@/api/executions'
 import type { Execution } from '@/api/executions'
+import { isTerminalExecutionStatus } from '@/utils/executionStatus'
 
 const POLL_INTERVAL_MS = 1000
 
@@ -60,8 +61,9 @@ export const useExecutionsStore = defineStore('executions', () => {
   }
 
   /**
-   * Poll /api/executions/{id} every 1s until status is done/failed.
-   * Returns a stop function the caller invokes on unmount.
+   * Poll /api/executions/{id} every 1s until status is terminal
+   * (done/failed/canceled). Returns a stop function the caller
+   * invokes on unmount.
    */
   function startPolling(id: number): () => void {
     stopPolling()
@@ -76,7 +78,7 @@ export const useExecutionsStore = defineStore('executions', () => {
         const d = await api.get(id)
         consecutiveFailures = 0
         detail.value = d
-        if (d.status === 'done' || d.status === 'failed') {
+        if (isTerminalExecutionStatus(d.status)) {
           stopPolling()
         }
       } catch (e) {
