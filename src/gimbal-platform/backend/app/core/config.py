@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # Resolved to absolute at startup so JSONL run-log / DB paths
     # never land as relative ``./data\...`` in logs.
     DATA_DIR: Path = Path("./data").resolve()
+    # case 案卷(result.json/case.json,含注入后明文凭证)保留天数;
+    # 启动期清扫超期目录。0 = 禁用清扫(P2:此前无限累积)。
+    CASE_RETENTION_DAYS: int = 14
 
     # ── Gimbal 执行链(V3.2 ``gimbal run launch`` 子进程) ──
     # GIMBAL_BIN: gimbal 可执行文件(如 D:\Gimbal\Scripts\gimbal.exe);

@@ -26,6 +26,14 @@ def execution_out(e: Execution) -> ExecutionOut:
 
 
 async def delete_execution(session: AsyncSession, ex: Execution) -> None:
-    """删除整单。调度日志(data/runs/*.jsonl)按日期分文件、不随删。"""
+    """删除整单 + 连带清理 case 案卷目录(P2:案卷含明文凭证)。
+
+    调度日志(data/runs/*.jsonl)按日期分文件、不随删(现行设计)。
+    """
+    from . import run_dispatcher
+
+    run_id = (ex.config_json or {}).get("runId")
     await session.delete(ex)
     await session.commit()
+    if run_id:
+        run_dispatcher.purge_case_dir(str(run_id))

@@ -28,6 +28,8 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import shutil
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -171,7 +173,7 @@ async def reconcile_stale_executions(db_factory: Any) -> int:
 async def startup_recovery() -> tuple[int, int]:
     """启动恢复:reconcile 僵尸执行 + 清扫过期 case 目录(Task 5 接入)。"""
     stale = await reconcile_stale_executions(_session_factory)
-    swept = 0  # Task 5: swept = sweep_stale_case_dirs()
+    swept = sweep_stale_case_dirs()
     return stale, swept
 
 
@@ -895,6 +897,38 @@ def _jsonl_path() -> Path:
 def _run_dir(run_id: str) -> Path:
     """一个 run 的 case 文件根目录(与 JSONL 同域的执行审计面)。"""
     return settings.DATA_DIR / "runs" / "cases" / run_id
+
+
+def purge_case_dir(run_id: str) -> None:
+    """删除整单的 case 案卷目录(P2:case.json 含明文凭证,删除执行
+    必须连带清理,否则 UI 删除后凭证仍永久留盘)。Best-effort。"""
+    shutil.rmtree(_run_dir(run_id), ignore_errors=True)
+
+
+def sweep_stale_case_dirs() -> int:
+    """启动期保留期清扫:删除 mtime 超过 CASE_RETENTION_DAYS 的 run 目录。
+
+    0 = 禁用。JSONL 按日期分文件、不在此清理(现行设计)。
+    """
+    days = settings.CASE_RETENTION_DAYS
+    if days <= 0:
+        return 0
+    root = settings.DATA_DIR / "runs" / "cases"
+    if not root.exists():
+        return 0
+    cutoff = time.time() - days * 86400
+    removed = 0
+    for child in root.iterdir():
+        try:
+            stale = child.is_dir() and child.stat().st_mtime < cutoff
+        except OSError:
+            continue
+        if stale:
+            shutil.rmtree(child, ignore_errors=True)
+            removed += 1
+    if removed:
+        logger.info("run_dispatcher: swept {} stale case dir(s) (> {}d)", removed, days)
+    return removed
 
 
 def _write_case_file(case_dir: Path, scenario_dict: dict[str, Any]) -> Path:
