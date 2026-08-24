@@ -243,9 +243,21 @@ async def dispatch_run(
     # 2. Validate env + datasets.  list_envs() is sync (cached) — safe to
     # call inline here because it returns from an lru_cache on the
     # happy path; the first call does a one-shot YAML parse.
-    env_ids = {e.env_id for e in env_store.list_envs()}
-    if req.env.env_id not in env_ids:
+    server_env = next(
+        (e for e in env_store.list_envs() if e.env_id == req.env.env_id), None
+    )
+    if server_env is None:
         raise NotFound("env_not_found", f"env not found: {req.env.env_id}")
+    # P5 服务端权威:name/baseUrl 一律取 env_store 记录;请求体携带的
+    # 值不一致时告警(此前客户端可传 envId=dev + baseUrl=任意内网地址,
+    # env 治理形同虚设)。
+    if (req.env.name, req.env.base_url) != (server_env.name, server_env.base_url):
+        logger.warning(
+            "run_dispatcher: env mismatch for {} — client ({}, {}), "
+            "server ({}, {}); using server record",
+            req.env.env_id, req.env.name, req.env.base_url,
+            server_env.name, server_env.base_url,
+        )
 
     # step_to 校验(同 V1 executions:与场景 steps 数比对,越界 409)
     steps = steps_from_payload(scen.payload)
@@ -326,7 +338,7 @@ async def dispatch_run(
                 run_id=run_id,
                 scenario_payload=dict(scen.payload or {}),
                 datasets=fanout_datasets,
-                env=req.env.model_dump(by_alias=True, mode="json"),
+                env=server_env.model_dump(by_alias=True, mode="json"),
                 owner_id=user_id,
                 auth_aliases=list(req.auths) if req.inject_credentials else [],
                 halt_at=req.step_to,

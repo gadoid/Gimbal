@@ -213,17 +213,20 @@ async def test_env_base_url_materializes_unmapped_services(
     r = await client.post(
         "/api/runs",
         headers=bob,
+        # P5 服务端权威:baseUrl 一律取 env_store 记录(dev-local 的
+        # 真值是 http://127.0.0.1:8000);请求体值与记录不一致时
+        # services 物化也只认服务端记录(见 test_run_env_authority)。
         json=_run_payload(env={
             "envId": "dev-local", "name": "dev-local",
-            "baseUrl": "http://127.0.0.1:9000",
+            "baseUrl": "http://127.0.0.1:8000",
         }),
     )
     assert r.status_code == 201, r.text
 
     await _wait(lambda: len(payloads) >= 1)
     services = (payloads[0].get("config") or {}).get("services") or {}
-    assert services["audit"] == "http://127.0.0.1:9000"      # 补缺口
-    assert services["order_fee"] == "http://127.0.0.1:9000"
+    assert services["audit"] == "http://127.0.0.1:8000"      # 补缺口
+    assert services["order_fee"] == "http://127.0.0.1:8000"
     assert services["mock"] == "http://self"                 # authored 不覆盖
 
 
