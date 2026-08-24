@@ -131,6 +131,32 @@ def reset_shutdown_state() -> None:
     _shutting_down = False
 
 
+# ─── cooperative cancel registry (P4) ─────────────────────────────
+# 取消注册表(P4 协作式取消):取消请求集合 + 在飞 fanout task 索引。
+# 取消语义:协作式 —— 只在未来行边界生效,在飞子进程自然跑完
+# (Windows 下 task.cancel 会让 asyncio 放弃收尸、泄漏 gimbal 子进程,
+# 不做);未跑行记 ``canceled`` JSONL 行、不进计数器;``total_runs``
+# 不变,canceled 单允许 ``passed+failed < total_runs``(finalize 跳过
+# 校账)。
+_cancel_requested: set[int] = set()
+_tasks_by_execution: dict[int, asyncio.Task] = {}
+
+
+def request_cancel(execution_id: int) -> None:
+    """登记取消请求(幂等);由 _fanout 在行边界消费。"""
+    _cancel_requested.add(execution_id)
+
+
+def has_live_fanout(execution_id: int) -> bool:
+    return execution_id in _tasks_by_execution
+
+
+def reset_cancel_state() -> None:
+    """测试隔离:清空取消注册表。"""
+    _cancel_requested.clear()
+    _tasks_by_execution.clear()
+
+
 # ─── startup reconcile (P3) ────────────────────────────────────────
 async def reconcile_stale_executions(db_factory: Any) -> int:
     """启动期 reconcile:进程内 _fanout 随重启丢失,queued 即僵尸。
@@ -313,6 +339,12 @@ async def dispatch_run(
         )
         task.add_done_callback(_log_task_exception)
         _track(task)
+        # P4:在飞 fanout 索引(cancel 端点据此区分"活单等行边界收敛"与
+        # "僵尸单立即终态化")。出清回调与 _in_flight.discard 并存。
+        _tasks_by_execution[execution.id] = task
+        task.add_done_callback(
+            lambda _t, eid=execution.id: _tasks_by_execution.pop(eid, None)
+        )
 
     return RunResponse(runId=run_id, executionId=execution.id)
 
@@ -349,6 +381,11 @@ async def _fanout(
     case 文件即数据驱动用例快照(含注入后的明文 users —— 与 V1 临时
     yaml 同语义,落在平台 DATA_DIR 权限域内)。
     """
+    # P4:防御性出清该 id 的历史残留取消请求(僵尸单由 cancel 端点
+    # inline 终态化,没有 fanout 来消费;测试的 fresh 库会复用执行 id)。
+    # 活跃请求只可能在本 task 启动之后到达(dispatch 先 spawn、后返回
+    # 响应,行边界检查更在其后),此处不会误吞。
+    _cancel_requested.discard(execution_id)
     log_path = _jsonl_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)
     # 每个 run 一个 case 目录:case 文件 + 引擎原生报告,并发 fan-out
@@ -388,6 +425,21 @@ async def _fanout(
     async def _row(ds: dict, row_idx: int, rep: int, seq: int) -> None:
         """One (dataset row × repeat) entry — compose + convert + launch."""
         async with sem:
+            # P4 协作式取消:行边界在信号量准入处(全部行 task 在 fanout
+            # 启动时就已创建并排队,准入前检查永远看不到晚到的取消请求)。
+            # 已准入的行视为在飞、自然跑完;排队中的行在准入时刻检查,
+            # 未启动的直接记 canceled,不进计数器。
+            if execution_id in _cancel_requested:
+                await _append_log(log_path, {
+                    "ts": _utcnow().isoformat() + "Z",
+                    "runId": run_id,
+                    "executionId": execution_id,
+                    "datasetId": ds["datasetId"],
+                    "rowIndex": row_idx,
+                    "rep": rep,
+                    "status": "canceled",
+                })
+                return
             row_dict = dict(ds["rows"][row_idx] or {})
             composed = _compose_scenario(scenario_payload, row_dict)
             # 每个 case 独立子目录:case.json(数据驱动用例快照)+ 引擎
@@ -524,7 +576,14 @@ async def _fanout(
 
     # Terminal status + timestamps only (counters already maintained
     # incrementally above).
-    await _finalize_execution(db_factory, execution_id)
+    if execution_id in _cancel_requested:
+        # P4 协作式取消:未跑行已在行边界记 canceled,在飞子进程已自然
+        # 跑完;canceled 允许 passed+failed < total_runs(finalize 跳过
+        # 校账)。请求在此消费出清(终态后状态归零,同 id 空间不被污染)。
+        await _finalize_execution(db_factory, execution_id, status=STATUS_CANCELED)
+        _cancel_requested.discard(execution_id)
+    else:
+        await _finalize_execution(db_factory, execution_id)
 
 
 async def _fail_whole_execution(

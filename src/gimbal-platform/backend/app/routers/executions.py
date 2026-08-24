@@ -12,15 +12,17 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser, get_owned_execution
+from ..core.timeutil import utcnow
 from ..models import Execution
+from ..models.execution import STATUS_CANCELED, STATUS_QUEUED
 from ..schemas.execution import ExecutionListOut, ExecutionOut
-from ..services import execution_store
+from ..services import execution_store, run_dispatcher
 
 router = APIRouter(prefix="/executions", tags=["executions"])
 
@@ -62,3 +64,30 @@ async def delete_execution(
     session: DbSession,
 ) -> None:
     await execution_store.delete_execution(session, ex)
+
+
+# ── cancel ──────────────────────────────────────────────────────
+@router.post("/{execution_id}/cancel", response_model=ExecutionOut)
+async def cancel_execution(
+    ex: OwnedExecution,
+    session: DbSession,
+) -> ExecutionOut:
+    """P4 协作式取消:登记请求,在飞 fanout 在行边界收敛为 canceled。
+
+    无在飞 task 的 queued 僵尸单立即终态化。终态单 409。
+    """
+    if ex.status != STATUS_QUEUED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "not_cancelable",
+                "message": f"execution already {ex.status}",
+            },
+        )
+    run_dispatcher.request_cancel(ex.id)
+    if not run_dispatcher.has_live_fanout(ex.id):
+        ex.status = STATUS_CANCELED
+        ex.finished_at = utcnow()
+        await session.commit()
+        await session.refresh(ex)
+    return execution_store.execution_out(ex)
