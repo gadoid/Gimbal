@@ -16,7 +16,7 @@ import router from '@/router'
 interface ApiErrorPayload {
   code?: number
   msg?: string
-  detail?: { code?: number; msg?: string } | string
+  detail?: { code?: number; msg?: string; message?: string } | string
 }
 
 export class ApiError extends Error {
@@ -76,7 +76,8 @@ function normalizeError(err: AxiosError): ApiError {
     msg = v.msg
   } else if (detail && typeof detail === 'object') {
     code = typeof detail.code === 'number' ? detail.code : code
-    msg = detail.msg ?? msg
+    // 平台错误信封字段是 {code, message};msg 兼容旧格式兜底。
+    msg = detail.message ?? detail.msg ?? msg
   } else if (typeof detail === 'string') {
     msg = detail
   } else if (typeof payload.code === 'number') {

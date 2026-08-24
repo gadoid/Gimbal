@@ -537,10 +537,13 @@ async def _fanout(
                 else:
                     cache_key = _convert_cache_key(composed)
                     if cache_key in convert_cache:
-                        convert_data = convert_cache[cache_key]
+                        # 注入路径会原地修改 convert 输出,按引用共享会污染后续命中
+                        convert_data = copy.deepcopy(convert_cache[cache_key])
                     else:
                         convert_data = await plate_client.convert(composed)
-                        convert_cache[cache_key] = convert_data
+                        # 入缓存的是注入前原始快照:miss 路径的原地注入
+                        # 不得写回缓存(否则深拷贝命中仍带首次注入痕迹)
+                        convert_cache[cache_key] = copy.deepcopy(convert_data)
                     plate_state["consecutive_unavailable"] = 0
                     # Convert succeeded — hand the gimbal-shaped product to the
                     # engine. 明文 users 只进 run 副本(convert 那份不带,防明文
@@ -1075,7 +1078,8 @@ def sweep_stale_case_dirs() -> int:
             continue
         if stale:
             shutil.rmtree(child, ignore_errors=True)
-            removed += 1
+            if not child.exists():
+                removed += 1
     if removed:
         logger.info("run_dispatcher: swept {} stale case dir(s) (> {}d)", removed, days)
     return removed

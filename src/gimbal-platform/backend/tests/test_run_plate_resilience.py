@@ -78,6 +78,47 @@ async def test_convert_memoized_across_repeats(client, monkeypatch):
     assert calls["n"] == 1          # 同一行 ×3 重复共享一次 convert
 
 
+async def test_memo_hit_injection_view_not_polluted(client, monkeypatch):
+    """memo 命中必须给深拷贝:注入的原地修改不得泄漏进后续命中。
+
+    默认 injectCredentials=false → exec_auths 为空 → _inject_exec_users
+    原样返回同一引用,随后 _inject_* 系列就地修改 convert 输出。若
+    memo 命中按引用共享缓存对象,rep 2/3 会看到 rep 1 留下的注入痕迹。
+    """
+    import copy
+
+    from app.services import run_dispatcher
+
+    calls = {"n": 0}
+    snapshots: list[dict] = []
+
+    async def passthrough_convert(scenario):
+        calls["n"] += 1
+        return {"consumer": "platform", "converted": dict(scenario)}
+
+    def spying_inject_services(composed, env):
+        # 记录进入注入时的深快照,并施加一次可观察的原地修改。
+        snapshots.append(copy.deepcopy(composed))
+        composed.setdefault("__pollution_marker", []).append(len(snapshots))
+
+    monkeypatch.setattr(
+        run_dispatcher, "_inject_services", spying_inject_services
+    )
+
+    eid = await _run_with_convert(client, monkeypatch, passthrough_convert,
+                                  body_over={"nRuns": 3})
+    await _wait_terminal(eid)
+
+    assert calls["n"] == 1          # 前提:rep 2/3 确实命中 memo
+    assert len(snapshots) == 3
+    assert snapshots[1] == snapshots[0], (
+        f"rep 2 携带 rep 1 的注入痕迹: {snapshots[1]}"
+    )
+    assert snapshots[2] == snapshots[0], (
+        f"rep 3 携带前次注入痕迹: {snapshots[2]}"
+    )
+
+
 async def test_breaker_opens_after_consecutive_unavailable(
     client, monkeypatch
 ):

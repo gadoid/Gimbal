@@ -93,7 +93,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { executionStatusText } from '@/utils/executionStatus'
+import { executionStatusText, isTerminalExecutionStatus } from '@/utils/executionStatus'
 import { removeExecution } from '@/utils/removeExecution'
 import { useExecutionsStore } from '@/stores/executions'
 
@@ -144,7 +144,7 @@ async function refreshNow() {
     // back for non-terminal executions — a manual click is the natural
     // "resume" gesture after the pollError banner.
     const st = execStore.detail?.status
-    if (st && st !== 'done' && st !== 'failed') {
+    if (st && !isTerminalExecutionStatus(st)) {
       stop = execStore.startPolling(executionId.value)
     }
   } catch (e) {
