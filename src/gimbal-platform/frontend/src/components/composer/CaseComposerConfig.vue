@@ -1,7 +1,7 @@
 <!--
   CaseComposerConfig.vue — ③ 配置 (平面风统一)
-  样式走 composer.css 共享层; 6 个子区块:
-  时间策略 / 重试 / 前置 / 后置 / 变量 / 服务
+  样式走 composer.css 共享层; 7 个子区块:
+  时间策略 / 重试 / 前置 / 后置 / 变量 / 服务 / 用户认证
 -->
 <template>
   <div class="c-page c-form">
@@ -236,6 +236,9 @@
       <button class="c-add" @click="addService">+ 添加服务</button>
     </div>
 
+    <!-- 用户认证(2026-08-25):场景级 users 快照 — 手动配置或凭证池导入 -->
+    <UsersCard v-model="local.users" />
+
     <!--
       导出入口已统一上移到:
         - CaseComposer 顶栏 (任意 step 都可见)
@@ -250,6 +253,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { ConfigView, RetryPolicyView } from '@/types/plate'
 import { parseJson } from '../../utils/json'
+import UsersCard from './UsersCard.vue'
 
 // plate TimePolicy 只有两态:record / timeout(带 seconds)。
 // 砍掉原 cost-collect / intervalMs — 不在 plate 契约内。
@@ -424,7 +428,7 @@ function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: 
 .c-page {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-.vars-card, .svc-card { grid-column: 1 / -1; }
+.vars-card, .svc-card, .users-card { grid-column: 1 / -1; }
 @media (max-width: 960px) {
   .c-page { grid-template-columns: 1fr; }
 }

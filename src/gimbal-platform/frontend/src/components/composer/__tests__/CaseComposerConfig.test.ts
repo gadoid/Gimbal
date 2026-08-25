@@ -17,6 +17,7 @@ import { defineComponent, h, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import CaseComposerConfig from '@/components/composer/CaseComposerConfig.vue'
+import UsersCard from '@/components/composer/UsersCard.vue'
 import type { ConfigView } from '@/types/plate'
 
 function makeConfig(): ConfigView {
@@ -88,5 +89,19 @@ describe('CaseComposerConfig — 变量注册表已迁 Canvas(#11 摘除)', () =
   it('渲染文本不再含"变量注册表"(配置步只管编辑,总览在步骤编辑页)', () => {
     const { w } = mountWithParent(makeConfig())
     expect(w.text()).not.toContain('变量注册表')
+  })
+})
+
+describe('CaseComposerConfig — 用户认证卡(2026-08-25)', () => {
+  it('UsersCard 挂载;users 变更经 v-model 上抛父 config', async () => {
+    const { w, config } = mountWithParent(makeConfig())
+    expect(w.text()).toContain('用户认证')
+    const card = w.findComponent(UsersCard)
+    expect(card.exists()).toBe(true)
+    card.vm.$emit('update:modelValue', {
+      qa1: { url: 'https://x', username: 'u', password: 'p', token_type: 'Bearer', expires_in: 3600 },
+    })
+    await flush()
+    expect(config.value.users.qa1?.username).toBe('u')
   })
 })
