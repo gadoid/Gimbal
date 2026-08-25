@@ -289,12 +289,23 @@ export interface RetryPolicyView {
   retryOn: string[]
 }
 
+/** 场景级认证用户快照(plate AuthSession 的配置字段子集,
+ *  与 run_dispatcher 执行注入写入形状一致)。字段可选:
+ *  兼容导入/历史 payload 的不完整 users。 */
+export interface UserAuthView {
+  url?: string
+  username?: string
+  password?: string
+  token_type?: string
+  expires_in?: number
+}
+
 /** plate Config。对齐 gimbal_plate/schema/scenario.py Config。 */
 export interface ConfigView {
   setup: unknown[]
   teardown: unknown[]
   services: Record<string, string>
-  users: Record<string, unknown>
+  users: Record<string, UserAuthView>
   timePolicy: TimePolicyView
   retry: RetryPolicyView | null
   vars: Record<string, unknown>

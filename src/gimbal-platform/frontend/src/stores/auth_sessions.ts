@@ -3,7 +3,8 @@
  *
  * Spec-2 §4.4 D.  Backed by /api/auths/* (Fernet-encrypted at rest).
  * The store does NOT cache plaintext passwords; passwords are write-only
- * from the UI and never returned by the backend.
+ * from the UI — except fetchDetail(includeSecrets), a pass-through used by
+ * the composer users-card snapshot copy (plaintext never lands in state).
  */
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
@@ -12,6 +13,7 @@ import type {
   AuthSession,
   AuthSessionCreateIn,
   AuthSessionPatchIn,
+  AuthSessionSecrets,
   TestResult,
 } from '@/api/auth_sessions'
 import { useSetStatus } from '@/utils/useSetStatus'
@@ -57,6 +59,14 @@ export const useAuthSessionsStore = defineStore('authSessions', () => {
     return await authSessionsApi.testConnection(id)
   }
 
+  /** 按需取详情;includeSecrets 时为一次性快照直通 — 明文不落 store 状态。 */
+  async function fetchDetail(
+    id: number,
+    includeSecrets = false,
+  ): Promise<AuthSession | AuthSessionSecrets> {
+    return await authSessionsApi.get(id, includeSecrets)
+  }
+
   return {
     list,
     fetchStatus,
@@ -66,5 +76,6 @@ export const useAuthSessionsStore = defineStore('authSessions', () => {
     patchAuth,
     deleteAuth,
     testConnection,
+    fetchDetail,
   }
 })

@@ -55,3 +55,20 @@ export function remove(id: number) {
 export function testConnection(id: number) {
   return http.post<TestResult>(`/auths/${id}/test`).then((r) => r.data)
 }
+
+export interface AuthSessionSecrets extends AuthSession {
+  password: string
+}
+
+/** 详情;includeSecrets=true 时后端附解密明文密码(内网测试环境策略,
+ *  2026-08-25 认证改造设计 — 供场景配置页快照拷贝)。 */
+export function get(
+  id: number,
+  includeSecrets = false,
+): Promise<AuthSession | AuthSessionSecrets> {
+  return http
+    .get<AuthSession | AuthSessionSecrets>(`/auths/${id}`, {
+      params: includeSecrets ? { include_secrets: true } : undefined,
+    })
+    .then((r) => r.data)
+}
