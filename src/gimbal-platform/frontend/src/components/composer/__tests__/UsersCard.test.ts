@@ -113,6 +113,28 @@ describe('UsersCard — 渲染与手动 CRUD', () => {
     w.unmount()
   })
 
+  it('空表时 alias=constructor(原型链同名属性)不被误判已存在', async () => {
+    const { w, users } = mountCard({})
+    await w.findAll('button').filter((b) => b.text().includes('添加用户'))[0].trigger('click')
+    await flush()
+    setInput('例 qa1', 'constructor')
+    setInput('https://target', 'https://y/login')
+    setInput('登录用户名', 'u1')
+    setInput('登录密码', 'p1')
+    await flush()
+    clickDialogButton('添加')
+    await flushPromises()
+    expect(users.value['constructor']).toEqual({
+      url: 'https://y/login', username: 'u1', password: 'p1',
+      token_type: 'Bearer', expires_in: 7200,
+    })
+    expect(
+      [...document.querySelectorAll('.el-message')]
+        .some((m) => m.textContent!.includes('已存在') && m.textContent!.includes('constructor')),
+    ).toBe(false)
+    w.unmount()
+  })
+
   it('删除用户 → emit 移除后的字典', async () => {
     const { w, users } = mountCard({
       qa1: { url: 'https://x', username: 'a', password: 'p' },

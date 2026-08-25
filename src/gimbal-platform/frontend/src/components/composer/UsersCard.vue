@@ -202,7 +202,7 @@ async function submitForm() {
   } catch {
     return
   }
-  if (!editingAlias.value && form.alias in (props.modelValue || {})) {
+  if (!editingAlias.value && Object.hasOwn(props.modelValue || {}, form.alias)) {
     ElMessage.warning(`alias ${form.alias} 已存在 — 不做覆盖,如需刷新请先删除该行`)
     return
   }
@@ -227,7 +227,8 @@ const pool = ref<AuthSession[]>([])
 const selectedIds = ref<number[]>([])
 
 function isTaken(alias: string): boolean {
-  return alias in (props.modelValue || {})
+  // hasOwn:只认自有 key — `in` 会命中 Object.prototype(constructor/toString…),空表误报"已存在"
+  return Object.hasOwn(props.modelValue || {}, alias)
 }
 function isSelected(id: number): boolean {
   return selectedIds.value.includes(id)
