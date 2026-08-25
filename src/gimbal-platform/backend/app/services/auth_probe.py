@@ -9,6 +9,8 @@
 """
 from __future__ import annotations
 
+import asyncio
+
 from app.auth import AuthSession, get_authenticator
 from app.auth.exceptions import AuthError
 
@@ -32,8 +34,10 @@ async def probe(url: str, username: str, password: str) -> tuple[bool, int | Non
     authenticator = get_authenticator(url)
 
     try:
-        # 3. 执行认证(authenticator 内部会调 apply_token 写入 token)
-        authenticator.authenticate(auth, tag="probe")
+        # 3. 执行认证(authenticator 内部会调 apply_token 写入 token)。
+        #    认证器是同步 httpx.post(最长 30s)— 直接在事件循环里跑会把
+        #    整个后端卡住(测试弹框"认证中"期间所有请求停摆),丢线程池执行。
+        await asyncio.to_thread(authenticator.authenticate, auth, "probe")
     except AuthError as e:
         # 已认证但返回了 AuthError(如 GitHub 没拿到 token 等)
         return False, None, f"认证失败: {e}"

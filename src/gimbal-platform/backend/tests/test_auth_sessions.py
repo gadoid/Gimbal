@@ -201,26 +201,17 @@ async def test_delete_returns_204(client: AsyncClient) -> None:
 async def test_test_endpoint_returns_token_preview(
     client: AsyncClient, monkeypatch
 ) -> None:
-    """Mock httpx to return a fake auth response and verify parsing."""
-    # Replace httpx.AsyncClient.post used inside the router
+    """Mock 同步 httpx.post(probe 经 to_thread 调认证器)验证 token 提取。"""
     import httpx
 
-    class FakeResp:
-        status_code = 200
-        def json(self):
-            return {"access_token": "fake-token-abcdef123456"}
+    req = httpx.Request("POST", "https://x")
 
-    class FakeClient:
-        def __init__(self, *a, **kw):
-            pass
-        async def __aenter__(self):
-            return self
-        async def __aexit__(self, *a):
-            return False
-        async def post(self, *a, **kw):
-            return FakeResp()
+    def fake_post(*a: object, **kw: object) -> httpx.Response:
+        return httpx.Response(
+            200, json={"access_token": "fake-token-abcdef123456"}, request=req
+        )
 
-    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr(httpx, "post", fake_post)
 
     auth = await register_and_login(client)
     r = await client.post(
@@ -241,25 +232,19 @@ async def test_test_endpoint_returns_token_preview(
 async def test_test_endpoint_4xx_returns_failure(
     client: AsyncClient, monkeypatch
 ) -> None:
+    """401 → raise_for_status 抛 HTTPStatusError → ok=False、status_code=None。
+
+    迁移后 probe 失败路径不再透传 4xx 码(auth_probe.py 失败分支恒 None),
+    前端弹框仅在 status_code 非空时显示 HTTP badge。
+    """
     import httpx
 
-    class FakeResp:
-        status_code = 401
-        text = "unauthorized"
-        def json(self):
-            return {"error": "bad creds"}
+    req = httpx.Request("POST", "https://x")
 
-    class FakeClient:
-        def __init__(self, *a, **kw):
-            pass
-        async def __aenter__(self):
-            return self
-        async def __aexit__(self, *a):
-            return False
-        async def post(self, *a, **kw):
-            return FakeResp()
+    def fake_post(*a: object, **kw: object) -> httpx.Response:
+        return httpx.Response(401, json={"error": "bad creds"}, request=req)
 
-    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr(httpx, "post", fake_post)
 
     auth = await register_and_login(client)
     r = await client.post(
@@ -273,7 +258,8 @@ async def test_test_endpoint_4xx_returns_failure(
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is False
-    assert body["status_code"] == 401
+    assert body["status_code"] is None
+    assert "网络/认证错误" in body["message"]
 
 
 # ── unauthenticated ─────────────────────────────────────────────
