@@ -402,3 +402,41 @@ describe('VarSelectorModal 分流(#7)', () => {
     w.unmount()
   })
 })
+
+describe('CaseComposerCanvas — auth 引用徽章 union(2026-08-25)', () => {
+  it('引用场景本地用户(仅 config.users 有)不标悬空', async () => {
+    const draft = useScenarioDraftStore()
+    ;(draft.draft as any).definition.config.users = {
+      'local-user-1': { url: 'https://x', username: 'u', password: 'p', token_type: 'Bearer', expires_in: 3600 },
+    }
+    const s0 = mkStep({
+      api: {
+        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+        headers: { Authorization: '${auth.local-user-1.token}' },
+        view_hints: { endpoint_id: 'ep-1' },
+      },
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    const chips = w.findAll('.ref-chip')
+    expect(chips.length).toBeGreaterThan(0)
+    expect(chips[0].classes()).not.toContain('dangling')
+    w.unmount()
+  })
+
+  it('引用两边都没有的 alias 仍标悬空', async () => {
+    const s0 = mkStep({
+      api: {
+        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+        headers: { Authorization: '${auth.ghost.token}' },
+        view_hints: { endpoint_id: 'ep-1' },
+      },
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    const chip = w.findAll('.ref-chip').find((c) => c.text().includes('ghost'))
+    expect(chip).toBeTruthy()
+    expect(chip!.classes()).toContain('dangling')
+    w.unmount()
+  })
+})

@@ -732,8 +732,12 @@ function onVarPicked(tpl: string) {
   varPickerVal.value = null
 }
 
-/** 模板里 refStatus 的第二参:已知 alias 列表 */
-const authAliases = computed(() => auths.value.map((a) => a.alias))
+/** 模板里 refStatus 的第二参:已知 alias 集合 = 凭证池 ∪ 草稿 config.users
+ *  (③ 用户认证快照 — 场景本地用户执行期由 Config.users 解析,不能误标悬空) */
+const authAliases = computed(() => {
+  const localUsers = Object.keys(draftStore.draft?.definition?.config?.users ?? {})
+  return [...new Set([...auths.value.map((a) => a.alias), ...localUsers])]
+})
 
 onMounted(() => {
   // 首次进入策略区前预热:策略 kinds + 各 kind 的 detail(一次性)。
