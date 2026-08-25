@@ -32,6 +32,7 @@ from ..schemas.auth_session import (
     AuthSessionCreateIn,
     AuthSessionOut,
     AuthSessionPatchIn,
+    AuthSessionSecretsOut,
     TestResult,
 )
 from ..services import auth_probe
@@ -129,14 +130,38 @@ async def create_auth(
 
 
 # ── detail ─────────────────────────────────────────────────────
-@router.get("/{auth_id}", response_model=AuthSessionOut)
+@router.get("/{auth_id}", response_model=AuthSessionSecretsOut | AuthSessionOut)
 async def get_auth(
     auth_id: Annotated[int, PathParam(ge=1)],
     user: CurrentUser,
     session: DbSession,
-) -> AuthSessionOut:
+    include_secrets: bool = False,
+) -> AuthSessionOut | AuthSessionSecretsOut:
     a = await _get_owned(session, auth_id, user.id)
-    return _to_out(a)
+    if not include_secrets:
+        return _to_out(a)
+    # 严解密:密钥轮换后的旧密文不可恢复。快照拷贝会把返回值当真值写进
+    # 场景导出产物,不能像列表 _safe_decrypt 那样降级为占位符 — 显式 422。
+    try:
+        username = fernet_decrypt(a.username_enc)
+        password = fernet_decrypt(a.password_enc)
+    except ValueError as e:
+        logger.warning("auth.get include_secrets: fernet decrypt failed: {}", e)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="加密凭据已损坏或密钥已轮换，请先在认证管理重新编辑保存",
+        )
+    return AuthSessionSecretsOut(
+        id=a.id,
+        alias=a.alias,
+        url=a.url,
+        username=username,
+        password=password,
+        token_type=a.token_type,
+        expires_in=a.expires_in,
+        created_at=a.created_at,
+        updated_at=a.updated_at,
+    )
 
 
 # ── patch ──────────────────────────────────────────────────────

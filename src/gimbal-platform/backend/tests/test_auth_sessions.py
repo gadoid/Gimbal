@@ -286,3 +286,84 @@ async def test_endpoints_require_auth(client: AsyncClient) -> None:
         json={"alias": "x", "url": "x", "username": "x", "password": "x"},
     )
     assert r.status_code == 401
+
+
+# ── GET detail + include_secrets(2026-08-25 认证改造设计)─────────
+async def test_detail_without_secrets_keeps_password_masked(client: AsyncClient) -> None:
+    """不带 include_secrets 的详情:行为与改造前一致,不泄露明文。"""
+    auth = await register_and_login(client)
+    r = await client.post(
+        "/api/auths",
+        headers=auth,
+        json={"alias": "qa1", "url": "https://x", "username": "u", "password": "s3cret"},
+    )
+    aid = r.json()["id"]
+
+    r = await client.get(f"/api/auths/{aid}", headers=auth)
+    assert r.status_code == 200
+    assert "password" not in r.json()
+    assert r.json()["password_masked"] == "<REDACTED>"
+
+
+async def test_detail_with_secrets_returns_plaintext(client: AsyncClient) -> None:
+    """include_secrets=true:附解密后的明文 password(内网测试环境策略)。"""
+    auth = await register_and_login(client)
+    r = await client.post(
+        "/api/auths",
+        headers=auth,
+        json={
+            "alias": "qa1",
+            "url": "https://x",
+            "username": "alice_user",
+            "password": "s3cret",
+        },
+    )
+    aid = r.json()["id"]
+
+    r = await client.get(f"/api/auths/{aid}?include_secrets=true", headers=auth)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["username"] == "alice_user"
+    assert body["password"] == "s3cret"
+
+
+async def test_detail_with_secrets_cross_owner_404(client: AsyncClient) -> None:
+    a_auth = await register_and_login(client)
+    r = await client.post(
+        "/api/auths",
+        headers=a_auth,
+        json={"alias": "qa1", "url": "https://x", "username": "u", "password": "p"},
+    )
+    aid = r.json()["id"]
+
+    b_auth = await register_and_login(client, "bob", "bobpass456")
+    r = await client.get(f"/api/auths/{aid}?include_secrets=true", headers=b_auth)
+    assert r.status_code == 404
+
+
+async def test_detail_with_secrets_rotation_422(
+    client: AsyncClient, monkeypatch
+) -> None:
+    """FERNET_KEY 轮换后的旧密文:严解密失败 → 422(带人话指引)。
+
+    快照拷贝会把返回值当真值写进场景导出产物,所以这里不能像列表
+    _safe_decrypt 那样降级为占位符 — 必须显式失败。
+    """
+    from app.routers import auth_sessions as router_mod
+
+    def boom(_s: str) -> str:
+        raise ValueError("key rotated")
+
+    monkeypatch.setattr(router_mod, "fernet_decrypt", boom)
+
+    auth = await register_and_login(client)
+    r = await client.post(
+        "/api/auths",
+        headers=auth,
+        json={"alias": "qa1", "url": "https://x", "username": "u", "password": "p"},
+    )
+    aid = r.json()["id"]
+
+    r = await client.get(f"/api/auths/{aid}?include_secrets=true", headers=auth)
+    assert r.status_code == 422
+    assert "重新编辑保存" in r.json()["detail"]

@@ -48,3 +48,14 @@ class TestResult(BaseModel):
     ok: bool
     status_code: int | None = None
     message: str
+
+
+class AuthSessionSecretsOut(AuthSessionOut):
+    """include_secrets=true 时的详情视图 — 附解密后的明文 password。
+
+    仅限内网测试环境的策略放宽(2026-08-25 认证改造设计):场景配置页
+    "从凭证池导入"需要把明文快照拷进 config.users(导出在前端本地拼装,
+    明文必须过客户端)。列表接口行为不变,不带密。
+    """
+
+    password: str
