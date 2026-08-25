@@ -57,6 +57,9 @@ class ScenarioMeta(BaseModel):
     version: str = Field(default="v0.1.0", max_length=32)
     expire: bool = False
     create_time: datetime | None = Field(default=None, alias="createTime")
+    # 「最后编辑」— 服务端权威:读侧由 to_read_shape 以 DB 行 updated_at
+    # 覆盖(_meta_from_row),draft 里客户端传的值不采信。
+    update_time: datetime | None = Field(default=None, alias="updateTime")
 
     @field_validator("tags")
     @classmethod

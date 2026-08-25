@@ -30,11 +30,16 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
             <span class="scenario-id">{{ definition.scenarioId }}</span>
           </div>
-          <h1 class="title">
+          <h1 class="title" :class="{ expired: meta.expire }">
             {{ meta.name || '未命名编排' }}
             <span v-if="scenario?.starred" class="star-pill">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
               已收藏
+            </span>
+            <!-- ① 基本信息的 expire 实时同步:过期场景顶栏置灰标记 -->
+            <span v-if="meta.expire" class="expire-pill">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              已过期
             </span>
           </h1>
         </div>
@@ -729,6 +734,14 @@ async function onRunConfirm(
   display: inline-flex; align-items: center; gap: 4px;
   background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
   color: #fff; font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px;
+}
+/* 过期场景:标题置灰 + 灰 pill(与收藏金 pill 同构、语义相反) */
+.title.expired { color: #94a3b8; }
+.expire-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #f1f5f9; border: 1px solid #e2e8f0;
+  color: #64748b; font-size: 11px; font-weight: 600;
   padding: 2px 8px; border-radius: 999px;
 }
 

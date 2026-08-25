@@ -111,6 +111,38 @@ async def test_scenario_update_blocks_rename(fresh_db) -> None:
             await scenario_store.update(db, "sc-test", renamed)
 
 
+async def test_scenario_meta_update_time_projected_from_db(fresh_db) -> None:
+    """「最后编辑」读侧投影:meta.updateTime 来自 DB 行 updated_at(服务端
+    权威,onupdate 自动刷新),客户端 draft 里的伪值不得穿透读侧。
+
+    SQLite CURRENT_TIMESTAMP 存的是 naive UTC — 投影时必须标成
+    tz-aware UTC,否则前端 new Date() 按本地时间解析,显示偏 8 小时。
+    """
+    from datetime import datetime, timezone
+
+    async with _session() as db:
+        created = await scenario_store.create(db, _make_draft(), owner="alice")
+        assert created.meta.update_time is not None
+        assert created.meta.update_time.tzinfo is timezone.utc
+
+        # 编辑一次:draft 容器里伪造的 updateTime 不得穿透读侧
+        spoofed = _make_draft(name="v2")
+        spoofed.definition["meta"]["updateTime"] = "1999-01-01T00:00:00Z"
+        updated = await scenario_store.update(db, "sc-test", spoofed)
+        assert updated.meta.update_time is not None
+        assert updated.meta.update_time > datetime(1999, 1, 1, tzinfo=timezone.utc)
+        assert updated.meta.name == "v2"
+
+        # wire 形状:ISO 带 Z 后缀,前端 new Date() 按 UTC 解析
+        wire = updated.model_dump(by_alias=True, mode="json")["meta"]["updateTime"]
+        assert wire.endswith("Z")
+
+        # list 读侧同样携带(create/get/update/list 共用 to_read_shape)
+        listed = await scenario_store.list_scenarios(db)
+        row = next(s for s in listed if s.meta.scenario_id == "sc-test")
+        assert row.meta.update_time == updated.meta.update_time
+
+
 async def test_scenario_delete_cascades_datasets(fresh_db) -> None:
     async with _session() as db:
         await scenario_store.create(

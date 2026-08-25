@@ -35,6 +35,7 @@
       v-loading="store.scenariosStatus === 'loading'"
       :data="paged"
       :row-key="rowKey"
+      :row-class-name="rowClassName"
       class="scenarios-table"
       @row-click="openScenario"
     >
@@ -59,6 +60,11 @@
             class="vis-tag vis-public"
             title="公共:所有登录用户可读"
           >公共</span>
+          <span
+            v-if="row.meta.expire"
+            class="vis-tag vis-expired"
+            title="已过期:① 基本信息中标记为过期的场景"
+          >已过期</span>
           <div class="sid">{{ row.meta.scenarioId }}</div>
           <div class="desc">{{ row.meta.description }}</div>
         </template>
@@ -310,6 +316,12 @@ onMounted(async () => {
 
 function rowKey(row: Scenario) { return row.meta.scenarioId }
 
+/** 过期行置灰:meta.expire → 行加 row-expired class(样式见 .row-expired)。
+ *  过期只是视觉降级,行仍可点/可操作 — 与编排页顶栏的「已过期」pill 呼应。 */
+function rowClassName({ row }: { row: Scenario }) {
+  return row.meta.expire ? 'row-expired' : ''
+}
+
 const formatTime = shortDateTime
 
 function openScenario(row: Scenario) {
@@ -508,6 +520,14 @@ async function onCmd(cmd: string, row: Scenario) {
   color: #047857;
   background: #d1fae5;
 }
+.vis-expired {
+  color: #64748b;
+  background: #f1f5f9;
+}
+
+/* 过期条目整行置灰 — opacity 一次性压暗行内所有自带头色的小组件
+ * (SystemChip/TagPill/PriorityPill…),比逐列改色一致。 */
+:deep(.el-table__row.row-expired td.el-table__cell) { opacity: 0.55; }
 
 .sid {
   margin-top: 2px;

@@ -8,6 +8,8 @@ concurrent requests see consistent reads/writes.
 """
 from __future__ import annotations
 
+from datetime import timezone
+
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func
 from sqlalchemy import select
@@ -404,6 +406,14 @@ def _meta_from_row(row: ComposerScenario) -> ScenarioMeta:
         meta_dict["module"] = "default"
     if not list(meta_dict.get("system") or []):
         meta_dict["system"] = ["default"]
+    # 「最后编辑」服务端权威:读时以 DB 行 updated_at 覆盖 — payload 里
+    # 客户端伪造/陈旧的 updateTime 一律不可信(与 starred/visibility
+    # 同族的读时投影)。SQLite CURRENT_TIMESTAMP 是 naive UTC,标上
+    # tzinfo 让 wire 输出 ISO-Z,前端 new Date() 才不会按本地时间错位。
+    meta_dict["updateTime"] = (
+        row.updated_at.replace(tzinfo=timezone.utc)
+        if row.updated_at is not None else None
+    )
     return ScenarioMeta.model_validate(meta_dict)
 
 
