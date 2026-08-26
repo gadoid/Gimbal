@@ -706,3 +706,61 @@ class StrategyKindDetailView(BaseModel):
             fields=[StrategyFieldDesc.model_validate(f) for f in d.fields],
             base_fields=[StrategyFieldDesc.model_validate(f) for f in d.base_fields],
         )
+
+
+# ─── generators 语法 dim 视图(常量池目录,2026-08-26)──────────────
+
+
+class GeneratorParamDesc(BaseModel):
+    """生成器 kind 的一个参数描述符。
+
+    与 StrategyFieldDesc 的差异: 管理页动态表单需要 min/max(InputNumber
+    约束)与显式 JSON-Schema 风格 type,而非 ui_kind;生成器参数无
+    path 概念(name 即键)。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    type: Literal["string", "integer", "number", "boolean"]
+    required: bool = False
+    default: Any | None = None
+    enum: list[Any] | None = None
+    min: float | None = None
+    max: float | None = None
+    description: str = ""
+
+
+class GeneratorKindView(BaseModel):
+    """generators dim 的 light view —— 给 kind 下拉用(kind/summary)。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str
+    summary: str
+
+    @classmethod
+    def from_descriptor(cls, d: Any) -> "GeneratorKindView":
+        return cls(kind=d.kind, summary=d.summary)
+
+
+class GeneratorKindDetailView(BaseModel):
+    """generators dim 的 full view —— 管理页文档卡片与动态表单渲染契约。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str
+    summary: str
+    description: str
+    params: list[GeneratorParamDesc] = Field(default_factory=list)
+    example: dict[str, Any] = Field(default_factory=dict)
+
+    @classmethod
+    def from_descriptor(cls, d: Any) -> "GeneratorKindDetailView":
+        return cls(
+            kind=d.kind,
+            summary=d.summary,
+            description=d.description,
+            params=[GeneratorParamDesc.model_validate(p) for p in d.params],
+            example=dict(d.example),
+        )

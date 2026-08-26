@@ -18,6 +18,7 @@
 """
 from __future__ import annotations
 
+from gimbal_plate.http.generator_dim import GeneratorIndex
 from gimbal_plate.http.grammar import (
     ConfigIndex,
     DimSpec,
@@ -44,6 +45,8 @@ from gimbal_plate.http.views import (
     ConfigView,
     EndpointDetailView,
     EndpointView,
+    GeneratorKindDetailView,
+    GeneratorKindView,
     MetaDetailView,
     MetaView,
     ResourceDetailView,
@@ -181,6 +184,22 @@ def register_fin_dims(reg: PlateRegistry) -> None:
             index=StrategyIndex(registry=reg),
             view_factory=StrategyKindView.from_descriptor,
             full_view_factory=StrategyKindDetailView.from_descriptor,
+            actions={},
+        ),
+    )
+
+    # generators: 语法级 dim(第 9 个),生成器 spec 描述符 —— 注册在 fin
+    # 装配点的理由同 strategy(生产/测试共用唯一 dim 装配入口,防 drift)。
+    # 引擎 src/gimbal/generator/specs.py 是执行权威源;plate 镜像
+    # schema/generator.py 手工同步,tests/plate/test_generator_dim.py
+    # P7 防漂移。语法全局,任意 system 作用域返回全量。
+    reg.register_dim(
+        "generators",
+        DimSpec(
+            name="generators",
+            index=GeneratorIndex(registry=reg),
+            view_factory=GeneratorKindView.from_descriptor,
+            full_view_factory=GeneratorKindDetailView.from_descriptor,
             actions={},
         ),
     )
