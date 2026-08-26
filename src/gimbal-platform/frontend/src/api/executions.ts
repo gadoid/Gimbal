@@ -2,7 +2,7 @@
 import http from './http'
 
 export type MergePolicy = 'override' | 'merge' | 'append'
-export type ExecutionStatus = 'queued' | 'done' | 'failed' | 'canceled'
+export type ExecutionStatus = 'queued' | 'running' | 'done' | 'failed' | 'canceled'
 
 export interface Execution {
   id: number
@@ -28,6 +28,11 @@ export interface Execution {
     parallel?: number
     prefix?: string | null
     mergePolicy?: MergePolicy
+    // 系统标记(后端按需写入;详情页转告警条,不进配方 dl)
+    /** 启动期 reconcile 收敛记录(P3:进程重启僵尸单) */
+    reconciled?: { at: string; reason: string }
+    /** 计数器漂移:passed+failed ≠ total_runs(P8 校账,真值以 JSONL 为准) */
+    counterDrift?: boolean
   }
 }
 

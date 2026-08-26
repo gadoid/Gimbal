@@ -25,6 +25,7 @@ from ..core.db import Base
 
 # Execution.status values (V3 dispatcher lifecycle)
 STATUS_QUEUED = "queued"
+STATUS_RUNNING = "running"
 STATUS_DONE = "done"
 STATUS_FAILED = "failed"
 STATUS_CANCELED = "canceled"
@@ -39,7 +40,7 @@ class Execution(Base):
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     status: Mapped[str] = mapped_column(String(16), default=STATUS_QUEUED)
-    # queued / done / failed / canceled
+    # queued / running(认证解析通过、行分发开始)/ done / failed / canceled
     total_runs: Mapped[int] = mapped_column(Integer, default=0)
     passed: Mapped[int] = mapped_column(Integer, default=0)
     failed: Mapped[int] = mapped_column(Integer, default=0)

@@ -20,7 +20,11 @@ from ..core.db import get_db
 from ..core.deps import CurrentUser, get_owned_execution
 from ..core.timeutil import utcnow
 from ..models import Execution
-from ..models.execution import STATUS_CANCELED, STATUS_QUEUED
+from ..models.execution import (
+    STATUS_CANCELED,
+    STATUS_QUEUED,
+    STATUS_RUNNING,
+)
 from ..schemas.execution import ExecutionListOut, ExecutionOut
 from ..services import execution_store, run_dispatcher
 
@@ -80,9 +84,10 @@ async def cancel_execution(
 ) -> ExecutionOut:
     """P4 协作式取消:登记请求,在飞 fanout 在行边界收敛为 canceled。
 
-    无在飞 task 的 queued 僵尸单立即终态化。终态单 409。
+    可取消态 = queued | running(running 由在飞 fanout 行边界消费);
+    无在飞 task 的 queued/running 都是重启僵尸,立即终态化。终态单 409。
     """
-    if ex.status != STATUS_QUEUED:
+    if ex.status not in (STATUS_QUEUED, STATUS_RUNNING):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={

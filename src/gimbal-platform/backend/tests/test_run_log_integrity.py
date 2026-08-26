@@ -180,6 +180,19 @@ async def test_reconcile_marks_stale_queued_failed(fresh_db):
     assert row.config_json["reconciled"]["reason"] == "backend restarted mid-dispatch"
 
 
+async def test_reconcile_marks_stale_running_failed(fresh_db):
+    """running 单同样是进程内 fanout 的孤儿(重启即僵尸)→ 一并收敛 failed。"""
+    from app.core import db as db_module
+    from app.services import run_dispatcher
+
+    eid = await _seed_execution(1, status="running")
+    n = await run_dispatcher.reconcile_stale_executions(db_module.SessionLocal)
+    assert n == 1
+    row = await _get_execution(eid)
+    assert row.status == "failed"
+    assert row.config_json["reconciled"]["reason"] == "backend restarted mid-dispatch"
+
+
 async def test_reconcile_ignores_terminal(fresh_db):
     from app.core import db as db_module
     from app.services import run_dispatcher

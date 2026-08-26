@@ -38,7 +38,7 @@ from typing import Any
 from uuid import uuid4
 
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy import update as sqlalchemy_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,6 +50,7 @@ from ..models.execution import (
     STATUS_DONE,
     STATUS_FAILED,
     STATUS_QUEUED,
+    STATUS_RUNNING,
 )
 from ..models.auth_session import AuthSession as DBAuthSession
 from ..models.composer_data_set import ComposerDataSet
@@ -201,17 +202,20 @@ def reset_cancel_state() -> None:
 
 # ─── startup reconcile (P3) ────────────────────────────────────────
 async def reconcile_stale_executions(db_factory: Any) -> int:
-    """启动期 reconcile:进程内 _fanout 随重启丢失,queued 即僵尸。
+    """启动期 reconcile:进程内 _fanout 随重启丢失,queued/running 即僵尸。
 
     全部标 failed + ``config_json.reconciled`` 记录(P3:此前永远
-    停在 queued,UI 无从得知)。返回处理行数。
+    停在 queued,UI 无从得知;running 同为进程孤儿,一并收敛)。
+    返回处理行数。
     """
     count = 0
     async with db_factory() as session:
         rows = (
             (
                 await session.execute(
-                    select(Execution).where(Execution.status == STATUS_QUEUED)
+                    select(Execution).where(
+                        Execution.status.in_((STATUS_QUEUED, STATUS_RUNNING))
+                    )
                 )
             )
             .scalars()
@@ -232,7 +236,7 @@ async def reconcile_stale_executions(db_factory: Any) -> int:
         await session.commit()
     if count:
         logger.warning(
-            "run_dispatcher: reconciled {} stale queued execution(s) after restart",
+            "run_dispatcher: reconciled {} stale queued/running execution(s) after restart",
             count,
         )
     return count
@@ -477,6 +481,9 @@ async def _fanout(
         )
         return
 
+    # 认证解析通过、即将分发行 → queued 置 running(UI 可见"在跑")。
+    await _mark_running(db_factory, execution_id)
+
     sem = asyncio.Semaphore(max(1, parallel))
 
     # P6:整单固定一次 compose 时间戳 — fill_plate_defaults 对缺失的
@@ -687,6 +694,36 @@ async def _fanout(
         _cancel_requested.discard(execution_id)
     else:
         await _finalize_execution(db_factory, execution_id)
+
+
+async def _mark_running(db_factory: Any, execution_id: int) -> None:
+    """queued → running + started_at(原子条件 update,只动 queued 行)。
+
+    fanout 在认证解析通过、行分发开始前调用 —— UI 由此区分"排队中"
+    与"在跑"(此前 queued 直接到终态,长时间执行无法观测进度感)。
+    条件更新天然幂等:终态/已 running 的行不被覆写;行被并发删除时
+    where 不命中,静默跳过即可(fanout 稍后自然 no-op 收尾)。
+    """
+    try:
+        async with db_factory() as session:
+            await session.execute(
+                sqlalchemy_update(Execution)
+                .where(
+                    Execution.id == execution_id,
+                    Execution.status == STATUS_QUEUED,
+                )
+                .values(
+                    status=STATUS_RUNNING,
+                    started_at=func.coalesce(Execution.started_at, _utcnow()),
+                )
+            )
+            await session.commit()
+    except Exception as e:  # noqa: BLE001
+        # 观测性标记,失败不阻断 fanout(终态写入才是权威)。
+        logger.warning(
+            "run_dispatcher: mark running failed for execution {}: {}",
+            execution_id, e,
+        )
 
 
 async def _fail_whole_execution(

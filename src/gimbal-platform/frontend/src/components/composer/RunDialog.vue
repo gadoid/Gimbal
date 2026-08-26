@@ -36,7 +36,7 @@
                 </div>
                 <div class="env-url">{{ env.baseUrl }}</div>
               </button>
-              <div v-if="envs.length === 0" class="muted small">暂无可用环境 (请检查 Plate 服务)</div>
+              <div v-if="envs.length === 0" class="muted small">暂无可用环境 — 请在服务端 data/envs.yaml 中配置后重试</div>
             </div>
           </section>
 
@@ -210,7 +210,11 @@
               </svg>
               {{ selectedEnv }}
             </span>
-            <span class="summary-chip total">
+            <span
+              class="summary-chip total"
+              :class="{ over: totalRuns > MAX_TOTAL_RUNS }"
+              :title="totalRuns > MAX_TOTAL_RUNS ? `超过平台上限 ${MAX_TOTAL_RUNS},无法发起` : undefined"
+            >
               {{ totalRuns }} 次运行
             </span>
             <span v-if="parallel > 1" class="summary-chip">
@@ -371,6 +375,10 @@ function toggleBaseline() {
   if (useBaseline.value) selectedDatasets.value = []
 }
 
+/** 总量闸(行数 × 每行重复):对齐后端 dispatch 侧
+ * MAX_RUNS_PER_EXECUTION(app/core/config.py)的 409 too_many_runs。 */
+const MAX_TOTAL_RUNS = 200
+
 const totalRuns = computed(() => {
   // 基线或空选择都按一个隐式空行计(D12:confirm 原样透传空 dataSetIds 即基线,
   // 显示必须与派发语义一致,不能谎报 0 次)
@@ -399,6 +407,14 @@ function onConfirm() {
   // 输入钳位(与后端 schema 上限一致,防 422)
   nRuns.value = Math.min(1000, Math.max(1, Math.floor(nRuns.value || 1)))
   parallel.value = Math.min(200, Math.max(1, Math.floor(parallel.value || 1)))
+  // 总量闸前置:dispatch 侧 rows × nRuns > 200 整单 409 too_many_runs,
+  // 同闸提前拦(后端权威定义:app/core/config.py MAX_RUNS_PER_EXECUTION)。
+  if (totalRuns.value > MAX_TOTAL_RUNS) {
+    ElMessage.warning(
+      `总运行次数 ${totalRuns.value} 超过平台上限 ${MAX_TOTAL_RUNS}(行数 × 每行重复)— 请减少数据集/重复次数`,
+    )
+    return
+  }
   const origin = mergePolicy.value === 'origin'
   emit('confirm', selectedEnv.value, selectedDatasets.value, {
     stepTo: stepTo.value,
@@ -623,6 +639,8 @@ function goCreateDataSet() {
 }
 .summary-chip.env { background: #fef3c7; color: #92400e; }
 .summary-chip.total { background: #d1fae5; color: #065f46; }
+/* 总量超闸(dispatch 409 too_many_runs)→ 红色警示,confirm 亦被拦 */
+.summary-chip.total.over { background: #fee2e2; color: #991b1b; }
 .run-actions { display: flex; gap: 8px; }
 
 .ghost-btn {

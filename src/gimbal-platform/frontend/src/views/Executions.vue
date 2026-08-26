@@ -19,6 +19,8 @@
         <h2>执行 #{{ execStore.detail.id }}</h2>
         <p>
           {{ execStore.detail.scenario_id }} · 状态 {{ statusText }}
+          <template v-if="startedAtLabel"> · 开始 {{ startedAtLabel }}</template>
+          <template v-if="finishedAtLabel"> · 结束 {{ finishedAtLabel }}</template>
           <el-tag
             v-if="stepToLabel"
             type="info"
@@ -32,10 +34,34 @@
         <span :class="['status-tag', `status-${execStore.detail.status}`]">
           {{ statusText }}
         </span>
+        <el-button
+          v-if="canCancel"
+          link
+          type="warning"
+          @click="cancelExec"
+        >取消</el-button>
         <el-button link @click="refreshNow">手动刷新</el-button>
         <el-button link type="danger" @click="removeExec">删除</el-button>
       </div>
     </header>
+
+    <!-- 系统标记:reconcile 收敛 / 计数器漂移(不进配方 dl)-->
+    <el-alert
+      v-if="execStore.detail.config?.reconciled"
+      type="warning"
+      :closable="false"
+      show-icon
+      class="sys-alert"
+      title="后端重启：本单由启动期 reconcile 收敛为 failed（详见执行配方外的 reconciled 记录）"
+    />
+    <el-alert
+      v-if="execStore.detail.config?.counterDrift"
+      type="error"
+      :closable="false"
+      show-icon
+      class="sys-alert"
+      title="计数器漂移：通过+失败 ≠ 总执行，真值以 data/runs/<date>.jsonl 调度日志为准"
+    />
 
     <div class="counters">
       <div class="counter">
@@ -50,8 +76,8 @@
         <div class="counter-label">失败</div>
         <div class="counter-value">{{ execStore.detail.failed }}</div>
       </div>
-      <div class="counter">
-        <div class="counter-label">未开始</div>
+      <div class="counter" title="未执行 / 行边界跳过 / 取消未跑的行">
+        <div class="counter-label">未完成</div>
         <div class="counter-value">{{
           Math.max(0, execStore.detail.total_runs - execStore.detail.passed - execStore.detail.failed)
         }}</div>
@@ -60,8 +86,8 @@
 
     <h3 class="recipe-title">执行配方</h3>
     <dl class="recipe">
-      <template v-for="(v, k) in recipeEntries" :key="k">
-        <dt>{{ k }}</dt>
+      <template v-for="([k, label, v]) in recipeEntries" :key="k">
+        <dt>{{ label }}</dt>
         <dd class="mono">{{ formatRecipeValue(v) }}</dd>
       </template>
     </dl>
@@ -93,8 +119,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { executionStatusText, isTerminalExecutionStatus } from '@/utils/executionStatus'
+import { cancelExecution } from '@/api/executions'
 import { removeExecution } from '@/utils/removeExecution'
+import { showError } from '@/utils/errorFallback'
 import { useExecutionsStore } from '@/stores/executions'
 
 const route = useRoute()
@@ -107,6 +136,21 @@ const statusText = computed(() => {
   const s = execStore.detail?.status
   return s ? executionStatusText(s) : ''
 })
+
+// P4 协作式取消:queued/running 可取消(running 由在飞 fanout 行边界
+// 收敛);终态按钮消失。
+const canCancel = computed(() => {
+  const s = execStore.detail?.status
+  return !!s && !isTerminalExecutionStatus(s)
+})
+
+/** 'YYYY-MM-DDTHH:MM:SS' → 'HH:MM:SS'(与列表页同款字符串切片)。 */
+function fmtTime(iso: string | null): string {
+  return iso ? iso.slice(11, 19) : ''
+}
+
+const startedAtLabel = computed(() => fmtTime(execStore.detail?.started_at ?? null))
+const finishedAtLabel = computed(() => fmtTime(execStore.detail?.finished_at ?? null))
 
 // ``stepTo`` is a 0-based inclusive halt index stored in
 // Execution.config_json by the dispatcher (V3 camelCase).
@@ -121,10 +165,28 @@ const stepToLabel = computed(() => {
 
 // V3 dispatcher recipe (config_json) rendered as a definition list —
 // the run-level surface lives in data/runs/*.jsonl, not the API.
-const recipeEntries = computed<Array<[string, unknown]>>(() => {
+// 系统键(reconciled/counterDrift)转上方 alert;stepTo 由 pill 表达,
+// 均不进 dl。已知键给中文标签,未知键原样。
+const RECIPE_LABELS: Record<string, string> = {
+  runId: '运行ID',
+  scenarioId: '场景',
+  dataSetIds: '数据集',
+  envId: '环境',
+  exec_auth_alias: '执行认证',
+  injectCredentials: '凭证注入',
+  nRuns: '每行重复',
+  parallel: '并发',
+  prefix: '提单前缀',
+  mergePolicy: '认证合并',
+}
+const RECIPE_HIDDEN_KEYS = new Set(['stepTo', 'reconciled', 'counterDrift'])
+
+const recipeEntries = computed<Array<[string, string, unknown]>>(() => {
   const cfg = execStore.detail?.config
   if (!cfg) return []
-  return Object.entries(cfg).filter(([, v]) => v !== undefined)
+  return Object.entries(cfg)
+    .filter(([k, v]) => v !== undefined && !RECIPE_HIDDEN_KEYS.has(k))
+    .map(([k, v]) => [k, RECIPE_LABELS[k] ?? k, v])
 })
 
 function formatRecipeValue(v: unknown): string {
@@ -158,6 +220,24 @@ async function removeExec() {
   if (!execStore.detail) return
   const ok = await removeExecution(execStore.detail.id, (i) => execStore.remove(i))
   if (ok) router.push('/executions')
+}
+
+/** P4:请求协作式取消;在飞 fanout 在行边界收敛,刷新看最新状态。 */
+async function cancelExec() {
+  if (!execStore.detail) return
+  try {
+    await cancelExecution(execStore.detail.id)
+    ElMessage.success('已请求取消 — 在飞行收敛后生效')
+  } catch (e) {
+    if ((e as { status?: number }).status === 409) {
+      // 终态竞态:刷新让按钮消失即可,不算失败。
+      ElMessage.info('该执行已结束,无法取消')
+    } else {
+      showError('取消', e)
+      return
+    }
+  }
+  await refreshNow()
 }
 
 onMounted(async () => {
@@ -317,6 +397,10 @@ onUnmounted(() => {
 }
 
 .poll-warn {
+  margin-bottom: 12px;
+}
+
+.sys-alert {
   margin-bottom: 12px;
 }
 </style>

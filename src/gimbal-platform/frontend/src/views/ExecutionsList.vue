@@ -41,7 +41,7 @@
         <template #default="{ row }">
           <el-button link type="primary" @click="open(row.id)">详情</el-button>
           <el-button
-            v-if="row.status === 'queued'"
+            v-if="row.status === 'queued' || row.status === 'running'"
             link
             type="warning"
             @click="cancel(row.id)"
@@ -89,7 +89,9 @@ async function remove(id: number) {
   await removeExecution(id, (i) => store.remove(i))
 }
 
-/** P4 协作式取消:仅 queued 行可见;409 = 点击时单子已终态(竞态)。 */
+/** P4 协作式取消:queued/running 行可见(running 由在飞 fanout 行边界
+ * 消费;无在飞 task 的都是重启僵尸,后端 inline 终态化)。
+ * 409 = 点击时单子已终态(竞态)。 */
 async function cancel(id: number) {
   try {
     await cancelExecution(id)
