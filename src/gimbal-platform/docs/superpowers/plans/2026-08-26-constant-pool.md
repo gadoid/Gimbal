@@ -10,6 +10,17 @@
 
 **Spec:** `src/gimbal-platform/docs/superpowers/specs/2026-08-26-constant-pool-design.md`(本计划从 spec 取证;执行者应同时读 spec 对应章节)
 
+> **实现进度(2026-08-27 更新):已全部完成并合并。**
+>
+> - T1-T10 全部落地,合并入 `strbody_avaliable` 并推送远端(origin/strbody_avaliable)。
+> - 验证:plate 436 例 / backend 268 例 / frontend 304 例全绿,`vue-tsc --noEmit` 0 错。
+> - 后续 UI 微调(超出本计划范围,同一分支追加合并):分支 `constant-pool-ui-polish`
+>   614c321 → e93f741 → f4c8d61 — 面板升级白卡外壳(`.c-card` 配方 + 分隔线卡头),
+>   Canvas col-info 拆分为三张独立卡(step 信息 / 变量注册表 / 常量池;VRP 改常驻,
+>   新增 F12b 钉住拆分),①-③ 页 rail 与主卡间隔收敛为精确 16px
+>   (`with-rail` 限宽 1596px 居中,消除 c-page 居中产生的 ~54px 死白),
+>   `/constants` 管理页参数表改发丝线 + kind-chip 靛蓝选中态。
+
 ## Global Constraints
 
 - 平台**绝不求值、不造新模板语法**:插入产物仅三种引擎原生形态 —— 字面值文本 / `${var.x}` 引用 / config.vars 内的 spec 声明;求值唯一发生在引擎 preprocess(PLATFORM_REQUIREMENTS L242:平台只写配置阶段内容)。
@@ -102,7 +113,7 @@
 - `random_decorated`:`length int=8 (1≤x≤1024)`、`charset Literal[alpha,digit,alnum]=alnum`、`head str=""`、`tail str=""`、`separator str=""`
 - `time_offset`:`unit Literal[milliseconds,seconds,minutes,hours,days,weeks,months,years]=seconds`、`value int=0`、`direction Literal[future,past]=future`、`base str|None=None`、`base_format str|None=None`
 
-- [ ] **Step 1.1: 写失败测试(全文)**
+- [x] **Step 1.1: 写失败测试(全文)**
 
 创建 `tests/plate/test_generator_dim.py`:
 
@@ -246,12 +257,12 @@ def test_p7_mirror_matches_engine_specs() -> None:
 
 注意 P7 中 `reg.generators` 属性名以 `src/gimbal/generator/registry.py` 实际实现为准 —— 执行此 Step 前先打开该文件确认 registry 暴露 kind 集合的属性;若两者都不适用,保留符号表退化分支即可(它已能钉死清单)。
 
-- [ ] **Step 1.2: 跑测试确认失败**
+- [x] **Step 1.2: 跑测试确认失败**
 
 Run: `python -m pytest tests/plate/test_generator_dim.py -v`
 Expected: 全部 7 例 FAIL/ERROR,首因为 `ModuleNotFoundError: No module named 'gimbal_plate.http.generator_dim'`
 
-- [ ] **Step 1.3: 写镜像 schema**
+- [x] **Step 1.3: 写镜像 schema**
 
 创建 `src/gimbal-plate/gimbal_plate/schema/generator.py`:
 
@@ -387,7 +398,7 @@ class TimeOffsetSpec(BaseModel):
     base_format: str | None = Field(default=None, description="基准时间的解析格式")
 ```
 
-- [ ] **Step 1.4: 写 dim 模块**
+- [x] **Step 1.4: 写 dim 模块**
 
 创建 `src/gimbal-plate/gimbal_plate/http/generator_dim.py`:
 
@@ -593,7 +604,7 @@ class GeneratorIndex:
         return {"kind": item.kind, "summary": item.summary}
 ```
 
-- [ ] **Step 1.5: views.py 追加三个视图模型**
+- [x] **Step 1.5: views.py 追加三个视图模型**
 
 在 `src/gimbal-plate/gimbal_plate/http/views.py` 文件末尾(strategy 视图之后)追加。先确认文件头部已有 `Any`、`Literal` 导入与 `BaseModel`/`ConfigDict`/`Field`(StrategyFieldDesc 同族在用;缺哪个补哪个):
 
@@ -656,7 +667,7 @@ class GeneratorKindDetailView(BaseModel):
         )
 ```
 
-- [ ] **Step 1.6: dimensions.py 注册 dim**
+- [x] **Step 1.6: dimensions.py 注册 dim**
 
 在 `src/gimbal-plate/gimbal_plate/systems/fin/dimensions.py` 的 `register_fin_dims` 内 strategy 注册块之后追加(imports 区补:
 `from gimbal_plate.http.generator_dim import GeneratorIndex`;views 导入行补 `GeneratorKindDetailView`、`GeneratorKindView`):
@@ -679,17 +690,17 @@ class GeneratorKindDetailView(BaseModel):
     )
 ```
 
-- [ ] **Step 1.7: 跑测试确认通过**
+- [x] **Step 1.7: 跑测试确认通过**
 
 Run: `python -m pytest tests/plate/test_generator_dim.py -v`
 Expected: 7 passed。若 P7 因 registry 属性名不符而 FAIL,按 registry.py 实际暴露的 kind 集合修正测试的取数分支(保持断言不变)。
 
-- [ ] **Step 1.8: plate 全量回归 + no-reverse-import 锁**
+- [x] **Step 1.8: plate 全量回归 + no-reverse-import 锁**
 
 Run: `python -m pytest tests/plate -q`
 Expected: 全绿(新增 7 例,既有不减)。特别确认 `test_v3_no_reverse_import.py` 通过。
 
-- [ ] **Step 1.9: Commit**
+- [x] **Step 1.9: Commit**
 
 ```bash
 git add src/gimbal-plate/gimbal_plate/schema/generator.py src/gimbal-plate/gimbal_plate/http/generator_dim.py src/gimbal-plate/gimbal_plate/http/views.py src/gimbal-plate/gimbal_plate/systems/fin/dimensions.py tests/plate/test_generator_dim.py
@@ -719,7 +730,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
   - `DELETE /api/constants/{id}` → 204
   - `ConstantEntryOut = {id, name, description, entry_kind: "literal"|"generator", value, spec, created_at, updated_at}`(literal 行 spec=null,generator 行 value=null)
 
-- [ ] **Step 2.1: 写失败测试(全文)**
+- [x] **Step 2.1: 写失败测试(全文)**
 
 创建 `src/gimbal-platform/backend/tests/test_constants_api.py`:
 
@@ -929,12 +940,12 @@ async def test_b9_literal_primitive_roundtrip(client: AsyncClient) -> None:
         assert r.json()["value"] == value
 ```
 
-- [ ] **Step 2.2: 跑测试确认失败**
+- [x] **Step 2.2: 跑测试确认失败**
 
 Run: `cd src/gimbal-platform/backend && python -m pytest tests/test_constants_api.py -v`
 Expected: 全部 FAIL(404 Not Found,路由未挂)
 
-- [ ] **Step 2.3: 写 ORM 模型**
+- [x] **Step 2.3: 写 ORM 模型**
 
 创建 `src/gimbal-platform/backend/app/models/constant_entry.py`(列定义惯例照抄 `auth_session.py`:`from ..core.db import Base`、`server_default=func.now()`、`onupdate=func.now()`):
 
@@ -989,7 +1000,7 @@ from .constant_entry import ConstantEntry
 
 并在 `__all__`(如有)中补 `"ConstantEntry"`。
 
-- [ ] **Step 2.4: 写 Pydantic schemas**
+- [x] **Step 2.4: 写 Pydantic schemas**
 
 创建 `src/gimbal-platform/backend/app/schemas/constants.py`:
 
@@ -1062,7 +1073,7 @@ class ConstantEntryPatchIn(BaseModel):
     spec: dict[str, Any] | None = None
 ```
 
-- [ ] **Step 2.5: 写 router**
+- [x] **Step 2.5: 写 router**
 
 创建 `src/gimbal-platform/backend/app/routers/constants.py`:
 
@@ -1207,7 +1218,7 @@ async def delete_constant(
     await session.commit()
 ```
 
-- [ ] **Step 2.6: main.py 挂载**
+- [x] **Step 2.6: main.py 挂载**
 
 在 `src/gimbal-platform/backend/app/main.py` 的 include_router 注册区(`strategy_catalog` 之后、`scenarios` 之前)补 import 与注册:
 
@@ -1219,17 +1230,17 @@ from .routers import constants  # noqa: F401  (import 区,与既有 router impor
 app.include_router(constants.router, prefix="/api")
 ```
 
-- [ ] **Step 2.7: 跑测试确认通过**
+- [x] **Step 2.7: 跑测试确认通过**
 
 Run: `cd src/gimbal-platform/backend && python -m pytest tests/test_constants_api.py -v`
 Expected: 9 passed
 
-- [ ] **Step 2.8: backend 回归**
+- [x] **Step 2.8: backend 回归**
 
 Run: `cd src/gimbal-platform/backend && python -m pytest tests -q`
 Expected: 全绿(既有套件不减)
 
-- [ ] **Step 2.9: Commit**
+- [x] **Step 2.9: Commit**
 
 ```bash
 git add src/gimbal-platform/backend/app/models/constant_entry.py src/gimbal-platform/backend/app/models/__init__.py src/gimbal-platform/backend/app/schemas/constants.py src/gimbal-platform/backend/app/routers/constants.py src/gimbal-platform/backend/app/main.py src/gimbal-platform/backend/tests/test_constants_api.py
@@ -1254,7 +1265,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
   - `GET /api/generator-catalog/{kind}/full` → `{kind, summary, description, params, example}`(解 `data.item`)
   - 错误:plate 5xx/连不上 → 502 `detail={"code": "plate_unavailable", ...}`;plate 404 → 404 `detail={"code": "generator_kind_not_found", ...}`;信封残缺 → 502 `plate_invalid_envelope`
 
-- [ ] **Step 3.1: 写失败测试(全文)**
+- [x] **Step 3.1: 写失败测试(全文)**
 
 创建 `src/gimbal-platform/backend/tests/test_generator_catalog_proxy.py`(克隆 `tests/test_strategy_catalog.py` 的 MockTransport 三态模式):
 
@@ -1363,12 +1374,12 @@ async def test_b11_full_proxy_states(
 
 注意: fixture 名 `plate`/`client` 与 `set_client_for_tests` 以 `backend/tests/conftest.py` 现有实现为准(`test_strategy_catalog.py` 用的就是这套);若名字不同,以 strategy 测试的实际用法为准照抄。
 
-- [ ] **Step 3.2: 跑测试确认失败**
+- [x] **Step 3.2: 跑测试确认失败**
 
 Run: `cd src/gimbal-platform/backend && python -m pytest tests/test_generator_catalog_proxy.py -v`
 Expected: FAIL(404,路由未挂)
 
-- [ ] **Step 3.3: 写代理(全文,克隆 strategy_catalog.py)**
+- [x] **Step 3.3: 写代理(全文,克隆 strategy_catalog.py)**
 
 创建 `src/gimbal-platform/backend/app/routers/generator_catalog.py`:
 
@@ -1479,12 +1490,12 @@ app.include_router(generator_catalog.router, prefix="/api")
 
 (import 区补 `from .routers import generator_catalog` —— 若 T2 已把 import 写成多模块一行,合并即可)
 
-- [ ] **Step 3.4: 跑测试确认通过 + backend 回归**
+- [x] **Step 3.4: 跑测试确认通过 + backend 回归**
 
 Run: `cd src/gimbal-platform/backend && python -m pytest tests/test_generator_catalog_proxy.py -v && python -m pytest tests -q`
 Expected: 新增 4 passed;全量回归绿
 
-- [ ] **Step 3.5: Commit**
+- [x] **Step 3.5: Commit**
 
 ```bash
 git add src/gimbal-platform/backend/app/routers/generator_catalog.py src/gimbal-platform/backend/app/main.py src/gimbal-platform/backend/tests/test_generator_catalog_proxy.py
@@ -1506,7 +1517,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: `stores/scenario-draft.ts` 现有 `copyJson`(L95-110 附近,clipboard API 主 + execCommand 回退的内联实现)。
 - Produces: `copyText(text: string): Promise<boolean>`(T7 panel / T9 管理页复制按钮复用)。
 
-- [ ] **Step 4.1: 写失败测试(全文)**
+- [x] **Step 4.1: 写失败测试(全文)**
 
 创建 `src/gimbal-platform/frontend/src/utils/__tests__/clipboard.test.ts`:
 
@@ -1553,12 +1564,12 @@ describe('copyText', () => {
 })
 ```
 
-- [ ] **Step 4.2: 跑测试确认失败**
+- [x] **Step 4.2: 跑测试确认失败**
 
 Run: `cd src/gimbal-platform/frontend && npx vitest run src/utils/__tests__/clipboard.test.ts`
 Expected: FAIL(`Failed to resolve import "@/utils/clipboard"`)
 
-- [ ] **Step 4.3: 写实现**
+- [x] **Step 4.3: 写实现**
 
 创建 `src/gimbal-platform/frontend/src/utils/clipboard.ts`:
 
@@ -1593,7 +1604,7 @@ export async function copyText(text: string): Promise<boolean> {
 }
 ```
 
-- [ ] **Step 4.4: 重构 scenario-draft copyJson**
+- [x] **Step 4.4: 重构 scenario-draft copyJson**
 
 在 `src/gimbal-platform/frontend/src/stores/scenario-draft.ts`:删除 copyJson 内联的 clipboard/execCommand 分支(保留其 fetchConverted 逻辑与 ElMessage 提示),改为:
 
@@ -1612,12 +1623,12 @@ import { copyText } from '@/utils/clipboard'
 
 (提示文案若与现状有出入,保留现状文案,仅替换通道部分)
 
-- [ ] **Step 4.5: 跑测试 + 相关回归**
+- [x] **Step 4.5: 跑测试 + 相关回归**
 
 Run: `cd src/gimbal-platform/frontend && npx vitest run src/utils/__tests__/clipboard.test.ts src/stores/__tests__ 2>/dev/null || npx vitest run src/utils/__tests__/clipboard.test.ts`
 Expected: 3 passed;若 stores 下有 scenario-draft 相关测试也保持绿
 
-- [ ] **Step 4.6: Commit**
+- [x] **Step 4.6: Commit**
 
 ```bash
 git add src/gimbal-platform/frontend/src/utils/clipboard.ts src/gimbal-platform/frontend/src/utils/__tests__/clipboard.test.ts src/gimbal-platform/frontend/src/stores/scenario-draft.ts
@@ -1643,7 +1654,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
   - `useSharedInsertTarget(): InsertTargetApi`(inject;未 provide 时 throw)
   - `appendValue` 语义:目标断连返回 false 并清空;input/textarea 值尾追加后派发原生 `input` 事件(bubbles),contenteditable 追加文本节点。
 
-- [ ] **Step 5.1: 写失败测试(全文)**
+- [x] **Step 5.1: 写失败测试(全文)**
 
 创建 `src/gimbal-platform/frontend/src/composables/__tests__/useInsertTarget.test.ts`:
 
@@ -1721,12 +1732,12 @@ describe('useInsertTarget', () => {
 
 (文件顶部 import 行补 `vi`:`import { describe, it, expect, vi } from 'vitest'`)
 
-- [ ] **Step 5.2: 跑测试确认失败**
+- [x] **Step 5.2: 跑测试确认失败**
 
 Run: `cd src/gimbal-platform/frontend && npx vitest run src/composables/__tests__/useInsertTarget.test.ts`
 Expected: FAIL(无法解析 `@/composables/useInsertTarget`)
 
-- [ ] **Step 5.3: 写实现(全文)**
+- [x] **Step 5.3: 写实现(全文)**
 
 创建 `src/gimbal-platform/frontend/src/composables/useInsertTarget.ts`:
 
@@ -1818,12 +1829,12 @@ export function useSharedInsertTarget(): InsertTargetApi {
 }
 ```
 
-- [ ] **Step 5.4: 跑测试确认通过**
+- [x] **Step 5.4: 跑测试确认通过**
 
 Run: `cd src/gimbal-platform/frontend && npx vitest run src/composables/__tests__/useInsertTarget.test.ts`
 Expected: 3 passed
 
-- [ ] **Step 5.5: Commit**
+- [x] **Step 5.5: Commit**
 
 ```bash
 git add src/gimbal-platform/frontend/src/composables/useInsertTarget.ts src/gimbal-platform/frontend/src/composables/__tests__/useInsertTarget.test.ts
@@ -1851,7 +1862,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
   - api: `list()/create()/patch()/remove()`、`listGeneratorKinds()/getGeneratorKindFull(kind)`
   - store `useConstantsStore`:`entries` / `catalog` / `catalogError` / `fetchStatus` / `lastError` / `ensureEntries()`(in-flight 去重)/ `ensureCatalog()`(不抛错,失败落 `catalogError`)/ `createEntry` / `patchEntry` / `removeEntry`
 
-- [ ] **Step 6.1: 写类型 + api 层(纯声明,随测试一并验证)**
+- [x] **Step 6.1: 写类型 + api 层(纯声明,随测试一并验证)**
 
 创建 `src/gimbal-platform/frontend/src/types/constants.ts`:
 
@@ -1961,7 +1972,7 @@ export function getGeneratorKindFull(kind: string) {
 }
 ```
 
-- [ ] **Step 6.2: 写失败测试(全文)**
+- [x] **Step 6.2: 写失败测试(全文)**
 
 创建 `src/gimbal-platform/frontend/src/stores/__tests__/constants.test.ts`:
 
@@ -2055,12 +2066,12 @@ describe('useConstantsStore', () => {
 
 注意: `fetchStatus` 是否带 `.value` 取决于 `useSetStatus` 的实现(若 store 展开 return 的是 ref 则带 `.value`,若 `useSetStatus` 返回 reactive 则直接 `.fetchStatus`)——写测试前打开 `src/utils/useSetStatus.ts` 核对,以实际形态断言(auth_sessions store 是先例)。
 
-- [ ] **Step 6.3: 跑测试确认失败**
+- [x] **Step 6.3: 跑测试确认失败**
 
 Run: `cd src/gimbal-platform/frontend && npx vitest run src/stores/__tests__/constants.test.ts`
 Expected: FAIL(`Failed to resolve import "@/stores/constants"`)
 
-- [ ] **Step 6.4: 写 store(全文)**
+- [x] **Step 6.4: 写 store(全文)**
 
 创建 `src/gimbal-platform/frontend/src/stores/constants.ts`:
 
@@ -2173,12 +2184,12 @@ export const useConstantsStore = defineStore('constants', () => {
 })
 ```
 
-- [ ] **Step 6.5: 跑测试确认通过**
+- [x] **Step 6.5: 跑测试确认通过**
 
 Run: `cd src/gimbal-platform/frontend && npx vitest run src/stores/__tests__/constants.test.ts`
 Expected: 4 passed(若 F19c 的 fetchStatus 形态断言与 useSetStatus 实现不符,按 Step 6.2 注释核对后修正断言写法,语义不变:目录失败不污染条目状态)
 
-- [ ] **Step 6.6: Commit**
+- [x] **Step 6.6: Commit**
 
 ```bash
 git add src/gimbal-platform/frontend/src/types/constants.ts src/gimbal-platform/frontend/src/api/constants.ts src/gimbal-platform/frontend/src/api/generator_catalog.ts src/gimbal-platform/frontend/src/stores/constants.ts src/gimbal-platform/frontend/src/stores/__tests__/constants.test.ts
@@ -2203,7 +2214,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
   - 行内按钮类名契约(测试/回归选择器):`.act-copy-key` / `.act-insert-key` / `.act-copy-value` / `.act-insert-value`;条目根 `[data-entry="<name>"]`;根类 `.cp-panel`
   - 复制/插入载荷:字面量 → 值文本(`String(value)`);生成器 key → `` `${var.<name>}` ``;生成器 value → `JSON.stringify(spec)` 紧凑文本
 
-- [ ] **Step 7.1: 写失败测试(全文)**
+- [x] **Step 7.1: 写失败测试(全文)**
 
 创建 `src/gimbal-platform/frontend/src/components/composer/__tests__/ConstantPoolPanel.test.ts`:
 
@@ -2355,12 +2366,12 @@ describe('ConstantPoolPanel', () => {
 })
 ```
 
-- [ ] **Step 7.2: 跑测试确认失败**
+- [x] **Step 7.2: 跑测试确认失败**
 
 Run: `cd src/gimbal-platform/frontend && npx vitest run src/components/composer/__tests__/ConstantPoolPanel.test.ts`
 Expected: FAIL(`Failed to resolve import .../ConstantPoolPanel.vue`)
 
-- [ ] **Step 7.3: 写组件(全文)**
+- [x] **Step 7.3: 写组件(全文)**
 
 创建 `src/gimbal-platform/frontend/src/components/composer/ConstantPoolPanel.vue`:
 
@@ -2564,12 +2575,12 @@ function insertValue(e: ConstantEntry): void {
 </style>
 ```
 
-- [ ] **Step 7.4: 跑测试确认通过**
+- [x] **Step 7.4: 跑测试确认通过**
 
 Run: `cd src/gimbal-platform/frontend && npx vitest run src/components/composer/__tests__/ConstantPoolPanel.test.ts`
 Expected: 5 passed
 
-- [ ] **Step 7.5: Commit**
+- [x] **Step 7.5: Commit**
 
 ```bash
 git add src/gimbal-platform/frontend/src/components/composer/ConstantPoolPanel.vue src/gimbal-platform/frontend/src/components/composer/__tests__/ConstantPoolPanel.test.ts
@@ -2596,7 +2607,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 **既有锚点(2026-08-26 实测)**:CaseComposer 模板根 `<div class="composer-shell">`(L18);body 为 `<main class="body">`(L123)内单个 `<transition>`(L124-156)切 4 子视图,链条件 `stepIdx === 0/1/2/v-else`,`stepIdx = ref(0)`(L252)、`canRun = !!scenario && steps.length > 0`(L310)、query.step 1-based(L365-366);imports L217 `import { computed, onMounted, onUnmounted, ref, watch } from 'vue'`、L219 `ElMessage` 已有;RunDialog L200-212(v-if Teleport);顶栏运行按钮 L80-83。Canvas col-info 为 `<aside class="col col-info">`,`v-if="currentStep"` info-body 内 VariableRegistryPanel + `v-else` 空态;emits 含 `varPromote`;Canvas 已直接使用 draftStore 且导入了 onMounted。
 
-- [ ] **Step 8.1: 写播种纯函数失败测试(全文)**
+- [x] **Step 8.1: 写播种纯函数失败测试(全文)**
 
 创建 `src/gimbal-platform/frontend/src/utils/__tests__/pool-var.test.ts`:
 
@@ -2643,12 +2654,12 @@ describe('seedPoolVarIntoDefinition', () => {
 })
 ```
 
-- [ ] **Step 8.2: 跑测试确认失败**
+- [x] **Step 8.2: 跑测试确认失败**
 
 Run: `cd src/gimbal-platform/frontend && npx vitest run src/utils/__tests__/pool-var.test.ts`
 Expected: FAIL(无法解析 `@/utils/pool-var`)
 
-- [ ] **Step 8.3: 写纯函数**
+- [x] **Step 8.3: 写纯函数**
 
 创建 `src/gimbal-platform/frontend/src/utils/pool-var.ts`:
 
@@ -2685,12 +2696,12 @@ export function seedPoolVarIntoDefinition<
 }
 ```
 
-- [ ] **Step 8.4: 跑测试确认通过**
+- [x] **Step 8.4: 跑测试确认通过**
 
 Run: `cd src/gimbal-platform/frontend && npx vitest run src/utils/__tests__/pool-var.test.ts`
 Expected: 4 passed
 
-- [ ] **Step 8.5: 写 CaseComposer/Canvas 集成失败测试**
+- [x] **Step 8.5: 写 CaseComposer/Canvas 集成失败测试**
 
 创建 `src/gimbal-platform/frontend/src/views/__tests__/CaseComposer.poolrail.test.ts`:
 
@@ -2872,12 +2883,12 @@ describe('CaseComposer — 常量池 rail', () => {
 
 注意: F9c/F11 的最小 step 形状若导致渲染报错(以 CaseComposer 加载/Canvas 渲染实测为准),改用 Canvas 既有测试文件里 `mkStep()` 的真实形状内联到这里(打开 `src/components/composer/__tests__/CaseComposerCanvas.test.ts` 抄字段),断言不变。
 
-- [ ] **Step 8.6: 跑测试确认失败**
+- [x] **Step 8.6: 跑测试确认失败**
 
 Run: `cd src/gimbal-platform/frontend && npx vitest run src/views/__tests__/CaseComposer.poolrail.test.ts`
 Expected: FAIL(`.body-split`/`.pool-rail`/`.col-info .cp-panel` 找不到)
 
-- [ ] **Step 8.7: 改 CaseComposer(template + script + CSS)**
+- [x] **Step 8.7: 改 CaseComposer(template + script + CSS)**
 
 `src/gimbal-platform/frontend/src/views/CaseComposer.vue` 五处修改:
 
@@ -3004,7 +3015,7 @@ function seedPoolVar(name: string, spec: Record<string, unknown>): void {
 }
 ```
 
-- [ ] **Step 8.8: 改 Canvas(col-info 常驻 + seedVar 转发)**
+- [x] **Step 8.8: 改 Canvas(col-info 常驻 + seedVar 转发)**
 
 `src/gimbal-platform/frontend/src/components/composer/CaseComposerCanvas.vue` 三处:
 
@@ -3045,7 +3056,7 @@ const constantsStore = useConstantsStore()
 
 (`emit` 是该文件既有 `const emit = defineEmits<...>()` 变量;若模板内联箭头函数与 ESLint 模板规则冲突,改为 methods 区转发函数 `onPoolSeedVar` 同效。)
 
-- [ ] **Step 8.9: Canvas 测试文件追加 F12/F13**
+- [x] **Step 8.9: Canvas 测试文件追加 F12/F13**
 
 在 `src/gimbal-platform/frontend/src/components/composer/__tests__/CaseComposerCanvas.test.ts`:
 
@@ -3143,12 +3154,12 @@ describe('CaseComposerCanvas — 常量池 col-info 常驻(F12/F13)', () => {
 
 (`CaseComposerCanvas`/`mkStep`/`mkOrch`/`flushPromises` 用该文件既有导入;若 `mkStep()` 需要 body 字段才能渲染出 input,以其现签名为准传参 —— F13 断言不依赖具体字段。)
 
-- [ ] **Step 8.10: 跑本任务全部测试确认通过**
+- [x] **Step 8.10: 跑本任务全部测试确认通过**
 
 Run: `cd src/gimbal-platform/frontend && npx vitest run src/utils/__tests__/pool-var.test.ts src/views/__tests__/CaseComposer.poolrail.test.ts src/components/composer/__tests__/CaseComposerCanvas.test.ts src/components/composer/__tests__/ConstantPoolPanel.test.ts`
 Expected: 全部 passed(含 Canvas 既有用例)
 
-- [ ] **Step 8.11: Commit**
+- [x] **Step 8.11: Commit**
 
 ```bash
 git add src/gimbal-platform/frontend/src/utils/pool-var.ts src/gimbal-platform/frontend/src/utils/__tests__/pool-var.test.ts src/gimbal-platform/frontend/src/views/CaseComposer.vue src/gimbal-platform/frontend/src/components/composer/CaseComposerCanvas.vue src/gimbal-platform/frontend/src/components/composer/__tests__/CaseComposerCanvas.test.ts src/gimbal-platform/frontend/src/views/__tests__/CaseComposer.poolrail.test.ts
@@ -3169,7 +3180,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: T6 store(`entries`/`catalog`/`catalogError`/`ensureEntries`/`ensureCatalog`/CRUD)、`getGeneratorKindFull`、`copyText`、`ElMessageBox`。
 - Produces: `/constants` 页面(Task 10 路由指向)。测试选择器契约:目录卡 `.kind-card[data-kind]`、降级条 `.degraded`、条目表 `[data-testid="entries-table"]`、行操作 `[data-action="edit"|"delete"]`、弹框 `[data-testid="entry-dialog"]`、表单字段 `[data-field="<名>"]`、kind 芯片 `.kind-chip[data-kind]`、spec 预览 `[data-testid="spec-preview"]`、提交 `[data-action="submit"]`。
 
-- [ ] **Step 9.1: 写失败测试(全文)**
+- [x] **Step 9.1: 写失败测试(全文)**
 
 创建 `src/gimbal-platform/frontend/src/views/__tests__/ConstantsPool.test.ts`:
 
@@ -3363,12 +3374,12 @@ describe('ConstantsPool — 条目 CRUD', () => {
 
 (注意: F18 的 `[data-action="pool-create"]` 是新增按钮选择器契约;若实现时按钮改名,同步改测试 —— 两者都在本任务内。)
 
-- [ ] **Step 9.2: 跑测试确认失败**
+- [x] **Step 9.2: 跑测试确认失败**
 
 Run: `cd src/gimbal-platform/frontend && npx vitest run src/views/__tests__/ConstantsPool.test.ts`
 Expected: FAIL(无法解析 `@/views/ConstantsPool.vue`)
 
-- [ ] **Step 9.3: 写管理页组件(全文)**
+- [x] **Step 9.3: 写管理页组件(全文)**
 
 创建 `src/gimbal-platform/frontend/src/views/ConstantsPool.vue`:
 
@@ -3917,12 +3928,12 @@ function copySpec(): void {
 
 (`primary-btn`/`ghost-btn` 若是全局样式(既有视图在用同 class),此处沿用;若是某组件局部样式,在 scoped 里补最小定义 —— 以既有页面实际为准。)
 
-- [ ] **Step 9.4: 跑测试确认通过**
+- [x] **Step 9.4: 跑测试确认通过**
 
 Run: `cd src/gimbal-platform/frontend && npx vitest run src/views/__tests__/ConstantsPool.test.ts`
 Expected: 5 passed
 
-- [ ] **Step 9.5: Commit**
+- [x] **Step 9.5: Commit**
 
 ```bash
 git add src/gimbal-platform/frontend/src/views/ConstantsPool.vue src/gimbal-platform/frontend/src/views/__tests__/ConstantsPool.test.ts
@@ -3944,7 +3955,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Consumes: T9 `ConstantsPool.vue`;router 既有 `meta: { requiresAuth: true }` 守卫约定;TopNav 既有 `NavEntry` 结构 `{ path, label, icon, adminOnly? }`(常量池对所有登录用户可见 —— 无 adminOnly)。
 - Produces: 可导航的 `/constants` 页(端到端闭环)。
 
-- [ ] **Step 10.1: 写失败测试(全文)**
+- [x] **Step 10.1: 写失败测试(全文)**
 
 创建 `src/gimbal-platform/frontend/src/components/__tests__/TopNav.pool.test.ts`:
 
@@ -4009,12 +4020,12 @@ describe('TopNav — 常量池入口(F20)', () => {
 
 注意: `auth.currentUser` 的形状以 `src/stores/auth.ts` 实际 User 类型为准(缺字段则以其必填字段补齐,cast `as never` 保留)。
 
-- [ ] **Step 10.2: 跑测试确认失败**
+- [x] **Step 10.2: 跑测试确认失败**
 
 Run: `cd src/gimbal-platform/frontend && npx vitest run src/components/__tests__/TopNav.pool.test.ts`
 Expected: FAIL(找不到含「常量池」的入口)
 
-- [ ] **Step 10.3: 改 router 与 TopNav**
+- [x] **Step 10.3: 改 router 与 TopNav**
 
 `src/gimbal-platform/frontend/src/router/index.ts` — routes 数组 `/auths` 条目之后插入(与相邻条目同构;若相邻路由带 `name`,同样补 `name: 'constants'`):
 
@@ -4047,12 +4058,12 @@ allEntries(L80-87)在 认证管理 之后、用户管理 之前插入:
   { path: '/constants', label: '常量池', icon: Coin },
 ```
 
-- [ ] **Step 10.4: 跑测试确认通过**
+- [x] **Step 10.4: 跑测试确认通过**
 
 Run: `cd src/gimbal-platform/frontend && npx vitest run src/components/__tests__/TopNav.pool.test.ts`
 Expected: 1 passed
 
-- [ ] **Step 10.5: 三端全量回归 + 类型检查**
+- [x] **Step 10.5: 三端全量回归 + 类型检查**
 
 ```bash
 python -m pytest tests/plate -q
@@ -4063,7 +4074,7 @@ npx vue-tsc --noEmit
 
 Expected: 三套件全绿(只增不减)、vue-tsc 零错误。vue-tsc 若报 ConstantsPool 模板内 `as number | undefined` 相关错误,把该 `:model-value` 换成 `:model-value="typeof form.genParams[p.name] === 'number' ? (form.genParams[p.name] as number) : undefined"`(等价写法,以编译器口味为准)。
 
-- [ ] **Step 10.6: Commit**
+- [x] **Step 10.6: Commit**
 
 ```bash
 git add src/gimbal-platform/frontend/src/router/index.ts src/gimbal-platform/frontend/src/components/TopNav.vue src/gimbal-platform/frontend/src/components/__tests__/TopNav.pool.test.ts
