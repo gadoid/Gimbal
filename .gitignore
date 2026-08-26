@@ -20,3 +20,4 @@ run.out
 run.err
 collect.err.log
 *.log
+.superpowers/
