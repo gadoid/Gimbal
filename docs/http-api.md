@@ -112,7 +112,7 @@ ADR 0002 定义的统一语法:
 | dim | 形态 | 视图裁剪 | 已注册 action | 一期数据 |
 | --- | --- | --- | --- | --- |
 | `system` | list + detail + tree + dim/action + obj/action | 全字段 | `from-service`, `register` (501), `sync` (501) | 1 条:`fin` |
-| `service` | list + detail | 全字段 | — | 6 条:`fin.{account,order,order_entrust,settlement,transit}` + 隐式 `fin.tidb-test` / `logi.mysql-svc` |
+| `service` | list + detail | 全字段 | — | 1 条:`fin-service`(fin 全部 endpoint 统一归属)+ 隐式 `fin.tidb-test` / `logi.mysql-svc` |
 | `endpoint` | list + detail | 全字段(按 ADR 0001) | `field-defaults`, `resolve-paths`, `failed-criteria`, `find` | 18 条(由 `conftest.py` / `_register_fin_dims` 种入) |
 | `config` | list + detail | **脱敏**:丢弃 `password` / `token` / `refresh_token` / `expires_at` | — | 1 条:`fin.default` |
 | `meta` | list + detail | 全字段 | — | 1 条:`fin.default` |
@@ -191,11 +191,13 @@ GET /api/systems/fin/service HTTP/1.1
 
 #### `POST /api/system/action/from-service` — 由 service 名反查 system
 
+body 传 `services` 列表,每项为全限定名 `<system>.<service>`(纯命名约定解析,不做 registry 查询):
+
 ```http
 POST /api/system/action/from-service
 Content-Type: application/json
 
-{"service": "settlement"}
+{"services": ["fin.fin-service", "logi.mysql-svc"]}
 ```
 
 响应:
@@ -205,13 +207,15 @@ Content-Type: application/json
   "ok": true,
   "dim": "system",
   "data": {
-    "items": ["fin"],
-    "total": 1
+    "systems": [
+      {"service": "fin.fin-service", "system": "fin"},
+      {"service": "logi.mysql-svc", "system": "logi"}
+    ]
   }
 }
 ```
 
-`{"service": "no-dot-here"}` → 0 匹配;`{"service": "fin.tidb-test"}` → 命中 `fin` (endpoint/service 共享 system 关系)。
+`"no-dot-here"`(不带点)→ 无法消歧,`system` 为空串。
 
 #### `POST /api/system/action/register` (501)
 
@@ -284,13 +288,13 @@ GET /api/systems/fin/service HTTP/1.1
 | Query 参数 | 含义 |
 | --- | --- |
 | `system` | 限定 system |
-| `service` | 限定 service(全名 `fin.order`) |
+| `service` | 限定 service(fin 全部 endpoint 统一为 `fin-service`) |
 | `method` | HTTP 方法大写 |
 | `tag` | 命中任一 tag |
 | `q` | 模糊匹配 id / path |
 
 ```http
-GET /api/endpoint?service=fin.order&method=POST&q=order_add HTTP/1.1
+GET /api/endpoint?service=fin-service&method=POST&q=order_add HTTP/1.1
 ```
 
 响应:
@@ -337,11 +341,11 @@ GET /api/endpoint/fin.order.order_add/full HTTP/1.1
     "item": {
       "id": "fin.order.order_add",
       "system": "fin",
-      "service": "order",
+      "service": "fin-service",
       "name": "order_add",
       "description": "...",
       "api": {
-        "service": "order",
+        "service": "fin-service",
         "method": "POST",
         "path": "/api/order/order/orderAdd",
         "headers": {},
@@ -454,7 +458,7 @@ Content-Type: application/json
 POST /api/endpoint/action/find
 Content-Type: application/json
 
-{"service": "settlement", "method": "POST", "path": "/api/v1/orders"}
+{"service": "fin-service", "method": "POST", "path": "/api/v1/orders"}
 ```
 
 响应:
@@ -882,7 +886,7 @@ from gimbal_plate.registry import (
     "references": {
       "dim": "endpoint",
       "systems": ["fin"],
-      "service": "order",
+      "service": "fin-service",
       "module": "fin",
       "tags": ["fin"]
     }

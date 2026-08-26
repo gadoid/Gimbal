@@ -33,7 +33,11 @@ class TestOneFilePerEndpoint:
             )
 
     def test_endpoint_filename_matches_id_last_segment(self) -> None:
-        """文件名的语义约定:id 的第三段(<system>.<service>.<action>)中 action 部分。"""
+        """文件名的语义约定:id 的第三段(<system>.<域>.<action>)中 action 部分。
+
+        注:id 第二段是接口域(account/order/...),与 EndpointSpec.service
+        (部署单元,统一为 fin-service)已解耦。
+        """
         for ep in ALL_ENDPOINTS:
             # id 形如 fin.settlement.create_order
             # 文件名形如 settlement_create_order.py

@@ -119,10 +119,7 @@ class TestEndpointCompositionHolds:
     """V3 核心原则:系统差异由组合表达,允许 EndpointSpec 容纳 body model。"""
 
     def test_all_fin_endpoints_carry_system_and_service(self) -> None:
-        expected_services = {
-            "settlement", "account",
-            "order_entrust", "order", "order_fee", "audit",
-        }
+        expected_services = {"fin-service"}
         for endpoint in ALL_ENDPOINTS:
             assert endpoint.system == "fin"
             assert endpoint.service in expected_services

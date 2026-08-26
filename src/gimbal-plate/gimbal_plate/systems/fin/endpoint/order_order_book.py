@@ -24,10 +24,10 @@ from gimbal_plate.schema.endpoint import (
 ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
     id="fin.order.order_book",
     system=FIN_SYSTEM,
-    service="order",
+    service="fin-service",
     name="提交订舱文件",
     description="由 Scenario_Test_14 提取: 提交订舱文件",
-    api=ApiSpec(service="order", method="POST", path="/api/order/order/orderBook", auth="bearer", timeout_seconds=30.0),
+    api=ApiSpec(service="fin-service", method="POST", path="/api/order/order/orderBook", auth="bearer", timeout_seconds=30.0),
     request=RequestSpec(
         body_type="json",
         fields=[

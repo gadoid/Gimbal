@@ -26,11 +26,11 @@ from gimbal_plate.systems.fin.models import (
 SETTLEMENT_CREATE_ORDER: Final[EndpointSpec] = EndpointSpec(
     id="fin.settlement.create_order",
     system=FIN_SYSTEM,
-    service="settlement",
+    service="fin-service",
     name="创建结算单",
     description="fin 结算服务创建结算订单的核心接口",
     api=ApiSpec(
-        service="settlement",
+        service="fin-service",
         method="POST",
         path="/api/v1/fin/settlement/orders",
         auth="bearer",

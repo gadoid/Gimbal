@@ -62,13 +62,13 @@ def test_config_full_keeps_other_keys(http_client: TestClient) -> None:
 
 
 def test_config_full_services_dict(http_client: TestClient) -> None:
-    """The bundled fin config carries 6 service URLs."""
+    """The bundled fin config carries the single fin-service URL."""
     resp = http_client.get(f"/api/config/{CONFIG_ID}/full")
     item = resp.json()["data"]["item"]
     services = item["services"]
     assert isinstance(services, dict)
-    # Bundled fin seed registers 6 service URLs (settlement / account / etc).
-    assert len(services) >= 5
+    # fin 全部 endpoint 统一归属单一部署单元 fin-service。
+    assert set(services) == {"fin-service"}
     assert all(v.startswith("https://") for v in services.values())
 
 

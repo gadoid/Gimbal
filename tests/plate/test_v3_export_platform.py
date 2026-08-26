@@ -217,11 +217,12 @@ class TestPlatformEndpointViewRestored:
     def test_navigation_grouped_by_service(self) -> None:
         sc = _load_scenario()
         view = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS).to_view()
-        assert len(view.navigation) == 6
-        assert "order" in view.navigation
-        assert len(view.navigation["order"]) == 7
+        # fin 全部 endpoint 统一归属 fin-service:导航树只有一组
+        assert len(view.navigation) == 1
+        assert "fin-service" in view.navigation
+        assert len(view.navigation["fin-service"]) == 18
         # 每个节点含 id/name/description/method/path/deep_link
-        node = view.navigation["order"][0]
+        node = view.navigation["fin-service"][0]
         assert {"id", "name", "description", "method", "path", "deep_link"} <= set(node.keys())
 
     def test_config_summary_classifies_placeholders(self) -> None:

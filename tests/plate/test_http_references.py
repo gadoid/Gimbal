@@ -55,13 +55,13 @@ def _envelope_ok(body: dict) -> None:
     "dim, sample_id, dim_specific",
     [
         # endpoint: loose checks for module / tags (string / list types only)
-        ("endpoint", "fin.order.order_add", {"service": "order"}),
-        ("service",  "order",               {"endpoint_count": (int, lambda v: v >= 1)}),
+        ("endpoint", "fin.order.order_add", {"service": "fin-service"}),
+        ("service",  "fin-service",         {"endpoint_count": (int, lambda v: v >= 1)}),
         ("system",   "fin",                 {
             "endpoint_count": (int, lambda v: v >= 1),
             "service_count": (int, lambda v: v >= 1),
         }),
-        ("config",   "fin.default",         {"service_count": (int, lambda v: v >= 5)}),
+        ("config",   "fin.default",         {"service_count": (int, lambda v: v == 1)}),
         ("meta",     "fin.default",         {}),
         ("resource", "fin.tidb_test",       {"kind": str}),
         ("scenario", "sc-fin-default",      {"scenarios_referenced_by": []}),

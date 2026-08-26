@@ -110,7 +110,7 @@
 - **注意**：url 是 `/api/system`（dim 名单数）而不是 `/api/systems`（http-api 实际路由）
 
 ### A2（v2.0 移除）— service 树由 Platform 聚合
-- **替代方案**：Platform 调 A1 + `GET /api/systems/{system}/service` + `GET /api/endpoint?service=fin.order&...` 在内存里聚合
+- **替代方案**：Platform 调 A1 + `GET /api/systems/{system}/service` + `GET /api/endpoint?service=fin-service&...` 在内存里聚合
 - **理由**：http-api 没有 service 树聚合接口（A2 树是 v1.x 设计，M6 改成"按 service 列表"）
 - **使用场景**：`EndpointCatalog` 左侧树 / `CaseComposerCanvasAddStep` 嵌入 CatalogPanel 左侧
 
@@ -124,7 +124,7 @@
     "dim": "endpoint",
     "data": {
       "items": [
-        {"id": "fin.order_entrust.order_add", "name": "orderAdd", "method": "POST", "path": "/api/order/orderEntrust/orderAdd", "system": "fin", "service": "tidb-test", "module": "order", "tags": [...], "priority": 1, "version": "1.0.0"}
+        {"id": "fin.order_entrust.order_add", "name": "orderAdd", "method": "POST", "path": "/api/order/orderEntrust/orderAdd", "system": "fin", "service": "fin-service", "module": "order", "tags": [...], "priority": 1, "version": "1.0.0"}
       ],
       "total": 12
     }
@@ -143,7 +143,7 @@
     "data": {
       "item": {
         "id": "fin.order_entrust.order_add",
-        "system": "fin", "service": "tidb-test", "name": "orderAdd",
+        "system": "fin", "service": "fin-service", "name": "orderAdd",
         "description": "...",
         "api": {"service": "...", "method": "POST", "path": "...", "headers": {}, "timeout_seconds": 30.0, "auth": "bearer"},
         "request": {
@@ -276,19 +276,18 @@
 ### B3. 跨系统归属计算（per-service）
 - **触发**：`CaseComposerMeta` 选中归属系统 chip / `CaseComposerCanvas` 步骤流系统着色
 - **请求**：`POST /api/system/action/from-service`（dim 名单数 + global）
-- **请求 body**：`{"service": "fin.tidb-test"}`
+- **请求 body**：`{"services": ["fin.fin-service"]}`（列表，每项为全限定名 `<system>.<service>`，纯命名约定解析）
 - **响应**：
   ```json
   {
     "ok": true,
     "dim": "system",
     "data": {
-      "items": ["fin"],
-      "total": 1
+      "systems": [{"service": "fin.fin-service", "system": "fin"}]
     }
   }
   ```
-- **说明**：`{"service": "fin.tidb-test"}` → "fin"（endpoint/service 共享 system 关系）
+- **说明**：`"fin.fin-service"` → "fin"；不带点的名字无法消歧，`system` 为空串
 - **缓存**：与 A1 同步
 
 ---

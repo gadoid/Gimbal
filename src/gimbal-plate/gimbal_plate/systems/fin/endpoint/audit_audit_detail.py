@@ -24,10 +24,10 @@ from gimbal_plate.schema.endpoint import (
 AUDIT_AUDIT_DETAIL: Final[EndpointSpec] = EndpointSpec(
     id="fin.audit.audit_detail",
     system=FIN_SYSTEM,
-    service="audit",
+    service="fin-service",
     name="查询审批详情",
     description="由 Scenario_Test_14 提取: 查询审批详情",
-    api=ApiSpec(service="audit", method="POST", path="/api/home/audit/auditDetail", auth="bearer", timeout_seconds=30.0),
+    api=ApiSpec(service="fin-service", method="POST", path="/api/home/audit/auditDetail", auth="bearer", timeout_seconds=30.0),
     request=RequestSpec(
         body_type="json",
         fields=[

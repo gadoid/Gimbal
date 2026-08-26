@@ -40,8 +40,16 @@ def fresh_registry() -> PlateRegistry:
     ADR 0002 §D-D4: shared helper replaces the prior near-verbatim duplicate
     of ``app._register_fin_dims`` — drift between app and tests is no longer
     possible.
+
+    ``register_fin_dims`` 不注册 endpoint(防二次注册);按其契约,
+    调用方须先把 ``ALL_ENDPOINTS`` 注册进 registry(与生产端
+    ``app._lifespan`` owned 模式步骤 1 对齐)。
     """
+    from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
+
     reg = PlateRegistry()
+    for ep in ALL_ENDPOINTS:
+        reg.register_endpoint(ep)
     register_fin_dims(reg)
     return reg
 

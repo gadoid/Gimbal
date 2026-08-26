@@ -68,18 +68,13 @@ gimbal_plate/systems/fin/
 |------|------|----|------|
 | `FIN_CREATE_TIME_ANCHOR` | `datetime` | `2026-08-04 00:00:00 UTC` | `Meta.createTime`,固定 UTC 时间戳,便于 round-trip 测试断言一致。 |
 
-### E. 资源清单(1 个 dict,含 6 项)
+### E. 资源清单(1 个 dict,含 1 项)
 
-`FIN_SERVICES_URLS` — fin 系统 6 个服务的测试 URL,生产 URL 由调用方在 `fin_config_template(overrides=...)` 中注入:
+`FIN_SERVICES_URLS` — fin 系统全部 endpoint 统一归属单一部署单元 `fin-service`,其测试 URL 如下,生产 URL 由调用方在 `fin_config_template(overrides=...)` 中注入:
 
 ```python
 {
-    "settlement":    "https://test-api.example.com/fin/settlement",
-    "account":       "https://test-api.example.com/fin/account",
-    "order_entrust": "https://test-api.example.com/fin/order-entrust",
-    "order":         "https://test-api.example.com/fin/order",
-    "order_fee":     "https://test-api.example.com/fin/order-fee",
-    "audit":         "https://test-api.example.com/fin/audit",
+    "fin-service": "https://test-api.example.com/fin",
 }
 ```
 
@@ -128,9 +123,9 @@ from gimbal_plate.schema.endpoint import (
 AUDIT_AUDIT_PAGE: Final[EndpointSpec] = EndpointSpec(
     id="fin.audit.audit_page",
     system=FIN_SYSTEM,
-    service="audit",
+    service="fin-service",
     name="分页查询审计单",
-    api=ApiSpec(service="audit", method="POST", path="/api/audit/page"),
+    api=ApiSpec(service="fin-service", method="POST", path="/api/audit/page"),
     responses={200: ResponseSpec(status=200, ...)},
     version=FIN_DEFAULT_VERSION,
     metadata=EndpointMetadata(

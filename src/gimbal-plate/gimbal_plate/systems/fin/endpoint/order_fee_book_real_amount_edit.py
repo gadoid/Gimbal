@@ -24,10 +24,10 @@ from gimbal_plate.schema.endpoint import (
 ORDER_FEE_BOOK_REAL_AMOUNT_EDIT: Final[EndpointSpec] = EndpointSpec(
     id="fin.order_fee.book_real_amount_edit",
     system=FIN_SYSTEM,
-    service="order_fee",
+    service="fin-service",
     name="订舱实收实付金额配置",
     description="由 Scenario_Test_14 提取: 订舱实收实付金额配置",
-    api=ApiSpec(service="order_fee", method="POST", path="/api/order/orderFee/bookRealAmountEdit", auth="bearer", timeout_seconds=30.0),
+    api=ApiSpec(service="fin-service", method="POST", path="/api/order/orderFee/bookRealAmountEdit", auth="bearer", timeout_seconds=30.0),
     request=RequestSpec(
         body_type="json",
         fields=[

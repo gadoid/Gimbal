@@ -24,10 +24,10 @@ from gimbal_plate.schema.endpoint import (
 ORDER_FEE_TOGGLE_REAL_AMOUNT: Final[EndpointSpec] = EndpointSpec(
     id="fin.order_fee.toggle_real_amount",
     system=FIN_SYSTEM,
-    service="order_fee",
+    service="fin-service",
     name="切换订单实收实付金额模式",
     description="由 Scenario_Test_14 提取: 切换订单实收实付金额模式",
-    api=ApiSpec(service="order_fee", method="POST", path="/api/order/orderFee/toggleRealAmount", auth="bearer", timeout_seconds=30.0),
+    api=ApiSpec(service="fin-service", method="POST", path="/api/order/orderFee/toggleRealAmount", auth="bearer", timeout_seconds=30.0),
     request=RequestSpec(
         body_type="json",
         fields=[

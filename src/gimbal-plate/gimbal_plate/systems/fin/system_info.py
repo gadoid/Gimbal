@@ -61,14 +61,10 @@ FIN_CREATE_TIME_ANCHOR: Final[datetime] = datetime(
 
 
 # ── E. 资源清单(供 fin.config / app lifespan 引用) ────────────────
-# 各服务测试环境 URL;生产 URL 由调用方在 overrides 中注入。
+# fin 全部 endpoint 统一归属单一部署单元 fin-service;
+# 测试环境 URL 如下,生产 URL 由调用方在 overrides 中注入。
 FIN_SERVICES_URLS: Final[dict[str, str]] = {
-    "settlement":     "https://test-api.example.com/fin/settlement",
-    "account":        "https://test-api.example.com/fin/account",
-    "order_entrust":  "https://test-api.example.com/fin/order-entrust",
-    "order":          "https://test-api.example.com/fin/order",
-    "order_fee":      "https://test-api.example.com/fin/order-fee",
-    "audit":          "https://test-api.example.com/fin/audit",
+    "fin-service": "https://test-api.example.com/fin",
 }
 
 

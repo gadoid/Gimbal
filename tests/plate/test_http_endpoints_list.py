@@ -31,18 +31,20 @@ def test_list_endpoints_under_system(http_client: TestClient) -> None:
 
 
 def test_filter_by_service(http_client: TestClient) -> None:
-    resp = http_client.get("/api/endpoint", params={"service": "order_entrust"})
+    # fin 全部 endpoint 统一归属单一服务 fin-service:
+    # 按 service 过滤应命中全部 18 个(过滤一个不存在的服务则返回 0)。
+    resp = http_client.get("/api/endpoint", params={"service": "fin-service"})
     assert resp.status_code == 200
     items = resp.json()["data"]["items"]
-    assert resp.json()["data"]["total"] == 2
+    assert resp.json()["data"]["total"] == 18
     for ep in items:
         assert ep["system"] == "fin"
-        assert ep["service"] == "order_entrust"
+        assert ep["service"] == "fin-service"
 
 
 def test_filter_by_method(http_client: TestClient) -> None:
     resp = http_client.get(
-        "/api/endpoint", params={"service": "order_entrust", "method": "POST"}
+        "/api/endpoint", params={"service": "fin-service", "method": "POST"}
     )
     assert resp.status_code == 200
     data = resp.json()["data"]

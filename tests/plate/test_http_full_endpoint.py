@@ -50,7 +50,7 @@ def test_endpoint_full_returns_full_contract(http_client: TestClient) -> None:
     # Core identity.
     assert item["id"] == SAMPLE_ENDPOINT
     assert item["system"] == "fin"
-    assert item["service"] == "order"
+    assert item["service"] == "fin-service"
     # ``name`` is a human-readable description (not the slug); non-empty
     # check keeps the test robust across i18n changes.
     assert isinstance(item["name"], str) and item["name"]

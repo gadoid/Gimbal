@@ -24,10 +24,10 @@ from gimbal_plate.schema.endpoint import (
 ORDER_FEE_REAL_AMOUNT_LOCK_SUBMIT: Final[EndpointSpec] = EndpointSpec(
     id="fin.order_fee.real_amount_lock_submit",
     system=FIN_SYSTEM,
-    service="order_fee",
+    service="fin-service",
     name="费用实收实付锁定",
     description="由 Scenario_Test_14 提取: 费用实收实付锁定",
-    api=ApiSpec(service="order_fee", method="POST", path="/api/order/orderFee/realAmountLockSubmit", auth="bearer", timeout_seconds=30.0),
+    api=ApiSpec(service="fin-service", method="POST", path="/api/order/orderFee/realAmountLockSubmit", auth="bearer", timeout_seconds=30.0),
     request=RequestSpec(
         body_type="json",
         fields=[

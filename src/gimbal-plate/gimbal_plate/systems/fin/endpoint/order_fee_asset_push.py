@@ -24,10 +24,10 @@ from gimbal_plate.schema.endpoint import (
 ORDER_FEE_ASSET_PUSH: Final[EndpointSpec] = EndpointSpec(
     id="fin.order_fee.asset_push",
     system=FIN_SYSTEM,
-    service="order_fee",
+    service="fin-service",
     name="费用资产推送",
     description="由 Scenario_Test_14 提取: 费用资产推送",
-    api=ApiSpec(service="order_fee", method="POST", path="/api/order/orderFee/assetPush", auth="bearer", timeout_seconds=30.0),
+    api=ApiSpec(service="fin-service", method="POST", path="/api/order/orderFee/assetPush", auth="bearer", timeout_seconds=30.0),
     request=RequestSpec(
         body_type="json",
         fields=[

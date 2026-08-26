@@ -122,9 +122,8 @@ class TestDefaultsRoundTrip:
         assert restored.version == META_TEMPLATE.version
 
     def test_config_template_has_fin_services(self) -> None:
-        assert "settlement" in CONFIG_TEMPLATE.services
-        assert "account" in CONFIG_TEMPLATE.services
-        assert "fin/settlement" in CONFIG_TEMPLATE.services["settlement"]
+        assert "fin-service" in CONFIG_TEMPLATE.services
+        assert "test-api.example.com/fin" in CONFIG_TEMPLATE.services["fin-service"]
 
     def test_config_template_users_have_no_production_secrets(self) -> None:
         # 文档 §3:defaults.py 的 services / users 不放生产敏感信息。
@@ -232,8 +231,7 @@ class TestFinConfigFactory:
 
     def test_no_args_returns_fin_defaults(self) -> None:
         c = fin_config_template()
-        assert "settlement" in c.services
-        assert "audit" in c.services
+        assert "fin-service" in c.services
         assert "tester_a" in c.users
         assert c.users["tester_a"].password.startswith("${")
 

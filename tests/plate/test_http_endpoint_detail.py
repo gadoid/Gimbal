@@ -25,7 +25,7 @@ def test_endpoint_detail_returns_minimal_view(http_client: TestClient) -> None:
         assert key in item, key
     assert item["id"] == "fin.order_entrust.order_add"
     assert item["system"] == "fin"
-    assert item["service"] == "order_entrust"
+    assert item["service"] == "fin-service"
 
 
 def test_endpoint_detail_unknown_returns_404(http_client: TestClient) -> None:
