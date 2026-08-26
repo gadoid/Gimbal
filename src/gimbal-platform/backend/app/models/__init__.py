@@ -1,5 +1,6 @@
 from .user import User
 from .auth_session import AuthSession
+from .constant_entry import ConstantEntry
 from .execution import Execution
 from .composer_scenario import ComposerScenario
 from .composer_data_set import ComposerDataSet
@@ -12,6 +13,7 @@ from .adaptation_op import AdaptationOp
 __all__ = [
     "User",
     "AuthSession",
+    "ConstantEntry",
     "Execution",
     "ComposerScenario",
     "ComposerDataSet",
