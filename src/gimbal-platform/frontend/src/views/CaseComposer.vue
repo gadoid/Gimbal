@@ -15,7 +15,7 @@
   - Inter 字体
 -->
 <template>
-  <div class="composer-shell" :class="{ 'has-run-open': runDialogOpen }">
+  <div ref="rootEl" class="composer-shell" :class="{ 'has-run-open': runDialogOpen }">
     <!-- ═══════ Top action bar (sticky) ═══════ -->
     <header class="topbar">
       <div class="topbar-inner">
@@ -121,39 +121,49 @@
 
     <!-- ═══════ Body (4 步 sub-views) ═══════ -->
     <main class="body">
-      <transition name="slide" mode="out-in">
-        <!-- ① Meta -->
-        <CaseComposerMeta
-          v-if="stepIdx === 0"
-          key="meta"
-          v-model="definition.meta"
-        />
+      <div class="body-split" :class="{ 'with-rail': showPoolRail }">
+        <div class="body-main">
+          <transition name="slide" mode="out-in">
+            <!-- ① Meta -->
+            <CaseComposerMeta
+              v-if="stepIdx === 0"
+              key="meta"
+              v-model="definition.meta"
+            />
 
-        <!-- ② Resource -->
-        <CaseComposerResource
-          v-else-if="stepIdx === 1"
-          key="resource"
-          v-model:resource="definition.resource"
-          v-model:resource-meta="orchestration.resourceMeta"
-        />
+            <!-- ② Resource -->
+            <CaseComposerResource
+              v-else-if="stepIdx === 1"
+              key="resource"
+              v-model:resource="definition.resource"
+              v-model:resource-meta="orchestration.resourceMeta"
+            />
 
-        <!-- ③ Config -->
-        <CaseComposerConfig
-          v-else-if="stepIdx === 2"
-          key="config"
-          v-model="definition.config"
-        />
+            <!-- ③ Config -->
+            <CaseComposerConfig
+              v-else-if="stepIdx === 2"
+              key="config"
+              v-model="definition.config"
+            />
 
-        <!-- ④ Canvas -->
-        <CaseComposerCanvas
-          v-else
-          key="canvas"
-          v-model:steps="definition.steps"
-          v-model:orchestration="orchestration"
-          :scenario="scenario"
-          @var-promote="onVarPromote"
-        />
-      </transition>
+            <!-- ④ Canvas -->
+            <CaseComposerCanvas
+              v-else
+              key="canvas"
+              v-model:steps="definition.steps"
+              v-model:orchestration="orchestration"
+              :scenario="scenario"
+              @var-promote="onVarPromote"
+              @seed-var="seedPoolVar"
+            />
+          </transition>
+        </div>
+
+        <!-- 常量池 rail(步骤 0-2;步骤 3 挂在 Canvas col-info,同一组件) -->
+        <aside v-if="showPoolRail" class="pool-rail">
+          <ConstantPoolPanel :entries="constantsStore.entries" @seed-var="seedPoolVar" />
+        </aside>
+      </div>
     </main>
 
     <!-- ═══════ Footer nav-bar (下/上步, 保存, 验证) ═══════ -->
@@ -223,6 +233,10 @@ import CaseComposerResource from '@/components/composer/CaseComposerResource.vue
 import CaseComposerConfig from '@/components/composer/CaseComposerConfig.vue'
 import CaseComposerCanvas from '@/components/composer/CaseComposerCanvas.vue'
 import RunDialog from '@/components/composer/RunDialog.vue'
+import ConstantPoolPanel from '@/components/composer/ConstantPoolPanel.vue'
+import { provideInsertTarget, useInsertTarget } from '@/composables/useInsertTarget'
+import { seedPoolVarIntoDefinition } from '@/utils/pool-var'
+import { useConstantsStore } from '@/stores/constants'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { showError } from '@/utils/errorFallback'
@@ -360,6 +374,23 @@ function onVarPromote(name: string, value: unknown) {
   }
 }
 
+const constantsStore = useConstantsStore()
+const rootEl = ref<HTMLElement | null>(null)
+const inserter = useInsertTarget()
+provideInsertTarget(inserter)
+
+/** 常量池 rail: 步骤 0-2(步骤 3 面板挂在 Canvas col-info) */
+const showPoolRail = computed(() => stepIdx.value < 3)
+
+/** 常量池播种(生成器 key 插入链): 快照拷贝进 config.vars,已存在不覆盖。 */
+function seedPoolVar(name: string, spec: Record<string, unknown>): void {
+  const result = seedPoolVarIntoDefinition(definition.value, name, spec)
+  definition.value = result.definition
+  if (!result.seeded) {
+    ElMessage.info(`config.vars 已有同名变量 ${name},使用现有值`)
+  }
+}
+
 // ── lifecycle ──
 onMounted(async () => {
   const stepParam = parseInt(route.query.step as string) || 1
@@ -372,6 +403,8 @@ onMounted(async () => {
   // Auto-compute system warning (PRD §5.1 §9): declared systems vs
   // services actually called by steps.
   if (scenario.value) checkSystemMismatch()
+  if (rootEl.value) inserter.start(rootEl.value)
+  void constantsStore.ensureEntries().catch(() => {})
 })
 
 // 运行成功后跳详情页的延迟定时器 — 组件卸载时必须清除，否则用户在
@@ -382,6 +415,7 @@ onUnmounted(() => {
     clearTimeout(runNavTimer)
     runNavTimer = null
   }
+  inserter.stop()
 })
 
 /** Compare meta.system (declared) with the union of step services
@@ -922,4 +956,28 @@ async function onRunConfirm(
 }
 .system-warn svg { color: #f59e0b; flex-shrink: 0; }
 .system-warn strong { color: #92400e; }
+
+/* ── 常量池 rail(步骤 0-2 右栏,body-split 布局;步骤 3 挂 Canvas col-info)── */
+.body-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+}
+.body-split.with-rail {
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+}
+.body-main { min-width: 0; min-height: 0; }
+.pool-rail {
+  position: sticky;
+  top: 8px;
+  align-self: start;
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+}
+@media (max-width: 1280px) {
+  .body-split.with-rail { grid-template-columns: minmax(0, 1fr); }
+  .pool-rail { position: static; max-height: none; }
+}
 </style>

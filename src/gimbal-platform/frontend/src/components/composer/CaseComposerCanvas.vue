@@ -377,6 +377,12 @@
           />
         </div>
         <div v-else class="info-empty muted">无选中 step</div>
+
+        <!-- 常量池(编排页常驻;VRP 之下,无选中 step 时也在) -->
+        <ConstantPoolPanel
+          :entries="constantsStore.entries"
+          @seed-var="(n: string, s: Record<string, unknown>) => emit('seedVar', n, s)"
+        />
       </aside>
     </div>
 
@@ -405,9 +411,11 @@ import CaseComposerCatalog from './CaseComposerCatalog.vue'
 import FieldForm from './FieldForm.vue'
 import StrategyForm from './StrategyForm.vue'
 import VariableRegistryPanel from './VariableRegistryPanel.vue'
+import ConstantPoolPanel from './ConstantPoolPanel.vue'
 import AuthSelectorModal from '../AuthSelectorModal.vue'
 import VarSelectorModal from './VarSelectorModal.vue'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
+import { useConstantsStore } from '@/stores/constants'
 import { deriveVarRegistry } from '@/utils/var-registry'
 import { getFullEndpoint, listStrategyKinds, getStrategyKindFull } from '@/api/scenario-composer'
 import { list as listAuths } from '@/api/auth_sessions'
@@ -431,6 +439,7 @@ const emit = defineEmits<{
   'update:steps': [StepView[]]
   'update:orchestration': [Orchestration]
   'varPromote': [name: string, value: unknown]
+  'seedVar': [name: string, spec: Record<string, unknown>],
 }>()
 
 const local = reactive<StepView[]>([...(props.steps || [])])
@@ -629,6 +638,7 @@ function hdrRefStatus(ref: TplRef): 'ok' | 'dangling' {
 // 注册表 = 共享 vars(config) + 全部 step 的 extract;config 来自共享
 // draft store(CaseComposer watch 同步,含本页未编辑的最新值)。
 const draftStore = useScenarioDraftStore()
+const constantsStore = useConstantsStore()
 const varPickerOpen = ref(false)
 const varPickerKey = ref<string | null>(null)
 const varPickerVal = ref<string | null>(null)
@@ -747,6 +757,9 @@ onMounted(() => {
   })
   // 认证列表:ⓘ 选择器 + 悬空徽章判定共用。失败静默(ⓘ 打开时列表为空,可重进)
   listAuths().then((a) => { auths.value = a }).catch(() => {})
+  // 常量池条目(CaseComposer rail 之外的第二拉取点;store 内 in-flight/
+  // 已有数据短路保证只发一次)
+  void constantsStore.ensureEntries().catch(() => {})
 })
 
 watch(() => props.steps, (v) => {

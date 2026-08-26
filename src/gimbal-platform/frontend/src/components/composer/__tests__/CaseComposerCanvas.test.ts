@@ -9,7 +9,7 @@
  * listAuths)全部 mock — 挂载级测试不碰网络。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { defineComponent, h, ref } from 'vue'
+import { provide, defineComponent, h, ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ElementPlus from 'element-plus'
@@ -17,6 +17,9 @@ import CaseComposerCanvas from '@/components/composer/CaseComposerCanvas.vue'
 import type { StepView } from '@/types/plate'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
+import { useInsertTarget, INSERT_TARGET_KEY } from '@/composables/useInsertTarget'
+import { useConstantsStore } from '@/stores/constants'
+import type { ConstantEntry } from '@/types/constants'
 
 // ── plate 代理 API mock(挂载即触发的:listStrategyKinds/listAuths) ──
 vi.mock('@/api/scenario-composer', () => ({
@@ -61,6 +64,12 @@ vi.mock('@/api/scenario-composer', () => ({
 vi.mock('@/api/auth_sessions', () => ({
   list: vi.fn().mockResolvedValue([]),
 }))
+vi.mock('@/api/constants', () => ({
+  list: vi.fn().mockResolvedValue([]),
+  create: vi.fn(),
+  patch: vi.fn(),
+  remove: vi.fn(),
+}))
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
@@ -93,8 +102,12 @@ let activePinia: ReturnType<typeof createPinia>
 
 function mountCanvas(steps: StepView[], activeIdx = 0) {
   const orch = ref<Orchestration>(mkOrch(steps.length))
+  // col-info 常驻 ConstantPoolPanel 注入 INSERT_TARGET_KEY —— 挂载 Canvas
+  // 的 Parent 必须提供,否则 useSharedInsertTarget 抛错。
+  const inserter = useInsertTarget()
   const Parent = defineComponent({
     setup() {
+      provide(INSERT_TARGET_KEY, inserter)
       return () => h(CaseComposerCanvas, {
         steps: steps,
         orchestration: orch.value,
@@ -437,6 +450,74 @@ describe('CaseComposerCanvas — auth 引用徽章 union(2026-08-25)', () => {
     const chip = w.findAll('.ref-chip').find((c) => c.text().includes('ghost'))
     expect(chip).toBeTruthy()
     expect(chip!.classes()).toContain('dangling')
+    w.unmount()
+  })
+})
+
+describe('CaseComposerCanvas — 常量池 col-info 常驻(F12/F13)', () => {
+  const GEN: ConstantEntry = {
+    id: 1,
+    name: 'bl_no',
+    description: '',
+    entry_kind: 'generator',
+    value: null,
+    spec: { kind: 'random_decorated', length: 6 },
+    created_at: '',
+    updated_at: '',
+  }
+
+  function mountCanvasWithPool(entries: ConstantEntry[]) {
+    const store = useConstantsStore()
+    store.entries = entries
+    const inserter = useInsertTarget()
+    inserter.start(document.body)
+    const Parent = defineComponent({
+      setup() {
+        provide(INSERT_TARGET_KEY, inserter)
+        const steps = ref([mkStep()])
+        const orch = ref(mkOrch(0))
+        return () =>
+          h(CaseComposerCanvas, {
+            steps: steps.value,
+            orchestration: orch.value,
+            'onUpdate:steps': (v: unknown) => {
+              steps.value = v as typeof steps.value
+            },
+            'onUpdate:orchestration': (v: unknown) => {
+              orch.value = v as typeof orch.value
+            },
+          })
+      },
+    })
+    return mount(Parent, {
+      global: { plugins: [ElementPlus, activePinia] },
+      attachTo: document.body,
+    })
+  }
+
+  it('F12: panel 常驻 col-info(VRP/info-empty 之后、aside 最后一个子元素)', async () => {
+    const w = mountCanvasWithPool([GEN])
+    await flushPromises()
+    const info = w.find('.col-info')
+    expect(info.exists()).toBe(true)
+    const panel = info.find('.cp-panel')
+    expect(panel.exists()).toBe(true) // 无选中 step 时也常驻
+    expect(info.element.lastElementChild!.classList.contains('cp-panel')).toBe(true)
+    w.unmount()
+  })
+
+  it('F13: panel 插入生成器 key → Canvas 转发 seedVar 事件', async () => {
+    const w = mountCanvasWithPool([GEN])
+    await flushPromises()
+    const input = w.element.querySelector('input') as HTMLInputElement
+    expect(input).toBeTruthy()
+    input.dispatchEvent(new FocusEvent('focusin', { bubbles: true }))
+    await w.find('[data-entry="bl_no"] .act-insert-key').trigger('click')
+    const canvas = w.findComponent(CaseComposerCanvas)
+    expect(canvas.emitted('seedVar')).toBeTruthy()
+    const [[name, spec]] = canvas.emitted('seedVar')!
+    expect(name).toBe('bl_no')
+    expect(spec).toEqual(GEN.spec)
     w.unmount()
   })
 })
