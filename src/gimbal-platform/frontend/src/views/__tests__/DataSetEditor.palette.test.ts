@@ -837,3 +837,86 @@ it('点顶栏「撤销提升」→ LIFO 弹出最近一次提升,字段变回 di
   const headerUndoBtn2 = w.findAll('.header-actions button').find((b) => b.text().includes('撤销提升'))
   expect(headerUndoBtn2).toBeTruthy()
 })
+
+// ── 步骤分组表头(P1.4)─────────────────────────────────────────
+
+it('步骤分组行:orchestration 缺名降级 Step N;colspan 按连续段合并', async () => {
+  const w = mountEditor()
+  await flushPromises()
+  const groupRow = w.find('.data-table tr.row-step-group')
+  expect(groupRow.exists()).toBe(true)
+  const cells = groupRow.findAll('th.th-step-group')
+  // DRAFT:step0(amount/customer_id)+ step1(page/size)各 2 列
+  expect(cells.length).toBe(2)
+  expect(cells[0].text()).toBe('步骤 1 · Step 1')   // orchestration.steps 空 → 兜底
+  expect(cells[1].text()).toBe('步骤 2 · Step 2')
+  expect(cells[0].attributes('colspan')).toBe('2')
+  expect(cells[1].attributes('colspan')).toBe('2')
+  w.unmount()
+})
+
+it('步骤分组行:orchestration 有名显示名(平台编排视图)', async () => {
+  vi.spyOn(api, 'getScenarioDraft').mockResolvedValueOnce({
+    ...DRAFT,
+    orchestration: {
+      steps: [{ name: '创建订单' }, { name: '查询详情' }],
+      resourceMeta: {},
+    },
+  } as any)
+  const w = mountEditor()
+  await flushPromises()
+  const cells = w.findAll('.data-table tr.row-step-group th.th-step-group')
+  expect(cells[0].text()).toBe('步骤 1 · 创建订单')
+  expect(cells[1].text()).toBe('步骤 2 · 查询详情')
+  w.unmount()
+})
+
+it('共享 var:同 varName 被两个步骤引用 → 字段行两列都标「共享」', async () => {
+  // step1.page 也改用 ${var.amount} → amount 出现在两个 step,varName 唯一
+  vi.spyOn(api, 'getScenarioDraft').mockResolvedValueOnce({
+    ...DRAFT,
+    definition: {
+      ...DRAFT.definition,
+      steps: [
+        DRAFT.definition.steps[0],
+        {
+          api: { view_hints: { endpoint_id: 'fin.order.q' } },
+          request: { body: { amount: '${var.amount}', size: '20' } },
+        },
+      ],
+    },
+  } as any)
+  const w = mountEditor()
+  await flushPromises()
+  const fieldRow = w.find('.data-table tr.row-field')
+  // amount 两列共享;page 已不是 var(换成 amount 引用);size 是 direct
+  const marks = fieldRow.findAll('.shared-mark')
+  expect(marks.length).toBe(2)
+  expect(fieldRow.text()).toContain('步骤1 - amount')
+  expect(fieldRow.text()).toContain('步骤2 - amount')
+  w.unmount()
+})
+
+it('非共享 var / direct 列不带共享徽标(默认 DRAFT)', async () => {
+  const w = mountEditor()
+  await flushPromises()
+  // amount 只在 step0,page 只在 step1 → 无共享
+  expect(w.findAll('.data-table .shared-mark').length).toBe(0)
+  w.unmount()
+})
+
+it('步骤段首列带 is-step-start(字段行 + 数据行贯穿分隔线)', async () => {
+  const w = mountEditor()
+  await flushPromises()
+  await w.findAll('button').find((b) => b.text().includes('新增数据'))!.trigger('click')
+  await flushPromises()
+  // 字段行:第 3 个数据列(page,step1 段首)带类;amount(首列)也是段首(ci=0)
+  const fieldStarts = w.findAll('.data-table tr.row-field th.is-step-start')
+  expect(fieldStarts.length).toBe(2)
+  expect(fieldStarts[0].text()).toContain('amount')
+  expect(fieldStarts[1].text()).toContain('page')
+  // 数据行同样
+  const dataStarts = w.findAll('.data-table tbody tr.row-data td.is-step-start')
+  expect(dataStarts.length).toBe(2)
+  w.unmount()
+})

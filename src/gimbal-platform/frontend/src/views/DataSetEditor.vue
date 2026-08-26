@@ -161,6 +161,19 @@
           <col class="col-action" />
         </colgroup>
         <thead>
+          <!-- 步骤分组行(P1.4):同 stepIndex 相邻列合并 colspan,横多列时
+               一眼看出列属于哪个步骤;名读 orchestration,缺名降级 Step N。 -->
+          <tr class="row-step-group">
+            <th class="th-select" />
+            <th class="th-label" />
+            <th
+              v-for="g in stepGroups"
+              :key="`grp:${g.stepIndex}`"
+              :colspan="g.colspan"
+              class="th-step-group"
+            >步骤 {{ g.stepIndex + 1 }} · {{ stepLabel(g.stepIndex) }}</th>
+            <th class="th-action" />
+          </tr>
           <tr class="row-info row-desc">
             <th class="th-select">
               <el-checkbox
@@ -172,9 +185,9 @@
             </th>
             <th class="th-label">描述</th>
             <th
-              v-for="col in allColumns"
+              v-for="(col, ci) in allColumns"
               :key="`info-d:${col.stepIndex}:${col.source}:${col.field}`"
-              :class="['th-data', isPromotableVar(col) ? 'col-promoted' : '']"
+              :class="['th-data', isPromotableVar(col) ? 'col-promoted' : '', isStepStart(ci) ? 'is-step-start' : '']"
               :title="descriptionByColumnKey.get(`${col.stepIndex}:${col.source}:${col.field}`) || col.field"
             >
               {{ descriptionByColumnKey.get(`${col.stepIndex}:${col.source}:${col.field}`) || '—' }}
@@ -185,12 +198,17 @@
             <th class="th-select" />
             <th class="th-label">字段</th>
             <th
-              v-for="col in allColumns"
+              v-for="(col, ci) in allColumns"
               :key="`info-f:${col.stepIndex}:${col.source}:${col.field}`"
-              :class="['th-data', isPromotableVar(col) ? 'col-promoted' : '']"
+              :class="['th-data', isPromotableVar(col) ? 'col-promoted' : '', isStepStart(ci) ? 'is-step-start' : '']"
               :title="(col.kind === 'var' ? col.varName : col.field) ?? ''"
             >
               步骤{{ col.stepIndex + 1 }} - {{ col.kind === 'var' ? col.varName : col.field }}
+              <span
+                v-if="col.kind === 'var' && col.varName && sharedVarNames.has(col.varName)"
+                class="shared-mark"
+                title="该变量被多个步骤引用 — 数据行里改一处,所有引用处生效"
+              >共享</span>
             </th>
             <th class="th-action" />
           </tr>
@@ -212,9 +230,9 @@
               />
             </td>
             <td
-              v-for="col in allColumns"
+              v-for="(col, ci) in allColumns"
               :key="`c:${i}:${col.stepIndex}:${col.source}:${col.field}`"
-              :class="['td-data', cellClass(row, col), isPromotableVar(col) ? 'col-promoted' : '']"
+              :class="['td-data', cellClass(row, col), isPromotableVar(col) ? 'col-promoted' : '', isStepStart(ci) ? 'is-step-start' : '']"
               :title="col.kind === 'var' ? col.baseline : col.baseline || '空'"
             >
               <input
@@ -326,6 +344,40 @@ const allColumns = computed<BaselineColumn[]>(() =>
 )
 const varColumns = computed(() => varOnlyPalette(allColumns.value))
 const baselineGroups = computed(() => groupByStepLocation(allColumns.value))
+
+// ── 步骤分组表头(P1.4:横多列时按 step 视觉分组,零后端)─────────
+/** 列序上同 stepIndex 的连续段(merge 相邻同段,colspan 呈现)。 */
+const stepGroups = computed(() => {
+  const groups: Array<{ stepIndex: number; colspan: number }> = []
+  for (const col of allColumns.value) {
+    const last = groups[groups.length - 1]
+    if (last && last.stepIndex === col.stepIndex) last.colspan++
+    else groups.push({ stepIndex: col.stepIndex, colspan: 1 })
+  }
+  return groups
+})
+/** 步骤展示名:读 orchestration.steps[i].name(平台编排视图,plate Step
+ *  无 name 字段);缺名/越界降级 Step N(同 RunDialog stepTo 下拉语义)。 */
+function stepLabel(i: number): string {
+  const name = draft.value?.orchestration?.steps?.[i]?.name
+  return name || `Step ${i + 1}`
+}
+/** 该列是所属步骤段的首列 → 渲染左分隔线(表头到数据行贯穿)。 */
+function isStepStart(ci: number): boolean {
+  const cols = allColumns.value
+  return ci === 0 || cols[ci - 1].stepIndex !== cols[ci].stepIndex
+}
+/** 被多个 (step, source) 列引用的 varName — 字段行标「共享」。
+ *  共享 var 改一处全局生效(config.vars 单值),提示用户跨步骤影响。 */
+const sharedVarNames = computed(() => {
+  const seen = new Set<string>()
+  const shared = new Set<string>()
+  for (const c of varColumns.value) {
+    if (seen.has(c.varName)) shared.add(c.varName)
+    else seen.add(c.varName)
+  }
+  return shared
+})
 const filteredGroups = computed(() => {
   const q = baselineQuery.value
   return baselineGroups.value
@@ -875,6 +927,30 @@ onMounted(async () => {
 }
 .data-table .row-desc th  { background: #f1f5f9; }
 .data-table .row-field th { background: #e2e8f0; }
+
+/* 步骤分组行:比 row-field 更深一档的底色,colspan 段 + 段间分隔线
+   (P1.4 — 横多列时按 step 视觉分组) */
+.data-table .row-step-group th {
+  background: #dde3ee;
+  color: #334155;
+  font-weight: 700;
+  font-size: 11px;
+  text-align: center;
+  border-left: 1px solid #c3ccdb;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.data-table .row-step-group th:first-of-type { border-left: none; }
+/* 步骤段首列:贯穿 thead(描述/字段行)与 tbody 的左分隔线 */
+.data-table .is-step-start { border-left: 1px solid #c3ccdb; }
+/* 共享 var 徽标:多步骤引用同一变量(config.vars 单值,改一处全局生效) */
+.data-table .shared-mark {
+  display: inline-block;
+  margin-left: 4px; padding: 0 4px;
+  border-radius: 3px;
+  background: #eef2ff; color: #4338ca;
+  font-size: 10px; line-height: 16px;
+  vertical-align: middle;
+}
 .data-table .th-label, .data-table .td-label {
   background: #f8fafc; color: var(--accent);
   font-weight: 700; text-align: center;
