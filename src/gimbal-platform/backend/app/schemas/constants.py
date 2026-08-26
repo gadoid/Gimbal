@@ -39,7 +39,7 @@ class ConstantEntryCreateIn(BaseModel):
 
     @model_validator(mode="after")
     def _check_payload(self) -> "ConstantEntryCreateIn":
-        if not NAME_PATTERN.match(self.name):
+        if not NAME_PATTERN.fullmatch(self.name):
             raise ValueError("name 须匹配 ^[A-Za-z0-9_]{1,64}$")
         if self.entry_kind == "literal":
             if not is_literal_primitive(self.value):

@@ -335,9 +335,11 @@ function setParam(name: string, v: unknown): void {
 function buildSpec(): Record<string, unknown> | null {
   if (form.entry_kind !== 'generator' || !form.genKind) return null
   const spec: Record<string, unknown> = { kind: form.genKind }
-  for (const p of genParams.value) {
-    const v = form.genParams[p.name]
-    if (v !== undefined && v !== null && v !== '') spec[p.name] = v
+  // 并集: 目录 full 拉取失败时 genParams 为空,只遍历描述符会丢已存参数(降级编辑)
+  const names = new Set([...genParams.value.map((p) => p.name), ...Object.keys(form.genParams)])
+  for (const name of names) {
+    const v = form.genParams[name]
+    if (v !== undefined && v !== null && v !== '') spec[name] = v
   }
   return spec
 }

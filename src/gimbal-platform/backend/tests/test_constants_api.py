@@ -112,6 +112,17 @@ async def test_b5_name_pattern(client: AsyncClient) -> None:
         assert r.status_code == 422, bad
 
 
+async def test_b5_name_trailing_newline_rejected(client: AsyncClient) -> None:
+    """回归: $ 可匹配尾随换行之前,.match 曾放过 "ok\\n" —— 调用点须 fullmatch。"""
+    headers = await _auth(client)
+    r = await client.post(
+        "/api/constants",
+        json={"name": "ok\n", "entry_kind": "literal", "value": "1"},
+        headers=headers,
+    )
+    assert r.status_code == 422, r.text
+
+
 async def test_b6_duplicate_name_409_dict_detail(client: AsyncClient) -> None:
     headers = await _auth(client)
     payload = {"name": "dup", "entry_kind": "literal", "value": "1"}

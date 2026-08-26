@@ -183,4 +183,27 @@ describe('ConstantsPool — 条目 CRUD', () => {
     expect(constantsApi.remove).toHaveBeenCalledWith(1)
     w.unmount()
   })
+
+  it('F17b: 编辑降级 — full 拉取失败时提交不丢已存 spec 参数', async () => {
+    vi.mocked(constantsApi.list).mockResolvedValue([
+      { ...GEN_ROW, spec: { kind: 'seq', width: 6, start: 1 } } as never,
+    ])
+    vi.mocked(catalogApi.getGeneratorKindFull).mockRejectedValue(new Error('full down'))
+    vi.mocked(constantsApi.patch).mockResolvedValue(GEN_ROW as never)
+    const w = mountPage()
+    await flushPromises()
+
+    await w.find('[data-action="edit"]').trigger('click')
+    await flushPromises() // ensureFull 拒绝 → genParams 空(目录降级编辑)
+    await w.find('[data-field="description"]').setValue('只改说明')
+    await w.find('[data-action="submit"]').trigger('click')
+    await flushPromises()
+
+    // 已存 width/start 不因目录 full 拉取失败而被从 spec 中丢弃
+    expect(constantsApi.patch).toHaveBeenCalledWith(1, {
+      description: '只改说明',
+      spec: { kind: 'seq', width: 6, start: 1 },
+    })
+    w.unmount()
+  })
 })
