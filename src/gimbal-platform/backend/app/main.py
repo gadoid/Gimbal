@@ -24,6 +24,7 @@ from .routers import (
     endpoint_catalog,
     envs,
     executions,
+    generator_catalog,
     runs,
     scenarios,
     strategy_catalog,
@@ -122,6 +123,7 @@ def create_app() -> FastAPI:
     app.include_router(endpoint_catalog.router, prefix="/api")
     app.include_router(strategy_catalog.router, prefix="/api")
     app.include_router(constants.router, prefix="/api")
+    app.include_router(generator_catalog.router, prefix="/api")
     app.include_router(adaptations.router, prefix="/api")
     app.include_router(scenarios.router, prefix="/api")  # MUST be last — has /{scenario_id}
 
