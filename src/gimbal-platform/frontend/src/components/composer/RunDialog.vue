@@ -1,6 +1,7 @@
 <!--
-  RunDialog.vue — 运行对话框 (env + data-set 选择)
-  V3 composer 1:1 模型: 通过 case 自动选择 data-set, env 来自平台 /api/envs
+  RunDialog.vue — 运行对话框 (env + data-set + 执行认证选择)
+  env 来自平台 /api/envs;数据集多选(空 = 基线);auths = 场景引用 ∪ owner
+  凭证池(后端 dispatcher 按 alias 解密注入,本弹框只选 alias 不拉明文)。
 -->
 <template>
   <Teleport to="body">
@@ -43,7 +44,7 @@
           <section class="run-section">
             <div class="label-row">
               <label class="run-label">数据集 <span class="muted small">(可多选, 不选则该数据集的行不参与运行)</span></label>
-              <button class="link-btn" @click="onCreateDataSet" type="button">+ 新建数据集</button>
+              <button class="link-btn" @click="goCreateDataSet" type="button">+ 新建数据集</button>
             </div>
             <div class="ds-grid ds-grid-baseline">
               <label class="ds-tile baseline" :class="{ active: useBaseline || selectedDatasets.length === 0 }">
@@ -65,7 +66,7 @@
                 <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/>
               </svg>
               <p>暂无数据集 — 创建一个数据集来参数化运行</p>
-              <button class="primary-btn" @click="onCreateDataSet">+ 新建第一个数据集</button>
+              <button class="primary-btn" @click="goCreateDataSet">+ 新建第一个数据集</button>
             </div>
             <div v-else class="ds-grid">
               <label
@@ -88,6 +89,26 @@
                     <code>{{ JSON.stringify(ds.preview[0]) }}</code>
                   </div>
                 </div>
+              </label>
+            </div>
+          </section>
+
+          <!-- 执行认证 (P0:激活后端 auths 注入链路 — RunRequest.auths) -->
+          <section class="run-section">
+            <label class="run-label">执行认证 <span class="muted small">(场景已引用默认全选;留空 = 不注入,场景内置 users 原样运行)</span></label>
+            <div v-if="authOptions.length === 0" class="muted small">
+              无可用认证别名 — 场景未引用认证,且凭证池为空
+            </div>
+            <div v-else class="auth-group">
+              <label
+                v-for="a in authOptions"
+                :key="a.alias"
+                class="policy-opt auth-opt"
+                :class="{ active: selectedAuths.includes(a.alias) }"
+              >
+                <input type="checkbox" data-test="auth" :value="a.alias" v-model="selectedAuths" />
+                <span class="auth-alias">{{ a.alias }}</span>
+                <span class="auth-src">{{ a.from }}</span>
               </label>
             </div>
           </section>
@@ -216,9 +237,8 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { promptAction } from '@/utils/confirmAction'
-import * as api from '@/api/scenario-composer'
 import type { MergePolicy } from '@/api/executions'
 import type { Scenario, DataSetSummary, RunEnv } from '@/types/scenario-composer'
 
@@ -229,6 +249,10 @@ const props = defineProps<{
   running: boolean
   lastRunId: string | null
   lastRunError: string | null
+  /** owner 凭证池别名(父级懒加载,auth_sessions.list → alias);静默缺省 = [] */
+  ownerAuthAliases?: string[]
+  /** 平台编排展示名(orchestration.steps[i].name,与 steps 同序);plate Step 无 name */
+  stepOrchestrationNames?: string[]
 }>()
 const emit = defineEmits<{
   close: []
@@ -242,6 +266,8 @@ const emit = defineEmits<{
       parallel?: number
       prefix?: string
       mergePolicy?: MergePolicy
+      /** 所选执行认证 alias;空数组/缺省 = 不注入(等价 origin) */
+      auths?: string[]
     },
   ]
 }>()
@@ -250,6 +276,31 @@ const selectedEnv = ref<string>(props.envs[0]?.envId || '')
 const selectedDatasets = ref<string[]>([])
 // D12 基线执行:不选数据集 = 直填值 + 共享变量默认值跑一次(一个隐式空覆盖行)
 const useBaseline = ref(false)
+
+// ── 执行认证:场景 config.users 别名 ∪ owner 凭证池别名 ──────────────
+// 场景引用默认全勾,凭证池独有别名列出不勾;alias 去重,场景在前。
+const selectedAuths = ref<string[]>([])
+/** 场景内置 users 的别名(append 冲突预检也要用) */
+const scenarioUserAliases = computed<string[]>(() => {
+  const users = props.scenario?.config?.users as Record<string, unknown> | undefined
+  return users ? Object.keys(users) : []
+})
+const authOptions = computed(() => {
+  const seen = new Set<string>()
+  const opts = scenarioUserAliases.value
+    .filter((a) => !seen.has(a) && seen.add(a))
+    .map((alias) => ({ alias, from: '场景' }))
+  for (const alias of props.ownerAuthAliases ?? []) {
+    if (seen.has(alias)) continue
+    seen.add(alias)
+    opts.push({ alias, from: '凭证池' })
+  }
+  return opts
+})
+watch(() => props.scenario, (s) => {
+  // 打开期间 scenario 引用不变;初始默认 = 场景已引用全勾
+  selectedAuths.value = s ? [...scenarioUserAliases.value] : []
+}, { immediate: true })
 // V1 能力移植:stepTo = 0-based 含端点(引擎 halt_at);null = 全量运行
 const stepTo = ref<number | null>(null)
 // M1 执行能力(V1 ExecutionDrawer 语义):origin 在此表达"不注入"
@@ -290,11 +341,11 @@ const policyHint = computed(() => {
 
 const stepCount = computed(() => props.scenario?.stepCount ?? 0)
 
-/** 下拉里附上步骤名(有 name/id 时),便于定位 */
+/** 下拉里附上步骤名,便于定位。展示名在 orchestration(plate Step 无
+ *  name/id 字段);长度不齐或缺名时降级 Step N,不再恒空。 */
 function stepName(i: number): string {
-  const s = props.scenario?.steps?.[i] as { name?: string; id?: string } | undefined
-  const n = s?.name || s?.id
-  return n ? ` · ${n}` : ''
+  const n = props.stepOrchestrationNames?.[i]
+  return n ? ` · ${n}` : ` · Step ${i + 1}`
 }
 
 watch(() => props.envs, (envs) => {
@@ -334,6 +385,17 @@ function onConfirm() {
     ElMessage.warning('请选择执行环境')
     return
   }
+  // append 预检:所选执行认证与场景内置 users 别名交集 → 后端必 409
+  // 整单拒(run_dispatcher 冲突预检),提交前拦截并提示出路。
+  if (mergePolicy.value === 'append') {
+    const clash = selectedAuths.value.filter((a) => scenarioUserAliases.value.includes(a))
+    if (clash.length) {
+      ElMessage.warning(
+        `append 与场景内置 users 别名冲突: ${clash.join(', ')} — 请改用 merge/override 或取消勾选`,
+      )
+      return
+    }
+  }
   // 输入钳位(与后端 schema 上限一致,防 422)
   nRuns.value = Math.min(1000, Math.max(1, Math.floor(nRuns.value || 1)))
   parallel.value = Math.min(200, Math.max(1, Math.floor(parallel.value || 1)))
@@ -347,47 +409,20 @@ function onConfirm() {
     ...(nRuns.value > 1 ? { nRuns: nRuns.value } : {}),
     ...(parallel.value > 1 ? { parallel: parallel.value } : {}),
     ...(prefix.value ? { prefix: prefix.value } : {}),
+    // 执行认证 alias(后端按 alias 解密注入);空 = 不注入
+    ...(selectedAuths.value.length ? { auths: selectedAuths.value } : {}),
   })
 }
 
-async function onCreateDataSet() {
+/** 新建数据集:跳转数据集编辑器(结构由调色板/稀疏行模型约束,
+ *  裸 JSON 快速创建路径已退役 — 会引导未声明变量并 422)。 */
+const router = useRouter()
+function goCreateDataSet() {
   if (!props.scenario) {
     ElMessage.warning('请先保存草稿')
     return
   }
-  try {
-    const name = await promptAction('数据集名称', '新建数据集', {
-      inputValue: '默认数据集',
-      confirmButtonText: '创建',
-    })
-    if (name === null || !name) return
-    const rowsStr = await promptAction(
-      'JSON 数组格式, 如 [{"qty": 1}, {"qty": 2}]',
-      '数据集内容',
-      {
-        inputType: 'textarea',
-        inputValue: '[]',
-        confirmButtonText: '创建',
-      }
-    )
-    if (rowsStr === null) return
-    let rows: any[]
-    try {
-      rows = JSON.parse(rowsStr || '[]')
-    } catch {
-      // 解析失败必须中止：静默按 [] 创建会把用户输入整组丢掉。
-      ElMessage.error('JSON 解析失败，未创建数据集 — 请检查格式后重试')
-      return
-    }
-    if (!Array.isArray(rows)) {
-      ElMessage.error('数据集内容必须是 JSON 数组（如 [{"qty": 1}]），未创建')
-      return
-    }
-    await api.createDataSet(props.scenario.meta.scenarioId, { name, rows })
-    ElMessage.success('已创建, 请重新打开运行对话框')
-  } catch (e) {
-    ElMessage.error('创建失败: ' + (e as Error).message)
-  }
+  router.push(`/scenarios/${props.scenario.meta.scenarioId}/data-sets/new`)
 }
 </script>
 
@@ -524,6 +559,18 @@ async function onCreateDataSet() {
 }
 .policy-opt input { margin: 0; accent-color: #4f46e5; }
 .policy-hint { margin-top: 6px; }
+
+/* 执行认证 chips(复用 policy-opt 视觉,alias + 来源标签) */
+.auth-group {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.auth-opt { gap: 6px; }
+.auth-alias { font-family: var(--font-mono); }
+.auth-src {
+  font-size: 10px; color: #94a3b8;
+  padding: 0 4px; border-radius: 3px; background: #f1f5f9;
+}
+.auth-opt.active .auth-src { background: #e0e7ff; }
 .num-row {
   display: flex; align-items: center; gap: 6px;
 }

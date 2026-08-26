@@ -77,7 +77,7 @@
           <!-- 导出菜单 — 在每个 step 都可见,平台侧始终持有当前 draft -->
           <ScenarioExportMenu variant="topbar" />
 
-          <button class="primary-btn" :disabled="!canRun" @click="runDialogOpen = true">
+          <button class="primary-btn" :disabled="!canRun" @click="openRunDialog">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
             运行
           </button>
@@ -188,7 +188,7 @@
           v-else
           class="primary-btn"
           :disabled="!canRun"
-          @click="runDialogOpen = true"
+          @click="openRunDialog"
         >
           下一步：运行
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -196,7 +196,7 @@
       </div>
     </footer>
 
-    <!-- ═══════ Run dialog (env + data-set picker) ═══════ -->
+    <!-- ═══════ Run dialog (env + data-set + auths picker) ═══════ -->
     <RunDialog
       v-if="runDialogOpen"
       :scenario="scenario"
@@ -205,6 +205,8 @@
       :running="runDispatching"
       :last-run-id="lastRunId"
       :last-run-error="lastRunError"
+      :owner-auth-aliases="ownerAuthAliases"
+      :step-orchestration-names="stepNames"
       @close="runDialogOpen = false"
       @confirm="onRunConfirm"
     />
@@ -229,6 +231,7 @@ import { executionUrl, composerUrl } from '@/utils/links'
 import { confirmAction } from '@/utils/confirmAction'
 import { lintDraft } from '@/utils/draft-lint'
 import * as api from '@/api/scenario-composer'
+import { list as listAuthSessions } from '@/api/auth_sessions'
 import type { MergePolicy } from '@/api/executions'
 import type {
   Scenario, DataSetSummary, RunEnv, Orchestration, ScenarioDraft,
@@ -301,8 +304,23 @@ const runDialogOpen = ref(false)
 const runDispatching = ref(false)
 const lastRunId = ref<string | null>(null)
 const lastRunError = ref<string | null>(null)
+// owner 凭证池别名(懒加载:首次打开运行弹框时拉取;失败静默 — 不阻塞运行)
+const ownerAuthAliases = ref<string[]>([])
 
 const canRun = computed(() => !!scenario.value && steps.value.length > 0)
+
+/** stepTo 下拉的展示名:平台编排态 orchestration.steps[].name(plate Step 无 name) */
+const stepNames = computed(() => orchestration.value.steps.map((s) => s.name))
+
+/** 打开运行弹框;首次打开顺带拉凭证池别名(执行认证选项的并集来源) */
+function openRunDialog() {
+  runDialogOpen.value = true
+  if (ownerAuthAliases.value.length === 0) {
+    listAuthSessions()
+      .then((sessions) => { ownerAuthAliases.value = sessions.map((s) => s.alias) })
+      .catch(() => { /* 凭证池不可达不阻塞运行 */ })
+  }
+}
 
 // 步骤条进度 (0% → 100%) — 当前 step 之前的部分用绿色,之后用灰色
 const progressPct = computed(() => {
@@ -636,6 +654,7 @@ async function onRunConfirm(
     parallel?: number
     prefix?: string
     mergePolicy?: MergePolicy
+    auths?: string[]
   },
 ) {
   if (!scenario.value) {
@@ -661,6 +680,9 @@ async function onRunConfirm(
       ...(opts?.nRuns && opts.nRuns > 1 ? { nRuns: opts.nRuns } : {}),
       ...(opts?.parallel && opts.parallel > 1 ? { parallel: opts.parallel } : {}),
       ...(opts?.prefix ? { prefix: opts.prefix } : {}),
+      // P0 执行认证:dispatcher 按 alias 解密注入 Config.users;
+      // 空选 = 不注入(等价 origin),不上送字段。
+      ...(opts?.auths?.length ? { auths: opts.auths } : {}),
     })
     lastRunId.value = resp.runId
     ElMessage.success(`运行已发起: ${resp.runId}`)
