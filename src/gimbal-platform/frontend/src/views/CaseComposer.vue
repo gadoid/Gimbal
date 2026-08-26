@@ -958,11 +958,11 @@ async function onRunConfirm(
 .system-warn strong { color: #92400e; }
 
 /* ── 常量池 rail(步骤 0-2 右栏,body-split 布局;步骤 3 挂 Canvas col-info)── */
-/* gap 12px 对齐步骤编辑页(.three-col)功能块间隔 */
+/* gap 16px 对齐 ①-③ 页 .c-page 卡片间隔(常量池 rail 与主内容同节奏) */
 .body-split {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
+  gap: 16px;
   height: 100%;
   min-height: 0;
 }

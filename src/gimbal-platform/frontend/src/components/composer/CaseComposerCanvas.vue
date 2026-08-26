@@ -1044,11 +1044,12 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
 /* 表单控件统一外观走 composer.css (.c-form) */
 .canvas-shell { width: 100%; }
 
-/* 三栏自适应: 宽屏 3 栏, 中屏两栏 (信息面板下移), 窄屏单列 */
+/* 三栏自适应: 宽屏 3 栏, 中屏两栏 (信息面板下移), 窄屏单列
+   (gap 16px 对齐 ①-③ 页 .c-page 卡片间隔) */
 .three-col {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(240px, 300px);
-  gap: 12px;
+  gap: 16px;
   min-height: 600px;
   align-items: start;
 }
@@ -1059,7 +1060,7 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
   .col-stack {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 12px;
+    gap: 16px;
     align-items: start;
   }
   .col-stack .info-card { grid-column: 1 / -1; }
@@ -1068,24 +1069,25 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
   .three-col { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* 右栏卡堆: step 信息 / 变量注册表 / 常量池 三张独立卡,块间隔对齐 .three-col */
+/* 右栏卡堆: step 信息 / 变量注册表 / 常量池 三张独立卡,块间隔对齐 .c-page */
 .col-stack {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   min-width: 0;
 }
 
+/* 列卡与 ①-③ 页 .c-card 同款(白卡 20px 24px + col-head 分隔线) */
 .col {
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: 10px;
-  padding: 16px 18px;
+  padding: 20px 24px;
   display: flex; flex-direction: column;
 }
 
 .col-head {
-  margin-bottom: 14px; padding-bottom: 12px;
+  margin-bottom: 16px; padding-bottom: 12px;
   border-bottom: 1px solid var(--c-divider);
   display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
 }

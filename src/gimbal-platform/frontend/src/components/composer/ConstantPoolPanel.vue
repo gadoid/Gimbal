@@ -111,23 +111,23 @@ function insertValue(e: ConstantEntry): void {
 </script>
 
 <style scoped>
-/* 独立白卡外壳(= Canvas .col 配方),双挂载自带卡片:
+/* 独立白卡外壳(= .c-card 配方,与 ①-③ 页功能块同款),双挂载自带卡片:
    rail(步骤 0-2)与 col-info(步骤 3)均直接持有本组件,不靠父级包 .col */
 .cp-panel {
-  padding: 16px 18px;
+  padding: 20px 24px;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
-/* 分隔线卡头(= .col-head 节奏) */
+/* 分隔线卡头(= .c-card-head 节奏: 16px 下距 + 12px 分隔) */
 .cp-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--c-divider);
 }
 .cp-title {
@@ -166,6 +166,7 @@ function insertValue(e: ConstantEntry): void {
   border-radius: 6px;
   background: var(--c-bg-secondary);
 }
+.cp-entry + .cp-entry { margin-top: 8px; }
 .cp-row {
   display: flex;
   align-items: center;

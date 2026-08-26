@@ -109,19 +109,20 @@ const unregisteredRefs = computed(() => {
 </script>
 
 <style scoped>
-/* 独立白卡外壳(= Canvas .col 配方,与 ConstantPoolPanel 同款):
+/* 独立白卡外壳(= .c-card 配方,与 ①-③ 页功能块及 ConstantPoolPanel 同款):
    从「step 信息」块拆出后作为 col-stack 中的独立卡常驻 */
 .vr-panel {
-  padding: 16px 18px;
+  padding: 20px 24px;
   background: var(--c-surface);
   border: 1px solid var(--c-border);
   border-radius: 10px;
-  display: flex; flex-direction: column; gap: 8px;
+  display: flex; flex-direction: column;
 }
-/* 分隔线卡头(= .col-head 节奏,镜像 cp-head) */
+/* 分隔线卡头(= .c-card-head 节奏,镜像 cp-head) */
 .vr-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding-bottom: 10px; border-bottom: 1px solid var(--c-divider);
+  margin-bottom: 16px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--c-divider);
 }
 .vr-title {
   font-size: 14px; font-weight: 600; color: var(--c-text-primary);
@@ -148,6 +149,7 @@ const unregisteredRefs = computed(() => {
   font-size: 11.5px;
   background: var(--c-bg-secondary);
 }
+.vr-row + .vr-row { margin-top: 8px; }
 .vr-name {
   font-family: var(--font-mono); font-weight: 600;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -167,7 +169,7 @@ const unregisteredRefs = computed(() => {
 
 /* 未注册引用琥珀提示条(白卡上软底) */
 .vr-unregistered {
-  margin: 4px 0 0;
+  margin: 12px 0 0;
   background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;
   padding: 6px 8px;
   font-size: 10px; font-family: var(--font-mono);
