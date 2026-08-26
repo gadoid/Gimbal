@@ -455,7 +455,7 @@ function copySpec(): void {
   padding: 20px 24px 48px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 .page-head h1 { font-size: 18px; margin-bottom: 4px; }
 .muted { color: var(--c-text-tertiary); font-size: 12px; }
@@ -492,10 +492,19 @@ function copySpec(): void {
 .kind-summary { color: var(--c-text-secondary, #64748b); }
 .kind-body { padding: 0 12px 10px; }
 .kind-desc { font-size: 12px; margin: 4px 0 8px; }
+/* 发丝线表格(去硬边框,横向分隔对齐全局表格惯例) */
 .params-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 .params-table th,
-.params-table td { border: 1px solid var(--c-border); padding: 3px 8px; text-align: left; }
-.params-table th { background: var(--c-bg-secondary); font-weight: 600; }
+.params-table td { border: none; border-bottom: 1px solid var(--c-divider); padding: 5px 8px; text-align: left; }
+.params-table th {
+  background: transparent;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--c-text-tertiary);
+}
+.params-table tbody tr:last-child td { border-bottom: none; }
 .example-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .example-json {
   font-family: var(--font-mono);
@@ -520,10 +529,11 @@ function copySpec(): void {
   font-size: 11.5px;
   cursor: pointer;
 }
+/* 选中态对齐全局靛蓝 accent(替换此前的紫罗兰) */
 .kind-chip.active {
-  background: #ede9fe;
-  border-color: #7c3aed;
-  color: #4c1d95;
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent-soft-border);
+  color: var(--c-accent);
 }
 .param-hint { display: block; margin-top: 2px; }
 .spec-preview { display: flex; align-items: center; gap: 8px; width: 100%; }

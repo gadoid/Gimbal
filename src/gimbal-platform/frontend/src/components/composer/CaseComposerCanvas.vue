@@ -303,82 +303,86 @@
         </div>
       </main>
 
-      <!-- ③ 信息面板 -->
-      <aside class="col col-info">
-        <div class="col-head">
-          <h3>step 信息</h3>
-        </div>
-        <div v-if="currentStep" class="info-body">
-          <div class="info-block">
-            <div class="info-k">HTTP</div>
-            <div class="info-v">
-              <span v-if="currentStep.api?.method" class="method-badge" :class="`m-${currentStep.api.method.toLowerCase()}`">{{ currentStep.api.method }}</span>
-              <code>{{ currentStep.api?.path || '—' }}</code>
-            </div>
+      <!-- ③ 信息面板(拆分为独立卡堆: step 信息 / 变量注册表 / 常量池,
+           间隔 12px 对齐 .three-col 功能块节奏) -->
+      <aside class="col-info col-stack">
+        <div class="col info-card">
+          <div class="col-head">
+            <h3>step 信息</h3>
           </div>
-          <div class="info-block">
-            <div class="info-k">service</div>
-            <div class="info-v"><code>{{ currentStep.api?.service || '—' }}</code></div>
-          </div>
-          <div class="info-block">
-            <div class="info-k">kind</div>
-            <div class="info-v"><span class="badge">{{ inferProtocol(currentStep) }}</span></div>
-          </div>
-          <div class="info-block">
-            <div class="info-k">enabled</div>
-            <div class="info-v">
-              <span :class="['status-pill', currentOrch?.enabled ? 'on' : 'off']">
-                {{ currentOrch?.enabled ? '✓ 启用' : '✗ 禁用' }}
-              </span>
-            </div>
-          </div>
-          <!-- 右栏按签页分流(设计 §3.4):Request 页请求侧统计;
-               Response 页 extracts + 响应契约(全状态码,含 ✓ 标) -->
-          <template v-if="activeIoTab === 'request'">
+          <div v-if="currentStep" class="info-body">
             <div class="info-block">
-              <div class="info-k">请求侧</div>
+              <div class="info-k">HTTP</div>
               <div class="info-v">
-                <span class="badge">{{ fieldBindings(currentStep).length }} 字段</span>
-                <span class="badge">{{ Object.keys(currentStep.api?.headers || {}).length }} headers</span>
+                <span v-if="currentStep.api?.method" class="method-badge" :class="`m-${currentStep.api.method.toLowerCase()}`">{{ currentStep.api.method }}</span>
+                <code>{{ currentStep.api?.path || '—' }}</code>
               </div>
             </div>
-          </template>
-          <template v-else>
-            <div v-if="extractStrategies(currentStep).length" class="info-block">
-              <div class="info-k">extracts</div>
+            <div class="info-block">
+              <div class="info-k">service</div>
+              <div class="info-v"><code>{{ currentStep.api?.service || '—' }}</code></div>
+            </div>
+            <div class="info-block">
+              <div class="info-k">kind</div>
+              <div class="info-v"><span class="badge">{{ inferProtocol(currentStep) }}</span></div>
+            </div>
+            <div class="info-block">
+              <div class="info-k">enabled</div>
               <div class="info-v">
-                <div v-for="(ex, i) in extractStrategies(currentStep)" :key="i" class="extract-line">
-                  <code>{{ ex.target || '?' }}</code> ← <code>{{ ex.expression || '?' }}</code>
+                <span :class="['status-pill', currentOrch?.enabled ? 'on' : 'off']">
+                  {{ currentOrch?.enabled ? '✓ 启用' : '✗ 禁用' }}
+                </span>
+              </div>
+            </div>
+            <!-- 右栏按签页分流(设计 §3.4):Request 页请求侧统计;
+                 Response 页 extracts + 响应契约(全状态码,含 ✓ 标) -->
+            <template v-if="activeIoTab === 'request'">
+              <div class="info-block">
+                <div class="info-k">请求侧</div>
+                <div class="info-v">
+                  <span class="badge">{{ fieldBindings(currentStep).length }} 字段</span>
+                  <span class="badge">{{ Object.keys(currentStep.api?.headers || {}).length }} headers</span>
                 </div>
               </div>
-            </div>
-            <!-- 响应契约:全状态码(升级自旧"响应字段 (200)"块) -->
-            <div v-if="currentRespSpecs.length" class="info-block">
-              <div class="info-k">响应契约 (全状态码)</div>
-              <div class="info-v">
-                <div v-for="spec in currentRespSpecs" :key="spec.status" class="resp-contract-group">
-                  <span class="resp-status-badge" :class="spec.status < 400 ? 'ok' : 'err'">{{ spec.status }}</span>
-                  <div class="resp-contract-fields">
-                    <div v-for="rf in spec.fields" :key="rf.name" class="resp-field-line">
-                      <code>{{ rf.name }}</code>
-                      <span v-if="spec.assertable.includes(rf.path)" class="assertable-mark" title="可断言字段">✓</span>
-                      <span class="resp-field-kind">{{ rf.ui_kind }}</span>
+            </template>
+            <template v-else>
+              <div v-if="extractStrategies(currentStep).length" class="info-block">
+                <div class="info-k">extracts</div>
+                <div class="info-v">
+                  <div v-for="(ex, i) in extractStrategies(currentStep)" :key="i" class="extract-line">
+                    <code>{{ ex.target || '?' }}</code> ← <code>{{ ex.expression || '?' }}</code>
+                  </div>
+                </div>
+              </div>
+              <!-- 响应契约:全状态码(升级自旧"响应字段 (200)"块) -->
+              <div v-if="currentRespSpecs.length" class="info-block">
+                <div class="info-k">响应契约 (全状态码)</div>
+                <div class="info-v">
+                  <div v-for="spec in currentRespSpecs" :key="spec.status" class="resp-contract-group">
+                    <span class="resp-status-badge" :class="spec.status < 400 ? 'ok' : 'err'">{{ spec.status }}</span>
+                    <div class="resp-contract-fields">
+                      <div v-for="rf in spec.fields" :key="rf.name" class="resp-field-line">
+                        <code>{{ rf.name }}</code>
+                        <span v-if="spec.assertable.includes(rf.path)" class="assertable-mark" title="可断言字段">✓</span>
+                        <span class="resp-field-kind">{{ rf.ui_kind }}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </template>
-          <!-- 变量注册表(#1 变量工作台):从 ③ 配置步迁入 — 变量的生产与
-               消费都发生在本页,就近总览 -->
-          <VariableRegistryPanel
-            :steps="local"
-            :config-vars="draftStore.draft?.definition?.config?.vars"
-          />
+            </template>
+          </div>
+          <div v-else class="info-empty muted">无选中 step</div>
         </div>
-        <div v-else class="info-empty muted">无选中 step</div>
 
-        <!-- 常量池(编排页常驻;VRP 之下,无选中 step 时也在) -->
+        <!-- 变量注册表(#1 变量工作台):从 ③ 配置步迁入 — 变量的生产与
+             消费都发生在本页,就近总览;草稿级数据,无选中 step 也常驻 -->
+        <VariableRegistryPanel
+          :steps="local"
+          :config-vars="draftStore.draft?.definition?.config?.vars"
+        />
+
+        <!-- 常量池(编排页常驻;必须保持 aside 最后一个子元素,F12) -->
         <ConstantPoolPanel
           :entries="constantsStore.entries"
           @seed-var="(n: string, s: Record<string, unknown>) => emit('seedVar', n, s)"
@@ -1051,9 +1055,25 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
 @media (max-width: 1280px) {
   .three-col { grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); }
   .col-info { grid-column: 1 / -1; }
+  /* 全宽时三卡自适应并肩(step 信息横贯,VRP+CPP 并排;~640px 下自动单列) */
+  .col-stack {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+    align-items: start;
+  }
+  .col-stack .info-card { grid-column: 1 / -1; }
 }
 @media (max-width: 860px) {
   .three-col { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* 右栏卡堆: step 信息 / 变量注册表 / 常量池 三张独立卡,块间隔对齐 .three-col */
+.col-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
 }
 
 .col {

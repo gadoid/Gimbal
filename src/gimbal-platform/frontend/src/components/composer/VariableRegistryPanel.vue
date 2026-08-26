@@ -1,7 +1,8 @@
 <!--
-  VariableRegistryPanel.vue — 变量注册表 (#3 变量全局化 → #1 迁 Canvas 紧凑形态)
+  VariableRegistryPanel.vue — 变量注册表 (#3 变量全局化 → #1 迁 Canvas 独立卡)
 
-  只读面板,挂在 ④ 步骤编辑页(Canvas)右栏 col-info:把草稿里"会产生的
+  只读面板,挂在 ④ 步骤编辑页(Canvas)右栏 col-stack(「step 信息」块之外
+  的独立卡,草稿级数据无选中 step 也常驻):把草稿里"会产生的
   变量"(config.vars + 各 step 的 extract)摊开成紧凑单列行:
   变量名 | 出身徽章 | 产出者。同名多产出聚合为一行 + 黄标"后者生效"
   (运行期 promote 静默覆盖,与 channels 语义一致)。
@@ -13,8 +14,9 @@
 -->
 <template>
   <div class="vr-panel">
-    <div class="vr-title">
-      变量注册表 <span class="vr-count">{{ rows.length }}</span>
+    <div class="vr-head">
+      <span class="vr-title">变量注册表</span>
+      <span class="vr-count">{{ rows.length }}</span>
     </div>
 
     <div v-if="!rows.length" class="vr-empty">
@@ -107,31 +109,44 @@ const unregisteredRefs = computed(() => {
 </script>
 
 <style scoped>
-/* 紧凑单列形态(col-info 240-300px 适配) */
+/* 独立白卡外壳(= Canvas .col 配方,与 ConstantPoolPanel 同款):
+   从「step 信息」块拆出后作为 col-stack 中的独立卡常驻 */
 .vr-panel {
-  padding: 10px 12px;
-  background: var(--c-bg-secondary);
+  padding: 16px 18px;
+  background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: 8px;
-  display: flex; flex-direction: column; gap: 4px;
+  border-radius: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+/* 分隔线卡头(= .col-head 节奏,镜像 cp-head) */
+.vr-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 10px; border-bottom: 1px solid var(--c-divider);
 }
 .vr-title {
-  font-size: 11px; font-weight: 600; color: var(--c-text-tertiary);
-  text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 14px; font-weight: 600; color: var(--c-text-primary);
 }
 .vr-count {
   font-family: var(--font-mono);
-  background: var(--c-surface); border: 1px solid var(--c-border);
-  border-radius: 8px; padding: 0 6px; margin-left: 4px; font-size: 10px;
+  background: var(--c-bg-secondary); border: 1px solid var(--c-border);
+  border-radius: 999px; padding: 0 7px; font-size: 10px;
+  color: var(--c-text-secondary);
 }
-.vr-empty { font-size: 11px; color: var(--c-text-tertiary); line-height: 1.6; }
+/* 虚线空态框(对齐 .c-add 虚线添加惯例) */
+.vr-empty {
+  border: 1px dashed var(--c-border-strong);
+  border-radius: 6px; padding: 14px 12px;
+  font-size: 11.5px; color: var(--c-text-tertiary);
+  line-height: 1.6; text-align: center;
+}
 
+/* 灰底行(编辑器嵌套内容惯例: 白卡上灰条) */
 .vr-row {
   display: grid; grid-template-columns: 1fr 56px auto; gap: 6px;
   align-items: center;
-  padding: 3px 6px; border-radius: 5px;
+  padding: 4px 8px; border-radius: 6px;
   font-size: 11.5px;
-  background: var(--c-surface);
+  background: var(--c-bg-secondary);
 }
 .vr-name {
   font-family: var(--font-mono); font-weight: 600;
@@ -150,8 +165,11 @@ const unregisteredRefs = computed(() => {
   background: #fef3c7; color: #92400e; font-size: 9px; font-weight: 600;
 }
 
+/* 未注册引用琥珀提示条(白卡上软底) */
 .vr-unregistered {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
+  background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;
+  padding: 6px 8px;
   font-size: 10px; font-family: var(--font-mono);
   color: #92400e; line-height: 1.6;
 }

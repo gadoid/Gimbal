@@ -111,43 +111,60 @@ function insertValue(e: ConstantEntry): void {
 </script>
 
 <style scoped>
-/* 视觉对齐 VariableRegistryPanel(col-info 240-300px 适配) */
+/* 独立白卡外壳(= Canvas .col 配方),双挂载自带卡片:
+   rail(步骤 0-2)与 col-info(步骤 3)均直接持有本组件,不靠父级包 .col */
 .cp-panel {
-  padding: 10px 12px;
-  background: var(--c-bg-secondary);
+  padding: 16px 18px;
+  background: var(--c-surface);
   border: 1px solid var(--c-border);
-  border-radius: 8px;
+  border-radius: 10px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
-.cp-head { display: flex; align-items: center; justify-content: space-between; }
+/* 分隔线卡头(= .col-head 节奏) */
+.cp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--c-divider);
+}
 .cp-title {
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 600;
-  color: var(--c-text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  color: var(--c-text-primary);
 }
 .cp-count {
   font-family: var(--font-mono);
-  background: var(--c-surface);
+  background: var(--c-bg-secondary);
   border: 1px solid var(--c-border);
-  border-radius: 8px;
-  padding: 0 6px;
-  margin-left: 4px;
+  border-radius: 999px;
+  padding: 0 7px;
+  margin-left: 6px;
   font-size: 10px;
+  color: var(--c-text-secondary);
 }
 .cp-manage { color: var(--c-text-tertiary); text-decoration: none; font-size: 11px; }
-.cp-manage:hover { color: var(--c-text-primary, #0f172a); }
-.cp-empty { font-size: 11px; color: var(--c-text-tertiary); line-height: 1.6; }
+.cp-manage:hover { color: var(--c-accent); }
+/* 虚线空态框(对齐 .c-add 虚线添加惯例) */
+.cp-empty {
+  border: 1px dashed var(--c-border-strong);
+  border-radius: 6px;
+  padding: 14px 12px;
+  font-size: 11.5px;
+  color: var(--c-text-tertiary);
+  line-height: 1.6;
+  text-align: center;
+}
+/* 灰底条目(编辑器嵌套内容惯例: 白卡上灰条) */
 .cp-entry {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 4px 6px;
-  border-radius: 5px;
-  background: var(--c-surface);
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--c-bg-secondary);
 }
 .cp-row {
   display: flex;
@@ -184,14 +201,16 @@ function insertValue(e: ConstantEntry): void {
   min-width: 0;
 }
 .cp-actions { display: inline-flex; gap: 3px; flex-shrink: 0; }
+/* 无边框幽灵钮: 灰条上悬浮高亮(accent-soft, 对齐 .c-add hover) */
 .cp-btn {
-  border: 1px solid var(--c-border);
+  border: none;
   background: transparent;
   color: var(--c-text-tertiary);
   border-radius: 4px;
   font-size: 10px;
-  padding: 0 5px;
+  padding: 1px 6px;
   cursor: pointer;
+  transition: background 0.15s, color 0.15s;
 }
-.cp-btn:hover { background: var(--c-bg-secondary); color: var(--c-text-primary, #0f172a); }
+.cp-btn:hover { background: var(--c-accent-soft); color: var(--c-accent); }
 </style>

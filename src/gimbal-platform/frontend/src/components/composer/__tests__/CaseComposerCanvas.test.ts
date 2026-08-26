@@ -466,7 +466,7 @@ describe('CaseComposerCanvas — 常量池 col-info 常驻(F12/F13)', () => {
     updated_at: '',
   }
 
-  function mountCanvasWithPool(entries: ConstantEntry[]) {
+  function mountCanvasWithPool(entries: ConstantEntry[], stepList: StepView[] = [mkStep()]) {
     const store = useConstantsStore()
     store.entries = entries
     const inserter = useInsertTarget()
@@ -474,7 +474,7 @@ describe('CaseComposerCanvas — 常量池 col-info 常驻(F12/F13)', () => {
     const Parent = defineComponent({
       setup() {
         provide(INSERT_TARGET_KEY, inserter)
-        const steps = ref([mkStep()])
+        const steps = ref(stepList)
         const orch = ref(mkOrch(0))
         return () =>
           h(CaseComposerCanvas, {
@@ -502,6 +502,20 @@ describe('CaseComposerCanvas — 常量池 col-info 常驻(F12/F13)', () => {
     expect(info.exists()).toBe(true)
     const panel = info.find('.cp-panel')
     expect(panel.exists()).toBe(true) // 无选中 step 时也常驻
+    expect(info.element.lastElementChild!.classList.contains('cp-panel')).toBe(true)
+    w.unmount()
+  })
+
+  it('F12b: 拆分后三卡独立 — 0 步(无选中 step)时 VRP 仍常驻, CPP 仍为末位', async () => {
+    const w = mountCanvasWithPool([], [])
+    await flushPromises()
+    const info = w.find('.col-info')
+    // step 信息卡自身空态(VRP/CPP 不再嵌在其结构里)
+    expect(info.find('.info-card').exists()).toBe(true)
+    expect(info.find('.info-empty').exists()).toBe(true)
+    // VRP 独立成卡:草稿级数据,无选中 step 也常驻(与 CPP 同语义)
+    expect(info.find('.vr-panel').exists()).toBe(true)
+    // CPP 保持 aside 最后一个子元素(F12 语义不因拆分回退)
     expect(info.element.lastElementChild!.classList.contains('cp-panel')).toBe(true)
     w.unmount()
   })
