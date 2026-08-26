@@ -62,6 +62,11 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/constants',
+    component: () => import('@/views/ConstantsPool.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     // P5 适配中心 —— admin 全量视图;member 自动只读 owner 视图(页内 scope=mine)
     path: '/adaptations',
     component: () => import('@/views/AdaptationCenter.vue'),

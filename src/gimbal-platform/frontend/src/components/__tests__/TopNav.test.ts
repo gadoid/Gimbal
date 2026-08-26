@@ -39,7 +39,7 @@ describe('TopNav', () => {
     } as never)
   })
 
-  it('renders five real router-link anchors', async () => {
+  it('renders six real router-link anchors', async () => {
     const auth = useAuthStore()
     auth.accessToken = 'tok'
     auth.currentUser = { id: 1, username: 'alice', is_admin: true } as never
@@ -53,7 +53,7 @@ describe('TopNav', () => {
     })
 
     const links = w.findAll('a.nav-entry')
-    expect(links.length).toBe(5)
+    expect(links.length).toBe(6)
 
     // Each link points to the right path(P3:工作台/公共库已并入场景库)
     const hrefs = links.map((l) => l.attributes('href'))
@@ -97,7 +97,7 @@ describe('TopNav', () => {
 
     const hrefs = w.findAll('a.nav-entry').map((l) => l.attributes('href'))
     expect(hrefs).not.toContain('/admin/users')
-    expect(hrefs.length).toBe(4)
+    expect(hrefs.length).toBe(5)
   })
 
   it('does not show nav entries when not authenticated', () => {

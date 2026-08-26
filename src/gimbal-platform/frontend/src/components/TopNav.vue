@@ -45,6 +45,7 @@ import type { Component } from 'vue'
 import { computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
+  Coin,
   Collection,
   Connection,
   DataAnalysis,
@@ -83,6 +84,7 @@ const allEntries: NavEntry[] = [
   { path: '/executions', label: '执行历史', icon: DataAnalysis },
   { path: '/adaptations', label: '适配中心', icon: Connection },
   { path: '/auths', label: '认证管理', icon: Lock },
+  { path: '/constants', label: '常量池', icon: Coin },
   { path: '/admin/users', label: '用户管理', icon: Setting, adminOnly: true },
 ]
 
