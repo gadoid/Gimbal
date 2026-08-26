@@ -968,6 +968,11 @@ async function onRunConfirm(
 }
 .body-split.with-rail {
   grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  /* 整体限宽 1280(c-page 上限)+16(间隔)+300(rail 上限)并居中:
+     主单元恰为 1280 → c-page 撑满,rail 以精确 16px 贴主卡;
+     否则 c-page 在更宽单元里居中,卡与 rail 之间夹 ~54px 死白 */
+  max-width: 1596px;
+  margin: 0 auto;
 }
 .body-main { min-width: 0; min-height: 0; }
 .pool-rail {
