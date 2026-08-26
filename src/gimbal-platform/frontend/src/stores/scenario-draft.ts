@@ -17,6 +17,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as yaml from 'js-yaml'
 import { previewPlateDraft } from '@/api/scenario-composer'
+import { copyText } from '@/utils/clipboard'
 import { downloadFile } from '@/utils/download'
 import { exportTimestamp } from '@/utils/datetime'
 import { ElMessage } from 'element-plus'
@@ -94,19 +95,9 @@ export const useScenarioDraftStore = defineStore('scenario-draft', () => {
 
   async function copyJson(): Promise<void> {
     const converted = await fetchConverted()
-    const text = JSON.stringify(converted, null, 2)
-    try {
-      await navigator.clipboard.writeText(text)
-      ElMessage.success('plate 转换后的 JSON 已复制到剪贴板')
-    } catch {
-      const ta = document.createElement('textarea')
-      ta.value = text
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
-      ElMessage.success('plate 转换后的 JSON 已复制到剪贴板')
-    }
+    const ok = await copyText(JSON.stringify(converted, null, 2))
+    if (ok) ElMessage.success('plate 转换后的 JSON 已复制到剪贴板')
+    else ElMessage.error('复制失败 — 请手动复制')
   }
 
   return {
