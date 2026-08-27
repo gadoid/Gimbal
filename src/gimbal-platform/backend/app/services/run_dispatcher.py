@@ -689,6 +689,7 @@ async def _fanout(
                             step_to=halt_at,
                             report_dir=case_dir / "reports",
                             cwd=case_dir,
+                            engine_log_path=case_dir / "engine.log",
                         )
                     log_line["runResult"] = result.run_result
                     if result.launch_status != "ok":

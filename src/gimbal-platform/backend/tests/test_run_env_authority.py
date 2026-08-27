@@ -10,7 +10,7 @@ from tests.helpers import make_draft, register_and_login, test_env, wait_until
 
 # ─── 测试基座(同 test_run_cancel:mock launch/convert 走 /api/runs 全链)──
 async def _fake_launch(case_path, *, step_to=None, report_dir=None,
-                       cwd=None, timeout=None):
+                       cwd=None, timeout=None, engine_log_path=None):
     from tests.helpers import launch_ok
 
     return launch_ok()

@@ -47,7 +47,7 @@ def _patch_launch_capture(
     """把 ``gimbal_launcher.launch`` 换成读 case.json 并捕获的假实现。"""
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
-                       cwd=None, timeout=None):
+                       cwd=None, timeout=None, engine_log_path=None):
         sink.append(json.loads(Path(case_path).read_text(encoding="utf-8")))
         return _ok()
 
@@ -129,7 +129,7 @@ async def test_parallel_limits_concurrency(
     done = 0
 
     async def _capture(case_path, *, step_to=None, report_dir=None,
-                       cwd=None, timeout=None):
+                       cwd=None, timeout=None, engine_log_path=None):
         nonlocal in_flight, max_in_flight, done
         in_flight += 1
         max_in_flight = max(max_in_flight, in_flight)

@@ -149,11 +149,16 @@ async def launch(
     report_dir: Path | str | None = None,
     cwd: Path | str | None = None,
     timeout: float | None = None,
+    engine_log_path: Path | None = None,
 ) -> LaunchResult:
     """执行 ``gimbal run launch <case_path>``,同步返回 LaunchResult。
 
     ``timeout`` 缺省取 ``settings.GIMBAL_TIMEOUT_SEC``;到点 kill 进程,
     返回 ``launch_status="timeout"``(进程残留不可能——kill 后仍 await)。
+
+    ``engine_log_path``:stderr 逐行流式落盘(边读边写,spec §9.2);
+    超时 kill 保留已读部分,spawn 失败不产生该文件。stdout JSON
+    解析语义不受影响(stderr 仍会在内存留一份供退化分支取尾行)。
     """
     argv = build_argv(case_path, step_to=step_to, report_dir=report_dir)
     timeout = settings.GIMBAL_TIMEOUT_SEC if timeout is None else timeout
@@ -195,18 +200,43 @@ async def launch(
             argv=argv,
         )
 
+    # stderr 流式落盘(spec §9.2):逐行边读边写,超时 kill 保留已读
+    # 部分;内存同步留一份(stderr_parts)供退化分支取错误尾行 —
+    # 与旧 communicate() 的 stderr 语义保持一致。newline="" 保字节
+    # 忠实:Windows 子进程 stderr 行尾是 \r\n,禁用二次转换。
+    log_fh = (
+        engine_log_path.open("w", encoding="utf-8", newline="")
+        if engine_log_path else None
+    )
+    stderr_parts: list[str] = []
+
+    async def _drain_stderr() -> None:
+        assert proc.stderr is not None
+        while True:
+            raw = await proc.stderr.readline()
+            if not raw:
+                break
+            text = raw.decode("utf-8", errors="replace")
+            stderr_parts.append(text)
+            if log_fh:
+                log_fh.write(text)
+
+    stdout_task = asyncio.create_task(proc.stdout.read())
+    stderr_task = asyncio.create_task(_drain_stderr())
     try:
-        stdout_b, stderr_b = await asyncio.wait_for(
-            proc.communicate(), timeout=timeout
+        await asyncio.wait_for(
+            asyncio.gather(stdout_task, stderr_task, proc.wait()),
+            timeout=timeout,
         )
     except asyncio.TimeoutError:
-        # kill 后仍 communicate() 收尸,避免进程/管道残留。
+        # kill 后 wait() 收尸,避免进程残留;管道随进程关闭,
+        # 在飞读取任务已被 wait_for 取消,finally 落盘已读部分。
         try:
             proc.kill()
         except ProcessLookupError:  # pragma: no cover - race with exit
             pass
         try:
-            await proc.communicate()
+            await proc.wait()
         except Exception:  # noqa: BLE001 - best-effort reaping
             pass
         logger.warning(
@@ -217,9 +247,16 @@ async def launch(
             error=f"launch timeout after {timeout}s",
             argv=argv,
         )
+    finally:
+        if log_fh:
+            log_fh.flush()
+            log_fh.close()
+        for t in (stdout_task, stderr_task):
+            if not t.done():
+                t.cancel()
 
-    stdout = stdout_b.decode("utf-8", errors="replace")
-    stderr = stderr_b.decode("utf-8", errors="replace")
+    stdout = stdout_task.result().decode("utf-8", errors="replace")
+    stderr = "".join(stderr_parts)
     exit_code = proc.returncode
 
     counts = parse_run_result(stdout)
