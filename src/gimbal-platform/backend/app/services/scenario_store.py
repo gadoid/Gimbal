@@ -21,6 +21,7 @@ from ..models.composer_data_set import ComposerDataSet
 # 删除 ScenarioStep;ScenarioMeta 仍保留(读侧用)
 from ..schemas.scenario_composer import (
     Orchestration,
+    RunScheme,
     Scenario,
     ScenarioDraft,
     ScenarioMeta,
@@ -131,14 +132,38 @@ async def update(
         "meta": server_owned.model_dump(by_alias=True, mode="json"),
     }
     row.owner = effective_owner
+    # runSchemes 键归窄端点(PUT /{id}/run-schemes)专管:整体替换前从现有
+    # payload 透传保留 — 编辑器 PUT(orchestration 不带 runSchemes)永不
+    # 覆盖已存方案(spec §3.2)。存量场景无此键 → 保留为空列表。
+    stored_orch = ((row.payload or {}).get("orchestration") or {})
+    orch_data = draft.orchestration.model_dump(by_alias=True, mode="json")
+    orch_data["runSchemes"] = stored_orch.get("runSchemes") or []   # 窄端点专管键
     row.payload = ScenarioDraft(
         definition=stored_definition,
-        orchestration=draft.orchestration,
+        orchestration=Orchestration.model_validate(orch_data),
     ).model_dump(by_alias=True, mode="json")
     await endpoint_ref_index.sync_scenario(db, scenario_id, row.payload)
     await db.commit()
     await db.refresh(row)
     return await to_read_shape(db, row, user_id=user_id)
+
+
+async def put_run_schemes(
+    db: AsyncSession, scenario_id: str, schemes: list[RunScheme]
+) -> list[RunScheme]:
+    """整键替换 orchestration.runSchemes(窄端点专用写路径)。
+
+    只动 runSchemes 一个键,definition/steps/resourceMeta 原样保留;
+    调用方(路由)已做存在性/属主/重名校验。返回入参 schemes 原样。
+    """
+    row = await get_row(db, scenario_id)          # None → 调用方 404
+    payload = dict(row.payload or {})
+    orch = dict(payload.get("orchestration") or {})
+    orch["runSchemes"] = [s.model_dump(by_alias=True, mode="json") for s in schemes]
+    payload["orchestration"] = orch
+    row.payload = payload
+    await db.commit()
+    return schemes
 
 
 async def delete(db: AsyncSession, scenario_id: str) -> None:

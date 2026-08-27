@@ -106,11 +106,18 @@ class Orchestration(BaseModel):
 
     steps is index-aligned with definition.steps (same order, same length).
     resourceMeta is name-aligned with definition.resource keys.
+    runSchemes is the run-scheme sidecar (spec §3.1): owned exclusively by
+    PUT /scenarios/{id}/run-schemes — composer saves pass the stored value
+    through untouched (scenario_store.update), so the key never round-trips
+    through the editor. Old payloads without the key deserialize to [].
     """
     model_config = _CAMEL
 
     steps: list[StepOrchestration] = Field(default_factory=list)
     resourceMeta: dict[str, str] = Field(default_factory=dict)
+    # RunScheme 定义在后文(依赖 ServiceBinding);future annotations 使该
+    # 前向引用延迟解析,Orchestration.model_rebuild() 在其定义后闭合。
+    run_schemes: list[RunScheme] = Field(default_factory=list, alias="runSchemes")
 
 
 class ScenarioDraft(BaseModel):
@@ -190,6 +197,30 @@ class ServiceBinding(BaseModel):
 
     auth_alias: str | None = Field(default=None, alias="authAlias", max_length=128)
     url: str | None = Field(default=None, alias="url", max_length=512)
+
+
+class RunScheme(BaseModel):
+    """场景级运行方案(orchestration sidecar,plate 零感知,spec §3.1)。"""
+    model_config = _CAMEL
+
+    name: str = Field(min_length=1, max_length=64)
+    env_id: str | None = Field(default=None, alias="envId", max_length=64)
+    data_set_ids: list[str] = Field(default_factory=list, alias="dataSetIds")
+    service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
+                                                        alias="serviceBindings")
+    plugins: Any = None        # 预埋,gimbal 就绪前 no-op
+    log_sub: Any = Field(default=None, alias="logSub")  # 预埋,同上
+
+
+class RunSchemesIn(BaseModel):
+    """PUT /scenarios/{id}/run-schemes 请求体。"""
+    model_config = _CAMEL
+
+    schemes: list[RunScheme]
+
+
+# Orchestration.run_schemes 的前向引用在此闭合(见 Orchestration 字段注释)。
+Orchestration.model_rebuild()
 
 
 class ExportOverlay(BaseModel):
@@ -322,6 +353,8 @@ __all__ = [
     "RunEnv",
     "RunRequest",
     "RunResponse",
+    "RunScheme",
+    "RunSchemesIn",
     "Scenario",
     "ScenarioDraft",
     "ScenarioMeta",
