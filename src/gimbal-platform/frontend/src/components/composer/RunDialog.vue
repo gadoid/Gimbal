@@ -367,7 +367,9 @@ watch(selectedScheme, (v) => {
     next[svc] = src?.serviceBindings?.[svc] ? { ...src.serviceBindings[svc]! } : {}
   bindings.value = next
   if (src?.envId && props.envs.some((e) => e.envId === src.envId)) selectedEnv.value = src.envId
-  if (src?.dataSetIds?.length) selectedDatasets.value = src.dataSetIds.filter((id) =>
+  // 无条件回填:基线方案(dataSetIds: [])也要把勾选重置回基线,
+  // 不能沿用打开时的当前勾选。
+  selectedDatasets.value = (src?.dataSetIds ?? []).filter((id) =>
     props.dataSets.some((d) => d.datasetId === id))
 })
 
@@ -461,7 +463,8 @@ function onSaveScheme() {
     plugins: null,
     logSub: null,
   })
-  schemeNameDraft.value = ''
+  // 不立即清空方案名草稿:PUT 失败(如 409 重名)时用户改名即可重试,
+  // 清空会丢掉已输入的名字 — 由用户手动编辑/清空。
 }
 
 /** 新建数据集:跳转数据集编辑器(结构由调色板/稀疏行模型约束,

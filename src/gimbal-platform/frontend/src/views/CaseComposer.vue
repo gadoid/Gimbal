@@ -206,7 +206,7 @@
       </div>
     </footer>
 
-    <!-- ═══════ Run dialog (env + data-set + auths picker) ═══════ -->
+    <!-- ═══════ Run dialog (方案栏 + env/ds + 用户与服务绑定) ═══════ -->
     <RunDialog
       v-if="runDialogOpen"
       :scenario="scenario"
@@ -215,10 +215,14 @@
       :running="runDispatching"
       :last-run-id="lastRunId"
       :last-run-error="lastRunError"
-      :owner-auth-aliases="ownerAuthAliases"
       :step-orchestration-names="stepNames"
+      :schemes="runSchemes"
+      :last-run-overlay="lastRunOverlay"
+      :referenced-services="referencedServices"
+      :auth-options="authOptions"
       @close="runDialogOpen = false"
       @confirm="onRunConfirm"
+      @save-scheme="onSaveScheme"
     />
   </div>
 </template>
@@ -246,7 +250,10 @@ import { confirmAction } from '@/utils/confirmAction'
 import { lintDraft } from '@/utils/draft-lint'
 import * as api from '@/api/scenario-composer'
 import { list as listAuthSessions } from '@/api/auth_sessions'
-import type { MergePolicy } from '@/api/executions'
+import { listExecutions } from '@/api/executions'
+import type {
+  RunRequest, RunScheme, RunOverlay, ServiceBinding,
+} from '@/api/scenario-composer'
 import type {
   Scenario, DataSetSummary, RunEnv, Orchestration, ScenarioDraft,
 } from '@/types/scenario-composer'
@@ -304,7 +311,10 @@ const definition = ref<ScenarioView>({
   resource: {},
   steps: [],
 })
-const orchestration = ref<Orchestration>({
+/** Orchestration + 运行方案 sidecar 键(后端 Task 10 已收录 runSchemes,
+ *  前端 types 侧 Orchestration 尚未补 — 本地交叉类型桥接,不改共享类型)。 */
+type OrchestrationWithSchemes = Orchestration & { runSchemes?: RunScheme[] }
+const orchestration = ref<OrchestrationWithSchemes>({
   steps: [],
   resourceMeta: {},
 })
@@ -318,6 +328,8 @@ const runDialogOpen = ref(false)
 const runDispatching = ref(false)
 const lastRunId = ref<string | null>(null)
 const lastRunError = ref<string | null>(null)
+/** 上次运行覆盖层(方案栏「上次运行」回填源;openRunDialog 拉取,仅三字段) */
+const lastRunOverlay = ref<RunOverlay | null>(null)
 // owner 凭证池别名(懒加载:首次打开运行弹框时拉取;失败静默 — 不阻塞运行)
 const ownerAuthAliases = ref<string[]>([])
 
@@ -326,14 +338,29 @@ const canRun = computed(() => !!scenario.value && steps.value.length > 0)
 /** stepTo 下拉的展示名:平台编排态 orchestration.steps[].name(plate Step 无 name) */
 const stepNames = computed(() => orchestration.value.steps.map((s) => s.name))
 
-/** 打开运行弹框;首次打开顺带拉凭证池别名(执行认证选项的并集来源) */
-function openRunDialog() {
+/** 打开运行弹框:先开弹层(网络慢不阻塞交互),再并行拉 上次运行覆盖层
+ *  与 owner 凭证池别名(两者失败均静默 — 不阻塞运行)。 */
+async function openRunDialog() {
+  if (!scenarioId.value) return
   runDialogOpen.value = true
   if (ownerAuthAliases.value.length === 0) {
     listAuthSessions()
       .then((sessions) => { ownerAuthAliases.value = sessions.map((s) => s.alias) })
       .catch(() => { /* 凭证池不可达不阻塞运行 */ })
   }
+  try {
+    const res = await listExecutions({ scenarioId: scenarioId.value, limit: 1 })
+    const cfg = res.items[0]?.config
+    // 只回填 overlay 三字段:stepTo/nRuns/parallel 等其余 base_config 键
+    // 不进方案栏(方案快照语义),三字段全缺 → 视为无可回填。
+    lastRunOverlay.value = cfg && (cfg.envId || cfg.dataSetIds?.length || cfg.serviceBindings)
+      ? {
+          envId: cfg.envId ?? null,
+          dataSetIds: cfg.dataSetIds ?? [],
+          serviceBindings: cfg.serviceBindings ?? {},
+        }
+      : null
+  } catch { lastRunOverlay.value = null }
 }
 
 // 步骤条进度 (0% → 100%) — 当前 step 之前的部分用绿色,之后用灰色
@@ -364,6 +391,24 @@ watch(
   },
   { deep: true, immediate: true },
 )
+
+// ── RunDialog props 装配(Task 12)────────────────────────────────
+/** 已存运行方案:orchestration sidecar(Task 10 窄端点专管键,编辑器
+ *  PUT 对该键透传保留 — 这里只读,写走 onSaveScheme → putRunSchemes)。 */
+const runSchemes = computed<RunScheme[]>(() =>
+  (draftStore.draft?.orchestration as OrchestrationWithSchemes | undefined)?.runSchemes ?? [])
+/** 场景引用的 service 名(steps[].api.service 去重;用户与服务区每服务一行) */
+const referencedServices = computed(() => {
+  const seen = new Set<string>()
+  for (const st of (draftStore.draft?.definition?.steps ?? []) as { api?: { service?: string } }[])
+    if (st?.api?.service) seen.add(st.api.service)
+  return [...seen]
+})
+/** 绑定下拉选项:owner 凭证池别名 ∪ 场景内置 users 键 */
+const authOptions = computed(() => [...new Set([
+  ...ownerAuthAliases.value,
+  ...Object.keys(definition.value.config?.users ?? {}),
+])])
 
 /** Canvas"设为变量"上报:登记共享变量默认值(D8;vars 扁平 name→value,零 schema 变化) */
 function onVarPromote(name: string, value: unknown) {
@@ -478,14 +523,23 @@ async function loadScenario() {
     // orchestration 与 definition.steps 同序同长。
     // 优先用持久化值 (s.orchestration);缺失或长度不齐 (编辑过步骤后过期)
     // 时回退到默认重建 (全启用、展示名空、resourceMeta 空),保证 index 对齐。
+    // runSchemes 与步骤无关,两条分支都原样带回 — 否则重载后方案丢失,
+    // 下次存方案会整表覆盖掉已存方案。
     const persistedOrch = s.orchestration
+    const persistedSchemes
+      = (persistedOrch as OrchestrationWithSchemes | undefined)?.runSchemes
     const inSync = persistedOrch
       && persistedOrch.steps.length === definition.value.steps.length
     orchestration.value = inSync
-      ? { steps: persistedOrch!.steps, resourceMeta: persistedOrch!.resourceMeta ?? {} }
+      ? {
+          steps: persistedOrch!.steps,
+          resourceMeta: persistedOrch!.resourceMeta ?? {},
+          runSchemes: persistedSchemes,
+        }
       : {
           steps: definition.value.steps.map(() => ({ enabled: true, name: '' })),
           resourceMeta: {},
+          runSchemes: persistedSchemes,
         }
     await loadDataSets()
     saveState.value = 'clean'
@@ -682,13 +736,10 @@ async function onRunConfirm(
   envId: string,
   dataSetIds: string[],
   opts?: {
-    stepTo?: number | null
-    injectCredentials: boolean
+    stepTo?: number
     nRuns?: number
     parallel?: number
-    prefix?: string
-    mergePolicy?: MergePolicy
-    auths?: string[]
+    serviceBindings?: Record<string, ServiceBinding>
   },
 ) {
   if (!scenario.value) {
@@ -699,25 +750,20 @@ async function onRunConfirm(
   lastRunError.value = null
   try {
     const env = envs.value.find(e => e.envId === envId) || { envId, name: envId, baseUrl: '' }
-    const resp = await api.runScenario({
+    // RunRequest 新配方(spec §6):serviceBindings 取代 auths/prefix/
+    // mergePolicy/injectCredentials;stepTo 0 合法(首步后停),只在
+    // null/undefined 时缺省;nRuns/parallel 仅非默认上送。
+    const body: RunRequest = {
       scenarioId: scenario.value.meta.scenarioId,
       dataSetIds,
       env,
-      // V1 能力移植:stepTo(引擎 halt_at)与凭证注入开关;仅在
-      // 非默认时上送,保持旧后端兼容。
       ...(opts?.stepTo != null ? { stepTo: opts.stepTo } : {}),
-      ...(opts && opts.injectCredentials === false
-        ? { injectCredentials: false } : {}),
-      // M1 执行能力:nRuns/parallel/prefix/mergePolicy,同样仅在
-      // 非默认时上送。
-      ...(opts?.mergePolicy ? { mergePolicy: opts.mergePolicy } : {}),
-      ...(opts?.nRuns && opts.nRuns > 1 ? { nRuns: opts.nRuns } : {}),
-      ...(opts?.parallel && opts.parallel > 1 ? { parallel: opts.parallel } : {}),
-      ...(opts?.prefix ? { prefix: opts.prefix } : {}),
-      // P0 执行认证:dispatcher 按 alias 解密注入 Config.users;
-      // 空选 = 不注入(等价 origin),不上送字段。
-      ...(opts?.auths?.length ? { auths: opts.auths } : {}),
-    })
+      ...(opts?.nRuns && opts.nRuns !== 1 ? { nRuns: opts.nRuns } : {}),
+      ...(opts?.parallel && opts.parallel !== 1 ? { parallel: opts.parallel } : {}),
+      ...(opts?.serviceBindings && Object.keys(opts.serviceBindings).length
+        ? { serviceBindings: opts.serviceBindings } : {}),
+    }
+    const resp = await api.runScenario(body)
     lastRunId.value = resp.runId
     ElMessage.success(`运行已发起: ${resp.runId}`)
     runDialogOpen.value = false
@@ -735,6 +781,22 @@ async function onRunConfirm(
     lastRunError.value = (e as Error).message
     showError('运行', undefined, (e as Error).message)
     runDispatching.value = false
+  }
+}
+
+/** 存为方案:同名覆盖,整表 PUT(Task 10 窄端点);落库返回值回填共享
+ *  草稿(RunDialog schemes prop 数据源)。失败弹错且不清空方案名草稿
+ *  (409 重名等用户改名即可重试)。 */
+async function onSaveScheme(scheme: RunScheme) {
+  if (!scenarioId.value) return
+  try {
+    const next = [...runSchemes.value.filter(s => s.name !== scheme.name), scheme]
+    const saved = await api.putRunSchemes(scenarioId.value, next)
+    if (draftStore.draft) {
+      ;(draftStore.draft.orchestration as OrchestrationWithSchemes).runSchemes = saved
+    }
+  } catch (e) {
+    showError('存方案', undefined, (e as Error).message)
   }
 }
 </script>
