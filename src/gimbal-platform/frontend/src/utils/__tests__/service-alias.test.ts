@@ -10,8 +10,12 @@ describe('deriveBase — 最后一个 "-" 切分 + 目录名集合成员判定(s
   it('别名:base = 目录名 → 归属 base(切分点固定,绝不切成 fin)', () => {
     expect(deriveBase('fin-service-2', CAT)).toBe('fin-service')
   })
-  it('目录名含多个 "-":fin-order-service-x-1 → fin-order-service', () => {
-    expect(deriveBase('fin-order-service-x-1', CAT)).toBe('fin-order-service')
+  it('目录名含多个 "-":fin-order-service-2 → fin-order-service', () => {
+    expect(deriveBase('fin-order-service-2', CAT)).toBe('fin-order-service')
+  })
+  it('后缀含 "-":fin-order-service-x-1 → null(裸声明,不猜)', () => {
+    // 后缀含 `-` = 非构造性别名键 → 裸声明 null,不猜(D5 固定切分)
+    expect(deriveBase('fin-order-service-x-1', CAT)).toBeNull()
   })
   it('目录名含 ".":fin.tidb-test-2 → fin.tidb-test', () => {
     expect(deriveBase('fin.tidb-test-2', CAT)).toBe('fin.tidb-test')
