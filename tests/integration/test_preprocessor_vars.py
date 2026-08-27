@@ -42,7 +42,7 @@ class TestGeneratorVar:
         )
         cfg = _make_cfg()
         pre = ScenarioPreprocessor(sc, cfg)
-        steps, _ = pre.run()
+        steps, _, _ = pre.run()
         body = steps[0].request.body
         assert isinstance(body["bl_no"], str)
         assert len(body["bl_no"]) == 12
@@ -55,7 +55,7 @@ class TestGeneratorVar:
         )
         cfg = _make_cfg()
         pre = ScenarioPreprocessor(sc, cfg)
-        steps, _ = pre.run()
+        steps, _, _ = pre.run()
         assert isinstance(steps[0].request.body["etd"], int)
 
     def test_timestamp_with_base_and_custom_format(self):
@@ -70,7 +70,7 @@ class TestGeneratorVar:
             },
             body={"etd": "${var.etd}"},
         )
-        steps, _ = ScenarioPreprocessor(sc, _make_cfg()).run()
+        steps, _, _ = ScenarioPreprocessor(sc, _make_cfg()).run()
         assert steps[0].request.body["etd"] == "2026-06-14 12:00:01"
 
     def test_time_offset_with_base(self):
@@ -85,7 +85,7 @@ class TestGeneratorVar:
             },
             body={"etd": "${var.etd}"},
         )
-        steps, _ = ScenarioPreprocessor(sc, _make_cfg()).run()
+        steps, _, _ = ScenarioPreprocessor(sc, _make_cfg()).run()
         from datetime import datetime
         assert datetime.fromtimestamp(steps[0].request.body["etd"]).strftime("%Y-%m-%d %H:%M:%S") == "2026-06-15 11:00:01"
 
@@ -96,7 +96,7 @@ class TestGeneratorVar:
         )
         cfg = _make_cfg()
         pre = ScenarioPreprocessor(sc, cfg)
-        steps, _ = pre.run()
+        steps, _, _ = pre.run()
         u = steps[0].request.body["u"]
         assert isinstance(u, str) and len(u) == 32
 
@@ -105,26 +105,26 @@ class TestLiteralVar:
     def test_int_literal(self):
         sc = _make_scenario(vars={"n": 16}, body={"n": "${var.n}"})
         cfg = _make_cfg()
-        steps, _ = ScenarioPreprocessor(sc, cfg).run()
+        steps, _, _ = ScenarioPreprocessor(sc, cfg).run()
         assert steps[0].request.body["n"] == 16
 
     def test_str_literal(self):
         sc = _make_scenario(vars={"s": "hello"}, body={"s": "${var.s}"})
         cfg = _make_cfg()
-        steps, _ = ScenarioPreprocessor(sc, cfg).run()
+        steps, _, _ = ScenarioPreprocessor(sc, cfg).run()
         assert steps[0].request.body["s"] == "hello"
 
     def test_bool_literal(self):
         sc = _make_scenario(vars={"b": False}, body={"b": "${var.b}"})
         cfg = _make_cfg()
-        steps, _ = ScenarioPreprocessor(sc, cfg).run()
+        steps, _, _ = ScenarioPreprocessor(sc, cfg).run()
         assert steps[0].request.body["b"] is False
 
     def test_none_literal(self):
         """None 字面量展开为 None（合法值）。"""
         sc = _make_scenario(vars={"x": None}, body={"x": "${var.x}"})
         cfg = _make_cfg()
-        steps, _ = ScenarioPreprocessor(sc, cfg).run()
+        steps, _, _ = ScenarioPreprocessor(sc, cfg).run()
         assert steps[0].request.body["x"] is None
 
 
@@ -136,7 +136,7 @@ class TestPrecedence:
             body={"x": "${var.x}"},
         )
         cfg = _make_cfg(vars={"x": "fixed_from_cli"})
-        steps, _ = ScenarioPreprocessor(sc, cfg).run()
+        steps, _, _ = ScenarioPreprocessor(sc, cfg).run()
         assert steps[0].request.body["x"] == "fixed_from_cli"
 
     def test_cli_var_merges_with_scenario_vars(self):
@@ -146,7 +146,7 @@ class TestPrecedence:
             body={"a": "${var.a}", "b": "${var.b}"},
         )
         cfg = _make_cfg(vars={"b": "from_cli"})
-        steps, _ = ScenarioPreprocessor(sc, cfg).run()
+        steps, _, _ = ScenarioPreprocessor(sc, cfg).run()
         body = steps[0].request.body
         assert body["a"] == "literal_a"
         assert body["b"] == "from_cli"
@@ -177,5 +177,5 @@ class TestNoVars:
         """vars 为空时不影响其他阶段。"""
         sc = _make_scenario(vars={}, body={"x": "static_value"})
         cfg = _make_cfg()
-        steps, _ = ScenarioPreprocessor(sc, cfg).run()
+        steps, _, _ = ScenarioPreprocessor(sc, cfg).run()
         assert steps[0].request.body["x"] == "static_value"

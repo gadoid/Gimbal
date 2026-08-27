@@ -54,6 +54,7 @@ sm._dispatcher.dispatch.return_value = StrategyResult(
 )
 sm._view = MagicMock()
 sm._service_base_url = "https://fin-tidb.21eflag.com/"  # properly configured
+sm._services = {}  # D7 per-step 查表(空 dict = 回落 base_url,保持 #6 语义)
 sm._on_transition = None
 sm._hooks = None
 sm._bus = None
@@ -94,6 +95,7 @@ sm2._step_schema = step_schema2
 sm2._dispatcher = MagicMock()
 sm2._view = MagicMock()
 sm2._service_base_url = ""  # empty: the bug case
+sm2._services = {}  # D7 per-step 查表(空 dict = 回落 base_url,保持 #6 语义)
 sm2._on_transition = None
 sm2._hooks = None
 sm2._bus = None
@@ -147,6 +149,7 @@ sm3._step_schema = step_schema4
 sm3._dispatcher = MagicMock()
 sm3._view = MagicMock()
 sm3._service_base_url = ""
+sm3._services = {}  # D7 per-step 查表(空 dict = 回落 base_url,保持 #6 语义)
 sm3._on_transition = None
 sm3._hooks = None
 sm3._bus = None
