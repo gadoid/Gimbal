@@ -25,7 +25,7 @@ export const useExecutionsStore = defineStore('executions', () => {
   async function fetchList(): Promise<Execution[]> {
     loading.value = true
     try {
-      const r = await api.list()
+      const r = await api.listExecutions()
       list.value = r.items
       lastError.value = ''
       return r.items

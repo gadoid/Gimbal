@@ -6,7 +6,6 @@
  * Case 层已解散 — RunRequest 即执行配方,直接挂 scenario。
  */
 import http from '@/api/http'
-import type { MergePolicy } from '@/api/executions'
 import type {
   Scenario, DataSet, DataSetSummary,
   ScenarioDraft, DataSetDraft, RunEnv,
@@ -113,26 +112,46 @@ export async function deleteDataSet(datasetId: string): Promise<void> {
 }
 
 // ── run ────────────────────────────────────────────────────────
+/** service → {authAlias?, url?} 绑定(spec §3.1/§5),与后端 ServiceBinding 同形 */
+export interface ServiceBinding {
+  authAlias?: string
+  url?: string
+}
+
+/** 场景级运行方案(orchestration sidecar,plate 零感知,spec §3.1) */
+export interface RunScheme {
+  name: string
+  envId?: string | null
+  dataSetIds: string[]
+  serviceBindings: Record<string, ServiceBinding>
+  /** 预埋(gimbal 就绪前 no-op) */
+  plugins?: unknown
+  logSub?: unknown
+}
+
+/** 运行方案覆盖层:RunDialog 上次运行回填 / 按方案导出共用(spec §8) */
+export interface RunOverlay {
+  envId?: string | null
+  dataSetIds?: string[]
+  serviceBindings?: Record<string, ServiceBinding>
+}
+
 /** 执行配方(recipe):Case 层解散后 RunRequest 即配方本身,直接挂 scenario */
 export interface RunRequest {
   scenarioId: string
   /** D12:空数组合法 = 基线执行(一个隐式空覆盖行);非空 = 选中数据集 */
   dataSetIds: string[]
   env: RunEnv
-  /** 执行用认证 alias 多选(原 auth 单选已废);dispatcher 解密注入 Config.users */
-  auths?: string[]
+  /** service → {authAlias?, url?} 绑定:注入清单 = 模板扫描(steps 里的
+   * ${auth.*} 引用)∪ 绑定 authAlias;绑定 url 物化进 services(显式绑定
+   * 最优先)。旧 auths/injectCredentials/prefix/mergePolicy 已退役(spec §6) */
+  serviceBindings?: Record<string, ServiceBinding>
   /** V1 能力移植:0-based 含端点,透传引擎 halt_at,在该步后停 */
   stepTo?: number
-  /** V1 能力移植:false = 跳过执行凭证解析/注入 */
-  injectCredentials?: boolean
   /** M1 执行能力:每行数据的重复执行次数(total = Σrows × nRuns) */
   nRuns?: number
   /** M1 执行能力:fan-out 并发度(1–200) */
   parallel?: number
-  /** M1 执行能力:提单号前缀,注入 vars.order_no / order_no_prefix / seq */
-  prefix?: string
-  /** M1 执行能力:执行认证合并策略(真源 @/api/executions 的 MergePolicy) */
-  mergePolicy?: MergePolicy
 }
 
 export interface RunScenarioResult {
@@ -143,6 +162,12 @@ export interface RunScenarioResult {
 
 export async function runScenario(req: RunRequest): Promise<RunScenarioResult> {
   const { data } = await http.post<RunScenarioResult>('/runs', req)
+  return data
+}
+
+/** PUT 场景级运行方案(整表替换);返回落库后的完整列表 */
+export async function putRunSchemes(scenarioId: string, schemes: RunScheme[]): Promise<RunScheme[]> {
+  const { data } = await http.put<RunScheme[]>(`/scenarios/${enc(scenarioId)}/run-schemes`, { schemes })
   return data
 }
 
@@ -159,9 +184,13 @@ export interface PreviewPlateResult {
   converted?: Record<string, any> | null
 }
 
-export async function previewPlateDraft(draft: ScenarioDraft): Promise<PreviewPlateResult> {
+/** 预校验/导出转换;overlay(按方案导出,spec §8)不传 → 行为与旧完全一致 */
+export async function previewPlateDraft(
+  draft: ScenarioDraft, overlay?: RunOverlay,
+): Promise<PreviewPlateResult> {
   const { data } = await http.post<PreviewPlateResult>(
-    '/scenarios/preview-plate', draft,
+    '/scenarios/preview-plate',
+    overlay ? { ...draft, overlay } : draft,
   )
   return data
 }

@@ -1,7 +1,7 @@
 /** executions.ts — typed wrappers around /api/executions/* endpoints. */
 import http from './http'
+import type { ServiceBinding } from './scenario-composer'
 
-export type MergePolicy = 'override' | 'merge' | 'append'
 export type ExecutionStatus = 'queued' | 'running' | 'done' | 'failed' | 'canceled'
 
 export interface Execution {
@@ -20,14 +20,14 @@ export interface Execution {
     scenarioId?: string
     dataSetIds?: string[]
     envId?: string
-    exec_auth_alias?: string[]
+    /** 实际注入清单(模板扫描 ∪ 绑定 authAlias)— 读侧据此展示认证列 */
+    injectedAuths?: string[]
+    /** service → {authAlias?, url?}(驼峰 dump,None 键不落) */
+    serviceBindings?: Record<string, ServiceBinding>
     /** 0-based inclusive halt index(V3 写 stepTo) */
     stepTo?: number | null
-    injectCredentials?: boolean
     nRuns?: number
     parallel?: number
-    prefix?: string | null
-    mergePolicy?: MergePolicy
     // 系统标记(后端按需写入;详情页转告警条,不进配方 dl)
     /** 启动期 reconcile 收敛记录(P3:进程重启僵尸单) */
     reconciled?: { at: string; reason: string }
@@ -36,9 +36,24 @@ export interface Execution {
   }
 }
 
-export function list() {
+/** 行级状态(spec §9.1)— rows 端点返回的 camelCase 行结构 */
+export interface ExecutionRow {
+  seq: number
+  datasetId: string | null
+  rowIndex: number
+  rep: number
+  status: string
+  caseDir: string
+  startedAt: string | null
+  finishedAt: string | null
+}
+
+export function listExecutions(params?: { scenarioId?: string; limit?: number }) {
+  // 后端 Query 形参是 snake_case scenario_id — 出参侧保持 camelCase。
   return http
-    .get<{ items: Execution[]; total: number }>('/executions')
+    .get<{ items: Execution[]; total: number }>('/executions', {
+      params: { scenario_id: params?.scenarioId, limit: params?.limit },
+    })
     .then((r) => r.data)
 }
 
@@ -53,4 +68,21 @@ export function remove(id: number) {
 /** P4 协作式取消:queued 单登记取消,canceled 为终态。 */
 export function cancelExecution(id: number): Promise<Execution> {
   return http.post<Execution>(`/executions/${id}/cancel`).then((r) => r.data)
+}
+
+/** 行级状态(spec §9.1):活跃执行读 dispatcher registry,历史执行回放 JSONL。 */
+export function getExecutionRows(id: number): Promise<{ items: ExecutionRow[] }> {
+  return http
+    .get<{ items: ExecutionRow[] }>(`/executions/${id}/rows`)
+    .then((r) => r.data)
+}
+
+/** 白名单工件(text/plain):engine-log=引擎日志 / result=步骤级明细。
+ *  case.json 刻意不暴露(含明文凭证,spec §9.1)。 */
+export function getCaseArtifact(
+  id: number, caseStem: string, file: 'engine-log' | 'result',
+): Promise<string> {
+  return http
+    .get<string>(`/executions/${id}/case-artifact`, { params: { case: caseStem, file } })
+    .then((r) => r.data)
 }
