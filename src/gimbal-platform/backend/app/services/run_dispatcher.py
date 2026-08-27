@@ -33,7 +33,7 @@ import hashlib
 import json
 import shutil
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -202,6 +202,79 @@ def reset_cancel_state() -> None:
     """测试隔离:清空取消注册表。"""
     _cancel_requested.clear()
     _tasks_by_execution.clear()
+
+
+# ─── row-level live registry (spec §9.1) ──────────────────────────
+# 行级可观测(Task 7):活跃执行的行状态驻内存,GET /executions/{id}/rows
+# 实时读取;执行终态化(fanout task 结束)后 pop,读侧自动回落到
+# JSONL 回放 —— 活跃读内存、历史读文件,两段式无缝切换。
+@dataclass
+class RowState:
+    """一行(dataset row × repeat)的实时状态(纯值对象,单 loop 内读写)。"""
+
+    seq: int
+    dataset_id: str | None
+    row_index: int
+    rep: int
+    status: str
+    case_dir: str = ""                 # case stem(非全路径,不泄漏服务端布局)
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
+# 行终态集合:JSONL 里 per-row 最后一行 status 的取值("dispatched" 为
+# 中间态,"queued" 只存在于 registry)。回放器据此区分时间戳归属
+# (final → finishedAt,否则 → startedAt);新增失败分支时同步维护。
+_FINAL_STATUSES = frozenset({
+    "passed", "failed", "canceled",
+    "gimbal_rejected", "plate_unavailable", "plate_rejected",
+    "launch_timeout", "launch_error", "dispatcher_error",
+})
+
+_row_states: dict[int, list[RowState]] = {}   # 活跃执行;finalize 后 pop
+
+
+def execution_rows(execution_id: int) -> list[dict]:
+    """行级状态读侧:活跃执行读内存 registry,历史执行回放 JSONL。"""
+    live = _row_states.get(execution_id)
+    if live is not None:
+        return [asdict(r) for r in live]
+    return _replay_rows(execution_id)
+
+
+def _replay_rows(execution_id: int) -> list[dict]:
+    """按天 JSONL 回放:同 (executionId, seq) 后行覆盖前行(final 覆盖 dispatched)。"""
+    rows: dict[int, dict] = {}
+    for path in sorted((settings.DATA_DIR / "runs").glob("*.jsonl")):
+        with path.open(encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if rec.get("executionId") != execution_id:
+                    continue
+                seq = rec.get("seq")
+                if seq is None:
+                    continue
+                cur = rows.setdefault(seq, {"seq": seq,
+                                            "datasetId": rec.get("datasetId"),
+                                            "rowIndex": rec.get("rowIndex", 0),
+                                            "rep": rec.get("rep", 0),
+                                            "status": rec.get("status", ""),
+                                            "caseDir": "",
+                                            "startedAt": None, "finishedAt": None})
+                cur["status"] = rec.get("status", cur["status"])
+                if rec.get("casePath"):
+                    # casePath 指向 case.json 文件;caseDir 取其父目录名
+                    # (= case stem,与 live registry 的 case_dir 同口径)。
+                    cur["caseDir"] = Path(rec["casePath"]).parent.name
+                ts = rec.get("ts")
+                if rec.get("status") in _FINAL_STATUSES:
+                    cur["finishedAt"] = ts
+                else:
+                    cur["startedAt"] = ts or cur["startedAt"]
+    return [rows[k] for k in sorted(rows)]
 
 
 # ─── startup reconcile (P3) ────────────────────────────────────────
@@ -410,6 +483,12 @@ async def dispatch_run(
         task.add_done_callback(
             lambda _t, eid=execution.id: _tasks_by_execution.pop(eid, None)
         )
+        # spec §9.1:fanout task 结束(含异常/被取消的崩溃路径,届时
+        # _finalize_execution 不会执行)即出清活跃行状态,防 registry
+        # 泄漏盖住回放;正常路径 finalize 已 pop,此处幂等。
+        task.add_done_callback(
+            lambda _t, eid=execution.id: _row_states.pop(eid, None)
+        )
 
     return RunResponse(runId=run_id, executionId=execution.id)
 
@@ -512,6 +591,7 @@ async def _fanout(
 
     async def _row(ds: dict, row_idx: int, rep: int, seq: int) -> None:
         """One (dataset row × repeat) entry — compose + convert + launch."""
+        state = row_states[seq]
         async with sem:
             # P4 协作式取消:行边界在信号量准入处(全部行 task 在 fanout
             # 启动时就已创建并排队,准入前检查永远看不到晚到的取消请求)。
@@ -522,11 +602,14 @@ async def _fanout(
                     "ts": _utcnow().isoformat() + "Z",
                     "runId": run_id,
                     "executionId": execution_id,
+                    "seq": seq,
                     "datasetId": ds["datasetId"],
                     "rowIndex": row_idx,
                     "rep": rep,
                     "status": "canceled",
                 })
+                state.status = "canceled"
+                state.finished_at = _utcnow().isoformat() + "Z"
                 return
             row_dict = dict(ds["rows"][row_idx] or {})
             composed = _compose_scenario(scenario_payload, row_dict)
@@ -537,10 +620,12 @@ async def _fanout(
                 f"-r{row_idx}-n{rep}"
             )
             case_dir = run_dir / stem
+            ts = _utcnow().isoformat() + "Z"
             log_line = {
-                "ts": _utcnow().isoformat() + "Z",
+                "ts": ts,
                 "runId": run_id,
                 "executionId": execution_id,
+                "seq": seq,
                 "scenarioId": composed.get("scenarioId"),
                 "datasetId": ds["datasetId"],
                 "rowIndex": row_idx,
@@ -551,6 +636,8 @@ async def _fanout(
                 "reportDir": str((case_dir / "reports")),
             }
             await _append_log(log_path, log_line)
+            state.status = "dispatched"
+            state.started_at = ts
 
             try:
                 if _breaker_open():
@@ -667,6 +754,13 @@ async def _fanout(
             # branches ``continue``'d before this and lost the line).
             await _append_log(log_path, log_line)
 
+            # 行终态落 registry(spec §9.1):真实完成时刻 + case stem
+            # (供工件端点;JSONL 写侧不改 final 行 ts,回放的
+            # finishedAt 近似为派发时刻 — 已知回放精度损失)。
+            state.status = log_line["status"]
+            state.finished_at = _utcnow().isoformat() + "Z"
+            state.case_dir = case_dir.name
+
             # Atomic per-row counter bump.  Deltas (not absolute
             # write-backs) so concurrent rows and concurrent UI
             # deletions (MAX(0, col-1) SQL) compose correctly.
@@ -682,6 +776,18 @@ async def _fanout(
         for ds in datasets
         for row_idx in range(len(ds["rows"]))
         for rep in range(n_runs)
+    ]
+    # spec §9.1:组完全部行任务后初始化行状态 registry(全部 queued;
+    # _row 内逐行推进,执行终态化时整体 pop → 读侧回落 JSONL 回放)。
+    row_states = _row_states[execution_id] = [
+        RowState(
+            seq=seq,
+            dataset_id=ds["datasetId"],
+            row_index=row_idx,
+            rep=rep,
+            status="queued",
+        )
+        for seq, (ds, row_idx, rep) in enumerate(entries)
     ]
     await asyncio.gather(
         *(_row(ds, i, r, seq) for seq, (ds, i, r) in enumerate(entries))
@@ -875,6 +981,10 @@ async def _finalize_execution(
                 await session.commit()
     except Exception as e:  # noqa: BLE001
         logger.warning("run_dispatcher: failed to update execution {}: {}", execution_id, e)
+    # spec §9.1:执行终态化 → 活跃行状态出清(读侧此后走 JSONL 回放)。
+    # DB 写失败也出清 —— fanout 已收尾,残留的"活跃"行状态会永久盖住
+    # 回放路径。
+    _row_states.pop(execution_id, None)
 
 
 # ─── helpers ──────────────────────────────────────────────────────

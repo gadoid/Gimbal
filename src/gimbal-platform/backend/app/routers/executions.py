@@ -25,7 +25,7 @@ from ..models.execution import (
     STATUS_QUEUED,
     STATUS_RUNNING,
 )
-from ..schemas.execution import ExecutionListOut, ExecutionOut
+from ..schemas.execution import ExecutionListOut, ExecutionOut, ExecutionRowsOut
 from ..services import execution_store, run_dispatcher
 
 router = APIRouter(prefix="/executions", tags=["executions"])
@@ -71,6 +71,14 @@ async def list_executions(
 @router.get("/{execution_id}", response_model=ExecutionOut)
 async def get_execution(ex: OwnedExecution) -> ExecutionOut:
     return execution_store.execution_out(ex)
+
+
+# ── rows(行级可观测,spec §9.1)─────────────────────────────────
+@router.get("/{execution_id}/rows", response_model=ExecutionRowsOut)
+async def get_execution_rows(ex: OwnedExecution) -> ExecutionRowsOut:
+    """行级状态:活跃执行读 dispatcher 内存 registry,历史执行回放
+    JSONL(dispatched+final 两行/row,final 覆盖)。Task 13 前端消费。"""
+    return ExecutionRowsOut(items=run_dispatcher.execution_rows(ex.id))
 
 
 # ── delete ─────────────────────────────────────────────────────
