@@ -1,8 +1,9 @@
 """materialize_run_copy — POST-convert 物化纯函数(执行/导出同源)。
 
-绑定优先级(spec §5):显式绑定 url > 场景 authored > env.baseUrl 补缺。
+绑定优先级(spec §5 / D2):显式绑定 url > 场景 authored(env 补缺层已退役)。
 users 合并固定 merge 语义(spec §10:merge_policy 退役)。
 """
+import inspect
 from types import SimpleNamespace
 
 from app.services.run_materialize import materialize_run_copy
@@ -32,19 +33,14 @@ def _auth(alias: str, url="https://auth-url") -> SimpleNamespace:
 
 
 def test_binding_url_overrides_authored() -> None:
-    out = materialize_run_copy(_converted(), env_base_url="https://env",
+    out = materialize_run_copy(_converted(),
                                service_bindings={"fin-service": {"url": "https://bound"}})
     assert out["config"]["services"]["fin-service"] == "https://bound"
 
 
 def test_authored_kept_when_no_binding() -> None:
-    out = materialize_run_copy(_converted(), env_base_url="https://env")
+    out = materialize_run_copy(_converted())
     assert out["config"]["services"]["fin-service"] == "https://authored"
-
-
-def test_env_fills_missing_referenced_service() -> None:
-    out = materialize_run_copy(_converted(), env_base_url="https://env")
-    assert out["config"]["services"]["svc-orphan"] == "https://env"
 
 
 def test_no_env_leaves_gap_visible() -> None:
@@ -92,7 +88,7 @@ def test_no_auths_leaves_users_untouched() -> None:
 def test_pure_function_input_not_mutated() -> None:
     src = _converted()
     snapshot = {"services": dict(src["config"]["services"]), "users": dict(src["config"]["users"])}
-    materialize_run_copy(src, env_base_url="https://env",
+    materialize_run_copy(src,
                          service_bindings={"fin-service": {"url": "https://bound"}},
                          resolved_auths=[_auth("qa1")])
     assert src["config"]["services"] == snapshot["services"]
@@ -102,5 +98,27 @@ def test_pure_function_input_not_mutated() -> None:
 def test_unreferenced_service_keys_preserved() -> None:
     src = _converted()
     src["config"]["services"]["legacy-svc"] = "https://legacy"
-    out = materialize_run_copy(src, env_base_url="https://env")
+    out = materialize_run_copy(src)
     assert out["config"]["services"]["legacy-svc"] == "https://legacy"
+
+
+def test_no_env_layer_binding_and_authored_only() -> None:
+    """D2:env 补缺层删除后,URL 链只剩 显式绑定 > authored。"""
+    # env 层不存在:签名已无 env_base_url 参数
+    assert "env_base_url" not in inspect.signature(materialize_run_copy).parameters
+
+    # 已有声明(authored)+ 无绑定 → 原样保留
+    out = materialize_run_copy(_converted())
+    assert out["config"]["services"]["fin-service"] == "https://authored"
+
+    # 显式绑定覆盖 authored(语义不变)
+    out = materialize_run_copy(
+        _converted(),
+        service_bindings={"fin-service": {"url": "https://bound"}},
+    )
+    assert out["config"]["services"]["fin-service"] == "https://bound"
+
+    # 未声明且未绑定 → 留空(引擎显式报错语义,RunDialog 并集行提前发现)
+    out = materialize_run_copy(_converted())
+    assert "svc-orphan" not in out["config"]["services"] or \
+        not out["config"]["services"].get("svc-orphan")

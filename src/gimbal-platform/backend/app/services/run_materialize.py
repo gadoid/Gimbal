@@ -14,7 +14,6 @@ from typing import Any
 def materialize_run_copy(
     converted: dict[str, Any],
     *,
-    env_base_url: str = "",
     service_bindings: dict[str, dict[str, Any]] | None = None,
     resolved_auths: list[Any] | None = None,
     built_in_users: dict[str, Any] | None = None,
@@ -23,8 +22,8 @@ def materialize_run_copy(
 
     * users:merge 基座 ``{**built_in_users, **converted.config.users}``
       (内置认证以场景定义为唯一可信源),resolved_auths 按别名覆盖/追加
-    * services:显式绑定 url > 场景 authored > env.baseUrl 补缺(仅对
-      steps 实际引用的 service 键生效,未引用键原样保留)
+    * services:显式绑定 url > 场景 authored(仅对 steps 实际引用的
+      service 键生效,未引用键原样保留;D2 env 补缺层已退役)
     """
     out = copy.deepcopy(converted)
     cfg = out.setdefault("config", {})
@@ -35,7 +34,7 @@ def materialize_run_copy(
     cfg["users"] = dict(cfg.get("users") or {})
 
     _apply_services(cfg, steps=out.get("steps") or [],
-                    env_base_url=env_base_url, bindings=service_bindings or {})
+                    bindings=service_bindings or {})
     _apply_users(cfg, resolved_auths or [], built_in_users=built_in_users or {})
     return out
 
@@ -52,15 +51,15 @@ def _referenced_services(steps: list) -> list[str]:
     return list(seen)
 
 
-def _apply_services(cfg: dict, *, steps: list, env_base_url: str,
+def _apply_services(cfg: dict, *, steps: list,
                     bindings: dict[str, dict]) -> None:
     services: dict[str, Any] = cfg["services"]
     for svc in _referenced_services(steps):
         bound_url = (bindings.get(svc) or {}).get("url")
         if bound_url:
             services[svc] = bound_url                    # 显式绑定最优先
-        elif not services.get(svc) and env_base_url:
-            services[svc] = env_base_url                 # env 补缺(authored 已有则不动)
+        # D2:env.baseUrl 补缺层退役 — 未绑定则留给 authored/缺口
+        # (未声明缺口由引擎显式报错,RunDialog 并集行提前发现)
 
 
 def _apply_users(cfg: dict, resolved_auths: list, *, built_in_users: dict) -> None:
