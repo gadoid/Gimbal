@@ -42,9 +42,15 @@ async def list_executions(
     session: DbSession,
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
+    scenario_id: Annotated[str | None, Query(max_length=64)] = None,
 ) -> ExecutionListOut:
-    """分页列表(P:此前全量返回,无界)。默认 200 与前端现状兼容。"""
+    """分页列表(P:此前全量返回,无界)。默认 200 与前端现状兼容。
+
+    ``scenario_id`` 叠加在 owner 过滤之上(前端「上次运行」数据源)。
+    """
     base = select(Execution).where(Execution.owner_id == user.id)
+    if scenario_id:
+        base = base.where(Execution.scenario_id == scenario_id)
     total = (
         await session.execute(select(func.count()).select_from(base.subquery()))
     ).scalar_one()
