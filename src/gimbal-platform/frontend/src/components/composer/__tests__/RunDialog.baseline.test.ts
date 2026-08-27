@@ -15,6 +15,7 @@ function mountDialog() {
     props: {
       scenario: null, dataSets: DS, envs: ENV,
       running: false, lastRunId: null, lastRunError: null,
+      schemes: [], lastRunOverlay: null, referencedServices: [], authOptions: [],
     },
     global: { plugins: [ElementPlus], stubs: { teleport: true } },
   })

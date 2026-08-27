@@ -32,7 +32,7 @@ function mountDialog(scenario: Scenario, orchestrationNames: string[]) {
     props: {
       scenario, dataSets: DS, envs: ENV,
       running: false, lastRunId: null, lastRunError: null,
-      ownerAuthAliases: [],
+      schemes: [], lastRunOverlay: null, referencedServices: [], authOptions: [],
       stepOrchestrationNames: orchestrationNames,
     },
     global: { plugins: [ElementPlus], stubs: { teleport: true } },
@@ -42,7 +42,7 @@ function mountDialog(scenario: Scenario, orchestrationNames: string[]) {
 describe('RunDialog — stepTo 下拉步骤名', () => {
   it('orchestration 有名:渲染 · {name}', async () => {
     const w = mountDialog(sampleScenario(2), ['创建订单', '查询详情'])
-    const select = w.find('select')
+    const select = w.find('select.adv-select')
     const opts = select.findAll('option').map((o) => o.text())
     expect(opts.some((t) => t.includes('第 1 步后停止 · 创建订单'))).toBe(true)
     expect(opts.some((t) => t.includes('第 2 步后停止 · 查询详情'))).toBe(true)
@@ -50,7 +50,7 @@ describe('RunDialog — stepTo 下拉步骤名', () => {
 
   it('orchestration 缺名:降级为 "Step N"', async () => {
     const w = mountDialog(sampleScenario(2), ['', ''])
-    const opts = w.find('select').findAll('option').map((o) => o.text())
+    const opts = w.find('select.adv-select').findAll('option').map((o) => o.text())
     expect(opts.some((t) => t.includes('第 1 步后停止 · Step 1'))).toBe(true)
     expect(opts.some((t) => t.includes('第 2 步后停止 · Step 2'))).toBe(true)
   })
@@ -58,7 +58,7 @@ describe('RunDialog — stepTo 下拉步骤名', () => {
   it('orchestration 长度不齐:越界取 "Step N" 兜底', async () => {
     // 3 steps 但 orchestration 只有 1 个名
     const w = mountDialog(sampleScenario(3), ['仅第一步'])
-    const opts = w.find('select').findAll('option').map((o) => o.text())
+    const opts = w.find('select.adv-select').findAll('option').map((o) => o.text())
     expect(opts.some((t) => t.includes('· 仅第一步'))).toBe(true)
     expect(opts.some((t) => t.includes('· Step 2'))).toBe(true)
     expect(opts.some((t) => t.includes('· Step 3'))).toBe(true)

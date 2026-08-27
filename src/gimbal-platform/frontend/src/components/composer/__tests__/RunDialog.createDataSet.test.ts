@@ -43,7 +43,7 @@ function mountDialog() {
     props: {
       scenario: SCENARIO, dataSets: DS, envs: ENV,
       running: false, lastRunId: null, lastRunError: null,
-      ownerAuthAliases: [],
+      schemes: [], lastRunOverlay: null, referencedServices: [], authOptions: [],
     },
     global: { plugins: [ElementPlus, createPinia()], stubs: { teleport: true } },
   })

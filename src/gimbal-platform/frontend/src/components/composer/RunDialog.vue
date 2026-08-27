@@ -1,10 +1,13 @@
 <!--
-  RunDialog.vue — 运行对话框 (env + data-set + 执行认证选择)
-  env 来自平台 /api/envs;数据集多选(空 = 基线);auths = 场景引用 ∪ owner
-  凭证池(后端 dispatcher 按 alias 解密注入,本弹框只选 alias 不拉明文)。
+  RunDialog.vue — 运行对话框(spec §4 重构:方案栏 + 主面板 + 折叠区)
+  方案栏:临时手填 / 上次运行 / 已存方案(orchestration sidecar,plate 零感知);
+  主面板:环境 tiles / 数据集多选(空 = 基线)/ 基础设置(stepTo · nRuns×parallel);
+  折叠区:用户与服务绑定(service → authAlias/url;凭证按 alias 解密注入,
+  本弹框只选 alias 不拉明文)+ 插件/日志订阅预埋(待 gimbal 侧支持)。
+  旧 prefix / mergePolicy / preset / auths 多选 chips 语义已退役(spec §10)。
 -->
 <template>
-  <Teleport to="body">
+  <Teleport v-if="visible" to="body">
     <div class="run-overlay" @click.self="$emit('close')">
       <div class="run-dialog" role="dialog" aria-modal="true">
         <header class="run-header">
@@ -18,6 +21,15 @@
         </header>
 
         <div class="run-body">
+          <!-- 方案栏:临时手填 / 上次运行 / 已存方案;右侧命名另存 -->
+          <div class="rd-scheme-bar">
+            <select class="rd-scheme-select" v-model="selectedScheme">
+              <option v-for="o in schemeOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+            </select>
+            <input class="rd-scheme-name" v-model="schemeNameDraft" placeholder="方案名" maxlength="64" />
+            <button class="ghost-btn" data-testid="save-scheme" type="button" @click="onSaveScheme">存为方案</button>
+          </div>
+
           <!-- 环境选择 -->
           <section class="run-section">
             <label class="run-label">执行环境</label>
@@ -93,29 +105,9 @@
             </div>
           </section>
 
-          <!-- 执行认证 (P0:激活后端 auths 注入链路 — RunRequest.auths) -->
+          <!-- 基础设置(stepTo / nRuns × parallel;旧 凭证策略·前缀·预设 已退役) -->
           <section class="run-section">
-            <label class="run-label">执行认证 <span class="muted small">(场景已引用默认全选;留空 = 不注入,场景内置 users 原样运行)</span></label>
-            <div v-if="authOptions.length === 0" class="muted small">
-              无可用认证别名 — 场景未引用认证,且凭证池为空
-            </div>
-            <div v-else class="auth-group">
-              <label
-                v-for="a in authOptions"
-                :key="a.alias"
-                class="policy-opt auth-opt"
-                :class="{ active: selectedAuths.includes(a.alias) }"
-              >
-                <input type="checkbox" data-test="auth" :value="a.alias" v-model="selectedAuths" />
-                <span class="auth-alias">{{ a.alias }}</span>
-                <span class="auth-src">{{ a.from }}</span>
-              </label>
-            </div>
-          </section>
-
-          <!-- 高级选项 (V1 能力移植) -->
-          <section class="run-section">
-            <label class="run-label">高级选项 <span class="muted small">(V1 兼容:步进调试 / 凭证策略 / 批量执行)</span></label>
+            <label class="run-label">基础设置 <span class="muted small">(步进调试 / 批量执行)</span></label>
             <div class="adv-grid">
               <div class="adv-field">
                 <span class="adv-name">停止于步骤</span>
@@ -127,21 +119,6 @@
                 </select>
               </div>
               <div class="adv-field">
-                <span class="adv-name">凭证合并策略</span>
-                <div class="policy-group">
-                  <label
-                    v-for="p in POLICIES"
-                    :key="p.value"
-                    class="policy-opt"
-                    :class="{ active: mergePolicy === p.value }"
-                  >
-                    <input type="radio" :value="p.value" v-model="mergePolicy" />
-                    <span>{{ p.label }}</span>
-                  </label>
-                </div>
-                <div class="muted small policy-hint">{{ policyHint }}</div>
-              </div>
-              <div class="adv-field">
                 <span class="adv-name">执行次数 / 并发度</span>
                 <div class="num-row">
                   <input type="number" v-model.number="nRuns" class="adv-input" min="1" max="1000" />
@@ -150,29 +127,47 @@
                   <span class="num-sep">并发</span>
                 </div>
               </div>
-              <div class="adv-field">
-                <span class="adv-name">提单号前缀</span>
-                <input
-                  type="text"
-                  v-model.trim="prefix"
-                  class="adv-input"
-                  maxlength="64"
-                  placeholder="留空 = 不注入 order_no 变量"
-                />
-              </div>
-            </div>
-            <div class="preset-row">
-              <span class="muted small">快捷预设:</span>
-              <button
-                v-for="p in PRESETS"
-                :key="p.label"
-                type="button"
-                class="preset-btn"
-                :class="{ active: nRuns === p.nRuns && parallel === p.parallel }"
-                @click="applyPreset(p)"
-              >{{ p.label }}</button>
             </div>
             <div v-if="stepCount === 0" class="muted small">场景暂无步骤,停止于步骤不可用</div>
+          </section>
+
+          <!-- 折叠区:用户与服务绑定(默认折叠) -->
+          <section class="rd-fold" :class="{ 'is-open': foldBindings }">
+            <button class="rd-fold-head" type="button" @click="foldBindings = !foldBindings">
+              用户与服务
+              <span class="rd-fold-summary">{{ bindingsSummary }}</span>
+            </button>
+            <div v-show="foldBindings" class="rd-fold-body">
+              <div
+                v-for="svc in referencedServices"
+                :key="svc"
+                class="rd-bind-row"
+                :class="{ 'is-degraded': degraded(svc) }"
+              >
+                <span class="rd-bind-svc">{{ svc }}</span>
+                <select class="rd-bind-user" v-model="bindings[svc].authAlias">
+                  <option :value="undefined">— 未绑定 —</option>
+                  <option v-for="a in authOptions" :key="a" :value="a">{{ a }}</option>
+                </select>
+                <input class="rd-bind-url" v-model="bindings[svc].url" placeholder="覆盖 URL(可选)" />
+                <span v-if="degraded(svc)" class="rd-bind-warn">凭证已删,运行时该用户不注入</span>
+              </div>
+              <p v-if="!referencedServices.length" class="rd-empty">场景未引用任何 service</p>
+            </div>
+          </section>
+
+          <!-- 预埋:插件列表 / 日志订阅(只读占位,待 gimbal 侧支持) -->
+          <section class="rd-fold">
+            <button class="rd-fold-head" type="button">
+              插件列表
+              <span class="rd-fold-summary">待 gimbal 侧支持</span>
+            </button>
+          </section>
+          <section class="rd-fold">
+            <button class="rd-fold-head" type="button">
+              日志订阅
+              <span class="rd-fold-summary">待 gimbal 侧支持</span>
+            </button>
           </section>
 
           <!-- 错误显示 -->
@@ -225,6 +220,7 @@
             <button class="ghost-btn" @click="$emit('close')">取消</button>
             <button
               class="primary-btn"
+              data-testid="run-confirm"
               :disabled="!selectedEnv || running"
               @click="onConfirm"
             >
@@ -243,114 +239,62 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import type { MergePolicy } from '@/api/executions'
+import type { ServiceBinding, RunScheme, RunOverlay } from '@/api/scenario-composer'
 import type { Scenario, DataSetSummary, RunEnv } from '@/types/scenario-composer'
 
-const props = defineProps<{
-  scenario: Scenario | null
-  dataSets: DataSetSummary[]
+const props = withDefaults(defineProps<{
+  /** 弹层显隐(父级亦可直接 v-if;默认 true 兼容外部 v-if 用法) */
+  visible?: boolean
+  scenario?: Scenario | null
   envs: RunEnv[]
-  running: boolean
-  lastRunId: string | null
-  lastRunError: string | null
-  /** owner 凭证池别名(父级懒加载,auth_sessions.list → alias);静默缺省 = [] */
-  ownerAuthAliases?: string[]
+  dataSets: DataSetSummary[]
+  running?: boolean
+  lastRunId?: string | null
+  lastRunError?: string | null
+  /** 运行方案(orchestration sidecar,Task 10 类型) */
+  schemes: RunScheme[]
+  /** 上次运行覆盖层(方案栏「上次运行」回填源) */
+  lastRunOverlay: RunOverlay | null
+  /** 场景引用的 service 名(用户与服务区每服务一行) */
+  referencedServices: string[]
+  /** 绑定下拉选项:owner 凭证池 ∪ 场景内置 users 别名(父级供给) */
+  authOptions: string[]
   /** 平台编排展示名(orchestration.steps[i].name,与 steps 同序);plate Step 无 name */
   stepOrchestrationNames?: string[]
-}>()
+}>(), {
+  visible: true,
+  scenario: null,
+  running: false,
+  lastRunId: null,
+  lastRunError: null,
+  stepOrchestrationNames: () => [] as string[],
+})
+
 const emit = defineEmits<{
   close: []
   confirm: [
     envId: string,
     dataSetIds: string[],
-    opts?: {
-      stepTo?: number | null
-      injectCredentials: boolean
+    opts: {
+      /** 0-based 含端点(引擎 halt_at);缺省 = 全量运行 */
+      stepTo?: number
+      /** 每行数据的重复执行次数(total = Σrows × nRuns) */
       nRuns?: number
+      /** fan-out 并发度(1–200) */
       parallel?: number
-      prefix?: string
-      mergePolicy?: MergePolicy
-      /** 所选执行认证 alias;空数组/缺省 = 不注入(等价 origin) */
-      auths?: string[]
+      /** service → {authAlias?, url?};空绑定条目不随 confirm 下发 */
+      serviceBindings?: Record<string, ServiceBinding>
     },
   ]
+  /** 存为方案:当前 env/ds/绑定快照(plugins/logSub 预埋 no-op) */
+  saveScheme: [scheme: RunScheme]
 }>()
 
+// ── 环境与数据集(既有语义保留)──────────────────────────────────
 const selectedEnv = ref<string>(props.envs[0]?.envId || '')
 const selectedDatasets = ref<string[]>([])
 // D12 基线执行:不选数据集 = 直填值 + 共享变量默认值跑一次(一个隐式空覆盖行)
 const useBaseline = ref(false)
-
-// ── 执行认证:场景 config.users 别名 ∪ owner 凭证池别名 ──────────────
-// 场景引用默认全勾,凭证池独有别名列出不勾;alias 去重,场景在前。
-const selectedAuths = ref<string[]>([])
-/** 场景内置 users 的别名(append 冲突预检也要用) */
-const scenarioUserAliases = computed<string[]>(() => {
-  const users = props.scenario?.config?.users as Record<string, unknown> | undefined
-  return users ? Object.keys(users) : []
-})
-const authOptions = computed(() => {
-  const seen = new Set<string>()
-  const opts = scenarioUserAliases.value
-    .filter((a) => !seen.has(a) && seen.add(a))
-    .map((alias) => ({ alias, from: '场景' }))
-  for (const alias of props.ownerAuthAliases ?? []) {
-    if (seen.has(alias)) continue
-    seen.add(alias)
-    opts.push({ alias, from: '凭证池' })
-  }
-  return opts
-})
-watch(() => props.scenario, (s) => {
-  // 打开期间 scenario 引用不变;初始默认 = 场景已引用全勾
-  selectedAuths.value = s ? [...scenarioUserAliases.value] : []
-}, { immediate: true })
-// V1 能力移植:stepTo = 0-based 含端点(引擎 halt_at);null = 全量运行
-const stepTo = ref<number | null>(null)
-// M1 执行能力(V1 ExecutionDrawer 语义):origin 在此表达"不注入"
-// (上送 injectCredentials=false),其余三选一映射后端 merge_policy。
-const POLICIES = [
-  { value: 'origin', label: 'origin · 不注入' },
-  { value: 'override', label: 'override · 替换' },
-  { value: 'merge', label: 'merge · 合并' },
-  { value: 'append', label: 'append · 追加' },
-] as const
-const mergePolicy = ref<'origin' | MergePolicy>('merge')
-const nRuns = ref(1)
-const parallel = ref(1)
-const prefix = ref('')
-const PRESETS = [
-  { label: '烟囱 1/1', nRuns: 1, parallel: 1 },
-  { label: '小批量 5/3', nRuns: 5, parallel: 3 },
-  { label: '压测 50/10', nRuns: 50, parallel: 10 },
-] as const
-
-function applyPreset(p: { nRuns: number; parallel: number }) {
-  nRuns.value = p.nRuns
-  parallel.value = p.parallel
-}
-
-const policyHint = computed(() => {
-  switch (mergePolicy.value) {
-    case 'origin':
-      return '跳过凭证注入,以场景 yaml 自带的 Config.users 原样运行'
-    case 'override':
-      return 'Config.users 整块替换为所选执行认证'
-    case 'append':
-      return '合并注入;与场景内置 users 别名冲突时整单拒绝(409)'
-    default:
-      return '同名覆盖、场景内置其余认证保留(默认)'
-  }
-})
-
-const stepCount = computed(() => props.scenario?.stepCount ?? 0)
-
-/** 下拉里附上步骤名,便于定位。展示名在 orchestration(plate Step 无
- *  name/id 字段);长度不齐或缺名时降级 Step N,不再恒空。 */
-function stepName(i: number): string {
-  const n = props.stepOrchestrationNames?.[i]
-  return n ? ` · ${n}` : ` · Step ${i + 1}`
-}
 
 watch(() => props.envs, (envs) => {
   if (!selectedEnv.value && envs.length > 0) {
@@ -375,6 +319,91 @@ function toggleBaseline() {
   if (useBaseline.value) selectedDatasets.value = []
 }
 
+// ── 方案栏(spec §4):临时手填 / 上次运行 / 已存方案 ──────────────
+const selectedScheme = ref<string>('__adhoc__')   // '__adhoc__' | '__last__' | scheme.name
+const schemeNameDraft = ref('')
+
+/** 方案配置降级:方案里的 env / 数据集已被删 → 选项标注(不报废,选了可改) */
+const schemeDegraded = computed(() =>
+  props.schemes
+    .filter((s) =>
+      (s.envId && !props.envs.some((e) => e.envId === s.envId)) ||
+      s.dataSetIds.some((id) => !props.dataSets.some((d) => d.datasetId === id)))
+    .map((s) => s.name))
+
+const schemeOptions = computed(() => [
+  { value: '__adhoc__', label: '临时手填' },
+  ...(props.lastRunOverlay ? [{ value: '__last__', label: '上次运行' }] : []),
+  ...props.schemes.map((s) => ({
+    value: s.name,
+    label: schemeDegraded.value.includes(s.name) ? `${s.name} · 配置已失效` : s.name,
+  })),
+])
+
+// ── 用户与服务绑定(spec §3.1/§4)───────────────────────────────
+// 绑定态:service → {authAlias?, url?};方案/上次运行选择时整体替换。
+const bindings = ref<Record<string, ServiceBinding>>({})
+
+// referencedServices 变化(异步补齐/场景变更)→ 补空行、清孤儿,行内
+// v-model 直写 bindings[svc].authAlias,必须保证每个 svc 有落点对象。
+watch(() => props.referencedServices, (svcs) => {
+  const next = { ...bindings.value }
+  for (const svc of svcs) if (!next[svc]) next[svc] = {}
+  for (const k of Object.keys(next)) if (!svcs.includes(k)) delete next[k]
+  bindings.value = next
+}, { immediate: true })
+
+// 选方案/上次运行 → 绑定整体替换预填 + env/ds 回填(已删项静默跳过 = 降级不报废)
+watch(selectedScheme, (v) => {
+  if (v === '__adhoc__') {
+    bindings.value = Object.fromEntries(props.referencedServices.map((svc) => [svc, {} as ServiceBinding]))
+    return
+  }
+  const src = v === '__last__'
+    ? props.lastRunOverlay
+    : props.schemes.find((s) => s.name === v)
+  const next: Record<string, ServiceBinding> = {}
+  for (const svc of props.referencedServices)
+    next[svc] = src?.serviceBindings?.[svc] ? { ...src.serviceBindings[svc]! } : {}
+  bindings.value = next
+  if (src?.envId && props.envs.some((e) => e.envId === src.envId)) selectedEnv.value = src.envId
+  if (src?.dataSetIds?.length) selectedDatasets.value = src.dataSetIds.filter((id) =>
+    props.dataSets.some((d) => d.datasetId === id))
+})
+
+/** 降级:绑定引用的 alias 已不在凭证选项(凭证被删)→ 行标红,不阻塞运行 */
+function degraded(svc: string): boolean {
+  const a = bindings.value[svc]?.authAlias
+  return !!a && !props.authOptions.includes(a)
+}
+
+const foldBindings = ref(false)   // 折叠区默认折叠
+
+const bindingsSummary = computed(() => {
+  const total = props.referencedServices.length
+  if (!total) return '未引用服务'
+  const bound = props.referencedServices.filter((svc) => {
+    const b = bindings.value[svc]
+    return !!(b?.authAlias || b?.url)
+  }).length
+  return `${bound}/${total} 已绑定`
+})
+
+// ── 基础设置(stepTo 0-based 含端点,nRuns × parallel)────────────
+// V1 能力移植:stepTo 透传引擎 halt_at;null = 全量运行
+const stepTo = ref<number | null>(null)
+const nRuns = ref(1)
+const parallel = ref(1)
+
+const stepCount = computed(() => props.scenario?.stepCount ?? 0)
+
+/** 下拉里附上步骤名,便于定位。展示名在 orchestration(plate Step 无
+ *  name/id 字段);长度不齐或缺名时降级 Step N,不再恒空。 */
+function stepName(i: number): string {
+  const n = props.stepOrchestrationNames?.[i]
+  return n ? ` · ${n}` : ` · Step ${i + 1}`
+}
+
 /** 总量闸(行数 × 每行重复):对齐后端 dispatch 侧
  * MAX_RUNS_PER_EXECUTION(app/core/config.py)的 409 too_many_runs。 */
 const MAX_TOTAL_RUNS = 200
@@ -393,17 +422,6 @@ function onConfirm() {
     ElMessage.warning('请选择执行环境')
     return
   }
-  // append 预检:所选执行认证与场景内置 users 别名交集 → 后端必 409
-  // 整单拒(run_dispatcher 冲突预检),提交前拦截并提示出路。
-  if (mergePolicy.value === 'append') {
-    const clash = selectedAuths.value.filter((a) => scenarioUserAliases.value.includes(a))
-    if (clash.length) {
-      ElMessage.warning(
-        `append 与场景内置 users 别名冲突: ${clash.join(', ')} — 请改用 merge/override 或取消勾选`,
-      )
-      return
-    }
-  }
   // 输入钳位(与后端 schema 上限一致,防 422)
   nRuns.value = Math.min(1000, Math.max(1, Math.floor(nRuns.value || 1)))
   parallel.value = Math.min(200, Math.max(1, Math.floor(parallel.value || 1)))
@@ -415,19 +433,35 @@ function onConfirm() {
     )
     return
   }
-  const origin = mergePolicy.value === 'origin'
+  // 用户与服务绑定:空绑定条目不随 confirm 下发(后端注入清单 =
+  // 模板扫描(steps 里 ${auth.*} 引用)∪ 绑定 authAlias,spec §6)
+  const serviceBindings = Object.fromEntries(Object.entries(bindings.value)
+    .filter(([, b]) => b.authAlias || b.url))
   emit('confirm', selectedEnv.value, selectedDatasets.value, {
-    stepTo: stepTo.value,
-    injectCredentials: !origin,
-    // 'origin'(保持 plate 原文)只在本地用于翻转 injectCredentials,
-    // 不是后端 RunRequest 的合法 merge_policy,不随 confirm 下发。
-    ...(origin ? {} : { mergePolicy: mergePolicy.value as Exclude<(typeof mergePolicy)['value'], 'origin'> }),
-    ...(nRuns.value > 1 ? { nRuns: nRuns.value } : {}),
-    ...(parallel.value > 1 ? { parallel: parallel.value } : {}),
-    ...(prefix.value ? { prefix: prefix.value } : {}),
-    // 执行认证 alias(后端按 alias 解密注入);空 = 不注入
-    ...(selectedAuths.value.length ? { auths: selectedAuths.value } : {}),
+    ...(stepTo.value !== null ? { stepTo: stepTo.value } : {}),
+    ...(nRuns.value !== 1 ? { nRuns: nRuns.value } : {}),
+    ...(parallel.value !== 1 ? { parallel: parallel.value } : {}),
+    ...(Object.keys(serviceBindings).length ? { serviceBindings } : {}),
   })
+}
+
+/** 存为方案:当前 env/ds/绑定快照落 orchestration sidecar(plate 零感知)。
+ *  插件/日志订阅为预埋 no-op(gimbal 侧就绪前恒 null)。 */
+function onSaveScheme() {
+  const name = schemeNameDraft.value.trim()
+  if (!name) {
+    ElMessage.warning('请填写方案名')
+    return
+  }
+  emit('saveScheme', {
+    name,
+    envId: selectedEnv.value || null,
+    dataSetIds: [...selectedDatasets.value],
+    serviceBindings: { ...bindings.value },
+    plugins: null,
+    logSub: null,
+  })
+  schemeNameDraft.value = ''
 }
 
 /** 新建数据集:跳转数据集编辑器(结构由调色板/稀疏行模型约束,
@@ -493,6 +527,25 @@ function goCreateDataSet() {
 }
 .link-btn:hover { text-decoration: underline; }
 
+/* ── 方案栏(spec §4)────────────────────────────────────────── */
+.rd-scheme-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; margin-bottom: 16px;
+  border: 1.5px solid #e6e8ec; border-radius: 10px;
+  background: #fafbfc;
+}
+.rd-scheme-select {
+  min-width: 128px; padding: 6px 8px;
+  border: 1px solid #e6e8ec; border-radius: 6px;
+  font-size: 12px; background: #fff;
+}
+.rd-scheme-name {
+  flex: 1; min-width: 0; padding: 6px 8px;
+  border: 1px solid #e6e8ec; border-radius: 6px;
+  font-size: 12px; background: #fff;
+}
+.rd-scheme-bar .ghost-btn { padding: 6px 12px; font-size: 12px; }
+
 /* env grid */
 .env-grid {
   display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
@@ -539,7 +592,7 @@ function goCreateDataSet() {
 }
 .empty-data p { margin: 0; font-size: 13px; }
 
-/* advanced options */
+/* 基础设置(stepTo / nRuns × parallel) */
 .adv-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
 }
@@ -555,38 +608,6 @@ function goCreateDataSet() {
   border: 1px solid #e6e8ec; border-radius: 6px;
   font-size: 12px; background: #fff;
 }
-.adv-check {
-  display: flex; gap: 6px; align-items: flex-start;
-  font-size: 12px; color: #5a6273; cursor: pointer;
-}
-.adv-check input { margin-top: 2px; }
-
-/* M1: merge-policy radio group + nRuns/parallel/prefix inputs + presets */
-.policy-group {
-  display: flex; flex-wrap: wrap; gap: 6px;
-}
-.policy-opt {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 4px 8px; border: 1px solid #e6e8ec; border-radius: 999px;
-  font-size: 11px; color: #5a6273; cursor: pointer; transition: all 0.15s;
-}
-.policy-opt.active {
-  border-color: #4f46e5; background: #eef2ff; color: #4f46e5;
-}
-.policy-opt input { margin: 0; accent-color: #4f46e5; }
-.policy-hint { margin-top: 6px; }
-
-/* 执行认证 chips(复用 policy-opt 视觉,alias + 来源标签) */
-.auth-group {
-  display: flex; flex-wrap: wrap; gap: 6px;
-}
-.auth-opt { gap: 6px; }
-.auth-alias { font-family: var(--font-mono); }
-.auth-src {
-  font-size: 10px; color: #94a3b8;
-  padding: 0 4px; border-radius: 3px; background: #f1f5f9;
-}
-.auth-opt.active .auth-src { background: #e0e7ff; }
 .num-row {
   display: flex; align-items: center; gap: 6px;
 }
@@ -597,18 +618,48 @@ function goCreateDataSet() {
 }
 .num-row .adv-input { width: 72px; }
 .num-sep { font-size: 11px; color: #94a3b8; }
-.preset-row {
-  display: flex; align-items: center; gap: 6px; margin-top: 10px;
+
+/* ── 折叠区 + 用户与服务绑定(spec §4)──────────────────────── */
+.rd-fold {
+  border: 1.5px solid #e6e8ec; border-radius: 10px;
+  margin-bottom: 16px; background: #fff; overflow: hidden;
 }
-.preset-btn {
-  padding: 4px 10px; border: 1px solid #e6e8ec; border-radius: 6px;
-  background: #fff; font-size: 11px; color: #5a6273;
-  cursor: pointer; transition: all 0.15s;
+.rd-fold-head {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border: none; background: transparent;
+  font-size: 13px; font-weight: 600; color: #1a1d24;
+  text-align: left; cursor: pointer; transition: background 0.15s;
 }
-.preset-btn:hover { border-color: #c7d2fe; }
-.preset-btn.active {
-  border-color: #4f46e5; background: #eef2ff; color: #4f46e5;
+.rd-fold-head:hover { background: #f5f6fa; }
+.rd-fold.is-open .rd-fold-head { border-bottom: 1px solid #e6e8ec; }
+.rd-fold-summary { margin-left: auto; font-size: 11px; font-weight: 400; color: #94a3b8; }
+.rd-fold-body { padding: 12px; }
+
+.rd-bind-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; margin-bottom: 8px;
+  border: 1px solid #e6e8ec; border-radius: 8px;
 }
+.rd-bind-row:last-child { margin-bottom: 0; }
+/* 降级:绑定引用的凭证已删 — 标红不报废,运行时该用户不注入 */
+.rd-bind-row.is-degraded { border-color: #fca5a5; background: #fef2f2; }
+.rd-bind-svc {
+  min-width: 120px; font-family: var(--font-mono);
+  font-size: 12px; font-weight: 600;
+}
+.rd-bind-user {
+  min-width: 128px; padding: 5px 8px;
+  border: 1px solid #e6e8ec; border-radius: 6px;
+  font-size: 12px; background: #fff;
+}
+.rd-bind-row.is-degraded .rd-bind-user { border-color: #fca5a5; }
+.rd-bind-url {
+  flex: 1; min-width: 0; padding: 5px 8px;
+  border: 1px solid #e6e8ec; border-radius: 6px;
+  font-size: 12px; background: #fff;
+}
+.rd-bind-warn { font-size: 11px; color: #b91c1c; white-space: nowrap; }
+.rd-empty { margin: 4px 0 0; font-size: 12px; color: #94a3b8; }
 
 .run-error, .run-success {
   display: flex; gap: 10px; align-items: flex-start;
