@@ -30,13 +30,15 @@ from ._error_mapping import key_error_404, not_found_404, value_error_http
 from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import (
     PreviewPlateError,
+    PreviewPlateIn,
     PreviewPlateResponse,
     Scenario,
     ScenarioDraft,
     StarIn,
 )
-from ..services import plate_client, scenario_store
+from ..services import env_store, plate_client, run_dispatcher, scenario_store
 from ..services.marks_store import stars
+from ..services.run_materialize import materialize_run_copy
 
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
@@ -98,7 +100,7 @@ def _draft_to_full_scenario_dict(
     "/preview-plate", response_model=PreviewPlateResponse
 )
 async def preview_plate(
-    user: CurrentUser, db: DbSession, body: ScenarioDraft
+    user: CurrentUser, db: DbSession, body: PreviewPlateIn
 ) -> PreviewPlateResponse:
     """Forward the draft to Plate's ``/convert`` and return the verdict.
 
@@ -134,6 +136,38 @@ async def preview_plate(
     # the full ``converted`` dict back so the frontend can use it as the
     # canonical "gimbal-executable" structure for export.
     converted = (data or {}).get("converted") or {}
+    # Optional export overlay (spec §8): convert 之后、返回之前物化
+    # (POST-convert 位点,明文绑定/凭证不过 plate)。物化语义与
+    # run 执行链(run_dispatcher._fanout)同源 — 黄金等价:同场景同
+    # overlay 下 preview-plate 产物 ≡ 基线单行 case.json,逐字段相等。
+    if body.overlay is not None:
+        env_base_url = ""
+        if body.overlay.env_id:
+            envs = env_store.list_envs()  # 与 dispatch 同源的环境读取(sync, lru_cache)
+            match = [e for e in envs if e.env_id == body.overlay.env_id]
+            if not match:
+                raise HTTPException(
+                    status_code=404,
+                    detail={"code": "env_not_found",
+                            "message": body.overlay.env_id},
+                )
+            env_base_url = match[0].base_url or ""
+        aliases = sorted({b.auth_alias for b in body.overlay.service_bindings.values()
+                          if b.auth_alias})
+        exec_auths = await run_dispatcher._resolve_exec_auths(
+            run_dispatcher.session_factory, owner_id=user.id, aliases=aliases)
+        # built_in 基座与 dispatch 同源:场景 definition.config.users
+        # (plate 会剥平台视图字段,内置认证以场景定义为唯一可信源)
+        def_cfg = (body.definition.get("config") or {})
+        built_in = def_cfg.get("users") if isinstance(def_cfg.get("users"), dict) else {}
+        converted = materialize_run_copy(
+            converted,
+            env_base_url=env_base_url,
+            service_bindings={k: b.model_dump(by_alias=True)
+                              for k, b in body.overlay.service_bindings.items()},
+            resolved_auths=exec_auths,
+            built_in_users=dict(built_in or {}),
+        )
     inner_errors = converted.get("errors") or []
     return PreviewPlateResponse(
         ok=True,

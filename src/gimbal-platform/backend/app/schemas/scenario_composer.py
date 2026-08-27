@@ -192,6 +192,16 @@ class ServiceBinding(BaseModel):
     url: str | None = Field(default=None, alias="url", max_length=512)
 
 
+class ExportOverlay(BaseModel):
+    """导出/预览的运行方案覆盖层(spec §8)。dataSetIds 有意不收 —
+    导出是场景级产物,行级展开是非目标。"""
+    model_config = _CAMEL
+
+    env_id: str | None = Field(default=None, alias="envId", min_length=1, max_length=64)
+    service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
+                                                        alias="serviceBindings")
+
+
 class RunRequest(BaseModel):
     """一次执行的配方(recipe):env/数据集/认证等全是纯值。
 
@@ -237,6 +247,17 @@ class RunResponse(BaseModel):
 
 
 # ─── preview-plate ─────────────────────────────────────────────────
+class PreviewPlateIn(ScenarioDraft):
+    """POST /scenarios/preview-plate 请求体:ScenarioDraft + 可选 overlay。
+
+    ``overlay`` 不传 → 与旧 ScenarioDraft 行为完全一致(向后兼容,
+    spec §8);传入则 convert 产物经 materialize_run_copy 物化(明文
+    绑定/凭证注入 POST-convert 位点,不过 plate)。
+    """
+
+    overlay: ExportOverlay | None = None
+
+
 class PreviewPlateError(BaseModel):
     model_config = _CAMEL
 
@@ -293,8 +314,10 @@ __all__ = [
     "DataSet",
     "DataSetDraft",
     "DataSetSummary",
+    "ExportOverlay",
     "Orchestration",
     "PreviewPlateError",
+    "PreviewPlateIn",
     "PreviewPlateResponse",
     "RunEnv",
     "RunRequest",
