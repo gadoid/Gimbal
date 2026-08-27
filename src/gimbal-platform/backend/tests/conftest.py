@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 from typing import AsyncGenerator
 
+import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import (
@@ -49,12 +50,6 @@ async def fresh_db(monkeypatch, tmp_path) -> AsyncGenerator[None, None]:
 
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    # Sanity check: list tables in the new sqlite file
-    async with test_engine.connect() as conn:
-        from sqlalchemy import text
-
-        rows = (await conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))).all()
-        logger.info("fresh_db created tables: %s", [r[0] for r in rows])
 
     try:
         yield
@@ -63,18 +58,18 @@ async def fresh_db(monkeypatch, tmp_path) -> AsyncGenerator[None, None]:
 
 
 @pytest.fixture(autouse=True)
-def _isolate_favorites(tmp_path, monkeypatch):
-    """Point the in-memory favorites store at the per-test tmp dir.
+def _isolate_marks(tmp_path, monkeypatch):
+    """Point the marks store (stars) at the per-test tmp dir.
 
-    Without this, favorites written by one test pollute the next test in the
-    same pytest run (and any local ``data/favorites.json`` from prior runs).
+    Without this, marks written by one test pollute the next test in the
+    same pytest run (and any local ``data/stars.json`` from prior runs).
     """
-    from app.routers import cases as cases_router
+    from app.services.marks_store import stars
 
-    monkeypatch.setattr(cases_router, "_FAV_PATH", tmp_path / "favorites.json")
-    cases_router._FAVORITES.clear()
+    stars.path = tmp_path / "stars.json"
+    stars.clear_for_tests()
     yield
-    cases_router._FAVORITES.clear()
+    stars.clear_for_tests()
 
 
 @pytest.fixture
@@ -89,3 +84,59 @@ async def client(fresh_db) -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+class EndpointPlateMock:
+    """Programmable plate mock for the endpoint dim(适配域测试共享)。
+
+    ``items``:GET /api/endpoint 轻量列表(id/version/updated_at);
+    ``fulls``:endpoint_id → full spec(GET /api/endpoint/{id}/full);
+    ``down=True``:一切请求抛 ConnectError(plate 不可达)。
+    """
+
+    def __init__(self) -> None:
+        self.items: list[dict] = []
+        self.fulls: dict[str, dict] = {}
+        self.down = False
+
+    def install(self) -> None:
+        mock = self
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if mock.down:
+                raise httpx.ConnectError("connection refused", request=request)
+            path = request.url.path
+            if path == "/api/endpoint":
+                return httpx.Response(200, json={
+                    "ok": True, "dim": "endpoint",
+                    "data": {"items": mock.items, "total": len(mock.items)},
+                })
+            if path.endswith("/full"):
+                eid = path.rsplit("/", 2)[-2]
+                if eid in mock.fulls:
+                    return httpx.Response(200, json={
+                        "ok": True, "dim": "endpoint",
+                        "data": {"item": mock.fulls[eid], "total": 1},
+                    })
+            return httpx.Response(404, json={"ok": False})
+
+        from app.services import plate_client
+
+        plate_client.set_client_for_tests(httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), base_url="http://plate-test",
+        ))
+
+    def uninstall(self) -> None:
+        from app.services import plate_client
+
+        plate_client.set_client_for_tests(None)
+
+
+@pytest.fixture
+def plate():
+    mock = EndpointPlateMock()
+    mock.install()
+    try:
+        yield mock
+    finally:
+        mock.uninstall()

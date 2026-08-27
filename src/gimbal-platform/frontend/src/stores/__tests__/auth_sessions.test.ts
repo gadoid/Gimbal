@@ -83,4 +83,14 @@ describe('useAuthSessionsStore', () => {
     const r = await s.testConnection(1)
     expect(r).toEqual(result)
   })
+
+  it('fetchDetail 直通 api.get;includeSecrets 明文不落 store 状态', async () => {
+    const secrets = { ...sample, password: 's3cret' }
+    const getSpy = vi.spyOn(api, 'get').mockResolvedValue(secrets)
+    const s = useAuthSessionsStore()
+    const r = await s.fetchDetail(1, true)
+    expect(r).toEqual(secrets)
+    expect(getSpy).toHaveBeenCalledWith(1, true)
+    expect(JSON.stringify(s.$state)).not.toContain('s3cret')
+  })
 })

@@ -25,6 +25,8 @@ from ..schemas.auth import (
     TokenOut,
     UserPublic,
 )
+from ._codes import BAD_CREDENTIALS, ACCOUNT_DISABLED, NAME_TAKEN_ON_REGISTER, code_detail
+from ._name_checks import assert_name_available
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -55,14 +57,16 @@ async def register(
     payload: RegisterIn,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TokenOut:
-    existing = (
-        await db.execute(select(User).where(User.username == payload.username))
-    ).scalar_one_or_none()
-    if existing is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": 4003, "msg": "用户名已被占用"},
-        )
+    # Normalize display_name the same way patch_user does: it doubles as
+    # composer-ownership identity, so " Bob " / "Bob" must not coexist.
+    payload.display_name = (payload.display_name or "").strip()
+    # 用户名/display_name 查重 + 双向冲突检查(见 _name_checks)。
+    await assert_name_available(
+        db,
+        username=payload.username,
+        display_name=payload.display_name or None,
+        code=NAME_TAKEN_ON_REGISTER,
+    )
     # First registered user becomes admin.
     count = (await db.execute(select(func.count()).select_from(User))).scalar_one()
     is_admin = count == 0
@@ -91,12 +95,12 @@ async def login(
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": 4004, "msg": "用户名或密码错误"},
+            detail=code_detail(BAD_CREDENTIALS, "用户名或密码错误"),
         )
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": 4005, "msg": "账号已停用"},
+            detail=code_detail(ACCOUNT_DISABLED, "账号已停用"),
         )
     return _token_out(user)
 

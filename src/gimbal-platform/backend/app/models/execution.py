@@ -1,8 +1,11 @@
-"""Execution + ExecRun models (Spec-2 §4.5 E).
+"""Execution model(V3)。
 
-Executions are user-triggered runs of a case with N parallel/concurrent
-subprocess calls to ``gimbal run launch``.  Each run produces one HTML
-report file; the parent Execution row aggregates counters.
+Execution 是用户触发的场景执行:run_dispatcher 逐行 fan-out 调
+gimbal_launcher 子进程(``gimbal run launch``),只更新本表计数器;
+每-run 明细的 exec_runs 表(V1 子进程时代)已随存量数据清理退役。
+
+DB 列 ``scenario_id`` 由 Spec-2 时代的 ``case_id`` 迁移改名而来
+(Case 层已解散,场景即挂载点;迁移见 core/db.py)。
 """
 from __future__ import annotations
 
@@ -14,52 +17,37 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
-    Text,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
 
+# Execution.status values (V3 dispatcher lifecycle)
+STATUS_QUEUED = "queued"
+STATUS_RUNNING = "running"
+STATUS_DONE = "done"
+STATUS_FAILED = "failed"
+STATUS_CANCELED = "canceled"
+
 
 class Execution(Base):
     __tablename__ = "executions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    case_id: Mapped[str] = mapped_column(String(256), index=True)
+    scenario_id: Mapped[str] = mapped_column(String(128), index=True)
     owner_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
-    status: Mapped[str] = mapped_column(String(16), default="queued")
-    # queued / running / done / failed
+    status: Mapped[str] = mapped_column(String(16), default=STATUS_QUEUED)
+    # queued / running(认证解析通过、行分发开始)/ done / failed / canceled
     total_runs: Mapped[int] = mapped_column(Integer, default=0)
     passed: Mapped[int] = mapped_column(Integer, default=0)
     failed: Mapped[int] = mapped_column(Integer, default=0)
     config_json: Mapped[dict] = mapped_column(JSON, default=dict)
-    # {N, parallel, env, prefix, execAuthAlias, mergePolicy}
+    # V3 dispatcher recipe: {runId, scenarioId, dataSetIds, envId,
+    # injectedAuths, serviceBindings, stepTo, nRuns, parallel}
+    # (T3 起旧配方键已退役;存量历史行仍含旧键,读侧按键驱动渲染)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-
-
-class ExecRun(Base):
-    __tablename__ = "exec_runs"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    execution_id: Mapped[int] = mapped_column(
-        ForeignKey("executions.id", ondelete="CASCADE"), index=True
-    )
-    idx: Mapped[int] = mapped_column(Integer)  # 1..N
-    status: Mapped[str] = mapped_column(String(16), default="pending")
-    # pending / running / passed / failed
-    exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    report_path: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Path to the `<report_dir>/run_<id>.log` text file written on completion
-    # (CLI cmdline + captured stdout + stderr).  Null while the run is still
-    # pending/running.
-    log_path: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Full command line that was launched, rendered for the UI log dialog.
-    command_line: Mapped[str | None] = mapped_column(Text, nullable=True)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)

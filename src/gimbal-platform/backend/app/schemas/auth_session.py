@@ -10,8 +10,8 @@ class AuthSessionOut(BaseModel):
     """Public-facing view of an AuthSession row.
 
     Note: the password is NEVER returned in plaintext.  ``password_masked``
-    is a sentinel the UI uses to render ``<REDACTED>``.  Use the
-    ``/fetch-token`` endpoint to obtain a usable token at execution time.
+    is a sentinel the UI uses to render ``<REDACTED>``.  凭证解密注入由
+    run_dispatcher 服务端完成(不对外下发)。
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -50,18 +50,12 @@ class TestResult(BaseModel):
     message: str
 
 
-class FetchTokenOut(BaseModel):
-    """Returned by /fetch-token — the cleared plaintext credentials.
+class AuthSessionSecretsOut(AuthSessionOut):
+    """include_secrets=true 时的详情视图 — 附解密后的明文 password。
 
-    ``token`` is the bearer token returned by the target auth endpoint;
-    ``username`` / ``password`` are surfaced for the executor to call
-    arbitrary login flows (Spec-2 §4.5).
+    仅限内网测试环境的策略放宽(2026-08-25 认证改造设计):场景配置页
+    "从凭证池导入"需要把明文快照拷进 config.users(导出在前端本地拼装,
+    明文必须过客户端)。列表接口行为不变,不带密。
     """
 
-    alias: str
-    url: str
-    username: str
     password: str
-    token_type: str
-    token: str
-    expires_at: datetime | None = None

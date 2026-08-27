@@ -13,7 +13,8 @@
           v-model="searchQuery"
           class="search-input"
           clearable
-          placeholder="🔍 搜索 alias / username / url"
+          :prefix-icon="Search"
+          placeholder="搜索 alias / username / url"
         />
         <el-select v-model="tokenTypeFilter" class="tt-filter">
           <el-option label="全部 token_type" value="all" />
@@ -64,7 +65,7 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="操作" width="140" align="center" fixed="right">
+      <el-table-column label="操作" width="200" align="center" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="runTest(row)">测试</el-button>
           <el-button link @click="openEdit(row)">编辑</el-button>
@@ -132,29 +133,34 @@
       </template>
     </el-dialog>
 
-    <!-- ── Test result dialog ────────────────────────── -->
-    <el-dialog
-      v-model="testOpen"
-      :title="testResult?.ok ? '✓ 连通成功' : '✗ 连通失败'"
-      width="460px"
-    >
-      <div v-if="testResult" class="test-result">
-        <div class="kv">
-          <span class="kv-label">HTTP 状态</span>
-          <code class="mono">{{ testResult.status_code ?? '—' }}</code>
+    <!-- ── Test result dialog(状态主视觉式)────────────── -->
+    <el-dialog v-model="testOpen" title="认证测试" width="460px">
+      <div v-if="testTarget" class="test-hero">
+        <div class="test-sub">{{ testTarget.alias }} · {{ testTarget.url }}</div>
+
+        <div v-if="testPhase === 'testing'" class="test-state testing">
+          <span class="test-icon spinner" />
+          <span class="test-word">认证中…</span>
         </div>
-        <div class="kv">
-          <span class="kv-label">结果</span>
-          <span :class="testResult.ok ? 'text-ok' : 'text-fail'">
-            {{ testResult.ok ? '成功' : '失败' }}
-          </span>
-        </div>
-        <div class="kv kv-block">
-          <span class="kv-label">详情</span>
-          <code class="mono detail">{{ testResult.message }}</code>
-        </div>
+
+        <template v-else-if="testResult">
+          <div class="test-state" :class="testPhase">
+            <span class="test-icon">{{ testPhase === 'success' ? '✓' : '✗' }}</span>
+            <span class="test-word">{{ testPhase === 'success' ? '认证成功' : '认证失败' }}</span>
+            <span v-if="testResult.status_code != null" class="test-code">
+              HTTP {{ testResult.status_code }}
+            </span>
+          </div>
+          <button class="detail-toggle" @click="testDetailOpen = !testDetailOpen">
+            {{ testDetailOpen ? '▾' : '▸' }} 详情
+          </button>
+          <code v-if="testDetailOpen" class="mono detail">{{ testResult.message }}</code>
+        </template>
       </div>
       <template #footer>
+        <el-button v-if="testPhase !== 'testing' && testTarget" @click="runTest(testTarget)">
+          重新测试
+        </el-button>
         <el-button type="primary" @click="testOpen = false">关闭</el-button>
       </template>
     </el-dialog>
@@ -162,7 +168,7 @@
     <!-- ── Delete confirm ───────────────────────────── -->
     <el-dialog
       v-model="deleteOpen"
-      title="⚠ 删除认证"
+      title="删除认证"
       width="420px"
       :close-on-click-modal="false"
     >
@@ -192,28 +198,29 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { Search } from '@element-plus/icons-vue'
+import { useListSearch } from '@/utils/useListSearch'
 import { ElMessage, type FormInstance } from 'element-plus'
+import { showError } from '@/utils/errorFallback'
 import { useAuthSessionsStore } from '@/stores/auth_sessions'
 import type { AuthSession, TestResult } from '@/api/auth_sessions'
 
 const store = useAuthSessionsStore()
 
 // ── filters ────────────────────────────────────────────────────
-const searchQuery = ref('')
+// Search via the shared composable; the token-type chip filter is
+// applied on top so the two concerns stay orthogonal.
+const { query: searchQuery, filtered: searchFiltered } = useListSearch(
+  () => store.list,
+  ['alias', 'username', 'url'],
+)
 const tokenTypeFilter = ref<'all' | 'Bearer' | 'Basic' | 'Cookie' | 'Authorization'>('all')
 
-const visibleAuths = computed(() => {
-  const q = searchQuery.value.trim().toLocaleLowerCase()
-  return store.list.filter((a) => {
-    if (tokenTypeFilter.value !== 'all' && a.token_type !== tokenTypeFilter.value) return false
-    if (!q) return true
-    return (
-      a.alias.toLocaleLowerCase().includes(q) ||
-      a.username.toLocaleLowerCase().includes(q) ||
-      a.url.toLocaleLowerCase().includes(q)
-    )
-  })
-})
+const visibleAuths = computed(() =>
+  searchFiltered.value.filter(
+    (a) => tokenTypeFilter.value === 'all' || a.token_type === tokenTypeFilter.value,
+  ),
+)
 
 const metaText = computed(() => {
   const total = store.list.length
@@ -316,28 +323,42 @@ async function submitForm() {
       ElMessage.success(`已创建 ${form.alias}`)
     }
     createOpen.value = false
-  } catch {
-    ElMessage.error(store.lastError || '保存失败')
+  } catch (e) {
+    // store 的 mutation 不维护 lastError — 必须用捕获到的错误本身，
+    // 否则会显示上一次 fetch 的陈旧错误。
+    showError('保存', undefined, (e as Error).message)
   } finally {
     submitting.value = false
   }
 }
 
 // ── test ───────────────────────────────────────────────────────
+// 状态机:开弹框即 testing(修复历史 bug — 标题三元把 null 折叠成
+// "连通失败",在途假失败);返回/异常切终态。失败详情默认展开。
 const testOpen = ref(false)
+const testPhase = ref<'testing' | 'success' | 'fail'>('testing')
 const testResult = ref<TestResult | null>(null)
+const testTarget = ref<AuthSession | null>(null)
+const testDetailOpen = ref(true)
 
 async function runTest(row: AuthSession) {
+  testTarget.value = row
   testResult.value = null
+  testPhase.value = 'testing'
+  testDetailOpen.value = true
   testOpen.value = true
   try {
     testResult.value = await store.testConnection(row.id)
-  } catch {
+    testPhase.value = testResult.value.ok ? 'success' : 'fail'
+    // 成功默认收起(信息就一行 token 预览);失败保持展开直接看到原因
+    if (testPhase.value === 'success') testDetailOpen.value = false
+  } catch (e) {
     testResult.value = {
       ok: false,
       status_code: null,
-      message: store.lastError || '请求失败',
+      message: (e as Error).message || '请求失败',
     }
+    testPhase.value = 'fail'
   }
 }
 
@@ -364,8 +385,9 @@ async function submitDelete() {
     await store.deleteAuth(deleteTarget.value.id)
     ElMessage.success(`已删除 ${deleteTarget.value.alias}`)
     deleteOpen.value = false
-  } catch {
-    ElMessage.error(store.lastError || '删除失败')
+  } catch (e) {
+    // deleteAuth 直连 api 并 rethrow — store 没有 lastError, 必须用真实错误
+    showError('删除', undefined, (e as Error).message)
   } finally {
     deleteSubmitting.value = false
   }
@@ -376,7 +398,7 @@ onMounted(async () => {
   try {
     await store.fetchAll()
   } catch {
-    ElMessage.error(store.lastError || '加载失败')
+    showError('加载', undefined, store.lastError)
   }
 })
 </script>
@@ -441,15 +463,6 @@ onMounted(async () => {
 }
 
 .url {
-  color: var(--color-text-secondary);
-  font-size: 11px;
-}
-
-.mono {
-  font-family: var(--font-mono);
-}
-
-.muted {
   color: var(--color-text-secondary);
   font-size: 11px;
 }
@@ -523,8 +536,69 @@ onMounted(async () => {
   word-break: break-all;
 }
 
-.text-ok { color: #166534; font-weight: 600; }
-.text-fail { color: #991b1b; font-weight: 600; }
+/* 测试弹框 — 状态主视觉式 */
+.test-hero { text-align: center; }
+
+.test-sub {
+  margin-bottom: 18px;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.test-state {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  margin: 6px 0 14px;
+}
+
+.test-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  font-size: 20px;
+  font-weight: 700;
+  border-radius: 50%;
+}
+
+.testing .test-icon {
+  border: 3px solid #e2e8f0;
+  border-top-color: #6366f1;
+  animation: test-spin 0.9s linear infinite;
+}
+
+.success .test-icon { color: #166534; background: #dcfce7; }
+.fail .test-icon { color: #991b1b; background: #fef2f2; }
+
+.test-word { font-size: 16px; font-weight: 600; }
+.testing .test-word { color: var(--color-text-secondary); }
+.success .test-word { color: #166534; }
+.fail .test-word { color: #991b1b; }
+
+.test-code {
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.detail-toggle {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+@keyframes test-spin { to { transform: rotate(360deg); } }
 
 .delete-body p {
   margin: 0 0 10px;

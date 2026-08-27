@@ -15,15 +15,15 @@
       class="exec-table"
     >
       <el-table-column label="#" prop="id" width="60" />
-      <el-table-column label="case_id" min-width="180">
+      <el-table-column label="scenario_id" min-width="180">
         <template #default="{ row }">
-          <code class="mono">{{ row.case_id }}</code>
+          <code class="mono">{{ row.scenario_id }}</code>
         </template>
       </el-table-column>
       <el-table-column label="状态" width="120">
         <template #default="{ row }">
           <span :class="['status-tag', `status-${row.status}`]">
-            {{ statusText(row.status) }}
+            {{ executionStatusText(row.status) }}
           </span>
         </template>
       </el-table-column>
@@ -37,17 +37,32 @@
           <span class="mono dim">{{ row.started_at?.slice(0, 19).replace('T', ' ') || '—' }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="120" align="center" fixed="right">
+      <el-table-column label="操作" width="160" align="center" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="open(row.id)">详情</el-button>
+          <el-button
+            v-if="row.status === 'queued' || row.status === 'running'"
+            link
+            type="warning"
+            @click="cancel(row.id)"
+            >取消</el-button
+          >
           <el-button link type="danger" @click="remove(row.id)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
 
+    <el-alert
+      v-else-if="store.lastError"
+      :title="`加载执行历史失败：${store.lastError}`"
+      type="error"
+      :closable="false"
+      show-icon
+      class="load-error"
+    />
     <el-empty
       v-else-if="!store.loading"
-      description="暂无执行记录 — 从用例页点击 ⋯ → 执行"
+      description="暂无执行记录 — 在场景编排页点击「运行」发起执行"
     />
   </section>
 </template>
@@ -57,29 +72,50 @@ import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useExecutionsStore } from '@/stores/executions'
+import { cancelExecution } from '@/api/executions'
+import { executionStatusText } from '@/utils/executionStatus'
+import { executionUrl } from '@/utils/links'
+import { removeExecution } from '@/utils/removeExecution'
+import { showError } from '@/utils/errorFallback'
 
 const router = useRouter()
 const store = useExecutionsStore()
 
-function statusText(s: string): string {
-  return ({ queued: '排队', running: '运行中', done: '完成', failed: '失败' } as Record<string, string>)[s] ?? s
-}
-
 function open(id: number) {
-  router.push(`/executions/${id}`)
+  router.push(executionUrl(id))
 }
 
 async function remove(id: number) {
-  await store.remove(id)
-  ElMessage.success('已删除')
+  await removeExecution(id, (i) => store.remove(i))
+}
+
+/** P4 协作式取消:queued/running 行可见(running 由在飞 fanout 行边界
+ * 消费;无在飞 task 的都是重启僵尸,后端 inline 终态化)。
+ * 409 = 点击时单子已终态(竞态)。 */
+async function cancel(id: number) {
+  try {
+    await cancelExecution(id)
+    ElMessage.success('已请求取消')
+  } catch (e) {
+    if ((e as { status?: number }).status === 409) {
+      // 终态竞态:刷新让取消按钮消失即可,不算失败。
+      ElMessage.info('该执行已结束,无法取消')
+    } else {
+      showError('取消', e)
+      return
+    }
+  }
+  await store.fetchList().catch(() => undefined)
 }
 
 let handle: ReturnType<typeof setInterval> | null = null
 
 onMounted(async () => {
-  await store.fetchList()
-  // Refresh list every 3s while on the page (cheap; list is small)
-  handle = setInterval(() => store.fetchList(), 3000)
+  await store.fetchList().catch(() => undefined)
+  // Refresh list every 3s while on the page (cheap; list is small).
+  // fetchList rethrows — swallow here so a down backend / expired
+  // session doesn't emit an unhandled rejection every tick.
+  handle = setInterval(() => store.fetchList().catch(() => undefined), 3000)
 })
 
 onUnmounted(() => {
@@ -113,13 +149,8 @@ onUnmounted(() => {
   border-radius: 8px;
 }
 
-.mono {
-  font-family: var(--font-mono);
-}
-
-.dim {
-  color: var(--color-text-secondary);
-  font-size: 11px;
+.load-error {
+  margin-top: 14px;
 }
 
 .status-tag {
@@ -130,23 +161,7 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
-.status-queued {
-  color: #4338ca;
-  background: #eef2ff;
-}
-
-.status-running {
-  color: #854d0e;
-  background: #fef9c3;
-}
-
-.status-done {
-  color: #166534;
-  background: #dcfce7;
-}
-
-.status-failed {
-  color: #991b1b;
-  background: #fee2e2;
-}
+/* 状态配色统一在 @/styles/status-colors.css（见文件末尾引入） */
 </style>
+
+<style src="@/styles/status-colors.css"></style>

@@ -11,18 +11,20 @@ from gimbal.cli.commands.run_scenario import scenario
 from gimbal.cli.commands.run_server import server
 from gimbal.cli.commands.run_suite import suite
 from gimbal.cli.commands.run_launch import launch
+from gimbal.cli.commands.run_show import show
 
 
 run_app = typer.Typer(
     name="run",
     help=(
         "执行测试。\n\n"
-        "五种执行模式：\n"
+        "六种执行模式：\n"
         "  suite     按 ID 执行已注册的 Suite 资产（支持命名空间通配）\n"
         "  scenario  按 ID 执行已注册的 Scenario 资产（支持命名空间通配）\n"
         "  match     按路径/模式匹配本地未注册的用例文件\n"
         "  server    作为服务监听端口接收任务\n"
-        "  launch    直接接收文件信息进行加载执行"
+        "  launch    直接接收文件信息进行加载执行\n"
+        "  show      只读展示 Scenario 的步骤索引 → 描述映射（不执行，方便决定 --step-to）"
     ),
     no_args_is_help=True,
 )
@@ -34,3 +36,4 @@ run_app.command("scenario")(scenario)
 run_app.command("match")(match)
 run_app.command("server")(server)
 run_app.command("launch")(launch)
+run_app.command("show")(show)

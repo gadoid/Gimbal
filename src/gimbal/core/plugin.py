@@ -90,6 +90,7 @@ class PluginContext:
     event_bus: EventBusProtocol
     hook_registry: HookRegistryProtocol
     plugin_registry: Any = None                            # 通用插件注册表（避开循环 import）
+    auth_registry: Any = None                              # 运行时认证会话注册表
 
     # 计数器：仅用于 activate 日志打印"本插件注册了几个 event/hook"。
     # 实际的清理走 name-based 路径（event_bus.unsubscribe_plugin(name) /

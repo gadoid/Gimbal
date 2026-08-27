@@ -14,11 +14,12 @@
           v-model="searchQuery"
           class="search-input"
           clearable
-          placeholder="🔍 搜索用户名 / 昵称"
+          :prefix-icon="Search"
+          placeholder="搜索用户名 / 昵称"
         />
         <el-select v-model="roleFilter" class="role-filter" placeholder="角色">
           <el-option label="全部角色" value="all" />
-          <el-option label="🛡 admin" value="admin" />
+          <el-option label="admin" value="admin" />
           <el-option label="成员" value="member" />
         </el-select>
         <el-button type="primary" @click="openCreate">+ 创建用户</el-button>
@@ -55,7 +56,7 @@
         <template #default="{ row }">
           <span
             :class="['role-badge', row.is_admin ? 'role-admin' : 'role-member']"
-          >{{ row.is_admin ? '🛡 admin' : '成员' }}</span>
+          >{{ row.is_admin ? 'admin' : '成员' }}</span>
         </template>
       </el-table-column>
 
@@ -151,7 +152,7 @@
               show-password
               placeholder="至少 8 位含字母 + 数字"
             />
-            <el-button @click="randomPassword">🎲 随机</el-button>
+            <el-button @click="randomPassword">随机</el-button>
           </div>
           <div class="pw-hint">
             首登录后强制修改 · 至少 8 位含字母 + 数字
@@ -160,7 +161,7 @@
         <el-form-item label="角色" prop="is_admin">
           <el-radio-group v-model="createForm.is_admin">
             <el-radio :value="false">成员</el-radio>
-            <el-radio :value="true">🛡 admin</el-radio>
+            <el-radio :value="true">admin</el-radio>
           </el-radio-group>
         </el-form-item>
       </el-form>
@@ -177,7 +178,7 @@
     <!-- ── Edit user dialog ───────────────────────────────── -->
     <el-dialog
       v-model="editOpen"
-      title="✏️ 编辑用户"
+      title="编辑用户"
       width="420px"
       :close-on-click-modal="false"
     >
@@ -207,13 +208,13 @@
     <!-- ── Reset password dialog ──────────────────────────── -->
     <el-dialog
       v-model="resetOpen"
-      title="🔑 重置密码"
+      title="重置密码"
       width="420px"
     >
       <div v-if="resetResult" class="reset-result">
         <p>新密码已生成（仅显示一次）：</p>
         <code class="reset-pw mono">{{ resetResult.new_password }}</code>
-        <el-button @click="copyResetPw">📋 复制</el-button>
+        <el-button @click="copyResetPw"><el-icon style="margin-right:4px"><DocumentCopy /></el-icon>复制</el-button>
         <p class="reset-hint">
           目标用户：<b>{{ resetResult.username }}</b>（{{ resetResult.user_id }}）<br>
           首登录后强制修改 · 安全起见请通过安全渠道告知本人
@@ -227,7 +228,7 @@
     <!-- ── Delete confirm dialog ──────────────────────────── -->
     <el-dialog
       v-model="deleteOpen"
-      title="⚠ 删除用户"
+      title="删除用户"
       width="460px"
       :close-on-click-modal="false"
     >
@@ -259,7 +260,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { DocumentCopy, Search } from '@element-plus/icons-vue'
+import { useListSearch } from '@/utils/useListSearch'
 import { ElMessage, type FormInstance } from 'element-plus'
+import { showError } from '@/utils/errorFallback'
 import { useUsersStore } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
 import * as usersApi from '@/api/users'
@@ -270,21 +274,22 @@ const authStore = useAuthStore()
 
 // ── filters & visible rows ──────────────────────────────
 type RoleFilter = 'all' | 'admin' | 'member'
-const searchQuery = ref('')
+// Search + role filter split: useListSearch handles substring
+// matching, the role filter stays as a separate predicate so the
+// composable stays generic.
+const { query: searchQuery, filtered: searchFiltered } = useListSearch(
+  () => usersStore.list,
+  ['username', 'display_name'],
+)
 const roleFilter = ref<RoleFilter>('all')
 
-const visibleUsers = computed(() => {
-  const q = searchQuery.value.trim().toLocaleLowerCase()
-  return usersStore.list.filter((u) => {
+const visibleUsers = computed(() =>
+  searchFiltered.value.filter((u) => {
     if (roleFilter.value === 'admin' && !u.is_admin) return false
     if (roleFilter.value === 'member' && u.is_admin) return false
-    if (!q) return true
-    return (
-      u.username.toLocaleLowerCase().includes(q) ||
-      (u.display_name ?? '').toLocaleLowerCase().includes(q)
-    )
-  })
-})
+    return true
+  }),
+)
 
 const adminCount = computed(() => usersStore.list.filter((u) => u.is_admin).length)
 const activeCount = computed(() => usersStore.list.filter((u) => u.is_active).length)
@@ -343,7 +348,7 @@ async function toggleRole(row: UserOut): Promise<void> {
     await usersStore.patchUser(row.id, { is_admin: !row.is_admin })
     ElMessage.success(`已${row.is_admin ? '降级' : '升级'} ${row.username}`)
   } catch {
-    ElMessage.error(usersStore.lastError || '角色变更失败')
+    showError('修改', undefined, usersStore.lastError)
   }
 }
 
@@ -352,7 +357,7 @@ async function setActive(row: UserOut, active: boolean): Promise<void> {
     await usersStore.patchUser(row.id, { is_active: active })
     ElMessage.success(`已${active ? '启用' : '停用'} ${row.username}`)
   } catch {
-    ElMessage.error(usersStore.lastError || '状态变更失败')
+    showError('修改', undefined, usersStore.lastError)
   }
 }
 
@@ -366,7 +371,7 @@ async function resetPassword(row: UserOut): Promise<void> {
     resetResult.value = out
     resetOpen.value = true
   } catch {
-    ElMessage.error(usersStore.lastError || '重置密码失败')
+    showError('修改', undefined, usersStore.lastError)
   }
 }
 
@@ -451,7 +456,7 @@ async function submitCreate() {
     ElMessage.success(`已创建用户 ${createForm.username}`)
     createOpen.value = false
   } catch {
-    ElMessage.error(usersStore.lastError || '创建失败')
+    showError('创建', undefined, usersStore.lastError)
   } finally {
     createSubmitting.value = false
   }
@@ -479,7 +484,7 @@ async function submitEdit() {
     ElMessage.success(`已更新 ${editTarget.value.username}`)
     editOpen.value = false
   } catch {
-    ElMessage.error(usersStore.lastError || '保存失败')
+    showError('保存', undefined, usersStore.lastError)
   } finally {
     editSubmitting.value = false
   }
@@ -509,7 +514,7 @@ async function submitDelete() {
     ElMessage.success(`已删除 ${deleteTarget.value.username}`)
     deleteOpen.value = false
   } catch {
-    ElMessage.error(usersStore.lastError || '删除失败')
+    showError('删除', undefined, usersStore.lastError)
   } finally {
     deleteSubmitting.value = false
   }
@@ -520,7 +525,7 @@ onMounted(async () => {
   try {
     await usersStore.fetchAll()
   } catch {
-    ElMessage.error(usersStore.lastError || '加载用户失败')
+    showError('加载', undefined, usersStore.lastError)
   }
 })
 </script>
@@ -608,19 +613,6 @@ onMounted(async () => {
   font-weight: 700;
   background: #ede9fe;
   border-radius: 3px;
-}
-
-.muted {
-  color: var(--color-text-tertiary);
-}
-
-.mono {
-  font-family: var(--font-mono);
-}
-
-.dim {
-  color: var(--color-text-secondary);
-  font-size: 11px;
 }
 
 .role-badge {

@@ -1,0 +1,290 @@
+/* ──────────────────────────────────────────────────────────────────
+ * composer.css — V3 编排页共享样式层 (平面风统一)
+ *
+ * 基本信息 / 资源 / 配置 / 步骤编辑 四页共用的设计规则:
+ *   - 白卡片 + 1px 边框 + 10px 圆角, 无渐变无彩色图标底
+ *   - 卡片头: 16px 线性 SVG (currentColor) + 标题 + muted 描述 + 分割线
+ *   - 字段行统一 .c-field-row 栅格, 控件统一灰底白聚焦
+ *   - 内容宽度统一 1280px, padding 走 clamp 自适应
+ *
+ * 类名前缀 c- (composer), 页面组件按需引用, 不全局强制。
+ * ────────────────────────────────────────────────────────────────── */
+
+/* ── 页面容器 ── */
+.c-page {
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  gap: 16px;
+}
+
+/* ── 卡片 ── */
+.c-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  padding: 20px 24px;
+}
+
+.c-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--c-divider);
+}
+.c-card-head .c-head-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--c-text-secondary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.c-card-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-text);
+}
+.c-card-head .c-head-desc {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--c-text-tertiary);
+}
+.c-card-head .c-head-extra {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--c-text-tertiary);
+  align-self: center;
+}
+
+/* 计数徽章 (列表头用) */
+.c-count {
+  display: inline-block;
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+/* ── 表单栅格 (自适应) ── */
+.c-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 16px; }
+.c-grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 16px; }
+
+/* 字段行: label 窄列 + 控件填充。多字段行套 .c-field-row-group */
+.c-field-row {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) 1fr;
+  gap: 8px 12px;
+  align-items: center;
+}
+.c-field-row-label {
+  font-size: 12px;
+  color: var(--c-text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.c-field-row-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px 12px;
+  align-items: center;
+}
+
+/* 统一行内控件行: 灰底框内 label 左 + 控件右, 时间/重试/开关等共用。
+ * 控件列不定宽 — el-switch / 小号 input-number 靠自身固有宽对齐。 */
+.c-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--c-bg-secondary);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+}
+.c-inline-row .c-inline-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--c-text-secondary);
+  font-weight: 500;
+}
+.c-inline-row .c-inline-hint {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--c-text-tertiary);
+  margin: 2px 0 0;
+}
+.c-inline-row .c-inline-ctrl { flex-shrink: 0; }
+.c-inline-row .c-inline-ctrl :deep(.el-input-number) { width: 120px; }
+/* 多行堆叠变体 (垂直分组若干行) */
+.c-inline-stack { display: flex; flex-direction: column; gap: 8px; }
+.c-inline-row.wrap { flex-wrap: wrap; row-gap: 6px; }
+
+/* ── 统一 Element-Plus 控件外观 ── */
+.c-form :deep(.el-input__wrapper),
+.c-form :deep(.el-textarea__inner),
+.c-form :deep(.el-select__wrapper) {
+  border-radius: 6px;
+  background: var(--c-field-bg);
+  box-shadow: 0 0 0 1px var(--c-field-border);
+  transition: box-shadow 0.15s, background 0.15s;
+}
+.c-form :deep(.el-input__wrapper:hover),
+.c-form :deep(.el-select__wrapper:hover) {
+  box-shadow: 0 0 0 1px var(--c-accent-soft-border);
+}
+.c-form :deep(.el-input__wrapper.is-focus),
+.c-form :deep(.el-textarea__inner:focus),
+.c-form :deep(.el-select__wrapper.is-focused) {
+  background: var(--c-surface);
+  box-shadow: 0 0 0 2px var(--c-accent);
+}
+.c-form :deep(.el-form-item__label) {
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--c-text);
+}
+.c-form :deep(.el-form-item) { margin-bottom: 16px; }
+
+/* 数字输入 */
+.c-form :deep(.el-input-number__decrease),
+.c-form :deep(.el-input-number__increase) { background: var(--c-bg-secondary); }
+
+/* ── 键值行 (vars / services / port-mapping 共用) ──
+ * auto-fit: 窄屏自动从 2 列降 1 列, 宽屏保持 key 固定 + value 填充 */
+.c-kv-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) 24px minmax(0, 1fr) 28px;
+  gap: 6px;
+  align-items: center;
+  padding: 6px;
+  background: var(--c-bg-secondary);
+  border-radius: 6px;
+}
+.c-kv-row .c-kv-sep { color: var(--c-text-tertiary); text-align: center; }
+.c-kv-del {
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; border-radius: 4px;
+  color: var(--c-text-tertiary); cursor: pointer; font-size: 16px;
+}
+.c-kv-del:hover { background: #fef2f2; color: #ef4444; }
+@media (max-width: 720px) {
+  .c-kv-row { grid-template-columns: 1fr 28px; }
+  .c-kv-row .c-kv-sep { display: none; }
+}
+
+/* ── JSON 编辑器 (暗底等宽) ── */
+.c-json {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  background: #1e1e2e;
+  color: #a6e3a1;
+  border: 1px solid #313244;
+  border-radius: 6px;
+  padding: 8px 12px;
+  resize: vertical;
+  min-height: 56px;
+  box-sizing: border-box;
+}
+
+/* ── 空状态 ── */
+.c-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 20px;
+  border: 1px dashed var(--c-border-strong);
+  border-radius: 8px;
+  color: var(--c-text-secondary);
+  text-align: center;
+}
+.c-empty svg { color: var(--c-border-strong); }
+.c-empty .c-empty-title { margin: 0; font-size: 13px; font-weight: 600; }
+.c-empty p { margin: 0; font-size: 12px; color: var(--c-text-tertiary); }
+
+/* ── 添加按钮 (全宽虚线) ── */
+.c-add {
+  background: transparent;
+  border: 1px dashed var(--c-border-strong);
+  border-radius: 6px;
+  color: var(--c-text-secondary);
+  font-size: 12px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+  width: 100%;
+  margin-top: 8px;
+}
+.c-add:hover {
+  background: var(--c-accent-soft);
+  border-color: var(--c-accent-soft-border);
+  color: var(--c-accent);
+}
+
+/* ── 行内 code 提示 ── */
+.c-code {
+  font-family: var(--font-mono);
+  background: var(--c-bg-secondary);
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: var(--c-accent);
+  font-size: 11px;
+}
+
+/* ── 命名空间分组 (vars / services 按系统分组) ── */
+.c-ns-group {
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--c-bg-secondary);
+}
+.c-ns-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--c-border);
+}
+.c-ns-sys {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+}
+.c-ns-sys.s-fin { background: #eef2ff; color: #4338ca; }
+.c-ns-sys.s-logi { background: #cffafe; color: #0e7490; }
+.c-ns-sys.s-wms { background: #f3e8ff; color: #6b21a8; }
+.c-ns-sys.s-mall { background: #fce7f3; color: #9d174d; }
+.c-ns-sys.s-common { background: #f1f5f9; color: #475569; }
+.c-ns-count { font-size: 11px; color: var(--c-text-tertiary); }
+
+/* ── tokens (若 theme.css 已定义则引用, 否则在此落地) ── */
+:root {
+  --c-surface: #ffffff;
+  --c-border: #e2e8f0;
+  --c-border-strong: #cbd5e1;
+  --c-divider: #f1f5f9;
+  --c-bg-secondary: #f8fafc;
+  --c-text: #1f2933;
+  --c-text-secondary: #64748b;
+  --c-text-tertiary: #94a3b8;
+  --c-field-bg: #f8fafc;
+  --c-field-border: #e2e8f0;
+  --c-accent: #4338ca;
+  --c-accent-soft: #eef2ff;
+  --c-accent-soft-border: #c7d2fe;
+}

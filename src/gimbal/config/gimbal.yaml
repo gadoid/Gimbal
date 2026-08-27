@@ -60,3 +60,11 @@ chaos:                       # Chaos Strategy 开关
 poll:
   default_interval: 5
   default_timeout: 60
+
+plugin_configs:
+  gimbal-test-report:
+    output_path: ./reports/test-report.html
+    title: "Gimbal Test Report"
+    include_passed: true
+  gimbal-auth-headers:
+    auth_tag: admin

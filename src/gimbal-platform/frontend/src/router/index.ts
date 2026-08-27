@@ -10,33 +10,71 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const routes = [
-  { path: '/', redirect: '/cases/mine' },
+  // P3:场景库统一入口(原 /cases/mine 工作台 + /cases/public 公共库
+  // 已退役,合并进 /scenarios 的"我的/公共/收藏"三 tab)
+  { path: '/', redirect: '/scenarios' },
   { path: '/login', component: () => import('@/views/Login.vue') },
   { path: '/register', component: () => import('@/views/Register.vue') },
   // protected
+  // ── 场景编排 V3 ────────────────────────────────────────────
   {
-    path: '/cases/mine',
-    component: () => import('@/views/CasesMine.vue'),
+    path: '/scenarios',
+    component: () => import('@/views/Scenarios.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: '/cases/public',
-    component: () => import('@/views/CasesPublic.vue'),
+    // 用例编排 (V3) 专用页面 — 一个页面承载 4 步流程 (Meta → Resource → Config → Canvas)
+    // /composer/new         新建 (空白草稿)
+    // /composer/:scenarioId 编辑已有
+    // ?step=1..4            直接跳到某一步
+    path: '/composer/:scenarioId',
+    component: () => import('@/views/CaseComposer.vue'),
     meta: { requiresAuth: true },
   },
   {
-    path: '/cases/:caseId/config',
-    component: () => import('@/views/CaseConfigReadonly.vue'),
+    // /scenarios/:scenarioId/detail — 场景详情页(数据驱动的可读渲染,
+    // 数据源 = composer_scenarios 读侧结构)
+    path: '/scenarios/:scenarioId/detail',
+    component: () => import('@/views/ScenarioDetailView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    // /scenarios/:scenarioId/data-sets (数据集列表 — 数据集直接挂场景 1:N;
+    // Case 层已解散)
+    path: '/scenarios/:scenarioId/data-sets',
+    component: () => import('@/views/CaseDataSetsList.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    // /scenarios/:scenarioId/data-sets/new 或 /:datasetId
+    path: '/scenarios/:scenarioId/data-sets/:datasetId',
+    component: () => import('@/views/DataSetEditor.vue'),
     meta: { requiresAuth: true },
   },
   {
     path: '/admin/users',
     component: () => import('@/views/UsersAdmin.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, requiresAdmin: true },
   },
   {
     path: '/auths',
     component: () => import('@/views/Auths.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/constants',
+    component: () => import('@/views/ConstantsPool.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    // P5 适配中心 —— admin 全量视图;member 自动只读 owner 视图(页内 scope=mine)
+    path: '/adaptations',
+    component: () => import('@/views/AdaptationCenter.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/adaptations/batches/:batchId',
+    component: () => import('@/views/AdaptationBatchDetail.vue'),
     meta: { requiresAuth: true },
   },
   {
@@ -61,8 +99,13 @@ router.beforeEach((to) => {
   if (to.meta.requiresAuth && !auth.accessToken) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
+  if (to.meta.requiresAdmin && !auth.isAdmin) {
+    // Backend enforces admin-only on these endpoints too; this is the
+    // UX-side guard so members never land on a page that 403s.
+    return { path: '/scenarios' }
+  }
   if ((to.path === '/login' || to.path === '/register') && auth.accessToken) {
-    return { path: '/cases/mine' }
+    return { path: '/scenarios' }
   }
 })
 

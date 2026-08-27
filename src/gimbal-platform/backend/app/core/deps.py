@@ -36,9 +36,17 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
 async def require_admin(user: CurrentUser) -> User:
+    """Admin gate for adaptation routes(spec §5.5)—— 复用既有 ``is_admin``
+    判定(users.py 的内联判定将来可收敛到此),不新增权限面。"""
     if not user.is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin only")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="admin_only: adaptation routes require an administrator",
+        )
     return user
+
+
+AdminUser = Annotated[User, Depends(require_admin)]
 
 
 async def get_owned_execution(

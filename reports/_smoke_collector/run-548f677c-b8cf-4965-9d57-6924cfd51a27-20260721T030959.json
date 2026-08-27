@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "run_id": "548f677c-b8cf-4965-9d57-6924cfd51a27",
+    "env": "dev",
+    "mode": "local",
+    "framework_version": "0.1.0",
+    "generated_at": "2026-07-21T03:09:59.883519+00:00"
+  },
+  "summary": {
+    "exit_code": 0,
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "error": 0,
+    "skipped": 0
+  },
+  "details": [
+    {
+      "scenario_id": "运综轨迹查询-perf-smokeX2-",
+      "status": "passed",
+      "duration_ms": 1283.685,
+      "halted": false,
+      "halt_reason": null,
+      "steps": [
+        {
+          "step_id": "step-000",
+          "status": "passed",
+          "duration_ms": 1278.6109999999999,
+          "error": null,
+          "error_phase": null
+        }
+      ]
+    }
+  ]
+}

@@ -52,3 +52,21 @@ body {
 #app {
   min-height: 100vh;
 }
+
+/* ── page-title icon (emoji → SVG 图标统一替换) ─────────────────── */
+.page-title {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+.page-title .el-icon {
+  color: var(--accent, #4f46e5);
+  font-size: 20px;
+}
+
+/* ── shared text utilities (consolidated from ~10 per-SFC copies) ──
+   .dim / .muted are two semantic names for the same value; declared
+   together so they can't drift apart. */
+.mono { font-family: var(--font-mono, monospace); }
+.dim,
+.muted { color: var(--color-text-secondary); font-size: 11px; }

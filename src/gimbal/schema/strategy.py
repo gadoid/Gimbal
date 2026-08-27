@@ -52,6 +52,10 @@ class StrategyBase(BaseModel) :
 
 class Extract(StrategyBase) :
     kind : Literal["extract"] = "extract"
+    # phase 缺省按 kind 落默认值：dispatch_phase 严格按 phase 过滤，
+    # 不给默认时未声明 phase 的策略会被静默跳过（Composer 导出的
+    # extract/断言曾因此全部不执行）。extract 提取响应字段 → post-response。
+    phase : StrategyPhase = StrategyPhase.AFTER_REQUEST
     expression: str          # JSONPath，在 scratch 上导航
     target: str              # 写入目标的 key
     scope: Scope = Scope.STEP
@@ -60,6 +64,8 @@ class Extract(StrategyBase) :
 
 class Assign(StrategyBase) :
     kind : Literal["assign"] = "assign"
+    # assign 准备入参 → pre-request（与 StrategyPhase 注释语义一致）。
+    phase : StrategyPhase = StrategyPhase.BEFORE_REQUEST
     source : Any # 路径或者值
     target : str # 模板路径
     scope: Scope = Scope.SCENARIO # 如果source为空则从对应的作用域检查是否存在同名字段提取数据
@@ -68,6 +74,8 @@ class Assign(StrategyBase) :
 
 class Assertion(StrategyBase) :
     kind : Literal["assertion"] = "assertion"
+    # 断言默认落 verifying 阶段；显式声明其它 phase 仍然生效（覆盖默认）。
+    phase : StrategyPhase = StrategyPhase.VERIFYING
     target : str # 断言的目标字段
     operator : AssertOperator # 断言的比较符
     expected : Any = None # 断言的比较值

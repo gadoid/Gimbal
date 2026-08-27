@@ -13,3 +13,11 @@ build/
 .coverage
 htmlcov/
 *.egg
+.gimbal-tmp/
+
+# Local runtime artifacts (empty / overwritten on every run)
+run.out
+run.err
+collect.err.log
+*.log
+.superpowers/

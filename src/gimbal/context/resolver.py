@@ -114,7 +114,12 @@ class SpecResolver:
         # 在 list body 上只会整体返回 list，内部 ${var.x} 不会被替换。
         return Request(
             kind=request.kind,
-            body=self._resolve_nested(request.body or {}),
+            # 修复 falsy 兜底：request.body or {} 会把空字符串 "" 误判为 falsy
+            # 并替换成 {} —— 引入 str body 后这是显性问题。
+            # 改成 `is None` 才是正确的"body 未提供"语义。
+            body=self._resolve_nested(
+                request.body if request.body is not None else {}
+            ),
         )
 
     def _resolve_strategy(self, strategy: "StrategyUnion") -> "StrategyUnion":

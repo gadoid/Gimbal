@@ -23,9 +23,6 @@
     "services": {
       "yhr-test-service": "https://test.21eline.com"
     },
-    "vars": {
-      "bl_no": "YHRGIMBAL00034"
-    },
     "users": {
       "yhxjsx": {
         "url": "https://test.21eline.com/",
@@ -151,7 +148,7 @@
           "order": 0,
           "enabled": true,
           "onFailure": "abort",
-          "expression": "$.response_body",
+          "expression": "$.response_body.list[0]",
           "target": "response_body",
           "required": true,
           "default": null,

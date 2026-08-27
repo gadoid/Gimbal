@@ -90,6 +90,15 @@ def scenario(
     # 互斥校验
     if step_from is not None and step_to is not None and step_from > step_to:
         raise typer.BadParameter("--step-from 不能大于 --step-to。")
+    # breakpoint_at 仅与 step_to 互斥提示（不强制）：当同时给两者，优先级：
+    #   1. step_to 优先（用户最明确的"执行到 X 停止"意图）
+    #   2. breakpoint_at 适合交互模式（暂停 / 排查），非本阶段 1 范围
+    if breakpoint_at is not None and step_to is not None:
+        logger.warning(
+            "[CLI] --step-to={} 与 --breakpoint={} 同时设置；优先使用 --step-to，"
+            "--breakpoint 将在阶段 2 引入",
+            step_to, breakpoint_at,
+        )
 
     logger.info("[CLI] Scenario command invoked: scenario_ids={} env={} mode={}", scenario_ids, env, mode)
 
@@ -218,13 +227,42 @@ def scenario(
         scenarios.append((asset.id, sc))
 
     # 6. 构造 Engine（注入 asset_store 用于 Phase 0 引用物化），逐个执行
+    #    阶段 1 最小子集：把 CLI 的 --step-from / --step-to 真正接到 Engine。
+    #    --step-from 当前实现是"从 start_idx 开始"语义，但 ScenarioRunner.run()
+    #    还没支持 start_idx；这里先只对 --step-to 实现 halt，
+    #    step_from 用浅层截断 resolved_steps 不可能（preprocessor 内部），故 stage 1 只
+    #    实现 step_to；step_from 在阶段 2 引入 StepResolver 时一并支持。
+    from gimbal.core.scenario_runner import RuntimeControl
+
+    # 优先级：step_to > breakpoint_at > 默认（不控制）
+    runtime_control: RuntimeControl | None = None
+    if step_to is not None:
+        runtime_control = RuntimeControl(
+            halt_at=step_to,
+            halt_reason=f"cli --step-to={step_to}",
+        )
+    elif breakpoint_at is not None and breakpoint_at:
+        # breakpoint_at 是 list[int]，取首个；interactive 模式在 stage 2 实现完整版
+        runtime_control = RuntimeControl(
+            halt_at=breakpoint_at[0],
+            halt_reason=f"cli --breakpoint={breakpoint_at[0]}",
+        )
+    if step_from is not None:
+        # step_from 在当前 ScenarioRunner 中未支持；显式提示，避免静默忽略。
+        typer.secho(
+            f"[warn] --step-from={step_from} 当前版本暂未生效（将在阶段 2 引入 StepResolver 后支持）。\n"
+            f"       当前阶段 1 仅支持 --step-to 与 --breakpoint。",
+            fg=typer.colors.YELLOW, err=True,
+        )
+
     engine = Engine(configuration, asset_store=asset_store)
     try:
         results = []
         for original_id, sc in scenarios:
             logger.info("[CLI] 执行 scenario: id={} scenario_id={}", original_id, sc.scenarioId)
-            result = engine.run(sc)
+            result = engine.run(sc, runtime_control=runtime_control)
             results.append(result)
+            # fail_fast 与 halted 的语义叠加：halted 视为未通过，触发 fail_fast
             if fail_fast and result.exit_code != 0:
                 logger.warning("[CLI] fail_fast 触发：在 {} 后停止", original_id)
                 break
@@ -244,6 +282,7 @@ def scenario(
         passed=sum(r.passed for r in results),
         failed=sum(r.failed for r in results),
         error=sum(r.error for r in results),
+        halted=sum(r.halted for r in results),
         details=[d for r in results for d in r.details],
     )
     _print_run_report(merged, output, artifacts=engine.artifacts)

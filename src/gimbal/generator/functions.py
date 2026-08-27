@@ -42,16 +42,50 @@ def random_decimal(min: float = 0.0, max: float = 100.0, places: int = 2) -> flo
     return round(random.uniform(min, max), places)
 
 
-def timestamp(format: str = "iso", offset_seconds: int = 0) -> int | str:
-    """当前时间 + 偏移。"""
-    ts = datetime.now() + timedelta(seconds=offset_seconds)
+def _parse_base(base: str | None = None, base_format: str | None = None) -> datetime:
+    """解析时间基准；未指定时使用当前本地时间。"""
+    if base is None:
+        return datetime.now()
+    if base_format is not None:
+        try:
+            return datetime.strptime(base, base_format)
+        except ValueError as exc:
+            raise ValueError(
+                f"invalid base time {base!r} for format {base_format!r}"
+            ) from exc
+    try:
+        return datetime.fromisoformat(base)
+    except ValueError:
+        # 兼容用户常用的 ``YYYY-MM-DD HH:MM:SS`` 格式。
+        try:
+            return datetime.strptime(base, "%Y-%m-%d %H:%M:%S")
+        except ValueError as exc:
+            raise ValueError(
+                f"invalid base time {base!r}; use ISO 8601 or provide base_format"
+            ) from exc
+
+
+def _format_timestamp(ts: datetime, format: str) -> int | str:
     if format == "epoch":
         return int(ts.timestamp())
     if format == "iso":
         return ts.isoformat()
     if format == "compact":
         return ts.strftime("%Y%m%d%H%M%S")
+    if "%" in format:
+        return ts.strftime(format)
     raise ValueError(f"invalid format: {format!r}")
+
+
+def timestamp(
+    format: str = "iso",
+    offset_seconds: int = 0,
+    base: str | None = None,
+    base_format: str | None = None,
+) -> int | str:
+    """基准时间 + 秒级偏移；基准缺省为当前时间。"""
+    ts = _parse_base(base, base_format) + timedelta(seconds=offset_seconds)
+    return _format_timestamp(ts, format)
 
 
 def now(format: str = "iso") -> int | str:
@@ -105,9 +139,16 @@ def random_decorated_str(
     return f"{head}{separator}{core}{separator}{tail}"
 
 
-# time_offset 单位 → timedelta 关键字参数的映射
+# time_offset 单位集合
 # 注意：milliseconds 在 Python 3.10+ 的 datetime 中并未作为 timedelta 关键字直接支持，
-# 我们用 seconds=msec/1000 来表达。
+# 我们用 seconds=msec/1000 来表达；months / years 在 datetime 中无原生支持，按"日历月"
+# 手算（见 _shift_months）。
+_VALID_OFFSET_UNITS = (
+    "milliseconds", "seconds", "minutes", "hours",
+    "days", "weeks", "months", "years",
+)
+
+# time_offset 单位 → timedelta 关键字参数的映射（仅适用于"固定长度"单位）
 _TIMEDELTA_UNIT_KEYWORD = {
     "seconds": "seconds",
     "minutes": "minutes",
@@ -117,34 +158,61 @@ _TIMEDELTA_UNIT_KEYWORD = {
 }
 
 
+def _shift_months(dt: datetime, months: int) -> datetime:
+    """在 ``dt`` 上按"日历月"做偏移，月末溢出时夹到目标月最后一天。
+
+    之所以手写而非引入 ``dateutil.relativedelta``：
+      - 项目时间工具此前只用 Python 标准库 + pydantic（无第三方时间库）
+      - 逻辑简单，跨年/跨闰年的 corner case 可控
+      - 保持零新增依赖
+
+    行为约定：
+      - ``Jan 31 + 1 month`` → ``Feb 28``（非闰年）/ ``Feb 29``（闰年）
+      - ``Mar 31 + (-1) month`` → ``Feb 28/29``（同向上面）
+      - 跨年正常推进（例如 ``Nov 10 + 3 months`` → 次年 ``Feb 10``）
+
+    Examples::
+
+        _shift_months(datetime(2026, 1, 15),  1)  == datetime(2026, 2, 15)
+        _shift_months(datetime(2026, 1, 31),  1)  == datetime(2026, 2, 28)
+        _shift_months(datetime(2024, 3, 31), -1)  == datetime(2024, 2, 29)
+        _shift_months(datetime(2026, 11, 10), 3)  == datetime(2027, 2, 10)
+    """
+    total_months = dt.year * 12 + (dt.month - 1) + months
+    new_year, new_month0 = divmod(total_months, 12)
+    new_month = new_month0 + 1
+    # 目标月最后一天：利用"下月第 0 天 = 上月最后一天"
+    if new_month == 12:
+        last_day = 31
+    else:
+        last_day = (datetime(new_year, new_month + 1, 1) - timedelta(days=1)).day
+    new_day = min(dt.day, last_day)
+    return dt.replace(year=new_year, month=new_month, day=new_day)
+
+
 def time_offset(
     unit: str = "seconds",
     value: int = 0,
     direction: str = "future",
+    base: str | None = None,
+    base_format: str | None = None,
 ) -> int:
-    """当前 unix 秒 + 单位化偏移量。
-
-    输出恒为 int（unix 秒）。format 由下游 strategy / render 决定，本函数
-    不参与字符串格式化。
-
-    Examples::
-
-        time_offset(unit="days", value=30, direction="future")
-        time_offset(unit="hours", value=2, direction="past")
-        time_offset(unit="milliseconds", value=500)
-        time_offset()  # 当前 unix 秒
-    """
-    if unit not in _TIMEDELTA_UNIT_KEYWORD and unit != "milliseconds":
+    """基准 Unix 秒 + 单位化偏移量；基准缺省为当前时间。"""
+    if unit not in _VALID_OFFSET_UNITS:
         raise ValueError(f"invalid unit: {unit!r}")
 
     sign = 1 if direction == "future" else -1
+    delta_value = value * sign
+    base_time = _parse_base(base, base_format)
 
     if unit == "milliseconds":
-        # timedelta 不直接接收 milliseconds 关键字，转 seconds
-        seconds_offset = (value * sign) / 1000.0
-        target = datetime.now() + timedelta(seconds=seconds_offset)
+        target = base_time + timedelta(seconds=delta_value / 1000.0)
+    elif unit == "years":
+        target = _shift_months(base_time, delta_value * 12)
+    elif unit == "months":
+        target = _shift_months(base_time, delta_value)
     else:
-        kwarg = {f"{_TIMEDELTA_UNIT_KEYWORD[unit]}": value * sign}
-        target = datetime.now() + timedelta(**kwarg)
+        kwarg = {_TIMEDELTA_UNIT_KEYWORD[unit]: delta_value}
+        target = base_time + timedelta(**kwarg)
 
     return int(target.timestamp())

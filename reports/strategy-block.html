@@ -1,0 +1,135 @@
+<div class="strategy-block">
+<span class="kind">strategy: http</span> &middot; <span class="retry">⚡ 2 retries</span>
+<table class="strategy-spec">
+<tbody>
+<tr>
+<th>type</th>
+<td>http</td>
+</tr>
+<tr>
+<th style="padding-left:8px">request</th>
+<td style="padding-left:8px;color:#666">
+<i>(nested)</i>
+</td>
+</tr>
+<tr>
+<th style="padding-left:24px">method</th>
+<td style="padding-left:24px">POST</td>
+</tr>
+<tr>
+<th style="padding-left:24px">url</th>
+<td style="padding-left:24px">http://api/login</td>
+</tr>
+<tr>
+<th style="padding-left:24px">headers</th>
+<td style="padding-left:24px;color:#666">
+<i>(nested)</i>
+</td>
+</tr>
+<tr>
+<th style="padding-left:40px">Content-Type</th>
+<td style="padding-left:40px">application/json</td>
+</tr>
+<tr>
+<th style="padding-left:24px">body</th>
+<td style="padding-left:24px;color:#666">
+<i>(nested)</i>
+</td>
+</tr>
+<tr>
+<th style="padding-left:40px">user</th>
+<td style="padding-left:40px">demo</td>
+</tr>
+<tr>
+<th style="padding-left:40px">password</th>
+<td style="padding-left:40px">***</td>
+</tr>
+<tr>
+<th>assertions</th>
+<td>(list, 3 items)</td>
+</tr>
+<tr>
+<th style="padding-left:24px">[0]</th>
+<td style="padding-left:24px;color:#666">
+<i>(nested)</i>
+</td>
+</tr>
+<tr>
+<th style="padding-left:40px">path</th>
+<td style="padding-left:40px">$.code</td>
+</tr>
+<tr>
+<th style="padding-left:40px">op</th>
+<td style="padding-left:40px">eq</td>
+</tr>
+<tr>
+<th style="padding-left:40px">expected</th>
+<td style="padding-left:40px">0</td>
+</tr>
+<tr>
+<th style="padding-left:24px">[1]</th>
+<td style="padding-left:24px;color:#666">
+<i>(nested)</i>
+</td>
+</tr>
+<tr>
+<th style="padding-left:40px">path</th>
+<td style="padding-left:40px">$.msg</td>
+</tr>
+<tr>
+<th style="padding-left:40px">op</th>
+<td style="padding-left:40px">contains</td>
+</tr>
+<tr>
+<th style="padding-left:40px">expected</th>
+<td style="padding-left:40px">ok</td>
+</tr>
+<tr>
+<th style="padding-left:24px">[2]</th>
+<td style="padding-left:24px;color:#666">
+<i>(nested)</i>
+</td>
+</tr>
+<tr>
+<th style="padding-left:40px">path</th>
+<td style="padding-left:40px">$.data.token</td>
+</tr>
+<tr>
+<th style="padding-left:40px">op</th>
+<td style="padding-left:40px">exists</td>
+</tr>
+<tr>
+<th style="padding-left:8px">extract</th>
+<td style="padding-left:8px;color:#666">
+<i>(nested)</i>
+</td>
+</tr>
+<tr>
+<th style="padding-left:24px">token</th>
+<td style="padding-left:24px">$.data.token</td>
+</tr>
+<tr>
+<th style="padding-left:24px">user_id</th>
+<td style="padding-left:24px">$.data.user.id</td>
+</tr>
+<tr>
+<th style="padding-left:8px">retry</th>
+<td style="padding-left:8px;color:#666">
+<i>(nested)</i>
+</td>
+</tr>
+<tr>
+<th style="padding-left:24px">max_attempts</th>
+<td style="padding-left:24px">3</td>
+</tr>
+<tr>
+<th style="padding-left:24px">interval_ms</th>
+<td style="padding-left:24px">1000</td>
+</tr>
+<tr>
+<th style="padding-left:24px">backoff</th>
+<td style="padding-left:24px">exponential</td>
+</tr>
+</tbody>
+</table>
+</div>

@@ -44,10 +44,6 @@ export function create(payload: AuthSessionCreateIn) {
   return http.post<AuthSession>('/auths', payload).then((r) => r.data)
 }
 
-export function get(id: number) {
-  return http.get<AuthSession>(`/auths/${id}`).then((r) => r.data)
-}
-
 export function patch(id: number, payload: AuthSessionPatchIn) {
   return http.patch<AuthSession>(`/auths/${id}`, payload).then((r) => r.data)
 }
@@ -60,6 +56,19 @@ export function testConnection(id: number) {
   return http.post<TestResult>(`/auths/${id}/test`).then((r) => r.data)
 }
 
-export function fetchToken(id: number) {
-  return http.post(`/auths/${id}/fetch-token`).then((r) => r.data)
+export interface AuthSessionSecrets extends AuthSession {
+  password: string
+}
+
+/** 详情;includeSecrets=true 时后端附解密明文密码(内网测试环境策略,
+ *  2026-08-25 认证改造设计 — 供场景配置页快照拷贝)。 */
+export function get(
+  id: number,
+  includeSecrets = false,
+): Promise<AuthSession | AuthSessionSecrets> {
+  return http
+    .get<AuthSession | AuthSessionSecrets>(`/auths/${id}`, {
+      params: includeSecrets ? { include_secrets: true } : undefined,
+    })
+    .then((r) => r.data)
 }

@@ -1,20 +1,67 @@
-<!-- Executions.vue — 单次执行的实时状态页 + 报告链接.
-     V0.1 用 1s 轮询；WebSocket 实时推送留 V1+. -->
+<!-- Executions.vue — 单次执行的实时状态页（V3）。
+     可观测面 = Execution 计数器 + 执行配方 + 行级明细表（展开后随
+     1s 轮询刷新；engine.log / result.json 工件按需加载）。
+     V1 的每-run 报告/SSE 已退役。 -->
 <template>
   <section class="executions" v-if="execStore.detail">
+    <!-- Poller gave up (failure budget) while the last detail snapshot
+         stays rendered — tell the user the data may be stale. -->
+    <el-alert
+      v-if="execStore.pollError"
+      :title="execStore.pollError"
+      type="warning"
+      :closable="false"
+      show-icon
+      class="poll-warn"
+    />
     <header class="page-header">
       <div>
         <h2>执行 #{{ execStore.detail.id }}</h2>
-        <p>{{ execStore.detail.case_id }} · 状态 {{ statusText }}</p>
+        <p>
+          {{ execStore.detail.scenario_id }} · 状态 {{ statusText }}
+          <template v-if="startedAtLabel"> · 开始 {{ startedAtLabel }}</template>
+          <template v-if="finishedAtLabel"> · 结束 {{ finishedAtLabel }}</template>
+          <el-tag
+            v-if="stepToLabel"
+            type="info"
+            size="small"
+            class="step-to-pill"
+            title="本次执行在 --step-to 模式下运行（仅跑到第 N 步后停止）"
+          >执行到第 {{ stepToLabel }} 步</el-tag>
+        </p>
       </div>
       <div class="header-actions">
         <span :class="['status-tag', `status-${execStore.detail.status}`]">
           {{ statusText }}
         </span>
+        <el-button
+          v-if="canCancel"
+          link
+          type="warning"
+          @click="cancelExec"
+        >取消</el-button>
         <el-button link @click="refreshNow">手动刷新</el-button>
         <el-button link type="danger" @click="removeExec">删除</el-button>
       </div>
     </header>
+
+    <!-- 系统标记:reconcile 收敛 / 计数器漂移(不进配方 dl)-->
+    <el-alert
+      v-if="execStore.detail.config?.reconciled"
+      type="warning"
+      :closable="false"
+      show-icon
+      class="sys-alert"
+      title="后端重启：本单由启动期 reconcile 收敛为 failed（详见执行配方外的 reconciled 记录）"
+    />
+    <el-alert
+      v-if="execStore.detail.config?.counterDrift"
+      type="error"
+      :closable="false"
+      show-icon
+      class="sys-alert"
+      title="计数器漂移：通过+失败 ≠ 总执行，真值以 data/runs/<date>.jsonl 调度日志为准"
+    />
 
     <div class="counters">
       <div class="counter">
@@ -29,137 +76,115 @@
         <div class="counter-label">失败</div>
         <div class="counter-value">{{ execStore.detail.failed }}</div>
       </div>
-      <div class="counter">
-        <div class="counter-label">未开始</div>
+      <div class="counter" title="未执行 / 行边界跳过 / 取消未跑的行">
+        <div class="counter-label">未完成</div>
         <div class="counter-value">{{
           Math.max(0, execStore.detail.total_runs - execStore.detail.passed - execStore.detail.failed)
         }}</div>
       </div>
     </div>
 
-    <h3 class="runs-title">运行明细</h3>
-    <el-table :data="execStore.detail.runs" class="runs-table">
-      <el-table-column label="#" prop="idx" width="60" />
-      <el-table-column label="状态" width="120">
-        <template #default="{ row }">
-          <span :class="['run-tag', `run-${row.status}`]">{{ statusLabel(row.status) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="exit" width="70">
-        <template #default="{ row }">
-          <code :class="['mono', exitClass(row.exit_code)]">{{ row.exit_code ?? '—' }}</code>
-        </template>
-      </el-table-column>
-      <el-table-column label="耗时" width="90">
-        <template #default="{ row }">
-          <span class="mono">{{ row.duration_ms != null ? `${row.duration_ms}ms` : '—' }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="开始时间" width="160">
-        <template #default="{ row }">
-          <span class="mono dim">{{ row.started_at?.slice(11, 19) || '—' }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="报告" min-width="280" align="center" fixed="right">
-        <template #default="{ row }">
-          <el-button
-            link
-            type="primary"
-            :disabled="!row.report_path"
-            @click="openReport(row)"
-          >查看报告</el-button>
-          <el-button
-            link
-            :type="isSelectedForLog(row) ? 'primary' : undefined"
-            @click="toggleLog(row)"
-          >{{ isSelectedForLog(row) ? '收起日志' : '查看日志' }}</el-button>
-          <el-button link @click="rerunRun(row)" :loading="row.rerunning">重跑</el-button>
-          <el-button link type="danger" @click="deleteRun(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-
-    <!-- 日志面板：与执行详情同级，行内展开（替代原来的 el-dialog）。
-         点行尾的「查看日志」按钮展开，再点一次（或点面板右上角「收起」）
-         即折叠。流式 SSE 与原弹窗一致；只是布局从浮层改为页面内嵌。 -->
-    <section v-if="logRow" class="log-panel" aria-live="polite">
-      <header class="log-panel-head">
-        <div class="log-panel-title">
-          <span :class="['run-tag', `run-${logRow.status}`]">
-            {{ runStatusLabel(logRow.status) }}
-          </span>
-          <span class="log-panel-id">
-            run #{{ logRow.idx }}
-            · exit {{ logRow.exit_code ?? '—' }}
-            · {{ logRow.duration_ms != null ? `${logRow.duration_ms}ms` : '—' }}
-          </span>
-          <span v-if="logLoading" class="log-panel-loading">连接中…</span>
-          <span v-else-if="logStreamClosed" class="log-panel-done">已结束</span>
-        </div>
-        <div class="log-panel-actions">
-          <el-button
-            v-if="logRow.report_path"
-            link
-            type="primary"
-            @click="openReport(logRow)"
-          >查看 HTML 报告 →</el-button>
-          <el-button link @click="toggleLog(logRow)">收起</el-button>
-        </div>
-      </header>
-
-      <section class="log-section">
-        <h4 class="log-section-title">
-          <span class="log-section-bullet" aria-hidden="true">$</span>
-          命令行
-        </h4>
-        <pre class="log-pre log-cmd">{{ logRow.command_line || '(尚未记录)' }}</pre>
-      </section>
-
-      <section class="log-section">
-        <h4 class="log-section-title">
-          <span class="log-section-bullet" aria-hidden="true">›</span>
-          stdout
-        </h4>
-        <pre ref="stdoutRef" class="log-pre log-stdout">{{ logStdout }}</pre>
-      </section>
-
-      <section v-if="logStderr" class="log-section">
-        <h4 class="log-section-title">
-          <span class="log-section-bullet" aria-hidden="true">!</span>
-          stderr
-        </h4>
-        <pre class="log-pre log-stderr">{{ logStderr }}</pre>
-      </section>
-    </section>
-
-    <!-- 报告嵌入弹窗 -->
-    <el-dialog
-      v-model="reportOpen"
-      :title="`报告 #${reportIdx}`"
-      width="90%"
-      top="5vh"
-      :close-on-click-modal="false"
-    >
-      <iframe
-        v-if="reportOpen"
-        :src="reportSrc"
-        class="report-frame"
-      ></iframe>
-    </el-dialog>
-
-    <!-- 删除确认 -->
-    <el-dialog
-      v-model="deleteOpen"
-      title="⚠ 删除 run"
-      width="420px"
-    >
-      <p>确认删除 run #{{ deleteTarget?.idx }} 的记录？<br>
-      <span class="muted">仅删除数据库行 + 报告文件，execution 计数器不变。</span></p>
-      <template #footer>
-        <el-button @click="deleteOpen = false">取消</el-button>
-        <el-button type="danger" :loading="deleteSubmitting" @click="confirmDeleteRun">确认</el-button>
+    <h3 class="recipe-title">执行配方</h3>
+    <dl class="recipe">
+      <template v-for="([k, label, v]) in recipeEntries" :key="k">
+        <dt>{{ label }}</dt>
+        <dd class="mono">{{ formatRecipeValue(v) }}</dd>
       </template>
-    </el-dialog>
+    </dl>
+
+    <h3 class="rows-title">行级明细</h3>
+    <div class="rows-head">
+      <p class="rows-hint">
+        每行 = 数据集 × 行 × 重复（数据驱动场景按数据集展开）；状态随 1s 轮询刷新，引擎日志与步骤明细按需加载。
+      </p>
+      <el-button
+        link
+        type="primary"
+        :data-testid="`exec-row-${execStore.detail.id}`"
+        @click="toggleRows"
+      >{{ isExpanded ? '收起行级表格' : '展开行级表格' }}</el-button>
+    </div>
+    <div v-if="isExpanded" class="rows-panel">
+      <p v-if="rowsLoading" class="rows-empty">行级数据加载中…</p>
+      <p v-else-if="rows.length === 0" class="rows-empty">
+        无行级数据 — 预部署/认证快速失败等未分发行的单不产生行级记录
+      </p>
+      <table v-else class="ex-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>数据集</th>
+            <th>行</th>
+            <th>重复</th>
+            <th>状态</th>
+            <th>耗时</th>
+            <th>case 目录</th>
+            <th>工件</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="row in rows" :key="row.seq">
+            <tr class="ex-table-row">
+              <td class="mono">{{ row.seq }}</td>
+              <td>{{ row.datasetId ?? '—' }}</td>
+              <td class="mono">{{ row.rowIndex }}</td>
+              <td class="mono">{{ row.rep }}</td>
+              <td>
+                <span :class="['row-tag', rowStatusClass(row.status)]">{{ row.status }}</span>
+              </td>
+              <td class="mono">{{ rowDuration(row) }}</td>
+              <td class="mono dim">{{ row.caseDir || '—' }}</td>
+              <td>
+                <span class="row-actions">
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    :disabled="!row.caseDir"
+                    :data-testid="`row-artifact-${row.seq}-engine-log`"
+                    @click="loadArtifact(row, 'engine-log')"
+                  >引擎日志</el-button>
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    :disabled="!row.caseDir"
+                    :data-testid="`row-artifact-${row.seq}-result`"
+                    @click="loadArtifact(row, 'result')"
+                  >步骤明细</el-button>
+                </span>
+              </td>
+            </tr>
+            <tr
+              v-for="a in loadedArtifacts(row)"
+              :key="`${row.seq}-${a.file}-artifact`"
+              class="ex-table-artifact"
+            >
+              <td colspan="8">
+                <div class="artifact-head">
+                  <span>{{ a.file === 'engine-log' ? 'engine.log（引擎日志）' : 'result.json（步骤明细）' }}</span>
+                  <span class="mono dim">{{ row.caseDir }}</span>
+                </div>
+                <pre :class="['artifact-pre', 'mono', { 'artifact-error': a.isError }]">{{ a.content }}</pre>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section v-else-if="execStore.pollError" class="state error-state">
+    <el-alert
+      :title="execStore.pollError"
+      type="error"
+      :closable="false"
+      show-icon
+    />
+    <div class="error-actions">
+      <el-button type="primary" @click="refreshNow">重新加载</el-button>
+      <el-button @click="router.push('/executions')">返回执行列表</el-button>
+    </div>
   </section>
 
   <section v-else class="state loading-state">
@@ -168,20 +193,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { executionStatusText, isTerminalExecutionStatus } from '@/utils/executionStatus'
+import { cancelExecution } from '@/api/executions'
+import type { ExecutionRow } from '@/api/executions'
+import { removeExecution } from '@/utils/removeExecution'
+import { showError } from '@/utils/errorFallback'
 import { useExecutionsStore } from '@/stores/executions'
-import { useAuthStore } from '@/stores/auth'
-import {
-  reportUrl,
-  rerunRun as apiRerun,
-  deleteRun as apiDeleteRun,
-  getRunLog,
-  openRunLogStream,
-  type LogStream,
-} from '@/api/executions'
-import type { ExecRun } from '@/api/executions'
 
 const route = useRoute()
 const router = useRouter()
@@ -191,269 +211,236 @@ const executionId = computed(() => Number(route.params.id))
 
 const statusText = computed(() => {
   const s = execStore.detail?.status
-  if (!s) return ''
-  return ({ queued: '排队', running: '运行中', done: '完成', failed: '失败' } as Record<string, string>)[s] ?? s
+  return s ? executionStatusText(s) : ''
 })
 
-function statusLabel(s: string): string {
-  return ({ pending: '排队', running: '运行中', passed: '通过', failed: '失败' } as Record<string, string>)[s] ?? s
-}
-
-function exitClass(code: number | null): string {
-  if (code === null) return ''
-  return code === 0 ? 'exit-ok' : 'exit-fail'
-}
-
-// ── report dialog ─────────────────────────────────────────
-const reportOpen = ref(false)
-const reportIdx = ref(0)
-const reportSrc = ref('')
-
-function openReport(row: ExecRun) {
-  if (!row.report_path || !execStore.detail) return
-  reportIdx.value = row.idx
-  reportSrc.value = reportUrl(execStore.detail.id, row.idx)
-  reportOpen.value = true
-}
-
-// ── log panel (inline, same level as execution detail) ────
-// 只存 run id,通过下面的 computed ``logRow`` 从 ``detail.runs`` 派生当前行。
-// 之前这里直接 ``logTarget = ref<ExecRun | null>`` 缓存 row 引用,
-// 1s 轮询把 ``detail.value`` 整体替换后,``logTarget`` 仍指向第一次点击时的
-// 旧对象,导致 ``command_line`` 等字段一直停留在 null,
-// 模板渲染为 "(尚未记录)"。改用 id + computed 后,轮询刷新会自动重算。
-const logTargetId = ref<number | null>(null)
-const logRow = computed<ExecRun | null>(() => {
-  const id = logTargetId.value
-  if (id === null || !execStore.detail) return null
-  return execStore.detail.runs.find((r) => r.id === id) ?? null
+// P4 协作式取消:queued/running 可取消(running 由在飞 fanout 行边界
+// 收敛);终态按钮消失。
+const canCancel = computed(() => {
+  const s = execStore.detail?.status
+  return !!s && !isTerminalExecutionStatus(s)
 })
-const logStdout = ref('')
-const logStderr = ref('')
-const logLoading = ref(false)
-const logStreamClosed = ref(false)
-// Reference to the stdout <pre> so we can auto-scroll as new lines arrive.
-const stdoutRef = ref<HTMLPreElement | null>(null)
-// We don't have a separate stream for stderr right now; the SSE frames
-// arrive tagged with their kind and we route them into the matching ref.
-const logStream = ref<LogStream | null>(null)
-const authStore = useAuthStore()
 
-function runStatusLabel(s: string): string {
-  return (
-    { pending: '排队', running: '运行中', passed: '通过', failed: '失败' } as Record<
-      string,
-      string
-    >
-  )[s] ?? s
+/** 'YYYY-MM-DDTHH:MM:SS' → 'HH:MM:SS'(与列表页同款字符串切片)。 */
+function fmtTime(iso: string | null): string {
+  return iso ? iso.slice(11, 19) : ''
 }
 
-/** True when the row is the one currently displayed in the inline panel. */
-function isSelectedForLog(row: ExecRun): boolean {
-  return logTargetId.value === row.id
+const startedAtLabel = computed(() => fmtTime(execStore.detail?.started_at ?? null))
+const finishedAtLabel = computed(() => fmtTime(execStore.detail?.finished_at ?? null))
+
+// ``stepTo`` is a 0-based inclusive halt index stored in
+// Execution.config_json by the dispatcher (V3 camelCase).
+// Display as 1-based "执行到第 N 步" only when present and non-null.
+const stepToLabel = computed(() => {
+  const v = execStore.detail?.config?.stepTo
+  if (v === null || v === undefined) return ''
+  const n = Number(v)
+  if (!Number.isFinite(n) || n < 0) return ''
+  return String(Math.floor(n) + 1)
+})
+
+// V3 dispatcher recipe (config_json) rendered as a definition list —
+// the run-level surface lives in the 行级明细 table below.
+// 系统键(reconciled/counterDrift)转上方 alert;stepTo 由 pill 表达,
+// 均不进 dl。已知键给中文标签,未知键原样。
+// T3→T13 配方键迁移(spec §6):新键 serviceBindings/injectedAuths
+// 取代 auths/prefix/mergePolicy/injectCredentials/exec_auth_alias;
+// 旧键标签保留 — 历史记录的 config_json 仍含旧键,按键驱动渲染保持可读。
+const RECIPE_LABELS: Record<string, string> = {
+  runId: '运行ID',
+  scenarioId: '场景',
+  dataSetIds: '数据集',
+  envId: '环境',
+  // 新配方键(读侧认证列 = injectedAuths,实际注入清单)
+  serviceBindings: '服务绑定',
+  injectedAuths: '注入凭证',
+  // 旧配方键(snake/camel 两种历史拼写都留标签,仅展示用)
+  exec_auth_alias: '执行认证',
+  execAuthAlias: '执行认证',
+  injectCredentials: '凭证注入',
+  nRuns: '每行重复',
+  parallel: '并发',
+  prefix: '提单号前缀',
+  mergePolicy: '认证合并',
+}
+const RECIPE_HIDDEN_KEYS = new Set(['stepTo', 'reconciled', 'counterDrift'])
+
+const recipeEntries = computed<Array<[string, string, unknown]>>(() => {
+  const cfg = execStore.detail?.config
+  if (!cfg) return []
+  return Object.entries(cfg)
+    .filter(([k, v]) => v !== undefined && !RECIPE_HIDDEN_KEYS.has(k))
+    .map(([k, v]) => [k, RECIPE_LABELS[k] ?? k, v])
+})
+
+function formatRecipeValue(v: unknown): string {
+  if (Array.isArray(v)) return v.length ? v.join(', ') : '(空)'
+  // serviceBindings 等对象值:紧凑 JSON 保结构可读,不出现 [object Object]
+  if (v !== null && typeof v === 'object') return JSON.stringify(v)
+  if (v === null || v === '') return '—'
+  return String(v)
 }
 
-/** Toggle the inline log panel: open if closed or showing a different
- *  run; collapse if the user clicks the same run again. */
-function toggleLog(row: ExecRun) {
-  if (isSelectedForLog(row)) {
-    collapseLog()
-    return
-  }
-  startLog(row)
-}
+// ── 行级明细(spec §9.1)───────────────────────────────────
+const rows = computed<ExecutionRow[]>(() => execStore.rowsByExecution[executionId.value] ?? [])
+const rowsLoading = computed(() => execStore.rowsByExecution[executionId.value] === undefined)
+const isExpanded = computed(() => execStore.expanded.has(executionId.value))
 
-function collapseLog() {
-  logStream.value?.close()
-  logStream.value = null
-  logTargetId.value = null
-  logStdout.value = ''
-  logStderr.value = ''
-  logLoading.value = false
-  logStreamClosed.value = false
-}
-
-async function startLog(row: ExecRun) {
+function toggleRows(): void {
   if (!execStore.detail) return
-  // Switching to a different run — close the prior stream first.
-  logStream.value?.close()
-  logTargetId.value = row.id
-  logStdout.value = ''
-  logStderr.value = ''
-  logLoading.value = true
-  logStreamClosed.value = false
-  try {
-    // Open the SSE stream first — it will replay any history (sourced
-    // from disk if the run already finished) before yielding new lines.
-    const stream = await openRunLogStream(
-      execStore.detail.id,
-      row.id,
-      authStore.accessToken,
-    )
-    logStream.value = stream
-    drainStreamInBackground(row, stream)
-  } catch (e) {
-    logLoading.value = false
-    logStreamClosed.value = true
-    const err = e as { msg?: string; message?: string }
-    logStderr.value = err.msg || err.message || '读取日志失败'
-  }
+  execStore.toggleExpanded(execStore.detail.id)
 }
 
-/** Drain the SSE stream's events into the panel's refs.  Never throws
- *  — falls back to the legacy ``getRunLog`` endpoint if SSE fails so
- *  the user always sees something. */
-async function drainStreamInBackground(row: ExecRun, stream: LogStream): Promise<void> {
-  try {
-    for (;;) {
-      const event = await stream.next()
-      if (event === null) {
-        // Stream closed without an end event.  Try to reconnect using
-        // the last delivered seq so we resume from where we left off
-        // instead of re-fetching the whole log.
-        try {
-          const lastSeq = stream.lastSeq()
-          stream.close()
-          if (!execStore.detail) break
-          const resumed = await openRunLogStream(
-            execStore.detail.id,
-            row.id,
-            authStore.accessToken,
-            { lastEventId: lastSeq },
-          )
-          logStream.value = resumed
-          // Tail-call: continue consuming from the resumed stream.
-          await drainStreamInBackground(row, resumed)
-          return
-        } catch {
-          break
-        }
-      }
-      if (event.kind === 'end') {
-        // Backfill exit_code into the row so the header pill flips from
-        // "exit —" to "exit <code>" without waiting for a refetch.
-        // ``logRow`` 是从 ``detail.runs`` 派生的 computed,直接 mutate 它,
-        // 触发依赖它的模板/计算属性重算。
-        if (logRow.value) {
-          logRow.value.exit_code = event.exit_code
-        }
-        logStreamClosed.value = true
-        break
-      }
-      if (event.kind === 'stderr') logStderr.value += event.text
-      else logStdout.value += event.text
-      autoScrollStdout()
+const ARTIFACT_FILES = ['engine-log', 'result'] as const
+type ArtifactFile = (typeof ARTIFACT_FILES)[number]
+
+interface RowArtifactView {
+  file: ArtifactFile
+  content: string
+  isError: boolean
+}
+
+function loadArtifact(row: ExecutionRow, file: ArtifactFile): void {
+  void execStore.fetchArtifact(executionId.value, row.caseDir, file)
+}
+
+/** 已拉取工件 → 渲染视图(按需拉取,不轮询)。 */
+function loadedArtifacts(row: ExecutionRow): RowArtifactView[] {
+  const out: RowArtifactView[] = []
+  for (const file of ARTIFACT_FILES) {
+    const key = `${executionId.value}:${row.caseDir}:${file}`
+    const err = execStore.artifactError[key]
+    if (err !== undefined) {
+      out.push({ file, content: err, isError: true })
+      continue
     }
-  } catch {
-    // Stream aborted or transient error — fall back to legacy fetch.
-  } finally {
-    logLoading.value = false
-    await fetchLegacyFullLog(row)
-  }
-}
-
-async function fetchLegacyFullLog(row: ExecRun) {
-  if (!execStore.detail) return
-  try {
-    const text = await getRunLog(execStore.detail.id, row.id)
-    if (text.startsWith('# gimbal run log')) {
-      const sections = text.split(/^===== /m).filter(Boolean)
-      let stdoutBuf = ''
-      let stderrBuf = ''
-      for (const s of sections) {
-        if (s.startsWith('STDOUT =====\n')) {
-          stdoutBuf = s.replace(/^STDOUT =====\n/, '')
-        } else if (s.startsWith('STDERR =====\n')) {
-          stderrBuf = s.replace(/^STDERR =====\n/, '')
-        }
-      }
-      logStdout.value = stdoutBuf || logStdout.value
-      logStderr.value = stderrBuf || logStderr.value
+    const text = execStore.artifactText[key]
+    if (text !== undefined) {
+      out.push({ file, content: text === '' ? '(空)' : prettyArtifact(file, text), isError: false })
     }
-  } catch {
-    // best-effort; ignore
   }
+  return out
 }
 
-/** Pin the stdout panel to the bottom on every new chunk.  Cheap
- *  (single ``scrollTop = scrollHeight``) and only runs while the panel
- *  is mounted. */
-function autoScrollStdout() {
-  const el = stdoutRef.value
-  if (!el) return
-  // Defer one microtask so the v-model has flushed the new text
-  // before we measure.
-  Promise.resolve().then(() => {
-    el.scrollTop = el.scrollHeight
-  })
-}
-
-// ── per-run actions ────────────────────────────────────────
-const deleteOpen = ref(false)
-const deleteTarget = ref<ExecRun | null>(null)
-const deleteSubmitting = ref(false)
-
-function deleteRun(row: ExecRun) {
-  deleteTarget.value = row
-  deleteOpen.value = true
-}
-
-async function confirmDeleteRun() {
-  if (!deleteTarget.value || !execStore.detail) return
-  deleteSubmitting.value = true
+/** result.json 是 P1 证据字典(launchStatus/status/…),形状不定:
+ *  能 parse 就缩进 pretty-print,不能就原样展示,绝不假设结构。 */
+function prettyArtifact(file: ArtifactFile, text: string): string {
+  if (file !== 'result') return text
   try {
-    await apiDeleteRun(execStore.detail.id, deleteTarget.value.id)
-    ElMessage.success('已删除')
-    deleteOpen.value = false
-    await execStore.fetchDetail(execStore.detail.id)
+    return JSON.stringify(JSON.parse(text), null, 2)
   } catch {
-    ElMessage.error('删除失败')
-  } finally {
-    deleteSubmitting.value = false
+    return text
   }
 }
 
-async function rerunRun(row: ExecRun) {
-  if (!execStore.detail) return
-  try {
-    await apiRerun(execStore.detail.id, row.id)
-    ElMessage.success(`run #${row.idx} 重跑已提交`)
-    await execStore.fetchDetail(execStore.detail.id)
-  } catch {
-    ElMessage.error('重跑失败')
-  }
+/** 行耗时 = finishedAt − startedAt;两者齐备才算,否则 '—'
+ *  (T15 起 final 行 ts = 完成时刻,新单回放时长真实;修正前的存量
+ *  调度日志行 finishedAt ≈ startedAt,直显 0ms,不过度设计)。 */
+function rowDuration(row: ExecutionRow): string {
+  if (!row.startedAt || !row.finishedAt) return '—'
+  const ms = Date.parse(row.finishedAt) - Date.parse(row.startedAt)
+  if (!Number.isFinite(ms) || ms < 0) return '—'
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+}
+
+// 行级状态词汇来自 dispatcher/引擎(queued/dispatched/…
+// /launch_timeout 等),与 Execution 状态集部分重叠:语义对得上的
+// 复用既有配色桶;状态串原样透传(不翻译),表外词汇套中性兜底色。
+const ROW_STATUS_CLASS: Record<string, string> = {
+  queued: 'status-queued',
+  dispatched: 'status-running',
+  passed: 'status-done',
+  failed: 'status-failed',
+  canceled: 'status-canceled',
+  gimbal_rejected: 'status-failed',
+  plate_unavailable: 'status-failed',
+  plate_rejected: 'status-failed',
+  launch_timeout: 'status-failed',
+  launch_error: 'status-failed',
+  dispatcher_error: 'status-failed',
+}
+
+function rowStatusClass(s: string): string {
+  return ROW_STATUS_CLASS[s] ?? 'row-status-other'
+}
+
+function refreshRowsIfExpanded(): void {
+  if (execStore.expanded.has(executionId.value)) void execStore.fetchRows(executionId.value)
 }
 
 // ── lifecycle ─────────────────────────────────────────────
 let stop: (() => void) | null = null
 
 async function refreshNow() {
-  if (executionId.value) await execStore.fetchDetail(executionId.value)
+  if (!executionId.value) return
+  try {
+    await execStore.fetchDetail(executionId.value)
+    // If the poller had given up (404-blip / failure budget), bring it
+    // back for non-terminal executions — a manual click is the natural
+    // "resume" gesture after the pollError banner.
+    const st = execStore.detail?.status
+    if (st && !isTerminalExecutionStatus(st)) {
+      stop = execStore.startPolling(executionId.value)
+    }
+    refreshRowsIfExpanded()
+  } catch (e) {
+    // fetchDetail rethrows; detail stays as-is — surface via pollError.
+    const err = e as Error
+    execStore.pollError = `刷新失败：${err.message}`
+  }
 }
 
 async function removeExec() {
   if (!execStore.detail) return
-  await execStore.remove(execStore.detail.id)
-  ElMessage.success('已删除')
-  router.push('/executions')
+  const ok = await removeExecution(execStore.detail.id, (i) => execStore.remove(i))
+  if (ok) router.push('/executions')
+}
+
+/** P4:请求协作式取消;在飞 fanout 在行边界收敛,刷新看最新状态。 */
+async function cancelExec() {
+  if (!execStore.detail) return
+  try {
+    await cancelExecution(execStore.detail.id)
+    ElMessage.success('已请求取消 — 在飞行收敛后生效')
+  } catch (e) {
+    if ((e as { status?: number }).status === 409) {
+      // 终态竞态:刷新让按钮消失即可,不算失败。
+      ElMessage.info('该执行已结束,无法取消')
+    } else {
+      showError('取消', e)
+      return
+    }
+  }
+  await refreshNow()
 }
 
 onMounted(async () => {
   if (!executionId.value) return
-  await execStore.fetchDetail(executionId.value)
+  try {
+    await execStore.fetchDetail(executionId.value)
+  } catch (e) {
+    // Surface load failure instead of an infinite skeleton (fetchDetail
+    // rethrows and detail stays null).
+    const status = (e as { status?: number }).status
+    execStore.pollError = status === 404
+      ? '该执行记录不存在（可能已被删除）'
+      : `加载失败：${(e as Error).message}`
+    return
+  }
   stop = execStore.startPolling(executionId.value)
+  // 行级表格的展开态跨导航保留(store 持有):回到本页立即补一次 rows。
+  refreshRowsIfExpanded()
 })
 
 onUnmounted(() => {
   if (stop) stop()
-  // Tear down any live SSE stream so the backend subscriber is freed.
-  collapseLog()
 })
 </script>
 
 <style scoped>
 .executions {
-  max-width: 1480px;
+  max-width: 1080px;
   padding: 28px 32px 48px;
   margin: 0 auto;
 }
@@ -478,6 +465,10 @@ onUnmounted(() => {
   color: var(--color-text-secondary);
   font-size: 12px;
 }
+.step-to-pill {
+  margin-left: 8px;
+  vertical-align: middle;
+}
 
 .header-actions {
   display: flex;
@@ -492,25 +483,7 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
-.status-queued {
-  color: #4338ca;
-  background: #eef2ff;
-}
-
-.status-running {
-  color: #854d0e;
-  background: #fef9c3;
-}
-
-.status-done {
-  color: #166534;
-  background: #dcfce7;
-}
-
-.status-failed {
-  color: #991b1b;
-  background: #fee2e2;
-}
+/* 状态配色统一在 @/styles/status-colors.css（见文件末尾引入） */
 
 .counters {
   display: grid;
@@ -546,44 +519,36 @@ onUnmounted(() => {
   color: #991b1b;
 }
 
-.runs-title {
+.recipe-title,
+.rows-title {
   margin: 0 0 12px;
   color: var(--color-text-primary);
   font-size: 14px;
 }
 
-.runs-table {
-  width: 100%;
-  border: 1px solid #e2e8f0;
+.rows-title {
+  margin-top: 8px;
+}
+
+.recipe {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 24px;
+  padding: 14px 18px;
+  margin: 0 0 16px;
+  font-size: 12px;
+  background: #fff;
+  border: 0.5px solid #e2e8f0;
   border-radius: 8px;
 }
 
-.run-tag {
-  display: inline-flex;
-  padding: 2px 8px;
-  font-size: 10.5px;
-  font-weight: 600;
-  border-radius: 4px;
+.recipe dt {
+  color: var(--color-text-secondary);
 }
 
-.run-pending {
-  color: #4338ca;
-  background: #eef2ff;
-}
-
-.run-running {
-  color: #854d0e;
-  background: #fef9c3;
-}
-
-.run-passed {
-  color: #166534;
-  background: #dcfce7;
-}
-
-.run-failed {
-  color: #991b1b;
-  background: #fee2e2;
+.recipe dd {
+  margin: 0;
+  color: var(--color-text-primary);
 }
 
 .mono {
@@ -591,40 +556,115 @@ onUnmounted(() => {
 }
 
 .dim {
+  color: var(--color-text-tertiary);
+}
+
+/* ── 行级明细(spec §9.1)────────────────────────────── */
+.rows-head {
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.rows-hint {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+.rows-panel {
+  margin-bottom: 16px;
+}
+
+.rows-empty {
+  margin: 0;
+  padding: 18px;
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  background: #fff;
+  border: 0.5px dashed #e2e8f0;
+  border-radius: 8px;
+}
+
+.ex-table {
+  width: 100%;
+  font-size: 12px;
+  background: #fff;
+  border: 0.5px solid #e2e8f0;
+  border-radius: 8px;
+  border-collapse: collapse;
+}
+
+.ex-table th {
+  padding: 8px 10px;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  text-align: left;
+  background: #f8fafc;
+  border-bottom: 0.5px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.ex-table td {
+  padding: 7px 10px;
+  color: var(--color-text-primary);
+  text-align: left;
+  border-bottom: 0.5px solid #f1f5f9;
+}
+
+.row-tag {
+  display: inline-flex;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* 词汇表外的行状态:中性兜底(状态串原样透传,不翻译) */
+.row-status-other {
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.ex-table-artifact td {
+  padding: 8px 10px 12px;
+  background: #f8fafc;
+}
+
+.artifact-head {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  margin-bottom: 6px;
   color: var(--color-text-secondary);
   font-size: 11px;
 }
 
-.muted {
-  color: var(--color-text-tertiary);
+.artifact-pre {
+  max-height: 320px;
+  padding: 10px 12px;
+  margin: 0;
+  overflow: auto;
   font-size: 11px;
-}
-
-.exit-ok {
-  color: #166534;
-  font-weight: 600;
-}
-
-.exit-fail {
-  color: #991b1b;
-  font-weight: 600;
-}
-
-.report-link {
-  color: var(--accent);
-  font-size: 12px;
-  text-decoration: none;
-}
-
-.report-link:hover {
-  text-decoration: underline;
-}
-
-.report-frame {
-  width: 100%;
-  height: 75vh;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: #fff;
   border: 0.5px solid #e2e8f0;
-  border-radius: 4px;
+  border-radius: 6px;
+}
+
+.artifact-error {
+  color: #991b1b;
 }
 
 .state {
@@ -633,125 +673,25 @@ onUnmounted(() => {
   margin: 0 auto;
 }
 
-/* ─── Inline log panel (same level as execution detail) ───
-   Lives directly below the runs table.  Fixed-height scrollable
-   stdout so the panel doesn't grow unbounded as lines stream in. */
-.log-panel {
+.error-state {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 16px 18px;
-  margin-top: 16px;
-  background: #fff;
-  border: 0.5px solid #e2e8f0;
-  border-radius: 8px;
+  gap: 16px;
+  align-items: flex-start;
 }
 
-.log-panel-head {
+.error-actions {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 10px;
-  border-bottom: 0.5px solid var(--color-border-tertiary);
-}
-
-.log-panel-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--color-text-primary);
-  font-size: 13px;
-}
-
-.log-panel-id {
-  color: var(--color-text-tertiary);
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
-.log-panel-loading {
-  color: var(--color-text-secondary);
-  font-size: 10.5px;
-  font-style: italic;
-}
-
-.log-panel-done {
-  padding: 1px 8px;
-  color: #166534;
-  font-size: 10.5px;
-  font-weight: 600;
-  background: #dcfce7;
-  border-radius: 4px;
-}
-
-.log-panel-actions {
-  display: inline-flex;
-  align-items: center;
   gap: 8px;
 }
 
-.log-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.poll-warn {
+  margin-bottom: 12px;
 }
 
-.log-section-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-}
-
-.log-section-bullet {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  color: white;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  background: var(--color-text-secondary);
-  border-radius: 3px;
-}
-
-.log-pre {
-  margin: 0;
-  padding: 10px 12px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-  border-radius: 6px;
-}
-
-.log-cmd {
-  color: #4338ca;
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-soft-border);
-}
-
-.log-stdout {
-  max-height: 320px;
-  color: #1f2933;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  overflow: auto;
-}
-
-.log-stderr {
-  max-height: 240px;
-  color: #991b1b;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  overflow: auto;
+.sys-alert {
+  margin-bottom: 12px;
 }
 </style>
+
+<style src="@/styles/status-colors.css"></style>

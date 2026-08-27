@@ -1,0 +1,33 @@
+/**
+ * status-colors.css — execution 状态配色（唯一来源）。
+ *
+ * 原 3 份逐字拷贝（ExecutionsList 的 .status-*、Executions 的
+ * .status-* 与 .run-*）收敛于此。新增状态时只改这里。
+ * Execution 状态集:queued/running/done/failed/canceled(run 级状态
+ * 已随 exec_runs 退役)。
+ * 颜色语义：queued 靛、running 蓝、done 绿、failed 红、canceled 灰。
+ */
+.status-queued {
+  color: #4338ca;
+  background: #eef2ff;
+}
+
+.status-running {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.status-done {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.status-failed {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.status-canceled {
+  color: #64748b;
+  background: #f1f5f9;
+}

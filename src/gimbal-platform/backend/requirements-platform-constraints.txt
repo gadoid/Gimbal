@@ -1,0 +1,16 @@
+# Platform backend dependency constraints.
+#
+# Used as `pip install -c requirements-platform-constraints.txt ...` to
+# force a specific transitive-dep version that pyproject.toml pins but
+# pip may otherwise resolve to an incompatible newer release.
+#
+# ── bcrypt ──────────────────────────────────────────────────────────
+# passlib 1.7.4 (released 2021) reads ``bcrypt.__about__.__version__`` on
+# init and calls ``bcrypt.hashpw`` directly.  Both interactions break
+# against bcrypt ≥ 4.1: the ``__about__`` attribute was removed, and
+# ``hashpw`` now refuses passwords > 72 bytes instead of silently
+# truncating.  Symptom on /api/auth/register:
+#     AttributeError: module 'bcrypt' has no attribute '__about__'
+#     ValueError: password cannot be longer than 72 bytes
+# Cap at <4.1 (the latest version still compatible with passlib 1.7.4).
+bcrypt>=3.1,<4.1

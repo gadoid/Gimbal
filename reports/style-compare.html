@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gimbal Test Report</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 24px; background: #fafafa; color: #212121; }
+  h1 { margin: 0 0 8px 0; font-size: 24px; }
+  h2 { margin: 32px 0 12px 0; font-size: 18px; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
+  h3 { margin: 16px 0 8px 0; font-size: 15px; }
+  .meta { color: #666; font-size: 13px; margin-bottom: 24px; }
+  .summary { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+  .card { padding: 12px 16px; border-radius: 6px; color: #fff; min-width: 90px; }
+  .card.http { background: #6a1b9a; }
+  .card.promo { background: #00838f; }
+  .card.total { background: #0277bd; }
+  .card.passed { background: #2e7d32; }
+  .card.failed { background: #c62828; }
+  .card.error  { background: #ef6c00; }
+  .card.skipped { background: #757575; }
+  .card .num { font-size: 28px; font-weight: 600; }
+  .card .lbl { font-size: 12px; opacity: 0.85; }
+  details { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 12px 16px; margin-bottom: 8px; }
+  details.suite { border-color: #90a4ae; }
+  summary { cursor: pointer; font-weight: 600; font-size: 15px; outline: none; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; font-size: 13px; vertical-align: top; }
+  th { background: #f5f5f5; font-weight: 600; }
+  td.duration { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.error { color: #c62828; font-family: ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; }
+  td.mono, pre { font-family: ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; }
+  pre { background: #263238; color: #eceff1; padding: 10px 12px; border-radius: 4px; font-size: 12px; overflow-x: auto; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; color: #fff; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .subtable { margin-top: 6px; background: #fafafa; }
+  .subtable th { background: #eceff1; }
+  .empty { color: #999; font-style: italic; }
+  footer { color: #999; font-size: 12px; margin-top: 32px; text-align: center; }
+  .kv-table th { width: 200px; }
+</style>
+</head>
+<body>
+<h1>Gimbal Test Report</h1>
+<div class="meta">run_id: <code>demo</code> &middot; env: prod &middot; mode: ci &middot; framework: 2.5.0</div>
+<div class="summary">
+  <div class="card total"><div class="num">0</div><div class="lbl">TOTAL</div></div>
+  <div class="card passed"><div class="num">0</div><div class="lbl">PASSED</div></div>
+  <div class="card failed"><div class="num">0</div><div class="lbl">FAILED</div></div>
+  <div class="card error"><div class="num">0</div><div class="lbl">ERROR</div></div>
+  <div class="card skipped"><div class="num">0</div><div class="lbl">SKIPPED</div></div>
+  <div class="card http"><div class="num">1</div><div class="lbl">HTTP</div></div>
+  <div class="card promo"><div class="num">1</div><div class="lbl">PROMOTIONS</div></div>
+</div>
+
+
+<h2>Scenarios (no suite)</h2>
+<details open>
+  <summary>login <span style="color:#666;font-weight:400">— sc · 1 steps (<span style="color:#2e7d32">0 passed</span> · <span style="color:#c62828">1 failed</span> · <span style="color:#ef6c00">0 error</span>)</span> <span class="badge" style="background:#c62828">failed</span></summary>
+  
+  <table><thead><tr><th>Step</th><th>Status</th><th class="duration">Duration</th><th>Detail</th></tr></thead><tr>
+  <td>POST /login<br><span style="color:#999;font-size:11px">s1</span></td>
+  <td><span class="badge" style="background:#c62828">failed</span></td>
+  <td class="duration">200 ms</td>
+  <td><details style="margin:6px 0"><summary style="font-weight:500">Strategy · http · ⚡ 2 retries</summary><table class="subtable"><tbody><tr><th>type</th><td>http</td></tr><tr><th style="padding-left:8px">request</th><td style="padding-left:8px;color:#666"><i>(nested)</i></td></tr><tr><th style="padding-left:24px">method</th><td style="padding-left:24px">POST</td></tr><tr><th style="padding-left:24px">url</th><td style="padding-left:24px">http://api/login</td></tr><tr><th style="padding-left:24px">headers</th><td style="padding-left:24px;color:#666"><i>(nested)</i></td></tr><tr><th style="padding-left:40px">Content-Type</th><td style="padding-left:40px">application/json</td></tr><tr><th>assertions</th><td>(list, 1 items)</td></tr><tr><th style="padding-left:24px">[0]</th><td style="padding-left:24px;color:#666"><i>(nested)</i></td></tr><tr><th style="padding-left:40px">path</th><td style="padding-left:40px">$.code</td></tr><tr><th style="padding-left:40px">op</th><td style="padding-left:40px">eq</td></tr><tr><th style="padding-left:40px">expected</th><td style="padding-left:40px">0</td></tr></tbody></table></details><br><div style="background:#fff3e0;padding:8px;border-radius:4px;border-left:3px solid #c62828;margin:4px 0"><span style="color:#c62828;font-size:11px">phase: http_call</span><div class="mono" style="color:#c62828;margin-top:4px">expected 0 got 401</div></div><br><details style="margin:6px 0"><summary style="font-weight:500">HTTP exchanges (1)</summary><table class="subtable"><thead><tr><th>#</th><th>Method</th><th>URL</th><th>Status</th><th class="duration">Duration</th></tr></thead><tbody><tr><td>1</td><td><b>POST</b></td><td class="mono">http://api/login</td><td style="color:#c62828;font-weight:600">401</td><td class="duration">200 ms</td></tr></tbody></table></details><br><details style="margin:6px 0"><summary style="font-weight:500">Variable promotions (1)</summary><table class="subtable"><thead><tr><th>Key</th><th>Path</th><th>By step</th><th>Reason</th></tr></thead><tbody><tr><td><code>token</code></td><td>step → scenario<span style="color:#00838f"></span></td><td><code>s1</code></td><td style="color:#666"> <span style="color:#666">— cached</span></td></tr></tbody></table></details></td>
+</tr></table>
+</details>
+<footer>Generated by gimbal-test-report plugin · v2 full-info</footer>
+</body>
+</html>

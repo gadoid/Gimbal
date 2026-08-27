@@ -1,0 +1,1286 @@
+"""Run dispatcher (V3.2 Scenario Composer — ``gimbal run launch`` 执行链).
+
+Per-row fan-out of a Scenario's selected DataSets:
+
+1. :func:`_compose_scenario` — 场景 definition + 一行数据集 → 数据驱动的
+   gimbal scenario dict(行键注入 ``config.vars``,按基线类型还原)。
+2. Plate ``/convert`` — 校验 + 剥平台视图字段(orchestration 绝不外发)。
+3. 执行凭证注入 convert 产物(明文不流经 plate)— Task 3 起由
+   ``materialize_run_copy`` 纯函数接管(services/users 物化,注入清单 =
+   模板扫描 ∪ serviceBindings 绑定)。
+4. 落盘 case 文件(``DATA_DIR/runs/cases/<runId>/``)。
+5. ``gimbal_launcher.launch`` 子进程执行 ``gimbal run launch <case>``,
+   stdout JSON RunResult 驱动行级计数。
+
+Mirrors the in-flight task pattern in ``app/routers/executions.py``
+(tracked ``set[asyncio.Task]`` + ``_shutting_down`` flag + ``drain_*``
+helper) so the app lifespan can shut down cleanly.
+
+The former Case layer was dissolved — ``RunRequest`` IS the recipe
+(env / dataSetIds / serviceBindings / …, pure values) applied directly
+to the scenario by :func:`_compose_scenario` (the 配置器/transformer).
+
+Returns ``RunResponse(runId)`` to the caller immediately, and the
+``Execution`` row (re-used from Spec-2) holds the aggregate counters
+so the existing ``/executions`` UI shows the run without any frontend
+changes.
+"""
+from __future__ import annotations
+
+import asyncio
+import copy
+import hashlib
+import json
+import shutil
+import time
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+from uuid import uuid4
+
+from loguru import logger
+from sqlalchemy import func, select
+from sqlalchemy import update as sqlalchemy_update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..core.config import settings
+from ..core.timeutil import utcnow as _utcnow
+from ..models import Execution
+from ..models.execution import (
+    STATUS_CANCELED,
+    STATUS_DONE,
+    STATUS_FAILED,
+    STATUS_QUEUED,
+    STATUS_RUNNING,
+)
+from ..models.auth_session import AuthSession as DBAuthSession
+from ..models.composer_data_set import ComposerDataSet
+from ..models.composer_scenario import ComposerScenario
+from ..schemas.scenario_composer import RunRequest, RunResponse, ServiceBinding
+from . import env_store, gimbal_launcher, plate_client
+from .auth_ref_scan import scan_auth_aliases
+from .run_materialize import materialize_run_copy
+
+# 物理迁移自 gimbal 后:用平台侧标准 AuthSession 替代自创 ResolvedAuth dataclass。
+# 下游 materialize_run_copy(_apply_users)仍消费 username/password/url/token_type/
+# expires_in 这几个字段,与标准 AuthSession 完全对齐(后者字段更多但不影响注入
+# 逻辑)。保留 ResolvedAuth 作为兼容 shim,免改下游的字段引用。
+from app.auth.schema import AuthSession as RuntimeAuthSession  # noqa: E402
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedAuth:
+    """解密后的执行认证(轻量值对象,保留兼容 shim)。
+
+    明文凭证只存在于该对象的生命周期内,不落在 AuthSession ORM 行
+    上 — 避免任何意外 commit 把明文写回数据库。
+
+    内部委托给标准 RuntimeAuthSession(物理迁移自 gimbal),字段对齐下游消费者。
+    """
+
+    alias: str
+    url: str
+    username: str
+    password: str
+    token_type: str
+    expires_in: int
+
+    @classmethod
+    def from_runtime(cls, runtime: "RuntimeAuthSession", alias: str) -> "ResolvedAuth":
+        """从标准 RuntimeAuthSession 构造,供 _resolve_exec_auths 内部使用。"""
+        return cls(
+            alias=alias,
+            url=runtime.url,
+            username=runtime.username,
+            password=runtime.password,
+            token_type=runtime.token_type,
+            expires_in=runtime.expires_in or 0,
+        )
+
+
+# ─── in-flight tracking ───────────────────────────────────────────
+# 与 routers/executions.py 相同的 task 跟踪模式(tracked
+# ``set[asyncio.Task]`` + ``_shutting_down`` flag):app lifespan 调用
+# ``drain_in_flight_dispatches()`` 等待取消。
+_in_flight: set[asyncio.Task] = set()
+_shutting_down: bool = False
+
+
+def is_shutting_down() -> bool:
+    return _shutting_down
+
+
+def _track(task: asyncio.Task) -> None:
+    _in_flight.add(task)
+    task.add_done_callback(_in_flight.discard)
+
+
+def _log_task_exception(task: asyncio.Task) -> None:
+    """Done-callback that surfaces unhandled exceptions in background tasks.
+
+    Without this an exception inside ``_fanout`` would be silently lost
+    (asyncio doesn't propagate task exceptions to the parent).  We
+    already track + discard from ``_in_flight`` in the parent callback;
+    this one only logs the exception, never raises.
+    """
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.exception(
+            "run_dispatcher: background fan-out task crashed: {}", exc
+        )
+
+
+async def drain_in_flight_dispatches() -> int:
+    """Cancel + await all in-flight dispatch tasks.  Called from lifespan."""
+    global _shutting_down
+    _shutting_down = True
+    n = len(_in_flight)
+    if not n:
+        return 0
+    for t in list(_in_flight):
+        t.cancel()
+    await asyncio.gather(*_in_flight, return_exceptions=True)
+    return n
+
+
+def reset_shutdown_state() -> None:
+    """Clear the shutdown flag (lifespan startup).
+
+    ``_shutting_down`` 只在 drain 时置位;不复位的话,同一进程复用模块
+    (测试直接调 drain 后再来一次 app lifespan)时 dispatch 会静默跳过
+    fan-out,Execution 永远停在 queued。
+    """
+    global _shutting_down
+    _shutting_down = False
+
+
+# ─── global launch concurrency gate (P7) ──────────────────────────
+# 全局 launch 并发闸(P7):按事件循环缓存 Semaphore——asyncio 原语
+# 绑定创建时的 loop,pytest 每用例新 loop,进程级单例会跨 loop 复用
+# 报 "attached to a different loop"。
+_launch_sems: dict[int, asyncio.Semaphore] = {}
+
+
+def _global_launch_sem() -> asyncio.Semaphore:
+    loop_id = id(asyncio.get_running_loop())
+    sem = _launch_sems.get(loop_id)
+    if sem is None:
+        sem = asyncio.Semaphore(max(1, settings.MAX_CONCURRENT_LAUNCHES))
+        _launch_sems[loop_id] = sem
+    return sem
+
+
+def reset_concurrency_state() -> None:
+    """测试隔离:清空按 loop 缓存的信号量(换上限后重建)。"""
+    _launch_sems.clear()
+
+
+# ─── cooperative cancel registry (P4) ─────────────────────────────
+# 取消注册表(P4 协作式取消):取消请求集合 + 在飞 fanout task 索引。
+# 取消语义:协作式 —— 只在未来行边界生效,在飞子进程自然跑完
+# (Windows 下 task.cancel 会让 asyncio 放弃收尸、泄漏 gimbal 子进程,
+# 不做);未跑行记 ``canceled`` JSONL 行、不进计数器;``total_runs``
+# 不变,canceled 单允许 ``passed+failed < total_runs``(finalize 跳过
+# 校账)。
+_cancel_requested: set[int] = set()
+_tasks_by_execution: dict[int, asyncio.Task] = {}
+
+
+def request_cancel(execution_id: int) -> None:
+    """登记取消请求(幂等);由 _fanout 在行边界消费。"""
+    _cancel_requested.add(execution_id)
+
+
+def has_live_fanout(execution_id: int) -> bool:
+    return execution_id in _tasks_by_execution
+
+
+def reset_cancel_state() -> None:
+    """测试隔离:清空取消注册表。"""
+    _cancel_requested.clear()
+    _tasks_by_execution.clear()
+
+
+# ─── row-level live registry (spec §9.1) ──────────────────────────
+# 行级可观测(Task 7):活跃执行的行状态驻内存,GET /executions/{id}/rows
+# 实时读取;执行终态化(fanout task 结束)后 pop,读侧自动回落到
+# JSONL 回放 —— 活跃读内存、历史读文件,两段式无缝切换。
+@dataclass
+class RowState:
+    """一行(dataset row × repeat)的实时状态(纯值对象,单 loop 内读写)。"""
+
+    seq: int
+    dataset_id: str | None
+    row_index: int
+    rep: int
+    status: str
+    case_dir: str = ""                 # case stem(非全路径,不泄漏服务端布局)
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
+# 行终态集合:JSONL 里 per-row 最后一行 status 的取值("dispatched" 为
+# 中间态,"queued" 只存在于 registry)。回放器据此区分时间戳归属
+# (final → finishedAt,否则 → startedAt);新增失败分支时同步维护。
+_FINAL_STATUSES = frozenset({
+    "passed", "failed", "canceled",
+    "gimbal_rejected", "plate_unavailable", "plate_rejected",
+    "launch_timeout", "launch_error", "dispatcher_error",
+})
+
+_row_states: dict[int, list[RowState]] = {}   # 活跃执行;finalize 后 pop
+
+
+def execution_rows(execution_id: int) -> list[dict]:
+    """行级状态读侧:活跃执行读内存 registry,历史执行回放 JSONL。"""
+    live = _row_states.get(execution_id)
+    if live is not None:
+        return [asdict(r) for r in live]
+    return _replay_rows(execution_id)
+
+
+def _replay_rows(execution_id: int) -> list[dict]:
+    """按天 JSONL 回放:同 (executionId, seq) 后行覆盖前行(final 覆盖 dispatched)。"""
+    rows: dict[int, dict] = {}
+    for path in sorted((settings.DATA_DIR / "runs").glob("*.jsonl")):
+        with path.open(encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if rec.get("executionId") != execution_id:
+                    continue
+                seq = rec.get("seq")
+                if seq is None:
+                    continue
+                cur = rows.setdefault(seq, {"seq": seq,
+                                            "datasetId": rec.get("datasetId"),
+                                            "rowIndex": rec.get("rowIndex", 0),
+                                            "rep": rec.get("rep", 0),
+                                            "status": rec.get("status", ""),
+                                            "caseDir": "",
+                                            "startedAt": None, "finishedAt": None})
+                cur["status"] = rec.get("status", cur["status"])
+                if rec.get("casePath"):
+                    # casePath 指向 case.json 文件;caseDir 取其父目录名
+                    # (= case stem,与 live registry 的 case_dir 同口径)。
+                    cur["caseDir"] = Path(rec["casePath"]).parent.name
+                ts = rec.get("ts")
+                if rec.get("status") in _FINAL_STATUSES:
+                    cur["finishedAt"] = ts
+                else:
+                    cur["startedAt"] = ts or cur["startedAt"]
+    return [rows[k] for k in sorted(rows)]
+
+
+# ─── startup reconcile (P3) ────────────────────────────────────────
+async def reconcile_stale_executions(db_factory: Any) -> int:
+    """启动期 reconcile:进程内 _fanout 随重启丢失,queued/running 即僵尸。
+
+    全部标 failed + ``config_json.reconciled`` 记录(P3:此前永远
+    停在 queued,UI 无从得知;running 同为进程孤儿,一并收敛)。
+    返回处理行数。
+    """
+    count = 0
+    async with db_factory() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(Execution).where(
+                        Execution.status.in_((STATUS_QUEUED, STATUS_RUNNING))
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for ex in rows:
+            ex.status = STATUS_FAILED
+            if ex.started_at is None:
+                ex.started_at = ex.created_at or _utcnow()
+            ex.finished_at = _utcnow()
+            cfg = dict(ex.config_json or {})
+            cfg["reconciled"] = {
+                "at": _utcnow().isoformat() + "Z",
+                "reason": "backend restarted mid-dispatch",
+            }
+            ex.config_json = cfg
+            count += 1
+        await session.commit()
+    if count:
+        logger.warning(
+            "run_dispatcher: reconciled {} stale queued/running execution(s) after restart",
+            count,
+        )
+    return count
+
+
+async def startup_recovery() -> tuple[int, int]:
+    """启动恢复:reconcile 僵尸执行 + 清扫过期 case 目录(Task 5 接入)。"""
+    stale = await reconcile_stale_executions(_session_factory)
+    swept = sweep_stale_case_dirs()
+    return stale, swept
+
+
+# ─── main entry point ─────────────────────────────────────────────
+async def dispatch_run(
+    db: AsyncSession,
+    user_id: int,
+    req: RunRequest,
+    *,
+    preloaded_scenario: ComposerScenario | None = None,
+) -> RunResponse:
+    """Validate + fan out + return runId.
+
+    Caller (the runs router) wraps any exception in HTTPException.  This
+    function NEVER raises for "Plate is down" — it records the failure
+    and returns the runId so the user can still see the run in
+    ``/executions`` (per the agreed run-failure semantics).
+
+    ``preloaded_scenario``: the runs router already loads the scenario
+    row for the ownership check — pass it here to avoid querying the
+    same row twice (and keep a single source for the
+    scenario_not_found 404).
+    """
+    # P3:优雅关闭窗口内不再"建行但不 spawn"(那会制造一条 201 返回、
+    # 永远停在 queued 的僵尸单)。直接拒单,客户端重启后重试。
+    if is_shutting_down():
+        raise Conflict(
+            "shutting_down",
+            "platform is shutting down; retry after the backend restarts",
+        )
+
+    # 1. Load the scenario (PK is the string scenario_id, not the int id)
+    scen = (
+        preloaded_scenario
+        if preloaded_scenario is not None
+        else await get_row(db, req.scenario_id)
+    )
+    if scen is None:
+        raise NotFound("scenario_not_found", f"scenario not found: {req.scenario_id}")
+
+    # 2. Validate env + datasets.  list_envs() is sync (cached) — safe to
+    # call inline here because it returns from an lru_cache on the
+    # happy path; the first call does a one-shot YAML parse.
+    server_env = next(
+        (e for e in env_store.list_envs() if e.env_id == req.env.env_id), None
+    )
+    if server_env is None:
+        raise NotFound("env_not_found", f"env not found: {req.env.env_id}")
+    # P5 服务端权威:name/baseUrl 一律取 env_store 记录;请求体携带的
+    # 值不一致时告警(此前客户端可传 envId=dev + baseUrl=任意内网地址,
+    # env 治理形同虚设)。
+    if (req.env.name, req.env.base_url) != (server_env.name, server_env.base_url):
+        logger.warning(
+            "run_dispatcher: env mismatch for {} — client ({}, {}), "
+            "server ({}, {}); using server record",
+            req.env.env_id, req.env.name, req.env.base_url,
+            server_env.name, server_env.base_url,
+        )
+
+    # step_to 校验(同 V1 executions:与场景 steps 数比对,越界 409)
+    steps = steps_from_payload(scen.payload)
+    if req.step_to is not None:
+        if not steps:
+            raise NotFound("no_steps", "scenario has no steps; step_to cannot be set")
+        if req.step_to >= len(steps):
+            raise Conflict(
+                "step_to_out_of_range",
+                f"step_to={req.step_to} out of range (0..{len(steps) - 1})",
+            )
+
+    selected_datasets: list[ComposerDataSet] = []
+    for ds_id in req.data_set_ids:
+        ds = await _find_dataset_by_id(db, ds_id)
+        if ds is None or ds.scenario_id != scen.scenario_id:
+            raise NotFound(
+                "data_set_not_found", f"data set not found: {ds_id}"
+            )
+        selected_datasets.append(ds)
+
+    # 3. Allocate runId + Execution row
+    # total_runs 必须按实际行数算(与 _fanout 的迭代口径一致)— 旧的
+    # row_count 列在 raw-SQL 迁移路径下不回填,NULL/过期会让计数器
+    # 超过 total_runs 出现 failed > total 的怪状态。
+    run_id = _new_run_id()
+    # D12 基线执行:未选数据集 = 一个隐式空覆盖行(纯基线,行键空集
+    # 全部回落 config.vars)。datasetId=None 在 JSONL 里如实记录。
+    # 新编辑器里行 0 基线虚行不落库 → 0 行数据集 = "只有基线",同样
+    # 回退一个隐式空覆盖行(否则 entries 为空,执行 0/0/0 秒完结)。
+    fanout_datasets = [
+        {"datasetId": ds.dataset_id, "rows": list(ds.rows or []) or [{}]}
+        for ds in selected_datasets
+    ] or [{"datasetId": None, "rows": [{}]}]
+    total_runs = sum(len(d["rows"]) for d in fanout_datasets) * req.n_runs
+    # P7:总量闸——行数 × nRuns 无上限时,万行数据集 × n_runs 会派生
+    # 出十万级子进程。
+    if total_runs > settings.MAX_RUNS_PER_EXECUTION:
+        raise Conflict(
+            "too_many_runs",
+            f"total runs {total_runs} exceed platform cap "
+            f"{settings.MAX_RUNS_PER_EXECUTION} (rows x nRuns)",
+        )
+    # 注入清单 = 模板扫描 ∪ 绑定(spec §5)。扫描源是存储的 definition
+    # steps(authored 模板所在处,${auth.*} 引用一网打尽);绑定的
+    # authAlias 并入(即使 steps 未引用该 alias)。去重保序。
+    scanned = scan_auth_aliases(definition_from_payload(scen.payload).get("steps") or [])
+    bound = [b.auth_alias for b in req.service_bindings.values() if b.auth_alias]
+    auth_aliases: list[str] = list(dict.fromkeys([*scanned, *bound]))
+
+    execution = await _create_execution(
+        db,
+        # (Case 层解散后执行的挂载点就是场景)。
+        scenario_id=scen.scenario_id,
+        owner_id=user_id,
+        total_runs=total_runs,
+        config_json={
+            "runId": run_id,
+            "scenarioId": scen.scenario_id,
+            "dataSetIds": req.data_set_ids,
+            "envId": req.env.env_id,
+            # 实际注入清单(扫描 ∪ 绑定)— 读侧据此展示认证列。缺 alias
+            # 只告警继续(清单如实记录原始请求,与"解不到≠没要求"对齐)。
+            "injectedAuths": auth_aliases,
+            # service → {authAlias?, url?}(驼峰 dump,None 键不落)。
+            "serviceBindings": {
+                k: b.model_dump(by_alias=True, exclude_none=True)
+                for k, b in req.service_bindings.items()
+            },
+            "stepTo": req.step_to,
+            "nRuns": req.n_runs,
+            "parallel": req.parallel,
+        },
+    )
+
+    # 4. Spawn the background fan-out (cancel-cleanly tracked)
+    if not is_shutting_down():
+        task = asyncio.create_task(
+            _fanout(
+                db_factory=_session_factory,
+                execution_id=execution.id,
+                run_id=run_id,
+                scenario_payload=dict(scen.payload or {}),
+                datasets=fanout_datasets,
+                env=server_env.model_dump(by_alias=True, mode="json"),
+                owner_id=user_id,
+                auth_aliases=auth_aliases,
+                halt_at=req.step_to,
+                n_runs=req.n_runs,
+                parallel=req.parallel,
+                service_bindings=req.service_bindings,
+            ),
+            name=f"v3-dispatch-{run_id}",
+        )
+        task.add_done_callback(_log_task_exception)
+        _track(task)
+        # P4:在飞 fanout 索引(cancel 端点据此区分"活单等行边界收敛"与
+        # "僵尸单立即终态化")。出清回调与 _in_flight.discard 并存。
+        _tasks_by_execution[execution.id] = task
+        task.add_done_callback(
+            lambda _t, eid=execution.id: _tasks_by_execution.pop(eid, None)
+        )
+        # spec §9.1:fanout task 结束(含异常/被取消的崩溃路径,届时
+        # _finalize_execution 不会执行)即出清活跃行状态,防 registry
+        # 泄漏盖住回放;正常路径 finalize 已 pop,此处幂等。
+        task.add_done_callback(
+            lambda _t, eid=execution.id: _row_states.pop(eid, None)
+        )
+
+    return RunResponse(runId=run_id, executionId=execution.id)
+
+
+# ─── background fan-out ──────────────────────────────────────────
+async def _fanout(
+    *,
+    db_factory: Any,
+    execution_id: int,
+    run_id: str,
+    scenario_payload: dict,
+    datasets: list[dict],
+    env: dict,
+    owner_id: int,
+    auth_aliases: list[str],
+    halt_at: int | None = None,
+    n_runs: int = 1,
+    parallel: int = 1,
+    service_bindings: dict[str, ServiceBinding] | None = None,
+) -> None:
+    """Per-row × per-repeat compose + convert + ``gimbal run launch`` 子进程。
+
+    ``halt_at``(V1 step_to 移植):0-based 含端点,透传 CLI
+    ``--step-to`` —— RuntimeControl 在该步后停(剩余步显示 skipped)。
+
+    M1(V1 executor 移植):``n_runs`` 每行重复次数、``parallel`` 并发度
+    (asyncio.Semaphore);``service_bindings`` 逐绑定传给
+    ``materialize_run_copy`` 物化 run 副本(users 合并固定 merge 语义;
+    prefix/merge 策略等旧字段已随 RunRequest 收敛退役,spec §6)。
+
+    V3.2:执行调用从 gimbal HTTP POST /run 改为落盘 case 文件后
+    ``gimbal run launch <case>`` 子进程(设计:2026-08-24 spec)。
+    case 文件即数据驱动用例快照(含注入后的明文 users —— 与 V1 临时
+    yaml 同语义,落在平台 DATA_DIR 权限域内)。
+    """
+    # P4:防御性出清该 id 的历史残留取消请求(僵尸单由 cancel 端点
+    # inline 终态化,没有 fanout 来消费;测试的 fresh 库会复用执行 id)。
+    # 活跃请求只可能在本 task 启动之后到达(dispatch 先 spawn、后返回
+    # 响应,行边界检查更在其后),此处不会误吞。
+    _cancel_requested.discard(execution_id)
+    log_path = _jsonl_path()
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    # 每个 run 一个 case 目录:case 文件 + 引擎原生报告,并发 fan-out
+    # 互不互踩;与 JSONL 同域构成执行审计面(什么数据真的打给了引擎)。
+    run_dir = _run_dir(run_id)
+
+    # 执行用认证:owner 级解密一次,逐行注入 run 副本的 Config.users。
+    # 解密失败 = fail-fast(V1 严格语义):整单 execution 记为
+    # failed,所有行计入 failed 计数,不带着空/坏凭证打环境。
+    try:
+        # 注入清单为空(无 ${auth.*} 扫描引用、无绑定 authAlias)时
+        # 直接跳过解析。
+        exec_auths = (
+            await _resolve_exec_auths(db_factory, owner_id, auth_aliases)
+            if auth_aliases
+            else []
+        )
+    except _AuthResolveError as e:
+        logger.error(
+            "run_dispatcher: auth resolve failed for execution {}: {}",
+            execution_id, e,
+        )
+        total_rows = sum(len(ds["rows"]) for ds in datasets) * n_runs
+        await _fail_whole_execution(
+            db_factory, log_path, execution_id=execution_id, run_id=run_id,
+            total_rows=total_rows, error=str(e),
+        )
+        return
+
+    # 认证解析通过、即将分发行 → queued 置 running(UI 可见"在跑")。
+    await _mark_running(db_factory, execution_id)
+
+    sem = asyncio.Semaphore(max(1, parallel))
+
+    # P6:整单固定一次 compose 时间戳 — fill_plate_defaults 对缺失的
+    # meta.createTime 注入"当前时刻"(微秒精度),同一行 n_runs 次重复
+    # 的 convert 输入会逐次不同,memo 键永不命中。deepcopy 隔离存储
+    # payload(防写穿 ORM 行)后预填一次,compose 内 setdefault 语义
+    # 即复用同一值 → 同一行重复输入完全一致。
+    scenario_payload = copy.deepcopy(scenario_payload)
+    plate_client.fill_plate_defaults(definition_from_payload(scenario_payload))
+
+    # P6:fan-out 级 convert memo + plate 连续不可用熔断计数。
+    convert_cache: dict[str, dict] = {}
+    plate_state = {"consecutive_unavailable": 0}
+
+    def _breaker_open() -> bool:
+        return (
+            plate_state["consecutive_unavailable"]
+            >= settings.PLATE_BREAKER_THRESHOLD
+        )
+
+    # 内置认证(definition.config.users)是 users 合并的保留基座 —— plate
+    # /convert 的产物可能剥掉平台视图字段,凭证合并不依赖 converted
+    # 自带 users,而是以场景定义为源(与 V1 在原始 yaml 上渲染同语义)。
+    built_in_users = _built_in_users(scenario_payload)
+    # serviceBindings 原样传给 materialize_run_copy(url 物化只对 steps
+    # 实际引用的 service 键生效,见 run_materialize._apply_services)。
+    service_bindings = service_bindings or {}
+
+    async def _row(ds: dict, row_idx: int, rep: int, seq: int) -> None:
+        """One (dataset row × repeat) entry — compose + convert + launch."""
+        state = row_states[seq]
+        async with sem:
+            # P4 协作式取消:行边界在信号量准入处(全部行 task 在 fanout
+            # 启动时就已创建并排队,准入前检查永远看不到晚到的取消请求)。
+            # 已准入的行视为在飞、自然跑完;排队中的行在准入时刻检查,
+            # 未启动的直接记 canceled,不进计数器。
+            if execution_id in _cancel_requested:
+                await _append_log(log_path, {
+                    "ts": _utcnow().isoformat() + "Z",
+                    "runId": run_id,
+                    "executionId": execution_id,
+                    "seq": seq,
+                    "datasetId": ds["datasetId"],
+                    "rowIndex": row_idx,
+                    "rep": rep,
+                    "status": "canceled",
+                })
+                state.status = "canceled"
+                state.finished_at = _utcnow().isoformat() + "Z"
+                return
+            row_dict = dict(ds["rows"][row_idx] or {})
+            composed = _compose_scenario(scenario_payload, row_dict)
+            # 每个 case 独立子目录:case.json(数据驱动用例快照)+ 引擎
+            # 原生报告目录;stem 带 dataset/row/rep 定位,便于事后审计。
+            stem = (
+                f"case-{seq:03d}-{ds['datasetId'] or 'baseline'}"
+                f"-r{row_idx}-n{rep}"
+            )
+            case_dir = run_dir / stem
+            ts = _utcnow().isoformat() + "Z"
+            log_line = {
+                "ts": ts,
+                "runId": run_id,
+                "executionId": execution_id,
+                "seq": seq,
+                "scenarioId": composed.get("scenarioId"),
+                "datasetId": ds["datasetId"],
+                "rowIndex": row_idx,
+                "rep": rep,
+                "env": env,
+                "status": "dispatched",
+                "casePath": str((case_dir / "case.json")),
+                "reportDir": str((case_dir / "reports")),
+            }
+            await _append_log(log_path, log_line)
+            state.status = "dispatched"
+            state.started_at = ts
+
+            try:
+                if _breaker_open():
+                    # 熔断开路:不再调用 plate,行快速失败(落到下方
+                    # 公共尾部:记日志行 + failed 计数)。
+                    log_line["status"] = "plate_unavailable"
+                    log_line["error"] = (
+                        "plate circuit open: "
+                        f"{plate_state['consecutive_unavailable']} "
+                        "consecutive unavailable"
+                    )
+                else:
+                    cache_key = _convert_cache_key(composed)
+                    if cache_key in convert_cache:
+                        # 防御性深拷贝:materialize_run_copy 虽是纯函数,
+                        # 任何未来的原地注入仍不得污染缓存共享引用。
+                        convert_data = copy.deepcopy(convert_cache[cache_key])
+                    else:
+                        convert_data = await plate_client.convert(composed)
+                        # 入缓存的是物化前原始快照(注入只进 run 副本)。
+                        convert_cache[cache_key] = copy.deepcopy(convert_data)
+                    plate_state["consecutive_unavailable"] = 0
+                    # Convert succeeded — hand the gimbal-shaped product to the
+                    # engine. 明文 users 只进 run 副本(convert 那份不带,防明文
+                    # 流进 plate 校验/日志);注入形状同 V1 executor 生产路径。
+                    # convert_data = {consumer, converted};converted 是
+                    # GimbalScenarioExporter 的产物(已剥平台视图扩展字段)。
+                    converted = convert_data.get("converted") or {}
+                    # 物化 run 副本(纯函数,深拷贝 — 绝不原地改 converted):
+                    # users 合并(内置基座 + 注入覆盖,固定 merge 语义)与
+                    # services 物化(绑定 url > authored > env.baseUrl 补缺)。
+                    composed_exec = materialize_run_copy(
+                        converted,
+                        env_base_url=(env.get("baseUrl") or ""),
+                        service_bindings={
+                            k: b.model_dump(by_alias=True)
+                            for k, b in service_bindings.items()
+                        },
+                        resolved_auths=exec_auths,
+                        built_in_users=built_in_users,
+                    )
+                    # 落盘数据驱动用例快照后交给 CLI 子进程执行。
+                    case_path = _write_case_file(case_dir, composed_exec)
+                    # P7 全局并发闸:进程级 launch 在飞上限(跨 execution
+                    # 合并生效;行级 sem 只管单 execution 的 parallel)。
+                    async with _global_launch_sem():
+                        result = await gimbal_launcher.launch(
+                            case_path,
+                            step_to=halt_at,
+                            report_dir=case_dir / "reports",
+                            cwd=case_dir,
+                            engine_log_path=case_dir / "engine.log",
+                        )
+                    log_line["runResult"] = result.run_result
+                    if result.launch_status != "ok":
+                        # 子进程层故障(超时 kill / spawn 失败):记失败但
+                        # 不中断后续行(fan-out 永不因单行崩溃)。
+                        log_line["status"] = (
+                            "launch_timeout"
+                            if result.launch_status == "timeout"
+                            else "launch_error"
+                        )
+                        log_line["runError"] = result.error
+                        logger.warning(
+                            "run_dispatcher: launch {} for row {}/{}#{}: {}",
+                            result.launch_status, ds["datasetId"], row_idx, rep,
+                            result.error,
+                        )
+                    elif result.exit_code == 0:
+                        log_line["status"] = "passed"
+                        logger.info(
+                            "run_dispatcher: row {}/{}#{} executed: exit=0 passed={} failed={}",
+                            ds["datasetId"], row_idx, rep,
+                            result.passed, result.failed,
+                        )
+                    elif result.exit_code == 2:
+                        # 引擎 Scenario 校验拒绝(与 HTTP 422 同源)。
+                        log_line["status"] = "gimbal_rejected"
+                        log_line["runError"] = result.error
+                        logger.warning(
+                            "run_dispatcher: gimbal rejected row {}/{}#{}: {}",
+                            ds["datasetId"], row_idx, rep, result.error,
+                        )
+                    else:
+                        # exit 1 = 测试失败(正常业务结果);>=3 = 引擎侧错误。
+                        log_line["status"] = "failed"
+                        log_line["runError"] = result.error
+                        logger.info(
+                            "run_dispatcher: row {}/{}#{} executed: exit={} passed={} failed={}",
+                            ds["datasetId"], row_idx, rep, result.exit_code,
+                            result.passed, result.failed,
+                        )
+            except plate_client.PlateUnavailableError as e:
+                plate_state["consecutive_unavailable"] += 1
+                log_line["status"] = "plate_unavailable"
+                log_line["error"] = str(e)
+                logger.warning("run_dispatcher: plate unavailable for row {}/{}#{}: {}", ds["datasetId"], row_idx, rep, e)
+            except plate_client.PlateRejectedError as e:
+                log_line["status"] = "plate_rejected"
+                log_line["error"] = e.message
+                log_line["errors"] = list(e.errors or [])
+                logger.warning("run_dispatcher: plate rejected row {}/{}#{}: {}", ds["datasetId"], row_idx, rep, e.message)
+            except Exception as e:  # noqa: BLE001  defensive — never let a row kill the fan-out
+                log_line["status"] = "dispatcher_error"
+                log_line["error"] = repr(e)
+                logger.exception("run_dispatcher: unexpected error row {}/{}#{}", ds["datasetId"], row_idx, rep)
+
+            # P1:引擎结果全量证据落盘(仅真实拿到 LaunchResult 的路径;
+            # plate 异常分支不设 runResult,短路跳过)。
+            if "runResult" in log_line:
+                _write_result_evidence(case_dir, result, log_line["status"])
+
+            # T7-Q1:final 行 ts 刷新为完成时刻 — log_line 的 ts 构造于
+            # 派发时刻,沿用会让 JSONL 回放的 finishedAt == startedAt
+            # (行时长恒为 0)。同一时刻写 registry,两读路口径一致。
+            finished_ts = _utcnow().isoformat() + "Z"
+            log_line["ts"] = finished_ts
+
+            # Append the final log line for this row (covers all
+            # success / failure branches — previously the rejected
+            # branches ``continue``'d before this and lost the line).
+            await _append_log(log_path, log_line)
+
+            # 行终态落 registry(spec §9.1):完成时刻 + case stem(供
+            # 工件端点;ts 与 JSONL final 行同一时刻)。
+            state.status = log_line["status"]
+            state.finished_at = finished_ts
+            state.case_dir = case_dir.name
+
+            # Atomic per-row counter bump.  Deltas (not absolute
+            # write-backs) so concurrent rows and concurrent UI
+            # deletions (MAX(0, col-1) SQL) compose correctly.
+            passed = 1 if log_line["status"] == "passed" else 0
+            await _bump_counters(
+                db_factory, execution_id, passed=passed, failed=1 - passed
+            )
+
+    # (dataset, row, repeat) 笛卡尔积;n_runs=1 时与旧逐行行为完全一致。
+    # seq 为 case 文件名里的全局序号(与 entries 顺序一致,单测可断言)。
+    entries = [
+        (ds, row_idx, rep)
+        for ds in datasets
+        for row_idx in range(len(ds["rows"]))
+        for rep in range(n_runs)
+    ]
+    # spec §9.1:组完全部行任务后初始化行状态 registry(全部 queued;
+    # _row 内逐行推进,执行终态化时整体 pop → 读侧回落 JSONL 回放)。
+    row_states = _row_states[execution_id] = [
+        RowState(
+            seq=seq,
+            dataset_id=ds["datasetId"],
+            row_index=row_idx,
+            rep=rep,
+            status="queued",
+        )
+        for seq, (ds, row_idx, rep) in enumerate(entries)
+    ]
+    await asyncio.gather(
+        *(_row(ds, i, r, seq) for seq, (ds, i, r) in enumerate(entries))
+    )
+
+    # Terminal status + timestamps only (counters already maintained
+    # incrementally above).
+    if execution_id in _cancel_requested:
+        # P4 协作式取消:未跑行已在行边界记 canceled,在飞子进程已自然
+        # 跑完;canceled 允许 passed+failed < total_runs(finalize 跳过
+        # 校账)。请求在此消费出清(终态后状态归零,同 id 空间不被污染)。
+        await _finalize_execution(db_factory, execution_id, status=STATUS_CANCELED)
+        _cancel_requested.discard(execution_id)
+    else:
+        await _finalize_execution(db_factory, execution_id)
+
+
+async def _mark_running(db_factory: Any, execution_id: int) -> None:
+    """queued → running + started_at(原子条件 update,只动 queued 行)。
+
+    fanout 在认证解析通过、行分发开始前调用 —— UI 由此区分"排队中"
+    与"在跑"(此前 queued 直接到终态,长时间执行无法观测进度感)。
+    条件更新天然幂等:终态/已 running 的行不被覆写;行被并发删除时
+    where 不命中,静默跳过即可(fanout 稍后自然 no-op 收尾)。
+    """
+    try:
+        async with db_factory() as session:
+            await session.execute(
+                sqlalchemy_update(Execution)
+                .where(
+                    Execution.id == execution_id,
+                    Execution.status == STATUS_QUEUED,
+                )
+                .values(
+                    status=STATUS_RUNNING,
+                    started_at=func.coalesce(Execution.started_at, _utcnow()),
+                )
+            )
+            await session.commit()
+    except Exception as e:  # noqa: BLE001
+        # 观测性标记,失败不阻断 fanout(终态写入才是权威)。
+        logger.warning(
+            "run_dispatcher: mark running failed for execution {}: {}",
+            execution_id, e,
+        )
+
+
+async def _fail_whole_execution(
+    db_factory: Any,
+    log_path: Path,
+    *,
+    execution_id: int,
+    run_id: str,
+    total_rows: int,
+    error: str,
+) -> None:
+    """Auth fail-fast path: log once, count every row as failed, finalize.
+
+    解密失败 = fail-fast(V1 严格语义):整单 execution 记为 failed,
+    所有行计入 failed 计数,不带着空/坏凭证打环境。
+    """
+    await _append_log(log_path, {
+        "ts": _utcnow().isoformat() + "Z",
+        "runId": run_id,
+        "executionId": execution_id,
+        "status": "auth_resolve_failed",
+        "error": error,
+    })
+    await _bump_counters(db_factory, execution_id, passed=0, failed=total_rows)
+    await _finalize_execution(db_factory, execution_id)
+
+
+async def _append_log(path: Path, payload: dict) -> None:
+    """Best-effort JSONL append(to_thread 异步写,不阻塞事件循环)。
+
+    写失败只告警,绝不打断 fan-out(P9:原同步写在逐行大单下会
+    阻塞 loop)。
+    """
+    try:
+        await asyncio.to_thread(_append_jsonl, path, payload)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "run_dispatcher: failed to write JSONL log line for {}: {}",
+            payload.get("runId"), e,
+        )
+
+
+def _write_result_evidence(
+    case_dir: Path, result: gimbal_launcher.LaunchResult, status: str
+) -> None:
+    """P1 证据落盘:per-case result.json(步骤级 details 完整保留)。
+
+    JSONL 保持 counts-only(运维索引);完整证据(含 details[] / 兜底
+    stdout 原文)落在本文件,与 case.json 同目录构成审计面。
+    Best-effort:写失败只告警,绝不打断行执行。
+    """
+    payload: dict[str, Any] = {
+        "launchStatus": result.launch_status,
+        "exitCode": result.exit_code,
+        "status": status,
+        "total": result.total,
+        "passed": result.passed,
+        "failed": result.failed,
+        "skipped": result.skipped,
+        "details": result.details,
+        "error": result.error,
+    }
+    if not result.details and result.stdout:
+        # 引擎未给出可解析 JSON 报告(如 exit 2 走 typer err)时保留原文。
+        payload["stdout"] = result.stdout
+    try:
+        (case_dir / "result.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "run_dispatcher: failed to write result.json for {}: {}",
+            case_dir, e,
+        )
+
+
+async def _bump_counters(
+    db_factory: Any, execution_id: int, *, passed: int, failed: int
+) -> None:
+    """Atomic Execution counter bump(P8:失败重试一次,双败 JSONL 记账)。
+
+    Deltas(not absolute write-backs)so concurrent rows and concurrent
+    UI deletions compose correctly.
+    """
+    for attempt in (1, 2):
+        try:
+            async with db_factory() as session:
+                await session.execute(
+                    sqlalchemy_update(Execution)
+                    .where(Execution.id == execution_id)
+                    .values(
+                        passed=Execution.passed + passed,
+                        failed=Execution.failed + failed,
+                    )
+                )
+                await session.commit()
+            return
+        except Exception as e:  # noqa: BLE001
+            if attempt == 2:
+                logger.error(
+                    "run_dispatcher: counter bump failed twice for execution {}: {}",
+                    execution_id, e,
+                )
+                await _append_log(_jsonl_path(), {
+                    "ts": _utcnow().isoformat() + "Z",
+                    "executionId": execution_id,
+                    "status": "counter_bump_failed",
+                    "error": repr(e),
+                    "deltas": {"passed": passed, "failed": failed},
+                })
+
+
+async def _finalize_execution(
+    db_factory: Any, execution_id: int, *, status: str | None = None
+) -> None:
+    """终态收尾:只写 status + 时间戳(计数器由上方增量维护)。
+
+    ``status`` 显式覆盖用于取消终态(canceled);缺省沿用严格规则
+    ``failed > 0 → failed``。P8:非 canceled 终态校账
+    ``passed + failed == total_runs``,漂移只标记不修正(counterDrift
+    供读侧发现"数字对不上",真值以 JSONL 为准)。
+    """
+    try:
+        async with db_factory() as session:
+            ex = await session.get(Execution, execution_id)
+            if ex is not None:
+                final_status = status or (
+                    STATUS_FAILED if ex.failed else STATUS_DONE
+                )
+                ex.status = final_status
+                if ex.started_at is None:
+                    ex.started_at = _utcnow()
+                ex.finished_at = _utcnow()
+                if (
+                    final_status != STATUS_CANCELED
+                    and ex.passed + ex.failed != ex.total_runs
+                ):
+                    logger.error(
+                        "run_dispatcher: counter drift execution {}: "
+                        "total={} passed+failed={}",
+                        execution_id, ex.total_runs, ex.passed + ex.failed,
+                    )
+                    cfg = dict(ex.config_json or {})
+                    cfg["counterDrift"] = True
+                    ex.config_json = cfg
+                await session.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("run_dispatcher: failed to update execution {}: {}", execution_id, e)
+    # spec §9.1:执行终态化 → 活跃行状态出清(读侧此后走 JSONL 回放)。
+    # DB 写失败也出清 —— fanout 已收尾,残留的"活跃"行状态会永久盖住
+    # 回放路径。
+    _row_states.pop(execution_id, None)
+
+
+# ─── helpers ──────────────────────────────────────────────────────
+def _built_in_users(scenario_payload: dict | None) -> dict[str, Any]:
+    """场景 definition.config.users(merge 策略保留基座)。"""
+    def_cfg = definition_from_payload(scenario_payload).get("config") or {}
+    users = def_cfg.get("users") if isinstance(def_cfg.get("users"), dict) else {}
+    return dict(users or {})
+
+
+def _compose_scenario(
+    scenario_payload: dict, row_dict: dict
+) -> dict[str, Any]:
+    """配置器:把存储的 Scenario + 一行数据 变换成 Plate 输入。
+
+    源存果算 — 这里是唯一的变换点:存储里只有场景定义(源)与
+    数据行(纯值),每个 run 的形态由本函数即时计算:
+
+    * deep-copy 场景定义,行键值合入 ``config.vars``(行值覆盖同名
+      场景级 var)。行值按基线类型还原(新数据集编辑器全字符串落库,
+      ``_coerce_row_value`` 恢复"int 还是 int"的旧语义,断言
+      ``expected: 0`` 不会被字符串化破坏)。
+    * 数据集行是稀疏覆盖(缺键 = 继承基线,即场景级 vars 原值;
+      ``""`` = 显式空覆盖),与行 0 基线虚行/三态单元格的编辑器
+      契约一致 —— 基线行本身不落库,由场景 vars 承担。
+    * ``scenario_payload`` 是持久化的 ``ComposerScenario.payload``。
+      容器化重构后为 ``{definition, orchestration}``;plate 只吃
+      ``definition``(orchestration 是平台侧投影,绝不外发)。
+    * plate 必填默认由 :func:`plate_client.fill_plate_defaults` 就地
+      补齐(仅 setdefault,不覆盖已有值)—— 与 preview/export 同源。
+    """
+    raw = scenario_payload or {}
+    # Unwrap the container: plate must never see orchestration.
+    out = copy.deepcopy(definition_from_payload(raw))
+    # plate 必填默认(与 preview/export 路径共用同一份):存量场景
+    # meta 可能缺 requirementRef/createTime 等 UI 不采集的字段,
+    # 不补会在 plate /convert 处 4xx(plate_rejected 整单失败)。
+    plate_client.fill_plate_defaults(out)
+    cfg = out.setdefault("config", {})
+    if not isinstance(cfg, dict):
+        cfg = {}
+        out["config"] = cfg
+    vars_map = dict(cfg.get("vars") or {})
+    # Row wins: a row's `qty` overrides a scenario-level `vars.qty`.
+    for k, v in (row_dict or {}).items():
+        vars_map[k] = _coerce_row_value(vars_map.get(k), v)
+    cfg["vars"] = vars_map
+    return out
+
+
+def _new_run_id() -> str:
+    return f"run-{_utcnow().strftime('%Y%m%d')}-{uuid4().hex[:6]}"
+
+
+def _convert_cache_key(payload: dict) -> str:
+    """convert memo 键:合成场景的规范化 JSON 摘要。
+
+    同一行 n_runs 次重复输入完全一致(P6:此前重复打 plate)。
+    """
+    return hashlib.sha1(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+        .encode("utf-8")
+    ).hexdigest()
+
+
+class _AuthResolveError(RuntimeError):
+    """执行认证解密失败 — fail-fast,同 V1 executor 的 ``_decrypt_auths``
+    语义(解密失败上抛使整个 run 失败,而不是带着空/坏凭证静默打环境)。"""
+
+
+async def _resolve_exec_auths(
+    db_factory: Any, owner_id: int, aliases: list[str]
+) -> list["ResolvedAuth"]:
+    """Owner 级 alias → ResolvedAuth(解密后的轻量值对象)。owner 过滤
+    防跨 owner 同名 alias 解错凭证。
+
+    * 解密失败 → 抛 :class:`_AuthResolveError`(V1 严格语义:
+      凭证路径 fail-fast,不静默降级)。
+    * alias 不属于该 owner 时解不到 → 告警后继续(与 V1 一致:
+      缺 alias 只是注入不到 users,该行 run 在 Gimbal 解析
+      ``${auth.*}`` 时步骤级报错)。
+    * 明文只存在于返回的值对象上 — 绝不写回 ORM 行(此前
+      ``a.username = ...`` 会把明文挂到 session 里的 AuthSession
+      实例上,任何一次意外 commit 都会把明文持久化进库)。
+
+    Phase 3 改造:内部先用平台侧标准 RuntimeAuthSession(物理迁移自 gimbal)
+    接收解密后的字段,然后通过 ``ResolvedAuth.from_runtime`` 转为兼容 shim。
+    这样下游 materialize_run_copy(_apply_users)不动,未来可直接消费
+    ``RuntimeAuthSession``。
+    """
+    if not aliases:
+        return []
+    from ..core.security import fernet_decrypt
+
+    resolved: list[ResolvedAuth] = []
+    async with db_factory() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(DBAuthSession).where(
+                        DBAuthSession.owner_id == owner_id,
+                        DBAuthSession.alias.in_(aliases),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    for a in rows:
+        try:
+            # 先构造标准 RuntimeAuthSession(字段对齐 gimbal 侧 AuthSession)
+            runtime = RuntimeAuthSession(
+                url=a.url,
+                username=fernet_decrypt(a.username_enc),
+                password=fernet_decrypt(a.password_enc),
+                token_type=a.token_type,
+                expires_in=a.expires_in,
+            )
+            # 转兼容 shim(下游消费的字段不变)
+            resolved.append(ResolvedAuth.from_runtime(runtime, alias=a.alias))
+        except ValueError as e:
+            raise _AuthResolveError(
+                f"auth alias '{a.alias}' decrypt failed: {e}"
+            ) from e
+    missing = set(aliases) - {a.alias for a in resolved}
+    if missing:
+        logger.warning(
+            "run_dispatcher: exec auth aliases not found: {}", sorted(missing)
+        )
+    return resolved
+
+
+def _jsonl_path() -> Path:
+    return settings.DATA_DIR / "runs" / f"{_utcnow().strftime('%Y-%m-%d')}.jsonl"
+
+
+def _run_dir(run_id: str) -> Path:
+    """一个 run 的 case 文件根目录(与 JSONL 同域的执行审计面)。"""
+    return settings.DATA_DIR / "runs" / "cases" / run_id
+
+
+# 公开别名:executions 路由的 case-artifact 端点按 runId 定位 run 目录
+# (跨执行读不可能 —— runId 唯一,目录名即 runId)。
+run_dir = _run_dir
+
+
+def purge_case_dir(run_id: str) -> None:
+    """删除整单的 case 案卷目录(P2:case.json 含明文凭证,删除执行
+    必须连带清理,否则 UI 删除后凭证仍永久留盘)。Best-effort。"""
+    shutil.rmtree(_run_dir(run_id), ignore_errors=True)
+
+
+def sweep_stale_case_dirs() -> int:
+    """启动期保留期清扫:删除 mtime 超过 CASE_RETENTION_DAYS 的 run 目录。
+
+    0 = 禁用。JSONL 按日期分文件、不在此清理(现行设计)。
+    """
+    days = settings.CASE_RETENTION_DAYS
+    if days <= 0:
+        return 0
+    root = settings.DATA_DIR / "runs" / "cases"
+    if not root.exists():
+        return 0
+    cutoff = time.time() - days * 86400
+    removed = 0
+    for child in root.iterdir():
+        try:
+            stale = child.is_dir() and child.stat().st_mtime < cutoff
+        except OSError:
+            continue
+        if stale:
+            shutil.rmtree(child, ignore_errors=True)
+            if not child.exists():
+                removed += 1
+    if removed:
+        logger.info("run_dispatcher: swept {} stale case dir(s) (> {}d)", removed, days)
+    return removed
+
+
+def _write_case_file(case_dir: Path, scenario_dict: dict[str, Any]) -> Path:
+    """把注入完成的数据驱动用例落盘为 gimbal 可执行 case.json。
+
+    文件内容 = ``gimbal run launch`` 的唯一输入快照(含明文 users,与
+    V1 临时 yaml 同语义);落盘失败(磁盘满等)抛 OSError,由 _row 的
+    兜底 except 记 dispatcher_error。
+    """
+    case_dir.mkdir(parents=True, exist_ok=True)
+    case_path = case_dir / "case.json"
+    case_path.write_text(
+        json.dumps(scenario_dict, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+    return case_path
+
+
+def _coerce_row_value(base_val: Any, row_val: Any) -> Any:
+    """行值按基线类型还原(新数据集编辑器把所有值存成字符串)。
+
+    转置表格/CSV 导入统一 ``String(v)`` 落库,直接合入会把整型基线
+    覆盖成字符串,破坏 ``Assertion{expected: 0}`` 这类强类型断言
+    (旧链路"int 还是 int"的语义)。规则:
+
+    * 基线是 bool  → ``"true"/"false"``(大小写不敏感)还原,其余原样;
+    * 基线是 int   → ``int(row_val)`` 可解析则还原(int("2.0") 会抛
+      ValueError,正好保留原串);
+    * 基线是 float → ``float(row_val)`` 可解析则还原;
+    * 其余(str/生成式 dict/基线不存在)→ 原样合入 —— 空串仍是显式
+      空覆盖,生成式 spec 不受行值影响。
+    """
+    if not isinstance(row_val, str) or not isinstance(base_val, (bool, int, float)):
+        return row_val
+    if isinstance(base_val, bool):
+        lowered = row_val.strip().lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        return row_val
+    try:
+        if isinstance(base_val, int):
+            return int(row_val)
+        return float(row_val)
+    except ValueError:
+        return row_val
+
+
+def _append_jsonl(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
+async def _create_execution(
+    db: AsyncSession,
+    *,
+    scenario_id: str,
+    owner_id: int,
+    total_runs: int,
+    config_json: dict,
+) -> Execution:
+    """Insert an Execution row."""
+    ex = Execution(
+        scenario_id=scenario_id,
+        owner_id=owner_id,
+        status=STATUS_QUEUED,
+        total_runs=total_runs,
+        passed=0,
+        failed=0,
+        config_json=config_json,
+    )
+    db.add(ex)
+    await db.commit()
+    await db.refresh(ex)
+    return ex
+
+
+# ─── ad-hoc lookups (scenario_id is the string PK) ────────────────
+# 单行场景/数据集查询收敛到各自 store 的 get_row(全后端唯一实现)。
+from .scenario_store import get_row, steps_from_payload, definition_from_payload
+from .data_set_store import get_row as get_dataset_row
+
+
+async def _find_dataset_by_id(
+    db: AsyncSession, dataset_id: str
+) -> ComposerDataSet | None:
+    return await get_dataset_row(db, dataset_id)
+
+
+# ─── session factory (for the background task) ───────────────────
+def _session_factory() -> AsyncSession:
+    """Open a fresh AsyncSession — the background task outlives the
+    request-scoped session the router passed in."""
+    from ..core.db import SessionLocal
+    return SessionLocal()
+
+
+# 公开别名:启动恢复等模块外调用方不必触私有名。
+session_factory = _session_factory
+
+
+# ─── error sentinels (router translates to HTTPException) ─────────
+class NotFound(Exception):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+class Conflict(Exception):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message

@@ -1,0 +1,111 @@
+{
+    "kind": "scenario",
+    "scenarioId": "运综轨迹查询",
+    "meta": {
+        "name": "运综-轨迹查询接口",
+        "description": "运综-轨迹查询接口",
+        "module": "settlement",
+        "priority": 1,
+        "author": "codfish",
+        "owner": "codfish",
+        "tags": [
+            "smoke",
+            "settlement"
+        ],
+        "version": "1.0.0",
+        "createTime": "2026-07-20T10:00:00",
+        "expire": false,
+        "requirementRef": []
+    },
+    "resource": {},
+    "config": {
+        "setup": [],
+        "teardown": [],
+        "services": {
+            "track-trace-service": "https://track-test.21eline.com"
+        },
+        "users": {
+            "admin": {
+                "token":"urbzxwu47463vcwkwures75jbuzjp745"
+            }
+        },
+        "vars": {
+            "requestId": {
+                "kind": "random_decorated",
+                "charset": "alnum",
+                "length": 8,
+                "head": "perf",
+                "separator": "-"
+            },  
+            "vehicleNo": "鲁B18832",
+            "startTime": {
+                "kind": "timestamp",
+                "base": "2026-06-14 11:00:01",
+                "offset_seconds": 3600,
+                "format": "%Y-%m-%d %H:%M:%S"
+            },
+            "endTime": {
+                "kind": "timestamp",
+                "base": "2026-06-14 12:00:01",
+                "offset_seconds": 3600,
+                "format": "%Y-%m-%d %H:%M:%S"   
+            }            
+        },
+        "timePolicy": {
+            "kind": "record"
+        },
+        "retry": null
+    },
+    "steps": [    {
+      "kind": "step",
+      "description": "轨迹查询接口",
+      "api": {
+        "kind": "api",
+        "service": "track-trace-service",
+        "method": "POST",
+        "path": "/api/v1/trace/trajectory/query",
+        "headers": {
+          "Content-Type": "application/json",
+          "token": "",
+          "subscribeSource" : "4"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+            "requestId": "${var.requestId}",
+            "businessNo": "${var.requestId}",
+            "vehicleNo": "${var.vehicleNo}",
+            "vehicleColor": 2,
+            "startTime": "${var.startTime}",
+            "endTime": "${var.endTime}"
+            }
+      },
+      "strategy":[ {
+          "kind": "extract",
+          "name": "extract_request",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.request_headers",
+          "target": "request",
+          "required": true,
+          "default": null,
+          "scope": "step"
+        },{
+          "kind": "extract",
+          "name": "extract_response",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "expression": "$.response_body",
+          "target": "resp",
+          "required": true,
+          "default": null,
+          "scope": "step"
+        }]
+    }]
+}

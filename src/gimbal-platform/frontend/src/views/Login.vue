@@ -23,10 +23,6 @@
         <el-alert type="error" :closable="false" show-icon :title="errorMsg" />
       </div>
 
-      <!-- TODO(spec-1): dev-mode strip ("admin / admin 自动建好") skipped —
-           backend guarantees first registration becomes admin, so the hint
-           adds no value here. Revisit in spec-2 if needed. -->
-
       <!-- Form -->
       <el-form
         ref="formRef"
@@ -66,14 +62,14 @@
                 :title="showPassword ? '隐藏密码' : '显示密码'"
                 @click="showPassword = !showPassword"
               >
-                {{ showPassword ? '🙈' : '👁' }}
+                <el-icon><Hide v-if="showPassword" /><View v-else /></el-icon>
               </el-button>
             </template>
           </el-input>
         </el-form-item>
 
         <div class="row-between">
-          <el-checkbox v-model="keepLogged">30 天内保持登录</el-checkbox>
+          <span class="keep-hint">登录状态将在此设备上保持</span>
           <el-link type="primary" :underline="false" disabled>忘记密码？</el-link>
         </div>
 
@@ -96,6 +92,7 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
+import { Hide, View } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
@@ -107,7 +104,6 @@ const route = useRoute()
 const formRef = ref<FormInstance | null>(null)
 const loading = ref(false)
 const showPassword = ref(false)
-const keepLogged = ref(true)
 const errorMsg = ref('')
 
 const form = reactive({
@@ -135,7 +131,7 @@ async function onSubmit() {
   try {
     await auth.login(form.username, form.password)
     ElMessage.success('登录成功')
-    const redirect = (route.query.redirect as string) || '/cases/mine'
+    const redirect = (route.query.redirect as string) || '/scenarios'
     router.push(redirect)
   } catch (e) {
     const msg = (e as { msg?: string; message?: string }).msg
@@ -247,6 +243,11 @@ async function onSubmit() {
   align-items: center;
   margin-bottom: 16px;
   margin-top: -4px;
+}
+
+.keep-hint {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 .submit-btn {

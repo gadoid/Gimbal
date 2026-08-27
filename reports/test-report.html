@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gimbal Test Report</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 24px; background: #fafafa; color: #212121; }
+  h1 { margin: 0 0 8px 0; font-size: 24px; }
+  h2 { margin: 32px 0 12px 0; font-size: 18px; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
+  h3 { margin: 16px 0 8px 0; font-size: 15px; }
+  .meta { color: #666; font-size: 13px; margin-bottom: 24px; }
+  .summary { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+  .card { padding: 12px 16px; border-radius: 6px; color: #fff; min-width: 90px; }
+  .card.http { background: #6a1b9a; }
+  .card.promo { background: #00838f; }
+  .card.total { background: #0277bd; }
+  .card.passed { background: #2e7d32; }
+  .card.failed { background: #c62828; }
+  .card.error  { background: #ef6c00; }
+  .card.skipped { background: #757575; }
+  .card .num { font-size: 28px; font-weight: 600; }
+  .card .lbl { font-size: 12px; opacity: 0.85; }
+  details { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 12px 16px; margin-bottom: 8px; }
+  details.suite { border-color: #90a4ae; }
+  summary { cursor: pointer; font-weight: 600; font-size: 15px; outline: none; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; font-size: 13px; vertical-align: top; }
+  th { background: #f5f5f5; font-weight: 600; }
+  td.duration { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  /* step-card：每个 step 一张独立卡片，section 之间用 divider 隔开 */
+  .step-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; margin: 8px 0; padding: 0; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .step-card .step-header { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid #eee; }
+  .step-card .step-name { font-weight: 600; font-size: 14px; flex: 1; }
+  .step-card .step-status { flex-shrink: 0; }
+  .step-card .step-duration { color: #666; font-size: 12px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .step-card .step-meta { padding: 6px 14px 8px; color: #666; font-size: 12px; border-bottom: 1px solid #eee; }
+  .step-card .step-section { padding: 8px 14px; border-bottom: 1px solid #eee; }
+  .step-card .step-section:last-child { border-bottom: none; }
+  .step-card .step-section summary { cursor: pointer; font-weight: 500; font-size: 13px; outline: none; padding: 2px 0; }
+  .step-card .step-section summary::before { content: "▸ "; color: #999; }
+  .step-card .step-section[open] > summary::before { content: "▾ "; }
+  .step-card .step-section > details > summary { font-weight: 500; font-size: 13px; padding: 4px 0; cursor: pointer; outline: none; }
+  .step-card .step-section > details > summary::before { content: "▸ "; color: #999; }
+  .step-card .step-section > details[open] > summary::before { content: "▾ "; }
+  .step-card .failure-section { background: #fff3e0; border-left: 3px solid #c62828; padding: 10px 14px; }
+  td.error { color: #c62828; font-family: ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; }
+  td.mono, pre { font-family: ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; }
+  pre { background: #263238; color: #eceff1; padding: 10px 12px; border-radius: 4px; font-size: 12px; overflow-x: auto; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; color: #fff; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .subtable { margin-top: 6px; background: #fafafa; }
+  .subtable th { background: #eceff1; }
+  .empty { color: #999; font-style: italic; }
+  footer { color: #999; font-size: 12px; margin-top: 32px; text-align: center; }
+  .kv-table th { width: 200px; }
+</style>
+</head>
+<body>
+<h1>Gimbal Test Report</h1>
+<div class="meta">run_id: <code>f9e6d117-da4d-4a13-b0b5-c18f00a843c0</code> &middot; env: dev &middot; mode: local &middot; started: 2026-08-26T05:37:30.071041+00:00 &middot; ended: 2026-08-26T05:37:32.913562+00:00</div>
+<div class="summary">
+  <div class="card total"><div class="num">1</div><div class="lbl">TOTAL</div></div>
+  <div class="card passed"><div class="num">1</div><div class="lbl">PASSED</div></div>
+  <div class="card failed"><div class="num">0</div><div class="lbl">FAILED</div></div>
+  <div class="card error"><div class="num">0</div><div class="lbl">ERROR</div></div>
+  <div class="card skipped"><div class="num">0</div><div class="lbl">SKIPPED</div></div>
+  <div class="card http"><div class="num">1</div><div class="lbl">HTTP</div></div>
+  <div class="card promo"><div class="num">0</div><div class="lbl">PROMOTIONS</div></div>
+</div>
+<h2>Run meta</h2>
+<table class="kv-table">
+  <tbody>
+      <tr><th>branch</th><td class="mono"></td></tr>
+      <tr><th>build_id</th><td class="mono"></td></tr>
+      <tr><th>build_number</th><td class="mono"></td></tr>
+      <tr><th>build_url</th><td class="mono"></td></tr>
+      <tr><th>ci</th><td class="mono">False</td></tr>
+      <tr><th>ci_provider</th><td class="mono"></td></tr>
+      <tr><th>commit</th><td class="mono"></td></tr>
+      <tr><th>commit_msg</th><td class="mono"></td></tr>
+      <tr><th>triggered_by</th><td class="mono">jiaoshouxiang</td></tr>
+  </tbody>
+</table>
+
+<h2>Scenarios (no suite)</h2>
+<details open>
+  <summary>物流订单查询 <span style="color:#666;font-weight:400">— sc-scenario-8fj4xj2ez · 1 steps (<span style="color:#2e7d32">1 passed</span> · <span style="color:#c62828">0 failed</span> · <span style="color:#ef6c00">0 error</span>)</span> <span class="badge" style="background:#2e7d32">passed</span></summary>
+  <div style="margin:6px 0 10px 0;font-size:12px;color:#555"><span style="margin-right:12px"><b>author</b>: Codfish</span><span style="margin-right:12px"><b>createTime</b>: 2026-08-25T08:54:39.786000Z</span><span style="margin-right:12px"><b>description</b>: </span><span style="margin-right:12px"><b>expire</b>: False</span><span style="margin-right:12px"><b>module</b>: 订单</span><span style="margin-right:12px"><b>name</b>: 物流订单查询</span><span style="margin-right:12px"><b>owner</b>: Administrator</span><span style="margin-right:12px"><b>priority</b>: 3</span><span style="margin-right:12px"><b>requirementRef</b>: []</span><span style="margin-right:12px"><b>tags</b>: [&#x27;订单查询&#x27;]</span><span style="margin-right:12px"><b>version</b>: v0.1.0</span></div>
+  <div class="step-card"><div class="step-header"><div class="step-name">step-000<span style="color:#999;font-size:11px;font-weight:400;margin-left:8px">step-000</span></div><div class="step-status"><span class="badge" style="background:#2e7d32">passed</span></div><div class="step-duration">1.49 s</div></div><div class="step-meta">asserts: 1/1</div><div class="step-meta">分页查询委托订单</div><div class="step-section"><details><summary style="font-weight:500">Strategy · multi · 1 strategy</summary><table class="subtable"><tbody><tr><th>kind</th><td>step</td></tr><tr><th>description</th><td>分页查询委托订单</td></tr><tr><th style="padding-left:8px">api</th><td style="padding-left:8px;color:#666"><i>(nested)</i></td></tr><tr><th style="padding-left:24px">kind</th><td style="padding-left:24px">api</td></tr><tr><th style="padding-left:24px">service</th><td style="padding-left:24px">fin-service</td></tr><tr><th style="padding-left:24px">method</th><td style="padding-left:24px">POST</td></tr><tr><th style="padding-left:24px">path</th><td style="padding-left:24px">/api/order/order/orderPage</td></tr><tr><th style="padding-left:24px">headers</th><td style="padding-left:24px;color:#666"><i>(nested)</i></td></tr><tr><th style="padding-left:40px">Authorization</th><td style="padding-left:40px">9Z80GTXLkvoGcAlod2hC/3eKv8Onax90l1TTwd3aTH5UCm2j+/1mv9Xio43xh+Lp</td></tr><tr><th style="padding-left:24px">timeout</th><td style="padding-left:24px">30.0</td></tr><tr><th style="padding-left:8px">request</th><td style="padding-left:8px;color:#666"><i>(nested)</i></td></tr><tr><th style="padding-left:24px">kind</th><td style="padding-left:24px">request</td></tr><tr><th style="padding-left:24px">body</th><td style="padding-left:24px;color:#666"><i>(nested)</i></td></tr><tr><th style="padding-left:40px">page_no</th><td style="padding-left:40px">1</td></tr><tr><th style="padding-left:40px">page_size</th><td style="padding-left:40px">20</td></tr><tr><th style="padding-left:40px">sort_field</th><td style="padding-left:40px">update_time</td></tr><tr><th style="padding-left:40px">sort_order</th><td style="padding-left:40px">desc</td></tr><tr><th style="padding-left:40px">params</th><td style="padding-left:40px;color:#666"><i>(nested)</i></td></tr></tbody></table></details></div><div class="step-section"><details><summary style="font-weight:500">Strategy [1] · assertion<span style="color:#666;font-size:11px;margin-left:8px">phase: StrategyPhase.VERIFYING</span><span style="color:#c62828;font-size:11px;margin-left:8px">onFailure: FailurePolicy.ABORT</span></summary><table class="subtable"><tbody><tr><th>name</th><td></td></tr><tr><th>phase</th><td>StrategyPhase.VERIFYING</td></tr><tr><th>order</th><td>0</td></tr><tr><th>enabled</th><td>True</td></tr><tr><th>onFailure</th><td>FailurePolicy.ABORT</td></tr><tr><th>timeout</th><td></td></tr><tr><th>tags</th><td>[]</td></tr><tr><th>kind</th><td>assertion</td></tr><tr><th>target</th><td>$.response_status</td></tr><tr><th>operator</th><td>AssertOperator.EQ</td></tr><tr><th>expected</th><td>200</td></tr><tr><th>message</th><td></td></tr><tr><th>soft</th><td>False</td></tr></tbody></table></details></div><div class="step-section"><details><summary style="font-weight:500">HTTP exchanges (1)</summary><table class="subtable"><thead><tr><th>#</th><th>Method</th><th>URL</th><th>Status</th><th class="duration">Duration</th></tr></thead><tbody><tr><td>1</td><td><b>POST</b></td><td class="mono">https://fin-tidb.21eflag.com/api/order/order/orderPage</td><td style="color:#212121;font-weight:600">—</td><td class="duration">1.48 s</td></tr></tbody></table></details></div></div>
+</details>
+<footer>Generated by gimbal-test-report plugin · v2 full-info</footer>
+</body>
+</html>

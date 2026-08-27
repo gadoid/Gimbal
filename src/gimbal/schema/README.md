@@ -198,7 +198,29 @@ API 联合类型，由 `Api`, `ApiRef` 组成，通过 `kind` 字段区分。
 | 字段 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
 | `kind` | `Literal["request"]` | 是 | `"request"` | 类型标识 |
-| `body` | `dict[str, Any]` | 否 | `{}` | 请求体内容 |
+| `body` | `Union[str, dict[str, Any], list[Any]]` | 否 | `{}` | 请求体内容（见下方"body 形态与策略可用性"） |
+
+#### body 形态与策略可用性（阶段 1）
+
+`body` 支持三种形态，框架按运行时类型自动分发到 httpx 的不同通道：
+
+| body 形态 | 通道 | 隐式 Content-Type | 适用场景 |
+|---|---|---|---|
+| `dict` / `list` | `json=` | `application/json` | 常规 JSON API |
+| `str` | `content=`（UTF-8 bytes） | 由 `api.headers.Content-Type` 控制 | text/xml、application/xml、text/plain 等原始文本 |
+
+**str body 的注意事项**：
+
+- **Content-Type**：str body 不带默认 Content-Type；httpx 会兜底为 `text/plain`。**建议在 `api.headers` 显式声明**（如 `Content-Type: application/xml`），否则 call.py 会输出 warning。
+- **模板变量**：str body 里的 `${var.x}` 会被 `SpecResolver._resolve_nested` 正常替换（[_resolve_value](src/gimbal/context/resolver.py#L163) 天然支持 str）。
+- **策略可用性**：str 没有可索引字段，下列策略在 str body 下行为降级：
+  - `Extract("$.request_body.xxx")` → 返回 `None`（路径不存在）
+  - `Extract("$.request_body")` → 返回完整 str（**唯一可用形式**）
+  - `Assign("$.request_body.xxx", ...)` → 写无效
+  - `Assign` 替换整个 body → **合法**，可以 str 替换 dict（反之亦然）
+  - `Assertion("$.request_body.xxx", ...)` → `None` 比较
+
+  阶段 1 不在 schema 层强制限制，由文档告知用户；阶段 2 拆 `RawRequest`/`JsonRequest`/`FormRequest` 子类后可通过 Pydantic validator 收紧。
 
 ### RequestRef
 

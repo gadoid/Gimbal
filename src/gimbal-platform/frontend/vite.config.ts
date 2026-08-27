@@ -31,7 +31,13 @@ export default defineConfig({
             proxyRes.headers['x-accel-buffering'] = 'no'
           })
         },
-      }
+      },
+      // V3 composer 的接口目录 (Catalog Panel) 直接拉 Plate 的端点契约
+      '/plate': {
+        target: 'http://127.0.0.1:8765',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/plate/, ''),
+      },
     }
   }
 })

@@ -1,5 +1,6 @@
 # Backend
 backend/data/
+backend/.env
 *.db
 *.sqlite
 *.tmp.yaml
@@ -15,6 +16,7 @@ frontend/.vite/
 
 # Spec / Mockup artifacts (NOT business artifacts)
 .superpowers/
+allure-results/
 
 # OS
 .DS_Store

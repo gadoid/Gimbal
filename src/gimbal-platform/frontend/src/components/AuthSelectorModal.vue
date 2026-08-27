@@ -97,7 +97,4 @@ function confirm() {
   font-size: 11px;
 }
 
-.mono {
-  font-family: var(--font-mono);
-}
 </style>

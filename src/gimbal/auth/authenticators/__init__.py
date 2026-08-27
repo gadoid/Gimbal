@@ -3,4 +3,5 @@ from .pretoken import PreTokenAuthenticator
 from .http_basic import HTTPSAuthenticator, HTTPAuthenticator
 from .wl import WLAuthenticator  # noqa: F401 - 导入即触发注册
 from .yhr import YHRAuthenticator
+from .yz import YZAuthenticator
 # noqa: F401 - 导入即触发注册

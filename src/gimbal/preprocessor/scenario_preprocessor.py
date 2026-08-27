@@ -372,7 +372,12 @@ class ScenarioPreprocessor:
 
         return Request(
             kind=request.kind,
-            body=self._resolve_nested(request.body or {}, root),
+            # 修复 falsy 兜底：request.body or {} 会把空字符串 "" 误判为 falsy
+            # 并替换成 {} —— 引入 str body 后这是显性问题（str 不再保证 truthy）。
+            # 改成 `is None` 才是正确的"body 未提供"语义。
+            body=self._resolve_nested(
+                request.body if request.body is not None else {}, root
+            ),
         )
 
     def _resolve_strategy(self, strategy, root: dict):

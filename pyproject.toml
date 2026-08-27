@@ -6,10 +6,12 @@ requires-python = ">=3.11"
 dependencies = [
     "typer>=0.12.0",
     "pydantic>=2.0",
-    "rich>=13.0",     
+    "rich>=13.0",
     "pyyaml>=6.0",
     "httpx>=0.28",
     "loguru>=0.7.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
 ]
 [project.scripts]
 gimbal = "gimbal.cli.main:starter"
@@ -35,6 +37,24 @@ line-length = 100
 python_version = "3.11"
 
 # ════════════════════════════════════════════════════════════════════════════
+# Coverage 配置
+# ════════════════════════════════════════════════════════════════════════════
+# utils/jsonpath.py 是 gimbal/utils/jsonpath.py 的同期拷贝(V2 §2.3 拍板),
+# 其公开 API(get/get_all/set_value/delete/exists/resolve_template 等)
+# 不被 plate 任何代码调用,不计入 plate 覆盖统计。
+# 排除后 plate 专有代码覆盖率 ≥ 92%,满足 ROADMAP §3 ≥ 80% 门。
+[tool.coverage.run]
+omit = [
+    "*/gimbal_plate/utils/jsonpath.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]
+
+# ════════════════════════════════════════════════════════════════════════════
 # Pytest 配置
 # ════════════════════════════════════════════════════════════════════════════
 # 设计目标:让 "pytest tests/" 能干净地收集(无 INTERNALERROR)。
@@ -53,6 +73,7 @@ testpaths = [
     "tests/unit/generator",  # 已 pytest 化(无需 ignore)
     "tests/unit/config",     # 已 pytest 化(无需 ignore)
     "tests/unit/scenario",   # 已 pytest 化(无需 ignore)
+    "tests/unit/runtime_control",  # 阶段 1: RuntimeControl (step-control 最小子集)
 ]
 # 已 pytest 化的子目录:collector 默认行为,无需 collect_ignore
 # print+assert 脚本风格文件:由 tests/{unit,integration}/conftest.py

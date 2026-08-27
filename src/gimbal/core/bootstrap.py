@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, TYPE_CHECKING, Optional
 
 from gimbal.cli.context import CLIContext
@@ -107,6 +108,7 @@ def bootstrap(cli_ctx: CLIContext) -> Configuration:
         event_bus=event_bus,
         hook_registry=hook_registry,
         plugin_registry=plugin_registry,
+        auth_registry=auth_registry,
     )
     logger.info("[bootstrap] 插件加载完成: count={}", len(plugins))
 
@@ -159,6 +161,7 @@ def _load_plugins(
     event_bus: Any,
     hook_registry: Any,
     plugin_registry: Any,
+    auth_registry: Any,
 ) -> list["Plugin"]:
     """插件发现 → 解析依赖 → 加载 → 激活。
 
@@ -175,7 +178,10 @@ def _load_plugins(
     """
     from gimbal.plugins import PluginLoader
 
-    plugins_dir = cfg.base_dir / cfg.plugins_dir
+    # plugins_dir 为绝对路径时直用(平台侧 GIMBAL_PLUGINS_DIR 注入);
+    # 相对路径保持既有语义:相对 base_dir。
+    pdir = Path(cfg.plugins_dir)
+    plugins_dir = pdir if pdir.is_absolute() else cfg.base_dir / pdir
     white = set(cfg.plugins) if cfg.plugins else None   # 空 = 全部启用
     loader = PluginLoader(plugins_dir=plugins_dir, enabled_filter=white)
 
@@ -203,6 +209,7 @@ def _load_plugins(
         hook_registry=hook_registry,
         user_configs=cfg.plugin_configs or {},
         plugin_registry=plugin_registry,
+        auth_registry=auth_registry,
     )
     return activated
 

@@ -1,0 +1,161 @@
+{
+  "kind": "scenario",
+  "scenarioId": "case_p032",
+  "meta": {
+    "name": "case_p032",
+    "description": "finance | 放货状态=1 | field=delivery_status value='1'",
+    "module": "settlement",
+    "priority": 1,
+    "author": "explore",
+    "owner": "explore",
+    "tags": [
+      "smoke",
+      "settlement"
+    ],
+    "version": "1.0.0",
+    "createTime": "2026-07-17T16:04:15",
+    "expire": false,
+    "requirementRef": []
+  },
+  "config": {
+    "setup": [],
+    "teardown": [],
+    "services": {
+      "yhr-test-service": "https://test.21eline.com"
+    },
+    "users": {
+      "yhxjsx": {
+        "url": "https://test.21eline.com/",
+        "username": "yhxjsx",
+        "password": "Codfish1234!",
+        "expires_in": 7200,
+        "token_type": "Cookie"
+      }
+    },
+    "timePolicy": {
+      "kind": "record"
+    },
+    "retry": null
+  },
+  "resource": {},
+  "steps": [
+    {
+      "kind": "step",
+      "description": "finance | 放货状态=1 | field=delivery_status value='1'",
+      "api": {
+        "kind": "api",
+        "service": "yhr-test-service",
+        "method": "GET",
+        "path": "/newshopadmin-tidb/SyncLogorder/ajaxGetList.html",
+        "headers": {
+          "Cookie": "${auth.yhxjsx.token}",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "page": 1,
+          "port": "",
+          "wd": "",
+          "search_company": "",
+          "work_no": "",
+          "order_customer_real": "",
+          "booking_agent_bp": "",
+          "booking_agent_bp_real": "",
+          "order_business_no": "",
+          "size": 15,
+          "ship_company": "",
+          "sale": "",
+          "client": "",
+          "release_status": "",
+          "financing_status": "",
+          "asset_verify_status": "",
+          "company_funds": "",
+          "funds": "",
+          "shipment_ifautoquota": "",
+          "booking_mbl_delivery_mode": "",
+          "order_remarks": "",
+          "delivery_status": "1",
+          "schedule_line_category": "",
+          "line_type": "",
+          "premium_warn_status": "",
+          "receipt_status": "",
+          "insured_status": "",
+          "order_terminated_shutout_status": 1,
+          "is_backtrack": "",
+          "cancel_remark": "",
+          "limit_status": "",
+          "search_time[schedule_actual_delivery_date]": "",
+          "search_time[order_updated_date]": "",
+          "search_time[charge_rec_date]": "",
+          "search_time[charge_rec_date_ext]": "",
+          "search_time[charge_pay_date]": "",
+          "search_time[schedule_estimate_delivery_date]": "",
+          "search_time[receipt_pay_ts]": "",
+          "search_time[charge_rec_receipt_ts]": "",
+          "search_time[charge_pay_payment_ts]": "",
+          "search_time[file_customs_upload_ts]": "",
+          "search_time[ocean_freight_ts]": "",
+          "search_time[supplier_bill_time]": "",
+          "search_time[customer_bill_time]": "",
+          "search_time[get_customs_time]": "",
+          "search_time[invoice_rec_ts]": "",
+          "search_time[first_file_upload_time]": "",
+          "search_time[second_file_upload_time]": "",
+          "search_time[full_information_time]": "",
+          "search_time[first_loan_time]": "",
+          "search_time[second_loan_time]": "",
+          "search_time[invoice_cny_apply_ts]": "",
+          "search_time[invoice_usd_apply_ts]": "",
+          "search_time[supplement_update_ts]": "",
+          "search_time[decl_create_ts]": "",
+          "search_time[decl_release_ts]": "",
+          "search_time[track_atd]": "",
+          "search_time[order_created_date]": "",
+          "other_remarks": "",
+          "order_ids": "",
+          "bulk_query_type": 1,
+          "bulk_shutout_status": "",
+          "bulk_query": 0,
+          "is_exceed": "",
+          "handle_exceed": "",
+          "finance_file_status": "",
+          "finance_file_result": "",
+          "loan_remark_type_select": "",
+          "need_buy_back": "",
+          "batch_exchange_query": ""
+        }
+      },
+      "strategy": [
+        {
+          "kind": "assertion",
+          "name": "assert_http_status_eq_200",
+          "phase": "verifying",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "case_p032 应返回200",
+          "soft": false
+        },
+        {
+          "kind": "extract",
+          "name": "extract_list_len",
+          "phase": "after_request",
+          "order": 0,
+          "enabled": true,
+          "onFailure": "continue",
+          "expression": "$.response_body.list",
+          "target": "list",
+          "required": false,
+          "default": null,
+          "scope": "scenario"
+        }
+      ]
+    }
+  ]
+}

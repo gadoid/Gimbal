@@ -2,29 +2,31 @@
  * Regression test for TopNav.vue — Spec-1 sign-off bug.
  *
  * The original `<router-link custom v-slot="{ navigate }">` pattern silently
- * failed to navigate from /cases/:id/config to other routes. After the fix
- * we use plain `<router-link :to="path">` and vue-router handles href/click.
+ * failed to navigate between routes. After the fix we use plain
+ * `<router-link :to="path">` and vue-router handles href/click.
  *
  * This test mounts the TopNav (which expects an authenticated user via the
  * auth store) and asserts each nav entry renders as a real `<a href>` link.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import ElementPlus from 'element-plus'
 import TopNav from '@/components/TopNav.vue'
 import { useAuthStore } from '@/stores/auth'
+import * as adaptationsApi from '@/api/adaptations'
+import { useAdaptationsStore } from '@/stores/adaptations'
 
 function makeRouter() {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/cases/mine', component: { template: '<div/>' } },
-      { path: '/cases/public', component: { template: '<div/>' } },
+      { path: '/scenarios', component: { template: '<div/>' } },
+      { path: '/executions', component: { template: '<div/>' } },
       { path: '/auths', component: { template: '<div/>' } },
+      { path: '/adaptations', component: { template: '<div/>' } },
       { path: '/admin/users', component: { template: '<div/>' } },
-      { path: '/cases/:caseId/config', component: { template: '<div/>' } },
     ],
   })
 }
@@ -32,15 +34,18 @@ function makeRouter() {
 describe('TopNav', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    vi.spyOn(adaptationsApi, 'catalogDiff').mockResolvedValue({
+      pending: [], anomalies: [], baselinedNow: 0,
+    } as never)
   })
 
-  it('renders five real router-link anchors', async () => {
+  it('renders six real router-link anchors', async () => {
     const auth = useAuthStore()
     auth.accessToken = 'tok'
     auth.currentUser = { id: 1, username: 'alice', is_admin: true } as never
 
     const router = makeRouter()
-    router.push('/cases/mine')
+    router.push('/scenarios')
     await router.isReady()
 
     const w = mount(TopNav, {
@@ -48,13 +53,13 @@ describe('TopNav', () => {
     })
 
     const links = w.findAll('a.nav-entry')
-    expect(links.length).toBe(5)
+    expect(links.length).toBe(6)
 
-    // Each link points to the right path
+    // Each link points to the right path(P3:工作台/公共库已并入场景库)
     const hrefs = links.map((l) => l.attributes('href'))
-    expect(hrefs).toContain('/cases/mine')
-    expect(hrefs).toContain('/cases/public')
+    expect(hrefs).toContain('/scenarios')
     expect(hrefs).toContain('/executions')
+    expect(hrefs).toContain('/adaptations')
     expect(hrefs).toContain('/auths')
     expect(hrefs).toContain('/admin/users')
   })
@@ -62,7 +67,7 @@ describe('TopNav', () => {
   it('highlights the active route', async () => {
     const auth = useAuthStore()
     auth.accessToken = 'tok'
-    auth.currentUser = { id: 1, username: 'alice', is_admin: false } as never
+    auth.currentUser = { id: 1, username: 'alice', is_admin: true } as never
 
     const router = makeRouter()
     router.push('/admin/users')
@@ -77,6 +82,24 @@ describe('TopNav', () => {
     expect(active[0].attributes('href')).toBe('/admin/users')
   })
 
+  it('hides the admin-only 用户管理 entry from members', async () => {
+    const auth = useAuthStore()
+    auth.accessToken = 'tok'
+    auth.currentUser = { id: 1, username: 'alice', is_admin: false } as never
+
+    const router = makeRouter()
+    router.push('/scenarios')
+    await router.isReady()
+
+    const w = mount(TopNav, {
+      global: { plugins: [router, ElementPlus] },
+    })
+
+    const hrefs = w.findAll('a.nav-entry').map((l) => l.attributes('href'))
+    expect(hrefs).not.toContain('/admin/users')
+    expect(hrefs.length).toBe(5)
+  })
+
   it('does not show nav entries when not authenticated', () => {
     // No currentUser / accessToken
     const router = makeRouter()
@@ -87,5 +110,41 @@ describe('TopNav', () => {
     // a non-empty header but the auth-aware bits should be empty.
     // The test just verifies we don't crash without auth state.
     expect(w.find('.topnav').exists()).toBe(true)
+  })
+
+  it('shows the pending-changes badge for admins only', async () => {
+    const auth = useAuthStore()
+    auth.accessToken = 'tok'
+
+    const router = makeRouter()
+    router.push('/scenarios')
+    await router.isReady()
+
+    // admin:watch 静默拉 diff(此处覆写 beforeEach 的空报告 → 1 条 pending)
+    vi.spyOn(adaptationsApi, 'catalogDiff').mockResolvedValue({
+      pending: [{ endpointId: 'e', fromVersion: '1', toVersion: '2' }],
+      anomalies: [],
+      baselinedNow: 0,
+    } as never)
+    auth.currentUser = { id: 1, username: 'alice', is_admin: true } as never
+    let w = mount(TopNav, { global: { plugins: [router, ElementPlus] } })
+    await flushPromises()
+    expect(w.find('.nav-badge').exists()).toBe(true)
+    expect(w.find('.nav-badge').text()).toBe('1')
+    w.unmount()
+
+    // member:不发 diff,手工置数也不显示徽章(v-if isAdmin)
+    setActivePinia(createPinia())
+    // 同一 it 内 admin 半场已调过一次;清计数后断言 member 挂载零调用
+    vi.mocked(adaptationsApi.catalogDiff).mockClear()
+    const auth2 = useAuthStore()
+    auth2.accessToken = 'tok'
+    auth2.currentUser = { id: 2, username: 'peon', is_admin: false } as never
+    useAdaptationsStore().pendingCount = 3
+    w = mount(TopNav, { global: { plugins: [router, ElementPlus] } })
+    await flushPromises()
+    expect(w.find('.nav-badge').exists()).toBe(false)
+    expect(adaptationsApi.catalogDiff).not.toHaveBeenCalled()
+    w.unmount()
   })
 })
