@@ -95,6 +95,32 @@
               <span v-if="currentStep.api?.service" class="svc-tag">{{ currentStep.api.service }}</span>
               <span v-if="currentStep.api?.path" class="ep-path">{{ currentStep.api.path }}</span>
             </div>
+
+            <!-- 运行引用(别名消费点,spec §1.4 双显):目录事实只读,引用可切 -->
+            <div class="svc-ref">
+              <span class="svc-ref-label">服务引用</span>
+              <select
+                class="svc-ref-select"
+                :value="currentStep.api?.service"
+                @change="onServiceRefChange(currentStep, ($event.target as HTMLSelectElement).value)"
+              >
+                <option
+                  v-if="currentStep.api?.service && !serviceOptions.some(o => o.value === currentStep.api?.service)"
+                  :value="currentStep.api.service"
+                >{{ currentStep.api.service }}(未挂目录)</option>
+                <option v-for="o in serviceOptions" :key="o.value" :value="o.value" :class="{ dim: o.dim }">{{ o.label }}</option>
+                <option value="__create__">+ 为此服务新建别名…</option>
+              </select>
+              <span v-if="refWarning" class="svc-ref-warn" :class="refWarning.level">{{ refWarning.text }}</span>
+              <div v-if="creatingAlias" class="alias-create">
+                <span class="alias-prefix">{{ serviceAnchor }}-</span>
+                <input v-model="aliasSuffix" placeholder="后缀(不含 -)" class="alias-suffix" />
+                <input v-model="aliasUrl" placeholder="baseUrl(如 https://qa2.fin.local)" class="alias-url" />
+                <button type="button" class="ghost-btn alias-create-confirm" @click="confirmAliasCreate(currentStep)">创建并切换</button>
+                <button type="button" class="ghost-btn" @click="creatingAlias = false">取消</button>
+              </div>
+              <div class="svc-ref-url">URL: {{ declaredUrlOf(currentStep.api?.service || '') || '(未声明 — 运行前需补 URL)' }}</div>
+            </div>
           </div>
           <el-form label-position="top" size="small" class="c-form">
             <!-- description 来自接口目录 (ep.name/desc), 同为选定接口的事实 — 只读展示 -->
@@ -428,6 +454,8 @@ import type { TplRef } from '@/utils/tpl-refs'
 import type { AuthSession } from '@/api/auth_sessions'
 import { deepDefaults } from '@/utils/jsonpath'
 import { toScratchPath } from '@/utils/scratch-path'
+import { deriveBase } from '@/utils/service-alias'
+import { loadCatalogServiceNames } from '@/utils/catalog-services'
 import type {
   StepView, ExtractView, IOFieldBinding, EndpointFullView,
   StrategyView, StrategyKindView, StrategyKindDetailView,
@@ -438,10 +466,14 @@ import { parseJson } from '../../utils/json'
 const props = defineProps<{
   steps: StepView[]
   orchestration: Orchestration
+  /** 场景服务声明 dict(config.services)—— 别名下拉/双写消费(spec §1.4) */
+  services?: Record<string, string>
 }>()
 const emit = defineEmits<{
   'update:steps': [StepView[]]
   'update:orchestration': [Orchestration]
+  /** 内联创建别名双写的声明面(config.services 整表替换) */
+  'update:services': [Record<string, string>]
   'varPromote': [name: string, value: unknown]
   'seedVar': [name: string, spec: Record<string, unknown>],
 }>()
@@ -922,6 +954,95 @@ const respTypeC = computed<TypeCField[]>(() => {
   return typeCFields(spec200.model_schema, spec200.fields.map((f) => f.path))
 })
 
+// ── 服务引用(别名消费点,spec §1.4 双显)─────────────────────────
+// 目录事实(锚点)只读;引用(steps[k].api.service)可切可建别名。
+// 目录名集合 = deriveBase 的唯一外部输入;拉取失败静默降级为空集合 →
+// 全部裸声明黄警,不阻塞编排(酸性测试)。
+
+/** plate 目录服务名全串集合(会话级,模块缓存由 loader 负责) */
+const catalogNames = ref<Set<string>>(new Set())
+onMounted(() => {
+  loadCatalogServiceNames()
+    .then((ns) => { catalogNames.value = new Set(ns) })
+    .catch(() => { /* 目录不可达 → 派生降级裸声明黄警,不阻塞编排 */ })
+})
+
+/** 本 endpoint 的目录服务锚点:/full 的 service(权威)→ 派生当前引用 → null */
+const serviceAnchor = computed<string | null>(() => {
+  const fromFull = currentFull.value?.service
+  if (fromFull && catalogNames.value.has(fromFull)) return fromFull
+  return deriveBase(currentStep.value?.api?.service || '', catalogNames.value)
+})
+
+/**
+ * 引用下拉选项:锚点(目录服务)居首 → 同基别名(deriveBase === 锚点)
+ * → 其他声明键置底标跨服务(dim)。
+ */
+const serviceOptions = computed(() => {
+  const anchor = serviceAnchor.value
+  const declared = props.services ?? {}
+  const opts: Array<{ value: string; label: string; dim?: boolean }> = []
+  if (anchor) opts.push({ value: anchor, label: `${anchor}(目录服务)` })
+  for (const key of Object.keys(declared)) {
+    if (!anchor || key === anchor) continue
+    if (deriveBase(key, catalogNames.value) === anchor)
+      opts.push({ value: key, label: key })                    // 本服务别名
+  }
+  for (const key of Object.keys(declared)) {                   // 其他键置底
+    if (anchor && (key === anchor || deriveBase(key, catalogNames.value) === anchor)) continue
+    opts.push({ value: key, label: `${key}(跨服务)`, dim: true })
+  }
+  return opts
+})
+
+/** 引用告警(§1.5 全表警告级,永不阻断):裸声明黄 / 跨服务黄 / 未声明红 */
+const refWarning = computed<{ text: string; level: 'warn' | 'error' } | null>(() => {
+  const cur = currentStep.value?.api?.service || ''
+  if (!cur) return null
+  const anchor = serviceAnchor.value
+  if (!anchor || deriveBase(cur, catalogNames.value) === null)
+    return { text: '未挂目录服务(裸声明)', level: 'warn' }
+  if (cur !== anchor && deriveBase(cur, catalogNames.value) !== anchor)
+    return { text: '跨服务引用', level: 'warn' }
+  if (!(cur in (props.services ?? {})))
+    return { text: '未声明 — Config 或运行弹框补 URL 后可跑', level: 'error' }
+  return null
+})
+
+/** 当前引用键的已声明 URL(未声明 → 空,模板给占位提示) */
+const declaredUrlOf = (svc: string) => (props.services ?? {})[svc] || ''
+
+function onServiceRefChange(step: StepView, value: string) {
+  if (value === '__create__') { creatingAlias.value = true; return }
+  creatingAlias.value = false
+  step.api!.service = value          // local 直改,既有 watch 传播 update:steps
+}
+
+// 内联创建器:前缀(目录名)固定不可改,只收后缀 + URL(spec §1.3)
+const creatingAlias = ref(false)
+const aliasSuffix = ref('')
+const aliasUrl = ref('')
+
+function confirmAliasCreate(step: StepView) {
+  const anchor = serviceAnchor.value
+  const suffix = aliasSuffix.value.trim()
+  const url = aliasUrl.value.trim()
+  if (!anchor) { ElMessage.warning('未知目录服务,无法创建别名'); return }
+  if (!suffix) { ElMessage.warning('后缀不能为空'); return }
+  if (suffix.includes('-')) { ElMessage.warning('后缀不能含 "-"(分隔符保留)'); return }
+  const full = `${anchor}-${suffix}`
+  if (full in (props.services ?? {})) { ElMessage.warning(`别名 ${full} 已存在`); return }
+  if (!url) { ElMessage.warning('baseUrl 不能为空'); return }
+  // 一次动作双写 ①声明(config.services,经 emit 由父级落 definition)
+  // ②引用(steps[k].api.service,local 直改经既有 watch 传播)
+  emit('update:services', { ...(props.services ?? {}), [full]: url })
+  step.api!.service = full
+  creatingAlias.value = false
+  aliasSuffix.value = ''
+  aliasUrl.value = ''
+  ElMessage.success(`已创建别名 ${full} 并切换引用`)
+}
+
 /** 策略表单候选映射(#2):kind 定字段名 — assertion 用 target,extract 用 expression */
 function strategyCandidates(s: StrategyView): Record<string, string[]> {
   const fields = s.kind === 'assertion' ? ['target'] : s.kind === 'extract' ? ['expression'] : []
@@ -955,6 +1076,12 @@ function buildInitialStrategies(full: EndpointFullView | undefined): StrategyVie
   return strategies
 }
 
+/**
+ * 从接口目录把 endpoint 加入步骤流:拉 /full 组装初始 step(策略/初始 body)。
+ * 契约禁令(spec 2026-08-27 §1.6):目录插入只此一次写 api.service(初值
+ * = 规范目录名);任何 plate 拉取驱动的回写不得再触碰该字段 — 它是用户
+ * 引用键(可为别名全串),view_hints.endpoint_id 才是目录锚点。
+ */
 async function onAddEndpoint(ep: any) {
   if (!ep) return
   adding.value = true
@@ -1206,6 +1333,68 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
   border-radius: 6px;
 }
 .api-summary .ep-path { font-size: 11px; }
+
+/* ── 服务引用双显(spec §1.4):目录事实只读缩略之上,引用下拉 + 内联创建 ── */
+.svc-ref {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 6px; padding: 6px 10px;
+  background: var(--c-bg-secondary);
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  font-size: 11px;
+}
+.svc-ref-label {
+  flex-shrink: 0;
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  color: var(--c-text-tertiary);
+}
+.svc-ref-select {
+  border: 1px solid var(--c-border);
+  border-radius: 5px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-size: 11px; font-family: var(--font-mono);
+  padding: 3px 6px;
+  max-width: 260px;
+  outline: none;
+}
+.svc-ref-select:focus { border-color: var(--c-accent); }
+/* 跨服务键置底置灰(可选项,非禁用 — 显示级语义,不阻断选择) */
+.svc-ref-select .dim { color: #94a3b8; }
+/* 引用告警:黄=裸声明/跨服务(可跑但提示),红=未声明(运行前需补 URL) */
+.svc-ref-warn { font-size: 10px; font-weight: 600; }
+.svc-ref-warn.warn { color: #b45309; }
+.svc-ref-warn.error { color: #dc2626; }
+/* 内联创建器:前缀(目录名)固定只读,后缀 + URL 两输入 */
+.alias-create {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  width: 100%;
+  padding: 6px;
+  background: var(--c-surface);
+  border: 1px dashed var(--c-border);
+  border-radius: 6px;
+}
+.alias-prefix {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  color: var(--c-text-secondary);
+}
+.alias-suffix, .alias-url {
+  border: 1px solid var(--c-border);
+  border-radius: 5px;
+  background: var(--c-bg-secondary);
+  font-size: 11px; font-family: var(--font-mono);
+  padding: 3px 6px;
+  outline: none;
+}
+.alias-suffix { width: 110px; }
+.alias-url { flex: 1; min-width: 180px; }
+.alias-suffix:focus, .alias-url:focus { border-color: var(--c-accent); }
+.svc-ref-url {
+  width: 100%;
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--c-text-tertiary);
+  word-break: break-all;
+}
 .desc-readonly {
   margin: 0;
   font-size: 12.5px;

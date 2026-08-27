@@ -153,6 +153,8 @@
               v-model:steps="definition.steps"
               v-model:orchestration="orchestration"
               :scenario="scenario"
+              :services="definition.config?.services ?? {}"
+              @update:services="onServicesUpdate"
               @var-promote="onVarPromote"
               @seed-var="seedPoolVar"
             />
@@ -420,6 +422,14 @@ function onVarPromote(name: string, value: unknown) {
   definition.value = {
     ...definition.value,
     config: { ...config, vars: { ...(config.vars ?? {}), [name]: value } },
+  }
+}
+
+/** Canvas 内联创建别名双写的声明面落库(config.services 整表替换) */
+function onServicesUpdate(services: Record<string, string>) {
+  definition.value = {
+    ...definition.value,
+    config: { ...definition.value.config, services },
   }
 }
 

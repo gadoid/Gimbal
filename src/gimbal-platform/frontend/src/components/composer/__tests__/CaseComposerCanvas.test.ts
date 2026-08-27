@@ -64,6 +64,11 @@ vi.mock('@/api/scenario-composer', () => ({
 vi.mock('@/api/auth_sessions', () => ({
   list: vi.fn().mockResolvedValue([]),
 }))
+// 目录服务名加载器 mock(别名派生 deriveBase 的唯一外部输入)—— 用例
+// 不碰 /plate 网络;catalog miss 时锚点回落 deriveBase(当前 api.service)。
+vi.mock('@/utils/catalog-services', () => ({
+  loadCatalogServiceNames: vi.fn(async () => ['fin-service', 'order-svc']),
+}))
 vi.mock('@/api/constants', () => ({
   list: vi.fn().mockResolvedValue([]),
   create: vi.fn(),
@@ -97,10 +102,28 @@ function mkOrch(n: number): Orchestration {
   }
 }
 
+/** 指定 service 的最小 step(服务引用双显用例;endpoint_id=ep-1 走既有
+ *  /full mock —— mock 返回体无 service 字段,锚点回落 deriveBase)。 */
+function stepOf(service: string): StepView {
+  return {
+    kind: 'step',
+    description: 'ep',
+    api: { kind: 'api', service, method: 'GET', path: '/x', headers: {}, view_hints: { endpoint_id: 'ep-1' } },
+    request: { kind: 'request', body: {} },
+    strategy: [],
+  } as StepView
+}
+
 /** 挂载前激活的 pinia(beforeEach 里 setActivePinia 的同一实例) */
 let activePinia: ReturnType<typeof createPinia>
 
-function mountCanvas(steps: StepView[], activeIdx = 0) {
+/** 既有 mount 包装的多态入参:数组 = 仅 steps;对象 = steps + services
+ *  (场景服务声明 dict,spec §1.4 服务引用双显用)。 */
+type CanvasMountOpts = { steps: StepView[]; services?: Record<string, string> }
+
+function mountCanvas(stepsOrOpts: StepView[] | CanvasMountOpts, activeIdx = 0) {
+  const steps = Array.isArray(stepsOrOpts) ? stepsOrOpts : stepsOrOpts.steps
+  const services = Array.isArray(stepsOrOpts) ? undefined : stepsOrOpts.services
   const orch = ref<Orchestration>(mkOrch(steps.length))
   // col-info 常驻 ConstantPoolPanel 注入 INSERT_TARGET_KEY —— 挂载 Canvas
   // 的 Parent 必须提供,否则 useSharedInsertTarget 抛错。
@@ -111,6 +134,7 @@ function mountCanvas(steps: StepView[], activeIdx = 0) {
       return () => h(CaseComposerCanvas, {
         steps: steps,
         orchestration: orch.value,
+        services: services,
         'onUpdate:steps': () => {},
         'onUpdate:orchestration': () => {},
       })
@@ -532,6 +556,47 @@ describe('CaseComposerCanvas — 常量池 col-info 常驻(F12/F13)', () => {
     const [[name, spec]] = canvas.emitted('seedVar')!
     expect(name).toBe('bl_no')
     expect(spec).toEqual(GEN.spec)
+    w.unmount()
+  })
+})
+
+describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §1.4)', () => {
+  it('下拉列出目录服务 + 本服务别名;其他声明键置底标跨服务', async () => {
+    const { w } = mountCanvas({
+      steps: [stepOf('fin-service')],
+      services: { 'fin-service': 'https://a', 'fin-service-2': 'https://b', 'order-svc-1': 'https://c' },
+    })
+    await flushPromises()
+    const opts = w.find('.svc-ref-select').findAll('option').map((o) => o.text())
+    // 锚点(目录服务)+ 同基别名(fin-service-2 → base fin-service)+ 跨服务键置底
+    expect(opts.some((t) => t.includes('fin-service') && t.includes('目录服务'))).toBe(true)
+    expect(opts.some((t) => t.includes('fin-service-2'))).toBe(true)
+    expect(opts.some((t) => t.includes('order-svc-1') && t.includes('跨服务'))).toBe(true)
+    w.unmount()
+  })
+
+  it('内联创建:后缀+URL → 拼全串双写(update:services + api.service 切换);后缀含 - 拦截', async () => {
+    const steps = [stepOf('fin-service')]
+    const { w } = mountCanvas({
+      steps,
+      services: { 'fin-service': 'https://a' },
+    })
+    await flushPromises()
+    const canvas = w.findComponent(CaseComposerCanvas)
+    await w.find('.svc-ref-select').setValue('__create__')
+    await w.find('.alias-suffix').setValue('qa2')
+    await w.find('.alias-url').setValue('https://qa2.fin.local')
+    await w.find('.alias-create-confirm').trigger('click')
+    const svc = canvas.emitted('update:services')![0][0] as Record<string, string>
+    expect(svc['fin-service-qa2']).toBe('https://qa2.fin.local')
+    expect(svc['fin-service']).toBe('https://a')          // 既有声明保留
+    // 双写另一面:引用同步切到全串(local 直改)
+    expect(steps[0].api?.service).toBe('fin-service-qa2')
+    // 拦截:后缀含 "-"
+    await w.find('.svc-ref-select').setValue('__create__')
+    await w.find('.alias-suffix').setValue('a-b')
+    await w.find('.alias-create-confirm').trigger('click')
+    expect(canvas.emitted('update:services')).toHaveLength(1)  // 未再发
     w.unmount()
   })
 })
