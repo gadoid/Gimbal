@@ -4,7 +4,6 @@ import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import RunDialog from '../RunDialog.vue'
 
-const ENV = [{ envId: 'dev', name: 'dev', baseUrl: 'http://x' }]
 const DS = [
   { datasetId: 'ds-1', scenarioId: 'sc-a', name: 'A', rowCount: 3, preview: [] },
   { datasetId: 'ds-2', scenarioId: 'sc-a', name: 'B', rowCount: 2, preview: [] },
@@ -13,9 +12,9 @@ const DS = [
 function mountDialog() {
   return mount(RunDialog, {
     props: {
-      scenario: null, dataSets: DS, envs: ENV,
+      scenario: null, dataSets: DS,
       running: false, lastRunId: null, lastRunError: null,
-      schemes: [], lastRunOverlay: null, referencedServices: [], authOptions: [],
+      schemes: [], lastRunOverlay: null, serviceRows: [], authOptions: [],
     },
     global: { plugins: [ElementPlus], stubs: { teleport: true } },
   })
@@ -29,7 +28,7 @@ it('默认全选数据集;切基线后 confirm 发空 dataSetIds', async () => {
   const go = w.findAll('button').find((b) => b.text().includes('发起运行'))
   await go!.trigger('click')
   const evt = w.emitted('confirm')!
-  expect(evt[evt.length - 1][1]).toEqual([])   // dataSetIds = [] → D12 基线执行
+  expect(evt[evt.length - 1][0]).toEqual([])   // dataSetIds = [] → D12 基线执行(首参,无 envId)
 })
 
 it('全取消数据集(基线未勾)也按基线显示:基线 ×1 / 1 次运行', async () => {

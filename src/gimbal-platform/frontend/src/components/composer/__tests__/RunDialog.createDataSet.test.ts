@@ -14,7 +14,6 @@ import RunDialog from '../RunDialog.vue'
 import * as api from '@/api/scenario-composer'
 import type { Scenario } from '@/types/scenario-composer'
 
-const ENV = [{ envId: 'dev', name: 'dev', baseUrl: 'http://x' }]
 const DS = [{ datasetId: 'ds-1', scenarioId: 'sc-a', name: 'A', rowCount: 3, preview: [] }]
 
 const mockRoute = { params: { scenarioId: 'sc-a' }, query: {} }
@@ -41,9 +40,9 @@ const SCENARIO: Scenario = {
 function mountDialog() {
   return mount(RunDialog, {
     props: {
-      scenario: SCENARIO, dataSets: DS, envs: ENV,
+      scenario: SCENARIO, dataSets: DS,
       running: false, lastRunId: null, lastRunError: null,
-      schemes: [], lastRunOverlay: null, referencedServices: [], authOptions: [],
+      schemes: [], lastRunOverlay: null, serviceRows: [], authOptions: [],
     },
     global: { plugins: [ElementPlus, createPinia()], stubs: { teleport: true } },
   })

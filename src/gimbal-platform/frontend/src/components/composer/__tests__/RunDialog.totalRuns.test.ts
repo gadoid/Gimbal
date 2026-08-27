@@ -15,7 +15,6 @@ import ElementPlus from 'element-plus'
 import RunDialog from '../RunDialog.vue'
 import type { Scenario } from '@/types/scenario-composer'
 
-const ENV = [{ envId: 'dev', name: 'dev', baseUrl: 'http://x' }]
 const DS = [{ datasetId: 'ds-1', scenarioId: 'sc-a', name: 'A', rowCount: 3, preview: [] }]
 
 const scenario = {
@@ -34,9 +33,9 @@ const scenario = {
 function mountDialog() {
   return mount(RunDialog, {
     props: {
-      scenario, dataSets: DS, envs: ENV,
+      scenario, dataSets: DS,
       running: false, lastRunId: null, lastRunError: null,
-      schemes: [], lastRunOverlay: null, referencedServices: [], authOptions: [],
+      schemes: [], lastRunOverlay: null, serviceRows: [], authOptions: [],
     },
     global: { plugins: [ElementPlus], stubs: { teleport: true } },
   })

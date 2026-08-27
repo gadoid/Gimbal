@@ -88,7 +88,6 @@ function nextBtn(w: ReturnType<typeof mount>) {
 
 beforeEach(() => {
   vi.restoreAllMocks()
-  vi.spyOn(api, 'listEnvs').mockResolvedValue([])
   vi.spyOn(api, 'listDataSets').mockResolvedValue([])
   // constants/auth_sessions 走 vi.mock 工厂(restoreAllMocks 不影响工厂 mock)
 })

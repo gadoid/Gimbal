@@ -365,11 +365,11 @@ async function pickExportScheme(
   const PickerBody = defineComponent({
     setup: () => () => h('div', null, [
       h('p', { style: 'margin:0 0 10px;color:#5a6273' },
-        '该场景存有运行方案 — 按方案导出会把方案的环境与服务绑定物化进导出文件。'),
+        '该场景存有运行方案 — 按方案导出会把方案的服务绑定物化进导出文件。'),
       option('', '默认导出(不套方案)'),
       ...schemes.map((s) => option(
         s.name,
-        `按方案导出 · ${s.name}${s.envId ? `(env: ${s.envId})` : ''}`,
+        `按方案导出 · ${s.name}`,
       )),
     ]),
   })
@@ -391,7 +391,7 @@ async function pickExportScheme(
  *
  * 这里直接走 plate preview-plate + 自己下载,store 状态完全不变。
  * 场景存有运行方案时先弹方案选择(可回退默认导出),选中后 overlay
- * ({envId, serviceBindings})物化进导出(spec §8);无方案走原路径。
+ * ({serviceBindings})物化进导出(spec §8,envId 已随 D2 退役);无方案走原路径。
  */
 async function exportRow(row: Scenario) {
   try {

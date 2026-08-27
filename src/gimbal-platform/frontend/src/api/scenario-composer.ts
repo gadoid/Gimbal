@@ -8,7 +8,7 @@
 import http from '@/api/http'
 import type {
   Scenario, DataSet, DataSetSummary,
-  ScenarioDraft, DataSetDraft, RunEnv,
+  ScenarioDraft, DataSetDraft,
 } from '@/types/scenario-composer'
 import type {
   EndpointFullView, StrategyKindView, StrategyKindDetailView,
@@ -118,10 +118,10 @@ export interface ServiceBinding {
   url?: string
 }
 
-/** 场景级运行方案(orchestration sidecar,plate 零感知,spec §3.1) */
+/** 场景级运行方案(orchestration sidecar,plate 零感知,spec §3.1;
+ *  envId 已随 D2 退役) */
 export interface RunScheme {
   name: string
-  envId?: string | null
   dataSetIds: string[]
   serviceBindings: Record<string, ServiceBinding>
   /** 预埋(gimbal 就绪前 no-op) */
@@ -129,9 +129,9 @@ export interface RunScheme {
   logSub?: unknown
 }
 
-/** 运行方案覆盖层:RunDialog 上次运行回填 / 按方案导出共用(spec §8) */
+/** 运行方案覆盖层:RunDialog 上次运行回填 / 按方案导出共用(spec §8;
+ *  envId 已随 D2 退役) */
 export interface RunOverlay {
-  envId?: string | null
   dataSetIds?: string[]
   serviceBindings?: Record<string, ServiceBinding>
 }
@@ -141,7 +141,6 @@ export interface RunRequest {
   scenarioId: string
   /** D12:空数组合法 = 基线执行(一个隐式空覆盖行);非空 = 选中数据集 */
   dataSetIds: string[]
-  env: RunEnv
   /** service → {authAlias?, url?} 绑定:注入清单 = 模板扫描(steps 里的
    * ${auth.*} 引用)∪ 绑定 authAlias;绑定 url 物化进 services(显式绑定
    * 最优先)。旧 auths/injectCredentials/prefix/mergePolicy 已退役(spec §6) */
@@ -168,11 +167,6 @@ export async function runScenario(req: RunRequest): Promise<RunScenarioResult> {
 /** PUT 场景级运行方案(整表替换);返回落库后的完整列表 */
 export async function putRunSchemes(scenarioId: string, schemes: RunScheme[]): Promise<RunScheme[]> {
   const { data } = await http.put<RunScheme[]>(`/scenarios/${enc(scenarioId)}/run-schemes`, { schemes })
-  return data
-}
-
-export async function listEnvs(): Promise<RunEnv[]> {
-  const { data } = await http.get<RunEnv[]>('/envs')
   return data
 }
 

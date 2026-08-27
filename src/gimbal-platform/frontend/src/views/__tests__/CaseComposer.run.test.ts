@@ -1,9 +1,11 @@
 /**
- * CaseComposer — Task 12 RunDialog 对接:
+ * CaseComposer — Task 12 RunDialog 对接(2026-08-27 D2/D3 适配):
  * - openRunDialog 装配 lastRunOverlay(GET /executions?limit=1 只取 overlay
- *   三字段:envId / dataSetIds / serviceBindings,base_config 其余键不回填);
- * - confirm 新签名:serviceBindings 原样上送,退役键(prefix/mergePolicy/
- *   auths/injectCredentials)不出现在 RunRequest;
+ *   两字段:dataSetIds / serviceBindings;envId 已随 D2 退役,历史
+ *   config_json 里的 envId 键静默忽略;base_config 其余键不回填);
+ * - serviceRows = 声明 ∪ 引用并集(steps 引用未声明 → declaredUrl null);
+ * - confirm 新签名(dataSetIds 首参,无 envId):serviceBindings 原样上送,
+ *   RunRequest 无 env,退役键(prefix/mergePolicy/auths/injectCredentials)不出现;
  * - stepTo=0 合法(0-based halt 索引,首步后停)不被 falsy 过滤;
  * - saveScheme → putRunSchemes 整表替换 + 草稿 store 回填。
  *
@@ -35,8 +37,8 @@ vi.mock('vue-router', async (importOriginal) => {
 })
 
 // vi.hoisted:vi.mock 工厂提升到文件顶部,引用必须先行提升。config 里掺
-// 杂 overlay 三字段以外的键(runId/nRuns/parallel/stepTo/injectedAuths),
-// 证明装配只取三字段、base_config 不整体回填。
+// 杂 overlay 两字段以外的键(envId/runId/nRuns/parallel/stepTo/injectedAuths),
+// 证明装配只取两字段(envId 随 D2 退役被静默忽略)、base_config 不整体回填。
 const LAST_RUN = vi.hoisted(() => ({
   id: 7,
   config: {
@@ -102,9 +104,8 @@ function mountPage() {
   })
 }
 
-/** 建件:getScenario 回样例场景(steps 引用 fin-service),envs 可注入 */
-async function mountComposerWithDraft(opts: { envs?: { envId: string; name: string; baseUrl: string }[] } = {}) {
-  if (opts.envs) vi.spyOn(api, 'listEnvs').mockResolvedValue(opts.envs)
+/** 建件:getScenario 回样例场景(steps 引用 fin-service,config 未声明 service) */
+async function mountComposerWithDraft() {
   vi.spyOn(api, 'getScenario').mockResolvedValue(sampleScenario())
   const w = mountPage()
   await flushPromises()
@@ -124,31 +125,31 @@ async function openRunDialog(w: ReturnType<typeof mount>) {
 
 beforeEach(() => {
   vi.restoreAllMocks()
-  vi.spyOn(api, 'listEnvs').mockResolvedValue([])
   vi.spyOn(api, 'listDataSets').mockResolvedValue([])
 })
 
 describe('CaseComposer — RunDialog 对接(Task 12)', () => {
-  it('上次运行只回填 overlay 三字段(base_config 其余键不回填)', async () => {
+  it('上次运行只回填 overlay 两字段(base_config 其余键不回填)', async () => {
     const w = await mountComposerWithDraft()
     const dlg = await openRunDialog(w)
 
     expect(dlg.props('lastRunOverlay')).toEqual({
-      envId: 'dev', dataSetIds: ['ds-1'],
+      dataSetIds: ['ds-1'],
       serviceBindings: { 'fin-service': { authAlias: 'qa1' } },
     })
-    // 方案/服务引用装配:无已存方案;steps 引用的 service 去重上送
+    // 方案/绑定行装配:无已存方案;steps 引用未声明的 service →
+    // declaredUrl null(RunDialog 标红可救燃)
     expect(dlg.props('schemes')).toEqual([])
-    expect(dlg.props('referencedServices')).toEqual(['fin-service'])
+    expect(dlg.props('serviceRows')).toEqual([
+      { service: 'fin-service', declaredUrl: null },
+    ])
     w.unmount()
   })
 
-  it('onRunConfirm 转发 serviceBindings,不含退役键', async () => {
+  it('onRunConfirm 转发 serviceBindings,无 env、不含退役键', async () => {
     const runScenario = vi.fn().mockResolvedValue({ runId: 'r-1', executionId: 1 })
     vi.spyOn(api, 'runScenario').mockImplementation(runScenario)
-    const w = await mountComposerWithDraft({
-      envs: [{ envId: 'dev', name: 'dev', baseUrl: 'http://dev' }],
-    })
+    const w = await mountComposerWithDraft()
     const dlg = await openRunDialog(w)
 
     // 折叠区默认 v-show 隐藏,select 仍可寻址(RunDialog.auths 同款)
@@ -159,7 +160,7 @@ describe('CaseComposer — RunDialog 对接(Task 12)', () => {
     expect(runScenario).toHaveBeenCalledTimes(1)
     const body = runScenario.mock.calls[0][0]
     expect(body.scenarioId).toBe('sc-demo')
-    expect(body.env).toEqual({ envId: 'dev', name: 'dev', baseUrl: 'http://dev' })
+    expect('env' in body).toBe(false)
     expect(body.serviceBindings).toEqual({ 'fin-service': { authAlias: 'qa1' } })
     expect('prefix' in body || 'mergePolicy' in body || 'auths' in body
       || 'injectCredentials' in body).toBe(false)
@@ -169,9 +170,7 @@ describe('CaseComposer — RunDialog 对接(Task 12)', () => {
   it('stepTo=0 原样上送(0 是合法 halt 索引,不被 falsy 过滤)', async () => {
     const runScenario = vi.fn().mockResolvedValue({ runId: 'r-0', executionId: 2 })
     vi.spyOn(api, 'runScenario').mockImplementation(runScenario)
-    const w = await mountComposerWithDraft({
-      envs: [{ envId: 'dev', name: 'dev', baseUrl: 'http://dev' }],
-    })
+    const w = await mountComposerWithDraft()
     const dlg = await openRunDialog(w)
 
     // stepCount=1:下拉含「运行全部(null)」与「第 1 步后停止(0)」
@@ -185,12 +184,10 @@ describe('CaseComposer — RunDialog 对接(Task 12)', () => {
   })
 
   it('saveScheme → putRunSchemes 整表替换 + 草稿 store 回填', async () => {
-    const saved = [{ name: '冒烟', envId: 'dev', dataSetIds: [], serviceBindings: {} }]
+    const saved = [{ name: '冒烟', dataSetIds: [], serviceBindings: {} }]
     const putRunSchemes = vi.fn().mockResolvedValue(saved)
     vi.spyOn(api, 'putRunSchemes').mockImplementation(putRunSchemes)
-    const w = await mountComposerWithDraft({
-      envs: [{ envId: 'dev', name: 'dev', baseUrl: 'http://dev' }],
-    })
+    const w = await mountComposerWithDraft()
     const dlg = await openRunDialog(w)
 
     await dlg.find('.rd-scheme-name').setValue('冒烟')

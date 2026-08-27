@@ -74,7 +74,7 @@ export interface Scenario {
   visibility?: 'private' | 'public'
 }
 
-// ─── 数据集 / 执行环境(Case 层已解散,数据集直接挂场景)─────────────
+// ─── 数据集(Case 层已解散,数据集直接挂场景;执行环境已随 D2 退役)──
 export interface DataSetRow { [field: string]: string | number | boolean }
 
 export interface DataSet {
@@ -100,10 +100,4 @@ export interface DataSetDraft {
   name: string
   description?: string
   rows: DataSetRow[]
-}
-
-export interface RunEnv {
-  envId: string
-  name: string
-  baseUrl: string
 }

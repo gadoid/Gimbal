@@ -206,19 +206,18 @@
       </div>
     </footer>
 
-    <!-- ═══════ Run dialog (方案栏 + env/ds + 用户与服务绑定) ═══════ -->
+    <!-- ═══════ Run dialog (方案栏 + ds + 声明∪引用并集绑定行) ═══════ -->
     <RunDialog
       v-if="runDialogOpen"
       :scenario="scenario"
       :data-sets="dataSets"
-      :envs="envs"
       :running="runDispatching"
       :last-run-id="lastRunId"
       :last-run-error="lastRunError"
       :step-orchestration-names="stepNames"
       :schemes="runSchemes"
       :last-run-overlay="lastRunOverlay"
-      :referenced-services="referencedServices"
+      :service-rows="serviceRows"
       :auth-options="authOptions"
       @close="runDialogOpen = false"
       @confirm="onRunConfirm"
@@ -255,7 +254,7 @@ import type {
   RunRequest, RunScheme, RunOverlay, ServiceBinding,
 } from '@/api/scenario-composer'
 import type {
-  Scenario, DataSetSummary, RunEnv, Orchestration, ScenarioDraft,
+  Scenario, DataSetSummary, Orchestration, ScenarioDraft,
 } from '@/types/scenario-composer'
 import type { ScenarioView, StepView } from '@/types/plate'
 
@@ -279,7 +278,6 @@ const saveState = ref<'clean' | 'dirty' | 'saving'>('clean')
 
 const scenario = ref<Scenario | null>(null)
 const dataSets = ref<DataSetSummary[]>([])
-const envs = ref<RunEnv[]>([])
 
 // Local draft state — 容器: definition(plate) + orchestration(平台)
 const definition = ref<ScenarioView>({
@@ -328,7 +326,7 @@ const runDialogOpen = ref(false)
 const runDispatching = ref(false)
 const lastRunId = ref<string | null>(null)
 const lastRunError = ref<string | null>(null)
-/** 上次运行覆盖层(方案栏「上次运行」回填源;openRunDialog 拉取,仅三字段) */
+/** 上次运行覆盖层(方案栏「上次运行」回填源;openRunDialog 拉取,仅两字段) */
 const lastRunOverlay = ref<RunOverlay | null>(null)
 // owner 凭证池别名(懒加载:首次打开运行弹框时拉取;失败静默 — 不阻塞运行)
 const ownerAuthAliases = ref<string[]>([])
@@ -355,14 +353,11 @@ async function openRunDialog() {
   try {
     const res = await listExecutions({ scenarioId: sid, limit: 1 })
     const cfg = res.items[0]?.config
-    // 只回填 overlay 三字段:stepTo/nRuns/parallel 等其余 base_config 键
-    // 不进方案栏(方案快照语义),三字段全缺 → 视为无可回填。
-    lastRunOverlay.value = cfg && (cfg.envId || cfg.dataSetIds?.length || cfg.serviceBindings)
-      ? {
-          envId: cfg.envId ?? null,
-          dataSetIds: cfg.dataSetIds ?? [],
-          serviceBindings: cfg.serviceBindings ?? {},
-        }
+    // 只回填 overlay 两字段:envId 已随 D2 退役(历史 config_json 里的
+    // envId 键静默忽略);stepTo/nRuns/parallel 等其余 base_config 键
+    // 不进方案栏(方案快照语义),两字段全缺 → 视为无可回填。
+    lastRunOverlay.value = cfg && (cfg.dataSetIds?.length || cfg.serviceBindings)
+      ? { dataSetIds: cfg.dataSetIds ?? [], serviceBindings: cfg.serviceBindings ?? {} }
       : null
   } catch { lastRunOverlay.value = null }
 }
@@ -401,12 +396,17 @@ watch(
  *  PUT 对该键透传保留 — 这里只读,写走 onSaveScheme → putRunSchemes)。 */
 const runSchemes = computed<RunScheme[]>(() =>
   (draftStore.draft?.orchestration as OrchestrationWithSchemes | undefined)?.runSchemes ?? [])
-/** 场景引用的 service 名(steps[].api.service 去重;用户与服务区每服务一行) */
-const referencedServices = computed(() => {
-  const seen = new Set<string>()
-  for (const st of (draftStore.draft?.definition?.steps ?? []) as { api?: { service?: string } }[])
-    if (st?.api?.service) seen.add(st.api.service)
-  return [...seen]
+/** 绑定行 = 声明 ∪ 引用并集(spec D3):声明行带 declaredUrl,
+ *  引用未声明的键 declaredUrl=null(RunDialog 标红可救燃)。
+ *  声明源 = definition.config.services(service → URL);引用源 = steps[].api.service。 */
+const serviceRows = computed(() => {
+  const declared = definition.value.config?.services ?? {}
+  const rows = new Map<string, string | null>()
+  for (const [k, v] of Object.entries(declared))
+    rows.set(k, typeof v === 'string' ? v : null)
+  for (const st of (definition.value.steps ?? []) as { api?: { service?: string } }[])
+    if (st?.api?.service && !rows.has(st.api.service)) rows.set(st.api.service, null)
+  return [...rows].map(([service, declaredUrl]) => ({ service, declaredUrl }))
 })
 /** 绑定下拉选项:owner 凭证池别名 ∪ 场景内置 users 键 */
 const authOptions = computed(() => [...new Set([
@@ -448,7 +448,6 @@ onMounted(async () => {
   if (scenarioId.value && scenarioId.value !== 'new') {
     await loadScenario()
   }
-  await loadEnvs()
   // Auto-compute system warning (PRD §5.1 §9): declared systems vs
   // services actually called by steps.
   if (scenario.value) checkSystemMismatch()
@@ -562,12 +561,6 @@ async function loadDataSets() {
   } catch (e) {
     showError('加载数据集', undefined, (e as Error).message)
   }
-}
-
-async function loadEnvs() {
-  try {
-    envs.value = await api.listEnvs()
-  } catch { /* leave empty */ }
 }
 
 // ── navigation ──
@@ -737,7 +730,6 @@ async function onPreview() {
 }
 
 async function onRunConfirm(
-  envId: string,
   dataSetIds: string[],
   opts?: {
     stepTo?: number
@@ -753,14 +745,12 @@ async function onRunConfirm(
   runDispatching.value = true
   lastRunError.value = null
   try {
-    const env = envs.value.find(e => e.envId === envId) || { envId, name: envId, baseUrl: '' }
-    // RunRequest 新配方(spec §6):serviceBindings 取代 auths/prefix/
-    // mergePolicy/injectCredentials;stepTo 0 合法(首步后停),只在
-    // null/undefined 时缺省;nRuns/parallel 仅非默认上送。
+    // RunRequest 新配方(spec §6,D2 后无 env):serviceBindings 取代
+    // auths/prefix/mergePolicy/injectCredentials;stepTo 0 合法(首步后停),
+    // 只在 null/undefined 时缺省;nRuns/parallel 仅非默认上送。
     const body: RunRequest = {
       scenarioId: scenario.value.meta.scenarioId,
       dataSetIds,
-      env,
       ...(opts?.stepTo != null ? { stepTo: opts.stepTo } : {}),
       ...(opts?.nRuns && opts.nRuns !== 1 ? { nRuns: opts.nRuns } : {}),
       ...(opts?.parallel && opts.parallel !== 1 ? { parallel: opts.parallel } : {}),

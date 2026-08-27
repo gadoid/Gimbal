@@ -1,16 +1,17 @@
 /**
- * ScenarioExportMenu — 按方案导出(spec §8,Task 14)。
+ * ScenarioExportMenu — 按方案导出(spec §8,Task 14;D2 环境退役适配)。
  *
- * 方案子项把方案的 overlay({envId, serviceBindings};dataSetIds 有意
- * 不带 — spec §7.3 导出是场景级)交给 store.exportJson 物化导出。
+ * 方案子项把方案的 overlay({serviceBindings};envId 已随 D2 退役,
+ * dataSetIds 有意不带 — spec §7.3 导出是场景级)交给 store.exportJson
+ * 物化导出。
  *
  * 建件遵循 UsersCard.test.ts 惯例:ElementPlus 插件 + attachTo
  * document.body,弹层走真实 teleport,以 document.querySelectorAll 检索、
  * 原生 .click() 触发(CaseComposer.run.test.ts 记录过 popper 组件与
  * teleport stub 叠加在 jsdom 递归更新爆表,故不用 teleport stub)。
  *
- * store mock 走 importOriginal 展开:保留真实 schemeToOverlay,让 envId
- * 归一化(null → 键缺席,绝不上送 "")参与断言,而非 mock 自证。
+ * store mock 走 importOriginal 展开:保留真实 schemeToOverlay 参与
+ * 断言(overlay 无 envId 键),而非 mock 自证。
  */
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -31,9 +32,9 @@ vi.mock('@/stores/scenario-draft', async (importOriginal) => {
 })
 
 const schemes = [
-  { name: '冒烟-qa1', envId: 'dev', dataSetIds: [],
+  { name: '冒烟-qa1', dataSetIds: [],
     serviceBindings: { 'fin-service': { authAlias: 'qa1' } } },
-  { name: '回归-无环境', envId: null, dataSetIds: [],
+  { name: '回归-qa2', dataSetIds: [],
     serviceBindings: { 'fin-service': { authAlias: 'qa2' } } },
 ]
 
@@ -77,20 +78,20 @@ describe('ScenarioExportMenu — 按方案导出', () => {
     await flushPromises()
     expect(mockStore.exportJson).toHaveBeenCalledTimes(1)
     expect(mockStore.exportJson).toHaveBeenCalledWith({
-      envId: 'dev', serviceBindings: { 'fin-service': { authAlias: 'qa1' } } })
+      serviceBindings: { 'fin-service': { authAlias: 'qa1' } } })
     w.unmount()
   })
 
-  it('envId=null 的方案:overlay 不带 envId(归一化为缺席,不上送 "")', async () => {
+  it('overlay 只带 serviceBindings(envId 已退役;dataSetIds 有意不带)', async () => {
     mockStore.draft = { orchestration: { runSchemes: schemes } }
     const w = mountMenu()
     const items = await openMenu(w)
-    const item = items.find((i) => i.textContent!.includes('回归-无环境'))
+    const item = items.find((i) => i.textContent!.includes('回归-qa2'))
     expect(item).toBeTruthy()
     item!.click()
     await flushPromises()
     const overlay = mockStore.exportJson.mock.calls[0][0]
-    expect(overlay.envId).toBeUndefined()
+    expect('envId' in overlay).toBe(false)
     // dataSetIds 有意不带(spec §7.3 导出是场景级)
     expect('dataSetIds' in overlay).toBe(false)
     expect(overlay.serviceBindings).toEqual({ 'fin-service': { authAlias: 'qa2' } })

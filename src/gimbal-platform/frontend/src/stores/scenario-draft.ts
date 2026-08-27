@@ -32,12 +32,10 @@ interface DraftSnapshot {
   scenarioId: string | null
 }
 
-/** RunScheme → 导出 overlay(spec §8):只带 envId + serviceBindings,
- *  dataSetIds 有意不带(spec §7.3 导出是场景级,v1 忽略行语义)。
- *  envId 归一化:null / "" → undefined — undefined 键在 JSON 序列化时被
- *  丢弃,后端按「未钉环境」处理;绝不能以 "" 上送(环境查找 404)。 */
+/** RunScheme → 导出 overlay(spec §8):只带 serviceBindings — envId 已随
+ *  D2 退役,dataSetIds 有意不带(导出是场景级产物,v1 忽略行语义)。 */
 export function schemeToOverlay(s: RunScheme): RunOverlay {
-  return { envId: s.envId || undefined, serviceBindings: s.serviceBindings }
+  return { serviceBindings: s.serviceBindings }
 }
 
 /** 草稿 → plate /convert → 纯可执行结构(store 无关,列表页行级导出复用)。

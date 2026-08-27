@@ -60,7 +60,6 @@ function mountPage() {
 
 beforeEach(() => {
   vi.restoreAllMocks()
-  vi.spyOn(api, 'listEnvs').mockResolvedValue([])
   vi.spyOn(api, 'listDataSets').mockResolvedValue([])
 })
 

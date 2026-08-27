@@ -1,9 +1,11 @@
 <!--
-  RunDialog.vue — 运行对话框(spec §4 重构:方案栏 + 主面板 + 折叠区)
+  RunDialog.vue — 运行对话框(spec §4 重构 + 2026-08-27 D2/D3:环境退役)
   方案栏:临时手填 / 上次运行 / 已存方案(orchestration sidecar,plate 零感知);
-  主面板:环境 tiles / 数据集多选(空 = 基线)/ 基础设置(stepTo · nRuns×parallel);
-  折叠区:用户与服务绑定(service → authAlias/url;凭证按 alias 解密注入,
-  本弹框只选 alias 不拉明文)+ 插件/日志订阅预埋(待 gimbal 侧支持)。
+  主面板:数据集多选(空 = 基线)/ 基础设置(stepTo · nRuns×parallel)—
+  执行环境已随 D2 退役(URL 由 service 声明/绑定行承载);
+  折叠区:用户与服务绑定 = 声明 ∪ 引用并集固定行(D3):service 名只读标签,
+  auth 下拉 + URL 覆盖(唯一自由文本);未声明引用行标红「未声明」,现场填
+  URL 即救燃;凭证按 alias 解密注入,本弹框只选 alias 不拉明文。
   旧 prefix / mergePolicy / preset / auths 多选 chips 语义已退役(spec §10)。
 -->
 <template>
@@ -29,28 +31,6 @@
             <input class="rd-scheme-name" v-model="schemeNameDraft" placeholder="方案名" maxlength="64" />
             <button class="ghost-btn" data-testid="save-scheme" type="button" @click="onSaveScheme">存为方案</button>
           </div>
-
-          <!-- 环境选择 -->
-          <section class="run-section">
-            <label class="run-label">执行环境</label>
-            <div class="env-grid">
-              <button
-                v-for="env in envs"
-                :key="env.envId"
-                class="env-tile"
-                :class="{ active: selectedEnv === env.envId }"
-                @click="selectedEnv = env.envId"
-                type="button"
-              >
-                <div class="env-tile-head">
-                  <span class="env-radio"></span>
-                  <span class="env-name">{{ env.name }}</span>
-                </div>
-                <div class="env-url">{{ env.baseUrl }}</div>
-              </button>
-              <div v-if="envs.length === 0" class="muted small">暂无可用环境 — 请在服务端 data/envs.yaml 中配置后重试</div>
-            </div>
-          </section>
 
           <!-- 数据集选择 -->
           <section class="run-section">
@@ -139,20 +119,25 @@
             </button>
             <div v-show="foldBindings" class="rd-fold-body">
               <div
-                v-for="svc in referencedServices"
-                :key="svc"
+                v-for="row in serviceRows"
+                :key="row.service"
                 class="rd-bind-row"
-                :class="{ 'is-degraded': degraded(svc) }"
+                :class="{ 'is-degraded': degraded(row.service), 'is-undeclared': row.declaredUrl === null }"
               >
-                <span class="rd-bind-svc">{{ svc }}</span>
-                <select class="rd-bind-user" v-model="bindings[svc].authAlias">
+                <span class="rd-bind-svc">{{ row.service }}</span>
+                <select class="rd-bind-user" v-model="bindings[row.service].authAlias">
                   <option :value="undefined">— 未绑定 —</option>
                   <option v-for="a in authOptions" :key="a" :value="a">{{ a }}</option>
                 </select>
-                <input class="rd-bind-url" v-model="bindings[svc].url" placeholder="覆盖 URL(可选)" />
-                <span v-if="degraded(svc)" class="rd-bind-warn">凭证已删,运行时该用户不注入</span>
+                <input
+                  class="rd-bind-url"
+                  v-model="bindings[row.service].url"
+                  :placeholder="row.declaredUrl === null ? '未声明 — 现场填 URL 即可运行' : '覆盖 URL(可选,已预填声明值)'"
+                />
+                <span v-if="row.declaredUrl === null" class="rd-bind-warn undeclared">未声明</span>
+                <span v-else-if="degraded(row.service)" class="rd-bind-warn">凭证已删,运行时该用户不注入</span>
               </div>
-              <p v-if="!referencedServices.length" class="rd-empty">场景未引用任何 service</p>
+              <p v-if="!serviceRows.length" class="rd-empty">场景未声明且未引用任何 service</p>
             </div>
           </section>
 
@@ -199,12 +184,6 @@
             <span v-if="selectedDatasets.length" class="summary-chip">
               {{ selectedDatasets.length }} 数据集
             </span>
-            <span v-if="selectedEnv" class="summary-chip env">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>
-              </svg>
-              {{ selectedEnv }}
-            </span>
             <span
               class="summary-chip total"
               :class="{ over: totalRuns > MAX_TOTAL_RUNS }"
@@ -221,7 +200,7 @@
             <button
               class="primary-btn"
               data-testid="run-confirm"
-              :disabled="!selectedEnv || running"
+              :disabled="running"
               @click="onConfirm"
             >
               <svg v-if="!running" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -240,13 +219,15 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { ServiceBinding, RunScheme, RunOverlay } from '@/api/scenario-composer'
-import type { Scenario, DataSetSummary, RunEnv } from '@/types/scenario-composer'
+import type { Scenario, DataSetSummary } from '@/types/scenario-composer'
+
+/** 绑定行(spec D3):声明 ∪ 引用并集的固定行;declaredUrl null = 未声明引用行 */
+export interface ServiceRow { service: string; declaredUrl: string | null }
 
 const props = withDefaults(defineProps<{
   /** 弹层显隐(父级亦可直接 v-if;默认 true 兼容外部 v-if 用法) */
   visible?: boolean
   scenario?: Scenario | null
-  envs: RunEnv[]
   dataSets: DataSetSummary[]
   running?: boolean
   lastRunId?: string | null
@@ -255,8 +236,8 @@ const props = withDefaults(defineProps<{
   schemes: RunScheme[]
   /** 上次运行覆盖层(方案栏「上次运行」回填源) */
   lastRunOverlay: RunOverlay | null
-  /** 场景引用的 service 名(用户与服务区每服务一行) */
-  referencedServices: string[]
+  /** 绑定行 = 声明 ∪ 引用并集(D3);declaredUrl null = 未声明引用行(红,可救燃) */
+  serviceRows: ServiceRow[]
   /** 绑定下拉选项:owner 凭证池 ∪ 场景内置 users 别名(父级供给) */
   authOptions: string[]
   /** 平台编排展示名(orchestration.steps[i].name,与 steps 同序);plate Step 无 name */
@@ -273,7 +254,6 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   close: []
   confirm: [
-    envId: string,
     dataSetIds: string[],
     opts: {
       /** 0-based 含端点(引擎 halt_at);缺省 = 全量运行 */
@@ -282,25 +262,19 @@ const emit = defineEmits<{
       nRuns?: number
       /** fan-out 并发度(1–200) */
       parallel?: number
-      /** service → {authAlias?, url?};空绑定条目不随 confirm 下发 */
+      /** service → {authAlias?, url?};空绑定条目不随 confirm 下发,
+       *  预填未改动的声明 URL 也不算显式绑定不上送(D3) */
       serviceBindings?: Record<string, ServiceBinding>
     },
   ]
-  /** 存为方案:当前 env/ds/绑定快照(plugins/logSub 预埋 no-op) */
+  /** 存为方案:当前 ds/绑定快照(无 envId,plugins/logSub 预埋 no-op) */
   saveScheme: [scheme: RunScheme]
 }>()
 
-// ── 环境与数据集(既有语义保留)──────────────────────────────────
-const selectedEnv = ref<string>(props.envs[0]?.envId || '')
+// ── 数据集(既有语义保留;执行环境已随 D2 退役)─────────────────
 const selectedDatasets = ref<string[]>([])
 // D12 基线执行:不选数据集 = 直填值 + 共享变量默认值跑一次(一个隐式空覆盖行)
 const useBaseline = ref(false)
-
-watch(() => props.envs, (envs) => {
-  if (!selectedEnv.value && envs.length > 0) {
-    selectedEnv.value = envs[0].envId
-  }
-}, { immediate: true })
 
 watch(() => props.dataSets, (ds) => {
   if (ds.length) {
@@ -323,11 +297,10 @@ function toggleBaseline() {
 const selectedScheme = ref<string>('__adhoc__')   // '__adhoc__' | '__last__' | scheme.name
 const schemeNameDraft = ref('')
 
-/** 方案配置降级:方案里的 env / 数据集已被删 → 选项标注(不报废,选了可改) */
+/** 方案配置降级:方案里的数据集已被删 → 选项标注(不报废,选了可改) */
 const schemeDegraded = computed(() =>
   props.schemes
     .filter((s) =>
-      (s.envId && !props.envs.some((e) => e.envId === s.envId)) ||
       s.dataSetIds.some((id) => !props.dataSets.some((d) => d.datasetId === id)))
     .map((s) => s.name))
 
@@ -340,33 +313,43 @@ const schemeOptions = computed(() => [
   })),
 ])
 
-// ── 用户与服务绑定(spec §3.1/§4)───────────────────────────────
-// 绑定态:service → {authAlias?, url?};方案/上次运行选择时整体替换。
+// ── 用户与服务绑定(spec D3:声明 ∪ 引用并集固定行)────────────────
+// 绑定态:service → {authAlias?, url?};声明行预填 declaredUrl,方案/
+// 上次运行选择时整体替换。
 const bindings = ref<Record<string, ServiceBinding>>({})
 
-// referencedServices 变化(异步补齐/场景变更)→ 补空行、清孤儿,行内
-// v-model 直写 bindings[svc].authAlias,必须保证每个 svc 有落点对象。
-watch(() => props.referencedServices, (svcs) => {
+function declaredUrlOf(svc: string): string | null {
+  return props.serviceRows.find((r) => r.service === svc)?.declaredUrl ?? null
+}
+
+// serviceRows 变化(异步补齐/场景变更)→ 补行、清孤儿;行内 v-model 直写
+// bindings[svc].authAlias,必须保证每个 svc 有落点对象。声明行预填声明 URL。
+watch(() => props.serviceRows, (rows) => {
   const next = { ...bindings.value }
-  for (const svc of svcs) if (!next[svc]) next[svc] = {}
-  for (const k of Object.keys(next)) if (!svcs.includes(k)) delete next[k]
+  for (const r of rows)
+    if (!next[r.service]) next[r.service] = { url: r.declaredUrl ?? undefined }
+  const keep = new Set(rows.map((r) => r.service))
+  for (const k of Object.keys(next)) if (!keep.has(k)) delete next[k]
   bindings.value = next
 }, { immediate: true })
 
-// 选方案/上次运行 → 绑定整体替换预填 + env/ds 回填(已删项静默跳过 = 降级不报废)
+// 选方案/上次运行 → 绑定整体替换预填 + ds 回填(已删项静默跳过 = 降级不报废)
 watch(selectedScheme, (v) => {
   if (v === '__adhoc__') {
-    bindings.value = Object.fromEntries(props.referencedServices.map((svc) => [svc, {} as ServiceBinding]))
+    bindings.value = Object.fromEntries(props.serviceRows.map(
+      (r) => [r.service, { url: r.declaredUrl ?? undefined } as ServiceBinding]))
     return
   }
-  const src = v === '__last__'
-    ? props.lastRunOverlay
-    : props.schemes.find((s) => s.name === v)
+  const src = v === '__last__' ? props.lastRunOverlay : props.schemes.find((s) => s.name === v)
   const next: Record<string, ServiceBinding> = {}
-  for (const svc of props.referencedServices)
-    next[svc] = src?.serviceBindings?.[svc] ? { ...src.serviceBindings[svc]! } : {}
+  for (const r of props.serviceRows) {
+    const b = src?.serviceBindings?.[r.service]
+    next[r.service] = {
+      ...(b?.authAlias ? { authAlias: b.authAlias } : {}),
+      url: b?.url ?? r.declaredUrl ?? undefined,
+    }
+  }
   bindings.value = next
-  if (src?.envId && props.envs.some((e) => e.envId === src.envId)) selectedEnv.value = src.envId
   // 无条件回填:基线方案(dataSetIds: [])也要把勾选重置回基线,
   // 不能沿用打开时的当前勾选。
   selectedDatasets.value = (src?.dataSetIds ?? []).filter((id) =>
@@ -382,10 +365,10 @@ function degraded(svc: string): boolean {
 const foldBindings = ref(false)   // 折叠区默认折叠
 
 const bindingsSummary = computed(() => {
-  const total = props.referencedServices.length
-  if (!total) return '未引用服务'
-  const bound = props.referencedServices.filter((svc) => {
-    const b = bindings.value[svc]
+  const total = props.serviceRows.length
+  if (!total) return '无服务'
+  const bound = props.serviceRows.filter((r) => {
+    const b = bindings.value[r.service]
     return !!(b?.authAlias || b?.url)
   }).length
   return `${bound}/${total} 已绑定`
@@ -420,10 +403,6 @@ const totalRuns = computed(() => {
 })
 
 function onConfirm() {
-  if (!selectedEnv.value) {
-    ElMessage.warning('请选择执行环境')
-    return
-  }
   // 输入钳位(与后端 schema 上限一致,防 422)
   nRuns.value = Math.min(1000, Math.max(1, Math.floor(nRuns.value || 1)))
   parallel.value = Math.min(200, Math.max(1, Math.floor(parallel.value || 1)))
@@ -435,11 +414,23 @@ function onConfirm() {
     )
     return
   }
-  // 用户与服务绑定:空绑定条目不随 confirm 下发(后端注入清单 =
-  // 模板扫描(steps 里 ${auth.*} 引用)∪ 绑定 authAlias,spec §6)
-  const serviceBindings = Object.fromEntries(Object.entries(bindings.value)
-    .filter(([, b]) => b.authAlias || b.url))
-  emit('confirm', selectedEnv.value, selectedDatasets.value, {
+  // 用户与服务绑定装配(D3):预填未改动的声明 URL 不算显式绑定不上送
+  // (否则每次运行都会把声明值重送成覆盖);未声明行任何非空 URL 都是
+  // 救燃绑定。空绑定条目不随 confirm 下发(后端注入清单 = 模板扫描
+  // (steps 里 ${auth.*} 引用)∪ 绑定 authAlias,spec §6)。
+  const serviceBindings: Record<string, ServiceBinding> = {}
+  for (const [svc, b] of Object.entries(bindings.value)) {
+    const declared = declaredUrlOf(svc)
+    const url = b.url?.trim()
+    const effectiveUrl = url && url !== declared ? url : undefined
+    const authAlias = b.authAlias || undefined
+    if (authAlias || effectiveUrl)
+      serviceBindings[svc] = {
+        ...(authAlias ? { authAlias } : {}),
+        ...(effectiveUrl ? { url: effectiveUrl } : {}),
+      }
+  }
+  emit('confirm', selectedDatasets.value, {
     ...(stepTo.value !== null ? { stepTo: stepTo.value } : {}),
     ...(nRuns.value !== 1 ? { nRuns: nRuns.value } : {}),
     ...(parallel.value !== 1 ? { parallel: parallel.value } : {}),
@@ -447,8 +438,8 @@ function onConfirm() {
   })
 }
 
-/** 存为方案:当前 env/ds/绑定快照落 orchestration sidecar(plate 零感知)。
- *  插件/日志订阅为预埋 no-op(gimbal 侧就绪前恒 null)。 */
+/** 存为方案:当前 ds/绑定快照落 orchestration sidecar(plate 零感知;
+ *  环境已随 D2 退役,快照无 envId)。插件/日志订阅为预埋 no-op。 */
 function onSaveScheme() {
   const name = schemeNameDraft.value.trim()
   if (!name) {
@@ -457,7 +448,6 @@ function onSaveScheme() {
   }
   emit('saveScheme', {
     name,
-    envId: selectedEnv.value || null,
     dataSetIds: [...selectedDatasets.value],
     serviceBindings: { ...bindings.value },
     plugins: null,
@@ -549,26 +539,6 @@ function goCreateDataSet() {
 }
 .rd-scheme-bar .ghost-btn { padding: 6px 12px; font-size: 12px; }
 
-/* env grid */
-.env-grid {
-  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
-}
-.env-tile {
-  text-align: left;
-  background: #fff; border: 1.5px solid #e6e8ec; border-radius: 10px;
-  padding: 12px 14px; cursor: pointer; transition: all 0.15s;
-}
-.env-tile:hover { border-color: #c7d2fe; }
-.env-tile.active { border-color: #4f46e5; background: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%); }
-.env-tile-head { display: flex; align-items: center; gap: 8px; }
-.env-radio {
-  width: 14px; height: 14px; border-radius: 50%;
-  border: 2px solid #cbd5e1; transition: all 0.15s;
-}
-.env-tile.active .env-radio { border-color: #4f46e5; background: radial-gradient(circle, #4f46e5 0%, #4f46e5 35%, transparent 40%); }
-.env-name { font-weight: 600; font-size: 13px; }
-.env-url { font-family: var(--font-mono); font-size: 11px; color: #5a6273; margin-top: 4px; padding-left: 22px; }
-
 /* data-set grid */
 .ds-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .ds-tile {
@@ -646,6 +616,9 @@ function goCreateDataSet() {
 .rd-bind-row:last-child { margin-bottom: 0; }
 /* 降级:绑定引用的凭证已删 — 标红不报废,运行时该用户不注入 */
 .rd-bind-row.is-degraded { border-color: #fca5a5; background: #fef2f2; }
+/* 未声明引用行(D3):service 名标红 + 「未声明」警示,现场填 URL 即救燃 */
+.rd-bind-row.is-undeclared .rd-bind-svc { color: #dc2626; font-weight: 600; }
+.rd-bind-warn.undeclared { color: #dc2626; }
 .rd-bind-svc {
   min-width: 120px; font-family: var(--font-mono);
   font-size: 12px; font-weight: 600;
@@ -691,7 +664,6 @@ function goCreateDataSet() {
   font-size: 11px; font-weight: 500;
   background: #eef2ff; color: #4f46e5;
 }
-.summary-chip.env { background: #fef3c7; color: #92400e; }
 .summary-chip.total { background: #d1fae5; color: #065f46; }
 /* 总量超闸(dispatch 409 too_many_runs)→ 红色警示,confirm 亦被拦 */
 .summary-chip.total.over { background: #fee2e2; color: #991b1b; }
