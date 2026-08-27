@@ -1127,6 +1127,11 @@ def _run_dir(run_id: str) -> Path:
     return settings.DATA_DIR / "runs" / "cases" / run_id
 
 
+# 公开别名:executions 路由的 case-artifact 端点按 runId 定位 run 目录
+# (跨执行读不可能 —— runId 唯一,目录名即 runId)。
+run_dir = _run_dir
+
+
 def purge_case_dir(run_id: str) -> None:
     """删除整单的 case 案卷目录(P2:case.json 含明文凭证,删除执行
     必须连带清理,否则 UI 删除后凭证仍永久留盘)。Best-effort。"""

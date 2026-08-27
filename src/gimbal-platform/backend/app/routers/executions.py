@@ -10,9 +10,11 @@ exec_runs 表(V1 每-run 明细/报告/日志/SSE)已随存量数据清理一并
 """
 from __future__ import annotations
 
+import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import PlainTextResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -79,6 +81,49 @@ async def get_execution_rows(ex: OwnedExecution) -> ExecutionRowsOut:
     """行级状态:活跃执行读 dispatcher 内存 registry,历史执行回放
     JSONL(dispatched+final 两行/row,final 覆盖)。Task 13 前端消费。"""
     return ExecutionRowsOut(items=run_dispatcher.execution_rows(ex.id))
+
+
+# ── case-artifact(白名单工件,spec §9.1)────────────────────────
+# 白名单只有两个文件;case.json 刻意不在列(含明文凭证,无前端消费
+# 场景)。stem 严格式校验(无路径分隔符),run 目录按 runId 定位 ——
+# 跨执行读不可能(runId 唯一),深度防御再验一次 path.parent。
+_CASE_STEM_RE = re.compile(r"[A-Za-z0-9._-]+")
+_ARTIFACTS = {"engine-log": "engine.log", "result": "result.json"}
+
+
+@router.get("/{execution_id}/case-artifact", response_class=PlainTextResponse)
+async def get_case_artifact(
+    ex: OwnedExecution,
+    case: Annotated[str, Query(max_length=128)],
+    file: Annotated[str, Query(max_length=32)],
+) -> PlainTextResponse:
+    """白名单工件:engine.log(引擎日志)/ result.json(步骤级明细)。
+    case.json 刻意不暴露 — 含明文凭证,无前端消费场景。Task 13 前端消费。"""
+    name = _ARTIFACTS.get(file)
+    if name is None or not _CASE_STEM_RE.fullmatch(case):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "bad_artifact_kind",
+                "message": f"file ∈ {sorted(_ARTIFACTS)}",
+            },
+        )
+    run_id = (ex.config_json or {}).get("runId")
+    if not run_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "artifact_not_found", "message": name},
+        )
+    root = run_dispatcher.run_dir(str(run_id))
+    path = root / case / name
+    # 深度防御:工件必须恰好在 run_dir/<case>/ 下(stem 式校验之外
+    # 再验一次拼出来的路径没有逃逸);不存在同罪 404,不泄漏布局。
+    if path.parent != root / case or not path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "artifact_not_found", "message": name},
+        )
+    return PlainTextResponse(path.read_text(encoding="utf-8"))
 
 
 # ── delete ─────────────────────────────────────────────────────
