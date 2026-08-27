@@ -354,6 +354,7 @@ def _make_sm_with_api(service: str, base_url: str, api: Api = None):
     )
     sm._view = MagicMock()
     sm._service_base_url = base_url
+    sm._services = {}  # D7 per-step 查表(空 dict = 回落 base_url,保持 #6 语义)
     sm._on_transition = None
     sm._hooks = None
     sm._bus = bus
@@ -641,6 +642,7 @@ def _build_sm_for_soft_failure(
     sm._dispatcher.dispatch_phase.side_effect = _dispatch_phase
     sm._view = MagicMock()
     sm._service_base_url = "https://api.example.com"  # valid to avoid #6 firing
+    sm._services = {}  # D7 per-step 查表(空 dict = 回落 base_url)
     sm._on_transition = None
     sm._hooks = None
     sm._bus = bus
@@ -1387,6 +1389,7 @@ def _build_sm_with_http_result(http_result: "StrategyResult", has_teardown: bool
     sm._dispatcher.dispatch_phase.side_effect = _dispatch_phase
     sm._view = MagicMock()
     sm._service_base_url = "https://api.example.com"
+    sm._services = {}  # D7 per-step 查表(空 dict = 回落 base_url)
     sm._on_transition = None
     sm._hooks = None
     sm._bus = bus

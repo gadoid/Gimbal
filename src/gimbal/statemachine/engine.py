@@ -107,6 +107,7 @@ class StepStateMachine:
             dispatcher=dispatcher,
             view=view,
             service_base_url="http://user-service",
+            services={"user-service": "http://user-service"},
         )
         result = sm.run()
     """
@@ -122,12 +123,15 @@ class StepStateMachine:
         on_transition: Optional[TransitionHook] = None,
         hook_registry: Optional[Any] = None,
         event_bus: Optional[Any] = None,
+        services: Optional[dict[str, str]] = None,
     ) -> None:
         self._step_id = step_id
         self._step_schema = step_schema
         self._dispatcher = dispatcher
         self._view = view
         self._service_base_url = service_base_url
+        # D7 per-step 路由:api.service → 声明 URL 查表;空/未命中回落 base_url
+        self._services = services or {}
         self._on_transition = on_transition
         # 埋点设施：可选，不传则不触发（保持向后兼容）
         self._hooks = hook_registry
@@ -385,9 +389,11 @@ class StepStateMachine:
                 message="api is a ref that was not resolved before execution",
             )
 
-        # 修复 #6：删除 "http://<service_key>" 兜底（产生幽灵 URL）
-        # 当 _service_base_url 为空时，api.service 是 key 而非 URL，必须显式失败
-        if not self._service_base_url:
+        # D7 per-step 路由 + 修复 #6:先查场景声明 dict(api.service 是
+        # config.services 的 key),未命中回落兼容 _service_base_url
+        # (_pick_base_url 兼容路径);两者皆空 → 显式失败,不造幽灵 URL。
+        service_url = self._services.get(api.service) or self._service_base_url
+        if not service_url:
             logger.error(
                 "[SM {}] 缺少 service_base_url: api.service={!r}，"
                 "请在 scenario.config.services 或 bootstrap.services 中配置",
@@ -402,7 +408,6 @@ class StepStateMachine:
                     "or bootstrap.services with a real base URL."
                 ),
             )
-        service_url = self._service_base_url
         request = self._step_schema.request
         # body 可以是 Dict 或 List —— 不要用 `or {}` 兜底成 dict，会把 list 静默改成 dict。
         original_body = getattr(request, "body", None)

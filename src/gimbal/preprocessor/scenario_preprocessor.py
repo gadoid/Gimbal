@@ -56,10 +56,11 @@ class ScenarioPreprocessor:
     用法::
 
         pre = ScenarioPreprocessor(scenario_schema, bootstrap_config, auth_registry)
-        resolved_steps, base_url = pre.run()
+        resolved_steps, base_url, services = pre.run()
 
         # resolved_steps 中所有 ${} 模板已展开
         # base_url 供 StepRunner 构造完整 URL
+        # services 为场景声明服务表(D7 per-step 查表,未命中回落 base_url)
     """
 
     def __init__(
@@ -91,8 +92,8 @@ class ScenarioPreprocessor:
 
     # ── 公开入口 ──────────────────────────────────────────────────────────────
 
-    def run(self) -> tuple[list["StepUnion"], str]:
-        """执行完整预处理入口，按顺序执行 0)引用物化、1)认证、2)构建查询根、3)批量展开 steps 模板、4)提取 base_url，返回 (resolved_steps, base_url) 元组。
+    def run(self) -> tuple[list["StepUnion"], str, dict[str, str]]:
+        """执行完整预处理入口，按顺序执行 0)引用物化、1)认证、2)构建查询根、3)批量展开 steps 模板、4)提取 base_url，返回 (resolved_steps, base_url, services) 元组。
 
         步骤：
           0. 引用物化（asset_store 不为 None 时）：递归替换 scenario 中所有
@@ -102,7 +103,7 @@ class ScenarioPreprocessor:
           1. 认证（填充 token 到 AuthRegistry）
           2. 构建查询根对象
           3. 批量展开 steps 模板
-          4. 提取 base_url
+          4. 提取 base_url + 场景声明 services（D7 per-step 查表用）
         """
         # 0. 引用物化
         self._materialize_refs()
@@ -119,16 +120,21 @@ class ScenarioPreprocessor:
         # 3. 展开 steps
         resolved_steps = self._resolve_steps(root)
 
-        # 4. base_url
+        # 4. base_url + 场景声明 services(D7 per-step base_url)
         base_url = self._pick_base_url()
+        # 仅场景声明 dict,不合并 bootstrap —— per-step 查表范围拍板 D7:
+        # 只查 scenario.config.services(bootstrap 独有键进不了 URL 解析
+        # = 现状保持)。模板解析 root["service"] 的合并语义不受影响。
+        services = dict(getattr(self._schema.config, "services", None) or {})
 
         logger.info(
-            "[Preprocessor] 预处理完成: scenario_id={} steps={} base_url={}",
+            "[Preprocessor] 预处理完成: scenario_id={} steps={} base_url={} services={}",
             self._schema.scenarioId,
             len(resolved_steps),
             base_url,
+            sorted(services),
         )
-        return resolved_steps, base_url
+        return resolved_steps, base_url, services
 
     # ── 第零段：引用物化（Phase 0）────────────────────────────────────────────
 

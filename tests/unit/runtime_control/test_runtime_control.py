@@ -138,7 +138,8 @@ def fake_dispatcher_and_ctx_factory():
             self._steps = scenario_schema.steps
 
         def run(self):
-            return (self._steps, "http://fake")
+            # D7 per-step base_url:run() 现返回 (steps, base_url, services) 三元组
+            return (self._steps, "http://fake", {})
 
     fake_steps = []
     for i in range(5):

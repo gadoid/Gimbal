@@ -104,14 +104,18 @@ class StepRunner:
         service_base_url: str = "",
         hook_registry: Optional[Any] = None,
         event_bus: Optional[Any] = None,
+        services: Optional[dict] = None,
     ) -> None:
-        """初始化 StepRunner，保存 strategy dispatcher、ctx_manager、service_base_url 以及可选的 hook_registry 与 event_bus。"""
+        """初始化 StepRunner，保存 strategy dispatcher、ctx_manager、service_base_url/services 以及可选的 hook_registry 与 event_bus。"""
         self._dispatcher = dispatcher
         self._ctx_manager = ctx_manager
         self._service_base_url = service_base_url
+        # D7 per-step 查表:api.service → 场景声明 URL;空 dict 回落 base_url
+        self._services = services or {}
         self._hooks = hook_registry
         self._bus = event_bus
-        logger.debug("[StepRunner] 初始化: service_base_url={}", service_base_url)
+        logger.debug("[StepRunner] 初始化: service_base_url={} services={}",
+                     service_base_url, sorted(self._services))
 
     def run(
         self,
@@ -154,6 +158,7 @@ class StepRunner:
             service_base_url=self._service_base_url,
             hook_registry=self._hooks,
             event_bus=self._bus,
+            services=self._services,
         )
         logger.debug("[StepRunner] StepStateMachine 构造完成: step_id={}", step_id)
 
@@ -258,7 +263,7 @@ class ScenarioRunner:
             auth_registry=self._auth_registry,
             asset_store=self._asset_store,
         )
-        resolved_steps, base_url = preprocessor.run()
+        resolved_steps, base_url, services = preprocessor.run()
         logger.debug(
             "[ScenarioRunner] 预处理完成: resolved_steps={} base_url={}",
             len(resolved_steps), base_url,
@@ -279,6 +284,7 @@ class ScenarioRunner:
             service_base_url=base_url,
             hook_registry=self._hooks,
             event_bus=self._bus,
+            services=services,
         )
 
         step_results: list[StepRunResult] = []
