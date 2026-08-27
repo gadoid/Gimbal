@@ -4,11 +4,14 @@
  * The store proxies /api/executions/* and exposes a `startPolling(id)`
  * helper that auto-refreshes detail every second until status reaches
  * a terminal state (done/failed/canceled).
+ *
+ * T13 行级可观测(spec §9.1):rows 只对「已展开」的执行随 tick 拉取
+ * (避免列表 N+1);engine-log/result 工件按需拉取,不参与轮询。
  */
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as api from '@/api/executions'
-import type { Execution } from '@/api/executions'
+import type { Execution, ExecutionRow } from '@/api/executions'
 import { isTerminalExecutionStatus } from '@/utils/executionStatus'
 
 const POLL_INTERVAL_MS = 1000
@@ -21,6 +24,58 @@ export const useExecutionsStore = defineStore('executions', () => {
   /** Set when the detail poller gives up (404 / repeated failures). */
   const pollError = ref('')
   let pollHandle: ReturnType<typeof setInterval> | null = null
+
+  // ── 行级可观测(spec §9.1)──────────────────────────────
+  /** execution id → 行级状态(仅已展开的执行有数据) */
+  const rowsByExecution = ref<Record<number, ExecutionRow[]>>({})
+  /** 已展开行级表格的 execution id 集合(轮询 tick 据此增量刷新) */
+  const expanded = ref<Set<number>>(new Set())
+  /** 工件文本缓存:key = `${id}:${caseStem}:${file}`(按需拉取,不轮询) */
+  const artifactText = ref<Record<string, string>>({})
+  /** 工件拉取失败文案(同 key;成功重拉时清除) */
+  const artifactError = ref<Record<string, string>>({})
+
+  /** 行级状态软失败:下次 tick/展开点击自然重试,不打断详情轮询。 */
+  async function fetchRows(id: number): Promise<void> {
+    try {
+      rowsByExecution.value = {
+        ...rowsByExecution.value,
+        [id]: (await api.getExecutionRows(id)).items,
+      }
+    } catch {
+      // 预部署/认证快速失败的单合法返回 [];网络错误留旧值等重试。
+    }
+  }
+
+  async function fetchArtifact(
+    id: number,
+    caseStem: string,
+    file: 'engine-log' | 'result',
+  ): Promise<void> {
+    const key = `${id}:${caseStem}:${file}`
+    try {
+      const text = await api.getCaseArtifact(id, caseStem, file)
+      artifactText.value = { ...artifactText.value, [key]: text }
+      const errs = { ...artifactError.value }
+      delete errs[key]
+      artifactError.value = errs
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '拉取失败'
+      artifactError.value = { ...artifactError.value, [key]: `工件拉取失败：${msg}` }
+    }
+  }
+
+  /** 展开即拉一次 rows;收起不清缓存(再展开即时可见,由 tick 增量刷新)。 */
+  function toggleExpanded(id: number): void {
+    const next = new Set(expanded.value)
+    if (next.has(id)) {
+      next.delete(id)
+    } else {
+      next.add(id)
+    }
+    expanded.value = next
+    if (next.has(id)) void fetchRows(id)
+  }
 
   async function fetchList(): Promise<Execution[]> {
     loading.value = true
@@ -78,6 +133,11 @@ export const useExecutionsStore = defineStore('executions', () => {
         const d = await api.get(id)
         consecutiveFailures = 0
         detail.value = d
+        // 行级表格只对已展开的执行随 tick 刷新;放在终态判定之前,
+        // 让收敛为终态的那一拍仍拉到最终 rows。
+        for (const rid of expanded.value) {
+          await fetchRows(rid)
+        }
         if (isTerminalExecutionStatus(d.status)) {
           stopPolling()
         }
@@ -113,9 +173,16 @@ export const useExecutionsStore = defineStore('executions', () => {
     loading,
     lastError,
     pollError,
+    rowsByExecution,
+    expanded,
+    artifactText,
+    artifactError,
     fetchList,
     fetchDetail,
     remove,
+    fetchRows,
+    fetchArtifact,
+    toggleExpanded,
     startPolling,
     stopPolling,
   }

@@ -1,7 +1,7 @@
 <!-- Executions.vue — 单次执行的实时状态页（V3）。
-     可观测面是 Execution 计数器 + 后端 data/runs/<date>.jsonl 调度日志
-     （运维直读文件，不经 API）；V1 的每-run 明细/报告/日志/SSE 已退役。
-     1s 轮询驱动状态刷新。 -->
+     可观测面 = Execution 计数器 + 执行配方 + 行级明细表（展开后随
+     1s 轮询刷新；engine.log / result.json 工件按需加载）。
+     V1 的每-run 报告/SSE 已退役。 -->
 <template>
   <section class="executions" v-if="execStore.detail">
     <!-- Poller gave up (failure budget) while the last detail snapshot
@@ -92,10 +92,86 @@
       </template>
     </dl>
 
-    <p class="observability-hint">
-      每-run 调度明细（请求/响应/耗时）由后端写入
-      <code class="mono">data/runs/&lt;date&gt;.jsonl</code>，可在服务端检索。
-    </p>
+    <h3 class="rows-title">行级明细</h3>
+    <div class="rows-head">
+      <p class="rows-hint">
+        每行 = 数据集 × 行 × 重复（数据驱动场景按数据集展开）；状态随 1s 轮询刷新，引擎日志与步骤明细按需加载。
+      </p>
+      <el-button
+        link
+        type="primary"
+        :data-testid="`exec-row-${execStore.detail.id}`"
+        @click="toggleRows"
+      >{{ isExpanded ? '收起行级表格' : '展开行级表格' }}</el-button>
+    </div>
+    <div v-if="isExpanded" class="rows-panel">
+      <p v-if="rowsLoading" class="rows-empty">行级数据加载中…</p>
+      <p v-else-if="rows.length === 0" class="rows-empty">
+        无行级数据 — 预部署/认证快速失败等未分发行的单不产生行级记录
+      </p>
+      <table v-else class="ex-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>数据集</th>
+            <th>行</th>
+            <th>重复</th>
+            <th>状态</th>
+            <th>耗时</th>
+            <th>case 目录</th>
+            <th>工件</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="row in rows" :key="row.seq">
+            <tr class="ex-table-row">
+              <td class="mono">{{ row.seq }}</td>
+              <td>{{ row.datasetId ?? '—' }}</td>
+              <td class="mono">{{ row.rowIndex }}</td>
+              <td class="mono">{{ row.rep }}</td>
+              <td>
+                <span :class="['row-tag', rowStatusClass(row.status)]">{{ row.status }}</span>
+              </td>
+              <td class="mono">{{ rowDuration(row) }}</td>
+              <td class="mono dim">{{ row.caseDir || '—' }}</td>
+              <td>
+                <span class="row-actions">
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    :disabled="!row.caseDir"
+                    :data-testid="`row-artifact-${row.seq}-engine-log`"
+                    @click="loadArtifact(row, 'engine-log')"
+                  >引擎日志</el-button>
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    :disabled="!row.caseDir"
+                    :data-testid="`row-artifact-${row.seq}-result`"
+                    @click="loadArtifact(row, 'result')"
+                  >步骤明细</el-button>
+                </span>
+              </td>
+            </tr>
+            <tr
+              v-for="a in loadedArtifacts(row)"
+              :key="`${row.seq}-${a.file}-artifact`"
+              class="ex-table-artifact"
+            >
+              <td colspan="8">
+                <div class="artifact-head">
+                  <span>{{ a.file === 'engine-log' ? 'engine.log（引擎日志）' : 'result.json（步骤明细）' }}</span>
+                  <span class="mono dim">{{ row.caseDir }}</span>
+                </div>
+                <pre :class="['artifact-pre', 'mono', { 'artifact-error': a.isError }]">{{ a.content }}</pre>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
   </section>
 
   <section v-else-if="execStore.pollError" class="state error-state">
@@ -122,6 +198,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { executionStatusText, isTerminalExecutionStatus } from '@/utils/executionStatus'
 import { cancelExecution } from '@/api/executions'
+import type { ExecutionRow } from '@/api/executions'
 import { removeExecution } from '@/utils/removeExecution'
 import { showError } from '@/utils/errorFallback'
 import { useExecutionsStore } from '@/stores/executions'
@@ -164,19 +241,27 @@ const stepToLabel = computed(() => {
 })
 
 // V3 dispatcher recipe (config_json) rendered as a definition list —
-// the run-level surface lives in data/runs/*.jsonl, not the API.
+// the run-level surface lives in the 行级明细 table below.
 // 系统键(reconciled/counterDrift)转上方 alert;stepTo 由 pill 表达,
 // 均不进 dl。已知键给中文标签,未知键原样。
+// T3→T13 配方键迁移(spec §6):新键 serviceBindings/injectedAuths
+// 取代 auths/prefix/mergePolicy/injectCredentials/exec_auth_alias;
+// 旧键标签保留 — 历史记录的 config_json 仍含旧键,按键驱动渲染保持可读。
 const RECIPE_LABELS: Record<string, string> = {
   runId: '运行ID',
   scenarioId: '场景',
   dataSetIds: '数据集',
   envId: '环境',
+  // 新配方键(读侧认证列 = injectedAuths,实际注入清单)
+  serviceBindings: '服务绑定',
+  injectedAuths: '注入凭证',
+  // 旧配方键(snake/camel 两种历史拼写都留标签,仅展示用)
   exec_auth_alias: '执行认证',
+  execAuthAlias: '执行认证',
   injectCredentials: '凭证注入',
   nRuns: '每行重复',
   parallel: '并发',
-  prefix: '提单前缀',
+  prefix: '提单号前缀',
   mergePolicy: '认证合并',
 }
 const RECIPE_HIDDEN_KEYS = new Set(['stepTo', 'reconciled', 'counterDrift'])
@@ -191,8 +276,97 @@ const recipeEntries = computed<Array<[string, string, unknown]>>(() => {
 
 function formatRecipeValue(v: unknown): string {
   if (Array.isArray(v)) return v.length ? v.join(', ') : '(空)'
+  // serviceBindings 等对象值:紧凑 JSON 保结构可读,不出现 [object Object]
+  if (v !== null && typeof v === 'object') return JSON.stringify(v)
   if (v === null || v === '') return '—'
   return String(v)
+}
+
+// ── 行级明细(spec §9.1)───────────────────────────────────
+const rows = computed<ExecutionRow[]>(() => execStore.rowsByExecution[executionId.value] ?? [])
+const rowsLoading = computed(() => execStore.rowsByExecution[executionId.value] === undefined)
+const isExpanded = computed(() => execStore.expanded.has(executionId.value))
+
+function toggleRows(): void {
+  if (!execStore.detail) return
+  execStore.toggleExpanded(execStore.detail.id)
+}
+
+const ARTIFACT_FILES = ['engine-log', 'result'] as const
+type ArtifactFile = (typeof ARTIFACT_FILES)[number]
+
+interface RowArtifactView {
+  file: ArtifactFile
+  content: string
+  isError: boolean
+}
+
+function loadArtifact(row: ExecutionRow, file: ArtifactFile): void {
+  void execStore.fetchArtifact(executionId.value, row.caseDir, file)
+}
+
+/** 已拉取工件 → 渲染视图(按需拉取,不轮询)。 */
+function loadedArtifacts(row: ExecutionRow): RowArtifactView[] {
+  const out: RowArtifactView[] = []
+  for (const file of ARTIFACT_FILES) {
+    const key = `${executionId.value}:${row.caseDir}:${file}`
+    const err = execStore.artifactError[key]
+    if (err !== undefined) {
+      out.push({ file, content: err, isError: true })
+      continue
+    }
+    const text = execStore.artifactText[key]
+    if (text !== undefined) {
+      out.push({ file, content: text === '' ? '(空)' : prettyArtifact(file, text), isError: false })
+    }
+  }
+  return out
+}
+
+/** result.json 是 P1 证据字典(launchStatus/status/…),形状不定:
+ *  能 parse 就缩进 pretty-print,不能就原样展示,绝不假设结构。 */
+function prettyArtifact(file: ArtifactFile, text: string): string {
+  if (file !== 'result') return text
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2)
+  } catch {
+    return text
+  }
+}
+
+/** 行耗时 = finishedAt − startedAt;两者齐备才算,否则 '—'
+ *  (历史回放单的 finishedAt 可能近似等于 startedAt,T15 后端修正前
+ *  直显 0,不过度设计)。 */
+function rowDuration(row: ExecutionRow): string {
+  if (!row.startedAt || !row.finishedAt) return '—'
+  const ms = Date.parse(row.finishedAt) - Date.parse(row.startedAt)
+  if (!Number.isFinite(ms) || ms < 0) return '—'
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+}
+
+// 行级状态词汇来自 dispatcher/引擎(queued/dispatched/…
+// /launch_timeout 等),与 Execution 状态集部分重叠:语义对得上的
+// 复用既有配色桶;状态串原样透传(不翻译),表外词汇套中性兜底色。
+const ROW_STATUS_CLASS: Record<string, string> = {
+  queued: 'status-queued',
+  dispatched: 'status-running',
+  passed: 'status-done',
+  failed: 'status-failed',
+  canceled: 'status-canceled',
+  gimbal_rejected: 'status-failed',
+  plate_unavailable: 'status-failed',
+  plate_rejected: 'status-failed',
+  launch_timeout: 'status-failed',
+  launch_error: 'status-failed',
+  dispatcher_error: 'status-failed',
+}
+
+function rowStatusClass(s: string): string {
+  return ROW_STATUS_CLASS[s] ?? 'row-status-other'
+}
+
+function refreshRowsIfExpanded(): void {
+  if (execStore.expanded.has(executionId.value)) void execStore.fetchRows(executionId.value)
 }
 
 // ── lifecycle ─────────────────────────────────────────────
@@ -209,6 +383,7 @@ async function refreshNow() {
     if (st && !isTerminalExecutionStatus(st)) {
       stop = execStore.startPolling(executionId.value)
     }
+    refreshRowsIfExpanded()
   } catch (e) {
     // fetchDetail rethrows; detail stays as-is — surface via pollError.
     const err = e as Error
@@ -254,6 +429,8 @@ onMounted(async () => {
     return
   }
   stop = execStore.startPolling(executionId.value)
+  // 行级表格的展开态跨导航保留(store 持有):回到本页立即补一次 rows。
+  refreshRowsIfExpanded()
 })
 
 onUnmounted(() => {
@@ -342,10 +519,15 @@ onUnmounted(() => {
   color: #991b1b;
 }
 
-.recipe-title {
+.recipe-title,
+.rows-title {
   margin: 0 0 12px;
   color: var(--color-text-primary);
   font-size: 14px;
+}
+
+.rows-title {
+  margin-top: 8px;
 }
 
 .recipe {
@@ -373,9 +555,116 @@ onUnmounted(() => {
   font-family: var(--font-mono);
 }
 
-.observability-hint {
+.dim {
+  color: var(--color-text-tertiary);
+}
+
+/* ── 行级明细(spec §9.1)────────────────────────────── */
+.rows-head {
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.rows-hint {
+  margin: 0;
   color: var(--color-text-tertiary);
   font-size: 12px;
+}
+
+.rows-panel {
+  margin-bottom: 16px;
+}
+
+.rows-empty {
+  margin: 0;
+  padding: 18px;
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  background: #fff;
+  border: 0.5px dashed #e2e8f0;
+  border-radius: 8px;
+}
+
+.ex-table {
+  width: 100%;
+  font-size: 12px;
+  background: #fff;
+  border: 0.5px solid #e2e8f0;
+  border-radius: 8px;
+  border-collapse: collapse;
+}
+
+.ex-table th {
+  padding: 8px 10px;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  text-align: left;
+  background: #f8fafc;
+  border-bottom: 0.5px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.ex-table td {
+  padding: 7px 10px;
+  color: var(--color-text-primary);
+  text-align: left;
+  border-bottom: 0.5px solid #f1f5f9;
+}
+
+.row-tag {
+  display: inline-flex;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* 词汇表外的行状态:中性兜底(状态串原样透传,不翻译) */
+.row-status-other {
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.ex-table-artifact td {
+  padding: 8px 10px 12px;
+  background: #f8fafc;
+}
+
+.artifact-head {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  margin-bottom: 6px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.artifact-pre {
+  max-height: 320px;
+  padding: 10px 12px;
+  margin: 0;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: #fff;
+  border: 0.5px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.artifact-error {
+  color: #991b1b;
 }
 
 .state {

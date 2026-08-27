@@ -12,6 +12,9 @@
  *  5. Cancel button: visible for non-terminal (queued/running) rows,
  *     calls cancelExecution then refreshes; hidden once terminal.
  *  6. started_at / finished_at render in the header.
+ *  7. (T13) 行级明细:展开拉取 rows 渲染行级表格,engine-log 工件
+ *     按需可读;rows 为空(预部署/认证快速失败)显示空态;
+ *     配方标签覆盖新键 serviceBindings/injectedAuths 且保留旧键 prefix。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -20,12 +23,18 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import ElementPlus from 'element-plus'
 import Executions from '@/views/Executions.vue'
 import { useExecutionsStore } from '@/stores/executions'
-import { cancelExecution } from '@/api/executions'
+import { cancelExecution, getExecutionRows, getCaseArtifact } from '@/api/executions'
 import type { Execution } from '@/api/executions'
 
 vi.mock('@/api/executions', async (importOriginal) => {
   const orig = await importOriginal<typeof import('@/api/executions')>()
-  return { ...orig, cancelExecution: vi.fn().mockResolvedValue(undefined) }
+  return {
+    ...orig,
+    cancelExecution: vi.fn().mockResolvedValue(undefined),
+    // T13 行级可观测:rows/artifact 默认空实现,各用例按需 mockResolvedValue。
+    getExecutionRows: vi.fn().mockResolvedValue({ items: [] }),
+    getCaseArtifact: vi.fn().mockResolvedValue(''),
+  }
 })
 
 function makeRouter() {
@@ -57,9 +66,9 @@ const fakeDetail = {
   },
 } satisfies Execution
 
-async function mountPage() {
+async function mountPage(id = 1) {
   const router = makeRouter()
-  router.push('/executions/1')
+  router.push(`/executions/${id}`)
   await router.isReady()
   const wrapper = mount(Executions, {
     global: { plugins: [router, ElementPlus] },
@@ -226,5 +235,85 @@ describe('Executions.vue — P1 detail upgrades', () => {
     expect(labels).toContain('未完成')
     expect(labels).not.toContain('未开始')
     wrapper.unmount()
+  })
+})
+
+describe('Executions.vue — T13 行级明细 + 配方标签迁移', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('行级表格:拉取 rows 并渲染;展开可读 engine-log', async () => {
+    vi.mocked(getExecutionRows).mockResolvedValue({ items: [
+      { seq: 0, datasetId: null, rowIndex: 0, rep: 0, status: 'passed',
+        caseDir: 'case-000-baseline-r0-n0', startedAt: 't1', finishedAt: 't2' },
+      { seq: 1, datasetId: 'ds-1', rowIndex: 0, rep: 0, status: 'failed',
+        caseDir: 'case-001-ds-1-r0-n0', startedAt: 't1', finishedAt: 't3' } ] })
+    vi.mocked(getCaseArtifact).mockResolvedValue('engine says hi')
+
+    const execStore = useExecutionsStore()
+    const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
+    execStore.detail = detail7
+    execStore.fetchDetail = vi.fn().mockResolvedValue(detail7)
+
+    const w = await mountPage(7)
+    await w.find('[data-testid="exec-row-7"]').trigger('click')   // 展开执行 7 的行级表格
+    await flushPromises()
+
+    expect(getExecutionRows).toHaveBeenCalledWith(7)
+    expect(w.findAll('.ex-table-row')).toHaveLength(2)
+    expect(w.text()).toContain('ds-1')
+
+    await w.find('[data-testid="row-artifact-1-engine-log"]').trigger('click')
+    await flushPromises()
+    expect(getCaseArtifact).toHaveBeenCalledWith(7, 'case-001-ds-1-r0-n0', 'engine-log')
+    expect(w.text()).toContain('engine says hi')
+    w.unmount()
+  })
+
+  it('行级数据为空(预部署/认证快速失败)显示空态而非报错', async () => {
+    vi.mocked(getExecutionRows).mockResolvedValue({ items: [] })
+
+    const execStore = useExecutionsStore()
+    const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
+    execStore.detail = detail7
+    execStore.fetchDetail = vi.fn().mockResolvedValue(detail7)
+
+    const w = await mountPage(7)
+    await w.find('[data-testid="exec-row-7"]').trigger('click')
+    await flushPromises()
+
+    expect(w.findAll('.ex-table-row')).toHaveLength(0)
+    expect(w.text()).toContain('无行级数据')
+    w.unmount()
+  })
+
+  it('配方 chips:serviceBindings/injectedAuths 显示新标签,旧键 prefix 仍有人读得懂的标签', async () => {
+    const execStore = useExecutionsStore()
+    // 旧键(prefix)不在 Execution 接口类型里 — 历史记录的 config_json 仍含
+    // 这些键,读侧按键驱动渲染,测试用窄转换构造。
+    const detail = {
+      ...fakeDetail,
+      id: 8,
+      config: {
+        runId: 'run-8',
+        scenarioId: 'sc_demo',
+        envId: 'env_dev',
+        serviceBindings: { 'fin-service': { authAlias: 'qa1' } },
+        injectedAuths: ['qa1'],
+        prefix: 'T-1',
+      },
+    } as unknown as Execution
+    execStore.detail = detail
+    execStore.fetchDetail = vi.fn().mockResolvedValue(detail)
+
+    const w = await mountPage(8)
+    const dtTexts = w.findAll('.recipe dt').map((d) => d.text())
+    expect(dtTexts).toContain('服务绑定')        // 新键标签
+    expect(dtTexts).toContain('注入凭证')        // 新键标签(injectedAuths)
+    expect(dtTexts).toContain('提单号前缀')      // 旧键标签保留(历史记录可读)
+    expect(w.text()).not.toContain('[object Object]')  // 对象值序列化可读
+    w.unmount()
   })
 })
