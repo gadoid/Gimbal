@@ -294,7 +294,7 @@ function strategyNote(t: Record<string, unknown>): string {
 function goScenario(step = 4) {
   router.push(composerUrl(scenarioId, step))
 }
-/** 运行统一走编排器的 RunDialog(数据集选择/次数/并发/凭证合并策略) */
+/** 运行统一走编排器的 RunDialog(数据集/次数并发/用户与服务绑定) */
 function goRun() {
   router.push(composerUrl(scenarioId))
 }

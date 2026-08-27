@@ -113,6 +113,36 @@ export const useExecutionsStore = defineStore('executions', () => {
     await api.remove(id)
     list.value = list.value.filter((e) => e.id !== id)
     if (detail.value?.id === id) detail.value = null
+    // T13-Q1:行级/工件缓存一并出清 — 该 id 的 rows、展开态与工件文本
+    // 都指向已删执行;expanded 残留还会让 tick 继续拉一个 404。
+    const nextExpanded = new Set(expanded.value)
+    nextExpanded.delete(id)
+    expanded.value = nextExpanded
+    const nextRows = { ...rowsByExecution.value }
+    delete nextRows[id]
+    rowsByExecution.value = nextRows
+    const keepOthers = (o: Record<string, string>): Record<string, string> =>
+      Object.fromEntries(
+        Object.entries(o).filter(([k]) => !k.startsWith(`${id}:`)),
+      )
+    artifactText.value = keepOthers(artifactText.value)
+    artifactError.value = keepOthers(artifactError.value)
+  }
+
+  /**
+   * T13-Q2:tick 是否跳过 rid 的 rows 拉取 = 「已知终态 && 已有 rows 缓存」。
+   * 终态是吸收态,list/detail 旧快照里的终态永远可信;状态未知(不在
+   * list、也不是本拍轮询对象)不跳过 — 宁可多拉一拍,不冒陈旧行级状态。
+   * ``prevDetail`` 是上一拍的 detail 快照:本拍 FIRST 观察到终态的那一拍
+   * 仍要先拉到最终 rows(T13 不变量,见 tick 内顺序),跳过只发生在
+   * 后续拍。
+   */
+  function shouldSkipRowFetch(rid: number, prevDetail: Execution | null): boolean {
+    if (rowsByExecution.value[rid] === undefined) return false
+    const status = prevDetail?.id === rid
+      ? prevDetail.status
+      : list.value.find((e) => e.id === rid)?.status
+    return status !== undefined && isTerminalExecutionStatus(status)
   }
 
   /**
@@ -130,12 +160,16 @@ export const useExecutionsStore = defineStore('executions', () => {
     const MAX_CONSECUTIVE_FAILURES = 10
     const tick = async () => {
       try {
+        // 上一拍的 detail 快照:跳过判定用它(见 shouldSkipRowFetch)。
+        const prevDetail = detail.value
         const d = await api.get(id)
         consecutiveFailures = 0
         detail.value = d
         // 行级表格只对已展开的执行随 tick 刷新;放在终态判定之前,
-        // 让收敛为终态的那一拍仍拉到最终 rows。
+        // 让收敛为终态的那一拍仍拉到最终 rows。T13-Q2:已知终态且已有
+        // rows 缓存的执行(终态行级数据不再变化)不再逐秒重拉。
         for (const rid of expanded.value) {
+          if (shouldSkipRowFetch(rid, prevDetail)) continue
           await fetchRows(rid)
         }
         if (isTerminalExecutionStatus(d.status)) {

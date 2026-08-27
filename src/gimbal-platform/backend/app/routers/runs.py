@@ -6,7 +6,9 @@ fan-out: compose → Plate /convert → case 落盘 → ``gimbal run launch``
 子进程执行).
 
 The former Case layer was dissolved — the run recipe (env / dataSetIds /
-auths / …) lives entirely in ``RunRequest``.
+serviceBindings / stepTo / nRuns / parallel) lives entirely in
+``RunRequest``; the dispatcher materializes it into ``config_json``
+(injectedAuths = 模板扫描 ∪ serviceBindings 绑定).
 
 Error mapping (per the agreed run-failure semantics):
 * scenario / env / data_set missing → 404

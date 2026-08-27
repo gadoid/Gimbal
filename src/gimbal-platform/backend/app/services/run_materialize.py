@@ -65,7 +65,7 @@ def _apply_services(cfg: dict, *, steps: list, env_base_url: str,
 
 def _apply_users(cfg: dict, resolved_auths: list, *, built_in_users: dict) -> None:
     if not resolved_auths:
-        return                       # 无 auths:users 原样(同现 _inject_exec_users)
+        return                       # 无 auths:users 原样(V1 语义:清单空 = 不注入)
     users: dict[str, Any] = {**built_in_users, **cfg["users"]}
     for r in resolved_auths:
         users[r.alias] = {

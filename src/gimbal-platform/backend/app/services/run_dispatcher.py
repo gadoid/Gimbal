@@ -5,7 +5,7 @@ Per-row fan-out of a Scenario's selected DataSets:
 1. :func:`_compose_scenario` — 场景 definition + 一行数据集 → 数据驱动的
    gimbal scenario dict(行键注入 ``config.vars``,按基线类型还原)。
 2. Plate ``/convert`` — 校验 + 剥平台视图字段(orchestration 绝不外发)。
-3. 执行认证/前缀注入 convert 产物(明文不流经 plate)— Task 3 起由
+3. 执行凭证注入 convert 产物(明文不流经 plate)— Task 3 起由
    ``materialize_run_copy`` 纯函数接管(services/users 物化,注入清单 =
    模板扫描 ∪ serviceBindings 绑定)。
 4. 落盘 case 文件(``DATA_DIR/runs/cases/<runId>/``)。
@@ -17,8 +17,8 @@ Mirrors the in-flight task pattern in ``app/routers/executions.py``
 helper) so the app lifespan can shut down cleanly.
 
 The former Case layer was dissolved — ``RunRequest`` IS the recipe
-(env / dataSetIds / auths / …, pure values) applied directly to
-the scenario by :func:`_compose_scenario` (the 配置器/transformer).
+(env / dataSetIds / serviceBindings / …, pure values) applied directly
+to the scenario by :func:`_compose_scenario` (the 配置器/transformer).
 
 Returns ``RunResponse(runId)`` to the caller immediately, and the
 ``Execution`` row (re-used from Spec-2) holds the aggregate counters
@@ -517,7 +517,7 @@ async def _fanout(
     M1(V1 executor 移植):``n_runs`` 每行重复次数、``parallel`` 并发度
     (asyncio.Semaphore);``service_bindings`` 逐绑定传给
     ``materialize_run_copy`` 物化 run 副本(users 合并固定 merge 语义;
-    prefix/merge_policy 已随 RunRequest 收敛退役,spec §6)。
+    prefix/merge 策略等旧字段已随 RunRequest 收敛退役,spec §6)。
 
     V3.2:执行调用从 gimbal HTTP POST /run 改为落盘 case 文件后
     ``gimbal run launch <case>`` 子进程(设计:2026-08-24 spec)。
@@ -750,16 +750,21 @@ async def _fanout(
             if "runResult" in log_line:
                 _write_result_evidence(case_dir, result, log_line["status"])
 
+            # T7-Q1:final 行 ts 刷新为完成时刻 — log_line 的 ts 构造于
+            # 派发时刻,沿用会让 JSONL 回放的 finishedAt == startedAt
+            # (行时长恒为 0)。同一时刻写 registry,两读路口径一致。
+            finished_ts = _utcnow().isoformat() + "Z"
+            log_line["ts"] = finished_ts
+
             # Append the final log line for this row (covers all
             # success / failure branches — previously the rejected
             # branches ``continue``'d before this and lost the line).
             await _append_log(log_path, log_line)
 
-            # 行终态落 registry(spec §9.1):真实完成时刻 + case stem
-            # (供工件端点;JSONL 写侧不改 final 行 ts,回放的
-            # finishedAt 近似为派发时刻 — 已知回放精度损失)。
+            # 行终态落 registry(spec §9.1):完成时刻 + case stem(供
+            # 工件端点;ts 与 JSONL final 行同一时刻)。
             state.status = log_line["status"]
-            state.finished_at = _utcnow().isoformat() + "Z"
+            state.finished_at = finished_ts
             state.case_dir = case_dir.name
 
             # Atomic per-row counter bump.  Deltas (not absolute

@@ -251,9 +251,9 @@ class RunRequest(BaseModel):
     data_set_ids: list[str] = Field(alias="dataSetIds", default_factory=list)
     # service → {authAlias?, url?} 绑定(spec §3.1/§5):注入清单 =
     # 模板扫描(steps 里的 ${auth.*} 引用)∪ 绑定 authAlias;绑定 url
-    # 物化进 services(显式绑定最优先)。旧 auths/inject_credentials/
-    # prefix/merge_policy 四字段已退役(spec §6)— 旧客户端多发的键
-    # 被 pydantic 静默忽略,仅失效、不 422。
+    # 物化进 services(显式绑定最优先)。旧凭证策略四字段(auths /
+    # inject_credentials / prefix / merge 策略)已退役(spec §6)—
+    # 旧客户端多发的键被 pydantic 静默忽略,仅失效、不 422。
     service_bindings: dict[str, ServiceBinding] = Field(
         default_factory=dict, alias="serviceBindings"
     )

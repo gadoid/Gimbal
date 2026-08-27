@@ -335,8 +335,8 @@ function prettyArtifact(file: ArtifactFile, text: string): string {
 }
 
 /** 行耗时 = finishedAt − startedAt;两者齐备才算,否则 '—'
- *  (历史回放单的 finishedAt 可能近似等于 startedAt,T15 后端修正前
- *  直显 0,不过度设计)。 */
+ *  (T15 起 final 行 ts = 完成时刻,新单回放时长真实;修正前的存量
+ *  调度日志行 finishedAt ≈ startedAt,直显 0ms,不过度设计)。 */
 function rowDuration(row: ExecutionRow): string {
   if (!row.startedAt || !row.finishedAt) return '—'
   const ms = Date.parse(row.finishedAt) - Date.parse(row.startedAt)
