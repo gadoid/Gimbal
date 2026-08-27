@@ -12,7 +12,7 @@ import pytest
 from httpx import AsyncClient
 
 from .helpers import register_and_login as _register_and_login
-from .helpers import make_draft as _draft, test_env
+from .helpers import make_draft as _draft
 from .test_scenario_composer_plate_integration import (
     PlateMock,
     plate_mock,  # noqa: F401  pytest fixture re-export
@@ -195,7 +195,6 @@ async def test_run_step_to_out_of_range_409(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": test_env(),
             "stepTo": 5,
         },
     )
@@ -234,7 +233,6 @@ async def test_run_step_to_passes_halt_at(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": test_env(),
             "stepTo": 1,
         },
     )

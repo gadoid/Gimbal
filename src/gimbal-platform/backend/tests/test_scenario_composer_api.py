@@ -16,7 +16,7 @@ from httpx import AsyncClient
 
 
 # ── helpers ────────────────────────────────────────────────────────
-from .helpers import make_draft, register_and_login as _register_and_login, test_env
+from .helpers import make_draft, register_and_login as _register_and_login
 
 
 def _make_draft(scenario_id: str = "sc-test", **meta_over) -> dict:
@@ -30,18 +30,6 @@ def _make_draft(scenario_id: str = "sc-test", **meta_over) -> dict:
     }
     defaults.update(meta_over)
     return make_draft(scenario_id, **defaults)
-
-
-# ── envs ───────────────────────────────────────────────────────────
-async def test_list_envs(client: AsyncClient) -> None:
-    headers = await _register_and_login(client)
-    r = await client.get("/api/envs", headers=headers)
-    assert r.status_code == 200
-    envs = r.json()
-    assert isinstance(envs, list)
-    # Bundled defaults ship at least dev-local + test-env-A + test-env-B.
-    env_ids = {e["envId"] for e in envs}
-    assert {"dev-local", "test-env-A", "test-env-B"} <= env_ids
 
 
 # ── scenarios CRUD ────────────────────────────────────────────────
@@ -343,27 +331,10 @@ async def test_run_dispatch_scenario_not_found_404(client: AsyncClient) -> None:
         json={
             "scenarioId": "sc-nope",
             "dataSetIds": ["ds-001"],
-            "env": test_env(),
         },
     )
     assert r.status_code == 404
     assert r.json()["detail"]["code"] == "scenario_not_found"
-
-
-async def test_run_dispatch_env_not_found_404(client: AsyncClient) -> None:
-    headers = await _register_and_login(client)
-    await client.post("/api/scenarios", headers=headers, json=_make_draft())
-    r = await client.post(
-        "/api/runs",
-        headers=headers,
-        json={
-            "scenarioId": "sc-test",
-            "dataSetIds": ["ds-001"],
-            "env": {"envId": "nope", "name": "nope", "baseUrl": "http://x"},
-        },
-    )
-    assert r.status_code == 404
-    assert r.json()["detail"]["code"] == "env_not_found"
 
 
 # ── access control on POST /runs + data-set reads ─────────────────
@@ -380,7 +351,6 @@ async def test_member_cannot_run_another_users_scenario(client: AsyncClient) -> 
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": test_env(),
         },
     )
     assert r.status_code == 403

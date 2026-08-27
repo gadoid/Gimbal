@@ -22,7 +22,6 @@ from .routers import (
     constants,
     data_sets,
     endpoint_catalog,
-    envs,
     executions,
     generator_catalog,
     runs,
@@ -113,7 +112,6 @@ def create_app() -> FastAPI:
     app.include_router(users.router, prefix="/api")
     # New V3 composer routers (registered in order so static suffixes
     # precede ``/{id}`` catch-alls).
-    app.include_router(envs.router, prefix="/api")
     app.include_router(runs.router, prefix="/api")
     app.include_router(data_sets.router, prefix="/api")
     # Dataset-create lives on a scenario-nested path but in the

@@ -8,7 +8,7 @@ from __future__ import annotations
 from .helpers import make_draft as _draft
 from .test_scenario_visibility_and_copy import _member
 
-SCHEMES = [{"name": "冒烟-qa1", "envId": "test-env-A", "dataSetIds": [],
+SCHEMES = [{"name": "冒烟-qa1", "dataSetIds": [],
             "serviceBindings": {"fin-service": {"authAlias": "qa1"}},
             "plugins": None, "logSub": None}]
 
@@ -26,9 +26,9 @@ async def test_put_and_get_roundtrip(client):
                             headers=bob, json={"schemes": SCHEMES})
     assert resp.status_code == 200, resp.text
     assert [s["name"] for s in resp.json()] == ["冒烟-qa1"]
-    # 保存后 GET 场景:orchestration.runSchemes 可见
+    # 保存后 GET 场景:orchestration.runSchemes 可见(serviceBindings 键随存随读)
     got = (await client.get(f"/api/scenarios/{sid}", headers=bob)).json()
-    assert got["orchestration"]["runSchemes"][0]["envId"] == "test-env-A"
+    assert "serviceBindings" in got["orchestration"]["runSchemes"][0]
 
 
 async def test_duplicate_name_409(client):
@@ -57,16 +57,29 @@ async def test_composer_save_never_overwrites_schemes(client):
 
 
 async def test_invalid_refs_accepted_warn_level(client):
-    """envId/datasetId/authAlias 失效 → 接受不拒(降级预填由前端标红)。"""
+    """datasetId/authAlias 失效 → 接受不拒(降级预填由前端标红)。"""
     bob = await _member(client, "bob")
     sid = await _saved_scenario(client, bob)
     resp = await client.put(f"/api/scenarios/{sid}/run-schemes", headers=bob,
                             json={"schemes": [{
-                                "name": "ghost", "envId": "env-gone",
+                                "name": "ghost",
                                 "dataSetIds": ["ds-gone"],
                                 "serviceBindings": {"fin-service": {"authAlias": "ghost-alias"}},
                             }]})
     assert resp.status_code == 200
+
+
+async def test_legacy_envid_schemes_silently_dropped(client):
+    """D2:旧存量方案含 envId → pydantic 忽略,存下的方案无该键。"""
+    bob = await _member(client, "bob")
+    sid = await _saved_scenario(client, bob)
+    resp = await client.put(f"/api/scenarios/{sid}/run-schemes", headers=bob,
+                            json={"schemes": [{
+                                "name": "legacy", "envId": "dev-local",
+                                "dataSetIds": [], "serviceBindings": {},
+                            }]})
+    assert resp.status_code == 200
+    assert "envId" not in resp.json()[0]
 
 
 async def test_owner_enforced(client):

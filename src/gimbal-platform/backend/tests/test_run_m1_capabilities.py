@@ -1,9 +1,9 @@
 """M1 执行能力补齐测试(V1 executor 语义移植):
 
 * nRuns/parallel fan-out —— total = Σrows × nRuns,launch 调用次数一致
-* services 物化 —— env.baseUrl 补未映射服务缺口(authored 不覆盖)
 * serviceBindings 绑定注入 —— authAlias 注入 users(固定 merge 语义,
-  场景内置 users 保留);prefix/mergePolicy 已随 RunRequest 收敛退役
+  场景内置 users 保留);prefix/mergePolicy 已随 RunRequest 收敛退役;
+  env.baseUrl 补缺层已随执行环境退役(D2)
 
 V3.2:执行 mock 从 gimbal HTTP /run 改为 ``gimbal_launcher.launch`` —
 capture 读落盘的 case.json(引擎子进程的真实输入)。
@@ -21,7 +21,6 @@ from .helpers import (
     launch_ok as _ok,
     make_draft as _draft,
     register_and_login as _register_and_login,
-    test_env,
     wait_until as _wait,
 )
 from .test_scenario_composer_plate_integration import (
@@ -35,7 +34,6 @@ def _run_payload(**extra: object) -> dict:
     payload = {
         "scenarioId": "sc-test",
         "dataSetIds": ["ds-001"],
-        "env": test_env(),
     }
     payload.update(extra)
     return payload
@@ -149,55 +147,6 @@ async def test_parallel_limits_concurrency(
     await _wait(lambda: done >= 8)
     assert done == 8
     assert max_in_flight <= 2
-
-
-# ── services 物化(env.baseUrl → 未映射服务名)────────────────────
-async def test_env_base_url_materializes_unmapped_services(
-    client: AsyncClient,
-    plate_mock: PlateMock,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """步骤引用 config.services 未映射的服务名 → case.json 注入选定
-    环境 baseUrl;authored 映射不覆盖(环境只补缺口)。"""
-    bob = await _member(client, "bob")
-    draft = _draft(
-        steps=[
-            {"api": {"service": "audit"}},
-            {"api": {"service": "order_fee"}},
-        ],
-        vars_map={"qty": 1},
-    )
-    draft["definition"]["config"]["services"] = {"mock": "http://self"}
-    await client.post("/api/scenarios", headers=bob, json=draft)
-    await _seed_ds(client, bob)
-
-    payloads: list[dict] = []
-    _patch_launch_capture(monkeypatch, payloads)
-
-    async def _fake_convert(scenario):
-        return {"consumer": "platform", "converted": dict(scenario)}
-
-    from app.services import plate_client as pc
-    monkeypatch.setattr(pc, "convert", _fake_convert)
-
-    r = await client.post(
-        "/api/runs",
-        headers=bob,
-        # P5 服务端权威:baseUrl 一律取 env_store 记录(dev-local 的
-        # 真值是 http://127.0.0.1:8000);请求体值与记录不一致时
-        # services 物化也只认服务端记录(见 test_run_env_authority)。
-        json=_run_payload(env={
-            "envId": "dev-local", "name": "dev-local",
-            "baseUrl": "http://127.0.0.1:8000",
-        }),
-    )
-    assert r.status_code == 201, r.text
-
-    await _wait(lambda: len(payloads) >= 1)
-    services = (payloads[0].get("config") or {}).get("services") or {}
-    assert services["audit"] == "http://127.0.0.1:8000"      # 补缺口
-    assert services["order_fee"] == "http://127.0.0.1:8000"
-    assert services["mock"] == "http://self"                 # authored 不覆盖
 
 
 # ── serviceBindings 绑定注入 ─────────────────────────────────────

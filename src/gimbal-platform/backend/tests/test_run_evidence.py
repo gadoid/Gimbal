@@ -1,7 +1,7 @@
 """P1 证据落盘:每个 case 目录写 result.json(details/兜底 stdout)。"""
 import json
 
-from tests.helpers import make_draft, register_and_login, test_env, wait_until
+from tests.helpers import make_draft, register_and_login, wait_until
 
 
 async def test_row_writes_result_json_with_details(client, monkeypatch):
@@ -27,7 +27,7 @@ async def test_row_writes_result_json_with_details(client, monkeypatch):
     monkeypatch.setattr(gl, "launch", _launch)
 
     r = await client.post("/api/runs", headers=headers, json={
-        "scenarioId": "sc-evidence", "dataSetIds": [], "env": test_env(),
+        "scenarioId": "sc-evidence", "dataSetIds": [],
     })
     assert r.status_code == 201, r.text
     run_id = r.json()["runId"]
@@ -69,7 +69,7 @@ async def test_row_writes_result_json_stdout_fallback(client, monkeypatch):
     monkeypatch.setattr(gl, "launch", _launch)
 
     r = await client.post("/api/runs", headers=headers, json={
-        "scenarioId": "sc-evidence2", "dataSetIds": [], "env": test_env(),
+        "scenarioId": "sc-evidence2", "dataSetIds": [],
     })
     assert r.status_code == 201, r.text
     run_id = r.json()["runId"]

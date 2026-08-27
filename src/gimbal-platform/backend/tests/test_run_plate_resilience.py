@@ -2,7 +2,7 @@
 import asyncio
 import json
 
-from tests.helpers import make_draft, register_and_login, test_env
+from tests.helpers import make_draft, register_and_login
 
 
 # ─── 测试基座(同 test_run_cancel / test_run_log_integrity)──
@@ -56,7 +56,7 @@ async def _run_with_convert(client, monkeypatch, convert, *, body_over=None):
                       json=make_draft("sc-plate", vars_map={"customer_id": "1"}))
     monkeypatch.setattr(gl, "launch", _fake_launch)
     monkeypatch.setattr(pc, "convert", convert)
-    body = {"scenarioId": "sc-plate", "dataSetIds": [], "env": test_env()}
+    body = {"scenarioId": "sc-plate", "dataSetIds": []}
     body.update(body_over or {})
     r = await client.post("/api/runs", headers=headers, json=body)
     assert r.status_code == 201, r.text
@@ -156,7 +156,7 @@ async def test_breaker_opens_after_consecutive_unavailable(
     monkeypatch.setattr(pc, "convert", down_convert)
 
     r = await client.post("/api/runs", headers=headers, json={
-        "scenarioId": "sc-plate", "dataSetIds": [ds_id], "env": test_env(),
+        "scenarioId": "sc-plate", "dataSetIds": [ds_id],
         "parallel": 1,
     })
     assert r.status_code == 201, r.text

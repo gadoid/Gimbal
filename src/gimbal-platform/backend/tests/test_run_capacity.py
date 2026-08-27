@@ -1,7 +1,7 @@
 """P7:总量上限拒单 + launch 全局并发闸。"""
 import asyncio
 
-from tests.helpers import make_draft, register_and_login, test_env
+from tests.helpers import make_draft, register_and_login
 
 
 # ─── 测试基座(同 test_run_cancel:轮询终态 + mock convert)──
@@ -46,7 +46,7 @@ async def test_dispatch_rejects_over_cap(client, monkeypatch):
     ds_id = r.json()["datasetId"]
 
     r = await client.post("/api/runs", headers=headers, json={
-        "scenarioId": "sc-cap", "dataSetIds": [ds_id], "env": test_env(),
+        "scenarioId": "sc-cap", "dataSetIds": [ds_id],
         "nRuns": 2,                      # 2 行 × 2 次 = 4 > 3
     })
     assert r.status_code == 409, r.text
@@ -80,7 +80,7 @@ async def test_global_launch_semaphore_caps_concurrency(client, monkeypatch):
     eids = []
     for _ in range(2):                   # 两个 execution,各 1 行 × nRuns=4
         r = await client.post("/api/runs", headers=headers, json={
-            "scenarioId": "sc-sem", "dataSetIds": [], "env": test_env(),
+            "scenarioId": "sc-sem", "dataSetIds": [],
             "nRuns": 4, "parallel": 4,
         })
         assert r.status_code == 201, r.text

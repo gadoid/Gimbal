@@ -144,7 +144,7 @@ async def test_dispatch_rejects_when_shutting_down(client, monkeypatch):
     from app.core import db as db_module
     from app.models.execution import Execution
     from app.services import run_dispatcher
-    from tests.helpers import make_draft, register_and_login, test_env
+    from tests.helpers import make_draft, register_and_login
 
     headers = await register_and_login(client)
     await client.post("/api/scenarios", headers=headers,
@@ -153,7 +153,7 @@ async def test_dispatch_rejects_when_shutting_down(client, monkeypatch):
     run_dispatcher._shutting_down = True
     try:
         r = await client.post("/api/runs", headers=headers, json={
-            "scenarioId": "sc-shutdown", "dataSetIds": [], "env": test_env(),
+            "scenarioId": "sc-shutdown", "dataSetIds": [],
         })
         assert r.status_code == 409, r.text
         assert r.json()["detail"]["code"] == "shutting_down"

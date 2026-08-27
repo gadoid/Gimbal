@@ -45,9 +45,9 @@ class Execution(Base):
     passed: Mapped[int] = mapped_column(Integer, default=0)
     failed: Mapped[int] = mapped_column(Integer, default=0)
     config_json: Mapped[dict] = mapped_column(JSON, default=dict)
-    # V3 dispatcher recipe: {runId, scenarioId, dataSetIds, envId,
+    # V3 dispatcher recipe: {runId, scenarioId, dataSetIds,
     # injectedAuths, serviceBindings, stepTo, nRuns, parallel}
-    # (T3 起旧配方键已退役;存量历史行仍含旧键,读侧按键驱动渲染)
+    # (D2 起执行环境键已退役;存量历史行仍含旧键,读侧按键驱动渲染)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

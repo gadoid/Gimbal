@@ -17,7 +17,7 @@ Mirrors the in-flight task pattern in ``app/routers/executions.py``
 helper) so the app lifespan can shut down cleanly.
 
 The former Case layer was dissolved — ``RunRequest`` IS the recipe
-(env / dataSetIds / serviceBindings / …, pure values) applied directly
+(dataSetIds / serviceBindings / …, pure values) applied directly
 to the scenario by :func:`_compose_scenario` (the 配置器/transformer).
 
 Returns ``RunResponse(runId)`` to the caller immediately, and the
@@ -58,7 +58,7 @@ from ..models.auth_session import AuthSession as DBAuthSession
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import RunRequest, RunResponse, ServiceBinding
-from . import env_store, gimbal_launcher, plate_client
+from . import gimbal_launcher, plate_client
 from .auth_ref_scan import scan_auth_aliases
 from .run_materialize import materialize_run_copy
 
@@ -363,24 +363,9 @@ async def dispatch_run(
     if scen is None:
         raise NotFound("scenario_not_found", f"scenario not found: {req.scenario_id}")
 
-    # 2. Validate env + datasets.  list_envs() is sync (cached) — safe to
-    # call inline here because it returns from an lru_cache on the
-    # happy path; the first call does a one-shot YAML parse.
-    server_env = next(
-        (e for e in env_store.list_envs() if e.env_id == req.env.env_id), None
-    )
-    if server_env is None:
-        raise NotFound("env_not_found", f"env not found: {req.env.env_id}")
-    # P5 服务端权威:name/baseUrl 一律取 env_store 记录;请求体携带的
-    # 值不一致时告警(此前客户端可传 envId=dev + baseUrl=任意内网地址,
-    # env 治理形同虚设)。
-    if (req.env.name, req.env.base_url) != (server_env.name, server_env.base_url):
-        logger.warning(
-            "run_dispatcher: env mismatch for {} — client ({}, {}), "
-            "server ({}, {}); using server record",
-            req.env.env_id, req.env.name, req.env.base_url,
-            server_env.name, server_env.base_url,
-        )
+    # 2. Validate datasets.
+    # (旧 env 校验块已随 D2 执行环境退役 — 旧客户端多发的 env 键由
+    # pydantic extra=ignore 静默忽略。)
 
     # step_to 校验(同 V1 executions:与场景 steps 数比对,越界 409)
     steps = steps_from_payload(scen.payload)
@@ -441,7 +426,8 @@ async def dispatch_run(
             "runId": run_id,
             "scenarioId": scen.scenario_id,
             "dataSetIds": req.data_set_ids,
-            "envId": req.env.env_id,
+            # 执行环境键已随 D2 退役(不再写入);历史行旧键由前端
+            # RECIPE_LABELS 标签保留可读。
             # 实际注入清单(扫描 ∪ 绑定)— 读侧据此展示认证列。缺 alias
             # 只告警继续(清单如实记录原始请求,与"解不到≠没要求"对齐)。
             "injectedAuths": auth_aliases,
@@ -465,7 +451,6 @@ async def dispatch_run(
                 run_id=run_id,
                 scenario_payload=dict(scen.payload or {}),
                 datasets=fanout_datasets,
-                env=server_env.model_dump(by_alias=True, mode="json"),
                 owner_id=user_id,
                 auth_aliases=auth_aliases,
                 halt_at=req.step_to,
@@ -501,7 +486,6 @@ async def _fanout(
     run_id: str,
     scenario_payload: dict,
     datasets: list[dict],
-    env: dict,
     owner_id: int,
     auth_aliases: list[str],
     halt_at: int | None = None,
@@ -630,7 +614,6 @@ async def _fanout(
                 "datasetId": ds["datasetId"],
                 "rowIndex": row_idx,
                 "rep": rep,
-                "env": env,
                 "status": "dispatched",
                 "casePath": str((case_dir / "case.json")),
                 "reportDir": str((case_dir / "reports")),
@@ -668,10 +651,10 @@ async def _fanout(
                     converted = convert_data.get("converted") or {}
                     # 物化 run 副本(纯函数,深拷贝 — 绝不原地改 converted):
                     # users 合并(内置基座 + 注入覆盖,固定 merge 语义)与
-                    # services 物化(绑定 url > authored > env.baseUrl 补缺)。
+                    # services 物化(绑定 url > authored;env.baseUrl 补缺层
+                    # 已随 D2 执行环境退役)。
                     composed_exec = materialize_run_copy(
                         converted,
-                        env_base_url=(env.get("baseUrl") or ""),
                         service_bindings={
                             k: b.model_dump(by_alias=True)
                             for k, b in service_bindings.items()

@@ -65,11 +65,6 @@ def make_draft(
     }
 
 
-def test_env() -> dict:
-    """The bundled ``test-env-A`` env dict (fresh copy per call)."""
-    return {"envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://x"}
-
-
 def launch_ok() -> "Any":
     """A passing ``gimbal run launch`` result (per-row counters all green)."""
     from app.services.gimbal_launcher import LaunchResult

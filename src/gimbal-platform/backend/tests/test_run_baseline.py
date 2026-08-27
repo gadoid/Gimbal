@@ -15,7 +15,6 @@ from tests.helpers import (
     launch_ok as _ok,
     make_draft,
     register_and_login,
-    test_env,
     wait_until,
 )
 
@@ -54,7 +53,7 @@ async def test_baseline_run_without_datasets(
     monkeypatch.setattr(pc, "convert", _fake_convert)
 
     r = await client.post("/api/runs", headers=headers, json={
-        "scenarioId": "sc-base", "dataSetIds": [], "env": test_env(),
+        "scenarioId": "sc-base", "dataSetIds": [],
     })
     assert r.status_code == 201, r.text
 
@@ -130,7 +129,6 @@ async def test_selected_dataset_with_zero_rows_runs_baseline_once(
 
     r = await client.post("/api/runs", headers=headers, json={
         "scenarioId": "sc-empty-ds", "dataSetIds": [dataset_id],
-        "env": test_env(),
     })
     assert r.status_code == 201, r.text
 
@@ -199,7 +197,6 @@ async def test_dataset_row_string_values_coerced_to_baseline_types(
 
     r = await client.post("/api/runs", headers=headers, json={
         "scenarioId": "sc-coerce", "dataSetIds": [dataset_id],
-        "env": test_env(),
     })
     assert r.status_code == 201, r.text
 
@@ -243,7 +240,7 @@ async def test_run_fills_plate_required_meta_defaults(
     monkeypatch.setattr(pc, "convert", _record_convert)
 
     r = await client.post("/api/runs", headers=headers, json={
-        "scenarioId": "sc-meta-def", "dataSetIds": [], "env": test_env(),
+        "scenarioId": "sc-meta-def", "dataSetIds": [],
     })
     assert r.status_code == 201, r.text
 
@@ -254,3 +251,35 @@ async def test_run_fills_plate_required_meta_defaults(
     assert sent[0]["kind"] == "scenario"
     # 已有值不被覆盖(setdefault 语义)
     assert meta["scenarioId"] == "sc-meta-def"
+
+
+async def test_stale_env_key_silently_ignored(client, monkeypatch):
+    """D2:RunRequest 删 env 后,旧客户端仍发 env 键 → 静默忽略不 422,
+    config_json 不再留痕 envId。"""
+    from app.services import gimbal_launcher as gl, plate_client as pc, run_dispatcher
+
+    async def _fake_launch(case_path, *, step_to=None, report_dir=None,
+                           cwd=None, timeout=None, engine_log_path=None):
+        return _ok()
+
+    async def _fake_convert(scenario):
+        return {"consumer": "platform", "converted": dict(scenario)}
+
+    headers = await register_and_login(client)
+    await client.post(
+        "/api/scenarios", headers=headers, json=make_draft("sc-stale-env")
+    )
+    monkeypatch.setattr(gl, "launch", _fake_launch)
+    monkeypatch.setattr(pc, "convert", _fake_convert)
+    r = await client.post("/api/runs", headers=headers, json={
+        "scenarioId": "sc-stale-env", "dataSetIds": [],
+        "env": {"envId": "dev-local", "name": "dev-local", "baseUrl": "http://x"},
+    })
+    assert r.status_code == 201, r.text
+    run_id = r.json()["runId"]
+    await wait_until(
+        lambda: list(run_dispatcher._run_dir(run_id).rglob("case.json"))
+    )
+    # config_json 不再留痕 envId
+    exec_row = (await client.get("/api/executions", headers=headers)).json()
+    assert all("envId" not in (e.get("config") or {}) for e in exec_row.get("items", []))

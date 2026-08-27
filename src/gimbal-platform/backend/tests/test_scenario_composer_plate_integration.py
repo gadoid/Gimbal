@@ -27,7 +27,6 @@ from httpx import AsyncClient
 # ── shared fixture: register + login + seed scenario/case/ds ───────
 from .helpers import make_draft as _draft
 from .helpers import register_and_login as _register_and_login
-from .helpers import test_env
 
 
 # ── Plate mock helpers ─────────────────────────────────────────────
@@ -252,11 +251,6 @@ async def test_run_dispatch_calls_convert_per_row(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": {
-                "envId": "test-env-A",
-                "name": "test-env-A",
-                "baseUrl": "http://x",
-            },
         },
     )
     assert r.status_code == 201
@@ -306,7 +300,6 @@ async def test_run_dispatch_preserves_row_value_types(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": test_env(),
         },
     )
     assert r.status_code == 201
@@ -370,7 +363,6 @@ async def test_run_chain_convert_then_gimbal_execute(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": test_env(),
         },
     )
     assert r.status_code == 201
@@ -413,7 +405,6 @@ async def test_run_chain_gimbal_failure_counts_row_failed(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": test_env(),
         },
     )
     assert r.status_code == 201
@@ -466,7 +457,6 @@ async def test_run_partial_failure_marks_execution_failed(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": test_env(),
         },
     )
     assert r.status_code == 201
@@ -536,7 +526,6 @@ async def test_run_auth_decrypt_failure_fails_execution(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": test_env(),
             "serviceBindings": {"fin": {"authAlias": "corrupt1"}},
         },
     )
@@ -565,11 +554,6 @@ async def test_run_dispatch_records_failure_when_plate_down(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": {
-                "envId": "test-env-A",
-                "name": "test-env-A",
-                "baseUrl": "http://x",
-            },
         },
     )
     assert r.status_code == 201
@@ -632,11 +616,6 @@ async def test_run_injects_exec_auths_into_run_copy_only(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": {
-                "envId": "test-env-A",
-                "name": "test-env-A",
-                "baseUrl": "http://x",
-            },
             "serviceBindings": {"fin-service": {"authAlias": "qa1"}},
         },
     )
@@ -738,7 +717,6 @@ async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
         json={
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
-            "env": test_env(),
             "serviceBindings": {"fin-service": {"authAlias": "qa1"}},
         },
     )

@@ -95,6 +95,10 @@ def check_step_addressable(definition: dict, op: dict, endpoint_id: str) -> str 
 
     返回 None = 可寻址;否则返回冲突原因(调用方写进 op.note)。
     清单生成到应用之间用户可能重排/删步骤 —— 这里挡住盲改。
+
+    契约禁令(spec 2026-08-27 §1.6):任何 plate 目录驱动的回写(适配 ops、
+    未来契约同步/导入)不得触碰 ``api.service`` —— 它是用户引用键(可為
+    别名全串),``view_hints.endpoint_id`` 才是目录锚点,两权分立。
     """
     steps = definition.get("steps")
     if not isinstance(steps, list):

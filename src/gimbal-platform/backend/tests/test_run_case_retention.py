@@ -49,7 +49,7 @@ def _make_case_dir(run_dispatcher, run_id: str, age_days: float = 0):
 async def test_delete_execution_purges_case_dir(client, monkeypatch, tmp_path):
     from app.core.config import settings
     from app.services import gimbal_launcher as gl, plate_client as pc, run_dispatcher
-    from tests.helpers import make_draft, register_and_login, test_env
+    from tests.helpers import make_draft, register_and_login
 
     # DATA_DIR 指到 tmp:case 目录/JSONL 全落在临时域,不污染真实 data/。
     monkeypatch.setattr(settings, "DATA_DIR", tmp_path)
@@ -61,7 +61,7 @@ async def test_delete_execution_purges_case_dir(client, monkeypatch, tmp_path):
     monkeypatch.setattr(pc, "convert", _fake_convert)
 
     r = await client.post("/api/runs", headers=headers, json={
-        "scenarioId": "sc-purge", "dataSetIds": [], "env": test_env(),
+        "scenarioId": "sc-purge", "dataSetIds": [],
     })
     assert r.status_code == 201, r.text
     run_id, eid = r.json()["runId"], r.json()["executionId"]

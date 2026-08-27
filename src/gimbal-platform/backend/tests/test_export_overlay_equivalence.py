@@ -27,7 +27,6 @@ from .test_scenario_composer_plate_integration import PlateMock, plate_mock  # n
 from .test_scenario_visibility_and_copy import _member
 
 OVERLAY = {
-    "envId": "test-env-A",
     "serviceBindings": {"fin-service": {"authAlias": "qa1", "url": "https://bound"}},
 }
 # meta 钉死 owner/createTime:两路 fill_plate_defaults 全 setdefault 无增量;

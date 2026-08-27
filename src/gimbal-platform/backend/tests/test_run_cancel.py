@@ -7,7 +7,6 @@ from tests.helpers import (
     launch_ok as _ok,
     make_draft,
     register_and_login,
-    test_env,
     wait_until,
 )
 
@@ -104,7 +103,7 @@ async def test_cancel_skips_remaining_rows(client, monkeypatch):
     monkeypatch.setattr(pc, "convert", _fake_convert)
 
     r = await client.post("/api/runs", headers=headers, json={
-        "scenarioId": "sc-cancel", "dataSetIds": [ds_id], "env": test_env(),
+        "scenarioId": "sc-cancel", "dataSetIds": [ds_id],
         "parallel": 1,
     })
     assert r.status_code == 201, r.text
@@ -131,7 +130,7 @@ async def test_cancel_terminal_conflicts(client, monkeypatch):
     monkeypatch.setattr(gl, "launch", _fake_launch)
     monkeypatch.setattr(pc, "convert", _fake_convert)
     r = await client.post("/api/runs", headers=headers, json={
-        "scenarioId": "sc-cancel-done", "dataSetIds": [], "env": test_env(),
+        "scenarioId": "sc-cancel-done", "dataSetIds": [],
     })
     eid = r.json()["executionId"]
     await _wait_terminal(eid)
@@ -195,7 +194,7 @@ async def test_fanout_marks_running(client, monkeypatch):
     monkeypatch.setattr(pc, "convert", _fake_convert)
 
     r = await client.post("/api/runs", headers=headers, json={
-        "scenarioId": "sc-running", "dataSetIds": [], "env": test_env(),
+        "scenarioId": "sc-running", "dataSetIds": [],
     })
     assert r.status_code == 201, r.text
     eid = r.json()["executionId"]

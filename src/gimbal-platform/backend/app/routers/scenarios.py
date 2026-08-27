@@ -42,7 +42,7 @@ from ..schemas.scenario_composer import (
     ScenarioDraft,
     StarIn,
 )
-from ..services import env_store, plate_client, run_dispatcher, scenario_store
+from ..services import plate_client, run_dispatcher, scenario_store
 from ..services.auth_ref_scan import scan_auth_aliases
 from ..services.marks_store import stars
 from ..services.run_materialize import materialize_run_copy
@@ -147,18 +147,8 @@ async def preview_plate(
     # (POST-convert 位点,明文绑定/凭证不过 plate)。物化语义与
     # run 执行链(run_dispatcher._fanout)同源 — 黄金等价:同场景同
     # overlay 下 preview-plate 产物 ≡ 基线单行 case.json,逐字段相等。
+    # (旧执行环境覆盖键已随 D2 退役;overlay 只收 serviceBindings。)
     if body.overlay is not None:
-        env_base_url = ""
-        if body.overlay.env_id:
-            envs = env_store.list_envs()  # 与 dispatch 同源的环境读取(sync, lru_cache)
-            match = [e for e in envs if e.env_id == body.overlay.env_id]
-            if not match:
-                raise HTTPException(
-                    status_code=404,
-                    detail={"code": "env_not_found",
-                            "message": body.overlay.env_id},
-                )
-            env_base_url = match[0].base_url or ""
         # 注入清单与 dispatch 同构(spec §7.3 矩阵:导出侧 = 执行侧):
         # scan_auth_aliases(definition steps)∪ 绑定 authAlias。预览侧
         # 无需保序,去重即可(dispatch 侧 dict.fromkeys 保序仅为一稳定日志序)。
@@ -182,7 +172,6 @@ async def preview_plate(
         built_in = def_cfg.get("users") if isinstance(def_cfg.get("users"), dict) else {}
         converted = materialize_run_copy(
             converted,
-            env_base_url=env_base_url,
             service_bindings={k: b.model_dump(by_alias=True)
                               for k, b in body.overlay.service_bindings.items()},
             resolved_auths=exec_auths,
@@ -321,12 +310,11 @@ async def _warn_dangling_refs(
     schemes: list[RunScheme],
 ) -> None:
     """警告级校验(spec §3.2 降级预填原则):失效引用仅 logger.warning,
-    绝不拒写(env 下线/数据集删除/凭证移除后方案照存,运行对话框前端
+    绝不拒写(数据集删除/凭证移除后方案照存,运行对话框前端
     标红提示)。告警路径自身的任何异常也吞掉 — 它永远不能变成写入
     路径的故障点。
     """
     try:
-        env_ids = {e.env_id for e in env_store.list_envs()}
         ds_ids = set(
             (
                 await db.execute(
@@ -355,11 +343,6 @@ async def _warn_dangling_refs(
         )
         known_aliases = {*owner_aliases, *(built_in or {}).keys()}
         for s in schemes:
-            if s.env_id and s.env_id not in env_ids:
-                logger.warning(
-                    "run_scheme env not found: scenario={} env={}",
-                    row.scenario_id, s.env_id,
-                )
             for ds_id in s.data_set_ids:
                 if ds_id not in ds_ids:
                     logger.warning(

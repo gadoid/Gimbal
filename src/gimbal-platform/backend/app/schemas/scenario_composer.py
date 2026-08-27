@@ -182,15 +182,7 @@ class DataSetDraft(BaseModel):
     rows: list[dict[str, Any]] = Field(default_factory=list)
 
 
-# ─── envs / runs ───────────────────────────────────────────────────
-class RunEnv(BaseModel):
-    model_config = _CAMEL
-
-    env_id: str = Field(alias="envId", min_length=1, max_length=64)
-    name: str = Field(min_length=1, max_length=64)
-    base_url: str = Field(alias="baseUrl", min_length=1, max_length=512)
-
-
+# ─── runs ───────────────────────────────────────────────────────────
 class ServiceBinding(BaseModel):
     """service → {authAlias?, url?} 绑定(spec §3.1/§5)。"""
     model_config = _CAMEL
@@ -204,7 +196,6 @@ class RunScheme(BaseModel):
     model_config = _CAMEL
 
     name: str = Field(min_length=1, max_length=64)
-    env_id: str | None = Field(default=None, alias="envId", max_length=64)
     data_set_ids: list[str] = Field(default_factory=list, alias="dataSetIds")
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
@@ -225,18 +216,19 @@ Orchestration.model_rebuild()
 
 class ExportOverlay(BaseModel):
     """导出/预览的运行方案覆盖层(spec §8)。dataSetIds 有意不收 —
-    导出是场景级产物,行级展开是非目标。"""
+    导出是场景级产物,行级展开是非目标。执行环境键已随 D2 退役。"""
     model_config = _CAMEL
 
-    env_id: str | None = Field(default=None, alias="envId", min_length=1, max_length=64)
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
 
 
 class RunRequest(BaseModel):
-    """一次执行的配方(recipe):env/数据集/认证等全是纯值。
+    """一次执行的配方(recipe):数据集/认证等全是纯值。
 
     Case 层已解散 — RunRequest 即配方本身,直接挂在 scenario 上。
+    旧 ``env`` 字段已随 D2 退役 — 旧客户端多发的 env 键被 pydantic
+    静默忽略,仅失效、不 422。
     """
 
     model_config = _CAMEL
@@ -257,7 +249,6 @@ class RunRequest(BaseModel):
     service_bindings: dict[str, ServiceBinding] = Field(
         default_factory=dict, alias="serviceBindings"
     )
-    env: RunEnv
     # V1 高级能力移植:``stepTo`` 0-based 含端点(与 V1 executions 的
     # step_to 同语义),dispatcher 透传 gimbal HTTP ``halt_at``。
     step_to: int | None = Field(default=None, ge=0, alias="stepTo")
@@ -350,7 +341,6 @@ __all__ = [
     "PreviewPlateError",
     "PreviewPlateIn",
     "PreviewPlateResponse",
-    "RunEnv",
     "RunRequest",
     "RunResponse",
     "RunScheme",
