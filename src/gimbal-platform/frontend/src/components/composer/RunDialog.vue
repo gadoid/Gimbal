@@ -322,6 +322,34 @@ function declaredUrlOf(svc: string): string | null {
   return props.serviceRows.find((r) => r.service === svc)?.declaredUrl ?? null
 }
 
+/** 行级显式绑定(D3,confirm 下发与方案快照同口径):预填未改动的
+ *  声明 URL 不算显式绑定(否则 confirm 重送成覆盖、方案快照钉死旧声明
+ *  URL);未声明行任何非空 URL 都是救燃绑定。非显式行返回 undefined。 */
+function explicitBindingOf(
+  b: ServiceBinding | undefined,
+  declared: string | null,
+): ServiceBinding | undefined {
+  const url = b?.url?.trim()
+  const effectiveUrl = url && url !== declared ? url : undefined
+  const authAlias = b?.authAlias || undefined
+  if (!authAlias && !effectiveUrl) return undefined
+  return {
+    ...(authAlias ? { authAlias } : {}),
+    ...(effectiveUrl ? { url: effectiveUrl } : {}),
+  }
+}
+
+/** 装配显式绑定记录:空绑定条目不落(confirm 下发与方案快照共用;
+ *  后端注入清单 = 模板扫描(steps 里 ${auth.*} 引用)∪ 绑定 authAlias,spec §6) */
+function explicitServiceBindings(): Record<string, ServiceBinding> {
+  const out: Record<string, ServiceBinding> = {}
+  for (const svc of Object.keys(bindings.value)) {
+    const eb = explicitBindingOf(bindings.value[svc], declaredUrlOf(svc))
+    if (eb) out[svc] = eb
+  }
+  return out
+}
+
 // serviceRows 变化(异步补齐/场景变更)→ 补行、清孤儿;行内 v-model 直写
 // bindings[svc].authAlias,必须保证每个 svc 有落点对象。声明行预填声明 URL。
 watch(() => props.serviceRows, (rows) => {
@@ -367,10 +395,10 @@ const foldBindings = ref(false)   // 折叠区默认折叠
 const bindingsSummary = computed(() => {
   const total = props.serviceRows.length
   if (!total) return '无服务'
-  const bound = props.serviceRows.filter((r) => {
-    const b = bindings.value[r.service]
-    return !!(b?.authAlias || b?.url)
-  }).length
+  // 与 confirm/存方案同口径:预填未改动的声明 URL 不算已绑定,否则
+  // 纯声明场景会谎报 N/N(实际显式绑定 0 条)。
+  const bound = props.serviceRows.filter((r) =>
+    explicitBindingOf(bindings.value[r.service], r.declaredUrl)).length
   return `${bound}/${total} 已绑定`
 })
 
@@ -414,22 +442,9 @@ function onConfirm() {
     )
     return
   }
-  // 用户与服务绑定装配(D3):预填未改动的声明 URL 不算显式绑定不上送
-  // (否则每次运行都会把声明值重送成覆盖);未声明行任何非空 URL 都是
-  // 救燃绑定。空绑定条目不随 confirm 下发(后端注入清单 = 模板扫描
-  // (steps 里 ${auth.*} 引用)∪ 绑定 authAlias,spec §6)。
-  const serviceBindings: Record<string, ServiceBinding> = {}
-  for (const [svc, b] of Object.entries(bindings.value)) {
-    const declared = declaredUrlOf(svc)
-    const url = b.url?.trim()
-    const effectiveUrl = url && url !== declared ? url : undefined
-    const authAlias = b.authAlias || undefined
-    if (authAlias || effectiveUrl)
-      serviceBindings[svc] = {
-        ...(authAlias ? { authAlias } : {}),
-        ...(effectiveUrl ? { url: effectiveUrl } : {}),
-      }
-  }
+  // 用户与服务绑定装配(D3):与存方案快照同口径(explicitServiceBindings)
+  // — 预填未改动的声明 URL 不算显式绑定不上送,空绑定条目不随 confirm 下发。
+  const serviceBindings = explicitServiceBindings()
   emit('confirm', selectedDatasets.value, {
     ...(stepTo.value !== null ? { stepTo: stepTo.value } : {}),
     ...(nRuns.value !== 1 ? { nRuns: nRuns.value } : {}),
@@ -439,7 +454,10 @@ function onConfirm() {
 }
 
 /** 存为方案:当前 ds/绑定快照落 orchestration sidecar(plate 零感知;
- *  环境已随 D2 退役,快照无 envId)。插件/日志订阅为预埋 no-op。 */
+ *  环境已随 D2 退役,快照无 envId)。绑定与 confirm 同口径只存显式
+ *  (authAlias/改动 URL)— 预填未改动的声明 URL 不入快照,否则回放
+ *  (watch selectedScheme: b?.url ?? declaredUrl)会让快照旧值优先于
+ *  当前声明,声明 URL 变更后被钉死在旧地址。插件/日志订阅为预埋 no-op。 */
 function onSaveScheme() {
   const name = schemeNameDraft.value.trim()
   if (!name) {
@@ -449,7 +467,7 @@ function onSaveScheme() {
   emit('saveScheme', {
     name,
     dataSetIds: [...selectedDatasets.value],
-    serviceBindings: { ...bindings.value },
+    serviceBindings: explicitServiceBindings(),
     plugins: null,
     logSub: null,
   })

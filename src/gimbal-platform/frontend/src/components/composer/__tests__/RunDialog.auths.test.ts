@@ -8,6 +8,8 @@
  * - 预填的声明值未改动时 confirm 不重复上送(非覆盖不进 serviceBindings)
  * - confirm 携带 serviceBindings(空绑定条目剔除)
  * - 存为方案快照无 envId
+ * - 存为方案快照绑定与 confirm 同口径:预填未改动的声明 URL 不入快照
+ *   (防回放/导出钉死旧声明 URL),显式覆盖/救燃/alias 才入
  */
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -85,5 +87,28 @@ describe('并集绑定行(D3)', () => {
       serviceBindings?: Record<string, unknown>
     }
     expect(opts.serviceBindings).toEqual({ 'fin-service': { url: 'https://override.example' } })
+  })
+
+  it('方案快照绑定与 confirm 同口径:预填未改动的声明 URL 不入快照,显式覆盖/救燃才入', async () => {
+    const w = mountDlg()
+    await w.find('.rd-scheme-name').setValue('快照口径')
+    await w.find('[data-testid="save-scheme"]').trigger('click')
+    let s = w.emitted('saveScheme')![0][0] as {
+      serviceBindings?: Record<string, { url?: string }>
+    }
+    // fin-service 预填 == 声明值:不算显式覆盖,不入快照
+    // (入快照会被 watch(selectedScheme) 的 b?.url ?? declaredUrl 钉死旧地址)
+    expect(s.serviceBindings?.['fin-service']).toBeUndefined()
+    expect(s.serviceBindings).toEqual({})              // order-svc 未填同略
+
+    // 声明行改 URL = 显式覆盖;未声明行现场填 = 救燃 → 都入快照
+    await w.findAll('.rd-bind-url')[0].setValue('https://override.example')
+    await w.findAll('.rd-bind-url')[1].setValue('https://rescue.example')
+    await w.find('[data-testid="save-scheme"]').trigger('click')
+    s = w.emitted('saveScheme')![1][0] as typeof s
+    expect(s.serviceBindings).toEqual({
+      'fin-service': { url: 'https://override.example' },
+      'order-svc': { url: 'https://rescue.example' },
+    })
   })
 })
