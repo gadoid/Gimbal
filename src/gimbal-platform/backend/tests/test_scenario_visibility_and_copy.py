@@ -1,5 +1,5 @@
 """P1 收紧 + 能力移植测试:visibility 隔离、发布/下架、深拷贝、
-stars 清理、runs stepTo/injectCredentials。
+stars 清理、runs stepTo(injectCredentials 已随 RunRequest 收敛退役)。
 
 首注册用户会被 bootstrap 为 admin,因此需要"普通成员"的测试都先
 注册一个一次性 admin,再注册真正的成员。
@@ -177,7 +177,7 @@ async def test_delete_scenario_clears_stars(client: AsyncClient) -> None:
     assert not any("sc-test" in ids for ids in stars._marks.values())
 
 
-# ── runs:stepTo / injectCredentials(V1 能力移植)──────────────────
+# ── runs:stepTo(V1 能力移植)──────────────────────────────────────
 async def test_run_step_to_out_of_range_409(
     client: AsyncClient, plate_mock: PlateMock
 ) -> None:
@@ -246,74 +246,3 @@ async def test_run_step_to_passes_halt_at(
         await asyncio.sleep(0.05)
     assert len(calls) == 1
     assert calls[0].get("step_to") == 1
-
-
-async def test_run_inject_credentials_false_skips_auth_resolution(
-    client: AsyncClient,
-    plate_mock: PlateMock,  # noqa: F811
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """injectCredentials=False → 不解析执行凭证(缺 alias 也不影响),
-    gimbal 收到的 case.json 不带 users 注入。"""
-    bob = await _member(client, "bob")
-    await client.post(
-        "/api/scenarios", headers=bob, json=_draft(steps=[{"id": "s1"}], vars_map={"qty": 1})
-    )
-    await _seed_ds(client, bob)
-
-    import json as _json
-    from pathlib import Path
-
-    from app.services import gimbal_launcher as gl
-    from app.services import run_dispatcher as rd
-
-    run_payloads: list[dict] = []
-    resolved: list[list] = []
-
-    async def _capture(case_path, **kw: object):
-        run_payloads.append(
-            _json.loads(Path(case_path).read_text(encoding="utf-8"))
-        )
-        return gl.LaunchResult(launch_status="ok", exit_code=0,
-                               total=1, passed=1)
-
-    async def _spy_resolve(db_factory, owner_id, aliases):
-        resolved.append(list(aliases))
-        return []
-
-    monkeypatch.setattr(gl, "launch", _capture)
-    monkeypatch.setattr(rd, "_resolve_exec_auths", _spy_resolve)
-
-    r = await client.post(
-        "/api/runs",
-        headers=bob,
-        json={
-            "scenarioId": "sc-test",
-            "dataSetIds": ["ds-001"],
-            "env": test_env(),
-            "auths": ["qa1"],
-            "injectCredentials": False,
-        },
-    )
-    assert r.status_code == 201
-
-    for _ in range(50):
-        if len(run_payloads) >= 1:
-            break
-        await asyncio.sleep(0.05)
-    assert len(run_payloads) == 1
-    # 凭证解析被完全跳过(即便请求带了 auths)
-    assert resolved == []
-    # Execution.config_json 记录了 injectCredentials=False
-    import sqlalchemy as sa
-
-    from app.core import db as db_module
-    from app.models import Execution
-
-    async with db_module.SessionLocal() as s:
-        ex = (
-            (await s.execute(sa.select(Execution).order_by(Execution.id.desc())))
-            .scalars()
-            .first()
-        )
-        assert ex.config_json["injectCredentials"] is False

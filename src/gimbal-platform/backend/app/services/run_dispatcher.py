@@ -5,7 +5,9 @@ Per-row fan-out of a Scenario's selected DataSets:
 1. :func:`_compose_scenario` — 场景 definition + 一行数据集 → 数据驱动的
    gimbal scenario dict(行键注入 ``config.vars``,按基线类型还原)。
 2. Plate ``/convert`` — 校验 + 剥平台视图字段(orchestration 绝不外发)。
-3. 执行认证/前缀注入 convert 产物(明文不流经 plate)。
+3. 执行认证/前缀注入 convert 产物(明文不流经 plate)— Task 3 起由
+   ``materialize_run_copy`` 纯函数接管(services/users 物化,注入清单 =
+   模板扫描 ∪ serviceBindings 绑定)。
 4. 落盘 case 文件(``DATA_DIR/runs/cases/<runId>/``)。
 5. ``gimbal_launcher.launch`` 子进程执行 ``gimbal run launch <case>``,
    stdout JSON RunResult 驱动行级计数。
@@ -55,13 +57,15 @@ from ..models.execution import (
 from ..models.auth_session import AuthSession as DBAuthSession
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
-from ..schemas.scenario_composer import RunRequest, RunResponse
+from ..schemas.scenario_composer import RunRequest, RunResponse, ServiceBinding
 from . import env_store, gimbal_launcher, plate_client
+from .auth_ref_scan import scan_auth_aliases
+from .run_materialize import materialize_run_copy
 
 # 物理迁移自 gimbal 后:用平台侧标准 AuthSession 替代自创 ResolvedAuth dataclass。
-# 下游 _inject_exec_users 仍消费 username/password/url/token_type/expires_in 这几个
-# 字段,与标准 AuthSession 完全对齐(后者字段更多但不影响注入逻辑)。
-# 保留 ResolvedAuth 作为兼容 shim,免改下游 _inject_exec_users 的字段引用。
+# 下游 materialize_run_copy(_apply_users)仍消费 username/password/url/token_type/
+# expires_in 这几个字段,与标准 AuthSession 完全对齐(后者字段更多但不影响注入
+# 逻辑)。保留 ResolvedAuth 作为兼容 shim,免改下游的字段引用。
 from app.auth.schema import AuthSession as RuntimeAuthSession  # noqa: E402
 
 
@@ -325,18 +329,6 @@ async def dispatch_run(
             )
         selected_datasets.append(ds)
 
-    # append 合并策略冲突预检(V1 executor 同语义):所选认证 alias 与
-    # 场景内置 Config.users 同名 → 409 拒绝整单(而不是行级静默覆盖)。
-    if req.inject_credentials and req.merge_policy == "append" and req.auths:
-        built_in_users = _built_in_users(scen.payload)
-        collisions = sorted(set(req.auths) & set(built_in_users.keys()))
-        if collisions:
-            raise Conflict(
-                "append_policy_conflict",
-                f"append policy conflict: auth alias {collisions} already "
-                f"defined in scenario config.users",
-            )
-
     # 3. Allocate runId + Execution row
     # total_runs 必须按实际行数算(与 _fanout 的迭代口径一致)— 旧的
     # row_count 列在 raw-SQL 迁移路径下不回填,NULL/过期会让计数器
@@ -359,6 +351,13 @@ async def dispatch_run(
             f"total runs {total_runs} exceed platform cap "
             f"{settings.MAX_RUNS_PER_EXECUTION} (rows x nRuns)",
         )
+    # 注入清单 = 模板扫描 ∪ 绑定(spec §5)。扫描源是存储的 definition
+    # steps(authored 模板所在处,${auth.*} 引用一网打尽);绑定的
+    # authAlias 并入(即使 steps 未引用该 alias)。去重保序。
+    scanned = scan_auth_aliases(definition_from_payload(scen.payload).get("steps") or [])
+    bound = [b.auth_alias for b in req.service_bindings.values() if b.auth_alias]
+    auth_aliases: list[str] = list(dict.fromkeys([*scanned, *bound]))
+
     execution = await _create_execution(
         db,
         # (Case 层解散后执行的挂载点就是场景)。
@@ -370,16 +369,17 @@ async def dispatch_run(
             "scenarioId": scen.scenario_id,
             "dataSetIds": req.data_set_ids,
             "envId": req.env.env_id,
-            # 读侧契约是 exec_auth_alias(同 V1 executor 路径);此前误写
-            # "auth" 导致 Execution 详情认证列恒空。injectCredentials=false
-            # 时 aliases 根本不会被解析/注入,记录原始选择会误导详情页。
-            "exec_auth_alias": list(req.auths) if req.inject_credentials else [],
+            # 实际注入清单(扫描 ∪ 绑定)— 读侧据此展示认证列。缺 alias
+            # 只告警继续(清单如实记录原始请求,与"解不到≠没要求"对齐)。
+            "injectedAuths": auth_aliases,
+            # service → {authAlias?, url?}(驼峰 dump,None 键不落)。
+            "serviceBindings": {
+                k: b.model_dump(by_alias=True, exclude_none=True)
+                for k, b in req.service_bindings.items()
+            },
             "stepTo": req.step_to,
-            "injectCredentials": req.inject_credentials,
             "nRuns": req.n_runs,
             "parallel": req.parallel,
-            "prefix": req.prefix,
-            "mergePolicy": req.merge_policy,
         },
     )
 
@@ -394,12 +394,11 @@ async def dispatch_run(
                 datasets=fanout_datasets,
                 env=server_env.model_dump(by_alias=True, mode="json"),
                 owner_id=user_id,
-                auth_aliases=list(req.auths) if req.inject_credentials else [],
+                auth_aliases=auth_aliases,
                 halt_at=req.step_to,
                 n_runs=req.n_runs,
                 parallel=req.parallel,
-                prefix=req.prefix,
-                merge_policy=req.merge_policy,
+                service_bindings=req.service_bindings,
             ),
             name=f"v3-dispatch-{run_id}",
         )
@@ -429,8 +428,7 @@ async def _fanout(
     halt_at: int | None = None,
     n_runs: int = 1,
     parallel: int = 1,
-    prefix: str | None = None,
-    merge_policy: str = "merge",
+    service_bindings: dict[str, ServiceBinding] | None = None,
 ) -> None:
     """Per-row × per-repeat compose + convert + ``gimbal run launch`` 子进程。
 
@@ -438,9 +436,9 @@ async def _fanout(
     ``--step-to`` —— RuntimeControl 在该步后停(剩余步显示 skipped)。
 
     M1(V1 executor 移植):``n_runs`` 每行重复次数、``parallel`` 并发度
-    (asyncio.Semaphore)、``prefix`` 提单号前缀变量注入、``merge_policy``
-    执行认证合并策略(override/merge/append;append 冲突已在 dispatch
-    侧预检拒绝)。
+    (asyncio.Semaphore);``service_bindings`` 逐绑定传给
+    ``materialize_run_copy`` 物化 run 副本(users 合并固定 merge 语义;
+    prefix/merge_policy 已随 RunRequest 收敛退役,spec §6)。
 
     V3.2:执行调用从 gimbal HTTP POST /run 改为落盘 case 文件后
     ``gimbal run launch <case>`` 子进程(设计:2026-08-24 spec)。
@@ -462,8 +460,8 @@ async def _fanout(
     # 解密失败 = fail-fast(V1 严格语义):整单 execution 记为
     # failed,所有行计入 failed 计数,不带着空/坏凭证打环境。
     try:
-        # injectCredentials=False 时 dispatch 侧已清空 aliases,这里直接
-        # 跳过解析(与 V1 executor 的 inject_credentials=False 同语义)。
+        # 注入清单为空(无 ${auth.*} 扫描引用、无绑定 authAlias)时
+        # 直接跳过解析。
         exec_auths = (
             await _resolve_exec_auths(db_factory, owner_id, auth_aliases)
             if auth_aliases
@@ -504,10 +502,13 @@ async def _fanout(
             >= settings.PLATE_BREAKER_THRESHOLD
         )
 
-    # 内置认证(definition.config.users)merge 策略的保留基座 —— plate
+    # 内置认证(definition.config.users)是 users 合并的保留基座 —— plate
     # /convert 的产物可能剥掉平台视图字段,凭证合并不依赖 converted
     # 自带 users,而是以场景定义为源(与 V1 在原始 yaml 上渲染同语义)。
     built_in_users = _built_in_users(scenario_payload)
+    # serviceBindings 原样传给 materialize_run_copy(url 物化只对 steps
+    # 实际引用的 service 键生效,见 run_materialize._apply_services)。
+    service_bindings = service_bindings or {}
 
     async def _row(ds: dict, row_idx: int, rep: int, seq: int) -> None:
         """One (dataset row × repeat) entry — compose + convert + launch."""
@@ -564,12 +565,12 @@ async def _fanout(
                 else:
                     cache_key = _convert_cache_key(composed)
                     if cache_key in convert_cache:
-                        # 注入路径会原地修改 convert 输出,按引用共享会污染后续命中
+                        # 防御性深拷贝:materialize_run_copy 虽是纯函数,
+                        # 任何未来的原地注入仍不得污染缓存共享引用。
                         convert_data = copy.deepcopy(convert_cache[cache_key])
                     else:
                         convert_data = await plate_client.convert(composed)
-                        # 入缓存的是注入前原始快照:miss 路径的原地注入
-                        # 不得写回缓存(否则深拷贝命中仍带首次注入痕迹)
+                        # 入缓存的是物化前原始快照(注入只进 run 副本)。
                         convert_cache[cache_key] = copy.deepcopy(convert_data)
                     plate_state["consecutive_unavailable"] = 0
                     # Convert succeeded — hand the gimbal-shaped product to the
@@ -578,17 +579,19 @@ async def _fanout(
                     # convert_data = {consumer, converted};converted 是
                     # GimbalScenarioExporter 的产物(已剥平台视图扩展字段)。
                     converted = convert_data.get("converted") or {}
-                    composed_exec = _inject_exec_users(
+                    # 物化 run 副本(纯函数,深拷贝 — 绝不原地改 converted):
+                    # users 合并(内置基座 + 注入覆盖,固定 merge 语义)与
+                    # services 物化(绑定 url > authored > env.baseUrl 补缺)。
+                    composed_exec = materialize_run_copy(
                         converted,
-                        exec_auths,
-                        merge_policy=merge_policy,
+                        env_base_url=(env.get("baseUrl") or ""),
+                        service_bindings={
+                            k: b.model_dump(by_alias=True)
+                            for k, b in service_bindings.items()
+                        },
+                        resolved_auths=exec_auths,
                         built_in_users=built_in_users,
                     )
-                    if prefix:
-                        # 前缀变量注入进 run 副本(post-convert,防 plate 剥掉)。
-                        _inject_prefix_vars(composed_exec, prefix)
-                    # services 物化:未映射服务名 → env.baseUrl(见函数 docstring)。
-                    _inject_services(composed_exec, env)
                     # 落盘数据驱动用例快照后交给 CLI 子进程执行。
                     case_path = _write_case_file(case_dir, composed_exec)
                     # P7 全局并发闸:进程级 launch 在飞上限(跨 execution
@@ -959,7 +962,8 @@ async def _resolve_exec_auths(
 
     Phase 3 改造:内部先用平台侧标准 RuntimeAuthSession(物理迁移自 gimbal)
     接收解密后的字段,然后通过 ``ResolvedAuth.from_runtime`` 转为兼容 shim。
-    这样下游 ``_inject_exec_users`` 不动,未来可直接消费 ``RuntimeAuthSession``。
+    这样下游 materialize_run_copy(_apply_users)不动,未来可直接消费
+    ``RuntimeAuthSession``。
     """
     if not aliases:
         return []
@@ -989,7 +993,7 @@ async def _resolve_exec_auths(
                 token_type=a.token_type,
                 expires_in=a.expires_in,
             )
-            # 转兼容 shim(下游 _inject_exec_users 字段不变)
+            # 转兼容 shim(下游消费的字段不变)
             resolved.append(ResolvedAuth.from_runtime(runtime, alias=a.alias))
         except ValueError as e:
             raise _AuthResolveError(
@@ -1001,109 +1005,6 @@ async def _resolve_exec_auths(
             "run_dispatcher: exec auth aliases not found: {}", sorted(missing)
         )
     return resolved
-
-
-def _inject_prefix_vars(composed: dict[str, Any], prefix: str) -> None:
-    """提单号前缀变量注入(就地修改 composed.config.vars;V1
-    ``_render_temp_yaml`` 同语义):
-
-    * ``vars.order_no_prefix = prefix`` — 步骤里可用 `${var.order_no_prefix}` 拼前缀
-    * ``vars.order_no = "<prefix>-{{ seq }}"`` — 引擎渲染期展开为 ``P-1 / P-2 / …``
-    * ``vars.seq = {"kind": "seq"}`` — 序列生成器声明(幂等覆盖)
-    """
-    cfg = composed.get("config")
-    if not isinstance(cfg, dict):
-        cfg = {}
-        composed["config"] = cfg
-    vars_map = dict(cfg.get("vars") or {})
-    vars_map["order_no_prefix"] = prefix
-    vars_map["order_no"] = f"{prefix}-{{{{ seq }}}}"
-    vars_map["seq"] = {"kind": "seq"}
-    cfg["vars"] = vars_map
-
-
-def _inject_services(composed: dict[str, Any], env: dict[str, Any]) -> None:
-    """services 物化:steps 引用而 config.services 未映射的服务名 →
-    注入选定环境的 baseUrl(就地修改)。
-
-    plate 的端点模型没有 host 概念(service = 业务域,如 fin 下的
-    audit/order_fee),部署主机只存在于执行环境(RunEnv.baseUrl)——
-    引擎侧 URL 解析需要的 service→base_url 映射只能由运行时环境补:
-
-    * 只补缺口:场景显式写过的 services(如自建 mock)原样保留,
-      环境不覆盖 authored 映射;
-    * env.baseUrl 为空(RunDialog 兜底构造/环境配置缺失)时不注入,
-      保持"步骤无映射"的引擎报错可见,不静默造出假 URL;
-    * post-convert 注入 run 副本,与凭证/前缀同一模式(convert 的
-      输入始终是 authored 原文,审计面不失真)。
-    """
-    base_url = (env or {}).get("baseUrl") or ""
-    if not base_url:
-        return
-    referenced: set[str] = {
-        api["service"]
-        for step in composed.get("steps") or []
-        if isinstance(step, dict)
-        and isinstance(api := step.get("api"), dict)
-        and api.get("service")
-    }
-    if not referenced:
-        return
-    cfg = composed.get("config")
-    if not isinstance(cfg, dict):
-        cfg = {}
-        composed["config"] = cfg
-    services = dict(cfg.get("services") or {})
-    for name in sorted(referenced):
-        services.setdefault(name, base_url)
-    cfg["services"] = services
-
-
-def _inject_exec_users(
-    composed: dict[str, Any],
-    exec_auths: list[ResolvedAuth],
-    *,
-    merge_policy: str = "merge",
-    built_in_users: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """返回注入 ``Config.users`` 的 run 副本(不改动入参)。
-
-    形状与 V1 executor 生产路径一致,Gimbal preprocessor 已消费验证::
-
-        users[<alias>] = {url, username, password, token_type, expires_in}
-
-    ``merge_policy``(V1 merge_policy 移植):
-      * ``merge``(默认)— 同名覆盖、场景内置其余保留。保留基座是
-        ``built_in_users``(场景 definition.config.users)而非 converted
-        自带的 users —— plate /convert 会剥平台视图字段,内置认证以
-        场景定义为唯一可信源。
-      * ``override`` — 整块替换为所选认证(内置 users 丢弃)
-      * ``append`` — 同 merge;与内置 users 的别名冲突已在 dispatch
-        侧预检拒绝(409),此处不再重复校验
-    ``exec_auths`` 为空时原样返回同一引用(run stub 不会外发,无明文
-    泄漏面)。
-    """
-    if not exec_auths:
-        return composed
-    out = copy.deepcopy(composed)
-    cfg = out.get("config")
-    if not isinstance(cfg, dict):
-        cfg = {}
-        out["config"] = cfg
-    if merge_policy == "override":
-        users: dict[str, Any] = {}
-    else:
-        users = {**(built_in_users or {}), **(cfg.get("users") or {})}
-    for a in exec_auths:
-        users[a.alias] = {
-            "url": a.url,
-            "username": a.username,
-            "password": a.password,
-            "token_type": a.token_type,
-            "expires_in": a.expires_in,
-        }
-    cfg["users"] = users
-    return out
 
 
 def _jsonl_path() -> Path:

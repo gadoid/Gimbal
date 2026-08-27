@@ -15,7 +15,7 @@ Key conventions:
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -184,6 +184,14 @@ class RunEnv(BaseModel):
     base_url: str = Field(alias="baseUrl", min_length=1, max_length=512)
 
 
+class ServiceBinding(BaseModel):
+    """service → {authAlias?, url?} 绑定(spec §3.1/§5)。"""
+    model_config = _CAMEL
+
+    auth_alias: str | None = Field(default=None, alias="authAlias", max_length=128)
+    url: str | None = Field(default=None, alias="url", max_length=512)
+
+
 class RunRequest(BaseModel):
     """一次执行的配方(recipe):env/数据集/认证等全是纯值。
 
@@ -200,34 +208,23 @@ class RunRequest(BaseModel):
     )
     # D12:空列表 = 基线执行(一个隐式空覆盖行),不再强制 min_length=1
     data_set_ids: list[str] = Field(alias="dataSetIds", default_factory=list)
+    # service → {authAlias?, url?} 绑定(spec §3.1/§5):注入清单 =
+    # 模板扫描(steps 里的 ${auth.*} 引用)∪ 绑定 authAlias;绑定 url
+    # 物化进 services(显式绑定最优先)。旧 auths/inject_credentials/
+    # prefix/merge_policy 四字段已退役(spec §6)— 旧客户端多发的键
+    # 被 pydantic 静默忽略,仅失效、不 422。
+    service_bindings: dict[str, ServiceBinding] = Field(
+        default_factory=dict, alias="serviceBindings"
+    )
     env: RunEnv
-    # 执行用认证 alias 多选(原 ``auth`` 单选已废):dispatcher 按 owner
-    # 解密后注入 composed scenario 的 Config.users,headers 里的
-    # ``${auth.<alias>.<field>}`` 在 Gimbal 运行期解析。
-    auths: list[str] = Field(alias="auths", default_factory=list)
     # V1 高级能力移植:``stepTo`` 0-based 含端点(与 V1 executions 的
     # step_to 同语义),dispatcher 透传 gimbal HTTP ``halt_at``。
     step_to: int | None = Field(default=None, ge=0, alias="stepTo")
-    # False = 跳过执行凭证解析/注入(V1 inject_credentials 同语义)。
-    inject_credentials: bool = Field(default=True, alias="injectCredentials")
     # ── M1 执行能力补齐(V1 executor 语义移植)────────────────────
     # 每行数据的重复执行次数;total_runs = Σ(rows) × nRuns。
     n_runs: int = Field(default=1, ge=1, le=1000, alias="nRuns")
     # fan-out 并发度(asyncio.Semaphore 上限)。
     parallel: int = Field(default=1, ge=1, le=200, alias="parallel")
-    # 提单号前缀:注入 vars.order_no_prefix / order_no("<P>-{{ seq }}") /
-    # seq({"kind":"seq"}) — 同 V1 _render_temp_yaml。
-    prefix: str | None = Field(
-        default=None, min_length=1, max_length=64, alias="prefix"
-    )
-    # 执行认证合并策略(V1 merge_policy 同语义):
-    #   override — Config.users 整块替换为所选认证
-    #   merge    — 同名覆盖、其余保留(默认)
-    #   append   — 合并,但与场景内置 users 别名冲突时拒绝(409)
-    # origin("不注入")由 inject_credentials=False 表达,不在此枚举。
-    merge_policy: Literal["override", "merge", "append"] = Field(
-        default="merge", alias="mergePolicy"
-    )
 
 
 class RunResponse(BaseModel):
@@ -305,6 +302,7 @@ __all__ = [
     "Scenario",
     "ScenarioDraft",
     "ScenarioMeta",
+    "ServiceBinding",
     "StarIn",
     "StepOrchestration",
 ]

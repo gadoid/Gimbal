@@ -1,9 +1,9 @@
 """M1 执行能力补齐测试(V1 executor 语义移植):
 
 * nRuns/parallel fan-out —— total = Σrows × nRuns,launch 调用次数一致
-* prefix 提单号前缀 —— vars.order_no_prefix / order_no / seq 注入
-* mergePolicy 认证合并策略 —— override 整块替换 / merge 保留内置 /
-  append 与内置冲突 409 / origin(injectCredentials=false)不注入
+* services 物化 —— env.baseUrl 补未映射服务缺口(authored 不覆盖)
+* serviceBindings 绑定注入 —— authAlias 注入 users(固定 merge 语义,
+  场景内置 users 保留);prefix/mergePolicy 已随 RunRequest 收敛退役
 
 V3.2:执行 mock 从 gimbal HTTP /run 改为 ``gimbal_launcher.launch`` —
 capture 读落盘的 case.json(引擎子进程的真实输入)。
@@ -151,36 +151,6 @@ async def test_parallel_limits_concurrency(
     assert max_in_flight <= 2
 
 
-# ── prefix 变量注入 ───────────────────────────────────────────────
-async def test_prefix_injects_order_no_vars(
-    client: AsyncClient,
-    plate_mock: PlateMock,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """prefix="ORD" → case.json 的 config.vars 带 order_no_prefix / order_no / seq。"""
-    bob = await _member(client, "bob")
-    await client.post(
-        "/api/scenarios",
-        headers=bob,
-        json=_draft(steps=[{"id": "s1"}], vars_map={"qty": 1}),
-    )
-    await _seed_ds(client, bob)
-
-    payloads: list[dict] = []
-    _patch_launch_capture(monkeypatch, payloads)
-
-    r = await client.post(
-        "/api/runs", headers=bob, json=_run_payload(prefix="ORD")
-    )
-    assert r.status_code == 201, r.text
-
-    await _wait(lambda: len(payloads) >= 1)
-    vars_map = (payloads[0].get("config") or {}).get("vars") or {}
-    assert vars_map["order_no_prefix"] == "ORD"
-    assert vars_map["order_no"] == "ORD-{{ seq }}"
-    assert vars_map["seq"] == {"kind": "seq"}
-
-
 # ── services 物化(env.baseUrl → 未映射服务名)────────────────────
 async def test_env_base_url_materializes_unmapped_services(
     client: AsyncClient,
@@ -230,27 +200,7 @@ async def test_env_base_url_materializes_unmapped_services(
     assert services["mock"] == "http://self"                 # authored 不覆盖
 
 
-def test_inject_services_unit_semantics() -> None:
-    """_inject_services 纯函数:baseUrl 空 → 不注入;config 缺失 → 建出来。"""
-    from app.services.run_dispatcher import _inject_services
-
-    # baseUrl 为空:保持不注入(引擎侧报错可见,不造假 URL)
-    scenario = {"steps": [{"api": {"service": "audit"}}], "config": {}}
-    _inject_services(scenario, {"baseUrl": ""})
-    assert scenario["config"].get("services") in (None, {})
-
-    # config 整个缺失也能注入
-    scenario = {"steps": [{"api": {"service": "audit"}}]}
-    _inject_services(scenario, {"baseUrl": "http://h:1"})
-    assert scenario["config"]["services"] == {"audit": "http://h:1"}
-
-    # 无 service 引用 → 不动 config
-    scenario = {"steps": [{"request": {}}], "config": {"services": {}}}
-    _inject_services(scenario, {"baseUrl": "http://h:1"})
-    assert scenario["config"]["services"] == {}
-
-
-# ── mergePolicy 认证合并策略 ─────────────────────────────────────
+# ── serviceBindings 绑定注入 ─────────────────────────────────────
 async def _seed_built_in_user(client: AsyncClient, headers: dict) -> None:
     """建一个 config.users 里带内置认证 qa1 的场景 + case/ds。"""
     draft = _draft(steps=[{"id": "s1"}])
@@ -264,7 +214,8 @@ async def _seed_built_in_user(client: AsyncClient, headers: dict) -> None:
 
 
 class _FakeAuth:
-    """_inject_exec_users 只消费这些属性(与 AuthSession 解密后一致)。"""
+    """materialize_run_copy(_apply_users)只消费这些属性(与 AuthSession
+    解密后一致)。"""
 
     def __init__(self, alias: str) -> None:
         self.alias = alias
@@ -279,12 +230,12 @@ async def _post_run(client: AsyncClient, headers: dict, **extra: object):
     return await client.post("/api/runs", headers=headers, json=_run_payload(**extra))
 
 
-async def test_merge_policy_override_replaces_built_in_users(
+async def test_service_binding_auth_merge_keeps_built_in(
     client: AsyncClient,
     plate_mock: PlateMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """override → Config.users 整块替换,内置 qa1 消失。"""
+    """绑定 authAlias 注入 users,场景内置 users 保留(固定 merge)。"""
     bob = await _member(client, "bob")
     await _seed_built_in_user(client, bob)
 
@@ -299,35 +250,8 @@ async def test_merge_policy_override_replaces_built_in_users(
     monkeypatch.setattr(rd, "_resolve_exec_auths", _fake_resolve)
 
     r = await _post_run(
-        client, bob, auths=["qa9"], mergePolicy="override"
+        client, bob, serviceBindings={"svc": {"authAlias": "qa9"}}
     )
-    assert r.status_code == 201, r.text
-    await _wait(lambda: len(payloads) >= 1)
-    users = (payloads[0].get("config") or {}).get("users") or {}
-    assert set(users.keys()) == {"qa9"}
-    assert users["qa9"]["username"] == "exec-user"
-
-
-async def test_merge_policy_merge_keeps_built_in_users(
-    client: AsyncClient,
-    plate_mock: PlateMock,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """merge(默认)→ 所选注入覆盖,内置其余保留。"""
-    bob = await _member(client, "bob")
-    await _seed_built_in_user(client, bob)
-
-    from app.services import run_dispatcher as rd
-
-    payloads: list[dict] = []
-    _patch_launch_capture(monkeypatch, payloads)
-
-    async def _fake_resolve(db_factory, owner_id, aliases):
-        return [_FakeAuth(a) for a in aliases]
-
-    monkeypatch.setattr(rd, "_resolve_exec_auths", _fake_resolve)
-
-    r = await _post_run(client, bob, auths=["qa9"], mergePolicy="merge")
     assert r.status_code == 201, r.text
     await _wait(lambda: len(payloads) >= 1)
     users = (payloads[0].get("config") or {}).get("users") or {}
@@ -336,41 +260,3 @@ async def test_merge_policy_merge_keeps_built_in_users(
     assert users["qa1"]["url"] == "http://builtin"
     # 所选 qa9 注入
     assert users["qa9"]["username"] == "exec-user"
-
-
-async def test_merge_policy_append_conflict_409(
-    client: AsyncClient,
-    plate_mock: PlateMock,
-) -> None:
-    """append + 所选 alias 与内置 users 同名 → 整单 409 拒绝。"""
-    bob = await _member(client, "bob")
-    await _seed_built_in_user(client, bob)
-
-    r = await _post_run(client, bob, auths=["qa1"], mergePolicy="append")
-    assert r.status_code == 409
-    assert "append_policy_conflict" in r.text
-
-
-async def test_merge_policy_default_is_merge(
-    client: AsyncClient,
-    plate_mock: PlateMock,
-) -> None:
-    """缺省(不传 mergePolicy)→ config_json 记 merge,请求成功。"""
-    bob = await _member(client, "bob")
-    await _seed_built_in_user(client, bob)
-
-    r = await _post_run(client, bob, auths=["qa1"])
-    assert r.status_code == 201, r.text
-
-    import sqlalchemy as sa
-
-    from app.core import db as db_module
-    from app.models import Execution
-
-    async with db_module.SessionLocal() as s:
-        ex = (
-            (await s.execute(sa.select(Execution).order_by(Execution.id.desc())))
-            .scalars()
-            .first()
-        )
-        assert ex.config_json["mergePolicy"] == "merge"

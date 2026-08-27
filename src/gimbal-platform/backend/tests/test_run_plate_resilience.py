@@ -81,13 +81,19 @@ async def test_convert_memoized_across_repeats(client, monkeypatch):
 async def test_memo_hit_injection_view_not_polluted(client, monkeypatch):
     """memo 命中必须给深拷贝:注入的原地修改不得泄漏进后续命中。
 
-    默认 injectCredentials=false → exec_auths 为空 → _inject_exec_users
-    原样返回同一引用,随后 _inject_* 系列就地修改 convert 输出。若
-    memo 命中按引用共享缓存对象,rep 2/3 会看到 rep 1 留下的注入痕迹。
+    注入链路已收敛为 materialize_run_copy(纯函数;原 _inject_* 系列已
+    删除)。注入清单默认空(无 ${auth.*} 引用、无绑定)→ resolved_auths
+    为空 → users 原样,但物化边界仍是注入痕迹的必经之路:spy 包装
+    materialize_run_copy,记录每次进入物化的 converted 深快照并施加
+    一次可观察的原地修改。若 memo miss 路径不存"物化前快照"(或命中
+    按引用共享缓存对象),rep 2/3 会看到 rep 1 留下的注入痕迹。
     """
     import copy
 
     from app.services import run_dispatcher
+    from app.services.run_materialize import (
+        materialize_run_copy as _real_materialize,
+    )
 
     calls = {"n": 0}
     snapshots: list[dict] = []
@@ -96,13 +102,14 @@ async def test_memo_hit_injection_view_not_polluted(client, monkeypatch):
         calls["n"] += 1
         return {"consumer": "platform", "converted": dict(scenario)}
 
-    def spying_inject_services(composed, env):
-        # 记录进入注入时的深快照,并施加一次可观察的原地修改。
-        snapshots.append(copy.deepcopy(composed))
-        composed.setdefault("__pollution_marker", []).append(len(snapshots))
+    def spying_materialize(converted, **kw):
+        # 记录进入物化时的深快照,并施加一次可观察的原地修改。
+        snapshots.append(copy.deepcopy(converted))
+        converted.setdefault("__pollution_marker", []).append(len(snapshots))
+        return _real_materialize(converted, **kw)
 
     monkeypatch.setattr(
-        run_dispatcher, "_inject_services", spying_inject_services
+        run_dispatcher, "materialize_run_copy", spying_materialize
     )
 
     eid = await _run_with_convert(client, monkeypatch, passthrough_convert,

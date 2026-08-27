@@ -38,7 +38,7 @@ class PlateMock:
     def __init__(self) -> None:
         self.convert_calls: list[dict] = []
         self.run_calls: list[dict] = []  # D2 run bodies (stubbed upstream)
-        self.behaviour: str = "ok"  # ok | 4xx | 5xx | unavailable
+        self.behaviour: str = "ok"  # ok | echo | 4xx | 5xx | unavailable
 
     def install(self) -> None:
         """Replace the singleton httpx client with a MockTransport."""
@@ -59,6 +59,14 @@ class PlateMock:
                             },
                         },
                     )
+                if self.behaviour == "echo":
+                    # scenario 原样回灌为 converted — 供 services/users 物化断言用
+                    # (默认 ok 桩的 converted 是 {"kind": "platform_scenario"},无 steps)
+                    body = json.loads(request.content)
+                    return httpx.Response(200, json={
+                        "ok": True, "dim": "scenario",
+                        "data": {"consumer": "gimbal", "converted": body["scenario"]},
+                    })
                 if self.behaviour == "4xx":
                     return httpx.Response(
                         400,
@@ -529,7 +537,7 @@ async def test_run_auth_decrypt_failure_fails_execution(
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
             "env": test_env(),
-            "auths": ["corrupt1"],
+            "serviceBindings": {"fin": {"authAlias": "corrupt1"}},
         },
     )
     assert r.status_code == 201
@@ -572,7 +580,8 @@ async def test_run_dispatch_records_failure_when_plate_down(
 async def test_run_injects_exec_auths_into_run_copy_only(
     client: AsyncClient, plate_mock: PlateMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """执行用认证多选:解密注入只进 run 副本,convert 永不带明文。
+    """执行用认证注入(serviceBindings.authAlias):解密注入只进 run 副本,
+    convert 永不带明文。
 
     锁三条边界(#1 改造的安全契约 + V3.2 run 链路接线):
       1. convert 收到的 scenario.config.users 不含所选 alias 的明文凭据;
@@ -581,8 +590,8 @@ async def test_run_injects_exec_auths_into_run_copy_only(
          V1 executor 生产路径),且载体是 convert 的 **converted 产物**
          不是平台原始 dict。gimbal 子进程不在测试里真跑,monkeypatch
          捕获 launch 入参 — 验证的是 dispatcher 侧接线;
-      3. Execution.config_json 用读侧契约 key ``exec_auth_alias``(数组),
-         不再是旧的 "auth" 单选 key。
+      3. Execution.config_json 用读侧契约 key ``injectedAuths``(数组,
+         注入清单 = 扫描 ∪ 绑定),不再是旧的 "auth"/"exec_auth_alias"。
     """
     headers = await _register_and_login(client)
     await _seed_scenario_case_and_dataset(client, headers, rows=[{"qty": 1}])
@@ -628,7 +637,7 @@ async def test_run_injects_exec_auths_into_run_copy_only(
                 "name": "test-env-A",
                 "baseUrl": "http://x",
             },
-            "auths": ["qa1"],
+            "serviceBindings": {"fin-service": {"authAlias": "qa1"}},
         },
     )
     assert r.status_code == 201
@@ -668,8 +677,10 @@ async def test_run_injects_exec_auths_into_run_copy_only(
             .first()
         )
         assert ex is not None
-        assert ex.config_json["exec_auth_alias"] == ["qa1"]
+        assert ex.config_json["injectedAuths"] == ["qa1"]
+        assert ex.config_json["serviceBindings"]["fin-service"]["authAlias"] == "qa1"
         assert "auth" not in ex.config_json
+        assert "exec_auth_alias" not in ex.config_json
 
 
 async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
@@ -728,7 +739,7 @@ async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
             "scenarioId": "sc-test",
             "dataSetIds": ["ds-001"],
             "env": test_env(),
-            "auths": ["qa1"],
+            "serviceBindings": {"fin-service": {"authAlias": "qa1"}},
         },
     )
     assert r.status_code == 201
@@ -744,34 +755,3 @@ async def test_run_exec_auths_owner_scoped_cross_owner_alias_collision(
     assert users["qa1"]["username"] == "alice-user"
     assert users["qa1"]["password"] == "alice-pass"
     assert users["qa1"]["url"] == "http://alice-auth/login"
-
-
-def test_inject_exec_users_shape_and_no_mutation() -> None:
-    """_inject_exec_users: 同名覆盖 + 不改入参 + 空列表原样返回(单元级)。"""
-    from copy import deepcopy
-
-    from app.models.auth_session import AuthSession
-    from app.services.run_dispatcher import _inject_exec_users
-
-    a = AuthSession(
-        alias="qa1",
-        url="http://x",
-        username_enc="enc",
-        password_enc="enc",
-        token_type="bearer",
-        expires_in=3600,
-    )
-    a.username = "u"
-    a.password = "p"
-
-    composed = {"kind": "scenario", "config": {"users": {"keep": {"url": "k"}}}}
-    snapshot = deepcopy(composed)
-
-    out = _inject_exec_users(composed, [a])
-    # 同名覆盖 + 保留既有 users
-    assert out["config"]["users"]["keep"] == {"url": "k"}
-    assert out["config"]["users"]["qa1"]["username"] == "u"
-    # 入参未被改动(明文不回渗 compose 结果)
-    assert composed == snapshot
-    # 空列表 → 同一引用(无注入面)
-    assert _inject_exec_users(composed, []) is composed
