@@ -533,14 +533,15 @@ class ScenarioPreprocessor:
         解析策略：
           1. 收集所有 step 引用了哪些 service key
           2. 如果只有一个 service 被引用：用它（精确匹配）
-          3. 如果多个 service 被引用：当前架构只支持一个 base_url per scenario，
-             取第一个并 warn（让用户知道是 multi-service 降级）
+          3. 如果多个 service 被引用：取其一作 base_url 并告知——D7 后各 step
+             由 scenario.config.services 查表路由，base_url 仅是 legacy
+             fallback，不再决定其他 service step 的成败
           4. 如果 step 未引用任何 service：fallback 到 services dict 的第一个
              （保留旧行为，向后兼容）
           5. 优先取 scenario.config.services，找不到再查 bootstrap.services
 
-        注：完全多服务支持需要 per-step base_url（架构层面变更），本次
-        修复仅消除"静默错路由"——最坏情况是 warn 而非 silent misroute。
+        注：D7 per-step 路由已上线（engine 侧查 services dict），本方法产出
+        的 base_url 仅作未命中/兼容回落；引用未声明服务的 step 仍显式报错。
         """
         sd = getattr(self._schema.config, "services", None) or {}
         if not sd:
@@ -574,13 +575,15 @@ class ScenarioPreprocessor:
             )
             return url
         elif len(referenced) > 1:
-            # 当前架构不支持 per-step base_url，降级并 warn
+            # D7 per-step 路由：各 step 经 scenario.config.services 查表解析
+            # 自己的 URL，不再失败；base_url 仅作 legacy fallback。
             chosen = next(iter(referenced))
             url = sd[chosen]
             logger.warning(
                 "[Preprocessor] multi-service scenario detected: 引用了 {} 个 "
-                "service keys ({})。当前架构只支持一个 base_url per scenario，"
-                "使用 '{}' 作为 fallback。其他 service 的 step 会失败。",
+                "service keys ({})。base_url 回落为引用服务 '{}' 的声明 URL"
+                "（legacy fallback）；各 step 路由由 scenario.config.services "
+                "查表解析（D7），引用未声明服务的 step 仍会显式报错。",
                 len(referenced), sorted(referenced), chosen,
             )
             return url
