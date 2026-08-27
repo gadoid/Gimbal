@@ -101,7 +101,7 @@ path    /order                       ├─ fin.tidb-qa1       ← of == 本endp
 | `/full` 会话缓存 | 每次配置 endpoint 现拉 | ❌ 只读渲染数据(字段表单/断言/响应参考),不回写 api 对象 |
 | 适配中心 apply_op | plate 目录变更适配 | ❌ 按 view_hints.endpoint_id 定位,STEP_OPS 只动字段层 |
 
-**契约禁令(写入实施约束)**:任何 plate 拉取驱动的回写(现存适配 ops、未来契约同步)**不得触碰 `api.service`** —— `view_hints.endpoint_id` 是目录锚点,`api.service` 是用户引用键,两权分立。
+**契约禁令(写入实施约束)**:任何 plate 拉取驱动的回写(现存适配 ops、未来契约同步)**不得触碰 `api.service`** —— `view_hints.endpoint_id` 是目录锚点,`api.service` 是用户引用键,两权分立。禁令延伸覆盖未来导入链:导入按**不透明键**处理 `api.service`,不得对 plate 目录做存在性校验、不得按目录名规范化改写(违此则别名场景导入即坏)。
 
 **命名约定**:别名保持 `系统.名字` 前缀(config.services 分组展示与 checkSystemMismatch 的 `svc.split('.')[0]` 依赖前缀)。
 
@@ -180,6 +180,8 @@ statemachine/engine.py    _do_http_call: service_url = services.get(api.service)
 
 按方案导出的物化 = **已实现**的 `materialize_run_copy`(spec §8 / commit 412bf95):方案 bindings 作为 overlay 参数显式传入,物化发生在产物副本,库里 definition 永不被改写。别名机制零新增合并 —— 绑定键就是别名键,现有「显式绑定 > 声明值」语义直接套用。导出产物与平台执行跑同一引擎,per-step 查表同时惠及两者。
 
+**产物自洽性(导入安全基线)**:别名引用(`steps[].api.service`)与别名声明(`config.services`)同在 definition 随产物走 —— 产物对任何 gimbal 部署自包含可执行,消费方按「键查表」语义工作,零别名感知。**不存在「后续必须按别名导入」的约定**;平台重导入丢 `of` 标签与 `endpoint_id`(导出剥离,所有导入场景通用)只影响编辑体验(裸声明降级、无法重链目录),不影响运行与再导出。导入侧硬约束见 §1.6 禁令延伸与 §7。
+
 ## 6. 变更点清单(文件级)
 
 | 区域 | 内容 |
@@ -202,7 +204,7 @@ statemachine/engine.py    _do_http_call: service_url = services.get(api.service)
 | 项 | 触发器/时点 |
 |---|---|
 | bootstrap.services URL 兜底修缮 | 依赖 bootstrap 兜底 URL 的部署诉求出现 |
-| 导入反向映射(产物 config → 平台实体,含 of 重建) | feature-gaps #1 立项 |
+| 导入反向映射(产物 config → 平台实体,含 of 重建) | feature-gaps #1 立项;立项时须守 §1.6 禁令延伸(api.service 不透明键:禁目录存在性校验、禁按目录名规范化改写);of 重建为增强项,候选 = 按 method+path 重链目录后回推 of / 导出 bundle 旁挂平台 meta(endpoint_id 映射 + serviceMeta);两者皆无 = 裸声明降级(§1.5),运行/再导出零影响 |
 | 数据集行展开导出 | 沿袭原 spec §2 |
 | gimbal 插件执行参数/日志订阅 | gimbal 侧就绪后接入(方案字段已预埋) |
 | 团队共享方案 / 全局别名库(跨场景复用别名声明) | per-user 场景所有权语义下无需求;出现时评估独立于场景的声明面 |
