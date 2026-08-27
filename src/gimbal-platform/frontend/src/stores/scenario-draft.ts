@@ -23,6 +23,7 @@ import { exportTimestamp } from '@/utils/datetime'
 import { ElMessage } from 'element-plus'
 import type { ScenarioDraft, Orchestration } from '@/types/scenario-composer'
 import type { ScenarioView } from '@/types/plate'
+import type { RunScheme, RunOverlay } from '@/api/scenario-composer'
 
 interface DraftSnapshot {
   definition: ScenarioView
@@ -31,9 +32,20 @@ interface DraftSnapshot {
   scenarioId: string | null
 }
 
-/** 草稿 → plate /convert → 纯可执行结构(store 无关,列表页行级导出复用)。 */
-export async function convertDraftToExecutable(draft: ScenarioDraft): Promise<Record<string, any>> {
-  const res = await previewPlateDraft(draft)
+/** RunScheme → 导出 overlay(spec §8):只带 envId + serviceBindings,
+ *  dataSetIds 有意不带(spec §7.3 导出是场景级,v1 忽略行语义)。
+ *  envId 归一化:null / "" → undefined — undefined 键在 JSON 序列化时被
+ *  丢弃,后端按「未钉环境」处理;绝不能以 "" 上送(环境查找 404)。 */
+export function schemeToOverlay(s: RunScheme): RunOverlay {
+  return { envId: s.envId || undefined, serviceBindings: s.serviceBindings }
+}
+
+/** 草稿 → plate /convert → 纯可执行结构(store 无关,列表页行级导出复用)。
+ *  overlay(按方案导出)不传 → 行为与旧完全一致。 */
+export async function convertDraftToExecutable(
+  draft: ScenarioDraft, overlay?: RunOverlay,
+): Promise<Record<string, any>> {
+  const res = await previewPlateDraft(draft, overlay)
   if (!res.ok) {
     const errMsg = res.errors?.length
       ? res.errors.map((e) => `${e.path}: ${e.message}`).join('; ')
@@ -61,13 +73,13 @@ export const useScenarioDraftStore = defineStore('scenario-draft', () => {
    * 已经把 endpoints / navigation / config_summary 等平台视图扩展字段
    * 过滤掉,我们直接用 converted 即可。
    */
-  async function fetchConverted(): Promise<Record<string, any>> {
+  async function fetchConverted(overlay?: RunOverlay): Promise<Record<string, any>> {
     if (!draft.value) {
       throw new Error('当前没有可导出的草稿')
     }
     // 容器形:definition 原样透传 plate /convert;orchestration 不进 plate。
     const { definition, orchestration } = draft.value
-    return convertDraftToExecutable({ definition, orchestration })
+    return convertDraftToExecutable({ definition, orchestration }, overlay)
   }
 
   function fileBase(): string {
@@ -78,15 +90,16 @@ export const useScenarioDraftStore = defineStore('scenario-draft', () => {
     return `${id}-${ts}`
   }
 
-  async function exportJson(): Promise<void> {
-    const converted = await fetchConverted()
+  /** overlay(按方案导出,spec §8)不传 → 下载行为与旧完全一致。 */
+  async function exportJson(overlay?: RunOverlay): Promise<void> {
+    const converted = await fetchConverted(overlay)
     const base = fileBase()
     downloadFile(`${base}.json`, JSON.stringify(converted, null, 2), 'application/json')
     ElMessage.success(`已导出 ${base}.json (plate 转换后)`)
   }
 
-  async function exportYaml(): Promise<void> {
-    const converted = await fetchConverted()
+  async function exportYaml(overlay?: RunOverlay): Promise<void> {
+    const converted = await fetchConverted(overlay)
     const base = fileBase()
     const content = yaml.dump(converted, { lineWidth: 120, noRefs: true })
     downloadFile(`${base}.yaml`, content, 'application/x-yaml')

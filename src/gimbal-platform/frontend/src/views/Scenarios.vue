@@ -198,14 +198,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, defineComponent, h, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Collection, Search, Star, StarFilled } from '@element-plus/icons-vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useAuthStore } from '@/stores/auth'
 import { getScenarioDraft } from '@/api/scenario-composer'
-import { convertDraftToExecutable } from '@/stores/scenario-draft'
+import type { RunScheme, RunOverlay } from '@/api/scenario-composer'
+import { convertDraftToExecutable, schemeToOverlay } from '@/stores/scenario-draft'
 import { downloadFile } from '@/utils/download'
 import { useListSearch } from '@/utils/useListSearch'
 import { confirmAction } from '@/utils/confirmAction'
@@ -217,7 +218,7 @@ import TagPill from '@/components/TagPill.vue'
 import SystemChip from '@/components/SystemChip.vue'
 import PriorityPill from '@/components/PriorityPill.vue'
 import { applyFiltersToList, emptyFilters, type ScenarioFilters } from '@/utils/filters'
-import type { Scenario } from '@/types/scenario-composer'
+import type { Scenario, Orchestration } from '@/types/scenario-composer'
 
 const store = useScenarioComposerStore()
 const auth = useAuthStore()
@@ -333,17 +334,76 @@ function onCreate() {
   router.push('/composer/new?step=1')
 }
 
+/** Orchestration + 运行方案 sidecar 键(后端 Task 10 起收录 runSchemes,
+ *  前端 Orchestration 类型尚未声明 — 与 CaseComposer.vue 同款约定)。 */
+type OrchestrationWithSchemes = Orchestration & { runSchemes?: RunScheme[] }
+
+/** 行级「按方案导出」选择器(spec §8):ElMessageBox + 原生 radio 简易
+ *  下拉(遵循本文件 ElMessageBox 的既有交互风格;原生控件不经 teleport
+ *  弹层嵌套,行为可预期)。
+ *  返回:RunScheme = 选中方案;null = 默认导出(不套方案);undefined = 取消。 */
+async function pickExportScheme(
+  schemes: RunScheme[],
+  scenarioName: string,
+): Promise<RunScheme | null | undefined> {
+  const chosen = ref('')
+  const option = (value: string, label: string) => h(
+    'label',
+    { style: 'display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer' },
+    [
+      h('input', {
+        type: 'radio',
+        name: 'export-scheme',
+        value,
+        checked: chosen.value === value,
+        onChange: () => { chosen.value = value },
+      }),
+      h('span', null, label),
+    ],
+  )
+  // 内联组件让 message 的渲染函数闭包 chosen — radio 点击可重渲染选中态。
+  const PickerBody = defineComponent({
+    setup: () => () => h('div', null, [
+      h('p', { style: 'margin:0 0 10px;color:#5a6273' },
+        '该场景存有运行方案 — 按方案导出会把方案的环境与服务绑定物化进导出文件。'),
+      option('', '默认导出(不套方案)'),
+      ...schemes.map((s) => option(
+        s.name,
+        `按方案导出 · ${s.name}${s.envId ? `(env: ${s.envId})` : ''}`,
+      )),
+    ]),
+  })
+  try {
+    await ElMessageBox.confirm(h(PickerBody), `导出场景 ${scenarioName}`, {
+      confirmButtonText: '导出',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return undefined // cancel / close 都不是错误
+  }
+  return chosen.value ? (schemes.find((s) => s.name === chosen.value) ?? null) : null
+}
+
 /** 行级导出 — 不污染共享 store 的"进行中"对象。
  *
  * 之前实现是先 loadFromSaved → exportJson,会把 store 当前持有的草稿覆盖掉,
  * 导致用户在 CaseComposer 里改了一半的其它场景被静默丢失。
  *
  * 这里直接走 plate preview-plate + 自己下载,store 状态完全不变。
+ * 场景存有运行方案时先弹方案选择(可回退默认导出),选中后 overlay
+ * ({envId, serviceBindings})物化进导出(spec §8);无方案走原路径。
  */
 async function exportRow(row: Scenario) {
   try {
     const draft = await getScenarioDraft(row.meta.scenarioId)
-    const converted = await convertDraftToExecutable(draft)
+    let overlay: RunOverlay | undefined
+    const schemes = (draft.orchestration as OrchestrationWithSchemes | undefined)?.runSchemes ?? []
+    if (schemes.length) {
+      const picked = await pickExportScheme(schemes, row.meta.name || row.meta.scenarioId)
+      if (picked === undefined) return // 用户取消
+      if (picked) overlay = schemeToOverlay(picked)
+    }
+    const converted = await convertDraftToExecutable(draft, overlay)
     const ts = exportTimestamp()
     const filename = `${row.meta.scenarioId}-${ts}.json`
     downloadFile(filename, JSON.stringify(converted, null, 2), 'application/json')

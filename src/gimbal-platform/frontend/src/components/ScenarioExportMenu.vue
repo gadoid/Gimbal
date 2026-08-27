@@ -37,6 +37,15 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
           复制 JSON
         </el-dropdown-item>
+        <!-- 按方案导出(spec §8):方案的 envId/serviceBindings 物化进导出。
+             首项 divided 与上方动作分组;统一走 exportJson(overlay)。 -->
+        <el-dropdown-item
+          v-for="(s, i) in schemes"
+          :key="s.name"
+          :command="`scheme:${s.name}`"
+          :disabled="exporting"
+          :divided="i === 0"
+        >按方案导出 · {{ s.name }}</el-dropdown-item>
       </el-dropdown-menu>
     </template>
   </el-dropdown>
@@ -44,8 +53,14 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useScenarioDraftStore } from '@/stores/scenario-draft'
+import { useScenarioDraftStore, schemeToOverlay } from '@/stores/scenario-draft'
 import { ElMessage } from 'element-plus'
+import type { RunScheme } from '@/api/scenario-composer'
+import type { Orchestration } from '@/types/scenario-composer'
+
+/** Orchestration + 运行方案 sidecar 键(后端 Task 10 起收录 runSchemes,
+ *  前端 Orchestration 类型尚未声明 — 与 CaseComposer.vue 同款约定)。 */
+type OrchestrationWithSchemes = Orchestration & { runSchemes?: RunScheme[] }
 
 withDefaults(defineProps<{
   variant?: 'topbar'
@@ -57,6 +72,9 @@ const exporting = ref(false)
 const hasDraft = computed(() => !!store.draft)
 const labelText = computed(() => hasDraft.value ? '导出' : '导出 (无草稿)')
 
+const schemes = computed<RunScheme[]>(() =>
+  (store.draft?.orchestration as OrchestrationWithSchemes | undefined)?.runSchemes ?? [])
+
 async function onCommand(cmd: string) {
   if (!hasDraft.value) {
     ElMessage.warning('当前没有正在编辑的草稿,请先在 CaseComposer 里打开 / 新建一个场景')
@@ -64,7 +82,11 @@ async function onCommand(cmd: string) {
   }
   exporting.value = true
   try {
-    if (cmd === 'json') await store.exportJson()
+    if (cmd.startsWith('scheme:')) {
+      const s = schemes.value.find((x) => x.name === cmd.slice('scheme:'.length))
+      if (!s) return // 菜单打开期间方案被改掉 — 静默不导出
+      await store.exportJson(schemeToOverlay(s))
+    } else if (cmd === 'json') await store.exportJson()
     else if (cmd === 'yaml') await store.exportYaml()
     else if (cmd === 'copy') await store.copyJson()
   } catch (e) {
