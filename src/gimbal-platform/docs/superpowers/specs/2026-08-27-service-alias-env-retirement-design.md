@@ -51,7 +51,7 @@ composer_scenarios.payload
 ### 1.3 前缀派生规则(D5 二次拍板,替代 serviceMeta sidecar)
 
 ```
-别名形态:  <目录服务名>-<后缀>          如 fin-1、fin.tidb-test-2
+别名形态:  <目录服务名>-<后缀>          如 fin-service-2、fin.tidb-test-2(目录名含 "-" 或 "." 皆可)
 分隔符:    "-" 为唯一分隔符;后缀非空且不含 "-"(创建期拦截)
            → 别名内最后一个 "-" 必是分隔符,切分唯一确定、不依赖目录
 派生规则:  按最后一个 "-" 切出 base 与后缀;base ∈ plate 目录名集合 → 归属 = base
@@ -108,7 +108,11 @@ path    /order                       ├─ fin.tidb-test-2      ← 前缀派�
 
 **契约禁令(写入实施约束)**:任何 plate 拉取驱动的回写(现存适配 ops、未来契约同步)**不得触碰 `api.service`** —— `view_hints.endpoint_id` 是目录锚点,`api.service` 是用户引用键,两权分立。禁令延伸覆盖未来导入链:导入按**不透明键**处理 `api.service`,不得对 plate 目录做存在性校验、不得按目录名规范化改写(违此则别名场景导入即坏)。
 
-**命名约定**:别名 = `<目录服务名>-<后缀>`,`-` 为唯一分隔符,后缀非空且不含 `-`(内联创建与 Config 卡两处入口创建期拦截;目录名本身可含 `-`,不受影响);别名因此天然保持 `系统.名字` 前缀(config.services 分组展示与 checkSystemMismatch 的 `svc.split('.')[0]` 依赖前缀)。
+**命名约定**:别名 = `<目录服务名>-<后缀>`,`-` 为唯一分隔符,后缀非空且不含 `-`(内联创建与 Config 卡两处入口创建期拦截;目录名本身可含 `-` 如 fin-service,不受影响)。
+
+**存量点切逻辑处置**(勘明:全前端仅两处依赖服务名前缀):
+- `checkSystemMismatch`([CaseComposer.vue](../frontend/src/views/CaseComposer.vue) `svc.split('.')[0]`)—— **须改**:别名全串无点时被整串当系统,每个别名步骤误报「调用了未声明的系统」;改为先派生 base(`deriveAlias(key) ?? key`)再比对
+- `namespaceOf`([CaseComposerConfig.vue](../frontend/src/components/composer/CaseComposerConfig.vue) 首 `.` 前缀分组)—— **不改**:别名与 base 共享首个 `.` 前缀(无点则同落 common 组),分组自动一致
 
 ## 2. 执行环境彻底退役(D2)
 
@@ -193,7 +197,7 @@ statemachine/engine.py    _do_http_call: service_url = services.get(api.service)
 |---|---|
 | 前端 CaseComposerCanvas | 步骤面板双显 + 服务引用下拉(按 of 过滤)+ 内联建别名;目录插入不变 |
 | 前端 CaseComposerConfig | 声明卡归属列(前缀派生只读);删声明行即删键(无联动清理) |
-| 前端 CaseComposer | referencedServices 改声明∪引用并集;env 装配删除 |
+| 前端 CaseComposer | referencedServices 改声明∪引用并集;checkSystemMismatch 先派生 base 再比对(§1.6);env 装配删除 |
 | 前端 RunDialog | 环境 tiles 删除;confirm 签名去 env;绑定行取并集;方案回填/降级去 envId |
 | 前端 api/types/stores | envs api/store 删;RunScheme/RunRequest/ExportOverlay 类型去 env |
 | 后端 schemas | RunRequest.env/RunEnv/RunScheme.envId/ExportOverlay.envId 删(别名零 schema 增) |
@@ -218,7 +222,7 @@ statemachine/engine.py    _do_http_call: service_url = services.get(api.service)
 
 - 引擎:per-step 查表命中 / 回落 base_url / 双缺失显式报错;单服务场景全量回归**逐字节不变**;旧「多服务降级取第一个 + warn」断言改为正确路由;run() 签名调用点与 docstring 示例同步
 - 后端:RunScheme 去 envId 后窄端点往返;旧含 envId 方案静默降级;materialize 去 env 层等价;preview-plate overlay 无 env 路径;黄金等价测试随两层层级更新
-- 前端:前缀派生单元(最后 `-` 切分/目录名含 `-`/后缀含 `-` 创建期拦截/违规键降级裸声明);步骤面板别名下拉过滤(派生归属)/内联创建拼串双写/跨服务黄警/未声明红;Config 卡归属派生展示;RunDialog 无环境版重写;并集绑定行(未声明行救燃);方案栏回填新签名
+- 前端:前缀派生单元(最后 `-` 切分/目录名含 `-`/后缀含 `-` 创建期拦截/违规键降级裸声明);checkSystemMismatch 别名不误报系统告警;步骤面板别名下拉过滤(派生归属)/内联创建拼串双写/跨服务黄警/未声明红;Config 卡归属派生展示;RunDialog 无环境版重写;并集绑定行(未声明行救燃);方案栏回填新签名
 - 回归底线:plate 零改动;`vue-tsc --noEmit` 绿;现有套件只增不减全绿
 
 ## 9. 风险与对策
@@ -229,6 +233,7 @@ statemachine/engine.py    _do_http_call: service_url = services.get(api.service)
 | 别名键与模板 `${service.*}` 手写不一致(作者笔误) | 编辑期校验:${service.x} 引用的 x 不在声明面 → 悬空提示(tpl-refs 扩展,非阻塞;v1 可选增强,不进 §6 变更清单) |
 | 旧方案含 envId / 旧 execution 含 env 键 | pydantic 静默忽略;RECIPE_LABELS 保留旧键标签可读 |
 | 目录改名/下线致前缀失配 | 派生降级裸声明黄警(编辑期可见),运行零影响;目录侧变更本就经适配中心公告 |
+| plate 目录未来新增服务名恰与某别名全串相同(如目录新增 fin-service-2) | 该键语义翻为目录名直引(§1.5 末行);运行零影响(config.services 键与 URL 不变),编辑期黄警重分类,改后缀即可 |
 | 引擎回归面 | 单服务回落路径 + 逐字节不变回归;构造点唯一已勘明 |
 
 ## 10. 实施顺序建议(计划期细化)
