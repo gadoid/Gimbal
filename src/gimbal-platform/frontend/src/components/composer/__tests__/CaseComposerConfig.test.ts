@@ -12,13 +12,19 @@
  * 这组用例把组件挂成生产用法(父持 config,v-model 双向),
  * 复现并锁死该行为。
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import CaseComposerConfig from '@/components/composer/CaseComposerConfig.vue'
 import UsersCard from '@/components/composer/UsersCard.vue'
 import type { ConfigView } from '@/types/plate'
+
+// 目录服务名加载器 mock(归属列 deriveBase 的唯一外部输入)—— 用例不碰
+// /plate 网络;直引 / 别名派生 base / 未挂目录 全由该集合决定。
+vi.mock('@/utils/catalog-services', () => ({
+  loadCatalogServiceNames: vi.fn(async () => ['fin-service']),
+}))
 
 function makeConfig(): ConfigView {
   return {
@@ -103,5 +109,17 @@ describe('CaseComposerConfig — 用户认证卡(2026-08-25)', () => {
     })
     await flush()
     expect(config.value.users.qa1?.username).toBe('u')
+  })
+})
+
+describe('CaseComposerConfig — 归属列(别名派生只读展示, spec §1.4)', () => {
+  it('直引/别名行显示目录 base(同值两次);目录外违规键显示未挂目录', async () => {
+    const initial = makeConfig()
+    initial.services = { 'fin-service': 'https://a', 'fin-service-2': 'https://b', 'loose-key': 'https://c' }
+    const { w } = mountWithParent(initial)
+    await flush() // 等 onMounted 目录 loader(mocked)落地 + 重渲染
+    const owners = w.findAll('.svc-owner').map(n => n.text())
+    expect(owners.filter(t => t === 'fin-service')).toHaveLength(2) // 直引 + 别名 fin-service-2 派生
+    expect(owners).toContain('未挂目录')                            // loose-key: base 不在目录集合
   })
 })

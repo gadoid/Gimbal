@@ -221,6 +221,7 @@
               placeholder="alias (例: tidb-test-service)"
               size="small"
             />
+            <span class="svc-owner" :title="ownerLabel(s.alias)">{{ ownerLabel(s.alias) }}</span>
             <span class="c-kv-sep">→</span>
             <el-input
               :model-value="s.baseUrl"
@@ -250,9 +251,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import type { ConfigView, RetryPolicyView } from '@/types/plate'
 import { parseJson } from '../../utils/json'
+import { deriveBase } from '@/utils/service-alias'
+import { loadCatalogServiceNames } from '@/utils/catalog-services'
 import UsersCard from './UsersCard.vue'
 
 // plate TimePolicy 只有两态:record / timeout(带 seconds)。
@@ -326,6 +329,17 @@ const servicesBySystem = computed(() => {
   }
   return out
 })
+
+// ── 别名归属列(spec §1.4/§1.3):前缀派生只读标签,无手填 ──────────
+const catalogNames = ref<Set<string>>(new Set())
+onMounted(() => {
+  loadCatalogServiceNames()
+    .then((ns) => { catalogNames.value = new Set(ns) })
+    .catch(() => { /* 目录不可达 → 全部显示未挂目录,不阻塞编辑 */ })
+})
+function ownerLabel(alias: string): string {
+  return deriveBase(alias, catalogNames.value) ?? '未挂目录'
+}
 
 /**
  * 当前编辑态折叠成的 ConfigView(emit watch 发出的同一形状)。
@@ -482,7 +496,17 @@ function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: 
 /* vars / services 行 (c-kv-row 共享栅格) */
 .c-kv-row { margin-bottom: 4px; }
 .c-kv-row :deep(.el-input__wrapper) { background: var(--c-surface); }
+/* svc-row 在共享 4 列栅格上扩一列归属标签: alias | 归属 | → | url | × */
+.svc-row { grid-template-columns: minmax(140px, 220px) minmax(96px, 150px) 24px minmax(0, 1fr) 28px; }
+.svc-owner {
+  font-family: var(--font-mono); font-size: 11px; color: var(--c-text-tertiary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .svc-row .svc-url :deep(.el-input__wrapper) { font-family: var(--font-mono); }
+@media (max-width: 720px) {
+  /* 与共享层 .c-kv-sep 同款降级:窄屏收起归属列,退回 2 列行为 */
+  .svc-row .svc-owner { display: none; }
+}
 .c-ns-grid { display: flex; flex-direction: column; gap: 12px; }
 .c-ns-group .c-kv-row:last-child { margin-bottom: 0; }
 </style>

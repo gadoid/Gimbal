@@ -241,6 +241,8 @@ import RunDialog from '@/components/composer/RunDialog.vue'
 import ConstantPoolPanel from '@/components/composer/ConstantPoolPanel.vue'
 import { provideInsertTarget, useInsertTarget } from '@/composables/useInsertTarget'
 import { seedPoolVarIntoDefinition } from '@/utils/pool-var'
+import { deriveBase } from '@/utils/service-alias'
+import { loadCatalogServiceNames } from '@/utils/catalog-services'
 import { useConstantsStore } from '@/stores/constants'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
@@ -450,6 +452,12 @@ function seedPoolVar(name: string, spec: Record<string, unknown>): void {
   }
 }
 
+// ── 目录服务名集合(别名派生输入, spec D5/§1.6)──
+// checkSystemMismatch 先派生 base 再取系统前缀;与 Canvas/Config 共享
+// loader 的模块缓存 — 任一消费者先拉过则此处免费。失败静默降级为空
+// 集合 → 派生退回整串(现状行为),不阻塞加载。
+const catalogNames = ref<Set<string>>(new Set())
+
 // ── lifecycle ──
 onMounted(async () => {
   const stepParam = parseInt(route.query.step as string) || 1
@@ -458,6 +466,11 @@ onMounted(async () => {
   if (scenarioId.value && scenarioId.value !== 'new') {
     await loadScenario()
   }
+  // 目录名非阻塞拉取(fire-and-forget, 不 await):到达晚于下方首次
+  // checkSystemMismatch → 由 watch(catalogNames) 重算;失败静默降级。
+  loadCatalogServiceNames()
+    .then((ns) => { catalogNames.value = new Set(ns) })
+    .catch(() => { /* 目录不可达 → 派生降级为整串(现状行为) */ })
   // Auto-compute system warning (PRD §5.1 §9): declared systems vs
   // services actually called by steps.
   if (scenario.value) checkSystemMismatch()
@@ -487,8 +500,11 @@ function checkSystemMismatch() {
   const actual = new Set<string>()
   for (const s of scenario.value.steps as any[]) {
     const svc = (s.api && s.api.service) || ''
-    if (svc.includes('.')) actual.add(svc.split('.')[0])
-    else if (svc) actual.add(svc)
+    if (!svc) continue
+    // 先派生 base(别名 fin-service-2 → fin-service)再取系统前缀;
+    // 不派生则别名全串被当系统名,每个别名步骤都误报(spec §1.6)
+    const base = deriveBase(svc, catalogNames.value) ?? svc
+    actual.add(base.includes('.') ? base.split('.')[0] : base)
   }
   const missing = [...actual].filter(s => !declared.has(s) && s !== 'common')
   const extra = [...declared].filter(s => !actual.has(s) && s !== 'common')
@@ -497,6 +513,13 @@ function checkSystemMismatch() {
   if (extra.length) parts.push(`声明但未使用的系统: ${extra.join(', ')}`)
   systemMismatch.value = parts.join(' · ')
 }
+
+// 目录名异步到达(fire-and-forget)晚于 onMounted 首次比对 → 到达后
+// 重算一次,别名派生才真正生效;loader 失败时本 watch 不触发,
+// 维持整串降级(现状行为)。
+watch(catalogNames, () => {
+  if (scenario.value) checkSystemMismatch()
+})
 
 watch(() => route.query.step, (q) => {
   if (q) {
