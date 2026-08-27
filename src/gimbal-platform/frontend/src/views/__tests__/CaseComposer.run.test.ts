@@ -67,6 +67,11 @@ vi.mock('@/api/constants', () => ({
 vi.mock('@/api/auth_sessions', () => ({
   list: vi.fn(() => Promise.resolve([{ alias: 'qa1' }])),
 }))
+// 删除方案走 confirmAction 确认 — jsdom 下 ElMessageBox 无人可点,
+// mock 自动确认(取消路径由 RunDialog/confirmAction 各自单测覆盖)。
+vi.mock('@/utils/confirmAction', () => ({
+  confirmAction: vi.fn(async () => true),
+}))
 
 function sampleScenario(): Scenario {
   return {
@@ -201,6 +206,32 @@ describe('CaseComposer — RunDialog 对接(Task 12)', () => {
       orchestration?: { runSchemes?: unknown[] }
     }
     expect(draft?.orchestration?.runSchemes).toEqual(saved)
+    w.unmount()
+  })
+
+  it('deleteScheme → 确认后整表 PUT 去掉该项 + 草稿回填收缩', async () => {
+    const withSchemes = sampleScenario()
+    ;(withSchemes.orchestration as unknown as Record<string, unknown>).runSchemes = [
+      { name: '冒烟-qa1', dataSetIds: [], serviceBindings: {} },
+    ]
+    vi.spyOn(api, 'getScenario').mockResolvedValue(withSchemes)
+    const putRunSchemes = vi.fn().mockResolvedValue([])
+    vi.spyOn(api, 'putRunSchemes').mockImplementation(putRunSchemes)
+    const w = mountPage()
+    await flushPromises()
+    const dlg = await openRunDialog(w)
+
+    await dlg.find('.rd-scheme-select').setValue('冒烟-qa1')
+    await dlg.find('[data-testid="delete-scheme"]').trigger('click')
+    await flushPromises()
+
+    // 整表 PUT 去掉选中项(窄端点整键替换语义,后端零改动)
+    expect(putRunSchemes).toHaveBeenCalledWith('sc-demo', [])
+    // 落库返回值回填共享草稿 → RunDialog schemes prop 收缩自动回临时手填
+    const draft = useScenarioDraftStore().draft as unknown as {
+      orchestration?: { runSchemes?: unknown[] }
+    }
+    expect(draft?.orchestration?.runSchemes).toEqual([])
     w.unmount()
   })
 })

@@ -30,6 +30,13 @@
             </select>
             <input class="rd-scheme-name" v-model="schemeNameDraft" placeholder="方案名" maxlength="64" />
             <button class="ghost-btn" data-testid="save-scheme" type="button" @click="onSaveScheme">存为方案</button>
+            <button
+              v-if="selectedSavedScheme"
+              class="ghost-btn rd-del-scheme"
+              data-testid="delete-scheme"
+              type="button"
+              @click="onDeleteScheme"
+            >删除方案</button>
           </div>
 
           <!-- 数据集选择 -->
@@ -269,6 +276,8 @@ const emit = defineEmits<{
   ]
   /** 存为方案:当前 ds/绑定快照(无 envId,plugins/logSub 预埋 no-op) */
   saveScheme: [scheme: RunScheme]
+  /** 删除已存方案:父级确认后整表 PUT 去掉该项,回填使 schemes 收缩 */
+  deleteScheme: [name: string]
 }>()
 
 // ── 数据集(既有语义保留;执行环境已随 D2 退役)─────────────────
@@ -312,6 +321,23 @@ const schemeOptions = computed(() => [
     label: schemeDegraded.value.includes(s.name) ? `${s.name} · 配置已失效` : s.name,
   })),
 ])
+
+/** 选中态对应的已存方案(临时手填/上次运行不是删除对象) */
+const selectedSavedScheme = computed(() =>
+  props.schemes.find((s) => s.name === selectedScheme.value) ?? null)
+
+function onDeleteScheme() {
+  if (selectedSavedScheme.value) emit('deleteScheme', selectedSavedScheme.value.name)
+}
+
+// 选中方案从 schemes 消失(父级删除后整表 PUT 回填收缩)→ 选择器回
+// 「临时手填」,watch(selectedScheme) 随之把绑定重置为声明预填态。
+watch(() => props.schemes, (list) => {
+  const v = selectedScheme.value
+  if (v !== '__adhoc__' && v !== '__last__' && !list.some((s) => s.name === v)) {
+    selectedScheme.value = '__adhoc__'
+  }
+})
 
 // ── 用户与服务绑定(spec D3:声明 ∪ 引用并集固定行)────────────────
 // 绑定态:service → {authAlias?, url?};声明行预填 declaredUrl,方案/
@@ -556,6 +582,9 @@ function goCreateDataSet() {
   font-size: 12px; background: #fff;
 }
 .rd-scheme-bar .ghost-btn { padding: 6px 12px; font-size: 12px; }
+/* 删除方案:危险色弱化(ghost 底),hover 加深 — 只在选中已存方案时出现 */
+.rd-scheme-bar .rd-del-scheme { color: #b91c1c; border-color: #f3c1c1; }
+.rd-scheme-bar .rd-del-scheme:hover { background: #fef2f2; color: #991b1b; }
 
 /* data-set grid */
 .ds-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }

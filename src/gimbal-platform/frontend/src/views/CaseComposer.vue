@@ -224,6 +224,7 @@
       @close="runDialogOpen = false"
       @confirm="onRunConfirm"
       @save-scheme="onSaveScheme"
+      @delete-scheme="onDeleteScheme"
     />
   </div>
 </template>
@@ -673,6 +674,11 @@ async function saveDraft(advance = false, manual = true) {
       if (!saved) throw new Error('create failed: id 撞号重试耗尽')
     }
     scenario.value = saved
+    // 新建首次保存:路由仍停留 /composer/new → 替换为真实 id(F5 安全、
+    // URL 可分享;router-view 无 key 不重挂载,内存态原样保留)。
+    if (route.params.scenarioId === 'new') {
+      router.replace(composerUrl(saved.meta.scenarioId, stepIdx.value + 1))
+    }
     // 新建场景后拉一次数据集列表(空列表,但保持状态一致)
     if (!dataSets.value.length) await loadDataSets()
     lastSavedAt.value = new Date()
@@ -830,6 +836,32 @@ async function onSaveScheme(scheme: RunScheme) {
     }
   } catch (e) {
     showError('存方案', undefined, (e as Error).message)
+  }
+}
+
+/** 删除方案:确认后整表 PUT 去掉该项(窄端点整键替换语义,后端零改动);
+ *  落库返回值回填共享草稿 → RunDialog schemes prop 收缩,其内部 watch
+ *  检测选中项消失自动回「临时手填」。取消(含 ESC/遮罩)静默不动。 */
+async function onDeleteScheme(name: string) {
+  const id = scenario.value?.meta.scenarioId
+  if (!id) {
+    ElMessage.warning('场景尚未保存 — 无已存方案可删')
+    return
+  }
+  const ok = await confirmAction(
+    `删除方案 "${name}"?此操作不可撤销。`,
+    '删除方案',
+    { type: 'warning' },
+  )
+  if (!ok) return
+  try {
+    const saved = await api.putRunSchemes(id, runSchemes.value.filter(s => s.name !== name))
+    if (draftStore.draft) {
+      ;(draftStore.draft.orchestration as OrchestrationWithSchemes).runSchemes = saved
+    }
+    ElMessage.success(`已删除方案 ${name}`)
+  } catch (e) {
+    showError('删方案', undefined, (e as Error).message)
   }
 }
 </script>

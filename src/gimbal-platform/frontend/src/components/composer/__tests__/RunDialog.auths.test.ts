@@ -54,6 +54,27 @@ describe('执行环境退役(D2)', () => {
   })
 })
 
+describe('方案删除', () => {
+  it('临时手填/上次运行无删除按钮;选中已存方案 → 点击 emit deleteScheme(名字)', async () => {
+    const w = mountDlg()
+    expect(w.find('[data-testid="delete-scheme"]').exists()).toBe(false)
+
+    await w.find('.rd-scheme-select').setValue('冒烟-qa1')
+    expect(w.find('[data-testid="delete-scheme"]').exists()).toBe(true)
+    await w.find('[data-testid="delete-scheme"]').trigger('click')
+    expect(w.emitted('deleteScheme')![0]).toEqual(['冒烟-qa1'])
+    w.unmount()
+  })
+
+  it('方案从 schemes 消失(父级删后回填)→ 选择器自动回「临时手填」', async () => {
+    const w = mountDlg()
+    await w.find('.rd-scheme-select').setValue('冒烟-qa1')
+    await w.setProps({ schemes: [] })
+    expect((w.find('.rd-scheme-select').element as HTMLSelectElement).value).toBe('__adhoc__')
+    w.unmount()
+  })
+})
+
 describe('并集绑定行(D3)', () => {
   it('声明 ∪ 引用各一行;声明行 URL 预填、未声明行标红', () => {
     const w = mountDlg()
