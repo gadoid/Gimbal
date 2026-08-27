@@ -18,6 +18,8 @@ class ExecutionOut(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     config: dict
+    # 执行时场景快照是否存在(存量行 False → 前端"导出场景"置灰)。
+    has_scenario_snapshot: bool = False
 
 
 class ExecutionListOut(BaseModel):

@@ -422,6 +422,10 @@ async def dispatch_run(
         scenario_id=scen.scenario_id,
         owner_id=user_id,
         total_runs=total_runs,
+        # 执行时场景快照:与传给 _fanout 的 scenario_payload 同拍同源
+        # (同一读取),保证"快照即所执行";深拷贝隔离后续 fanout 内的
+        # setdefault 写穿,不污染快照。
+        scenario_snapshot=copy.deepcopy(scen.payload or {}),
         config_json={
             "runId": run_id,
             "scenarioId": scen.scenario_id,
@@ -1213,6 +1217,7 @@ async def _create_execution(
     owner_id: int,
     total_runs: int,
     config_json: dict,
+    scenario_snapshot: dict | None = None,
 ) -> Execution:
     """Insert an Execution row."""
     ex = Execution(
@@ -1223,6 +1228,7 @@ async def _create_execution(
         passed=0,
         failed=0,
         config_json=config_json,
+        scenario_snapshot=scenario_snapshot,
     )
     db.add(ex)
     await db.commit()

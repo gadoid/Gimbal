@@ -19,6 +19,7 @@ function makeExec(id: number, status: api.ExecutionStatus): api.Execution {
     started_at: null,
     finished_at: null,
     config: {},
+    has_scenario_snapshot: false,
   }
 }
 
@@ -48,6 +49,35 @@ it('remove() 出清 list/detail + expanded/rows/工件缓存(不误伤其他 id)
   expect(store.artifactText['9:case-a:engine-log']).toBeUndefined()
   expect(store.artifactText['10:case-b:result']).toBe('{ }')
   expect(store.artifactError['9:case-a:result']).toBeUndefined()
+})
+
+it('toggleArtifact:展开即拉一次并记 key;收起只藏不清缓存;重展重拉', async () => {
+  const artSpy = vi.spyOn(api, 'getCaseArtifact').mockResolvedValue('log-body')
+  const store = useExecutionsStore()
+
+  store.toggleArtifact(9, 'case-a', 'engine-log')      // 展开
+  expect(artSpy).toHaveBeenCalledWith(9, 'case-a', 'engine-log')
+  expect(store.expandedArtifacts.has('9:case-a:engine-log')).toBe(true)
+
+  store.toggleArtifact(9, 'case-a', 'engine-log')      // 收起:视图藏,缓存留
+  expect(store.expandedArtifacts.has('9:case-a:engine-log')).toBe(false)
+
+  store.toggleArtifact(9, 'case-a', 'engine-log')      // 重展:重拉最新
+  expect(artSpy).toHaveBeenCalledTimes(2)
+  expect(store.expandedArtifacts.has('9:case-a:engine-log')).toBe(true)
+})
+
+it('remove() 同时出清该 id 的工件展开态', async () => {
+  vi.spyOn(api, 'remove').mockResolvedValue(undefined)
+  const store = useExecutionsStore()
+  store.expandedArtifacts = new Set(['9:case-a:engine-log', '10:case-b:result'])
+  store.list = [makeExec(9, 'done'), makeExec(10, 'running')]
+  store.detail = makeExec(9, 'done')
+
+  await store.remove(9)
+
+  expect(store.expandedArtifacts.has('9:case-a:engine-log')).toBe(false)
+  expect(store.expandedArtifacts.has('10:case-b:result')).toBe(true)
 })
 
 it('tick:已知终态且已有 rows 的执行跳过;首拍观察到终态的那一拍仍拉', async () => {

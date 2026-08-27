@@ -1,5 +1,6 @@
 /** executions.ts — typed wrappers around /api/executions/* endpoints. */
 import http from './http'
+import type { ScenarioDraft } from '@/types/scenario-composer'
 import type { ServiceBinding } from './scenario-composer'
 
 export type ExecutionStatus = 'queued' | 'running' | 'done' | 'failed' | 'canceled'
@@ -13,6 +14,8 @@ export interface Execution {
   failed: number
   started_at: string | null
   finished_at: string | null
+  /** 执行时场景快照是否存在(存量行 false → 详情页"导出场景"置灰)。 */
+  has_scenario_snapshot: boolean
   config: {
     // V3 dispatcher 写入的配方键(run_dispatcher._create_execution,
     // 与 RunRequest 创建入参一一对应;camelCase)。
@@ -84,5 +87,13 @@ export function getCaseArtifact(
 ): Promise<string> {
   return http
     .get<string>(`/executions/${id}/case-artifact`, { params: { case: caseStem, file } })
+    .then((r) => r.data)
+}
+
+/** 执行时场景快照(dispatch 同拍存的 draft 容器,场景后改不影响)。
+ *  存量行无快照 → 404 {code:"scenario_snapshot_not_found"}。 */
+export function getScenarioSnapshot(id: number): Promise<ScenarioDraft> {
+  return http
+    .get<ScenarioDraft>(`/executions/${id}/scenario-snapshot`)
     .then((r) => r.data)
 }

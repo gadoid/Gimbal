@@ -34,6 +34,21 @@
         <span :class="['status-tag', `status-${execStore.detail.status}`]">
           {{ statusText }}
         </span>
+        <el-tooltip
+          content="该执行早于快照功能上线，无执行时场景快照"
+          :disabled="execStore.detail.has_scenario_snapshot"
+          placement="top"
+        >
+          <span>
+            <el-button
+              link
+              type="primary"
+              :disabled="!execStore.detail.has_scenario_snapshot"
+              data-testid="exec-export-scenario"
+              @click="exportScenario"
+            >导出场景</el-button>
+          </span>
+        </el-tooltip>
         <el-button
           v-if="canCancel"
           link
@@ -142,16 +157,16 @@
                     size="small"
                     :disabled="!row.caseDir"
                     :data-testid="`row-artifact-${row.seq}-engine-log`"
-                    @click="loadArtifact(row, 'engine-log')"
-                  >引擎日志</el-button>
+                    @click="toggleArtifact(row, 'engine-log')"
+                  >{{ isArtifactShown(row, 'engine-log') ? '收起日志' : '引擎日志' }}</el-button>
                   <el-button
                     link
                     type="primary"
                     size="small"
                     :disabled="!row.caseDir"
                     :data-testid="`row-artifact-${row.seq}-result`"
-                    @click="loadArtifact(row, 'result')"
-                  >步骤明细</el-button>
+                    @click="toggleArtifact(row, 'result')"
+                  >{{ isArtifactShown(row, 'result') ? '收起明细' : '步骤明细' }}</el-button>
                 </span>
               </td>
             </tr>
@@ -197,11 +212,14 @@ import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { executionStatusText, isTerminalExecutionStatus } from '@/utils/executionStatus'
-import { cancelExecution } from '@/api/executions'
+import { cancelExecution, getScenarioSnapshot } from '@/api/executions'
 import type { ExecutionRow } from '@/api/executions'
 import { removeExecution } from '@/utils/removeExecution'
 import { showError } from '@/utils/errorFallback'
 import { useExecutionsStore } from '@/stores/executions'
+import { convertDraftToExecutable } from '@/stores/scenario-draft'
+import { downloadFile } from '@/utils/download'
+import { exportTimestamp } from '@/utils/datetime'
 
 const route = useRoute()
 const router = useRouter()
@@ -301,15 +319,21 @@ interface RowArtifactView {
   isError: boolean
 }
 
-function loadArtifact(row: ExecutionRow, file: ArtifactFile): void {
-  void execStore.fetchArtifact(executionId.value, row.caseDir, file)
+/** 工件视图展开/收起(展开重拉最新;收起藏视图,缓存留在 store)。 */
+function toggleArtifact(row: ExecutionRow, file: ArtifactFile): void {
+  execStore.toggleArtifact(executionId.value, row.caseDir, file)
 }
 
-/** 已拉取工件 → 渲染视图(按需拉取,不轮询)。 */
+function isArtifactShown(row: ExecutionRow, file: ArtifactFile): boolean {
+  return execStore.expandedArtifacts.has(`${executionId.value}:${row.caseDir}:${file}`)
+}
+
+/** 已展开且已拉取的工件 → 渲染视图(按需拉取,不轮询)。 */
 function loadedArtifacts(row: ExecutionRow): RowArtifactView[] {
   const out: RowArtifactView[] = []
   for (const file of ARTIFACT_FILES) {
     const key = `${executionId.value}:${row.caseDir}:${file}`
+    if (!isArtifactShown(row, file)) continue
     const err = execStore.artifactError[key]
     if (err !== undefined) {
       out.push({ file, content: err, isError: true })
@@ -395,6 +419,23 @@ async function removeExec() {
   if (!execStore.detail) return
   const ok = await removeExecution(execStore.detail.id, (i) => execStore.remove(i))
   if (ok) router.push('/executions')
+}
+
+/** 导出执行时场景快照:快照 draft → plate convert(无 overlay、不注入
+ *  凭证,与场景库"默认导出"同构)→ 下载。文件名带 exec<id> 区分于
+ *  场景库导出;执行时的服务绑定/数据集选择在执行配方里另行可读。 */
+async function exportScenario(): Promise<void> {
+  if (!execStore.detail) return
+  try {
+    const draft = await getScenarioSnapshot(execStore.detail.id)
+    const converted = await convertDraftToExecutable(draft)
+    const filename =
+      `${execStore.detail.scenario_id}-exec${execStore.detail.id}-${exportTimestamp()}.json`
+    downloadFile(filename, JSON.stringify(converted, null, 2), 'application/json')
+    ElMessage.success(`已导出 ${filename}（执行时版本）`)
+  } catch (e) {
+    showError('导出场景', e)
+  }
 }
 
 /** P4:请求协作式取消;在飞 fanout 在行边界收敛,刷新看最新状态。 */

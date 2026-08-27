@@ -22,6 +22,7 @@ def execution_out(e: Execution) -> ExecutionOut:
         started_at=e.started_at,
         finished_at=e.finished_at,
         config=e.config_json or {},
+        has_scenario_snapshot=e.scenario_snapshot is not None,
     )
 
 

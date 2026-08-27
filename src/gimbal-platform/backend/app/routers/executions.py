@@ -123,6 +123,27 @@ async def get_case_artifact(
     return PlainTextResponse(path.read_text(encoding="utf-8"))
 
 
+# ── scenario-snapshot(执行时场景快照,P-review)────────────────
+@router.get("/{execution_id}/scenario-snapshot")
+async def get_scenario_snapshot(ex: OwnedExecution) -> dict:
+    """执行时的场景 draft 容器({definition, orchestration})原样返回。
+
+    dispatch 同拍快照(见 run_dispatcher._create_execution)— 场景此后
+    被编辑不影响本端点内容。原样透传、不经 ScenarioDraft 重校验:快照是
+    历史事实,schema 漂移不应让旧快照不可读(与 GET /scenarios/{id}/draft
+    的校验语义不同,那是对"活草稿"的校验)。存量行无快照 → 404 带明确
+    code(前端据此区分"无快照"与"无权限",两者对用户都呈现为不可导出)。"""
+    if not ex.scenario_snapshot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "scenario_snapshot_not_found",
+                "message": "该执行早于快照功能上线,无场景快照",
+            },
+        )
+    return ex.scenario_snapshot
+
+
 # ── delete ─────────────────────────────────────────────────────
 @router.delete("/{execution_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_execution(

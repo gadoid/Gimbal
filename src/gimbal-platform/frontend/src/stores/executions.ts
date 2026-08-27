@@ -34,6 +34,8 @@ export const useExecutionsStore = defineStore('executions', () => {
   const artifactText = ref<Record<string, string>>({})
   /** 工件拉取失败文案(同 key;成功重拉时清除) */
   const artifactError = ref<Record<string, string>>({})
+  /** 已展开工件视图的 key 集合(同上 key;收起只藏视图不清缓存) */
+  const expandedArtifacts = ref<Set<string>>(new Set())
 
   /** 行级状态软失败:下次 tick/展开点击自然重试,不打断详情轮询。 */
   async function fetchRows(id: number): Promise<void> {
@@ -75,6 +77,24 @@ export const useExecutionsStore = defineStore('executions', () => {
     }
     expanded.value = next
     if (next.has(id)) void fetchRows(id)
+  }
+
+  /** 工件视图展开/收起:展开即拉一次(运行中单日志在长,重展重拉最新);
+   *  收起只藏视图,缓存留着重展不闪。 */
+  function toggleArtifact(
+    id: number,
+    caseStem: string,
+    file: 'engine-log' | 'result',
+  ): void {
+    const key = `${id}:${caseStem}:${file}`
+    const next = new Set(expandedArtifacts.value)
+    if (next.has(key)) {
+      next.delete(key)
+    } else {
+      next.add(key)
+      void fetchArtifact(id, caseStem, file)
+    }
+    expandedArtifacts.value = next
   }
 
   async function fetchList(): Promise<Execution[]> {
@@ -127,6 +147,11 @@ export const useExecutionsStore = defineStore('executions', () => {
       )
     artifactText.value = keepOthers(artifactText.value)
     artifactError.value = keepOthers(artifactError.value)
+    const nextArtifacts = new Set(expandedArtifacts.value)
+    for (const k of nextArtifacts) {
+      if (k.startsWith(`${id}:`)) nextArtifacts.delete(k)
+    }
+    expandedArtifacts.value = nextArtifacts
   }
 
   /**
@@ -211,12 +236,14 @@ export const useExecutionsStore = defineStore('executions', () => {
     expanded,
     artifactText,
     artifactError,
+    expandedArtifacts,
     fetchList,
     fetchDetail,
     remove,
     fetchRows,
     fetchArtifact,
     toggleExpanded,
+    toggleArtifact,
     startPolling,
     stopPolling,
   }

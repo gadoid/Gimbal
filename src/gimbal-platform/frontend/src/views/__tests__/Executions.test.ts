@@ -23,7 +23,9 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import ElementPlus from 'element-plus'
 import Executions from '@/views/Executions.vue'
 import { useExecutionsStore } from '@/stores/executions'
-import { cancelExecution, getExecutionRows, getCaseArtifact } from '@/api/executions'
+import { cancelExecution, getExecutionRows, getCaseArtifact, getScenarioSnapshot } from '@/api/executions'
+import { previewPlateDraft } from '@/api/scenario-composer'
+import type { ScenarioDraft } from '@/types/scenario-composer'
 import type { Execution } from '@/api/executions'
 
 vi.mock('@/api/executions', async (importOriginal) => {
@@ -34,8 +36,26 @@ vi.mock('@/api/executions', async (importOriginal) => {
     // T13 行级可观测:rows/artifact 默认空实现,各用例按需 mockResolvedValue。
     getExecutionRows: vi.fn().mockResolvedValue({ items: [] }),
     getCaseArtifact: vi.fn().mockResolvedValue(''),
+    // 场景快照导出:默认无快照(存量行形态),快照用例按需覆写。
+    getScenarioSnapshot: vi.fn().mockRejectedValue(new Error('no snapshot')),
   }
 })
+
+// 快照导出链:plate convert 在 api 层 mock(真实 convertDraftToExecutable
+// 逻辑照跑),downloadFile 打点断言文件名与内容。
+vi.mock('@/api/scenario-composer', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('@/api/scenario-composer')>()
+  return {
+    ...orig,
+    previewPlateDraft: vi.fn().mockResolvedValue({
+      ok: true, errors: [], converted: { kind: 'scenario', convertedBy: 'plate' },
+    }),
+  }
+})
+
+vi.mock('@/utils/download', () => ({
+  downloadFile: vi.fn(),
+}))
 
 function makeRouter() {
   return createRouter({
@@ -56,6 +76,7 @@ const fakeDetail = {
   failed: 1,
   started_at: null,
   finished_at: null,
+  has_scenario_snapshot: true,
   config: {
     runId: 'run-42',
     scenarioId: 'sc_demo',
@@ -272,6 +293,64 @@ describe('Executions.vue — T13 行级明细 + 配方标签迁移', () => {
     w.unmount()
   })
 
+  it('工件可收起:点击引擎日志展开,再点收起,又点重新展开并重拉', async () => {
+    vi.mocked(getExecutionRows).mockResolvedValue({ items: [
+      { seq: 0, datasetId: null, rowIndex: 0, rep: 0, status: 'passed',
+        caseDir: 'case-000-baseline-r0-n0', startedAt: 't1', finishedAt: 't2' } ] })
+    vi.mocked(getCaseArtifact).mockResolvedValue('engine says hi')
+
+    const execStore = useExecutionsStore()
+    const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
+    execStore.detail = detail7
+    execStore.fetchDetail = vi.fn().mockResolvedValue(detail7)
+
+    const w = await mountPage(7)
+    await w.find('[data-testid="exec-row-7"]').trigger('click')
+    await flushPromises()
+
+    const btn = w.find('[data-testid="row-artifact-0-engine-log"]')
+    await btn.trigger('click')            // 第一次点:展开
+    await flushPromises()
+    expect(w.text()).toContain('engine says hi')
+
+    await btn.trigger('click')            // 第二次点:收起
+    await flushPromises()
+    expect(w.text()).not.toContain('engine says hi')
+
+    await btn.trigger('click')            // 第三次点:重新展开(重拉最新)
+    await flushPromises()
+    expect(w.text()).toContain('engine says hi')
+    // 展开 + 重展各拉一次;收起不拉。
+    expect(getCaseArtifact).toHaveBeenCalledTimes(2)
+    w.unmount()
+  })
+
+  it('工件可收起:步骤明细同样支持展开/收起', async () => {
+    vi.mocked(getExecutionRows).mockResolvedValue({ items: [
+      { seq: 0, datasetId: null, rowIndex: 0, rep: 0, status: 'passed',
+        caseDir: 'case-000-baseline-r0-n0', startedAt: 't1', finishedAt: 't2' } ] })
+    vi.mocked(getCaseArtifact).mockResolvedValue('{"launchStatus":"ok"}')
+
+    const execStore = useExecutionsStore()
+    const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
+    execStore.detail = detail7
+    execStore.fetchDetail = vi.fn().mockResolvedValue(detail7)
+
+    const w = await mountPage(7)
+    await w.find('[data-testid="exec-row-7"]').trigger('click')
+    await flushPromises()
+
+    const btn = w.find('[data-testid="row-artifact-0-result"]')
+    await btn.trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain('launchStatus')
+
+    await btn.trigger('click')
+    await flushPromises()
+    expect(w.text()).not.toContain('launchStatus')
+    w.unmount()
+  })
+
   it('行级数据为空(预部署/认证快速失败)显示空态而非报错', async () => {
     vi.mocked(getExecutionRows).mockResolvedValue({ items: [] })
 
@@ -314,6 +393,70 @@ describe('Executions.vue — T13 行级明细 + 配方标签迁移', () => {
     expect(dtTexts).toContain('注入凭证')        // 新键标签(injectedAuths)
     expect(dtTexts).toContain('提单号前缀')      // 旧键标签保留(历史记录可读)
     expect(w.text()).not.toContain('[object Object]')  // 对象值序列化可读
+    w.unmount()
+  })
+})
+
+describe('Executions.vue — 执行时场景快照导出', () => {
+  // 注意:本文件第一个 describe 用 restoreAllMocks,会把 factory mock 的
+  // mockResolvedValue 实现抹掉(单测隔离跑得通、全文件跑挂的那种序)——
+  // 与 T13 describe 同款防御:实现一律 beforeEach 重建。
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    vi.mocked(previewPlateDraft).mockResolvedValue({
+      ok: true, errors: [], converted: { kind: 'scenario', convertedBy: 'plate' },
+    })
+  })
+
+  // 快照只被透传(端点 → convert),fixture 无需完整 MetaView —
+  // 窄转换构造(与上方旧配方键 detail 同款手法)。
+  const snapshotDraft = {
+    definition: {
+      kind: 'scenario', scenarioId: 'sc_demo',
+      meta: { scenarioId: 'sc_demo' },
+      config: {}, resource: {}, steps: [],
+    },
+    orchestration: { steps: [], resourceMeta: {} },
+  } as unknown as ScenarioDraft
+
+  it('「导出场景」:拉执行时快照 → plate convert → 下载 exec 命名文件', async () => {
+    vi.mocked(getScenarioSnapshot).mockResolvedValue(snapshotDraft)
+
+    const execStore = useExecutionsStore()
+    const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
+    execStore.detail = detail7
+    execStore.fetchDetail = vi.fn().mockResolvedValue(detail7)
+
+    const w = await mountPage(7)
+    await w.find('[data-testid="exec-export-scenario"]').trigger('click')
+    await flushPromises()
+
+    expect(getScenarioSnapshot).toHaveBeenCalledWith(7)
+    const { downloadFile } = await import('@/utils/download')
+    expect(downloadFile).toHaveBeenCalledTimes(1)
+    const [filename, content, mime] = vi.mocked(downloadFile).mock.calls[0]
+    expect(filename).toContain('sc_demo-exec7-')
+    expect(filename.endsWith('.json')).toBe(true)
+    expect(mime).toBe('application/json')
+    // 内容 = plate convert 归一化产物(mock converted),含执行时快照的 draft 键
+    expect(content).toContain('convertedBy')
+    w.unmount()
+  })
+
+  it('存量行无快照(has_scenario_snapshot=false)按钮置灰不可点', async () => {
+    const execStore = useExecutionsStore()
+    const legacy = { ...fakeDetail, id: 9, has_scenario_snapshot: false } satisfies Execution
+    execStore.detail = legacy
+    execStore.fetchDetail = vi.fn().mockResolvedValue(legacy)
+
+    const w = await mountPage(9)
+    const btn = w.find('[data-testid="exec-export-scenario"]')
+    expect(btn.exists()).toBe(true)
+    expect(btn.attributes('disabled')).toBeDefined()
+    await btn.trigger('click')
+    await flushPromises()
+    expect(getScenarioSnapshot).not.toHaveBeenCalled()
     w.unmount()
   })
 })

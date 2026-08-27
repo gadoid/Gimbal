@@ -48,6 +48,13 @@ class Execution(Base):
     # V3 dispatcher recipe: {runId, scenarioId, dataSetIds,
     # injectedAuths, serviceBindings, stepTo, nRuns, parallel}
     # (D2 起执行环境键已退役;存量历史行仍含旧键,读侧按键驱动渲染)
+    # 执行时场景快照:dispatch 同拍复制的 ComposerScenario.payload
+    # ({definition, orchestration})— 场景后改不影响历史单"当时跑了什么"
+    # 的导出;敏感度与 composer_scenarios.payload 同级(读侧同按 owner
+    # 收紧),删除执行随行删。存量行 NULL = 快照功能上线前,无快照可导。
+    # 注:列表查询会整列加载(内部平台量级可接受;若日后膨胀,defer 需
+    # 同步处理 has_scenario_snapshot 标志的 unloaded 判定)。
+    scenario_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
