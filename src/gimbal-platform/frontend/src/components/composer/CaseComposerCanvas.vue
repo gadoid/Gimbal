@@ -976,21 +976,30 @@ const serviceAnchor = computed<string | null>(() => {
 
 /**
  * 引用下拉选项:锚点(目录服务)居首 → 同基别名(deriveBase === 锚点)
- * → 其他声明键置底标跨服务(dim)。
+ * → 其他声明键置底标跨服务(dim)。锚点缺失(未挂目录步骤,引用键派生
+ * 不出目录归属)时列出全部目录名 — 否则目录名在下拉里根本不出现,
+ * 裸声明步骤无路切回目录服务,与「无法创建别名」互相死锁。
  */
 const serviceOptions = computed(() => {
   const anchor = serviceAnchor.value
   const declared = props.services ?? {}
   const opts: Array<{ value: string; label: string; dim?: boolean }> = []
-  if (anchor) opts.push({ value: anchor, label: `${anchor}(目录服务)` })
+  const seen = new Set<string>()
+  const push = (value: string, label: string, dim = false) => {
+    if (seen.has(value)) return
+    seen.add(value)
+    opts.push({ value, label, dim })
+  }
+  if (anchor) push(anchor, `${anchor}(目录服务)`)
+  else for (const n of catalogNames.value) push(n, `${n}(目录服务)`)
   for (const key of Object.keys(declared)) {
     if (!anchor || key === anchor) continue
     if (deriveBase(key, catalogNames.value) === anchor)
-      opts.push({ value: key, label: key })                    // 本服务别名
+      push(key, key)                                           // 本服务别名
   }
   for (const key of Object.keys(declared)) {                   // 其他键置底
     if (anchor && (key === anchor || deriveBase(key, catalogNames.value) === anchor)) continue
-    opts.push({ value: key, label: `${key}(跨服务)`, dim: true })
+    push(key, `${key}(跨服务)`, true)
   }
   return opts
 })

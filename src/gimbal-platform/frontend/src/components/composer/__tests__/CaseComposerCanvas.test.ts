@@ -575,6 +575,22 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     w.unmount()
   })
 
+  it('锚点缺失(引用未挂目录键)时,下拉仍列目录名可切回;裸声明键置底不丢', async () => {
+    // 步骤引用手写键 fin(不在目录)→ 派生 null → 锚点缺失。
+    // 修复点:此前此时目录名完全不出现,裸声明步骤无路切回目录服务。
+    const { w } = mountCanvas({
+      steps: [stepOf('fin')],
+      services: { fin: 'https://a' },
+    })
+    await flushPromises()
+    const opts = w.find('.svc-ref-select').findAll('option').map((o) => o.text())
+    expect(opts.some((t) => t.includes('fin-service') && t.includes('目录服务'))).toBe(true)
+    expect(opts.some((t) => t.includes('order-svc') && t.includes('目录服务'))).toBe(true)
+    // 旧裸声明键仍在列(置底跨服务),不丢
+    expect(opts.some((t) => t.trim() === 'fin(跨服务)')).toBe(true)
+    w.unmount()
+  })
+
   it('内联创建:后缀+URL → 拼全串双写(update:services + api.service 切换);后缀含 - 拦截', async () => {
     const steps = [stepOf('fin-service')]
     const { w } = mountCanvas({
