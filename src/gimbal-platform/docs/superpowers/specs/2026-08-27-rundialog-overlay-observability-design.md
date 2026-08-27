@@ -1,7 +1,7 @@
 # RunDialog 重构 + 运行方案(overlay)+ 执行可观测性 设计文档
 
 - 日期:2026-08-27
-- 状态:待评审
+- 状态:已实现(15 任务 SHIP IT);**§13 设计回归待讨论**
 - 分支:strbody_avaliable
 - 前置:常量池(T1-T10 已合并)、run-launch-subprocess(2026-08-24)、认证改造(2026-08-25)
 
@@ -220,3 +220,36 @@ PRE/POST convert 是刻意安全缝:明文凭证不过 plate。
 4. 前端:RunDialog 重构 + 方案栏 + 用户与服务区
 5. 前端:Executions 行级表格 + 日志查看 + 按方案导出
 6. 清理清单收尾 + 全量回归
+
+## 13. 设计回归与开放问题(2026-08-27 验收反馈,待讨论)
+
+实现完成后用户验收提出四项反馈。②为实现 bug(已修复);**①③为 brainstorm→spec 阶段丢失的用户决策,本节如实记录差异与待拍板点,等用户回来重新讨论后再改设计与实现**;④经查为②的级联失效,②修复后入口即显。
+
+### ① 执行环境选择 — 用户决策:退役;spec 现状:保留
+
+- spec §4 保留环境 tiles,env.baseUrl 为绑定 URL 优先级第三级(§5:显式绑定 > 场景 authored > env 补缺)
+- 用户意图(2026-08-27):RunDialog 不再展示环境选择;执行直接使用「用户与服务绑定 + 默认服务配置」
+- 待拍板:
+  - 环境退役后,服务默认 URL 的来源(`config.services` 每服务自带默认 baseUrl?)
+  - `data/envs.yaml` / RunEnv 数据层是否一并退役,还是仅 RunDialog UI 退场
+  - `RunScheme.envId` 字段去留(方案模型三字段之一;退役则「上次运行」派生与按方案导出随之调整)
+
+### ③ 用户与服务区 — 服务检索源与 spec 不符 + 服务别名未实现
+
+- spec §4 写「场景**引用的**每个 service 一行」→ 实现 = `steps[].api.service` 去重(编排关联面)
+- 用户决策(2026-08-27):检索源应为 `config.services`(场景服务声明面,服务名 → baseUrl),而非编排中接口的关联服务
+- 服务别名机制(用户原始决策)未进 spec、未实现 — 具体形态待用户重述后补设计
+- 待拍板:
+  - 绑定行范围:`config.services` 声明集,还是声明 ∪ steps 引用的并集(steps 引用了未声明服务时需有绑定落点,否则 URL 补缺/绑定无受体)
+  - 别名形态:同一服务多个命名实例(别名 → URL + 用户)?step 引用别名还是真名?执行/导出物化时别名如何解析回 `config.services`?
+  - 与①联动:若环境退役且服务自带默认 URL,绑定行「覆盖 URL」与 authored URL 的优先级链需要重排
+
+### ④ 方案覆盖与按方案导出 — 已实现,入口曾被②掩盖(已随②修复显现)
+
+- 选方案回填 env/数据集/绑定:RunDialog 方案栏已实现(watch selectedScheme 整体替换)
+- 按方案导出:ScenarioExportMenu 按已存方案动态渲染「按方案导出 · {方案名}」条目 + 场景库行级入口;「导出 JSON/YAML」= 默认配置(不带 overlay)。方案列表恒空(②存不上方案)时入口不渲染 — 曾表现为"功能不存在"
+- 若需更显眼入口(如 CaseComposer 页内导出对话框选方案),随①③讨论一并定
+
+### ②(已修)存为方案 404 — 根因与修复
+
+新建场景首次保存后路由停留 `/scenarios/new`,而 onSaveScheme 用路由参数作场景 id → `PUT /api/scenarios/new/run-schemes` 404。修复:onSaveScheme / openRunDialog(上次运行查询同根)改用持久化 `scenario.meta.scenarioId`,未保存场景提示「请先保存场景,再存为方案」。
