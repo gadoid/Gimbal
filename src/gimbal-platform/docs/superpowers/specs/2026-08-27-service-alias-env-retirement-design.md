@@ -15,24 +15,25 @@
 | D2 | 环境退役程度 | **彻底退役**:RunDialog tiles、RunRequest.env、RunEnv 模型、envs.yaml、/api/envs、RunScheme.envId、ExportOverlay.envId、materialize env 补缺层全部删除 |
 | D3 | 绑定行范围 | **声明 ∪ 引用并集**:config.services 全部声明键 ∪ 步骤引用但未声明的名字(标红,可现场填 URL 救燃) |
 | D4 | 持有方案 | **作者期直写 `api.service`(方案 A)**;否掉 orchestration sidecar 注入(方案 B,模板不一致深坑,见 §1.2) |
-| D5 | 别名↔目录映射 | `orchestration.serviceMeta` sidecar:`{别名: {of: 目录服务名}}`,plate 契约零破坏(见 §1.3) |
+| D5 | 别名↔目录映射 | **前缀派生**:别名 = `<目录服务名>-<后缀>`,UI 对目录名做最长前缀匹配派生归属;零 sidecar、后端 schema 零增,映射编码在键名里随 definition 走(导入回路天然自洽,见 §1.3)。原 serviceMeta sidecar 方案否决 |
 | D6 | 校验风格 | 警告级不阻塞(撞目录名黄警、跨服务引用黄警),与现有「降级预填不报废」一致 |
 | D7 | 引擎改造 | **保留 per-step base_url 三触点改造**(业务确认:场景内部存在多服务地址需求);查表只用 `scenario.config.services`,bootstrap 零触碰零适配 |
 | D8 | 配置文件 | 引擎 `config/env/*.yml` 零修改;平台唯一删除的配置文件是 `backend/app/core/envs.yaml` |
 
 ## 1. 服务别名模型
 
-### 1.1 三字段与存储(全部落 `composer_scenarios.payload` JSON 列,不加表不加列)
+### 1.1 两字段与存储(全部落 `composer_scenarios.payload` JSON 列,不加表不加列)
 
 ```
 composer_scenarios.payload
 ├─ definition                      # plate 契约层(外发/导出)
-│   ├─ steps[N].api.service        # ① 别名引用 — 现有字段,值为别名键(方案 A 直写)
-│   └─ config.services             # ② 别名声明 {别名: URL} — 现有字段,零结构变化
+│   ├─ steps[N].api.service        # ① 别名引用 — 现有字段,值为全串别名键(方案 A 直写)
+│   └─ config.services             # ② 别名声明 {全串别名: URL} — 现有字段,零结构变化
 └─ orchestration                   # 平台 sidecar 层(plate 零感知,永不外发)
-    ├─ steps / resourceMeta / runSchemes   # 现有
-    └─ serviceMeta                 # ③ 新增 {别名: {of: "目录服务名"}} — 仅编辑期 UI 标签
+    └─ steps / resourceMeta / runSchemes   # 现有,别名零新增键
 ```
+
+**后缀不单独存储**:存储单元永远是全串键 —— ① 引用与 ② 声明各存一份全串;「后缀」与「目录归属」都是 UI 渲染/创建时的派生视图,不落库。内联创建器把「目录名(固定)+ 后缀(输入)+ URL」拼成全串,一次动作双写 ①② 两个现有字段;此后系统里只有全串。
 
 依据(勘明):
 - plate `ApiSpec.service: str` 自由字符串,无注册名校验([api_spec.py](../../../../gimbal-plate/gimbal_plate/schema/endpoint/api_spec.py))
@@ -41,25 +42,28 @@ composer_scenarios.payload
 - `${service.<key>}` 模板按声明 dict 解析([scenario_preprocessor.py](../../../../gimbal/gimbal/preprocessor/scenario_preprocessor.py))
 - 数据库从不 SQL 查询 payload 内部([composer_scenario.py](../backend/app/models/composer_scenario.py) docstring)
 
-**酸性测试**:`serviceMeta` 从 payload 整体删除,执行结果与导出产物一个字节不变 —— 它是标签不是配置源。
+**酸性测试**:派生输入(plate 目录服务列表)整体清空,执行结果与导出产物一个字节不变 —— 前缀失配仅令 UI 降级为裸声明黄警,派生是视图不是配置源。
 
 ### 1.2 方案 A(直写)与否掉方案 B(sidecar 注入)的理由
 
 方案 B(orchestration 持 stepIdx→别名映射,物化期改写 api.service)的深坑:headers/path/body 里的 `${service.x}` 模板是作者手写字符串,物化改写只动 api.service 字段、扫不动模板 → 模板引用域与 api.service 改写结果不同步。方案 A 作者期一处一致(api.service 与 `${service.*}` 同写别名),执行链零注入零改写、画布所见即所跑。
 
-### 1.3 `serviceMeta` 的写入与生命周期
+### 1.3 前缀派生规则(D5 二次拍板,替代 serviceMeta sidecar)
 
-| 触点 | 行为 |
-|---|---|
-| 写入 | 步骤面板内联建别名 / Config 声明卡,写 draft 后随编辑器 `PUT /scenarios/{id}` 正常保存(同一 payload 原子落库) |
-| 窄端点 | **不需要** —— 只在编辑器内写(runSchemes 有窄端点是因为 RunDialog 在编辑器外写) |
-| 后端 schema | `Orchestration` 加 `serviceMeta: dict[str, ServiceMeta] = {}`(旧 payload 反序列化自动空 dict) |
-| 编辑器保存透传 | 按 runSchemes 同款「两条分支都原样带回」处理(CaseComposer.vue orchestration 重建处) |
-| 适配中心 | 自动幸存 —— adaptation_service 保存时 orchestration 从现有 payload 原样透传 |
-| 一致性清理 | 删声明行时同步删 serviceMeta 同名键(同一 UI 动作,同一 JSON,无跨存储事务) |
-| 导出 | **永不导出**(orchestration 整层不外发;导入丢 of 映射 = 已知非目标) |
+```
+别名形态:  <目录服务名>-<后缀>          如 fin-1、fin.tidb-test-2
+派生规则:  对 plate 目录名做最长前缀匹配 — 别名以 目录名+"-" 开头 → 归属 = 该目录名
+           (最长匹配消解层级:目录同时有 fin 与 fin-a 时,fin-a-1 归 fin-a;
+            目录名本身含 "-" 如 fin.tidb-test 亦天然正确)
+未配别名:  api.service = 目录名本身(现状),查 config.services 同名键
+派生位点:  仅平台 UI(下拉过滤/归属标签/跨服务黄警);引擎与物化零感知,键查表语义不变
+```
 
-`of` 不能放 definition 的原因:config.services 值是 plate 契约 `dict[str,str]` 不能破;definition 会被 plate /convert 校验并外发,平台私有标签污染产物;view_hints 是步骤级,声明是场景级会重复漂移。
+- 派生失败(前缀不匹配任何目录名)= 裸声明降级(§1.5 黄警),运行零影响 —— 键 + URL 自洽
+- 内联创建:前缀(目录名)固定不可改,只填后缀与 URL;保存时拼全串双写 ①②
+- Config 声明卡:归属列 = 派生只读标签,无手填;改后缀 = 删行重建(v1 不做键改名传播)
+- 导入回路:映射编码在键名里随 definition 走,导入目标目录一致即自动恢复过滤/归属;目录漂移则降级裸声明(优于 sidecar 的必然丢失)
+- 后端 schema 零增(Orchestration 不动),别名特性 = 纯前端 + 引擎
 
 ### 1.4 编辑交互
 
@@ -67,29 +71,29 @@ composer_scenarios.payload
 
 ```
 接口事实(目录,只读)              运行引用(可编辑)
-method  POST                     服务引用 [fin.tidb-qa1 ▾]
-目录服务 fin.tidb-test               ├─ fin.tidb-test      ← 目录服务名(默认/现状)
-path    /order                       ├─ fin.tidb-qa1       ← of == 本endpoint目录服务的别名
-                                     ├─ fin.tidb-prod         (只列映射到本服务的)
+method  POST                     服务引用 [fin.tidb-test-2 ▾]
+目录服务 fin.tidb-test               ├─ fin.tidb-test        ← 目录服务名(默认/现状)
+path    /order                       ├─ fin.tidb-test-2      ← 前缀派生归属 == 本endpoint目录服务
+                                     ├─ fin.tidb-test-prod     (只列派生到本服务的)
                                      ├─ (其他声明键,置底灰显)  ← 选了黄警「跨服务引用」
-                                     └─ + 为此服务新建别名…   ← 内联创建
+                                     └─ + 为此服务新建别名…   ← 内联创建(前缀固定)
                                    URL 预览(按声明解析,只读)
 ```
 
-- 内联创建:填 URL → 一次动作同时写 `config.services` 声明 + serviceMeta.of → 当前步骤引用立即切换(即用户描述的「配置每个 endpoint 时为服务起别名」)
+- 内联创建:后缀 + URL → 拼全串一次双写 `config.services` 声明 + `steps[k].api.service` 引用切换(即用户描述的「配置每个 endpoint 时为服务起别名」)
 - 目录插入(`onAddEndpoint`)默认写 Plate 服务名(现状不变)
 
-**Config 页声明卡(别名定义点)**:现有服务映射卡每行加 `of 目录服务` 列(目录名自动补全,可选填)。
+**Config 页声明卡(别名定义点)**:现有服务映射卡每行加 `归属` 列(前缀派生只读标签;派生不出显示「未挂目录」)。
 
 ### 1.5 校验语义(全表警告级,不阻塞)
 
 | 情形 | 表现 |
 |---|---|
-| 引用别名,of = 本 endpoint 目录服务 | ✅ 主路径 |
-| 引用别名,of ≠ 本服务(跨服务) | 🟡 黄警(网关/mock 场景可能故意跨) |
-| 引用别名,无 of(裸声明) | 🟡 提示「未挂目录服务」,下拉置底 |
+| 引用别名,前缀派生归属 = 本 endpoint 目录服务 | ✅ 主路径 |
+| 引用别名,派生归属 ≠ 本服务(跨服务) | 🟡 黄警(网关/mock 场景可能故意跨) |
+| 引用别名,前缀不匹配任何目录名(裸声明) | 🟡 提示「未挂目录服务」,下拉置底 |
 | 引用键完全未声明 | 🔴 红(RunDialog 并集行兜底可救燃;不救则引擎显式报错,现有语义) |
-| 别名撞 plate 目录服务名 | 🟡 黄警「与目录服务重名,将按 config.services 声明解析」 |
+| 全串 == 目录服务名 | 非别名,即目录名直引(按 config.services 声明解析,现状) |
 
 ### 1.6 冲突矩阵与契约禁令
 
@@ -103,7 +107,7 @@ path    /order                       ├─ fin.tidb-qa1       ← of == 本endp
 
 **契约禁令(写入实施约束)**:任何 plate 拉取驱动的回写(现存适配 ops、未来契约同步)**不得触碰 `api.service`** —— `view_hints.endpoint_id` 是目录锚点,`api.service` 是用户引用键,两权分立。禁令延伸覆盖未来导入链:导入按**不透明键**处理 `api.service`,不得对 plate 目录做存在性校验、不得按目录名规范化改写(违此则别名场景导入即坏)。
 
-**命名约定**:别名保持 `系统.名字` 前缀(config.services 分组展示与 checkSystemMismatch 的 `svc.split('.')[0]` 依赖前缀)。
+**命名约定**:别名 = `<目录服务名>-<后缀>`(目录名本身可含 `-`,最长前缀派生天然消解);别名因此天然保持 `系统.名字` 前缀(config.services 分组展示与 checkSystemMismatch 的 `svc.split('.')[0]` 依赖前缀)。
 
 ## 2. 执行环境彻底退役(D2)
 
@@ -175,23 +179,23 @@ statemachine/engine.py    _do_http_call: service_url = services.get(api.service)
 | 别名声明 config.services | 编辑期已写,原样带出,**零合并** | 绑定 URL 覆盖对应别名键 |
 | 别名引用 api.service | 原样带出 | 不动(键不变,变的是键指向 URL) |
 | 用户凭证 | 定义自带 users | 绑定 authAlias 注入 users |
-| serviceMeta.of | **不导出** | **不导出** |
+| 别名→目录归属 | 键名前缀编码,随定义走(§1.3 派生) | 同左 |
 | runSchemes 本体 | 不导出 | 不导出(bindings 已物化进产物副本) |
 
 按方案导出的物化 = **已实现**的 `materialize_run_copy`(spec §8 / commit 412bf95):方案 bindings 作为 overlay 参数显式传入,物化发生在产物副本,库里 definition 永不被改写。别名机制零新增合并 —— 绑定键就是别名键,现有「显式绑定 > 声明值」语义直接套用。导出产物与平台执行跑同一引擎,per-step 查表同时惠及两者。
 
-**产物自洽性(导入安全基线)**:别名引用(`steps[].api.service`)与别名声明(`config.services`)同在 definition 随产物走 —— 产物对任何 gimbal 部署自包含可执行,消费方按「键查表」语义工作,零别名感知。**不存在「后续必须按别名导入」的约定**;平台重导入丢 `of` 标签与 `endpoint_id`(导出剥离,所有导入场景通用)只影响编辑体验(裸声明降级、无法重链目录),不影响运行与再导出。导入侧硬约束见 §1.6 禁令延伸与 §7。
+**产物自洽性(导入安全基线)**:别名引用(`steps[].api.service`)与别名声明(`config.services`)同在 definition 随产物走 —— 产物对任何 gimbal 部署自包含可执行,消费方按「键查表」语义工作,零别名感知。**不存在「后续必须按别名导入」的约定**;且归属映射编码在键名里(前缀派生,§1.3),导入后目录一致即自动恢复过滤/归属/黄警,仅 `endpoint_id`(导出剥离,所有导入场景通用)丢失影响重链目录 —— 都只是编辑体验降级,不影响运行与再导出。导入侧硬约束见 §1.6 禁令延伸与 §7。
 
 ## 6. 变更点清单(文件级)
 
 | 区域 | 内容 |
 |---|---|
 | 前端 CaseComposerCanvas | 步骤面板双显 + 服务引用下拉(按 of 过滤)+ 内联建别名;目录插入不变 |
-| 前端 CaseComposerConfig | 声明卡 of 列;删声明联动 serviceMeta |
-| 前端 CaseComposer | referencedServices 改声明∪引用并集;orchestration 重建透传 serviceMeta;env 装配删除 |
+| 前端 CaseComposerConfig | 声明卡归属列(前缀派生只读);删声明行即删键(无联动清理) |
+| 前端 CaseComposer | referencedServices 改声明∪引用并集;env 装配删除 |
 | 前端 RunDialog | 环境 tiles 删除;confirm 签名去 env;绑定行取并集;方案回填/降级去 envId |
-| 前端 api/types/stores | envs api/store 删;RunScheme/RunRequest/ExportOverlay 类型去 env;ServiceMeta 类型 |
-| 后端 schemas | RunRequest.env/RunEnv/RunScheme.envId/ExportOverlay.envId 删;Orchestration.serviceMeta 增 |
+| 前端 api/types/stores | envs api/store 删;RunScheme/RunRequest/ExportOverlay 类型去 env |
+| 后端 schemas | RunRequest.env/RunEnv/RunScheme.envId/ExportOverlay.envId 删(别名零 schema 增) |
 | 后端 routers | /api/envs 删;run-schemes 校验调整;preview-plate overlay 去 env |
 | 后端 run_dispatcher | env 校验/config_json 键/上次运行派生调整 |
 | 后端 run_materialize | env_base_url 补缺层删 |
@@ -204,7 +208,7 @@ statemachine/engine.py    _do_http_call: service_url = services.get(api.service)
 | 项 | 触发器/时点 |
 |---|---|
 | bootstrap.services URL 兜底修缮 | 依赖 bootstrap 兜底 URL 的部署诉求出现 |
-| 导入反向映射(产物 config → 平台实体,含 of 重建) | feature-gaps #1 立项;立项时须守 §1.6 禁令延伸(api.service 不透明键:禁目录存在性校验、禁按目录名规范化改写);of 重建为增强项,候选 = 按 method+path 重链目录后回推 of / 导出 bundle 旁挂平台 meta(endpoint_id 映射 + serviceMeta);两者皆无 = 裸声明降级(§1.5),运行/再导出零影响 |
+| 导入反向映射(产物 config → 平台实体) | feature-gaps #1 立项;立项时须守 §1.6 禁令延伸(api.service 不透明键:禁目录存在性校验、禁按目录名规范化改写);别名归属随键名前缀自动派生(§1.3,无需重建),仅 endpoint_id 重链为增强项(候选 = 按 method+path 匹配 / 导出 bundle 旁挂平台 meta) |
 | 数据集行展开导出 | 沿袭原 spec §2 |
 | gimbal 插件执行参数/日志订阅 | gimbal 侧就绪后接入(方案字段已预埋) |
 | 团队共享方案 / 全局别名库(跨场景复用别名声明) | per-user 场景所有权语义下无需求;出现时评估独立于场景的声明面 |
@@ -212,8 +216,8 @@ statemachine/engine.py    _do_http_call: service_url = services.get(api.service)
 ## 8. 测试
 
 - 引擎:per-step 查表命中 / 回落 base_url / 双缺失显式报错;单服务场景全量回归**逐字节不变**;旧「多服务降级取第一个 + warn」断言改为正确路由;run() 签名调用点与 docstring 示例同步
-- 后端:serviceMeta 透传(编辑器保存/适配中心);RunScheme 去 envId 后窄端点往返;旧含 envId 方案静默降级;materialize 去 env 层等价;preview-plate overlay 无 env 路径;黄金等价测试随两层层级更新
-- 前端:步骤面板别名下拉过滤(of)/内联建别名双写/跨服务黄警/未声明红;Config 卡 of 列与清理联动;RunDialog 无环境版重写;并集绑定行(未声明行救燃);方案栏回填新签名
+- 后端:RunScheme 去 envId 后窄端点往返;旧含 envId 方案静默降级;materialize 去 env 层等价;preview-plate overlay 无 env 路径;黄金等价测试随两层层级更新
+- 前端:前缀派生单元(最长前缀匹配/目录名含 `-`/失配降级裸声明);步骤面板别名下拉过滤(派生归属)/内联创建拼串双写/跨服务黄警/未声明红;Config 卡归属派生展示;RunDialog 无环境版重写;并集绑定行(未声明行救燃);方案栏回填新签名
 - 回归底线:plate 零改动;`vue-tsc --noEmit` 绿;现有套件只增不减全绿
 
 ## 9. 风险与对策
@@ -223,13 +227,13 @@ statemachine/engine.py    _do_http_call: service_url = services.get(api.service)
 | 未来契约同步功能覆盖 api.service | §1.6 契约禁令写入 spec + onAddEndpoint/适配处代码注释 |
 | 别名键与模板 `${service.*}` 手写不一致(作者笔误) | 编辑期校验:${service.x} 引用的 x 不在声明面 → 悬空提示(tpl-refs 扩展,非阻塞;v1 可选增强,不进 §6 变更清单) |
 | 旧方案含 envId / 旧 execution 含 env 键 | pydantic 静默忽略;RECIPE_LABELS 保留旧键标签可读 |
-| serviceMeta 与声明面漂移(手改 JSON) | 声明卡打开时清理孤儿 of 键(编辑期自愈,非运行期) |
+| 目录改名/下线致前缀失配 | 派生降级裸声明黄警(编辑期可见),运行零影响;目录侧变更本就经适配中心公告 |
 | 引擎回归面 | 单服务回落路径 + 逐字节不变回归;构造点唯一已勘明 |
 
 ## 10. 实施顺序建议(计划期细化)
 
 1. 引擎:三触点 + 测试(独立可先行,向后兼容无依赖)
-2. 后端:schema 增删(serviceMeta/env 退役)+ materialize 去 env 层 + 端点调整
+2. 后端:schema 删改(env 退役;别名零 schema 增)+ materialize 去 env 层 + 端点调整
 3. 前端:RunDialog 环境退役 + 并集绑定行;CaseComposer 装配调整
-4. 前端:步骤面板别名配置 + Config 卡 of 列 + serviceMeta 透传
+4. 前端:前缀派生工具 + 步骤面板别名配置 + Config 卡归属列
 5. 清单收尾 + 全量回归
