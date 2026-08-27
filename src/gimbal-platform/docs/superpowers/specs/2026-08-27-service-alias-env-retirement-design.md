@@ -55,7 +55,9 @@ composer_scenarios.payload
 分隔符:    "-" 为唯一分隔符;后缀非空且不含 "-"(创建期拦截)
            → 别名内最后一个 "-" 必是分隔符,切分唯一确定、不依赖目录
 派生规则:  按最后一个 "-" 切出 base 与后缀;base ∈ plate 目录名集合 → 归属 = base
-           (目录名本身可含 "-",如 fin.tidb-test / fin.tidb-test-qa,切分天然正确)
+           (切分点固定,不搜索前缀、不按最长:fin-service-2 的 base 一定为
+            fin-service,绝不会切成 fin;目录名含多个 "-" 如 fin-order-service
+            亦天然正确;base 不在目录名集合则派生失败,不猜)
 未配别名:  api.service = 目录名本身(现状),查 config.services 同名键
 派生位点:  仅平台 UI(下拉过滤/归属标签/跨服务黄警);引擎与物化零感知,键查表语义不变
 ```
