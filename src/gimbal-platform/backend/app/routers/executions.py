@@ -85,8 +85,8 @@ async def get_execution_rows(ex: OwnedExecution) -> ExecutionRowsOut:
 
 # ── case-artifact(白名单工件,spec §9.1)────────────────────────
 # 白名单只有两个文件;case.json 刻意不在列(含明文凭证,无前端消费
-# 场景)。stem 严格式校验(无路径分隔符),run 目录按 runId 定位 ——
-# 跨执行读不可能(runId 唯一),深度防御再验一次 path.parent。
+# 场景)。stem 严格式校验(无路径分隔符 + 显式拒 `.`/`..`),run 目录
+# 按 runId 定位 —— 跨执行读不可能(runId 唯一)。
 _CASE_STEM_RE = re.compile(r"[A-Za-z0-9._-]+")
 _ARTIFACTS = {"engine-log": "engine.log", "result": "result.json"}
 
@@ -100,7 +100,7 @@ async def get_case_artifact(
     """白名单工件:engine.log(引擎日志)/ result.json(步骤级明细)。
     case.json 刻意不暴露 — 含明文凭证,无前端消费场景。Task 13 前端消费。"""
     name = _ARTIFACTS.get(file)
-    if name is None or not _CASE_STEM_RE.fullmatch(case):
+    if name is None or case in {".", ".."} or not _CASE_STEM_RE.fullmatch(case):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -114,11 +114,8 @@ async def get_case_artifact(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "artifact_not_found", "message": name},
         )
-    root = run_dispatcher.run_dir(str(run_id))
-    path = root / case / name
-    # 深度防御:工件必须恰好在 run_dir/<case>/ 下(stem 式校验之外
-    # 再验一次拼出来的路径没有逃逸);不存在同罪 404,不泄漏布局。
-    if path.parent != root / case or not path.is_file():
+    path = run_dispatcher.run_dir(str(run_id)) / case / name
+    if not path.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "artifact_not_found", "message": name},

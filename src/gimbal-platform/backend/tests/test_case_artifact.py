@@ -97,6 +97,20 @@ async def test_path_traversal_rejected(client, finished_run):
     assert resp.status_code in (400, 404)
 
 
+async def test_dot_stems_rejected(client, finished_run):
+    """`.`/`..` 能过字符集正则但指向 run 目录自身/父层 —— 显式 400。
+
+    评审 canary:run 目录根/cases 根被植入 engine.log 时,`.`/`..`
+    会把布局假设变成真实泄漏,不能只靠"那里通常没有文件"兜底。
+    """
+    bob, exec_id, _ = finished_run
+    for c in (".", ".."):
+        resp = await client.get(f"/api/executions/{exec_id}/case-artifact",
+                                headers=bob,
+                                params={"case": c, "file": "engine-log"})
+        assert resp.status_code == 400
+
+
 async def test_missing_artifact_404(client, finished_run):
     bob, exec_id, _ = finished_run
     resp = await client.get(f"/api/executions/{exec_id}/case-artifact",
