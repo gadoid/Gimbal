@@ -5,11 +5,21 @@
 不进 case.json → 无需模掉任何字段(spec §7.3 的「模掉行 vars/halt」
 在基线单行下自然退化为零差)。
 
+注入清单钉死并集语义(spec §7.3 矩阵:导出侧 = 执行侧):steps 模板
+同时引用 qa1/qa2,overlay 只绑 fin-service→qa1 — 两路清单同为
+scan(steps)∪ 绑定 = {qa1, qa2},导出产物 users 同时含两个 alias。
+
 断言形状注:preview-plate 现返回 ``PreviewPlateResponse`` 信封
 (``{ok, errors, converted}``),产物断言一律取 ``resp.json()["converted"]``
 (brief 授权的「以外层包裹为准对齐」适配)。
 """
 from __future__ import annotations
+
+from sqlalchemy import select
+
+from app.core import db as db_module
+from app.core.security import fernet_encrypt
+from app.models import AuthSession, User
 
 from .helpers import make_draft as _draft, wait_until as _wait
 from .test_run_m1_capabilities import _patch_launch_capture, _run_payload
@@ -38,9 +48,11 @@ _META = {
     "expire": False,
     "updateTime": None,
 }
+# 模板同时引用 qa1/qa2(overlay 只绑 qa1)— 锁「扫描 ∪ 绑定」并集语义
 _STEP = {"kind": "step",
          "api": {"service": "fin-service", "path": "/x",
-                 "headers": {"Authorization": "${auth.qa1.token}"}}}
+                 "headers": {"Authorization": "${auth.qa1.token}",
+                             "X-Api-Key": "${auth.qa2.token}"}}}
 
 
 def _eq_draft() -> dict:
@@ -50,6 +62,28 @@ def _eq_draft() -> dict:
 async def _seed(client, headers) -> None:
     r = await client.post("/api/scenarios", headers=headers, json=_eq_draft())
     assert r.status_code in (200, 201), r.text
+
+
+async def _seed_owner_auth(alias: str, *, bad: bool = False) -> None:
+    """给当前 owner(bob)ORM 直插一条 fernet 加密 AuthSession。
+
+    写法对齐 test_run_auth_resolution._seed_owner(fernet_encrypt +
+    db_module.SessionLocal);owner_id 从 User 表按 username 查真实 id,
+    不假设自增起点。``bad=True`` 插坏密文(fernet 解不开)。
+    """
+    async with db_module.SessionLocal() as db:
+        owner_id = (await db.execute(
+            select(User.id).where(User.username == "bob"))).scalar_one()
+        db.add(AuthSession(
+            owner_id=owner_id,
+            alias=alias,
+            url=f"https://{alias}-auth/login",
+            username_enc=("gitleaks:not-a-fernet-token" if bad
+                          else fernet_encrypt(f"{alias}-user")),
+            password_enc=("gitleaks:not-a-fernet-token" if bad
+                          else fernet_encrypt(f"{alias}-pass")),
+        ))
+        await db.commit()
 
 
 async def test_preview_plate_without_overlay_unchanged(client, plate_mock: PlateMock):
@@ -74,20 +108,46 @@ async def test_preview_plate_with_overlay_materializes(client, plate_mock: Plate
     assert resp.status_code == 200, resp.text
     converted = resp.json()["converted"]
     assert converted["config"]["services"]["fin-service"] == "https://bound"
-    # qa1 无凭证池会话 → 告警继续,users 不含 qa1(与 dispatch 同语义)
-    assert "qa1" not in (converted["config"].get("users") or {})
+    # qa1/qa2 无凭证池会话 → 告警继续,users 不含两 alias(与 dispatch 同语义)
+    users = converted["config"].get("users") or {}
+    assert "qa1" not in users and "qa2" not in users
+
+
+async def test_preview_plate_overlay_auth_resolve_failure_returns_422(
+        client, plate_mock: PlateMock):
+    """凭证池密文损坏 → 422 auth_resolve_failed(fail-fast,不再 500)。"""
+    plate_mock.behaviour = "echo"
+    bob = await _member(client, "bob")
+    await _seed(client, bob)
+    await _seed_owner_auth("qa1", bad=True)  # 绑定 qa1 触发解析
+
+    resp = await client.post("/api/scenarios/preview-plate", headers=bob,
+                             json={**_eq_draft(), "overlay": OVERLAY})
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["detail"]["code"] == "auth_resolve_failed"
 
 
 async def test_golden_equivalence_export_equals_baseline_case_json(
         client, plate_mock: PlateMock, monkeypatch):
-    """黄金等价:导出产物 ≡ 基线单行 case.json,逐字段相等。"""
+    """黄金等价:导出产物 ≡ 基线单行 case.json,逐字段相等。
+
+    注入清单并集语义:steps 模板引用 qa1+qa2,overlay 只绑 qa1 —
+    导出产物 users 须同时含 qa1/qa2(扫描 ∪ 绑定);dispatch 侧扫描
+    同源 steps,两路收敛,等价逐字段成立。
+    """
     plate_mock.behaviour = "echo"
     bob = await _member(client, "bob")
     await _seed(client, bob)
+    await _seed_owner_auth("qa1")
+    await _seed_owner_auth("qa2")
 
     exported = (await client.post(
         "/api/scenarios/preview-plate", headers=bob,
         json={**_eq_draft(), "overlay": OVERLAY})).json()["converted"]
+
+    # 并集:qa1(绑定 + 模板)与 qa2(仅模板)都注入,凭证来自同一凭证池
+    assert set(exported["config"]["users"]) == {"qa1", "qa2"}
+    assert exported["config"]["users"]["qa2"]["username"] == "qa2-user"
 
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)

@@ -37,6 +37,7 @@ from ..schemas.scenario_composer import (
     StarIn,
 )
 from ..services import env_store, plate_client, run_dispatcher, scenario_store
+from ..services.auth_ref_scan import scan_auth_aliases
 from ..services.marks_store import stars
 from ..services.run_materialize import materialize_run_copy
 
@@ -152,10 +153,23 @@ async def preview_plate(
                             "message": body.overlay.env_id},
                 )
             env_base_url = match[0].base_url or ""
-        aliases = sorted({b.auth_alias for b in body.overlay.service_bindings.values()
-                          if b.auth_alias})
-        exec_auths = await run_dispatcher._resolve_exec_auths(
-            run_dispatcher.session_factory, owner_id=user.id, aliases=aliases)
+        # 注入清单与 dispatch 同构(spec §7.3 矩阵:导出侧 = 执行侧):
+        # scan_auth_aliases(definition steps)∪ 绑定 authAlias。预览侧
+        # 无需保序,去重即可(dispatch 侧 dict.fromkeys 保序仅为一稳定日志序)。
+        scanned = scan_auth_aliases(body.definition.get("steps") or [])
+        bound = [b.auth_alias for b in body.overlay.service_bindings.values()
+                 if b.auth_alias]
+        aliases = sorted(set([*scanned, *bound]))
+        try:
+            exec_auths = await run_dispatcher._resolve_exec_auths(
+                run_dispatcher.session_factory, owner_id=user.id, aliases=aliases)
+        except run_dispatcher._AuthResolveError as e:
+            # 凭证路径 fail-fast 的预览侧形态(dispatch 整单失败同语义;
+            # preview 无执行副作用,直接拒答 422 而非 500)。
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "auth_resolve_failed", "message": str(e)},
+            )
         # built_in 基座与 dispatch 同源:场景 definition.config.users
         # (plate 会剥平台视图字段,内置认证以场景定义为唯一可信源)
         def_cfg = (body.definition.get("config") or {})
