@@ -348,8 +348,12 @@ async function openRunDialog() {
       .then((sessions) => { ownerAuthAliases.value = sessions.map((s) => s.alias) })
       .catch(() => { /* 凭证池不可达不阻塞运行 */ })
   }
+  // 「上次运行」按持久化 id 查(新建保存后路由仍停留 /scenarios/new,
+  // 路由参数查 'new' 恒空 → 回填永不出现);未保存场景无执行历史,跳过。
+  const sid = scenario.value?.meta.scenarioId
+  if (!sid) return
   try {
-    const res = await listExecutions({ scenarioId: scenarioId.value, limit: 1 })
+    const res = await listExecutions({ scenarioId: sid, limit: 1 })
     const cfg = res.items[0]?.config
     // 只回填 overlay 三字段:stepTo/nRuns/parallel 等其余 base_config 键
     // 不进方案栏(方案快照语义),三字段全缺 → 视为无可回填。
@@ -788,10 +792,16 @@ async function onRunConfirm(
  *  草稿(RunDialog schemes prop 数据源)。失败弹错且不清空方案名草稿
  *  (409 重名等用户改名即可重试)。 */
 async function onSaveScheme(scheme: RunScheme) {
-  if (!scenarioId.value) return
+  // 新建场景首次保存后路由仍停留 /scenarios/new — 路由参数不可作场景 id
+  // (PUT /api/scenarios/new/run-schemes 会 404);用持久化 scenario 的真实 id。
+  const id = scenario.value?.meta.scenarioId
+  if (!id) {
+    ElMessage.warning('场景尚未保存 — 请先保存场景,再存为方案')
+    return
+  }
   try {
     const next = [...runSchemes.value.filter(s => s.name !== scheme.name), scheme]
-    const saved = await api.putRunSchemes(scenarioId.value, next)
+    const saved = await api.putRunSchemes(id, next)
     if (draftStore.draft) {
       ;(draftStore.draft.orchestration as OrchestrationWithSchemes).runSchemes = saved
     }
