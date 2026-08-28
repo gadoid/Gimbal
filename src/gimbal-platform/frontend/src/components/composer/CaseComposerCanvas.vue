@@ -160,13 +160,17 @@
             <el-form-item v-if="activeIoTab === 'request'" label="headers (点 ⓘ 注入 ${auth.<alias>.<field>})">
               <div class="hdr-rows">
                 <div v-for="(value, key) in currentStep.api.headers" :key="String(key)" class="hdr-row">
-                  <el-input
+                  <!-- key: 常用预设下拉 + allow-create 手输(规范大小写由预设带出) -->
+                  <el-select
                     :model-value="String(key)"
                     size="small"
-                    placeholder="header name"
+                    filterable allow-create default-first-option
+                    placeholder="选择或输入 header"
                     class="hdr-key"
                     @update:model-value="(v: string) => updateHeaderKey(currentStep, String(key), v)"
-                  />
+                  >
+                    <el-option v-for="k in COMMON_HEADER_KEYS" :key="k" :value="k" :label="k" />
+                  </el-select>
                   <el-input
                     :model-value="String(value)"
                     size="small"
@@ -594,6 +598,14 @@ function removeStrategy(step: StepView, s: StrategyView) {
 
 // ── headers KV 行 + 认证引用(模式照搬 EditableStepCard 成熟实现) ────
 // headers 本就是 Record<string, string>;KV 行只是编辑形态,草稿/导出形状不变。
+
+/** key 预设:标准头 + 内网网关/链路追踪高频头。下拉即选(规范大小写),
+ *  自定义 key 走 el-select filterable+allow-create 手输,不锁死清单。 */
+const COMMON_HEADER_KEYS = [
+  'Authorization', 'Content-Type', 'Accept', 'Accept-Encoding', 'Accept-Language',
+  'User-Agent', 'Cache-Control', 'Connection', 'Host', 'Origin', 'Referer', 'Cookie',
+  'X-Request-ID', 'traceparent', 'X-Forwarded-For', 'X-Real-IP', 'X-API-Key', 'X-Trace-Id',
+]
 
 const auths = ref<AuthSession[]>([])
 const authPickerOpen = ref(false)

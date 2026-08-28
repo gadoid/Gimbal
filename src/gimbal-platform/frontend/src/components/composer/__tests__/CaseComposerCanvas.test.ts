@@ -616,3 +616,57 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     w.unmount()
   })
 })
+
+// ── headers 常用 key 下拉(默认配置头 + 可自行新增) ──────────────────
+// 契约:header key 由裸 el-input 换为 el-select(filterable +
+// allow-create)— 常用 key 下拉即选,自定义 key 仍可输入;
+// 值仍走 updateHeaderKey 重命名,headers 对象形状不变。
+describe('CaseComposerCanvas — headers 常用 key 下拉', () => {
+  /** 挂载一个带单行 header 的 step,返回 wrapper + step 引用 */
+  async function mountWithHeader() {
+    const s0 = mkStep({
+      api: {
+        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+        headers: { 'X-Header': 'v' }, view_hints: { endpoint_id: 'ep-1' },
+      },
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    return { w, step: s0 }
+  }
+
+  /** 定位 header key 的 ElSelect(.hdr-key class 落在组件根元素上) */
+  function findHeaderKeySelect(w: ReturnType<typeof mountCanvas>['w']) {
+    return w.findAllComponents({ name: 'ElSelect' })
+      .find((c) => c.classes().includes('hdr-key'))
+  }
+
+  it('H1: 预设选项含标准头与网关/链路追踪常用头,选中后 key 重命名', async () => {
+    const { w, step } = await mountWithHeader()
+    const sel = findHeaderKeySelect(w)
+    expect(sel).toBeTruthy()
+    const labels = sel!.findAllComponents({ name: 'ElOption' }).map((o) => o.props('label'))
+    // 标准 + 内网网关/链路追踪两组各抽代表
+    expect(labels).toContain('Authorization')
+    expect(labels).toContain('Content-Type')
+    expect(labels).toContain('X-Request-ID')
+    expect(labels).toContain('traceparent')
+    // 选中预设 → 既有 value 保留,key 重命名
+    sel!.vm.$emit('update:modelValue', 'Authorization')
+    await flush()
+    expect(step.api.headers).toEqual({ Authorization: 'v' })
+    w.unmount()
+  })
+
+  it('H2: allow-create — 自定义 key 仍可输入(不锁死预设清单)', async () => {
+    const { w, step } = await mountWithHeader()
+    const sel = findHeaderKeySelect(w)
+    expect(sel).toBeTruthy()
+    expect(sel!.props('filterable')).toBe(true)
+    expect(sel!.props('allowCreate')).toBe(true)
+    sel!.vm.$emit('update:modelValue', 'X-Custom-Trace')
+    await flush()
+    expect(step.api.headers).toEqual({ 'X-Custom-Trace': 'v' })
+    w.unmount()
+  })
+})
