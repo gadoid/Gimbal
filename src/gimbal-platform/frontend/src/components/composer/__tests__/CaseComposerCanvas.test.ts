@@ -14,6 +14,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import CaseComposerCanvas from '@/components/composer/CaseComposerCanvas.vue'
+import { resolveResponsePaths } from '@/api/scenario-composer'
 import type { StepView } from '@/types/plate'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
@@ -24,11 +25,19 @@ import type { ConstantEntry } from '@/types/constants'
 // ── plate 代理 API mock(挂载即触发的:listStrategyKinds/listAuths) ──
 vi.mock('@/api/scenario-composer', () => ({
   listStrategyKinds: vi.fn().mockResolvedValue([]),
+  // extract 的 expression 带 B1 候选下拉用输入控件(fields 描述符);
+  // 其余 kind 保持无字段(既有用例不依赖其 DOM)
   getStrategyKindFull: vi.fn().mockImplementation((kind: string) => Promise.resolve({
-    extract: { kind: 'extract', label: '从响应提取变量', phase: 'after_request', fields: [], base_fields: [] },
-    assertion: { kind: 'assertion', label: '断言', phase: 'verifying', fields: [], base_fields: [] },
+    extract: { kind: 'extract', label: '从响应提取变量', phase: 'after_request', fields: [
+      { name: 'target', path: 'target', ui_kind: 'text', source_kind: 'independent', required: true, description: null, example: null, default: null, enum: null },
+      { name: 'expression', path: 'expression', ui_kind: 'text', source_kind: 'independent', required: true, description: null, example: null, default: null, enum: null },
+    ], base_fields: [] },
+    assertion: { kind: 'assertion', label: '断言', phase: 'verifying', fields: [
+      { name: 'target', path: 'target', ui_kind: 'text', source_kind: 'independent', required: true, description: null, example: null, default: null, enum: null },
+    ], base_fields: [] },
     assign: { kind: 'assign', label: '注入响应变量', phase: 'before_request', fields: [], base_fields: [] },
   }[kind] ?? { kind, label: kind, phase: 'after_request', fields: [], base_fields: [] })),
+  resolveResponsePaths: vi.fn().mockResolvedValue([]),
   getFullEndpoint: vi.fn().mockImplementation((endpointId: string) => Promise.resolve({
     request: {
       // /full 请求字段契约(现拉渲染的主数据源)。ep-1: orderId 平铺;
@@ -667,6 +676,76 @@ describe('CaseComposerCanvas — headers 常用 key 下拉', () => {
     sel!.vm.$emit('update:modelValue', 'X-Custom-Trace')
     await flush()
     expect(step.api.headers).toEqual({ 'X-Custom-Trace': 'v' })
+    w.unmount()
+  })
+})
+
+describe('CaseComposerCanvas — B1 响应样本路径推断', () => {
+  // spy 计数跨用例累积(无全局 restore)— 本 describe 每用例前清零
+  beforeEach(() => {
+    vi.mocked(resolveResponsePaths).mockClear()
+  })
+
+  /**
+   * 痛点: 端点无 assertable_fields(未录响应模型)时 respPathFor 静默
+   * 兜底 $.data.<字段>,响应 data 为数组则丢 [0] 段(2026-08-28 用户
+   * 踩坑 $.data.data[0].order_id → $.response_body.data.order_id)。
+   * 正解: 粘真实响应样本 → plate resolve-paths 展开候选(数组天然
+   * 出下标)→ 合入策略路径字段候选(scratch 域),点选即正确。
+   */
+  it('B1a: 粘贴样本 → 解析 → 候选含数组下标路径(scratch 域),与 assertable 联合', async () => {
+    // 策略区 v-if="strategyKinds.length" — 基线 mock 返回空走降级 UI,
+    // 本用例一次性给非空让策略卡渲染
+    const { listStrategyKinds } = await import('@/api/scenario-composer')
+    vi.mocked(listStrategyKinds).mockResolvedValueOnce([
+      { kind: 'extract', label: '从响应提取变量' },
+      { kind: 'assertion', label: '断言' },
+    ] as any)
+    const extract = { kind: 'extract', target: 'order_id', expression: '' } as any
+    const s0 = mkStep({ strategy: [extract] })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+
+    // 展开样本折叠条 → 填样本 → 解析(mock 只回数组下标路径)
+    await w.find('.sample-toggle').trigger('click')
+    await w.find('.sample-input').setValue('{"code":0,"data":{"data":[{"order_id":"BL1"}]}}')
+    vi.mocked(resolveResponsePaths).mockResolvedValueOnce([
+      { path: "$.data['data'][0]['order_id']", depth: 4, extracted_by_default: false },
+    ] as any)
+    await w.find('.sample-parse').trigger('click')
+    await flushPromises()
+    expect(resolveResponsePaths).toHaveBeenCalledTimes(1)
+    // 样本解析后的 body 对象直传(不是 JSON 字符串)
+    expect((vi.mocked(resolveResponsePaths).mock.calls[0] as any[])[0]).toEqual({
+      code: 0, data: { data: [{ order_id: 'BL1' }] },
+    })
+
+    // 展开策略卡 → expression 字段出现候选按钮 → 候选含 plate 域→scratch
+    // 域转换后的数组下标路径,同时含 assertable 转换候选(联合)。
+    // .cand-btn 会命中请求体字段的 fa-menu-btn(同名类)— 排除之
+    await w.find('.sf-head').trigger('click')
+    const candBtn = w.findAll('.cand-btn').find((b) => !b.classes().includes('fa-menu-btn'))
+    expect(candBtn).toBeTruthy()
+    await candBtn!.trigger('click')
+    const items = w.findAll('.cand-item').map((b) => b.text())
+    expect(items).toContain("$.response_body.data['data'][0]['order_id']")
+    expect(items).toContain('$.response_body.data.orderId')
+    w.unmount()
+  })
+
+  it('B1b: 非法 JSON → 提示且不调 API', async () => {
+    const { listStrategyKinds } = await import('@/api/scenario-composer')
+    vi.mocked(listStrategyKinds).mockResolvedValueOnce([
+      { kind: 'extract', label: '从响应提取变量' },
+    ] as any)
+    const { w } = mountCanvas([mkStep()])
+    await flushPromises()
+    await w.find('.sample-toggle').trigger('click')
+    await w.find('.sample-input').setValue('{not json')
+    await w.find('.sample-parse').trigger('click')
+    await flushPromises()
+    expect(resolveResponsePaths).not.toHaveBeenCalled()
+    expect(w.find('.sample-error').exists()).toBe(true)
     w.unmount()
   })
 })

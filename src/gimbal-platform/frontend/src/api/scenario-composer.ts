@@ -200,6 +200,22 @@ export async function getFullEndpoint(endpointId: string): Promise<EndpointFullV
   return data
 }
 
+/** B1 路径推断候选(plate resolve-paths: 响应样本 → JSONPath,数组出下标) */
+export interface ResponsePathCandidate {
+  path: string
+  depth: number
+  extracted_by_default: boolean
+}
+
+/** 响应样本 → 候选 JSONPath(plate 域 `$.…`)— 策略路径字段点选用 */
+export async function resolveResponsePaths(sample: unknown): Promise<ResponsePathCandidate[]> {
+  const { data } = await http.post<ResponsePathCandidate[]>(
+    '/endpoint-catalog/resolve-paths',
+    { response_body_sample: sample },
+  )
+  return data
+}
+
 // ── strategy catalog (proxy → Plate /api/strategy 语法 dim) ────────
 //
 // 策略语法(M6 第 8 dim)的引用数据:哪些 kind、每个 kind 哪些字段。

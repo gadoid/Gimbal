@@ -43,7 +43,7 @@
               type="button"
               class="cand-btn"
               title="从候选值选择"
-              @click="candOpenField = candOpenField === f ? null : f"
+              @click="candOpenField = candOpenField === f.name ? null : f.name"
             >▾</button>
             <!-- 字段动作菜单(#4/#5 变量工作台):引用/提取/注入/断言。
                  fieldActions 门控 — 仅 Canvas 请求体场景传 -->
@@ -54,7 +54,7 @@
               title="变量与策略动作"
               @click="toggleMenu(f)"
             >☰</button>
-            <div v-if="candOpenField === f" class="cand-list">
+            <div v-if="candOpenField === f.name" class="cand-list">
               <button
                 v-for="c in candidatesFor(f)"
                 :key="c"
@@ -399,8 +399,10 @@ const emit = defineEmits<{
   'varPromote': [field: IOFieldBinding, name: string, value: unknown]
 }>()
 
-/** 候选下拉开合状态(同屏至多一个) */
-const candOpenField = ref<IOFieldBinding | null>(null)
+/** 候选下拉开合状态(同屏至多一个)— 存字段名而非对象引用:
+ *  props.bindings 被 Vue 包 reactive proxy,v-for 元素与原始对象
+ *  === 不等(菜单 menuField 踩过同坑,存 name 后列表才能展开) */
+const candOpenField = ref<string | null>(null)
 function candidatesFor(f: IOFieldBinding): string[] {
   return props.candidates?.[f.name] ?? []
 }

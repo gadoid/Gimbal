@@ -271,6 +271,28 @@
                  (执行序即数组序,不按签页过滤 — 添加即见);失败降级 extract 专用 UI -->
             <el-form-item v-if="strategyKinds.length" label="策略 (request · response 共用)">
               <div class="strategy-area">
+                <!-- B1 响应样本:端点无 assertable 时路径只能猜(数组丢 [0] 段)
+                     → 粘真实样本解析候选,数组下标天然正确 -->
+                <div class="sample-bar">
+                  <button type="button" class="sample-toggle" @click="sampleOpen = !sampleOpen">
+                    {{ sampleOpen ? '▾' : '▸' }} 响应样本(选填 — 解析路径候选)
+                  </button>
+                  <div v-if="sampleOpen" class="sample-body">
+                    <textarea
+                      v-model="sampleText"
+                      class="sample-input"
+                      rows="4"
+                      placeholder='粘贴该步骤的真实响应 JSON,如 {"code":0,"data":{"data":[{"order_id":"BL1"}]}}'
+                    />
+                    <div class="sample-actions">
+                      <button type="button" class="sample-parse" @click="onParseSample">解析路径</button>
+                      <span v-if="sampleError" class="sample-error">{{ sampleError }}</span>
+                      <span v-else-if="samplePaths.length" class="sample-ok">
+                        已解析 {{ samplePaths.length }} 条候选 → 策略路径字段的 ▾ 可选
+                      </span>
+                    </div>
+                  </div>
+                </div>
                 <StrategyForm
                   v-for="(s, idx) in currentStep.strategy"
                   :key="`${activeStepIdx}-${idx}`"
@@ -451,7 +473,7 @@ import VarSelectorModal from './VarSelectorModal.vue'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { useConstantsStore } from '@/stores/constants'
 import { deriveVarRegistry } from '@/utils/var-registry'
-import { getFullEndpoint, listStrategyKinds, getStrategyKindFull } from '@/api/scenario-composer'
+import { getFullEndpoint, listStrategyKinds, getStrategyKindFull, resolveResponsePaths } from '@/api/scenario-composer'
 import { list as listAuths } from '@/api/auth_sessions'
 import { parseTplRefs, refStatus } from '@/utils/tpl-refs'
 import type { TplRef } from '@/utils/tpl-refs'
@@ -1067,11 +1089,40 @@ function confirmAliasCreate(step: StepView) {
 /** 策略表单候选映射(#2):kind 定字段名 — assertion 用 target,extract 用 expression */
 function strategyCandidates(s: StrategyView): Record<string, string[]> {
   const fields = s.kind === 'assertion' ? ['target'] : s.kind === 'extract' ? ['expression'] : []
-  if (!fields.length || !currentAssertable.value.length) return {}
+  // B1:候选 = 端点 assertable ∪ 响应样本解析(数组下标天然正确)
+  const platePaths = [...currentAssertable.value, ...samplePaths.value]
+  if (!fields.length || !platePaths.length) return {}
   // 候选列表 = 运行期真实语义(scratch 域),用户选了即正确
   return Object.fromEntries(
-    fields.map((f) => [f, currentAssertable.value.map(toScratchPath)])
+    fields.map((f) => [f, platePaths.map(toScratchPath)])
   )
+}
+
+// ── B1 响应样本路径推断 ──
+const sampleOpen = ref(false)
+const sampleText = ref('')
+const sampleError = ref('')
+/** plate 域候选路径(resolve-paths 产物);strategyCandidates 统一转 scratch 域 */
+const samplePaths = ref<string[]>([])
+
+async function onParseSample() {
+  sampleError.value = ''
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(sampleText.value)
+  } catch {
+    sampleError.value = 'JSON 解析失败 — 请粘贴合法 JSON 响应体'
+    return
+  }
+  try {
+    const paths = await resolveResponsePaths(parsed)
+    samplePaths.value = paths.map((p) => p.path)
+    if (!samplePaths.value.length) {
+      sampleError.value = '未解析出路径 — 样本需为 JSON 对象或数组'
+    }
+  } catch {
+    sampleError.value = '解析失败 — plate 服务不可达或返回异常'
+  }
 }
 
 /** 由 endpoint 契约(/full 原料)构造初始策略,替代硬编码 $.status eq 200 */
@@ -1498,6 +1549,31 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
 
 /* 策略区(语法 dim 驱动) */
 .strategy-area { width: 100%; }
+
+/* B1 响应样本折叠条:折叠态只占一行;展开 textarea + 解析按钮 */
+.sample-bar { margin-bottom: 6px; }
+.sample-toggle {
+  border: none; background: transparent; padding: 2px 0;
+  font-size: 11px; color: #64748b; cursor: pointer;
+}
+.sample-toggle:hover { color: #4f46e5; }
+.sample-body { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.sample-input {
+  box-sizing: border-box; width: 100%;
+  font-family: var(--font-mono); font-size: 12px;
+  border: 1.5px solid #e6e8ec; border-radius: 8px;
+  padding: 8px 10px; outline: none; resize: vertical;
+  background: #fafbfc; color: #1a1d24;
+}
+.sample-input:focus { border-color: #4f46e5; background: #fff; }
+.sample-actions { display: flex; align-items: center; gap: 10px; }
+.sample-parse {
+  border: 1px solid #c3ccdb; background: #f8fafc; border-radius: 6px;
+  padding: 4px 12px; font-size: 12px; cursor: pointer;
+}
+.sample-parse:hover { background: #eef2ff; border-color: #4f46e5; }
+.sample-error { font-size: 11px; color: #dc2626; }
+.sample-ok { font-size: 11px; color: #059669; }
 .add-strategy { width: 100%; }
 .strat-kind-tag {
   margin-left: 8px;
