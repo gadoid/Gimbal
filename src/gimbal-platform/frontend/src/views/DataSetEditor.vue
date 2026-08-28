@@ -152,6 +152,9 @@
           <el-button size="small" plain :disabled="!varColumns.length" @click="onExportCsv">导出 CSV</el-button>
         </div>
       </div>
+      <!-- 横向滚动容器:变量列多时表格按 colgroup 定宽展开,拖动条滚动查看;
+           工具栏留在滚动区外不随之移动 -->
+      <div class="grid-scroll">
       <!-- 字段描述行(从 Plate IOFieldBinding 拉)— description 可选,空时显示 — -->
       <table class="data-table">
         <colgroup>
@@ -259,6 +262,7 @@
           </tr>
         </tbody>
       </table>
+      </div><!-- /grid-scroll -->
     </div>
   </section>
 
@@ -895,12 +899,17 @@ onMounted(async () => {
   background: #f8fafc;
 }
 
+/* 横向滚动:列少时表格仍占满(width:100%),列多时按 colgroup 定宽展开
+   (min-width:max-content 赢),拖滚动条查看右侧列 */
+.grid-scroll { overflow-x: auto; }
+
 /* 字段描述行 + 字段名行 + 数据行 — 全部走同一个 <table>,列对齐
    - colgroup 给每列 120px min,保证四个 thead/tbody 行严格对齐
    - .row-info / .row-quick-add / .row-data 行级只覆盖背景色,不影响 td 宽度
 */
 .data-table {
   width: 100%;
+  min-width: max-content;          /* 列多时不被压扁 — 撑开到 colgroup 总宽,交给 .grid-scroll 滚动 */
   border-collapse: collapse;       /* 关键 — 默认 separate 时 td 间会有缝隙,破坏对齐 */
   table-layout: fixed;             /* 列宽由 colgroup 决定,不被内容撑开 */
   font-family: var(--font-mono); font-size: 12px;
