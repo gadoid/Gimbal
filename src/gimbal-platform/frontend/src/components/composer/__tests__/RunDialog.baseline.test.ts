@@ -3,16 +3,17 @@ import { expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import RunDialog from '../RunDialog.vue'
+import type { Scenario } from '@/types/scenario-composer'
 
 const DS = [
   { datasetId: 'ds-1', scenarioId: 'sc-a', name: 'A', rowCount: 3, preview: [] },
   { datasetId: 'ds-2', scenarioId: 'sc-a', name: 'B', rowCount: 2, preview: [] },
 ]
 
-function mountDialog() {
+function mountDialog(scenario: Scenario | null = null) {
   return mount(RunDialog, {
     props: {
-      scenario: null, dataSets: DS,
+      scenario, dataSets: DS,
       running: false, lastRunId: null, lastRunError: null,
       schemes: [], lastRunOverlay: null, serviceRows: [], authOptions: [],
     },
@@ -46,4 +47,28 @@ it('全取消数据集(基线未勾)也按基线显示:基线 ×1 / 1 次运行'
   // 空选择 = 一个隐式空覆盖行(D12 显示对齐):显示如实反映 confirm 将派发 []
   expect(w.find('.summary-chip.total').text()).toBe('1 次运行')
   expect(w.text()).toContain('基线 ×1')
+})
+
+// ── 场景标识显示 name(零获取:scenario prop 在手)──────────────────
+// 契约:「从 <X> 触发执行」的 X 从裸 scenarioId 改为 `meta.name || id`。
+function dialogScenario(over: { name?: string }): Scenario {
+  return {
+    meta: {
+      scenarioId: 'sc-a', name: '订单查询', description: '', module: '订单',
+      priority: 1, author: 'qa', owner: 'qa', tags: [], system: ['fin'],
+      ...over,
+    },
+    steps: [], dataSetCount: 0, stepCount: 0, tags: [],
+  } as unknown as Scenario
+}
+
+it('场景标识显示 name:从 <name> 触发执行', async () => {
+  const w = mountDialog(dialogScenario({}))
+  expect(w.text()).toContain('从 订单查询 触发执行')
+  expect(w.text()).not.toContain('sc-a')
+})
+
+it('未命名(name 为空)回退显示 scenarioId', async () => {
+  const w = mountDialog(dialogScenario({ name: '' }))
+  expect(w.text()).toContain('从 sc-a 触发执行')
 })

@@ -28,7 +28,7 @@
           <div class="crumb">
             <span @click="$router.push('/scenarios')">场景库</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
-            <span class="scenario-id">{{ definition.scenarioId }}</span>
+            <span class="scenario-id">{{ meta.name || definition.scenarioId }}</span>
           </div>
           <h1 class="title" :class="{ expired: meta.expire }">
             {{ meta.name || '未命名编排' }}

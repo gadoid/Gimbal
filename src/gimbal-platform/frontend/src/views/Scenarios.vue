@@ -431,7 +431,7 @@ async function onCmd(cmd: string, row: Scenario) {
   if (cmd === 'copy') {
     try {
       const saved = await store.copyScenario(row.meta.scenarioId)
-      ElMessage.success(`已复制到我的场景：${saved.meta.scenarioId}`)
+      ElMessage.success(`已复制到我的场景：${saved.meta.name || saved.meta.scenarioId}`)
     } catch (e) {
       showError('复制', undefined, (e as Error).message)
     }
@@ -470,14 +470,14 @@ async function onCmd(cmd: string, row: Scenario) {
   if (cmd === 'export') return exportRow(row)
   if (cmd === 'delete') {
     const ok = await confirmAction(
-      `确认删除场景 ${row.meta.scenarioId}？其下所有用例与数据集将一并删除，操作不可撤销。`,
+      `确认删除场景 ${row.meta.name || row.meta.scenarioId}？其下所有用例与数据集将一并删除，操作不可撤销。`,
       '删除场景',
       { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
     )
     if (!ok) return // 用户取消
     try {
       await store.removeScenario(row.meta.scenarioId)
-      ElMessage.success(`已删除：${row.meta.scenarioId}`)
+      ElMessage.success(`已删除：${row.meta.name || row.meta.scenarioId}`)
     } catch (e) {
       showError('删除', undefined, (e as Error).message)
     }

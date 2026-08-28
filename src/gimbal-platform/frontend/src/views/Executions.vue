@@ -1,5 +1,5 @@
 <!-- Executions.vue — 单次执行的实时状态页（V3）。
-     可观测面 = Execution 计数器 + 执行配方 + 行级明细表（展开后随
+     可观测面 = Execution 计数器 + 执行信息 + 行级明细表（展开后随
      1s 轮询刷新；engine.log / result.json 工件按需加载）。
      V1 的每-run 报告/SSE 已退役。 -->
 <template>
@@ -67,7 +67,7 @@
       :closable="false"
       show-icon
       class="sys-alert"
-      title="后端重启：本单由启动期 reconcile 收敛为 failed（详见执行配方外的 reconciled 记录）"
+      title="后端重启：本单由启动期 reconcile 收敛为 failed（详见执行信息外的 reconciled 记录）"
     />
     <el-alert
       v-if="execStore.detail.config?.counterDrift"
@@ -99,7 +99,7 @@
       </div>
     </div>
 
-    <h3 class="recipe-title">执行配方</h3>
+    <h3 class="recipe-title">执行信息</h3>
     <dl class="recipe">
       <template v-for="([k, label, v]) in recipeEntries" :key="k">
         <dt>{{ label }}</dt>
@@ -141,7 +141,7 @@
           <template v-for="row in rows" :key="row.seq">
             <tr class="ex-table-row">
               <td class="mono">{{ row.seq }}</td>
-              <td>{{ row.datasetId ?? '—' }}</td>
+              <td>{{ row.datasetId ?? '使用基线配置' }}</td>
               <td class="mono">{{ row.rowIndex }}</td>
               <td class="mono">{{ row.rep }}</td>
               <td>
@@ -292,11 +292,14 @@ const recipeEntries = computed<Array<[string, string, unknown]>>(() => {
     .map(([k, v]) => [k, RECIPE_LABELS[k] ?? k, v])
 })
 
+/** 未配置项(空数组/空对象/null/空串)= 无覆盖 → 场景基线配置生效。 */
 function formatRecipeValue(v: unknown): string {
-  if (Array.isArray(v)) return v.length ? v.join(', ') : '(空)'
+  if (Array.isArray(v)) return v.length ? v.join(', ') : '使用基线配置'
   // serviceBindings 等对象值:紧凑 JSON 保结构可读,不出现 [object Object]
-  if (v !== null && typeof v === 'object') return JSON.stringify(v)
-  if (v === null || v === '') return '—'
+  if (v !== null && typeof v === 'object') {
+    return Object.keys(v).length ? JSON.stringify(v) : '使用基线配置'
+  }
+  if (v === null || v === '') return '使用基线配置'
   return String(v)
 }
 
@@ -423,7 +426,7 @@ async function removeExec() {
 
 /** 导出执行时场景快照:快照 draft → plate convert(无 overlay、不注入
  *  凭证,与场景库"默认导出"同构)→ 下载。文件名带 exec<id> 区分于
- *  场景库导出;执行时的服务绑定/数据集选择在执行配方里另行可读。 */
+ *  场景库导出;执行时的服务绑定/数据集选择在执行信息里另行可读。 */
 async function exportScenario(): Promise<void> {
   if (!execStore.detail) return
   try {
