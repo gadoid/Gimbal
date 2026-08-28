@@ -735,17 +735,26 @@ const injectVarChoices = computed(() => {
 })
 
 /**
- * 字段名 → 响应 JSONPath:assertable 精确匹配($.data.<字段> 优先,
- * 其次 $.<字段>),命中才用;未命中返回 $.data.<字段> 兜底(策略卡
- * 展开引导改)。
+ * 字段名 → 响应 JSONPath — 唯一来源是 plate 解析的候选,不猜:
+ * ① 运行时样本(resolve-paths,最新鲜、数组天然 [idx])按字段名结尾匹配
+ * ② 端点契约 assertable(注册时预解析的缓存)精确匹配
+ * 无命中返回 ''(宁空勿错 — 旧兜底模板 $.data.<字段> 在数组响应上
+ * 丢 [0] 段,静默错路径比空更糟;空引导用户粘样本/手填)。
  */
 function respPathFor(fieldName: string): string {
-  const preferred = `$.data.${fieldName}`
-  const alt = `$.${fieldName}`
-  let platePath = preferred
-  if (currentAssertable.value.includes(alt)) platePath = alt
-  // plate /full 域 → 引擎 scratch 域($.data.x → $.response_body.data.x)
-  return toScratchPath(platePath)
+  const sampleHit = samplePaths.value.find((p) => pathEndsWithField(p, fieldName))
+  if (sampleHit) return toScratchPath(sampleHit)
+  const assertableHit = currentAssertable.value.find(
+    (p) => p === `$.data.${fieldName}` || p === `$.${fieldName}`
+  )
+  if (assertableHit) return toScratchPath(assertableHit)
+  return ''
+}
+
+/** plate 域路径是否以字段名结尾:$.a.b / $.a['b'] / $.a[0]['b'] */
+function pathEndsWithField(p: string, fieldName: string): boolean {
+  const escaped = fieldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(?:\\.|\\[')${escaped}(?:'\\])?$`).test(p)
 }
 
 /** 菜单"从响应提取":extract 骨架(target=字段名,scope=scenario) */

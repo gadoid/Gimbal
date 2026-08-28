@@ -749,3 +749,90 @@ describe('CaseComposerCanvas — B1 响应样本路径推断', () => {
     w.unmount()
   })
 })
+
+describe('CaseComposerCanvas — B1c 路径生成统一走 plate 解析(不猜)', () => {
+  /**
+   * 统一原则: respPathFor 的路径只信 plate 解析 — 运行时样本(resolve-paths)
+   * 优先,端点契约 assertable(注册时预解析)次之,无命中返回 ''(宁空勿错:
+   * 兜底模板 $.data.<字段> 在数组响应上丢 [0] 段,静默错路径比空更糟)。
+   */
+  beforeEach(() => {
+    vi.mocked(resolveResponsePaths).mockClear()
+  })
+
+  it('B1c: 样本已解析时点"从响应提取" → 默认即样本数组路径(优先于 assertable)', async () => {
+    const { listStrategyKinds } = await import('@/api/scenario-composer')
+    vi.mocked(listStrategyKinds).mockResolvedValueOnce([
+      { kind: 'extract', label: '从响应提取变量' },
+    ] as any)
+    const s0 = mkStep()
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    // 解析样本(只回 order_id 数组路径)
+    await w.find('.sample-toggle').trigger('click')
+    await w.find('.sample-input').setValue('{"data":{"data":[{"order_id":"BL1"}]}}')
+    vi.mocked(resolveResponsePaths).mockResolvedValueOnce([
+      { path: "$.data['data'][0]['order_id']", depth: 4, extracted_by_default: false },
+    ] as any)
+    await w.find('.sample-parse').trigger('click')
+    await flushPromises()
+    // 点请求字段的 ☰ → "从响应提取"(字段 orderId,assertable 里有
+    // $.data.orderId — 样本无 orderId 结尾路径,应落 assertable 命中)
+    await w.find('.fa-menu-btn').trigger('click')
+    await flush()
+    const item = w.findAll('.fa-item').find((b) => b.text().includes('从响应提取'))
+    await item!.trigger('click')
+    await flush()
+    const ex = s0.strategy.find((s: any) => s.kind === 'extract') as any
+    expect(ex.expression).toBe('$.response_body.data.orderId')
+    w.unmount()
+  })
+
+  it('B1d: 样本命中字段名结尾 → 直接用样本路径(数组下标)', async () => {
+    const { listStrategyKinds } = await import('@/api/scenario-composer')
+    vi.mocked(listStrategyKinds).mockResolvedValueOnce([
+      { kind: 'extract', label: '从响应提取变量' },
+    ] as any)
+    // ep-2 请求字段 oid;样本解析出 ['oid'] 结尾的数组路径 → 生成即样本路径
+    const s0 = mkStep({
+      api: { kind: 'api', service: 'fin', method: 'POST', path: '/x', headers: {}, view_hints: { endpoint_id: 'ep-2' } },
+      request: { kind: 'request', body: { nested: { oid: '' } } },
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    await w.find('.sample-toggle').trigger('click')
+    await w.find('.sample-input').setValue('{"data":{"items":[{"oid":"O1"}]}}')
+    vi.mocked(resolveResponsePaths).mockResolvedValueOnce([
+      { path: "$.data['items'][0]['oid']", depth: 4, extracted_by_default: false },
+    ] as any)
+    await w.find('.sample-parse').trigger('click')
+    await flushPromises()
+    await w.find('.fa-menu-btn').trigger('click')
+    await flush()
+    const item = w.findAll('.fa-item').find((b) => b.text().includes('从响应提取'))
+    await item!.trigger('click')
+    await flush()
+    const ex = s0.strategy.find((s: any) => s.kind === 'extract') as any
+    expect(ex.expression).toBe("$.response_body.data['items'][0]['oid']")
+    w.unmount()
+  })
+
+  it('B1e: 无样本无 assertable 命中 → expression 空(不猜 $.data.<字段>)', async () => {
+    // ep-2 字段 oid;assertable(mock 共用)= $.data.orderId/$.code 不含 oid,
+    // 无样本 → 旧逻辑会猜 $.response_body.data.oid,统一后应为 ''
+    const s0 = mkStep({
+      api: { kind: 'api', service: 'fin', method: 'POST', path: '/x', headers: {}, view_hints: { endpoint_id: 'ep-2' } },
+      request: { kind: 'request', body: { nested: { oid: '' } } },
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    await w.find('.fa-menu-btn').trigger('click')
+    await flush()
+    const item = w.findAll('.fa-item').find((b) => b.text().includes('从响应提取'))
+    await item!.trigger('click')
+    await flush()
+    const ex = s0.strategy.find((s: any) => s.kind === 'extract') as any
+    expect(ex.expression).toBe('')
+    w.unmount()
+  })
+})
