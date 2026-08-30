@@ -82,7 +82,7 @@
             multiple filterable allow-create
             placeholder="选择或输入被测系统"
           >
-            <el-option v-for="s in KNOWN_SYSTEMS" :key="s" :value="s" :label="systemLabel(s)">
+            <el-option v-for="s in plateSystems" :key="s" :value="s" :label="systemLabel(s)">
               <span class="opt-sys">{{ systemLabel(s) }}</span>
             </el-option>
           </el-select>
@@ -101,11 +101,14 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
+import { reactive, ref, watch, onMounted } from 'vue'
 import TagInput from '@/components/TagInput.vue'
+import { fetchPlateSystems } from '@/api/plate'
 import type { MetaView } from '@/types/plate'
 
-const KNOWN_SYSTEMS = ['fin', 'logi', 'wms', 'mall', 'common']
+// 下拉选项 = plate 已注册系统 (api/plate 统一查询层拉取),
+// 不再硬编码 fin/logi/wms/mall/common。SYS_LABELS 只做已知系统的中文
+// 显示优化;未知系统 (含已保存场景里的旧值) 回退显示原始 id。
 const SYS_LABELS: Record<string, string> = {
   fin: '财务', logi: '物流', wms: '仓储', mall: '商城', common: '通用',
 }
@@ -113,6 +116,17 @@ function systemLabel(s: string) {
   const v = SYS_LABELS[s] || s
   return s === 'common' ? `common (${v})` : `${s} (${v})`
 }
+
+const plateSystems = ref<string[]>([])
+
+onMounted(async () => {
+  try {
+    plateSystems.value = await fetchPlateSystems()
+  } catch (e) {
+    // 静默降级:选项为空,下拉 allow-create 手输不受影响
+    console.warn('[CaseComposerMeta] plate 系统列表加载失败:', e)
+  }
+})
 
 // scenarioId 已上移到 definition.scenarioId (顶层),MetaView 不再含该字段。
 const props = defineProps<{ modelValue: MetaView }>()

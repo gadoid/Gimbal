@@ -24,6 +24,7 @@ from gimbal_plate import (
 )
 from gimbal_plate.http import create_app
 from gimbal_plate.registry import PlateRegistry
+from gimbal_plate.systems.common.dimensions import register_common_dims
 from gimbal_plate.systems.fin.dimensions import register_fin_dims
 
 
@@ -51,6 +52,8 @@ def fresh_registry() -> PlateRegistry:
     for ep in ALL_ENDPOINTS:
         reg.register_endpoint(ep)
     register_fin_dims(reg)
+    # common 通用层与生产 lifespan 同步注册(声明式系统 + 通用 seed)。
+    register_common_dims(reg)
     return reg
 
 

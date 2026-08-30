@@ -8,9 +8,10 @@
  * 期望(Resource):若添加 mock 后行被吞 / Maximum recursive updates → 与
  * Config 同病,需同款修复。
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 import { mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import CaseComposerMeta from '@/components/composer/CaseComposerMeta.vue'
 import CaseComposerResource from '@/components/composer/CaseComposerResource.vue'
@@ -27,6 +28,16 @@ function makeMeta(): MetaView {
 }
 
 describe('CaseComposerMeta — 回声审计(预期收敛,锁死不回归)', () => {
+  // Meta 挂载时经 /plate 代理拉系统列表 → 组件依赖 auth store (pinia)
+  // 与全局 fetch。补最小 fixture (空系统表),回声审计行为不受干扰。
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true, json: async () => ({ data: { items: [] } }),
+    }))
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
   it('编辑 name 写回父级且不递归', async () => {
     const meta = ref<MetaView>(makeMeta())
     const Parent = defineComponent({

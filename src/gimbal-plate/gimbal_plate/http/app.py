@@ -15,6 +15,7 @@ from gimbal_plate.http.envelope import (
 from gimbal_plate.http.grammar import ErrorCode
 from gimbal_plate.http.routes_grammar import router as grammar_router
 from gimbal_plate.registry import PlateRegistry, registry as default_registry
+from gimbal_plate.systems.common.dimensions import register_common_dims
 from gimbal_plate.systems.fin.dimensions import register_fin_dims
 
 
@@ -63,6 +64,11 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         # M6 grammar: 注册 8 个 dim(7 数据 + 1 语法 strategy)+ 4 条 seed(ADR 0002 §D-D4,
         # 共享入口见 ``gimbal_plate.systems.fin.dimensions``)。
         register_fin_dims(default_registry)
+
+        # common 通用层:声明式系统 + ``common.default`` config/meta 通用默认
+        # (编排页"选系统 → 场景骨架预填"的默认源;meta 在通用层管理,
+        # 不放业务系统下)。须在 register_fin_dims 之后(dim 已就位才可播种)。
+        register_common_dims(default_registry)
     yield
 
 

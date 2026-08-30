@@ -31,8 +31,34 @@ class PlateRegistry:
         # "config", "meta"). Each value is a DimSpec exposing the index, the
         # view factory, and the per-dim actions.
         self.dims: dict[str, Any] = {}
+        # 声明式系统 (declared systems):不依赖 endpoint 的系统条目
+        # (common 通用层、C1 注册的尚无 endpoint 的系统)。
+        # "系统存在" = endpoint 派生 ∪ 声明式。
+        self._declared_systems: dict[str, dict[str, Any]] = {}
 
     # ── 注册 ──────────────────────────────────────────────────
+    def declare_system(
+        self,
+        system_id: str,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        """声明一个不依赖 endpoint 的系统(幂等)。
+
+        已声明时直接返回现有条目、不覆盖 —— 启动内置注册与 C1 动态
+        注册可能声明同一个系统,重复声明是合法收敛而非冲突。
+        """
+        if not system_id:
+            raise ValueError("system_id 不可为空")
+        if system_id not in self._declared_systems:
+            self._declared_systems[system_id] = {
+                "id": system_id,
+                "name": name or system_id,
+                "description": description or "",
+            }
+        return dict(self._declared_systems[system_id])
+
     def register_service(self, service: ServiceDefinition) -> None:
         if not service.name:
             raise ValueError("ServiceDefinition.name 不可为空")
@@ -57,9 +83,9 @@ class PlateRegistry:
 
     # ── 查询 ──────────────────────────────────────────────────
     def list_systems(self) -> list[str]:
-        seen: set[str] = set()
-        for ep in self._index.by_id.values():
-            seen.add(ep.system)
+        """All known systems: endpoint-derived ∪ declared, sorted."""
+        seen: set[str] = {ep.system for ep in self._index.by_id.values()}
+        seen.update(self._declared_systems)
         return sorted(seen)
 
     def list_services(self, system: str | None = None) -> list[ServiceDefinition]:
@@ -166,8 +192,10 @@ class PlateRegistry:
         return [ep for ep in self._index.by_id.values() if ep.system == system]
 
     def has_system(self, system: str) -> bool:
-        """Whether any endpoint is registered under ``system``."""
-        return any(ep.system == system for ep in self._index.by_id.values())
+        """Whether ``system`` exists (endpoint-derived OR declared)."""
+        return system in self._declared_systems or any(
+            ep.system == system for ep in self._index.by_id.values()
+        )
 
     def count_endpoints_for_service(self, service: str) -> int:
         """Number of endpoints belonging to ``service``."""
@@ -211,6 +239,7 @@ class PlateRegistry:
         self._services.clear()
         self._index.clear()
         self.dims.clear()
+        self._declared_systems.clear()
 
 
 # 全局默认注册表

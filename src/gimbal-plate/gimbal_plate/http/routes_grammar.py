@@ -766,16 +766,26 @@ def action_system_from_service(
 def action_system_register(
     *, item: Any, body: Any, index: Any, request: Any
 ) -> dict[str, Any]:
-    """C1 — system registration stub."""
-    _ = item, body, index, request
-    raise PlateHTTPError(
-        http_status=501,
-        code=ErrorCode.ADMIN_NOT_IMPLEMENTED,
-        message=(
-            "system registration is not implemented in plate; "
-            "C1 is deferred to the platform backend"
-        ),
+    """C1 — declare a system (idempotent, no endpoints required).
+
+    body: ``{"id": str, "name"?: str, "description"?: str}``。
+    声明的系统存活于当前进程的内存 registry(plate 一期不做持久化,
+    重启即失;内置系统如 fin/common 由 lifespan 代码注册,不受影响)。
+    """
+    _ = item, index
+    body = body or {}
+    system_id = str(body.get("id") or "").strip()
+    if not system_id:
+        raise PlateHTTPError(
+            http_status=400,
+            code=ErrorCode.INVALID_ACTION,
+            message="system registration requires a non-empty body.id",
+        )
+    reg = _registry(request)
+    info = reg.declare_system(
+        system_id, name=body.get("name"), description=body.get("description")
     )
+    return ok_response({"item": info, "total": 1}, dim="system")
 
 
 def action_system_sync(

@@ -241,6 +241,7 @@ import CaseComposerCanvas from '@/components/composer/CaseComposerCanvas.vue'
 import RunDialog from '@/components/composer/RunDialog.vue'
 import ConstantPoolPanel from '@/components/composer/ConstantPoolPanel.vue'
 import { provideInsertTarget, useInsertTarget } from '@/composables/useInsertTarget'
+import { useSystemPrefill } from '@/composables/useSystemPrefill'
 import { seedPoolVarIntoDefinition } from '@/utils/pool-var'
 import { deriveBase } from '@/utils/service-alias'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
@@ -321,6 +322,13 @@ const orchestration = ref<OrchestrationWithSchemes>({
   steps: [],
   resourceMeta: {},
 })
+
+// ── 选系统预填(仅新建场景)──────────────────────────────
+// meta 取 common 通用定义公共项;config 取 common 基座 + 各选中系统
+// services/users/vars 合并;resource 取各系统并集。仅首次、且
+// config/resource 未被编辑过时生效 — 详见 useSystemPrefill 契约。
+const isNewScenario = computed(() => !scenarioId.value || scenarioId.value === 'new')
+useSystemPrefill(definition, isNewScenario)
 
 // 便利 getter (模板顶部 crumb / 标题 / canRun 用)
 const meta = computed(() => definition.value.meta)

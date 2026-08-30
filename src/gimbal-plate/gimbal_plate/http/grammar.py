@@ -196,10 +196,8 @@ class SystemIndex(BaseIndex):
     registry: Any
 
     def _systems(self) -> list[str]:
-        seen: set[str] = set()
-        for ep in self.registry.iter_endpoints_global():
-            seen.add(ep.system)
-        return sorted(seen)
+        # endpoint 派生 ∪ 声明式(common 通用层 / C1 注册),由 registry 统一合并。
+        return self.registry.list_systems()
 
     def list_global(
         self, *, filters: dict[str, Any] | None = None
