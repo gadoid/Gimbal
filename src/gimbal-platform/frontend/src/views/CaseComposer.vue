@@ -243,8 +243,8 @@ import ConstantPoolPanel from '@/components/composer/ConstantPoolPanel.vue'
 import { provideInsertTarget, useInsertTarget } from '@/composables/useInsertTarget'
 import { useSystemPrefill } from '@/composables/useSystemPrefill'
 import { seedPoolVarIntoDefinition } from '@/utils/pool-var'
-import { deriveBase } from '@/utils/service-alias'
-import { loadCatalogServiceNames } from '@/utils/catalog-services'
+import { deriveSystem } from '@/utils/service-alias'
+import { loadCatalogServiceNames, loadCatalogSystemByService } from '@/utils/catalog-services'
 import { useConstantsStore } from '@/stores/constants'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
@@ -462,10 +462,12 @@ function seedPoolVar(name: string, spec: Record<string, unknown>): void {
 }
 
 // ── 目录服务名集合(别名派生输入, spec D5/§1.6)──
-// checkSystemMismatch 先派生 base 再取系统前缀;与 Canvas/Config 共享
-// loader 的模块缓存 — 任一消费者先拉过则此处免费。失败静默降级为空
-// 集合 → 派生退回整串(现状行为),不阻塞加载。
+// checkSystemMismatch 经 deriveSystem 派生 step 系统;与 Canvas/Config
+// 共享 loader 的模块缓存 — 任一消费者先拉过则此处免费。失败静默降级为
+// 空集合/空映射 → 派生退回点前缀启发式(现状行为),不阻塞加载。
 const catalogNames = ref<Set<string>>(new Set())
+/** 目录权威映射 service → system(endpoint 条目自带 system 字段)。 */
+const systemByService = ref<Map<string, string>>(new Map())
 
 // ── lifecycle ──
 onMounted(async () => {
@@ -476,10 +478,13 @@ onMounted(async () => {
     await loadScenario()
   }
   // 目录名非阻塞拉取(fire-and-forget, 不 await):到达晚于下方首次
-  // checkSystemMismatch → 由 watch(catalogNames) 重算;失败静默降级。
+  // checkSystemMismatch → 由 watch 重算;失败静默降级。
   loadCatalogServiceNames()
     .then((ns) => { catalogNames.value = new Set(ns) })
     .catch(() => { /* 目录不可达 → 派生降级为整串(现状行为) */ })
+  loadCatalogSystemByService()
+    .then((m) => { systemByService.value = m })
+    .catch(() => { /* 同上:同一拉取,失败时两者一起降级 */ })
   // Auto-compute system warning (PRD §5.1 §9): declared systems vs
   // services actually called by steps.
   if (scenario.value) checkSystemMismatch()
@@ -498,22 +503,20 @@ onUnmounted(() => {
   inserter.stop()
 })
 
-/** Compare meta.system (declared) with the union of step services
- *  (actual). Mismatch is a yellow warning, not a hard error — the
- *  user can have a scenario that declares only `fin` but happens to
- *  call a `common.monitor` mock, for example. */
+/** Compare meta.system (declared) with the union of step systems
+ *  (actual, 经 deriveSystem 权威派生 — endpoint_id 首段 / 目录
+ *  service→system 映射,详见 service-alias.ts)。Mismatch is a yellow
+ *  warning, not a hard error — the user can have a scenario that
+ *  declares only `fin` but happens to call a `common.monitor` mock,
+ *  for example. */
 const systemMismatch = ref<string>('')
 function checkSystemMismatch() {
   if (!scenario.value) return
   const declared = new Set(scenario.value.meta.system || [])
   const actual = new Set<string>()
   for (const s of scenario.value.steps as any[]) {
-    const svc = (s.api && s.api.service) || ''
-    if (!svc) continue
-    // 先派生 base(别名 fin-service-2 → fin-service)再取系统前缀;
-    // 不派生则别名全串被当系统名,每个别名步骤都误报(spec §1.6)
-    const base = deriveBase(svc, catalogNames.value) ?? svc
-    actual.add(base.includes('.') ? base.split('.')[0] : base)
+    const system = deriveSystem(s?.api, catalogNames.value, systemByService.value)
+    if (system) actual.add(system)
   }
   const missing = [...actual].filter(s => !declared.has(s) && s !== 'common')
   const extra = [...declared].filter(s => !actual.has(s) && s !== 'common')
@@ -523,10 +526,10 @@ function checkSystemMismatch() {
   systemMismatch.value = parts.join(' · ')
 }
 
-// 目录名异步到达(fire-and-forget)晚于 onMounted 首次比对 → 到达后
-// 重算一次,别名派生才真正生效;loader 失败时本 watch 不触发,
-// 维持整串降级(现状行为)。
-watch(catalogNames, () => {
+// 目录名/系统映射异步到达(fire-and-forget)晚于 onMounted 首次比对 →
+// 到达后重算一次,权威派生才真正生效;loader 失败时本 watch 不触发,
+// 维持点前缀启发式降级(现状行为)。
+watch([catalogNames, systemByService], () => {
   if (scenario.value) checkSystemMismatch()
 })
 
