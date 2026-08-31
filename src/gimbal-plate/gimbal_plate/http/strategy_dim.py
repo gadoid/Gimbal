@@ -85,10 +85,9 @@ def _bindings_from_schema(schema: dict[str, Any]) -> list[dict[str, Any]]:
     """从(已解析 ref 的)JSON Schema 派生字段描述符 dict 列表。
 
     映射规则:enum→select / number→number / boolean→boolean / string→text
-    / array|object→json / else unknown。接受现成 schema 而非 model 内省 ——
-    Enum 字段的 ``$ref`` 必须先展开(见 ``_resolve_enum_refs``),从 model
-    现生成会重新拿到未解析的原始形态(2026-08-17 实测踩坑;原
-    ``_bindings_from_model`` 内省路线已随 model 机制退役,2026-08-31)。
+    / array|object→json / else unknown。入参是已解析 ref 的 schema_
+    (唯一结构真源):Enum 字段的 ``$ref`` 必须先展开(见
+    ``_resolve_enum_refs``)再传入,否则拿到的是未解析的原始形态。
     """
     props = schema.get("properties") or {}
     required = set(schema.get("required") or [])

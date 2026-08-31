@@ -181,14 +181,9 @@ class TestRequestSpecBodyTypeValidation:
 
     def test_body_type_json_empty_schema_only_passes_per_q_a(self) -> None:
         # 测试点:Q-A a2 + Q-B b1 一致性 —— schema_={} + body_type='json'
-        #     时通过(类型非 None 即视为"已声明 schema")。
+        #     时通过(类型非 None 即视为"已声明 schema",空 dict 视为合法)。
         # 文档依据:V2 §2.2 决策 Q-A=a2 / Q-B=b1。
         # 注:这是决策拍板的边界用例,实测用于锁定"空 dict 不参与校验"的语义。
-        spec = RequestSpec(body_type="json", schema_={})
-        assert spec.schema_ == {}
-
-    def test_body_type_json_with_empty_dict_schema_passes_per_q_a(self) -> None:
-        # Q-A a2:schema_={} 视为"已声明",合法
         spec = RequestSpec(body_type="json", schema_={})
         assert spec.schema_ == {}
 

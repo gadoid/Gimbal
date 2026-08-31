@@ -74,8 +74,9 @@ class TestEndpointValidatorChecks:
             assert 200 in ep.responses
 
 
-class TestModelsComposition:
-    """models.py 的 body 类被组合挂载到 EndpointSpec.request/responses。"""
+class TestSchemaComposition:
+    """body 契约以 schema_ 组合挂载到 EndpointSpec.request/responses
+    (schema_ 是唯一结构真源,title 锚定挂载来源)。"""
 
     def test_create_order_endpoint_has_request_model(self) -> None:
         rs = SETTLEMENT_CREATE_ORDER.request
