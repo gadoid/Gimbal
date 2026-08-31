@@ -83,6 +83,10 @@ export interface IOFieldBinding {
  * 注意:前端拿到的是序列化后的 dict,所以这里是 model_schema/schema 的扁平形式,
  * 而非 Pydantic 侧的 model/schema_ 类引用语义。需要原始 JSON Schema 时优先读
  * model_schema(派生自 model),否则读 schema。
+ *
+ * carry 键(可选):RequestSpec 声明了传递字段面(spec §2)时才有,
+ * path → {description, type};值不在 plate —— 在 platform 值表
+ * (服务绑定/全局默认两层,spec §3.1),运行时由 platform 注入。
  */
 export interface RequestSpecView {
   body_type: BodyType

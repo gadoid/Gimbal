@@ -17,6 +17,9 @@ class CreateOrderRequest(BaseModel):
     order_id: str = Field(..., min_length=1, description="业务订单号")
     amount: int = Field(..., gt=0, description="结算金额,单位分")
     currency: str = Field(default="CNY", description="币种")
+    # carry 面真实字段(Type C 过滤活体夹具):$.remark 与 schema.properties
+    # 交集存在 — 平台值表配置后 step 卡徽标/漂移面板均有活体数据
+    remark: str | None = Field(default=None, description="订单备注(carry 传递字段)")
 
 
 class CreateOrderResponse(BaseModel):

@@ -53,6 +53,18 @@
                     <span v-if="s.api?.method" class="method-badge" :class="`m-${s.api.method.toLowerCase()}`">{{ s.api.method }}</span>
                     <span v-if="s.api?.service" class="svc-tag">{{ s.api.service }}</span>
                     <span v-if="s.api?.path" class="ep-path">{{ s.api.path }}</span>
+                    <!-- carry 只读提示:字段面∩值表非空才出现;悬停列键来源(服务绑定/全局默认) -->
+                    <el-tooltip
+                      v-if="carryInjectable(s).size"
+                      placement="top"
+                    >
+                      <template #content>
+                        <div v-for="[p, src] of carryInjectable(s)" :key="p">
+                          {{ p }} ← {{ src }}
+                        </div>
+                      </template>
+                      <span class="carry-badge">carry {{ carryInjectable(s).size }}</span>
+                    </el-tooltip>
                   </div>
                 </div>
                 <el-switch v-if="orch.steps[i]" v-model="orch.steps[i].enabled" size="small" @click.stop />
@@ -475,6 +487,7 @@ import { useConstantsStore } from '@/stores/constants'
 import { deriveVarRegistry } from '@/utils/var-registry'
 import { getFullEndpoint, listStrategyKinds, getStrategyKindFull, resolveResponsePaths } from '@/api/scenario-composer'
 import { list as listAuths } from '@/api/auth_sessions'
+import { getBindings as getCarryBindings, getDefaults as getCarryDefaults } from '@/api/carry'
 import { parseTplRefs, refStatus } from '@/utils/tpl-refs'
 import type { TplRef } from '@/utils/tpl-refs'
 import type { AuthSession } from '@/api/auth_sessions'
@@ -482,6 +495,8 @@ import { deepDefaults } from '@/utils/jsonpath'
 import { toScratchPath } from '@/utils/scratch-path'
 import { deriveBase } from '@/utils/service-alias'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
+import { carryHint } from '@/utils/carry-hint'
+import type { CarrySource, CarryValues } from '@/utils/carry-hint'
 import type {
   StepView, ExtractView, IOFieldBinding, EndpointFullView,
   StrategyView, StrategyKindView, StrategyKindDetailView,
@@ -988,7 +1003,7 @@ function typeCFields(
 }
 /** 请求侧 Type C(挂 Request 签页底部;carry 键排除 — 传递面零感知) */
 const reqCarryPaths = computed<Set<string>>(() =>
-  new Set(Object.keys((currentFull.value?.request as any)?.carry ?? {})))
+  new Set(Object.keys(currentFull.value?.request?.carry ?? {})))
 const reqTypeC = computed<TypeCField[]>(() =>
   typeCFields(currentReqSchema.value, fieldBindings(currentStep.value).map((f) => f.path))
     .filter((f) => !reqCarryPaths.value.has(f.path))
@@ -1019,6 +1034,32 @@ const serviceAnchor = computed<string | null>(() => {
   if (fromFull && catalogNames.value.has(fromFull)) return fromFull
   return deriveBase(currentStep.value?.api?.service || '', catalogNames.value)
 })
+
+// ── carry 只读提示(spec §5)───────────────────────────────────────
+// 编排器对 carry 零感知(值由 platform 运行时注入),这里只读提示:
+// 字段面 ∩ 值表非空集 → step 卡灰徽标「carry N」,悬停列每个键的来源
+// (服务绑定/全局默认)。值表拉取失败静默降级 → 无徽标,不阻塞编排
+// (与目录名降级同策略);交集与绑定优先规则在 carryHint 纯函数。
+const carryValues = ref<{ defaults: CarryValues; bindings: Record<string, CarryValues> } | null>(null)
+onMounted(async () => {
+  try {
+    const [defaults, bindings] = await Promise.all([getCarryDefaults(), getCarryBindings()])
+    carryValues.value = { defaults, bindings }
+  } catch { /* 值表不可达 → 无提示,不阻塞编排 */ }
+})
+
+/** step → 可注入的 carry 键清单(path → 来源);别名经 deriveBase 归锚点服务 */
+function carryInjectable(step: StepView): Map<string, CarrySource> {
+  void fullVersion.value  // /full 会话缓存回填(fullVersion bump)后徽标重算
+  if (!carryValues.value) return new Map()
+  const eid = step.api?.view_hints?.endpoint_id
+  const full = eid ? endpointFullByEndpoint.get(eid) : undefined
+  const face = Object.keys(full?.request?.carry ?? {})
+  if (!face.length) return new Map()
+  const base = deriveBase(step.api?.service || '', catalogNames.value)
+  const bound = base ? carryValues.value.bindings[base] ?? {} : {}
+  return carryHint(face, bound, carryValues.value.defaults)
+}
 
 /**
  * 引用下拉选项:锚点(目录服务)居首 → 同基别名(deriveBase === 锚点)
@@ -1373,6 +1414,13 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
 .method-badge.m-put { background: #fef3c7; color: #92400e; }
 .method-badge.m-delete { background: #fee2e2; color: #991b1b; }
 .method-badge.m-patch { background: #f3e8ff; color: #6b21a8; }
+/* carry 只读徽标:灰底中性色(platform 注入,编排器零感知,仅提示) */
+.carry-badge {
+  font-family: var(--font-mono); font-weight: 700;
+  padding: 1px 5px; border-radius: 3px;
+  background: #e2e8f0; color: #64748b; font-size: 9px;
+  cursor: default;
+}
 .svc-tag { background: #f1f5f9; color: #475569; padding: 1px 5px; border-radius: 3px; font-size: 9px; }
 .ep-path { font-family: var(--font-mono); font-size: 10px; color: var(--c-text-tertiary); }
 .step-row :deep(.el-switch) { transform: scale(0.8); }
