@@ -986,9 +986,12 @@ function typeCFields(
       default: props[k]?.default,
     }))
 }
-/** 请求侧 Type C(挂 Request 签页底部) */
+/** 请求侧 Type C(挂 Request 签页底部;carry 键排除 — 传递面零感知) */
+const reqCarryPaths = computed<Set<string>>(() =>
+  new Set(Object.keys((currentFull.value?.request as any)?.carry ?? {})))
 const reqTypeC = computed<TypeCField[]>(() =>
   typeCFields(currentReqSchema.value, fieldBindings(currentStep.value).map((f) => f.path))
+    .filter((f) => !reqCarryPaths.value.has(f.path))
 )
 /** 响应侧 Type C(200 契约 schema 差集,挂 Response 签页底部) */
 const respTypeC = computed<TypeCField[]>(() => {
@@ -1174,10 +1177,8 @@ async function onAddEndpoint(ep: any) {
     if (!full) ElMessage.warning('拉取完整接口定义失败, 仍以原始信息加入')
     const fields = full?.request?.fields || []
     const strategy = buildInitialStrategies(full)
-    // 初始 body:绑定 default/example + 契约字段(schema 非绑定)配了 default 的一并写入
-    const req = full?.request as any
-    const contracts = typeCFields(req?.model_schema ?? req?.schema, fields.map((f) => f.path))
-    const initialBody = deepDefaults(fields, contracts)
+    // 初始 body:只合成绑定 default/example(carry/契约默认移交注入通道)
+    const initialBody = deepDefaults(fields)
     const newStep: StepView = {
       kind: 'step',
       description: ep.name,

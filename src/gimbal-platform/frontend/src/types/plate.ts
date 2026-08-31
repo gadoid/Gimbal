@@ -90,6 +90,8 @@ export interface RequestSpecView {
   model_schema?: Record<string, unknown>
   model_name?: string
   schema?: Record<string, unknown>
+  /** 传递字段面(spec §2):path → {description, type};值在 platform 值表 */
+  carry?: Record<string, { description?: string; type?: string }>
 }
 
 /**

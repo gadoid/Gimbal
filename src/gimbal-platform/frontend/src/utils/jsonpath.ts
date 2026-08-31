@@ -35,25 +35,19 @@ export function setByPath(obj: any, path: string, value: any): void {
 }
 
 /**
- * 新建步骤初始 body 合成,两个来源:
- * ① IOFieldBinding 的 default(缺省 example)按 path 写入;
- * ② plate 契约字段(schema 有、binding 无)配了 schema default 的写入顶层键
- *    — 默认随请求发送;没配 default 不造空值,同名绑定已写的值优先。
+ * 新建步骤初始 body 合成(单来源):IOFieldBinding 的 default(缺省
+ * example)按 path 写入。
+ * 契约字段(schema 有、binding 无)的 schema default 不再拷贝 —— 该职责
+ * 已移交 carry 通道(platform 值表 + materialize 注入,spec §5)。
  */
 export function deepDefaults(
   bindings: Array<{ path: string; default: any; example: any }>,
-  unbound?: Array<{ name: string; default?: unknown }>,
 ): any {
   const root: any = {}
   for (const f of bindings) {
     const v = f.default !== null && f.default !== undefined ? f.default : f.example
     if (v === null || v === undefined) continue
     setByPath(root, f.path.replace(/^\$\./, ''), v)
-  }
-  for (const f of unbound ?? []) {
-    if (f.default === undefined || f.default === null) continue
-    if (root[f.name] !== undefined) continue
-    root[f.name] = f.default
   }
   return root
 }
