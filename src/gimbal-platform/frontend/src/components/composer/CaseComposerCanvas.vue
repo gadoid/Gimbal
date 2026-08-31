@@ -949,8 +949,8 @@ interface RespSpecLite {
   fields: IOFieldBinding[]
   /** plate 域路径,渲染 ✓ 标用;写策略时过 toScratchPath */
   assertable: string[]
-  /** 200 契约的 model_schema(Type C 差集源);非 200 恒 undefined */
-  model_schema?: Record<string, unknown>
+  /** 200 契约 schema(Type C 差集源);非 200 恒 undefined */
+  schema?: Record<string, unknown>
 }
 /** 当前 step 的全状态码响应契约(状态码字典序) */
 const currentRespSpecs = computed<RespSpecLite[]>(() => {
@@ -962,18 +962,17 @@ const currentRespSpecs = computed<RespSpecLite[]>(() => {
       description: spec.description || '',
       fields: spec.fields || [],
       assertable: spec.assertable_fields || [],
-      model_schema: status === '200'
-        ? (spec.model_schema ?? spec.schema)
+      schema: status === '200'
+        ? spec.schema
         : undefined,
     }))
     .sort((a, b) => a.status - b.status)
 })
 
-/** 请求侧 model_schema(Type C 差集源;request.model_schema fallback schema) */
-const currentReqSchema = computed<Record<string, unknown> | undefined>(() => {
-  const req = currentFull.value?.request as any
-  return req?.model_schema ?? req?.schema
-})
+/** 请求侧契约 schema(Type C 差集源) */
+const currentReqSchema = computed<Record<string, unknown> | undefined>(
+  () => currentFull.value?.request?.schema
+)
 
 // ── 策略区说明:request/response 共用 step.strategy 单数组(执行序即数组
 //    序,plate Step 契约不变);不按签页过滤,避免"Request 页添加的策略
@@ -1012,7 +1011,7 @@ const reqTypeC = computed<TypeCField[]>(() =>
 const respTypeC = computed<TypeCField[]>(() => {
   const spec200 = currentRespSpecs.value.find((s) => s.status === 200)
   if (!spec200) return []
-  return typeCFields(spec200.model_schema, spec200.fields.map((f) => f.path))
+  return typeCFields(spec200.schema, spec200.fields.map((f) => f.path))
 })
 
 // ── 服务引用(别名消费点,spec §1.4 双显)─────────────────────────

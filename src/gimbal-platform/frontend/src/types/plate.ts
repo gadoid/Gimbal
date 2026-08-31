@@ -82,10 +82,8 @@ export interface IOFieldBinding {
  * - carry:声明了传递字段面时才有(见下)
  *
  * 注意:前端拿到的是序列化后的 dict,需要原始 JSON Schema 直接读 schema。
- * model_schema / model_name 保留为兼容声明:Canvas 旧读点
- * (currentReqSchema / respTypeC)仍写 `model_schema ?? schema` 前缀,
- * 现网线上的 model_schema 恒为 undefined(走 ?? 兜底到 schema),
- * 属历史残留读点,待后续清理 —— 故不删字段只钉语义。
+ * 线上键 = body_type/fields/schema/carry;model 双轨(model_schema/
+ * model_name)已随机制退役一并清理。
  *
  * carry 键(可选):RequestSpec 声明了传递字段面(spec §2)时才有,
  * path → {description, type};值不在 plate —— 在 platform 值表
@@ -94,10 +92,6 @@ export interface IOFieldBinding {
 export interface RequestSpecView {
   body_type: BodyType
   fields: IOFieldBinding[]
-  /** @deprecated 2026-08-31 model 机制退役,线上不再产出;读 schema */
-  model_schema?: Record<string, unknown>
-  /** @deprecated 2026-08-31 model 机制退役,线上不再产出;读 schema */
-  model_name?: string
   schema?: Record<string, unknown>
   /** 传递字段面(spec §2):path → {description, type};值在 platform 值表 */
   carry?: Record<string, { description?: string; type?: string }>
@@ -112,10 +106,6 @@ export interface ResponseSpecView {
   description: string
   fields: IOFieldBinding[]
   assertable_fields: string[]
-  /** @deprecated 2026-08-31 model 机制退役,线上不再产出;读 schema */
-  model_schema?: Record<string, unknown>
-  /** @deprecated 2026-08-31 model 机制退役,线上不再产出;读 schema */
-  model_name?: string
   schema?: Record<string, unknown>
 }
 

@@ -58,7 +58,7 @@ vi.mock('@/api/scenario-composer', () => ({
       carry: endpointId === 'ep-carry'
         ? { '$.remark': { type: 'string' } }
         : undefined,
-      model_schema: endpointId === 'ep-carry'
+      schema: endpointId === 'ep-carry'
         ? { properties: {
             hidden_req: { type: 'string', default: 'hd-default' },
             remark: { type: 'string' },
@@ -69,7 +69,7 @@ vi.mock('@/api/scenario-composer', () => ({
       '200': {
         assertable_fields: ['$.data.orderId', '$.code'],
         description: 'OK',
-        model_schema: { properties: { trace_id: { type: 'string' } } },
+        schema: { properties: { trace_id: { type: 'string' } } },
         fields: [{
           name: 'orderId', path: '$.data.orderId', ui_kind: 'text',
           source_kind: 'independent', required: true,
