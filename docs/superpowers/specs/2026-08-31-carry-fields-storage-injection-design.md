@@ -2,7 +2,7 @@
 
 > 状态:设计已与编排者确认,待实现
 > 日期:2026-08-31
-> 影响范围:`gimbal_plate/schema/endpoint/io_spec.py` · `gimbal-platform/backend/app/services/run_materialize.py` · `run_dispatcher.py` · platform PG 新表 · 前端编排器与配置页
+> 影响范围:`gimbal_plate/schema/endpoint/io_spec.py` · `gimbal-platform/backend/app/services/run_materialize.py` · `run_dispatcher.py` · `adaptation_service.py`/`adaptation_ops.py` · platform PG 新表 · 前端编排器与配置页
 > 关联:[PRD-case-composer.md](../../PRD-case-composer.md) §5.4 Type C · [FIELD-UI-MAPPING.md](../../FIELD-UI-MAPPING.md) §3.5 · [ENDPOINT_SPEC_V2.md](../../../src/gimbal-plate/gimbal_plate/design/ENDPOINT_SPEC_V2.md)
 
 ---
@@ -125,6 +125,7 @@ carry_global_default     全局默认表(公用默认数据集)
 - `GET/PUT /api/carry/defaults` —— 全局默认表整表读写;
 - `GET /api/carry/bindings` / `GET/PUT /api/carry/bindings/{service}` —— 按服务读写;
 - `GET /api/carry/bindings/{service}/fields` —— 该服务所有接口的 carry 字段面并集(后端查 plate `/full` 聚合,供配置页拉清单);
+- `GET /api/carry/drift` —— 漂移面板数据:plate carry 面 vs 两表 paths 的三类 diff(orphaned/uncovered/renamed 建议),按服务分组(§7);
 - 写权限:平台配置维护者(与 RunDialog 环境绑定同级别)。
 
 ## 4. 注入:materialize_run_copy 扩展
@@ -182,7 +183,27 @@ class CarryContext:
 - **全局默认区**:同页"全局默认"标签页,整表编辑;页面常驻提示:**全局默认按纯 path 跨服务生效**——契约门控只保证"不注入未声明的字段",不保证同一路径在不同服务里语义一致(`$.remark` 类描述字段无碍;`$.type` 类语义敏感路径请用服务绑定覆盖兜底,属配置纪律,不做结构约束);
 - 编辑即生效:无缓存,下次执行/导出按新值物化(D1)。
 
-## 7. 二期预留(本期不实现,不堵死)
+## 7. 适配中心联动(版本治理)
+
+**定位**:carry 落地后场景定义不含传递字段(§D1 运行期物化),"用例用了旧版本 carry 结构"在场景侧**没有落点**——漂移的唯一平台侧载体是两张值表,场景零适配是 D1 的直接红利(carry 面变更后,场景下次执行自动按新面注入,无需逐场景 patch)。适配中心的 carry 职能 = 漂移发现 + 影响面筛选 + 值表 CRUD。
+
+**漂移发现(结构 diff,非 semver 判定)**:
+- plate carry 面 vs `carry_service_binding` 该服务 paths,三类结果:
+  - **orphaned**:绑定 path ∉ plate 面(plate 删/改名后遗留;契约门控下已无效果,属脏数据);
+  - **uncovered**:plate 面 path 无绑定行(降级全局默认,列出供补配,不阻塞);
+  - **renamed(建议)**:orphaned 项与面上同 type 新路径的启发式配对 → 生成 renameCarryPath 提案,人确认后入批;
+- `EndpointSpec.version` 仅作展示/分组锚,**不作判定依据**(semver 不携带变更内容;判定一律以结构 diff 为准,与业务字段既有通路同哲学)。
+
+**影响面筛选**:
+- 复用 `scenario_endpoint_refs` 倒排(endpoint_id):"引用了 carry 面变更 endpoint 的场景"直接可查;
+- 实现注意:该索引是 body 字段级,carry 字段不进 body 后,场景→endpoint 可见性来自业务字段的索引行;业务字段全空的 step 兜底直扫 `view_hints.endpoint_id`。
+
+**值表 CRUD(CARRY_OPS op 族,进既有适配批)**:
+- `CARRY_OPS = (renameCarryPath, addCarryBinding, removeCarryBinding)`,payload:`{service?, from/path, to/value}`(service 缺省 = 全局默认表);
+- 复用既有批机制(before/after 快照、审计、apply/回滚),entity 面为值表(scenario_id / dataset_id 为 NULL 的新实体类,adaptation_service 按 op 族分流);
+- 查询侧即漂移面板(适配中心 carry 面板:按服务列 orphaned/uncovered/renamed 建议,勾选生成批)。
+
+## 8. 二期预留(本期不实现,不堵死)
 
 | 预留 | 链位 | 说明 |
 |---|---|---|
@@ -190,27 +211,29 @@ class CarryContext:
 | 环境分 profile | 服务绑定表加 env 维度 | 测试/生产通知人不同时启用 |
 | 精确门控全覆盖 | — | 一期已按锚点门控,存量无锚点 step 用降级门控(§4.2.2),存量逐步补锚点后收敛 |
 
-## 8. 兼容
+## 9. 兼容
 
 - **存量场景**:body 已有值的键不被填充(填缺失语义),行为零变化;
 - **gimbal 核心 schema 零改动**:carry 是 platform 侧概念,materialize 缝隙消费完,gimbal 只见完整 body;
 - **等价测试**:materialize 新增参数默认 None(无 carry 上下文时行为与现状完全一致),既有黄金等价用例不破;
 - **未声明字段**(Type C 存量):不注入、不阻塞,编排器黄警。
 
-## 9. 测试策略
+## 10. 测试策略
 
 - plate:`CarryEntry` 校验(path 归一 / 与 fields[] 互斥 / type 词表 / extra=forbid)、`/full` 序列化含 carry、light 视图不含;`model` 机制移除后 rule B(schema_ 单轴)、序列化无 `model_schema/model_name`、2 个存量端点改写等价(fields/schema/carry 面不变);
 - materialize:纯函数逐规则用例(body 已有跳过 / 服务绑定优先 / 默认兜底 / 两层皆无跳过 / null 行显式注入 / 嵌套路径 / 类型转换(number/boolean/object/失败保留原串)/ 模板值跳过转换透传 / 服务名解析失败降级黄警 / carry_context=None 行为等价现状);
 - 等价:执行链与导出链同 carry_context → 逐字段相同输出(黄金等价用例扩展);
-- API:两表 CRUD、字段面聚合端点;
+- API:两表 CRUD、字段面聚合端点、漂移 diff 端点(三类结果/renamed 启发式配对);
+- 适配中心:CARRY_OPS 三 op 的 apply/快照/回滚;漂移面板→勾选→生成批→应用→值表终态;影响面筛选(ref index 命中 carry 面变更 endpoint 的场景);场景定义在 carry 适配批前后零变化(红利断言);
 - 前端:deepDefaults 不再拷 Type C 默认、step 只读注入提示、配置页读写流。
 
-## 10. 验收
+## 11. 验收
 
 - [ ] plate `RequestSpec.carry` + CarryEntry 落地,校验与序列化如 §2,`model` 机制移除如 §2.1.1(存量 2 端点改写,测试跟随);
 - [ ] platform 两表 + API 如 §3;
 - [ ] materialize carry_context 参数与填充规则如 §4,纯函数保持,等价测试扩展通过;
 - [ ] deepDefaults 收敛 + 编排器只读提示如 §5;
 - [ ] 配置入口页面如 §6(可分期,一期至少 API + 最小页面);
+- [ ] 适配中心 carry 职能如 §7:漂移 diff 端点 + 影响面筛选 + CARRY_OPS 批应用(场景定义零变化);
 - [ ] 存量场景回归零变化;
 - [ ] 二期链位(行覆盖 / env profile)以注释与表结构评审预留,不实现。
