@@ -36,12 +36,13 @@ SETTLEMENT_CREATE_ORDER: Final[EndpointSpec] = EndpointSpec(
         auth="bearer",
         timeout_seconds=10.0,
     ),
-    request=RequestSpec(body_type="json", model=CreateOrderRequest),
+    request=RequestSpec(body_type="json",
+                        schema_=CreateOrderRequest.model_json_schema()),
     responses={
         200: ResponseSpec(
             status=200,
             description="成功",
-            model=CreateOrderResponse,
+            schema_=CreateOrderResponse.model_json_schema(),
         ),
     },
     version=FIN_DEFAULT_VERSION,

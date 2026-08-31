@@ -39,7 +39,7 @@ def make_sample_endpoint() -> EndpointSpec:
         ),
         request=RequestSpec(
             body_type="json",
-            model=OrderIn,
+            schema_=OrderIn.model_json_schema(),
             fields=[
                 IOFieldBinding(name="order_no", path="order_no", required=True,
                                example="SAMPLE-001", ui_kind="text"),
@@ -51,7 +51,7 @@ def make_sample_endpoint() -> EndpointSpec:
             200: ResponseSpec(
                 status=200,
                 description="成功",
-                model=OrderOut,
+                schema_=OrderOut.model_json_schema(),
                 fields=[
                     IOFieldBinding(name="order_id", path="order_id",
                                    required=True, ui_kind="text"),

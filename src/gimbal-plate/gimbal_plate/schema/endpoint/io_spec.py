@@ -95,97 +95,33 @@ class CarryEntry(BaseModel):
         return self
 
 
-def _bindings_from_model(model: type[BaseModel]) -> list[IOFieldBinding]:
-    """从 Pydantic model 的 JSON Schema 派生顶层字段的 IOFieldBinding。
-
-    description / default / required / enum 单一维护在 model 上,此处物化为
-    fields 输出(plate 是结构权威源,平台前端按 binding 渲染表单)。仅覆盖
-    顶层属性;嵌套结构以 ui_kind=json 整体编辑,不展开。
-    """
-    schema = model.model_json_schema()
-    props = schema.get("properties") or {}
-    required = set(schema.get("required") or [])
-    out: list[IOFieldBinding] = []
-    for name, prop in props.items():
-        if not isinstance(prop, dict):
-            continue
-        t = prop.get("type")
-        if "enum" in prop:
-            ui: str = "select"
-        elif t in ("integer", "number"):
-            ui = "number"
-        elif t == "boolean":
-            ui = "boolean"
-        elif t == "string":
-            ui = "text"
-        elif t in ("array", "object"):
-            ui = "json"
-        else:
-            ui = "unknown"
-        out.append(
-            IOFieldBinding(
-                name=name,
-                path=f"$.{name}",
-                required=name in required,
-                default=prop.get("default"),
-                description=str(prop.get("description") or ""),
-                enum=prop["enum"] if "enum" in prop else None,
-                ui_kind=ui,  # type: ignore[arg-type]
-            )
-        )
-    return out
-
-
 class RequestSpec(BaseModel):
     """接口请求 body 的形态定义。"""
 
     model_config = ConfigDict(
         extra="forbid",
-        arbitrary_types_allowed=True,
         populate_by_name=True,
     )
 
     body_type: Literal["none", "json", "form", "multipart", "raw", "binary"] = "json"
-    model: type[BaseModel] | None = None
     schema_: dict[str, Any] | None = Field(default=None, alias="schema")
     fields: list[IOFieldBinding] = Field(default_factory=list)
     carry: dict[str, CarryEntry] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _validate(self) -> "RequestSpec":
-        # 规则 A:body_type="none" 时 model 与 schema_ 必须都为 None
         if self.body_type == "none":
-            if self.model is not None:
-                raise ValueError(
-                    f"RequestSpec.body_type='none' 时 model 必须为 None,"
-                    f"实际为 {self.model.__name__}"
-                )
             if self.schema_ is not None:
                 raise ValueError(
                     f"RequestSpec.body_type='none' 时 schema_ 必须为 None,"
                     f"实际为 {self.schema_!r}"
                 )
-        # 规则 B:body_type != "none" 时 model 或 schema_ 至少一个非 None
-        # 注:此处 schema_ 是空 dict {} 视为"已声明"(类型非 None),
-        #     即使内容为空也算"声明了 schema";空 dict 与 None 等价的语义
-        #     仅在规则 A 的"必须为空"上下文中不强制(见 Q-A a2)。
-        else:
-            has_model = self.model is not None
-            has_schema = self.schema_ is not None
-            if not (has_model or has_schema):
-                raise ValueError(
-                    f"RequestSpec.body_type={self.body_type!r} 时 model 或 schema_"
-                    f" 至少一个非空"
-                )
-        # 规则 C(model 与 schema_ 可并存)不强制:见 V2 §2.2 决策 Q3 b。
-        # model 优先语义已在 validate_body() 中隐含(model 非 None 时
-        # 只用 model 校验,schema_ 仅作序列化/展示补充);见 V1 §4.1。
-        #
-        # 派生规则:fields 为空且 model 存在时,从 model JSON Schema 自动派生
-        # IOFieldBinding(description/default/required 全量带出)。手写 fields
-        # 优先,不被动过 —— 派生只兜"只声明 model"的接口。
-        if not self.fields and self.model is not None:
-            self.fields = _bindings_from_model(self.model)
+        # 规则 B(model 机制退役后单轴):body_type != none 时 schema_ 必须非 None。
+        # schema_={} 视为"已声明"(Q-A a2)。
+        elif self.schema_ is None:
+            raise ValueError(
+                f"RequestSpec.body_type={self.body_type!r} 时 schema_ 必须非 None"
+            )
         # carry 键:归一化 JSONPath,且与 fields[].path 互斥(一个字段
         # 不得同时出现在表单面与传递面,spec §2.1)
         if self.carry:
@@ -209,32 +145,15 @@ class RequestSpec(BaseModel):
         return self
 
     def json_schema(self) -> dict[str, Any] | None:
-        """返回请求体的 JSON Schema,供跨进程传输与平台渲染使用。
-
-        优先从 ``model`` 派生;否则使用 ``schema_``;都没有则返回 None。
-        """
-        if self.model is not None:
-            return self.model.model_json_schema()
+        """返回请求体的 JSON Schema(schema_ 为唯一结构真源),供跨进程传输使用。"""
         return self.schema_
-
-    def validate_body(self, values: Any) -> Any:
-        """用声明的 Pydantic 模型校验并序列化 body;无模型时按原样返回。"""
-        if self.model is None:
-            return values
-        if isinstance(values, dict):
-            return self.model(**values).model_dump()
-        return values
 
     @model_serializer
     def _serialize(self) -> dict[str, Any]:
-        """JSON 模式序列化时,把 ``model`` 类引用替换为内嵌 JSON Schema。"""
         out: dict[str, Any] = {
             "body_type": self.body_type,
             "fields": [f.model_dump(mode="json") for f in self.fields],
         }
-        if self.model is not None:
-            out["model_schema"] = self.model.model_json_schema()
-            out["model_name"] = self.model.__name__
         if self.schema_ is not None:
             out["schema"] = self.schema_
         if self.carry:
@@ -248,20 +167,16 @@ class ResponseSpec(BaseModel):
 
     model_config = ConfigDict(
         extra="forbid",
-        arbitrary_types_allowed=True,
         populate_by_name=True,
     )
 
     status: int
     description: str = ""
-    model: type[BaseModel] | None = None
     schema_: dict[str, Any] | None = Field(default=None, alias="schema")
     fields: list[IOFieldBinding] = Field(default_factory=list)
     assertable_fields: list[str] = Field(default_factory=list)
 
     def json_schema(self) -> dict[str, Any] | None:
-        if self.model is not None:
-            return self.model.model_json_schema()
         return self.schema_
 
     @model_validator(mode="after")
@@ -291,16 +206,12 @@ class ResponseSpec(BaseModel):
 
     @model_serializer
     def _serialize(self) -> dict[str, Any]:
-        """JSON 模式序列化时,把 ``model`` 类引用替换为内嵌 JSON Schema。"""
         out: dict[str, Any] = {
             "status": self.status,
             "description": self.description,
             "fields": [f.model_dump(mode="json") for f in self.fields],
             "assertable_fields": list(self.assertable_fields),
         }
-        if self.model is not None:
-            out["model_schema"] = self.model.model_json_schema()
-            out["model_name"] = self.model.__name__
         if self.schema_ is not None:
             out["schema"] = self.schema_
         return out

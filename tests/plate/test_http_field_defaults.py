@@ -44,7 +44,7 @@ def _build_endpoint() -> EndpointSpec:
         api=ApiSpec(service="sample-svc", method="POST", path="/sample/fields"),
         request=RequestSpec(
             body_type="json",
-            model=_ReqIn,
+            schema_=_ReqIn.model_json_schema(),
             fields=[
                 IOFieldBinding(
                     name="client_expand_name",
@@ -71,7 +71,7 @@ def _build_endpoint() -> EndpointSpec:
                 ),
             ],
         ),
-        responses={200: ResponseSpec(status=200, model=_RespOut, fields=[])},
+        responses={200: ResponseSpec(status=200, schema_=_RespOut.model_json_schema(), fields=[])},
         version="1.0.0",
     )
 

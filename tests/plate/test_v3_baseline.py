@@ -46,8 +46,8 @@ def sample_endpoint() -> EndpointSpec:
         service="sample",
         name="基线样例",
         api=ApiSpec(service="sample", method="GET", path="/baseline/sample"),
-        request=RequestSpec(body_type="json", model=_SampleIn),
-        responses={200: ResponseSpec(status=200, model=_SampleOut)},
+        request=RequestSpec(body_type="json", schema_=_SampleIn.model_json_schema()),
+        responses={200: ResponseSpec(status=200, schema_=_SampleOut.model_json_schema())},
         version="1.0.0",
     )
 

@@ -82,10 +82,9 @@ class TestIOSpec:
     """``RequestSpec`` / ``ResponseSpec`` / ``IOFieldBinding`` 字段集合测试。"""
 
     def test_request_spec_no_body(self) -> None:
-        # 测试点:body_type="none" 时,model/schema_ 默认为 None,json_schema() 返回 None。
-        # 文档依据:V1 §4.1 RequestSpec + json_schema() 方法。
+        # 测试点:body_type="none" 时,schema_ 默认为 None,json_schema() 返回 None。
+        # 文档依据:V1 §4.1 RequestSpec + json_schema() 方法(model 机制退役后恒返回 schema_)。
         req = RequestSpec(body_type="none")
-        assert req.model is None
         assert req.schema_ is None
         assert req.json_schema() is None
 
@@ -144,24 +143,11 @@ class TestIOSpec:
 
 
 class TestRequestSpecBodyTypeValidation:
-    """``RequestSpec.body_type`` 与 ``model`` / ``schema_`` 互斥校验。"""
+    """``RequestSpec.body_type`` 与 ``schema_`` 互斥校验(model 机制已退役)。"""
 
-    def test_body_type_none_with_empty_model_and_schema_passes(self) -> None:
-        # 测试点:规则 A 正向 —— body_type='none' + model 与 schema_ 都为 None 时构造通过。
-        # 文档依据:V1 §4.1 规则 A + V2 §2.2 决策 Q1=a(硬拒反向)/Q-A=a2(空 dict 合规)。
+    def test_body_type_none_with_nothing_passes(self) -> None:
         spec = RequestSpec(body_type="none")
-        assert spec.model is None
         assert spec.schema_ is None
-
-    def test_body_type_none_with_model_rejected(self) -> None:
-        # 测试点:规则 A 反向 —— body_type='none' 但 model 非 None 必须拒。
-        # 文档依据:V1 §4.1 规则 A + V2 §2.2 决策 Q1=a。
-        class _PingReq(BaseModel):
-            trace_id: str
-        with pytest.raises(Exception) as excinfo:
-            RequestSpec(body_type="none", model=_PingReq)
-        assert "body_type='none'" in str(excinfo.value)
-        assert "model" in str(excinfo.value)
 
     def test_body_type_none_with_schema_rejected(self) -> None:
         # 测试点:规则 A 反向 —— body_type='none' 但 schema_ 非 None 必须拒。
@@ -171,61 +157,40 @@ class TestRequestSpecBodyTypeValidation:
         assert "body_type='none'" in str(excinfo.value)
         assert "schema_" in str(excinfo.value)
 
-    def test_body_type_json_with_model_only_passes(self) -> None:
-        # 测试点:规则 B 正向(分支 1) —— body_type='json' + 只填 model 时构造通过。
-        # 文档依据:V1 §4.1 规则 B + V2 §2.2 决策 Q2=b(非 None 即可)。
+    def test_body_type_json_with_schema_only_passes_no_derivation(self) -> None:
+        # model 派生已退役:fields 只来自显式声明,不再自动填充
         class _OrderReq(BaseModel):
             order_no: str
-        spec = RequestSpec(body_type="json", model=_OrderReq)
-        assert spec.model is _OrderReq
-        assert spec.schema_ is None
+        spec = RequestSpec(body_type="json", schema_=_OrderReq.model_json_schema())
+        assert spec.fields == []
 
     def test_body_type_json_with_schema_only_passes(self) -> None:
         # 测试点:规则 B 正向(分支 2) —— body_type='json' + 只填 schema_ 时构造通过。
         # 文档依据:V1 §4.1 规则 B + V2 §2.2 决策 Q2=b。
         spec = RequestSpec(body_type="json", schema_={"type": "object", "properties": {"x": {"type": "string"}}})
-        assert spec.model is None
         assert spec.schema_ == {"type": "object", "properties": {"x": {"type": "string"}}}
 
-    def test_body_type_json_with_both_model_and_schema_passes(self) -> None:
-        # 测试点:规则 C 正向 —— model 与 schema_ 可并存(决策 Q3=b,不强制互斥)。
-        # 文档依据:V2 §2.2 决策 Q3=b("两者并存概率较低,但实现不强制互斥")。
-        # 现实工程意义:model 用于 plate 真实校验,schema_ 用于序列化/前端展示补充。
-        class _OrderReq(BaseModel):
-            order_no: str
-        spec = RequestSpec(
-            body_type="json",
-            model=_OrderReq,
-            schema_={"description": "from openapi generator"},
-        )
-        assert spec.model is _OrderReq
-        assert spec.schema_ == {"description": "from openapi generator"}
-
     def test_body_type_json_empty_both_rejected(self) -> None:
-        # 测试点:规则 B 反向 —— body_type='json' 但 model 与 schema_ 都为 None 必须拒。
-        # 文档依据:V1 §4.1 规则 B + V2 §2.2 决策 Q2=b。
+        # 测试点:规则 B 反向(model 机制退役后单轴)—— body_type='json' 但 schema_ 为 None 必须拒。
+        # 文档依据:spec carry 设计 §2.1.1(schema_ 为唯一结构真源)。
         # 现实意义:防止"声明了 json body 却不告诉调用方 body 长啥样"的契约残缺。
         with pytest.raises(Exception) as excinfo:
             RequestSpec(body_type="json")
-        assert "model 或 schema_" in str(excinfo.value)
+        assert "schema_ 必须非 None" in str(excinfo.value)
         assert "'json'" in str(excinfo.value)
 
     def test_body_type_json_empty_schema_only_passes_per_q_a(self) -> None:
-        # 测试点:Q-A a2 + Q-B b1 一致性 —— schema_={} + body_type='json' + model=None
+        # 测试点:Q-A a2 + Q-B b1 一致性 —— schema_={} + body_type='json'
         #     时通过(类型非 None 即视为"已声明 schema")。
         # 文档依据:V2 §2.2 决策 Q-A=a2 / Q-B=b1。
         # 注:这是决策拍板的边界用例,实测用于锁定"空 dict 不参与校验"的语义。
         spec = RequestSpec(body_type="json", schema_={})
         assert spec.schema_ == {}
 
-    def test_body_type_json_with_empty_dict_schema_rejected_when_no_model(self) -> None:
-        # 测试点:验证反向 —— 如果改用 Q-B=b2(schema_={} 视为"未声明"),
-        #     应改为拒;但当前决策是 Q-B=b1,故此用例锁住"通过"行为。
-        # 文档依据:V2 §2.2 决策 Q-B=b1(类型非 None 即可)。
-        # 此处作为决策快照:若未来改 Q-B=b2,本测试需改为 assert raises。
-        spec = RequestSpec(body_type="json", schema_={}, model=None)
+    def test_body_type_json_with_empty_dict_schema_passes_per_q_a(self) -> None:
+        # Q-A a2:schema_={} 视为"已声明",合法
+        spec = RequestSpec(body_type="json", schema_={})
         assert spec.schema_ == {}
-        assert spec.model is None
 
 
 class TestIOFieldBindingEnumValidation:
@@ -377,7 +342,7 @@ class TestEndpointSpec:
         assert ep.system == "finas"
         assert ep.service == "settlement"
         assert ep.api.service == "settlement"
-        assert ep.responses[200].model is not None
+        assert ep.responses[200].schema_ is not None
         assert ep.metadata.priority == 1
 
     def test_id_required(self) -> None:
@@ -621,16 +586,17 @@ class TestSerialization:
 
     def test_model_dump_json_carries_key_fields(self, order_endpoint) -> None:
         # 测试点:JSON dump 必须把关键字段(顶层 + IO 节点)序列化;
-        # IO 节点需把 Pydantic class 引用替换成内嵌 JSON Schema(model_schema + model_name)。
+        # model 机制退役后 IO 节点不再输出 model_schema / model_name,只输出 schema。
         # 文档依据:V1 §2.3 + schema/endpoint/io_spec.py RequestSpec._serialize / ResponseSpec._serialize。
         data = order_endpoint.model_dump(mode="json")
         assert data["id"] == "finas.order.add"
         assert data["api"]["method"] == "POST"
         assert data["responses"]["200"]["status"] == 200
-        assert "model_schema" in data["request"]
-        assert data["request"]["model_name"] == "OrderIn"
-        assert "model_schema" in data["responses"]["200"]
-        assert data["responses"]["200"]["model_name"] == "OrderOut"
+        assert "model_schema" not in data["request"]
+        assert "model_name" not in data["request"]
+        assert "schema" in data["request"]   # fixture 改写后 schema_ 在
+        assert "model_schema" not in data["responses"]["200"]
+        assert "model_name" not in data["responses"]["200"]
 
     def test_version_based_semantic_equivalence(self, order_endpoint) -> None:
         # 测试点:同 version 下,语义字段相等;updated_at 改动不影响关键字段,不参与断言。

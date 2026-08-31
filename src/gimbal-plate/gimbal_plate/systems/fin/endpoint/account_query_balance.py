@@ -36,7 +36,7 @@ ACCOUNT_QUERY_BALANCE: Final[EndpointSpec] = EndpointSpec(
         200: ResponseSpec(
             status=200,
             description="成功",
-            model=QueryBalanceResponse,
+            schema_=QueryBalanceResponse.model_json_schema(),
         ),
     },
     version=FIN_DEFAULT_VERSION,

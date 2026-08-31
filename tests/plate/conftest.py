@@ -111,7 +111,7 @@ def order_endpoint() -> EndpointSpec:
         ),
         request=RequestSpec(
             body_type="json",
-            model=OrderIn,
+            schema_=OrderIn.model_json_schema(),
             fields=[
                 IOFieldBinding(name="order_no", path="order_no", required=True,
                                example="ORD-001", ui_kind="text"),
@@ -123,7 +123,7 @@ def order_endpoint() -> EndpointSpec:
             200: ResponseSpec(
                 status=200,
                 description="成功",
-                model=OrderOut,
+                schema_=OrderOut.model_json_schema(),
                 fields=[
                     IOFieldBinding(name="order_id", path="order_id",
                                    required=True, ui_kind="text"),
@@ -159,7 +159,16 @@ def order_patch_endpoint() -> EndpointSpec:
             method="POST",
             path="/api/v1/orders/patch",
         ),
-        request=RequestSpec(body_type="json", model=OrderPatch),
-        responses={200: ResponseSpec(status=200, model=OrderOut)},
+        request=RequestSpec(
+            body_type="json",
+            schema_=OrderPatch.model_json_schema(),
+            fields=[
+                IOFieldBinding(name="order_id", path="order_id", required=True,
+                               ui_kind="text"),
+                IOFieldBinding(name="status", path="status", required=True,
+                               ui_kind="text"),
+            ],
+        ),
+        responses={200: ResponseSpec(status=200, schema_=OrderOut.model_json_schema())},
         metadata=EndpointMetadata(tags=["结算"], owner="bob"),
     )

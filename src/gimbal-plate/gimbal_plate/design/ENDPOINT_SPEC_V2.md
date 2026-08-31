@@ -68,6 +68,8 @@ V1 §2.3 提到的 "Migrations 章节" 属于本条的课题范围(`version` 1.x
 
 ### 2.2 `RequestSpec.body_type` / `model` / `schema_` 的互斥约束 — **已实装**
 
+> 2026-08-31：`model` 机制已退役（spec carry 设计 §2.1.1）——`schema_` 为唯一结构真源，`fields` 只来自显式声明。
+
 - **V1 出处**：[ENDPOINT_SPEC_V1.md §4.1](ENDPOINT_SPEC_V1.md)（两条约束）。
 - **V1 现状（实装前）**：`RequestSpec(...)` 任意组合均接受，模型层不做互斥。
 - **约束本意**：

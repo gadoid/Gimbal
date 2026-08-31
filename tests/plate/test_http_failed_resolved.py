@@ -34,11 +34,11 @@ def _build_endpoint() -> EndpointSpec:
         service="sample-svc",
         name="sample",
         api=ApiSpec(service="sample-svc", method="POST", path="/sample/failed"),
-        request=RequestSpec(body_type="json", model=_Req),
+        request=RequestSpec(body_type="json", schema_=_Req.model_json_schema()),
         responses={
             200: ResponseSpec(
                 status=200,
-                model=_Out,
+                schema_=_Out.model_json_schema(),
                 fields=[IOFieldBinding(name="code", path="$.code", required=True)],
                 assertable_fields=["$.code"],
             )

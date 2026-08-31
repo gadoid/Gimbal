@@ -67,7 +67,7 @@ def test_end_to_end_c1_c2() -> None:
     assert data["version"] == "1.0.0"
     assert data["id"] == ep.id
     assert data["api"]["method"] == "POST"
-    assert "model_schema" in data["request"]
-    assert data["request"]["model_name"] == "OrderIn"
-    assert "model_schema" in data["responses"]["200"]
-    assert data["responses"]["200"]["model_name"] == "OrderOut"
+    assert "schema" in data["request"]
+    assert "model_schema" not in data["request"]
+    assert "schema" in data["responses"]["200"]
+    assert "model_schema" not in data["responses"]["200"]
