@@ -52,10 +52,18 @@ export async function putBindings(
 /** 单个 carry 字段的面元信息(plate /full request.carry 聚合并集)。 */
 export interface CarryFieldFace { path: string; type: string; description: string }
 
-export async function getServiceFields(service: string): Promise<CarryFieldFace[]> {
-  const { data } = await http.get<{ fields: CarryFieldFace[] }>(
+/** 字段面聚合响应(对齐后端 ServiceFieldsOut):degraded=True = 任一端点
+ *  /full 失败(抛错或 404),面不完整 — 保存是整表替换,会不可逆删除
+ *  不可见端点的绑定值,调用方必须据此禁存直到刷新恢复。 */
+export interface ServiceFields {
+  fields: CarryFieldFace[]
+  degraded: boolean
+}
+
+export async function getServiceFields(service: string): Promise<ServiceFields> {
+  const { data } = await http.get<ServiceFields>(
     `/carry/bindings/${encodeURIComponent(service)}/fields`)
-  return data.fields
+  return data
 }
 
 /** 单服务漂移项:orphaned=绑定有面无 / uncovered=面有绑定无 /

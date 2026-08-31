@@ -33,6 +33,9 @@ class CarryFieldFace(BaseModel):
 
 class ServiceFieldsOut(BaseModel):
     fields: list[CarryFieldFace] = Field(default_factory=list)
+    # True = 任一端点 /full 失败,面不完整:配置页整表替换保存会
+    # 不可逆删除不可见端点的绑定值,必须禁存直到恢复。
+    degraded: bool = False
 
 
 class ServiceDrift(BaseModel):

@@ -39,6 +39,16 @@
             <el-option v-for="s in knownServices" :key="s" :label="s" :value="s" />
           </el-select>
 
+          <el-alert
+            v-if="degraded"
+            type="warning"
+            :closable="false"
+            show-icon
+            class="degraded-alert"
+            title="字段面部分降级,保存已禁用"
+            description="字段面部分降级(部分端点不可达),保存会删除不可见端点的绑定值,已禁用;请稍后刷新重试"
+          />
+
           <el-table
             v-if="rows.length"
             v-loading="loadingFields"
@@ -77,7 +87,7 @@
           </div>
 
           <div class="card-footer">
-            <el-button type="primary" :disabled="!service" @click="saveService">保存</el-button>
+            <el-button type="primary" :disabled="!service || degraded" @click="saveService">保存</el-button>
           </div>
         </div>
       </el-tab-pane>
@@ -174,6 +184,10 @@ const rows = ref<ServiceRow[]>([])
 const defaultsMap = ref<CarryValues>({})
 const knownServices = ref<string[]>([])
 const loadingFields = ref(false)
+/** 字段面降级门控(数据安全):rows 仅由 plate 面构建,而保存是整表替换 —
+ *  面不完整(单端点 /full 失败,或加载整体失败)时放行保存会不可逆删除
+ *  不可见端点的绑定值。每次 onServiceChange 刷新时重置。 */
+const degraded = ref(false)
 
 async function loadBindings() {
   const bindings = await getBindings()
@@ -191,17 +205,19 @@ function valuePlaceholder(row: ServiceRow): string {
 }
 
 async function onServiceChange() {
+  degraded.value = false
   if (!service.value) {
     rows.value = []
     return
   }
   loadingFields.value = true
   try {
-    const [face, bound] = await Promise.all([
+    const [faceRes, bound] = await Promise.all([
       getServiceFields(service.value),
       getBindingsFor(service.value),
     ])
-    rows.value = face.map((f: CarryFieldFace) => {
+    degraded.value = faceRes.degraded
+    rows.value = faceRes.fields.map((f: CarryFieldFace) => {
       const hasRow = f.path in bound
       const boundValue = bound[f.path]
       return {
@@ -216,6 +232,8 @@ async function onServiceChange() {
   } catch (e) {
     showError('加载字段面', e)
     rows.value = []
+    // 加载整体失败是最大降级:rows=[] 下保存 = 清空该服务全部绑定
+    degraded.value = true
   } finally {
     loadingFields.value = false
   }
@@ -346,6 +364,10 @@ onMounted(() => {
 }
 
 .defaults-alert {
+  margin-bottom: 14px;
+}
+
+.degraded-alert {
   margin-bottom: 14px;
 }
 

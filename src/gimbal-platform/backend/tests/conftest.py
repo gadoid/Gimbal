@@ -136,12 +136,14 @@ class EndpointPlateMock:
 
     ``items``:GET /api/endpoint 轻量列表(id/version/updated_at);
     ``fulls``:endpoint_id → full spec(GET /api/endpoint/{id}/full);
+    ``full_down``:这些 id 的 /full 抛 ConnectError(单端点级故障);
     ``down=True``:一切请求抛 ConnectError(plate 不可达)。
     """
 
     def __init__(self) -> None:
         self.items: list[dict] = []
         self.fulls: dict[str, dict] = {}
+        self.full_down: set[str] = set()
         self.down = False
 
     def install(self) -> None:
@@ -158,6 +160,9 @@ class EndpointPlateMock:
                 })
             if path.endswith("/full"):
                 eid = path.rsplit("/", 2)[-2]
+                if eid in mock.full_down:
+                    raise httpx.ConnectError("connection refused",
+                                             request=request)
                 if eid in mock.fulls:
                     return httpx.Response(200, json={
                         "ok": True, "dim": "endpoint",

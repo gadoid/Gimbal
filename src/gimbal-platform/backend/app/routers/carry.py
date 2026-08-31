@@ -79,7 +79,9 @@ async def drift(user: AdminUser, db=DbSession):
 
 @router.get("/bindings/{service}/fields", response_model=ServiceFieldsOut)
 async def service_fields(service: str, user: AdminUser, db=DbSession):
-    """该服务全部接口 carry 面并集:GET /api/endpoint?service= → 逐 id /full。"""
+    """该服务全部接口 carry 面并集:GET /api/endpoint?service= → 逐 id /full。
+    任一端点 /full 失败(抛错或 404)→ degraded=True:面不完整,
+    配置页整表替换保存会删不可见端点的绑定值,须据此禁存。"""
     from ..services.adaptation_service import _plate_full_endpoint
 
     try:
@@ -87,12 +89,15 @@ async def service_fields(service: str, user: AdminUser, db=DbSession):
     except PlateUnavailableError as e:
         raise _plate_502(e) from e
     faces: dict[str, CarryFieldFace] = {}
+    degraded = False
     for item in client_items:
         try:
             full = await _plate_full_endpoint(item["id"])
         except PlateUnavailableError:
+            degraded = True
             continue  # 降级:该端点面缺席,不阻塞其余
         if full is None:
+            degraded = True
             continue
         carry = ((full.get("request") or {}).get("carry")) or {}
         for path, entry in carry.items():
@@ -101,7 +106,8 @@ async def service_fields(service: str, user: AdminUser, db=DbSession):
                 type=str(entry.get("type") or "string"),
                 description=str(entry.get("description") or ""),
             ))
-    return ServiceFieldsOut(fields=sorted(faces.values(), key=lambda f: f.path))
+    return ServiceFieldsOut(fields=sorted(faces.values(), key=lambda f: f.path),
+                            degraded=degraded)
 
 
 async def _plate_list_endpoints_filtered(service: str) -> list[dict]:

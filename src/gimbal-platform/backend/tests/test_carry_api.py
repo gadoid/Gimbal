@@ -51,6 +51,34 @@ async def test_service_fields_aggregates_carry_face(client, plate):
     assert r.status_code == 200, r.text
     assert r.json()["fields"] == [
         {"path": "$.remark", "type": "string", "description": "备注"}]
+    assert r.json()["degraded"] is False
+
+
+async def test_service_fields_degraded_when_single_full_fails(client, plate):
+    """单端点 /full 失败(抛错或 404→None)→ degraded=True:面不完整,
+    配置页整表替换保存会删不可见端点的绑定值,前端据此禁存。"""
+    plate.items = [
+        {"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
+         "service": "fin-service"},
+        {"id": "fin.ep2", "version": "1.0.0", "updated_at": None,
+         "service": "fin-service"},
+        {"id": "fin.ep3", "version": "1.0.0", "updated_at": None,
+         "service": "fin-service"},
+    ]
+    plate.fulls = {"fin.ep1": {"request": {"carry": {
+        "$.remark": {"type": "string", "description": "备注"}}}}}
+    # ep2:/full 抛 ConnectError → PlateUnavailableError;
+    # ep3:列表有但 fulls 缺席 → 404 → None(端点已下架)。
+    plate.full_down = {"fin.ep2"}
+    admin = await _admin(client)
+    r = await client.get("/api/carry/bindings/fin-service/fields",
+                         headers=admin)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["degraded"] is True
+    # 可达端点的面照常聚合(部分结果,不是全空)
+    assert body["fields"] == [
+        {"path": "$.remark", "type": "string", "description": "备注"}]
 
 
 async def test_service_fields_502_when_plate_list_down(client, plate):
