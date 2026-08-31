@@ -3,8 +3,8 @@
 锁两条边界:
   1. dispatch 阶段 build_carry_context 预解析(plate carry 面 + 两张值表),
      materialize_run_copy 把服务绑定/全局默认填进 body(填缺失语义);
-  2. plate face 拉不到(/full 404)→ 无锚点候选,降级到「绑定 ∪ 全局默认」
-     键集仍可注入 — carry 永不阻塞执行。
+  2. plate face 拉不到(/full 404)→ 空面 fail-closed 不注入;降级门控
+     (绑定 ∪ 全局默认)仅限无锚点存量 step — carry 永不阻塞执行。
 
 brief 测试草稿对仓库真实形状的适配(草稿 vs 现行 helper 契约):
   * 场景创建用 ``make_draft(steps=[...])`` — 草稿的裸

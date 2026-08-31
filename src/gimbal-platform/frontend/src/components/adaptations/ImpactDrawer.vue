@@ -18,9 +18,9 @@
         <ul>
           <li v-for="(it, i) in g.items" :key="i">
             <span class="mono">{{ it.scenarioId }}</span> · 步骤 {{ it.stepIndex }}
-            · {{ it.source }}
+            <template v-if="it.source"> · {{ it.source }}</template>
             <el-tag size="small" :type="it.viaVar ? 'warning' : 'info'">
-              {{ it.viaVar ? '模板' : '直填' }}
+              {{ it.field === null ? '无业务字段' : (it.viaVar ? '模板' : '直填') }}
             </el-tag>
             <span v-if="it.viaVar" class="via">
               {{ it.viaVar }}
