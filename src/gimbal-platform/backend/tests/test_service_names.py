@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import httpx
-import pytest
 
 from app.services import service_names
 from app.services import plate_client
@@ -57,3 +56,35 @@ async def test_catalog_unavailable_degrades_to_empty():
         assert await service_names.catalog_service_names() == set()
     finally:
         plate_client.set_client_for_tests(None)
+
+
+async def test_catalog_non_200_degrades_to_empty():
+    """非 200(如 503 过载)→ 空集,不上抛。"""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, text="overloaded")
+
+    plate_client.set_client_for_tests(httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://plate-test"))
+    try:
+        assert await service_names.catalog_service_names() == set()
+    finally:
+        plate_client.set_client_for_tests(None)
+
+
+async def test_catalog_malformed_200_envelope_degrades_to_empty():
+    """垃圾 200 体:json() 抛 ValueError / 信封非 dict → AttributeError —
+    统一降级空集(T9 控制器裁定:垃圾 200 不得打断 carry 预解析)。"""
+    malformed = (
+        httpx.Response(200, text="<html>not-json</html>"),   # ValueError
+        httpx.Response(200, json=[1, 2]),                    # AttributeError
+    )
+    for resp in malformed:
+        def handler(request: httpx.Request, _r=resp) -> httpx.Response:
+            return _r
+
+        plate_client.set_client_for_tests(httpx.AsyncClient(
+            transport=httpx.MockTransport(handler), base_url="http://plate-test"))
+        try:
+            assert await service_names.catalog_service_names() == set()
+        finally:
+            plate_client.set_client_for_tests(None)

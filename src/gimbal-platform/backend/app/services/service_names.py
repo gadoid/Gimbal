@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import httpx
 
-from .plate_client import PlateUnavailableError, get_client
+from .plate_client import get_client
 
 
 def derive_base(key: str, catalog_names: set[str]) -> str | None:
@@ -24,15 +24,21 @@ def derive_base(key: str, catalog_names: set[str]) -> str | None:
 
 
 async def catalog_service_names() -> set[str]:
-    """GET /api/service → data.items[].name;失败 → 空集(降级)。"""
+    """GET /api/service → data.items[].name;失败 → 空集(降级)。
+
+    降级面覆盖 json 解析/信封遍历全程:plate 回垃圾 200 体(json 抛
+    ValueError)或非 dict 信封(.get 抛 AttributeError)同样得空集,
+    不上抛 — 该目录喂 carry 预解析/服务名推导,属增强链路,绝不
+    阻塞执行。
+    """
     client = get_client()
     try:
         resp = await client.get("/api/service")
-    except httpx.HTTPError:
+        if resp.status_code != 200:
+            return set()
+        items = (resp.json().get("data") or {}).get("items")
+    except (httpx.HTTPError, ValueError, AttributeError):
         return set()
-    if resp.status_code != 200:
-        return set()
-    items = (resp.json().get("data") or {}).get("items")
     if not isinstance(items, list):
         return set()
     return {str(it.get("name")) for it in items

@@ -577,6 +577,20 @@ async def _fanout(
     # 实际引用的 service 键生效,见 run_materialize._apply_services)。
     service_bindings = service_bindings or {}
 
+    # carry 预解析(spec §4.1):dispatch 阶段一次,run 内快照一致 —
+    # 绑定/契约编辑的生效边界是下次执行。plate 故障在 build 内部降级
+    # (空面/空目录);此处再兜一层 — carry 是增强不是前置条件,任何
+    # 故障(含 DB)都降级为无 carry,绝不阻塞执行。
+    from .carry_injection import build_carry_context
+    try:
+        async with db_factory() as _carry_db:
+            carry_ctx = await build_carry_context(
+                _carry_db, definition_from_payload(scenario_payload))
+    except Exception:  # noqa: BLE001 — carry 绝不阻塞执行
+        logger.opt(exception=True).warning(
+            "run_dispatcher: carry context build failed; skipped")
+        carry_ctx = None
+
     async def _row(ds: dict, row_idx: int, rep: int, seq: int) -> None:
         """One (dataset row × repeat) entry — compose + convert + launch."""
         state = row_states[seq]
@@ -665,6 +679,7 @@ async def _fanout(
                         },
                         resolved_auths=exec_auths,
                         built_in_users=built_in_users,
+                        carry_context=carry_ctx,
                     )
                     # 落盘数据驱动用例快照后交给 CLI 子进程执行。
                     case_path = _write_case_file(case_dir, composed_exec)

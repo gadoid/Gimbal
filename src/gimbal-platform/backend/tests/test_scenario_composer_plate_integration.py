@@ -38,6 +38,11 @@ class PlateMock:
         self.convert_calls: list[dict] = []
         self.run_calls: list[dict] = []  # D2 run bodies (stubbed upstream)
         self.behaviour: str = "ok"  # ok | echo | 4xx | 5xx | unavailable
+        # carry 预解析面(T9):GET /api/service 目录 + /api/endpoint/{id}/full。
+        # 空目录默认 → derive_base 全失败 → carry 全跳过:
+        # 既有等价测试行为不变(兼容关键),carry 用例自行注入服务。
+        self.fulls: dict[str, dict] = {}   # endpoint_id → full spec(carry 面)
+        self.services: list[dict] = []
 
     def install(self) -> None:
         """Replace the singleton httpx client with a MockTransport."""
@@ -96,6 +101,22 @@ class PlateMock:
                     200,
                     json={"ok": True, "dim": "scenario", "data": {"dispatched": True}},
                 )
+            # carry 预解析面(T9):services 目录 + endpoint full(写法对齐
+            # conftest.EndpointPlateMock;未知 /full id → 404 = face 降级)。
+            if path == "/api/service":
+                return httpx.Response(200, json={
+                    "ok": True, "dim": "service",
+                    "data": {"items": self.services,
+                             "total": len(self.services)},
+                })
+            if path.startswith("/api/endpoint/") and path.endswith("/full"):
+                eid = path.rsplit("/", 2)[-2]
+                if eid in self.fulls:
+                    return httpx.Response(200, json={
+                        "ok": True, "dim": "endpoint",
+                        "data": {"item": self.fulls[eid], "total": 1},
+                    })
+                return httpx.Response(404, json={"ok": False})
             return httpx.Response(404)
 
         from app.services import plate_client
