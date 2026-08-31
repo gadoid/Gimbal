@@ -15,6 +15,7 @@ from gimbal_plate import (
     ResponseSpec,
     ServiceDefinition,
 )
+from gimbal_plate.schema.endpoint.io_spec import CarryEntry
 
 
 class TestApiSpec:
@@ -1144,3 +1145,46 @@ class TestIOFieldBindingExtraFields:
         # 文档依据:V1 §4.3 + schema/endpoint/io_spec.py ConfigDict(extra="forbid")。
         with pytest.raises(Exception):
             IOFieldBinding(name="x", path="x", unknown_field="y")
+
+
+class TestCarryEntry:
+    """RequestSpec.carry —— 传递字段面(spec §2.1)。"""
+
+    def test_carry_accepts_and_normalizes_keys(self) -> None:
+        spec = RequestSpec(body_type="json", schema_={}, carry={"remark": CarryEntry()})
+        assert list(spec.carry) == ["$.remark"]
+
+    def test_carry_rejects_invalid_path(self) -> None:
+        # 注:brief 原样例 "$[0]" 实为合法 JSONPath(根数组下标,is_valid_path
+        # 返回 True,见 TestPathUtils),此处沿用本文件既有的非法标本 "$["。
+        with pytest.raises(ValueError, match="不是合法 path"):
+            RequestSpec(body_type="json", schema_={}, carry={"$[": CarryEntry()})
+
+    def test_carry_disjoint_from_fields_paths(self) -> None:
+        with pytest.raises(ValueError, match="交集非空"):
+            RequestSpec(
+                body_type="json", schema_={},
+                fields=[IOFieldBinding(name="remark", path="$.remark")],
+                carry={"$.remark": CarryEntry()},
+            )
+
+    def test_carry_type_vocabulary(self) -> None:
+        CarryEntry(type="integer")  # 合法词表内
+        with pytest.raises(ValueError, match="词表"):
+            CarryEntry(type="timestamp")
+
+    def test_carry_entry_extra_forbid(self) -> None:
+        with pytest.raises(ValueError):
+            CarryEntry(value="x")
+
+    def test_serialize_carries_carry_key(self) -> None:
+        spec = RequestSpec(
+            body_type="json", schema_={},
+            carry={"$.remark": CarryEntry(description="备注", type="string")},
+        )
+        data = spec.model_dump(mode="json")
+        assert data["carry"] == {"$.remark": {"description": "备注", "type": "string"}}
+
+    def test_serialize_omits_empty_carry(self) -> None:
+        data = RequestSpec(body_type="json", schema_={}).model_dump(mode="json")
+        assert "carry" not in data

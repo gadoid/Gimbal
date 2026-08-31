@@ -68,6 +68,33 @@ class IOFieldBinding(BaseModel):
         return self
 
 
+class CarryEntry(BaseModel):
+    """非绑定传递字段:不进表单,值随 platform 配置走(spec §2.1)。
+
+    与 IOFieldBinding 正交(fields[] = 表单面,carry = 传递面):
+    无 value / 无 ui_kind / 无 source_kind —— 值在 platform 两张值表,
+    path 复用外层 dict 的键,不在 entry 内重复。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    description: str = ""
+    # JSON Schema 原语词表;materialize 注入时按此做宽松类型转换。
+    # 自持 —— 不依赖 schema_ 反查,端点没有 schema_ 也能声明 carry。
+    type: str = "string"
+
+    @model_validator(mode="after")
+    def _validate(self) -> "CarryEntry":
+        if self.type not in (
+            "string", "number", "integer", "boolean", "object", "array",
+        ):
+            raise ValueError(
+                f"CarryEntry.type={self.type!r} 不在 JSON Schema 原语词表"
+                f"(string/number/integer/boolean/object/array)"
+            )
+        return self
+
+
 def _bindings_from_model(model: type[BaseModel]) -> list[IOFieldBinding]:
     """从 Pydantic model 的 JSON Schema 派生顶层字段的 IOFieldBinding。
 
@@ -122,6 +149,7 @@ class RequestSpec(BaseModel):
     model: type[BaseModel] | None = None
     schema_: dict[str, Any] | None = Field(default=None, alias="schema")
     fields: list[IOFieldBinding] = Field(default_factory=list)
+    carry: dict[str, CarryEntry] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _validate(self) -> "RequestSpec":
@@ -158,6 +186,26 @@ class RequestSpec(BaseModel):
         # 优先,不被动过 —— 派生只兜"只声明 model"的接口。
         if not self.fields and self.model is not None:
             self.fields = _bindings_from_model(self.model)
+        # carry 键:归一化 JSONPath,且与 fields[].path 互斥(一个字段
+        # 不得同时出现在表单面与传递面,spec §2.1)
+        if self.carry:
+            normalized: dict[str, CarryEntry] = {}
+            for raw, entry in self.carry.items():
+                if not _path.is_valid_path(raw):
+                    raise ValueError(
+                        f"RequestSpec.carry 键 {raw!r} 不是合法 path"
+                        f"(须为 JSONPath 形式或合法短名)"
+                    )
+                norm = _path.normalize(raw)
+                if norm in normalized:
+                    raise ValueError(f"RequestSpec.carry 归一后重复键 {norm!r}")
+                normalized[norm] = entry
+            overlap = {f.path for f in self.fields} & set(normalized)
+            if overlap:
+                raise ValueError(
+                    f"carry 键与 fields[].path 交集非空: {sorted(overlap)}"
+                )
+            self.carry = normalized
         return self
 
     def json_schema(self) -> dict[str, Any] | None:
@@ -189,6 +237,9 @@ class RequestSpec(BaseModel):
             out["model_name"] = self.model.__name__
         if self.schema_ is not None:
             out["schema"] = self.schema_
+        if self.carry:
+            out["carry"] = {k: v.model_dump(mode="json")
+                            for k, v in self.carry.items()}
         return out
 
 
