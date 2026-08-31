@@ -76,7 +76,9 @@ async def build_carry_context(db: AsyncSession, definition: dict) -> CarryContex
         if not isinstance(step, dict):
             continue
         eid = _endpoint_id(step)
-        if eid and faces.get(eid):
+        if eid:
+            # 锚点在即占位:空面(合法 carry={} 或单端点 /full 降级)= 不注入
+            # (fail-closed,spec §4.2.2/D3);降级门控仅限无锚点存量 step
             step_fields[i] = faces[eid]
 
     # ② 服务引用 → derive_base 解析 → 绑定值(None = 解析失败,整步跳过)

@@ -223,6 +223,13 @@ class TestCarryFill:
         assert body["flag"] == "true"
         assert body["meta"] == "{\"k\": 1}"
 
+    def test_nested_path_builds_intermediate_layers(self):
+        # $.a.b 深路径:body 无 a 键 → _body_set 逐层建 dict 后写入嵌套值
+        out = materialize_run_copy(_carry_converted(), carry_context=_ctx(
+            step_fields={0: {"$.a.b": "string"}},
+            service_bindings={"fin-service": {"$.a.b": "深嵌值"}}))
+        assert out["steps"][0]["request"]["body"]["a"]["b"] == "深嵌值"
+
     def test_carry_context_none_behaves_as_today(self):
         out = materialize_run_copy(_carry_converted())
         assert out["steps"][0]["request"]["body"] == {"order_id": "o-1"}

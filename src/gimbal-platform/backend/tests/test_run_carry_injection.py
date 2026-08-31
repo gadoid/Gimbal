@@ -82,7 +82,8 @@ async def test_run_injects_carry_into_case_body(
 async def test_run_carry_degrades_when_plate_face_unavailable(
     client: AsyncClient, plate_mock: PlateMock, monkeypatch: MonkeyPatch
 ) -> None:
-    """face 拉不到 → 无锚点候选(绑定∪默认),仍可注入;不阻塞执行。"""
+    """face 拉不到 → 空面 fail-closed 不注入;降级门控(绑定∪默认)
+    仅限无锚点存量 step(run 正常完成,carry 不阻塞执行)。"""
     plate_mock.behaviour = "echo"
     plate_mock.services = [{"name": "fin-service"}]  # 无 fulls → face 空
     await _seed_values()
@@ -97,7 +98,33 @@ async def test_run_carry_degrades_when_plate_face_unavailable(
     await _wait(lambda: len(cases) >= 1)
 
     body = cases[0]["steps"][0]["request"]["body"]
-    assert body["remark"] == "压测-张三"
+    # 锚点在(face 拉不到 = 空面)→ fail-closed:不注入未声明字段
+    assert "remark" not in body
+    assert "appCode" not in body
+
+
+async def test_run_carry_empty_declared_face_injects_nothing(
+        client: AsyncClient, plate_mock: PlateMock, monkeypatch: MonkeyPatch
+) -> None:
+    """端点合法声明 carry={} + 已配全局默认 → 空面 fail-closed:零注入
+    (spec §4.2.2/D3 契约门控 — 不盲注端点未声明的字段)。"""
+    plate_mock.behaviour = "echo"
+    plate_mock.services = [{"name": "fin-service"}]
+    plate_mock.fulls = {
+        "fin.settlement.create_order": {"request": {"carry": {}}},
+    }
+    await _seed_values()
+    bob = await _member(client, "bob")
+    await _create_scenario(client, bob)
+
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+    r = await client.post("/api/runs", headers=bob,
+                          json=_run_payload(dataSetIds=[]))
+    assert r.status_code == 201, r.text
+    await _wait(lambda: len(cases) >= 1)
+
+    assert cases[0]["steps"][0]["request"]["body"] == {"order_id": "o-1"}
 
 
 async def test_run_carry_skips_step_when_service_not_in_catalog(
