@@ -77,17 +77,18 @@ class TestSchemaEndpointImportable:
         assert sample_endpoint.system == "baseline"
         assert sample_endpoint.version == "1.0.0"
 
-    def test_endpoint_spec_dump_contains_request_model_name(
+    def test_endpoint_spec_dump_contains_response_schema(
         self, sample_endpoint: EndpointSpec
     ) -> None:
-        # RequestSpec / ResponseSpec 的 @model_serializer 会注入 model_schema /
-        # model_name,这些字段在 dump 之后会被反向 validate 拒绝(extra=forbid)。
-        # 这是 schema 的固有行为,不是 bug —— 测试只校验 dump 出来的结构里
-        # 我们填的关键字段都在。
+        # RequestSpec / ResponseSpec 的 @model_serializer 输出 schema / fields /
+        # assertable_fields(model 机制已退役,spec §2.1.1,不再注入 model_name)。
+        # 测试只校验 dump 出来的结构里我们填的关键字段都在。
         dumped = sample_endpoint.model_dump(mode="json")
         assert dumped["id"] == "baseline.sample.endpoint"
         assert dumped["api"]["path"] == "/baseline/sample"
-        assert dumped["responses"]["200"]["model_name"] == "_SampleOut"
+        resp_200 = dumped["responses"]["200"]
+        assert "schema" in resp_200
+        assert resp_200["schema"]["title"] == "_SampleOut"
 
 
 class TestSchemaInterfaceImportable:

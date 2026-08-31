@@ -26,11 +26,6 @@ from gimbal_plate.systems.fin.endpoint import (
     ALL_ENDPOINTS,
     SETTLEMENT_CREATE_ORDER,
 )
-from gimbal_plate.systems.fin.models import (
-    CreateOrderRequest,
-    CreateOrderResponse,
-    QueryBalanceResponse,
-)
 
 
 class TestSystemsFinEndpointExists:
@@ -85,25 +80,27 @@ class TestModelsComposition:
     def test_create_order_endpoint_has_request_model(self) -> None:
         rs = SETTLEMENT_CREATE_ORDER.request
         assert isinstance(rs, RequestSpec)
-        assert rs.model is CreateOrderRequest
+        # model 机制已退役(spec §2.1.1):schema_ 是唯一结构真源,
+        # 由其 title 锚定挂载的是哪个 body 模型。
+        assert rs.schema_["title"] == "CreateOrderRequest"
         assert rs.json_schema() is not None
 
     def test_create_order_endpoint_has_response_model(self) -> None:
         rsp = SETTLEMENT_CREATE_ORDER.responses[200]
         assert isinstance(rsp, ResponseSpec)
-        assert rsp.model is CreateOrderResponse
+        assert rsp.schema_["title"] == "CreateOrderResponse"
         assert rsp.json_schema() is not None
 
     def test_query_balance_endpoint_has_response_model(self) -> None:
         rsp = ACCOUNT_QUERY_BALANCE.responses[200]
-        assert rsp.model is QueryBalanceResponse
+        assert rsp.schema_["title"] == "QueryBalanceResponse"
         assert rsp.json_schema() is not None
 
-    def test_create_order_request_validate_body(self) -> None:
+    def test_create_order_request_face(self) -> None:
         rs = SETTLEMENT_CREATE_ORDER.request
-        validated = rs.validate_body({"order_id": "o-1", "amount": 100})
-        assert validated["order_id"] == "o-1"
-        assert validated["amount"] == 100
+        assert rs is not None
+        assert [f.name for f in rs.fields] == ["order_id", "amount", "currency"]
+        assert list(rs.carry) == ["$.remark"]
 
 
 class TestDefaultsRoundTrip:

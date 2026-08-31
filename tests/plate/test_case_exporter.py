@@ -135,3 +135,27 @@ class TestBodyRendering:
         exporter = EndpointCaseExporter(order_patch_endpoint)
         step = exporter.to_gimbal_step(case)
         assert step["request"]["body"] == {"order_id": "X", "status": "ok"}
+
+    def test_request_body_interpolates_var_placeholder(self, order_endpoint) -> None:
+        # ${var.*} 插值仍经 _render_body 生效(model 退役后仅存的加工);
+        # 变量由 EndpointCaseExporter(endpoint, variables=...) 构造时注入
+        case = EndpointCase(
+            name="interp",
+            parameters={"order_no": "${var.order_no}", "amount": 5},
+        )
+        exporter = EndpointCaseExporter(
+            order_endpoint, variables={"var.order_no": "ORD-9"}
+        )
+        step = exporter.to_gimbal_step(case)
+        assert step["request"]["body"] == {"order_no": "ORD-9", "amount": 5}
+
+    def test_request_body_schema_violation_passes_through(self, order_endpoint) -> None:
+        # schema 里 amount 是 number;传字符串照透传不抛错 ——
+        # body 校验已随 model 机制退役(spec §2.1.1)
+        case = EndpointCase(
+            name="violation",
+            parameters={"order_no": "X", "amount": "not-a-number"},
+        )
+        exporter = EndpointCaseExporter(order_endpoint)
+        step = exporter.to_gimbal_step(case)
+        assert step["request"]["body"]["amount"] == "not-a-number"

@@ -98,10 +98,10 @@ def test_field_defaults_kinds() -> None:
     assert by_name["bl_no"]["kind"] == "scenario_var"
     assert by_name["supplier"]["kind"] == "auth_placeholder"
     assert by_name["etd"]["kind"] == "generated"
-    assert data["carry_fields"] == []
+    assert data["generated_fields"] == []
 
 
-def test_field_defaults_carry_fields_from_response() -> None:
+def test_field_defaults_generated_fields_from_response() -> None:
     endpoint = _build_endpoint()
     endpoint.responses[200].fields = [
         IOFieldBinding(
@@ -117,6 +117,6 @@ def test_field_defaults_carry_fields_from_response() -> None:
     with TestClient(create_app(registry=reg)) as client:
         resp = client.get("/api/endpoint/sample.fields/action/field-defaults")
     assert resp.status_code == 200
-    carry = resp.json()["data"]["carry_fields"]
-    assert carry and carry[0]["name"] == "internal_note"
-    assert carry[0]["carry"] is True
+    generated = resp.json()["data"]["generated_fields"]
+    assert generated and generated[0]["name"] == "internal_note"
+    assert generated[0]["carry"] is True

@@ -81,18 +81,16 @@ def compute_field_defaults(
             {"name": f.name, "kind": kind, "value": value}
         )
 
-    # carry_fields: placeholders for the schema-only / generated channel.
-    # V1 semantics: every response 200 IOFieldBinding with source_kind=generated
-    # is treated as a "carry" field; IOFieldBinding does not yet expose a
-    # ``carry`` flag, so this is a best-effort default and is explicitly
-    # documented as such in the response.
-    carry_fields: list[dict[str, Any]] = []
+    # generated_fields: placeholders for the schema-only / generated channel.
+    # (响应侧 generated 字段清单;2026-08-31 起 "carry" 一词专指请求侧
+    #  传递字段 —— RequestSpec.carry,spec carry 设计 §2.1.1 术语唯一化。)
+    generated_fields: list[dict[str, Any]] = []
     resp_200 = endpoint.responses.get(200)
     if resp_200 is not None:
         for f in resp_200.fields:
             if f.source_kind != "generated":
                 continue
-            carry_fields.append(
+            generated_fields.append(
                 {
                     "name": f.name,
                     "type": f.ui_kind if f.ui_kind != "unknown" else "string",
@@ -103,7 +101,7 @@ def compute_field_defaults(
 
     return {
         "field_defaults": field_defaults,
-        "carry_fields": carry_fields,
+        "generated_fields": generated_fields,
     }
 
 
