@@ -82,7 +82,7 @@ class RequestSpec(BaseModel):
 carry 显式声明落地后,`RequestSpec/ResponseSpec.model`(Pydantic 类引用)及其隐式机制一并移除:
 
 - **依据**:`model=` 仅 2 个端点使用(settlement_create_order / account_query_balance),其余全部显式 `fields[]`;`validate_body` 唯一调用点是 plate 自用的 export/gimbal.py(平台主链路从不校验 body);`_bindings_from_model` 自动派生正是"碰巧语义"的制造者。
-- **改动**:删 `model` 字段、`_bindings_from_model`、`validate_body`;rule B 收敛为"body_type != none 时 schema_ 必须非 None";序列化去 `model_schema/model_name` 键;2 个存量端点(settlement_create_order / account_query_balance)**必须显式写 fields[](或 fields+carry)**——换 `schema_=` 后 fields 不再自动派生,/action/field-defaults 输出与平台 fields_meta 断言会静默退化,显式补齐才保字段面等价;export/gimbal.py 的 `_render_body` 退化为恒等(与平台链路行为对齐)。
+- **改动**:删 `model` 字段、`_bindings_from_model`、`validate_body`;rule B 收敛为"body_type != none 时 schema_ 必须非 None";序列化去 `model_schema/model_name` 键;2 个存量端点(settlement_create_order / account_query_balance)**必须显式写 fields[](或 fields+carry)**——换 `schema_=` 后 fields 不再自动派生,/action/field-defaults 输出与平台 fields_meta 断言会静默退化,显式补齐才保字段面等价;export/gimbal.py 的 `_render_body` 删校验、保留 `${var}` 插值(与平台链路行为对齐;2026-08-31 一致性审计勘误:原文「恒等」不准)。
 - **术语唯一化**:`field-defaults` 动作现有输出键 `carry_fields`(响应侧 generated 字段,另一概念)与本设计冲突。经查该键无生产消费方(前端不调此动作、平台后端无引用,仅 1 个 plate 测试锁定)——**响应侧改名 `generated_fields`**,代码库中"carry"一词自此只指请求侧传递字段。
 - **不动**:`strategy_dim.py` 的 Pydantic model 用法是策略 kind 视图机制,与此无关;`schema_` 保留为结构真源(§2.2)。
 - **前端零适配**:`req?.model_schema ?? req?.schema` 的 fallback 本就读 `schema` 键。
@@ -104,7 +104,7 @@ body 字段从此显式三分类,消除"裸躺 schema 靠 default 暗示语义"�
 ### 3.1 数据模型(PG 新表)
 
 ```
-carry_service_binding   服务绑定表
+carry_service_bindings  服务绑定表
   id            PK
   service_name  str, idx      # 目录服务名(deriveBase 解析产物,非用户引用键)
   field_path    str           # $.remark
@@ -112,7 +112,7 @@ carry_service_binding   服务绑定表
   updated_by / updated_at
   UNIQUE(service_name, field_path)
 
-carry_global_default     全局默认表(公用默认数据集)
+carry_global_defaults   全局默认表(公用默认数据集)
   id            PK
   field_path    str, uniq     # $.appCode
   value         str|null
@@ -126,7 +126,7 @@ carry_global_default     全局默认表(公用默认数据集)
 - `GET/PUT /api/carry/defaults` —— 全局默认表整表读写;
 - `GET /api/carry/bindings` / `GET/PUT /api/carry/bindings/{service}` —— 按服务读写;
 - `GET /api/carry/bindings/{service}/fields` —— 该服务所有接口的 carry 字段面并集(后端查 plate `/full` 聚合,供配置页拉清单);
-- `GET /api/carry/drift` —— 漂移面板数据:plate carry 面 vs 两表 paths 的三类 diff(orphaned/uncovered/renamed 建议),按服务分组(§7);
+- `GET /api/carry/drift` —— 漂移面板数据:plate carry 面 vs 服务绑定表 paths 的三类 diff(orphaned/uncovered/renamed 建议),按服务分组(与 §7 一致;全局默认孤儿不在本面 — 2026-08-31 一致性审计勘误:原文「vs 两表 paths」与 §7 实现矛盾);
 - 写权限:平台配置维护者(与 RunDialog 环境绑定同级别)。
 
 ## 4. 注入:materialize_run_copy 扩展
@@ -163,7 +163,7 @@ class CarryContext:
 3. 取值链(逐键):`body 已有该键 → 跳过` > `服务绑定值` > `全局默认值`;两层都无 → 跳过(该字段本次不注入);
 4. 写入:`setByPath(body, path, value)` —— 嵌套路径天然支持;值为 `${var.x}` 模板时,gimbal 运行时照常解析(与 body 既有模板同一通路)。
 
-**值类型**:PG 两表 value 统一存 str。注入时按 `step_fields` 携带的契约类型做一次宽松转换——number/integer→`Number()`,boolean→严格 `'true'/'false'`,object/array→JSON 解析,转换失败保留原串(与数据集行值 `_coerce_row_value` 的既有哲学一致)。**模板值(`${var.x}`)跳过转换、原样透传**:gimbal 解析后即 var 的类型,不做二次 coerce——与 body 既有模板 `${var.requestId}` 的行为完全一致(同一条解析通路,无特殊分支)。
+**值类型**:PG 两表 value 统一存 str。注入时按 `step_fields` 携带的契约类型做一次宽松转换——integer→整型解析(`int()`,"3.0" 保原串)、number→浮点,boolean→`'true'/'false'` 另接受 `'True'/'False'` 大小写变体,object/array→JSON 解析,转换失败保留原串(与数据集行值 `_coerce_row_value` 的既有哲学一致;2026-08-31 一致性审计勘误:原文 `Number()`/严格小写与实现不符)。**模板值(`${var.x}`)跳过转换、原样透传**:gimbal 解析后即 var 的类型,不做二次 coerce——与 body 既有模板 `${var.requestId}` 的行为完全一致(同一条解析通路,无特殊分支)。
 
 **null 语义**:取值命中 value=null 的行 → 注入 JSON null(§3.1,显式空);只有行不存在才继续降级。
 
@@ -174,13 +174,13 @@ class CarryContext:
 ## 5. 编排期无感 + 只读预览
 
 - FieldForm 主区、「其他字段」折叠区**不再出现** carry 字段(编排者零感知零维护)。机制:/full 带出 `request.carry` 后,前端在**两处**减去 carry 键——`reqTypeC`(typeCFields 差集)与 `contracts`(deepDefaults 入参);FieldForm 本体不动(unboundFields 已在上游预过滤,body 键路天然看不见 carry);
-- step 卡片挂只读提示"将注入 N 个非绑定字段"(字段面 ∩ 值表非空集),悬停可见清单与取值来源(服务绑定/全局默认);
+- step 卡片挂只读徽标「carry N」(字段面 ∩ 值表非空集),悬停可见清单与取值来源(服务绑定/全局默认)— 2026-08-31 一致性审计勘误:以实现文案为准;
 - `deepDefaults` **停止**把 Type C schema default 拷进初始 body(该职责移交 carry 通道;绑定字段 default/example 拷贝行为不变)。
 
 ## 6. 配置入口(平台页面)
 
 - 位置:平台导航新增"传递字段配置"入口(用户确认:平台须留对应入口;实现可分期,数据模型与 API 一期到位);
-- **服务绑定页**:选服务(目录服务名)→ 自动拉该服务 carry 字段面并集(§3.2)→ 逐字段填值 → 存 `carry_service_binding`;placeholder 按 §3.1 null 语义:字段无行时显示全局默认值,有行(含 null 行)显示行值(null 显示"显式 null"态);
+- **服务绑定页**:选服务(目录服务名)→ 自动拉该服务 carry 字段面并集(§3.2)→ 逐字段填值 → 存 `carry_service_bindings`;placeholder 按 §3.1 null 语义:字段无行时显示全局默认值,有行(含 null 行)显示行值(null 显示"显式 null"态);
 - **全局默认区**:同页"全局默认"标签页,整表编辑;页面常驻提示:**全局默认按纯 path 跨服务生效**——契约门控只保证"不注入未声明的字段",不保证同一路径在不同服务里语义一致(`$.remark` 类描述字段无碍;`$.type` 类语义敏感路径请用服务绑定覆盖兜底,属配置纪律,不做结构约束);
 - 编辑即生效:无缓存,下次执行/导出按新值物化(D1)。
 
@@ -189,10 +189,10 @@ class CarryContext:
 **定位**:carry 落地后场景定义不含传递字段(§D1 运行期物化),"用例用了旧版本 carry 结构"在场景侧**没有落点**——漂移的唯一平台侧载体是两张值表,场景零适配是 D1 的直接红利(carry 面变更后,场景下次执行自动按新面注入,无需逐场景 patch)。适配中心的 carry 职能 = 漂移发现 + 影响面筛选 + 值表 CRUD。
 
 **漂移发现(结构 diff,非 semver 判定)**:
-- plate carry 面 vs `carry_service_binding` 该服务 paths,三类结果:
+- plate carry 面 vs `carry_service_bindings` 该服务 paths,三类结果:
   - **orphaned**:绑定 path ∉ plate 面(plate 删/改名后遗留;契约门控下已无效果,属脏数据);
   - **uncovered**:plate 面 path 无绑定行(降级全局默认,列出供补配,不阻塞);
-  - **renamed(建议)**:orphaned 项与面上同 type 新路径的启发式配对 → 生成 renameCarryPath 提案,人确认后入批;
+  - **renamed(建议)**:orphaned 项与面上新路径的单×单配对建议(值表不存 type,同 type 不可知),人确认后执行 → 生成 renameCarryPath 提案入批(2026-08-31 一致性审计勘误:原文「同 type 启发式配对」技术不可行);
 - `EndpointSpec.version` 仅作展示/分组锚,**不作判定依据**(semver 不携带变更内容;判定一律以结构 diff 为准,与业务字段既有通路同哲学)。
 
 **影响面筛选**:
@@ -224,7 +224,7 @@ class CarryContext:
 - plate:`CarryEntry` 校验(path 归一 / 与 fields[] 互斥 / type 词表 / extra=forbid)、`/full` 序列化含 carry、light 视图不含;`model` 机制移除后 rule B(schema_ 单轴)、序列化无 `model_schema/model_name`、2 个存量端点改写等价(fields/schema/carry 面不变)、`field-defaults` 输出键改名 generated_fields 的等价断言;
 - materialize:纯函数逐规则用例(body 已有跳过 / 服务绑定优先 / 默认兜底 / 两层皆无跳过 / null 行显式注入 / 嵌套路径 / 类型转换(number/boolean/object/失败保留原串)/ 模板值跳过转换透传 / 服务名解析失败降级黄警 / carry_context=None 行为等价现状);
 - 等价:执行链与导出链同 carry_context → 逐字段相同输出(黄金等价用例扩展);
-- API:两表 CRUD、字段面聚合端点、漂移 diff 端点(三类结果/renamed 启发式配对);
+- API:两表 CRUD、字段面聚合端点、漂移 diff 端点(三类结果/renamed 配对建议);
 - 适配中心:CARRY_OPS 三 op 的 apply/快照/回滚;漂移面板→勾选→生成批→应用→值表终态;影响面筛选(ref index 命中 carry 面变更 endpoint 的场景);场景定义在 carry 适配批前后零变化(红利断言);
 - 前端:deepDefaults 不再拷 Type C 默认(含 contracts 入参过滤 carry 键)、reqTypeC 差集过滤 carry 键、step 只读注入提示、配置页读写流。
 
