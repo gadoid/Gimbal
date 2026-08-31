@@ -19,6 +19,7 @@ from .routers import (
     adaptations,
     auth,
     auth_sessions,
+    carry,
     constants,
     data_sets,
     endpoint_catalog,
@@ -123,6 +124,7 @@ def create_app() -> FastAPI:
     app.include_router(constants.router, prefix="/api")
     app.include_router(generator_catalog.router, prefix="/api")
     app.include_router(adaptations.router, prefix="/api")
+    app.include_router(carry.router, prefix="/api")
     app.include_router(scenarios.router, prefix="/api")  # MUST be last — has /{scenario_id}
 
     @app.get("/api/health")
