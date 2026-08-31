@@ -38,7 +38,8 @@ export interface ImpactItem {
 export interface OpOut {
   id: number
   batchId: string
-  scenarioId: string
+  /** CARRY_OPS 免场景落点(D1)→ null;场景 op 恒有值。 */
+  scenarioId: string | null
   datasetId: string | null
   opType: string
   payload: Record<string, unknown>
@@ -93,7 +94,8 @@ export interface UnindexedStep {
 
 export interface OpCreateIn {
   opType: string
-  scenarioId: string
+  /** 场景 op 必填;CARRY_OPS 免(后端 OpCreateIn 已可空)—— carry 请求体不带该键。 */
+  scenarioId?: string | null
   datasetId?: string | null
   payload: Record<string, unknown>
 }
@@ -145,6 +147,16 @@ export async function getBatch(batchId: string): Promise<BatchDetail> {
 export async function openBatch(endpointId: string): Promise<BatchDetail> {
   const { data } = await http.post<BatchDetail>('/adaptations/batches', {
     endpointId,
+  })
+  return data
+}
+
+/** 开 carry 值表批(漂移面板入口,spec §7);service=null → 全局默认表面。 */
+export async function openCarryBatch(
+  service: string | null,
+): Promise<BatchDetail> {
+  const { data } = await http.post<BatchDetail>('/adaptations/carry-batches', {
+    service,
   })
   return data
 }

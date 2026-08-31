@@ -23,6 +23,25 @@
       </table>
     </template>
 
+    <!-- CARRY_OPS(T16):值表层,无场景落点 —— 不拉场景,直渲 payload。 -->
+    <template v-else-if="isCarryOp">
+      <span class="mono">
+        carry 值表({{ carryScopeLabel }})
+        <template v-if="op.opType === 'renameCarryPath'">
+          :<code>{{ op.payload.from }}</code> → <code>{{ op.payload.to }}</code>
+        </template>
+        <template v-else-if="op.opType === 'addCarryBinding'">
+          + <code>{{ op.payload.path }}</code>
+          <template v-if="'value' in op.payload">
+            = {{ JSON.stringify(op.payload.value) }}
+          </template>
+        </template>
+        <template v-else>
+          − <code>{{ op.payload.path }}</code>
+        </template>
+      </span>
+    </template>
+
     <template v-else-if="step">
       <span class="mono">
         步骤 {{ op.payload.step }} · {{ fieldLabel }}
@@ -70,6 +89,13 @@ const scenario = ref<Awaited<ReturnType<typeof getScenario>> | null>(null)
 const isDatasetOp = computed(() => ['renameDatasetColumn', 'mapDatasetValues']
   .includes(props.op.opType))
 
+/** CARRY_OPS:值表 op,scenarioId=null(D1 免场景),不进场景拉取分支。 */
+const isCarryOp = computed(() => ['renameCarryPath', 'addCarryBinding',
+  'removeCarryBinding'].includes(props.op.opType))
+
+const carryScopeLabel = computed(() =>
+  String(props.op.payload.service ?? '全局默认'))
+
 const columnLabel = computed(() =>
   String(props.op.payload.column ?? props.op.payload.from ?? ''))
 
@@ -113,6 +139,8 @@ const refCount = computed(() => {
 })
 
 onMounted(async () => {
+  // carry op(值表层)与数据集 op 不拉场景;scenarioId=null 直接守卫
+  if (isCarryOp.value || props.op.scenarioId === null) return
   if (props.op.opType === 'renameVar' || isDatasetOp.value) {
     // renameVar 引用计数需要场景;数据集 op 只用 datasetId,不拉场景
     if (props.op.opType !== 'renameVar') return

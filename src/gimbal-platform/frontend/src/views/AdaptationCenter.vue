@@ -1,5 +1,6 @@
-<!-- AdaptationCenter —— P5 适配中心总览(spec §3/§5)。
-     admin:未索引警示 + 待适配卡片(C12 异常卡不可开批次)+ 全量批次表;
+<!-- AdaptationCenter —— P5 适配中心总览(spec §3/§5 + §7 carry 职能)。
+     admin:未索引警示 + 待适配卡片(C12 异常卡不可开批次)+ 全量批次表
+       + carry 漂移面板(T16:三类勾选 → 生成值表批,plateReachable 先判);
      member:自动只读 owner 视图(仅批次表,scope=mine,无详情列 ——
      批次工作台为 admin-only,member 直入得 403)。 -->
 <template>
@@ -132,6 +133,69 @@
         </template>
       </el-table-column>
     </el-table>
+
+    <!-- carry 漂移(T16,admin-only:后端 drift 为 AdminUser,member 403)。
+         plateReachable=False → 不渲染清单 + 显式警示 + 禁批生成(T11 硬性
+         契约:plate 挂时 drift 会把全表绑定误报孤儿,防管理员误清空)。 -->
+    <template v-if="auth.isAdmin">
+      <div class="section-head">
+        <span class="section-title">carry 漂移(值表 vs plate 面)</span>
+        <span v-if="carryDrift.length" class="section-count">
+          {{ carryDriftTotal }} 项漂移 · {{ carryDrift.length }} 服务
+        </span>
+        <span class="section-actions">
+          <el-button
+            size="small"
+            :loading="carryDriftLoading"
+            @click="loadCarryDrift"
+          >刷新</el-button>
+          <el-button
+            size="small"
+            type="primary"
+            data-action="carry-generate"
+            :disabled="!canGenerate"
+            :loading="carryGenerating"
+            @click="openCarryBatchFromDrift"
+          >勾选生成批({{ carryChecked.length }})</el-button>
+        </span>
+      </div>
+
+      <el-alert
+        v-if="!carryPlateReachable"
+        type="warning"
+        :closable="false"
+        class="drift-alert"
+        title="plate 目录不可达:漂移数据可能失真(绑定可能被误报为孤儿),已禁用勾选与批生成"
+        description="清单已停止渲染,请先恢复 plate 目录后点刷新重查"
+      />
+      <el-empty
+        v-else-if="carryDrift.length === 0"
+        description="暂无服务 carry 数据(无绑定且 plate 面为空)"
+      />
+      <div v-else class="drift-list">
+        <div
+          v-for="s in carryDrift"
+          :key="s.service"
+          class="drift-svc"
+          data-testid="drift-svc"
+        >
+          <h4 class="mono">{{ s.service }}</h4>
+          <!-- 对齐服务(三列表全空)正向确认,不渲染空壳(T11 评审契约) -->
+          <p v-if="!hasCarryDrift(s)" class="hint drift-ok">已检查,无漂移</p>
+          <el-checkbox-group
+            v-else
+            v-model="carryChecked"
+            class="drift-checks"
+          >
+            <el-checkbox
+              v-for="opt in driftCheckOptions(s)"
+              :key="opt.key"
+              :value="opt.key"
+            >{{ opt.text }}</el-checkbox>
+          </el-checkbox-group>
+        </div>
+      </div>
+    </template>
   </section>
 </template>
 
@@ -141,6 +205,14 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import * as api from '@/api/adaptations'
 import type { BatchOut, PendingChange, UnindexedStep } from '@/api/adaptations'
+import { getDrift, type ServiceDrift } from '@/api/carry'
+import {
+  canGenerateCarryBatch,
+  checkedServices,
+  driftCheckOptions,
+  hasCarryDrift,
+  parseCarryChecked,
+} from '@/utils/carry-drift'
 import { useAuthStore } from '@/stores/auth'
 import { useAdaptationsStore } from '@/stores/adaptations'
 import UnindexedAlert from '@/components/adaptations/UnindexedAlert.vue'
@@ -218,9 +290,73 @@ async function onOpenBatch(): Promise<void> {
   }
 }
 
+// ── carry 漂移面板(T16,spec §7):发现 → 勾选 → 生成值表批 ─────────────
+// plateReachable 先判(T11 契约):False 时清单不渲染、勾选与生成禁用。
+const carryDrift = ref<ServiceDrift[]>([])
+const carryPlateReachable = ref(true)
+const carryDriftLoading = ref(false)
+const carryGenerating = ref(false)
+const carryChecked = ref<string[]>([])
+
+const carryDriftTotal = computed(() =>
+  carryDrift.value.reduce((n, s) =>
+    n + s.orphaned.length + s.uncovered.length + s.renamedSuggestions.length,
+    0))
+const canGenerate = computed(
+  () => canGenerateCarryBatch(carryPlateReachable.value, carryChecked.value.length))
+
+async function loadCarryDrift(): Promise<void> {
+  carryDriftLoading.value = true
+  try {
+    const report = await getDrift()
+    carryPlateReachable.value = report.plateReachable
+    carryDrift.value = report.services
+    carryChecked.value = []
+  } catch (e) {
+    ElMessage.error(api.errMsg(e, 'carry 漂移拉取失败'))
+  } finally {
+    carryDriftLoading.value = false
+  }
+}
+
+/** 勾选 → 按服务分批(ops 保勾选序逐条 createOp,详情页按序逐条应用),
+ *  完成跳到最后一个批;carry op 请求体不带 scenarioId(后端 D1 免场景)。 */
+async function openCarryBatchFromDrift(): Promise<void> {
+  const items = parseCarryChecked(carryChecked.value)
+  if (!canGenerateCarryBatch(carryPlateReachable.value, items.length)) return
+  carryGenerating.value = true
+  try {
+    let lastBatchId = ''
+    for (const svc of checkedServices(items)) {
+      const detail = await api.openCarryBatch(svc)
+      lastBatchId = detail.batchId
+      for (const item of items) {
+        if (item.service !== svc) continue
+        await api.createOp(detail.batchId, {
+          opType: item.opType,
+          payload: item.payload,
+        })
+      }
+    }
+    carryChecked.value = []
+    ElMessage.success('carry 批已生成,请在批次详情页按序逐条应用')
+    await loadBatches()
+    await router.push(`/adaptations/batches/${lastBatchId}`)
+  } catch (e) {
+    ElMessage.error(api.errMsg(e, 'carry 批生成失败'))
+    await loadBatches()   // 中途失败也可能已建批:刷新让列表反映真实
+  } finally {
+    carryGenerating.value = false
+  }
+}
+
 onMounted(() => {
-  if (auth.isAdmin) void refreshAll()
-  else void loadBatches('mine')
+  if (auth.isAdmin) {
+    void refreshAll()
+    void loadCarryDrift()
+  } else {
+    void loadBatches('mine')
+  }
 })
 </script>
 
@@ -340,4 +476,33 @@ onMounted(() => {
 .op-tag { margin-right: 4px; }
 .link { color: #409eff; }
 .mono { font-family: monospace; }
+
+/* ── carry 漂移(T16)── */
+.section-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+.drift-alert { margin: 0 0 12px; }
+.drift-svc {
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+.drift-svc h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+.drift-checks { display: block; }
+.drift-checks :deep(.el-checkbox) {
+  height: auto;
+  min-height: 24px;
+  align-items: flex-start;
+  white-space: normal;
+  margin-right: 0;
+}
+.drift-ok { margin: 0; color: #67c23a; }
 </style>

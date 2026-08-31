@@ -1,8 +1,9 @@
 /**
- * OpConstructDialog —— 8 类构造表单(§6.3):
+ * OpConstructDialog —— 11 类构造表单(§6.3 全量 + T16 三个 carry 值表 op):
  *   - renameVar:from/to 取场景 vars 调色板,payload {from,to},datasetId null;
  *   - mapValue:键值行编辑器,空键行剔除,payload {step,field,map};
- *   - mergeSeed:锁 renameField 并预填。
+ *   - mergeSeed:锁 renameField 并预填;
+ *   - CARRY_OPS:免场景校验,请求体不带 scenarioId 键;service 缺省不带键。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -122,6 +123,66 @@ describe('OpConstructDialog', () => {
     expect(createSpy).toHaveBeenCalledWith('bt-1', {
       opType: 'renameField', scenarioId: 'sc-1', datasetId: null,
       payload: { step: 0, from: 'legacy_field', to: 'extra' },
+    })
+    w.unmount()
+  })
+
+  it('CARRY_OPS:免场景校验,请求体不带 scenarioId 键;service 缺省不带键(全局默认)', async () => {
+    const createSpy = vi.spyOn(api, 'createOp').mockResolvedValue({
+      ...created, opType: 'addCarryBinding', scenarioId: null,
+    } as never)
+    const w = await mountDialog()
+    const vm = w.vm as unknown as {
+      form: Record<string, unknown>
+      submit: () => Promise<void>
+    }
+
+    vm.form.opType = 'addCarryBinding'
+    vm.form.service = ''          // 缺省 = 全局默认表
+    vm.form.field = '$.fee'
+    vm.form.value = 'CNY'
+    // 不设 scenarioId —— carry op 不校验、不发送
+    await vm.submit()
+    await flushPromises()
+
+    expect(createSpy).toHaveBeenCalledWith('bt-1', {
+      opType: 'addCarryBinding',
+      payload: { path: '$.fee', value: 'CNY' },
+    })
+    const body = createSpy.mock.calls[0][1] as unknown as Record<string, unknown>
+    expect('scenarioId' in body).toBe(false)
+    expect('datasetId' in body).toBe(false)
+    w.unmount()
+  })
+
+  it('CARRY_OPS:renameCarryPath 带 service;removeCarryPath 只带 path', async () => {
+    const createSpy = vi.spyOn(api, 'createOp').mockResolvedValue(created)
+    const w = await mountDialog()
+    const vm = w.vm as unknown as {
+      form: Record<string, unknown>
+      submit: () => Promise<void>
+    }
+
+    vm.form.opType = 'renameCarryPath'
+    vm.form.service = 'fin.order'
+    vm.form.from = '$.legacy_fee'
+    vm.form.to = '$.fee'
+    await vm.submit()
+    await flushPromises()
+
+    vm.form.opType = 'removeCarryBinding'
+    vm.form.service = 'fin.order'
+    vm.form.field = '$.legacy_fee'
+    await vm.submit()
+    await flushPromises()
+
+    expect(createSpy).toHaveBeenNthCalledWith(1, 'bt-1', {
+      opType: 'renameCarryPath',
+      payload: { service: 'fin.order', from: '$.legacy_fee', to: '$.fee' },
+    })
+    expect(createSpy).toHaveBeenNthCalledWith(2, 'bt-1', {
+      opType: 'removeCarryBinding',
+      payload: { service: 'fin.order', path: '$.legacy_fee' },
     })
     w.unmount()
   })

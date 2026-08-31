@@ -1,4 +1,6 @@
-<!-- OpConstructDialog —— 8 类人工构造 op(§6.3,全量类型 + mergeSeed 预填)。 -->
+<!-- OpConstructDialog —— 11 类人工构造 op(§6.3 全量 + T16 三个 carry 值表
+     op;mergeSeed 预填)。CARRY_OPS 免场景落点(后端 D1):值表层,
+     service 缺省 = 全局默认表。 -->
 <template>
   <el-dialog
     :model-value="modelValue"
@@ -18,7 +20,8 @@
           />
         </el-select>
       </el-form-item>
-      <el-form-item label="场景">
+      <!-- carry 值表 op 无场景落点:不渲染场景选择,提交也不校验 -->
+      <el-form-item v-if="!isCarryOp" label="场景">
         <el-select v-model="form.scenarioId" placeholder="选择场景">
           <el-option
             v-for="s in scenarios"
@@ -62,6 +65,27 @@
           <el-select v-model="form.to" placeholder="to" class="pair">
             <el-option v-for="v in varNames" :key="v" :label="v" :value="v" />
           </el-select>
+        </el-form-item>
+      </template>
+
+      <!-- CARRY_OPS(T16):值表三层字段 —— service 缺省 = 全局默认表;
+           from/to 输入对模式同 renameField。 -->
+      <template v-else-if="isCarryOp">
+        <el-form-item label="服务(service)">
+          <el-input
+            v-model="form.service"
+            placeholder="缺省 = 全局默认表"
+          />
+        </el-form-item>
+        <el-form-item v-if="form.opType === 'renameCarryPath'" label="路径 from → to">
+          <el-input v-model="form.from" placeholder="from" />
+          <el-input v-model="form.to" placeholder="to" class="pair" />
+        </el-form-item>
+        <el-form-item v-else label="路径(path)">
+          <el-input v-model="form.field" placeholder="$.carry.path" />
+        </el-form-item>
+        <el-form-item v-if="form.opType === 'addCarryBinding'" label="值(value)">
+          <el-input v-model="form.value" placeholder="空串合法;显式 null 用批详情编辑 JSON" />
         </el-form-item>
       </template>
 
@@ -149,7 +173,15 @@ const OP_TYPES = [
   { value: 'mapValue', label: 'mapValue(值映射,补值)' },
   { value: 'renameDatasetColumn', label: 'renameDatasetColumn(数据集列重命名)' },
   { value: 'mapDatasetValues', label: 'mapDatasetValues(数据集值映射)' },
+  { value: 'renameCarryPath', label: 'renameCarryPath(carry 路径重命名)' },
+  { value: 'addCarryBinding', label: 'addCarryBinding(补 carry 绑定)' },
+  { value: 'removeCarryBinding', label: 'removeCarryBinding(移除 carry 绑定)' },
 ] as const
+
+/** CARRY_OPS(T16):值表 op 免场景落点,payload 带 service?/路径字段。 */
+const CARRY_OP_TYPES = [
+  'renameCarryPath', 'addCarryBinding', 'removeCarryBinding',
+]
 
 const scenarios = ref<{ scenarioId: string }[]>([])
 const datasets = ref<{ datasetId: string }[]>([])
@@ -160,6 +192,7 @@ const form = reactive({
   opType: 'renameVar' as string,
   scenarioId: '',
   datasetId: '',
+  service: '',
   step: 0,
   field: '',
   from: '',
@@ -183,10 +216,13 @@ function opTypeIn(list: string[]): boolean {
   return list.includes(form.opType)
 }
 
+const isCarryOp = computed(() => opTypeIn(CARRY_OP_TYPES))
+
 function resetForm(): void {
   form.opType = 'renameVar'
   form.scenarioId = ''
   form.datasetId = ''
+  form.service = ''
   form.step = 0
   form.field = ''
   form.from = ''
@@ -243,6 +279,11 @@ function buildMap(): Record<string, string> {
   return map
 }
 
+/** carry op payload:service 为空不带键(缺省 = 全局默认表,后端契约)。 */
+function carryPayload(base: Record<string, unknown>): Record<string, unknown> {
+  return form.service ? { service: form.service, ...base } : base
+}
+
 function buildPayload(): Record<string, unknown> {
   switch (form.opType) {
     case 'renameVar': return { from: form.from, to: form.to }
@@ -253,12 +294,16 @@ function buildPayload(): Record<string, unknown> {
     case 'renameDatasetColumn': return { from: form.from, to: form.to }
     case 'mapDatasetValues': return { column: form.column, map: buildMap() }
     case 'mapValue': return { step: form.step, field: form.field, map: buildMap() }
+    case 'renameCarryPath': return carryPayload({ from: form.from, to: form.to })
+    case 'addCarryBinding': return carryPayload({ path: form.field, value: form.value })
+    case 'removeCarryBinding': return carryPayload({ path: form.field })
     default: return {}
   }
 }
 
 async function submit(): Promise<void> {
-  if (!form.scenarioId) {
+  // CARRY_OPS 免场景(值表 op);场景 op 仍必选
+  if (!isCarryOp.value && !form.scenarioId) {
     ElMessage.warning('请选择场景')
     return
   }
@@ -269,7 +314,11 @@ async function submit(): Promise<void> {
   }
   submitting.value = true
   try {
-    const op = await api.createOp(props.batchId, {
+    // carry op 请求体不带 scenarioId/datasetId 键(后端 D1 免场景)
+    const op = await api.createOp(props.batchId, isCarryOp.value ? {
+      opType: form.opType,
+      payload: buildPayload(),
+    } : {
       opType: form.opType,
       scenarioId: form.scenarioId,
       datasetId: datasetOp ? form.datasetId : null,

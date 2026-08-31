@@ -1,9 +1,10 @@
 /**
- * OpPreview —— 单条 op 预览(§6.2,零后端改动):
+ * OpPreview —— 单条 op 预览(§6.2,零后端改动;T16 增 carry 分支):
  *   - STEP_OPS:getScenario 取 steps[step] 的容器片段,body/headers;
  *   - renameVar:from→to + 场景内 ${var.from} 引用计数;
  *   - mapValue:map 键值表;
- *   - 数据集 op:datasetId + 列名(+ map 表)。
+ *   - 数据集 op:datasetId + 列名(+ map 表);
+ *   - CARRY_OPS:值表 payload 直渲,不拉场景(scenarioId=null)。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -90,5 +91,38 @@ describe('OpPreview', () => {
     expect(w2.text()).toContain('ds-1')
     expect(w2.text()).toContain('amount → amt')
     w2.unmount()
+  })
+
+  it('CARRY_OPS:直渲值表 payload,不拉场景(scenarioId=null 不误报场景失败)', async () => {
+    const spy = vi.spyOn(scenarioApi, 'getScenario')
+
+    const w = mountOp(op({
+      scenarioId: null, opType: 'renameCarryPath',
+      payload: { service: 'fin.order', from: '$.legacy_fee', to: '$.fee' },
+    }))
+    await flushPromises()
+    expect(w.text()).toContain('fin.order')
+    expect(w.text()).toContain('$.legacy_fee → $.fee')
+    expect(w.text()).not.toContain('场景加载失败')   // 旧行为:carry op 误拉场景 404
+    w.unmount()
+
+    const w2 = mountOp(op({
+      scenarioId: null, opType: 'addCarryBinding',
+      payload: { path: '$.fee', value: '' },        // 无 service → 全局默认
+    }))
+    await flushPromises()
+    expect(w2.text()).toContain('全局默认')
+    expect(w2.text()).toContain('$.fee')
+    w2.unmount()
+
+    const w3 = mountOp(op({
+      scenarioId: null, opType: 'removeCarryBinding',
+      payload: { service: 'fin.risk', path: '$.trace_id' },
+    }))
+    await flushPromises()
+    expect(w3.text()).toContain('$.trace_id')
+    w3.unmount()
+
+    expect(spy).not.toHaveBeenCalled()
   })
 })
