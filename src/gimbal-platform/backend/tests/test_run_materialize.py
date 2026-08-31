@@ -122,3 +122,108 @@ def test_no_env_layer_binding_and_authored_only() -> None:
     out = materialize_run_copy(_converted())
     assert "svc-orphan" not in out["config"]["services"] or \
         not out["config"]["services"].get("svc-orphan")
+
+
+# ─── carry 填充(spec §4)────────────────────────────────────────
+from app.services.run_materialize import CarryContext
+
+
+def _carry_converted() -> dict:
+    return {
+        "kind": "scenario",
+        "config": {"services": {}, "users": {}, "vars": {}},
+        "steps": [
+            {"kind": "step",
+             "api": {"service": "fin-service", "path": "/x",
+                     "view_hints": {"endpoint_id": "fin.ep1"}},
+             "request": {"kind": "request", "body": {"order_id": "o-1"}}},
+        ],
+    }
+
+
+def _ctx(**over) -> CarryContext:
+    base = dict(
+        step_fields={0: {"$.remark": "string", "$.appCode": "string",
+                          "$.count": "integer", "$.flag": "boolean",
+                          "$.meta": "object", "$.tpl": "string"}},
+        service_bindings={"fin-service": {"$.remark": "压测-张三",
+                                           "$.count": "3"}},
+        global_defaults={"$.appCode": "TRACE-V2", "$.flag": "true",
+                          "$.meta": "{\"k\": 1}"},
+    )
+    base.update(over)
+    return CarryContext(**base)
+
+
+class TestCarryFill:
+    def test_service_binding_wins_over_default(self):
+        out = materialize_run_copy(_carry_converted(), carry_context=_ctx(
+            global_defaults={"$.remark": "全局备注", "$.appCode": "V2"}))
+        body = out["steps"][0]["request"]["body"]
+        assert body["remark"] == "压测-张三"
+
+    def test_global_default_fills_unbound_path(self):
+        out = materialize_run_copy(_carry_converted(), carry_context=_ctx())
+        assert out["steps"][0]["request"]["body"]["appCode"] == "TRACE-V2"
+
+    def test_body_existing_key_skipped(self):
+        src = _carry_converted()
+        src["steps"][0]["request"]["body"]["remark"] = "手填值"
+        out = materialize_run_copy(src, carry_context=_ctx())
+        assert out["steps"][0]["request"]["body"]["remark"] == "手填值"
+
+    def test_two_layers_absent_skips(self):
+        out = materialize_run_copy(_carry_converted(), carry_context=_ctx(
+            step_fields={0: {"$.nosuch": "string"}}))
+        assert "nosuch" not in out["steps"][0]["request"]["body"]
+
+    def test_null_row_injects_json_null(self):
+        out = materialize_run_copy(_carry_converted(), carry_context=_ctx(
+            service_bindings={"fin-service": {"$.remark": None}}))
+        assert out["steps"][0]["request"]["body"]["remark"] is None
+
+    def test_type_coercion(self):
+        out = materialize_run_copy(_carry_converted(), carry_context=_ctx())
+        body = out["steps"][0]["request"]["body"]
+        assert body["count"] == 3            # integer
+        assert body["flag"] is True          # boolean 严格 true/false
+        assert body["meta"] == {"k": 1}      # object JSON 解析
+
+    def test_coerce_failure_keeps_original_string(self):
+        out = materialize_run_copy(_carry_converted(), carry_context=_ctx(
+            service_bindings={"fin-service": {"$.count": "3x"}},
+            global_defaults={"$.meta": "{not-json}"}))
+        body = out["steps"][0]["request"]["body"]
+        assert body["count"] == "3x"
+        assert body["meta"] == "{not-json}"
+
+    def test_template_value_passes_through_uncoerced(self):
+        out = materialize_run_copy(_carry_converted(), carry_context=_ctx(
+            service_bindings={"fin-service": {"$.tpl": "${var.envId}",
+                                              "$.count": "${var.n}"}}))
+        body = out["steps"][0]["request"]["body"]
+        assert body["tpl"] == "${var.envId}"
+        assert body["count"] == "${var.n}"   # 模板不做二次 coerce
+
+    def test_unresolved_service_skips_whole_step(self):
+        out = materialize_run_copy(_carry_converted(), carry_context=_ctx(
+            service_bindings={"fin-service": None}))
+        body = out["steps"][0]["request"]["body"]
+        assert "appCode" not in body and "remark" not in body
+
+    def test_no_anchor_falls_back_to_value_table_keys(self):
+        out = materialize_run_copy(_carry_converted(), carry_context=_ctx(
+            step_fields={}))
+        body = out["steps"][0]["request"]["body"]
+        # 降级门控:候选 = 绑定键 ∪ 全局默认键
+        assert body["remark"] == "压测-张三"
+        assert body["appCode"] == "TRACE-V2"
+
+    def test_carry_context_none_behaves_as_today(self):
+        out = materialize_run_copy(_carry_converted())
+        assert out["steps"][0]["request"]["body"] == {"order_id": "o-1"}
+
+    def test_pure_function_input_not_mutated_carry(self):
+        src = _carry_converted()
+        materialize_run_copy(src, carry_context=_ctx())
+        assert src["steps"][0]["request"]["body"] == {"order_id": "o-1"}
