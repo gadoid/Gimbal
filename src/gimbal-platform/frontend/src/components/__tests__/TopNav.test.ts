@@ -27,6 +27,7 @@ function makeRouter() {
       { path: '/auths', component: { template: '<div/>' } },
       { path: '/adaptations', component: { template: '<div/>' } },
       { path: '/admin/users', component: { template: '<div/>' } },
+      { path: '/carry-config', component: { template: '<div/>' } },
     ],
   })
 }
@@ -39,7 +40,7 @@ describe('TopNav', () => {
     } as never)
   })
 
-  it('renders six real router-link anchors', async () => {
+  it('renders seven real router-link anchors', async () => {
     const auth = useAuthStore()
     auth.accessToken = 'tok'
     auth.currentUser = { id: 1, username: 'alice', is_admin: true } as never
@@ -53,7 +54,7 @@ describe('TopNav', () => {
     })
 
     const links = w.findAll('a.nav-entry')
-    expect(links.length).toBe(6)
+    expect(links.length).toBe(7)
 
     // Each link points to the right path(P3:工作台/公共库已并入场景库)
     const hrefs = links.map((l) => l.attributes('href'))
@@ -62,6 +63,7 @@ describe('TopNav', () => {
     expect(hrefs).toContain('/adaptations')
     expect(hrefs).toContain('/auths')
     expect(hrefs).toContain('/admin/users')
+    expect(hrefs).toContain('/carry-config')
   })
 
   it('highlights the active route', async () => {
@@ -82,7 +84,7 @@ describe('TopNav', () => {
     expect(active[0].attributes('href')).toBe('/admin/users')
   })
 
-  it('hides the admin-only 用户管理 entry from members', async () => {
+  it('hides the admin-only 用户管理/传递字段 entries from members', async () => {
     const auth = useAuthStore()
     auth.accessToken = 'tok'
     auth.currentUser = { id: 1, username: 'alice', is_admin: false } as never
@@ -97,6 +99,7 @@ describe('TopNav', () => {
 
     const hrefs = w.findAll('a.nav-entry').map((l) => l.attributes('href'))
     expect(hrefs).not.toContain('/admin/users')
+    expect(hrefs).not.toContain('/carry-config')
     expect(hrefs.length).toBe(5)
   })
 

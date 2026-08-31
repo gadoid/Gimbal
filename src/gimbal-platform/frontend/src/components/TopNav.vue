@@ -50,6 +50,7 @@ import {
   Connection,
   DataAnalysis,
   Lock,
+  Postcard,
   Setting,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -86,6 +87,7 @@ const allEntries: NavEntry[] = [
   { path: '/auths', label: '认证管理', icon: Lock },
   { path: '/constants', label: '常量池', icon: Coin },
   { path: '/admin/users', label: '用户管理', icon: Setting, adminOnly: true },
+  { path: '/carry-config', label: '传递字段', icon: Postcard, adminOnly: true },
 ]
 
 // Hide the admin entry from members entirely (previously it rendered for

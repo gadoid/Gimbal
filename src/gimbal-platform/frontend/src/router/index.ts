@@ -52,6 +52,13 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    // carry 值表配置页(T15)— admin 维护入口(TopNav adminOnly);
+    // 路由本身只 requiresAuth:member 直接访问时 GET 可读、PUT 由后端 403(spec §6)
+    path: '/carry-config',
+    component: () => import('@/views/CarryConfig.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/admin/users',
     component: () => import('@/views/UsersAdmin.vue'),
     meta: { requiresAuth: true, requiresAdmin: true },
