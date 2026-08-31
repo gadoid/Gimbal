@@ -115,22 +115,19 @@ class TestDataset:
         assert len(sd["steps"]) == 1
 
 
-class TestBodyValidation:
-    def test_request_with_pydantic_model_validates(self, order_endpoint) -> None:
-        # request.model = OrderIn, 会校验并 dump
+class TestBodyRendering:
+    def test_request_body_passes_through_interpolated(self, order_endpoint) -> None:
+        # model 机制退役(spec §2.1.1):_render_body 只做 ${var} 插值,不再校验
         case = EndpointCase(
-            name="validate",
+            name="passthrough",
             parameters={"order_no": "X", "amount": 5},
         )
         exporter = EndpointCaseExporter(order_endpoint)
         step = exporter.to_gimbal_step(case)
         body = step["request"]["body"]
-        assert isinstance(body, dict)
-        assert body["order_no"] == "X"
-        assert body["amount"] == 5
+        assert body == {"order_no": "X", "amount": 5}
 
-    def test_request_without_model_passes_through(self, order_patch_endpoint) -> None:
-        # request.model = None, params 原样传
+    def test_request_none_returns_interpolated(self, order_patch_endpoint) -> None:
         case = EndpointCase(
             name="raw",
             parameters={"order_id": "X", "status": "ok"},

@@ -189,10 +189,9 @@ class EndpointCaseExporter:
 
     # ── 内部 ──────────────────────────────────────────────
     def _render_body(self, params: dict[str, Any]) -> Any:
-        interpolated = _interpolate_params(params, self.variables)
-        if self.endpoint.request is None:
-            return interpolated
-        return self.endpoint.request.validate_body(interpolated)
+        """model 机制退役(spec §2.1.1):只做 ${var} 插值,不校验 —— 与
+        平台主链路(plate /convert 从不校验 body)行为对齐。"""
+        return _interpolate_params(params, self.variables)
 
     def _render_api(self, case: EndpointCase) -> dict[str, Any]:
         api = self.endpoint.api

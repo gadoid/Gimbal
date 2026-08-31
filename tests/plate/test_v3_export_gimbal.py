@@ -82,7 +82,7 @@ class TestExportGimbalFunctional:
         assert step["api"]["service"] == "settlement"
         assert step["api"]["method"] == "POST"
         assert step["request"]["kind"] == "request"
-        # request body 应当经过 validate_body 链路(因为 _InBody 有 model)
+        # model 退役:body 原样(插值后)透传
         assert step["request"]["body"]["order_id"] == "o-1"
         # strategy 应包含 status check + 1 个 assertion
         assert len(step["strategy"]) == 2
