@@ -58,6 +58,10 @@ class CarryEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     description: str = ""
+    # 字段类型(JSON Schema 原语词表:string/number/integer/boolean/object/array),
+    # 供 materialize 注入时宽松类型转换(§4.2)。默认 string。自持——不依赖
+    # schema_ 反查,端点没有 schema_ 也能声明 carry。
+    type: str = "string"
     # path 复用外层 dict 的键(见 §2.2),不在 entry 内重复
 ```
 
@@ -73,6 +77,15 @@ class RequestSpec(BaseModel):
 - `_validate` 追加:carry 键与 `fields[].path` 交集为空(一个字段不得同时出现在两个面);
 - `/api/endpoint/{id}/full` 序列化带出 `request.carry`,light 视图不含。
 
+### 2.1.1 `model` 机制移除(同批清理)
+
+carry 显式声明落地后,`RequestSpec/ResponseSpec.model`(Pydantic 类引用)及其隐式机制一并移除:
+
+- **依据**:`model=` 仅 2 个端点使用(settlement_create_order / account_query_balance),其余全部显式 `fields[]`;`validate_body` 唯一调用点是 plate 自用的 export/gimbal.py(平台主链路从不校验 body);`_bindings_from_model` 自动派生正是"碰巧语义"的制造者。
+- **改动**:删 `model` 字段、`_bindings_from_model`、`validate_body`;rule B 收敛为"body_type != none 时 schema_ 必须非 None";序列化去 `model_schema/model_name` 键;2 个存量端点改写为 `schema_=<Model>.model_json_schema()` 或显式 fields/carry;export/gimbal.py 的 `_render_body` 退化为恒等(与平台链路行为对齐)。
+- **不动**:`strategy_dim.py` 的 Pydantic model 用法是策略 kind 视图机制,与此无关;`schema_` 保留为结构真源(§2.2)。
+- **前端零适配**:`req?.model_schema ?? req?.schema` 的 fallback 本就读 `schema` 键。
+
 ### 2.2 三分类穷尽
 
 body 字段从此显式三分类,消除"裸躺 schema 靠 default 暗示语义"的状态:
@@ -83,7 +96,7 @@ body 字段从此显式三分类,消除"裸躺 schema 靠 default 暗示语义"�
 | 传递字段 | `carry` | platform 两层值表,materialize 填充 |
 | 未声明 | 两者皆无 | 编排器黄警提示(存量 Type C 收敛目标) |
 
-**迁移语义**:现存 Type C(schema 有、fields 无)按"未声明"处理——不阻塞执行,编排器标黄;接口维护者逐步把它们声明进 carry。schema(model/schema_)仍是结构真源,carry 是值通道声明,二者不重复记录值。
+**迁移语义**:现存 Type C(schema 有、fields 无)按"未声明"处理——不阻塞执行,编排器标黄;接口维护者逐步把它们声明进 carry。schema_ 仍是结构真源,carry 是值通道声明,二者不重复记录值。
 
 ## 3. platform 值层存储
 
@@ -104,6 +117,8 @@ carry_global_default     全局默认表(公用默认数据集)
   value         str|null
   updated_by / updated_at
 ```
+
+**null 语义(写死)**:两表**行存在即声明注入,value=null 注入 JSON null(显式空)**;行不存在才是"未配置",走降级链。理由:行存在=意图声明("该字段要注入"),value=内容;null 行若等同未配置则永远死代码。全局默认表同规则(行存在+null → 无服务绑定时注入 null)。配置页 placeholder 依赖此语义(§6);无"抑制注入"第三态(某服务不注入某字段)——YAGNI,真有需求再加,不改本语义。
 
 ### 3.2 API 面
 
@@ -128,11 +143,14 @@ def materialize_run_copy(
 @dataclass(frozen=True)
 class CarryContext:
     """dispatch 阶段预解析的注入上下文(纯值)。"""
-    # step 索引 → 该 endpoint 声明的 carry 字段面(查 plate,经 view_hints.endpoint_id 锚点)
-    step_fields: dict[int, frozenset[str]]
+    # step 索引 → 该 endpoint 的 carry 字段面:path → 契约类型(§2.1 的
+    # CarryEntry.type;类型转换 §4.2 需要,查 plate 时顺手带出,不做二次反查)
+    step_fields: dict[int, dict[str, str]]
     service_bindings: dict[str, dict[str, str]]    # 目录服务名 → {path: 值}
     global_defaults: dict[str, str]                # path → 值
 ```
+
+**预解析批量与快照语义**:dispatch 按 endpoint 去重批量查询 plate(同 `view_hints.endpoint_id` 的 step 共享一次 `/full` 结果,fanout 大批量时不逐 step 打 plate);一次 run 内字段面快照一致——绑定/契约编辑的生效边界是**下次执行**,不在 run 中途变化。
 
 ### 4.2 填充规则(无差别单条规则)
 
@@ -143,7 +161,9 @@ class CarryContext:
 3. 取值链(逐键):`body 已有该键 → 跳过` > `服务绑定值` > `全局默认值`;两层都无 → 跳过(该字段本次不注入);
 4. 写入:`setByPath(body, path, value)` —— 嵌套路径天然支持;值为 `${var.x}` 模板时,gimbal 运行时照常解析(与 body 既有模板同一通路)。
 
-**值类型**:PG 两表 value 统一存 str。注入时按契约字段类型做一次宽松转换(数值型字段转 number / 布尔型转 boolean,转换失败保留原串)——与数据集行值 `_coerce_row_value` 的既有哲学一致(参照 vars 基线类型推断)。
+**值类型**:PG 两表 value 统一存 str。注入时按 `step_fields` 携带的契约类型做一次宽松转换——number/integer→`Number()`,boolean→严格 `'true'/'false'`,object/array→JSON 解析,转换失败保留原串(与数据集行值 `_coerce_row_value` 的既有哲学一致)。**模板值(`${var.x}`)跳过转换、原样透传**:gimbal 解析后即 var 的类型,不做二次 coerce——与 body 既有模板 `${var.requestId}` 的行为完全一致(同一条解析通路,无特殊分支)。
+
+**null 语义**:取值命中 value=null 的行 → 注入 JSON null(§3.1,显式空);只有行不存在才继续降级。
 
 ### 4.3 导出链同源
 
@@ -158,8 +178,8 @@ class CarryContext:
 ## 6. 配置入口(平台页面)
 
 - 位置:平台导航新增"传递字段配置"入口(用户确认:平台须留对应入口;实现可分期,数据模型与 API 一期到位);
-- **服务绑定页**:选服务(目录服务名)→ 自动拉该服务 carry 字段面并集(§3.2)→ 逐字段填值 → 存 `carry_service_binding`;界面同时展示全局默认值作 placeholder(未填时可见兜底);
-- **全局默认区**:同页"全局默认"标签页,整表编辑;
+- **服务绑定页**:选服务(目录服务名)→ 自动拉该服务 carry 字段面并集(§3.2)→ 逐字段填值 → 存 `carry_service_binding`;placeholder 按 §3.1 null 语义:字段无行时显示全局默认值,有行(含 null 行)显示行值(null 显示"显式 null"态);
+- **全局默认区**:同页"全局默认"标签页,整表编辑;页面常驻提示:**全局默认按纯 path 跨服务生效**——契约门控只保证"不注入未声明的字段",不保证同一路径在不同服务里语义一致(`$.remark` 类描述字段无碍;`$.type` 类语义敏感路径请用服务绑定覆盖兜底,属配置纪律,不做结构约束);
 - 编辑即生效:无缓存,下次执行/导出按新值物化(D1)。
 
 ## 7. 二期预留(本期不实现,不堵死)
@@ -179,15 +199,15 @@ class CarryContext:
 
 ## 9. 测试策略
 
-- plate:`CarryEntry` 校验(path 归一 / 与 fields[] 互斥 / extra=forbid)、`/full` 序列化含 carry、light 视图不含;
-- materialize:纯函数逐规则用例(body 已有跳过 / 服务绑定优先 / 默认兜底 / 两层皆无跳过 / 嵌套路径 / 模板值透传 / 服务名解析失败降级黄警 / carry_context=None 行为等价现状);
+- plate:`CarryEntry` 校验(path 归一 / 与 fields[] 互斥 / type 词表 / extra=forbid)、`/full` 序列化含 carry、light 视图不含;`model` 机制移除后 rule B(schema_ 单轴)、序列化无 `model_schema/model_name`、2 个存量端点改写等价(fields/schema/carry 面不变);
+- materialize:纯函数逐规则用例(body 已有跳过 / 服务绑定优先 / 默认兜底 / 两层皆无跳过 / null 行显式注入 / 嵌套路径 / 类型转换(number/boolean/object/失败保留原串)/ 模板值跳过转换透传 / 服务名解析失败降级黄警 / carry_context=None 行为等价现状);
 - 等价:执行链与导出链同 carry_context → 逐字段相同输出(黄金等价用例扩展);
 - API:两表 CRUD、字段面聚合端点;
 - 前端:deepDefaults 不再拷 Type C 默认、step 只读注入提示、配置页读写流。
 
 ## 10. 验收
 
-- [ ] plate `RequestSpec.carry` + CarryEntry 落地,校验与序列化如 §2;
+- [ ] plate `RequestSpec.carry` + CarryEntry 落地,校验与序列化如 §2,`model` 机制移除如 §2.1.1(存量 2 端点改写,测试跟随);
 - [ ] platform 两表 + API 如 §3;
 - [ ] materialize carry_context 参数与填充规则如 §4,纯函数保持,等价测试扩展通过;
 - [ ] deepDefaults 收敛 + 编排器只读提示如 §5;
