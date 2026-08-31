@@ -71,8 +71,10 @@ async def put_bindings(service: str, user: AdminUser, body: CarryMapIn,
 
 @router.get("/drift", response_model=DriftReport)
 async def drift(user: AdminUser, db=DbSession):
-    return DriftReport(services=[
-        ServiceDrift(**s) for s in await carry_store.carry_drift(db)])
+    raw = await carry_store.carry_drift(db)
+    return DriftReport(
+        plateReachable=raw["plateReachable"],
+        services=[ServiceDrift(**s) for s in raw["services"]])
 
 
 @router.get("/bindings/{service}/fields", response_model=ServiceFieldsOut)

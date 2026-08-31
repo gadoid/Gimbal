@@ -44,3 +44,4 @@ class ServiceDrift(BaseModel):
 
 class DriftReport(BaseModel):
     services: list[ServiceDrift] = Field(default_factory=list)
+    plateReachable: bool = True

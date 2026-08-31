@@ -42,7 +42,7 @@ async def put_defaults(
                                   updated_by=updated_by))
 
 
-async def carry_drift(db) -> list[dict]:
+async def carry_drift(db) -> dict:
     """plate carry 面 vs 绑定表 paths 三类 diff(spec §7;结构 diff,非 semver)。
 
     renamed 启发式:单 orphaned × 单 uncovered(同 type 不可知 —— 绑定行
@@ -51,8 +51,11 @@ async def carry_drift(db) -> list[dict]:
     对齐服务同样入报告(orphaned/uncovered 为空)— Task 11 测试 2 契约:
     面板要能展示"已检查、无漂移",而非只列问题服务。
 
-    plate 列表拉不到 → face 视为空(bound 全成 orphaned);单端点 /full
-    失败 → 该端点面缺席,不阻塞其余。
+    plate 列表拉不到 → plateReachable=False + face 视为空(bound 全成
+    orphaned)— 调用方须先看信号再渲染清单,防把不可达误读成漂移;
+    单端点 /full 失败 → 该端点面缺席,不阻塞其余。
+
+    返回 ``{"services": [...], "plateReachable": bool}``。
     """
     from .adaptation_service import _plate_list_endpoints, _plate_full_endpoint
     from .plate_client import PlateUnavailableError
@@ -64,10 +67,12 @@ async def carry_drift(db) -> list[dict]:
 
     # 面并集(按服务)
     face_by_service: dict[str, set[str]] = {}
+    reachable = True
     try:
         items = await _plate_list_endpoints()
     except PlateUnavailableError:
         items = []
+        reachable = False
     for item in items:
         svc = item.get("service")
         eid = item.get("id")
@@ -93,4 +98,4 @@ async def carry_drift(db) -> list[dict]:
         out.append({"service": svc, "orphaned": orphaned,
                     "uncovered": uncovered,
                     "renamedSuggestions": suggestions})
-    return out
+    return {"services": out, "plateReachable": reachable}
