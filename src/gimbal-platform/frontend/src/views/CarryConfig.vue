@@ -102,7 +102,7 @@
             description="$.type 类语义敏感路径请用服务绑定覆盖兜底(配置纪律,spec §6)。"
           />
 
-          <el-table :data="defaultRows" class="carry-table">
+          <el-table v-if="defaultRows.length" :data="defaultRows" class="carry-table">
             <el-table-column label="字段路径" width="300">
               <template #default="{ row }">
                 <el-input v-model="row.path" placeholder="$.headers.X-Trace-Id" />
@@ -151,6 +151,7 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { showError } from '@/utils/errorFallback'
+import { buildServiceEntries, type ServiceCarryRow } from '@/utils/carry-entries'
 import {
   getDefaults, putDefaults, getBindings, getBindingsFor, putBindings, getServiceFields,
   type CarryFieldFace, type CarryValues,
@@ -159,16 +160,13 @@ import {
 const activeTab = ref('service')
 
 // ── 服务绑定 ──────────────────────────────────────────────
-/** 行三态:hasRow=false 无行(不注入);isNull=true 显式 null;否则空串/字串值。
+/** 行三态:hasRow=false 无行;isNull=true 显式 null;否则空串/字串值。
  *  拆成布尔列是必须的 —— el-input 的 v-model 会把 null 折叠成 '',
- *  空串值/null/无行在输入框里不可区分(task-15 执行注)。 */
-interface ServiceRow {
-  path: string
+ *  空串值/null/无行在输入框里不可区分(task-15 执行注)。
+ *  保存编码(任何输入即建行,修复 R1-B1)收敛在 buildServiceEntries。 */
+interface ServiceRow extends ServiceCarryRow {
   type: string
   description: string
-  value: string
-  isNull: boolean
-  hasRow: boolean
 }
 
 const service = ref('')
@@ -237,14 +235,15 @@ function removeBindingRow(row: ServiceRow) {
 
 async function saveService() {
   if (!service.value) return
-  const entries: CarryValues = {}
-  for (const r of rows.value) {
-    if (!r.hasRow) continue // 无行 → 不配置
-    entries[r.path] = r.isNull ? null : r.value // null → 显式 null;'' → 空串值
-  }
+  // 编码规则(R1-B1 修复):无行且无输入才跳过 —— hasRow=false 的行
+  // 输入框可编辑(透全局默认 placeholder),用户填了值必须建行,
+  // 旧 `!hasRow → continue` 会静默丢弃并假报"已保存"
+  const entries = buildServiceEntries(rows.value)
   try {
     await putBindings(service.value, entries)
     ElMessage.success('已保存')
+    // 回读:让 hasRow/isNull 与刚落库的状态一致(新建行亮出「删行」)
+    void onServiceChange()
     // allow-create 的新服务入库后刷新候选列表
     loadBindings().catch(() => { /* 候选列表刷新失败不惊动已成功的保存提示 */ })
   } catch (e) {
@@ -271,7 +270,23 @@ function addDefaultRow() {
   defaultRows.value.push({ path: '', value: '', isNull: false })
 }
 
+/** 重复 path 会让后写行静默覆盖先行(dict 键折叠)— 保存前拦截(R1-M2)。 */
+function firstDuplicatePath(rows: DefaultRow[]): string | null {
+  const seen = new Set<string>()
+  for (const r of rows) {
+    if (!r.path) continue
+    if (seen.has(r.path)) return r.path
+    seen.add(r.path)
+  }
+  return null
+}
+
 async function saveDefaults() {
+  const dup = firstDuplicatePath(defaultRows.value)
+  if (dup) {
+    ElMessage.warning(`字段路径重复:${dup} — 保存会静默覆盖,请先去重`)
+    return
+  }
   const entries: CarryValues = {}
   for (const r of defaultRows.value) {
     if (!r.path) continue
