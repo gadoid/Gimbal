@@ -200,6 +200,15 @@ async def test_manual_op_validation(client, plate):
     assert no_ds.status_code == 400
     assert "op_needs_dataset" in no_ds.json()["detail"]
 
+    # 场景类 op 漏传 scenarioId → op_needs_scenario(而非 KeyError→误导 404)
+    no_sc = await client.post(
+        f"/api/adaptations/batches/{batch_id}/ops",
+        json={"opType": "renameVar",
+              "payload": {"from": "amount", "to": "amt"}},
+        headers=admin)
+    assert no_sc.status_code == 400
+    assert "op_needs_scenario" in no_sc.json()["detail"]
+
     ok = await client.post(
         f"/api/adaptations/batches/{batch_id}/ops",
         json={"opType": "renameVar", "scenarioId": "sc-api",

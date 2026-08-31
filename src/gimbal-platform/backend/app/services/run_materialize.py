@@ -138,7 +138,7 @@ def _coerce_carry_value(value: str, ftype: str) -> Any:
             return value
         if ftype in ("object", "array"):
             return json.loads(value)
-    except (ValueError, json.JSONDecodeError):
+    except ValueError:  # json.JSONDecodeError 继承 ValueError,无需并列
         pass
     return value
 

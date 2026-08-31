@@ -31,18 +31,11 @@ from ..schemas.adaptations import (
 from ..services import adaptation_service
 from ..services.endpoint_ref_index import unindexed_steps as collect_unindexed
 from ..services.plate_client import PlateUnavailableError
-from ._error_mapping import key_error_404, value_error_http
+from ._error_mapping import _plate_502, key_error_404, value_error_http
 
 router = APIRouter(prefix="/adaptations", tags=["adaptations"])
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
-
-
-def _plate_502(e: PlateUnavailableError) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_502_BAD_GATEWAY,
-        detail={"code": "plate_unavailable", "message": e.message},
-    )
 
 
 @router.post("/catalog/diff", response_model=CatalogDiffReport)

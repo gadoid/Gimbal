@@ -22,7 +22,7 @@ from ..schemas.carry import (
 )
 from ..services import carry_store
 from ..services.plate_client import PlateUnavailableError
-from .adaptations import _plate_502
+from ._error_mapping import _plate_502
 
 router = APIRouter(prefix="/carry", tags=["carry"])
 
@@ -78,7 +78,7 @@ async def drift(user: AdminUser, db=DbSession):
 
 
 @router.get("/bindings/{service}/fields", response_model=ServiceFieldsOut)
-async def service_fields(service: str, user: AdminUser, db=DbSession):
+async def service_fields(service: str, user: AdminUser):
     """该服务全部接口 carry 面并集:GET /api/endpoint?service= → 逐 id /full。
     任一端点 /full 失败(抛错或 404)→ degraded=True:面不完整,
     配置页整表替换保存会删不可见端点的绑定值,须据此禁存。"""

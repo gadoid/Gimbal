@@ -82,7 +82,7 @@ async def test_service_fields_degraded_when_single_full_fails(client, plate):
 
 
 async def test_service_fields_502_when_plate_list_down(client, plate):
-    """plate 列表级故障 → 502(adaptations._plate_502 同款信封);
+    """plate 列表级故障 → 502(_error_mapping._plate_502 同款信封);
     循环内单端点 /full 失败的降级跳过由聚合测试覆盖,此处只提升列表级。"""
     plate.down = True
     admin = await _admin(client)

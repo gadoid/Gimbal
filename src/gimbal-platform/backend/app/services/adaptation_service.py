@@ -919,6 +919,8 @@ async def create_op(
         pass  # 无场景/数据集寻址;payload.service 决定触哪张值表
     elif op_type in DATASET_OPS and not dataset_id:
         raise ValueError(f"op_needs_dataset: {op_type} requires datasetId")
+    elif not scenario_id:
+        raise ValueError(f"op_needs_scenario: {op_type} requires scenarioId")
     batch = await _get_batch(db, batch_id)
     if batch.status != "open":
         raise ValueError(

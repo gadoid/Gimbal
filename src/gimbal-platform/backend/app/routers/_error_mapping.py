@@ -13,7 +13,9 @@ error code meant remembering to update every hand-written if-chain.
 """
 from __future__ import annotations
 
-from fastapi import HTTPException
+from fastapi import HTTPException, status
+
+from ..services.plate_client import PlateUnavailableError
 
 
 def key_error_404(e: KeyError) -> HTTPException:
@@ -47,3 +49,10 @@ def value_error_http(
     msg = str(e)
     code = msg.split(":", 1)[0]
     return HTTPException(status_code=codes.get(code, default), detail=msg)
+
+
+def _plate_502(e: PlateUnavailableError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail={"code": "plate_unavailable", "message": e.message},
+    )
