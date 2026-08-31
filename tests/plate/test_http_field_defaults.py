@@ -119,4 +119,4 @@ def test_field_defaults_generated_fields_from_response() -> None:
     assert resp.status_code == 200
     generated = resp.json()["data"]["generated_fields"]
     assert generated and generated[0]["name"] == "internal_note"
-    assert generated[0]["carry"] is True
+    assert generated[0]["generated"] is True

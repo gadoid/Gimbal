@@ -1126,6 +1126,15 @@ class TestCarryEntry:
         with pytest.raises(ValueError, match="不是合法 path"):
             RequestSpec(body_type="json", schema_={}, carry={"$[": CarryEntry()})
 
+    def test_carry_rejects_duplicate_after_normalization(self) -> None:
+        # 短名与 JSONPath 归一后同键($.remark)— dict 字面键不折叠,
+        # 校验必须显式拦截(io_spec._validate 归一后重复键规则)。
+        with pytest.raises(ValueError, match="归一后重复键"):
+            RequestSpec(
+                body_type="json", schema_={},
+                carry={"remark": CarryEntry(), "$.remark": CarryEntry()},
+            )
+
     def test_carry_disjoint_from_fields_paths(self) -> None:
         with pytest.raises(ValueError, match="交集非空"):
             RequestSpec(

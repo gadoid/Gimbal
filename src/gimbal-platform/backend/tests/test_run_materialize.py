@@ -218,6 +218,10 @@ class TestCarryFill:
         # 降级门控:候选 = 绑定键 ∪ 全局默认键
         assert body["remark"] == "压测-张三"
         assert body["appCode"] == "TRACE-V2"
+        # 降级无类型 → 透传不转换:候选 dict 的"类型"位实际是值串,
+        # coerce 无分支命中 — "true" 保持字符串,不得变 boolean True
+        assert body["flag"] == "true"
+        assert body["meta"] == "{\"k\": 1}"
 
     def test_carry_context_none_behaves_as_today(self):
         out = materialize_run_copy(_carry_converted())

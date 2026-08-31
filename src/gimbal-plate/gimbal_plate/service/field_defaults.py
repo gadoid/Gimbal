@@ -83,7 +83,9 @@ def compute_field_defaults(
 
     # generated_fields: placeholders for the schema-only / generated channel.
     # (响应侧 generated 字段清单;2026-08-31 起 "carry" 一词专指请求侧
-    #  传递字段 —— RequestSpec.carry,spec carry 设计 §2.1.1 术语唯一化。)
+    #  传递字段 —— RequestSpec.carry,spec carry 设计 §2.1.1 术语唯一化;
+    #  条目内层旗标同步由 "carry": True 改名 "generated": True,
+    #  全仓零生产消费方,仅本测试锁形状。)
     generated_fields: list[dict[str, Any]] = []
     resp_200 = endpoint.responses.get(200)
     if resp_200 is not None:
@@ -94,7 +96,7 @@ def compute_field_defaults(
                 {
                     "name": f.name,
                     "type": f.ui_kind if f.ui_kind != "unknown" else "string",
-                    "carry": True,
+                    "generated": True,
                     "default": f.default if f.default is not None else "",
                 }
             )

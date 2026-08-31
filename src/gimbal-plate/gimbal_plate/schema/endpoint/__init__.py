@@ -2,6 +2,7 @@
 from gimbal_plate.schema.endpoint.api_spec import ApiSpec
 from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
 from gimbal_plate.schema.endpoint.io_spec import (
+    CarryEntry,
     IOFieldBinding,
     RequestSpec,
     ResponseSpec,
@@ -10,6 +11,7 @@ from gimbal_plate.schema.endpoint.metadata import EndpointMetadata
 
 __all__ = [
     "ApiSpec",
+    "CarryEntry",
     "EndpointSpec",
     "IOFieldBinding",
     "RequestSpec",
