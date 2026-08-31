@@ -98,3 +98,67 @@ async def test_run_carry_degrades_when_plate_face_unavailable(
 
     body = cases[0]["steps"][0]["request"]["body"]
     assert body["remark"] == "压测-张三"
+
+
+async def test_run_carry_skips_step_when_service_not_in_catalog(
+        client: AsyncClient, plate_mock: PlateMock, monkeypatch: MonkeyPatch
+) -> None:
+    """裸声明:服务不在 plate 目录 → derive_base 失败 → 该 step 跳过
+    carry 填充(无注入、无报错),run 正常完成(T9 评审补的边界)。"""
+    plate_mock.behaviour = "echo"
+    plate_mock.services = []  # 空目录 → fin-service 是裸声明
+    plate_mock.fulls = {  # face 有锚点也无效:服务解析失败先短路
+        "fin.settlement.create_order": {"request": {"carry": {
+            "$.remark": {"type": "string"},
+            "$.appCode": {"type": "string"}}}},
+    }
+    await _seed_values()
+    bob = await _member(client, "bob")
+    await _create_scenario(client, bob)
+
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+    r = await client.post("/api/runs", headers=bob,
+                          json=_run_payload(dataSetIds=[]))
+    assert r.status_code == 201, r.text
+    await _wait(lambda: len(cases) >= 1)
+
+    # step 被整步跳过:body 只有原值,无任何 carry 注入痕迹
+    assert cases[0]["steps"][0]["request"]["body"] == {"order_id": "o-1"}
+
+
+async def test_run_completes_when_carry_context_build_fails(
+        client: AsyncClient, plate_mock: PlateMock, monkeypatch: MonkeyPatch
+) -> None:
+    """build_carry_context 在 dispatcher 层抛异常 → 降级 carry_ctx=None,
+    run 仍完成、case 正常产出(无注入)— carry 是增强不是前置条件
+    (T9 评审补的边界)。"""
+    plate_mock.behaviour = "echo"
+    plate_mock.services = [{"name": "fin-service"}]
+    plate_mock.fulls = {
+        "fin.settlement.create_order": {"request": {"carry": {
+            "$.remark": {"type": "string"},
+            "$.appCode": {"type": "string"}}}},
+    }
+    await _seed_values()
+
+    async def _boom(db, definition):
+        raise RuntimeError("carry boom")
+
+    # _fanout 内是函数级 import(from .carry_injection import ...)—
+    # 打模块属性,调用时才解析,monkeypatch 生效。
+    monkeypatch.setattr(
+        "app.services.carry_injection.build_carry_context", _boom)
+
+    bob = await _member(client, "bob")
+    await _create_scenario(client, bob)
+
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+    r = await client.post("/api/runs", headers=bob,
+                          json=_run_payload(dataSetIds=[]))
+    assert r.status_code == 201, r.text
+    await _wait(lambda: len(cases) >= 1)
+
+    # 无 carry 注入,body 原值;case 已产出(执行链未受影响)
+    assert cases[0]["steps"][0]["request"]["body"] == {"order_id": "o-1"}

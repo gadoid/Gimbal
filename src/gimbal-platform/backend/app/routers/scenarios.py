@@ -44,6 +44,7 @@ from ..schemas.scenario_composer import (
 )
 from ..services import plate_client, run_dispatcher, scenario_store
 from ..services.auth_ref_scan import scan_auth_aliases
+from ..services.carry_injection import build_carry_context
 from ..services.marks_store import stars
 from ..services.run_materialize import materialize_run_copy
 
@@ -170,12 +171,23 @@ async def preview_plate(
         # (plate 会剥平台视图字段,内置认证以场景定义为唯一可信源)
         def_cfg = (body.definition.get("config") or {})
         built_in = def_cfg.get("users") if isinstance(def_cfg.get("users"), dict) else {}
+        # carry 同源注入(spec §4.3):与 dispatch 共用 build_carry_context
+        # → 导出产物 = 绑定状态的当时快照。plate 故障在 build 内部降级
+        # (不注入,不 5xx);此处再兜一层 — carry 是增强不是前置条件,
+        # 任何故障(含 DB)都降级为无 carry,绝不阻塞导出。
+        try:
+            carry_ctx = await build_carry_context(db, body.definition)
+        except Exception:  # noqa: BLE001 — carry 绝不阻塞导出
+            logger.opt(exception=True).warning(
+                "preview_plate: carry context build failed; skipped")
+            carry_ctx = None
         converted = materialize_run_copy(
             converted,
             service_bindings={k: b.model_dump(by_alias=True)
                               for k, b in body.overlay.service_bindings.items()},
             resolved_auths=exec_auths,
             built_in_users=dict(built_in or {}),
+            carry_context=carry_ctx,
         )
     inner_errors = converted.get("errors") or []
     return PreviewPlateResponse(

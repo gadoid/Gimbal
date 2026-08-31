@@ -557,7 +557,11 @@ async def _fanout(
     # payload(防写穿 ORM 行)后预填一次,compose 内 setdefault 语义
     # 即复用同一值 → 同一行重复输入完全一致。
     scenario_payload = copy.deepcopy(scenario_payload)
-    plate_client.fill_plate_defaults(definition_from_payload(scenario_payload))
+    # 容器解包一次,fill_plate_defaults(就地补 meta)与 build_carry_context
+    # (读 steps)共用 — definition_from_payload 返回的是 payload 内同一
+    # dict 引用,重复解包只是多一次 .get。
+    definition = definition_from_payload(scenario_payload)
+    plate_client.fill_plate_defaults(definition)
 
     # P6:fan-out 级 convert memo + plate 连续不可用熔断计数。
     convert_cache: dict[str, dict] = {}
@@ -584,8 +588,7 @@ async def _fanout(
     from .carry_injection import build_carry_context
     try:
         async with db_factory() as _carry_db:
-            carry_ctx = await build_carry_context(
-                _carry_db, definition_from_payload(scenario_payload))
+            carry_ctx = await build_carry_context(_carry_db, definition)
     except Exception:  # noqa: BLE001 — carry 绝不阻塞执行
         logger.opt(exception=True).warning(
             "run_dispatcher: carry context build failed; skipped")

@@ -72,6 +72,51 @@ def _isolate_marks(tmp_path, monkeypatch):
     stars.clear_for_tests()
 
 
+@pytest.fixture(autouse=True)
+def _default_plate_stub():
+    """Hermeticity default: safe plate stub for tests without an explicit mock.
+
+    ``plate_client.get_client`` lazily builds a real client against
+    ``settings.PLATE_BASE_URL`` (localhost:8765) — since T9 any un-mocked
+    test that reaches ``build_carry_context`` (POST /api/runs, preview-plate
+    overlay) would hit the real network through ``catalog_service_names`` /
+    ``_carry_face``. This autouse fixture installs a MockTransport default
+    FIRST; explicit mocks (``plate_mock`` / ``plate`` / per-test
+    ``set_client_for_tests``) overwrite it later — autouse fixtures are
+    instantiated before same-scope explicitly-requested ones, so the
+    explicit mock always wins. Teardown is LIFO: the explicit mock's
+    ``set_client_for_tests(None)`` runs before ours (idempotent reset).
+
+    Responses mirror the degraded path these callers already take on real
+    plate failure: ``/api/service`` → empty catalog (``catalog_service_names``
+    → set()), ``/api/endpoint/*/full`` → 404 (``_carry_face`` → {}), anything
+    else (convert) → 503 → ``PlateUnavailableError`` (same 502 the router
+    already returns on connection-refused).
+    """
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/api/service":
+            return httpx.Response(200, json={
+                "ok": True, "dim": "service",
+                "data": {"items": [], "total": 0},
+            })
+        if path.startswith("/api/endpoint/") and path.endswith("/full"):
+            return httpx.Response(404, json={"ok": False})
+        return httpx.Response(503, json={"ok": False})
+
+    from app.services import plate_client
+
+    # 与既有 mock 桩同款:AsyncClient 不走 socket,uninstall 也不 aclose。
+    plate_client.set_client_for_tests(httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="http://plate-test-default",
+    ))
+    try:
+        yield
+    finally:
+        plate_client.set_client_for_tests(None)
+
+
 @pytest.fixture
 async def client(fresh_db) -> AsyncGenerator[AsyncClient, None]:
     """ASGI test client wired to a freshly-built FastAPI app.

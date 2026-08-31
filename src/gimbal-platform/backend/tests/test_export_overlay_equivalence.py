@@ -20,6 +20,7 @@ from sqlalchemy import select
 from app.core import db as db_module
 from app.core.security import fernet_encrypt
 from app.models import AuthSession, User
+from app.services import carry_store
 
 from .helpers import make_draft as _draft, wait_until as _wait
 from .test_run_m1_capabilities import _patch_launch_capture, _run_payload
@@ -58,8 +59,25 @@ def _eq_draft() -> dict:
     return _draft(steps=[_STEP], vars_map={}, **_META)
 
 
-async def _seed(client, headers) -> None:
-    r = await client.post("/api/scenarios", headers=headers, json=_eq_draft())
+# carry 形态 step(spec §4.3):同 _STEP 的 qa1/qa2 headers 并集锚 +
+# view_hints.endpoint_id(carry 面)+ request.body(注入载体)。
+def _carry_step() -> dict:
+    return {"kind": "step",
+            "api": {"service": "fin-service", "path": "/x",
+                    "headers": {"Authorization": "${auth.qa1.token}",
+                                "X-Api-Key": "${auth.qa2.token}"},
+                    "view_hints": {"endpoint_id": "fin.ep1"}},
+            "request": {"kind": "request", "body": {"order_id": "o-1"}}}
+
+
+def _eq_draft_with_carry() -> dict:
+    """同 _eq_draft 但 step 换成带 carry 锚点的形态。"""
+    return _draft(steps=[_carry_step()], vars_map={}, **_META)
+
+
+async def _seed(client, headers, draft: dict | None = None) -> None:
+    r = await client.post("/api/scenarios", headers=headers,
+                          json=draft or _eq_draft())
     assert r.status_code in (200, 201), r.text
 
 
@@ -147,6 +165,48 @@ async def test_golden_equivalence_export_equals_baseline_case_json(
     # 并集:qa1(绑定 + 模板)与 qa2(仅模板)都注入,凭证来自同一凭证池
     assert set(exported["config"]["users"]) == {"qa1", "qa2"}
     assert exported["config"]["users"]["qa2"]["username"] == "qa2-user"
+
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+    r = await client.post("/api/runs", headers=bob, json=_run_payload(
+        dataSetIds=[], serviceBindings=OVERLAY["serviceBindings"]))
+    assert r.status_code == 201, r.text
+    await _wait(lambda: len(cases) >= 1)
+
+    assert cases[0] == exported
+
+
+# ─── carry 黄金等价(spec §4.3)────────────────────────────────────
+async def test_golden_equivalence_with_carry(
+        client, plate_mock: PlateMock, monkeypatch):
+    """carry 物化同源:导出产物 ≡ 基线单行 case.json,含注入后的 carry 值。
+
+    导出链与 dispatch 共用 build_carry_context(快照语义:导出产物 =
+    绑定状态的当时快照)— face(锚点)+ 服务绑定 + 全局默认三层,
+    两路物化逐字段相等。
+    """
+    plate_mock.behaviour = "echo"
+    plate_mock.services = [{"name": "fin-service"}]
+    plate_mock.fulls = {"fin.ep1": {"request": {"carry": {
+        "$.remark": {"type": "string"},
+        "$.appCode": {"type": "string"}}}}}
+    async with db_module.SessionLocal() as db:
+        await carry_store.put_bindings(
+            db, "fin-service", {"$.remark": "压测-张三"}, "bob")
+        await carry_store.put_defaults(db, {"$.appCode": "TRACE-V2"}, "bob")
+        await db.commit()
+
+    bob = await _member(client, "bob")
+    await _seed(client, bob, draft=_eq_draft_with_carry())
+    await _seed_owner_auth("qa1")
+    await _seed_owner_auth("qa2")
+
+    exported = (await client.post(
+        "/api/scenarios/preview-plate", headers=bob,
+        json={**_eq_draft_with_carry(), "overlay": OVERLAY})).json()["converted"]
+    body = exported["steps"][0]["request"]["body"]
+    assert body["remark"] == "压测-张三"
+    assert body["appCode"] == "TRACE-V2"
 
     cases: list[dict] = []
     _patch_launch_capture(monkeypatch, cases)
