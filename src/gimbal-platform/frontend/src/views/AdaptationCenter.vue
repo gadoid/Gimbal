@@ -170,7 +170,9 @@
       />
       <el-empty
         v-else-if="carryDrift.length === 0"
-        description="暂无服务 carry 数据(无绑定且 plate 面为空)"
+        :description="carryLoadFailed
+          ? '加载失败,请刷新'
+          : '暂无服务 carry 数据(无绑定且 plate 面为空)'"
       />
       <div v-else class="drift-list">
         <div
@@ -297,6 +299,8 @@ const carryPlateReachable = ref(true)
 const carryDriftLoading = ref(false)
 const carryGenerating = ref(false)
 const carryChecked = ref<string[]>([])
+/** 拉取失败标志:失败时空态须说"加载失败"而非误导性的"暂无数据"。 */
+const carryLoadFailed = ref(false)
 
 const carryDriftTotal = computed(() =>
   carryDrift.value.reduce((n, s) =>
@@ -307,12 +311,14 @@ const canGenerate = computed(
 
 async function loadCarryDrift(): Promise<void> {
   carryDriftLoading.value = true
+  carryLoadFailed.value = false
   try {
     const report = await getDrift()
     carryPlateReachable.value = report.plateReachable
     carryDrift.value = report.services
     carryChecked.value = []
   } catch (e) {
+    carryLoadFailed.value = true
     ElMessage.error(api.errMsg(e, 'carry 漂移拉取失败'))
   } finally {
     carryDriftLoading.value = false

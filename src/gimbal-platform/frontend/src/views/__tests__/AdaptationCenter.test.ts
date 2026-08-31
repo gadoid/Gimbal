@@ -280,4 +280,53 @@ describe('AdaptationCenter', () => {
     expect(router.currentRoute.value.path).toBe('/adaptations/batches/bt-carry-fin.risk')
     w.unmount()
   })
+
+  it('admin:单服务双 op — createOp 调用序保持勾选序,生成后刷新批次表', async () => {
+    login(true)
+    mockAdminBasics()
+    const listSpy = vi.mocked(api.listBatches)
+    mockDrift([
+      { service: 'fin.order', orphaned: ['$.old_a', '$.old_b'],
+        uncovered: [], renamedSuggestions: [] },
+    ])
+    vi.spyOn(api, 'openCarryBatch').mockImplementation(async (svc) => ({
+      batchId: `bt-carry-${svc}`, endpointId: `carry:${svc}`,
+      fromVersion: '-', toVersion: '-', status: 'open' as const, operatorId: 1,
+      createdAt: '2026-08-31T00:00:00Z', closedAt: null, opCounts: {},
+      ops: [], snapshots: [],
+    }))
+    const createSpy = vi.spyOn(api, 'createOp').mockResolvedValue({
+      id: 1, batchId: 'x', scenarioId: null, datasetId: null,
+      opType: 'removeCarryBinding', payload: {}, status: 'pending',
+      appliedAt: null, note: null,
+    } as never)
+
+    const { w } = await mountPage()
+
+    // 勾选序 = 点击序:先勾第 2 项($.old_b)再勾第 1 项($.old_a)
+    // — 断言 op 序跟勾选序而非选项渲染序
+    const boxes = w.findAll('.drift-checks .el-checkbox')
+    expect(boxes.length).toBe(2)
+    await boxes[1].find('input').setValue(true)
+    await boxes[0].find('input').setValue(true)
+
+    await w.find('[data-action="carry-generate"]').trigger('click')
+    await flushPromises()
+
+    // 单服务只开一批;双 op 逐条 createOp,序 = 勾选序(old_b 先于 old_a)
+    expect(api.openCarryBatch).toHaveBeenCalledTimes(1)
+    expect(api.openCarryBatch).toHaveBeenCalledWith('fin.order')
+    expect(createSpy).toHaveBeenCalledTimes(2)
+    expect(createSpy).toHaveBeenNthCalledWith(1, 'bt-carry-fin.order', {
+      opType: 'removeCarryBinding',
+      payload: { service: 'fin.order', path: '$.old_b' },
+    })
+    expect(createSpy).toHaveBeenNthCalledWith(2, 'bt-carry-fin.order', {
+      opType: 'removeCarryBinding',
+      payload: { service: 'fin.order', path: '$.old_a' },
+    })
+    // 生成完成后批次表刷新(首进 1 次 + 生成后 1 次)
+    expect(listSpy).toHaveBeenCalledTimes(2)
+    w.unmount()
+  })
 })

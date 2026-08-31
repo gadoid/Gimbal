@@ -41,7 +41,9 @@ vi.mock('@/api/scenario-composer', () => ({
   getFullEndpoint: vi.fn().mockImplementation((endpointId: string) => Promise.resolve({
     request: {
       // /full 请求字段契约(现拉渲染的主数据源)。ep-1: orderId 平铺;
-      // ep-2(T6 嵌套注入用): nested.oid
+      // ep-2(T6 嵌套注入用): nested.oid;
+      // ep-carry(reqTypeC carry 过滤用例): request.carry 声明 $.remark
+      // 且 schema properties 另含 remark + hidden_req → 差集须滤 carry 键
       fields: endpointId === 'ep-2'
         ? [{
             name: 'oid', path: '$.nested.oid', ui_kind: 'text',
@@ -53,7 +55,15 @@ vi.mock('@/api/scenario-composer', () => ({
             source_kind: 'independent', required: true,
             description: null, example: null, default: null, enum: null,
           } as any],
-      model_schema: { properties: { hidden_req: { type: 'string', default: 'hd-default' } } },
+      carry: endpointId === 'ep-carry'
+        ? { '$.remark': { type: 'string' } }
+        : undefined,
+      model_schema: endpointId === 'ep-carry'
+        ? { properties: {
+            hidden_req: { type: 'string', default: 'hd-default' },
+            remark: { type: 'string' },
+          } }
+        : { properties: { hidden_req: { type: 'string', default: 'hd-default' } } },
     },
     responses: {
       '200': {
@@ -409,6 +419,28 @@ describe('CaseComposerCanvas — 右栏分流 + Type C(C3)', () => {
     // response 签:200 契约 schema 差集 trace_id(响应侧仍为只读块)
     expect(w.findAll('.typec-block').length).toBe(1)
     expect(w.find('.typec-block').text()).toContain('trace_id')
+  })
+
+  it('T21b: reqTypeC carry 过滤 — request.carry 声明键不进「其他字段」', async () => {
+    // ep-carry:schema 差集 = hidden_req + remark,其中 $.remark 声明在
+    // request.carry(值由 platform 运行时注入,编排面零感知)→ 必须滤除;
+    // hidden_req 非传递键,照常进「其他字段」证明过滤是选择性的。
+    const s0 = mkStep({
+      api: {
+        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+        headers: {}, view_hints: { endpoint_id: 'ep-carry' },
+      },
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    const extras = w.find('[data-testid="extra-fields"]')
+    expect(extras.exists()).toBe(true)
+    await w.find('.extras-toggle').trigger('click')
+    expect(extras.text()).toContain('hidden_req')
+    expect(extras.text()).not.toContain('remark')
+    // 请求签整体不出现 remark 输入(未被滤除即会产生重复注入入口)
+    expect(w.text()).not.toContain('remark')
+    w.unmount()
   })
 })
 
