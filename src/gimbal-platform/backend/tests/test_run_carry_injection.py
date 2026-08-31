@@ -142,7 +142,10 @@ async def test_run_completes_when_carry_context_build_fails(
     }
     await _seed_values()
 
+    boom_calls = {"n": 0}
+
     async def _boom(db, definition):
+        boom_calls["n"] += 1
         raise RuntimeError("carry boom")
 
     # _fanout 内是函数级 import(from .carry_injection import ...)—
@@ -160,5 +163,8 @@ async def test_run_completes_when_carry_context_build_fails(
     assert r.status_code == 201, r.text
     await _wait(lambda: len(cases) >= 1)
 
+    # 确实走过了 build_carry_context(防未来重构删掉 _fanout 里的调用,
+    # 本降级测试空转通过)
+    assert boom_calls["n"] >= 1
     # 无 carry 注入,body 原值;case 已产出(执行链未受影响)
     assert cases[0]["steps"][0]["request"]["body"] == {"order_id": "o-1"}

@@ -53,6 +53,30 @@ async def test_service_fields_aggregates_carry_face(client, plate):
         {"path": "$.remark", "type": "string", "description": "备注"}]
 
 
+async def test_service_fields_502_when_plate_list_down(client, plate):
+    """plate 列表级故障 → 502(adaptations._plate_502 同款信封);
+    循环内单端点 /full 失败的降级跳过由聚合测试覆盖,此处只提升列表级。"""
+    plate.down = True
+    admin = await _admin(client)
+    r = await client.get("/api/carry/bindings/fin-service/fields",
+                         headers=admin)
+    assert r.status_code == 502, r.text
+    assert r.json()["detail"]["code"] == "plate_unavailable"
+
+
+async def test_put_defaults_missing_body_is_422(client):
+    """缺 body → FastAPI 422(而非 body=None → AttributeError 500)。"""
+    admin = await _admin(client)
+    r = await client.put("/api/carry/defaults", headers=admin)
+    assert r.status_code == 422, r.text
+
+
+async def test_put_bindings_missing_body_is_422(client):
+    admin = await _admin(client)
+    r = await client.put("/api/carry/bindings/fin-service", headers=admin)
+    assert r.status_code == 422, r.text
+
+
 async def test_bindings_isolated_across_services(client):
     """跨服务隔离(Task 5 评审裁定):写 B 不得扰动 A 的行。"""
     admin = await _admin(client)

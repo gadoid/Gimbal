@@ -15,11 +15,14 @@ from ..schemas.carry import (
     CarryMapIn,
     DefaultsIn,
     DefaultsOut,
+    DriftReport,
     ServiceBindingsOut,
+    ServiceDrift,
     ServiceFieldsOut,
 )
 from ..services import carry_store
 from ..services.plate_client import PlateUnavailableError
+from .adaptations import _plate_502
 
 router = APIRouter(prefix="/carry", tags=["carry"])
 
@@ -39,7 +42,7 @@ async def get_defaults(user: CurrentUser, db=DbSession):
 
 
 @router.put("/defaults", response_model=DefaultsOut)
-async def put_defaults(user: AdminUser, db=DbSession, body: DefaultsIn = None):
+async def put_defaults(user: AdminUser, body: DefaultsIn, db=DbSession):
     await carry_store.put_defaults(db, body.defaults, user.username)
     await db.commit()
     return DefaultsOut(defaults=await carry_store.get_defaults(db))
@@ -58,12 +61,18 @@ async def get_bindings(service: str, user: CurrentUser, db=DbSession):
 
 
 @router.put("/bindings/{service}", response_model=ServiceBindingsOut)
-async def put_bindings(service: str, user: AdminUser, db=DbSession,
-                       body: CarryMapIn = None):
+async def put_bindings(service: str, user: AdminUser, body: CarryMapIn,
+                       db=DbSession):
     await carry_store.put_bindings(db, service, body.bindings, user.username)
     await db.commit()
     return ServiceBindingsOut(
         bindings=await carry_store.get_bindings(db, service))
+
+
+@router.get("/drift", response_model=DriftReport)
+async def drift(user: AdminUser, db=DbSession):
+    return DriftReport(services=[
+        ServiceDrift(**s) for s in await carry_store.carry_drift(db)])
 
 
 @router.get("/bindings/{service}/fields", response_model=ServiceFieldsOut)
@@ -71,7 +80,10 @@ async def service_fields(service: str, user: AdminUser, db=DbSession):
     """该服务全部接口 carry 面并集:GET /api/endpoint?service= → 逐 id /full。"""
     from ..services.adaptation_service import _plate_full_endpoint
 
-    client_items = await _plate_list_endpoints_filtered(service)
+    try:
+        client_items = await _plate_list_endpoints_filtered(service)
+    except PlateUnavailableError as e:
+        raise _plate_502(e) from e
     faces: dict[str, CarryFieldFace] = {}
     for item in client_items:
         try:
