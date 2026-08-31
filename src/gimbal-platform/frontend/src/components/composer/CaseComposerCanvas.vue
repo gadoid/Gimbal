@@ -1056,7 +1056,10 @@ function carryInjectable(step: StepView): Map<string, CarrySource> {
   const face = Object.keys(full?.request?.carry ?? {})
   if (!face.length) return new Map()
   const base = deriveBase(step.api?.service || '', catalogNames.value)
-  const bound = base ? carryValues.value.bindings[base] ?? {} : {}
+  // base=null(未知服务)→ 运行时整步跳过注入(carry_injection derive_base
+  // 失败短路),徽标不显示 — 与运行时行为对齐,不过度承诺
+  if (!base) return new Map()
+  const bound = carryValues.value.bindings[base] ?? {}
   return carryHint(face, bound, carryValues.value.defaults)
 }
 

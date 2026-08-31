@@ -83,6 +83,12 @@ vi.mock('@/api/scenario-composer', () => ({
 vi.mock('@/api/auth_sessions', () => ({
   list: vi.fn().mockResolvedValue([]),
 }))
+// carry 值表默认空(与未 mock 时拉取失败 → carryValues=null 行为一致,
+// 既有用例零影响);E8 徽标用例内 mockResolvedValueOnce 注入非空默认
+vi.mock('@/api/carry', () => ({
+  getDefaults: vi.fn().mockResolvedValue({}),
+  getBindings: vi.fn().mockResolvedValue({}),
+}))
 // 目录服务名加载器 mock(别名派生 deriveBase 的唯一外部输入)—— 用例
 // 不碰 /plate 网络;catalog miss 时锚点回落 deriveBase(当前 api.service)。
 vi.mock('@/utils/catalog-services', () => ({
@@ -440,6 +446,25 @@ describe('CaseComposerCanvas — 右栏分流 + Type C(C3)', () => {
     expect(extras.text()).not.toContain('remark')
     // 请求签整体不出现 remark 输入(未被滤除即会产生重复注入入口)
     expect(w.text()).not.toContain('remark')
+    w.unmount()
+  })
+
+  it('E8: carry 徽标 base-null 守卫 — 未知服务(裸声明)不显徽标', async () => {
+    // 已知服务(catalog 内)显徽标为对照,证明值表/face 链路通;
+    // 裸声明服务 deriveBase=null → 运行时整步跳过注入(carry_injection
+    // 失败短路)→ 徽标不得显示(不过度承诺)
+    const { getDefaults } = await import('@/api/carry')
+    vi.mocked(getDefaults).mockResolvedValueOnce({ '$.remark': '默认备注' })
+    const withEid = (svc: string): StepView => {
+      const s = stepOf(svc)
+      ;(s.api as any).view_hints = { endpoint_id: 'ep-carry' }
+      return s
+    }
+    const { w } = mountCanvas([withEid('fin-service'), withEid('ghost-svc')])
+    await flushPromises()
+    const rows = w.findAll('.step-row')
+    expect(rows[0].find('.carry-badge').exists()).toBe(true)   // 对照:显
+    expect(rows[1].find('.carry-badge').exists()).toBe(false)  // 裸声明:无
     w.unmount()
   })
 })
