@@ -9,6 +9,7 @@ from .catalog_version import CatalogVersion
 from .adaptation_batch import AdaptationBatch
 from .adaptation_snapshot import AdaptationSnapshot
 from .adaptation_op import AdaptationOp
+from .carry_binding import CarryGlobalDefault, CarryServiceBinding
 
 __all__ = [
     "User",
@@ -22,4 +23,6 @@ __all__ = [
     "AdaptationBatch",
     "AdaptationSnapshot",
     "AdaptationOp",
+    "CarryGlobalDefault",
+    "CarryServiceBinding",
 ]
