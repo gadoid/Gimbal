@@ -51,12 +51,20 @@ class OpenBatchIn(BaseModel):
     endpoint_id: str = Field(alias="endpointId", min_length=1)
 
 
+class CarryBatchIn(BaseModel):
+    """POST /adaptations/carry-batches 请求体(spec §7):service 缺省 = 全局默认表。"""
+
+    model_config = _CAMEL
+
+    service: str | None = Field(default=None, min_length=1)
+
+
 class OpOut(BaseModel):
     model_config = _CAMEL
 
     id: int
     batch_id: str = Field(alias="batchId")
-    scenario_id: str = Field(alias="scenarioId")
+    scenario_id: str | None = Field(default=None, alias="scenarioId")
     dataset_id: str | None = Field(default=None, alias="datasetId")
     op_type: str = Field(alias="opType")
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -95,7 +103,7 @@ class OpCreateIn(BaseModel):
     model_config = _CAMEL
 
     op_type: str = Field(alias="opType", min_length=1)
-    scenario_id: str = Field(alias="scenarioId", min_length=1)
+    scenario_id: str | None = Field(default=None, alias="scenarioId")
     dataset_id: str | None = Field(default=None, alias="datasetId")
     payload: dict[str, Any] = Field(default_factory=dict)
 

@@ -13,6 +13,8 @@ def test_op_constants():
     assert ALL_OPS == (
         "renameField", "addField", "removeField", "rebindField", "mapValue",
         "renameDatasetColumn", "mapDatasetValues", "renameVar",
+        # carry 值表类(spec §7,Task 12):service 缺省 = 全局默认表
+        "renameCarryPath", "addCarryBinding", "removeCarryBinding",
     )
 
 

@@ -18,6 +18,7 @@ from ..core.deps import AdminUser, CurrentUser
 from ..schemas.adaptations import (
     BatchDetail,
     BatchOut,
+    CarryBatchIn,
     CatalogDiffReport,
     ImpactItem,
     OpenBatchIn,
@@ -94,6 +95,18 @@ async def open_batch(
         raise value_error_http(e, codes={
             "no_baseline": 409, "no_pending_change": 409,
         }) from e
+    return BatchDetail.model_validate(detail)
+
+
+@router.post("/carry-batches", response_model=BatchDetail, status_code=201)
+async def open_carry_batch(
+    user: AdminUser, body: CarryBatchIn, db: DbSession,
+) -> BatchDetail:
+    """开 carry 值表批(漂移面板入口,spec §7);ops 经既有
+    POST /batches/{id}/ops,apply/rollback 走既有逐条/整批端点。"""
+    detail = await adaptation_service.open_carry_batch(
+        db, service=body.service, operator_id=user.id,
+    )
     return BatchDetail.model_validate(detail)
 
 

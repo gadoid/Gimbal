@@ -20,7 +20,8 @@ class AdaptationOp(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     batch_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    scenario_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    # carry 值表类 op 无场景落点(spec §7/D1 红利)→ 可空
+    scenario_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     dataset_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     op_type: Mapped[str] = mapped_column(String(32), nullable=False)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)

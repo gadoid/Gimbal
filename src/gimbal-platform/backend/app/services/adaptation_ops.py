@@ -14,7 +14,9 @@ STEP_OPS = ("renameField", "addField", "removeField", "rebindField", "mapValue")
 DATASET_OPS = ("renameDatasetColumn", "mapDatasetValues")
 # 场景全局 op(改 definition 任意处 + 联动数据集列)
 GLOBAL_OPS = ("renameVar",)
-ALL_OPS = STEP_OPS + DATASET_OPS + GLOBAL_OPS
+# carry 值表类 op(触 platform 两张值表;service 缺省 = 全局默认表)
+CARRY_OPS = ("renameCarryPath", "addCarryBinding", "removeCarryBinding")
+ALL_OPS = STEP_OPS + DATASET_OPS + GLOBAL_OPS + CARRY_OPS
 
 
 def _field_map(spec: dict | None) -> dict[str, dict]:
