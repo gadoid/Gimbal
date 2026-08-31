@@ -195,8 +195,11 @@ class EndpointDetailView(BaseModel):
 
     Output shape on the wire is unchanged from the previous pass-through:
     ``request`` / ``responses`` still serialise their ``@model_serializer``
-    keys (``model_schema`` / ``schema`` …) because those are produced by the
-    source types' own serializers, not by this view.
+    keys (``schema`` and, on requests, ``carry``) because those are produced
+    by the source types' own serializers, not by this view. The retired
+    ``model`` mechanism (and its ``model_schema`` / ``model_name`` serializer
+    keys) was removed on 2026-08-31; ``schema_`` is the sole structural
+    source of truth.
 
     Light :class:`EndpointView` returns only id / method / path /
     description / module / tags. The ``/full`` endpoint surfaces the full
@@ -649,7 +652,7 @@ class StrategyFieldDesc(BaseModel):
     独立而非直接复用 :class:`IOFieldBinding` 的原因:策略字段不是接口
     body 字段,``source_kind``(字段值来源语义)对策略无意义,且 name/path
     强一致校验是 endpoint 契约的规则。映射规则(enum→select / bool→boolean
-    / string→text / …)与 ``_bindings_from_model`` 保持一致。
+    / string→text / …)与 ``strategy_dim._bindings_from_schema`` 保持一致。
     """
 
     model_config = ConfigDict(extra="forbid")

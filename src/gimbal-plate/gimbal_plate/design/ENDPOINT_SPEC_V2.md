@@ -84,6 +84,7 @@ V1 §2.3 提到的 "Migrations 章节" 属于本条的课题范围(`version` 1.x
   - Q1=a：规则 A 硬拒。
   - Q2=b：规则 B "非 None" 即可。
   - Q3=b：model 与 schema_ **不强制互斥**，可并存；语义上 model 优先（`json_schema()` / `validate_body()` 均先看 `model`），`schema_` 仅作序列化/展示补充。
+    - **已随 model 机制退役移除（2026-08-31）**：carry 分支终审裁定 `model` 字段 / `_bindings_from_model` / `validate_body` 整体删除，`schema_` 成为唯一结构真源，本条并存语义不再适用（规则 B 同步收敛为 `schema_` 必须非 None）。
   - Q-A=a2：空 dict `{}` 在规则 A 的"必须为空"上下文中视为合规（不视为"非空"）。
   - Q-B=b1：空 dict `{}` 在规则 B 的"非空"上下文中视为合规（类型非 None 即满足）。
 - **`schema_` 字段别名桥接**：Python 构造端用 `schema_=...`（字段名），跨进程 JSON 形式用 `"schema"`（alias），pydantic `populate_by_name=True` 自动桥接。

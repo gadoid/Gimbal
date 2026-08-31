@@ -50,11 +50,11 @@ class _KindDescriptor:
 
 
 def _resolve_enum_refs(schema: dict[str, Any]) -> dict[str, Any]:
-    """把属性级的 ``$ref`` 展开为内联 enum,使 ``_bindings_from_model`` 可消费。
+    """把属性级的 ``$ref`` 展开为内联 enum,使 ``_bindings_from_schema`` 可消费。
 
     Pydantic v2 对 Enum 字段(Scope / AssertOperator / FailurePolicy)在属性级
     输出 ``{"$ref": "#/$defs/X"}`` 而非内联 ``enum``(2026-08-17 实测);
-    不解析会被 ``_bindings_from_model`` 误判为 ``ui_kind=unknown``。
+    不解析会被 ``_bindings_from_schema`` 误判为 ``ui_kind=unknown``。
     ``default`` 与 ``$ref`` 是 schema sibling,展开时保留不受影响。
     """
     defs = schema.get("$defs") or {}
@@ -84,11 +84,11 @@ def _resolve_enum_refs(schema: dict[str, Any]) -> dict[str, Any]:
 def _bindings_from_schema(schema: dict[str, Any]) -> list[dict[str, Any]]:
     """从(已解析 ref 的)JSON Schema 派生字段描述符 dict 列表。
 
-    与 ``_bindings_from_model`` 同一映射规则(enum→select / number→number /
-    boolean→boolean / string→text / array|object→json / else unknown),但接受
-    现成 schema —— 因为 Enum 字段的 ``$ref`` 必须先展开(见
-    ``_resolve_enum_refs``),而 ``_bindings_from_model`` 内部自行调
-    ``model_json_schema()`` 会重新拿到未解析的原始形态(2026-08-17 实测踩坑)。
+    映射规则:enum→select / number→number / boolean→boolean / string→text
+    / array|object→json / else unknown。接受现成 schema 而非 model 内省 ——
+    Enum 字段的 ``$ref`` 必须先展开(见 ``_resolve_enum_refs``),从 model
+    现生成会重新拿到未解析的原始形态(2026-08-17 实测踩坑;原
+    ``_bindings_from_model`` 内省路线已随 model 机制退役,2026-08-31)。
     """
     props = schema.get("properties") or {}
     required = set(schema.get("required") or [])

@@ -6,9 +6,10 @@
  *   键缺席 = 未配置(spec §3.1)。
  * - 读值表 CurrentUser(编排器提示,T14);写值表与 fields/drift 走
  *   AdminUser(配置页 T15 / 漂移面板 T16)。
- * - getDrift 返回完整 DriftReport:plateReachable=False 时 services 是
- *   降级空集(bb5a663)— 面板必须先判该信号再渲染清单/放开批生成入口,
- *   防把 plate 不可达误读成漂移。
+ * - getDrift 返回完整 DriftReport:plate 不可达(plateReachable=False)时
+ *   services 照常返回,但面视为空集 → 全部绑定误报为 orphaned —
+ *   消费方必须先判 plateReachable 再渲染清单/放行批生成,
+ *   防把不可达误读成漂移。
  *
  * http 是裸 axios 实例(响应拦截器透传 AxiosResponse),惯例同
  * api/adaptations.ts:解构 `.data`,baseURL 已含 /api,路径不带前缀。
@@ -75,7 +76,8 @@ export interface ServiceDrift {
   renamedSuggestions: Array<{ from: string; to: string }>
 }
 
-/** 漂移报告:plateReachable=False 时 services 为降级空集,先判信号再消费。 */
+/** 漂移报告:plateReachable=False 时 services 照常返回,但面视为空集 →
+ *  全部绑定误报为 orphaned — 先判该信号再渲染/放行批生成。 */
 export interface DriftReport {
   services: ServiceDrift[]
   plateReachable: boolean

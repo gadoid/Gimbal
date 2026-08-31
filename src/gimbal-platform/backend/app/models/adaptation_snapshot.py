@@ -15,7 +15,8 @@ class AdaptationSnapshot(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     batch_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    entity_type: Mapped[str] = mapped_column(String(16), nullable=False)  # scenario|dataset
+    # scenario|dataset|carry_binding(按服务)|carry_default(全局默认)
+    entity_type: Mapped[str] = mapped_column(String(16), nullable=False)
     entity_id: Mapped[str] = mapped_column(String(128), nullable=False)
     before_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
