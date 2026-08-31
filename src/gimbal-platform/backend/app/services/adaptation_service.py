@@ -22,7 +22,7 @@ from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..models.scenario_endpoint_ref import ScenarioEndpointRef
 from ..schemas.scenario_composer import DataSetDraft, ScenarioDraft
-from . import carry_store, data_set_store, plate_client, scenario_store
+from . import carry_store, data_set_store, endpoint_ref_index, plate_client, scenario_store
 from .adaptation_ops import (
     ALL_OPS,
     CARRY_OPS,
@@ -201,8 +201,6 @@ async def impact(
         ScenarioEndpointRef.source, ScenarioEndpointRef.field_name,
     )
     refs = (await db.execute(stmt)).scalars().all()
-    if not refs:
-        return []
     scenario_ids = sorted({r.scenario_id for r in refs})
     ds_rows = (await db.execute(
         select(ComposerDataSet).where(
@@ -232,6 +230,21 @@ async def impact(
                 hit_any = True
         if not hit_any:  # 变量默认值通路(vars 扁平值),不挂数据集
             out.append(entry)
+
+    if not field_name:
+        # 兜底直扫(spec §7):业务字段全空的锚点 step 零索引行 → 直扫
+        # payload 补 {field: None} 条目;与字段过滤互斥(带 field 时
+        # 兜底条目无 field 可比对,必零命中,不扫)。
+        covered = {(r.scenario_id, r.step_index) for r in refs}
+        scen_rows = (await db.execute(select(ComposerScenario).order_by(
+            ComposerScenario.scenario_id))).scalars().all()
+        for row in scen_rows:
+            for i in endpoint_ref_index.anchor_step_indexes(row.payload, endpoint_id):
+                if (row.scenario_id, i) in covered:
+                    continue
+                out.append({"scenarioId": row.scenario_id, "stepIndex": i,
+                            "source": None, "field": None, "viaVar": None,
+                            "datasetId": None, "datasetColumn": None})
     return out
 
 

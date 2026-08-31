@@ -28,8 +28,8 @@ export interface CatalogDiffReport {
 export interface ImpactItem {
   scenarioId: string
   stepIndex: number
-  source: 'body' | 'headers'
-  field: string
+  source: 'body' | 'headers' | null
+  field: string | null
   viaVar: string | null
   datasetId: string | null
   datasetColumn: string | null

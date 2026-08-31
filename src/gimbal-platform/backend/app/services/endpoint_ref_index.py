@@ -75,6 +75,21 @@ def parse_refs(
     return refs, unindexed
 
 
+def anchor_step_indexes(payload: dict | None, endpoint_id: str) -> list[int]:
+    """锚点=endpoint_id 的全部 step 下标(含业务字段全空者)— impact 兜底直扫用。
+
+    parse_refs 只为有业务字段(body/headers)的锚点 step 产行;业务字段
+    全空的锚点 step 零行 → 影响查询对其不可见,须按锚点直扫 payload 补位。
+    """
+    out: list[int] = []
+    for i, step in enumerate(_steps(payload)):
+        api = step.get("api") if isinstance(step.get("api"), dict) else {}
+        hints = api.get("view_hints") if isinstance(api.get("view_hints"), dict) else {}
+        if hints.get("endpoint_id") == endpoint_id:
+            out.append(i)
+    return out
+
+
 async def sync_scenario(
     db: AsyncSession, scenario_id: str, payload: dict | None
 ) -> None:

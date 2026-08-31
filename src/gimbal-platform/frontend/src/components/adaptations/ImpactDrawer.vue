@@ -70,8 +70,9 @@ const drawerTitle = computed(() =>
 const groups = computed(() => {
   const byField = new Map<string, ImpactItem[]>()
   for (const it of items.value) {
-    if (!byField.has(it.field)) byField.set(it.field, [])
-    byField.get(it.field)!.push(it)
+    const key = it.field ?? '(无业务字段)'
+    if (!byField.has(key)) byField.set(key, [])
+    byField.get(key)!.push(it)
   }
   return [...byField.entries()].map(([field, list]) => ({ field, items: list }))
 })

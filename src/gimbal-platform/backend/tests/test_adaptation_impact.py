@@ -82,3 +82,27 @@ async def test_impact_var_default_path_when_no_dataset_has_column(fresh_db):
         "field": "amount", "viaVar": "amount",
         "datasetId": None, "datasetColumn": "amount",
     }]
+
+
+async def test_impact_anchor_step_with_all_empty_fields(fresh_db):
+    """锚点 step 业务字段全空(body/headers 皆空)→ 零索引行,兜底直扫
+    出 {field: None} 条目(spec §7);字段过滤与兜底互斥(带 field 不扫)。"""
+    async with db_module.SessionLocal() as s:
+        await scenario_store.create(
+            s,
+            ScenarioDraft.model_validate(
+                make_draft("sc-imp3", steps=[{
+                    "api": {"view_hints": {"endpoint_id": EP}, "headers": {}},
+                    "request": {"body": {}},
+                }])
+            ),
+            owner="alice", owner_id=1,
+        )
+    async with db_module.SessionLocal() as s:
+        assert await impact(s, EP) == [{
+            "scenarioId": "sc-imp3", "stepIndex": 0, "source": None,
+            "field": None, "viaVar": None,
+            "datasetId": None, "datasetColumn": None,
+        }]
+        # 带 field 过滤 → 不兜底直扫(互斥),零命中
+        assert await impact(s, EP, "amount") == []

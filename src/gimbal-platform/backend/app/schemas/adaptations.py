@@ -38,8 +38,8 @@ class ImpactItem(BaseModel):
 
     scenario_id: str = Field(alias="scenarioId")
     step_index: int = Field(alias="stepIndex")
-    source: str
-    field: str
+    source: str | None = None
+    field: str | None = None
     via_var: str | None = Field(default=None, alias="viaVar")
     dataset_id: str | None = Field(default=None, alias="datasetId")
     dataset_column: str | None = Field(default=None, alias="datasetColumn")
