@@ -118,6 +118,11 @@ class DeclarationEntry(BaseModel):
 | `carry` | 请求 carry{} | 传递面(值在 platform 值表,运行时注入) |
 | `view_only` | 响应 fields[] | 响应展示字段;`assertable=True` 者为断言目标 |
 
+通道约束(条目级校验):
+
+- `channel=="carry"` → **default 与 example 必须为 None**(§6 B6,D2 后门封死)。桥路线天然合规 —— CarryEntry 本就无值字段,编译产物恒 None;禁令实际约束的是手写 declarations 与 declare() 的节点吸收。enum 不禁 —— 词表约束非值,不触 D2,派生 carry 面天然丢弃;
+- `name == last_segment(path)` 对根路径沿用现行行为(`last_segment("$")=="$"`,order_entrust 响应现网已有 name='$' 合法先例),实现带一条 `$` 条目单测。
+
 ### 3.2 通道互斥(D4 结构化)
 
 同一 path 在 declarations 内唯一 —— 清单是 list[path 唯一],构造时重复 path 即校验错误。carry∩fields=∅ 由此从"运行时检查"变为"结构性不可能"。
@@ -164,12 +169,18 @@ class ResponseSpec(BaseModel):
 展开规则(纯函数,无状态):
 
 - `schema_ = model.model_json_schema()`(dict 直接用);
-- 列出的键生成 DeclarationEntry,**元数据从 schema 节点吸收**:type←节点 type、default←节点 default、description←节点 description、enum←节点 enum、required←schema.required 成员;
+- 列出的键生成 DeclarationEntry,**元数据从 schema 节点吸收**:type←节点 type、default←节点 default、description←节点 description、enum←节点 enum、required←schema.required 成员;**carry 键跳过 default 吸收**(B6 —— 契约面不带值);example 从来不在吸收清单内;
 - dict 值中的键(ui_kind/source_kind/description/…)作为覆写,优先于节点吸收值;
 - 未列出的属性不生成声明(Type C 语义不变);
 - 默认通道:RequestSpec → `binding`,ResponseSpec → `view_only`;
 - `assert_paths` 列出的 path 置 `assertable=True`(§6 B3);
 - carry 条目的 type 从节点吸收;节点无 type(如空 schema)时必须显式给出 —— 报告"carry 声明缺 type"构造错误。
+
+**表达力边界(防静默)**:
+
+- **键仅支持顶层属性名**(`schema.properties` 直查)。含 `.` 或 `[` 的键 → 构造错误(嵌套/数组路径请直接手写 DeclarationEntry 或走构造桥);
+- **bindings 键必须存在于 schema.properties** —— 查无此键报构造错误,防"吸收落空静默生成全默认值垃圾条目";
+- **carry 键可无节点**(B2 镜像:carry 自持),但必须显式给 type。糖对两通道的契约是"binding 必须挂模型、carry 可以自持"。
 
 **type 吸收的通道不对称是刻意的**:declare() 路线全通道吸收 type;构造桥路线 type 仅 carry 必填、其余 None(§6 B5)。不对称只存在于新增的 declarations 键内 —— 旧键(fields)今日本就无 type,线上等价不受影响。
 
@@ -248,7 +259,7 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 | assertable_fields | ✓ | ✓ | ✓(派生) | 移除 |
 | declarations | — | ✓ 新增 | ✓(直存) | ✓ |
 
-**等价性锚点**:fields 顺序 = declarations 顺序按通道过滤(桥编译保输入序,与今日 fields 声明序一致);carry 字典键序 = declarations 中 carry 条目序。
+**等价性锚点**:fields 顺序 = declarations 顺序按通道过滤(桥编译保输入序,与今日 fields 声明序一致);carry 字典键序 = declarations 中 carry 条目序。**declarations 键序约定(P1 view 与 P2 桥两处实现显式遵循同一约定)**:binding/view_only 条目(输入序)在前,carry 条目(输入序)在后。
 
 ---
 
@@ -265,6 +276,7 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 | body_type='none' → schema_ must be None(Rule B) | 不变 | |
 | body_type='none' → declarations 必须为空 | **新增**(§6 B4) | 无存量实例 |
 | body_type≠'none' → schema_ 非 None(Rule B,{} 算声明) | 不变 | schema 伴随轴独立校验 |
+| —(新增) | channel=="carry" → default/example 必须为 None | B6:桥路线天然合规(CarryEntry 无值字段);爆炸半径仅手写声明与 declare() 吸收 |
 
 ---
 
@@ -277,6 +289,7 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 | B3 | **assertable 覆写键,默认 False** | 今日缺省 assertable_fields=[] —— 默认 False 才能派生回空,保线上等价 | 声明"可断言"须显式(assertable=True 或 declare(assert_paths=...));存量 3 处显式写有的零损失 |
 | B4 | **body_type='none' → declarations 必须空** | 无 body 的端点声明字段无意义;今日无存量实例 | 理论收紧,零实际影响 |
 | B5 | **type 仅 carry 通道必填** | 今日 fields 无 type 字段;桥编译不做信息发明 | binding/view_only 条目类型信息仍靠 ui_kind 近似(与今日一致) |
+| B6 | **carry 通道禁值**:default/example 必须为 None;declare() 对 carry 键跳过 default 吸收 | D2(2026-08-31 carry spec 钦点"契约只声明字段面,值全收 platform")—— 同构字段若不封,`channel="carry", default="压测-张三"` 结构合法,值回流 plate;declare() 吸收会无声带值 | 手写 carry 条目失去 example 文档位(今日 CarryEntry 本就无此字段,零实际损失);enum 不禁(词表约束非值) |
 
 ---
 
@@ -302,7 +315,7 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 2. **构造桥**:构造函数继续接受 fields=/carry=/assertable_fields= 旧参数,以 `model_validator(mode="before")` 在存储前逐条编译为 DeclarationEntry(请求 fields→binding、carry→carry 保序;响应 fields→view_only,assertable_fields 成员置 assertable=True);declarations= 与旧参数二选一,同传报构造错误;
 3. fields/carry/assertable_fields 变为派生属性(§4.1),属性消费者透明;
 4. declare() 糖落地(§3.4),含单测;
-5. settlement_create_order 迁移为 declare() 写法(showcase,验证糖的端到端等价);其余 16 文件经构造桥零改动;
+5. settlement_create_order 迁移为 declare() 写法(showcase,验证糖的端到端等价);**迁移时以覆写保住今日线上串**(如 carry description"备注(随请求传递,不进表单)"≠ 模型节点 description,不带覆写会无声漂移),等价由 golden ③ 锁;其余 16 文件经构造桥零改动;
 6. golden 测试 ②③(见 §8)。
 
 **门禁**:三套件全绿 + golden 全绿。
@@ -319,12 +332,12 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 | # | 测试 | 内容 | 阶段 |
 |---|---|---|---|
 | ① | /full 逐键相等 golden | P1 前后,全部 17 端点(加 account 共 18)的 /full JSON:既有键逐键相等,新增仅 declarations | P1 |
-| ② | 桥构造等价 golden | P2 后:17 端点文件零改动经桥构造 → /full 既有键与 P1 基线逐键相等(锁 fields 顺序) | P2 |
-| ③ | declare() 等价 golden | declare(CreateOrderRequest, ...) 与手写 declarations 构造 → /full 逐键相等(含 schema 伴随) | P2 |
+| ② | 桥构造等价 golden | **16 个桥路线端点**(settlement 除外,走 ③)零改动经桥构造 → /full 与 P1 基线**全键**逐键相等(既有键 + declarations;锁 fields/carry/declarations 三处序) | P2 |
+| ③ | declare() 等价 golden | settlement 迁移后:(a) 既有键与 P1 基线逐键相等(锁覆写保串);(b) 手写 declarations(含节点吸收值与覆写)与 declare() 输出全键相等。**②③ 基线不混用**:② 的 binding 条目 type 恒 None(桥不吸收),③ 的 type 恒吸收值 —— 混用必假阳性 | P2 |
 | ④ | 派生==手写 | declarations 手写 → 派生 fields/carry/assertable_fields == 直接构造旧参数的投影 | P2 |
-| ⑤ | 通道互斥 | 重复 path(含跨通道)→ 构造错误;body_type=none + 声明 → 错误 | P2 |
+| ⑤ | 通道互斥与守卫 | 重复 path(含跨通道)→ 构造错误;body_type=none + 声明 → 错误;**carry 条目带 default/example → 构造错误(B6);根路径 `$` 条目构造与派生** | P2 |
 | ⑥ | assertable 语义 | 缺省派生 assertable_fields == [];显式 True 才进;audit_detail 的 audit_id(声明但未断言)桥编译后保持 False | P2 |
-| ⑦ | declare() 展开规则 | 节点吸收(type/default/description/enum/required)、覆写优先、未列出=Type C、carry 缺 type 报错 | P2 |
+| ⑦ | declare() 展开规则与边界 | 节点吸收(type/default/description/enum/required)、覆写优先、未列出=Type C、carry 缺 type 报错;**carry 键不吸收 default;键含 `.` 或 `[` → 报错;bindings 键查无 schema.properties 节点 → 报错** | P2 |
 | ⑧ | 既有三套件 | plate 451 基线 / backend 345 / frontend 401 + typecheck,允许 ±新增用例数 | P1/P2 |
 
 ---
@@ -344,11 +357,13 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 
 ## 10. 验收清单
 
-- [ ] /full 既有键(body_type/fields/schema/carry/assertable_fields)对全部端点与 P1 前逐键相等(测试 ①②);
+- [ ] /full 既有键(body_type/fields/schema/carry/assertable_fields)对全部端点与 P1 前逐键相等(测试 ①②③a);
+- [ ] **declarations 键被 golden 全键锁定**(16 桥路线端点 P1→P2 逐键相等,测试 ②;唯一已切换消费者 service_fields 的读取面稳态);
 - [ ] declarations 视图覆盖全部 746 条存量声明,channel 映射正确(测试 ①④);
+- [ ] **carry 通道 default/example 封死有单测**,declare() 对 carry 键不吸收 default(测试 ⑤⑦,B6);
 - [ ] 17 个端点文件在 P2 提交里零 diff(桥承接;settlement 除外,迁 declare());
-- [ ] settlement declare() 写法与手写线上等价(测试 ③);
-- [ ] 通道互斥/body_type 守卫/assertable 缺省语义有单测(测试 ⑤⑥);
+- [ ] settlement declare() 写法与手写线上等价,覆写保串(测试 ③);
+- [ ] 通道互斥/body_type 守卫/assertable 缺省语义/declare 边界报错有单测(测试 ⑤⑥⑦);
 - [ ] 三套件门禁全绿(测试 ⑧);
 - [ ] platform 消费面已归一到 declarations(P1 切换完成,carry 面 service_fields 走新键)。
 
