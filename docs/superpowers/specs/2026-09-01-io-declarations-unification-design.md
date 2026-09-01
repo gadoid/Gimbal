@@ -34,11 +34,13 @@ model 双真源机制(model_schema/model_name 与 schema_ 并行)刚在 carry �
 | 事实 | 数量 |
 |---|---|
 | 声明了 IOFieldBinding 的 fin 端点文件 | 17 / 17 |
-| IOFieldBinding 声明总数 | 746 条 |
+| IOFieldBinding 声明总数 | 737 条 |
 | `schema_={}`(空 schema)的端点 | 15 / 17 |
-| 单文件最大声明量 | order_order_add / order_order_book / order_entrust_order_add 各 ~229 条 |
+| 单文件最大声明量 | order_order_add / order_order_book / order_entrust_order_add 各 ~226 条(备注族 3 键移入 carry 后) |
 | 有真实 model schema 的端点 | 仅 settlement_create_order、account_query_balance |
-| carry 声明 | 全仓仅 settlement 1 条($.remark) |
+| carry 声明 | 10 条(settlement $.remark + 下单三端点备注族 $.remark/$.notes/$.cancel_remark) |
+
+**基线口径(2026-09-01)**:上表为 fix/carry-faces-all-fin-endpoints(606be60)并回后的链上实测,与事故记录口径(737/10)一致;归一化实现分支从该链开出,golden 基线(P1 前快照)以含全部 10 条 carry 声明的 /full 为准。
 
 且声明的形态是**场景流量提取物**:路径含数组下标(`$.data.data[0].audit_id`)、深层嵌套(`$.data.audit_content.relation_id`)、根路径(`$`);example 携带真实业务值。对这 15/17 个端点,**fields[] 本身就是结构真源,schema_ 是空壳** —— 与 settlement(模型丰富)正好相反。audit_audit_page 揭示第三种用法:schema_ 只装 Type C 补充字段(risk_note)。
 
@@ -46,7 +48,7 @@ model 双真源机制(model_schema/model_name 与 schema_ 并行)刚在 carry �
 
 基于 0.3 的规模事实,甲形状不可行:
 
-1. **743/746 条声明无 schema 节点可挂** —— x-io 标记必须挂在 JSON Schema 属性节点上,而 `$.data.data[0].audit_id`、`$` 根路径在 schema 里没有对应节点;
+1. **743/747 条声明无 schema 节点可挂**(737 binding + 10 carry 中,仅 settlement 的 4 条有模型节点)—— x-io 标记必须挂在 JSON Schema 属性节点上,而 `$.data.data[0].audit_id`、`$` 根路径在 schema 里没有对应节点;
 2. **为存量声明合成嵌套 schema(含数组结构)= /full 的 schema 键内容变化** → 前端 Type C 差集受影响,违反硬性规格 §1.2;
 3. **引入虚拟路径旁路字典 = 双真源**,重蹈 model 机制腐化覆辙。
 
@@ -216,7 +218,7 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
     ...
 ```
 
-- 现算无缓存:端点对象是进程级单例、消费频率低,746 条量级的过滤是微秒级 —— YAGNI,不引入 pydantic 缓存复杂度。
+- 现算无缓存:端点对象是进程级单例、消费频率低,747 条量级的过滤是微秒级 —— YAGNI,不引入 pydantic 缓存复杂度。
 - 返回值视为只读快照(返回新构造对象),调用方修改不影响存储。
 
 ### 4.2 属性消费者(全部零改动透明)
@@ -359,7 +361,7 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 
 - [ ] /full 既有键(body_type/fields/schema/carry/assertable_fields)对全部端点与 P1 前逐键相等(测试 ①②③a);
 - [ ] **declarations 键被 golden 全键锁定**(16 桥路线端点 P1→P2 逐键相等,测试 ②;唯一已切换消费者 service_fields 的读取面稳态);
-- [ ] declarations 视图覆盖全部 746 条存量声明,channel 映射正确(测试 ①④);
+- [ ] declarations 视图覆盖全部 747 条存量声明(737 fields + 10 carry),channel 映射正确(测试 ①④);
 - [ ] **carry 通道 default/example 封死有单测**,declare() 对 carry 键不吸收 default(测试 ⑤⑦,B6);
 - [ ] 17 个端点文件在 P2 提交里零 diff(桥承接;settlement 除外,迁 declare());
 - [ ] settlement declare() 写法与手写线上等价,覆写保串(测试 ③);
