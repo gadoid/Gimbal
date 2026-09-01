@@ -425,8 +425,9 @@ async function removeExec() {
 }
 
 /** 导出执行时场景快照:快照 draft → plate convert(无 overlay、不注入
- *  凭证,与场景库"默认导出"同构)→ 下载。文件名带 exec<id> 区分于
- *  场景库导出;执行时的服务绑定/数据集选择在执行信息里另行可读。 */
+ *  凭证;carry 仍物化 — spec §4.3 勘误,与场景库"默认导出"同构)→ 下载。
+ *  文件名带 exec<id> 区分于场景库导出;执行时的服务绑定/数据集选择在
+ *  执行信息里另行可读。 */
 async function exportScenario(): Promise<void> {
   if (!execStore.detail) return
   try {

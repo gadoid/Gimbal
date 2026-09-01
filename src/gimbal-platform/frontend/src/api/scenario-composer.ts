@@ -178,7 +178,8 @@ export interface PreviewPlateResult {
   converted?: Record<string, any> | null
 }
 
-/** 预校验/导出转换;overlay(按方案导出,spec §8)不传 → 行为与旧完全一致 */
+/** 预校验/导出转换;overlay(按方案导出,spec §8)不传 → 凭证/服务绑定
+ *  零注入,carry 物化无条件(spec §4.3 勘误) */
 export async function previewPlateDraft(
   draft: ScenarioDraft, overlay?: RunOverlay,
 ): Promise<PreviewPlateResult> {

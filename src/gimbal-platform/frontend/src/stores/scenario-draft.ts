@@ -39,7 +39,8 @@ export function schemeToOverlay(s: RunScheme): RunOverlay {
 }
 
 /** 草稿 → plate /convert → 纯可执行结构(store 无关,列表页行级导出复用)。
- *  overlay(按方案导出)不传 → 行为与旧完全一致。 */
+ *  overlay(按方案导出)不传 → 凭证/服务绑定零注入;carry 物化无条件
+ *  (spec §4.3 勘误:默认导出与按方案导出同源)。 */
 export async function convertDraftToExecutable(
   draft: ScenarioDraft, overlay?: RunOverlay,
 ): Promise<Record<string, any>> {
@@ -88,7 +89,8 @@ export const useScenarioDraftStore = defineStore('scenario-draft', () => {
     return `${id}-${ts}`
   }
 
-  /** overlay(按方案导出,spec §8)不传 → 下载行为与旧完全一致。 */
+  /** overlay(按方案导出,spec §8)不传 → 不注入凭证/绑定;carry 仍物化
+   *  (spec §4.3 勘误:导出与执行产物不再系统性漂移)。 */
   async function exportJson(overlay?: RunOverlay): Promise<void> {
     const converted = await fetchConverted(overlay)
     const base = fileBase()

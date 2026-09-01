@@ -169,7 +169,7 @@ class CarryContext:
 
 ### 4.3 导出链同源
 
-导出(preview-plate overlay)走同一 materialize + 同一 carry_context 构造 → 导出物 body 含按当前绑定状态物化的值,脱平台自包含。导出是绑定值的**当时快照**,之后绑定变更不回改已导出文件(导出物快照语义,既有惯例)。
+导出(preview-plate)走同一 materialize + 同一 carry_context 构造 → 导出物 body 含按当前绑定状态物化的值,脱平台自包含。carry 物化**无条件**(2026-09-01 勘误:原实现仅在 overlay 分支,默认导出 JSON/YAML/执行页快照不注入,与执行产物系统性漂移;现默认导出与按方案导出同源);凭证/服务绑定注入仍以 overlay 为唯一开关。导出是绑定值的**当时快照**,之后绑定变更不回改已导出文件(导出物快照语义,既有惯例)。
 
 ## 5. 编排期无感 + 只读预览
 
