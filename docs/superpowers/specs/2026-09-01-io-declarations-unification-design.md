@@ -375,7 +375,8 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 |---|---|
 | fields 顺序漂移(前端表单渲染序) | 桥编译保输入序;golden ② 锁序 |
 | 派生属性性能 | 现算微秒级,进程级单例,消费低频(§4.1);如实测热点再缓存 |
-| pydantic v2 property 与序列化 | fields/carry 不再是模型字段 → `model_dump` 不含它们;`_serialize` 本就是手写 wrap(线上键显式拼),不受影响;测试 ①② 锁线上形状 |
+| pydantic v2 property 与序列化 | fields/carry 不再是模型字段 → **默认**字段 dump 不含它们;但 RequestSpec/ResponseSpec 走自定义 `@model_serializer _serialize`(io_spec.py,线上键显式拼),一切 dump(直调/嵌套于 EndpointDetailView/JSON 模式)都经它 —— P2 改为读派生属性即形状不变,加 declarations 键也只动这一处;逐点清点(2026-09-01):无任何调用方依赖 spec 默认字段 dump(fields_meta 逐条 dump IOFieldBinding 实例,派生返回的仍是真模型);测试 ①② 锁线上形状 |
+| P2 后 wire dict(旧键 + declarations 同含)**不可直接 `model_validate` 回构** —— 构造桥二选一,同传互斥报错 | 无现实消费方(端点是代码声明,/full 是纯视图,platform 经 HTTP 消费 JSON 不持 spec 对象);P2 计划含"扫测试中 spec round-trip 用法"步骤,有则改断言 |
 | platform P1 切读的版本错配 | 同仓同部署内网单体,无错配窗口 |
 | 构造桥长期滞留变成新兼容债 | P3 挂账显式可执行;桥是编译语义(旧参数→canonical)而非并行真源,不产生第二承重轴 |
 | `$` 根路径/数组下标路径的派生 | 本就是扁平 path 一等公民,path 校验沿用 is_valid_path,无节点依赖 |
