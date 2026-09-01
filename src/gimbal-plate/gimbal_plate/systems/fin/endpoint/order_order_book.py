@@ -255,7 +255,6 @@ ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
         IOFieldBinding(name='subsidy_category_name', path='subsidy_category_name', required=True, example='—', ui_kind='text'),
         IOFieldBinding(name='expect_subsidy_category_name', path='expect_subsidy_category_name', required=True, example='—', ui_kind='text'),
         IOFieldBinding(name='real_subsidy_category_name', path='real_subsidy_category_name', required=True, example='—', ui_kind='text'),
-        IOFieldBinding(name='action', path='action', required=True, example='check', ui_kind='text'),
         IOFieldBinding(name='order_file', path='order_file', required=True, example=[], ui_kind='json'),
         ],
         # 传递面(spec §2):备注族描述性字段 —— 值随 platform 两层值表(服务绑定+全局默认)走
@@ -263,6 +262,7 @@ ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
             "$.remark": CarryEntry(description="订单备注(随请求传递,不进表单)"),
             "$.notes": CarryEntry(description="内部备注(随请求传递,不进表单)"),
             "$.cancel_remark": CarryEntry(description="取消备注(随请求传递,不进表单)"),
+            "$.action": CarryEntry(description="test"),
         },
         schema_={},
     ),

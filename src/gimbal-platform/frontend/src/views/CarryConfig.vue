@@ -3,6 +3,8 @@
      服务绑定 tab:选服务 → 拉该服务 carry 字段面并集 → 逐字段填值;
        placeholder = 全局默认值(无行时);删行 = 不注入(回退全局默认);
        「设 null」= 显式注入 JSON null(§3.1)。
+       CSV 批量导入 = 表编辑动作:解析/合并走 utils/carry-csv,导入后
+       仍须手动保存(putBindings 整表替换),不绕 degraded 门控。
      全局默认 tab:整表编辑;常驻提示纯 path 跨服务生效(§6)。
      三态说明:el-input 的 v-model 会把 null 折叠成 '',故 null 用独立
      isNull 布尔承载,无行用 hasRow 承载 —— 空串值/null/无行三种状态
@@ -28,16 +30,37 @@
             </div>
           </div>
 
-          <el-select
-            v-model="service"
-            class="svc-select"
-            filterable
-            allow-create
-            placeholder="选择或输入目录服务名"
-            @change="onServiceChange"
-          >
-            <el-option v-for="s in knownServices" :key="s" :label="s" :value="s" />
-          </el-select>
+          <div class="svc-bar">
+            <el-select
+              v-model="service"
+              class="svc-select"
+              filterable
+              allow-create
+              placeholder="选择或输入目录服务名"
+              @change="onServiceChange"
+            >
+              <el-option v-for="s in knownServices" :key="s" :label="s" :value="s" />
+            </el-select>
+            <el-tooltip
+              content="CSV 三列:path,value,is_null —— 表头按名定位(列序任意);is_null=1 为显式 null,两列都留空 = 该行不导入;面外字段会被跳过"
+              placement="top"
+            >
+              <el-button :disabled="!service || !rows.length" @click="pickCsv">导入 CSV</el-button>
+            </el-tooltip>
+            <el-tooltip
+              content="按当前服务的字段面生成模板(预填全部 path 与已绑定值);不改直接导回 = 绑定态不变"
+              placement="top"
+            >
+              <el-button :disabled="!rows.length" @click="downloadTemplate">下载模板</el-button>
+            </el-tooltip>
+            <input
+              ref="csvInput"
+              type="file"
+              accept=".csv,text/csv"
+              class="csv-input"
+              @change="onCsvPicked"
+            />
+          </div>
 
           <el-alert
             v-if="degraded"
@@ -162,6 +185,7 @@ import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { showError } from '@/utils/errorFallback'
 import { buildServiceEntries, type ServiceCarryRow } from '@/utils/carry-entries'
+import { CarryCsvError, buildCarryTemplate, mergeCarryCsv, parseCarryCsv } from '@/utils/carry-csv'
 import {
   getDefaults, putDefaults, getBindings, getBindingsFor, putBindings, getServiceFields,
   type CarryFieldFace, type CarryValues,
@@ -242,6 +266,55 @@ async function onServiceChange() {
 function toggleNull(row: ServiceRow) {
   row.isNull = !row.isNull
   if (row.isNull) row.hasRow = true // 设 null 隐含建行
+}
+
+// ── CSV 批量导入(表编辑动作,不自动保存)────────────────────
+const csvInput = ref<HTMLInputElement | null>(null)
+
+function pickCsv() {
+  csvInput.value?.click()
+}
+
+/** 下载模板:字段面全量 path + 当前绑定值;BOM 保证 Excel 识别 UTF-8。 */
+function downloadTemplate() {
+  const blob = new Blob([`﻿${buildCarryTemplate(rows.value)}`], {
+    type: 'text/csv;charset=utf-8',
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `carry-${service.value || 'template'}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+async function onCsvPicked(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = '' // 清掉选择,同名文件可重复导入
+  if (!file) return
+  let parsed
+  try {
+    parsed = parseCarryCsv(await file.text())
+  } catch (err) {
+    if (err instanceof CarryCsvError) {
+      ElMessage.error(`CSV 格式错误:${err.message}`)
+    } else {
+      showError('读取 CSV', err)
+    }
+    return
+  }
+  const report = mergeCarryCsv(rows.value, parsed)
+  const unsaved = '尚未保存,请核对后点「保存」'
+  if (report.skippedUnknown.length > 0) {
+    ElMessage.warning(
+      `已导入 ${report.applied} 条(${unsaved});` +
+      `面外跳过 ${report.skippedUnknown.length} 条(未声明,门控会滤掉):` +
+      report.skippedUnknown.join('、'),
+    )
+  } else {
+    ElMessage.success(`已导入 ${report.applied} 条(${unsaved})`)
+  }
 }
 
 /** 删行 = 保存时不再写入该 path → 运行时回退全局默认。 */
@@ -358,9 +431,19 @@ onMounted(() => {
   font-size: 12px;
 }
 
+.svc-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
 .svc-select {
   width: 320px;
-  margin-bottom: 14px;
+}
+
+.csv-input {
+  display: none;
 }
 
 .defaults-alert {

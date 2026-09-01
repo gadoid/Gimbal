@@ -23,7 +23,16 @@ app = create_app()  # 默认绑定 default_registry
 开发期启动:
 
 ```bash
-uvicorn gimbal_plate.http.app:app --host 127.0.0.1 --port 8765
+python src/gimbal-plate/run_plate.py            # 常规启动
+python src/gimbal-plate/run_plate.py --reload   # 监听 gimbal_plate/ 变更自动重启
+```
+
+> **Windows 注意**:`--reload` 的重启依赖 `CTRL_C_EVENT`,只在**真实控制台**下生效(uvicorn 已知问题族,见 [uvicorn#1972](https://github.com/Kludex/uvicorn/issues/1972))。在无控制台的后台 shell/IDE runner 里,重载进程会卡在等待旧 worker 退出且不再响应后续变更——此时请用真终端运行,或套一层 `winpty python run_plate.py --reload`。
+
+或直接用 uvicorn(factory 形式,`--reload` 同样可用):
+
+```bash
+uvicorn "gimbal_plate.http.app:create_app" --factory --host 127.0.0.1 --port 8765
 ```
 
 ### 1.2 M6 URL 语法
