@@ -103,8 +103,14 @@ async def _seed_owner_auth(alias: str, *, bad: bool = False) -> None:
         await db.commit()
 
 
-async def test_preview_plate_without_overlay_unchanged(client, plate_mock: PlateMock):
-    """不传 overlay → convert 原样(向后兼容,无绑定注入痕迹)。"""
+async def test_preview_plate_without_overlay_no_credentials(
+        client, plate_mock: PlateMock):
+    """默认导出(无 overlay):凭证/服务绑定零注入(向后兼容)。
+
+    carry 物化已无条件化(spec §4.3 勘误)— 凭证与绑定注入仍以
+    overlay 为唯一开关,本用例钉住这条边界:无 overlay 时 services
+    不落绑定 url、users 不落扫描到的 alias。
+    """
     plate_mock.behaviour = "echo"
     bob = await _member(client, "bob")
     await _seed(client, bob)
@@ -114,6 +120,45 @@ async def test_preview_plate_without_overlay_unchanged(client, plate_mock: Plate
     converted = resp.json()["converted"]
     services = (converted.get("config") or {}).get("services") or {}
     assert services.get("fin-service") != "https://bound"
+    # 凭证零注入:模板引用 qa1/qa2,无 overlay 时 users 不含两 alias
+    users = converted["config"].get("users") or {}
+    assert "qa1" not in users and "qa2" not in users
+
+
+async def test_preview_plate_without_overlay_materializes_carry(
+        client, plate_mock: PlateMock):
+    """默认导出(无 overlay)也走 carry 物化(spec §4.3 勘误)。
+
+    与按方案导出同源:服务绑定 + 全局默认注入 body;凭证仍零注入。
+    修复背景(2026-09-01):carry 物化原仅在 overlay 分支,默认导出
+    (JSON/YAML/执行页快照)不注入 → 与执行产物系统性漂移。
+    """
+    plate_mock.behaviour = "echo"
+    plate_mock.services = [{"name": "fin-service"}]
+    plate_mock.fulls = {"fin.ep1": {"request": {"carry": {
+        "$.remark": {"type": "string"},
+        "$.appCode": {"type": "string"}}}}}
+    async with db_module.SessionLocal() as db:
+        await carry_store.put_bindings(
+            db, "fin-service", {"$.remark": "压测-张三"}, "bob")
+        await carry_store.put_defaults(db, {"$.appCode": "TRACE-V2"}, "bob")
+        await db.commit()
+
+    bob = await _member(client, "bob")
+    await _seed(client, bob, draft=_eq_draft_with_carry())
+
+    resp = await client.post("/api/scenarios/preview-plate", headers=bob,
+                             json=_eq_draft_with_carry())
+    assert resp.status_code == 200, resp.text
+    converted = resp.json()["converted"]
+    body = converted["steps"][0]["request"]["body"]
+    assert body["remark"] == "压测-张三"
+    assert body["appCode"] == "TRACE-V2"
+    # 凭证/服务绑定零注入(carry 无条件,凭证仅 overlay)
+    services = (converted.get("config") or {}).get("services") or {}
+    assert services.get("fin-service") != "https://bound"
+    users = converted["config"].get("users") or {}
+    assert "qa1" not in users and "qa2" not in users
 
 
 async def test_preview_plate_with_overlay_materializes(client, plate_mock: PlateMock):

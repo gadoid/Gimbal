@@ -171,24 +171,32 @@ async def preview_plate(
         # (plate 会剥平台视图字段,内置认证以场景定义为唯一可信源)
         def_cfg = (body.definition.get("config") or {})
         built_in = def_cfg.get("users") if isinstance(def_cfg.get("users"), dict) else {}
-        # carry 同源注入(spec §4.3):与 dispatch 共用 build_carry_context
-        # → 导出产物 = 绑定状态的当时快照。plate 故障在 build 内部降级
-        # (不注入,不 5xx);此处再兜一层 — carry 是增强不是前置条件,
-        # 任何故障(含 DB)都降级为无 carry,绝不阻塞导出。
-        try:
-            carry_ctx = await build_carry_context(db, body.definition)
-        except Exception:  # noqa: BLE001 — carry 绝不阻塞导出
-            logger.opt(exception=True).warning(
-                "preview_plate: carry context build failed; skipped")
-            carry_ctx = None
-        converted = materialize_run_copy(
-            converted,
-            service_bindings={k: b.model_dump(by_alias=True)
-                              for k, b in body.overlay.service_bindings.items()},
-            resolved_auths=exec_auths,
-            built_in_users=dict(built_in or {}),
-            carry_context=carry_ctx,
-        )
+        service_bindings = {k: b.model_dump(by_alias=True)
+                            for k, b in body.overlay.service_bindings.items()}
+    else:
+        # 默认导出(无 overlay):凭证/服务绑定零注入 — overlay 是它们
+        # 的唯一开关;carry 见下方无条件物化。
+        exec_auths = []
+        built_in = {}
+        service_bindings = {}
+    # carry 同源注入(spec §4.3 勘误):与 dispatch 共用 build_carry_context
+    # → 导出产物 = 绑定状态的当时快照。无条件执行 — 默认导出与按方案
+    # 导出走同一套 carry 物化(执行/导出不再系统性漂移)。plate 故障在
+    # build 内部降级(不注入,不 5xx);此处再兜一层 — carry 是增强
+    # 不是前置条件,任何故障(含 DB)都降级为无 carry,绝不阻塞导出。
+    try:
+        carry_ctx = await build_carry_context(db, body.definition)
+    except Exception:  # noqa: BLE001 — carry 绝不阻塞导出
+        logger.opt(exception=True).warning(
+            "preview_plate: carry context build failed; skipped")
+        carry_ctx = None
+    converted = materialize_run_copy(
+        converted,
+        service_bindings=service_bindings,
+        resolved_auths=exec_auths,
+        built_in_users=dict(built_in or {}),
+        carry_context=carry_ctx,
+    )
     inner_errors = converted.get("errors") or []
     return PreviewPlateResponse(
         ok=True,
