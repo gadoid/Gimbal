@@ -380,7 +380,7 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 
 **裁定:carry_injection 不切**。它虽也读 /full carry 面,但是运行时关键路径,单轴消费、无重推导痛点;切 declarations 零收益、带执行链等价风险。carry 键在 P3 前恒发,留在旧键上直至 P3 一并处理。
 
-**门禁**:plate 451+ / backend 345+ / frontend 401 全绿;新增 golden 测试 ①(见 §8)。
+**门禁**:plate 451+ / backend 345+ / frontend 401 全绿;新增 golden 测试 ①(见 §8)与缺键容忍用例 ⑨(见 §8)。
 **断点与回滚**:线上只增不减;回滚 = platform 读键切回 + 删 declarations 输出。
 
 ### P2 — 存储翻转(declarations 成为真源,构造桥保 17 文件零改动)
@@ -390,7 +390,7 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 2. **构造桥**:构造函数继续接受 fields=/carry=/assertable_fields= 旧参数,以 `model_validator(mode="before")` 在存储前逐条编译为 DeclarationEntry(请求 fields→binding、carry→carry 保序;响应 fields→view_only,assertable_fields 成员置 assertable=True);declarations= 与旧参数二选一,同传报构造错误;
 3. fields/carry/assertable_fields 变为派生属性(§4.1),属性消费者透明;
 4. declare() 糖落地(§3.4),含单测;
-5. settlement_create_order 迁移为 declare() 写法(showcase,验证糖的端到端等价);**迁移时以覆写保住今日线上串**(如 carry description"备注(随请求传递,不进表单)"≠ 模型节点 description,不带覆写会无声漂移),等价由 golden ③ 锁;其余 16 文件经构造桥零改动;
+5. settlement_create_order 迁移为 declare() 写法(showcase,验证糖的端到端等价);**迁移时以覆写保住今日线上串**(如 carry description"备注(随请求传递,不进表单)"≠ 模型节点 description,不带覆写会无声漂移),等价由 golden ③ 锁;其余 17 文件(fin 16 + account)经构造桥零改动 —— account 响应零声明,桥上无事可做。**settlement 是全量 18 端点中唯一 declarations 键 P1→P2 有意漂移者**(binding 条目 type:P1 view 恒 None → declare() 吸收值;②③ 不混用即为此)。漂移安全的推理链显式钉住:唯一已切读消费者 service_fields 只过滤 carry 通道条目,而 carry 条目 type 在 P1 view 已有(源自 CarryEntry)→ P1→P2 稳定,binding 条目的漂移不被任何消费者读;
 6. golden 测试 ②③(见 §8)。
 
 **门禁**:三套件全绿 + golden 全绿。
@@ -407,13 +407,14 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 | # | 测试 | 内容 | 阶段 |
 |---|---|---|---|
 | ① | /full 逐键相等 golden | P1 前后,全部 17 端点(加 account 共 18)的 /full JSON:既有键逐键相等,新增仅 declarations。基线物化为**提交进库的 fixture 文件** —— 执行期 corpus 再漂(606be60 即先例)→ 红,强制 diff 可见的意识性 re-baseline,杜绝测试自适应吸收 | P1 |
-| ② | 桥构造等价 golden | **16 个桥路线端点**(settlement 除外,走 ③)零改动经桥构造 → /full 与 P1 基线**全键**逐键相等(既有键 + declarations;锁 fields/carry/declarations 三处序) | P2 |
+| ② | 桥构造等价 golden | **17 个桥路线端点**(fin 16 + account_query_balance;settlement 除外走 ③)零改动经桥构造 → /full 与 P1 基线**全键**逐键相等(既有键 + declarations;锁 fields/carry/declarations 三处序)。**account 归桥是被线上等价逼定的而非选择**:其响应 schema-only、零声明(全 Type C,§3.5 第三落点活样本),declare() 化会令派生 fields 从 [] 变非空 → 违 ③(a) | P2 |
 | ③ | declare() 等价 golden | settlement 迁移后:(a) 既有键与 P1 基线逐键相等(锁覆写保串);(b) 手写 declarations(含节点吸收值与覆写)与 declare() 输出全键相等。**②③ 基线不混用**:② 的 binding 条目 type 恒 None(桥不吸收),③ 的 type 恒吸收值 —— 混用必假阳性 | P2 |
 | ④ | 派生==手写 | declarations 手写 → 派生 fields/carry/assertable_fields == 直接构造旧参数的投影 | P2 |
 | ⑤ | 通道互斥与守卫 | 重复 path(含跨通道)→ 构造错误;body_type=none + 声明 → 错误;**carry 条目带 default/example → 构造错误(B6);RequestSpec+view_only / ResponseSpec+binding|carry → 构造错误(B7 闭合);根路径 `$` 条目构造与派生** | P2 |
 | ⑥ | assertable 语义 | 缺省派生 assertable_fields == [];显式 True 才进;audit_detail 的 audit_id(声明但未断言)桥编译后保持 False | P2 |
 | ⑦ | declare() 展开规则与边界 | 节点吸收(type/default/description/enum/required)、覆写优先、未列出=Type C、carry 缺 type 报错;**carry 键不吸收 default;键含 `.` 或 `[` → 报错;bindings 键查无 schema.properties 节点 → 报错** | P2 |
 | ⑧ | 既有三套件 | plate 451 基线 / backend 345 / frontend 401 + typecheck,允许 ±新增用例数 | P1/P2 |
+| ⑨ | service_fields 缺键容忍 | 无声明端点(如 account_query_balance:request 缺席、响应 schema-only → declarations 键不发射)经 service_fields 聚合不报错、不产空占位条目 | P1 |
 
 ---
 
