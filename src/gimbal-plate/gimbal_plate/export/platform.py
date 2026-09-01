@@ -13,7 +13,7 @@ V3.1 设计(PLATE_V3_DESIGN.md §7,与 gimbal export 共享同一个 Scenario �
   再附加 platform 视图扩展字段(endpoints / navigation / config_summary)
 - 每条 step 内层加 platform 视图扩展字段:
   - api.view_hints(endpoint_id/module/tags)
-  - request.body 已用 endpoint 全量字段定义补全(直接渲染 + 直接执行)
+  - request.body 已用 endpoint 全量字段定义补全(直接渲染 + 直接执行);carry 键不补默认,仅透传 body 已有字面量
   - request.fields_meta:{字段名 → IOFieldBinding 全量元数据}(平台前端渲染用)
   - strategy[i].view_note(人类语言摘要)
 - 端到端链路:platform 落库 dict → (仅改 kind)→ Scenario.model_validate()
@@ -151,12 +151,38 @@ def _render_strategy_view(strategy: list[Assertion | Assign | Extract]) -> list[
     return out
 
 
+def _merge_carry_literal(path: str, body: dict[str, Any], full_body: dict[str, Any]) -> None:
+    """把 body 中已存在的 carry 路径字面量原样并入 full_body。
+
+    嵌套路径("$.a.b")逐层下钻;任一层缺失即视为无字面量,不加键。
+    已存在于 full_body 的键不覆盖(fields/carry 面互斥,防御性保留)。
+    """
+    parts = [p for p in path.lstrip("$").split(".") if p]
+    if not parts:
+        return
+    src: Any = body
+    for p in parts:
+        if isinstance(src, dict) and p in src:
+            src = src[p]
+        else:
+            return
+    dst: dict[str, Any] = full_body
+    for p in parts[:-1]:
+        nxt = dst.get(p)
+        if not isinstance(nxt, dict):
+            nxt = {}
+            dst[p] = nxt
+        dst = nxt
+    dst.setdefault(parts[-1], src)
+
+
 def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str, Any]:
     """把 Request 翻译为 dict,body 全量补全 + fields_meta 携带字段元数据。
 
     设计(PLATE_V3_DESIGN.md §7.2 方案 C):
     - body 仍是纯 dict,key = 字段名,value = 字面量值
     - 字段值优先级:body 已填值 → endpoint default → endpoint example → None
+    - carry 面键(spec §2.2):不参与补全,仅透传 body 已有字面量(值归 platform 值表)
     - 字段元数据集中放在 fields_meta:{name → IOFieldBinding 全部字段元信息}
       (path / required / default / example / description / enum / ui_kind / source_kind)
     - 平台前端:O(N) 遍历 body + O(1) 查 fields_meta[name]
@@ -182,6 +208,11 @@ def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str,
                 full_body[f.name] = f.example
             else:
                 full_body[f.name] = None
+        # 3) carry 面键:值归 platform 两层值表管,不补默认、不造 None 占位;
+        #    body 已带字面量的原样并入 —— 保住 gimbal→platform→gimbal 往返
+        #    子集契约,且与运行时 fill-missing(body 显式值优先)语义一致。
+        for carry_path in ep.request.carry:
+            _merge_carry_literal(carry_path, body, full_body)
     else:
         full_body = dict(body)
     return {
