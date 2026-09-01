@@ -64,6 +64,7 @@ model 双真源机制(model_schema/model_name 与 schema_ 并行)刚在 carry �
 | 1.2 | 后端变更不影响前端 | 同上 —— 唯一线上增量是 declarations 键(可忽略);schema 键内容不变(不做合成) |
 | 1.3 | 数据迁移 ≈ 0 | 端点是代码声明非 DB 存储;PG 只存 shape 无关的值与锚点;scenario payload 只带值;P2 构造桥让 17 个端点文件零改动通过(§7 P2) |
 | 1.4 | 多层次渲染/导入/导出 full/执行 scenario 结构不受影响 | 派生层让 views/exporter/field_defaults 等属性消费者透明(§4.2);执行链只读线上派生键,结构免疫 |
+| 1.5 | **请求字段落点闭合**:每个请求字段必须落在 binding(fields 面)/ carry / schema 伴随(Type C)三个定义位置之一;禁止为实现功能新增旁路游离结构(2026-09-01 钦定) | 通道-规格闭合校验(§3.1/§6 B7):RequestSpec 声明通道 ∈ {binding, carry},ResponseSpec ∈ {view_only},违者构造错误;落点完整枚举(§3.5);游离结构历史学费:model 双真源(carry 轮 T2 已退役) |
 
 ---
 
@@ -74,6 +75,7 @@ model 双真源机制(model_schema/model_name 与 schema_ 并行)刚在 carry �
 2. fields / carry / assertable_fields 变为按通道的派生投影,全部既有消费者透明。
 3. 读写归一:构造侧(declarations= 参数 + declare() 糖)与读取侧(/full declarations 视图 + 派生旧键)走同一存储。
 4. 三段可回滚迁移,每段有独立断点与全绿门禁。
+5. **落点闭合与反游离**:字段宇宙在 §3.5 枚举的落点内闭合;基于归一化后的结构定义做功能,不再出现为绕开架构而生的游离/临时代码(2026-09-01 钦定)。
 
 ### 非目标
 1. **不合成、不改写 schema_** —— 它降级为可选伴随(§6 B1),内容与今日完全一致。
@@ -123,7 +125,8 @@ class DeclarationEntry(BaseModel):
 通道约束(条目级校验):
 
 - `channel=="carry"` → **default 与 example 必须为 None**(§6 B6,D2 后门封死)。桥路线天然合规 —— CarryEntry 本就无值字段,编译产物恒 None;禁令实际约束的是手写 declarations 与 declare() 的节点吸收。enum 不禁 —— 词表约束非值,不触 D2,派生 carry 面天然丢弃;
-- `name == last_segment(path)` 对根路径沿用现行行为(`last_segment("$")=="$"`,order_entrust 响应现网已有 name='$' 合法先例),实现带一条 `$` 条目单测。
+- `name == last_segment(path)` 对根路径沿用现行行为(`last_segment("$")=="$"`,order_entrust 响应现网已有 name='$' 合法先例),实现带一条 `$` 条目单测;
+- **通道-规格闭合(§6 B7)**:RequestSpec 内条目 channel ∈ {binding, carry},ResponseSpec 内条目 ∈ {view_only} —— 违者构造错误。请求面由此闭合:不存在第三种请求字段落点(§3.5)。
 
 ### 3.2 通道互斥(D4 结构化)
 
@@ -200,6 +203,21 @@ request=RequestSpec.declare(
 
 场景提取路线(order_order_add 等 15 个端点)**不使用糖** —— 扁平清单本就是其自然输入形态,由构造桥(§7 P2)零改动承接。
 
+### 3.5 落点闭合(字段宇宙完整枚举)
+
+归一化后字段只有以下定义落点,闭合(2026-09-01 钦定:"一个 request 必须落在 carry 或 IOFieldBinding 上,不存在额外的游离结构"):
+
+| 落点 | 载体 | 语义 | 值来源 |
+|---|---|---|---|
+| binding 通道(≡ IOFieldBinding 面) | declarations | 请求表单绑定字段 → 派生 fields[] | 场景 step body |
+| carry 通道(≡ carry 面) | declarations | 请求传递面 → 派生 carry{} | platform 两层值表(运行时注入) |
+| Type C(schema 伴随) | schema_.properties − 已声明键 | 未声明字段,前端差集渲染 | step body 直填 |
+| view_only 通道(响应) | declarations | 响应展示/断言面 → 派生 fields[] / assertable_fields | 响应体 |
+
+**闭合性**:除此之外不存在请求/响应字段来源。step body 里的字面量是**值**不是声明 —— 值的通道:binding 值随 body、carry 值随值表注入(export 物化层只透传字面量、不补默认,606be60 已钉);新增字段需求 = 在上述落点之一登记,而非另起旁路结构。
+
+**Type C 的定位是裁定不是疏漏**:本轮硬性规格 1.1/1.2 钉死前端差集语义不动,故 Type C 留在 schema 伴随(B1)且**是定义落点,不算游离**;若未来要求其携带绑定元数据,收编路线见 §11 挂账 6。历史反模式:model 双真源(carry 轮 T2 退役)、绕开声明直改 body 的临时补丁 —— 均属本节禁止之列。
+
 ---
 
 ## 4. 派生层与消费者影响面
@@ -226,9 +244,12 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 | 消费者 | 读取 | P2 后 |
 |---|---|---|
 | `http/views.py` `_serialize` | spec.fields / spec.carry / spec.assertable_fields | 属性派生,透明 |
-| `export/platform.py`(L173/222/237) | ep.request.fields / spec.fields | 同上 |
-| `service/field_defaults.py`(L78-92) | request.fields / request.carry / resp.fields | 同上 |
+| `export/platform.py` | ep.request.fields / **ep.request.carry**(606be60 新增:carry 字面量透传迭代)/ spec.fields | 同上 |
+| `service/field_defaults.py` | request.fields / request.carry / resp.fields | 同上 |
 | 前端 Canvas / 平台 carry_injection | /full 线上键 | 线上键由派生属性序列化,逐键等价(§4.3) |
+| `tests/plate` `TestCarryFacesAllEndpoints`(606be60) | rs.carry / rs.fields(通道政策守卫) | 派生属性下零改动通过(§5 分层声明) |
+
+> 消费面按**读取的轴**登记(行号仅为落点参考,活代码会漂):P1/P2 实现时按轴 grep 盘点,不按行号对号。606be60 即在归一化 spec 写作期间新增了 carry 迭代消费点 —— 表过时是常态,轴漏读才是事故。
 
 ### 4.3 /full 线上视图与兼容表
 
@@ -279,6 +300,9 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 | body_type='none' → declarations 必须为空 | **新增**(§6 B4) | 无存量实例 |
 | body_type≠'none' → schema_ 非 None(Rule B,{} 算声明) | 不变 | schema 伴随轴独立校验 |
 | —(新增) | channel=="carry" → default/example 必须为 None | B6:桥路线天然合规(CarryEntry 无值字段);爆炸半径仅手写声明与 declare() 吸收 |
+| —(新增) | 通道-规格闭合:RequestSpec 条目 ∈ {binding,carry};ResponseSpec 条目 ∈ {view_only} | B7;桥与 declare() 天然合规,约束的是手写 declarations |
+
+**结构与政策的分层(2026-09-01 事故钉点)**:结构校验(上表)管"同一 path 不可双通道、通道闭合、值边界";**通道政策**("哪些字段属于哪个通道",如 fin 备注族一律 carry)是域语义,由 `TestCarryFacesAllEndpoints` 承担 —— 它是**永久站立守卫**,与 golden ② 生命周期不同(② 是迁移门,对 P1 基线锁相等,基线之后的日常变化它不管;政策测试正好补上)。归一化不消除通道误放类别(remark 声明成 binding 结构上恒合法);迁移不得删改该测试。
 
 ---
 
@@ -291,7 +315,8 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 | B3 | **assertable 覆写键,默认 False** | 今日缺省 assertable_fields=[] —— 默认 False 才能派生回空,保线上等价 | 声明"可断言"须显式(assertable=True 或 declare(assert_paths=...));存量 3 处显式写有的零损失 |
 | B4 | **body_type='none' → declarations 必须空** | 无 body 的端点声明字段无意义;今日无存量实例 | 理论收紧,零实际影响 |
 | B5 | **type 仅 carry 通道必填** | 今日 fields 无 type 字段;桥编译不做信息发明 | binding/view_only 条目类型信息仍靠 ui_kind 近似(与今日一致) |
-| B6 | **carry 通道禁值**:default/example 必须为 None;declare() 对 carry 键跳过 default 吸收 | D2(2026-08-31 carry spec 钦点"契约只声明字段面,值全收 platform")—— 同构字段若不封,`channel="carry", default="压测-张三"` 结构合法,值回流 plate;declare() 吸收会无声带值 | 手写 carry 条目失去 example 文档位(今日 CarryEntry 本就无此字段,零实际损失);enum 不禁(词表约束非值) |
+| B6 | **carry 通道禁值**:default/example 必须为 None;declare() 对 carry 键跳过 default 吸收 | D2(2026-08-31 carry spec 钦点"契约只声明字段面,值全收 platform")—— 同构字段若不封,`channel="carry", default="压测-张三"` 结构合法,值回流 plate;declare() 吸收会无声带值。与 606be60 物化层"carry 不补默认、仅透传字面量"(`_merge_carry_literal`)构成值边界两侧:声明侧禁值、物化侧不造值,改一处须想到另一处 | 手写 carry 条目失去 example 文档位(今日 CarryEntry 本就无此字段,零实际损失);enum 不禁(词表约束非值) |
+| B7 | **通道-规格闭合**:RequestSpec 条目 ∈ {binding,carry},ResponseSpec 条目 ∈ {view_only},违者构造错误 | 2026-09-01 钦定:请求字段必须落在 carry 或 IOFieldBinding 面,不存在游离结构 —— 闭合校验把要求变成结构不可能,而非依赖约定。Type C 是定义落点非游离(§3.5) | 无存量冲突(请求侧从未有 view_only 语义,响应侧从未有 binding/carry);手写 declarations 多一个报错面 |
 
 ---
 
@@ -333,11 +358,11 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 
 | # | 测试 | 内容 | 阶段 |
 |---|---|---|---|
-| ① | /full 逐键相等 golden | P1 前后,全部 17 端点(加 account 共 18)的 /full JSON:既有键逐键相等,新增仅 declarations | P1 |
+| ① | /full 逐键相等 golden | P1 前后,全部 17 端点(加 account 共 18)的 /full JSON:既有键逐键相等,新增仅 declarations。基线物化为**提交进库的 fixture 文件** —— 执行期 corpus 再漂(606be60 即先例)→ 红,强制 diff 可见的意识性 re-baseline,杜绝测试自适应吸收 | P1 |
 | ② | 桥构造等价 golden | **16 个桥路线端点**(settlement 除外,走 ③)零改动经桥构造 → /full 与 P1 基线**全键**逐键相等(既有键 + declarations;锁 fields/carry/declarations 三处序) | P2 |
 | ③ | declare() 等价 golden | settlement 迁移后:(a) 既有键与 P1 基线逐键相等(锁覆写保串);(b) 手写 declarations(含节点吸收值与覆写)与 declare() 输出全键相等。**②③ 基线不混用**:② 的 binding 条目 type 恒 None(桥不吸收),③ 的 type 恒吸收值 —— 混用必假阳性 | P2 |
 | ④ | 派生==手写 | declarations 手写 → 派生 fields/carry/assertable_fields == 直接构造旧参数的投影 | P2 |
-| ⑤ | 通道互斥与守卫 | 重复 path(含跨通道)→ 构造错误;body_type=none + 声明 → 错误;**carry 条目带 default/example → 构造错误(B6);根路径 `$` 条目构造与派生** | P2 |
+| ⑤ | 通道互斥与守卫 | 重复 path(含跨通道)→ 构造错误;body_type=none + 声明 → 错误;**carry 条目带 default/example → 构造错误(B6);RequestSpec+view_only / ResponseSpec+binding|carry → 构造错误(B7 闭合);根路径 `$` 条目构造与派生** | P2 |
 | ⑥ | assertable 语义 | 缺省派生 assertable_fields == [];显式 True 才进;audit_detail 的 audit_id(声明但未断言)桥编译后保持 False | P2 |
 | ⑦ | declare() 展开规则与边界 | 节点吸收(type/default/description/enum/required)、覆写优先、未列出=Type C、carry 缺 type 报错;**carry 键不吸收 default;键含 `.` 或 `[` → 报错;bindings 键查无 schema.properties 节点 → 报错** | P2 |
 | ⑧ | 既有三套件 | plate 451 基线 / backend 345 / frontend 401 + typecheck,允许 ±新增用例数 | P1/P2 |
@@ -354,6 +379,8 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 | platform P1 切读的版本错配 | 同仓同部署内网单体,无错配窗口 |
 | 构造桥长期滞留变成新兼容债 | P3 挂账显式可执行;桥是编译语义(旧参数→canonical)而非并行真源,不产生第二承重轴 |
 | `$` 根路径/数组下标路径的派生 | 本就是扁平 path 一等公民,path 校验沿用 is_valid_path,无节点依赖 |
+| declare() 通道误放新语法面(`bindings={"remark": None}` 误代 `carry=["remark"]`) | `test_descriptive_fields_never_in_form_fields` 断言派生 fields ∩ DESCRIPTIVE = ∅,declare() 产物走同一派生,天然覆盖;注意 bindings"查无节点报错"防吸收落空、**不防误放**(模型有 remark 节点,误放吸收成功静默产出完整 binding 条目) |
+| 游离结构复发(为实现功能绕开 declarations 另起旁路) | B7 闭合校验 + §3.5 落点闭合表作为评审依据;历史学费:model 双真源(已退役) |
 
 ---
 
@@ -365,7 +392,8 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 - [ ] **carry 通道 default/example 封死有单测**,declare() 对 carry 键不吸收 default(测试 ⑤⑦,B6);
 - [ ] 17 个端点文件在 P2 提交里零 diff(桥承接;settlement 除外,迁 declare());
 - [ ] settlement declare() 写法与手写线上等价,覆写保串(测试 ③);
-- [ ] 通道互斥/body_type 守卫/assertable 缺省语义/declare 边界报错有单测(测试 ⑤⑥⑦);
+- [ ] 通道互斥/body_type 守卫/**通道-规格闭合(B7)**/assertable 缺省语义/declare 边界报错有单测(测试 ⑤⑥⑦);
+- [ ] `TestCarryFacesAllEndpoints` 在 P2 派生属性下**零改动**通过(结构/政策分层,§5;迁移不删政策守卫);
 - [ ] 三套件门禁全绿(测试 ⑧);
 - [ ] platform 消费面已归一到 declarations(P1 切换完成,carry 面 service_fields 走新键)。
 
@@ -377,3 +405,5 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 2. **schema 伴随与声明的交叉校验**(开放点):B1 裁定不做;若未来漂移成痛,再立项"一致性 lint"(非运行时校验)。
 3. **binding/view_only 条目的 type 增强**(B5 余项):若前端控件渲染需要真类型,再扩 type 到全通道 —— 届时 declare() 已在吸收,存量靠一次性脚本补齐。
 4. **StrategyFieldDesc 同构化**:策略 dim 描述符词汇表与 DeclarationEntry 对齐问题,另一契约面,独立轮。
+5. **服务绑定目标 carry 键存在性校验**:2026-09-01 事故的真实成本是检测延迟(端点未声明 carry 面 → 零候选 → 绑定静默失效);P1 后 platform 可读 /full declarations,"绑定目标 path ∉ 端点 carry 声明"可在建绑定时告警/fail —— 与 B1 开放点同类(跨层交叉校验),独立轮。
+6. **Type C 收编**(可选):若未来要求 schema-only 字段进 declarations(如需绑定元数据/ui_kind),新增 schema_only 通道或按 binding 声明 —— 届时 golden 基线与前端差集逻辑同步调整;本轮 B1/1.5 裁定下 Type C 是定义落点(§3.5),非游离结构。
