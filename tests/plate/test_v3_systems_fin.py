@@ -104,6 +104,43 @@ class TestSchemaComposition:
         assert list(rs.carry) == ["$.remark"]
 
 
+class TestCarryFacesAllEndpoints:
+    """全端点 carry 面策略(spec §2.2 三分类):描述性传递字段(备注族)
+    一律声明进 carry,不得滞留 fields[](业务表单面)。
+
+    背景(2026-09-01):orderAdd 的 $.remark 服务绑定未注入 — 锚点步
+    契约门控 fail-closed,端点未声明 carry 面即零候选、绑定永不生效。
+    策略钉在 ALL_ENDPOINTS 全集上(而非逐端点打地鼠):凡请求含
+    remark / notes / cancel_remark 三个描述性字段的端点,三键全部
+    声明进 carry;查询类端点无此类字段、carry 面为空。
+    """
+
+    DESCRIPTIVE = {"remark", "notes", "cancel_remark"}
+
+    EXPECTED_CARRY: dict[str, list[str]] = {
+        "fin.settlement.create_order": ["$.remark"],
+        "fin.order_entrust.order_add": ["$.cancel_remark", "$.notes", "$.remark"],
+        "fin.order.order_add": ["$.cancel_remark", "$.notes", "$.remark"],
+        "fin.order.order_book": ["$.cancel_remark", "$.notes", "$.remark"],
+    }
+
+    def test_all_endpoints_carry_face_matches_policy(self) -> None:
+        actual = {
+            ep.id: sorted(rs.carry)
+            for ep in ALL_ENDPOINTS
+            if (rs := ep.request) is not None and rs.carry
+        }
+        assert actual == self.EXPECTED_CARRY
+
+    def test_descriptive_fields_never_in_form_fields(self) -> None:
+        for ep in ALL_ENDPOINTS:
+            rs = ep.request
+            if rs is None:
+                continue
+            leaked = {f.name for f in rs.fields} & self.DESCRIPTIVE
+            assert not leaked, f"{ep.id}: 描述性字段 {sorted(leaked)} 滞留 fields[]"
+
+
 class TestDefaultsRoundTrip:
     """defaults.py 的 Meta / Config 模板可 round-trip,system 信息携带正确。"""
 

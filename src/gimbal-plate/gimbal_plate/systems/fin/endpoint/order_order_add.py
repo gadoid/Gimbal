@@ -19,6 +19,7 @@ from gimbal_plate.schema.endpoint import (
     ResponseSpec,
     EndpointMetadata,
 )
+from gimbal_plate.schema.endpoint.io_spec import CarryEntry
 
 
 ORDER_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
@@ -84,7 +85,6 @@ ORDER_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
         IOFieldBinding(name='notifier', path='notifier', required=True, example='Codfish', ui_kind='text'),
         IOFieldBinding(name='ship_mark', path='ship_mark', required=True, example='Codfish', ui_kind='text'),
         IOFieldBinding(name='commodity', path='commodity', required=True, example='Codfish', ui_kind='text'),
-        IOFieldBinding(name='notes', path='notes', required=True, example='Codfish', ui_kind='text'),
         IOFieldBinding(name='cargo_type', path='cargo_type', required=True, example='', ui_kind='text'),
         IOFieldBinding(name='packer', path='packer', required=True, example='', ui_kind='text'),
         IOFieldBinding(name='num', path='num', required=True, example='1872', ui_kind='text'),
@@ -182,7 +182,6 @@ ORDER_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
         IOFieldBinding(name='is_loan_before_invoice', path='is_loan_before_invoice', required=True, example='0', ui_kind='text'),
         IOFieldBinding(name='is_fee_miss', path='is_fee_miss', required=True, example='0', ui_kind='text'),
         IOFieldBinding(name='fee_miss_name', path='fee_miss_name', required=True, example='', ui_kind='text'),
-        IOFieldBinding(name='cancel_remark', path='cancel_remark', required=True, example='', ui_kind='text'),
         IOFieldBinding(name='cancel_time', path='cancel_time', required=True, example='0', ui_kind='text'),
         IOFieldBinding(name='effective_id', path='effective_id', required=True, example='0', ui_kind='text'),
         IOFieldBinding(name='effective_by', path='effective_by', required=True, example='', ui_kind='text'),
@@ -211,7 +210,6 @@ ORDER_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
         IOFieldBinding(name='expect_discount_status', path='expect_discount_status', required=True, example='0', ui_kind='text'),
         IOFieldBinding(name='real_discount_status', path='real_discount_status', required=True, example='0', ui_kind='text'),
         IOFieldBinding(name='entrust_status', path='entrust_status', required=True, example='2', ui_kind='text'),
-        IOFieldBinding(name='remark', path='remark', required=True, example='', ui_kind='text'),
         IOFieldBinding(name='audit_type', path='audit_type', required=True, example='', ui_kind='text'),
         IOFieldBinding(name='is_system_generate', path='is_system_generate', required=True, example='0', ui_kind='text'),
         IOFieldBinding(name='is_financing', path='is_financing', required=True, example='0', ui_kind='text'),
@@ -260,6 +258,12 @@ ORDER_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
         IOFieldBinding(name='action', path='action', required=True, example='check', ui_kind='text'),
         IOFieldBinding(name='order_file', path='order_file', required=True, example=[], ui_kind='json'),
         ],
+        # 传递面(spec §2):备注族描述性字段 —— 值随 platform 两层值表(服务绑定+全局默认)走
+        carry={
+            "$.remark": CarryEntry(description="订单备注(随请求传递,不进表单)"),
+            "$.notes": CarryEntry(description="内部备注(随请求传递,不进表单)"),
+            "$.cancel_remark": CarryEntry(description="取消备注(随请求传递,不进表单)"),
+        },
         schema_={},
     ),
     responses={

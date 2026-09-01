@@ -19,6 +19,7 @@ from gimbal_plate.schema.endpoint import (
     ResponseSpec,
     EndpointMetadata,
 )
+from gimbal_plate.schema.endpoint.io_spec import CarryEntry
 
 
 ORDER_ENTRUST_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
@@ -85,7 +86,6 @@ ORDER_ENTRUST_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
         IOFieldBinding(name='notifier', path='notifier', required=True, example='', ui_kind='text'),
         IOFieldBinding(name='ship_mark', path='ship_mark', required=True, example='', ui_kind='text'),
         IOFieldBinding(name='commodity', path='commodity', required=True, example='', ui_kind='text'),
-        IOFieldBinding(name='notes', path='notes', required=True, example='', ui_kind='text'),
         IOFieldBinding(name='cargo_type', path='cargo_type', required=True, example='', ui_kind='text'),
         IOFieldBinding(name='packer', path='packer', required=True, example='', ui_kind='text'),
         IOFieldBinding(name='num', path='num', required=True, example='1872', ui_kind='text'),
@@ -102,7 +102,6 @@ ORDER_ENTRUST_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
         IOFieldBinding(name='message_board', path='message_board', required=True, example=[], ui_kind='json'),
         IOFieldBinding(name='customer_file_list', path='customer_file_list', required=True, example=[], ui_kind='json'),
         IOFieldBinding(name='supplier', path='supplier', required=True, example=[{'is_manual': '', 'is_primary': '1', 'isset_fee': '0', 'isset_supplier': '1', 'order_id': '', 'order_supplier_id': '', 'service_item': 'booking_space', 'service_item_name': '订舱', 'settle_object_id': '', 'settlement_date': None, 'supplier_id': '805', 'supplier_name': '青岛雅然国际物流有限公司', 'supplier_pay_date': None, 'supplier_period': None, 'user_id': '336', 'user_name': '闫航'}], ui_kind='json'),
-        IOFieldBinding(name='remark', path='remark', required=True, example='', ui_kind='text'),
         IOFieldBinding(name='policy_type_name', path='policy_type_name', required=True, example='', ui_kind='text'),
         IOFieldBinding(name='main_ids', path='main_ids', required=True, example='15,16,1', ui_kind='text'),
         IOFieldBinding(name='pol_cn', path='pol_cn', required=True, example='青岛流亭机场', ui_kind='text'),
@@ -188,7 +187,6 @@ ORDER_ENTRUST_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
         IOFieldBinding(name='is_loan_before_invoice', path='is_loan_before_invoice', required=True, example='0', ui_kind='text'),
         IOFieldBinding(name='is_fee_miss', path='is_fee_miss', required=True, example='0', ui_kind='text'),
         IOFieldBinding(name='fee_miss_name', path='fee_miss_name', required=True, example='', ui_kind='text'),
-        IOFieldBinding(name='cancel_remark', path='cancel_remark', required=True, example='', ui_kind='text'),
         IOFieldBinding(name='cancel_time', path='cancel_time', required=True, example='0', ui_kind='text'),
         IOFieldBinding(name='effective_id', path='effective_id', required=True, example='0', ui_kind='text'),
         IOFieldBinding(name='effective_by', path='effective_by', required=True, example='', ui_kind='text'),
@@ -260,6 +258,12 @@ ORDER_ENTRUST_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
         IOFieldBinding(name='expect_subsidy_category_name', path='expect_subsidy_category_name', required=True, example='—', ui_kind='text'),
         IOFieldBinding(name='real_subsidy_category_name', path='real_subsidy_category_name', required=True, example='—', ui_kind='text'),
         ],
+        # 传递面(spec §2):备注族描述性字段 —— 值随 platform 两层值表(服务绑定+全局默认)走
+        carry={
+            "$.remark": CarryEntry(description="订单备注(随请求传递,不进表单)"),
+            "$.notes": CarryEntry(description="内部备注(随请求传递,不进表单)"),
+            "$.cancel_remark": CarryEntry(description="取消备注(随请求传递,不进表单)"),
+        },
         schema_={},
     ),
     responses={
