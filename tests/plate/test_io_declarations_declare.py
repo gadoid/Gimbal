@@ -34,6 +34,17 @@ class TestDeclare:
         assert e.default is None        # B6:跳过 default 吸收
         assert e.example is None        # example 从不在吸收清单
 
+    def test_carry_absorbs_type_from_optional_anyof(self) -> None:
+        # 真实 settlement 形态:`remark: str | None = None` → 节点
+        # anyOf[{string},{null}] 无顶层 type;吸收解析 Optional 得 T
+        # (spec §3.4 settlement 示例依赖,Task 8 语料锚)
+        class WithOptional(PdBModel):
+            remark: "str | None" = None
+
+        rs = RequestSpec.declare(WithOptional, carry=["remark"])
+        (e,) = rs.declarations
+        assert e.type == "string"
+
     def test_carry_requires_explicit_type_when_nodeless(self) -> None:
         with pytest.raises(ValueError, match="carry.*type"):
             RequestSpec.declare({}, carry=["remark"])  # 空 schema 无节点

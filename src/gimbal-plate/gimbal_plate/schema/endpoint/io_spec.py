@@ -350,6 +350,28 @@ def _check_declarations(
             )
 
 
+def _node_type(node: dict[str, Any]) -> str | None:
+    """declare() 的节点 type 吸收:顶层 type;无则解析 anyOf/oneOf 的
+    Optional[T] 形(成员剥掉 null 后唯一 type)。
+
+    真实语料形态:`remark: str | None = None` 的 schema 节点是
+    anyOf[{string},{null}] 无顶层 type —— spec §3.4 settlement 示例
+    要求 carry=["remark"] 吸收得 "string"。
+    """
+    t = node.get("type")
+    if t is not None:
+        return t
+    for combinator in ("anyOf", "oneOf"):
+        members = node.get(combinator)
+        if isinstance(members, list):
+            types = {m.get("type") for m in members
+                     if isinstance(m, dict) and m.get("type") != "null"}
+            if len(types) == 1:
+                (t,) = types
+                return t
+    return None
+
+
 def _declare_entries(
     schema_: dict[str, Any],
     items: dict[str, dict[str, Any] | None] | list[str] | None,
@@ -398,7 +420,7 @@ def _declare_entries(
             "name": key,
             "path": path,
             "channel": channel,
-            "type": node.get("type"),
+            "type": _node_type(node),
             "required": key in required_names,
             "description": node.get("description") or "",
             "enum": node.get("enum"),

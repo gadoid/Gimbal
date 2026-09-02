@@ -14,12 +14,10 @@ from gimbal_plate.systems.fin.system_info import (
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
     EndpointSpec,
-    IOFieldBinding,
     RequestSpec,
     ResponseSpec,
     EndpointMetadata,
 )
-from gimbal_plate.schema.endpoint.io_spec import CarryEntry
 from gimbal_plate.systems.fin.models import (
     CreateOrderRequest,
     CreateOrderResponse,
@@ -38,19 +36,12 @@ SETTLEMENT_CREATE_ORDER: Final[EndpointSpec] = EndpointSpec(
         auth="bearer",
         timeout_seconds=10.0,
     ),
-    request=RequestSpec(
-        body_type="json",
-        schema_=CreateOrderRequest.model_json_schema(),
-        fields=[
-            IOFieldBinding(name="order_id", path="$.order_id", required=True,
-                           description="业务订单号"),
-            IOFieldBinding(name="amount", path="$.amount", required=True,
-                           description="结算金额,单位分", ui_kind="number"),
-            IOFieldBinding(name="currency", path="$.currency", required=False,
-                           default="CNY", description="币种"),
-        ],
-        # 传递面(spec §2):备注是典型 carry 字段 —— 值随 platform 配置走
-        carry={"$.remark": CarryEntry(description="备注(随请求传递,不进表单)")},
+    request=RequestSpec.declare(
+        CreateOrderRequest,
+        bindings={"order_id": None,
+                  "amount": {"ui_kind": "number"},
+                  "currency": None},
+        carry={"remark": {"description": "备注(随请求传递,不进表单)"}},
     ),
     responses={
         200: ResponseSpec(

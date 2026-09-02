@@ -11,7 +11,11 @@ from pathlib import Path
 import pytest
 
 from gimbal_plate.http.views import EndpointDetailView
-from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
+from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry, RequestSpec
+from gimbal_plate.systems.fin.endpoint import (
+    ALL_ENDPOINTS, SETTLEMENT_CREATE_ORDER,
+)
+from gimbal_plate.systems.fin.models import CreateOrderRequest
 
 FIXTURE = Path(__file__).parent / "fixtures" / "io_full_pre_p1.json"
 FIXTURE_DECL = Path(__file__).parent / "fixtures" / "io_declarations_p1.json"
@@ -119,3 +123,49 @@ def test_baseline_counts() -> None:
         "(若红:以 fixture 实测重新核对 spec §0.3 并意识性更新)"
     )
     assert carries == 99
+
+
+class TestSettlementDeclare:
+    """③(spec §8):③a 锁既有键(覆写保串);③b 手写与 declare 全键相等。
+    与 ② 不混用:③ 的 binding 条目 type 恒为吸收值(非 None)。"""
+
+    def test_3a_legacy_keys_vs_pre_p1(self) -> None:
+        live = _full_dict(SETTLEMENT_CREATE_ORDER)
+        base = json.loads(FIXTURE.read_text(encoding="utf-8"))[
+            "fin.settlement.create_order"]
+        _assert_request(base, live)
+
+    def test_3b_handwritten_equals_declare(self) -> None:
+        # 手写反填:字面量来自 declare() 输出实测,并对模型源码抽查锚定
+        # (order_id: str 无默认 → required=True/default=None;
+        #  amount: int gt 0 无默认 → required=True/default=None;
+        #  currency: str = "CNY" → default="CNY"/required=False;
+        #  remark 覆写 description 逐字节保串)
+        handwritten = RequestSpec(
+            body_type="json",
+            schema_=CreateOrderRequest.model_json_schema(),
+            declarations=[
+                DeclarationEntry(name="order_id", path="$.order_id",
+                                 channel="binding", type="string",
+                                 required=True, description="业务订单号"),
+                DeclarationEntry(name="amount", path="$.amount",
+                                 channel="binding", type="integer",
+                                 required=True, description="结算金额,单位分",
+                                 ui_kind="number"),
+                DeclarationEntry(name="currency", path="$.currency",
+                                 channel="binding", type="string",
+                                 required=False, default="CNY",
+                                 description="币种"),
+                DeclarationEntry(name="remark", path="$.remark",
+                                 channel="carry", type="string", required=False,
+                                 description="备注(随请求传递,不进表单)"),
+            ],
+        )
+        sugared = RequestSpec.declare(
+            CreateOrderRequest,
+            bindings={"order_id": None, "amount": {"ui_kind": "number"},
+                      "currency": None},
+            carry={"remark": {"description": "备注(随请求传递,不进表单)"}},
+        )
+        assert handwritten.declarations == sugared.declarations
+        assert handwritten.model_dump(mode="json") == sugared.model_dump(mode="json")
