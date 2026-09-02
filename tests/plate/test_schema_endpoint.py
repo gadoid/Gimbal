@@ -15,7 +15,7 @@ from gimbal_plate import (
     ResponseSpec,
     ServiceDefinition,
 )
-from gimbal_plate.schema.endpoint.io_spec import CarryEntry
+from gimbal_plate.schema.endpoint.io_spec import CarryEntry, DeclarationEntry
 
 
 class TestApiSpec:
@@ -1158,3 +1158,47 @@ class TestCarryEntry:
     def test_serialize_omits_empty_carry(self) -> None:
         data = RequestSpec(body_type="json", schema_={}).model_dump(mode="json")
         assert "carry" not in data
+
+
+class TestDeclarationEntry:
+    """DeclarationEntry 条目级校验(spec §3.1/§5)。spec 级(B7/B4/唯一)在 Task 6。"""
+
+    def test_minimal_binding_entry(self) -> None:
+        e = DeclarationEntry(name="remark", path="$.remark", channel="binding")
+        assert e.type is None and e.assertable is False
+
+    def test_b6_carry_bans_values(self) -> None:
+        DeclarationEntry(name="remark", path="$.remark", channel="carry",
+                         type="string")  # 合法
+        with pytest.raises(ValueError, match="carry.*default"):
+            DeclarationEntry(name="remark", path="$.remark", channel="carry",
+                             type="string", default="压测-张三")
+        with pytest.raises(ValueError, match="carry.*example"):
+            DeclarationEntry(name="remark", path="$.remark", channel="carry",
+                             type="string", example="x")
+        # enum 不禁(词表约束非值)
+        DeclarationEntry(name="level", path="$.level", channel="carry",
+                         type="string", enum=["a", "b"])
+
+    def test_carry_type_required_and_vocab(self) -> None:
+        with pytest.raises(ValueError, match="carry.*type"):
+            DeclarationEntry(name="remark", path="$.remark", channel="carry")
+        with pytest.raises(ValueError, match="词表"):
+            DeclarationEntry(name="remark", path="$.remark",
+                             channel="carry", type="timestamp")
+
+    def test_path_and_name_rules(self) -> None:
+        with pytest.raises(ValueError):
+            DeclarationEntry(name="x", path="$[0]", channel="binding")
+        with pytest.raises(ValueError):
+            DeclarationEntry(name="wrong", path="$.remark", channel="binding")
+        DeclarationEntry(name="$", path="$", channel="view_only")  # 根路径合法(2026-09-02 起无现网实例,规则保留)
+
+    def test_enum_membership(self) -> None:
+        with pytest.raises(ValueError):
+            DeclarationEntry(name="level", path="$.level", channel="binding",
+                             enum=["a", "b"], default="c")
+
+    def test_extra_forbid(self) -> None:
+        with pytest.raises(ValueError):
+            DeclarationEntry(name="x", path="$.x", channel="binding", bogus=1)

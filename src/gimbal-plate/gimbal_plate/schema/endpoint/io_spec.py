@@ -7,6 +7,58 @@ from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_valid
 
 from ...utils import path as _path
 
+# JSON Schema 原语词表(六原语);CarryEntry.type 与 DeclarationEntry
+# carry 通道条目共用同一词表对象(不复制两份)。
+_PRIMITIVE_TYPES = ("string", "number", "integer", "boolean", "object", "array")
+
+
+def _validate_path_name_enum(
+    *,
+    path: str,
+    name: str,
+    default: Any,
+    example: Any,
+    enum: list[Any] | None,
+    owner: str,
+    root_fallback_name: bool = False,
+) -> str:
+    """path 合法性/归一化 + name==末段 + enum 成员一致性(返回归一化 path)。
+
+    IOFieldBinding 与 DeclarationEntry 共用(owner 仅作报错文案前缀):
+    - 双形态并存:短名合法,但非法 JSONPath / 空串直接拒;
+    - 归一化统一收敛为 JSONPath 形态($.xxx),对已是 JSONPath 的 no-op;
+    - name 与 path 末段:末段是 FIELD 时 name 必须等于该标识符;
+      末段非 FIELD(根/INDEX/WILDCARD/...)时,IOFieldBinding 不约束
+      (V2 §2.4),DeclarationEntry 落兜底名 "$"(spec §5,与派生视图
+      `last_segment(path) or "$"` 同源);
+    - enum 非空时 default/example 必须在 enum 中(None/[] 跳过、
+      严格 ==、default 与 example 同等 —— IOFieldBinding 现行裁定)。
+    """
+    if not _path.is_valid_path(path):
+        raise ValueError(
+            f"{owner}.path={path!r} 不是合法 path"
+            f"（须为 JSONPath 形式或合法短名）"
+        )
+    norm = _path.normalize(path)
+    seg = _path.last_segment(norm)
+    if seg is not None:
+        if name != seg:
+            raise ValueError(
+                f"{owner}.name={name!r} 与 path={norm!r} 的末段 {seg!r} 不一致"
+            )
+    elif root_fallback_name and name != "$":
+        raise ValueError(
+            f"{owner}.name={name!r} 与 path={norm!r} 的末段非 FIELD,"
+            f"必须为兜底名 '$'"
+        )
+    if enum:
+        for label, value in (("default", default), ("example", example)):
+            if value is not None and not any(value == e for e in enum):
+                raise ValueError(
+                    f"{owner}.{label}={value!r} 不在 enum={enum!r} 中"
+                )
+    return norm
+
 
 class IOFieldBinding(BaseModel):
     """请求或响应 body 中的一个字段元信息。"""
@@ -37,34 +89,73 @@ class IOFieldBinding(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self) -> "IOFieldBinding":
-        # path 合法性（双形态并存：短名合法，但非法 JSONPath / 空串直接拒）
-        if not _path.is_valid_path(self.path):
-            raise ValueError(
-                f"IOFieldBinding.path={self.path!r} 不是合法 path"
-                f"（须为 JSONPath 形式或合法短名）"
-            )
-        # 归一化：统一收敛为 JSONPath 形态（$.xxx）。request/response 的
-        # IOFieldBinding.path 与 strategy[*].target、ResponseSpec.assertable_fields
-        # 保持一致;避免 request_fields / response_fields 在 platform dict 中出现
-        # 短名 vs JSONPath 混用。normalize() 对已经是 JSONPath 的 path 是 no-op。
-        self.path = _path.normalize(self.path)
-        # name 与 path 末段：末段是 FIELD 时 name 必须等于该标识符
-        seg = _path.last_segment(self.path)
-        if seg is not None and self.name != seg:
-            raise ValueError(
-                f"IOFieldBinding.name={self.name!r} 与 path={self.path!r} 的末段 {seg!r} 不一致"
-            )
-        # enum 成员一致性：enum 非空时 default / example 必须在 enum 中
-        #   Q2=a:enum 为 None 或 [] 视为"未声明可选值清单",跳过校验(填空风格自由)
-        #   Q1=b:严格 ==(Pythonic 默认,bool/int 互认由用户负责语义)
-        #   Q4=a:default 与 example 同等严格
-        #   Q3=b:enum 元素可以是任意类型(含 list/dict),直接用 == 比对
-        if self.enum:
-            for label, value in (("default", self.default), ("example", self.example)):
-                if value is not None and not any(value == e for e in self.enum):
-                    raise ValueError(
-                        f"IOFieldBinding.{label}={value!r} 不在 enum={self.enum!r} 中"
-                    )
+        # 校验逻辑与 DeclarationEntry 共享(模块级 _validate_path_name_enum);
+        # 末段非 FIELD 时 name 不约束(V2 §2.4,与 DeclarationEntry 的
+        # 兜底名 "$" 不同,由 root_fallback_name 开关分流)。
+        self.path = _validate_path_name_enum(
+            path=self.path, name=self.name, default=self.default,
+            example=self.example, enum=self.enum, owner="IOFieldBinding",
+        )
+        return self
+
+
+class DeclarationEntry(BaseModel):
+    """统一声明条目(spec §3.1)—— declarations 清单的元素。
+
+    通道-规格闭合(B7)在 RequestSpec/ResponseSpec 的 spec 级校验;
+    此处只做条目级:path/name/enum 与 IOFieldBinding 同款、carry
+    通道的 type 必填与禁值(B6)。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    path: str
+    channel: Literal["binding", "carry", "view_only"]
+    type: str | None = None          # 仅 carry 必填(§6 B5)
+    required: bool = True
+    default: Any | None = None
+    example: Any | None = None
+    description: str = ""
+    enum: list[Any] | None = None
+    ui_kind: Literal[
+        "text", "number", "boolean", "select",
+        "textarea", "json", "file", "binary", "unknown",
+    ] = "unknown"
+    source_kind: Literal["independent", "lookup", "generated"] = "independent"
+    assertable: bool = False
+
+    @model_validator(mode="after")
+    def _validate_entry(self) -> "DeclarationEntry":
+        # path/name/enum 与 IOFieldBinding 同款;末段非 FIELD 落兜底名 "$"
+        self.path = _validate_path_name_enum(
+            path=self.path, name=self.name, default=self.default,
+            example=self.example, enum=self.enum,
+            owner="DeclarationEntry", root_fallback_name=True,
+        )
+        if self.channel == "carry":
+            # type 必填(§6 B5)且在六原语词表(与 CarryEntry 同源常量)
+            if self.type is None:
+                raise ValueError(
+                    f"DeclarationEntry: carry 通道条目 {self.path!r} "
+                    f"type 必填(§6 B5)"
+                )
+            if self.type not in _PRIMITIVE_TYPES:
+                raise ValueError(
+                    f"DeclarationEntry.type={self.type!r} "
+                    f"不在 JSON Schema 原语词表({'/'.join(_PRIMITIVE_TYPES)})"
+                )
+            # B6:D2 后门封死 —— 值只走 platform 值表,条目不携带
+            if self.default is not None:
+                raise ValueError(
+                    f"DeclarationEntry: carry 通道条目 {self.path!r} "
+                    f"禁带 default(值在 platform 值表,B6)"
+                )
+            if self.example is not None:
+                raise ValueError(
+                    f"DeclarationEntry: carry 通道条目 {self.path!r} "
+                    f"禁带 example(值在 platform 值表,B6)"
+                )
         return self
 
 
@@ -85,12 +176,10 @@ class CarryEntry(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self) -> "CarryEntry":
-        if self.type not in (
-            "string", "number", "integer", "boolean", "object", "array",
-        ):
+        if self.type not in _PRIMITIVE_TYPES:
             raise ValueError(
                 f"CarryEntry.type={self.type!r} 不在 JSON Schema 原语词表"
-                f"(string/number/integer/boolean/object/array)"
+                f"({'/'.join(_PRIMITIVE_TYPES)})"
             )
         return self
 
