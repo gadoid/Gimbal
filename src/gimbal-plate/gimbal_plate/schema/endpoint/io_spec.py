@@ -287,6 +287,28 @@ class RequestSpec(BaseModel):
         """返回请求体的 JSON Schema(schema_ 为唯一结构真源),供跨进程传输使用。"""
         return self.schema_
 
+    @classmethod
+    def declare(
+        cls,
+        model: "type[BaseModel] | dict[str, Any]",
+        *,
+        body_type: Literal["none", "json", "form", "multipart", "raw", "binary"] = "json",
+        bindings: "dict[str, dict[str, Any] | None] | list[str] | None" = None,
+        carry: "dict[str, dict[str, Any] | None] | list[str] | None" = None,
+    ) -> "RequestSpec":
+        """declare() 糖(spec §3.4):pydantic 优先路线的瘦身入口。
+
+        元数据从 schema 节点吸收,type 全通道吸收(与构造桥的
+        "type 仅 carry 必填、其余 None"刻意不对称,spec §3.4 末节);
+        未列出的属性不生成声明(Type C 语义不变)。
+        """
+        schema_ = model.model_json_schema() if isinstance(model, type) else model
+        entries = _declare_entries(schema_, bindings, "binding",
+                                   skip_default=False, require_node=True)
+        entries += _declare_entries(schema_, carry, "carry",
+                                    skip_default=True, require_node=False)
+        return cls(body_type=body_type, schema_=schema_, declarations=entries)
+
     @model_serializer
     def _serialize(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -326,6 +348,72 @@ def _check_declarations(
                 f"{owner} 声明通道非法(B7 闭合): {e.channel!r}"
                 f" 不在 {allowed_channels}"
             )
+
+
+def _declare_entries(
+    schema_: dict[str, Any],
+    items: dict[str, dict[str, Any] | None] | list[str] | None,
+    channel: str,
+    *,
+    skip_default: bool,
+    require_node: bool,
+    marked_paths: set[str] | None = None,
+) -> list[DeclarationEntry]:
+    """declare() 糖的节点吸收/覆写展开(spec §3.4,纯函数)。
+
+    - 键仅顶层属性名(schema.properties 直查);含 '.'/'[' → 构造错误
+      (嵌套/数组路径请手写 DeclarationEntry 或走构造桥);
+    - 吸收:type/default(仅 binding 通道)/description/enum,
+      required ← schema.required 成员;example 从不在吸收清单;
+    - dict 值中的键作为覆写,优先于节点吸收值(junk 键由
+      DeclarationEntry extra=forbid 拒,不静默);
+    - carry(§6 B2 镜像,自持):跳过 default 吸收(B6 契约面不带值),
+      节点无 type 且未显式给 → "carry 声明缺 type" 构造错误;
+    - marked_paths(响应 assert_paths):命中的条目 assertable=True(B3)。
+    """
+    if items is None:
+        return []
+    if isinstance(items, list):
+        items = {k: None for k in items}
+    properties = schema_.get("properties") or {}
+    required_names = set(schema_.get("required") or [])
+    marked_paths = marked_paths or set()
+    entries: list[DeclarationEntry] = []
+    for key, override in items.items():
+        if "." in key or "[" in key:
+            raise ValueError(
+                f"declare() {channel} 键 {key!r} 非法:仅接受顶层属性名"
+                f"(schema.properties 直查,不含 '.' 或 '[';"
+                f"嵌套/数组路径请手写 DeclarationEntry 或走构造桥)"
+            )
+        node = properties.get(key)
+        if node is None and require_node:
+            raise ValueError(
+                f"declare() {channel} 键 {key!r} 不在 schema.properties 中"
+                f"(防吸收落空静默生成全默认值垃圾条目)"
+            )
+        node = node or {}
+        path = f"$.{key}"
+        absorbed: dict[str, Any] = {
+            "name": key,
+            "path": path,
+            "channel": channel,
+            "type": node.get("type"),
+            "required": key in required_names,
+            "description": node.get("description") or "",
+            "enum": node.get("enum"),
+            "assertable": path in marked_paths,
+        }
+        if not skip_default:
+            absorbed["default"] = node.get("default")
+        override = override or {}
+        if channel == "carry" and not (absorbed["type"] or override.get("type")):
+            raise ValueError(
+                f"declare() carry 键 {key!r} 无 schema 节点且未显式给"
+                f" type(carry 声明缺 type)"
+            )
+        entries.append(DeclarationEntry(**{**absorbed, **override}))
+    return entries
 
 
 class ResponseSpec(BaseModel):
@@ -419,6 +507,24 @@ class ResponseSpec(BaseModel):
 
     def json_schema(self) -> dict[str, Any] | None:
         return self.schema_
+
+    @classmethod
+    def declare(
+        cls,
+        model: "type[BaseModel] | dict[str, Any]",
+        *,
+        status: int = 200,
+        view_only: "dict[str, dict[str, Any] | None] | list[str] | None" = None,
+        assert_paths: "list[str] | None" = None,
+    ) -> "ResponseSpec":
+        """declare() 糖(spec §3.4):默认通道 view_only,assert_paths 置
+        assertable=True(B3)。吸收规则与 RequestSpec.declare 同款。"""
+        schema_ = model.model_json_schema() if isinstance(model, type) else model
+        marked = {_path.normalize(p) for p in (assert_paths or [])}
+        entries = _declare_entries(schema_, view_only, "view_only",
+                                   skip_default=False, require_node=True,
+                                   marked_paths=marked)
+        return cls(status=status, schema_=schema_, declarations=entries)
 
     @model_serializer
     def _serialize(self) -> dict[str, Any]:
