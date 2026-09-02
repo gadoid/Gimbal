@@ -113,15 +113,49 @@ class TestCarryFacesAllEndpoints:
     策略钉在 ALL_ENDPOINTS 全集上(而非逐端点打地鼠):凡请求含
     remark / notes / cancel_remark 三个描述性字段的端点,三键全部
     声明进 carry;查询类端点无此类字段、carry 面为空。
+
+    re-baseline(2026-09-02):73cc71b 语料重构把 order_entrust.order_add
+    委托下单改为 3 binding + 91 carry(该接口契约本就无 cancel_remark 声明)、
+    order_order_book 新增 $.action carry → EXPECTED_CARRY 按链上实际
+    carry 面重钉(全量 91 键显式锁定,后续漂移即红)。
     """
 
     DESCRIPTIVE = {"remark", "notes", "cancel_remark"}
 
     EXPECTED_CARRY: dict[str, list[str]] = {
         "fin.settlement.create_order": ["$.remark"],
-        "fin.order_entrust.order_add": ["$.cancel_remark", "$.notes", "$.remark"],
+        "fin.order_entrust.order_add": [
+            "$.airline_type", "$.atd", "$.bulk", "$.business_type",
+            "$.cargo_type", "$.carrier", "$.carrier_id", "$.client_expand_id",
+            "$.client_expand_name", "$.commodity", "$.consignee",
+            "$.container", "$.country_id", "$.country_name",
+            "$.country_name_cn", "$.customer_contact_id",
+            "$.customer_contact_name", "$.customer_file_list",
+            "$.customer_id", "$.customer_name", "$.customer_order_sn",
+            "$.del", "$.del_cn", "$.del_port_name", "$.deposit_refund_day",
+            "$.deposit_settlement_date", "$.deposit_type",
+            "$.deposit_type_name", "$.entrust_status", "$.etd",
+            "$.gross_weight", "$.m_delivery_type", "$.main_ids",
+            "$.main_sort", "$.message_board", "$.notes", "$.notifier",
+            "$.num", "$.ocean_type", "$.operator_id", "$.operator_name",
+            "$.order_file", "$.order_sn", "$.packer", "$.pay_type",
+            "$.payment_type", "$.payment_type_name", "$.period_delay_type",
+            "$.period_delay_type_name", "$.pod", "$.pod_cn",
+            "$.pod_port_name", "$.pol", "$.pol_cn", "$.pol_country",
+            "$.pol_country_cn", "$.pol_country_id", "$.pol_port_name",
+            "$.policy_id", "$.policy_name", "$.policy_type",
+            "$.policy_type_name", "$.pot", "$.pot_cn", "$.pot_port_name",
+            "$.product_id", "$.product_name", "$.receive_time_limit",
+            "$.remark", "$.sale_id", "$.sale_name", "$.sea_trans_cost",
+            "$.sea_trans_currency", "$.service_id", "$.service_items",
+            "$.service_name", "$.settle_type", "$.settle_type_name",
+            "$.ship_mark", "$.ship_name", "$.shipper", "$.status",
+            "$.supplier", "$.terms_payment", "$.terms_shipment",
+            "$.terms_transport", "$.teu", "$.trade_term", "$.volume",
+            "$.volume_desc", "$.voy",
+        ],
         "fin.order.order_add": ["$.cancel_remark", "$.notes", "$.remark"],
-        "fin.order.order_book": ["$.cancel_remark", "$.notes", "$.remark"],
+        "fin.order.order_book": ["$.action", "$.cancel_remark", "$.notes", "$.remark"],
     }
 
     def test_all_endpoints_carry_face_matches_policy(self) -> None:

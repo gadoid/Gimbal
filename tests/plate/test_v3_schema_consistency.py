@@ -53,6 +53,27 @@ def _platform_view() -> dict:
     return PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS).to_dict()
 
 
+# 与 PlatformScenarioExporter 相同的 step↔endpoint 匹配键
+_EP_BY_KEY = {(ep.api.method, ep.api.path): ep for ep in ALL_ENDPOINTS}
+
+
+def _declared_body_keys(ep) -> set[str] | None:
+    """平台补全面会物化的顶层 body 键集;None = 不物化(全量透传)。
+
+    73cc71b 语料重构后,旧场景 body 可能携带端点已不再声明的键
+    (如 entrust 的 order_id)— 平台补全只覆盖已声明面
+    (binding 字段名 ∪ 平铺 carry 键 "$.x"),未声明键按设计丢弃。
+    """
+    if ep is None or ep.request is None:
+        return None
+    keys = {f.name for f in ep.request.fields}
+    for p in ep.request.carry:
+        seg = p[2:] if p.startswith("$.") else p
+        if "." not in seg and "[" not in seg:
+            keys.add(seg)
+    return keys
+
+
 # §7.2 字段归属表 —— 测试代码必须与文档表格逐项对齐
 EXPECTED_PLATFORM_FIELDS: dict[str, tuple[type, str]] = {
     # field_name -> (owning_class, documented_type)
@@ -168,8 +189,14 @@ class TestDeserializationContract:
             # api / request.kind / request.body 子集 / strategy 完全一致
             assert s_from["api"] == s_native["api"]
             assert s_from["request"]["kind"] == s_native["request"]["kind"]
-            # body 是 superset 关系(platform 补全)
+            # body 是 superset 关系(platform 补全);73cc71b 语料重构后旧场景
+            # body 可能携带端点已不再声明的键(如 entrust 的 order_id),
+            # 补全只覆盖已声明面 — 未声明键按设计丢弃,不再要求往返保真
+            declared = _declared_body_keys(
+                _EP_BY_KEY.get((s_from["api"]["method"], s_from["api"]["path"])))
             for k, v in s_native["request"]["body"].items():
+                if declared is not None and k not in declared:
+                    continue
                 assert s_from["request"]["body"].get(k) == v, (
                     f"body key {k!r} 值在 platform → gimbal 链路中丢失或被改"
                 )

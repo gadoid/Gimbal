@@ -16,6 +16,7 @@ import pytest
 
 from gimbal_plate.export.gimbal import GimbalScenarioExporter
 from gimbal_plate.export.platform import PlatformScenarioExporter
+from gimbal_plate.schema.endpoint import EndpointSpec
 from gimbal_plate.schema.scenario import Scenario as ScenarioModel
 from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
 
@@ -47,6 +48,28 @@ def _roundtrip(platform_dict: dict) -> tuple[ScenarioModel, dict]:
     return sc, gimbal_dict
 
 
+# 与 PlatformScenarioExporter 相同的 step↔endpoint 匹配键
+_EP_BY_KEY = {(ep.api.method, ep.api.path): ep for ep in ALL_ENDPOINTS}
+
+
+def _declared_body_keys(ep: EndpointSpec | None) -> set[str] | None:
+    """平台补全面会物化的顶层 body 键集;None = 不物化(全量透传)。
+
+    73cc71b 语料重构后,旧场景 body 可能携带端点已不再声明的键
+    (如 entrust 的 order_id)— 平台补全只覆盖已声明面
+    (binding 字段名 ∪ 平铺 carry 键 "$.x"),未声明键按设计丢弃;
+    嵌套/数组下标 carry 路径不做字面量透传,不计入。
+    """
+    if ep is None or ep.request is None:
+        return None
+    keys = {f.name for f in ep.request.fields}
+    for p in ep.request.carry:
+        seg = p[2:] if p.startswith("$.") else p
+        if "." not in seg and "[" not in seg:
+            keys.add(seg)
+    return keys
+
+
 class TestPlatformDictRoundTrip:
     """平台后端落库的 dict 必须能 reverse 回 Scenario → GimbalScenarioExporter。"""
 
@@ -72,9 +95,14 @@ class TestPlatformDictRoundTrip:
         for gs, ge in zip(gimbal_dict["steps"], gimbal_original["steps"]):
             assert gs["api"]["method"] == ge["api"]["method"]
             assert gs["api"]["path"] == ge["api"]["path"]
-            # 新设计:body 已是 endpoint 全量字段定义,所以 gs.body ⊇ ge.body
-            # 每个 ge.body 的 key 必须在 gs.body 里且值一致
+            # 新设计:body 按 endpoint 已声明面补全,所以 gs.body ⊇ ge.body 的
+            # **已声明子集**;语料未声明的键(旧场景残留,如 entrust 的
+            # order_id)按设计不物化,不再要求往返保真
+            declared = _declared_body_keys(
+                _EP_BY_KEY.get((gs["api"]["method"], gs["api"]["path"])))
             for k, v in ge["request"]["body"].items():
+                if declared is not None and k not in declared:
+                    continue
                 assert k in gs["request"]["body"], f"missing key {k!r}"
                 assert gs["request"]["body"][k] == v, f"value mismatch at {k!r}"
             assert len(gs["strategy"]) == len(ge["strategy"])
