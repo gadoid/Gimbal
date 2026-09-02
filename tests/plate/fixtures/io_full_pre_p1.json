@@ -1,0 +1,8389 @@
+{
+ "fin.settlement.create_order": {
+  "id": "fin.settlement.create_order",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "创建结算单",
+  "description": "fin 结算服务创建结算订单的核心接口",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/v1/fin/settlement/orders",
+   "headers": {},
+   "timeout_seconds": 10.0,
+   "auth": "bearer",
+   "produces": [
+    "application/json"
+   ],
+   "consumes": [
+    "application/json"
+   ]
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "order_id",
+     "path": "$.order_id",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "业务订单号",
+     "enum": null,
+     "ui_kind": "unknown",
+     "source_kind": "independent"
+    },
+    {
+     "name": "amount",
+     "path": "$.amount",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "结算金额,单位分",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent"
+    },
+    {
+     "name": "currency",
+     "path": "$.currency",
+     "required": false,
+     "default": "CNY",
+     "example": null,
+     "description": "币种",
+     "enum": null,
+     "ui_kind": "unknown",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {
+    "additionalProperties": false,
+    "description": "fin.settlement.create_order 的请求 body。",
+    "properties": {
+     "order_id": {
+      "description": "业务订单号",
+      "minLength": 1,
+      "title": "Order Id",
+      "type": "string"
+     },
+     "amount": {
+      "description": "结算金额,单位分",
+      "exclusiveMinimum": 0,
+      "title": "Amount",
+      "type": "integer"
+     },
+     "currency": {
+      "default": "CNY",
+      "description": "币种",
+      "title": "Currency",
+      "type": "string"
+     },
+     "remark": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "default": null,
+      "description": "订单备注(carry 传递字段)",
+      "title": "Remark"
+     }
+    },
+    "required": [
+     "order_id",
+     "amount"
+    ],
+    "title": "CreateOrderRequest",
+    "type": "object"
+   },
+   "carry": {
+    "$.remark": {
+     "description": "备注(随请求传递,不进表单)",
+     "type": "string"
+    }
+   }
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "成功",
+    "fields": [],
+    "assertable_fields": [],
+    "schema": {
+     "additionalProperties": false,
+     "description": "fin.settlement.create_order 的 200 响应 body。",
+     "properties": {
+      "order_id": {
+       "title": "Order Id",
+       "type": "string"
+      },
+      "status": {
+       "title": "Status",
+       "type": "string"
+      },
+      "created_at": {
+       "title": "Created At",
+       "type": "string"
+      }
+     },
+     "required": [
+      "order_id",
+      "status",
+      "created_at"
+     ],
+     "title": "CreateOrderResponse",
+     "type": "object"
+    }
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.000012Z"
+ },
+ "fin.account.query_balance": {
+  "id": "fin.account.query_balance",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "查询账户余额",
+  "description": "fin 账户服务查询指定账户的当前余额",
+  "api": {
+   "service": "fin-service",
+   "method": "GET",
+   "path": "/api/v1/fin/account/balance",
+   "headers": {},
+   "timeout_seconds": 5.0,
+   "auth": "bearer",
+   "produces": [
+    "application/json"
+   ],
+   "consumes": [
+    "application/json"
+   ]
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "成功",
+    "fields": [],
+    "assertable_fields": [],
+    "schema": {
+     "additionalProperties": false,
+     "description": "fin.account.query_balance 的 200 响应 body。",
+     "properties": {
+      "account_id": {
+       "title": "Account Id",
+       "type": "string"
+      },
+      "balance": {
+       "description": "账户余额,单位分",
+       "minimum": 0,
+       "title": "Balance",
+       "type": "integer"
+      },
+      "currency": {
+       "default": "CNY",
+       "title": "Currency",
+       "type": "string"
+      },
+      "as_of": {
+       "title": "As Of",
+       "type": "string"
+      }
+     },
+     "required": [
+      "account_id",
+      "balance",
+      "as_of"
+     ],
+     "title": "QueryBalanceResponse",
+     "type": "object"
+    }
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.000472Z"
+ },
+ "fin.order_entrust.order_add": {
+  "id": "fin.order_entrust.order_add",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "委托订舱下单",
+  "description": "委托订舱下单",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/order/orderEntrust/orderAdd",
+   "headers": {},
+   "timeout_seconds": 30.0,
+   "auth": "none",
+   "produces": [],
+   "consumes": []
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "bl_no",
+     "path": "$.bl_no",
+     "required": true,
+     "default": "Codfish_TEST_001",
+     "example": "Codfish_TEST_001",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "track_bl_no",
+     "path": "$.track_bl_no",
+     "required": true,
+     "default": "Codfish_TEST_001",
+     "example": "Codfish_TEST_001",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "action",
+     "path": "$.action",
+     "required": true,
+     "default": "check",
+     "example": "submit",
+     "description": "check[校验]/submit[提交]",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {
+    "type": "object",
+    "properties": {
+     "client_expand_name": {
+      "type": "string"
+     },
+     "client_expand_id": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "m_delivery_type": {
+      "type": "string"
+     },
+     "customer_id": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "customer_name": {
+      "type": "string"
+     },
+     "receive_time_limit": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "deposit_refund_day": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "deposit_settlement_date": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "service_id": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "service_name": {
+      "type": "string"
+     },
+     "sale_id": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "sale_name": {
+      "type": "string"
+     },
+     "operator_id": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "operator_name": {
+      "type": "string"
+     },
+     "customer_contact_id": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "customer_contact_name": {
+      "type": "string"
+     },
+     "main_sort": {
+      "type": "string"
+     },
+     "policy_id": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "policy_name": {
+      "type": "string"
+     },
+     "policy_type": {
+      "type": "string"
+     },
+     "settle_type": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "settle_type_name": {
+      "type": "string"
+     },
+     "product_id": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "product_name": {
+      "type": "string"
+     },
+     "deposit_type": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "deposit_type_name": {
+      "type": "string"
+     },
+     "period_delay_type": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "period_delay_type_name": {
+      "type": "string"
+     },
+     "service_items": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "business_type": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "trade_term": {
+      "type": "string"
+     },
+     "carrier": {
+      "type": "string"
+     },
+     "carrier_id": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "bl_no": {
+      "type": "string"
+     },
+     "track_bl_no": {
+      "type": "string"
+     },
+     "etd": {
+      "type": "integer"
+     },
+     "atd": {
+      "type": "integer"
+     },
+     "ship_name": {
+      "type": "string"
+     },
+     "voy": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "pol": {
+      "type": "string"
+     },
+     "pot": {
+      "type": "string"
+     },
+     "pod": {
+      "type": "string"
+     },
+     "del": {
+      "type": "string"
+     },
+     "country_name": {
+      "type": "string"
+     },
+     "airline_type": {
+      "type": "string"
+     },
+     "ocean_type": {
+      "type": "string"
+     },
+     "terms_payment": {
+      "type": "string"
+     },
+     "terms_transport": {
+      "type": "string"
+     },
+     "pay_type": {
+      "type": "string"
+     },
+     "customer_order_sn": {
+      "type": "string"
+     },
+     "terms_shipment": {
+      "type": "string"
+     },
+     "shipper": {
+      "type": "string"
+     },
+     "consignee": {
+      "type": "string"
+     },
+     "notifier": {
+      "type": "string"
+     },
+     "ship_mark": {
+      "type": "string"
+     },
+     "commodity": {
+      "type": "string"
+     },
+     "notes": {
+      "type": "string"
+     },
+     "cargo_type": {
+      "type": "string"
+     },
+     "packer": {
+      "type": "string"
+     },
+     "num": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "gross_weight": {
+      "type": "string"
+     },
+     "bulk": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "sea_trans_cost": {
+      "type": "string"
+     },
+     "teu": {
+      "type": "string"
+     },
+     "volume": {
+      "type": "string"
+     },
+     "volume_desc": {
+      "type": "string"
+     },
+     "order_sn": {
+      "type": "string"
+     },
+     "status": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "sea_trans_currency": {
+      "type": "string"
+     },
+     "container": {
+      "type": "array"
+     },
+     "message_board": {
+      "type": "array"
+     },
+     "customer_file_list": {
+      "type": "array"
+     },
+     "supplier": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "is_manual": {
+         "type": "string"
+        },
+        "is_primary": {
+         "type": "string",
+         "description": "",
+         "x-type-hint": "疑似 int(字符串形态)"
+        },
+        "isset_fee": {
+         "type": "string",
+         "description": "",
+         "x-type-hint": "疑似 int(字符串形态)"
+        },
+        "isset_supplier": {
+         "type": "string",
+         "description": "",
+         "x-type-hint": "疑似 int(字符串形态)"
+        },
+        "order_id": {
+         "type": "string"
+        },
+        "order_supplier_id": {
+         "type": "string"
+        },
+        "service_item": {
+         "type": "string"
+        },
+        "service_item_name": {
+         "type": "string"
+        },
+        "settle_object_id": {
+         "type": "string",
+         "description": "",
+         "x-type-hint": "疑似 int(字符串形态)"
+        },
+        "settlement_date": {
+         "type": "string"
+        },
+        "pay_time_limit": {
+         "type": "string",
+         "description": "",
+         "x-type-hint": "疑似 int(字符串形态)"
+        },
+        "supplier_id": {
+         "type": "string",
+         "description": "",
+         "x-type-hint": "疑似 int(字符串形态)"
+        },
+        "supplier_name": {
+         "type": "string"
+        },
+        "supplier_pay_date": {
+         "type": "string"
+        },
+        "supplier_period": {
+         "type": "string"
+        },
+        "user_id": {
+         "type": "string",
+         "description": "",
+         "x-type-hint": "疑似 int(字符串形态)"
+        },
+        "user_name": {
+         "type": "string"
+        },
+        "settle_type": {
+         "type": "string",
+         "description": "",
+         "x-type-hint": "疑似 int(字符串形态)"
+        },
+        "supplier_name_clean": {
+         "type": "string"
+        },
+        "supplier_name_en": {
+         "type": "string"
+        },
+        "tax_number": {
+         "type": "string"
+        },
+        "settle_object": {
+         "type": "string"
+        },
+        "settle_object_clean": {
+         "type": "string"
+        },
+        "settle_type_name": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "remark": {
+      "type": "string"
+     },
+     "payment_type_name": {
+      "type": "string"
+     },
+     "payment_type": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "policy_type_name": {
+      "type": "string"
+     },
+     "main_ids": {
+      "type": "string"
+     },
+     "pot_cn": {
+      "type": "string"
+     },
+     "pot_port_name": {
+      "type": "string"
+     },
+     "pol_cn": {
+      "type": "string"
+     },
+     "pol_port_name": {
+      "type": "string"
+     },
+     "pol_country_id": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "pol_country": {
+      "type": "string"
+     },
+     "pol_country_cn": {
+      "type": "string"
+     },
+     "del_cn": {
+      "type": "string"
+     },
+     "del_port_name": {
+      "type": "string"
+     },
+     "pod_cn": {
+      "type": "string"
+     },
+     "pod_port_name": {
+      "type": "string"
+     },
+     "country_id": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     },
+     "country_name_cn": {
+      "type": "string"
+     },
+     "action": {
+      "type": "string"
+     },
+     "entrust_status": {
+      "type": "integer"
+     },
+     "order_file": {
+      "type": "array"
+     }
+    },
+    "required": [
+     "bl_no",
+     "track_bl_no"
+    ]
+   },
+   "carry": {
+    "$.client_expand_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.client_expand_id": {
+     "description": "",
+     "type": "string"
+    },
+    "$.m_delivery_type": {
+     "description": "",
+     "type": "string"
+    },
+    "$.customer_id": {
+     "description": "",
+     "type": "string"
+    },
+    "$.customer_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.receive_time_limit": {
+     "description": "",
+     "type": "string"
+    },
+    "$.deposit_refund_day": {
+     "description": "",
+     "type": "string"
+    },
+    "$.deposit_settlement_date": {
+     "description": "",
+     "type": "string"
+    },
+    "$.service_id": {
+     "description": "",
+     "type": "string"
+    },
+    "$.service_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.sale_id": {
+     "description": "",
+     "type": "string"
+    },
+    "$.sale_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.operator_id": {
+     "description": "",
+     "type": "string"
+    },
+    "$.operator_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.customer_contact_id": {
+     "description": "",
+     "type": "string"
+    },
+    "$.customer_contact_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.main_sort": {
+     "description": "",
+     "type": "string"
+    },
+    "$.policy_id": {
+     "description": "",
+     "type": "string"
+    },
+    "$.policy_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.policy_type": {
+     "description": "",
+     "type": "string"
+    },
+    "$.settle_type": {
+     "description": "",
+     "type": "string"
+    },
+    "$.settle_type_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.product_id": {
+     "description": "",
+     "type": "string"
+    },
+    "$.product_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.deposit_type": {
+     "description": "",
+     "type": "string"
+    },
+    "$.deposit_type_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.period_delay_type": {
+     "description": "",
+     "type": "string"
+    },
+    "$.period_delay_type_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.service_items": {
+     "description": "",
+     "type": "array"
+    },
+    "$.business_type": {
+     "description": "",
+     "type": "string"
+    },
+    "$.trade_term": {
+     "description": "",
+     "type": "string"
+    },
+    "$.carrier": {
+     "description": "",
+     "type": "string"
+    },
+    "$.carrier_id": {
+     "description": "",
+     "type": "string"
+    },
+    "$.etd": {
+     "description": "",
+     "type": "integer"
+    },
+    "$.atd": {
+     "description": "",
+     "type": "integer"
+    },
+    "$.ship_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.voy": {
+     "description": "",
+     "type": "string"
+    },
+    "$.pol": {
+     "description": "",
+     "type": "string"
+    },
+    "$.pot": {
+     "description": "",
+     "type": "string"
+    },
+    "$.pod": {
+     "description": "",
+     "type": "string"
+    },
+    "$.del": {
+     "description": "",
+     "type": "string"
+    },
+    "$.country_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.airline_type": {
+     "description": "",
+     "type": "string"
+    },
+    "$.ocean_type": {
+     "description": "",
+     "type": "string"
+    },
+    "$.terms_payment": {
+     "description": "",
+     "type": "string"
+    },
+    "$.terms_transport": {
+     "description": "",
+     "type": "string"
+    },
+    "$.pay_type": {
+     "description": "",
+     "type": "string"
+    },
+    "$.customer_order_sn": {
+     "description": "",
+     "type": "string"
+    },
+    "$.terms_shipment": {
+     "description": "",
+     "type": "string"
+    },
+    "$.shipper": {
+     "description": "",
+     "type": "string"
+    },
+    "$.consignee": {
+     "description": "",
+     "type": "string"
+    },
+    "$.notifier": {
+     "description": "",
+     "type": "string"
+    },
+    "$.ship_mark": {
+     "description": "",
+     "type": "string"
+    },
+    "$.commodity": {
+     "description": "",
+     "type": "string"
+    },
+    "$.notes": {
+     "description": "",
+     "type": "string"
+    },
+    "$.cargo_type": {
+     "description": "",
+     "type": "string"
+    },
+    "$.packer": {
+     "description": "",
+     "type": "string"
+    },
+    "$.num": {
+     "description": "",
+     "type": "string"
+    },
+    "$.gross_weight": {
+     "description": "",
+     "type": "string"
+    },
+    "$.bulk": {
+     "description": "",
+     "type": "string"
+    },
+    "$.sea_trans_cost": {
+     "description": "",
+     "type": "string"
+    },
+    "$.teu": {
+     "description": "",
+     "type": "string"
+    },
+    "$.volume": {
+     "description": "",
+     "type": "string"
+    },
+    "$.volume_desc": {
+     "description": "",
+     "type": "string"
+    },
+    "$.order_sn": {
+     "description": "",
+     "type": "string"
+    },
+    "$.status": {
+     "description": "",
+     "type": "string"
+    },
+    "$.sea_trans_currency": {
+     "description": "",
+     "type": "string"
+    },
+    "$.container": {
+     "description": "",
+     "type": "array"
+    },
+    "$.message_board": {
+     "description": "",
+     "type": "array"
+    },
+    "$.customer_file_list": {
+     "description": "",
+     "type": "array"
+    },
+    "$.supplier": {
+     "description": "",
+     "type": "array"
+    },
+    "$.remark": {
+     "description": "",
+     "type": "string"
+    },
+    "$.payment_type_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.payment_type": {
+     "description": "",
+     "type": "string"
+    },
+    "$.policy_type_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.main_ids": {
+     "description": "",
+     "type": "string"
+    },
+    "$.pot_cn": {
+     "description": "",
+     "type": "string"
+    },
+    "$.pot_port_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.pol_cn": {
+     "description": "",
+     "type": "string"
+    },
+    "$.pol_port_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.pol_country_id": {
+     "description": "",
+     "type": "string"
+    },
+    "$.pol_country": {
+     "description": "",
+     "type": "string"
+    },
+    "$.pol_country_cn": {
+     "description": "",
+     "type": "string"
+    },
+    "$.del_cn": {
+     "description": "",
+     "type": "string"
+    },
+    "$.del_port_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.pod_cn": {
+     "description": "",
+     "type": "string"
+    },
+    "$.pod_port_name": {
+     "description": "",
+     "type": "string"
+    },
+    "$.country_id": {
+     "description": "",
+     "type": "string"
+    },
+    "$.country_name_cn": {
+     "description": "",
+     "type": "string"
+    },
+    "$.entrust_status": {
+     "description": "",
+     "type": "integer"
+    },
+    "$.order_file": {
+     "description": "",
+     "type": "array"
+    }
+   }
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "",
+    "fields": [],
+    "assertable_fields": []
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.001718Z"
+ },
+ "fin.order_entrust.order_page": {
+  "id": "fin.order_entrust.order_page",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "委托订单的分页查询",
+  "description": "由 Scenario_Test_14 提取: 分页查询委托订单",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/order/orderEntrust/orderPage",
+   "headers": {},
+   "timeout_seconds": 30.0,
+   "auth": "bearer",
+   "produces": [
+    "application/json"
+   ],
+   "consumes": [
+    "application/json"
+   ]
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "bl_no",
+     "path": "$.bl_no",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_no",
+     "path": "$.order_no",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "page_no",
+     "path": "$.page_no",
+     "required": true,
+     "default": null,
+     "example": 1,
+     "description": "",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent"
+    },
+    {
+     "name": "page_size",
+     "path": "$.page_size",
+     "required": true,
+     "default": null,
+     "example": 20,
+     "description": "",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent"
+    },
+    {
+     "name": "sort_field",
+     "path": "$.sort_field",
+     "required": true,
+     "default": null,
+     "example": "update_time",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "sort_order",
+     "path": "$.sort_order",
+     "required": true,
+     "default": null,
+     "example": "desc",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "params",
+     "path": "$.params",
+     "required": true,
+     "default": null,
+     "example": {},
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {}
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "成功",
+    "fields": [
+     {
+      "name": "code",
+      "path": "$.code",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "业务状态码(200=成功)",
+      "enum": null,
+      "ui_kind": "number",
+      "source_kind": "independent"
+     },
+     {
+      "name": "msg",
+      "path": "$.msg",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "业务提示信息",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "request_id",
+      "path": "$.request_id",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "请求追踪ID",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "total",
+      "path": "$.data.total",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "命中总条数(分页)",
+      "enum": null,
+      "ui_kind": "number",
+      "source_kind": "independent"
+     },
+     {
+      "name": "order_id",
+      "path": "$.data.data[0].order_id",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "订单ID",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "order_no",
+      "path": "$.data.data[0].order_no",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "业务订单号(如 YWDD20260901110701)",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "order_sub_no",
+      "path": "$.data.data[0].order_sub_no",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "子订单号",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "business_no",
+      "path": "$.data.data[0].business_no",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "业务编号",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "copy_order_id",
+      "path": "$.data.data[0].copy_order_id",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "复制来源订单ID(0=非复制)",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "change_type",
+      "path": "$.data.data[0].change_type",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "变更类型(0=无)",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "business_main_id",
+      "path": "$.data.data[0].business_main_id",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "业务主体ID",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "business_main_name",
+      "path": "$.data.data[0].business_main_name",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "业务主体名称",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "main_ids",
+      "path": "$.data.data[0].main_ids",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "主体ID列表(逗号分隔)",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "main_sort",
+      "path": "$.data.data[0].main_sort",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "主体简称拼接(如 易航道,易汇联)",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "customer_order_sn",
+      "path": "$.data.data[0].customer_order_sn",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "客户单号",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "etd",
+      "path": "$.data.data[0].etd",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "预计离港时间(秒级时间戳字符串)",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "atd",
+      "path": "$.data.data[0].atd",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "实际离港时间(秒级时间戳字符串)",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "bl_no",
+      "path": "$.data.data[0].bl_no",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "提单号",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "track_bl_no",
+      "path": "$.data.data[0].track_bl_no",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "跟踪提单号",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "service_items",
+      "path": "$.data.data[0].service_items",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "服务项",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "track_atd",
+      "path": "$.data.data[0].track_atd",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "track_eta",
+      "path": "$.data.data[0].track_eta",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "track_ata",
+      "path": "$.data.data[0].track_ata",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     }
+    ],
+    "assertable_fields": [
+     "$.code",
+     "$.msg",
+     "$.request_id",
+     "$.data.total",
+     "$.data.data[0].order_id",
+     "$.data.data[0].order_no",
+     "$.data.data[0].order_sub_no",
+     "$.data.data[0].business_no",
+     "$.data.data[0].copy_order_id",
+     "$.data.data[0].change_type",
+     "$.data.data[0].business_main_id",
+     "$.data.data[0].business_main_name",
+     "$.data.data[0].main_ids",
+     "$.data.data[0].main_sort",
+     "$.data.data[0].customer_order_sn",
+     "$.data.data[0].etd",
+     "$.data.data[0].atd",
+     "$.data.data[0].bl_no",
+     "$.data.data[0].track_bl_no",
+     "$.data.data[0].service_items",
+     "$.data.data[0].track_atd",
+     "$.data.data[0].track_eta",
+     "$.data.data[0].track_ata"
+    ]
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.003246Z"
+ },
+ "fin.order.order_add": {
+  "id": "fin.order.order_add",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "委托订舱下单",
+  "description": "由 Scenario_Test_14 提取: 委托订舱下单",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/order/order/orderAdd",
+   "headers": {},
+   "timeout_seconds": 30.0,
+   "auth": "bearer",
+   "produces": [
+    "application/json"
+   ],
+   "consumes": [
+    "application/json"
+   ]
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "client_expand_name",
+     "path": "$.client_expand_name",
+     "required": true,
+     "default": null,
+     "example": "唐欣雨",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "m_delivery_type",
+     "path": "$.m_delivery_type",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_id",
+     "path": "$.customer_id",
+     "required": true,
+     "default": null,
+     "example": "320",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_name",
+     "path": "$.customer_name",
+     "required": true,
+     "default": null,
+     "example": "山东悦慕食品有限公司",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "receive_time_limit",
+     "path": "$.receive_time_limit",
+     "required": true,
+     "default": null,
+     "example": "20",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "deposit_refund_day",
+     "path": "$.deposit_refund_day",
+     "required": true,
+     "default": null,
+     "example": "180",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "deposit_settlement_date",
+     "path": "$.deposit_settlement_date",
+     "required": true,
+     "default": null,
+     "example": "30",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "service_id",
+     "path": "$.service_id",
+     "required": true,
+     "default": null,
+     "example": "55",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "service_name",
+     "path": "$.service_name",
+     "required": true,
+     "default": null,
+     "example": "曲静霞",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "operator_id",
+     "path": "$.operator_id",
+     "required": true,
+     "default": null,
+     "example": "336",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "operator_name",
+     "path": "$.operator_name",
+     "required": true,
+     "default": null,
+     "example": "闫航",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_contact_id",
+     "path": "$.customer_contact_id",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_contact_name",
+     "path": "$.customer_contact_name",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "main_sort",
+     "path": "$.main_sort",
+     "required": true,
+     "default": null,
+     "example": "易汇瀚,易海,易航道",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "policy_id",
+     "path": "$.policy_id",
+     "required": true,
+     "default": null,
+     "example": "134",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "policy_name",
+     "path": "$.policy_name",
+     "required": true,
+     "default": null,
+     "example": "【SPV对客】易汇瀚（仅人民币）",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "policy_type",
+     "path": "$.policy_type",
+     "required": true,
+     "default": null,
+     "example": "JSZX",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "settle_type",
+     "path": "$.settle_type",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "settle_type_name",
+     "path": "$.settle_type_name",
+     "required": true,
+     "default": null,
+     "example": "月结",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "product_id",
+     "path": "$.product_id",
+     "required": true,
+     "default": null,
+     "example": "4",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "product_name",
+     "path": "$.product_name",
+     "required": true,
+     "default": null,
+     "example": "月结-延长-保证金",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "deposit_type",
+     "path": "$.deposit_type",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "deposit_type_name",
+     "path": "$.deposit_type_name",
+     "required": true,
+     "default": null,
+     "example": "有",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "period_delay_type",
+     "path": "$.period_delay_type",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "period_delay_type_name",
+     "path": "$.period_delay_type_name",
+     "required": true,
+     "default": null,
+     "example": "延长",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "service_items",
+     "path": "$.service_items",
+     "required": true,
+     "default": null,
+     "example": [
+      "booking_space"
+     ],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "business_type",
+     "path": "$.business_type",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "trade_term",
+     "path": "$.trade_term",
+     "required": true,
+     "default": null,
+     "example": "CIF",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "carrier",
+     "path": "$.carrier",
+     "required": true,
+     "default": null,
+     "example": "COSCO",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "carrier_id",
+     "path": "$.carrier_id",
+     "required": true,
+     "default": null,
+     "example": "16",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "bl_no",
+     "path": "$.bl_no",
+     "required": true,
+     "default": null,
+     "example": "${var.bl_no}",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "track_bl_no",
+     "path": "$.track_bl_no",
+     "required": true,
+     "default": null,
+     "example": "${var.bl_no}",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "etd",
+     "path": "$.etd",
+     "required": true,
+     "default": null,
+     "example": 1782316800,
+     "description": "",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent"
+    },
+    {
+     "name": "atd",
+     "path": "$.atd",
+     "required": true,
+     "default": null,
+     "example": 1782835200,
+     "description": "",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent"
+    },
+    {
+     "name": "ship_name",
+     "path": "$.ship_name",
+     "required": true,
+     "default": null,
+     "example": "OOCL FRANCE",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "voy",
+     "path": "$.voy",
+     "required": true,
+     "default": null,
+     "example": "068E",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pol",
+     "path": "$.pol",
+     "required": true,
+     "default": null,
+     "example": "QINGDAO,CHINA",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pot",
+     "path": "$.pot",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pod",
+     "path": "$.pod",
+     "required": true,
+     "default": null,
+     "example": "ANTING,CHINA",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "del",
+     "path": "$.del",
+     "required": true,
+     "default": null,
+     "example": "ANTING,CHINA",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "country_name",
+     "path": "$.country_name",
+     "required": true,
+     "default": null,
+     "example": "CHINA",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "airline_type",
+     "path": "$.airline_type",
+     "required": true,
+     "default": null,
+     "example": "中国",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "ocean_type",
+     "path": "$.ocean_type",
+     "required": true,
+     "default": null,
+     "example": "近洋",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "terms_payment",
+     "path": "$.terms_payment",
+     "required": true,
+     "default": null,
+     "example": "T/T",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "terms_transport",
+     "path": "$.terms_transport",
+     "required": true,
+     "default": null,
+     "example": "CY/CY",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pay_type",
+     "path": "$.pay_type",
+     "required": true,
+     "default": null,
+     "example": "FREIGHT PREPAID",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_order_sn",
+     "path": "$.customer_order_sn",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "terms_shipment",
+     "path": "$.terms_shipment",
+     "required": true,
+     "default": null,
+     "example": "Codfish",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "shipper",
+     "path": "$.shipper",
+     "required": true,
+     "default": null,
+     "example": "Codfish",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "consignee",
+     "path": "$.consignee",
+     "required": true,
+     "default": null,
+     "example": "Codfish",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "notifier",
+     "path": "$.notifier",
+     "required": true,
+     "default": null,
+     "example": "Codfish",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "ship_mark",
+     "path": "$.ship_mark",
+     "required": true,
+     "default": null,
+     "example": "Codfish",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "commodity",
+     "path": "$.commodity",
+     "required": true,
+     "default": null,
+     "example": "Codfish",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "cargo_type",
+     "path": "$.cargo_type",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "packer",
+     "path": "$.packer",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "num",
+     "path": "$.num",
+     "required": true,
+     "default": null,
+     "example": "1872",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "gross_weight",
+     "path": "$.gross_weight",
+     "required": true,
+     "default": null,
+     "example": "26800.000",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "bulk",
+     "path": "$.bulk",
+     "required": true,
+     "default": null,
+     "example": "60.000",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "sea_trans_cost",
+     "path": "$.sea_trans_cost",
+     "required": true,
+     "default": null,
+     "example": "1.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "teu",
+     "path": "$.teu",
+     "required": true,
+     "default": null,
+     "example": "2",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "volume",
+     "path": "$.volume",
+     "required": true,
+     "default": null,
+     "example": "1*40HQ",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "volume_desc",
+     "path": "$.volume_desc",
+     "required": true,
+     "default": null,
+     "example": "普柜",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_sn",
+     "path": "$.order_sn",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "status",
+     "path": "$.status",
+     "required": true,
+     "default": null,
+     "example": 2,
+     "description": "",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent"
+    },
+    {
+     "name": "sea_trans_currency",
+     "path": "$.sea_trans_currency",
+     "required": true,
+     "default": null,
+     "example": "USD",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "container",
+     "path": "$.container",
+     "required": true,
+     "default": null,
+     "example": [
+      {
+       "order_container_id": "",
+       "box_type": "40HQ",
+       "box_num": "1",
+       "box_no": [
+        ""
+       ],
+       "seal_number": [
+        ""
+       ],
+       "sea_trans_unit_price": 1
+      }
+     ],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "message_board",
+     "path": "$.message_board",
+     "required": true,
+     "default": null,
+     "example": [],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_file_list",
+     "path": "$.customer_file_list",
+     "required": true,
+     "default": null,
+     "example": [],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "supplier",
+     "path": "$.supplier",
+     "required": true,
+     "default": null,
+     "example": [
+      {
+       "order_supplier_id": "",
+       "order_id": "",
+       "isset_supplier": "1",
+       "is_primary": "1",
+       "supplier_id": "805",
+       "supplier_name": "青岛雅然国际物流有限公司",
+       "settle_object_id": "1384",
+       "user_id": "336",
+       "user_name": "闫航",
+       "service_item": "booking_space",
+       "supplier_period": "60",
+       "settlement_date": "20",
+       "supplier_pay_date": "0",
+       "is_manual": "0",
+       "sys_upttime": "2026-07-01 13:14:48",
+       "supplier_label": "青岛雅然国际物流有限公司-订舱",
+       "service_item_name": "订舱",
+       "isset_fee": false
+      }
+     ],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_id",
+     "path": "$.order_id",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_no",
+     "path": "$.order_no",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_category",
+     "path": "$.customer_category",
+     "required": true,
+     "default": null,
+     "example": ",1,2,",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_tax_number",
+     "path": "$.customer_tax_number",
+     "required": true,
+     "default": null,
+     "example": "91370786MA3D6MW35A",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_address_cn",
+     "path": "$.customer_address_cn",
+     "required": true,
+     "default": null,
+     "example": "山东省潍坊市昌邑市围子街道206国道北(官道郜北)",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "client_expand_id",
+     "path": "$.client_expand_id",
+     "required": true,
+     "default": null,
+     "example": "261",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_contact_phone",
+     "path": "$.customer_contact_phone",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_main_id",
+     "path": "$.customer_main_id",
+     "required": true,
+     "default": null,
+     "example": "15",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_main_name",
+     "path": "$.customer_main_name",
+     "required": true,
+     "default": null,
+     "example": "成都易汇瀚供应链管理有限公司",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "business_main_id",
+     "path": "$.business_main_id",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "business_main_name",
+     "path": "$.business_main_name",
+     "required": true,
+     "default": null,
+     "example": "青岛易航道物流科技有限公司",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "fund_code",
+     "path": "$.fund_code",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "fund_name",
+     "path": "$.fund_name",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "track_atd",
+     "path": "$.track_atd",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "track_eta",
+     "path": "$.track_eta",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "track_ata",
+     "path": "$.track_ata",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "track_stcs",
+     "path": "$.track_stcs",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "track_ship_name",
+     "path": "$.track_ship_name",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "track_voy",
+     "path": "$.track_voy",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "finance_date",
+     "path": "$.finance_date",
+     "required": true,
+     "default": null,
+     "example": "1782316800",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pol_cn",
+     "path": "$.pol_cn",
+     "required": true,
+     "default": null,
+     "example": "青岛流亭机场",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pol_country_id",
+     "path": "$.pol_country_id",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pol_country",
+     "path": "$.pol_country",
+     "required": true,
+     "default": null,
+     "example": "CHINA",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pol_country_cn",
+     "path": "$.pol_country_cn",
+     "required": true,
+     "default": null,
+     "example": "中国",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pod_cn",
+     "path": "$.pod_cn",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pot_cn",
+     "path": "$.pot_cn",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "del_cn",
+     "path": "$.del_cn",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "country_id",
+     "path": "$.country_id",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "country_name_cn",
+     "path": "$.country_name_cn",
+     "required": true,
+     "default": null,
+     "example": "中国",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_period",
+     "path": "$.customer_period",
+     "required": true,
+     "default": null,
+     "example": "120",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_settlement_date",
+     "path": "$.customer_settlement_date",
+     "required": true,
+     "default": null,
+     "example": "10",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "period_rule",
+     "path": "$.period_rule",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "term_rule_name",
+     "path": "$.term_rule_name",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_due_date",
+     "path": "$.customer_due_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_put_date",
+     "path": "$.customer_put_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_payment_collection_date",
+     "path": "$.customer_payment_collection_date",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_put_date_manual",
+     "path": "$.customer_put_date_manual",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_put_writeoff_date",
+     "path": "$.customer_put_writeoff_date",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "supplier_due_date",
+     "path": "$.supplier_due_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "discount_start",
+     "path": "$.discount_start",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "discount_rule",
+     "path": "$.discount_rule",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "discount_end",
+     "path": "$.discount_end",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "discount_ratio",
+     "path": "$.discount_ratio",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "discount_status",
+     "path": "$.discount_status",
+     "required": true,
+     "default": null,
+     "example": "2",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "discount_currency",
+     "path": "$.discount_currency",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "book_upload_date",
+     "path": "$.book_upload_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "trans_cost_put_preserve_date",
+     "path": "$.trans_cost_put_preserve_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "bl_no_upload_date",
+     "path": "$.bl_no_upload_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "supplier_invoice_date",
+     "path": "$.supplier_invoice_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "supplier_invoice_taketime",
+     "path": "$.supplier_invoice_taketime",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_cost_date",
+     "path": "$.real_cost_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_invoice_request_date",
+     "path": "$.customer_invoice_request_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "first_financing_doc_ok_date",
+     "path": "$.first_financing_doc_ok_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "second_financing_doc_ok_date",
+     "path": "$.second_financing_doc_ok_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "insurance_doc_ok_date",
+     "path": "$.insurance_doc_ok_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_confirm_date",
+     "path": "$.customer_confirm_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_delayed_recovery",
+     "path": "$.is_delayed_recovery",
+     "required": true,
+     "default": null,
+     "example": "否",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "delayed_recovery_usd",
+     "path": "$.delayed_recovery_usd",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "delayed_recovery_cny",
+     "path": "$.delayed_recovery_cny",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "delayed_time",
+     "path": "$.delayed_time",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "expect_fee_status",
+     "path": "$.expect_fee_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_fee_status",
+     "path": "$.real_fee_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "fee_lock_status",
+     "path": "$.fee_lock_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pay_account_status",
+     "path": "$.pay_account_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "account_status",
+     "path": "$.account_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_pay_usd",
+     "path": "$.real_pay_usd",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_pay_cny",
+     "path": "$.real_pay_cny",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_put_usd",
+     "path": "$.real_put_usd",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_put_cny",
+     "path": "$.real_put_cny",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_put_discount_rate",
+     "path": "$.real_put_discount_rate",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "exchange_rate",
+     "path": "$.exchange_rate",
+     "required": true,
+     "default": null,
+     "example": "6.8067",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "folde_pay_usd",
+     "path": "$.folde_pay_usd",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "folde_put_usd",
+     "path": "$.folde_put_usd",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "folde_pay_total",
+     "path": "$.folde_pay_total",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "folde_put_total",
+     "path": "$.folde_put_total",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "gross_margin",
+     "path": "$.gross_margin",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "gross_margin_rate",
+     "path": "$.gross_margin_rate",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_special_pay",
+     "path": "$.is_special_pay",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_loan_before_invoice",
+     "path": "$.is_loan_before_invoice",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_fee_miss",
+     "path": "$.is_fee_miss",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "fee_miss_name",
+     "path": "$.fee_miss_name",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "cancel_time",
+     "path": "$.cancel_time",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "effective_id",
+     "path": "$.effective_id",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "effective_by",
+     "path": "$.effective_by",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "effective_time",
+     "path": "$.effective_time",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "create_id",
+     "path": "$.create_id",
+     "required": true,
+     "default": null,
+     "example": "828",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "create_by",
+     "path": "$.create_by",
+     "required": true,
+     "default": null,
+     "example": "GIMBAL",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "create_time",
+     "path": "$.create_time",
+     "required": true,
+     "default": null,
+     "example": "1782882887",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "update_id",
+     "path": "$.update_id",
+     "required": true,
+     "default": null,
+     "example": "828",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "update_by",
+     "path": "$.update_by",
+     "required": true,
+     "default": null,
+     "example": "GIMBAL",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "update_time",
+     "path": "$.update_time",
+     "required": true,
+     "default": null,
+     "example": "1782882935",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "delete_time",
+     "path": "$.delete_time",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "business_time",
+     "path": "$.business_time",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "main_ids",
+     "path": "$.main_ids",
+     "required": true,
+     "default": null,
+     "example": ",15,16,1,",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "reverse_status",
+     "path": "$.reverse_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "proprietary_business_status",
+     "path": "$.proprietary_business_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "loan_status",
+     "path": "$.loan_status",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "first_status",
+     "path": "$.first_status",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "second_status",
+     "path": "$.second_status",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "loan_pay_status",
+     "path": "$.loan_pay_status",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "change_type",
+     "path": "$.change_type",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "copy_order_id",
+     "path": "$.copy_order_id",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_fee_locked",
+     "path": "$.real_fee_locked",
+     "required": true,
+     "default": null,
+     "example": false,
+     "description": "",
+     "enum": null,
+     "ui_kind": "boolean",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_usd_project",
+     "path": "$.is_usd_project",
+     "required": true,
+     "default": null,
+     "example": "2",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pay_status",
+     "path": "$.pay_status",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_sync_es",
+     "path": "$.is_sync_es",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "expect_discount_status",
+     "path": "$.expect_discount_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_discount_status",
+     "path": "$.real_discount_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "entrust_status",
+     "path": "$.entrust_status",
+     "required": true,
+     "default": null,
+     "example": "2",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "audit_type",
+     "path": "$.audit_type",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_system_generate",
+     "path": "$.is_system_generate",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_financing",
+     "path": "$.is_financing",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "confirm_status",
+     "path": "$.confirm_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_traverse",
+     "path": "$.is_traverse",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "financing_apply_amount",
+     "path": "$.financing_apply_amount",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "financing_apply_amount_cny",
+     "path": "$.financing_apply_amount_cny",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "financing_apply_amount_usd",
+     "path": "$.financing_apply_amount_usd",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "sys_upttime",
+     "path": "$.sys_upttime",
+     "required": true,
+     "default": null,
+     "example": "2026-07-01 13:15:35",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_put_date_desc",
+     "path": "$.customer_put_date_desc",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "deposit_refund_month",
+     "path": "$.deposit_refund_month",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "payment_type",
+     "path": "$.payment_type",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "reverse_status_name",
+     "path": "$.reverse_status_name",
+     "required": true,
+     "default": null,
+     "example": "否",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_delayed_recovery_name",
+     "path": "$.is_delayed_recovery_name",
+     "required": true,
+     "default": null,
+     "example": "否",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_finance_arr",
+     "path": "$.order_finance_arr",
+     "required": true,
+     "default": null,
+     "example": [],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_main_bank_arr",
+     "path": "$.order_main_bank_arr",
+     "required": true,
+     "default": null,
+     "example": [],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_sub",
+     "path": "$.order_sub",
+     "required": true,
+     "default": null,
+     "example": [],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_sub_no",
+     "path": "$.order_sub_no",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "service_project",
+     "path": "$.service_project",
+     "required": true,
+     "default": null,
+     "example": {
+      "booking_space": false,
+      "customs_clearance": false,
+      "manifest": false,
+      "insurance": false,
+      "trucking": false
+     },
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "service_project_amount",
+     "path": "$.service_project_amount",
+     "required": true,
+     "default": null,
+     "example": {
+      "booking_space": false,
+      "customs_clearance": false,
+      "manifest": false,
+      "insurance": false,
+      "trucking": false
+     },
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "finance_status",
+     "path": "$.finance_status",
+     "required": true,
+     "default": null,
+     "example": true,
+     "description": "",
+     "enum": null,
+     "ui_kind": "boolean",
+     "source_kind": "independent"
+    },
+    {
+     "name": "main_ids_name",
+     "path": "$.main_ids_name",
+     "required": true,
+     "default": null,
+     "example": "易汇瀚,易海,易航道",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "policy_main_arr",
+     "path": "$.policy_main_arr",
+     "required": true,
+     "default": null,
+     "example": [
+      {
+       "fee_main_id": "15",
+       "main_name": "成都易汇瀚供应链管理有限公司"
+      },
+      {
+       "fee_main_id": "16",
+       "main_name": "青岛易海供应链管理有限公司"
+      },
+      {
+       "fee_main_id": "1",
+       "main_name": "青岛易航道物流科技有限公司"
+      }
+     ],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "policy_type_name",
+     "path": "$.policy_type_name",
+     "required": true,
+     "default": null,
+     "example": "结算业务",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "business_type_name",
+     "path": "$.business_type_name",
+     "required": true,
+     "default": null,
+     "example": "海运整箱",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "cargo_type_name",
+     "path": "$.cargo_type_name",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "period_rule_name",
+     "path": "$.period_rule_name",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "trade_term_name",
+     "path": "$.trade_term_name",
+     "required": true,
+     "default": null,
+     "example": "CIF",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "carrier_name",
+     "path": "$.carrier_name",
+     "required": true,
+     "default": null,
+     "example": "中国远洋运输（集团）总公司",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "terms_transport_name",
+     "path": "$.terms_transport_name",
+     "required": true,
+     "default": null,
+     "example": "CY/CY",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "terms_payment_name",
+     "path": "$.terms_payment_name",
+     "required": true,
+     "default": null,
+     "example": "T/T",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pay_type_name",
+     "path": "$.pay_type_name",
+     "required": true,
+     "default": null,
+     "example": "FREIGHT PREPAID",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "m_delivery_type_name",
+     "path": "$.m_delivery_type_name",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "payment_type_name",
+     "path": "$.payment_type_name",
+     "required": true,
+     "default": null,
+     "example": "空",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "audit",
+     "path": "$.audit",
+     "required": true,
+     "default": null,
+     "example": [],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "enable",
+     "path": "$.enable",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "policy_match",
+     "path": "$.policy_match",
+     "required": true,
+     "default": null,
+     "example": "semi",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "policy_match_name",
+     "path": "$.policy_match_name",
+     "required": true,
+     "default": null,
+     "example": "手动选择",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_discount_status_name",
+     "path": "$.real_discount_status_name",
+     "required": true,
+     "default": null,
+     "example": "—",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "expect_discount_status_name",
+     "path": "$.expect_discount_status_name",
+     "required": true,
+     "default": null,
+     "example": "—",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "expect_policy_status_name",
+     "path": "$.expect_policy_status_name",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "policy_status_name",
+     "path": "$.policy_status_name",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "subsidy_category_name",
+     "path": "$.subsidy_category_name",
+     "required": true,
+     "default": null,
+     "example": "—",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "expect_subsidy_category_name",
+     "path": "$.expect_subsidy_category_name",
+     "required": true,
+     "default": null,
+     "example": "—",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_subsidy_category_name",
+     "path": "$.real_subsidy_category_name",
+     "required": true,
+     "default": null,
+     "example": "—",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "action",
+     "path": "$.action",
+     "required": true,
+     "default": null,
+     "example": "check",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_file",
+     "path": "$.order_file",
+     "required": true,
+     "default": null,
+     "example": [],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {},
+   "carry": {
+    "$.remark": {
+     "description": "订单备注(随请求传递,不进表单)",
+     "type": "string"
+    },
+    "$.notes": {
+     "description": "内部备注(随请求传递,不进表单)",
+     "type": "string"
+    },
+    "$.cancel_remark": {
+     "description": "取消备注(随请求传递,不进表单)",
+     "type": "string"
+    }
+   }
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "成功",
+    "fields": [],
+    "assertable_fields": []
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.006186Z"
+ },
+ "fin.order.order_detail": {
+  "id": "fin.order.order_detail",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "订单-查询订单详情",
+  "description": "订单-查询订单详情",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/order/order/orderDetail",
+   "headers": {},
+   "timeout_seconds": 30.0,
+   "auth": "none",
+   "produces": [],
+   "consumes": []
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "order_id",
+     "path": "$.order_id",
+     "required": true,
+     "default": null,
+     "example": "353432653833176064",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {
+    "type": "object",
+    "properties": {
+     "order_id": {
+      "type": "string",
+      "description": "",
+      "x-type-hint": "疑似 int(字符串形态)"
+     }
+    },
+    "required": [
+     "order_id"
+    ]
+   }
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "",
+    "fields": [
+     {
+      "name": "code",
+      "path": "$.code",
+      "required": false,
+      "default": null,
+      "example": 200,
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "msg",
+      "path": "$.msg",
+      "required": false,
+      "default": null,
+      "example": "成功",
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "order_id",
+      "path": "$.data.data[0].order_id",
+      "required": false,
+      "default": null,
+      "example": "353432653833176064",
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "order_no",
+      "path": "$.data.data[0].order_no",
+      "required": false,
+      "default": null,
+      "example": "YWDD20260902110779",
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "bl_no",
+      "path": "$.data.data[0].bl_no",
+      "required": false,
+      "default": null,
+      "example": "Codfish-3KQI-Test",
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "policy_type",
+      "path": "$.data.data[0].policy_type",
+      "required": false,
+      "default": null,
+      "example": "JSZX",
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "policy_id",
+      "path": "$.data.data[0].policy_id",
+      "required": false,
+      "default": null,
+      "example": "295502731957764096",
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "business_type",
+      "path": "$.data.data[0].business_type",
+      "required": false,
+      "default": null,
+      "example": "1",
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "main_ids",
+      "path": "$.data.data[0].main_ids",
+      "required": false,
+      "default": null,
+      "example": ",1,3,",
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "supplier_names",
+      "path": "$.data.data[0].supplier_names",
+      "required": false,
+      "default": null,
+      "example": "青岛跃航国际物流有限公司",
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "supplier_ids",
+      "path": "$.data.data[0].supplier_ids",
+      "required": false,
+      "default": null,
+      "example": [
+       "5"
+      ],
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "order_sub_no",
+      "path": "$.data.data[0].order_sub_no",
+      "required": false,
+      "default": null,
+      "example": "ZDD20260902022947",
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "business_no",
+      "path": "$.data.data[0].business_no",
+      "required": false,
+      "default": null,
+      "example": "YHD20260902036490",
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     }
+    ],
+    "assertable_fields": [
+     "$.code",
+     "$.msg",
+     "$.data.data[0].order_id",
+     "$.data.data[0].order_no",
+     "$.data.data[0].bl_no",
+     "$.data.data[0].policy_type",
+     "$.data.data[0].policy_id",
+     "$.data.data[0].business_type",
+     "$.data.data[0].main_ids",
+     "$.data.data[0].supplier_names",
+     "$.data.data[0].supplier_ids",
+     "$.data.data[0].order_sub_no",
+     "$.data.data[0].business_no"
+    ]
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.007141Z"
+ },
+ "fin.order.order_page": {
+  "id": "fin.order.order_page",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "分页查询委托订单",
+  "description": "由 Scenario_test_14 提取: 分页查询委托订单",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/order/order/orderPage",
+   "headers": {},
+   "timeout_seconds": 30.0,
+   "auth": "bearer",
+   "produces": [
+    "application/json"
+   ],
+   "consumes": [
+    "application/json"
+   ]
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "bl_no",
+     "path": "$.bl_no",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_no",
+     "path": "$.order_no",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "page_no",
+     "path": "$.page_no",
+     "required": true,
+     "default": null,
+     "example": 1,
+     "description": "",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent"
+    },
+    {
+     "name": "page_size",
+     "path": "$.page_size",
+     "required": true,
+     "default": null,
+     "example": 20,
+     "description": "",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent"
+    },
+    {
+     "name": "sort_field",
+     "path": "$.sort_field",
+     "required": true,
+     "default": null,
+     "example": "update_time",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "sort_order",
+     "path": "$.sort_order",
+     "required": true,
+     "default": null,
+     "example": "desc",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "params",
+     "path": "$.params",
+     "required": true,
+     "default": null,
+     "example": {},
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {}
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "成功",
+    "fields": [
+     {
+      "name": "code",
+      "path": "$.code",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "业务状态码(200=成功)",
+      "enum": null,
+      "ui_kind": "number",
+      "source_kind": "independent"
+     },
+     {
+      "name": "msg",
+      "path": "$.msg",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "业务提示信息",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "request_id",
+      "path": "$.request_id",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "请求追踪ID",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "total",
+      "path": "$.data.total",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "命中总条数(分页)",
+      "enum": null,
+      "ui_kind": "number",
+      "source_kind": "independent"
+     },
+     {
+      "name": "order_id",
+      "path": "$.data.data[0].order_id",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "订单ID",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "order_no",
+      "path": "$.data.data[0].order_no",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "业务订单号(如 YWDD20260901110701)",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "order_sub_no",
+      "path": "$.data.data[0].order_sub_no",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "子订单号",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "business_no",
+      "path": "$.data.data[0].business_no",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "业务编号",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "copy_order_id",
+      "path": "$.data.data[0].copy_order_id",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "复制来源订单ID(0=非复制)",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "change_type",
+      "path": "$.data.data[0].change_type",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "变更类型(0=无)",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "business_main_id",
+      "path": "$.data.data[0].business_main_id",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "业务主体ID",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "business_main_name",
+      "path": "$.data.data[0].business_main_name",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "业务主体名称",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "main_ids",
+      "path": "$.data.data[0].main_ids",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "主体ID列表(逗号分隔)",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "main_sort",
+      "path": "$.data.data[0].main_sort",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "主体简称拼接(如 易航道,易汇联)",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "customer_order_sn",
+      "path": "$.data.data[0].customer_order_sn",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "客户单号",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "etd",
+      "path": "$.data.data[0].etd",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "预计离港时间(秒级时间戳字符串)",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "atd",
+      "path": "$.data.data[0].atd",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "实际离港时间(秒级时间戳字符串)",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "bl_no",
+      "path": "$.data.data[0].bl_no",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "提单号",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "track_bl_no",
+      "path": "$.data.data[0].track_bl_no",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "跟踪提单号",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "service_items",
+      "path": "$.data.data[0].service_items",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "服务项",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "track_atd",
+      "path": "$.data.data[0].track_atd",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "track_eta",
+      "path": "$.data.data[0].track_eta",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     },
+     {
+      "name": "track_ata",
+      "path": "$.data.data[0].track_ata",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "",
+      "enum": null,
+      "ui_kind": "text",
+      "source_kind": "independent"
+     }
+    ],
+    "assertable_fields": [
+     "$.code",
+     "$.msg",
+     "$.request_id",
+     "$.data.total",
+     "$.data.data[0].order_id",
+     "$.data.data[0].order_no",
+     "$.data.data[0].order_sub_no",
+     "$.data.data[0].business_no",
+     "$.data.data[0].copy_order_id",
+     "$.data.data[0].change_type",
+     "$.data.data[0].business_main_id",
+     "$.data.data[0].business_main_name",
+     "$.data.data[0].main_ids",
+     "$.data.data[0].main_sort",
+     "$.data.data[0].customer_order_sn",
+     "$.data.data[0].etd",
+     "$.data.data[0].atd",
+     "$.data.data[0].bl_no",
+     "$.data.data[0].track_bl_no",
+     "$.data.data[0].service_items",
+     "$.data.data[0].track_atd",
+     "$.data.data[0].track_eta",
+     "$.data.data[0].track_ata"
+    ]
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.008606Z"
+ },
+ "fin.order.order_book": {
+  "id": "fin.order.order_book",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "提交订舱文件",
+  "description": "由 Scenario_Test_14 提取: 提交订舱文件",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/order/order/orderBook",
+   "headers": {},
+   "timeout_seconds": 30.0,
+   "auth": "bearer",
+   "produces": [
+    "application/json"
+   ],
+   "consumes": [
+    "application/json"
+   ]
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "client_expand_name",
+     "path": "$.client_expand_name",
+     "required": true,
+     "default": null,
+     "example": "唐欣雨",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "m_delivery_type",
+     "path": "$.m_delivery_type",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_id",
+     "path": "$.customer_id",
+     "required": true,
+     "default": null,
+     "example": "320",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_name",
+     "path": "$.customer_name",
+     "required": true,
+     "default": null,
+     "example": "山东悦慕食品有限公司",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "receive_time_limit",
+     "path": "$.receive_time_limit",
+     "required": true,
+     "default": null,
+     "example": "20",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "deposit_refund_day",
+     "path": "$.deposit_refund_day",
+     "required": true,
+     "default": null,
+     "example": "180",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "deposit_settlement_date",
+     "path": "$.deposit_settlement_date",
+     "required": true,
+     "default": null,
+     "example": "30",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "service_id",
+     "path": "$.service_id",
+     "required": true,
+     "default": null,
+     "example": "55",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "service_name",
+     "path": "$.service_name",
+     "required": true,
+     "default": null,
+     "example": "曲静霞",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "operator_id",
+     "path": "$.operator_id",
+     "required": true,
+     "default": null,
+     "example": "336",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "operator_name",
+     "path": "$.operator_name",
+     "required": true,
+     "default": null,
+     "example": "闫航",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_contact_id",
+     "path": "$.customer_contact_id",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_contact_name",
+     "path": "$.customer_contact_name",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "main_sort",
+     "path": "$.main_sort",
+     "required": true,
+     "default": null,
+     "example": "易汇瀚,易海,易航道",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "policy_id",
+     "path": "$.policy_id",
+     "required": true,
+     "default": null,
+     "example": "134",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "policy_name",
+     "path": "$.policy_name",
+     "required": true,
+     "default": null,
+     "example": "【SPV对客】易汇瀚（仅人民币）",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "policy_type",
+     "path": "$.policy_type",
+     "required": true,
+     "default": null,
+     "example": "JSZX",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "settle_type",
+     "path": "$.settle_type",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "settle_type_name",
+     "path": "$.settle_type_name",
+     "required": true,
+     "default": null,
+     "example": "月结",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "product_id",
+     "path": "$.product_id",
+     "required": true,
+     "default": null,
+     "example": "4",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "product_name",
+     "path": "$.product_name",
+     "required": true,
+     "default": null,
+     "example": "月结-延长-保证金",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "deposit_type",
+     "path": "$.deposit_type",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "deposit_type_name",
+     "path": "$.deposit_type_name",
+     "required": true,
+     "default": null,
+     "example": "有",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "period_delay_type",
+     "path": "$.period_delay_type",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "period_delay_type_name",
+     "path": "$.period_delay_type_name",
+     "required": true,
+     "default": null,
+     "example": "延长",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "service_items",
+     "path": "$.service_items",
+     "required": true,
+     "default": null,
+     "example": [
+      "booking_space"
+     ],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "business_type",
+     "path": "$.business_type",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "trade_term",
+     "path": "$.trade_term",
+     "required": true,
+     "default": null,
+     "example": "CIF",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "carrier",
+     "path": "$.carrier",
+     "required": true,
+     "default": null,
+     "example": "COSCO",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "carrier_id",
+     "path": "$.carrier_id",
+     "required": true,
+     "default": null,
+     "example": "16",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "bl_no",
+     "path": "$.bl_no",
+     "required": true,
+     "default": null,
+     "example": "${var.bl_no}",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "track_bl_no",
+     "path": "$.track_bl_no",
+     "required": true,
+     "default": null,
+     "example": "${var.bl_no}",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "etd",
+     "path": "$.etd",
+     "required": true,
+     "default": null,
+     "example": 1782316800,
+     "description": "",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent"
+    },
+    {
+     "name": "atd",
+     "path": "$.atd",
+     "required": true,
+     "default": null,
+     "example": 1782835200,
+     "description": "",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent"
+    },
+    {
+     "name": "ship_name",
+     "path": "$.ship_name",
+     "required": true,
+     "default": null,
+     "example": "OOCL FRANCE",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "voy",
+     "path": "$.voy",
+     "required": true,
+     "default": null,
+     "example": "068E",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pol",
+     "path": "$.pol",
+     "required": true,
+     "default": null,
+     "example": "QINGDAO,CHINA",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pot",
+     "path": "$.pot",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pod",
+     "path": "$.pod",
+     "required": true,
+     "default": null,
+     "example": "ANTING,CHINA",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "del",
+     "path": "$.del",
+     "required": true,
+     "default": null,
+     "example": "ANTING,CHINA",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "country_name",
+     "path": "$.country_name",
+     "required": true,
+     "default": null,
+     "example": "CHINA",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "airline_type",
+     "path": "$.airline_type",
+     "required": true,
+     "default": null,
+     "example": "中国",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "ocean_type",
+     "path": "$.ocean_type",
+     "required": true,
+     "default": null,
+     "example": "近洋",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "terms_payment",
+     "path": "$.terms_payment",
+     "required": true,
+     "default": null,
+     "example": "T/T",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "terms_transport",
+     "path": "$.terms_transport",
+     "required": true,
+     "default": null,
+     "example": "CY/CY",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pay_type",
+     "path": "$.pay_type",
+     "required": true,
+     "default": null,
+     "example": "FREIGHT PREPAID",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_order_sn",
+     "path": "$.customer_order_sn",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "terms_shipment",
+     "path": "$.terms_shipment",
+     "required": true,
+     "default": null,
+     "example": "Codfish",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "shipper",
+     "path": "$.shipper",
+     "required": true,
+     "default": null,
+     "example": "Codfish",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "consignee",
+     "path": "$.consignee",
+     "required": true,
+     "default": null,
+     "example": "Codfish",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "notifier",
+     "path": "$.notifier",
+     "required": true,
+     "default": null,
+     "example": "Codfish",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "ship_mark",
+     "path": "$.ship_mark",
+     "required": true,
+     "default": null,
+     "example": "Codfish",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "commodity",
+     "path": "$.commodity",
+     "required": true,
+     "default": null,
+     "example": "Codfish",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "cargo_type",
+     "path": "$.cargo_type",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "packer",
+     "path": "$.packer",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "num",
+     "path": "$.num",
+     "required": true,
+     "default": null,
+     "example": "1872",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "gross_weight",
+     "path": "$.gross_weight",
+     "required": true,
+     "default": null,
+     "example": "26800.000",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "bulk",
+     "path": "$.bulk",
+     "required": true,
+     "default": null,
+     "example": "60.000",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "sea_trans_cost",
+     "path": "$.sea_trans_cost",
+     "required": true,
+     "default": null,
+     "example": "1.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "teu",
+     "path": "$.teu",
+     "required": true,
+     "default": null,
+     "example": "2",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "volume",
+     "path": "$.volume",
+     "required": true,
+     "default": null,
+     "example": "1*40HQ",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "volume_desc",
+     "path": "$.volume_desc",
+     "required": true,
+     "default": null,
+     "example": "普柜",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_sn",
+     "path": "$.order_sn",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "status",
+     "path": "$.status",
+     "required": true,
+     "default": null,
+     "example": 2,
+     "description": "",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent"
+    },
+    {
+     "name": "sea_trans_currency",
+     "path": "$.sea_trans_currency",
+     "required": true,
+     "default": null,
+     "example": "USD",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "container",
+     "path": "$.container",
+     "required": true,
+     "default": null,
+     "example": [
+      {
+       "order_container_id": "",
+       "box_type": "40HQ",
+       "box_num": "1",
+       "box_no": [
+        ""
+       ],
+       "seal_number": [
+        ""
+       ],
+       "sea_trans_unit_price": 1
+      }
+     ],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "message_board",
+     "path": "$.message_board",
+     "required": true,
+     "default": null,
+     "example": [],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_file_list",
+     "path": "$.customer_file_list",
+     "required": true,
+     "default": null,
+     "example": [],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "supplier",
+     "path": "$.supplier",
+     "required": true,
+     "default": null,
+     "example": [
+      {
+       "order_supplier_id": "",
+       "order_id": "",
+       "isset_supplier": "1",
+       "is_primary": "1",
+       "supplier_id": "805",
+       "supplier_name": "青岛雅然国际物流有限公司",
+       "settle_object_id": "1384",
+       "user_id": "336",
+       "user_name": "闫航",
+       "service_item": "booking_space",
+       "supplier_period": "60",
+       "settlement_date": "20",
+       "supplier_pay_date": "0",
+       "is_manual": "0",
+       "sys_upttime": "2026-07-01 13:14:48",
+       "supplier_label": "青岛雅然国际物流有限公司-订舱",
+       "service_item_name": "订舱",
+       "isset_fee": false
+      }
+     ],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_id",
+     "path": "$.order_id",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_no",
+     "path": "$.order_no",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_category",
+     "path": "$.customer_category",
+     "required": true,
+     "default": null,
+     "example": ",1,2,",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_tax_number",
+     "path": "$.customer_tax_number",
+     "required": true,
+     "default": null,
+     "example": "91370786MA3D6MW35A",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_address_cn",
+     "path": "$.customer_address_cn",
+     "required": true,
+     "default": null,
+     "example": "山东省潍坊市昌邑市围子街道206国道北(官道郜北)",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "client_expand_id",
+     "path": "$.client_expand_id",
+     "required": true,
+     "default": null,
+     "example": "261",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_contact_phone",
+     "path": "$.customer_contact_phone",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_main_id",
+     "path": "$.customer_main_id",
+     "required": true,
+     "default": null,
+     "example": "15",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_main_name",
+     "path": "$.customer_main_name",
+     "required": true,
+     "default": null,
+     "example": "成都易汇瀚供应链管理有限公司",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "business_main_id",
+     "path": "$.business_main_id",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "business_main_name",
+     "path": "$.business_main_name",
+     "required": true,
+     "default": null,
+     "example": "青岛易航道物流科技有限公司",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "fund_code",
+     "path": "$.fund_code",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "fund_name",
+     "path": "$.fund_name",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "track_atd",
+     "path": "$.track_atd",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "track_eta",
+     "path": "$.track_eta",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "track_ata",
+     "path": "$.track_ata",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "track_stcs",
+     "path": "$.track_stcs",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "track_ship_name",
+     "path": "$.track_ship_name",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "track_voy",
+     "path": "$.track_voy",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "finance_date",
+     "path": "$.finance_date",
+     "required": true,
+     "default": null,
+     "example": "1782316800",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pol_cn",
+     "path": "$.pol_cn",
+     "required": true,
+     "default": null,
+     "example": "青岛流亭机场",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pol_country_id",
+     "path": "$.pol_country_id",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pol_country",
+     "path": "$.pol_country",
+     "required": true,
+     "default": null,
+     "example": "CHINA",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pol_country_cn",
+     "path": "$.pol_country_cn",
+     "required": true,
+     "default": null,
+     "example": "中国",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pod_cn",
+     "path": "$.pod_cn",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pot_cn",
+     "path": "$.pot_cn",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "del_cn",
+     "path": "$.del_cn",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "country_id",
+     "path": "$.country_id",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "country_name_cn",
+     "path": "$.country_name_cn",
+     "required": true,
+     "default": null,
+     "example": "中国",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_period",
+     "path": "$.customer_period",
+     "required": true,
+     "default": null,
+     "example": "120",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_settlement_date",
+     "path": "$.customer_settlement_date",
+     "required": true,
+     "default": null,
+     "example": "10",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "period_rule",
+     "path": "$.period_rule",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "term_rule_name",
+     "path": "$.term_rule_name",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_due_date",
+     "path": "$.customer_due_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_put_date",
+     "path": "$.customer_put_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_payment_collection_date",
+     "path": "$.customer_payment_collection_date",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_put_date_manual",
+     "path": "$.customer_put_date_manual",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_put_writeoff_date",
+     "path": "$.customer_put_writeoff_date",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "supplier_due_date",
+     "path": "$.supplier_due_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "discount_start",
+     "path": "$.discount_start",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "discount_rule",
+     "path": "$.discount_rule",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "discount_end",
+     "path": "$.discount_end",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "discount_ratio",
+     "path": "$.discount_ratio",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "discount_status",
+     "path": "$.discount_status",
+     "required": true,
+     "default": null,
+     "example": "2",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "discount_currency",
+     "path": "$.discount_currency",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "book_upload_date",
+     "path": "$.book_upload_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "trans_cost_put_preserve_date",
+     "path": "$.trans_cost_put_preserve_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "bl_no_upload_date",
+     "path": "$.bl_no_upload_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "supplier_invoice_date",
+     "path": "$.supplier_invoice_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "supplier_invoice_taketime",
+     "path": "$.supplier_invoice_taketime",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_cost_date",
+     "path": "$.real_cost_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_invoice_request_date",
+     "path": "$.customer_invoice_request_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "first_financing_doc_ok_date",
+     "path": "$.first_financing_doc_ok_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "second_financing_doc_ok_date",
+     "path": "$.second_financing_doc_ok_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "insurance_doc_ok_date",
+     "path": "$.insurance_doc_ok_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_confirm_date",
+     "path": "$.customer_confirm_date",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_delayed_recovery",
+     "path": "$.is_delayed_recovery",
+     "required": true,
+     "default": null,
+     "example": "否",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "delayed_recovery_usd",
+     "path": "$.delayed_recovery_usd",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "delayed_recovery_cny",
+     "path": "$.delayed_recovery_cny",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "delayed_time",
+     "path": "$.delayed_time",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "expect_fee_status",
+     "path": "$.expect_fee_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_fee_status",
+     "path": "$.real_fee_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "fee_lock_status",
+     "path": "$.fee_lock_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pay_account_status",
+     "path": "$.pay_account_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "account_status",
+     "path": "$.account_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_pay_usd",
+     "path": "$.real_pay_usd",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_pay_cny",
+     "path": "$.real_pay_cny",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_put_usd",
+     "path": "$.real_put_usd",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_put_cny",
+     "path": "$.real_put_cny",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_put_discount_rate",
+     "path": "$.real_put_discount_rate",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "exchange_rate",
+     "path": "$.exchange_rate",
+     "required": true,
+     "default": null,
+     "example": "6.8067",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "folde_pay_usd",
+     "path": "$.folde_pay_usd",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "folde_put_usd",
+     "path": "$.folde_put_usd",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "folde_pay_total",
+     "path": "$.folde_pay_total",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "folde_put_total",
+     "path": "$.folde_put_total",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "gross_margin",
+     "path": "$.gross_margin",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "gross_margin_rate",
+     "path": "$.gross_margin_rate",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_special_pay",
+     "path": "$.is_special_pay",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_loan_before_invoice",
+     "path": "$.is_loan_before_invoice",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_fee_miss",
+     "path": "$.is_fee_miss",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "fee_miss_name",
+     "path": "$.fee_miss_name",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "cancel_time",
+     "path": "$.cancel_time",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "effective_id",
+     "path": "$.effective_id",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "effective_by",
+     "path": "$.effective_by",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "effective_time",
+     "path": "$.effective_time",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "create_id",
+     "path": "$.create_id",
+     "required": true,
+     "default": null,
+     "example": "828",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "create_by",
+     "path": "$.create_by",
+     "required": true,
+     "default": null,
+     "example": "GIMBAL",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "create_time",
+     "path": "$.create_time",
+     "required": true,
+     "default": null,
+     "example": "1782882887",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "update_id",
+     "path": "$.update_id",
+     "required": true,
+     "default": null,
+     "example": "828",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "update_by",
+     "path": "$.update_by",
+     "required": true,
+     "default": null,
+     "example": "GIMBAL",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "update_time",
+     "path": "$.update_time",
+     "required": true,
+     "default": null,
+     "example": "1782882935",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "delete_time",
+     "path": "$.delete_time",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "business_time",
+     "path": "$.business_time",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "main_ids",
+     "path": "$.main_ids",
+     "required": true,
+     "default": null,
+     "example": ",15,16,1,",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "reverse_status",
+     "path": "$.reverse_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "proprietary_business_status",
+     "path": "$.proprietary_business_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "loan_status",
+     "path": "$.loan_status",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "first_status",
+     "path": "$.first_status",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "second_status",
+     "path": "$.second_status",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "loan_pay_status",
+     "path": "$.loan_pay_status",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "change_type",
+     "path": "$.change_type",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "copy_order_id",
+     "path": "$.copy_order_id",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_fee_locked",
+     "path": "$.real_fee_locked",
+     "required": true,
+     "default": null,
+     "example": false,
+     "description": "",
+     "enum": null,
+     "ui_kind": "boolean",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_usd_project",
+     "path": "$.is_usd_project",
+     "required": true,
+     "default": null,
+     "example": "2",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pay_status",
+     "path": "$.pay_status",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_sync_es",
+     "path": "$.is_sync_es",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "expect_discount_status",
+     "path": "$.expect_discount_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_discount_status",
+     "path": "$.real_discount_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "entrust_status",
+     "path": "$.entrust_status",
+     "required": true,
+     "default": null,
+     "example": "2",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "audit_type",
+     "path": "$.audit_type",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_system_generate",
+     "path": "$.is_system_generate",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_financing",
+     "path": "$.is_financing",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "confirm_status",
+     "path": "$.confirm_status",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_traverse",
+     "path": "$.is_traverse",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "financing_apply_amount",
+     "path": "$.financing_apply_amount",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "financing_apply_amount_cny",
+     "path": "$.financing_apply_amount_cny",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "financing_apply_amount_usd",
+     "path": "$.financing_apply_amount_usd",
+     "required": true,
+     "default": null,
+     "example": "0.00",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "sys_upttime",
+     "path": "$.sys_upttime",
+     "required": true,
+     "default": null,
+     "example": "2026-07-01 13:15:35",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "customer_put_date_desc",
+     "path": "$.customer_put_date_desc",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "deposit_refund_month",
+     "path": "$.deposit_refund_month",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "payment_type",
+     "path": "$.payment_type",
+     "required": true,
+     "default": null,
+     "example": "0",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "reverse_status_name",
+     "path": "$.reverse_status_name",
+     "required": true,
+     "default": null,
+     "example": "否",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "is_delayed_recovery_name",
+     "path": "$.is_delayed_recovery_name",
+     "required": true,
+     "default": null,
+     "example": "否",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_finance_arr",
+     "path": "$.order_finance_arr",
+     "required": true,
+     "default": null,
+     "example": [],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_main_bank_arr",
+     "path": "$.order_main_bank_arr",
+     "required": true,
+     "default": null,
+     "example": [],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_sub",
+     "path": "$.order_sub",
+     "required": true,
+     "default": null,
+     "example": [],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_sub_no",
+     "path": "$.order_sub_no",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "service_project",
+     "path": "$.service_project",
+     "required": true,
+     "default": null,
+     "example": {
+      "booking_space": false,
+      "customs_clearance": false,
+      "manifest": false,
+      "insurance": false,
+      "trucking": false
+     },
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "service_project_amount",
+     "path": "$.service_project_amount",
+     "required": true,
+     "default": null,
+     "example": {
+      "booking_space": false,
+      "customs_clearance": false,
+      "manifest": false,
+      "insurance": false,
+      "trucking": false
+     },
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "finance_status",
+     "path": "$.finance_status",
+     "required": true,
+     "default": null,
+     "example": true,
+     "description": "",
+     "enum": null,
+     "ui_kind": "boolean",
+     "source_kind": "independent"
+    },
+    {
+     "name": "main_ids_name",
+     "path": "$.main_ids_name",
+     "required": true,
+     "default": null,
+     "example": "易汇瀚,易海,易航道",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "policy_main_arr",
+     "path": "$.policy_main_arr",
+     "required": true,
+     "default": null,
+     "example": [
+      {
+       "fee_main_id": "15",
+       "main_name": "成都易汇瀚供应链管理有限公司"
+      },
+      {
+       "fee_main_id": "16",
+       "main_name": "青岛易海供应链管理有限公司"
+      },
+      {
+       "fee_main_id": "1",
+       "main_name": "青岛易航道物流科技有限公司"
+      }
+     ],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "policy_type_name",
+     "path": "$.policy_type_name",
+     "required": true,
+     "default": null,
+     "example": "结算业务",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "business_type_name",
+     "path": "$.business_type_name",
+     "required": true,
+     "default": null,
+     "example": "海运整箱",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "cargo_type_name",
+     "path": "$.cargo_type_name",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "period_rule_name",
+     "path": "$.period_rule_name",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "trade_term_name",
+     "path": "$.trade_term_name",
+     "required": true,
+     "default": null,
+     "example": "CIF",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "carrier_name",
+     "path": "$.carrier_name",
+     "required": true,
+     "default": null,
+     "example": "中国远洋运输（集团）总公司",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "terms_transport_name",
+     "path": "$.terms_transport_name",
+     "required": true,
+     "default": null,
+     "example": "CY/CY",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "terms_payment_name",
+     "path": "$.terms_payment_name",
+     "required": true,
+     "default": null,
+     "example": "T/T",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "pay_type_name",
+     "path": "$.pay_type_name",
+     "required": true,
+     "default": null,
+     "example": "FREIGHT PREPAID",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "m_delivery_type_name",
+     "path": "$.m_delivery_type_name",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "payment_type_name",
+     "path": "$.payment_type_name",
+     "required": true,
+     "default": null,
+     "example": "空",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "audit",
+     "path": "$.audit",
+     "required": true,
+     "default": null,
+     "example": [],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "enable",
+     "path": "$.enable",
+     "required": true,
+     "default": null,
+     "example": "1",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "policy_match",
+     "path": "$.policy_match",
+     "required": true,
+     "default": null,
+     "example": "semi",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "policy_match_name",
+     "path": "$.policy_match_name",
+     "required": true,
+     "default": null,
+     "example": "手动选择",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_discount_status_name",
+     "path": "$.real_discount_status_name",
+     "required": true,
+     "default": null,
+     "example": "—",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "expect_discount_status_name",
+     "path": "$.expect_discount_status_name",
+     "required": true,
+     "default": null,
+     "example": "—",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "expect_policy_status_name",
+     "path": "$.expect_policy_status_name",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "policy_status_name",
+     "path": "$.policy_status_name",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "subsidy_category_name",
+     "path": "$.subsidy_category_name",
+     "required": true,
+     "default": null,
+     "example": "—",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "expect_subsidy_category_name",
+     "path": "$.expect_subsidy_category_name",
+     "required": true,
+     "default": null,
+     "example": "—",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "real_subsidy_category_name",
+     "path": "$.real_subsidy_category_name",
+     "required": true,
+     "default": null,
+     "example": "—",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_file",
+     "path": "$.order_file",
+     "required": true,
+     "default": null,
+     "example": [],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {},
+   "carry": {
+    "$.remark": {
+     "description": "订单备注(随请求传递,不进表单)",
+     "type": "string"
+    },
+    "$.notes": {
+     "description": "内部备注(随请求传递,不进表单)",
+     "type": "string"
+    },
+    "$.cancel_remark": {
+     "description": "取消备注(随请求传递,不进表单)",
+     "type": "string"
+    },
+    "$.action": {
+     "description": "test",
+     "type": "string"
+    }
+   }
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "成功",
+    "fields": [
+     {
+      "name": "file_id",
+      "path": "$.data[0].file_id",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "",
+      "enum": null,
+      "ui_kind": "unknown",
+      "source_kind": "independent"
+     }
+    ],
+    "assertable_fields": [
+     "$.data[0].file_id"
+    ]
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.011535Z"
+ },
+ "fin.order.check_generate_order_sub": {
+  "id": "fin.order.check_generate_order_sub",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "校验主订单拆分子订单",
+  "description": "由 Scenario_Test_14 提取: 校验主订单拆分子订单",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/order/order/checkGenerateOrderSub",
+   "headers": {},
+   "timeout_seconds": 30.0,
+   "auth": "bearer",
+   "produces": [
+    "application/json"
+   ],
+   "consumes": [
+    "application/json"
+   ]
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "order_id",
+     "path": "$.order_id",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {}
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "成功",
+    "fields": [],
+    "assertable_fields": []
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.011777Z"
+ },
+ "fin.order.generate_order_sub": {
+  "id": "fin.order.generate_order_sub",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "生成应收应付子订单",
+  "description": "由 Scenario_Test_14 提取: 生成应收应付子订单",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/order/order/generateOrderSub",
+   "headers": {},
+   "timeout_seconds": 30.0,
+   "auth": "bearer",
+   "produces": [
+    "application/json"
+   ],
+   "consumes": [
+    "application/json"
+   ]
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "order_id",
+     "path": "$.order_id",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {}
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "成功",
+    "fields": [],
+    "assertable_fields": []
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.012025Z"
+ },
+ "fin.order.order_notice": {
+  "id": "fin.order.order_notice",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "应收核销通知",
+  "description": "由 Scenario_Test_14 提取: 应收核销通知",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/order/order/orderNotice",
+   "headers": {},
+   "timeout_seconds": 30.0,
+   "auth": "bearer",
+   "produces": [
+    "application/json"
+   ],
+   "consumes": [
+    "application/json"
+   ]
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "order_id",
+     "path": "$.order_id",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "action",
+     "path": "$.action",
+     "required": true,
+     "default": null,
+     "example": "check",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "finance_ids",
+     "path": "$.finance_ids",
+     "required": true,
+     "default": null,
+     "example": [
+      "${var.finance_id_0}",
+      "${var.finance_id_1}"
+     ],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "bank_ids",
+     "path": "$.bank_ids",
+     "required": true,
+     "default": null,
+     "example": [
+      "${var.bank_id_0}",
+      "${var.bank_id_1}"
+     ],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {}
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "成功",
+    "fields": [],
+    "assertable_fields": []
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.012271Z"
+ },
+ "fin.order_fee.toggle_real_amount": {
+  "id": "fin.order_fee.toggle_real_amount",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "切换订单实收实付金额模式",
+  "description": "由 Scenario_Test_14 提取: 切换订单实收实付金额模式",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/order/orderFee/toggleRealAmount",
+   "headers": {},
+   "timeout_seconds": 30.0,
+   "auth": "bearer",
+   "produces": [
+    "application/json"
+   ],
+   "consumes": [
+    "application/json"
+   ]
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "order_id",
+     "path": "$.order_id",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {}
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "成功",
+    "fields": [
+     {
+      "name": "order_id",
+      "path": "$.data.amount_summary.order_id",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "",
+      "enum": null,
+      "ui_kind": "unknown",
+      "source_kind": "independent"
+     },
+     {
+      "name": "order_fee_real_id",
+      "path": "$.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "",
+      "enum": null,
+      "ui_kind": "unknown",
+      "source_kind": "independent"
+     },
+     {
+      "name": "order_sub_no",
+      "path": "$.data.to_customer[0].order_sub_no",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "",
+      "enum": null,
+      "ui_kind": "unknown",
+      "source_kind": "independent"
+     }
+    ],
+    "assertable_fields": [
+     "$.data.amount_summary.order_id",
+     "$.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id",
+     "$.data.to_customer[0].order_sub_no"
+    ]
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.012667Z"
+ },
+ "fin.order_fee.book_real_amount_edit": {
+  "id": "fin.order_fee.book_real_amount_edit",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "订舱实收实付金额配置",
+  "description": "由 Scenario_Test_14 提取: 订舱实收实付金额配置",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/order/orderFee/bookRealAmountEdit",
+   "headers": {},
+   "timeout_seconds": 30.0,
+   "auth": "bearer",
+   "produces": [
+    "application/json"
+   ],
+   "consumes": [
+    "application/json"
+   ]
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "action",
+     "path": "$.action",
+     "required": true,
+     "default": null,
+     "example": "check",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_id",
+     "path": "$.order_id",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "discount_ratio",
+     "path": "$.discount_ratio",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "service_project",
+     "path": "$.service_project",
+     "required": true,
+     "default": null,
+     "example": "booking_space",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "import_status",
+     "path": "$.import_status",
+     "required": true,
+     "default": null,
+     "example": 0,
+     "description": "",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent"
+    },
+    {
+     "name": "to_customer",
+     "path": "$.to_customer",
+     "required": true,
+     "default": null,
+     "example": {
+      "put_amount": {
+       "standard_list": [
+        {
+         "order_fee_real_id": null,
+         "fee_type": 0,
+         "policy_sub_id": "470",
+         "service_project": "booking_space",
+         "cost_id": "17",
+         "settle_object_id": "829",
+         "subsidy_category": "0",
+         "currency": "USD",
+         "unit_price": "1",
+         "unit": "box",
+         "specs": "40HQ",
+         "num": "1",
+         "remark": null,
+         "discount_ratio": 100,
+         "discount_amount": "1.00",
+         "discount_status": "0",
+         "policy_sub_status_name": "正常",
+         "pay_sync_status": 1,
+         "unique_id": "61abfbc5-106d-45e2-8a83-0fbacbd7c648",
+         "init_main_name": "成都易汇瀚供应链管理有限公司",
+         "main_name": "成都易汇瀚供应链管理有限公司",
+         "rowIndex": 0
+        }
+       ]
+      }
+     },
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "to_supplier",
+     "path": "$.to_supplier",
+     "required": true,
+     "default": null,
+     "example": {
+      "pay_amount": {
+       "standard_list": [
+        {
+         "order_fee_real_id": null,
+         "fee_type": 0,
+         "policy_sub_id": "470",
+         "service_project": "booking_space",
+         "cost_id": "17",
+         "settle_object_id": "1384",
+         "subsidy_category": "0",
+         "currency": "USD",
+         "unit_price": "1",
+         "unit": "box",
+         "specs": "40HQ",
+         "num": "1",
+         "remark": null,
+         "discount_ratio": 100,
+         "discount_amount": "1.00",
+         "discount_status": "0",
+         "policy_sub_status_name": "异常",
+         "pay_sync_status": 1,
+         "unique_id": "61abfbc5-106d-45e2-8a83-0fbacbd7c648",
+         "init_main_name": "—",
+         "main_name": "成都易汇瀚供应链管理有限公司",
+         "related_unique_id": "61abfbc5-106d-45e2-8a83-0fbacbd7c648",
+         "rowIndex": 0
+        }
+       ]
+      }
+     },
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {}
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "成功",
+    "fields": [],
+    "assertable_fields": []
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.012958Z"
+ },
+ "fin.order_fee.real_amount_lock_submit": {
+  "id": "fin.order_fee.real_amount_lock_submit",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "费用实收实付锁定",
+  "description": "由 Scenario_Test_14 提取: 费用实收实付锁定",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/order/orderFee/realAmountLockSubmit",
+   "headers": {},
+   "timeout_seconds": 30.0,
+   "auth": "bearer",
+   "produces": [
+    "application/json"
+   ],
+   "consumes": [
+    "application/json"
+   ]
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "action",
+     "path": "$.action",
+     "required": true,
+     "default": null,
+     "example": "check",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_id",
+     "path": "$.order_id",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_fee_real_ids",
+     "path": "$.order_fee_real_ids",
+     "required": true,
+     "default": null,
+     "example": [
+      ""
+     ],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "audit_msg",
+     "path": "$.audit_msg",
+     "required": true,
+     "default": null,
+     "example": {
+      "title": "业务订单ID",
+      "code": "",
+      "msgs": [
+       "费用锁定申请"
+      ]
+     },
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "select_node_user",
+     "path": "$.select_node_user",
+     "required": true,
+     "default": null,
+     "example": [
+      {
+       "node_sort": "0",
+       "user_id": "828"
+      }
+     ],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {}
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "成功",
+    "fields": [],
+    "assertable_fields": []
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.013241Z"
+ },
+ "fin.order_fee.asset_push": {
+  "id": "fin.order_fee.asset_push",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "费用资产推送",
+  "description": "由 Scenario_Test_14 提取: 费用资产推送",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/order/orderFee/assetPush",
+   "headers": {},
+   "timeout_seconds": 30.0,
+   "auth": "bearer",
+   "produces": [
+    "application/json"
+   ],
+   "consumes": [
+    "application/json"
+   ]
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "action",
+     "path": "$.action",
+     "required": true,
+     "default": null,
+     "example": "check",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "order_id",
+     "path": "$.order_id",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "audit_msg",
+     "path": "$.audit_msg",
+     "required": true,
+     "default": null,
+     "example": {
+      "title": "资产推送申请",
+      "code": "",
+      "msgs": [
+       "资产推送申请"
+      ]
+     },
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "select_node_user",
+     "path": "$.select_node_user",
+     "required": true,
+     "default": null,
+     "example": [
+      {
+       "node_sort": "0",
+       "user_id": "828"
+      }
+     ],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {}
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "成功",
+    "fields": [],
+    "assertable_fields": []
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.013573Z"
+ },
+ "fin.audit.audit_page": {
+  "id": "fin.audit.audit_page",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "查询待审批记录",
+  "description": "由 Scenario_Test_14 提取: 查询待审批记录",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/home/audit/auditPage",
+   "headers": {},
+   "timeout_seconds": 30.0,
+   "auth": "bearer",
+   "produces": [
+    "application/json"
+   ],
+   "consumes": [
+    "application/json"
+   ]
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "page_no",
+     "path": "$.page_no",
+     "required": true,
+     "default": null,
+     "example": 1,
+     "description": "页码,从 1 开始",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent"
+    },
+    {
+     "name": "page_size",
+     "path": "$.page_size",
+     "required": true,
+     "default": null,
+     "example": 20,
+     "description": "每页条数,默认 20",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent"
+    },
+    {
+     "name": "active_tab",
+     "path": "$.active_tab",
+     "required": true,
+     "default": null,
+     "example": "examine_wait",
+     "description": "审批页签: examine_wait=待审批 / examine_done=已审批",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "sort_field",
+     "path": "$.sort_field",
+     "required": true,
+     "default": null,
+     "example": "expedite_num",
+     "description": "排序字段,如 expedite_num(催办次数)",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "sort_order",
+     "path": "$.sort_order",
+     "required": true,
+     "default": null,
+     "example": "desc",
+     "description": "排序方向: asc / desc",
+     "enum": [
+      "asc",
+      "desc"
+     ],
+     "ui_kind": "text",
+     "source_kind": "independent"
+    },
+    {
+     "name": "params",
+     "path": "$.params",
+     "required": true,
+     "default": null,
+     "example": {},
+     "description": "业务过滤条件,如单号/客户/日期范围",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {
+    "type": "object",
+    "properties": {
+     "risk_note": {
+      "type": "string",
+      "description": "演示:plate 契约携带的非绑定字段",
+      "default": "正常"
+     }
+    }
+   }
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "成功",
+    "fields": [
+     {
+      "name": "audit_id",
+      "path": "$.data.data[0].audit_id",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "",
+      "enum": null,
+      "ui_kind": "unknown",
+      "source_kind": "independent"
+     }
+    ],
+    "assertable_fields": [
+     "$.data.data[0].audit_id"
+    ]
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.014058Z"
+ },
+ "fin.audit.audit_execute": {
+  "id": "fin.audit.audit_execute",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "执行审批",
+  "description": "由 Scenario_Test_14 提取: 执行审批",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/home/audit/auditExecute",
+   "headers": {},
+   "timeout_seconds": 30.0,
+   "auth": "bearer",
+   "produces": [
+    "application/json"
+   ],
+   "consumes": [
+    "application/json"
+   ]
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "audit_ids",
+     "path": "$.audit_ids",
+     "required": true,
+     "default": null,
+     "example": [
+      ""
+     ],
+     "description": "",
+     "enum": null,
+     "ui_kind": "json",
+     "source_kind": "independent"
+    },
+    {
+     "name": "audit_status",
+     "path": "$.audit_status",
+     "required": true,
+     "default": null,
+     "example": 2,
+     "description": "",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent"
+    },
+    {
+     "name": "audit_remark",
+     "path": "$.audit_remark",
+     "required": true,
+     "default": null,
+     "example": null,
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {}
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "成功",
+    "fields": [],
+    "assertable_fields": []
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.014346Z"
+ },
+ "fin.audit.audit_detail": {
+  "id": "fin.audit.audit_detail",
+  "system": "fin",
+  "service": "fin-service",
+  "name": "查询审批详情",
+  "description": "由 Scenario_Test_14 提取: 查询审批详情",
+  "api": {
+   "service": "fin-service",
+   "method": "POST",
+   "path": "/api/home/audit/auditDetail",
+   "headers": {},
+   "timeout_seconds": 30.0,
+   "auth": "bearer",
+   "produces": [
+    "application/json"
+   ],
+   "consumes": [
+    "application/json"
+   ]
+  },
+  "request": {
+   "body_type": "json",
+   "fields": [
+    {
+     "name": "audit_id",
+     "path": "$.audit_id",
+     "required": true,
+     "default": null,
+     "example": "",
+     "description": "",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent"
+    }
+   ],
+   "schema": {}
+  },
+  "responses": {
+   "200": {
+    "status": 200,
+    "description": "成功",
+    "fields": [
+     {
+      "name": "relation_id",
+      "path": "$.data.audit_content.relation_id",
+      "required": false,
+      "default": null,
+      "example": null,
+      "description": "",
+      "enum": null,
+      "ui_kind": "unknown",
+      "source_kind": "independent"
+     }
+    ],
+    "assertable_fields": [
+     "$.data.audit_content.relation_id"
+    ]
+   }
+  },
+  "metadata": {
+   "module": "fin",
+   "tags": [
+    "fin"
+   ],
+   "owner": "fin-team",
+   "preconditions": [],
+   "success_criteria": "",
+   "failed_criteria": [],
+   "business_notes": "",
+   "deprecated": false,
+   "experimental": false
+  },
+  "version": "1.1.0",
+  "updated_at": "2026-09-02T12:12:54.014619Z"
+ }
+}
