@@ -12,9 +12,15 @@ def _generate_fernet_key() -> str:
     return Fernet.generate_key().decode()
 
 
+# 后端根(app/ 的上一级 = backend/):所有相对资源锚定于此,而非进程 CWD。
+# 从仓库根误启动会在根部 mkdir 空 data/ + 新建空库,服务"静默失忆"
+# (2026-09-02 实录:根部冒出第二个空 app.db,登录全 401)。
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_BACKEND_ROOT / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -29,12 +35,15 @@ class Settings(BaseSettings):
     FERNET_KEY: str = ""
 
     # ── DB ────────────────────────────────────────────────
-    DATABASE_URL: str = "sqlite+aiosqlite:///./data/app.db"
+    # 锚定 backend/(见 _BACKEND_ROOT):误启动目录不再另起炉灶。
+    DATABASE_URL: str = (
+        f"sqlite+aiosqlite:///{(_BACKEND_ROOT / 'data' / 'app.db').as_posix()}"
+    )
 
     # ── Data dir ──────────────────────────────────────────
     # Resolved to absolute at startup so JSONL run-log / DB paths
     # never land as relative ``./data\...`` in logs.
-    DATA_DIR: Path = Path("./data").resolve()
+    DATA_DIR: Path = _BACKEND_ROOT / "data"
     # case 案卷(result.json/case.json,含注入后明文凭证)保留天数;
     # 启动期清扫超期目录。0 = 禁用清扫(P2:此前无限累积)。
     CASE_RETENTION_DAYS: int = 14

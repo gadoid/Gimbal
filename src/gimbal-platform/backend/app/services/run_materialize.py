@@ -7,6 +7,7 @@ materialize_run_copy 是执行链(run_dispatcher._fanout)与导出链
 """
 from __future__ import annotations
 
+import ast
 import copy
 import json
 from dataclasses import dataclass
@@ -124,7 +125,13 @@ def _body_set(body: dict, path: str, value: Any) -> None:
 
 
 def _coerce_carry_value(value: str, ftype: str) -> Any:
-    """宽松转换(与数据集 _coerce_row_value 同哲学);失败保留原串。"""
+    """宽松转换(与数据集 _coerce_row_value 同哲学);失败保留原串。
+
+    object/array 双级还原:json.loads 之外再试 ast.literal_eval —— 值表
+    统一存 str,容器值可能是粘贴进来的 Python repr 文本(单引号/None/
+    True),非法 JSON 但可安全字面还原;兜底只收 list/dict,标量与残缺
+    文本仍保留原串。literal_eval 只吃字面量,无执行面。
+    """
     try:
         if ftype == "integer":
             return int(value)
@@ -137,8 +144,17 @@ def _coerce_carry_value(value: str, ftype: str) -> Any:
                 return False
             return value
         if ftype in ("object", "array"):
-            return json.loads(value)
-    except ValueError:  # json.JSONDecodeError 继承 ValueError,无需并列
+            try:
+                return json.loads(value)
+            except ValueError:
+                pass
+            try:
+                healed = ast.literal_eval(value)
+            except (ValueError, SyntaxError):
+                healed = None
+            if isinstance(healed, (list, dict)):
+                return healed
+    except ValueError:  # int/float 解析失败:保留原串
         pass
     return value
 

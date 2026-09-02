@@ -197,6 +197,34 @@ class TestCarryFill:
         assert body["count"] == "3x"
         assert body["meta"] == "{not-json}"
 
+    def test_repr_text_heals_for_container_faces(self):
+        """值表容器值是 Python repr 文本(单引号/None/True,粘贴产物)——
+        非法 JSON 但可字面还原;json.loads 失败须再试 literal_eval,
+        不得把 repr 原串注入 body(fin orderAdd supplier 实录回归)。"""
+        out = materialize_run_copy(_carry_converted(), carry_context=_ctx(
+            step_fields={0: {"$.supplier": "array", "$.meta": "object"}},
+            service_bindings={"fin-service": {
+                "$.supplier": "[{'is_manual': '', 'settlement_date': None,"
+                              " 'isset_fee': '0'}]",
+                "$.meta": "{'k': 'v', 'on': True}"}}))
+        body = out["steps"][0]["request"]["body"]
+        assert body["supplier"] == [{"is_manual": "", "settlement_date": None,
+                                     "isset_fee": "0"}]
+        assert body["meta"] == {"k": "v", "on": True}
+
+    def test_repr_heal_rejects_non_container_and_garbage(self):
+        """兜底只收容器:literal_eval 还原出标量(None)不收;两级都解析
+        不了的残缺文本保留原串。"""
+        out = materialize_run_copy(_carry_converted(), carry_context=_ctx(
+            step_fields={0: {"$.supplier": "array", "$.meta": "object"}},
+            service_bindings={"fin-service": {
+                "$.supplier": "None",         # 标量 repr:兜底不收,保串
+                "$.meta": "{'k': 'v'",        # 残缺 repr:literal_eval 也败
+            }}))
+        body = out["steps"][0]["request"]["body"]
+        assert body["supplier"] == "None"
+        assert body["meta"] == "{'k': 'v'"
+
     def test_template_value_passes_through_uncoerced(self):
         out = materialize_run_copy(_carry_converted(), carry_context=_ctx(
             service_bindings={"fin-service": {"$.tpl": "${var.envId}",
