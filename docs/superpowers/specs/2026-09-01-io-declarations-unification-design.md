@@ -3,7 +3,7 @@
 > 状态:**已评审定稿**(2026-09-01;评审轮:形状裁定 → 三点修订(B6/②③/边界)→ 落点闭合钦定(1.5/B7)→ 结构问题/扩展性/schema_ 能力/序列化面盘问通过)
 > 日期:2026-09-01
 > 前置:carry 存储与注入设计(2026-08-31,分支 feat/carry-fields-storage-injection 已落地)
-> 落链:本 spec 落于 feat/carry-fields-storage-injection(基线 606be60 并回后实测 737/10);归一化实现分支从本链开出。
+> 落链:本 spec 落于 feat/carry-fields-storage-injection(基线 606be60 并回后实测 737/10;2026-09-02 语料重构后重钉 532/99,见 §0.3);归一化实现分支从本链开出。
 
 ---
 
@@ -27,28 +27,28 @@ plate 端点契约(`gimbal_plate/schema/endpoint/io_spec.py`)用一个接口的 
 
 model 双真源机制(model_schema/model_name 与 schema_ 并行)刚在 carry 轮(T2)退役 —— 第二承重真源必然漂移腐化。本次归一化的本质:**只留一根承重轴,其余降级或派生**。
 
-### 0.3 规模事实(2026-09-01 勘误,形状决策依据)
+### 0.3 规模事实(2026-09-01 勘误;2026-09-02 语料重构后重钉,形状决策依据)
 
 最初评估"只有 settlement 声明了 fields,迁移 ≈ 0"是**错误的**。全量 grep 结果:
 
 | 事实 | 数量 |
 |---|---|
 | 声明了 IOFieldBinding 的 fin 端点文件 | 17 / 17 |
-| IOFieldBinding 声明总数 | 737 条 |
-| `schema_={}`(空 schema)的端点 | 15 / 17 |
-| 单文件最大声明量 | order_order_add / order_order_book / order_entrust_order_add 各 ~226 条(备注族 3 键移入 carry 后) |
+| IOFieldBinding 声明总数 | 532 条 |
+| 含 `schema_={}`(空 schema)的端点文件 | 13 / 17(order_order_detail、order_entrust_order_add 重构后带非空 schema) |
+| 单文件最大声明量 | order_order_book 229(225 binding + 4 carry)、order_order_add 228(225 + 3)、order_entrust_order_add 94(3 binding + 91 carry) |
 | 有真实 model schema 的端点 | 仅 settlement_create_order、account_query_balance |
-| carry 声明 | 10 条(settlement $.remark + 下单三端点备注族 $.remark/$.notes/$.cancel_remark) |
+| carry 声明 | 99 条(settlement 1 + order_order_add 3 + order_order_book 4 + order_entrust_order_add 91 —— 委托下单 2026-09-02 全量 carry 化) |
 
-**基线口径(2026-09-01)**:上表为 fix/carry-faces-all-fin-endpoints(606be60)并回后的链上实测,与事故记录口径(737/10)一致;归一化实现分支从该链开出,golden 基线(P1 前快照)以含全部 10 条 carry 声明的 /full 为准。
+**基线口径(2026-09-02 重钉)**:上表为 73cc71b..f6147ee 语料重构(order_entrust_order_add 委托下单全量 carry 化 91 条、响应 view_only 大批转 schema-only、根路径 `$` 实例删除)后的链上实测 532/99;golden 基线(P1 前快照)以含全部 99 条 carry 声明的 /full 为准。历史口径:2026-09-01 定稿时 737/10(606be60 并回后实测)。
 
-且声明的形态是**场景流量提取物**:路径含数组下标(`$.data.data[0].audit_id`)、深层嵌套(`$.data.audit_content.relation_id`)、根路径(`$`);example 携带真实业务值。对这 15/17 个端点,**fields[] 本身就是结构真源,schema_ 是空壳** —— 与 settlement(模型丰富)正好相反。audit_audit_page 揭示第三种用法:schema_ 只装 Type C 补充字段(risk_note)。
+且声明的形态是**场景流量提取物**:路径含数组下标(`$.data.data[0].audit_id`)、深层嵌套(`$.data.audit_content.relation_id`)(根路径 `$` 实例已随 2026-09-02 重构移除,规则仍容纳);example 携带真实业务值。对这 13/17 个端点,**fields[] 本身就是结构真源,schema_ 是空壳** —— 与 settlement(模型丰富)正好相反。audit_audit_page 揭示第三种用法:schema_ 只装 Type C 补充字段(risk_note)。
 
 ### 0.4 被否决的形状(甲:schema + x-io 注记为唯一真源)
 
 基于 0.3 的规模事实,甲形状不可行:
 
-1. **743/747 条声明无 schema 节点可挂**(737 binding + 10 carry 中,仅 settlement 的 4 条有模型节点)—— x-io 标记必须挂在 JSON Schema 属性节点上,而 `$.data.data[0].audit_id`、`$` 根路径在 schema 里没有对应节点;
+1. **绝大多数声明无 schema 节点可挂**(2026-09-01 实测 747 条中仅 settlement 的 4 条有模型节点;2026-09-02 重构后 631 条,有真实 model 的端点仍仅 settlement/account)—— x-io 标记必须挂在 JSON Schema 属性节点上,而 `$.data.data[0].audit_id` 这类深层提取路径在 schema 里没有对应节点;
 2. **为存量声明合成嵌套 schema(含数组结构)= /full 的 schema 键内容变化** → 前端 Type C 差集受影响,违反硬性规格 §1.2;
 3. **引入虚拟路径旁路字典 = 双真源**,重蹈 model 机制腐化覆辙。
 
@@ -73,7 +73,7 @@ model 双真源机制(model_schema/model_name 与 schema_ 并行)刚在 carry �
 1. schema ↔ declarations 可能漂移(B1)。缓解:declare() 路线天然单源;触发器 = 漂移成痛 → 一致性 lint(§11.2)。不做的理由:交叉校验与"schema 内容不动"(1.2)互斥。
 2. 通道政策不结构化。域语义(备注族必 carry)进 plate = 层次污染;由政策测试 + §11.5 承担。
 3. 构造桥长期承重(P3 不启动时)。桥是"旧参数→canonical"的编译语义,非第二真源 —— 不产生漂移面,只产生维护面,且 P3 路径显式可执行。
-4. 747 条语料的语义时效性。归一化管结构合法,不管流量提取物的语义真伪(提取时刻的 API 是否还在)。
+4. 631 条语料的语义时效性。归一化管结构合法,不管流量提取物的语义真伪(提取时刻的 API 是否还在)。
 
 ---
 
@@ -107,7 +107,7 @@ model 双真源机制(model_schema/model_name 与 schema_ 并行)刚在 carry �
 
 ### 2.3 扩展性(两速结构,2026-09-01 评审轮钉点)
 
-**涂油的路(日常增长,零结构改动)**:新端点、新声明条目、新系统接入(手写清单或 declare())、政策调整(改测试)、词表扩容(ui_kind/source_kind 是 Literal,加值即可)。747→N 条只是清单变长,所有消费者自动一致 —— 读的是同一根轴的投影。
+**涂油的路(日常增长,零结构改动)**:新端点、新声明条目、新系统接入(手写清单或 declare())、政策调整(改测试)、词表扩容(ui_kind/source_kind 是 Literal,加值即可)。631→N 条只是清单变长,所有消费者自动一致 —— 读的是同一根轴的投影。
 
 **带摩擦的路(结构演化,必过三道门)**:新通道 / 新落点 / 拆旧键 —— 都要动 §3.5 闭合表 + B7 闭合校验 + golden re-baseline。**摩擦是从事故买来的设计**:结构演化必须显式,不允许无声发生。
 
@@ -162,7 +162,7 @@ class DeclarationEntry(BaseModel):
 通道约束(条目级校验):
 
 - `channel=="carry"` → **default 与 example 必须为 None**(§6 B6,D2 后门封死)。桥路线天然合规 —— CarryEntry 本就无值字段,编译产物恒 None;禁令实际约束的是手写 declarations 与 declare() 的节点吸收。enum 不禁 —— 词表约束非值,不触 D2,派生 carry 面天然丢弃;
-- `name == last_segment(path)` 对根路径沿用现行行为(`last_segment("$")=="$"`,order_entrust 响应现网已有 name='$' 合法先例),实现带一条 `$` 条目单测;
+- `name == last_segment(path)` 对根路径沿用现行行为(`last_segment("$")` 返回 None、不约束 name —— utils/path.py ROOT 节点非 FIELD;`$` 条目 name 落兜底 `"$"`),实现带一条 `$` 条目单测(2026-09-02 起现网无根路径实例,单测走合成构造);
 - **通道-规格闭合(§6 B7)**:RequestSpec 内条目 channel ∈ {binding, carry},ResponseSpec 内条目 ∈ {view_only} —— 违者构造错误。请求面由此闭合:不存在第三种请求字段落点(§3.5)。
 
 ### 3.2 通道互斥(D4 结构化)
@@ -284,7 +284,7 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
     ...
 ```
 
-- 现算无缓存:端点对象是进程级单例、消费频率低,747 条量级的过滤是微秒级 —— YAGNI,不引入 pydantic 缓存复杂度。
+- 现算无缓存:端点对象是进程级单例、消费频率低,631 条量级的过滤是微秒级 —— YAGNI,不引入 pydantic 缓存复杂度。
 - 返回值视为只读快照(返回新构造对象),调用方修改不影响存储。
 
 ### 4.2 属性消费者(全部零改动透明)
@@ -438,7 +438,7 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 
 - [ ] /full 既有键(body_type/fields/schema/carry/assertable_fields)对全部端点与 P1 前逐键相等(测试 ①②③a);
 - [ ] **declarations 键被 golden 全键锁定**(16 桥路线端点 P1→P2 逐键相等,测试 ②;唯一已切换消费者 service_fields 的读取面稳态);
-- [ ] declarations 视图覆盖全部 747 条存量声明(737 fields + 10 carry),channel 映射正确(测试 ①④);
+- [ ] declarations 视图覆盖全部 631 条存量声明(532 fields + 99 carry),channel 映射正确(测试 ①④);
 - [ ] **carry 通道 default/example 封死有单测**,declare() 对 carry 键不吸收 default(测试 ⑤⑦,B6);
 - [ ] 17 个端点文件在 P2 提交里零 diff(桥承接;settlement 除外,迁 declare());
 - [ ] settlement declare() 写法与手写线上等价,覆写保串(测试 ③);

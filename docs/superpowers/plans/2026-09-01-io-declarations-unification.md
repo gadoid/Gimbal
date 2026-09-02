@@ -1,4 +1,5 @@
 # IO 声明归一化(declarations 唯一真源)实现计划
+# IO 声明归一化(declarations 唯一真源)实现计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -16,8 +17,8 @@
 - **工作分支**:`feat/io-declarations-unification`,从 `feat/carry-fields-storage-injection`(3719ef7)开出;commit 中文,尾部 `Co-Authored-By: Claude <noreply@anthropic.com>`。
 - **线上等价铁律**(spec §1.1/1.2/4.3):/full 既有键(body_type/fields/schema/carry/assertable_fields)逐键逐字节不变;唯一增量 = declarations 键(有声明才发);schema 内容一字不动,不合成。
 - **键序约定**(spec §4.3):declarations = binding/view_only 条目(输入序)在前,carry 条目(输入序)在后;P1 view 与 P2 桥两处实现显式遵循同一约定。
-- **基线口径**(spec §0.3):ALL_ENDPOINTS = 18(fin 全量,account_query_balance 在内);有声明端点 17 + account(零声明,request 缺席、响应 schema-only);声明总数 747 = 737 binding/view_only + 10 carry;**fixture 是计数权威**(grep 行级 736/出现级 737 有出入,以 Task 1 捕获实测为准);**捕获只补缺** —— 两个 fixture 的捕获分支均带 `not FIXTURE.exists()` 守卫,fixture 提交后任何 CAPTURE 运行都走比对分支,re-baseline 必须显式删文件再捕(单开 commit 说明原因)。
-- **2026-09-02 漂移预警**:文档定稿(1f04edb)后语料已大改 —— 73cc71b 把 order_entrust 委托下单重构为 3 binding + 80 余 carry、响应 view_only 大批转 schema-only,carry 面 10→99、binding 面 737→524(HEAD 实测);根路径 `$` 先例随重构消失(entrust 已提交删除,order_detail 在未提交工作树中)。**本节 747/737/10、Task 1 计数断言、Task 2 test_coverage_747 与 test_root_path_entry 前提均已过期** —— 执行日 Task 1 以 fixture 实测重新钉数(spec §0.3 + 本计划一并改,单开 commit);根路径测试按届时语料换锚或删除;`or "$"` 兜底逻辑与 Task 5 根路径用例保留(模型规则仍允许,只是不再有现网实例)。
+- **基线口径**(spec §0.3):ALL_ENDPOINTS = 18(fin 全量,account_query_balance 在内);有声明端点 17 + account(零声明,request 缺席、响应 schema-only);声明总数 631 = 532 binding/view_only + 99 carry(**2026-09-02 语料重构后重钉**,grep 出现级;fixture 捕获为最终权威);**捕获只补缺** —— 两个 fixture 的捕获分支均带 `not FIXTURE.exists()` 守卫,fixture 提交后任何 CAPTURE 运行都走比对分支,re-baseline 必须显式删文件再捕(单开 commit 说明原因)。
+- **2026-09-02 re-baseline(已执行)**:文档定稿(1f04edb)后语料重构 —— 73cc71b 起把 order_entrust_order_add 委托下单改为 3 binding + 91 carry、order/order_book 契约面更新、根路径 `$` 现网实例全部删除;计数 747→631(532+99)。本计划与 spec §0.3 数字已同步重钉;test_root_path_entry 改合成用例(锁 `or "$"` 兜底派生,原依赖的现网先例已不存在);根路径规则与 Task 5 根路径用例保留(模型仍允许,只是无现网实例)。
 - **端点归属**:settlement 唯一 declare() 迁移(Task 8);其余 17(fin 16 + account)走构造桥零改动 —— account 归桥是被线上等价逼定(spec §8 ②)。
 - **②③ 基线不混用**(spec §8):② 的 binding 条目 type 恒 None(桥不吸收),③ 的 type 恒吸收值;两测试各自独立断言,不共享基线对象。
 - **政策守卫不可删**:`tests/plate/test_v3_systems_fin.py::TestCarryFacesAllEndpoints` 在 P2 派生属性下必须零改动通过(spec §5 分层声明);任何任务不得"顺手优化"它。
@@ -109,7 +110,7 @@ def _assert_response(base: dict, live: dict) -> None:
 
 
 def test_baseline_counts() -> None:
-    """基线计数权威:747 = 737 + 10(fixture 实测;grep 行级 736 是假象)。"""
+    """基线计数权威:631 = 532 + 99(2026-09-02 重钉;fixture 实测为准)。"""
     base = json.loads(FIXTURE.read_text(encoding="utf-8"))
     bindings = sum(len((b.get("request") or {}).get("fields") or [])
                    for b in base.values())
@@ -118,8 +119,8 @@ def test_baseline_counts() -> None:
                 for r in b.get("responses", {}).values())
     carries = sum(len((b.get("request") or {}).get("carry") or {})
                   for b in base.values())
-    assert bindings + views == 737, f"binding/view_only 总数 {bindings + views} != 737(若红:以 fixture 实测重新核对 spec §0.3 并意识性更新)"
-    assert carries == 10
+    assert bindings + views == 532, f"binding/view_only 总数 {bindings + views} != 532(若红:以 fixture 实测重新核对 spec §0.3 并意识性更新)"
+    assert carries == 99
 ```
 
 若计数红:停下来用 `git grep -o "IOFieldBinding(" -- src/gimbal-plate/gimbal_plate/systems/fin/endpoint | wc -l` 出现级计数交叉核对,确认是基线数字错还是实现错,**不许静默改断言**。
@@ -158,7 +159,6 @@ from gimbal_plate.schema.endpoint.io_spec import (
 )
 from gimbal_plate.systems.fin.endpoint import (
     ALL_ENDPOINTS, SETTLEMENT_CREATE_ORDER, ACCOUNT_QUERY_BALANCE,
-    ORDER_ENTRUST_ORDER_ADD,
 )
 
 
@@ -196,20 +196,23 @@ class TestDeclarationsView:
         assert by_path["$.data.data[0].audit_id"]["assertable"] is False
 
     def test_root_path_entry(self) -> None:
-        # order_entrust 响应现网 name='$' 先例(spec §3.1)
-        rs = ORDER_ENTRUST_ORDER_ADD.request
-        dv = rs.declarations_view()
-        root = [e for e in dv if e["path"] == "$"]
-        assert all(e["name"] == "$" for e in root)
+        # 根路径现网实例已随 2026-09-02 语料重构移除;合成用例锁派生逻辑:
+        # carry 根路径 last_segment 为 None → name 落 "$" 兜底(spec §3.1)
+        rs = RequestSpec(
+            body_type="json", schema_={},
+            carry={"$": CarryEntry(description="整包透传", type="object")},
+        )
+        (e,) = rs.declarations_view()
+        assert e["name"] == "$" and e["path"] == "$" and e["channel"] == "carry"
 
-    def test_coverage_747(self) -> None:
+    def test_coverage_631(self) -> None:
         total = 0
         for ep in ALL_ENDPOINTS:
             if ep.request:
                 total += len(ep.request.declarations_view())
             total += sum(len(r.declarations_view())
                          for r in ep.responses.values())
-        assert total == 747, f"declarations 覆盖 {total} != 747"
+        assert total == 631, f"declarations 覆盖 {total} != 631"
 
     def test_serialize_emits_only_when_present(self) -> None:
         rs = RequestSpec(body_type="json", schema_={})
@@ -246,7 +249,7 @@ def declarations_view(self) -> list[dict[str, Any]]:
                     "enum": f.enum, "ui_kind": f.ui_kind,
                     "source_kind": f.source_kind, "assertable": False})
     for path, c in self.carry.items():
-        # 根路径 "$" 的 last_segment 为 None → name="$"(现网先例)
+        # 根路径 "$" 的 last_segment 为 None → name="$"(根兜底;2026-09-02 起无现网实例,规则保留)
         out.append({"name": _path.last_segment(path) or "$", "path": path,
                     "channel": "carry", "type": c.type, "required": True,
                     "default": None, "example": None,
@@ -468,7 +471,7 @@ class TestDeclarationEntry:
             DeclarationEntry(name="x", path="$[0]", channel="binding")
         with pytest.raises(ValueError):
             DeclarationEntry(name="wrong", path="$.remark", channel="binding")
-        DeclarationEntry(name="$", path="$", channel="view_only")  # 根路径先例
+        DeclarationEntry(name="$", path="$", channel="view_only")  # 根路径合法(2026-09-02 起无现网实例,规则保留)
 
     def test_enum_membership(self) -> None:
         with pytest.raises(ValueError):
@@ -663,7 +666,7 @@ class RequestSpec(BaseModel):
         for p, c in (data.pop("carry") or {}).items():
             cd = c.model_dump() if isinstance(c, CarryEntry) \
                 else CarryEntry.model_validate(c).model_dump()
-            # 根路径 "$" 的 last_segment 为 None → name="$"(现网先例)
+            # 根路径 "$" 的 last_segment 为 None → name="$"(根兜底;2026-09-02 起无现网实例,规则保留)
             cd.update(name=_path.last_segment(p) or "$", path=p,
                       channel="carry")
             compiled.append(cd)
@@ -962,3 +965,4 @@ cd src/gimbal-platform/frontend && npm run typecheck && npm test
 2. **占位符扫描**:Task 3 Step2 `...` 与 Task 8 Step1 `...` 均为"按既有测试模式补全 monkeypatch/从糖输出反填字面量"的显式指示,附断言要点 —— 非 TBD。符号名已对照源码核实:`last_segment`(utils/path.py:71,返回 `str | None`,根路径/数组末段返 None —— 桥与 view 均以 `or "$"` 兜根路径,carry 语料全为叶子路径)、五个端点导出名(`fin/endpoint/__init__.py` re-export 确认)、id 串 `fin.settlement.create_order`(settlement_create_order.py:29)、`CarryFieldFace`(app/schemas/carry.py:28)、`ui_kind` 九词 Literal(io_spec.py:23-26,与 DeclarationEntry 词表逐词一致)。桥代码按"构造参数可能是模型实例"归一(`model_dump()` 再编译)—— 端点文件传 `IOFieldBinding`/`CarryEntry` 实例而非 dict。
 3. **类型一致**:`declarations_view()`(P1,dict 形状)→ Task 6 明确退役为 `.declarations` 属性访问并同步改 Task 2/4 测试访问面;`DeclarationEntry` 字段集在 Task 2(view dict 键集)与 Task 5(模型字段)一致;`CarryFieldFace` 形状 Task 3 保持不变。
 4. **执行前评审修订(2026-09-01,用户评审抓出)**:① CAPTURE 开关全局共享,Task 4 带开关重跑会把 pre_p1 基线污染成 P1 末快照 → 两个捕获分支均加 `not FIXTURE.exists()` 守卫(捕获只补缺,re-baseline 必须显式删文件,呼应意识性 re-baseline 纪律);② decl 快照原走 `declarations_view()` 旁路,Task 9 ② 却比 `_full_dict` 出口的 declarations 键,exclude_none 嵌套裁剪差异必爆假红 → `_decl_payloads()` 改为从 `_full_dict` 摘键,捕获与比对同出口;③ 桥 `data.pop` 直接改调用方 dict → 先 `data = dict(data)` 浅拷贝;④ 两处 `"string"` 兜底是掩蔽性死代码,但 `CarryEntry.type` 有默认 `"string"`(io_spec.py:84),裸 dict 无 type 今日并不报错 → 删兜底改为归一路由:dict 过 `CarryEntry/IOFieldBinding.model_validate`(默认值填充/extra 拒 junk/词表校验与今日同路同文案),实例直接 dump,两路后键集完整、编译零 `.get()` 兜底;⑤ ③b 手写反填补"对模型源码抽查字面量"提示(独立锚是 ③a,抽查补全 ③b 证明力)。
+5. **2026-09-02 re-baseline(语料重构后重钉)**:73cc71b..f6147ee 把 order_entrust_order_add 委托下单改为 3 binding + 91 carry、order/order_book 契约面更新、根路径 `$` 现网实例全部删除 → 计数 747→631(532+99,零声明端点仍仅 account,"17+1" 划分不变)。spec §0.3 表格/基线口径与本计划 Global Constraints、Task 1 计数断言(737→532、10→99)、Task 2 覆盖用例(747→631,更名 test_coverage_631)同步重钉;test_root_path_entry 由现网锚(order_entrust,实例已删)改为合成 carry 根路径用例 —— 反而补上了 `or "$"` 兜底分支的直接测试(原用例走 binding 面 name 透传,测不到该分支);三处"现网先例"注释改为"规则保留"。数字以执行日 Task 1 fixture 捕获为最终权威。
