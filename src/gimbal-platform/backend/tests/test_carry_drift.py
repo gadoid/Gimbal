@@ -20,9 +20,9 @@ async def test_drift_three_classes(client, plate):
     await _seed()
     plate.items = [{"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
                     "service": "fin-service"}]
-    plate.fulls = {"fin.ep1": {"request": {"carry": {
-        "$.remark": {"type": "string"},
-        "$.new": {"type": "string"}}}}}
+    plate.fulls = {"fin.ep1": {"request": {"declarations": [
+        {"path": "$.remark", "channel": "carry", "type": "string"},
+        {"path": "$.new", "channel": "carry", "type": "string"}]}}}
     admin = await _admin(client)
     r = await client.get("/api/carry/drift", headers=admin)
     assert r.status_code == 200, r.text
@@ -39,8 +39,9 @@ async def test_drift_empty_when_aligned(client, plate):
     await _seed()
     plate.items = [{"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
                     "service": "fin-service"}]
-    plate.fulls = {"fin.ep1": {"request": {"carry": {
-        "$.remark": {"type": "string"}, "$.old": {"type": "string"}}}}}
+    plate.fulls = {"fin.ep1": {"request": {"declarations": [
+        {"path": "$.remark", "channel": "carry", "type": "string"},
+        {"path": "$.old", "channel": "carry", "type": "string"}]}}}
     admin = await _admin(client)
     r = await client.get("/api/carry/drift", headers=admin)
     fin = next(s for s in r.json()["services"] if s["service"] == "fin-service")
@@ -72,8 +73,9 @@ async def test_drift_no_rename_suggestion_when_multiple_candidates(client, plate
         await db.commit()
     plate.items = [{"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
                     "service": "fin-service"}]
-    plate.fulls = {"fin.ep1": {"request": {"carry": {
-        "$.new": {"type": "string"}, "$.new2": {"type": "string"}}}}}
+    plate.fulls = {"fin.ep1": {"request": {"declarations": [
+        {"path": "$.new", "channel": "carry", "type": "string"},
+        {"path": "$.new2", "channel": "carry", "type": "string"}]}}}
     admin = await _admin(client)
     r = await client.get("/api/carry/drift", headers=admin)
     assert r.status_code == 200, r.text

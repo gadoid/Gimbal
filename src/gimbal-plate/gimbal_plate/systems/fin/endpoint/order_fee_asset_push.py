@@ -14,7 +14,7 @@ from gimbal_plate.systems.fin.system_info import (
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
     EndpointSpec,
-    IOFieldBinding,
+    DeclarationEntry,
     RequestSpec,
     ResponseSpec,
     EndpointMetadata,
@@ -30,11 +30,11 @@ ORDER_FEE_ASSET_PUSH: Final[EndpointSpec] = EndpointSpec(
     api=ApiSpec(service="fin-service", method="POST", path="/api/order/orderFee/assetPush", auth="bearer", timeout_seconds=30.0),
     request=RequestSpec(
         body_type="json",
-        fields=[
-        IOFieldBinding(name='action', path='action', required=True, example='check', ui_kind='text'),
-        IOFieldBinding(name='order_id', path='order_id', required=True, example='', ui_kind='text'),
-        IOFieldBinding(name='audit_msg', path='audit_msg', required=True, example={'title': '资产推送申请', 'code': '', 'msgs': ['资产推送申请']}, ui_kind='json'),
-        IOFieldBinding(name='select_node_user', path='select_node_user', required=True, example=[{'node_sort': '0', 'user_id': '828'}], ui_kind='json'),
+        declarations=[
+        DeclarationEntry(name='action', path='action', channel='binding', required=True, example='check', ui_kind='text'),
+        DeclarationEntry(name='order_id', path='order_id', channel='binding', required=True, example='', ui_kind='text'),
+        DeclarationEntry(name='audit_msg', path='audit_msg', channel='binding', required=True, example={'title': '资产推送申请', 'code': '', 'msgs': ['资产推送申请']}, ui_kind='json'),
+        DeclarationEntry(name='select_node_user', path='select_node_user', channel='binding', required=True, example=[{'node_sort': '0', 'user_id': '828'}], ui_kind='json'),
         ],
         schema_={},
     ),

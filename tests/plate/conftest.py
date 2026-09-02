@@ -15,9 +15,9 @@ from pydantic import BaseModel
 
 from gimbal_plate import (
     ApiSpec,
+    DeclarationEntry,
     EndpointMetadata,
     EndpointSpec,
-    IOFieldBinding,
     RequestSpec,
     ResponseSpec,
     registry,
@@ -112,11 +112,13 @@ def order_endpoint() -> EndpointSpec:
         request=RequestSpec(
             body_type="json",
             schema_=OrderIn.model_json_schema(),
-            fields=[
-                IOFieldBinding(name="order_no", path="order_no", required=True,
-                               example="ORD-001", ui_kind="text"),
-                IOFieldBinding(name="amount", path="amount", required=True,
-                               example=99.9, ui_kind="number"),
+            declarations=[
+                DeclarationEntry(name="order_no", path="$.order_no",
+                                 channel="binding", required=True,
+                                 example="ORD-001", ui_kind="text"),
+                DeclarationEntry(name="amount", path="$.amount",
+                                 channel="binding", required=True,
+                                 example=99.9, ui_kind="number"),
             ],
         ),
         responses={
@@ -124,13 +126,14 @@ def order_endpoint() -> EndpointSpec:
                 status=200,
                 description="成功",
                 schema_=OrderOut.model_json_schema(),
-                fields=[
-                    IOFieldBinding(name="order_id", path="order_id",
-                                   required=True, ui_kind="text"),
-                    IOFieldBinding(name="order_no", path="order_no",
-                                   required=True, ui_kind="text"),
+                declarations=[
+                    DeclarationEntry(name="order_id", path="$.order_id",
+                                     channel="view_only", required=True,
+                                     ui_kind="text", assertable=True),
+                    DeclarationEntry(name="order_no", path="$.order_no",
+                                     channel="view_only", required=True,
+                                     ui_kind="text", assertable=True),
                 ],
-                assertable_fields=["order_id", "order_no"],
             ),
             400: ResponseSpec(status=400, description="参数错误"),
         },
@@ -162,11 +165,13 @@ def order_patch_endpoint() -> EndpointSpec:
         request=RequestSpec(
             body_type="json",
             schema_=OrderPatch.model_json_schema(),
-            fields=[
-                IOFieldBinding(name="order_id", path="order_id", required=True,
-                               ui_kind="text"),
-                IOFieldBinding(name="status", path="status", required=True,
-                               ui_kind="text"),
+            declarations=[
+                DeclarationEntry(name="order_id", path="$.order_id",
+                                 channel="binding", required=True,
+                                 ui_kind="text"),
+                DeclarationEntry(name="status", path="$.status",
+                                 channel="binding", required=True,
+                                 ui_kind="text"),
             ],
         ),
         responses={200: ResponseSpec(status=200, schema_=OrderOut.model_json_schema())},

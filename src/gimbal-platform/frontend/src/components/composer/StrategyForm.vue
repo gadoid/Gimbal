@@ -18,7 +18,7 @@
   <div class="strategy-form" :class="`ph-${detail.phase}`">
     <div class="sf-head" @click="toggle">
       <span class="sf-badge" :class="`ph-${detail.phase}`">{{ detail.label }}</span>
-      <span class="sf-kind">{{ detail.kind }}</span>
+      <span class="sf-kind">{{ tagLabel ?? detail.kind }}</span>
       <span class="sf-summary" :title="summary">{{ summary }}</span>
       <button type="button" class="sf-toggle" title="展开/折叠">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" :class="{ open: expanded }"><polyline points="6 9 12 15 18 9"/></svg>
@@ -54,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import FieldForm from './FieldForm.vue'
 import type { StrategyView, StrategyKindDetailView, StrategyFieldDescView, IOFieldBinding } from '@/types/plate'
 
@@ -68,6 +68,10 @@ const props = defineProps<{
    * 由 Canvas 从 step 的 endpoint 响应契约推导后传入;缺省无候选按钮。
    */
   candidates?: Record<string, string[]>
+  /** 角标跳转脉冲(需求1):false→true 沿触发展开(定位被折叠的策略卡) */
+  expandWhen?: boolean
+  /** 头部 kind 标文本(Canvas 传编号形态 extract_2,与字段行角标对应) */
+  tagLabel?: string
 }>()
 const emit = defineEmits<{
   remove: []
@@ -75,6 +79,7 @@ const emit = defineEmits<{
 
 const expanded = ref(!!props.startExpanded)
 function toggle() { expanded.value = !expanded.value }
+watch(() => props.expandWhen, (v) => { if (v) expanded.value = true })
 
 /** onFailure 的字段描述符(plate base_fields 内省产物;无则不渲染入口) */
 const onFailureBinding = computed(() =>
@@ -207,6 +212,10 @@ const summary = computed<string>(() => {
   padding: 8px 10px 10px;
   border-top: 1px dashed #e6e8ec;
 }
+
+/* 角标跳转定位闪烁(需求1):1.2s 靛蓝光环渐隐 */
+@keyframes sf-flash { from { box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.35); } to { box-shadow: 0 0 0 3px rgba(79, 70, 229, 0); } }
+.strategy-form.sf-flash { animation: sf-flash 1.2s ease-out; }
 
 /* onFailure 入口(#2):字段区底部一行,label + select 紧凑排 */
 .sf-onfail {

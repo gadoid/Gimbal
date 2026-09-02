@@ -47,7 +47,7 @@ async def test_catalog_batch_snapshot_roundtrip(fresh_db):
         s.add(CatalogVersion(
             endpoint_id="fin.order.add", version="1.0.0",
             spec_json={"id": "fin.order.add", "version": "1.0.0",
-                       "request": {"fields": []}},
+                       "request": {"declarations": []}},
         ))
         s.add(AdaptationBatch(
             batch_id="bt-1", endpoint_id="fin.order.add",

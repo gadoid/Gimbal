@@ -148,13 +148,14 @@
         "api": {"service": "...", "method": "POST", "path": "...", "headers": {}, "timeout_seconds": 30.0, "auth": "bearer"},
         "request": {
           "body_type": "json",
-          "fields": [
-            {"name": "client_expand_name", "path": "$.client_expand_name", "required": true, "ui_kind": "text", "source_kind": "independent", "default": null, "example": "张三", "description": "客户拓展员名称", "enum": null},
+          "declarations": [
+            {"name": "client_expand_name", "path": "$.client_expand_name", "channel": "binding", "type": null, "required": true, "ui_kind": "text", "source_kind": "independent", "default": null, "example": "张三", "description": "客户拓展员名称", "enum": null},
+            {"name": "remark", "path": "$.remark", "channel": "carry", "type": "string", "required": true, "ui_kind": "unknown", "source_kind": "independent", "default": null, "example": null, "description": "", "enum": null},
             ...
           ],
-          "schema_": {...}
+          "schema": {...}
         },
-        "responses": {"200": {"status": 200, "fields": [...], "assertable_fields": ["$.code", "$.data.order_id"]}, "400": {...}, "500": {...}},
+        "responses": {"200": {"status": 200, "declarations": [{"name": "code", "path": "$.code", "channel": "view_only", "required": true, "assertable": true, ...}, ...]}, "400": {...}, "500": {...}},
         "metadata": {
           "preconditions": [...], "success_criteria": "...",
           "failed_criteria": ["401 ...", "403 ...", "422 ..."],
@@ -169,7 +170,7 @@
 - **缓存**：endpoint 缓存，结构变更失效
 - **使用场景**：
   - `CaseComposerCanvasAddStepDetail` Hero（从 item.metadata 拿失败参考 / 前置条件 / 业务备注）
-  - `CaseComposerCanvas` 字段编辑器（从 item.request.fields 拿字段定义）
+  - `CaseComposerCanvas` 字段编辑器（从 item.request.declarations 的 binding 通道拿字段定义）
 
 ### A5. 字段默认值填充建议
 - **触发**：`CaseComposerCanvas` 字段编辑器加载 step
@@ -373,7 +374,7 @@
     }
   }
   ```
-- **词汇表**：与 `IOFieldBinding` 同名同义（name/path/required/default/description/enum/ui_kind），但**无 `source_kind`**（值来源语义对策略无意义）。前端 StrategyForm 补 `'independent'` 默认值即可复用 FieldForm。
+- **词汇表**：与 `DeclarationEntry` 的字段轴同名同义（name/path/required/default/description/enum/ui_kind），但**无 `source_kind` / `channel` / `type` / `assertable`**（值来源与通道语义对策略无意义）。前端 StrategyForm 补 `'independent'` 默认值即可复用 FieldForm。
 - **base_fields 第一版不渲染**：添加策略骨架 = `{kind}` + 按 `fields` 的 `default` 展开；base 字段走默认值。
 - **平台代理**：`GET /api/strategy-catalog/{kind}/full`（unwrap `data.item`）；plate 不可达 → `502 plate_unavailable`，404 → `strategy_kind_not_found`
 
@@ -472,7 +473,7 @@ A4 拆为 3 块（`meta-and-api` / `request-spec` / `response-specs`），因为
 - **场景 Hero 渲染**只需要元信息 + API 坐标（method / path / 失败参考 / 前置条件 / 业务备注）→ A4
 - **字段编辑器渲染**只需要 RequestSpec → A4a
 - **响应表 / Auto-Extract 渲染**只需要 ResponseSpec → A4b
-- 拆分后**网络开销降低**（每次进入 AddStepDetail 不必拉整个 EndpointSpec 包含的几十个 IOFieldBinding），**缓存粒度更细**（结构变更时只失效相关子集）
+- 拆分后**网络开销降低**（每次进入 AddStepDetail 不必拉整个 EndpointSpec 包含的几十个声明条目），**缓存粒度更细**（结构变更时只失效相关子集）
 
 ### EndpointSpec 与 Scenario 的关系（关键）
 

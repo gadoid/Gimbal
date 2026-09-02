@@ -23,6 +23,8 @@ from .run_materialize import CarryContext
 async def _carry_face(endpoint_id: str) -> dict[str, str]:
     """plate /full → {path: type};任何失败 → {}(降级)。
 
+    读 ``request.declarations`` 的 carry 通道条目(wire 已归一化,
+    旧 ``carry`` 键不再存在;与 carry 路由 service_fields 同款投影)。
     垃圾 200 体(json 抛错/信封非 dict)同样降级 — 模块契约是
     「plate 全部失败 → 空面」,不让单端点的坏包打断整单 carry。
     """
@@ -36,9 +38,11 @@ async def _carry_face(endpoint_id: str) -> dict[str, str]:
         return {}
     if not isinstance(item, dict):
         return {}
-    carry = ((item.get("request") or {}).get("carry")) or {}
-    return {str(p): str(e.get("type") or "string")
-            for p, e in carry.items() if isinstance(e, dict)}
+    decls = ((item.get("request") or {}).get("declarations")) or []
+    return {str(e["path"]): str(e.get("type") or "string")
+            for e in decls
+            if isinstance(e, dict) and e.get("channel") == "carry"
+            and e.get("path")}
 
 
 def _endpoint_id(step: dict) -> Any:

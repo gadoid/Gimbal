@@ -20,17 +20,26 @@ ALL_OPS = STEP_OPS + DATASET_OPS + GLOBAL_OPS + CARRY_OPS
 
 
 def _field_map(spec: dict | None) -> dict[str, dict]:
-    """full spec → {字段名: 字段绑定};request 缺失/形状不符 → {}。"""
+    """full spec → {字段名: 声明条目};request 缺失/形状不符 → {}。
+
+    只读 ``request.declarations`` 的 binding 通道(声明面单一真源)。
+    旧 wire 的 ``fields`` 键不做兼容读(2026-09-02 剥离,清库重基线):
+    归一化前落库的 CatalogVersion.spec_json 快照在此解析为空,
+    diff 只产 addField、无 removeField —— 存量库须重跑 catalog 基线。
+    """
     if not isinstance(spec, dict):
         return {}
     request = spec.get("request")
-    fields = request.get("fields") if isinstance(request, dict) else None
-    if not isinstance(fields, list):
+    if not isinstance(request, dict):
+        return {}
+    decls = request.get("declarations")
+    if not isinstance(decls, list):
         return {}
     return {
-        str(f.get("name")): f
-        for f in fields
-        if isinstance(f, dict) and f.get("name")
+        str(e["name"]): e
+        for e in decls
+        if isinstance(e, dict) and e.get("channel") == "binding"
+        and e.get("name")
     }
 
 

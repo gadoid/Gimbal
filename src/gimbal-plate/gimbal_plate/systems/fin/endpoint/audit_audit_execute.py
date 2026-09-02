@@ -14,7 +14,7 @@ from gimbal_plate.systems.fin.system_info import (
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
     EndpointSpec,
-    IOFieldBinding,
+    DeclarationEntry,
     RequestSpec,
     ResponseSpec,
     EndpointMetadata,
@@ -30,10 +30,10 @@ AUDIT_AUDIT_EXECUTE: Final[EndpointSpec] = EndpointSpec(
     api=ApiSpec(service="fin-service", method="POST", path="/api/home/audit/auditExecute", auth="bearer", timeout_seconds=30.0),
     request=RequestSpec(
         body_type="json",
-        fields=[
-        IOFieldBinding(name='audit_ids', path='audit_ids', required=True, example=[''], ui_kind='json'),
-        IOFieldBinding(name='audit_status', path='audit_status', required=True, example=2, ui_kind='number'),
-        IOFieldBinding(name='audit_remark', path='audit_remark', required=True, example=None, ui_kind='text'),
+        declarations=[
+        DeclarationEntry(name='audit_ids', path='audit_ids', channel='binding', required=True, example=[''], ui_kind='json'),
+        DeclarationEntry(name='audit_status', path='audit_status', channel='binding', required=True, example=2, ui_kind='number'),
+        DeclarationEntry(name='audit_remark', path='audit_remark', channel='binding', required=True, example=None, ui_kind='text'),
         ],
         schema_={},
     ),

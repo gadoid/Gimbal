@@ -16,9 +16,10 @@ def test_end_to_end_c1_c2() -> None:
     assert ep.system == "sample"
     assert ep.service == "order"
     assert ep.api.method == "POST"
-    # P2 存储翻转:assertable_fields 为派生投影,恒归一化 JSONPath
-    # (入参短名 "order_id" 由构造桥归一等价匹配)
-    assert ep.responses[200].assertable_fields == ["$.order_id"]
+    # P2 存储翻转:断言面 = view_only 条目的 assertable 旗标
+    (order_id,) = [e for e in ep.responses[200].declarations
+                   if e.name == "order_id"]
+    assert order_id.channel == "view_only" and order_id.assertable is True
 
     # 2. 注册
     registry.reset()

@@ -62,11 +62,14 @@ def _declared_body_keys(ep: EndpointSpec | None) -> set[str] | None:
     """
     if ep is None or ep.request is None:
         return None
-    keys = {f.name for f in ep.request.fields}
-    for p in ep.request.carry:
-        seg = p[2:] if p.startswith("$.") else p
-        if "." not in seg and "[" not in seg:
-            keys.add(seg)
+    keys: set[str] = set()
+    for e in ep.request.declarations:
+        if e.channel == "binding":
+            keys.add(e.name)
+        elif e.channel == "carry":
+            seg = e.path[2:] if e.path.startswith("$.") else e.path
+            if "." not in seg and "[" not in seg:
+                keys.add(seg)
     return keys
 
 

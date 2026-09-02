@@ -42,24 +42,30 @@ vi.mock('@/api/scenario-composer', () => ({
     // /full 顶层 description(接口编辑页只读展示的事实源)
     description: 'ep-1 plate 契约描述',
     request: {
-      // /full 请求字段契约(现拉渲染的主数据源)。ep-1: orderId 平铺;
-      // ep-2(T6 嵌套注入用): nested.oid;
-      // ep-carry(reqTypeC carry 过滤用例): request.carry 声明 $.remark
+      // declarations 归一化后线上唯一承重键(旧 fields/carry 键已清除)。
+      // ep-1: orderId 平铺;ep-2(T6 嵌套注入用): nested.oid;
+      // ep-carry(reqTypeC carry 过滤用例): carry 通道声明 $.remark
       // 且 schema properties 另含 remark + hidden_req → 差集须滤 carry 键
-      fields: endpointId === 'ep-2'
-        ? [{
-            name: 'oid', path: '$.nested.oid', ui_kind: 'text',
-            source_kind: 'independent', required: true,
-            description: null, example: null, default: null, enum: null,
-          } as any]
-        : [{
-            name: 'orderId', path: '$.orderId', ui_kind: 'text',
-            source_kind: 'independent', required: true,
-            description: null, example: null, default: null, enum: null,
-          } as any],
-      carry: endpointId === 'ep-carry'
-        ? { '$.remark': { type: 'string' } }
-        : undefined,
+      declarations: [
+        ...(endpointId === 'ep-2'
+          ? [{
+              name: 'oid', path: '$.nested.oid', channel: 'binding',
+              ui_kind: 'text', source_kind: 'independent',
+              required: true, description: '', assertable: false,
+            } as any]
+          : [{
+              name: 'orderId', path: '$.orderId', channel: 'binding',
+              ui_kind: 'text', source_kind: 'independent',
+              required: true, description: '', assertable: false,
+            } as any]),
+        ...(endpointId === 'ep-carry'
+          ? [{
+              name: 'remark', path: '$.remark', channel: 'carry', type: 'string',
+              ui_kind: 'unknown', source_kind: 'independent',
+              required: false, description: '', assertable: false,
+            } as any]
+          : []),
+      ],
       schema: endpointId === 'ep-carry'
         ? { properties: {
             hidden_req: { type: 'string', default: 'hd-default' },
@@ -69,16 +75,24 @@ vi.mock('@/api/scenario-composer', () => ({
     },
     responses: {
       '200': {
-        assertable_fields: ['$.data.orderId', '$.code'],
         description: 'OK',
         schema: { properties: { trace_id: { type: 'string' } } },
-        fields: [{
-          name: 'orderId', path: '$.data.orderId', ui_kind: 'text',
-          source_kind: 'independent', required: true,
-          description: null, example: 'ord-9', default: null, enum: null,
-        } as any],
+        // view_only 投影回旧 fields 面 = orderId;assertable 面 =
+        // [$.data.orderId, $.code](code 声明为 assertable 条目保序)
+        declarations: [
+          {
+            name: 'orderId', path: '$.data.orderId', channel: 'view_only',
+            ui_kind: 'text', source_kind: 'independent', example: 'ord-9',
+            required: true, description: '', assertable: true,
+          },
+          {
+            name: 'code', path: '$.code', channel: 'view_only',
+            ui_kind: 'unknown', source_kind: 'independent',
+            required: true, description: '', assertable: true,
+          },
+        ],
       },
-      '401': { assertable_fields: [], description: '未认证', fields: [] },
+      '401': { description: '未认证', declarations: [] },
     },
   })),
 }))
@@ -148,7 +162,7 @@ let activePinia: ReturnType<typeof createPinia>
  *  (场景服务声明 dict,spec §1.4 服务引用双显用)。 */
 type CanvasMountOpts = { steps: StepView[]; services?: Record<string, string> }
 
-function mountCanvas(stepsOrOpts: StepView[] | CanvasMountOpts, activeIdx = 0) {
+function mountCanvas(stepsOrOpts: StepView[] | CanvasMountOpts, activeIdx = 0, attach = false) {
   const steps = Array.isArray(stepsOrOpts) ? stepsOrOpts : stepsOrOpts.steps
   const services = Array.isArray(stepsOrOpts) ? undefined : stepsOrOpts.services
   const orch = ref<Orchestration>(mkOrch(steps.length))
@@ -167,7 +181,12 @@ function mountCanvas(stepsOrOpts: StepView[] | CanvasMountOpts, activeIdx = 0) {
       })
     },
   })
-  const w = mount(Parent, { global: { plugins: [ElementPlus, activePinia] } })
+  // attach=B4 角标跳转用:VTU 默认挂脱离 document 的 div,
+  // document.getElementById(策略卡 id) 落空 → 跳转 no-op
+  const w = mount(Parent, {
+    global: { plugins: [ElementPlus, activePinia] },
+    ...(attach ? { attachTo: document.body } : {}),
+  })
   return { w }
 }
 
@@ -400,7 +419,8 @@ describe('CaseComposerCanvas — 右栏分流 + Type C(C3)', () => {
     const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
     await respTab.trigger('click')
     await flush()
-    expect(info.text()).toContain('token')
+    // 需求1:extracts 信息块已删,策略信息迁到字段行角标
+    expect(info.text()).not.toContain('extracts')
     expect(info.text()).toContain('响应契约')
     expect(info.findAll('.resp-contract-group').length).toBe(2)
     // assertable 字段(命中 $.data.orderId)带 ✓ 标
@@ -920,7 +940,7 @@ describe('CaseComposerCanvas — description 取 plate(问题2)', () => {
     try {
       vi.mocked(getFullEndpoint).mockImplementation(async (endpointId: string) =>
         endpointId === 'ep-d'
-          ? { id: 'ep-d', description: '创建订单', request: { fields: [] }, responses: {} } as any
+          ? { id: 'ep-d', description: '创建订单', request: { declarations: [] }, responses: {} } as any
           : origImpl(endpointId))
       const updates: StepView[][] = []
       const orch = ref<Orchestration>(mkOrch(1))
@@ -957,6 +977,139 @@ describe('CaseComposerCanvas — description 取 plate(问题2)', () => {
     } finally {
       vi.mocked(getFullEndpoint).mockImplementation(origImpl)
       vi.unstubAllGlobals()
+    }
+  })
+})
+
+describe('CaseComposerCanvas — 策略角标(需求1)', () => {
+  it('B1: 策略命中字段 → 对应签页字段行显角标(extract/assertion→Response,assign→Request)', async () => {
+    const s0 = mkStep({
+      strategy: [
+        { kind: 'extract', target: 'oid', expression: '$.response_body.data.orderId' } as any,
+        { kind: 'assign', source: '$.oid', target: '$.request_body.orderId' } as any,
+        { kind: 'assertion', target: '$.response_body.data.orderId', operator: 'exists', expected: null } as any,
+      ],
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    // request 签(默认):assign 角标挂 orderId 行;extract/assertion 不挂(响应侧)
+    const reqTag = w.find('.field-label .strategy-tag')
+    expect(reqTag.text()).toBe('assign')
+    // response 签:extract + assertion 两枚角标(assign 不挂)
+    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
+    await respTab.trigger('click')
+    await flush()
+    const respTags = w.findAll('.field-label .strategy-tag').map((b) => b.text()).sort()
+    expect(respTags).toEqual(['assertion', 'extract'])
+  })
+
+  it('B2: 同 kind 两条 → 编号 extract_1/extract_2(数组序,不论是否命中字段)', async () => {
+    const s0 = mkStep({
+      strategy: [
+        { kind: 'extract', target: 'a', expression: '$.response_body.data.orderId' } as any,
+        { kind: 'extract', target: 'b', expression: '$.response_body.nowhere' } as any,
+      ],
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
+    await respTab.trigger('click')
+    await flush()
+    // 命中字段的角标按数组序编号:第 1 条 extract → extract_1
+    expect(w.find('.field-label .strategy-tag').text()).toBe('extract_1')
+  })
+
+  it('B3: plate 域旧格式 expression 兼容 — 老草稿 $.data.orderId 也命中', async () => {
+    const s0 = mkStep({
+      strategy: [{ kind: 'extract', target: 'oid', expression: '$.data.orderId' } as any],
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
+    await respTab.trigger('click')
+    await flush()
+    expect(w.find('.field-label .strategy-tag').text()).toBe('extract')
+  })
+
+  it('B4: 点击角标 → 滚动定位对应策略卡并展开 + flash;卡头显示编号', async () => {
+    const { listStrategyKinds } = await import('@/api/scenario-composer')
+    const kindsMock = (listStrategyKinds as any).getMockImplementation()
+    ;(listStrategyKinds as any).mockResolvedValue([
+      { kind: 'extract', label: '从响应提取' },
+      { kind: 'assertion', label: '断言' },
+      { kind: 'assign', label: '注入' },
+    ])
+    // jsdom 无 scrollIntoView → stub(记录调用)
+    const origScroll = Element.prototype.scrollIntoView
+    const scrolled: unknown[] = []
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this) }
+    try {
+      const s0 = mkStep({
+        strategy: [
+          { kind: 'extract', target: 'oid', expression: '$.response_body.data.orderId' } as any,
+          { kind: 'extract', target: 'x', expression: '$.response_body.nowhere' } as any,
+        ],
+      })
+      const { w } = mountCanvas([s0], 0, true)
+      await flushPromises()
+      const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
+      await respTab.trigger('click')
+      await flush()
+      // 卡头编号:第 1/2 条 extract → extract_1/extract_2(与角标对应)
+      const kindTags = w.findAll('.sf-kind').map((b) => b.text())
+      expect(kindTags).toContain('extract_1')
+      expect(kindTags).toContain('extract_2')
+      // 点击角标 extract_1 → 定位 strategy-card-0:展开 + flash + scrollIntoView
+      const tag = w.findAll('.field-label .strategy-tag').find((b) => b.text() === 'extract_1')!
+      await tag.trigger('click')
+      await flushPromises()
+      const card = w.find('#strategy-card-0')
+      expect(card.exists()).toBe(true)
+      expect(card.classes()).toContain('sf-flash')
+      expect(card.find('.sf-body').isVisible()).toBe(true)
+      expect(scrolled.length).toBe(1)
+      w.unmount()
+    } finally {
+      ;(listStrategyKinds as any).mockImplementation(kindsMock)
+      Element.prototype.scrollIntoView = origScroll
+    }
+  })
+
+  it('B5: Request 签 assign 角标同样生效 — 点击跳转混合策略中的 assign 卡', async () => {
+    const { listStrategyKinds } = await import('@/api/scenario-composer')
+    const kindsMock = (listStrategyKinds as any).getMockImplementation()
+    ;(listStrategyKinds as any).mockResolvedValue([
+      { kind: 'extract', label: '从响应提取' },
+      { kind: 'assign', label: '注入' },
+    ])
+    const origScroll = Element.prototype.scrollIntoView
+    const scrolled: unknown[] = []
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this) }
+    try {
+      const s0 = mkStep({
+        strategy: [
+          { kind: 'extract', target: 'oid', expression: '$.response_body.data.orderId' } as any,
+          { kind: 'assign', source: '$.oid', target: '$.request_body.orderId' } as any,
+        ],
+      })
+      const { w } = mountCanvas([s0], 0, true)
+      await flushPromises()
+      // request 签为默认签:assign 角标直接可见(extract 是响应侧,不挂)
+      const tag = w.find('.field-label .strategy-tag')
+      expect(tag.text()).toBe('assign')
+      // 卡头与角标同一标签(单条 assign → 裸 kind)
+      expect(w.findAll('.sf-kind').map((b) => b.text())).toContain('assign')
+      await tag.trigger('click')
+      await flushPromises()
+      const card = w.find('#strategy-card-1')   // 混合策略中 assign 是第 2 条
+      expect(card.exists()).toBe(true)
+      expect(card.classes()).toContain('sf-flash')
+      expect(card.find('.sf-body').isVisible()).toBe(true)
+      expect(scrolled.length).toBe(1)
+      w.unmount()
+    } finally {
+      ;(listStrategyKinds as any).mockImplementation(kindsMock)
+      Element.prototype.scrollIntoView = origScroll
     }
   })
 })

@@ -100,8 +100,10 @@ class TestSchemaComposition:
     def test_create_order_request_face(self) -> None:
         rs = SETTLEMENT_CREATE_ORDER.request
         assert rs is not None
-        assert [f.name for f in rs.fields] == ["order_id", "amount", "currency"]
-        assert list(rs.carry) == ["$.remark"]
+        assert [e.name for e in rs.declarations
+                if e.channel == "binding"] == ["order_id", "amount", "currency"]
+        assert [e.path for e in rs.declarations
+                if e.channel == "carry"] == ["$.remark"]
 
 
 class TestCarryFacesAllEndpoints:
@@ -160,9 +162,11 @@ class TestCarryFacesAllEndpoints:
 
     def test_all_endpoints_carry_face_matches_policy(self) -> None:
         actual = {
-            ep.id: sorted(rs.carry)
+            ep.id: sorted(e.path for e in rs.declarations
+                          if e.channel == "carry")
             for ep in ALL_ENDPOINTS
-            if (rs := ep.request) is not None and rs.carry
+            if (rs := ep.request) is not None
+            and any(e.channel == "carry" for e in rs.declarations)
         }
         assert actual == self.EXPECTED_CARRY
 
@@ -171,8 +175,9 @@ class TestCarryFacesAllEndpoints:
             rs = ep.request
             if rs is None:
                 continue
-            leaked = {f.name for f in rs.fields} & self.DESCRIPTIVE
-            assert not leaked, f"{ep.id}: 描述性字段 {sorted(leaked)} 滞留 fields[]"
+            leaked = {e.name for e in rs.declarations
+                      if e.channel == "binding"} & self.DESCRIPTIVE
+            assert not leaked, f"{ep.id}: 描述性字段 {sorted(leaked)} 滞留 binding 面"
 
 
 class TestDefaultsRoundTrip:

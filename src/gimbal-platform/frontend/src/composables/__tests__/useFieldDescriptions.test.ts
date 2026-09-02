@@ -8,12 +8,14 @@ import {
   useFieldDescriptions,
 } from '@/composables/useFieldDescriptions'
 
+// declarations 归一化后 /full 请求面唯一承重键(旧 fields 键已清除);
+// binding 通道条目经 channelFields 投影出 description 索引源
 const FULL_A = {
   id: 'fin.order.add',
   request: {
-    fields: [
-      { name: 'amount', description: '订单金额(分)', required: true, default: null, example: null, enum: null, ui_kind: 'number', source_kind: 'literal' },
-      { name: 'customer_id', description: '客户编号', required: true, default: null, example: null, enum: null, ui_kind: 'text', source_kind: 'literal' },
+    declarations: [
+      { name: 'amount', path: '$.amount', channel: 'binding', description: '订单金额(分)', required: true, ui_kind: 'number', source_kind: 'independent', assertable: false },
+      { name: 'customer_id', path: '$.customer_id', channel: 'binding', description: '客户编号', required: true, ui_kind: 'text', source_kind: 'independent', assertable: false },
     ],
   },
 }
@@ -21,8 +23,8 @@ const FULL_A = {
 const FULL_B = {
   id: 'fin.order.query',
   request: {
-    fields: [
-      { name: 'page', description: '页码', required: false, default: 1, example: null, enum: null, ui_kind: 'number', source_kind: 'literal' },
+    declarations: [
+      { name: 'page', path: '$.page', channel: 'binding', description: '页码', required: false, default: 1, ui_kind: 'number', source_kind: 'independent', assertable: false },
     ],
   },
 }
@@ -75,7 +77,7 @@ describe('useFieldDescriptions', () => {
 
   it('endpoint 不在 /full 中存在 → 该 step 的所有 columnKey 缺失(无错误)', async () => {
     vi.spyOn(api, 'getFullEndpoint').mockResolvedValue({
-      id: 'x', request: { fields: [] },
+      id: 'x', request: { declarations: [] },
     } as any)
 
     const draft = ref({

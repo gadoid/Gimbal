@@ -14,14 +14,12 @@ from gimbal_plate.systems.fin.system_info import (
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
     EndpointSpec,
-    IOFieldBinding,
+    DeclarationEntry,
     RequestSpec,
     ResponseSpec,
     EndpointMetadata,
 )
 
-
-from gimbal_plate.schema.endpoint.io_spec import CarryEntry
 
 # ----------------------------------------------------------------------
 # 来源: curl 导入 | 生成时间: 2026-09-02T08:02:51.572363+00:00
@@ -56,42 +54,27 @@ ORDER_ORDER_DETAIL: Final[EndpointSpec] = EndpointSpec(
             },
             'required': ['order_id'],
         },
-        fields=[
-            IOFieldBinding(name='order_id', path='$.order_id', required=True, example='353432653833176064', description='', ui_kind='text', source_kind='independent'),
+        declarations=[
+            DeclarationEntry(name='order_id', path='$.order_id', channel='binding', required=True, example='353432653833176064', description='', ui_kind='text', source_kind='independent'),
         ],
     ),
     responses={
         200: ResponseSpec(
             status=200,
-            fields=[
-                IOFieldBinding(name='code', path='$.code', required=False, example=200, description='', ui_kind='text', source_kind='independent'),
-                IOFieldBinding(name='msg', path='$.msg', required=False, example='成功', description='', ui_kind='text', source_kind='independent'),
-                IOFieldBinding(name='order_id', path='$.data.data[0].order_id', required=False, example='353432653833176064', description='', ui_kind='text', source_kind='independent'),
-                IOFieldBinding(name='order_no', path='$.data.data[0].order_no', required=False, example='YWDD20260902110779', description='', ui_kind='text', source_kind='independent'),
-                IOFieldBinding(name='bl_no', path='$.data.data[0].bl_no', required=False, example='Codfish-3KQI-Test', description='', ui_kind='text', source_kind='independent'),
-                IOFieldBinding(name='policy_type', path='$.data.data[0].policy_type', required=False, example='JSZX', description='', ui_kind='text', source_kind='independent'),
-                IOFieldBinding(name='policy_id', path='$.data.data[0].policy_id', required=False, example='295502731957764096', description='', ui_kind='text', source_kind='independent'),
-                IOFieldBinding(name='business_type', path='$.data.data[0].business_type', required=False, example='1', description='', ui_kind='text', source_kind='independent'),
-                IOFieldBinding(name='main_ids', path='$.data.data[0].main_ids', required=False, example=',1,3,', description='', ui_kind='text', source_kind='independent'),
-                IOFieldBinding(name='supplier_names', path='$.data.data[0].supplier_names', required=False, example='青岛跃航国际物流有限公司', description='', ui_kind='text', source_kind='independent'),
-                IOFieldBinding(name='supplier_ids', path='$.data.data[0].supplier_ids', required=False, example=['5'], description='', ui_kind='text', source_kind='independent'),
-                IOFieldBinding(name='order_sub_no', path='$.data.data[0].order_sub_no', required=False, example='ZDD20260902022947', description='', ui_kind='text', source_kind='independent'),
-                IOFieldBinding(name='business_no', path='$.data.data[0].business_no', required=False, example='YHD20260902036490', description='', ui_kind='text', source_kind='independent'),
-            ],
-            assertable_fields=[
-                '$.code',
-                '$.msg',
-                '$.data.data[0].order_id',
-                '$.data.data[0].order_no',
-                '$.data.data[0].bl_no',
-                '$.data.data[0].policy_type',
-                '$.data.data[0].policy_id',
-                '$.data.data[0].business_type',
-                '$.data.data[0].main_ids',
-                '$.data.data[0].supplier_names',
-                '$.data.data[0].supplier_ids',
-                '$.data.data[0].order_sub_no',
-                '$.data.data[0].business_no',
+            declarations=[
+                DeclarationEntry(name='code', path='$.code', channel='view_only', required=False, example=200, description='', ui_kind='text', source_kind='independent', assertable=True),
+                DeclarationEntry(name='msg', path='$.msg', channel='view_only', required=False, example='成功', description='', ui_kind='text', source_kind='independent', assertable=True),
+                DeclarationEntry(name='order_id', path='$.data.data[0].order_id', channel='view_only', required=False, example='353432653833176064', description='', ui_kind='text', source_kind='independent', assertable=True),
+                DeclarationEntry(name='order_no', path='$.data.data[0].order_no', channel='view_only', required=False, example='YWDD20260902110779', description='', ui_kind='text', source_kind='independent', assertable=True),
+                DeclarationEntry(name='bl_no', path='$.data.data[0].bl_no', channel='view_only', required=False, example='Codfish-3KQI-Test', description='', ui_kind='text', source_kind='independent', assertable=True),
+                DeclarationEntry(name='policy_type', path='$.data.data[0].policy_type', channel='view_only', required=False, example='JSZX', description='', ui_kind='text', source_kind='independent', assertable=True),
+                DeclarationEntry(name='policy_id', path='$.data.data[0].policy_id', channel='view_only', required=False, example='295502731957764096', description='', ui_kind='text', source_kind='independent', assertable=True),
+                DeclarationEntry(name='business_type', path='$.data.data[0].business_type', channel='view_only', required=False, example='1', description='', ui_kind='text', source_kind='independent', assertable=True),
+                DeclarationEntry(name='main_ids', path='$.data.data[0].main_ids', channel='view_only', required=False, example=',1,3,', description='', ui_kind='text', source_kind='independent', assertable=True),
+                DeclarationEntry(name='supplier_names', path='$.data.data[0].supplier_names', channel='view_only', required=False, example='青岛跃航国际物流有限公司', description='', ui_kind='text', source_kind='independent', assertable=True),
+                DeclarationEntry(name='supplier_ids', path='$.data.data[0].supplier_ids', channel='view_only', required=False, example=['5'], description='', ui_kind='text', source_kind='independent', assertable=True),
+                DeclarationEntry(name='order_sub_no', path='$.data.data[0].order_sub_no', channel='view_only', required=False, example='ZDD20260902022947', description='', ui_kind='text', source_kind='independent', assertable=True),
+                DeclarationEntry(name='business_no', path='$.data.data[0].business_no', channel='view_only', required=False, example='YHD20260902036490', description='', ui_kind='text', source_kind='independent', assertable=True),
             ],
         ),
     },

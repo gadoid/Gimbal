@@ -58,9 +58,9 @@ async def test_run_injects_carry_into_case_body(
     plate_mock.behaviour = "echo"
     plate_mock.services = [{"name": "fin-service"}]
     plate_mock.fulls = {
-        "fin.settlement.create_order": {"request": {"carry": {
-            "$.remark": {"type": "string"},
-            "$.appCode": {"type": "string"}}}},
+        "fin.settlement.create_order": {"request": {"declarations": [
+            {"path": "$.remark", "channel": "carry", "type": "string"},
+            {"path": "$.appCode", "channel": "carry", "type": "string"}]}},
     }
     await _seed_values()
     bob = await _member(client, "bob")
@@ -111,7 +111,7 @@ async def test_run_carry_empty_declared_face_injects_nothing(
     plate_mock.behaviour = "echo"
     plate_mock.services = [{"name": "fin-service"}]
     plate_mock.fulls = {
-        "fin.settlement.create_order": {"request": {"carry": {}}},
+        "fin.settlement.create_order": {"request": {"declarations": []}},
     }
     await _seed_values()
     bob = await _member(client, "bob")
@@ -135,9 +135,9 @@ async def test_run_carry_skips_step_when_service_not_in_catalog(
     plate_mock.behaviour = "echo"
     plate_mock.services = []  # 空目录 → fin-service 是裸声明
     plate_mock.fulls = {  # face 有锚点也无效:服务解析失败先短路
-        "fin.settlement.create_order": {"request": {"carry": {
-            "$.remark": {"type": "string"},
-            "$.appCode": {"type": "string"}}}},
+        "fin.settlement.create_order": {"request": {"declarations": [
+            {"path": "$.remark", "channel": "carry", "type": "string"},
+            {"path": "$.appCode", "channel": "carry", "type": "string"}]}},
     }
     await _seed_values()
     bob = await _member(client, "bob")
@@ -163,9 +163,9 @@ async def test_run_completes_when_carry_context_build_fails(
     plate_mock.behaviour = "echo"
     plate_mock.services = [{"name": "fin-service"}]
     plate_mock.fulls = {
-        "fin.settlement.create_order": {"request": {"carry": {
-            "$.remark": {"type": "string"},
-            "$.appCode": {"type": "string"}}}},
+        "fin.settlement.create_order": {"request": {"declarations": [
+            {"path": "$.remark", "channel": "carry", "type": "string"},
+            {"path": "$.appCode", "channel": "carry", "type": "string"}]}},
     }
     await _seed_values()
 

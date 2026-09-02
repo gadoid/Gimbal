@@ -17,7 +17,7 @@ Coverage matrix:
 - ``ok=True``, ``dim="endpoint"`` envelope
 - ``item.api`` is a nested dict (NOT the light ``method`` / ``path`` fields)
 - ``item.metadata`` is a nested dict (NOT the light ``module`` / ``tags`` fields)
-- ``item.request`` / ``item.responses`` are present (with ``IOFieldBinding`` payload)
+- ``item.request`` / ``item.responses`` are present (with ``declarations`` payload)
 - Light view (control) does NOT contain ``api`` / ``metadata`` nested keys
 - 404 dim_item_not_found for unknown id under both global and system-scoped routes
 - 200 on system-scoped routes even when system has many endpoints
@@ -65,6 +65,14 @@ def test_endpoint_full_returns_full_contract(http_client: TestClient) -> None:
     # flat fields — this is the structural marker that the full factory ran).
     assert item["api"].get("method") == "POST"
     assert "path" in item["api"]
+
+    # Wire 形状(P2 存储翻转后):IO 节点只发 declarations(+可选 schema),
+    # legacy fields/carry/assertable_fields 键不再出现。
+    req = item["request"]
+    assert isinstance(req, dict) and "declarations" in req
+    assert not ({"fields", "carry", "assertable_fields"} & req.keys())
+    for r in item["responses"].values():
+        assert not ({"fields", "assertable_fields"} & r.keys())
 
 
 def test_endpoint_full_light_excludes_full_keys(http_client: TestClient) -> None:

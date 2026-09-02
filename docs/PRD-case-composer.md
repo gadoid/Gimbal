@@ -11,6 +11,16 @@
 | 关联 schema | `schema/endpoint/*`、`schema/interface/*`、`schema/base/*` |
 | 原型位置 | `pencil-welcome-desktop.pen` · 14 屏 |
 
+> **术语映射(2026-09-02 注)**:本文撰写时 plate 侧 IO 字段模型为
+> `fields: list[IOFieldBinding]` 三轴(fields/carry/assertable_fields);
+> 现已归一化为 `declarations: list[DeclarationEntry]` 单一存储
+> (binding/carry/view_only 三通道,assertable 为条目旗标)。
+> 文中 `IOFieldBinding` / `fields[*]` 字样按语义对应
+> `DeclarationEntry` / `request.declarations[*]`(binding 通道);
+> `assertable_paths` 对应 view_only 通道 `assertable=true` 条目的 path 集。
+> 现行契约见 plate `io_spec.py` 与
+> [2026-09-01 归一化设计](superpowers/specs/2026-09-01-io-declarations-unification-design.md)。
+
 ---
 
 ## 1. 背景
@@ -545,7 +555,7 @@ Row 3 (y=1960) — Canvas 子态
 |---|---|
 | **被测系统** | 业务方正在测试的、对外提供 HTTP 接口的系统（如 fin、logi、wms）。平台向其拉取接口契约 |
 | **接口契约 (EndpointSpec)** | 一个接口的完整结构定义：API 坐标 + 请求体形态 + 响应体形态 + 业务元信息 |
-| **IOFieldBinding** | 单个字段的元信息（name/path/ui_kind/source_kind/enum/default/example/description） |
+| **IOFieldBinding** | 单个字段的元信息（name/path/ui_kind/source_kind/enum/default/example/description）；2026-09-02 起 plate 契约为 `DeclarationEntry`（同字段轴 + channel/type/required/assertable），前端本地投影仍沿用此名 |
 | **ui_kind** | 字段 UI 渲染类型（text/number/boolean/select/textarea/json/file/binary/unknown） |
 | **source_kind** | 字段值来源类型（independent/lookup/generated） |
 | **assertable_paths** | 响应里可以被 Assertion 校验的 JSONPath 列表 |
@@ -557,6 +567,6 @@ Row 3 (y=1960) — Canvas 子态
 | **动态注入** | 字段值在运行时通过 Extract + Assign 链注入 |
 | **@ 浮层** | 字段输入框聚焦按 `@` 唤起的变量选择器浮层 |
 | **Auto-Extract** | 引用未声明的响应路径时自动在来源 step 加 Extract 策略 |
-| **附带字段** | JSON Schema 里有但未绑 IOFieldBinding 的字段，运行时全量携带，默认开启可手动关闭 |
+| **附带字段** | JSON Schema 里有但未绑 IOFieldBinding（现 binding 通道声明条目）的字段，运行时全量携带，默认开启可手动关闭 |
 | **HeadStepper** | 4 屏共享的顶部"面包屑 + 4 步进度条 + 上下步按钮"组件 |
 | **Scenario Editor** | 一个用例的完整编辑视图（4 步 stepper + Body），4 屏共享同一布局结构 |

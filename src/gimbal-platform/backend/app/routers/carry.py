@@ -99,8 +99,8 @@ async def service_fields(service: str, user: AdminUser):
         if full is None:
             degraded = True
             continue
-        # P1 起读 request.declarations 的 carry 通道条目(spec §7 P1.3);
-        # 旧 carry 键仍在线上等价期内并存,消费面切到声明面单一真源。
+        # 读 request.declarations 的 carry 通道条目(spec §7 P1.3);
+        # wire 已归一化(旧 carry 键已清除),声明面是单一真源。
         decls = ((full.get("request") or {}).get("declarations")) or []
         for entry in decls:
             if entry.get("channel") != "carry":

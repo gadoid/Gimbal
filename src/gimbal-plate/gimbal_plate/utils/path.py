@@ -1,6 +1,6 @@
 """plate/utils/path.py
 
-``IOFieldBinding.path`` / ``ResponseSpec.assertable_fields`` 的归一化与末段提取。
+``DeclarationEntry.path`` 的归一化与末段提取。
 
 path 语法（与 ``plate/utils/jsonpath.py`` 一致）：JSONPath，须以 ``$`` 领头，
 支持 ``$.a.b.c`` / ``$.items[0]`` / ``$.items[*].id`` / ``$['key with space']`` /
@@ -13,7 +13,7 @@ path 语法（与 ``plate/utils/jsonpath.py`` 一致）：JSONPath，须以 ``$`
 末段规则（给 ``name`` 校验用）：
   - 末段节点是 ``FIELD`` → 用其 ``value``（标识符或带空格/中文的 key）。
   - 末段节点是 ``INDEX`` / ``WILDCARD`` / ``FILTER`` / ``RECURSIVE`` → 末段视为"非标识符"，
-    ``last_segment`` 返回 ``None``。``IOFieldBinding`` 允许这种 path，
+    ``last_segment`` 返回 ``None``。``DeclarationEntry`` 允许这种 path，
     但 ``name`` 与之无强约束关系。
 """
 from __future__ import annotations

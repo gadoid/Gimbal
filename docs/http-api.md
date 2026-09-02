@@ -43,7 +43,7 @@ ADR 0002 定义的统一语法:
 | --- | --- | --- |
 | **list / dim 节点操作** | `GET /api/{dim}` <br> `POST /api/{dim}/action/{name}` | 列举 dim 全部条目;触发 dim 级别 action |
 | **detail** | `GET /api/{dim}/{id}` | 取单个条目经 `view_factory` 裁剪后的**轻量**视图 |
-| **list / detail · 完整契约** | `GET /api/{dim}/full` <br> `GET /api/{dim}/{id}/full` | 同上的 `full_view_factory` 版本,每个字段都返回(含 IOFieldBinding 扩展、敏感凭据等) |
+| **list / detail · 完整契约** | `GET /api/{dim}/full` <br> `GET /api/{dim}/{id}/full` | 同上的 `full_view_factory` 版本,每个字段都返回(含声明条目扩展、敏感凭据等) |
 | **references** | `GET /api/{dim}/{id}/references` | Phase β(ADR §D-D2):反查信号,见 [§3.9](#39-references-反查信号-phase-β)。返回 `data.item={dim,id}` + `data.references={...}`,dim 内 dim-特定信号(systems / service / module / tags / endpoint_count / kind / 等) |
 | **object action** | `POST /api/{dim}/{id}/action/{name}` | 触发指定条目的 action,body 由 action 自定义 |
 | **system scoped** | `GET /api/systems/{system}/{dim}` <br> `GET /api/systems/{system}/{dim}/{id}` <br> `GET /api/systems/{system}/{dim}/full` <br> `GET /api/systems/{system}/{dim}/{id}/full` <br> `POST /api/systems/{system}/{dim}/action/{name}` | 限定 system 范围的 dim 视图;`{dim}=system` 时为该 system 的子节点视图 |
@@ -786,8 +786,8 @@ Content-Type: application/json
 
 `fields` = 该 kind 的业务字段;`base_fields` = `StrategyBase` 公共字段(name / phase /
 order / enabled / onFailure / timeout / tags / view_note)。字段描述符词汇表与
-`IOFieldBinding` 同名同义(name / path / required / default / description / enum /
-ui_kind),但**无 `source_kind`**(值来源语义对策略无意义)。
+`DeclarationEntry` 的字段轴同名同义(name / path / required / default / description / enum /
+ui_kind),但**无 `source_kind` / `channel` / `type` / `assertable`**(值来源与通道语义对策略无意义)。
 
 assertion 的 `operator` 字段 `enum` = 14 个 AssertOperator、`ui_kind = "select"`。
 

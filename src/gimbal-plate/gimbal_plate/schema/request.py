@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any, Literal, Union, Annotated, Dict, List
 from pydantic import BaseModel, Field
 
-from gimbal_plate.schema.endpoint.io_spec import IOFieldBinding
+from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry
 from gimbal_plate.schema.ref import RefBase
 
 
@@ -17,12 +17,13 @@ class Request(BaseModel):
 
     fields_meta 是平台视图扩展(可选,只有 platform 落库 dict 会含此字段);
     gimbal 导出时由 GimbalScenarioExporter 通过 model_dump(exclude=...) 自动排除,
-    保证 gimbal 可执行 dict 干净。
+    保证 gimbal 可执行 dict 干净。值为 binding 通道声明条目
+    (PlatformScenarioExporter 投影,platform 前端表单渲染用)。
     """
 
     kind: Literal["request"] = "request"
     body: Union[str, Dict[str, Any], List[Any]] = Field(default_factory=dict)
-    fields_meta: Dict[str, IOFieldBinding] | None = None
+    fields_meta: Dict[str, DeclarationEntry] | None = None
 
 
 class RequestRef(RefBase):

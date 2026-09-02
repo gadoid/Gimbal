@@ -1,4 +1,4 @@
-"""B2: failed_criteria × assertable_fields linkage analysis (M6 grammar).
+"""B2: failed_criteria × 断言面(assertable)linkage analysis (M6 grammar).
 
 M6 mapping (ADR 0002 §D1):
     POST /api/endpoints/{id}/failed-criteria-resolved
@@ -13,7 +13,9 @@ from gimbal_plate.http import create_app
 from gimbal_plate.registry import PlateRegistry
 from gimbal_plate.systems.fin.dimensions import register_fin_dims
 from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
-from gimbal_plate.schema.endpoint.io_spec import IOFieldBinding, RequestSpec, ResponseSpec
+from gimbal_plate.schema.endpoint.io_spec import (
+    DeclarationEntry, RequestSpec, ResponseSpec,
+)
 from gimbal_plate.schema.endpoint.api_spec import ApiSpec
 from gimbal_plate.schema.endpoint.metadata import EndpointMetadata
 
@@ -39,8 +41,11 @@ def _build_endpoint() -> EndpointSpec:
             200: ResponseSpec(
                 status=200,
                 schema_=_Out.model_json_schema(),
-                fields=[IOFieldBinding(name="code", path="$.code", required=True)],
-                assertable_fields=["$.code"],
+                declarations=[
+                    DeclarationEntry(name="code", path="$.code",
+                                     channel="view_only", required=True,
+                                     assertable=True),
+                ],
             )
         },
         metadata=EndpointMetadata(

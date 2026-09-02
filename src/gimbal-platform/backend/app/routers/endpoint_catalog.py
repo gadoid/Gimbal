@@ -1,6 +1,6 @@
 """Endpoint catalog proxy — Platform → Plate.
 
-The V3 composer front-end needs the full ``IOFieldBinding`` shape for
+The V3 composer front-end needs the full ``declarations`` shape for
 each endpoint so it can render the request body form correctly.  The
 canonical view lives on Plate (``GET /api/endpoint/{id}/full``); this
 module proxies the call so the front-end can hit a single API surface
@@ -38,9 +38,10 @@ async def get_full_endpoint(
 ) -> dict:
     """Proxy ``GET {plate}/api/endpoint/{id}/full`` and unwrap the envelope.
 
-    Returns the ``item`` payload (with full ``request.fields`` carrying
-    ``IOFieldBinding`` shape and the 200-response ``assertable_fields``).
-    Surfaces Plate's status code + error envelope to the client.
+    Returns the ``item`` payload (with full ``request.declarations``
+    carrying ``DeclarationEntry`` shape; response assertable candidates
+    are the ``assertable=True`` view_only entries). Surfaces Plate's
+    status code + error envelope to the client.
     """
     client = get_client()
     try:
@@ -71,7 +72,7 @@ async def resolve_paths(user: CurrentUser, body: ResolvePathsRequest) -> list[di
 
     B1 路径推断: 响应样本 → 候选 JSONPath(数组展开下标),供编排页
     策略路径字段(assertion.target / extract.expression)点选 — 替代
-    assertable_fields 缺失时的静默猜测。action 名是连字符(fin 系统
+    断言面缺失时的静默猜测。action 名是连字符(fin 系统
     endpoint dim 注册名)。解 ``data.paths`` 返回数组(前端下拉直接用)。
     """
     client = get_client()

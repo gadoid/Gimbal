@@ -84,8 +84,13 @@ async def carry_drift(db) -> dict:
             continue
         if full is None:
             continue
-        carry = ((full.get("request") or {}).get("carry")) or {}
-        face_by_service.setdefault(svc, set()).update(carry.keys())
+        # wire 已归一化:读 request.declarations 的 carry 通道条目
+        # (与 carry_injection._carry_face / carry 路由同款投影)
+        decls = ((full.get("request") or {}).get("declarations")) or []
+        paths = {str(e["path"]) for e in decls
+                 if isinstance(e, dict) and e.get("channel") == "carry"
+                 and e.get("path")}
+        face_by_service.setdefault(svc, set()).update(paths)
 
     out: list[dict] = []
     for svc in sorted(set(bound_by_service) | set(face_by_service)):

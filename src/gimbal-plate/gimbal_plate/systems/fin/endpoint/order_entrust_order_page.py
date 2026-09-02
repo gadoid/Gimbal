@@ -14,7 +14,7 @@ from gimbal_plate.systems.fin.system_info import (
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
     EndpointSpec,
-    IOFieldBinding,
+    DeclarationEntry,
     RequestSpec,
     ResponseSpec,
     EndpointMetadata,
@@ -47,27 +47,32 @@ _ROW_FIELDS: Final[list[tuple[str, str, str]]] = [
 ]
 
 
-def _build_response_face() -> tuple[list[IOFieldBinding], list[str]]:
-    """信封字段 + 行字段 → (fields, assertable_fields);全部声明即可断言。"""
-    fields = [
-        IOFieldBinding(name="code", path="$.code", required=False, ui_kind="number",
-                       description="业务状态码(200=成功)"),
-        IOFieldBinding(name="msg", path="$.msg", required=False, ui_kind="text",
-                       description="业务提示信息"),
-        IOFieldBinding(name="request_id", path="$.request_id", required=False, ui_kind="text",
-                       description="请求追踪ID"),
-        IOFieldBinding(name="total", path="$.data.total", required=False, ui_kind="number",
-                       description="命中总条数(分页)"),
+def _build_response_decls() -> list[DeclarationEntry]:
+    """信封字段 + 行字段 → view_only 声明;全部声明即可断言(B3 assertable)。"""
+    entries = [
+        DeclarationEntry(name="code", path="$.code", channel="view_only",
+                         required=False, ui_kind="number",
+                         description="业务状态码(200=成功)", assertable=True),
+        DeclarationEntry(name="msg", path="$.msg", channel="view_only",
+                         required=False, ui_kind="text",
+                         description="业务提示信息", assertable=True),
+        DeclarationEntry(name="request_id", path="$.request_id", channel="view_only",
+                         required=False, ui_kind="text",
+                         description="请求追踪ID", assertable=True),
+        DeclarationEntry(name="total", path="$.data.total", channel="view_only",
+                         required=False, ui_kind="number",
+                         description="命中总条数(分页)", assertable=True),
     ]
-    fields += [
-        IOFieldBinding(name=name, path=f"{_ROW_BASE}{name}", required=False,
-                       ui_kind=kind, description=desc)
+    entries += [
+        DeclarationEntry(name=name, path=f"{_ROW_BASE}{name}", channel="view_only",
+                         required=False, ui_kind=kind, description=desc,
+                         assertable=True)
         for name, kind, desc in _ROW_FIELDS
     ]
-    return fields, [f.path for f in fields]
+    return entries
 
 
-_RESPONSE_FIELDS, _ASSERTABLE_FIELDS = _build_response_face()
+_RESPONSE_DECLS = _build_response_decls()
 
 
 
@@ -80,14 +85,14 @@ ORDER_ENTRUST_ORDER_PAGE: Final[EndpointSpec] = EndpointSpec(
     api=ApiSpec(service="fin-service", method="POST", path="/api/order/orderEntrust/orderPage", auth="bearer", timeout_seconds=30.0),
     request=RequestSpec(
         body_type="json",
-        fields=[
-        IOFieldBinding(name='bl_no', path='bl_no', required=True, example='', ui_kind='text'),
-        IOFieldBinding(name='order_no', path='order_no', required=True, example='', ui_kind='text'),
-        IOFieldBinding(name='page_no', path='page_no', required=True, example=1, ui_kind='number'),
-        IOFieldBinding(name='page_size', path='page_size', required=True, example=20, ui_kind='number'),
-        IOFieldBinding(name='sort_field', path='sort_field', required=True, example='update_time', ui_kind='text'),
-        IOFieldBinding(name='sort_order', path='sort_order', required=True, example='desc', ui_kind='text'),
-        IOFieldBinding(name='params', path='params', required=True, example={}, ui_kind='json'),
+        declarations=[
+        DeclarationEntry(name='bl_no', path='bl_no', channel='binding', required=True, example='', ui_kind='text'),
+        DeclarationEntry(name='order_no', path='order_no', channel='binding', required=True, example='', ui_kind='text'),
+        DeclarationEntry(name='page_no', path='page_no', channel='binding', required=True, example=1, ui_kind='number'),
+        DeclarationEntry(name='page_size', path='page_size', channel='binding', required=True, example=20, ui_kind='number'),
+        DeclarationEntry(name='sort_field', path='sort_field', channel='binding', required=True, example='update_time', ui_kind='text'),
+        DeclarationEntry(name='sort_order', path='sort_order', channel='binding', required=True, example='desc', ui_kind='text'),
+        DeclarationEntry(name='params', path='params', channel='binding', required=True, example={}, ui_kind='json'),
         ],
         schema_={},
     ),
@@ -95,8 +100,7 @@ ORDER_ENTRUST_ORDER_PAGE: Final[EndpointSpec] = EndpointSpec(
         200: ResponseSpec(
             status=200,
             description="成功",
-            fields=_RESPONSE_FIELDS,
-            assertable_fields=_ASSERTABLE_FIELDS,
+            declarations=_RESPONSE_DECLS,
         ),
     },
     version=FIN_DEFAULT_VERSION,

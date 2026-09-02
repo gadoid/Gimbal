@@ -1,8 +1,16 @@
 # EndpointSpec V1 详细规格
 
-> 状态：评审中
+> 状态：评审中(历史规范层)
 > 最近修订：2026-07-30
 > 影响范围：`gimbal_plate/schema/endpoint/**` · `gimbal_plate/registry/**` · `gimbal_plate/service/**` · `gimbal_plate/__init__.py`
+>
+> **历史层提示(2026-09-02)**:本文 §2/§4 描述的 IO 字段模型
+> (`fields: list[IOFieldBinding]` / `carry` / `assertable_fields` 三轴)
+> 已被 declarations 归一化取代 —— 现行为 `declarations: list[DeclarationEntry]`
+> 单一承重存储(binding/carry/view_only 三通道),`IOFieldBinding` / `CarryEntry`
+> 类与三轴线上键已清除。约束语义(path 归一 / name==末段 / enum 成员一致)
+> 原样继承到 `DeclarationEntry._validate_entry`,现行契约见
+> `io_spec.py` 与 [2026-09-01 归一化设计](../../../docs/superpowers/specs/2026-09-01-io-declarations-unification-design.md)。
 
 ---
 

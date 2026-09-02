@@ -14,7 +14,7 @@ from gimbal_plate.systems.fin.system_info import (
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
     EndpointSpec,
-    IOFieldBinding,
+    DeclarationEntry,
     RequestSpec,
     ResponseSpec,
     EndpointMetadata,
@@ -30,8 +30,8 @@ ORDER_FEE_TOGGLE_REAL_AMOUNT: Final[EndpointSpec] = EndpointSpec(
     api=ApiSpec(service="fin-service", method="POST", path="/api/order/orderFee/toggleRealAmount", auth="bearer", timeout_seconds=30.0),
     request=RequestSpec(
         body_type="json",
-        fields=[
-        IOFieldBinding(name='order_id', path='order_id', required=True, example='', ui_kind='text'),
+        declarations=[
+        DeclarationEntry(name='order_id', path='order_id', channel='binding', required=True, example='', ui_kind='text'),
         ],
         schema_={},
     ),
@@ -39,12 +39,11 @@ ORDER_FEE_TOGGLE_REAL_AMOUNT: Final[EndpointSpec] = EndpointSpec(
         200: ResponseSpec(
             status=200,
             description="成功",
-            fields=[
-        IOFieldBinding(name='order_id', path='$.data.amount_summary.order_id', required=False, ui_kind="unknown"),
-        IOFieldBinding(name='order_fee_real_id', path='$.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id', required=False, ui_kind="unknown"),
-        IOFieldBinding(name='order_sub_no', path='$.data.to_customer[0].order_sub_no', required=False, ui_kind="unknown"),
+            declarations=[
+        DeclarationEntry(name='order_id', path='$.data.amount_summary.order_id', channel='view_only', required=False, ui_kind="unknown", assertable=True),
+        DeclarationEntry(name='order_fee_real_id', path='$.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id', channel='view_only', required=False, ui_kind="unknown", assertable=True),
+        DeclarationEntry(name='order_sub_no', path='$.data.to_customer[0].order_sub_no', channel='view_only', required=False, ui_kind="unknown", assertable=True),
             ],
-            assertable_fields=['$.data.amount_summary.order_id', '$.data.to_customer[0].put_amount.standard_list[0].order_fee_real_id', '$.data.to_customer[0].order_sub_no'],
         ),
     },
     version=FIN_DEFAULT_VERSION,

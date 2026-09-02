@@ -177,11 +177,11 @@
           <div class="summary">
             <div class="summary-grid">
               <div class="summary-cell">
-                <span class="cell-num">{{ selected.request?.fields?.length || 0 }}</span>
+                <span class="cell-num">{{ requestFields.length }}</span>
                 <span class="cell-lbl">请求字段</span>
               </div>
               <div class="summary-cell">
-                <span class="cell-num">{{ primaryResponse?.assertable_fields?.length || 0 }}</span>
+                <span class="cell-num">{{ primaryAssertable.length }}</span>
                 <span class="cell-lbl">响应可断言字段</span>
               </div>
               <div class="summary-cell">
@@ -197,8 +197,8 @@
 
           <!-- 字段表 (请求 + 响应) -->
           <el-tabs class="tabs">
-            <el-tab-pane label="请求字段" v-if="selected.request?.fields?.length">
-              <el-table :data="selected.request.fields" stripe size="small">
+            <el-tab-pane label="请求字段" v-if="requestFields.length">
+              <el-table :data="requestFields" stripe size="small">
                 <el-table-column prop="name" label="name" width="160" />
                 <el-table-column prop="path" label="path" width="200" />
                 <el-table-column label="required" width="80">
@@ -215,14 +215,14 @@
                 </el-table-column>
               </el-table>
             </el-tab-pane>
-            <el-tab-pane label="响应字段" v-if="primaryResponse?.fields?.length">
-              <el-table :data="primaryResponse.fields" stripe size="small">
+            <el-tab-pane label="响应字段" v-if="primaryResponseFields.length">
+              <el-table :data="primaryResponseFields" stripe size="small">
                 <el-table-column prop="name" label="name" width="160" />
                 <el-table-column prop="path" label="path" width="200" />
                 <el-table-column prop="description" label="description" />
                 <el-table-column label="assertable" width="100">
                   <template #default="{ row }">
-                    <el-tag v-if="primaryResponse?.assertable_fields?.includes(row.path)" type="success" size="small">✓ assertable</el-tag>
+                    <el-tag v-if="primaryAssertable.includes(row.path)" type="success" size="small">✓ assertable</el-tag>
                     <el-tag v-else size="small" type="info">○ 未声明</el-tag>
                   </template>
                 </el-table-column>
@@ -255,6 +255,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { ArrowLeft, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getFullEndpoint } from '@/api/scenario-composer'
+import { assertablePaths, channelFields } from '@/utils/declarations'
 import { useAuthStore } from '@/stores/auth'
 import type { EndpointFullView } from '@/types/plate'
 
@@ -345,6 +346,11 @@ const primaryResponse = computed(() => {
   return r
 })
 
+/** declarations 归一化后的三面投影(旧 fields/assertable_fields 线上键已清除) */
+const requestFields = computed(() => channelFields(selected.value?.request?.declarations, 'binding'))
+const primaryResponseFields = computed(() => channelFields(primaryResponse.value?.declarations, 'view_only'))
+const primaryAssertable = computed(() => assertablePaths(primaryResponse.value?.declarations))
+
 const hasBusiness = computed(() => {
   const m = selected.value?.metadata
   return !!(m && (m.preconditions?.length || m.success_criteria || m.failed_criteria?.length || m.business_notes))
@@ -380,7 +386,7 @@ function selectService(s: string, svc: string) {
   }
 }
 
-// ── 选中时拉 full 定义(列表不带 request.fields / responses / metadata) ──
+// ── 选中时拉 full 定义(列表不带 request.declarations / responses / metadata) ──
 const selectedFull = ref<EndpointFullView | null>(null)
 const detailLoading = ref(false)
 async function selectEndpoint(ep: CatalogRow) {

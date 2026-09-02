@@ -69,17 +69,18 @@ class TestPlatformStepView:
         api_dict = s.api
         ep = exporter._ep_by_key.get((api_dict["method"], api_dict["path"]))
         assert ep is not None and ep.request is not None
-        expected_field_names = {f.name for f in ep.request.fields}
+        expected_field_names = {e.name for e in ep.request.declarations
+                                if e.channel == "binding"}
         body_keys = set(s.request["body"].keys())
         # body 的 keys 应当 ⊇ endpoint 全量字段名(补全)
         assert expected_field_names.issubset(body_keys), (
             f"body keys missing: {expected_field_names - body_keys}"
         )
 
-    def test_request_carries_fields_meta_with_io_binding_info(self) -> None:
-        """方案 C:request.fields_meta 必须携带 IOFieldBinding 全量元信息。
+    def test_request_carries_fields_meta_with_declaration_info(self) -> None:
+        """方案 C:request.fields_meta 必须携带 binding 通道声明条目全量元信息。
 
-        每个 endpoint 全量字段都必须在 fields_meta 中出现,
+        每个 endpoint 的全量 binding 字段都必须在 fields_meta 中出现,
         且至少包含 path / required / ui_kind / source_kind 等关键字段,
         否则平台前端无法渲染表单(无法识别必填/控件类型/字段说明)。
         """
@@ -97,9 +98,10 @@ class TestPlatformStepView:
         meta = s.request["fields_meta"]
         assert isinstance(meta, dict)
 
-        expected_field_names = {f.name for f in ep.request.fields}
+        expected_field_names = {e.name for e in ep.request.declarations
+                                if e.channel == "binding"}
         meta_keys = set(meta.keys())
-        # fields_meta 的 key 必须覆盖 endpoint 全量字段
+        # fields_meta 的 key 必须覆盖 endpoint 全量 binding 字段
         assert expected_field_names.issubset(meta_keys), (
             f"fields_meta missing: {expected_field_names - meta_keys}"
         )
@@ -107,7 +109,7 @@ class TestPlatformStepView:
         # 取一个具体字段,验证元数据完整
         sample_name = next(iter(expected_field_names))
         sample_meta = meta[sample_name]
-        # 关键字段必须存在(IOFieldBinding 的全部属性)
+        # 关键字段必须存在(DeclarationEntry 的关键属性)
         for key in ("path", "required", "ui_kind", "source_kind"):
             assert key in sample_meta, (
                 f"fields_meta[{sample_name!r}] 缺少 {key!r}; "

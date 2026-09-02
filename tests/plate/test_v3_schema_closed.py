@@ -4,9 +4,9 @@ from __future__ import annotations
 from gimbal_plate.schema import (
     ApiSpec,
     Config,
+    DeclarationEntry,
     EndpointMetadata,
     EndpointSpec,
-    IOFieldBinding,
     Meta,
     RequestSpec,
     Resource,
@@ -18,9 +18,9 @@ from gimbal_plate.schema import (
 
 SCHEMA_CLASSES = (
     ApiSpec,
+    DeclarationEntry,
     EndpointMetadata,
     EndpointSpec,
-    IOFieldBinding,
     RequestSpec,
     ResponseSpec,
     Config,

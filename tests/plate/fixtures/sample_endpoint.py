@@ -5,9 +5,9 @@ from pydantic import BaseModel
 
 from gimbal_plate import (
     ApiSpec,
+    DeclarationEntry,
     EndpointMetadata,
     EndpointSpec,
-    IOFieldBinding,
     RequestSpec,
     ResponseSpec,
 )
@@ -40,11 +40,13 @@ def make_sample_endpoint() -> EndpointSpec:
         request=RequestSpec(
             body_type="json",
             schema_=OrderIn.model_json_schema(),
-            fields=[
-                IOFieldBinding(name="order_no", path="order_no", required=True,
-                               example="SAMPLE-001", ui_kind="text"),
-                IOFieldBinding(name="amount", path="amount", required=True,
-                               example=10.0, ui_kind="number"),
+            declarations=[
+                DeclarationEntry(name="order_no", path="$.order_no",
+                                 channel="binding", required=True,
+                                 example="SAMPLE-001", ui_kind="text"),
+                DeclarationEntry(name="amount", path="$.amount",
+                                 channel="binding", required=True,
+                                 example=10.0, ui_kind="number"),
             ],
         ),
         responses={
@@ -52,11 +54,11 @@ def make_sample_endpoint() -> EndpointSpec:
                 status=200,
                 description="成功",
                 schema_=OrderOut.model_json_schema(),
-                fields=[
-                    IOFieldBinding(name="order_id", path="order_id",
-                                   required=True, ui_kind="text"),
+                declarations=[
+                    DeclarationEntry(name="order_id", path="$.order_id",
+                                     channel="view_only", required=True,
+                                     ui_kind="text", assertable=True),
                 ],
-                assertable_fields=["order_id"],
             ),
         },
         metadata=EndpointMetadata(

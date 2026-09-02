@@ -4,6 +4,11 @@
 > 日期:2026-09-01
 > 前置:carry 存储与注入设计(2026-08-31,分支 feat/carry-fields-storage-injection 已落地)
 > 落链:本 spec 落于 feat/carry-fields-storage-injection(基线 606be60 并回后实测 737/10;2026-09-02 语料重构后重钉 532/99,见 §0.3);归一化实现分支从本链开出。
+>
+> **P3 已执行(2026-09-02,用户明示启动)**:见 §7 P3 节执行记。本文正文保留 P1/P2
+> 时点的表述(旧线上键并存等价期、构造桥、派生投影),那是设计当时的目标态,
+> 现行实现以 io_spec.py 为准 —— 旧键/桥/投影类均已清除,语义等价由
+> golden(io_declarations_p1.json,667=568+99)与 HEAD↔工作树 A/B 对拍锁定。
 
 ---
 
@@ -396,9 +401,23 @@ def assertable_fields(self) -> list[str]:      # 响应:view_only 且 assertable
 **门禁**:三套件全绿 + golden 全绿。
 **断点与回滚**:旧线上键照发(派生),前端无感;回滚 = revert P2 提交(构造桥使新旧写法并存,无数据迁移)。
 
-### P3 — 拆旧键(可选,挂账)
+### P3 — 拆旧键(原挂账;**已于 2026-09-02 执行**)
 
 前端切读 declarations → 移除构造桥与旧线上键(fields/carry/assertable_fields)→ 移除 IOFieldBinding/CarryEntry 对外导出(内部保留为派生投影的返回类型)。**仅在用户明示启动时执行**;不启动则桥长期承重(spec §9 钦点同款先例)。
+
+> **执行记(2026-09-02)**:用户明示"不再向后兼容,清除全部兼容代码",实际拆除
+> 比上方原 sketch 更彻底 —— 不止移除对外导出:**IOFieldBinding / CarryEntry 类、
+> 构造桥(`_bridge_legacy`)、fields/carry/assertable_fields 派生投影与
+> `_serialize` 旧键全部移除**;16 个端点文件(settlement 除外,它已是 declare()
+> 写法)改写为字面量 `declarations=[DeclarationEntry(...)]`。消费面适配:
+> 前端自 F1 起读 declarations;platform 后端 carry 路由自 P1 起读 declarations,
+> carry_injection / carry_store / adaptation_ops 三处于同日切读
+> (adaptation_ops._field_map 曾保留对**库内历史快照**(CatalogVersion.spec_json)
+> legacy fields 键的读路径,同日经用户裁定**一并剥离** —— 清库重基线,
+> 旧快照解析为空仅产 addField,存量库须重跑 catalog 基线)。
+> 验证:plate 466 / backend 350 / frontend 450 + vue-tsc 0;语义等价 =
+> golden 667=568+99 + git HEAD(转换前)↔ 工作树 A/B 运行时对拍全等
+> (declarations + fields/carry/assertable 三投影逐端点逐条相等)。
 
 ---
 

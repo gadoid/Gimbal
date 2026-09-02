@@ -1,7 +1,8 @@
 /**
  * carry-hint.ts — step 卡 carry 只读提示的纯核心(spec §5)。
  *
- * 输入:字段面(face,plate /full 的 request.carry 键集)与两层值表
+ * 输入:字段面(face,plate /full request.declarations 的 carry 通道
+ * 条目路径集)与两层值表
  * (服务绑定 bound / 全局默认 defaults);输出 path → 来源标签。
  *
  * 语义对齐值表两层模型(spec §3.1):

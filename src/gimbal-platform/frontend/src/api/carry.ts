@@ -50,7 +50,7 @@ export async function putBindings(
   return data.bindings
 }
 
-/** 单个 carry 字段的面元信息(plate /full request.carry 聚合并集)。 */
+/** 单个 carry 字段的面元信息(plate /full request.declarations 的 carry 通道条目聚合并集)。 */
 export interface CarryFieldFace { path: string; type: string; description: string }
 
 /** 字段面聚合响应(对齐后端 ServiceFieldsOut):degraded=True = 任一端点

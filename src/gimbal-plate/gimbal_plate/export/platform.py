@@ -14,7 +14,7 @@ V3.1 设计(PLATE_V3_DESIGN.md §7,与 gimbal export 共享同一个 Scenario �
 - 每条 step 内层加 platform 视图扩展字段:
   - api.view_hints(endpoint_id/module/tags)
   - request.body 已用 endpoint 全量字段定义补全(直接渲染 + 直接执行);carry 键不补默认,仅透传 body 已有字面量
-  - request.fields_meta:{字段名 → IOFieldBinding 全量元数据}(平台前端渲染用)
+  - request.fields_meta:{字段名 → binding 通道声明条目全量元数据}(平台前端渲染用)
   - strategy[i].view_note(人类语言摘要)
 - 端到端链路:platform 落库 dict → (仅改 kind)→ Scenario.model_validate()
   → GimbalScenarioExporter.to_dict() 得到 gimbal 可执行 dict
@@ -62,7 +62,8 @@ class PlatformEndpointView(BaseModel):
     - module/tags/owner/priority/preconditions/success_criteria/business_notes:
       来自 EndpointMetadata
     - request_fields/response_fields/assertable_paths:
-      来自 EndpointSpec.responses[*].fields / assertable_fields
+      来自 RequestSpec/ResponseSpec 的 declarations 按通道投影
+      (binding / view_only / view_only∧assertable)
     - request_body_sample / request_body_samples:
       从 Scenario.steps 中按 (method,path) 匹配的 step.request.body 聚合
     - deep_link:平台前端跳转锚点
@@ -183,8 +184,9 @@ def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str,
     - body 仍是纯 dict,key = 字段名,value = 字面量值
     - 字段值优先级:body 已填值 → endpoint default → endpoint example → None
     - carry 面键(spec §2.2):不参与补全,仅透传 body 已有字面量(值归 platform 值表)
-    - 字段元数据集中放在 fields_meta:{name → IOFieldBinding 全部字段元信息}
-      (path / required / default / example / description / enum / ui_kind / source_kind)
+    - 字段元数据集中放在 fields_meta:{name → binding 通道声明条目全量元信息}
+      (path / channel / type / required / default / example / description /
+       enum / ui_kind / source_kind / assertable)
     - 平台前端:O(N) 遍历 body + O(1) 查 fields_meta[name]
     - 反向转 gimbal:Scenario.model_validate(platform_dict) 直接接受 fields_meta;
       GimbalScenarioExporter.to_dict() 通过 model_dump(exclude=...) 过滤掉,
@@ -196,7 +198,7 @@ def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str,
     full_body: dict[str, Any] = {}
     fields_meta: dict[str, Any] = {}
     if ep is not None and ep.request is not None:
-        for f in ep.request.fields:
+        for f in (e for e in ep.request.declarations if e.channel == "binding"):
             # 1) 字段元数据全量带上(让平台表单渲染有依据)
             fields_meta[f.name] = f.model_dump(mode="json", exclude_none=True)
             # 2) body 的值优先级
@@ -211,7 +213,8 @@ def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str,
         # 3) carry 面键:值归 platform 两层值表管,不补默认、不造 None 占位;
         #    body 已带字面量的原样并入 —— 保住 gimbal→platform→gimbal 往返
         #    子集契约,且与运行时 fill-missing(body 显式值优先)语义一致。
-        for carry_path in ep.request.carry:
+        for carry_path in (e.path for e in ep.request.declarations
+                           if e.channel == "carry"):
             _merge_carry_literal(carry_path, body, full_body)
     else:
         full_body = dict(body)
@@ -250,7 +253,7 @@ def _render_endpoint_view(
     """单个 EndpointSpec + 聚合到的 request_body 样本 → PlatformEndpointView。"""
     request_fields: list[dict[str, Any]] = []
     if ep.request is not None:
-        for f in ep.request.fields:
+        for f in (e for e in ep.request.declarations if e.channel == "binding"):
             request_fields.append({
                 "name": f.name,
                 "path": _path_utils.normalize(f.path),
@@ -265,7 +268,7 @@ def _render_endpoint_view(
     response_fields: list[dict[str, Any]] = []
     assertable: list[str] = []
     for status, spec in ep.responses.items():
-        for f in spec.fields:
+        for f in (e for e in spec.declarations if e.channel == "view_only"):
             response_fields.append({
                 "status": status,
                 "name": f.name,
@@ -274,7 +277,10 @@ def _render_endpoint_view(
                 "ui_kind": f.ui_kind,
                 "example": f.example,
             })
-        assertable.extend(spec.assertable_fields)
+        assertable.extend(
+            e.path for e in spec.declarations
+            if e.channel == "view_only" and e.assertable
+        )
 
     md = ep.metadata
     sample = body_samples[0] if body_samples else {}

@@ -119,7 +119,7 @@ def tree_dim_for_system(
 # ── /full handlers (system-scoped first, then global) ────────────
 #
 # ADR 0002 §D-D5: ``/{dim}/full`` and ``/{dim}/{id}/full`` return the
-# *full* contract (every schema field, including IOFieldBinding metadata,
+# *full* contract (every schema field, including field-declaration metadata,
 # sensitive credentials, and ``extra``-captured extension fields). When
 # the dim didn't register a ``full_view_factory`` the endpoint returns
 # ``501 admin_not_implemented`` — the dim chose to keep its light view

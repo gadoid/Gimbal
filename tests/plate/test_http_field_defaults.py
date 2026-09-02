@@ -16,7 +16,7 @@ from gimbal_plate.registry import PlateRegistry
 from gimbal_plate.systems.fin.dimensions import register_fin_dims
 from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
 from gimbal_plate.schema.endpoint.io_spec import (
-    IOFieldBinding,
+    DeclarationEntry,
     RequestSpec,
     ResponseSpec,
 )
@@ -45,33 +45,37 @@ def _build_endpoint() -> EndpointSpec:
         request=RequestSpec(
             body_type="json",
             schema_=_ReqIn.model_json_schema(),
-            fields=[
-                IOFieldBinding(
+            declarations=[
+                DeclarationEntry(
                     name="client_expand_name",
                     path="$.client_expand_name",
+                    channel="binding",
                     example="张三",
                 ),
-                IOFieldBinding(
+                DeclarationEntry(
                     name="bl_no",
                     path="$.bl_no",
+                    channel="binding",
                     example="${var.bl_no}",
                 ),
-                IOFieldBinding(
+                DeclarationEntry(
                     name="supplier",
                     path="$.supplier",
+                    channel="binding",
                     example="${auth.codfish.suppliers}",
                     source_kind="lookup",
                 ),
-                IOFieldBinding(
+                DeclarationEntry(
                     name="etd",
                     path="$.etd",
+                    channel="binding",
                     example="auto · date policy",
                     source_kind="generated",
                     ui_kind="number",
                 ),
             ],
         ),
-        responses={200: ResponseSpec(status=200, schema_=_RespOut.model_json_schema(), fields=[])},
+        responses={200: ResponseSpec(status=200, schema_=_RespOut.model_json_schema(), declarations=[])},
         version="1.0.0",
     )
 
@@ -103,14 +107,15 @@ def test_field_defaults_kinds() -> None:
 
 def test_field_defaults_generated_fields_from_response() -> None:
     endpoint = _build_endpoint()
-    # P2 存储翻转:fields 为派生投影(无 setter),改声明面需整替 ResponseSpec
+    # P2 存储翻转:改声明面 = 整替 ResponseSpec 的 declarations
     endpoint.responses[200] = ResponseSpec(
         status=200,
         schema_=_RespOut.model_json_schema(),
-        fields=[
-            IOFieldBinding(
+        declarations=[
+            DeclarationEntry(
                 name="internal_note",
                 path="$.internal_note",
+                channel="view_only",
                 source_kind="generated",
                 ui_kind="text",
             )

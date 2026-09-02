@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
-from gimbal_plate.schema.endpoint.io_spec import IOFieldBinding
+from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry
 
 FieldDefaultKind = Literal[
     "literal",
@@ -25,8 +25,8 @@ class FieldDefault:
     value: Any | None
 
 
-def _classify(field: IOFieldBinding) -> tuple[FieldDefaultKind, Any | None]:
-    """Classify a single ``IOFieldBinding`` into kind + value."""
+def _classify(field: DeclarationEntry) -> tuple[FieldDefaultKind, Any | None]:
+    """Classify a single ``DeclarationEntry`` into kind + value."""
     example = field.example
     default = field.default
 
@@ -75,7 +75,7 @@ def compute_field_defaults(
     _ = scenario_vars  # reserved for future ${var.*} resolution hint
 
     field_defaults: list[dict[str, Any]] = []
-    for f in endpoint.request.fields:
+    for f in (e for e in endpoint.request.declarations if e.channel == "binding"):
         kind, value = _classify(f)
         field_defaults.append(
             {"name": f.name, "kind": kind, "value": value}
@@ -83,13 +83,13 @@ def compute_field_defaults(
 
     # generated_fields: placeholders for the schema-only / generated channel.
     # (响应侧 generated 字段清单;2026-08-31 起 "carry" 一词专指请求侧
-    #  传递字段 —— RequestSpec.carry,spec carry 设计 §2.1.1 术语唯一化;
+    #  传递字段(carry 通道声明条目,spec carry 设计 §2.1.1 术语唯一化);
     #  条目内层旗标同步由 "carry": True 改名 "generated": True,
     #  全仓零生产消费方,仅本测试锁形状。)
     generated_fields: list[dict[str, Any]] = []
     resp_200 = endpoint.responses.get(200)
     if resp_200 is not None:
-        for f in resp_200.fields:
+        for f in (e for e in resp_200.declarations if e.channel == "view_only"):
             if f.source_kind != "generated":
                 continue
             generated_fields.append(

@@ -14,6 +14,7 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 
 import { getFullEndpoint } from '@/api/scenario-composer'
+import { channelFields } from '@/utils/declarations'
 import type { EndpointFullView } from '@/types/plate'
 
 // 会话级缓存(模块作用域;Vue 组件间共享)
@@ -33,7 +34,7 @@ async function ensureFull(eid: string): Promise<EndpointFullView | undefined> {
     .then((full) => {
       console.debug(
         '[useFieldDescriptions] /full ok', eid,
-        'fields:', full?.request?.fields?.length ?? 0,
+        'declarations:', full?.request?.declarations?.length ?? 0,
       )
       fullByEndpoint.set(eid, full)
       fullVersion.value++
@@ -97,8 +98,11 @@ export function useFieldDescriptions(
       const eid = step?.api?.view_hints?.endpoint_id
       if (!eid) continue
       const full = fullByEndpoint.get(eid)
-      if (!full?.request?.fields) continue
-      const fieldsByName = new Map(full.request.fields.map((f) => [f.name, f]))
+      if (!full?.request?.declarations) continue
+      // declarations 归一化:表单字段面 = binding 通道投影
+      const fieldsByName = new Map(
+        channelFields(full.request.declarations, 'binding').map((f) => [f.name, f]),
+      )
       // 只 body 字段在 Plate 里有 IOFieldBinding;query/headers 留空
       const body = step?.request?.body
       if (!body || typeof body !== 'object' || Array.isArray(body)) continue

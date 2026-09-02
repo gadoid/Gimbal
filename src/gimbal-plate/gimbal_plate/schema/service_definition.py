@@ -3,7 +3,7 @@
 本文件原位于 ``gimbal_plate.service.service``,于 V3.1 架构重构中迁入
 ``schema/``。归位理由:
     - ``ServiceDefinition`` 是 Pydantic ``BaseModel``,与其他 schema/* 同类
-      (``EndpointSpec`` / ``ApiSpec`` / ``IOFieldBinding`` …);
+      (``EndpointSpec`` / ``ApiSpec`` / ``DeclarationEntry`` …);
     - ``service/`` 包当前承担"服务层纯函数"职责,与数据模型语义不符;
     - V3 设计文档 PLATE_V3_DESIGN.md §V4 已质疑 ``service/service.py``
       的位置与字段用途,本迁入为后续 V4 评估做准备。

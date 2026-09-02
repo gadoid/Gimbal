@@ -34,7 +34,7 @@ Plate 是被测系统结构信息与框架结构信息的统一定义层。V3 �
 
 保持现状，不为任何被测系统开子类：
 
-- `schema/endpoint/`：`EndpointSpec` / `ApiSpec` / `RequestSpec` / `ResponseSpec` / `IOFieldBinding` / `EndpointMetadata`
+- `schema/endpoint/`：`EndpointSpec` / `ApiSpec` / `RequestSpec` / `ResponseSpec` / `DeclarationEntry` / `EndpointMetadata`
 - `schema/interface/`：`Meta` / `Config` / `Step` / `Resource` 等
 
 这一层只回答"一个接口 / 一条用例的结构长什么样"，与具体被测系统无关。
@@ -198,7 +198,7 @@ plate/export/
 
 - **同一数据类承载真相源**：平台视图扩展字段**必须声明在 schema 数据类上**（默认值为 `None`），禁止为 platform 视图构建平行的数据类（如 `PlatformRequestView` / `PlatformScenarioView`）。这样保证所有内容流转都经过 `Scenario` 实例化处理，模块间不产生 schema 漂移。
 - **导出器只做翻译，不做 schema 漂移**：`PlatformScenarioExporter` / `GimbalScenarioExporter` 都接收同一个 `Scenario` 实例；前者注入平台视图字段，后者用 `model_dump(exclude=...)` 过滤掉。
-- **强类型优先**：视图扩展字段能用强类型就用强类型（如 `Dict[str, IOFieldBinding]`），避免 `Any` 暗箱。`view_hints` 等结构松散的字段才用 `dict[str, Any]`，并在文档中说明字段契约。
+- **强类型优先**：视图扩展字段能用强类型就用强类型（如 `Dict[str, DeclarationEntry]`），避免 `Any` 暗箱。`view_hints` 等结构松散的字段才用 `dict[str, Any]`，并在文档中说明字段契约。
 - **下划线前缀字段禁止**：Pydantic 把 `_xxx` 视为 `PrivateAttr`，会被静默丢弃（既不出现在 `model_dump` 中，也不会被 `model_validate` 接受）。平台视图字段必须用普通字段名（如 `fields_meta`、`view_hints`、`view_note`）。
 
 ### 7.2 字段归属表
@@ -207,7 +207,7 @@ plate/export/
 
 | 平台视图扩展字段 | 承载数据类 | schema 文件 | 类型 | 平台语义 |
 |---|---|---|---|---|
-| `request.fields_meta` | `Request` | `schema/interface/request.py` | `Dict[str, IOFieldBinding] \| None` | 平台前端字段元数据（path/required/default/example/description/enum/ui_kind/source_kind） |
+| `request.fields_meta` | `Request` | `schema/interface/request.py` | `Dict[str, DeclarationEntry] \| None` | 平台前端字段元数据（值 = binding 通道 DeclarationEntry dump;2026-09-02 起已 deprecated,前端渲染现拉 /full） |
 | `api.view_hints` | `Api` | `schema/interface/api.py` | `dict[str, Any] \| None` | endpoint_id/module/tags 渲染提示 |
 | `strategy[*].view_note` | `StrategyBase` | `schema/interface/strategy.py` | `Optional[str]` | 人类语言策略摘要（断言/赋值/提取） |
 | `Scenario.endpoints` | `Scenario` | `schema/interface/scenario.py` | `list[dict[str, Any]] \| None` | endpoint 渲染视图列表 |
@@ -220,7 +220,7 @@ plate/export/
 
 - 全量携带 §7.2 字段表中的全部字段
 - `kind = "platform_scenario"`（与 `Scenario.kind = "scenario"` 区分）
-- `_render_request_view` 翻译 `request.fields_meta`，值取自 `endpoint.request.fields[*]` 的 `IOFieldBinding` 全量元数据
+- `_render_request_view` 翻译 `request.fields_meta`，值取自 `endpoint.request.declarations` 的 binding 通道条目全量元数据
 - `_render_api_view` 翻译 `api.view_hints`，值取自 `endpoint.id` / `endpoint.metadata.module` / `endpoint.metadata.tags`
 - `_render_strategy_view` 翻译 `strategy[*].view_note`，按 `Assertion` / `Assign` / `Extract` 类型生成人类语言摘要
 - `_render_endpoint_view` + 聚合逻辑填充 `endpoints` / `navigation` / `config_summary`
@@ -257,7 +257,7 @@ exclude = {
 
 - ❌ **构建平行数据类**：为 platform 视图创建 `PlatformRequestView` / `PlatformScenarioView` 等独立数据类，会导致数据在 `Scenario` 与平行类之间来回转换，破坏"同一数据类承载真相源"原则
 - ❌ **下划线前缀字段**：用 `_fields_meta` 等下划线前缀命名平台视图字段——Pydantic 把它们当 `PrivateAttr`，既不写入 `model_dump` 也不接受 `model_validate`，会让平台编辑→gimbal 执行链路**静默丢字段**
-- ❌ **弱类型替代**：用 `dict[str, Any]` 替代 `Dict[str, IOFieldBinding]` 看似灵活，但失去 schema 校验，平台前端要靠猜字段名渲染表单
+- ❌ **弱类型替代**：用 `dict[str, Any]` 替代 `Dict[str, DeclarationEntry]` 看似灵活，但失去 schema 校验，平台前端要靠猜字段名渲染表单
 - ❌ **保留 strip 兼容层**：V3 之前 `strip_platform_view_fields()` 是必要的，因为它处理 `_fields_meta` 这类非 schema 字段。V3 之后所有平台视图字段都在 schema 中，strip 变成空操作；保留只是增加认知负担，无外部用户，直接删除
 
 ### 7.6 一致性检查清单
@@ -288,7 +288,7 @@ V3 设计落地后，对 `tests/plate/` 下的全部测试用例做了一次基�
 
 | 文件 | 用例数 | 覆盖主题 |
 |---|---|---|
-| `test_schema_endpoint.py` | 129 | ApiSpec / IOFieldBinding / EndpointSpec / Metadata / Version / PathUtils / assertable_fields 校验 |
+| `test_schema_endpoint.py` | 129 | ApiSpec / IO 声明(DeclarationEntry 及校验) / EndpointSpec / Metadata / Version / PathUtils 校验 |
 | `test_v3_schema_consistency.py` | 19 | §7 一致性：字段归属、反序列化、平台字段泄露 |
 | `test_v3_systems_fin.py` | 17 | systems/fin 实例化与组合校验 |
 | `test_v3_export_platform.py` | 17 | PlatformScenarioExporter to_dict 链路 |
@@ -382,7 +382,7 @@ V3 决策：**`IOFieldBinding.path` 构造时自动归一化为 JSONPath**（短
 | 范围 | 文件数 | 状态 | 备注 |
 |---|---|---|---|
 | `schema/` 顶层 14 个文件(`__init__` + `api / auth / ref / request / resource / retry_policy / scenario / setup / states / step / strategy / teardown / time_policy`) | 14 | ✅ 锁住 | 53 个 `__all__` 名字、192 字段、6 个 `extra="forbid"` 类(endpoint 子包) |
-| `schema/endpoint/` 5 个文件 | 5 | ✅ 锁住 | `ApiSpec` / `RequestSpec` / `ResponseSpec` / `IOFieldBinding` / `EndpointMetadata` / `EndpointSpec` 全部 `extra="forbid"` |
+| `schema/endpoint/` 5 个文件 | 5 | ✅ 锁住 | `ApiSpec` / `RequestSpec` / `ResponseSpec` / `DeclarationEntry` / `EndpointMetadata` / `EndpointSpec` 全部 `extra="forbid"` |
 | `utils/{__init__,path,jsonpath}.py` | 3 | ✅ 锁住 | path 校验是 schema 校验基石;`is_valid_path` / `normalize` 不可变 |
 | `systems/common/{__init__,meta,config}.py` | 3 | ✅ 锁住 | 4 工厂之一;`common_meta_template` / `common_config_template` 签名不可变 |
 | `systems/fin/{__init__,models,meta,config,defaults}.py` | 5 | ✅ 锁住 | 4 工厂之二、三、四;`fin_meta_template` / `fin_config_template` 签名不可变;`models.py` 标记为临时方式(§3.4) |
@@ -431,7 +431,7 @@ V3.1 §7 是结构层最强的契约:**6 个平台视图扩展字段在 schema �
 
 | 字段 | 归属 | 类型 |
 |---|---|---|
-| `request.fields_meta` | `Request` | `Dict[str, IOFieldBinding] \| None` |
+| `request.fields_meta` | `Request` | `Dict[str, DeclarationEntry] \| None` |
 | `api.view_hints` | `Api` | `dict[str, Any] \| None` |
 | `strategy[*].view_note` | `StrategyBase` | `Optional[str]` |
 | `Scenario.endpoints` | `Scenario` | `list[dict[str, Any]] \| None` |

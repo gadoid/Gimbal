@@ -8,14 +8,13 @@ from pydantic import BaseModel
 
 from gimbal_plate import (
     ApiSpec,
+    DeclarationEntry,
     EndpointMetadata,
     EndpointSpec,
-    IOFieldBinding,
     RequestSpec,
     ResponseSpec,
     ServiceDefinition,
 )
-from gimbal_plate.schema.endpoint.io_spec import CarryEntry, DeclarationEntry
 
 
 class TestApiSpec:
@@ -79,7 +78,7 @@ class TestApiSpec:
 
 
 class TestIOSpec:
-    """``RequestSpec`` / ``ResponseSpec`` / ``IOFieldBinding`` 字段集合测试。"""
+    """``RequestSpec`` / ``ResponseSpec`` / ``DeclarationEntry`` 字段集合测试。"""
 
     def test_request_spec_no_body(self) -> None:
         # 测试点:body_type="none" 时,schema_ 默认为 None,json_schema() 返回 None。
@@ -96,54 +95,56 @@ class TestIOSpec:
         with pytest.raises(Exception):
             ResponseSpec(status=600)
 
-    def test_io_field_binding_source_kind_default(self) -> None:
+    def test_declaration_entry_source_kind_default(self) -> None:
         # 测试点:不显式指定时,source_kind 默认为 "independent"。
-        # 文档依据:V1 §4.3 IOFieldBinding.source_kind。
-        f = IOFieldBinding(name="order_no", path="order_no")
-        assert f.source_kind == "independent"
+        # 文档依据:V1 §4.3(source_kind 随 IO 声明归一化并入 DeclarationEntry)。
+        e = DeclarationEntry(name="order_no", path="order_no", channel="binding")
+        assert e.source_kind == "independent"
 
-    def test_io_field_binding_source_kind_enum_values(self) -> None:
+    def test_declaration_entry_source_kind_enum_values(self) -> None:
         # 测试点:三个合法取值(independent / lookup / generated)都被接受。
         # 文档依据:FIELD-UI-MAPPING.md §source_kind（与 PRD §5.4 三类型正交）。
-        IOFieldBinding(name="a", path="a", source_kind="independent")
-        IOFieldBinding(name="b", path="b", source_kind="lookup")
-        IOFieldBinding(name="c", path="c", source_kind="generated")
+        DeclarationEntry(name="a", path="a", channel="binding", source_kind="independent")
+        DeclarationEntry(name="b", path="b", channel="binding", source_kind="lookup")
+        DeclarationEntry(name="c", path="c", channel="binding", source_kind="generated")
 
-    def test_io_field_binding_source_kind_invalid_rejected(self) -> None:
+    def test_declaration_entry_source_kind_invalid_rejected(self) -> None:
         # 测试点:不在 Literal 集合内的值必须拒。
-        # 文档依据:V1 §4.3 IOFieldBinding.source_kind Literal。
+        # 文档依据:V1 §4.3 source_kind Literal。
         with pytest.raises(Exception):
-            IOFieldBinding(name="x", path="x", source_kind="bogus")
+            DeclarationEntry(name="x", path="x", channel="binding", source_kind="bogus")
 
-    def test_io_field_binding_source_kind_in_request_and_response(self) -> None:
+    def test_source_kind_in_request_and_response(self) -> None:
         # 测试点:
-        # 1) RequestSpec.fields 与 ResponseSpec.fields 都可携带 source_kind;
-        # 2) 响应字段保持默认 independent(无前置依赖语义);
+        # 1) 请求(binding)与响应(view_only)声明条目都可携带 source_kind;
+        # 2) 响应条目保持默认 independent(无前置依赖语义);
         # 3) JSON dump 序列化保留 source_kind 字段。
         # 文档依据:V1 §4.3"请求字段 / 响应字段的语义差异"段。
         req = RequestSpec(
-            # 注:原 body_type="none" + fields 在 B4(IO 声明归一化:
-            # none 即零声明)下为构造错误;本测试意图是 source_kind 透传,
-            # 换 json + 空 schema_ 即可。
             body_type="json",
             schema_={},
-            fields=[
-                IOFieldBinding(name="order_no", path="order_no", source_kind="independent"),
-                IOFieldBinding(name="user_id", path="user_id", source_kind="lookup"),
-                IOFieldBinding(name="order_id", path="order_id", source_kind="generated"),
-            ]
+            declarations=[
+                DeclarationEntry(name="order_no", path="order_no",
+                                 channel="binding", source_kind="independent"),
+                DeclarationEntry(name="user_id", path="user_id",
+                                 channel="binding", source_kind="lookup"),
+                DeclarationEntry(name="order_id", path="order_id",
+                                 channel="binding", source_kind="generated"),
+            ],
         )
         resp = ResponseSpec(
             status=200,
-            fields=[IOFieldBinding(name="order_id", path="order_id", source_kind="independent")],
+            declarations=[DeclarationEntry(name="order_id", path="order_id",
+                                           channel="view_only")],
         )
-        assert [f.source_kind for f in req.fields] == ["independent", "lookup", "generated"]
-        assert resp.fields[0].source_kind == "independent"
+        assert [f.source_kind for f in req.declarations] == [
+            "independent", "lookup", "generated"]
+        assert resp.declarations[0].source_kind == "independent"
 
         # JSON dump 中 source_kind 字段被序列化保留(便于跨进程传输)
         req_dump = req.model_dump(mode="json")
-        assert req_dump["fields"][1]["source_kind"] == "lookup"
-        assert req_dump["fields"][2]["source_kind"] == "generated"
+        assert req_dump["declarations"][1]["source_kind"] == "lookup"
+        assert req_dump["declarations"][2]["source_kind"] == "generated"
 
 
 class TestRequestSpecBodyTypeValidation:
@@ -162,11 +163,11 @@ class TestRequestSpecBodyTypeValidation:
         assert "schema_" in str(excinfo.value)
 
     def test_body_type_json_with_schema_only_passes_no_derivation(self) -> None:
-        # model 派生已退役:fields 只来自显式声明,不再自动填充
+        # model 派生已退役:declarations 只来自显式声明,不再自动填充
         class _OrderReq(BaseModel):
             order_no: str
         spec = RequestSpec(body_type="json", schema_=_OrderReq.model_json_schema())
-        assert spec.fields == []
+        assert spec.declarations == []
 
     def test_body_type_json_with_schema_only_passes(self) -> None:
         # 测试点:规则 B 正向(分支 2) —— body_type='json' + 只填 schema_ 时构造通过。
@@ -192,14 +193,16 @@ class TestRequestSpecBodyTypeValidation:
         assert spec.schema_ == {}
 
 
-class TestIOFieldBindingEnumValidation:
-    """``IOFieldBinding.enum`` 与 ``default`` / ``example`` 成员一致性校验。"""
+class TestDeclarationEntryEnumValidation:
+    """``DeclarationEntry.enum`` 与 ``default`` / ``example`` 成员一致性校验。"""
 
     def test_enum_none_skips_validation(self) -> None:
         # 测试点:Q2=a 正向 —— enum=None 视为未声明可选值清单,跳过校验,
         #     default / example 可以是任意值(填空风格自由)。
         # 文档依据:V1 §4.3"enum 非空时"+ V2 §2.5 决策 Q2=a。
-        field = IOFieldBinding(name="user_id", path="user_id", default="u_001", example="u_002")
+        field = DeclarationEntry(name="user_id", path="user_id",
+                                 channel="binding", default="u_001",
+                                 example="u_002")
         assert field.enum is None
         assert field.default == "u_001"
         assert field.example == "u_002"
@@ -207,15 +210,16 @@ class TestIOFieldBindingEnumValidation:
     def test_enum_empty_list_skips_validation(self) -> None:
         # 测试点:Q2=a 正向 —— enum=[] 同样视为未声明,跳过校验。
         # 文档依据:V2 §2.5 决策 Q2=a(空列表视为未声明)。
-        field = IOFieldBinding(name="user_id", path="user_id", enum=[], default="u_001")
+        field = DeclarationEntry(name="user_id", path="user_id",
+                                 channel="binding", enum=[], default="u_001")
         assert field.enum == []
         assert field.default == "u_001"
 
     def test_enum_with_default_and_example_in_set_passes(self) -> None:
         # 测试点:Q4=a 正向 —— enum 非空时,default 与 example 都在 enum 中 → 通过。
         # 文档依据:V1 §4.3"enum 非空时所有 default/example 必须在 enum 中"+ V2 §2.5 决策 Q4=a。
-        field = IOFieldBinding(
-            name="status", path="status",
+        field = DeclarationEntry(
+            name="status", path="status", channel="binding",
             enum=["pending", "active", "closed"],
             default="pending", example="active",
         )
@@ -226,8 +230,8 @@ class TestIOFieldBindingEnumValidation:
         # 测试点:反向 —— enum=["A","B"] 但 default="C" 必须拒。
         # 文档依据:V1 §4.3 + V2 §2.5 决策 Q1=b / Q4=a。
         with pytest.raises(Exception) as excinfo:
-            IOFieldBinding(
-                name="status", path="status",
+            DeclarationEntry(
+                name="status", path="status", channel="binding",
                 enum=["A", "B"], default="C",
             )
         assert "default" in str(excinfo.value)
@@ -238,8 +242,8 @@ class TestIOFieldBindingEnumValidation:
         # 测试点:反向 —— default 通过但 example 不在 enum 中也必须拒。
         # 文档依据:V1 §4.3 + V2 §2.5 决策 Q4=a(default 与 example 同等严格)。
         with pytest.raises(Exception) as excinfo:
-            IOFieldBinding(
-                name="status", path="status",
+            DeclarationEntry(
+                name="status", path="status", channel="binding",
                 enum=["A", "B"], default="A", example="C",
             )
         assert "example" in str(excinfo.value)
@@ -250,8 +254,8 @@ class TestIOFieldBindingEnumValidation:
         # 文档依据:V2 §2.5 决策 Q4=a(双字段同等严格)。
         # 此用例与 test_enum_example_not_in_set_rejected 互补,锁定"逐字段独立校验"行为。
         with pytest.raises(Exception):
-            IOFieldBinding(
-                name="status", path="status",
+            DeclarationEntry(
+                name="status", path="status", channel="binding",
                 enum=["A"], default="A", example="B",
             )
 
@@ -261,8 +265,8 @@ class TestIOFieldBindingEnumValidation:
         # 文档依据:V2 §2.5 决策 Q1=b(Pythonic 默认 ==)。
         # 工程意义:enum 真正生效是字符串传输阶段;bool/int 在前端都是字符串"true"/"1",
         #     plate 不替用户管 Pythonic 类型互认。
-        field = IOFieldBinding(
-            name="flag", path="flag",
+        field = DeclarationEntry(
+            name="flag", path="flag", channel="binding",
             enum=[1, 2, 3], default=True,
         )
         assert field.default is True
@@ -270,8 +274,8 @@ class TestIOFieldBindingEnumValidation:
     def test_enum_accepts_float_int_equality_per_q1_b(self) -> None:
         # 测试点:Q1=b —— 1.0 == 1 在 Python 里为 True,所以 enum=[1.0] + default=1 通过。
         # 文档依据:V2 §2.5 决策 Q1=b。
-        field = IOFieldBinding(
-            name="ratio", path="ratio",
+        field = DeclarationEntry(
+            name="ratio", path="ratio", channel="binding",
             enum=[1.0, 2.0], default=1,
         )
         assert field.default == 1
@@ -280,16 +284,16 @@ class TestIOFieldBindingEnumValidation:
         # 测试点:Q1=b —— str("A") 与 int(1) 的 == 是 False,所以 enum=["A"] + default=1 拒。
         # 文档依据:V2 §2.5 决策 Q1=b(== 为 False 时拒)。
         with pytest.raises(Exception):
-            IOFieldBinding(
-                name="code", path="code",
+            DeclarationEntry(
+                name="code", path="code", channel="binding",
                 enum=["A", "B"], default=1,
             )
 
     def test_enum_allows_mutable_container_members_per_q3_b(self) -> None:
         # 测试点:Q3=b —— enum 元素可以是 list / dict 等可变容器,用 == 比较内容。
         # 文档依据:V2 §2.5 决策 Q3=b(允许可变 + ==)。
-        field = IOFieldBinding(
-            name="filter", path="filter",
+        field = DeclarationEntry(
+            name="filter", path="filter", channel="binding",
             enum=[{"type": "eq"}, {"type": "in"}],
             default={"type": "eq"},
         )
@@ -298,8 +302,8 @@ class TestIOFieldBindingEnumValidation:
     def test_enum_allows_duplicate_members_per_q6_a(self) -> None:
         # 测试点:Q6=a —— enum=["A","A","B"] 中的重复元素不拒(Q6 不扩规则)。
         # 文档依据:V2 §2.5 决策 Q6=a(允许重复,不扩规则)。
-        field = IOFieldBinding(
-            name="status", path="status",
+        field = DeclarationEntry(
+            name="status", path="status", channel="binding",
             enum=["A", "A", "B"], default="A",
         )
         assert field.enum == ["A", "A", "B"]
@@ -307,23 +311,24 @@ class TestIOFieldBindingEnumValidation:
     def test_enum_default_none_passes(self) -> None:
         # 测试点:enum 非空但 default / example 都是 None(默认值)时通过。
         # 文档依据:实现语义 —— 校验跳过 None(避免 default=None 误拒)。
-        field = IOFieldBinding(
-            name="status", path="status",
+        field = DeclarationEntry(
+            name="status", path="status", channel="binding",
             enum=["A", "B"],
         )
         assert field.default is None
         assert field.example is None
 
     def test_enum_validation_propagates_to_request_spec(self) -> None:
-        # 测试点:综合 —— enum 校验在 IOFieldBinding 构造期触发,
-        #     RequestSpec 接受 fields 时会一并拒(嵌套校验透传)。
+        # 测试点:综合 —— enum 校验在 DeclarationEntry 构造期触发,
+        #     RequestSpec 接受 declarations 时会一并拒(嵌套校验透传)。
         # 文档依据:V1 §4.1 + §4.3 + V2 §2.5 实装落点。
         with pytest.raises(Exception):
             RequestSpec(
-                body_type="none",
-                fields=[
-                    IOFieldBinding(
-                        name="status", path="status",
+                body_type="json",
+                schema_={},
+                declarations=[
+                    DeclarationEntry(
+                        name="status", path="status", channel="binding",
                         enum=["A", "B"], default="C",  # C 不在 enum 中
                     )
                 ],
@@ -571,7 +576,7 @@ class TestSerialization:
     _SEMANTIC_KEYS = (
         "id", "system", "service", "name", "description",
         "api.method", "api.path", "api.timeout_seconds", "api.auth",
-        "responses.200.status", "responses.200.assertable_fields",
+        "responses.200.status", "responses.200.declarations",
         "metadata.module", "metadata.priority", "metadata.owner", "metadata.tags",
         "version",
     )
@@ -875,13 +880,13 @@ class TestPathUtils:
     def test_last_segment_with_array_field(self) -> None:
         # 测试点:含数组下标的路径,只要最后一段是 FIELD,仍能取到最后标识符。
         # 例如 `$.items[0].sku` 末段是 sku,IoFieldBinding.name 应等于 "sku"。
-        # 文档依据:V2 §2.3 共享决策"name = path 末段" + V2 §2.4 IOFieldBinding 校验。
+        # 文档依据:V2 §2.3 共享决策"name = path 末段" + V2 §2.4 条目校验。
         from gimbal_plate.utils.path import last_segment
         assert last_segment("$.items[0].sku") == "sku"
 
     def test_last_segment_returns_none_for_non_field_terminal(self) -> None:
         # 测试点:末段是 INDEX / WILDCARD / RECURSIVE 时,last_segment 必须返回 None。
-        # 此时 IOFieldBinding.name 与末段无强约束关系(V2 §2.4 实装语义)。
+        # 此时 DeclarationEntry.name 与末段无强约束关系(V2 §2.4 实装语义)。
         # 文档依据:V2 §2.3 末段规则;V2 §2.4"name 不与之强约束"。
         from gimbal_plate.utils.path import last_segment
         assert last_segment("$.items[0]") is None
@@ -890,7 +895,7 @@ class TestPathUtils:
 
     def test_last_segment_quoted_key(self) -> None:
         # 测试点:带空格的引号 key 也是 FIELD 节点,末段必须返回该 key 字符串。
-        # 这种形态下 IOFieldBinding.name 应等于"key with space"。
+        # 这种形态下 DeclarationEntry.name 应等于"key with space"。
         # 文档依据:V2 §2.3 末段规则 + plate/utils/jsonpath.py TK.KEY 节点。
         from gimbal_plate.utils.path import last_segment
         assert last_segment("$['key with space']") == "key with space"
@@ -903,8 +908,8 @@ class TestPathUtils:
         assert last_segment("$[") is None
 
 
-class TestIOFieldBindingPathValidation:
-    """IOFieldBinding._validate:path 合法 + name = path 末段。
+class TestDeclarationEntryPathValidation:
+    """DeclarationEntry._validate:path 合法 + name = path 末段。
 
     文档依据:V2 §2.3 / §2.4 已实装。
     """
@@ -912,29 +917,31 @@ class TestIOFieldBindingPathValidation:
     def test_jsonpath_passes(self) -> None:
         # 测试点:`$.xxx` JSONPath 形态 path 必须被接受。
         # 文档依据:V3 决策:path 统一为 JSONPath,代码层 _path.normalize 归一化。
-        fb = IOFieldBinding(name="order_id", path="$.order_id")
-        assert fb.path == "$.order_id"
+        e = DeclarationEntry(name="order_id", path="$.order_id",
+                             channel="binding")
+        assert e.path == "$.order_id"
 
     def test_short_name_normalized_to_jsonpath(self) -> None:
         # V3 决策:短名形态 path 构造时自动归一化为 JSONPath,避免
-        # IOFieldBinding.path / ResponseSpec.assertable_fields / strategy[*].target
-        # 在 platform dict 中出现短名 vs JSONPath 混用。
-        fb = IOFieldBinding(name="order_id", path="order_id")
-        assert fb.path == "$.order_id", (
-            "V3 要求 IOFieldBinding.path 构造后必须是 JSONPath 形态"
+        # 条目 path / strategy[*].target 在 platform dict 中出现
+        # 短名 vs JSONPath 混用。
+        e = DeclarationEntry(name="order_id", path="order_id",
+                             channel="binding")
+        assert e.path == "$.order_id", (
+            "V3 要求 DeclarationEntry.path 构造后必须是 JSONPath 形态"
         )
 
     def test_nested_path_last_segment_must_match_name(self) -> None:
         # 测试点:嵌套 path `$.a.b.c` 末段是 "c",name = "c" 必须通过。
         # 文档依据:V2 §2.4"name 必须等于 path 的末段(末段是 FIELD 时)"。
-        IOFieldBinding(name="c", path="$.a.b.c")
+        DeclarationEntry(name="c", path="$.a.b.c", channel="binding")
 
     def test_nested_path_name_must_equal_last_segment(self) -> None:
         # 测试点:嵌套 path `$.a.b.c` 末段是 "c",name = "b" 必须拒
         # (不能只测浅层 $.x 的 mismatch,深层路径同样要校验)。
         # 文档依据:V2 §2.4。
         with pytest.raises(Exception) as excinfo:
-            IOFieldBinding(name="b", path="$.a.b.c")
+            DeclarationEntry(name="b", path="$.a.b.c", channel="binding")
         # 错误信息需指向 path / name,便于定位
         assert "c" in str(excinfo.value) or "b" in str(excinfo.value)
 
@@ -942,228 +949,90 @@ class TestIOFieldBindingPathValidation:
         # 测试点:name 与最浅层 JSONPath 末段不一致时拒。
         # 文档依据:V2 §2.4。
         with pytest.raises(Exception):
-            IOFieldBinding(name="user_id", path="$.order_id")
+            DeclarationEntry(name="user_id", path="$.order_id",
+                             channel="binding")
 
     def test_name_mismatch_rejected_on_short_path(self) -> None:
         # 测试点:双形态并存下,短名写法走同样的 name 校验。
         # 文档依据:V2 §2.3 共享决策 + §2.4。
         with pytest.raises(Exception):
-            IOFieldBinding(name="user_id", path="order_id")
+            DeclarationEntry(name="user_id", path="order_id",
+                             channel="binding")
 
     def test_invalid_jsonpath_rejected(self) -> None:
         # 测试点:path 是以 $ 领头但语法不合法的 JSONPath 形态时拒。
         # 文档依据:V2 §2.3 path 合法性由 parser 校验。
         with pytest.raises(Exception):
-            IOFieldBinding(name="x", path="$[")
+            DeclarationEntry(name="x", path="$[", channel="binding")
 
     def test_invalid_short_name_rejected(self) -> None:
         # 测试点:path 是非标识符形态的短名(含空格 / 以数字开头)时拒。
         # 文档依据:V2 §2.3 短名 = 合法标识符。
         with pytest.raises(Exception):
-            IOFieldBinding(name="x", path="order no")
+            DeclarationEntry(name="x", path="order no", channel="binding")
         with pytest.raises(Exception):
-            IOFieldBinding(name="x", path="1order_no")
+            DeclarationEntry(name="x", path="1order_no", channel="binding")
 
     def test_empty_path_rejected(self) -> None:
         # 测试点:空字符串 path 直接拒。
         # 文档依据:V2 §2.3 path 必须合法(非空)。
         with pytest.raises(Exception):
-            IOFieldBinding(name="x", path="")
+            DeclarationEntry(name="x", path="", channel="binding")
 
     def test_array_index_path_name_unconstrained(self) -> None:
         # 测试点:path 末段是 INDEX(`$.items[0]`)时,name 取任意字符串都能通过。
         # 阻塞回归:如果哪天有人把 name 强制等于"items",这条会立刻红。
         # 文档依据:V2 §2.4"name 不与之强约束(末段非 FIELD)"。
-        fb = IOFieldBinding(name="anything", path="$.items[0]")
-        assert fb.path == "$.items[0]"
+        e = DeclarationEntry(name="anything", path="$.items[0]",
+                             channel="binding")
+        assert e.path == "$.items[0]"
         # 反向:name 故意设成与末段标识符不同,也不应触发 name mismatch
-        IOFieldBinding(name="not_items", path="$.items[0]")
+        DeclarationEntry(name="not_items", path="$.items[0]", channel="binding")
 
     def test_wildcard_path_name_unconstrained(self) -> None:
         # 测试点:path 末段是 WILDCARD(`$.items[*]`)时,name 任意。
         # 文档依据:V2 §2.4"name 不与之强约束"。
-        fb = IOFieldBinding(name="anything", path="$.items[*]")
-        assert fb.path == "$.items[*]"
-        IOFieldBinding(name="totally_unrelated", path="$.items[*]")
+        e = DeclarationEntry(name="anything", path="$.items[*]",
+                             channel="binding")
+        assert e.path == "$.items[*]"
+        DeclarationEntry(name="totally_unrelated", path="$.items[*]",
+                         channel="binding")
 
     def test_recursive_path_name_unconstrained(self) -> None:
         # 测试点:`$..field` 是递归下降,无末段 FIELD,name 任意。
         # 文档依据:V2 §2.4"name 不与之强约束"。
-        IOFieldBinding(name="whatever", path="$..field")
+        DeclarationEntry(name="whatever", path="$..field", channel="binding")
 
 
-class TestResponseSpecAssertableFields:
-    """ResponseSpec._validate:assertable_fields[i] 归一后必须在 fields[*].path 归一集合里。
+class TestResponseSpecAssertable:
+    """响应断言面 = view_only 条目的 assertable 旗标(spec §3.1/B3)。"""
 
-    文档依据:V2 §2.3 已实装 + V1 §4.2 约束行(翻为"已实装")。
-    """
-
-    def test_empty_assertable_passes(self) -> None:
-        # 测试点:assertable_fields = [] 必须通过,无校验动作。
-        # 文档依据:V2 §2.3(空 assertable 跳过校验)。
+    def test_empty_response_passes(self) -> None:
+        # 测试点:零声明响应构造通过(空断言面)。
         ResponseSpec(status=200)
 
-    def test_empty_fields_with_assertable_rejected(self) -> None:
-        # 测试点:fields = [] 但 assertable 非空时,所有 assertable 项都找不到对应 fields,必须拒。
-        # 文档依据:V2 §2.3 / V1 §4.2:assertable_fields[i] 必须在 fields 中存在。
-        with pytest.raises(Exception):
-            ResponseSpec(status=200, assertable_fields=["$.anything"])
-
-    def test_short_name_iofield_normalized_within_response(self) -> None:
-        # V3 决策:ResponseSpec 构造时,IOFieldBinding.path 与 assertable_fields 都
-        # 会被归一化为 JSONPath。"双形态并存"已废弃,内存值不再保留短名。
+    def test_entry_path_normalized_to_jsonpath(self) -> None:
+        # V3 决策:短名形态 path 在条目构造时归一化为 JSONPath。
         rs = ResponseSpec(
             status=200,
-            fields=[IOFieldBinding(name="order_id", path="order_id")],
-            assertable_fields=["$.order_id"],
+            declarations=[DeclarationEntry(name="order_id", path="order_id",
+                                           channel="view_only")],
         )
-        assert rs.fields[0].path == "$.order_id"
-        assert rs.assertable_fields == ["$.order_id"]
+        assert rs.declarations[0].path == "$.order_id"
 
-    def test_dual_form_reverse_passes(self) -> None:
-        # V3 决策:assertable_fields 内存值保留原值,但比较时归一化。
-        # P2 存储翻转(IO 声明归一化)后此保留退役:assertable_fields 变
-        # 派生投影(view_only 条目 path),恒归一化形态 —— 短名入参仍被
-        # 构造桥接受(归一等价匹配),投影输出统一 JSONPath。
+    def test_assertable_flag_in_wire(self) -> None:
+        # 测试点:assertable 旗标按条目原样进 wire(默认 False,声明 True 才断言)。
         rs = ResponseSpec(
             status=200,
-            fields=[IOFieldBinding(name="order_id", path="$.order_id")],
-            assertable_fields=["order_id"],
+            declarations=[
+                DeclarationEntry(name="order_id", path="$.order_id",
+                                 channel="view_only", assertable=True),
+                DeclarationEntry(name="msg", path="$.msg", channel="view_only"),
+            ],
         )
-        # 短名入参归一匹配成功;投影输出为归一化 JSONPath
-        assert rs.assertable_fields == ["$.order_id"]
-        # IOFieldBinding.path 已经是 JSONPath,不变
-        assert rs.fields[0].path == "$.order_id"
-
-    def test_nested_path_in_assertable_passes(self) -> None:
-        # 测试点:`$.a.b.c` 嵌套形式的 assertable 与同名末段 fields 等价 → 通过。
-        # 文档依据:V2 §2.3 normalize / V1 §4.2。
-        rs = ResponseSpec(
-            status=200,
-            fields=[IOFieldBinding(name="c", path="$.a.b.c")],
-            assertable_fields=["$.a.b.c"],
-        )
-        assert rs.assertable_fields == ["$.a.b.c"]
-
-    def test_missing_field_rejected(self) -> None:
-        # 测试点:assertable 列出一个 fields 里没声明的 path,必须拒。
-        # 文档依据:V2 §2.3 / V1 §4.2。
-        with pytest.raises(Exception):
-            ResponseSpec(
-                status=200,
-                fields=[IOFieldBinding(name="order_id", path="$.order_id")],
-                assertable_fields=["$.missing"],
-            )
-
-    def test_multiple_missing_all_reported(self) -> None:
-        # 测试点:多个缺失项必须整批报;错误信息应同时指出每个缺失项(便于排查)。
-        # 文档依据:V2 §2.3 决策"整批拒一条 ValueError,列出缺失项"。
-        with pytest.raises(Exception) as excinfo:
-            ResponseSpec(
-                status=200,
-                fields=[IOFieldBinding(name="order_id", path="$.order_id")],
-                assertable_fields=["$.missing_a", "$.missing_b"],
-            )
-        msg = str(excinfo.value)
-        assert "missing_a" in msg
-        assert "missing_b" in msg
-
-    def test_mixed_present_and_missing_rejected(self) -> None:
-        # 测试点:部分存在的 + 部分缺失的也拒;只报告缺失项(不污染存在的项)。
-        # 文档依据:V2 §2.3。
-        with pytest.raises(Exception) as excinfo:
-            ResponseSpec(
-                status=200,
-                fields=[IOFieldBinding(name="order_id", path="$.order_id")],
-                assertable_fields=["$.order_id", "$.missing"],
-            )
-        assert "missing" in str(excinfo.value)
-
-    def test_invalid_path_in_assertable_rejected(self) -> None:
-        # 测试点:assertable 项本身是非法 path(如 `$[`)也必须拒
-        # (而不是悄悄忽略,这关系到错误可观测性)。
-        # 文档依据:V2 §2.3 path 合法性由 parser 校验。
-        with pytest.raises(Exception):
-            ResponseSpec(
-                status=200,
-                fields=[IOFieldBinding(name="order_id", path="$.order_id")],
-                assertable_fields=["$["],
-            )
-
-    def test_array_index_in_assertable_passes(self) -> None:
-        # 测试点:`$.items[0]` 这种末段是 INDEX 的 path 在 fields 与 assertable 都用同一形态时通过。
-        # fields 末段是 INDEX 时 last_segment=None,name 不强约束。
-        # 文档依据:V2 §2.4 + §2.3 末段规则。
-        rs = ResponseSpec(
-            status=200,
-            fields=[IOFieldBinding(name="anything", path="$.items[0]")],
-            assertable_fields=["$.items[0]"],
-        )
-        # 内存值原样保留
-        assert rs.fields[0].path == "$.items[0]"
-        assert rs.assertable_fields == ["$.items[0]"]
-
-
-class TestIOFieldBindingExtraFields:
-    """``IOFieldBinding`` 字段集合边界。"""
-
-    def test_extra_field_rejected(self) -> None:
-        # 测试点:``IOFieldBinding`` 在 ``extra="forbid"`` 下,任何未声明字段都会触发外键拒绝。
-        # 文档依据:V1 §4.3 + schema/endpoint/io_spec.py ConfigDict(extra="forbid")。
-        with pytest.raises(Exception):
-            IOFieldBinding(name="x", path="x", unknown_field="y")
-
-
-class TestCarryEntry:
-    """RequestSpec.carry —— 传递字段面(spec §2.1)。"""
-
-    def test_carry_accepts_and_normalizes_keys(self) -> None:
-        spec = RequestSpec(body_type="json", schema_={}, carry={"remark": CarryEntry()})
-        assert list(spec.carry) == ["$.remark"]
-
-    def test_carry_rejects_invalid_path(self) -> None:
-        # 注:brief 原样例 "$[0]" 实为合法 JSONPath(根数组下标,is_valid_path
-        # 返回 True,见 TestPathUtils),此处沿用本文件既有的非法标本 "$["。
-        with pytest.raises(ValueError, match="不是合法 path"):
-            RequestSpec(body_type="json", schema_={}, carry={"$[": CarryEntry()})
-
-    def test_carry_rejects_duplicate_after_normalization(self) -> None:
-        # 短名与 JSONPath 归一后同键($.remark)— dict 字面键不折叠,
-        # 校验必须显式拦截(io_spec._validate 归一后重复键规则)。
-        with pytest.raises(ValueError, match="归一后重复键"):
-            RequestSpec(
-                body_type="json", schema_={},
-                carry={"remark": CarryEntry(), "$.remark": CarryEntry()},
-            )
-
-    def test_carry_disjoint_from_fields_paths(self) -> None:
-        with pytest.raises(ValueError, match="交集非空"):
-            RequestSpec(
-                body_type="json", schema_={},
-                fields=[IOFieldBinding(name="remark", path="$.remark")],
-                carry={"$.remark": CarryEntry()},
-            )
-
-    def test_carry_type_vocabulary(self) -> None:
-        CarryEntry(type="integer")  # 合法词表内
-        with pytest.raises(ValueError, match="词表"):
-            CarryEntry(type="timestamp")
-
-    def test_carry_entry_extra_forbid(self) -> None:
-        with pytest.raises(ValueError):
-            CarryEntry(value="x")
-
-    def test_serialize_carries_carry_key(self) -> None:
-        spec = RequestSpec(
-            body_type="json", schema_={},
-            carry={"$.remark": CarryEntry(description="备注", type="string")},
-        )
-        data = spec.model_dump(mode="json")
-        assert data["carry"] == {"$.remark": {"description": "备注", "type": "string"}}
-
-    def test_serialize_omits_empty_carry(self) -> None:
-        data = RequestSpec(body_type="json", schema_={}).model_dump(mode="json")
-        assert "carry" not in data
+        assert [e.assertable for e in rs.declarations] == [True, False]
+        dump = rs.model_dump(mode="json")
+        assert [e["assertable"] for e in dump["declarations"]] == [True, False]
 
 
 class TestDeclarationEntry:
@@ -1195,9 +1064,9 @@ class TestDeclarationEntry:
 
     def test_path_and_name_rules(self) -> None:
         # 注:原计划标本 "$[0]" 实为合法 JSONPath(根数组下标,is_valid_path
-        # 返回 True,见 TestPathUtils / TestCarryEntry 同款注),非法标本
+        # 返回 True,见 TestPathUtils 同款注),非法标本
         # 沿用本文件既有的 "$["。末段非 FIELD(INDEX/WILDCARD/根)不约束
-        # name —— 沿用 IOFieldBinding 现行行为(spec §5)。
+        # name —— 沿用条目现行行为(spec §5)。
         with pytest.raises(ValueError):
             DeclarationEntry(name="x", path="$[", channel="binding")
         with pytest.raises(ValueError):

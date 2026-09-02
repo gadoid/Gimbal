@@ -35,15 +35,15 @@ beforeEach(() => {
   vi.spyOn(api, 'getScenarioDraft').mockResolvedValue(DRAFT as any)
   vi.spyOn(api, 'updateScenario').mockResolvedValue({} as any)
   vi.spyOn(api, 'createDataSet').mockResolvedValue({ datasetId: 'ds-1', rows: [] } as any)
-  // IOFieldBinding mock — 让字段描述行有内容可显示
+  // declarations 归一化 mock — binding 通道投影出字段描述行
   vi.spyOn(api, 'getFullEndpoint').mockImplementation(async (eid: string) => ({
     id: eid,
     request: {
-      fields: [
-        { name: 'amount', description: '订单金额(分)', required: true, default: null, example: null, enum: null, ui_kind: 'number', source_kind: 'literal' },
-        { name: 'customer_id', description: '客户编号', required: true, default: null, example: null, enum: null, ui_kind: 'text', source_kind: 'literal' },
-        { name: 'page', description: '页码', required: false, default: 1, example: null, enum: null, ui_kind: 'number', source_kind: 'literal' },
-        { name: 'size', description: null, required: false, default: 20, example: null, enum: null, ui_kind: 'number', source_kind: 'literal' },
+      declarations: [
+        { name: 'amount', path: '$.amount', channel: 'binding', description: '订单金额(分)', required: true, ui_kind: 'number', source_kind: 'independent', assertable: false },
+        { name: 'customer_id', path: '$.customer_id', channel: 'binding', description: '客户编号', required: true, ui_kind: 'text', source_kind: 'independent', assertable: false },
+        { name: 'page', path: '$.page', channel: 'binding', description: '页码', required: false, default: 1, ui_kind: 'number', source_kind: 'independent', assertable: false },
+        { name: 'size', path: '$.size', channel: 'binding', description: '', required: false, default: 20, ui_kind: 'number', source_kind: 'independent', assertable: false },
       ],
     },
   } as any))

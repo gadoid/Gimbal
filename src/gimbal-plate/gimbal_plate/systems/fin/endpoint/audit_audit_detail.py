@@ -14,7 +14,7 @@ from gimbal_plate.systems.fin.system_info import (
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
     EndpointSpec,
-    IOFieldBinding,
+    DeclarationEntry,
     RequestSpec,
     ResponseSpec,
     EndpointMetadata,
@@ -30,8 +30,8 @@ AUDIT_AUDIT_DETAIL: Final[EndpointSpec] = EndpointSpec(
     api=ApiSpec(service="fin-service", method="POST", path="/api/home/audit/auditDetail", auth="bearer", timeout_seconds=30.0),
     request=RequestSpec(
         body_type="json",
-        fields=[
-        IOFieldBinding(name='audit_id', path='audit_id', required=True, example='', ui_kind='text'),
+        declarations=[
+        DeclarationEntry(name='audit_id', path='audit_id', channel='binding', required=True, example='', ui_kind='text'),
         ],
         schema_={},
     ),
@@ -39,10 +39,9 @@ AUDIT_AUDIT_DETAIL: Final[EndpointSpec] = EndpointSpec(
         200: ResponseSpec(
             status=200,
             description="成功",
-            fields=[
-        IOFieldBinding(name='relation_id', path='$.data.audit_content.relation_id', required=False, ui_kind="unknown"),
+            declarations=[
+        DeclarationEntry(name='relation_id', path='$.data.audit_content.relation_id', channel='view_only', required=False, ui_kind="unknown", assertable=True),
             ],
-            assertable_fields=['$.data.audit_content.relation_id'],
         ),
     },
     version=FIN_DEFAULT_VERSION,

@@ -4,6 +4,15 @@
 > 调研对象：`gimbal-plate/src/gimbal-plate/gimbal_plate/schema/`
 > 调研目的：校验 PRD v1.0 中所有渲染需求都有 schema 字段支撑，并标注\"够用 / 缺口 / 边界\"。
 
+> **状态更新(2026-09-02,IO declarations 归一化后)**:plate IO 侧已收敛为
+> `declarations` 单一承重存储(`DeclarationEntry` 通道标记条目,binding /
+> carry / view_only 三通道);`IOFieldBinding` / `CarryEntry` 类与
+> `fields` / `carry` / `assertable_fields` 线上键已清除,断言面 =
+> view_only 通道 `assertable=True` 条目的 path 集。本文 §1.2 表已按
+> 现行 schema 更新;§2-§4 的映射语义(ui_kind / source_kind / Type C
+> 差集)不变,只是挂载点从旧三轴换到声明条目。现行契约单点源:
+> `io_spec.py` + `docs/superpowers/specs/2026-09-01-io-declarations-unification-design.md`。
+
 ---
 
 ## 1. 字段清单（按 schema 文件归类）
@@ -38,26 +47,26 @@
 | | auth | Literal[none/bearer/basic/cookie/custom] | 认证方式 |
 | | produces | list[str] | 响应 Content-Type |
 | | consumes | list[str] | 请求 Content-Type |
-| `IOFieldBinding` | name | str | 字段名 |
-| | path | str | 字段路径（JSONPath，自动归一化） |
+| `DeclarationEntry` | name | str | 字段名(与 path 末段一致) |
+| | path | str | 字段路径（JSONPath，自动归一化 `$.xxx`） |
+| | **channel** | Literal[binding / carry / view_only] | **通道:binding=表单面,carry=传递面,view_only=响应展示面** |
+| | type | str \| None | JSON Schema 原语类型(仅 carry 必填) |
 | | required | bool | 是否必填 |
-| | default | Any \| None | 默认值 |
-| | example | Any \| None | 示例值 |
+| | default | Any \| None | 默认值(carry 通道禁) |
+| | example | Any \| None | 示例值(carry 通道禁) |
 | | description | str | 描述 |
 | | enum | list[Any] \| None | 可选值清单 |
 | | **ui_kind** | Literal[text / number / boolean / select / textarea / json / file / binary / unknown] | **UI 渲染类型** |
 | | **source_kind** | Literal[independent / lookup / generated] | **字段值来源类型** |
+| | **assertable** | bool | 仅 view_only 有意义:断言候选(默认 False) |
 | `RequestSpec` | body_type | Literal[none / json / form / multipart / raw / binary] | body 类型 |
-| | model | Pydantic class \| None | 强类型模型 |
-| | schema_ | dict[str, Any] \| None | JSON Schema |
-| | fields | list[IOFieldBinding] | 显式绑定的字段 |
+| | schema_ | dict[str, Any] \| None | JSON Schema(唯一结构真源) |
+| | **declarations** | list[DeclarationEntry] | 统一声明清单(请求面闭合 {binding, carry}) |
 | | *method* json_schema() | dict | 返回 JSON Schema |
 | `ResponseSpec` | status | int | 状态码 |
 | | description | str | 描述 |
-| | model | Pydantic class \| None | 强类型模型 |
 | | schema_ | dict[str, Any] \| None | JSON Schema |
-| | fields | list[IOFieldBinding] | 显式绑定的字段 |
-| | **assertable_fields** | list[str] | 可断言的字段路径 |
+| | **declarations** | list[DeclarationEntry] | 统一声明清单(响应面闭合 {view_only};assertable=True 条目即断言面) |
 | `EndpointMetadata` | module | str | 业务模块 |
 | | tags | list[str] | 标签 |
 | | owner | str | 维护人 |
@@ -116,7 +125,7 @@
 | | api | ApiSpec | API |
 | | request | Request | 请求 |
 | | strategy | list[StrategyUnion] | 策略 |
-| `Request` | **fields_meta** | dict[str, IOFieldBinding] \| None | **平台视图扩展** |
+| `Request` | **fields_meta** | dict[str, DeclarationEntry] \| None | **平台视图扩展**(值 = binding 通道 DeclarationEntry dump;deprecated,渲染现拉 /full) |
 | | body | str \| dict \| list | body 数据 |
 | `Strategy` | `kind` | Literal[extract / assign / assertion / strategy_ref] | discriminator |
 | | name | str | 策略名 |
@@ -162,7 +171,7 @@
 
 | 控件 | 触发字段 | 字段值类型 | 缺失场景 |
 |---|---|---|---|
-| text input | `IOFieldBinding.ui_kind == \"text\"` | str | — |
+| text input | `DeclarationEntry.ui_kind == \"text\"`(binding / view_only 通道) | str | — |
 | number input | `ui_kind == \"number\"` | int / float | — |
 | boolean toggle | `ui_kind == \"boolean\"` | bool | — |
 | select dropdown | `ui_kind == \"select\"` + `enum` | enum 元素 | `enum` 为空 → 退化且提示 |
@@ -176,9 +185,9 @@
 
 | 视觉 | 字段 | 备注 |
 |---|---|---|
-| 必填红点 ● | `IOFieldBinding.required == true` | schema 强校验 |
+| 必填红点 ● | `DeclarationEntry.required == true` | schema 强校验 |
 | 选填空心 ○ | `required == false` | — |
-| 预填值 | `IOFieldBinding.example` 优先，否则 `default` | PRD 5.5 |
+| 预填值 | `DeclarationEntry.example` 优先，否则 `default` | PRD 5.5 |
 | 字面量展示 | 用户手输 | 灰底 input |
 
 ### 2.4 字段绑定动态注入 UI
@@ -203,8 +212,8 @@
 | 失败参考 · 失败卡（多行） | `EndpointMetadata.failed_criteria` | list[str] |
 | 前置条件 · 前置卡 | `EndpointMetadata.preconditions` | list[str] |
 | 业务备注 · 备注卡 | `EndpointMetadata.business_notes` | str |
-| ✅ assertable 标记 | `failed_criteria[i]` 解析路径 ∩ `ResponseSpec.assertable_fields` | 平台运行时计算 |
-| ○ 未声明标记 | `failed_criteria[i]` 解析路径 ∉ `assertable_fields` | 平台运行时计算 |
+| ✅ assertable 标记 | `failed_criteria[i]` 解析路径 ∩ 断言面(view_only 通道 `assertable=True` 条目 path 集) | 平台运行时计算 |
+| ○ 未声明标记 | `failed_criteria[i]` 解析路径 ∉ 断言面 | 平台运行时计算 |
 
 `success_criteria` 是 **str**（单条），`failed_criteria` / `preconditions` 是 **list[str]**。形状差异需要前端做不同渲染：成功标准单行、失败参考多行。
 
@@ -298,12 +307,14 @@ Canvas 策略区 v2：不再 extract 专用，由 `GET /api/strategy/{kind}/full
 
 **词汇适配**（前端 StrategyForm 内完成，不改 FieldForm 本体）：
 `StrategyFieldDescView` 无 `source_kind`（值来源语义对策略无意义）→ 补
-`source_kind: 'independent'` + `example: null` 后按 `IOFieldBinding` 消费。
+`source_kind: 'independent'` + `example: null` 后按 FieldForm 的字段形状
+（前端本地 `IOFieldBinding` 投影,`utils/declarations.ts`）消费。
 
 **初始策略预填（endpoint 契约驱动，替代硬编码）**：加入 endpoint 时由
-`/full` 的 `metadata.success_criteria` + `responses[200].assertable_fields` 构造：
+`/full` 的 `metadata.success_criteria` + `responses[200]` 断言面（view_only
+通道 `assertable=True` 条目 path 集）构造：
 - 保底第一条：`assertion {target: $.status, operator: eq, expected: 200}`（HTTP 层，恒有）
-- 契约驱动追加：`success_criteria` 非空 **且** assertable_fields 含
+- 契约驱动追加：`success_criteria` 非空 **且** 断言面含
   `$.code` / `$.data.code` 之一 → 追加 `assertion {target: <codeTarget>, operator: eq, expected: 0, message: success_criteria}`
 
 `strategy_ref`（预埋字段，待重设计）不出现在 dim 输出与策略表单中。
@@ -320,9 +331,9 @@ schema 提供了 `ui_kind` 的 9 种字面量 + `source_kind` 的 3 种字面量
 - `ui_kind == \"unknown\"`（schema 默认值）→ PRD 5.4 Type B 字段，前端**自动按 text 渲染**（无 schema 缺口）
 - `enum == []` 或 `None` → 元素下拉不可用，select 控件退化为 text
 
-### 3.2 失败参考 × assertable_fields 联动
+### 3.2 失败参考 × 断言面联动
 
-**当前实现**：平台运行时计算 `failed_criteria[i]` 解析路径 ∩ `ResponseSpec.assertable_fields`。**schema 字段够用**。
+**当前实现**：平台运行时计算 `failed_criteria[i]` 解析路径 ∩ 断言面（view_only 通道 `assertable=True` 条目 path 集,旧 `assertable_fields` 键的继任）。**schema 字段够用**。
 
 ### 3.3 跨系统识别
 
@@ -338,7 +349,7 @@ schema 提供了 `ui_kind` 的 9 种字面量 + `source_kind` 的 3 种字面量
 
 ### 3.5 全量字段请求（Type C 字段运行时携带）
 
-**当前实现**：示例字段值取自 `IOFieldBinding.example` / `default`，缺省时留空。**schema 字段够用**。
+**当前实现**：示例字段值取自 `DeclarationEntry.example` / `default`，缺省时留空。**schema 字段够用**。
 
 **缺口**：schema 没有\"示例字段值缺失时填什么\"的语义约定。这是**业务约定**（PRD 11 节开放问题 #3），非 schema 缺失。
 
@@ -361,7 +372,7 @@ schema 提供了 `ui_kind` 的 9 种字面量 + `source_kind` 的 3 种字面量
 |---|---|---|
 | \"最近使用变量\"快捷区 | 无 | 需要前端在用户态记录 |
 | 跨 step 同名字段冲突的 step 标识 | `Step.api.service` 间接 | 平台运行时反推 |
-| 类型校验（number 字段填 string） | `IOFieldBinding.ui_kind` | 平台运行时校验 |
+| 类型校验（number 字段填 string） | `DeclarationEntry.ui_kind` | 平台运行时校验 |
 | 批量引用（多选字段） | 无 | 高级用户功能 |
 | @ 浮层里的\"最近用过\" | 无 | 需要前端在用户态记录 |
 
@@ -376,14 +387,14 @@ schema 提供了 `ui_kind` 的 9 种字面量 + `source_kind` 的 3 种字面量
 | CaseComposer Home 显示被测系统 chip 列表 | `Meta.system: list[str]` | ✅ |
 | 4 屏 HeadStepper 位置统一 | （前端布局） | ✅ |
 | 4 屏导航按钮规范 | （前端布局） | ✅ |
-| 字段编辑器按 ui_kind 渲染 | `IOFieldBinding.ui_kind` | ✅ |
+| 字段编辑器按 ui_kind 渲染 | `DeclarationEntry.ui_kind` | ✅ |
 | 字段编辑器缺 ui_kind 默认 text | `ui_kind == \"unknown\"` → 兜底 text | ✅ |
-| 字段三种类型（Type A/B/C） | `ui_kind` + 字段是否在 `fields[]` 列表 | ✅ |
-| 字段全量请求运行时携带 | `Request.fields_meta` + `RequestSpec.fields` | ✅ |
+| 字段三种类型（Type A/B/C） | `ui_kind` + 是否生成 binding 通道声明条目 | ✅ |
+| 字段全量请求运行时携带 | `Request.fields_meta` + `RequestSpec.declarations` binding 通道 | ✅ |
 | 静态 vs 动态注入两种视觉 | `Strategy.kind` + 值字符串模板 | ✅ |
 | @ 浮层 + Auto-Extract | 用户态 + 平台运行时算 | ✅ |
 | 失败参考 + 前置条件 + 业务备注 | 三个 metadata 字段 | ✅ |
-| 失败参考 × assertable 联动 | `failed_criteria` + `assertable_fields` | ✅ |
+| 失败参考 × assertable 联动 | `failed_criteria` + 断言面（view_only `assertable=True` 条目） | ✅ |
 | 跨系统识别 | `Meta.system: list[str]` + `service.split(\".\")` | ✅ |
 | 命名空间 `<system>.key` | `Config.{services,users,vars}` 是 dict | ✅ |
 | 用例编排 4 步 stepper | `Scenario.{meta, config, resource, steps}` 4 段 | ✅ |
@@ -408,7 +419,7 @@ schema 提供了 `ui_kind` 的 9 种字面量 + `source_kind` 的 3 种字面量
 
 1. **`RefreshPolicy` 字段命名**：当前是 `maxAttempts` / `backoffSeconds` / `retryOn`，与 PRD 5.5 节的\"最大次数 / 重试间隔 / 触发条件\"一致
 2. **失败参考列表的字段形态**：`failed_criteria: list[str]`，前端需自行解析\"状态码 + 描述\"两层（如果想要结构化，建议新增 `failed_criteria: list[FailedCriterion]` 子模型，但当前实现够用）
-3. **C2 字段值来源**：schema 没有 `source_kind == \"lookup\"` 时如何从 auth 拿哪个字段的约定——这是**业务约定**，应由被测系统在 IOFieldBinding.example 字段里提供完整路径（如 `${auth.codfish.suppliers}`）
+3. **C2 字段值来源**：schema 没有 `source_kind == \"lookup\"` 时如何从 auth 拿哪个字段的约定——这是**业务约定**，应由被测系统在 DeclarationEntry.example 字段里提供完整路径（如 `${auth.codfish.suppliers}`）
 
 ### 5.3 不需要新增字段
 

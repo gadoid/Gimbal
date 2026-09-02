@@ -204,7 +204,7 @@ class EndpointDetailView(BaseModel):
     Light :class:`EndpointView` returns only id / method / path /
     description / module / tags. The ``/full`` endpoint surfaces the full
     :class:`EndpointSpec` for code generators and assertion builders that
-    need the IOFieldBinding metadata.
+    need the field-declaration metadata.
     """
 
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
@@ -647,9 +647,9 @@ ScenarioView = ScenarioMinimalView  # alias used by grammar.py
 
 
 class StrategyFieldDesc(BaseModel):
-    """策略 kind 的一个字段描述符 —— 词汇表对齐 IOFieldBinding 但独立建模。
+    """策略 kind 的一个字段描述符 —— 词汇表对齐接口字段声明但独立建模。
 
-    独立而非直接复用 :class:`IOFieldBinding` 的原因:策略字段不是接口
+    独立而非直接复用 :class:`DeclarationEntry` 的原因:策略字段不是接口
     body 字段,``source_kind``(字段值来源语义)对策略无意义,且 name/path
     强一致校验是 endpoint 契约的规则。映射规则(enum→select / bool→boolean
     / string→text / …)与 ``strategy_dim._bindings_from_schema`` 保持一致。

@@ -18,9 +18,9 @@ from gimbal_plate.export.gimbal import (
 from gimbal_plate.schema import (
     ApiSpec,
     Config,
+    DeclarationEntry,
     EndpointMetadata,
     EndpointSpec,
-    IOFieldBinding,
     Meta,
     RequestSpec,
     ResponseSpec,
@@ -80,8 +80,8 @@ class TestSchemaEndpointImportable:
     def test_endpoint_spec_dump_contains_response_schema(
         self, sample_endpoint: EndpointSpec
     ) -> None:
-        # RequestSpec / ResponseSpec 的 @model_serializer 输出 schema / fields /
-        # assertable_fields(model 机制已退役,spec §2.1.1,不再注入 model_name)。
+        # RequestSpec / ResponseSpec 的 @model_serializer 输出 declarations /
+        # schema(P2 存储翻转后 IO 节点与 wire 同形)。
         # 测试只校验 dump 出来的结构里我们填的关键字段都在。
         dumped = sample_endpoint.model_dump(mode="json")
         assert dumped["id"] == "baseline.sample.endpoint"

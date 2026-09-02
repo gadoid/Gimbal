@@ -2,7 +2,7 @@
  * types/plate.ts — gimbal-plate 对外契约的前端完整结构表述。
  *
  * 真源(Single Source of Truth)在 plate 侧的 Pydantic schema:
- *   - IOFieldBinding / RequestSpec / ResponseSpec  → gimbal_plate/schema/endpoint/io_spec.py
+ *   - DeclarationEntry / RequestSpec / ResponseSpec → gimbal_plate/schema/endpoint/io_spec.py
  *   - ApiSpec                                      → gimbal_plate/schema/endpoint/api_spec.py
  *   - EndpointMetadata                             → gimbal_plate/schema/endpoint/metadata.py
  *   - EndpointDetailView(/full 视图)               → gimbal_plate/http/views.py
@@ -18,7 +18,7 @@
 
 // ─── 字面量联合:与 plate 的 Literal 一一对应 ──────────────────────
 
-/** IOFieldBinding.ui_kind —— 控件渲染类型。对齐 io_spec.py IOFieldBinding.ui_kind。 */
+/** DeclarationEntry.ui_kind —— 控件渲染类型。对齐 io_spec.py DeclarationEntry.ui_kind。 */
 export type UiKind =
   | 'text'
   | 'number'
@@ -31,15 +31,15 @@ export type UiKind =
   | 'unknown'
 
 /**
- * IOFieldBinding.source_kind —— 字段值来源(provenance)。
+ * DeclarationEntry.source_kind —— 字段值来源(provenance)。
  *
- * 这是"值从哪来"的语义维度,与"是否在表单展示"正交。三态自洽:
+ * 这是"值从哪来"的语义维度,与"是否在表单展示"(channel)正交。三态自洽:
  * - independent: 独立字面量,与上下文无关联,表单直接填(默认)
  * - lookup:      可经接口/变量查询得到(如 ${var.xxx} / ${env.xxx}),表单只读展示
  * - generated:   运行时基于其他接口处理结果动态生成(如 Assign 时间戳),表单提示"由策略产出"
  *
- * 注意:没有 IOFieldBinding 的 schema-only 字段(PRD §5.4 Type C)压根不会出现在
- * fields[] 里,因此碰不到 source_kind。"隐藏 Type C 字段"属于平台侧渲染关注点,
+ * 注意:schema-only 字段(PRD §5.4 Type C)压根不会生成声明条目,
+ * 因此碰不到 source_kind。"隐藏 Type C 字段"属于平台侧渲染关注点,
  * 不混入来源语义。详见 FIELD-UI-MAPPING.md / PRD §5.4。
  */
 export type SourceKind = 'independent' | 'lookup' | 'generated'
@@ -56,8 +56,9 @@ export type BodyType = 'none' | 'json' | 'form' | 'multipart' | 'raw' | 'binary'
 // ─── IO / 坐标 / 元信息 ──────────────────────────────────────────
 
 /**
- * IOFieldBinding —— 请求/响应 body 中单个字段的元信息。
- * 对齐 io_spec.py IOFieldBinding(extra="forbid")。
+ * IOFieldBinding —— 字段元信息的 UI 形状(FieldForm / FieldActionMenu 消费)。
+ * 由 utils/declarations.ts 从 DeclarationEntryView 投影(掐掉 channel /
+ * type / assertable 三个声明轴);plate 侧 wire 已无同名类,此为前端本地形状。
  */
 export interface IOFieldBinding {
   name: string
@@ -73,39 +74,60 @@ export interface IOFieldBinding {
 }
 
 /**
+ * DeclarationEntry 视图 —— declarations 统一声明清单条目。
+ * 对齐 io_spec.py DeclarationEntry(extra="forbid");plate 序列化经
+ * EndpointDetailView exclude_none 裁剪后,type/default/example/enum 为
+ * null 的键不在 dict 中(此处标可选,消费侧按缺省 null 处理)。
+ *
+ * channel 三通道(请求面闭合 {binding, carry},响应面 {view_only}):
+ * - binding:  请求表单字段面 → 投影为 IOFieldBinding 渲染
+ * - carry:    传递字段面(值在 platform 值表,编排面零感知)
+ * - view_only:响应展示面 → 投影为 IOFieldBinding;assertable=True
+ *             的条目即断言候选(旧 assertable_fields 的继任)
+ */
+export interface DeclarationEntryView {
+  name: string
+  /** 归一化 JSONPath 形态($.xxx);与 name 末段一致 */
+  path: string
+  channel: 'binding' | 'carry' | 'view_only'
+  /** JSON Schema 原语类型;仅 carry 通道必填,其余通道可能缺省 */
+  type?: string | null
+  required: boolean
+  default?: unknown
+  example?: unknown
+  description: string
+  enum?: unknown[] | null
+  ui_kind: UiKind
+  source_kind: SourceKind
+  /** 仅 view_only 通道有意义:该字段是否为断言候选 */
+  assertable: boolean
+}
+
+/**
  * RequestSpec 视图 —— 接口请求 body 的形态。
  *
- * 序列化后(@model_serializer 产生的)线上的键:
- * - body_type / fields:恒有
- * - schema:schema_ 非 None 时才有(别名为 "schema")—— 2026-08-31 起
- *   model 机制退役,这是唯一结构真源,线上不再产出 model_schema/model_name
- * - carry:声明了传递字段面时才有(见下)
- *
- * 注意:前端拿到的是序列化后的 dict,需要原始 JSON Schema 直接读 schema。
- * 线上键 = body_type/fields/schema/carry;model 双轨(model_schema/
- * model_name)已随机制退役一并清理。
- *
- * carry 键(可选):RequestSpec 声明了传递字段面(spec §2)时才有,
- * path → {description, type};值不在 plate —— 在 platform 值表
- * (服务绑定/全局默认两层,spec §3.1),运行时由 platform 注入。
+ * 线上键 = body_type / declarations(恒有)/ schema(schema_ 非 None 时
+ * 才有,别名为 "schema",唯一结构真源)。declarations 为统一承重存储:
+ * binding 通道投影出表单字段面,carry 通道即传递字段面(旧 fields/carry
+ * 双键已随归一化清除);值不在 plate —— 在 platform 值表(服务绑定/
+ * 全局默认两层),运行时由 platform 注入。
  */
 export interface RequestSpecView {
   body_type: BodyType
-  fields: IOFieldBinding[]
+  declarations: DeclarationEntryView[]
   schema?: Record<string, unknown>
-  /** 传递字段面(spec §2):path → {description, type};值在 platform 值表 */
-  carry?: Record<string, { description?: string; type?: string }>
 }
 
 /**
  * ResponseSpec 视图 —— 接口某状态码响应的形态。
- * 序列化键含义同 RequestSpecView,额外含 status / description / assertable_fields。
+ * 线上键 = status / description / declarations(恒有)/ schema(可选);
+ * view_only 通道投影出展示字段面,assertable=True 条目即断言候选
+ * (旧 fields/assertable_fields 双键已随归一化清除)。
  */
 export interface ResponseSpecView {
   status: number
   description: string
-  fields: IOFieldBinding[]
-  assertable_fields: string[]
+  declarations: DeclarationEntryView[]
   schema?: Record<string, unknown>
 }
 
@@ -217,8 +239,9 @@ export interface RequestView {
   body: unknown
   /** @deprecated 结构快照不再持久化(容器原则:引用数据不进 payload,
    *  渲染时按 api.view_hints.endpoint_id 现拉 /full)。仅为读存量 payload
-   *  保留的类型;新代码禁止写入。 */
-  fields_meta?: Record<string, IOFieldBinding>
+   *  保留的类型;新代码禁止写入。值为 binding 通道 DeclarationEntry dump
+   *  (plate export/platform.py 投影)。 */
+  fields_meta?: Record<string, DeclarationEntryView>
 }
 
 /** plate strategy 三种变体。对齐 gimbal_plate/schema/strategy.py。 */

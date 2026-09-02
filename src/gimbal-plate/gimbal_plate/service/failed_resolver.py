@@ -48,7 +48,11 @@ def _parse_line(line: str) -> tuple[int | None, str, str | None, str | None]:
 
 def resolve_failed_criteria(endpoint: EndpointSpec) -> dict[str, Any]:
     """Return B2-shaped failed_criteria analysis for ``endpoint``."""
-    assertable = set(endpoint.responses.get(200).assertable_fields or [])
+    resp_200 = endpoint.responses.get(200)
+    assertable = {
+        e.path for e in (resp_200.declarations if resp_200 is not None else [])
+        if e.channel == "view_only" and e.assertable
+    }
 
     resolved: list[dict[str, Any]] = []
     for line in endpoint.metadata.failed_criteria or []:

@@ -14,7 +14,7 @@ from gimbal_plate.systems.fin.system_info import (
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
     EndpointSpec,
-    IOFieldBinding,
+    DeclarationEntry,
     RequestSpec,
     ResponseSpec,
     EndpointMetadata,
@@ -30,15 +30,15 @@ AUDIT_AUDIT_PAGE: Final[EndpointSpec] = EndpointSpec(
     api=ApiSpec(service="fin-service", method="POST", path="/api/home/audit/auditPage", auth="bearer", timeout_seconds=30.0),
     request=RequestSpec(
         body_type="json",
-        fields=[
-        IOFieldBinding(name='page_no', path='page_no', required=True, example=1, ui_kind='number', description='页码,从 1 开始'),
-        IOFieldBinding(name='page_size', path='page_size', required=True, example=20, ui_kind='number', description='每页条数,默认 20'),
-        IOFieldBinding(name='active_tab', path='active_tab', required=True, example='examine_wait', ui_kind='text', description='审批页签: examine_wait=待审批 / examine_done=已审批'),
-        IOFieldBinding(name='sort_field', path='sort_field', required=True, example='expedite_num', ui_kind='text', description='排序字段,如 expedite_num(催办次数)'),
-        IOFieldBinding(name='sort_order', path='sort_order', required=True, example='desc', ui_kind='text', description='排序方向: asc / desc', enum=['asc', 'desc']),
-        IOFieldBinding(name='params', path='params', required=True, example={}, ui_kind='json', description='业务过滤条件,如单号/客户/日期范围'),
+        declarations=[
+        DeclarationEntry(name='page_no', path='page_no', channel='binding', required=True, example=1, ui_kind='number', description='页码,从 1 开始'),
+        DeclarationEntry(name='page_size', path='page_size', channel='binding', required=True, example=20, ui_kind='number', description='每页条数,默认 20'),
+        DeclarationEntry(name='active_tab', path='active_tab', channel='binding', required=True, example='examine_wait', ui_kind='text', description='审批页签: examine_wait=待审批 / examine_done=已审批'),
+        DeclarationEntry(name='sort_field', path='sort_field', channel='binding', required=True, example='expedite_num', ui_kind='text', description='排序字段,如 expedite_num(催办次数)'),
+        DeclarationEntry(name='sort_order', path='sort_order', channel='binding', required=True, example='desc', ui_kind='text', description='排序方向: asc / desc', enum=['asc', 'desc']),
+        DeclarationEntry(name='params', path='params', channel='binding', required=True, example={}, ui_kind='json', description='业务过滤条件,如单号/客户/日期范围'),
         ],
-        # schema 携带的非绑定字段(Type C):不设 IOFieldBinding,
+        # schema 携带的非绑定字段(Type C):不生成声明条目,
         # 前端「其他字段」折叠区以「契约」行渲染 — 可编辑,编辑后随请求发送。
         schema_={
             "type": "object",
@@ -55,10 +55,9 @@ AUDIT_AUDIT_PAGE: Final[EndpointSpec] = EndpointSpec(
         200: ResponseSpec(
             status=200,
             description="成功",
-            fields=[
-        IOFieldBinding(name='audit_id', path='$.data.data[0].audit_id', required=False, ui_kind="unknown"),
+            declarations=[
+        DeclarationEntry(name='audit_id', path='$.data.data[0].audit_id', channel='view_only', required=False, ui_kind="unknown", assertable=True),
             ],
-            assertable_fields=['$.data.data[0].audit_id'],
         ),
     },
     version=FIN_DEFAULT_VERSION,

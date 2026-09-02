@@ -3,7 +3,7 @@
 本期公共 API(C1 + C2):
     结构定义:
         EndpointSpec, ApiSpec, RequestSpec, ResponseSpec,
-        IOFieldBinding, CarryEntry, EndpointMetadata, ServiceDefinition
+        DeclarationEntry, EndpointMetadata, ServiceDefinition
     能力提供:
         EndpointCase, EndpointCaseDataset, EndpointCaseExporter,
         GimbalScenarioExporter
@@ -14,10 +14,9 @@
 # 结构定义层
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
-    CarryEntry,
+    DeclarationEntry,
     EndpointMetadata,
     EndpointSpec,
-    IOFieldBinding,
     RequestSpec,
     ResponseSpec,
 )
@@ -43,8 +42,7 @@ __all__ = [
     "ApiSpec",
     "RequestSpec",
     "ResponseSpec",
-    "IOFieldBinding",
-    "CarryEntry",
+    "DeclarationEntry",
     "EndpointMetadata",
     "ServiceDefinition",
     # C2 用例导出

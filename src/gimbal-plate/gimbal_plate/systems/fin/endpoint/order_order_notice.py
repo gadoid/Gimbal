@@ -14,7 +14,7 @@ from gimbal_plate.systems.fin.system_info import (
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
     EndpointSpec,
-    IOFieldBinding,
+    DeclarationEntry,
     RequestSpec,
     ResponseSpec,
     EndpointMetadata,
@@ -30,11 +30,11 @@ ORDER_ORDER_NOTICE: Final[EndpointSpec] = EndpointSpec(
     api=ApiSpec(service="fin-service", method="POST", path="/api/order/order/orderNotice", auth="bearer", timeout_seconds=30.0),
     request=RequestSpec(
         body_type="json",
-        fields=[
-        IOFieldBinding(name='order_id', path='order_id', required=True, example='', ui_kind='text'),
-        IOFieldBinding(name='action', path='action', required=True, example='check', ui_kind='text'),
-        IOFieldBinding(name='finance_ids', path='finance_ids', required=True, example=['${var.finance_id_0}', '${var.finance_id_1}'], ui_kind='json'),
-        IOFieldBinding(name='bank_ids', path='bank_ids', required=True, example=['${var.bank_id_0}', '${var.bank_id_1}'], ui_kind='json'),
+        declarations=[
+        DeclarationEntry(name='order_id', path='order_id', channel='binding', required=True, example='', ui_kind='text'),
+        DeclarationEntry(name='action', path='action', channel='binding', required=True, example='check', ui_kind='text'),
+        DeclarationEntry(name='finance_ids', path='finance_ids', channel='binding', required=True, example=['${var.finance_id_0}', '${var.finance_id_1}'], ui_kind='json'),
+        DeclarationEntry(name='bank_ids', path='bank_ids', channel='binding', required=True, example=['${var.bank_id_0}', '${var.bank_id_1}'], ui_kind='json'),
         ],
         schema_={},
     ),

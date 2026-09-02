@@ -66,18 +66,21 @@ def _declared_body_keys(ep) -> set[str] | None:
     """
     if ep is None or ep.request is None:
         return None
-    keys = {f.name for f in ep.request.fields}
-    for p in ep.request.carry:
-        seg = p[2:] if p.startswith("$.") else p
-        if "." not in seg and "[" not in seg:
-            keys.add(seg)
+    keys: set[str] = set()
+    for e in ep.request.declarations:
+        if e.channel == "binding":
+            keys.add(e.name)
+        elif e.channel == "carry":
+            seg = e.path[2:] if e.path.startswith("$.") else e.path
+            if "." not in seg and "[" not in seg:
+                keys.add(seg)
     return keys
 
 
 # §7.2 字段归属表 —— 测试代码必须与文档表格逐项对齐
 EXPECTED_PLATFORM_FIELDS: dict[str, tuple[type, str]] = {
     # field_name -> (owning_class, documented_type)
-    "fields_meta": (Request, "Dict[str, IOFieldBinding] | None"),
+    "fields_meta": (Request, "Dict[str, DeclarationEntry] | None"),
     "view_hints": (Api, "dict[str, Any] | None"),
     "view_note": (StrategyBase, "Optional[str]"),
     "endpoints": (ScenarioModel, "list[dict[str, Any]] | None"),
@@ -106,14 +109,13 @@ class TestSchemaFieldsMatchDesignDoc:
                 f"Scenario 缺少 §7.2 顶层平台视图字段 {f!r}"
             )
 
-    def test_request_has_fields_meta_with_io_binding_type(self) -> None:
-        """§7.2 要求 Request.fields_meta 类型为 Dict[str, IOFieldBinding] | None。"""
-        from gimbal_plate.schema.endpoint.io_spec import IOFieldBinding
+    def test_request_has_fields_meta_with_declaration_type(self) -> None:
+        """§7.2 要求 Request.fields_meta 类型为 Dict[str, DeclarationEntry] | None。"""
         f = Request.model_fields["fields_meta"]
-        # annotation 形式可能是 Optional[Dict[str, IOFieldBinding]] 或带字符串
+        # annotation 形式可能是 Optional[Dict[str, DeclarationEntry]] 或带字符串
         ann = str(f.annotation)
-        assert "IOFieldBinding" in ann, (
-            f"Request.fields_meta 必须是 IOFieldBinding 强类型,实际: {ann}"
+        assert "DeclarationEntry" in ann, (
+            f"Request.fields_meta 必须是 DeclarationEntry 强类型,实际: {ann}"
         )
         assert "Dict" in ann or "dict" in ann, (
             f"Request.fields_meta 必须是 dict 类型,实际: {ann}"

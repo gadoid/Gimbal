@@ -9,7 +9,7 @@
       ↓
     interface 层(resource/setup/teardown/api/strategy/step/scenario/request)
       ↓
-    endpoint 出口(Request 引用 IOFieldBinding,Scenario 整体作为真相源)
+    endpoint 出口(Request 引用 DeclarationEntry,Scenario 整体作为真相源)
 
 外部 import 应统一通过本 __init__,直接 import 子文件应仅限 schema 内部。
 """
@@ -30,9 +30,9 @@ from gimbal_plate.schema.time_policy import (
 # ── endpoint(目录形式,保持现状) ──
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
+    DeclarationEntry,
     EndpointMetadata,
     EndpointSpec,
-    IOFieldBinding,
     RequestSpec,
     ResponseSpec,
 )
@@ -91,7 +91,7 @@ __all__ = [
     "ApiSpec",
     "EndpointMetadata",
     "EndpointSpec",
-    "IOFieldBinding",
+    "DeclarationEntry",
     "RequestSpec",
     "ResponseSpec",
     # api / request

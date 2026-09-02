@@ -215,6 +215,8 @@
                   :var-choices="referenceVarChoices"
                   :inject-choices="injectVarChoices"
                   :unbound-fields="reqTypeC"
+                  :strategy-tags="requestStrategyTags"
+                  @strategy-jump="onStrategyJump"
                   @update:body="(v: unknown) => currentStep.request.body = v"
                   @field-extract="onFieldExtract"
                   @field-assign="(f, name) => onFieldAssign(f, name)"
@@ -262,6 +264,8 @@
                     :domain="'response'"
                     :field-actions="true"
                     :assertable="spec.assertable"
+                    :strategy-tags="responseStrategyTags"
+                    @strategy-jump="onStrategyJump"
                     @field-extract="onFieldExtract"
                     @field-assert="onFieldAssert"
                   />
@@ -310,10 +314,13 @@
                 <StrategyForm
                   v-for="(s, idx) in currentStep.strategy"
                   :key="`${activeStepIdx}-${idx}`"
+                  :id="`strategy-card-${idx}`"
                   :strategy="s"
                   :detail="strategyDetail(s)"
                   :start-expanded="idx === justAddedStrategyIdx"
                   :candidates="strategyCandidates(s)"
+                  :tag-label="currentTagLabels[idx]"
+                  :expand-when="jumpSeq > 0 && idx === jumpTargetIdx"
                   @remove="removeStrategy(currentStep, s)"
                 />
                 <el-dropdown trigger="click" @command="addStrategy(currentStep, $event as string)">
@@ -401,7 +408,8 @@
               </div>
             </div>
             <!-- 右栏按签页分流(设计 §3.4):Request 页请求侧统计;
-                 Response 页 extracts + 响应契约(全状态码,含 ✓ 标) -->
+                 Response 页响应契约(全状态码,含 ✓ 标)。
+                 需求1:extracts 信息块已删 — 策略信息迁到字段行角标 -->
             <template v-if="activeIoTab === 'request'">
               <div class="info-block">
                 <div class="info-k">请求侧</div>
@@ -412,14 +420,6 @@
               </div>
             </template>
             <template v-else>
-              <div v-if="extractStrategies(currentStep).length" class="info-block">
-                <div class="info-k">extracts</div>
-                <div class="info-v">
-                  <div v-for="(ex, i) in extractStrategies(currentStep)" :key="i" class="extract-line">
-                    <code>{{ ex.target || '?' }}</code> ← <code>{{ ex.expression || '?' }}</code>
-                  </div>
-                </div>
-              </div>
               <!-- 响应契约:全状态码(升级自旧"响应字段 (200)"块) -->
               <div v-if="currentRespSpecs.length" class="info-block">
                 <div class="info-k">响应契约 (全状态码)</div>
@@ -474,7 +474,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import draggable from 'vuedraggable'
 import CaseComposerCatalog from './CaseComposerCatalog.vue'
@@ -495,6 +495,7 @@ import type { TplRef } from '@/utils/tpl-refs'
 import type { AuthSession } from '@/api/auth_sessions'
 import { deepDefaults } from '@/utils/jsonpath'
 import { toScratchPath } from '@/utils/scratch-path'
+import { assertablePaths, carryPaths, channelFields } from '@/utils/declarations'
 import { deriveBase } from '@/utils/service-alias'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
 import { carryHint } from '@/utils/carry-hint'
@@ -546,13 +547,14 @@ function inferProtocol(step: StepView | undefined): string {
 
 /** FieldForm 需要的 IOFieldBinding[] — 会话级按 endpoint_id 现拉 /full,
  *  不读持久化快照(旧 step.request.fields_meta 已废弃,不再作为数据源)。
- *  读 fullVersion 建立响应依赖:回填后模板/reqTypeC 自动重算。 */
+ *  读 fullVersion 建立响应依赖:回填后模板/reqTypeC 自动重算。
+ *  declarations 归一化后:请求表单面 = binding 通道投影。 */
 function fieldBindings(step: StepView | undefined): IOFieldBinding[] {
   void fullVersion.value
   const eid = step?.api?.view_hints?.endpoint_id
   if (!eid) return []
   void ensureEndpointFull(eid)
-  return endpointFullByEndpoint.get(eid)?.request?.fields || []
+  return channelFields(endpointFullByEndpoint.get(eid)?.request?.declarations, 'binding')
 }
 
 /** step 是否携带接口身份引用(决定 loading/failed 占位是否适用) */
@@ -587,7 +589,7 @@ const strategyDetailCache = ref<Record<string, StrategyKindDetailView>>({})
 /** 刚通过"添加策略"下拉新建的实例下标(渲染为展开引导填写);-1 = 无 */
 const justAddedStrategyIdx = ref(-1)
 // 切 step 时清"刚添加"标记(下标在新 step 语境无意义,防误展开);签页回 request
-watch(activeStepIdx, () => { justAddedStrategyIdx.value = -1; activeIoTab.value = 'request' })
+watch(activeStepIdx, () => { justAddedStrategyIdx.value = -1; jumpTargetIdx.value = -1; activeIoTab.value = 'request' })
 
 async function loadStrategyKinds() {
   try {
@@ -838,6 +840,77 @@ function onVarPicked(tpl: string) {
   varPickerVal.value = null
 }
 
+// ── 策略角标(需求1):字段行尾显示已挂策略,点击跳转下方策略卡 ──────
+
+/** 同 kind ≥2 → 按数组序编号 extract_1/extract_2;单条裸 kind。
+ *  角标与策略卡头(Task 3 tagLabel)共用 → 对应关系可见。 */
+function strategyTagLabels(strategies: StrategyView[]): string[] {
+  const count = new Map<string, number>()
+  for (const s of strategies) count.set(s.kind, (count.get(s.kind) ?? 0) + 1)
+  const seq = new Map<string, number>()
+  return strategies.map((s) => {
+    const n = (seq.get(s.kind) ?? 0) + 1
+    seq.set(s.kind, n)
+    return (count.get(s.kind) ?? 0) > 1 ? `${s.kind}_${n}` : s.kind
+  })
+}
+
+/** 策略 ↔ 字段匹配(双形态:scratch 域 + plate 域旧格式,老草稿兼容) */
+function strategyMatchesField(s: StrategyView, domain: 'request' | 'response', f: IOFieldBinding): boolean {
+  const sv = s as any
+  if (domain === 'request') {
+    return sv.kind === 'assign' && sv.target === f.path.replace(/^\$\./, '$.request_body.')
+  }
+  const scratch = toScratchPath(f.path)
+  if (sv.kind === 'extract') return sv.expression === scratch || sv.expression === f.path
+  if (sv.kind === 'assertion') return sv.target === scratch || sv.target === f.path
+  return false
+}
+
+/** 字段名 → 角标数组;响应侧字段取全状态码契约按名去重(同名字段同路径语义) */
+function fieldStrategyTags(domain: 'request' | 'response'): Record<string, Array<{ label: string; idx: number }>> {
+  const step = currentStep.value
+  if (!step?.strategy.length) return {}
+  const labels = strategyTagLabels(step.strategy)
+  const fields = domain === 'request'
+    ? fieldBindings(step)
+    : currentRespSpecs.value.flatMap((spec) => spec.fields)
+  const seen = new Set<string>()
+  const tags: Record<string, Array<{ label: string; idx: number }>> = {}
+  for (const f of fields) {
+    if (seen.has(f.name)) continue
+    seen.add(f.name)
+    step.strategy.forEach((s, idx) => {
+      if (strategyMatchesField(s, domain, f)) {
+        ;(tags[f.name] ||= []).push({ label: labels[idx], idx })
+      }
+    })
+  }
+  return tags
+}
+
+const requestStrategyTags = computed(() => fieldStrategyTags('request'))
+const responseStrategyTags = computed(() => fieldStrategyTags('response'))
+
+/** 角标跳转目标 + 脉冲序号(同 idx 重复点击靠 flash 重放感知,展开幂等) */
+const jumpTargetIdx = ref(-1)
+const jumpSeq = ref(0)
+const currentTagLabels = computed(() => strategyTagLabels(currentStep.value?.strategy ?? []))
+
+/** 角标点击:定位下方策略卡 — 滚动 + 展开(expandWhen 沿) + flash 重放 */
+function onStrategyJump(idx: number) {
+  jumpTargetIdx.value = idx
+  jumpSeq.value++
+  void nextTick(() => {
+    const el = document.getElementById(`strategy-card-${idx}`)
+    if (!el) return // 降级模式(kinds 拉取失败)无策略卡 → no-op
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.remove('sf-flash')
+    void (el as HTMLElement).offsetWidth // 重启动画
+    el.classList.add('sf-flash')
+  })
+}
+
 /** 模板里 refStatus 的第二参:已知 alias 集合 = 凭证池 ∪ 草稿 config.users
  *  (③ 用户认证快照 — 场景本地用户执行期由 Config.users 解析,不能误标悬空) */
 const authAliases = computed(() => {
@@ -889,8 +962,9 @@ function sameSteps(a: readonly unknown[] | undefined, b: readonly unknown[]): bo
 }
 
 /**
- * 预填的 code 断言 target 探测顺序 —— 仅当 assertable_fields 命中其一
- * 才追加业务码断言,避免给没有 code 语义的接口塞无效断言。
+ * 预填的 code 断言 target 探测顺序 —— 仅当断言面(view_only 通道
+ * assertable=True 条目的 path 集)命中其一才追加业务码断言,避免给
+ * 没有 code 语义的接口塞无效断言。
  */
 const CODE_TARGET_CANDIDATES = ['$.code', '$.data.code'] as const
 
@@ -939,9 +1013,10 @@ const currentFull = computed<EndpointFullView | undefined>(() => {
   return endpointFullByEndpoint.get(eid)
 })
 
-/** 当前 step 的断言候选列表;未知/拉取中 → 空(不渲染 ▾) */
+/** 当前 step 的断言候选列表;未知/拉取中 → 空(不渲染 ▾)
+ *  declarations 归一化后:view_only 通道 assertable=True 条目的 paths */
 const currentAssertable = computed<string[]>(
-  () => currentFull.value?.responses?.['200']?.assertable_fields || []
+  () => assertablePaths(currentFull.value?.responses?.['200']?.declarations)
 )
 
 /** /full responses[status] 轻量投影(设计 §2.4);引用数据不进 draft */
@@ -954,7 +1029,8 @@ interface RespSpecLite {
   /** 200 契约 schema(Type C 差集源);非 200 恒 undefined */
   schema?: Record<string, unknown>
 }
-/** 当前 step 的全状态码响应契约(状态码字典序) */
+/** 当前 step 的全状态码响应契约(状态码字典序)
+ *  declarations 归一化后:fields = view_only 投影,assertable = 断言候选投影 */
 const currentRespSpecs = computed<RespSpecLite[]>(() => {
   const full = currentFull.value
   if (!full) return []
@@ -962,8 +1038,8 @@ const currentRespSpecs = computed<RespSpecLite[]>(() => {
     .map(([status, spec]) => ({
       status: Number(status),
       description: spec.description || '',
-      fields: spec.fields || [],
-      assertable: spec.assertable_fields || [],
+      fields: channelFields(spec.declarations, 'view_only'),
+      assertable: assertablePaths(spec.declarations),
       schema: status === '200'
         ? spec.schema
         : undefined,
@@ -1002,9 +1078,10 @@ function typeCFields(
       default: props[k]?.default,
     }))
 }
-/** 请求侧 Type C(挂 Request 签页底部;carry 键排除 — 传递面零感知) */
+/** 请求侧 Type C(挂 Request 签页底部;carry 键排除 — 传递面零感知)
+ *  declarations 归一化后:carry 通道条目 path 集 */
 const reqCarryPaths = computed<Set<string>>(() =>
-  new Set(Object.keys(currentFull.value?.request?.carry ?? {})))
+  new Set(carryPaths(currentFull.value?.request?.declarations)))
 const reqTypeC = computed<TypeCField[]>(() =>
   typeCFields(currentReqSchema.value, fieldBindings(currentStep.value).map((f) => f.path))
     .filter((f) => !reqCarryPaths.value.has(f.path))
@@ -1055,7 +1132,7 @@ function carryInjectable(step: StepView): Map<string, CarrySource> {
   if (!carryValues.value) return new Map()
   const eid = step.api?.view_hints?.endpoint_id
   const full = eid ? endpointFullByEndpoint.get(eid) : undefined
-  const face = Object.keys(full?.request?.carry ?? {})
+  const face = carryPaths(full?.request?.declarations)
   if (!face.length) return new Map()
   const base = deriveBase(step.api?.service || '', catalogNames.value)
   // base=null(未知服务)→ 运行时整步跳过注入(carry_injection derive_base
@@ -1190,7 +1267,7 @@ function buildInitialStrategies(full: EndpointFullView | undefined): StrategyVie
   ]
   if (!full) return strategies
   const r200 = full.responses?.['200']
-  const assertable = r200?.assertable_fields || []
+  const assertable = assertablePaths(r200?.declarations)
   const successCriteria = full.metadata?.success_criteria || ''
   // 契约驱动追加: success_criteria 非空 且 响应确有 code 断言位
   if (successCriteria) {
@@ -1215,12 +1292,12 @@ async function onAddEndpoint(ep: any) {
   if (!ep) return
   adding.value = true
   try {
-    // 拉 plate /api/endpoint/{id}/full 取 IOFieldBinding + 策略原料
-    // (assertable_fields / success_criteria);失败仍以原始信息加入
+    // 拉 plate /api/endpoint/{id}/full 取字段契约 + 策略原料
+    // (assertable 面 / success_criteria);失败仍以原始信息加入
     // (用户投诉过的"裸 JSON"兜底)。
     const full = await ensureEndpointFull(ep.id)
     if (!full) ElMessage.warning('拉取完整接口定义失败, 仍以原始信息加入')
-    const fields = full?.request?.fields || []
+    const fields = channelFields(full?.request?.declarations, 'binding')
     const strategy = buildInitialStrategies(full)
     // 初始 body:只合成绑定 default/example(carry/契约默认移交注入通道)
     const initialBody = deepDefaults(fields)

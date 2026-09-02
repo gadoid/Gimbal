@@ -27,6 +27,14 @@
           <template v-else-if="f.source_kind === 'generated'">dynamic · Assign</template>
           <template v-else>{{ f.source_kind }}</template>
         </span>
+        <button
+          v-for="t in strategyTags?.[f.name] ?? []"
+          :key="t.idx"
+          type="button"
+          class="strategy-tag"
+          :title="`跳转到下方策略 ${t.label}`"
+          @click.stop="emit('strategyJump', t.idx)"
+        >{{ t.label }}</button>
       </label>
       <div class="field-control">
         <!-- text / unknown (Type B fallback) -->
@@ -393,9 +401,15 @@ const props = defineProps<{
    * 并入「其他字段」折叠区,可编辑;编辑即写入 body(未编辑不随请求发送)。
    */
   unboundFields?: Array<{ name: string; path: string; type?: string; default?: unknown }>
+  /** 策略角标(需求1):字段名 → 角标数组(label 由 Canvas 预计算含编号,
+   *  idx = step.strategy 数组下标);点击上抛 strategyJump 由 Canvas 定位
+   *  下方策略卡。StrategyForm 复用本组件处不传 → 零角标。 */
+  strategyTags?: Record<string, Array<{ label: string; idx: number }>>
 }>()
 const emit = defineEmits<{
   'update:body': [any]
+  /** 策略角标点击(需求1):idx = step.strategy 数组下标,Canvas 定位策略卡 */
+  'strategyJump': [idx: number]
   /** 快捷策略创建(菜单动作,Canvas 落地为策略骨架) */
   'fieldExtract': [field: IOFieldBinding]
   'fieldAssign': [field: IOFieldBinding, varName: string]
@@ -697,6 +711,13 @@ function formatJson(v: unknown): string {
 }
 .src-tag.s-lookup { background: #faf5ff; color: #7c3aed; }   /* static 紫 */
 .src-tag.s-generated { background: #ede9fe; color: #7c3aed; } /* dynamic 紫 */
+/* 策略角标(需求1):字段已挂策略 → 行尾定位入口,点击跳转下方策略卡 */
+.strategy-tag {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 700;
+  padding: 1px 6px; border-radius: 3px; border: none; cursor: pointer;
+  background: #e0e7ff; color: #4338ca;
+}
+.strategy-tag:hover { background: #c7d2fe; color: #3730a3; }
 /* 字段行 4 色左边框 */
 .field.sk-independent { border-left: 3px solid #cbd5e1; }    /* literal 灰 */
 .field.sk-lookup { border-left: 3px solid #7c3aed; }            /* static 紫 */

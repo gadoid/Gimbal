@@ -14,20 +14,22 @@ from .helpers import make_draft, register_and_login
 
 EP = "fin.order.add"
 
+# OLD_FULL:基线戳的 spec_json 快照(declarations 形状,与现拉 /full 同构)
 OLD_FULL = {
     "id": EP, "version": "1.0.0",
-    "request": {"fields": [
-        {"name": "amount"},
-        {"name": "legacy_field"},
-        {"name": "settle_type", "enum": ["1", "2"]},
+    "request": {"declarations": [
+        {"name": "amount", "channel": "binding"},
+        {"name": "legacy_field", "channel": "binding"},
+        {"name": "settle_type", "channel": "binding", "enum": ["1", "2"]},
     ]},
 }
+# NEW_FULL:现拉 plate /full(declarations binding 通道)
 NEW_FULL = {
     "id": EP, "version": "1.1.0",
-    "request": {"fields": [
-        {"name": "amount"},
-        {"name": "extra", "default": "E"},
-        {"name": "settle_type", "enum": ["2", "3"]},
+    "request": {"declarations": [
+        {"name": "amount", "channel": "binding"},
+        {"name": "extra", "channel": "binding", "default": "E"},
+        {"name": "settle_type", "channel": "binding", "enum": ["2", "3"]},
     ]},
 }
 
@@ -82,7 +84,7 @@ async def test_diff_admin_only(client, plate):
     plate.items = [{"id": "fin.order.add", "version": "1.0.0",
                     "updated_at": "2026-01-01T00:00:00Z"}]
     plate.fulls = {"fin.order.add": {"id": "fin.order.add", "version": "1.0.0",
-                                     "request": {"fields": []}}}
+                                     "request": {"declarations": []}}}
     ok = await client.post("/api/adaptations/catalog/diff", headers=admin)
     assert ok.status_code == 200
     assert ok.json() == {"pending": [], "anomalies": [], "baselinedNow": 1}

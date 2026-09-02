@@ -370,7 +370,7 @@ class DimSpec:
 
     ``full_view_factory`` is **optional**. When set, it returns the **full**
     contract for ``/{dim}/full`` and ``/{dim}/{id}/full`` (every original
-    schema field, including IOFieldBinding metadata, sensitive credentials,
+    schema field, including field-declaration metadata, sensitive credentials,
     and ``extra``-captured extension fields). When unset, the ``/full``
     endpoints return 501 ``admin_not_implemented`` (the dim chose to keep
     its ``light`` view as the only contract).
