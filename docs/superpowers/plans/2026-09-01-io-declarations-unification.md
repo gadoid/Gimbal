@@ -17,6 +17,7 @@
 - **线上等价铁律**(spec §1.1/1.2/4.3):/full 既有键(body_type/fields/schema/carry/assertable_fields)逐键逐字节不变;唯一增量 = declarations 键(有声明才发);schema 内容一字不动,不合成。
 - **键序约定**(spec §4.3):declarations = binding/view_only 条目(输入序)在前,carry 条目(输入序)在后;P1 view 与 P2 桥两处实现显式遵循同一约定。
 - **基线口径**(spec §0.3):ALL_ENDPOINTS = 18(fin 全量,account_query_balance 在内);有声明端点 17 + account(零声明,request 缺席、响应 schema-only);声明总数 747 = 737 binding/view_only + 10 carry;**fixture 是计数权威**(grep 行级 736/出现级 737 有出入,以 Task 1 捕获实测为准);**捕获只补缺** —— 两个 fixture 的捕获分支均带 `not FIXTURE.exists()` 守卫,fixture 提交后任何 CAPTURE 运行都走比对分支,re-baseline 必须显式删文件再捕(单开 commit 说明原因)。
+- **2026-09-02 漂移预警**:文档定稿(1f04edb)后语料已大改 —— 73cc71b 把 order_entrust 委托下单重构为 3 binding + 80 余 carry、响应 view_only 大批转 schema-only,carry 面 10→99、binding 面 737→524(HEAD 实测);根路径 `$` 先例随重构消失(entrust 已提交删除,order_detail 在未提交工作树中)。**本节 747/737/10、Task 1 计数断言、Task 2 test_coverage_747 与 test_root_path_entry 前提均已过期** —— 执行日 Task 1 以 fixture 实测重新钉数(spec §0.3 + 本计划一并改,单开 commit);根路径测试按届时语料换锚或删除;`or "$"` 兜底逻辑与 Task 5 根路径用例保留(模型规则仍允许,只是不再有现网实例)。
 - **端点归属**:settlement 唯一 declare() 迁移(Task 8);其余 17(fin 16 + account)走构造桥零改动 —— account 归桥是被线上等价逼定(spec §8 ②)。
 - **②③ 基线不混用**(spec §8):② 的 binding 条目 type 恒 None(桥不吸收),③ 的 type 恒吸收值;两测试各自独立断言,不共享基线对象。
 - **政策守卫不可删**:`tests/plate/test_v3_systems_fin.py::TestCarryFacesAllEndpoints` 在 P2 派生属性下必须零改动通过(spec §5 分层声明);任何任务不得"顺手优化"它。
