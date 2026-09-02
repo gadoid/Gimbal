@@ -1,5 +1,9 @@
 # tests/plate/test_io_declarations_p1.py
-"""P1:declarations_view 派生视图(spec §3.1 形状、§4.3 键序)。"""
+"""P1:declarations 形状(spec §3.1、§4.3 键序)。
+
+P2 存储翻转后 declarations_view() 退役,访问面改为 .declarations
+属性(断言值不变,视图=存储)。
+"""
 from gimbal_plate.schema.endpoint.io_spec import (
     CarryEntry, IOFieldBinding, RequestSpec, ResponseSpec,
 )
@@ -20,7 +24,7 @@ class TestDeclarationsView:
             fields=[IOFieldBinding(name="remark", path="$.remark")],
             carry={"$.notes": CarryEntry(description="备注", type="string")},
         )
-        dv = rs.declarations_view()
+        dv = [e.model_dump() for e in rs.declarations]
         non_carry, carry = _by_channel(dv)
         assert [e["path"] for e in non_carry] == ["$.remark"]
         assert all(e["channel"] == "binding" for e in non_carry)
@@ -35,7 +39,7 @@ class TestDeclarationsView:
                     IOFieldBinding(name="total", path="$.data.total")],
             assertable_fields=["$.data.total"],
         )
-        dv = resp.declarations_view()
+        dv = [e.model_dump() for e in resp.declarations]
         assert all(e["channel"] == "view_only" for e in dv)
         by_path = {e["path"]: e for e in dv}
         assert by_path["$.data.total"]["assertable"] is True
@@ -48,15 +52,15 @@ class TestDeclarationsView:
             body_type="json", schema_={},
             carry={"$": CarryEntry(description="整包透传", type="object")},
         )
-        (e,) = rs.declarations_view()
-        assert e["name"] == "$" and e["path"] == "$" and e["channel"] == "carry"
+        (e,) = rs.declarations
+        assert e.name == "$" and e.path == "$" and e.channel == "carry"
 
     def test_coverage_667(self) -> None:
         total = 0
         for ep in ALL_ENDPOINTS:
             if ep.request:
-                total += len(ep.request.declarations_view())
-            total += sum(len(r.declarations_view())
+                total += len(ep.request.declarations)
+            total += sum(len(r.declarations)
                          for r in ep.responses.values())
         assert total == 667, f"declarations 覆盖 {total} != 667"
 
@@ -65,10 +69,10 @@ class TestDeclarationsView:
         assert "declarations" not in rs.model_dump(mode="json")
         # account:零声明端点,full 视图不含 declarations(⑨ 的前置事实)
         full = ACCOUNT_QUERY_BALANCE.request
-        assert full is None or not full.declarations_view()
+        assert full is None or not full.declarations
 
     def test_settlement_carry_entry_shape(self) -> None:
-        dv = SETTLEMENT_CREATE_ORDER.request.declarations_view()
+        dv = [e.model_dump() for e in SETTLEMENT_CREATE_ORDER.request.declarations]
         remark = next(e for e in dv if e["path"] == "$.remark")
         assert remark["channel"] == "carry"
         assert remark["description"] == "备注(随请求传递,不进表单)"

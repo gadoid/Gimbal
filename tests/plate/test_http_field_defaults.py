@@ -103,14 +103,19 @@ def test_field_defaults_kinds() -> None:
 
 def test_field_defaults_generated_fields_from_response() -> None:
     endpoint = _build_endpoint()
-    endpoint.responses[200].fields = [
-        IOFieldBinding(
-            name="internal_note",
-            path="$.internal_note",
-            source_kind="generated",
-            ui_kind="text",
-        )
-    ]
+    # P2 存储翻转:fields 为派生投影(无 setter),改声明面需整替 ResponseSpec
+    endpoint.responses[200] = ResponseSpec(
+        status=200,
+        schema_=_RespOut.model_json_schema(),
+        fields=[
+            IOFieldBinding(
+                name="internal_note",
+                path="$.internal_note",
+                source_kind="generated",
+                ui_kind="text",
+            )
+        ],
+    )
     reg = PlateRegistry()
     reg.register_endpoint(endpoint)
     register_fin_dims(reg)

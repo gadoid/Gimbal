@@ -122,7 +122,11 @@ class TestIOSpec:
         # 3) JSON dump 序列化保留 source_kind 字段。
         # 文档依据:V1 §4.3"请求字段 / 响应字段的语义差异"段。
         req = RequestSpec(
-            body_type="none",
+            # 注:原 body_type="none" + fields 在 B4(IO 声明归一化:
+            # none 即零声明)下为构造错误;本测试意图是 source_kind 透传,
+            # 换 json + 空 schema_ 即可。
+            body_type="json",
+            schema_={},
             fields=[
                 IOFieldBinding(name="order_no", path="order_no", source_kind="independent"),
                 IOFieldBinding(name="user_id", path="user_id", source_kind="lookup"),
@@ -1017,15 +1021,17 @@ class TestResponseSpecAssertableFields:
         assert rs.assertable_fields == ["$.order_id"]
 
     def test_dual_form_reverse_passes(self) -> None:
-        # V3 决策:assertable_fields 内存值保留原值,但比较时归一化(IOFieldBinding.path
-        # 是构造期归一,assertable_fields 是使用期归一,见 io_spec.py:_validate 注释)
+        # V3 决策:assertable_fields 内存值保留原值,但比较时归一化。
+        # P2 存储翻转(IO 声明归一化)后此保留退役:assertable_fields 变
+        # 派生投影(view_only 条目 path),恒归一化形态 —— 短名入参仍被
+        # 构造桥接受(归一等价匹配),投影输出统一 JSONPath。
         rs = ResponseSpec(
             status=200,
             fields=[IOFieldBinding(name="order_id", path="$.order_id")],
             assertable_fields=["order_id"],
         )
-        # 内存值保留原值(短名),但断言校验通过(归一化等价)
-        assert rs.assertable_fields == ["order_id"]
+        # 短名入参归一匹配成功;投影输出为归一化 JSONPath
+        assert rs.assertable_fields == ["$.order_id"]
         # IOFieldBinding.path 已经是 JSONPath,不变
         assert rs.fields[0].path == "$.order_id"
 
@@ -1188,8 +1194,12 @@ class TestDeclarationEntry:
                              channel="carry", type="timestamp")
 
     def test_path_and_name_rules(self) -> None:
+        # 注:原计划标本 "$[0]" 实为合法 JSONPath(根数组下标,is_valid_path
+        # 返回 True,见 TestPathUtils / TestCarryEntry 同款注),非法标本
+        # 沿用本文件既有的 "$["。末段非 FIELD(INDEX/WILDCARD/根)不约束
+        # name —— 沿用 IOFieldBinding 现行行为(spec §5)。
         with pytest.raises(ValueError):
-            DeclarationEntry(name="x", path="$[0]", channel="binding")
+            DeclarationEntry(name="x", path="$[", channel="binding")
         with pytest.raises(ValueError):
             DeclarationEntry(name="wrong", path="$.remark", channel="binding")
         DeclarationEntry(name="$", path="$", channel="view_only")  # 根路径合法(2026-09-02 起无现网实例,规则保留)
