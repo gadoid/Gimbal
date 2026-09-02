@@ -125,6 +125,36 @@ def test_baseline_counts() -> None:
     assert carries == 99
 
 
+BRIDGE_ENDPOINT_IDS = {ep.id for ep in ALL_ENDPOINTS} - {
+    "fin.settlement.create_order"}
+
+
+class TestGolden2Bridge:
+    """②(spec §8):17 桥路线端点(fin 16 + account)settlement 除外。
+    全键 = 既有键(对 io_full_pre_p1)+ declarations(对 io_declarations_p1)。
+    binding 条目 type 恒 None(桥不吸收)—— 与 ③ 基线不混用。"""
+
+    def test_bridge_full_key_equality(self) -> None:
+        base = json.loads(FIXTURE.read_text(encoding="utf-8"))
+        decl = json.loads(FIXTURE_DECL.read_text(encoding="utf-8"))
+        for ep in ALL_ENDPOINTS:
+            if ep.id not in BRIDGE_ENDPOINT_IDS:
+                continue
+            live = _full_dict(ep)
+            _assert_request(base[ep.id], live)
+            ep_decl = decl.get(ep.id) or {}
+            # 空态天然对齐:无声明端点两侧均无 declarations 键/记录 → None==None
+            assert (live.get("request") or {}).get("declarations") == \
+                   ep_decl.get("request")
+            for code, base_resp in base[ep.id]["responses"].items():
+                _assert_response(base_resp, live["responses"][code])
+                assert live["responses"][code].get("declarations") == \
+                       (ep_decl.get("responses") or {}).get(code)
+            for e in (live.get("request") or {}).get("declarations") or []:
+                if e["channel"] == "binding":
+                    assert e["type"] is None  # 桥不吸收(②③ 不混用锚点)
+
+
 class TestSettlementDeclare:
     """③(spec §8):③a 锁既有键(覆写保串);③b 手写与 declare 全键相等。
     与 ② 不混用:③ 的 binding 条目 type 恒为吸收值(非 None)。"""

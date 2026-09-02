@@ -86,3 +86,22 @@ class TestDerived:
                                                         channel="binding")])
         rs.fields[0].name = "mutated"  # type: ignore[index]
         assert rs.fields[0].name == "x"  # 派生每次新建,改快照不回流
+
+
+class TestAssertableSemantics:
+    """⑥(spec §8):assertable 缺省 False 派生回空;声明但未断言保持 False。"""
+
+    def test_default_derives_empty(self) -> None:
+        resp = ResponseSpec(status=200, schema_={},
+                            declarations=[DeclarationEntry(
+                                name="code", path="$.code",
+                                channel="view_only")])
+        assert resp.assertable_fields == []  # B3:缺省 False 派生回空
+
+    def test_audit_detail_keeps_false(self) -> None:
+        # audit_detail 的 audit_id 声明但未断言(现网)→ 桥编译后保持 False
+        from gimbal_plate.systems.fin.endpoint import AUDIT_AUDIT_DETAIL
+        for r in AUDIT_AUDIT_DETAIL.responses.values():
+            for e in r.declarations:
+                if e.name == "audit_id":
+                    assert e.assertable is (e.path in r.assertable_fields)
