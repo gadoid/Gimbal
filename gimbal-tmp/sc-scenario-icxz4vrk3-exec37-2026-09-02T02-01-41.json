@@ -1,0 +1,302 @@
+{
+  "kind": "scenario",
+  "scenarioId": "sc-scenario-icxz4vrk3",
+  "meta": {
+    "name": "订单创建",
+    "description": "委托订单创建",
+    "module": "订单创建",
+    "priority": 1,
+    "author": "",
+    "owner": "Administrator",
+    "tags": [
+      "订单"
+    ],
+    "version": "1.0.0",
+    "createTime": "2026-09-01T07:40:06.738000Z",
+    "expire": false,
+    "requirementRef": [],
+    "system": [
+      "fin"
+    ]
+  },
+  "config": {
+    "setup": [],
+    "teardown": [],
+    "services": {
+      "fin-service": "https://fin-tidb.21eflag.com"
+    },
+    "users": {
+      "codfish": {
+        "url": "https://fin-tidb.21eflag.com/",
+        "username": "18180789650",
+        "password": "yhd123456!",
+        "expires_in": 7200,
+        "token_type": "Authorization"
+      }
+    },
+    "timePolicy": {
+      "kind": "record"
+    },
+    "vars": {
+      "bl_no": {
+        "kind": "random_decorated",
+        "length": 4,
+        "charset": "alnum",
+        "head": "Codfish",
+        "tail": "Test",
+        "separator": "-"
+      },
+      "track_bl_no": {
+        "kind": "random_decorated",
+        "length": 4,
+        "charset": "alnum",
+        "head": "Codfish",
+        "tail": "Test",
+        "separator": "-"
+      }
+    }
+  },
+  "resource": {},
+  "steps": [
+    {
+      "kind": "step",
+      "description": "委托订舱下单",
+      "api": {
+        "kind": "api",
+        "service": "fin-service",
+        "method": "POST",
+        "path": "/api/order/orderEntrust/orderAdd",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "bl_no": "${var.bl_no}",
+          "track_bl_no": "${var.track_bl_no}",
+          "action": "submit",
+          "client_expand_name": "孙奉盛",
+          "client_expand_id": "41",
+          "m_delivery_type": "",
+          "customer_id": "335247043402399744",
+          "customer_name": "",
+          "receive_time_limit": "5",
+          "deposit_refund_day": "60",
+          "deposit_settlement_date": "30",
+          "service_id": "41",
+          "service_name": "孙奉盛",
+          "sale_id": "795",
+          "sale_name": "孙奉盛运营",
+          "operator_id": "786",
+          "operator_name": "",
+          "customer_contact_id": "335247043675029504",
+          "customer_contact_name": "",
+          "main_sort": "易航道-易汇联",
+          "policy_id": "295502731957764096",
+          "policy_name": "sfs易航道-易汇联",
+          "policy_type": "JSZX",
+          "settle_type": "1",
+          "settle_type_name": "月结",
+          "product_id": "2",
+          "product_name": "月结-延长-无保证金",
+          "deposit_type": "2",
+          "deposit_type_name": "无",
+          "period_delay_type": "1",
+          "period_delay_type_name": "延长",
+          "service_items": ["booking_space"],
+          "business_type": "1",
+          "trade_term": "",
+          "carrier": "ONE",
+          "carrier_id": "110",
+          "etd": 1785945600,
+          "atd": 1786377600,
+          "ship_name": "ONE SAN DIEGO",
+          "voy": "6275",
+          "pol": "QINGDAO,CHINA",
+          "pot": "AOSHANWEI,CHINA",
+          "pod": "FREMANTLE,AUSTRALIA",
+          "del": "FREMANTLE,AUSTRALIA",
+          "country_name": "AUSTRALIA",
+          "airline_type": "澳洲",
+          "ocean_type": "远洋",
+          "terms_payment": "T/T",
+          "terms_transport": "CY/CY",
+          "pay_type": "FREIGHT PREPAID",
+          "customer_order_sn": "",
+          "terms_shipment": "测试装运条款",
+          "shipper": "测试发货人",
+          "consignee": "测试收货人",
+          "notifier": "测试通知人",
+          "ship_mark": "测试唛头",
+          "commodity": "测试品名",
+          "notes": "测试备注",
+          "cargo_type": "goods",
+          "packer": "测试包装",
+          "num": "1",
+          "gross_weight": "1.00",
+          "bulk": "999",
+          "sea_trans_cost": "",
+          "teu": "",
+          "volume": "",
+          "volume_desc": "",
+          "order_sn": "",
+          "status": "1",
+          "sea_trans_currency": "USD",
+          "container": [],
+          "message_board": [],
+          "customer_file_list": [],
+          "supplier": [{"is_manual": "", "is_primary": "1", "isset_fee": "0", "isset_supplier": "1", "order_id": "", "order_supplier_id": "", "service_item": "booking_space", "service_item_name": "订舱", "settle_object_id": "15", "settlement_date": None, "pay_time_limit": "10", "supplier_id": "1", "supplier_name": "山东旭禾国际贸易有限公司", "supplier_pay_date": None, "supplier_period": None, "user_id": "41", "user_name": "孙奉盛", "settle_type": "1", "supplier_name_clean": "山东旭禾国际贸易有限公司", "supplier_name_en": "", "tax_number": "91370811MA3F04A516", "settle_object": "山东旭禾国际贸易有限公司", "settle_object_clean": "山东旭禾国际贸易有限公司", "settle_type_name": "月结"}],
+          "remark": "",
+          "payment_type_name": "确定性付款",
+          "payment_type": "1",
+          "policy_type_name": "",
+          "main_ids": "1,3",
+          "pot_cn": null,
+          "pot_port_name": "AOSHANWEI,CHINA",
+          "pol_cn": "青岛港",
+          "pol_port_name": "QINGDAO,CHINA",
+          "pol_country_id": "1",
+          "pol_country": "CHINA",
+          "pol_country_cn": "中国",
+          "del_cn": "弗里曼特尔",
+          "del_port_name": "FREMANTLE,AUSTRALIA",
+          "pod_cn": "弗里曼特尔",
+          "pod_port_name": "FREMANTLE,AUSTRALIA",
+          "country_id": "673",
+          "country_name_cn": "澳大利亚",
+          "entrust_status": 1,
+          "order_file": []
+        }
+      },
+      "strategy": [
+        {
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "tags": [],
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "",
+          "soft": false
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "分页查询委托订单",
+      "api": {
+        "kind": "api",
+        "service": "fin-service",
+        "method": "POST",
+        "path": "/api/order/orderEntrust/orderPage",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "bl_no": "${var.bl_no}",
+          "order_no": "",
+          "page_no": 1,
+          "page_size": 20,
+          "sort_field": "update_time",
+          "sort_order": "desc",
+          "params": {}
+        }
+      },
+      "strategy": [
+        {
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "tags": [],
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "",
+          "soft": false
+        },
+        {
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "tags": [],
+          "kind": "extract",
+          "expression": "$.response_body.data.data[0].order_no",
+          "target": "order_no",
+          "scope": "scenario",
+          "required": true
+        }
+      ]
+    },
+    {
+      "kind": "step",
+      "description": "分页查询委托订单",
+      "api": {
+        "kind": "api",
+        "service": "fin-service",
+        "method": "POST",
+        "path": "/api/order/orderEntrust/orderPage",
+        "headers": {
+          "Authorization": "${auth.codfish.token}"
+        },
+        "timeout": 30
+      },
+      "request": {
+        "kind": "request",
+        "body": {
+          "bl_no": "",
+          "order_no": "",
+          "page_no": 1,
+          "page_size": 20,
+          "sort_field": "update_time",
+          "sort_order": "desc",
+          "params": {}
+        }
+      },
+      "strategy": [
+        {
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "tags": [],
+          "kind": "assertion",
+          "target": "$.response_status",
+          "operator": "eq",
+          "expected": 200,
+          "message": "",
+          "soft": false
+        },
+        {
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "tags": [],
+          "kind": "assign",
+          "source": "$.order_no",
+          "target": "$.request_body.order_no",
+          "scope": "scenario",
+          "required": true
+        },
+        {
+          "order": 0,
+          "enabled": true,
+          "onFailure": "abort",
+          "tags": [],
+          "kind": "extract",
+          "expression": "$.response_body.data.data[0].order_no",
+          "target": "order_no_1",
+          "scope": "scenario",
+          "required": true
+        }
+      ]
+    }
+  ]
+}
