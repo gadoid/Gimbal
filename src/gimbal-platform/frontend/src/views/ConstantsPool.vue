@@ -96,7 +96,12 @@
     >
       <el-form label-width="90px">
         <el-form-item label="名称" required>
-          <el-input v-model="form.name" data-field="name" placeholder="A-Z a-z 0-9 _,1-64 字符" />
+          <el-input
+            v-model="form.name"
+            data-field="name"
+            :disabled="editing"
+            placeholder="A-Z a-z 0-9 _,1-64 字符"
+          />
         </el-form-item>
         <el-form-item label="说明">
           <el-input v-model="form.description" data-field="description" placeholder="可选" />
@@ -315,8 +320,10 @@ const genParams = computed<GeneratorParamDesc[]>(() => genFull.value?.params ?? 
 const NAME_RE = /^[A-Za-z0-9_]{1,64}$/
 const canSubmit = computed(() => {
   if (!NAME_RE.test(form.name)) return false
+  // 仅新建路径需要唯一性检查;编辑时 name 不可改,全库 name 唯一已保证无重复
   if (
-    constantsStore.entries.some((e) => e.name === form.name && e.id !== editing.value?.id)
+    !editing.value &&
+    constantsStore.entries.some((e) => e.name === form.name)
   ) {
     return false
   }
