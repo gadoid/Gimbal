@@ -135,9 +135,11 @@
             </div>
           </div>
           <el-form label-position="top" size="small" class="c-form">
-            <!-- description 来自接口目录 (ep.name/desc), 同为选定接口的事实 — 只读展示 -->
+            <!-- description 事实源是 plate /full(选定接口的契约描述,拉到即显);
+                 step.description 是加入时落草稿的快照(老草稿可能存的是 name 兜底)——
+                 展示链 plate 优先,老草稿显示侧自愈 — 只读展示 -->
             <el-form-item label="description">
-              <p class="desc-readonly">{{ currentStep.description || '—' }}</p>
+              <p class="desc-readonly">{{ currentFull?.description || currentStep.description || '—' }}</p>
             </el-form-item>
 
             <!-- IO 重叠页签(Chrome 造型):选中签与下方 io-card 面板连体;
@@ -1224,7 +1226,8 @@ async function onAddEndpoint(ep: any) {
     const initialBody = deepDefaults(fields)
     const newStep: StepView = {
       kind: 'step',
-      description: ep.name,
+      // plate 契约描述优先(/full → 目录行),name 仅最后兜底
+      description: full?.description || ep.description || ep.name,
       api: {
         kind: 'api',
         service: ep.service,

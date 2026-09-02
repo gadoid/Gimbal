@@ -1,7 +1,9 @@
 <!--
   FieldActionMenu.vue — 字段动作菜单 (#4/#5 变量工作台迁移)
 
-  FieldForm 每个字段控件尾部的 ☰ 菜单(fieldActions 门控开启时渲染):
+  FieldForm 每个字段控件尾部的 ☰ 按钮 + 浮层菜单(fieldActions 门控开启时
+  由 FieldForm 渲染本组件;开合状态 menuField 由 FieldForm 持有,同屏至多
+  一个 — 经 open prop 下传 / toggle 事件上抛):
     ├─ 引用共享变量 (Reference)     → 子列表 config 出身 → 插 ${var.x} 文本
     ├─ 设为变量 (Promote)          → emit fieldPromote(直填值提升为 ${var.x},命名/替换在 FieldForm 完成)
     ├─ 从响应提取 (Extract)         → emit fieldExtract(快捷 extract 策略)
@@ -12,7 +14,13 @@
   子列表用就地展开(非 el-dropdown 嵌套子菜单 — 测试与 a11y 都更稳)。
 -->
 <template>
-  <div class="fa-menu" @click.stop>
+  <button
+    type="button"
+    class="cand-btn fa-menu-btn"
+    title="变量与策略动作"
+    @click.stop="emit('toggle')"
+  >☰</button>
+  <div v-if="open" class="fa-menu" @click.stop>
     <!-- 主菜单(未展开子列表时) -->
     <template v-if="!subOpen">
       <button v-if="domain !== 'response'" type="button" class="fa-item" @click="subOpen = 'ref'">
@@ -68,7 +76,7 @@
         :class="{ disabled: e.disabled }"
         :disabled="e.disabled"
         :title="e.disabled ? `步骤 ${(e.stepIdx ?? 0) + 1} 才产出` : undefined"
-        @click="!e.disabled && emit('fieldAssign', field, e.name)"
+        @click="pickInject(e)"
       >
         <span class="fa-name">{{ e.name }}</span>
         <span class="fa-badge" :class="e.origin">{{ e.origin }}</span>
@@ -83,14 +91,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { IOFieldBinding } from '@/types/plate'
 import type { VarEntry } from '@/utils/var-registry'
 
 const props = defineProps<{
   /** 当前字段(提取/断言/注入事件的载体) */
   field: IOFieldBinding
-  /** 当前字段值(预留给引用插入位置的上下文;菜单本身不改值) */
+  /** 当前字段值(设为变量的已有模板检测;菜单本身不改值) */
   value?: string
   /** 引用子列表:config 出身 */
   varChoices: VarEntry[]
@@ -101,11 +109,15 @@ const props = defineProps<{
    * 'response'(契约参考,仅 提取/断言 两项 — 无值可插、无 request_body 可写)
    */
   domain?: 'request' | 'response'
+  /** 浮层开合由 FieldForm 持有(同屏至多一个),经 open 下传 */
+  open?: boolean
 }>()
 
 const emit = defineEmits<{
+  /** ☰ 点击(开合切换;FieldForm 管理 menuField 单开状态) */
+  'toggle': []
   'close': []
-  /** 插入 ${var.<name>}(FieldForm 在本组件外完成值追加) */
+  /** 插入 ${var.<name>}(FieldForm 在本组件外完成值写入) */
   'varInsert': [name: string]
   'fieldExtract': [field: IOFieldBinding]
   'fieldAssign': [field: IOFieldBinding, varName: string]
@@ -116,6 +128,16 @@ const emit = defineEmits<{
 
 /** 子列表开合:null=主菜单 / 'ref'=引用 / 'inject'=注入 */
 const subOpen = ref<null | 'ref' | 'inject'>(null)
+// 浮层关闭时重置子列表态:重开回主菜单,不残留上次的子列表
+watch(() => props.open, (v) => { if (!v) subOpen.value = null })
+
+/** 注入子列表选中即返回(需求2):上抛 fieldAssign 后整卡收起,免 ‹ 返回 */
+function pickInject(e: VarEntry & { disabled?: boolean }) {
+  if (e.disabled) return
+  emit('fieldAssign', props.field, e.name)
+  subOpen.value = null
+  emit('close')
+}
 
 function emitExtract() { emit('fieldExtract', props.field); emit('close') }
 function emitAssert() { emit('fieldAssert', props.field); emit('close') }
@@ -123,6 +145,18 @@ function emitPromote() { emit('fieldPromote', props.field); emit('close') }
 </script>
 
 <style scoped>
+/* ☰ 触发按钮(原 FieldForm 内联,收编进本组件 — 与候选 ▾ 同位同尺寸) */
+.cand-btn {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px;
+  border: none; border-radius: 4px; background: transparent;
+  color: #94a3b8; cursor: pointer; font-size: 10px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.cand-btn:hover { background: #e2e8f0; color: #475569; }
+.fa-menu-btn { color: #4f46e5; }
+.fa-menu-btn:hover { background: #e0e7ff; color: #3730a3; }
+
 /* 就地浮层(与 FieldForm cand-list 同模式:绝对定位 + 阴影) */
 .fa-menu {
   position: absolute; top: calc(100% + 2px); right: 0;

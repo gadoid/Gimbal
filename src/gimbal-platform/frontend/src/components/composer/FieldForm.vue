@@ -7,6 +7,10 @@
 
   path 字段是 JSONPath (如 "$.customer_id") — 表单值通过 path 写入 body
   valueGetter/setter 通过 JSONPath util 双向转换
+
+  typed 字段(number/boolean/select)的模板值支持:值为 ${var.x} 串时控件
+  降级为 text 输入 — 浏览器 number input 拒显非数字、checkbox/select 无法
+  承载串值;运行期引擎对整串模板按变量原类型解析,前端只需可见可编辑。
 -->
 <template>
   <div class="field-form">
@@ -47,13 +51,6 @@
             >▾</button>
             <!-- 字段动作菜单(#4/#5 变量工作台):引用/提取/注入/断言。
                  fieldActions 门控 — 仅 Canvas 请求体场景传 -->
-            <button
-              v-if="fieldActions"
-              type="button"
-              class="cand-btn fa-menu-btn"
-              title="变量与策略动作"
-              @click="toggleMenu(f)"
-            >☰</button>
             <div v-if="candOpenField === f.name" class="cand-list">
               <button
                 v-for="c in candidatesFor(f)"
@@ -66,60 +63,76 @@
               </button>
             </div>
             <FieldActionMenu
-              v-if="fieldActions && menuField === f.name"
+              v-if="fieldActions"
               :field="f"
               :value="String(getValue(f) ?? '')"
               :var-choices="varChoices ?? []"
               :inject-choices="injectChoices ?? []"
               :domain="domain"
+              :open="menuField === f.name"
+              @toggle="toggleMenu(f)"
               @close="menuField = null"
-              @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
-              @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
-              @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+              @var-insert="(name) => onMenuVarInsert(f, name)"
+              @field-extract="(field) => emit('fieldExtract', field)"
+              @field-assign="(field, name) => emit('fieldAssign', field, name)"
               @field-promote="(field) => onFieldPromote(field)"
-              @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
+              @field-assert="(field) => emit('fieldAssert', field)"
             />
           </div>
         </div>
 
-        <!-- number -->
+        <!-- number(值为模板串 → 降级 text 输入,见文件头注释) -->
         <div v-else-if="f.ui_kind === 'number'" class="ctl-with-var">
           <div class="ctl-cand-wrap">
             <input
+              v-if="isTpl(getValue(f))"
+              type="text"
+              class="ctl tpl"
+              :value="getValue(f) as string"
+              :placeholder="placeholderFor(f)"
+              :disabled="readonly"
+              @input="e => setValueTplNum(f, (e.target as HTMLInputElement).value)"
+            />
+            <input
+              v-else
               type="number"
               class="ctl"
               :value="getValue(f) as number | string"
               :placeholder="placeholderFor(f)"
               :disabled="readonly"
-              @input="e => setValue(f, Number((e.target as HTMLInputElement).value))"
+              @input="e => setValueNum(f, e)"
             />
-            <button
-              v-if="fieldActions"
-              type="button"
-              class="cand-btn fa-menu-btn"
-              title="变量与策略动作"
-              @click="toggleMenu(f)"
-            >☰</button>
             <FieldActionMenu
-              v-if="fieldActions && menuField === f.name"
+              v-if="fieldActions"
               :field="f"
               :value="String(getValue(f) ?? '')"
               :var-choices="varChoices ?? []"
               :inject-choices="injectChoices ?? []"
               :domain="domain"
+              :open="menuField === f.name"
+              @toggle="toggleMenu(f)"
               @close="menuField = null"
-              @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
-              @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
-              @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+              @var-insert="(name) => onMenuVarInsert(f, name)"
+              @field-extract="(field) => emit('fieldExtract', field)"
+              @field-assign="(field, name) => emit('fieldAssign', field, name)"
               @field-promote="(field) => onFieldPromote(field)"
-              @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
+              @field-assert="(field) => emit('fieldAssert', field)"
             />
           </div>
         </div>
 
-        <!-- boolean -->
+        <!-- boolean(值为模板串 → 降级 text 输入) -->
         <div v-else-if="f.ui_kind === 'boolean'" class="ctl-with-var">
-          <label class="ctl-bool">
+          <input
+            v-if="isTpl(getValue(f))"
+            type="text"
+            class="ctl tpl"
+            :value="getValue(f) as string"
+            :placeholder="placeholderFor(f)"
+            :disabled="readonly"
+            @input="e => setValue(f, (e.target as HTMLInputElement).value)"
+          />
+          <label v-else class="ctl-bool">
             <input
               type="checkbox"
               :checked="Boolean(getValue(f))"
@@ -128,31 +141,37 @@
             />
             <span>{{ getValue(f) ? 'true' : 'false' }}</span>
           </label>
-          <button
-            v-if="fieldActions"
-            type="button"
-            class="cand-btn fa-menu-btn"
-            title="变量与策略动作"
-            @click="toggleMenu(f)"
-          >☰</button>
           <FieldActionMenu
-            v-if="fieldActions && menuField === f.name"
+            v-if="fieldActions"
             :field="f"
             :value="String(getValue(f) ?? '')"
             :var-choices="varChoices ?? []"
             :inject-choices="injectChoices ?? []"
+            :domain="domain"
+            :open="menuField === f.name"
+            @toggle="toggleMenu(f)"
             @close="menuField = null"
-            @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
-            @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
-            @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+            @var-insert="(name) => onMenuVarInsert(f, name)"
+            @field-extract="(field) => emit('fieldExtract', field)"
+            @field-assign="(field, name) => emit('fieldAssign', field, name)"
             @field-promote="(field) => onFieldPromote(field)"
-            @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
+            @field-assert="(field) => emit('fieldAssert', field)"
           />
         </div>
 
-        <!-- select -->
+        <!-- select(值为模板串 → 降级 text 输入:选项列表不含模板值) -->
         <div v-else-if="f.ui_kind === 'select' && f.enum" class="ctl-with-var">
+          <input
+            v-if="isTpl(getValue(f))"
+            type="text"
+            class="ctl tpl"
+            :value="getValue(f) as string"
+            :placeholder="placeholderFor(f)"
+            :disabled="readonly"
+            @input="e => setValue(f, (e.target as HTMLInputElement).value)"
+          />
           <select
+            v-else
             class="ctl"
             :value="getValue(f) as string"
             :disabled="readonly"
@@ -161,25 +180,21 @@
             <option value="">— select —</option>
             <option v-for="opt in f.enum" :key="String(opt)" :value="String(opt)">{{ String(opt) }}</option>
           </select>
-          <button
-            v-if="fieldActions"
-            type="button"
-            class="cand-btn fa-menu-btn"
-            title="变量与策略动作"
-            @click="toggleMenu(f)"
-          >☰</button>
           <FieldActionMenu
-            v-if="fieldActions && menuField === f.name"
+            v-if="fieldActions"
             :field="f"
             :value="String(getValue(f) ?? '')"
             :var-choices="varChoices ?? []"
             :inject-choices="injectChoices ?? []"
+            :domain="domain"
+            :open="menuField === f.name"
+            @toggle="toggleMenu(f)"
             @close="menuField = null"
-            @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
-            @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
-            @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+            @var-insert="(name) => onMenuVarInsert(f, name)"
+            @field-extract="(field) => emit('fieldExtract', field)"
+            @field-assign="(field, name) => emit('fieldAssign', field, name)"
             @field-promote="(field) => onFieldPromote(field)"
-            @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
+            @field-assert="(field) => emit('fieldAssert', field)"
           />
         </div>
 
@@ -193,25 +208,21 @@
             :disabled="readonly"
             @input="e => setValue(f, (e.target as HTMLTextAreaElement).value)"
           />
-          <button
-            v-if="fieldActions"
-            type="button"
-            class="cand-btn fa-menu-btn"
-            title="变量与策略动作"
-            @click="toggleMenu(f)"
-          >☰</button>
           <FieldActionMenu
-            v-if="fieldActions && menuField === f.name"
+            v-if="fieldActions"
             :field="f"
             :value="String(getValue(f) ?? '')"
             :var-choices="varChoices ?? []"
             :inject-choices="injectChoices ?? []"
+            :domain="domain"
+            :open="menuField === f.name"
+            @toggle="toggleMenu(f)"
             @close="menuField = null"
-            @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
-            @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
-            @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+            @var-insert="(name) => onMenuVarInsert(f, name)"
+            @field-extract="(field) => emit('fieldExtract', field)"
+            @field-assign="(field, name) => emit('fieldAssign', field, name)"
             @field-promote="(field) => onFieldPromote(field)"
-            @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
+            @field-assert="(field) => emit('fieldAssert', field)"
           />
         </div>
 
@@ -225,25 +236,21 @@
             :disabled="readonly"
             @input="e => setValue(f, parseJsonOrRaw((e.target as HTMLTextAreaElement).value))"
           />
-          <button
-            v-if="fieldActions"
-            type="button"
-            class="cand-btn fa-menu-btn dark"
-            title="变量与策略动作"
-            @click="toggleMenu(f)"
-          >☰</button>
           <FieldActionMenu
-            v-if="fieldActions && menuField === f.name"
+            v-if="fieldActions"
             :field="f"
             :value="String(getValue(f) ?? '')"
             :var-choices="varChoices ?? []"
             :inject-choices="injectChoices ?? []"
+            :domain="domain"
+            :open="menuField === f.name"
+            @toggle="toggleMenu(f)"
             @close="menuField = null"
-            @var-insert="(name) => { setValue(f, String(getValue(f) ?? '') + `\${var.${name}}`); emit('varInsert', f, name); menuField = null }"
-            @field-extract="(field) => { emit('fieldExtract', field); menuField = null }"
-            @field-assign="(field, name) => { emit('fieldAssign', field, name); menuField = null }"
+            @var-insert="(name) => onMenuVarInsert(f, name)"
+            @field-extract="(field) => emit('fieldExtract', field)"
+            @field-assign="(field, name) => emit('fieldAssign', field, name)"
             @field-promote="(field) => onFieldPromote(field)"
-            @field-assert="(field) => { emit('fieldAssert', field); menuField = null }"
+            @field-assert="(field) => emit('fieldAssert', field)"
           />
         </div>
 
@@ -423,6 +430,19 @@ function toggleMenu(f: IOFieldBinding) {
 }
 
 /**
+ * 菜单"引用共享变量"插值:字符串现值追加(部分模板 ORD-${var.x});
+ * 非字符串(number/boolean)或空值整串替换 — String(5) 拼出
+ * '5${var.x}' 是垃圾值,typed 字段模板只能整串。
+ */
+function onMenuVarInsert(f: IOFieldBinding, name: string) {
+  const cur = getValue(f)
+  const tpl = `\${var.${name}}`
+  setValue(f, typeof cur === 'string' && cur !== '' ? cur + tpl : tpl)
+  emit('varInsert', f, name)
+  menuField.value = null
+}
+
+/**
  * 菜单"设为变量"(D8 提升语义):与"引用共享变量"的**追加**不同 —
  * ① 值整串替换为 ${var.<name>};② 变量名默认取字段名,同名(共享
  * 变量/extract 任一出身)自动加 _2/_3 后缀;③ 原值随 varPromote
@@ -441,6 +461,30 @@ function onFieldPromote(f: IOFieldBinding) {
   setValue(f, `\${var.${name}}`)
   emit('varPromote', f, name, original)
   menuField.value = null
+}
+
+/**
+ * 值是否为模板串(${...})— number/boolean/select 控件遇模板降级
+ * text 输入:number input 拒显非数字、checkbox/select 无法承载串值。
+ * 运行期引擎(resolve_template)对整串模板按变量原类型解析,合法。
+ */
+function isTpl(v: unknown): boolean {
+  return typeof v === 'string' && v.includes('${')
+}
+
+/** number 控件输入:清空存 ''(对齐「其他字段」分支约定,不落幻影 0) */
+function setValueNum(f: IOFieldBinding, e: Event) {
+  const v = (e.target as HTMLInputElement).value
+  setValue(f, v === '' ? '' : Number(v))
+}
+
+/** number 字段模板态输入:纯数字串回归 number;模板/混排保持字符串 */
+function setValueTplNum(f: IOFieldBinding, v: string) {
+  if (v !== '' && !isTpl(v) && !Number.isNaN(Number(v))) {
+    setValue(f, Number(v))
+    return
+  }
+  setValue(f, v)
 }
 
 // Type A + Type B: 有 binding 的都显示; Type C (无 binding 的 schema 字段) 走 hiddenFields 不在此显示
@@ -619,10 +663,6 @@ function formatJson(v: unknown): string {
   font-family: var(--font-mono); font-size: 11px; color: #334155;
 }
 
-/* ☰ 字段动作菜单按钮(#4/#5):与候选 ▾ 同位同尺寸 */
-.fa-menu-btn { color: #4f46e5; }
-.fa-menu-btn:hover { background: #e0e7ff; color: #3730a3; }
-
 .field-label {
   display: flex; align-items: center; gap: 6px;
   font-size: 12px; font-weight: 500;
@@ -675,6 +715,12 @@ function formatJson(v: unknown): string {
 .ctl:hover { border-color: #c7d2fe; }
 .ctl:focus { background: #fff; border-color: #4f46e5; box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15); }
 .ctl::placeholder { color: #cbd5e1; }
+
+/* 模板态降级输入(typed 字段值为 ${...}):等宽字体 + 靛蓝底提示语域切换 */
+.ctl.tpl {
+  font-family: var(--font-mono); font-size: 12px;
+  border-color: #c7d2fe; background: #f5f7ff;
+}
 
 .ctl-area { resize: vertical; min-height: 60px; }
 .ctl-code {

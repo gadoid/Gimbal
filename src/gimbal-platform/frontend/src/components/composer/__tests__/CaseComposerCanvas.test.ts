@@ -14,7 +14,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import CaseComposerCanvas from '@/components/composer/CaseComposerCanvas.vue'
-import { resolveResponsePaths } from '@/api/scenario-composer'
+import { getFullEndpoint, resolveResponsePaths } from '@/api/scenario-composer'
 import type { StepView } from '@/types/plate'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
@@ -39,6 +39,8 @@ vi.mock('@/api/scenario-composer', () => ({
   }[kind] ?? { kind, label: kind, phase: 'after_request', fields: [], base_fields: [] })),
   resolveResponsePaths: vi.fn().mockResolvedValue([]),
   getFullEndpoint: vi.fn().mockImplementation((endpointId: string) => Promise.resolve({
+    // /full 顶层 description(接口编辑页只读展示的事实源)
+    description: 'ep-1 plate 契约描述',
     request: {
       // /full 请求字段契约(现拉渲染的主数据源)。ep-1: orderId 平铺;
       // ep-2(T6 嵌套注入用): nested.oid;
@@ -891,5 +893,70 @@ describe('CaseComposerCanvas — B1c 路径生成统一走 plate 解析(不猜)'
     const ex = s0.strategy.find((s: any) => s.kind === 'extract') as any
     expect(ex.expression).toBe('')
     w.unmount()
+  })
+})
+
+describe('CaseComposerCanvas — description 取 plate(问题2)', () => {
+  it('desc-1: 编辑页 description 展示 /full 的 description(老草稿显示侧自愈,非 step.description)', async () => {
+    const { w } = mountCanvas([mkStep()])
+    await flushPromises()
+    // mkStep.description='test step' 是旧的 name 兜底;展示以 plate 事实源优先
+    expect(w.find('.desc-readonly').text()).toBe('ep-1 plate 契约描述')
+    w.unmount()
+  })
+
+  it('desc-2: 目录加入 → step.description 落 plate description(非 ep.name)', async () => {
+    // catalog 列表走原生 fetch(绕 axios /api 前缀)→ stub
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { items: [{
+        id: 'ep-d', system: 'fin', service: 'fin-service', name: '下单',
+        description: '创建订单', api: { method: 'POST', path: '/o' },
+      }] } }),
+    }))
+    // ep-d 定向覆写(catalog 选中拉 /full 与 Canvas ensureEndpointFull 两拉都命中;
+    // 不能用 Once — mount 时 ep-1 首拉就会消费掉共享 mock 的 Once 队列)
+    const origImpl = vi.mocked(getFullEndpoint).getMockImplementation()!
+    try {
+      vi.mocked(getFullEndpoint).mockImplementation(async (endpointId: string) =>
+        endpointId === 'ep-d'
+          ? { id: 'ep-d', description: '创建订单', request: { fields: [] }, responses: {} } as any
+          : origImpl(endpointId))
+      const updates: StepView[][] = []
+      const orch = ref<Orchestration>(mkOrch(1))
+      const inserter = useInsertTarget()
+      const Parent = defineComponent({
+        setup() {
+          provide(INSERT_TARGET_KEY, inserter)
+          return () => h(CaseComposerCanvas, {
+            steps: [mkStep()],
+            orchestration: orch.value,
+            'onUpdate:steps': (v: StepView[]) => { updates.push(v) },
+            'onUpdate:orchestration': () => {},
+          })
+        },
+      })
+      const w = mount(Parent, { global: { plugins: [ElementPlus, activePinia] } })
+      await flushPromises()
+      await w.find('.add-step').trigger('click')
+      await flushPromises()
+      // 树:catalog 自动展开首个 system → 点 service 展开 endpoints → 点 endpoint
+      await w.find('.tree-service-node').trigger('click')
+      await flushPromises()
+      await w.find('.tree-endpoint-node').trigger('click')
+      await flushPromises()
+      const addBtn = w.findAll('button').find((b) => b.text().includes('加入编排画布'))
+      expect(addBtn).toBeTruthy()
+      await addBtn!.trigger('click')
+      await flushPromises()
+      await flush()
+      const added = updates.at(-1)?.[1]
+      expect(added).toBeTruthy()
+      expect(added!.description).toBe('创建订单')
+      w.unmount()
+    } finally {
+      vi.mocked(getFullEndpoint).mockImplementation(origImpl)
+      vi.unstubAllGlobals()
+    }
   })
 })
