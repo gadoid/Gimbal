@@ -230,9 +230,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import ScenarioExportMenu from '@/components/ScenarioExportMenu.vue'
 import CaseComposerMeta from '@/components/composer/CaseComposerMeta.vue'
 import CaseComposerResource from '@/components/composer/CaseComposerResource.vue'
@@ -281,6 +281,29 @@ const saving = ref(false)
 const dirty = ref(false)
 const lastSavedAt = ref<Date | null>(null)
 const saveState = ref<'clean' | 'dirty' | 'saving'>('clean')
+
+// ── 防抖自动保存(仅已保存过的场景)──────────────────────────
+// 编辑停顿 2.5s 自动落库;新建场景(无服务端身份)不自动 — 首存仍手动,
+// 防半成品草稿污染场景库。失败静默:指示灯保持「未保存」,下次编辑再试。
+const AUTOSAVE_DEBOUNCE_MS = 2500
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleAutoSave(): void {
+  if (autoSaveTimer !== null) clearTimeout(autoSaveTimer)
+  autoSaveTimer = setTimeout(() => {
+    autoSaveTimer = null
+    void maybeAutoSave()
+  }, AUTOSAVE_DEBOUNCE_MS)
+}
+
+async function maybeAutoSave(): Promise<void> {
+  if (!scenario.value || !meta.value.name || !dirty.value) return
+  if (saving.value) {
+    scheduleAutoSave()   // 手动/步进保存进行中 → 顺延一个窗口再试
+    return
+  }
+  await saveDraft(false, false, true)
+}
 
 const scenario = ref<Scenario | null>(null)
 const dataSets = ref<DataSetSummary[]>([])
@@ -349,10 +372,16 @@ const canRun = computed(() => !!scenario.value && steps.value.length > 0)
 /** stepTo 下拉的展示名:平台编排态 orchestration.steps[].name(plate Step 无 name) */
 const stepNames = computed(() => orchestration.value.steps.map((s) => s.name))
 
-/** 打开运行弹框:先开弹层(网络慢不阻塞交互),再并行拉 上次运行覆盖层
+/** 打开运行弹框:dirty 时先 flush 落库(运行按 scenarioId 取服务端版本,
+ *  不 flush 则跑的是最后一次保存的旧编排);flush 失败中止 — 宁可不跑,
+ *  不跑旧版。之后先开弹层(网络慢不阻塞交互),再并行拉 上次运行覆盖层
  *  与 owner 凭证池别名(两者失败均静默 — 不阻塞运行)。 */
 async function openRunDialog() {
   if (!scenarioId.value) return
+  if (scenario.value && dirty.value && meta.value.name) {
+    const flushed = await saveDraft(false, false, true)
+    if (!flushed) return
+  }
   runDialogOpen.value = true
   if (ownerAuthAliases.value.length === 0) {
     listAuthSessions()
@@ -383,11 +412,21 @@ const progressPct = computed(() => {
 })
 
 // Mark dirty on any draft change
+// suppressDirty:loadScenario 的整包替换不是编辑 — deep watch 在赋值上
+// 同样触发(pre-flush 微任务),不抑制则每次加载都伪 dirty → 加载即自动保存。
+// editsDuringSave:保存进行中的编辑 — 不当场翻转 saveState(灯仍显 saving),
+// 但 dirty 置位;保存成功后据此不清 dirty,防抖再存最新草稿(编辑不被吞)。
+let suppressDirty = false
+let editsDuringSave = false
 watch([definition, orchestration], () => {
-  if (saveState.value !== 'saving') {
-    dirty.value = true
+  if (suppressDirty) return
+  dirty.value = true
+  if (saveState.value === 'saving') {
+    editsDuringSave = true   // 灯仍显 saving;保存完成后再转 dirty
+  } else {
     saveState.value = 'dirty'
   }
+  scheduleAutoSave()   // 编辑即重设防抖窗口(尾随去抖)
 }, { deep: true })
 
 // ── 把进行中对象同步到共享 draft store (任意 step / 任意时刻都可达) ──
@@ -469,6 +508,38 @@ const catalogNames = ref<Set<string>>(new Set())
 /** 目录权威映射 service → system(endpoint 条目自带 system 字段)。 */
 const systemByService = ref<Map<string, string>>(new Map())
 
+// ── 离开防线:dirty 时拦截(自动保存把窗口缩到 ≤2.5s,这里是兜底;
+//    新建未保存场景无自动保存,全靠这里)──────────────────────────
+function onBeforeUnload(e: BeforeUnloadEvent): void {
+  if (!dirty.value) return
+  e.preventDefault()
+  e.returnValue = ''   // 旧版 Chrome 要求显式赋值才弹原生提示
+}
+
+// 三选(distinguishCancelAndClose):确认=保存并离开;cancel=放弃修改并
+// 离开;ESC/关闭=留下。无名/未保存过的场景没有「保存并离开」可走 — 确认
+// 钮退化为直接离开。保存失败 → 留在页面(错误 toast 由 manual 路径弹出)。
+onBeforeRouteLeave(async () => {
+  if (!dirty.value) return true
+  const canSave = Boolean(scenario.value && meta.value.name)
+  try {
+    await ElMessageBox.confirm(
+      `当前有未保存的修改${canSave ? '' : '(场景尚未保存过)'},离开将丢失本次编辑。`,
+      '未保存的修改',
+      {
+        type: 'warning',
+        distinguishCancelAndClose: true,
+        confirmButtonText: canSave ? '保存并离开' : '离开',
+        cancelButtonText: '放弃修改并离开',
+      },
+    )
+  } catch (action) {
+    if (action === 'cancel') return true   // 放弃修改并离开
+    return false                           // close(ESC/×)→ 留下
+  }
+  return canSave ? await saveDraft(false, false, false) : true
+})
+
 // ── lifecycle ──
 onMounted(async () => {
   const stepParam = parseInt(route.query.step as string) || 1
@@ -490,6 +561,7 @@ onMounted(async () => {
   if (scenario.value) checkSystemMismatch()
   if (rootEl.value) inserter.start(rootEl.value)
   void constantsStore.ensureEntries().catch(() => {})
+  window.addEventListener('beforeunload', onBeforeUnload)
 })
 
 // 运行成功后跳详情页的延迟定时器 — 组件卸载时必须清除，否则用户在
@@ -500,6 +572,11 @@ onUnmounted(() => {
     clearTimeout(runNavTimer)
     runNavTimer = null
   }
+  if (autoSaveTimer !== null) {
+    clearTimeout(autoSaveTimer)
+    autoSaveTimer = null
+  }
+  window.removeEventListener('beforeunload', onBeforeUnload)
   inserter.stop()
 })
 
@@ -541,6 +618,7 @@ watch(() => route.query.step, (q) => {
 })
 
 async function loadScenario() {
+  suppressDirty = true   // 加载赋值不算编辑;nextTick 后 watch 已冲刷,复位
   try {
     const s = await api.getScenario(scenarioId.value!)
     scenario.value = s
@@ -590,8 +668,13 @@ async function loadScenario() {
           runSchemes: persistedSchemes,
         }
     await loadDataSets()
+    dirty.value = false
+    editsDuringSave = false
     saveState.value = 'clean'
+    await nextTick()    // 等 deep watch 冲完加载赋值,再解除抑制
+    suppressDirty = false
   } catch (e) {
+    suppressDirty = false
     showError('加载场景', undefined, (e as Error).message)
   }
 }
@@ -639,12 +722,15 @@ function genScenarioId(name: string): string {
   return id.length > 128 ? id.slice(0, 128) : id
 }
 
-async function saveDraft(advance = false, manual = true) {
+/** silent=true(防抖自动保存路径):失败不弹 toast,指示灯保持「未保存」,
+ *  下次编辑重新调度 — 防后端掉线时每 2.5s 弹一次窗。
+ *  返回是否成功 — openRunDialog/离开守卫据此决定「中止跑旧版/留在页面」。 */
+async function saveDraft(advance = false, manual = true, silent = false): Promise<boolean> {
   if (!meta.value.name) {
     // scenarioId 不再前端必填校验:新建时自动生成,编辑时由路由回填并锁定。
     ElMessage.warning('请先在 ① 基本信息 中填写 name')
     onStepClick(0)
-    return
+    return false
   }
   // 保存前 lint(C10/§4.3):不拦截保存,只提醒;自动保存(步进)不弹 toast
   const lintWarns = lintDraft(definition.value as Parameters<typeof lintDraft>[0])
@@ -658,6 +744,7 @@ async function saveDraft(advance = false, manual = true) {
   }
   saving.value = true
   saveState.value = 'saving'
+  editsDuringSave = false   // 本次保存的编辑快照基线
   try {
     // 容器草稿:definition(plate) + orchestration(平台渲染)
     const draft: ScenarioDraft = {
@@ -693,13 +780,19 @@ async function saveDraft(advance = false, manual = true) {
     // 新建场景后拉一次数据集列表(空列表,但保持状态一致)
     if (!dataSets.value.length) await loadDataSets()
     lastSavedAt.value = new Date()
-    dirty.value = false
-    saveState.value = 'clean'
+    if (!editsDuringSave) {
+      dirty.value = false
+      saveState.value = 'clean'
+    } else {
+      saveState.value = 'dirty'   // 保存中又有编辑:不清 dirty,防抖续存
+    }
     if (advance) {
       onStepClick(Math.min(STEPS.length - 1, stepIdx.value + 1))
     }
+    return true
   } catch (e) {
-    showError('保存', undefined, (e as Error).message)
+    if (!silent) showError('保存', undefined, (e as Error).message)
+    return false
   } finally {
     saving.value = false
   }
