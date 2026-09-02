@@ -40,11 +40,18 @@ async def test_write_requires_admin(client):
 
 
 async def test_service_fields_aggregates_carry_face(client, plate):
-    """该服务全部接口的 carry 面并集(plate /full 聚合)。"""
+    """该服务全部接口的 carry 面并集(plate /full 聚合)。
+
+    P1 起读 request.declarations 的 carry 通道条目(spec §7 P1.3);
+    binding 条目被过滤(消费面只取 carry 通道)。"""
     plate.items = [{"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
                     "service": "fin-service"}]
-    plate.fulls = {"fin.ep1": {"request": {"carry": {
-        "$.remark": {"type": "string", "description": "备注"}}}}}
+    plate.fulls = {"fin.ep1": {"request": {"declarations": [
+        {"path": "$.order_id", "channel": "binding", "type": None,
+         "description": "业务订单号"},
+        {"path": "$.remark", "channel": "carry", "type": "string",
+         "description": "备注"},
+    ]}}}
     admin = await _admin(client)
     r = await client.get("/api/carry/bindings/fin-service/fields",
                          headers=admin)
@@ -65,8 +72,10 @@ async def test_service_fields_degraded_when_single_full_fails(client, plate):
         {"id": "fin.ep3", "version": "1.0.0", "updated_at": None,
          "service": "fin-service"},
     ]
-    plate.fulls = {"fin.ep1": {"request": {"carry": {
-        "$.remark": {"type": "string", "description": "备注"}}}}}
+    plate.fulls = {"fin.ep1": {"request": {"declarations": [
+        {"path": "$.remark", "channel": "carry", "type": "string",
+         "description": "备注"},
+    ]}}}
     # ep2:/full 抛 ConnectError → PlateUnavailableError;
     # ep3:列表有但 fulls 缺席 → 404 → None(端点已下架)。
     plate.full_down = {"fin.ep2"}
@@ -77,6 +86,33 @@ async def test_service_fields_degraded_when_single_full_fails(client, plate):
     body = r.json()
     assert body["degraded"] is True
     # 可达端点的面照常聚合(部分结果,不是全空)
+    assert body["fields"] == [
+        {"path": "$.remark", "type": "string", "description": "备注"}]
+
+
+async def test_service_fields_tolerates_missing_declarations(client, plate):
+    """⑨ 缺键容忍:无声明端点(request 缺席、响应 schema-only →
+    无 declarations 键)聚合不报错、不产空占位条目。"""
+    plate.items = [
+        {"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
+         "service": "fin-service"},
+        {"id": "fin.account", "version": "1.0.0", "updated_at": None,
+         "service": "fin-service"},
+    ]
+    plate.fulls = {
+        "fin.ep1": {"request": {"declarations": [
+            {"path": "$.remark", "channel": "carry", "type": "string",
+             "description": "备注"},
+        ]}},
+        # account 形态:request 整体缺席(零声明端点)
+        "fin.account": {"responses": {"200": {"status": 200}}},
+    }
+    admin = await _admin(client)
+    r = await client.get("/api/carry/bindings/fin-service/fields",
+                         headers=admin)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["degraded"] is False
     assert body["fields"] == [
         {"path": "$.remark", "type": "string", "description": "备注"}]
 
