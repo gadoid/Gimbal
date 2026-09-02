@@ -14,6 +14,7 @@ from gimbal_plate.http.views import EndpointDetailView
 from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
 
 FIXTURE = Path(__file__).parent / "fixtures" / "io_full_pre_p1.json"
+FIXTURE_DECL = Path(__file__).parent / "fixtures" / "io_declarations_p1.json"
 CAPTURE = bool(os.environ.get("GIMBAL_GOLDEN_CAPTURE"))
 LEGACY_REQUEST_KEYS = {"body_type", "fields", "schema", "carry"}
 LEGACY_RESPONSE_KEYS = {"status", "description", "fields", "assertable_fields", "schema"}
@@ -25,6 +26,30 @@ def _full_dict(ep) -> dict:
 
 def _ep_payloads() -> dict:
     return {ep.id: _full_dict(ep) for ep in ALL_ENDPOINTS}
+
+
+def _decl_payloads() -> dict:
+    """declarations 快照:从 _full_dict 里摘取 declarations 键。
+
+    必须与 Task 9 ② 的比对走同一序列化出口(EndpointDetailView.
+    model_dump(mode="json", exclude_none=True))。若另走
+    declarations_view() 旁路捕获,exclude_none 对嵌套 dict 的裁剪
+    行为差异会在 ② 处爆成假红;同出口捕获,任何裁剪两侧自然抵消。
+    """
+    out = {}
+    for ep in ALL_ENDPOINTS:
+        full = _full_dict(ep)
+        d: dict = {}
+        if (full.get("request") or {}).get("declarations"):
+            d["request"] = full["request"]["declarations"]
+        resp = {str(code): r["declarations"]
+                for code, r in full.get("responses", {}).items()
+                if r.get("declarations")}
+        if resp:
+            d["responses"] = resp
+        if d:
+            out[ep.id] = d
+    return out
 
 
 def test_capture_or_equal() -> None:
@@ -60,6 +85,18 @@ def _assert_response(base: dict, live: dict) -> None:
     for k in LEGACY_RESPONSE_KEYS & base.keys():
         assert live.get(k) == base[k], f"response.{k} 漂移"
     assert set(live) - set(base) <= {"declarations"}, "新增键超出 declarations"
+
+
+def test_capture_or_equal_declarations() -> None:
+    """P1 末 declarations 快照(② 的比对基线)。"""
+    live = _decl_payloads()
+    # 捕获只补缺,不覆写(与 pre_p1 同款守卫)
+    if CAPTURE and not FIXTURE_DECL.exists():
+        FIXTURE_DECL.write_text(json.dumps(live, ensure_ascii=False, indent=1),
+                                encoding="utf-8")
+        pytest.skip("declarations baseline captured")
+    base = json.loads(FIXTURE_DECL.read_text(encoding="utf-8"))
+    assert live == base, "declarations 漂移(P1 末基线,Task 9 ② 依赖)"
 
 
 def test_baseline_counts() -> None:
