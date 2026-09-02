@@ -148,6 +148,26 @@ class RequestSpec(BaseModel):
         """返回请求体的 JSON Schema(schema_ 为唯一结构真源),供跨进程传输使用。"""
         return self.schema_
 
+    def declarations_view(self) -> list[dict[str, Any]]:
+        """§3.1 形状条目(纯派生,不动存储)。键序:binding 在前、carry 在后。"""
+        out: list[dict[str, Any]] = []
+        for f in self.fields:
+            out.append({"name": f.name, "path": f.path, "channel": "binding",
+                        "type": None, "required": f.required, "default": f.default,
+                        "example": f.example, "description": f.description,
+                        "enum": f.enum, "ui_kind": f.ui_kind,
+                        "source_kind": f.source_kind, "assertable": False})
+        for path, c in self.carry.items():
+            # 根路径 "$" 的 last_segment 为 None → name="$"(根兜底;
+            # 2026-09-02 起无现网实例,规则保留)
+            out.append({"name": _path.last_segment(path) or "$", "path": path,
+                        "channel": "carry", "type": c.type, "required": True,
+                        "default": None, "example": None,
+                        "description": c.description, "enum": None,
+                        "ui_kind": "unknown", "source_kind": "independent",
+                        "assertable": False})
+        return out
+
     @model_serializer
     def _serialize(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -159,6 +179,9 @@ class RequestSpec(BaseModel):
         if self.carry:
             out["carry"] = {k: v.model_dump(mode="json")
                             for k, v in self.carry.items()}
+        decls = self.declarations_view()
+        if decls:
+            out["declarations"] = decls
         return out
 
 
@@ -178,6 +201,19 @@ class ResponseSpec(BaseModel):
 
     def json_schema(self) -> dict[str, Any] | None:
         return self.schema_
+
+    def declarations_view(self) -> list[dict[str, Any]]:
+        """§3.1 形状条目(纯派生,不动存储);channel 恒 view_only。"""
+        out: list[dict[str, Any]] = []
+        assertable = set(self.assertable_fields)
+        for f in self.fields:
+            out.append({"name": f.name, "path": f.path, "channel": "view_only",
+                        "type": None, "required": f.required, "default": f.default,
+                        "example": f.example, "description": f.description,
+                        "enum": f.enum, "ui_kind": f.ui_kind,
+                        "source_kind": f.source_kind,
+                        "assertable": f.path in assertable})
+        return out
 
     @model_validator(mode="after")
     def _validate(self) -> "ResponseSpec":
@@ -214,4 +250,7 @@ class ResponseSpec(BaseModel):
         }
         if self.schema_ is not None:
             out["schema"] = self.schema_
+        decls = self.declarations_view()
+        if decls:
+            out["declarations"] = decls
         return out
