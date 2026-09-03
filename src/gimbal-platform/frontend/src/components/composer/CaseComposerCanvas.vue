@@ -916,8 +916,9 @@ const responseStrategyTags = computed(() => fieldStrategyTags('response'))
 
 /** 请求体字段动态注入态(已注入 → FieldForm 值控件换只读提示条):
  *  与 fieldStrategyTags 同源同匹配(assign target 精确命中
- *  $.request_body.<path>,匹配面 = requestFieldSurface 含派生行),
- *  但携带 source/target 供提示条悬停展示。
+ *  $.request_body<path> — 平铺/深层加点($.request_body.a.b),根 list
+ *  直拼无点($.request_body[0].sku,见 requestBodyTargetOf),匹配面 =
+ *  requestFieldSurface 含派生行),但携带 source/target 供提示条悬停展示。
  *  响应侧无此概念(assign 不写响应)。 */
 const requestInjected = computed<Record<string, Array<{ source: string; target: string }>>>(() => {
   const step = currentStep.value
@@ -1113,7 +1114,7 @@ function typeCFields(
   knownPaths: string[]
 ): TypeCField[] {
   const props = (schema?.properties ?? {}) as Record<string, { type?: string; default?: unknown }>
-  const known = new Set(knownPaths.map((p) => p.replace(/^\$\./, '')))
+  const known = new Set(knownPaths.map((p) => p.replace(/^\$\.?/, '')))
   return Object.keys(props)
     .filter((k) => !known.has(k))
     .map((k) => ({

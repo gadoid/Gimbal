@@ -26,4 +26,9 @@ describe('toScratchPath', () => {
     expect(toScratchPath('$.response_body.data.id')).toBe('$.response_body.data.id')
     expect(toScratchPath('$.response_status')).toBe('$.response_status')
   })
+
+  it('根 list 形态: $[0].sku → $.response_body[0].sku(前缀直拼无点,修轮 R2)', () => {
+    expect(toScratchPath('$[0].sku')).toBe('$.response_body[0].sku')
+    expect(toScratchPath('$[1].items[0].n')).toBe('$.response_body[1].items[0].n')
+  })
 })
