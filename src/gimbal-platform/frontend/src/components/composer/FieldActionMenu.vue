@@ -12,6 +12,8 @@
 
   措辞对齐 plate _KIND_LABELS;数据全部由调用方传入,零 IO。
   子列表用就地展开(非 el-dropdown 嵌套子菜单 — 测试与 a11y 都更稳)。
+  injected=true(字段已挂 assign)时 引用/设为变量/注入 三项禁用 —
+  值写入必被运行时覆盖,防矛盾态;提取/断言不受影响。
 -->
 <template>
   <button
@@ -23,13 +25,24 @@
   <div v-if="open" class="fa-menu" @click.stop>
     <!-- 主菜单(未展开子列表时) -->
     <template v-if="!subOpen">
-      <button v-if="domain !== 'response'" type="button" class="fa-item" @click="subOpen = 'ref'">
+      <button
+        v-if="domain !== 'response'"
+        type="button"
+        class="fa-item"
+        :class="{ disabled: injected }"
+        :disabled="injected"
+        :title="injected ? INJECTED_NOTE : undefined"
+        @click="subOpen = 'ref'"
+      >
         <span class="fa-label">引用共享变量</span><span class="fa-note">Reference</span>
       </button>
       <button
         v-if="domain !== 'response' && !/\$\{var\./.test(value ?? '')"
         type="button"
         class="fa-item fa-promote"
+        :class="{ disabled: injected }"
+        :disabled="injected"
+        :title="injected ? INJECTED_NOTE : undefined"
         @click="emitPromote"
       >
         <span class="fa-label">设为变量</span><span class="fa-note">Promote</span>
@@ -37,7 +50,15 @@
       <button type="button" class="fa-item" @click="emitExtract">
         <span class="fa-label">从响应提取</span><span class="fa-note">Extract</span>
       </button>
-      <button v-if="domain !== 'response'" type="button" class="fa-item" @click="subOpen = 'inject'">
+      <button
+        v-if="domain !== 'response'"
+        type="button"
+        class="fa-item"
+        :class="{ disabled: injected }"
+        :disabled="injected"
+        :title="injected ? INJECTED_NOTE : undefined"
+        @click="subOpen = 'inject'"
+      >
         <span class="fa-label">注入响应变量</span><span class="fa-note">DynamicAssign</span>
       </button>
       <button type="button" class="fa-item" @click="emitAssert">
@@ -109,6 +130,12 @@ const props = defineProps<{
    * 'response'(契约参考,仅 提取/断言 两项 — 无值可插、无 request_body 可写)
    */
   domain?: 'request' | 'response'
+  /**
+   * 动态注入态(FieldForm 注入行传入):值被 assign 运行时覆盖 →
+   * 引用/设为变量/注入三项禁用(写入必被覆盖,防矛盾态);
+   * 提取/断言是响应域动作,保持可用。
+   */
+  injected?: boolean
   /** 浮层开合由 FieldForm 持有(同屏至多一个),经 open 下传 */
   open?: boolean
 }>()
@@ -128,6 +155,9 @@ const emit = defineEmits<{
 
 /** 子列表开合:null=主菜单 / 'ref'=引用 / 'inject'=注入 */
 const subOpen = ref<null | 'ref' | 'inject'>(null)
+
+/** 注入态禁用项的悬停说明(injected=true 时三项值写入动作共用) */
+const INJECTED_NOTE = '该字段已挂动态注入策略,值由运行时覆盖 — 如需手填,先删除对应 assign 策略'
 // 浮层关闭时重置子列表态:重开回主菜单,不残留上次的子列表
 watch(() => props.open, (v) => { if (!v) subOpen.value = null })
 

@@ -1113,3 +1113,48 @@ describe('CaseComposerCanvas — 策略角标(需求1)', () => {
     }
   })
 })
+
+describe('CaseComposerCanvas — 动态注入只读态(assign 覆盖请求字段值)', () => {
+  it('I1: assign 命中请求字段 → 值控件换只读提示条 + 原值兜底行;角标保留', async () => {
+    const s0 = mkStep({
+      strategy: [{ kind: 'assign', source: '$.oid', target: '$.request_body.orderId' } as any],
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    // mkStep body orderId='ord-1':值控件被提示条代替,不再出值输入框
+    expect(w.find('.ctl-injected').exists()).toBe(true)
+    expect(w.text()).toContain('已使用动态策略注入')
+    expect(w.find('.field-control input.ctl').exists()).toBe(false)
+    expect(w.find('.ctl-injected').attributes('title')).toBe('$.oid → $.request_body.orderId')
+    // 兜底行:原值 + continue 语义
+    const fb = w.find('.injected-fallback')
+    expect(fb.text()).toContain('ord-1')
+    expect(fb.text()).toContain('continue')
+    // assign 角标保留(跳转策略卡入口不因只读丢失)
+    expect(w.find('.field-label .strategy-tag').text()).toBe('assign')
+  })
+
+  it('I2: 无 assign(extract 不锁请求值)→ 常规值控件', async () => {
+    const s0 = mkStep({ strategy: [{ kind: 'extract', target: 't', expression: '$.t' } as any] })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    expect(w.find('.ctl-injected').exists()).toBe(false)
+    expect(w.find('.field-control input.ctl').exists()).toBe(true)
+  })
+
+  it('I3: 注入行 ☰ 菜单 — 引用/设为变量/注入禁用(写入必被覆盖),提取/断言可用', async () => {
+    const s0 = mkStep({
+      strategy: [{ kind: 'assign', source: '$.oid', target: '$.request_body.orderId' } as any],
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    await w.find('.fa-menu-btn').trigger('click')
+    await flush()
+    const item = (label: string) => w.findAll('.fa-item').find((b) => b.text().includes(label))!
+    expect((item('引用共享变量').element as HTMLButtonElement).disabled).toBe(true)
+    expect((item('设为变量').element as HTMLButtonElement).disabled).toBe(true)
+    expect((item('注入响应变量').element as HTMLButtonElement).disabled).toBe(true)
+    expect((item('从响应提取').element as HTMLButtonElement).disabled).toBe(false)
+    expect((item('断言该字段').element as HTMLButtonElement).disabled).toBe(false)
+  })
+})

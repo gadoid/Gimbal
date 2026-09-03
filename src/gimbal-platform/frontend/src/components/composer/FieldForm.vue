@@ -37,8 +37,33 @@
         >{{ t.label }}</button>
       </label>
       <div class="field-control">
+        <!-- 动态注入态(assign 覆盖值):只读提示条代替值控件 — 原值仍存
+             body,策略失败且 onFailure=continue 时兜底出网(下行透出) -->
+        <div v-if="isInjected(f)" class="ctl-injected-wrap">
+          <div class="ctl-injected" :title="injectedTitle(f)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+            <span>已使用动态策略注入 · 运行时覆盖此值</span>
+          </div>
+          <FieldActionMenu
+            v-if="fieldActions"
+            :field="f"
+            :value="String(getValue(f) ?? '')"
+            :var-choices="varChoices ?? []"
+            :inject-choices="injectChoices ?? []"
+            :domain="domain"
+            :injected="true"
+            :open="menuField === f.name"
+            @toggle="toggleMenu(f)"
+            @close="menuField = null"
+            @var-insert="(name) => onMenuVarInsert(f, name)"
+            @field-extract="(field) => emit('fieldExtract', field)"
+            @field-assign="(field, name) => emit('fieldAssign', field, name)"
+            @field-promote="(field) => onFieldPromote(field)"
+            @field-assert="(field) => emit('fieldAssert', field)"
+          />
+        </div>
         <!-- text / unknown (Type B fallback) -->
-        <div v-if="f.ui_kind === 'text' || f.ui_kind === 'unknown'" class="ctl-with-var">
+        <div v-else-if="f.ui_kind === 'text' || f.ui_kind === 'unknown'" class="ctl-with-var">
           <div class="ctl-cand-wrap">
             <input
               type="text"
@@ -282,6 +307,10 @@
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
         {{ f.description }}
       </p>
+      <!-- 兜底原值行(注入态):策略失败且 onFailure=continue 时以此值发送 -->
+      <p v-if="isInjected(f)" class="injected-fallback">
+        原值 <code>{{ fallbackText(f) }}</code> · 策略失败且继续(continue)时以此发送
+      </p>
     </div>
 
     <!-- 其他字段(Type C 逆向面):body 实有键 + plate schema 非绑定字段,合并去重。
@@ -405,6 +434,11 @@ const props = defineProps<{
    *  idx = step.strategy 数组下标);点击上抛 strategyJump 由 Canvas 定位
    *  下方策略卡。StrategyForm 复用本组件处不传 → 零角标。 */
   strategyTags?: Record<string, Array<{ label: string; idx: number }>>
+  /** 请求体字段动态注入态(Canvas 传入):name → 命中的 assign 策略
+   *  (source/target 供提示条悬停)。命中字段值被 assign 运行时覆盖 →
+   *  值控件换只读提示条,原值降级为 continue 兜底(见 injected-fallback)。
+   *  StrategyForm/响应页复用处不传 → 零影响。 */
+  injected?: Record<string, Array<{ source: string; target: string }>>
 }>()
 const emit = defineEmits<{
   'update:body': [any]
@@ -484,6 +518,25 @@ function onFieldPromote(f: IOFieldBinding) {
  */
 function isTpl(v: unknown): boolean {
   return typeof v === 'string' && v.includes('${')
+}
+
+/** 动态注入态:该字段命中 assign(target=$.request_body.<path>)→ 值控件只读化 */
+function isInjected(f: IOFieldBinding): boolean {
+  return (props.injected?.[f.name]?.length ?? 0) > 0
+}
+
+/** 提示条悬停:命中策略的 source → target(多条全列) */
+function injectedTitle(f: IOFieldBinding): string {
+  return (props.injected?.[f.name] ?? [])
+    .map((h) => `${h.source} → ${h.target}`)
+    .join('\n')
+}
+
+/** 兜底原值展示:空 → (空);对象 JSON 化;长值靠 CSS 截断 */
+function fallbackText(f: IOFieldBinding): string {
+  const v = getValue(f)
+  if (v === '' || v === null || v === undefined) return '(空)'
+  return typeof v === 'object' ? JSON.stringify(v) : String(v)
 }
 
 /** number 控件输入:清空存 ''(对齐「其他字段」分支约定,不落幻影 0) */
@@ -722,6 +775,30 @@ function formatJson(v: unknown): string {
 .field.sk-independent { border-left: 3px solid #cbd5e1; }    /* literal 灰 */
 .field.sk-lookup { border-left: 3px solid #7c3aed; }            /* static 紫 */
 .field.sk-generated { border-left: 3px solid #f59e0b; }         /* dynamic 橙 (auto-extract 提示色) */
+
+/* 动态注入态提示条:琥珀族与 sk-generated 橙同源 — 值由 assign 运行时覆盖。
+   wrap 相对定位给 ☰ 菜单浮层做锚(同 ctl-cand-wrap)。 */
+.ctl-injected-wrap { position: relative; display: flex; gap: 6px; width: 100%; }
+.ctl-injected {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 6px;
+  background: #fffbeb; border: 1.5px dashed #f59e0b; border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px; color: #92400e;
+  cursor: default; user-select: none;
+}
+.ctl-injected svg { flex-shrink: 0; }
+/* 兜底原值行:continue 语义透出,长值 code 内截断 */
+.injected-fallback {
+  display: flex; align-items: center; gap: 4px;
+  margin: 1px 0 0;
+  font-size: 11px; color: #b45309;
+}
+.injected-fallback code {
+  font-family: var(--font-mono); font-size: 10.5px;
+  background: #fef3c7; border-radius: 3px; padding: 0 5px;
+  max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .ctl {
   width: 100%;

@@ -216,6 +216,7 @@
                   :inject-choices="injectVarChoices"
                   :unbound-fields="reqTypeC"
                   :strategy-tags="requestStrategyTags"
+                  :injected="requestInjected"
                   @strategy-jump="onStrategyJump"
                   @update:body="(v: unknown) => currentStep.request.body = v"
                   @field-extract="onFieldExtract"
@@ -891,6 +892,28 @@ function fieldStrategyTags(domain: 'request' | 'response'): Record<string, Array
 
 const requestStrategyTags = computed(() => fieldStrategyTags('request'))
 const responseStrategyTags = computed(() => fieldStrategyTags('response'))
+
+/** 请求体字段动态注入态(已注入 → FieldForm 值控件换只读提示条):
+ *  与 fieldStrategyTags 同源同匹配(assign target 精确命中
+ *  $.request_body.<path>),但携带 source/target 供提示条悬停展示。
+ *  响应侧无此概念(assign 不写响应)。 */
+const requestInjected = computed<Record<string, Array<{ source: string; target: string }>>>(() => {
+  const step = currentStep.value
+  const out: Record<string, Array<{ source: string; target: string }>> = {}
+  if (!step?.strategy.length) return out
+  const seen = new Set<string>()
+  for (const f of fieldBindings(step)) {
+    if (seen.has(f.name)) continue
+    seen.add(f.name)
+    const hits = step.strategy.filter((s) => strategyMatchesField(s, 'request', f)) as Array<{
+      source?: unknown; target?: unknown
+    }>
+    if (hits.length) {
+      out[f.name] = hits.map((h) => ({ source: String(h.source ?? ''), target: String(h.target ?? '') }))
+    }
+  }
+  return out
+})
 
 /** 角标跳转目标 + 脉冲序号(同 idx 重复点击靠 flash 重放感知,展开幂等) */
 const jumpTargetIdx = ref(-1)
