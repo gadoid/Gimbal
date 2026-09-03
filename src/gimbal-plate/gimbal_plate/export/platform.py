@@ -267,7 +267,10 @@ def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str,
             if value is None and deep:
                 continue  # D7:深层无值不落 None 骨架(防挡 carry 容器注入)
             if deep or value is not _MISSING:
-                _set_by_path(full_body, segs, value)
+                # 接收返回值:首段为 INDEX 时 _set_by_path 新建 list 容器,
+                # 丢弃返回 = 值静默蒸发(整 body 为数组是正确导出形态);
+                # dict 首段原位变异返回同对象,赋值无副作用
+                full_body = _set_by_path(full_body, segs, value)
         # 3) carry 面键:值归 platform 两层值表管,不补默认、不造 None 占位;
         #    body 已带字面量的原样并入 —— 保住 gimbal→platform→gimbal 往返
         #    子集契约,且与运行时 fill-missing(body 显式值优先)语义一致。

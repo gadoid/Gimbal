@@ -315,6 +315,16 @@ class TestDeepPathBindingCompletion:
         out = _render_request_view(Request(body={}), ep)
         assert out["body"] == {"supplier": [{"order_supplier_id": "DEF-S"}]}
 
+    def test_deep_binding_example_lands_nested(self) -> None:
+        """R2(评审 #4):default=None、example 有值 → example 落嵌套
+        (钉住 fallback 链中段 default → example 的 example 档零覆盖)。"""
+        ep = _deep_binding_ep([DeclarationEntry(
+            name="supplier_id", path="$.supplier[0].order_supplier_id",
+            channel="binding", example="EX-S",
+        )])
+        out = _render_request_view(Request(body={}), ep)
+        assert out["body"] == {"supplier": [{"order_supplier_id": "EX-S"}]}
+
     def test_deep_binding_missing_leaves_no_none_skeleton(self) -> None:
         """D7:深层无值(default/example 均无)不落 None 骨架;
         同端点平铺 binding 维持 None 占位现行为。"""
@@ -351,6 +361,18 @@ class TestDeepPathBindingCompletion:
         # fields_meta 仍登记根条目(元数据面完整)
         assert "$" in out["fields_meta"]
         assert out["fields_meta"]["$"]["path"] == "$"
+
+    def test_root_index_first_segment_value_lands(self) -> None:
+        """R2(评审 #1):首段为 INDEX($[0].sku,D2 合法形态)时,
+        写值点必须接收 _set_by_path 返回值 —— 否则新建的 list 被丢弃,
+        值静默蒸发。整 body 为数组是正确导出形态。"""
+        ep = _deep_binding_ep([DeclarationEntry(
+            name="sku0", path="$[0].sku", channel="binding",
+        )])
+        out = _render_request_view(Request(body=[{"sku": "S-1"}]), ep)
+        assert out["body"] == [{"sku": "S-1"}], (
+            "根 INDEX 首段:值须落到新建的 list 容器(full_body 变数组),不得蒸发"
+        )
 
     def test_deep_binding_nested_in_full_export_view(self) -> None:
         """端到端:exporter 全链路输出的 step request.body 中深层值为嵌套形态。"""
