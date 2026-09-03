@@ -47,13 +47,21 @@ vi.mock('@/api/scenario-composer', () => ({
       // ep-carry(reqTypeC carry 过滤用例): carry 通道声明 $.remark
       // 且 schema properties 另含 remark + hidden_req → 差集须滤 carry 键;
       // ep-deep(R1 深层派生行用): binding 覆盖 $.supplier[0].order_supplier_id,
-      // supplier[1] 留给 body 投影派生
+      // supplier[1] 留给 body 投影派生;
+      // ep-list(修轮 R1 根 list 用): root-INDEX binding $[0].sku —
+      // 请求体直接是 JSON 数组的端点,assign target 须落 $.request_body[0].sku
       declarations: [
         ...(endpointId === 'ep-2'
           ? [{
               name: 'oid', path: '$.nested.oid', channel: 'binding',
               ui_kind: 'text', source_kind: 'independent',
               required: true, description: '', assertable: false,
+            } as any]
+          : endpointId === 'ep-list'
+          ? [{
+              name: 'sku_0', path: '$[0].sku', channel: 'binding',
+              ui_kind: 'text', source_kind: 'independent',
+              required: false, description: '', assertable: false,
             } as any]
           : endpointId === 'ep-deep'
           ? [{
@@ -1234,5 +1242,71 @@ describe('CaseComposerCanvas — 深层派生行注入态/角标(D9 全链)', ()
     const derivedAfter = w.find('.field.is-derived')
     expect(derivedAfter.find('.ctl-injected').exists()).toBe(true)
     expect(derivedAfter.find('.field-label .strategy-tag').text()).toBe('assign')
+  })
+})
+
+/**
+ * 修轮 R1(Task 10 concern 转正):根 list 字段(root-INDEX binding `$[0].sku`)
+ * 的 assign target 派生与策略匹配面 —— `replace(/^\$\./, '$.request_body.')`
+ * 对 `$[0].sku` 不匹配(无点)→ target 落裸 `$[0].sku`、角标/注入态匹配双双
+ * 落空。统一改:剥 `/^\$\.?/` 得 rel,`'$.request_body' + ('[' 开头直拼无点,
+ * 否则加 '.') + rel` —— `$.supplier[0].x` → `$.request_body.supplier[0].x`
+ * (不变),`$[0].sku` → `$.request_body[0].sku`(修好)。
+ */
+describe('CaseComposerCanvas — 根 list 字段 assign/角标 target 派生(修轮 R1)', () => {
+  /** ep-list step:root-INDEX binding $[0].sku,body 直接是 JSON 数组 */
+  const listStep = (over: Partial<StepView> = {}): StepView => ({
+    kind: 'step',
+    description: 'rootlist',
+    api: { kind: 'api', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-list' } },
+    request: { kind: 'request', body: [{ sku: 'A' }] },
+    strategy: [],
+    ...over,
+  } as StepView)
+
+  it('RL1: 菜单注入 root-INDEX 行 → onFieldAssign 落 target=$.request_body[0].sku(前缀直拼无点),注入态即时闭环', async () => {
+    const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' } as any] })
+    const s1 = listStep()
+    const { w } = mountCanvas([s0, s1])
+    await flushPromises()
+    // 选中 step2(产出变量在 step1 → 注入候选不被时序门控禁用)
+    const rows = w.findAll('.step-row')
+    await rows[1].trigger('click')
+    await flush()
+    // root-INDEX 声明行([0].sku 被 binding 覆盖 → 无派生行)注入前可编辑
+    expect(w.find('input.ctl').exists()).toBe(true)
+    await w.find('.fa-menu-btn').trigger('click')
+    await flush()
+    const inj = w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))
+    await inj!.trigger('click')
+    await flush()
+    const cand = w.findAll('.fa-var-item').find((b) => b.text().includes('token'))
+    await cand!.trigger('click')
+    await flushPromises()
+    // assign 骨架经 Canvas onFieldAssign 落前缀贯通的 target(真驱动)
+    const as = s1.strategy.find((s: any) => s.kind === 'assign') as any
+    expect(as).toBeTruthy()
+    expect(as.source).toBe('$.token')
+    expect(as.target).toBe('$.request_body[0].sku')
+    // 注入态闭环:root-INDEX 行换只读提示条 + assign 角标(匹配面同式贯通)
+    expect(w.find('.ctl-injected').exists()).toBe(true)
+    expect(w.find('.ctl-injected').attributes('title')).toBe('$.token → $.request_body[0].sku')
+    expect(w.find('.field-label .strategy-tag').text()).toBe('assign')
+  })
+
+  it('RL2: 既有 assign target=$.request_body[0].sku → root-INDEX 声明行注入态 + assign 角标(匹配面贯通)', async () => {
+    const s0 = listStep({
+      strategy: [{ kind: 'assign', source: '$.oid', target: '$.request_body[0].sku' } as any],
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    // 注入只读态:值控件换提示条(同 I1 惯例,title 透出 source → target)
+    expect(w.find('.ctl-injected').exists()).toBe(true)
+    expect(w.find('.ctl-injected').attributes('title')).toBe('$.oid → $.request_body[0].sku')
+    // 兜底行:原值 'A' + continue 语义
+    expect(w.find('.injected-fallback').text()).toContain('A')
+    expect(w.find('.injected-fallback').text()).toContain('continue')
+    // 策略角标按 target 匹配挂上(assign)
+    expect(w.find('.field-label .strategy-tag').text()).toBe('assign')
   })
 })

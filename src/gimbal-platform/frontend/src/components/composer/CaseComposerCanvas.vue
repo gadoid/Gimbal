@@ -791,13 +791,25 @@ function onFieldExtract(f: IOFieldBinding) {
   justAddedStrategyIdx.value = currentStep.value.strategy.length - 1
 }
 
+/**
+ * assign target 派生(单一真源,修轮 R1):`$.request_body` + 字段 rel 路径。
+ * 根 list(Task 10)`$[0].sku` 剥后 rel 以 `[` 开头 → 前缀直拼无点
+ * (`$.request_body[0].sku`);平铺/深层 `$.a[0].b` → `$.request_body.a[0].b`
+ * (行为不变)。onFieldAssign 落 target 与 strategyMatchesField 匹配同走此处,
+ * 双侧同式不漂移。
+ */
+function requestBodyTargetOf(path: string): string {
+  const rel = path.replace(/^\$\.?/, '')
+  return `$.request_body${rel.startsWith('[') ? '' : '.'}${rel}`
+}
+
 /** 菜单"注入响应变量":assign 骨架(source=$.<name>,target=request_body.<path>) */
 function onFieldAssign(f: IOFieldBinding, name: string) {
   if (!currentStep.value) return
   currentStep.value.strategy.push({
     kind: 'assign',
     source: `$.${name}`,
-    target: f.path.replace(/^\$\./, '$.request_body.'),
+    target: requestBodyTargetOf(f.path),
     scope: 'scenario',
     required: true,
   })
@@ -861,7 +873,7 @@ function strategyTagLabels(strategies: StrategyView[]): string[] {
 function strategyMatchesField(s: StrategyView, domain: 'request' | 'response', f: IOFieldBinding): boolean {
   const sv = s as any
   if (domain === 'request') {
-    return sv.kind === 'assign' && sv.target === f.path.replace(/^\$\./, '$.request_body.')
+    return sv.kind === 'assign' && sv.target === requestBodyTargetOf(f.path)
   }
   const scratch = toScratchPath(f.path)
   if (sv.kind === 'extract') return sv.expression === scratch || sv.expression === f.path
