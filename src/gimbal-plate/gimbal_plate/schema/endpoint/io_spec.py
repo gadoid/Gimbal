@@ -13,25 +13,25 @@ _PRIMITIVE_TYPES = ("string", "number", "integer", "boolean", "object", "array")
 
 # DeclarationEntry.name 标识符规则(D1 name 别名制):name 作显示别名与前端键,
 # 须为 ASCII 标识符;path 是寻址真源,name↔path 解绑(2026-09-03 spec D1)。
-_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*$")
+# \Z 结尾锚:name 作前端键不放行尾部换行(评审 R2:$ 锚对 "x\n" 为真,不安全)。
+_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
-def _validate_path_name_enum(
+def _validate_path_enum(
     *,
     path: str,
-    name: str,
     default: Any,
     example: Any,
     enum: list[Any] | None,
     owner: str,
 ) -> str:
-    """path 合法性/归一化 + enum 一致性(name↔path 解绑见 2026-09-03 spec D1)。
+    """path 合法性/归一化 + enum 一致性(返回归一化 path)。
 
     DeclarationEntry 条目级校验(owner 仅作报错文案前缀):
     - 双形态并存:短名合法,但非法 JSONPath / 空串直接拒;
     - 归一化统一收敛为 JSONPath 形态($.xxx),对已是 JSONPath 的 no-op;
-    - name 与 path 解绑:name 是显示别名/前端键,寻址以 path 为唯一真源
-      (唯一性/标识符校验见 DeclarationEntry 与 _check_declarations);
+      (name↔path 已解绑,name 校验见 _validate_entry 与 _check_declarations,
+       2026-09-03 spec D1)
     - enum 非空时 default/example 必须在 enum 中(None/[] 跳过、
       严格 ==、default 与 example 同等)。
     """
@@ -96,8 +96,8 @@ class DeclarationEntry(BaseModel):
                 f"DeclarationEntry.name={self.name!r} 须为 ASCII 标识符"
                 f"([A-Za-z_][A-Za-z0-9_]*,作显示别名与前端键)"
             )
-        self.path = _validate_path_name_enum(
-            path=self.path, name=self.name, default=self.default,
+        self.path = _validate_path_enum(
+            path=self.path, default=self.default,
             example=self.example, enum=self.enum,
             owner="DeclarationEntry",
         )

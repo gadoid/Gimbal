@@ -1,6 +1,6 @@
 """plate/utils/path.py
 
-``DeclarationEntry.path`` 的归一化与末段提取。
+``DeclarationEntry.path`` 的归一化、末段提取与节点序列解析。
 
 path 语法（与 ``plate/utils/jsonpath.py`` 一致）：JSONPath，须以 ``$`` 领头，
 支持 ``$.a.b.c`` / ``$.items[0]`` / ``$.items[*].id`` / ``$['key with space']`` /
@@ -10,11 +10,11 @@ path 语法（与 ``plate/utils/jsonpath.py`` 一致）：JSONPath，须以 ``$`
   - 形态统一为带 ``$.`` 前缀的字符串。``"order_no"`` → ``"$.order_no"``。
   - 非字符串、空字符串、非法 JSONPath 视为非法 path。
 
-末段规则（给 ``name`` 校验用）：
+末段提取（``last_segment``，独立工具函数）：
+  - ``name`` 校验已不再消费末段（name↔path 解绑，2026-09-03 spec D1）；
   - 末段节点是 ``FIELD`` → 用其 ``value``（标识符或带空格/中文的 key）。
-  - 末段节点是 ``INDEX`` / ``WILDCARD`` / ``FILTER`` / ``RECURSIVE`` → 末段视为"非标识符"，
-    ``last_segment`` 返回 ``None``。``DeclarationEntry`` 允许这种 path，
-    但 ``name`` 与之无强约束关系。
+  - 末段节点是 ``INDEX`` / ``WILDCARD`` / ``FILTER`` / ``RECURSIVE`` →
+    ``last_segment`` 返回 ``None``（``DeclarationEntry`` 允许这种 path）。
 """
 from __future__ import annotations
 

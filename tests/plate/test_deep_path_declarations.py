@@ -32,6 +32,12 @@ def test_non_identifier_name_rejected():
     with pytest.raises(ValueError, match="标识符"):
         _decl(name="订单ID", path="$.order_id")
 
+def test_trailing_newline_name_rejected():
+    # 评审 R2 finding 2:`$` 锚会放行尾部换行(re.match("x\n") 为真),
+    # name 作前端键不安全 — 改 `\Z` 锚收紧(brief 原文正则的有意偏离)。
+    with pytest.raises(ValueError, match="标识符"):
+        _decl(name="x\n", path="$.x")
+
 def test_root_entry_name_dollar_convention_accepted():
     """根路径条目 name='$' 为 spec §3.1 既有惯例,D1 标识符规则放行特例。"""
     DeclarationEntry(name="$", path="$", channel="view_only")
@@ -44,14 +50,16 @@ def test_carry_deep_index_rejected():
                      channel="carry", type="string"))
 
 def test_carry_dot_nested_accepted():
-    _decl(name="b", path="$.a.b", channel="carry", type="string")
+    # spec 级钉子(评审 R2):carry 多 FIELD 段在清单校验层放行不回归
+    _build(_decl(name="b", path="$.a.b", channel="carry", type="string"))
 
 def test_binding_wildcard_rejected():
     with pytest.raises(ValueError, match="具体路径"):
         _build(_decl(name="sku", path="$.supplier[*].order_supplier_id"))
 
 def test_binding_deep_index_accepted():
-    _decl(name="sku0", path="$.supplier[0].order_supplier_id")
+    # spec 级钉子(评审 R2):binding 深下标在清单校验层放行不回归
+    _build(_decl(name="sku0", path="$.supplier[0].order_supplier_id"))
 
 # ── D3 包含四格 ───────────────────────────────────────────
 def test_carry_contains_binding_ok():
