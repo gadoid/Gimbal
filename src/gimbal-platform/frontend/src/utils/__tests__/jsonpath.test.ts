@@ -72,3 +72,28 @@ describe('pruneByPath — 容器级剪枝(D8)', () => {
     expect(body).toEqual({ supplier: [null, { b: 1 }] })
   })
 })
+
+/**
+ * 根 list body 寻址(Task 10):请求体直接是 JSON 数组的端点,path 形如
+ * `$[0].sku` —— `$` 后紧跟下标(无点)。三函数剥离 `/^\$\.?/` 后 rel 以
+ * `[` 开头,parseSegments 本就吃前导下标;数组根容器语义:
+ * setByPath push pad 建链、pruneByPath 元素置 null 不洗位、根数组不删。
+ * (dict 根 + 首段 INDEX 落字符串键是 INDEX-on-dict 已知边界,不在此测。)
+ */
+describe('get/set/prune — 根 list body 寻址 $[N](Task 10)', () => {
+  it('getByPath: $[0].sku 直取数组根元素字段', () => {
+    expect(getByPath([{ sku: 'A' }], '$[0].sku')).toBe('A')
+  })
+
+  it('setByPath: 数组根 [] 容器建链 → [{sku:"x"}](无 $ 幻影段)', () => {
+    const body: any = []
+    setByPath(body, '$[0].sku', 'x')
+    expect(body).toEqual([{ sku: 'x' }])
+  })
+
+  it('pruneByPath: 元素置 null 不洗位、根数组不删(对齐 D8)', () => {
+    const body: any = [{}]
+    pruneByPath(body, '$[0].sku')
+    expect(body).toEqual([null])
+  })
+})

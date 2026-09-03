@@ -37,14 +37,15 @@ function mkBinding(over: Partial<IOFieldBinding> = {}): IOFieldBinding {
   } as IOFieldBinding
 }
 
-/** 生产用法镜像:父持 body ref,子 update:body 双向 */
+/** 生产用法镜像:父持 body ref,子 update:body 双向。
+ *  body 兼容根 list(Task 10):请求体直接是 JSON 数组(unknown[]) */
 function mountWithParent(opts: {
   bindings: IOFieldBinding[]
-  body?: Record<string, unknown> | null
+  body?: Record<string, unknown> | unknown[] | null
   carryRoots?: string[]
   injected?: Record<string, Array<{ source: string; target: string }>>
 }) {
-  const body = ref<Record<string, unknown>>(opts.body ?? { order_id: 'ord-1' })
+  const body = ref<unknown>(opts.body ?? { order_id: 'ord-1' })
   const Parent = defineComponent({
     setup() {
       return () => h(FieldForm, {
@@ -52,7 +53,7 @@ function mountWithParent(opts: {
         body: opts.body === null ? null : body.value,
         carryRoots: opts.carryRoots,
         injected: opts.injected,
-        'onUpdate:body': (v: Record<string, unknown>) => { body.value = v },
+        'onUpdate:body': (v: unknown) => { body.value = v },
       })
     },
   })
@@ -401,5 +402,93 @@ describe('FieldForm — 「+ 同级」按钮(D9)', () => {
       global: { plugins: [ElementPlus] },
     })
     expect(w.find('.sib-btn').exists()).toBe(false)
+  })
+})
+
+/**
+ * 根 list body(Task 10):请求体直接是 JSON 数组的端点,binding path 形如
+ * `$[0].sku`。全链路贯通:展示(getValue)/编辑(setValue 数组保形,不 spread
+ * 成 {0:…} 数字键对象)/空 body 落值(首段 INDEX 建 [])/清空剪枝(元素置
+ * null 不洗位,根数组不删)/+同级(根容器 = body 本体)/carry `$`(整包,
+ * 根键 '')豁免与接管警告/extras 卫生(body-walk 源防数组根,无数字键垃圾行)。
+ */
+describe('FieldForm — 根 list body $[N] 寻址(Task 10)', () => {
+  it('R1: 展示 — body=[{sku:"A"}]、binding $[0].sku → 行显 A(getByPath 通)', () => {
+    const { w } = mountWithParent({
+      bindings: [mkBinding({ name: 'sku', path: '$[0].sku' })],
+      body: [{ sku: 'A' }],
+    })
+    expect((w.find('input.ctl').element as HTMLInputElement).value).toBe('A')
+  })
+
+  it('R2: 编辑 — body 仍数组且 [{sku:"B"}](spread 保形,无 $ 幻影键)', async () => {
+    const { w, body } = mountWithParent({
+      bindings: [mkBinding({ name: 'sku', path: '$[0].sku' })],
+      body: [{ sku: 'A' }],
+    })
+    await w.find('input.ctl').setValue('B')
+    await flush()
+    expect(Array.isArray(body.value)).toBe(true)
+    expect(body.value).toEqual([{ sku: 'B' }])
+  })
+
+  it('R3: 空 body 落值 — body=null 编辑该行 → [{sku:"X"}](首段 INDEX 建数组非对象)', async () => {
+    const { w, body } = mountWithParent({
+      bindings: [mkBinding({ name: 'sku', path: '$[0].sku' })],
+      body: null,
+    })
+    await w.find('input.ctl').setValue('X')
+    await flush()
+    expect(Array.isArray(body.value)).toBe(true)
+    expect(body.value).toEqual([{ sku: 'X' }])
+  })
+
+  it('R4: 清空剪枝 — [{sku:"A"}] 清空 → [null](元素置 null,根数组不删)', async () => {
+    const { w, body } = mountWithParent({
+      bindings: [mkBinding({ name: 'sku', path: '$[0].sku' })],
+      body: [{ sku: 'A' }],
+    })
+    await w.find('input.ctl').setValue('')
+    await flush()
+    expect(Array.isArray(body.value)).toBe(true)
+    expect(body.value).toEqual([null])
+  })
+
+  it('R5: +同级 — [{sku:"A"}] 点 → [{sku:"A"},{sku:""}](siblingPathOf 根容器=body)', async () => {
+    const { w, body } = mountWithParent({
+      bindings: [mkBinding({ name: 'sku', path: '$[0].sku' })],
+      body: [{ sku: 'A' }],
+    })
+    const btn = w.find('.sib-btn')
+    expect(btn.exists()).toBe(true)
+    await btn.trigger('click')
+    await flush()
+    expect(Array.isArray(body.value)).toBe(true)
+    expect(body.value).toEqual([{ sku: 'A' }, { sku: '' }])
+  })
+
+  it('R6: carry $(整包,根键 "")豁免 — +同级不显示、接管警告行在(整包语义)', () => {
+    const { w } = mountWithParent({
+      bindings: [mkBinding({ name: 'sku', path: '$[0].sku' })],
+      body: [{ sku: 'A' }],
+      carryRoots: [''],
+    })
+    expect(w.find('.sib-btn').exists()).toBe(false)
+    const note = w.find('.deep-carry-note')
+    expect(note.exists()).toBe(true)
+    expect(note.text()).toContain('carry 整包传递')
+  })
+
+  it('R7: extras 卫生 — body=[{a:1}] 不产生数字键垃圾行;数组根叶子健康投影为派生行', () => {
+    const { w } = mountWithParent({
+      bindings: [],
+      body: [{ a: 1 }],
+    })
+    // extras 的 body-walk 源防数组根 → 无数字键垃圾行
+    expect(w.find('[data-testid="extra-fields"]').exists()).toBe(false)
+    // 未覆盖叶子照常派生(走 deriveDeepRows 数组根投影,标签 = 相对路径)
+    const derived = w.findAll('.field.is-derived')
+    expect(derived).toHaveLength(1)
+    expect(derived[0].find('.label-text').text()).toBe('[0].a')
   })
 })

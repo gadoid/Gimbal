@@ -5,7 +5,7 @@
  * FieldForm path 角标悬停据此透出治理归属)。
  */
 import { describe, it, expect } from 'vitest'
-import { channelFields } from '@/utils/declarations'
+import { channelFields, deriveDeepRows } from '@/utils/declarations'
 import type { DeclarationEntryView } from '@/types/plate'
 
 function mkDecl(over: Partial<DeclarationEntryView> = {}): DeclarationEntryView {
@@ -84,5 +84,29 @@ describe('channelFields — parentPath 投影派生(D12)', () => {
   it('decls 为 null/undefined → 空投影(消费点容错)', () => {
     expect(channelFields(null, 'binding')).toEqual([])
     expect(channelFields(undefined, 'view_only')).toEqual([])
+  })
+})
+
+/**
+ * deriveDeepRows — 根 list body 投影(Task 10):body 直接是 JSON 数组时
+ * 进 walk(rel 从 `[i]` 起),未被 binding 精确覆盖的叶子照常派生行;
+ * 拼接按 rel 形态分流 — `[` 开头 → `$`+rel 直拼(无点),否则 `$.`+rel。
+ * name 转形 `[1].sku` → `_1_sku`(下标 [i]→_i、点 .→_,既有惯例)。
+ * carry 根 ''(整包 `$` 剥离产物)命中 → 数组根整包跳过不派生。
+ */
+describe('deriveDeepRows — 根 list body 投影(Task 10)', () => {
+  it('数组根未覆盖叶子成行 — path $+rel 直拼无点;name [1].sku→_1_sku', () => {
+    const rows = deriveDeepRows(
+      [{ sku: 'A' }, { sku: 'B', n: 2 }],
+      [{ name: 'sku_0', path: '$[0].sku' }],
+      [],
+    )
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => r.path)).toEqual(['$[1].sku', '$[1].n'])
+    expect(rows.map((r) => r.name)).toEqual(['_1_sku', '_1_n'])
+  })
+
+  it('carry $(整包,carryRoots=[""])→ 数组根整包跳过,零派生行', () => {
+    expect(deriveDeepRows([{ a: 1 }], [], [''])).toEqual([])
   })
 })

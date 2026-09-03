@@ -88,23 +88,28 @@ export function assertablePaths(decls: DeclarationEntryView[] | undefined | null
  * name=相对路径安全形态(`supplier[1].x` → `supplier_1_x`,下标 [i]→_i、
  * 点 .→_;与声明 name 撞车加 _2/_3 后缀),path=完整 $. 路径(角标/assign
  * target 派生);ui_kind 按 typeof 值推断(number/boolean,其余含 null→text)。
+ *
+ * 根 list body(Task 10):body 直接是 JSON 数组时同样进 walk(rel 从
+ * `[i]` 起);完整路径拼接按 rel 形态分流 — `[` 开头 → `$`+rel 直拼
+ * (无点,`$[1].sku`),否则 `$.`+rel。根级标量元素(`$[0]`)rel 含 `[`
+ * 同成派生行(extras 区不吃数组根,无数字键垃圾行)。carry 根 `''`
+ * (整包 `$` 的根键)命中 → 数组根整包跳过(容器值归值表)。
  */
 export function deriveDeepRows(
   body: unknown,
   bindings: Array<Pick<IOFieldBinding, 'name' | 'path'>>,
   carryRoots: string[],
 ): IOFieldBinding[] {
-  const bodyObj =
-    body && typeof body === 'object' && !Array.isArray(body)
-      ? (body as Record<string, unknown>)
-      : null
-  if (!bodyObj) return []
+  if (!body || typeof body !== 'object') return []
+  const bodyArr = Array.isArray(body) ? (body as unknown[]) : null
   const covered = new Set(bindings.map((b) => b.path))
   const carry = new Set(carryRoots)
   const taken = new Set(bindings.map((b) => b.name))
   const rows: IOFieldBinding[] = []
+  // 完整路径拼接:rel 以 '[' 开头(根 list)→ $+rel 直拼;否则 $.+rel
+  const full = (rel: string) => (rel.startsWith('[') ? `$${rel}` : `$.${rel}`)
   const leaf = (rel: string, v: unknown) => {
-    if (covered.has(`$.${rel}`)) return
+    if (covered.has(full(rel))) return
     const base = rel.replace(/\[(\d+)\]/g, '_$1').replace(/\./g, '_')
     let name = base
     let n = 2
@@ -112,7 +117,7 @@ export function deriveDeepRows(
     taken.add(name)
     rows.push({
       name,
-      path: `$.${rel}`,
+      path: full(rel),
       ui_kind: typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'boolean' : 'text',
       source_kind: 'independent',
       required: false,
@@ -131,7 +136,12 @@ export function deriveDeepRows(
     if (Array.isArray(val)) val.forEach((x, i) => walk(x, `${rel}[${i}]`))
     else for (const [k, v] of Object.entries(val)) walk(v, `${rel}.${k}`)
   }
-  for (const [k, v] of Object.entries(bodyObj)) {
+  if (bodyArr) {
+    if (carry.has('')) return [] // 整包 carry($ → 根键 '')→ 数组根整包跳过
+    bodyArr.forEach((x, i) => walk(x, `[${i}]`))
+    return rows
+  }
+  for (const [k, v] of Object.entries(body as Record<string, unknown>)) {
     if (carry.has(k)) continue
     walk(v, k)
   }

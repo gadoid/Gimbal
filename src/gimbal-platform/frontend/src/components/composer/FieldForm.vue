@@ -333,9 +333,10 @@
         {{ f.description }}
       </p>
       <!-- carry 容器接管警告(D7):深层字段落 carry 根键容器 — 手填整包
-           接管(值表不再注入),清空剪枝掉容器可恢复注入 -->
+           接管(值表不再注入),清空剪枝掉容器可恢复注入;根 list 整包
+           carry(根键 '')显示 $(整包),不显示空滴 $. -->
       <p v-if="isDeepField(f) && inCarryContainer(f)" class="deep-carry-note">
-        上级容器 $.{{ rootOf(f) }} 为 carry 整包传递 — 手填将接管该容器,清空可恢复注入
+        上级容器 {{ rootOf(f) === '' ? '$(整包)' : '$.' + rootOf(f) }} 为 carry 整包传递 — 手填将接管该容器,清空可恢复注入
       </p>
       <!-- 兜底原值行(注入态):策略失败且 onFailure=continue 时以此值发送 -->
       <p v-if="isInjected(f)" class="injected-fallback">
@@ -590,12 +591,15 @@ function parentTitle(f: IOFieldBinding): string {
 /** 深层字段判定(D8):rel 含 `.` 或 `[`(平铺两字符皆不含)— 与 setValue
  *  清空剪枝分流同判据;`[` 必须转义(本仓实证 /[.[]/ 写法有坑) */
 function isDeepField(f: IOFieldBinding): boolean {
-  return /[.\[]/.test(f.path.replace(/^\$\./, ''))
+  return /[.\[]/.test(f.path.replace(/^\$\.?/, ''))
 }
 
-/** 字段根键:$.a[0].b → 'a'(D12 归一切法,数组下标不拆根) */
+/** 字段根键:$.a[0].b → 'a'(D12 归一切法,数组下标不拆根);
+ *  根 list(Task 10):$[0].b / 裸 $ 剥后 rel 为 '' 或 '[' 开头 → 根键 ''
+ *  (与 Canvas carryRoots 对 `$` 整包的归一产物天然对齐) */
 function rootOf(f: IOFieldBinding): string {
-  return f.path.replace(/^\$\./, '').split(/[.[\]]/)[0]
+  const rel = f.path.replace(/^\$\.?/, '')
+  return rel === '' || rel.startsWith('[') ? '' : rel.split(/[.[\]]/)[0]
 }
 
 /** 深层字段是否落在 carry 容器内(根键命中 Canvas 传入的 carry 根键集) */
@@ -612,9 +616,11 @@ function inCarryContainer(f: IOFieldBinding): boolean {
  * (出现即合法,与 carry 豁免同理);readonly(响应页契约参考)同不显示。
  */
 function siblingPathOf(f: IOFieldBinding): string | null {
-  const m = f.path.replace(/^\$\./, '').match(/^(.*)\[(\d+)\](.*)$/)
+  const m = f.path.replace(/^\$\.?/, '').match(/^(.*)\[(\d+)\](.*)$/)
   if (!m) return null
-  const arr = getByPath(props.body, m[1])
+  // 根 list(Task 10):m[1]===''(rel 首段即下标)→ 容器是 body 本体
+  // (getByPath 空 path 有 guard 恒 undefined,不能走它)
+  const arr = m[1] === '' ? props.body : getByPath(props.body, m[1])
   return `${m[1]}[${Array.isArray(arr) ? arr.length : 0}]${m[3]}`
 }
 
@@ -628,10 +634,21 @@ function canAddSibling(f: IOFieldBinding): boolean {
  * setValue:setValue 对深层 '' 会走 D8 剪枝(空值立删),此处空值正是要落
  * 的载体(body 有叶子 → Task 8 派生行投影即现)。emit 走既有 update:body 通路。
  */
+/**
+ * body 浅拷贝(数组保形,Task 10):数组根 spread 保数组性 — 对象 spread
+ * `{...body}` 会把数组洗成 {0:…} 数字键对象,数组性丢失;空 body 按 rel
+ * 首段形态建容器:`[` 开头建 [](根 list 首段 INDEX),否则 {}(对象根惯例)。
+ */
+function copyBody(rel: string): any {
+  if (Array.isArray(props.body)) return [...props.body]
+  if (props.body && typeof props.body === 'object') return { ...props.body }
+  return rel.startsWith('[') ? [] : {}
+}
+
 function addSibling(f: IOFieldBinding) {
   const rel = siblingPathOf(f)
   if (rel === null || props.readonly) return
-  const next = { ...(props.body || {}) }
+  const next = copyBody(rel)
   setByPath(next, rel, '')
   emit('update:body', next)
 }
@@ -671,9 +688,9 @@ function isDerived(f: IOFieldBinding): boolean {
   return derivedNames.value.has(f.name)
 }
 
-/** 派生行标签 = 相对路径(完整 $. 路径在角标);声明行标签 = name */
+/** 派生行标签 = 相对路径(完整 $ 路径在角标);声明行标签 = name */
 function labelOf(f: IOFieldBinding): string {
-  return isDerived(f) ? f.path.replace(/^\$\./, '') : f.name
+  return isDerived(f) ? f.path.replace(/^\$\.?/, '') : f.name
 }
 
 /**
@@ -699,9 +716,10 @@ const extraRows = computed<ExtraRowView[]>(() => {
       ? (props.body as Record<string, unknown>)
       : null
   // binding 覆盖面的根段(D12 归一:按 `.`/`[`/`]` 切 — '$.supplier[0].x' 根段
-  // 是 'supplier' 而非 'supplier[0]',数组下标不拆根,容器整体归入覆盖面)
+  // 是 'supplier' 而非 'supplier[0]',数组下标不拆根,容器整体归入覆盖面;
+  // 根 list '$[0].x' 根段 '' — 对象 body 键不可能是 '',天然无侵入)
   const roots = new Set(
-    props.bindings.map((b) => b.path.replace(/^\$\./, '').split(/[.[\]]/)[0])
+    props.bindings.map((b) => b.path.replace(/^\$\.?/, '').split(/[.[\]]/)[0])
   )
   const schemaTypes = new Map(
     (props.unboundFields ?? []).map((f) => [f.name, f.type ?? 'string'])
@@ -749,14 +767,14 @@ function isStructured(v: unknown): boolean {
 
 function setExtra(k: string, val: unknown) {
   if (props.readonly) return
-  const next = { ...(props.body || {}) }
+  const next = copyBody(k)
   next[k] = val
   emit('update:body', next)
 }
 
 function removeExtra(k: string) {
   if (props.readonly) return
-  const next = { ...(props.body || {}) }
+  const next = copyBody(k)
   delete next[k]
   emit('update:body', next)
 }
@@ -770,13 +788,13 @@ function extraPlaceholder(row: ExtraRowView): string {
 
 function getValue(f: IOFieldBinding): unknown {
   if (!props.body) return f.default ?? f.example ?? ''
-  return getByPath(props.body, f.path.replace(/^\$\./, '')) ?? f.default ?? f.example ?? ''
+  return getByPath(props.body, f.path.replace(/^\$\.?/, '')) ?? f.default ?? f.example ?? ''
 }
 
 function setValue(f: IOFieldBinding, val: unknown) {
   if (props.readonly) return
-  const next = { ...(props.body || {}) }
-  const rel = f.path.replace(/^\$\./, '')
+  const rel = f.path.replace(/^\$\.?/, '')
+  const next = copyBody(rel)
   if (val === '' && /[.\[]/.test(rel)) {
     // D8:深层清空=删叶子+容器级剪枝(防幻影容器挡 carry 整包注入);
     // 平铺字段清空维持 ''(现状,见 setValueNum 同约定)
