@@ -252,6 +252,9 @@ def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str,
             # 2) body 的值优先级(D11 按 path 寻址,深层值落嵌套):
             #    body 已填值 → default → example → None
             segs = _path_segs(f.path)
+            if not segs:
+                # 根路径 binding($ 整体):无按键写值的语义,跳过值面(fields_meta 仍登记)
+                continue
             deep = len(segs) > 1 or isinstance(segs[0], int)
             value = _get_by_path(body, segs)
             if value is _MISSING:

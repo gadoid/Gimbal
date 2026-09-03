@@ -337,6 +337,21 @@ class TestDeepPathBindingCompletion:
         assert meta["supplier_id"]["path"] == "$.supplier[0].order_supplier_id"
         assert meta["order_id"]["path"] == "$.order_id"
 
+    def test_root_binding_entry_skips_value_face_without_crash(self) -> None:
+        """R1 根路径守卫:path="$" 的 binding 条目(schema 层 D2 真空放行)
+        不得炸整个 export —— 无按键写值的语义,跳过值面(fields_meta 仍登记)。"""
+        ep = _deep_binding_ep([
+            DeclarationEntry(name="$", path="$", channel="binding"),
+            _FLAT_ORDER_ID,
+        ])
+        out = _render_request_view(Request(body={}), ep)
+        # 不抛异常;full_body 无 "$" 键;平铺 binding 维持现行为
+        assert out["body"] == {"order_id": None}
+        assert "$" not in out["body"]
+        # fields_meta 仍登记根条目(元数据面完整)
+        assert "$" in out["fields_meta"]
+        assert out["fields_meta"]["$"]["path"] == "$"
+
     def test_deep_binding_nested_in_full_export_view(self) -> None:
         """端到端:exporter 全链路输出的 step request.body 中深层值为嵌套形态。"""
         ep = _deep_binding_ep([_DEEP_SUPPLIER, _FLAT_ORDER_ID])
