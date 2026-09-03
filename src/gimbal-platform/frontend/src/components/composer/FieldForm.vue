@@ -50,6 +50,16 @@
           :title="`跳转到下方策略 ${t.label}`"
           @click.stop="emit('strategyJump', t.idx)"
         >{{ t.label }}</button>
+        <!-- 「+ 同级」(D9):深层行(含派生行)于同容器下一可用下标(现数组
+             长度)建同字段空值 → Task 8 派生行投影即现;carry 容器根下与
+             平铺/dot-only/readonly 行不显示(出现即合法) -->
+        <button
+          v-if="canAddSibling(f)"
+          type="button"
+          class="sib-btn"
+          title="同容器下一可用下标新增同字段空值(派生行即现)"
+          @click.stop="addSibling(f)"
+        >+ 同级</button>
       </label>
       <div class="field-control">
         <!-- 动态注入态(assign 覆盖值):只读提示条代替值控件 — 原值仍存
@@ -593,6 +603,39 @@ function inCarryContainer(f: IOFieldBinding): boolean {
   return (props.carryRoots ?? []).includes(rootOf(f))
 }
 
+/**
+ * 「+ 同级」兄弟路径派生(D9):取 path 最后一个 `[n]` 下标段所属数组为
+ * 容器(`supplier[0].order_supplier_id` → 容器 `supplier` + 尾段
+ * `.order_supplier_id`),兄弟 = `supplier[<len>].order_supplier_id`,
+ * len = 现数组长度(数组不存在 0,setByPath 自建链)。dot-only 深层
+ * ($.cfg.timeout)无数组容器、下标无从派生 → 返回 null,按钮不显示
+ * (出现即合法,与 carry 豁免同理);readonly(响应页契约参考)同不显示。
+ */
+function siblingPathOf(f: IOFieldBinding): string | null {
+  const m = f.path.replace(/^\$\./, '').match(/^(.*)\[(\d+)\](.*)$/)
+  if (!m) return null
+  const arr = getByPath(props.body, m[1])
+  return `${m[1]}[${Array.isArray(arr) ? arr.length : 0}]${m[3]}`
+}
+
+/** 「+ 同级」可见性(D9):深层行 && 非 carry 容器 && 可派生兄弟路径(派生行同语义) */
+function canAddSibling(f: IOFieldBinding): boolean {
+  return !props.readonly && isDeepField(f) && !inCarryContainer(f) && siblingPathOf(f) !== null
+}
+
+/**
+ * 同容器下一可用下标(现数组长度)落同字段空值 '' — 直写 setByPath 而非
+ * setValue:setValue 对深层 '' 会走 D8 剪枝(空值立删),此处空值正是要落
+ * 的载体(body 有叶子 → Task 8 派生行投影即现)。emit 走既有 update:body 通路。
+ */
+function addSibling(f: IOFieldBinding) {
+  const rel = siblingPathOf(f)
+  if (rel === null || props.readonly) return
+  const next = { ...(props.body || {}) }
+  setByPath(next, rel, '')
+  emit('update:body', next)
+}
+
 /** number 控件输入:清空存 ''(对齐「其他字段」分支约定,不落幻影 0) */
 function setValueNum(f: IOFieldBinding, e: Event) {
   const v = (e.target as HTMLInputElement).value
@@ -865,6 +908,17 @@ function formatJson(v: unknown): string {
   background: #e0e7ff; color: #4338ca;
 }
 .strategy-tag:hover { background: #c7d2fe; color: #3730a3; }
+/* 「+ 同级」按钮(D9):行级小按钮,cand-btn 同位惯例(slate 淡显、悬停
+   加深)— hover 取青族,与深层派生行 is-derived/deep-divider 同色系 */
+.sib-btn {
+  flex-shrink: 0;
+  border: 1px dashed #cbd5e1; border-radius: 4px;
+  background: transparent; color: #94a3b8;
+  font-size: 9.5px; font-family: var(--font-mono); font-weight: 600;
+  padding: 1px 6px; line-height: 1.4; cursor: pointer;
+  transition: all 0.15s;
+}
+.sib-btn:hover { background: #f0fdfa; border-color: #5eead4; color: #0f766e; }
 /* 字段行 4 色左边框 */
 .field.sk-independent { border-left: 3px solid #cbd5e1; }    /* literal 灰 */
 .field.sk-lookup { border-left: 3px solid #7c3aed; }            /* static 紫 */

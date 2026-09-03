@@ -8,6 +8,9 @@
  * → field-desc 位置渲染「手填接管,清空恢复注入」警告。
  * D9 深层派生行(Task 8):body 容器根下未被 binding 精确覆盖的深层叶子
  * 自动成行(菜单/注入复用),carry 根与顶层平铺键互不侵占。
+ * D9「+ 同级」(Task 9):深层行(含派生行)于同容器下一可用下标(现数组
+ * 长度)建同字段空值 '' → Task 8 派生行投影即现;carry 容器根下/平铺行
+ * 不显示按钮(出现即合法)。
  * 裁定14 顺手锁:view_only 上级 title 显示原通道,不再误标 binding。
  */
 import { describe, it, expect } from 'vitest'
@@ -302,5 +305,101 @@ describe('FieldForm — 深层派生行(D9)', () => {
     expect(derived.find('.ctl-injected').exists()).toBe(true)
     expect(derived.find('.ctl-injected').attributes('title'))
       .toBe('$.oid → $.request_body.supplier[0].order_supplier_id')
+  })
+})
+
+/**
+ * 「+ 同级」按钮(Task 9,D9):深层行点一下 — 同容器下一可用下标
+ * (现数组长度)建同字段空值 '',body 叶子即现 → Task 8 派生行投影自动
+ * 出现(无手动接线)。可见性 = isDeepField && !inCarryContainer:
+ * carry 容器根下的行不显示(加同级=接管整包,按钮出现即合法);平铺行
+ * 不显示;dot-only 深层($.cfg.timeout)无数组容器、下标无从派生,同不显示。
+ */
+describe('FieldForm — 「+ 同级」按钮(D9)', () => {
+  it('S1: 深层 binding 行有「+ 同级」;点击 → supplier[1].order_supplier_id=\'\' 且派生行即现', async () => {
+    const { w, body } = mountWithParent({
+      bindings: [mkBinding({ name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id' })],
+      body: { supplier: [{ order_supplier_id: 'x' }] },
+    })
+    const btn = w.find('.sib-btn')
+    expect(btn.exists()).toBe(true)
+    expect(btn.text()).toContain('+ 同级')
+    await btn.trigger('click')
+    await flush()
+    expect(body.value).toEqual({
+      supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: '' }],
+    })
+    // 派生行即现(Task 8 body 投影,零手动接线)
+    const derived = w.findAll('.field.is-derived')
+    expect(derived).toHaveLength(1)
+    expect(derived[0].find('.label-text').text()).toBe('supplier[1].order_supplier_id')
+  })
+
+  it('S2: 派生行同语义 — 从 supplier[1] 行加同级 → supplier[2]', async () => {
+    const { w, body } = mountWithParent({
+      bindings: [mkBinding({ name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id' })],
+      body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y' }] },
+    })
+    const derivedBtn = w.find('.field.is-derived .sib-btn')
+    expect(derivedBtn.exists()).toBe(true)
+    await derivedBtn.trigger('click')
+    await flush()
+    expect(body.value).toEqual({
+      supplier: [
+        { order_supplier_id: 'x' },
+        { order_supplier_id: 'y' },
+        { order_supplier_id: '' },
+      ],
+    })
+    const labels = w.findAll('.field.is-derived .label-text').map((r) => r.text())
+    expect(labels).toContain('supplier[2].order_supplier_id')
+  })
+
+  it('S3: carry 容器根下的深层行不显示按钮(加同级=接管整包,出现即合法)', () => {
+    const { w } = mountWithParent({
+      bindings: [mkBinding({ name: 'sku', path: '$.items[0].sku' })],
+      body: { items: [{ sku: 's' }] },
+      carryRoots: ['items'],
+    })
+    expect(w.find('.sib-btn').exists()).toBe(false)
+  })
+
+  it('S4: 平铺字段行不显示按钮', () => {
+    const { w } = mountWithParent({
+      bindings: [mkBinding()],
+      body: { order_id: 'ord-1' },
+    })
+    expect(w.find('.sib-btn').exists()).toBe(false)
+  })
+
+  it('S5: 数组不存在 → len=0,兄弟落 supplier[0](setByPath 自建链)', async () => {
+    const { w, body } = mountWithParent({
+      bindings: [mkBinding({ name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id' })],
+      body: {},
+    })
+    expect(w.find('.sib-btn').exists()).toBe(true)
+    await w.find('.sib-btn').trigger('click')
+    await flush()
+    expect(body.value).toEqual({ supplier: [{ order_supplier_id: '' }] })
+  })
+
+  it('S6: dot-only 深层(无下标段)不显示按钮 — 无数组容器,下标无从派生', () => {
+    const { w } = mountWithParent({
+      bindings: [mkBinding({ name: 'timeout', path: '$.cfg.timeout' })],
+      body: { cfg: { timeout: 30 } },
+    })
+    expect(w.find('.sib-btn').exists()).toBe(false)
+  })
+
+  it('S7: readonly(响应页契约参考)不显示按钮 — 不提供 body 变更入口', () => {
+    const w = mount(FieldForm, {
+      props: {
+        bindings: [mkBinding({ name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id' })],
+        body: { supplier: [{ order_supplier_id: 'x' }] },
+        readonly: true,
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    expect(w.find('.sib-btn').exists()).toBe(false)
   })
 })
