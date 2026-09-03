@@ -2,14 +2,30 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from gimbal_plate.export.platform import (
     PlatformScenarioExporter,
     PlatformScenarioView,
     PlatformStepView,
+    _render_request_view,
 )
-from gimbal_plate.schema.scenario import Scenario as ScenarioModel
+from gimbal_plate.schema.api import Api
+from gimbal_plate.schema.endpoint import (
+    ApiSpec,
+    DeclarationEntry,
+    EndpointSpec,
+    RequestSpec,
+    ResponseSpec,
+)
+from gimbal_plate.schema.request import Request
+from gimbal_plate.schema.scenario import (
+    Config,
+    Meta,
+    Scenario as ScenarioModel,
+)
+from gimbal_plate.schema.step import Step
 from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
 
 
@@ -236,3 +252,113 @@ class TestPlatformEndpointViewRestored:
         kinds = {v["name"]: v["kind"] for v in cs["vars"]}
         assert kinds["bl_no"] == "random_decorated"
         assert kinds["bank_id_0"] == "literal"
+
+
+# ── D11:binding 补全按 path 寻址(深层值落嵌套) ──────────────────
+
+
+def _deep_binding_ep(declarations: list[DeclarationEntry]) -> EndpointSpec:
+    """深层 binding 声明的最小 endpoint(D11 语料:$.supplier[0].order_supplier_id)。"""
+    return EndpointSpec(
+        id="tst.deep_order_add",
+        system="tst",
+        service="tst-service",
+        name="deep_order_add",
+        description="深层 binding 补全测试端点",
+        api=ApiSpec(service="tst-service", method="POST", path="/deep-order-add"),
+        request=RequestSpec(
+            body_type="json",
+            schema_={"type": "object", "properties": {}},
+            declarations=declarations,
+        ),
+        responses={200: ResponseSpec(status=200)},
+    )
+
+
+_DEEP_SUPPLIER = DeclarationEntry(
+    name="supplier_id", path="$.supplier[0].order_supplier_id", channel="binding",
+)
+_FLAT_ORDER_ID = DeclarationEntry(
+    name="order_id", path="$.order_id", channel="binding",
+)
+
+
+class TestDeepPathBindingCompletion:
+    """D11:binding 补全从平键写改为 path 寻址写。
+
+    - 深层 binding 值落嵌套({"supplier": [{"order_supplier_id": "x"}]}),
+      不再落顶层平键 {"supplier_id": "x"}
+    - 深层 binding 无值时不落 None 骨架(D7:防挡 carry 容器注入);
+      平铺 binding 维持 None 占位现行为
+    - fields_meta 仍按 name 键控,条目带 path
+    """
+
+    def test_deep_binding_value_lands_nested(self) -> None:
+        ep = _deep_binding_ep([_DEEP_SUPPLIER, _FLAT_ORDER_ID])
+        body = {
+            "order_id": "O-77",
+            "supplier": [{"order_supplier_id": "S-001"}],
+        }
+        out = _render_request_view(Request(body=body), ep)
+        assert out["body"] == {
+            "order_id": "O-77",
+            "supplier": [{"order_supplier_id": "S-001"}],
+        }, "深层 binding 值必须按 path 落嵌套,而非顶层平键"
+        assert "supplier_id" not in out["body"]
+
+    def test_deep_binding_default_lands_nested(self) -> None:
+        """body 无值时 default 沿 path 落嵌套(fallback 顺序 default → example → None)。"""
+        ep = _deep_binding_ep([DeclarationEntry(
+            name="supplier_id", path="$.supplier[0].order_supplier_id",
+            channel="binding", default="DEF-S",
+        )])
+        out = _render_request_view(Request(body={}), ep)
+        assert out["body"] == {"supplier": [{"order_supplier_id": "DEF-S"}]}
+
+    def test_deep_binding_missing_leaves_no_none_skeleton(self) -> None:
+        """D7:深层无值(default/example 均无)不落 None 骨架;
+        同端点平铺 binding 维持 None 占位现行为。"""
+        ep = _deep_binding_ep([_DEEP_SUPPLIER, _FLAT_ORDER_ID])
+        out = _render_request_view(Request(body={}), ep)
+        assert out["body"] == {"order_id": None}, (
+            "深层 binding 无值不得物化 None 骨架(防挡 carry 容器注入);"
+            "平铺 binding 保留 None 占位"
+        )
+        assert "supplier" not in out["body"]
+
+    def test_fields_meta_name_keyed_with_path(self) -> None:
+        ep = _deep_binding_ep([_DEEP_SUPPLIER, _FLAT_ORDER_ID])
+        out = _render_request_view(
+            Request(body={"supplier": [{"order_supplier_id": "S-001"}]}), ep,
+        )
+        meta = out["fields_meta"]
+        # 仍按 name 键控(平台前端 O(1) 查表),条目带寻址真源 path
+        assert set(meta.keys()) == {"supplier_id", "order_id"}
+        assert meta["supplier_id"]["path"] == "$.supplier[0].order_supplier_id"
+        assert meta["order_id"]["path"] == "$.order_id"
+
+    def test_deep_binding_nested_in_full_export_view(self) -> None:
+        """端到端:exporter 全链路输出的 step request.body 中深层值为嵌套形态。"""
+        ep = _deep_binding_ep([_DEEP_SUPPLIER, _FLAT_ORDER_ID])
+        sc = ScenarioModel(
+            scenarioId="sc-deep-path-001",
+            meta=Meta(
+                name="deep-path-binding", description="D11 端到端",
+                module="plate", priority=1, author="t", owner="t",
+                tags=[], version="1",
+                createTime=datetime.now(UTC), expire=False, requirementRef=[],
+            ),
+            config=Config(),
+            resource={},
+            steps=[Step(
+                api=Api(service="tst-service", method="POST",
+                        path="/deep-order-add"),
+                request=Request(body={
+                    "supplier": [{"order_supplier_id": "S-001"}],
+                }),
+            )],
+        )
+        view = PlatformScenarioExporter(sc, endpoints=[ep]).to_view()
+        body = view.steps[0].request["body"]
+        assert body["supplier"][0]["order_supplier_id"] == "S-001"
+        assert "supplier_id" not in body

@@ -26,6 +26,7 @@ V3.1.1 抽象化:继承 ``gimbal_plate.export._protocol.ScenarioExporter``,
 """
 from __future__ import annotations
 
+import re
 from typing import Any, override
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -177,12 +178,59 @@ def _merge_carry_literal(path: str, body: dict[str, Any], full_body: dict[str, A
     dst.setdefault(parts[-1], src)
 
 
+# ── 内部:path 寻址读写(D11 binding 补全按 path 寻址写) ───────────
+
+_MISSING = object()
+
+
+def _path_segs(path: str) -> list[Any]:
+    """'$.a[0].b' → ['a', 0, 'b'](FIELD/INDEX 段;binding 限具体路径后无通配)。"""
+    segs: list[Any] = []
+    for m in re.finditer(r"([^[\].]+)|\[(\d+)\]", path.lstrip("$.")):
+        segs.append(m.group(1) if m.group(1) is not None else int(m.group(2)))
+    return segs
+
+
+def _get_by_path(data: Any, segs: list[Any]) -> Any:
+    cur = data
+    for seg in segs:
+        if isinstance(seg, int):
+            if not isinstance(cur, list) or seg >= len(cur):
+                return _MISSING
+            cur = cur[seg]
+        else:
+            if not isinstance(cur, dict) or seg not in cur:
+                return _MISSING
+            cur = cur[seg]
+    return cur
+
+
+def _set_by_path(container: Any, segs: list[Any], value: Any) -> Any:
+    """按段写值,中间节点自动创建(FIELD→dict/INDEX→list+pad None),对齐 gimbal _set_at。"""
+    if not segs:
+        return value
+    seg, rest = segs[0], segs[1:]
+    if isinstance(seg, int):
+        if not isinstance(container, list):
+            container = []
+        while len(container) <= seg:
+            container.append(None)
+        container[seg] = _set_by_path(container[seg], rest, value)
+        return container
+    if not isinstance(container, dict):
+        container = {}
+    container[seg] = _set_by_path(container.get(seg), rest, value)
+    return container
+
+
 def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str, Any]:
     """把 Request 翻译为 dict,body 全量补全 + fields_meta 携带字段元数据。
 
     设计(PLATE_V3_DESIGN.md §7.2 方案 C):
-    - body 仍是纯 dict,key = 字段名,value = 字面量值
+    - body 仍是纯 dict;D11 起 binding 补全按声明 path 寻址写:
+      平铺路径落顶层键,深层路径("$.a[0].b")值落嵌套形态
     - 字段值优先级:body 已填值 → endpoint default → endpoint example → None
+      (深层路径无值不落 None 骨架,D7:防挡 carry 容器注入;平铺维持 None 占位)
     - carry 面键(spec §2.2):不参与补全,仅透传 body 已有字面量(值归 platform 值表)
     - 字段元数据集中放在 fields_meta:{name → binding 通道声明条目全量元信息}
       (path / channel / type / required / default / example / description /
@@ -199,17 +247,24 @@ def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str,
     fields_meta: dict[str, Any] = {}
     if ep is not None and ep.request is not None:
         for f in (e for e in ep.request.declarations if e.channel == "binding"):
-            # 1) 字段元数据全量带上(让平台表单渲染有依据)
+            # 1) 字段元数据全量带上(让平台表单渲染有依据;按 name 键控,条目带 path)
             fields_meta[f.name] = f.model_dump(mode="json", exclude_none=True)
-            # 2) body 的值优先级
-            if f.name in body:
-                full_body[f.name] = body[f.name]
-            elif f.default is not None:
-                full_body[f.name] = f.default
-            elif f.example is not None:
-                full_body[f.name] = f.example
-            else:
-                full_body[f.name] = None
+            # 2) body 的值优先级(D11 按 path 寻址,深层值落嵌套):
+            #    body 已填值 → default → example → None
+            segs = _path_segs(f.path)
+            deep = len(segs) > 1 or isinstance(segs[0], int)
+            value = _get_by_path(body, segs)
+            if value is _MISSING:
+                if f.default is not None:
+                    value = f.default
+                elif f.example is not None:
+                    value = f.example
+                else:
+                    value = None
+            if value is None and deep:
+                continue  # D7:深层无值不落 None 骨架(防挡 carry 容器注入)
+            if deep or value is not _MISSING:
+                _set_by_path(full_body, segs, value)
         # 3) carry 面键:值归 platform 两层值表管,不补默认、不造 None 占位;
         #    body 已带字面量的原样并入 —— 保住 gimbal→platform→gimbal 往返
         #    子集契约,且与运行时 fill-missing(body 显式值优先)语义一致。
