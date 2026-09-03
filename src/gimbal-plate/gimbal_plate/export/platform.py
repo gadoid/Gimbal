@@ -154,10 +154,13 @@ def _render_strategy_view(strategy: list[Assertion | Assign | Extract]) -> list[
 
 
 def _merge_carry_literal(path: str, body: dict[str, Any], full_body: dict[str, Any]) -> None:
-    """把 body 中已存在的 carry 路径字面量原样并入 full_body。
+    """把 body 中已存在的 carry 路径字面量原样并入 full_body(打底)。
 
     嵌套路径("$.a.b")逐层下钻;任一层缺失即视为无字面量,不加键。
-    已存在于 full_body 的键不覆盖(fields/carry 面互斥,防御性保留)。
+    D3 起允许 carry ⊃ binding 嵌套(旧"fields/carry 面互斥"前提已过时):
+    本合并先于 binding 循环执行 —— carry 整容器字面量先落 full_body,
+    binding 深层叶子随后沿容器下钻覆写,容器内兄弟键得以保留(F1)。
+    已存在于 full_body 的键不覆盖(setdefault 防御性保留)。
     """
     parts = [p for p in path.lstrip("$").split(".") if p]
     if not parts:
@@ -246,10 +249,19 @@ def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str,
     full_body: dict[str, Any] = {}
     fields_meta: dict[str, Any] = {}
     if ep is not None and ep.request is not None:
+        # 1) carry 面键先行打底:值归 platform 两层值表管,不补默认、不造 None 占位;
+        #    body 已带字面量的原样并入 —— 保住 gimbal→platform→gimbal 往返
+        #    子集契约,且与运行时 fill-missing(body 显式值优先)语义一致。
+        #    必须先于 binding 循环(D3 旗舰格 carry ⊃ binding):carry 整容器
+        #    先落 full_body,binding 深层叶子随后沿已并入的完整容器下钻,
+        #    只覆已声明路径 —— 容器内兄弟键不截断(F1)。
+        for carry_path in (e.path for e in ep.request.declarations
+                           if e.channel == "carry"):
+            _merge_carry_literal(carry_path, body, full_body)
         for f in (e for e in ep.request.declarations if e.channel == "binding"):
-            # 1) 字段元数据全量带上(让平台表单渲染有依据;按 name 键控,条目带 path)
+            # 2) 字段元数据全量带上(让平台表单渲染有依据;按 name 键控,条目带 path)
             fields_meta[f.name] = f.model_dump(mode="json", exclude_none=True)
-            # 2) body 的值优先级(D11 按 path 寻址,深层值落嵌套):
+            # 3) body 的值优先级(D11 按 path 寻址,深层值落嵌套):
             #    body 已填值 → default → example → None
             segs = _path_segs(f.path)
             if not segs:
@@ -271,12 +283,6 @@ def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str,
                 # 丢弃返回 = 值静默蒸发(整 body 为数组是正确导出形态);
                 # dict 首段原位变异返回同对象,赋值无副作用
                 full_body = _set_by_path(full_body, segs, value)
-        # 3) carry 面键:值归 platform 两层值表管,不补默认、不造 None 占位;
-        #    body 已带字面量的原样并入 —— 保住 gimbal→platform→gimbal 往返
-        #    子集契约,且与运行时 fill-missing(body 显式值优先)语义一致。
-        for carry_path in (e.path for e in ep.request.declarations
-                           if e.channel == "carry"):
-            _merge_carry_literal(carry_path, body, full_body)
     else:
         full_body = dict(body)
     return {

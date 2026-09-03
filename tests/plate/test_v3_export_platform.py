@@ -399,3 +399,33 @@ class TestDeepPathBindingCompletion:
         body = view.steps[0].request["body"]
         assert body["supplier"][0]["order_supplier_id"] == "S-001"
         assert "supplier_id" not in body
+
+
+# ── F1 修轮:carry 先行打底,binding 深层只覆叶子 ──────────────────
+
+
+_CARRY_SUPPLIER = DeclarationEntry(
+    name="supplier", path="$.supplier", channel="carry", type="array",
+)
+
+
+class TestCarryBaseThenBindingOverlay:
+    """F1(D3 旗舰格 carry ⊃ binding):carry 整容器打底、binding 只覆叶子。
+
+    顺序缺陷回归:binding 循环先跑会从空 full_body 重建仅含已声明叶子的
+    部分容器,随后 carry 字面量合并对根键 setdefault 因键已存在而 no-op,
+    body 中完整容器字面量的兄弟键(如 note)被截断。
+    """
+
+    def test_carry_container_base_keeps_binding_sibling_keys(self) -> None:
+        """carry $.supplier 整容器 + binding $.supplier[0].order_supplier_id;
+        body 带兄弟键 note —— 导出 view body 的 supplier[0] 必须保留 note,
+        且 order_supplier_id 为 body 值(carry 打底、binding 只覆叶子)。"""
+        ep = _deep_binding_ep([_CARRY_SUPPLIER, _DEEP_SUPPLIER])
+        body = {"supplier": [{"order_supplier_id": "S1", "note": "N1"}]}
+        out = _render_request_view(Request(body=body), ep)
+        assert out["body"]["supplier"][0]["note"] == "N1", (
+            "carry 容器打底:body 字面量的兄弟键 note 不得被 binding "
+            "部分容器截断(F1)"
+        )
+        assert out["body"]["supplier"][0]["order_supplier_id"] == "S1"
