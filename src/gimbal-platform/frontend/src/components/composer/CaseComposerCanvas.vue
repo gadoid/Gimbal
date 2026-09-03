@@ -217,6 +217,7 @@
                   :unbound-fields="reqTypeC"
                   :strategy-tags="requestStrategyTags"
                   :injected="requestInjected"
+                  :carry-roots="carryRoots"
                   @strategy-jump="onStrategyJump"
                   @update:body="(v: unknown) => currentStep.request.body = v"
                   @field-extract="onFieldExtract"
@@ -1105,6 +1106,11 @@ function typeCFields(
  *  declarations 归一化后:carry 通道条目 path 集 */
 const reqCarryPaths = computed<Set<string>>(() =>
   new Set(carryPaths(currentFull.value?.request?.declarations)))
+/** carry 容器根键集(D7 警告行):carry 通道 path 归一根段去重 —
+ *  $.cfg.timeout → 'cfg';传 FieldForm,深字段落 carry 容器渲染接管警告 */
+const carryRoots = computed<string[]>(() =>
+  [...new Set(carryPaths(currentFull.value?.request?.declarations)
+    .map((p) => p.replace(/^\$\.?/, '').split(/[.[\]]/)[0]))])
 const reqTypeC = computed<TypeCField[]>(() =>
   typeCFields(currentReqSchema.value, fieldBindings(currentStep.value).map((f) => f.path))
     .filter((f) => !reqCarryPaths.value.has(f.path))

@@ -310,6 +310,11 @@
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
         {{ f.description }}
       </p>
+      <!-- carry 容器接管警告(D7):深层字段落 carry 根键容器 — 手填整包
+           接管(值表不再注入),清空剪枝掉容器可恢复注入 -->
+      <p v-if="isDeepField(f) && inCarryContainer(f)" class="deep-carry-note">
+        上级容器 $.{{ rootOf(f) }} 为 carry 整包传递 — 手填将接管该容器,清空可恢复注入
+      </p>
       <!-- 兜底原值行(注入态):策略失败且 onFailure=continue 时以此值发送 -->
       <p v-if="isInjected(f)" class="injected-fallback">
         原值 <code>{{ fallbackText(f) }}</code> · 策略失败且继续(continue)时以此发送
@@ -393,7 +398,7 @@
 import { computed, ref } from 'vue'
 import type { IOFieldBinding } from '@/types/plate'
 import type { VarEntry } from '@/utils/var-registry'
-import { getByPath, setByPath } from '@/utils/jsonpath'
+import { getByPath, pruneByPath, setByPath } from '@/utils/jsonpath'
 import FieldActionMenu from './FieldActionMenu.vue'
 import { parseJson } from '../../utils/json'
 
@@ -442,6 +447,11 @@ const props = defineProps<{
    *  值控件换只读提示条,原值降级为 continue 兜底(见 injected-fallback)。
    *  StrategyForm/响应页复用处不传 → 零影响。 */
   injected?: Record<string, Array<{ source: string; target: string }>>
+  /** carry 容器根键集(Canvas 传入 — declarations carry 通道 path 归一根段
+   *  去重):深层字段落在此容器 → field-desc 位置渲染接管警告行
+   *  (手填接管整包传递,清空剪枝可恢复注入)。StrategyForm/响应页
+   *  复用处不传 → 零警告行。 */
+  carryRoots?: string[]
 }>()
 const emit = defineEmits<{
   'update:body': [any]
@@ -544,11 +554,30 @@ function fallbackText(f: IOFieldBinding): string {
 
 /**
  * path 角标悬停(D5 治理标注):carry 上级 = 值表打底、此处覆写;
- * binding 上级 = 同容器可 JSON 域整编。无上级(深层但祖先未声明)只透 path。
+ * 其余通道(binding/view_only)透出原值。无上级(深层但祖先未声明)只透 path。
  */
 function parentTitle(f: IOFieldBinding): string {
   if (!f.parentPath) return f.path
-  return `${f.path} · 上级 ${f.parentPath}(${f.parentChannel === 'carry' ? 'carry · 值表打底,此处覆写' : 'binding'})`
+  const chan = f.parentChannel === 'carry'
+    ? 'carry · 值表打底,此处覆写'
+    : f.parentChannel ?? 'binding'
+  return `${f.path} · 上级 ${f.parentPath}(${chan})`
+}
+
+/** 深层字段判定(D8):rel 含 `.` 或 `[`(平铺两字符皆不含)— 与 setValue
+ *  清空剪枝分流同判据;`[` 必须转义(本仓实证 /[.[]/ 写法有坑) */
+function isDeepField(f: IOFieldBinding): boolean {
+  return /[.\[]/.test(f.path.replace(/^\$\./, ''))
+}
+
+/** 字段根键:$.a[0].b → 'a'(D12 归一切法,数组下标不拆根) */
+function rootOf(f: IOFieldBinding): string {
+  return f.path.replace(/^\$\./, '').split(/[.[\]]/)[0]
+}
+
+/** 深层字段是否落在 carry 容器内(根键命中 Canvas 传入的 carry 根键集) */
+function inCarryContainer(f: IOFieldBinding): boolean {
+  return (props.carryRoots ?? []).includes(rootOf(f))
 }
 
 /** number 控件输入:清空存 ''(对齐「其他字段」分支约定,不落幻影 0) */
@@ -669,7 +698,14 @@ function getValue(f: IOFieldBinding): unknown {
 function setValue(f: IOFieldBinding, val: unknown) {
   if (props.readonly) return
   const next = { ...(props.body || {}) }
-  setByPath(next, f.path.replace(/^\$\./, ''), val)
+  const rel = f.path.replace(/^\$\./, '')
+  if (val === '' && /[.\[]/.test(rel)) {
+    // D8:深层清空=删叶子+容器级剪枝(防幻影容器挡 carry 整包注入);
+    // 平铺字段清空维持 ''(现状,见 setValueNum 同约定)
+    pruneByPath(next, rel)
+  } else {
+    setByPath(next, rel, val)
+  }
   emit('update:body', next)
 }
 
@@ -870,6 +906,15 @@ function formatJson(v: unknown): string {
   font-size: 11.5px; color: #64748b; line-height: 1.5;
 }
 .field-desc svg { flex-shrink: 0; margin-top: 2px; color: #94a3b8; }
+
+/* carry 容器接管警告行(D7):琥珀族(injected-fallback 同色系)——
+   深层字段落在 carry 根键容器,手填/清空的治理语义就地透出 */
+.deep-carry-note {
+  margin: 1px 0 0;
+  padding: 3px 8px;
+  font-size: 11px; color: #b45309; line-height: 1.5;
+  background: #fffbeb; border: 1px dashed #fde68a; border-radius: 6px;
+}
 
 /* ── 其他字段折叠区:琥珀警示(浅底 + 左条),与 sk-generated 橙同族 ── */
 .extras {
