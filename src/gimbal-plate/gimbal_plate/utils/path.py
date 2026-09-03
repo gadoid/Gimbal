@@ -95,3 +95,16 @@ def last_segment(value: str) -> str | None:
         # 内部 enum 名见 plate/utils/jsonpath.py：FIELD / INDEX / WILDCARD / FILTER / RECURSIVE
         return last.value
     return None
+
+
+def parse_nodes(value: str) -> "list[_jp.PathNode] | None":
+    """合法 path → 节点序列(非法/空/非字符串 → None)。
+
+    包含判定(io_spec D3)与通道形态判定(D2)的公共入口。
+    """
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return _jp._parse(value)
+    except _jp.JsonPathError:
+        return None

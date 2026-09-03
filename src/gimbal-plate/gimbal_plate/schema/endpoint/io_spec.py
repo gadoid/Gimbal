@@ -1,6 +1,7 @@
 """请求/响应形态:描述接口输入输出 body 的形状与字段元信息。"""
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
@@ -9,6 +10,10 @@ from ...utils import path as _path
 
 # JSON Schema 原语词表(六原语);DeclarationEntry carry 通道条目校验用。
 _PRIMITIVE_TYPES = ("string", "number", "integer", "boolean", "object", "array")
+
+# DeclarationEntry.name 标识符规则(D1 name 别名制):name 作显示别名与前端键,
+# 须为 ASCII 标识符;path 是寻址真源,name↔path 解绑(2026-09-03 spec D1)。
+_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _validate_path_name_enum(
@@ -20,14 +25,13 @@ def _validate_path_name_enum(
     enum: list[Any] | None,
     owner: str,
 ) -> str:
-    """path 合法性/归一化 + name==末段 + enum 成员一致性(返回归一化 path)。
+    """path 合法性/归一化 + enum 一致性(name↔path 解绑见 2026-09-03 spec D1)。
 
     DeclarationEntry 条目级校验(owner 仅作报错文案前缀):
     - 双形态并存:短名合法,但非法 JSONPath / 空串直接拒;
     - 归一化统一收敛为 JSONPath 形态($.xxx),对已是 JSONPath 的 no-op;
-    - name 与 path 末段:末段是 FIELD 时 name 必须等于该标识符;
-      末段非 FIELD(根/INDEX/WILDCARD/...)时不约束 name —— 沿用现行
-      行为(spec §5 引 utils/path.py ROOT 非 FIELD);
+    - name 与 path 解绑:name 是显示别名/前端键,寻址以 path 为唯一真源
+      (唯一性/标识符校验见 DeclarationEntry 与 _check_declarations);
     - enum 非空时 default/example 必须在 enum 中(None/[] 跳过、
       严格 ==、default 与 example 同等)。
     """
@@ -37,11 +41,6 @@ def _validate_path_name_enum(
             f"（须为 JSONPath 形式或合法短名）"
         )
     norm = _path.normalize(path)
-    seg = _path.last_segment(norm)
-    if seg is not None and name != seg:
-        raise ValueError(
-            f"{owner}.name={name!r} 与 path={norm!r} 的末段 {seg!r} 不一致"
-        )
     if enum:
         for label, value in (("default", default), ("example", example)):
             if value is not None and not any(value == e for e in enum):
@@ -87,7 +86,16 @@ class DeclarationEntry(BaseModel):
 
     @model_validator(mode="after")
     def _validate_entry(self) -> "DeclarationEntry":
-        # 末段非 FIELD(根/INDEX/WILDCARD)不约束 name
+        # D1 name 别名制:name 须为 ASCII 标识符(显示别名/前端键),
+        # 与 path 末段解绑(寻址真源是 path)。
+        # 根路径条目 name='$' 为 spec §3.1 既有惯例,放行特例
+        # ("$" 是归一化不动点,path=='$' 判定与归一化先后无关)
+        is_root_entry = self.name == "$" and self.path == "$"
+        if not is_root_entry and not _NAME_RE.match(self.name):
+            raise ValueError(
+                f"DeclarationEntry.name={self.name!r} 须为 ASCII 标识符"
+                f"([A-Za-z_][A-Za-z0-9_]*,作显示别名与前端键)"
+            )
         self.path = _validate_path_name_enum(
             path=self.path, name=self.name, default=self.default,
             example=self.example, enum=self.enum,
@@ -213,6 +221,50 @@ def _check_declarations(
         seen.add(e.path)
     if dup:
         raise ValueError(f"{owner} declarations 内重复 path(含跨通道交集非空): {dup}")
+    # D1 name 全清单唯一:name 是前端键控/显示别名,撞名即结构性冲突
+    seen_names: set[str] = set()
+    dup_names: list[str] = []
+    for e in declarations:
+        if e.name in seen_names and e.name not in dup_names:
+            dup_names.append(e.name)
+        seen_names.add(e.name)
+    if dup_names:
+        raise ValueError(f"{owner} declarations 内重复 name: {dup_names}")
+    # D2 通道形态:carry 限平铺/dot(整容器传递);binding 限具体路径(拒通配/filter/递归)
+    for e in declarations:
+        nodes = _path.parse_nodes(e.path)
+        if nodes is None:
+            continue  # 条目级校验已拒,防御
+        if e.channel == "carry" and any(n.kind.name != "FIELD" for n in nodes):
+            raise ValueError(
+                f"{owner} carry 通道 path 限平铺/dot 嵌套(整容器传递,值表存容器 JSON):{e.path!r}"
+            )
+        if e.channel == "binding" and any(
+                n.kind.name not in ("FIELD", "INDEX") for n in nodes):
+            raise ValueError(
+                f"{owner} binding 通道 path 须为具体路径(FIELD/INDEX,拒通配):{e.path!r}"
+            )
+    # D3 包含四格:carry⊃binding ✓(分层覆写)/ carry⊃carry ✗(一树二主)/
+    #             binding⊃binding ✓(同归表单)/ binding⊃carry ✗(双所有者)
+    parsed = [(e, _path.parse_nodes(e.path)) for e in declarations]
+    for outer, onodes in parsed:
+        if onodes is None:
+            continue
+        for inner, inodes in parsed:
+            if outer is inner or inodes is None or len(onodes) >= len(inodes):
+                continue
+            if all(a.kind == b.kind and a.value == b.value
+                   for a, b in zip(onodes, inodes)):
+                if outer.channel == "carry" and inner.channel == "carry":
+                    raise ValueError(
+                        f"{owner} carry 声明不允许嵌套(一树二主):"
+                        f"{outer.path!r} ⊃ {inner.path!r}"
+                    )
+                if outer.channel == "binding" and inner.channel == "carry":
+                    raise ValueError(
+                        f"{owner} binding 容器内不允许 carry 声明(容器归表单,叶子归值表):"
+                        f"{outer.path!r} ⊃ {inner.path!r}"
+                    )
     # B7 通道闭合:请求面 {binding, carry}(§3.5 无第三种落点),响应面 {view_only}
     for e in declarations:
         if e.channel not in allowed_channels:
