@@ -238,7 +238,7 @@ class TestPlatformEndpointViewRestored:
         # fin 全部 endpoint 统一归属 fin-service:导航树只有一组
         assert len(view.navigation) == 1
         assert "fin-service" in view.navigation
-        assert len(view.navigation["fin-service"]) == 18
+        assert len(view.navigation["fin-service"]) == 19
         # 每个节点含 id/name/description/method/path/deep_link
         node = view.navigation["fin-service"][0]
         assert {"id", "name", "description", "method", "path", "deep_link"} <= set(node.keys())

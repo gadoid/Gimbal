@@ -57,14 +57,15 @@ class TestDeclarationsShape:
         (e,) = rs.declarations
         assert e.name == "$" and e.path == "$" and e.channel == "carry"
 
-    def test_coverage_667(self) -> None:
+    def test_coverage_901(self) -> None:
+        # 意识性 re-baseline(2026-09-03):order_dispatch 落地(+234,241 请求 + 响应)
         total = 0
         for ep in ALL_ENDPOINTS:
             if ep.request:
                 total += len(ep.request.declarations)
             total += sum(len(r.declarations)
                          for r in ep.responses.values())
-        assert total == 667, f"declarations 覆盖 {total} != 667"
+        assert total == 901, f"declarations 覆盖 {total} != 901"
 
     def test_serialize_wire_shape(self) -> None:
         # P2 后 wire 恒发 declarations(空声明即空表,不再按键省略)

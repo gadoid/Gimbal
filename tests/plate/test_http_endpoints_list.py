@@ -22,7 +22,7 @@ def test_list_endpoints_under_system(http_client: TestClient) -> None:
     assert body["ok"] is True
     assert body["dim"] == "endpoint"
     items = body["data"]["items"]
-    assert body["data"]["total"] == len(items) == 18
+    assert body["data"]["total"] == len(items) == 19
     for ep in items:
         assert ep["system"] == "fin"
         assert "id" in ep
@@ -36,7 +36,7 @@ def test_filter_by_service(http_client: TestClient) -> None:
     resp = http_client.get("/api/endpoint", params={"service": "fin-service"})
     assert resp.status_code == 200
     items = resp.json()["data"]["items"]
-    assert resp.json()["data"]["total"] == 18
+    assert resp.json()["data"]["total"] == 19
     for ep in items:
         assert ep["system"] == "fin"
         assert ep["service"] == "fin-service"

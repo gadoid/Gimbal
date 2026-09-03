@@ -66,7 +66,7 @@ def test_capture_or_equal() -> None:
 
 
 def test_baseline_channel_counts() -> None:
-    """基线计数权威:667 = 568 binding/view_only + 99 carry(fixture 实测)。
+    """基线计数权威:901 = 570 binding/view_only + 331 carry(fixture 实测)。
 
     计划/spec 原钉 631 = 532 + 99 为 grep 出现级计数 —— 两个 *_order_page
     端点的响应面由 _ROW_FIELDS 推导式各生成 19 条(grep 不可见),fixture
@@ -81,12 +81,12 @@ def test_baseline_channel_counts() -> None:
             for e in r:
                 channels[e["channel"]] = channels.get(e["channel"], 0) + 1
     total = sum(channels.values())
-    assert channels.get("binding", 0) + channels.get("view_only", 0) == 568, (
+    assert channels.get("binding", 0) + channels.get("view_only", 0) == 570, (
         f"binding/view_only 总数 {channels.get('binding', 0) + channels.get('view_only', 0)}"
-        " != 568(若红:以 fixture 实测重新核对 spec §0.3 并意识性更新)"
+        " != 570(若红:以 fixture 实测重新核对 spec §0.3 并意识性更新)"
     )
-    assert channels.get("carry", 0) == 99
-    assert total == 667
+    assert channels.get("carry", 0) == 331
+    assert total == 901
 
 
 class TestSettlementDeclare:
