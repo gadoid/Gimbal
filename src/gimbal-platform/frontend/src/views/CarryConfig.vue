@@ -3,8 +3,9 @@
      服务绑定 tab:选服务 → 拉该服务 carry 字段面并集 → 逐字段填值;
        placeholder = 全局默认值(无行时);删行 = 不注入(回退全局默认);
        「设 null」= 显式注入 JSON null(§3.1)。
-       CSV 批量导入 = 表编辑动作:解析/合并走 utils/carry-csv,导入后
-       仍须手动保存(putBindings 整表替换),不绕 degraded 门控。
+       CSV 三件套(导入/模板/导出,两 tab 同一三列格式)= 表编辑动作:
+       解析/合并走 utils/carry-csv,导入后仍须手动保存,不绕 degraded 门控;
+       服务绑定导出仅已绑定行,全局默认导入为 upsert(无 face 门控)。
      全局默认 tab:整表编辑;常驻提示纯 path 跨服务生效(§6)。
      三态说明:el-input 的 v-model 会把 null 折叠成 '',故 null 用独立
      isNull 布尔承载,无行用 hasRow 承载 —— 空串值/null/无行三种状态
@@ -52,6 +53,12 @@
               placement="top"
             >
               <el-button :disabled="!rows.length" @click="downloadTemplate">下载模板</el-button>
+            </el-tooltip>
+            <el-tooltip
+              content="导出该服务的已绑定行(未绑定的面字段不进文件);导出→不改→导回 = 绑定态不变"
+              placement="top"
+            >
+              <el-button :disabled="!hasBoundRows" @click="downloadBoundCsv">导出 CSV</el-button>
             </el-tooltip>
             <input
               ref="csvInput"
@@ -135,6 +142,34 @@
             description="$.type 类语义敏感路径请用服务绑定覆盖兜底(配置纪律,spec §6)。"
           />
 
+          <div class="svc-bar">
+            <el-tooltip
+              content="CSV 三列:path,value,is_null —— 表头按名定位(列序任意);已有 path 更新、新 path 追加,两列都留空 = 该行不导入;导入后仍须手动保存"
+              placement="top"
+            >
+              <el-button @click="pickDefaultsCsv">导入 CSV</el-button>
+            </el-tooltip>
+            <el-tooltip
+              content="表头 + 一行示例(path 已填、值列留空 → 原样导回也是无操作)"
+              placement="top"
+            >
+              <el-button @click="downloadDefaultsTemplate">下载模板</el-button>
+            </el-tooltip>
+            <el-tooltip
+              content="导出当前全部默认行;导出→不改→导回 = 默认态不变"
+              placement="top"
+            >
+              <el-button :disabled="!hasDefaultRows" @click="downloadDefaultsCsv">导出 CSV</el-button>
+            </el-tooltip>
+            <input
+              ref="defaultsCsvInput"
+              type="file"
+              accept=".csv,text/csv"
+              class="csv-input"
+              @change="onDefaultsCsvPicked"
+            />
+          </div>
+
           <el-table v-if="defaultRows.length" :data="defaultRows" class="carry-table">
             <el-table-column label="字段路径" width="300">
               <template #default="{ row }">
@@ -181,11 +216,15 @@
  *   「设 null」= 显式注入 JSON null(§3.1)。
  * 全局默认 tab:整表编辑;常驻提示纯 path 跨服务生效(§6)。
  */
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { showError } from '@/utils/errorFallback'
 import { buildServiceEntries, type ServiceCarryRow } from '@/utils/carry-entries'
-import { CarryCsvError, buildCarryTemplate, mergeCarryCsv, parseCarryCsv } from '@/utils/carry-csv'
+import {
+  CarryCsvError, buildBoundCsv, buildCarryTemplate, buildDefaultsCsv,
+  buildDefaultsTemplateCsv, mergeCarryCsv, mergeDefaultsCsv, parseCarryCsv,
+  type DefaultCarryRow,
+} from '@/utils/carry-csv'
 import {
   getDefaults, putDefaults, getBindings, getBindingsFor, putBindings, getServiceFields,
   type CarryFieldFace, type CarryValues,
@@ -275,17 +314,27 @@ function pickCsv() {
   csvInput.value?.click()
 }
 
-/** 下载模板:字段面全量 path + 当前绑定值;BOM 保证 Excel 识别 UTF-8。 */
-function downloadTemplate() {
-  const blob = new Blob([`﻿${buildCarryTemplate(rows.value)}`], {
-    type: 'text/csv;charset=utf-8',
-  })
+/** 下载文本文件:前缀 BOM 保证 Excel 识别 UTF-8(两 tab 共用)。 */
+function downloadText(filename: string, text: string) {
+  const blob = new Blob([`﻿${text}`], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `carry-${service.value || 'template'}.csv`
+  a.download = filename
   a.click()
   URL.revokeObjectURL(url)
+}
+
+/** 下载模板:字段面全量 path + 当前绑定值。 */
+function downloadTemplate() {
+  downloadText(`carry-${service.value || 'template'}.csv`, buildCarryTemplate(rows.value))
+}
+
+/** 导出已绑定行:无绑定行时按钮禁用,不会产出纯表头文件。 */
+const hasBoundRows = computed(() => rows.value.some((r) => r.hasRow))
+
+function downloadBoundCsv() {
+  downloadText(`carry-${service.value}-bindings.csv`, buildBoundCsv(rows.value))
 }
 
 async function onCsvPicked(e: Event) {
@@ -343,9 +392,7 @@ async function saveService() {
 }
 
 // ── 全局默认 ──────────────────────────────────────────────
-interface DefaultRow { path: string; value: string; isNull: boolean }
-
-const defaultRows = ref<DefaultRow[]>([])
+const defaultRows = ref<DefaultCarryRow[]>([])
 
 async function loadDefaults() {
   const d = await getDefaults()
@@ -361,8 +408,47 @@ function addDefaultRow() {
   defaultRows.value.push({ path: '', value: '', isNull: false })
 }
 
+// ── 全局默认 CSV(与服务绑定同格式;导入 = upsert 表编辑,不自动保存)──
+const defaultsCsvInput = ref<HTMLInputElement | null>(null)
+/** 有可导出的默认行(非空白 path);全空时导出按钮禁用。 */
+const hasDefaultRows = computed(() => defaultRows.value.some((r) => r.path))
+
+function pickDefaultsCsv() {
+  defaultsCsvInput.value?.click()
+}
+
+function downloadDefaultsTemplate() {
+  downloadText('carry-defaults-template.csv', buildDefaultsTemplateCsv())
+}
+
+function downloadDefaultsCsv() {
+  downloadText('carry-defaults.csv', buildDefaultsCsv(defaultRows.value))
+}
+
+async function onDefaultsCsvPicked(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = '' // 清掉选择,同名文件可重复导入
+  if (!file) return
+  let parsed
+  try {
+    parsed = parseCarryCsv(await file.text())
+  } catch (err) {
+    if (err instanceof CarryCsvError) {
+      ElMessage.error(`CSV 格式错误:${err.message}`)
+    } else {
+      showError('读取 CSV', err)
+    }
+    return
+  }
+  const report = mergeDefaultsCsv(defaultRows.value, parsed)
+  ElMessage.success(
+    `已导入:更新 ${report.updated} 条、新增 ${report.added} 条(尚未保存,请核对后点「保存」)`,
+  )
+}
+
 /** 重复 path 会让后写行静默覆盖先行(dict 键折叠)— 保存前拦截(R1-M2)。 */
-function firstDuplicatePath(rows: DefaultRow[]): string | null {
+function firstDuplicatePath(rows: DefaultCarryRow[]): string | null {
   const seen = new Set<string>()
   for (const r of rows) {
     if (!r.path) continue

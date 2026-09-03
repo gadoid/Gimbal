@@ -1,5 +1,6 @@
 /**
- * carry-csv.ts — CarryConfig 服务绑定 tab 的 CSV 批量导入(解析 + 合并纯核心)。
+ * carry-csv.ts — CarryConfig 两 tab 共用的 CSV 纯核心:
+ * 解析 + 模板/导出编码 + 合并(服务绑定 face 门控 / 全局默认 upsert)。
  *
  * 固定格式:首行表头按名定位(列序任意),列集必须恰为
  * path / value / is_null;数据行 path 必须命中字段面,面外行跳过并报告
@@ -183,4 +184,77 @@ export function mergeCarryCsv(
     applied += 1
   }
   return { applied, skippedUnknown }
+}
+
+// ── 全局默认 tab(同一三列格式;无字段面概念 — 纯 path 跨服务)──────
+
+/** 全局默认编辑行(CarryConfig defaults tab):行存在即配置,无 hasRow 态。 */
+export interface DefaultCarryRow {
+  path: string
+  value: string
+  isNull: boolean
+}
+
+/** 默认导入合并报告:updated = 更新已有 path 的行数;added = 追加新行数。 */
+export interface DefaultsMergeReport {
+  updated: number
+  added: number
+}
+
+/** 服务绑定导出:仅已绑定行(hasRow),编码复用 buildCarryTemplate
+ *  (null=1 / 显式空串=0)。导出→不改→导回 = 绑定态不变;未绑定面
+ *  字段不进文件 —— 模板才是全 face 编辑形态,导出是纯绑定数据。 */
+export function buildBoundCsv(rows: readonly ServiceCarryRow[]): string {
+  return buildCarryTemplate(rows.filter((r) => r.hasRow))
+}
+
+/** 全局默认导出:当前默认行 → 三列 CSV。空白 path 行(加了行没填)
+ *  跳过不导出,对齐 saveDefaults 的落库语义。 */
+export function buildDefaultsCsv(rows: readonly DefaultCarryRow[]): string {
+  const lines = ['path,value,is_null']
+  for (const r of rows) {
+    if (!r.path) continue
+    const value = r.isNull ? '' : r.value
+    const isNull = r.isNull ? '1' : r.value === '' ? '0' : ''
+    lines.push(`${escapeField(r.path)},${escapeField(value)},${isNull}`)
+  }
+  return `${lines.join('\n')}\n`
+}
+
+/** 全局默认模板:表头 + 一行示例。示例值列两空 = 导入无操作,
+ *  模板原样导回不会误建默认(与服务 tab 模板同一条安全规则)。 */
+export function buildDefaultsTemplateCsv(): string {
+  return 'path,value,is_null\n$.headers.X-Trace-Id,,\n'
+}
+
+/** 全局默认导入 upsert:已有 path 更新值/null 态,新 path 追加行。
+ *  任何 path 都合法(无 face 门控);CSV 不删行(缺席 = 不动),
+ *  删除留在表格 UI。表内空白 path 行不参与匹配(path 不会撞空)。 */
+export function mergeDefaultsCsv(
+  rows: DefaultCarryRow[],
+  parsed: readonly ParsedCsvRow[],
+): DefaultsMergeReport {
+  const byPath = new Map(
+    rows.filter((r) => r.path).map((r) => [r.path, r] as const),
+  )
+  let updated = 0
+  let added = 0
+  for (const p of parsed) {
+    const row = byPath.get(p.path)
+    if (row) {
+      row.isNull = p.isNull
+      row.value = p.isNull ? '' : p.value
+      updated += 1
+    } else {
+      const newRow: DefaultCarryRow = {
+        path: p.path,
+        value: p.isNull ? '' : p.value,
+        isNull: p.isNull,
+      }
+      rows.push(newRow)
+      byPath.set(p.path, newRow)
+      added += 1
+    }
+  }
+  return { updated, added }
 }

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { CarryCsvError, buildCarryTemplate, mergeCarryCsv, parseCarryCsv } from '../carry-csv'
+import {
+  CarryCsvError, buildBoundCsv, buildCarryTemplate, buildDefaultsCsv,
+  buildDefaultsTemplateCsv, mergeCarryCsv, mergeDefaultsCsv, parseCarryCsv,
+} from '../carry-csv'
+import type { DefaultCarryRow } from '../carry-csv'
 import type { ServiceCarryRow } from '../carry-entries'
 
 /** 标准形态:三列、path 在首列、LF、无 BOM。 */
@@ -159,5 +163,105 @@ describe('mergeCarryCsv — 合并进字段面行', () => {
     expect(rows[0].value).toBe('ok')
     // 面外行不会凭空造行
     expect(rows.some((r) => r.path === '$.ghost')).toBe(false)
+  })
+})
+
+describe('buildBoundCsv — 服务绑定导出(仅已绑定行)', () => {
+  const FACE = (): ServiceCarryRow[] => [
+    { path: '$.remark', value: '绑定值', isNull: false, hasRow: true },
+    { path: '$.action', value: '', isNull: true, hasRow: true },
+    { path: '$.notes', value: '', isNull: false, hasRow: true }, // 显式空串
+    { path: '$.cancel_remark', value: '', isNull: false, hasRow: false }, // 未绑定
+  ]
+
+  it('只导出 hasRow 行:null=1、显式空串=0,未绑定面字段不进文件', () => {
+    expect(buildBoundCsv(FACE())).toBe(
+      'path,value,is_null\n$.remark,绑定值,\n$.action,,1\n$.notes,,0\n',
+    )
+  })
+
+  it('无绑定行 = 纯表头(调用方据此禁用按钮)', () => {
+    const none = FACE().map((r) => ({ ...r, hasRow: false }))
+    expect(buildBoundCsv(none)).toBe('path,value,is_null\n')
+  })
+
+  it('round-trip:导出 → 导回全 face = 未绑定行不动,绑定行原样恢复', () => {
+    const face = FACE()
+    const reParsed = parseCarryCsv(buildBoundCsv(face))
+    const target = FACE().map((r) => ({ ...r, value: '', isNull: false, hasRow: false }))
+    mergeCarryCsv(target, reParsed)
+    expect(target).toEqual(face)
+  })
+})
+
+describe('buildDefaultsCsv / buildDefaultsTemplateCsv — 全局默认导出与模板', () => {
+  const ROWS = (): DefaultCarryRow[] => [
+    { path: '$.headers.X-Trace-Id', value: 'trace-1', isNull: false },
+    { path: '$.remark', value: '', isNull: true },        // null 默认
+    { path: '$.notes', value: '', isNull: false },        // 显式空串默认
+    { path: '', value: '', isNull: false },               // 空白新行
+  ]
+
+  it('编码:null=1、显式空串=0、常规值空 is_null;空白 path 行跳过', () => {
+    expect(buildDefaultsCsv(ROWS())).toBe(
+      'path,value,is_null\n'
+      + '$.headers.X-Trace-Id,trace-1,\n'
+      + '$.remark,,1\n'
+      + '$.notes,,0\n',
+    )
+  })
+
+  it('值含逗号/引号/换行时 RFC4180 转义', () => {
+    const rows: DefaultCarryRow[] = [{ path: '$.remark', value: 'a,b\n"c"', isNull: false }]
+    expect(buildDefaultsCsv(rows)).toBe('path,value,is_null\n$.remark,"a,b\n""c""",\n')
+  })
+
+  it('模板 = 表头 + 一行两空示例:解析后被安全规则丢弃,原样导回无操作', () => {
+    expect(buildDefaultsTemplateCsv()).toBe('path,value,is_null\n$.headers.X-Trace-Id,,\n')
+    expect(parseCarryCsv(buildDefaultsTemplateCsv())).toEqual([])
+  })
+
+  it('round-trip:导出 → 清空表 → 导回 = 原默认态恢复', () => {
+    const rows = ROWS()
+    const reParsed = parseCarryCsv(buildDefaultsCsv(rows))
+    const target: DefaultCarryRow[] = []
+    mergeDefaultsCsv(target, reParsed)
+    expect(target).toEqual(rows.filter((r) => r.path))
+  })
+})
+
+describe('mergeDefaultsCsv — 全局默认导入 upsert(无 face 门控)', () => {
+  const ROWS = (): DefaultCarryRow[] => [
+    { path: '$.remark', value: '旧值', isNull: false },
+    { path: '', value: '', isNull: false }, // 空白新行:不参与匹配
+  ]
+
+  it('已有 path 更新值,新 path 追加行;空白表内行不被撞', () => {
+    const rows = ROWS()
+    const report = mergeDefaultsCsv(rows, [
+      { path: '$.remark', value: '新值', isNull: false },
+      { path: '$.headers.X-Trace-Id', value: 'trace-9', isNull: false },
+    ])
+    expect(report).toEqual({ updated: 1, added: 1 })
+    expect(rows).toEqual([
+      { path: '$.remark', value: '新值', isNull: false },
+      { path: '', value: '', isNull: false },
+      { path: '$.headers.X-Trace-Id', value: 'trace-9', isNull: false },
+    ])
+  })
+
+  it('is_null=1 行:isNull=true 且值清空(对齐表格「设 null」交互)', () => {
+    const rows = ROWS()
+    mergeDefaultsCsv(rows, [{ path: '$.remark', value: '将被忽略', isNull: true }])
+    expect(rows[0]).toEqual({ path: '$.remark', value: '', isNull: true })
+  })
+
+  it('同份 CSV 导两遍 = 幂等(第二遍全落 updated,行数不增)', () => {
+    const rows: DefaultCarryRow[] = []
+    const parsed = parseCarryCsv('path,value,is_null\n$.remark,r1,\n$.notes,,1\n')
+    mergeDefaultsCsv(rows, parsed)
+    const again = mergeDefaultsCsv(rows, parsed)
+    expect(again).toEqual({ updated: 2, added: 0 })
+    expect(rows).toHaveLength(2)
   })
 })
