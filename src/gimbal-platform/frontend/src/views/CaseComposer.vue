@@ -208,6 +208,23 @@
       </div>
     </footer>
 
+    <!-- ═══════ 步骤编辑(step4)回顶:字段编辑器列随字段数增长,页面较长;
+         滚过 240px 浮现,bottom 76 避开 sticky footer;横向锚定 step 信息卡
+         左缘(.backtop-btn 覆写 inline right),悬停提示「回到最上」 ═══════ -->
+    <el-tooltip v-if="stepIdx === 3" content="回到最上" placement="left" :show-after="120">
+      <el-backtop
+        :right="28"
+        :bottom="76"
+        :visibility-height="240"
+        class="backtop-btn"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 19V5" />
+          <path d="M5 12l7-7 7 7" />
+        </svg>
+      </el-backtop>
+    </el-tooltip>
+
     <!-- ═══════ Run dialog (方案栏 + ds + 声明∪引用并集绑定行) ═══════ -->
     <RunDialog
       v-if="runDialogOpen"
@@ -1169,6 +1186,39 @@ async function onDeleteScheme(name: string) {
 }
 .footer-center {
   flex: 1; display: flex; gap: 8px; justify-content: center;
+}
+
+/* ── 步骤编辑回顶按钮:玻璃质感,hover 渐变上浮;锚定 step 信息卡左缘 ──
+   分解:50% - min(50vw,900px) = 0(视口≤1800,body 满宽)或 (vw-1800)/2
+   (body 限宽 1800 居中)+ clamp(.body 右内边距)→ 内容右缘;
+   + 252px = col-info(300)+ 列距 16 − 按钮宽 44 − 20px 手调右移 → 按钮左缘
+   在 step 信息卡左边线右侧 20px(探入卡内)。≤1280 三栏塌缩(信息面板下移)锚点失效,退回贴边。
+   el-backtop 把 right 写进 inline style,须 !important 压制。 */
+.backtop-btn {
+  right: calc(50% - min(50vw, 900px) + clamp(16px, 3vw, 48px) + 252px) !important;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: saturate(180%) blur(12px);
+  border: 1px solid #e6e8ec;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  color: #4f46e5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, color 0.2s ease,
+    box-shadow 0.2s ease, transform 0.2s ease;
+}
+.backtop-btn:hover {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 6px 20px rgba(79, 70, 229, 0.35);
+  transform: translateY(-2px);
+}
+@media (max-width: 1280px) {
+  .backtop-btn { right: 28px !important; }
 }
 
 /* ═══════ Slide transition ═══════ */
