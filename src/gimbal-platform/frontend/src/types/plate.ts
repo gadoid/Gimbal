@@ -62,7 +62,7 @@ export type BodyType = 'none' | 'json' | 'form' | 'multipart' | 'raw' | 'binary'
  */
 export interface IOFieldBinding {
   name: string
-  /** 归一化后的 JSONPath 形态($.xxx);与 name 末段一致。 */
+  /** 寻址真源(D1):归一化 JSONPath($.xxx / $.a[0].b);name 为显示别名,可不同于 path 末段。 */
   path: string
   required: boolean
   default: unknown
@@ -71,6 +71,14 @@ export interface IOFieldBinding {
   enum: unknown[] | null
   ui_kind: UiKind
   source_kind: SourceKind
+  /**
+   * D12 投影派生(utils/declarations.ts deriveParent):最长已声明祖先的
+   * path,直挂根/无祖先 → null。派生跨通道 — carry 容器是 binding 深字段
+   * 的合法上级(FieldForm path 角标悬停透出治理归属)。
+   */
+  parentPath?: string | null
+  /** 随 parentPath 源条目的声明通道(carry 上级 = 值表打底、此处覆写)。 */
+  parentChannel?: 'binding' | 'carry' | 'view_only' | null
 }
 
 /**
@@ -87,7 +95,7 @@ export interface IOFieldBinding {
  */
 export interface DeclarationEntryView {
   name: string
-  /** 归一化 JSONPath 形态($.xxx);与 name 末段一致 */
+  /** 寻址真源(D1):归一化 JSONPath($.xxx);name 为显示别名,可不同于 path 末段 */
   path: string
   channel: 'binding' | 'carry' | 'view_only'
   /** JSON Schema 原语类型;仅 carry 通道必填,其余通道可能缺省 */

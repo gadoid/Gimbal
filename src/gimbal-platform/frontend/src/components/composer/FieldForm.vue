@@ -18,7 +18,10 @@
       <label class="field-label">
         <span class="label-text">{{ f.name }}</span>
         <span v-if="f.required" class="req-mark">*</span>
-        <span class="field-path">{{ f.path }}</span>
+        <!-- 深层字段 path 角标(D5):path ≠ $.+name(深层/别名)→ path 即治理线索,
+             悬停透出上级归属;平铺字段维持灰 chip,零噪音 -->
+        <span v-if="f.path !== '$.' + f.name" class="path-badge" :title="parentTitle(f)">{{ f.path }}</span>
+        <span v-else class="field-path">{{ f.path }}</span>
         <span class="ui-tag" :class="`k-${f.ui_kind}`">{{ f.ui_kind }}</span>
         <span v-if="assertable?.includes(f.path)" class="assertable-mark" title="可断言字段">✓</span>
         <span class="src-tag" :class="`s-${f.source_kind}`">
@@ -539,6 +542,15 @@ function fallbackText(f: IOFieldBinding): string {
   return typeof v === 'object' ? JSON.stringify(v) : String(v)
 }
 
+/**
+ * path 角标悬停(D5 治理标注):carry 上级 = 值表打底、此处覆写;
+ * binding 上级 = 同容器可 JSON 域整编。无上级(深层但祖先未声明)只透 path。
+ */
+function parentTitle(f: IOFieldBinding): string {
+  if (!f.parentPath) return f.path
+  return `${f.path} · 上级 ${f.parentPath}(${f.parentChannel === 'carry' ? 'carry · 值表打底,此处覆写' : 'binding'})`
+}
+
 /** number 控件输入:清空存 ''(对齐「其他字段」分支约定,不落幻影 0) */
 function setValueNum(f: IOFieldBinding, e: Event) {
   const v = (e.target as HTMLInputElement).value
@@ -579,8 +591,10 @@ const extraRows = computed<ExtraRowView[]>(() => {
     props.body && typeof props.body === 'object' && !Array.isArray(props.body)
       ? (props.body as Record<string, unknown>)
       : null
+  // binding 覆盖面的根段(D12 归一:按 `.`/`[`/`]` 切 — '$.supplier[0].x' 根段
+  // 是 'supplier' 而非 'supplier[0]',数组下标不拆根,容器整体归入覆盖面)
   const roots = new Set(
-    props.bindings.map((b) => b.path.replace(/^\$\./, '').split('.')[0])
+    props.bindings.map((b) => b.path.replace(/^\$\./, '').split(/[.[\]]/)[0])
   )
   const schemaTypes = new Map(
     (props.unboundFields ?? []).map((f) => [f.name, f.type ?? 'string'])
@@ -739,6 +753,15 @@ function formatJson(v: unknown): string {
 .field-path {
   font-family: var(--font-mono); font-size: 10px;
   color: #94a3b8; background: #f1f5f9; padding: 1px 4px; border-radius: 3px;
+}
+/* 深层字段 path 角标(D5):path ≠ $.+name 的字段以角标替代灰 chip —
+   mono 小字 slate 族(对齐 .fa-note/策略角标惯例),悬停透出上级治理归属 */
+.path-badge {
+  font-family: var(--font-mono); font-size: 9.5px;
+  padding: 1px 5px; border-radius: 3px;
+  background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
+  cursor: default;
+  max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ui-tag {
   font-size: 9px; font-weight: 700; text-transform: uppercase;
