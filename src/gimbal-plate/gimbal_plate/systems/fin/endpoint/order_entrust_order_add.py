@@ -137,7 +137,7 @@ ORDER_ENTRUST_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
         DeclarationEntry(name='pod_port_name', path='$.pod_port_name', channel='carry', type='string'),
         DeclarationEntry(name='country_id', path='$.country_id', channel='carry', type='string'),
         DeclarationEntry(name='country_name_cn', path='$.country_name_cn', channel='carry', type='string'),
-        DeclarationEntry(name='entrust_status', path='$.entrust_status', channel='carry', type='integer'),
+        DeclarationEntry(name='entrust_status', path='$.entrust_status', channel='binding', type='integer',default='',example='1',description='1是检查，2是分发',ui_kind='text'),
         DeclarationEntry(name='order_file', path='$.order_file', channel='carry', type='array'),
         ],
     ),

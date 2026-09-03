@@ -12,6 +12,9 @@ from gimbal_plate.systems.fin.endpoint.account_query_balance import (
 from gimbal_plate.systems.fin.endpoint.order_entrust_order_add import (
     ORDER_ENTRUST_ORDER_ADD,
 )
+from gimbal_plate.systems.fin.endpoint.order_entrust_order_dispatch import (
+    ORDER_ENTRUST_ORDER_DISPATCH,
+)
 from gimbal_plate.systems.fin.endpoint.order_entrust_order_page import (
     ORDER_ENTRUST_ORDER_PAGE,
 )
@@ -63,6 +66,7 @@ ALL_ENDPOINTS = [
     SETTLEMENT_CREATE_ORDER,
     ACCOUNT_QUERY_BALANCE,
     ORDER_ENTRUST_ORDER_ADD,
+    ORDER_ENTRUST_ORDER_DISPATCH,
     ORDER_ENTRUST_ORDER_PAGE,
     ORDER_ORDER_ADD,
     ORDER_ORDER_DETAIL,
@@ -84,6 +88,7 @@ __all__ = [
     "SETTLEMENT_CREATE_ORDER",
     "ACCOUNT_QUERY_BALANCE",
     "ORDER_ENTRUST_ORDER_ADD",
+    "ORDER_ENTRUST_ORDER_DISPATCH",
     "ORDER_ENTRUST_ORDER_PAGE",
     "ORDER_ORDER_ADD",
     "ORDER_ORDER_DETAIL",
