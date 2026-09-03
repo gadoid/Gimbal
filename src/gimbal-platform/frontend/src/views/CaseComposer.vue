@@ -210,20 +210,19 @@
 
     <!-- ═══════ 步骤编辑(step4)回顶:字段编辑器列随字段数增长,页面较长;
          滚过 240px 浮现,bottom 76 避开 sticky footer;横向锚定 step 信息卡
-         左缘(.backtop-btn 覆写 inline right),悬停提示「回到最上」 ═══════ -->
-    <el-tooltip v-if="stepIdx === 3" content="回到最上" placement="left" :show-after="120">
-      <el-backtop
-        :right="28"
-        :bottom="76"
-        :visibility-height="240"
-        class="backtop-btn"
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 19V5" />
-          <path d="M5 12l7-7 7 7" />
-        </svg>
-      </el-backtop>
-    </el-tooltip>
+         左缘(.backtop-btn 覆写 inline right) ═══════ -->
+    <el-backtop
+      v-if="stepIdx === 3"
+      :right="28"
+      :bottom="76"
+      :visibility-height="240"
+      class="backtop-btn"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 19V5" />
+        <path d="M5 12l7-7 7 7" />
+      </svg>
+    </el-backtop>
 
     <!-- ═══════ Run dialog (方案栏 + ds + 声明∪引用并集绑定行) ═══════ -->
     <RunDialog
