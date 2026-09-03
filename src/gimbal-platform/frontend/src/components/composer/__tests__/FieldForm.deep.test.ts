@@ -6,6 +6,8 @@
  * 防幻影容器({cfg:{}})挡 carry 整包注入。
  * D7 carry 容器接管警告行:深层字段根键命中 Canvas 传入的 carryRoots
  * → field-desc 位置渲染「手填接管,清空恢复注入」警告。
+ * D9 深层派生行(Task 8):body 容器根下未被 binding 精确覆盖的深层叶子
+ * 自动成行(菜单/注入复用),carry 根与顶层平铺键互不侵占。
  * 裁定14 顺手锁:view_only 上级 title 显示原通道,不再误标 binding。
  */
 import { describe, it, expect } from 'vitest'
@@ -162,5 +164,143 @@ describe('FieldForm — 深层字段注入共存与上级通道标注', () => {
     })
     expect(w.find('.path-badge').attributes('title'))
       .toBe('$.data.code · 上级 $.data(view_only)')
+  })
+})
+
+/**
+ * 深层派生行(Task 8,D9):body 容器根下未被 binding 精确覆盖的深层叶子
+ * → 合成 IOFieldBinding 纯投影自动成行。排除面:① 精确覆盖叶子;
+ * ② carry 根下叶子(容器值归值表);③ 顶层平铺键(仍归「其他字段」区)。
+ * 菜单/注入复用既有 FieldActionMenu 接线;读写走既有 setValue/getValue
+ * (清空自动 D8 剪枝,不新增存储)。
+ */
+describe('FieldForm — 深层派生行(D9)', () => {
+  it('P1: 未覆盖深层叶子成行 — 相对路径标签 + 完整 $. path 角标;被覆盖叶子不出行', () => {
+    const { w } = mountWithParent({
+      bindings: [mkBinding({ name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id' })],
+      body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y', note: 'n' }] },
+    })
+    const derived = w.findAll('.field.is-derived')
+    expect(derived).toHaveLength(2)
+    expect(derived[0].find('.label-text').text()).toBe('supplier[1].order_supplier_id')
+    expect(derived[0].find('.path-badge').text()).toBe('$.supplier[1].order_supplier_id')
+    expect(derived[1].find('.label-text').text()).toBe('supplier[1].note')
+    // supplier[0].order_supplier_id 已被 binding 精确覆盖 → 不派生(第 3 行不存在)
+    // 分区头透出「深层字段」与计数
+    const divider = w.find('.deep-divider')
+    expect(divider.text()).toContain('深层字段')
+    expect(divider.text()).toContain('2')
+  })
+
+  it('P2: 未覆盖叶子可编辑 — setByPath 落位到深层路径', async () => {
+    const { w, body } = mountWithParent({
+      bindings: [mkBinding({ name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id' })],
+      body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y', note: 'n' }] },
+    })
+    // walk 序:supplier[1].order_supplier_id → supplier[1].note
+    await w.findAll('.field.is-derived')[1].find('input.ctl').setValue('nn')
+    await flush()
+    expect(body.value).toEqual({
+      supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y', note: 'nn' }],
+    })
+  })
+
+  it('P3: 派生行清空 → pruneByPath 剪枝叶子(同容器留有叶子不连锁删)', async () => {
+    const { w, body } = mountWithParent({
+      bindings: [mkBinding({ name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id' })],
+      body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y', note: 'n' }] },
+    })
+    await w.findAll('.field.is-derived')[1].find('input.ctl').setValue('')
+    await flush()
+    expect(body.value).toEqual({
+      supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y' }],
+    })
+  })
+
+  it('P4: carry 根下叶子不派生行(carry 容器值归值表,D9 明文)', () => {
+    const { w } = mountWithParent({
+      bindings: [],
+      body: { cfg: { timeout: 30 }, meta: { ref: 'r' } },
+      carryRoots: ['cfg'],
+    })
+    const derived = w.findAll('.field.is-derived')
+    expect(derived).toHaveLength(1)
+    expect(derived[0].find('.label-text').text()).toBe('meta.ref')
+  })
+
+  it('P5: 顶层平铺键仍走「其他字段」区,不派生行(互不侵占)', async () => {
+    const { w } = mountWithParent({
+      bindings: [],
+      body: { note: 'n', meta: { ref: 'r' } },
+    })
+    // 平铺键 note 只出现在 extras,不成为派生行
+    expect(w.findAll('.field.is-derived')).toHaveLength(1)
+    expect(w.find('.field.is-derived .label-text').text()).toBe('meta.ref')
+    // extras 折叠区默认收起 → 展开后 note 与 meta 整包行俱在(平铺归 extras)
+    await w.find('.extras-toggle').trigger('click')
+    const extras = w.find('[data-testid="extra-fields"]')
+    expect(extras.text()).toContain('note')
+    expect(extras.text()).toContain('meta')
+  })
+
+  it('P6: 派生行 ☰ 菜单注入 → fieldAssign 携带合成 binding,assign target 派生 $.request_body.<path>', async () => {
+    const w = mount(FieldForm, {
+      props: {
+        bindings: [mkBinding({ name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id' })],
+        body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y' }] },
+        fieldActions: true,
+        varChoices: [],
+        injectChoices: [{ name: 'oid', origin: 'extract' as const, stepIdx: 0, expression: '$.oid' }],
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    const derivedRow = w.find('.field.is-derived')
+    await derivedRow.find('.fa-menu-btn').trigger('click')
+    const injectBtn = w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))
+    expect(injectBtn).toBeTruthy()
+    await injectBtn!.trigger('click')
+    const varBtn = w.findAll('.fa-var-item').find((b) => b.text().includes('oid'))
+    expect(varBtn).toBeTruthy()
+    await varBtn!.trigger('click')
+    const evt = w.emitted('fieldAssign')
+    expect(evt).toBeTruthy()
+    const [field, varName] = evt![0] as [IOFieldBinding, string]
+    expect(varName).toBe('oid')
+    // 合成 binding:name=相对路径安全形态,path=完整 $. 路径
+    expect(field.name).toBe('supplier_1_order_supplier_id')
+    expect(field.path).toBe('$.supplier[1].order_supplier_id')
+    // Canvas onFieldAssign 同式派生 assign target(注入机制 7546cae)
+    expect(field.path.replace(/^\$\./, '$.request_body.'))
+      .toBe('$.request_body.supplier[1].order_supplier_id')
+  })
+
+  it('P7: ui_kind 按 typeof 值推断 — number→number / boolean→boolean / string→text', () => {
+    const { w } = mountWithParent({
+      bindings: [],
+      body: { meta: { s: 'x', n: 5, b: true } },
+    })
+    const derived = w.findAll('.field.is-derived')
+    expect(derived).toHaveLength(3)
+    const byLabel = (l: string) =>
+      derived.find((r) => r.find('.label-text').text() === l)!
+    expect(byLabel('meta.n').find('input[type="number"]').exists()).toBe(true)
+    expect(byLabel('meta.b').find('input[type="checkbox"]').exists()).toBe(true)
+    expect(byLabel('meta.s').find('input[type="text"]').exists()).toBe(true)
+  })
+
+  it('P8: injected 命中派生行(安全形态 name)→ 值控件换只读提示条(注入态复用)', () => {
+    const { w } = mountWithParent({
+      bindings: [],
+      body: { supplier: [{ order_supplier_id: 'y' }] },
+      injected: {
+        supplier_0_order_supplier_id: [
+          { source: '$.oid', target: '$.request_body.supplier[0].order_supplier_id' },
+        ],
+      },
+    })
+    const derived = w.find('.field.is-derived')
+    expect(derived.find('.ctl-injected').exists()).toBe(true)
+    expect(derived.find('.ctl-injected').attributes('title'))
+      .toBe('$.oid → $.request_body.supplier[0].order_supplier_id')
   })
 })

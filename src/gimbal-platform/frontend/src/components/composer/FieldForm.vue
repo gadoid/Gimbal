@@ -14,9 +14,19 @@
 -->
 <template>
   <div class="field-form">
-    <div v-for="f in visibleFields" :key="f.name" class="field" :class="['sk-' + f.source_kind, { required: f.required }]">
+    <div
+      v-for="(f, i) in visibleFields"
+      :key="f.name"
+      class="field"
+      :class="['sk-' + f.source_kind, { required: f.required, 'is-derived': isDerived(f) }]"
+    >
+      <!-- 深层派生行分区头(D9):声明字段与 body 投影派生行的分隔,
+           派生行紧跟声明字段之后、「其他字段」折叠区之上 -->
+      <div v-if="deepExtraRows.length && i === bindings.length" class="deep-divider">
+        深层字段 · {{ deepExtraRows.length }} 个请求体实有叶子 · 未被绑定覆盖
+      </div>
       <label class="field-label">
-        <span class="label-text">{{ f.name }}</span>
+        <span class="label-text">{{ labelOf(f) }}</span>
         <span v-if="f.required" class="req-mark">*</span>
         <!-- 深层字段 path 角标(D5):path ≠ $.+name(深层/别名)→ path 即治理线索,
              悬停透出上级归属;平铺字段维持灰 chip,零噪音 -->
@@ -24,7 +34,9 @@
         <span v-else class="field-path">{{ f.path }}</span>
         <span class="ui-tag" :class="`k-${f.ui_kind}`">{{ f.ui_kind }}</span>
         <span v-if="assertable?.includes(f.path)" class="assertable-mark" title="可断言字段">✓</span>
-        <span class="src-tag" :class="`s-${f.source_kind}`">
+        <!-- 派生行来源:body 投影(非 plate 声明,值编辑/清空即写回请求体) -->
+        <span v-if="isDerived(f)" class="src-tag s-derived">body · 派生</span>
+        <span v-else class="src-tag" :class="`s-${f.source_kind}`">
           <template v-if="f.source_kind === 'independent'">literal</template>
           <template v-else-if="f.source_kind === 'lookup'">static · ${ var }</template>
           <template v-else-if="f.source_kind === 'generated'">dynamic · Assign</template>
@@ -596,7 +608,86 @@ function setValueTplNum(f: IOFieldBinding, v: string) {
 }
 
 // Type A + Type B: 有 binding 的都显示; Type C (无 binding 的 schema 字段) 走 hiddenFields 不在此显示
-const visibleFields = computed(() => props.bindings)
+// 深层派生行(D9)追加在声明字段之后(分区头分隔)
+const visibleFields = computed(() => [...props.bindings, ...deepExtraRows.value])
+
+/** 相对路径 → 安全形态名(D1):`supplier[1].order_supplier_id` →
+ *  `supplier_1_order_supplier_id`(下标 [i] → _i、点 . → _;ASCII 标识符)。
+ *  派生行清单内唯一 — 多行同字段不同下标天然不同名;与声明 name 撞车时
+ *  加 _2/_3 后缀(对齐 onFieldPromote 命名约定)。 */
+function safeDeepName(rel: string): string {
+  return rel.replace(/\[(\d+)\]/g, '_$1').replace(/\./g, '_')
+}
+
+/** 派生行 ui_kind 按 typeof 值推断(string→text / number→number / boolean→switch 语义,其余→text) */
+function deepKindOf(v: unknown): IOFieldBinding['ui_kind'] {
+  return typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'boolean' : 'text'
+}
+
+/**
+ * 深层派生行(D9):body 容器根下未被 binding 精确覆盖的深层叶子,经
+ * FIELD/INDEX walk 合成 IOFieldBinding — body 纯投影,不新增存储;读写走
+ * 既有 setValue/getValue(深层清空自动 D8 剪枝)。排除面:
+ * ① 任一 binding path 精确覆盖的叶子(已是声明行);
+ * ② carry 根下叶子(carry 容器值归值表,D9 明文);
+ * ③ 顶层平铺键(仍归「其他字段」区,互不侵占)。
+ * name=相对路径安全形态(菜单/注入状态键),path=完整 $. 路径(角标/assign target)。
+ */
+const deepExtraRows = computed<IOFieldBinding[]>(() => {
+  const bodyObj =
+    props.body && typeof props.body === 'object' && !Array.isArray(props.body)
+      ? (props.body as Record<string, unknown>)
+      : null
+  if (!bodyObj) return []
+  const covered = new Set(props.bindings.map((b) => b.path))
+  const carry = new Set(props.carryRoots ?? [])
+  const taken = new Set(props.bindings.map((b) => b.name))
+  const rows: IOFieldBinding[] = []
+  const leaf = (rel: string, v: unknown) => {
+    if (covered.has(`$.${rel}`)) return
+    const base = safeDeepName(rel)
+    let name = base
+    let n = 2
+    while (taken.has(name)) name = `${base}_${n++}`
+    taken.add(name)
+    rows.push({
+      name,
+      path: `$.${rel}`,
+      ui_kind: deepKindOf(v),
+      source_kind: 'independent',
+      required: false,
+      description: '',
+      example: null,
+      default: null,
+      enum: null,
+    })
+  }
+  const walk = (val: unknown, rel: string) => {
+    if (val === null || typeof val !== 'object') {
+      // 深层叶子才成行(rel 含 `.`/`[`);顶层平铺叶子归「其他字段」区
+      if (/[.\[]/.test(rel)) leaf(rel, val)
+      return
+    }
+    if (Array.isArray(val)) val.forEach((x, i) => walk(x, `${rel}[${i}]`))
+    else for (const [k, v] of Object.entries(val)) walk(v, `${rel}.${k}`)
+  }
+  for (const [k, v] of Object.entries(bodyObj)) {
+    if (carry.has(k)) continue
+    walk(v, k)
+  }
+  return rows
+})
+
+/** 派生行判定(name 集;合成名与声明 name 已去撞车 → 集合互斥) */
+const derivedNames = computed(() => new Set(deepExtraRows.value.map((r) => r.name)))
+function isDerived(f: IOFieldBinding): boolean {
+  return derivedNames.value.has(f.name)
+}
+
+/** 派生行标签 = 相对路径(完整 $. 路径在角标);声明行标签 = name */
+function labelOf(f: IOFieldBinding): string {
+  return isDerived(f) ? f.path.replace(/^\$\./, '') : f.name
+}
 
 /**
  * 其他字段(Type C 逆向面)行视图,两个来源合并去重:
@@ -834,6 +925,19 @@ function formatJson(v: unknown): string {
 .field.sk-independent { border-left: 3px solid #cbd5e1; }    /* literal 灰 */
 .field.sk-lookup { border-left: 3px solid #7c3aed; }            /* static 紫 */
 .field.sk-generated { border-left: 3px solid #f59e0b; }         /* dynamic 橙 (auto-extract 提示色) */
+
+/* ── 深层派生行(D9):青族区分声明字段 — body 投影,非 plate 声明 ── */
+.deep-divider {
+  margin: 8px 0 2px -6px;
+  padding-top: 6px;
+  border-top: 1px dashed #99f6e4;
+  font-family: var(--font-mono);
+  font-size: 10.5px; font-weight: 700;
+  color: #0f766e;
+}
+/* 虚线左边框:同位 sk-independent 灰实线,派生行覆写为青虚线(置后保证优先) */
+.field.is-derived { border-left: 3px dashed #5eead4; }
+.src-tag.s-derived { background: #f0fdfa; color: #0f766e; }
 
 /* 动态注入态提示条:琥珀族与 sk-generated 橙同源 — 值由 assign 运行时覆盖。
    wrap 相对定位给 ☰ 菜单浮层做锚(同 ctl-cand-wrap)。 */
