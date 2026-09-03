@@ -909,9 +909,11 @@ class TestPathUtils:
 
 
 class TestDeclarationEntryPathValidation:
-    """DeclarationEntry._validate:path 合法 + name = path 末段。
+    """DeclarationEntry._validate:path 合法 + name 为显示别名。
 
-    文档依据:V2 §2.3 / §2.4 已实装。
+    name↔path 已解绑:name 只需是合法标识符,不再要求等于 path 末段;
+    唯一性由 name 全清单唯一校验继任(条目级不再管)。
+    文档依据:2026-09-03 D1(别名制)。
     """
 
     def test_jsonpath_passes(self) -> None:
@@ -936,28 +938,29 @@ class TestDeclarationEntryPathValidation:
         # 文档依据:V2 §2.4"name 必须等于 path 的末段(末段是 FIELD 时)"。
         DeclarationEntry(name="c", path="$.a.b.c", channel="binding")
 
-    def test_nested_path_name_must_equal_last_segment(self) -> None:
-        # 测试点:嵌套 path `$.a.b.c` 末段是 "c",name = "b" 必须拒
-        # (不能只测浅层 $.x 的 mismatch,深层路径同样要校验)。
-        # 文档依据:V2 §2.4。
-        with pytest.raises(Exception) as excinfo:
-            DeclarationEntry(name="b", path="$.a.b.c", channel="binding")
-        # 错误信息需指向 path / name,便于定位
-        assert "c" in str(excinfo.value) or "b" in str(excinfo.value)
+    def test_nested_path_alias_accepted(self) -> None:
+        # 意识性 re-baseline(2026-09-03 D1):name↔path 解绑,name 为显示别名,
+        # 旧 V2 §2.3/§2.4 "name=末段" 规则由 name 全清单唯一校验继任。
+        # 测试点:嵌套 path `$.a.b.c` 末段是 "c",name 取别名 "b" 同样通过
+        # (深层路径与浅层一并解绑)。
+        e = DeclarationEntry(name="b", path="$.a.b.c", channel="binding")
+        assert e.name == "b" and e.path == "$.a.b.c"
 
-    def test_name_mismatch_rejected_on_simple_path(self) -> None:
-        # 测试点:name 与最浅层 JSONPath 末段不一致时拒。
-        # 文档依据:V2 §2.4。
-        with pytest.raises(Exception):
-            DeclarationEntry(name="user_id", path="$.order_id",
+    def test_name_alias_accepted_on_simple_path(self) -> None:
+        # 意识性 re-baseline(2026-09-03 D1):name↔path 解绑,name 为显示别名,
+        # 旧 V2 §2.3/§2.4 "name=末段" 规则由 name 全清单唯一校验继任。
+        # 测试点:浅层 JSONPath `$.order_id`,name 取别名 "user_id" 同样通过。
+        e = DeclarationEntry(name="user_id", path="$.order_id",
                              channel="binding")
+        assert e.name == "user_id" and e.path == "$.order_id"
 
-    def test_name_mismatch_rejected_on_short_path(self) -> None:
-        # 测试点:双形态并存下,短名写法走同样的 name 校验。
-        # 文档依据:V2 §2.3 共享决策 + §2.4。
-        with pytest.raises(Exception):
-            DeclarationEntry(name="user_id", path="order_id",
+    def test_name_alias_accepted_on_short_path(self) -> None:
+        # 意识性 re-baseline(2026-09-03 D1):name↔path 解绑,name 为显示别名,
+        # 旧 V2 §2.3/§2.4 "name=末段" 规则由 name 全清单唯一校验继任。
+        # 测试点:短名写法同样解绑;V3 归一化(path → JSONPath)照旧生效。
+        e = DeclarationEntry(name="user_id", path="order_id",
                              channel="binding")
+        assert e.path == "$.order_id"
 
     def test_invalid_jsonpath_rejected(self) -> None:
         # 测试点:path 是以 $ 领头但语法不合法的 JSONPath 形态时拒。
@@ -1069,8 +1072,10 @@ class TestDeclarationEntry:
         # name —— 沿用条目现行行为(spec §5)。
         with pytest.raises(ValueError):
             DeclarationEntry(name="x", path="$[", channel="binding")
-        with pytest.raises(ValueError):
-            DeclarationEntry(name="wrong", path="$.remark", channel="binding")
+        # 意识性 re-baseline(2026-09-03 D1):name↔path 解绑,name 为显示别名,
+        # 旧 V2 §2.3/§2.4 "name=末段" 规则由 name 全清单唯一校验继任。
+        e = DeclarationEntry(name="wrong", path="$.remark", channel="binding")
+        assert e.name == "wrong" and e.path == "$.remark"
         DeclarationEntry(name="$", path="$", channel="view_only")  # 根路径合法(2026-09-02 起无现网实例,规则保留)
 
     def test_enum_membership(self) -> None:
