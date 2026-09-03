@@ -45,13 +45,21 @@ vi.mock('@/api/scenario-composer', () => ({
       // declarations 归一化后线上唯一承重键(旧 fields/carry 键已清除)。
       // ep-1: orderId 平铺;ep-2(T6 嵌套注入用): nested.oid;
       // ep-carry(reqTypeC carry 过滤用例): carry 通道声明 $.remark
-      // 且 schema properties 另含 remark + hidden_req → 差集须滤 carry 键
+      // 且 schema properties 另含 remark + hidden_req → 差集须滤 carry 键;
+      // ep-deep(R1 深层派生行用): binding 覆盖 $.supplier[0].order_supplier_id,
+      // supplier[1] 留给 body 投影派生
       declarations: [
         ...(endpointId === 'ep-2'
           ? [{
               name: 'oid', path: '$.nested.oid', channel: 'binding',
               ui_kind: 'text', source_kind: 'independent',
               required: true, description: '', assertable: false,
+            } as any]
+          : endpointId === 'ep-deep'
+          ? [{
+              name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id', channel: 'binding',
+              ui_kind: 'text', source_kind: 'independent',
+              required: false, description: '', assertable: false,
             } as any]
           : [{
               name: 'orderId', path: '$.orderId', channel: 'binding',
@@ -1156,5 +1164,75 @@ describe('CaseComposerCanvas — 动态注入只读态(assign 覆盖请求字段
     expect((item('注入响应变量').element as HTMLButtonElement).disabled).toBe(true)
     expect((item('从响应提取').element as HTMLButtonElement).disabled).toBe(false)
     expect((item('断言该字段').element as HTMLButtonElement).disabled).toBe(false)
+  })
+})
+
+/**
+ * R1(D9 全链):派生行注入态/策略角标接入 Canvas 匹配面 —
+ * requestInjected / fieldStrategyTags('request') 迭代 声明 binding +
+ * deriveDeepRows 派生行(共享投影,同名同 path)→ 派生行 assign 命中
+ * 同得只读提示条/兜底行/角标,菜单注入真驱动 onFieldAssign 落深路径。
+ */
+describe('CaseComposerCanvas — 深层派生行注入态/角标(D9 全链)', () => {
+  /** ep-deep step:binding 覆盖 supplier[0].order_supplier_id;supplier[1] 为派生行 */
+  const deepStep = (over: Partial<StepView> = {}): StepView => ({
+    kind: 'step',
+    description: 'deep',
+    api: { kind: 'api', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-deep' } },
+    request: { kind: 'request', body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y' }] } },
+    strategy: [],
+    ...over,
+  } as StepView)
+
+  it('R1-D1: 派生行 assign 命中 → 只读提示条 + 兜底行 + assign 角标(匹配面含派生行)', async () => {
+    const s0 = deepStep({
+      strategy: [{ kind: 'assign', source: '$.oid', target: '$.request_body.supplier[1].order_supplier_id' } as any],
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    const derived = w.find('.field.is-derived')
+    expect(derived.exists()).toBe(true)
+    expect(derived.find('.label-text').text()).toBe('supplier[1].order_supplier_id')
+    // 只读态:值控件换提示条(运行时覆盖,防编辑误导)
+    expect(derived.find('.ctl-injected').exists()).toBe(true)
+    expect(derived.find('.ctl-injected').attributes('title'))
+      .toBe('$.oid → $.request_body.supplier[1].order_supplier_id')
+    // 兜底行:原值 'y' + continue 语义
+    expect(derived.find('.injected-fallback').text()).toContain('y')
+    expect(derived.find('.injected-fallback').text()).toContain('continue')
+    // 策略角标按 path 匹配挂上(assign)
+    expect(derived.find('.field-label .strategy-tag').text()).toBe('assign')
+    // 声明行(supplier[0],未被 assign 命中)保持可编辑,不误伤
+    expect(w.findAll('.ctl-injected')).toHaveLength(1)
+  })
+
+  it('R1-D2: 派生行菜单注入 → 真 onFieldAssign 落 $.request_body.<深路径>,注入态即时闭环', async () => {
+    const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' } as any] })
+    const s1 = deepStep()
+    const { w } = mountCanvas([s0, s1])
+    await flushPromises()
+    // 选中 step2(产出变量在 step1 → 注入候选不被时序门控禁用)
+    const rows = w.findAll('.step-row')
+    await rows[1].trigger('click')
+    await flush()
+    const derived = w.find('.field.is-derived')
+    expect(derived.find('input.ctl').exists()).toBe(true) // 注入前可编辑
+    await derived.find('.fa-menu-btn').trigger('click')
+    await flush()
+    const inj = w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))
+    await inj!.trigger('click')
+    await flush()
+    const cand = w.findAll('.fa-var-item').find((b) => b.text().includes('token'))
+    await cand!.trigger('click')
+    await flushPromises()
+    // assign 骨架经 Canvas onFieldAssign 落派生 path(真驱动,非测试内模拟变换)
+    const as = s1.strategy.find((s: any) => s.kind === 'assign') as any
+    expect(as).toBeTruthy()
+    expect(as.source).toBe('$.token')
+    expect(as.target).toBe('$.request_body.supplier[1].order_supplier_id')
+    // 注入态闭环:派生行换只读提示条 + assign 角标
+    const derivedAfter = w.find('.field.is-derived')
+    expect(derivedAfter.find('.ctl-injected').exists()).toBe(true)
+    expect(derivedAfter.find('.field-label .strategy-tag').text()).toBe('assign')
   })
 })

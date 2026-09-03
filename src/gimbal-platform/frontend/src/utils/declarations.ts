@@ -74,3 +74,66 @@ export function carryPaths(decls: DeclarationEntryView[] | undefined | null): st
 export function assertablePaths(decls: DeclarationEntryView[] | undefined | null): string[] {
   return (decls ?? []).filter((e) => e.channel === 'view_only' && e.assertable).map((e) => e.path)
 }
+
+/**
+ * D9 深层派生行(body 纯投影):body 容器根下未被 binding 精确覆盖的深层
+ * 叶子,经 FIELD/INDEX walk 合成 IOFieldBinding — 不新增存储,读写走
+ * FieldForm 既有 setValue/getValue(深层清空自动 D8 剪枝)。
+ *
+ * 单一真源:FieldForm 渲染与 Canvas 匹配面(requestInjected 只读态 /
+ * 请求侧策略角标)共用本函数 — 派生行 name 键控两侧同源,防键漂移。
+ *
+ * 排除面:① 任一 binding path 精确覆盖的叶子(已是声明行);② carry 根下
+ * 叶子(容器值归值表,D9 明文);③ 顶层平铺键(归「其他字段」区,互不侵占)。
+ * name=相对路径安全形态(`supplier[1].x` → `supplier_1_x`,下标 [i]→_i、
+ * 点 .→_;与声明 name 撞车加 _2/_3 后缀),path=完整 $. 路径(角标/assign
+ * target 派生);ui_kind 按 typeof 值推断(number/boolean,其余含 null→text)。
+ */
+export function deriveDeepRows(
+  body: unknown,
+  bindings: Array<Pick<IOFieldBinding, 'name' | 'path'>>,
+  carryRoots: string[],
+): IOFieldBinding[] {
+  const bodyObj =
+    body && typeof body === 'object' && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : null
+  if (!bodyObj) return []
+  const covered = new Set(bindings.map((b) => b.path))
+  const carry = new Set(carryRoots)
+  const taken = new Set(bindings.map((b) => b.name))
+  const rows: IOFieldBinding[] = []
+  const leaf = (rel: string, v: unknown) => {
+    if (covered.has(`$.${rel}`)) return
+    const base = rel.replace(/\[(\d+)\]/g, '_$1').replace(/\./g, '_')
+    let name = base
+    let n = 2
+    while (taken.has(name)) name = `${base}_${n++}`
+    taken.add(name)
+    rows.push({
+      name,
+      path: `$.${rel}`,
+      ui_kind: typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'boolean' : 'text',
+      source_kind: 'independent',
+      required: false,
+      description: '',
+      example: null,
+      default: null,
+      enum: null,
+    })
+  }
+  const walk = (val: unknown, rel: string) => {
+    if (val === null || typeof val !== 'object') {
+      // 深层叶子才成行(rel 含 `.`/`[`);顶层平铺叶子归「其他字段」区
+      if (/[.\[]/.test(rel)) leaf(rel, val)
+      return
+    }
+    if (Array.isArray(val)) val.forEach((x, i) => walk(x, `${rel}[${i}]`))
+    else for (const [k, v] of Object.entries(val)) walk(v, `${rel}.${k}`)
+  }
+  for (const [k, v] of Object.entries(bodyObj)) {
+    if (carry.has(k)) continue
+    walk(v, k)
+  }
+  return rows
+}

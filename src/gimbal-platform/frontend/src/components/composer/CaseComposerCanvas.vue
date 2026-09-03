@@ -497,7 +497,7 @@ import type { TplRef } from '@/utils/tpl-refs'
 import type { AuthSession } from '@/api/auth_sessions'
 import { deepDefaults } from '@/utils/jsonpath'
 import { toScratchPath } from '@/utils/scratch-path'
-import { assertablePaths, carryPaths, channelFields } from '@/utils/declarations'
+import { assertablePaths, carryPaths, channelFields, deriveDeepRows } from '@/utils/declarations'
 import { deriveBase } from '@/utils/service-alias'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
 import { carryHint } from '@/utils/carry-hint'
@@ -869,13 +869,21 @@ function strategyMatchesField(s: StrategyView, domain: 'request' | 'response', f
   return false
 }
 
+/** 请求字段匹配面(D9):声明 binding + body 深层派生行(deriveDeepRows
+ *  单一真源,与 FieldForm 派生行同名同 path)— 注入只读态/请求侧策略
+ *  角标按 path 匹配全部复用:派生行 assign 命中同得只读条/兜底行/角标。 */
+function requestFieldSurface(step: StepView | undefined): IOFieldBinding[] {
+  const declared = fieldBindings(step)
+  return [...declared, ...deriveDeepRows(step?.request?.body, declared, carryRoots.value)]
+}
+
 /** 字段名 → 角标数组;响应侧字段取全状态码契约按名去重(同名字段同路径语义) */
 function fieldStrategyTags(domain: 'request' | 'response'): Record<string, Array<{ label: string; idx: number }>> {
   const step = currentStep.value
   if (!step?.strategy.length) return {}
   const labels = strategyTagLabels(step.strategy)
   const fields = domain === 'request'
-    ? fieldBindings(step)
+    ? requestFieldSurface(step)
     : currentRespSpecs.value.flatMap((spec) => spec.fields)
   const seen = new Set<string>()
   const tags: Record<string, Array<{ label: string; idx: number }>> = {}
@@ -896,14 +904,15 @@ const responseStrategyTags = computed(() => fieldStrategyTags('response'))
 
 /** 请求体字段动态注入态(已注入 → FieldForm 值控件换只读提示条):
  *  与 fieldStrategyTags 同源同匹配(assign target 精确命中
- *  $.request_body.<path>),但携带 source/target 供提示条悬停展示。
+ *  $.request_body.<path>,匹配面 = requestFieldSurface 含派生行),
+ *  但携带 source/target 供提示条悬停展示。
  *  响应侧无此概念(assign 不写响应)。 */
 const requestInjected = computed<Record<string, Array<{ source: string; target: string }>>>(() => {
   const step = currentStep.value
   const out: Record<string, Array<{ source: string; target: string }>> = {}
   if (!step?.strategy.length) return out
   const seen = new Set<string>()
-  for (const f of fieldBindings(step)) {
+  for (const f of requestFieldSurface(step)) {
     if (seen.has(f.name)) continue
     seen.add(f.name)
     const hits = step.strategy.filter((s) => strategyMatchesField(s, 'request', f)) as Array<{

@@ -411,6 +411,7 @@ import { computed, ref } from 'vue'
 import type { IOFieldBinding } from '@/types/plate'
 import type { VarEntry } from '@/utils/var-registry'
 import { getByPath, pruneByPath, setByPath } from '@/utils/jsonpath'
+import { deriveDeepRows } from '@/utils/declarations'
 import FieldActionMenu from './FieldActionMenu.vue'
 import { parseJson } from '../../utils/json'
 
@@ -611,72 +612,15 @@ function setValueTplNum(f: IOFieldBinding, v: string) {
 // 深层派生行(D9)追加在声明字段之后(分区头分隔)
 const visibleFields = computed(() => [...props.bindings, ...deepExtraRows.value])
 
-/** 相对路径 → 安全形态名(D1):`supplier[1].order_supplier_id` →
- *  `supplier_1_order_supplier_id`(下标 [i] → _i、点 . → _;ASCII 标识符)。
- *  派生行清单内唯一 — 多行同字段不同下标天然不同名;与声明 name 撞车时
- *  加 _2/_3 后缀(对齐 onFieldPromote 命名约定)。 */
-function safeDeepName(rel: string): string {
-  return rel.replace(/\[(\d+)\]/g, '_$1').replace(/\./g, '_')
-}
-
-/** 派生行 ui_kind 按 typeof 值推断(string→text / number→number / boolean→switch 语义,其余→text) */
-function deepKindOf(v: unknown): IOFieldBinding['ui_kind'] {
-  return typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'boolean' : 'text'
-}
-
 /**
- * 深层派生行(D9):body 容器根下未被 binding 精确覆盖的深层叶子,经
- * FIELD/INDEX walk 合成 IOFieldBinding — body 纯投影,不新增存储;读写走
- * 既有 setValue/getValue(深层清空自动 D8 剪枝)。排除面:
- * ① 任一 binding path 精确覆盖的叶子(已是声明行);
- * ② carry 根下叶子(carry 容器值归值表,D9 明文);
- * ③ 顶层平铺键(仍归「其他字段」区,互不侵占)。
- * name=相对路径安全形态(菜单/注入状态键),path=完整 $. 路径(角标/assign target)。
+ * 深层派生行(D9):投影单一真源在 utils/declarations.ts 的 deriveDeepRows
+ * (排除面三顶 + safeName + _2/_3 去重都在彼处)— Canvas 的注入只读态/
+ * 请求侧策略角标匹配面共用同一函数,派生行 name 键控两侧同源,防键漂移。
+ * body 纯投影,不新增存储;读写走既有 setValue/getValue(深层清空自动 D8 剪枝)。
  */
-const deepExtraRows = computed<IOFieldBinding[]>(() => {
-  const bodyObj =
-    props.body && typeof props.body === 'object' && !Array.isArray(props.body)
-      ? (props.body as Record<string, unknown>)
-      : null
-  if (!bodyObj) return []
-  const covered = new Set(props.bindings.map((b) => b.path))
-  const carry = new Set(props.carryRoots ?? [])
-  const taken = new Set(props.bindings.map((b) => b.name))
-  const rows: IOFieldBinding[] = []
-  const leaf = (rel: string, v: unknown) => {
-    if (covered.has(`$.${rel}`)) return
-    const base = safeDeepName(rel)
-    let name = base
-    let n = 2
-    while (taken.has(name)) name = `${base}_${n++}`
-    taken.add(name)
-    rows.push({
-      name,
-      path: `$.${rel}`,
-      ui_kind: deepKindOf(v),
-      source_kind: 'independent',
-      required: false,
-      description: '',
-      example: null,
-      default: null,
-      enum: null,
-    })
-  }
-  const walk = (val: unknown, rel: string) => {
-    if (val === null || typeof val !== 'object') {
-      // 深层叶子才成行(rel 含 `.`/`[`);顶层平铺叶子归「其他字段」区
-      if (/[.\[]/.test(rel)) leaf(rel, val)
-      return
-    }
-    if (Array.isArray(val)) val.forEach((x, i) => walk(x, `${rel}[${i}]`))
-    else for (const [k, v] of Object.entries(val)) walk(v, `${rel}.${k}`)
-  }
-  for (const [k, v] of Object.entries(bodyObj)) {
-    if (carry.has(k)) continue
-    walk(v, k)
-  }
-  return rows
-})
+const deepExtraRows = computed<IOFieldBinding[]>(() =>
+  deriveDeepRows(props.body, props.bindings, props.carryRoots ?? [])
+)
 
 /** 派生行判定(name 集;合成名与声明 name 已去撞车 → 集合互斥) */
 const derivedNames = computed(() => new Set(deepExtraRows.value.map((r) => r.name)))
