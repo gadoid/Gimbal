@@ -13,12 +13,22 @@
 
   折叠交互:头行常显(badge + kind + 单行摘要 + 箭头),字段区 v-show。
   新添加的策略默认展开引导填写;预填/加载的默认折叠降噪。
+
+  base_fields 特例露出(onFailure 之后的第二个):order 执行顺序 ——
+  引擎 dispatch_phase 按 phase 过滤后以 order 升序稳定排序,全缺省(0)
+  时执行序=数组序;显式设置(导入/手编)后卡头 #N 角标可见,卡身可改,
+  清空输入删 key 回缺省(不把 0 写进 payload)。
 -->
 <template>
   <div class="strategy-form" :class="`ph-${detail.phase}`">
     <div class="sf-head" @click="toggle">
       <span class="sf-badge" :class="`ph-${detail.phase}`">{{ detail.label }}</span>
       <span class="sf-kind">{{ tagLabel ?? detail.kind }}</span>
+      <span
+        v-if="orderChip !== null"
+        class="sf-order"
+        :title="`执行顺序 order=${orderChip}(同 phase 内升序,缺省 0 按列表序)`"
+      >#{{ orderChip }}</span>
       <span class="sf-summary" :title="summary">{{ summary }}</span>
       <button type="button" class="sf-toggle" title="展开/折叠">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" :class="{ open: expanded }"><polyline points="6 9 12 15 18 9"/></svg>
@@ -32,6 +42,21 @@
         :candidates="candidates"
         @update:body="onUpdateBody"
       />
+      <!-- order 入口:同 phase 内执行顺序(base_fields 特例露出,同 onFailure 模式);
+           清空 = 删 key 回缺省 0(数组序),不写 0 进 payload -->
+      <div v-if="orderBinding" class="sf-order-row">
+        <label class="sf-order-label">
+          执行顺序 (order)
+          <span class="sf-onfail-hint">同 phase 内按 order 升序执行;缺省 0 相同则按列表序,清空恢复缺省</span>
+        </label>
+        <input
+          type="number"
+          class="sf-order-input"
+          :value="orderInput"
+          :placeholder="String(orderBinding.default ?? 0)"
+          @change="onOrderChange"
+        >
+      </div>
       <!-- onFailure 入口(#2):base_fields 第一版整体不渲染,但失败处理
            是编排高频诉求 → 单独露出这一个;其余 base 字段仍走默认值 -->
       <div v-if="onFailureBinding" class="sf-onfail">
@@ -85,6 +110,39 @@ watch(() => props.expandWhen, (v) => { if (v) expanded.value = true })
 const onFailureBinding = computed(() =>
   props.detail.base_fields.find((f: StrategyFieldDescView) => f.name === 'onFailure')
 )
+
+/** order 的字段描述符(同 onFailure 模式;无则编辑行不渲染,卡头角标独立判断) */
+const orderBinding = computed(() =>
+  props.detail.base_fields.find((f: StrategyFieldDescView) => f.name === 'order')
+)
+
+/** 卡头 #N 角标:显式设置(数字)才显示 —— 平台新增骨架不含 order,缺省 0 零噪音 */
+const orderChip = computed<number | null>(() => {
+  const v = (props.strategy as any).order
+  return typeof v === 'number' && Number.isInteger(v) ? v : null
+})
+
+/** 输入框受控值:未设置 → 空(placeholder 显示缺省),不把 0 预填进框 */
+const orderInput = computed<string>(() => {
+  const v = (props.strategy as any).order
+  return typeof v === 'number' && Number.isInteger(v) ? String(v) : ''
+})
+
+function onOrderChange(e: Event) {
+  const el = e.target as HTMLInputElement
+  const raw = el.value.trim()
+  if (raw === '') {
+    // 清空 → 回缺省:删 key 让默认值生效,不写 0 进 payload
+    delete (props.strategy as any).order
+    return
+  }
+  const n = Number(raw)
+  if (!Number.isInteger(n)) {
+    el.value = orderInput.value   // 非整数回滚显示,不写入
+    return
+  }
+  ;(props.strategy as any).order = n
+}
 
 const ON_FAILURE_LABELS: Record<string, string> = {
   abort: '中止本 step',
@@ -178,6 +236,14 @@ const summary = computed<string>(() => {
   padding: 1px 5px; border-radius: 3px;
 }
 
+/* 卡头 order 角标:显式设置的执行顺序,折叠态也可见 */
+.sf-order {
+  flex-shrink: 0;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  color: #4f46e5; background: #eef2ff;
+  padding: 1px 5px; border-radius: 3px;
+}
+
 /* 单行摘要: 吸收剩余宽度, 溢出 ellipsis */
 .sf-summary {
   flex: 1; min-width: 0;
@@ -223,6 +289,25 @@ const summary = computed<string>(() => {
   margin-top: 10px; padding-top: 8px;
   border-top: 1px dashed #e6e8ec;
 }
+
+/* order 入口:同 onFailure 行形态,number 输入窄列 */
+.sf-order-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 10px; padding-top: 8px;
+  border-top: 1px dashed #e6e8ec;
+}
+.sf-order-label {
+  display: flex; flex-direction: column; gap: 1px;
+  font-size: 11px; font-weight: 600; color: #475569;
+  flex-shrink: 0;
+}
+.sf-order-input {
+  width: 110px; flex-shrink: 0; box-sizing: border-box;
+  background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 8px;
+  padding: 6px 10px; font-size: 12px; color: #1a1d24;
+  outline: none;
+}
+.sf-order-input:focus { border-color: #4f46e5; background: #fff; }
 .sf-onfail-label {
   display: flex; flex-direction: column; gap: 1px;
   font-size: 11px; font-weight: 600; color: #475569;

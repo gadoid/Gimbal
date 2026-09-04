@@ -221,7 +221,11 @@ export interface StrategyFieldDescView {
   ui_kind: UiKind
 }
 
-/** plate `GET /api/strategy/{kind}/full` —— 表单渲染契约。base_fields 第一版不渲染,默认值生效。 */
+/**
+ * plate `GET /api/strategy/{kind}/full` —— 表单渲染契约。
+ * base_fields(StrategyBase 公共字段)默认不渲染;onFailure/order 两个编排
+ * 高频字段由 StrategyForm 特例露出(缺省值兜底语义不变)。
+ */
 export interface StrategyKindDetailView extends StrategyKindView {
   fields: StrategyFieldDescView[]
   base_fields: StrategyFieldDescView[]
@@ -256,6 +260,7 @@ export interface RequestView {
 export interface ExtractView {
   kind: 'extract'
   name?: string
+  order?: number           // StrategyBase 公共字段:同 phase 内升序执行,缺省 0
   expression: string       // JSONPath
   target: string
   scope?: string
@@ -266,6 +271,7 @@ export interface ExtractView {
 export interface AssignView {
   kind: 'assign'
   name?: string
+  order?: number           // StrategyBase 公共字段:同 phase 内升序执行,缺省 0
   source: unknown
   target: string
   scope?: string
@@ -276,6 +282,7 @@ export interface AssignView {
 export interface AssertionView {
   kind: 'assertion'
   name?: string
+  order?: number           // StrategyBase 公共字段:同 phase 内升序执行,缺省 0
   target: string
   operator: string
   expected?: unknown
