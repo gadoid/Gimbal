@@ -1,4 +1,4 @@
-"""fin.order.order_book —— 提交订舱文件接口契约。在 scen_test_14 中出现1次。"""
+"""fin.order_entrust.order_add —— 委托订舱下单接口契约。在 scen_test_14 中出现4次。"""
 
 from typing import Final
 
@@ -11,6 +11,7 @@ from gimbal_plate.systems.fin.system_info import (
     FIN_DEFAULT_VERSION,
     FIN_SYSTEM,
 )
+
 from gimbal_plate.schema.endpoint import (
     ApiSpec,
     EndpointSpec,
@@ -20,14 +21,26 @@ from gimbal_plate.schema.endpoint import (
     EndpointMetadata,
 )
 
-
-ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
-    id="fin.order.order_book",
-    system=FIN_SYSTEM,
-    service="fin-service",
-    name="提交订舱文件",
-    description="由 Scenario_Test_14 提取: 提交订舱文件",
-    api=ApiSpec(service="fin-service", method="POST", path="/api/order/order/orderBook", auth="bearer", timeout_seconds=30.0),
+# ----------------------------------------------------------------------
+# 来源: curl 导入 | 生成时间: 2026-09-01T07:29:13.326038+00:00
+# 人工已确认: 类型/必填/绑定面/响应语义/能力声明
+# 原始 curl(认证信息已脱敏):
+#   curl --url 'https://fin-tidb.21eflag.com/api/order/orderEntrust/orderAdd'    -H 'Accept: application/json, text/plain, */*'    -H 'Accept-Language: zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'    -H 'Authorization: ***REDACTED***'    -H 'Connection: keep-alive'    -H 'Content-Type: application/json;charset=UTF-8'    -H 'Origin: https://fin-tidb.21eflag.com'    -H 'Referer: https://fin-tidb.21eflag.com/'    -H 'Sec-Fetch-Dest: empty'    -H 'Sec-Fetch-Mode: cors'    -H 'Sec-Fetch-Site: same-origin'    -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0'    -H 'sec-ch-ua: "Not=A?Brand";v="99", "Microsoft Edge";v="151", "Chromium";v="151"'    -H 'sec-ch-ua-mobile: ?0'    -H 'sec-ch-ua-platform: "Windows"'    -b 'rememberMe=true; username=18180789650; PHPSESSID=grfb3ngdiae9pd44ihj91v8arr; think_language=zh-CN; password=iwyIYO3mqqLwnODZDxadCzUvLk9TMoJxrB/O1ubK4TAi8H0niCTrbccYl+4EHD+4h0JdPvRGPnkY/4mMY70Evw==; Admin-Token=***REDACTED***'    --data-raw '{"client_expand_name":"孙奉盛","client_expand_id":"41","m_delivery_type":"","customer_id":"335247043402399744","customer_name":"","receive_time_limit":"5","deposit_refund_day":"60","deposit_settlement_date":"30","service_id":"41","service_name":"孙奉盛","sale_id":"795","sale_name":"孙奉盛运营","operator_id":"786","operator_name":"","customer_contact_id":"335247043675029504","customer_contact_name":"","main_sort":"易航道-易汇联","policy_id":"295502731957764096","policy_name":"sfs易航道-易汇联","policy_type":"JSZX","settle_type":"1","settle_type_name":"月结","product_id":"2","product_name":"月结-延长-无保证金","deposit_type":"2","deposit_type_name":"无","period_delay_type":"1","period_delay_type_name":"延长","service_items":["booking_space"],"business_type":"1","trade_term":"","carrier":"ONE","carrier_id":"110","bl_no":"Codfish_TEST_001","track_bl_no":"Codfish_TEST_001","etd":1785945600,"atd":1786377600,"ship_name":"ONE SAN DIEGO","voy":"6275","pol":"QINGDAO,CHINA","pot":"AOSHANWEI,CHINA","pod":"FREMANTLE,AUSTRALIA","del":"FREMANTLE,AUSTRALIA","country_name":"AUSTRALIA","airline_type":"澳洲","ocean_type":"远洋","terms_payment":"T/T","terms_transport":"CY/CY","pay_type":"FREIGHT PREPAID","customer_order_sn":"","terms_shipment":"测试装运条款","shipper":"测试发货人","consignee":"测试收货人","notifier":"测试通知人","ship_mark":"测试唛头","commodity":"测试品名","notes":"测试备注","cargo_type":"goods","packer":"测试包装","num":"1","gross_weight":"1.00","bulk":"999","sea_trans_cost":"","teu":"","volume":"","volume_desc":"","order_sn":"","status":"1","sea_trans_currency":"USD","container":[],"message_board":[],"customer_file_list":[],"supplier":[{"is_manual":"","is_primary":"1","isset_fee":"0","isset_supplier":"1","order_id":"","order_supplier_id":"","service_item":"booking_space","service_item_name":"订舱","settle_object_id":"15","settlement_date":null,"pay_time_limit":"10","supplier_id":"1","supplier_name":"山东旭禾国际贸易有限公司","supplier_pay_date":null,"supplier_period":null,"user_id":"41","user_name":"孙奉盛","settle_type":"1","supplier_name_clean":"山东旭禾国际贸易有限公司","supplier_name_en":"","tax_number":"91370811MA3F04A516","settle_object":"山东旭禾国际贸易有限公司","settle_object_clean":"山东旭禾国际贸易有限公司","settle_type_name":"月结"}],"remark":"","payment_type_name":"确定性付款","payment_type":"1","policy_type_name":"","main_ids":"1,3","pot_cn":null,"pot_port_name":"AOSHANWEI,CHINA","pol_cn":"青岛港","pol_port_name":"QINGDAO,CHINA","pol_country_id":"1","pol_country":"CHINA","pol_country_cn":"中国","del_cn":"弗里曼特尔","del_port_name":"FREMANTLE,AUSTRALIA","pod_cn":"弗里曼特尔","pod_port_name":"FREMANTLE,AUSTRALIA","country_id":"673","country_name_cn":"澳大利亚","entrust_status":1,"order_file":[]}'
+# ----------------------------------------------------------------------
+ORDER_ENTRUST_ORDER_CONFIRM: Final[EndpointSpec] = EndpointSpec(
+    id='fin.order_entrust.order_confirm',
+    system='fin',
+    service='fin-service',
+    name='委托订单确认',
+    description='委托订单确认',
+    api=ApiSpec(
+        service='fin-service',
+        method='POST',
+        path='/api/order/orderEntrust/orderAdd',
+        headers={},
+        consumes=[],
+        produces=[],
+    ),
     request=RequestSpec(
         body_type='json',
         schema={
@@ -174,36 +187,7 @@ ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
                     },
                 },
                 'message_board': {'type': 'array'},
-                'customer_file_list': {
-                    'type': 'array',
-                    'items': {
-                        'type': 'object',
-                        'properties': {
-                            'client_company_id': {
-                                'type': 'string',
-                                'description': '',
-                                'x-type-hint': '疑似 int(字符串形态)',
-                            },
-                            'client_company_name': {'type': 'string'},
-                            'trustee_company_id': {
-                                'type': 'string',
-                                'description': '',
-                                'x-type-hint': '疑似 int(字符串形态)',
-                            },
-                            'trustee_company_name': {'type': 'string'},
-                            'document_type': {'type': 'string'},
-                            'file_url': {'type': 'string'},
-                            'file_name': {'type': 'string'},
-                            'file_id': {
-                                'type': 'string',
-                                'description': '',
-                                'x-type-hint': '疑似 int(字符串形态)',
-                            },
-                            'file_type': {'type': 'string'},
-                            '_XID': {'type': 'string'},
-                        },
-                    },
-                },
+                'customer_file_list': {'type': 'array'},
                 'supplier': {
                     'type': 'array',
                     'items': {
@@ -630,7 +614,7 @@ ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
                 },
                 'entrust_status': {
                     'type': 'string',
-                    'description': '1: 委托订单 2: 订单已分发',
+                    'description': '',
                     'x-type-hint': '疑似 int(字符串形态)',
                 },
                 'remark': {'type': 'string'},
@@ -779,7 +763,7 @@ ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
                 'revoke_status_name': {'type': 'string'},
                 'revoke_type_name': {'type': 'string'},
                 'asset_status_name': {'type': 'string'},
-                'action': {'type': 'string', 'description': 'check 检查 | submit 提交'},
+                'action': {'type': 'string'},
                 'order_file': {'type': 'array'},
             },
             'required': [
@@ -788,20 +772,22 @@ ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
                 'order_no',
                 'track_bl_no',
                 'entrust_status',
-                'action',
+                'order_file',
             ],
         },
         declarations=[
             DeclarationEntry(name='bl_no', path='$.bl_no', channel='binding', example='Codfish-IPKZ-Test', ui_kind='text'),
-            DeclarationEntry(name='order_id', path='$.order_id', channel='binding', example='354066893969032192', ui_kind='text'),
-            DeclarationEntry(name='order_no', path='$.order_no', channel='binding', example='YWDD20260904110854', ui_kind='text'),
+            DeclarationEntry(name='order_id', path='$.order_id', channel='binding', default='354066893969032192', example='354066893969032192', ui_kind='text'),
+            DeclarationEntry(name='order_no', path='$.order_no', channel='binding', default='YWDD20260904110854', example='YWDD20260904110854', ui_kind='text'),
             DeclarationEntry(name='track_bl_no', path='$.track_bl_no', channel='binding', example='Codfish-IPKZ-Test', ui_kind='text'),
-            DeclarationEntry(name='entrust_status', path='$.entrust_status', channel='binding', example='2', description='1: 委托订单 2: 订单已分发', ui_kind='text'),
-            DeclarationEntry(name='action', path='$.action', channel='binding', example='check', description='check 检查 | submit 提交', ui_kind='text'),
+            DeclarationEntry(name='entrust_status', path='$.entrust_status', channel='binding', default='2', example='2', ui_kind='text'),
+            DeclarationEntry(name='action', path='$.action', channel='binding', default='check', example='check', ui_kind='text'),
             DeclarationEntry(name='supplier_id', path='$.supplier[0].order_supplier_id', channel='binding', default='', example='', ui_kind='text'),
             DeclarationEntry(name='supplier_order_id', path='$.supplier[0].order_id', channel='binding', default='', example='', ui_kind='text'),
             DeclarationEntry(name='order_container_id', path='$.container[0].order_container_id', channel='binding', default='', example='', ui_kind='text'),
+            DeclarationEntry(name='customer_file_list', path='$.customer_file_list', channel='binding', example=[{"client_company_id": "335247043402399744","client_company_name": "绍兴柯桥鹏达进出口有限公司","trustee_company_id": "1","trustee_company_name": "青岛易航道物流科技有限公司","document_type": "BOOK_CUSTOMER","file_url": "6a9a8954ca71a.pdf","file_name": "6a9a8954ca71a.pdf","file_id": "354189666712290304","file_type": "PDF","_XID": "row_3248"}], ui_kind='text'),
             # 传递面(carry 通道,不进表单,值随 platform 两层值表走)
+            DeclarationEntry(name='order_file', path='$.order_file', channel='carry', type='string'),
             DeclarationEntry(name='client_expand_name', path='$.client_expand_name', channel='carry', type='string'),
             DeclarationEntry(name='m_delivery_type', path='$.m_delivery_type', channel='carry', type='string'),
             DeclarationEntry(name='customer_id', path='$.customer_id', channel='carry', type='string'),
@@ -865,9 +851,7 @@ ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
             DeclarationEntry(name='order_sn', path='$.order_sn', channel='carry', type='string'),
             DeclarationEntry(name='status', path='$.status', channel='carry', type='integer'),
             DeclarationEntry(name='sea_trans_currency', path='$.sea_trans_currency', channel='carry', type='string'),
-            DeclarationEntry(name='container', path='$.container', channel='carry', type='array'),
             DeclarationEntry(name='message_board', path='$.message_board', channel='carry', type='array'),
-            DeclarationEntry(name='customer_file_list', path='$.customer_file_list', channel='carry', type='array'),
             DeclarationEntry(name='supplier', path='$.supplier', channel='carry', type='array'),
             DeclarationEntry(name='customer_category', path='$.customer_category', channel='carry', type='string'),
             DeclarationEntry(name='customer_tax_number', path='$.customer_tax_number', channel='carry', type='string'),
@@ -1035,30 +1019,13 @@ ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
             DeclarationEntry(name='revoke_status_name', path='$.revoke_status_name', channel='carry', type='string'),
             DeclarationEntry(name='revoke_type_name', path='$.revoke_type_name', channel='carry', type='string'),
             DeclarationEntry(name='asset_status_name', path='$.asset_status_name', channel='carry', type='string'),
-            DeclarationEntry(name='order_file', path='$.order_file', channel='carry', type='array'),
         ],
     ),
     responses={
         200: ResponseSpec(
             status=200,
-            description="成功",
-            declarations=[
-                DeclarationEntry(name='code', path='$.code', channel='view_only', required=False, example=200, ui_kind='text', assertable=True),
-                DeclarationEntry(name='msg', path='$.msg', channel='view_only', required=False, example='成功', ui_kind='text', assertable=True),
-                DeclarationEntry(name='data', path='$.data', channel='view_only',required=False, assertable=True, example=[{"client_company_id": "335247043402399744","client_company_name": "绍兴柯桥鹏达进出口有限公司","trustee_company_id": "1","trustee_company_name": "青岛易航道物流科技有限公司","document_type": "BOOK_CUSTOMER","file_url": "6a9a8954ca71a.pdf","file_name": "6a9a8954ca71a.pdf","file_id": "354189666712290304","file_type": "PDF","_XID": "row_3248"}], ui_kind='text'),
-                DeclarationEntry(name='client_company_id', path='$.data[0].client_company_id', channel='view_only', required=False, example='335247043402399744', ui_kind='text', assertable=True),                
-                DeclarationEntry(name='client_company_name', path='$.data[0].client_company_name', channel='view_only', required=False, example='绍兴柯桥鹏达进出口有限公司', ui_kind='text', assertable=True),
-                DeclarationEntry(name='trustee_company_id', path='$.data[0].trustee_company_id', channel='view_only', required=False, example='1', ui_kind='text', assertable=True),
-                DeclarationEntry(name='trustee_company_name', path='$.data[0].trustee_company_name', channel='view_only', required=False, example='青岛易航道物流科技有限公司', ui_kind='text', assertable=True),
-                DeclarationEntry(name='document_type', path='$.data[0].document_type', channel='view_only', required=False, example='BOOK_CUSTOMER', ui_kind='text', assertable=True),
-                DeclarationEntry(name='file_url', path='$.data[0].file_url', channel='view_only', required=False, example='6a9a8954ca71a.pdf', ui_kind='text', assertable=True),
-                DeclarationEntry(name='file_name', path='$.data[0].file_name', channel='view_only', required=False, example='6a9a8954ca71a.pdf', ui_kind='text', assertable=True),
-                DeclarationEntry(name='file_id', path='$.data[0].file_id', channel='view_only', required=False, example='354189666712290304', ui_kind='text', assertable=True),
-                DeclarationEntry(name='file_type', path='$.data[0].file_type', channel='view_only', required=False, example='PDF', ui_kind='text', assertable=True),
-                DeclarationEntry(name='request_id', path='$.request_id', channel='view_only', required=False, example='6b7090b23d229be18ef70b139a8699b2', ui_kind='text', assertable=True),
-            ],        
         ),
-    },
+    },   
     version=FIN_DEFAULT_VERSION,
     metadata=EndpointMetadata(
         module=FIN_DEFAULT_MODULE,

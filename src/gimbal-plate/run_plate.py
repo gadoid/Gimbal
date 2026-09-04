@@ -12,13 +12,18 @@ def main() -> None:
         action="store_true",
         help="watch gimbal_plate/ for file changes and restart on change",
     )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="bind address (0.0.0.0 exposes the service on the LAN)",
+    )
     args = parser.parse_args()
 
     # uvicorn reload requires an import string (it re-imports the module in a
     # fresh worker on restart); passing an app object would disable reload.
     kwargs: dict = {
         "factory": True,
-        "host": "127.0.0.1",
+        "host": args.host,
         "port": 8765,
         "log_level": "info",
     }

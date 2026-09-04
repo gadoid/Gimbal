@@ -26,7 +26,7 @@ ORDER_CHECK_GENERATE_ORDER_SUB: Final[EndpointSpec] = EndpointSpec(
     system=FIN_SYSTEM,
     service="fin-service",
     name="校验主订单拆分子订单",
-    description="由 Scenario_Test_14 提取: 校验主订单拆分子订单",
+    description="校验主订单拆分子订单",
     api=ApiSpec(service="fin-service", method="POST", path="/api/order/order/checkGenerateOrderSub", auth="bearer", timeout_seconds=30.0),
     request=RequestSpec(
         body_type="json",

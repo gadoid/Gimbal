@@ -65,6 +65,7 @@ ORDER_ORDER_DETAIL: Final[EndpointSpec] = EndpointSpec(
                 DeclarationEntry(name='order_no', path='$.data.order_no', channel='view_only', required=False, example='YWDD20260903110794', ui_kind='text', assertable=True),
                 DeclarationEntry(name='customer_id', path='$.data.customer_id', channel='view_only', required=False, example='335247043402399744', ui_kind='text', assertable=True),
                 DeclarationEntry(name='order_supplier_id', path='$.data.supplier[0].order_supplier_id', channel='view_only', required=False, example='353724758581314560', ui_kind='text', assertable=True),
+                DeclarationEntry(name='order_container_id', path='$.data.container[0].order_container_id', channel='view_only', required=False, example='354178949166662656', ui_kind='text', assertable=True),
             ],
         ),
     },
