@@ -223,9 +223,9 @@
                   :overlay="currentStep.field_states"
                   @strategy-jump="onStrategyJump"
                   @update:body="(v: unknown) => currentStep.request.body = v"
-                  @field-extract="onFieldExtract"
+                  @field-extract="(f) => onFieldExtract(f, 'request')"
                   @field-assign="(f, name) => onFieldAssign(f, name)"
-                  @field-assert="onFieldAssert"
+                  @field-assert="(f) => onFieldAssert(f, 'request')"
                   @var-insert="onVarInsert"
                   @var-promote="onVarPromote"
                   @field-state="onFieldState"
@@ -254,7 +254,8 @@
             <!-- 请求侧 Type C(schema 有、binding 无)已并入 FieldForm「其他字段」
                  折叠区(unbound-fields) — 可见可编辑,不再单独设只读块。 -->
             <!-- Response 页:/full responses 全状态码契约,只读参考(设计 §3.1)。
-                 ☰ 菜单仅 提取/断言 两项,路径经 respPathFor → toScratchPath -->
+                 ☰ 菜单仅 提取/断言 两项;提取/断言域感知 — 响应侧路径经
+                 respPathOf → toScratchPath,请求侧见各自 handler 域分流 -->
             <template v-if="activeIoTab === 'response'">
               <div v-if="currentRespSpecs.length" class="resp-specs">
                 <div v-for="spec in currentRespSpecs" :key="spec.status" class="resp-spec">
@@ -275,8 +276,8 @@
                     :assertable="spec.assertable"
                     :strategy-tags="responseStrategyTags"
                     @strategy-jump="onStrategyJump"
-                    @field-extract="onFieldExtract"
-                    @field-assert="onFieldAssert"
+                    @field-extract="(f) => onFieldExtract(f, 'response')"
+                    @field-assert="(f) => onFieldAssert(f, 'response')"
                   />
                   <p v-else class="resp-spec-empty">该状态码未声明字段契约</p>
                 </div>
@@ -787,20 +788,27 @@ const injectVarChoices = computed(() => {
 })
 
 /**
- * 字段 → 响应 JSONPath — 唯一来源是 plate 解析的候选,不猜:
- * ① 运行时样本(resolve-paths,最新鲜、数组天然 [idx])按字段名结尾匹配
- * ② 字段自身 plate 域路径在 assertable 面精确命中(P7:响应树模板路径
- *    任意深度可寻址 — 此前仅 $.data.<名>/$.<名> 两式,深层字段落空)
- * ③ 端点契约 assertable 按 $.data.<名>/$.<名> 惯例形状匹配(请求侧
- *    叶子无响应路径,靠字段名对惯例形状)
- * 无命中返回 ''(宁空勿错 — 旧兜底模板 $.data.<字段> 在数组响应上
- * 丢 [0] 段,静默错路径比空更糟;空引导用户粘样本/手填)。
+ * 响应侧字段 → scratch 域路径(提取/断言共用):响应树与绑定面同源
+ * (模板路径),字段自带的就是确定地址;运行时样本(resolve-paths,
+ * 数组天然带 [idx])按字段名结尾命中时优先 — 比模板路径更贴近运行期
+ * 真实形态。数组容器取整容器引用(元素级下标编排期不可知,模板态是
+ * 接受的设计)。
  */
-function respPathFor(f: IOFieldBinding): string {
+function respPathOf(f: IOFieldBinding): string {
+  const sampleHit = samplePaths.value.find((p) => pathEndsWithField(p, f.name))
+  return toScratchPath(sampleHit ?? f.path)
+}
+
+/**
+ * 请求侧字段 → 响应断言位(仅断言用;请求侧提取走 requestBodyTargetOf
+ * 取发出的请求体)。请求字段自身路径是请求域的,只能按字段名找响应
+ * 断言位,且只信 plate 解析,不猜:
+ * ① 运行时样本按字段名结尾 ② 字段路径恰好 ∈ assertable(同名同位)
+ * ③ 惯例形状 $.data.<名>/$.<名> ④ 无命中 ''(宁空勿错 — B1c)
+ */
+function respPathByName(f: IOFieldBinding): string {
   const sampleHit = samplePaths.value.find((p) => pathEndsWithField(p, f.name))
   if (sampleHit) return toScratchPath(sampleHit)
-  // 字段自身路径:响应树叶(模板态,无 [i])与 assertable 面同键宇宙,
-  // 命中即字段自己的契约路径;请求侧叶路径属请求域(或含 [i]),不会误中
   if (currentAssertable.value.includes(f.path)) return toScratchPath(f.path)
   const assertableHit = currentAssertable.value.find(
     (p) => p === `$.data.${f.name}` || p === `$.${f.name}`
@@ -815,13 +823,18 @@ function pathEndsWithField(p: string, fieldName: string): boolean {
   return new RegExp(`(?:\\.|\\[')${escaped}(?:'\\])?$`).test(p)
 }
 
-/** 菜单"提取该字段"(P7 更名,原"从响应提取"):extract 骨架(target=字段名,scope=scenario) */
-function onFieldExtract(f: IOFieldBinding) {
+/**
+ * 菜单"提取该字段"(域感知):request 侧提取**本步发出的请求体字段**
+ * (after_request 时 scratch 已有 request_body — 整容器提出/下一步注入
+ * 复用的既定工作流),表达式确定 = requestBodyTargetOf(与 assign target
+ * 同源);response 侧走 respPathOf。target=字段名,scope=scenario。
+ */
+function onFieldExtract(f: IOFieldBinding, domain: 'request' | 'response') {
   if (!currentStep.value) return
   currentStep.value.strategy.push({
     kind: 'extract',
     target: f.name,
-    expression: respPathFor(f),
+    expression: domain === 'request' ? requestBodyTargetOf(f.path) : respPathOf(f),
     scope: 'scenario',
     required: true,
   })
@@ -853,12 +866,13 @@ function onFieldAssign(f: IOFieldBinding, name: string) {
   justAddedStrategyIdx.value = currentStep.value.strategy.length - 1
 }
 
-/** 菜单"断言该字段":assertion 骨架(exists 起步,策略卡改 operator) */
-function onFieldAssert(f: IOFieldBinding) {
+/** 菜单"断言该字段"(域感知):response 侧直取自身路径;request 侧按名
+ *  找响应断言位。assertion 骨架(exists 起步,策略卡改 operator) */
+function onFieldAssert(f: IOFieldBinding, domain: 'request' | 'response') {
   if (!currentStep.value) return
   currentStep.value.strategy.push({
     kind: 'assertion',
-    target: respPathFor(f),
+    target: domain === 'request' ? respPathByName(f) : respPathOf(f),
     operator: 'exists',
     expected: null,
     message: '',
@@ -946,7 +960,10 @@ function strategyTagLabels(strategies: StrategyView[]): string[] {
 function strategyMatchesField(s: StrategyView, domain: 'request' | 'response', f: IOFieldBinding): boolean {
   const sv = s as any
   if (domain === 'request') {
-    return sv.kind === 'assign' && sv.target === requestBodyTargetOf(f.path)
+    if (sv.kind === 'assign') return sv.target === requestBodyTargetOf(f.path)
+    // 请求侧提取(取发出的请求体)角标:expression 命中 $.request_body<path>
+    if (sv.kind === 'extract') return sv.expression === requestBodyTargetOf(f.path)
+    return false
   }
   const scratch = toScratchPath(f.path)
   if (sv.kind === 'extract') return sv.expression === scratch || sv.expression === f.path

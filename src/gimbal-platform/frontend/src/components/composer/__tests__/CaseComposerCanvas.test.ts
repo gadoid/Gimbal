@@ -298,7 +298,7 @@ describe('CaseComposerCanvas — 变量注册表迁入(#1)', () => {
 })
 
 describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
-  it('T5: 从响应提取 → push extract{target=字段名, scope=scenario}', async () => {
+  it('T5: 提取该字段(请求侧)→ push extract{expression=$.request_body.<path>, scope=scenario}', async () => {
     const steps = [mkStep()]
     const { w } = mountCanvas(steps)
     await flushPromises()
@@ -311,8 +311,9 @@ describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
     expect(ex).toBeTruthy()
     expect(ex.target).toBe('orderId')
     expect(ex.scope).toBe('scenario')
-    // expression 匹配 assertable 且已转 scratch 域($.data.orderId → 前缀 response_body)
-    expect(ex.expression).toBe('$.response_body.data.orderId')
+    // 请求侧提取 = 取本步发出的请求体字段(after_request 时 scratch 已有
+    // request_body)— 表达式确定 = requestBodyTargetOf,不再按名猜响应位
+    expect(ex.expression).toBe('$.request_body.orderId')
   })
 
   it('T6: 注入 → push assign{source=$.<name>, target=$.request_body.<path>}', async () => {
@@ -836,7 +837,7 @@ describe('CaseComposerCanvas — B1 响应样本路径推断', () => {
   })
 
   /**
-   * 痛点: 端点无 assertable_fields(未录响应模型)时 respPathFor 静默
+   * 痛点: 端点无 assertable_fields(未录响应模型)时按名匹配(respPathByName)静默
    * 兜底 $.data.<字段>,响应 data 为数组则丢 [0] 段(2026-08-28 用户
    * 踩坑 $.data.data[0].order_id → $.response_body.data.order_id)。
    * 正解: 粘真实响应样本 → plate resolve-paths 展开候选(数组天然
@@ -899,17 +900,26 @@ describe('CaseComposerCanvas — B1 响应样本路径推断', () => {
   })
 })
 
-describe('CaseComposerCanvas — B1c 路径生成统一走 plate 解析(不猜)', () => {
+describe('CaseComposerCanvas — B1c 响应侧路径只信 plate 解析(不猜)', () => {
   /**
-   * 统一原则: respPathFor 的路径只信 plate 解析 — 运行时样本(resolve-paths)
-   * 优先,端点契约 assertable(注册时预解析)次之,无命中返回 ''(宁空勿错:
-   * 兜底模板 $.data.<字段> 在数组响应上丢 [0] 段,静默错路径比空更糟)。
+   * 统一原则(2026-09-05 域感知后限响应侧):respPathOf 的路径只信 plate —
+   * 运行时样本(resolve-paths,数组下标天然正确)按字段名结尾优先,
+   * 否则字段自身模板路径直转;请求侧断言(respPathByName)无命中返回 ''
+   * (宁空勿错:兜底模板 $.data.<字段> 在数组响应上丢 [0] 段,静默错
+   * 路径比空更糟)。
    */
   beforeEach(() => {
     vi.mocked(resolveResponsePaths).mockClear()
   })
 
-  it('B1c: 样本已解析时点"提取该字段" → 默认即样本数组路径(优先于 assertable)', async () => {
+  /** 切 Response 签(样本在策略区,两签共用;提取点在响应字段上) */
+  async function toRespTab(w: ReturnType<typeof mountCanvas>['w']) {
+    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
+    await respTab.trigger('click')
+    await flush()
+  }
+
+  it('B1c: 样本无同名字段 → 响应侧提取落自身模板路径(不硬贴样本)', async () => {
     const { listStrategyKinds } = await import('@/api/scenario-composer')
     vi.mocked(listStrategyKinds).mockResolvedValueOnce([
       { kind: 'extract', label: '从响应提取变量' },
@@ -917,7 +927,7 @@ describe('CaseComposerCanvas — B1c 路径生成统一走 plate 解析(不猜)'
     const s0 = mkStep()
     const { w } = mountCanvas([s0])
     await flushPromises()
-    // 解析样本(只回 order_id 数组路径)
+    // 解析样本(order_id 数组路径 — 与响应字段 orderId 名字不结尾匹配)
     await w.find('.sample-toggle').trigger('click')
     await w.find('.sample-input').setValue('{"data":{"data":[{"order_id":"BL1"}]}}')
     vi.mocked(resolveResponsePaths).mockResolvedValueOnce([
@@ -925,9 +935,9 @@ describe('CaseComposerCanvas — B1c 路径生成统一走 plate 解析(不猜)'
     ] as any)
     await w.find('.sample-parse').trigger('click')
     await flushPromises()
-    // 点请求字段的 ☰ → "提取该字段"(字段 orderId,assertable 里有
-    // $.data.orderId — 样本无 orderId 结尾路径,应落 assertable 命中)
-    await w.find('.fa-menu-btn').trigger('click')
+    await toRespTab(w)
+    // 点响应字段 orderId 的 ☰ → "提取该字段":样本名不中 → 自身模板路径
+    await w.find('.io-card .fa-menu-btn').trigger('click')
     await flush()
     const item = w.findAll('.fa-item').find((b) => b.text().includes('提取该字段'))
     await item!.trigger('click')
@@ -942,33 +952,32 @@ describe('CaseComposerCanvas — B1c 路径生成统一走 plate 解析(不猜)'
     vi.mocked(listStrategyKinds).mockResolvedValueOnce([
       { kind: 'extract', label: '从响应提取变量' },
     ] as any)
-    // ep-2 请求字段 oid;样本解析出 ['oid'] 结尾的数组路径 → 生成即样本路径
-    const s0 = mkStep({
-      api: { kind: 'api', service: 'fin', method: 'POST', path: '/x', headers: {}, view_hints: { endpoint_id: 'ep-2' } },
-      request: { kind: 'request', body: { nested: { oid: '' } } },
-    })
+    // 响应字段 orderId;样本解析出 ['orderId'] 结尾的数组路径 → 样本优先
+    const s0 = mkStep()
     const { w } = mountCanvas([s0])
     await flushPromises()
     await w.find('.sample-toggle').trigger('click')
-    await w.find('.sample-input').setValue('{"data":{"items":[{"oid":"O1"}]}}')
+    await w.find('.sample-input').setValue('{"data":{"items":[{"orderId":"O1"}]}}')
     vi.mocked(resolveResponsePaths).mockResolvedValueOnce([
-      { path: "$.data['items'][0]['oid']", depth: 4, extracted_by_default: false },
+      { path: "$.data['items'][0]['orderId']", depth: 4, extracted_by_default: false },
     ] as any)
     await w.find('.sample-parse').trigger('click')
     await flushPromises()
-    await w.find('.fa-menu-btn').trigger('click')
+    await toRespTab(w)
+    await w.find('.io-card .fa-menu-btn').trigger('click')
     await flush()
     const item = w.findAll('.fa-item').find((b) => b.text().includes('提取该字段'))
     await item!.trigger('click')
     await flush()
     const ex = s0.strategy.find((s: any) => s.kind === 'extract') as any
-    expect(ex.expression).toBe("$.response_body.data['items'][0]['oid']")
+    expect(ex.expression).toBe("$.response_body.data['items'][0]['orderId']")
     w.unmount()
   })
 
-  it('B1e: 无样本无 assertable 命中 → expression 空(不猜 $.data.<字段>)', async () => {
-    // ep-2 字段 oid;assertable(mock 共用)= $.data.orderId/$.code 不含 oid,
-    // 无样本 → 旧逻辑会猜 $.response_body.data.oid,统一后应为 ''
+  it('B1e: 请求侧提取确定落 $.request_body.<深路径>;断言无响应命中 → target 空(不猜)', async () => {
+    // ep-2 请求深叶 oid($.nested.oid):提取 = 请求体地址确定,无需匹配;
+    // 断言 = 按名找响应位,assertable(mock 共用)= $.data.orderId/$.code
+    // 不含 oid 也无样本 → ''(宁空勿错保留在断言名匹配)
     const s0 = mkStep({
       api: { kind: 'api', service: 'fin', method: 'POST', path: '/x', headers: {}, view_hints: { endpoint_id: 'ep-2' } },
       request: { kind: 'request', body: { nested: { oid: '' } } },
@@ -977,11 +986,21 @@ describe('CaseComposerCanvas — B1c 路径生成统一走 plate 解析(不猜)'
     await flushPromises()
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
-    const item = w.findAll('.fa-item').find((b) => b.text().includes('提取该字段'))
-    await item!.trigger('click')
+    const exItem = w.findAll('.fa-item').find((b) => b.text().includes('提取该字段'))
+    await exItem!.trigger('click')
     await flush()
     const ex = s0.strategy.find((s: any) => s.kind === 'extract') as any
-    expect(ex.expression).toBe('')
+    expect(ex.expression).toBe('$.request_body.nested.oid')
+    // 断言(菜单动作后已收,重开)
+    await w.find('.fa-menu-btn').trigger('click')
+    await flush()
+    const asItem = w.findAll('.fa-item').find((b) => b.text().includes('断言该字段'))
+    await asItem!.trigger('click')
+    await flush()
+    const as = s0.strategy.find(
+      (s: any) => s.kind === 'assertion' && s.target !== '$.response_status',
+    ) as any
+    expect(as.target).toBe('')
     w.unmount()
   })
 })
@@ -1556,7 +1575,7 @@ describe('CaseComposerCanvas — 响应契约树(P7)', () => {
     await respTab.trigger('click')
     await flush()
     // 嵌套叶 sku($.data.items.sku):字段名对不上 $.data.<名>/$.<名> 惯例
-    // 形状,respPathFor 此前落空 — 现经字段自身模板路径精确命中 assertable 面
+    // 形状,按名匹配此前落空 — 响应侧(respPathOf)现直取字段自身模板路径
     await w.find('.arr-row .fa-menu-btn').trigger('click')
     await flush()
     const exItem = w.findAll('.fa-item').find((b) => b.text().includes('提取该字段'))!
@@ -1566,7 +1585,7 @@ describe('CaseComposerCanvas — 响应契约树(P7)', () => {
     expect(ex).toBeTruthy()
     expect(ex.target).toBe('sku')
     expect(ex.expression).toBe('$.response_body.data.items.sku')
-    // 断言同源(respPathFor 单一真源,深层 target 同式落自身路径)
+    // 断言同源(respPathOf 单一真源,深层 target 同式落自身路径)
     await w.find('.arr-row .fa-menu-btn').trigger('click')
     await flush()
     const asItem = w.findAll('.fa-item').find((b) => b.text().includes('断言该字段'))!
@@ -1576,6 +1595,63 @@ describe('CaseComposerCanvas — 响应契约树(P7)', () => {
       (s: any) => s.kind === 'assertion' && s.target !== '$.response_status',
     ) as any
     expect(as.target).toBe('$.response_body.data.items.sku')
+    w.unmount()
+  })
+})
+
+/**
+ * 请求侧提取域感知(2026-09-05 修复):菜单"提取该字段"在请求签此前按
+ * 字段名去响应 assertable 撞(撞不上即空)。用户实际工作流是"取本步
+ * 发出的请求体字段"(如 container 整容器提出、下一步注入复用 — 运行
+ * 草稿里已存在 $.request_body.container 提取模式)。修:提取/断言按签
+ * 页域分流 — request 侧表达式确定 = $.request_body<path>
+ * (requestBodyTargetOf,与 assign target 同源);角标匹配面同步
+ * (请求侧 extract 按 requestBodyTargetOf 命中挂请求字段行/容器头)。
+ */
+describe('CaseComposerCanvas — 请求侧提取域感知(2026-09-05)', () => {
+  /** ep-deep step:$.supplier 数组容器,body 2 行 → 行数跟 body */
+  const deepStep = (over: Partial<StepView> = {}): StepView => ({
+    kind: 'step',
+    description: 'deep',
+    api: { kind: 'api', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-deep' } },
+    request: { kind: 'request', body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y' }] } },
+    strategy: [],
+    ...over,
+  } as StepView)
+
+  it('N1: 请求容器头提取 → expression=$.request_body.supplier;容器头挂 extract 角标', async () => {
+    const s0 = deepStep()
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    await w.find('.node-fa .fa-menu-btn').trigger('click')
+    await flush()
+    const item = w.findAll('.fa-item').find((b) => b.text().includes('提取该字段'))
+    await item!.trigger('click')
+    await flush()
+    const ex = s0.strategy.find((s: any) => s.kind === 'extract') as any
+    expect(ex).toBeTruthy()
+    expect(ex.target).toBe('supplier')
+    // 整容器提出(运行草稿 $.request_body.container 同式,与 assign target 同源)
+    expect(ex.expression).toBe('$.request_body.supplier')
+    // 角标匹配面同步:容器头挂 extract
+    expect(w.find('.arr-node > .node-head .strategy-tag').text()).toBe('extract')
+    w.unmount()
+  })
+
+  it('N2: 既有请求侧 extract($.request_body.orderId)→ 请求签字段行挂角标;响应签不误挂', async () => {
+    const s0 = mkStep({
+      strategy: [{ kind: 'extract', target: 'orderId', expression: '$.request_body.orderId' } as any],
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    // 请求签(默认):orderId 行挂 extract 角标
+    expect(w.find('.field-label .strategy-tag').text()).toBe('extract')
+    // 响应签:response 字段路径($.data.orderId → $.response_body.data.orderId)
+    // 与请求域表达式不等 → 不误挂
+    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
+    await respTab.trigger('click')
+    await flush()
+    expect(w.findAll('.field-label .strategy-tag')).toHaveLength(0)
     w.unmount()
   })
 })
