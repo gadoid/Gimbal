@@ -1395,15 +1395,19 @@ describe('CaseComposerCanvas — 字段状态控制门禁(§3.5)', () => {
     const { w } = mountCanvas(steps)
     await flushPromises()
     // 用 collapse 写增量(carry 会让行离树 — 翻回入口是 §5.4 搜索框
-    // 定位手段,M2 未实现,挂账);collapse 行仍在,↺ 可达
+    // 定位手段,M2 未实现,挂账);collapse 叶子收进「已折叠字段」区,
+    // 区内行尾 ↺ 仍可达
     await w.find('.field .fss-sel').setValue('collapse')
     await flushPromises()
     expect(steps[0].field_states).toEqual({ '$.orderId': 'collapse' })
-    // overlay 命中 → ↺ 可见;点击上抛 (path, null) → 增量清空整键删除
-    const reset = w.find('.field .fss-reset')
+    // overlay 命中 → 折叠区行内 ↺ 可见;点击上抛 (path, null) →
+    // 增量清空整键删除,叶子回直接渲染面(折叠区随之消失)
+    await w.find('.folded-toggle').trigger('click')
+    const reset = w.find('.folded-row .fss-reset')
     expect(reset.exists()).toBe(true)
     await reset.trigger('click')
     await flushPromises()
     expect(steps[0].field_states).toBeUndefined()
+    expect(w.find('[data-testid="folded-fields"]').exists()).toBe(false)
   })
 })

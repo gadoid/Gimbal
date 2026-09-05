@@ -8,6 +8,9 @@
  *   到 [len],删行 = splice(下标前移);标量数组加标量空壳;
  * - 开放字典(object 无 children):KV 编辑器整字典回写;
  * - carry 不进树(共识/增量翻 carry → 节点缺席);collapse 面板默认收起;
+ * - 折叠区(§5.4):collapse 目录叶子不占直接渲染面,收进顶部
+ *   「已折叠字段」区(展开编辑/行尾状态下拉翻回 form;合成标量行
+ *   随容器折叠不收);
  * - 字段状态控制(§5.4):行尾下拉上抛 fieldState(模板路径,两通路分离);
  * - 「其他字段」区(§4):deepExtras 深浅残留 + unboundFields 契约差集
  *   按 path 归并;删除走 D8 连锁剪枝。
@@ -385,6 +388,101 @@ describe('FieldForm 树模式 — carry 剪除与 collapse 收起', () => {
   })
 })
 
+// ─── 折叠区(§5.4 折叠区 = collapse:叶子收区,容器原地折叠)────────
+
+describe('FieldForm 树模式 — 折叠区(叶子 collapse,§5.4)', () => {
+  const decls = () => [
+    mkDecl({ name: 'open', path: '$.open' }),
+    mkDecl({ name: 'memo', path: '$.memo', state: 'collapse' }),
+    mkDecl({ name: 'cfg', path: '$.cfg', type: 'object', children: [
+      mkDecl({ name: 'timeout', path: '$.cfg.timeout', state: 'collapse' }),
+      mkDecl({ name: 'retries', path: '$.cfg.retries' }),
+    ] }),
+  ]
+  const mountFolded = (over: Partial<Parameters<typeof mountTree>[0]> = {}) =>
+    mountTree({
+      decls: decls(),
+      body: { open: 'x', memo: 'm', cfg: { timeout: 30, retries: 2 } },
+      ...over,
+    })
+
+  it('L1: collapse 叶子不占直接渲染面,收进「已折叠字段」区(计数常显,默认收起)', () => {
+    const { w } = mountFolded()
+    // 直接面:form 字段在(open/retries),collapse 叶子不在
+    const names = w.findAll('.field .label-text').map((l) => l.text())
+    expect(names).toContain('open')
+    expect(names).toContain('retries')
+    expect(names).not.toContain('memo')
+    expect(names).not.toContain('timeout')
+    // 折叠区在场,计数 = 深浅两枚(memo 顶层 + cfg.timeout 深层);默认收起
+    const zone = w.find('[data-testid="folded-fields"]')
+    expect(zone.exists()).toBe(true)
+    expect(zone.text()).toContain('已折叠字段 · 2')
+    expect(w.find('.folded-body').exists()).toBe(false)
+  })
+
+  it('L2: 展开折叠区 → 行编辑写 body 实例路径;深层清空走 D8 剪枝', async () => {
+    const { w, body } = mountFolded()
+    await w.find('.folded-toggle').trigger('click')
+    // 文档序:行 1 = memo,行 2 = cfg.timeout
+    const rows = w.findAll('.folded-row')
+    expect(rows).toHaveLength(2)
+    expect(rows[0].find('.path-badge').text()).toBe('$.memo')
+    expect(rows[1].find('.path-badge').text()).toBe('$.cfg.timeout')
+    await rows[1].find('input.ctl').setValue('60')
+    await flush()
+    expect(body.value).toEqual({ open: 'x', memo: 'm', cfg: { timeout: '60', retries: 2 } })
+    // 深层清空 = 删叶 + 容器级剪枝(D8 同款;retries 有值,cfg 保留)
+    await rows[1].find('input.ctl').setValue('')
+    await flush()
+    expect(body.value).toEqual({ open: 'x', memo: 'm', cfg: { retries: 2 } })
+  })
+
+  it('L3: 行尾状态下拉在折叠区行内 → 上抛模板路径(翻回 form 的通路)', async () => {
+    const { w, emitted } = mountFolded({ stateControl: true })
+    await w.find('.folded-toggle').trigger('click')
+    await w.findAll('.folded-row .fss-sel')[1].setValue('form')
+    expect(emitted).toContainEqual(['$.cfg.timeout', 'form'])
+  })
+
+  it('L4: 合成标量行不收区 — 标量数组自身 collapse 原地折叠,展开行仍在', async () => {
+    const decls2 = [mkDecl({ name: 'tags', path: '$.tags', type: 'array', state: 'collapse' })]
+    const { w, body } = mountTree({ decls: decls2, body: { tags: ['a'] } })
+    // 折叠区整体缺席(数组折叠 = 容器行为,行不搬空)
+    expect(w.find('[data-testid="folded-fields"]').exists()).toBe(false)
+    expect(w.findAll('.arr-body')[0].attributes('style')).toContain('display: none')
+    await w.find('.obj-toggle').trigger('click')
+    expect(w.findAll('.arr-body')[0].attributes('style')).not.toContain('display: none')
+    expect(w.findAll('.arr-row input.ctl')).toHaveLength(1)
+    expect(body.value).toEqual({ tags: ['a'] })
+  })
+
+  it('L5: 数组行内目录叶子 collapse → 逐实例收区(实例路径寻址)', async () => {
+    const decls3 = [
+      mkDecl({ name: 'items', path: '$.items', type: 'array', children: [
+        mkDecl({ name: 'sku', path: '$.items.sku' }),
+        mkDecl({ name: 'note', path: '$.items.note', state: 'collapse' }),
+      ] }),
+    ]
+    const { w, body } = mountTree({
+      decls: decls3,
+      body: { items: [{ sku: 'A', note: 'na' }, { sku: 'B', note: 'nb' }] },
+    })
+    // 直接面只剩 sku;note 两行实例都收进区(计数 2)
+    const names = w.findAll('.field .label-text').map((l) => l.text())
+    expect(names).toEqual(['sku', 'sku'])
+    await w.find('.folded-toggle').trigger('click')
+    const badges = w.findAll('.folded-row .path-badge').map((b) => b.text())
+    expect(badges).toEqual(['$.items[0].note', '$.items[1].note'])
+    // 编辑第二行实例 → 写 $.items[1].note
+    await w.findAll('.folded-row input.ctl')[1].setValue('nb2')
+    await flush()
+    expect(body.value).toEqual({
+      items: [{ sku: 'A', note: 'na' }, { sku: 'B', note: 'nb2' }],
+    })
+  })
+})
+
 // ─── 区块级折叠(2026-09-05 注入粒度 P2:数组/开放字典同款机制)──────
 
 describe('FieldForm 树模式 — 区块级折叠(P2)', () => {
@@ -554,7 +652,9 @@ describe('FieldForm 树模式 — 字段状态控制(§5.4)', () => {
     const { w, emitted } = mountTree({
       decls, body: {}, stateControl: true, fieldStates: { '$.open': 'collapse' },
     })
-    const reset = w.find('.field .fss-reset')
+    // 叶子 collapse → 收进折叠区(§5.4);展开后行尾 ↺ 清增量回 form
+    await w.find('.folded-toggle').trigger('click')
+    const reset = w.find('.folded-row .fss-reset')
     expect(reset.exists()).toBe(true)
     await reset.trigger('click')
     expect(emitted).toContainEqual(['$.open', null])

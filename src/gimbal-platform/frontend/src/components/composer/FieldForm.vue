@@ -13,6 +13,9 @@
              加行/添键自动展开 —— 嵌套过长目录盖 collapse 治噪)
     三类容器区块头均带策略菜单(P3):提取/注入/断言作用于整容器值
     (目录化前整容器叶子的快捷入口;值写入类动作不适用 → structured 门控)
+    collapse 的两副面孔:容器(对象/数组/字典)原地折叠面板;叶子
+    不占直接渲染面,收进「已折叠字段」区(§5.4 折叠区 — 顶部汇总,
+    展开编辑,行尾状态下拉可翻回 form;合成标量行随容器折叠,不收)。
     carry 不进树(值表整包注入,编排面零感知);深层残留不在此 ——
     「其他字段」区承接目录外 body 键(深浅皆收)。
   - 平铺模式(bindings):StrategyForm / 响应契约参考。IOFieldBinding[]
@@ -263,9 +266,11 @@
 
       <!-- ── 叶子节点:字段行(ui_kind 选控件,§5.3)──────────────
            v-else-if="item.f" 显式判别(vue-tsc 无法反演上方三个
-           item.n && kind 守卫的合取否定;f 真值直接收窄叶子分支) -->
+           item.n && kind 守卫的合取否定;f 真值直接收窄叶子分支)。
+           isFoldedLeaf 剪除:collapse 目录叶子不占直接渲染面(§5.4
+           折叠区收纳;合成标量行随容器折叠,不剪) -->
       <div
-        v-else-if="item.f"
+        v-else-if="item.f && !isFoldedLeaf(item)"
         class="field"
         :class="['sk-' + item.f.source_kind, { required: item.f.required }]"
       >
@@ -580,6 +585,83 @@
       </div>
     </template>
 
+    <!-- 已折叠字段(§5.4 折叠区 = collapse):目录叶子解析态 collapse 不占
+         直接渲染面,深浅皆收于此;展开编辑走同一 body 通路(setValue + D8
+         剪枝),行尾状态下拉可翻回 form。容器(对象/数组/字典)collapse
+         原地折叠面板,不进此区;合成标量行随容器折叠,亦不收。 -->
+    <div v-if="!nested && foldedLeaves.length" class="folded" data-testid="folded-fields">
+      <button type="button" class="folded-toggle" @click="foldedOpen = !foldedOpen">
+        <span class="folded-arrow" :class="{ open: foldedOpen }">▸</span>
+        <span class="folded-title">已折叠字段 · {{ foldedLeaves.length }}</span>
+        <span class="folded-hint">折叠面板收纳 · 值仍在请求体</span>
+      </button>
+      <div v-if="foldedOpen" class="folded-body">
+        <div v-for="r in foldedLeaves" :key="r.f.path" class="folded-row">
+          <label class="folded-label">
+            <span class="label-text">{{ r.f.path.replace(/^\$\.?/, '') }}</span>
+            <span class="path-badge" :title="r.f.path">{{ r.f.path }}</span>
+            <FieldStateSelect
+              v-if="stateControl"
+              :state="r.lf.state"
+              :overlay="overlay?.[r.lf.templatePath] !== undefined"
+              @change="(s: FieldState) => emit('fieldState', r.lf.templatePath, s)"
+              @reset="() => emit('fieldState', r.lf.templatePath, null)"
+            />
+          </label>
+          <div class="folded-control">
+            <!-- 控件随 ui_kind 分形(同叶子行惯例;typed 值为模板串 →
+                 降级 text 输入,不拒显) -->
+            <textarea
+              v-if="r.f.ui_kind === 'json' || isStructured(getValue(r.f))"
+              class="ctl ctl-code"
+              rows="3"
+              :value="formatJson(getValue(r.f))"
+              :placeholder="placeholderFor(r.f)"
+              :disabled="readonly"
+              @input="e => setValue(r.f, parseJsonOrRaw((e.target as HTMLTextAreaElement).value))"
+            />
+            <label v-else-if="r.f.ui_kind === 'boolean'" class="ctl-bool">
+              <input
+                type="checkbox"
+                :checked="Boolean(getValue(r.f))"
+                :disabled="readonly"
+                @change="e => setValue(r.f, (e.target as HTMLInputElement).checked)"
+              />
+              <span>{{ getValue(r.f) ? 'true' : 'false' }}</span>
+            </label>
+            <input
+              v-else-if="r.f.ui_kind === 'number' && !isTpl(getValue(r.f))"
+              type="number"
+              class="ctl"
+              :value="getValue(r.f) as number | string"
+              :placeholder="placeholderFor(r.f)"
+              :disabled="readonly"
+              @input="e => { const v = (e.target as HTMLInputElement).value; setValue(r.f, v === '' ? '' : Number(v)) }"
+            />
+            <select
+              v-else-if="r.f.ui_kind === 'select' && r.f.enum && !isTpl(getValue(r.f))"
+              class="ctl"
+              :value="getValue(r.f) as string"
+              :disabled="readonly"
+              @change="e => setValue(r.f, (e.target as HTMLSelectElement).value)"
+            >
+              <option value="">— select —</option>
+              <option v-for="opt in r.f.enum" :key="String(opt)" :value="String(opt)">{{ String(opt) }}</option>
+            </select>
+            <input
+              v-else
+              type="text"
+              class="ctl"
+              :value="getValue(r.f) as string"
+              :placeholder="placeholderFor(r.f)"
+              :disabled="readonly"
+              @input="e => setValue(r.f, (e.target as HTMLInputElement).value)"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 其他字段(§4:目录外 body 残留,深浅皆收 + 契约差集行)。树模式
          行集由 Canvas 投影(deepExtras = extraBodyPaths 单一真源);平铺
          模式维持顶层平铺键 − binding 根段(StrategyForm 复用不受影响)。
@@ -776,6 +858,38 @@ function hasOverlay(item: RenderItem): boolean {
   const p = templatePathOf(item)
   return !!p && props.overlay?.[p] !== undefined
 }
+
+// ─── 折叠区(§5.4 折叠区 = collapse):叶子收区,容器原地折叠 ──────
+
+/** 折叠区叶子:目录叶子解析态 collapse → 不占直接渲染面,收进顶部
+ *  「已折叠字段」区。合成标量行(synthetic)随所属数组容器原地折叠,
+ *  不收 —— 收了会把折叠数组的行搬空(展开容器反而没行)。 */
+function isFoldedLeaf(item: RenderItem): boolean {
+  return item.lf?.state === 'collapse' && !item.lf.synthetic
+}
+
+/** 折叠区行集:全树收集 collapse 目录叶子(深浅皆收,文档序;仅顶层
+ *  渲染区块 — 嵌套实例不重复收集)。 */
+const foldedLeaves = computed<Array<{ lf: FieldLeafNode; f: IOFieldBinding }>>(() => {
+  if (props.nested || !props.nodes) return []
+  const out: Array<{ lf: FieldLeafNode; f: IOFieldBinding }> = []
+  const walk = (ns: FieldTreeNode[]): void => {
+    for (const n of ns) {
+      if (n.kind === 'leaf') {
+        if (n.state === 'collapse' && !n.synthetic) out.push({ lf: n, f: n.binding })
+      } else if (n.kind === 'object') {
+        walk(n.children)
+      } else if (n.kind === 'array') {
+        for (const row of n.rows) walk(row)
+      }
+    }
+  }
+  walk(props.nodes)
+  return out
+})
+
+/** 折叠区默认收起(挂载即折,不跨步骤记忆 — 同「其他字段」约定) */
+const foldedOpen = ref(false)
 
 // ─── 区块折叠面板:开合状态(path 键控,跨 body 重算保持;────────────
 //     对象/数组/开放字典三类区块共用;未见过 = 目录解析态默认:
@@ -1436,6 +1550,32 @@ function formatJson(v: unknown): string {
   font-size: 11.5px; color: #64748b; line-height: 1.5;
 }
 .field-desc svg { flex-shrink: 0; margin-top: 2px; color: #94a3b8; }
+
+/* ── 已折叠字段区(§5.4 折叠区):中性 slate —— 渐进披露而非警示
+   (与「其他字段」琥珀警示区分;值仍在 body,仅布局收纳) ── */
+.folded {
+  padding: 8px 10px 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid #94a3b8;
+  border-radius: 8px;
+}
+.folded-toggle {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; padding: 0; border: none; background: transparent;
+  font-size: 12px; text-align: left; cursor: pointer;
+}
+.folded-arrow {
+  display: inline-block; font-size: 10px; color: #64748b;
+  transition: transform 0.15s;
+}
+.folded-arrow.open { transform: rotate(90deg); }
+.folded-title { font-weight: 600; color: #475569; }
+.folded-hint { margin-left: auto; font-size: 11px; color: #94a3b8; }
+.folded-body { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.folded-row { display: flex; flex-direction: column; gap: 4px; padding-left: 6px; }
+.folded-label { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.folded-control .ctl { width: 100%; }
 
 /* ── 其他字段折叠区:琥珀警示(浅底 + 左条),与 sk-generated 橙同族 ── */
 .extras {
