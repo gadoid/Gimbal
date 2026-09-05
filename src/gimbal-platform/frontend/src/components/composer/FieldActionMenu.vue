@@ -14,6 +14,8 @@
   子列表用就地展开(非 el-dropdown 嵌套子菜单 — 测试与 a11y 都更稳)。
   injected=true(字段已挂 assign)时 引用/设为变量/注入 三项禁用 —
   值写入必被运行时覆盖,防矛盾态;提取/断言不受影响。
+  structured=true(容器区块头)时 引用/设为变量 两项隐藏 — 行组/KV
+  编辑器无法承载 ${var.x} 字符串值;提取/注入/断言策略项保留。
 -->
 <template>
   <button
@@ -26,7 +28,7 @@
     <!-- 主菜单(未展开子列表时) -->
     <template v-if="!subOpen">
       <button
-        v-if="domain !== 'response'"
+        v-if="domain !== 'response' && !structured"
         type="button"
         class="fa-item"
         :class="{ disabled: injected }"
@@ -37,7 +39,7 @@
         <span class="fa-label">引用共享变量</span><span class="fa-note">Reference</span>
       </button>
       <button
-        v-if="domain !== 'response' && !/\$\{var\./.test(value ?? '')"
+        v-if="domain !== 'response' && !structured && !/\$\{var\./.test(value ?? '')"
         type="button"
         class="fa-item fa-promote"
         :class="{ disabled: injected }"
@@ -136,6 +138,13 @@ const props = defineProps<{
    * 提取/断言是响应域动作,保持可用。
    */
   injected?: boolean
+  /**
+   * 结构化容器(对象/数组/字典区块头,2026-09-05 注入粒度 P3):
+   * 隐藏「引用共享变量/设为变量」两个值写入项 — 行组/KV 编辑器无法
+   * 承载 ${var.x} 字符串值(写入会洗掉结构);提取/注入/断言三个
+   * 策略项保留(容器级快捷策略,恢复目录化前的整容器叶子能力)。
+   */
+  structured?: boolean
   /** 浮层开合由 FieldForm 持有(同屏至多一个),经 open 下传 */
   open?: boolean
 }>()

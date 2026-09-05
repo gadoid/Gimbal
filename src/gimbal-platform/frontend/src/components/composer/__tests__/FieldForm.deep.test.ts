@@ -20,6 +20,7 @@ import FieldForm from '@/components/composer/FieldForm.vue'
 import { buildTree, extraBodyPaths } from '@/utils/declarations'
 import type { ExtraBodyRow } from '@/utils/declarations'
 import type { DeclarationEntryView, FieldState, IOFieldBinding } from '@/types/plate'
+import type { VarEntry } from '@/utils/var-registry'
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
@@ -46,8 +47,15 @@ function mountTree(opts: {
   unboundFields?: Array<{ name: string; path: string; type?: string; default?: unknown }>
   injected?: Record<string, Array<{ source: string; target: string }>>
   readonly?: boolean
+  fieldActions?: boolean
+  varChoices?: VarEntry[]
+  injectChoices?: Array<VarEntry & { disabled?: boolean }>
 }) {
   const body = ref<unknown>(opts.body ?? {})
+  const emitted: Array<[string, FieldState | null]> = []
+  const extracted: IOFieldBinding[] = []
+  const assigned: Array<[IOFieldBinding, string]> = []
+  const asserted: IOFieldBinding[] = []
   const Parent = defineComponent({
     setup() {
       return () => h(FieldForm, {
@@ -59,16 +67,21 @@ function mountTree(opts: {
         unboundFields: opts.unboundFields,
         injected: opts.injected,
         readonly: opts.readonly,
+        fieldActions: opts.fieldActions,
+        varChoices: opts.varChoices ?? [],
+        injectChoices: opts.injectChoices ?? [],
         'onUpdate:body': (v: unknown) => { body.value = v },
         'onFieldState': (p: string, s: FieldState | null) => {
           emitted.push([p, s])
         },
+        'onFieldExtract': (f: IOFieldBinding) => { extracted.push(f) },
+        'onFieldAssign': (f: IOFieldBinding, name: string) => { assigned.push([f, name]) },
+        'onFieldAssert': (f: IOFieldBinding) => { asserted.push(f) },
       })
     },
   })
-  const emitted: Array<[string, FieldState | null]> = []
   const w = mount(Parent, { global: { plugins: [ElementPlus] } })
-  return { w, body, emitted }
+  return { w, body, emitted, extracted, assigned, asserted }
 }
 
 // ─── D8 清空分流(树模式语义保持)──────────────────────────────────
@@ -436,6 +449,85 @@ describe('FieldForm 树模式 — 区块级折叠(P2)', () => {
     await flush()
     expect(body.value).toEqual({ labels: { env: 'qa', key: '' }, open: 'x' })
     expect(w.find('.dict-node .arr-body').attributes('style')).not.toContain('display: none')
+  })
+})
+
+// ─── 容器级策略菜单(2026-09-05 注入粒度 P3:恢复整容器快捷策略)──────
+
+describe('FieldForm 树模式 — 容器级策略菜单(P3)', () => {
+  const decls = () => [
+    mkDecl({ name: 'order_id', path: '$.order_id' }),
+    mkDecl({ name: 'container', path: '$.container', type: 'array', children: [
+      mkDecl({ name: 'box_type', path: '$.container.box_type' }),
+      mkDecl({ name: 'box_no', path: '$.container.box_no', type: 'array', state: 'collapse', children: [
+        mkDecl({ name: 'no', path: '$.container.box_no.no' }),
+      ] }),
+    ] }),
+    mkDecl({ name: 'labels', path: '$.labels', type: 'object' }),
+    mkDecl({ name: 'cfg', path: '$.cfg', type: 'object', children: [
+      mkDecl({ name: 'timeout', path: '$.cfg.timeout' }),
+    ] }),
+  ]
+  const mountFa = (over: Partial<Parameters<typeof mountTree>[0]> = {}) =>
+    mountTree({
+      decls: decls(),
+      body: { order_id: 'o-1', container: [{ box_type: '20GP', box_no: [{ no: 'A1' }] }], labels: { env: 'qa' }, cfg: { timeout: 30 } },
+      fieldActions: true,
+      ...over,
+    })
+
+  it('M1: 三类容器区块头都有 ☰;fieldActions 未开时整体缺席', () => {
+    const { w } = mountFa()
+    // 实例数 = container(数组)+ box_no(行内数组)+ labels(字典)+ cfg(对象)
+    expect(w.findAll('.node-fa')).toHaveLength(4)
+    const plain = mountTree({ decls: decls(), body: {} })
+    expect(plain.w.find('.node-fa').exists()).toBe(false)
+  })
+
+  it('M2: structured 菜单项 — 提取/注入/断言在,值写入项(引用/设为变量)隐藏', async () => {
+    const { w } = mountFa({ varChoices: [{ name: 'v1', origin: 'config', stepIdx: null, expression: null }] })
+    await w.find('.arr-node .fa-menu-btn').trigger('click')
+    const labels = w.findAll('.fa-item .fa-label').map((l) => l.text())
+    expect(labels).toContain('从响应提取')
+    expect(labels).toContain('注入响应变量')
+    expect(labels).toContain('断言该字段')
+    expect(labels).not.toContain('引用共享变量')
+    expect(labels).not.toContain('设为变量')
+  })
+
+  it('M3: 断言/提取上抛整容器合成载体(path = $.container,目录元数据随行)', async () => {
+    const { w, asserted, extracted } = mountFa()
+    await w.find('.arr-node .fa-menu-btn').trigger('click')
+    await w.findAll('.fa-item').find((b) => b.text().includes('断言该字段'))!.trigger('click')
+    expect(asserted).toHaveLength(1)
+    expect(asserted[0].name).toBe('container')
+    expect(asserted[0].path).toBe('$.container')
+    await w.find('.arr-node .fa-menu-btn').trigger('click')
+    await w.findAll('.fa-item').find((b) => b.text().includes('从响应提取'))!.trigger('click')
+    expect(extracted[0].path).toBe('$.container')
+  })
+
+  it('M4: 注入子列表选中 → fieldAssign(整容器, 变量名),菜单收起', async () => {
+    const { w, assigned } = mountFa({
+      injectChoices: [{ name: 'resp_container', origin: 'extract', stepIdx: 0, expression: null }],
+    })
+    await w.find('.arr-node .fa-menu-btn').trigger('click')
+    await w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))!.trigger('click')
+    await w.findAll('.fa-var-item').find((b) => b.text().includes('resp_container'))!.trigger('click')
+    expect(assigned).toEqual([[
+      expect.objectContaining({ path: '$.container' }), 'resp_container',
+    ]])
+    expect(w.find('.fa-menu').exists()).toBe(false)
+  })
+
+  it('M5: 行内嵌套容器菜单按实例路径寻址($.container[0].box_no,与叶子同源)', async () => {
+    const { w, asserted } = mountFa()
+    // 文档序 .node-fa = [container(数组), box_no(行内数组), labels(字典), cfg(对象)]
+    const fas = w.findAll('.node-fa')
+    expect(fas).toHaveLength(4)
+    await fas[1].find('.fa-menu-btn').trigger('click')
+    await fas[1].findAll('.fa-item').find((b) => b.text().includes('断言该字段'))!.trigger('click')
+    expect(asserted[0].path).toBe('$.container[0].box_no')
   })
 })
 

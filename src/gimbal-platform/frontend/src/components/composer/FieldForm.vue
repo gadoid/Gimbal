@@ -11,6 +11,8 @@
       开放字典:object 无 children(additionalProperties)→ KV 编辑器
             (区块折叠同款;三类区块 collapse 态默认收起,点击展开,
              加行/添键自动展开 —— 嵌套过长目录盖 collapse 治噪)
+    三类容器区块头均带策略菜单(P3):提取/注入/断言作用于整容器值
+    (目录化前整容器叶子的快捷入口;值写入类动作不适用 → structured 门控)
     carry 不进树(值表整包注入,编排面零感知);深层残留不在此 ——
     「其他字段」区承接目录外 body 键(深浅皆收)。
   - 平铺模式(bindings):StrategyForm / 响应契约参考。IOFieldBinding[]
@@ -46,6 +48,23 @@
             @change="(s) => emit('fieldState', templatePathOf(item), s)"
             @reset="() => emit('fieldState', templatePathOf(item), null)"
           />
+          <!-- 容器级策略菜单(P3):提取/注入/断言作用于整容器值,
+               恢复目录化前整容器叶子的快捷入口 -->
+          <span v-if="fieldActions && item.n.path !== '$'" class="node-fa">
+            <FieldActionMenu
+              :field="nodeBinding(item.n)"
+              structured
+              :var-choices="varChoices ?? []"
+              :inject-choices="injectChoices ?? []"
+              :domain="domain"
+              :open="menuField === nodeBinding(item.n).name"
+              @toggle="toggleMenu(nodeBinding(item.n))"
+              @close="menuField = null"
+              @field-extract="(field: IOFieldBinding) => emit('fieldExtract', field)"
+              @field-assign="(field: IOFieldBinding, name: string) => emit('fieldAssign', field, name)"
+              @field-assert="(field: IOFieldBinding) => emit('fieldAssert', field)"
+            />
+          </span>
         </div>
         <div v-show="isOpen(item.n)" class="obj-body">
           <FieldForm
@@ -94,6 +113,23 @@
             @change="(s) => emit('fieldState', templatePathOf(item), s)"
             @reset="() => emit('fieldState', templatePathOf(item), null)"
           />
+          <!-- 容器级策略菜单(P3):整容器快捷策略入口(如 $.container
+               整体提取/注入/断言),行组编辑不动 — 目录化前整容器叶子同款 -->
+          <span v-if="fieldActions && item.n.path !== '$'" class="node-fa">
+            <FieldActionMenu
+              :field="nodeBinding(item.n)"
+              structured
+              :var-choices="varChoices ?? []"
+              :inject-choices="injectChoices ?? []"
+              :domain="domain"
+              :open="menuField === nodeBinding(item.n).name"
+              @toggle="toggleMenu(nodeBinding(item.n))"
+              @close="menuField = null"
+              @field-extract="(field: IOFieldBinding) => emit('fieldExtract', field)"
+              @field-assign="(field: IOFieldBinding, name: string) => emit('fieldAssign', field, name)"
+              @field-assert="(field: IOFieldBinding) => emit('fieldAssert', field)"
+            />
+          </span>
           <button
             v-if="!readonly"
             type="button"
@@ -162,6 +198,22 @@
             @change="(s) => emit('fieldState', templatePathOf(item), s)"
             @reset="() => emit('fieldState', templatePathOf(item), null)"
           />
+          <!-- 容器级策略菜单(P3):整字典快捷策略入口,同对象/数组区块 -->
+          <span v-if="fieldActions && item.n.path !== '$'" class="node-fa">
+            <FieldActionMenu
+              :field="nodeBinding(item.n)"
+              structured
+              :var-choices="varChoices ?? []"
+              :inject-choices="injectChoices ?? []"
+              :domain="domain"
+              :open="menuField === nodeBinding(item.n).name"
+              @toggle="toggleMenu(nodeBinding(item.n))"
+              @close="menuField = null"
+              @field-extract="(field: IOFieldBinding) => emit('fieldExtract', field)"
+              @field-assign="(field: IOFieldBinding, name: string) => emit('fieldAssign', field, name)"
+              @field-assert="(field: IOFieldBinding) => emit('fieldAssert', field)"
+            />
+          </span>
           <button
             v-if="!readonly"
             type="button"
@@ -741,6 +793,26 @@ function toggleSection(n: SectionNode) {
   sectionOpen.value[n.path] = !isOpen(n)
 }
 
+/**
+ * 容器区块头策略菜单的合成载体:目录条目 → IOFieldBinding(path 用
+ * 实例路径,行内嵌套容器如 $.container[1].box_no 与叶子同源寻址;
+ * 2026-09-05 注入粒度 P3 —— 恢复目录化前整容器叶子的快捷策略入口,
+ * 提取/注入/断言作用于整个容器值)。
+ */
+function nodeBinding(n: SectionNode): IOFieldBinding {
+  return {
+    name: n.entry.name,
+    path: n.path,
+    required: n.entry.required,
+    default: n.entry.default ?? null,
+    example: n.entry.example ?? null,
+    description: n.entry.description,
+    enum: n.entry.enum ?? null,
+    ui_kind: n.entry.ui_kind,
+    source_kind: n.entry.source_kind,
+  }
+}
+
 // ─── 数组行组:加行(模板空壳)/删行(splice,§5.3 行尾删除)────────
 
 /** body 浅拷贝(数组根保形):数组根 spread 保数组性 — 对象 spread
@@ -1135,6 +1207,13 @@ function formatJson(v: unknown): string {
 .obj-toggle svg { transition: transform 0.15s; }
 .obj-toggle svg.open { transform: rotate(0deg); }
 .obj-toggle svg:not(.open) { transform: rotate(-90deg); }
+/* 容器级策略菜单锚点(P3):☰ 绝对定位需要 positioned 祖先;
+   显式 22×20 占位(0 宽锚点会让 ☰ 向左溢出压到角标/状态下拉) */
+.node-fa {
+  position: relative; flex-shrink: 0;
+  width: 22px; height: 20px;
+  margin-left: 2px;
+}
 .obj-body {
   display: flex; flex-direction: column; gap: 12px;
   padding: 8px 0 2px 10px; border-left: 1px dashed #cbd5e1; margin-left: 4px;
