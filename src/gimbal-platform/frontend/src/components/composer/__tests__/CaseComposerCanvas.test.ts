@@ -1654,6 +1654,85 @@ describe('CaseComposerCanvas — 请求侧提取域感知(2026-09-05)', () => {
     expect(w.findAll('.field-label .strategy-tag')).toHaveLength(0)
     w.unmount()
   })
+
+  it('N3: 提取态提示与注入态分面 — 容器提取挂绿色「已提取」徽标,不锁体不藏加行', async () => {
+    // 提取只读取不覆盖:此前 requestInjected 混收 extract → 容器头误显
+    // 「已注入·运行时覆盖整个区块」+ 体锁定 + 藏加行(注入语义错挂)
+    const s0 = deepStep({
+      strategy: [{ kind: 'extract', target: 'supplier', expression: '$.request_body.supplier' } as any],
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    const head = w.find('.arr-node > .node-head')
+    expect(head.find('.node-extracted').exists()).toBe(true)
+    expect(head.find('.node-extracted').text()).toContain('已提取')
+    expect(head.find('.node-injected').exists()).toBe(false)
+    // 不锁体 + 加行在 + 行值控件可编辑(与 P6 注入锁定面对照)
+    expect(w.find('.arr-node .arr-body').classes()).not.toContain('body-locked')
+    expect(w.find('.arr-add').exists()).toBe(true)
+    expect(w.find('.arr-row input.ctl').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('N4: 叶提取 → 值控件保持可编辑 + 「已提取」提示行;无注入只读条', async () => {
+    const s0 = mkStep({
+      strategy: [{ kind: 'extract', target: 'orderId', expression: '$.request_body.orderId' } as any],
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    // 提取不覆盖值:控件照常(I1 只读条是 assign 专属)
+    expect(w.find('.field-control input.ctl').exists()).toBe(true)
+    expect(w.find('.ctl-injected').exists()).toBe(false)
+    expect(w.find('.injected-fallback').exists()).toBe(false)
+    const hint = w.find('.extracted-hint')
+    expect(hint.exists()).toBe(true)
+    expect(hint.text()).toContain('orderId')
+    expect(hint.attributes('title')).toBe('$.request_body.orderId → orderId')
+    w.unmount()
+  })
+})
+
+describe('CaseComposerCanvas — 策略显示名统一(2026-09-05)', () => {
+  /**
+   * P7 菜单更名(提取该字段/向该字段动态注入/断言该字段)后,策略卡徽标
+   * 仍显 plate 旧 label(从响应提取变量/注入响应变量)— 同名两套叫法。
+   * 修:展示层覆写(strategyLabelOf,plate 数据面不动)。
+   */
+  it('L1: 策略卡徽标显示统一名(覆写 plate 旧 label),未知 kind 回落', async () => {
+    const { strategyLabelOf } = await import('@/utils/strategy-labels')
+    // 覆写表:与菜单动作同口径;未知 kind 原样回落
+    expect(strategyLabelOf('extract', '从响应提取变量')).toBe('提取该字段')
+    expect(strategyLabelOf('assign', '注入响应变量')).toBe('向该字段动态注入')
+    expect(strategyLabelOf('assertion', '断言')).toBe('断言该字段')
+    expect(strategyLabelOf('custom_x', '自定义策略')).toBe('自定义策略')
+
+    const { listStrategyKinds } = await import('@/api/scenario-composer')
+    const kindsMock = (listStrategyKinds as any).getMockImplementation()
+    ;(listStrategyKinds as any).mockResolvedValue([
+      { kind: 'extract', label: '从响应提取变量' },
+      { kind: 'assertion', label: '断言' },
+      { kind: 'assign', label: '注入响应变量' },
+    ])
+    try {
+      const s0 = mkStep({
+        strategy: [
+          { kind: 'extract', target: 't', expression: '$.response_body.data.t' } as any,
+          { kind: 'assign', source: '$.t', target: '$.request_body.orderId' } as any,
+        ],
+      })
+      const { w } = mountCanvas([s0])
+      await flushPromises()
+      // 策略卡徽标:覆写名(旧 label 不再出现)
+      const badges = w.findAll('.sf-badge').map((b) => b.text())
+      expect(badges).toContain('提取该字段')
+      expect(badges).toContain('向该字段动态注入')
+      expect(w.text()).not.toContain('从响应提取变量')
+      expect(w.text()).not.toContain('注入响应变量')
+      w.unmount()
+    } finally {
+      ;(listStrategyKinds as any).mockImplementation(kindsMock)
+    }
+  })
 })
 
 /**

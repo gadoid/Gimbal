@@ -22,7 +22,7 @@
 <template>
   <div class="strategy-form" :class="`ph-${detail.phase}`">
     <div class="sf-head" @click="toggle">
-      <span class="sf-badge" :class="`ph-${detail.phase}`">{{ detail.label }}</span>
+      <span class="sf-badge" :class="`ph-${detail.phase}`">{{ strategyLabelOf(detail.kind, detail.label) }}</span>
       <span class="sf-kind">{{ tagLabel ?? detail.kind }}</span>
       <span
         v-if="orderChip !== null"
@@ -81,6 +81,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import FieldForm from './FieldForm.vue'
+import { strategyLabelOf } from '@/utils/strategy-labels'
 import type { StrategyView, StrategyKindDetailView, StrategyFieldDescView, IOFieldBinding } from '@/types/plate'
 
 const props = defineProps<{

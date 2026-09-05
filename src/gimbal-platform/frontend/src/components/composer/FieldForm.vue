@@ -58,6 +58,10 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
             <span>已注入 · 运行时覆盖整个区块</span>
           </span>
+          <span v-if="nodeExtracted(item.n)" class="node-extracted" :title="extractedTitle(nodeBinding(item.n))">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>已提取 · 运行时读取整个区块</span>
+          </span>
           <FieldStateSelect
             v-if="stateControl"
             :state="item.n.state"
@@ -137,6 +141,10 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
             <span>已注入 · 运行时覆盖整个区块</span>
           </span>
+          <span v-if="nodeExtracted(item.n)" class="node-extracted" :title="extractedTitle(nodeBinding(item.n))">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>已提取 · 运行时读取整个区块</span>
+          </span>
           <FieldStateSelect
             v-if="stateControl"
             :state="item.n.state"
@@ -188,6 +196,7 @@
               :assertable="assertable"
               :strategy-tags="strategyTags"
               :injected="injected"
+              :extracted="extracted"
               :state-control="stateControl"
               :overlay="overlay"
               @update:body="(v: any) => emit('update:body', v)"
@@ -236,6 +245,10 @@
           <span v-if="nodeInjected(item.n)" class="node-injected" :title="injectedTitle(nodeBinding(item.n))">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
             <span>已注入 · 运行时覆盖整个区块</span>
+          </span>
+          <span v-if="nodeExtracted(item.n)" class="node-extracted" :title="extractedTitle(nodeBinding(item.n))">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>已提取 · 运行时读取整个区块</span>
           </span>
           <FieldStateSelect
             v-if="stateControl"
@@ -626,6 +639,11 @@
       <p v-if="isInjected(item.f)" class="injected-fallback">
         原值 <code>{{ fallbackText(item.f) }}</code> · 策略失败且继续(continue)时以此发送
       </p>
+      <!-- 提取提示行(域感知提取):运行时读取此值 → 变量;只读取不覆盖,
+           值控件上方照常可编辑(与注入态的只读提示条分面) -->
+      <p v-if="isExtracted(item.f)" class="extracted-hint" :title="extractedTitle(item.f)">
+        已提取 → 变量 <code>{{ extractedVars(item.f) }}</code> · 运行时读取此值(可编辑)
+      </p>
       </div>
     </template>
 
@@ -669,6 +687,10 @@
                 <span>已使用动态策略注入 · 运行时覆盖此值</span>
               </div>
             </div>
+            <!-- 提取提示行(同叶子行):折叠不丢提示,值控件照常可编辑 -->
+            <p v-else-if="isExtracted(r.f)" class="extracted-hint" :title="extractedTitle(r.f)">
+              已提取 → 变量 <code>{{ extractedVars(r.f) }}</code> · 运行时读取此值(可编辑)
+            </p>
             <!-- 控件随 ui_kind 分形(同叶子行惯例;typed 值为模板串 →
                  降级 text 输入,不拒显) -->
             <textarea
@@ -860,8 +882,14 @@ const props = defineProps<{
   /** 请求体字段动态注入态(Canvas 传入):path → 命中的 assign 策略
    *  (source/target 供提示条悬停)。命中字段值被 assign 运行时覆盖 →
    *  值控件换只读提示条,原值降级为 continue 兜底(见 injected-fallback)。
+   *  仅 assign(写入才覆盖;extract 只读取,另见 extracted)。
    *  StrategyForm/响应页复用处不传 → 零影响。 */
   injected?: Record<string, Array<{ source: string; target: string }>>
+  /** 请求体字段提取态(Canvas 传入,域感知提取):path → 命中的 extract
+   *  策略(varName/expression 供提示悬停)。提取运行时只读取不覆盖 →
+   *  值控件保持可编辑,仅显「已提取」提示行;容器头徽标不锁体。
+   *  复用处不传 → 零影响。 */
+  extracted?: Record<string, Array<{ varName: string; expression: string }>>
   /** 字段状态控制门控(§5.4):行尾状态下拉写 step.field_states —
    *  仅 Canvas 请求体场景传;只读/响应/策略表单复用处不传 → 零控件。 */
   stateControl?: boolean
@@ -995,6 +1023,12 @@ function nodeBinding(n: SectionNode): IOFieldBinding {
  */
 function nodeInjected(n: SectionNode): boolean {
   return isInjected(nodeBinding(n))
+}
+
+/** 整容器提取态:extract expression 命中容器实例路径 — 头部绿色徽标,
+ *  不锁体不藏加行(提取只读取,与 P6 注入徽标的锁定面分家) */
+function nodeExtracted(n: SectionNode): boolean {
+  return isExtracted(nodeBinding(n))
 }
 
 // ─── 数组行组:加行(模板空壳)/删行(splice,§5.3 行尾删除)────────
@@ -1178,6 +1212,25 @@ function injectedTitle(f: IOFieldBinding): string {
   return (props.injected?.[f.path] ?? [])
     .map((h) => `${h.source} → ${h.target}`)
     .join('\n')
+}
+
+/** 提取态(域感知提取,2026-09-05):该字段命中 extract(expression=
+ *  $.request_body<path>,Canvas requestExtracted 键)→ 值控件保持可编辑
+ *  (提取只读取),提示行标"运行时读取此值"(与 assign 注入态只读化分面) */
+function isExtracted(f: IOFieldBinding): boolean {
+  return (props.extracted?.[f.path]?.length ?? 0) > 0
+}
+
+/** 提取提示悬停:命中策略的 expression → 变量名(多条全列) */
+function extractedTitle(f: IOFieldBinding): string {
+  return (props.extracted?.[f.path] ?? [])
+    .map((h) => `${h.expression} → ${h.varName}`)
+    .join('\n')
+}
+
+/** 提取提示行内变量名串(多条 · 连接) */
+function extractedVars(f: IOFieldBinding): string {
+  return (props.extracted?.[f.path] ?? []).map((h) => h.varName).join('、')
 }
 
 /** 兜底原值展示:空 → (空);对象 JSON 化;长值靠 CSS 截断 */
@@ -1573,6 +1626,26 @@ function formatJson(v: unknown): string {
 /* 注入容器体锁定(P6):原值仍在(策略失败 continue 兜底)但只读 —
    惨淡化 + 拦截交互(I1 防编辑误导的容器面) */
 .body-locked { pointer-events: none; opacity: 0.55; }
+/* 提取态(域感知提取):绿色族(与变量注册表 extract 出身徽章同源)—
+   只读取不覆盖,值控件不锁,仅提示运行时读取 */
+.node-extracted {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 8px; border-radius: 999px;
+  background: #ecfdf5; border: 1.5px dashed #059669;
+  font-size: 11px; color: #065f46;
+  cursor: default; user-select: none; flex-shrink: 0;
+}
+.node-extracted svg { flex-shrink: 0; }
+.extracted-hint {
+  display: flex; align-items: center; gap: 4px;
+  margin: 1px 0 0;
+  font-size: 11px; color: #047857;
+}
+.extracted-hint code {
+  font-family: var(--font-mono); font-size: 10.5px;
+  background: #d1fae5; border-radius: 3px; padding: 0 5px;
+  max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 /* 兜底原值行:continue 语义透出,长值 code 内截断 */
 .injected-fallback {
   display: flex; align-items: center; gap: 4px;

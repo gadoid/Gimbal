@@ -219,6 +219,7 @@
                   :deep-extras="requestExtras"
                   :strategy-tags="requestStrategyTags"
                   :injected="requestInjected"
+                  :extracted="requestExtracted"
                   :state-control="true"
                   :overlay="currentStep.field_states"
                   @strategy-jump="onStrategyJump"
@@ -346,7 +347,7 @@
                         :key="k.kind"
                         :command="k.kind"
                       >
-                        {{ k.label }}<span class="strat-kind-tag">{{ k.kind }}</span>
+                        {{ strategyLabelOf(k.kind, k.label) }}<span class="strat-kind-tag">{{ k.kind }}</span>
                       </el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
@@ -508,6 +509,7 @@ import type { TplRef } from '@/utils/tpl-refs'
 import type { AuthSession } from '@/api/auth_sessions'
 import { deepDefaults } from '@/utils/jsonpath'
 import { toScratchPath } from '@/utils/scratch-path'
+import { strategyLabelOf } from '@/utils/strategy-labels'
 import {
   assertablePaths, buildTree, carryPaths, containerSurface, contractTree,
   extraBodyPaths, extraSurfaceBindings, formBindings, leafSurface, prefillBindings,
@@ -1012,21 +1014,41 @@ const requestStrategyTags = computed(() => fieldStrategyTags('request'))
 const responseStrategyTags = computed(() => fieldStrategyTags('response'))
 
 /** 请求体字段动态注入态(已注入 → FieldForm 值控件换只读提示条):
- *  与 fieldStrategyTags 同源同匹配(assign target 精确命中
- *  $.request_body<path> — 平铺/深层加点($.request_body.a.b),根 list
- *  直拼无点($.request_body[0].sku,见 requestBodyTargetOf)),key = path
- *  (实例地址唯一;name 在数组行间共享会整列误标),携带 source/target
- *  供提示条悬停展示。响应侧无此概念(assign 不写响应)。 */
+ *  仅 assign(写入才覆盖 — extract 只读取不锁值控件,提示另见
+ *  requestExtracted)。与 fieldStrategyTags 同源同匹配(assign target
+ *  精确命中 $.request_body<path> — 平铺/深层加点($.request_body.a.b),
+ *  根 list 直拼无点($.request_body[0].sku,见 requestBodyTargetOf)),
+ *  key = path(实例地址唯一;name 在数组行间共享会整列误标),携带
+ *  source/target 供提示条悬停展示。响应侧无此概念(assign 不写响应)。 */
 const requestInjected = computed<Record<string, Array<{ source: string; target: string }>>>(() => {
   const step = currentStep.value
   const out: Record<string, Array<{ source: string; target: string }>> = {}
   if (!step?.strategy.length) return out
   for (const f of requestFieldSurface(step)) {
-    const hits = step.strategy.filter((s) => strategyMatchesField(s, 'request', f)) as Array<{
-      source?: unknown; target?: unknown
-    }>
+    const hits = step.strategy.filter(
+      (s) => s.kind === 'assign' && strategyMatchesField(s, 'request', f)
+    ) as Array<{ source?: unknown; target?: unknown }>
     if (hits.length) {
       out[f.path] = hits.map((h) => ({ source: String(h.source ?? ''), target: String(h.target ?? '') }))
+    }
+  }
+  return out
+})
+
+/** 请求体字段提取态(域感知提取,2026-09-05):expression 命中
+ *  $.request_body<path> 的 extract → 携带 varName/expression 供提示
+ *  悬停。提取运行时只读取不覆盖 — FieldForm 值控件保持可编辑,仅显
+ *  「已提取」提示(与 assign 注入态的只读化分面,key 同为 path)。 */
+const requestExtracted = computed<Record<string, Array<{ varName: string; expression: string }>>>(() => {
+  const step = currentStep.value
+  const out: Record<string, Array<{ varName: string; expression: string }>> = {}
+  if (!step?.strategy.length) return out
+  for (const f of requestFieldSurface(step)) {
+    const hits = step.strategy.filter(
+      (s) => s.kind === 'extract' && strategyMatchesField(s, 'request', f)
+    ) as Array<{ target?: unknown; expression?: unknown }>
+    if (hits.length) {
+      out[f.path] = hits.map((h) => ({ varName: String(h.target ?? ''), expression: String(h.expression ?? '') }))
     }
   }
   return out
