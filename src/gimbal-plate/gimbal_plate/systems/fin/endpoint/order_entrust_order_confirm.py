@@ -136,8 +136,9 @@ ORDER_ENTRUST_ORDER_CONFIRM: Final[EndpointSpec] = EndpointSpec(
                     DeclarationEntry(name='order_container_id', path='$.container.order_container_id', state='form', type='string', ui_kind='text'),
                     DeclarationEntry(name='box_type', path='$.container.box_type', state='form', type='string', ui_kind='text'),
                     DeclarationEntry(name='box_num', path='$.container.box_num', state='form', type='string', ui_kind='text'),
-                    DeclarationEntry(name='box_no', path='$.container.box_no', state='form', type='array'),
-                    DeclarationEntry(name='seal_number', path='$.container.seal_number', state='form', type='array'),
+                    # P2(2026-09-05):噪声子数组盖 collapse(区块级折叠,默认收起)
+                    DeclarationEntry(name='box_no', path='$.container.box_no', state='collapse', type='array'),
+                    DeclarationEntry(name='seal_number', path='$.container.seal_number', state='collapse', type='array'),
                     DeclarationEntry(name='sea_trans_unit_price', path='$.container.sea_trans_unit_price', state='form', type='number', ui_kind='number'),
                 ]),
             DeclarationEntry(name='customer_category', path='$.customer_category', state='carry', type='string'),

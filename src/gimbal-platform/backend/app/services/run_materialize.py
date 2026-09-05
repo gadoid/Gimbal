@@ -105,23 +105,37 @@ def _path_parts(path: str) -> list[str]:
     return path[2:].split(".") if path.startswith("$.") else path.split(".")
 
 
-def _body_has(body: dict, path: str) -> bool:
-    cur: Any = body
-    for seg in _path_parts(path):
-        if not isinstance(cur, dict) or seg not in cur:
-            return False
-        cur = cur[seg]
-    return True
+def _carry_targets(body: dict[str, Any], path: str) -> list[tuple[dict[str, Any], str]]:
+    """模板 path 在 body 上的写入点集合(数组容器广播语义)。
 
+    中间节点为 dict → 下钻(缺席/非容器 → 建 dict 骨架,值表面打底
+    旧语义,dispatch 基线钉死);中间节点为数组 → 剩余段广播到每个
+    dict 行,嵌套数组逐层再广播 —— 修复旧实现把数组中间节点「洗成
+    {}」的病理(form 容器的字段级 carry 注入会毁掉整组行数据)。
+    行/叶子已有键由调用方按点跳过(行级填缺失:body 显式值最优先)。
+    """
+    segs = _path_parts(path)
+    if not segs:
+        return []
+    out: list[tuple[dict[str, Any], str]] = []
 
-def _body_set(body: dict, path: str, value: Any) -> None:
-    parts = _path_parts(path)
-    cur = body
-    for seg in parts[:-1]:
-        if not isinstance(cur.get(seg), dict):
-            cur[seg] = {}
-        cur = cur[seg]
-    cur[parts[-1]] = value
+    def _walk(cur: dict[str, Any], i: int) -> None:
+        seg = segs[i]
+        if i == len(segs) - 1:
+            out.append((cur, seg))
+            return
+        nxt = cur.get(seg)
+        if isinstance(nxt, list):
+            for row in nxt:
+                if isinstance(row, dict):
+                    _walk(row, i + 1)
+        else:
+            if not isinstance(nxt, dict):
+                cur[seg] = {}
+            _walk(cur[seg], i + 1)
+
+    _walk(body, 0)
+    return out
 
 
 def _coerce_carry_value(value: str, ftype: str) -> Any:
@@ -160,7 +174,11 @@ def _coerce_carry_value(value: str, ftype: str) -> Any:
 
 
 def _apply_carry(out: dict[str, Any], ctx: CarryContext) -> None:
-    """carry 填充(spec §4.2):填缺失语义 — body 已有键绝不覆盖。"""
+    """carry 填充(spec §4.2):填缺失语义 — body 已有键绝不覆盖。
+
+    模板 path 跨数组容器时广播到每个 dict 行(行级填缺失):body 显式
+    行值最优先,无行不造行 —— 整容器注入与字段级注入共用同一通道。
+    """
     for i, step in enumerate(out.get("steps") or []):
         if not isinstance(step, dict):
             continue
@@ -182,8 +200,6 @@ def _apply_carry(out: dict[str, Any], ctx: CarryContext) -> None:
         if not isinstance(body, dict):
             continue
         for path, ftype in candidates.items():
-            if _body_has(body, path):
-                continue                    # body 显式值最优先
             if path in bound:
                 value = bound[path]
             elif path in ctx.global_defaults:
@@ -191,9 +207,10 @@ def _apply_carry(out: dict[str, Any], ctx: CarryContext) -> None:
             else:
                 continue                    # 两层皆无 → 本次不注入
             if value is None:
-                _body_set(body, path, None)  # 行存在+null → 显式 JSON null
+                coerced = None              # 绑定显式 null → 显式 JSON null
             elif isinstance(value, str) and "${" in value:
-                _body_set(body, path, value)  # 模板原样透传,gimbal 解析
+                coerced = value             # 模板原样透传,gimbal 解析
             else:
-                _body_set(body, path,
-                          _coerce_carry_value(str(value), ftype))
+                coerced = _coerce_carry_value(str(value), ftype)
+            for tgt, key in _carry_targets(body, path):
+                tgt.setdefault(key, coerced)  # 行级填缺失:body 显式值最优先

@@ -7,8 +7,10 @@
       叶子:目录叶子 × 实例路径(数组行内含 [i]),ui_kind 选控件
       对象:折叠面板(标题 = name,展开递归;collapse 态默认收起)
       数组:动态行组(行数跟 body、结构跟目录;加行 = 模板实例化空壳,
-            行尾删除;支持 list 套 list)
+            行尾删除;支持 list 套 list)—— 同款区块折叠,头部行数常显
       开放字典:object 无 children(additionalProperties)→ KV 编辑器
+            (区块折叠同款;三类区块 collapse 态默认收起,点击展开,
+             加行/添键自动展开 —— 嵌套过长目录盖 collapse 治噪)
     carry 不进树(值表整包注入,编排面零感知);深层残留不在此 ——
     「其他字段」区承接目录外 body 键(深浅皆收)。
   - 平铺模式(bindings):StrategyForm / 响应契约参考。IOFieldBinding[]
@@ -31,7 +33,7 @@
       <!-- ── 对象节点:折叠面板(§5.3)────────────────────────── -->
       <div v-if="item.n && item.n.kind === 'object'" class="obj-node">
         <div class="node-head">
-          <button type="button" class="obj-toggle" @click="toggleObj(item.n)">
+          <button type="button" class="obj-toggle" @click="toggleSection(item.n)">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" :class="{ open: isOpen(item.n) }"><polyline points="9 6 15 12 9 18"/></svg>
           </button>
           <span class="label-text">{{ item.n.entry.name }}</span>
@@ -73,9 +75,14 @@
         </div>
       </div>
 
-      <!-- ── 数组节点:动态行组(§5.3;行数跟 body、结构跟目录)──── -->
+      <!-- ── 数组节点:动态行组(§5.3;行数跟 body、结构跟目录;──────
+           区块级折叠:与对象节点同机制,collapse 态默认收起,头部行数
+           可见,点击展开;加行自动展开(P2)) -->
       <div v-else-if="item.n && item.n.kind === 'array'" class="arr-node">
         <div class="node-head">
+          <button type="button" class="obj-toggle" @click="toggleSection(item.n)">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" :class="{ open: isOpen(item.n) }"><polyline points="9 6 15 12 9 18"/></svg>
+          </button>
           <span class="label-text">{{ item.n.entry.name }}</span>
           <span class="path-badge" :title="item.n.path">{{ item.n.path }}</span>
           <span class="ui-tag k-json">array</span>
@@ -95,6 +102,7 @@
             @click="addArrayRow(item.n)"
           >+ 加行</button>
         </div>
+        <div v-show="isOpen(item.n)" class="arr-body">
         <div v-for="(row, i) in item.n.rows" :key="i" class="arr-row">
           <span class="arr-idx">{{ i }}</span>
           <div class="arr-row-body">
@@ -134,11 +142,15 @@
         <p v-if="!item.n.rows.length" class="arr-empty">
           空数组 —「+ 加行」按目录模板实例化空壳行
         </p>
+        </div>
       </div>
 
       <!-- ── 开放字典节点:KV 编辑器(§5.3)────────────────────── -->
       <div v-else-if="item.n && item.n.kind === 'dict'" class="dict-node">
         <div class="node-head">
+          <button type="button" class="obj-toggle" @click="toggleSection(item.n)">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" :class="{ open: isOpen(item.n) }"><polyline points="9 6 15 12 9 18"/></svg>
+          </button>
           <span class="label-text">{{ item.n.entry.name }}</span>
           <span class="path-badge" :title="item.n.path">{{ item.n.path }}</span>
           <span class="ui-tag k-json">object</span>
@@ -158,6 +170,7 @@
             @click="addDictKey(item.n)"
           >+ 添加键</button>
         </div>
+        <div v-show="isOpen(item.n)" class="arr-body">
         <div v-for="kv in dictKvs(item.n)" :key="kv.key" class="kv-row">
           <input
             type="text"
@@ -193,6 +206,7 @@
           >×</button>
         </div>
         <p v-if="!item.n.entries.length" class="arr-empty">空字典 —「+ 添加键」自由落键</p>
+        </div>
       </div>
 
       <!-- ── 叶子节点:字段行(ui_kind 选控件,§5.3)──────────────
@@ -711,16 +725,20 @@ function hasOverlay(item: RenderItem): boolean {
   return !!p && props.overlay?.[p] !== undefined
 }
 
-// ─── 对象折叠面板:开合状态(path 键控,跨 body 重算保持;────────────
-//     未见过 = 目录解析态默认:collapse 收起,form 展开)
+// ─── 区块折叠面板:开合状态(path 键控,跨 body 重算保持;────────────
+//     对象/数组/开放字典三类区块共用;未见过 = 目录解析态默认:
+//     collapse 收起,form 展开 —— 嵌套内容过长时目录盖 collapse,
+//     需要时点击展开(2026-09-05 注入粒度 P2))
 
-const objOpen = ref<Record<string, boolean>>({})
-function isOpen(n: FieldObjectNode): boolean {
-  const v = objOpen.value[n.path]
+type SectionNode = FieldObjectNode | FieldArrayNode | FieldDictNode
+
+const sectionOpen = ref<Record<string, boolean>>({})
+function isOpen(n: SectionNode): boolean {
+  const v = sectionOpen.value[n.path]
   return v === undefined ? n.state !== 'collapse' : v
 }
-function toggleObj(n: FieldObjectNode) {
-  objOpen.value[n.path] = !isOpen(n)
+function toggleSection(n: SectionNode) {
+  sectionOpen.value[n.path] = !isOpen(n)
 }
 
 // ─── 数组行组:加行(模板空壳)/删行(splice,§5.3 行尾删除)────────
@@ -748,6 +766,7 @@ function addArrayRow(n: FieldArrayNode) {
       : '',
   )
   setByPath(next, rel, arr)
+  sectionOpen.value[n.path] = true   // 加行自动展开:新行立即可见
   emit('update:body', next)
 }
 
@@ -821,6 +840,7 @@ function addDictKey(n: FieldDictNode) {
     while (base in o) base = `key_${i++}`
     o[base] = ''
   })
+  sectionOpen.value[n.path] = true   // 添键自动展开:新键行立即可见
 }
 
 // ─── 候选下拉 / 动作菜单 / 变量插入(既有行为,平移)────────────────
@@ -1117,6 +1137,11 @@ function formatJson(v: unknown): string {
 .obj-toggle svg:not(.open) { transform: rotate(-90deg); }
 .obj-body {
   display: flex; flex-direction: column; gap: 12px;
+  padding: 8px 0 2px 10px; border-left: 1px dashed #cbd5e1; margin-left: 4px;
+}
+/* 数组/字典区块体:与 obj-body 同款缩进导轨(区块级折叠 P2) */
+.arr-body {
+  display: flex; flex-direction: column; gap: 10px;
   padding: 8px 0 2px 10px; border-left: 1px dashed #cbd5e1; margin-left: 4px;
 }
 .arr-count {

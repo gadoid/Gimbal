@@ -99,13 +99,15 @@ ORDER_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
         # 2026-09-05 补全:行形状按本条 example 三方印证(order_customer_container
         # curl / Scenario_Test_14 转储同款)声明 children,行内业务键回到树行组
         # 渲染;不带 default/example → platform 导出 D7 深层无值不落 None 骨架
+        # 同日 P2:box_no/seal_number 噪声子数组盖 collapse(区块级折叠,
+        # 前端默认收起,点击展开);container 本体保持 form(最常编辑)
         DeclarationEntry(name='container', path='$.container', type='array', example=[{'order_container_id': '', 'box_type': '40HQ', 'box_num': '1', 'box_no': [''], 'seal_number': [''], 'sea_trans_unit_price': 1}], ui_kind='json',
             children=[
                 DeclarationEntry(name='order_container_id', path='$.container.order_container_id', type='string', ui_kind='text'),
                 DeclarationEntry(name='box_type', path='$.container.box_type', type='string', ui_kind='text'),
                 DeclarationEntry(name='box_num', path='$.container.box_num', type='string', ui_kind='text'),
-                DeclarationEntry(name='box_no', path='$.container.box_no', type='array'),
-                DeclarationEntry(name='seal_number', path='$.container.seal_number', type='array'),
+                DeclarationEntry(name='box_no', path='$.container.box_no', type='array', state='collapse'),
+                DeclarationEntry(name='seal_number', path='$.container.seal_number', type='array', state='collapse'),
                 DeclarationEntry(name='sea_trans_unit_price', path='$.container.sea_trans_unit_price', type='number', ui_kind='number'),
             ]),
         DeclarationEntry(name='message_board', path='$.message_board', type='array', example=[], ui_kind='json'),

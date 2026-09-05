@@ -372,6 +372,73 @@ describe('FieldForm 树模式 — carry 剪除与 collapse 收起', () => {
   })
 })
 
+// ─── 区块级折叠(2026-09-05 注入粒度 P2:数组/开放字典同款机制)──────
+
+describe('FieldForm 树模式 — 区块级折叠(P2)', () => {
+  const boxDecls = () => [
+    mkDecl({ name: 'container', path: '$.container', type: 'array', children: [
+      mkDecl({ name: 'box_type', path: '$.container.box_type' }),
+      mkDecl({ name: 'box_no', path: '$.container.box_no', type: 'array', state: 'collapse', children: [
+        mkDecl({ name: 'no', path: '$.container.box_no.no' }),
+      ] }),
+    ] }),
+  ]
+
+  it('S1: 共识 collapse 子数组默认收起(v-show,行仍在 DOM);头部行数常显;form 容器展开', () => {
+    const { w } = mountTree({
+      decls: boxDecls(),
+      body: { container: [{ box_type: '20GP', box_no: [{ no: 'A1' }] }] },
+    })
+    const arrBodies = w.findAll('.arr-body')
+    expect(arrBodies[0].isVisible()).toBe(true)   // container(form)默认展开
+    expect(arrBodies[1].isVisible()).toBe(false)  // box_no(collapse)默认收起
+    // v-show 而非 v-if:收起只是不可见,行数据保留(不藏差异)
+    expect(w.findAll('.arr-row')).toHaveLength(2)
+    // 收起时头部行数仍可见(区块折叠不藏差异线索)
+    const heads = w.findAll('.arr-node .node-head')
+    expect(heads[1].find('.arr-count').text()).toBe('1 行')
+  })
+
+  it('S2: 点击 toggle 展开 collapse 子数组(inline style 翻转,箭头 open;jsdom isVisible 缓存以 style 断言,同 C3)', async () => {
+    const { w } = mountTree({
+      decls: boxDecls(),
+      body: { container: [{ box_type: '20GP', box_no: [{ no: 'A1' }] }] },
+    })
+    expect(w.findAll('.arr-body')[1].attributes('style')).toContain('display: none')
+    await w.findAll('.obj-toggle')[1].trigger('click')
+    expect(w.findAll('.arr-body')[1].attributes('style')).not.toContain('display: none')
+    expect(w.findAll('.obj-toggle')[1].find('svg')!.classes()).toContain('open')
+  })
+
+  it('S3: 收起数组「+ 加行」→ 自动展开,新行立即可见', async () => {
+    const { w, body } = mountTree({
+      decls: boxDecls(),
+      body: { container: [{ box_type: '20GP', box_no: [] }] },
+    })
+    // box_no 收起中;文档序 arr-add = [container, box_no]
+    await w.findAll('.arr-add')[1].trigger('click')
+    await flush()
+    expect((body.value as Record<string, any>).container[0].box_no).toEqual([{}])
+    expect(w.findAll('.arr-body')[1].attributes('style')).not.toContain('display: none')
+  })
+
+  it('S4: 开放字典同款 — 增量盖 collapse 收起,「+ 添加键」自动展开', async () => {
+    const decls = [
+      mkDecl({ name: 'labels', path: '$.labels', type: 'object' }),
+      mkDecl({ name: 'open', path: '$.open' }),
+    ]
+    const { w, body } = mountTree({
+      decls, body: { labels: { env: 'qa' }, open: 'x' },
+      fieldStates: { '$.labels': 'collapse' },
+    })
+    expect(w.find('.dict-node .arr-body').isVisible()).toBe(false)
+    await w.find('.dict-node .arr-add').trigger('click')
+    await flush()
+    expect(body.value).toEqual({ labels: { env: 'qa', key: '' }, open: 'x' })
+    expect(w.find('.dict-node .arr-body').attributes('style')).not.toContain('display: none')
+  })
+})
+
 // ─── 字段状态控制(§5.4:状态回写与值回写两通路分离)────────────────
 
 describe('FieldForm 树模式 — 字段状态控制(§5.4)', () => {

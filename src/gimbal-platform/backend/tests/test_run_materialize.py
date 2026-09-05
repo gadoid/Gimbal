@@ -252,11 +252,98 @@ class TestCarryFill:
         assert body["meta"] == "{\"k\": 1}"
 
     def test_nested_path_builds_intermediate_layers(self):
-        # $.a.b 深路径:body 无 a 键 → _body_set 逐层建 dict 后写入嵌套值
+        # $.a.b 深路径:body 无 a 键 → _carry_targets 逐层建 dict 后写入嵌套值
         out = materialize_run_copy(_carry_converted(), carry_context=_ctx(
             step_fields={0: {"$.a.b": "string"}},
             service_bindings={"fin-service": {"$.a.b": "深嵌值"}}))
         assert out["steps"][0]["request"]["body"]["a"]["b"] == "深嵌值"
+
+    # ── 字段级注入 × 数组容器广播(2026-09-05 注入粒度)─────────────
+
+    @staticmethod
+    def _container_src() -> dict:
+        src = _carry_converted()
+        src["steps"][0]["request"]["body"]["container"] = [
+            {"box_type": "20GP", "box_num": "1", "box_no": ["A1"]},
+            {"box_num": "2", "box_no": []},
+        ]
+        return src
+
+    def test_field_path_broadcasts_to_all_rows(self):
+        """模板字段 path 跨数组容器 → 广播每个 dict 行(行级填缺失)。"""
+        out = materialize_run_copy(self._container_src(), carry_context=_ctx(
+            step_fields={0: {"$.container.sea_trans_unit_price": "number"}},
+            service_bindings={"fin-service": {
+                "$.container.sea_trans_unit_price": "100"}}))
+        rows = out["steps"][0]["request"]["body"]["container"]
+        assert [r.get("sea_trans_unit_price") for r in rows] == [100, 100]
+
+    def test_row_explicit_value_wins_over_broadcast(self):
+        out = materialize_run_copy(self._container_src(), carry_context=_ctx(
+            step_fields={0: {"$.container.box_type": "string"}},
+            service_bindings={"fin-service": {"$.container.box_type": "40HQ"}}))
+        rows = out["steps"][0]["request"]["body"]["container"]
+        assert rows[0]["box_type"] == "20GP"    # 行显式值最优先
+        assert rows[1]["box_type"] == "40HQ"    # 缺失行被填充
+
+    def test_array_rows_and_siblings_survive_injection(self):
+        """洗行病理回归:旧 _body_set 把数组中间节点替换成 {},行数据
+        整组蒸发;新 walker 只按点填缺失,行数/兄弟键/嵌套数组全保留。"""
+        out = materialize_run_copy(self._container_src(), carry_context=_ctx(
+            step_fields={0: {"$.container.box_type": "string"}},
+            service_bindings={"fin-service": {"$.container.box_type": "40HQ"}}))
+        rows = out["steps"][0]["request"]["body"]["container"]
+        assert len(rows) == 2
+        assert rows[0] == {"box_type": "20GP", "box_num": "1", "box_no": ["A1"]}
+        assert rows[1] == {"box_type": "40HQ", "box_num": "2", "box_no": []}
+
+    def test_nested_array_broadcasts_two_levels(self):
+        src = _carry_converted()
+        src["steps"][0]["request"]["body"]["a"] = [
+            {"b": [{"q": 1}, {"q": 2, "c": "显式"}]},
+            {"b": []},                            # 空子数组:无行不造行
+            {"b": "非容器"},                       # 非列表中间节点:下钻为 dict
+        ]
+        out = materialize_run_copy(src, carry_context=_ctx(
+            step_fields={0: {"$.a.b.c": "string"}},
+            service_bindings={"fin-service": {"$.a.b.c": "广播"}}))
+        rows = out["steps"][0]["request"]["body"]["a"]
+        assert [r["c"] for r in rows[0]["b"]] == ["广播", "显式"]
+        assert rows[1]["b"] == []
+        assert rows[2]["b"] == {"c": "广播"}       # 非列表 → dict 骨架下钻
+
+    def test_whole_container_injection_shared_channel(self):
+        """整容器注入与字段级注入共用同一通道:容器值 setdefault 落顶键,
+        body 已有整容器字面量时最优先(整容器粒度填缺失)。"""
+        out = materialize_run_copy(self._container_src(), carry_context=_ctx(
+            step_fields={0: {"$.container": "array"}},
+            service_bindings={"fin-service": {
+                "$.container": "[{'box_type': '40HQ', 'box_num': '9'}]"}}))
+        # body 已有 container 字面量 → 不覆盖
+        assert out["steps"][0]["request"]["body"]["container"][0]["box_type"] == "20GP"
+
+        src2 = _carry_converted()                  # body 无 container 键
+        out2 = materialize_run_copy(src2, carry_context=_ctx(
+            step_fields={0: {"$.container": "array"}},
+            service_bindings={"fin-service": {
+                "$.container": "[{'box_type': '40HQ', 'box_num': '9'}]"}}))
+        assert out2["steps"][0]["request"]["body"]["container"] == [
+            {"box_type": "40HQ", "box_num": "9"}]
+
+    def test_empty_or_non_dict_rows_never_fabricate(self):
+        """空数组无行不造行;标量行跳过不炸 —— 广播只面向 dict 行。"""
+        src = _carry_converted()
+        src["steps"][0]["request"]["body"]["container"] = []
+        out = materialize_run_copy(src, carry_context=_ctx(
+            step_fields={0: {"$.container.box_type": "string"}},
+            service_bindings={"fin-service": {"$.container.box_type": "40HQ"}}))
+        assert out["steps"][0]["request"]["body"]["container"] == []
+
+        src["steps"][0]["request"]["body"]["container"] = ["20GP", 3, None]
+        out = materialize_run_copy(src, carry_context=_ctx(
+            step_fields={0: {"$.container.box_type": "string"}},
+            service_bindings={"fin-service": {"$.container.box_type": "40HQ"}}))
+        assert out["steps"][0]["request"]["body"]["container"] == ["20GP", 3, None]
 
     def test_carry_context_none_behaves_as_today(self):
         out = materialize_run_copy(_carry_converted())
