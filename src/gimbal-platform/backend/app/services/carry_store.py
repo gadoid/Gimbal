@@ -7,6 +7,7 @@ from __future__ import annotations
 from sqlalchemy import delete, select
 
 from ..models.carry_binding import CarryGlobalDefault, CarryServiceBinding
+from .field_state_resolution import carry_face
 
 
 async def get_bindings(db, service_name: str) -> dict[str, str | None]:
@@ -84,13 +85,13 @@ async def carry_drift(db) -> dict:
             continue
         if full is None:
             continue
-        # wire 已归一化:读 request.declarations 的 carry 通道条目
-        # (与 carry_injection._carry_face / carry 路由同款投影)
+        # 解析态 == 'carry' 投影(2026-09-05 目录化 §4.1(a)):端点级
+        # entry.state 共识默认 —— 与 carry 路由 service_fields 同口径
+        # (值表是环境级,不 join step 增量);投影走单一实现
+        # field_state_resolution.carry_face(与 carry_injection 同款,
+        # 含祖先吸收:整容器是绑定/注入单元)
         decls = ((full.get("request") or {}).get("declarations")) or []
-        paths = {str(e["path"]) for e in decls
-                 if isinstance(e, dict) and e.get("channel") == "carry"
-                 and e.get("path")}
-        face_by_service.setdefault(svc, set()).update(paths)
+        face_by_service.setdefault(svc, set()).update(carry_face(decls))
 
     out: list[dict] = []
     for svc in sorted(set(bound_by_service) | set(face_by_service)):

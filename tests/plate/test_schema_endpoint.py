@@ -81,11 +81,11 @@ class TestIOSpec:
     """``RequestSpec`` / ``ResponseSpec`` / ``DeclarationEntry`` 字段集合测试。"""
 
     def test_request_spec_no_body(self) -> None:
-        # 测试点:body_type="none" 时,schema_ 默认为 None,json_schema() 返回 None。
-        # 文档依据:V1 §4.1 RequestSpec + json_schema() 方法(model 机制退役后恒返回 schema_)。
+        # 测试点:body_type="none" 即零声明(body 都不存在,无从声明字段),
+        # declarations 默认空清单;schema_ 已退役,declarations 为唯一承重。
+        # 文档依据:2026-09-05 目录化 io_spec B4 + RequestSpec 模型。
         req = RequestSpec(body_type="none")
-        assert req.schema_ is None
-        assert req.json_schema() is None
+        assert req.declarations == []
 
     def test_response_status_range(self) -> None:
         # 测试点:status 必须 ∈ [100, 599],边界外值必须拒。
@@ -98,21 +98,21 @@ class TestIOSpec:
     def test_declaration_entry_source_kind_default(self) -> None:
         # 测试点:不显式指定时,source_kind 默认为 "independent"。
         # 文档依据:V1 §4.3(source_kind 随 IO 声明归一化并入 DeclarationEntry)。
-        e = DeclarationEntry(name="order_no", path="order_no", channel="binding")
+        e = DeclarationEntry(name="order_no", path="order_no", type='string')
         assert e.source_kind == "independent"
 
     def test_declaration_entry_source_kind_enum_values(self) -> None:
         # 测试点:三个合法取值(independent / lookup / generated)都被接受。
         # 文档依据:FIELD-UI-MAPPING.md §source_kind（与 PRD §5.4 三类型正交）。
-        DeclarationEntry(name="a", path="a", channel="binding", source_kind="independent")
-        DeclarationEntry(name="b", path="b", channel="binding", source_kind="lookup")
-        DeclarationEntry(name="c", path="c", channel="binding", source_kind="generated")
+        DeclarationEntry(name="a", path="a", type='string', source_kind="independent")
+        DeclarationEntry(name="b", path="b", type='string', source_kind="lookup")
+        DeclarationEntry(name="c", path="c", type='string', source_kind="generated")
 
     def test_declaration_entry_source_kind_invalid_rejected(self) -> None:
         # 测试点:不在 Literal 集合内的值必须拒。
         # 文档依据:V1 §4.3 source_kind Literal。
         with pytest.raises(Exception):
-            DeclarationEntry(name="x", path="x", channel="binding", source_kind="bogus")
+            DeclarationEntry(name="x", path="x", type='string', source_kind="bogus")
 
     def test_source_kind_in_request_and_response(self) -> None:
         # 测试点:
@@ -122,20 +122,20 @@ class TestIOSpec:
         # 文档依据:V1 §4.3"请求字段 / 响应字段的语义差异"段。
         req = RequestSpec(
             body_type="json",
-            schema_={},
+            
             declarations=[
-                DeclarationEntry(name="order_no", path="order_no",
-                                 channel="binding", source_kind="independent"),
-                DeclarationEntry(name="user_id", path="user_id",
-                                 channel="binding", source_kind="lookup"),
-                DeclarationEntry(name="order_id", path="order_id",
-                                 channel="binding", source_kind="generated"),
+                DeclarationEntry(name="order_no", path="order_no", type='string',
+                                 source_kind="independent"),
+                DeclarationEntry(name="user_id", path="user_id", type='string',
+                                 source_kind="lookup"),
+                DeclarationEntry(name="order_id", path="order_id", type='string',
+                                 source_kind="generated"),
             ],
         )
         resp = ResponseSpec(
             status=200,
-            declarations=[DeclarationEntry(name="order_id", path="order_id",
-                                           channel="view_only")],
+            declarations=[DeclarationEntry(name="order_id", path="order_id", type='string',
+                                           )],
         )
         assert [f.source_kind for f in req.declarations] == [
             "independent", "lookup", "generated"]
@@ -148,49 +148,48 @@ class TestIOSpec:
 
 
 class TestRequestSpecBodyTypeValidation:
-    """``RequestSpec.body_type`` 与 ``schema_`` 互斥校验(model 机制已退役)。"""
+    """``RequestSpec.body_type`` 与 declarations 的约束(2026-09-05 目录化)。
+
+    schema_ 轴已退役(旧规则 A/B 与 Q-A/Q-B 决策用例一并废止);
+    新轴只有 B4:none 即零声明。json + 空 declarations 合法 ——
+    目录即宇宙,空目录 = 无已声明字段(残缺 body 键归前端「其他字段」兜底)。
+    """
 
     def test_body_type_none_with_nothing_passes(self) -> None:
         spec = RequestSpec(body_type="none")
-        assert spec.schema_ is None
-
-    def test_body_type_none_with_schema_rejected(self) -> None:
-        # 测试点:规则 A 反向 —— body_type='none' 但 schema_ 非 None 必须拒。
-        # 文档依据:V1 §4.1 规则 A + V2 §2.2 决策 Q1=a。
-        with pytest.raises(Exception) as excinfo:
-            RequestSpec(body_type="none", schema_={"type": "object"})
-        assert "body_type='none'" in str(excinfo.value)
-        assert "schema_" in str(excinfo.value)
-
-    def test_body_type_json_with_schema_only_passes_no_derivation(self) -> None:
-        # model 派生已退役:declarations 只来自显式声明,不再自动填充
-        class _OrderReq(BaseModel):
-            order_no: str
-        spec = RequestSpec(body_type="json", schema_=_OrderReq.model_json_schema())
         assert spec.declarations == []
 
-    def test_body_type_json_with_schema_only_passes(self) -> None:
-        # 测试点:规则 B 正向(分支 2) —— body_type='json' + 只填 schema_ 时构造通过。
-        # 文档依据:V1 §4.1 规则 B + V2 §2.2 决策 Q2=b。
-        spec = RequestSpec(body_type="json", schema_={"type": "object", "properties": {"x": {"type": "string"}}})
-        assert spec.schema_ == {"type": "object", "properties": {"x": {"type": "string"}}}
+    def test_body_type_none_with_declarations_rejected(self) -> None:
+        # 测试点:B4 反向 —— body_type='none' 但 declarations 非空必须拒。
+        # 文档依据:2026-09-05 目录化 spec B4。
+        with pytest.raises(Exception, match="B4"):
+            RequestSpec(
+                body_type="none",
+                declarations=[DeclarationEntry(name="x", path="$.x", type="string")],
+            )
 
-    def test_body_type_json_empty_both_rejected(self) -> None:
-        # 测试点:规则 B 反向(model 机制退役后单轴)—— body_type='json' 但 schema_ 为 None 必须拒。
-        # 文档依据:spec carry 设计 §2.1.1(schema_ 为唯一结构真源)。
-        # 现实意义:防止"声明了 json body 却不告诉调用方 body 长啥样"的契约残缺。
-        with pytest.raises(Exception) as excinfo:
-            RequestSpec(body_type="json")
-        assert "schema_ 必须非 None" in str(excinfo.value)
-        assert "'json'" in str(excinfo.value)
+    def test_body_type_json_with_no_declarations_passes(self) -> None:
+        # 目录化语义翻转:json + 空目录合法(原"schema_ 必须非 None"废止)。
+        spec = RequestSpec(body_type="json")
+        assert spec.declarations == []
 
-    def test_body_type_json_empty_schema_only_passes_per_q_a(self) -> None:
-        # 测试点:Q-A a2 + Q-B b1 一致性 —— schema_={} + body_type='json'
-        #     时通过(类型非 None 即视为"已声明 schema",空 dict 视为合法)。
-        # 文档依据:V2 §2.2 决策 Q-A=a2 / Q-B=b1。
-        # 注:这是决策拍板的边界用例,实测用于锁定"空 dict 不参与校验"的语义。
-        spec = RequestSpec(body_type="json", schema_={})
-        assert spec.schema_ == {}
+    def test_declare_derives_full_catalog(self) -> None:
+        # 测试点:P7 declare() 糖:schema → 全量目录(顶层成条目),
+        # 与旧"no_derivation"语义相反 —— 派生回归,通道参数归零。
+        class _OrderReq(BaseModel):
+            order_no: str
+
+        spec = RequestSpec.declare(_OrderReq)
+        assert [e.name for e in spec.declarations] == ["order_no"]
+        assert spec.declarations[0].type == "string"
+        assert spec.declarations[0].state == "form"
+
+    def test_body_type_json_with_declarations_passes(self) -> None:
+        spec = RequestSpec(
+            body_type="json",
+            declarations=[DeclarationEntry(name="x", path="$.x", type="string")],
+        )
+        assert len(spec.declarations) == 1
 
 
 class TestDeclarationEntryEnumValidation:
@@ -200,8 +199,8 @@ class TestDeclarationEntryEnumValidation:
         # 测试点:Q2=a 正向 —— enum=None 视为未声明可选值清单,跳过校验,
         #     default / example 可以是任意值(填空风格自由)。
         # 文档依据:V1 §4.3"enum 非空时"+ V2 §2.5 决策 Q2=a。
-        field = DeclarationEntry(name="user_id", path="user_id",
-                                 channel="binding", default="u_001",
+        field = DeclarationEntry(name="user_id", path="user_id", type='string',
+                                 default="u_001",
                                  example="u_002")
         assert field.enum is None
         assert field.default == "u_001"
@@ -210,8 +209,8 @@ class TestDeclarationEntryEnumValidation:
     def test_enum_empty_list_skips_validation(self) -> None:
         # 测试点:Q2=a 正向 —— enum=[] 同样视为未声明,跳过校验。
         # 文档依据:V2 §2.5 决策 Q2=a(空列表视为未声明)。
-        field = DeclarationEntry(name="user_id", path="user_id",
-                                 channel="binding", enum=[], default="u_001")
+        field = DeclarationEntry(name="user_id", path="user_id", type='string',
+                                 enum=[], default="u_001")
         assert field.enum == []
         assert field.default == "u_001"
 
@@ -219,7 +218,7 @@ class TestDeclarationEntryEnumValidation:
         # 测试点:Q4=a 正向 —— enum 非空时,default 与 example 都在 enum 中 → 通过。
         # 文档依据:V1 §4.3"enum 非空时所有 default/example 必须在 enum 中"+ V2 §2.5 决策 Q4=a。
         field = DeclarationEntry(
-            name="status", path="status", channel="binding",
+            name="status", path="status", type='string', 
             enum=["pending", "active", "closed"],
             default="pending", example="active",
         )
@@ -231,7 +230,7 @@ class TestDeclarationEntryEnumValidation:
         # 文档依据:V1 §4.3 + V2 §2.5 决策 Q1=b / Q4=a。
         with pytest.raises(Exception) as excinfo:
             DeclarationEntry(
-                name="status", path="status", channel="binding",
+                name="status", path="status", type='string', 
                 enum=["A", "B"], default="C",
             )
         assert "default" in str(excinfo.value)
@@ -243,7 +242,7 @@ class TestDeclarationEntryEnumValidation:
         # 文档依据:V1 §4.3 + V2 §2.5 决策 Q4=a(default 与 example 同等严格)。
         with pytest.raises(Exception) as excinfo:
             DeclarationEntry(
-                name="status", path="status", channel="binding",
+                name="status", path="status", type='string', 
                 enum=["A", "B"], default="A", example="C",
             )
         assert "example" in str(excinfo.value)
@@ -255,7 +254,7 @@ class TestDeclarationEntryEnumValidation:
         # 此用例与 test_enum_example_not_in_set_rejected 互补,锁定"逐字段独立校验"行为。
         with pytest.raises(Exception):
             DeclarationEntry(
-                name="status", path="status", channel="binding",
+                name="status", path="status", type='string', 
                 enum=["A"], default="A", example="B",
             )
 
@@ -266,7 +265,7 @@ class TestDeclarationEntryEnumValidation:
         # 工程意义:enum 真正生效是字符串传输阶段;bool/int 在前端都是字符串"true"/"1",
         #     plate 不替用户管 Pythonic 类型互认。
         field = DeclarationEntry(
-            name="flag", path="flag", channel="binding",
+            name="flag", path="flag", type='boolean', 
             enum=[1, 2, 3], default=True,
         )
         assert field.default is True
@@ -275,7 +274,7 @@ class TestDeclarationEntryEnumValidation:
         # 测试点:Q1=b —— 1.0 == 1 在 Python 里为 True,所以 enum=[1.0] + default=1 通过。
         # 文档依据:V2 §2.5 决策 Q1=b。
         field = DeclarationEntry(
-            name="ratio", path="ratio", channel="binding",
+            name="ratio", path="ratio", type='integer', 
             enum=[1.0, 2.0], default=1,
         )
         assert field.default == 1
@@ -285,7 +284,7 @@ class TestDeclarationEntryEnumValidation:
         # 文档依据:V2 §2.5 决策 Q1=b(== 为 False 时拒)。
         with pytest.raises(Exception):
             DeclarationEntry(
-                name="code", path="code", channel="binding",
+                name="code", path="code", type='integer', 
                 enum=["A", "B"], default=1,
             )
 
@@ -293,7 +292,7 @@ class TestDeclarationEntryEnumValidation:
         # 测试点:Q3=b —— enum 元素可以是 list / dict 等可变容器,用 == 比较内容。
         # 文档依据:V2 §2.5 决策 Q3=b(允许可变 + ==)。
         field = DeclarationEntry(
-            name="filter", path="filter", channel="binding",
+            name="filter", path="filter", type='object', 
             enum=[{"type": "eq"}, {"type": "in"}],
             default={"type": "eq"},
         )
@@ -303,7 +302,7 @@ class TestDeclarationEntryEnumValidation:
         # 测试点:Q6=a —— enum=["A","A","B"] 中的重复元素不拒(Q6 不扩规则)。
         # 文档依据:V2 §2.5 决策 Q6=a(允许重复,不扩规则)。
         field = DeclarationEntry(
-            name="status", path="status", channel="binding",
+            name="status", path="status", type='string', 
             enum=["A", "A", "B"], default="A",
         )
         assert field.enum == ["A", "A", "B"]
@@ -312,7 +311,7 @@ class TestDeclarationEntryEnumValidation:
         # 测试点:enum 非空但 default / example 都是 None(默认值)时通过。
         # 文档依据:实现语义 —— 校验跳过 None(避免 default=None 误拒)。
         field = DeclarationEntry(
-            name="status", path="status", channel="binding",
+            name="status", path="status", type='string', 
             enum=["A", "B"],
         )
         assert field.default is None
@@ -325,10 +324,10 @@ class TestDeclarationEntryEnumValidation:
         with pytest.raises(Exception):
             RequestSpec(
                 body_type="json",
-                schema_={},
+                
                 declarations=[
                     DeclarationEntry(
-                        name="status", path="status", channel="binding",
+                        name="status", path="status", type='string', 
                         enum=["A", "B"], default="C",  # C 不在 enum 中
                     )
                 ],
@@ -346,7 +345,7 @@ class TestEndpointSpec:
         assert ep.system == "finas"
         assert ep.service == "settlement"
         assert ep.api.service == "settlement"
-        assert ep.responses[200].schema_ is not None
+        assert [e.name for e in ep.responses[200].declarations] == ["order_id", "order_no"]
         assert ep.metadata.priority == 1
 
     def test_id_required(self) -> None:
@@ -590,17 +589,18 @@ class TestSerialization:
 
     def test_model_dump_json_carries_key_fields(self, order_endpoint) -> None:
         # 测试点:JSON dump 必须把关键字段(顶层 + IO 节点)序列化;
-        # model 机制退役后 IO 节点不再输出 model_schema / model_name,只输出 schema。
-        # 文档依据:V1 §2.3 + schema/endpoint/io_spec.py RequestSpec._serialize / ResponseSpec._serialize。
+        # 目录化后 IO 节点只输出 {body_type|status/description, declarations},
+        # schema_/model_* 均退役,条目携带 state/children。
+        # 文档依据:2026-09-05 目录化 io_spec RequestSpec._serialize / ResponseSpec._serialize。
         data = order_endpoint.model_dump(mode="json")
         assert data["id"] == "finas.order.add"
         assert data["api"]["method"] == "POST"
         assert data["responses"]["200"]["status"] == 200
-        assert "model_schema" not in data["request"]
-        assert "model_name" not in data["request"]
-        assert "schema" in data["request"]   # fixture 改写后 schema_ 在
-        assert "model_schema" not in data["responses"]["200"]
-        assert "model_name" not in data["responses"]["200"]
+        assert "schema" not in data["request"]
+        assert "schema_" not in data["request"]
+        assert data["request"]["declarations"][0]["state"] == "form"
+        assert "channel" not in data["request"]["declarations"][0]
+        assert "schema" not in data["responses"]["200"]
 
     def test_version_based_semantic_equivalence(self, order_endpoint) -> None:
         # 测试点:同 version 下,语义字段相等;updated_at 改动不影响关键字段,不参与断言。
@@ -919,16 +919,16 @@ class TestDeclarationEntryPathValidation:
     def test_jsonpath_passes(self) -> None:
         # 测试点:`$.xxx` JSONPath 形态 path 必须被接受。
         # 文档依据:V3 决策:path 统一为 JSONPath,代码层 _path.normalize 归一化。
-        e = DeclarationEntry(name="order_id", path="$.order_id",
-                             channel="binding")
+        e = DeclarationEntry(name="order_id", path="$.order_id", type='string',
+                             )
         assert e.path == "$.order_id"
 
     def test_short_name_normalized_to_jsonpath(self) -> None:
         # V3 决策:短名形态 path 构造时自动归一化为 JSONPath,避免
         # 条目 path / strategy[*].target 在 platform dict 中出现
         # 短名 vs JSONPath 混用。
-        e = DeclarationEntry(name="order_id", path="order_id",
-                             channel="binding")
+        e = DeclarationEntry(name="order_id", path="order_id", type='string',
+                             )
         assert e.path == "$.order_id", (
             "V3 要求 DeclarationEntry.path 构造后必须是 JSONPath 形态"
         )
@@ -936,75 +936,75 @@ class TestDeclarationEntryPathValidation:
     def test_nested_path_last_segment_must_match_name(self) -> None:
         # 测试点:嵌套 path `$.a.b.c` 末段是 "c",name = "c" 必须通过。
         # 文档依据:V2 §2.4"name 必须等于 path 的末段(末段是 FIELD 时)"。
-        DeclarationEntry(name="c", path="$.a.b.c", channel="binding")
+        DeclarationEntry(name="c", path="$.a.b.c", type='string')
 
     def test_nested_path_alias_accepted(self) -> None:
         # 意识性 re-baseline(2026-09-03 D1):name↔path 解绑,name 为显示别名,
         # 旧 V2 §2.3/§2.4 "name=末段" 规则由 name 全清单唯一校验继任。
         # 测试点:嵌套 path `$.a.b.c` 末段是 "c",name 取别名 "b" 同样通过
         # (深层路径与浅层一并解绑)。
-        e = DeclarationEntry(name="b", path="$.a.b.c", channel="binding")
+        e = DeclarationEntry(name="b", path="$.a.b.c", type='string')
         assert e.name == "b" and e.path == "$.a.b.c"
 
     def test_name_alias_accepted_on_simple_path(self) -> None:
         # 意识性 re-baseline(2026-09-03 D1):name↔path 解绑,name 为显示别名,
         # 旧 V2 §2.3/§2.4 "name=末段" 规则由 name 全清单唯一校验继任。
         # 测试点:浅层 JSONPath `$.order_id`,name 取别名 "user_id" 同样通过。
-        e = DeclarationEntry(name="user_id", path="$.order_id",
-                             channel="binding")
+        e = DeclarationEntry(name="user_id", path="$.order_id", type='string',
+                             )
         assert e.name == "user_id" and e.path == "$.order_id"
 
     def test_name_alias_accepted_on_short_path(self) -> None:
         # 意识性 re-baseline(2026-09-03 D1):name↔path 解绑,name 为显示别名,
         # 旧 V2 §2.3/§2.4 "name=末段" 规则由 name 全清单唯一校验继任。
         # 测试点:短名写法同样解绑;V3 归一化(path → JSONPath)照旧生效。
-        e = DeclarationEntry(name="user_id", path="order_id",
-                             channel="binding")
+        e = DeclarationEntry(name="user_id", path="order_id", type='string',
+                             )
         assert e.path == "$.order_id"
 
     def test_invalid_jsonpath_rejected(self) -> None:
         # 测试点:path 是以 $ 领头但语法不合法的 JSONPath 形态时拒。
         # 文档依据:V2 §2.3 path 合法性由 parser 校验。
         with pytest.raises(Exception):
-            DeclarationEntry(name="x", path="$[", channel="binding")
+            DeclarationEntry(name="x", path="$[", type='string')
 
     def test_invalid_short_name_rejected(self) -> None:
         # 测试点:path 是非标识符形态的短名(含空格 / 以数字开头)时拒。
         # 文档依据:V2 §2.3 短名 = 合法标识符。
         with pytest.raises(Exception):
-            DeclarationEntry(name="x", path="order no", channel="binding")
+            DeclarationEntry(name="x", path="order no", type='string')
         with pytest.raises(Exception):
-            DeclarationEntry(name="x", path="1order_no", channel="binding")
+            DeclarationEntry(name="x", path="1order_no", type='string')
 
     def test_empty_path_rejected(self) -> None:
         # 测试点:空字符串 path 直接拒。
         # 文档依据:V2 §2.3 path 必须合法(非空)。
         with pytest.raises(Exception):
-            DeclarationEntry(name="x", path="", channel="binding")
+            DeclarationEntry(name="x", path="", type='string')
 
     def test_array_index_path_name_unconstrained(self) -> None:
         # 测试点:path 末段是 INDEX(`$.items[0]`)时,name 取任意字符串都能通过。
         # 阻塞回归:如果哪天有人把 name 强制等于"items",这条会立刻红。
         # 文档依据:V2 §2.4"name 不与之强约束(末段非 FIELD)"。
-        e = DeclarationEntry(name="anything", path="$.items[0]",
-                             channel="binding")
+        e = DeclarationEntry(name="anything", path="$.items[0]", type='string',
+                             )
         assert e.path == "$.items[0]"
         # 反向:name 故意设成与末段标识符不同,也不应触发 name mismatch
-        DeclarationEntry(name="not_items", path="$.items[0]", channel="binding")
+        DeclarationEntry(name="not_items", path="$.items[0]", type='string')
 
     def test_wildcard_path_name_unconstrained(self) -> None:
         # 测试点:path 末段是 WILDCARD(`$.items[*]`)时,name 任意。
         # 文档依据:V2 §2.4"name 不与之强约束"。
-        e = DeclarationEntry(name="anything", path="$.items[*]",
-                             channel="binding")
+        e = DeclarationEntry(name="anything", path="$.items[*]", type='string',
+                             )
         assert e.path == "$.items[*]"
-        DeclarationEntry(name="totally_unrelated", path="$.items[*]",
-                         channel="binding")
+        DeclarationEntry(name="totally_unrelated", path="$.items[*]", type='string',
+                         )
 
     def test_recursive_path_name_unconstrained(self) -> None:
         # 测试点:`$..field` 是递归下降,无末段 FIELD,name 任意。
         # 文档依据:V2 §2.4"name 不与之强约束"。
-        DeclarationEntry(name="whatever", path="$..field", channel="binding")
+        DeclarationEntry(name="whatever", path="$..field", type='string')
 
 
 class TestResponseSpecAssertable:
@@ -1018,8 +1018,8 @@ class TestResponseSpecAssertable:
         # V3 决策:短名形态 path 在条目构造时归一化为 JSONPath。
         rs = ResponseSpec(
             status=200,
-            declarations=[DeclarationEntry(name="order_id", path="order_id",
-                                           channel="view_only")],
+            declarations=[DeclarationEntry(name="order_id", path="order_id", type='string',
+                                           )],
         )
         assert rs.declarations[0].path == "$.order_id"
 
@@ -1028,9 +1028,9 @@ class TestResponseSpecAssertable:
         rs = ResponseSpec(
             status=200,
             declarations=[
-                DeclarationEntry(name="order_id", path="$.order_id",
-                                 channel="view_only", assertable=True),
-                DeclarationEntry(name="msg", path="$.msg", channel="view_only"),
+                DeclarationEntry(name="order_id", path="$.order_id", type='string',
+                                 assertable=True),
+                DeclarationEntry(name="msg", path="$.msg", type='string'),
             ],
         )
         assert [e.assertable for e in rs.declarations] == [True, False]
@@ -1041,29 +1041,28 @@ class TestResponseSpecAssertable:
 class TestDeclarationEntry:
     """DeclarationEntry 条目级校验(spec §3.1/§5)。spec 级(B7/B4/唯一)在 Task 6。"""
 
-    def test_minimal_binding_entry(self) -> None:
-        e = DeclarationEntry(name="remark", path="$.remark", channel="binding")
-        assert e.type is None and e.assertable is False
+    def test_minimal_entry_defaults(self) -> None:
+        # 目录化:最小条目 = name/path/type;state 默认 form(fail-closed)。
+        e = DeclarationEntry(name="remark", path="$.remark", type="string")
+        assert e.state == "form" and e.assertable is False and e.required is True
 
-    def test_b6_carry_bans_values(self) -> None:
-        DeclarationEntry(name="remark", path="$.remark", channel="carry",
-                         type="string")  # 合法
-        with pytest.raises(ValueError, match="carry.*default"):
-            DeclarationEntry(name="remark", path="$.remark", channel="carry",
-                             type="string", default="压测-张三")
-        with pytest.raises(ValueError, match="carry.*example"):
-            DeclarationEntry(name="remark", path="$.remark", channel="carry",
-                             type="string", example="x")
+    def test_b6_softened_carry_allows_form_metadata(self) -> None:
+        # B6 软化(2026-09-05 目录化):default/example 为表单角色元数据,
+        # 全条目合法(carry 含内)— 保证点从存储禁值移到注入侧不消费。
+        e = DeclarationEntry(name="remark", path="$.remark", state="carry",
+                             type="string", default="压测-张三", example="x")
+        assert e.default == "压测-张三"
         # enum 不禁(词表约束非值)
-        DeclarationEntry(name="level", path="$.level", channel="carry",
+        DeclarationEntry(name="level", path="$.level", state="carry",
                          type="string", enum=["a", "b"])
 
-    def test_carry_type_required_and_vocab(self) -> None:
-        with pytest.raises(ValueError, match="carry.*type"):
-            DeclarationEntry(name="remark", path="$.remark", channel="carry")
-        with pytest.raises(ValueError, match="词表"):
-            DeclarationEntry(name="remark", path="$.remark",
-                             channel="carry", type="timestamp")
+    def test_state_vocab_limited(self) -> None:
+        # state 三态词表外拒(Literal);type 词表约束已由全条目必填 +
+        # 六原语校验承接(纪律细节见 test_field_state_catalog.py)。
+        DeclarationEntry(name="remark", path="$.remark", type="string", state="carry")
+        with pytest.raises(Exception):
+            DeclarationEntry(name="remark", path="$.remark", type="string",
+                             state="bogus")  # type: ignore[call-arg]
 
     def test_path_and_name_rules(self) -> None:
         # 注:原计划标本 "$[0]" 实为合法 JSONPath(根数组下标,is_valid_path
@@ -1071,18 +1070,18 @@ class TestDeclarationEntry:
         # 沿用本文件既有的 "$["。末段非 FIELD(INDEX/WILDCARD/根)不约束
         # name —— 沿用条目现行行为(spec §5)。
         with pytest.raises(ValueError):
-            DeclarationEntry(name="x", path="$[", channel="binding")
+            DeclarationEntry(name="x", path="$[", type='string')
         # 意识性 re-baseline(2026-09-03 D1):name↔path 解绑,name 为显示别名,
         # 旧 V2 §2.3/§2.4 "name=末段" 规则由 name 全清单唯一校验继任。
-        e = DeclarationEntry(name="wrong", path="$.remark", channel="binding")
+        e = DeclarationEntry(name="wrong", path="$.remark", type='string')
         assert e.name == "wrong" and e.path == "$.remark"
-        DeclarationEntry(name="$", path="$", channel="view_only")  # 根路径合法(2026-09-02 起无现网实例,规则保留)
+        DeclarationEntry(name="$", path="$", type='string')  # 根路径合法(2026-09-02 起无现网实例,规则保留)
 
     def test_enum_membership(self) -> None:
         with pytest.raises(ValueError):
-            DeclarationEntry(name="level", path="$.level", channel="binding",
+            DeclarationEntry(name="level", path="$.level", type='string', 
                              enum=["a", "b"], default="c")
 
     def test_extra_forbid(self) -> None:
         with pytest.raises(ValueError):
-            DeclarationEntry(name="x", path="$.x", channel="binding", bogus=1)
+            DeclarationEntry(name="x", path="$.x", type='string', bogus=1)

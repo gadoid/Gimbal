@@ -217,6 +217,31 @@ export async function resolveResponsePaths(sample: unknown): Promise<ResponsePat
   return data
 }
 
+// ── 字段状态目录:配置编辑校验(2026-09-05 spec §3.5)───────────────
+
+/** 校验裁决:errors 非空 = 拒(合成态树一致性);warnings 仅提示 */
+export interface FieldStatesVerdict {
+  errors: Array<{ code: string; path: string; message: string }>
+  warnings: Array<{ code: string; path: string; message: string }>
+}
+
+/**
+ * step.field_states 增量 × plate 目录 → 合成态裁决(§3.5)。
+ * 编辑器在改字段状态时调用:errors 非空 → 前端门禁拒绝该次写入;
+ * warnings(required 落 carry / 备注族进 form / 目录外 stale path)
+ * 仅提示。plate 不可达 → 抛错由调用方降级(不阻塞编辑)。
+ */
+export async function validateEndpointFieldStates(
+  endpointId: string,
+  fieldStates: Record<string, string>,
+): Promise<FieldStatesVerdict> {
+  const { data } = await http.post<FieldStatesVerdict>(
+    `/endpoint-catalog/${encodeURIComponent(endpointId)}/field-states/validate`,
+    { field_states: fieldStates },
+  )
+  return data
+}
+
 // ── strategy catalog (proxy → Plate /api/strategy 语法 dim) ────────
 //
 // 策略语法(M6 第 8 dim)的引用数据:哪些 kind、每个 kind 哪些字段。

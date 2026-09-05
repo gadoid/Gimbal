@@ -31,13 +31,13 @@ ORDER_FEE_REAL_AMOUNT_LOCK_SUBMIT: Final[EndpointSpec] = EndpointSpec(
     request=RequestSpec(
         body_type="json",
         declarations=[
-        DeclarationEntry(name='action', path='action', channel='binding', required=True, example='check', ui_kind='text'),
-        DeclarationEntry(name='order_id', path='order_id', channel='binding', required=True, example='', ui_kind='text'),
-        DeclarationEntry(name='order_fee_real_ids', path='order_fee_real_ids', channel='binding', required=True, example=[''], ui_kind='json'),
-        DeclarationEntry(name='audit_msg', path='audit_msg', channel='binding', required=True, example={'title': '业务订单ID', 'code': '', 'msgs': ['费用锁定申请']}, ui_kind='json'),
-        DeclarationEntry(name='select_node_user', path='select_node_user', channel='binding', required=True, example=[{'node_sort': '0', 'user_id': '828'}], ui_kind='json'),
+        DeclarationEntry(name='action', path='action', type='string', required=True, example='check', ui_kind='text'),
+        DeclarationEntry(name='order_id', path='order_id', type='string', required=True, example='', ui_kind='text'),
+        DeclarationEntry(name='order_fee_real_ids', path='order_fee_real_ids', type='array', required=True, example=[''], ui_kind='json'),
+        DeclarationEntry(name='audit_msg', path='audit_msg', type='object', required=True, example={'title': '业务订单ID', 'code': '', 'msgs': ['费用锁定申请']}, ui_kind='json'),
+        DeclarationEntry(name='select_node_user', path='select_node_user', type='array', required=True, example=[{'node_sort': '0', 'user_id': '828'}], ui_kind='json'),
         ],
-        schema_={},
+        
     ),
     responses={
         200: ResponseSpec(

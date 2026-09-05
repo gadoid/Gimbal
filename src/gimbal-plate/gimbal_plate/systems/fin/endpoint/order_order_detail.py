@@ -40,32 +40,22 @@ ORDER_ORDER_DETAIL: Final[EndpointSpec] = EndpointSpec(
         produces=[],
     ),
     request=RequestSpec(
-        schema={
-            'type': 'object',
-            'properties': {
-                'order_id': {
-                    'type': 'string',
-                    'description': '订单id',
-                    'x-type-hint': '疑似 int(字符串形态)',
-                },
-            },
-            'required': ['order_id'],
-        },
+        
         declarations=[
-            DeclarationEntry(name='order_id', path='$.order_id', channel='binding', example='353724757260108800', description='订单id', ui_kind='text'),
+            DeclarationEntry(name='order_id', path='$.order_id', type='string', example='353724757260108800', description='订单id', ui_kind='text'),
         ],
     ),
     responses={
         200: ResponseSpec(
             status=200,
             declarations=[
-                DeclarationEntry(name='code', path='$.code', channel='view_only', required=False, example=200, ui_kind='text', assertable=True),
-                DeclarationEntry(name='msg', path='$.msg', channel='view_only', required=False, example='成功', ui_kind='text', assertable=True),
-                DeclarationEntry(name='order_id', path='$.data.order_id', channel='view_only', required=False, example='353724757260108800', ui_kind='text', assertable=True),
-                DeclarationEntry(name='order_no', path='$.data.order_no', channel='view_only', required=False, example='YWDD20260903110794', ui_kind='text', assertable=True),
-                DeclarationEntry(name='customer_id', path='$.data.customer_id', channel='view_only', required=False, example='335247043402399744', ui_kind='text', assertable=True),
-                DeclarationEntry(name='order_supplier_id', path='$.data.supplier[0].order_supplier_id', channel='view_only', required=False, example='353724758581314560', ui_kind='text', assertable=True),
-                DeclarationEntry(name='order_container_id', path='$.data.container[0].order_container_id', channel='view_only', required=False, example='354178949166662656', ui_kind='text', assertable=True),
+                DeclarationEntry(name='code', path='$.code', type='integer', required=False, example=200, ui_kind='text', assertable=True),
+                DeclarationEntry(name='msg', path='$.msg', type='string', required=False, example='成功', ui_kind='text', assertable=True),
+                DeclarationEntry(name='order_id', path='$.data.order_id', type='string', required=False, example='353724757260108800', ui_kind='text', assertable=True),
+                DeclarationEntry(name='order_no', path='$.data.order_no', type='string', required=False, example='YWDD20260903110794', ui_kind='text', assertable=True),
+                DeclarationEntry(name='customer_id', path='$.data.customer_id', type='string', required=False, example='335247043402399744', ui_kind='text', assertable=True),
+                DeclarationEntry(name='order_supplier_id', path='$.data.supplier[0].order_supplier_id', type='string', required=False, example='353724758581314560', ui_kind='text', assertable=True),
+                DeclarationEntry(name='order_container_id', path='$.data.container[0].order_container_id', type='string', required=False, example='354178949166662656', ui_kind='text', assertable=True),
             ],
         ),
     },

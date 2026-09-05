@@ -15,9 +15,10 @@ from typing import Any, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..core.deps import CurrentUser
+from ..services.field_state_resolution import validate_field_states
 from ..services.plate_client import get_client
 from .strategy_catalog import proxy_error, unavailable
 
@@ -31,6 +32,12 @@ class ResolvePathsRequest(BaseModel):
     path_prefix: Optional[str] = None
 
 
+class FieldStatesValidateRequest(BaseModel):
+    """§3.5 配置编辑校验入参:step 的 field_states 增量(可空)。"""
+
+    field_states: dict[str, str] = Field(default_factory=dict)
+
+
 @router.get("/{endpoint_id:path}/full")
 async def get_full_endpoint(
     user: CurrentUser,
@@ -39,9 +46,10 @@ async def get_full_endpoint(
     """Proxy ``GET {plate}/api/endpoint/{id}/full`` and unwrap the envelope.
 
     Returns the ``item`` payload (with full ``request.declarations``
-    carrying ``DeclarationEntry`` shape; response assertable candidates
-    are the ``assertable=True`` view_only entries). Surfaces Plate's
-    status code + error envelope to the client.
+    carrying ``DeclarationEntry`` shape; response assertion candidates
+    are the ``assertable=True`` entries — 响应面单脸,state 不被读取,
+    2026-09-05 目录化). Surfaces Plate's status code + error envelope
+    to the client.
     """
     client = get_client()
     try:
@@ -96,3 +104,40 @@ async def resolve_paths(user: CurrentUser, body: ResolvePathsRequest) -> list[di
             detail={"code": "plate_invalid_envelope", "message": "no paths in response"},
         )
     return paths
+
+
+@router.post("/{endpoint_id:path}/field-states/validate")
+async def validate_step_field_states(
+    user: CurrentUser,
+    endpoint_id: str,
+    body: FieldStatesValidateRequest,
+) -> dict:
+    """§3.5 配置编辑校验:plate 目录 + step.field_states 增量 → 合成态裁决。
+
+    编辑器在改字段状态时调用:``errors`` 非空 = 拒(树一致性),
+    ``warnings`` 仅提示(required 落 carry / DESCRIPTIVE 进 form /
+    目录外 stale path)。校验跑在合成态上 —— 目录本身一致但增量
+    破坏整传一致性同样拒。目录拉取复用 /full 代理语义(错误映射
+    同款:plate 不可达 502 / 404 endpoint_not_found)。
+    """
+    client = get_client()
+    try:
+        resp = await client.get(f"/api/endpoint/{endpoint_id}/full")
+    except httpx.HTTPError as e:
+        raise unavailable(e) from e
+    if resp.status_code != 200:
+        raise proxy_error(
+            resp,
+            context=endpoint_id,
+            not_found_code="endpoint_not_found",
+            not_found_msg="endpoint not found",
+        )
+    item = (resp.json().get("data") or {}).get("item")
+    if not isinstance(item, dict):
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "plate_invalid_envelope",
+                    "message": "no item in response"},
+        )
+    decls = ((item.get("request") or {}).get("declarations")) or []
+    return validate_field_states(decls, body.field_states)

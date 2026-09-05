@@ -13,8 +13,11 @@ V3.1 设计(PLATE_V3_DESIGN.md §7,与 gimbal export 共享同一个 Scenario �
   再附加 platform 视图扩展字段(endpoints / navigation / config_summary)
 - 每条 step 内层加 platform 视图扩展字段:
   - api.view_hints(endpoint_id/module/tags)
-  - request.body 已用 endpoint 全量字段定义补全(直接渲染 + 直接执行);carry 键不补默认,仅透传 body 已有字面量
-  - request.fields_meta:{字段名 → binding 通道声明条目全量元数据}(平台前端渲染用)
+  - request.body 已用目录 form/collapse 面叶子补全(直接渲染 + 直接执行);
+    carry 面(state=='carry',含整容器)不补默认,仅透传 body 已有字面量
+  - request.fields_meta:{顶层字段名 → 条目全量元数据(含 state 与 children 树)}
+    (平台前端渲染用;2026-09-05 目录化:树全量携带,面基准 = entry.state,
+    场景 field_states 穿线为挂账细化)
   - strategy[i].view_note(人类语言摘要)
 - 端到端链路:platform 落库 dict → (仅改 kind)→ Scenario.model_validate()
   → GimbalScenarioExporter.to_dict() 得到 gimbal 可执行 dict
@@ -34,6 +37,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from gimbal_plate.export._protocol import ExporterCapabilities, ScenarioExporter
 from gimbal_plate.schema.api import Api
 from gimbal_plate.schema.endpoint import EndpointSpec
+from gimbal_plate.schema.endpoint.io_spec import iter_declarations
 from gimbal_plate.schema.request import Request
 from gimbal_plate.schema.scenario import Scenario as ScenarioModel
 from gimbal_plate.schema.strategy import Assertion, Assign, Extract
@@ -62,9 +66,10 @@ class PlatformEndpointView(BaseModel):
       直接来自 EndpointSpec
     - module/tags/owner/priority/preconditions/success_criteria/business_notes:
       来自 EndpointMetadata
-    - request_fields/response_fields/assertable_paths:
-      来自 RequestSpec/ResponseSpec 的 declarations 按通道投影
-      (binding / view_only / view_only∧assertable)
+    - request_fields:RequestSpec declarations 按解析态投影(state != 'carry',
+      iter_declarations 平铺,携带 state/type;2026-09-05 目录化,原 binding 通道)
+    - response_fields/assertable_paths:ResponseSpec declarations 单脸全量
+      (state 不被读取;原 view_only 通道退役,assertable 即断言面)
     - request_body_sample / request_body_samples:
       从 Scenario.steps 中按 (method,path) 匹配的 step.request.body 聚合
     - deep_link:平台前端跳转锚点
@@ -229,16 +234,19 @@ def _set_by_path(container: Any, segs: list[Any], value: Any) -> Any:
 def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str, Any]:
     """把 Request 翻译为 dict,body 全量补全 + fields_meta 携带字段元数据。
 
-    设计(PLATE_V3_DESIGN.md §7.2 方案 C):
-    - body 仍是纯 dict;D11 起 binding 补全按声明 path 寻址写:
-      平铺路径落顶层键,深层路径("$.a[0].b")值落嵌套形态
+    设计(PLATE_V3_DESIGN.md §7.2 方案 C;2026-09-05 目录化改面):
+    - body 仍是纯 dict;form/collapse 面叶子按声明 path 寻址写(D11):
+      平铺路径落顶层键,深层路径("$.a.b")值落嵌套形态
     - 字段值优先级:body 已填值 → endpoint default → endpoint example → None
       (深层路径无值不落 None 骨架,D7:防挡 carry 容器注入;平铺维持 None 占位)
-    - carry 面键(spec §2.2):不参与补全,仅透传 body 已有字面量(值归 platform 值表)
-    - 字段元数据集中放在 fields_meta:{name → binding 通道声明条目全量元信息}
-      (path / channel / type / required / default / example / description /
-       enum / ui_kind / source_kind / assertable)
-    - 平台前端:O(N) 遍历 body + O(1) 查 fields_meta[name]
+    - carry 面(state=='carry',含整容器):不参与补全,仅透传 body 已有
+      字面量(值归 platform 值表)。面基准 = entry.state(共识默认);
+      场景 field_states 穿线为挂账细化,M1 读穿等价
+    - 字段元数据集中放在 fields_meta:{name → 顶层条目全量元信息}
+      (含 path / state / type / children 树 / required / default / example /
+       description / enum / ui_kind / source_kind / assertable);
+      顶层键控(fields_meta 键控面 = 顶层 name 全局唯一),树内节点前端键是 path
+    - 平台前端:O(N) 遍历 body + O(1) 查 fields_meta[name],嵌套结构走 children 树
     - 反向转 gimbal:Scenario.model_validate(platform_dict) 直接接受 fields_meta;
       GimbalScenarioExporter.to_dict() 通过 model_dump(exclude=...) 过滤掉,
       body 已是 Scenario 校验通过的完整字段,gimbal 零适配
@@ -249,23 +257,33 @@ def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str,
     full_body: dict[str, Any] = {}
     fields_meta: dict[str, Any] = {}
     if ep is not None and ep.request is not None:
-        # 1) carry 面键先行打底:值归 platform 两层值表管,不补默认、不造 None 占位;
-        #    body 已带字面量的原样并入 —— 保住 gimbal→platform→gimbal 往返
-        #    子集契约,且与运行时 fill-missing(body 显式值优先)语义一致。
-        #    必须先于 binding 循环(D3 旗舰格 carry ⊃ binding):carry 整容器
-        #    先落 full_body,binding 深层叶子随后沿已并入的完整容器下钻,
-        #    只覆已声明路径 —— 容器内兄弟键不截断(F1)。
-        for carry_path in (e.path for e in ep.request.declarations
-                           if e.channel == "carry"):
-            _merge_carry_literal(carry_path, body, full_body)
-        for f in (e for e in ep.request.declarations if e.channel == "binding"):
-            # 2) 字段元数据全量带上(让平台表单渲染有依据;按 name 键控,条目带 path)
-            fields_meta[f.name] = f.model_dump(mode="json", exclude_none=True)
-            # 3) body 的值优先级(D11 按 path 寻址,深层值落嵌套):
-            #    body 已填值 → default → example → None
+        decls = ep.request.declarations
+        # 1) carry 面先行打底(state=='carry';先序遍历 ⇒ 整容器先于子孙合并):
+        #    值归 platform 两层值表管,不补默认、不造 None 占位;body 已带
+        #    字面量的原样并入 —— 保住 gimbal→platform→gimbal 往返子集契约,
+        #    且与运行时 fill-missing(body 显式值优先)语义一致。
+        #    必须先于 form 面补全(carry ⊃ form 旗舰格):carry 整容器先落
+        #    full_body,form 面深层叶子随后沿已并入的完整容器下钻,
+        #    只覆已声明路径 —— 容器内兄弟键不截断(F1)。子孙 setdefault
+        #    对已并入容器为 no-op,保留逐条合并以承接 form 容器下的
+        #    carry 叶子(整传一致性只约束 carry 容器,不反向强制)。
+        for e in iter_declarations(decls):
+            if e.state == "carry":
+                _merge_carry_literal(e.path, body, full_body)
+        # 2) fields_meta:顶层条目全量登记(含 children 树与 state),carry
+        #    面顶层条目不进表(值透传,无表单渲染依据);树内 carry 节点
+        #    保留在树中(state 逐节点可读,搜索语料/翻面用)
+        for e in decls:
+            if e.state != "carry":
+                fields_meta[e.name] = e.model_dump(mode="json", exclude_none=True)
+        # 3) form/collapse 面叶子补全(容器自身无值语义,行壳跟 children):
+        #    body 已填值 → default → example → None
+        for f in iter_declarations(decls):
+            if f.state == "carry" or f.children:
+                continue
             segs = _path_segs(f.path)
             if not segs:
-                # 根路径 binding($ 整体):无按键写值的语义,跳过值面(fields_meta 仍登记)
+                # 根路径叶子($ 整体):无按键写值的语义,跳过值面(fields_meta 仍登记)
                 continue
             deep = len(segs) > 1 or isinstance(segs[0], int)
             value = _get_by_path(body, segs)
@@ -317,13 +335,21 @@ def _render_endpoint_view(
     ep: EndpointSpec,
     body_samples: list[dict[str, Any]],
 ) -> PlatformEndpointView:
-    """单个 EndpointSpec + 聚合到的 request_body 样本 → PlatformEndpointView。"""
+    """单个 EndpointSpec + 聚合到的 request_body 样本 → PlatformEndpointView。
+
+    2026-09-05 目录化:请求面 = 解析态投影(M1 面基准 entry.state,
+    场景 field_states 穿线挂账),response 单脸 = 全量 + assertable。
+    """
     request_fields: list[dict[str, Any]] = []
     if ep.request is not None:
-        for f in (e for e in ep.request.declarations if e.channel == "binding"):
+        for f in iter_declarations(ep.request.declarations):
+            if f.state == "carry":
+                continue
             request_fields.append({
                 "name": f.name,
                 "path": _path_utils.normalize(f.path),
+                "type": f.type,
+                "state": f.state,
                 "required": f.required,
                 "ui_kind": f.ui_kind,
                 "example": f.example,
@@ -335,18 +361,19 @@ def _render_endpoint_view(
     response_fields: list[dict[str, Any]] = []
     assertable: list[str] = []
     for status, spec in ep.responses.items():
-        for f in (e for e in spec.declarations if e.channel == "view_only"):
+        for f in iter_declarations(spec.declarations):
             response_fields.append({
                 "status": status,
                 "name": f.name,
                 "path": _path_utils.normalize(f.path),
+                "type": f.type,
                 "required": f.required,
                 "ui_kind": f.ui_kind,
                 "example": f.example,
             })
         assertable.extend(
-            e.path for e in spec.declarations
-            if e.channel == "view_only" and e.assertable
+            e.path for e in iter_declarations(spec.declarations)
+            if e.assertable
         )
 
     md = ep.metadata

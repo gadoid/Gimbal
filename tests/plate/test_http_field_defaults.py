@@ -44,38 +44,33 @@ def _build_endpoint() -> EndpointSpec:
         api=ApiSpec(service="sample-svc", method="POST", path="/sample/fields"),
         request=RequestSpec(
             body_type="json",
-            schema_=_ReqIn.model_json_schema(),
             declarations=[
                 DeclarationEntry(
                     name="client_expand_name",
-                    path="$.client_expand_name",
-                    channel="binding",
+                    path="$.client_expand_name", type='string',
                     example="张三",
                 ),
                 DeclarationEntry(
                     name="bl_no",
-                    path="$.bl_no",
-                    channel="binding",
+                    path="$.bl_no", type='string',
                     example="${var.bl_no}",
                 ),
                 DeclarationEntry(
                     name="supplier",
-                    path="$.supplier",
-                    channel="binding",
+                    path="$.supplier", type='string',
                     example="${auth.codfish.suppliers}",
                     source_kind="lookup",
                 ),
                 DeclarationEntry(
                     name="etd",
-                    path="$.etd",
-                    channel="binding",
+                    path="$.etd", type='string',
                     example="auto · date policy",
                     source_kind="generated",
                     ui_kind="number",
                 ),
             ],
         ),
-        responses={200: ResponseSpec(status=200, schema_=_RespOut.model_json_schema(), declarations=[])},
+        responses={200: ResponseSpec.declare(_RespOut, status=200)},
         version="1.0.0",
     )
 
@@ -110,12 +105,10 @@ def test_field_defaults_generated_fields_from_response() -> None:
     # P2 存储翻转:改声明面 = 整替 ResponseSpec 的 declarations
     endpoint.responses[200] = ResponseSpec(
         status=200,
-        schema_=_RespOut.model_json_schema(),
         declarations=[
             DeclarationEntry(
                 name="internal_note",
-                path="$.internal_note",
-                channel="view_only",
+                path="$.internal_note", type='string',
                 source_kind="generated",
                 ui_kind="text",
             )

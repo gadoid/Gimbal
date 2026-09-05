@@ -5,10 +5,10 @@ from app.services.adaptation_ops import ALL_OPS, diff_field_specs
 
 
 def _spec(fields: list[dict]) -> dict:
-    """新 wire:request.declarations 的 binding 通道条目。"""
+    """新 wire(M1 目录态):request.declarations 条目(全量,无通道轴)。"""
     return {"id": "fin.order.add", "version": "1.1.0",
             "request": {"declarations": [
-                {"channel": "binding", **f} for f in fields]}}
+                {"state": "form", **f} for f in fields]}}
 
 
 def _legacy_spec(fields: list[dict]) -> dict:
@@ -81,4 +81,40 @@ def test_legacy_fields_key_not_read():
     assert diff_field_specs(old, new) == [
         {"op": "addField", "field": "a", "value": ""},
         {"op": "addField", "field": "d", "value": ""},
+    ]
+
+
+# ── 2026-09-05 目录化:diff 全量泛化(§4.1(a),去通道过滤)──────────
+
+
+def test_diff_sees_carry_entries_too():
+    """全量目录:carry 条目同样参与 diff(旧 binding 通道过滤已退役)—
+    新增 carry 字段产 addField,消失产 removeField。"""
+    old = _spec([{"name": "amount"}, {"name": "remark"}])
+    new = _spec([{"name": "amount"}, {"name": "trace"}])
+    assert diff_field_specs(old, new) == [
+        {"op": "addField", "field": "trace", "value": ""},
+        {"op": "removeField", "field": "remark"},
+    ]
+
+
+def test_diff_flattens_children_tree():
+    """children 树先序展开(iter_flat):容器与叶子都在字段宇宙里 —
+    叶子消失/新增同样产 removeField/addField(容器行壳跟 children,
+    §4 值×结构分离)。"""
+    old = _spec([
+        {"name": "supplier", "path": "$.supplier", "state": "carry",
+         "type": "array", "children": [
+             {"name": "supplier_id",
+              "path": "$.supplier.order_supplier_id"}]},
+    ])
+    new = _spec([
+        {"name": "supplier", "path": "$.supplier", "state": "carry",
+         "type": "array", "children": [
+             {"name": "supplier_id",
+              "path": "$.supplier.order_supplier_id"},
+             {"name": "order_id", "path": "$.supplier.order_id"}]},
+    ])
+    assert diff_field_specs(old, new) == [
+        {"op": "addField", "field": "order_id", "value": ""},
     ]

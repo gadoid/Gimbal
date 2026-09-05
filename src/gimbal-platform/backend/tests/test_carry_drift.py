@@ -21,8 +21,8 @@ async def test_drift_three_classes(client, plate):
     plate.items = [{"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
                     "service": "fin-service"}]
     plate.fulls = {"fin.ep1": {"request": {"declarations": [
-        {"path": "$.remark", "channel": "carry", "type": "string"},
-        {"path": "$.new", "channel": "carry", "type": "string"}]}}}
+        {"path": "$.remark", "state": "carry", "type": "string"},
+        {"path": "$.new", "state": "carry", "type": "string"}]}}}
     admin = await _admin(client)
     r = await client.get("/api/carry/drift", headers=admin)
     assert r.status_code == 200, r.text
@@ -40,8 +40,8 @@ async def test_drift_empty_when_aligned(client, plate):
     plate.items = [{"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
                     "service": "fin-service"}]
     plate.fulls = {"fin.ep1": {"request": {"declarations": [
-        {"path": "$.remark", "channel": "carry", "type": "string"},
-        {"path": "$.old", "channel": "carry", "type": "string"}]}}}
+        {"path": "$.remark", "state": "carry", "type": "string"},
+        {"path": "$.old", "state": "carry", "type": "string"}]}}}
     admin = await _admin(client)
     r = await client.get("/api/carry/drift", headers=admin)
     fin = next(s for s in r.json()["services"] if s["service"] == "fin-service")
@@ -74,8 +74,8 @@ async def test_drift_no_rename_suggestion_when_multiple_candidates(client, plate
     plate.items = [{"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
                     "service": "fin-service"}]
     plate.fulls = {"fin.ep1": {"request": {"declarations": [
-        {"path": "$.new", "channel": "carry", "type": "string"},
-        {"path": "$.new2", "channel": "carry", "type": "string"}]}}}
+        {"path": "$.new", "state": "carry", "type": "string"},
+        {"path": "$.new2", "state": "carry", "type": "string"}]}}}
     admin = await _admin(client)
     r = await client.get("/api/carry/drift", headers=admin)
     assert r.status_code == 200, r.text

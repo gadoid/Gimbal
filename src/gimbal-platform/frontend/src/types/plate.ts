@@ -31,9 +31,22 @@ export type UiKind =
   | 'unknown'
 
 /**
+ * DeclarationEntry.state —— 字段状态(2026-09-05 目录化,共识默认)。
+ *
+ * plate 目录盖章的渲染/传递意向,场景 step.field_states 稀疏增量可覆盖
+ * (解析链 state(path) = field_states[path] ?? entry.state ?? 'form',
+ * 前端同式实现于 utils/declarations.ts resolveState,§3.2):
+ * - form:     表单直接渲染面
+ * - collapse: 折叠区(渲染但收进折叠面板)
+ * - carry:    传递面(值在 platform 值表,编排面零感知;carry 容器
+ *             ⇒ 子孙 carry,整容器是注入单元 —— 祖先吸收)
+ */
+export type FieldState = 'form' | 'collapse' | 'carry'
+
+/**
  * DeclarationEntry.source_kind —— 字段值来源(provenance)。
  *
- * 这是"值从哪来"的语义维度,与"是否在表单展示"(channel)正交。三态自洽:
+ * 这是"值从哪来"的语义维度,与渲染/传递状态(state)正交。三态自洽:
  * - independent: 独立字面量,与上下文无关联,表单直接填(默认)
  * - lookup:      可经接口/变量查询得到(如 ${var.xxx} / ${env.xxx}),表单只读展示
  * - generated:   运行时基于其他接口处理结果动态生成(如 Assign 时间戳),表单提示"由策略产出"
@@ -57,8 +70,10 @@ export type BodyType = 'none' | 'json' | 'form' | 'multipart' | 'raw' | 'binary'
 
 /**
  * IOFieldBinding —— 字段元信息的 UI 形状(FieldForm / FieldActionMenu 消费)。
- * 由 utils/declarations.ts 从 DeclarationEntryView 投影(掐掉 channel /
- * type / assertable 三个声明轴);plate 侧 wire 已无同名类,此为前端本地形状。
+ * 由 utils/declarations.ts 从 DeclarationEntryView 投影(掐掉 state /
+ * children / type / assertable 四个声明轴;上级归属由 children 树天然
+ * 承载,D12 parentPath/parentChannel 已死);plate 侧 wire 已无同名类,
+ * 此为前端本地形状。
  */
 export interface IOFieldBinding {
   name: string
@@ -71,34 +86,28 @@ export interface IOFieldBinding {
   enum: unknown[] | null
   ui_kind: UiKind
   source_kind: SourceKind
-  /**
-   * D12 投影派生(utils/declarations.ts deriveParent):最长已声明祖先的
-   * path,直挂根/无祖先 → null。派生跨通道 — carry 容器是 binding 深字段
-   * 的合法上级(FieldForm path 角标悬停透出治理归属)。
-   */
-  parentPath?: string | null
-  /** 随 parentPath 源条目的声明通道(carry 上级 = 值表打底、此处覆写)。 */
-  parentChannel?: 'binding' | 'carry' | 'view_only' | null
 }
 
 /**
- * DeclarationEntry 视图 —— declarations 统一声明清单条目。
+ * DeclarationEntry 视图 —— declarations 目录条目(字段状态目录,2026-09-05)。
  * 对齐 io_spec.py DeclarationEntry(extra="forbid");plate 序列化经
- * EndpointDetailView exclude_none 裁剪后,type/default/example/enum 为
- * null 的键不在 dict 中(此处标可选,消费侧按缺省 null 处理)。
+ * EndpointDetailView exclude_none 裁剪后,type/state/default/example/enum
+ * 为 null 的键不在 dict 中(此处标可选,消费侧按缺省 null 处理)。
  *
- * channel 三通道(请求面闭合 {binding, carry},响应面 {view_only}):
- * - binding:  请求表单字段面 → 投影为 IOFieldBinding 渲染
- * - carry:    传递字段面(值在 platform 值表,编排面零感知)
- * - view_only:响应展示面 → 投影为 IOFieldBinding;assertable=True
- *             的条目即断言候选(旧 assertable_fields 的继任)
+ * 条目可携带 children 树(容器模板:type=object/array 的结构真源,
+ * §5.2「children 是唯一结构真源」);叶子无 children 键。请求面渲染
+ * 走 buildNode 值×结构合并树;响应面单脸 = 全量条目,assertable=True
+ * 者即断言候选(state 不被读取)。
  */
 export interface DeclarationEntryView {
   name: string
   /** 寻址真源(D1):归一化 JSONPath($.xxx);name 为显示别名,可不同于 path 末段 */
   path: string
-  channel: 'binding' | 'carry' | 'view_only'
-  /** JSON Schema 原语类型;仅 carry 通道必填,其余通道可能缺省 */
+  /** 字段状态(共识默认;缺省按 form 解析 —— fail-closed) */
+  state?: FieldState | null
+  /** 容器模板子孙(仅容器条目;模板路径无实例下标,$.a.b 而非 $.a[0].b) */
+  children?: DeclarationEntryView[]
+  /** JSON Schema 原语类型(P8 回填后全备;缺省按 string 处理) */
   type?: string | null
   required: boolean
   default?: unknown
@@ -107,18 +116,17 @@ export interface DeclarationEntryView {
   enum?: unknown[] | null
   ui_kind: UiKind
   source_kind: SourceKind
-  /** 仅 view_only 通道有意义:该字段是否为断言候选 */
+  /** 仅响应面有意义:该字段是否为断言候选(响应单脸标记) */
   assertable: boolean
 }
 
 /**
  * RequestSpec 视图 —— 接口请求 body 的形态。
  *
- * 线上键 = body_type / declarations(恒有)/ schema(schema_ 非 None 时
- * 才有,别名为 "schema",唯一结构真源)。declarations 为统一承重存储:
- * binding 通道投影出表单字段面,carry 通道即传递字段面(旧 fields/carry
- * 双键已随归一化清除);值不在 plate —— 在 platform 值表(服务绑定/
- * 全局默认两层),运行时由 platform 注入。
+ * 线上键 = body_type / declarations(恒有)/ schema(可选)。declarations
+ * 即字段状态目录(条目 + children 模板树,含 state 共识默认):渲染面由
+ * 解析态定面(form 直接渲染 / collapse 折叠区 / carry 不进树 —— 值在
+ * platform 值表,服务绑定/全局默认两层,运行时由 platform 注入)。
  */
 export interface RequestSpecView {
   body_type: BodyType
@@ -129,8 +137,8 @@ export interface RequestSpecView {
 /**
  * ResponseSpec 视图 —— 接口某状态码响应的形态。
  * 线上键 = status / description / declarations(恒有)/ schema(可选);
- * view_only 通道投影出展示字段面,assertable=True 条目即断言候选
- * (旧 fields/assertable_fields 双键已随归一化清除)。
+ * 响应面单脸 = 全量条目,assertable=True 者即断言候选
+ * (2026-09-05 目录化:state 不被读取,无三通道投影)。
  */
 export interface ResponseSpecView {
   status: number
@@ -251,8 +259,9 @@ export interface RequestView {
   body: unknown
   /** @deprecated 结构快照不再持久化(容器原则:引用数据不进 payload,
    *  渲染时按 api.view_hints.endpoint_id 现拉 /full)。仅为读存量 payload
-   *  保留的类型;新代码禁止写入。值为 binding 通道 DeclarationEntry dump
-   *  (plate export/platform.py 投影)。 */
+   *  保留的类型;新代码禁止写入。值为 fields_meta 键控面:顶层 name 键控,
+   *  2026-09-05 目录化起条目携带 state 与 children 树、树全量展开
+   *  (值透传的 carry 顶层条目不进表;plate export/platform.py 投影)。 */
   fields_meta?: Record<string, DeclarationEntryView>
 }
 
@@ -292,13 +301,24 @@ export interface AssertionView {
 }
 export type StrategyView = ExtractView | AssignView | AssertionView
 
-/** plate Step。对齐 gimbal_plate/schema/step.py Step。 */
+/**
+ * plate Step。对齐 gimbal_plate/schema/step.py Step(平台视图在 definition
+ * 自由 dict 上扩展 field_states;plate Step 模型 extra=ignore 静默剥除,
+ * 注入面在 dispatch 预解析阶段读原始 definition,§3.1)。
+ */
 export interface StepView {
   kind: 'step'
   description?: string
   api: ApiView
   request: RequestView
   strategy: StrategyView[]
+  /**
+   * 字段状态稀疏增量(§3.1):{归一化 path → state},与 api/request/strategy
+   * 平级。默认不存(空 step 零存储);仅存与目录共识默认不同的条目。
+   * 添加字段 = 增量[path]=form/collapse;移除 = 增量[path]=carry。
+   * 解析链见 utils/declarations.ts resolveState(单一实现,§3.2)。
+   */
+  field_states?: Record<string, FieldState>
 }
 
 /** plate Meta。对齐 gimbal_plate/schema/scenario.py Meta。 */

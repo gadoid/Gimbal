@@ -8,6 +8,8 @@ adaptation_service.py。op 形状即 §5.4 补丁契约的元素:
 """
 from __future__ import annotations
 
+from .field_state_resolution import iter_flat
+
 # step 寻址类 op(payload 带 step 索引;应用前须过 check_step_addressable)
 STEP_OPS = ("renameField", "addField", "removeField", "rebindField", "mapValue")
 # 仅数据集类 op(不触场景 definition;执行时 dataset_id 必填)
@@ -22,7 +24,9 @@ ALL_OPS = STEP_OPS + DATASET_OPS + GLOBAL_OPS + CARRY_OPS
 def _field_map(spec: dict | None) -> dict[str, dict]:
     """full spec → {字段名: 声明条目};request 缺失/形状不符 → {}。
 
-    只读 ``request.declarations`` 的 binding 通道(声明面单一真源)。
+    2026-09-05 目录化(§4.1(a)):全量目录,去通道过滤 —— iter_flat
+    先序展开 children 树(容器先于子孙),diff 语义随之泛化:
+    addField/removeField 对全目录生效,不再只盯 binding 面。
     旧 wire 的 ``fields`` 键不做兼容读(2026-09-02 剥离,清库重基线):
     归一化前落库的 CatalogVersion.spec_json 快照在此解析为空,
     diff 只产 addField、无 removeField —— 存量库须重跑 catalog 基线。
@@ -37,9 +41,8 @@ def _field_map(spec: dict | None) -> dict[str, dict]:
         return {}
     return {
         str(e["name"]): e
-        for e in decls
-        if isinstance(e, dict) and e.get("channel") == "binding"
-        and e.get("name")
+        for e in iter_flat(decls)
+        if isinstance(e, dict) and e.get("name")
     }
 
 

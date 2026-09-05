@@ -1,86 +1,261 @@
 <!--
-  FieldForm.vue — 根据 IOFieldBinding 动态渲染表单字段 (PRD §5.4 三类型策略)
+  FieldForm.vue —— 字段状态目录的渲染器(2026-09-05 spec §5 值×结构合并树)
 
-  Type A: 完整 IOFieldBinding → 渲染对应 ui_kind 的表单控件
-  Type B: 仅 ui_kind=unknown → 降级为通用 text
-  Type C: 仅在 schema 出现但无 binding → 隐藏, 但运行时携带
+  两种模式(互斥,由 props 决定):
+  - 树模式(nodes):Canvas 请求体场景。buildTree(declarations.ts)产出
+    四种节点,本组件递归渲染 ——
+      叶子:目录叶子 × 实例路径(数组行内含 [i]),ui_kind 选控件
+      对象:折叠面板(标题 = name,展开递归;collapse 态默认收起)
+      数组:动态行组(行数跟 body、结构跟目录;加行 = 模板实例化空壳,
+            行尾删除;支持 list 套 list)
+      开放字典:object 无 children(additionalProperties)→ KV 编辑器
+    carry 不进树(值表整包注入,编排面零感知);深层残留不在此 ——
+    「其他字段」区承接目录外 body 键(深浅皆收)。
+  - 平铺模式(bindings):StrategyForm / 响应契约参考。IOFieldBinding[]
+    直渲染叶子行,无树无 extras 深层扩展。
 
-  path 字段是 JSONPath (如 "$.customer_id") — 表单值通过 path 写入 body
-  valueGetter/setter 通过 JSONPath util 双向转换
+  值回写走 body(setValue + D8 深层清空剪枝);状态回写走 step.field_states
+  (fieldState 事件上抛,§5.4 两通路分离)。行尾状态下拉 = 字段状态控制
+  (form/collapse/carry;× 重置 = 清除该条增量,回落目录共识默认)。
 
-  typed 字段(number/boolean/select)的模板值支持:值为 ${var.x} 串时控件
-  降级为 text 输入 — 浏览器 number input 拒显非数字、checkbox/select 无法
-  承载串值;运行期引擎对整串模板按变量原类型解析,前端只需可见可编辑。
+  path 字段是 JSONPath(如 "$.customer_id" / "$.supplier[0].sku")—
+  表单值通过 path 写入 body;typed 字段(number/boolean/select)的模板
+  值支持:值为 ${var.x} 串时控件降级为 text 输入(浏览器 number input
+  拒显非数字、checkbox/select 无法承载串值;运行期引擎对整串模板按
+  变量原类型解析,前端只需可见可编辑)。
 -->
 <template>
   <div class="field-form">
-    <div
-      v-for="(f, i) in visibleFields"
-      :key="f.name"
-      class="field"
-      :class="['sk-' + f.source_kind, { required: f.required, 'is-derived': isDerived(f) }]"
-    >
-      <!-- 深层派生行分区头(D9):声明字段与 body 投影派生行的分隔,
-           派生行紧跟声明字段之后、「其他字段」折叠区之上 -->
-      <div v-if="deepExtraRows.length && i === bindings.length" class="deep-divider">
-        深层字段 · {{ deepExtraRows.length }} 个请求体实有叶子 · 未被绑定覆盖
+    <template v-for="item in renderItems" :key="item.n ? item.n.path : item.f.path">
+
+      <!-- ── 对象节点:折叠面板(§5.3)────────────────────────── -->
+      <div v-if="item.n && item.n.kind === 'object'" class="obj-node">
+        <div class="node-head">
+          <button type="button" class="obj-toggle" @click="toggleObj(item.n)">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" :class="{ open: isOpen(item.n) }"><polyline points="9 6 15 12 9 18"/></svg>
+          </button>
+          <span class="label-text">{{ item.n.entry.name }}</span>
+          <span class="path-badge" :title="item.n.path">{{ item.n.path }}</span>
+          <span v-if="item.n.entry.type" class="ui-tag k-json">{{ item.n.entry.type }}</span>
+          <FieldStateSelect
+            v-if="stateControl"
+            :state="item.n.state"
+            :overlay="hasOverlay(item)"
+            @change="(s) => emit('fieldState', templatePathOf(item), s)"
+            @reset="() => emit('fieldState', templatePathOf(item), null)"
+          />
+        </div>
+        <div v-show="isOpen(item.n)" class="obj-body">
+          <FieldForm
+            nested
+            :nodes="item.n.children"
+            :body="body"
+            :field-actions="fieldActions"
+            :var-choices="varChoices"
+            :inject-choices="injectChoices"
+            :candidates="candidates"
+            :readonly="readonly"
+            :domain="domain"
+            :assertable="assertable"
+            :strategy-tags="strategyTags"
+            :injected="injected"
+            :state-control="stateControl"
+            :overlay="overlay"
+            @update:body="(v: any) => emit('update:body', v)"
+            @strategy-jump="(i: number) => emit('strategyJump', i)"
+            @field-extract="(f: IOFieldBinding) => emit('fieldExtract', f)"
+            @field-assign="(f: IOFieldBinding, n: string) => emit('fieldAssign', f, n)"
+            @field-assert="(f: IOFieldBinding) => emit('fieldAssert', f)"
+            @var-insert="(f: IOFieldBinding, n: string) => emit('varInsert', f, n)"
+            @var-promote="(f: IOFieldBinding, n: string, v: unknown) => emit('varPromote', f, n, v)"
+            @field-state="(p: string, s: FieldState | null) => emit('fieldState', p, s)"
+          />
+        </div>
       </div>
+
+      <!-- ── 数组节点:动态行组(§5.3;行数跟 body、结构跟目录)──── -->
+      <div v-else-if="item.n && item.n.kind === 'array'" class="arr-node">
+        <div class="node-head">
+          <span class="label-text">{{ item.n.entry.name }}</span>
+          <span class="path-badge" :title="item.n.path">{{ item.n.path }}</span>
+          <span class="ui-tag k-json">array</span>
+          <span class="arr-count">{{ item.n.rows.length }} 行</span>
+          <FieldStateSelect
+            v-if="stateControl"
+            :state="item.n.state"
+            :overlay="hasOverlay(item)"
+            @change="(s) => emit('fieldState', templatePathOf(item), s)"
+            @reset="() => emit('fieldState', templatePathOf(item), null)"
+          />
+          <button
+            v-if="!readonly"
+            type="button"
+            class="arr-add"
+            title="同容器下一可用下标实例化模板空壳行"
+            @click="addArrayRow(item.n)"
+          >+ 加行</button>
+        </div>
+        <div v-for="(row, i) in item.n.rows" :key="i" class="arr-row">
+          <span class="arr-idx">{{ i }}</span>
+          <div class="arr-row-body">
+            <FieldForm
+              nested
+              :nodes="row"
+              :body="body"
+              :field-actions="fieldActions"
+              :var-choices="varChoices"
+              :inject-choices="injectChoices"
+              :candidates="candidates"
+              :readonly="readonly"
+              :domain="domain"
+              :assertable="assertable"
+              :strategy-tags="strategyTags"
+              :injected="injected"
+              :state-control="stateControl"
+              :overlay="overlay"
+              @update:body="(v: any) => emit('update:body', v)"
+              @strategy-jump="(i: number) => emit('strategyJump', i)"
+              @field-extract="(f: IOFieldBinding) => emit('fieldExtract', f)"
+              @field-assign="(f: IOFieldBinding, n: string) => emit('fieldAssign', f, n)"
+              @field-assert="(f: IOFieldBinding) => emit('fieldAssert', f)"
+              @var-insert="(f: IOFieldBinding, n: string) => emit('varInsert', f, n)"
+              @var-promote="(f: IOFieldBinding, n: string, v: unknown) => emit('varPromote', f, n, v)"
+              @field-state="(p: string, s: FieldState | null) => emit('fieldState', p, s)"
+            />
+          </div>
+          <button
+            v-if="!readonly"
+            type="button"
+            class="arr-del"
+            title="删除该行(splice,后续行下标前移)"
+            @click="removeArrayRow(item.n, i)"
+          >×</button>
+        </div>
+        <p v-if="!item.n.rows.length" class="arr-empty">
+          空数组 —「+ 加行」按目录模板实例化空壳行
+        </p>
+      </div>
+
+      <!-- ── 开放字典节点:KV 编辑器(§5.3)────────────────────── -->
+      <div v-else-if="item.n && item.n.kind === 'dict'" class="dict-node">
+        <div class="node-head">
+          <span class="label-text">{{ item.n.entry.name }}</span>
+          <span class="path-badge" :title="item.n.path">{{ item.n.path }}</span>
+          <span class="ui-tag k-json">object</span>
+          <span class="arr-count">{{ item.n.entries.length }} 键</span>
+          <FieldStateSelect
+            v-if="stateControl"
+            :state="item.n.state"
+            :overlay="hasOverlay(item)"
+            @change="(s) => emit('fieldState', templatePathOf(item), s)"
+            @reset="() => emit('fieldState', templatePathOf(item), null)"
+          />
+          <button
+            v-if="!readonly"
+            type="button"
+            class="arr-add"
+            title="新增开放键(目录未声明,键自由命名)"
+            @click="addDictKey(item.n)"
+          >+ 添加键</button>
+        </div>
+        <div v-for="kv in dictKvs(item.n)" :key="kv.key" class="kv-row">
+          <input
+            type="text"
+            class="kv-key"
+            :value="kv.key"
+            :disabled="readonly"
+            @change="e => renameDictKey(kv.node, kv.key, (e.target as HTMLInputElement).value)"
+          >
+          <div class="kv-value">
+            <textarea
+              v-if="isStructured(kv.value)"
+              class="ctl ctl-code"
+              rows="3"
+              :value="formatJson(kv.value)"
+              :disabled="readonly"
+              @input="e => setDictValue(kv.node, kv.key, parseJsonOrRaw((e.target as HTMLTextAreaElement).value))"
+            />
+            <input
+              v-else
+              type="text"
+              class="ctl"
+              :value="String(kv.value ?? '')"
+              :disabled="readonly"
+              @input="e => setDictValue(kv.node, kv.key, (e.target as HTMLInputElement).value)"
+            >
+          </div>
+          <button
+            v-if="!readonly"
+            type="button"
+            class="arr-del"
+            title="删除该键"
+            @click="removeDictKey(kv.node, kv.key)"
+          >×</button>
+        </div>
+        <p v-if="!item.n.entries.length" class="arr-empty">空字典 —「+ 添加键」自由落键</p>
+      </div>
+
+      <!-- ── 叶子节点:字段行(ui_kind 选控件,§5.3)──────────────
+           v-else-if="item.f" 显式判别(vue-tsc 无法反演上方三个
+           item.n && kind 守卫的合取否定;f 真值直接收窄叶子分支) -->
+      <div
+        v-else-if="item.f"
+        class="field"
+        :class="['sk-' + item.f.source_kind, { required: item.f.required }]"
+      >
       <label class="field-label">
-        <span class="label-text">{{ labelOf(f) }}</span>
-        <span v-if="f.required" class="req-mark">*</span>
-        <!-- 深层字段 path 角标(D5):path ≠ $.+name(深层/别名)→ path 即治理线索,
-             悬停透出上级归属;平铺字段维持灰 chip,零噪音 -->
-        <span v-if="f.path !== '$.' + f.name" class="path-badge" :title="parentTitle(f)">{{ f.path }}</span>
-        <span v-else class="field-path">{{ f.path }}</span>
-        <span class="ui-tag" :class="`k-${f.ui_kind}`">{{ f.ui_kind }}</span>
-        <span v-if="assertable?.includes(f.path)" class="assertable-mark" title="可断言字段">✓</span>
-        <!-- 派生行来源:body 投影(非 plate 声明,值编辑/清空即写回请求体) -->
-        <span v-if="isDerived(f)" class="src-tag s-derived">body · 派生</span>
-        <span v-else class="src-tag" :class="`s-${f.source_kind}`">
-          <template v-if="f.source_kind === 'independent'">literal</template>
-          <template v-else-if="f.source_kind === 'lookup'">static · ${ var }</template>
-          <template v-else-if="f.source_kind === 'generated'">dynamic · Assign</template>
-          <template v-else>{{ f.source_kind }}</template>
+        <span class="label-text">{{ item.f.name }}</span>
+        <span v-if="item.f.required" class="req-mark">*</span>
+        <!-- 深层字段 path 角标(D5):path ≠ $.+name(深层/别名)→ path 即治理线索;
+             平铺字段维持灰 chip,零噪音 -->
+        <span v-if="item.f.path !== '$.' + item.f.name" class="path-badge">{{ item.f.path }}</span>
+        <span v-else class="field-path">{{ item.f.path }}</span>
+        <span class="ui-tag" :class="`k-${item.f.ui_kind}`">{{ item.f.ui_kind }}</span>
+        <span v-if="assertable?.includes(item.f.path)" class="assertable-mark" title="可断言字段">✓</span>
+        <span class="src-tag" :class="`s-${item.f.source_kind}`">
+          <template v-if="item.f.source_kind === 'independent'">literal</template>
+          <template v-else-if="item.f.source_kind === 'lookup'">static · ${ var }</template>
+          <template v-else-if="item.f.source_kind === 'generated'">dynamic · Assign</template>
+          <template v-else>{{ item.f.source_kind }}</template>
         </span>
+        <!-- 字段状态控制(§5.4):行尾状态下拉,写 step.field_states 增量
+             (状态回写与值回写两通路分离) -->
+        <FieldStateSelect
+          v-if="stateControl"
+          :state="stateOf(item)"
+          :overlay="hasOverlay(item)"
+          @change="(s) => emit('fieldState', templatePathOf(item), s)"
+          @reset="() => emit('fieldState', templatePathOf(item), null)"
+        />
         <button
-          v-for="t in strategyTags?.[f.name] ?? []"
+          v-for="t in strategyTags?.[item.f.path] ?? []"
           :key="t.idx"
           type="button"
           class="strategy-tag"
           :title="`跳转到下方策略 ${t.label}`"
           @click.stop="emit('strategyJump', t.idx)"
         >{{ t.label }}</button>
-        <!-- 「+ 同级」(D9):深层行(含派生行)于同容器下一可用下标(现数组
-             长度)建同字段空值 → Task 8 派生行投影即现;carry 容器根下与
-             平铺/dot-only/readonly 行不显示(出现即合法) -->
-        <button
-          v-if="canAddSibling(f)"
-          type="button"
-          class="sib-btn"
-          title="同容器下一可用下标新增同字段空值(派生行即现)"
-          @click.stop="addSibling(f)"
-        >+ 同级</button>
       </label>
       <div class="field-control">
         <!-- 动态注入态(assign 覆盖值):只读提示条代替值控件 — 原值仍存
              body,策略失败且 onFailure=continue 时兜底出网(下行透出) -->
-        <div v-if="isInjected(f)" class="ctl-injected-wrap">
-          <div class="ctl-injected" :title="injectedTitle(f)">
+        <div v-if="isInjected(item.f)" class="ctl-injected-wrap">
+          <div class="ctl-injected" :title="injectedTitle(item.f)">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
             <span>已使用动态策略注入 · 运行时覆盖此值</span>
           </div>
           <FieldActionMenu
             v-if="fieldActions"
-            :field="f"
-            :value="String(getValue(f) ?? '')"
+            :field="item.f"
+            :value="String(getValue(item.f) ?? '')"
             :var-choices="varChoices ?? []"
             :inject-choices="injectChoices ?? []"
             :domain="domain"
             :injected="true"
-            :open="menuField === f.name"
-            @toggle="toggleMenu(f)"
+            :open="menuField === item.f.name"
+            @toggle="toggleMenu(item.f)"
             @close="menuField = null"
-            @var-insert="(name) => onMenuVarInsert(f, name)"
+            @var-insert="(name) => onMenuVarInsert(item.f, name)"
             @field-extract="(field) => emit('fieldExtract', field)"
             @field-assign="(field, name) => emit('fieldAssign', field, name)"
             @field-promote="(field) => onFieldPromote(field)"
@@ -88,49 +263,49 @@
           />
         </div>
         <!-- text / unknown (Type B fallback) -->
-        <div v-else-if="f.ui_kind === 'text' || f.ui_kind === 'unknown'" class="ctl-with-var">
+        <div v-else-if="item.f.ui_kind === 'text' || item.f.ui_kind === 'unknown'" class="ctl-with-var">
           <div class="ctl-cand-wrap">
             <input
               type="text"
               class="ctl"
-              :value="getValue(f) as string"
-              :placeholder="placeholderFor(f)"
+              :value="getValue(item.f) as string"
+              :placeholder="placeholderFor(item.f)"
               :disabled="readonly"
-              @input="e => setValue(f, (e.target as HTMLInputElement).value)"
+              @input="e => setValue(item.f, (e.target as HTMLInputElement).value)"
             />
             <!-- 候选下拉(#2 策略改造):assertion.target / extract.expression
                  从响应字段选 JSONPath,不手打。候选由调用方按字段名映射传入 -->
             <button
-              v-if="candidatesFor(f).length"
+              v-if="candidatesFor(item.f).length"
               type="button"
               class="cand-btn"
               title="从候选值选择"
-              @click="candOpenField = candOpenField === f.name ? null : f.name"
+              @click="candOpenField = candOpenField === item.f.name ? null : item.f.name"
             >▾</button>
             <!-- 字段动作菜单(#4/#5 变量工作台):引用/提取/注入/断言。
                  fieldActions 门控 — 仅 Canvas 请求体场景传 -->
-            <div v-if="candOpenField === f.name" class="cand-list">
+            <div v-if="candOpenField === item.f.name" class="cand-list">
               <button
-                v-for="c in candidatesFor(f)"
+                v-for="c in candidatesFor(item.f)"
                 :key="c"
                 type="button"
                 class="cand-item"
-                @click="applyCandidate(f, c)"
+                @click="applyCandidate(item.f, c)"
               >
                 <code>{{ c }}</code>
               </button>
             </div>
             <FieldActionMenu
               v-if="fieldActions"
-              :field="f"
-              :value="String(getValue(f) ?? '')"
+              :field="item.f"
+              :value="String(getValue(item.f) ?? '')"
               :var-choices="varChoices ?? []"
               :inject-choices="injectChoices ?? []"
               :domain="domain"
-              :open="menuField === f.name"
-              @toggle="toggleMenu(f)"
+              :open="menuField === item.f.name"
+              @toggle="toggleMenu(item.f)"
               @close="menuField = null"
-              @var-insert="(name) => onMenuVarInsert(f, name)"
+              @var-insert="(name) => onMenuVarInsert(item.f, name)"
               @field-extract="(field) => emit('fieldExtract', field)"
               @field-assign="(field, name) => emit('fieldAssign', field, name)"
               @field-promote="(field) => onFieldPromote(field)"
@@ -140,37 +315,37 @@
         </div>
 
         <!-- number(值为模板串 → 降级 text 输入,见文件头注释) -->
-        <div v-else-if="f.ui_kind === 'number'" class="ctl-with-var">
+        <div v-else-if="item.f.ui_kind === 'number'" class="ctl-with-var">
           <div class="ctl-cand-wrap">
             <input
-              v-if="isTpl(getValue(f))"
+              v-if="isTpl(getValue(item.f))"
               type="text"
               class="ctl tpl"
-              :value="getValue(f) as string"
-              :placeholder="placeholderFor(f)"
+              :value="getValue(item.f) as string"
+              :placeholder="placeholderFor(item.f)"
               :disabled="readonly"
-              @input="e => setValueTplNum(f, (e.target as HTMLInputElement).value)"
+              @input="e => setValueTplNum(item.f, (e.target as HTMLInputElement).value)"
             />
             <input
               v-else
               type="number"
               class="ctl"
-              :value="getValue(f) as number | string"
-              :placeholder="placeholderFor(f)"
+              :value="getValue(item.f) as number | string"
+              :placeholder="placeholderFor(item.f)"
               :disabled="readonly"
-              @input="e => setValueNum(f, e)"
+              @input="e => setValueNum(item.f, e)"
             />
             <FieldActionMenu
               v-if="fieldActions"
-              :field="f"
-              :value="String(getValue(f) ?? '')"
+              :field="item.f"
+              :value="String(getValue(item.f) ?? '')"
               :var-choices="varChoices ?? []"
               :inject-choices="injectChoices ?? []"
               :domain="domain"
-              :open="menuField === f.name"
-              @toggle="toggleMenu(f)"
+              :open="menuField === item.f.name"
+              @toggle="toggleMenu(item.f)"
               @close="menuField = null"
-              @var-insert="(name) => onMenuVarInsert(f, name)"
+              @var-insert="(name) => onMenuVarInsert(item.f, name)"
               @field-extract="(field) => emit('fieldExtract', field)"
               @field-assign="(field, name) => emit('fieldAssign', field, name)"
               @field-promote="(field) => onFieldPromote(field)"
@@ -180,36 +355,36 @@
         </div>
 
         <!-- boolean(值为模板串 → 降级 text 输入) -->
-        <div v-else-if="f.ui_kind === 'boolean'" class="ctl-with-var">
+        <div v-else-if="item.f.ui_kind === 'boolean'" class="ctl-with-var">
           <input
-            v-if="isTpl(getValue(f))"
+            v-if="isTpl(getValue(item.f))"
             type="text"
             class="ctl tpl"
-            :value="getValue(f) as string"
-            :placeholder="placeholderFor(f)"
+            :value="getValue(item.f) as string"
+            :placeholder="placeholderFor(item.f)"
             :disabled="readonly"
-            @input="e => setValue(f, (e.target as HTMLInputElement).value)"
+            @input="e => setValue(item.f, (e.target as HTMLInputElement).value)"
           />
           <label v-else class="ctl-bool">
             <input
               type="checkbox"
-              :checked="Boolean(getValue(f))"
+              :checked="Boolean(getValue(item.f))"
               :disabled="readonly"
-              @change="e => setValue(f, (e.target as HTMLInputElement).checked)"
+              @change="e => setValue(item.f, (e.target as HTMLInputElement).checked)"
             />
-            <span>{{ getValue(f) ? 'true' : 'false' }}</span>
+            <span>{{ getValue(item.f) ? 'true' : 'false' }}</span>
           </label>
           <FieldActionMenu
             v-if="fieldActions"
-            :field="f"
-            :value="String(getValue(f) ?? '')"
+            :field="item.f"
+            :value="String(getValue(item.f) ?? '')"
             :var-choices="varChoices ?? []"
             :inject-choices="injectChoices ?? []"
             :domain="domain"
-            :open="menuField === f.name"
-            @toggle="toggleMenu(f)"
+            :open="menuField === item.f.name"
+            @toggle="toggleMenu(item.f)"
             @close="menuField = null"
-            @var-insert="(name) => onMenuVarInsert(f, name)"
+            @var-insert="(name) => onMenuVarInsert(item.f, name)"
             @field-extract="(field) => emit('fieldExtract', field)"
             @field-assign="(field, name) => emit('fieldAssign', field, name)"
             @field-promote="(field) => onFieldPromote(field)"
@@ -218,37 +393,37 @@
         </div>
 
         <!-- select(值为模板串 → 降级 text 输入:选项列表不含模板值) -->
-        <div v-else-if="f.ui_kind === 'select' && f.enum" class="ctl-with-var">
+        <div v-else-if="item.f.ui_kind === 'select' && item.f.enum" class="ctl-with-var">
           <input
-            v-if="isTpl(getValue(f))"
+            v-if="isTpl(getValue(item.f))"
             type="text"
             class="ctl tpl"
-            :value="getValue(f) as string"
-            :placeholder="placeholderFor(f)"
+            :value="getValue(item.f) as string"
+            :placeholder="placeholderFor(item.f)"
             :disabled="readonly"
-            @input="e => setValue(f, (e.target as HTMLInputElement).value)"
+            @input="e => setValue(item.f, (e.target as HTMLInputElement).value)"
           />
           <select
             v-else
             class="ctl"
-            :value="getValue(f) as string"
+            :value="getValue(item.f) as string"
             :disabled="readonly"
-            @change="e => setValue(f, (e.target as HTMLSelectElement).value)"
+            @change="e => setValue(item.f, (e.target as HTMLSelectElement).value)"
           >
             <option value="">— select —</option>
-            <option v-for="opt in f.enum" :key="String(opt)" :value="String(opt)">{{ String(opt) }}</option>
+            <option v-for="opt in item.f.enum" :key="String(opt)" :value="String(opt)">{{ String(opt) }}</option>
           </select>
           <FieldActionMenu
             v-if="fieldActions"
-            :field="f"
-            :value="String(getValue(f) ?? '')"
+            :field="item.f"
+            :value="String(getValue(item.f) ?? '')"
             :var-choices="varChoices ?? []"
             :inject-choices="injectChoices ?? []"
             :domain="domain"
-            :open="menuField === f.name"
-            @toggle="toggleMenu(f)"
+            :open="menuField === item.f.name"
+            @toggle="toggleMenu(item.f)"
             @close="menuField = null"
-            @var-insert="(name) => onMenuVarInsert(f, name)"
+            @var-insert="(name) => onMenuVarInsert(item.f, name)"
             @field-extract="(field) => emit('fieldExtract', field)"
             @field-assign="(field, name) => emit('fieldAssign', field, name)"
             @field-promote="(field) => onFieldPromote(field)"
@@ -257,26 +432,26 @@
         </div>
 
         <!-- textarea -->
-        <div v-else-if="f.ui_kind === 'textarea'" class="ctl-with-var col">
+        <div v-else-if="item.f.ui_kind === 'textarea'" class="ctl-with-var col">
           <textarea
             class="ctl ctl-area"
             rows="3"
-            :value="getValue(f) as string"
-            :placeholder="placeholderFor(f)"
+            :value="getValue(item.f) as string"
+            :placeholder="placeholderFor(item.f)"
             :disabled="readonly"
-            @input="e => setValue(f, (e.target as HTMLTextAreaElement).value)"
+            @input="e => setValue(item.f, (e.target as HTMLTextAreaElement).value)"
           />
           <FieldActionMenu
             v-if="fieldActions"
-            :field="f"
-            :value="String(getValue(f) ?? '')"
+            :field="item.f"
+            :value="String(getValue(item.f) ?? '')"
             :var-choices="varChoices ?? []"
             :inject-choices="injectChoices ?? []"
             :domain="domain"
-            :open="menuField === f.name"
-            @toggle="toggleMenu(f)"
+            :open="menuField === item.f.name"
+            @toggle="toggleMenu(item.f)"
             @close="menuField = null"
-            @var-insert="(name) => onMenuVarInsert(f, name)"
+            @var-insert="(name) => onMenuVarInsert(item.f, name)"
             @field-extract="(field) => emit('fieldExtract', field)"
             @field-assign="(field, name) => emit('fieldAssign', field, name)"
             @field-promote="(field) => onFieldPromote(field)"
@@ -285,26 +460,26 @@
         </div>
 
         <!-- json (dark code editor) -->
-        <div v-else-if="f.ui_kind === 'json'" class="ctl-with-var col">
+        <div v-else-if="item.f.ui_kind === 'json'" class="ctl-with-var col">
           <textarea
             class="ctl ctl-code"
             rows="4"
-            :value="formatJson(getValue(f))"
+            :value="formatJson(getValue(item.f))"
             placeholder="JSON object"
             :disabled="readonly"
-            @input="e => setValue(f, parseJsonOrRaw((e.target as HTMLTextAreaElement).value))"
+            @input="e => setValue(item.f, parseJsonOrRaw((e.target as HTMLTextAreaElement).value))"
           />
           <FieldActionMenu
             v-if="fieldActions"
-            :field="f"
-            :value="String(getValue(f) ?? '')"
+            :field="item.f"
+            :value="String(getValue(item.f) ?? '')"
             :var-choices="varChoices ?? []"
             :inject-choices="injectChoices ?? []"
             :domain="domain"
-            :open="menuField === f.name"
-            @toggle="toggleMenu(f)"
+            :open="menuField === item.f.name"
+            @toggle="toggleMenu(item.f)"
             @close="menuField = null"
-            @var-insert="(name) => onMenuVarInsert(f, name)"
+            @var-insert="(name) => onMenuVarInsert(item.f, name)"
             @field-extract="(field) => emit('fieldExtract', field)"
             @field-assign="(field, name) => emit('fieldAssign', field, name)"
             @field-promote="(field) => onFieldPromote(field)"
@@ -313,8 +488,8 @@
         </div>
 
         <!-- file (placeholder) -->
-        <div v-else-if="f.ui_kind === 'file' || f.ui_kind === 'binary'" class="ctl-file">
-          <span class="file-tag">{{ f.ui_kind }}</span>
+        <div v-else-if="item.f.ui_kind === 'file' || item.f.ui_kind === 'binary'" class="ctl-file">
+          <span class="file-tag">{{ item.f.ui_kind }}</span>
           <span class="file-hint">文件上传 — TODO</span>
         </div>
 
@@ -323,40 +498,37 @@
           v-else
           type="text"
           class="ctl"
-          :value="getValue(f) as string"
-          :placeholder="placeholderFor(f)"
-          @input="e => setValue(f, (e.target as HTMLInputElement).value)"
+          :value="getValue(item.f) as string"
+          :placeholder="placeholderFor(item.f)"
+          @input="e => setValue(item.f, (e.target as HTMLInputElement).value)"
         />
       </div>
-      <p v-if="f.description" class="field-desc">
+      <p v-if="item.f.description" class="field-desc">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-        {{ f.description }}
-      </p>
-      <!-- carry 容器接管警告(D7):深层字段落 carry 根键容器 — 手填整包
-           接管(值表不再注入),清空剪枝掉容器可恢复注入;根 list 整包
-           carry(根键 '')显示 $(整包),不显示空滴 $. -->
-      <p v-if="isDeepField(f) && inCarryContainer(f)" class="deep-carry-note">
-        上级容器 {{ rootOf(f) === '' ? '$(整包)' : '$.' + rootOf(f) }} 为 carry 整包传递 — 手填将接管该容器,清空可恢复注入
+        {{ item.f.description }}
       </p>
       <!-- 兜底原值行(注入态):策略失败且 onFailure=continue 时以此值发送 -->
-      <p v-if="isInjected(f)" class="injected-fallback">
-        原值 <code>{{ fallbackText(f) }}</code> · 策略失败且继续(continue)时以此发送
+      <p v-if="isInjected(item.f)" class="injected-fallback">
+        原值 <code>{{ fallbackText(item.f) }}</code> · 策略失败且继续(continue)时以此发送
       </p>
-    </div>
+      </div>
+    </template>
 
-    <!-- 其他字段(Type C 逆向面):body 实有键 + plate schema 非绑定字段,合并去重。
+    <!-- 其他字段(§4:目录外 body 残留,深浅皆收 + 契约差集行)。树模式
+         行集由 Canvas 投影(deepExtras = extraBodyPaths 单一真源);平铺
+         模式维持顶层平铺键 − binding 根段(StrategyForm 复用不受影响)。
          实有键随请求发送;契约字段编辑即写入 body — 默认折叠。 -->
-    <div v-if="extraRows.length" class="extras" data-testid="extra-fields">
+    <div v-if="!nested && extraRows.length" class="extras" data-testid="extra-fields">
       <button type="button" class="extras-toggle" @click="extrasOpen = !extrasOpen">
         <span class="extras-arrow" :class="{ open: extrasOpen }">▸</span>
         <span class="extras-title">其他字段 · {{ extraRows.length }}</span>
-        <span class="extras-hint">不在接口绑定中 · 已写入的随请求发送</span>
+        <span class="extras-hint">不在接口目录中 · 已写入的随请求发送</span>
       </button>
       <div v-if="extrasOpen" class="extras-body">
-        <div v-for="row in extraRows" :key="row.key" class="extra-row">
+        <div v-for="row in extraRows" :key="row.path" class="extra-row">
           <label class="extra-label">
             <span class="label-text">{{ row.key }}</span>
-            <span class="field-path">$.{{ row.key }}</span>
+            <span class="field-path">{{ row.path }}</span>
             <span
               class="extra-src"
               :class="row.source"
@@ -367,48 +539,48 @@
           </label>
           <div class="extra-control">
             <textarea
-              v-if="isStructured(extraValue(row.key)) || row.type === 'object' || row.type === 'array'"
+              v-if="isStructured(extraValue(row)) || row.type === 'object' || row.type === 'array'"
               class="ctl ctl-code"
               rows="3"
-              :value="formatJson(extraValue(row.key))"
+              :value="formatJson(extraValue(row))"
               :placeholder="extraPlaceholder(row)"
               :disabled="readonly"
-              @input="e => setExtra(row.key, parseJsonOrRaw((e.target as HTMLTextAreaElement).value))"
+              @input="e => setExtra(row, parseJsonOrRaw((e.target as HTMLTextAreaElement).value))"
             />
             <label v-else-if="row.type === 'boolean'" class="ctl-bool">
               <input
                 type="checkbox"
-                :checked="Boolean(extraValue(row.key))"
+                :checked="Boolean(extraValue(row))"
                 :disabled="readonly"
-                @change="e => setExtra(row.key, (e.target as HTMLInputElement).checked)"
+                @change="e => setExtra(row, (e.target as HTMLInputElement).checked)"
               />
-              <span>{{ extraValue(row.key) ? 'true' : 'false' }}</span>
+              <span>{{ extraValue(row) ? 'true' : 'false' }}</span>
             </label>
             <input
               v-else-if="row.type === 'number'"
               type="number"
               class="ctl"
-              :value="extraValue(row.key) ?? ''"
+              :value="extraValue(row) ?? ''"
               :placeholder="extraPlaceholder(row)"
               :disabled="readonly"
-              @input="e => setExtra(row.key, (e.target as HTMLInputElement).value === '' ? '' : Number((e.target as HTMLInputElement).value))"
+              @input="e => setExtra(row, (e.target as HTMLInputElement).value === '' ? '' : Number((e.target as HTMLInputElement).value))"
             />
             <input
               v-else
               type="text"
               class="ctl"
-              :value="String(extraValue(row.key) ?? '')"
+              :value="String(extraValue(row) ?? '')"
               :placeholder="extraPlaceholder(row)"
               :disabled="readonly"
-              @input="e => setExtra(row.key, (e.target as HTMLInputElement).value)"
+              @input="e => setExtra(row, (e.target as HTMLInputElement).value)"
             />
             <button
               v-if="row.inBody"
               type="button"
               class="extra-del"
-              title="从请求体移除该字段"
+              title="从请求体移除该字段(深层清空连锁剪枝容器)"
               :disabled="readonly"
-              @click="removeExtra(row.key)"
+              @click="removeExtra(row)"
             >×</button>
           </div>
         </div>
@@ -419,15 +591,22 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { IOFieldBinding } from '@/types/plate'
+import type { FieldState, IOFieldBinding } from '@/types/plate'
 import type { VarEntry } from '@/utils/var-registry'
 import { getByPath, pruneByPath, setByPath } from '@/utils/jsonpath'
-import { deriveDeepRows } from '@/utils/declarations'
+import type {
+  FieldArrayNode, FieldDictNode, FieldLeafNode, FieldObjectNode, FieldTreeNode,
+} from '@/utils/declarations'
 import FieldActionMenu from './FieldActionMenu.vue'
+import FieldStateSelect from './FieldStateSelect.vue'
 import { parseJson } from '../../utils/json'
 
+/** 递归内部标记:嵌套渲染不重复「其他字段」区/策略角标引导(顶层专属)。 */
 const props = defineProps<{
-  bindings: IOFieldBinding[]
+  /** 平铺模式行集(StrategyForm / 响应契约参考);树模式不传。 */
+  bindings?: IOFieldBinding[]
+  /** 树模式节点集(Canvas 请求体:buildTree 产物,值×结构合并树 §5)。 */
+  nodes?: FieldTreeNode[]
   body: any
   /**
    * 字段动作菜单门控(#4/#5 变量工作台):仅 Canvas 请求体场景传。
@@ -458,24 +637,29 @@ const props = defineProps<{
   /** 可断言字段的 plate 域路径列表(Response 页 ✓ 标线) */
   assertable?: string[]
   /**
-   * plate 非绑定字段(请求 schema 有、binding 无 — Canvas 的 reqTypeC):
+   * plate 契约差集行(schema 有、目录渲染面无 — Canvas 的 reqTypeC):
    * 并入「其他字段」折叠区,可编辑;编辑即写入 body(未编辑不随请求发送)。
    */
   unboundFields?: Array<{ name: string; path: string; type?: string; default?: unknown }>
-  /** 策略角标(需求1):字段名 → 角标数组(label 由 Canvas 预计算含编号,
+  /** 目录外 body 残留行(Canvas 投影:extraBodyPaths 单一真源,深浅皆收) */
+  deepExtras?: Array<{ path: string; top: boolean }>
+  /** 策略角标(需求1):字段 path → 角标数组(label 由 Canvas 预计算含编号,
    *  idx = step.strategy 数组下标);点击上抛 strategyJump 由 Canvas 定位
-   *  下方策略卡。StrategyForm 复用本组件处不传 → 零角标。 */
+   *  下方策略卡。key = path(实例地址,唯一)— name 在数组行间共享会
+   *  误挂全行;StrategyForm 复用本组件处不传 → 零角标。 */
   strategyTags?: Record<string, Array<{ label: string; idx: number }>>
-  /** 请求体字段动态注入态(Canvas 传入):name → 命中的 assign 策略
+  /** 请求体字段动态注入态(Canvas 传入):path → 命中的 assign 策略
    *  (source/target 供提示条悬停)。命中字段值被 assign 运行时覆盖 →
    *  值控件换只读提示条,原值降级为 continue 兜底(见 injected-fallback)。
    *  StrategyForm/响应页复用处不传 → 零影响。 */
   injected?: Record<string, Array<{ source: string; target: string }>>
-  /** carry 容器根键集(Canvas 传入 — declarations carry 通道 path 归一根段
-   *  去重):深层字段落在此容器 → field-desc 位置渲染接管警告行
-   *  (手填接管整包传递,清空剪枝可恢复注入)。StrategyForm/响应页
-   *  复用处不传 → 零警告行。 */
-  carryRoots?: string[]
+  /** 字段状态控制门控(§5.4):行尾状态下拉写 step.field_states —
+   *  仅 Canvas 请求体场景传;只读/响应/策略表单复用处不传 → 零控件。 */
+  stateControl?: boolean
+  /** step.field_states 增量(Canvas 传入):标记显式覆盖行(可重置)。 */
+  overlay?: Record<string, FieldState>
+  /** 递归内部标记(容器/行组嵌套渲染)— 外部调用方不传。 */
+  nested?: boolean
 }>()
 const emit = defineEmits<{
   'update:body': [any]
@@ -489,7 +673,157 @@ const emit = defineEmits<{
   'varInsert': [field: IOFieldBinding, name: string]
   /** 设为变量(D8 提升):值整串替换为 ${var.<name>},原值随事件上抛登记默认值 */
   'varPromote': [field: IOFieldBinding, name: string, value: unknown]
+  /**
+   * 字段状态控制(§5.4):path = 模板路径(增量 keyed 于目录态);
+   * state = form/collapse/carry,null = 清除该条增量(重置回共识默认)。
+   * Canvas 落地为 step.field_states 稀疏写入(§3.1)。
+   */
+  'fieldState': [path: string, state: FieldState | null]
 }>()
+
+// ─── 渲染行集:树模式(四节点)或平铺模式(叶子行)─────────────────
+
+/** 判别联合:容器行(仅 n)/ 叶子行(f 必有)— v-else 叶子分支内
+ *  item.f 由联合收窄保证非空,模板免逐一非空断言。 */
+type RenderItem =
+  | { n: FieldObjectNode | FieldArrayNode | FieldDictNode; f?: undefined; lf?: undefined }
+  | { n?: undefined; f: IOFieldBinding; lf?: FieldLeafNode }
+
+const renderItems = computed<RenderItem[]>(() => {
+  if (props.nodes) {
+    return props.nodes.map((n): RenderItem => {
+      if (n.kind === 'leaf') return { f: n.binding, lf: n }
+      return { n }
+    })
+  }
+  return (props.bindings ?? []).map((f): RenderItem => ({ f }))
+})
+
+/** 字段状态控制辅助:解析态 / 模板路径 / 显式覆盖标记。 */
+function stateOf(item: RenderItem): FieldState {
+  return item.lf?.state ?? item.n?.state ?? 'form'
+}
+function templatePathOf(item: RenderItem): string {
+  return item.lf?.templatePath ?? item.n?.templatePath ?? item.f?.path ?? ''
+}
+function hasOverlay(item: RenderItem): boolean {
+  const p = templatePathOf(item)
+  return !!p && props.overlay?.[p] !== undefined
+}
+
+// ─── 对象折叠面板:开合状态(path 键控,跨 body 重算保持;────────────
+//     未见过 = 目录解析态默认:collapse 收起,form 展开)
+
+const objOpen = ref<Record<string, boolean>>({})
+function isOpen(n: FieldObjectNode): boolean {
+  const v = objOpen.value[n.path]
+  return v === undefined ? n.state !== 'collapse' : v
+}
+function toggleObj(n: FieldObjectNode) {
+  objOpen.value[n.path] = !isOpen(n)
+}
+
+// ─── 数组行组:加行(模板空壳)/删行(splice,§5.3 行尾删除)────────
+
+/** body 浅拷贝(数组根保形):数组根 spread 保数组性 — 对象 spread
+ *  {...body} 会把数组洗成 {0:…} 数字键对象;空 body 按 rel 首段形态
+ *  建容器:`[` 开头建 [],否则 {}。 */
+function copyBody(rel: string): any {
+  if (Array.isArray(props.body)) return [...props.body]
+  if (props.body && typeof props.body === 'object') return { ...props.body }
+  return rel.startsWith('[') ? [] : {}
+}
+
+function addArrayRow(n: FieldArrayNode) {
+  if (props.readonly) return
+  const rel = n.path.replace(/^\$\.?/, '')
+  const next = copyBody(rel)
+  const cur = getByPath(next, rel)
+  const arr = Array.isArray(cur) ? cur : []
+  // 模板实例化空壳(§5.2):对象模板 → {};嵌套数组模板 → [](行内递归);
+  // 标量数组(无模板)→ 标量空壳 ''(push {} 会洗掉字符串数组的标量性)
+  arr.push(
+    n.templates.length
+      ? (n.templates[0].type === 'array' ? [] : {})
+      : '',
+  )
+  setByPath(next, rel, arr)
+  emit('update:body', next)
+}
+
+function removeArrayRow(n: FieldArrayNode, i: number) {
+  if (props.readonly) return
+  const rel = n.path.replace(/^\$\.?/, '')
+  const next = copyBody(rel)
+  const arr = getByPath(next, rel)
+  if (!Array.isArray(arr)) return
+  arr.splice(i, 1) // 行删除 = splice(下标前移;与清空剪枝 pruneByPath 语义分流)
+  setByPath(next, rel, arr)
+  emit('update:body', next)
+}
+
+// ─── 开放字典:KV 编辑器(§5.3;键重命名/删键/添键整字典回写)──────
+
+function writeDict(
+  n: FieldDictNode,
+  mutator: (o: Record<string, unknown>) => void,
+) {
+  if (props.readonly) return
+  const rel = n.path.replace(/^\$\.?/, '')
+  const cur = getByPath(props.body, rel)
+  const o: Record<string, unknown> =
+    cur && typeof cur === 'object' && !Array.isArray(cur)
+      ? { ...(cur as Record<string, unknown>) }
+      : {}
+  mutator(o)
+  if (!rel) {
+    emit('update:body', o) // 根字典:next 即对象本体(setByPath 空 rel no-op)
+    return
+  }
+  const next = copyBody(rel)
+  setByPath(next, rel, o)
+  emit('update:body', next)
+}
+
+/** dict KV 行绑定:收窄后的 dict 节点随行携带 —— 嵌套 v-for 的行内
+ *  事件闭包里 item.n 的属性收窄不传播(vue-tsc 降回容器联合),
+ *  kv.node 静态定型 FieldDictNode 即免收窄。 */
+function dictKvs(n: FieldObjectNode | FieldArrayNode | FieldDictNode): Array<{
+  node: FieldDictNode; key: string; value: unknown
+}> {
+  return n.kind === 'dict'
+    ? n.entries.map((kv) => ({ node: n, ...kv }))
+    : []
+}
+
+function setDictValue(n: FieldDictNode, key: string, val: unknown) {
+  writeDict(n, (o) => { o[key] = val })
+}
+
+function renameDictKey(n: FieldDictNode, oldKey: string, newKey: string) {
+  const k = newKey.trim()
+  if (!k || k === oldKey) return
+  writeDict(n, (o) => {
+    if (!(oldKey in o) || k in o) return
+    o[k] = o[oldKey]
+    delete o[oldKey]
+  })
+}
+
+function removeDictKey(n: FieldDictNode, key: string) {
+  writeDict(n, (o) => { delete o[key] })
+}
+
+function addDictKey(n: FieldDictNode) {
+  writeDict(n, (o) => {
+    let base = 'key'
+    let i = 2
+    while (base in o) base = `key_${i++}`
+    o[base] = ''
+  })
+}
+
+// ─── 候选下拉 / 动作菜单 / 变量插入(既有行为,平移)────────────────
 
 /** 候选下拉开合状态(同屏至多一个)— 存字段名而非对象引用:
  *  props.bindings 被 Vue 包 reactive proxy,v-for 元素与原始对象
@@ -557,14 +891,15 @@ function isTpl(v: unknown): boolean {
   return typeof v === 'string' && v.includes('${')
 }
 
-/** 动态注入态:该字段命中 assign(target=$.request_body.<path>)→ 值控件只读化 */
+/** 动态注入态:该字段命中 assign(target=$.request_body.<path>)→ 值控件只读化
+ *  (key = path:数组行实例各得其所,name 在行间共享会整列误标) */
 function isInjected(f: IOFieldBinding): boolean {
-  return (props.injected?.[f.name]?.length ?? 0) > 0
+  return (props.injected?.[f.path]?.length ?? 0) > 0
 }
 
 /** 提示条悬停:命中策略的 source → target(多条全列) */
 function injectedTitle(f: IOFieldBinding): string {
-  return (props.injected?.[f.name] ?? [])
+  return (props.injected?.[f.path] ?? [])
     .map((h) => `${h.source} → ${h.target}`)
     .join('\n')
 }
@@ -574,83 +909,6 @@ function fallbackText(f: IOFieldBinding): string {
   const v = getValue(f)
   if (v === '' || v === null || v === undefined) return '(空)'
   return typeof v === 'object' ? JSON.stringify(v) : String(v)
-}
-
-/**
- * path 角标悬停(D5 治理标注):carry 上级 = 值表打底、此处覆写;
- * 其余通道(binding/view_only)透出原值。无上级(深层但祖先未声明)只透 path。
- */
-function parentTitle(f: IOFieldBinding): string {
-  if (!f.parentPath) return f.path
-  const chan = f.parentChannel === 'carry'
-    ? 'carry · 值表打底,此处覆写'
-    : f.parentChannel ?? 'binding'
-  return `${f.path} · 上级 ${f.parentPath}(${chan})`
-}
-
-/** 深层字段判定(D8):rel 含 `.` 或 `[`(平铺两字符皆不含)— 与 setValue
- *  清空剪枝分流同判据;`[` 必须转义(本仓实证 /[.[]/ 写法有坑) */
-function isDeepField(f: IOFieldBinding): boolean {
-  return /[.\[]/.test(f.path.replace(/^\$\.?/, ''))
-}
-
-/** 字段根键:$.a[0].b → 'a'(D12 归一切法,数组下标不拆根);
- *  根 list(Task 10):$[0].b / 裸 $ 剥后 rel 为 '' 或 '[' 开头 → 根键 ''
- *  (与 Canvas carryRoots 对 `$` 整包的归一产物天然对齐) */
-function rootOf(f: IOFieldBinding): string {
-  const rel = f.path.replace(/^\$\.?/, '')
-  return rel === '' || rel.startsWith('[') ? '' : rel.split(/[.[\]]/)[0]
-}
-
-/** 深层字段是否落在 carry 容器内(根键命中 Canvas 传入的 carry 根键集) */
-function inCarryContainer(f: IOFieldBinding): boolean {
-  return (props.carryRoots ?? []).includes(rootOf(f))
-}
-
-/**
- * 「+ 同级」兄弟路径派生(D9):取 path 最后一个 `[n]` 下标段所属数组为
- * 容器(`supplier[0].order_supplier_id` → 容器 `supplier` + 尾段
- * `.order_supplier_id`),兄弟 = `supplier[<len>].order_supplier_id`,
- * len = 现数组长度(数组不存在 0,setByPath 自建链)。dot-only 深层
- * ($.cfg.timeout)无数组容器、下标无从派生 → 返回 null,按钮不显示
- * (出现即合法,与 carry 豁免同理);readonly(响应页契约参考)同不显示。
- */
-function siblingPathOf(f: IOFieldBinding): string | null {
-  const m = f.path.replace(/^\$\.?/, '').match(/^(.*)\[(\d+)\](.*)$/)
-  if (!m) return null
-  // 根 list(Task 10):m[1]===''(rel 首段即下标)→ 容器是 body 本体
-  // (getByPath 空 path 有 guard 恒 undefined,不能走它)
-  const arr = m[1] === '' ? props.body : getByPath(props.body, m[1])
-  return `${m[1]}[${Array.isArray(arr) ? arr.length : 0}]${m[3]}`
-}
-
-/** 「+ 同级」可见性(D9):深层行 && 非 carry 容器 && 可派生兄弟路径(派生行同语义) */
-function canAddSibling(f: IOFieldBinding): boolean {
-  return !props.readonly && isDeepField(f) && !inCarryContainer(f) && siblingPathOf(f) !== null
-}
-
-/**
- * 同容器下一可用下标(现数组长度)落同字段空值 '' — 直写 setByPath 而非
- * setValue:setValue 对深层 '' 会走 D8 剪枝(空值立删),此处空值正是要落
- * 的载体(body 有叶子 → Task 8 派生行投影即现)。emit 走既有 update:body 通路。
- */
-/**
- * body 浅拷贝(数组保形,Task 10):数组根 spread 保数组性 — 对象 spread
- * `{...body}` 会把数组洗成 {0:…} 数字键对象,数组性丢失;空 body 按 rel
- * 首段形态建容器:`[` 开头建 [](根 list 首段 INDEX),否则 {}(对象根惯例)。
- */
-function copyBody(rel: string): any {
-  if (Array.isArray(props.body)) return [...props.body]
-  if (props.body && typeof props.body === 'object') return { ...props.body }
-  return rel.startsWith('[') ? [] : {}
-}
-
-function addSibling(f: IOFieldBinding) {
-  const rel = siblingPathOf(f)
-  if (rel === null || props.readonly) return
-  const next = copyBody(rel)
-  setByPath(next, rel, '')
-  emit('update:body', next)
 }
 
 /** number 控件输入:清空存 ''(对齐「其他字段」分支约定,不落幻影 0) */
@@ -668,40 +926,20 @@ function setValueTplNum(f: IOFieldBinding, v: string) {
   setValue(f, v)
 }
 
-// Type A + Type B: 有 binding 的都显示; Type C (无 binding 的 schema 字段) 走 hiddenFields 不在此显示
-// 深层派生行(D9)追加在声明字段之后(分区头分隔)
-const visibleFields = computed(() => [...props.bindings, ...deepExtraRows.value])
+// ─── 「其他字段」区(§4:目录外 body 残留深浅皆收 + 契约差集)────────
 
 /**
- * 深层派生行(D9):投影单一真源在 utils/declarations.ts 的 deriveDeepRows
- * (排除面三顶 + safeName + _2/_3 去重都在彼处)— Canvas 的注入只读态/
- * 请求侧策略角标匹配面共用同一函数,派生行 name 键控两侧同源,防键漂移。
- * body 纯投影,不新增存储;读写走既有 setValue/getValue(深层清空自动 D8 剪枝)。
- */
-const deepExtraRows = computed<IOFieldBinding[]>(() =>
-  deriveDeepRows(props.body, props.bindings, props.carryRoots ?? [])
-)
-
-/** 派生行判定(name 集;合成名与声明 name 已去撞车 → 集合互斥) */
-const derivedNames = computed(() => new Set(deepExtraRows.value.map((r) => r.name)))
-function isDerived(f: IOFieldBinding): boolean {
-  return derivedNames.value.has(f.name)
-}
-
-/** 派生行标签 = 相对路径(完整 $ 路径在角标);声明行标签 = name */
-function labelOf(f: IOFieldBinding): string {
-  return isDerived(f) ? f.path.replace(/^\$\.?/, '') : f.name
-}
-
-/**
- * 其他字段(Type C 逆向面)行视图,两个来源合并去重:
- * ① body 实有键(body 顶层键 − binding 根段;binding $.cfg.timeout 覆盖键 cfg)
- * ② plate schema 声明但无 binding 的字段(unboundFields,请求侧 Canvas 传入)
+ * 其他字段行视图:
+ * - 树模式:deepExtras(Canvas 投影的目录外 body 残留,深浅皆收)+
+ *   unboundFields(契约差集行)按 path 去重合并(body 实有的契约键
+ *   归并为 schema 行 inBody=true,旧语义保持);
+ * - 平铺模式:body 顶层键 − binding 根段 + unboundFields(StrategyForm
+ *   复用路径,行为与旧版一致)。
  * source=行来源标签;inBody=是否已写入 body(决定随请求发送 + 可删除)。
- * ② 未编辑前不进 body → 不发送;编辑即写入(setExtra)转为实有。
  */
 interface ExtraRowView {
   key: string
+  path: string
   source: 'body' | 'schema'
   inBody: boolean
   /** schema 声明类型(body 实有行无) — 控件按此渲染:boolean 勾选/number 数字框/object·array JSON 域 */
@@ -711,43 +949,65 @@ interface ExtraRowView {
 }
 
 const extraRows = computed<ExtraRowView[]>(() => {
+  if (props.nested) return []
+  const relOf = (p: string) => p.replace(/^\$\.?/, '')
+  const rows: ExtraRowView[] = []
+  if (props.nodes) {
+    const byPath = new Map<string, ExtraRowView>()
+    for (const r of props.deepExtras ?? []) {
+      const row: ExtraRowView = {
+        key: relOf(r.path), path: r.path, source: 'body', inBody: true,
+      }
+      byPath.set(r.path, row)
+      rows.push(row)
+    }
+    for (const f of props.unboundFields ?? []) {
+      const p = f.path || `$.${f.name}`
+      const ex = byPath.get(p)
+      if (ex) {
+        // 契约键已被 body 实有 → 归并为契约行(旧 dedupe 语义)
+        ex.source = 'schema'
+        ex.type = f.type
+        ex.default = f.default
+        continue
+      }
+      rows.push({
+        key: relOf(p), path: p, source: 'schema', inBody: false,
+        type: f.type, default: f.default,
+      })
+    }
+    return rows
+  }
+  // 平铺模式(StrategyForm / 无目录步骤):顶层平铺键 − binding 根段
   const bodyObj =
     props.body && typeof props.body === 'object' && !Array.isArray(props.body)
       ? (props.body as Record<string, unknown>)
       : null
-  // binding 覆盖面的根段(D12 归一:按 `.`/`[`/`]` 切 — '$.supplier[0].x' 根段
-  // 是 'supplier' 而非 'supplier[0]',数组下标不拆根,容器整体归入覆盖面;
-  // 根 list '$[0].x' 根段 '' — 对象 body 键不可能是 '',天然无侵入)
+  // binding 覆盖面的根段(数组下标不拆根,容器整体归入覆盖面)
   const roots = new Set(
-    props.bindings.map((b) => b.path.replace(/^\$\.?/, '').split(/[.[\]]/)[0])
+    (props.bindings ?? []).map((b) => b.path.replace(/^\$\.?/, '').split(/[.[\]]/)[0]),
   )
   const schemaTypes = new Map(
-    (props.unboundFields ?? []).map((f) => [f.name, f.type ?? 'string'])
+    (props.unboundFields ?? []).map((f) => [f.name, f.type ?? 'string']),
   )
-  const rows: ExtraRowView[] = []
-  // ① body 实有且未绑定的键(schema 已声明的标 契约,与 ② 去重)
   for (const k of bodyObj ? Object.keys(bodyObj) : []) {
     if (roots.has(k)) continue
     rows.push({
-      key: k,
+      key: k, path: `$.${k}`,
       source: schemaTypes.has(k) ? 'schema' : 'body',
-      inBody: true,
-      type: schemaTypes.get(k),
+      inBody: true, type: schemaTypes.get(k),
     })
   }
-  // ② plate 契约声明但未写入 body 的(编辑后转实有;默认值 placeholder 透出)
   const schemaDefaults = new Map(
-    (props.unboundFields ?? []).map((f) => [f.name, f.default])
+    (props.unboundFields ?? []).map((f) => [f.name, f.default]),
   )
   for (const f of props.unboundFields ?? []) {
     if (bodyObj && f.name in bodyObj) continue
     if (roots.has(f.name)) continue
     rows.push({
-      key: f.name,
-      source: 'schema',
-      inBody: false,
-      type: f.type ?? 'string',
-      default: schemaDefaults.get(f.name),
+      key: f.name, path: f.path || `$.${f.name}`,
+      source: 'schema', inBody: false,
+      type: f.type ?? 'string', default: schemaDefaults.get(f.name),
     })
   }
   return rows
@@ -756,8 +1016,8 @@ const extraRows = computed<ExtraRowView[]>(() => {
 /** 折叠区默认收起(挂载即折叠,不跨步骤记忆) */
 const extrasOpen = ref(false)
 
-function extraValue(k: string): unknown {
-  return props.body?.[k]
+function extraValue(row: ExtraRowView): unknown {
+  return getByPath(props.body, row.path.replace(/^\$\.?/, ''))
 }
 
 /** 结构值(对象/数组)走 JSON 域,其余按原始值文本编辑(未声明 → 类型未知,text 是诚实兜底) */
@@ -765,17 +1025,19 @@ function isStructured(v: unknown): boolean {
   return typeof v === 'object' && v !== null
 }
 
-function setExtra(k: string, val: unknown) {
+function setExtra(row: ExtraRowView, val: unknown) {
   if (props.readonly) return
-  const next = copyBody(k)
-  next[k] = val
+  const rel = row.path.replace(/^\$\.?/, '')
+  const next = copyBody(rel)
+  setByPath(next, rel, val)
   emit('update:body', next)
 }
 
-function removeExtra(k: string) {
+function removeExtra(row: ExtraRowView) {
   if (props.readonly) return
-  const next = copyBody(k)
-  delete next[k]
+  const rel = row.path.replace(/^\$\.?/, '')
+  const next = copyBody(rel)
+  pruneByPath(next, rel) // 深层残留删除连锁剪枝空容器(D8 同款)
   emit('update:body', next)
 }
 
@@ -785,6 +1047,8 @@ function extraPlaceholder(row: ExtraRowView): string {
   if (typeof row.default === 'object') return JSON.stringify(row.default, null, 2)
   return String(row.default)
 }
+
+// ─── 值读写(path 寻址;深层清空 D8 剪枝)────────────────────────────
 
 function getValue(f: IOFieldBinding): unknown {
   if (!props.body) return f.default ?? f.example ?? ''
@@ -796,7 +1060,7 @@ function setValue(f: IOFieldBinding, val: unknown) {
   const rel = f.path.replace(/^\$\.?/, '')
   const next = copyBody(rel)
   if (val === '' && /[.\[]/.test(rel)) {
-    // D8:深层清空=删叶子+容器级剪枝(防幻影容器挡 carry 整包注入);
+    // D8:深层清空=删叶子+容器级剪枝(防幻影容器残留);
     // 平铺字段清空维持 ''(现状,见 setValueNum 同约定)
     pruneByPath(next, rel)
   } else {
@@ -830,6 +1094,72 @@ function formatJson(v: unknown): string {
 }
 .field { display: flex; flex-direction: column; gap: 4px; padding-left: 6px; }
 .field.required .label-text { color: #1a1d24; }
+
+/* ── 容器节点(§5.3):对象折叠面板 / 数组行组 / 开放字典 KV ── */
+.obj-node, .arr-node, .dict-node {
+  display: flex; flex-direction: column; gap: 6px;
+  border-left: 3px solid #c7d2fe; border-radius: 4px;
+  background: #f8fafc; padding: 8px 10px;
+}
+.node-head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 500;
+}
+.obj-toggle {
+  width: 20px; height: 20px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 4px; background: transparent;
+  color: #64748b; cursor: pointer; transition: all 0.15s;
+}
+.obj-toggle:hover { background: #e2e8f0; color: #334155; }
+.obj-toggle svg { transition: transform 0.15s; }
+.obj-toggle svg.open { transform: rotate(0deg); }
+.obj-toggle svg:not(.open) { transform: rotate(-90deg); }
+.obj-body {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 8px 0 2px 10px; border-left: 1px dashed #cbd5e1; margin-left: 4px;
+}
+.arr-count {
+  font-family: var(--font-mono); font-size: 10px;
+  color: #94a3b8; background: #f1f5f9; padding: 1px 5px; border-radius: 3px;
+}
+.arr-add {
+  flex-shrink: 0; margin-left: auto;
+  border: 1px dashed #a5b4fc; border-radius: 4px;
+  background: transparent; color: #6366f1;
+  font-size: 10.5px; font-family: var(--font-mono); font-weight: 600;
+  padding: 1px 8px; line-height: 1.5; cursor: pointer; transition: all 0.15s;
+}
+.arr-add:hover { background: #eef2ff; border-color: #6366f1; }
+.arr-row { display: flex; gap: 6px; align-items: flex-start; }
+.arr-idx {
+  flex-shrink: 0; width: 20px; margin-top: 4px; text-align: center;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+  color: #6366f1; background: #eef2ff; border-radius: 3px; padding: 1px 0;
+}
+.arr-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.arr-del, .extra-del {
+  flex-shrink: 0; width: 26px; height: 32px;
+  background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 8px;
+  color: #94a3b8; cursor: pointer; font-size: 14px; line-height: 1;
+  transition: all 0.15s;
+}
+.arr-del:hover:not(:disabled), .extra-del:hover:not(:disabled) {
+  border-color: #fca5a5; background: #fef2f2; color: #ef4444;
+}
+.arr-del:disabled, .extra-del:disabled { cursor: not-allowed; opacity: 0.5; }
+.arr-empty, .dict-empty {
+  margin: 0; font-size: 11px; color: #94a3b8; font-style: normal;
+}
+.kv-row { display: flex; gap: 6px; align-items: flex-start; }
+.kv-key {
+  flex-shrink: 0; width: 130px; box-sizing: border-box;
+  background: #fafbfc; border: 1.5px dashed #e6e8ec; border-radius: 8px;
+  padding: 7px 10px; font-size: 12px;
+  font-family: var(--font-mono); color: #475569;
+}
+.kv-key:focus { outline: none; border-color: #6366f1; background: #fff; }
+.kv-value { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 
 /* 控件 + Ⓥ 按钮同排(text)/叠排(textarea/json) */
 .ctl-with-var { display: flex; gap: 6px; align-items: stretch; }
@@ -887,7 +1217,7 @@ function formatJson(v: unknown): string {
   color: #94a3b8; background: #f1f5f9; padding: 1px 4px; border-radius: 3px;
 }
 /* 深层字段 path 角标(D5):path ≠ $.+name 的字段以角标替代灰 chip —
-   mono 小字 slate 族(对齐 .fa-note/策略角标惯例),悬停透出上级治理归属 */
+   mono 小字 slate 族(对齐 .fa-note/策略角标惯例) */
 .path-badge {
   font-family: var(--font-mono); font-size: 9.5px;
   padding: 1px 5px; border-radius: 3px;
@@ -925,35 +1255,11 @@ function formatJson(v: unknown): string {
   padding: 1px 6px; border-radius: 3px; border: none; cursor: pointer;
   background: #e0e7ff; color: #4338ca;
 }
-.strategy-tag:hover { background: #c7d2fe; color: #3730a3; }
-/* 「+ 同级」按钮(D9):行级小按钮,cand-btn 同位惯例(slate 淡显、悬停
-   加深)— hover 取青族,与深层派生行 is-derived/deep-divider 同色系 */
-.sib-btn {
-  flex-shrink: 0;
-  border: 1px dashed #cbd5e1; border-radius: 4px;
-  background: transparent; color: #94a3b8;
-  font-size: 9.5px; font-family: var(--font-mono); font-weight: 600;
-  padding: 1px 6px; line-height: 1.4; cursor: pointer;
-  transition: all 0.15s;
-}
-.sib-btn:hover { background: #f0fdfa; border-color: #5eead4; color: #0f766e; }
+.strategy-tag:hover { background: #c7d2fe; color: #3730ea; }
 /* 字段行 4 色左边框 */
 .field.sk-independent { border-left: 3px solid #cbd5e1; }    /* literal 灰 */
 .field.sk-lookup { border-left: 3px solid #7c3aed; }            /* static 紫 */
 .field.sk-generated { border-left: 3px solid #f59e0b; }         /* dynamic 橙 (auto-extract 提示色) */
-
-/* ── 深层派生行(D9):青族区分声明字段 — body 投影,非 plate 声明 ── */
-.deep-divider {
-  margin: 8px 0 2px -6px;
-  padding-top: 6px;
-  border-top: 1px dashed #99f6e4;
-  font-family: var(--font-mono);
-  font-size: 10.5px; font-weight: 700;
-  color: #0f766e;
-}
-/* 虚线左边框:同位 sk-independent 灰实线,派生行覆写为青虚线(置后保证优先) */
-.field.is-derived { border-left: 3px dashed #5eead4; }
-.src-tag.s-derived { background: #f0fdfa; color: #0f766e; }
 
 /* 动态注入态提示条:琥珀族与 sk-generated 橙同源 — 值由 assign 运行时覆盖。
    wrap 相对定位给 ☰ 菜单浮层做锚(同 ctl-cand-wrap)。 */
@@ -1027,15 +1333,6 @@ function formatJson(v: unknown): string {
 }
 .field-desc svg { flex-shrink: 0; margin-top: 2px; color: #94a3b8; }
 
-/* carry 容器接管警告行(D7):琥珀族(injected-fallback 同色系)——
-   深层字段落在 carry 根键容器,手填/清空的治理语义就地透出 */
-.deep-carry-note {
-  margin: 1px 0 0;
-  padding: 3px 8px;
-  font-size: 11px; color: #b45309; line-height: 1.5;
-  background: #fffbeb; border: 1px dashed #fde68a; border-radius: 6px;
-}
-
 /* ── 其他字段折叠区:琥珀警示(浅底 + 左条),与 sk-generated 橙同族 ── */
 .extras {
   padding: 8px 10px 8px 12px;
@@ -1059,7 +1356,7 @@ function formatJson(v: unknown): string {
 .extras-body { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
 .extra-row { display: flex; flex-direction: column; gap: 4px; padding-left: 6px; }
 .extra-label { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-/* 来源标签:实有(body 键,随请求发送)/ 契约(plate schema 声明) */
+/* 来源标签:实有(body 键,随请求发送)/ 契约(plate 契约声明) */
 .extra-src {
   font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
   background: #fef3c7; color: #92400e; cursor: default;
@@ -1067,12 +1364,4 @@ function formatJson(v: unknown): string {
 .extra-src.schema { background: #ecf5ff; color: #409eff; }
 .extra-control { display: flex; gap: 6px; align-items: flex-start; }
 .extra-control .ctl { flex: 1; min-width: 0; }
-.extra-del {
-  flex-shrink: 0; width: 26px; height: 32px;
-  background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 8px;
-  color: #94a3b8; cursor: pointer; font-size: 14px; line-height: 1;
-  transition: all 0.15s;
-}
-.extra-del:hover:not(:disabled) { border-color: #fca5a5; background: #fef2f2; color: #ef4444; }
-.extra-del:disabled { cursor: not-allowed; opacity: 0.5; }
 </style>

@@ -31,9 +31,9 @@ ORDER_GENERATE_ORDER_SUB: Final[EndpointSpec] = EndpointSpec(
     request=RequestSpec(
         body_type="json",
         declarations=[
-        DeclarationEntry(name='order_id', path='order_id', channel='binding', required=True, example='', ui_kind='text'),
+        DeclarationEntry(name='order_id', path='order_id', type='string', required=True, example='', ui_kind='text'),
         ],
-        schema_={},
+        
     ),
     responses={
         200: ResponseSpec(

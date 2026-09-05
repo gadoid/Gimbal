@@ -47,9 +47,9 @@ async def test_service_fields_aggregates_carry_face(client, plate):
     plate.items = [{"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
                     "service": "fin-service"}]
     plate.fulls = {"fin.ep1": {"request": {"declarations": [
-        {"path": "$.order_id", "channel": "binding", "type": None,
+        {"path": "$.order_id", "state": "form", "type": None,
          "description": "业务订单号"},
-        {"path": "$.remark", "channel": "carry", "type": "string",
+        {"path": "$.remark", "state": "carry", "type": "string",
          "description": "备注"},
     ]}}}
     admin = await _admin(client)
@@ -73,7 +73,7 @@ async def test_service_fields_degraded_when_single_full_fails(client, plate):
          "service": "fin-service"},
     ]
     plate.fulls = {"fin.ep1": {"request": {"declarations": [
-        {"path": "$.remark", "channel": "carry", "type": "string",
+        {"path": "$.remark", "state": "carry", "type": "string",
          "description": "备注"},
     ]}}}
     # ep2:/full 抛 ConnectError → PlateUnavailableError;
@@ -101,7 +101,7 @@ async def test_service_fields_tolerates_missing_declarations(client, plate):
     ]
     plate.fulls = {
         "fin.ep1": {"request": {"declarations": [
-            {"path": "$.remark", "channel": "carry", "type": "string",
+            {"path": "$.remark", "state": "carry", "type": "string",
              "description": "备注"},
         ]}},
         # account 形态:request 整体缺席(零声明端点)
@@ -158,3 +158,32 @@ async def test_bindings_isolated_across_services(client):
         "svc-a": {"$.a1": "A1", "$.shared": "from-a"},
         "svc-b": {"$.b1": "B1"},
     }
+
+
+async def test_service_fields_container_absorbs_children(client, plate):
+    """祖先吸收(§4):carry 容器整容器是绑定单元,模板子孙 path
+    不进候选面(绑 $.supplier 整体 JSON;深实例缩并后子孙 path 无
+    实例下标,单独绑定会物化错误形态)。"""
+    plate.items = [{"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
+                    "service": "fin-service"}]
+    plate.fulls = {"fin.ep1": {"request": {"declarations": [
+        {"path": "$.supplier", "state": "carry", "type": "array",
+         "description": "供应商", "children": [
+             {"path": "$.supplier.order_supplier_id",
+              "state": "carry", "type": "string"},
+         ]},
+        {"path": "$.ext", "state": "form", "type": "object",
+         "children": [
+             {"path": "$.ext.trace_id", "state": "carry",
+              "type": "string", "description": "链路"},
+         ]},
+    ]}}}
+    admin = await _admin(client)
+    r = await client.get("/api/carry/bindings/fin-service/fields",
+                         headers=admin)
+    assert r.status_code == 200, r.text
+    assert r.json()["fields"] == [
+        {"path": "$.ext.trace_id", "type": "string", "description": "链路"},
+        {"path": "$.supplier", "type": "array", "description": "供应商"},
+    ]
+    assert r.json()["degraded"] is False

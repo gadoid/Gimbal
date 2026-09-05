@@ -14,7 +14,9 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import CaseComposerCanvas from '@/components/composer/CaseComposerCanvas.vue'
-import { getFullEndpoint, resolveResponsePaths } from '@/api/scenario-composer'
+import {
+  getFullEndpoint, resolveResponsePaths, validateEndpointFieldStates,
+} from '@/api/scenario-composer'
 import type { StepView } from '@/types/plate'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
@@ -38,45 +40,59 @@ vi.mock('@/api/scenario-composer', () => ({
     assign: { kind: 'assign', label: '注入响应变量', phase: 'before_request', fields: [], base_fields: [] },
   }[kind] ?? { kind, label: kind, phase: 'after_request', fields: [], base_fields: [] })),
   resolveResponsePaths: vi.fn().mockResolvedValue([]),
+  // §3.5 前端门禁校验:默认放行(errors/warnings 空)—— G 组用例按需
+  // mockResolvedValueOnce 覆写拒绝/软警告分支
+  validateEndpointFieldStates: vi.fn().mockResolvedValue({ errors: [], warnings: [] }),
   getFullEndpoint: vi.fn().mockImplementation((endpointId: string) => Promise.resolve({
     // /full 顶层 description(接口编辑页只读展示的事实源)
     description: 'ep-1 plate 契约描述',
     request: {
-      // declarations 归一化后线上唯一承重键(旧 fields/carry 键已清除)。
-      // ep-1: orderId 平铺;ep-2(T6 嵌套注入用): nested.oid;
-      // ep-carry(reqTypeC carry 过滤用例): carry 通道声明 $.remark
+      // declarations = 字段状态目录(children 树 + state 共识默认;
+      // 旧 channel/fields 键已退役)。ep-1: orderId 平铺叶;
+      // ep-2(T6 嵌套注入用): 深叶 $.nested.oid(目录可直声明深叶);
+      // ep-carry(reqTypeC carry 过滤用例): $.remark 共识 carry
       // 且 schema properties 另含 remark + hidden_req → 差集须滤 carry 键;
-      // ep-deep(R1 深层派生行用): binding 覆盖 $.supplier[0].order_supplier_id,
-      // supplier[1] 留给 body 投影派生;
-      // ep-list(修轮 R1 根 list 用): root-INDEX binding $[0].sku —
+      // ep-deep(R1 数组行注入用): $.supplier 数组容器 + 行模板叶
+      // $.supplier.order_supplier_id,body 2 行 → 行数跟 body;
+      // ep-list(修轮 R1 根 list 用): 根数组 $(type array, children $.sku)—
       // 请求体直接是 JSON 数组的端点,assign target 须落 $.request_body[0].sku
       declarations: [
         ...(endpointId === 'ep-2'
           ? [{
-              name: 'oid', path: '$.nested.oid', channel: 'binding',
+              name: 'oid', path: '$.nested.oid',
               ui_kind: 'text', source_kind: 'independent',
               required: true, description: '', assertable: false,
             } as any]
           : endpointId === 'ep-list'
           ? [{
-              name: 'sku_0', path: '$[0].sku', channel: 'binding',
-              ui_kind: 'text', source_kind: 'independent',
+              name: 'root', path: '$', type: 'array',
+              ui_kind: 'json', source_kind: 'independent',
               required: false, description: '', assertable: false,
+              children: [{
+                name: 'sku', path: '$.sku',
+                ui_kind: 'text', source_kind: 'independent',
+                required: false, description: '', assertable: false,
+              }],
             } as any]
           : endpointId === 'ep-deep'
           ? [{
-              name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id', channel: 'binding',
-              ui_kind: 'text', source_kind: 'independent',
+              name: 'supplier', path: '$.supplier', type: 'array',
+              ui_kind: 'json', source_kind: 'independent',
               required: false, description: '', assertable: false,
+              children: [{
+                name: 'order_supplier_id', path: '$.supplier.order_supplier_id',
+                ui_kind: 'text', source_kind: 'independent',
+                required: false, description: '', assertable: false,
+              }],
             } as any]
           : [{
-              name: 'orderId', path: '$.orderId', channel: 'binding',
+              name: 'orderId', path: '$.orderId',
               ui_kind: 'text', source_kind: 'independent',
               required: true, description: '', assertable: false,
             } as any]),
         ...(endpointId === 'ep-carry'
           ? [{
-              name: 'remark', path: '$.remark', channel: 'carry', type: 'string',
+              name: 'remark', path: '$.remark', type: 'string', state: 'carry',
               ui_kind: 'unknown', source_kind: 'independent',
               required: false, description: '', assertable: false,
             } as any]
@@ -93,16 +109,16 @@ vi.mock('@/api/scenario-composer', () => ({
       '200': {
         description: 'OK',
         schema: { properties: { trace_id: { type: 'string' } } },
-        // view_only 投影回旧 fields 面 = orderId;assertable 面 =
-        // [$.data.orderId, $.code](code 声明为 assertable 条目保序)
+        // 响应单脸全量投影 = orderId + code;assertable 面 =
+        // [$.data.orderId, $.code](assertable 条目保序)
         declarations: [
           {
-            name: 'orderId', path: '$.data.orderId', channel: 'view_only',
+            name: 'orderId', path: '$.data.orderId',
             ui_kind: 'text', source_kind: 'independent', example: 'ord-9',
             required: true, description: '', assertable: true,
           },
           {
-            name: 'code', path: '$.code', channel: 'view_only',
+            name: 'code', path: '$.code',
             ui_kind: 'unknown', source_kind: 'independent',
             required: true, description: '', assertable: true,
           },
@@ -1176,13 +1192,14 @@ describe('CaseComposerCanvas — 动态注入只读态(assign 覆盖请求字段
 })
 
 /**
- * R1(D9 全链):派生行注入态/策略角标接入 Canvas 匹配面 —
- * requestInjected / fieldStrategyTags('request') 迭代 声明 binding +
- * deriveDeepRows 派生行(共享投影,同名同 path)→ 派生行 assign 命中
- * 同得只读提示条/兜底行/角标,菜单注入真驱动 onFieldAssign 落深路径。
+ * R1(树模式全链):数组行注入态/策略角标接入 Canvas 匹配面 —
+ * requestFieldSurface = leafSurface(buildTree)(实例路径含 [i])+
+ * extraSurfaceBindings;injected/strategyTags 键 = path(实例地址唯一,
+ * name 在行间共享会整列误标)→ 行 assign 命中同得只读提示条/兜底行/
+ * 角标,菜单注入真驱动 onFieldAssign 落行实例深路径。
  */
-describe('CaseComposerCanvas — 深层派生行注入态/角标(D9 全链)', () => {
-  /** ep-deep step:binding 覆盖 supplier[0].order_supplier_id;supplier[1] 为派生行 */
+describe('CaseComposerCanvas — 数组行注入态/角标(树模式全链)', () => {
+  /** ep-deep step:$.supplier 数组容器,body 2 行 → 行数跟 body */
   const deepStep = (over: Partial<StepView> = {}): StepView => ({
     kind: 'step',
     description: 'deep',
@@ -1192,29 +1209,34 @@ describe('CaseComposerCanvas — 深层派生行注入态/角标(D9 全链)', ()
     ...over,
   } as StepView)
 
-  it('R1-D1: 派生行 assign 命中 → 只读提示条 + 兜底行 + assign 角标(匹配面含派生行)', async () => {
+  it('R1-D1: 数组行 assign 命中 → 只读提示条 + 兜底行 + assign 角标(path 键控不误伤同行)', async () => {
     const s0 = deepStep({
       strategy: [{ kind: 'assign', source: '$.oid', target: '$.request_body.supplier[1].order_supplier_id' } as any],
     })
     const { w } = mountCanvas([s0])
     await flushPromises()
-    const derived = w.find('.field.is-derived')
-    expect(derived.exists()).toBe(true)
-    expect(derived.find('.label-text').text()).toBe('supplier[1].order_supplier_id')
+    const rows = w.findAll('.arr-row')
+    expect(rows).toHaveLength(2)
+    const row1 = rows[1]
+    // 行内叶子:模板名 + 实例 path(含 [1])
+    expect(row1.find('.label-text').text()).toBe('order_supplier_id')
+    expect(row1.find('.path-badge').text()).toBe('$.supplier[1].order_supplier_id')
     // 只读态:值控件换提示条(运行时覆盖,防编辑误导)
-    expect(derived.find('.ctl-injected').exists()).toBe(true)
-    expect(derived.find('.ctl-injected').attributes('title'))
+    expect(row1.find('.ctl-injected').exists()).toBe(true)
+    expect(row1.find('.ctl-injected').attributes('title'))
       .toBe('$.oid → $.request_body.supplier[1].order_supplier_id')
     // 兜底行:原值 'y' + continue 语义
-    expect(derived.find('.injected-fallback').text()).toContain('y')
-    expect(derived.find('.injected-fallback').text()).toContain('continue')
+    expect(row1.find('.injected-fallback').text()).toContain('y')
+    expect(row1.find('.injected-fallback').text()).toContain('continue')
     // 策略角标按 path 匹配挂上(assign)
-    expect(derived.find('.field-label .strategy-tag').text()).toBe('assign')
-    // 声明行(supplier[0],未被 assign 命中)保持可编辑,不误伤
+    expect(row1.find('.field-label .strategy-tag').text()).toBe('assign')
+    // 同名不同 path:row[0] 不被整列误标(name 共享,path 键控)
+    expect(rows[0].find('input.ctl').exists()).toBe(true)
+    expect(rows[0].find('.ctl-injected').exists()).toBe(false)
     expect(w.findAll('.ctl-injected')).toHaveLength(1)
   })
 
-  it('R1-D2: 派生行菜单注入 → 真 onFieldAssign 落 $.request_body.<深路径>,注入态即时闭环', async () => {
+  it('R1-D2: 数组行菜单注入 → 真 onFieldAssign 落 $.request_body.<行实例路径>,注入态即时闭环', async () => {
     const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' } as any] })
     const s1 = deepStep()
     const { w } = mountCanvas([s0, s1])
@@ -1223,9 +1245,9 @@ describe('CaseComposerCanvas — 深层派生行注入态/角标(D9 全链)', ()
     const rows = w.findAll('.step-row')
     await rows[1].trigger('click')
     await flush()
-    const derived = w.find('.field.is-derived')
-    expect(derived.find('input.ctl').exists()).toBe(true) // 注入前可编辑
-    await derived.find('.fa-menu-btn').trigger('click')
+    const row1 = w.findAll('.arr-row')[1]
+    expect(row1.find('input.ctl').exists()).toBe(true) // 注入前可编辑
+    await row1.find('.fa-menu-btn').trigger('click')
     await flush()
     const inj = w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))
     await inj!.trigger('click')
@@ -1233,28 +1255,29 @@ describe('CaseComposerCanvas — 深层派生行注入态/角标(D9 全链)', ()
     const cand = w.findAll('.fa-var-item').find((b) => b.text().includes('token'))
     await cand!.trigger('click')
     await flushPromises()
-    // assign 骨架经 Canvas onFieldAssign 落派生 path(真驱动,非测试内模拟变换)
+    // assign 骨架经 Canvas onFieldAssign 落行实例 path(真驱动,非测试内模拟变换)
     const as = s1.strategy.find((s: any) => s.kind === 'assign') as any
     expect(as).toBeTruthy()
     expect(as.source).toBe('$.token')
     expect(as.target).toBe('$.request_body.supplier[1].order_supplier_id')
-    // 注入态闭环:派生行换只读提示条 + assign 角标
-    const derivedAfter = w.find('.field.is-derived')
-    expect(derivedAfter.find('.ctl-injected').exists()).toBe(true)
-    expect(derivedAfter.find('.field-label .strategy-tag').text()).toBe('assign')
+    // 注入态闭环:该行换只读提示条 + assign 角标
+    const row1After = w.findAll('.arr-row')[1]
+    expect(row1After.find('.ctl-injected').exists()).toBe(true)
+    expect(row1After.find('.field-label .strategy-tag').text()).toBe('assign')
   })
 })
 
 /**
- * 修轮 R1(Task 10 concern 转正):根 list 字段(root-INDEX binding `$[0].sku`)
- * 的 assign target 派生与策略匹配面 —— `replace(/^\$\./, '$.request_body.')`
- * 对 `$[0].sku` 不匹配(无点)→ target 落裸 `$[0].sku`、角标/注入态匹配双双
- * 落空。统一改:剥 `/^\$\.?/` 得 rel,`'$.request_body' + ('[' 开头直拼无点,
- * 否则加 '.') + rel` —— `$.supplier[0].x` → `$.request_body.supplier[0].x`
- * (不变),`$[0].sku` → `$.request_body[0].sku`(修好)。
+ * 修轮 R1(Task 10 concern 转正,树模式继任):根数组 body(目录根 $
+ * type=array)的 assign target 派生与策略匹配面 —— `replace(/^\$\./,
+ * '$.request_body.')` 对根数组叶子 `$[0].sku` 不匹配(无点)→ target
+ * 落裸 `$[0].sku`、角标/注入态匹配双双落空。统一改:剥 `/^\$\.?/` 得
+ * rel,`'$.request_body' + ('[' 开头直拼无点,否则加 '.') + rel` ——
+ * `$.supplier[0].x` → `$.request_body.supplier[0].x`(不变),
+ * `$[0].sku` → `$.request_body[0].sku`(修好)。
  */
-describe('CaseComposerCanvas — 根 list 字段 assign/角标 target 派生(修轮 R1)', () => {
-  /** ep-list step:root-INDEX binding $[0].sku,body 直接是 JSON 数组 */
+describe('CaseComposerCanvas — 根数组字段 assign/角标 target 派生(修轮 R1)', () => {
+  /** ep-list step:根数组容器($ + children $.sku),body 直接是 JSON 数组 */
   const listStep = (over: Partial<StepView> = {}): StepView => ({
     kind: 'step',
     description: 'rootlist',
@@ -1264,7 +1287,7 @@ describe('CaseComposerCanvas — 根 list 字段 assign/角标 target 派生(修
     ...over,
   } as StepView)
 
-  it('RL1: 菜单注入 root-INDEX 行 → onFieldAssign 落 target=$.request_body[0].sku(前缀直拼无点),注入态即时闭环', async () => {
+  it('RL1: 菜单注入根数组行 → onFieldAssign 落 target=$.request_body[0].sku(前缀直拼无点),注入态即时闭环', async () => {
     const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' } as any] })
     const s1 = listStep()
     const { w } = mountCanvas([s0, s1])
@@ -1273,7 +1296,7 @@ describe('CaseComposerCanvas — 根 list 字段 assign/角标 target 派生(修
     const rows = w.findAll('.step-row')
     await rows[1].trigger('click')
     await flush()
-    // root-INDEX 声明行([0].sku 被 binding 覆盖 → 无派生行)注入前可编辑
+    // 根数组行内叶子(实例 $[0].sku)注入前可编辑
     expect(w.find('input.ctl').exists()).toBe(true)
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
@@ -1288,13 +1311,13 @@ describe('CaseComposerCanvas — 根 list 字段 assign/角标 target 派生(修
     expect(as).toBeTruthy()
     expect(as.source).toBe('$.token')
     expect(as.target).toBe('$.request_body[0].sku')
-    // 注入态闭环:root-INDEX 行换只读提示条 + assign 角标(匹配面同式贯通)
+    // 注入态闭环:根数组行换只读提示条 + assign 角标(匹配面同式贯通)
     expect(w.find('.ctl-injected').exists()).toBe(true)
     expect(w.find('.ctl-injected').attributes('title')).toBe('$.token → $.request_body[0].sku')
     expect(w.find('.field-label .strategy-tag').text()).toBe('assign')
   })
 
-  it('RL2: 既有 assign target=$.request_body[0].sku → root-INDEX 声明行注入态 + assign 角标(匹配面贯通)', async () => {
+  it('RL2: 既有 assign target=$.request_body[0].sku → 根数组行注入态 + assign 角标(匹配面贯通)', async () => {
     const s0 = listStep({
       strategy: [{ kind: 'assign', source: '$.oid', target: '$.request_body[0].sku' } as any],
     })
@@ -1308,5 +1331,79 @@ describe('CaseComposerCanvas — 根 list 字段 assign/角标 target 派生(修
     expect(w.find('.injected-fallback').text()).toContain('continue')
     // 策略角标按 target 匹配挂上(assign)
     expect(w.find('.field-label .strategy-tag').text()).toBe('assign')
+  })
+})
+
+/**
+ * 字段状态控制门禁(2026-09-05 spec §3.5,Canvas 落地层 onFieldState):
+ * 行尾下拉写 step.field_states 稀疏增量 → validateEndpointFieldStates
+ * 合成态裁决 —— errors 非空 = 拒(回滚本次写入);warnings 仅提示;
+ * plate 校验不可达 = 不阻塞编辑(保存链路兜底)。重置(↺)= 清除该条
+ * 增量,增量空整键删除(§3.1 稀疏写入)。
+ */
+describe('CaseComposerCanvas — 字段状态控制门禁(§3.5)', () => {
+  it('G1: 下拉切 carry → 稀疏增量落 step.field_states,校验放行不回滚', async () => {
+    const steps = [mkStep()]
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    const sel = w.find('.field .fss-sel')
+    expect(sel.exists()).toBe(true)
+    await sel.setValue('carry')
+    await flushPromises()
+    expect(steps[0].field_states).toEqual({ '$.orderId': 'carry' })
+    expect(validateEndpointFieldStates).toHaveBeenCalledWith('ep-1', { '$.orderId': 'carry' })
+  })
+
+  it('G2: 校验 errors 非空 → 回滚本次写入(首次写入 field_states 整键不落)', async () => {
+    vi.mocked(validateEndpointFieldStates).mockResolvedValueOnce({
+      errors: [{ path: '$.orderId', message: 'required 字段不可 carry(硬拒)' }],
+      warnings: [],
+    } as any)
+    const steps = [mkStep()]
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    await w.find('.field .fss-sel').setValue('carry')
+    await flushPromises()
+    expect(steps[0].field_states).toBeUndefined()
+  })
+
+  it('G3: plate 校验不可达 → 不阻塞(增量保留,保存链路兜底)', async () => {
+    vi.mocked(validateEndpointFieldStates).mockRejectedValueOnce(new Error('net down'))
+    const steps = [mkStep()]
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    await w.find('.field .fss-sel').setValue('collapse')
+    await flushPromises()
+    expect(steps[0].field_states).toEqual({ '$.orderId': 'collapse' })
+  })
+
+  it('G4: warnings 软警告 → 不回滚(stale 增量等提示透出)', async () => {
+    vi.mocked(validateEndpointFieldStates).mockResolvedValueOnce({
+      errors: [],
+      warnings: [{ path: '$.ghost', message: '增量路径不在目录宇宙: $.ghost' }],
+    } as any)
+    const steps = [mkStep()]
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    await w.find('.field .fss-sel').setValue('carry')
+    await flushPromises()
+    expect(steps[0].field_states).toEqual({ '$.orderId': 'carry' })
+  })
+
+  it('G5: ↺ 重置 → 清除该条增量;增量空整键删除(§3.1 稀疏写入)', async () => {
+    const steps = [mkStep()]
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    // 用 collapse 写增量(carry 会让行离树 — 翻回入口是 §5.4 搜索框
+    // 定位手段,M2 未实现,挂账);collapse 行仍在,↺ 可达
+    await w.find('.field .fss-sel').setValue('collapse')
+    await flushPromises()
+    expect(steps[0].field_states).toEqual({ '$.orderId': 'collapse' })
+    // overlay 命中 → ↺ 可见;点击上抛 (path, null) → 增量清空整键删除
+    const reset = w.find('.field .fss-reset')
+    expect(reset.exists()).toBe(true)
+    await reset.trigger('click')
+    await flushPromises()
+    expect(steps[0].field_states).toBeUndefined()
   })
 })

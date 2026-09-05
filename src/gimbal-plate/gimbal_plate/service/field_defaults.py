@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
-from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry
+from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry, iter_declarations
 
 FieldDefaultKind = Literal[
     "literal",
@@ -74,11 +74,14 @@ def compute_field_defaults(
     _ = step_index  # reserved for future per-step customisation
     _ = scenario_vars  # reserved for future ${var.*} resolution hint
 
+    # 2026-09-05 目录化:全量出默认值(children 树展开,含嵌套叶子 —
+    # 前端行壳预填用);form/carry 面划分是场景语境,由 platform 按
+    # 解析态(step.field_states ?? entry.state)过滤,plate 不带参数。
     field_defaults: list[dict[str, Any]] = []
-    for f in (e for e in endpoint.request.declarations if e.channel == "binding"):
+    for f in iter_declarations(endpoint.request.declarations):
         kind, value = _classify(f)
         field_defaults.append(
-            {"name": f.name, "kind": kind, "value": value}
+            {"name": f.name, "path": f.path, "kind": kind, "value": value}
         )
 
     # generated_fields: placeholders for the schema-only / generated channel.
@@ -89,7 +92,8 @@ def compute_field_defaults(
     generated_fields: list[dict[str, Any]] = []
     resp_200 = endpoint.responses.get(200)
     if resp_200 is not None:
-        for f in (e for e in resp_200.declarations if e.channel == "view_only"):
+        # 响应面单脸(state 无视),全量展开
+        for f in iter_declarations(resp_200.declarations):
             if f.source_kind != "generated":
                 continue
             generated_fields.append(

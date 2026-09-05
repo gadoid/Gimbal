@@ -31,16 +31,16 @@ AUDIT_AUDIT_DETAIL: Final[EndpointSpec] = EndpointSpec(
     request=RequestSpec(
         body_type="json",
         declarations=[
-        DeclarationEntry(name='audit_id', path='audit_id', channel='binding', required=True, example='', ui_kind='text'),
+        DeclarationEntry(name='audit_id', path='audit_id', type='string', required=True, example='', ui_kind='text'),
         ],
-        schema_={},
+        
     ),
     responses={
         200: ResponseSpec(
             status=200,
             description="成功",
             declarations=[
-        DeclarationEntry(name='relation_id', path='$.data.audit_content.relation_id', channel='view_only', required=False, ui_kind="unknown", assertable=True),
+        DeclarationEntry(name='relation_id', path='$.data.audit_content.relation_id', type='string', required=False, ui_kind="unknown", assertable=True),
             ],
         ),
     },

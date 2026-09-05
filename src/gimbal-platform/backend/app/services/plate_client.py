@@ -127,6 +127,11 @@ async def convert(scenario_dict: dict[str, Any]) -> dict[str, Any]:
     model_dump(exclude=...) 剥掉平台视图扩展字段(endpoints /
     navigation / config_summary / steps[*].api.view_hints /
     steps[*].request.fields_meta / steps[*].strategy[*].view_note)。
+    fields_meta 键控面 2026-09-05 目录化起随 M1 携带 state 与
+    children 树(顶层 name 键控,值透传的 carry 顶层条目不进表)。
+    step.field_states 是平台侧配置意图(§3.1),plate Step 模型
+    extra=ignore 静默剥除 —— 注入面在 dispatch 预解析阶段读原始
+    definition,不依赖 convert 产物。
     (plate 契约还支持 consumer="platform" 供 UI 渲染,但平台目前
     不消费 —— 需要时再加回该参数。)
 

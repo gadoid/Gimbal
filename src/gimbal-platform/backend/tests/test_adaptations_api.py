@@ -18,18 +18,18 @@ EP = "fin.order.add"
 OLD_FULL = {
     "id": EP, "version": "1.0.0",
     "request": {"declarations": [
-        {"name": "amount", "channel": "binding"},
-        {"name": "legacy_field", "channel": "binding"},
-        {"name": "settle_type", "channel": "binding", "enum": ["1", "2"]},
+        {"name": "amount", "state": "form"},
+        {"name": "legacy_field", "state": "form"},
+        {"name": "settle_type", "state": "form", "enum": ["1", "2"]},
     ]},
 }
 # NEW_FULL:现拉 plate /full(declarations binding 通道)
 NEW_FULL = {
     "id": EP, "version": "1.1.0",
     "request": {"declarations": [
-        {"name": "amount", "channel": "binding"},
-        {"name": "extra", "channel": "binding", "default": "E"},
-        {"name": "settle_type", "channel": "binding", "enum": ["2", "3"]},
+        {"name": "amount", "state": "form"},
+        {"name": "extra", "state": "form", "default": "E"},
+        {"name": "settle_type", "state": "form", "enum": ["2", "3"]},
     ]},
 }
 

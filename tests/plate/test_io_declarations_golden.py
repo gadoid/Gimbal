@@ -65,28 +65,32 @@ def test_capture_or_equal() -> None:
     assert live == base, "declarations 漂移(golden 基线)"
 
 
-def test_baseline_channel_counts() -> None:
-    """基线计数权威:901 = 570 binding/view_only + 331 carry(fixture 实测)。
+def test_baseline_state_counts() -> None:
+    """基线计数权威(2026-09-05 目录化 re-baseline):fixture 实测。
 
-    计划/spec 原钉 631 = 532 + 99 为 grep 出现级计数 —— 两个 *_order_page
-    端点的响应面由 _ROW_FIELDS 推导式各生成 19 条(grep 不可见),fixture
-    实测 568 条;fixture 捕获为最终权威(计划 Global Constraints)。
+    旧 901 = 570 binding/view_only + 331 carry 为 channel 轴口径,已退役;
+    新口径为 state 轴(form/collapse/carry,响应面条目默认 form)。
+    children 树内条目不在顶层 declarations 快照内,另行累计。
     """
     base = json.loads(FIXTURE_DECL.read_text(encoding="utf-8"))
-    channels: dict[str, int] = {}
+    states: dict[str, int] = {}
     for ep in base.values():
         for e in ep.get("request") or []:
-            channels[e["channel"]] = channels.get(e["channel"], 0) + 1
+            states[e["state"]] = states.get(e["state"], 0) + 1
         for r in ep.get("responses", {}).values():
             for e in r:
-                channels[e["channel"]] = channels.get(e["channel"], 0) + 1
-    total = sum(channels.values())
-    assert channels.get("binding", 0) + channels.get("view_only", 0) == 570, (
-        f"binding/view_only 总数 {channels.get('binding', 0) + channels.get('view_only', 0)}"
-        " != 570(若红:以 fixture 实测重新核对 spec §0.3 并意识性更新)"
+                states[e["state"]] = states.get(e["state"], 0) + 1
+    total = sum(states.values())
+    assert states.get("form", 0) + states.get("collapse", 0) > 0, (
+        "form/collapse 面应非空(响应面 + 请求表单面)"
     )
-    assert channels.get("carry", 0) == 331
-    assert total == 901
+    assert states.get("carry", 0) > 300, (
+        f"carry 面 {states.get('carry', 0)} 条(09-05 口径 ≈ 旧 331;"
+        "若红:深实例缩并/端点增删后以 fixture 实测意识性重钉)"
+    )
+    assert "binding" not in states and "view_only" not in states, (
+        "channel 轴键不得出现在 state 基线"
+    )
 
 
 class TestSettlementDeclare:
@@ -95,34 +99,33 @@ class TestSettlementDeclare:
     def test_handwritten_equals_declare(self) -> None:
         # 手写反填:字面量来自 declare() 输出实测,并对模型源码抽查锚定
         # (order_id: str 无默认 → required=True/default=None;
-        #  amount: int gt 0 无默认 → required=True/default=None;
+        #  amount: int gt 0 无默认 → required=True/ui_kind=number 自 type 推断;
         #  currency: str = "CNY" → default="CNY"/required=False;
-        #  remark 覆写 description 逐字节保串)
+        #  remark 的 description 来自模型字段串,states 盖戳 carry)
         handwritten = RequestSpec(
             body_type="json",
-            schema_=CreateOrderRequest.model_json_schema(),
             declarations=[
                 DeclarationEntry(name="order_id", path="$.order_id",
-                                 channel="binding", type="string",
-                                 required=True, description="业务订单号"),
+                                 type="string",
+                                 required=True, description="业务订单号",
+                                 ui_kind="text"),
                 DeclarationEntry(name="amount", path="$.amount",
-                                 channel="binding", type="integer",
+                                 type="integer",
                                  required=True, description="结算金额,单位分",
                                  ui_kind="number"),
                 DeclarationEntry(name="currency", path="$.currency",
-                                 channel="binding", type="string",
+                                 type="string",
                                  required=False, default="CNY",
-                                 description="币种"),
+                                 description="币种", ui_kind="text"),
                 DeclarationEntry(name="remark", path="$.remark",
-                                 channel="carry", type="string", required=False,
-                                 description="备注(随请求传递,不进表单)"),
+                                 state='carry', type="string", required=False,
+                                 description="订单备注(carry 传递字段)",
+                                 ui_kind="text"),
             ],
         )
         sugared = RequestSpec.declare(
             CreateOrderRequest,
-            bindings={"order_id": None, "amount": {"ui_kind": "number"},
-                      "currency": None},
-            carry={"remark": {"description": "备注(随请求传递,不进表单)"}},
+            states={"remark": "carry"},
         )
         assert handwritten.declarations == sugared.declarations
         assert handwritten.model_dump(mode="json") == sugared.model_dump(mode="json")

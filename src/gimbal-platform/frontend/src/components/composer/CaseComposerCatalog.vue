@@ -255,7 +255,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { ArrowLeft, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getFullEndpoint } from '@/api/scenario-composer'
-import { assertablePaths, channelFields } from '@/utils/declarations'
+import { assertablePaths, formBindings, responseBindings } from '@/utils/declarations'
 import { useAuthStore } from '@/stores/auth'
 import type { EndpointFullView } from '@/types/plate'
 
@@ -346,9 +346,10 @@ const primaryResponse = computed(() => {
   return r
 })
 
-/** declarations 归一化后的三面投影(旧 fields/assertable_fields 线上键已清除) */
-const requestFields = computed(() => channelFields(selected.value?.request?.declarations, 'binding'))
-const primaryResponseFields = computed(() => channelFields(primaryResponse.value?.declarations, 'view_only'))
+/** 目录化后的面投影(旧 fields/assertable_fields 线上键已清除):
+ *  请求 = 解析态非 carry 平铺(端点级读穿);响应 = 单脸全量 + assertable */
+const requestFields = computed(() => formBindings(selected.value?.request?.declarations))
+const primaryResponseFields = computed(() => responseBindings(primaryResponse.value?.declarations))
 const primaryAssertable = computed(() => assertablePaths(primaryResponse.value?.declarations))
 
 const hasBusiness = computed(() => {

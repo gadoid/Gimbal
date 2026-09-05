@@ -86,19 +86,21 @@ class TestPlatformStepView:
         ep = exporter._ep_by_key.get((api_dict["method"], api_dict["path"]))
         assert ep is not None and ep.request is not None
         expected_field_names = {e.name for e in ep.request.declarations
-                                if e.channel == "binding"}
+                                if e.state != "carry"}
         body_keys = set(s.request["body"].keys())
-        # body 的 keys 应当 ⊇ endpoint 全量字段名(补全)
+        # body 的 keys 应当 ⊇ endpoint form/collapse 面字段名(补全;
+        # 2026-09-05 目录化:面基准 = entry.state,carry 面归值表透传)
         assert expected_field_names.issubset(body_keys), (
             f"body keys missing: {expected_field_names - body_keys}"
         )
 
     def test_request_carries_fields_meta_with_declaration_info(self) -> None:
-        """方案 C:request.fields_meta 必须携带 binding 通道声明条目全量元信息。
+        """方案 C:request.fields_meta 必须携带 form/collapse 面声明条目全量元信息。
 
-        每个 endpoint 的全量 binding 字段都必须在 fields_meta 中出现,
+        每个 endpoint 的全量表单字段都必须在 fields_meta 中出现,
         且至少包含 path / required / ui_kind / source_kind 等关键字段,
         否则平台前端无法渲染表单(无法识别必填/控件类型/字段说明)。
+        (2026-09-05 目录化:carry 顶层条目不进 fields_meta,值透传。)
         """
         sc = _load_scenario()
         exporter = PlatformScenarioExporter(sc, endpoints=ALL_ENDPOINTS)
@@ -115,9 +117,9 @@ class TestPlatformStepView:
         assert isinstance(meta, dict)
 
         expected_field_names = {e.name for e in ep.request.declarations
-                                if e.channel == "binding"}
+                                if e.state != "carry"}
         meta_keys = set(meta.keys())
-        # fields_meta 的 key 必须覆盖 endpoint 全量 binding 字段
+        # fields_meta 的 key 必须覆盖 endpoint 全量表单(form/collapse)字段
         assert expected_field_names.issubset(meta_keys), (
             f"fields_meta missing: {expected_field_names - meta_keys}"
         )
@@ -238,7 +240,7 @@ class TestPlatformEndpointViewRestored:
         # fin 全部 endpoint 统一归属 fin-service:导航树只有一组
         assert len(view.navigation) == 1
         assert "fin-service" in view.navigation
-        assert len(view.navigation["fin-service"]) == 19
+        assert len(view.navigation["fin-service"]) == 21
         # 每个节点含 id/name/description/method/path/deep_link
         node = view.navigation["fin-service"][0]
         assert {"id", "name", "description", "method", "path", "deep_link"} <= set(node.keys())
@@ -268,7 +270,7 @@ def _deep_binding_ep(declarations: list[DeclarationEntry]) -> EndpointSpec:
         api=ApiSpec(service="tst-service", method="POST", path="/deep-order-add"),
         request=RequestSpec(
             body_type="json",
-            schema_={"type": "object", "properties": {}},
+            
             declarations=declarations,
         ),
         responses={200: ResponseSpec(status=200)},
@@ -276,10 +278,10 @@ def _deep_binding_ep(declarations: list[DeclarationEntry]) -> EndpointSpec:
 
 
 _DEEP_SUPPLIER = DeclarationEntry(
-    name="supplier_id", path="$.supplier[0].order_supplier_id", channel="binding",
+    name="supplier_id", path="$.supplier[0].order_supplier_id", type='string', 
 )
 _FLAT_ORDER_ID = DeclarationEntry(
-    name="order_id", path="$.order_id", channel="binding",
+    name="order_id", path="$.order_id", type='string', 
 )
 
 
@@ -309,8 +311,8 @@ class TestDeepPathBindingCompletion:
     def test_deep_binding_default_lands_nested(self) -> None:
         """body 无值时 default 沿 path 落嵌套(fallback 顺序 default → example → None)。"""
         ep = _deep_binding_ep([DeclarationEntry(
-            name="supplier_id", path="$.supplier[0].order_supplier_id",
-            channel="binding", default="DEF-S",
+            name="supplier_id", path="$.supplier[0].order_supplier_id", type='string',
+            default="DEF-S",
         )])
         out = _render_request_view(Request(body={}), ep)
         assert out["body"] == {"supplier": [{"order_supplier_id": "DEF-S"}]}
@@ -319,8 +321,8 @@ class TestDeepPathBindingCompletion:
         """R2(评审 #4):default=None、example 有值 → example 落嵌套
         (钉住 fallback 链中段 default → example 的 example 档零覆盖)。"""
         ep = _deep_binding_ep([DeclarationEntry(
-            name="supplier_id", path="$.supplier[0].order_supplier_id",
-            channel="binding", example="EX-S",
+            name="supplier_id", path="$.supplier[0].order_supplier_id", type='string',
+            example="EX-S",
         )])
         out = _render_request_view(Request(body={}), ep)
         assert out["body"] == {"supplier": [{"order_supplier_id": "EX-S"}]}
@@ -351,7 +353,7 @@ class TestDeepPathBindingCompletion:
         """R1 根路径守卫:path="$" 的 binding 条目(schema 层 D2 真空放行)
         不得炸整个 export —— 无按键写值的语义,跳过值面(fields_meta 仍登记)。"""
         ep = _deep_binding_ep([
-            DeclarationEntry(name="$", path="$", channel="binding"),
+            DeclarationEntry(name="$", path="$", type='string'),
             _FLAT_ORDER_ID,
         ])
         out = _render_request_view(Request(body={}), ep)
@@ -367,7 +369,7 @@ class TestDeepPathBindingCompletion:
         写值点必须接收 _set_by_path 返回值 —— 否则新建的 list 被丢弃,
         值静默蒸发。整 body 为数组是正确导出形态。"""
         ep = _deep_binding_ep([DeclarationEntry(
-            name="sku0", path="$[0].sku", channel="binding",
+            name="sku0", path="$[0].sku", type='string', 
         )])
         out = _render_request_view(Request(body=[{"sku": "S-1"}]), ep)
         assert out["body"] == [{"sku": "S-1"}], (
@@ -405,7 +407,7 @@ class TestDeepPathBindingCompletion:
 
 
 _CARRY_SUPPLIER = DeclarationEntry(
-    name="supplier", path="$.supplier", channel="carry", type="array",
+    name="supplier", path="$.supplier", state='carry', type="array",
 )
 
 

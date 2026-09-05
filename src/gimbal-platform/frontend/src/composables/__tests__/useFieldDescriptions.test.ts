@@ -8,14 +8,14 @@ import {
   useFieldDescriptions,
 } from '@/composables/useFieldDescriptions'
 
-// declarations 归一化后 /full 请求面唯一承重键(旧 fields 键已清除);
-// binding 通道条目经 channelFields 投影出 description 索引源
+// /full 请求面 = 字段状态目录(declarations,children 树 + state 共识默认;
+// 旧 channel/fields 键已退役)→ formBindings 投影出 description 索引源
 const FULL_A = {
   id: 'fin.order.add',
   request: {
     declarations: [
-      { name: 'amount', path: '$.amount', channel: 'binding', description: '订单金额(分)', required: true, ui_kind: 'number', source_kind: 'independent', assertable: false },
-      { name: 'customer_id', path: '$.customer_id', channel: 'binding', description: '客户编号', required: true, ui_kind: 'text', source_kind: 'independent', assertable: false },
+      { name: 'amount', path: '$.amount', description: '订单金额(分)', required: true, ui_kind: 'number', source_kind: 'independent', assertable: false },
+      { name: 'customer_id', path: '$.customer_id', description: '客户编号', required: true, ui_kind: 'text', source_kind: 'independent', assertable: false },
     ],
   },
 }
@@ -24,7 +24,7 @@ const FULL_B = {
   id: 'fin.order.query',
   request: {
     declarations: [
-      { name: 'page', path: '$.page', channel: 'binding', description: '页码', required: false, default: 1, ui_kind: 'number', source_kind: 'independent', assertable: false },
+      { name: 'page', path: '$.page', description: '页码', required: false, default: 1, ui_kind: 'number', source_kind: 'independent', assertable: false },
     ],
   },
 }

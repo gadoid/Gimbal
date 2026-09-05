@@ -59,8 +59,8 @@ async def test_run_injects_carry_into_case_body(
     plate_mock.services = [{"name": "fin-service"}]
     plate_mock.fulls = {
         "fin.settlement.create_order": {"request": {"declarations": [
-            {"path": "$.remark", "channel": "carry", "type": "string"},
-            {"path": "$.appCode", "channel": "carry", "type": "string"}]}},
+            {"path": "$.remark", "state": "carry", "type": "string"},
+            {"path": "$.appCode", "state": "carry", "type": "string"}]}},
     }
     await _seed_values()
     bob = await _member(client, "bob")
@@ -136,8 +136,8 @@ async def test_run_carry_skips_step_when_service_not_in_catalog(
     plate_mock.services = []  # 空目录 → fin-service 是裸声明
     plate_mock.fulls = {  # face 有锚点也无效:服务解析失败先短路
         "fin.settlement.create_order": {"request": {"declarations": [
-            {"path": "$.remark", "channel": "carry", "type": "string"},
-            {"path": "$.appCode", "channel": "carry", "type": "string"}]}},
+            {"path": "$.remark", "state": "carry", "type": "string"},
+            {"path": "$.appCode", "state": "carry", "type": "string"}]}},
     }
     await _seed_values()
     bob = await _member(client, "bob")
@@ -164,8 +164,8 @@ async def test_run_completes_when_carry_context_build_fails(
     plate_mock.services = [{"name": "fin-service"}]
     plate_mock.fulls = {
         "fin.settlement.create_order": {"request": {"declarations": [
-            {"path": "$.remark", "channel": "carry", "type": "string"},
-            {"path": "$.appCode", "channel": "carry", "type": "string"}]}},
+            {"path": "$.remark", "state": "carry", "type": "string"},
+            {"path": "$.appCode", "state": "carry", "type": "string"}]}},
     }
     await _seed_values()
 
@@ -195,3 +195,102 @@ async def test_run_completes_when_carry_context_build_fails(
     assert boom_calls["n"] >= 1
     # 无 carry 注入,body 原值;case 已产出(执行链未受影响)
     assert cases[0]["steps"][0]["request"]["body"] == {"order_id": "o-1"}
+
+
+# ── 2026-09-05 目录化:解析链 join step.field_states(§3.2/§3.3)──────
+
+
+async def test_run_step_field_states_overlay_flips_face(
+    client: AsyncClient, plate_mock: PlateMock, monkeypatch: MonkeyPatch
+) -> None:
+    """解析链在 dispatch 关键路径生效:同一端点两个 step ——
+    无增量的读穿共识默认($.remark carry → 注入);
+    显式覆盖受保护($.remark→form 不注入,$.trace→carry 注入)。
+    覆盖即时生效、零发版(护栏 §1.3)。"""
+    plate_mock.behaviour = "echo"
+    plate_mock.services = [{"name": "fin-service"}]
+    plate_mock.fulls = {
+        "fin.settlement.create_order": {"request": {"declarations": [
+            {"path": "$.remark", "state": "carry", "type": "string"},
+            {"path": "$.trace", "state": "form", "type": "string"}]}},
+    }
+    async with db_module.SessionLocal() as db:
+        await carry_store.put_bindings(db, "fin-service", {
+            "$.remark": "压测-张三", "$.trace": "T-1"}, "alice")
+        await db.commit()
+
+    def _step(field_states: dict | None = None) -> dict:
+        step = {"kind": "step",
+                "api": {"service": "fin-service", "path": "/x",
+                        "view_hints": {"endpoint_id":
+                                       "fin.settlement.create_order"}},
+                "request": {"kind": "request", "body": {"order_id": "o-1"}}}
+        if field_states is not None:
+            step["field_states"] = field_states
+        return step
+
+    bob = await _member(client, "bob")
+    r = await client.post(
+        "/api/scenarios", headers=bob,
+        json=_draft(steps=[_step(), _step({"$.remark": "form",
+                                           "$.trace": "carry"})]))
+    assert r.status_code in (200, 201), r.text
+
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+    r = await client.post("/api/runs", headers=bob,
+                          json=_run_payload(dataSetIds=[]))
+    assert r.status_code == 201, r.text
+    await _wait(lambda: len(cases) >= 1)
+
+    body0 = cases[0]["steps"][0]["request"]["body"]
+    body1 = cases[0]["steps"][1]["request"]["body"]
+    # step 0(读穿):carry 面注入 remark,form 面 trace 不注入
+    assert body0["remark"] == "压测-张三"
+    assert "trace" not in body0
+    # step 1(显式覆盖):remark 划回 form → 受保护不注入;
+    # trace 划成 carry → 入面注入(添加与移除同机制,§3.1)
+    assert "remark" not in body1
+    assert body1["trace"] == "T-1"
+
+
+async def test_run_carry_container_whole_literal_injection(
+    client: AsyncClient, plate_mock: PlateMock, monkeypatch: MonkeyPatch
+) -> None:
+    """深实例缩并(§2.4)后的注入形态:carry 容器整容器是注入单元 —
+    值表绑 $.supplier 整体 JSON 字面量,物化为 list(type=array 宽松
+    还原);模板子孙 path($.supplier.order_supplier_id)不单独注入,
+    不产生错误形态(祖先吸收,§4)。"""
+    plate_mock.behaviour = "echo"
+    plate_mock.services = [{"name": "fin-service"}]
+    plate_mock.fulls = {
+        "fin.settlement.create_order": {"request": {"declarations": [
+            {"path": "$.supplier", "state": "carry", "type": "array",
+             "children": [
+                 {"path": "$.supplier.order_supplier_id",
+                  "state": "carry", "type": "string"},
+             ]},
+        ]}},
+    }
+    async with db_module.SessionLocal() as db:
+        await carry_store.put_bindings(db, "fin-service", {
+            "$.supplier": '[{"order_supplier_id": "S-9", "note": "N"}]',
+        }, "alice")
+        await db.commit()
+
+    bob = await _member(client, "bob")
+    r = await client.post("/api/scenarios", headers=bob,
+                          json=_draft(steps=[_carry_step()]))
+    assert r.status_code in (200, 201), r.text
+
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+    r = await client.post("/api/runs", headers=bob,
+                          json=_run_payload(dataSetIds=[]))
+    assert r.status_code == 201, r.text
+    await _wait(lambda: len(cases) >= 1)
+
+    body = cases[0]["steps"][0]["request"]["body"]
+    # 整容器物化:兄弟键 note 保留;子孙模板 path 无独立注入痕迹
+    assert body["supplier"] == [{"order_supplier_id": "S-9", "note": "N"}]
+    assert "supplier.order_supplier_id" not in body

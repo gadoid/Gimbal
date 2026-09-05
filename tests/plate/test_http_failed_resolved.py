@@ -36,14 +36,13 @@ def _build_endpoint() -> EndpointSpec:
         service="sample-svc",
         name="sample",
         api=ApiSpec(service="sample-svc", method="POST", path="/sample/failed"),
-        request=RequestSpec(body_type="json", schema_=_Req.model_json_schema()),
+        request=RequestSpec.declare(_Req),
         responses={
             200: ResponseSpec(
                 status=200,
-                schema_=_Out.model_json_schema(),
                 declarations=[
-                    DeclarationEntry(name="code", path="$.code",
-                                     channel="view_only", required=True,
+                    DeclarationEntry(name="code", path="$.code", type='integer',
+                                     required=True,
                                      assertable=True),
                 ],
             )

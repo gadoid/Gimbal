@@ -37,18 +37,14 @@ SETTLEMENT_CREATE_ORDER: Final[EndpointSpec] = EndpointSpec(
         timeout_seconds=10.0,
     ),
     request=RequestSpec.declare(
+        # 2026-09-05 目录化:bindings/carry 通道参数退役,states 盖戳共识默认
+        # (order_id/amount/currency = form 默认;remark = carry 值表传递;
+        #  amount 的 number 控件由 type 基线推断承接)
         CreateOrderRequest,
-        bindings={"order_id": None,
-                  "amount": {"ui_kind": "number"},
-                  "currency": None},
-        carry={"remark": {"description": "备注(随请求传递,不进表单)"}},
+        states={"remark": "carry"},
     ),
     responses={
-        200: ResponseSpec(
-            status=200,
-            description="成功",
-            schema_=CreateOrderResponse.model_json_schema(),
-        ),
+        200: ResponseSpec.declare(CreateOrderResponse, status=200, description='成功'),
     },
     version=FIN_DEFAULT_VERSION,
     metadata=EndpointMetadata(

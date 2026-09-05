@@ -205,19 +205,22 @@
                 <button type="button" class="c-add" @click="addHeader(currentStep)">+ 新增 header</button>
               </div>
             </el-form-item>
-            <!-- body: 由 plate /full 的 IOFieldBinding 实时驱动表单(会话级现拉,非持久快照) -->
-            <el-form-item v-if="activeIoTab === 'request' && fieldBindings(currentStep).length" label="请求体 (由 IOFieldBinding 驱动)">
+            <!-- body: 由 plate /full 目录实时驱动渲染树(会话级现拉,非持久快照;
+                 §5 值×结构合并:行数跟 body、结构跟目录,carry 不进树) -->
+            <el-form-item v-if="activeIoTab === 'request' && requestNodes.length" label="请求体 (由字段状态目录驱动)">
               <div class="field-form-wrap">
                 <FieldForm
-                  :bindings="fieldBindings(currentStep)"
+                  :nodes="requestNodes"
                   :body="currentStep.request.body || {}"
                   :field-actions="true"
                   :var-choices="referenceVarChoices"
                   :inject-choices="injectVarChoices"
                   :unbound-fields="reqTypeC"
+                  :deep-extras="requestExtras"
                   :strategy-tags="requestStrategyTags"
                   :injected="requestInjected"
-                  :carry-roots="carryRoots"
+                  :state-control="true"
+                  :overlay="currentStep.field_states"
                   @strategy-jump="onStrategyJump"
                   @update:body="(v: unknown) => currentStep.request.body = v"
                   @field-extract="onFieldExtract"
@@ -225,11 +228,12 @@
                   @field-assert="onFieldAssert"
                   @var-insert="onVarInsert"
                   @var-promote="onVarPromote"
+                  @field-state="onFieldState"
                 />
                 <p class="field-form-hint">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                  来自 plate <code>/api/endpoint/.../full</code> 的 IOFieldBinding
-                  · {{ fieldBindings(currentStep).length }} 个字段, plate 是结构权威源
+                  来自 plate <code>/api/endpoint/.../full</code> 的字段状态目录
+                  · {{ requestNodes.length }} 个顶层节点 · 行尾下拉切换 form/collapse/carry
                 </p>
               </div>
             </el-form-item>
@@ -489,7 +493,10 @@ import VarSelectorModal from './VarSelectorModal.vue'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { useConstantsStore } from '@/stores/constants'
 import { deriveVarRegistry } from '@/utils/var-registry'
-import { getFullEndpoint, listStrategyKinds, getStrategyKindFull, resolveResponsePaths } from '@/api/scenario-composer'
+import {
+  getFullEndpoint, listStrategyKinds, getStrategyKindFull, resolveResponsePaths,
+  validateEndpointFieldStates,
+} from '@/api/scenario-composer'
 import { list as listAuths } from '@/api/auth_sessions'
 import { getBindings as getCarryBindings, getDefaults as getCarryDefaults } from '@/api/carry'
 import { parseTplRefs, refStatus } from '@/utils/tpl-refs'
@@ -497,14 +504,18 @@ import type { TplRef } from '@/utils/tpl-refs'
 import type { AuthSession } from '@/api/auth_sessions'
 import { deepDefaults } from '@/utils/jsonpath'
 import { toScratchPath } from '@/utils/scratch-path'
-import { assertablePaths, carryPaths, channelFields, deriveDeepRows } from '@/utils/declarations'
+import {
+  assertablePaths, buildTree, carryPaths, extraBodyPaths, extraSurfaceBindings,
+  formBindings, leafSurface, prefillBindings, responseBindings,
+} from '@/utils/declarations'
+import type { FieldTreeNode } from '@/utils/declarations'
 import { deriveBase } from '@/utils/service-alias'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
 import { carryHint } from '@/utils/carry-hint'
 import type { CarrySource, CarryValues } from '@/utils/carry-hint'
 import type {
   StepView, ExtractView, IOFieldBinding, EndpointFullView,
-  StrategyView, StrategyKindView, StrategyKindDetailView,
+  StrategyView, StrategyKindView, StrategyKindDetailView, FieldState,
 } from '@/types/plate'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
 import { parseJson } from '../../utils/json'
@@ -547,17 +558,33 @@ function inferProtocol(step: StepView | undefined): string {
   return 'step'
 }
 
-/** FieldForm 需要的 IOFieldBinding[] — 会话级按 endpoint_id 现拉 /full,
- *  不读持久化快照(旧 step.request.fields_meta 已废弃,不再作为数据源)。
- *  读 fullVersion 建立响应依赖:回填后模板/reqTypeC 自动重算。
- *  declarations 归一化后:请求表单面 = binding 通道投影。 */
-function fieldBindings(step: StepView | undefined): IOFieldBinding[] {
+/** 当前 step 的请求目录(会话级按 endpoint_id 现拉 /full,不读持久化
+ *  快照 — 旧 step.request.fields_meta 已废弃,不再作为数据源)。
+ *  读 fullVersion 建立响应依赖:回填后树/reqTypeC 自动重算。 */
+function stepDecls(step: StepView | undefined) {
   void fullVersion.value
   const eid = step?.api?.view_hints?.endpoint_id
-  if (!eid) return []
+  if (!eid) return undefined
   void ensureEndpointFull(eid)
-  return channelFields(endpointFullByEndpoint.get(eid)?.request?.declarations, 'binding')
+  return endpointFullByEndpoint.get(eid)?.request?.declarations
 }
+
+/** 请求表单面平铺投影(解析态 != carry,先序)— reqTypeC 差集/描述
+ *  索引消费;渲染树走 requestNodes(buildTree 值×结构合并,§5)。 */
+function fieldBindings(step: StepView | undefined): IOFieldBinding[] {
+  return formBindings(stepDecls(step), step?.field_states)
+}
+
+/** 请求体渲染树(§5.1 三输入:目录 + 意图 field_states + 值 body)。
+ *  行数跟 body、结构跟目录;carry 不进树(值表整包注入零感知)。 */
+const requestNodes = computed<FieldTreeNode[]>(() => {
+  const step = currentStep.value
+  return buildTree(stepDecls(step), step?.field_states, step?.request?.body)
+})
+
+/** 「其他字段」区 body 残留行(§4:目录外深浅皆收,Canvas 投影单一真源) */
+const requestExtras = computed(() =>
+  extraBodyPaths(currentStep.value?.request?.body, stepDecls(currentStep.value), currentStep.value?.field_states))
 
 /** step 是否携带接口身份引用(决定 loading/failed 占位是否适用) */
 function hasEndpointRef(step: StepView | undefined): boolean {
@@ -841,6 +868,42 @@ function onVarPromote(_f: IOFieldBinding, name: string, value: unknown) {
   ElMessage.success(`已设为变量 ${name} — 默认值登记到 ③ 共享变量,保存草稿后生效`)
 }
 
+// ── 字段状态控制(§5.4):行尾下拉写 step.field_states 稀疏增量 ──────
+//    与值回写两通路分离 — 状态意图落 step 顶层键,不碰 request.body。
+
+/**
+ * 状态增量落地(§3.1):state = null 清除该条(重置回共识默认);
+ * 增量对象空了整键删除(空 step 零存储)。写后即调 §3.5 校验:
+ * errors 非空 = 拒(回滚本次写入,前端门禁);warnings 仅提示;
+ * plate 不可达不阻塞编辑(保存链路兜底)。
+ */
+async function onFieldState(path: string, state: FieldState | null) {
+  const step = currentStep.value
+  if (!step) return
+  const before = step.field_states ? { ...step.field_states } : undefined
+  const next: Record<string, FieldState> = { ...(step.field_states ?? {}) }
+  if (state === null) delete next[path]
+  else next[path] = state
+  if (Object.keys(next).length) step.field_states = next
+  else delete step.field_states
+  const eid = step.api?.view_hints?.endpoint_id
+  if (!eid) return
+  try {
+    const verdict = await validateEndpointFieldStates(eid, step.field_states ?? {})
+    if (verdict.errors.length) {
+      if (before) step.field_states = before
+      else delete step.field_states
+      ElMessage.error(`字段状态被拒:${verdict.errors[0].message}`)
+      return
+    }
+    if (verdict.warnings.length) {
+      ElMessage.warning(verdict.warnings.map((w) => w.message).join(';\n'))
+    }
+  } catch {
+    // 校验服务不可达 → 不阻塞编辑(§3.5 门禁在保存链路兜底)
+  }
+}
+
 /** 同 openAuthPicker:key 在弹窗期间可能被改,落注入时按 key 或唯一 value 定位 */
 function openVarPicker(key: string, value: string) {
   if (!currentStep.value) return
@@ -881,15 +944,23 @@ function strategyMatchesField(s: StrategyView, domain: 'request' | 'response', f
   return false
 }
 
-/** 请求字段匹配面(D9):声明 binding + body 深层派生行(deriveDeepRows
- *  单一真源,与 FieldForm 派生行同名同 path)— 注入只读态/请求侧策略
- *  角标按 path 匹配全部复用:派生行 assign 命中同得只读条/兜底行/角标。 */
+/** 请求字段匹配面(§5 值×结构合并树继任 D9):树叶子(实例路径,含
+ *  数组行 [i])+ 目录外残留合成行 — 注入只读态/请求侧策略角标按 path
+ *  匹配全部复用;与 FieldForm 渲染同源(buildTree/extraBodyPaths 单一
+ *  真源),防键漂移。 */
 function requestFieldSurface(step: StepView | undefined): IOFieldBinding[] {
-  const declared = fieldBindings(step)
-  return [...declared, ...deriveDeepRows(step?.request?.body, declared, carryRoots.value)]
+  const decls = stepDecls(step)
+  if (!decls) return []
+  const fs = step?.field_states
+  const tree = buildTree(decls, fs, step?.request?.body)
+  return [
+    ...leafSurface(tree),
+    ...extraSurfaceBindings(step?.request?.body, decls, fs),
+  ]
 }
 
-/** 字段名 → 角标数组;响应侧字段取全状态码契约按名去重(同名字段同路径语义) */
+/** 字段 path → 角标数组(key = 实例地址:数组行各得其所,name 行间共享
+ *  会整列误挂);响应侧字段取全状态码契约(path 天然唯一)。 */
 function fieldStrategyTags(domain: 'request' | 'response'): Record<string, Array<{ label: string; idx: number }>> {
   const step = currentStep.value
   if (!step?.strategy.length) return {}
@@ -897,14 +968,11 @@ function fieldStrategyTags(domain: 'request' | 'response'): Record<string, Array
   const fields = domain === 'request'
     ? requestFieldSurface(step)
     : currentRespSpecs.value.flatMap((spec) => spec.fields)
-  const seen = new Set<string>()
   const tags: Record<string, Array<{ label: string; idx: number }>> = {}
   for (const f of fields) {
-    if (seen.has(f.name)) continue
-    seen.add(f.name)
     step.strategy.forEach((s, idx) => {
       if (strategyMatchesField(s, domain, f)) {
-        ;(tags[f.name] ||= []).push({ label: labels[idx], idx })
+        ;(tags[f.path] ||= []).push({ label: labels[idx], idx })
       }
     })
   }
@@ -917,22 +985,19 @@ const responseStrategyTags = computed(() => fieldStrategyTags('response'))
 /** 请求体字段动态注入态(已注入 → FieldForm 值控件换只读提示条):
  *  与 fieldStrategyTags 同源同匹配(assign target 精确命中
  *  $.request_body<path> — 平铺/深层加点($.request_body.a.b),根 list
- *  直拼无点($.request_body[0].sku,见 requestBodyTargetOf),匹配面 =
- *  requestFieldSurface 含派生行),但携带 source/target 供提示条悬停展示。
- *  响应侧无此概念(assign 不写响应)。 */
+ *  直拼无点($.request_body[0].sku,见 requestBodyTargetOf)),key = path
+ *  (实例地址唯一;name 在数组行间共享会整列误标),携带 source/target
+ *  供提示条悬停展示。响应侧无此概念(assign 不写响应)。 */
 const requestInjected = computed<Record<string, Array<{ source: string; target: string }>>>(() => {
   const step = currentStep.value
   const out: Record<string, Array<{ source: string; target: string }>> = {}
   if (!step?.strategy.length) return out
-  const seen = new Set<string>()
   for (const f of requestFieldSurface(step)) {
-    if (seen.has(f.name)) continue
-    seen.add(f.name)
     const hits = step.strategy.filter((s) => strategyMatchesField(s, 'request', f)) as Array<{
       source?: unknown; target?: unknown
     }>
     if (hits.length) {
-      out[f.name] = hits.map((h) => ({ source: String(h.source ?? ''), target: String(h.target ?? '') }))
+      out[f.path] = hits.map((h) => ({ source: String(h.source ?? ''), target: String(h.target ?? '') }))
     }
   }
   return out
@@ -1076,7 +1141,8 @@ interface RespSpecLite {
   schema?: Record<string, unknown>
 }
 /** 当前 step 的全状态码响应契约(状态码字典序)
- *  declarations 归一化后:fields = view_only 投影,assertable = 断言候选投影 */
+ *  响应面单脸:fields = 全量条目投影,state 不被读取(§4);
+ *  assertable = 断言候选投影 */
 const currentRespSpecs = computed<RespSpecLite[]>(() => {
   const full = currentFull.value
   if (!full) return []
@@ -1084,7 +1150,7 @@ const currentRespSpecs = computed<RespSpecLite[]>(() => {
     .map(([status, spec]) => ({
       status: Number(status),
       description: spec.description || '',
-      fields: channelFields(spec.declarations, 'view_only'),
+      fields: responseBindings(spec.declarations),
       assertable: assertablePaths(spec.declarations),
       schema: status === '200'
         ? spec.schema
@@ -1125,14 +1191,9 @@ function typeCFields(
     }))
 }
 /** 请求侧 Type C(挂 Request 签页底部;carry 键排除 — 传递面零感知)
- *  declarations 归一化后:carry 通道条目 path 集 */
+ *  目录化后:解析态 carry 面 path 集(端点级读穿 — 值表跟共识默认走) */
 const reqCarryPaths = computed<Set<string>>(() =>
   new Set(carryPaths(currentFull.value?.request?.declarations)))
-/** carry 容器根键集(D7 警告行):carry 通道 path 归一根段去重 —
- *  $.cfg.timeout → 'cfg';传 FieldForm,深字段落 carry 容器渲染接管警告 */
-const carryRoots = computed<string[]>(() =>
-  [...new Set(carryPaths(currentFull.value?.request?.declarations)
-    .map((p) => p.replace(/^\$\.?/, '').split(/[.[\]]/)[0]))])
 const reqTypeC = computed<TypeCField[]>(() =>
   typeCFields(currentReqSchema.value, fieldBindings(currentStep.value).map((f) => f.path))
     .filter((f) => !reqCarryPaths.value.has(f.path))
@@ -1348,9 +1409,12 @@ async function onAddEndpoint(ep: any) {
     // (用户投诉过的"裸 JSON"兜底)。
     const full = await ensureEndpointFull(ep.id)
     if (!full) ElMessage.warning('拉取完整接口定义失败, 仍以原始信息加入')
-    const fields = channelFields(full?.request?.declarations, 'binding')
+    // 预填面:解析态 != carry 的浅层叶子(新步骤零增量 → 读共识默认);
+    // 深层/数组子孙不落库(D7:深层默认只展示,防挡 carry 整包注入,
+    // 模板路径落数组子孙会物化 dict 顶替 array 的错误形态)
+    const fields = prefillBindings(full?.request?.declarations)
     const strategy = buildInitialStrategies(full)
-    // 初始 body:只合成绑定 default/example(carry/契约默认移交注入通道)
+    // 初始 body:只合成浅层 default/example(carry/契约默认移交注入通道)
     const initialBody = deepDefaults(fields)
     const newStep: StepView = {
       kind: 'step',

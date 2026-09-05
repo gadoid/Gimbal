@@ -1,494 +1,407 @@
 /**
- * FieldForm — 深层字段读写闭环(Task 6,D7/D8):
+ * FieldForm — 树模式渲染器(2026-09-05 spec §5):
  *
- * D8 清空分流:平铺字段清空维持 ''(现状);dot 嵌套与 bracket 深层清空走
- * pruneByPath 容器级剪枝 — 叶子删后祖先链全空 → 连锁删到根键,
- * 防幻影容器({cfg:{}})挡 carry 整包注入。
- * D7 carry 容器接管警告行:深层字段根键命中 Canvas 传入的 carryRoots
- * → field-desc 位置渲染「手填接管,清空恢复注入」警告。
- * D9 深层派生行(Task 8):body 容器根下未被 binding 精确覆盖的深层叶子
- * 自动成行(菜单/注入复用),carry 根与顶层平铺键互不侵占。
- * D9「+ 同级」(Task 9):深层行(含派生行)于同容器下一可用下标(现数组
- * 长度)建同字段空值 '' → Task 8 派生行投影即现;carry 容器根下/平铺行
- * 不显示按钮(出现即合法)。
- * 裁定14 顺手锁:view_only 上级 title 显示原通道,不再误标 binding。
+ * 值×结构合并树(buildTree 产物)四节点的读写闭环:
+ * - D8 清空分流保持:深层(容器内/数组行)清空走 pruneByPath 容器级
+ *   剪枝,平铺字段清空维持 '';
+ * - 数组行组(§5.3):行数跟 body、结构跟目录;加行 = 模板空壳 push
+ *   到 [len],删行 = splice(下标前移);标量数组加标量空壳;
+ * - 开放字典(object 无 children):KV 编辑器整字典回写;
+ * - carry 不进树(共识/增量翻 carry → 节点缺席);collapse 面板默认收起;
+ * - 字段状态控制(§5.4):行尾下拉上抛 fieldState(模板路径,两通路分离);
+ * - 「其他字段」区(§4):deepExtras 深浅残留 + unboundFields 契约差集
+ *   按 path 归并;删除走 D8 连锁剪枝。
  */
 import { describe, it, expect } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import FieldForm from '@/components/composer/FieldForm.vue'
-import type { IOFieldBinding } from '@/types/plate'
+import { buildTree, extraBodyPaths } from '@/utils/declarations'
+import type { ExtraBodyRow } from '@/utils/declarations'
+import type { DeclarationEntryView, FieldState, IOFieldBinding } from '@/types/plate'
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
-function mkBinding(over: Partial<IOFieldBinding> = {}): IOFieldBinding {
+function mkDecl(over: Partial<DeclarationEntryView> = {}): DeclarationEntryView {
   return {
-    name: 'order_id',
-    path: '$.order_id',
+    name: 'x',
+    path: '$.x',
+    required: false,
+    description: '',
     ui_kind: 'text',
     source_kind: 'independent',
-    required: true,
-    description: null,
-    example: null,
-    default: null,
-    enum: null,
+    assertable: false,
     ...over,
-  } as IOFieldBinding
+  }
 }
 
-/** 生产用法镜像:父持 body ref,子 update:body 双向。
- *  body 兼容根 list(Task 10):请求体直接是 JSON 数组(unknown[]) */
-function mountWithParent(opts: {
-  bindings: IOFieldBinding[]
-  body?: Record<string, unknown> | unknown[] | null
-  carryRoots?: string[]
+/** 生产用法镜像(Canvas):父持 body ref,nodes/deepExtras 随 body 重算
+ *  (computed 语义 — 值编辑/加删行后树自动重建,行数跟 body 生效)。 */
+function mountTree(opts: {
+  decls: DeclarationEntryView[]
+  body?: unknown
+  fieldStates?: Record<string, FieldState>
+  stateControl?: boolean
+  unboundFields?: Array<{ name: string; path: string; type?: string; default?: unknown }>
   injected?: Record<string, Array<{ source: string; target: string }>>
+  readonly?: boolean
 }) {
-  const body = ref<unknown>(opts.body ?? { order_id: 'ord-1' })
+  const body = ref<unknown>(opts.body ?? {})
   const Parent = defineComponent({
     setup() {
       return () => h(FieldForm, {
-        bindings: opts.bindings,
-        body: opts.body === null ? null : body.value,
-        carryRoots: opts.carryRoots,
+        nodes: buildTree(opts.decls, opts.fieldStates, body.value),
+        deepExtras: extraBodyPaths(body.value, opts.decls, opts.fieldStates),
+        body: body.value,
+        overlay: opts.fieldStates,
+        stateControl: opts.stateControl,
+        unboundFields: opts.unboundFields,
         injected: opts.injected,
+        readonly: opts.readonly,
         'onUpdate:body': (v: unknown) => { body.value = v },
+        'onFieldState': (p: string, s: FieldState | null) => {
+          emitted.push([p, s])
+        },
       })
     },
   })
+  const emitted: Array<[string, FieldState | null]> = []
   const w = mount(Parent, { global: { plugins: [ElementPlus] } })
-  return { w, body }
+  return { w, body, emitted }
 }
 
-describe('FieldForm — 深层字段清空剪枝(D8)', () => {
-  it('D1: dot 嵌套字段清空 → 容器整体消失(body 不残留幻影空容器)', async () => {
-    const { w, body } = mountWithParent({
-      bindings: [mkBinding({ name: 'timeout', path: '$.cfg.timeout' })],
-      body: { cfg: { timeout: 30 } },
-    })
-    await w.find('input.ctl').setValue('')
+// ─── D8 清空分流(树模式语义保持)──────────────────────────────────
+
+describe('FieldForm 树模式 — 深层清空剪枝(D8)', () => {
+  it('D1: 对象容器内叶子清空 → 容器整体消失(body 不残留幻影空容器)', async () => {
+    const decls = [
+      mkDecl({ name: 'cfg', path: '$.cfg', type: 'object', children: [
+        mkDecl({ name: 'timeout', path: '$.cfg.timeout' }),
+      ] }),
+    ]
+    const { w, body } = mountTree({ decls, body: { cfg: { timeout: 30 } } })
+    await w.find('.obj-body input.ctl').setValue('')
     await flush()
     expect(body.value).toEqual({})
   })
 
-  it('D2: bracket 深层字段清空 → 数组容器连锁剪枝消失', async () => {
-    const { w, body } = mountWithParent({
-      bindings: [mkBinding({ name: 'sku', path: '$.items[0].sku' })],
-      body: { items: [{ sku: 'sku-1' }] },
-    })
-    await w.find('input.ctl').setValue('')
+  it('D2: 数组行内叶子清空 → 剪枝该叶子(同容器留有叶子不连锁删)', async () => {
+    const decls = [
+      mkDecl({ name: 'items', path: '$.items', type: 'array', children: [
+        mkDecl({ name: 'sku', path: '$.items.sku' }),
+        mkDecl({ name: 'qty', path: '$.items.qty' }),
+      ] }),
+    ]
+    const { w, body } = mountTree({ decls, body: { items: [{ sku: 'A', qty: 1 }] } })
+    await w.find('.arr-row input.ctl').setValue('')
     await flush()
-    expect(body.value).toEqual({})
+    expect(body.value).toEqual({ items: [{ qty: 1 }] })
   })
 
   it('D3: 平铺字段清空 → 维持 \'\'(现状不变,不误伤)', async () => {
-    const { w, body } = mountWithParent({
-      bindings: [mkBinding()],
-      body: { order_id: 'ord-1' },
-    })
+    const decls = [mkDecl({ name: 'order_id', path: '$.order_id' })]
+    const { w, body } = mountTree({ decls, body: { order_id: 'ord-1' } })
     await w.find('input.ctl').setValue('')
     await flush()
     expect(body.value).toEqual({ order_id: '' })
   })
 
   it('D3b: 深层字段非清空输入 → 正常 setByPath 写入(剪枝只在清空时)', async () => {
-    const { w, body } = mountWithParent({
-      bindings: [mkBinding({ name: 'timeout', path: '$.cfg.timeout' })],
-      body: { cfg: { timeout: 30 } },
-    })
-    await w.find('input.ctl').setValue('60')
+    const decls = [
+      mkDecl({ name: 'cfg', path: '$.cfg', type: 'object', children: [
+        mkDecl({ name: 'timeout', path: '$.cfg.timeout' }),
+      ] }),
+    ]
+    const { w, body } = mountTree({ decls, body: { cfg: { timeout: 30 } } })
+    await w.find('.obj-body input.ctl').setValue('60')
     await flush()
     expect(body.value).toEqual({ cfg: { timeout: '60' } })
   })
 })
 
-describe('FieldForm — carry 容器接管警告行(D7)', () => {
-  it('C1: 深层字段根键命中 carryRoots → 警告行透出容器与接管语义', () => {
-    const { w } = mountWithParent({
-      bindings: [mkBinding({ name: 'timeout', path: '$.cfg.timeout' })],
-      body: { cfg: { timeout: 30 } },
-      carryRoots: ['cfg'],
-    })
-    const note = w.find('.deep-carry-note')
-    expect(note.exists()).toBe(true)
-    expect(note.text()).toContain('上级容器 $.cfg 为 carry 整包传递')
-    expect(note.text()).toContain('手填将接管该容器,清空可恢复注入')
-  })
+// ─── 数组行组(§5.3:行数跟 body、结构跟目录)──────────────────────
 
-  it('C2: 深层字段但根键不在 carryRoots(binding 容器)→ 无警告行', () => {
-    const { w } = mountWithParent({
-      bindings: [mkBinding({ name: 'ref', path: '$.meta.ref' })],
-      body: { meta: { ref: 'r' } },
-      carryRoots: ['cfg'],
-    })
-    expect(w.find('.deep-carry-note').exists()).toBe(false)
-  })
+describe('FieldForm 树模式 — 数组行组(§5.3)', () => {
+  const itemsDecls = () => [
+    mkDecl({ name: 'items', path: '$.items', type: 'array', children: [
+      mkDecl({ name: 'sku', path: '$.items.sku' }),
+    ] }),
+  ]
 
-  it('C3: 根键命中但平铺字段(非深层)→ 无警告行', () => {
-    const { w } = mountWithParent({
-      bindings: [mkBinding()],
-      body: { order_id: 'ord-1' },
-      carryRoots: ['order_id'],
+  it('A1: 行数跟 body — 2 行渲染;编辑第二行写实例路径 $.items[1].sku', async () => {
+    const { w, body } = mountTree({
+      decls: itemsDecls(),
+      body: { items: [{ sku: 'A' }, { sku: 'B' }] },
     })
-    expect(w.find('.deep-carry-note').exists()).toBe(false)
-  })
-
-  it('C4: 不传 carryRoots(StrategyForm/响应页复用)→ 零警告行', () => {
-    const { w } = mountWithParent({
-      bindings: [mkBinding({ name: 'timeout', path: '$.cfg.timeout' })],
-      body: { cfg: { timeout: 30 } },
-    })
-    expect(w.find('.deep-carry-note').exists()).toBe(false)
-  })
-})
-
-describe('FieldForm — 深层字段注入共存与上级通道标注', () => {
-  it('X1: 深层字段注入 assign → 提示条与 path 角标(及 carry 警告行)共存', () => {
-    const { w } = mountWithParent({
-      bindings: [mkBinding({ name: 'timeout', path: '$.cfg.timeout' })],
-      body: { cfg: { timeout: 30 } },
-      injected: { timeout: [{ source: '$.oid', target: '$.request_body.cfg.timeout' }] },
-      carryRoots: ['cfg'],
-    })
-    expect(w.find('.ctl-injected').exists()).toBe(true)
-    expect(w.find('.path-badge').exists()).toBe(true)
-    expect(w.find('.deep-carry-note').exists()).toBe(true)
-  })
-
-  it('X2(裁定14): view_only 上级 → title 显示原通道,不再误标 binding', () => {
-    const { w } = mountWithParent({
-      bindings: [mkBinding({
-        name: 'code',
-        path: '$.data.code',
-        parentPath: '$.data',
-        parentChannel: 'view_only',
-      })],
-      body: {},
-    })
-    expect(w.find('.path-badge').attributes('title'))
-      .toBe('$.data.code · 上级 $.data(view_only)')
-  })
-})
-
-/**
- * 深层派生行(Task 8,D9):body 容器根下未被 binding 精确覆盖的深层叶子
- * → 合成 IOFieldBinding 纯投影自动成行。排除面:① 精确覆盖叶子;
- * ② carry 根下叶子(容器值归值表);③ 顶层平铺键(仍归「其他字段」区)。
- * 菜单/注入复用既有 FieldActionMenu 接线;读写走既有 setValue/getValue
- * (清空自动 D8 剪枝,不新增存储)。
- */
-describe('FieldForm — 深层派生行(D9)', () => {
-  it('P1: 未覆盖深层叶子成行 — 相对路径标签 + 完整 $. path 角标;被覆盖叶子不出行', () => {
-    const { w } = mountWithParent({
-      bindings: [mkBinding({ name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id' })],
-      body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y', note: 'n' }] },
-    })
-    const derived = w.findAll('.field.is-derived')
-    expect(derived).toHaveLength(2)
-    expect(derived[0].find('.label-text').text()).toBe('supplier[1].order_supplier_id')
-    expect(derived[0].find('.path-badge').text()).toBe('$.supplier[1].order_supplier_id')
-    expect(derived[1].find('.label-text').text()).toBe('supplier[1].note')
-    // supplier[0].order_supplier_id 已被 binding 精确覆盖 → 不派生(第 3 行不存在)
-    // 分区头透出「深层字段」与计数
-    const divider = w.find('.deep-divider')
-    expect(divider.text()).toContain('深层字段')
-    expect(divider.text()).toContain('2')
-  })
-
-  it('P2: 未覆盖叶子可编辑 — setByPath 落位到深层路径', async () => {
-    const { w, body } = mountWithParent({
-      bindings: [mkBinding({ name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id' })],
-      body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y', note: 'n' }] },
-    })
-    // walk 序:supplier[1].order_supplier_id → supplier[1].note
-    await w.findAll('.field.is-derived')[1].find('input.ctl').setValue('nn')
+    expect(w.findAll('.arr-row')).toHaveLength(2)
+    await w.findAll('.arr-row')[1].find('input.ctl').setValue('C')
     await flush()
-    expect(body.value).toEqual({
-      supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y', note: 'nn' }],
-    })
+    expect(body.value).toEqual({ items: [{ sku: 'A' }, { sku: 'C' }] })
   })
 
-  it('P3: 派生行清空 → pruneByPath 剪枝叶子(同容器留有叶子不连锁删)', async () => {
-    const { w, body } = mountWithParent({
-      bindings: [mkBinding({ name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id' })],
-      body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y', note: 'n' }] },
+  it('A2: 加行 = 模板空壳 push 到 [len](对象模板 → {})', async () => {
+    const { w, body } = mountTree({
+      decls: itemsDecls(),
+      body: { items: [{ sku: 'A' }, { sku: 'B' }] },
     })
-    await w.findAll('.field.is-derived')[1].find('input.ctl').setValue('')
+    await w.find('.arr-add').trigger('click')
     await flush()
-    expect(body.value).toEqual({
-      supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y' }],
-    })
+    expect(body.value).toEqual({ items: [{ sku: 'A' }, { sku: 'B' }, {}] })
+    // 树重算后新行即现(行数跟 body)
+    expect(w.findAll('.arr-row')).toHaveLength(3)
   })
 
-  it('P4: carry 根下叶子不派生行(carry 容器值归值表,D9 明文)', () => {
-    const { w } = mountWithParent({
-      bindings: [],
-      body: { cfg: { timeout: 30 }, meta: { ref: 'r' } },
-      carryRoots: ['cfg'],
+  it('A3: 删行 = splice — 中删一行,后续下标前移', async () => {
+    const { w, body } = mountTree({
+      decls: itemsDecls(),
+      body: { items: [{ sku: 'A' }, { sku: 'B' }, { sku: 'C' }] },
     })
-    const derived = w.findAll('.field.is-derived')
-    expect(derived).toHaveLength(1)
-    expect(derived[0].find('.label-text').text()).toBe('meta.ref')
-  })
-
-  it('P5: 顶层平铺键仍走「其他字段」区,不派生行(互不侵占)', async () => {
-    const { w } = mountWithParent({
-      bindings: [],
-      body: { note: 'n', meta: { ref: 'r' } },
-    })
-    // 平铺键 note 只出现在 extras,不成为派生行
-    expect(w.findAll('.field.is-derived')).toHaveLength(1)
-    expect(w.find('.field.is-derived .label-text').text()).toBe('meta.ref')
-    // extras 折叠区默认收起 → 展开后 note 与 meta 整包行俱在(平铺归 extras)
-    await w.find('.extras-toggle').trigger('click')
-    const extras = w.find('[data-testid="extra-fields"]')
-    expect(extras.text()).toContain('note')
-    expect(extras.text()).toContain('meta')
-  })
-
-  it('P6: 派生行 ☰ 菜单注入 → fieldAssign 携带合成 binding,assign target 派生 $.request_body.<path>', async () => {
-    const w = mount(FieldForm, {
-      props: {
-        bindings: [mkBinding({ name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id' })],
-        body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y' }] },
-        fieldActions: true,
-        varChoices: [],
-        injectChoices: [{ name: 'oid', origin: 'extract' as const, stepIdx: 0, expression: '$.oid' }],
-      },
-      global: { plugins: [ElementPlus] },
-    })
-    const derivedRow = w.find('.field.is-derived')
-    await derivedRow.find('.fa-menu-btn').trigger('click')
-    const injectBtn = w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))
-    expect(injectBtn).toBeTruthy()
-    await injectBtn!.trigger('click')
-    const varBtn = w.findAll('.fa-var-item').find((b) => b.text().includes('oid'))
-    expect(varBtn).toBeTruthy()
-    await varBtn!.trigger('click')
-    const evt = w.emitted('fieldAssign')
-    expect(evt).toBeTruthy()
-    const [field, varName] = evt![0] as [IOFieldBinding, string]
-    expect(varName).toBe('oid')
-    // 合成 binding:name=相对路径安全形态,path=完整 $. 路径
-    expect(field.name).toBe('supplier_1_order_supplier_id')
-    expect(field.path).toBe('$.supplier[1].order_supplier_id')
-    // Canvas onFieldAssign 同式派生 assign target(注入机制 7546cae)
-    expect(field.path.replace(/^\$\./, '$.request_body.'))
-      .toBe('$.request_body.supplier[1].order_supplier_id')
-  })
-
-  it('P7: ui_kind 按 typeof 值推断 — number→number / boolean→boolean / string→text', () => {
-    const { w } = mountWithParent({
-      bindings: [],
-      body: { meta: { s: 'x', n: 5, b: true } },
-    })
-    const derived = w.findAll('.field.is-derived')
-    expect(derived).toHaveLength(3)
-    const byLabel = (l: string) =>
-      derived.find((r) => r.find('.label-text').text() === l)!
-    expect(byLabel('meta.n').find('input[type="number"]').exists()).toBe(true)
-    expect(byLabel('meta.b').find('input[type="checkbox"]').exists()).toBe(true)
-    expect(byLabel('meta.s').find('input[type="text"]').exists()).toBe(true)
-  })
-
-  it('P8: injected 命中派生行(安全形态 name)→ 值控件换只读提示条(注入态复用)', () => {
-    const { w } = mountWithParent({
-      bindings: [],
-      body: { supplier: [{ order_supplier_id: 'y' }] },
-      injected: {
-        supplier_0_order_supplier_id: [
-          { source: '$.oid', target: '$.request_body.supplier[0].order_supplier_id' },
-        ],
-      },
-    })
-    const derived = w.find('.field.is-derived')
-    expect(derived.find('.ctl-injected').exists()).toBe(true)
-    expect(derived.find('.ctl-injected').attributes('title'))
-      .toBe('$.oid → $.request_body.supplier[0].order_supplier_id')
-  })
-})
-
-/**
- * 「+ 同级」按钮(Task 9,D9):深层行点一下 — 同容器下一可用下标
- * (现数组长度)建同字段空值 '',body 叶子即现 → Task 8 派生行投影自动
- * 出现(无手动接线)。可见性 = isDeepField && !inCarryContainer:
- * carry 容器根下的行不显示(加同级=接管整包,按钮出现即合法);平铺行
- * 不显示;dot-only 深层($.cfg.timeout)无数组容器、下标无从派生,同不显示。
- */
-describe('FieldForm — 「+ 同级」按钮(D9)', () => {
-  it('S1: 深层 binding 行有「+ 同级」;点击 → supplier[1].order_supplier_id=\'\' 且派生行即现', async () => {
-    const { w, body } = mountWithParent({
-      bindings: [mkBinding({ name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id' })],
-      body: { supplier: [{ order_supplier_id: 'x' }] },
-    })
-    const btn = w.find('.sib-btn')
-    expect(btn.exists()).toBe(true)
-    expect(btn.text()).toContain('+ 同级')
-    await btn.trigger('click')
+    await w.findAll('.arr-del')[1].trigger('click')
     await flush()
-    expect(body.value).toEqual({
-      supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: '' }],
-    })
-    // 派生行即现(Task 8 body 投影,零手动接线)
-    const derived = w.findAll('.field.is-derived')
-    expect(derived).toHaveLength(1)
-    expect(derived[0].find('.label-text').text()).toBe('supplier[1].order_supplier_id')
+    expect(body.value).toEqual({ items: [{ sku: 'A' }, { sku: 'C' }] })
+    expect(w.findAll('.arr-row')).toHaveLength(2)
   })
 
-  it('S2: 派生行同语义 — 从 supplier[1] 行加同级 → supplier[2]', async () => {
-    const { w, body } = mountWithParent({
-      bindings: [mkBinding({ name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id' })],
-      body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y' }] },
-    })
-    const derivedBtn = w.find('.field.is-derived .sib-btn')
-    expect(derivedBtn.exists()).toBe(true)
-    await derivedBtn.trigger('click')
+  it('A4: 标量数组加行 = 标量空壳 \'\'(无模板不 push {} 洗类型)', async () => {
+    const decls = [mkDecl({ name: 'tags', path: '$.tags', type: 'array' })]
+    const { w, body } = mountTree({ decls, body: { tags: ['a'] } })
+    await w.find('.arr-add').trigger('click')
     await flush()
-    expect(body.value).toEqual({
-      supplier: [
-        { order_supplier_id: 'x' },
-        { order_supplier_id: 'y' },
-        { order_supplier_id: '' },
-      ],
-    })
-    const labels = w.findAll('.field.is-derived .label-text').map((r) => r.text())
-    expect(labels).toContain('supplier[2].order_supplier_id')
+    expect(body.value).toEqual({ tags: ['a', ''] })
   })
 
-  it('S3: carry 容器根下的深层行不显示按钮(加同级=接管整包,出现即合法)', () => {
-    const { w } = mountWithParent({
-      bindings: [mkBinding({ name: 'sku', path: '$.items[0].sku' })],
-      body: { items: [{ sku: 's' }] },
-      carryRoots: ['items'],
+  it('A5: readonly 不显示加行/删行按钮(契约参考无 body 变更入口)', () => {
+    const { w } = mountTree({
+      decls: itemsDecls(),
+      body: { items: [{ sku: 'A' }] },
+      readonly: true,
     })
-    expect(w.find('.sib-btn').exists()).toBe(false)
+    expect(w.find('.arr-add').exists()).toBe(false)
+    expect(w.find('.arr-del').exists()).toBe(false)
   })
 
-  it('S4: 平铺字段行不显示按钮', () => {
-    const { w } = mountWithParent({
-      bindings: [mkBinding()],
-      body: { order_id: 'ord-1' },
-    })
-    expect(w.find('.sib-btn').exists()).toBe(false)
-  })
-
-  it('S5: 数组不存在 → len=0,兄弟落 supplier[0](setByPath 自建链)', async () => {
-    const { w, body } = mountWithParent({
-      bindings: [mkBinding({ name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id' })],
-      body: {},
-    })
-    expect(w.find('.sib-btn').exists()).toBe(true)
-    await w.find('.sib-btn').trigger('click')
-    await flush()
-    expect(body.value).toEqual({ supplier: [{ order_supplier_id: '' }] })
-  })
-
-  it('S6: dot-only 深层(无下标段)不显示按钮 — 无数组容器,下标无从派生', () => {
-    const { w } = mountWithParent({
-      bindings: [mkBinding({ name: 'timeout', path: '$.cfg.timeout' })],
-      body: { cfg: { timeout: 30 } },
-    })
-    expect(w.find('.sib-btn').exists()).toBe(false)
-  })
-
-  it('S7: readonly(响应页契约参考)不显示按钮 — 不提供 body 变更入口', () => {
-    const w = mount(FieldForm, {
-      props: {
-        bindings: [mkBinding({ name: 'supplier_0_oid', path: '$.supplier[0].order_supplier_id' })],
-        body: { supplier: [{ order_supplier_id: 'x' }] },
-        readonly: true,
-      },
-      global: { plugins: [ElementPlus] },
-    })
-    expect(w.find('.sib-btn').exists()).toBe(false)
-  })
-})
-
-/**
- * 根 list body(Task 10):请求体直接是 JSON 数组的端点,binding path 形如
- * `$[0].sku`。全链路贯通:展示(getValue)/编辑(setValue 数组保形,不 spread
- * 成 {0:…} 数字键对象)/空 body 落值(首段 INDEX 建 [])/清空剪枝(元素置
- * null 不洗位,根数组不删)/+同级(根容器 = body 本体)/carry `$`(整包,
- * 根键 '')豁免与接管警告/extras 卫生(body-walk 源防数组根,无数字键垃圾行)。
- */
-describe('FieldForm — 根 list body $[N] 寻址(Task 10)', () => {
-  it('R1: 展示 — body=[{sku:"A"}]、binding $[0].sku → 行显 A(getByPath 通)', () => {
-    const { w } = mountWithParent({
-      bindings: [mkBinding({ name: 'sku', path: '$[0].sku' })],
-      body: [{ sku: 'A' }],
-    })
-    expect((w.find('input.ctl').element as HTMLInputElement).value).toBe('A')
-  })
-
-  it('R2: 编辑 — body 仍数组且 [{sku:"B"}](spread 保形,无 $ 幻影键)', async () => {
-    const { w, body } = mountWithParent({
-      bindings: [mkBinding({ name: 'sku', path: '$[0].sku' })],
-      body: [{ sku: 'A' }],
-    })
-    await w.find('input.ctl').setValue('B')
+  it('A6: 根数组 body($ 容器)— 编辑保数组形,不洗成数字键对象', async () => {
+    const decls = [
+      mkDecl({ name: 'root', path: '$', type: 'array', children: [
+        mkDecl({ name: 'sku', path: '$.sku' }),
+      ] }),
+    ]
+    const { w, body } = mountTree({ decls, body: [{ sku: 'A' }] })
+    await w.find('.arr-row input.ctl').setValue('B')
     await flush()
     expect(Array.isArray(body.value)).toBe(true)
     expect(body.value).toEqual([{ sku: 'B' }])
   })
+})
 
-  it('R3: 空 body 落值 — body=null 编辑该行 → [{sku:"X"}](首段 INDEX 建数组非对象)', async () => {
-    const { w, body } = mountWithParent({
-      bindings: [mkBinding({ name: 'sku', path: '$[0].sku' })],
-      body: null,
-    })
-    await w.find('input.ctl').setValue('X')
+// ─── 开放字典(§5.3:object 无 children → KV 编辑器)────────────────
+
+describe('FieldForm 树模式 — 开放字典 KV(§5.3)', () => {
+  const dictDecls = () => [mkDecl({ name: 'labels', path: '$.labels', type: 'object' })]
+
+  it('K1: entries 跟 body 渲染;改值整字典回写', async () => {
+    const { w, body } = mountTree({ decls: dictDecls(), body: { labels: { env: 'qa' } } })
+    expect(w.findAll('.kv-row')).toHaveLength(1)
+    await w.find('.kv-row input.ctl').setValue('prod')
     await flush()
-    expect(Array.isArray(body.value)).toBe(true)
-    expect(body.value).toEqual([{ sku: 'X' }])
+    expect(body.value).toEqual({ labels: { env: 'prod' } })
   })
 
-  it('R4: 清空剪枝 — [{sku:"A"}] 清空 → [null](元素置 null,根数组不删)', async () => {
-    const { w, body } = mountWithParent({
-      bindings: [mkBinding({ name: 'sku', path: '$[0].sku' })],
-      body: [{ sku: 'A' }],
-    })
-    await w.find('input.ctl').setValue('')
+  it('K2: 添加键 → 落 key 空串(重名自增 key_2)', async () => {
+    const { w, body } = mountTree({ decls: dictDecls(), body: { labels: { env: 'qa' } } })
+    await w.find('.arr-add').trigger('click')
     await flush()
-    expect(Array.isArray(body.value)).toBe(true)
-    expect(body.value).toEqual([null])
+    expect(body.value).toEqual({ labels: { env: 'qa', key: '' } })
   })
 
-  it('R5: +同级 — [{sku:"A"}] 点 → [{sku:"A"},{sku:""}](siblingPathOf 根容器=body)', async () => {
-    const { w, body } = mountWithParent({
-      bindings: [mkBinding({ name: 'sku', path: '$[0].sku' })],
-      body: [{ sku: 'A' }],
-    })
-    const btn = w.find('.sib-btn')
-    expect(btn.exists()).toBe(true)
-    await btn.trigger('click')
+  it('K3: 删键 → body 少该键', async () => {
+    const { w, body } = mountTree({ decls: dictDecls(), body: { labels: { env: 'qa', x: 1 } } })
+    await w.findAll('.arr-del')[1].trigger('click')
     await flush()
-    expect(Array.isArray(body.value)).toBe(true)
-    expect(body.value).toEqual([{ sku: 'A' }, { sku: '' }])
+    expect(body.value).toEqual({ labels: { env: 'qa' } })
   })
 
-  it('R6: carry $(整包,根键 "")豁免 — +同级不显示、接管警告行在(整包语义)', () => {
-    const { w } = mountWithParent({
-      bindings: [mkBinding({ name: 'sku', path: '$[0].sku' })],
-      body: [{ sku: 'A' }],
-      carryRoots: [''],
-    })
-    expect(w.find('.sib-btn').exists()).toBe(false)
-    const note = w.find('.deep-carry-note')
-    expect(note.exists()).toBe(true)
-    expect(note.text()).toContain('carry 整包传递')
+  it('K4: 重命名键 → 值随迁', async () => {
+    const { w, body } = mountTree({ decls: dictDecls(), body: { labels: { env: 'qa' } } })
+    await w.find('.kv-key').setValue('zone')
+    await w.find('.kv-key').trigger('change')
+    await flush()
+    expect(body.value).toEqual({ labels: { zone: 'qa' } })
+  })
+})
+
+// ─── carry 剪除 / collapse 收起(§3.2 × §5.3)──────────────────────
+
+describe('FieldForm 树模式 — carry 剪除与 collapse 收起', () => {
+  const decls = () => [
+    mkDecl({ name: 'secret', path: '$.secret', state: 'carry' }),
+    mkDecl({ name: 'cfg', path: '$.cfg', type: 'object', children: [
+      mkDecl({ name: 'timeout', path: '$.cfg.timeout' }),
+    ] }),
+    mkDecl({ name: 'open', path: '$.open' }),
+  ]
+
+  it('C1: 共识 carry → 节点不进树(零渲染,搜索语料 §5.4)', () => {
+    const { w } = mountTree({ decls: decls(), body: {} })
+    const paths = w.findAll('.path-badge').map((b) => b.text())
+    expect(paths).not.toContain('$.secret')
+    expect(w.text()).not.toContain('secret')
   })
 
-  it('R7: extras 卫生 — body=[{a:1}] 不产生数字键垃圾行;数组根叶子健康投影为派生行', () => {
-    const { w } = mountWithParent({
-      bindings: [],
-      body: [{ a: 1 }],
+  it('C2: 增量翻 carry($.cfg)→ 容器整棵剪除', () => {
+    const { w } = mountTree({ decls: decls(), body: {}, fieldStates: { '$.cfg': 'carry' } })
+    expect(w.find('.obj-node').exists()).toBe(false)
+    expect(w.text()).not.toContain('timeout')
+  })
+
+  it('C3: 共识 collapse → 面板默认收起;form 容器展开', async () => {
+    const collapsed = [
+      mkDecl({ name: 'cfg', path: '$.cfg', type: 'object', state: 'collapse', children: [
+        mkDecl({ name: 'timeout', path: '$.cfg.timeout' }),
+      ] }),
+      mkDecl({ name: 'meta', path: '$.meta', type: 'object', children: [
+        mkDecl({ name: 'ref', path: '$.meta.ref' }),
+      ] }),
+    ]
+    const { w } = mountTree({ decls: collapsed, body: {} })
+    const bodies = w.findAll('.obj-body')
+    expect(bodies[0].isVisible()).toBe(false) // collapse 共识默认收起
+    expect(bodies[1].isVisible()).toBe(true)  // form 默认展开
+    // 手动展开后可见。断言 inline style 而非二次 isVisible():
+    // jsdom getComputedStyle 按元素缓存,先测过 isVisible 再清 inline
+    // display,计算样式不刷新 → isVisible 假阴性(v-show 本身已生效)
+    await w.findAll('.obj-toggle')[0].trigger('click')
+    expect(w.findAll('.obj-body')[0].attributes('style')).not.toContain('display: none')
+    expect(w.findAll('.obj-toggle')[0].find('svg')!.classes()).toContain('open')
+  })
+})
+
+// ─── 字段状态控制(§5.4:状态回写与值回写两通路分离)────────────────
+
+describe('FieldForm 树模式 — 字段状态控制(§5.4)', () => {
+  it('F1: 行尾下拉切换 → 上抛 fieldState(模板路径,实例下标不进增量)', async () => {
+    const decls = [
+      mkDecl({ name: 'items', path: '$.items', type: 'array', children: [
+        mkDecl({ name: 'sku', path: '$.items.sku' }),
+      ] }),
+    ]
+    const { w, emitted } = mountTree({
+      decls, body: { items: [{ sku: 'A' }] }, stateControl: true,
     })
-    // extras 的 body-walk 源防数组根 → 无数字键垃圾行
+    // 行内叶子(实例 $.items[0].sku)切 carry → 上抛模板路径 $.items.sku
+    const sel = w.find('.arr-row .fss-sel')
+    await sel.setValue('carry')
+    expect(emitted).toContainEqual(['$.items.sku', 'carry'])
+  })
+
+  it('F2: overlay 命中 → ↺ 重置按钮可见,点击上抛 (path, null)', async () => {
+    const decls = [mkDecl({ name: 'open', path: '$.open' })]
+    const { w, emitted } = mountTree({
+      decls, body: {}, stateControl: true, fieldStates: { '$.open': 'collapse' },
+    })
+    const reset = w.find('.field .fss-reset')
+    expect(reset.exists()).toBe(true)
+    await reset.trigger('click')
+    expect(emitted).toContainEqual(['$.open', null])
+  })
+
+  it('F3: 无 overlay → ↺ 不显示(无增量可清)', () => {
+    const decls = [mkDecl({ name: 'open', path: '$.open' })]
+    const { w } = mountTree({ decls, body: {}, stateControl: true })
+    expect(w.find('.fss-reset').exists()).toBe(false)
+  })
+})
+
+// ─── 「其他字段」区(§4:目录外残留深浅皆收 + 契约差集归并)──────────
+
+describe('FieldForm 树模式 — 其他字段区(§4)', () => {
+  it('E1: 深层残留成行(相对路径 key + 完整 path);编辑写入 body 深层', async () => {
+    const decls = [
+      mkDecl({ name: 'order', path: '$.order', type: 'object', children: [
+        mkDecl({ name: 'id', path: '$.order.id' }),
+      ] }),
+    ]
+    const { w, body } = mountTree({ decls, body: { order: { id: 1, memo: 'x' } } })
+    await w.find('.extras-toggle').trigger('click')
+    const row = w.find('.extra-row')
+    expect(row.find('.label-text').text()).toBe('order.memo')
+    expect(row.find('.field-path').text()).toBe('$.order.memo')
+    await row.find('input.ctl').setValue('y')
+    await flush()
+    expect(body.value).toEqual({ order: { id: 1, memo: 'y' } })
+  })
+
+  it('E2: 顶层未覆盖容器 → JSON 整行(top);删除走 D8 连锁剪枝', async () => {
+    const decls = [mkDecl({ name: 'id', path: '$.id' })]
+    const { w, body } = mountTree({ decls, body: { id: 1, extra: { a: 1 } } })
+    await w.find('.extras-toggle').trigger('click')
+    const del = w.find('.extra-del')
+    expect(del.exists()).toBe(true)
+    await del.trigger('click')
+    await flush()
+    expect(body.value).toEqual({ id: 1 })
+  })
+
+  it('E3: 契约差集键与 body 实有键按 path 归并(schema 标 + inBody 删除入口)', async () => {
+    const decls = [mkDecl({ name: 'id', path: '$.id' })]
+    const { w } = mountTree({
+      decls,
+      body: { id: 1, trace: 't1' },
+      unboundFields: [{ name: 'trace', path: '$.trace', type: 'string' }],
+    })
+    await w.find('.extras-toggle').trigger('click')
+    const row = w.find('.extra-row')
+    expect(row.find('.extra-src').text()).toBe('契约')
+    expect(row.find('.extra-del').exists()).toBe(true) // inBody → 可删
+  })
+
+  it('E4: 无残留 → 区块整体缺席', () => {
+    const decls = [mkDecl({ name: 'id', path: '$.id' })]
+    const { w } = mountTree({ decls, body: { id: 1 } })
     expect(w.find('[data-testid="extra-fields"]').exists()).toBe(false)
-    // 未覆盖叶子照常派生(走 deriveDeepRows 数组根投影,标签 = 相对路径)
-    const derived = w.findAll('.field.is-derived')
-    expect(derived).toHaveLength(1)
-    expect(derived[0].find('.label-text').text()).toBe('[0].a')
+  })
+})
+
+// ─── 注入态复用(树叶子按 path 命中)────────────────────────────────
+
+describe('FieldForm 树模式 — 注入只读态复用', () => {
+  it('X1: injected 命中树叶子(path 键控 — 数组行实例各得其所)→ 值控件换只读提示条', () => {
+    const decls = [
+      mkDecl({ name: 'items', path: '$.items', type: 'array', children: [
+        mkDecl({ name: 'sku', path: '$.items.sku' }),
+      ] }),
+    ]
+    const { w } = mountTree({
+      decls,
+      body: { items: [{ sku: 'A' }, { sku: 'B' }] },
+      injected: { '$.items[1].sku': [{ source: '$.oid', target: '$.request_body.items[1].sku' }] },
+    })
+    // 仅 row[1] 只读化;row[0](同 name 不同 path)不受牵连
+    expect(w.findAll('.ctl-injected')).toHaveLength(1)
+    const row1 = w.findAll('.arr-row')[1]
+    expect(row1.find('.ctl-injected').exists()).toBe(true)
+    expect(row1.find('.ctl-injected').attributes('title'))
+      .toBe('$.oid → $.request_body.items[1].sku')
+    expect(w.findAll('.arr-row')[0].find('input.ctl').exists()).toBe(true)
+  })
+
+  it('X1b: 策略角标 path 键控 — assign 只挂命中行,不整列误标', () => {
+    const decls = [
+      mkDecl({ name: 'items', path: '$.items', type: 'array', children: [
+        mkDecl({ name: 'sku', path: '$.items.sku' }),
+      ] }),
+    ]
+    const body = { items: [{ sku: 'A' }, { sku: 'B' }] }
+    const w = mount(FieldForm, {
+      props: {
+        nodes: buildTree(decls, undefined, body),
+        body,
+        strategyTags: { '$.items[1].sku': [{ label: 'assign', idx: 0 }] },
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    expect(w.findAll('.strategy-tag')).toHaveLength(1)
+    expect(w.findAll('.arr-row')[1].find('.strategy-tag').exists()).toBe(true)
   })
 })

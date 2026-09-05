@@ -17,32 +17,32 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import carry_store, plate_client, service_names
+from .field_state_resolution import carry_face
 from .run_materialize import CarryContext
 
 
-async def _carry_face(endpoint_id: str) -> dict[str, str]:
-    """plate /full → {path: type};任何失败 → {}(降级)。
+async def _endpoint_declarations(endpoint_id: str) -> list | None:
+    """plate /full → request.declarations(目录态);任何失败 → None(降级)。
 
-    读 ``request.declarations`` 的 carry 通道条目(wire 已归一化,
-    旧 ``carry`` 键不再存在;与 carry 路由 service_fields 同款投影)。
-    垃圾 200 体(json 抛错/信封非 dict)同样降级 — 模块契约是
-    「plate 全部失败 → 空面」,不让单端点的坏包打断整单 carry。
+    2026-09-05 目录化(§4):不再在此过滤面 —— 面投影统一走
+    ``field_state_resolution.carry_face``(解析链单一实现,join
+    step.field_states)。垃圾 200 体(json 抛错/信封非 dict)同样
+    降级 — 模块契约是「plate 全部失败 → 空面」,不让单端点的坏包
+    打断整单 carry。None(降级)与合法空目录 ``[]`` 在调用侧同为
+    空面;类型上分开,留降级遥测的口子。
     """
     client = plate_client.get_client()
     try:
         resp = await client.get(f"/api/endpoint/{endpoint_id}/full")
         if resp.status_code != 200:
-            return {}
+            return None
         item = (resp.json().get("data") or {}).get("item")
     except Exception:  # noqa: BLE001 — httpx 全家 + 垃圾体,统一降级
-        return {}
+        return None
     if not isinstance(item, dict):
-        return {}
+        return None
     decls = ((item.get("request") or {}).get("declarations")) or []
-    return {str(e["path"]): str(e.get("type") or "string")
-            for e in decls
-            if isinstance(e, dict) and e.get("channel") == "carry"
-            and e.get("path")}
+    return decls if isinstance(decls, list) else None
 
 
 def _endpoint_id(step: dict) -> Any:
@@ -61,10 +61,16 @@ def _step_service(step: dict) -> Any:
 
 
 async def build_carry_context(db: AsyncSession, definition: dict) -> CarryContext:
+    """dispatch 预解析入口:plate 目录 + step 增量 → 每 step 的 carry 面。
+
+    面解析走 ``field_state_resolution.carry_face``(§3.2 单一实现):
+    ``state(path) = step.field_states[path] ?? entry.state ?? 'form'`` —
+    场景显式覆盖即时生效(护栏 §1.3),零发版。
+    """
     # 索引契约:枚举原始列表(跳过非 dict),不用过滤后的下标。
     raw_steps: list = list(definition.get("steps") or [])
 
-    # ① 锚点 → carry 面(按 endpoint_id 去重批量,不逐 step 打 plate)
+    # ① 锚点 → 目录声明(按 endpoint_id 去重批量,不逐 step 打 plate)
     endpoint_ids: dict[str, None] = {}
     for step in raw_steps:
         if not isinstance(step, dict):
@@ -72,8 +78,8 @@ async def build_carry_context(db: AsyncSession, definition: dict) -> CarryContex
         eid = _endpoint_id(step)
         if eid:
             endpoint_ids.setdefault(eid, None)
-    faces: dict[str, dict[str, str]] = {
-        eid: await _carry_face(eid) for eid in endpoint_ids
+    decls_by_eid: dict[str, list | None] = {
+        eid: await _endpoint_declarations(eid) for eid in endpoint_ids
     }
     step_fields: dict[int, dict[str, str]] = {}
     for i, step in enumerate(raw_steps):
@@ -81,9 +87,14 @@ async def build_carry_context(db: AsyncSession, definition: dict) -> CarryContex
             continue
         eid = _endpoint_id(step)
         if eid:
-            # 锚点在即占位:空面(合法 carry={} 或单端点 /full 降级)= 不注入
-            # (fail-closed,spec §4.2.2/D3);降级门控仅限无锚点存量 step
-            step_fields[i] = faces[eid]
+            decls = decls_by_eid[eid]
+            # 锚点在即占位:目录拉不到(None 降级)或合法空目录 → 空面
+            # = 不注入(fail-closed,spec §4.2.2/D3);降级门控仅限无锚点
+            # 存量 step。面 = 解析态投影(join 本 step 的 field_states 增量)
+            step_fields[i] = (
+                carry_face(decls, step.get("field_states"))
+                if decls is not None else {}
+            )
 
     # ② 服务引用 → derive_base 解析 → 绑定值(None = 解析失败,整步跳过)
     catalog = await service_names.catalog_service_names()

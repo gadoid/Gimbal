@@ -1,36 +1,48 @@
-"""深层路径声明(D1-D3):name 别名制、通道形态边界、包含四格。
-设计依据:docs/superpowers/specs/2026-09-03-deep-path-declarations-design.md"""
+"""深层路径声明:2026-09-05 目录化后的存活钉子。
+
+原 2026-09-03 设计(D2 通道形态边界 / D3 包含四格)随 channel 退役:
+- D2 的 carry 深下标拒/binding 深下标放行 → 模板纪律继任(children 子树
+  FIELD-only,顶层条目路径自由 — 全量用例见 test_field_state_catalog.py);
+- D3 四格 → 整传一致性单规则继任(carry 容器 ⇒ 子孙 carry,经 children
+  树表达,不再有平铺兄弟包含判定)。
+
+本文件保留:D1 name 别名制边界(标识符/唯一性/根 $ 惯例)— 它们
+不依赖通道轴,目录化后原样存活。
+"""
 import pytest
 from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry, RequestSpec
 
-_SCHEMA = {"type": "object", "properties": {}}
 
 def _build(*entries):
-    return RequestSpec(body_type="json", schema=_SCHEMA,
-                       declarations=list(entries))
+    return RequestSpec(body_type="json", declarations=list(entries))
+
 
 def _decl(**kw):
-    base = dict(name="x", path="$.x", channel="binding")
+    base = dict(name="x", path="$.x", type="string")
     base.update(kw)
     return DeclarationEntry(**base)
 
-# ── D1 别名制 ─────────────────────────────────────────────
+
+# ── D1 别名制(存活)─────────────────────────────────────
 def test_alias_name_accepted():
-    """dispatch 原样案例:name≠末段 通过(name=显示别名,path=寻址真源)。"""
+    """name≠末段 通过(name=显示别名,path=寻址真源)。"""
     _build(
-        _decl(name="supplier_id", path="$.supplier[0].order_supplier_id"),
-        _decl(name="order_id_relate_supplier", path="$.supplier[0].order_id"),
+        _decl(name="supplier_id", path="$.supplier.order_supplier_id"),
+        _decl(name="order_id_relate_supplier", path="$.supplier.order_id"),
         _decl(name="order_id", path="$.order_id"),
     )
+
 
 def test_duplicate_name_rejected():
     with pytest.raises(ValueError, match="重复 name"):
         _build(_decl(name="order_id", path="$.order_id"),
-               _decl(name="order_id", path="$.supplier[0].order_id"))
+               _decl(name="order_id", path="$.supplier.order_id"))
+
 
 def test_non_identifier_name_rejected():
     with pytest.raises(ValueError, match="标识符"):
         _decl(name="订单ID", path="$.order_id")
+
 
 def test_trailing_newline_name_rejected():
     # 评审 R2 finding 2:`$` 锚会放行尾部换行(re.match("x\n") 为真),
@@ -38,45 +50,35 @@ def test_trailing_newline_name_rejected():
     with pytest.raises(ValueError, match="标识符"):
         _decl(name="x\n", path="$.x")
 
+
 def test_root_entry_name_dollar_convention_accepted():
     """根路径条目 name='$' 为 spec §3.1 既有惯例,D1 标识符规则放行特例。"""
-    DeclarationEntry(name="$", path="$", channel="view_only")
+    DeclarationEntry(name="$", path="$", type='string')
 
-# ── D2 通道形态(spec 级:_check_declarations;brief 勘误:两条拒绝用例
-#    需 _build() 包裹 — 通道形态校验在清单级,裸 DeclarationEntry 不经过) ──
-def test_carry_deep_index_rejected():
-    with pytest.raises(ValueError, match="carry 通道 path"):
-        _build(_decl(name="x", path="$.supplier[0].order_supplier_id",
-                     channel="carry", type="string"))
 
-def test_carry_dot_nested_accepted():
-    # spec 级钉子(评审 R2):carry 多 FIELD 段在清单校验层放行不回归
-    _build(_decl(name="b", path="$.a.b", channel="carry", type="string"))
+# ── 旧 D3 → 整传一致性(children 树表达)──────────────────
+def test_carry_container_children_must_carry():
+    """carry 容器的子孙必须 carry(整传一致性,单规则取代旧四格)。"""
+    with pytest.raises(ValueError, match="整传|carry"):
+        _build(_decl(name="supplier", path="$.supplier", type="array",
+                     state="carry",
+                     children=[dict(name="sid", path="$.supplier.sid",
+                                    type="string")]))
 
-def test_binding_wildcard_rejected():
-    with pytest.raises(ValueError, match="具体路径"):
-        _build(_decl(name="sku", path="$.supplier[*].order_supplier_id"))
 
-def test_binding_deep_index_accepted():
-    # spec 级钉子(评审 R2):binding 深下标在清单校验层放行不回归
-    _build(_decl(name="sku0", path="$.supplier[0].order_supplier_id"))
+def test_carry_container_carry_children_ok():
+    _build(_decl(name="supplier", path="$.supplier", type="array",
+                 state="carry",
+                 children=[dict(name="sid", path="$.supplier.sid",
+                                type="string", state="carry")]))
 
-# ── D3 包含四格 ───────────────────────────────────────────
-def test_carry_contains_binding_ok():
-    """dispatch 主案例:carry 容器 + binding 深层叶子 = 分层覆写。"""
-    _build(_decl(name="supplier", path="$.supplier", channel="carry", type="array"),
-           _decl(name="supplier_id", path="$.supplier[0].order_supplier_id"))
 
-def test_carry_contains_carry_rejected():
-    with pytest.raises(ValueError, match="carry 声明不允许嵌套"):
-        _build(_decl(name="supplier", path="$.supplier", channel="carry", type="array"),
-               _decl(name="leaf", path="$.supplier.x", channel="carry", type="string"))
-
-def test_binding_contains_binding_ok():
-    _build(_decl(name="cfg", path="$.cfg", ui_kind="json"),
-           _decl(name="timeout", path="$.cfg.timeout"))
-
-def test_binding_contains_carry_rejected():
-    with pytest.raises(ValueError, match="binding 容器内不允许 carry"):
-        _build(_decl(name="cfg", path="$.cfg", ui_kind="json"),
-               _decl(name="owner", path="$.cfg.owner", channel="carry", type="string"))
+def test_form_container_mixed_children_ok():
+    """form/collapse 容器子孙状态自由(整传一致性只约束 carry 容器)。"""
+    _build(_decl(name="cfg", path="$.cfg", type="object",
+                 children=[
+                     dict(name="timeout", path="$.cfg.timeout",
+                          type="string"),
+                     dict(name="owner", path="$.cfg.owner",
+                          type="string", state="carry"),
+                 ]))

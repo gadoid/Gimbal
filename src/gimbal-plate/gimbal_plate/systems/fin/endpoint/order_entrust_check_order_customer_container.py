@@ -42,52 +42,12 @@ ORDER_ENTRUST_CHECK_ORDER_CUSTOMER_CONTAINER: Final[EndpointSpec] = EndpointSpec
     ),
     request=RequestSpec(
         body_type='json',
-        schema={
-            'type': 'object',
-            'properties': {
-                'customer_id': {
-                    'type': 'string',
-                    'description': '',
-                    'x-type-hint': '疑似 int(字符串形态)',
-                },
-                'order_id': {
-                    'type': 'string',
-                    'description': '',
-                    'x-type-hint': '疑似 int(字符串形态)',
-                },
-                'container': {
-                    'type': 'array',
-                    'items': {
-                        'type': 'object',
-                        'properties': {
-                            'box_type': {'type': 'string'},
-                            'box_num': {
-                                'type': 'string',
-                                'description': '',
-                                'x-type-hint': '疑似 int(字符串形态)',
-                            },
-                            'box_no': {'type': 'array', 'items': {'type': 'string'}},
-                            'seal_number': {
-                                'type': 'array',
-                                'items': {'type': 'string'},
-                            },
-                            'sea_trans_unit_price': {
-                                'type': 'string',
-                                'description': '',
-                                'x-type-hint': '疑似 int(字符串形态)',
-                            },
-                        },
-                    },
-                },
-                'policy_type': {'type': 'string'},
-            },
-            'required': ['customer_id', 'order_id', 'container', 'policy_type'],
-        },
+        
         declarations=[
-            DeclarationEntry(name='customer_id', path='$.customer_id', channel='binding', example='335247043402399744', ui_kind='text'),
-            DeclarationEntry(name='order_id', path='$.order_id', channel='binding', example='354066893969032192', ui_kind='text'),
-            DeclarationEntry(name='container', path='$.container', channel='binding', example=[{'order_container_id':'','box_type': '20GP', 'box_num': '1', 'box_no': [''], 'seal_number': [''], 'sea_trans_unit_price': '100'}], ui_kind='text'),
-            DeclarationEntry(name='policy_type', path='$.policy_type', channel='binding', example='JSZX', ui_kind='text'),
+            DeclarationEntry(name='customer_id', path='$.customer_id', type='string', example='335247043402399744', ui_kind='text'),
+            DeclarationEntry(name='order_id', path='$.order_id', type='string', example='354066893969032192', ui_kind='text'),
+            DeclarationEntry(name='container', path='$.container', type='array', example=[{'order_container_id':'','box_type': '20GP', 'box_num': '1', 'box_no': [''], 'seal_number': [''], 'sea_trans_unit_price': '100'}], ui_kind='text'),
+            DeclarationEntry(name='policy_type', path='$.policy_type', type='string', example='JSZX', ui_kind='text'),
         ],
     ),
     responses={

@@ -21,6 +21,7 @@ from ..schemas.carry import (
     ServiceFieldsOut,
 )
 from ..services import carry_store
+from ..services.field_state_resolution import carry_entries
 from ..services.plate_client import PlateUnavailableError
 from ._error_mapping import _plate_502
 
@@ -99,12 +100,13 @@ async def service_fields(service: str, user: AdminUser):
         if full is None:
             degraded = True
             continue
-        # 读 request.declarations 的 carry 通道条目(spec §7 P1.3);
-        # wire 已归一化(旧 carry 键已清除),声明面是单一真源。
+        # 解析态 == 'carry' 投影(2026-09-05 目录化 §4):面基准 =
+        # entry.state 共识默认 —— 值表是环境级,不 join step 增量
+        # (场景覆盖是 step 级意图,不改值表候选宇宙)。投影走
+        # field_state_resolution 单一实现(与 carry_injection 同款,
+        # 含祖先吸收:整容器是绑定/注入单元)。
         decls = ((full.get("request") or {}).get("declarations")) or []
-        for entry in decls:
-            if entry.get("channel") != "carry":
-                continue  # 消费面只取 carry 通道(spec §7 P1.5 免疫链)
+        for entry in carry_entries(decls):
             path = str(entry.get("path") or "")
             faces.setdefault(path, CarryFieldFace(
                 path=path,

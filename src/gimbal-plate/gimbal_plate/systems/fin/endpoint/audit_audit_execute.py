@@ -31,11 +31,11 @@ AUDIT_AUDIT_EXECUTE: Final[EndpointSpec] = EndpointSpec(
     request=RequestSpec(
         body_type="json",
         declarations=[
-        DeclarationEntry(name='audit_ids', path='audit_ids', channel='binding', required=True, example=[''], ui_kind='json'),
-        DeclarationEntry(name='audit_status', path='audit_status', channel='binding', required=True, example=2, ui_kind='number'),
-        DeclarationEntry(name='audit_remark', path='audit_remark', channel='binding', required=True, example=None, ui_kind='text'),
+        DeclarationEntry(name='audit_ids', path='audit_ids', type='array', required=True, example=[''], ui_kind='json'),
+        DeclarationEntry(name='audit_status', path='audit_status', type='integer', required=True, example=2, ui_kind='number'),
+        DeclarationEntry(name='audit_remark', path='audit_remark', type='string', required=True, example=None, ui_kind='text'),
         ],
-        schema_={},
+        
     ),
     responses={
         200: ResponseSpec(

@@ -57,8 +57,8 @@ class TestExportGimbalFunctional:
             service="settlement",
             name="创建结算单",
             api=ApiSpec(service="settlement", method="POST", path="/api/v1/fin/settlement/orders"),
-            request=RequestSpec(body_type="json", schema_=_InBody.model_json_schema()),
-            responses={200: ResponseSpec(status=200, schema_=_OutBody.model_json_schema())},
+            request=RequestSpec.declare(_InBody),
+            responses={200: ResponseSpec.declare(_OutBody, status=200)},
             version="1.0.0",
         )
 

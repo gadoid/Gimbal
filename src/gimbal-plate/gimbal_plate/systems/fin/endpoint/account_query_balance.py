@@ -33,11 +33,7 @@ ACCOUNT_QUERY_BALANCE: Final[EndpointSpec] = EndpointSpec(
         timeout_seconds=5.0,
     ),
     responses={
-        200: ResponseSpec(
-            status=200,
-            description="成功",
-            schema_=QueryBalanceResponse.model_json_schema(),
-        ),
+        200: ResponseSpec.declare(QueryBalanceResponse, status=200, description='成功'),
     },
     version=FIN_DEFAULT_VERSION,
     metadata=EndpointMetadata(

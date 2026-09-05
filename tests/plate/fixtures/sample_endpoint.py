@@ -39,13 +39,12 @@ def make_sample_endpoint() -> EndpointSpec:
         ),
         request=RequestSpec(
             body_type="json",
-            schema_=OrderIn.model_json_schema(),
             declarations=[
                 DeclarationEntry(name="order_no", path="$.order_no",
-                                 channel="binding", required=True,
+                                 type="string", required=True,
                                  example="SAMPLE-001", ui_kind="text"),
                 DeclarationEntry(name="amount", path="$.amount",
-                                 channel="binding", required=True,
+                                 type="number", required=True,
                                  example=10.0, ui_kind="number"),
             ],
         ),
@@ -53,10 +52,9 @@ def make_sample_endpoint() -> EndpointSpec:
             200: ResponseSpec(
                 status=200,
                 description="成功",
-                schema_=OrderOut.model_json_schema(),
                 declarations=[
                     DeclarationEntry(name="order_id", path="$.order_id",
-                                     channel="view_only", required=True,
+                                     type="string", required=True,
                                      ui_kind="text", assertable=True),
                 ],
             ),

@@ -136,8 +136,8 @@ async def test_preview_plate_without_overlay_materializes_carry(
     plate_mock.behaviour = "echo"
     plate_mock.services = [{"name": "fin-service"}]
     plate_mock.fulls = {"fin.ep1": {"request": {"declarations": [
-        {"path": "$.remark", "channel": "carry", "type": "string"},
-        {"path": "$.appCode", "channel": "carry", "type": "string"}]}}}
+        {"path": "$.remark", "state": "carry", "type": "string"},
+        {"path": "$.appCode", "state": "carry", "type": "string"}]}}}
     async with db_module.SessionLocal() as db:
         await carry_store.put_bindings(
             db, "fin-service", {"$.remark": "压测-张三"}, "bob")
@@ -233,8 +233,8 @@ async def test_golden_equivalence_with_carry(
     plate_mock.behaviour = "echo"
     plate_mock.services = [{"name": "fin-service"}]
     plate_mock.fulls = {"fin.ep1": {"request": {"declarations": [
-        {"path": "$.remark", "channel": "carry", "type": "string"},
-        {"path": "$.appCode", "channel": "carry", "type": "string"}]}}}
+        {"path": "$.remark", "state": "carry", "type": "string"},
+        {"path": "$.appCode", "state": "carry", "type": "string"}]}}}
     async with db_module.SessionLocal() as db:
         await carry_store.put_bindings(
             db, "fin-service", {"$.remark": "压测-张三"}, "bob")

@@ -397,58 +397,31 @@ describe('FieldForm — 其他字段(body 实有但无 binding 的顶层键)', (
   })
 })
 
-describe('FieldForm — 深层字段 path 角标(D5)与 roots 归一(D12)', () => {
-  it('P1: 非平铺字段(path ≠ $.+name)渲染 path-badge,title 透出上级治理标注', () => {
+describe('FieldForm — 深层字段 path 角标(D5)与平铺 extras roots 归一', () => {
+  it('P1: 非平铺字段(path ≠ $.+name)渲染 path-badge(治理归属由目录树承载,平铺面无上级轴)', () => {
     const { w } = mountWithParent({
       bindings: [
         mkBinding(),
-        mkBinding({
-          name: 'email',
-          path: '$.supplier.contact.email',
-          parentPath: '$.supplier.contact',
-          parentChannel: 'binding',
-        }),
+        mkBinding({ name: 'email', path: '$.supplier.contact.email' }),
       ],
       body: { order_id: 'ord-1' },
     })
     const badge = w.find('.path-badge')
     expect(badge.exists()).toBe(true)
     expect(badge.text()).toBe('$.supplier.contact.email')
-    expect(badge.attributes('title')).toBe(
-      '$.supplier.contact.email · 上级 $.supplier.contact(binding)',
-    )
   })
 
-  it('P2: carry 上级 → title 标注「值表打底,此处覆写」', () => {
-    const { w } = mountWithParent({
-      bindings: [
-        mkBinding({
-          name: 'note',
-          path: '$.ext.note',
-          parentPath: '$.ext',
-          parentChannel: 'carry',
-        }),
-      ],
-      body: {},
-    })
-    expect(w.find('.path-badge').attributes('title')).toBe(
-      '$.ext.note · 上级 $.ext(carry · 值表打底,此处覆写)',
-    )
-  })
-
-  it('P3: 平铺字段无角标(维持灰 chip);无上级的角标 title 只含 path', () => {
+  it('P3: 平铺字段无角标(维持灰 chip);别名平铺(path ≠ $.+name)有角标', () => {
     // 平铺:path === $.+name → 灰 chip,无 path-badge
     const flat = mountWithParent({ bindings: [mkBinding()], body: { order_id: 'ord-1' } })
     expect(flat.w.find('.path-badge').exists()).toBe(false)
     expect(flat.w.find('.field .field-path').exists()).toBe(true)
-    // 别名平铺(D1):path ≠ $.+name → 有角标;无上级 → title 仅 path
+    // 别名平铺:name 与 path 末段不一致 → 有角标
     const alias = mountWithParent({
       bindings: [mkBinding({ name: 'oid', path: '$.order_id' })],
       body: { order_id: 'ord-1' },
     })
-    const badge = alias.w.find('.path-badge')
-    expect(badge.exists()).toBe(true)
-    expect(badge.attributes('title')).toBe('$.order_id')
+    expect(alias.w.find('.path-badge').exists()).toBe(true)
   })
 
   it('P4: roots 归一 — $.supplier[0].xxx 根段归一为 supplier,body 容器不再进「其他字段」', () => {

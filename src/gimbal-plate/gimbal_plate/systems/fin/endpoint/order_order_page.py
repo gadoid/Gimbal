@@ -57,21 +57,21 @@ _ROW_FIELDS: Final[list[tuple[str, str, str]]] = [
 def _build_response_decls() -> list[DeclarationEntry]:
     """信封字段 + 行字段 → view_only 声明;全部声明即可断言(B3 assertable)。"""
     entries = [
-        DeclarationEntry(name="code", path="$.code", channel="view_only",
+        DeclarationEntry(name="code", path="$.code", type='number', 
                          required=False, ui_kind="number",
                          description="业务状态码(200=成功)", assertable=True),
-        DeclarationEntry(name="msg", path="$.msg", channel="view_only",
+        DeclarationEntry(name="msg", path="$.msg", type='string', 
                          required=False, ui_kind="text",
                          description="业务提示信息", assertable=True),
-        DeclarationEntry(name="request_id", path="$.request_id", channel="view_only",
+        DeclarationEntry(name="request_id", path="$.request_id", type='string', 
                          required=False, ui_kind="text",
                          description="请求追踪ID", assertable=True),
-        DeclarationEntry(name="total", path="$.data.total", channel="view_only",
+        DeclarationEntry(name="total", path="$.data.total", type='number', 
                          required=False, ui_kind="number",
                          description="命中总条数(分页)", assertable=True),
     ]
     entries += [
-        DeclarationEntry(name=name, path=f"{_ROW_BASE}{name}", channel="view_only",
+        DeclarationEntry(name=name, path=f"{_ROW_BASE}{name}", type='string', 
                          required=False, ui_kind=kind, description=desc,
                          assertable=True)
         for name, kind, desc in _ROW_FIELDS
@@ -91,15 +91,15 @@ ORDER_ORDER_PAGE: Final[EndpointSpec] = EndpointSpec(
     request=RequestSpec(
         body_type="json",
         declarations=[
-        DeclarationEntry(name='bl_no', path='bl_no', channel='binding', required=True, example='', ui_kind='text'),
-        DeclarationEntry(name='order_no', path='order_no', channel='binding', required=True, example='', ui_kind='text'),
-        DeclarationEntry(name='page_no', path='page_no', channel='binding', required=True, example=1, ui_kind='number'),
-        DeclarationEntry(name='page_size', path='page_size', channel='binding', required=True, example=20, ui_kind='number'),
-        DeclarationEntry(name='sort_field', path='sort_field', channel='binding', required=True, example='update_time', ui_kind='text'),
-        DeclarationEntry(name='sort_order', path='sort_order', channel='binding', required=True, example='desc', ui_kind='text'),
-        DeclarationEntry(name='params', path='params', channel='binding', required=True, example={}, ui_kind='json'),
+        DeclarationEntry(name='bl_no', path='bl_no', type='string', required=True, example='', ui_kind='text'),
+        DeclarationEntry(name='order_no', path='order_no', type='string', required=True, example='', ui_kind='text'),
+        DeclarationEntry(name='page_no', path='page_no', type='integer', required=True, example=1, ui_kind='number'),
+        DeclarationEntry(name='page_size', path='page_size', type='integer', required=True, example=20, ui_kind='number'),
+        DeclarationEntry(name='sort_field', path='sort_field', type='string', required=True, example='update_time', ui_kind='text'),
+        DeclarationEntry(name='sort_order', path='sort_order', type='string', required=True, example='desc', ui_kind='text'),
+        DeclarationEntry(name='params', path='params', type='object', required=True, example={}, ui_kind='json'),
         ],
-        schema_={},
+        
     ),
     responses={
         200: ResponseSpec(

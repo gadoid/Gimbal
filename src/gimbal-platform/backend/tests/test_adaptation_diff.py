@@ -18,7 +18,7 @@ from app.services.plate_client import PlateUnavailableError
 FULL = {
     "id": "fin.order.add", "version": "1.0.0",
     "request": {"declarations": [
-        {"name": "amount", "channel": "binding", "enum": None}]},
+        {"name": "amount", "state": "form", "enum": None}]},
 }
 
 

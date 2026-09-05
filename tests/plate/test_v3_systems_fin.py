@@ -31,9 +31,10 @@ from gimbal_plate.systems.fin.endpoint import (
 class TestSystemsFinEndpointExists:
     """systems/fin/endpoint/ 三个文件齐全。"""
 
-    def test_endpoint_init_aggregates_nineteen_endpoints(self) -> None:
-        # 原 2 个 + Scenario_Test_14 提取 16 个 + order_dispatch(2026-09-03)= 19 个
-        assert len(ALL_ENDPOINTS) == 19
+    def test_endpoint_init_aggregates_all_endpoints(self) -> None:
+        # 原 2 个 + Scenario_Test_14 提取 16 个 + order_dispatch(2026-09-03)
+        # + order_confirm / order_book / audit_page(2026-09-04/05)= 21 个
+        assert len(ALL_ENDPOINTS) == 21
 
     def test_endpoint_constants_are_endpointspec_instances(self) -> None:
         assert isinstance(SETTLEMENT_CREATE_ORDER, EndpointSpec)
@@ -74,173 +75,65 @@ class TestEndpointValidatorChecks:
             assert 200 in ep.responses
 
 
-class TestSchemaComposition:
-    """body 契约以 schema_ 组合挂载到 EndpointSpec.request/responses
-    (schema_ 是唯一结构真源,title 锚定挂载来源)。"""
+class TestCatalogComposition:
+    """body 契约以 declare() 全量目录组合挂载(2026-09-05 目录化):
+    declarations 为唯一承重,schema_/title 锚退役;面划分读 entry.state。"""
 
-    def test_create_order_endpoint_has_request_model(self) -> None:
+    def test_create_order_endpoint_request_catalog(self) -> None:
         rs = SETTLEMENT_CREATE_ORDER.request
         assert isinstance(rs, RequestSpec)
-        # model 机制已退役(spec §2.1.1):schema_ 是唯一结构真源,
-        # 由其 title 锚定挂载的是哪个 body 模型。
-        assert rs.schema_["title"] == "CreateOrderRequest"
-        assert rs.json_schema() is not None
+        assert [e.name for e in rs.declarations] == [
+            "order_id", "amount", "currency", "remark"]
 
-    def test_create_order_endpoint_has_response_model(self) -> None:
+    def test_create_order_endpoint_response_catalog(self) -> None:
         rsp = SETTLEMENT_CREATE_ORDER.responses[200]
         assert isinstance(rsp, ResponseSpec)
-        assert rsp.schema_["title"] == "CreateOrderResponse"
-        assert rsp.json_schema() is not None
+        assert [e.name for e in rsp.declarations] == [
+            "order_id", "status", "created_at"]
 
-    def test_query_balance_endpoint_has_response_model(self) -> None:
+    def test_query_balance_endpoint_response_catalog(self) -> None:
         rsp = ACCOUNT_QUERY_BALANCE.responses[200]
-        assert rsp.schema_["title"] == "QueryBalanceResponse"
-        assert rsp.json_schema() is not None
+        assert isinstance(rsp, ResponseSpec)
+        assert [e.name for e in rsp.declarations] == [
+            "account_id", "balance", "currency", "as_of"]
 
     def test_create_order_request_face(self) -> None:
         rs = SETTLEMENT_CREATE_ORDER.request
         assert rs is not None
         assert [e.name for e in rs.declarations
-                if e.channel == "binding"] == ["order_id", "amount", "currency"]
+                if e.state == "form"] == ["order_id", "amount", "currency"]
         assert [e.path for e in rs.declarations
-                if e.channel == "carry"] == ["$.remark"]
+                if e.state == "carry"] == ["$.remark"]
 
 
-class TestCarryFacesAllEndpoints:
-    """全端点 carry 面策略(spec §2.2 三分类):描述性传递字段(备注族)
-    一律声明进 carry,不得滞留 fields[](业务表单面)。
+class TestCarryStatePolicy:
+    """全端点 state 策略(2026-09-05 目录化,取代旧 channel 面 census):
+    描述性传递字段(备注族)一律 state=carry,不得滞留 form(业务表单面)。
 
-    背景(2026-09-01):orderAdd 的 $.remark 服务绑定未注入 — 锚点步
-    契约门控 fail-closed,端点未声明 carry 面即零候选、绑定永不生效。
-    策略钉在 ALL_ENDPOINTS 全集上(而非逐端点打地鼠):凡请求含
-    remark / notes / cancel_remark 三个描述性字段的端点,三键全部
-    声明进 carry;查询类端点无此类字段、carry 面为空。
-
-    re-baseline(2026-09-02):73cc71b 语料重构把 order_entrust.order_add
-    委托下单改为 3 binding + 91 carry(该接口契约本就无 cancel_remark 声明)、
-    order_order_book 新增 $.action carry → EXPECTED_CARRY 按链上实际
-    carry 面重钉(全量 91 键显式锁定,后续漂移即红)。
+    原 TestCarryFacesAllEndpoints 的 91/233 键 EXPECTED_CARRY 全量普查
+    随 channel 轴退役(§4.1(c)):目录化后面基准 = entry.state 共识默认,
+    逐键 census 属打地鼠重钉负担;存活的策略钉收窄为下方两条。
     """
 
     DESCRIPTIVE = {"remark", "notes", "cancel_remark"}
 
-    EXPECTED_CARRY: dict[str, list[str]] = {
-        "fin.settlement.create_order": ["$.remark"],
-        "fin.order_entrust.order_add": [
-            "$.airline_type", "$.atd", "$.bulk", "$.business_type",
-            "$.cargo_type", "$.carrier", "$.carrier_id", "$.client_expand_id",
-            "$.client_expand_name", "$.commodity", "$.consignee",
-            "$.container", "$.country_id", "$.country_name",
-            "$.country_name_cn", "$.customer_contact_id",
-            "$.customer_contact_name", "$.customer_file_list",
-            "$.customer_id", "$.customer_name", "$.customer_order_sn",
-            "$.del", "$.del_cn", "$.del_port_name", "$.deposit_refund_day",
-            "$.deposit_settlement_date", "$.deposit_type",
-            "$.deposit_type_name", "$.etd",
-            "$.gross_weight", "$.m_delivery_type", "$.main_ids",
-            "$.main_sort", "$.message_board", "$.notes", "$.notifier",
-            "$.num", "$.ocean_type", "$.operator_id", "$.operator_name",
-            "$.order_file", "$.order_sn", "$.packer", "$.pay_type",
-            "$.payment_type", "$.payment_type_name", "$.period_delay_type",
-            "$.period_delay_type_name", "$.pod", "$.pod_cn",
-            "$.pod_port_name", "$.pol", "$.pol_cn", "$.pol_country",
-            "$.pol_country_cn", "$.pol_country_id", "$.pol_port_name",
-            "$.policy_id", "$.policy_name", "$.policy_type",
-            "$.policy_type_name", "$.pot", "$.pot_cn", "$.pot_port_name",
-            "$.product_id", "$.product_name", "$.receive_time_limit",
-            "$.remark", "$.sale_id", "$.sale_name", "$.sea_trans_cost",
-            "$.sea_trans_currency", "$.service_id", "$.service_items",
-            "$.service_name", "$.settle_type", "$.settle_type_name",
-            "$.ship_mark", "$.ship_name", "$.shipper", "$.status",
-            "$.supplier", "$.terms_payment", "$.terms_shipment",
-            "$.terms_transport", "$.teu", "$.trade_term", "$.volume",
-            "$.volume_desc", "$.voy",
-        ],
-        # 意识性 re-baseline(2026-09-03):order_dispatch 落地,233 键 carry 面
-        # 按链上实际重钉(深层 binding 叶子 supplier[0].* 不入 carry 面)。
-        "fin.order_entrust.order_dispatch": [
-            "$.account_status", "$.airline_type", "$.asset_status", "$.asset_status_name",
-            "$.atd", "$.audit", "$.audit_type", "$.bl_no_upload_date",
-            "$.book_upload_date", "$.bulk", "$.business_main_id", "$.business_main_name",
-            "$.business_time", "$.business_type", "$.business_type_name", "$.cancel_remark",
-            "$.cancel_time", "$.cargo_type", "$.cargo_type_name", "$.carrier",
-            "$.carrier_id", "$.carrier_name", "$.change_type", "$.client_expand_id",
-            "$.client_expand_name", "$.commodity", "$.confirm_status", "$.consignee",
-            "$.container", "$.copy_order_id", "$.country_id", "$.country_name",
-            "$.country_name_cn", "$.create_by", "$.create_id", "$.create_time",
-            "$.customer_address_cn", "$.customer_category", "$.customer_confirm_date", "$.customer_contact_id",
-            "$.customer_contact_name", "$.customer_contact_phone", "$.customer_due_date", "$.customer_file_list",
-            "$.customer_id", "$.customer_invoice_request_date", "$.customer_main_id", "$.customer_main_name",
-            "$.customer_name", "$.customer_order_sn", "$.customer_payment_collection_date", "$.customer_period",
-            "$.customer_put_date", "$.customer_put_date_desc", "$.customer_put_date_manual", "$.customer_put_writeoff_date",
-            "$.customer_settlement_date", "$.customer_tax_number", "$.del", "$.del_cn",
-            "$.delayed_recovery_cny", "$.delayed_recovery_usd", "$.delayed_time", "$.delete_time",
-            "$.deposit_refund_day", "$.deposit_refund_month", "$.deposit_settlement_date", "$.deposit_type",
-            "$.deposit_type_name", "$.discount_currency", "$.discount_end", "$.discount_ratio",
-            "$.discount_rule", "$.discount_start", "$.discount_status", "$.effective_by",
-            "$.effective_id", "$.effective_time", "$.enable", "$.etd",
-            "$.exchange_rate", "$.expect_discount_status", "$.expect_discount_status_name", "$.expect_fee_status",
-            "$.expect_policy_status_name", "$.expect_subsidy_category_name", "$.fee_lock_status", "$.fee_miss_name",
-            "$.finance_date", "$.finance_status", "$.financing_apply_amount", "$.financing_apply_amount_cny",
-            "$.financing_apply_amount_usd", "$.first_financing_doc_ok_date", "$.first_status", "$.folde_pay_total",
-            "$.folde_pay_usd", "$.folde_put_total", "$.folde_put_usd", "$.fund_code",
-            "$.fund_name", "$.gross_margin", "$.gross_margin_rate", "$.gross_weight",
-            "$.insurance_doc_ok_date", "$.is_delayed_recovery", "$.is_delayed_recovery_name", "$.is_fee_miss",
-            "$.is_financing", "$.is_loan_before_invoice", "$.is_special_pay", "$.is_sync_es",
-            "$.is_system_generate", "$.is_traverse", "$.is_usd_project", "$.loan_pay_status",
-            "$.loan_status", "$.m_delivery_type", "$.m_delivery_type_name", "$.main_ids",
-            "$.main_ids_name", "$.main_sort", "$.message_board", "$.notes",
-            "$.notifier", "$.num", "$.ocean_type", "$.operator_id",
-            "$.operator_name", "$.order_file", "$.order_finance_arr", "$.order_main_bank_arr",
-            "$.order_sn", "$.order_sub", "$.order_sub_no", "$.packer",
-            "$.pay_account_status", "$.pay_status", "$.pay_type", "$.pay_type_name",
-            "$.payment_type", "$.payment_type_name", "$.period_delay_type", "$.period_delay_type_name",
-            "$.period_rule", "$.period_rule_name", "$.pod", "$.pod_cn",
-            "$.pol", "$.pol_cn", "$.pol_country", "$.pol_country_cn",
-            "$.pol_country_id", "$.policy_id", "$.policy_main_arr", "$.policy_match",
-            "$.policy_match_name", "$.policy_name", "$.policy_status_name", "$.policy_type",
-            "$.policy_type_name", "$.pot", "$.pot_cn", "$.product_id",
-            "$.product_name", "$.proprietary_business_status", "$.real_cost_date", "$.real_discount_status",
-            "$.real_discount_status_name", "$.real_fee_locked", "$.real_fee_status", "$.real_pay_cny",
-            "$.real_pay_usd", "$.real_put_cny", "$.real_put_discount_rate", "$.real_put_usd",
-            "$.real_subsidy_category_name", "$.receive_time_limit", "$.remark", "$.repay_warn_time",
-            "$.repayment_date", "$.reverse_status", "$.reverse_status_name", "$.revoke_failure_reason",
-            "$.revoke_status", "$.revoke_status_name", "$.revoke_type", "$.revoke_type_name",
-            "$.sale_id", "$.sale_name", "$.sea_trans_cost", "$.sea_trans_currency",
-            "$.second_financing_doc_ok_date", "$.second_status", "$.service_id", "$.service_items",
-            "$.service_name", "$.service_project", "$.service_project_amount", "$.settle_type",
-            "$.settle_type_name", "$.ship_mark", "$.ship_name", "$.shipper",
-            "$.status", "$.subsidy_category_name", "$.supplier", "$.supplier_due_date",
-            "$.supplier_invoice_date", "$.supplier_invoice_taketime", "$.sys_upttime", "$.term_rule_name",
-            "$.terms_payment", "$.terms_payment_name", "$.terms_shipment", "$.terms_transport",
-            "$.terms_transport_name", "$.teu", "$.track_ata", "$.track_atd",
-            "$.track_eta", "$.track_ship_name", "$.track_stcs", "$.track_voy",
-            "$.trade_term", "$.trade_term_name", "$.trans_cost_put_preserve_date", "$.update_by",
-            "$.update_id", "$.update_time", "$.volume", "$.volume_desc",
-            "$.voy",
-        ],
-        "fin.order.order_add": ["$.cancel_remark", "$.notes", "$.remark"],
-        "fin.order.order_book": ["$.action", "$.cancel_remark", "$.notes", "$.remark"],
-    }
-
-    def test_all_endpoints_carry_face_matches_policy(self) -> None:
-        actual = {
-            ep.id: sorted(e.path for e in rs.declarations
-                          if e.channel == "carry")
-            for ep in ALL_ENDPOINTS
-            if (rs := ep.request) is not None
-            and any(e.channel == "carry" for e in rs.declarations)
-        }
-        assert actual == self.EXPECTED_CARRY
-
-    def test_descriptive_fields_never_in_form_fields(self) -> None:
+    def test_descriptive_fields_never_in_form_state(self) -> None:
         for ep in ALL_ENDPOINTS:
             rs = ep.request
             if rs is None:
                 continue
             leaked = {e.name for e in rs.declarations
-                      if e.channel == "binding"} & self.DESCRIPTIVE
-            assert not leaked, f"{ep.id}: 描述性字段 {sorted(leaked)} 滞留 binding 面"
+                      if e.state == "form"} & self.DESCRIPTIVE
+            assert not leaked, f"{ep.id}: 描述性字段 {sorted(leaked)} 滞留 form 面"
+
+    def test_carry_state_needs_no_channel(self) -> None:
+        # wire 面不再有 channel 键;state 是唯一面划分轴。
+        for ep in ALL_ENDPOINTS:
+            rs = ep.request
+            if rs is None:
+                continue
+            for e in rs.declarations:
+                assert "channel" not in e.model_dump()
 
 
 class TestDefaultsRoundTrip:

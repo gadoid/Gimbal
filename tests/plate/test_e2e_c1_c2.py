@@ -16,10 +16,10 @@ def test_end_to_end_c1_c2() -> None:
     assert ep.system == "sample"
     assert ep.service == "order"
     assert ep.api.method == "POST"
-    # P2 存储翻转:断言面 = view_only 条目的 assertable 旗标
+    # P2 存储翻转 + 目录化:断言面 = 条目 assertable 旗标(响应面无视 state)
     (order_id,) = [e for e in ep.responses[200].declarations
                    if e.name == "order_id"]
-    assert order_id.channel == "view_only" and order_id.assertable is True
+    assert order_id.assertable is True
 
     # 2. 注册
     registry.reset()
@@ -66,11 +66,13 @@ def test_end_to_end_c1_c2() -> None:
 
     # 6. 序列化:基于 version 的语义等价断言(详见 ENDPOINT_SPEC_V1.md §2.3)。
     # 不做字节级 round-trip;updated_at 不参与断言。
+    # 目录化:IO 节点只发 declarations,schema_/model_* 均退役。
     data = ep.model_dump(mode="json")
     assert data["version"] == "1.0.0"
     assert data["id"] == ep.id
     assert data["api"]["method"] == "POST"
-    assert "schema" in data["request"]
-    assert "model_schema" not in data["request"]
-    assert "schema" in data["responses"]["200"]
+    assert "declarations" in data["request"]
+    assert "schema" not in data["request"] and "model_schema" not in data["request"]
+    assert "declarations" in data["responses"]["200"]
+    assert "schema" not in data["responses"]["200"]
     assert "model_schema" not in data["responses"]["200"]

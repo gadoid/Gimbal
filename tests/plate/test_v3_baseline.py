@@ -46,8 +46,8 @@ def sample_endpoint() -> EndpointSpec:
         service="sample",
         name="基线样例",
         api=ApiSpec(service="sample", method="GET", path="/baseline/sample"),
-        request=RequestSpec(body_type="json", schema_=_SampleIn.model_json_schema()),
-        responses={200: ResponseSpec(status=200, schema_=_SampleOut.model_json_schema())},
+        request=RequestSpec.declare(_SampleIn),
+        responses={200: ResponseSpec.declare(_SampleOut, status=200)},
         version="1.0.0",
     )
 
@@ -77,18 +77,19 @@ class TestSchemaEndpointImportable:
         assert sample_endpoint.system == "baseline"
         assert sample_endpoint.version == "1.0.0"
 
-    def test_endpoint_spec_dump_contains_response_schema(
+    def test_endpoint_spec_dump_contains_response_declarations(
         self, sample_endpoint: EndpointSpec
     ) -> None:
-        # RequestSpec / ResponseSpec 的 @model_serializer 输出 declarations /
-        # schema(P2 存储翻转后 IO 节点与 wire 同形)。
+        # RequestSpec / ResponseSpec 的 @model_serializer 输出 declarations
+        # (2026-09-05 目录化:IO 节点与 wire 同形,schema_ 键退役)。
         # 测试只校验 dump 出来的结构里我们填的关键字段都在。
         dumped = sample_endpoint.model_dump(mode="json")
         assert dumped["id"] == "baseline.sample.endpoint"
         assert dumped["api"]["path"] == "/baseline/sample"
         resp_200 = dumped["responses"]["200"]
-        assert "schema" in resp_200
-        assert resp_200["schema"]["title"] == "_SampleOut"
+        assert "schema" not in resp_200
+        assert [e["name"] for e in resp_200["declarations"]] == [
+            "order_id", "status"]
 
 
 class TestSchemaInterfaceImportable:

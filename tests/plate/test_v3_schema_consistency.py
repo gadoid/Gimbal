@@ -60,20 +60,19 @@ _EP_BY_KEY = {(ep.api.method, ep.api.path): ep for ep in ALL_ENDPOINTS}
 def _declared_body_keys(ep) -> set[str] | None:
     """平台补全面会物化的顶层 body 键集;None = 不物化(全量透传)。
 
-    73cc71b 语料重构后,旧场景 body 可能携带端点已不再声明的键
-    (如 entrust 的 order_id)— 平台补全只覆盖已声明面
-    (binding 字段名 ∪ 平铺 carry 键 "$.x"),未声明键按设计丢弃。
+    2026-09-05 目录化(state 轴):form/collapse 面叶子按声明 path 补全,
+    carry 面(含整容器)对 body 已有字面量透传 — 两者都取 path 首段。
+    未声明键按设计丢弃(目录即宇宙,残缺键归前端「其他字段」区,
+    不进 body 补全面)。
     """
     if ep is None or ep.request is None:
         return None
     keys: set[str] = set()
     for e in ep.request.declarations:
-        if e.channel == "binding":
-            keys.add(e.name)
-        elif e.channel == "carry":
-            seg = e.path[2:] if e.path.startswith("$.") else e.path
-            if "." not in seg and "[" not in seg:
-                keys.add(seg)
+        seg = e.path[2:] if e.path.startswith("$.") else e.path
+        first = seg.split(".", 1)[0].split("[", 1)[0]
+        if first:
+            keys.add(first)
     return keys
 
 
