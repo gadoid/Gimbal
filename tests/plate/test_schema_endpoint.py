@@ -1043,8 +1043,10 @@ class TestDeclarationEntry:
 
     def test_minimal_entry_defaults(self) -> None:
         # 目录化:最小条目 = name/path/type;state 默认 form(fail-closed)。
+        # required 默认 False(2026-09-05 注入粒度 P5):curl 导入无必填
+        # 信息,默认 True 星标全量噪音;真必填显式盖戳/schema 导入计算。
         e = DeclarationEntry(name="remark", path="$.remark", type="string")
-        assert e.state == "form" and e.assertable is False and e.required is True
+        assert e.state == "form" and e.assertable is False and e.required is False
 
     def test_b6_softened_carry_allows_form_metadata(self) -> None:
         # B6 软化(2026-09-05 目录化):default/example 为表单角色元数据,

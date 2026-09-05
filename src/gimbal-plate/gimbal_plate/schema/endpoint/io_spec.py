@@ -88,7 +88,11 @@ class DeclarationEntry(BaseModel):
     path: str
     type: str                      # 全条目必填,限六原语
     state: Literal["form", "collapse", "carry"] = "form"
-    required: bool = True
+    # required 默认 False(fail-closed,与 state 默认 form 同向):curl 导入
+    # 无必填信息,默认 True 会让星标全量噪音(每个字段都"必填"= 没有必填)。
+    # 真必填两条正路:手写目录显式盖 required=True;schema 导入按
+    # required_names 计算注入。
+    required: bool = False
     default: Any | None = None
     example: Any | None = None
     description: str = ""
