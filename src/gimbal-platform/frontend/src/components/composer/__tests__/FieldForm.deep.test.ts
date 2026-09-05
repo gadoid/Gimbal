@@ -225,6 +225,49 @@ describe('FieldForm 树模式 — 数组行组(§5.3)', () => {
       .toEqual([{ sku: 'a' }, {}])
     expect((body.value as Record<string, any>).outer[1].rows).toHaveLength(2)
   })
+
+  it('A8: 多层嵌套(对象×数组×对象×数组)— 渲染/深路径编辑/D8 连锁剪枝逐层收敛', async () => {
+    const decls = [
+      mkDecl({ name: 'order', path: '$.order', type: 'object', children: [
+        mkDecl({ name: 'lines', path: '$.order.lines', type: 'array', children: [
+          mkDecl({ name: 'item', path: '$.order.lines.item', type: 'object', children: [
+            mkDecl({ name: 'tags', path: '$.order.lines.item.tags', type: 'array', children: [
+              mkDecl({ name: 'code', path: '$.order.lines.item.tags.code' }),
+            ] }),
+          ] }),
+        ] }),
+      ] }),
+    ]
+    const { w, body } = mountTree({
+      decls,
+      body: { order: { lines: [
+        { item: { tags: [{ code: 'x' }, { code: 'y' }] } },
+        { item: { tags: [{ code: 'z' }] } },
+      ] } },
+    })
+    // 渲染:obj-node = order + 2×item;arr-node = lines + 2×tags;
+    // arr-row = 2 外层 + 3 内层;叶输入 3
+    expect(w.findAll('.obj-node')).toHaveLength(3)
+    expect(w.findAll('.arr-node')).toHaveLength(3)
+    expect(w.findAll('.arr-row')).toHaveLength(5)
+    expect(w.findAll('.arr-row input.ctl')).toHaveLength(3)
+    // 编辑最深叶(文档序第 2 个 = lines[0].tags[1])→ 四层实例路径写入
+    await w.findAll('.arr-row input.ctl')[1].setValue('Y')
+    await flush()
+    expect(body.value).toEqual({ order: { lines: [
+      { item: { tags: [{ code: 'x' }, { code: 'Y' }] } },
+      { item: { tags: [{ code: 'z' }] } },
+    ] } })
+    // 清空 lines[1] 唯一最深叶 → D8 逐层连锁:code 删 → tags[0] 置 null →
+    // tags 全空删 → item 空删 → lines[1] 置 null(数组保长度不 splice)→
+    // lines 非全空(第 1 行有值)停止
+    await w.findAll('.arr-row input.ctl')[2].setValue('')
+    await flush()
+    expect(body.value).toEqual({ order: { lines: [
+      { item: { tags: [{ code: 'x' }, { code: 'Y' }] } },
+      null,
+    ] } })
+  })
 })
 
 // ─── 开放字典(§5.3:object 无 children → KV 编辑器)────────────────

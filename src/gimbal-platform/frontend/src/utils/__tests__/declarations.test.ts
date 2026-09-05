@@ -243,6 +243,42 @@ describe('buildTree — 三输入合一(目录 + 意图 + 值)', () => {
     }
   })
 
+  it('多层嵌套(对象×数组混合四层):路径逐层累积,各层行数各跟 body', () => {
+    const decls = [
+      mkDecl({ name: 'order', path: '$.order', type: 'object', children: [
+        mkDecl({ name: 'lines', path: '$.order.lines', type: 'array', children: [
+          mkDecl({ name: 'item', path: '$.order.lines.item', type: 'object', children: [
+            mkDecl({ name: 'tags', path: '$.order.lines.item.tags', type: 'array', children: [
+              mkDecl({ name: 'code', path: '$.order.lines.item.tags.code' }),
+            ] }),
+          ] }),
+        ] }),
+      ] }),
+    ]
+    const body = { order: { lines: [
+      { item: { tags: [{ code: 'x' }, { code: 'y' }] } },
+      { item: { tags: [{ code: 'z' }] } },
+    ] } }
+    const [o] = buildTree(decls, undefined, body)
+    if (o?.kind !== 'object') throw new Error('顶层应为对象节点')
+    expect(o.path).toBe('$.order')
+    const lines = o.children[0]
+    if (lines?.kind !== 'array') throw new Error('二层应为数组节点')
+    expect(lines.path).toBe('$.order.lines')
+    expect(lines.rows).toHaveLength(2)                          // 外层行数
+    const item = lines.rows[1][0]
+    if (item?.kind !== 'object') throw new Error('行内应为对象节点')
+    expect(item.path).toBe('$.order.lines[1].item')            // 外层下标入路径
+    const tags = item.children[0]
+    if (tags?.kind !== 'array') throw new Error('三层应为数组节点')
+    expect(tags.path).toBe('$.order.lines[1].item.tags')
+    expect(tags.rows).toHaveLength(1)                           // 内层行数独立
+    const leaf = tags.rows[0][0]
+    expect(leaf?.kind).toBe('leaf')
+    expect(leaf?.path).toBe('$.order.lines[1].item.tags[0].code')   // 下标逐层累积
+    expect(leaf?.templatePath).toBe('$.order.lines.item.tags.code') // 模板态无下标
+  })
+
   it('标量数组(无 children 模板):按值类型合成行', () => {
     const decls = [mkDecl({ name: 'tags', path: '$.tags', type: 'array' })]
     const [arr] = buildTree(decls, undefined, { tags: [1, 'a', true] })
