@@ -11,8 +11,10 @@
       开放字典:object 无 children(additionalProperties)→ KV 编辑器
             (区块折叠同款;三类区块 collapse 态默认收起,点击展开,
              加行/添键自动展开 —— 嵌套过长目录盖 collapse 治噪)
-    三类容器区块头均带策略菜单(P3):提取/注入/断言作用于整容器值
-    (目录化前整容器叶子的快捷入口;值写入类动作不适用 → structured 门控)
+    三类容器区块头均带五项策略菜单(P3 起;2026-09-05 恢复值写入项):
+    提取/注入/断言作用于整容器值(目录化前整容器叶子的快捷入口);
+    引用共享变量/设为变量把整容器值整串替换为 ${var.x} → 容器模板态
+    (单行模板输入替行组/KV 编辑,清空恢复结构编辑)
     collapse 的两副面孔:容器(对象/数组/字典)原地折叠面板;叶子
     不占直接渲染面,收进「已折叠字段」区(§5.4 折叠区 — 顶部汇总,
     展开编辑,行尾状态下拉可翻回 form;合成标量行随容器折叠,不收)。
@@ -62,6 +64,7 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             <span>已提取 · 运行时读取整个区块</span>
           </span>
+          <span v-if="nodeTpl(item.n)" class="node-tpl-badge" title="整容器引用变量模板 — 展开可编辑,清空恢复结构编辑">引用变量</span>
           <FieldStateSelect
             v-if="stateControl"
             :state="item.n.state"
@@ -74,7 +77,7 @@
           <span v-if="fieldActions && item.n.path !== '$'" class="node-fa">
             <FieldActionMenu
               :field="nodeBinding(item.n)"
-              structured
+              :value="String(getValue(nodeBinding(item.n)) ?? '')"
               :var-choices="varChoices ?? []"
               :inject-choices="injectChoices ?? []"
               :domain="domain"
@@ -82,14 +85,28 @@
               :open="menuField === nodeBinding(item.n).name"
               @toggle="toggleMenu(nodeBinding(item.n))"
               @close="menuField = null"
+              @var-insert="(name: string) => onMenuVarInsert(nodeBinding(item.n), name)"
               @field-extract="(field: IOFieldBinding) => emit('fieldExtract', field)"
               @field-assign="(field: IOFieldBinding, name: string) => emit('fieldAssign', field, name)"
+              @field-promote="(field: IOFieldBinding) => onFieldPromote(field)"
               @field-assert="(field: IOFieldBinding) => emit('fieldAssert', field)"
             />
           </span>
         </div>
         <div v-show="isOpen(item.n)" class="obj-body" :class="{ 'body-locked': nodeInjected(item.n) }">
+          <div v-if="nodeStr(item.n) !== null" class="node-tpl-ctl">
+            <input
+              type="text"
+              class="ctl tpl"
+              :value="nodeStr(item.n) ?? ''"
+              placeholder="${var.name} — 清空恢复结构编辑"
+              :disabled="readonly"
+              @input="e => setValue(nodeBinding(item.n), (e.target as HTMLInputElement).value)"
+            >
+            <p class="node-tpl-hint">整容器字符串值(${var.x} 运行时按变量原类型解析发送)· 清空输入恢复结构编辑</p>
+          </div>
           <FieldForm
+            v-else
             nested
             :nodes="item.n.children"
             :body="body"
@@ -102,6 +119,7 @@
             :assertable="assertable"
             :strategy-tags="strategyTags"
             :injected="injected"
+            :extracted="extracted"
             :state-control="stateControl"
             :overlay="overlay"
             @update:body="(v: any) => emit('update:body', v)"
@@ -127,7 +145,7 @@
           <span class="label-text">{{ item.n.entry.name }}</span>
           <span class="path-badge" :title="item.n.path">{{ item.n.path }}</span>
           <span class="ui-tag k-json">array</span>
-          <span class="arr-count">{{ item.n.rows.length }} 行</span>
+          <span v-if="nodeStr(item.n) === null" class="arr-count">{{ item.n.rows.length }} 行</span>
           <!-- P6:整容器策略角标/注入徽标(同对象节点) -->
           <button
             v-for="t in strategyTags?.[item.n.path] ?? []"
@@ -145,6 +163,7 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             <span>已提取 · 运行时读取整个区块</span>
           </span>
+          <span v-if="nodeTpl(item.n)" class="node-tpl-badge" title="整容器引用变量模板 — 展开可编辑,清空恢复结构编辑">引用变量</span>
           <FieldStateSelect
             v-if="stateControl"
             :state="item.n.state"
@@ -157,7 +176,7 @@
           <span v-if="fieldActions && item.n.path !== '$'" class="node-fa">
             <FieldActionMenu
               :field="nodeBinding(item.n)"
-              structured
+              :value="String(getValue(nodeBinding(item.n)) ?? '')"
               :var-choices="varChoices ?? []"
               :inject-choices="injectChoices ?? []"
               :domain="domain"
@@ -165,14 +184,16 @@
               :open="menuField === nodeBinding(item.n).name"
               @toggle="toggleMenu(nodeBinding(item.n))"
               @close="menuField = null"
+              @var-insert="(name: string) => onMenuVarInsert(nodeBinding(item.n), name)"
               @field-extract="(field: IOFieldBinding) => emit('fieldExtract', field)"
               @field-assign="(field: IOFieldBinding, name: string) => emit('fieldAssign', field, name)"
+              @field-promote="(field: IOFieldBinding) => onFieldPromote(field)"
               @field-assert="(field: IOFieldBinding) => emit('fieldAssert', field)"
             />
           </span>
           <!-- 注入态隐藏加行(I1 防编辑误导的容器面:写入必被覆盖) -->
           <button
-            v-if="!readonly && !nodeInjected(item.n)"
+            v-if="!readonly && !nodeInjected(item.n) && nodeStr(item.n) === null"
             type="button"
             class="arr-add"
             title="同容器下一可用下标实例化模板空壳行"
@@ -180,6 +201,18 @@
           >+ 加行</button>
         </div>
         <div v-show="isOpen(item.n)" class="arr-body" :class="{ 'body-locked': nodeInjected(item.n) }">
+        <div v-if="nodeStr(item.n) !== null" class="node-tpl-ctl">
+          <input
+            type="text"
+            class="ctl tpl"
+            :value="nodeStr(item.n) ?? ''"
+            placeholder="${var.name} — 清空恢复结构编辑"
+            :disabled="readonly"
+            @input="e => setValue(nodeBinding(item.n), (e.target as HTMLInputElement).value)"
+          >
+          <p class="node-tpl-hint">整容器字符串值(${var.x} 运行时按变量原类型解析发送)· 清空输入恢复结构编辑</p>
+        </div>
+        <template v-else>
         <div v-for="(row, i) in item.n.rows" :key="i" class="arr-row">
           <span class="arr-idx">{{ i }}</span>
           <div class="arr-row-body">
@@ -220,6 +253,7 @@
         <p v-if="!item.n.rows.length" class="arr-empty">
           空数组 —「+ 加行」按目录模板实例化空壳行
         </p>
+        </template>
         </div>
       </div>
 
@@ -232,7 +266,7 @@
           <span class="label-text">{{ item.n.entry.name }}</span>
           <span class="path-badge" :title="item.n.path">{{ item.n.path }}</span>
           <span class="ui-tag k-json">object</span>
-          <span class="arr-count">{{ item.n.entries.length }} 键</span>
+          <span v-if="nodeStr(item.n) === null" class="arr-count">{{ item.n.entries.length }} 键</span>
           <!-- P6:整容器策略角标/注入徽标(同对象/数组节点) -->
           <button
             v-for="t in strategyTags?.[item.n.path] ?? []"
@@ -250,6 +284,7 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             <span>已提取 · 运行时读取整个区块</span>
           </span>
+          <span v-if="nodeTpl(item.n)" class="node-tpl-badge" title="整容器引用变量模板 — 展开可编辑,清空恢复结构编辑">引用变量</span>
           <FieldStateSelect
             v-if="stateControl"
             :state="item.n.state"
@@ -261,7 +296,7 @@
           <span v-if="fieldActions && item.n.path !== '$'" class="node-fa">
             <FieldActionMenu
               :field="nodeBinding(item.n)"
-              structured
+              :value="String(getValue(nodeBinding(item.n)) ?? '')"
               :var-choices="varChoices ?? []"
               :inject-choices="injectChoices ?? []"
               :domain="domain"
@@ -269,13 +304,15 @@
               :open="menuField === nodeBinding(item.n).name"
               @toggle="toggleMenu(nodeBinding(item.n))"
               @close="menuField = null"
+              @var-insert="(name: string) => onMenuVarInsert(nodeBinding(item.n), name)"
               @field-extract="(field: IOFieldBinding) => emit('fieldExtract', field)"
               @field-assign="(field: IOFieldBinding, name: string) => emit('fieldAssign', field, name)"
+              @field-promote="(field: IOFieldBinding) => onFieldPromote(field)"
               @field-assert="(field: IOFieldBinding) => emit('fieldAssert', field)"
             />
           </span>
           <button
-            v-if="!readonly && !nodeInjected(item.n)"
+            v-if="!readonly && !nodeInjected(item.n) && nodeStr(item.n) === null"
             type="button"
             class="arr-add"
             title="新增开放键(目录未声明,键自由命名)"
@@ -283,6 +320,18 @@
           >+ 添加键</button>
         </div>
         <div v-show="isOpen(item.n)" class="arr-body" :class="{ 'body-locked': nodeInjected(item.n) }">
+        <div v-if="nodeStr(item.n) !== null" class="node-tpl-ctl">
+          <input
+            type="text"
+            class="ctl tpl"
+            :value="nodeStr(item.n) ?? ''"
+            placeholder="${var.name} — 清空恢复结构编辑"
+            :disabled="readonly"
+            @input="e => setValue(nodeBinding(item.n), (e.target as HTMLInputElement).value)"
+          >
+          <p class="node-tpl-hint">整容器字符串值(${var.x} 运行时按变量原类型解析发送)· 清空输入恢复结构编辑</p>
+        </div>
+        <template v-else>
         <div v-for="kv in dictKvs(item.n)" :key="kv.key" class="kv-row">
           <input
             type="text"
@@ -318,6 +367,7 @@
           >×</button>
         </div>
         <p v-if="!item.n.entries.length" class="arr-empty">空字典 —「+ 添加键」自由落键</p>
+        </template>
         </div>
       </div>
 
@@ -1031,6 +1081,22 @@ function nodeExtracted(n: SectionNode): boolean {
   return isExtracted(nodeBinding(n))
 }
 
+/** 容器字符串态(2026-09-05 恢复值写入项):整容器值是非空字符串
+ *  (引用共享变量/设为变量写入的 ${var.x},或手输的任意串)— 行组/KV
+ *  编辑让位给单行输入(清空恢复结构编辑)。空串/缺省(getValue 的 ''
+ *  兜底)不算 — 回落结构渲染,空容器照常见行组/加行。 */
+function nodeStr(n: SectionNode): string | null {
+  const v = getValue(nodeBinding(n))
+  return typeof v === 'string' && v !== '' ? v : null
+}
+
+/** 容器模板态:字符串值含 ${...} → 头部亮「引用变量」徽标(收起态也
+ *  可见);普通字符串只有输入框,不冒充变量引用 */
+function nodeTpl(n: SectionNode): boolean {
+  const s = nodeStr(n)
+  return s !== null && s.includes('${')
+}
+
 // ─── 数组行组:加行(模板空壳)/删行(splice,§5.3 行尾删除)────────
 
 /** body 浅拷贝(数组根保形):数组根 spread 保数组性 — 对象 spread
@@ -1159,23 +1225,23 @@ function toggleMenu(f: IOFieldBinding) {
 }
 
 /**
- * 菜单"引用共享变量"插值:字符串现值追加(部分模板 ORD-${var.x});
- * 非字符串(number/boolean)或空值整串替换 — String(5) 拼出
- * '5${var.x}' 是垃圾值,typed 字段模板只能整串。
+ * 菜单"引用共享变量"插值(2026-09-05 语义修订):先清空再写入 —
+ * 值整串替换为 ${var.<name>}。点选变量即明确指向该变量,追加旧值会
+ * 拼出 '旧值${var.x}' 混串静默改变语义(要混排模板手编输入框即可);
+ * 非字符串现值(number/boolean/整容器对象)同样整串替换。
  */
 function onMenuVarInsert(f: IOFieldBinding, name: string) {
-  const cur = getValue(f)
-  const tpl = `\${var.${name}}`
-  setValue(f, typeof cur === 'string' && cur !== '' ? cur + tpl : tpl)
+  setValue(f, `\${var.${name}}`)
   emit('varInsert', f, name)
   menuField.value = null
 }
 
 /**
- * 菜单"设为变量"(D8 提升语义):与"引用共享变量"的**追加**不同 —
- * ① 值整串替换为 ${var.<name>};② 变量名默认取字段名,同名(共享
- * 变量/extract 任一出身)自动加 _2/_3 后缀;③ 原值随 varPromote
- * 上抛,由 Canvas → CaseComposer 登记进 definition.config.vars。
+ * 菜单"设为变量"(D8 提升语义):与"引用共享变量"同为整串替换,
+ * 差别在 ① 变量名默认取字段名,同名(共享变量/extract 任一出身)自动
+ * 加 _2/_3 后缀;② 原值随 varPromote 上抛,由 Canvas → CaseComposer
+ * 登记进 definition.config.vars 作默认值(引用是挑既有变量,提升是
+ * 建新变量并留存原值)。容器头同样可用(2026-09-05 恢复)。
  */
 function onFieldPromote(f: IOFieldBinding) {
   const original = getValue(f)
@@ -1636,6 +1702,20 @@ function formatJson(v: unknown): string {
   cursor: default; user-select: none; flex-shrink: 0;
 }
 .node-extracted svg { flex-shrink: 0; }
+/* 容器模板态(2026-09-05 恢复值写入项):整容器值 = ${var.x} 串 —
+   头部靛蓝徽标(收起态也可见)+ 单行模板输入替行组/KV 编辑 */
+.node-tpl-badge {
+  display: inline-flex; align-items: center;
+  padding: 1px 8px; border-radius: 999px;
+  background: #eef2ff; border: 1.5px dashed #6366f1;
+  font-size: 11px; color: #4338ca;
+  cursor: default; user-select: none; flex-shrink: 0;
+}
+.node-tpl-ctl { display: flex; flex-direction: column; gap: 3px; }
+.node-tpl-hint {
+  margin: 0;
+  font-size: 11px; color: #4338ca;
+}
 .extracted-hint {
   display: flex; align-items: center; gap: 4px;
   margin: 1px 0 0;

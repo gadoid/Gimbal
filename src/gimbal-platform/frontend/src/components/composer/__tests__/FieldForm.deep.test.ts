@@ -61,6 +61,8 @@ function mountTree(opts: {
   const assigned: Array<[IOFieldBinding, string]> = []
   const asserted: IOFieldBinding[] = []
   const jumps: number[] = []
+  const varInserted: Array<[IOFieldBinding, string]> = []
+  const promoted: Array<{ name: string; value: unknown }> = []
   const Parent = defineComponent({
     setup() {
       return () => h(FieldForm, {
@@ -84,11 +86,13 @@ function mountTree(opts: {
         'onFieldAssign': (f: IOFieldBinding, name: string) => { assigned.push([f, name]) },
         'onFieldAssert': (f: IOFieldBinding) => { asserted.push(f) },
         'onStrategyJump': (i: number) => { jumps.push(i) },
+        'onVarInsert': (f: IOFieldBinding, name: string) => { varInserted.push([f, name]) },
+        'onVarPromote': (f: IOFieldBinding, name: string, value: unknown) => { promoted.push({ name, value }) },
       })
     },
   })
   const w = mount(Parent, { global: { plugins: [ElementPlus] } })
-  return { w, body, emitted, extracted, assigned, asserted, jumps }
+  return { w, body, emitted, extracted, assigned, asserted, jumps, varInserted, promoted }
 }
 
 // ─── D8 清空分流(树模式语义保持)──────────────────────────────────
@@ -586,15 +590,15 @@ describe('FieldForm 树模式 — 容器级策略菜单(P3)', () => {
     expect(plain.w.find('.node-fa').exists()).toBe(false)
   })
 
-  it('M2: structured 菜单项 — 提取/注入/断言在,值写入项(引用/设为变量)隐藏', async () => {
+  it('M2: 容器菜单五项齐全 — 值写入项(引用/设为变量)恢复(2026-09-05)', async () => {
     const { w } = mountFa({ varChoices: [{ name: 'v1', origin: 'config', stepIdx: null, expression: null }] })
     await w.find('.arr-node .fa-menu-btn').trigger('click')
     const labels = w.findAll('.fa-item .fa-label').map((l) => l.text())
+    expect(labels).toContain('引用共享变量')
+    expect(labels).toContain('设为变量')
     expect(labels).toContain('提取该字段')
     expect(labels).toContain('向该字段动态注入')
     expect(labels).toContain('断言该字段')
-    expect(labels).not.toContain('引用共享变量')
-    expect(labels).not.toContain('设为变量')
   })
 
   it('M3: 断言/提取上抛整容器合成载体(path = $.container,目录元数据随行)', async () => {
@@ -630,6 +634,71 @@ describe('FieldForm 树模式 — 容器级策略菜单(P3)', () => {
     await fas[1].find('.fa-menu-btn').trigger('click')
     await fas[1].findAll('.fa-item').find((b) => b.text().includes('断言该字段'))!.trigger('click')
     expect(asserted[0].path).toBe('$.container[0].box_no')
+  })
+
+  it('M6: 容器「设为变量」→ 整容器值替换 ${var.container} + varPromote 上抛原数组 + 模板态渲染', async () => {
+    const { w, body, promoted } = mountFa()
+    await w.find('.arr-node .fa-menu-btn').trigger('click')
+    await w.find('.fa-promote').trigger('click')
+    expect((body.value as Record<string, unknown>).container).toBe('${var.container}')
+    // 原值(整行组数组)随事件上抛 → Canvas→CaseComposer 登记变量默认值
+    expect(promoted).toEqual([{
+      name: 'container',
+      value: [{ box_type: '20GP', box_no: [{ no: 'A1' }] }],
+    }])
+    // 模板态:行组让位单行模板输入;头部「引用变量」徽标 + 加行隐藏
+    const tplInput = w.find('.arr-node .node-tpl-ctl input.ctl')
+    expect((tplInput.element as HTMLInputElement).value).toBe('${var.container}')
+    expect(w.find('.arr-row').exists()).toBe(false)
+    expect(w.find('.arr-node .node-tpl-badge').exists()).toBe(true)
+    // 加行隐藏(labels 字典的「添加键」同 class,收窄到容器自身头部)
+    expect(w.find('.arr-node > .node-head .arr-add').exists()).toBe(false)
+  })
+
+  it('M7: 容器模板态清空输入 → 恢复结构编辑(行组/加行回来,徽标消失)', async () => {
+    const { w } = mountFa()
+    await w.find('.arr-node .fa-menu-btn').trigger('click')
+    await w.find('.fa-promote').trigger('click')
+    expect(w.find('.node-tpl-ctl').exists()).toBe(true)
+    await w.find('.node-tpl-ctl input.ctl').setValue('')
+    // 清空 = 撤销引用,回结构编辑面(空行组 + 加行可见)
+    expect(w.find('.node-tpl-ctl').exists()).toBe(false)
+    expect(w.find('.node-tpl-badge').exists()).toBe(false)
+    expect(w.find('.arr-node > .node-head .arr-add').exists()).toBe(true)
+    expect(w.find('.arr-empty').exists()).toBe(true)
+  })
+
+  it('M8: 容器「引用共享变量」→ 整串替换(原数组不拼接)+ varInsert 上抛', async () => {
+    const { w, body, varInserted } = mountFa({
+      varChoices: [{ name: 'v1', origin: 'config', stepIdx: null, expression: null }],
+    })
+    await w.find('.arr-node .fa-menu-btn').trigger('click')
+    await w.findAll('.fa-item').find((b) => b.text().includes('引用共享变量'))!.trigger('click')
+    await w.findAll('.fa-var-item').find((b) => b.text().includes('v1'))!.trigger('click')
+    expect((body.value as Record<string, unknown>).container).toBe('${var.v1}')
+    expect(varInserted[0][0].path).toBe('$.container')
+    expect(varInserted[0][1]).toBe('v1')
+  })
+
+  it('M9: 字典/对象容器模板态 — KV 编辑器/子面板让位单行模板输入', () => {
+    const { w } = mountFa({
+      body: { order_id: 'o-1', labels: '${var.labels}', cfg: '${var.cfg}' },
+    })
+    // 字典容器(labels):KV 行不渲染,模板输入 + 徽标在
+    expect(w.find('.dict-node .node-tpl-ctl input.ctl').exists()).toBe(true)
+    expect(w.find('.kv-row').exists()).toBe(false)
+    // 对象容器(cfg):子面板字段不渲染
+    expect(w.find('.obj-node .node-tpl-ctl input.ctl').exists()).toBe(true)
+    expect(w.find('.obj-node .obj-body .field').exists()).toBe(false)
+    expect(w.findAll('.node-tpl-badge')).toHaveLength(2)
+  })
+
+  it('M10: 容器普通字符串值(非模板)→ 字符串态输入在,徽标不冒充引用', () => {
+    const { w } = mountFa({ body: { order_id: 'o-1', labels: 'hello' } })
+    // 字符串值可见可编辑(不消失在结构渲染里),但无 ${ → 不亮徽标
+    expect((w.find('.dict-node .node-tpl-ctl input.ctl').element as HTMLInputElement).value).toBe('hello')
+    expect(w.find('.node-tpl-badge').exists()).toBe(false)
+    expect(w.find('.kv-row').exists()).toBe(false)
   })
 })
 

@@ -1692,6 +1692,65 @@ describe('CaseComposerCanvas — 请求侧提取域感知(2026-09-05)', () => {
   })
 })
 
+/**
+ * 容器头值写入项恢复(2026-09-05):P3 曾以 structured 门控藏掉容器头
+ * 「引用共享变量/设为变量」(行组无法承载 ${var.x})— 用户工作流容器重,
+ * 整容器提升是目录化前的既有能力。修:容器菜单五项齐全 + 容器模板态
+ * 渲染(单行模板输入替行组,清空恢复结构编辑)+ 引用整串替换语义。
+ */
+describe('CaseComposerCanvas — 容器头值写入项恢复(2026-09-05)', () => {
+  /** ep-deep step:$.supplier 数组容器,body 2 行 */
+  const deepStep = (over: Partial<StepView> = {}): StepView => ({
+    kind: 'step',
+    description: 'deep',
+    api: { kind: 'api', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-deep' } },
+    request: { kind: 'request', body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y' }] } },
+    strategy: [],
+    ...over,
+  } as StepView)
+
+  it('V1: 容器头「设为变量」→ body 整容器替换 + varPromote 上抛原数组 + 模板态闭环', async () => {
+    const s0 = deepStep()
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    await w.find('.node-fa .fa-menu-btn').trigger('click')
+    await flush()
+    // 五项齐全(值写入项恢复,与叶子菜单同款)
+    const labels = w.findAll('.fa-item .fa-label').map((l) => l.text())
+    expect(labels).toContain('引用共享变量')
+    expect(labels).toContain('设为变量')
+    await w.find('.fa-promote').trigger('click')
+    await flush()
+    expect((s0.request as any).body.supplier).toBe('${var.supplier}')
+    // 默认值上抛链路入口:Canvas → CaseComposer 登记 config.vars(对象原样)
+    const canvas = w.findComponent(CaseComposerCanvas)
+    expect(canvas.emitted('varPromote')).toEqual([
+      ['supplier', [{ order_supplier_id: 'x' }, { order_supplier_id: 'y' }]],
+    ])
+    // 模板态闭环:行组让位单行模板输入 + 头部「引用变量」徽标
+    expect((w.find('.node-tpl-ctl input.ctl').element as HTMLInputElement).value).toBe('${var.supplier}')
+    expect(w.find('.node-tpl-badge').exists()).toBe(true)
+    expect(w.find('.arr-row').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('V2: 容器头「引用共享变量」→ 整容器整串替换(先清空再写入)', async () => {
+    const s0 = deepStep()
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    await w.find('.node-fa .fa-menu-btn').trigger('click')
+    await flush()
+    await w.findAll('.fa-item').find((b) => b.text().includes('引用共享变量'))!.trigger('click')
+    await flush()
+    // config 变量 base_url(draft store beforeEach 注入)可选用
+    await w.findAll('.fa-var-item').find((b) => b.text().includes('base_url'))!.trigger('click')
+    await flush()
+    expect((s0.request as any).body.supplier).toBe('${var.base_url}')
+    expect((w.find('.node-tpl-ctl input.ctl').element as HTMLInputElement).value).toBe('${var.base_url}')
+    w.unmount()
+  })
+})
+
 describe('CaseComposerCanvas — 策略显示名统一(2026-09-05)', () => {
   /**
    * P7 菜单更名(提取该字段/向该字段动态注入/断言该字段)后,策略卡徽标

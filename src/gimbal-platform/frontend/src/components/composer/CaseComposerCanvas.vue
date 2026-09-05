@@ -883,7 +883,8 @@ function onFieldAssert(f: IOFieldBinding, domain: 'request' | 'response') {
   justAddedStrategyIdx.value = currentStep.value.strategy.length - 1
 }
 
-/** 菜单"引用共享变量":值追加已由 FieldForm 完成,此处给引导提示 */
+/** 菜单"引用共享变量":值写入(先清空再写入 ${var.x})已由 FieldForm
+ *  完成,此处给引导提示 */
 function onVarInsert(_f: IOFieldBinding, name: string) {
   ElMessage.success(`已插入 \${var.${name}}(启动前展开,查不到将拒启)`)
 }

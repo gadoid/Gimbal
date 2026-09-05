@@ -97,7 +97,7 @@ describe('FieldForm — 字段下拉菜单(fieldActions 门控)', () => {
     expect(text).toContain('断言该字段')
   })
 
-  it('T10: 引用共享变量 → 追加 ${var.x} 到现值尾(原 Ⓥ 行为保留)', async () => {
+  it('T10: 引用共享变量 → 先清空再写入(整串替换为 ${var.x};不与旧值混排)', async () => {
     const { w, body, received } = mountWithParent({
       bindings: [mkBinding()],
       fieldActions: true,
@@ -105,14 +105,14 @@ describe('FieldForm — 字段下拉菜单(fieldActions 门控)', () => {
     })
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
-    // 打开引用子列表 → 点 config 变量
+    // 打开引用子列表 → 点 config 变量(现值 'ord-1' 被清空,非 'ord-1${var.…}')
     const refItem = w.findAll('.fa-item').find((b) => b.text().includes('引用共享变量'))
     await refItem!.trigger('click')
     await flush()
     const varItem = w.findAll('.fa-var-item').find((b) => b.text().includes('base_url'))
     await varItem!.trigger('click')
     await flush()
-    expect(body.value.order_id).toBe('ord-1${var.base_url}')
+    expect(body.value.order_id).toBe('${var.base_url}')
     expect(received.varInsert).toHaveLength(1)
   })
 
