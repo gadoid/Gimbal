@@ -49,6 +49,7 @@ function mountTree(opts: {
   stateControl?: boolean
   unboundFields?: Array<{ name: string; path: string; type?: string; default?: unknown }>
   injected?: Record<string, Array<{ source: string; target: string }>>
+  strategyTags?: Record<string, Array<{ label: string; idx: number }>>
   readonly?: boolean
   fieldActions?: boolean
   varChoices?: VarEntry[]
@@ -59,6 +60,7 @@ function mountTree(opts: {
   const extracted: IOFieldBinding[] = []
   const assigned: Array<[IOFieldBinding, string]> = []
   const asserted: IOFieldBinding[] = []
+  const jumps: number[] = []
   const Parent = defineComponent({
     setup() {
       return () => h(FieldForm, {
@@ -69,6 +71,7 @@ function mountTree(opts: {
         stateControl: opts.stateControl,
         unboundFields: opts.unboundFields,
         injected: opts.injected,
+        strategyTags: opts.strategyTags,
         readonly: opts.readonly,
         fieldActions: opts.fieldActions,
         varChoices: opts.varChoices ?? [],
@@ -80,11 +83,12 @@ function mountTree(opts: {
         'onFieldExtract': (f: IOFieldBinding) => { extracted.push(f) },
         'onFieldAssign': (f: IOFieldBinding, name: string) => { assigned.push([f, name]) },
         'onFieldAssert': (f: IOFieldBinding) => { asserted.push(f) },
+        'onStrategyJump': (i: number) => { jumps.push(i) },
       })
     },
   })
   const w = mount(Parent, { global: { plugins: [ElementPlus] } })
-  return { w, body, emitted, extracted, assigned, asserted }
+  return { w, body, emitted, extracted, assigned, asserted, jumps }
 }
 
 // ─── D8 清空分流(树模式语义保持)──────────────────────────────────
@@ -626,6 +630,143 @@ describe('FieldForm 树模式 — 容器级策略菜单(P3)', () => {
     await fas[1].find('.fa-menu-btn').trigger('click')
     await fas[1].findAll('.fa-item').find((b) => b.text().includes('断言该字段'))!.trigger('click')
     expect(asserted[0].path).toBe('$.container[0].box_no')
+  })
+})
+
+// ─── 容器注入态/角标(2026-09-05 注入粒度 P6)────────────────────────
+//  整容器 assign 提示缺失的补面:此前注入只读态/策略角标只挂叶子行,
+//  P3 容器快捷注入后整容器 assign 零提示(用户踩坑)。叶子行 I1 语义
+//  (只读提示条 + 防编辑误导)的容器面继任:头徽标 + 体锁定 + 角标。
+
+describe('FieldForm 树模式 — 容器注入态/角标(P6)', () => {
+  const boxDecls = () => [
+    mkDecl({ name: 'container', path: '$.container', type: 'array', children: [
+      mkDecl({ name: 'box_type', path: '$.container.box_type' }),
+      mkDecl({ name: 'box_no', path: '$.container.box_no', type: 'array', state: 'collapse', children: [
+        mkDecl({ name: 'no', path: '$.container.box_no.no' }),
+      ] }),
+    ] }),
+  ]
+  const body = { container: [{ box_type: '20GP', box_no: [{ no: 'A1' }] }] }
+
+  it('N1: 整容器注入 → 头徽标(title 透出 source → target)+ 体锁定 + 隐藏加行;行叶不逐叶横幅', () => {
+    const { w } = mountTree({
+      decls: boxDecls(),
+      body,
+      injected: { '$.container': [{ source: '$.oid', target: '$.request_body.container' }] },
+    })
+    const head = w.find('.arr-node > .node-head')
+    expect(head.find('.node-injected').exists()).toBe(true)
+    expect(head.find('.node-injected').attributes('title')).toBe('$.oid → $.request_body.container')
+    expect(head.text()).toContain('运行时覆盖整个区块')
+    // 体锁定(pointer-events 拦截交互,原值仍可见 = continue 兜底)
+    expect(w.find('.arr-node > .arr-body').classes()).toContain('body-locked')
+    // 加行隐藏随实例:container 头无加行;未注入的嵌套 box_no 头照常有
+    expect(head.find('.arr-add').exists()).toBe(false)
+    expect(w.findAll('.arr-add')).toHaveLength(1)
+    // 横幅只挂容器头,行叶不逐叶重复(.ctl-injected 是叶子行控件位)
+    expect(w.findAll('.ctl-injected')).toHaveLength(0)
+    expect(w.find('.arr-row input.ctl').exists()).toBe(true)
+  })
+
+  it('N2: 注入菜单值写入项禁用(I3 同语义 — 写入必被覆盖)', async () => {
+    const { w } = mountTree({
+      decls: boxDecls(),
+      body,
+      fieldActions: true,
+      varChoices: [{ name: 'v1', origin: 'config', stepIdx: null, expression: null }],
+      injectChoices: [{ name: 'resp_box', origin: 'extract', stepIdx: 0, expression: null }],
+      injected: { '$.container': [{ source: '$.resp_box', target: '$.request_body.container' }] },
+    })
+    await w.find('.node-fa .fa-menu-btn').trigger('click')
+    const inj = w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))
+    expect(inj).toBeTruthy()
+    expect((inj!.element as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('N3: 行内嵌套容器实例注入($.container[0].box_no)→ 仅该实例头徽标 + 该体锁定,外层不锁定', () => {
+    const { w } = mountTree({
+      decls: boxDecls(),
+      body,
+      injected: { '$.container[0].box_no': [{ source: '$.nos', target: '$.request_body.container[0].box_no' }] },
+    })
+    // 徽标唯一,落在 box_no 实例头(文档序 .arr-node = [container, box_no])
+    const badges = w.findAll('.node-injected')
+    expect(badges).toHaveLength(1)
+    const nodes = w.findAll('.arr-node')
+    // 判定收窄到各自头(find 是子树搜索,container 子树含 box_no 后代)
+    const outerHead = nodes[0].find('.node-head')   // 文档序首个 = 自身头
+    const innerHead = nodes[1].find('.node-head')
+    expect(outerHead.find('.node-injected').exists()).toBe(false)  // 外层 container
+    expect(innerHead.find('.node-injected').exists()).toBe(true)   // box_no[0]
+    expect(innerHead.find('.node-injected').attributes('title'))
+      .toBe('$.nos → $.request_body.container[0].box_no')
+    // 锁定粒度随实例:box_no 体锁,container 体不锁(box_type 行可编辑)
+    // (nodes[0].find('.arr-body') 文档序首个 = container 自身体)
+    expect(nodes[1].find('.arr-body').classes()).toContain('body-locked')
+    expect(nodes[0].find('.arr-body').classes()).not.toContain('body-locked')
+    expect(nodes[0].find('.arr-row input.ctl').exists()).toBe(true)
+  })
+
+  it('N4: 容器头策略角标(path 键控)→ 渲染 + 点击上抛 strategyJump(跳转策略卡入口)', async () => {
+    const { w, jumps } = mountTree({
+      decls: boxDecls(),
+      body,
+      strategyTags: { '$.container': [{ label: 'assign', idx: 2 }] },
+    })
+    const tag = w.find('.arr-node > .node-head .strategy-tag')
+    expect(tag.text()).toBe('assign')
+    await tag.trigger('click')
+    expect(jumps).toEqual([2])
+  })
+
+  it('N5: 折叠区行注入 → 值控件换提示条 + 角标在位(折叠不丢提示)', async () => {
+    const decls = [
+      mkDecl({ name: 'memo', path: '$.memo', state: 'collapse' }),
+      mkDecl({ name: 'open', path: '$.open' }),
+    ]
+    const { w, jumps } = mountTree({
+      decls,
+      body: { memo: 'm', open: 'x' },
+      injected: { '$.memo': [{ source: '$.note', target: '$.request_body.memo' }] },
+      strategyTags: { '$.memo': [{ label: 'assign', idx: 0 }] },
+    })
+    await w.find('.folded-toggle').trigger('click')
+    const row = w.find('.folded-row')
+    expect(row.find('.ctl-injected').exists()).toBe(true)
+    expect(row.find('.ctl-injected').attributes('title')).toBe('$.note → $.request_body.memo')
+    expect(row.find('input.ctl').exists()).toBe(false)
+    expect(row.find('.strategy-tag').text()).toBe('assign')
+    await row.find('.strategy-tag').trigger('click')
+    expect(jumps).toEqual([0])
+  })
+
+  it('N6: 对象容器与开放字典头同款注入徽标 + 体锁定(三类容器头齐平)', () => {
+    const decls = [
+      mkDecl({ name: 'cfg', path: '$.cfg', type: 'object', children: [
+        mkDecl({ name: 'timeout', path: '$.cfg.timeout' }),
+      ] }),
+      mkDecl({ name: 'labels', path: '$.labels', type: 'object' }),
+    ]
+    const { w } = mountTree({
+      decls,
+      body: { cfg: { timeout: 30 }, labels: { env: 'qa' } },
+      injected: {
+        '$.cfg': [{ source: '$.c', target: '$.request_body.cfg' }],
+        '$.labels': [{ source: '$.l', target: '$.request_body.labels' }],
+      },
+    })
+    // 对象容器:头徽标 + 体锁定;行叶不逐叶横幅
+    const obj = w.find('.obj-node')
+    expect(obj.find('.node-head .node-injected').attributes('title')).toBe('$.c → $.request_body.cfg')
+    expect(obj.find('.obj-body').classes()).toContain('body-locked')
+    expect(obj.find('input.ctl').exists()).toBe(true)  // 原值仍可见(兜底)
+    // 开放字典:头徽标 + 体锁定 + 添加键隐藏
+    const dict = w.find('.dict-node')
+    expect(dict.find('.node-head .node-injected').attributes('title')).toBe('$.l → $.request_body.labels')
+    expect(dict.find('.arr-body').classes()).toContain('body-locked')
+    expect(dict.find('.arr-add').exists()).toBe(false)
+    expect(w.findAll('.node-injected')).toHaveLength(2)
   })
 })
 

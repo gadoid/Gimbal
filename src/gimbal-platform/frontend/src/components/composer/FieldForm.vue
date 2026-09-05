@@ -44,6 +44,20 @@
           <span class="label-text">{{ item.n.entry.name }}</span>
           <span class="path-badge" :title="item.n.path">{{ item.n.path }}</span>
           <span v-if="item.n.entry.type" class="ui-tag k-json">{{ item.n.entry.type }}</span>
+          <!-- P6:整容器策略角标/注入徽标 — 与叶子行同式(path 键控,
+               assign target 命中 $.request_body<容器实例路径>) -->
+          <button
+            v-for="t in strategyTags?.[item.n.path] ?? []"
+            :key="t.idx"
+            type="button"
+            class="strategy-tag"
+            :title="`跳转到下方策略 ${t.label}`"
+            @click.stop="emit('strategyJump', t.idx)"
+          >{{ t.label }}</button>
+          <span v-if="nodeInjected(item.n)" class="node-injected" :title="injectedTitle(nodeBinding(item.n))">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+            <span>已注入 · 运行时覆盖整个区块</span>
+          </span>
           <FieldStateSelect
             v-if="stateControl"
             :state="item.n.state"
@@ -60,6 +74,7 @@
               :var-choices="varChoices ?? []"
               :inject-choices="injectChoices ?? []"
               :domain="domain"
+              :injected="nodeInjected(item.n)"
               :open="menuField === nodeBinding(item.n).name"
               @toggle="toggleMenu(nodeBinding(item.n))"
               @close="menuField = null"
@@ -69,7 +84,7 @@
             />
           </span>
         </div>
-        <div v-show="isOpen(item.n)" class="obj-body">
+        <div v-show="isOpen(item.n)" class="obj-body" :class="{ 'body-locked': nodeInjected(item.n) }">
           <FieldForm
             nested
             :nodes="item.n.children"
@@ -109,6 +124,19 @@
           <span class="path-badge" :title="item.n.path">{{ item.n.path }}</span>
           <span class="ui-tag k-json">array</span>
           <span class="arr-count">{{ item.n.rows.length }} 行</span>
+          <!-- P6:整容器策略角标/注入徽标(同对象节点) -->
+          <button
+            v-for="t in strategyTags?.[item.n.path] ?? []"
+            :key="t.idx"
+            type="button"
+            class="strategy-tag"
+            :title="`跳转到下方策略 ${t.label}`"
+            @click.stop="emit('strategyJump', t.idx)"
+          >{{ t.label }}</button>
+          <span v-if="nodeInjected(item.n)" class="node-injected" :title="injectedTitle(nodeBinding(item.n))">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+            <span>已注入 · 运行时覆盖整个区块</span>
+          </span>
           <FieldStateSelect
             v-if="stateControl"
             :state="item.n.state"
@@ -125,6 +153,7 @@
               :var-choices="varChoices ?? []"
               :inject-choices="injectChoices ?? []"
               :domain="domain"
+              :injected="nodeInjected(item.n)"
               :open="menuField === nodeBinding(item.n).name"
               @toggle="toggleMenu(nodeBinding(item.n))"
               @close="menuField = null"
@@ -133,15 +162,16 @@
               @field-assert="(field: IOFieldBinding) => emit('fieldAssert', field)"
             />
           </span>
+          <!-- 注入态隐藏加行(I1 防编辑误导的容器面:写入必被覆盖) -->
           <button
-            v-if="!readonly"
+            v-if="!readonly && !nodeInjected(item.n)"
             type="button"
             class="arr-add"
             title="同容器下一可用下标实例化模板空壳行"
             @click="addArrayRow(item.n)"
           >+ 加行</button>
         </div>
-        <div v-show="isOpen(item.n)" class="arr-body">
+        <div v-show="isOpen(item.n)" class="arr-body" :class="{ 'body-locked': nodeInjected(item.n) }">
         <div v-for="(row, i) in item.n.rows" :key="i" class="arr-row">
           <span class="arr-idx">{{ i }}</span>
           <div class="arr-row-body">
@@ -194,6 +224,19 @@
           <span class="path-badge" :title="item.n.path">{{ item.n.path }}</span>
           <span class="ui-tag k-json">object</span>
           <span class="arr-count">{{ item.n.entries.length }} 键</span>
+          <!-- P6:整容器策略角标/注入徽标(同对象/数组节点) -->
+          <button
+            v-for="t in strategyTags?.[item.n.path] ?? []"
+            :key="t.idx"
+            type="button"
+            class="strategy-tag"
+            :title="`跳转到下方策略 ${t.label}`"
+            @click.stop="emit('strategyJump', t.idx)"
+          >{{ t.label }}</button>
+          <span v-if="nodeInjected(item.n)" class="node-injected" :title="injectedTitle(nodeBinding(item.n))">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+            <span>已注入 · 运行时覆盖整个区块</span>
+          </span>
           <FieldStateSelect
             v-if="stateControl"
             :state="item.n.state"
@@ -209,6 +252,7 @@
               :var-choices="varChoices ?? []"
               :inject-choices="injectChoices ?? []"
               :domain="domain"
+              :injected="nodeInjected(item.n)"
               :open="menuField === nodeBinding(item.n).name"
               @toggle="toggleMenu(nodeBinding(item.n))"
               @close="menuField = null"
@@ -218,14 +262,14 @@
             />
           </span>
           <button
-            v-if="!readonly"
+            v-if="!readonly && !nodeInjected(item.n)"
             type="button"
             class="arr-add"
             title="新增开放键(目录未声明,键自由命名)"
             @click="addDictKey(item.n)"
           >+ 添加键</button>
         </div>
-        <div v-show="isOpen(item.n)" class="arr-body">
+        <div v-show="isOpen(item.n)" class="arr-body" :class="{ 'body-locked': nodeInjected(item.n) }">
         <div v-for="kv in dictKvs(item.n)" :key="kv.key" class="kv-row">
           <input
             type="text"
@@ -600,6 +644,15 @@
           <label class="folded-label">
             <span class="label-text">{{ r.f.path.replace(/^\$\.?/, '') }}</span>
             <span class="path-badge" :title="r.f.path">{{ r.f.path }}</span>
+            <!-- P6:策略角标同叶子行(path 键控,跳转策略卡入口不因折叠丢) -->
+            <button
+              v-for="t in strategyTags?.[r.f.path] ?? []"
+              :key="t.idx"
+              type="button"
+              class="strategy-tag"
+              :title="`跳转到下方策略 ${t.label}`"
+              @click.stop="emit('strategyJump', t.idx)"
+            >{{ t.label }}</button>
             <FieldStateSelect
               v-if="stateControl"
               :state="r.lf.state"
@@ -609,9 +662,17 @@
             />
           </label>
           <div class="folded-control">
+            <!-- 注入只读态(同叶子行 I1):值控件换提示条 — 折叠不丢提示 -->
+            <div v-if="isInjected(r.f)" class="ctl-injected-wrap">
+              <div class="ctl-injected" :title="injectedTitle(r.f)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+                <span>已使用动态策略注入 · 运行时覆盖此值</span>
+              </div>
+            </div>
             <!-- 控件随 ui_kind 分形(同叶子行惯例;typed 值为模板串 →
                  降级 text 输入,不拒显) -->
             <textarea
+              v-else-if="r.f.ui_kind === 'json' || isStructured(getValue(r.f))"
               v-if="r.f.ui_kind === 'json' || isStructured(getValue(r.f))"
               class="ctl ctl-code"
               rows="3"
@@ -925,6 +986,15 @@ function nodeBinding(n: SectionNode): IOFieldBinding {
     ui_kind: n.entry.ui_kind,
     source_kind: n.entry.source_kind,
   }
+}
+
+/**
+ * 整容器注入态(2026-09-05 注入粒度 P6):assign target 命中容器实例
+ * 路径(Canvas requestInjected 键,path 键控与叶子同源)— 头部徽标 +
+ * 体锁定 + 菜单值写入项禁用,叶子行 I1 只读语义的容器面继任。
+ */
+function nodeInjected(n: SectionNode): boolean {
+  return isInjected(nodeBinding(n))
 }
 
 // ─── 数组行组:加行(模板空壳)/删行(splice,§5.3 行尾删除)────────
@@ -1491,6 +1561,18 @@ function formatJson(v: unknown): string {
   cursor: default; user-select: none;
 }
 .ctl-injected svg { flex-shrink: 0; }
+/* 容器头注入徽标(P6):同琥珀族紧凑形态 — 整区块运行时被 assign 覆盖 */
+.node-injected {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 8px; border-radius: 999px;
+  background: #fffbeb; border: 1.5px dashed #f59e0b;
+  font-size: 11px; color: #92400e;
+  cursor: default; user-select: none; flex-shrink: 0;
+}
+.node-injected svg { flex-shrink: 0; }
+/* 注入容器体锁定(P6):原值仍在(策略失败 continue 兜底)但只读 —
+   惨淡化 + 拦截交互(I1 防编辑误导的容器面) */
+.body-locked { pointer-events: none; opacity: 0.55; }
 /* 兜底原值行:continue 语义透出,长值 code 内截断 */
 .injected-fallback {
   display: flex; align-items: center; gap: 4px;

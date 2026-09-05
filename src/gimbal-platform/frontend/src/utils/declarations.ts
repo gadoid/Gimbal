@@ -362,6 +362,50 @@ export function leafSurface(nodes: FieldTreeNode[]): IOFieldBinding[] {
   return out
 }
 
+/** 容器节点 → 合成载体(FieldForm.nodeBinding 同形;path 用实例路径)。 */
+function containerBinding(
+  n: FieldObjectNode | FieldArrayNode | FieldDictNode,
+): IOFieldBinding {
+  return {
+    name: n.entry.name,
+    path: n.path,
+    required: n.entry.required,
+    default: n.entry.default ?? null,
+    example: n.entry.example ?? null,
+    description: n.entry.description,
+    enum: n.entry.enum ?? null,
+    ui_kind: n.entry.ui_kind,
+    source_kind: n.entry.source_kind,
+  }
+}
+
+/**
+ * 树容器平摊(匹配面,2026-09-05 注入粒度 P6):object/array/dict 节点
+ * → IOFieldBinding[](实例路径,行内嵌套容器如 $.container[0].box_no、
+ * 无模板数组的合成字典行 $.misc[0] 亦收)。整容器 assign(target 命中
+ * $.request_body<容器实例路径>)与叶子同式匹配 — P3 容器快捷策略的
+ * 提示态/角标继任(此前匹配面只含叶子,整容器注入零提示)。根容器
+ * ('$')排除:快捷菜单即排除(P3,根无 rel 路径,target 派生畸形)。
+ */
+export function containerSurface(nodes: FieldTreeNode[]): IOFieldBinding[] {
+  const out: IOFieldBinding[] = []
+  const walk = (list: FieldTreeNode[]) => {
+    for (const n of list) {
+      if (n.kind === 'object') {
+        if (n.path !== '$') out.push(containerBinding(n))
+        walk(n.children)
+      } else if (n.kind === 'array') {
+        if (n.path !== '$') out.push(containerBinding(n))
+        n.rows.forEach((row) => walk(row))
+      } else if (n.kind === 'dict' && n.path !== '$') {
+        out.push(containerBinding(n))
+      }
+    }
+  }
+  walk(nodes)
+  return out
+}
+
 // ─── 「其他字段」区(§4:目录外 body 残留,深浅皆收,Type C 继任)──────
 
 export interface ExtraBodyRow {

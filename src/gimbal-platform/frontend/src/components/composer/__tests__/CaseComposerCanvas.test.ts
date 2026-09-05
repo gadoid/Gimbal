@@ -1335,6 +1335,77 @@ describe('CaseComposerCanvas — 根数组字段 assign/角标 target 派生(修
 })
 
 /**
+ * P6(整容器注入提示态,2026-09-05 注入粒度):向嵌套结构注入(整容器
+ * assign,target 命中 $.request_body<容器实例路径>)此前零提示零角标 —
+ * requestFieldSurface 匹配面只含叶子(leafSurface),FieldForm 容器头
+ * 也无徽标/角标渲染位。修:containerSurface 并入匹配面 + 容器头注入
+ * 徽标/角标/体锁定。与 I1(平铺叶)/R1(数组行叶)同族,粒度到整容器。
+ */
+describe('CaseComposerCanvas — 整容器注入态/角标(P6)', () => {
+  /** ep-deep step:$.supplier 数组容器,body 2 行 → 行数跟 body */
+  const deepStep = (over: Partial<StepView> = {}): StepView => ({
+    kind: 'step',
+    description: 'deep',
+    api: { kind: 'api', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-deep' } },
+    request: { kind: 'request', body: { supplier: [{ order_supplier_id: 'x' }, { order_supplier_id: 'y' }] } },
+    strategy: [],
+    ...over,
+  } as StepView)
+
+  it('P6-1: 既有整容器 assign → 容器头徽标(title 透出 source → target)+ assign 角标 + 体锁定;行叶不误标', async () => {
+    const s0 = deepStep({
+      strategy: [{ kind: 'assign', source: '$.oid', target: '$.request_body.supplier' } as any],
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    const head = w.find('.arr-node > .node-head')
+    expect(head.find('.node-injected').exists()).toBe(true)
+    expect(head.find('.node-injected').attributes('title')).toBe('$.oid → $.request_body.supplier')
+    expect(head.find('.strategy-tag').text()).toBe('assign')
+    // 体锁定 + 加行隐藏(I1 防编辑误导的容器面);行叶不逐叶横幅
+    expect(w.find('.arr-node .arr-body').classes()).toContain('body-locked')
+    expect(w.find('.arr-add').exists()).toBe(false)
+    expect(w.findAll('.ctl-injected')).toHaveLength(0)
+    // 原值仍可见(策略失败 continue 兜底)— 值控件在场,仅被锁定
+    expect(w.find('.arr-row input.ctl').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('P6-2: 容器菜单注入闭环 — ☰ 注入 → target=$.request_body.supplier,徽标/角标即时出现', async () => {
+    const s0 = mkStep({ strategy: [{ kind: 'extract', target: 'token', expression: '$.t' } as any] })
+    const s1 = deepStep()
+    const { w } = mountCanvas([s0, s1])
+    await flushPromises()
+    // 选中 step2(产出变量在 step1 → 注入候选不被时序门控禁用)
+    const rows = w.findAll('.step-row')
+    await rows[1].trigger('click')
+    await flush()
+    // 注入前:无徽标无角标,加行在
+    expect(w.find('.node-injected').exists()).toBe(false)
+    expect(w.find('.arr-add').exists()).toBe(true)
+    // 容器头 ☰(node-fa 是容器菜单专属挂载位,行叶菜单不在此列)
+    await w.find('.node-fa .fa-menu-btn').trigger('click')
+    await flush()
+    const inj = w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))
+    await inj!.trigger('click')
+    await flush()
+    const cand = w.findAll('.fa-var-item').find((b) => b.text().includes('token'))
+    await cand!.trigger('click')
+    await flushPromises()
+    // assign 经 onFieldAssign 落整容器 target(单一真源派生)
+    const as = s1.strategy.find((s: any) => s.kind === 'assign') as any
+    expect(as).toBeTruthy()
+    expect(as.source).toBe('$.token')
+    expect(as.target).toBe('$.request_body.supplier')
+    // 注入态闭环:头徽标 + 角标 + 体锁定(匹配面 containerSurface 贯通)
+    expect(w.find('.node-injected').attributes('title')).toBe('$.token → $.request_body.supplier')
+    expect(w.find('.arr-node > .node-head .strategy-tag').text()).toBe('assign')
+    expect(w.find('.arr-node .arr-body').classes()).toContain('body-locked')
+    w.unmount()
+  })
+})
+
+/**
  * 字段状态控制门禁(2026-09-05 spec §3.5,Canvas 落地层 onFieldState):
  * 行尾下拉写 step.field_states 稀疏增量 → validateEndpointFieldStates
  * 合成态裁决 —— errors 非空 = 拒(回滚本次写入);warnings 仅提示;

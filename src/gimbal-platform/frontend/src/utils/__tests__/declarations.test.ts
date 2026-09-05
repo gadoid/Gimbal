@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest'
 import {
   resolveState, iterFlat, catalogPaths, carryPaths,
   formBindings, responseBindings, assertablePaths,
-  buildTree, leafSurface, extraBodyPaths, extraSurfaceBindings, prefillBindings,
+  buildTree, leafSurface, containerSurface, extraBodyPaths, extraSurfaceBindings, prefillBindings,
 } from '@/utils/declarations'
 import type { DeclarationEntryView } from '@/types/plate'
 
@@ -377,6 +377,73 @@ describe('leafSurface — 树叶平铺(实例路径匹配面)', () => {
     const decls = [mkDecl({ name: 'misc', path: '$.misc', type: 'array' })]
     const surface = leafSurface(buildTree(decls, undefined, { misc: [{ a: 1 }, { b: 2 }] }))
     expect(surface.map((f) => f.path)).toEqual(['$.misc[0].a', '$.misc[1].b'])
+  })
+})
+
+// ─── containerSurface 匹配面(注入粒度 P6)──────────────────────────
+
+describe('containerSurface — 树容器平摊(整容器 assign 匹配面,P6)', () => {
+  it('object/array/dict 容器全收(实例路径),叶子不入面', () => {
+    const decls = [
+      mkDecl({ name: 'id', path: '$.id' }),
+      mkDecl({ name: 'cfg', path: '$.cfg', type: 'object', children: [
+        mkDecl({ name: 'timeout', path: '$.cfg.timeout' }),
+      ] }),
+      mkDecl({ name: 'tags', path: '$.tags', type: 'array' }),
+      mkDecl({ name: 'labels', path: '$.labels', type: 'object' }),
+    ]
+    const surface = containerSurface(buildTree(decls, undefined, {
+      id: 1, cfg: { timeout: 30 }, tags: ['a'], labels: { env: 'qa' },
+    }))
+    // 标量数组 tags 的行是合成叶子(dict 才是容器);叶子 id/timeout 不入
+    expect(surface.map((f) => f.path)).toEqual(['$.cfg', '$.tags', '$.labels'])
+    // 载体携带目录元数据(FieldForm.nodeBinding 同形,name 取条目名)
+    expect(surface[0]).toMatchObject({ name: 'cfg', path: '$.cfg', ui_kind: 'text' })
+  })
+
+  it('行内嵌套容器逐实例入面($.container[0].box_no 与叶子同源寻址)', () => {
+    const decls = [
+      mkDecl({ name: 'container', path: '$.container', type: 'array', children: [
+        mkDecl({ name: 'box_type', path: '$.container.box_type' }),
+        mkDecl({ name: 'box_no', path: '$.container.box_no', type: 'array', children: [
+          mkDecl({ name: 'no', path: '$.container.box_no.no' }),
+        ] }),
+      ] }),
+    ]
+    const surface = containerSurface(buildTree(decls, undefined, {
+      container: [
+        { box_type: '20GP', box_no: [{ no: 'A1' }] },
+        { box_type: '40GP', box_no: [] },
+      ],
+    }))
+    expect(surface.map((f) => f.path)).toEqual([
+      '$.container', '$.container[0].box_no', '$.container[1].box_no',
+    ])
+  })
+
+  it('无模板数组对象行:合成字典行逐行入面($.misc[0],assign 可整行替换)', () => {
+    const decls = [mkDecl({ name: 'misc', path: '$.misc', type: 'array' })]
+    const surface = containerSurface(buildTree(decls, undefined, { misc: [{ a: 1 }, { b: 2 }] }))
+    expect(surface.map((f) => f.path)).toEqual(['$.misc', '$.misc[0]', '$.misc[1]'])
+  })
+
+  it('根容器($)排除 — 快捷菜单即排除(P3),无 rel 路径不入匹配面', () => {
+    const decls = [
+      mkDecl({ name: 'root', path: '$', type: 'array', children: [
+        mkDecl({ name: 'sku', path: '$.sku' }),
+      ] }),
+    ]
+    const surface = containerSurface(buildTree(decls, undefined, [{ sku: 'A' }]))
+    expect(surface).toEqual([])
+  })
+
+  it('carry 容器不进树(containerSurface 无从产出,与 leafSurface 同语义)', () => {
+    const decls = [
+      mkDecl({ name: 'secret', path: '$.secret', state: 'carry', children: [
+        mkDecl({ name: 'token', path: '$.secret.token' }),
+      ] }),
+    ]
+    expect(containerSurface(buildTree(decls, undefined, { secret: { token: 't' } }))).toEqual([])
   })
 })
 

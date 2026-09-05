@@ -505,8 +505,8 @@ import type { AuthSession } from '@/api/auth_sessions'
 import { deepDefaults } from '@/utils/jsonpath'
 import { toScratchPath } from '@/utils/scratch-path'
 import {
-  assertablePaths, buildTree, carryPaths, extraBodyPaths, extraSurfaceBindings,
-  formBindings, leafSurface, prefillBindings, responseBindings,
+  assertablePaths, buildTree, carryPaths, containerSurface, extraBodyPaths,
+  extraSurfaceBindings, formBindings, leafSurface, prefillBindings, responseBindings,
 } from '@/utils/declarations'
 import type { FieldTreeNode } from '@/utils/declarations'
 import { deriveBase } from '@/utils/service-alias'
@@ -944,10 +944,11 @@ function strategyMatchesField(s: StrategyView, domain: 'request' | 'response', f
   return false
 }
 
-/** 请求字段匹配面(§5 值×结构合并树继任 D9):树叶子(实例路径,含
- *  数组行 [i])+ 目录外残留合成行 — 注入只读态/请求侧策略角标按 path
- *  匹配全部复用;与 FieldForm 渲染同源(buildTree/extraBodyPaths 单一
- *  真源),防键漂移。 */
+/** 请求字段匹配面(§5 值×结构合并树继任 D9):树叶子 + 容器节点
+ *  (实例路径,含数组行 [i];容器面 = 注入粒度 P6,整容器 assign 与
+ *  叶子同式命中)+ 目录外残留合成行 — 注入只读态/请求侧策略角标按
+ *  path 匹配全部复用;与 FieldForm 渲染同源(buildTree/extraBodyPaths
+ *  单一真源),防键漂移。 */
 function requestFieldSurface(step: StepView | undefined): IOFieldBinding[] {
   const decls = stepDecls(step)
   if (!decls) return []
@@ -955,6 +956,7 @@ function requestFieldSurface(step: StepView | undefined): IOFieldBinding[] {
   const tree = buildTree(decls, fs, step?.request?.body)
   return [
     ...leafSurface(tree),
+    ...containerSurface(tree),
     ...extraSurfaceBindings(step?.request?.body, decls, fs),
   ]
 }
