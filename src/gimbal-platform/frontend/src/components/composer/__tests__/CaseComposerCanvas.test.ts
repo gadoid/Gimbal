@@ -129,7 +129,7 @@ vi.mock('@/api/scenario-composer', () => ({
                     children: [{
                       name: 'sku', path: '$.data.items.sku',
                       ui_kind: 'text', source_kind: 'independent', example: 'S-1',
-                      required: false, description: '', assertable: false,
+                      required: false, description: '', assertable: true,
                     }],
                   },
                 ],
@@ -1545,6 +1545,37 @@ describe('CaseComposerCanvas — 响应契约树(P7)', () => {
     expect(items).toHaveLength(2)
     expect(items.map((b) => b.text()).join()).toContain('提取该字段')
     expect(items.map((b) => b.text()).join()).toContain('断言该字段')
+    w.unmount()
+  })
+
+  it('P7-4: 响应树叶提取/断言 → expression 落字段自身模板路径(深层字段不再空)', async () => {
+    const s0 = respStep()
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
+    await respTab.trigger('click')
+    await flush()
+    // 嵌套叶 sku($.data.items.sku):字段名对不上 $.data.<名>/$.<名> 惯例
+    // 形状,respPathFor 此前落空 — 现经字段自身模板路径精确命中 assertable 面
+    await w.find('.arr-row .fa-menu-btn').trigger('click')
+    await flush()
+    const exItem = w.findAll('.fa-item').find((b) => b.text().includes('提取该字段'))!
+    await exItem.trigger('click')
+    await flush()
+    const ex = s0.strategy.find((s: any) => s.kind === 'extract') as any
+    expect(ex).toBeTruthy()
+    expect(ex.target).toBe('sku')
+    expect(ex.expression).toBe('$.response_body.data.items.sku')
+    // 断言同源(respPathFor 单一真源,深层 target 同式落自身路径)
+    await w.find('.arr-row .fa-menu-btn').trigger('click')
+    await flush()
+    const asItem = w.findAll('.fa-item').find((b) => b.text().includes('断言该字段'))!
+    await asItem.trigger('click')
+    await flush()
+    const as = s0.strategy.find(
+      (s: any) => s.kind === 'assertion' && s.target !== '$.response_status',
+    ) as any
+    expect(as.target).toBe('$.response_body.data.items.sku')
     w.unmount()
   })
 })

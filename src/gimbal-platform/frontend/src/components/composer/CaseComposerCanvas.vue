@@ -787,17 +787,23 @@ const injectVarChoices = computed(() => {
 })
 
 /**
- * 字段名 → 响应 JSONPath — 唯一来源是 plate 解析的候选,不猜:
+ * 字段 → 响应 JSONPath — 唯一来源是 plate 解析的候选,不猜:
  * ① 运行时样本(resolve-paths,最新鲜、数组天然 [idx])按字段名结尾匹配
- * ② 端点契约 assertable(注册时预解析的缓存)精确匹配
+ * ② 字段自身 plate 域路径在 assertable 面精确命中(P7:响应树模板路径
+ *    任意深度可寻址 — 此前仅 $.data.<名>/$.<名> 两式,深层字段落空)
+ * ③ 端点契约 assertable 按 $.data.<名>/$.<名> 惯例形状匹配(请求侧
+ *    叶子无响应路径,靠字段名对惯例形状)
  * 无命中返回 ''(宁空勿错 — 旧兜底模板 $.data.<字段> 在数组响应上
  * 丢 [0] 段,静默错路径比空更糟;空引导用户粘样本/手填)。
  */
-function respPathFor(fieldName: string): string {
-  const sampleHit = samplePaths.value.find((p) => pathEndsWithField(p, fieldName))
+function respPathFor(f: IOFieldBinding): string {
+  const sampleHit = samplePaths.value.find((p) => pathEndsWithField(p, f.name))
   if (sampleHit) return toScratchPath(sampleHit)
+  // 字段自身路径:响应树叶(模板态,无 [i])与 assertable 面同键宇宙,
+  // 命中即字段自己的契约路径;请求侧叶路径属请求域(或含 [i]),不会误中
+  if (currentAssertable.value.includes(f.path)) return toScratchPath(f.path)
   const assertableHit = currentAssertable.value.find(
-    (p) => p === `$.data.${fieldName}` || p === `$.${fieldName}`
+    (p) => p === `$.data.${f.name}` || p === `$.${f.name}`
   )
   if (assertableHit) return toScratchPath(assertableHit)
   return ''
@@ -815,7 +821,7 @@ function onFieldExtract(f: IOFieldBinding) {
   currentStep.value.strategy.push({
     kind: 'extract',
     target: f.name,
-    expression: respPathFor(f.name),
+    expression: respPathFor(f),
     scope: 'scenario',
     required: true,
   })
@@ -852,7 +858,7 @@ function onFieldAssert(f: IOFieldBinding) {
   if (!currentStep.value) return
   currentStep.value.strategy.push({
     kind: 'assertion',
-    target: respPathFor(f.name),
+    target: respPathFor(f),
     operator: 'exists',
     expected: null,
     message: '',
