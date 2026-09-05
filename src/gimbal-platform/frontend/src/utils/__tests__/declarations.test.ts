@@ -291,6 +291,31 @@ describe('buildTree — 三输入合一(目录 + 意图 + 值)', () => {
     }
   })
 
+  it('无模板数组对象/数组行:对象 → 字典行(KV),嵌套数组 → 递归合成(防 text 洗型)', () => {
+    const decls = [mkDecl({ name: 'misc', path: '$.misc', type: 'array' })]
+    const [arr] = buildTree(decls, undefined, {
+      misc: [{ a: 1, b: 'x' }, [1, 2], 's'],
+    })
+    if (arr?.kind !== 'array') throw new Error('应为数组节点')
+    expect(arr.rows).toHaveLength(3)
+    const [dictRow] = arr.rows[0]
+    expect(dictRow?.kind).toBe('dict')
+    if (dictRow?.kind === 'dict') {
+      expect(dictRow.path).toBe('$.misc[0]')
+      expect(dictRow.templatePath).toBe('$.misc')          // 模板归容器(行内无声明)
+      expect(dictRow.entries.map((e) => e.key)).toEqual(['a', 'b'])
+      expect(dictRow.entry.name).toBe('misc[0]')           // 行内名带下标(拷贝)
+    }
+    const [inner] = arr.rows[1]
+    expect(inner?.kind).toBe('array')
+    if (inner?.kind === 'array') {
+      expect(inner.rows).toHaveLength(2)
+      expect(inner.rows[1][0].path).toBe('$.misc[1][1]')   // 嵌套下标累积
+      expect(inner.templatePath).toBe('$.misc')
+    }
+    expect(arr.rows[2][0].kind).toBe('leaf')               // 标量行保持
+  })
+
   it('开放字典(object 无 children):KV 编辑器,entries 跟 body', () => {
     const decls = [mkDecl({ name: 'labels', path: '$.labels', type: 'object' })]
     const [dict] = buildTree(decls, undefined, { labels: { a: 'x', b: 'y' } })
@@ -347,6 +372,12 @@ describe('leafSurface — 树叶平铺(实例路径匹配面)', () => {
     const surface = leafSurface(buildTree(decls, undefined, { items: [{ sku: 'A' }, { sku: 'B' }] }))
     expect(surface.map((f) => f.path)).toEqual(['$.items[0].sku', '$.items[1].sku'])
   })
+
+  it('无模板数组对象行:字典行键逐键入面(实例路径,同顶层字典)', () => {
+    const decls = [mkDecl({ name: 'misc', path: '$.misc', type: 'array' })]
+    const surface = leafSurface(buildTree(decls, undefined, { misc: [{ a: 1 }, { b: 2 }] }))
+    expect(surface.map((f) => f.path)).toEqual(['$.misc[0].a', '$.misc[1].b'])
+  })
 })
 
 // ─── 「其他字段」区(§4:目录外 body 残留,深浅皆收)────────────────
@@ -388,6 +419,21 @@ describe('extraBodyPaths — 目录外残留投影', () => {
     ]
     const rows = extraBodyPaths([{ sku: 'A', n: 1 }], decls)
     expect(rows).toEqual([{ path: '$[0].n', top: false }])
+  })
+
+  it('自渲染容器子树不进 extras(开放字典/无模板数组 — 防与 KV/合成行双重展示)', () => {
+    const decls = [
+      mkDecl({ path: '$.labels', type: 'object' }),   // 开放字典:KV 承载全文
+      mkDecl({ path: '$.misc', type: 'array' }),      // 无模板数组:合成行承载全文
+      mkDecl({ path: '$.order', children: [mkDecl({ path: '$.order.id' })] }),
+    ]
+    const rows = extraBodyPaths({
+      labels: { env: 'qa' },
+      misc: [{ a: 1 }, [1, 2]],
+      order: { id: 1, memo: 'x' },
+    }, decls)
+    // 声明了 children 的容器只渲染声明面,残留下钻保持(E1 语义不回退)
+    expect(rows).toEqual([{ path: '$.order.memo', top: false }])
   })
 
   it('非对象 body → 空投影', () => {

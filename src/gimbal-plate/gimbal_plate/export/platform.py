@@ -258,7 +258,8 @@ def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str,
     fields_meta: dict[str, Any] = {}
     if ep is not None and ep.request is not None:
         decls = ep.request.declarations
-        # 1) carry 面先行打底(state=='carry';先序遍历 ⇒ 整容器先于子孙合并):
+        # 1) 容器字面量打底(carry 整面 + 有 children 的 form/collapse 容器;
+        #    先序遍历 ⇒ 整容器先于子孙合并):
         #    值归 platform 两层值表管,不补默认、不造 None 占位;body 已带
         #    字面量的原样并入 —— 保住 gimbal→platform→gimbal 往返子集契约,
         #    且与运行时 fill-missing(body 显式值优先)语义一致。
@@ -267,8 +268,13 @@ def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str,
         #    只覆已声明路径 —— 容器内兄弟键不截断(F1)。子孙 setdefault
         #    对已并入容器为 no-op,保留逐条合并以承接 form 容器下的
         #    carry 叶子(整传一致性只约束 carry 容器,不反向强制)。
+        #    form 容器(尤其 array 行组)同面:叶子补全按模板 path 寻址,
+        #    无下标语义,重建不了行 —— body 行字面量必须先落 full_body,
+        #    声明叶随后下钻覆写(值取自 body,同值回写)。2026-09-05
+        #    container children 补全暴露该缺口(此前 children=0 容器走
+        #    顶层整值拷贝侥幸存活)。
         for e in iter_declarations(decls):
-            if e.state == "carry":
+            if e.state == "carry" or e.children:
                 _merge_carry_literal(e.path, body, full_body)
         # 2) fields_meta:顶层条目全量登记(含 children 树与 state),carry
         #    面顶层条目不进表(值透传,无表单渲染依据);树内 carry 节点

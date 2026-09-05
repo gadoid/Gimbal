@@ -122,6 +122,10 @@ ORDER_ENTRUST_ORDER_CONFIRM: Final[EndpointSpec] = EndpointSpec(
             # 并入容器模板 children。盖戳分流:$.supplier 在 HEAD 已是 carry 容器
             # (旧 855 行)→ 整传一致性子孙 carry;$.container HEAD 无容器条目、
             # 仅 binding 深叶 → binding→form(切换面等价,§6-M3 ⑧ 对拍修正)
+            # 同日补全:container 行形状三方印证(order_add example /
+            # order_customer_container curl / Scenario_Test_14 转储)补齐 5 键,
+            # 行内业务键回到树行组渲染,不再落「其他字段」;不带 default/example
+            # → platform 导出 D7 深层无值不落 None 骨架,body 零漂移
             DeclarationEntry(name='supplier', path='$.supplier', state='carry', type='array',
                 children=[
                     DeclarationEntry(name='supplier_id', path='$.supplier.order_supplier_id', state='carry', type='string'),
@@ -129,7 +133,12 @@ ORDER_ENTRUST_ORDER_CONFIRM: Final[EndpointSpec] = EndpointSpec(
                 ]),
             DeclarationEntry(name='container', path='$.container', state='form', type='array',
                 children=[
-                    DeclarationEntry(name='order_container_id', path='$.container.order_container_id', state='form', type='string'),
+                    DeclarationEntry(name='order_container_id', path='$.container.order_container_id', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='box_type', path='$.container.box_type', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='box_num', path='$.container.box_num', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='box_no', path='$.container.box_no', state='form', type='array'),
+                    DeclarationEntry(name='seal_number', path='$.container.seal_number', state='form', type='array'),
+                    DeclarationEntry(name='sea_trans_unit_price', path='$.container.sea_trans_unit_price', state='form', type='number', ui_kind='number'),
                 ]),
             DeclarationEntry(name='customer_category', path='$.customer_category', state='carry', type='string'),
             DeclarationEntry(name='customer_tax_number', path='$.customer_tax_number', state='carry', type='string'),

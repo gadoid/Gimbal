@@ -269,22 +269,47 @@ function suffixOf(childPath: string, containerPath: string): string {
     : `.${childPath}`
 }
 
-/** 标量数组行(无 children 模板):按值类型合成叶子(状态随容器解析态)。 */
+/** 无 children 模板的数组合成行(§5.3):按值类型分形 —— 标量 → 叶子;
+ *  对象 → 开放字典行(KV 编辑。此前对象值落 text 输入,显示成
+ *  [object Object] 且编辑会用字符串整洗行对象);数组 → 递归合成数组。
+ *  templatePath 归容器模板(行内无独立声明),状态随容器解析态。 */
 function scalarRows(
   instancePath: string, entry: DeclarationEntryView,
   state: FieldState, body: unknown,
 ): FieldTreeNode[][] {
   const value = getByPath(body, instancePath)
   const items = Array.isArray(value) ? value : []
-  return items.map((item, i) => [{
-    kind: 'leaf' as const,
-    path: `${instancePath}[${i}]`,
-    templatePath: entry.path,
-    state,
+  return items.map((item, i) => [
+    synthRowNode(item, `${instancePath}[${i}]`, `${entry.name}[${i}]`, entry, state, body),
+  ])
+}
+
+/** 单个合成行节点(name 携带下标,多行可辨;行内 entry 用拷贝不污染模板)。 */
+function synthRowNode(
+  item: unknown, path: string, name: string,
+  entry: DeclarationEntryView, state: FieldState, body: unknown,
+): FieldTreeNode {
+  if (Array.isArray(item)) {
+    const rowEntry = { ...entry, name }
+    return {
+      kind: 'array', path, templatePath: entry.path, state,
+      entry: rowEntry, templates: [],
+      rows: scalarRows(path, rowEntry, state, body),
+    }
+  }
+  if (item !== null && typeof item === 'object') {
+    return {
+      kind: 'dict', path, templatePath: entry.path, state,
+      entry: { ...entry, name },
+      entries: Object.entries(item as Record<string, unknown>)
+        .map(([key, value]) => ({ key, value })),
+    }
+  }
+  return {
+    kind: 'leaf', path, templatePath: entry.path, state,
     synthetic: true,
     binding: {
-      name: `${entry.name}[${i}]`,
-      path: `${instancePath}[${i}]`,
+      name, path,
       required: false,
       default: null,
       example: null,
@@ -294,7 +319,7 @@ function scalarRows(
         : typeof item === 'boolean' ? 'boolean' : 'text',
       source_kind: 'independent',
     },
-  }])
+  }
 }
 
 /** §5.1 三输入合一:目录 + 意图(field_states)+ 值(body)→ 渲染树。 */
@@ -353,10 +378,13 @@ function toTemplate(path: string): string {
 
 /**
  * 目录外 body 残留投影:body(深浅皆收)中不被目录覆盖的键。
- * 覆盖判定:模板化 path ∈ 目录宇宙(已覆盖容器继续下钻找内部残留
- * 叶子);carry 根下整棵剪除(容器值归值表,D9 排除面继任)。
- * 未覆盖节点整块成行:顶层平铺键维持旧 extras 语义,结构键 JSON
- * 整行(top),标量叶子行 —— deriveDeepRows 的深浅皆收继任。
+ * 覆盖判定:模板化 path ∈ 目录宇宙;声明了 children 的已覆盖容器
+ * 只渲染声明面,继续下钻找内部残留叶子(E1);无 children 声明的
+ * 结构容器(开放字典 / 无模板数组合成行)在树内自渲染全部内容,
+ * 子树不再重复成行(防双重展示)。carry 根下整棵剪除(容器值归
+ * 值表,D9 排除面继任)。未覆盖节点整块成行:顶层平铺键维持旧
+ * extras 语义,结构键 JSON 整行(top),标量叶子行 ——
+ * deriveDeepRows 的深浅皆收继任。
  */
 export function extraBodyPaths(
   body: unknown,
@@ -366,6 +394,13 @@ export function extraBodyPaths(
   if (!body || typeof body !== 'object') return []
   const universe = catalogPaths(decls)
   const carry = new Set(carryPaths(decls, fieldStates))
+  // 自渲染容器:无 children 声明的结构条目(dict KV / 合成行承载全文)
+  const selfRendered = new Set(
+    iterFlat(decls).filter((e) =>
+      (e.type === 'object' || e.type === 'array')
+      && !(Array.isArray(e.children) && e.children.length),
+    ).map((e) => e.path),
+  )
   const rows: ExtraBodyRow[] = []
   const full = (rel: string) => (rel.startsWith('[') ? `$${rel}` : `$.${rel}`)
   /** 前缀段是否落 carry 容器(模板化前缀逐段收敛到 '.' 边界;$ = 整包)。 */
@@ -386,9 +421,11 @@ export function extraBodyPaths(
       const childRel = isArr ? `${rel}[${k}]` : rel ? `${rel}.${k}` : k
       const p = full(childRel)
       if (universe.has(toTemplate(p)) || underCarry(p)) {
-        // 已覆盖(或 carry 吸收):结构容器继续下钻找内部残留叶子;
+        // 已覆盖(或 carry 吸收):声明了 children 的结构容器只渲染
+        // 声明面,下钻找内部残留叶子;自渲染容器子树不重复成行;
         // 已覆盖叶子/标量由渲染树本体承载,不成行
-        if (v !== null && typeof v === 'object') walk(v, childRel)
+        if (v !== null && typeof v === 'object'
+          && !selfRendered.has(toTemplate(p))) walk(v, childRel)
         continue
       }
       rows.push({ path: p, top: v !== null && typeof v === 'object' })

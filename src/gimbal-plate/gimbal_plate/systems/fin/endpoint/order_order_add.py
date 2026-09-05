@@ -96,7 +96,18 @@ ORDER_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
         DeclarationEntry(name='order_sn', path='$.order_sn', type='string', example='', ui_kind='text'),
         DeclarationEntry(name='status', path='$.status', type='integer', example=2, ui_kind='number'),
         DeclarationEntry(name='sea_trans_currency', path='$.sea_trans_currency', type='string', example='USD', ui_kind='text'),
-        DeclarationEntry(name='container', path='$.container', type='array', example=[{'order_container_id': '', 'box_type': '40HQ', 'box_num': '1', 'box_no': [''], 'seal_number': [''], 'sea_trans_unit_price': 1}], ui_kind='json'),
+        # 2026-09-05 补全:行形状按本条 example 三方印证(order_customer_container
+        # curl / Scenario_Test_14 转储同款)声明 children,行内业务键回到树行组
+        # 渲染;不带 default/example → platform 导出 D7 深层无值不落 None 骨架
+        DeclarationEntry(name='container', path='$.container', type='array', example=[{'order_container_id': '', 'box_type': '40HQ', 'box_num': '1', 'box_no': [''], 'seal_number': [''], 'sea_trans_unit_price': 1}], ui_kind='json',
+            children=[
+                DeclarationEntry(name='order_container_id', path='$.container.order_container_id', type='string', ui_kind='text'),
+                DeclarationEntry(name='box_type', path='$.container.box_type', type='string', ui_kind='text'),
+                DeclarationEntry(name='box_num', path='$.container.box_num', type='string', ui_kind='text'),
+                DeclarationEntry(name='box_no', path='$.container.box_no', type='array'),
+                DeclarationEntry(name='seal_number', path='$.container.seal_number', type='array'),
+                DeclarationEntry(name='sea_trans_unit_price', path='$.container.sea_trans_unit_price', type='number', ui_kind='number'),
+            ]),
         DeclarationEntry(name='message_board', path='$.message_board', type='array', example=[], ui_kind='json'),
         DeclarationEntry(name='customer_file_list', path='$.customer_file_list', type='array', example=[], ui_kind='json'),
         DeclarationEntry(name='supplier', path='$.supplier', type='array', example=[{'order_supplier_id': '', 'order_id': '', 'isset_supplier': '1', 'is_primary': '1', 'supplier_id': '805', 'supplier_name': '青岛雅然国际物流有限公司', 'settle_object_id': '1384', 'user_id': '336', 'user_name': '闫航', 'service_item': 'booking_space', 'supplier_period': '60', 'settlement_date': '20', 'supplier_pay_date': '0', 'is_manual': '0', 'sys_upttime': '2026-07-01 13:14:48', 'supplier_label': '青岛雅然国际物流有限公司-订舱', 'service_item_name': '订舱', 'isset_fee': False}], ui_kind='json'),

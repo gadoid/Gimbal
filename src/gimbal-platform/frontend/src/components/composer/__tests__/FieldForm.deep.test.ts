@@ -268,6 +268,26 @@ describe('FieldForm 树模式 — 数组行组(§5.3)', () => {
       null,
     ] } })
   })
+
+  it('A9: 无模板数组对象行 — 字典 KV 行渲染(对象值不落 text 洗型);extras 不双重展示;删行 splice', async () => {
+    const decls = [mkDecl({ name: 'misc', path: '$.misc', type: 'array' })]
+    const { w, body } = mountTree({ decls, body: { misc: [{ a: '1', b: 'x' }] } })
+    // 对象行 → 字典 KV 编辑器承载行内键(此前合成 text 行,对象值显示
+    // [object Object] 且编辑会用字符串整洗行对象)
+    expect(w.findAll('.arr-node')).toHaveLength(1)
+    expect(w.findAll('.kv-row')).toHaveLength(2)
+    expect(w.find('.dict-node .path-badge').text()).toBe('$.misc[0]')
+    await w.findAll('.kv-row input.ctl')[1].setValue('y')
+    await flush()
+    expect(body.value).toEqual({ misc: [{ a: '1', b: 'y' }] })
+    // 树内已自渲染 → 「其他字段」区整体缺席(无双重展示)
+    expect(w.find('[data-testid="extra-fields"]').exists()).toBe(false)
+    // 删行 = splice(行删按钮是 .arr-row 直系子级;KV 删键同类名需区分);
+    // 空数组壳保留(删行不走 D8 剪枝,同 A3 语义)
+    await w.find('.arr-row > .arr-del').trigger('click')
+    await flush()
+    expect(body.value).toEqual({ misc: [] })
+  })
 })
 
 // ─── 开放字典(§5.3:object 无 children → KV 编辑器)────────────────

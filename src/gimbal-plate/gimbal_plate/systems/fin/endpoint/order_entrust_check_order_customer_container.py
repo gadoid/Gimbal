@@ -46,7 +46,18 @@ ORDER_ENTRUST_CHECK_ORDER_CUSTOMER_CONTAINER: Final[EndpointSpec] = EndpointSpec
         declarations=[
             DeclarationEntry(name='customer_id', path='$.customer_id', type='string', example='335247043402399744', ui_kind='text'),
             DeclarationEntry(name='order_id', path='$.order_id', type='string', example='354066893969032192', ui_kind='text'),
-            DeclarationEntry(name='container', path='$.container', type='array', example=[{'order_container_id':'','box_type': '20GP', 'box_num': '1', 'box_no': [''], 'seal_number': [''], 'sea_trans_unit_price': '100'}], ui_kind='text'),
+            # 2026-09-05 补全:行形状按本条 curl example 三方印证(order_add
+            # example / Scenario_Test_14 转储同款)声明 children,行内业务键
+            # 回到树行组渲染;不带 default/example → D7 深层无值不落 None 骨架
+            DeclarationEntry(name='container', path='$.container', type='array', example=[{'order_container_id':'','box_type': '20GP', 'box_num': '1', 'box_no': [''], 'seal_number': [''], 'sea_trans_unit_price': '100'}], ui_kind='text',
+                children=[
+                    DeclarationEntry(name='order_container_id', path='$.container.order_container_id', type='string', ui_kind='text'),
+                    DeclarationEntry(name='box_type', path='$.container.box_type', type='string', ui_kind='text'),
+                    DeclarationEntry(name='box_num', path='$.container.box_num', type='string', ui_kind='text'),
+                    DeclarationEntry(name='box_no', path='$.container.box_no', type='array'),
+                    DeclarationEntry(name='seal_number', path='$.container.seal_number', type='array'),
+                    DeclarationEntry(name='sea_trans_unit_price', path='$.container.sea_trans_unit_price', type='number', ui_kind='number'),
+                ]),
             DeclarationEntry(name='policy_type', path='$.policy_type', type='string', example='JSZX', ui_kind='text'),
         ],
     ),
