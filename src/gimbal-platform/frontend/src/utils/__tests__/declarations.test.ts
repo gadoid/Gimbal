@@ -215,6 +215,34 @@ describe('buildTree — 三输入合一(目录 + 意图 + 值)', () => {
     }
   })
 
+  it('list 套 list:数组行内数组容器 — 下标逐层累积,内外行数各跟 body(§9 验收)', () => {
+    const decls = [
+      mkDecl({ name: 'outer', path: '$.outer', type: 'array', children: [
+        mkDecl({ name: 'rows', path: '$.outer.rows', type: 'array', children: [
+          mkDecl({ name: 'sku', path: '$.outer.rows.sku' }),
+        ] }),
+      ] }),
+    ]
+    const [outer] = buildTree(decls, undefined, {
+      outer: [{ rows: [{ sku: 'a' }, { sku: 'b' }] }, { rows: [{ sku: 'c' }] }],
+    })
+    if (outer?.kind !== 'array') throw new Error('outer 应为数组节点')
+    expect(outer.rows).toHaveLength(2)                        // 外层行数跟 body
+    const [inner] = outer.rows[0]
+    expect(inner?.kind).toBe('array')
+    expect(inner?.path).toBe('$.outer[0].rows')               // 外层下标入实例路径
+    if (inner?.kind === 'array') {
+      expect(inner.rows).toHaveLength(2)                      // 内层行数独立跟 body
+      expect(inner.rows[1][0].path).toBe('$.outer[0].rows[1].sku')
+      expect(inner.rows[1][0].templatePath).toBe('$.outer.rows.sku')  // 模板路径无下标
+    }
+    const [inner2] = outer.rows[1]
+    if (inner2?.kind === 'array') {
+      expect(inner2.rows).toHaveLength(1)
+      expect(inner2.rows[0][0].path).toBe('$.outer[1].rows[0].sku')
+    }
+  })
+
   it('标量数组(无 children 模板):按值类型合成行', () => {
     const decls = [mkDecl({ name: 'tags', path: '$.tags', type: 'array' })]
     const [arr] = buildTree(decls, undefined, { tags: [1, 'a', true] })

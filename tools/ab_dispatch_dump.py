@@ -1,26 +1,29 @@
-"""M3 A/B 对拍转储(2026-09-05 spec §6-M3 ⑧ / §9 ⑧)。
+"""dispatch 物化基线生成器(2026-09-05 spec §6-M3 ⑧/§9 ⑧ 基线重钉工具)。
 
-同一批场景在旧树(HEAD,channel 时代)与新树(工作树,字段状态目录)
-各跑一次,产物 canonical JSON(sort_keys)逐字节 diff,全等 = 切换等价。
+生成 dispatch 物化终值的目录敏感分量六段转储(canonical JSON sort_keys
+写出)。回归测试 tests/plate/test_dispatch_baseline.py 经 importlib 加载
+本模块 build_dump,与 fixtures/dispatch_baseline.json 逐段全等比对 ——
+目录或解析链的任何演进取到「无意识改变 dispatch 物化终值」时即红
+(有意漂移闸门);重钉 = 本工具再生成 + 经评审并回 fixture。
 
-批构成(两树同一批,由各自 plate 注册表在线发现):
+M3 A/B 对拍已收口(2026-09-05:切换时点存量值表下新旧树六段全等,
+commit b7d522f);旧树侧对照逻辑随对拍收口移除,仅存 git 历史。
+
+批构成(A/B 收口时点同款,由 plate 注册表在线发现):
   * fin 全端点(排序去重)—— 每端点一个合成 step(view_hints.endpoint_id
     锚点 + 空 body),构成「AB 批」场景;
   * Scenario_Test_14_copy.json(36 步真实转储,plate 既有测试同款)。
 
-转储面(dispatch 物化终值的目录敏感分量):
-  A. endpoints        —— 批身份(端点 id 排序表;两树不等即批漂移);
+六段:
+  A. endpoints        —— 批身份(端点 id 排序表);
   B. carry_faces      —— 每端点 carry 注入面 {path: type}
-                         新:field_state_resolution.carry_face(解析链单一
-                         实现,场景无增量 → 读穿 = 盖戳面)
-                         旧:HEAD carry_injection._carry_face 逐字转录
-                         (channel=='carry' 平铺投影);
+                         (field_state_resolution.carry_face 解析链单一实现,
+                         场景无增量 → 读穿 = 盖戳面);
   C. carry_injected   —— AB 批每端点 carry 注入后的物化请求体
-                         (run_materialize._apply_carry,双侧同源未改;
-                         值表确定性合成:面内每 path 按契约类型给值;
-                         --values-from 锚定切换时点存量值表 = 旧面键集,
-                         两侧同表重放 —— 服务级值表跨端点共享,面差路径
-                         恰有同路径值即真实改变物化,故面全等是硬前提);
+                         (run_materialize._apply_carry;值表确定性合成:
+                         面内每 path 按契约类型给值;--values-from 锚定
+                         切换时点存量值表 —— 服务级值表跨端点共享,
+                         面差路径恰有同路径值即真实改变物化);
   D. convert_gimbal / convert_platform —— plate /convert 产物
                          (dispatch 链的 plate 调用:校验 + 剥平台视图字段;
                          platform 产物含 endpoints 定面 = M1 消费方 #3);
@@ -29,10 +32,6 @@
 
 用法:
     python tools/ab_dispatch_dump.py --out dump.json [--values-from 值表.json]
-
-A/B 对拍已收口(2026-09-05:改章 $.container 后两侧同表六段全等);
-本工具现为 dispatch 基线再生成器 —— 回归测试加载 build_dump 与
-tests/plate/fixtures/dispatch_baseline.json 全等比对,漂移即红。
 """
 from __future__ import annotations
 
@@ -50,26 +49,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from gimbal_plate.http import create_app  # noqa: E402
 
-# ── 版本探测 ───────────────────────────────────────────────────────
-# 新树:解析链模块存在(§3.2 单一实现)。旧树(HEAD):模块缺席 → 走
-# HEAD 生产逻辑逐字转录(carry_injection._carry_face 的投影部分,wire
-# 为 channel 平铺形态)。
-try:
-    from app.services.field_state_resolution import carry_face as _face_new
-except ImportError:  # 旧树
-    _face_new = None
-
-
-def _face_old(decls: list) -> dict[str, str]:
-    """HEAD carry_injection._carry_face 投影逐字转录(channel 平铺)。"""
-    return {str(e["path"]): str(e.get("type") or "string")
-            for e in decls
-            if isinstance(e, dict) and e.get("channel") == "carry"
-            and e.get("path")}
-
-
-def carry_face_of(decls: list) -> dict[str, str]:
-    return _face_new(decls, None) if _face_new is not None else _face_old(decls)
+# 解析链单一实现(§3.2)— 本工具只从新树跑(旧树对照已随 A/B 收口移除)
+from app.services.field_state_resolution import carry_face  # noqa: E402
 
 
 # ── 确定性值表(模拟 carry 绑定值;值表存 str,注入按类型强转)────
@@ -128,7 +109,7 @@ def build_dump(values: dict[str, str] | None = None) -> dict:
     回归测试(tests/plate/test_dispatch_baseline.py)经 importlib 加载
     本函数 —— 生成算法单一真源,测试与 CLI 不漂移。
     """
-    out: dict = {"side": "new" if _face_new is not None else "old"}
+    out: dict = {}
 
     with TestClient(create_app()) as client:
         # A. 批身份:注册表全端点(排序)
@@ -139,14 +120,12 @@ def build_dump(values: dict[str, str] | None = None) -> dict:
         eids = sorted(it["id"] for it in items)
         out["endpoints"] = eids
 
-        # B. carry 面(每端点;/full wire → 版本各自的真源投影)
-        decls_by_eid: dict[str, list] = {}
+        # B. carry 面(每端点;/full wire → 解析链真源投影)
         faces: dict[str, dict[str, str]] = {}
         for eid in eids:
             item = (client.get(f"/api/endpoint/{eid}/full").json()["data"] or {})["item"]
             decls = ((item.get("request") or {}).get("declarations")) or []
-            decls_by_eid[eid] = decls
-            faces[eid] = carry_face_of(decls)
+            faces[eid] = carry_face(decls)
         out["carry_faces"] = faces
 
         # C. carry 注入物化终值(run_materialize 双侧同源;值表确定性合成)
@@ -213,7 +192,7 @@ def main() -> None:
     Path(args.out).write_text(
         json.dumps(out, ensure_ascii=False, indent=1, sort_keys=True, default=str),
         encoding="utf-8")
-    print(f"side={out['side']} endpoints={len(out['endpoints'])} "
+    print(f"endpoints={len(out['endpoints'])} "
           f"carry_paths={sum(len(f) for f in out['carry_faces'].values())} -> {args.out}")
 
 

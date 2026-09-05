@@ -193,6 +193,38 @@ describe('FieldForm 树模式 — 数组行组(§5.3)', () => {
     expect(Array.isArray(body.value)).toBe(true)
     expect(body.value).toEqual([{ sku: 'B' }])
   })
+
+  it('A7: list 套 list — 数组行内数组渲染/编辑/加行,下标逐层累积(§9 验收)', async () => {
+    const decls = [
+      mkDecl({ name: 'outer', path: '$.outer', type: 'array', children: [
+        mkDecl({ name: 'rows', path: '$.outer.rows', type: 'array', children: [
+          mkDecl({ name: 'sku', path: '$.outer.rows.sku' }),
+        ] }),
+      ] }),
+    ]
+    const { w, body } = mountTree({
+      decls,
+      body: { outer: [{ rows: [{ sku: 'a' }] }, { rows: [{ sku: 'b' }, { sku: 'c' }] }] },
+    })
+    // 渲染:arr-node = 外 1 + 内 2;arr-row = 外 2 + 内 1+2;叶输入 3
+    expect(w.findAll('.arr-node')).toHaveLength(3)
+    expect(w.findAll('.arr-row')).toHaveLength(5)
+    expect(w.findAll('.arr-row input.ctl')).toHaveLength(3)
+    // 编辑外层第 2 行的内层首叶 → 写 $.outer[1].rows[0].sku(实例下标逐层)
+    await w.findAll('.arr-row input.ctl')[1].setValue('B')
+    await flush()
+    expect(body.value).toEqual({
+      outer: [{ rows: [{ sku: 'a' }] }, { rows: [{ sku: 'B' }, { sku: 'c' }] }],
+    })
+    // 内层加行:文档序 arr-add = [外层, 外层第1行的内层, 外层第2行的内层];
+    // 点外层第 1 行的内组 → 仅该内组 push 模板空壳(对象模板 → {},同 A2
+    // 稀疏语义;同层他组不误伤)
+    await w.findAll('.arr-add')[1].trigger('click')
+    await flush()
+    expect((body.value as Record<string, any>).outer[0].rows)
+      .toEqual([{ sku: 'a' }, {}])
+    expect((body.value as Record<string, any>).outer[1].rows).toHaveLength(2)
+  })
 })
 
 // ─── 开放字典(§5.3:object 无 children → KV 编辑器)────────────────

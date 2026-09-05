@@ -40,7 +40,6 @@ def test_dispatch_materialized_baseline():
     tool = _load_tool()
 
     dump = tool.build_dump(values=fixture["carry_values"])
-    dump.pop("side", None)  # 生成环境标记,不参与基线
 
     sections = sorted(set(fixture) - {"carry_values"})
     assert sorted(dump) == sections, (

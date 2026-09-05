@@ -14,12 +14,13 @@
     <select
       class="fss-sel"
       :class="`s-${state}`"
+      :value="state"
       title="字段状态:form 表单 / collapse 折叠 / carry 传递(写 step.field_states 增量)"
       @change="e => emit('change', (e.target as HTMLSelectElement).value as FieldState)"
     >
-      <option value="form" :selected="state === 'form'">form</option>
-      <option value="collapse" :selected="state === 'collapse'">collapse</option>
-      <option value="carry" :selected="state === 'carry'">carry</option>
+      <option value="form">form</option>
+      <option value="collapse">collapse</option>
+      <option value="carry">carry</option>
     </select>
     <button
       v-if="overlay"
