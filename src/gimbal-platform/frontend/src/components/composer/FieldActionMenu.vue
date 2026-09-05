@@ -6,8 +6,8 @@
   一个 — 经 open prop 下传 / toggle 事件上抛):
     ├─ 引用共享变量 (Reference)     → 子列表 config 出身 → 插 ${var.x} 文本
     ├─ 设为变量 (Promote)          → emit fieldPromote(直填值提升为 ${var.x},命名/替换在 FieldForm 完成)
-    ├─ 从响应提取 (Extract)         → emit fieldExtract(快捷 extract 策略)
-    ├─ 注入响应变量 (DynamicAssign) → 子列表 extract 出身 → emit fieldAssign
+    ├─ 提取该字段 (Extract)         → emit fieldExtract(快捷 extract 策略)
+    ├─ 向该字段动态注入 (DynamicAssign) → 子列表 extract 出身 → emit fieldAssign
     └─ 断言该字段 (Assertion)       → emit fieldAssert(快捷断言策略)
 
   措辞对齐 plate _KIND_LABELS;数据全部由调用方传入,零 IO。
@@ -50,7 +50,7 @@
         <span class="fa-label">设为变量</span><span class="fa-note">Promote</span>
       </button>
       <button type="button" class="fa-item" @click="emitExtract">
-        <span class="fa-label">从响应提取</span><span class="fa-note">Extract</span>
+        <span class="fa-label">提取该字段</span><span class="fa-note">Extract</span>
       </button>
       <button
         v-if="domain !== 'response'"
@@ -61,7 +61,7 @@
         :title="injected ? INJECTED_NOTE : undefined"
         @click="subOpen = 'inject'"
       >
-        <span class="fa-label">注入响应变量</span><span class="fa-note">DynamicAssign</span>
+        <span class="fa-label">向该字段动态注入</span><span class="fa-note">DynamicAssign</span>
       </button>
       <button type="button" class="fa-item" @click="emitAssert">
         <span class="fa-label">断言该字段</span><span class="fa-note">Assertion</span>
@@ -89,7 +89,7 @@
 
     <!-- 注入子列表:extract 出身(时序门控 disabled)→ 建 assign 策略 -->
     <template v-else>
-      <p class="fa-sub-title">注入响应变量 → 建赋值策略</p>
+      <p class="fa-sub-title">向该字段动态注入 → 建赋值策略</p>
       <p v-if="!injectChoices.length" class="fa-empty">没有可用变量</p>
       <button
         v-for="e in injectChoices"

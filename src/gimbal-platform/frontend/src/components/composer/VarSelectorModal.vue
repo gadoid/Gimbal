@@ -45,7 +45,7 @@
       <!-- #7 分流:extract 变量运行期才有,${var.x} 启动前展开查不到 → 禁选 -->
       <p v-if="hasExtractEntries" class="split-hint">
         Ⓥ 插入的是启动前展开的 \${var.x} 模板 — extract 产出的响应变量不在此列,
-        请在请求体字段菜单选"注入响应变量"(运行期 assign 通路)
+        请在请求体字段菜单选"向该字段动态注入"(运行期 assign 通路)
       </p>
       <p v-if="selected" class="preview-hint">
         将插入 <code class="mono preview">${{ 'var.' + selected.name }}</code>

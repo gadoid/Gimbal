@@ -2,7 +2,8 @@
  * declarations.ts — 字段状态目录前端投影(2026-09-05 spec):
  * resolveState 解析链(§3.2,与后端 field_state_resolution 同式)、
  * carryPaths 祖先吸收、form/response/assertable 三投影、buildTree
- * 值×结构合并(§5:模板/实例路径分离、行数跟 body)、leafSurface
+ * 值×结构合并(§5:模板/实例路径分离、行数跟 body)、contractTree
+ * 响应契约模板树(P7:state 无视、一行模板集)、leafSurface
  * 匹配面、extraBodyPaths 目录外残留(§4 深浅皆收)、prefillBindings
  * 浅层预填(D7 语义保持)。
  */
@@ -10,7 +11,7 @@ import { describe, it, expect } from 'vitest'
 import {
   resolveState, iterFlat, catalogPaths, carryPaths,
   formBindings, responseBindings, assertablePaths,
-  buildTree, leafSurface, containerSurface, extraBodyPaths, extraSurfaceBindings, prefillBindings,
+  buildTree, contractTree, leafSurface, containerSurface, extraBodyPaths, extraSurfaceBindings, prefillBindings,
 } from '@/utils/declarations'
 import type { DeclarationEntryView } from '@/types/plate'
 
@@ -444,6 +445,75 @@ describe('containerSurface — 树容器平摊(整容器 assign 匹配面,P6)', 
       ] }),
     ]
     expect(containerSurface(buildTree(decls, undefined, { secret: { token: 't' } }))).toEqual([])
+  })
+})
+
+// ─── contractTree 响应契约模板树(P7 渲染一致性)────────────────────
+
+describe('contractTree — 响应契约模板树(P7)', () => {
+  const decls = () => [
+    mkDecl({ name: 'data', path: '$.data', type: 'object', children: [
+      mkDecl({ name: 'orderId', path: '$.data.orderId', example: 'ord-9' }),
+      mkDecl({ name: 'items', path: '$.data.items', type: 'array', children: [
+        mkDecl({ name: 'sku', path: '$.data.items.sku', example: 'S-1' }),
+      ] }),
+    ] }),
+    mkDecl({ name: 'code', path: '$.code', example: 0 }),
+  ]
+
+  it('嵌套结构照目录成树;数组一行模板集,行内路径保持模板态(无 [i])', () => {
+    const [data, code] = contractTree(decls())
+    expect(data?.kind).toBe('object')
+    expect(code?.kind).toBe('leaf')
+    if (data?.kind !== 'object') throw new Error('data 应为对象节点')
+    expect(data.children.map((c) => c.path)).toEqual(['$.data.orderId', '$.data.items'])
+    const items = data.children[1]
+    if (items?.kind !== 'array') throw new Error('items 应为数组节点')
+    // 一行模板集:行数不跟 body(响应值运行期才有),结构即契约形状
+    expect(items.rows).toHaveLength(1)
+    expect(items.rows[0].map((n) => n.path)).toEqual(['$.data.items.sku'])
+    if (code?.kind === 'leaf') expect(code.binding.example).toBe(0)
+  })
+
+  it('响应面无视 state(§2.6):carry 不剪、collapse 不折,全树 form', () => {
+    const tree = contractTree([
+      mkDecl({ name: 'secret', path: '$.secret', state: 'carry' }),
+      mkDecl({ name: 'cfg', path: '$.cfg', type: 'object', state: 'collapse', children: [
+        mkDecl({ name: 'timeout', path: '$.cfg.timeout', state: 'carry' }),
+      ] }),
+    ])
+    // buildTree 会剪 carry/收 collapse — 契约展示不吃请求侧编排语义
+    expect(tree.map((n) => n.path)).toEqual(['$.secret', '$.cfg'])
+    expect(tree.every((n) => n.state === 'form')).toBe(true)
+    const cfg = tree[1]
+    if (cfg?.kind !== 'object') throw new Error('cfg 应为对象节点')
+    expect(cfg.children[0].state).toBe('form')
+  })
+
+  it('无模板数组/开放字典:按 example 合成行/KV(契约参考值)', () => {
+    const [tags, labels] = contractTree([
+      mkDecl({ name: 'tags', path: '$.tags', type: 'array', example: ['a', 'b'] }),
+      mkDecl({ name: 'labels', path: '$.labels', type: 'object', example: { env: 'qa' } }),
+    ])
+    if (tags?.kind !== 'array') throw new Error('tags 应为数组节点')
+    expect(tags.rows).toHaveLength(2)
+    expect(tags.rows[0][0].path).toBe('$.tags[0]')
+    if (labels?.kind !== 'dict') throw new Error('labels 应为字典节点')
+    expect(labels.entries).toEqual([{ key: 'env', value: 'qa' }])
+  })
+
+  it('匹配面零漂移:leafSurface(contractTree) 路径全在 responseBindings 键宇宙(模板态)', () => {
+    const surface = leafSurface(contractTree(decls()))
+    expect(surface.map((f) => f.path)).toEqual(['$.data.orderId', '$.data.items.sku', '$.code'])
+    const universe = new Set(responseBindings(decls()).map((f) => f.path))
+    for (const f of surface) expect(universe.has(f.path)).toBe(true)
+  })
+
+  it('formFace 深拷贝 — 目录本体 state 不被污染', () => {
+    const d = decls()
+    contractTree(d)
+    expect(d.map((e) => e.state)).toEqual([undefined, undefined])
+    expect(d[0].children?.every((c) => c.state === undefined)).toBe(true)
   })
 })
 

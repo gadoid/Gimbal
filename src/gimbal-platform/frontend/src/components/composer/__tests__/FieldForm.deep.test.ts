@@ -590,8 +590,8 @@ describe('FieldForm 树模式 — 容器级策略菜单(P3)', () => {
     const { w } = mountFa({ varChoices: [{ name: 'v1', origin: 'config', stepIdx: null, expression: null }] })
     await w.find('.arr-node .fa-menu-btn').trigger('click')
     const labels = w.findAll('.fa-item .fa-label').map((l) => l.text())
-    expect(labels).toContain('从响应提取')
-    expect(labels).toContain('注入响应变量')
+    expect(labels).toContain('提取该字段')
+    expect(labels).toContain('向该字段动态注入')
     expect(labels).toContain('断言该字段')
     expect(labels).not.toContain('引用共享变量')
     expect(labels).not.toContain('设为变量')
@@ -605,7 +605,7 @@ describe('FieldForm 树模式 — 容器级策略菜单(P3)', () => {
     expect(asserted[0].name).toBe('container')
     expect(asserted[0].path).toBe('$.container')
     await w.find('.arr-node .fa-menu-btn').trigger('click')
-    await w.findAll('.fa-item').find((b) => b.text().includes('从响应提取'))!.trigger('click')
+    await w.findAll('.fa-item').find((b) => b.text().includes('提取该字段'))!.trigger('click')
     expect(extracted[0].path).toBe('$.container')
   })
 
@@ -614,7 +614,7 @@ describe('FieldForm 树模式 — 容器级策略菜单(P3)', () => {
       injectChoices: [{ name: 'resp_container', origin: 'extract', stepIdx: 0, expression: null }],
     })
     await w.find('.arr-node .fa-menu-btn').trigger('click')
-    await w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))!.trigger('click')
+    await w.findAll('.fa-item').find((b) => b.text().includes('向该字段动态注入'))!.trigger('click')
     await w.findAll('.fa-var-item').find((b) => b.text().includes('resp_container'))!.trigger('click')
     expect(assigned).toEqual([[
       expect.objectContaining({ path: '$.container' }), 'resp_container',
@@ -679,7 +679,7 @@ describe('FieldForm 树模式 — 容器注入态/角标(P6)', () => {
       injected: { '$.container': [{ source: '$.resp_box', target: '$.request_body.container' }] },
     })
     await w.find('.node-fa .fa-menu-btn').trigger('click')
-    const inj = w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))
+    const inj = w.findAll('.fa-item').find((b) => b.text().includes('向该字段动态注入'))
     expect(inj).toBeTruthy()
     expect((inj!.element as HTMLButtonElement).disabled).toBe(true)
   })

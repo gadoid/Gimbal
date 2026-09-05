@@ -20,7 +20,7 @@
     </div>
 
     <div v-if="!rows.length" class="vr-empty">
-      还没有变量 — 在 ③ 配置步添加共享变量,或用字段菜单"从响应提取"
+      还没有变量 — 在 ③ 配置步添加共享变量,或用字段菜单"提取该字段"
     </div>
 
     <template v-else>

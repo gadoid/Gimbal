@@ -105,7 +105,45 @@ vi.mock('@/api/scenario-composer', () => ({
           } }
         : { properties: { hidden_req: { type: 'string', default: 'hd-default' } } },
     },
-    responses: {
+    responses: endpointId === 'ep-resp'
+      ? {
+          // P7 响应契约树用:嵌套目录($.data 对象容器,行内 $.data.items
+          // 数组容器)— 响应签此前平铺渲染,树化后须照目录嵌套展示
+          '200': {
+            description: 'OK',
+            declarations: [
+              {
+                name: 'data', path: '$.data', type: 'object',
+                ui_kind: 'json', source_kind: 'independent',
+                required: true, description: '', assertable: false,
+                children: [
+                  {
+                    name: 'orderId', path: '$.data.orderId',
+                    ui_kind: 'text', source_kind: 'independent', example: 'ord-9',
+                    required: true, description: '', assertable: true,
+                  },
+                  {
+                    name: 'items', path: '$.data.items', type: 'array',
+                    ui_kind: 'json', source_kind: 'independent',
+                    required: false, description: '', assertable: false,
+                    children: [{
+                      name: 'sku', path: '$.data.items.sku',
+                      ui_kind: 'text', source_kind: 'independent', example: 'S-1',
+                      required: false, description: '', assertable: false,
+                    }],
+                  },
+                ],
+              } as any,
+              {
+                name: 'code', path: '$.code',
+                ui_kind: 'number', source_kind: 'independent', example: 0,
+                required: true, description: '', assertable: true,
+              },
+            ],
+          },
+          '404': { description: '未找到', declarations: [] },
+        }
+      : {
       '200': {
         description: 'OK',
         schema: { properties: { trace_id: { type: 'string' } } },
@@ -266,7 +304,7 @@ describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
     await flushPromises()
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
-    const item = w.findAll('.fa-item').find((b) => b.text().includes('从响应提取'))
+    const item = w.findAll('.fa-item').find((b) => b.text().includes('提取该字段'))
     await item!.trigger('click')
     await flush()
     const ex = steps[0].strategy.find((s: any) => s.kind === 'extract') as any
@@ -295,7 +333,7 @@ describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
     await flush()
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
-    const inj = w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))
+    const inj = w.findAll('.fa-item').find((b) => b.text().includes('向该字段动态注入'))
     await inj!.trigger('click')
     await flush()
     const cand = w.findAll('.fa-var-item').find((b) => b.text().includes('token'))
@@ -318,7 +356,7 @@ describe('CaseComposerCanvas — FieldForm 菜单接线(#5)', () => {
     await flush()
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
-    const inj = w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))
+    const inj = w.findAll('.fa-item').find((b) => b.text().includes('向该字段动态注入'))
     await inj!.trigger('click')
     await flush()
     const cand = w.findAll('.fa-var-item').find((b) => b.text().includes('token'))
@@ -378,12 +416,12 @@ describe('CaseComposerCanvas — IO 双签卡片(C2)', () => {
     await flush()
     const items = w.findAll('.fa-item')
     expect(items.length).toBe(2)
-    expect(w.text()).toContain('从响应提取')
+    expect(w.text()).toContain('提取该字段')
     expect(w.text()).toContain('断言该字段')
     expect(w.text()).not.toContain('引用共享变量')
-    expect(w.text()).not.toContain('注入响应变量')
+    expect(w.text()).not.toContain('向该字段动态注入')
     // 点提取 → strategy 落 scratch 域路径
-    const exItem = items.find((b) => b.text().includes('从响应提取'))!
+    const exItem = items.find((b) => b.text().includes('提取该字段'))!
     await exItem.trigger('click')
     await flush()
     const ex = steps[0].strategy.find((s: any) => s.kind === 'extract') as any
@@ -546,7 +584,7 @@ describe('VarSelectorModal 分流(#7)', () => {
     const extractEl = items.find((el) => el.textContent!.includes('token'))
     expect(extractEl!.classList.contains('disabled')).toBe(true)
     const hint = document.querySelector('.split-hint')
-    expect(hint?.textContent).toContain('注入响应变量')
+    expect(hint?.textContent).toContain('向该字段动态注入')
     // 条目级 title 也给出具体原因
     expect(extractEl!.title).toContain('响应变量不能进 headers')
     // config 出身仍可选
@@ -871,7 +909,7 @@ describe('CaseComposerCanvas — B1c 路径生成统一走 plate 解析(不猜)'
     vi.mocked(resolveResponsePaths).mockClear()
   })
 
-  it('B1c: 样本已解析时点"从响应提取" → 默认即样本数组路径(优先于 assertable)', async () => {
+  it('B1c: 样本已解析时点"提取该字段" → 默认即样本数组路径(优先于 assertable)', async () => {
     const { listStrategyKinds } = await import('@/api/scenario-composer')
     vi.mocked(listStrategyKinds).mockResolvedValueOnce([
       { kind: 'extract', label: '从响应提取变量' },
@@ -887,11 +925,11 @@ describe('CaseComposerCanvas — B1c 路径生成统一走 plate 解析(不猜)'
     ] as any)
     await w.find('.sample-parse').trigger('click')
     await flushPromises()
-    // 点请求字段的 ☰ → "从响应提取"(字段 orderId,assertable 里有
+    // 点请求字段的 ☰ → "提取该字段"(字段 orderId,assertable 里有
     // $.data.orderId — 样本无 orderId 结尾路径,应落 assertable 命中)
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
-    const item = w.findAll('.fa-item').find((b) => b.text().includes('从响应提取'))
+    const item = w.findAll('.fa-item').find((b) => b.text().includes('提取该字段'))
     await item!.trigger('click')
     await flush()
     const ex = s0.strategy.find((s: any) => s.kind === 'extract') as any
@@ -920,7 +958,7 @@ describe('CaseComposerCanvas — B1c 路径生成统一走 plate 解析(不猜)'
     await flushPromises()
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
-    const item = w.findAll('.fa-item').find((b) => b.text().includes('从响应提取'))
+    const item = w.findAll('.fa-item').find((b) => b.text().includes('提取该字段'))
     await item!.trigger('click')
     await flush()
     const ex = s0.strategy.find((s: any) => s.kind === 'extract') as any
@@ -939,7 +977,7 @@ describe('CaseComposerCanvas — B1c 路径生成统一走 plate 解析(不猜)'
     await flushPromises()
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
-    const item = w.findAll('.fa-item').find((b) => b.text().includes('从响应提取'))
+    const item = w.findAll('.fa-item').find((b) => b.text().includes('提取该字段'))
     await item!.trigger('click')
     await flush()
     const ex = s0.strategy.find((s: any) => s.kind === 'extract') as any
@@ -1185,8 +1223,8 @@ describe('CaseComposerCanvas — 动态注入只读态(assign 覆盖请求字段
     const item = (label: string) => w.findAll('.fa-item').find((b) => b.text().includes(label))!
     expect((item('引用共享变量').element as HTMLButtonElement).disabled).toBe(true)
     expect((item('设为变量').element as HTMLButtonElement).disabled).toBe(true)
-    expect((item('注入响应变量').element as HTMLButtonElement).disabled).toBe(true)
-    expect((item('从响应提取').element as HTMLButtonElement).disabled).toBe(false)
+    expect((item('向该字段动态注入').element as HTMLButtonElement).disabled).toBe(true)
+    expect((item('提取该字段').element as HTMLButtonElement).disabled).toBe(false)
     expect((item('断言该字段').element as HTMLButtonElement).disabled).toBe(false)
   })
 })
@@ -1249,7 +1287,7 @@ describe('CaseComposerCanvas — 数组行注入态/角标(树模式全链)', ()
     expect(row1.find('input.ctl').exists()).toBe(true) // 注入前可编辑
     await row1.find('.fa-menu-btn').trigger('click')
     await flush()
-    const inj = w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))
+    const inj = w.findAll('.fa-item').find((b) => b.text().includes('向该字段动态注入'))
     await inj!.trigger('click')
     await flush()
     const cand = w.findAll('.fa-var-item').find((b) => b.text().includes('token'))
@@ -1300,7 +1338,7 @@ describe('CaseComposerCanvas — 根数组字段 assign/角标 target 派生(修
     expect(w.find('input.ctl').exists()).toBe(true)
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
-    const inj = w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))
+    const inj = w.findAll('.fa-item').find((b) => b.text().includes('向该字段动态注入'))
     await inj!.trigger('click')
     await flush()
     const cand = w.findAll('.fa-var-item').find((b) => b.text().includes('token'))
@@ -1386,7 +1424,7 @@ describe('CaseComposerCanvas — 整容器注入态/角标(P6)', () => {
     // 容器头 ☰(node-fa 是容器菜单专属挂载位,行叶菜单不在此列)
     await w.find('.node-fa .fa-menu-btn').trigger('click')
     await flush()
-    const inj = w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))
+    const inj = w.findAll('.fa-item').find((b) => b.text().includes('向该字段动态注入'))
     await inj!.trigger('click')
     await flush()
     const cand = w.findAll('.fa-var-item').find((b) => b.text().includes('token'))
@@ -1401,6 +1439,112 @@ describe('CaseComposerCanvas — 整容器注入态/角标(P6)', () => {
     expect(w.find('.node-injected').attributes('title')).toBe('$.token → $.request_body.supplier')
     expect(w.find('.arr-node > .node-head .strategy-tag').text()).toBe('assign')
     expect(w.find('.arr-node .arr-body').classes()).toContain('body-locked')
+    w.unmount()
+  })
+})
+
+/**
+ * P7(响应侧渲染一致性,2026-09-05):响应契约此前平铺渲染(bindings
+ * 模式),嵌套目录压平成行 — 与请求侧树渲染不一致,容器头角标/☰
+ * 快捷策略(P3/P6 面)也零承载。修:contractTree 模板树(响应面无视
+ * state §2.6;数组一行模板集,路径保持模板态无 [i] — 角标/断言候选
+ * 匹配面 responseBindings 键宇宙零漂移)+ FieldForm 树模式复用;
+ * 菜单文案同步去响应化(提取该字段/向该字段动态注入)。
+ */
+describe('CaseComposerCanvas — 响应契约树(P7)', () => {
+  /** ep-resp step:响应 200 目录 = $.data 对象容器(orderId 叶 + items
+   *  数组容器(sku 叶))— 请求侧落 else 分支(orderId 平铺叶)无关紧要 */
+  const respStep = (over: Partial<StepView> = {}): StepView => ({
+    kind: 'step',
+    description: 'resp',
+    api: { kind: 'api', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-resp' } },
+    request: { kind: 'request', body: {} },
+    strategy: [],
+    ...over,
+  } as StepView)
+
+  it('P7-1: 响应签照目录嵌套渲染 — 容器面板 + 一行模板集(无 [i])+ example 只读值 + ✓ 标', async () => {
+    const { w } = mountCanvas([respStep()])
+    await flushPromises()
+    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
+    await respTab.trigger('click')
+    await flush()
+    // 嵌套结构成树:$.data 对象面板 + 行内 $.data.items 数组面板
+    const dataNode = w.find('.obj-node')
+    expect(dataNode.exists()).toBe(true)
+    expect(dataNode.find('.node-head .path-badge').text()).toBe('$.data')
+    const itemsNode = w.find('.arr-node')
+    expect(itemsNode.find('.node-head .path-badge').text()).toBe('$.data.items')
+    expect(itemsNode.find('.arr-count').text()).toBe('1 行')
+    // 一行模板集:行内叶子路径保持模板态($.data.items.sku,无 [0]);
+    // 值 = example 契约参考(body=null → getValue 回落 binding.example)
+    const skuInputs = w.findAll('.arr-row input.ctl')
+    expect(skuInputs).toHaveLength(1)
+    expect((skuInputs[0].element as HTMLInputElement).value).toBe('S-1')
+    expect((skuInputs[0].element as HTMLInputElement).disabled).toBe(true)
+    expect(w.findAll('.arr-row .path-badge')[0].text()).toBe('$.data.items.sku')
+    // 容器内 orderId:example 值 + assertable ✓ 标
+    const orderRow = w.find('.obj-node .field')
+    expect(orderRow.find('.label-text').text()).toBe('orderId')
+    expect(orderRow.find('.assertable-mark').exists()).toBe(true)
+    const orderInput = orderRow.find('input.ctl')
+    expect((orderInput.element as HTMLInputElement).value).toBe('ord-9')
+    expect((orderInput.element as HTMLInputElement).disabled).toBe(true)
+    // 只读契约:无加行/删行/状态下拉/折叠区(与请求侧编辑面区分)
+    expect(w.find('.arr-add').exists()).toBe(false)
+    expect(w.find('.arr-del').exists()).toBe(false)
+    expect(w.find('.fss-sel').exists()).toBe(false)
+    expect(w.find('[data-testid="folded-fields"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('P7-2: 嵌套叶策略角标照挂(模板路径匹配面零漂移)+ 容器头角标', async () => {
+    const s0 = respStep({
+      strategy: [
+        { kind: 'extract', target: 'oid', expression: '$.response_body.data.orderId' } as any,
+        { kind: 'assertion', target: '$.response_body.data', operator: 'exists', expected: null } as any,
+      ],
+    })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
+    await respTab.trigger('click')
+    await flush()
+    // 容器内叶子角标:extract 命中 $.data.orderId(模板路径,树化不漂移)
+    const orderRow = w.find('.obj-node .field')
+    expect(orderRow.find('.field-label .strategy-tag').text()).toBe('extract')
+    // 容器头角标:assertion 命中整容器 $.data(P6 头部渲染位在响应侧生效)
+    const dataHead = w.find('.obj-node > .node-head')
+    expect(dataHead.find('.strategy-tag').text()).toBe('assertion')
+    w.unmount()
+  })
+
+  it('P7-3: 响应侧菜单 — 嵌套叶与容器头 ☰ 均仅 提取该字段/断言该字段 两项(更名后文案)', async () => {
+    const { w } = mountCanvas([respStep()])
+    await flushPromises()
+    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
+    await respTab.trigger('click')
+    await flush()
+    // 嵌套叶 ☰
+    await w.find('.obj-node .field .fa-menu-btn').trigger('click')
+    await flush()
+    let items = w.findAll('.fa-item')
+    expect(items).toHaveLength(2)
+    expect(items[0].text()).toContain('提取该字段')
+    expect(items[1].text()).toContain('断言该字段')
+    expect(w.text()).not.toContain('引用共享变量')
+    expect(w.text()).not.toContain('向该字段动态注入')
+    // 收起叶菜单(叶子与容器头菜单分属不同 FieldForm 实例,状态各自独立)
+    await w.find('.obj-node .field .fa-menu-btn').trigger('click')
+    await flush()
+    expect(w.findAll('.fa-item')).toHaveLength(0)
+    // 容器头 ☰(P3 structured 菜单在响应侧同款两项)
+    await w.find('.obj-node > .node-head .node-fa .fa-menu-btn').trigger('click')
+    await flush()
+    items = w.findAll('.fa-item')
+    expect(items).toHaveLength(2)
+    expect(items.map((b) => b.text()).join()).toContain('提取该字段')
+    expect(items.map((b) => b.text()).join()).toContain('断言该字段')
     w.unmount()
   })
 })

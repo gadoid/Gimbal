@@ -262,9 +262,12 @@
                     <span class="resp-status-badge" :class="spec.status < 400 ? 'ok' : 'err'">{{ spec.status }}</span>
                     <span class="resp-spec-desc">{{ spec.description || '—' }}</span>
                   </div>
+                  <!-- P7 渲染一致性:响应契约走树模式(contractTree 模板树,
+                       与请求侧同构 — 嵌套容器/容器头角标/☰ 菜单齐平);
+                       body=null → 叶值回落 binding.example 只读展示 -->
                   <FieldForm
                     v-if="spec.fields.length"
-                    :bindings="spec.fields"
+                    :nodes="spec.nodes"
                     :body="null"
                     :readonly="true"
                     :domain="'response'"
@@ -505,8 +508,9 @@ import type { AuthSession } from '@/api/auth_sessions'
 import { deepDefaults } from '@/utils/jsonpath'
 import { toScratchPath } from '@/utils/scratch-path'
 import {
-  assertablePaths, buildTree, carryPaths, containerSurface, extraBodyPaths,
-  extraSurfaceBindings, formBindings, leafSurface, prefillBindings, responseBindings,
+  assertablePaths, buildTree, carryPaths, containerSurface, contractTree,
+  extraBodyPaths, extraSurfaceBindings, formBindings, leafSurface, prefillBindings,
+  responseBindings,
 } from '@/utils/declarations'
 import type { FieldTreeNode } from '@/utils/declarations'
 import { deriveBase } from '@/utils/service-alias'
@@ -805,7 +809,7 @@ function pathEndsWithField(p: string, fieldName: string): boolean {
   return new RegExp(`(?:\\.|\\[')${escaped}(?:'\\])?$`).test(p)
 }
 
-/** 菜单"从响应提取":extract 骨架(target=字段名,scope=scenario) */
+/** 菜单"提取该字段"(P7 更名,原"从响应提取"):extract 骨架(target=字段名,scope=scenario) */
 function onFieldExtract(f: IOFieldBinding) {
   if (!currentStep.value) return
   currentStep.value.strategy.push({
@@ -830,7 +834,7 @@ function requestBodyTargetOf(path: string): string {
   return `$.request_body${rel.startsWith('[') ? '' : '.'}${rel}`
 }
 
-/** 菜单"注入响应变量":assign 骨架(source=$.<name>,target=request_body.<path>) */
+/** 菜单"向该字段动态注入"(P7 更名,原"注入响应变量"):assign 骨架(source=$.<name>,target=request_body.<path>) */
 function onFieldAssign(f: IOFieldBinding, name: string) {
   if (!currentStep.value) return
   currentStep.value.strategy.push({
@@ -1136,7 +1140,10 @@ const currentAssertable = computed<string[]>(
 interface RespSpecLite {
   status: number
   description: string
+  /** 全量条目投影(模板路径,含容器)— 角标/断言候选匹配面(§4 单脸) */
   fields: IOFieldBinding[]
+  /** 响应契约树(P7):与请求侧同构的只读模板树(渲染面,state 无视) */
+  nodes: FieldTreeNode[]
   /** plate 域路径,渲染 ✓ 标用;写策略时过 toScratchPath */
   assertable: string[]
   /** 200 契约 schema(Type C 差集源);非 200 恒 undefined */
@@ -1153,6 +1160,7 @@ const currentRespSpecs = computed<RespSpecLite[]>(() => {
       status: Number(status),
       description: spec.description || '',
       fields: responseBindings(spec.declarations),
+      nodes: contractTree(spec.declarations),
       assertable: assertablePaths(spec.declarations),
       schema: status === '200'
         ? spec.schema

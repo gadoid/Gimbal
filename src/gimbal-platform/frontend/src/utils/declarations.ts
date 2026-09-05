@@ -406,6 +406,71 @@ export function containerSurface(nodes: FieldTreeNode[]): IOFieldBinding[] {
   return out
 }
 
+// ─── 响应契约树(P7 渲染一致性,§2.6 响应面无视 state)────────────────
+
+/**
+ * formFace:响应面无视 state(spec §2.6)— 全树翻 form(深拷贝,不碰
+ * 目录本体)。buildNode 会剪 carry 叶子/容器,契约展示不吃这套语义:
+ * 响应契约是"接口会回什么"的全量参考,carry/collapse 是请求侧编排意图。
+ */
+function formFace(e: DeclarationEntryView): DeclarationEntryView {
+  return {
+    ...e, state: 'form',
+    children: Array.isArray(e.children) ? e.children.map(formFace) : e.children,
+  }
+}
+
+/**
+ * 响应契约树(P7):目录 → 只读模板树,与请求侧 buildTree 同构渲染
+ * (FieldForm 树模式复用,容器头角标/☰ 菜单白拿)。与 buildTree 的差异:
+ * - 无 body 可跟(响应值运行期才有)→ 数组容器渲染**一行模板集**,
+ *   行内路径保持模板态(无 [i])— 与 responseBindings(iterFlat 模板
+ *   路径)键宇宙一致,角标/断言候选匹配面零漂移;
+ * - 标量数组/开放字典无模板可实例化 → 按 example 合成行/KV(契约
+ *   参考值,getValue 走 binding.example 通路,无需 body);
+ * - state 全树 form(§2.6):carry 不剪、collapse 不折,契约常展开。
+ * 值展示:FieldForm 以 body=null 渲染 → getValue 回落 default/example。
+ */
+export function contractTree(
+  decls: DeclarationEntryView[] | null | undefined,
+): FieldTreeNode[] {
+  const tree = buildTree((decls ?? []).map(formFace), undefined, undefined)
+  fillContractRows(tree)
+  return tree
+}
+
+/** 契约行填充:空数组容器 → 一行模板集(模板态路径);无模板数组/
+ *  开放字典 → 按 example 合成。递归下钻,行内嵌套数组同式填充。 */
+function fillContractRows(nodes: FieldTreeNode[]): void {
+  for (const n of nodes) {
+    if (n.kind === 'object') {
+      fillContractRows(n.children)
+    } else if (n.kind === 'array') {
+      if (!n.rows.length && n.templates.length) {
+        n.rows = [
+          n.templates
+            .map((c) => buildNode(
+              formFace(c), n.path + suffixOf(c.path, n.templatePath), undefined, undefined,
+            ))
+            .filter((rn): rn is FieldTreeNode => rn !== null),
+        ]
+      } else if (
+        !n.rows.length && Array.isArray(n.entry.example)
+      ) {
+        n.rows = n.entry.example.map((v, i) => [
+          synthRowNode(v, `${n.path}[${i}]`, `${n.entry.name}[${i}]`, n.entry, 'form', undefined),
+        ])
+      }
+      n.rows.forEach((row) => fillContractRows(row))
+    } else if (n.kind === 'dict') {
+      const ex = n.entry.example
+      if (!n.entries.length && ex !== null && typeof ex === 'object' && !Array.isArray(ex)) {
+        n.entries = Object.entries(ex as Record<string, unknown>).map(([key, value]) => ({ key, value }))
+      }
+    }
+  }
+}
+
 // ─── 「其他字段」区(§4:目录外 body 残留,深浅皆收,Type C 继任)──────
 
 export interface ExtraBodyRow {

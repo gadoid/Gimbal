@@ -2,7 +2,7 @@
  * FieldForm.vue — 字段下拉菜单(#4/#5,变量工作台迁移)。
  *
  * fieldActions 门控:仅 Canvas 请求体场景传,StrategyForm 复用 FieldForm
- * 处不渲染。四菜单项:引用共享变量 / 从响应提取 / 注入响应变量 / 断言该字段。
+ * 处不渲染。四菜单项:引用共享变量 / 提取该字段 / 向该字段动态注入 / 断言该字段。
  * 引用子列表插 ${var.<name>}(原 Ⓥ 行为收编);提取/注入/断言是 emit 事件,
  * 由 Canvas 落地为策略骨架。
  */
@@ -92,8 +92,8 @@ describe('FieldForm — 字段下拉菜单(fieldActions 门控)', () => {
     await flush()
     const text = w.text()
     expect(text).toContain('引用共享变量')
-    expect(text).toContain('从响应提取')
-    expect(text).toContain('注入响应变量')
+    expect(text).toContain('提取该字段')
+    expect(text).toContain('向该字段动态注入')
     expect(text).toContain('断言该字段')
   })
 
@@ -116,7 +116,7 @@ describe('FieldForm — 字段下拉菜单(fieldActions 门控)', () => {
     expect(received.varInsert).toHaveLength(1)
   })
 
-  it('T10b: 从响应提取 / 断言该字段 / 注入 → emit 事件(不本地改 body)', async () => {
+  it('T10b: 提取该字段 / 断言该字段 / 注入 → emit 事件(不本地改 body)', async () => {
     const { w, body, received } = mountWithParent({
       bindings: [mkBinding()],
       fieldActions: true,
@@ -126,7 +126,7 @@ describe('FieldForm — 字段下拉菜单(fieldActions 门控)', () => {
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
     // 注入:开子列表点 extract 变量
-    const injItem = w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))
+    const injItem = w.findAll('.fa-item').find((b) => b.text().includes('向该字段动态注入'))
     await injItem!.trigger('click')
     await flush()
     const cand = w.findAll('.fa-var-item').find((b) => b.text().includes('token'))
@@ -146,7 +146,7 @@ describe('FieldForm — 字段下拉菜单(fieldActions 门控)', () => {
     })
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
-    const injItem = w.findAll('.fa-item').find((b) => b.text().includes('注入响应变量'))
+    const injItem = w.findAll('.fa-item').find((b) => b.text().includes('向该字段动态注入'))
     await injItem!.trigger('click')
     await flush()
     const cand = w.findAll('.fa-var-item').find((b) => b.text().includes('token'))
@@ -200,10 +200,10 @@ describe('FieldForm — IO 双签卡片 props(C2)', () => {
     await flush()
     const items = w.findAll('.fa-item')
     expect(items.length).toBe(2)
-    expect(w.text()).toContain('从响应提取')
+    expect(w.text()).toContain('提取该字段')
     expect(w.text()).toContain('断言该字段')
     expect(w.text()).not.toContain('引用共享变量')
-    expect(w.text()).not.toContain('注入响应变量')
+    expect(w.text()).not.toContain('向该字段动态注入')
   })
 
   it('T18: assertable 命中 path → ✓ 标;不传 assertable → 无标', () => {
