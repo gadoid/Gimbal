@@ -139,6 +139,11 @@ ORDER_ENTRUST_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
         DeclarationEntry(name='country_name_cn', path='$.country_name_cn', state='carry', type='string'),
         DeclarationEntry(name='entrust_status', path='$.entrust_status', type='integer',default='',example='1',description='1是检查，2是分发',ui_kind='text'),
         DeclarationEntry(name='order_file', path='$.order_file', state='carry', type='array'),
+        # create_time/update_time 补录(2026-09-06):下单原始 curl 无此二字段,
+        # Test_15 起以 time_offset 变量驱动,按 form 口径补录(与 order_add/
+        # order_book/dispatch 三条目同款提升);本条目其余审计字段未声明
+        DeclarationEntry(name='create_time', path='$.create_time', state='form', type='string'),
+        DeclarationEntry(name='update_time', path='$.update_time', state='form', type='string'),
         ],
     ),
     responses={

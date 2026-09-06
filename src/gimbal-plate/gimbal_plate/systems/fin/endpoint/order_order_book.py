@@ -38,6 +38,21 @@ ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
             DeclarationEntry(name='track_bl_no', path='$.track_bl_no', type='string', example='Codfish-IPKZ-Test', ui_kind='text'),
             DeclarationEntry(name='entrust_status', path='$.entrust_status', type='string', example='2', description='1: 委托订单 2: 订单已分发', ui_kind='text'),
             DeclarationEntry(name='action', path='$.action', type='string', example='check', description='check 检查 | submit 提交', ui_kind='text'),
+            # 2026-09-06 结构化(对齐 order_add 同款):customer_file_list 行形状
+            # example 单例承载 → 容器模板 children;9 业务键,_XID 前端行标记
+            # 不进目录;弃 example,深层无值不落 None 骨架(supplier/container 同款纪律)
+            DeclarationEntry(name='customer_file_list', path='$.customer_file_list', type='array',
+                children=[
+                    DeclarationEntry(name='client_company_id', path='$.customer_file_list.client_company_id', type='string', ui_kind='text'),
+                    DeclarationEntry(name='client_company_name', path='$.customer_file_list.client_company_name', type='string', ui_kind='text'),
+                    DeclarationEntry(name='trustee_company_id', path='$.customer_file_list.trustee_company_id', type='string', ui_kind='text'),
+                    DeclarationEntry(name='trustee_company_name', path='$.customer_file_list.trustee_company_name', type='string', ui_kind='text'),
+                    DeclarationEntry(name='document_type', path='$.customer_file_list.document_type', type='string', ui_kind='text'),
+                    DeclarationEntry(name='file_url', path='$.customer_file_list.file_url', type='string', ui_kind='text'),
+                    DeclarationEntry(name='file_name', path='$.customer_file_list.file_name', type='string', ui_kind='text'),
+                    DeclarationEntry(name='file_id', path='$.customer_file_list.file_id', type='string', ui_kind='text'),
+                    DeclarationEntry(name='file_type', path='$.customer_file_list.file_type', type='string', ui_kind='text'),
+                ]),
             # 传递面(carry 通道,不进表单,值随 platform 两层值表走)
             DeclarationEntry(name='client_expand_name', path='$.client_expand_name', state='carry', type='string'),
             DeclarationEntry(name='m_delivery_type', path='$.m_delivery_type', state='carry', type='string'),
@@ -102,18 +117,44 @@ ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
             DeclarationEntry(name='order_sn', path='$.order_sn', state='carry', type='string'),
             DeclarationEntry(name='status', path='$.status', state='carry', type='integer'),
             DeclarationEntry(name='sea_trans_currency', path='$.sea_trans_currency', state='carry', type='string'),
-            # 2026-09-05 缩并:原 $.supplier[0].* / $.container[0].* binding 深实例叶子
-            # 并入容器模板 children,整传一致性(carry 容器 ⇒ 子孙 carry)盖戳
-            DeclarationEntry(name='container', path='$.container', state='carry', type='array',
-                children=[
-                    DeclarationEntry(name='order_container_id', path='$.container.order_container_id', state='carry', type='string'),
-                ]),
             DeclarationEntry(name='message_board', path='$.message_board', state='carry', type='array'),
-            DeclarationEntry(name='customer_file_list', path='$.customer_file_list', state='carry', type='array'),
-            DeclarationEntry(name='supplier', path='$.supplier', state='carry', type='array',
+            # 2026-09-05 对齐 order_order_add:supplier/container 弃 carry 整传,
+            # 容器与子孙一律 form(22/6 键行模板,与 order_add 同构);
+            # 深实例叶子并入容器模板 children,不带 default/example(body 零漂移)
+            DeclarationEntry(name='supplier', path='$.supplier', state='form', type='array',
                 children=[
-                    DeclarationEntry(name='supplier_id', path='$.supplier.order_supplier_id', state='carry', type='string'),
-                    DeclarationEntry(name='supplier_order_id', path='$.supplier.order_id', state='carry', type='string'),
+                    DeclarationEntry(name='order_supplier_id', path='$.supplier.order_supplier_id', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='order_id', path='$.supplier.order_id', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='isset_supplier', path='$.supplier.isset_supplier', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='is_primary', path='$.supplier.is_primary', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='supplier_id', path='$.supplier.supplier_id', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='supplier_name', path='$.supplier.supplier_name', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='settle_object_id', path='$.supplier.settle_object_id', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='user_id', path='$.supplier.user_id', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='user_name', path='$.supplier.user_name', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='service_item', path='$.supplier.service_item', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='supplier_period', path='$.supplier.supplier_period', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='settlement_date', path='$.supplier.settlement_date', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='supplier_pay_date', path='$.supplier.supplier_pay_date', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='is_manual', path='$.supplier.is_manual', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='sys_upttime', path='$.supplier.sys_upttime', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='pay_time_limit', path='$.supplier.pay_time_limit', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='supplier_pay_date_desc', path='$.supplier.supplier_pay_date_desc', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='settle_type', path='$.supplier.settle_type', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='supplier_label', path='$.supplier.supplier_label', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='settle_type_name', path='$.supplier.settle_type_name', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='service_item_name', path='$.supplier.service_item_name', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='isset_fee', path='$.supplier.isset_fee', state='form', type='boolean', ui_kind='boolean'),
+                ]),
+            DeclarationEntry(name='container', path='$.container', state='form', type='array',
+                children=[
+                    DeclarationEntry(name='order_container_id', path='$.container.order_container_id', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='box_type', path='$.container.box_type', state='form', type='string', ui_kind='text'),
+                    DeclarationEntry(name='box_num', path='$.container.box_num', state='form', type='string', ui_kind='text'),
+                    # P2(2026-09-05):噪声子数组盖 collapse(区块级折叠,默认收起)
+                    DeclarationEntry(name='box_no', path='$.container.box_no', state='collapse', type='array'),
+                    DeclarationEntry(name='seal_number', path='$.container.seal_number', state='collapse', type='array'),
+                    DeclarationEntry(name='sea_trans_unit_price', path='$.container.sea_trans_unit_price', state='form', type='number', ui_kind='number'),
                 ]),
             DeclarationEntry(name='customer_category', path='$.customer_category', state='carry', type='string'),
             DeclarationEntry(name='customer_tax_number', path='$.customer_tax_number', state='carry', type='string'),
@@ -201,10 +242,12 @@ ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
             DeclarationEntry(name='effective_time', path='$.effective_time', state='carry', type='string'),
             DeclarationEntry(name='create_id', path='$.create_id', state='carry', type='string'),
             DeclarationEntry(name='create_by', path='$.create_by', state='carry', type='string'),
-            DeclarationEntry(name='create_time', path='$.create_time', state='carry', type='string'),
+            # create_time/update_time 提升 form(2026-09-06):Test_15 起以
+            # time_offset 变量驱动,表单须可见可编辑;同类审计字段仍 carry
+            DeclarationEntry(name='create_time', path='$.create_time', state='form', type='string'),
             DeclarationEntry(name='update_id', path='$.update_id', state='carry', type='string'),
             DeclarationEntry(name='update_by', path='$.update_by', state='carry', type='string'),
-            DeclarationEntry(name='update_time', path='$.update_time', state='carry', type='string'),
+            DeclarationEntry(name='update_time', path='$.update_time', state='form', type='string'),
             DeclarationEntry(name='delete_time', path='$.delete_time', state='carry', type='string'),
             DeclarationEntry(name='business_time', path='$.business_time', state='carry', type='string'),
             DeclarationEntry(name='main_ids', path='$.main_ids', state='carry', type='string'),
@@ -231,7 +274,7 @@ ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
             DeclarationEntry(name='financing_apply_amount', path='$.financing_apply_amount', state='carry', type='string'),
             DeclarationEntry(name='financing_apply_amount_cny', path='$.financing_apply_amount_cny', state='carry', type='string'),
             DeclarationEntry(name='financing_apply_amount_usd', path='$.financing_apply_amount_usd', state='carry', type='string'),
-            DeclarationEntry(name='sys_upttime', path='$.sys_upttime', state='carry', type='string'),
+            DeclarationEntry(name='sys_upttime', path='$.sys_upttime', state='form', type='string', ui_kind='text'),
             DeclarationEntry(name='receive_time_limit', path='$.receive_time_limit', state='carry', type='string'),
             DeclarationEntry(name='customer_put_date_desc', path='$.customer_put_date_desc', state='carry', type='string'),
             DeclarationEntry(name='deposit_refund_day', path='$.deposit_refund_day', state='carry', type='string'),
@@ -251,11 +294,34 @@ ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
             DeclarationEntry(name='order_main_bank_arr', path='$.order_main_bank_arr', state='carry', type='array'),
             DeclarationEntry(name='order_sub', path='$.order_sub', state='carry', type='array'),
             DeclarationEntry(name='order_sub_no', path='$.order_sub_no', state='carry', type='string'),
-            DeclarationEntry(name='service_project', path='$.service_project', state='carry', type='object'),
-            DeclarationEntry(name='service_project_amount', path='$.service_project_amount', state='carry', type='object'),
+            # 2026-09-06 补录行形状(对齐 order_add 同款):service_project/
+            # _amount 实抓为固定 5 键布尔(service_items 词表);carry 容器
+            # ⇒ 子孙一律 carry(整传一致性)
+            DeclarationEntry(name='service_project', path='$.service_project', state='carry', type='object',
+                children=[
+                    DeclarationEntry(name='booking_space', path='$.service_project.booking_space', state='carry', type='boolean'),
+                    DeclarationEntry(name='customs_clearance', path='$.service_project.customs_clearance', state='carry', type='boolean'),
+                    DeclarationEntry(name='manifest', path='$.service_project.manifest', state='carry', type='boolean'),
+                    DeclarationEntry(name='insurance', path='$.service_project.insurance', state='carry', type='boolean'),
+                    DeclarationEntry(name='trucking', path='$.service_project.trucking', state='carry', type='boolean'),
+                ]),
+            DeclarationEntry(name='service_project_amount', path='$.service_project_amount', state='carry', type='object',
+                children=[
+                    DeclarationEntry(name='booking_space', path='$.service_project_amount.booking_space', state='carry', type='boolean'),
+                    DeclarationEntry(name='customs_clearance', path='$.service_project_amount.customs_clearance', state='carry', type='boolean'),
+                    DeclarationEntry(name='manifest', path='$.service_project_amount.manifest', state='carry', type='boolean'),
+                    DeclarationEntry(name='insurance', path='$.service_project_amount.insurance', state='carry', type='boolean'),
+                    DeclarationEntry(name='trucking', path='$.service_project_amount.trucking', state='carry', type='boolean'),
+                ]),
             DeclarationEntry(name='finance_status', path='$.finance_status', state='carry', type='boolean'),
             DeclarationEntry(name='main_ids_name', path='$.main_ids_name', state='carry', type='string'),
-            DeclarationEntry(name='policy_main_arr', path='$.policy_main_arr', state='carry', type='array'),
+            # 2026-09-06 补录行形状(对齐 order_add 同款):policy_main_arr
+            # 双 body 实抓 2 键行(fee_main_id/main_name);carry 容器 ⇒ 子孙 carry
+            DeclarationEntry(name='policy_main_arr', path='$.policy_main_arr', state='carry', type='array',
+                children=[
+                    DeclarationEntry(name='fee_main_id', path='$.policy_main_arr.fee_main_id', state='carry', type='string'),
+                    DeclarationEntry(name='main_name', path='$.policy_main_arr.main_name', state='carry', type='string'),
+                ]),
             DeclarationEntry(name='policy_type_name', path='$.policy_type_name', state='carry', type='string'),
             DeclarationEntry(name='business_type_name', path='$.business_type_name', state='carry', type='string'),
             DeclarationEntry(name='cargo_type_name', path='$.cargo_type_name', state='carry', type='string'),
@@ -291,17 +357,22 @@ ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
             declarations=[
                 DeclarationEntry(name='code', path='$.code', type='integer', required=False, example=200, ui_kind='text', assertable=True),
                 DeclarationEntry(name='msg', path='$.msg', type='string', required=False, example='成功', ui_kind='text', assertable=True),
-                DeclarationEntry(name='data', path='$.data', type='array', required=False, assertable=True, example=[{"client_company_id": "335247043402399744","client_company_name": "绍兴柯桥鹏达进出口有限公司","trustee_company_id": "1","trustee_company_name": "青岛易航道物流科技有限公司","document_type": "BOOK_CUSTOMER","file_url": "6a9a8954ca71a.pdf","file_name": "6a9a8954ca71a.pdf","file_id": "354189666712290304","file_type": "PDF","_XID": "row_3248"}], ui_kind='text'),
-                DeclarationEntry(name='client_company_id', path='$.data[0].client_company_id', type='string', required=False, example='335247043402399744', ui_kind='text', assertable=True),                
-                DeclarationEntry(name='client_company_name', path='$.data[0].client_company_name', type='string', required=False, example='绍兴柯桥鹏达进出口有限公司', ui_kind='text', assertable=True),
-                DeclarationEntry(name='trustee_company_id', path='$.data[0].trustee_company_id', type='string', required=False, example='1', ui_kind='text', assertable=True),
-                DeclarationEntry(name='trustee_company_name', path='$.data[0].trustee_company_name', type='string', required=False, example='青岛易航道物流科技有限公司', ui_kind='text', assertable=True),
-                DeclarationEntry(name='document_type', path='$.data[0].document_type', type='string', required=False, example='BOOK_CUSTOMER', ui_kind='text', assertable=True),
-                DeclarationEntry(name='file_url', path='$.data[0].file_url', type='string', required=False, example='6a9a8954ca71a.pdf', ui_kind='text', assertable=True),
-                DeclarationEntry(name='file_name', path='$.data[0].file_name', type='string', required=False, example='6a9a8954ca71a.pdf', ui_kind='text', assertable=True),
-                DeclarationEntry(name='file_id', path='$.data[0].file_id', type='string', required=False, example='354189666712290304', ui_kind='text', assertable=True),
-                DeclarationEntry(name='file_type', path='$.data[0].file_type', type='string', required=False, example='PDF', ui_kind='text', assertable=True),
-                DeclarationEntry(name='request_id', path='$.request_id', type='string', required=False, example='6b7090b23d229be18ef70b139a8699b2', ui_kind='text', assertable=True),
+                # 2026-09-05 结构化:$.data[0].* 深实例叶子升为整容器模板
+                # children(响应侧实例级角标不做,模板态匹配,实例化归渲染器);
+                # 行形状 9 键,example 同步同日抓包(订舱文件行,无 _XID)
+                DeclarationEntry(name='data', path='$.data', type='array', required=False, assertable=True,
+                    children=[
+                        DeclarationEntry(name='client_company_id', path='$.data.client_company_id', type='string', required=False, example='335247043402399744', ui_kind='text', assertable=True),
+                        DeclarationEntry(name='client_company_name', path='$.data.client_company_name', type='string', required=False, example='绍兴柯桥鹏达进出口有限公司', ui_kind='text', assertable=True),
+                        DeclarationEntry(name='trustee_company_id', path='$.data.trustee_company_id', type='string', required=False, example='1', ui_kind='text', assertable=True),
+                        DeclarationEntry(name='trustee_company_name', path='$.data.trustee_company_name', type='string', required=False, example='青岛易航道物流科技有限公司', ui_kind='text', assertable=True),
+                        DeclarationEntry(name='document_type', path='$.data.document_type', type='string', required=False, example='BOOK_CUSTOMER', ui_kind='text', assertable=True),
+                        DeclarationEntry(name='file_url', path='$.data.file_url', type='string', required=False, example='6a9c2d1e2292e.pdf', ui_kind='text', assertable=True),
+                        DeclarationEntry(name='file_name', path='$.data.file_name', type='string', required=False, example='6a9c2d1e2292e.pdf', ui_kind='text', assertable=True),
+                        DeclarationEntry(name='file_id', path='$.data.file_id', type='string', required=False, example='354640409386812416', ui_kind='text', assertable=True),
+                        DeclarationEntry(name='file_type', path='$.data.file_type', type='string', required=False, example='PDF', ui_kind='text', assertable=True),
+                    ]),
+                DeclarationEntry(name='request_id', path='$.request_id', type='string', required=False, example='44a89db20b3ebd34718f4b3f4b7c24d8', ui_kind='text', assertable=True),
             ],        
         ),
     },

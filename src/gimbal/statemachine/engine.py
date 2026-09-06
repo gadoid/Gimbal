@@ -581,9 +581,12 @@ class StepStateMachine:
             return
         try:
             from gimbal.events.types import HttpResponseEvent
-            # 防御：HTTP 失败时 result.status 是字符串（"timeout"/"RequestError"），
-            # int() 会抛 ValueError 吞掉整个事件；只把能转 int 的状态码写事件
-            raw_status = getattr(result, "status", None)
+            # HTTP 真实数据在 CallExecutor 的 StrategyResult.extracted 里
+            # （response_status / response_body）；result.status 是策略状态
+            # （PASSED/FAILED），不是 HTTP 状态码，result.body 字段不存在 ——
+            # 旧实现读这两处导致事件恒为 status_code=0 / response_body=None。
+            extracted = getattr(result, "extracted", None) or {}
+            raw_status = extracted.get("response_status")
             try:
                 status_code = int(raw_status) if raw_status is not None else 0
             except (ValueError, TypeError):
@@ -594,7 +597,7 @@ class StepStateMachine:
                 url=call_spec.url,
                 status_code=status_code,
                 duration_ms=float(getattr(result, "duration_ms", 0.0) or 0.0),
-                response_body=getattr(result, "body", None),
+                response_body=extracted.get("response_body"),
             ))
         except Exception:  # noqa: BLE001
             logger.debug("[SM {}] emit HTTP_RESPONSE failed", self._step_id)

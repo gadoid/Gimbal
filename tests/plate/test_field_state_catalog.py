@@ -18,6 +18,7 @@ from gimbal_plate.schema.endpoint.io_spec import (
     ResponseSpec,
     iter_declarations,
 )
+from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS
 
 
 # ── 构造糖 ─────────────────────────────────────────────
@@ -305,3 +306,22 @@ def test_wire_entry_carries_state_children():
     assert e["state"] == "carry"
     assert e["children"][0]["state"] == "carry"
     assert "channel" not in e
+
+
+# ── 目录级决策回归 ─────────────────────────────────────
+def test_sys_upttime_form_across_catalog():
+    """2026-09-06 拍板:全目录 sys_upttime 由 carry 提升 form(审计字段进表单)。
+
+    防回归:后续 curl 重导入/手工编辑不得把任何 sys_upttime 路径
+    (含 $.supplier.sys_upttime 等容器内)翻回 carry。
+    """
+    offenders: list[str] = []
+    for ep in ALL_ENDPOINTS:
+        for d in iter_declarations((ep.request.declarations if ep.request else None) or []):
+            if d.name == "sys_upttime" and d.state != "form":
+                offenders.append(f"{ep.id} request {d.path} state={d.state}")
+        for resp in ep.responses.values():
+            for d in iter_declarations(resp.declarations or []):
+                if d.name == "sys_upttime" and d.state != "form":
+                    offenders.append(f"{ep.id} response[{resp.status}] {d.path} state={d.state}")
+    assert not offenders, "\n".join(offenders)

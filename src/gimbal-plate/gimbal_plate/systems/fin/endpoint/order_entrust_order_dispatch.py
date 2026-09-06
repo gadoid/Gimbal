@@ -215,10 +215,12 @@ ORDER_ENTRUST_ORDER_DISPATCH: Final[EndpointSpec] = EndpointSpec(
             DeclarationEntry(name='effective_time', path='$.effective_time', state='carry', type='string', required=False),
             DeclarationEntry(name='create_id', path='$.create_id', state='carry', type='string', required=False),
             DeclarationEntry(name='create_by', path='$.create_by', state='carry', type='string', required=False),
-            DeclarationEntry(name='create_time', path='$.create_time', state='carry', type='string', required=False),
+            # create_time/update_time 提升 form(2026-09-06):Test_15 起以
+            # time_offset 变量驱动,表单须可见可编辑;同类审计字段仍 carry
+            DeclarationEntry(name='create_time', path='$.create_time', state='form', type='string', required=False),
             DeclarationEntry(name='update_id', path='$.update_id', state='carry', type='string', required=False),
             DeclarationEntry(name='update_by', path='$.update_by', state='carry', type='string', required=False),
-            DeclarationEntry(name='update_time', path='$.update_time', state='carry', type='string', required=False),
+            DeclarationEntry(name='update_time', path='$.update_time', state='form', type='string', required=False),
             DeclarationEntry(name='delete_time', path='$.delete_time', state='carry', type='string', required=False),
             DeclarationEntry(name='business_time', path='$.business_time', state='carry', type='string', required=False),
             DeclarationEntry(name='main_ids', path='$.main_ids', state='carry', type='string', required=False),
@@ -244,7 +246,7 @@ ORDER_ENTRUST_ORDER_DISPATCH: Final[EndpointSpec] = EndpointSpec(
             DeclarationEntry(name='financing_apply_amount', path='$.financing_apply_amount', state='carry', type='string', required=False),
             DeclarationEntry(name='financing_apply_amount_cny', path='$.financing_apply_amount_cny', state='carry', type='string', required=False),
             DeclarationEntry(name='financing_apply_amount_usd', path='$.financing_apply_amount_usd', state='carry', type='string', required=False),
-            DeclarationEntry(name='sys_upttime', path='$.sys_upttime', state='carry', type='string', required=False),
+            DeclarationEntry(name='sys_upttime', path='$.sys_upttime', state='form', type='string', required=False),
             DeclarationEntry(name='customer_put_date_desc', path='$.customer_put_date_desc', state='carry', type='string', required=False),
             DeclarationEntry(name='deposit_refund_month', path='$.deposit_refund_month', state='carry', type='string', required=False),
             DeclarationEntry(name='payment_type', path='$.payment_type', state='carry', type='string', required=False),
