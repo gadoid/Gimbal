@@ -27,6 +27,10 @@ from gimbal_plate.schema.endpoint import (
 # 原始 curl(认证信息已脱敏):
 #   curl --url 'https://fin-tidb.21eflag.com/api/order/orderEntrust/orderAdd'    -H 'Accept: application/json, text/plain, */*'    -H 'Accept-Language: zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'    -H 'Authorization: ***REDACTED***'    -H 'Connection: keep-alive'    -H 'Content-Type: application/json;charset=UTF-8'    -H 'Origin: https://fin-tidb.21eflag.com'    -H 'Referer: https://fin-tidb.21eflag.com/'    -H 'Sec-Fetch-Dest: empty'    -H 'Sec-Fetch-Mode: cors'    -H 'Sec-Fetch-Site: same-origin'    -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0'    -H 'sec-ch-ua: "Not=A?Brand";v="99", "Microsoft Edge";v="151", "Chromium";v="151"'    -H 'sec-ch-ua-mobile: ?0'    -H 'sec-ch-ua-platform: "Windows"'    -b 'rememberMe=true; username=18180789650; PHPSESSID=grfb3ngdiae9pd44ihj91v8arr; think_language=zh-CN; password=iwyIYO3mqqLwnODZDxadCzUvLk9TMoJxrB/O1ubK4TAi8H0niCTrbccYl+4EHD+4h0JdPvRGPnkY/4mMY70Evw==; Admin-Token=***REDACTED***'    --data-raw '{"client_expand_name":"孙奉盛","client_expand_id":"41","m_delivery_type":"","customer_id":"335247043402399744","customer_name":"","receive_time_limit":"5","deposit_refund_day":"60","deposit_settlement_date":"30","service_id":"41","service_name":"孙奉盛","sale_id":"795","sale_name":"孙奉盛运营","operator_id":"786","operator_name":"","customer_contact_id":"335247043675029504","customer_contact_name":"","main_sort":"易航道-易汇联","policy_id":"295502731957764096","policy_name":"sfs易航道-易汇联","policy_type":"JSZX","settle_type":"1","settle_type_name":"月结","product_id":"2","product_name":"月结-延长-无保证金","deposit_type":"2","deposit_type_name":"无","period_delay_type":"1","period_delay_type_name":"延长","service_items":["booking_space"],"business_type":"1","trade_term":"","carrier":"ONE","carrier_id":"110","bl_no":"Codfish_TEST_001","track_bl_no":"Codfish_TEST_001","etd":1785945600,"atd":1786377600,"ship_name":"ONE SAN DIEGO","voy":"6275","pol":"QINGDAO,CHINA","pot":"AOSHANWEI,CHINA","pod":"FREMANTLE,AUSTRALIA","del":"FREMANTLE,AUSTRALIA","country_name":"AUSTRALIA","airline_type":"澳洲","ocean_type":"远洋","terms_payment":"T/T","terms_transport":"CY/CY","pay_type":"FREIGHT PREPAID","customer_order_sn":"","terms_shipment":"测试装运条款","shipper":"测试发货人","consignee":"测试收货人","notifier":"测试通知人","ship_mark":"测试唛头","commodity":"测试品名","notes":"测试备注","cargo_type":"goods","packer":"测试包装","num":"1","gross_weight":"1.00","bulk":"999","sea_trans_cost":"","teu":"","volume":"","volume_desc":"","order_sn":"","status":"1","sea_trans_currency":"USD","container":[],"message_board":[],"customer_file_list":[],"supplier":[{"is_manual":"","is_primary":"1","isset_fee":"0","isset_supplier":"1","order_id":"","order_supplier_id":"","service_item":"booking_space","service_item_name":"订舱","settle_object_id":"15","settlement_date":null,"pay_time_limit":"10","supplier_id":"1","supplier_name":"山东旭禾国际贸易有限公司","supplier_pay_date":null,"supplier_period":null,"user_id":"41","user_name":"孙奉盛","settle_type":"1","supplier_name_clean":"山东旭禾国际贸易有限公司","supplier_name_en":"","tax_number":"91370811MA3F04A516","settle_object":"山东旭禾国际贸易有限公司","settle_object_clean":"山东旭禾国际贸易有限公司","settle_type_name":"月结"}],"remark":"","payment_type_name":"确定性付款","payment_type":"1","policy_type_name":"","main_ids":"1,3","pot_cn":null,"pot_port_name":"AOSHANWEI,CHINA","pol_cn":"青岛港","pol_port_name":"QINGDAO,CHINA","pol_country_id":"1","pol_country":"CHINA","pol_country_cn":"中国","del_cn":"弗里曼特尔","del_port_name":"FREMANTLE,AUSTRALIA","pod_cn":"弗里曼特尔","pod_port_name":"FREMANTLE,AUSTRALIA","country_id":"673","country_name_cn":"澳大利亚","entrust_status":1,"order_file":[]}'
 # ----------------------------------------------------------------------
+# 2026-09-06 补充抓包(Test_15 实跑,action=check):container 首现实例行
+# (20GP 行 5 键),supplier 键集与原始 curl 复核一致(24 键)—— 两容器按
+# 整传一致性结构化为模板 children;etd/atd 维持 carry(time 拍板:仅
+# create_time/update_time 提升 form)
 ORDER_ENTRUST_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
     id='fin.order_entrust.order_add',
     system='fin',
@@ -115,10 +119,51 @@ ORDER_ENTRUST_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
         DeclarationEntry(name='order_sn', path='$.order_sn', state='carry', type='string'),
         DeclarationEntry(name='status', path='$.status', state='carry', type='string'),
         DeclarationEntry(name='sea_trans_currency', path='$.sea_trans_currency', state='carry', type='string'),
-        DeclarationEntry(name='container', path='$.container', state='carry', type='array'),
+        # 2026-09-06 结构化:Test_15 实跑首现 container 实例行(20GP);
+        # 行形状 5 键,与 order_book 请求行同族(无 order_container_id ——
+        # 委托下单时容器尚未落库);carry 容器 ⇒ 子孙全 carry(整传一致性)
+        DeclarationEntry(name='container', path='$.container', state='carry', type='array',
+            children=[
+                DeclarationEntry(name='box_type', path='$.container.box_type', state='carry', type='string'),
+                DeclarationEntry(name='box_num', path='$.container.box_num', state='carry', type='string'),
+                DeclarationEntry(name='box_no', path='$.container.box_no', state='carry', type='array'),
+                DeclarationEntry(name='seal_number', path='$.container.seal_number', state='carry', type='array'),
+                DeclarationEntry(name='sea_trans_unit_price', path='$.container.sea_trans_unit_price', state='carry', type='string'),
+            ]),
         DeclarationEntry(name='message_board', path='$.message_board', state='carry', type='array'),
         DeclarationEntry(name='customer_file_list', path='$.customer_file_list', state='carry', type='array'),
-        DeclarationEntry(name='supplier', path='$.supplier', state='carry', type='array'),
+        # 2026-09-06 结构化:行形状 24 键自两次抓包复核(键集一致);较
+        # order_add 请求行多 supplier_name_clean/en、tax_number、settle_object
+        # (含 _clean),无 sys_upttime/supplier_label;null 三键
+        # (settlement_date/supplier_pay_date/supplier_period)依同名字段定 string;
+        # carry 容器 ⇒ 子孙全 carry(整传一致性,与 dispatch 缩并同款)
+        DeclarationEntry(name='supplier', path='$.supplier', state='carry', type='array',
+            children=[
+                DeclarationEntry(name='is_manual', path='$.supplier.is_manual', state='carry', type='string'),
+                DeclarationEntry(name='is_primary', path='$.supplier.is_primary', state='carry', type='string'),
+                DeclarationEntry(name='isset_fee', path='$.supplier.isset_fee', state='carry', type='string'),
+                DeclarationEntry(name='isset_supplier', path='$.supplier.isset_supplier', state='carry', type='string'),
+                DeclarationEntry(name='order_id', path='$.supplier.order_id', state='carry', type='string'),
+                DeclarationEntry(name='order_supplier_id', path='$.supplier.order_supplier_id', state='carry', type='string'),
+                DeclarationEntry(name='service_item', path='$.supplier.service_item', state='carry', type='string'),
+                DeclarationEntry(name='service_item_name', path='$.supplier.service_item_name', state='carry', type='string'),
+                DeclarationEntry(name='settle_object_id', path='$.supplier.settle_object_id', state='carry', type='string'),
+                DeclarationEntry(name='settlement_date', path='$.supplier.settlement_date', state='carry', type='string'),
+                DeclarationEntry(name='pay_time_limit', path='$.supplier.pay_time_limit', state='carry', type='string'),
+                DeclarationEntry(name='supplier_id', path='$.supplier.supplier_id', state='carry', type='string'),
+                DeclarationEntry(name='supplier_name', path='$.supplier.supplier_name', state='carry', type='string'),
+                DeclarationEntry(name='supplier_pay_date', path='$.supplier.supplier_pay_date', state='carry', type='string'),
+                DeclarationEntry(name='supplier_period', path='$.supplier.supplier_period', state='carry', type='string'),
+                DeclarationEntry(name='user_id', path='$.supplier.user_id', state='carry', type='string'),
+                DeclarationEntry(name='user_name', path='$.supplier.user_name', state='carry', type='string'),
+                DeclarationEntry(name='settle_type', path='$.supplier.settle_type', state='carry', type='string'),
+                DeclarationEntry(name='supplier_name_clean', path='$.supplier.supplier_name_clean', state='carry', type='string'),
+                DeclarationEntry(name='supplier_name_en', path='$.supplier.supplier_name_en', state='carry', type='string'),
+                DeclarationEntry(name='tax_number', path='$.supplier.tax_number', state='carry', type='string'),
+                DeclarationEntry(name='settle_object', path='$.supplier.settle_object', state='carry', type='string'),
+                DeclarationEntry(name='settle_object_clean', path='$.supplier.settle_object_clean', state='carry', type='string'),
+                DeclarationEntry(name='settle_type_name', path='$.supplier.settle_type_name', state='carry', type='string'),
+            ]),
         DeclarationEntry(name='remark', path='$.remark', state='carry', type='string'),
         DeclarationEntry(name='payment_type_name', path='$.payment_type_name', state='carry', type='string'),
         DeclarationEntry(name='payment_type', path='$.payment_type', state='carry', type='string'),
