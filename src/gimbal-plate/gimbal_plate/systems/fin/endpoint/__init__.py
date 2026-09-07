@@ -21,9 +21,9 @@ from gimbal_plate.systems.fin.endpoint.order_entrust_order_dispatch import (
 from gimbal_plate.systems.fin.endpoint.order_entrust_order_page import (
     ORDER_ENTRUST_ORDER_PAGE,
 )
-# 委托订单确认:curl 导入版契约并进 order_order_add(旧独立文件已删)
+# 委托订单确认:并入 order_order_add(path 已修正为 /api/order/order/orderAdd)
 from gimbal_plate.systems.fin.endpoint.order_order_add import (
-    ORDER_ENTRUST_ORDER_CONFIRM,
+    ORDER_ORDER_ADD,
 )
 from gimbal_plate.systems.fin.endpoint.order_order_detail import (
     ORDER_ORDER_DETAIL,
@@ -71,9 +71,9 @@ ALL_ENDPOINTS = [
     ACCOUNT_QUERY_BALANCE,
     ORDER_ENTRUST_CHECK_ORDER_CUSTOMER_CONTAINER,
     ORDER_ENTRUST_ORDER_ADD,
-    ORDER_ENTRUST_ORDER_CONFIRM,
     ORDER_ENTRUST_ORDER_DISPATCH,
     ORDER_ENTRUST_ORDER_PAGE,
+    ORDER_ORDER_ADD,
     ORDER_ORDER_DETAIL,
     ORDER_ORDER_PAGE,
     ORDER_ORDER_BOOK,
@@ -94,7 +94,7 @@ __all__ = [
     "ACCOUNT_QUERY_BALANCE",
     "ORDER_ENTRUST_CHECK_ORDER_CUSTOMER_CONTAINER",
     "ORDER_ENTRUST_ORDER_ADD",
-    "ORDER_ENTRUST_ORDER_CONFIRM",
+    "ORDER_ORDER_ADD",
     "ORDER_ENTRUST_ORDER_DISPATCH",
     "ORDER_ENTRUST_ORDER_PAGE",
     "ORDER_ORDER_DETAIL",

@@ -1,4 +1,4 @@
-"""fin.order_entrust.order_add —— 委托订舱下单接口契约。在 scen_test_14 中出现4次。"""
+"""fin.order.order_add —— 委托订单确认接口契约(POST /api/order/order/orderAdd)。"""
 
 from typing import Final
 
@@ -22,12 +22,13 @@ from gimbal_plate.schema.endpoint import (
 )
 
 # ----------------------------------------------------------------------
-# 来源: curl 导入 | 生成时间: 2026-09-01T07:29:13.326038+00:00
+# 来源: 实测场景转储(OUHA-YHD-1783672927.scenario.json 等,认证已脱敏)
 # 人工已确认: 类型/必填/绑定面/响应语义/能力声明
-# 原始 curl(认证信息已脱敏):
-#   curl --url 'https://fin-tidb.21eflag.com/api/order/orderEntrust/orderAdd'    -H 'Accept: application/json, text/plain, */*'    -H 'Accept-Language: zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'    -H 'Authorization: ***REDACTED***'    -H 'Connection: keep-alive'    -H 'Content-Type: application/json;charset=UTF-8'    -H 'Origin: https://fin-tidb.21eflag.com'    -H 'Referer: https://fin-tidb.21eflag.com/'    -H 'Sec-Fetch-Dest: empty'    -H 'Sec-Fetch-Mode: cors'    -H 'Sec-Fetch-Site: same-origin'    -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36 Edg/151.0.0.0'    -H 'sec-ch-ua: "Not=A?Brand";v="99", "Microsoft Edge";v="151", "Chromium";v="151"'    -H 'sec-ch-ua-mobile: ?0'    -H 'sec-ch-ua-platform: "Windows"'    -b 'rememberMe=true; username=18180789650; PHPSESSID=grfb3ngdiae9pd44ihj91v8arr; think_language=zh-CN; password=iwyIYO3mqqLwnODZDxadCzUvLk9TMoJxrB/O1ubK4TAi8H0niCTrbccYl+4EHD+4h0JdPvRGPnkY/4mMY70Evw==; Admin-Token=***REDACTED***'    --data-raw '{"client_expand_name":"孙奉盛","client_expand_id":"41","m_delivery_type":"","customer_id":"335247043402399744","customer_name":"","receive_time_limit":"5","deposit_refund_day":"60","deposit_settlement_date":"30","service_id":"41","service_name":"孙奉盛","sale_id":"795","sale_name":"孙奉盛运营","operator_id":"786","operator_name":"","customer_contact_id":"335247043675029504","customer_contact_name":"","main_sort":"易航道-易汇联","policy_id":"295502731957764096","policy_name":"sfs易航道-易汇联","policy_type":"JSZX","settle_type":"1","settle_type_name":"月结","product_id":"2","product_name":"月结-延长-无保证金","deposit_type":"2","deposit_type_name":"无","period_delay_type":"1","period_delay_type_name":"延长","service_items":["booking_space"],"business_type":"1","trade_term":"","carrier":"ONE","carrier_id":"110","bl_no":"Codfish_TEST_001","track_bl_no":"Codfish_TEST_001","etd":1785945600,"atd":1786377600,"ship_name":"ONE SAN DIEGO","voy":"6275","pol":"QINGDAO,CHINA","pot":"AOSHANWEI,CHINA","pod":"FREMANTLE,AUSTRALIA","del":"FREMANTLE,AUSTRALIA","country_name":"AUSTRALIA","airline_type":"澳洲","ocean_type":"远洋","terms_payment":"T/T","terms_transport":"CY/CY","pay_type":"FREIGHT PREPAID","customer_order_sn":"","terms_shipment":"测试装运条款","shipper":"测试发货人","consignee":"测试收货人","notifier":"测试通知人","ship_mark":"测试唛头","commodity":"测试品名","notes":"测试备注","cargo_type":"goods","packer":"测试包装","num":"1","gross_weight":"1.00","bulk":"999","sea_trans_cost":"","teu":"","volume":"","volume_desc":"","order_sn":"","status":"1","sea_trans_currency":"USD","container":[],"message_board":[],"customer_file_list":[],"supplier":[{"is_manual":"","is_primary":"1","isset_fee":"0","isset_supplier":"1","order_id":"","order_supplier_id":"","service_item":"booking_space","service_item_name":"订舱","settle_object_id":"15","settlement_date":null,"pay_time_limit":"10","supplier_id":"1","supplier_name":"山东旭禾国际贸易有限公司","supplier_pay_date":null,"supplier_period":null,"user_id":"41","user_name":"孙奉盛","settle_type":"1","supplier_name_clean":"山东旭禾国际贸易有限公司","supplier_name_en":"","tax_number":"91370811MA3F04A516","settle_object":"山东旭禾国际贸易有限公司","settle_object_clean":"山东旭禾国际贸易有限公司","settle_type_name":"月结"}],"remark":"","payment_type_name":"确定性付款","payment_type":"1","policy_type_name":"","main_ids":"1,3","pot_cn":null,"pot_port_name":"AOSHANWEI,CHINA","pol_cn":"青岛港","pol_port_name":"QINGDAO,CHINA","pol_country_id":"1","pol_country":"CHINA","pol_country_cn":"中国","del_cn":"弗里曼特尔","del_port_name":"FREMANTLE,AUSTRALIA","pod_cn":"弗里曼特尔","pod_port_name":"FREMANTLE,AUSTRALIA","country_id":"673","country_name_cn":"澳大利亚","entrust_status":1,"order_file":[]}'
+# 2026-09-06 勘误: 原 order_entrust_order_confirm.py 的 api.path 误指
+#   /api/order/orderEntrust/orderAdd(curl 导入误带),真实端点为
+#   /api/order/order/orderAdd,并入本文件时已修正。
 # ----------------------------------------------------------------------
-ORDER_ENTRUST_ORDER_CONFIRM: Final[EndpointSpec] = EndpointSpec(
+ORDER_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
     id='fin.order.order_add',
     system='fin',
     service='fin-service',
