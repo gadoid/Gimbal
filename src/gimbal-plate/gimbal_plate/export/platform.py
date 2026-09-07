@@ -17,7 +17,7 @@ V3.1 设计(PLATE_V3_DESIGN.md §7,与 gimbal export 共享同一个 Scenario �
     carry 面(state=='carry',含整容器)不补默认,仅透传 body 已有字面量
   - request.fields_meta:{顶层字段名 → 条目全量元数据(含 state 与 children 树)}
     (平台前端渲染用;2026-09-05 目录化:树全量携带,面基准 = entry.state,
-    场景 field_states 穿线为挂账细化)
+    场景 field_states 穿线已立项 — 09-05 spec §10.6 / 2026-09-07 spec §3)
   - strategy[i].view_note(人类语言摘要)
 - 端到端链路:platform 落库 dict → (仅改 kind)→ Scenario.model_validate()
   → GimbalScenarioExporter.to_dict() 得到 gimbal 可执行 dict
@@ -241,7 +241,8 @@ def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str,
       (深层路径无值不落 None 骨架,D7:防挡 carry 容器注入;平铺维持 None 占位)
     - carry 面(state=='carry',含整容器):不参与补全,仅透传 body 已有
       字面量(值归 platform 值表)。面基准 = entry.state(共识默认);
-      场景 field_states 穿线为挂账细化,M1 读穿等价
+      场景 field_states 穿线已立项 — 09-05 spec §10.6 / 2026-09-07
+      spec §3(M1 读穿等价)
     - 字段元数据集中放在 fields_meta:{name → 顶层条目全量元信息}
       (含 path / state / type / children 树 / required / default / example /
        description / enum / ui_kind / source_kind / assertable);
@@ -344,7 +345,8 @@ def _render_endpoint_view(
     """单个 EndpointSpec + 聚合到的 request_body 样本 → PlatformEndpointView。
 
     2026-09-05 目录化:请求面 = 解析态投影(M1 面基准 entry.state,
-    场景 field_states 穿线挂账),response 单脸 = 全量 + assertable。
+    场景 field_states 穿线已立项 — 09-05 spec §10.6 / 2026-09-07
+    spec §3),response 单脸 = 全量 + assertable。
     """
     request_fields: list[dict[str, Any]] = []
     if ep.request is not None:
