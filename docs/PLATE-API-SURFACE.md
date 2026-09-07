@@ -486,8 +486,21 @@ A4 拆为 3 块（`meta-and-api` / `request-spec` / `response-specs`），因为
 | 概念 | 角色 | 谁拥有 | 例子 |
 |---|---|---|---|
 | **EndpointSpec** | 抽象 — 一个接口的结构 | **Plate** | `orderAdd` 的 method/path/18 字段定义 |
-| **Step** | 一个接口调用 + 值 + 策略 | **Platform 组装** | `{api: ..., request: {body: {填充值}}, strategy: [...]}` |
+| **Step** | 一个接口调用 + 值 + 策略 | **Platform 组装** | `{api: ..., request: {body: {填充值}}, strategy: [...]}`；可选携带 `field_states`（场景侧字段状态稀疏增量，2026-09-07 收编，见下） |
 | **Scenario** | 用例（meta + config + resource + steps[]） | **Platform 存储** | `{meta, config, resource, steps: [Step1, Step2, Step3]}` |
+
+**Step wire 的 `field_states` 键（2026-09-07 收编）**：`steps[].field_states`
+是可选的场景侧字段状态稀疏增量 —— `{"$.remark": "carry", ...}`
+（path → form/collapse/carry）。Platform 组装 Step 时把 Canvas 字段状态
+控制的增量写在这里；随 definition 进 plate `/convert` 时不再被
+`Scenario.model_validate` 剥除（收编前 extra=ignore 静默丢弃，是导出面
+与配置面不一致的根因）。语义：**None / 缺席 / 空集 = 读穿共识默认**
+（`DeclarationEntry.state`），有增量则按
+`state(path) = step.field_states[path] ?? entry.state ?? 'form'` 解析链
+定面（plate 导出面 / platform 运行时 / 前端 declarations.ts 三处同式
+镜像）。gimbal 执行核对带增量 Step 容忍（裸 BaseModel extra=ignore），
+意图键随产物透传不炸。词表/形状校验归解析链，模型层只做形状防御
+（非 dict / 空集 → None）。
 
 Platform 调 Plate 的 A4a / A4b / A5 / B1 拿 **EndpointSpec 抽象**，**Platform 自己组装 Step**，**Platform 自己的存储**存 Scenario 序列化文件。
 

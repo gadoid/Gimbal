@@ -205,6 +205,15 @@
                 <button type="button" class="c-add" @click="addHeader(currentStep)">+ 新增 header</button>
               </div>
             </el-form-item>
+            <!-- 字段状态找回(2026-09-07 §2.2):独立于渲染树挂载 ——
+                 全 carry 树空时也须可达(找回入口恰在最需要时不得消失) -->
+            <el-form-item v-if="activeIoTab === 'request' && fieldSearchCorpus.length" label="字段状态">
+              <FieldStateSearch
+                :corpus="fieldSearchCorpus"
+                @select="onSearchFieldState"
+                @reset="onSearchFieldReset"
+              />
+            </el-form-item>
             <!-- body: 由 plate /full 目录实时驱动渲染树(会话级现拉,非持久快照;
                  §5 值×结构合并:行数跟 body、结构跟目录,carry 不进树) -->
             <el-form-item v-if="activeIoTab === 'request' && requestNodes.length" label="请求体 (由字段状态目录驱动)">
@@ -490,6 +499,7 @@ import { ElMessage } from 'element-plus'
 import draggable from 'vuedraggable'
 import CaseComposerCatalog from './CaseComposerCatalog.vue'
 import FieldForm from './FieldForm.vue'
+import FieldStateSearch from './FieldStateSearch.vue'
 import StrategyForm from './StrategyForm.vue'
 import VariableRegistryPanel from './VariableRegistryPanel.vue'
 import ConstantPoolPanel from './ConstantPoolPanel.vue'
@@ -511,9 +521,9 @@ import { deepDefaults } from '@/utils/jsonpath'
 import { toScratchPath } from '@/utils/scratch-path'
 import { strategyLabelOf } from '@/utils/strategy-labels'
 import {
-  assertablePaths, buildTree, carryPaths, containerSurface, contractTree,
-  extraBodyPaths, extraSurfaceBindings, formBindings, leafSurface, prefillBindings,
-  responseBindings,
+  assertablePaths, buildTree, carryPaths, cascadeIncrements, containerSurface,
+  contractTree, extraBodyPaths, extraSurfaceBindings, formBindings, leafSurface,
+  prefillBindings, responseBindings, searchCorpus,
 } from '@/utils/declarations'
 import type { FieldTreeNode } from '@/utils/declarations'
 import { deriveBase } from '@/utils/service-alias'
@@ -588,6 +598,11 @@ const requestNodes = computed<FieldTreeNode[]>(() => {
   const step = currentStep.value
   return buildTree(stepDecls(step), step?.field_states, step?.request?.body)
 })
+
+/** 字段找回搜索语料(2026-09-07 §2.1):全量目录含 carry(carry 正是
+ *  搜索语料,09-05 §5.4);仅请求签挂载(响应面 state 无视)。 */
+const fieldSearchCorpus = computed(() =>
+  searchCorpus(stepDecls(currentStep.value), currentStep.value?.field_states))
 
 /** 「其他字段」区 body 残留行(§4:目录外深浅皆收,Canvas 投影单一真源) */
 const requestExtras = computed(() =>
@@ -895,22 +910,25 @@ function onVarPromote(_f: IOFieldBinding, name: string, value: unknown) {
   ElMessage.success(`已设为变量 ${name} — 默认值登记到 ③ 共享变量,保存草稿后生效`)
 }
 
-// ── 字段状态控制(§5.4):行尾下拉写 step.field_states 稀疏增量 ──────
-//    与值回写两通路分离 — 状态意图落 step 顶层键,不碰 request.body。
+// ── 字段状态控制(§5.4 + 2026-09-07 §2.3/§2.4)───────────────────────
+//    行尾下拉与搜索框共用级联批量通路:状态意图落 step 顶层键,
+//    与值回写两通路分离,不碰 request.body。
 
 /**
- * 状态增量落地(§3.1):state = null 清除该条(重置回共识默认);
- * 增量对象空了整键删除(空 step 零存储)。写后即调 §3.5 校验:
- * errors 非空 = 拒(回滚本次写入,前端门禁);warnings 仅提示;
- * plate 不可达不阻塞编辑(保存链路兜底)。
+ * 级联批量落地(§2.4,单事务):increments 键 → 目标态,null = 清除
+ * 该条增量(↺ 重置,仅自身)。合并后空 → 整键删除(§3.1 空 step
+ * 零存储)。写后即调 §3.5 校验(整批一次):errors 非空 = 拒,
+ * **整批回滚**;warnings 仅提示;plate 不可达不阻塞编辑(保存链路兜底)。
  */
-async function onFieldState(path: string, state: FieldState | null) {
+async function applyFieldStates(increments: Record<string, FieldState | null>) {
   const step = currentStep.value
-  if (!step) return
+  if (!step || !Object.keys(increments).length) return
   const before = step.field_states ? { ...step.field_states } : undefined
   const next: Record<string, FieldState> = { ...(step.field_states ?? {}) }
-  if (state === null) delete next[path]
-  else next[path] = state
+  for (const [p, s] of Object.entries(increments)) {
+    if (s === null) delete next[p]
+    else next[p] = s
+  }
   if (Object.keys(next).length) step.field_states = next
   else delete step.field_states
   const eid = step.api?.view_hints?.endpoint_id
@@ -929,6 +947,30 @@ async function onFieldState(path: string, state: FieldState | null) {
   } catch {
     // 校验服务不可达 → 不阻塞编辑(§3.5 门禁在保存链路兜底)
   }
+}
+
+/**
+ * 行尾下拉(§5.4):级联增量(§2.3 —— surface 拉起 carry 祖先落
+ * collapse / sink 压平非 carry 子孙,行尾 carry 容器由此一次成功);
+ * state = null = ↺ 重置(仅清该条增量)。
+ */
+async function onFieldState(path: string, state: FieldState | null) {
+  const step = currentStep.value
+  if (!step) return
+  if (state === null) {
+    await applyFieldStates({ [path]: null })
+    return
+  }
+  await applyFieldStates(
+    cascadeIncrements(stepDecls(step), step.field_states, path, state))
+}
+
+/** 搜索框(§2.2):命中行 select/reset —— 与行尾同通路,级联归此。 */
+async function onSearchFieldState(path: string, target: FieldState) {
+  await onFieldState(path, target)
+}
+async function onSearchFieldReset(path: string) {
+  await onFieldState(path, null)
 }
 
 /** 同 openAuthPicker:key 在弹窗期间可能被改,落注入时按 key 或唯一 value 定位 */

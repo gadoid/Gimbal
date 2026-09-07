@@ -86,6 +86,116 @@ export function carryPaths(
   return out
 }
 
+// ─── 字段找回搜索 + 级联增量(2026-09-07 spec §2)──────────────────────
+
+/** 搜索语料行:全量目录条目(含 carry 与容器)+ 解析态快照(§2.1)。 */
+export interface FieldSearchRow {
+  path: string
+  name: string
+  description: string
+  type: string
+  /** 解析态(resolveState;搜索行徽标用) */
+  resolved: FieldState
+  /** 有合法显式增量(FieldStateSelect ↺ 重置语义直连) */
+  overlay: boolean
+  /** 祖先 name 链(» 分隔;顶层为空) */
+  breadcrumb: string
+}
+
+/**
+ * 搜索语料 = iterFlat 全量(children 先序,**不按状态剪** —— carry 正是
+ * 搜索语料,09-05 §5.4);容器条目在列(可整树切面)。行携带解析态与
+ * overlay 标记,搜索框只做定位与状态上抛,不做添加语义(§2.2)。
+ */
+export function searchCorpus(
+  decls: DeclarationEntryView[] | undefined | null,
+  fieldStates?: Record<string, string> | null,
+): FieldSearchRow[] {
+  const out: FieldSearchRow[] = []
+  const walk = (
+    entries: DeclarationEntryView[] | undefined,
+    ancestors: DeclarationEntryView[],
+  ) => {
+    for (const e of entries ?? []) {
+      if (!e || typeof e !== 'object' || !e.path) continue
+      out.push({
+        path: e.path,
+        name: e.name,
+        description: e.description ?? '',
+        type: e.type ?? 'string',
+        resolved: resolveState(e.path, e.state, fieldStates),
+        overlay: isValidState(fieldStates?.[e.path]),
+        breadcrumb: ancestors.map((a) => a.name).join(' › '),
+      })
+      walk(e.children, [...ancestors, e])
+    }
+  }
+  walk(decls ?? [], [])
+  return out
+}
+
+/**
+ * 级联增量(§2.3,批量单事务):对 path 切 target 应合并的增量集。
+ *
+ * - surface(target=form/collapse):path 落 target + 每个**解析态 carry**
+ *   的祖先容器落 collapse(不拉起则子树在 buildNode 剪除,切换不可见;
+ *   collapse = 最小侵入布局)。子孙增量不动(collapse 容器下局部
+ *   carry 合法,已表达意图保留);
+ * - sink(target=carry):path 落 carry + 每个**解析态非 carry** 的子孙
+ *   压 carry(§3.5 tree_inconsistency 不变式:carry 容器 ⇒ 子孙必 carry);
+ * - 同值仍写显式增量(↺ 可回;显式覆盖是漂移保护凭据,§3.3);
+ * - 目录外 path / 词表外 target → 空对象(防御,不上抛)。
+ *
+ * 返回值是"待合并批",由 Canvas 乐观合并 + 整批校验 + 失败整批回滚
+ * (§2.4);行尾下拉与搜索行共用此通路(零分叉)。
+ */
+export function cascadeIncrements(
+  decls: DeclarationEntryView[] | undefined | null,
+  fieldStates: Record<string, string> | null | undefined,
+  path: string,
+  target: FieldState,
+): Record<string, FieldState> {
+  const out: Record<string, FieldState> = {}
+  if (!isValidState(target)) return out
+  // 定位条目并收集祖先链(先序深搜;目录外 path → 空批)
+  const locate = (
+    entries: DeclarationEntryView[] | undefined,
+  ): { entry: DeclarationEntryView; ancestors: DeclarationEntryView[] } | null => {
+    for (const e of entries ?? []) {
+      if (!e || typeof e !== 'object' || !e.path) continue
+      if (e.path === path) return { entry: e, ancestors: [] }
+      const deep = locate(e.children)
+      if (deep) return { entry: deep.entry, ancestors: [e, ...deep.ancestors] }
+    }
+    return null
+  }
+  const hit = locate(decls ?? [])
+  if (!hit) return out
+  const { entry, ancestors } = hit
+  out[path] = target
+  if (target === 'carry') {
+    // sink:整树压平(解析态判,默认 form 与显式 form 增量都压)
+    const sink = (entries: DeclarationEntryView[] | undefined) => {
+      for (const e of entries ?? []) {
+        if (!e || typeof e !== 'object' || !e.path) continue
+        if (resolveState(e.path, e.state, fieldStates) !== 'carry') {
+          out[e.path] = 'carry'
+        }
+        sink(e.children)
+      }
+    }
+    sink(entry.children)
+  } else {
+    // surface:拉起 carry 祖先(显式 carry 增量同被覆写 — 最新意图胜)
+    for (const a of ancestors) {
+      if (resolveState(a.path, a.state, fieldStates) === 'carry') {
+        out[a.path] = 'collapse'
+      }
+    }
+  }
+  return out
+}
+
 // ─── IOFieldBinding 投影(行形状;掐掉 state/children/type/assertable)──
 
 function toFieldBinding(e: DeclarationEntryView, path: string): IOFieldBinding {

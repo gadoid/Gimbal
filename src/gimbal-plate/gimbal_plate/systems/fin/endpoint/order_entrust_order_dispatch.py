@@ -117,17 +117,19 @@ ORDER_ENTRUST_ORDER_DISPATCH: Final[EndpointSpec] = EndpointSpec(
             DeclarationEntry(name='volume', path='$.volume', state='carry', type='string', required=False),
             DeclarationEntry(name='volume_desc', path='$.volume_desc', state='carry', type='string', required=False),
             DeclarationEntry(name='order_sn', path='$.order_sn', state='carry', type='string', required=False),
-            DeclarationEntry(name='status', path='$.status', state='carry', type='string', required=False),
+            DeclarationEntry(name='status', path='$.status', state='form', type='string', required=False),
             DeclarationEntry(name='sea_trans_currency', path='$.sea_trans_currency', state='carry', type='string', required=False),
             DeclarationEntry(name='container', path='$.container', state='carry', type='array', required=False),
             DeclarationEntry(name='message_board', path='$.message_board', state='carry', type='array', required=False),
             DeclarationEntry(name='customer_file_list', path='$.customer_file_list', state='carry', type='array', required=False),
             # 2026-09-05 缩并:原 $.supplier[0].* binding 深实例叶子并入容器模板
-            # children,整传一致性(carry 容器 ⇒ 子孙 carry)盖戳
-            DeclarationEntry(name='supplier', path='$.supplier', state='carry', type='array', required=False,
+            # children;2026-09-07 整树 carry→form(容器与子孙一律 form,
+            # 一树一主)——supplier 行进表单,弃整容器值表注入通道,
+            # dispatch 基线随之重钉(有意漂移,非回归)
+            DeclarationEntry(name='supplier', path='$.supplier', state='form', type='array', required=False,
                 children=[
-                    DeclarationEntry(name='supplier_id', path='$.supplier.order_supplier_id', state='carry', type='string'),
-                    DeclarationEntry(name='supplier_order_id', path='$.supplier.order_id', state='carry', type='string'),
+                    DeclarationEntry(name='supplier_id', path='$.supplier.order_supplier_id', state='form', type='string'),
+                    DeclarationEntry(name='supplier_order_id', path='$.supplier.order_id', state='form', type='string'),
                 ]),
             DeclarationEntry(name='remark', path='$.remark', state='carry', type='string', required=False),
             DeclarationEntry(name='customer_category', path='$.customer_category', state='carry', type='string', required=False),

@@ -375,8 +375,8 @@ buildNode(entry, templatePath, bodyValue):
 
 | # | 挂账 | 裁定 | 依据 / 触发器 |
 |---|---|---|---|
-| 0 | **carry 字段找回(搜索框)** — §5.4 设计为定位手段,未进 §6-M2-3 任务清单 | **活跃立项** | 高息日计:§1.3 逃生门单向残废 —— 行尾下拉只挂渲染行,carry 不进树(buildNode 剪除)→ carry→form 无 UI 路径;plate 共识 carry 字段(备注族)进不了任何场景表单 → [2026-09-07 spec](2026-09-07-field-recovery-and-export-threading-design.md) §2 |
-| 6 | export 场景解析态穿线 | **活跃立项(与 0 合并)** | 唯一正确性含金量:composer 定面与运行时注入(carry_injection)已 join 增量,plate 导出面基准仍 entry.state(Step 模型剥 field_states)→ 导出产物面与配置面不一致 → 同上 spec §3 |
+| 0 | **carry 字段找回(搜索框)** — §5.4 设计为定位手段,未进 §6-M2-3 任务清单 | **已实施(2026-09-07,commit 待回填)** | 高息日计:§1.3 逃生门单向残废 —— 行尾下拉只挂渲染行,carry 不进树(buildNode 剪除)→ carry→form 无 UI 路径;plate 共识 carry 字段(备注族)进不了任何场景表单 → [2026-09-07 spec](2026-09-07-field-recovery-and-export-threading-design.md) §2(已按该 spec 落地:FieldStateSearch 搜索框 + cascadeIncrements 级联) |
+| 6 | export 场景解析态穿线 | **已实施(2026-09-07,commit 待回填)** | 唯一正确性含金量:composer 定面与运行时注入(carry_injection)已 join 增量,plate 导出面基准仍 entry.state(Step 模型剥 field_states)→ 导出产物面与配置面不一致 → 同上 spec §3(已按该 spec 落地:Step 收编 field_states + 导出面切 resolve_state 解析链,dispatch 基线零重钉) |
 | 1 | absorb CLI | 触发器保留 | 情节性高息(每新端点手编一次;order_confirm 并入 fin.order.order_add 即手编痛证:4000 字 curl 勘误 + children 树手搬);触发器 = **下一批新端点接入 ≥3 个时立项**,单个接入继续手编(顺便积累生成器形状手感) |
 | 3 | L3 流量挖掘 | 随 1 | collector 插件已存,但出口即 absorb —— 绑定同触发器,不独立立项 |
 | 2 | L1/L2 升降级闭环 | 冰冻 + 丢弃触发器 | 语料≈0(增量刚上线);丢弃触发器 = **12 个月内全平台 field_states 增量 < 100 条 → 销账** |

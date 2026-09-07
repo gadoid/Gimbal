@@ -117,7 +117,7 @@ ORDER_ENTRUST_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
         DeclarationEntry(name='volume', path='$.volume', state='carry', type='string'),
         DeclarationEntry(name='volume_desc', path='$.volume_desc', state='carry', type='string'),
         DeclarationEntry(name='order_sn', path='$.order_sn', state='carry', type='string'),
-        DeclarationEntry(name='status', path='$.status', state='carry', type='string'),
+        DeclarationEntry(name='status', path='$.status', state='form', type='string'),
         DeclarationEntry(name='sea_trans_currency', path='$.sea_trans_currency', state='carry', type='string'),
         # 2026-09-06 结构化:Test_15 实跑首现 container 实例行(20GP);
         # 行形状 5 键,与 order_book 请求行同族(无 order_container_id ——

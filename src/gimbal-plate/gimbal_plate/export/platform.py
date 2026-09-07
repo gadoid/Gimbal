@@ -14,10 +14,10 @@ V3.1 设计(PLATE_V3_DESIGN.md §7,与 gimbal export 共享同一个 Scenario �
 - 每条 step 内层加 platform 视图扩展字段:
   - api.view_hints(endpoint_id/module/tags)
   - request.body 已用目录 form/collapse 面叶子补全(直接渲染 + 直接执行);
-    carry 面(state=='carry',含整容器)不补默认,仅透传 body 已有字面量
+    carry 面(解析态 == carry,含整容器)不补默认,仅透传 body 已有字面量
   - request.fields_meta:{顶层字段名 → 条目全量元数据(含 state 与 children 树)}
-    (平台前端渲染用;2026-09-05 目录化:树全量携带,面基准 = entry.state,
-    场景 field_states 穿线已立项 — 09-05 spec §10.6 / 2026-09-07 spec §3)
+    (平台前端渲染用;2026-09-05 目录化:树全量携带;2026-09-07 §3.3 面基准
+    切解析链 —— 场景 field_states 穿线已实施,条目 state 逐节点 = 解析态)
   - strategy[i].view_note(人类语言摘要)
 - 端到端链路:platform 落库 dict → (仅改 kind)→ Scenario.model_validate()
   → GimbalScenarioExporter.to_dict() 得到 gimbal 可执行 dict
@@ -141,6 +141,30 @@ class PlatformScenarioView(BaseModel):
 
 # ── 内部:Step → platform dict ──────────────────────────────────
 
+#: 字段状态词表(与平台/前端共享的宇宙,09-05 §2)
+_VALID_FIELD_STATES = frozenset({"form", "collapse", "carry"})
+
+
+def resolve_state(path: str, entry_state: Any, field_states: Any) -> str:
+    """解析链镜像(09-05 §3.2 / 2026-09-07 §3.3):增量 → 共识默认 → form。
+
+    **三处镜像纪律**:本函数与 platform backend
+    ``field_state_resolution.resolve_state``、前端 ``declarations.ts``
+    同式实现 —— 词表/形状防御/回落链必须逐字对齐,改动须三处同改
+    (09-05 §3.2 单一实现原则的跨语言边界声明)。
+
+    防御:``field_states`` 形状不符 / 值不在词表 → 该条增量视同缺席
+    (读穿);``entry_state`` 缺席或不在词表 → form(fail-closed)。
+    """
+    if isinstance(field_states, dict):
+        override = field_states.get(path)
+        if override in _VALID_FIELD_STATES:
+            return override
+    if entry_state in _VALID_FIELD_STATES:
+        return entry_state
+    return "form"
+
+
 def _render_strategy_view(strategy: list[Assertion | Assign | Extract]) -> list[dict[str, Any]]:
     """把 Strategy 子模型列表翻译为 dict 列表,加 view_note。"""
     out: list[dict[str, Any]] = []
@@ -231,22 +255,26 @@ def _set_by_path(container: Any, segs: list[Any], value: Any) -> Any:
     return container
 
 
-def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str, Any]:
+def _render_request_view(
+    request: Request, ep: EndpointSpec | None, field_states: Any = None,
+) -> dict[str, Any]:
     """把 Request 翻译为 dict,body 全量补全 + fields_meta 携带字段元数据。
 
-    设计(PLATE_V3_DESIGN.md §7.2 方案 C;2026-09-05 目录化改面):
+    设计(PLATE_V3_DESIGN.md §7.2 方案 C;2026-09-05 目录化改面;
+    2026-09-07 §3.3 面基准切解析链 —— 已实施):
     - body 仍是纯 dict;form/collapse 面叶子按声明 path 寻址写(D11):
       平铺路径落顶层键,深层路径("$.a.b")值落嵌套形态
     - 字段值优先级:body 已填值 → endpoint default → endpoint example → None
       (深层路径无值不落 None 骨架,D7:防挡 carry 容器注入;平铺维持 None 占位)
-    - carry 面(state=='carry',含整容器):不参与补全,仅透传 body 已有
-      字面量(值归 platform 值表)。面基准 = entry.state(共识默认);
-      场景 field_states 穿线已立项 — 09-05 spec §10.6 / 2026-09-07
-      spec §3(M1 读穿等价)
+    - carry 面(解析态 == carry,含整容器):不参与补全,仅透传 body 已有
+      字面量(值归 platform 值表)。面基准 = resolve_state(增量 → 共识默认
+      → form),场景 field_states 穿线已实施(调用点从 step.field_states
+      传入;None/空 = 读穿共识默认,M1 读穿等价)
     - 字段元数据集中放在 fields_meta:{name → 顶层条目全量元信息}
       (含 path / state / type / children 树 / required / default / example /
        description / enum / ui_kind / source_kind / assertable);
-      顶层键控(fields_meta 键控面 = 顶层 name 全局唯一),树内节点前端键是 path
+      登记面 = 解析态非 carry 的顶层条目;**条目内 state 逐节点 = 解析态**
+      (合成态诚实 —— 顶层与树内子孙同链解析,前端 O(1) 查表语义不变)
     - 平台前端:O(N) 遍历 body + O(1) 查 fields_meta[name],嵌套结构走 children 树
     - 反向转 gimbal:Scenario.model_validate(platform_dict) 直接接受 fields_meta;
       GimbalScenarioExporter.to_dict() 通过 model_dump(exclude=...) 过滤掉,
@@ -254,6 +282,13 @@ def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str,
     - 注:fields_meta 必须用普通字段名(不能 _fields_meta),因为 Pydantic 把
       下划线前缀视为 PrivateAttr,会静默丢弃(PLATE_V3_DESIGN.md §7.1)
     """
+
+    def _stamp_resolved(node: dict[str, Any]) -> None:
+        """fields_meta 树内节点逐个盖解析态(与顶层同链)。"""
+        node["state"] = resolve_state(node["path"], node.get("state"), field_states)
+        for c in node.get("children") or []:
+            _stamp_resolved(c)
+
     body = request.body if request.body is not None else {}
     full_body: dict[str, Any] = {}
     fields_meta: dict[str, Any] = {}
@@ -273,20 +308,23 @@ def _render_request_view(request: Request, ep: EndpointSpec | None) -> dict[str,
         #    无下标语义,重建不了行 —— body 行字面量必须先落 full_body,
         #    声明叶随后下钻覆写(值取自 body,同值回写)。2026-09-05
         #    container children 补全暴露该缺口(此前 children=0 容器走
-        #    顶层整值拷贝侥幸存活)。
+        #    顶层整值拷贝侥幸存活)。carry 判定走解析态(增量可把共识
+        #    form 容器翻成 carry —— sink 批量的导出面)。
         for e in iter_declarations(decls):
-            if e.state == "carry" or e.children:
+            if resolve_state(e.path, e.state, field_states) == "carry" or e.children:
                 _merge_carry_literal(e.path, body, full_body)
-        # 2) fields_meta:顶层条目全量登记(含 children 树与 state),carry
-        #    面顶层条目不进表(值透传,无表单渲染依据);树内 carry 节点
-        #    保留在树中(state 逐节点可读,搜索语料/翻面用)
+        # 2) fields_meta:顶层条目全量登记(含 children 树),解析态 carry
+        #    的顶层条目不进表(值透传,无表单渲染依据);树内节点保留在
+        #    树中并逐节点盖解析态(搜索语料/翻面用)
         for e in decls:
-            if e.state != "carry":
-                fields_meta[e.name] = e.model_dump(mode="json", exclude_none=True)
+            if resolve_state(e.path, e.state, field_states) != "carry":
+                entry = e.model_dump(mode="json", exclude_none=True)
+                _stamp_resolved(entry)
+                fields_meta[e.name] = entry
         # 3) form/collapse 面叶子补全(容器自身无值语义,行壳跟 children):
-        #    body 已填值 → default → example → None
+        #    body 已填值 → default → example → None(carry 判定同走解析态)
         for f in iter_declarations(decls):
-            if f.state == "carry" or f.children:
+            if resolve_state(f.path, f.state, field_states) == "carry" or f.children:
                 continue
             segs = _path_segs(f.path)
             if not segs:
@@ -344,9 +382,10 @@ def _render_endpoint_view(
 ) -> PlatformEndpointView:
     """单个 EndpointSpec + 聚合到的 request_body 样本 → PlatformEndpointView。
 
-    2026-09-05 目录化:请求面 = 解析态投影(M1 面基准 entry.state,
-    场景 field_states 穿线已立项 — 09-05 spec §10.6 / 2026-09-07
-    spec §3),response 单脸 = 全量 + assertable。
+    2026-09-05 目录化 + 2026-09-07 §3.3:请求面在步骤级导出走解析态
+    (场景 field_states 穿线已实施,见 _render_request_view);本端点级
+    聚合视图无场景语境,维持 entry.state 读穿 —— 端点级是共识默认的
+    领地(与值表路由同口径)。response 单脸 = 全量 + assertable。
     """
     request_fields: list[dict[str, Any]] = []
     if ep.request is not None:
@@ -589,7 +628,7 @@ class PlatformScenarioExporter(ScenarioExporter):
         for s in sc.steps:
             ep = keys.get((s.api.method, s.api.path))
             api_dict = _render_api_view(s.api, ep)
-            request_dict = _render_request_view(s.request, ep)
+            request_dict = _render_request_view(s.request, ep, s.field_states)
             strategy_list = _render_strategy_view(s.strategy)  # type: ignore[arg-type]
             step_views.append(PlatformStepView(
                 description=s.description or "",

@@ -327,6 +327,23 @@ Canvas 策略区 v2：不再 extract 专用，由 `GET /api/strategy/{kind}/full
 
 `strategy_ref`（预埋字段，待重设计）不出现在 dim 输出与策略表单中。
 
+### 2.10 字段状态控制（state 行尾下拉 + 找回搜索框，2026-09-07）
+
+Canvas 请求签字段的 state 控制回路（字段状态目录化 + 找回闭环）：
+
+| 视觉 / 交互 | 字段 | 触发条件 |
+|---|---|---|
+| 行尾状态下拉（form/collapse/carry） | `DeclarationEntry.state` + `Step.field_states` | 写入走稀疏增量（`step.field_states[path] = 值`，空则整键删除）；校验 `validateEndpointFieldStates`（§3.5 前端门禁，errors 拒 → 整批回滚） |
+| 行尾 ↺ 重置 | `Step.field_states` | 清除该条增量；增量空整键删除（读穿共识默认） |
+| 容器行尾下拉 carry 一次成功 | `Step.field_states` | sink 级联：容器 + 子孙同批 carry 增量（`cascadeIncrements`，utils/declarations.ts） |
+| **字段找回搜索框**（`FieldStateSearch`，请求签顶部常驻） | 目录全量（含共识 carry 字段） | `searchCorpus` 平铺目录（含 children 树内）→ 名称/面包屑过滤；命中行下拉写 `field_states` 同路径增量；surface 级联：深子拉起祖先落 collapse；行内 ↺ 仅清自身（祖先意图保留） |
+| 搜索空态 | — | 语料空（无目录）或无命中时提示文案，不报错 |
+
+**为什么需要搜索框**：行尾下拉只挂渲染行，carry 字段不进渲染树
+（buildNode 剪除）→ carry→form 无 UI 路径；plate 共识 carry 字段
+（备注族）靠搜索框才能进场景表单（09-05 spec §10.0 挂账，2026-09-07
+已实施，见 [2026-09-07 spec](superpowers/specs/2026-09-07-field-recovery-and-export-threading-design.md) §2）。
+
 ---
 
 ## 3. 渲染缺口与边界

@@ -133,7 +133,7 @@ ORDER_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
             DeclarationEntry(name='volume', path='$.volume', state='carry', type='string'),
             DeclarationEntry(name='volume_desc', path='$.volume_desc', state='carry', type='string'),
             DeclarationEntry(name='order_sn', path='$.order_sn', state='carry', type='string'),
-            DeclarationEntry(name='status', path='$.status', state='carry', type='integer'),
+            DeclarationEntry(name='status', path='$.status', state='form', type='integer'),
             DeclarationEntry(name='sea_trans_currency', path='$.sea_trans_currency', state='carry', type='string'),
             DeclarationEntry(name='message_board', path='$.message_board', state='carry', type='array'),
             # 2026-09-05 缩并:原 $.supplier[0].* / $.container[0].* binding 深实例叶子

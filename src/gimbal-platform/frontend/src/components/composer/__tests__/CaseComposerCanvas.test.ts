@@ -85,6 +85,20 @@ vi.mock('@/api/scenario-composer', () => ({
                 required: false, description: '', assertable: false,
               }],
             } as any]
+          : endpointId === 'ep-carry-tree'
+          ? [{
+              // 2026-09-07 §2 找回用例:carry 容器(真目录不变式 —
+              // carry 容器子叶同 carry,buildNode 整树剪除)
+              name: 'supplier', path: '$.supplier', type: 'object', state: 'carry',
+              ui_kind: 'json', source_kind: 'independent',
+              required: false, description: '', assertable: false,
+              children: [{
+                name: 'order_supplier_id', path: '$.supplier.order_supplier_id',
+                state: 'carry',
+                ui_kind: 'text', source_kind: 'independent',
+                required: false, description: '', assertable: false,
+              }],
+            } as any]
           : [{
               name: 'orderId', path: '$.orderId',
               ui_kind: 'text', source_kind: 'independent',
@@ -1854,8 +1868,8 @@ describe('CaseComposerCanvas — 字段状态控制门禁(§3.5)', () => {
     const steps = [mkStep()]
     const { w } = mountCanvas(steps)
     await flushPromises()
-    // 用 collapse 写增量(carry 会让行离树 — 翻回入口是 §5.4 搜索框
-    // 定位手段,M2 未实现,挂账);collapse 叶子收进「已折叠字段」区,
+    // 用 collapse 写增量(carry 会让行离树 — 翻回入口 = 字段找回搜索框,
+    // 2026-09-07 §2 已实现,见 C2);collapse 叶子收进「已折叠字段」区,
     // 区内行尾 ↺ 仍可达
     await w.find('.field .fss-sel').setValue('collapse')
     await flushPromises()
@@ -1869,5 +1883,95 @@ describe('CaseComposerCanvas — 字段状态控制门禁(§3.5)', () => {
     await flushPromises()
     expect(steps[0].field_states).toBeUndefined()
     expect(w.find('[data-testid="folded-fields"]').exists()).toBe(false)
+  })
+})
+
+describe('CaseComposerCanvas — 级联与找回(2026-09-07 §2.3/§2.4)', () => {
+  /** 搜索框防抖 200ms,真实定时器等待 */
+  async function waitForDebounce() {
+    await new Promise((r) => setTimeout(r, 230))
+    await flushPromises()
+  }
+
+  function mkStepOn(eid: string): StepView {
+    return mkStep({
+      api: {
+        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+        headers: {}, view_hints: { endpoint_id: eid },
+      },
+    })
+  }
+
+  it('C1: 行尾 carry 容器一次成功(sink 压平子孙,隐性缺陷修复)', async () => {
+    const steps = [mkStepOn('ep-deep')]
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    // 容器头是文档序首个 FieldStateSelect(supplier 先序;body 无数组行,
+    // 叶子行不存在,.field .fss-sel 落空 —— 须找容器头)
+    await w.find('.fss-sel').setValue('carry')
+    await flushPromises()
+    expect(steps[0].field_states).toEqual({
+      '$.supplier': 'carry',
+      '$.supplier.order_supplier_id': 'carry',
+    })
+  })
+
+  it('C2: 搜索找回 carry 容器深子(surface 拉起祖先落 collapse)', async () => {
+    const steps = [mkStepOn('ep-carry-tree')]
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    const input = w.find('input.fss-search-input')
+    expect(input.exists()).toBe(true)
+    await input.setValue('order_supplier_id')
+    await waitForDebounce()
+    const sel = w.find('.fss-search-row select.fss-sel')
+    expect(sel.exists()).toBe(true)
+    await sel.setValue('form')
+    await flushPromises()
+    expect(steps[0].field_states).toEqual({
+      '$.supplier.order_supplier_id': 'form',
+      '$.supplier': 'collapse',
+    })
+    expect(validateEndpointFieldStates).toHaveBeenCalledWith('ep-carry-tree', {
+      '$.supplier.order_supplier_id': 'form',
+      '$.supplier': 'collapse',
+    })
+  })
+
+  it('C3: 校验拒绝 → 整批回滚(不落半套增量)', async () => {
+    vi.mocked(validateEndpointFieldStates).mockResolvedValueOnce({
+      errors: [{ path: '$.supplier', message: 'tree_inconsistency(构造)' }],
+      warnings: [],
+    } as any)
+    const steps = [mkStepOn('ep-carry-tree')]
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    await w.find('input.fss-search-input').setValue('order_supplier_id')
+    await waitForDebounce()
+    await w.find('.fss-search-row select.fss-sel').setValue('form')
+    await flushPromises()
+    expect(steps[0].field_states).toBeUndefined()
+  })
+
+  it('C4: 搜索行 ↺ 仅清自身增量(祖先 surface 意图保留)', async () => {
+    const steps = [mkStepOn('ep-carry-tree')]
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    await w.find('input.fss-search-input').setValue('order_supplier_id')
+    await waitForDebounce()
+    await w.find('.fss-search-row select.fss-sel').setValue('form')
+    await flushPromises()
+    expect(steps[0].field_states).toEqual({
+      '$.supplier.order_supplier_id': 'form',
+      '$.supplier': 'collapse',
+    })
+    // 再搜同一字段(当前 overlay 命中)→ 行内 ↺ 可见;点击仅清自身
+    await w.find('input.fss-search-input').setValue('order_supplier_id')
+    await waitForDebounce()
+    const reset = w.find('.fss-search-row .fss-reset')
+    expect(reset.exists()).toBe(true)
+    await reset.trigger('click')
+    await flushPromises()
+    expect(steps[0].field_states).toEqual({ '$.supplier': 'collapse' })
   })
 })

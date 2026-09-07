@@ -1,6 +1,6 @@
 # carry 字段找回与导出解析态穿线 设计
 
-> 状态:已立项待实施(2026-09-07 评审,09-05 spec §10.0 + §10.6 合并立项)
+> 状态:已实施(2026-09-07 评审立项,同日按计划落地;commit 待回填)
 > 前置:2026-09-05 field-state-catalog 已全量落地(M1-M3 绿);本设计是其 §10 挂账的活跃窗口。
 
 ---
@@ -274,5 +274,8 @@ field_states: Optional[dict[str, str]] = Field(
    —— 搜索行结构已预留(面包屑 + 徽标 + 下拉),认领时零结构改动;
 2. **响应面搜索定位**:响应树大时的字段定位(纯 locate,无状态切换)——
    等响应面可配置(§10.5)一起定价;
-3. **gimbal 侧 Scenario 对 field_states 键的容忍性**:3.4 预期 pydantic
-   容忍,实现时实测;若 strict 则导出 exclude(预计 1 行)—— 落地时销。
+3. **gimbal 侧 Scenario 对 field_states 键的容忍性**:**已销(2026-09-07
+   实测)** —— gimbal 核心 Step 是裸 BaseModel(pydantic v2 默认
+   extra="ignore"),`/convert consumer=gimbal` 实测 200 且产物携带
+   `field_states == {"$.order_id": "carry"}` 意图键(执行核忽略不炸);
+   预期的 exclude 一行不需要,export/gimbal.py 零改动(§3.4 判定成立)。
