@@ -22,7 +22,7 @@ def test_list_endpoints_under_system(http_client: TestClient) -> None:
     assert body["ok"] is True
     assert body["dim"] == "endpoint"
     items = body["data"]["items"]
-    assert body["data"]["total"] == len(items) == 21
+    assert body["data"]["total"] == len(items) == 20
     for ep in items:
         assert ep["system"] == "fin"
         assert "id" in ep
@@ -32,11 +32,12 @@ def test_list_endpoints_under_system(http_client: TestClient) -> None:
 
 def test_filter_by_service(http_client: TestClient) -> None:
     # fin 全部 endpoint 统一归属单一服务 fin-service:
-    # 按 service 过滤应命中全部 21 个(过滤一个不存在的服务则返回 0)。
+    # 按 service 过滤应命中全部 20 个(过滤一个不存在的服务则返回 0;
+    # 2026-09-06 order_confirm 并入 fin.order.order_add,21 → 20)。
     resp = http_client.get("/api/endpoint", params={"service": "fin-service"})
     assert resp.status_code == 200
     items = resp.json()["data"]["items"]
-    assert resp.json()["data"]["total"] == 21
+    assert resp.json()["data"]["total"] == 20
     for ep in items:
         assert ep["system"] == "fin"
         assert ep["service"] == "fin-service"

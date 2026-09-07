@@ -56,18 +56,19 @@ class TestDeclarationsShape:
         (e,) = rs.declarations
         assert e.name == "$" and e.path == "$" and e.state == "carry"
 
-    def test_coverage_1175(self) -> None:
-        # 意识性 re-baseline(2026-09-05 目录化):
-        # 901(09-03 口径)→ 深实例缩并(9 条折叠进 children)+ audit_page
-        # 落地 + confirm/book 端点 = 1175(顶层条目口径,children 树内
-        # 条目另计,见 test_coverage_with_children)。
+    def test_coverage_940(self) -> None:
+        # 意识性 re-baseline(2026-09-06 委托结构化):
+        # 1175(09-05 目录化口径)→ order_confirm 并入 fin.order.order_add
+        # + order_book 容器目录化瘦身 + 委托下单 container/supplier 整传
+        # 结构化(顶层条目缩并进 children)= 940(顶层条目口径,children
+        # 树内条目另计,见 test_coverage_with_children)。
         total = 0
         for ep in ALL_ENDPOINTS:
             if ep.request:
                 total += len(ep.request.declarations)
             total += sum(len(r.declarations)
                          for r in ep.responses.values())
-        assert total == 1175, f"declarations 覆盖 {total} != 1175"
+        assert total == 940, f"declarations 覆盖 {total} != 940"
 
     def test_serialize_wire_shape(self) -> None:
         # P2 后 wire 恒发 declarations(空声明即空表,不再按键省略)

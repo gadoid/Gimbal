@@ -33,8 +33,9 @@ class TestSystemsFinEndpointExists:
 
     def test_endpoint_init_aggregates_all_endpoints(self) -> None:
         # 原 2 个 + Scenario_Test_14 提取 16 个 + order_dispatch(2026-09-03)
-        # + order_confirm / order_book / audit_page(2026-09-04/05)= 21 个
-        assert len(ALL_ENDPOINTS) == 21
+        # + order_book / audit_page(2026-09-04/05)= 21 个;2026-09-06
+        # order_confirm 并入 fin.order.order_add(独立文件删除)= 20 个
+        assert len(ALL_ENDPOINTS) == 20
 
     def test_endpoint_constants_are_endpointspec_instances(self) -> None:
         assert isinstance(SETTLEMENT_CREATE_ORDER, EndpointSpec)
