@@ -4,6 +4,16 @@
 > 调研对象：`gimbal-plate/src/gimbal-plate/gimbal_plate/schema/`
 > 调研目的：校验 PRD v1.0 中所有渲染需求都有 schema 字段支撑，并标注\"够用 / 缺口 / 边界\"。
 
+> **状态更新(2026-09-05,字段状态目录化后)**:IO 声明轴再演进 —— channel
+> 三通道(binding/carry/view_only)退役为 `state` 三态
+> (form/collapse/carry,默认 form);`type` 升格全条目必填(六原语);
+> `children` 内联树取代 `schema_` 成为唯一结构真源(wire 不再有 `schema`
+> 键);深实例 path(`$.supplier[0].x` 类)缩并为容器模板 + children;
+> `required` 默认翻转为 False(未声明即选填,星标去噪音);响应面单脸
+> (全量 + assertable,state 不被读取)。本文 §1.2 表已按现行契约更新。
+> 现行契约单点源:`io_spec.py` +
+> `docs/superpowers/specs/2026-09-05-field-state-catalog-design.md`。
+
 > **状态更新(2026-09-02,IO declarations 归一化后)**:plate IO 侧已收敛为
 > `declarations` 单一承重存储(`DeclarationEntry` 通道标记条目,binding /
 > carry / view_only 三通道);`IOFieldBinding` / `CarryEntry` 类与
@@ -48,25 +58,23 @@
 | | produces | list[str] | 响应 Content-Type |
 | | consumes | list[str] | 请求 Content-Type |
 | `DeclarationEntry` | name | str | 字段名(与 path 末段一致) |
-| | path | str | 字段路径（JSONPath，自动归一化 `$.xxx`） |
-| | **channel** | Literal[binding / carry / view_only] | **通道:binding=表单面,carry=传递面,view_only=响应展示面** |
-| | type | str \| None | JSON Schema 原语类型(仅 carry 必填) |
-| | required | bool | 是否必填 |
-| | default | Any \| None | 默认值(carry 通道禁) |
-| | example | Any \| None | 示例值(carry 通道禁) |
+| | path | str | 字段路径（JSONPath，自动归一化 `$.xxx`;children 子树内为模板态,禁 `[i]` 下标） |
+| | **state** | Literal[form / collapse / carry] | **状态(默认 form):form=表单直渲染,collapse=折叠面板渲染,carry=值表注入不渲染;响应面不读此键** |
+| | type | str | 原语类型(全条目必填:string/number/integer/boolean/object/array) |
+| | required | bool | 是否必填(默认 False,未声明即选填) |
+| | default | Any \| None | 默认值(表单角色元数据,全条目合法) |
+| | example | Any \| None | 示例值(表单角色元数据,全条目合法) |
 | | description | str | 描述 |
 | | enum | list[Any] \| None | 可选值清单 |
 | | **ui_kind** | Literal[text / number / boolean / select / textarea / json / file / binary / unknown] | **UI 渲染类型** |
 | | **source_kind** | Literal[independent / lookup / generated] | **字段值来源类型** |
-| | **assertable** | bool | 仅 view_only 有意义:断言候选(默认 False) |
+| | **assertable** | bool | 仅响应侧有意义:断言候选(默认 False) |
+| | **children** | list[DeclarationEntry] \| None | 子树(仅 object/array 容器可带且须非空;carry 容器 ⇒ 子孙必 carry) |
 | `RequestSpec` | body_type | Literal[none / json / form / multipart / raw / binary] | body 类型 |
-| | schema_ | dict[str, Any] \| None | JSON Schema(唯一结构真源) |
-| | **declarations** | list[DeclarationEntry] | 统一声明清单(请求面闭合 {binding, carry}) |
-| | *method* json_schema() | dict | 返回 JSON Schema |
+| | **declarations** | list[DeclarationEntry] | 目录清单(身份 + children 结构 + state 共识默认;构造与 wire 同形 `{body_type, declarations}`) |
 | `ResponseSpec` | status | int | 状态码 |
 | | description | str | 描述 |
-| | schema_ | dict[str, Any] \| None | JSON Schema |
-| | **declarations** | list[DeclarationEntry] | 统一声明清单(响应面闭合 {view_only};assertable=True 条目即断言面) |
+| | **declarations** | list[DeclarationEntry] | 全量目录(响应面单脸,state 不被读取;assertable=True 条目即断言面) |
 | `EndpointMetadata` | module | str | 业务模块 |
 | | tags | list[str] | 标签 |
 | | owner | str | 维护人 |

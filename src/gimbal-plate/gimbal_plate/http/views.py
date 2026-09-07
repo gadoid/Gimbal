@@ -194,12 +194,15 @@ class EndpointDetailView(BaseModel):
       definition side and the platform side — by design.
 
     Output shape on the wire is unchanged from the previous pass-through:
-    ``request`` / ``responses`` still serialise their ``@model_serializer``
-    keys (``schema`` and, on requests, ``carry``) because those are produced
-    by the source types' own serializers, not by this view. The retired
-    ``model`` mechanism (and its ``model_schema`` / ``model_name`` serializer
-    keys) was removed on 2026-08-31; ``schema_`` is the sole structural
-    source of truth.
+    ``request`` / ``responses`` serialise their ``@model_serializer`` keys
+    (``{body_type, declarations}`` / ``{status, description, declarations}``)
+    because those are produced by the source types' own serializers, not by
+    this view. The retired ``model`` mechanism (and its ``model_schema`` /
+    ``model_name`` serializer keys) was removed on 2026-08-31; ``schema_``
+    was in turn retired on 2026-09-05 (field-state catalog) — the
+    ``children`` inline tree on each declaration entry is the sole
+    structural source of truth, and the ``schema`` wire key no longer
+    exists.
 
     Light :class:`EndpointView` returns only id / method / path /
     description / module / tags. The ``/full`` endpoint surfaces the full

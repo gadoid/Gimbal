@@ -4,6 +4,12 @@
 >
 > 版本：v2.1（与 http-api.md M6 对齐：13 个直接可用 + 6 个 v2.x 待实现；v2.1 新增 strategy 语法 dim 两接口）
 >
+> **状态更新(2026-09-05,字段状态目录化)**:IO 声明 channel 轴已退役为
+> `state` 三态(form/collapse/carry,默认 form),`type` 全条目必填,
+> `children` 内联树取代 `schema_`(wire 不再有 `schema` 键),`required`
+> 默认 False。文中 wire 示例已按现行契约更新;详见
+> [2026-09-05 目录化设计](superpowers/specs/2026-09-05-field-state-catalog-design.md)。
+>
 > **重要边界**：
 > - **Plate 提供**「**EndpointSpec 抽象**」 — 一个被测系统接口的结构定义（method / path / 请求字段 / 响应字段 / 失败参考 / 业务备注）
 > - **Platform 自己组装**「**Scenario 序列化文件**」 — 用例的具体内容（meta / config / resource / steps[]）。**Scenario 由 Platform 自身存储**
@@ -149,13 +155,13 @@
         "request": {
           "body_type": "json",
           "declarations": [
-            {"name": "client_expand_name", "path": "$.client_expand_name", "channel": "binding", "type": null, "required": true, "ui_kind": "text", "source_kind": "independent", "default": null, "example": "张三", "description": "客户拓展员名称", "enum": null},
-            {"name": "remark", "path": "$.remark", "channel": "carry", "type": "string", "required": true, "ui_kind": "unknown", "source_kind": "independent", "default": null, "example": null, "description": "", "enum": null},
+            {"name": "client_expand_name", "path": "$.client_expand_name", "type": "string", "state": "form", "required": false, "default": null, "example": "张三", "description": "客户拓展员名称", "enum": null, "ui_kind": "text", "source_kind": "independent", "assertable": false, "children": null},
+            {"name": "remark", "path": "$.remark", "type": "string", "state": "carry", "required": false, "default": null, "example": null, "description": "", "enum": null, "ui_kind": "unknown", "source_kind": "independent", "assertable": false, "children": null},
+            {"name": "container", "path": "$.container", "type": "array", "state": "carry", "required": false, "default": null, "example": null, "description": "", "enum": null, "ui_kind": "unknown", "source_kind": "independent", "assertable": false, "children": [{"name": "container_id", "path": "$.container.container_id", "type": "string", "state": "carry", "required": false, ...}]},
             ...
-          ],
-          "schema": {...}
+          ]
         },
-        "responses": {"200": {"status": 200, "declarations": [{"name": "code", "path": "$.code", "channel": "view_only", "required": true, "assertable": true, ...}, ...]}, "400": {...}, "500": {...}},
+        "responses": {"200": {"status": 200, "description": "...", "declarations": [{"name": "code", "path": "$.code", "type": "string", "state": "form", "required": false, "assertable": true, ...}, ...]}, "400": {...}, "500": {...}},
         "metadata": {
           "preconditions": [...], "success_criteria": "...",
           "failed_criteria": ["401 ...", "403 ...", "422 ..."],
@@ -374,7 +380,7 @@
     }
   }
   ```
-- **词汇表**：与 `DeclarationEntry` 的字段轴同名同义（name/path/required/default/description/enum/ui_kind），但**无 `source_kind` / `channel` / `type` / `assertable`**（值来源与通道语义对策略无意义）。前端 StrategyForm 补 `'independent'` 默认值即可复用 FieldForm。
+- **词汇表**：与 `DeclarationEntry` 的字段轴同名同义（name/path/required/default/description/enum/ui_kind），但**无 `source_kind` / `state` / `type` / `assertable`**（值来源与状态语义对策略无意义）。前端 StrategyForm 补 `'independent'` 默认值即可复用 FieldForm。
 - **base_fields 第一版不渲染**：添加策略骨架 = `{kind}` + 按 `fields` 的 `default` 展开；base 字段走默认值。
 - **平台代理**：`GET /api/strategy-catalog/{kind}/full`（unwrap `data.item`）；plate 不可达 → `502 plate_unavailable`，404 → `strategy_kind_not_found`
 

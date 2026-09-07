@@ -11,15 +11,18 @@
 | 关联 schema | `schema/endpoint/*`、`schema/interface/*`、`schema/base/*` |
 | 原型位置 | `pencil-welcome-desktop.pen` · 14 屏 |
 
-> **术语映射(2026-09-02 注)**:本文撰写时 plate 侧 IO 字段模型为
+> **术语映射(2026-09-05 更新)**:本文撰写时 plate 侧 IO 字段模型为
 > `fields: list[IOFieldBinding]` 三轴(fields/carry/assertable_fields);
-> 现已归一化为 `declarations: list[DeclarationEntry]` 单一存储
-> (binding/carry/view_only 三通道,assertable 为条目旗标)。
-> 文中 `IOFieldBinding` / `fields[*]` 字样按语义对应
-> `DeclarationEntry` / `request.declarations[*]`(binding 通道);
-> `assertable_paths` 对应 view_only 通道 `assertable=true` 条目的 path 集。
-> 现行契约见 plate `io_spec.py` 与
-> [2026-09-01 归一化设计](superpowers/specs/2026-09-01-io-declarations-unification-design.md)。
+> 现为 `declarations: list[DeclarationEntry]` 单一目录存储 —— 先经
+> 2026-09-02 归一化(binding/carry/view_only 三通道),再经 2026-09-05
+> 字段状态目录化:channel 退役为 `state` 三态(form/collapse/carry,
+> 默认 form),`type` 全条目必填,`children` 内联树取代 `schema_` 为唯一
+> 结构真源(wire 无 `schema` 键)。文中 `IOFieldBinding` / `fields[*]`
+> 字样按语义对应 `DeclarationEntry` / `request.declarations[*]`
+> (state=form 的解析态面);`assertable_paths` 对应响应 `assertable=true`
+> 条目的 path 集(响应面单脸,state 不被读取)。现行契约见 plate
+> `io_spec.py` 与
+> [2026-09-05 目录化设计](superpowers/specs/2026-09-05-field-state-catalog-design.md)。
 
 ---
 
@@ -256,7 +259,7 @@ config:
 |---|---|---|---|---|
 | **Type A** IOFieldBinding 完整 | `fields[*].ui_kind` 有值 | 按 ui_kind 渲染 | 按 ui_kind 控件，主要编辑区 | ✅ 完整 |
 | **Type B** IOFieldBinding 缺 ui_kind | `fields[*].ui_kind == unknown` | 默认按 text 渲染 | 按 text 控件 | ✅ 完整 |
-| **Type C** 仅 JSON Schema | `schema_.properties` 有但 `fields[]` 未绑 | 折叠区"仅 schema 字段 (N)" | 折叠区"附带字段 (N)" | ✅ 全量携带 |
+| **Type C** 目录外 body 残留键(原「仅 JSON Schema」;2026-09-05 目录化后 schema_ 退役,目录即宇宙) | body 中有、目录未登记的键(深浅皆收) | 「其他字段」区兜底展示 | 「其他字段」区编辑 | ✅ 全量携带 |
 
 **业务处理过程要全程携带所有字段**（不丢字段），仅在 UI 上区分主/次编辑区。
 
@@ -555,7 +558,7 @@ Row 3 (y=1960) — Canvas 子态
 |---|---|
 | **被测系统** | 业务方正在测试的、对外提供 HTTP 接口的系统（如 fin、logi、wms）。平台向其拉取接口契约 |
 | **接口契约 (EndpointSpec)** | 一个接口的完整结构定义：API 坐标 + 请求体形态 + 响应体形态 + 业务元信息 |
-| **IOFieldBinding** | 单个字段的元信息（name/path/ui_kind/source_kind/enum/default/example/description）；2026-09-02 起 plate 契约为 `DeclarationEntry`（同字段轴 + channel/type/required/assertable），前端本地投影仍沿用此名 |
+| **IOFieldBinding** | 单个字段的元信息（name/path/ui_kind/source_kind/enum/default/example/description）；plate 契约为 `DeclarationEntry`（同字段轴 + state/type/required/assertable/children —— 2026-09-05 目录化起 channel 退役为 state 三态），前端本地投影仍沿用此名 |
 | **ui_kind** | 字段 UI 渲染类型（text/number/boolean/select/textarea/json/file/binary/unknown） |
 | **source_kind** | 字段值来源类型（independent/lookup/generated） |
 | **assertable_paths** | 响应里可以被 Assertion 校验的 JSONPath 列表 |
