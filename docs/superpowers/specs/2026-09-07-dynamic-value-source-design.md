@@ -1,6 +1,7 @@
 # 动态取数源设计 — QueryView 端点注记 + 组合期取数解释器
 
 > 状态:设计定稿待评审(2026-09-07 brainstorming 逐节过审:模型/消费模式/流程/缓存/凭证/配方落点;配方落点采用户提议的**端点注记式**,独立 recipes.py 方案作废)
+> 修订:2026-09-07 评审加固一轮(形状漂移与空结果分离 / stale-while-error / 短熔断 / query_safe 写副作用护栏 / 投影列集 / 缺列跳过——后两者推翻初稿"整行返回不投影"方案)
 > 日期:2026-09-07
 > 前置:2026-09-05 field-state-catalog(§1.4 一致化:字段的每个决策都是字段属性);2026-09-07 找回/穿线已实施(65740b4c)
 > 分支:`feat/field-state-catalog`
@@ -173,7 +174,7 @@ N=1(单字段下拉)与 N>1(一查多填)不是两种机制,是**同一绑定的
 | 层 | 规则 |
 |---|---|
 | 单模型 | QueryView 形状:name 非空 ASCII 标识符 / items 以 `$.` 开头 / label 非空 |
-| 聚合层(fin ALL_ENDPOINTS + plate 策略测试) | ① **view name 全局唯一**(跨端点查重,构造期拒);② **引用闭合**:`value_source.view` 必命中某端点的某视图;③ **enum × value_source 互斥**(enum 是静态闭集,value_source 是动态开集,并置 = 定义精神分裂) |
+| 聚合层(fin ALL_ENDPOINTS + plate 策略测试) | ① **view name 全局唯一**(跨端点查重,构造期拒);② **引用闭合**:`value_source.view` 必命中某端点的某视图;③ **enum × value_source 互斥**(enum 是静态闭集,value_source 是动态开集,并置 = 定义精神分裂);④ **写副作用护栏**:非 GET 端点挂 query_views 必须显式 `EndpointMetadata.query_safe = true`(声明式白名单——fin 是 POST 重镇,不能走 GET-only 禁令;git 评审可见),违反构造期拒 |
 | 运行时 fail-soft | column/label 不做构造期校验(需活响应):列缺失 → 选择器行显示原始 JSON 兜底,不炸 |
 
 ### 3.4 wire 与索引
@@ -182,9 +183,10 @@ N=1(单字段下拉)与 N>1(一查多填)不是两种机制,是**同一绑定的
   (io_declarations fixtures)**意识性重钉**(变化面:含视图的端点 + §7.1 的
   enum 回填 3 字段,同批重钉);
 - **plate 新只读聚合路由 `GET /api/query-views`**:
-  `[{name, endpoint_id, system, service, method, path, params(合并后), items, label}]`
+  `[{name, endpoint_id, system, service, method, path, params(合并后), items, label, columns(派生绑定列集), query_safe}]`
   —— 纯投影零状态,遍历端点目录聚合;platform 经 plate_client 既有
-  memo + 熔断模式取用,不重复发明;
+  memo + 熔断模式取用,不重复发明;**聚合投影纳入 golden**(合并后 params +
+  columns 钉死——端点声明缺省的暗变在 re-baseline 时显形,§9);
 - **dispatch 基线零重钉**:v1 不改任何场景语义(钉值走既有 body 通路,导出链无感)。
 
 ### 3.5 命名不可变纪律
@@ -220,7 +222,7 @@ T2 触发       用户点绑定字段「查」钮 → GET /api/query-views/{name
 T3 解释执行   索引定位端点 → L1 缓存 → L2 同视图单飞 → L3 凭证闸
               → 组装请求(§4.2)→ resolve_service_url + 查询凭证 token → 发送
 T4 处理       jsonpath(items) 提取行集 → ≤MAX_ROWS 截断(标记 truncated)
-              → 回传 {view, rows, truncated, fetched_at, cached}
+              → 投影列集(§4.2)→ 回传 {view, rows, truncated, fetched_at, cached|stale}
 T5 落值       前端渲染选择器(label 列 + 绑定列);用户选 → setValue 写字面量
 ```
 
@@ -228,7 +230,9 @@ T5 落值       前端渲染选择器(label 列 + 绑定列);用户选 → setVa
 
 **组装,零自由发挥**:
 
-1. 索引定位 view → 端点声明(method/path/请求声明缺省);
+1. 索引定位 view → 端点声明(method/path/请求声明缺省);**写副作用护栏复核**:
+   非 GET 端点须索引携带 `query_safe=true`(§3.3④),违反 → **422**(纵深
+   防御,不单靠评审);
 2. params 合成:`view.params` ▸ 声明 `default` ▸ 声明 `example`;合并后必填键
    仍缺 → **422 视图定义错误**(fail loud,修视图定义,不静默补 None);
 3. 服务 URL 解析复用执行链服务绑定;凭证 = AuthSession 托管的查询凭证(§6.1);
@@ -237,8 +241,15 @@ T5 落值       前端渲染选择器(label 列 + 绑定列);用户选 → setVa
 
 **处理,v1 词表零格**:
 
-- 仅 `jsonpath(items)` 提取行集 + 行数截断;**返回整行 dict 不投影** —— 列绑定
-  在字段侧,任何列可用,免重查免预定义列清单;
+- `jsonpath(items)` 提取行集 → 行数截断 → **投影到列集**(`label ∪ 全目录
+  绑定列`;绑定关系全在目录 `value_source` 引用里,索引构建时派生——预定义
+  列清单免费)。缓存放投影后行,行宽收敛到几百字节,宽行方差消除(§5.3);
+- **形状漂移与空结果分离**:items 命中父路径且为空列表 = 合法空结果(缓存);
+  **不命中**(父路径缺失/非数组)= 形状漂移 → 按错误处理**不缓存** + 错误条
+  "行集提取失败(响应形状漂移?)"——两者语义天差地别,混谈会把漂移误当
+  空字典静默缓存;
+- **分页语义**:分页端点的视图 = 首页(行数受声明缺省 page_size 限制,到不了
+  MAX_ROWS 是正常态);要更多行调大视图 params 的 page_size;
 - **不设 transforms 键**(YAGNI):未来准入候选仅 filter/first/dedupe 三格,
   且需重新评审;若准入自由文本检索,检索词**不进缓存键**(不缓存,防键爆炸)。
 
@@ -261,10 +272,17 @@ T5 落值       前端渲染选择器(label 列 + 绑定列);用户选 → setVa
 | `QUERY_CACHE_TTL` | 300s | 字典/列表变更频率远低于此;选择语义 = 快照非实时 |
 | `MAX_ENTRIES` | 64 | 视图实际个位数,64 是宽上界 |
 | `MAX_ROWS` | 200 | 费用字典 130+;截断需 truncated 标记透出 |
+| `STALE_MAX_WINDOW` | 24h | stale-while-error 回退窗;超过即真降级 |
 
 - **惰性过期**:读时判 TTL,过期即 miss 重取;无后台线程;
 - **LRU 容量逐出**:命中 `move_to_end`,溢出 `popitem(last=False)`;
-- **错误永不缓存**(失败让下次重试);**空结果缓存**(空字典也是有效答案);
+- **错误永不写成新条目**;**空结果缓存**(items 命中且为空列表 = 合法答案);
+  **形状漂移不缓存**(父路径不命中 = 错误,§4.2——漂移被当空结果缓存是
+  静默错误);
+- **stale-while-error**:过期条目不立即丢弃——重取失败时回退**最后一次成功
+  行集** + `stale=true` 标记(fetched_at 照实显示),超过 `STALE_MAX_WINDOW`
+  才真降级。旧好值在错误窗内继续服务且明确标记:SUT 宕机窗口内配置工作流
+  不断炊;
 - **refresh=1 旁路**:绕过读,强取后写回覆盖(选择器的"刷新"钮);
 - **键 = view name**:view 的 params 是视图身份的一部分(固定预设),键天然
   完整;未来若准入检索词,该词不进键(§4.2)。
@@ -280,10 +298,14 @@ T5 落值       前端渲染选择器(label 列 + 绑定列);用户选 → setVa
 锁序:**view 锁外层 → 凭证闸内层;永不同时持两把 view 锁** → 无死锁。合计
 ~10 行。
 
+**短熔断**(对齐 plate_client 既有熔断模式):同视图**连续失败 3 次 → 30s
+熔断窗**,窗内直接降态不再打 SUT(refresh=1 同受约束)——防连点把垂死的
+SUT 或被踢的凭证刷爆。~6 行。
+
 ### 5.3 内存上界
 
-64 视图 × 200 行 × 1-2KB/行(整行 dict)≈ **13-26MB 理论上限**,实际远低
-(视图个位数、行多为窄字典)。有界即可接受。**不引 Redis**:multi-worker
+64 视图 × 200 行 × 0.2-0.5KB/行(**投影后**行宽,§4.2——几列标量,宽行
+方差消除)≈ **2.6-6.4MB 理论上限**。有界即可接受。**不引 Redis**:multi-worker
 各自进程内缓存,最坏 N× 冷启动放大,内网单体可受(边界表 §9)。
 
 ---
@@ -339,8 +361,14 @@ T5 落值       前端渲染选择器(label 列 + 绑定列);用户选 → setVa
 
 Canvas 按 `value_source.view` 分组;组内任一字段打开的选择器显示同一行集
 (行 = label 列 + 全部绑定列,path 徽标区分);选中行 → **组内每字段
-`setValue(row[column])`**(既有 body 写入通路 + D8 剪枝,零新写值机制)。
-例:选一条待委托订单 → bl_no/客户/容器等绑定字段全落。
+`setValue(row[column])`**(既有 body 写入通路 + D8 剪枝,零新写值机制);
+**缺列跳过**:行缺某绑定列 → 该字段不写、保留现值,行内该列显示
+"--"(稀疏行不产生 undefined 脏写)。例:选一条待委托订单 →
+bl_no/客户/容器等绑定字段全落。
+
+选择器顶部常驻**本地过滤框**(行内子串过滤,纯前端零上游,词表红线不涉;
+N=1 与 N>1 同用)——200 行内客户端过滤够用,服务端检索留给词表准入重议
+(§12.2)。
 
 ### 7.4 B-现钉 = 同一机制
 
@@ -353,7 +381,8 @@ Canvas 按 `value_source.view` 分组;组内任一字段打开的选择器显示
 流程恒为:渲染候选 → 用户显式选择 → 写字面量;保存即所见,产物自含。
 选择落值后行内显小徽标「view:<name>」(title 带 fetched_at),服务腐烂排查;
 纯 UI 态,零新增存储。降级态(视图 404 / 凭证过期 / SUT 不可达)= 选择器
-错误条 + 认证页引导,**绝不自动重登录**。
+错误条 + **认证页直达链接**,**绝不自动重登录**(凭证维护主体可能是管理员
+而非当前使用者——链接把干等变成引导)。
 
 ---
 
@@ -381,6 +410,8 @@ Canvas 按 `value_source.view` 分组;组内任一字段打开的选择器显示
 | multi-worker | 进程内缓存每 worker 一份,冷启动 N× 放大 | 有界(§5.3);不引 Redis |
 | 单会话 | 查询账号被挪用执行配置 → 约束被破坏 | 三规则(§6.2)+ 配置页告警挂账 |
 | MAX_ROWS 截断 | >200 行只见前 200 | truncated 透出;超长列表本该用检索(词表准入重议) |
+| 平台用户鉴权面 ≠ SUT 凭证权限面 | 任何平台登录用户可借查询凭证的 SUT 权限取数 | 内网接受,不设机制;对外暴露前重议 |
+| 分页端点视图 = 首页 | 行数受声明缺省 page_size 限制,到不了 MAX_ROWS | 语义明示(§4.2);要更多行调大视图 params 的 page_size |
 | 词表蔓生 | "再处理一下"逐格腐蚀解释器 | DSL 红线(§4.3),准入需重评审 |
 
 ---
@@ -389,13 +420,13 @@ Canvas 按 `value_source.view` 分组;组内任一字段打开的选择器显示
 
 | # | 层 | 用例 |
 |---|---|---|
-| ① | plate 模型 | QueryView 形状校验;聚合层:view name 全局唯一 / value_source 引用闭合 / enum×value_source 互斥 |
-| ② | plate wire | /full 携带 query_views + value_source;/api/query-views 聚合完整性;golden 意识性重钉 |
-| ③ | platform 组装 | GET/POST 分流;params 合成链(view▸default▸example);缺必填 422;服务解析 + token 注入 |
-| ④ | platform 缓存 | TTL 惰性过期 / LRU 逐出 / MAX_ROWS 截断 / 错误不缓存 / 空结果缓存 / refresh 旁路 |
-| ⑤ | platform 并发 | 同视图并发单飞(1 上游请求);同凭证跨视图串行;锁序无死锁冒烟 |
+| ① | plate 模型 | QueryView 形状校验;聚合层:view name 全局唯一 / value_source 引用闭合 / enum×value_source 互斥 / 非 GET 挂视图须 query_safe |
+| ② | plate wire | /full 携带 query_views + value_source;/api/query-views 聚合完整性(含 columns 派生与合并后 params);golden 意识性重钉(含索引投影) |
+| ③ | platform 组装 | GET/POST 分流;params 合成链(view▸default▸example);缺必填 422;非 GET 未声明 query_safe → 422;服务解析 + token 注入 |
+| ④ | platform 缓存 | TTL 惰性过期 / LRU 逐出 / MAX_ROWS 截断 / 空列表缓存与漂移不缓存分形 / 错误不写成新条目 / refresh 旁路 / stale 回退与 STALE_MAX_WINDOW |
+| ⑤ | platform 并发 | 同视图并发单飞(1 上游请求);同凭证跨视图串行;连续失败熔断窗;锁序无死锁冒烟 |
 | ⑥ | platform 凭证 | 401 → 降级提示不重登录;CurrentUser 鉴权门 |
-| ⑦ | 前端 | enum 分支优先级(ui_kind=text + enum → select);折叠区同款;number enum 写值类型;选择器行渲染 + 行扇出写值;N=1 单写;降级态 |
+| ⑦ | 前端 | enum 分支优先级(ui_kind=text + enum → select);折叠区同款;number enum 写值类型;选择器行渲染 + 行扇出写值 + 缺列跳过 + 本地过滤;N=1 单写;降级态(认证页直达) |
 | ⑧ | 回归 | 三套件 + vue-tsc 0;dispatch 基线零漂 |
 
 ---
@@ -408,6 +439,9 @@ Canvas 按 `value_source.view` 分组;组内任一字段打开的选择器显示
       enum 写值为 number 非 "1";
 - [ ] /full golden 重钉入库;dispatch 基线零漂;
 - [ ] 查询凭证过期 → 选择器提示 + 认证页引导,无自动重登录;
+- [ ] 非 GET 端点未声明 query_safe 挂视图 → 构造期拒 + 路由 422 双保险;
+- [ ] SUT 停机窗口内:选择器回退最后成功快照(stale 标记 + 原 fetched_at)
+      不空白;超 STALE_MAX_WINDOW 真降级;
 - [ ] 同视图连点 → 上游一次请求;refresh=1 → 重取新时间戳;
 - [ ] 三套件 + vue-tsc 0 全绿。
 
