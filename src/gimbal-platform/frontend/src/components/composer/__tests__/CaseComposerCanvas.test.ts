@@ -2156,6 +2156,19 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     // services 声明 → resolveQueryContext 的 serviceUrl 源(R3 钉取数上下文)
     const { w } = mountCanvas({ steps, services: { fin: 'http://fin.example' } })
     await flushPromises()
+    // 方案侧车(draft store,RunDialog 同源)注入 fin 的查询绑定 —
+    // queryUser 与 authAlias 同时显式 → queryUser 优先(§6.1 缺省回落主凭证)
+    const draft = useScenarioDraftStore()
+    draft.draft = {
+      ...draft.draft!,   // beforeEach 已置非空快照
+      orchestration: {
+        steps: [], resourceMeta: {},
+        runSchemes: [{
+          name: 's1', dataSetIds: [],
+          serviceBindings: { fin: { authAlias: 'main-qa', queryUser: 'query-qa' } },
+        }],
+      } as any,
+    }
     ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
       view: 'v',
       rows: [{ x: '1', y: '2', nm: 'r1' }, { x: 'only-x', nm: 'r2' }],
@@ -2163,9 +2176,11 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     })
     await w.find('.vs-query-btn').trigger('click')   // $.a 查钮 → fieldQuery → picker 开
     await flushPromises()
-    // 取数上下文钉死:view 名 + authored services URL + 主凭证别名 + 非刷新
+    // 取数上下文钉死:view 名 + authored services URL + 方案绑定别名
+    // (queryUser ?? authAlias)+ 非刷新 — alias=null 会被后端凭证闸
+    // 422(query_credential_required),此钉即凭证链防回归
     expect(fetchQueryViewRows).toHaveBeenCalledWith('v', {
-      refresh: false, serviceUrl: 'http://fin.example', queryAlias: null,
+      refresh: false, serviceUrl: 'http://fin.example', queryAlias: 'query-qa',
     })
     await w.find('tr.vsp-row').trigger('click')      // 选第一行
     expect(steps[0].request.body).toMatchObject({ a: '1', b: '2' })   // 组内扇出全落
@@ -2198,6 +2213,11 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     })
     await w.find('.vs-query-btn').trigger('click')   // 实例叶 $.fees[0].cost_id 的查钮
     await flushPromises()
+    // 无方案侧车(beforeEach draft 无 orchestration)→ 无绑定可解析:
+    // queryAlias 诚实 null(bearer 视图将 422 提示配置,§7.5 降级态)
+    expect(fetchQueryViewRows).toHaveBeenCalledWith('v2', {
+      refresh: false, serviceUrl: undefined, queryAlias: null,
+    })
     await w.find('tr.vsp-row').trigger('click')      // 选行 → 扇出
     const body = steps[0].request.body as {
       fees?: Array<{ cost_id?: string; note?: string }> & Record<string, unknown>

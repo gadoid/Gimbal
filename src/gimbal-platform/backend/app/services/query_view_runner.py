@@ -293,14 +293,14 @@ async def fetch_rows(
                              "service_url 缺失(服务绑定未解析)", status=422)
     stale_entry, fresh = _cache.lookup(name)
     if fresh and not refresh:
-        return RowsResult(name, stale_entry.rows, False, stale_entry.fetched_wall,
-                          cached=True, stale=False)
+        return RowsResult(name, stale_entry.rows, stale_entry.truncated,
+                          stale_entry.fetched_wall, cached=True, stale=False)
     # 熔断窗内:有 stale 回退 stale,否则降级(§5.2);refresh 也不豁免
     br = _view_breaker.get(name)
     if br and br["fails"] >= VIEW_BREAKER_THRESHOLD and \
             time.monotonic() < br["open_until"]:
         if stale_entry is not None:
-            return RowsResult(name, stale_entry.rows, False,
+            return RowsResult(name, stale_entry.rows, stale_entry.truncated,
                               stale_entry.fetched_wall, cached=False, stale=True)
         raise QueryViewError("circuit_open", f"视图 {name} 熔断窗内")
     lock = await _view_lock(name)
@@ -308,7 +308,7 @@ async def fetch_rows(
         if not refresh:                    # 双检:等锁期间别人已填
             e2, f2 = _cache.lookup(name)
             if f2:
-                return RowsResult(name, e2.rows, False, e2.fetched_wall,
+                return RowsResult(name, e2.rows, e2.truncated, e2.fetched_wall,
                                   cached=True, stale=False)
         try:
             header, session, cred_key = await _resolve_auth_header(
@@ -316,7 +316,7 @@ async def fetch_rows(
             rows, truncated = await _query_sut(view, service_url, header,
                                                session, cred_key)
             wall = _now_iso()
-            _cache.put(name, rows, wall)   # 投影后行入缓存(§5.3)
+            _cache.put(name, rows, wall, truncated)   # 投影后行 + 截断标记入缓存(§5.1/§5.3)
             _view_breaker.pop(name, None)  # 成功清零
             return RowsResult(name, rows, truncated, wall,
                               cached=False, stale=False)
@@ -327,7 +327,7 @@ async def fetch_rows(
             if e.status >= 500:
                 _bump_breaker(name)
             if stale_entry is not None:    # stale-while-error(§5.1)
-                return RowsResult(name, stale_entry.rows, False,
-                                  stale_entry.fetched_wall,
+                return RowsResult(name, stale_entry.rows,
+                                  stale_entry.truncated, stale_entry.fetched_wall,
                                   cached=False, stale=True)
             raise

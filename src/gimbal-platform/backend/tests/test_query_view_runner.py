@@ -160,6 +160,10 @@ class TestFetchRows:
         res = await r.fetch_rows("v1", refresh=False, service_url="http://sut",
                                  owner_id=1, query_alias=None, load_credential=None)
         assert len(res.rows) == 200 and res.truncated
+        # §5.1 截断标记随行集入缓存:TTL 内二开(命中)仍透出 truncated
+        cached = await r.fetch_rows("v1", refresh=False, service_url="http://sut",
+                                    owner_id=1, query_alias=None, load_credential=None)
+        assert cached.cached and cached.truncated and len(cached.rows) == 200
 
     async def test_l1_cache_and_refresh_bypass(self, index, monkeypatch):
         calls = {"n": 0}

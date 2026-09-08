@@ -571,6 +571,7 @@ import type {
   StrategyView, StrategyKindView, StrategyKindDetailView, FieldState,
 } from '@/types/plate'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
+import type { RunScheme } from '@/api/scenario-composer'
 import { parseJson } from '../../utils/json'
 
 const props = defineProps<{
@@ -1066,17 +1067,40 @@ const vsBadges = ref<Record<string, { view: string; fetchedAt?: string }>>({})
 const valueSourceGroups = computed<ValueSourceGroup[]>(() =>
   groupValueSources(stepDecls(currentStep.value)))
 
+/** Orchestration + 运行方案 sidecar 键(CaseComposer 同款本地桥接类型 —
+ *  共享 types 侧 Orchestration 尚未收录 runSchemes,不改共享类型)。 */
+type OrchestrationWithSchemes = Orchestration & { runSchemes?: RunScheme[] }
+
 /**
- * 查询上下文(§7.2):服务 URL 走 authored services 声明(Canvas 唯一
- * 可达的 URL 源 — Orchestration 不携带 runScheme,绑定在执行对话框层);
- * alias = null(主凭证)。queryUser/authAlias 绑定经 RunDialog 落
- * runScheme,编排面不读 —— §7.5 降级态兜底。
+ * 查询上下文(§7.2/§6.1):服务 URL 走 authored services 声明(svc → URL
+ * 平表,Canvas 唯一可达的 URL 源);查询别名 = 服务绑定 queryUser ??
+ * authAlias(缺省回落主凭证)— 后端凭证闸把 alias=None 视作「无凭证」
+ * (bearer 视图 422 query_credential_required),null 仅当两处都未绑。
+ * 绑定源 = orchestration 侧车 runSchemes[].serviceBindings(draft store
+ * 里那份 — RunDialog 方案选择器同源读;临时手填/上次运行不落侧车,
+ * 组合面读不到 → null = 诚实 422,提示到运行对话框配好方案再查)。
  */
 function resolveQueryContext(step: StepView): { serviceUrl?: string; queryAlias: string | null } {
+  const svc = step.api?.service || ''
   return {
-    serviceUrl: declaredUrlOf(step.api?.service || '') || undefined,
-    queryAlias: null,
+    serviceUrl: declaredUrlOf(svc) || undefined,
+    queryAlias: queryAliasOf(svc),
   }
+}
+
+/** 服务查询别名(§6.1):方案序 = RunDialog 选择器序,首个为该服务
+ *  显式绑定 queryUser/authAlias 的方案命中(queryUser 优先);trim 后
+ *  空串视同未绑。authored config.services 是 URL 平表,别名只在方案侧车。 */
+function queryAliasOf(svc: string): string | null {
+  if (!svc) return null
+  const schemes = (draftStore.draft?.orchestration as OrchestrationWithSchemes | undefined)
+    ?.runSchemes
+  for (const s of schemes ?? []) {
+    const b = s.serviceBindings?.[svc]
+    const alias = b?.queryUser?.trim() || b?.authAlias?.trim()
+    if (alias) return alias
+  }
+  return null
 }
 
 /** 行集首键 = label 列(后端投影列序:label 恒行首;空行集不进选择态)。 */

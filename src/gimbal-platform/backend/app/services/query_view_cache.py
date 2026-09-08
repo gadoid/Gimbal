@@ -12,10 +12,12 @@ from typing import Any, Callable
 
 
 class CacheEntry:
-    __slots__ = ("rows", "fetched_wall", "fetched_mono")
+    __slots__ = ("rows", "truncated", "fetched_wall", "fetched_mono")
 
-    def __init__(self, rows: list[dict], fetched_wall: str, fetched_mono: float):
+    def __init__(self, rows: list[dict], truncated: bool,
+                 fetched_wall: str, fetched_mono: float):
         self.rows = rows
+        self.truncated = truncated   # §5.1 截断标记随行集入缓存(命中也透出)
         self.fetched_wall = fetched_wall
         self.fetched_mono = fetched_mono
 
@@ -42,9 +44,10 @@ class TtlLruCache:
         self._data.pop(key, None)
         return None, False         # 超 STALE_MAX_WINDOW:真过期
 
-    def put(self, key: str, rows: list[dict], fetched_wall: str) -> None:
+    def put(self, key: str, rows: list[dict], fetched_wall: str,
+            truncated: bool = False) -> None:
         self._data.pop(key, None)
-        self._data[key] = CacheEntry(rows, fetched_wall, self._clock())
+        self._data[key] = CacheEntry(rows, truncated, fetched_wall, self._clock())
         while len(self._data) > self._max:
             self._data.popitem(last=False)
 
