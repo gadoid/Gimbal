@@ -64,6 +64,7 @@ from gimbal_plate.systems.fin.endpoint.audit_audit_execute import (
 from gimbal_plate.systems.fin.endpoint.audit_audit_detail import (
     AUDIT_AUDIT_DETAIL,
 )
+from gimbal_plate.service.query_views import validate_query_view_catalog as _validate_qv
 
 
 ALL_ENDPOINTS = [
@@ -88,6 +89,9 @@ ALL_ENDPOINTS = [
     AUDIT_AUDIT_EXECUTE,
     AUDIT_AUDIT_DETAIL,
 ]
+
+# §3.3 聚合层校验(构造期拒):view 唯一/引用闭合/分组一致。
+_validate_qv(ALL_ENDPOINTS)
 
 __all__ = [
     "SETTLEMENT_CREATE_ORDER",
