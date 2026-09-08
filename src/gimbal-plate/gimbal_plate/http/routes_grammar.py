@@ -36,6 +36,7 @@ from gimbal_plate.schema.scenario import Scenario
 from gimbal_plate.service.field_defaults import compute_field_defaults
 from gimbal_plate.service.failed_resolver import resolve_failed_criteria
 from gimbal_plate.service.paths_resolver import resolve_paths
+from gimbal_plate.service.query_views import build_query_view_index
 from gimbal_plate.service.system_from_service import system_from_service
 
 
@@ -389,6 +390,27 @@ def run_dim_action(
         body=body,
         request=request,
     )
+
+
+# ── /query-views(动态取数源 spec 2026-09-07 §3.4)──────────────────
+#
+# 注册顺序坑:本路由 MUST 先于下方 ``@router.get("/{dim}")`` 注册,
+# 否则 ``/api/query-views`` 被吞成 ``dim="query-views"`` → 404 DIM_NOT_FOUND。
+
+
+@router.get("/query-views")
+def list_query_views(request: Request) -> dict[str, Any]:
+    """动态取数源只读聚合索引(2026-09-07 spec §3.4):纯投影零状态。"""
+    reg = _registry(request)
+    spec = reg.index_for("endpoint")
+    if spec is None:
+        raise PlateHTTPError(
+            http_status=404,
+            code=ErrorCode.DIM_NOT_FOUND,
+            message="dim 'endpoint' is not registered",
+        )
+    items = build_query_view_index(spec.index.list_global())
+    return ok_response({"items": items, "total": len(items)})
 
 
 # ── Global /full (must precede /{dim}/{id}) ──────────────────────

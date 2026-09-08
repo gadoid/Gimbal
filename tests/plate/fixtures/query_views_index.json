@@ -1,0 +1,49 @@
+[
+ {
+  "name": "cost_list",
+  "endpoint_id": "fin.cost.amount_list",
+  "system": "fin",
+  "service": "fin-service",
+  "method": "GET",
+  "path": "/api/home/cost/amountCostList",
+  "params": {},
+  "items": "$.data[*]",
+  "label": "cost_name",
+  "columns": [
+   "cost_name",
+   "cost_id"
+  ],
+  "query_safe": false,
+  "missing_required": [],
+  "auth": "bearer",
+  "timeout_seconds": 30.0
+ },
+ {
+  "name": "pending_orders",
+  "endpoint_id": "fin.order_entrust.order_page",
+  "system": "fin",
+  "service": "fin-service",
+  "method": "POST",
+  "path": "/api/order/orderEntrust/orderPage",
+  "params": {
+   "entrust_status": "1",
+   "bl_no": "",
+   "order_no": "",
+   "page_no": 1,
+   "page_size": 20,
+   "sort_field": "update_time",
+   "sort_order": "desc",
+   "params": {}
+  },
+  "items": "$.data.data[*]",
+  "label": "order_no",
+  "columns": [
+   "order_no",
+   "bl_no"
+  ],
+  "query_safe": true,
+  "missing_required": [],
+  "auth": "bearer",
+  "timeout_seconds": 30.0
+ }
+]
