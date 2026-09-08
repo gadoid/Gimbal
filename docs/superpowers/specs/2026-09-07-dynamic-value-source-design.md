@@ -2,6 +2,7 @@
 
 > 状态:设计定稿待评审(2026-09-07 brainstorming 逐节过审:模型/消费模式/流程/缓存/凭证/配方落点;配方落点采用户提议的**端点注记式**,独立 recipes.py 方案作废)
 > 修订:2026-09-07 评审加固一轮(形状漂移与空结果分离 / stale-while-error / 短熔断 / query_safe 写副作用护栏 / 投影列集 / 缺列跳过——后两者推翻初稿"整行返回不投影"方案)
+> 修订 2:2026-09-08 评审收尾(示例 query_safe 自洽勘误 / 视图参数闭合构造期检查 / params 键语义 / 超时鉴权跟随 ApiSpec;新增:能力定位 §0.3——值域校验前移 + L1-L3 谱系 + 两线接口 = 产物;绑定 = 共识→发版 §3.6;边界三行 §9——双通道投影窗 / 钉值来源不持久化 / 查询端点双重角色)
 > 日期:2026-09-07
 > 前置:2026-09-05 field-state-catalog(§1.4 一致化:字段的每个决策都是字段属性);2026-09-07 找回/穿线已实施(65740b4c)
 > 分支:`feat/field-state-catalog`
@@ -48,6 +49,19 @@ B 内部再分两种消费:**现钉**(组合期查+选,值以字面量落配置,
 选择后值显式钉进配置);**RESOLUTION 非法**(执行引擎运行中隐式向被测系统查值
 ——产物不再自含,重放依赖外部时点)。本设计 = 方案二之形(平台取数)服务作者,
 方案一之机制(查询步骤)经 B-活查按需支付——二叉就此消解。
+
+**能力定位**(2026-09-08 评审补):本设计是**值域校验前移**,不是"接口测试
+前移"——无效值类错误(费用名不存在/订单号失效/枚举写错)的发现机制,从
+"执行期 400 反馈回路"前移为"配置期可见可选";机制是**可见化而非门禁**
+(手打错值照样存:管"选得对",不管"写得对"——写得对归执行期断言)。每次
+取数顺带演习目录声明(method/path/params 走真实请求),声明漂移在配置期降级
+显形。放进能力谱系:字段始终是控制点、目录始终是政策源——L1 状态自动化
+(09-05 field_states)→ **L2 值域自动化(本设计,value_source)** → L3 值解析
+自动化(活查,§8,按需回到执行期)。配置线与执行线的**唯一接口是场景产物**
+(钉下的字面量):执行器对查询发生与否无感知,解释器可整体移除而不影响任何
+已存场景;两线共享的只有平台地基(服务解析 / AuthSession),不共享调度/重试/
+证据——两线失败哲学相反(执行 fail-loud 重试留痕,查询 fail-soft 降级不断炊),
+强并即打架。
 
 ### 0.4 需求追溯表(讨论要义 → 设计落点)
 
@@ -127,12 +141,15 @@ class QueryView(BaseModel):
 query_views: list[QueryView] | None = None
 ```
 
-**既有端点升级**(加 3 行,其余零重复):
+**既有端点升级**(注记数行,其余零重复):
 
 ```python
-# systems/fin/endpoint/order_entrust_order_page.py(既有文件)
+# systems/fin/endpoint/order_entrust_order_page.py(既有文件;api: POST
+# /api/order/orderEntrust/orderPage, auth=bearer, timeout_seconds=30)
 ORDER_ENTRUST_ORDER_PAGE: Final[EndpointSpec] = EndpointSpec(
     ...,
+    # §3.3④:非 GET 端点挂视图须显式声明写副作用白名单
+    metadata=EndpointMetadata(query_safe=True),
     query_views=[QueryView(name='pending_orders',
                            params={'entrust_status': '1'},
                            items='$.data.list[*]', label='order_no')],
@@ -174,7 +191,7 @@ N=1(单字段下拉)与 N>1(一查多填)不是两种机制,是**同一绑定的
 | 层 | 规则 |
 |---|---|
 | 单模型 | QueryView 形状:name 非空 ASCII 标识符 / items 以 `$.` 开头 / label 非空 |
-| 聚合层(fin ALL_ENDPOINTS + plate 策略测试) | ① **view name 全局唯一**(跨端点查重,构造期拒);② **引用闭合**:`value_source.view` 必命中某端点的某视图;③ **enum × value_source 互斥**(enum 是静态闭集,value_source 是动态开集,并置 = 定义精神分裂);④ **写副作用护栏**:非 GET 端点挂 query_views 必须显式 `EndpointMetadata.query_safe = true`(声明式白名单——fin 是 POST 重镇,不能走 GET-only 禁令;git 评审可见),违反构造期拒 |
+| 聚合层(fin ALL_ENDPOINTS + plate 策略测试) | ① **view name 全局唯一**(跨端点查重,构造期拒);② **引用闭合**:`value_source.view` 必命中某端点的某视图;③ **enum × value_source 互斥**(enum 是静态闭集,value_source 是动态开集,并置 = 定义精神分裂);④ **写副作用护栏**:非 GET 端点挂 query_views 必须显式 `EndpointMetadata.query_safe = true`(声明式白名单——fin 是 POST 重镇,不能走 GET-only 禁令;git 评审可见),违反构造期拒;⑤ **视图参数闭合**:必填键经 `view.params ▸ 声明 default ▸ 声明 example` 合并后仍缺 → 构造期拒;**"缺" = default 与 example 双 None**(空串/0/false 是合法值,不算缺) |
 | 运行时 fail-soft | column/label 不做构造期校验(需活响应):列缺失 → 选择器行显示原始 JSON 兜底,不炸 |
 
 ### 3.4 wire 与索引
@@ -200,6 +217,11 @@ view name 一经使用**不可改名**(与 endpoint id 同款纪律),四重身�
 `source_kind` 的 `lookup` 休眠词 v1 **不动**:其注释语义是"只读展示
 (`${var.xxx}`)",与取数选择器的可写形态不合;`value_source` 存在本身即信号。
 二期活查落地时再议是否派生 lookup 语义(挂账 §12.6)。
+
+**绑定是共识 → 发版**:新增字段绑定(value_source)或新增视图都是 plate 发版 +
+golden 重钉——动态的是**值**,不是**绑定**(绑定是低频共识,09-05 §1.2 两级
+分层的忠实延续;若绑定高频化是目录治理问题,不是本机制问题)。语境级覆写
+(某场景换字典)走装饰缝挂账(#5)延伸,不另开门。
 
 ---
 
@@ -233,10 +255,15 @@ T5 落值       前端渲染选择器(label 列 + 绑定列);用户选 → setVa
 1. 索引定位 view → 端点声明(method/path/请求声明缺省);**写副作用护栏复核**:
    非 GET 端点须索引携带 `query_safe=true`(§3.3④),违反 → **422**(纵深
    防御,不单靠评审);
-2. params 合成:`view.params` ▸ 声明 `default` ▸ 声明 `example`;合并后必填键
-   仍缺 → **422 视图定义错误**(fail loud,修视图定义,不静默补 None);
-3. 服务 URL 解析复用执行链服务绑定;凭证 = AuthSession 托管的查询凭证(§6.1);
-4. 按 ApiSpec 组装(GET → querystring;POST → JSON body)发送;超时 10s、
+2. params 合成(**per-key**):`view.params` ▸ 声明 `default` ▸ 声明 `example`;
+   view.params **覆盖**已声明键、**追加**未声明键(如 entrust_status 未声明则
+   追加;合并后 params 进索引投影 + golden,声明缺省的暗变在 re-baseline 显形);
+   可选键缺省不携带;必填键仍缺 → **422**(§3.3⑤ 构造期检查为主,此处纵深
+   防御;不静默补 None);
+3. 服务 URL 解析复用**平台**服务绑定(公共设施,非执行链私产——两线共享地基,
+   §0.3);凭证 = AuthSession 托管的查询凭证(§6.1);
+4. 按 ApiSpec 组装(GET → querystring;POST → JSON body)发送;**超时与鉴权
+   方案跟随 ApiSpec**(timeout_seconds / auth,单一真源,不另设硬编码);
    **不重试**(查询尽力而为,失败即降级态)。
 
 **处理,v1 词表零格**:
@@ -413,6 +440,9 @@ N=1 与 N>1 同用)——200 行内客户端过滤够用,服务端检索留给�
 | 平台用户鉴权面 ≠ SUT 凭证权限面 | 任何平台登录用户可借查询凭证的 SUT 权限取数 | 内网接受,不设机制;对外暴露前重议 |
 | 分页端点视图 = 首页 | 行数受声明缺省 page_size 限制,到不了 MAX_ROWS | 语义明示(§4.2);要更多行调大视图 params 的 page_size |
 | 词表蔓生 | "再处理一下"逐格腐蚀解释器 | DSL 红线(§4.3),准入需重评审 |
+| 双通道投影一致性窗 | /full(前端开 composer 拉)与 /api/query-views 索引(后端 memo)= 同一 plate 状态的两时刻两投影 | 命名不可变(§3.5)+ memo TTL + 熔断;失败 = 无害降级,非数据错误 |
+| 钉值来源不持久化 | 场景 JSON 只有字面量,无从考证来自哪个视图/时点(徽标纯 UI 态,§7.5) | 排查靠值本身 + git 历史;持久化需增场景 schema 键,v1 有意识不做 |
+| 查询端点双重角色 | 目录化查询端点既是被测对象又是配置工具——端点本身有错,作者就在错的值域里选 | 端点质量 = 配置质量上游;golden + 端点自身场景测试兜底 |
 
 ---
 
@@ -420,9 +450,9 @@ N=1 与 N>1 同用)——200 行内客户端过滤够用,服务端检索留给�
 
 | # | 层 | 用例 |
 |---|---|---|
-| ① | plate 模型 | QueryView 形状校验;聚合层:view name 全局唯一 / value_source 引用闭合 / enum×value_source 互斥 / 非 GET 挂视图须 query_safe |
+| ① | plate 模型 | QueryView 形状校验;聚合层:view name 全局唯一 / value_source 引用闭合 / enum×value_source 互斥 / 非 GET 挂视图须 query_safe / 视图参数闭合(必填缺 → 构造期拒;"缺" = 双 None) |
 | ② | plate wire | /full 携带 query_views + value_source;/api/query-views 聚合完整性(含 columns 派生与合并后 params);golden 意识性重钉(含索引投影) |
-| ③ | platform 组装 | GET/POST 分流;params 合成链(view▸default▸example);缺必填 422;非 GET 未声明 query_safe → 422;服务解析 + token 注入 |
+| ③ | platform 组装 | GET/POST 分流;params 合成链(view▸default▸example)与键语义(覆盖已声明/追加未声明/可选缺省不携带);缺必填 422;非 GET 未声明 query_safe → 422;服务解析 + token 注入;超时与鉴权跟随 ApiSpec |
 | ④ | platform 缓存 | TTL 惰性过期 / LRU 逐出 / MAX_ROWS 截断 / 空列表缓存与漂移不缓存分形 / 错误不写成新条目 / refresh 旁路 / stale 回退与 STALE_MAX_WINDOW |
 | ⑤ | platform 并发 | 同视图并发单飞(1 上游请求);同凭证跨视图串行;连续失败熔断窗;锁序无死锁冒烟 |
 | ⑥ | platform 凭证 | 401 → 降级提示不重登录;CurrentUser 鉴权门 |
