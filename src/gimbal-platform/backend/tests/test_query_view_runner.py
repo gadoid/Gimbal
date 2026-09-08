@@ -121,6 +121,24 @@ class TestFetchRows:
         assert seen["headers"]["Authorization"] == "Bearer tok"
         assert res.rows == [{"code": "c1"}]
 
+    async def test_async_load_credential_awaited(self, index, monkeypatch):
+        """路由 _loader 是 async 闭包(异步 DB 会话)—— 凭证闸须 await
+        coroutine-function 装载器(与 httpx.request seam 同款双形态);
+        同步装载器路径由其余各例锁定。"""
+        def fake_auth(session, why):
+            session.apply_token("tok-1", 3600)
+        monkeypatch.setattr(r, "_AUTHENTICATE", fake_auth)
+        monkeypatch.setattr(httpx, "request", lambda m, u, **kw: httpx.Response(
+            200, json={"rows": [{"code": "c1"}]}))
+
+        async def load(o, a):
+            assert (o, a) == (1, "qa")
+            return _FakeSession()
+
+        res = await r.fetch_rows("v2", refresh=False, service_url="http://sut",
+                                 owner_id=1, query_alias="qa", load_credential=load)
+        assert res.rows == [{"code": "c1"}]
+
     async def test_unknown_view_404(self, index):
         with pytest.raises(r.QueryViewError) as e:
             await r.fetch_rows("nope", refresh=False, service_url="http://s",

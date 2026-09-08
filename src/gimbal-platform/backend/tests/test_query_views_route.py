@@ -79,6 +79,37 @@ async def test_bearer_without_alias_422(client, monkeypatch):
     assert r.json()["detail"]["code"] == "query_credential_required"
 
 
+async def test_bearer_credential_loader_path(client, monkeypatch):
+    """装载通路端到端:bearer 视图 + query_alias + 真实 auth_sessions 行。
+
+    路由 _loader 是 async 闭包(异步 DB 会话)—— runner 凭证闸必须
+    await 它(与 httpx.request seam 同款双形态判别)。登录与 SUT 打桩:
+    _AUTHENTICATE seam 发 token,httpx.request 回行集。
+    """
+    idx = [dict(_IDX[0], auth="bearer")]
+    _install_plate(monkeypatch, idx)
+    h = await register_and_login(client)
+    seeded = await client.post("/api/auths", headers=h, json={
+        "alias": "qa", "url": "http://sut/auth",
+        "username": "u", "password": "p",
+        "token_type": "Bearer", "expires_in": 3600,
+    })
+    assert seeded.status_code == 201, seeded.text
+
+    def fake_auth(session, why):
+        session.apply_token("tok-1", 3600)
+    monkeypatch.setattr(run, "_AUTHENTICATE", fake_auth)
+    monkeypatch.setattr(httpx, "request", lambda m, u, **kw: httpx.Response(
+        200, json={"d": [{"nm": "y"}]}))
+    r = await client.get("/api/query-views/v1/rows",
+                         params={"service_url": "http://sut",
+                                 "query_alias": "qa"}, headers=h)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["view"] == "v1" and body["rows"] == [{"nm": "y"}]
+    assert body["cached"] is False and body["stale"] is False
+
+
 async def test_query_user_binding_field():
     from app.schemas.scenario_composer import ServiceBinding
     b = ServiceBinding.model_validate({"authAlias": "main", "queryUser": "q1",

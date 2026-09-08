@@ -16,7 +16,7 @@ import inspect
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 import httpx
 
@@ -159,7 +159,7 @@ def _bump_breaker(name: str) -> None:
 
 async def _resolve_auth_header(
     view: dict, owner_id: int, query_alias: "str | None",
-    load_credential: "Callable[[int, str], AuthSession | None] | None",
+    load_credential: "Callable[[int, str], AuthSession | None | Awaitable[AuthSession | None]] | None",
 ) -> "tuple[str | None, AuthSession | None, tuple[int, str] | None]":
     """凭证闸(L3):串行化凭证解析与登录(防并发自踢);查询不在闸内 ——
     §6.2 单 session SUT 允许并发 HTTP。锁序(§5.2)view 锁外层 → 此闸内层。
@@ -192,7 +192,13 @@ async def _resolve_auth_header(
                 f"查询凭证 {query_alias!r} 已 401 拉黑(不自动重登,§6.2)")
         session = _cred_sessions.get(cred_key)
         if session is None:
-            session = load_credential(owner_id, query_alias)
+            # 双形态装载器(同 httpx.request seam 裁定 T6-R1):路由的
+            # _loader 是 async 闭包(异步 DB 会话)→ await;同步装载器
+            # (Task 6 测试 lambda)保持原样直调。
+            if inspect.iscoroutinefunction(load_credential):
+                session = await load_credential(owner_id, query_alias)
+            else:
+                session = load_credential(owner_id, query_alias)
             if session is None:
                 raise QueryViewError(
                     "query_credential_required",
@@ -267,7 +273,7 @@ async def _query_sut(
 async def fetch_rows(
     name: str, *, refresh: bool, service_url: str, owner_id: int,
     query_alias: "str | None",
-    load_credential: "Callable[[int, str], AuthSession | None] | None",
+    load_credential: "Callable[[int, str], AuthSession | None | Awaitable[AuthSession | None]] | None",
 ) -> RowsResult:
     """取一行集:L1 缓存 → 熔断 → 单飞锁 → 凭证闸 → SUT 查询 → 缓存回填。"""
     index = await fetch_query_view_index()

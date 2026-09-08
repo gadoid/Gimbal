@@ -126,8 +126,9 @@ def create_app() -> FastAPI:
     app.include_router(generator_catalog.router, prefix="/api")
     app.include_router(adaptations.router, prefix="/api")
     app.include_router(carry.router, prefix="/api")
-    # query-views rows 路由须先于 scenarios 注册(其 /{scenario_id}
-    # catch-all 会吞 /api/query-views/... 前缀冲突面)。
+    # query-views rows 路由:注册在 scenarios 之前只为维持既有稳定注册
+    # 序(scenarios prefix 是 /scenarios,与 /query-views 无实际路由
+    # 冲突)。
     app.include_router(query_views.router, prefix="/api")
     app.include_router(scenarios.router, prefix="/api")  # MUST be last — has /{scenario_id}
 
