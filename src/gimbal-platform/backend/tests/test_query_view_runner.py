@@ -173,6 +173,22 @@ class TestFetchRows:
                                  owner_id=1, query_alias=None, load_credential=None)
         assert res.rows == [{"nm": "x", "id": 1}]     # 失败没被缓存,重取成功
 
+    async def test_non_json_200_shape_drift_and_not_cached(self, index, monkeypatch):
+        state = {"bad": True}
+        def fake_request(method, url, **kw):
+            if state["bad"]:
+                return httpx.Response(200, text="<html>gateway</html>")
+            return httpx.Response(200, json={"data": {"list": [{"nm": "x", "id": 1}]}})
+        monkeypatch.setattr(httpx, "request", fake_request)
+        with pytest.raises(r.QueryViewError) as e:
+            await r.fetch_rows("v1", refresh=False, service_url="http://sut",
+                               owner_id=1, query_alias=None, load_credential=None)
+        assert e.value.code == "shape_drift"    # 2xx 非 JSON 体 ≠ 未处理异常
+        state["bad"] = False
+        res = await r.fetch_rows("v1", refresh=False, service_url="http://sut",
+                                 owner_id=1, query_alias=None, load_credential=None)
+        assert res.rows == [{"nm": "x", "id": 1}]   # 错误没被缓存,好响应即恢复
+
     async def test_stale_while_error(self, index, monkeypatch):
         def ok(m, u, **kw):
             return httpx.Response(200, json={"data": {"list": [{"nm": "x", "id": 1}]}})

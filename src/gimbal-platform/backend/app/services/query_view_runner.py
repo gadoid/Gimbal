@@ -161,7 +161,8 @@ async def _resolve_auth_header(
     view: dict, owner_id: int, query_alias: "str | None",
     load_credential: "Callable[[int, str], AuthSession | None] | None",
 ) -> "tuple[str | None, AuthSession | None, tuple[int, str] | None]":
-    """凭证闸(L3):登录与查询同闸;§5.2 锁序 view 锁外层 → 此闸内层。
+    """凭证闸(L3):串行化凭证解析与登录(防并发自踢);查询不在闸内 ——
+    §6.2 单 session SUT 允许并发 HTTP。锁序(§5.2)view 锁外层 → 此闸内层。
 
     返回 (Authorization 值|None, session|None, cred_key|None)。
     - auth == "none" → (None, None, None),不走凭证链路;
@@ -253,7 +254,12 @@ async def _query_sut(
     if resp.status_code >= 400:
         raise QueryViewError(
             "sut_error", f"SUT {resp.status_code}:{resp.text[:200]}")
-    rows = extract_rows(resp.json(), view.get("items", ""))
+    try:
+        payload = resp.json()
+    except ValueError as e:   # 2xx 但非 JSON 体(网关 200 text/html / 截断)
+        raise QueryViewError(
+            "shape_drift", f"响应体非 JSON(SUT/网关拦截?): {e}") from e
+    rows = extract_rows(payload, view.get("items", ""))
     truncated = len(rows) > MAX_ROWS
     return project_rows(rows[:MAX_ROWS], view.get("columns") or []), truncated
 
