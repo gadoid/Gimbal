@@ -8,10 +8,8 @@ cost_list 视图供字段绑定组合期取数(spec 2026-09-07 §0.1/§3.1)。
 from typing import Final
 
 from gimbal_plate.systems.fin.system_info import (
-    FIN_DEFAULT_AUTHOR,
     FIN_DEFAULT_MODULE,
     FIN_DEFAULT_OWNER,
-    FIN_DEFAULT_PRIORITY,
     FIN_DEFAULT_TAGS,
     FIN_DEFAULT_VERSION,
     FIN_SYSTEM,

@@ -406,7 +406,8 @@
          "params": {"entrust_status": "1", "bl_no": "", "order_no": "", "page_no": 1, "page_size": 20, "sort_field": "update_time", "sort_order": "desc", "params": {}},
          "items": "$.data.data[*]", "label": "order_no", "columns": ["order_no", "bl_no"],
          "query_safe": true, "missing_required": [], "auth": "bearer", "timeout_seconds": 30.0}
-      ]
+      ],
+      "total": 2
     }
   }
   ```

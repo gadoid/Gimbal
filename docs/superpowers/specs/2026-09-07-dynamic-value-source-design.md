@@ -543,7 +543,8 @@ N=1 与 N>1 同用)——200 行内客户端过滤够用,服务端检索留给�
       backend `test_deep_defense_422`(路由层纵深防御)。
 - [x] SUT 停机窗口内:选择器回退最后成功快照(stale 标记 + 原 fetched_at)
       不空白;超 STALE_MAX_WINDOW 真降级;
-      —— backend `test_stale_while_error` + `test_query_view_cache.py`
+      —— backend `tests/test_query_view_runner.py::test_stale_while_error` +
+      `test_query_view_cache.py`
       (`test_lazy_expiry_then_stale_window` / `test_beyond_stale_window_is_true_miss`)。手验 5(真实停机窗)**待验**。
 - [x] 同视图连点 → 上游一次请求;refresh=1 → 重取新时间戳;
       —— backend `test_single_flight` + `test_l1_cache_and_refresh_bypass`。

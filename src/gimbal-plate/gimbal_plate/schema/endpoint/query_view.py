@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 if TYPE_CHECKING:  # 仅类型引用,运行时零依赖(避免与 endpoint/io_spec 循环 import)
     from gimbal_plate.schema.endpoint.endpoint import EndpointSpec
