@@ -2207,6 +2207,10 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     expect(body.fees![0].cost_id).toBe('C-9')            // 写值锚定点击行实例
     expect(body.fees![0].note).toBe('keep')              // 同数组未绑定兄弟不动
     expect(body.fees!.cost_id).toBeUndefined()           // 无模板路径幻影键(D7)
+    // 来源徽标键 = 落值写路径(实例 $.fees[0].cost_id)— FieldForm 叶子
+    // 行按实例路径查 queryBadges,模板键会让数组嵌套叶恒不亮(修轮 2)
+    expect(w.find('.vs-badge').exists()).toBe(true)
+    expect(w.find('.vs-badge').text()).toContain('view:v2')
     w.unmount()
   })
 })

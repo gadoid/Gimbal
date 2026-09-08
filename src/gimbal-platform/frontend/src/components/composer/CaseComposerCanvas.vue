@@ -1195,7 +1195,9 @@ function onVsSelect(row: Record<string, unknown>) {
     const writePath = anchorWritePath(f.path, ctx, arrTmpls)
     if (!writePath) continue                                    // 异数组不可锚 → 跳过
     setByPath(body, writePath.replace(/^\$\.?/, ''), row[col])
-    filled.push({ path: f.path })
+    // 徽标键 = 落值写路径(数组嵌套叶即实例路径 $.fees[0].cost_id)—
+    // FieldForm 叶子行按实例路径查 queryBadges,与写值同径才亮(修轮 2)
+    filled.push({ path: writePath })
   }
   step.request.body = body
   for (const { path } of filled) {
