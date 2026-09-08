@@ -16,14 +16,16 @@ import router from '@/router'
 interface ApiErrorPayload {
   code?: number
   msg?: string
-  detail?: { code?: number; msg?: string; message?: string } | string
+  detail?: { code?: number | string; msg?: string; message?: string } | string
 }
 
 export class ApiError extends Error {
-  code: number
+  /** 归一错误码:数值(平台信封/HTTP 码)或字符串 detail.code
+   *  (query-views 域错误码如 sut_auth_expired,2026-09-07 spec §7.5)。 */
+  code: number | string
   status: number
 
-  constructor(status: number, code: number, msg: string) {
+  constructor(status: number, code: number | string, msg: string) {
     super(msg)
     this.name = 'ApiError'
     this.status = status
@@ -67,7 +69,7 @@ function normalizeError(err: AxiosError): ApiError {
   const payload = extractErrorPayload(err)
   // FastAPI HTTPException(detail={code, msg}) surfaces as {detail: {code, msg}}
   const detail = payload.detail
-  let code = 0
+  let code: number | string = 0
   let msg = err.message || 'Network error'
   if (Array.isArray(detail)) {
     // Pydantic ValidationError → 422 {detail: [{loc, msg, type, ...}]}
@@ -75,7 +77,11 @@ function normalizeError(err: AxiosError): ApiError {
     code = v.code
     msg = v.msg
   } else if (detail && typeof detail === 'object') {
-    code = typeof detail.code === 'number' ? detail.code : code
+    // 数值码(平台信封)与字符串码(query-views 域错误码)都透传 —
+    // 字符串码是 §7.5 降级判定面(error.code === 'sut_auth_expired')。
+    code = typeof detail.code === 'number' || typeof detail.code === 'string'
+      ? detail.code
+      : code
     // 平台错误信封字段是 {code, message};msg 兼容旧格式兜底。
     msg = detail.message ?? detail.msg ?? msg
   } else if (typeof detail === 'string') {

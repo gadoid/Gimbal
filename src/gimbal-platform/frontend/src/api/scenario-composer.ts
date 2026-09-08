@@ -112,10 +112,13 @@ export async function deleteDataSet(datasetId: string): Promise<void> {
 }
 
 // ── run ────────────────────────────────────────────────────────
-/** service → {authAlias?, url?} 绑定(spec §3.1/§5),与后端 ServiceBinding 同形 */
+/** service → {authAlias?, url?, queryUser?} 绑定(spec §3.1/§5),与后端 ServiceBinding 同形 */
 export interface ServiceBinding {
   authAlias?: string
   url?: string
+  /** 查询账号别名(2026-09-07 挂账#3):动态取数源 query-views 的独立
+   *  查询凭证 alias,缺省用主凭证(authAlias)。键名与后端对齐。 */
+  queryUser?: string | null
 }
 
 /** 场景级运行方案(orchestration sidecar,plate 零感知,spec §3.1;

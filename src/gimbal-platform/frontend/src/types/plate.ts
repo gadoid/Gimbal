@@ -31,6 +31,20 @@ export type UiKind =
   | 'unknown'
 
 /**
+ * 动态取数源视图引用(2026-09-07 spec §3.2)。对齐 plate 侧
+ * DeclarationEntry.value_source —— 字段值可从被测系统查询视图取回:
+ * - view:   查询视图名(query-views 目录键)
+ * - column: 行集列名(缺省 = 视图 label 列,由消费方按投影行首键补)
+ * - group:  渲染层分组键(缺省 = view;同 view 双角色显式拆组,
+ *           §7.3 拆组不拆查询 — 两组同 view 各自打开选择器)
+ */
+export interface ValueSourceView {
+  view: string
+  column?: string | null
+  group?: string | null
+}
+
+/**
  * DeclarationEntry.state —— 字段状态(2026-09-05 目录化,共识默认)。
  *
  * plate 目录盖章的渲染/传递意向,场景 step.field_states 稀疏增量可覆盖
@@ -89,6 +103,8 @@ export interface IOFieldBinding {
   source_kind: SourceKind
   /** JSON Schema 原语类型(enum Number 包裹判据,2026-09-07 §7.1;缺省 null) */
   type?: string | null
+  /** 动态取数源(2026-09-07 §3.2;缺省 null = 无绑定) */
+  value_source?: ValueSourceView | null
 }
 
 /**
@@ -119,6 +135,8 @@ export interface DeclarationEntryView {
   enum?: unknown[] | null
   ui_kind: UiKind
   source_kind: SourceKind
+  /** 动态取数源(2026-09-07 §3.2;exclude_none 裁剪后缺省按 null 处理) */
+  value_source?: ValueSourceView | null
   /** 仅响应面有意义:该字段是否为断言候选(响应单脸标记) */
   assertable: boolean
 }

@@ -23,6 +23,7 @@ import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { useInsertTarget, INSERT_TARGET_KEY } from '@/composables/useInsertTarget'
 import { useConstantsStore } from '@/stores/constants'
 import type { ConstantEntry } from '@/types/constants'
+import { fetchQueryViewRows } from '@/api/query-views'
 
 // ── plate 代理 API mock(挂载即触发的:listStrategyKinds/listAuths) ──
 vi.mock('@/api/scenario-composer', () => ({
@@ -99,6 +100,26 @@ vi.mock('@/api/scenario-composer', () => ({
                 required: false, description: '', assertable: false,
               }],
             } as any]
+          : endpointId === 'ep-vs'
+          ? [{
+              // 2026-09-07 §7 一查多填用例:$.a/$.b 同组 'g' 显式绑定
+              // (列 x/y),$.c 无绑定(恒不被扇出覆写)
+              name: 'a', path: '$.a',
+              ui_kind: 'text', source_kind: 'independent',
+              required: false, description: '', assertable: false,
+              value_source: { view: 'v', column: 'x', group: 'g' },
+            } as any,
+              {
+                name: 'b', path: '$.b',
+                ui_kind: 'text', source_kind: 'independent',
+                required: false, description: '', assertable: false,
+                value_source: { view: 'v', column: 'y', group: 'g' },
+              } as any,
+              {
+                name: 'c', path: '$.c',
+                ui_kind: 'text', source_kind: 'independent',
+                required: false, description: '', assertable: false,
+              } as any]
           : [{
               name: 'orderId', path: '$.orderId',
               ui_kind: 'text', source_kind: 'independent',
@@ -199,6 +220,10 @@ vi.mock('@/api/constants', () => ({
   create: vi.fn(),
   patch: vi.fn(),
   remove: vi.fn(),
+}))
+// §7 一查多填:行集拉取 mock(用例内 mockResolvedValue 注入行集)
+vi.mock('@/api/query-views', () => ({
+  fetchQueryViewRows: vi.fn(),
 }))
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
@@ -2090,5 +2115,39 @@ describe('CaseComposerCanvas — 步骤卡片三处改造(2026-09-08)', () => {
     } finally {
       vi.mocked(getFullEndpoint).mockImplementation(origImpl)
     }
+  })
+})
+
+describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
+  it('选行 → 组内字段全落;缺列跳过;未绑定字段不动', async () => {
+    // fixture:step 请求声明三字段(组显式 'g'):
+    //   $.a { value_source: { view: 'v', column: 'x', group: 'g' } }
+    //   $.b { value_source: { view: 'v', column: 'y', group: 'g' } }
+    //   $.c 无绑定
+    const steps = [mkStep({
+      api: {
+        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+        headers: {}, view_hints: { endpoint_id: 'ep-vs' },
+      },
+      request: { kind: 'request', body: {} },
+    })]
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
+      view: 'v',
+      rows: [{ x: '1', y: '2', nm: 'r1' }, { x: 'only-x', nm: 'r2' }],
+      truncated: false, fetched_at: 'T', cached: false, stale: false,
+    })
+    await w.find('.vs-query-btn').trigger('click')   // $.a 查钮 → fieldQuery → picker 开
+    await flushPromises()
+    await w.find('tr.vsp-row').trigger('click')      // 选第一行
+    expect(steps[0].request.body).toMatchObject({ a: '1', b: '2' })   // 组内扇出全落
+    await w.find('.vs-query-btn').trigger('click')   // 再查,选第二行(y 缺列)
+    await flushPromises()
+    await w.findAll('tr.vsp-row')[1].trigger('click')
+    expect(steps[0].request.body).toMatchObject({ a: 'only-x' })      // a 覆写
+    expect((steps[0].request.body as Record<string, unknown>).b).toBe('2')   // 缺列跳过保留原值
+    expect((steps[0].request.body as Record<string, unknown>).c).toBeUndefined()  // 未绑定恒不写
+    w.unmount()
   })
 })

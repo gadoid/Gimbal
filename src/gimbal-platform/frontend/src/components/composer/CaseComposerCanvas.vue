@@ -244,6 +244,7 @@
                   :extracted="requestExtracted"
                   :state-control="true"
                   :overlay="currentStep.field_states"
+                  :query-badges="vsBadges"
                   @strategy-jump="onStrategyJump"
                   @update:body="(v: unknown) => currentStep.request.body = v"
                   @field-extract="(f) => onFieldExtract(f, 'request')"
@@ -252,6 +253,7 @@
                   @var-insert="onVarInsert"
                   @var-promote="onVarPromote"
                   @field-state="onFieldState"
+                  @field-query="onFieldQuery"
                 />
                 <p class="field-form-hint">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -503,6 +505,23 @@
       :entries="varRegistryEntries"
       @select="onVarPicked"
     />
+    <!-- 动态取数源选择器(§7 一查多填):行集/列序/降级态由 Canvas 拉取后
+         传入,选择器只做呈现与本地过滤 -->
+    <ValueSourcePicker
+      v-if="vsPicker.open"
+      v-model="vsPicker.open"
+      :view="vsPicker.group?.view ?? ''"
+      :label="vsPicker.label"
+      :columns="vsPicker.columns"
+      :rows="vsPicker.rows"
+      :truncated="vsPicker.truncated"
+      :fetched-at="vsPicker.fetchedAt"
+      :stale="vsPicker.stale"
+      :loading="vsPicker.loading"
+      :error="vsPicker.error"
+      @select="onVsSelect"
+      @refresh="onVsRefresh"
+    />
   </div>
 </template>
 
@@ -518,6 +537,7 @@ import VariableRegistryPanel from './VariableRegistryPanel.vue'
 import ConstantPoolPanel from './ConstantPoolPanel.vue'
 import AuthSelectorModal from '../AuthSelectorModal.vue'
 import VarSelectorModal from './VarSelectorModal.vue'
+import ValueSourcePicker from './ValueSourcePicker.vue'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { useConstantsStore } from '@/stores/constants'
 import { deriveVarRegistry } from '@/utils/var-registry'
@@ -527,18 +547,20 @@ import {
 } from '@/api/scenario-composer'
 import { list as listAuths } from '@/api/auth_sessions'
 import { getBindings as getCarryBindings, getDefaults as getCarryDefaults } from '@/api/carry'
+import { fetchQueryViewRows } from '@/api/query-views'
+import { ApiError } from '@/api/http'
 import { parseTplRefs, refStatus } from '@/utils/tpl-refs'
 import type { TplRef } from '@/utils/tpl-refs'
 import type { AuthSession } from '@/api/auth_sessions'
-import { deepDefaults } from '@/utils/jsonpath'
+import { deepDefaults, setByPath } from '@/utils/jsonpath'
 import { toScratchPath } from '@/utils/scratch-path'
 import { strategyLabelOf } from '@/utils/strategy-labels'
 import {
   assertablePaths, buildTree, carryPaths, cascadeIncrements, containerSurface,
-  contractTree, extraBodyPaths, extraSurfaceBindings, formBindings, leafSurface,
-  prefillBindings, responseBindings, searchCorpus,
+  contractTree, extraBodyPaths, extraSurfaceBindings, formBindings,
+  groupValueSources, leafSurface, prefillBindings, responseBindings, searchCorpus,
 } from '@/utils/declarations'
-import type { FieldTreeNode } from '@/utils/declarations'
+import type { FieldTreeNode, ValueSourceGroup } from '@/utils/declarations'
 import { deriveBase } from '@/utils/service-alias'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
 import { carryHint } from '@/utils/carry-hint'
@@ -1008,6 +1030,122 @@ function onVarPicked(tpl: string) {
   injectHeaderTpl(currentStep.value?.api?.headers, varPickerKey.value, varPickerVal.value, tpl)
   varPickerKey.value = null
   varPickerVal.value = null
+}
+
+// ── 动态取数源(2026-09-07 spec §7):一查多填选择器状态机 ──────────
+
+/** picker 全量状态(group 是扇出面:选行后按 g.fields 逐列落值)。 */
+interface VsPickerState {
+  open: boolean
+  group: ValueSourceGroup | null
+  /** label 列名(= 投影行首键;行集到位后回填) */
+  label: string
+  /** 呈现列序(label 打头 + 绑定显式列;行集到位后回填) */
+  columns: string[]
+  rows: Array<Record<string, unknown>>
+  truncated: boolean
+  fetchedAt: string
+  stale: boolean
+  loading: boolean
+  error: { code: string; message: string } | null
+}
+const vsPicker = reactive<VsPickerState>({
+  open: false, group: null, label: '', columns: [], rows: [],
+  truncated: false, fetchedAt: '', stale: false, loading: false, error: null,
+})
+
+/** 已查字段来源徽标(§7.5):path → view + 取数时间(会话级线索,
+ *  重查覆写;钉 view 不钉 group — 拆组是渲染层视角)。 */
+const vsBadges = ref<Record<string, { view: string; fetchedAt?: string }>>({})
+
+/** 当前 step 的 value_source 绑定分组(§7.3:group = vs.group || vs.view;
+ *  两组同 view 各自打开选择器,前端不复用结果、不跨组覆写)。 */
+const valueSourceGroups = computed<ValueSourceGroup[]>(() =>
+  groupValueSources(stepDecls(currentStep.value)))
+
+/**
+ * 查询上下文(§7.2):服务 URL 走 authored services 声明(Canvas 唯一
+ * 可达的 URL 源 — Orchestration 不携带 runScheme,绑定在执行对话框层);
+ * alias = null(主凭证)。queryUser/authAlias 绑定经 RunDialog 落
+ * runScheme,编排面不读 —— §7.5 降级态兜底。
+ */
+function resolveQueryContext(step: StepView): { serviceUrl?: string; queryAlias: string | null } {
+  return {
+    serviceUrl: declaredUrlOf(step.api?.service || '') || undefined,
+    queryAlias: null,
+  }
+}
+
+/** 行集首键 = label 列(后端投影列序:label 恒行首;空行集不进选择态)。 */
+function firstRowKeyLabel(row: Record<string, unknown>): string {
+  return Object.keys(row)[0] ?? ''
+}
+
+/** 查钮(§7.3):定位字段所在分组 → 开 picker → 拉行集。 */
+function onFieldQuery(field: IOFieldBinding) {
+  const g = valueSourceGroups.value.find((x) => x.fields.some((f) => f.path === field.path))
+  if (!g || !currentStep.value) return
+  vsPicker.group = g
+  vsPicker.open = true
+  vsLoad(g, false)
+}
+
+/** 刷新钮:bypass L1/L2 缓存重拉(§7.3 refresh=1)。 */
+function onVsRefresh() {
+  if (vsPicker.group) vsLoad(vsPicker.group, true)
+}
+
+/** 拉行集:呈现列 = 行首键 label + 绑定显式列;ApiError → 降级态(§7.5)。 */
+async function vsLoad(g: ValueSourceGroup, refresh: boolean) {
+  const step = currentStep.value
+  if (!step) return
+  vsPicker.loading = true
+  vsPicker.error = null
+  try {
+    const ctx = resolveQueryContext(step)
+    const res = await fetchQueryViewRows(g.view, {
+      refresh, serviceUrl: ctx.serviceUrl, queryAlias: ctx.queryAlias,
+    })
+    const label = firstRowKeyLabel(res.rows[0] ?? {})
+    const cols = new Set<string>([label])
+    for (const f of g.fields) if (f.column) cols.add(f.column)
+    vsPicker.rows = res.rows
+    vsPicker.label = label
+    vsPicker.columns = [...cols]
+    vsPicker.truncated = res.truncated
+    vsPicker.fetchedAt = res.fetched_at
+    vsPicker.stale = res.stale
+  } catch (e) {
+    vsPicker.error = e instanceof ApiError
+      ? { code: String(e.code ?? ''), message: e.message }
+      : { code: '', message: e instanceof Error ? e.message : String(e) }
+  } finally {
+    vsPicker.loading = false
+  }
+}
+
+/**
+ * 选行扇出(§7.3):组内字段逐列落值(column 空 = label 列 = 行首键);
+ * 缺列跳过保留原值;组外/未绑定字段恒不被写。徽标随落值字段同步亮起。
+ */
+function onVsSelect(row: Record<string, unknown>) {
+  const g = vsPicker.group
+  const step = currentStep.value
+  if (!g || !step) return
+  const body = JSON.parse(JSON.stringify(step.request.body ?? {}))
+  for (const f of g.fields) {
+    const col = f.column || firstRowKeyLabel(row)      // column 空 = label 列(= 行首键)
+    if (row[col] === undefined || row[col] === null) continue   // 缺列跳过(§7.3)
+    setByPath(body, f.path.replace(/^\$\.?/, ''), row[col])
+  }
+  step.request.body = body
+  for (const f of g.fields) {
+    const col = f.column || firstRowKeyLabel(row)
+    if (row[col] !== undefined && row[col] !== null) {
+      vsBadges.value[f.path] = { view: g.view, fetchedAt: vsPicker.fetchedAt }
+    }
+  }
+  vsPicker.open = false
 }
 
 // ── 策略角标(需求1):字段行尾显示已挂策略,点击跳转下方策略卡 ──────

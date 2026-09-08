@@ -122,6 +122,7 @@
             :extracted="extracted"
             :state-control="stateControl"
             :overlay="overlay"
+            :query-badges="queryBadges"
             @update:body="(v: any) => emit('update:body', v)"
             @strategy-jump="(i: number) => emit('strategyJump', i)"
             @field-extract="(f: IOFieldBinding) => emit('fieldExtract', f)"
@@ -130,6 +131,7 @@
             @var-insert="(f: IOFieldBinding, n: string) => emit('varInsert', f, n)"
             @var-promote="(f: IOFieldBinding, n: string, v: unknown) => emit('varPromote', f, n, v)"
             @field-state="(p: string, s: FieldState | null) => emit('fieldState', p, s)"
+            @field-query="(f: IOFieldBinding) => emit('fieldQuery', f)"
           />
         </div>
       </div>
@@ -232,6 +234,7 @@
               :extracted="extracted"
               :state-control="stateControl"
               :overlay="overlay"
+              :query-badges="queryBadges"
               @update:body="(v: any) => emit('update:body', v)"
               @strategy-jump="(i: number) => emit('strategyJump', i)"
               @field-extract="(f: IOFieldBinding) => emit('fieldExtract', f)"
@@ -240,6 +243,7 @@
               @var-insert="(f: IOFieldBinding, n: string) => emit('varInsert', f, n)"
               @var-promote="(f: IOFieldBinding, n: string, v: unknown) => emit('varPromote', f, n, v)"
               @field-state="(p: string, s: FieldState | null) => emit('fieldState', p, s)"
+              @field-query="(f: IOFieldBinding) => emit('fieldQuery', f)"
             />
           </div>
           <button
@@ -413,6 +417,20 @@
           :title="`跳转到下方策略 ${t.label}`"
           @click.stop="emit('strategyJump', t.idx)"
         >{{ t.label }}</button>
+        <!-- 动态取数源查钮(§7):请求侧 value_source 绑定字段 — 打开
+             Canvas 的行集选择器(一查多填;响应契约参考无查询语义) -->
+        <button
+          v-if="item.f.value_source && domain !== 'response'"
+          type="button"
+          class="vs-query-btn"
+          title="从被测系统查询候选值"
+          @click.stop="emit('fieldQuery', item.f)"
+        >查</button>
+        <span
+          v-if="queryBadges?.[item.f.path]"
+          class="vs-badge"
+          :title="vsBadgeTitle(item.f.path)"
+        >view:{{ queryBadges[item.f.path].view }}</span>
       </label>
       <div class="field-control">
         <!-- 动态注入态(assign 覆盖值):只读提示条代替值控件 — 原值仍存
@@ -949,6 +967,10 @@ const props = defineProps<{
   stateControl?: boolean
   /** step.field_states 增量(Canvas 传入):标记显式覆盖行(可重置)。 */
   overlay?: Record<string, FieldState>
+  /** 动态取数源 view 徽标(2026-09-07 §7.5,Canvas 传入):path → 命中
+   *  分组的 view 与取数时间 — 已查过的字段亮「view:xxx」来源徽标。
+   *  徽标钉 view 不钉 group(拆组是渲染层视角)。复用处不传 → 零徽标。 */
+  queryBadges?: Record<string, { view: string; fetchedAt?: string }>
   /** 递归内部标记(容器/行组嵌套渲染)— 外部调用方不传。 */
   nested?: boolean
 }>()
@@ -970,6 +992,11 @@ const emit = defineEmits<{
    * Canvas 落地为 step.field_states 稀疏写入(§3.1)。
    */
   'fieldState': [path: string, state: FieldState | null]
+  /**
+   * 动态取数源查询(2026-09-07 §7):查钮点击,field 携带 value_source —
+   * Canvas 定位绑定分组并打开 ValueSourcePicker(一查多填)。
+   */
+  'fieldQuery': [field: IOFieldBinding]
 }>()
 
 // ─── 渲染行集:树模式(四节点)或平铺模式(叶子行)─────────────────
@@ -996,6 +1023,12 @@ function stateOf(item: RenderItem): FieldState {
 }
 function templatePathOf(item: RenderItem): string {
   return item.lf?.templatePath ?? item.n?.templatePath ?? item.f?.path ?? ''
+}
+/** 取数来源徽标悬停(§7.5):view + 最近取数时间。 */
+function vsBadgeTitle(path: string): string {
+  const b = props.queryBadges?.[path]
+  if (!b) return ''
+  return `view:${b.view}` + (b.fetchedAt ? ` · fetched_at ${b.fetchedAt}` : '')
 }
 function hasOverlay(item: RenderItem): boolean {
   const p = templatePathOf(item)
@@ -1067,6 +1100,7 @@ function nodeBinding(n: SectionNode): IOFieldBinding {
     enum: n.entry.enum ?? null,
     ui_kind: n.entry.ui_kind,
     source_kind: n.entry.source_kind,
+    value_source: n.entry.value_source ?? null,
   }
 }
 
@@ -1675,6 +1709,19 @@ function formatJson(v: unknown): string {
   background: #e0e7ff; color: #4338ca;
 }
 .strategy-tag:hover { background: #c7d2fe; color: #3730ea; }
+/* 动态取数源查钮(§7):青绿族 — 与策略角标(靛)区分,指向查询动作 */
+.vs-query-btn {
+  font-size: 10px; font-weight: 700;
+  padding: 1px 7px; border-radius: 3px; border: 1px solid #99f6e4;
+  cursor: pointer; background: #f0fdfa; color: #0f766e;
+}
+.vs-query-btn:hover { background: #ccfbf1; border-color: #5eead4; }
+/* 取数来源徽标(§7.5):只读展示,钉 view 不钉 group */
+.vs-badge {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 600;
+  padding: 1px 6px; border-radius: 3px;
+  background: #ecfdf5; color: #047857;
+}
 /* 字段行 4 色左边框 */
 .field.sk-independent { border-left: 3px solid #cbd5e1; }    /* literal 灰 */
 .field.sk-lookup { border-left: 3px solid #7c3aed; }            /* static 紫 */

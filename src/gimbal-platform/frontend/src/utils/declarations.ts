@@ -196,7 +196,46 @@ export function cascadeIncrements(
   return out
 }
 
-// ─── IOFieldBinding 投影(行形状;掐掉 state/children/assertable;type 透传)──
+// ─── value_source 分组(2026-09-07 spec §3.2/§7.3)─────────────────────
+
+/** value_source 绑定分组:group 是渲染层视角(拆组不拆查询,§7.3)。 */
+export interface ValueSourceGroup {
+  group: string
+  view: string
+  fields: Array<{ path: string; name: string; column: string }>
+}
+
+/**
+ * 目录内 value_source 绑定分组(iterFlat 先序扫描,含 children 深层):
+ * - group = value_source.group || value_source.view(缺省组 = view;
+ *   同 view 双角色靠显式 group 拆组,§3.2 反例);
+ * - column 只透传显式列名(空串 = 消费方按投影行首键补 label 列 —
+ *   Canvas 职责,§7.3);
+ * - 两组同 view 各自打开选择器:后端 L1/L2 天然共享,前端不复用结果、
+ *   不跨组覆写。
+ */
+export function groupValueSources(
+  decls: DeclarationEntryView[] | undefined | null,
+): ValueSourceGroup[] {
+  const out: ValueSourceGroup[] = []
+  const byGroup = new Map<string, ValueSourceGroup>()
+  for (const e of iterFlat(decls)) {
+    if (!e || typeof e !== 'object' || !e.path) continue
+    const vs = e.value_source
+    if (!vs || !vs.view) continue
+    const group = vs.group || vs.view
+    let g = byGroup.get(group)
+    if (!g) {
+      g = { group, view: vs.view, fields: [] }
+      byGroup.set(group, g)
+      out.push(g)
+    }
+    g.fields.push({ path: e.path, name: e.name, column: vs.column || '' })
+  }
+  return out
+}
+
+// ─── IOFieldBinding 投影(行形状;掐掉 state/children/assertable;type/value_source 透传)──
 
 function toFieldBinding(e: DeclarationEntryView, path: string): IOFieldBinding {
   return {
@@ -210,6 +249,7 @@ function toFieldBinding(e: DeclarationEntryView, path: string): IOFieldBinding {
     ui_kind: e.ui_kind,
     source_kind: e.source_kind,
     type: e.type ?? null,
+    value_source: e.value_source ?? null,
   }
 }
 
@@ -429,6 +469,7 @@ function synthRowNode(
       ui_kind: typeof item === 'number' ? 'number'
         : typeof item === 'boolean' ? 'boolean' : 'text',
       source_kind: 'independent',
+      value_source: entry.value_source ?? null,
     },
   }
 }
@@ -465,6 +506,7 @@ export function leafSurface(nodes: FieldTreeNode[]): IOFieldBinding[] {
           required: false, default: null, example: null,
           description: '', enum: null,
           ui_kind: 'text', source_kind: 'independent',
+          value_source: null,
         }))
       }
     }
@@ -487,6 +529,7 @@ function containerBinding(
     enum: n.entry.enum ?? null,
     ui_kind: n.entry.ui_kind,
     source_kind: n.entry.source_kind,
+    value_source: n.entry.value_source ?? null,
   }
 }
 
@@ -680,6 +723,7 @@ export function extraSurfaceBindings(
       example: null,
       default: null,
       enum: null,
+      value_source: null,
     }
   })
 }

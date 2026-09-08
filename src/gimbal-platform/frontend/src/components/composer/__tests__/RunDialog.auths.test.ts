@@ -133,3 +133,40 @@ describe('并集绑定行(D3)', () => {
     })
   })
 })
+
+describe('查询账号别名 queryUser(2026-09-07 挂账 #3 最小配置)', () => {
+  it('绑定行各渲染 queryUser 输入;填值 → 快照与 confirm 携带,不填不携带', async () => {
+    const w = mountDlg()
+    expect(w.findAll('.rd-bind-query-user')).toHaveLength(2)   // 并集每行一个
+    await w.findAll('.rd-bind-query-user')[0].setValue('query-qa1')
+    await w.find('.rd-scheme-name').setValue('查询别名方案')
+    await w.find('[data-testid="save-scheme"]').trigger('click')
+    const s = w.emitted('saveScheme')![0][0] as {
+      serviceBindings?: Record<string, { queryUser?: string }>
+    }
+    expect(s.serviceBindings).toEqual({ 'fin-service': { queryUser: 'query-qa1' } })
+    expect(s.serviceBindings?.['order-svc']).toBeUndefined()  // 未填不携带
+
+    await w.find('[data-testid="run-confirm"]').trigger('click')
+    const opts = (w.emitted('confirm')![0] as unknown[])[1] as {
+      serviceBindings?: Record<string, { queryUser?: string }>
+    }
+    expect(opts.serviceBindings).toEqual({ 'fin-service': { queryUser: 'query-qa1' } })
+    w.unmount()
+  })
+
+  it('方案回填:serviceBindings 携带 queryUser → 输入框恢复(与 authAlias 同通路)', async () => {
+    const w = mountDlg({
+      // BASE_PROPS 字面量推断的 schemes 类型不含 queryUser(挂账#3 新键),
+      // 整体 any 断言绕开上下文余属性检查 — 运行时形状由组件消费。
+      schemes: [{
+        name: '查询方案', dataSetIds: [],
+        serviceBindings: { 'fin-service': { authAlias: 'qa1', queryUser: 'query-qa1' } },
+      }] as any,
+    })
+    await w.find('.rd-scheme-select').setValue('查询方案')
+    const input = w.findAll('.rd-bind-query-user')[0].element as HTMLInputElement
+    expect(input.value).toBe('query-qa1')
+    w.unmount()
+  })
+})
