@@ -27,7 +27,7 @@
             添加接口
           </button>
         </div>
-        <div class="step-list">
+        <div class="step-list" ref="stepListRef">
           <!-- vuedraggable 上下拖拽重排(#5):纵向手柄拖,不做 DAG。
                item-key 用 WeakMap 侧挂的稳定 key(step 数据本体不能加字段 —
                草稿原样进 /convert);local 已被 draggable 重排,onStepReordered
@@ -45,15 +45,21 @@
               <div class="step-row"
                    :class="{ active: i === activeStepIdx, disabled: !orch.steps[i]?.enabled }"
                    @click="activeStepIdx = i">
+                <!-- 四区卡片(2026-09-08):左列全高拖拽把手(加大命中面积)+
+                     右侧内容列 — ①名称行(序号+名+开关) ②meta 行(method/
+                     service/carry 同行定高) ③path 独占行 ④功能控制行(复制/删除) -->
                 <span class="step-handle" title="拖拽调整顺序">⠿</span>
-                <div class="step-idx">{{ i + 1 }}</div>
-                <div class="step-info">
-                  <div class="step-name">{{ orch.steps[i]?.name || s.api?.path || 'step' }}</div>
+                <div class="step-body">
+                  <div class="step-main">
+                    <div class="step-idx">{{ i + 1 }}</div>
+                    <div class="step-name">{{ orch.steps[i]?.name || s.api?.path || 'step' }}</div>
+                    <el-switch v-if="orch.steps[i]" v-model="orch.steps[i].enabled" size="small" @click.stop />
+                  </div>
                   <div class="step-meta">
                     <span v-if="s.api?.method" class="method-badge" :class="`m-${s.api.method.toLowerCase()}`">{{ s.api.method }}</span>
                     <span v-if="s.api?.service" class="svc-tag">{{ s.api.service }}</span>
-                    <span v-if="s.api?.path" class="ep-path">{{ s.api.path }}</span>
-                    <!-- carry 只读提示:字段面∩值表非空才出现;悬停列键来源(服务绑定/全局默认) -->
+                    <!-- carry 只读提示:字段面∩值表非空才出现;悬停列键来源(服务绑定/全局默认);
+                         与 method/service 同行定高(2026-09-08 免抖:预拉 /full 后点击不再补显) -->
                     <el-tooltip
                       v-if="carryInjectable(s).size"
                       placement="top"
@@ -66,11 +72,18 @@
                       <span class="carry-badge">carry {{ carryInjectable(s).size }}</span>
                     </el-tooltip>
                   </div>
+                  <div v-if="s.api?.path" class="ep-path">{{ s.api.path }}</div>
+                  <div class="step-actions">
+                    <button class="step-act step-copy" @click.stop="copyStep(i)" title="复制此步骤(插入到紧随其后)">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                      复制
+                    </button>
+                    <button class="step-act step-del" @click.stop="removeStep(i)" title="删除">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg>
+                      删除
+                    </button>
+                  </div>
                 </div>
-                <el-switch v-if="orch.steps[i]" v-model="orch.steps[i].enabled" size="small" @click.stop />
-                <button class="step-del" @click.stop="removeStep(i)" title="删除">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg>
-                </button>
               </div>
             </template>
           </draggable>
@@ -247,7 +260,7 @@
                 </p>
               </div>
             </el-form-item>
-            <el-form-item v-else-if="activeIoTab === 'request' && fullState === 'loading' && hasEndpointRef(currentStep)" label="请求体">
+            <el-form-item v-else-if="activeIoTab === 'request' && currentFullState === 'loading' && hasEndpointRef(currentStep)" label="请求体">
               <p class="resp-spec-empty">正在从 plate 拉取接口字段契约…</p>
             </el-form-item>
             <el-form-item v-else-if="activeIoTab === 'request'" label="body (JSON)">
@@ -258,7 +271,7 @@
                 :rows="5"
                 class="code-input"
               />
-              <span v-if="fullState === 'failed' && hasEndpointRef(currentStep)" class="hint">plate 不可达,字段表单暂不可用 — 已降级为 JSON 编辑</span>
+              <span v-if="currentFullState === 'failed' && hasEndpointRef(currentStep)" class="hint">plate 不可达,字段表单暂不可用 — 已降级为 JSON 编辑</span>
               <span v-else class="hint">提示: 该接口未声明请求字段契约,或 plate 拉取中</span>
             </el-form-item>
             <!-- 请求侧 Type C(schema 有、binding 无)已并入 FieldForm「其他字段」
@@ -641,6 +654,17 @@ const strategyDetailCache = ref<Record<string, StrategyKindDetailView>>({})
 const justAddedStrategyIdx = ref(-1)
 // 切 step 时清"刚添加"标记(下标在新 step 语境无意义,防误展开);签页回 request
 watch(activeStepIdx, () => { justAddedStrategyIdx.value = -1; jumpTargetIdx.value = -1; activeIoTab.value = 'request' })
+
+/** 步骤流视口跟随(2026-09-08 6 卡滚动视口):选中/增删后选中卡滚入可视区
+ *  (nearest — 已可见则不动,新增末卡/删除收紧时兜住选中项)。
+ *  jsdom 无 scrollIntoView → 可选调用,挂载级测试零桩也稳。 */
+const stepListRef = ref<HTMLElement | null>(null)
+watch([activeStepIdx, () => local.length], ([idx]) => {
+  void nextTick(() => {
+    stepListRef.value?.querySelectorAll('.step-row')[idx]
+      ?.scrollIntoView?.({ block: 'nearest' })
+  })
+})
 
 async function loadStrategyKinds() {
   try {
@@ -1183,8 +1207,8 @@ const endpointFullByEndpoint = new Map<string, EndpointFullView>()
 const fullInFlight = new Map<string, Promise<EndpointFullView | undefined>>()
 /** 响应式触发器:Map 变更不触发 computed,版本号 bump */
 const fullVersion = ref(0)
-/** 最近一次拉取状态(控制表单 loading/失败占位) */
-const fullState = ref<'loading' | 'failed' | ''>('')
+/** 拉取失败端点记录(scoped 占位判定;Set 无响应性,经 fullVersion 触发重算) */
+const fullFailed = new Set<string>()
 
 /** 缓存 miss 时拉 /full 并回填(fail-soft:失败返回 undefined,消费方各自降级) */
 function ensureEndpointFull(endpointId: string): Promise<EndpointFullView | undefined> {
@@ -1192,22 +1216,32 @@ function ensureEndpointFull(endpointId: string): Promise<EndpointFullView | unde
   if (cached) return Promise.resolve(cached)
   const inFlight = fullInFlight.get(endpointId)
   if (inFlight) return inFlight
-  fullState.value = 'loading'
   const p = getFullEndpoint(endpointId)
     .then((full) => {
       endpointFullByEndpoint.set(endpointId, full)
       fullVersion.value++
-      fullState.value = ''
       return full
     })
     .catch(() => {
-      fullState.value = 'failed'
+      fullFailed.add(endpointId)
+      fullVersion.value++   // 失败也是状态变更:占位/徽标重算
       return undefined
     })
     .finally(() => fullInFlight.delete(endpointId))
   fullInFlight.set(endpointId, p)
   return p
 }
+
+/** 当前 step 的 /full 拉取状态(scoped,2026-09-08):预拉让全部端点并发,
+ *  全局单值会跨端点串台(另一步失败盖到当前步头);改按当前端点判 —
+ *  缓存命中 → '' / 失败记录 → failed / 其余(未回填)→ loading。 */
+const currentFullState = computed<'loading' | 'failed' | ''>(() => {
+  void fullVersion.value
+  const eid = currentStep.value?.api?.view_hints?.endpoint_id
+  if (!eid) return ''
+  if (endpointFullByEndpoint.has(eid)) return ''
+  return fullFailed.has(eid) ? 'failed' : 'loading'
+})
 
 /** 当前 step 的 /full 结构契约(拉取中/失败 → undefined) */
 const currentFull = computed<EndpointFullView | undefined>(() => {
@@ -1217,6 +1251,15 @@ const currentFull = computed<EndpointFullView | undefined>(() => {
   void ensureEndpointFull(eid)
   return endpointFullByEndpoint.get(eid)
 })
+
+/** carry 免抖预拉(2026-09-08):进页即拉全部 step 的 /full — 徽标从进页起
+ *  即终值,点击卡片不再触发徽标补显(布局抖动根因)。同端点经会话缓存/
+ *  in-flight 去重;这些请求原本在逐个点开时也要发,只是提前。 */
+const stepEndpointIds = computed(() =>
+  local.map((s) => s.api?.view_hints?.endpoint_id).filter((v): v is string => !!v))
+watch(stepEndpointIds, (ids) => {
+  for (const id of ids) void ensureEndpointFull(id)
+}, { immediate: true })
 
 /** 当前 step 的断言候选列表;未知/拉取中 → 空(不渲染 ▾)
  *  declarations 归一化后:view_only 通道 assertable=True 条目的 paths */
@@ -1551,6 +1594,23 @@ function removeStep(i: number) {
   if (activeStepIdx.value >= local.length) activeStepIdx.value = Math.max(0, local.length - 1)
 }
 
+/**
+ * 控制行「复制」(2026-09-08):深拷贝 step + orch 元数据,插入紧随其后。
+ * step 数据本体不可加字段(草稿原样进 /convert),JSON 深克隆即纯副本;
+ * WeakMap 侧挂 key 对新对象按需分配,无需处理。
+ */
+function copyStep(i: number) {
+  const clone = JSON.parse(JSON.stringify(local[i])) as StepView
+  local.splice(i + 1, 0, clone)
+  const name = orch.steps[i]?.name || local[i].api?.path || 'step'
+  orch.steps.splice(i + 1, 0, {
+    ...(orch.steps[i] ?? { enabled: true, name: '' }),
+    name: `${name}(副本)`,
+  })
+  activeStepIdx.value = i + 1
+  ElMessage.success(`已复制 step ${i + 1}(副本插入其后,可改名单独编排)`)
+}
+
 // ── 步骤拖拽重排(#5) ─────────────────────────────────────────────
 // item-key 不能写进 step 数据本体(草稿原样进 /convert,不能加字段),
 // 用 WeakMap 给对象侧挂稳定 key — key 生命周期与对象引用一致,天然免清理。
@@ -1649,28 +1709,47 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
 }
 .add-step:hover { background: var(--accent-hover, #3730a3); }
 
-/* step list */
-.step-list { display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; }
+/* step list — 6 卡滚动视口(2026-09-08):>6 卡出滚动条,卡定高 90px;
+   细滚动条 6px 圆角(进度条观感) */
+.step-list {
+  display: flex; flex-direction: column; gap: 6px; flex: 1;
+  overflow-y: auto; min-height: 0;
+  max-height: calc(6 * 90px + 5 * 6px);   /* 570px:6 卡 + 行间隙 */
+  scrollbar-width: thin;
+}
+.step-list::-webkit-scrollbar { width: 6px; }
+.step-list::-webkit-scrollbar-track { background: transparent; }
+.step-list::-webkit-scrollbar-thumb {
+  background: var(--c-border-strong, #cbd5e1); border-radius: 3px;
+}
+.step-list::-webkit-scrollbar-thumb:hover { background: var(--c-text-tertiary); }
 /* draggable 容器接管行布局与行间距(行现在挂在这一层,不再直接挂 .step-list) */
 .step-drag-area { display: flex; flex-direction: column; gap: 6px; }
-/* 拖拽手柄:竖排点阵,grab 光标;仅手柄可发起拖拽(handle 限定),
+/* 拖拽手柄:左列全高把手条(2026-09-08 加大命中面积 — 整条左缘 24×74
+   皆可发起拖拽),grab 光标;仅手柄列可拖(handle 限定),
    行其余区域仍是点击选中 */
 .step-handle {
   flex-shrink: 0;
-  width: 14px;
+  width: 24px;
+  display: flex; align-items: center; justify-content: center;
   color: var(--c-border-strong, #cbd5e1);
   cursor: grab;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
   user-select: none;
-  text-align: center;
+  border-radius: 4px;
+  margin-left: -2px;
 }
 .step-handle:active { cursor: grabbing; }
 .step-row:hover .step-handle { color: var(--c-text-tertiary); }
 .step-row.sortable-ghost { opacity: 0.4; border-style: dashed; }
+/* 四区卡片(2026-09-08):左把手列 + 右内容列;定高 90px = 8pad + 名称行
+   (flex≈20) + 3gap + meta 15 + 3gap + path 13 + 3gap + 控制行 17 + 8pad;
+   定高同时是 6 卡视口计量基准与徽标补显免抖兜底 */
 .step-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px;
+  display: flex; align-items: stretch; gap: 6px;
+  height: 90px; box-sizing: border-box; overflow: hidden;
+  padding: 8px 12px 8px 4px;
   background: var(--c-bg-secondary);
   border: 1px solid transparent;
   border-radius: 8px;
@@ -1683,10 +1762,17 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
   border-color: var(--c-accent-soft-border);
 }
 .step-row.disabled { opacity: 0.55; }
+/* 内容列:名称/meta/path/控制 四行纵向 */
+.step-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+/* ① 名称行:序号 + 名(ellipsis)+ 开关 */
+.step-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+/* 序号圆徽:line-height 1 + border-box 消字体度量偏移(数字视觉居中);
+   20px 直径撑足名称行,双位数也不挤 */
 .step-idx {
-  width: 26px; height: 26px; border-radius: 50%;
+  width: 20px; height: 20px; border-radius: 50%;
+  box-sizing: border-box;
   background: var(--c-surface); color: var(--c-text-secondary);
-  font-size: 12px; font-weight: 700;
+  font-size: 11px; font-weight: 700; line-height: 1;
   display: flex; align-items: center; justify-content: center;
   border: 1px solid var(--c-border);
   flex-shrink: 0;
@@ -1695,15 +1781,21 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
   background: var(--c-accent);
   color: #fff; border-color: transparent;
 }
-.step-info { flex: 1; min-width: 0; }
-.step-name { font-size: 13px; font-weight: 600; color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.step-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .step-row.active .step-name { color: var(--c-accent); }
-.step-meta { display: flex; gap: 4px; align-items: center; margin-top: 3px; font-size: 10px; color: var(--c-text-secondary); flex-wrap: wrap; }
-.method-badge {
-  font-family: var(--font-mono); font-weight: 700;
-  padding: 1px 5px; border-radius: 3px;
-  background: #f1f5f9; color: #475569; font-size: 9px;
+/* ② meta 行:method/service/carry 同行定高(nowrap) */
+.step-meta {
+  display: flex; gap: 4px; align-items: center;
+  height: 15px; min-width: 0;
+  font-size: 10px; color: var(--c-text-secondary);
+  flex-wrap: nowrap;
 }
+.method-badge, .svc-tag, .carry-badge {
+  display: inline-flex; align-items: center;
+  height: 15px; padding: 0 5px; border-radius: 3px;
+  font-size: 9px; flex-shrink: 0; line-height: 1;
+}
+.method-badge { font-family: var(--font-mono); font-weight: 700; background: #f1f5f9; color: #475569; }
 .method-badge.m-get { background: #dbeafe; color: #1e40af; }
 .method-badge.m-post { background: #d1fae5; color: #065f46; }
 .method-badge.m-put { background: #fef3c7; color: #92400e; }
@@ -1712,21 +1804,31 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
 /* carry 只读徽标:灰底中性色(platform 注入,编排器零感知,仅提示) */
 .carry-badge {
   font-family: var(--font-mono); font-weight: 700;
-  padding: 1px 5px; border-radius: 3px;
-  background: #e2e8f0; color: #64748b; font-size: 9px;
-  cursor: default;
+  background: #e2e8f0; color: #64748b; cursor: default;
 }
-.svc-tag { background: #f1f5f9; color: #475569; padding: 1px 5px; border-radius: 3px; font-size: 9px; }
-.ep-path { font-family: var(--font-mono); font-size: 10px; color: var(--c-text-tertiary); }
+.svc-tag {
+  background: #f1f5f9; color: #475569;
+  max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* ③ path 独占行(2026-09-08):不再与 meta 挤一行,尾部截断;
+   api-summary 里同名 span 沿用(行内 13px 定高不破坏其 flex 行) */
+.ep-path {
+  flex: 0 1 auto; min-width: 0; height: 13px; line-height: 13px;
+  font-family: var(--font-mono); font-size: 10px; color: var(--c-text-tertiary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .step-row :deep(.el-switch) { transform: scale(0.8); }
-.step-del {
-  width: 24px; height: 24px; background: transparent; border: none;
-  border-radius: 4px; color: var(--c-text-tertiary); cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.15s; opacity: 0;
+/* ④ 功能控制行:复制/删除,幽灵文字按钮(无边框压进 17px 行高) */
+.step-actions { height: 17px; display: flex; align-items: center; gap: 10px; }
+.step-act {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: transparent; border: none; padding: 0;
+  font-size: 10px; font-family: inherit; line-height: 1;
+  color: var(--c-text-tertiary); cursor: pointer;
+  transition: color 0.15s;
 }
-.step-row:hover .step-del { opacity: 1; }
-.step-del:hover { background: #fef2f2; color: #ef4444; }
+.step-act:hover { color: var(--c-accent); }
+.step-act.step-del:hover { color: #ef4444; }
 
 .step-empty {
   display: flex; flex-direction: column; align-items: center; gap: 12px;

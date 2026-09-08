@@ -1975,3 +1975,120 @@ describe('CaseComposerCanvas — 级联与找回(2026-09-07 §2.3/§2.4)', () =>
     expect(steps[0].field_states).toEqual({ '$.supplier': 'collapse' })
   })
 })
+
+/**
+ * 步骤卡片三处改造(2026-09-08):
+ * K1/K2 功能控制行 — carry 上移与 post/service 同行后,原 carry 落位行
+ * 改为控制行,渲染 复制/删除;复制 = 深拷贝 step + orch 元数据插在源后。
+ * K4 视口跟随 — >6 卡滚动视口下,选中卡自动滚入可视区(nearest)。
+ * K3 carry 预拉 — 进页即拉全部 step 的 /full,徽标不再点击后补显(抖动根因)。
+ * K5 scoped 拉取状态 — 预拉后全局 fullState 跨端点串台,改按当前端点判定。
+ */
+describe('CaseComposerCanvas — 步骤卡片三处改造(2026-09-08)', () => {
+  function mkStepOn(eid: string): StepView {
+    return mkStep({
+      api: {
+        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+        headers: {}, view_hints: { endpoint_id: eid },
+      },
+    })
+  }
+
+  it('K1: 控制行「复制」→ 深拷贝插入紧随其后,名称加 (副本) 并选中新卡', async () => {
+    const steps = [mkStep(), mkStep()]
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    const rows = w.findAll('.step-row')
+    expect(rows[0].find('.step-copy').exists()).toBe(true)
+    await rows[0].find('.step-copy').trigger('click')
+    await flushPromises()
+    // 2 → 3 卡,副本插在源卡之后
+    expect(w.findAll('.step-row')).toHaveLength(3)
+    expect(w.findAll('.step-name')[1].text()).toBe('s1(副本)')
+    // 选中跟随副本:中栏标题输入即副本名
+    expect((w.find('.title-input').element as HTMLInputElement).value).toBe('s1(副本)')
+    // update:steps 上抛:副本与源深相等(纯克隆,不共享引用)
+    const canvas = w.findComponent(CaseComposerCanvas)
+    const last = canvas.emitted('update:steps')!.at(-1)![0] as StepView[]
+    expect(last).toHaveLength(3)
+    expect(last[1]).not.toBe(steps[0])
+    expect(JSON.stringify(last[1])).toBe(JSON.stringify(steps[0]))
+    w.unmount()
+  })
+
+  it('K2: 删除按钮移入功能控制行 — 点击删除该卡', async () => {
+    const { w } = mountCanvas([mkStep(), mkStep()])
+    await flushPromises()
+    const rows = w.findAll('.step-row')
+    expect(rows[1].find('.step-actions .step-del').exists()).toBe(true)
+    await rows[1].find('.step-actions .step-del').trigger('click')
+    await flushPromises()
+    expect(w.findAll('.step-row')).toHaveLength(1)
+    expect(w.findAll('.step-name')[0].text()).toBe('s1')
+    w.unmount()
+  })
+
+  it('K4: >6 卡滚动视口 — 选中视口外的卡自动滚入(scrollIntoView nearest)', async () => {
+    // jsdom 无 scrollIntoView → stub 记录调用(B4 同款手法)
+    const origScroll = Element.prototype.scrollIntoView
+    const scrolled: Element[] = []
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this) }
+    try {
+      const { w } = mountCanvas(Array.from({ length: 8 }, () => mkStep()))
+      await flushPromises()
+      expect(scrolled).toHaveLength(0)   // 挂载不触发(初始选中第 1 卡本就在顶)
+      const rows = w.findAll('.step-row')
+      await rows[7].trigger('click')     // 选中末卡(视口外)
+      await flushPromises()
+      expect(scrolled).toHaveLength(1)
+      expect(scrolled[0]).toBe(rows[7].element)
+      w.unmount()
+    } finally {
+      Element.prototype.scrollIntoView = origScroll
+    }
+  })
+
+  it('K3: carry 预拉 — 未点开的卡片进页即显徽标(点击补显=抖动根因)', async () => {
+    const { getDefaults } = await import('@/api/carry')
+    vi.mocked(getDefaults).mockResolvedValueOnce({ '$.remark': '默认备注' })
+    const { getFullEndpoint } = await import('@/api/scenario-composer')
+    vi.mocked(getFullEndpoint).mockClear()
+    // step[1] 服务挂目录(fin-service → base 可派生)+ ep-carry($.remark carry 面);
+    // 全程不点开它 — 旧实现 /full 只在卡片被选中时才拉,徽标无从渲染
+    const s1 = mkStep({
+      api: {
+        kind: 'api', service: 'fin-service', method: 'POST', path: '/order',
+        headers: {}, view_hints: { endpoint_id: 'ep-carry' },
+      },
+    })
+    const { w } = mountCanvas([mkStep(), s1])
+    await flushPromises()
+    // 预拉证据:ep-carry 的 /full 在无任何点击的情况下被请求
+    expect(vi.mocked(getFullEndpoint)).toHaveBeenCalledWith('ep-carry')
+    expect(w.findAll('.step-row')[1].find('.carry-badge').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('K5: 预拉失败不串台 — 另一步 /full 失败,当前步(无契约)不走"plate 不可达"占位', async () => {
+    // 预拉让全部端点的拉取在进页并发;旧全局 fullState 取"最后落定"状态,
+    // 另一步失败会盖到当前步头上 → 误标"plate 不可达"。scoped 后按当前端点判定。
+    const { getFullEndpoint } = await import('@/api/scenario-composer')
+    const origImpl = vi.mocked(getFullEndpoint).getMockImplementation()!
+    vi.mocked(getFullEndpoint).mockImplementation(async (id: string) =>
+      id === 'ep-fail' ? Promise.reject(new Error('down'))
+      : id === 'ep-empty'
+        ? { description: 'e', request: { declarations: [] }, responses: {} } as any
+        : origImpl(id))
+    try {
+      const s0 = mkStepOn('ep-empty')  // 当前步:契约空 → JSON 编辑 + "未声明请求字段契约"提示
+      const s1 = mkStepOn('ep-fail')   // 另一步预拉失败 — 不得污染当前步占位
+      const { w } = mountCanvas([s0, s1])
+      await flushPromises()
+      expect(w.text()).toContain('未声明请求字段契约')
+      expect(w.text()).not.toContain('plate 不可达')
+      w.unmount()
+    } finally {
+      vi.mocked(getFullEndpoint).mockImplementation(origImpl)
+    }
+  })
+})
