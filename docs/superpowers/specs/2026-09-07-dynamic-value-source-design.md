@@ -1,13 +1,14 @@
 # 动态取数源设计 — QueryView 端点注记 + 组合期取数解释器
 
-> 状态:设计定稿待评审(2026-09-07 brainstorming 逐节过审:模型/消费模式/流程/缓存/凭证/配方落点;配方落点采用户提议的**端点注记式**,独立 recipes.py 方案作废)
+> 状态:**已实施**(2026-09-08 Tasks 1-10 落地;实现终提交 3c178488,收尾文档 = 本状态行所在提交;三套件 plate 557 / backend 423 / frontend 664 + vue-tsc 0 全绿,dispatch 六节零漂复核通过;SUT 实测手验项待验 —— 内网不可达,见 §11 留痕)
 > 修订:2026-09-07 评审加固一轮(形状漂移与空结果分离 / stale-while-error / 短熔断 / query_safe 写副作用护栏 / 投影列集 / 缺列跳过——后两者推翻初稿"整行返回不投影"方案)
 > 修订 2:2026-09-08 评审收尾(示例 query_safe 自洽勘误 / 视图参数闭合构造期检查 / params 键语义 / 超时鉴权跟随 ApiSpec;新增:能力定位 §0.3——值域校验前移 + L1-L3 谱系 + 两线接口 = 产物;绑定 = 共识→发版 §3.6;边界三行 §9——双通道投影窗 / 钉值来源不持久化 / 查询端点双重角色)
 > 修订 3:2026-09-08 附录并入:一查多填分组语义修正 —— ValueSource 增显式分组键 `group`(缺省 = view;查询身份与选择身份分离);§3.3⑥ 分组一致性;模型字段前置堵口(绑定铺开后补救要重评存量),缺省零迁移,不挂账;补可见性边界(group 纯前端消歧:不进解释器语义/场景产物/徽标,用户可见溯源仅 view + fetched_at,§3.2/§7.5)
 > 修订 4:2026-09-08 成本收益终审:级联参数/多源/跨 view join 家族裁决为**原则上不做**(贵 × 零消费方 × 手动可替;逃逸门 = 手写恒合法),§9 留痕;挂账 #2 补源组合轴;实现项 9 组终版确认(writing-plans 输入)
+> 修订 5:2026-09-08 收尾:状态转已实施;§11 验收清单逐项勾选留痕(测试证据/手验结果);§5.2 补 L3 勘误注
 > 日期:2026-09-07
 > 前置:2026-09-05 field-state-catalog(§1.4 一致化:字段的每个决策都是字段属性);2026-09-07 找回/穿线已实施(65740b4c)
-> 分支:`feat/field-state-catalog`
+> 分支:`feat/dynamic-value-source`(实施分支,自 `feat/field-state-catalog` 分出;立项时写作 field-state-catalog)
 
 ---
 
@@ -352,6 +353,12 @@ T5 落值       前端渲染选择器(label 列 + 绑定列);用户选 → setVa
 锁序:**view 锁外层 → 凭证闸内层;永不同时持两把 view 锁** → 无死锁。合计
 ~10 行。
 
+> 勘误(2026-09-08 实施收尾):L3 行"同凭证最多 1 个在途 SUT 请求"措辞
+> 易读作"SUT 侧查询不可并发"。实际:单会话约束限制的是并发 **session** 数,
+> 单 session 内并发 HTTP 查询本身合法(§6.2 前言);L3 闸护的是**登录与
+> 查询的互斥**(冷启登录/凭证装载不与在途请求并发,防并发自踢),跨视图
+> 串行化是其保守副作用 —— 与 §6.2 规则 3"凭证闸兜底串行化"一致,不矛盾。
+
 **短熔断**(对齐 plate_client 既有熔断模式):同视图**连续失败 3 次 → 30s
 熔断窗**,窗内直接降态不再打 SUT(refresh=1 同受约束)——防连点把垂死的
 SUT 或被踢的凭证刷爆。~6 行。
@@ -498,19 +505,57 @@ N=1 与 N>1 同用)——200 行内客户端过滤够用,服务端检索留给�
 
 ## 11. 验收清单
 
-- [ ] 费用名称字段:打开选择器 → 130+ 费用字典全列 → 选择 → 字面量落 body;
-- [ ] 待委托订单一查多填:选一行 → bl_no/客户/容器等绑定字段全落;
-- [ ] 同 view 双角色绑定(如 sender/receiver 同源 pending_orders)拆独立
+> 2026-09-08 收尾勾选。证据 = 自动化测试(套件内用例名)或手验实测;
+> SUT(`fin-tidb.21eflag.com`)内网不可达 → 手验 2-6 待验,机制面以测试钉死。
+
+- [x] 费用名称字段:打开选择器 → 130+ 费用字典全列 → 选择 → 字面量落 body;
+      —— 机制面:`ValueSourcePicker.test.ts`(渲染行集/点行 select)+
+      `CaseComposerCanvas.test.ts`「value_source 一查多填(spec §7.3)」组;
+      目录投影列 live 核:`cost_list` columns=[cost_name, cost_id](plate
+      `GET /api/query-views` 实测)。「130+ 全列」SUT 实测**待验**(内网不可达)。
+- [x] 待委托订单一查多填:选一行 → bl_no/客户/容器等绑定字段全落;
+      —— 机制面:`CaseComposerCanvas.test.ts`「选行 → 组内字段全落;缺列
+      跳过;未绑定字段不动」+「数组嵌套绑定:查钮按模板路径命中组;选行写值
+      锚定点击行实例」。v1 目录现实:bl_no 单字段真实绑定(Task 3),客户/
+      容器为 carry 无表单行 → 真实 N>1 绑定随目录增长再挂。SUT 实测**待验**。
+- [x] 同 view 双角色绑定(如 sender/receiver 同源 pending_orders)拆独立
       选择器互不覆写,且共享同一次查询(§3.2 / §7.3);
-- [ ] 静态 enum 字段(active_tab/action/sort_order)渲染为 select;number 型
+      —— `declarations.valueSource.test.ts`「同 view 双角色显式拆组互不
+      混合(§3.2 反例)」+ plate `test_v3_systems_fin.py`(cost_list#
+      to_customer/#to_supplier 目录现实)+ backend `test_single_flight`
+      (同视图并发合一发)。
+- [x] 静态 enum 字段(active_tab/action/sort_order)渲染为 select;number 型
       enum 写值为 number 非 "1";
-- [ ] /full golden 重钉入库;dispatch 基线零漂;
-- [ ] 查询凭证过期 → 选择器提示 + 认证页引导,无自动重登录;
-- [ ] 非 GET 端点未声明 query_safe 挂视图 → 构造期拒 + 路由 422 双保险;
-- [ ] SUT 停机窗口内:选择器回退最后成功快照(stale 标记 + 原 fetched_at)
+      —— `FieldForm.enum.test.ts`:「ui_kind=text + enum → select」「ui_kind=unknown + enum → select」「number 型 enum 写值为 number 非 "1"」
+      「body 已有 number 值时 select 正确回显」。
+- [x] /full golden 重钉入库;dispatch 基线零漂;
+      —— Task 4 golden 重钉入库;Task 10 复核:`ab_dispatch_dump.py
+      --values-from`(carry_values 提取 flat 值表 238 路径)再生成,六节
+      (endpoints/carry_faces/carry_injected/convert_gimbal/convert_platform/
+      exports)与基线逐节全等 ZERO DIFF;`tests/plate/test_dispatch_baseline.py`
+      随 557 全绿。
+- [x] 查询凭证过期 → 选择器提示 + 认证页引导,无自动重登录;
+      —— backend `test_sut_401_degrade_no_relogin`(401 拉黑不重登)+
+      `ValueSourcePicker.test.ts`「sut_auth_expired → 认证页直达链接」。
+      手验 6(错密码 auth session 实测)**待验**。
+- [x] 非 GET 端点未声明 query_safe 挂视图 → 构造期拒 + 路由 422 双保险;
+      —— plate `test_schema_query_view.py`:`test_non_get_without_query_safe_rejected`(EndpointSpec validator 构造期拒)+
+      backend `test_deep_defense_422`(路由层纵深防御)。
+- [x] SUT 停机窗口内:选择器回退最后成功快照(stale 标记 + 原 fetched_at)
       不空白;超 STALE_MAX_WINDOW 真降级;
-- [ ] 同视图连点 → 上游一次请求;refresh=1 → 重取新时间戳;
-- [ ] 三套件 + vue-tsc 0 全绿。
+      —— backend `test_stale_while_error` + `test_query_view_cache.py`
+      (`test_lazy_expiry_then_stale_window` / `test_beyond_stale_window_is_true_miss`)。手验 5(真实停机窗)**待验**。
+- [x] 同视图连点 → 上游一次请求;refresh=1 → 重取新时间戳;
+      —— backend `test_single_flight` + `test_l1_cache_and_refresh_bypass`。
+- [x] 三套件 + vue-tsc 0 全绿。
+      —— Task 10 实测(2026-09-08):plate 557 passed / backend 423 passed /
+      frontend 71 files 664 passed + `vue-tsc --noEmit` exit 0。
+
+> 手验执行环境留痕:plate 8765 与 backend 8000 已按常驻普通模式重启
+> (旧进程为分支前僵尸,taskkill 后重启;`/api/query-views` 与
+> `/api/query-views/{name}/rows` 路由均实测存在 —— 手验 1 通过)。SUT
+> 不可达(https 探测超时)→ 手验 2-6 待验;前端 dev server 未启(无 SUT
+> 时选择器查询必失败,起栈无增量信息)。
 
 ---
 

@@ -68,6 +68,7 @@
 | | enum | list[Any] \| None | 可选值清单 |
 | | **ui_kind** | Literal[text / number / boolean / select / textarea / json / file / binary / unknown] | **UI 渲染类型** |
 | | **source_kind** | Literal[independent / lookup / generated] | **字段值来源类型** |
+| | **value_source** | ValueSource \| None | **动态取数绑定 `{view, column, group}`(2026-09-07 spec §3.2;null = 未绑定,wire 全条目携带,同 `enum: null` 惯例);group 空缺省 = view name,同 view 多角色拆独立选择器** |
 | | **assertable** | bool | 仅响应侧有意义:断言候选(默认 False) |
 | | **children** | list[DeclarationEntry] \| None | 子树(仅 object/array 容器可带且须非空;carry 容器 ⇒ 子孙必 carry) |
 | `RequestSpec` | body_type | Literal[none / json / form / multipart / raw / binary] | body 类型 |
@@ -83,6 +84,7 @@
 | | **success_criteria** | str | 成功标准 |
 | | **failed_criteria** | list[str] | 失败参考 |
 | | **business_notes** | str | 业务备注 |
+| | **query_safe** | bool | 写副作用白名单声明(默认 False;非 GET 端点挂 `query_views` 须显式 true,构造期拒,spec §3.3④) |
 | | deprecated | bool | 是否废弃 |
 | | experimental | bool | 是否实验 |
 | `EndpointSpec` | id | str | 唯一标识 |
@@ -94,6 +96,7 @@
 | | request | RequestSpec \| None | 请求形态 |
 | | responses | dict[int, ResponseSpec] | 响应形态（key 状态码） |
 | | metadata | EndpointMetadata | 业务元信息 |
+| | **query_views** | list[QueryView] \| None | **取数视图注记 `{name, params, items, label}`(spec §3.1;name 全局唯一跨端点;不进 /full 投影,经 plate `GET /api/query-views` 索引消费)** |
 | | version | str | 契约版本 |
 | | updated_at | datetime \| None | 更新时间 |
 
@@ -182,7 +185,7 @@
 | text input | `DeclarationEntry.ui_kind == \"text\"`(binding / view_only 通道) | str | — |
 | number input | `ui_kind == \"number\"` | int / float | — |
 | boolean toggle | `ui_kind == \"boolean\"` | bool | — |
-| select dropdown | `ui_kind == \"select\"` + `enum` | enum 元素 | `enum` 为空 → 退化且提示 |
+| select dropdown | **`enum` 非空即 select(2026-09-08 顺车票,spec §7.1):enum 优先于 ui_kind —— plate 目录在 `ui_kind=\"text\"` 字段上回填 enum(action/active_tab/sort_order 等)也走 select 分支;主面/折叠面双面同规则**(旧规则 `ui_kind==\"select\"` + enum 双条件从未命中) | enum 元素(str 化呈现/回显匹配) | 值为模板串(`${…}`)→ 降级 text 输入(选项列表不含模板值);**number 型 enum 写值 Number 包裹**(type integer/number 落 body 前转数字,防落 `\"2\"` 字符串) |
 | textarea | `ui_kind == \"textarea\"` | str | — |
 | json editor | `ui_kind == \"json\"` | dict / list | — |
 | file picker | `ui_kind == \"file\"` | path | — |
@@ -343,6 +346,28 @@ Canvas 请求签字段的 state 控制回路（字段状态目录化 + 找回闭
 （buildNode 剪除）→ carry→form 无 UI 路径；plate 共识 carry 字段
 （备注族）靠搜索框才能进场景表单（09-05 spec §10.0 挂账，2026-09-07
 已实施，见 [2026-09-07 spec](superpowers/specs/2026-09-07-field-recovery-and-export-threading-design.md) §2）。
+
+### 2.11 动态取数源（value_source 查钮 / 选择器 / 徽标，2026-09-08）
+
+Canvas 请求签字段的组合期取数回路（[2026-09-07 动态取数源 spec](superpowers/specs/2026-09-07-dynamic-value-source-design.md) §7）：
+
+| 视觉 / 交互 | 字段 | 触发条件 / 语义 |
+|---|---|---|
+| 行尾「查」按钮 | `DeclarationEntry.value_source` 非空（叶子行） | 点击开 `ValueSourcePicker`；行集由 Canvas 经平台后端 `GET /api/query-views/{view}/rows` 拉取（service_url / query_alias 由前端按 `ServiceBinding.url > authored config.services` / `queryUser ?? authAlias` 求值传参） |
+| 选择器分组键 | `value_source.group`（空缺省 = view name） | 同组字段 = 一次业务占用：选行后**一查多填扇出**，组内字段逐列落值（`column` 空 = label 列 = 行首键）；**缺列跳过**（行无该键 → 该字段值保留不覆写）；同 view 双角色（如 `cost_list#to_customer` / `#to_supplier`）拆独立选择器互不覆写，共享同一次查询（后端 L1/L2） |
+| 选择器呈现列 | `QueryView.label` + 后端投影列序 | 呈现列 = label 打头 + 其余绑定列去重（保持后端投影列序）；行首键即 label 列 |
+| 本地过滤输入框 | — | 纯前端收窄零上游（MAX_ROWS=200 已是呈现面边界，超限 truncated 提示） |
+| 「↻ 刷新」按钮 | `refresh=1` 查询参数 | bypass 后端 L1 缓存强制重取 → 新 `fetched_at` |
+| 选行落值 | 组字段 × 结果行 | **字面量**落 body（值语义：非注入，落盘即钉死，§7.5）；number 型列写值 Number 包裹 |
+| **数组嵌套锚定** | 绑定路径（模板态 vs 实例态） | **组匹配按模板路径**（点击行实例路径剥 `[i]` 下标后与 `value_source` 字段模板路径比对）；**落值/徽标锚定点击行实例路径**（如 `$.fees[0].cost_id`）—— 模板路径落数组子孙会物化 dict 顶替 array，故写值沿实例路径；无实例语境（无 `[i]`）→ 跳过落值（同缺列，值保留） |
+| view 徽标 | `queryBadges[实例路径]` = `{view, fetched_at}` | 绑定字段行尾显示来源 view + 取数时间；键与落值写同径（数组嵌套叶 = 实例路径），FieldForm 叶子行按实例路径查询亮起 |
+| 降级态：错误条 + 认证页直达 | 路由错误码 | `sut_auth_expired` → 错误条（code + message）+「到认证页刷新凭证」直链（`/auths`），**无自动重登录**；其余错误透出 code/message |
+| 降级态：stale 缓存副本 | `stale=true` | 上游失败 → 展示最后成功快照 +「数据可能过期」提示 + **原 fetched_at 不变**（不空白） |
+| RunDialog 服务绑定行 queryUser 输入 | `ServiceBinding.queryUser` | 查询凭证别名（挂账 #3 最小配置）；空缺省回落绑定主凭证（authAlias） |
+
+**值语义边界（§7.5）**：查钮钉的是**当时的字面量**，不建立运行期依赖 ——
+`value_source` 只是指路的元数据，场景产物里落的是值本身；徽标是用户可见
+的溯源面（view + fetched_at），`group` 不进徽标/场景产物。
 
 ---
 

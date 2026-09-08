@@ -81,10 +81,10 @@
 | **A. 结构拉取（per-endpoint）** | 4 | 启动 / 刷新 / 进入目录 / 进入详情 / 字段编辑 |
 | **B. 结构计算（per-endpoint）** | 3 | @ 浮层 / 跨系统校验 / 自动提取路径 |
 | **C. 系统管理** | 2 | 注册被测系统 / 同步结构版本 |
-| **S. 策略语法（grammar-level）** | 2 | Canvas 策略区渲染 / "添加策略"下拉 |
+| **S. 策略语法（grammar-level）** | 3 | Canvas 策略区渲染 / "添加策略"下拉 / 取数选择器行集视图索引 |
 | **D. v2.x 待实现** | 6 | 聚合视图 / 白名单 / 预设集 / Scenario 转换 / 联动计算 |
 
-**总计 13 个直接可用 + 6 个 v2.x 待实现**（A 组 4 + B 组 3 + C 组 2 + S 组 2 + 6 v2.x）。
+**总计 14 个直接可用 + 6 个 v2.x 待实现**（A 组 4 + B 组 3 + C 组 2 + S 组 3 + 6 v2.x）。
 
 > v2.0 起：11 个接口与 http-api.md M6 现状完全对齐。
 > v2.x 待实现：6 个需要 Plate 抽象扩展（聚合 / 白名单 / 预设集 / Scenario 转换 / 联动计算）。
@@ -155,9 +155,10 @@
         "request": {
           "body_type": "json",
           "declarations": [
-            {"name": "client_expand_name", "path": "$.client_expand_name", "type": "string", "state": "form", "required": false, "default": null, "example": "张三", "description": "客户拓展员名称", "enum": null, "ui_kind": "text", "source_kind": "independent", "assertable": false, "children": null},
-            {"name": "remark", "path": "$.remark", "type": "string", "state": "carry", "required": false, "default": null, "example": null, "description": "", "enum": null, "ui_kind": "unknown", "source_kind": "independent", "assertable": false, "children": null},
-            {"name": "container", "path": "$.container", "type": "array", "state": "carry", "required": false, "default": null, "example": null, "description": "", "enum": null, "ui_kind": "unknown", "source_kind": "independent", "assertable": false, "children": [{"name": "container_id", "path": "$.container.container_id", "type": "string", "state": "carry", "required": false, ...}]},
+            {"name": "client_expand_name", "path": "$.client_expand_name", "type": "string", "state": "form", "required": false, "default": null, "example": "张三", "description": "客户拓展员名称", "enum": null, "ui_kind": "text", "source_kind": "independent", "value_source": null, "assertable": false, "children": null},
+            {"name": "bl_no", "path": "$.bl_no", "type": "string", "state": "form", "required": false, "default": null, "example": "Codfish_TEST_001", "description": "", "enum": null, "ui_kind": "text", "source_kind": "independent", "value_source": {"view": "pending_orders", "column": "bl_no", "group": ""}, "assertable": false, "children": null},
+            {"name": "remark", "path": "$.remark", "type": "string", "state": "carry", "required": false, "default": null, "example": null, "description": "", "enum": null, "ui_kind": "unknown", "source_kind": "independent", "value_source": null, "assertable": false, "children": null},
+            {"name": "container", "path": "$.container", "type": "array", "state": "carry", "required": false, "default": null, "example": null, "description": "", "enum": null, "ui_kind": "unknown", "source_kind": "independent", "value_source": null, "assertable": false, "children": [{"name": "container_id", "path": "$.container.container_id", "type": "string", "state": "carry", "required": false, "value_source": null, ...}]},
             ...
           ]
         },
@@ -173,6 +174,7 @@
   }
   ```
 - **说明**：v2.0 合并 A4 + A4a + A4b 为单个 `/full` 接口（牺牲轻量切分，换与 http-api.md 一致）
+- **wire 键（2026-09-08 动态取数源）**：`declarations[]` 全条目携带 `value_source` 键（未绑定为 `null`，与 `enum: null` 同例；绑定为 `{view, column, group}`，group 空缺省 = view name）；`metadata.query_safe` 键（写副作用白名单声明，默认 false —— 非 GET 端点挂 `query_views` 须显式 true，plate 构造期拒）。`EndpointSpec.query_views`（取数视图注记）**不进 /full 投影** —— 经 S3 索引消费
 - **缓存**：endpoint 缓存，结构变更失效
 - **使用场景**：
   - `CaseComposerCanvasAddStepDetail` Hero（从 item.metadata 拿失败参考 / 前置条件 / 业务备注）
@@ -384,6 +386,34 @@
 - **base_fields 第一版不渲染**：添加策略骨架 = `{kind}` + 按 `fields` 的 `default` 展开；base 字段走默认值。
 - **平台代理**：`GET /api/strategy-catalog/{kind}/full`（unwrap `data.item`）；plate 不可达 → `502 plate_unavailable`，404 → `strategy_kind_not_found`
 
+### S3. 列出查询视图（query-views 索引，动态取数源）
+> 2026-09-08 新增（[动态取数源 spec](superpowers/specs/2026-09-07-dynamic-value-source-design.md) §3.4）。数据 dim 与 S1/S2 的语法 dim 又不同：items 是 `EndpointSpec.query_views`（端点注记）的**全库索引投影** —— 跨端点聚合、纯投影零状态（按需 build，无缓存一致性面）。与 grammar dim 同宿 `routes_grammar` 路由（注册次序敏感：必须先于 `/{dim}` 通配注册，否则 `/api/query-views` 被吞成 `dim="query-views"` → 404 dim_not_found）。
+- **触发**：Canvas value_source 绑定字段点「查」→ 平台后端 rows 路由取索引（TTL memo + 熔断）；前端不直连
+- **请求**：`GET /api/query-views`
+- **响应**（2026-09-08 目录实测形态，v1 两视图）：
+  ```json
+  {
+    "ok": true,
+    "dim": null,
+    "data": {
+      "items": [
+        {"name": "cost_list", "endpoint_id": "fin.cost.amount_list", "system": "fin", "service": "fin-service",
+         "method": "GET", "path": "/api/home/cost/amountCostList", "params": {},
+         "items": "$.data[*]", "label": "cost_name", "columns": ["cost_name", "cost_id"],
+         "query_safe": false, "missing_required": [], "auth": "bearer", "timeout_seconds": 30.0},
+        {"name": "pending_orders", "endpoint_id": "fin.order_entrust.order_page", "system": "fin", "service": "fin-service",
+         "method": "POST", "path": "/api/order/orderEntrust/orderPage",
+         "params": {"entrust_status": "1", "bl_no": "", "order_no": "", "page_no": 1, "page_size": 20, "sort_field": "update_time", "sort_order": "desc", "params": {}},
+         "items": "$.data.data[*]", "label": "order_no", "columns": ["order_no", "bl_no"],
+         "query_safe": true, "missing_required": [], "auth": "bearer", "timeout_seconds": 30.0}
+      ]
+    }
+  }
+  ```
+- **键说明**：`name` 全局唯一跨端点（命名不可变，§3.5）；`method/path/auth/timeout_seconds` 从端点 ApiSpec 派生（单一真源，超时与鉴权跟随 ApiSpec）；`params` = view 固定过滤预设 ▸ 声明 default ▸ example 合成后投影；`missing_required` = 双 None 的必填键（纵深防御：解释器执行时仍 422）；`columns` = 投影列集（label 打头 + 绑定列，几列标量 —— 宽行不回传）；`query_safe` = 端点 metadata 写副作用声明
+- **平台消费**：`GET /api/query-views/{name}/rows`（Platform Backend 解释器路由，CurrentUser 鉴权 + 查询凭证 + L1/L2/L3 缓存，非本接口代理面）
+- **缓存**：后端 TTL memo + 连续失败熔断（spec §3.4）；plate 侧零状态
+
 ---
 
 
@@ -412,6 +442,7 @@
 | C2 同步结构版本 | 管理员 系统管理 |
 | **S1** 列出策略 kind | `CaseComposerCanvas` 挂载（策略区 kinds）→ "添加策略"下拉 |
 | **S2** 策略 kind 字段契约 | `CaseComposerCanvas` 策略表单渲染（懒加载 + 挂载预取） |
+| **S3** 查询视图索引 | `CaseComposerCanvas` value_source 绑定字段「查」钮（经平台后端 rows 路由间接消费） |
 | **D1** Scenario → 执行体转换 | `CaseComposerCanvasRunner` "▶ 运行"按钮 |
 
 ---
