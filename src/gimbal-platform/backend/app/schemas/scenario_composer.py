@@ -189,6 +189,10 @@ class ServiceBinding(BaseModel):
 
     auth_alias: str | None = Field(default=None, alias="authAlias", max_length=128)
     url: str | None = Field(default=None, alias="url", max_length=512)
+    # 组合期取数专用账号别名(2026-09-07 §6.1):指向 owner 的 auth_sessions;
+    # 缺省回落 authAlias(主凭证)。查询凭证永不进场景执行配置(§6.2 —
+    # materialize_run_copy 只取绑定 url,queryUser 不落执行副本)。
+    query_user: str | None = Field(default=None, alias="queryUser", max_length=128)
 
 
 class RunScheme(BaseModel):

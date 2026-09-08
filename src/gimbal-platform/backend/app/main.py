@@ -25,6 +25,7 @@ from .routers import (
     endpoint_catalog,
     executions,
     generator_catalog,
+    query_views,
     runs,
     scenarios,
     strategy_catalog,
@@ -125,6 +126,9 @@ def create_app() -> FastAPI:
     app.include_router(generator_catalog.router, prefix="/api")
     app.include_router(adaptations.router, prefix="/api")
     app.include_router(carry.router, prefix="/api")
+    # query-views rows 路由须先于 scenarios 注册(其 /{scenario_id}
+    # catch-all 会吞 /api/query-views/... 前缀冲突面)。
+    app.include_router(query_views.router, prefix="/api")
     app.include_router(scenarios.router, prefix="/api")  # MUST be last — has /{scenario_id}
 
     @app.get("/api/health")
