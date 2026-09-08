@@ -71,7 +71,8 @@ export type BodyType = 'none' | 'json' | 'form' | 'multipart' | 'raw' | 'binary'
 /**
  * IOFieldBinding —— 字段元信息的 UI 形状(FieldForm / FieldActionMenu 消费)。
  * 由 utils/declarations.ts 从 DeclarationEntryView 投影(掐掉 state /
- * children / type / assertable 四个声明轴;上级归属由 children 树天然
+ * children / assertable 三个声明轴;type 自 2026-09-07 §7.1 起透传 —
+ * enum select 的 Number 包裹判据;上级归属由 children 树天然
  * 承载,D12 parentPath/parentChannel 已死);plate 侧 wire 已无同名类,
  * 此为前端本地形状。
  */
@@ -86,6 +87,8 @@ export interface IOFieldBinding {
   enum: unknown[] | null
   ui_kind: UiKind
   source_kind: SourceKind
+  /** JSON Schema 原语类型(enum Number 包裹判据,2026-09-07 §7.1;缺省 null) */
+  type?: string | null
 }
 
 /**

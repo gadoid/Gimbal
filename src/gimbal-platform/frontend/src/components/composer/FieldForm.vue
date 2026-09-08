@@ -440,6 +440,49 @@
             @field-assert="(field) => emit('fieldAssert', field)"
           />
         </div>
+        <!-- enum 非空即 select(spec §7.1 顺车票):plate 目录在 ui_kind='text'
+             字段上回填 enum(action/active_tab/sort_order 等),select 分支
+             不得以 ui_kind='select' 合取 — 否则先命中的 text 分支吞掉枚举面。
+             值为模板串 → 降级 text 输入(选项列表不含模板值);number 型 enum
+             写值经 coerceEnumOut Number 包裹,回显 String() 匹配 option 值 -->
+        <div v-else-if="item.f.enum && item.f.enum.length > 0" class="ctl-with-var">
+          <input
+            v-if="isTpl(getValue(item.f))"
+            type="text"
+            class="ctl tpl"
+            :value="getValue(item.f) as string"
+            :placeholder="placeholderFor(item.f)"
+            :disabled="readonly"
+            @input="e => setValue(item.f, (e.target as HTMLInputElement).value)"
+          />
+          <select
+            v-else
+            class="ctl"
+            :value="String(getValue(item.f) ?? '')"
+            :disabled="readonly"
+            @change="e => setValue(item.f, coerceEnumOut(item.f, (e.target as HTMLSelectElement).value))"
+          >
+            <option value="">— select —</option>
+            <option v-for="opt in item.f.enum" :key="String(opt)" :value="String(opt)">{{ String(opt) }}</option>
+          </select>
+          <FieldActionMenu
+            v-if="fieldActions"
+            :field="item.f"
+            :value="String(getValue(item.f) ?? '')"
+            :var-choices="varChoices ?? []"
+            :inject-choices="injectChoices ?? []"
+            :domain="domain"
+            :open="menuField === item.f.name"
+            @toggle="toggleMenu(item.f)"
+            @close="menuField = null"
+            @var-insert="(name) => onMenuVarInsert(item.f, name)"
+            @field-extract="(field) => emit('fieldExtract', field)"
+            @field-assign="(field, name) => emit('fieldAssign', field, name)"
+            @field-promote="(field) => onFieldPromote(field)"
+            @field-assert="(field) => emit('fieldAssert', field)"
+          />
+        </div>
+
         <!-- text / unknown (Type B fallback) -->
         <div v-else-if="item.f.ui_kind === 'text' || item.f.ui_kind === 'unknown'" class="ctl-with-var">
           <div class="ctl-cand-wrap">
@@ -552,45 +595,6 @@
             />
             <span>{{ getValue(item.f) ? 'true' : 'false' }}</span>
           </label>
-          <FieldActionMenu
-            v-if="fieldActions"
-            :field="item.f"
-            :value="String(getValue(item.f) ?? '')"
-            :var-choices="varChoices ?? []"
-            :inject-choices="injectChoices ?? []"
-            :domain="domain"
-            :open="menuField === item.f.name"
-            @toggle="toggleMenu(item.f)"
-            @close="menuField = null"
-            @var-insert="(name) => onMenuVarInsert(item.f, name)"
-            @field-extract="(field) => emit('fieldExtract', field)"
-            @field-assign="(field, name) => emit('fieldAssign', field, name)"
-            @field-promote="(field) => onFieldPromote(field)"
-            @field-assert="(field) => emit('fieldAssert', field)"
-          />
-        </div>
-
-        <!-- select(值为模板串 → 降级 text 输入:选项列表不含模板值) -->
-        <div v-else-if="item.f.ui_kind === 'select' && item.f.enum" class="ctl-with-var">
-          <input
-            v-if="isTpl(getValue(item.f))"
-            type="text"
-            class="ctl tpl"
-            :value="getValue(item.f) as string"
-            :placeholder="placeholderFor(item.f)"
-            :disabled="readonly"
-            @input="e => setValue(item.f, (e.target as HTMLInputElement).value)"
-          />
-          <select
-            v-else
-            class="ctl"
-            :value="getValue(item.f) as string"
-            :disabled="readonly"
-            @change="e => setValue(item.f, (e.target as HTMLSelectElement).value)"
-          >
-            <option value="">— select —</option>
-            <option v-for="opt in item.f.enum" :key="String(opt)" :value="String(opt)">{{ String(opt) }}</option>
-          </select>
           <FieldActionMenu
             v-if="fieldActions"
             :field="item.f"
@@ -772,11 +776,11 @@
               @input="e => { const v = (e.target as HTMLInputElement).value; setValue(r.f, v === '' ? '' : Number(v)) }"
             />
             <select
-              v-else-if="r.f.ui_kind === 'select' && r.f.enum && !isTpl(getValue(r.f))"
+              v-else-if="r.f.enum && r.f.enum.length > 0 && !isTpl(getValue(r.f))"
               class="ctl"
-              :value="getValue(r.f) as string"
+              :value="String(getValue(r.f) ?? '')"
               :disabled="readonly"
-              @change="e => setValue(r.f, (e.target as HTMLSelectElement).value)"
+              @change="e => setValue(r.f, coerceEnumOut(r.f, (e.target as HTMLSelectElement).value))"
             >
               <option value="">— select —</option>
               <option v-for="opt in r.f.enum" :key="String(opt)" :value="String(opt)">{{ String(opt) }}</option>
@@ -1265,6 +1269,14 @@ function onFieldPromote(f: IOFieldBinding) {
  */
 function isTpl(v: unknown): boolean {
   return typeof v === 'string' && v.includes('${')
+}
+
+/** enum select 写值包裹(spec §7.1):select.value 恒为 string — number 型
+ *  enum(type integer/number)写回 body 前 Number 包裹,不然落 "2" 字符串;
+ *  空串维持 ''(D8 清空语义:深层剪枝/平铺空串,与既有分支同约定) */
+function coerceEnumOut(f: IOFieldBinding, raw: string): unknown {
+  if (raw === '') return ''
+  return f.type === 'integer' || f.type === 'number' ? Number(raw) : raw
 }
 
 /** 动态注入态:该字段命中 assign(target=$.request_body.<path>)→ 值控件只读化

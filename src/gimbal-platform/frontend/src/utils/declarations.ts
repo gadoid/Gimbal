@@ -196,7 +196,7 @@ export function cascadeIncrements(
   return out
 }
 
-// ─── IOFieldBinding 投影(行形状;掐掉 state/children/type/assertable)──
+// ─── IOFieldBinding 投影(行形状;掐掉 state/children/assertable;type 透传)──
 
 function toFieldBinding(e: DeclarationEntryView, path: string): IOFieldBinding {
   return {
@@ -209,6 +209,7 @@ function toFieldBinding(e: DeclarationEntryView, path: string): IOFieldBinding {
     enum: e.enum ?? null,
     ui_kind: e.ui_kind,
     source_kind: e.source_kind,
+    type: e.type ?? null,
   }
 }
 
