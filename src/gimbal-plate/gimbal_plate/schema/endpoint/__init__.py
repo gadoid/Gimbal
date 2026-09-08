@@ -7,6 +7,7 @@ from gimbal_plate.schema.endpoint.io_spec import (
     ResponseSpec,
 )
 from gimbal_plate.schema.endpoint.metadata import EndpointMetadata
+from gimbal_plate.schema.endpoint.query_view import QueryView, ValueSource
 
 __all__ = [
     "ApiSpec",
@@ -15,4 +16,6 @@ __all__ = [
     "RequestSpec",
     "ResponseSpec",
     "EndpointMetadata",
+    "QueryView",
+    "ValueSource",
 ]

@@ -25,6 +25,7 @@ from typing import Any, Iterator, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from ...utils import path as _path
+from .query_view import ValueSource
 
 # JSON Schema 原语词表(六原语):全条目 type 词表(注入宽松类型转换依赖)。
 _PRIMITIVE_TYPES = ("string", "number", "integer", "boolean", "object", "array")
@@ -106,6 +107,9 @@ class DeclarationEntry(BaseModel):
     # - lookup:      可经接口/变量查询得到,如 ${var.xxx} / ${env.xxx},表单只读展示
     # - generated:   运行时基于其他接口处理结果动态生成(如 Assign 时间戳)
     source_kind: Literal["independent", "lookup", "generated"] = "independent"
+    # 组合期取数绑定(2026-09-07 §3.2):字段值可经 QueryView 查询后钉字面量。
+    # enum(静态闭集)× value_source(动态开集)互斥,见 _validate_entry。
+    value_source: ValueSource | None = None
     assertable: bool = False       # 仅响应侧有意义
     children: "list[DeclarationEntry] | None" = None
 
@@ -142,6 +146,11 @@ class DeclarationEntry(BaseModel):
                     f"DeclarationEntry: {self.path!r} children 为空列表 — "
                     f"容器要么不带(None),要么非空"
                 )
+        # §3.3③:enum × value_source 互斥 —— 并置 = 定义精神分裂
+        if self.enum and self.value_source is not None:
+            raise ValueError(
+                f"DeclarationEntry {self.path!r}: enum 与 value_source 互斥(§3.3③)"
+            )
         return self
 
 

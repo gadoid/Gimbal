@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .api_spec import ApiSpec
 from .io_spec import RequestSpec, ResponseSpec
 from .metadata import EndpointMetadata
+from .query_view import QueryView, resolve_view_params
 
 
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_.\-]{1,63}$")
@@ -45,6 +46,9 @@ class EndpointSpec(BaseModel):
     # ── 输入输出形态 ──
     request: RequestSpec | None = None
     responses: dict[int, ResponseSpec] = Field(default_factory=dict)
+
+    # ── 取数视图注记(2026-09-07 动态取数源 §3.1;None = 无)──
+    query_views: list[QueryView] | None = None
 
     # ── 业务元信息 ──
     metadata: EndpointMetadata = Field(default_factory=EndpointMetadata)
@@ -95,4 +99,18 @@ class EndpointSpec(BaseModel):
                 f"'{self.system}' 作为 prefix,"
                 f"完整期望 prefix='{self.system}.'"
             )
+        # §3.3④⑤:query_views 写副作用护栏 + 视图参数闭合(构造期拒)
+        if self.query_views:
+            if self.api.method != "GET" and not self.metadata.query_safe:
+                raise ValueError(
+                    f"EndpointSpec {self.id}: 非 GET({self.api.method})端点挂 "
+                    f"query_views 须显式 metadata.query_safe=True(§3.3④)"
+                )
+            for v in self.query_views:
+                _, missing = resolve_view_params(self, v)
+                if missing:
+                    raise ValueError(
+                        f"EndpointSpec {self.id} view {v.name!r}: 必填键经 "
+                        f"view.params▸default▸example 合并后仍缺 {missing}(§3.3⑤)"
+                    )
         return self

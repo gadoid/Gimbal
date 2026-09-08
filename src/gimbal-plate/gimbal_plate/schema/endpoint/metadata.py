@@ -21,6 +21,9 @@ class EndpointMetadata(BaseModel):
 
     deprecated: bool = False
     experimental: bool = False
+    # §3.3④:非 GET 端点挂 query_views 须显式声明写副作用白名单(声明式护栏,
+    # git 评审可见;fin 是 POST 重镇,不能走 GET-only 禁令)。
+    query_safe: bool = False
 
     @model_validator(mode="after")
     def _validate(self) -> "EndpointMetadata":
