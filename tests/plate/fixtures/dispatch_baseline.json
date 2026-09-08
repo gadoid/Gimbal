@@ -4,6 +4,7 @@
   "fin.audit.audit_detail",
   "fin.audit.audit_execute",
   "fin.audit.audit_page",
+  "fin.cost.amount_list",
   "fin.order.check_generate_order_sub",
   "fin.order.generate_order_sub",
   "fin.order.order_add",
@@ -26,6 +27,7 @@
   "fin.audit.audit_detail": {},
   "fin.audit.audit_execute": {},
   "fin.audit.audit_page": {},
+  "fin.cost.amount_list": {},
   "fin.order.check_generate_order_sub": {},
   "fin.order.generate_order_sub": {},
   "fin.order.order_add": {
@@ -825,6 +827,7 @@
   "fin.audit.audit_detail": {},
   "fin.audit.audit_execute": {},
   "fin.audit.audit_page": {},
+  "fin.cost.amount_list": {},
   "fin.order.check_generate_order_sub": {},
   "fin.order.generate_order_sub": {},
   "fin.order.order_add": {
@@ -1793,6 +1796,23 @@
      "request": {
       "kind": "request",
       "body": {}
+     },
+     "strategy": []
+    },
+    {
+     "kind": "step",
+     "description": "ab:fin.cost.amount_list",
+     "api": {
+      "headers": {},
+      "kind": "api",
+      "method": "POST",
+      "path": "/ab",
+      "service": "fin",
+      "timeout": 30.0
+     },
+     "request": {
+      "body": {},
+      "kind": "request"
      },
      "strategy": []
     },
@@ -3026,6 +3046,24 @@
       "kind": "request",
       "body": {},
       "fields_meta": {}
+     },
+     "strategy": []
+    },
+    {
+     "kind": "step",
+     "description": "ab:fin.cost.amount_list",
+     "api": {
+      "headers": {},
+      "kind": "api",
+      "method": "POST",
+      "path": "/ab",
+      "service": "fin",
+      "timeout": 30
+     },
+     "request": {
+      "body": {},
+      "fields_meta": {},
+      "kind": "request"
      },
      "strategy": []
     },
