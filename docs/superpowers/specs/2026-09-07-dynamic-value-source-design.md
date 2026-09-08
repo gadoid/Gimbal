@@ -1,11 +1,12 @@
 # 动态取数源设计 — QueryView 端点注记 + 组合期取数解释器
 
-> 状态:**已实施**(2026-09-08 Tasks 1-10 落地;实现终提交 3c178488,收尾文档 = 本状态行所在提交;三套件 plate 557 / backend 423 / frontend 664 + vue-tsc 0 全绿,dispatch 六节零漂复核通过;SUT 实测手验项待验 —— 内网不可达,见 §11 留痕)
+> 状态:**已实施**(2026-09-08 Tasks 1-10 + 终审修轮落地;实现终提交 b61015d1 —— 含查询凭证别名接线 + 缓存 truncated 透出;收尾文档 = 本状态行所在提交;三套件 plate 557 / backend 423 / frontend 664 + vue-tsc 0 全绿,dispatch 六节零漂复核通过;SUT 实测手验项待验 —— 内网不可达,见 §11 留痕)
 > 修订:2026-09-07 评审加固一轮(形状漂移与空结果分离 / stale-while-error / 短熔断 / query_safe 写副作用护栏 / 投影列集 / 缺列跳过——后两者推翻初稿"整行返回不投影"方案)
 > 修订 2:2026-09-08 评审收尾(示例 query_safe 自洽勘误 / 视图参数闭合构造期检查 / params 键语义 / 超时鉴权跟随 ApiSpec;新增:能力定位 §0.3——值域校验前移 + L1-L3 谱系 + 两线接口 = 产物;绑定 = 共识→发版 §3.6;边界三行 §9——双通道投影窗 / 钉值来源不持久化 / 查询端点双重角色)
 > 修订 3:2026-09-08 附录并入:一查多填分组语义修正 —— ValueSource 增显式分组键 `group`(缺省 = view;查询身份与选择身份分离);§3.3⑥ 分组一致性;模型字段前置堵口(绑定铺开后补救要重评存量),缺省零迁移,不挂账;补可见性边界(group 纯前端消歧:不进解释器语义/场景产物/徽标,用户可见溯源仅 view + fetched_at,§3.2/§7.5)
 > 修订 4:2026-09-08 成本收益终审:级联参数/多源/跨 view join 家族裁决为**原则上不做**(贵 × 零消费方 × 手动可替;逃逸门 = 手写恒合法),§9 留痕;挂账 #2 补源组合轴;实现项 9 组终版确认(writing-plans 输入)
 > 修订 5:2026-09-08 收尾:状态转已实施;§11 验收清单逐项勾选留痕(测试证据/手验结果);§5.2 补 L3 勘误注
+> 修订 6:2026-09-08 代码↔spec 一致性审计同步:§3.4 追认 /full 不携带端级 query_views(视图唯一供给 = 索引路由,单通道);§4.2③ 勘误 service_url/query_alias 调用方求值;§10⑤ 措辞随 §5.2 勘误同步
 > 日期:2026-09-07
 > 前置:2026-09-05 field-state-catalog(§1.4 一致化:字段的每个决策都是字段属性);2026-09-07 找回/穿线已实施(65740b4c)
 > 分支:`feat/dynamic-value-source`(实施分支,自 `feat/field-state-catalog` 分出;立项时写作 field-state-catalog)
@@ -222,9 +223,11 @@ step)划得够不够细的问题,是代理键缺语义维度的必然失效。�
 
 ### 3.4 wire 与索引
 
-- **/full 投影**:端点带 `query_views`、条目带 `value_source`(含 `group`
-  键,空缺省携带与否实现时与 value_source 其他键同策略钉死)→ golden
-  (io_declarations fixtures)**意识性重钉**(变化面:含视图的端点 + §7.1 的
+- **/full 投影**:条目带 `value_source`(含 `group` 键,空缺省照携 —— 与
+  `enum: null` 同例全条目携带);**端点级 `query_views` 不上 /full**(2026-09-08
+  审计追认:视图唯一供给通道 = 下述索引路由 —— 单通道,避免同一数据在 /full 与
+  索引两投影间漂移,§9「双通道投影一致性窗」同款顾虑)→ golden
+  (io_declarations fixtures)**意识性重钉**(变化面:含绑定条目的端点 + §7.1 的
   enum 回填 3 字段,同批重钉);
 - **plate 新只读聚合路由 `GET /api/query-views`**:
   `[{name, endpoint_id, system, service, method, path, params(合并后), items, label, columns(派生绑定列集), query_safe}]`
@@ -290,6 +293,11 @@ T5 落值       前端渲染选择器(label 列 + 绑定列);用户选 → setVa
    防御;不静默补 None);
 3. 服务 URL 解析复用**平台**服务绑定(公共设施,非执行链私产——两线共享地基,
    §0.3);凭证 = AuthSession 托管的查询凭证(§6.1);
+   > 勘误(2026-09-08 实施追认):平台无集中式 SUT URL resolver(执行线
+   > `_apply_services` 亦为调用方内联语义),故 service_url / query_alias 由
+   > **调用方(composer)求值后作 query param 传入**,路由保持无状态(CurrentUser
+   > 门内,内网语境接受;URL 求值源 = authored `config.services`,别名 = runSchemes
+   > 绑定首个显式 `queryUser ?? authAlias`,均缺 = 诚实 422);集中式解析不设;
 4. 按 ApiSpec 组装(GET → querystring;POST → JSON body)发送;**超时与鉴权
    方案跟随 ApiSpec**(timeout_seconds / auth,单一真源,不另设硬编码);
    **不重试**(查询尽力而为,失败即降级态)。
@@ -496,7 +504,7 @@ N=1 与 N>1 同用)——200 行内客户端过滤够用,服务端检索留给�
 | ② | plate wire | /full 携带 query_views + value_source;/api/query-views 聚合完整性(含 columns 派生与合并后 params);golden 意识性重钉(含索引投影) |
 | ③ | platform 组装 | GET/POST 分流;params 合成链(view▸default▸example)与键语义(覆盖已声明/追加未声明/可选缺省不携带);缺必填 422;非 GET 未声明 query_safe → 422;服务解析 + token 注入;超时与鉴权跟随 ApiSpec |
 | ④ | platform 缓存 | TTL 惰性过期 / LRU 逐出 / MAX_ROWS 截断 / 空列表缓存与漂移不缓存分形 / 错误不写成新条目 / refresh 旁路 / stale 回退与 STALE_MAX_WINDOW |
-| ⑤ | platform 并发 | 同视图并发单飞(1 上游请求);同凭证跨视图串行;连续失败熔断窗;锁序无死锁冒烟 |
+| ⑤ | platform 并发 | 同视图并发单飞(1 上游请求);L3 凭证闸互斥(登录/装载不与在途并发,§5.2 勘误口径——跨视图闸互斥与锁序冒烟未专测,已知缺口);连续失败熔断窗 |
 | ⑥ | platform 凭证 | 401 → 降级提示不重登录;CurrentUser 鉴权门 |
 | ⑦ | 前端 | enum 分支优先级(ui_kind=text + enum → select);折叠区同款;number enum 写值类型;选择器行渲染 + 行扇出写值 + 缺列跳过 + 本地过滤;N=1 单写;分组键 = group(缺省 view;同 view 双角色拆组互不覆写);降级态(认证页直达) |
 | ⑧ | 回归 | 三套件 + vue-tsc 0;dispatch 基线零漂 |

@@ -353,7 +353,7 @@ Canvas 请求签字段的组合期取数回路（[2026-09-07 动态取数源 spe
 
 | 视觉 / 交互 | 字段 | 触发条件 / 语义 |
 |---|---|---|
-| 行尾「查」按钮 | `DeclarationEntry.value_source` 非空（叶子行） | 点击开 `ValueSourcePicker`；行集由 Canvas 经平台后端 `GET /api/query-views/{view}/rows` 拉取（service_url / query_alias 由前端按 `ServiceBinding.url > authored config.services` / `queryUser ?? authAlias` 求值传参） |
+| 行尾「查」按钮 | `DeclarationEntry.value_source` 非空（叶子行） | 点击开 `ValueSourcePicker`；行集由 Canvas 经平台后端 `GET /api/query-views/{view}/rows` 拉取（service_url / query_alias 由前端求值传参：URL 取 authored `config.services` —— 取数上下文唯一 URL 源，方案侧车 `ServiceBinding.url` 不参与；别名取 runSchemes 服务绑定首个显式 `queryUser ?? authAlias`，均缺 = 诚实 422） |
 | 选择器分组键 | `value_source.group`（空缺省 = view name） | 同组字段 = 一次业务占用：选行后**一查多填扇出**，组内字段逐列落值（`column` 空 = label 列 = 行首键）；**缺列跳过**（行无该键 → 该字段值保留不覆写）；同 view 双角色（如 `cost_list#to_customer` / `#to_supplier`）拆独立选择器互不覆写，共享同一次查询（后端 L1/L2） |
 | 选择器呈现列 | `QueryView.label` + 后端投影列序 | 呈现列 = label 打头 + 其余绑定列去重（保持后端投影列序）；行首键即 label 列 |
 | 本地过滤输入框 | — | 纯前端收窄零上游（MAX_ROWS=200 已是呈现面边界，超限 truncated 提示） |

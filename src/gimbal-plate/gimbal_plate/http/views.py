@@ -193,6 +193,12 @@ class EndpointDetailView(BaseModel):
       field. Adding a field is a contract change that *must* touch both the
       definition side and the platform side — by design.
 
+    Deliberate boundary (2026-09-08): endpoint-level ``query_views`` is NOT
+    mirrored here. Views are served exclusively through the
+    ``GET /api/query-views`` index route — a single supply channel, so the
+    same data never drifts between two projections (dynamic-value-source
+    spec §3.4 追认).
+
     Output shape on the wire is unchanged from the previous pass-through:
     ``request`` / ``responses`` serialise their ``@model_serializer`` keys
     (``{body_type, declarations}`` / ``{status, description, declarations}``)
