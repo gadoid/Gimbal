@@ -73,7 +73,7 @@ class TestValidate:
     def test_deep_tree_binding_seen(self):  # 绑定在 children 树内也要被扫描
         deep = DeclarationEntry(name="obj", path="$.obj", type="object", children=[
             DeclarationEntry(name="leaf", path="$.obj.leaf", type="string",
-                             value_source=ValueSource(view="v1")),
+                             value_source=ValueSource(view="v9")),   # 悬空引用:树内绑定不可见则漏检
         ])
         ep = EndpointSpec(
             id="t.d", system="t", service="svc", name="d",
@@ -82,7 +82,8 @@ class TestValidate:
             responses={200: ResponseSpec(status=200)},
             query_views=[VIEW],
         )
-        validate_query_view_catalog([ep])  # 不抛即通过
+        with pytest.raises(ValueError, match="未命中"):
+            validate_query_view_catalog([ep])   # 树内悬空引用必须被 ② 拒
 
 
 class TestIndex:
