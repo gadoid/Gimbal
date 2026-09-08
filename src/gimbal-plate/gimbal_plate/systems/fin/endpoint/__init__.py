@@ -3,6 +3,9 @@
 每接口独立一个文件 <interface_id>.py,只导出一个 EndpointSpec 实例常量。
 本模块聚合所有实例供 PlateRegistry 一键注册。
 """
+from gimbal_plate.systems.fin.endpoint.cost_amount_list import (
+    COST_AMOUNT_LIST,
+)
 from gimbal_plate.systems.fin.endpoint.settlement_create_order import (
     SETTLEMENT_CREATE_ORDER,
 )
@@ -68,6 +71,7 @@ from gimbal_plate.service.query_views import validate_query_view_catalog as _val
 
 
 ALL_ENDPOINTS = [
+    COST_AMOUNT_LIST,
     SETTLEMENT_CREATE_ORDER,
     ACCOUNT_QUERY_BALANCE,
     ORDER_ENTRUST_CHECK_ORDER_CUSTOMER_CONTAINER,
@@ -94,6 +98,7 @@ ALL_ENDPOINTS = [
 _validate_qv(ALL_ENDPOINTS)
 
 __all__ = [
+    "COST_AMOUNT_LIST",
     "SETTLEMENT_CREATE_ORDER",
     "ACCOUNT_QUERY_BALANCE",
     "ORDER_ENTRUST_CHECK_ORDER_CUSTOMER_CONTAINER",

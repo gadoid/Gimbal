@@ -33,7 +33,7 @@ AUDIT_AUDIT_PAGE: Final[EndpointSpec] = EndpointSpec(
         declarations=[
         DeclarationEntry(name='page_no', path='page_no', type='integer', required=True, example=1, ui_kind='number', description='页码,从 1 开始'),
         DeclarationEntry(name='page_size', path='page_size', type='integer', required=True, example=20, ui_kind='number', description='每页条数,默认 20'),
-        DeclarationEntry(name='active_tab', path='active_tab', type='string', required=True, example='examine_wait', ui_kind='text', description='审批页签: examine_wait=待审批 / examine_done=已审批'),
+        DeclarationEntry(name='active_tab', path='active_tab', type='string', required=True, example='examine_wait', ui_kind='text', description='审批页签: examine_wait=待审批 / examine_done=已审批', enum=['examine_wait', 'examine_done']),
         DeclarationEntry(name='sort_field', path='sort_field', type='string', required=True, example='expedite_num', ui_kind='text', description='排序字段,如 expedite_num(催办次数)'),
         DeclarationEntry(name='sort_order', path='sort_order', type='string', required=True, example='desc', ui_kind='text', description='排序方向: asc / desc', enum=['asc', 'desc']),
         DeclarationEntry(name='params', path='params', type='object', required=True, example={}, ui_kind='json', description='业务过滤条件,如单号/客户/日期范围'),

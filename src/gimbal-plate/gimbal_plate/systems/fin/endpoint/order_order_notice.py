@@ -32,7 +32,7 @@ ORDER_ORDER_NOTICE: Final[EndpointSpec] = EndpointSpec(
         body_type="json",
         declarations=[
         DeclarationEntry(name='order_id', path='order_id', type='string', required=True, example='', ui_kind='text'),
-        DeclarationEntry(name='action', path='action', type='string', required=True, example='check', ui_kind='text'),
+        DeclarationEntry(name='action', path='action', type='string', required=True, example='check', ui_kind='text', enum=['check', 'submit']),
         DeclarationEntry(name='finance_ids', path='finance_ids', type='array', required=True, example=['${var.finance_id_0}', '${var.finance_id_1}'], ui_kind='json'),
         DeclarationEntry(name='bank_ids', path='bank_ids', type='array', required=True, example=['${var.bank_id_0}', '${var.bank_id_1}'], ui_kind='json'),
         ],

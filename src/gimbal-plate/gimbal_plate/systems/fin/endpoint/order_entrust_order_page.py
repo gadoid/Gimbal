@@ -18,6 +18,7 @@ from gimbal_plate.schema.endpoint import (
     RequestSpec,
     ResponseSpec,
     EndpointMetadata,
+    QueryView,
 )
 
 _ROW_BASE = "$.data.data[0]."
@@ -91,7 +92,7 @@ ORDER_ENTRUST_ORDER_PAGE: Final[EndpointSpec] = EndpointSpec(
         DeclarationEntry(name='page_no', path='page_no', type='integer', required=True, example=1, ui_kind='number'),
         DeclarationEntry(name='page_size', path='page_size', type='integer', required=True, example=20, ui_kind='number'),
         DeclarationEntry(name='sort_field', path='sort_field', type='string', required=True, example='update_time', ui_kind='text'),
-        DeclarationEntry(name='sort_order', path='sort_order', type='string', required=True, example='desc', ui_kind='text'),
+        DeclarationEntry(name='sort_order', path='sort_order', type='string', required=True, example='desc', ui_kind='text', enum=['asc', 'desc']),
         DeclarationEntry(name='params', path='params', type='object', required=True, example={}, ui_kind='json'),
         ],
         
@@ -103,10 +104,17 @@ ORDER_ENTRUST_ORDER_PAGE: Final[EndpointSpec] = EndpointSpec(
             declarations=_RESPONSE_DECLS,
         ),
     },
+    query_views=[QueryView(
+        name="pending_orders",
+        params={"entrust_status": "1"},
+        items="$.data.data[*]",       # 行集真位:响应声明 _ROW_BASE 同源
+        label="order_no",             # 选择器按业务订单号选行
+    )],
     version=FIN_DEFAULT_VERSION,
     metadata=EndpointMetadata(
         module=FIN_DEFAULT_MODULE,
         owner=FIN_DEFAULT_OWNER,
         tags=list(FIN_DEFAULT_TAGS),
+        query_safe=True,              # §3.3④:POST 挂视图显式白名单
     ),
 )

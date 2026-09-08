@@ -13,6 +13,7 @@ from gimbal_plate.schema.endpoint import (
     RequestSpec,
     ResponseSpec,
 )
+from gimbal_plate.schema.endpoint.io_spec import iter_declarations
 from gimbal_plate.systems.common.config import common_config_template
 from gimbal_plate.systems.common.meta import common_meta_template
 from gimbal_plate.systems.fin import (
@@ -34,8 +35,9 @@ class TestSystemsFinEndpointExists:
     def test_endpoint_init_aggregates_all_endpoints(self) -> None:
         # 原 2 个 + Scenario_Test_14 提取 16 个 + order_dispatch(2026-09-03)
         # + order_book / audit_page(2026-09-04/05)= 21 个;2026-09-06
-        # order_confirm 并入 fin.order.order_add(独立文件删除)= 20 个
-        assert len(ALL_ENDPOINTS) == 20
+        # order_confirm 并入 fin.order.order_add(独立文件删除)= 20 个;
+        # 2026-09-08 cost_amount_list 入册(动态取数源 §3.1)= 21 个
+        assert len(ALL_ENDPOINTS) == 21
 
     def test_endpoint_constants_are_endpointspec_instances(self) -> None:
         assert isinstance(SETTLEMENT_CREATE_ORDER, EndpointSpec)
@@ -293,3 +295,54 @@ class TestSchemaClosedInvariant:
 
         m = fin_meta_template()
         assert type(m) is Meta
+
+
+class TestQueryViews:
+    """动态取数源目录落点(2026-09-07 spec §3.1/§3.2/§7.1)。"""
+
+    def test_endpoint_count(self):  # 既有 20 → 21(cost_amount_list 入册)
+        assert len(ALL_ENDPOINTS) == 21
+
+    def test_views_present(self):
+        by_id = {e.id: e for e in ALL_ENDPOINTS}
+        views = {v.name: v for v in by_id["fin.cost.amount_list"].query_views or []}
+        assert views["cost_list"].items == "$.data[*]"
+        assert views["cost_list"].label == "cost_name"
+        pv = {v.name: v for v in by_id["fin.order_entrust.order_page"].query_views or []}
+        assert pv["pending_orders"].params == {"entrust_status": "1"}
+        assert pv["pending_orders"].items == "$.data.data[*]"
+        assert by_id["fin.order_entrust.order_page"].metadata.query_safe is True
+
+    def test_bindings(self):
+        by_id = {e.id: e for e in ALL_ENDPOINTS}
+        add = by_id["fin.order_entrust.order_add"].request.declarations
+        bl = next(e for e in add if e.name == "bl_no")
+        assert bl.value_source is not None
+        assert bl.value_source.view == "pending_orders"
+        assert bl.value_source.column == "bl_no"
+        assert bl.value_source.group == ""            # 缺省组 = view(N=1)
+        # cost_id 两条为深传容器 children(2026-09-07 结构化),
+        # 顶层 declarations 不展平 —— 须经 iter_declarations 树→平面投影
+        fee = list(iter_declarations(
+            by_id["fin.order_fee.book_real_amount_edit"].request.declarations))
+        c_ids = [e for e in fee if e.name == "cost_id"]
+        assert len(c_ids) == 2
+        groups = {e.value_source.group for e in c_ids}
+        assert groups == {"cost_list#to_customer", "cost_list#to_supplier"}  # 双角色拆组
+
+    def test_enum_backfill(self):
+        for ep in ALL_ENDPOINTS:
+            for e in ep.request.declarations if ep.request else []:
+                if e.name == "action":
+                    assert e.enum == ["check", "submit"], f"{ep.id} action enum"
+        by_id = {e.id: e for e in ALL_ENDPOINTS}
+        tabs = [e for e in by_id["fin.audit.audit_page"].request.declarations
+                if e.name == "active_tab"]
+        assert tabs[0].enum == ["examine_wait", "examine_done"]
+        so = [e for e in by_id["fin.order.order_page"].request.declarations
+              if e.name == "sort_order"]
+        assert so[0].enum == ["asc", "desc"]
+        # sort_order ×2 的另一处(order_entrust_order_page,§7.1 回填第 11 处)
+        so2 = [e for e in by_id["fin.order_entrust.order_page"].request.declarations
+               if e.name == "sort_order"]
+        assert so2[0].enum == ["asc", "desc"]

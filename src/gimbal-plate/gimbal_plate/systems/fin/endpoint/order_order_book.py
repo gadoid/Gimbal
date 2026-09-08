@@ -37,7 +37,7 @@ ORDER_ORDER_BOOK: Final[EndpointSpec] = EndpointSpec(
             DeclarationEntry(name='order_no', path='$.order_no', type='string', example='YWDD20260904110854', ui_kind='text'),
             DeclarationEntry(name='track_bl_no', path='$.track_bl_no', type='string', example='Codfish-IPKZ-Test', ui_kind='text'),
             DeclarationEntry(name='entrust_status', path='$.entrust_status', type='string', example='2', description='1: 委托订单 2: 订单已分发', ui_kind='text'),
-            DeclarationEntry(name='action', path='$.action', type='string', example='check', description='check 检查 | submit 提交', ui_kind='text'),
+            DeclarationEntry(name='action', path='$.action', type='string', example='check', description='check 检查 | submit 提交', ui_kind='text', enum=['check', 'submit']),
             # 2026-09-06 结构化(对齐 order_add 同款):customer_file_list 行形状
             # example 单例承载 → 容器模板 children;9 业务键,_XID 前端行标记
             # 不进目录;弃 example,深层无值不落 None 骨架(supplier/container 同款纪律)

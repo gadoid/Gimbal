@@ -96,7 +96,7 @@ ORDER_ORDER_PAGE: Final[EndpointSpec] = EndpointSpec(
         DeclarationEntry(name='page_no', path='page_no', type='integer', required=True, example=1, ui_kind='number'),
         DeclarationEntry(name='page_size', path='page_size', type='integer', required=True, example=20, ui_kind='number'),
         DeclarationEntry(name='sort_field', path='sort_field', type='string', required=True, example='update_time', ui_kind='text'),
-        DeclarationEntry(name='sort_order', path='sort_order', type='string', required=True, example='desc', ui_kind='text'),
+        DeclarationEntry(name='sort_order', path='sort_order', type='string', required=True, example='desc', ui_kind='text', enum=['asc', 'desc']),
         DeclarationEntry(name='params', path='params', type='object', required=True, example={}, ui_kind='json'),
         ],
         

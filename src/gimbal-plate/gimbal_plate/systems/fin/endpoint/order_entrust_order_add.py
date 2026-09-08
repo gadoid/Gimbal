@@ -19,6 +19,7 @@ from gimbal_plate.schema.endpoint import (
     RequestSpec,
     ResponseSpec,
     EndpointMetadata,
+    ValueSource,
 )
 
 # ----------------------------------------------------------------------
@@ -49,9 +50,10 @@ ORDER_ENTRUST_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
         body_type='json',
         
         declarations=[
-        DeclarationEntry(name='bl_no', path='$.bl_no', type='string', default='Codfish_TEST_001', example='Codfish_TEST_001', ui_kind='text'),
+        DeclarationEntry(name='bl_no', path='$.bl_no', type='string', default='Codfish_TEST_001', example='Codfish_TEST_001', ui_kind='text',
+                         value_source=ValueSource(view='pending_orders', column='bl_no')),
         DeclarationEntry(name='track_bl_no', path='$.track_bl_no', type='string', default='Codfish_TEST_001', example='Codfish_TEST_001', ui_kind='text'),
-        DeclarationEntry(name='action', path='$.action', type='string', default='check', example='submit', description='check[校验]/submit[提交]', ui_kind='text'),
+        DeclarationEntry(name='action', path='$.action', type='string', default='check', example='submit', description='check[校验]/submit[提交]', ui_kind='text', enum=['check', 'submit']),
         DeclarationEntry(name='client_expand_name', path='$.client_expand_name', state='carry', type='string'),
         DeclarationEntry(name='client_expand_id', path='$.client_expand_id', state='carry', type='string'),
         DeclarationEntry(name='m_delivery_type', path='$.m_delivery_type', state='carry', type='string'),

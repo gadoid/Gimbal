@@ -31,7 +31,7 @@ ORDER_FEE_REAL_AMOUNT_LOCK_SUBMIT: Final[EndpointSpec] = EndpointSpec(
     request=RequestSpec(
         body_type="json",
         declarations=[
-        DeclarationEntry(name='action', path='action', type='string', required=True, example='check', ui_kind='text'),
+        DeclarationEntry(name='action', path='action', type='string', required=True, example='check', ui_kind='text', enum=['check', 'submit']),
         DeclarationEntry(name='order_id', path='order_id', type='string', required=True, example='', ui_kind='text'),
         DeclarationEntry(name='order_fee_real_ids', path='order_fee_real_ids', type='array', required=True, example=[''], ui_kind='json'),
         DeclarationEntry(name='audit_msg', path='audit_msg', type='object', required=True, example={'title': '业务订单ID', 'code': '', 'msgs': ['费用锁定申请']}, ui_kind='json'),

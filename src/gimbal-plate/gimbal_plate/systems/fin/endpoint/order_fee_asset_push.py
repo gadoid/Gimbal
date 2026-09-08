@@ -31,7 +31,7 @@ ORDER_FEE_ASSET_PUSH: Final[EndpointSpec] = EndpointSpec(
     request=RequestSpec(
         body_type="json",
         declarations=[
-        DeclarationEntry(name='action', path='action', type='string', required=True, example='check', ui_kind='text'),
+        DeclarationEntry(name='action', path='action', type='string', required=True, example='check', ui_kind='text', enum=['check', 'submit']),
         DeclarationEntry(name='order_id', path='order_id', type='string', required=True, example='', ui_kind='text'),
         DeclarationEntry(name='audit_msg', path='audit_msg', type='object', required=True, example={'title': '资产推送申请', 'code': '', 'msgs': ['资产推送申请']}, ui_kind='json'),
         DeclarationEntry(name='select_node_user', path='select_node_user', type='array', required=True, example=[{'node_sort': '0', 'user_id': '828'}], ui_kind='json'),

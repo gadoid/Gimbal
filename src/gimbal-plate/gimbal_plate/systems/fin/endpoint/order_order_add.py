@@ -51,7 +51,7 @@ ORDER_ORDER_ADD: Final[EndpointSpec] = EndpointSpec(
             DeclarationEntry(name='order_no', path='$.order_no', type='string', default='YWDD20260904110854', example='YWDD20260904110854', ui_kind='text'),
             DeclarationEntry(name='track_bl_no', path='$.track_bl_no', type='string', example='Codfish-IPKZ-Test', ui_kind='text'),
             DeclarationEntry(name='entrust_status', path='$.entrust_status', type='string', default='2', example='2', ui_kind='text'),
-            DeclarationEntry(name='action', path='$.action', type='string', default='check', example='check', ui_kind='text'),
+            DeclarationEntry(name='action', path='$.action', type='string', default='check', example='check', ui_kind='text', enum=['check', 'submit']),
             # 2026-09-06 结构化:customer_file_list 行形状(example 单例承载
             # → 容器模板 children);9 业务键与 order_book 响应 $.data 行同构,
             # _XID 前端行标记不进目录(同 order_book 响应口径);弃 example,

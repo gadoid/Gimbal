@@ -50,7 +50,7 @@ ORDER_ENTRUST_ORDER_DISPATCH: Final[EndpointSpec] = EndpointSpec(
             DeclarationEntry(name='order_id', path='$.order_id', type='string', example='353806846525441024', ui_kind='text'),
             DeclarationEntry(name='order_no', path='$.order_no', type='string', example='YWDD20260903110831', ui_kind='text'),
             DeclarationEntry(name='entrust_status', path='$.entrust_status', type='integer', example=2, description='创建为1，分发为2', ui_kind='text'),
-            DeclarationEntry(name='action', path='$.action', type='string', default='check', example='check', ui_kind='text'),
+            DeclarationEntry(name='action', path='$.action', type='string', default='check', example='check', ui_kind='text', enum=['check', 'submit']),
             # 传递面(carry 通道,不进表单,值随 platform 两层值表走)
             DeclarationEntry(name='client_expand_name', path='$.client_expand_name', state='carry', type='string', required=False),
             DeclarationEntry(name='client_expand_id', path='$.client_expand_id', state='carry', type='string', required=False),
