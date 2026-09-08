@@ -558,7 +558,8 @@ import { strategyLabelOf } from '@/utils/strategy-labels'
 import {
   assertablePaths, buildTree, carryPaths, cascadeIncrements, containerSurface,
   contractTree, extraBodyPaths, extraSurfaceBindings, formBindings,
-  groupValueSources, leafSurface, prefillBindings, responseBindings, searchCorpus,
+  groupValueSources, iterFlat, leafSurface, prefillBindings, responseBindings,
+  searchCorpus, toTemplatePath,
 } from '@/utils/declarations'
 import type { FieldTreeNode, ValueSourceGroup } from '@/utils/declarations'
 import { deriveBase } from '@/utils/service-alias'
@@ -1038,6 +1039,8 @@ function onVarPicked(tpl: string) {
 interface VsPickerState {
   open: boolean
   group: ValueSourceGroup | null
+  /** 查钮点击字段的实例路径(数组语境锚:扇出写值沿它定位行实例) */
+  anchorPath: string
   /** label 列名(= 投影行首键;行集到位后回填) */
   label: string
   /** 呈现列序(label 打头 + 绑定显式列;行集到位后回填) */
@@ -1050,7 +1053,7 @@ interface VsPickerState {
   error: { code: string; message: string } | null
 }
 const vsPicker = reactive<VsPickerState>({
-  open: false, group: null, label: '', columns: [], rows: [],
+  open: false, group: null, anchorPath: '', label: '', columns: [], rows: [],
   truncated: false, fetchedAt: '', stale: false, loading: false, error: null,
 })
 
@@ -1081,11 +1084,56 @@ function firstRowKeyLabel(row: Record<string, unknown>): string {
   return Object.keys(row)[0] ?? ''
 }
 
-/** 查钮(§7.3):定位字段所在分组 → 开 picker → 拉行集。 */
+/** 数组容器模板面(目录 type=array 条目 path)— 扇出写值的数组语境判据。 */
+function arrayContainerTemplates(step: StepView | undefined): Set<string> {
+  return new Set(
+    iterFlat(stepDecls(step)).filter((e) => e.type === 'array' && !!e.path).map((e) => e.path))
+}
+
+/** 模板边界前缀($.a 是 $.a.b 的容器前缀;$.ab 不算 $.a 的)。 */
+function underTmpl(t: string, prefix: string): boolean {
+  return t === prefix || t.startsWith(prefix + '.')
+}
+
+/**
+ * 点击行实例的数组语境:实例路径每个 [i] 段截出的容器实例前缀 →
+ * 其模板前缀(buildNode 只在数组分支插 [i],故 [i] 即数组容器标记)。
+ */
+function arrayContextOf(instancePath: string): Map<string, string> {
+  const ctx = new Map<string, string>()
+  const re = /\[\d+\]/g
+  for (let m = re.exec(instancePath); m; m = re.exec(instancePath)) {
+    const inst = instancePath.slice(0, m.index + m[0].length)
+    ctx.set(toTemplatePath(inst), inst)
+  }
+  return ctx
+}
+
+/**
+ * 组字段写值路径(数组语境锚定):无数组祖先 → 模板即写值路径;最深
+ * 数组祖先在点击行语境内 → 替换为点击行实例前缀(嵌套数组的浅层下标
+ * 已含于实例前缀,最深一处替换即完备);在异数组容器下(无可导出
+ * 实例)→ null = 跳过(同缺列,值保留)— 杜绝模板路径把数组物化成 dict。
+ */
+function anchorWritePath(
+  tmpl: string, ctx: Map<string, string>, arrTmpls: Set<string>,
+): string | null {
+  const deepest = [...arrTmpls]
+    .filter((c) => underTmpl(tmpl, c))
+    .sort((a, b) => b.length - a.length)[0]
+  if (!deepest) return tmpl
+  const inst = ctx.get(deepest)
+  return inst ? inst + tmpl.slice(deepest.length) : null
+}
+
+/** 查钮(§7.3):叶子绑定携带实例路径(数组行内含 [i]),分组键是
+ *  模板路径 — 剥下标后匹配;命中 → 开 picker(锚定实例路径)→ 拉行集。 */
 function onFieldQuery(field: IOFieldBinding) {
-  const g = valueSourceGroups.value.find((x) => x.fields.some((f) => f.path === field.path))
+  const tmpl = toTemplatePath(field.path)
+  const g = valueSourceGroups.value.find((x) => x.fields.some((f) => f.path === tmpl))
   if (!g || !currentStep.value) return
   vsPicker.group = g
+  vsPicker.anchorPath = field.path
   vsPicker.open = true
   vsLoad(g, false)
 }
@@ -1095,12 +1143,16 @@ function onVsRefresh() {
   if (vsPicker.group) vsLoad(vsPicker.group, true)
 }
 
-/** 拉行集:呈现列 = 行首键 label + 绑定显式列;ApiError → 降级态(§7.5)。 */
+/** 拉行集:呈现列 = 行首键 label + 绑定显式列;ApiError → 降级态(§7.5)。
+ *  发起前清空上一组行集/列序 — 加载期不显示他组残留。 */
 async function vsLoad(g: ValueSourceGroup, refresh: boolean) {
   const step = currentStep.value
   if (!step) return
   vsPicker.loading = true
   vsPicker.error = null
+  vsPicker.rows = []
+  vsPicker.columns = []
+  vsPicker.label = ''
   try {
     const ctx = resolveQueryContext(step)
     const res = await fetchQueryViewRows(g.view, {
@@ -1126,24 +1178,28 @@ async function vsLoad(g: ValueSourceGroup, refresh: boolean) {
 
 /**
  * 选行扇出(§7.3):组内字段逐列落值(column 空 = label 列 = 行首键);
- * 缺列跳过保留原值;组外/未绑定字段恒不被写。徽标随落值字段同步亮起。
+ * 缺列跳过保留原值;组外/未绑定字段恒不被写;数组嵌套字段锚定点击行
+ * 实例(异数组容器无实例可导 → 跳过同缺列)。徽标随落值字段同步亮起。
  */
 function onVsSelect(row: Record<string, unknown>) {
   const g = vsPicker.group
   const step = currentStep.value
   if (!g || !step) return
+  const ctx = arrayContextOf(vsPicker.anchorPath)
+  const arrTmpls = arrayContainerTemplates(step)
   const body = JSON.parse(JSON.stringify(step.request.body ?? {}))
+  const filled: Array<{ path: string }> = []
   for (const f of g.fields) {
     const col = f.column || firstRowKeyLabel(row)      // column 空 = label 列(= 行首键)
     if (row[col] === undefined || row[col] === null) continue   // 缺列跳过(§7.3)
-    setByPath(body, f.path.replace(/^\$\.?/, ''), row[col])
+    const writePath = anchorWritePath(f.path, ctx, arrTmpls)
+    if (!writePath) continue                                    // 异数组不可锚 → 跳过
+    setByPath(body, writePath.replace(/^\$\.?/, ''), row[col])
+    filled.push({ path: f.path })
   }
   step.request.body = body
-  for (const f of g.fields) {
-    const col = f.column || firstRowKeyLabel(row)
-    if (row[col] !== undefined && row[col] !== null) {
-      vsBadges.value[f.path] = { view: g.view, fetchedAt: vsPicker.fetchedAt }
-    }
+  for (const { path } of filled) {
+    vsBadges.value[path] = { view: g.view, fetchedAt: vsPicker.fetchedAt }
   }
   vsPicker.open = false
 }

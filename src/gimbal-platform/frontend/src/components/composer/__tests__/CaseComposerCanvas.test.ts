@@ -120,6 +120,28 @@ vi.mock('@/api/scenario-composer', () => ({
                 ui_kind: 'text', source_kind: 'independent',
                 required: false, description: '', assertable: false,
               } as any]
+          : endpointId === 'ep-vs-arr'
+          ? [{
+              // 修轮 R1 数组嵌套绑定用例:$.fees 数组容器,行模板叶
+              // $.fees.cost_id(value_source 绑定,列 cid)— 渲染叶实例
+              // 路径 $.fees[0].cost_id,查钮组匹配须走模板路径剥 [i]
+              name: 'fees', path: '$.fees', type: 'array',
+              ui_kind: 'json', source_kind: 'independent',
+              required: false, description: '', assertable: false,
+              children: [
+                {
+                  name: 'cost_id', path: '$.fees.cost_id',
+                  ui_kind: 'text', source_kind: 'independent',
+                  required: false, description: '', assertable: false,
+                  value_source: { view: 'v2', column: 'cid', group: 'g2' },
+                },
+                {
+                  name: 'note', path: '$.fees.note',
+                  ui_kind: 'text', source_kind: 'independent',
+                  required: false, description: '', assertable: false,
+                },
+              ],
+            } as any]
           : [{
               name: 'orderId', path: '$.orderId',
               ui_kind: 'text', source_kind: 'independent',
@@ -2131,7 +2153,8 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
       },
       request: { kind: 'request', body: {} },
     })]
-    const { w } = mountCanvas(steps)
+    // services 声明 → resolveQueryContext 的 serviceUrl 源(R3 钉取数上下文)
+    const { w } = mountCanvas({ steps, services: { fin: 'http://fin.example' } })
     await flushPromises()
     ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
       view: 'v',
@@ -2140,6 +2163,10 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     })
     await w.find('.vs-query-btn').trigger('click')   // $.a 查钮 → fieldQuery → picker 开
     await flushPromises()
+    // 取数上下文钉死:view 名 + authored services URL + 主凭证别名 + 非刷新
+    expect(fetchQueryViewRows).toHaveBeenCalledWith('v', {
+      refresh: false, serviceUrl: 'http://fin.example', queryAlias: null,
+    })
     await w.find('tr.vsp-row').trigger('click')      // 选第一行
     expect(steps[0].request.body).toMatchObject({ a: '1', b: '2' })   // 组内扇出全落
     await w.find('.vs-query-btn').trigger('click')   // 再查,选第二行(y 缺列)
@@ -2148,6 +2175,38 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     expect(steps[0].request.body).toMatchObject({ a: 'only-x' })      // a 覆写
     expect((steps[0].request.body as Record<string, unknown>).b).toBe('2')   // 缺列跳过保留原值
     expect((steps[0].request.body as Record<string, unknown>).c).toBeUndefined()  // 未绑定恒不写
+    w.unmount()
+  })
+
+  it('数组嵌套绑定:查钮按模板路径命中组;选行写值锚定点击行实例;数组形态不破坏', async () => {
+    // fixture:$.fees 数组容器,行模板叶 $.fees.cost_id(绑定,列 cid)
+    // + $.fees.note(无绑定兄弟);body 已有 1 行 → 叶子渲染为实例路径
+    // $.fees[0].cost_id(buildTree [i] 语义)
+    const steps = [mkStep({
+      api: {
+        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+        headers: {}, view_hints: { endpoint_id: 'ep-vs-arr' },
+      },
+      request: { kind: 'request', body: { fees: [{ cost_id: '', note: 'keep' }] } },
+    })]
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
+      view: 'v2',
+      rows: [{ cid: 'C-9', nm: 'fee-1' }],
+      truncated: false, fetched_at: 'T2', cached: false, stale: false,
+    })
+    await w.find('.vs-query-btn').trigger('click')   // 实例叶 $.fees[0].cost_id 的查钮
+    await flushPromises()
+    await w.find('tr.vsp-row').trigger('click')      // 选行 → 扇出
+    const body = steps[0].request.body as {
+      fees?: Array<{ cost_id?: string; note?: string }> & Record<string, unknown>
+    }
+    expect(body.fees).toHaveLength(1)                     // 未物化 dict 覆盖数组
+    expect(Array.isArray(body.fees)).toBe(true)
+    expect(body.fees![0].cost_id).toBe('C-9')            // 写值锚定点击行实例
+    expect(body.fees![0].note).toBe('keep')              // 同数组未绑定兄弟不动
+    expect(body.fees!.cost_id).toBeUndefined()           // 无模板路径幻影键(D7)
     w.unmount()
   })
 })

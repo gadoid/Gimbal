@@ -634,8 +634,9 @@ export interface ExtraBodyRow {
   top: boolean
 }
 
-/** 实例路径 → 模板形态(剥 [i] 下标:$.a[0].b → $.a.b)。 */
-function toTemplate(path: string): string {
+/** 实例路径 → 模板形态(剥 [i] 下标:$.a[0].b → $.a.b)。导出供
+ *  Canvas 扇出组匹配消费(叶子绑定携带实例路径,目录/分组键是模板)。 */
+export function toTemplatePath(path: string): string {
   return path.replace(/\[\d+\]/g, '')
 }
 
@@ -668,7 +669,7 @@ export function extraBodyPaths(
   const full = (rel: string) => (rel.startsWith('[') ? `$${rel}` : `$.${rel}`)
   /** 前缀段是否落 carry 容器(模板化前缀逐段收敛到 '.' 边界;$ = 整包)。 */
   const underCarry = (path: string): boolean => {
-    let t = toTemplate(path)
+    let t = toTemplatePath(path)
     while (t.includes('.')) {
       t = t.slice(0, t.lastIndexOf('.'))
       if (carry.has(t)) return true
@@ -683,12 +684,12 @@ export function extraBodyPaths(
     for (const [k, v] of children) {
       const childRel = isArr ? `${rel}[${k}]` : rel ? `${rel}.${k}` : k
       const p = full(childRel)
-      if (universe.has(toTemplate(p)) || underCarry(p)) {
+      if (universe.has(toTemplatePath(p)) || underCarry(p)) {
         // 已覆盖(或 carry 吸收):声明了 children 的结构容器只渲染
         // 声明面,下钻找内部残留叶子;自渲染容器子树不重复成行;
         // 已覆盖叶子/标量由渲染树本体承载,不成行
         if (v !== null && typeof v === 'object'
-          && !selfRendered.has(toTemplate(p))) walk(v, childRel)
+          && !selfRendered.has(toTemplatePath(p))) walk(v, childRel)
         continue
       }
       rows.push({ path: p, top: v !== null && typeof v === 'object' })
