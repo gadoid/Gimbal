@@ -3,6 +3,7 @@
 > 状态:设计定稿待评审(2026-09-07 brainstorming 逐节过审:模型/消费模式/流程/缓存/凭证/配方落点;配方落点采用户提议的**端点注记式**,独立 recipes.py 方案作废)
 > 修订:2026-09-07 评审加固一轮(形状漂移与空结果分离 / stale-while-error / 短熔断 / query_safe 写副作用护栏 / 投影列集 / 缺列跳过——后两者推翻初稿"整行返回不投影"方案)
 > 修订 2:2026-09-08 评审收尾(示例 query_safe 自洽勘误 / 视图参数闭合构造期检查 / params 键语义 / 超时鉴权跟随 ApiSpec;新增:能力定位 §0.3——值域校验前移 + L1-L3 谱系 + 两线接口 = 产物;绑定 = 共识→发版 §3.6;边界三行 §9——双通道投影窗 / 钉值来源不持久化 / 查询端点双重角色)
+> 修订 3:2026-09-08 附录并入:一查多填分组语义修正 —— ValueSource 增显式分组键 `group`(缺省 = view;查询身份与选择身份分离);§3.3⑥ 分组一致性;模型字段前置堵口(绑定铺开后补救要重评存量),缺省零迁移,不挂账
 > 日期:2026-09-07
 > 前置:2026-09-05 field-state-catalog(§1.4 一致化:字段的每个决策都是字段属性);2026-09-07 找回/穿线已实施(65740b4c)
 > 分支:`feat/field-state-catalog`
@@ -175,8 +176,10 @@ COST_AMOUNT_LIST: Final[EndpointSpec] = EndpointSpec(
 
 ```python
 class ValueSource(BaseModel):
-    view: str         # QueryView.name(全局唯一引用)
+    view: str         # QueryView.name(全局唯一引用)— 查询身份:查哪张表
     column: str = ""  # 行内取值列;空 = label 列(N=1 退化:显示列即值列)
+    group: str = ""   # 显式分组键 — 选择身份:本次占用属于哪次语义选择;
+                      # 空 = 缺省取 view name(单一用途场景零配置零行为变化)
 
 # DeclarationEntry 增:
 value_source: ValueSource | None = None
@@ -184,19 +187,36 @@ value_source: ValueSource | None = None
 
 字段定义仍在 plate(用户裁定);绑定是字段属性 —— 09-05 §1.4 一致化的延续。
 N=1(单字段下拉)与 N>1(一查多填)不是两种机制,是**同一绑定的分组结果**:
-前端按 `value_source.view` 分组,N>1 组共享一个行集选择器(§7.3)。
+前端按 `value_source.group`(**缺省 = view**)分组,N>1 组共享一个行集选择器
+(§7.3)。
+
+**view 与 group 是两个身份**(2026-09-08 评审补):view 是查询身份(查哪张
+表),group 是选择身份(哪次业务占用)。让前者代理后者的隐式分组,在"同一
+view 被同一表单的多个互不相关角色复用"时失效——反例:订单转委托接口的
+sender_order_no / receiver_order_no 同源于 pending_orders,按 view 分组会在为
+sender 选行时把 receiver 一并覆写(字段错配脏写);这不是分组作用域(canvas/
+step)划得够不够细的问题,是代理键缺语义维度的必然失效。显式 group 把分组
+关系从推断改为声明:
+
+- **缺省语义**:group 空 = 取 view name——单一用途场景零配置、零行为变化;
+- **消歧场景**:同 view 多角色时各赋不同 group(建议约定 `<view>#<role>`
+  便于追溯,如 pending_orders#sender / #receiver),前端拆独立选择器互不覆写;
+- **治理归属**:group 赋值是绑定声明的一部分,与 value_source 同属 §3.6
+  "绑定是共识→发版"(发版评审常规职责,不新增治理流程,不在运行时或前端
+  动态决定)。
 
 ### 3.3 校验
 
 | 层 | 规则 |
 |---|---|
 | 单模型 | QueryView 形状:name 非空 ASCII 标识符 / items 以 `$.` 开头 / label 非空 |
-| 聚合层(fin ALL_ENDPOINTS + plate 策略测试) | ① **view name 全局唯一**(跨端点查重,构造期拒);② **引用闭合**:`value_source.view` 必命中某端点的某视图;③ **enum × value_source 互斥**(enum 是静态闭集,value_source 是动态开集,并置 = 定义精神分裂);④ **写副作用护栏**:非 GET 端点挂 query_views 必须显式 `EndpointMetadata.query_safe = true`(声明式白名单——fin 是 POST 重镇,不能走 GET-only 禁令;git 评审可见),违反构造期拒;⑤ **视图参数闭合**:必填键经 `view.params ▸ 声明 default ▸ 声明 example` 合并后仍缺 → 构造期拒;**"缺" = default 与 example 双 None**(空串/0/false 是合法值,不算缺) |
+| 聚合层(fin ALL_ENDPOINTS + plate 策略测试) | ① **view name 全局唯一**(跨端点查重,构造期拒);② **引用闭合**:`value_source.view` 必命中某端点的某视图;③ **enum × value_source 互斥**(enum 是静态闭集,value_source 是动态开集,并置 = 定义精神分裂);④ **写副作用护栏**:非 GET 端点挂 query_views 必须显式 `EndpointMetadata.query_safe = true`(声明式白名单——fin 是 POST 重镇,不能走 GET-only 禁令;git 评审可见),违反构造期拒;⑤ **视图参数闭合**:必填键经 `view.params ▸ 声明 default ▸ 声明 example` 合并后仍缺 → 构造期拒;**"缺" = default 与 example 双 None**(空串/0/false 是合法值,不算缺);⑥ **分组一致性**:同一 group(**解析后**键,缺省解析为 view)下的字段 view 必须一致——group 不跨 view 混用,显式 group 与他 view 缺省组撞名同样拒(§3.2) |
 | 运行时 fail-soft | column/label 不做构造期校验(需活响应):列缺失 → 选择器行显示原始 JSON 兜底,不炸 |
 
 ### 3.4 wire 与索引
 
-- **/full 投影**:端点带 `query_views`、条目带 `value_source` → golden
+- **/full 投影**:端点带 `query_views`、条目带 `value_source`(含 `group`
+  键,空缺省携带与否实现时与 value_source 其他键同策略钉死)→ golden
   (io_declarations fixtures)**意识性重钉**(变化面:含视图的端点 + §7.1 的
   enum 回填 3 字段,同批重钉);
 - **plate 新只读聚合路由 `GET /api/query-views`**:
@@ -221,7 +241,8 @@ view name 一经使用**不可改名**(与 endpoint id 同款纪律),四重身�
 **绑定是共识 → 发版**:新增字段绑定(value_source)或新增视图都是 plate 发版 +
 golden 重钉——动态的是**值**,不是**绑定**(绑定是低频共识,09-05 §1.2 两级
 分层的忠实延续;若绑定高频化是目录治理问题,不是本机制问题)。语境级覆写
-(某场景换字典)走装饰缝挂账(#5)延伸,不另开门。
+(某场景换字典)走装饰缝挂账(#5)延伸,不另开门。group 赋值亦同属此处
+(绑定声明的一部分,发版时一并确定,§3.2)。
 
 ---
 
@@ -239,7 +260,7 @@ OpenAPI operation ↔ 通用 HTTP 客户端的同构:视图是数据,解释器�
 ```
 T0 打开目录   composer 拉 /full(条目携带 value_source);
               platform 经 plate 索引 memo 视图注册表(冷启动一次)
-T1 分组       前端按 value_source.view 分组绑定字段(N=1 / N>1 组)
+T1 分组       前端按 value_source.group 分组绑定字段(缺省 = view;N=1 / N>1 组)
 T2 触发       用户点绑定字段「查」钮 → GET /api/query-views/{name}/rows
 T3 解释执行   索引定位端点 → L1 缓存 → L2 同视图单飞 → L3 凭证闸
               → 组装请求(§4.2)→ resolve_service_url + 查询凭证 token → 发送
@@ -386,12 +407,17 @@ SUT 或被踢的凭证刷爆。~6 行。
 
 ### 7.3 N>1:一查多填(行扇出)
 
-Canvas 按 `value_source.view` 分组;组内任一字段打开的选择器显示同一行集
-(行 = label 列 + 全部绑定列,path 徽标区分);选中行 → **组内每字段
+Canvas 按 `value_source.group`(**缺省 = view**,§3.2)分组;组内任一字段
+打开的选择器显示同一行集(行 = label 列 + **本组**绑定列,path 徽标区分——
+后端投影列集仍是全视图,仅前端呈现按组收窄);选中行 → **组内每字段
 `setValue(row[column])`**(既有 body 写入通路 + D8 剪枝,零新写值机制);
 **缺列跳过**:行缺某绑定列 → 该字段不写、保留现值,行内该列显示
 "--"(稀疏行不产生 undefined 脏写)。例:选一条待委托订单 →
 bl_no/客户/容器等绑定字段全落。
+
+**拆组不拆查询**:同一 view 被多角色复用时(§3.2 反例),各 group 独立
+选择器、互不覆写,但查询仍按 view 走同一条路由与缓存(同视图单飞去重)——
+组是渲染层视角,后端(取数/缓存/组装/解释器)零感知、零语义新增。
 
 选择器顶部常驻**本地过滤框**(行内子串过滤,纯前端零上游,词表红线不涉;
 N=1 与 N>1 同用)——200 行内客户端过滤够用,服务端检索留给词表准入重议
@@ -450,13 +476,13 @@ N=1 与 N>1 同用)——200 行内客户端过滤够用,服务端检索留给�
 
 | # | 层 | 用例 |
 |---|---|---|
-| ① | plate 模型 | QueryView 形状校验;聚合层:view name 全局唯一 / value_source 引用闭合 / enum×value_source 互斥 / 非 GET 挂视图须 query_safe / 视图参数闭合(必填缺 → 构造期拒;"缺" = 双 None) |
+| ① | plate 模型 | QueryView 形状校验;聚合层:view name 全局唯一 / value_source 引用闭合 / enum×value_source 互斥 / 非 GET 挂视图须 query_safe / 视图参数闭合(必填缺 → 构造期拒;"缺" = 双 None)/ 分组一致性(group 跨 view 拒,含显式与缺省撞名) |
 | ② | plate wire | /full 携带 query_views + value_source;/api/query-views 聚合完整性(含 columns 派生与合并后 params);golden 意识性重钉(含索引投影) |
 | ③ | platform 组装 | GET/POST 分流;params 合成链(view▸default▸example)与键语义(覆盖已声明/追加未声明/可选缺省不携带);缺必填 422;非 GET 未声明 query_safe → 422;服务解析 + token 注入;超时与鉴权跟随 ApiSpec |
 | ④ | platform 缓存 | TTL 惰性过期 / LRU 逐出 / MAX_ROWS 截断 / 空列表缓存与漂移不缓存分形 / 错误不写成新条目 / refresh 旁路 / stale 回退与 STALE_MAX_WINDOW |
 | ⑤ | platform 并发 | 同视图并发单飞(1 上游请求);同凭证跨视图串行;连续失败熔断窗;锁序无死锁冒烟 |
 | ⑥ | platform 凭证 | 401 → 降级提示不重登录;CurrentUser 鉴权门 |
-| ⑦ | 前端 | enum 分支优先级(ui_kind=text + enum → select);折叠区同款;number enum 写值类型;选择器行渲染 + 行扇出写值 + 缺列跳过 + 本地过滤;N=1 单写;降级态(认证页直达) |
+| ⑦ | 前端 | enum 分支优先级(ui_kind=text + enum → select);折叠区同款;number enum 写值类型;选择器行渲染 + 行扇出写值 + 缺列跳过 + 本地过滤;N=1 单写;分组键 = group(缺省 view;同 view 双角色拆组互不覆写);降级态(认证页直达) |
 | ⑧ | 回归 | 三套件 + vue-tsc 0;dispatch 基线零漂 |
 
 ---
@@ -465,6 +491,8 @@ N=1 与 N>1 同用)——200 行内客户端过滤够用,服务端检索留给�
 
 - [ ] 费用名称字段:打开选择器 → 130+ 费用字典全列 → 选择 → 字面量落 body;
 - [ ] 待委托订单一查多填:选一行 → bl_no/客户/容器等绑定字段全落;
+- [ ] 同 view 双角色绑定(如 sender/receiver 同源 pending_orders)拆独立
+      选择器互不覆写,且共享同一次查询(§3.2 / §7.3);
 - [ ] 静态 enum 字段(active_tab/action/sort_order)渲染为 select;number 型
       enum 写值为 number 非 "1";
 - [ ] /full golden 重钉入库;dispatch 基线零漂;
