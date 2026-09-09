@@ -33,7 +33,8 @@
             到认证页刷新凭证
           </router-link>
           <button v-if="paramFields?.length" type="button"
-                  class="vs-refresh vsp-back-params" @click="stage = 'params'">
+                  class="vs-refresh vsp-back-params"
+                  @click="stage = 'params'; emit('backParams')">
             ↩ 改参数
           </button>
         </div>
@@ -131,6 +132,9 @@ const emit = defineEmits<{
   'refresh': []
   /** §13.5 参数段确认(携当前参数值交 Canvas 拉行集) */
   'query': [values: Record<string, string>]
+  /** R1 错误块回跳:错误门控 template v-else,仅置本组件 stage 是视觉
+   *  no-op — 上抛由 Canvas 清 error prop 后参数段才可达 */
+  'backParams': []
 }>()
 
 const filter = ref('')

@@ -524,6 +524,7 @@
       @select="onVsSelect"
       @refresh="onVsRefresh"
       @query="onVsQuery"
+      @back-params="vsPicker.error = null"
     />
   </div>
 </template>
@@ -1170,6 +1171,7 @@ async function onFieldQuery(field: IOFieldBinding) {
   vsPicker.group = g
   vsPicker.anchorPath = field.path
   await primeParamFace(g)          // §13.5:先定参数面(索引),再开选择器
+  vsPicker.error = null            // R1 开壳清错:残错门控 template v-else 会困住参数面
   vsPicker.open = true
   if (!vsPicker.paramFields.length) void vsLoad(g, false, null)
 }

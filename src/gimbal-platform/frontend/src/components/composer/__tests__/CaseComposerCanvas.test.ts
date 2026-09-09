@@ -2337,4 +2337,42 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     })
     w.unmount()
   })
+
+  it('R1: 拉数失败错误态困不住参数面 — ↩ 改参数清错回段(值保留),重开无残错', async () => {
+    const steps = [mkStep({
+      api: {
+        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+        headers: {}, view_hints: { endpoint_id: 'ep-vs-params' },
+      },
+      request: { kind: 'request', body: {} },
+    })]
+    vi.mocked(fetchQueryViewIndex).mockResolvedValue([
+      { name: 'customer_part', query_params: ['customer_id'] },
+    ] as any[])
+    // 首次携参查询失败(§7.5 降级:错误块门控 template v-else,含参数段)
+    vi.mocked(fetchQueryViewRows).mockRejectedValueOnce(new Error('上游查询失败'))
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    await w.findAll('.vs-query-btn')[1].trigger('click')   // → 参数段
+    await flushPromises()
+    await w.find('.vsp-param-row input').setValue('C9')
+    await w.find('.vsp-param-query').trigger('click')      // 携参查询 → 失败
+    await flushPromises()
+    expect(w.find('.vsp-error').exists()).toBe(true)
+    // 错误块「↩ 改参数」:置段 + emit backParams → Canvas 清 error →
+    // 参数段重现,已输值保留(paramValues 未被清)
+    await w.find('.vsp-error .vsp-back-params').trigger('click')
+    await flush()
+    expect(w.find('.vsp-error').exists()).toBe(false)
+    const input = w.find('.vsp-param-row input')
+    expect(input.exists()).toBe(true)
+    expect((input.element as HTMLInputElement).value).toBe('C9')
+    // 开壳清错:关闭重开不残错(vsLoad 不跑,残错会盖住参数段)
+    await w.find('.vsp-close').trigger('click')
+    await w.findAll('.vs-query-btn')[1].trigger('click')
+    await flushPromises()
+    expect(w.find('.vsp-error').exists()).toBe(false)
+    expect(w.find('.vsp-param-row input').exists()).toBe(true)
+    w.unmount()
+  })
 })

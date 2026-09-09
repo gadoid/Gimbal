@@ -100,11 +100,15 @@ describe('ValueSourcePicker — 参数段(spec §13.5)', () => {
     expect(wrapper.find('table').exists()).toBe(true)
   })
 
-  it('错误态也可 ↩ 改参数(参数面不被错误困住)', () => {
+  it('错误态也可 ↩ 改参数(参数面不被错误困住)— 回跳上抛 backParams 由父级清错', async () => {
+    // 错误块门控整个 template v-else:仅置本组件 stage 是视觉 no-op,
+    // 须 emit backParams 让 Canvas 清 error prop → 参数段才可达(R1)
     const wrapper = mountPicker({
       paramFields: ['customer_id'],
+      paramPrefill: { customer_id: 'C1' },
       error: { code: 'sut_error', message: 'x' },
     })
-    expect(wrapper.find('.vsp-back-params').exists()).toBe(true)
+    await wrapper.find('.vsp-back-params').trigger('click')
+    expect(wrapper.emitted('backParams')).toHaveLength(1)
   })
 })
