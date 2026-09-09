@@ -4,8 +4,10 @@
   Canvas 一查多填的行集呈现面:数据(Canvas 拉取的 rows/列序/截断/降级态)
   全部由调用方传入,本组件零 IO —— 唯一的本地行为是纯前端过滤收窄
   (§7.3:不回上游,MAX_ROWS=200 已是呈现面边界)。
-  降级态(§7.5):sut_auth_expired 给认证页直达链接;stale 展示缓存
-  副本提示。行点击即选中 → emit select(row),扇出覆写由 Canvas 完成。
+  §13.5 参数段:paramFields 非空(参数面视图)先呈现参数行(预填自
+  paramPrefill),确认 emit query(values) 后才进行集段;↩ 改参数回跳
+  值保留。降级态(§7.5):sut_auth_expired 给认证页直达链接;stale 展示
+  缓存副本提示。行点击即选中 → emit select(row),扇出覆写由 Canvas 完成。
 
   渲染形态:内联 overlay(v-if 门控,非 el-dialog/teleport —— el-dialog
   的 rendered 门控首帧不渲染内容,且 teleport 脱离调用方树;RunDialog
@@ -20,7 +22,9 @@
                 @click="emit('update:modelValue', false)">✕</button>
       </header>
       <div class="vsp-body">
-        <!-- 降级态优先于一切呈现(§7.5):认证过期给直达链接,其余透出错误码/信息 -->
+        <!-- 降级态优先于一切呈现(§7.5):认证过期给直达链接,其余透出错误码/信息。
+             §13.5:参数面视图错误态也给 ↩ 改参数入口 — 错误在拉数期发生,
+             改参数即重开参数段,参数面不被错误困住。 -->
         <div v-if="error" class="vsp-error">
           <p class="vsp-error-msg">
             <code class="mono">{{ error.code }}</code> {{ error.message }}
@@ -28,9 +32,32 @@
           <router-link v-if="error.code === 'sut_auth_expired'" to="/auths" class="vsp-auth-link">
             到认证页刷新凭证
           </router-link>
+          <button v-if="paramFields?.length" type="button"
+                  class="vs-refresh vsp-back-params" @click="stage = 'params'">
+            ↩ 改参数
+          </button>
         </div>
         <template v-else>
+          <!-- §13.5 参数段:点击期参数先确认再拉行集(参数面视图) -->
+          <div v-if="stage === 'params' && paramFields?.length" class="vsp-params">
+            <p class="vsp-params-hint">查询参数 — 预填自表单同名键,可改;查询钉当时字面量</p>
+            <label v-for="p in paramFields" :key="p" class="vsp-param-row">
+              <code class="mono">{{ p }}</code>
+              <input v-model="paramValues[p]" type="text" class="vs-filter"
+                     :placeholder="`$.${p} 为空或模板时手输`" />
+            </label>
+            <button type="button" class="vsp-param-query" :disabled="loading"
+                    @click="stage = 'rows'; emit('query', { ...paramValues })">
+              {{ loading ? '查询中…' : '查询' }}
+            </button>
+          </div>
+          <template v-else>
           <div class="vsp-toolbar">
+            <!-- §13.5 回跳:改参数重查(值保留在 paramValues) -->
+            <button v-if="paramFields?.length" type="button"
+                    class="vs-refresh vsp-back-params" @click="stage = 'params'">
+              ↩ 改参数
+            </button>
             <!-- 本地过滤:纯前端收窄,零上游(§7.3) -->
             <input
               v-model="filter"
@@ -68,6 +95,7 @@
             </tbody>
           </table>
           <p v-if="fetchedAt" class="vsp-meta">取数时间:{{ fetchedAt }}</p>
+          </template>
         </template>
       </div>
     </div>
@@ -91,21 +119,42 @@ const props = defineProps<{
   stale: boolean
   loading: boolean
   error: { code: string; message: string } | null
+  /** §13.5 点击期参数名列表;空 = 无参直行集(现状) */
+  paramFields?: string[]
+  /** 预填值(Canvas 同名约定求值后传入;选择器保持零 IO) */
+  paramPrefill?: Record<string, string>
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [v: boolean]
   'select': [row: Record<string, unknown>]
   'refresh': []
+  /** §13.5 参数段确认(携当前参数值交 Canvas 拉行集) */
+  'query': [values: Record<string, string>]
 }>()
 
 const filter = ref('')
 
+/** §13.5 参数段状态机:params(确认前)→ rows(行集);无参视图恒 rows。 */
+const stage = ref<'params' | 'rows'>('rows')
+const paramValues = ref<Record<string, string>>({})
+
+// immediate:调用方以 v-if + modelValue=true 挂载(开即创建),非 immediate
+// 的 modelValue watch 在此形态永不触发 — 挂载即须定初始段与预填。
 watch(
   () => props.modelValue,
   (open) => {
-    if (open) filter.value = ''
+    if (open) {
+      filter.value = ''
+      if (props.paramFields?.length) {
+        stage.value = 'params'
+        paramValues.value = { ...(props.paramPrefill ?? {}) }
+      } else {
+        stage.value = 'rows'
+      }
+    }
   },
+  { immediate: true },
 )
 
 /** 呈现列 = label 打头 + 其余列去重(保持后端投影列序)。 */
@@ -201,6 +250,17 @@ const filtered = computed(() => {
 }
 .vs-refresh:hover:not(:disabled) { border-color: #4f46e5; }
 .vs-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
+/* §13.5 参数段:参数行 + 确认钮(靛蓝主行动色,与工具栏次级行动区分) */
+.vsp-params { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.vsp-params-hint { margin: 0; font-size: 11px; color: var(--c-text-secondary); }
+.vsp-param-row { display: grid; grid-template-columns: 130px 1fr; gap: 8px; align-items: center; }
+.vsp-param-row code { font-size: 11px; color: var(--c-text-secondary); }
+.vsp-param-query {
+  align-self: flex-end; padding: 5px 14px; font-size: 12px;
+  border: 1px solid #4f46e5; border-radius: 6px; background: #4f46e5;
+  color: #fff; cursor: pointer;
+}
+.vsp-param-query:disabled { opacity: 0.5; cursor: not-allowed; }
 .vsp-banner {
   margin: 0 0 8px;
   padding: 6px 10px;

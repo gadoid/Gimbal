@@ -65,3 +65,46 @@ describe('ValueSourcePicker(spec §7.3/§7.5)', () => {
     expect(w.emitted('refresh')).toHaveLength(1)
   })
 })
+
+// ── §13.5 参数段(stage: params → rows)────────────────────────
+
+describe('ValueSourcePicker — 参数段(spec §13.5)', () => {
+  it('paramFields 非空:先渲染参数行,预填自 paramPrefill,查询钮 emit query', async () => {
+    const wrapper = mountPicker({
+      paramFields: ['customer_id'],
+      paramPrefill: { customer_id: 'C1' },
+      rows: [],
+    })
+    // 打开 → 参数段
+    const input = wrapper.find('.vsp-param-row input')
+    expect((input.element as HTMLInputElement).value).toBe('C1')
+    await wrapper.find('.vsp-param-query').trigger('click')
+    expect(wrapper.emitted('query')?.[0]).toEqual([{ customer_id: 'C1' }])
+  })
+
+  it('↩ 改参数回跳:值保留(修改后回跳可见)', async () => {
+    const wrapper = mountPicker({
+      paramFields: ['customer_id'],
+      paramPrefill: { customer_id: 'C1' },
+      rows: [{ policy_name: 'P', policy_id: '1' }],
+    })
+    await wrapper.find('.vsp-param-query').trigger('click')   // → rows 段
+    await wrapper.find('.vsp-back-params').trigger('click')   // ↩ 改参数
+    const input = wrapper.find('.vsp-param-row input')
+    expect((input.element as HTMLInputElement).value).toBe('C1')   // 值未丢
+  })
+
+  it('无 paramFields:零参数段,直通行集(现状零变化)', () => {
+    const wrapper = mountPicker({ rows: [{ a: '1' }] })
+    expect(wrapper.find('.vsp-params').exists()).toBe(false)
+    expect(wrapper.find('table').exists()).toBe(true)
+  })
+
+  it('错误态也可 ↩ 改参数(参数面不被错误困住)', () => {
+    const wrapper = mountPicker({
+      paramFields: ['customer_id'],
+      error: { code: 'sut_error', message: 'x' },
+    })
+    expect(wrapper.find('.vsp-back-params').exists()).toBe(true)
+  })
+})

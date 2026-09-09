@@ -23,7 +23,7 @@ import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { useInsertTarget, INSERT_TARGET_KEY } from '@/composables/useInsertTarget'
 import { useConstantsStore } from '@/stores/constants'
 import type { ConstantEntry } from '@/types/constants'
-import { fetchQueryViewRows } from '@/api/query-views'
+import { fetchQueryViewIndex, fetchQueryViewRows } from '@/api/query-views'
 
 // ── plate 代理 API mock(挂载即触发的:listStrategyKinds/listAuths) ──
 vi.mock('@/api/scenario-composer', () => ({
@@ -142,6 +142,28 @@ vi.mock('@/api/scenario-composer', () => ({
                 },
               ],
             } as any]
+          : endpointId === 'ep-vs-params'
+          ? [{
+              // §13.5 参数面用例:customer_id 绑 customer_list(同名参数源,
+              // 其查钮不点击);client_expand_id/name 同组绑 customer_part
+              // 点列(点路径列到达前端已被后端投影为扁平键,row[col] 直吃)
+              name: 'customer_id', path: '$.customer_id',
+              ui_kind: 'text', source_kind: 'independent',
+              required: false, description: '', assertable: false,
+              value_source: { view: 'customer_list', column: 'customer_id' },
+            } as any,
+            {
+              name: 'client_expand_id', path: '$.client_expand_id',
+              ui_kind: 'text', source_kind: 'independent',
+              required: false, description: '', assertable: false,
+              value_source: { view: 'customer_part', column: 'handover_form.client_expand_id' },
+            } as any,
+            {
+              name: 'client_expand_name', path: '$.client_expand_name',
+              ui_kind: 'text', source_kind: 'independent',
+              required: false, description: '', assertable: false,
+              value_source: { view: 'customer_part', column: 'handover_form.client_expand_name' },
+            } as any]
           : [{
               name: 'orderId', path: '$.orderId',
               ui_kind: 'text', source_kind: 'independent',
@@ -243,9 +265,11 @@ vi.mock('@/api/constants', () => ({
   patch: vi.fn(),
   remove: vi.fn(),
 }))
-// §7 一查多填:行集拉取 mock(用例内 mockResolvedValue 注入行集)
+// §7 一查多填:行集拉取 mock(用例内 mockResolvedValue 注入行集);
+// §13.5 索引 mock 默认空目录(既有用例 = 无参视图,直通行集零变化)
 vi.mock('@/api/query-views', () => ({
   fetchQueryViewRows: vi.fn(),
+  fetchQueryViewIndex: vi.fn().mockResolvedValue([]),
 }))
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
@@ -2231,6 +2255,86 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     // 行按实例路径查 queryBadges,模板键会让数组嵌套叶恒不亮(修轮 2)
     expect(w.find('.vs-badge').exists()).toBe(true)
     expect(w.find('.vs-badge').text()).toContain('view:v2')
+    w.unmount()
+  })
+
+  // ── §13.5 级联参数面:同名预填 / 携参查询 / 单对象点列扇出 ────────
+
+  it('query_params 视图:打开即参数段;同名字面量预填、模板串留空', async () => {
+    // decls(ep-vs-params):customer_id 绑 customer_list + client_expand_id/
+    // name 绑 customer_part 点列;step body: { customer_id: 'C1' }
+    // mock index:customer_part 声明 query_params: ['customer_id']
+    const steps = [mkStep({
+      api: {
+        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+        headers: {}, view_hints: { endpoint_id: 'ep-vs-params' },
+      },
+      request: { kind: 'request', body: { customer_id: 'C1' } },
+    })]
+    vi.mocked(fetchQueryViewIndex).mockResolvedValue([
+      { name: 'customer_list', query_params: [] },
+      { name: 'customer_part', query_params: ['customer_id'] },
+    ] as any[])
+    vi.mocked(fetchQueryViewRows).mockClear()
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    // client_expand_id 查钮(customer_id 的查钮在先)→ 索引定参数面后
+    // 打开即参数段;同名约定预填当前 step body 顶层 customer_id 字面量
+    await w.findAll('.vs-query-btn')[1].trigger('click')
+    await flushPromises()
+    const input = w.find('.vsp-param-row input')
+    expect(input.exists()).toBe(true)
+    expect((input.element as HTMLInputElement).value).toBe('C1')
+    // 参数未确认 → 不盲拉行集(缺参 422 由后端兜底)
+    expect(fetchQueryViewRows).not.toHaveBeenCalled()
+    // §13.6 模板串留空:body.customer_id 换 ${var.x} 重开 → 预填空(手输)
+    ;(steps[0].request.body as Record<string, unknown>).customer_id = '${var.x}'
+    await w.find('.vsp-close').trigger('click')
+    await w.findAll('.vs-query-btn')[1].trigger('click')
+    await flushPromises()
+    expect((w.find('.vsp-param-row input').element as HTMLInputElement).value).toBe('')
+    w.unmount()
+  })
+
+  it('参数确认携 params 查询;单对象行点选点列扇出(§13.4)', async () => {
+    const steps = [mkStep({
+      api: {
+        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+        headers: {}, view_hints: { endpoint_id: 'ep-vs-params' },
+      },
+      request: { kind: 'request', body: {} },
+    })]
+    vi.mocked(fetchQueryViewIndex).mockResolvedValue([
+      { name: 'customer_part', query_params: ['customer_id'] },
+    ] as any[])
+    vi.mocked(fetchQueryViewRows).mockResolvedValue({
+      view: 'customer_part',
+      // 点路径列到达前端已被后端投影为扁平键(§13.4)— row[col] 直吃
+      rows: [{
+        'customer_service.user_name': '庞燕',
+        'handover_form.client_expand_id': 'E1',
+        'handover_form.client_expand_name': 'Expand',
+      }],
+      truncated: false, fetched_at: 'T3', cached: false, stale: false,
+    })
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    await w.findAll('.vs-query-btn')[1].trigger('click')   // client_expand_id 查钮 → 参数段
+    await flushPromises()
+    await w.find('.vsp-param-row input').setValue('C1')
+    await w.find('.vsp-param-query').trigger('click')      // 确认 → 携参拉行集
+    await flushPromises()
+    expect(fetchQueryViewRows).toHaveBeenCalledWith('customer_part', {
+      refresh: false, serviceUrl: undefined, queryAlias: null,
+      params: { customer_id: 'C1' },
+    })
+    // 单对象行点选 → 点列扇出(扁平键经 onVsSelect 既有通路直写 body)
+    expect(w.find('tr.vsp-row').text()).toContain('庞燕')
+    await w.find('tr.vsp-row').trigger('click')
+    expect(steps[0].request.body).toMatchObject({
+      client_expand_id: 'E1',
+      client_expand_name: 'Expand',
+    })
     w.unmount()
   })
 })

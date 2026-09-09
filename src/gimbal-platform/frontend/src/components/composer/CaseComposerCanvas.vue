@@ -519,8 +519,11 @@
       :stale="vsPicker.stale"
       :loading="vsPicker.loading"
       :error="vsPicker.error"
+      :param-fields="vsPicker.paramFields"
+      :param-prefill="vsPicker.paramPrefill"
       @select="onVsSelect"
       @refresh="onVsRefresh"
+      @query="onVsQuery"
     />
   </div>
 </template>
@@ -547,7 +550,8 @@ import {
 } from '@/api/scenario-composer'
 import { list as listAuths } from '@/api/auth_sessions'
 import { getBindings as getCarryBindings, getDefaults as getCarryDefaults } from '@/api/carry'
-import { fetchQueryViewRows } from '@/api/query-views'
+import { fetchQueryViewIndex, fetchQueryViewRows } from '@/api/query-views'
+import type { QueryViewIndexEntry } from '@/api/query-views'
 import { ApiError } from '@/api/http'
 import { parseTplRefs, refStatus } from '@/utils/tpl-refs'
 import type { TplRef } from '@/utils/tpl-refs'
@@ -1052,10 +1056,16 @@ interface VsPickerState {
   stale: boolean
   loading: boolean
   error: { code: string; message: string } | null
+  /** §13.5 参数面:stage params→rows;params = 最近一次携参(refresh 复用) */
+  stage: 'params' | 'rows'
+  paramFields: string[]
+  paramPrefill: Record<string, string>
+  params: Record<string, string> | null
 }
 const vsPicker = reactive<VsPickerState>({
   open: false, group: null, anchorPath: '', label: '', columns: [], rows: [],
   truncated: false, fetchedAt: '', stale: false, loading: false, error: null,
+  stage: 'rows', paramFields: [], paramPrefill: {}, params: null,
 })
 
 /** 已查字段来源徽标(§7.5):path → view + 取数时间(会话级线索,
@@ -1151,27 +1161,64 @@ function anchorWritePath(
 }
 
 /** 查钮(§7.3):叶子绑定携带实例路径(数组行内含 [i]),分组键是
- *  模板路径 — 剥下标后匹配;命中 → 开 picker(锚定实例路径)→ 拉行集。 */
-function onFieldQuery(field: IOFieldBinding) {
+ *  模板路径 — 剥下标后匹配;命中 → 先定参数面(§13.5 索引)再开
+ *  picker(锚定实例路径);无参视图直拉行集(现状零变化)。 */
+async function onFieldQuery(field: IOFieldBinding) {
   const tmpl = toTemplatePath(field.path)
   const g = valueSourceGroups.value.find((x) => x.fields.some((f) => f.path === tmpl))
   if (!g || !currentStep.value) return
   vsPicker.group = g
   vsPicker.anchorPath = field.path
+  await primeParamFace(g)          // §13.5:先定参数面(索引),再开选择器
   vsPicker.open = true
-  vsLoad(g, false)
+  if (!vsPicker.paramFields.length) void vsLoad(g, false, null)
 }
 
-/** 刷新钮:bypass L1/L2 缓存重拉(§7.3 refresh=1)。 */
+/** §13.5 参数面:索引读 query_params;同名约定预填当前 step body 顶层
+ *  字面量(模板串/空 → 留空手输 §13.6);索引不可达按无参处理(rows 侧降级)。 */
+async function primeParamFace(g: ValueSourceGroup) {
+  let entry: QueryViewIndexEntry | undefined
+  try {
+    const idx = await fetchQueryViewIndex()
+    entry = idx.find((v) => v.name === g.view)
+  } catch {
+    entry = undefined
+  }
+  const fields = entry?.query_params ?? []
+  vsPicker.paramFields = fields
+  const prefill: Record<string, string> = {}
+  for (const p of fields) {
+    const v = (currentStep.value?.request?.body as Record<string, unknown> | undefined)?.[p]
+    prefill[p] = typeof v === 'string'
+      ? (v && !v.includes('${') ? v : '')
+      : (typeof v === 'number' || typeof v === 'boolean') && v !== null ? String(v) : ''
+  }
+  vsPicker.paramPrefill = prefill
+  vsPicker.stage = fields.length ? 'params' : 'rows'
+}
+
+/** 参数段确认(§13.5):空值剔除(未填 = 未供给,后端缺键 422 兜底)→ 携参拉数。 */
+function onVsQuery(values: Record<string, string>) {
+  if (!vsPicker.group) return
+  const params: Record<string, string> = {}
+  for (const [k, v] of Object.entries(values)) {
+    const t = v.trim()
+    if (t) params[k] = t
+  }
+  void vsLoad(vsPicker.group, false, params)
+}
+
+/** 刷新钮:bypass L1/L2 缓存重拉(§7.3 refresh=1;§13.5 复用最近携参)。 */
 function onVsRefresh() {
-  if (vsPicker.group) vsLoad(vsPicker.group, true)
+  if (vsPicker.group) vsLoad(vsPicker.group, true, vsPicker.params)
 }
 
 /** 拉行集:呈现列 = 行首键 label + 绑定显式列;ApiError → 降级态(§7.5)。
  *  发起前清空上一组行集/列序 — 加载期不显示他组残留。 */
-async function vsLoad(g: ValueSourceGroup, refresh: boolean) {
+async function vsLoad(g: ValueSourceGroup, refresh: boolean, params: Record<string, string> | null) {
   const step = currentStep.value
   if (!step) return
+  vsPicker.params = params
   vsPicker.loading = true
   vsPicker.error = null
   vsPicker.rows = []
@@ -1181,6 +1228,7 @@ async function vsLoad(g: ValueSourceGroup, refresh: boolean) {
     const ctx = resolveQueryContext(step)
     const res = await fetchQueryViewRows(g.view, {
       refresh, serviceUrl: ctx.serviceUrl, queryAlias: ctx.queryAlias,
+      ...(params && Object.keys(params).length ? { params } : {}),
     })
     const label = firstRowKeyLabel(res.rows[0] ?? {})
     const cols = new Set<string>([label])
