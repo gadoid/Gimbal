@@ -116,3 +116,53 @@ async def test_query_user_binding_field():
                                        "url": "http://s"})
     assert b.query_user == "q1" and b.auth_alias == "main"
     assert ServiceBinding.model_validate({"authAlias": "main"}).query_user is None
+
+
+# ── §13.3 索引代理 + rows 路由 params 点击期参数 ──────────────────
+
+_PARAMS_IDX = [dict(_IDX[0], name="customer_part",
+                    query_params=["customer_id"])]
+
+
+async def test_index_proxy_shape(client, monkeypatch):
+    _install_plate(monkeypatch, _PARAMS_IDX)
+    h = await register_and_login(client)
+    r = await client.get("/api/query-views", headers=h)
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert any(i["name"] == "customer_part" and i["query_params"] == ["customer_id"]
+               for i in items)
+
+
+async def test_rows_params_bad_json_422(client):
+    h = await register_and_login(client)
+    r = await client.get("/api/query-views/customer_part/rows",
+                         params={"service_url": "http://sut",
+                                 "params": "not-json"}, headers=h)
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "bad_params"
+
+
+async def test_rows_params_non_object_422(client):
+    h = await register_and_login(client)
+    r = await client.get("/api/query-views/customer_part/rows",
+                         params={"service_url": "http://sut",
+                                 "params": "[1]"}, headers=h)
+    assert r.status_code == 422
+
+
+async def test_rows_params_passes_click_params(client, monkeypatch):
+    captured = {}
+
+    async def fake_fetch(name, *, refresh, service_url, owner_id,
+                         query_alias, load_credential, click_params=None):
+        captured["click"] = click_params
+        return run.RowsResult(name, [], False, "t", False, False)
+
+    monkeypatch.setattr(run, "fetch_rows", fake_fetch)
+    h = await register_and_login(client)
+    r = await client.get("/api/query-views/customer_part/rows",
+                         params={"service_url": "http://s",
+                                 "params": '{"customer_id":"1"}'}, headers=h)
+    assert r.status_code == 200, r.text
+    assert captured["click"] == {"customer_id": "1"}

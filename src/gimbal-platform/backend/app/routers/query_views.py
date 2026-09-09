@@ -7,7 +7,8 @@ config.services / query_user ?? auth_alias 优先级求值后传入(组合上下
 """
 from __future__ import annotations
 
-from typing import Annotated
+import json
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -44,6 +45,14 @@ def _loader(db: DbSession):
     return load
 
 
+@router.get("")
+async def list_views(user: CurrentUser) -> dict:
+    """索引代理(§13.3):前端参数段消费 query_params;复用 runner 的
+    plate memo + 熔断,零新增状态。"""
+    items = await query_view_runner.fetch_query_view_index()
+    return {"items": items}
+
+
 @router.get("/{name}/rows")
 async def get_rows(
     name: str,
@@ -52,13 +61,26 @@ async def get_rows(
     refresh: bool = False,
     service_url: str = "",
     query_alias: str | None = None,
+    params: str = "",
 ) -> dict:
+    click: dict[str, Any] | None = None
+    if params:
+        try:
+            parsed = json.loads(params)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "bad_params", "msg": "params 非合法 JSON"}) from e
+        if not isinstance(parsed, dict):
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "bad_params", "msg": "params 须为 JSON 对象"})
+        click = {str(k): v for k, v in parsed.items()}
     try:
         r = await query_view_runner.fetch_rows(
             name, refresh=refresh, service_url=service_url,
             owner_id=user.id, query_alias=query_alias,
-            load_credential=_loader(db),
-        )
+            load_credential=_loader(db), click_params=click)
     except query_view_runner.QueryViewError as e:
         raise HTTPException(status_code=e.status,
                             detail={"code": e.code, "msg": e.message}) from e
