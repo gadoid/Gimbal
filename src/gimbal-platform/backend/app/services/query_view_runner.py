@@ -316,6 +316,9 @@ async def fetch_rows(
         raise QueryViewError("unknown_view", f"未知视图 {name!r}", status=404)
     click_params = click_params or {}
     has_param_face = bool(view.get("query_params"))   # §13.3 参数面视图
+    # §13.7 手工逃生口:携参调用即使打在未声明参数面的视图上,也按参数面口径
+    # 旁路 L1 —— 否则携参结果会回填裸名键,无参调用吃到污染行集(TTL 300s)。
+    bypass_cache = has_param_face or bool(click_params)
     # §4.2 纵深防御(构造期为主,此处兜底:防 plate 版本错位)
     # §13.3 缺键豁免:索引 missing_required 是静态链视角,点击期供给即补齐
     missing = [k for k in (view.get("missing_required") or []) if k not in click_params]
@@ -330,7 +333,7 @@ async def fetch_rows(
         raise QueryViewError("service_url_required",
                              "service_url 缺失(服务绑定未解析)", status=422)
     stale_entry, fresh = None, False
-    if not has_param_face:            # §13.3 参数随表单变,按 view 键必破 → 不进键就不缓存
+    if not bypass_cache:              # §13.3 参数随表单变,按 view 键必破 → 不进键就不缓存
         stale_entry, fresh = _cache.lookup(name)
         if fresh and not refresh:
             return RowsResult(name, stale_entry.rows, stale_entry.truncated,
@@ -346,11 +349,11 @@ async def fetch_rows(
     # §13.3 单飞键:参数面视图 = (view, 点击期 params canonical);无参视图维持 view
     arrived = time.monotonic()
     lock_key = name
-    if has_param_face:
+    if bypass_cache:
         lock_key = f"{name}::{json.dumps(click_params, sort_keys=True, ensure_ascii=False)}"
     lock = await _view_lock(lock_key)
     async with lock:                       # L2 同视图单飞
-        if has_param_face:
+        if bypass_cache:
             # §13.3 在飞共享:等锁期间同参航班已完成且完成晚于本侧到达 → 复用结果
             flight = _param_flights.get(lock_key)
             if flight is not None and not refresh and flight[0] >= arrived:
@@ -367,12 +370,12 @@ async def fetch_rows(
                                                session, cred_key,
                                                click_params=click_params)
             wall = _now_iso()
-            if not has_param_face:    # §13.3 参数面不回填 L1(参数随表单变,键必破)
+            if not bypass_cache:      # §13.3 参数面不回填 L1(参数随表单变,键必破)
                 _cache.put(name, rows, wall, truncated)   # 投影后行 + 截断标记入缓存(§5.1/§5.3)
             _view_breaker.pop(name, None)  # 成功清零
             result = RowsResult(name, rows, truncated, wall,
                                 cached=False, stale=False)
-            if has_param_face:
+            if bypass_cache:
                 _remember_flight(lock_key, result)
             return result
         except QueryViewError as e:

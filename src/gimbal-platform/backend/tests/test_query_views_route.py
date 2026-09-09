@@ -151,6 +151,16 @@ async def test_rows_params_non_object_422(client):
     assert r.status_code == 422
 
 
+async def test_rows_params_non_scalar_value_422(client):
+    """§13.7 手工逃生口:参数值须为标量 —— dict/list/null 污染下游序列化。"""
+    h = await register_and_login(client)
+    r = await client.get("/api/query-views/customer_part/rows",
+                         params={"service_url": "http://sut",
+                                 "params": '{"a":[1]}'}, headers=h)
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "bad_params"
+
+
 async def test_rows_params_passes_click_params(client, monkeypatch):
     captured = {}
 

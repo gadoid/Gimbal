@@ -391,3 +391,38 @@ def test_project_rows_dotted_columns():
 def test_extract_rows_single_object_wraps_one_row():
     """§13.4 单对象型:$.data 命中对象 → 包一行(extract_rows 既有分支的显式钉)。"""
     assert r.extract_rows({"data": {"a": 1}}, "$.data") == [{"a": 1}]
+
+
+_NO_FACE_VIEW = {
+    "name": "cost_list", "endpoint_id": "fin.cost.list",
+    "method": "POST", "path": "/api/cost/list",
+    "params": {"page": 1}, "query_params": [],
+    "items": "$.data[*]", "label": "cost_name",
+    "columns": ["cost_name"], "query_safe": True,
+    "missing_required": [], "auth": "none", "timeout_seconds": 5.0,
+}
+
+
+@pytest.mark.asyncio
+async def test_carried_params_on_non_param_face_view_bypass_l1(monkeypatch):
+    """§13.7 手工携参调用非参数面视图:合并发送,但按携参口径旁路 L1 —
+    携参结果不得回填裸名键,否则无参调用吃到污染行集(TTL 300s)。"""
+    _patch_view(monkeypatch, dict(_NO_FACE_VIEW))
+    calls = []
+
+    def fake_request(method, url, **kw):
+        calls.append(kw.get("json"))
+        return httpx.Response(200, json={"data": [{"cost_name": "c"}]})
+
+    monkeypatch.setattr(r.httpx, "request", fake_request)
+    res = await r.fetch_rows(
+        "cost_list", refresh=False, service_url="http://sut",
+        owner_id=1, query_alias=None, load_credential=None,
+        click_params={"x": "1"})
+    assert calls[0] == {"page": 1, "x": "1"}    # 合并链仍生效(携参语义照发)
+    assert res.cached is False
+    res2 = await r.fetch_rows(
+        "cost_list", refresh=False, service_url="http://sut",
+        owner_id=1, query_alias=None, load_credential=None)
+    assert len(calls) == 2                       # 无参调用未吃到携参结果 = L1 未被污染
+    assert res2.cached is False

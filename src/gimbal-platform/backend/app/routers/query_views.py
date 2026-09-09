@@ -75,6 +75,14 @@ async def get_rows(
             raise HTTPException(
                 status_code=422,
                 detail={"code": "bad_params", "msg": "params 须为 JSON 对象"})
+        # §13.7 手工逃生口:参数值须为标量 —— dict/list/null 会污染下游序列化
+        # (httpx 在 GET 上会把非标量 repr 字符串化)。
+        if any(not isinstance(v, (str, int, float, bool))
+               for v in parsed.values()):
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "bad_params",
+                        "msg": "params 值须为标量(str/int/float/bool)"})
         click = {str(k): v for k, v in parsed.items()}
     try:
         r = await query_view_runner.fetch_rows(
