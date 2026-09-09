@@ -275,3 +275,119 @@ class TestFetchRows:
                                owner_id=1, query_alias="qa", load_credential=load)
         assert e2.value.code == "sut_auth_expired"   # 拉黑后直接降级,不打 SUT
         assert logins["n"] == 1      # 冷启一次;401 后绝不自动重登录(§6.2)
+
+
+# ── §13.3 点击期参数面 ────────────────────────────────────────────
+
+_POLICY_VIEW = {
+    "name": "customer_policy", "endpoint_id": "fin.customer.policy",
+    "method": "POST", "path": "/api/Customer/Policy/getCustomerPolicy",
+    "params": {"status": "2"}, "query_params": ["customer_id"],
+    "items": "$.data[*]", "label": "policy_name",
+    "columns": ["policy_name", "policy_id"], "query_safe": True,
+    "missing_required": ["customer_id"], "auth": "none", "timeout_seconds": 5.0,
+}
+
+
+def _patch_view(monkeypatch, view):
+    async def fake_index():
+        return [view]
+    monkeypatch.setattr(r, "fetch_query_view_index", fake_index)
+
+
+@pytest.mark.asyncio
+async def test_click_params_overlay_static_and_exemption(monkeypatch):
+    """点击期 ▸ 索引静态 params(已含 view.params▸default▸example);缺键被点击期豁免。"""
+    _patch_view(monkeypatch, dict(_POLICY_VIEW))
+    sent = {}
+
+    def fake_request(method, url, **kw):
+        sent.update(kw)
+        return httpx.Response(200, json={"data": [{"policy_name": "P1", "policy_id": "32"}]})
+
+    monkeypatch.setattr(r.httpx, "request", fake_request)
+    res = await r.fetch_rows(
+        "customer_policy", refresh=True, service_url="http://sut",
+        owner_id=1, query_alias=None, load_credential=None,
+        click_params={"customer_id": "1"})
+    assert sent["json"] == {"status": "2", "customer_id": "1"}   # 合并链:点击期最高
+    assert res.rows == [{"policy_name": "P1", "policy_id": "32"}]
+    assert res.cached is False
+
+
+@pytest.mark.asyncio
+async def test_click_param_absent_still_422(monkeypatch):
+    """query_param 未供给 → missing_required 不豁免 → 422。"""
+    _patch_view(monkeypatch, dict(_POLICY_VIEW))
+    with pytest.raises(r.QueryViewError) as ei:
+        await r.fetch_rows(
+            "customer_policy", refresh=True, service_url="http://sut",
+            owner_id=1, query_alias=None, load_credential=None)
+    assert ei.value.status == 422
+
+
+@pytest.mark.asyncio
+async def test_param_face_view_never_enters_l1(monkeypatch):
+    """带参数面视图不进 L1:同参数重查再发上游(无缓存命中)。"""
+    _patch_view(monkeypatch, dict(_POLICY_VIEW))
+    calls = []
+
+    def fake_request(method, url, **kw):
+        calls.append(kw.get("json"))
+        return httpx.Response(200, json={"data": [{"policy_name": "P", "policy_id": "1"}]})
+
+    monkeypatch.setattr(r.httpx, "request", fake_request)
+    for _ in range(2):
+        res = await r.fetch_rows(
+            "customer_policy", refresh=False, service_url="http://sut",
+            owner_id=1, query_alias=None, load_credential=None,
+            click_params={"customer_id": "1"})
+        assert res.cached is False
+    assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_param_face_single_flight_keyed_by_params(monkeypatch):
+    """单飞键 = (view, 点击期 params):并发同参 1 发,异参各 1 发 → 共 2 发。"""
+    _patch_view(monkeypatch, dict(_POLICY_VIEW))
+    calls = []
+
+    async def slow_request(method, url, **kw):
+        calls.append(kw.get("json"))
+        await asyncio.sleep(0.05)
+        return httpx.Response(200, json={"data": [{"policy_name": "P", "policy_id": "1"}]})
+
+    monkeypatch.setattr(r.httpx, "request", slow_request)
+    await asyncio.gather(
+        r.fetch_rows("customer_policy", refresh=False,
+                     service_url="http://sut", owner_id=1,
+                     query_alias=None, load_credential=None,
+                     click_params={"customer_id": "1"}),
+        r.fetch_rows("customer_policy", refresh=False,
+                     service_url="http://sut", owner_id=1,
+                     query_alias=None, load_credential=None,
+                     click_params={"customer_id": "1"}),
+        r.fetch_rows("customer_policy", refresh=False,
+                     service_url="http://sut", owner_id=1,
+                     query_alias=None, load_credential=None,
+                     click_params={"customer_id": "2"}),
+    )
+    assert len(calls) == 2
+
+
+def test_project_rows_dotted_columns():
+    """§13.4 点路径列:逐段下钻;缺列(含中途非 dict)= 键缺席。"""
+    rows = [{"handover_form": {"client_expand_id": "E1"},
+             "customer_service": {"user_name": "庞燕"},
+             "finance": [{"chinese_header": "X"}]}]
+    out = r.project_rows(
+        rows, ["customer_service.user_name", "handover_form.client_expand_id",
+               "finance.chinese_header", "absent.col"])
+    # finance 是数组 → finance.chinese_header 不可导航 = 缺席(不脏写 '--')
+    assert out == [{"customer_service.user_name": "庞燕",
+                    "handover_form.client_expand_id": "E1"}]
+
+
+def test_extract_rows_single_object_wraps_one_row():
+    """§13.4 单对象型:$.data 命中对象 → 包一行(extract_rows 既有分支的显式钉)。"""
+    assert r.extract_rows({"data": {"a": 1}}, "$.data") == [{"a": 1}]

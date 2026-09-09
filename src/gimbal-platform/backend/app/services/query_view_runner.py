@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -66,6 +67,11 @@ _view_breaker: dict[str, dict[str, float]] = {}
 _cred_locks: dict[tuple[int, str], asyncio.Lock] = {}
 _cred_sessions: dict[tuple[int, str], AuthSession] = {}
 _cred_dead: set[tuple[int, str]] = set()   # 401 拉黑:同 key 后续直接降级(§6.2)
+# §13.3 参数面在飞共享:lock_key → (航班完成时刻, 结果)。仅让"等锁期间
+# 同参航班已完成"的并发等待者复用结果(到达晚于完成 = 顺序调用,须重打 SUT);
+# 与 L1 不同,这不是 TTL 缓存 —— 条目只能被重叠航班命中,窗口外必死。
+FLIGHT_SHARE_WINDOW = 60.0
+_param_flights: dict[str, tuple[float, "RowsResult"]] = {}
 
 
 def reset_state_for_tests() -> None:
@@ -74,6 +80,15 @@ def reset_state_for_tests() -> None:
     _view_breaker.clear()
     _cred_sessions.clear()
     _cred_dead.clear()
+    _param_flights.clear()
+
+
+def _remember_flight(lock_key: str, result: "RowsResult") -> None:
+    """登记刚完成的参数面航班;顺手清窗口外死条目(lock_key 含用户参数,防无界)。"""
+    now = time.monotonic()
+    for k in [k for k, (t, _) in _param_flights.items() if now - t > FLIGHT_SHARE_WINDOW]:
+        _param_flights.pop(k, None)
+    _param_flights[lock_key] = (now, result)
 
 
 async def _view_lock(name: str) -> asyncio.Lock:
@@ -120,12 +135,27 @@ def extract_rows(payload: Any, items: str) -> list:
     return node if isinstance(node, list) else [node]
 
 
+def _dig(row: dict, dotted: str) -> Any:
+    """点路径列导航(§13.4):逐段下钻 dict;任一段非 dict/缺席 → _MISSING。"""
+    node: Any = row
+    for seg in dotted.split("."):
+        if not isinstance(node, dict) or seg not in node:
+            return _MISSING
+        node = node[seg]
+    return node
+
+
 def project_rows(rows: list, columns: list[str]) -> list[dict]:
-    """投影到列集:仅保留行内存在的列键(缺列 = 键缺席,前端 '--' 语义)。"""
+    """投影到列集(§13.4):含点路径列;缺列 = 键缺席,前端 '--' 语义。"""
     out = []
     for row in rows:
         if isinstance(row, dict):
-            out.append({c: row[c] for c in columns if c in row})
+            proj: dict[str, Any] = {}
+            for c in columns:
+                v = _dig(row, c) if "." in c else row.get(c, _MISSING)
+                if v is not _MISSING:
+                    proj[c] = v
+            out.append(proj)
     return out
 
 
@@ -224,6 +254,7 @@ async def _resolve_auth_header(
 async def _query_sut(
     view: dict, service_url: str, auth_header: "str | None",
     session: Any, cred_key: "tuple[int, str] | None",
+    click_params: "dict[str, Any] | None" = None,
 ) -> "tuple[list[dict], bool]":
     """请求组装 + SUT 查询 + 提取投影(spec §4)。
 
@@ -234,10 +265,12 @@ async def _query_sut(
     url = f"{service_url}{view.get('path', '')}"
     headers = {"Authorization": auth_header} if auth_header else None
     timeout = view.get("timeout_seconds") or 5.0
+    # §13.3 合并链 per-key:点击期 ▸ 索引 params(已含 view.params▸default▸example)
+    merged_params = {**dict(view.get("params") or {}), **(click_params or {})}
     if method == "GET":
-        kw: dict[str, Any] = {"params": dict(view.get("params") or {})}
+        kw: dict[str, Any] = {"params": merged_params}
     else:
-        kw = {"json": view.get("params") or {}}
+        kw = {"json": merged_params}
     try:
         request_fn = httpx.request   # 属性访问式调用:测试 monkeypatch 面
         if inspect.iscoroutinefunction(request_fn):
@@ -274,16 +307,21 @@ async def fetch_rows(
     name: str, *, refresh: bool, service_url: str, owner_id: int,
     query_alias: "str | None",
     load_credential: "Callable[[int, str], AuthSession | None | Awaitable[AuthSession | None]] | None",
+    click_params: "dict[str, Any] | None" = None,
 ) -> RowsResult:
     """取一行集:L1 缓存 → 熔断 → 单飞锁 → 凭证闸 → SUT 查询 → 缓存回填。"""
     index = await fetch_query_view_index()
     view = next((v for v in index if v.get("name") == name), None)
     if view is None:
         raise QueryViewError("unknown_view", f"未知视图 {name!r}", status=404)
+    click_params = click_params or {}
+    has_param_face = bool(view.get("query_params"))   # §13.3 参数面视图
     # §4.2 纵深防御(构造期为主,此处兜底:防 plate 版本错位)
-    if view.get("missing_required"):
+    # §13.3 缺键豁免:索引 missing_required 是静态链视角,点击期供给即补齐
+    missing = [k for k in (view.get("missing_required") or []) if k not in click_params]
+    if missing:
         raise QueryViewError("missing_required_params",
-                             f"必填键仍缺: {view['missing_required']}", status=422)
+                             f"必填键仍缺: {missing}", status=422)
     if view.get("method") != "GET" and not view.get("query_safe"):
         raise QueryViewError("query_not_safe",
                              f"{view.get('endpoint_id')} 非 GET 未声明 query_safe",
@@ -291,10 +329,12 @@ async def fetch_rows(
     if not service_url or not service_url.startswith(("http://", "https://")):
         raise QueryViewError("service_url_required",
                              "service_url 缺失(服务绑定未解析)", status=422)
-    stale_entry, fresh = _cache.lookup(name)
-    if fresh and not refresh:
-        return RowsResult(name, stale_entry.rows, stale_entry.truncated,
-                          stale_entry.fetched_wall, cached=True, stale=False)
+    stale_entry, fresh = None, False
+    if not has_param_face:            # §13.3 参数随表单变,按 view 键必破 → 不进键就不缓存
+        stale_entry, fresh = _cache.lookup(name)
+        if fresh and not refresh:
+            return RowsResult(name, stale_entry.rows, stale_entry.truncated,
+                              stale_entry.fetched_wall, cached=True, stale=False)
     # 熔断窗内:有 stale 回退 stale,否则降级(§5.2);refresh 也不豁免
     br = _view_breaker.get(name)
     if br and br["fails"] >= VIEW_BREAKER_THRESHOLD and \
@@ -303,9 +343,19 @@ async def fetch_rows(
             return RowsResult(name, stale_entry.rows, stale_entry.truncated,
                               stale_entry.fetched_wall, cached=False, stale=True)
         raise QueryViewError("circuit_open", f"视图 {name} 熔断窗内")
-    lock = await _view_lock(name)
+    # §13.3 单飞键:参数面视图 = (view, 点击期 params canonical);无参视图维持 view
+    arrived = time.monotonic()
+    lock_key = name
+    if has_param_face:
+        lock_key = f"{name}::{json.dumps(click_params, sort_keys=True, ensure_ascii=False)}"
+    lock = await _view_lock(lock_key)
     async with lock:                       # L2 同视图单飞
-        if not refresh:                    # 双检:等锁期间别人已填
+        if has_param_face:
+            # §13.3 在飞共享:等锁期间同参航班已完成且完成晚于本侧到达 → 复用结果
+            flight = _param_flights.get(lock_key)
+            if flight is not None and not refresh and flight[0] >= arrived:
+                return flight[1]
+        elif not refresh:                  # 双检:等锁期间别人已填
             e2, f2 = _cache.lookup(name)
             if f2:
                 return RowsResult(name, e2.rows, e2.truncated, e2.fetched_wall,
@@ -314,12 +364,17 @@ async def fetch_rows(
             header, session, cred_key = await _resolve_auth_header(
                 view, owner_id, query_alias, load_credential)
             rows, truncated = await _query_sut(view, service_url, header,
-                                               session, cred_key)
+                                               session, cred_key,
+                                               click_params=click_params)
             wall = _now_iso()
-            _cache.put(name, rows, wall, truncated)   # 投影后行 + 截断标记入缓存(§5.1/§5.3)
+            if not has_param_face:    # §13.3 参数面不回填 L1(参数随表单变,键必破)
+                _cache.put(name, rows, wall, truncated)   # 投影后行 + 截断标记入缓存(§5.1/§5.3)
             _view_breaker.pop(name, None)  # 成功清零
-            return RowsResult(name, rows, truncated, wall,
-                              cached=False, stale=False)
+            result = RowsResult(name, rows, truncated, wall,
+                                cached=False, stale=False)
+            if has_param_face:
+                _remember_flight(lock_key, result)
+            return result
         except QueryViewError as e:
             # 仅 SUT 域失败(502 类)计入熔断;422 配置错是确定性错误,
             # 不污健康信号(否则 3 次配置错会把 query_credential_required
