@@ -22,8 +22,9 @@ def test_list_endpoints_under_system(http_client: TestClient) -> None:
     assert body["ok"] is True
     assert body["dim"] == "endpoint"
     items = body["data"]["items"]
-    # 2026-09-08 cost_amount_list 入册(动态取数源 §3.1),20 → 21
-    assert body["data"]["total"] == len(items) == 21
+    # 2026-09-08 cost_amount_list 入册(动态取数源 §3.1),20 → 21;
+    # 2026-09-09 客户域三端点入册(§13 级联链),21 → 24
+    assert body["data"]["total"] == len(items) == 24
     for ep in items:
         assert ep["system"] == "fin"
         assert "id" in ep
@@ -33,13 +34,14 @@ def test_list_endpoints_under_system(http_client: TestClient) -> None:
 
 def test_filter_by_service(http_client: TestClient) -> None:
     # fin 全部 endpoint 统一归属单一服务 fin-service:
-    # 按 service 过滤应命中全部 21 个(过滤一个不存在的服务则返回 0;
+    # 按 service 过滤应命中全部 24 个(过滤一个不存在的服务则返回 0;
     # 2026-09-06 order_confirm 并入 fin.order.order_add,21 → 20;
-    # 2026-09-08 cost_amount_list 入册,20 → 21)。
+    # 2026-09-08 cost_amount_list 入册,20 → 21;
+    # 2026-09-09 客户域三端点入册,21 → 24)。
     resp = http_client.get("/api/endpoint", params={"service": "fin-service"})
     assert resp.status_code == 200
     items = resp.json()["data"]["items"]
-    assert resp.json()["data"]["total"] == 21
+    assert resp.json()["data"]["total"] == 24
     for ep in items:
         assert ep["system"] == "fin"
         assert ep["service"] == "fin-service"

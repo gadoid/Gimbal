@@ -36,8 +36,9 @@ class TestSystemsFinEndpointExists:
         # 原 2 个 + Scenario_Test_14 提取 16 个 + order_dispatch(2026-09-03)
         # + order_book / audit_page(2026-09-04/05)= 21 个;2026-09-06
         # order_confirm 并入 fin.order.order_add(独立文件删除)= 20 个;
-        # 2026-09-08 cost_amount_list 入册(动态取数源 §3.1)= 21 个
-        assert len(ALL_ENDPOINTS) == 21
+        # 2026-09-08 cost_amount_list 入册(动态取数源 §3.1)= 21 个;
+        # 2026-09-09 客户域三端点入册(§13 级联链:list/part/policy)= 24 个
+        assert len(ALL_ENDPOINTS) == 24
 
     def test_endpoint_constants_are_endpointspec_instances(self) -> None:
         assert isinstance(SETTLEMENT_CREATE_ORDER, EndpointSpec)
@@ -300,8 +301,8 @@ class TestSchemaClosedInvariant:
 class TestQueryViews:
     """动态取数源目录落点(2026-09-07 spec §3.1/§3.2/§7.1)。"""
 
-    def test_endpoint_count(self):  # 既有 20 → 21(cost_amount_list 入册)
-        assert len(ALL_ENDPOINTS) == 21
+    def test_endpoint_count(self):  # 既有 21 → 24(2026-09-09 客户域三端点入册)
+        assert len(ALL_ENDPOINTS) == 24
 
     def test_views_present(self):
         by_id = {e.id: e for e in ALL_ENDPOINTS}

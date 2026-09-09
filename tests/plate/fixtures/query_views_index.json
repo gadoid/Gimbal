@@ -20,6 +20,77 @@
   "timeout_seconds": 30.0
  },
  {
+  "name": "customer_list",
+  "endpoint_id": "fin.customer.list",
+  "system": "fin",
+  "service": "fin-service",
+  "method": "POST",
+  "path": "/api/customer/customer/customerList",
+  "params": {},
+  "query_params": [],
+  "items": "$.data[*]",
+  "label": "customer_name",
+  "columns": [
+   "customer_name",
+   "customer_id"
+  ],
+  "query_safe": true,
+  "missing_required": [],
+  "auth": "bearer",
+  "timeout_seconds": 30.0
+ },
+ {
+  "name": "customer_part",
+  "endpoint_id": "fin.customer.part",
+  "system": "fin",
+  "service": "fin-service",
+  "method": "POST",
+  "path": "/api/customer/customer/customerPart",
+  "params": {},
+  "query_params": [
+   "customer_id"
+  ],
+  "items": "$.data",
+  "label": "customer_service.user_name",
+  "columns": [
+   "customer_service.user_name",
+   "handover_form.client_expand_name",
+   "handover_form.client_expand_id"
+  ],
+  "query_safe": true,
+  "missing_required": [
+   "customer_id"
+  ],
+  "auth": "bearer",
+  "timeout_seconds": 30.0
+ },
+ {
+  "name": "customer_policy",
+  "endpoint_id": "fin.customer.policy",
+  "system": "fin",
+  "service": "fin-service",
+  "method": "POST",
+  "path": "/api/Customer/Policy/getCustomerPolicy",
+  "params": {
+   "status": "2"
+  },
+  "query_params": [
+   "customer_id"
+  ],
+  "items": "$.data[*]",
+  "label": "policy_name",
+  "columns": [
+   "policy_name",
+   "policy_id"
+  ],
+  "query_safe": true,
+  "missing_required": [
+   "customer_id"
+  ],
+  "auth": "bearer",
+  "timeout_seconds": 30.0
+ },
+ {
   "name": "pending_orders",
   "endpoint_id": "fin.order_entrust.order_page",
   "system": "fin",

@@ -31,6 +31,25 @@ def test_route_shape(http_client):
     assert cl["endpoint_id"] == "fin.cost.amount_list"
     assert cl["columns"] == ["cost_name", "cost_id"]
     assert cl["auth"] == "bearer"
+    # §13 客户域三级链路视图
+    assert {"customer_list", "customer_part", "customer_policy"} <= names
+    cl1 = by_name["customer_list"]
+    assert cl1["endpoint_id"] == "fin.customer.list"
+    assert cl1["query_params"] == []                    # 无参 = 现状通道
+    assert "customer_id" in cl1["columns"] and "customer_name" in cl1["columns"]
+    cp = by_name["customer_part"]
+    assert cp["endpoint_id"] == "fin.customer.part"
+    assert cp["query_params"] == ["customer_id"]
+    assert cp["items"] == "$.data"                      # 单对象型(§13.4)
+    assert cp["label"] == "customer_service.user_name"
+    assert "handover_form.client_expand_id" in cp["columns"]
+    assert cp["missing_required"] == ["customer_id"]    # 静态链视角;点击期补齐
+    po3 = by_name["customer_policy"]
+    assert po3["endpoint_id"] == "fin.customer.policy"
+    assert po3["query_params"] == ["customer_id"]
+    assert po3["params"]["status"] == "2"               # 静态预设
+    assert "customer_id" not in po3["params"]           # 点击期供给,静态面不含
+    assert po3["missing_required"] == ["customer_id"]
 
 
 def test_capture_or_equal(http_client):

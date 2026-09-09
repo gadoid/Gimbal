@@ -37,6 +37,172 @@
    ]
   }
  },
+ "fin.customer.list": {
+  "responses": {
+   "200": [
+    {
+     "name": "code",
+     "path": "$.code",
+     "type": "number",
+     "state": "form",
+     "required": false,
+     "default": null,
+     "example": null,
+     "description": "业务状态码(200=成功)",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent",
+     "value_source": null,
+     "assertable": true,
+     "children": null
+    },
+    {
+     "name": "msg",
+     "path": "$.msg",
+     "type": "string",
+     "state": "form",
+     "required": false,
+     "default": null,
+     "example": null,
+     "description": "业务提示信息",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent",
+     "value_source": null,
+     "assertable": true,
+     "children": null
+    }
+   ]
+  }
+ },
+ "fin.customer.part": {
+  "request": [
+   {
+    "name": "customer_id",
+    "path": "$.customer_id",
+    "type": "string",
+    "state": "form",
+    "required": true,
+    "default": null,
+    "example": null,
+    "description": "客户ID(点击期参数面供给,§13.2)",
+    "enum": null,
+    "ui_kind": "text",
+    "source_kind": "independent",
+    "value_source": null,
+    "assertable": false,
+    "children": null
+   }
+  ],
+  "responses": {
+   "200": [
+    {
+     "name": "code",
+     "path": "$.code",
+     "type": "number",
+     "state": "form",
+     "required": false,
+     "default": null,
+     "example": null,
+     "description": "业务状态码(200=成功)",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent",
+     "value_source": null,
+     "assertable": true,
+     "children": null
+    },
+    {
+     "name": "msg",
+     "path": "$.msg",
+     "type": "string",
+     "state": "form",
+     "required": false,
+     "default": null,
+     "example": null,
+     "description": "业务提示信息",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent",
+     "value_source": null,
+     "assertable": true,
+     "children": null
+    }
+   ]
+  }
+ },
+ "fin.customer.policy": {
+  "request": [
+   {
+    "name": "customer_id",
+    "path": "$.customer_id",
+    "type": "string",
+    "state": "form",
+    "required": true,
+    "default": null,
+    "example": null,
+    "description": "客户ID(点击期参数面供给,§13.2)",
+    "enum": null,
+    "ui_kind": "text",
+    "source_kind": "independent",
+    "value_source": null,
+    "assertable": false,
+    "children": null
+   },
+   {
+    "name": "status",
+    "path": "$.status",
+    "type": "string",
+    "state": "form",
+    "required": true,
+    "default": null,
+    "example": null,
+    "description": "策略状态(视图静态预设 status=2,§13.1)",
+    "enum": null,
+    "ui_kind": "text",
+    "source_kind": "independent",
+    "value_source": null,
+    "assertable": false,
+    "children": null
+   }
+  ],
+  "responses": {
+   "200": [
+    {
+     "name": "code",
+     "path": "$.code",
+     "type": "number",
+     "state": "form",
+     "required": false,
+     "default": null,
+     "example": null,
+     "description": "业务状态码(200=成功)",
+     "enum": null,
+     "ui_kind": "number",
+     "source_kind": "independent",
+     "value_source": null,
+     "assertable": true,
+     "children": null
+    },
+    {
+     "name": "msg",
+     "path": "$.msg",
+     "type": "string",
+     "state": "form",
+     "required": false,
+     "default": null,
+     "example": null,
+     "description": "业务提示信息",
+     "enum": null,
+     "ui_kind": "text",
+     "source_kind": "independent",
+     "value_source": null,
+     "assertable": true,
+     "children": null
+    }
+   ]
+  }
+ },
  "fin.settlement.create_order": {
   "request": [
    {
@@ -474,7 +640,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_part",
+     "column": "handover_form.client_expand_name",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -490,7 +660,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_part",
+     "column": "handover_form.client_expand_id",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -522,7 +696,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_list",
+     "column": "customer_id",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -538,7 +716,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_list",
+     "column": "customer_name",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -746,7 +928,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_policy",
+     "column": "policy_id",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -762,7 +948,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_policy",
+     "column": "policy_name",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -2531,7 +2721,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_part",
+     "column": "handover_form.client_expand_name",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -2547,7 +2741,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_part",
+     "column": "handover_form.client_expand_id",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -2579,7 +2777,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_list",
+     "column": "customer_id",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -2595,7 +2797,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_list",
+     "column": "customer_name",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -2803,7 +3009,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_policy",
+     "column": "policy_id",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -2819,7 +3029,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_policy",
+     "column": "policy_name",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -7063,7 +7277,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_part",
+     "column": "handover_form.client_expand_name",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -7095,7 +7313,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_list",
+     "column": "customer_id",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -7111,7 +7333,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_list",
+     "column": "customer_name",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -7271,7 +7497,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_policy",
+     "column": "policy_id",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -7287,7 +7517,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_policy",
+     "column": "policy_name",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -8617,7 +8851,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_part",
+     "column": "handover_form.client_expand_id",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -12664,7 +12902,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_part",
+     "column": "handover_form.client_expand_name",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -12696,7 +12938,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_list",
+     "column": "customer_id",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -12712,7 +12958,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_list",
+     "column": "customer_name",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -12872,7 +13122,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_policy",
+     "column": "policy_id",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -12888,7 +13142,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_policy",
+     "column": "policy_name",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },
@@ -14218,7 +14476,11 @@
     "enum": null,
     "ui_kind": "unknown",
     "source_kind": "independent",
-    "value_source": null,
+    "value_source": {
+     "view": "customer_part",
+     "column": "handover_form.client_expand_id",
+     "group": ""
+    },
     "assertable": false,
     "children": null
    },

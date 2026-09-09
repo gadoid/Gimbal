@@ -390,7 +390,7 @@
 > 2026-09-08 新增（[动态取数源 spec](superpowers/specs/2026-09-07-dynamic-value-source-design.md) §3.4）。数据 dim 与 S1/S2 的语法 dim 又不同：items 是 `EndpointSpec.query_views`（端点注记）的**全库索引投影** —— 跨端点聚合、纯投影零状态（按需 build，无缓存一致性面）。与 grammar dim 同宿 `routes_grammar` 路由（注册次序敏感：必须先于 `/{dim}` 通配注册，否则 `/api/query-views` 被吞成 `dim="query-views"` → 404 dim_not_found）。
 - **触发**：Canvas value_source 绑定字段点「查」→ 平台后端 rows 路由取索引（TTL memo + 熔断）；前端不直连
 - **请求**：`GET /api/query-views`
-- **响应**（2026-09-08 目录实测形态，v1 两视图）：
+- **响应**（示例为 2026-09-08 v1 两视图形态；2026-09-09 客户域三视图入册后目录共 5 视图）：
   ```json
   {
     "ok": true,
@@ -411,7 +411,11 @@
     }
   }
   ```
-- **键说明**：`name` 全局唯一跨端点（命名不可变，§3.5）；`method/path/auth/timeout_seconds` 从端点 ApiSpec 派生（单一真源，超时与鉴权跟随 ApiSpec）；`params` = view 固定过滤预设 ▸ 声明 default ▸ example 合成后投影；`missing_required` = 双 None 的必填键（纵深防御：解释器执行时仍 422）；`columns` = 投影列集（label 打头 + 绑定列，几列标量 —— 宽行不回传）；`query_safe` = 端点 metadata 写副作用声明
+- **键说明**：`name` 全局唯一跨端点（命名不可变，§3.5）；`method/path/auth/timeout_seconds` 从端点 ApiSpec 派生（单一真源，超时与鉴权跟随 ApiSpec）；`params` = view 固定过滤预设 ▸ 声明 default ▸ example 合成后投影；`missing_required` = 双 None 的必填键（纵深防御：解释器执行时仍 422）；`columns` = 投影列集（label 打头 + 绑定列，几列标量 —— 宽行不回传）；`query_safe` = 端点 metadata 写副作用声明；`query_params` = 点击期参数面（预填只读顶层键，缺省空列表 = 无参现状，§13.2）
+- **目录清单 2026-09-09 增量**（客户域级联链三端点，§13.1）：
+  - `POST /api/customer/customer/customerList` — `customer_list` 视图（无参，label `customer_name`）
+  - `POST /api/customer/customer/customerPart` — `customer_part` 视图（`query_params=['customer_id']`，单对象型 `$.data`，点路径列）
+  - `POST /api/Customer/Policy/getCustomerPolicy` — `customer_policy` 视图（`query_params=['customer_id']` + 静态 `params.status="2"`）
 - **平台消费**：`GET /api/query-views/{name}/rows`（Platform Backend 解释器路由，CurrentUser 鉴权 + 查询凭证 + L1/L2/L3 缓存，非本接口代理面）
 - **缓存**：后端 TTL memo + 连续失败熔断（spec §3.4）；plate 侧零状态
 
