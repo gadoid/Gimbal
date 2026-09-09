@@ -141,13 +141,6 @@
                   v-model="bindings[row.service].url"
                   :placeholder="row.declaredUrl === null ? '未声明 — 现场填 URL 即可运行' : '覆盖 URL(可选,已预填声明值)'"
                 />
-                <!-- 查询账号别名(2026-09-07 挂账#3):动态取数源查询凭证,
-                     缺省用主凭证 — 存方案走既有 runScheme PUT 通路零新机制 -->
-                <input
-                  class="rd-bind-query-user"
-                  v-model="bindings[row.service].queryUser"
-                  placeholder="查询账号别名(缺省用主凭证)"
-                />
                 <span v-if="row.declaredUrl === null" class="rd-bind-warn undeclared">未声明</span>
                 <span v-else-if="degraded(row.service)" class="rd-bind-warn">凭证已删,运行时该用户不注入</span>
               </div>
@@ -357,8 +350,7 @@ function declaredUrlOf(svc: string): string | null {
 
 /** 行级显式绑定(D3,confirm 下发与方案快照同口径):预填未改动的
  *  声明 URL 不算显式绑定(否则 confirm 重送成覆盖、方案快照钉死旧声明
- *  URL);未声明行任何非空 URL 都是救燃绑定。queryUser(挂账#3)非空
- *  即显式。非显式行返回 undefined。 */
+ *  URL);未声明行任何非空 URL 都是救燃绑定。非显式行返回 undefined。 */
 function explicitBindingOf(
   b: ServiceBinding | undefined,
   declared: string | null,
@@ -366,12 +358,10 @@ function explicitBindingOf(
   const url = b?.url?.trim()
   const effectiveUrl = url && url !== declared ? url : undefined
   const authAlias = b?.authAlias || undefined
-  const queryUser = b?.queryUser?.trim() || undefined
-  if (!authAlias && !effectiveUrl && !queryUser) return undefined
+  if (!authAlias && !effectiveUrl) return undefined
   return {
     ...(authAlias ? { authAlias } : {}),
     ...(effectiveUrl ? { url: effectiveUrl } : {}),
-    ...(queryUser ? { queryUser } : {}),
   }
 }
 
@@ -411,7 +401,6 @@ watch(selectedScheme, (v) => {
     next[r.service] = {
       ...(b?.authAlias ? { authAlias: b.authAlias } : {}),
       url: b?.url ?? r.declaredUrl ?? undefined,
-      ...(b?.queryUser ? { queryUser: b.queryUser } : {}),
     }
   }
   bindings.value = next

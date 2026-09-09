@@ -576,7 +576,6 @@ import type {
   StrategyView, StrategyKindView, StrategyKindDetailView, FieldState,
 } from '@/types/plate'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
-import type { RunScheme } from '@/api/scenario-composer'
 import { parseJson } from '../../utils/json'
 
 const props = defineProps<{
@@ -1078,40 +1077,33 @@ const vsBadges = ref<Record<string, { view: string; fetchedAt?: string }>>({})
 const valueSourceGroups = computed<ValueSourceGroup[]>(() =>
   groupValueSources(stepDecls(currentStep.value)))
 
-/** Orchestration + 运行方案 sidecar 键(CaseComposer 同款本地桥接类型 —
- *  共享 types 侧 Orchestration 尚未收录 runSchemes,不改共享类型)。 */
-type OrchestrationWithSchemes = Orchestration & { runSchemes?: RunScheme[] }
-
 /**
  * 查询上下文(§7.2/§6.1):服务 URL 走 authored services 声明(svc → URL
- * 平表,Canvas 唯一可达的 URL 源);查询别名 = 服务绑定 queryUser ??
- * authAlias(缺省回落主凭证)— 后端凭证闸把 alias=None 视作「无凭证」
- * (bearer 视图 422 query_credential_required),null 仅当两处都未绑。
- * 绑定源 = orchestration 侧车 runSchemes[].serviceBindings(draft store
- * 里那份 — RunDialog 方案选择器同源读;临时手填/上次运行不落侧车,
- * 组合面读不到 → null = 诚实 422,提示到运行对话框配好方案再查)。
+ * 平表,Canvas 唯一可达的 URL 源);查询别名 = config.users 首键 —
+ * 后端凭证闸把 alias=None 视作「无凭证」(bearer 视图 422
+ * query_credential_required),config.users 空 → null = 诚实 422。
  */
 function resolveQueryContext(step: StepView): { serviceUrl?: string; queryAlias: string | null } {
   const svc = step.api?.service || ''
   return {
     serviceUrl: declaredUrlOf(svc) || undefined,
-    queryAlias: queryAliasOf(svc),
+    queryAlias: queryAliasOf(),
   }
 }
 
-/** 服务查询别名(§6.1):方案序 = RunDialog 选择器序,首个为该服务
- *  显式绑定 queryUser/authAlias 的方案命中(queryUser 优先);trim 后
- *  空串视同未绑。authored config.services 是 URL 平表,别名只在方案侧车。 */
-function queryAliasOf(svc: string): string | null {
-  if (!svc) return null
-  const schemes = (draftStore.draft?.orchestration as OrchestrationWithSchemes | undefined)
-    ?.runSchemes
-  for (const s of schemes ?? []) {
-    const b = s.serviceBindings?.[svc]
-    const alias = b?.queryUser?.trim() || b?.authAlias?.trim()
-    if (alias) return alias
-  }
-  return null
+/** 查询别名(§6.1,2026-09-09 裁定:查询身份 = 执行身份):唯一来源 =
+ *  config.users 首键(多用户取首键,确定性规则;trim 后空串视同无)—
+ *  组合期查询用执行账号,钉的值执行时必然查得到(§6.3 权限腐烂由构造
+ *  消解);代价 = 同账号组合期查询 × 执行并发的互踢窗(§6.2 单会话,
+ *  顺序工作流不受影响)。runSchemes.serviceBindings 的 queryUser??
+ *  authAlias 通道已整体移除(查询凭证是场景配置,与末步运行方案无关
+ *  — §6.1 配置无关性回归)。config.users 键与凭证池同一命名空间;
+ *  池无该别名 → 后端诚实 422「未找到查询凭证」。 */
+function queryAliasOf(): string | null {
+  const firstUser = Object.keys(
+    draftStore.draft?.definition?.config?.users ?? {},
+  )[0]?.trim()
+  return firstUser || null
 }
 
 /** 行集首键 = label 列(后端投影列序:label 恒行首;空行集不进选择态)。 */

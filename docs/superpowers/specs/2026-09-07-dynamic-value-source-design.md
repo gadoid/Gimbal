@@ -8,6 +8,7 @@
 > 修订 5:2026-09-08 收尾:状态转已实施;§11 验收清单逐项勾选留痕(测试证据/手验结果);§5.2 补 L3 勘误注
 > 修订 6:2026-09-08 代码↔spec 一致性审计同步:§3.4 追认 /full 不携带端级 query_views(视图唯一供给 = 索引路由,单通道);§4.2③ 勘误 service_url/query_alias 调用方求值;§10⑤ 措辞随 §5.2 勘误同步
 > 修订 7:2026-09-09 级联参数重议成立——修订 4 三支柱之"零消费方"失效(真实三级链路:customerList 选公司 → customerPart 详情扇出 → getCustomerPolicy 选策略);裁定走便宜通道 = **选择器参数面**(§13:QueryView 增 query_params 点击期参数 + 同名约定预填 + 点路径列投影 + 单对象/嵌套数组响应形态),否决 params_from 声明式绑定(可见性/维护/时机三评);值语义四红线(§13.6:编排期值第一公民,变量事后提升)。**已确认待实施**
+> 修订 8:2026-09-09 用户裁定——**查询身份 = 执行身份**:查询凭证唯一来源 = `config.users` 首键(多用户取首键,确定性规则);runSchemes.serviceBindings 的 `queryUser ?? authAlias` 通道**整体移除**(实现挂末步运行方案自相矛盾于 §6.1"查询凭证与场景执行配置无关"原文;组合期查询不得依赖时序在后的方案配置)。§6.3 权限腐烂由构造消解(查询用执行账号 → 钉的值执行时必然查得到);代价 = §6.2 单会话下同账号组合期查询 × 执行并发的互踢窗(内网顺序工作流不受影响)。前端 canvas 解析链 / RunDialog 输入 / ServiceBinding 前后端字段与测试同步移除;旧侧车残留 queryUser 键被 pydantic extra=ignore 静默丢弃,零迁移。
 > 日期:2026-09-07
 > 前置:2026-09-05 field-state-catalog(§1.4 一致化:字段的每个决策都是字段属性);2026-09-07 找回/穿线已实施(65740b4c)
 > 分支:`feat/dynamic-value-source`(实施分支,自 `feat/field-state-catalog` 分出;立项时写作 field-state-catalog)
@@ -298,8 +299,9 @@ T5 落值       前端渲染选择器(label 列 + 绑定列);用户选 → setVa
    > 勘误(2026-09-08 实施追认):平台无集中式 SUT URL resolver(执行线
    > `_apply_services` 亦为调用方内联语义),故 service_url / query_alias 由
    > **调用方(composer)求值后作 query param 传入**,路由保持无状态(CurrentUser
-   > 门内,内网语境接受;URL 求值源 = authored `config.services`,别名 = runSchemes
-   > 绑定首个显式 `queryUser ?? authAlias`,均缺 = 诚实 422);集中式解析不设;
+   > 门内,内网语境接受;URL 求值源 = authored `config.services`,别名 = `config.users`
+   > 首键(修订 8:查询身份 = 执行身份;runSchemes 通道已移除),均缺 = 诚实 422);
+   > 集中式解析不设;
 4. 按 ApiSpec 组装(GET → querystring;POST → JSON body)发送;**超时与鉴权
    方案跟随 ApiSpec**(timeout_seconds / auth,单一真源,不另设硬编码);
    **不重试**(查询尽力而为,失败即降级态)。
@@ -385,9 +387,14 @@ SUT 或被踢的凭证刷爆。~6 行。
 
 ### 6.1 专用查询凭证
 
-每个服务绑定托管**一个查询账号**(AuthSession 管 token;服务绑定配置扩
-`query_user` 键指向该账号,缺省回落绑定的主凭证)。查询凭证是**平台配置**,
-与平台登录用户无关、与场景执行配置无关。
+> 修订 8(2026-09-09)重写:初稿"服务绑定扩 `query_user` 键"把查询凭证挂上
+> 了末步运行方案(runSchemes.serviceBindings)——与下文"与场景执行配置无关"
+> 自相矛盾(组合期查询时序上先于方案选择),已整体移除。
+
+查询身份 = **执行身份**(用户裁定):查询凭证唯一来源 = `config.users`
+**首键**(多用户取首键,确定性规则;trim 后空串视同无)。查询凭证是**平台
+配置**,与平台登录用户无关、与场景执行配置无关。config.users 键与凭证池
+(auth_sessions)同一命名空间;池无该别名 → 诚实 422「未找到查询凭证」。
 
 ### 6.2 三规则(单会话约束下的设计)
 
@@ -704,8 +711,8 @@ ValueSourcePicker overlay 壳/错误态/表格/扇出全复用,body 顶部插一
   customer_id → ②参数预填 → 扇出 client_expand_id → ③参数预填 +
   status="2" 固定 → 选策略钉 policy_id。
 - 手验留痕位(2026-09-09 实施注;执行时机随 SUT 可达,不阻塞本计划合入;
-  需三服务在跑:plate 8765 / backend 8000 / 前端 5173;凭证 = 服务绑定
-  queryUser;与 §11 手验 2-6 同批执行):
+  需三服务在跑:plate 8765 / backend 8000 / 前端 5173;凭证 = `config.users`
+  首键,修订 8 口径;与 §11 手验 2-6 同批执行):
   1. 任一下单端点场景(order_order_add / order_entrust_order_add):
      FieldStateSearch 找回 `customer_id`/`customer_name` → 翻 form;
   2. `customer_id` 查钮 → customer_list 无参直查 → 选公司 →

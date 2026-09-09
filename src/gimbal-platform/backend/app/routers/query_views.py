@@ -1,9 +1,9 @@
 """query-views rows 路由 —— 组合期取数解释器入口(2026-09-07 spec §4.1)。
 
-CurrentUser 鉴权(查询身份是平台服务绑定的查询凭证,不是平台用户自己);
-service_url/query_alias 由前端按 ServiceBinding.url > authored
-config.services / query_user ?? auth_alias 优先级求值后传入(组合上下文
-在调用方;后端无集中 resolver,与 _apply_services 同语义)。
+CurrentUser 鉴权(查询身份是场景执行账号,不是平台用户自己);
+service_url/query_alias 由前端按 authored config.services /
+config.users 首键(2026-09-09 裁定:查询身份 = 执行身份)求值后传入
+(组合上下文在调用方;后端无集中 resolver,与 _apply_services 同语义)。
 """
 from __future__ import annotations
 

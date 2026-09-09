@@ -184,15 +184,14 @@ class DataSetDraft(BaseModel):
 
 # ─── runs ───────────────────────────────────────────────────────────
 class ServiceBinding(BaseModel):
-    """service → {authAlias?, url?} 绑定(spec §3.1/§5)。"""
+    """service → {authAlias?, url?} 绑定(spec §3.1/§5)。
+    query_user 已移除(2026-09-09 裁定):查询凭证唯一来源 = config.users
+    首键(查询身份 = 执行身份),与运行方案无关;旧侧车残留键被
+    extra=ignore 静默丢弃。"""
     model_config = _CAMEL
 
     auth_alias: str | None = Field(default=None, alias="authAlias", max_length=128)
     url: str | None = Field(default=None, alias="url", max_length=512)
-    # 组合期取数专用账号别名(2026-09-07 §6.1):指向 owner 的 auth_sessions;
-    # 缺省回落 authAlias(主凭证)。查询凭证永不进场景执行配置(§6.2 —
-    # materialize_run_copy 只取绑定 url,queryUser 不落执行副本)。
-    query_user: str | None = Field(default=None, alias="queryUser", max_length=128)
 
 
 class RunScheme(BaseModel):

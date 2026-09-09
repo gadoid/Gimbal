@@ -2180,18 +2180,18 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     // services 声明 → resolveQueryContext 的 serviceUrl 源(R3 钉取数上下文)
     const { w } = mountCanvas({ steps, services: { fin: 'http://fin.example' } })
     await flushPromises()
-    // 方案侧车(draft store,RunDialog 同源)注入 fin 的查询绑定 —
-    // queryUser 与 authAlias 同时显式 → queryUser 优先(§6.1 缺省回落主凭证)
+    // config.users 首键 = 查询别名唯一来源(2026-09-09 裁定:查询身份 =
+    // 执行身份,runSchemes 通道已移除)— 注入两用户,取首键 query-qa
     const draft = useScenarioDraftStore()
     draft.draft = {
       ...draft.draft!,   // beforeEach 已置非空快照
-      orchestration: {
-        steps: [], resourceMeta: {},
-        runSchemes: [{
-          name: 's1', dataSetIds: [],
-          serviceBindings: { fin: { authAlias: 'main-qa', queryUser: 'query-qa' } },
-        }],
-      } as any,
+      definition: {
+        ...draft.draft!.definition,
+        config: {
+          ...draft.draft!.definition.config,
+          users: { 'query-qa': { token: 't' } as any, backup: { token: 't2' } as any },
+        } as any,
+      },
     }
     ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
       view: 'v',
@@ -2200,9 +2200,9 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     })
     await w.find('.vs-query-btn').trigger('click')   // $.a 查钮 → fieldQuery → picker 开
     await flushPromises()
-    // 取数上下文钉死:view 名 + authored services URL + 方案绑定别名
-    // (queryUser ?? authAlias)+ 非刷新 — alias=null 会被后端凭证闸
-    // 422(query_credential_required),此钉即凭证链防回归
+    // 取数上下文钉死:view 名 + authored services URL + config.users 首键
+    // + 非刷新 — alias=null 会被后端凭证闸 422(query_credential_required),
+    // 此钉即凭证链防回归
     expect(fetchQueryViewRows).toHaveBeenCalledWith('v', {
       refresh: false, serviceUrl: 'http://fin.example', queryAlias: 'query-qa',
     })
@@ -2237,8 +2237,8 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     })
     await w.find('.vs-query-btn').trigger('click')   // 实例叶 $.fees[0].cost_id 的查钮
     await flushPromises()
-    // 无方案侧车(beforeEach draft 无 orchestration)→ 无绑定可解析:
-    // queryAlias 诚实 null(bearer 视图将 422 提示配置,§7.5 降级态)
+    // beforeEach draft 无 config.users → queryAlias 诚实 null
+    // (bearer 视图将 422 提示配置,§7.5 降级态)
     expect(fetchQueryViewRows).toHaveBeenCalledWith('v2', {
       refresh: false, serviceUrl: undefined, queryAlias: null,
     })
@@ -2255,6 +2255,44 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     // 行按实例路径查 queryBadges,模板键会让数组嵌套叶恒不亮(修轮 2)
     expect(w.find('.vs-badge').exists()).toBe(true)
     expect(w.find('.vs-badge').text()).toContain('view:v2')
+    w.unmount()
+  })
+
+  it('查询凭证缺省回落 config.users 首键(2026-09-09 裁定:查询身份=执行身份)', async () => {
+    // 查询别名唯一来源 = config.users 首键(多用户取首键,确定性规则)
+    // —— 组合期查询用执行账号,钉的值执行时必然查得到(§6.3 权限腐烂
+    // 由构造消解);凭证池无此别名时后端诚实 422「未找到查询凭证」
+    const steps = [mkStep({
+      api: {
+        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+        headers: {}, view_hints: { endpoint_id: 'ep-vs' },
+      },
+      request: { kind: 'request', body: {} },
+    })]
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    const draft = useScenarioDraftStore()
+    draft.draft = {
+      ...draft.draft!,
+      definition: {
+        ...draft.draft!.definition,
+        config: {
+          ...draft.draft!.definition.config,
+          users: { pangyan: { token: 't' } as any, backup: { token: 't2' } as any },
+        } as any,
+      },
+    }
+    ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
+      view: 'v',
+      rows: [{ x: '1', nm: 'r1' }],
+      truncated: false, fetched_at: 'T', cached: false, stale: false,
+    })
+    await w.find('.vs-query-btn').trigger('click')
+    await flushPromises()
+    // config.users 首键 pangyan(backup 不取)= 查询别名兜底
+    expect(fetchQueryViewRows).toHaveBeenCalledWith('v', {
+      refresh: false, serviceUrl: undefined, queryAlias: 'pangyan',
+    })
     w.unmount()
   })
 

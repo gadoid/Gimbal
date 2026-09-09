@@ -1,4 +1,4 @@
-"""rows 路由:鉴权门 / 参数 / 错误形状 / query_user 键(spec §4.1/§6.1)。"""
+"""rows 路由:鉴权门 / 参数 / 错误形状(spec §4.1/§6.1)。"""
 import httpx
 import pytest
 
@@ -108,14 +108,6 @@ async def test_bearer_credential_loader_path(client, monkeypatch):
     body = r.json()
     assert body["view"] == "v1" and body["rows"] == [{"nm": "y"}]
     assert body["cached"] is False and body["stale"] is False
-
-
-async def test_query_user_binding_field():
-    from app.schemas.scenario_composer import ServiceBinding
-    b = ServiceBinding.model_validate({"authAlias": "main", "queryUser": "q1",
-                                       "url": "http://s"})
-    assert b.query_user == "q1" and b.auth_alias == "main"
-    assert ServiceBinding.model_validate({"authAlias": "main"}).query_user is None
 
 
 # ── §13.3 索引代理 + rows 路由 params 点击期参数 ──────────────────
