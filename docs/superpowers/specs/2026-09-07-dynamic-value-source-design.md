@@ -666,6 +666,10 @@ ValueSourcePicker overlay 壳/错误态/表格/扇出全复用,body 顶部插一
   语义,不新增失效传播);
 - FieldForm **零改动**(查钮/徽标/扇出落值原样);注入态(assign)字段
   可查,钉的字面量 = continue 兜底原值(I1 语义自洽)。
+- 消费承载(2026-09-09 实施注):下单端点链路字段(customer_id/policy_id/
+  client_expand_* 等)目录默认 carry(值表注入语义不动)——value_source 绑定
+  挂 carry 字段合法(能力与状态两轴正交),经 FieldStateSearch 找回翻 form 后
+  查钮显形;目录共识与 dispatch 基线零变化。
 
 ### 13.6 值语义四红线(与 §7.5 相承)
 
@@ -699,3 +703,17 @@ ValueSourcePicker overlay 壳/错误态/表格/扇出全复用,body 顶部插一
 - 手验(随 SUT 可达,与 §11 手验 2-6 同批):三级链路实查——①选公司钉
   customer_id → ②参数预填 → 扇出 client_expand_id → ③参数预填 +
   status="2" 固定 → 选策略钉 policy_id。
+- 手验留痕位(2026-09-09 实施注;执行时机随 SUT 可达,不阻塞本计划合入;
+  需三服务在跑:plate 8765 / backend 8000 / 前端 5173;凭证 = 服务绑定
+  queryUser;与 §11 手验 2-6 同批执行):
+  1. 任一下单端点场景(order_order_add / order_entrust_order_add):
+     FieldStateSearch 找回 `customer_id`/`customer_name` → 翻 form;
+  2. `customer_id` 查钮 → customer_list 无参直查 → 选公司 →
+     `customer_id`+`customer_name` 落值 + view 徽标;
+  3. `client_expand_id` 查钮 → 参数段 `customer_id` 预填(读 ① 落值)→
+     「查询」→ 单对象一行(`customer_service.user_name` 行首)→ 点行 →
+     `client_expand_id`/`client_expand_name` 点列扇出落值;
+  4. `policy_id` 查钮 → 参数段 `customer_id` 预填(status=2 静态不可见)→
+     「查询」→ 策略列表 → 选 → `policy_id`+`policy_name` 落值;
+  5. 「↩ 改参数」回跳值保留;改参重查后已落值字段不被自动清(重选行才覆写);
+  6. 参数段留空硬查 → 后端 422 缺键提示透出(缺 = 未供给)。
