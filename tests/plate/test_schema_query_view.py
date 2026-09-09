@@ -109,3 +109,41 @@ class TestResolveViewParams:
         merged, missing = resolve_view_params(ep, ep.query_views[0])
         assert merged == {"a": "OV", "b": "EB", "z": 1}   # 覆盖 a / 补 b / 追加 z / 丢 c
         assert missing == []
+
+
+# ── §13.2 query_params 点击期参数面 ──────────────────────────────
+
+def test_query_params_params_collision_rejected():
+    """query_params × params 同名 = 构造期拒(静态身份与点击期变量分家)。"""
+    with pytest.raises(ValidationError, match="同名冲突"):
+        QueryView(name="v", params={"status": "2"}, query_params=["status"],
+                  items="$.data[*]", label="n")
+
+
+def test_query_params_dot_name_rejected():
+    """名字禁点:预填只读顶层 '$.<name>',嵌套键不做预填源(§13.7)。"""
+    with pytest.raises(ValidationError, match="不含"):
+        QueryView(name="v", query_params=["a.b"], items="$.data[*]", label="n")
+
+
+def test_query_params_default_none_ok():
+    v = QueryView(name="v", items="$.data[*]", label="n")
+    assert v.query_params is None   # 缺省无参 = 现状行为零变化
+
+
+def test_closure_exempts_query_params_keys():
+    """⑤ 豁免:必填键在 query_params → 构造期不拒(点击期供给 §13.2);
+    索引仍透出 missing_required(backend 422 兜底)。"""
+    ep = EndpointSpec(
+        id="t.customer.part", system="t", service="t-service", name="part",
+        api=ApiSpec(service="t-service", method="POST", path="/p", auth="none"),
+        request=RequestSpec(body_type="json", declarations=[
+            DeclarationEntry(name="customer_id", path="$.customer_id",
+                             type="string", required=True, ui_kind="text"),
+        ]),
+        responses={200: ResponseSpec(status=200)},
+        metadata=EndpointMetadata(query_safe=True),
+        query_views=[QueryView(name="v_part", query_params=["customer_id"],
+                               items="$.data", label="x")],
+    )
+    assert ep.query_views[0].query_params == ["customer_id"]   # 构造通过即豁免成立

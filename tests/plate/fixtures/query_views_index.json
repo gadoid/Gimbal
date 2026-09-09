@@ -7,6 +7,7 @@
   "method": "GET",
   "path": "/api/home/cost/amountCostList",
   "params": {},
+  "query_params": [],
   "items": "$.data[*]",
   "label": "cost_name",
   "columns": [
@@ -35,6 +36,7 @@
    "sort_order": "desc",
    "params": {}
   },
+  "query_params": [],
   "items": "$.data.data[*]",
   "label": "order_no",
   "columns": [

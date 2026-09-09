@@ -31,6 +31,8 @@ class QueryView(BaseModel):
 
     name: str                              # 全局唯一(跨端点);四重身份见 §3.5
     params: dict[str, Any] | None = None
+    # 点击期参数面(spec 2026-09-09 §13.2):参数名列表;None/空 = 无参(现状零变化)。
+    query_params: list[str] | None = None
     items: str                             # 响应行集 JSONPath,如 '$.data.list[*]'
     label: str                             # 选择器显示列(行内键)
 
@@ -47,6 +49,19 @@ class QueryView(BaseModel):
             )
         if not self.label:
             raise ValueError("QueryView.label 不可为空(选择器显示列)")
+        if self.query_params:
+            static_keys = set(self.params or {})
+            for q in self.query_params:
+                if not q or "." in q:
+                    raise ValueError(
+                        f"QueryView.query_params 含非法名 {q!r}(须非空且不含 '.',"
+                        f"预填只读顶层键,嵌套键不做预填源 §13.7)"
+                    )
+                if q in static_keys:
+                    raise ValueError(
+                        f"QueryView.query_params 与 params 同名冲突:{q!r}"
+                        f"(§13.2 静态身份与点击期变量分家)"
+                    )
         return self
 
 

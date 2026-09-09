@@ -108,6 +108,9 @@ class EndpointSpec(BaseModel):
                 )
             for v in self.query_views:
                 _, missing = resolve_view_params(self, v)
+                # §13.2:query_params 键由点击期参数面供给,构造期不拒;
+                # 索引仍透出静态链视角的 missing_required(backend 422 兜底)
+                missing = [k for k in missing if k not in (v.query_params or [])]
                 if missing:
                     raise ValueError(
                         f"EndpointSpec {self.id} view {v.name!r}: 必填键经 "

@@ -125,3 +125,17 @@ class TestIndex:
                            query_views=ep.query_views)
         (r,) = build_query_view_index([ep2])
         assert r["params"] == {"k": 9, "page": 7}
+
+    def test_index_carries_query_params(self):
+        """§13.3:索引行携带 query_params;缺省视图携带空列表(全条目同例)。"""
+        qv = QueryView(name="v_param", query_params=["customer_id"],
+                       items="$.data", label="x")
+        rows = build_query_view_index([_ep("t.q", views=[qv, VIEW2])])
+        by_name = {r["name"] for r in rows}
+        assert "v_param" in by_name
+        param_row = next(r for r in rows if r["name"] == "v_param")
+        assert param_row["query_params"] == ["customer_id"]
+        # 既有无参视图(同文件样板构造)携带空列表
+        bare = next(r for r in rows if r["name"] != "v_param") if len(rows) > 1 else None
+        if bare is not None:
+            assert bare["query_params"] == []

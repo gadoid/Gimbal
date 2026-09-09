@@ -74,6 +74,7 @@ def build_query_view_index(endpoints: list[EndpointSpec]) -> list[dict[str, Any]
                 "method": ep.api.method,
                 "path": ep.api.path,
                 "params": merged,
+                "query_params": list(v.query_params or []),
                 "items": v.items,
                 "label": v.label,
                 "columns": cols,
