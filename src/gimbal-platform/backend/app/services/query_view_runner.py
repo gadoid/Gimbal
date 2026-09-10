@@ -5,9 +5,9 @@ fail-soft:所有失败上抛 QueryViewError(code, message, status),路由翻译�
 锁序(§5.2):view 锁外层 → 凭证闸内层;永不同时持两把 view 锁。
 
 凭证 duck-type 契约(四个面,对齐 app/auth/schema.py 真身 AuthSession):
-auth_header / apply_token(tok, ttl) / clear_token() / .url —— 真身的
-auth_header 是 @property(无 token 返 None,控制字符抛 ValueError),而契约
-形态是无参方法;runner 内 _auth_header_value 归一两种形态与异常。
+.token / apply_token(tok, ttl) / clear_token() / .url —— 注入形态与
+认证部分的控制一致:执行侧场景模板 = ${auth.<tag>.token} 裸值(token_type
+在执行链无消费,§13.8 首连测实证),runner 同源发裸 token,不拼 scheme。
 """
 from __future__ import annotations
 
@@ -163,19 +163,16 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
-def _auth_header_value(session: Any) -> "str | None":
-    """凭证 auth_header 兼容读取(真身 @property / 契约方法两形)。
+def _token_value(session: Any) -> "str | None":
+    """凭证 token 裸值读取(注入形态与认证部分的控制一致,§13.8 实证)。
 
-    真 AuthSession.auth_header 无 token 返 None、控制字符抛 ValueError;
-    duck-type 契约是方法。取属性后可调则调;任何异常归一为 None —— 与
-    "无 token"同路(冷启登录 / 登录后仍无 token 则降级)。
+    执行侧场景模板 = ${auth.<tag>.token}(裸值,无 scheme);runner 同源发
+    裸 token。不消费 auth_header/token_type —— token_type 在执行链无消费,
+    查询侧单边依赖它拼 scheme 正是首连测 407"登录已过期"事故的根因
+    (token_type='Authorization' 被拼成头值 scheme)。无 token → None
+    (冷启登录 / 登录后仍无 token 则降级)。
     """
-    try:
-        value = session.auth_header
-        if callable(value):
-            value = value()
-    except Exception:
-        return None
+    value = getattr(session, "token", None)
     return value if isinstance(value, str) and value else None
 
 
@@ -216,7 +213,7 @@ async def _resolve_auth_header(
     """凭证闸(L3):串行化凭证解析与登录(防并发自踢);查询不在闸内 ——
     §6.2 单 session SUT 允许并发 HTTP。锁序(§5.2)view 锁外层 → 此闸内层。
 
-    返回 (Authorization 值|None, session|None, cred_key|None)。
+    返回 (Authorization 值 = 裸 token|None, session|None, cred_key|None)。
     - auth == "none" → (None, None, None),不走凭证链路;
     - key 已在 _cred_dead → 直接 sut_auth_expired(401 拉黑,绝不重登,§6.2);
     - 冷启动(无 token)经 _AUTHENTICATE seam 登录一次;AuthError → 降级。
@@ -257,7 +254,7 @@ async def _resolve_auth_header(
                     f"未找到查询凭证 {query_alias!r}(owner={owner_id})",
                     status=422)
             _cred_sessions[cred_key] = session
-        header = _auth_header_value(session)
+        header = _token_value(session)
         if header is None:
             try:  # 冷启动:登录一次(§6.2);不重试(§4.2)
                 await asyncio.to_thread(_AUTHENTICATE, session, "query")
@@ -265,7 +262,7 @@ async def _resolve_auth_header(
                 raise QueryViewError(
                     "sut_auth_expired",
                     f"查询凭证 {query_alias!r} 登录失败: {e}") from e
-            header = _auth_header_value(session)
+            header = _token_value(session)
             if header is None:
                 raise QueryViewError(
                     "sut_auth_expired",
@@ -285,6 +282,8 @@ async def _query_sut(
     """
     method = view.get("method") or "GET"
     url = f"{service_url}{view.get('path', '')}"
+    # 裸 token 注入,与认证部分的控制一致(执行侧场景模板
+    # ${auth.<tag>.token} 同源;不拼 token_type scheme,§13.8 实证)
     headers = {"Authorization": auth_header} if auth_header else None
     timeout = view.get("timeout_seconds") or 5.0
     # §13.3 合并链 per-key:点击期 ▸ 索引 params(已含 view.params▸default▸example)
@@ -316,19 +315,20 @@ async def _query_sut(
         raise QueryViewError(
             "shape_drift", f"响应体非 JSON(SUT/网关拦截?): {e}") from e
     # 业务码信封检测(§13.8 首连测实证,2026-09-10):fin SUT 的凭证失效在
-    # 业务码层应答(HTTP 200 + code=401 + 空 data)—— HTTP 层不可见,死凭证
-    # 会被当"合法空行集"静默缓存/供数(§7.5 降级态不可达)。携 code 键且非
-    # 成功码 → 错误处理(§4.2 空结果分形的前提是响应宣告成功):401 与
-    # HTTP 401 同口径(拉黑不重登),其余业务码 sut_error 诚实透出;
-    # 无信封响应(code 键缺席)不受影响。
+    # 业务码层应答(HTTP 200 + code=401/407 + 空 data;407 msg="登录已过期"
+    # = 坏头/死 token 的统一应答)—— HTTP 层不可见,死凭证会被当"合法空行集"
+    # 静默缓存/供数(§7.5 降级态不可达)。携 code 键且非成功码 → 错误处理
+    # (§4.2 空结果分形的前提是响应宣告成功):401/407 与 HTTP 401 同口径
+    # (拉黑不重登),其余业务码 sut_error 诚实透出;无信封响应(code 键
+    # 缺席)不受影响。
     if isinstance(payload, dict) and "code" in payload:
         bc = payload["code"]
         if bc not in (200, "200"):
-            if bc in (401, "401"):
+            if bc in (401, "401", 407, "407"):
                 _kill_credential(session, cred_key)
                 raise QueryViewError(
                     "sut_auth_expired",
-                    f"SUT 业务码 401:{view.get('endpoint_id')} 凭证已失效")
+                    f"SUT 业务码 {bc}:{view.get('endpoint_id')} 凭证已失效")
             raise QueryViewError(
                 "sut_error",
                 f"SUT 业务码 {bc!r}:{str(payload.get('msg', ''))[:200]}")

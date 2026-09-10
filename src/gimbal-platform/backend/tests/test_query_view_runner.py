@@ -38,21 +38,19 @@ def index(monkeypatch):
 
 
 class _FakeSession:
-    """Duck-typed 查询凭证。契约:auth_header() 无 token 返回 None;
-    apply_token/clear_token 管理态。执行者对齐 app/auth 真实 AuthSession
-    API 时保持同形(runner 只依赖这四个面)。"""
+    """Duck-typed 查询凭证。契约面:.token(裸值注入,§13.8)/
+    apply_token/clear_token 管理态 / .url。执行者对齐 app/auth 真实
+    AuthSession API 时保持同形(runner 只依赖这四个面)。"""
 
     def __init__(self):
         self.token = None
+        self.url = "https://sut-login"
 
     def apply_token(self, tok: str, ttl: int) -> None:
         self.token = tok
 
     def clear_token(self) -> None:
         self.token = None
-
-    def auth_header(self) -> "str | None":
-        return f"Bearer {self.token}" if self.token else None
 
 
 class TestJsonpathMirror:
@@ -106,10 +104,10 @@ class TestFetchRows:
         assert res.rows == [{"nm": "a", "id": 1}, {"nm": "b", "id": 2}]
         assert not res.cached and not res.stale and not res.truncated
 
-    async def test_post_body_and_auth_header(self, index, monkeypatch):
+    async def test_post_body_and_bare_token(self, index, monkeypatch):
         seen = {}
-        class _S:  # 假 AuthSession
-            def auth_header(self): return "Bearer tok"
+        class _S:  # 假 AuthSession(契约面:.token 裸值)
+            token = "tok"
         def fake_request(method, url, **kw):
             seen.update(kw, method=method, url=url)
             return httpx.Response(200, json={"rows": [{"code": "c1"}]})
@@ -118,7 +116,9 @@ class TestFetchRows:
                                  owner_id=1, query_alias="qa",
                                  load_credential=lambda o, a: _S())
         assert seen["method"] == "POST" and seen["json"] == {"k": "x"}
-        assert seen["headers"]["Authorization"] == "Bearer tok"
+        # 裸 token 注入,与认证部分的控制一致(执行侧 ${auth.<tag>.token}
+        # 模板同源,§13.8 实证);token_type 不参与拼头
+        assert seen["headers"]["Authorization"] == "tok"
         assert res.rows == [{"code": "c1"}]
 
     async def test_async_load_credential_awaited(self, index, monkeypatch):
@@ -259,7 +259,7 @@ class TestFetchRows:
             logins["n"] += 1
             session.apply_token("tok-1", 3600)
         def fake_request(method, url, **kw):
-            if kw.get("headers", {}).get("Authorization") == "Bearer tok-1":
+            if kw.get("headers", {}).get("Authorization") == "tok-1":
                 return httpx.Response(401, json={"msg": "expired"})
             raise AssertionError("未经凭证直接请求 auth=bearer 视图")
         monkeypatch.setattr(httpx, "request", fake_request)
@@ -276,17 +276,19 @@ class TestFetchRows:
         assert e2.value.code == "sut_auth_expired"   # 拉黑后直接降级,不打 SUT
         assert logins["n"] == 1      # 冷启一次;401 后绝不自动重登录(§6.2)
 
-    async def test_business_401_degrades_blacklists(self, index, monkeypatch):
+    @pytest.mark.parametrize("bc", [401, 407])
+    async def test_business_auth_codes_degrade_blacklists(
+            self, index, monkeypatch, bc):
         """§13.8 首连测实证:fin SUT 凭证失效在业务码层应答(HTTP 200 +
-        code=401 + 空 data)—— HTTP 401 检测不可见;死凭证必须降级拉黑,
-        不得静默当"合法空行集"缓存/供数。"""
+        code=401/407 + 空 data;407 msg="登录已过期")—— HTTP 401 检测
+        不可见;死/坏凭证必须降级拉黑,不得静默当"合法空行集"缓存/供数。"""
         sess = _FakeSession()
         sess.apply_token("tok-1", 3600)
         calls = {"n": 0}
 
         def fake_request(method, url, **kw):
             calls["n"] += 1
-            return httpx.Response(200, json={"code": 401, "msg": "未登录",
+            return httpx.Response(200, json={"code": bc, "msg": "未登录",
                                              "rows": []})
         monkeypatch.setattr(httpx, "request", fake_request)
         with pytest.raises(r.QueryViewError) as e:
