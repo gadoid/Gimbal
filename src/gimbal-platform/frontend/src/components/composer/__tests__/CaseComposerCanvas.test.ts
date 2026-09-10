@@ -2180,8 +2180,8 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     // services 声明 → resolveQueryContext 的 serviceUrl 源(R3 钉取数上下文)
     const { w } = mountCanvas({ steps, services: { fin: 'http://fin.example' } })
     await flushPromises()
-    // config.users 首键 = 查询别名唯一来源(2026-09-09 裁定:查询身份 =
-    // 执行身份,runSchemes 通道已移除)— 注入两用户,取首键 query-qa
+    // 查询别名 = 当前 step 服务同域 users 键序首命中(修订 10:查询身份 =
+    // 执行身份的域内首键)— query-qa 同域命中;backup 异域不取
     const draft = useScenarioDraftStore()
     draft.draft = {
       ...draft.draft!,   // beforeEach 已置非空快照
@@ -2189,7 +2189,10 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
         ...draft.draft!.definition,
         config: {
           ...draft.draft!.definition.config,
-          users: { 'query-qa': { token: 't' } as any, backup: { token: 't2' } as any },
+          users: {
+            'query-qa': { url: 'http://fin.example', token: 't' } as any,
+            backup: { url: 'http://other.example', token: 't2' } as any,
+          },
         } as any,
       },
     }
@@ -2292,6 +2295,62 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     // config.users 首键 pangyan(backup 不取)= 查询别名兜底
     expect(fetchQueryViewRows).toHaveBeenCalledWith('v', {
       refresh: false, serviceUrl: undefined, queryAlias: 'pangyan',
+    })
+    w.unmount()
+  })
+
+  it('多服务混编:查询别名随当前 step 服务同域切换;异域零命中诚实 null(修订 10)', async () => {
+    // 混编:step1 走 fin(用户 finUser 同域),step2 走 sysY(用户 yUser 异域于
+    // 首键)— 查询别名必须锚定**当前 step 的服务域**,而非场景 users 首键;
+    // 否则错域 token 被 SUT 拒且业务码 401/407 拉黑污染首键本域(§13.8 实证)。
+    const steps = [mkStep({
+      api: { kind: 'api', service: 'fin', method: 'POST', path: '/order',
+             headers: {}, view_hints: { endpoint_id: 'ep-vs' } },
+      request: { kind: 'request', body: {} },
+    }), mkStep({
+      api: { kind: 'api', service: 'sysY', method: 'POST', path: '/other',
+             headers: {}, view_hints: { endpoint_id: 'ep-vs' } },
+      request: { kind: 'request', body: {} },
+    })]
+    const { w } = mountCanvas({
+      steps, services: { fin: 'http://fin.example', sysY: 'http://y.example' },
+    })
+    await flushPromises()
+    const draft = useScenarioDraftStore()
+    const setUsers = (users: Record<string, unknown>) => {
+      draft.draft = {
+        ...draft.draft!,
+        definition: {
+          ...draft.draft!.definition,
+          config: { ...draft.draft!.definition.config, users } as any,
+        },
+      }
+    }
+    setUsers({   // 键序 finUser 在前 — yUser 不是首键,只有同域匹配才取到
+      finUser: { url: 'http://fin.example' } as any,
+      yUser: { url: 'http://y.example' } as any,
+    })
+    ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
+      view: 'v', rows: [{ x: '1', nm: 'r1' }],
+      truncated: false, fetched_at: 'T', cached: false, stale: false,
+    })
+    await w.find('.vs-query-btn').trigger('click')       // step1(fin)查
+    await flushPromises()
+    expect(fetchQueryViewRows).toHaveBeenLastCalledWith('v', {
+      refresh: false, serviceUrl: 'http://fin.example', queryAlias: 'finUser',
+    })
+    await w.findAll('.step-row')[1].trigger('click')     // 切到 step2(sysY)
+    await flushPromises()
+    await w.find('.vs-query-btn').trigger('click')
+    await flushPromises()
+    expect(fetchQueryViewRows).toHaveBeenLastCalledWith('v', {
+      refresh: false, serviceUrl: 'http://y.example', queryAlias: 'yUser',
+    })
+    setUsers({ finUser: { url: 'http://fin.example' } as any })   // y 域无用户
+    await w.find('.vs-query-btn').trigger('click')
+    await flushPromises()
+    expect(fetchQueryViewRows).toHaveBeenLastCalledWith('v', {
+      refresh: false, serviceUrl: 'http://y.example', queryAlias: null,   // 不回退异域首键
     })
     w.unmount()
   })

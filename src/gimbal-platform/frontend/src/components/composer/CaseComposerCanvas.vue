@@ -1078,32 +1078,42 @@ const valueSourceGroups = computed<ValueSourceGroup[]>(() =>
   groupValueSources(stepDecls(currentStep.value)))
 
 /**
- * 查询上下文(§7.2/§6.1):服务 URL 走 authored services 声明(svc → URL
- * 平表,Canvas 唯一可达的 URL 源);查询别名 = config.users 首键 —
- * 后端凭证闸把 alias=None 视作「无凭证」(bearer 视图 422
- * query_credential_required),config.users 空 → null = 诚实 422。
+ * 查询上下文(§7.2/§6.1):服务 URL 与查询别名同源于**当前 step** —
+ * 服务 URL 走 authored services 声明(svc → URL 平表,Canvas 唯一可达的
+ * URL 源);查询别名 = 该服务同域的 users 条目(修订 10)。后端凭证闸把
+ * alias=None 视作「无凭证」(bearer 视图 422 query_credential_required)。
  */
 function resolveQueryContext(step: StepView): { serviceUrl?: string; queryAlias: string | null } {
   const svc = step.api?.service || ''
   return {
     serviceUrl: declaredUrlOf(svc) || undefined,
-    queryAlias: queryAliasOf(),
+    queryAlias: queryAliasOf(svc),
   }
 }
 
-/** 查询别名(§6.1,2026-09-09 裁定:查询身份 = 执行身份):唯一来源 =
- *  config.users 首键(多用户取首键,确定性规则;trim 后空串视同无)—
- *  组合期查询用执行账号,钉的值执行时必然查得到(§6.3 权限腐烂由构造
- *  消解);代价 = 同账号组合期查询 × 执行并发的互踢窗(§6.2 单会话,
- *  顺序工作流不受影响)。runSchemes.serviceBindings 的 queryUser??
- *  authAlias 通道已整体移除(查询凭证是场景配置,与末步运行方案无关
- *  — §6.1 配置无关性回归)。config.users 键与凭证池同一命名空间;
- *  池无该别名 → 后端诚实 422「未找到查询凭证」。 */
-function queryAliasOf(): string | null {
-  const firstUser = Object.keys(
-    draftStore.draft?.definition?.config?.users ?? {},
-  )[0]?.trim()
-  return firstUser || null
+/** 查询别名(§6.1 修订 10,2026-09-10 多服务混编裁定:查询身份 = 执行
+ *  身份的域内首键)= 与当前 step 服务**同域**的 users 条目,键序首命中
+ *  (确定性;users 条目自带登录域 url)。单服务退化 = 同域唯一命中即
+ *  首键,行为与修订 8 一致;组合期查询用执行账号,钉的值执行时必然查
+ *  得到(§6.3 权限腐烂由构造消解)。零命中(该服务域没配用户,含条目
+ *  缺 url)→ null 诚实 422 —— 不回退异域首键:错域 token 必被 SUT 拒,
+ *  业务码 401/407 还会拉黑该凭证,污染其本域查询(§13.8 实证)。服务
+ *  URL 自身未知 → 首键回退(服务侧 422 先炸,凭证侧无独立信号)。
+ *  config.users 键与凭证池同一命名空间;池无该别名 → 后端诚实 422
+ *  「未找到查询凭证」。 */
+function queryAliasOf(svc: string): string | null {
+  const users = draftStore.draft?.definition?.config?.users ?? {}
+  const keys = Object.keys(users)
+  const first = keys[0]?.trim() || null
+  const origin = urlOriginOf(declaredUrlOf(svc))
+  if (!origin) return first
+  return keys.find(k => urlOriginOf(users[k]?.url) === origin) ?? null
+}
+
+/** url → origin(scheme+host+port 归一);空/非串/解析失败 → null。 */
+function urlOriginOf(u: unknown): string | null {
+  if (typeof u !== 'string' || !u) return null
+  try { return new URL(u).origin } catch { return null }
 }
 
 /** 行集首键 = label 列(后端投影列序:label 恒行首;空行集不进选择态)。 */
