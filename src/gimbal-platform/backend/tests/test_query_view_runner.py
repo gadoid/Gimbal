@@ -276,6 +276,76 @@ class TestFetchRows:
         assert e2.value.code == "sut_auth_expired"   # 拉黑后直接降级,不打 SUT
         assert logins["n"] == 1      # 冷启一次;401 后绝不自动重登录(§6.2)
 
+    async def test_business_401_degrades_blacklists(self, index, monkeypatch):
+        """§13.8 首连测实证:fin SUT 凭证失效在业务码层应答(HTTP 200 +
+        code=401 + 空 data)—— HTTP 401 检测不可见;死凭证必须降级拉黑,
+        不得静默当"合法空行集"缓存/供数。"""
+        sess = _FakeSession()
+        sess.apply_token("tok-1", 3600)
+        calls = {"n": 0}
+
+        def fake_request(method, url, **kw):
+            calls["n"] += 1
+            return httpx.Response(200, json={"code": 401, "msg": "未登录",
+                                             "rows": []})
+        monkeypatch.setattr(httpx, "request", fake_request)
+        with pytest.raises(r.QueryViewError) as e:
+            await r.fetch_rows("v2", refresh=False, service_url="http://sut",
+                               owner_id=1, query_alias="qa",
+                               load_credential=lambda o, a: sess)
+        assert e.value.code == "sut_auth_expired"
+        assert sess.token is None                    # 清 token(拉黑硬动作)
+        with pytest.raises(r.QueryViewError) as e2:  # 拉黑后不再打 SUT
+            await r.fetch_rows("v2", refresh=True, service_url="http://sut",
+                               owner_id=1, query_alias="qa",
+                               load_credential=lambda o, a: sess)
+        assert e2.value.code == "sut_auth_expired" and calls["n"] == 1
+
+    async def test_business_code_non_200_is_sut_error(self, index, monkeypatch):
+        """其余非成功业务码 → sut_error 诚实透出;错误不写缓存(重查仍打 SUT)。"""
+        calls = {"n": 0}
+
+        def fake_request(method, url, **kw):
+            calls["n"] += 1
+            return httpx.Response(200, json={"code": 500, "msg": "服务异常",
+                                             "data": {"list": []}})
+        monkeypatch.setattr(httpx, "request", fake_request)
+        for _ in range(2):
+            with pytest.raises(r.QueryViewError) as e:
+                await r.fetch_rows("v1", refresh=False, service_url="http://sut",
+                                   owner_id=1, query_alias=None, load_credential=None)
+            assert e.value.code == "sut_error" and "500" in e.value.message
+        assert calls["n"] == 2                       # 失败没被缓存
+
+    async def test_business_code_envelope_success_passes(self, index, monkeypatch):
+        """携 code=200 成功信封的正常响应不受影响(fin SUT 全域此形状)。"""
+        monkeypatch.setattr(httpx, "request", lambda m, u, **kw: httpx.Response(
+            200, json={"code": 200, "msg": "成功",
+                       "data": {"list": [{"nm": "a", "id": 1}]}}))
+        res = await r.fetch_rows("v1", refresh=False, service_url="http://sut",
+                                 owner_id=1, query_alias=None, load_credential=None)
+        assert res.rows == [{"nm": "a", "id": 1}]
+
+    async def test_drop_credential_revives_blacklist(self, index, monkeypatch):
+        """§7.5 复活钩子:认证页重存凭证(patch/delete 触发)→ 清拉黑与缓存
+        会话 → 下次查询重装凭证冷启登录,降级态有真实恢复路径。"""
+        sess = _FakeSession()
+        sess.apply_token("tok-1", 3600)
+        seq = [{"code": 401, "msg": "x", "rows": []},
+               {"code": 200, "rows": [{"code": "c1"}]}]
+        monkeypatch.setattr(httpx, "request",
+                            lambda m, u, **kw: httpx.Response(200, json=seq.pop(0)))
+        with pytest.raises(r.QueryViewError):
+            await r.fetch_rows("v2", refresh=False, service_url="http://sut",
+                               owner_id=1, query_alias="qa",
+                               load_credential=lambda o, a: sess)
+        sess.apply_token("tok-2", 3600)              # 重存后冷启登录得新 token
+        r.drop_credential(1, "qa")
+        res = await r.fetch_rows("v2", refresh=False, service_url="http://sut",
+                                 owner_id=1, query_alias="qa",
+                                 load_credential=lambda o, a: sess)
+        assert res.rows == [{"code": "c1"}]
+
 
 # ── §13.3 点击期参数面 ────────────────────────────────────────────
 

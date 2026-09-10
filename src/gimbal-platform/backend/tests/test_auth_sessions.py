@@ -197,6 +197,38 @@ async def test_delete_returns_204(client: AsyncClient) -> None:
     assert r.status_code == 404
 
 
+# ── 查询凭证复活钩子(spec §7.5 认证页引导闭环,2026-09-10)─────────
+async def test_patch_and_delete_drop_runner_credential(
+    client: AsyncClient, monkeypatch
+) -> None:
+    """重存/删除凭证 = 认证页"手动刷新"动作 → runner 清该凭证的缓存
+    会话与 401 拉黑(drop_credential),降级态有真实恢复路径(§6.2
+    绝不自动重登录口径不变 —— 复活由用户显式动作触发)。"""
+    from app.services import query_view_runner as run
+
+    auth = await register_and_login(client)
+    uid = (await client.get("/api/auth/me", headers=auth)).json()["user"]["id"]
+    r = await client.post(
+        "/api/auths",
+        headers=auth,
+        json={"alias": "qa1", "url": "https://x", "username": "u", "password": "p"},
+    )
+    aid = r.json()["id"]
+
+    calls: list[tuple[int, str]] = []
+    monkeypatch.setattr(run, "drop_credential",
+                        lambda o, a: calls.append((o, a)))
+
+    r = await client.patch(f"/api/auths/{aid}", headers=auth,
+                           json={"password": "new-pw-9"})
+    assert r.status_code == 200
+    assert calls == [(uid, "qa1")]
+
+    r = await client.delete(f"/api/auths/{aid}", headers=auth)
+    assert r.status_code == 204
+    assert calls == [(uid, "qa1"), (uid, "qa1")]
+
+
 # ── /test endpoint ──────────────────────────────────────────────
 async def test_test_endpoint_returns_token_preview(
     client: AsyncClient, monkeypatch

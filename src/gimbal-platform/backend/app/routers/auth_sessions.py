@@ -35,7 +35,7 @@ from ..schemas.auth_session import (
     AuthSessionSecretsOut,
     TestResult,
 )
-from ..services import auth_probe
+from ..services import auth_probe, query_view_runner
 
 router = APIRouter(prefix="/auths", tags=["auths"])
 
@@ -191,6 +191,9 @@ async def patch_auth(
             status_code=status.HTTP_409_CONFLICT, detail="更新冲突"
         )
     await session.refresh(a)
+    # 查询凭证复活钩子(§7.5):重存 = 认证页"手动刷新"动作 → 清 runner
+    # 缓存会话与 401 拉黑,下次查询重装凭证冷启登录(§6.2 不自动重登不变)
+    query_view_runner.drop_credential(user.id, a.alias)
     return _to_out(a)
 
 
@@ -204,6 +207,7 @@ async def delete_auth(
     a = await _get_owned(session, auth_id, user.id)
     await session.delete(a)
     await session.commit()
+    query_view_runner.drop_credential(user.id, a.alias)
 
 
 # ── test ───────────────────────────────────────────────────────

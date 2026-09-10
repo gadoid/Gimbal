@@ -179,6 +179,28 @@ def _auth_header_value(session: Any) -> "str | None":
     return value if isinstance(value, str) and value else None
 
 
+def _kill_credential(session: Any, cred_key: "tuple[int, str] | None") -> None:
+    """401 拉黑:清 token + 入 dead-set(§6.2 绝不自动重登录)。
+
+    复活唯一路径 = drop_credential(认证页重存/删除凭证钩子,§7.5);
+    清理失败不遮蔽 401 降级 —— 拉黑才是硬动作。
+    """
+    if session is not None and cred_key is not None:
+        try:
+            session.clear_token()
+        except Exception:
+            pass
+        _cred_dead.add(cred_key)
+
+
+def drop_credential(owner_id: int, alias: str) -> None:
+    """凭证重存/删除的复活钩子(auth_sessions 路由调用,§7.5 引导闭环):
+    清缓存会话与 401 拉黑,下次查询重装凭证冷启登录一次(§6.2 口径不变)。"""
+    key = (owner_id, alias)
+    _cred_sessions.pop(key, None)
+    _cred_dead.discard(key)
+
+
 def _bump_breaker(name: str) -> None:
     br = _view_breaker.get(name) or {"fails": 0, "open_until": 0.0}
     br["fails"] += 1
@@ -282,12 +304,7 @@ async def _query_sut(
     except httpx.HTTPError as e:
         raise QueryViewError("sut_unreachable", f"SUT 不可达: {e}") from e
     if resp.status_code == 401:
-        if session is not None and cred_key is not None:
-            try:
-                session.clear_token()
-            except Exception:  # 拉黑才是硬动作;清理失败不遮蔽 401 降级
-                pass
-            _cred_dead.add(cred_key)
+        _kill_credential(session, cred_key)
         raise QueryViewError(
             "sut_auth_expired", f"SUT 401:{view.get('endpoint_id')} 凭证已失效")
     if resp.status_code >= 400:
@@ -298,6 +315,23 @@ async def _query_sut(
     except ValueError as e:   # 2xx 但非 JSON 体(网关 200 text/html / 截断)
         raise QueryViewError(
             "shape_drift", f"响应体非 JSON(SUT/网关拦截?): {e}") from e
+    # 业务码信封检测(§13.8 首连测实证,2026-09-10):fin SUT 的凭证失效在
+    # 业务码层应答(HTTP 200 + code=401 + 空 data)—— HTTP 层不可见,死凭证
+    # 会被当"合法空行集"静默缓存/供数(§7.5 降级态不可达)。携 code 键且非
+    # 成功码 → 错误处理(§4.2 空结果分形的前提是响应宣告成功):401 与
+    # HTTP 401 同口径(拉黑不重登),其余业务码 sut_error 诚实透出;
+    # 无信封响应(code 键缺席)不受影响。
+    if isinstance(payload, dict) and "code" in payload:
+        bc = payload["code"]
+        if bc not in (200, "200"):
+            if bc in (401, "401"):
+                _kill_credential(session, cred_key)
+                raise QueryViewError(
+                    "sut_auth_expired",
+                    f"SUT 业务码 401:{view.get('endpoint_id')} 凭证已失效")
+            raise QueryViewError(
+                "sut_error",
+                f"SUT 业务码 {bc!r}:{str(payload.get('msg', ''))[:200]}")
     rows = extract_rows(payload, view.get("items", ""))
     truncated = len(rows) > MAX_ROWS
     return project_rows(rows[:MAX_ROWS], view.get("columns") or []), truncated
