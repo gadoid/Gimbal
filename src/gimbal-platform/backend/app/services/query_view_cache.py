@@ -2,13 +2,14 @@
 
 进程内 TtlLruCache(OrderedDict,~40 行语义):
 惰性过期(读时判 TTL,无后台线程)/ LRU 容量逐出 / stale-while-error 回退窗。
-纪律:错误永不 put;空列表是合法答案可缓存;键 = view name(§5.1)。
+纪律:错误永不 put;空列表是合法答案可缓存;键 = (view, 查询凭证)(§5.1
+修订 11:同视图异凭证各自缓存,权限视角不在缓存层串台)。
 """
 from __future__ import annotations
 
 import time
 from collections import OrderedDict
-from typing import Callable
+from typing import Callable, Hashable
 
 
 class CacheEntry:
@@ -29,9 +30,9 @@ class TtlLruCache:
         self._max = max_entries
         self._stale_window = stale_max_window
         self._clock = clock
-        self._data: "OrderedDict[str, CacheEntry]" = OrderedDict()
+        self._data: "OrderedDict[Hashable, CacheEntry]" = OrderedDict()
 
-    def lookup(self, key: str) -> "tuple[CacheEntry | None, bool]":
+    def lookup(self, key: Hashable) -> "tuple[CacheEntry | None, bool]":
         e = self._data.get(key)
         if e is None:
             return None, False
@@ -44,12 +45,17 @@ class TtlLruCache:
         self._data.pop(key, None)
         return None, False         # 超 STALE_MAX_WINDOW:真过期
 
-    def put(self, key: str, rows: list[dict], fetched_wall: str,
+    def put(self, key: Hashable, rows: list[dict], fetched_wall: str,
             truncated: bool = False) -> None:
         self._data.pop(key, None)
         self._data[key] = CacheEntry(rows, truncated, fetched_wall, self._clock())
         while len(self._data) > self._max:
             self._data.popitem(last=False)
 
-    def drop(self, key: str) -> None:
+    def drop(self, key: Hashable) -> None:
         self._data.pop(key, None)
+
+    def drop_where(self, match: "Callable[[Hashable], bool]") -> None:
+        """逐键条件清除(修订 11:drop_credential 按凭证分量清 L1,§5.1)。"""
+        for k in [k for k in self._data if match(k)]:
+            self._data.pop(k, None)

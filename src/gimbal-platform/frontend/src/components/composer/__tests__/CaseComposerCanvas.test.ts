@@ -2355,6 +2355,84 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     w.unmount()
   })
 
+  it('查询别名锚 headers auth 引用首命中(修订 11):同域双用户取引用 tag 非首键', async () => {
+    // headers ${auth.userB.token} = 该步执行身份的声明 → 查询视角 = 执行视角
+    // (为 B 的列查到的候选就是 B 能用的,构造消解 per-凭证);域内首键
+    // userA 只是 fallback,有引用时不得吞掉引用
+    const steps = [mkStep({
+      api: {
+        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+        headers: { Authorization: '${auth.userB.token}' },
+        view_hints: { endpoint_id: 'ep-vs' },
+      },
+      request: { kind: 'request', body: {} },
+    })]
+    const { w } = mountCanvas({ steps, services: { fin: 'http://fin.example' } })
+    await flushPromises()
+    const draft = useScenarioDraftStore()
+    draft.draft = {
+      ...draft.draft!,
+      definition: {
+        ...draft.draft!.definition,
+        config: {
+          ...draft.draft!.definition.config,
+          users: {   // 键序 userA 在前(域内首键)— headers 引用 userB 优先
+            userA: { url: 'http://fin.example', token: 'tA' } as any,
+            userB: { url: 'http://fin.example', token: 'tB' } as any,
+          },
+        } as any,
+      },
+    }
+    ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
+      view: 'v', rows: [{ x: '1', nm: 'r1' }],
+      truncated: false, fetched_at: 'T', cached: false, stale: false,
+    })
+    await w.find('.vs-query-btn').trigger('click')
+    await flushPromises()
+    expect(fetchQueryViewRows).toHaveBeenLastCalledWith('v', {
+      refresh: false, serviceUrl: 'http://fin.example', queryAlias: 'userB',
+    })
+    w.unmount()
+  })
+
+  it('悬空 auth 引用照发不猜(后端 422 显形);headers 无引用走域内首键 fallback', async () => {
+    // 悬空引用不回退猜测:别名照发 'ghost',凭证池无此别名 → 后端诚实 422
+    // 「未找到查询凭证」(悬空徽章另有显形)—— 回退到域内首键反而是静默错身份
+    const withHeaders = (headers: Record<string, string>) => mkStep({
+      api: {
+        kind: 'api', service: 'fin', method: 'POST', path: '/order',
+        headers, view_hints: { endpoint_id: 'ep-vs' },
+      },
+      request: { kind: 'request', body: {} },
+    })
+    const { w } = mountCanvas({
+      steps: [withHeaders({ Authorization: '${auth.ghost.token}' })],
+      services: { fin: 'http://fin.example' },
+    })
+    await flushPromises()
+    const draft = useScenarioDraftStore()
+    draft.draft = {
+      ...draft.draft!,
+      definition: {
+        ...draft.draft!.definition,
+        config: {
+          ...draft.draft!.definition.config,
+          users: { 'query-qa': { url: 'http://fin.example', token: 't' } as any },
+        } as any,
+      },
+    }
+    ;(fetchQueryViewRows as ReturnType<typeof vi.fn>).mockResolvedValue({
+      view: 'v', rows: [{ x: '1', nm: 'r1' }],
+      truncated: false, fetched_at: 'T', cached: false, stale: false,
+    })
+    await w.find('.vs-query-btn').trigger('click')
+    await flushPromises()
+    expect(fetchQueryViewRows).toHaveBeenLastCalledWith('v', {
+      refresh: false, serviceUrl: 'http://fin.example', queryAlias: 'ghost',
+    })
+    w.unmount()
+  })
+
   // ── §13.5 级联参数面:同名预填 / 携参查询 / 单对象点列扇出 ────────
 
   it('query_params 视图:打开即参数段;同名字面量预填、模板串留空', async () => {

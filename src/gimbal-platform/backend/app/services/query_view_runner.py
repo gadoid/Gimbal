@@ -2,7 +2,7 @@
 
 fail-soft:所有失败上抛 QueryViewError(code, message, status),路由翻译降级;
 绝不自动重登录(§6.2);不重试(§4.2);错误永不写缓存(§5.1)。
-锁序(§5.2):view 锁外层 → 凭证闸内层;永不同时持两把 view 锁。
+锁序(§5.2):单飞锁外层 → 凭证闸内层;永不同时持两把单飞锁。
 
 凭证 duck-type 契约(四个面,对齐 app/auth/schema.py 真身 AuthSession):
 .token / apply_token(tok, ttl) / clear_token() / .url —— 注入形态与
@@ -192,10 +192,14 @@ def _kill_credential(session: Any, cred_key: "tuple[int, str] | None") -> None:
 
 def drop_credential(owner_id: int, alias: str) -> None:
     """凭证重存/删除的复活钩子(auth_sessions 路由调用,§7.5 引导闭环):
-    清缓存会话与 401 拉黑,下次查询重装凭证冷启登录一次(§6.2 口径不变)。"""
+    清缓存会话与 401 拉黑,下次查询重装凭证冷启登录一次(§6.2 口径不变)。
+    修订 11:同步逐凭证清 L1 行集——重存的可能是不同 SUT 账号,旧凭证名下
+    的行集可见性已作废(他凭证缓存不误伤,§5.1)。"""
     key = (owner_id, alias)
     _cred_sessions.pop(key, None)
     _cred_dead.discard(key)
+    _cache.drop_where(lambda ck: isinstance(ck, tuple) and len(ck) == 2
+                      and ck[1] == key)
 
 
 def _bump_breaker(name: str) -> None:
@@ -366,9 +370,16 @@ async def fetch_rows(
     if not service_url or not service_url.startswith(("http://", "https://")):
         raise QueryViewError("service_url_required",
                              "service_url 缺失(服务绑定未解析)", status=422)
+    # 修订 11(2026-09-10):L1/单飞键 = (view, 查询凭证)——同视图异凭证
+    # 各自缓存/单飞,权限视角不在缓存层串台(A 先查、B 不吃 A 的行集);
+    # auth=none 视图无凭证分量(可见性与凭证无关,全局共享,§5.1)。
+    cred_id: "tuple[int, str] | None" = (
+        (owner_id, query_alias)
+        if view.get("auth") != "none" and query_alias is not None else None)
+    cache_key = (name, cred_id)
     stale_entry, fresh = None, False
     if not bypass_cache:              # §13.3 参数随表单变,按 view 键必破 → 不进键就不缓存
-        stale_entry, fresh = _cache.lookup(name)
+        stale_entry, fresh = _cache.lookup(cache_key)
         if fresh and not refresh:
             return RowsResult(name, stale_entry.rows, stale_entry.truncated,
                               stale_entry.fetched_wall, cached=True, stale=False)
@@ -380,20 +391,20 @@ async def fetch_rows(
             return RowsResult(name, stale_entry.rows, stale_entry.truncated,
                               stale_entry.fetched_wall, cached=False, stale=True)
         raise QueryViewError("circuit_open", f"视图 {name} 熔断窗内")
-    # §13.3 单飞键:参数面视图 = (view, 点击期 params canonical);无参视图维持 view
+    # §13.3/§5.1 单飞键:(view, 凭证)[:: 点击期 params canonical]
     arrived = time.monotonic()
-    lock_key = name
+    lock_key = f"{name}::{cred_id!r}"
     if bypass_cache:
-        lock_key = f"{name}::{json.dumps(click_params, sort_keys=True, ensure_ascii=False)}"
+        lock_key = f"{lock_key}::{json.dumps(click_params, sort_keys=True, ensure_ascii=False)}"
     lock = await _view_lock(lock_key)
-    async with lock:                       # L2 同视图单飞
+    async with lock:                       # L2 同视图同凭证单飞
         if bypass_cache:
             # §13.3 在飞共享:等锁期间同参航班已完成且完成晚于本侧到达 → 复用结果
             flight = _param_flights.get(lock_key)
             if flight is not None and not refresh and flight[0] >= arrived:
                 return flight[1]
         elif not refresh:                  # 双检:等锁期间别人已填
-            e2, f2 = _cache.lookup(name)
+            e2, f2 = _cache.lookup(cache_key)
             if f2:
                 return RowsResult(name, e2.rows, e2.truncated, e2.fetched_wall,
                                   cached=True, stale=False)
@@ -405,7 +416,7 @@ async def fetch_rows(
                                                click_params=click_params)
             wall = _now_iso()
             if not bypass_cache:      # §13.3 参数面不回填 L1(参数随表单变,键必破)
-                _cache.put(name, rows, wall, truncated)   # 投影后行 + 截断标记入缓存(§5.1/§5.3)
+                _cache.put(cache_key, rows, wall, truncated)   # 投影后行 + 截断标记入缓存(§5.1/§5.3)
             _view_breaker.pop(name, None)  # 成功清零
             result = RowsResult(name, rows, truncated, wall,
                                 cached=False, stale=False)

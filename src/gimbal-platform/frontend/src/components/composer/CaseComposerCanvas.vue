@@ -1080,15 +1080,31 @@ const valueSourceGroups = computed<ValueSourceGroup[]>(() =>
 /**
  * 查询上下文(§7.2/§6.1):服务 URL 与查询别名同源于**当前 step** —
  * 服务 URL 走 authored services 声明(svc → URL 平表,Canvas 唯一可达的
- * URL 源);查询别名 = 该服务同域的 users 条目(修订 10)。后端凭证闸把
- * alias=None 视作「无凭证」(bearer 视图 422 query_credential_required)。
+ * URL 源);查询别名 = headers auth 引用首命中(修订 11)▸ 该服务同域的
+ * users 条目(修订 10)。后端凭证闸把 alias=None 视作「无凭证」(bearer
+ * 视图 422 query_credential_required)。
  */
 function resolveQueryContext(step: StepView): { serviceUrl?: string; queryAlias: string | null } {
   const svc = step.api?.service || ''
   return {
     serviceUrl: declaredUrlOf(svc) || undefined,
-    queryAlias: queryAliasOf(svc),
+    queryAlias: headerAuthTagOf(step) ?? queryAliasOf(svc),
   }
+}
+
+/** 查询别名·首选(§6.1 修订 11,2026-09-10 同域多用户裁定):当前 step
+ *  headers 的 `${auth.<tag>.…}` 引用首命中 → 该 tag 即查询别名 —— headers
+ *  引用就是该步执行身份的声明,查询视角 = 执行视角(构造消解恢复至每凭证
+ *  粒度:为 B 的列查到的候选就是 B 能用的)。解析复用 utils/tpl-refs
+ *  (悬空徽章同源);不校验域/存在性:悬空照发,后端诚实 422「未找到查询
+ *  凭证」(悬空另有徽章显形,不回退猜测)。无引用 → null → 域内首键
+ *  fallback(修订 10 行为,单用户场景零变化)。 */
+function headerAuthTagOf(step: StepView): string | null {
+  for (const v of Object.values(step.api?.headers ?? {})) {
+    const ref = parseTplRefs(String(v ?? '')).find(r => r.domain === 'auth' && r.alias)
+    if (ref?.alias) return ref.alias
+  }
+  return null
 }
 
 /** 查询别名(§6.1 修订 10,2026-09-10 多服务混编裁定:查询身份 = 执行

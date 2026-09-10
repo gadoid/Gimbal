@@ -217,7 +217,8 @@ class TestFetchRows:
         monkeypatch.setattr(httpx, "request", ok)
         first = await r.fetch_rows("v1", refresh=False, service_url="http://sut",
                                    owner_id=1, query_alias=None, load_credential=None)
-        r._cache._data["v1"].fetched_mono -= 400.0     # 人工老化过 TTL(仍在 stale 窗)
+        # 修订 11:L1 键 = (view, 凭证);v1 auth=none → 凭证分量 None
+        r._cache._data[("v1", None)].fetched_mono -= 400.0   # 人工老化过 TTL(仍在 stale 窗)
         async def boom(m, u, **kw):
             raise httpx.ConnectError("down")
         monkeypatch.setattr(httpx, "request", boom)
@@ -347,6 +348,92 @@ class TestFetchRows:
                                  owner_id=1, query_alias="qa",
                                  load_credential=lambda o, a: sess)
         assert res.rows == [{"code": "c1"}]
+
+
+class TestCredentialKeyedCache:
+    """修订 11(2026-09-10 同域多用户):L1/单飞键 = (view, 查询凭证)——
+    同视图异凭证各自缓存/单飞,权限视角不在缓存层串台(A 先查、B 不吃 A 的
+    行集);auth=none 视图可见性与凭证无关,跨别名共享;drop_credential
+    逐凭证清 L1(他凭证不误伤)。"""
+
+    def _tok_factory(self, monkeypatch):
+        """fake SUT:按 Authorization 头回带 token 印记的行集(权限视角显形)。"""
+        def fake_request(method, url, **kw):
+            tok = kw["headers"]["Authorization"]
+            return httpx.Response(200, json={"rows": [{"code": f"r-{tok}"}]})
+        monkeypatch.setattr(httpx, "request", fake_request)
+
+    def _sess(self, tok: str) -> _FakeSession:
+        s = _FakeSession()
+        s.apply_token(tok, 3600)
+        return s
+
+    async def test_l1_keyed_by_credential(self, index, monkeypatch):
+        self._tok_factory(monkeypatch)
+        s1, s2 = self._sess("tokA"), self._sess("tokB")
+        a1 = await r.fetch_rows("v2", refresh=False, service_url="http://s",
+                                owner_id=1, query_alias="qa1",
+                                load_credential=lambda o, a: s1)
+        a2 = await r.fetch_rows("v2", refresh=False, service_url="http://s",
+                                owner_id=1, query_alias="qa2",
+                                load_credential=lambda o, a: s2)
+        assert a1.rows == [{"code": "r-tokA"}] and not a1.cached
+        assert a2.rows == [{"code": "r-tokB"}] and not a2.cached  # 不吃 A 的缓存
+        again = await r.fetch_rows("v2", refresh=False, service_url="http://s",
+                                   owner_id=1, query_alias="qa1",
+                                   load_credential=lambda o, a: s1)
+        assert again.cached and again.rows == a1.rows             # 各自命中
+
+    async def test_auth_none_view_shared_across_aliases(self, index, monkeypatch):
+        calls = {"n": 0}
+
+        def fake_request(method, url, **kw):
+            calls["n"] += 1
+            return httpx.Response(200, json={"data": {"list": [{"nm": "x", "id": 1}]}})
+        monkeypatch.setattr(httpx, "request", fake_request)
+        for alias in ("qa1", "qa2"):
+            res = await r.fetch_rows("v1", refresh=False, service_url="http://s",
+                                     owner_id=1, query_alias=alias,
+                                     load_credential=None)
+            assert res.rows == [{"nm": "x", "id": 1}]
+        assert calls["n"] == 1    # auth=none:可见性与凭证无关,缓存全局共享
+
+    async def test_drop_credential_evicts_only_that_credential_l1(
+            self, index, monkeypatch):
+        self._tok_factory(monkeypatch)
+        s1, s2 = self._sess("tokA"), self._sess("tokB")
+        await r.fetch_rows("v2", refresh=False, service_url="http://s",
+                           owner_id=1, query_alias="qa1",
+                           load_credential=lambda o, a: s1)
+        await r.fetch_rows("v2", refresh=False, service_url="http://s",
+                           owner_id=1, query_alias="qa2",
+                           load_credential=lambda o, a: s2)
+        r.drop_credential(1, "qa1")   # 重存 qa1 → 其 L1 作废(可能是不同 SUT 账号)
+        res1 = await r.fetch_rows("v2", refresh=False, service_url="http://s",
+                                  owner_id=1, query_alias="qa1",
+                                  load_credential=lambda o, a: s1)
+        assert not res1.cached        # qa1 行集已清
+        res2 = await r.fetch_rows("v2", refresh=False, service_url="http://s",
+                                  owner_id=1, query_alias="qa2",
+                                  load_credential=lambda o, a: s2)
+        assert res2.cached            # qa2 不误伤
+
+    async def test_single_flight_keyed_by_credential(self, index, monkeypatch):
+        seen = []
+
+        def slow_sync(method, url, **kw):
+            import time as _t
+            _t.sleep(0.05)
+            seen.append(kw["headers"]["Authorization"])
+            return httpx.Response(200, json={"rows": [{"code": "c"}]})
+        monkeypatch.setattr(httpx, "request", slow_sync)
+        s1, s2 = self._sess("tokA"), self._sess("tokB")
+        rs = await asyncio.gather(*[
+            r.fetch_rows("v2", refresh=False, service_url="http://s",
+                         owner_id=1, query_alias=al, load_credential=lambda o, a, _s=s: _s)
+            for al, s in (("qa1", s1), ("qa1", s1), ("qa2", s2))])
+        assert sorted(seen) == ["tokA", "tokB"]   # 同凭证合一发,异凭证各一发
+        assert all(x.rows == [{"code": "c"}] for x in rs)
 
 
 # ── §13.3 点击期参数面 ────────────────────────────────────────────
