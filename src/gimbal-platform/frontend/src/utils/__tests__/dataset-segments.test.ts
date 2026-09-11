@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   deriveSegments, gridColumnsOf, sharedVarNames, deadRowKeys,
-  expectVarNameOf, type SegmentStepShape,
+  expectVarNameOf, fieldPathsOf, type SegmentStepShape,
 } from '../dataset-segments'
 
 const VARS = { amount: 100, exp_code: 200, exp_msg: 'ok' }
@@ -74,5 +74,44 @@ describe('deadRowKeys', () => {
       .toEqual(['ghost', 'other'])
     expect(deadRowKeys(null, [{ a: 1 }])).toEqual(['a'])
     expect(deadRowKeys({ a: 1 }, [])).toEqual([])
+  })
+})
+
+describe('fieldPathsOf — 全叶子扫描(spec v2 §4)', () => {
+  it('FP-1: body 深扫全叶子(模板/直填/深层/数组),path 带 $. 前缀,模板叶带 varName', () => {
+    const step = {
+      request: { body: {
+        amount: '${var.amount}', remark: '直填',
+        items: [{ id: 'x' }, { id: '${var.no}' }],
+        nested: { deep: '1' },
+      } },
+    }
+    expect(fieldPathsOf(step)).toEqual([
+      { source: 'body', path: '$.amount', varName: 'amount' },
+      { source: 'body', path: '$.remark' },
+      { source: 'body', path: '$.items[0].id' },
+      { source: 'body', path: '$.items[1].id', varName: 'no' },
+      { source: 'body', path: '$.nested.deep' },
+    ])
+  })
+
+  it('FP-2: 非字符串/null 叶仍报路径;空容器无叶;headers 浅扫且 ${auth.*} 不算 varName', () => {
+    const step = {
+      api: { headers: { Authorization: 'Bearer ${auth.u1.token}', X: '1' } },
+      request: { body: { n: 5, b: true, nil: null, empty: {}, list: [] } },
+    }
+    expect(fieldPathsOf(step)).toEqual([
+      { source: 'body', path: '$.n' },
+      { source: 'body', path: '$.b' },
+      { source: 'body', path: '$.nil' },
+      { source: 'headers', path: '$.Authorization' },
+      { source: 'headers', path: '$.X' },
+    ])
+  })
+
+  it('FP-3: null step / 空 body 返回空数组', () => {
+    expect(fieldPathsOf(null)).toEqual([])
+    expect(fieldPathsOf({})).toEqual([])
+    expect(fieldPathsOf({ request: {} })).toEqual([])
   })
 })
