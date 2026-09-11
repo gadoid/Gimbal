@@ -42,6 +42,7 @@ describe('deriveSegments', () => {
     // 非字符串 expected(数字 200)跳过;非 assertion 跳过
     expect(s0.expects.map((e) => e.varName)).toEqual(['exp_code', 'exp_msg'])
     expect(s0.expects[0]).toMatchObject({ target: '$.response_body.code', operator: 'eq', strategyIdx: 1 })
+    expect(s0.expects[0].baseline).toBe(200)   // 期望列基线 = config.vars 值(Task 4/5 消费)
     expect(s0.expects[1].strategyIdx).toBe(2)
   })
 

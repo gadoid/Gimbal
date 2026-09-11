@@ -30,6 +30,8 @@ export interface ExpectColumn {
   /** 断言在 step.strategy 数组的下标(跳转 #strategy-card-N 用) */
   strategyIdx: number
   stepIndex: number
+  /** config.vars[varName](与 InputColumn.baseline 同语义) */
+  baseline: unknown
 }
 
 export interface SegmentStepShape {
@@ -101,7 +103,7 @@ export function deriveSegments(
       for (const m of st.expected.matchAll(TPL_RE)) {
         expects.push({
           varName: m[1], target: String(st.target ?? ''), operator: String(st.operator ?? ''),
-          strategyIdx, stepIndex,
+          strategyIdx, stepIndex, baseline: v[m[1]],
         })
       }
     })
@@ -115,7 +117,7 @@ export function gridColumnsOf(seg: Segment): GridVarColumn[] {
   return [
     ...seg.inputs.map((c) => ({ varName: c.varName, baseline: c.baseline, stepIndex: c.stepIndex, source: c.source, field: c.field })),
     ...seg.expects.map((c) => ({
-      varName: c.varName, baseline: (c as { baseline?: unknown }).baseline, stepIndex: c.stepIndex,
+      varName: c.varName, baseline: c.baseline, stepIndex: c.stepIndex,
       source: 'expect' as const, field: c.target,
       expect: { target: c.target, operator: c.operator, strategyIdx: c.strategyIdx },
     })),
