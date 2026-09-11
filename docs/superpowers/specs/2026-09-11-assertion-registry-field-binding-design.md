@@ -145,11 +145,11 @@
 | # | 任务 | 层 |
 |---|---|---|
 | T0 | 数据集变量优先双模式 + 单变量面板(含 ValueSourcePicker 取数)— **✅ 已实施 bd15cc56** | 前端 |
-| T1 | `fieldPathsOf` 全叶子扫描 utils + 测试 | 前端 |
-| T2 | 注册表模型 + 断言管理编辑器(条目 CRUD:anchor/injection/asserts + 悬空检测) | 前端 + 场景文档 |
-| T3 | 编排器标记(FieldActionMenu 用户当前 WIP 版本上加项,只提交新增 hunk) | 前端 |
-| T4 | RunDialog 注入条目多选 + 运行方案透传 | 前端 |
-| T5 | backend 物化:注入条目族(基线 + injection 覆写 + asserts patch);backend 套件解冻 | backend |
-| T6 | 期望提升链退场 + exp_* 全清(含兼容/迁移代码清除;原 T7 并入) | 前端 |
+| T1 | `fieldPathsOf` 全叶子扫描 utils + 测试 — **✅ 已实施 8d0da1ce + a6502ca4** | 前端 |
+| T2 | 注册表模型 + 断言管理编辑器(条目 CRUD:anchor/injection/asserts + 悬空检测)— **✅ 已实施 83a25038 + ce32505f + 7d2930a6** | 前端 + 场景文档 |
+| T3 | 编排器标记(FieldActionMenu 用户当前 WIP 版本上加项,只提交新增 hunk)— **✅ 已实施 cde95c12** | 前端 |
+| T4 | RunDialog 注入条目多选 + 运行方案透传 — **✅ 已实施 244c0138 + dfdef5eb** | 前端 |
+| T5 | backend 物化:注入条目族(基线 + injection 覆写 + asserts patch);backend 套件解冻 — **✅ 已实施 da39b83** | backend |
+| T6 | 期望提升链退场 + exp_* 全清(含兼容/迁移代码清除;原 T7 并入)— **✅ 已实施 b912d59** | 前端 |
 | T7 | ~~一键迁移~~ **作废**(2026-09-11 用户裁定,见 §9) | — |
-| T8 | 2026-09-10 spec §8.4 取代标注 | 文档 |
+| T8 | 2026-09-10 spec §8.4 取代标注 — **✅ 本提交** | 文档 |

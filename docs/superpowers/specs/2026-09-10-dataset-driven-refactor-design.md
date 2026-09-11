@@ -9,6 +9,11 @@
 > 分支:立项时新建(自动态取数源集成合入之后;spec 立项名
 > dataset-driven-refactor)
 
+> **取代标注(2026-09-11)**:本 spec 的期望行级化(exp_* 提升链)与段网格已被
+> `2026-09-11-assertion-registry-field-binding-design.md` 取代 — 期望偏离迁至
+> 断言管理注册表(条目自含 injection+asserts),exp_* 提升链已随其 T6 退场;
+> 纯值面(置顶基线行/TSV/CSV/行详情/死键提示)继续有效。§8.4 后续项按新 spec §11 协议位重读。
+
 ---
 
 ## 0. 背景与需求追溯
