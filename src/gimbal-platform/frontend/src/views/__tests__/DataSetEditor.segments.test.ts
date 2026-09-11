@@ -63,6 +63,23 @@ const DEF_DUPVAR = {
   ],
 }
 
+/** COMPAT-1 旧提升流数据集:rows 键 = var 名(amount)、直填列在场(remark)、
+ *  断言 expected 为字面量(无任何 ${var} 模板,旧形态)→ 引用扫描仅 step1 一段。
+ *  两步都带 view_hints.endpoint_id — 段派生不设 endpoint_id 门(dataset-segments),
+ *  但基线区 deriveBaselineColumns 有 endpoint_id 纪律(dataset-palette):没有它
+ *  remark 直填行不进基线区,「基线区可编辑」断言面就钉不住(同 DEF_2SEG 注释)。 */
+const DEF_OLD_PROMOTE = {
+  kind: 'scenario', scenarioId: 'sc-ds', meta: { name: 'old' },
+  config: { vars: { amount: '1' } },
+  steps: [
+    { kind: 'step', description: '下单', api: { headers: {}, view_hints: { endpoint_id: 'fin.order.add' } },
+      request: { kind: 'request', body: { amount: '${var.amount}', remark: '直填字面量' } },
+      strategy: [{ kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: '0' }] },
+    { kind: 'step', description: '查单', api: { headers: {}, view_hints: { endpoint_id: 'fin.order.q' } },
+      request: { kind: 'request', body: { status: 'PAID' } }, strategy: [] },
+  ],
+}
+
 /** 挂载工厂:getDataSet 返回 rows(默认 [{amount:'-1'}]),draft 返回入参 definition;
  *  orchestration.steps 带 name(= step.description)供 stepLabel 读段头展示名。 */
 async function mountEditor(def: typeof DEF_2SEG, rows: Array<Record<string, any>> = [{ amount: '-1' }]) {
@@ -265,6 +282,49 @@ describe('DataSetEditor — 行详情 + 期望列头跳转 + 死行键(§6.2/§5
     const addBtn = w.findAll('button').find((b) => b.text().includes('新增数据'))
     expect(addBtn!.attributes('disabled')).toBeUndefined()
     expect(w.find('input.data-cell-input').attributes('disabled')).toBeUndefined()
+    w.unmount()
+  })
+})
+
+describe('DataSetEditor — 老数据集兼容(旧提升流)', () => {
+  it('COMPAT-1: 旧提升流数据集(rows 键=var 名,直填列存在)打开不炸,行名/TSV/三态全在', async () => {
+    const w = await mountEditor(DEF_OLD_PROMOTE as any, [{ amount: '5' }, { amount: '6' }])
+    // 段派生:仅 step1 一段(step2 无 ${var} 引用)→ 单段不渲染段 tabs,列作用域 = 唯一段
+    expect(w.findAll('.seg-tab').length).toBe(0)
+    const heads = w.findAll('.row-field .th-data').map((t) => t.text()).join()
+    expect(heads).toContain('步骤1 - amount')
+    expect(heads).not.toContain('remark')          // 直填列不出数据表格
+    // 两行:数据名输入 ×2;amount 格值 '5'/'6'(override-value 三态正常,基线 = config.vars)
+    expect(w.findAll('.data-name-input').length).toBe(2)
+    const cells = w.findAll('input.data-cell-input')
+    expect(cells.length).toBe(2)
+    expect((cells[0].element as HTMLInputElement).value).toBe('5')
+    expect((cells[1].element as HTMLInputElement).value).toBe('6')
+    expect((cells[0].element as HTMLInputElement).placeholder).toBe('1')   // config.vars.amount
+    expect(w.findAll('td.cell-override-value').length).toBe(2)
+    // 行键 amount ∈ config.vars 列宇宙 → 无死键提示条(旧数据集不该被误报)
+    expect(w.find('.dead-keys-bar').exists()).toBe(false)
+    // remark 直填列退场数据表格后在基线区可编辑(SEG-4 同款展开路径)
+    await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
+    await flushPromises()
+    const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
+    for (const h of groupHeaders) await h.trigger('click')
+    await flushPromises()
+    const directs = w.findAll('input.baseline-direct-input')
+      .map((d) => (d.element as HTMLInputElement).value)
+    expect(directs).toContain('直填字面量')
+    // 保存链不炸:点「保存基线」→ updateScenario 被调,rows 形状零变化
+    const saveBtn = w.findAll('button').find((b) => b.text().includes('保存基线'))
+    await saveBtn!.trigger('click')
+    await flushPromises()
+    expect(api.updateScenario).toHaveBeenCalledTimes(1)
+    expect((w.vm as any).rows).toEqual([{ amount: '5' }, { amount: '6' }])
+    // TSV 粘贴链在兼容网格下照常(行键仍落 var 名)
+    const evt = new Event('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(evt, 'clipboardData', { value: { getData: () => '7\n8' } })
+    await cells[0].element.dispatchEvent(evt)
+    await flushPromises()
+    expect((w.vm as any).rows).toEqual([{ amount: '7' }, { amount: '8' }])
     w.unmount()
   })
 })
