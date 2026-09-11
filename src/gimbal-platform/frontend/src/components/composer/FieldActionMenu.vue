@@ -8,6 +8,8 @@
     ├─ 设为变量 (Promote)          → emit fieldPromote(直填值提升为 ${var.x},命名/替换在 FieldForm 完成)
     ├─ 提取该字段 (Extract)         → emit fieldExtract(快捷 extract 策略)
     ├─ 向该字段动态注入 (DynamicAssign) → 子列表 extract 出身 → emit fieldAssign
+    ├─ 加入断言管理 (Registry)      → emit fieldRegistry(标记进断言管理注册表,spec v2 §4;
+    │                                  值须整串 ${var.x} 模板,守卫与 varName 提取在 FieldForm)
     └─ 断言该字段 (Assertion)       → emit fieldAssert(快捷断言策略)
 
   措辞对齐 plate _KIND_LABELS;数据全部由调用方传入,零 IO。
@@ -63,6 +65,17 @@
         @click="subOpen = 'inject'"
       >
         <span class="fa-label">向该字段动态注入</span><span class="fa-note">DynamicAssign</span>
+      </button>
+      <button
+        v-if="domain !== 'response'"
+        type="button"
+        class="fa-item"
+        :class="{ disabled: injected }"
+        :disabled="injected"
+        :title="injected ? INJECTED_NOTE : undefined"
+        @click="emitRegistry"
+      >
+        <span class="fa-label">加入断言管理</span><span class="fa-note">Registry</span>
       </button>
       <button type="button" class="fa-item" @click="emitAssert">
         <span class="fa-label">断言该字段</span><span class="fa-note">Assertion</span>
@@ -154,6 +167,8 @@ const emit = defineEmits<{
   'fieldAssert': [field: IOFieldBinding]
   /** 设为变量(D8 提升):直填值 → ${var.<name>};命名/替换在 FieldForm 完成 */
   'fieldPromote': [field: IOFieldBinding]
+  /** 加入断言管理(spec v2 §4):整串模板字段标记进 registry — FieldForm 守卫后上抛 registryMark */
+  'fieldRegistry': [field: IOFieldBinding]
 }>()
 
 /** 子列表开合:null=主菜单 / 'ref'=引用 / 'inject'=注入 */
@@ -175,6 +190,8 @@ function pickInject(e: VarEntry & { disabled?: boolean }) {
 function emitExtract() { emit('fieldExtract', props.field); emit('close') }
 function emitAssert() { emit('fieldAssert', props.field); emit('close') }
 function emitPromote() { emit('fieldPromote', props.field); emit('close') }
+/** 加入断言管理(spec v2 §4):模板化守卫与 varName 提取在 FieldForm(值上下文在那里) */
+function emitRegistry() { emit('fieldRegistry', props.field); emit('close') }
 </script>
 
 <style scoped>

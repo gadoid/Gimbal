@@ -254,6 +254,7 @@
                   @var-promote="onVarPromote"
                   @field-state="onFieldState"
                   @field-query="onFieldQuery"
+                  @registry-mark="onRegistryMark"
                 />
                 <p class="field-form-hint">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -581,6 +582,7 @@ import type {
   StrategyView, StrategyKindView, StrategyKindDetailView, FieldState,
 } from '@/types/plate'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
+import type { AssertionAnchor } from '@/types/assertion-registry'
 import { parseJson } from '../../utils/json'
 
 const props = defineProps<{
@@ -602,6 +604,9 @@ const emit = defineEmits<{
   'seedVar': [name: string, spec: Record<string, unknown>],
   /** 断言卡"↗ 数据集"导航:跳列表页由 CaseComposer 落(不知具体 datasetId) */
   'expNav': [],
+  /** 加入断言管理标记(spec v2 §4):FieldForm registryMark → anchor 组装
+   *  上抛,CaseComposer 落 registry.entries(registry 住在编排器层) */
+  'registryAdd': [anchor: AssertionAnchor]
 }>()
 
 const local = reactive<StepView[]>([...(props.steps || [])])
@@ -973,6 +978,20 @@ function onVarPromote(_f: IOFieldBinding, name: string, value: unknown) {
   emit('varPromote', name, value)
   ElMessage.success(`已设为变量 ${name} — 默认值登记到 ③ 共享变量,保存草稿后生效`)
   warnMultiViewVar(name)
+}
+
+/**
+ * 菜单"加入断言管理"(spec v2 §4):FieldForm 守卫后的 registryMark —
+ * stepIndex 由本层补(FieldForm 无步骤上下文),anchor.jsonpath = 字段
+ * 实例路径(溯源展示用);v1 请求体标记只产 source='body'(headers 不走字段卡)。
+ */
+function onRegistryMark(p: { field: IOFieldBinding; varName: string }) {
+  emit('registryAdd', {
+    stepIndex: activeStepIdx.value,
+    source: 'body',
+    jsonpath: p.field.path,
+    varName: p.varName,
+  })
 }
 
 /** §5.1 多视图前移提示:引用该 var 的字段,其端点声明 value_source 视图 >1

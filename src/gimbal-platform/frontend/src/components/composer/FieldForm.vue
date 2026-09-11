@@ -90,6 +90,7 @@
               @field-assign="(field: IOFieldBinding, name: string) => emit('fieldAssign', field, name)"
               @field-promote="(field: IOFieldBinding) => onFieldPromote(field)"
               @field-assert="(field: IOFieldBinding) => emit('fieldAssert', field)"
+              @field-registry="onRegistryMenu"
             />
           </span>
         </div>
@@ -132,6 +133,7 @@
             @var-promote="(f: IOFieldBinding, n: string, v: unknown) => emit('varPromote', f, n, v)"
             @field-state="(p: string, s: FieldState | null) => emit('fieldState', p, s)"
             @field-query="(f: IOFieldBinding) => emit('fieldQuery', f)"
+            @registry-mark="(p) => emit('registryMark', p)"
           />
         </div>
       </div>
@@ -191,6 +193,7 @@
               @field-assign="(field: IOFieldBinding, name: string) => emit('fieldAssign', field, name)"
               @field-promote="(field: IOFieldBinding) => onFieldPromote(field)"
               @field-assert="(field: IOFieldBinding) => emit('fieldAssert', field)"
+              @field-registry="onRegistryMenu"
             />
           </span>
           <!-- 注入态隐藏加行(I1 防编辑误导的容器面:写入必被覆盖) -->
@@ -244,6 +247,7 @@
               @var-promote="(f: IOFieldBinding, n: string, v: unknown) => emit('varPromote', f, n, v)"
               @field-state="(p: string, s: FieldState | null) => emit('fieldState', p, s)"
               @field-query="(f: IOFieldBinding) => emit('fieldQuery', f)"
+              @registry-mark="(p) => emit('registryMark', p)"
             />
           </div>
           <button
@@ -313,6 +317,7 @@
               @field-assign="(field: IOFieldBinding, name: string) => emit('fieldAssign', field, name)"
               @field-promote="(field: IOFieldBinding) => onFieldPromote(field)"
               @field-assert="(field: IOFieldBinding) => emit('fieldAssert', field)"
+              @field-registry="onRegistryMenu"
             />
           </span>
           <button
@@ -463,6 +468,7 @@
             @field-assign="(field, name) => emit('fieldAssign', field, name)"
             @field-promote="(field) => onFieldPromote(field)"
             @field-assert="(field) => emit('fieldAssert', field)"
+            @field-registry="onRegistryMenu"
           />
         </div>
         <!-- enum 非空即 select(spec §7.1 顺车票):plate 目录在 ui_kind='text'
@@ -505,6 +511,7 @@
             @field-assign="(field, name) => emit('fieldAssign', field, name)"
             @field-promote="(field) => onFieldPromote(field)"
             @field-assert="(field) => emit('fieldAssert', field)"
+            @field-registry="onRegistryMenu"
           />
         </div>
 
@@ -556,6 +563,7 @@
               @field-assign="(field, name) => emit('fieldAssign', field, name)"
               @field-promote="(field) => onFieldPromote(field)"
               @field-assert="(field) => emit('fieldAssert', field)"
+              @field-registry="onRegistryMenu"
             />
           </div>
         </div>
@@ -596,6 +604,7 @@
               @field-assign="(field, name) => emit('fieldAssign', field, name)"
               @field-promote="(field) => onFieldPromote(field)"
               @field-assert="(field) => emit('fieldAssert', field)"
+              @field-registry="onRegistryMenu"
             />
           </div>
         </div>
@@ -635,6 +644,7 @@
             @field-assign="(field, name) => emit('fieldAssign', field, name)"
             @field-promote="(field) => onFieldPromote(field)"
             @field-assert="(field) => emit('fieldAssert', field)"
+            @field-registry="onRegistryMenu"
           />
         </div>
 
@@ -663,6 +673,7 @@
             @field-assign="(field, name) => emit('fieldAssign', field, name)"
             @field-promote="(field) => onFieldPromote(field)"
             @field-assert="(field) => emit('fieldAssert', field)"
+            @field-registry="onRegistryMenu"
           />
         </div>
 
@@ -691,6 +702,7 @@
             @field-assign="(field, name) => emit('fieldAssign', field, name)"
             @field-promote="(field) => onFieldPromote(field)"
             @field-assert="(field) => emit('fieldAssert', field)"
+            @field-registry="onRegistryMenu"
           />
         </div>
 
@@ -901,9 +913,11 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import type { FieldState, IOFieldBinding } from '@/types/plate'
 import type { VarEntry } from '@/utils/var-registry'
 import { getByPath, pruneByPath, setByPath } from '@/utils/jsonpath'
+import { TPL_FULL_RE } from '@/utils/dataset-segments'
 import type {
   FieldArrayNode, FieldDictNode, FieldLeafNode, FieldObjectNode, FieldTreeNode,
 } from '@/utils/declarations'
@@ -1004,6 +1018,12 @@ const emit = defineEmits<{
    * Canvas 定位绑定分组并打开 ValueSourcePicker(一查多填)。
    */
   'fieldQuery': [field: IOFieldBinding]
+  /**
+   * 加入断言管理(spec v2 §4):FAM fieldRegistry 经守卫后上抛 — 值须整串
+   * ${var.x} 模板才放行(模板即偏离注入的地址),varName = 模板捕获组;
+   * 未模板化 warning 不上抛(先「设为变量」)。stepIndex 由 Canvas 补。
+   */
+  'registryMark': [payload: { field: IOFieldBinding; varName: string }]
 }>()
 
 // ─── 渲染行集:树模式(四节点)或平铺模式(叶子行)─────────────────
@@ -1300,6 +1320,21 @@ function onFieldPromote(f: IOFieldBinding) {
   while (taken.has(name)) name = `${base}_${n++}`
   setValue(f, `\${var.${name}}`)
   emit('varPromote', f, name, original)
+  menuField.value = null
+}
+
+/**
+ * 菜单「加入断言管理」守卫(spec v2 §4):值须整串 ${var.x} 模板 —
+ * 模板即偏离注入的地址(未模板化先「设为变量」);取值与 onFieldPromote
+ * 同源(getValue,body 寻址)。放行后上抛 registryMark,Canvas 组装 anchor。
+ */
+function onRegistryMenu(field: IOFieldBinding) {
+  const m = TPL_FULL_RE.exec(String(getValue(field) ?? ''))
+  if (!m) {
+    ElMessage.warning('该字段未模板化 — 请先「设为变量」再加入断言管理')
+    return
+  }
+  emit('registryMark', { field, varName: m[1] })
   menuField.value = null
 }
 

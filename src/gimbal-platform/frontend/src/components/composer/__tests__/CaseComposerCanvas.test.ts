@@ -14,6 +14,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import CaseComposerCanvas from '@/components/composer/CaseComposerCanvas.vue'
+import FieldForm from '@/components/composer/FieldForm.vue'
 import {
   getFullEndpoint, resolveResponsePaths, validateEndpointFieldStates,
 } from '@/api/scenario-composer'
@@ -2919,5 +2920,51 @@ describe('CaseComposerCanvas — 扰动位呈现与跳转(§5.3)', () => {
       warnSpy.mockRestore()
       ;(listStrategyKinds as any).mockImplementation(kindsMock)
     }
+  })
+})
+
+describe('CaseComposerCanvas — 加入断言管理标记(spec v2 §4)', () => {
+  it('REG-MARK: FieldForm registryMark → Canvas 组装 anchor(stepIndex=activeStepIdx)上抛 registryAdd', async () => {
+    const { w } = mountCanvas([mkStep()])
+    await flushPromises()
+    const canvas = w.findComponent(CaseComposerCanvas)
+    // 文档序第一个 FieldForm = 请求体侧(fieldActions=true);strategy=[]
+    // → 无 StrategyForm 内嵌实例,findComponent 无歧义
+    const ff = w.findComponent(FieldForm)
+    expect(ff.props('fieldActions')).toBe(true)
+    ;(ff.vm as any).$emit('registryMark', { field: { name: 'amount', path: '$.amount' }, varName: 'amount' })
+    await flushPromises()
+    const emits = canvas.emitted('registryAdd')
+    expect(emits).toBeTruthy()
+    expect(emits![0][0]).toEqual({ stepIndex: 0, source: 'body', jsonpath: '$.amount', varName: 'amount' })
+    w.unmount()
+  })
+
+  it('REG-GUARD: 值未模板化 → FieldForm 守卫拦下,不上抛 registryAdd', async () => {
+    // mkStep body orderId='ord-1'(非模板)→ 菜单点击后 TPL_FULL_RE 不中
+    const { w } = mountCanvas([mkStep()])
+    await flushPromises()
+    const canvas = w.findComponent(CaseComposerCanvas)
+    await w.find('.fa-menu-btn').trigger('click')
+    await flush()
+    await w.findAll('.fa-item').find((b) => b.text().includes('加入断言管理'))!.trigger('click')
+    await flush()
+    expect(canvas.emitted('registryAdd')).toBeUndefined()
+    w.unmount()
+  })
+
+  it('REG-CHAIN: 模板化字段全链 DOM 点击 → registryAdd(jsonpath=$.orderId, varName=oid)', async () => {
+    const s0 = mkStep({ request: { kind: 'request', body: { orderId: '${var.oid}' } } as any })
+    const { w } = mountCanvas([s0])
+    await flushPromises()
+    const canvas = w.findComponent(CaseComposerCanvas)
+    await w.find('.fa-menu-btn').trigger('click')
+    await flush()
+    await w.findAll('.fa-item').find((b) => b.text().includes('加入断言管理'))!.trigger('click')
+    await flush()
+    const emits = canvas.emitted('registryAdd')
+    expect(emits).toBeTruthy()
+    expect(emits![0][0]).toEqual({ stepIndex: 0, source: 'body', jsonpath: '$.orderId', varName: 'oid' })
+    w.unmount()
   })
 })

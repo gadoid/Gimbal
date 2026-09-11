@@ -162,6 +162,7 @@
               @var-demote="onVarDemote"
               @seed-var="seedPoolVar"
               @exp-nav="onExpNav"
+              @registry-add="onRegistryAdd"
             />
           </transition>
         </div>
@@ -284,6 +285,8 @@ import type {
   Scenario, DataSetSummary, Orchestration, ScenarioDraft,
 } from '@/types/scenario-composer'
 import type { AssertionRegistry } from '@/types/assertion-registry'
+import type { AssertionAnchor } from '@/types/assertion-registry'
+import { genEntryId } from '@/utils/assertion-registry'
 import type { ScenarioView, StepView } from '@/types/plate'
 
 const STEPS = [
@@ -518,6 +521,32 @@ function onVarDemote(name: string) {
 function onExpNav() {
   const sid = scenario.value?.meta.scenarioId ?? scenarioId.value
   if (sid && sid !== 'new') router.push(scenarioDataSetsUrl(sid))
+}
+
+/**
+ * Canvas「加入断言管理」标记(spec v2 §4):落 registry 条目 — 偏离
+ * injection 默认取基线 config.vars 值,asserts 留空由编辑器补(spec §7)。
+ * registry 不在 dirty watch 源(watch [definition, orchestration])→
+ * 显式走与单字段编辑同款保存调度:置 dirty + 防抖自动保存,标记不丢。
+ */
+function onRegistryAdd(anchor: AssertionAnchor) {
+  const base = definition.value.config?.vars?.[anchor.varName ?? ''] ?? ''
+  registry.value.entries.push({
+    id: genEntryId(),
+    name: `偏离 ${registry.value.entries.length + 1}`,
+    anchor,
+    injection: anchor.varName ? [{ varName: anchor.varName, value: base }] : [],
+    asserts: [],
+  })
+  ElMessage.success({ message: '已加入断言管理(偏离值默认取基线,请到断言管理编辑)', duration: 4000 })
+  // 与 watch([definition, orchestration]) 体同款(dirty 标记 + 防抖调度)
+  dirty.value = true
+  if (saveState.value === 'saving') {
+    editsDuringSave = true
+  } else {
+    saveState.value = 'dirty'
+  }
+  scheduleAutoSave()
 }
 
 /** Canvas 内联创建别名双写的声明面落库(config.services 整表替换) */
