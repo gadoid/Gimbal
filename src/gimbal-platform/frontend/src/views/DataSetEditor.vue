@@ -1,15 +1,17 @@
-<!-- DataSetEditor.vue — 转置表 + 段多选网格(基线区已退场)
+<!-- DataSetEditor.vue — 变量优先双模式(spec v2 §6;基线区已退场)
 
      信息架构:
-       - 全宽数据表格(行 = 数据,列 = 所选段的变量并排;直填列不进表格,
-         编辑家在编排器 FieldForm)
-       - 段下拉选择(spec §6.2 演进):引用扫描派生段,下拉单选一段;
-         "全部(N 列)" = 全段并列(总列数 ≤8 默认「全部」,>8 默认首段)
+       - 变量选择器:下拉单选「全部(N 变量)」或某个变量(>1 变量才显示)
+       - 「全部」= 变量网格:列 = config.vars 声明序(引用扫描的未声明
+         引用变量追加在后),一变量一列;列头带引用徽标 [步骤N·名]
+         (期望引用带「期望」徽标 + ↗ 跳断言卡);未引用列标灰
+       - 「单变量」= VariableDetailPanel 独立渲染(基线/引用面/取数/行值;
+         取数 = ValueSourcePicker 复用,直接向被测系统查询选值)
        - 置顶基线行(tbody 首行):config.vars 基线唯一编辑入口,
          不可选 / 不可粘贴;编辑触发 baselineDirty →「保存基线」
-       - 期望列与输入列并排(行键 = varName),列头带「期望」徽标(target/operator)
        - 三态单元格:inherit(灰显基线 placeholder) / override-empty(红条) / override-value
-       - TSV 粘贴 / CSV 导出 / CSV 导入
+       - TSV 粘贴 / CSV 导出 / CSV 导入(列宇宙 = 变量列,不随视图过滤)
+       - 直填列不进表格,编辑家在编排器 FieldForm
 
      数据契约(与后端对齐):
        - row 是稀疏 dict;undefined = 继承基线, "" = 显式空覆盖
@@ -81,17 +83,17 @@
           <el-button size="small" plain :disabled="!csvVarColumns.length" @click="onExportCsv">导出 CSV</el-button>
         </div>
       </div>
-      <!-- 段下拉选择(spec §6.2 演进,2026-09-11 勾选平铺改下拉):>1 段才显示;
-           单选一段,或「全部(N 列)」全段并列 -->
-      <div v-if="segments.length > 1" class="seg-picker">
-        <span class="seg-picker-label">步骤</span>
-        <el-select v-model="segChoice" class="seg-select" size="small">
-          <el-option value="all" :label="`全部(${totalGridColumns} 列)`" />
+      <!-- 变量选择器(spec v2 §6 变量优先双模式):>1 变量才显示;
+           「全部(N 变量)」= 变量网格,单变量 = 详情面板(独立渲染) -->
+      <div v-if="varColumns.length > 1" class="var-picker">
+        <span class="var-picker-label">变量</span>
+        <el-select v-model="varChoice" class="var-select" size="small">
+          <el-option value="all" :label="`全部(${varColumns.length} 变量)`" />
           <el-option
-            v-for="(seg, si) in segments"
-            :key="`segsel:${seg.stepIndex}`"
-            :value="si"
-            :label="`步骤${seg.stepIndex + 1} · ${stepLabel(seg.stepIndex)}`"
+            v-for="col in varColumns"
+            :key="`varsel:${col.varName}`"
+            :value="col.varName"
+            :label="col.varName"
           />
         </el-select>
       </div>
@@ -99,32 +101,33 @@
       <div v-if="deadKeys.length" class="dead-keys-bar">
         ⚠ {{ deadKeys.length }} 个行键不在列宇宙(变量已删):{{ deadKeys.join(', ') }} — 运行无效果,可继续编辑(spec §7 软提示)
       </div>
-      <!-- 横向滚动容器:变量列多时表格按 colgroup 定宽展开,拖动条滚动查看;
-           工具栏留在滚动区外不随之移动 -->
-      <div class="grid-scroll">
+      <!-- 单变量模式:VariableDetailPanel 独立渲染(不为与网格风格一致妥协,spec §6) -->
+      <VariableDetailPanel
+        v-if="varChoice !== 'all' && currentVarColumn"
+        :key="varChoice"
+        :var-name="currentVarColumn.varName"
+        :baseline="currentVarColumn.baseline"
+        :refs="currentVarColumn.refs"
+        :rows="rows"
+        :case-names="caseNames"
+        :step-contexts="stepContexts"
+        :query-config="queryConfig"
+        @set-baseline="onPanelBaseline"
+        @set-cell="onPanelCell"
+        @jump="jumpToRef"
+      />
+      <!-- 横向滚动容器:「全部」变量网格;列多时按 colgroup 定宽展开,
+           拖动条查看;工具栏留在滚动区外不随之移动 -->
+      <div v-else class="grid-scroll">
       <!-- 字段描述行(从 Plate IOFieldBinding 拉)— description 可选,空时显示 — -->
       <table class="data-table">
         <colgroup>
           <col class="col-select" />
           <col class="col-dataname" />
-          <col v-for="(col, ci) in visibleColumns" :key="`cg:${ci}:${col.stepIndex}:${col.source}:${col.varName}`" class="col-data" />
+          <col v-for="col in varColumns" :key="`cg:${col.varName}`" class="col-data" />
           <col class="col-action" />
         </colgroup>
         <thead>
-          <!-- 步骤分组行(P1.4):同 stepIndex 相邻列合并 colspan,横多列时
-               一眼看出列属于哪个步骤;名读 orchestration,缺名降级 Step N。
-               多段并列(「全部」且 >1 段)才渲染 — 单段无段间边界可标。 -->
-          <tr v-if="isMultiSegView" class="row-step-group">
-            <th class="th-select" />
-            <th class="th-label" />
-            <th
-              v-for="g in stepGroups"
-              :key="`grp:${g.stepIndex}`"
-              :colspan="g.colspan"
-              class="th-step-group"
-            >步骤 {{ g.stepIndex + 1 }} · {{ stepLabel(g.stepIndex) }}</th>
-            <th class="th-action" />
-          </tr>
           <tr class="row-info row-desc">
             <th class="th-select">
               <el-checkbox
@@ -136,12 +139,12 @@
             </th>
             <th class="th-label">描述</th>
             <th
-              v-for="(col, ci) in visibleColumns"
-              :key="`info-d:${ci}:${col.stepIndex}:${col.source}:${col.varName}`"
-              :class="['th-data', col.source === 'expect' ? 'col-expect' : '', isMultiSegView && isStepStart(ci) ? 'is-step-start' : '']"
-              :title="descriptionByColumnKey.get(`${col.stepIndex}:${col.source}:${col.field}`) || col.field"
+              v-for="col in varColumns"
+              :key="`info-d:${col.varName}`"
+              :class="['th-data', col.expect ? 'col-expect' : '', col.unreferenced ? 'col-unreferenced' : '']"
+              :title="col.description || '—'"
             >
-              {{ descriptionByColumnKey.get(`${col.stepIndex}:${col.source}:${col.field}`) || '—' }}
+              {{ col.description || '—' }}
             </th>
             <th class="th-action" />
           </tr>
@@ -149,29 +152,30 @@
             <th class="th-select" />
             <th class="th-label">字段</th>
             <th
-              v-for="(col, ci) in visibleColumns"
-              :key="`info-f:${ci}:${col.stepIndex}:${col.source}:${col.varName}`"
-              :class="['th-data', col.source === 'expect' ? 'col-expect' : '', isMultiSegView && isStepStart(ci) ? 'is-step-start' : '']"
-              :title="col.source === 'expect'
-                ? `期望列 ${col.varName} — 断言 ${col.expect?.target} ${col.expect?.operator}(步骤${col.stepIndex + 1})`
-                : `${col.stepIndex + 1} 步 ${col.source} · ${col.field}`"
+              v-for="col in varColumns"
+              :key="`info-f:${col.varName}`"
+              :class="['th-data', col.expect ? 'col-expect' : '', col.unreferenced ? 'col-unreferenced' : '']"
+              :title="col.badges.length
+                ? `${col.varName} — 被 ${col.badges.map(b => `步骤${b.stepIndex + 1}·${b.label}`).join(' / ')} 引用`
+                : `${col.varName} — 未被引用`"
             >
-              步骤{{ col.stepIndex + 1 }} - {{ col.varName }}
+              {{ col.varName }}
               <span
-                v-if="segSharedVars.has(col.varName)"
-                class="shared-mark"
-                title="该变量被多个步骤引用 — 数据行里改一处,所有引用处生效"
-              >共享</span>
+                v-for="b in col.badges"
+                :key="`badge:${col.varName}:${b.stepIndex}`"
+                class="ref-badge"
+                :title="`步骤${b.stepIndex + 1} · ${b.label} 引用 — 数据行里改一处,所有引用处生效`"
+              >{{ b.stepIndex + 1 }}·{{ b.label }}</span>
               <span
-                v-if="col.source === 'expect'"
+                v-if="col.expect"
                 class="exp-col-badge"
-                :title="`期望列 — 断言 ${col.expect?.target} ${col.expect?.operator}`"
+                :title="`期望列 — 断言 ${col.expect.field} ${col.expect.expect?.operator}`"
               >期望</span>
               <button
-                v-if="col.source === 'expect'"
+                v-if="col.expect"
                 type="button"
                 class="exp-jump"
-                :title="`跳编排器断言卡 — ${col.expect?.target} ${col.expect?.operator}`"
+                :title="`跳编排器断言卡 — ${col.expect.field} ${col.expect.expect?.operator}`"
                 @click.stop="jumpToAssertion(col)"
               >↗</button>
             </th>
@@ -185,13 +189,13 @@
             <td class="td-select" />
             <td class="td-label">基线</td>
             <td
-              v-for="(col, ci) in visibleColumns"
-              :key="`b:${ci}:${col.stepIndex}:${col.source}:${col.varName}`"
-              :class="['td-data', col.source === 'expect' ? 'col-expect' : '', isMultiSegView && isStepStart(ci) ? 'is-step-start' : '']"
+              v-for="col in varColumns"
+              :key="`b:${col.varName}`"
+              :class="['td-data', col.expect ? 'col-expect' : '', col.unreferenced ? 'col-unreferenced' : '']"
             >
               <input
                 class="baseline-cell-input"
-                :value="baselineValue(bcOf(col))"
+                :value="col.baseline"
                 :aria-label="`基线 ${col.varName}`"
                 @input="(e: Event) => setBaseline(bcOf(col), (e.target as HTMLInputElement).value)"
               />
@@ -214,17 +218,17 @@
               />
             </td>
             <td
-              v-for="(col, ci) in visibleColumns"
-              :key="`c:${i}:${ci}:${col.stepIndex}:${col.source}:${col.varName}`"
-              :class="['td-data', cellClass(row, bcOf(col)), col.source === 'expect' ? 'col-expect' : '', isMultiSegView && isStepStart(ci) ? 'is-step-start' : '']"
-              :title="bcOf(col).baseline"
+              v-for="col in varColumns"
+              :key="`c:${i}:${col.varName}`"
+              :class="['td-data', cellClass(row, bcOf(col)), col.expect ? 'col-expect' : '']"
+              :title="col.baseline"
             >
-              <!-- 期望列与输入列同款单元格:行键 = varName,期望列 baseline
-                   = config.vars 值(Task 1 契约),placeholder 显基线 -->
+              <!-- 一变量一列:行键 = varName,baseline = config.vars 值,
+                   placeholder 显基线(继承态线索) -->
               <input
                 :value="row[col.varName] ?? ''"
                 class="data-cell-input"
-                :placeholder="col.baseline === undefined || col.baseline === null ? '' : String(col.baseline)"
+                :placeholder="col.baseline"
                 @input="(e: Event) => onCellInput(i, bcOf(col), (e.target as HTMLInputElement).value)"
                 @paste="(e: ClipboardEvent) => onCellPaste(e, bcOf(col), i)"
               />
@@ -286,9 +290,11 @@ import {
   cellDisplay, gridStats, parseTsvPaste, applyPastePlan,
 } from '@/utils/dataset-grid'
 import {
-  deriveSegments, gridColumnsOf, sharedVarNames, deadRowKeys,
+  deriveSegments, gridColumnsOf, deadRowKeys,
   type GridVarColumn,
 } from '@/utils/dataset-segments'
+import VariableDetailPanel from '@/components/dataset/VariableDetailPanel.vue'
+import { type PanelStepContext } from '@/utils/query-context'
 import { exportDataSetCsv, importDataSetCsv } from '@/utils/csv-dataset'
 import { useFieldDescriptions } from '@/composables/useFieldDescriptions'
 
@@ -315,125 +321,190 @@ const selectedRows = reactive(new Set<number>())
 /** 预览弹窗显示开关 */
 const previewDialogOpen = ref(false)
 
-// ── 段网格(spec §6.2 演进:勾选多选)─────────────────────────
-/** 段派生(spec §6.2):打开编辑器对场景一次引用扫描(纯前端投影) */
+// ── 变量优先双模式(spec v2 §6)──────────────────────────────
+/** 段派生(引用扫描,纯前端投影):引用徽标/行详情/未声明引用列的来源 */
 const segments = computed(() => deriveSegments(
   draft.value?.definition?.steps ?? [],
   draft.value?.definition?.config?.vars ?? {},
 ))
-const segSharedVars = computed(() => sharedVarNames(segments.value))
-const ALL_THRESHOLD = 8   // 全段列数 ≤8 默认全段勾选(spec §6.2 初值)
 
-/** 段选择(下拉单选):'all' = 全段并列;数字 = 段索引(单段视图) */
-const segChoice = ref<'all' | number>('all')
-const segInitialized = ref(false)
-watch(segments, (segs) => {
-  if (segInitialized.value || !segs.length) return
-  segInitialized.value = true
-  const total = segs.reduce((n, s) => n + gridColumnsOf(s).length, 0)
-  segChoice.value = total <= ALL_THRESHOLD ? 'all' : 0
-}, { immediate: true })
-
-/** 多段并列视图(「全部」且 >1 段):表头渲染步骤分组行 + 段首分隔线 */
-const isMultiSegView = computed(() => segChoice.value === 'all' && segments.value.length > 1)
-
-/** 全段总列数(「全部」选项标签提示用) */
-const totalGridColumns = computed(() =>
-  segments.value.reduce((n, s) => n + gridColumnsOf(s).length, 0))
-
-/** 所选段的列并排(段序);「全部」= 全段列 */
-const visibleColumns = computed<GridVarColumn[]>(() => {
-  if (segChoice.value === 'all') return segments.value.flatMap(gridColumnsOf)
-  return gridColumnsOf(segments.value[segChoice.value] ?? [])
+/** varName → 全部引用位(输入 + 期望,含步骤/来源/字段/断言下标) */
+const refsByVar = computed(() => {
+  const m = new Map<string, GridVarColumn[]>()
+  for (const col of segments.value.flatMap(gridColumnsOf)) {
+    const arr = m.get(col.varName) ?? []
+    arr.push(col)
+    m.set(col.varName, arr)
+  }
+  return m
 })
 
-/** GridVarColumn → BaselineColumn 适配:cellClass/onCellInput/onCellPaste
+/** 变量视图列(spec v2 §6):一变量一列;列 = config.vars 声明序,
+ *  引用扫描的未声明引用变量追加在后(模板引用在场但基线未声明 —
+ *  基线行输入即声明)。未引用列标灰(引用语义面在单变量面板展开)。 */
+interface VarViewColumn {
+  varName: string
+  /** config.vars 显示串(未声明 = '') */
+  baseline: string
+  /** 声明于 config.vars */
+  declared: boolean
+  /** 全部引用位(含期望) */
+  refs: GridVarColumn[]
+  /** 首个期望引用(期望徽标 + ↗ 跳转载体) */
+  expect: GridVarColumn | null
+  /** 引用步骤徽标(按步骤去重,首现序) */
+  badges: Array<{ stepIndex: number; label: string }>
+  /** 首个输入引用的字段描述(Plate IOFieldBinding;无引用 = '') */
+  description: string
+  unreferenced: boolean
+}
+
+const varColumns = computed<VarViewColumn[]>(() => {
+  const vars = (draft.value?.definition?.config?.vars ?? {}) as Record<string, unknown>
+  const declared = Object.keys(vars)
+  const undeclared = [...refsByVar.value.keys()].filter(n => !declared.includes(n))
+  return [...declared, ...undeclared].map((name) => {
+    const refs = refsByVar.value.get(name) ?? []
+    const expect = refs.find(r => r.source === 'expect') ?? null
+    const badgeIdx = new Set<number>()
+    const badges: Array<{ stepIndex: number; label: string }> = []
+    for (const r of refs) {
+      if (badgeIdx.has(r.stepIndex)) continue
+      badgeIdx.add(r.stepIndex)
+      badges.push({ stepIndex: r.stepIndex, label: stepLabel(r.stepIndex) })
+    }
+    const firstInput = refs.find(r => r.source !== 'expect') ?? null
+    const bv = vars[name]
+    return {
+      varName: name,
+      baseline: bv === undefined || bv === null ? '' : String(bv),
+      declared: declared.includes(name),
+      refs,
+      expect,
+      badges,
+      description: firstInput
+        ? descriptionByColumnKey.value.get(`${firstInput.stepIndex}:${firstInput.source}:${firstInput.field}`) ?? ''
+        : '',
+      unreferenced: refs.length === 0,
+    }
+  })
+})
+
+/** 变量选择:'all' = 变量网格;字符串 = varName(单变量详情面板) */
+const varChoice = ref<'all' | string>('all')
+/** 所选变量不在列宇宙(基线被删等)→ 回落「全部」 */
+watch(varColumns, (cols) => {
+  if (varChoice.value !== 'all' && !cols.some(c => c.varName === varChoice.value)) {
+    varChoice.value = 'all'
+  }
+})
+
+/** 当前单变量视图列(面板 props 来源;varChoice = 'all'/非法时 undefined) */
+const currentVarColumn = computed(() =>
+  varChoice.value === 'all' ? undefined : varColumns.value.find(c => c.varName === varChoice.value))
+
+/** VarViewColumn → BaselineColumn 适配:cellClass/onCellInput/onCellPaste
  *  既有签名消费完整 BaselineColumn 形状(最小适配对象补齐
- *  stepIndex/source/field)。 */
-function bcOf(col: GridVarColumn): BaselineColumn {
+ *  stepIndex/source/field;无引用列用占位 0/body/名)。 */
+function bcOf(col: VarViewColumn): BaselineColumn {
+  const first = col.refs[0]
   return {
-    stepIndex: col.stepIndex,
-    source: col.source === 'headers' ? 'headers' : 'body',
-    field: col.field,
+    stepIndex: first?.stepIndex ?? 0,
+    source: first?.source === 'headers' ? 'headers' : 'body',
+    field: first?.field ?? col.varName,
     kind: 'var',
     varName: col.varName,
-    baseline: col.baseline === undefined || col.baseline === null ? '' : String(col.baseline),
+    baseline: col.baseline,
   }
 }
 
-/** CSV 导入导出链专用:全量 var 列宇宙(brief ⑥ — 不随段过滤)。
- *  flatMap gridColumnsOf 覆盖 ALL 段(输入列 + 期望列);columns 与
- *  descriptions 同源同序 → 单段模式下他段列不丢,(description) 行守卫
- *  (descriptions.length === vars.length)恒满足,不再静默丢描述行。
- *  varName 首现去重(修轮 f2):同一 var 兼为输入与期望(或跨段重复)时
- *  行键唯一(行键 = varName),CSV 列头重复会让导入端同列互踩 — 输入列
- *  先于期望列(gridColumnsOf 序),首现胜出。 */
-const csvVarColumns = computed<BaselineColumn[]>(() => {
-  const seen = new Set<string>()
-  const out: BaselineColumn[] = []
-  for (const col of segments.value.flatMap(gridColumnsOf)) {
-    if (seen.has(col.varName)) continue
-    seen.add(col.varName)
-    out.push(bcOf(col))
-  }
-  return out
-})
+/** CSV 导入导出链专用:全量变量列宇宙 = varColumns(config.vars 声明序 +
+ *  未声明引用列)。一变量一列天然去重 — 同 var 兼为输入与期望引用时
+ *  行键(= varName)唯一,不再互踩(修轮 f2 语义随 IA 翻转自动满足)。
+ *  不随单变量视图过滤(brief ⑥);columns 与 descriptions 同源同序,
+ *  (description) 行守卫恒满足。 */
+const csvVarColumns = computed<BaselineColumn[]>(() => varColumns.value.map(bcOf))
 
-// ── 步骤分组表头(P1.4:横多列时按 step 视觉分组,零后端)─────────
-/** 列序上同 stepIndex 的连续段(merge 相邻同段,colspan 呈现)。
- *  仅多段并列时渲染(模板侧短路);单段无段间边界可标。 */
-const stepGroups = computed(() => {
-  const groups: Array<{ stepIndex: number; colspan: number }> = []
-  for (const col of visibleColumns.value) {
-    const last = groups[groups.length - 1]
-    if (last && last.stepIndex === col.stepIndex) last.colspan++
-    else groups.push({ stepIndex: col.stepIndex, colspan: 1 })
-  }
-  return groups
-})
 /** 步骤展示名:读 orchestration.steps[i].name(平台编排视图,plate Step
  *  无 name 字段);缺名/越界降级 Step N(同 RunDialog stepTo 下拉语义)。 */
 function stepLabel(i: number): string {
   const name = draft.value?.orchestration?.steps?.[i]?.name
   return name || `Step ${i + 1}`
 }
-/** 该列是所属步骤段的首列 → 渲染左分隔线(表头到数据行贯穿)。
- *  仅多段并列时消费(模板侧短路);单段无段间边界。 */
-function isStepStart(ci: number): boolean {
-  const cols = visibleColumns.value
-  return ci === 0 || cols[ci - 1].stepIndex !== cols[ci].stepIndex
-}
 
-/** 期望列头 → 断言卡直跳(spec §5.3):路由携带 focusStep/focusStrategy,
+/** 期望引用 → 断言卡直跳(spec §5.3):路由携带 focusStep/focusStrategy,
  *  CaseComposer onMounted 消费(Task 3 契约)。索引恒为数字转串 —
  *  绝不发空串(Number('') === 0 会骗过消费端守卫,伪造 0/0 跳转)。 */
-function jumpToAssertion(col: GridVarColumn) {
-  if (!col.expect) return
+function jumpToAssertion(col: VarViewColumn) {
+  if (col.expect) jumpToRef(col.expect)
+}
+
+/** 面板引用位跳转(单变量模式引用面 ↗;与网格列头同契约)。 */
+function jumpToRef(r: GridVarColumn) {
+  if (!r.expect) return
   router.push({
     path: `/composer/${scenarioId}`,
     query: {
       step: '4',
-      focusStep: String(col.stepIndex),
-      focusStrategy: String(col.expect.strategyIdx),
+      focusStep: String(r.stepIndex),
+      focusStrategy: String(r.expect.strategyIdx),
     },
   })
+}
+
+// ── 单变量面板接线(spec v2 §6:取数 = ValueSourcePicker 复用)──────
+/** 面板步骤上下文:全部步骤(取数不强依赖引用 — 未引用变量也可选任意
+ *  步骤的服务上下文查值)。 */
+const stepContexts = computed<PanelStepContext[]>(() => {
+  const steps = draft.value?.definition?.steps ?? []
+  return steps.map((s: any, i: number) => ({
+    index: i,
+    label: stepLabel(i),
+    service: s?.api?.service ?? '',
+    headers: s?.api?.headers ?? {},
+    bodyTop: s?.request?.body && typeof s.request.body === 'object' && !Array.isArray(s.request.body)
+      ? s.request.body
+      : {},
+  }))
+})
+
+/** 取数查询配置(服务声明表 + 凭证条目;resolveQueryCtx 消费,修订 10/11 语义) */
+const queryConfig = computed(() => ({
+  services: draft.value?.definition?.config?.services ?? {},
+  users: draft.value?.definition?.config?.users ?? {},
+}))
+
+/** 最小 BaselineColumn(面板编辑链只消费 varName;stepIndex/source/field
+ *  为形状完备占位)。 */
+function pseudoColumn(varName: string, baseline: string): BaselineColumn {
+  return { stepIndex: 0, source: 'body', field: varName, kind: 'var', varName, baseline }
+}
+
+/** 面板基线编辑(置顶基线行同链:setBaseline → baselineDirty → 保存基线) */
+function onPanelBaseline(v: string) {
+  const col = currentVarColumn.value
+  if (!col) return
+  setBaseline(pseudoColumn(col.varName, v), v)
+}
+
+/** 面板行值编辑(网格 onCellInput 同语义:空串 = 显式空覆盖) */
+function onPanelCell(i: number, v: string) {
+  const col = currentVarColumn.value
+  if (!col) return
+  onCellInput(i, pseudoColumn(col.varName, ''), v)
 }
 
 /** 死行键(spec §7 软提示):行键 ∉ config.vars 列宇宙 → 提示条标黄,
  *  不阻断编辑(变量已删但行数据还在的悬空键)。 */
 const deadKeys = computed(() => deadRowKeys(draft.value?.definition?.config?.vars ?? {}, rows.value))
 
-/** 摘要统计:列宇宙 = csvVarColumns(全段 var 列,不随勾选段过滤) */
+/** 摘要统计:列宇宙 = csvVarColumns(变量列,不随单变量视图过滤) */
 const stats = computed(() => gridStats(csvVarColumns.value, rows.value))
 
 // 字段描述行(Plate IOFieldBinding.description)— 复用 CaseComposer 的缓存
 const { descriptionByColumnKey } = useFieldDescriptions(draft as any)
 
-// ── 基线(置顶基线行消费)─────────────────────────────────
-function baselineValue(col: BaselineColumn): string {
-  const v = draft.value?.definition?.config?.vars?.[col.varName as string]
-  return v === undefined || v === null ? '' : String(v)
-}
+// ── 基线(置顶基线行 + 单变量面板消费)─────────────────────
 function setBaseline(col: BaselineColumn, v: string) {
   if (!draft.value || !col.varName) return
   const def = draft.value.definition
@@ -730,10 +801,10 @@ onMounted(async () => {
   background: #f8fafc;
 }
 
-/* ── 段下拉选择(spec §6.2 演进):单选一段 / 全部(全段并列)── */
-.seg-picker { display: flex; gap: 8px; align-items: center; padding: 8px 12px 0; }
-.seg-picker-label { font-size: 12px; color: var(--color-text-secondary); }
-.seg-select { width: 260px; }
+/* ── 变量选择器(spec v2 §6 变量优先双模式):全部(变量网格)/ 单变量(面板)── */
+.var-picker { display: flex; gap: 8px; align-items: center; padding: 8px 12px 0; }
+.var-picker-label { font-size: 12px; color: var(--color-text-secondary); }
+.var-select { width: 260px; }
 
 /* 死行键软提示条(spec §7):标黄不阻断 */
 .dead-keys-bar { margin: 6px 12px 0; font-size: 11px; color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 5px 10px; }
@@ -780,22 +851,9 @@ onMounted(async () => {
 .data-table .row-desc th  { background: #f1f5f9; }
 .data-table .row-field th { background: #e2e8f0; }
 
-/* 步骤分组行:比 row-field 更深一档的底色,colspan 段 + 段间分隔线
-   (P1.4 — 横多列时按 step 视觉分组) */
-.data-table .row-step-group th {
-  background: #dde3ee;
-  color: #334155;
-  font-weight: 700;
-  font-size: 11px;
-  text-align: center;
-  border-left: 1px solid #c3ccdb;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.data-table .row-step-group th:first-of-type { border-left: none; }
-/* 步骤段首列:贯穿 thead(描述/字段行)与 tbody 的左分隔线 */
-.data-table .is-step-start { border-left: 1px solid #c3ccdb; }
-/* 共享 var 徽标:多步骤引用同一变量(config.vars 单值,改一处全局生效) */
-.data-table .shared-mark {
+/* 引用徽标(spec v2 §6):该变量被步骤N引用 — 共享 = 多徽标并列,
+   改一处所有引用处生效(config.vars 单值) */
+.data-table .ref-badge {
   display: inline-block;
   margin-left: 4px; padding: 0 4px;
   border-radius: 3px;
@@ -803,6 +861,10 @@ onMounted(async () => {
   font-size: 10px; line-height: 16px;
   vertical-align: middle;
 }
+/* 未引用变量列:表头/基线格标灰(声明在场但模板未引用 — 死值预警;
+   数据格保持三态语义不参与) */
+.data-table th.col-unreferenced { background: #f1f5f9; color: #94a3b8; }
+.data-table .row-baseline td.col-unreferenced { color: #94a3b8; }
 /* 期望列(spec §6.2):列头徽标 + 淡紫底,与输入列并排但可辨识 */
 .col-expect .exp-col-badge { font-size: 10px; font-weight: 700; color: #6b21a8; background: #f3e8ff; padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
 .th-data.col-expect { background: #faf5ff; }
