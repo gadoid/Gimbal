@@ -2615,6 +2615,38 @@ describe('CaseComposerCanvas — 期望变量提升(§5.2)', () => {
     }
   })
 
+  it('X2b: 改名后仍撞既有 var(手输 base_url)→ 循环 prompt 直到唯一,不静默覆写', async () => {
+    const { listStrategyKinds, ElMessageBox } = await Promise.all([
+      import('@/api/scenario-composer'),
+      import('element-plus'),
+    ]).then(([a, b]) => ({ listStrategyKinds: a.listStrategyKinds, ElMessageBox: b.ElMessageBox }))
+    const kindsMock = (listStrategyKinds as any).getMockImplementation()
+    ;(listStrategyKinds as any).mockResolvedValue([{ kind: 'assertion', label: '断言' }])
+    // 第一轮手输既有 var(base_url)→ 二次撞名;第二轮才给唯一名
+    const promptSpy = vi.spyOn(ElMessageBox, 'prompt')
+      .mockResolvedValueOnce({ value: 'base_url' } as any)
+      .mockResolvedValueOnce({ value: 'exp_code_neg' } as any)
+    try {
+      const draft = useScenarioDraftStore()
+      draft.draft!.definition.config.vars = { base_url: 'http://x', exp_code: 200 }
+      const s0 = mkStep({
+        strategy: [{ kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: 404 } as any],
+      })
+      const { w } = mountCanvas([s0])
+      await flushPromises()
+      await w.find('.sf-head').trigger('click')
+      await w.find('.sf-exp-promote').trigger('click')
+      await flushPromises()
+      expect(promptSpy).toHaveBeenCalledTimes(2)   // 撞名循环:第一轮撞 base_url 再问
+      expect((s0.strategy[0] as any).expected).toBe('${var.exp_code_neg}')
+      expect(w.findComponent(CaseComposerCanvas).emitted('varPromote')).toEqual([['exp_code_neg', 404]])
+      w.unmount()
+    } finally {
+      promptSpy.mockRestore()
+      ;(listStrategyKinds as any).mockImplementation(kindsMock)
+    }
+  })
+
   it('X3: 还原 → expected 写回基线字面量 + varDemote 上抛(删键新通路)', async () => {
     const { listStrategyKinds } = await import('@/api/scenario-composer')
     const kindsMock = (listStrategyKinds as any).getMockImplementation()

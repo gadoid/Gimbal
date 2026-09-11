@@ -974,7 +974,8 @@ function onVarPromote(_f: IOFieldBinding, name: string, value: unknown) {
 //    StrategyForm 只发事件,跨层动作(expected 模板化/还原 + varPromote/
 //    varDemote 上抛)在此单一真源;命名用 Task 1 的 expectVarNameOf。
 
-/** 期望提升(spec §5.2):expected → ${var.exp_*};撞名对话框改名,不静默 _2 */
+/** 期望提升(spec §5.2):expected → ${var.exp_*};撞名对话框改名,不静默 _2。
+ *  手输名也过同一闸:改名后仍撞既有 var → 循环再问,直到唯一(不静默覆写)。 */
 function onExpPromote(idx: number) {
   const step = currentStep.value
   if (!step) return
@@ -982,18 +983,40 @@ function onExpPromote(idx: number) {
   const base = expectVarNameOf(String(st.target ?? ''))
   const vars = (draftStore.draft?.definition?.config?.vars ?? {}) as Record<string, unknown>
   if (Object.prototype.hasOwnProperty.call(vars, base)) {
-    ElMessageBox.prompt(
-      `期望变量 ${base} 已存在(③ 共享变量里有同名键)。请换一个名字:`,
-      '撞名 — 改名后继续',
-      {
-        confirmButtonText: '确定', cancelButtonText: '取消',
-        inputPattern: /^[A-Za-z_][A-Za-z0-9_]*$/,
-        inputErrorMessage: '变量名须以字母/下划线开头,仅含字母/数字/下划线',
-      },
-    ).then(({ value }) => { if (value) applyExpPromote(st, value.trim()) }).catch(() => {})
+    void promptUniqueExpName(base, vars).then((name) => {
+      if (name) applyExpPromote(st, name)
+    })
     return
   }
   applyExpPromote(st, base)
+}
+
+/** 撞名改名循环(§5.2):prompt 直到名字不在 config.vars;空输入 = 取消;
+ *  cancel → null。每轮把撞上的名字带进文案,用户看到的是具体冲突而非笼统报错。 */
+async function promptUniqueExpName(
+  base: string, vars: Record<string, unknown>,
+): Promise<string | null> {
+  let collided = base
+  for (;;) {
+    let value: string
+    try {
+      const r = await ElMessageBox.prompt(
+        `期望变量 ${collided} 已存在(③ 共享变量里有同名键)。请换一个名字:`,
+        '撞名 — 改名后继续',
+        {
+          confirmButtonText: '确定', cancelButtonText: '取消',
+          inputPattern: /^[A-Za-z_][A-Za-z0-9_]*$/,
+          inputErrorMessage: '变量名须以字母/下划线开头,仅含字母/数字/下划线',
+        },
+      )
+      value = (r.value ?? '').trim()
+    } catch {
+      return null   // 取消 = 放弃提升(不静默选别的名)
+    }
+    if (!value) return null                       // 空输入视为取消
+    if (!Object.prototype.hasOwnProperty.call(vars, value)) return value
+    collided = value                              // 二次撞名:带着撞上的名字再问一轮
+  }
 }
 
 function applyExpPromote(st: { expected?: unknown; target?: unknown }, name: string) {
