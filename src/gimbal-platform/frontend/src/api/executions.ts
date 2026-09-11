@@ -43,6 +43,8 @@ export interface Execution {
 export interface ExecutionRow {
   seq: number
   datasetId: string | null
+  /** 注入族行的条目 id(spec v2 §8);数据集行/旧 JSONL 回放缺键 → null */
+  injectionId?: string | null
   rowIndex: number
   rep: number
   status: string

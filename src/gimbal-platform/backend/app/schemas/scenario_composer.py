@@ -260,6 +260,11 @@ class RunRequest(BaseModel):
     service_bindings: dict[str, ServiceBinding] = Field(
         default_factory=dict, alias="serviceBindings"
     )
+    # 断言注入条目(spec v2 §5/§8):选中条目在 dispatch 时物化为注入族
+    # (payload.assertion_registry → 基线 vars 覆写 + asserts patch),
+    # 与数据集行并列生成 case;空 = 不注入。
+    injection_entry_ids: list[str] = Field(default_factory=list,
+                                           alias="injectionEntryIds")
     # V1 高级能力移植:``stepTo`` 0-based 含端点(与 V1 executions 的
     # step_to 同语义),dispatcher 透传 gimbal HTTP ``halt_at``。
     step_to: int | None = Field(default=None, ge=0, alias="stepTo")

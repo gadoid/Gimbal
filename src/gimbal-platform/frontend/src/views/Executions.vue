@@ -129,6 +129,7 @@
           <tr>
             <th>#</th>
             <th>数据集</th>
+            <th>注入条目</th>
             <th>行</th>
             <th>重复</th>
             <th>状态</th>
@@ -141,7 +142,11 @@
           <template v-for="row in rows" :key="row.seq">
             <tr class="ex-table-row">
               <td class="mono">{{ row.seq }}</td>
-              <td>{{ row.datasetId ?? '使用基线配置' }}</td>
+              <td>{{ row.datasetId ?? (row.injectionId ? '基线' : '使用基线配置') }}</td>
+              <td>
+                <span v-if="row.injectionId" class="inj-badge">⚠ {{ row.injectionId }}</span>
+                <span v-else>—</span>
+              </td>
               <td class="mono">{{ row.rowIndex }}</td>
               <td class="mono">{{ row.rep }}</td>
               <td>
@@ -175,7 +180,7 @@
               :key="`${row.seq}-${a.file}-artifact`"
               class="ex-table-artifact"
             >
-              <td colspan="8">
+              <td colspan="9">
                 <div class="artifact-head">
                   <span>{{ a.file === 'engine-log' ? 'engine.log（引擎日志）' : 'result.json（步骤明细）' }}</span>
                   <span class="mono dim">{{ row.caseDir }}</span>
@@ -664,6 +669,18 @@ onUnmounted(() => {
   padding: 2px 8px;
   font-size: 10.5px;
   font-weight: 600;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* 注入族行角标(spec v2 §8):偏离注入条目 id,警示色系 */
+.inj-badge {
+  display: inline-flex;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #92400e;
+  background: #fef3c7;
   border-radius: 4px;
   white-space: nowrap;
 }

@@ -36,7 +36,7 @@ import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from loguru import logger
@@ -60,6 +60,7 @@ from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import RunRequest, RunResponse, ServiceBinding
 from . import gimbal_launcher, plate_client
 from .auth_ref_scan import scan_auth_aliases
+from .run_injection import compose_injection_scenario, entry_issues
 from .run_materialize import materialize_run_copy
 
 # 物理迁移自 gimbal 后:用平台侧标准 AuthSession 替代自创 ResolvedAuth dataclass。
@@ -220,6 +221,8 @@ class RowState:
     case_dir: str = ""                 # case stem(非全路径,不泄漏服务端布局)
     started_at: str | None = None
     finished_at: str | None = None
+    # 注入族行的条目 id(spec v2 §8);数据集行为 None。
+    injection_id: str | None = None
 
 
 # 行终态集合:JSONL 里 per-row 最后一行 status 的取值("dispatched" 为
@@ -259,6 +262,8 @@ def _replay_rows(execution_id: int) -> list[dict]:
                     continue
                 cur = rows.setdefault(seq, {"seq": seq,
                                             "datasetId": rec.get("datasetId"),
+                                            # 旧 JSONL 无注入族 → 缺键 None,不炸
+                                            "injectionId": rec.get("injectionId"),
                                             "rowIndex": rec.get("rowIndex", 0),
                                             "rep": rec.get("rep", 0),
                                             "status": rec.get("status", ""),
@@ -387,6 +392,31 @@ async def dispatch_run(
             )
         selected_datasets.append(ds)
 
+    # 2.5 断言注入条目(spec v2 §8):payload.assertion_registry 里被选中
+    # 且悬空检测通过的条目 → 注入族(与数据集族并集,不与数据集行交叉)。
+    # 死条目(越界/未知 var/override 无匹配)skip + 告警,绝不炸 dispatch。
+    raw_payload = scen.payload or {}
+    registry = raw_payload.get("assertion_registry") or {}
+    entries = registry.get("entries") or []
+    selected_ids = set(req.injection_entry_ids or [])
+    selected_entries: list[dict] = []
+    for e in entries:
+        if not isinstance(e, dict) or e.get("id") not in selected_ids:
+            continue
+        issues = entry_issues(
+            e,
+            len(steps_from_payload(raw_payload) or []),
+            set(_definition_vars(raw_payload)),
+            _assert_targets_of(raw_payload),
+        )
+        if issues:
+            logger.warning(
+                "run_dispatcher: injection entry %s dangling (%s) — skipped",
+                e.get("id"), issues,
+            )
+            continue
+        selected_entries.append(e)
+
     # 3. Allocate runId + Execution row
     # total_runs 必须按实际行数算(与 _fanout 的迭代口径一致)— 旧的
     # row_count 列在 raw-SQL 迁移路径下不回填,NULL/过期会让计数器
@@ -396,11 +426,17 @@ async def dispatch_run(
     # 全部回落 config.vars)。datasetId=None 在 JSONL 里如实记录。
     # 新编辑器里行 0 基线虚行不落库 → 0 行数据集 = "只有基线",同样
     # 回退一个隐式空覆盖行(否则 entries 为空,执行 0/0/0 秒完结)。
+    # 注入条目在场时注入族自身就是基线行(带偏离),不叠加隐式行。
     fanout_datasets = [
         {"datasetId": ds.dataset_id, "rows": list(ds.rows or []) or [{}]}
         for ds in selected_datasets
-    ] or [{"datasetId": None, "rows": [{}]}]
-    total_runs = sum(len(d["rows"]) for d in fanout_datasets) * req.n_runs
+    ]
+    if not fanout_datasets and not selected_entries:
+        fanout_datasets = [{"datasetId": None, "rows": [{}]}]
+    # 数据集族 + 注入族合计(rows x nRuns)。
+    total_runs = (
+        sum(len(d["rows"]) for d in fanout_datasets) + len(selected_entries)
+    ) * req.n_runs
     # P7:总量闸——行数 × nRuns 无上限时,万行数据集 × n_runs 会派生
     # 出十万级子进程。
     if total_runs > settings.MAX_RUNS_PER_EXECUTION:
@@ -455,6 +491,7 @@ async def dispatch_run(
                 run_id=run_id,
                 scenario_payload=dict(scen.payload or {}),
                 datasets=fanout_datasets,
+                injections=selected_entries,
                 owner_id=user_id,
                 auth_aliases=auth_aliases,
                 halt_at=req.step_to,
@@ -490,6 +527,7 @@ async def _fanout(
     run_id: str,
     scenario_payload: dict,
     datasets: list[dict],
+    injections: list[dict] | tuple = (),
     owner_id: int,
     auth_aliases: list[str],
     halt_at: int | None = None,
@@ -506,6 +544,11 @@ async def _fanout(
     (asyncio.Semaphore);``service_bindings`` 逐绑定传给
     ``materialize_run_copy`` 物化 run 副本(users 合并固定 merge 语义;
     prefix/merge 策略等旧字段已随 RunRequest 收敛退役,spec §6)。
+
+    spec v2 §8:``injections`` 为选中的断言注入条目(dispatch 已过滤死
+    条目)— 与数据集族并集(条目 × repeat 笛卡尔),注入族在 definition
+    层经 ``compose_injection_scenario`` patch(基线 vars 覆写 + asserts
+    patch)后再走 plate convert,``materialize_run_copy`` 其后照旧。
 
     V3.2:执行调用从 gimbal HTTP POST /run 改为落盘 case 文件后
     ``gimbal run launch <case>`` 子进程(设计:2026-08-24 spec)。
@@ -539,7 +582,8 @@ async def _fanout(
             "run_dispatcher: auth resolve failed for execution {}: {}",
             execution_id, e,
         )
-        total_rows = sum(len(ds["rows"]) for ds in datasets) * n_runs
+        total_rows = (sum(len(ds["rows"]) for ds in datasets)
+                      + len(injections)) * n_runs
         await _fail_whole_execution(
             db_factory, log_path, execution_id=execution_id, run_id=run_id,
             total_rows=total_rows, error=str(e),
@@ -594,9 +638,15 @@ async def _fanout(
             "run_dispatcher: carry context build failed; skipped")
         carry_ctx = None
 
-    async def _row(ds: dict, row_idx: int, rep: int, seq: int) -> None:
-        """One (dataset row × repeat) entry — compose + convert + launch."""
+    async def _row(ds: dict | None, row_idx: int, rep: int, seq: int,
+                   injection: dict | None = None) -> None:
+        """One (dataset row × repeat) or (injection entry × repeat) entry —
+        compose + convert + launch."""
         state = row_states[seq]
+        injection_id = (injection or {}).get("id")
+        ds_id = ds["datasetId"] if ds is not None else None
+        # 日志定位标签:数据集行用 datasetId,注入族用条目 id,基线行 baseline。
+        row_src = ds_id or injection_id or "baseline"
         async with sem:
             # P4 协作式取消:行边界在信号量准入处(全部行 task 在 fanout
             # 启动时就已创建并排队,准入前检查永远看不到晚到的取消请求)。
@@ -608,7 +658,8 @@ async def _fanout(
                     "runId": run_id,
                     "executionId": execution_id,
                     "seq": seq,
-                    "datasetId": ds["datasetId"],
+                    "datasetId": ds_id,
+                    "injectionId": injection_id,
                     "rowIndex": row_idx,
                     "rep": rep,
                     "status": "canceled",
@@ -616,11 +667,20 @@ async def _fanout(
                 state.status = "canceled"
                 state.finished_at = _utcnow().isoformat() + "Z"
                 return
-            row_dict = dict(ds["rows"][row_idx] or {})
-            composed = _compose_scenario(scenario_payload, row_dict)
+            if injection is not None:
+                # 注入族(spec v2 §8):definition 层 patch(基线 vars 覆写 +
+                # asserts patch)在 plate convert 之前完成 — 替代数据集行的
+                # 行合并路径(vars 已在 compose 内合并);materialize 其后照旧。
+                composed = compose_injection_scenario(definition, injection)
+            else:
+                row_dict = dict(ds["rows"][row_idx] or {})
+                composed = _compose_scenario(scenario_payload, row_dict)
             # 每个 case 独立子目录:case.json(数据驱动用例快照)+ 引擎
             # 原生报告目录;stem 带 dataset/row/rep 定位,便于事后审计。
+            # 注入族 stem:entryId 占 datasetId 位(无 dataset/row 维度)。
             stem = (
+                f"case-{seq:03d}-inj-{injection_id}-r{rep}"
+                if injection is not None else
                 f"case-{seq:03d}-{ds['datasetId'] or 'baseline'}"
                 f"-r{row_idx}-n{rep}"
             )
@@ -632,7 +692,8 @@ async def _fanout(
                 "executionId": execution_id,
                 "seq": seq,
                 "scenarioId": composed.get("scenarioId"),
-                "datasetId": ds["datasetId"],
+                "datasetId": ds_id,
+                "injectionId": injection_id,
                 "rowIndex": row_idx,
                 "rep": rep,
                 "status": "dispatched",
@@ -708,14 +769,14 @@ async def _fanout(
                         log_line["runError"] = result.error
                         logger.warning(
                             "run_dispatcher: launch {} for row {}/{}#{}: {}",
-                            result.launch_status, ds["datasetId"], row_idx, rep,
+                            result.launch_status, row_src, row_idx, rep,
                             result.error,
                         )
                     elif result.exit_code == 0:
                         log_line["status"] = "passed"
                         logger.info(
                             "run_dispatcher: row {}/{}#{} executed: exit=0 passed={} failed={}",
-                            ds["datasetId"], row_idx, rep,
+                            row_src, row_idx, rep,
                             result.passed, result.failed,
                         )
                     elif result.exit_code == 2:
@@ -724,7 +785,7 @@ async def _fanout(
                         log_line["runError"] = result.error
                         logger.warning(
                             "run_dispatcher: gimbal rejected row {}/{}#{}: {}",
-                            ds["datasetId"], row_idx, rep, result.error,
+                            row_src, row_idx, rep, result.error,
                         )
                     else:
                         # exit 1 = 测试失败(正常业务结果);>=3 = 引擎侧错误。
@@ -732,23 +793,23 @@ async def _fanout(
                         log_line["runError"] = result.error
                         logger.info(
                             "run_dispatcher: row {}/{}#{} executed: exit={} passed={} failed={}",
-                            ds["datasetId"], row_idx, rep, result.exit_code,
+                            row_src, row_idx, rep, result.exit_code,
                             result.passed, result.failed,
                         )
             except plate_client.PlateUnavailableError as e:
                 plate_state["consecutive_unavailable"] += 1
                 log_line["status"] = "plate_unavailable"
                 log_line["error"] = str(e)
-                logger.warning("run_dispatcher: plate unavailable for row {}/{}#{}: {}", ds["datasetId"], row_idx, rep, e)
+                logger.warning("run_dispatcher: plate unavailable for row {}/{}#{}: {}", row_src, row_idx, rep, e)
             except plate_client.PlateRejectedError as e:
                 log_line["status"] = "plate_rejected"
                 log_line["error"] = e.message
                 log_line["errors"] = list(e.errors or [])
-                logger.warning("run_dispatcher: plate rejected row {}/{}#{}: {}", ds["datasetId"], row_idx, rep, e.message)
+                logger.warning("run_dispatcher: plate rejected row {}/{}#{}: {}", row_src, row_idx, rep, e.message)
             except Exception as e:  # noqa: BLE001  defensive — never let a row kill the fan-out
                 log_line["status"] = "dispatcher_error"
                 log_line["error"] = repr(e)
-                logger.exception("run_dispatcher: unexpected error row {}/{}#{}", ds["datasetId"], row_idx, rep)
+                logger.exception("run_dispatcher: unexpected error row {}/{}#{}", row_src, row_idx, rep)
 
             # P1:引擎结果全量证据落盘(仅真实拿到 LaunchResult 的路径;
             # plate 异常分支不设 runResult,短路跳过)。
@@ -781,11 +842,17 @@ async def _fanout(
             )
 
     # (dataset, row, repeat) 笛卡尔积;n_runs=1 时与旧逐行行为完全一致。
+    # 注入族(spec v2 §8)并集在后:选中条目 × repeat(跑在基线上,不与
+    # 数据集行交叉);dataset 维度缺省 None(rowIndex 恒 0)。
     # seq 为 case 文件名里的全局序号(与 entries 顺序一致,单测可断言)。
     entries = [
-        (ds, row_idx, rep)
+        (ds, row_idx, rep, None)
         for ds in datasets
         for row_idx in range(len(ds["rows"]))
+        for rep in range(n_runs)
+    ] + [
+        (None, 0, rep, entry)
+        for entry in injections
         for rep in range(n_runs)
     ]
     # spec §9.1:组完全部行任务后初始化行状态 registry(全部 queued;
@@ -793,15 +860,17 @@ async def _fanout(
     row_states = _row_states[execution_id] = [
         RowState(
             seq=seq,
-            dataset_id=ds["datasetId"],
+            dataset_id=ds["datasetId"] if ds is not None else None,
             row_index=row_idx,
             rep=rep,
             status="queued",
+            injection_id=(inj or {}).get("id"),
         )
-        for seq, (ds, row_idx, rep) in enumerate(entries)
+        for seq, (ds, row_idx, rep, inj) in enumerate(entries)
     ]
     await asyncio.gather(
-        *(_row(ds, i, r, seq) for seq, (ds, i, r) in enumerate(entries))
+        *(_row(ds, i, r, seq, inj)
+          for seq, (ds, i, r, inj) in enumerate(entries))
     )
 
     # Terminal status + timestamps only (counters already maintained
@@ -999,6 +1068,31 @@ async def _finalize_execution(
 
 
 # ─── helpers ──────────────────────────────────────────────────────
+def _definition_vars(payload: dict | None) -> dict[str, Any]:
+    """definition.config.vars 投影(注入条目 varName 悬空检测的基线面)。"""
+    cfg = definition_from_payload(payload).get("config") or {}
+    vars_map = cfg.get("vars") if isinstance(cfg.get("vars"), dict) else {}
+    return vars_map or {}
+
+
+def _assert_targets_of(payload: dict | None) -> Callable[[int], set[str]]:
+    """steps[si].strategy 的 assertion target 投影(entry_issues 的
+    override-no-match 检测输入;匹配语义与 compose_injection_scenario
+    同源:kind=assertion 且 target 相等)。"""
+    steps = steps_from_payload(payload)
+
+    def _targets(si: int) -> set[str]:
+        if si < 0 or si >= len(steps):
+            return set()
+        return {
+            st.get("target")
+            for st in (steps[si].get("strategy") or [])
+            if isinstance(st, dict) and st.get("kind") == "assertion"
+        }
+
+    return _targets
+
+
 def _built_in_users(scenario_payload: dict | None) -> dict[str, Any]:
     """场景 definition.config.users(merge 策略保留基座)。"""
     def_cfg = definition_from_payload(scenario_payload).get("config") or {}

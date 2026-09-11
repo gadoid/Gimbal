@@ -36,6 +36,8 @@ class ExecutionRowOut(BaseModel):
 
     seq: int
     dataset_id: str | None = Field(default=None, alias="datasetId")
+    # 注入族行的条目 id(spec v2 §8);数据集行/旧 JSONL 回放缺键 → None。
+    injection_id: str | None = Field(default=None, alias="injectionId")
     row_index: int = Field(default=0, alias="rowIndex")
     rep: int = 0
     status: str
