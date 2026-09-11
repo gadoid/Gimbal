@@ -1,14 +1,14 @@
 /**
- * dataset-grid.ts — 转置表格 + 折叠基线视图所需的派生工具(纯函数,零 IO)
+ * dataset-grid.ts — 转置表格视图所需的派生工具(纯函数,零 IO)
  *
- * 输入:`deriveBaselineColumns()` 输出的 `BaselineColumn[]`(已存在
- * dataset-palette.ts)和当前 `rows[]`。只做投影 / 状态推导,不做保存。
+ * 输入:`BaselineColumn[]`(dataset-palette.ts,由 DataSetEditor 从
+ * dataset-segments 段列适配)和当前 `rows[]`。只做投影 / 状态推导,
+ * 不做保存。
  *
- * 三个关键事实(实现必须对齐):
+ * 两个关键事实(实现必须对齐):
  *   - 数据行是稀疏 dict;`undefined` ↔ 继承基线;`""` ↔ 显式空串覆盖。
  *     UI 必须保留这两种状态的区别(`override-empty` 红条)。
  *   - 后端 `_validate_rows` 只校验键 ⊆ palette,值任意 → cell 统一字符串。
- *   - 直填基线编辑(`setDirectBaseline()`)是本地草稿 mutate,基线 PUT 走 `updateScenario`。
  */
 
 import type { BaselineColumn } from './dataset-palette'
@@ -21,38 +21,6 @@ export type VarColumn = BaselineColumn & { kind: 'var'; varName: string }
 
 export function varOnlyPalette(columns: BaselineColumn[]): VarColumn[] {
   return columns.filter((c): c is VarColumn => c.kind === 'var' && !!c.varName)
-}
-
-/** 基线树形分组(按步骤 → 位置 → 字段);折叠区用。 */
-export interface BaselineGroup {
-  stepIndex: number
-  source: BaselineColumn['source']
-  fields: BaselineColumn[]
-}
-
-export function groupByStepLocation(columns: BaselineColumn[]): BaselineGroup[] {
-  const map = new Map<string, BaselineGroup>()
-  for (const c of columns) {
-    const key = `${c.stepIndex}:${c.source}`
-    let g = map.get(key)
-    if (!g) {
-      g = { stepIndex: c.stepIndex, source: c.source, fields: [] }
-      map.set(key, g)
-    }
-    g.fields.push(c)
-  }
-  return [...map.values()].sort((a, b) => {
-    if (a.stepIndex !== b.stepIndex) return a.stepIndex - b.stepIndex
-    return a.source.localeCompare(b.source)
-  })
-}
-
-/** 模糊匹配:不区分大小写,字段名 / varName 任一命中即可。空 query = 全显。 */
-export function matchesQuery(c: BaselineColumn, q: string): boolean {
-  const needle = q.trim().toLowerCase()
-  if (!needle) return true
-  return c.field.toLowerCase().includes(needle)
-    || (c.varName?.toLowerCase().includes(needle) ?? false)
 }
 
 // ─── cell 状态 ────────────────────────────────────────────────
@@ -87,19 +55,17 @@ export function cellDisplay(
 
 export interface GridStats {
   varCount: number     // 变量列数
-  directCount: number  // 直填列数
   rowCount: number     // 数据条数
   overrideCount: number // 显式覆盖的单元格数(inherit 之外的)
 }
 
-/** 顶栏「变量 X / 直填 Y · 数据 N · 覆盖 M 格」用。 */
+/** 顶栏「变量 X · 数据 N · 覆盖 M 格」用。 */
 export function gridStats(
   columns: BaselineColumn[],
   rows: Array<Record<string, unknown>>,
 ): GridStats {
   const varColumns = varOnlyPalette(columns)
   const varCount = varColumns.length
-  const directCount = columns.length - varCount
   // 防御性:只数 palette 里的 varName(后端 _validate_rows 也只允许这些键)。
   // 万一 row 里混进意外键,不被算成 override,避免顶栏数字被污染。
   const varNames = new Set(varColumns.map((v) => v.varName))
@@ -109,7 +75,7 @@ export function gridStats(
       if (varNames.has(k)) overrideCount++
     }
   }
-  return { varCount, directCount, rowCount: rows.length, overrideCount }
+  return { varCount, rowCount: rows.length, overrideCount }
 }
 
 // ─── TSV 粘贴 ─────────────────────────────────────────────────

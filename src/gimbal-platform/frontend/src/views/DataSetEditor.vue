@@ -1,10 +1,12 @@
-<!-- DataSetEditor.vue — 转置表 + 折叠基线(spec §4.5 重构)
+<!-- DataSetEditor.vue — 转置表 + 段多选网格(基线区已退场)
 
      信息架构:
-       - 顶部折叠基线(默认收起),按 step · source 树形分组,搜索过滤
-       - 下方全宽数据表格(行 = 数据,列 = 段内变量;直填列不进表格,基线区可编辑)
-       - 段 tabs(spec §6.2):引用扫描派生段,列作用域收缩到单 step 段;
-         "全部"仅小场景(全段列数 ≤8 默认选中)
+       - 全宽数据表格(行 = 数据,列 = 勾选段的变量并排;直填列不进表格,
+         编辑家在编排器 FieldForm)
+       - 段多选(spec §6.2 演进):引用扫描派生段,勾选框并列多段;
+         "全部" = master 快捷(勾=全选 / 取消=回只选首段);至少一段
+       - 置顶基线行(tbody 首行):config.vars 基线唯一编辑入口,
+         不可选 / 不可粘贴;编辑触发 baselineDirty →「保存基线」
        - 期望列与输入列并排(行键 = varName),列头带「期望」徽标(target/operator)
        - 三态单元格:inherit(灰显基线 placeholder) / override-empty(红条) / override-value
        - TSV 粘贴 / CSV 导出 / CSV 导入
@@ -47,73 +49,11 @@
         </el-form-item>
         <el-form-item label="摘要">
           <span class="mono">
-            变量 {{ stats.varCount }} · 直填 {{ stats.directCount }} ·
-            数据 {{ stats.rowCount }} · 覆盖 {{ stats.overrideCount }} 格
+            变量 {{ stats.varCount }} · 数据 {{ stats.rowCount }} · 覆盖 {{ stats.overrideCount }} 格
           </span>
         </el-form-item>
       </div>
     </el-form>
-
-    <!-- 折叠基线区 -->
-    <el-collapse v-model="baselineOpen" class="baseline-collapse">
-      <el-collapse-item name="baseline">
-        <template #title>
-          <span class="baseline-title">
-            基线
-            <span class="muted">({{ stats.varCount }} 变量 · {{ stats.directCount }} 直填)</span>
-          </span>
-        </template>
-        <div class="baseline-toolbar">
-          <el-input
-            v-model="baselineQuery"
-            placeholder="搜索字段名 / 变量名…"
-            clearable
-            size="small"
-            class="baseline-search"
-          />
-        </div>
-        <el-collapse v-model="openGroups" class="baseline-groups">
-          <el-collapse-item
-            v-for="g in filteredGroups"
-            :key="`${g.stepIndex}:${g.source}`"
-            :name="`${g.stepIndex}:${g.source}`"
-          >
-            <template #title>
-              <span class="group-title">
-                步骤{{ g.stepIndex + 1 }} · {{ g.source }}
-                <span class="muted">({{ g.fields.length }})</span>
-              </span>
-            </template>
-            <div class="baseline-rows">
-              <div v-for="col in g.fields" :key="`${col.stepIndex}:${col.source}:${col.field}`" class="baseline-row">
-                <span class="field-path mono" :class="col.kind">
-                  {{ col.kind === 'var' ? col.varName : col.field }}
-                </span>
-                <span class="field-sub">步骤{{ col.stepIndex + 1 }} · {{ col.source }} · {{ col.field }}</span>
-                <div class="baseline-edit">
-                  <el-input
-                    v-if="col.kind === 'var' && col.varName"
-                    size="small"
-                    :model-value="baselineValue(col)"
-                    @update:model-value="(v: string) => setBaseline(col, v)"
-                  />
-                  <template v-else>
-                    <!-- 直填列退场数据表格(spec §6.2):基线区直填行改可编辑输入,
-                         编辑即改 step 字面值(所有数据共享,基线 dirty) -->
-                    <input
-                      class="baseline-direct-input"
-                      :value="directBaselineValue(col)"
-                      :placeholder="col.baseline || '空'"
-                      @input="(e: Event) => setDirectBaseline(col, (e.target as HTMLInputElement).value)"
-                    />
-                  </template>
-                </div>
-              </div>
-            </div>
-          </el-collapse-item>
-        </el-collapse>
-      </el-collapse-item>
-    </el-collapse>
 
     <!-- 数据表格(转置) -->
     <div class="grid-card">
@@ -141,23 +81,21 @@
           <el-button size="small" plain :disabled="!csvVarColumns.length" @click="onExportCsv">导出 CSV</el-button>
         </div>
       </div>
-      <!-- 段 tabs(spec §6.2):>1 段才显示;列作用域 = 单 step 段,
-           "全部" = 全段并排(仅小场景,≤8 列时默认选中) -->
-      <div v-if="segments.length > 1" class="seg-tabs">
-        <button
+      <!-- 段多选(spec §6.2 演进):>1 段才显示;勾选段并列,
+           "全部" = master 快捷(勾=全选 / 取消=回只选首段);至少一段 -->
+      <div v-if="segments.length > 1" class="seg-picker">
+        <el-checkbox
+          class="seg-all"
+          :model-value="isAllSegs"
+          :indeterminate="isPartialSegs"
+          @change="onToggleAllSegs"
+        >全部({{ totalGridColumns }} 列)</el-checkbox>
+        <el-checkbox
           v-for="(seg, si) in segments"
-          :key="`segtab:${seg.stepIndex}`"
-          type="button"
-          class="seg-tab"
-          :class="{ active: activeSegment === si }"
-          @click="activeSegment = si"
-        >步骤{{ seg.stepIndex + 1 }} · {{ stepLabel(seg.stepIndex) }}</button>
-        <button
-          type="button"
-          class="seg-tab"
-          :class="{ active: activeSegment === 'all' }"
-          @click="activeSegment = 'all'"
-        >全部({{ segments.reduce((n, s) => n + gridColumnsOf(s).length, 0) }} 列)</button>
+          :key="`segsel:${seg.stepIndex}`"
+          :model-value="selectedSegs.has(si)"
+          @change="(v: boolean | string | number) => toggleSeg(si, !!v)"
+        >步骤{{ seg.stepIndex + 1 }} · {{ stepLabel(seg.stepIndex) }}</el-checkbox>
       </div>
       <!-- 死行键软提示(spec §7):行键 ∉ config.vars 列宇宙 — 标黄提示,不阻断编辑 -->
       <div v-if="deadKeys.length" class="dead-keys-bar">
@@ -177,8 +115,8 @@
         <thead>
           <!-- 步骤分组行(P1.4):同 stepIndex 相邻列合并 colspan,横多列时
                一眼看出列属于哪个步骤;名读 orchestration,缺名降级 Step N。
-               段网格下仅 'all'(全段并排)渲染 — 单段模式段边界由 tabs 承载。 -->
-          <tr v-if="activeSegment === 'all'" class="row-step-group">
+               勾选 >1 段才渲染 — 单段无段间边界可标。 -->
+          <tr v-if="selectedSegCount > 1" class="row-step-group">
             <th class="th-select" />
             <th class="th-label" />
             <th
@@ -202,7 +140,7 @@
             <th
               v-for="(col, ci) in visibleColumns"
               :key="`info-d:${ci}:${col.stepIndex}:${col.source}:${col.varName}`"
-              :class="['th-data', col.source === 'expect' ? 'col-expect' : '', activeSegment === 'all' && isStepStart(ci) ? 'is-step-start' : '']"
+              :class="['th-data', col.source === 'expect' ? 'col-expect' : '', selectedSegCount > 1 && isStepStart(ci) ? 'is-step-start' : '']"
               :title="descriptionByColumnKey.get(`${col.stepIndex}:${col.source}:${col.field}`) || col.field"
             >
               {{ descriptionByColumnKey.get(`${col.stepIndex}:${col.source}:${col.field}`) || '—' }}
@@ -215,7 +153,7 @@
             <th
               v-for="(col, ci) in visibleColumns"
               :key="`info-f:${ci}:${col.stepIndex}:${col.source}:${col.varName}`"
-              :class="['th-data', col.source === 'expect' ? 'col-expect' : '', activeSegment === 'all' && isStepStart(ci) ? 'is-step-start' : '']"
+              :class="['th-data', col.source === 'expect' ? 'col-expect' : '', selectedSegCount > 1 && isStepStart(ci) ? 'is-step-start' : '']"
               :title="col.source === 'expect'
                 ? `期望列 ${col.varName} — 断言 ${col.expect?.target} ${col.expect?.operator}(步骤${col.stepIndex + 1})`
                 : `${col.stepIndex + 1} 步 ${col.source} · ${col.field}`"
@@ -243,6 +181,25 @@
           </tr>
         </thead>
         <tbody>
+          <!-- 置顶基线行:config.vars 基线唯一编辑入口 — 不可选(无 checkbox)/
+               不可粘贴(无 paste 接管);编辑触发 baselineDirty →「保存基线」 -->
+          <tr class="row-baseline">
+            <td class="td-select" />
+            <td class="td-label">基线</td>
+            <td
+              v-for="(col, ci) in visibleColumns"
+              :key="`b:${ci}:${col.stepIndex}:${col.source}:${col.varName}`"
+              :class="['td-data', col.source === 'expect' ? 'col-expect' : '', selectedSegCount > 1 && isStepStart(ci) ? 'is-step-start' : '']"
+            >
+              <input
+                class="baseline-cell-input"
+                :value="baselineValue(bcOf(col))"
+                :aria-label="`基线 ${col.varName}`"
+                @input="(e: Event) => setBaseline(bcOf(col), (e.target as HTMLInputElement).value)"
+              />
+            </td>
+            <td class="td-action" />
+          </tr>
           <tr v-for="(row, i) in rows" :key="`r:${i}`" class="row-data">
             <td class="td-select">
               <el-checkbox
@@ -261,7 +218,7 @@
             <td
               v-for="(col, ci) in visibleColumns"
               :key="`c:${i}:${ci}:${col.stepIndex}:${col.source}:${col.varName}`"
-              :class="['td-data', cellClass(row, bcOf(col)), col.source === 'expect' ? 'col-expect' : '', activeSegment === 'all' && isStepStart(ci) ? 'is-step-start' : '']"
+              :class="['td-data', cellClass(row, bcOf(col)), col.source === 'expect' ? 'col-expect' : '', selectedSegCount > 1 && isStepStart(ci) ? 'is-step-start' : '']"
               :title="bcOf(col).baseline"
             >
               <!-- 期望列与输入列同款单元格:行键 = varName,期望列 baseline
@@ -326,10 +283,9 @@ import { getDataSet, getScenarioDraft, updateScenario } from '@/api/scenario-com
 import { showError } from '@/utils/errorFallback'
 import { confirmAction } from '@/utils/confirmAction'
 import { scenarioDataSetsUrl } from '@/utils/links'
-import { deriveBaselineColumns, fieldsOf, type BaselineColumn } from '@/utils/dataset-palette'
+import { type BaselineColumn } from '@/utils/dataset-palette'
 import {
-  cellDisplay, gridStats, groupByStepLocation,
-  matchesQuery, parseTsvPaste, applyPastePlan,
+  cellDisplay, gridStats, parseTsvPaste, applyPastePlan,
 } from '@/utils/dataset-grid'
 import {
   deriveSegments, gridColumnsOf, sharedVarNames, deadRowKeys,
@@ -360,40 +316,58 @@ const baselineDirty = ref(false)
 const selectedRows = reactive(new Set<number>())
 /** 预览弹窗显示开关 */
 const previewDialogOpen = ref(false)
-const baselineOpen = ref<string[]>([])        // 默认折叠
-const openGroups = ref<string[]>([])           // 步骤分组默认折叠
-const baselineQuery = ref('')
 
-const allColumns = computed<BaselineColumn[]>(() =>
-  draft.value ? deriveBaselineColumns(draft.value.definition) : [],
-)
-const baselineGroups = computed(() => groupByStepLocation(allColumns.value))
-
-// ── 段网格(spec §6.2)────────────────────────────────────────
+// ── 段网格(spec §6.2 演进:勾选多选)─────────────────────────
 /** 段派生(spec §6.2):打开编辑器对场景一次引用扫描(纯前端投影) */
 const segments = computed(() => deriveSegments(
   draft.value?.definition?.steps ?? [],
   draft.value?.definition?.config?.vars ?? {},
 ))
 const segSharedVars = computed(() => sharedVarNames(segments.value))
-const ALL_THRESHOLD = 8   // "全部"仅小场景:全段列数 ≤8 默认全部(spec §6.2 初值)
+const ALL_THRESHOLD = 8   // 全段列数 ≤8 默认全段勾选(spec §6.2 初值)
 
-type SegSel = 'all' | number
-const activeSegment = ref<SegSel>('all')
+/** 勾选段索引集合(checkbox 多选);至少一段 — 取消最后一段 no-op + 提示 */
+const selectedSegs = reactive(new Set<number>())
 const segInitialized = ref(false)
 watch(segments, (segs) => {
   if (segInitialized.value || !segs.length) return
   segInitialized.value = true
   const total = segs.reduce((n, s) => n + gridColumnsOf(s).length, 0)
-  activeSegment.value = total <= ALL_THRESHOLD ? 'all' : 0
+  if (total <= ALL_THRESHOLD) segs.forEach((_, si) => selectedSegs.add(si))
+  else selectedSegs.add(0)
 }, { immediate: true })
 
-/** 段内可编辑列(行键 = varName);'all' = 全段并排(小场景) */
-const visibleColumns = computed<GridVarColumn[]>(() => {
-  if (activeSegment.value === 'all') return segments.value.flatMap(gridColumnsOf)
-  const seg = segments.value[activeSegment.value]
-  return seg ? gridColumnsOf(seg) : []
-})
+const selectedSegCount = computed(() => selectedSegs.size)
+const isAllSegs = computed(() =>
+  segments.value.length > 0 && selectedSegs.size === segments.value.length)
+const isPartialSegs = computed(() =>
+  selectedSegs.size > 0 && selectedSegs.size < segments.value.length)
+/** master「全部」:勾 = 全选;取消 = 回只选首段(至少一段约束的快捷回退) */
+function onToggleAllSegs(v: boolean | string | number) {
+  if (!segments.value.length) return
+  selectedSegs.clear()
+  if (!!v) segments.value.forEach((_, si) => selectedSegs.add(si))
+  else selectedSegs.add(0)
+}
+function toggleSeg(si: number, checked: boolean) {
+  if (checked) selectedSegs.add(si)
+  else {
+    if (selectedSegs.size <= 1) {
+      ElMessage.warning('至少保留一个步骤段')
+      return
+    }
+    selectedSegs.delete(si)
+  }
+}
+
+/** 全段总列数("全部"快捷标签提示用) */
+const totalGridColumns = computed(() =>
+  segments.value.reduce((n, s) => n + gridColumnsOf(s).length, 0))
+
+/** 勾选段的列并排(段序);勾选 >1 段时表头渲染步骤分组行 + 段首分隔线 */
+const visibleColumns = computed<GridVarColumn[]>(() =>
+  segments.value.flatMap((seg, si) => (selectedSegs.has(si) ? gridColumnsOf(seg) : [])),
+)
 
 /** GridVarColumn → BaselineColumn 适配:cellClass/onCellInput/onCellPaste
  *  既有签名消费完整 BaselineColumn 形状(最小适配对象补齐
@@ -429,7 +403,7 @@ const csvVarColumns = computed<BaselineColumn[]>(() => {
 
 // ── 步骤分组表头(P1.4:横多列时按 step 视觉分组,零后端)─────────
 /** 列序上同 stepIndex 的连续段(merge 相邻同段,colspan 呈现)。
- *  段网格下仅在 'all'(全段并排)渲染;单段模式段边界由 tabs 承载。 */
+ *  仅勾选 >1 段时渲染(模板侧短路);单段无段间边界可标。 */
 const stepGroups = computed(() => {
   const groups: Array<{ stepIndex: number; colspan: number }> = []
   for (const col of visibleColumns.value) {
@@ -446,7 +420,7 @@ function stepLabel(i: number): string {
   return name || `Step ${i + 1}`
 }
 /** 该列是所属步骤段的首列 → 渲染左分隔线(表头到数据行贯穿)。
- *  段网格下仅 'all' 模式消费(模板侧短路);单段模式无段间边界。 */
+ *  仅勾选 >1 段时消费(模板侧短路);单段无段间边界。 */
 function isStepStart(ci: number): boolean {
   const cols = visibleColumns.value
   return ci === 0 || cols[ci - 1].stepIndex !== cols[ci].stepIndex
@@ -470,19 +444,14 @@ function jumpToAssertion(col: GridVarColumn) {
 /** 死行键(spec §7 软提示):行键 ∉ config.vars 列宇宙 → 提示条标黄,
  *  不阻断编辑(变量已删但行数据还在的悬空键)。 */
 const deadKeys = computed(() => deadRowKeys(draft.value?.definition?.config?.vars ?? {}, rows.value))
-const filteredGroups = computed(() => {
-  const q = baselineQuery.value
-  return baselineGroups.value
-    .map((g) => ({ ...g, fields: g.fields.filter((f) => matchesQuery(f, q)) }))
-    .filter((g) => g.fields.length)
-})
 
-const stats = computed(() => gridStats(allColumns.value, rows.value))
+/** 摘要统计:列宇宙 = csvVarColumns(全段 var 列,不随勾选段过滤) */
+const stats = computed(() => gridStats(csvVarColumns.value, rows.value))
 
 // 字段描述行(Plate IOFieldBinding.description)— 复用 CaseComposer 的缓存
 const { descriptionByColumnKey } = useFieldDescriptions(draft as any)
 
-// ── 基线 ───────────────────────────────────────────────
+// ── 基线(置顶基线行消费)─────────────────────────────────
 function baselineValue(col: BaselineColumn): string {
   const v = draft.value?.definition?.config?.vars?.[col.varName as string]
   return v === undefined || v === null ? '' : String(v)
@@ -498,20 +467,6 @@ function setBaseline(col: BaselineColumn, v: string) {
       config: { ...config, vars: { ...(config.vars ?? {}), [col.varName]: v } },
     },
   }
-  baselineDirty.value = true
-}
-
-/** draft 深克隆 + mutate + 整体替换。
- *  - draft 是响应式 ref,Vue 3 对内部深层 mutate 不触发更新,必须新建对象引用
- *  - baselineDirty 在所有写入者处统一翻起
- *  - mutator 返回 true 才算「真改了」,避免 no-op(没找到 fields 等)被误标 dirty,
- *    否则下次保存会 PUT 一份内容未变的数据回服务器。 */
-function mutateDraft(mutator: (clone: any) => boolean): void {
-  if (!draft.value) return
-  const clone = JSON.parse(JSON.stringify(draft.value))
-  const changed = mutator(clone)
-  if (!changed) return
-  draft.value = clone
   baselineDirty.value = true
 }
 
@@ -531,52 +486,14 @@ function onToggleAll(v: boolean | string | number) {
   }
 }
 
-/** 把一行 row + 字段定义合并成「实际跑的有效值」(baseline + override)。
- *  - var 列:row[col.varName] ?? baseline  →  用户没填就用基线
- *  - direct 列:col.baseline                →  共享字面值
- *  返回:{ merged, overrides[] }
- *  overrides 列出该行实际 override 的字段名(便于 UI 提示)。 */
-function mergeRowWithBaseline(row: Record<string, any>): {
-  merged: Record<string, string>
-  overrides: string[]
-} {
-  const merged: Record<string, string> = {}
-  const overrides: string[] = []
-  for (const col of allColumns.value) {
-    let value: string
-    if (col.kind === 'var' && col.varName) {
-      const override = row[col.varName]
-      if (override === undefined) {
-        value = col.baseline
-      } else {
-        value = override === null ? '' : String(override)
-        overrides.push(col.varName)
-      }
-    } else {
-      value = col.baseline || ''
-    }
-    if (col.kind === 'var' && col.varName) {
-      merged[col.varName] = value
-    } else {
-      merged[col.field] = value
-    }
-  }
-  return { merged, overrides }
-}
-
-/** 预览弹窗内容:按选中顺序(数组化 selectedRows 排个序)— 不影响原 selectedRows 的 Set 语义。
- *  merged/overrides 保留(palette 测试经 vm 消费共享基线语义)。 */
+/** 预览弹窗行索引:按选中顺序(数组化 selectedRows 排个序)— 不影响原
+ *  selectedRows 的 Set 语义;值/继承态由 previewedDetail 按段展开。 */
 const previewedRows = computed(() => {
   const idxs = Array.from(selectedRows).sort((a, b) => a - b)
-  return idxs.map((i) => {
-    const { merged, overrides } = mergeRowWithBaseline(rows.value[i] ?? {})
-    return {
-      index: i,
-      name: caseNames.value[i] || `data-${i + 1}`,
-      merged,
-      overrides,
-    }
-  })
+  return idxs.map((i) => ({
+    index: i,
+    name: caseNames.value[i] || `data-${i + 1}`,
+  }))
 })
 
 /** 行详情(§6.2 v1 只读):整条数据垂直呈现,按段分组 + 继承态标注 */
@@ -598,29 +515,8 @@ const previewedDetail = computed(() => previewedRows.value.map((item) => {
   }
 }))
 
-/** 直填列字面值读取(从 draft 里走真实路径:body / query / headers)。 */
-function directBaselineValue(col: BaselineColumn): string {
-  if (!draft.value) return ''
-  const fields = fieldsOf(draft.value.definition?.steps?.[col.stepIndex], col.source)
-  if (!fields) return ''
-  const v = fields[col.field]
-  if (v === undefined || v === null) return ''
-  return typeof v === 'string' ? v : String(v)
-}
-
-/** 直填列字面值编辑 — 修改 step 的真实字面值(所有数据共享这个 baseline)。
- *  baselineDirty = true,需要点「保存基线」PUT 回场景后才真正生效。 */
-function setDirectBaseline(col: BaselineColumn, v: string) {
-  if (!draft.value) return
-  mutateDraft((clone) => {
-    const fields = fieldsOf(clone.definition.steps[col.stepIndex], col.source)
-    if (!fields) return false
-    // 空串视作显式空值(覆盖 baseline);保留字段键
-    fields[col.field] = v
-    return true
-  })
-  // 静默 — 一次性 toast 会打扰用户连续编辑;dirty 标记已经在按钮上
-}
+/** 直填列编辑入口已退场(2026-09-11 基线区退场):字面值的家在编排器
+ *  FieldForm — 数据集编辑器只消费 config.vars 列宇宙,不再改 step 字面值。 */
 async function onSaveBaseline() {
   if (savingBaseline.value) return
   if (!draft.value) return
@@ -699,11 +595,9 @@ function onCellPaste(e: ClipboardEvent, col: BaselineColumn, rowIndex: number) {
   }
 }
 
-/** 三态单元格 class:inherit / override-empty / override-value / direct。 */
+/** 三态单元格 class:inherit / override-empty / override-value。 */
 function cellClass(row: Record<string, unknown>, col: BaselineColumn): string {
-  if (col.kind === 'direct') return 'td-direct'
-  const cell = cellDisplay(row, col)
-  return `cell-${cell.state}`
+  return `cell-${cellDisplay(row, col).state}`
 }
 
 /** 转 API row:稀疏化(undefined / '' 保留;空字符串 = override-empty 不删) */
@@ -847,68 +741,6 @@ onMounted(async () => {
 .mono { font-family: var(--font-mono); font-size: 12px; }
 .muted { color: var(--color-text-secondary); font-weight: normal; }
 
-/* ── 折叠基线 ── */
-.baseline-collapse {
-  margin-bottom: 16px; background: #fff;
-  border: 1px solid var(--color-border-tertiary); border-radius: 8px;
-  /* 折叠区统一水平缩进 — 设计决定(无 EP 默认约束),所有标题 / 搜索框 / 字段起点共享。
-     注:CSS 变量必须挂在 .baseline-collapse 上,不能写 :root —
-     <style scoped> 会把 :root 编译为 :root[data-v-xxx],而 html 元素不带
-     data-v-xxx 属性,变量永远不会生效,var(--baseline-indent) 引用无效,
-     整条 padding-left 声明被丢弃。 */
-  --baseline-indent: 30px;
-}
-/* EP 2.8 el-collapse-item header 默认有底色 + 1px 底边框 + 0 16px padding,
-   看起来像嵌套 card 与外层卡片视觉冲突;同时 border-bottom 又会跟我们自己的
-   .baseline-rows dashed border 重叠。所以这里把 padding / border / 底色全压成 0。
-   水平偏移由 .baseline-title / .group-title / .baseline-toolbar 自己控制(共用 --baseline-indent)。 */
-.baseline-collapse :deep(.el-collapse-item__header),
-.baseline-collapse :deep(.el-collapse-item__content) {
-  padding: 0;
-  border: none;
-  background: transparent;
-}
-.baseline-title {
-  font-family: var(--font-mono); font-size: 13px; font-weight: 600;
-  padding-left: var(--baseline-indent);
-}
-/* 搜索框所在行 — 单独一行(在 "基线" 标题下方),
-   水平 padding 起点用 --baseline-indent(与标题对齐),右侧与卡片 border 一致 */
-.baseline-toolbar { padding: 0 16px 12px var(--baseline-indent); display: flex; gap: 8px; }
-.baseline-search { width: 280px; }
-.baseline-groups { background: transparent; border-top: 1px dashed var(--color-border-tertiary); }
-.group-title { font-family: var(--font-mono); font-size: 12px; font-weight: 600; padding-left: var(--baseline-indent); }
-.baseline-rows {
-  display: flex; flex-direction: column; gap: 8px; padding: 4px 0;
-}
-/* baseline-row 用 padding-left 与 .baseline-title / .group-title / .baseline-toolbar
-   共享同一缩进起点(对齐基线标题文字);后续 field-path / field-sub / baseline-edit
-   用 flex + gap 自然展开,避免 grid 固定列宽把长字段名挤进 30px gutter
-   与 field-sub 重叠。 */
-.baseline-row {
-  display: flex; align-items: center; gap: 12px;
-  padding: 6px 16px 6px var(--baseline-indent);
-  border-bottom: 1px dashed var(--color-border-tertiary);
-}
-.baseline-row:last-child { border-bottom: none; }
-.field-path { font-size: 12px; font-weight: 700; }
-.field-path.var { color: var(--accent); }
-.field-path.direct { color: #475569; }
-.field-sub { font-size: 11px; color: var(--color-text-secondary); }
-.baseline-edit { display: flex; align-items: center; gap: 8px; }
-/* 直填行编辑输入(直填列退场数据表格后,字面值在基线区改)— 与数据格同形 */
-.baseline-direct-input {
-  width: 180px;
-  border: 1px solid #cbd5e1; background: #fff; border-radius: 4px;
-  padding: 4px 6px; font-family: var(--font-mono); font-size: 12px;
-  outline: none; box-sizing: border-box; color: var(--color-text-primary);
-}
-.baseline-direct-input:hover { border-color: #94a3b8; }
-.baseline-direct-input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
-}
-
 /* ── 数据表格 ── */
 .grid-card {
   background: #fff; border: 1px solid var(--color-border-tertiary);
@@ -920,10 +752,9 @@ onMounted(async () => {
   background: #f8fafc;
 }
 
-/* ── 段 tabs(spec §6.2):列作用域切换 ── */
-.seg-tabs { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 12px 0; }
-.seg-tab { border: 1px solid #e6e8ec; background: #fff; border-radius: 6px; padding: 4px 12px; font-size: 12px; cursor: pointer; color: #475569; }
-.seg-tab.active { border-color: #4f46e5; color: #4f46e5; background: #eef2ff; font-weight: 600; }
+/* ── 段多选(spec §6.2 演进):勾选段并列 + 全部 master ── */
+.seg-picker { display: flex; gap: 4px 18px; flex-wrap: wrap; align-items: center; padding: 8px 12px 0; }
+.seg-picker .seg-all { font-weight: 600; }
 
 /* 死行键软提示条(spec §7):标黄不阻断 */
 .dead-keys-bar { margin: 6px 12px 0; font-size: 11px; color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 5px 10px; }
@@ -1008,6 +839,24 @@ onMounted(async () => {
 /* ── 数据行 ── */
 /* hover 整行轻微高亮(让用户知道这是可交互区域) */
 .data-table .row-data:hover td { background: #f8faff; }
+
+/* 置顶基线行(tbody 首行):config.vars 基线唯一编辑入口 —
+   灰底与数据行区分;不可选 / 不可粘贴(无交互态) */
+.data-table .row-baseline td { background: #f1f5f9; }
+.data-table .row-baseline .td-label { color: #64748b; }
+.baseline-cell-input {
+  width: 100%;
+  border: 1px dashed #cbd5e1;
+  background: #fff;
+  border-radius: 4px; padding: 4px 6px;
+  font-family: var(--font-mono); font-size: 12px;
+  outline: none; box-sizing: border-box;
+  color: var(--color-text-primary);
+}
+.baseline-cell-input:focus {
+  border-color: var(--accent); border-style: solid;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
 
 /* data-name input:默认就有可见边框(否则跟普通文本没区别,误以为只读) */
 .data-table .data-name-input {

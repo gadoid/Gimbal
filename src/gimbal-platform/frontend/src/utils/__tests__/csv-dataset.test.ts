@@ -1,19 +1,14 @@
 /** csv-dataset.test.ts — CSV 导出 / 导入(papaparse) */
 import { describe, expect, it, vi } from 'vitest'
 
-import { deriveBaselineColumns } from '@/utils/dataset-palette'
+import type { BaselineColumn } from '@/utils/dataset-palette'
 import { buildDataSetCsv, exportDataSetCsv, importDataSetCsv } from '@/utils/csv-dataset'
 import * as downloadMod from '@/utils/download'
 
-const DRAFT = {
-  steps: [{
-    api: { view_hints: { endpoint_id: 'fin.order.add' } },
-    request: { body: { amount: '${var.amount}', customer_id: '261' } },
-  }],
-  config: { vars: { amount: '100' } },
-}
-
-const cols = deriveBaselineColumns(DRAFT as any)
+// 内联列 fixture(派生器已随基线区退场删除):1 个 var 列,baseline = '100'
+const cols: BaselineColumn[] = [
+  { stepIndex: 0, source: 'body', field: 'amount', kind: 'var', varName: 'amount', baseline: '100' },
+]
 
 describe('buildDataSetCsv', () => {
   it('header + baseline + N 数据行', () => {

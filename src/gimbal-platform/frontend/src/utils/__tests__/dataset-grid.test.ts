@@ -1,34 +1,26 @@
 /** dataset-grid.test.ts — 转置表格派生工具(纯函数) */
 import { describe, expect, it } from 'vitest'
 
-import { deriveBaselineColumns } from '@/utils/dataset-palette'
+import type { BaselineColumn } from '@/utils/dataset-palette'
 import {
   applyPastePlan,
   cellDisplay,
   gridStats,
-  groupByStepLocation,
-  matchesQuery,
   parseTsvPaste,
   varOnlyPalette,
   type CellState,
 } from '@/utils/dataset-grid'
 
-const DRAFT = {
-  steps: [
-    {
-      api: { view_hints: { endpoint_id: 'fin.order.add' } },
-      request: { body: { amount: '${var.amount}', customer_id: '261', remark: '' } },
-    },
-    {
-      // GET 风格步骤:引擎约定查询参数放 request.body(executor 映射为 params=)
-      api: { view_hints: { endpoint_id: 'fin.order.query' } },
-      request: { body: { page: '${var.page}', size: '20' } },
-    },
-  ],
-  config: { vars: { amount: '100', page: '1' } },
-}
+// 内联列 fixture(派生器已随基线区退场删除;step0 body {amount/customer_id/remark},
+// step1 body {page/size} — var ×2 + direct ×3,顺序 = 步骤内字段序)
+const cols: BaselineColumn[] = [
+  { stepIndex: 0, source: 'body', field: 'amount', kind: 'var', varName: 'amount', baseline: '100' },
+  { stepIndex: 0, source: 'body', field: 'customer_id', kind: 'direct', varName: null, baseline: '261' },
+  { stepIndex: 0, source: 'body', field: 'remark', kind: 'direct', varName: null, baseline: '' },
+  { stepIndex: 1, source: 'body', field: 'page', kind: 'var', varName: 'page', baseline: '1' },
+  { stepIndex: 1, source: 'body', field: 'size', kind: 'direct', varName: null, baseline: '20' },
+]
 
-const cols = deriveBaselineColumns(DRAFT as any)
 const amount = cols.find((c) => c.field === 'amount' && c.kind === 'var')!
 const page = cols.find((c) => c.field === 'page' && c.kind === 'var')!
 const customer = cols.find((c) => c.field === 'customer_id' && c.kind === 'direct')!
@@ -38,31 +30,6 @@ describe('varOnlyPalette', () => {
     const v = varOnlyPalette(cols)
     expect(v.map((c) => c.field)).toEqual(['amount', 'page'])
     expect(v.every((c) => c.kind === 'var')).toBe(true)
-  })
-})
-
-describe('groupByStepLocation', () => {
-  it('按 (stepIndex, source) 分组;同组 fields 保持步骤内顺序', () => {
-    const g = groupByStepLocation(cols)
-    expect(g.map((x) => `${x.stepIndex}:${x.source}`)).toEqual(['0:body', '1:body'])
-    expect(g[0].fields.map((f) => f.field)).toEqual(['amount', 'customer_id', 'remark'])
-    expect(g[1].fields.map((f) => f.field)).toEqual(['page', 'size'])
-  })
-})
-
-describe('matchesQuery', () => {
-  it('空 query = 全显', () => {
-    expect(matchesQuery(amount, '')).toBe(true)
-    expect(matchesQuery(amount, '  ')).toBe(true)
-  })
-  it('按 field 名不区分大小写命中', () => {
-    expect(matchesQuery(amount, 'AMO')).toBe(true)
-  })
-  it('按 varName 命中', () => {
-    expect(matchesQuery(amount, 'amount')).toBe(true)
-  })
-  it('不命中', () => {
-    expect(matchesQuery(amount, 'customer')).toBe(false)
   })
 })
 
@@ -91,14 +58,13 @@ describe('cellDisplay 三态', () => {
 })
 
 describe('gridStats', () => {
-  it('变量数 / 直填数 / 数据行数 / 覆盖单元格数', () => {
+  it('变量数 / 数据行数 / 覆盖单元格数', () => {
     const s = gridStats(cols, [
       { amount: '200', page: '' },
       { amount: '300' },
       {},
     ])
     expect(s.varCount).toBe(2)
-    expect(s.directCount).toBe(3)
     expect(s.rowCount).toBe(3)
     expect(s.overrideCount).toBe(3)
   })

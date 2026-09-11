@@ -1,4 +1,4 @@
-/** DataSetEditor 视图测试:转置表 + 折叠基线 + TSV/CSV + HTML <table> 一体化。 */
+/** DataSetEditor 视图测试:转置表 + 置顶基线行 + TSV/CSV + HTML <table> 一体化。 */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
@@ -79,54 +79,80 @@ it('scenario-name 显示 draft.definition.meta.name(场景级中文名)', async 
   expect(w.find('.scenario-name').text()).toBe('订单场景')
 })
 
-// ── 折叠基线 ───────────────────────────────────────────────
+// ── 基线区退场 + 置顶基线行 ─────────────────────────────────
 
-it('基线默认折叠:摘要显示 N 变量 · M 直填', async () => {
+it('摘要只统计变量;基线区整体退场(无 collapse / direct 输入)', async () => {
   const w = mountEditor()
   await flushPromises()
-  // 顶栏摘要:2 个变量(amount / page)+ 2 个直填(customer_id / size)
-  expect(w.text()).toMatch(/变量\s*2\s*·\s*直填\s*2/)
-  // 基线折叠区存在
-  expect(w.find('.baseline-collapse').exists()).toBe(true)
-  // 默认折叠 → 基线区顶部 collapse-item 不带 is-active(标题区不展开箭头朝下)
-  const baseItem = w.find('.baseline-collapse .el-collapse-item')
-  expect(baseItem.classes()).not.toContain('is-active')
+  // 顶栏摘要:2 个变量(amount / page);直填概念退场(customer_id / size 不计数)
+  expect(w.text()).toMatch(/变量\s*2\s*·\s*数据/)
+  expect(w.text()).not.toContain('直填')
+  // 基线区退场:折叠面板 / 直填编辑输入都不存在
+  expect(w.find('.baseline-collapse').exists()).toBe(false)
+  expect(w.find('input.baseline-direct-input').exists()).toBe(false)
 })
 
-it('展开基线后按 step · source 分组渲染,直填行改可编辑输入(提升入口已退场)', async () => {
+it('置顶基线行:tbody 首行常驻,格子初值 = config.vars 基线,不可选不可删', async () => {
   const w = mountEditor()
   await flushPromises()
-  // 点开折叠区
-  const header = w.find('.baseline-collapse .el-collapse-item__header')
-  await header.trigger('click')
-  await flushPromises()
-  // 现在有 baseline-rows
-  expect(w.findAll('.baseline-rows').length).toBeGreaterThan(0)
-  // 直填列提升入口已退场(裁定 A — 列宇宙 = config.vars,编辑器只消费不声明);
-  // 直填行是基线区可编辑输入(Task 4 语义,editing 细则另有用例)
+  const baseRow = w.find('.data-table tbody tr.row-baseline')
+  expect(baseRow.exists()).toBe(true)
+  // 常驻首行(在数据行之前)
+  expect(w.find('.data-table tbody tr:first-child').classes()).toContain('row-baseline')
+  // 2 个 var 格(amount=100 / page=1);直填列(customer_id/size)不在基线行
+  const inputs = baseRow.findAll('input.baseline-cell-input')
+  expect(inputs.length).toBe(2)
+  expect(inputs.map((i) => (i.element as HTMLInputElement).value)).toEqual(['100', '1'])
+  // 无选择 checkbox / 无操作按钮(不参与行选择与增删)
+  expect(baseRow.find('.el-checkbox').exists()).toBe(false)
+  expect(baseRow.find('button').exists()).toBe(false)
+  // 提升入口退场(裁定 A — 列宇宙 = config.vars,编辑器只消费不声明)
   expect(w.text()).not.toContain('提升为变量')
 })
 
-it('基线搜索过滤字段名', async () => {
+it('基线行编辑 var 基线 → baselineDirty + 写入 draft(「保存基线」按钮出现 * 标记)', async () => {
   const w = mountEditor()
   await flushPromises()
-  // 展开基线
-  await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
+  // 基线行 amount 格(初值 '100')编辑为 '999'
+  const amountInput = w.findAll('input.baseline-cell-input')
+    .find((i) => (i.element as HTMLInputElement).value === '100')!
+  expect(amountInput).toBeTruthy()
+  await amountInput.setValue('999')
   await flushPromises()
-  // 展开所有步骤分组
-  const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
-  for (const h of groupHeaders) await h.trigger('click')
+  // 「保存基线」按钮文字应包含 * 标记
+  const saveBaselineBtn = w.findAll('button').find((b) => b.text().includes('保存基线'))
+  expect(saveBaselineBtn!.text()).toContain('*')
+  // 写入 draft.definition.config.vars(「保存基线」PUT 的载荷)
+  expect((w.vm as any).draft.definition.config.vars.amount).toBe('999')
+})
+
+it('基线行改基线后,inherit 数据格 placeholder 跟随(新基线对未覆写行生效)', async () => {
+  const w = mountEditor()
   await flushPromises()
-  // 找到 customer_id 在折叠基线区里
-  const baselineScope = w.find('.baseline-collapse')
-  expect(baselineScope.text()).toContain('customer_id')
-  // 输入「amount」
-  const search = w.find('.baseline-search input')
-  await search.setValue('amount')
+  await w.findAll('button').find((b) => b.text().includes('新增数据'))!.trigger('click')
   await flushPromises()
-  // customer_id 应被过滤掉(只断言折叠基线区,info-row 不参与搜索)
-  expect(baselineScope.text()).not.toContain('customer_id')
-  expect(baselineScope.text()).toContain('amount')
+  // 数据格 inherit:placeholder 显示基线 100
+  expect(w.findAll('input.data-cell-input')[0].attributes('placeholder')).toBe('100')
+  // 基线行 amount 格改成 999 → placeholder 联动
+  const amountInput = w.findAll('input.baseline-cell-input')
+    .find((i) => (i.element as HTMLInputElement).value === '100')!
+  await amountInput.setValue('999')
+  await flushPromises()
+  expect(w.findAll('input.data-cell-input')[0].attributes('placeholder')).toBe('999')
+})
+
+it('基线行不接管 TSV 粘贴(无纵向填充语义;粘贴走浏览器默认文本行为)', async () => {
+  const w = mountEditor()
+  await flushPromises()
+  await w.findAll('button').find((b) => b.text().includes('新增数据'))!.trigger('click')
+  await flushPromises()
+  const before = JSON.stringify((w.vm as any).rows)
+  const evt = new Event('paste', { bubbles: true, cancelable: true })
+  Object.defineProperty(evt, 'clipboardData', { value: { getData: () => 'a\nb\nc' } })
+  await w.find('input.baseline-cell-input').element.dispatchEvent(evt)
+  await flushPromises()
+  // rows 零变化(基线行无 @paste 接管,纵向填充只属于数据格)
+  expect(JSON.stringify((w.vm as any).rows)).toBe(before)
 })
 
 // ── 一体化 HTML <table> 结构 ──────────────────────────────────────────
@@ -299,7 +325,7 @@ it('用户自定义的非 data-N 命名不参与自增计算', async () => {
   expect(labels).toEqual(['edge-min', 'data-2', 'data-3'])
 })
 
-it('新增的数据行中,网格列全为可编辑 var input(直填编辑移基线区,§6.3)', async () => {
+it('新增的数据行中,网格列全为可编辑 var input(直填列退场,§6.3)', async () => {
   const w = mountEditor()
   await flushPromises()
   const addBtn = w.findAll('button').find((b) => b.text().includes('新增数据'))
@@ -315,57 +341,6 @@ it('新增的数据行中,网格列全为可编辑 var input(直填编辑移基�
     expect(el.readOnly).toBe(false)
     expect(el.disabled).toBe(false)
   }
-})
-
-it('基线区编辑直填列 → 触发 baselineDirty(「保存基线」按钮出现 * 标记)', async () => {
-  const w = mountEditor()
-  await flushPromises()
-  // 直填列退场网格(§6.3):编辑走基线区 — 展开基线折叠 + 全部步骤分组
-  await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
-  await flushPromises()
-  const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
-  for (const h of groupHeaders) await h.trigger('click')
-  await flushPromises()
-  // customer_id 直填行的编辑输入,初值 '261'
-  const directInput = w.findAll('input.baseline-direct-input')
-    .find((i) => (i.element as HTMLInputElement).value === '261')
-  expect(directInput).toBeTruthy()
-  expect((directInput!.element as HTMLInputElement).value).toBe('261')
-  // 编辑
-  await directInput!.setValue('999')
-  await flushPromises()
-  // 「保存基线」按钮文字应包含 * 标记
-  const saveBaselineBtn = w.findAll('button').find((b) => b.text().includes('保存基线'))
-  expect(saveBaselineBtn!.text()).toContain('*')
-})
-
-it('基线区编辑直填后,所有数据行共享同一字面值(合并有效值同步,共享语义)', async () => {
-  const w = mountEditor()
-  await flushPromises()
-  const addBtn = w.findAll('button').find((b) => b.text().includes('新增数据'))
-  await addBtn!.trigger('click')  // data-1
-  await addBtn!.trigger('click')  // data-2
-  await flushPromises()
-  // 直填列退场网格(§6.3):共享语义 = 基线区单一输入,改一处全行生效
-  await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
-  await flushPromises()
-  const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
-  for (const h of groupHeaders) await h.trigger('click')
-  await flushPromises()
-  // customer_id 直填行的编辑输入(baseline=261)改成 999
-  const custInput = w.findAll('input.baseline-direct-input')
-    .find((i) => (i.element as HTMLInputElement).value === '261')
-  expect(custInput).toBeTruthy()
-  await custInput!.setValue('999')
-  await flushPromises()
-  // 两行数据的合并有效值都吃到新字面值(共享 baseline)
-  ;(w.vm as any).toggleRow(0, true)
-  ;(w.vm as any).toggleRow(1, true)
-  await flushPromises()
-  const items = (w.vm as any).previewedRows
-  expect(items.length).toBe(2)
-  expect(items[0].merged.customer_id).toBe('999')
-  expect(items[1].merged.customer_id).toBe('999')
 })
 
 it('var 输入框编辑不改 baseline(直接进 rows.value,不触发 baselineDirty)', async () => {
@@ -531,7 +506,7 @@ it('勾选一行 → 「预览选中」按钮变为可用,带计数 (1)', async 
   expect(previewBtn.text()).toContain('(1)')
 })
 
-it('点「预览选中」按钮 → previewedRows 合并 baseline + override', async () => {
+it('点「预览选中」按钮 → previewedDetail 合并 baseline + override(继承态标注)', async () => {
   const w = mountEditor()
   await flushPromises()
   await w.findAll('button').find((b) => b.text().includes('新增数据'))!.trigger('click')
@@ -542,16 +517,18 @@ it('点「预览选中」按钮 → previewedRows 合并 baseline + override', a
   await varInputs[0].setValue('999')
   await flushPromises()
   // 从 vm 反射读 computed 弹窗内容(避开 el-dialog teleport 在 jsdom 下的渲染问题)
-  const items = (w.vm as any).previewedRows
+  const items = (w.vm as any).previewedDetail
   expect(items.length).toBe(1)
   expect(items[0].name).toBe('data-1')
-  expect(items[0].merged).toEqual({
-    amount: '999',       // override 的值
-    page: '1',           // baseline 兜底
-    customer_id: '261',  // direct baseline
-    size: '20',          // direct baseline
-  })
-  expect(items[0].overrides).toEqual(['amount'])
+  // 步骤1 段:amount 覆写 999;步骤2 段:page 继承基线 '1'
+  const seg1 = items[0].groups.find((g: any) => g.stepIndex === 0)
+  const seg2 = items[0].groups.find((g: any) => g.stepIndex === 1)
+  const amount = seg1.items.find((it: any) => it.varName === 'amount')
+  const page = seg2.items.find((it: any) => it.varName === 'page')
+  expect(amount.value).toBe('999')       // override 的值
+  expect(amount.inherited).toBe(false)
+  expect(page.value).toBe('1')            // baseline 兜底
+  expect(page.inherited).toBe(true)
 })
 
 it('未选中的行不进 previewedRows', async () => {
@@ -570,19 +547,18 @@ it('未选中的行不进 previewedRows', async () => {
   expect(items[0].name).toBe('data-1')
 })
 
-it('全部 inherit 行预览:每个字段都是 baseline 值,overrides 为空', async () => {
+it('全部 inherit 行预览:每个字段都是 baseline 值,全部标继承', async () => {
   const w = mountEditor()
   await flushPromises()
   await w.findAll('button').find((b) => b.text().includes('新增数据'))!.trigger('click')
   await flushPromises()
   ;(w.vm as any).toggleRow(0, true)
   await flushPromises()
-  const items = (w.vm as any).previewedRows
+  const items = (w.vm as any).previewedDetail
   expect(items.length).toBe(1)
-  expect(items[0].merged).toEqual({
-    amount: '100', page: '1', customer_id: '261', size: '20',
-  })
-  expect(items[0].overrides).toEqual([])  // 全 inherit → 没有 override
+  const allItems = items[0].groups.flatMap((g: any) => g.items)
+  expect(allItems.map((it: any) => it.value)).toEqual(['100', '1'])  // 段序:步骤1 amount / 步骤2 page
+  expect(allItems.every((it: any) => it.inherited)).toBe(true)       // 全 inherit
 })
 
 it('thead 全选 checkbox:勾上 → 全部行被选中;取消 → 全部清空', async () => {
@@ -627,27 +603,21 @@ it('CSV 导出带 (description) 行;body var 有描述(IOFieldBinding 命中)', 
 
 // ── 提升退场(裁定 A:列宇宙 = config.vars,编辑器只消费不声明)──────
 // promote/demote/demoteLast/promotedKeys/promotedOrder/isPromotableVar/
-// col-promoted 整体移除(Task 6);直填行基线区编辑(Task 4)与 var 行
-// 基线编辑保留。本节钉死退场后语义:提升 / 撤销入口在任何位置不再出现。
+// col-promoted 整体移除(Task 6);基线区也已退场(2026-09-11)— var 基线
+// 编辑入口 = 置顶基线行,直填编辑的家在编排器 FieldForm。本节钉死退场后
+// 语义:提升 / 撤销入口在任何位置不再出现。
 
-it('提升已退场:基线区 / 顶栏无「提升为变量」「撤销提升」;直填与 var 行编辑保留', async () => {
+it('提升已退场:任何位置无「提升为变量」「撤销提升」;基线行 = var 基线编辑入口', async () => {
   const w = mountEditor()
   await flushPromises()
-  // 展开基线 + 所有步骤分组
-  await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
-  await flushPromises()
-  const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
-  for (const h of groupHeaders) await h.trigger('click')
-  await flushPromises()
-  // 提升 / 撤销入口全数退场(基线区 + 顶栏;文案与按钮都不残留)
+  // 提升 / 撤销入口全数退场(文案与按钮都不残留)
   expect(w.text()).not.toContain('提升为变量')
   expect(w.text()).not.toContain('撤销提升')
-  // 直填行基线区编辑保留(Task 4):customer_id=261 / size=20 两个直填输入
-  const directInputs = w.findAll('input.baseline-direct-input')
-  expect(directInputs.length).toBe(2)
-  expect(directInputs.some((i) => (i.element as HTMLInputElement).value === '261')).toBe(true)
-  // var 行基线编辑保留:amount / page 两个 el-input(config.vars 基线编辑入口)
-  expect(w.findAll('.baseline-edit .el-input').length).toBe(2)
+  // var 基线编辑入口 = 置顶基线行:amount / page 两格
+  const inputs = w.findAll('input.baseline-cell-input')
+  expect(inputs.length).toBe(2)
+  expect(inputs.some((i) => (i.element as HTMLInputElement).value === '100')).toBe(true)
+  expect(inputs.some((i) => (i.element as HTMLInputElement).value === '1')).toBe(true)
 })
 
 // ── 步骤分组表头(P1.4)─────────────────────────────────────────

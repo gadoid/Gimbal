@@ -1,8 +1,8 @@
 /**
- * DataSetEditor 段网格(spec §6.2,2026-09-10):列作用域收缩到单 step 段。
- * 段 tabs 派生(引用扫描)/ 段内列过滤 / 行名列常驻钉选 / "全部"阈值 ≤8
- * 默认全部 / 直填列退场数据表格(基线区可编辑)/ 期望列徽标。
- * 骨架(api mock + route stub)复制 DataSetEditor.palette.test.ts。
+ * DataSetEditor 段网格(spec §6.2,2026-09-10;2026-09-11 演进为勾选多选):
+ * 列作用域 = 勾选段并列。段选择器派生(引用扫描)/ 段勾选过滤 / 行名列
+ * 常驻钉选 / 总列数 ≤8 默认全勾 / 直填列彻底退场(编辑家在编排器)/
+ * 期望列徽标。骨架(api mock + route stub)复制 DataSetEditor.palette.test.ts。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -24,8 +24,8 @@ import * as api from '@/api/scenario-composer'
 import DataSetEditor from '@/views/DataSetEditor.vue'
 
 /** 三步场景:step1(amount + exp_code)/ step2(bl_no)/ step3(无引用)→ 两段。
- *  步骤带 view_hints.endpoint_id — 基线区(deriveBaselineColumns 有 endpoint_id
- *  纪律)需要它才能渲染 step3 的 plain 直填行(SEG-4 基线区断言面)。 */
+ *  step3 的 plain 是直填字面量 — SEG-4 钉「直填彻底退场」断言面
+ *  (不进网格列,也无任何基线编辑入口)。 */
 const DEF_2SEG = {
   kind: 'scenario', scenarioId: 'sc-ds', meta: { name: 's' },
   config: { vars: { amount: 100, exp_code: 200, bl_no: 'BL1' } },
@@ -82,9 +82,8 @@ const DEF_DUALVAR2 = {
 
 /** COMPAT-1 旧提升流数据集:rows 键 = var 名(amount)、直填列在场(remark)、
  *  断言 expected 为字面量(无任何 ${var} 模板,旧形态)→ 引用扫描仅 step1 一段。
- *  两步都带 view_hints.endpoint_id — 段派生不设 endpoint_id 门(dataset-segments),
- *  但基线区 deriveBaselineColumns 有 endpoint_id 纪律(dataset-palette):没有它
- *  remark 直填行不进基线区,「基线区可编辑」断言面就钉不住(同 DEF_2SEG 注释)。 */
+ *  remark 直填列在基线区退场后彻底无编辑入口(家在编排器)— 本用例钉
+ *  「打开不炸 + 直填不呈现」的兼容语义。 */
 const DEF_OLD_PROMOTE = {
   kind: 'scenario', scenarioId: 'sc-ds', meta: { name: 'old' },
   config: { vars: { amount: '1' } },
@@ -126,21 +125,26 @@ afterEach(() => {
 })
 
 describe('DataSetEditor — 段网格(§6.2)', () => {
-  it('SEG-1: 段 tabs 派生(两段)+ "全部";总列数 ≤8 默认全部;行名列常驻', async () => {
+  it('SEG-1: 段选择器派生(两段勾选框 + "全部" master);总列数 ≤8 默认全勾;行名列常驻', async () => {
     const w = await mountEditor(DEF_2SEG)
-    const tabs = w.findAll('.seg-tab')
-    expect(tabs.map((t) => t.text()).join('|')).toContain('步骤1')
-    expect(tabs.map((t) => t.text()).join('|')).toContain('步骤2')
-    expect(tabs.map((t) => t.text()).join('|')).toContain('全部')
-    expect(w.find('.seg-tab.active').text()).toContain('全部')   // 3 列 ≤8 → 默认全部
+    const boxes = w.findAll('.seg-picker .el-checkbox')
+    // master「全部」+ 两段勾选框
+    expect(boxes.length).toBe(3)
+    const labels = boxes.map((b) => b.text()).join('|')
+    expect(labels).toContain('全部(3 列)')
+    expect(labels).toContain('步骤1')
+    expect(labels).toContain('步骤2')
+    // 3 列 ≤8 → 默认全勾(两段并列)
+    expect((w.vm as any).selectedSegs.size).toBe(2)
     // 行名列钉选:数据表格首列数据名输入在场
     expect(w.find('.data-name-input').exists()).toBe(true)
     w.unmount()
   })
 
-  it('SEG-2: 切段 → 段内列过滤(输入+期望并排),他段列退场', async () => {
+  it('SEG-2: 取消一段 → 列作用域收编剩段(输入+期望并排),他段列退场', async () => {
     const w = await mountEditor(DEF_2SEG)
-    await w.findAll('.seg-tab').find((t) => t.text().includes('步骤1'))!.trigger('click')
+    ;(w.vm as any).toggleSeg(1, false)   // 取消勾选步骤2(剩段1)
+    await flushPromises()
     // 段1 列头:amount + exp_code(期望徽标);bl_no 退场
     const heads = w.findAll('.row-field .th-data').map((t) => t.text()).join()
     expect(heads).toContain('amount')
@@ -150,27 +154,27 @@ describe('DataSetEditor — 段网格(§6.2)', () => {
     w.unmount()
   })
 
-  it('SEG-3: 总列数 >8 默认第一段(阈值 8)', async () => {
-    // 9 列场景:step1 9 个 ${var} 字段 + step2 1 个 → 默认选中步骤1
+  it('SEG-3: 总列数 >8 默认只勾第一段(阈值 8)', async () => {
+    // 9 列场景:step1 9 个 ${var} 字段 + step2 1 个 → 默认只勾段0
     const w = await mountEditor(DEF_9COLS as any)
-    expect(w.find('.seg-tab.active').text()).toContain('步骤1')
+    expect([...(w.vm as any).selectedSegs]).toEqual([0])
+    // 列作用域 = 段0:9 列全在,other(段1)退场
+    const heads = w.findAll('.row-field .th-data').map((t) => t.text()).join()
+    expect(heads).toContain('f1')
+    expect(heads).not.toContain('other')
     w.unmount()
   })
 
-  it('SEG-4: 直填列退场数据表格;基线区直填行改为可编辑输入', async () => {
+  it('SEG-4: 直填列彻底退场 — 不进数据表格,也无任何基线编辑入口', async () => {
     const w = await mountEditor(DEF_2SEG)   // step3 plain 字面量(直填列)
-    await w.findAll('.seg-tab').find((t) => t.text().includes('全部'))!.trigger('click')
-    // 数据表格无直填输入(.data-cell-direct 退场)
+    // 数据表格无直填输入;基线区整体退场,无直填编辑输入
     expect(w.find('.data-cell-direct').exists()).toBe(false)
-    // 基线区直填行有编辑输入(展开基线折叠后可见;展开方式以现场结构为准 —
-    // 与 palette 测试同款:先展开基线折叠,再展开全部步骤分组)
-    await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
-    await flushPromises()
-    const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
-    for (const h of groupHeaders) await h.trigger('click')
-    await flushPromises()
-    // 断言:基线区 plain 行内 input.baseline-direct-input 存在
-    expect(w.find('input.baseline-direct-input').exists()).toBe(true)
+    expect(w.find('.baseline-collapse').exists()).toBe(false)
+    expect(w.find('input.baseline-direct-input').exists()).toBe(false)
+    // 基线行只有 var 格(amount / exp_code / bl_no)— plain 无处呈现
+    const baseLabels = w.findAll('.row-baseline input.baseline-cell-input')
+      .map((i) => i.attributes('aria-label'))
+    expect(baseLabels).toEqual(['基线 amount', '基线 exp_code', '基线 bl_no'])
     w.unmount()
   })
 
@@ -184,8 +188,8 @@ describe('DataSetEditor — 段网格(§6.2)', () => {
 
   it('SEG-6: TSV 粘贴/行增删/caseNames 保留(既有行为零回归)', async () => {
     const w = await mountEditor(DEF_2SEG)
-    // 段视图:切到步骤1(amount + exp_code 并排)
-    await w.findAll('.seg-tab').find((t) => t.text().includes('步骤1'))!.trigger('click')
+    // 段视图:取消步骤2(剩段1:amount + exp_code 并排)
+    ;(w.vm as any).toggleSeg(1, false)
     await flushPromises()
     // 段内首列(amount)= 第一个数据格输入;粘单列纵向 3 值(1 行 → 3 行)
     const firstCell = w.findAll('input.data-cell-input')[0]
@@ -211,8 +215,8 @@ describe('DataSetEditor — 段网格(§6.2)', () => {
 
   it('SEG-7(修轮回归): 单段模式下 CSV 导出覆盖全量 var 宇宙,段过滤不影响 CSV 链(brief ⑥)', async () => {
     const w = await mountEditor(DEF_2SEG)
-    // 切到步骤1 段(段内仅 amount + exp_code)— CSV 链不得随之收缩
-    await w.findAll('.seg-tab').find((t) => t.text().includes('步骤1'))!.trigger('click')
+    // 取消步骤2(剩段1:段内仅 amount + exp_code)— CSV 链不得随之收缩
+    ;(w.vm as any).toggleSeg(1, false)
     await flushPromises()
     const csv = await import('@/utils/csv-dataset')
     const exportSpy = vi.spyOn(csv, 'exportDataSetCsv').mockImplementation(() => {})
@@ -230,6 +234,42 @@ describe('DataSetEditor — 段网格(§6.2)', () => {
     const text = csv.buildDataSetCsv(args)
     expect(text).toContain('(description)')
     expect(text.split('\n')[0]).toContain('bl_no')
+    w.unmount()
+  })
+
+  it('SEG-8: 多段并列勾选 — 步骤分组行 + 段首分隔线在场;单段时退场', async () => {
+    const w = await mountEditor(DEF_2SEG)
+    // 默认全勾(3 列 ≤8)→ 分组行(两段各一 cell)+ 段首分隔线贯穿表头
+    expect(w.findAll('.row-step-group th.th-step-group').length).toBe(2)
+    expect(w.findAll('.row-field th.is-step-start').length).toBe(2)
+    expect(w.findAll('.row-baseline td.is-step-start').length).toBe(2)
+    // 取消段2 → 单段:分组行 / 分隔线全退场
+    ;(w.vm as any).toggleSeg(1, false)
+    await flushPromises()
+    expect(w.find('.row-step-group').exists()).toBe(false)
+    expect(w.findAll('.row-field th.is-step-start').length).toBe(0)
+    w.unmount()
+  })
+
+  it('SEG-9: 至少一段 — 取消最后一段 no-op + 警告;"全部" master 取消回只选首段', async () => {
+    const { ElMessage } = await import('element-plus')
+    const warnSpy = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({} as any))
+    const w = await mountEditor(DEF_2SEG)
+    // 勾到只剩段0,再取消段0 → no-op + 警告(至少一段)
+    ;(w.vm as any).toggleSeg(1, false)
+    await flushPromises()
+    ;(w.vm as any).toggleSeg(0, false)
+    await flushPromises()
+    expect([...(w.vm as any).selectedSegs]).toEqual([0])
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    // master 取消 → 回只选首段;master 勾 → 全选
+    ;(w.vm as any).onToggleAllSegs(false)
+    await flushPromises()
+    expect([...(w.vm as any).selectedSegs]).toEqual([0])
+    ;(w.vm as any).onToggleAllSegs(true)
+    await flushPromises()
+    expect((w.vm as any).selectedSegs.size).toBe(2)
+    warnSpy.mockRestore()
     w.unmount()
   })
 
@@ -308,17 +348,18 @@ describe('DataSetEditor — 行详情 + 期望列头跳转 + 死行键(§6.2/§5
     const warns: unknown[][] = []
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => { warns.push(args) })
     const w = await mountEditor(DEF_DUALVAR2 as any, [{ amount: '-1' }])
-    // 网格:单段(无段 tabs),amount 三列并存(1 输入 + 2 同 var 期望,跳转钮 ×2)
-    expect(w.findAll('.seg-tab').length).toBe(0)
+    // 网格:单段(无段选择器),amount 三列并存(1 输入 + 2 同 var 期望,跳转钮 ×2)
+    expect(w.findAll('.seg-picker').length).toBe(0)
     const heads = w.findAll('.row-field .th-data')
     expect(heads.length).toBe(3)
     expect(heads.filter((h) => h.text().includes('amount')).length).toBe(3)
     expect(w.findAll('.row-field .th-data .exp-jump').length).toBe(2)
     expect(w.findAll('colgroup col.col-data').length).toBe(3)
     // 数据格编辑(rows 替换 → tbody keyed diff)后行仍三列 — 键撞号会在此劣化
+    // (选择器限定 tr.row-data:置顶基线行另有 3 个 td-data,不计入)
     await w.find('input.data-cell-input').setValue('42')
     await flushPromises()
-    expect(w.findAll('.data-table tbody td.td-data').length).toBe(3)
+    expect(w.findAll('.data-table tbody tr.row-data td.td-data').length).toBe(3)
     // 行详情:勾首行 → 预览 — 段内 3 项同名 amount(1 输入无徽标 + 2 期望徽标)
     ;(w.vm as any).toggleRow(0, true)
     await flushPromises()
@@ -341,8 +382,8 @@ describe('DataSetEditor — 行详情 + 期望列头跳转 + 死行键(§6.2/§5
 describe('DataSetEditor — 老数据集兼容(旧提升流)', () => {
   it('COMPAT-1: 旧提升流数据集(rows 键=var 名,直填列存在)打开不炸,行名/TSV/三态全在', async () => {
     const w = await mountEditor(DEF_OLD_PROMOTE as any, [{ amount: '5' }, { amount: '6' }])
-    // 段派生:仅 step1 一段(step2 无 ${var} 引用)→ 单段不渲染段 tabs,列作用域 = 唯一段
-    expect(w.findAll('.seg-tab').length).toBe(0)
+    // 段派生:仅 step1 一段(step2 无 ${var} 引用)→ 单段不渲染段选择器,列作用域 = 唯一段
+    expect(w.findAll('.seg-picker').length).toBe(0)
     const heads = w.findAll('.row-field .th-data').map((t) => t.text()).join()
     expect(heads).toContain('步骤1 - amount')
     expect(heads).not.toContain('remark')          // 直填列不出数据表格
@@ -356,15 +397,11 @@ describe('DataSetEditor — 老数据集兼容(旧提升流)', () => {
     expect(w.findAll('td.cell-override-value').length).toBe(2)
     // 行键 amount ∈ config.vars 列宇宙 → 无死键提示条(旧数据集不该被误报)
     expect(w.find('.dead-keys-bar').exists()).toBe(false)
-    // remark 直填列退场数据表格后在基线区可编辑(SEG-4 同款展开路径)
-    await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
-    await flushPromises()
-    const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
-    for (const h of groupHeaders) await h.trigger('click')
-    await flushPromises()
-    const directs = w.findAll('input.baseline-direct-input')
-      .map((d) => (d.element as HTMLInputElement).value)
-    expect(directs).toContain('直填字面量')
+    // remark 直填列彻底退场:不进网格,也不进基线行(编辑家在编排器,SEG-4 语义)
+    const baseLabels = w.findAll('.row-baseline input.baseline-cell-input')
+      .map((i) => i.attributes('aria-label'))
+    expect(baseLabels).toEqual(['基线 amount'])
+    expect(w.find('input.baseline-direct-input').exists()).toBe(false)
     // 保存链不炸:点「保存基线」→ updateScenario 被调,rows 形状零变化
     const saveBtn = w.findAll('button').find((b) => b.text().includes('保存基线'))
     await saveBtn!.trigger('click')
