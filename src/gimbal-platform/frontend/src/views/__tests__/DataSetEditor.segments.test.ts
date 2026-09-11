@@ -63,6 +63,23 @@ const DEF_DUPVAR = {
   ],
 }
 
+/** DET-4 双用 var 双重撞号面:step1 body.amount 引用 ${var.amount}(输入列)+
+ *  同 step 两条断言 expected 都引用 ${var.amount}(期望列 ×2,expects 不去重)
+ *  → gridColumnsOf 三列同名 amount — 旧行详情键(it.varName)与旧网格列键
+ *  (stepIndex:source:varName,两期望列同 step 同 var)均撞号,键差异化后共存。 */
+const DEF_DUALVAR2 = {
+  kind: 'scenario', scenarioId: 'sc-ds', meta: { name: 'dual2' },
+  config: { vars: { amount: 100 } },
+  steps: [
+    { kind: 'step', description: '下单', api: { headers: {}, view_hints: { endpoint_id: 'fin.order.add' } },
+      request: { kind: 'request', body: { amount: '${var.amount}' } },
+      strategy: [
+        { kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: '${var.amount}' },
+        { kind: 'assertion', target: '$.response_body.msg', operator: 'contains', expected: '${var.amount}' },
+      ] },
+  ],
+}
+
 /** COMPAT-1 旧提升流数据集:rows 键 = var 名(amount)、直填列在场(remark)、
  *  断言 expected 为字面量(无任何 ${var} 模板,旧形态)→ 引用扫描仅 step1 一段。
  *  两步都带 view_hints.endpoint_id — 段派生不设 endpoint_id 门(dataset-segments),
@@ -282,6 +299,41 @@ describe('DataSetEditor — 行详情 + 期望列头跳转 + 死行键(§6.2/§5
     const addBtn = w.findAll('button').find((b) => b.text().includes('新增数据'))
     expect(addBtn!.attributes('disabled')).toBeUndefined()
     expect(w.find('input.data-cell-input').attributes('disabled')).toBeUndefined()
+    w.unmount()
+  })
+
+  it('DET-4: 双用 var 重复列 key 差异化 — 同 var 输入列 + 双期望列共存,无重复键告警', async () => {
+    // 全生命周期捕 console.warn:Vue 重复键在 keyed diff(更新期)冒
+    // "Duplicate keys found" — 挂载后触发一次 tbody 重渲 + 弹窗渲染覆盖两面
+    const warns: unknown[][] = []
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => { warns.push(args) })
+    const w = await mountEditor(DEF_DUALVAR2 as any, [{ amount: '-1' }])
+    // 网格:单段(无段 tabs),amount 三列并存(1 输入 + 2 同 var 期望,跳转钮 ×2)
+    expect(w.findAll('.seg-tab').length).toBe(0)
+    const heads = w.findAll('.row-field .th-data')
+    expect(heads.length).toBe(3)
+    expect(heads.filter((h) => h.text().includes('amount')).length).toBe(3)
+    expect(w.findAll('.row-field .th-data .exp-jump').length).toBe(2)
+    expect(w.findAll('colgroup col.col-data').length).toBe(3)
+    // 数据格编辑(rows 替换 → tbody keyed diff)后行仍三列 — 键撞号会在此劣化
+    await w.find('input.data-cell-input').setValue('42')
+    await flushPromises()
+    expect(w.findAll('.data-table tbody td.td-data').length).toBe(3)
+    // 行详情:勾首行 → 预览 — 段内 3 项同名 amount(1 输入无徽标 + 2 期望徽标)
+    ;(w.vm as any).toggleRow(0, true)
+    await flushPromises()
+    const btn = w.findAll('button').find((b) => b.text().includes('预览选中'))
+    expect(btn).toBeTruthy()
+    await btn!.trigger('click')
+    await flushPromises()
+    const detailRows = [...document.querySelectorAll('.detail-seg .detail-row')]
+    expect(detailRows.length).toBe(3)
+    expect(detailRows.map((r) => r.querySelector('.detail-name')?.textContent))
+      .toEqual(['amount', 'amount', 'amount'])
+    expect(document.querySelectorAll('.detail-row .exp-col-badge').length).toBe(2)
+    // 键差异化钉:整生命周期无 "Duplicate keys" 告警
+    expect(warns.some((args) => args.some((a) => String(a).includes('Duplicate keys')))).toBe(false)
+    warnSpy.mockRestore()
     w.unmount()
   })
 })

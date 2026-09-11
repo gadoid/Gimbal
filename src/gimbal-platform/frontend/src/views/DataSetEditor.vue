@@ -171,7 +171,7 @@
         <colgroup>
           <col class="col-select" />
           <col class="col-dataname" />
-          <col v-for="col in visibleColumns" :key="`cg:${col.stepIndex}:${col.source}:${col.varName}`" class="col-data" />
+          <col v-for="(col, ci) in visibleColumns" :key="`cg:${ci}:${col.stepIndex}:${col.source}:${col.varName}`" class="col-data" />
           <col class="col-action" />
         </colgroup>
         <thead>
@@ -201,7 +201,7 @@
             <th class="th-label">描述</th>
             <th
               v-for="(col, ci) in visibleColumns"
-              :key="`info-d:${col.stepIndex}:${col.source}:${col.varName}`"
+              :key="`info-d:${ci}:${col.stepIndex}:${col.source}:${col.varName}`"
               :class="['th-data', col.source === 'expect' ? 'col-expect' : '', activeSegment === 'all' && isStepStart(ci) ? 'is-step-start' : '']"
               :title="descriptionByColumnKey.get(`${col.stepIndex}:${col.source}:${col.field}`) || col.field"
             >
@@ -214,7 +214,7 @@
             <th class="th-label">字段</th>
             <th
               v-for="(col, ci) in visibleColumns"
-              :key="`info-f:${col.stepIndex}:${col.source}:${col.varName}`"
+              :key="`info-f:${ci}:${col.stepIndex}:${col.source}:${col.varName}`"
               :class="['th-data', col.source === 'expect' ? 'col-expect' : '', activeSegment === 'all' && isStepStart(ci) ? 'is-step-start' : '']"
               :title="col.source === 'expect'
                 ? `期望列 ${col.varName} — 断言 ${col.expect?.target} ${col.expect?.operator}(步骤${col.stepIndex + 1})`
@@ -260,7 +260,7 @@
             </td>
             <td
               v-for="(col, ci) in visibleColumns"
-              :key="`c:${i}:${col.stepIndex}:${col.source}:${col.varName}`"
+              :key="`c:${i}:${ci}:${col.stepIndex}:${col.source}:${col.varName}`"
               :class="['td-data', cellClass(row, bcOf(col)), col.source === 'expect' ? 'col-expect' : '', activeSegment === 'all' && isStepStart(ci) ? 'is-step-start' : '']"
               :title="bcOf(col).baseline"
             >
@@ -303,7 +303,7 @@
         </div>
         <div v-for="g in item.groups" :key="g.stepIndex" class="detail-seg">
           <div class="detail-seg-head">{{ g.label }}</div>
-          <div v-for="it in g.items" :key="it.varName" class="detail-row">
+          <div v-for="(it, gi) in g.items" :key="`${g.stepIndex}:${gi}:${it.varName}`" class="detail-row">
             <span class="detail-name mono">{{ it.varName }}</span>
             <span v-if="it.expect" class="exp-col-badge" :title="`断言 ${it.expect.target} ${it.expect.operator}`">期望</span>
             <span class="detail-val mono">{{ it.value === undefined ? '(未声明基线)' : JSON.stringify(it.value) }}</span>
