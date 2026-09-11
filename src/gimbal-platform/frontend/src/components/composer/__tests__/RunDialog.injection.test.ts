@@ -5,8 +5,10 @@
  * - INJ-1 条目区渲染 + 死条目(悬空)禁选(deadEntryIds 由 CaseComposer 预计算)
  * - INJ-2 勾选条目 → confirm 载荷含 injectionEntryIds;总量闸计入条目数
  *   ((Σ数据集行数 + 选中条目数)× nRuns ≤ 200;基线态 = 1 隐式空行)
+ *   INJ-2b 补数据集分支的 (Σrows + 条目数)× nRuns 数值断言
  * - INJ-3 方案回填链:选中条目存方案 → saveScheme 载荷含 injectionEntryIds
  *   → 重新选择该方案 → injectionIds 回填(核心透传链,双向)
+ *   INJ-3b 已删条目 / INJ-3c 死而现存条目:降级标注 + 回填静默过滤
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -97,6 +99,33 @@ describe('RunDialog — 注入条目多选(spec v2 §5)', () => {
     ;(w.vm as any).selectedScheme = '旧方案'
     await flushPromises()
     expect((w.vm as any).injectionIds).toEqual(['inj-1'])   // 已删项静默跳过,不报废
+    w.unmount()
+  })
+
+  it('INJ-3c: 方案引用死而现存条目 → 同样降级标注 + 回填被过滤', async () => {
+    // inj-dead 现存但悬空(deadEntryIds)— 条目未删,方案仍算配置失效
+    const deadRef = {
+      name: '悬空方案', dataSetIds: [], injectionEntryIds: ['inj-1', 'inj-dead'],
+      serviceBindings: {},
+    } as RunScheme
+    const w = mountDialog({ schemes: [deadRef] })
+    await flushPromises()
+    expect(w.text()).toContain('悬空方案 · 配置已失效')
+    ;(w.vm as any).selectedScheme = '悬空方案'
+    await flushPromises()
+    expect((w.vm as any).injectionIds).toEqual(['inj-1'])   // 死条目不可回填勾选
+    w.unmount()
+  })
+
+  it('INJ-2b: 总量闸数据集分支 = (Σrows + 选中条目数) × nRuns', async () => {
+    const w = mountDialog({
+      dataSets: [{ datasetId: 'ds-1', scenarioId: 'sc-1', name: 'A', rowCount: 3, preview: [] }],
+    })
+    await flushPromises()
+    ;(w.vm as any).injectionIds = ['inj-1']
+    await flushPromises()
+    // 数据集默认全选(3 行)+ 1 注入条目 = (3 + 1) × nRuns=1
+    expect(w.find('.summary-chip.total').text()).toBe('4 次运行')
     w.unmount()
   })
 })

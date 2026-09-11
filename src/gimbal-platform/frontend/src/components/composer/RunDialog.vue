@@ -334,8 +334,9 @@ function toggleBaseline() {
 const injectionIds = ref<string[]>([])
 /** 死条目(悬空)判定:CaseComposer 预计算传入(编辑器同款 isDeadEntry) */
 const deadIds = computed(() => new Set(props.deadEntryIds))
-/** 可回填集合 = 现存且未悬空:方案回填时已删/悬空 id 静默跳过
- *  (悬空条目禁选,回填成勾选态会卡死 — 无法取消勾选的禁用框) */
+/** 可注入集合 = 现存且未悬空:方案回填过滤(已删/悬空 id 静默跳过 —
+ *  悬空条目禁选,回填成勾选态会卡死)与方案降级判定(死而现存同样
+ *  降级)共用。 */
 const liveEntryIds = computed(() =>
   new Set(props.assertionEntries
     .filter((e) => !deadIds.value.has(e.id))
@@ -345,15 +346,13 @@ const liveEntryIds = computed(() =>
 const selectedScheme = ref<string>('__adhoc__')   // '__adhoc__' | '__last__' | scheme.name
 const schemeNameDraft = ref('')
 
-/** 全部现存条目 id(方案悬空判定用;死条目不算悬空 — 条目还在,只是禁选) */
-const allEntryIds = computed(() => new Set(props.assertionEntries.map((e) => e.id)))
-
-/** 方案配置降级:方案里的数据集/注入条目已被删 → 选项标注(不报废,选了可改) */
+/** 方案配置降级:方案里的数据集已被删,或注入条目已删/悬空(死而现存
+ *  同样降级 — 回填会被过滤,用户需重选)→ 选项标注(不报废,选了可改) */
 const schemeDegraded = computed(() =>
   props.schemes
     .filter((s) =>
       s.dataSetIds.some((id) => !props.dataSets.some((d) => d.datasetId === id))
-      || (s.injectionEntryIds ?? []).some((id) => !allEntryIds.value.has(id)))
+      || (s.injectionEntryIds ?? []).some((id) => !liveEntryIds.value.has(id)))
     .map((s) => s.name))
 
 const schemeOptions = computed(() => [

@@ -1007,8 +1007,8 @@ async function onRunConfirm(
       ...(opts?.parallel && opts.parallel !== 1 ? { parallel: opts.parallel } : {}),
       ...(opts?.serviceBindings && Object.keys(opts.serviceBindings).length
         ? { serviceBindings: opts.serviceBindings } : {}),
-      // 断言注入条目(spec v2 §5 异常组):空选不随 body 上送;引擎侧
-      // 展开由后续任务接入,后端 extra=ignore 先行透传不炸。
+      // 断言注入条目(spec v2 §5 异常组):空选不随 body 上送;后端
+      // RunRequest 暂未接收该键 — 静默丢弃,Task 6 建模后生效。
       ...(opts?.injectionEntryIds?.length
         ? { injectionEntryIds: opts.injectionEntryIds } : {}),
     }
