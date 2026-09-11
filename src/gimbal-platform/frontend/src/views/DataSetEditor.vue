@@ -179,6 +179,10 @@
           @click="activeSegment = 'all'"
         >全部({{ segments.reduce((n, s) => n + gridColumnsOf(s).length, 0) }} 列)</button>
       </div>
+      <!-- 死行键软提示(spec §7):行键 ∉ config.vars 列宇宙 — 标黄提示,不阻断编辑 -->
+      <div v-if="deadKeys.length" class="dead-keys-bar">
+        ⚠ {{ deadKeys.length }} 个行键不在列宇宙(变量已删):{{ deadKeys.join(', ') }} — 运行无效果,可继续编辑(spec §7 软提示)
+      </div>
       <!-- 横向滚动容器:变量列多时表格按 colgroup 定宽展开,拖动条滚动查看;
            工具栏留在滚动区外不随之移动 -->
       <div class="grid-scroll">
@@ -247,6 +251,13 @@
                 class="exp-col-badge"
                 :title="`期望列 — 断言 ${col.expect?.target} ${col.expect?.operator}`"
               >期望</span>
+              <button
+                v-if="col.source === 'expect'"
+                type="button"
+                class="exp-jump"
+                :title="`跳编排器断言卡 — ${col.expect?.target} ${col.expect?.operator}`"
+                @click.stop="jumpToAssertion(col)"
+              >↗</button>
             </th>
             <th class="th-action" />
           </tr>
@@ -294,25 +305,32 @@
     </div>
   </section>
 
-  <!-- 预览选中的数据:每个数据一行「合并后有效值」(baseline + override) -->
+  <!-- 预览选中的数据:行详情(spec §6.2 v1 只读)— 按段分组垂直呈现 + 继承态标注。
+       append-to-body:弹层 teleport 出编辑器的 overflow/stacking 上下文 -->
   <el-dialog
     v-model="previewDialogOpen"
     title="预览选中的数据"
     width="640px"
+    append-to-body
     :close-on-click-modal="false"
   >
     <div v-if="!previewedRows.length" class="muted">未选中任何数据</div>
     <div v-else class="preview-list">
-      <div v-for="(item, i) in previewedRows" :key="item.index" class="preview-item">
+      <div v-for="item in previewedDetail" :key="item.index" class="preview-item">
         <div class="preview-header">
           <span class="preview-name">{{ item.name }}</span>
           <span class="muted">第 {{ item.index + 1 }} 行</span>
         </div>
-        <pre class="preview-block">{{ JSON.stringify(item.merged, null, 2) }}</pre>
-        <div v-if="item.overrides.length" class="preview-overrides muted">
-          override: {{ item.overrides.join(', ') }}
+        <div v-for="g in item.groups" :key="g.stepIndex" class="detail-seg">
+          <div class="detail-seg-head">{{ g.label }}</div>
+          <div v-for="it in g.items" :key="it.varName" class="detail-row">
+            <span class="detail-name mono">{{ it.varName }}</span>
+            <span v-if="it.expect" class="exp-col-badge" :title="`断言 ${it.expect.target} ${it.expect.operator}`">期望</span>
+            <span class="detail-val mono">{{ it.value === undefined ? '(未声明基线)' : JSON.stringify(it.value) }}</span>
+            <span class="detail-flag" :class="it.inherited ? 'inh' : 'ovr'">{{ it.inherited ? '继承基线' : '覆写' }}</span>
+          </div>
         </div>
-        <div v-else class="preview-overrides muted">全部字段都走基线</div>
+        <div v-if="item.dead.length" class="detail-dead">死键(变量已删,运行无效果):{{ item.dead.join(', ') }}</div>
       </div>
     </div>
   </el-dialog>
@@ -427,10 +445,20 @@ const varColumns = computed<BaselineColumn[]>(() => visibleColumns.value.map(bcO
 /** CSV 导入导出链专用:全量 var 列宇宙(brief ⑥ — 不随段过滤)。
  *  flatMap gridColumnsOf 覆盖 ALL 段(输入列 + 期望列);columns 与
  *  descriptions 同源同序 → 单段模式下他段列不丢,(description) 行守卫
- *  (descriptions.length === vars.length)恒满足,不再静默丢描述行。 */
-const csvVarColumns = computed<BaselineColumn[]>(() =>
-  segments.value.flatMap(gridColumnsOf).map(bcOf),
-)
+ *  (descriptions.length === vars.length)恒满足,不再静默丢描述行。
+ *  varName 首现去重(修轮 f2):同一 var 兼为输入与期望(或跨段重复)时
+ *  行键唯一(行键 = varName),CSV 列头重复会让导入端同列互踩 — 输入列
+ *  先于期望列(gridColumnsOf 序),首现胜出。 */
+const csvVarColumns = computed<BaselineColumn[]>(() => {
+  const seen = new Set<string>()
+  const out: BaselineColumn[] = []
+  for (const col of segments.value.flatMap(gridColumnsOf)) {
+    if (seen.has(col.varName)) continue
+    seen.add(col.varName)
+    out.push(bcOf(col))
+  }
+  return out
+})
 
 // ── 步骤分组表头(P1.4:横多列时按 step 视觉分组,零后端)─────────
 /** 列序上同 stepIndex 的连续段(merge 相邻同段,colspan 呈现)。
@@ -456,6 +484,25 @@ function isStepStart(ci: number): boolean {
   const cols = visibleColumns.value
   return ci === 0 || cols[ci - 1].stepIndex !== cols[ci].stepIndex
 }
+
+/** 期望列头 → 断言卡直跳(spec §5.3):路由携带 focusStep/focusStrategy,
+ *  CaseComposer onMounted 消费(Task 3 契约)。索引恒为数字转串 —
+ *  绝不发空串(Number('') === 0 会骗过消费端守卫,伪造 0/0 跳转)。 */
+function jumpToAssertion(col: GridVarColumn) {
+  if (!col.expect) return
+  router.push({
+    path: `/composer/${scenarioId}`,
+    query: {
+      step: '4',
+      focusStep: String(col.stepIndex),
+      focusStrategy: String(col.expect.strategyIdx),
+    },
+  })
+}
+
+/** 死行键(spec §7 软提示):行键 ∉ config.vars 列宇宙 → 提示条标黄,
+ *  不阻断编辑(变量已删但行数据还在的悬空键)。 */
+const deadKeys = computed(() => deadRowKeys(draft.value?.definition?.config?.vars ?? {}, rows.value))
 const filteredGroups = computed(() => {
   const q = baselineQuery.value
   return baselineGroups.value
@@ -650,7 +697,8 @@ function mergeRowWithBaseline(row: Record<string, any>): {
   return { merged, overrides }
 }
 
-/** 预览弹窗内容:按选中顺序(数组化 selectedRows 排个序)— 不影响原 selectedRows 的 Set 语义。 */
+/** 预览弹窗内容:按选中顺序(数组化 selectedRows 排个序)— 不影响原 selectedRows 的 Set 语义。
+ *  merged/overrides 保留(palette 测试经 vm 消费共享基线语义)。 */
 const previewedRows = computed(() => {
   const idxs = Array.from(selectedRows).sort((a, b) => a - b)
   return idxs.map((i) => {
@@ -663,6 +711,25 @@ const previewedRows = computed(() => {
     }
   })
 })
+
+/** 行详情(§6.2 v1 只读):整条数据垂直呈现,按段分组 + 继承态标注 */
+const previewedDetail = computed(() => previewedRows.value.map((item) => {
+  const row = rows.value[item.index] ?? {}
+  return {
+    ...item,
+    groups: segments.value.map((seg) => ({
+      stepIndex: seg.stepIndex,
+      label: `步骤${seg.stepIndex + 1} · ${stepLabel(seg.stepIndex)}`,
+      items: gridColumnsOf(seg).map((c) => ({
+        varName: c.varName,
+        value: Object.prototype.hasOwnProperty.call(row, c.varName) ? row[c.varName] : c.baseline,
+        inherited: !Object.prototype.hasOwnProperty.call(row, c.varName),
+        expect: c.expect,
+      })),
+    })),
+    dead: deadRowKeys(draft.value?.definition?.config?.vars ?? {}, [row]),
+  }
+}))
 
 /** 直填列字面值读取(从 draft 里走真实路径:body / query / headers)。 */
 function directBaselineValue(col: BaselineColumn): string {
@@ -991,6 +1058,13 @@ onMounted(async () => {
 .seg-tab { border: 1px solid #e6e8ec; background: #fff; border-radius: 6px; padding: 4px 12px; font-size: 12px; cursor: pointer; color: #475569; }
 .seg-tab.active { border-color: #4f46e5; color: #4f46e5; background: #eef2ff; font-weight: 600; }
 
+/* 死行键软提示条(spec §7):标黄不阻断 */
+.dead-keys-bar { margin: 6px 12px 0; font-size: 11px; color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 5px 10px; }
+
+/* 期望列头 ↗ 跳断言卡(spec §5.3) */
+.exp-jump { border: none; background: transparent; color: #7c3aed; cursor: pointer; font-size: 12px; padding: 0 2px; }
+.exp-jump:hover { color: #4c1d95; }
+
 /* 横向滚动:列少时表格仍占满(width:100%),列多时按 colgroup 定宽展开
    (min-width:max-content 赢),拖滚动条查看右侧列 */
 .grid-scroll { overflow-x: auto; }
@@ -1154,11 +1228,16 @@ onMounted(async () => {
   font-family: var(--font-mono); font-size: 13px; font-weight: 600;
   color: var(--accent);
 }
-.preview-block {
-  margin: 0; padding: 10px 12px;
-  font-family: var(--font-mono); font-size: 11px; line-height: 1.55;
-  color: #cbd5e1; background: #0f172a; border-radius: 4px;
-  overflow-x: auto; max-height: 220px; overflow-y: auto;
-}
-.preview-overrides { margin-top: 6px; font-size: 11px; }
+
+/* ── 行详情(§6.2 v1 只读):按段分组垂直呈现 ── */
+/* 期望徽标在弹窗侧的样式(网格侧挂在 .col-expect 下,弹窗行无该祖先) */
+.detail-row .exp-col-badge { font-size: 10px; font-weight: 700; color: #6b21a8; background: #f3e8ff; padding: 1px 5px; border-radius: 3px; }
+.detail-seg-head { font-size: 12px; font-weight: 700; color: #475569; margin: 8px 0 4px; }
+.detail-row { display: flex; gap: 8px; align-items: center; padding: 2px 0 2px 12px; font-size: 12px; }
+.detail-name { min-width: 120px; color: #334155; }
+.detail-val { color: #0f172a; }
+.detail-flag { font-size: 10px; padding: 1px 6px; border-radius: 3px; }
+.detail-flag.inh { color: #64748b; background: #f1f5f9; }
+.detail-flag.ovr { color: #b45309; background: #fef3c7; }
+.detail-dead { margin-top: 6px; font-size: 11px; color: #b45309; background: #fef3c7; padding: 4px 8px; border-radius: 4px; }
 </style>

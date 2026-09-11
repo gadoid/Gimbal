@@ -9,10 +9,13 @@ import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { createPinia, setActivePinia } from 'pinia'
 
+// DET-2 需断言 router.push 调参 — push 提升为 hoisted 共享句柄
+// (vi.mock factory 早于顶层 const 初始化,直接闭包外层变量会 TDZ)
+const routerMock = vi.hoisted(() => ({ push: vi.fn() }))
 vi.mock('vue-router', () => ({
   // datasetId 非 'new' → onMounted 会走 getDataSet 载入既有 rows(SEG-1 注释契约)
   useRoute: () => ({ params: { scenarioId: 'sc-ds', datasetId: 'ds-1' } }),
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: routerMock.push }),
   createRouter: () => ({ beforeEach: () => {}, push: vi.fn(), replace: vi.fn() }),
   createWebHistory: () => ({}),
 }))
@@ -48,14 +51,27 @@ const DEF_9COLS = {
   ],
 }
 
-/** 挂载工厂:getDataSet 返回 rows:[{amount:'-1'}],draft 返回入参 definition。 */
-async function mountEditor(def: typeof DEF_2SEG) {
+/** 同 var 兼为输入与期望(SEG-7b 去重回归):step1 body.amount 引用 ${var.amount},
+ *  step1 断言 expected 也引用 ${var.amount} → gridColumnsOf 出两列同名列。 */
+const DEF_DUPVAR = {
+  kind: 'scenario', scenarioId: 'sc-ds', meta: { name: 'dup' },
+  config: { vars: { amount: 100 } },
+  steps: [
+    { kind: 'step', description: '下单', api: { headers: {}, view_hints: { endpoint_id: 'fin.order.add' } },
+      request: { kind: 'request', body: { amount: '${var.amount}' } },
+      strategy: [{ kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: '${var.amount}' }] },
+  ],
+}
+
+/** 挂载工厂:getDataSet 返回 rows(默认 [{amount:'-1'}]),draft 返回入参 definition;
+ *  orchestration.steps 带 name(= step.description)供 stepLabel 读段头展示名。 */
+async function mountEditor(def: typeof DEF_2SEG, rows: Array<Record<string, any>> = [{ amount: '-1' }]) {
   vi.spyOn(api, 'getScenarioDraft').mockResolvedValue(
-    { definition: def, orchestration: { steps: [], resourceMeta: {} } } as any,
+    { definition: def, orchestration: { steps: def.steps.map((s: any) => ({ name: s.description })), resourceMeta: {} } } as any,
   )
   vi.spyOn(api, 'updateScenario').mockResolvedValue({} as any)
   vi.spyOn(api, 'getDataSet').mockResolvedValue(
-    { name: 'n', description: '', rows: [{ amount: '-1' }] } as any,
+    { name: 'n', description: '', rows } as any,
   )
   vi.spyOn(api, 'getFullEndpoint').mockImplementation(async (eid: string) => ({
     id: eid, request: { declarations: [] },
@@ -67,6 +83,7 @@ async function mountEditor(def: typeof DEF_2SEG) {
 
 beforeEach(() => {
   setActivePinia(createPinia())
+  routerMock.push.mockReset()
 })
 
 // 让 vi.spyOn 不会跨测试泄漏(palette 测试同款纪律)
@@ -179,6 +196,75 @@ describe('DataSetEditor — 段网格(§6.2)', () => {
     const text = csv.buildDataSetCsv(args)
     expect(text).toContain('(description)')
     expect(text.split('\n')[0]).toContain('bl_no')
+    w.unmount()
+  })
+
+  it('SEG-7b(修轮回归): 同 var 兼为输入与期望 → CSV 列宇宙 varName 去重(首现胜出,恰好一列)', async () => {
+    // DEF_DUPVAR:step1 的 amount 既是输入列又是期望列 → 未去重时 CSV 会出现两个 amount 列
+    const w = await mountEditor(DEF_DUPVAR as any)
+    const csv = await import('@/utils/csv-dataset')
+    const exportSpy = vi.spyOn(csv, 'exportDataSetCsv').mockImplementation(() => {})
+    const btn = w.findAll('button').find((b) => b.text().includes('导出 CSV'))
+    expect(btn).toBeTruthy()
+    await btn!.trigger('click')
+    await flushPromises()
+    expect(exportSpy).toHaveBeenCalled()
+    const args = exportSpy.mock.calls[0][0] as any
+    // 去重:恰好一列(输入列首现胜出)
+    expect(args.columns.map((c: any) => c.varName)).toEqual(['amount'])
+    // 端到端:CSV 列头 amount 恰好出现一次
+    const text = csv.buildDataSetCsv(args)
+    expect(text.split('\n')[0]).toBe('__case_name,amount')
+    w.unmount()
+  })
+})
+
+describe('DataSetEditor — 行详情 + 期望列头跳转 + 死行键(§6.2/§5.3/§7)', () => {
+  it('DET-1: 预览弹窗升级行详情 — 按段分组垂直呈现,含继承态标注', async () => {
+    const w = await mountEditor(DEF_2SEG, [{ amount: '-1', exp_code: '400' }])
+    // 勾选首行 + 点「预览选中的数据」
+    ;(w.vm as any).toggleRow(0, true)
+    await flushPromises()
+    const btn = w.findAll('button').find((b) => b.text().includes('预览选中'))
+    expect(btn).toBeTruthy()
+    await btn!.trigger('click')
+    await flushPromises()
+    // el-dialog teleport 到 body — 从 document 查(T12 模式)
+    const segHeads = [...document.querySelectorAll('.detail-seg-head')].map((e) => e.textContent ?? '')
+    expect(segHeads.join('|')).toContain('步骤1 · 下单')
+    expect(segHeads.join('|')).toContain('步骤2 · 查单')
+    // 继承态标注:amount 行(row 有键)「覆写」;bl_no 行(row 无键)「继承基线」
+    const flags = [...document.querySelectorAll('.detail-flag')].map((e) => e.textContent ?? '')
+    expect(flags).toContain('覆写')
+    expect(flags).toContain('继承基线')
+    w.unmount()
+  })
+
+  it('DET-2: 期望列头 ↗ 跳转按钮 → router.push composer + focusStep/focusStrategy query', async () => {
+    const w = await mountEditor(DEF_2SEG)
+    // 默认「全部」(3 列 ≤8)→ exp_code 期望列头在场;非 expect 列不渲染跳转按钮
+    const jumps = w.findAll('.row-field .th-data .exp-jump')
+    expect(jumps.length).toBe(1)
+    await jumps[0].trigger('click')
+    // exp_code 断言 strategyIdx=0、stepIndex=0(0-based,Task 3 契约;绝不发空串)
+    expect(routerMock.push).toHaveBeenCalledTimes(1)
+    expect(routerMock.push).toHaveBeenCalledWith({
+      path: '/composer/sc-ds',
+      query: { step: '4', focusStep: '0', focusStrategy: '0' },
+    })
+    w.unmount()
+  })
+
+  it('DET-3: 死行键软提示条 — 行键 ∉ config.vars → 标黄提示,可继续编辑', async () => {
+    const w = await mountEditor(DEF_2SEG, [{ amount: '-1', ghost_key: 'x' }])
+    const bar = w.find('.dead-keys-bar')
+    expect(bar.exists()).toBe(true)
+    expect(bar.text()).toContain('ghost_key')
+    expect(bar.text()).toContain('运行无效果')
+    // 软提示无阻断:新增数据可点、数据格可编辑(无 disabled)
+    const addBtn = w.findAll('button').find((b) => b.text().includes('新增数据'))
+    expect(addBtn!.attributes('disabled')).toBeUndefined()
+    expect(w.find('input.data-cell-input').attributes('disabled')).toBeUndefined()
     w.unmount()
   })
 })
