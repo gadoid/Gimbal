@@ -541,6 +541,10 @@ async def _apply_scenario_op(
     await scenario_store.update(db, op.scenario_id, ScenarioDraft(
         definition=definition,
         orchestration=(row.payload or {}).get("orchestration") or {},
+        # 注册表透传(spec v2 §3):适配操作不触及该键 — 不带则经 update
+        # 重铸回落 default {} 把存量条目静默清空。回滚路径走
+        # model_validate(before)(payload 快照),已安全。
+        assertion_registry=(row.payload or {}).get("assertion_registry") or {},
     ))
     if op.op_type == "renameVar":
         # 联动:该场景全部数据集列改名(场景先落库 → 调色板已含新键)

@@ -276,6 +276,34 @@ async def test_rename_var_updates_scenario_and_datasets(fresh_db, plate):
     assert ds.rows == [{"amt": 5}, {"amt": 6}]  # 调色板先就位 → 列改名通过
 
 
+async def test_apply_op_preserves_assertion_registry(fresh_db, plate):
+    """适配操作经 update 重铸 payload — 注册表必须透传(spec v2 §3),
+    否则每次应用把存量条目静默清空(Task 3 编辑器上线后即数据丢失)。"""
+    registry = {"entries": [{
+        "id": "inj-1", "name": "金额为负",
+        "anchor": {"stepIndex": 0, "source": "body", "jsonpath": "$.amount",
+                   "varName": "amount"},
+        "injection": [{"varName": "amount", "value": "-1"}],
+        "asserts": [{"stepIndex": 0, "target": "$.response_body.code",
+                     "operator": "eq", "expected": "400", "mode": "override"}],
+    }]}
+    async with await _session() as s:   # 造数仿 _seed_scenario,加 registry 键
+        draft = make_draft("sc-batch", steps=_steps(), vars_map={"amount": 100})
+        draft["assertion_registry"] = registry
+        await scenario_store.create(
+            s, ScenarioDraft.model_validate(draft), owner="alice", owner_id=1,
+        )
+    await _seed_stamp()
+    _install_plate(plate)
+    async with await _session() as s:
+        detail = await adaptation_service.open_batch(s, endpoint_id=EP, operator_id=1)
+        await adaptation_service.apply_op(s, detail["ops"][0]["id"])  # addField
+        scenario = await scenario_store.get_row(s, "sc-batch")
+    # GET /draft 同一读法(model_validate(payload))— registry 原样存活
+    assert scenario.payload["assertion_registry"] == registry
+    assert ScenarioDraft.model_validate(scenario.payload).assertion_registry == registry
+
+
 async def test_completion_survives_plate_down(fresh_db, plate):
     """完成时 plate 拉取失败 → 仍完成并推进 version,spec_json 留旧(自愈)。"""
     await _seed_scenario()
