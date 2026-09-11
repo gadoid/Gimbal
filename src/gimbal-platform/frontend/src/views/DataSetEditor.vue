@@ -1,10 +1,10 @@
 <!-- DataSetEditor.vue — 转置表 + 段多选网格(基线区已退场)
 
      信息架构:
-       - 全宽数据表格(行 = 数据,列 = 勾选段的变量并排;直填列不进表格,
+       - 全宽数据表格(行 = 数据,列 = 所选段的变量并排;直填列不进表格,
          编辑家在编排器 FieldForm)
-       - 段多选(spec §6.2 演进):引用扫描派生段,勾选框并列多段;
-         "全部" = master 快捷(勾=全选 / 取消=回只选首段);至少一段
+       - 段下拉选择(spec §6.2 演进):引用扫描派生段,下拉单选一段;
+         "全部(N 列)" = 全段并列(总列数 ≤8 默认「全部」,>8 默认首段)
        - 置顶基线行(tbody 首行):config.vars 基线唯一编辑入口,
          不可选 / 不可粘贴;编辑触发 baselineDirty →「保存基线」
        - 期望列与输入列并排(行键 = varName),列头带「期望」徽标(target/operator)
@@ -81,21 +81,19 @@
           <el-button size="small" plain :disabled="!csvVarColumns.length" @click="onExportCsv">导出 CSV</el-button>
         </div>
       </div>
-      <!-- 段多选(spec §6.2 演进):>1 段才显示;勾选段并列,
-           "全部" = master 快捷(勾=全选 / 取消=回只选首段);至少一段 -->
+      <!-- 段下拉选择(spec §6.2 演进,2026-09-11 勾选平铺改下拉):>1 段才显示;
+           单选一段,或「全部(N 列)」全段并列 -->
       <div v-if="segments.length > 1" class="seg-picker">
-        <el-checkbox
-          class="seg-all"
-          :model-value="isAllSegs"
-          :indeterminate="isPartialSegs"
-          @change="onToggleAllSegs"
-        >全部({{ totalGridColumns }} 列)</el-checkbox>
-        <el-checkbox
-          v-for="(seg, si) in segments"
-          :key="`segsel:${seg.stepIndex}`"
-          :model-value="selectedSegs.has(si)"
-          @change="(v: boolean | string | number) => toggleSeg(si, !!v)"
-        >步骤{{ seg.stepIndex + 1 }} · {{ stepLabel(seg.stepIndex) }}</el-checkbox>
+        <span class="seg-picker-label">步骤</span>
+        <el-select v-model="segChoice" class="seg-select" size="small">
+          <el-option value="all" :label="`全部(${totalGridColumns} 列)`" />
+          <el-option
+            v-for="(seg, si) in segments"
+            :key="`segsel:${seg.stepIndex}`"
+            :value="si"
+            :label="`步骤${seg.stepIndex + 1} · ${stepLabel(seg.stepIndex)}`"
+          />
+        </el-select>
       </div>
       <!-- 死行键软提示(spec §7):行键 ∉ config.vars 列宇宙 — 标黄提示,不阻断编辑 -->
       <div v-if="deadKeys.length" class="dead-keys-bar">
@@ -115,8 +113,8 @@
         <thead>
           <!-- 步骤分组行(P1.4):同 stepIndex 相邻列合并 colspan,横多列时
                一眼看出列属于哪个步骤;名读 orchestration,缺名降级 Step N。
-               勾选 >1 段才渲染 — 单段无段间边界可标。 -->
-          <tr v-if="selectedSegCount > 1" class="row-step-group">
+               多段并列(「全部」且 >1 段)才渲染 — 单段无段间边界可标。 -->
+          <tr v-if="isMultiSegView" class="row-step-group">
             <th class="th-select" />
             <th class="th-label" />
             <th
@@ -140,7 +138,7 @@
             <th
               v-for="(col, ci) in visibleColumns"
               :key="`info-d:${ci}:${col.stepIndex}:${col.source}:${col.varName}`"
-              :class="['th-data', col.source === 'expect' ? 'col-expect' : '', selectedSegCount > 1 && isStepStart(ci) ? 'is-step-start' : '']"
+              :class="['th-data', col.source === 'expect' ? 'col-expect' : '', isMultiSegView && isStepStart(ci) ? 'is-step-start' : '']"
               :title="descriptionByColumnKey.get(`${col.stepIndex}:${col.source}:${col.field}`) || col.field"
             >
               {{ descriptionByColumnKey.get(`${col.stepIndex}:${col.source}:${col.field}`) || '—' }}
@@ -153,7 +151,7 @@
             <th
               v-for="(col, ci) in visibleColumns"
               :key="`info-f:${ci}:${col.stepIndex}:${col.source}:${col.varName}`"
-              :class="['th-data', col.source === 'expect' ? 'col-expect' : '', selectedSegCount > 1 && isStepStart(ci) ? 'is-step-start' : '']"
+              :class="['th-data', col.source === 'expect' ? 'col-expect' : '', isMultiSegView && isStepStart(ci) ? 'is-step-start' : '']"
               :title="col.source === 'expect'
                 ? `期望列 ${col.varName} — 断言 ${col.expect?.target} ${col.expect?.operator}(步骤${col.stepIndex + 1})`
                 : `${col.stepIndex + 1} 步 ${col.source} · ${col.field}`"
@@ -189,7 +187,7 @@
             <td
               v-for="(col, ci) in visibleColumns"
               :key="`b:${ci}:${col.stepIndex}:${col.source}:${col.varName}`"
-              :class="['td-data', col.source === 'expect' ? 'col-expect' : '', selectedSegCount > 1 && isStepStart(ci) ? 'is-step-start' : '']"
+              :class="['td-data', col.source === 'expect' ? 'col-expect' : '', isMultiSegView && isStepStart(ci) ? 'is-step-start' : '']"
             >
               <input
                 class="baseline-cell-input"
@@ -218,7 +216,7 @@
             <td
               v-for="(col, ci) in visibleColumns"
               :key="`c:${i}:${ci}:${col.stepIndex}:${col.source}:${col.varName}`"
-              :class="['td-data', cellClass(row, bcOf(col)), col.source === 'expect' ? 'col-expect' : '', selectedSegCount > 1 && isStepStart(ci) ? 'is-step-start' : '']"
+              :class="['td-data', cellClass(row, bcOf(col)), col.source === 'expect' ? 'col-expect' : '', isMultiSegView && isStepStart(ci) ? 'is-step-start' : '']"
               :title="bcOf(col).baseline"
             >
               <!-- 期望列与输入列同款单元格:行键 = varName,期望列 baseline
@@ -326,48 +324,28 @@ const segments = computed(() => deriveSegments(
 const segSharedVars = computed(() => sharedVarNames(segments.value))
 const ALL_THRESHOLD = 8   // 全段列数 ≤8 默认全段勾选(spec §6.2 初值)
 
-/** 勾选段索引集合(checkbox 多选);至少一段 — 取消最后一段 no-op + 提示 */
-const selectedSegs = reactive(new Set<number>())
+/** 段选择(下拉单选):'all' = 全段并列;数字 = 段索引(单段视图) */
+const segChoice = ref<'all' | number>('all')
 const segInitialized = ref(false)
 watch(segments, (segs) => {
   if (segInitialized.value || !segs.length) return
   segInitialized.value = true
   const total = segs.reduce((n, s) => n + gridColumnsOf(s).length, 0)
-  if (total <= ALL_THRESHOLD) segs.forEach((_, si) => selectedSegs.add(si))
-  else selectedSegs.add(0)
+  segChoice.value = total <= ALL_THRESHOLD ? 'all' : 0
 }, { immediate: true })
 
-const selectedSegCount = computed(() => selectedSegs.size)
-const isAllSegs = computed(() =>
-  segments.value.length > 0 && selectedSegs.size === segments.value.length)
-const isPartialSegs = computed(() =>
-  selectedSegs.size > 0 && selectedSegs.size < segments.value.length)
-/** master「全部」:勾 = 全选;取消 = 回只选首段(至少一段约束的快捷回退) */
-function onToggleAllSegs(v: boolean | string | number) {
-  if (!segments.value.length) return
-  selectedSegs.clear()
-  if (!!v) segments.value.forEach((_, si) => selectedSegs.add(si))
-  else selectedSegs.add(0)
-}
-function toggleSeg(si: number, checked: boolean) {
-  if (checked) selectedSegs.add(si)
-  else {
-    if (selectedSegs.size <= 1) {
-      ElMessage.warning('至少保留一个步骤段')
-      return
-    }
-    selectedSegs.delete(si)
-  }
-}
+/** 多段并列视图(「全部」且 >1 段):表头渲染步骤分组行 + 段首分隔线 */
+const isMultiSegView = computed(() => segChoice.value === 'all' && segments.value.length > 1)
 
-/** 全段总列数("全部"快捷标签提示用) */
+/** 全段总列数(「全部」选项标签提示用) */
 const totalGridColumns = computed(() =>
   segments.value.reduce((n, s) => n + gridColumnsOf(s).length, 0))
 
-/** 勾选段的列并排(段序);勾选 >1 段时表头渲染步骤分组行 + 段首分隔线 */
-const visibleColumns = computed<GridVarColumn[]>(() =>
-  segments.value.flatMap((seg, si) => (selectedSegs.has(si) ? gridColumnsOf(seg) : [])),
-)
+/** 所选段的列并排(段序);「全部」= 全段列 */
+const visibleColumns = computed<GridVarColumn[]>(() => {
+  if (segChoice.value === 'all') return segments.value.flatMap(gridColumnsOf)
+  return gridColumnsOf(segments.value[segChoice.value] ?? [])
+})
 
 /** GridVarColumn → BaselineColumn 适配:cellClass/onCellInput/onCellPaste
  *  既有签名消费完整 BaselineColumn 形状(最小适配对象补齐
@@ -403,7 +381,7 @@ const csvVarColumns = computed<BaselineColumn[]>(() => {
 
 // ── 步骤分组表头(P1.4:横多列时按 step 视觉分组,零后端)─────────
 /** 列序上同 stepIndex 的连续段(merge 相邻同段,colspan 呈现)。
- *  仅勾选 >1 段时渲染(模板侧短路);单段无段间边界可标。 */
+ *  仅多段并列时渲染(模板侧短路);单段无段间边界可标。 */
 const stepGroups = computed(() => {
   const groups: Array<{ stepIndex: number; colspan: number }> = []
   for (const col of visibleColumns.value) {
@@ -420,7 +398,7 @@ function stepLabel(i: number): string {
   return name || `Step ${i + 1}`
 }
 /** 该列是所属步骤段的首列 → 渲染左分隔线(表头到数据行贯穿)。
- *  仅勾选 >1 段时消费(模板侧短路);单段无段间边界。 */
+ *  仅多段并列时消费(模板侧短路);单段无段间边界。 */
 function isStepStart(ci: number): boolean {
   const cols = visibleColumns.value
   return ci === 0 || cols[ci - 1].stepIndex !== cols[ci].stepIndex
@@ -752,9 +730,10 @@ onMounted(async () => {
   background: #f8fafc;
 }
 
-/* ── 段多选(spec §6.2 演进):勾选段并列 + 全部 master ── */
-.seg-picker { display: flex; gap: 4px 18px; flex-wrap: wrap; align-items: center; padding: 8px 12px 0; }
-.seg-picker .seg-all { font-weight: 600; }
+/* ── 段下拉选择(spec §6.2 演进):单选一段 / 全部(全段并列)── */
+.seg-picker { display: flex; gap: 8px; align-items: center; padding: 8px 12px 0; }
+.seg-picker-label { font-size: 12px; color: var(--color-text-secondary); }
+.seg-select { width: 260px; }
 
 /* 死行键软提示条(spec §7):标黄不阻断 */
 .dead-keys-bar { margin: 6px 12px 0; font-size: 11px; color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 5px 10px; }

@@ -1,8 +1,9 @@
 /**
- * DataSetEditor 段网格(spec §6.2,2026-09-10;2026-09-11 演进为勾选多选):
- * 列作用域 = 勾选段并列。段选择器派生(引用扫描)/ 段勾选过滤 / 行名列
- * 常驻钉选 / 总列数 ≤8 默认全勾 / 直填列彻底退场(编辑家在编排器)/
- * 期望列徽标。骨架(api mock + route stub)复制 DataSetEditor.palette.test.ts。
+ * DataSetEditor 段网格(spec §6.2,2026-09-10;2026-09-11 演进为下拉单选):
+ * 列作用域 = 下拉所选段(或「全部」全段并列)。段选择器派生(引用扫描)/
+ * 段下拉过滤 / 行名列常驻钉选 / 总列数 ≤8 默认「全部」>8 默认首段 /
+ * 直填列彻底退场(编辑家在编排器)/ 期望列徽标。
+ * 骨架(api mock + route stub)复制 DataSetEditor.palette.test.ts。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -125,39 +126,37 @@ afterEach(() => {
 })
 
 describe('DataSetEditor — 段网格(§6.2)', () => {
-  it('SEG-1: 段选择器派生(两段勾选框 + "全部" master);总列数 ≤8 默认全勾;行名列常驻', async () => {
+  it('SEG-1: 段下拉选择器(单选);总列数 ≤8 默认「全部」;行名列常驻', async () => {
     const w = await mountEditor(DEF_2SEG)
-    const boxes = w.findAll('.seg-picker .el-checkbox')
-    // master「全部」+ 两段勾选框
-    expect(boxes.length).toBe(3)
-    const labels = boxes.map((b) => b.text()).join('|')
-    expect(labels).toContain('全部(3 列)')
-    expect(labels).toContain('步骤1')
-    expect(labels).toContain('步骤2')
-    // 3 列 ≤8 → 默认全勾(两段并列)
-    expect((w.vm as any).selectedSegs.size).toBe(2)
+    // 下拉容器在场(非勾选框平铺);EP ≥2.5 重写版 el-select 的选中回显
+    // 在 .el-select 根文本里(placeholder span,无 input value 可断言)
+    expect(w.find('.seg-picker .el-select').exists()).toBe(true)
+    expect(w.findAll('.seg-picker .el-checkbox').length).toBe(0)
+    expect(w.find('.seg-picker .el-select').text()).toContain('全部(3 列)')
+    expect((w.vm as any).segChoice).toBe('all')
     // 行名列钉选:数据表格首列数据名输入在场
     expect(w.find('.data-name-input').exists()).toBe(true)
     w.unmount()
   })
 
-  it('SEG-2: 取消一段 → 列作用域收编剩段(输入+期望并排),他段列退场', async () => {
+  it('SEG-2: 下拉选一段 → 列作用域收编该段,他段列退场;回显标签随选切换', async () => {
     const w = await mountEditor(DEF_2SEG)
-    ;(w.vm as any).toggleSeg(1, false)   // 取消勾选步骤2(剩段1)
+    ;(w.vm as any).segChoice = 1   // 选步骤2(查单段)
     await flushPromises()
-    // 段1 列头:amount + exp_code(期望徽标);bl_no 退场
+    // 段2 列头:bl_no;步骤1 的 amount / exp_code(期望)退场
     const heads = w.findAll('.row-field .th-data').map((t) => t.text()).join()
-    expect(heads).toContain('amount')
-    expect(heads).toContain('exp_code')
-    expect(heads).toContain('期望')        // 期望列徽标文案
-    expect(heads).not.toContain('bl_no')
+    expect(heads).toContain('bl_no')
+    expect(heads).not.toContain('amount')
+    expect(heads).not.toContain('exp_code')
+    // 回显标签 = 步骤2 选项 label(含 orchestration 步骤名)
+    expect(w.find('.seg-picker .el-select').text()).toContain('步骤2 · 查单')
     w.unmount()
   })
 
-  it('SEG-3: 总列数 >8 默认只勾第一段(阈值 8)', async () => {
-    // 9 列场景:step1 9 个 ${var} 字段 + step2 1 个 → 默认只勾段0
+  it('SEG-3: 总列数 >8 默认选首段(阈值 8)', async () => {
+    // 9 列场景:step1 9 个 ${var} 字段 + step2 1 个 → 默认段0
     const w = await mountEditor(DEF_9COLS as any)
-    expect([...(w.vm as any).selectedSegs]).toEqual([0])
+    expect((w.vm as any).segChoice).toBe(0)
     // 列作用域 = 段0:9 列全在,other(段1)退场
     const heads = w.findAll('.row-field .th-data').map((t) => t.text()).join()
     expect(heads).toContain('f1')
@@ -188,8 +187,8 @@ describe('DataSetEditor — 段网格(§6.2)', () => {
 
   it('SEG-6: TSV 粘贴/行增删/caseNames 保留(既有行为零回归)', async () => {
     const w = await mountEditor(DEF_2SEG)
-    // 段视图:取消步骤2(剩段1:amount + exp_code 并排)
-    ;(w.vm as any).toggleSeg(1, false)
+    // 段视图:下拉选步骤1(amount + exp_code 并排)
+    ;(w.vm as any).segChoice = 0
     await flushPromises()
     // 段内首列(amount)= 第一个数据格输入;粘单列纵向 3 值(1 行 → 3 行)
     const firstCell = w.findAll('input.data-cell-input')[0]
@@ -215,8 +214,8 @@ describe('DataSetEditor — 段网格(§6.2)', () => {
 
   it('SEG-7(修轮回归): 单段模式下 CSV 导出覆盖全量 var 宇宙,段过滤不影响 CSV 链(brief ⑥)', async () => {
     const w = await mountEditor(DEF_2SEG)
-    // 取消步骤2(剩段1:段内仅 amount + exp_code)— CSV 链不得随之收缩
-    ;(w.vm as any).toggleSeg(1, false)
+    // 下拉选步骤1(段内仅 amount + exp_code)— CSV 链不得随之收缩
+    ;(w.vm as any).segChoice = 0
     await flushPromises()
     const csv = await import('@/utils/csv-dataset')
     const exportSpy = vi.spyOn(csv, 'exportDataSetCsv').mockImplementation(() => {})
@@ -237,39 +236,39 @@ describe('DataSetEditor — 段网格(§6.2)', () => {
     w.unmount()
   })
 
-  it('SEG-8: 多段并列勾选 — 步骤分组行 + 段首分隔线在场;单段时退场', async () => {
+  it('SEG-8: 「全部」多段并列 — 步骤分组行 + 段首分隔线在场;单段视图退场', async () => {
     const w = await mountEditor(DEF_2SEG)
-    // 默认全勾(3 列 ≤8)→ 分组行(两段各一 cell)+ 段首分隔线贯穿表头
+    // 默认「全部」(3 列 ≤8)→ 分组行(两段各一 cell)+ 段首分隔线贯穿表头
     expect(w.findAll('.row-step-group th.th-step-group').length).toBe(2)
     expect(w.findAll('.row-field th.is-step-start').length).toBe(2)
     expect(w.findAll('.row-baseline td.is-step-start').length).toBe(2)
-    // 取消段2 → 单段:分组行 / 分隔线全退场
-    ;(w.vm as any).toggleSeg(1, false)
+    // 下拉选步骤2 → 单段视图:分组行 / 分隔线全退场
+    ;(w.vm as any).segChoice = 1
     await flushPromises()
     expect(w.find('.row-step-group').exists()).toBe(false)
     expect(w.findAll('.row-field th.is-step-start').length).toBe(0)
     w.unmount()
   })
 
-  it('SEG-9: 至少一段 — 取消最后一段 no-op + 警告;"全部" master 取消回只选首段', async () => {
-    const { ElMessage } = await import('element-plus')
-    const warnSpy = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({} as any))
-    const w = await mountEditor(DEF_2SEG)
-    // 勾到只剩段0,再取消段0 → no-op + 警告(至少一段)
-    ;(w.vm as any).toggleSeg(1, false)
+  it('SEG-9: 段下拉是纯视图过滤 — 切段不改 rows/caseNames;CSV 列宇宙仍全段', async () => {
+    const w = await mountEditor(DEF_2SEG, [{ amount: '-1', exp_code: '400', bl_no: 'BL9' }])
+    const rowsBefore = JSON.stringify((w.vm as any).rows)
+    const namesBefore = JSON.stringify((w.vm as any).caseNames)
+    ;(w.vm as any).segChoice = 1   // 切到步骤2 单段视图
     await flushPromises()
-    ;(w.vm as any).toggleSeg(0, false)
+    // 行数据零变化(下拉只过滤列呈现,不触碰 rows)
+    expect(JSON.stringify((w.vm as any).rows)).toBe(rowsBefore)
+    expect(JSON.stringify((w.vm as any).caseNames)).toBe(namesBefore)
+    // CSV 列宇宙仍全段(brief ⑥):bl_no 不因单段视图而丢
+    const csv = await import('@/utils/csv-dataset')
+    const exportSpy = vi.spyOn(csv, 'exportDataSetCsv').mockImplementation(() => {})
+    const btn = w.findAll('button').find((b) => b.text().includes('导出 CSV'))
+    expect(btn).toBeTruthy()
+    await btn!.trigger('click')
     await flushPromises()
-    expect([...(w.vm as any).selectedSegs]).toEqual([0])
-    expect(warnSpy).toHaveBeenCalledTimes(1)
-    // master 取消 → 回只选首段;master 勾 → 全选
-    ;(w.vm as any).onToggleAllSegs(false)
-    await flushPromises()
-    expect([...(w.vm as any).selectedSegs]).toEqual([0])
-    ;(w.vm as any).onToggleAllSegs(true)
-    await flushPromises()
-    expect((w.vm as any).selectedSegs.size).toBe(2)
-    warnSpy.mockRestore()
+    const args = exportSpy.mock.calls[0][0] as any
+    expect(args.columns.map((c: any) => c.varName)).toEqual(['amount', 'exp_code', 'bl_no'])
+    exportSpy.mockRestore()
     w.unmount()
   })
 
