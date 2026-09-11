@@ -377,6 +377,12 @@ const orchestration = ref<OrchestrationWithSchemes>({
  *  编排器保存整包携带(本任务只做回路,编辑 UI 由后续任务接入)。 */
 const registry = ref<AssertionRegistry>({ entries: [] })
 
+/** registry 是否已从服务端水化(loadScenario 的 GET /draft 成功;新建场景
+ *  无草稿恒 true)。false = 水化失败,本地 registry 可能空而服务端有存量
+ *  条目 — saveDraft 前必须重试拉取,否则空 entries 整包 PUT 会把用户
+ *  存量条目永久冲掉(终审 F2:加载失败不得静默擦除注册表)。 */
+let registryHydrated = true
+
 // ── 选系统预填(仅新建场景)──────────────────────────────
 // meta 取 common 通用定义公共项;config 取 common 基座 + 各选中系统
 // services/users/vars 合并;resource 取各系统并集。仅首次、且
@@ -748,11 +754,14 @@ async function loadScenario() {
           runSchemes: persistedSchemes,
         }
     // 断言注册表(spec v2 §3):读侧 Scenario 不带该键,从 GET /draft 补 —
-    // 重载后编排器保存(整包 PUT)才不会把存量条目冲掉。二级数据降级
-    // (loadDataSets 同款):拉取失败不阻断 composer 加载,保持缺省空。
+    // 重载后编排器保存(整包 PUT)才不会把存量条目冲掉。拉取失败不阻断
+    // composer 加载(降级同 loadDataSets),但置 registryHydrated=false:
+    // 本地空 registry 不可信,saveDraft 落盘前会先重试水化(终审 F2)。
+    registryHydrated = false
     try {
       registry.value = (await api.getScenarioDraft(scenarioId.value!)).assertion_registry
         ?? { entries: [] }
+      registryHydrated = true
     } catch (e) {
       showError('加载断言注册表', undefined, (e as Error).message)
     }
@@ -830,6 +839,28 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
   // 编辑场景:definition.scenarioId 已由 loadScenario 从路由回填,update 时锁定不变。
   if (!scenario.value && definition.value.scenarioId === 'sc-new') {
     definition.value.scenarioId = genScenarioId(meta.value.name)
+  }
+  // 注册表未水化(加载时 GET /draft 失败)→ 保存前重试拉取:带未水化
+  // (空)registry 的整包 PUT 会把存量条目永久冲掉(终审 F2)。重试成功
+  // → 按 id 并集合并(失败窗口内本地新增不丢);仍失败 → 中止本次保存 —
+  // 手动弹错,自动保存静默返回 false、指示灯保持「未保存」,下次窗口
+  // 重试(与后端掉线时自动保存失败同款语义)。
+  if (!registryHydrated) {
+    try {
+      const sid = scenario.value?.meta.scenarioId ?? definition.value.scenarioId
+      const fetched = (await api.getScenarioDraft(sid)).assertion_registry ?? { entries: [] }
+      const localIds = new Set(registry.value.entries.map((e) => e.id))
+      registry.value = {
+        entries: [
+          ...fetched.entries.filter((e) => !localIds.has(e.id)),
+          ...registry.value.entries,
+        ],
+      }
+      registryHydrated = true
+    } catch (e) {
+      if (!silent) showError('加载断言注册表', undefined, (e as Error).message)
+      return false
+    }
   }
   saving.value = true
   saveState.value = 'saving'
@@ -990,8 +1021,8 @@ async function onRunConfirm(
       ...(opts?.parallel && opts.parallel !== 1 ? { parallel: opts.parallel } : {}),
       ...(opts?.serviceBindings && Object.keys(opts.serviceBindings).length
         ? { serviceBindings: opts.serviceBindings } : {}),
-      // 断言注入条目(spec v2 §5 异常组):空选不随 body 上送;后端
-      // RunRequest 暂未接收该键 — 静默丢弃,Task 6 建模后生效。
+      // 断言注入条目(spec v2 §5 异常组):空选不随 body 上送;键已建模
+      // (RunRequest.injection_entry_ids)且 dispatcher 消费生成注入族。
       ...(opts?.injectionEntryIds?.length
         ? { injectionEntryIds: opts.injectionEntryIds } : {}),
     }

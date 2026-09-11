@@ -4,6 +4,10 @@
  * injection 默认取基线 config.vars)+ 显式保存调度(registry 不在 dirty
  * watch 源 → 防抖自动 PUT 须携带 assertion_registry,标记不丢)。
  *
+ * 终审 F2:loadScenario 的 GET /draft 失败(注册表未水化)→ 本地空
+ * registry 不可信 — 保存前重试拉取合并;重试仍失败则中止保存,
+ * 绝不带空 assertion_registry 整包 PUT(会把存量条目永久冲掉)。
+ *
  * 骨架 = CaseComposer.vardemote.test.ts 的 mock 面(模块 mock 构造器 impl
  * + 真实 vue-router memory history);挂载直取 ?step=4 进 Canvas 步,
  * 断言落在 draft store 同步面与 updateScenario spy。
@@ -152,6 +156,77 @@ describe('CaseComposer — registryAdd 落条目 + 保存调度(spec v2 §4)', (
     const draft = (api.updateScenario as any).mock.calls[0][1]
     expect(draft.assertion_registry.entries).toHaveLength(1)
     expect(draft.assertion_registry.entries[0].anchor).toEqual(ANCHOR)
+    w.unmount()
+  })
+})
+
+describe('CaseComposer — 注册表水化失败防擦除(终审 F2)', () => {
+  const ANCHOR = { stepIndex: 0, source: 'body' as const, jsonpath: '$.base_url', varName: 'base_url' }
+
+  /** 服务端存量注册表(用户精心维护的条目 — 擦除事故的受害面) */
+  const SERVER_DRAFT = {
+    definition: {},
+    orchestration: { steps: [], resourceMeta: {} },
+    assertion_registry: {
+      entries: [{
+        id: 'inj-server-1',
+        name: '存量偏离',
+        anchor: { stepIndex: 0, source: 'body', jsonpath: '$.amount', varName: 'amount' },
+        injection: [{ varName: 'amount', value: '-1' }],
+        asserts: [],
+      }],
+    },
+  } as any
+
+  it('GET /draft 加载失败 + 保存前重试仍失败 → 自动保存中止,不 PUT 空 assertion_registry', async () => {
+    // 加载与重试全部失败(草稿端点持续不可达)
+    vi.mocked(api.getScenarioDraft).mockRejectedValue(new Error('draft 503'))
+    const w = await mountPage()
+    ;(api.updateScenario as any).mockClear()
+    const canvas = w.findComponent(CaseComposerCanvas)
+    canvas.vm.$emit('registryAdd', ANCHOR)
+    await nextTick()
+    await flushPromises()
+    vi.advanceTimersByTime(2500)
+    await flushPromises()
+    await flushPromises()
+    // 加载 1 次 + 保存前重试 1 次;重试失败 → 中止保存 — 绝不带未水化
+    //(空/仅本地)registry 整包 PUT 冲掉服务端存量条目
+    expect(api.getScenarioDraft).toHaveBeenCalledTimes(2)
+    expect(api.updateScenario).not.toHaveBeenCalled()
+    w.unmount()
+  })
+
+  it('重试成功 → 按 id 并集水化后 PUT(存量 + 失败窗口内本地新增);水化后不再重拉', async () => {
+    // 加载瞬时失败,保存前重试恢复并带回存量注册表
+    vi.mocked(api.getScenarioDraft)
+      .mockRejectedValueOnce(new Error('transient'))
+      .mockResolvedValue(SERVER_DRAFT)
+    const w = await mountPage()
+    ;(api.updateScenario as any).mockClear()
+    const canvas = w.findComponent(CaseComposerCanvas)
+    canvas.vm.$emit('registryAdd', ANCHOR)   // 失败窗口内本地新增(偏离 1)
+    await nextTick()
+    await flushPromises()
+    vi.advanceTimersByTime(2500)
+    await flushPromises()
+    await flushPromises()
+    expect(api.updateScenario).toHaveBeenCalledTimes(1)
+    const entries = (api.updateScenario as any).mock.calls[0][1].assertion_registry.entries
+    // 并集:服务端存量在前,本地新增在后(按 id 不重不丢)
+    expect(entries).toHaveLength(2)
+    expect(entries[0].id).toBe('inj-server-1')
+    expect(entries[1].name).toBe('偏离 1')
+
+    // 水化完成后:后续自动保存不再重拉 /draft(registryHydrated 已置位)
+    canvas.vm.$emit('registryAdd', ANCHOR)
+    await nextTick()
+    await flushPromises()
+    vi.advanceTimersByTime(2500)
+    await flushPromises()
+    await flushPromises()
+    expect(api.updateScenario).toHaveBeenCalledTimes(2)
+    expect(api.getScenarioDraft).toHaveBeenCalledTimes(2)
     w.unmount()
   })
 })

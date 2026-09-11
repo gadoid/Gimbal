@@ -4,8 +4,10 @@
  * 断言注册表条目在运行对话框以「异常组」与数据集(正常组)并列多选:
  * - INJ-1 条目区渲染 + 死条目(悬空)禁选(deadEntryIds 由 CaseComposer 预计算)
  * - INJ-2 勾选条目 → confirm 载荷含 injectionEntryIds;总量闸计入条目数
- *   ((Σ数据集行数 + 选中条目数)× nRuns ≤ 200;基线态 = 1 隐式空行)
+ *   ((Σ数据集行数 + 选中条目数)× nRuns ≤ 200;仅条目(无数据集)态
+ *   = 条目数 × nRuns — 隐式基线抑制,对齐 dispatch 抑制语义,不 +1)
  *   INJ-2b 补数据集分支的 (Σrows + 条目数)× nRuns 数值断言
+ *   INJ-2c 合并态(数据集 + 条目)× nRuns>1:两族合计,无基线加算
  * - INJ-3 方案回填链:选中条目存方案 → saveScheme 载荷含 injectionEntryIds
  *   → 重新选择该方案 → injectionIds 回填(核心透传链,双向)
  *   INJ-3b 已删条目 / INJ-3c 死而现存条目:降级标注 + 回填静默过滤
@@ -54,8 +56,11 @@ describe('RunDialog — 注入条目多选(spec v2 §5)', () => {
     await flushPromises()
     ;(w.vm as any).injectionIds = ['inj-1']
     await flushPromises()
-    // 无数据集 = 基线态:1 隐式空行 + 1 注入条目 = 2 次运行(条目与数据集行并列计闸)
-    expect(w.find('.summary-chip.total').text()).toBe('2 次运行')
+    // 无数据集 = 仅注入条目态:dispatch 抑制隐式基线(注入族自身就是基线行,
+    // run_dispatcher: not fanout_datasets and not selected_entries 才补基线)→
+    // total = 1 条目 × nRuns=1,不 +1;基线 ×1 chip 不得承诺不会跑的纯基线 case
+    expect(w.find('.summary-chip.total').text()).toBe('1 次运行')
+    expect(w.text()).not.toContain('基线 ×1')
     await w.findAll('button').find((b) => b.text().includes('发起运行'))!.trigger('click')
     const emitted = w.emitted('confirm')
     expect(emitted).toBeTruthy()
@@ -126,6 +131,30 @@ describe('RunDialog — 注入条目多选(spec v2 §5)', () => {
     await flushPromises()
     // 数据集默认全选(3 行)+ 1 注入条目 = (3 + 1) × nRuns=1
     expect(w.find('.summary-chip.total').text()).toBe('4 次运行')
+    w.unmount()
+  })
+
+  it('INJ-2c: 合并态(数据集 + 条目)× nRuns>1 = (Σrows + 条目数)× nRuns,无基线加算', async () => {
+    const w = mountDialog({
+      dataSets: [
+        { datasetId: 'ds-1', scenarioId: 'sc-1', name: 'A', rowCount: 2, preview: [] },
+        { datasetId: 'ds-2', scenarioId: 'sc-1', name: 'B', rowCount: 3, preview: [] },
+      ],
+      assertionEntries: [
+        { id: 'inj-a', name: '金额为负', injection: [], asserts: [] },
+        { id: 'inj-b', name: '超时偏离', injection: [], asserts: [] },
+      ] as any[],
+      deadEntryIds: [],
+    })
+    await flushPromises()
+    ;(w.vm as any).injectionIds = ['inj-a', 'inj-b']
+    // 高级区第一个 number input = nRuns(第二个是 parallel;totalRuns 同款)
+    await w.findAll('input[type="number"]')[0].setValue('2')
+    await flushPromises()
+    // 两数据集默认全选(2+3 行)+ 2 注入条目,× nRuns=2 = (5+2)×2 = 14;
+    // 有数据集行即无隐式基线,总数只含两族合计
+    expect(w.find('.summary-chip.total').text()).toBe('14 次运行')
+    expect(w.text()).not.toContain('基线 ×1')
     w.unmount()
   })
 })

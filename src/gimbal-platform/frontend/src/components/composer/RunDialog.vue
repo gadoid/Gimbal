@@ -200,7 +200,12 @@
 
         <footer class="run-footer">
           <div class="run-summary">
-            <span v-if="useBaseline || selectedDatasets.length === 0" class="summary-chip">基线 ×1</span>
+            <!-- 仅注入条目(无数据集行)时隐式基线被抑制(dispatch 只派注入族) —
+                 不承诺一个不会跑的纯基线 case,该分支的 case 来源由注入条目 chip 承载 -->
+            <span
+              v-if="(useBaseline || selectedDatasets.length === 0) && !injectionIds.length"
+              class="summary-chip"
+            >基线 ×1</span>
             <span v-if="selectedDatasets.length" class="summary-chip">
               {{ selectedDatasets.length }} 数据集
             </span>
@@ -500,9 +505,14 @@ const MAX_TOTAL_RUNS = 200
 const totalRuns = computed(() => {
   // 注入条目与数据集行并列计闸(spec v2 §5):每个选中条目 = 一条 case 行。
   const inj = injectionIds.value.length
-  // 基线或空选择都按一个隐式空行计(D12:confirm 原样透传空 dataSetIds 即基线,
-  // 显示必须与派发语义一致,不能谎报 0 次)
-  if (useBaseline.value || selectedDatasets.value.length === 0) return (1 + inj) * (nRuns.value || 1)
+  // 基线或空选择(且无注入条目)按一个隐式空行计(D12:confirm 原样透传空
+  // dataSetIds 即基线,显示必须与派发语义一致,不能谎报 0 次)。仅注入条目
+  // 时隐式基线被抑制 — dispatch 侧注入族自身就是基线行(带偏离),不再
+  // 叠加隐式空行(run_dispatcher: not fanout_datasets and not selected_entries
+  // 才补基线)→ total = 条目数 × nRuns,不得 +1。
+  if (useBaseline.value || selectedDatasets.value.length === 0) {
+    return (inj > 0 ? inj : 1) * (nRuns.value || 1)
+  }
   return (props.dataSets
     .filter(d => selectedDatasets.value.includes(d.datasetId))
     .reduce((sum, d) => sum + (d.rowCount || 0), 0) + inj) * (nRuns.value || 1)
