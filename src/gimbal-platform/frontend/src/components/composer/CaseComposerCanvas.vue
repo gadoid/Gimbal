@@ -357,6 +357,9 @@
                   :tag-label="currentTagLabels[idx]"
                   :expand-when="jumpSeq > 0 && idx === jumpTargetIdx"
                   @remove="removeStrategy(currentStep, s)"
+                  @exp-promote="onExpPromote(idx)"
+                  @exp-restore="onExpRestore(idx)"
+                  @exp-nav="onExpNav"
                 />
                 <el-dropdown trigger="click" @command="addStrategy(currentStep, $event as string)">
                   <!-- type="button": el-form 渲染原生 form,无 type 的按钮是 submit,
@@ -531,7 +534,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import draggable from 'vuedraggable'
 import CaseComposerCatalog from './CaseComposerCatalog.vue'
 import FieldForm from './FieldForm.vue'
@@ -545,6 +548,7 @@ import ValueSourcePicker from './ValueSourcePicker.vue'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { useConstantsStore } from '@/stores/constants'
 import { deriveVarRegistry } from '@/utils/var-registry'
+import { expectVarNameOf, TPL_FULL_RE } from '@/utils/dataset-segments'
 import {
   getFullEndpoint, listStrategyKinds, getStrategyKindFull, resolveResponsePaths,
   validateEndpointFieldStates,
@@ -590,7 +594,11 @@ const emit = defineEmits<{
   /** 内联创建别名双写的声明面(config.services 整表替换) */
   'update:services': [Record<string, string>]
   'varPromote': [name: string, value: unknown]
+  /** 期望还原上报(§5.2 逆动作):CaseComposer 删 config.vars 键 */
+  'varDemote': [name: string]
   'seedVar': [name: string, spec: Record<string, unknown>],
+  /** 断言卡"↗ 数据集"导航:跳列表页由 CaseComposer 落(不知具体 datasetId) */
+  'expNav': [],
 }>()
 
 const local = reactive<StepView[]>([...(props.steps || [])])
@@ -960,6 +968,58 @@ function onVarInsert(_f: IOFieldBinding, name: string) {
 function onVarPromote(_f: IOFieldBinding, name: string, value: unknown) {
   emit('varPromote', name, value)
   ElMessage.success(`已设为变量 ${name} — 默认值登记到 ③ 共享变量,保存草稿后生效`)
+}
+
+// ── 期望变量提升(spec §5.2):断言卡动作行的值落地 ───────────────────
+//    StrategyForm 只发事件,跨层动作(expected 模板化/还原 + varPromote/
+//    varDemote 上抛)在此单一真源;命名用 Task 1 的 expectVarNameOf。
+
+/** 期望提升(spec §5.2):expected → ${var.exp_*};撞名对话框改名,不静默 _2 */
+function onExpPromote(idx: number) {
+  const step = currentStep.value
+  if (!step) return
+  const st = step.strategy[idx] as { expected?: unknown; target?: unknown }
+  const base = expectVarNameOf(String(st.target ?? ''))
+  const vars = (draftStore.draft?.definition?.config?.vars ?? {}) as Record<string, unknown>
+  if (Object.prototype.hasOwnProperty.call(vars, base)) {
+    ElMessageBox.prompt(
+      `期望变量 ${base} 已存在(③ 共享变量里有同名键)。请换一个名字:`,
+      '撞名 — 改名后继续',
+      {
+        confirmButtonText: '确定', cancelButtonText: '取消',
+        inputPattern: /^[A-Za-z_][A-Za-z0-9_]*$/,
+        inputErrorMessage: '变量名须以字母/下划线开头,仅含字母/数字/下划线',
+      },
+    ).then(({ value }) => { if (value) applyExpPromote(st, value.trim()) }).catch(() => {})
+    return
+  }
+  applyExpPromote(st, base)
+}
+
+function applyExpPromote(st: { expected?: unknown; target?: unknown }, name: string) {
+  const baseline = st.expected ?? null
+  ;(st as { expected?: unknown }).expected = `\${var.${name}}`
+  emit('varPromote', name, baseline)
+  ElMessage.success(`期望已模板化 \${var.${name}} — 数据集行可逐行供值;不挂数据集 = 基线`)
+}
+
+/** 逆动作:expected 写回基线字面量 + varDemote 删键;死键软提示(spec §5.2) */
+function onExpRestore(idx: number) {
+  const step = currentStep.value
+  if (!step) return
+  const st = step.strategy[idx] as { expected?: unknown }
+  const m = TPL_FULL_RE.exec(String(st.expected ?? ''))
+  if (!m) return
+  const name = m[1]
+  const vars = (draftStore.draft?.definition?.config?.vars ?? {}) as Record<string, unknown>
+  st.expected = (vars[name] as unknown) ?? null
+  emit('varDemote', name)
+  ElMessage.warning(`已还原为字面量;数据集行若引用 ${name} 将成死键(运行无效果,可在编辑器看到提示)`)
+}
+
+/** 断言卡"↗ 数据集"导航:跳列表页由 CaseComposer 落(编排器不知具体 datasetId) */
+function onExpNav() {
+  emit('expNav')
 }
 
 // ── 字段状态控制(§5.4 + 2026-09-07 §2.3/§2.4)───────────────────────

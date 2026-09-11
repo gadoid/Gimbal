@@ -37,6 +37,7 @@ vi.mock('@/api/scenario-composer', () => ({
     ], base_fields: [] },
     assertion: { kind: 'assertion', label: '断言', phase: 'verifying', fields: [
       { name: 'target', path: 'target', ui_kind: 'text', source_kind: 'independent', required: true, description: null, example: null, default: null, enum: null },
+      { name: 'expected', path: 'expected', ui_kind: 'text', source_kind: 'independent', required: false, description: null, example: null, default: null, enum: null },
     ], base_fields: [] },
     assign: { kind: 'assign', label: '注入响应变量', phase: 'before_request', fields: [], base_fields: [] },
   }[kind] ?? { kind, label: kind, phase: 'after_request', fields: [], base_fields: [] })),
@@ -2548,6 +2549,139 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
     await flushPromises()
     expect(w.find('.vsp-error').exists()).toBe(false)
     expect(w.find('.vsp-param-row input').exists()).toBe(true)
+    w.unmount()
+  })
+})
+
+/**
+ * 期望变量提升(spec §5.2,2026-09-10):断言卡 expected 模板化
+ * ${var.exp_*} + 基线登记 config.vars(varPromote 链复用)+ 还原
+ * (写回基线字面量 + varDemote 删键新通路)+ 撞名对话框(不静默 _2)。
+ */
+describe('CaseComposerCanvas — 期望变量提升(§5.2)', () => {
+  it('X1: 设为期望变量 → expected 模板化 ${var.exp_code} + varPromote 上抛基线', async () => {
+    const { listStrategyKinds } = await import('@/api/scenario-composer')
+    const kindsMock = (listStrategyKinds as any).getMockImplementation()
+    ;(listStrategyKinds as any).mockResolvedValue([{ kind: 'assertion', label: '断言' }])
+    try {
+      const s0 = mkStep({
+        strategy: [{ kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: 200 } as any],
+      })
+      const { w } = mountCanvas([s0])
+      await flushPromises()
+      await w.find('.sf-head').trigger('click')          // 展开断言卡
+      await w.find('.sf-exp-promote').trigger('click')   // 设为期望变量
+      await flush()
+      expect((s0.strategy[0] as any).expected).toBe('${var.exp_code}')
+      const canvas = w.findComponent(CaseComposerCanvas)
+      expect(canvas.emitted('varPromote')).toEqual([['exp_code', 200]])
+      // 已模板化态:徽标 + 还原入口出现,提升按钮退场
+      expect(w.find('.sf-exp-badge').text()).toContain('exp_code')
+      expect(w.find('.sf-exp-restore').exists()).toBe(true)
+      expect(w.find('.sf-exp-promote').exists()).toBe(false)
+      w.unmount()
+    } finally {
+      ;(listStrategyKinds as any).mockImplementation(kindsMock)
+    }
+  })
+
+  it('X2: 撞名 → ElMessageBox.prompt 改名(不静默 _2);确认后用新名', async () => {
+    const { listStrategyKinds, ElMessageBox } = await Promise.all([
+      import('@/api/scenario-composer'),
+      import('element-plus'),
+    ]).then(([a, b]) => ({ listStrategyKinds: a.listStrategyKinds, ElMessageBox: b.ElMessageBox }))
+    const kindsMock = (listStrategyKinds as any).getMockImplementation()
+    ;(listStrategyKinds as any).mockResolvedValue([{ kind: 'assertion', label: '断言' }])
+    const promptSpy = vi.spyOn(ElMessageBox, 'prompt').mockResolvedValue({ value: 'exp_code_neg' } as any)
+    try {
+      // beforeEach 已有 base_url;再造撞名:config.vars 先登记 exp_code
+      const draft = useScenarioDraftStore()
+      draft.draft!.definition.config.vars = { base_url: 'http://x', exp_code: 200 }
+      const s0 = mkStep({
+        strategy: [{ kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: 404 } as any],
+      })
+      const { w } = mountCanvas([s0])
+      await flushPromises()
+      await w.find('.sf-head').trigger('click')
+      await w.find('.sf-exp-promote').trigger('click')
+      await flushPromises()
+      expect(promptSpy).toHaveBeenCalled()
+      expect((s0.strategy[0] as any).expected).toBe('${var.exp_code_neg}')
+      expect(w.findComponent(CaseComposerCanvas).emitted('varPromote')).toEqual([['exp_code_neg', 404]])
+      w.unmount()
+    } finally {
+      promptSpy.mockRestore()
+      ;(listStrategyKinds as any).mockImplementation(kindsMock)
+    }
+  })
+
+  it('X3: 还原 → expected 写回基线字面量 + varDemote 上抛(删键新通路)', async () => {
+    const { listStrategyKinds } = await import('@/api/scenario-composer')
+    const kindsMock = (listStrategyKinds as any).getMockImplementation()
+    ;(listStrategyKinds as any).mockResolvedValue([{ kind: 'assertion', label: '断言' }])
+    try {
+      const draft = useScenarioDraftStore()
+      draft.draft!.definition.config.vars = { base_url: 'http://x', exp_code: 200 }
+      const s0 = mkStep({
+        strategy: [{ kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: '${var.exp_code}' } as any],
+      })
+      const { w } = mountCanvas([s0])
+      await flushPromises()
+      await w.find('.sf-head').trigger('click')
+      await w.find('.sf-exp-restore').trigger('click')
+      await flush()
+      expect((s0.strategy[0] as any).expected).toBe(200)   // 写回 config.vars 登记的基线
+      expect(w.findComponent(CaseComposerCanvas).emitted('varDemote')).toEqual([['exp_code']])
+      // 回到未模板化态:提升按钮重现
+      expect(w.find('.sf-exp-promote').exists()).toBe(true)
+      w.unmount()
+    } finally {
+      ;(listStrategyKinds as any).mockImplementation(kindsMock)
+    }
+  })
+
+  it('X4: 徽标点击 expNav 上抛(断言卡 → 数据集导航入口)', async () => {
+    const { listStrategyKinds } = await import('@/api/scenario-composer')
+    const kindsMock = (listStrategyKinds as any).getMockImplementation()
+    ;(listStrategyKinds as any).mockResolvedValue([{ kind: 'assertion', label: '断言' }])
+    try {
+      const s0 = mkStep({
+        strategy: [{ kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: '${var.exp_code}' } as any],
+      })
+      const { w } = mountCanvas([s0])
+      await flushPromises()
+      await w.find('.sf-head').trigger('click')
+      await w.find('.sf-exp-nav').trigger('click')
+      expect(w.findComponent(CaseComposerCanvas).emitted('expNav')).toBeTruthy()
+      w.unmount()
+    } finally {
+      ;(listStrategyKinds as any).mockImplementation(kindsMock)
+    }
+  })
+
+  it('X5: VarSelector exp_* 标注"期望"但不禁选', async () => {
+    const { mount: mountModal } = await import('@vue/test-utils')
+    const VarSelectorModal = (await import('@/components/composer/VarSelectorModal.vue')).default
+    const open = ref(true)
+    const w = mountModal(VarSelectorModal, {
+      props: {
+        modelValue: open.value,
+        'onUpdate:modelValue': (v: boolean) => { open.value = v },
+        entries: [
+          { name: 'exp_code', origin: 'config', stepIdx: null, expression: null },
+          { name: 'base_url', origin: 'config', stepIdx: null, expression: null },
+        ],
+      },
+      global: { plugins: [ElementPlus] },
+      attachTo: document.body,
+    })
+    await flush()
+    const items = [...document.querySelectorAll('.var-item')] as HTMLElement[]
+    const expEl = items.find((el) => el.textContent!.includes('exp_code'))!
+    expect(expEl.querySelector('.var-exp-tag')).toBeTruthy()          // 标注在场
+    expect(expEl.classList.contains('disabled')).toBe(false)          // 不禁选(双用合法)
+    expEl.click()                                                      // 可选
+    await flush()
     w.unmount()
   })
 })

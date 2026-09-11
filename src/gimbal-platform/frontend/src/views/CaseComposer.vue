@@ -156,6 +156,7 @@
               :services="definition.config?.services ?? {}"
               @update:services="onServicesUpdate"
               @var-promote="onVarPromote"
+              @var-demote="onVarDemote"
               @seed-var="seedPoolVar"
             />
           </transition>
@@ -489,6 +490,14 @@ function onVarPromote(name: string, value: unknown) {
     ...definition.value,
     config: { ...config, vars: { ...(config.vars ?? {}), [name]: value } },
   }
+}
+
+/** Canvas 期望还原上报(spec §5.2 逆动作):config.vars 删键(immutable 替换) */
+function onVarDemote(name: string) {
+  const config = definition.value.config
+  if (!config?.vars || !(name in config.vars)) return
+  const { [name]: _removed, ...rest } = config.vars
+  definition.value = { ...definition.value, config: { ...config, vars: rest } }
 }
 
 /** Canvas 内联创建别名双写的声明面落库(config.services 整表替换) */
