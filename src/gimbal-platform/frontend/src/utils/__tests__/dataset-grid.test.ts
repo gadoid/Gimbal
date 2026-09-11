@@ -11,7 +11,7 @@ import {
   type CellState,
 } from '@/utils/dataset-grid'
 
-// 内联列 fixture(派生器已随基线区退场删除;step0 body {amount/customer_id/remark},
+// 内联列 fixture(step0 body {amount/customer_id/remark},
 // step1 body {page/size} — var ×2 + direct ×3,顺序 = 步骤内字段序)
 const cols: BaselineColumn[] = [
   { stepIndex: 0, source: 'body', field: 'amount', kind: 'var', varName: 'amount', baseline: '100' },

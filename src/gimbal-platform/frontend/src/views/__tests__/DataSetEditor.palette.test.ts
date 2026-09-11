@@ -605,11 +605,8 @@ it('CSV 导出带 (description) 行;body var 有描述(IOFieldBinding 命中)', 
   expect(args.descriptions[1]).toBe('页码')          // step1.body.page
 })
 
-// ── 提升退场(裁定 A:列宇宙 = config.vars,编辑器只消费不声明)──────
-// promote/demote/demoteLast/promotedKeys/promotedOrder/isPromotableVar/
-// col-promoted 整体移除(Task 6);基线区也已退场(2026-09-11)— var 基线
-// 编辑入口 = 置顶基线行,直填编辑的家在编排器 FieldForm。本节钉死退场后
-// 语义:提升 / 撤销入口在任何位置不再出现。
+// ── 提升退场锚定(列宇宙 = config.vars,编辑器只消费不声明;
+//    退场记录见 docs/adr/0003)────────────────────────────────────
 
 it('提升已退场:任何位置无「提升为变量」「撤销提升」;基线行 = var 基线编辑入口', async () => {
   const w = mountEditor()
@@ -624,13 +621,13 @@ it('提升已退场:任何位置无「提升为变量」「撤销提升」;基�
   expect(inputs.some((i) => (i.element as HTMLInputElement).value === '1')).toBe(true)
 })
 
-// ── 引用徽标步骤名(原步骤分组行 P1.4 → §6 变量优先:分组行/段首线/
-//    共享徽标退场,步骤语义由列头引用徽标 [N·步骤名] 承载)────────────
+// ── 引用徽标步骤名(§6 变量优先:步骤语义由列头引用徽标 [N·步骤名] 承载,
+//    无分组行/段首线/共享徽标;退场记录见 docs/adr/0003)────────────
 
 it('引用徽标:orchestration 缺名降级 Step N;分组行/段首线全数退场', async () => {
   const w = mountEditor()
   await flushPromises()
-  // 步骤分组行 / 段首类退场(段机制整体移除,§6 变量优先)
+  // 步骤分组行 / 段首线不存在(§6 变量优先)
   expect(w.find('.data-table tr.row-step-group').exists()).toBe(false)
   expect(w.findAll('.data-table .is-step-start').length).toBe(0)
   // 徽标步骤名:orchestration.steps 空 → 兜底 Step N(与 RunDialog stepTo 同语义)

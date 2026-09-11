@@ -1,4 +1,4 @@
-<!-- DataSetEditor.vue — 变量优先双模式(spec v2 §6;基线区已退场)
+<!-- DataSetEditor.vue — 变量优先双模式(spec v2 §6)
 
      信息架构:
        - 变量选择器:下拉单选「全部(N 变量)」或某个变量(>1 变量才显示)
@@ -564,8 +564,8 @@ const previewedDetail = computed(() => previewedRows.value.map((item) => {
   }
 }))
 
-/** 直填列编辑入口已退场(2026-09-11 基线区退场):字面值的家在编排器
- *  FieldForm — 数据集编辑器只消费 config.vars 列宇宙,不再改 step 字面值。 */
+/** 字面值的家在编排器 FieldForm — 数据集编辑器只消费 config.vars
+ *  列宇宙,不改 step 字面值(退场记录见 docs/adr/0003)。 */
 async function onSaveBaseline() {
   if (savingBaseline.value) return
   if (!draft.value) return

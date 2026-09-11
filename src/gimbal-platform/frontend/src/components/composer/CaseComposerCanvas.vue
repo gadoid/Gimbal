@@ -626,7 +626,7 @@ function inferProtocol(step: StepView | undefined): string {
 }
 
 /** 当前 step 的请求目录(会话级按 endpoint_id 现拉 /full,不读持久化
- *  快照 — 旧 step.request.fields_meta 已废弃,不再作为数据源)。
+ *  快照;step.request.fields_meta 不作数据源 — 退场记录见 docs/adr/0003)。
  *  读 fullVersion 建立响应依赖:回填后树/reqTypeC 自动重算。 */
 function stepDecls(step: StepView | undefined) {
   void fullVersion.value

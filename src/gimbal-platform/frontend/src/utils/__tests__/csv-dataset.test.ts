@@ -5,7 +5,7 @@ import type { BaselineColumn } from '@/utils/dataset-palette'
 import { buildDataSetCsv, exportDataSetCsv, importDataSetCsv } from '@/utils/csv-dataset'
 import * as downloadMod from '@/utils/download'
 
-// 内联列 fixture(派生器已随基线区退场删除):1 个 var 列,baseline = '100'
+// 内联列 fixture:1 个 var 列,baseline = '100'
 const cols: BaselineColumn[] = [
   { stepIndex: 0, source: 'body', field: 'amount', kind: 'var', varName: 'amount', baseline: '100' },
 ]

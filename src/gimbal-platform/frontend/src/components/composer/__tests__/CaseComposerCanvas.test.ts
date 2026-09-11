@@ -2569,19 +2569,13 @@ describe('CaseComposerCanvas — value_source 一查多填(spec §7.3)', () => {
   })
 })
 
-/**
- * 期望提升链退场锚定(spec v2 §2/§9,2026-09-11):断言卡不再有
- * 设为期望变量/还原为字面量/期望列徽标 — 期望偏离的语义位置 =
- * 断言管理注册表(偏离注入编辑器承接),expected 回归字面量。
- */
 describe('CaseComposerCanvas — 期望提升链退场(spec v2 §2)', () => {
   it('EXP-EXIT: 断言卡无「设为期望变量」动作;expected 模板串不再有提升/还原入口', async () => {
     const { listStrategyKinds } = await import('@/api/scenario-composer')
     const kindsMock = (listStrategyKinds as any).getMockImplementation()
     ;(listStrategyKinds as any).mockResolvedValue([{ kind: 'assertion', label: '断言' }])
     try {
-      // 两形态并钉:字面量 expected(原提升按钮位)+ 已模板化 ${var.exp_*}
-      // (原 期望列徽标/还原按钮位)— 退场后两者都无任何提升/还原入口
+      // 两形态并钉:字面量 expected + 已模板化 ${var.exp_*} — 均无提升/还原入口
       const s0 = mkStep({
         strategy: [
           { kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: 200 } as any,
@@ -2596,7 +2590,7 @@ describe('CaseComposerCanvas — 期望提升链退场(spec v2 §2)', () => {
       await flush()
       expect(w.text()).not.toContain('设为期望变量')
       expect(w.text()).not.toContain('还原为字面量')
-      expect(w.text()).not.toContain('期望列')      // sf-exp-badge 一并退场
+      expect(w.text()).not.toContain('期望列')
       w.unmount()
     } finally {
       ;(listStrategyKinds as any).mockImplementation(kindsMock)

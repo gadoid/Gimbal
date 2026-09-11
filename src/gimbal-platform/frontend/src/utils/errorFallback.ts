@@ -9,8 +9,8 @@
  *   // → "保存失败: <server msg>" or just "保存失败" if no detail
  *
  * 第二参数 `err` 直接传 unknown,从 ErrorLike (msg/message) 抽详情。
- * 旧式三参 `showError(op, undefined, store.lastError)` 已废弃,store 层错误请
- * 直接 `throw` 出来,让 catch 块捕到再丢给 showError。
+ * store 层错误请直接 `throw` 出来,由 catch 块交给 showError —
+ * 双参签名之外不受支持。
  */
 import { ElMessage } from 'element-plus'
 

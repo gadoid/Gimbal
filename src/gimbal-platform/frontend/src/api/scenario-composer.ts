@@ -113,8 +113,8 @@ export async function deleteDataSet(datasetId: string): Promise<void> {
 
 // ── run ────────────────────────────────────────────────────────
 /** service → {authAlias?, url?} 绑定(spec §3.1/§5),与后端 ServiceBinding 同形。
- *  queryUser 已移除(2026-09-09 裁定):查询凭证唯一来源 = config.users
- *  首键(查询身份 = 执行身份),与运行方案无关。 */
+ *  查询凭证唯一来源 = config.users 首键(查询身份 = 执行身份),
+ *  与运行方案无关(退场记录见 docs/adr/0003)。 */
 export interface ServiceBinding {
   authAlias?: string
   url?: string

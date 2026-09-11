@@ -189,9 +189,9 @@ class DataSetDraft(BaseModel):
 # ─── runs ───────────────────────────────────────────────────────────
 class ServiceBinding(BaseModel):
     """service → {authAlias?, url?} 绑定(spec §3.1/§5)。
-    query_user 已移除(2026-09-09 裁定):查询凭证唯一来源 = config.users
-    首键(查询身份 = 执行身份),与运行方案无关;旧侧车残留键被
-    extra=ignore 静默丢弃。"""
+    查询凭证唯一来源 = config.users 首键(查询身份 = 执行身份),
+    与运行方案无关;侧车残留键被 extra=ignore 静默丢弃
+    (退场记录见 docs/adr/0003)。"""
     model_config = _CAMEL
 
     auth_alias: str | None = Field(default=None, alias="authAlias", max_length=128)

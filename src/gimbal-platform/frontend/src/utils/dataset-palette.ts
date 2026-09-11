@@ -1,11 +1,9 @@
 /**
  * dataset-palette.ts — 列描述类型(纯类型,零 IO)
  *
- * 历史上的列派生器(deriveBaselineColumns / fieldsOf / varNameOf /
- * renderTemplate)已随 DataSetEditor 基线区退场删除(2026-09-11):
- * 列宇宙 = config.vars,由 dataset-segments 的引用扫描派生。本文件
- * 只剩 BaselineColumn — 网格(dataset-grid)与 CSV 链(csv-dataset)
- * 共用的最小列形状。
+ * 列宇宙 = config.vars,由 dataset-segments 的引用扫描派生(退场
+ * 记录见 docs/adr/0003)。本文件仅承载 BaselineColumn — 网格
+ * (dataset-grid)与 CSV 链(csv-dataset)共用的最小列形状。
  */
 
 /** 网格 / CSV 链的最小列描述 */
