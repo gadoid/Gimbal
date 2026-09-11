@@ -2,8 +2,10 @@
 
      信息架构:
        - 顶部折叠基线(默认收起),按 step · source 树形分组,搜索过滤
-       - 下方全宽数据表格(行 = 数据,列 = 变量;直填列不进入表格)
-       - 每列 header 显示 变量名 + 步骤号 · source 缩写
+       - 下方全宽数据表格(行 = 数据,列 = 段内变量;直填列不进表格,基线区可编辑)
+       - 段 tabs(spec §6.2):引用扫描派生段,列作用域收缩到单 step 段;
+         "全部"仅小场景(全段列数 ≤8 默认选中)
+       - 期望列与输入列并排(行键 = varName),列头带「期望」徽标(target/operator)
        - 三态单元格:inherit(灰显基线 placeholder) / override-empty(红条) / override-value
        - TSV 粘贴 / CSV 导出 / CSV 导入
 
@@ -105,7 +107,14 @@
                     @update:model-value="(v: string) => setBaseline(col, v)"
                   />
                   <template v-else>
-                    <span class="direct-val">{{ col.baseline || '(空)' }}</span>
+                    <!-- 直填列退场数据表格(spec §6.2):基线区直填行改可编辑输入,
+                         编辑即改 step 字面值(所有数据共享,基线 dirty) -->
+                    <input
+                      class="baseline-direct-input"
+                      :value="directBaselineValue(col)"
+                      :placeholder="col.baseline || '空'"
+                      @input="(e: Event) => setDirectBaseline(col, (e.target as HTMLInputElement).value)"
+                    />
                     <el-button size="small" text type="primary" @click="promote(col)">提升为变量</el-button>
                   </template>
                   <!-- 只要字段当前还是 `${var.x}` 形态就显示撤销入口(不依赖会话状态) -->
@@ -152,6 +161,24 @@
           <el-button size="small" plain :disabled="!varColumns.length" @click="onExportCsv">导出 CSV</el-button>
         </div>
       </div>
+      <!-- 段 tabs(spec §6.2):>1 段才显示;列作用域 = 单 step 段,
+           "全部" = 全段并排(仅小场景,≤8 列时默认选中) -->
+      <div v-if="segments.length > 1" class="seg-tabs">
+        <button
+          v-for="(seg, si) in segments"
+          :key="`segtab:${seg.stepIndex}`"
+          type="button"
+          class="seg-tab"
+          :class="{ active: activeSegment === si }"
+          @click="activeSegment = si"
+        >步骤{{ seg.stepIndex + 1 }} · {{ stepLabel(seg.stepIndex) }}</button>
+        <button
+          type="button"
+          class="seg-tab"
+          :class="{ active: activeSegment === 'all' }"
+          @click="activeSegment = 'all'"
+        >全部({{ segments.reduce((n, s) => n + gridColumnsOf(s).length, 0) }} 列)</button>
+      </div>
       <!-- 横向滚动容器:变量列多时表格按 colgroup 定宽展开,拖动条滚动查看;
            工具栏留在滚动区外不随之移动 -->
       <div class="grid-scroll">
@@ -160,13 +187,14 @@
         <colgroup>
           <col class="col-select" />
           <col class="col-dataname" />
-          <col v-for="col in allColumns" :key="`cg:${col.stepIndex}:${col.source}:${col.field}`" class="col-data" />
+          <col v-for="col in visibleColumns" :key="`cg:${col.stepIndex}:${col.source}:${col.varName}`" class="col-data" />
           <col class="col-action" />
         </colgroup>
         <thead>
           <!-- 步骤分组行(P1.4):同 stepIndex 相邻列合并 colspan,横多列时
-               一眼看出列属于哪个步骤;名读 orchestration,缺名降级 Step N。 -->
-          <tr class="row-step-group">
+               一眼看出列属于哪个步骤;名读 orchestration,缺名降级 Step N。
+               段网格下仅 'all'(全段并排)渲染 — 单段模式段边界由 tabs 承载。 -->
+          <tr v-if="activeSegment === 'all'" class="row-step-group">
             <th class="th-select" />
             <th class="th-label" />
             <th
@@ -188,9 +216,9 @@
             </th>
             <th class="th-label">描述</th>
             <th
-              v-for="(col, ci) in allColumns"
-              :key="`info-d:${col.stepIndex}:${col.source}:${col.field}`"
-              :class="['th-data', isPromotableVar(col) ? 'col-promoted' : '', isStepStart(ci) ? 'is-step-start' : '']"
+              v-for="(col, ci) in visibleColumns"
+              :key="`info-d:${col.stepIndex}:${col.source}:${col.varName}`"
+              :class="['th-data', col.source === 'expect' ? 'col-expect' : '', isPromotableVar(bcOf(col)) ? 'col-promoted' : '', activeSegment === 'all' && isStepStart(ci) ? 'is-step-start' : '']"
               :title="descriptionByColumnKey.get(`${col.stepIndex}:${col.source}:${col.field}`) || col.field"
             >
               {{ descriptionByColumnKey.get(`${col.stepIndex}:${col.source}:${col.field}`) || '—' }}
@@ -201,17 +229,24 @@
             <th class="th-select" />
             <th class="th-label">字段</th>
             <th
-              v-for="(col, ci) in allColumns"
-              :key="`info-f:${col.stepIndex}:${col.source}:${col.field}`"
-              :class="['th-data', isPromotableVar(col) ? 'col-promoted' : '', isStepStart(ci) ? 'is-step-start' : '']"
-              :title="(col.kind === 'var' ? col.varName : col.field) ?? ''"
+              v-for="(col, ci) in visibleColumns"
+              :key="`info-f:${col.stepIndex}:${col.source}:${col.varName}`"
+              :class="['th-data', col.source === 'expect' ? 'col-expect' : '', isPromotableVar(bcOf(col)) ? 'col-promoted' : '', activeSegment === 'all' && isStepStart(ci) ? 'is-step-start' : '']"
+              :title="col.source === 'expect'
+                ? `期望列 ${col.varName} — 断言 ${col.expect?.target} ${col.expect?.operator}(步骤${col.stepIndex + 1})`
+                : `${col.stepIndex + 1} 步 ${col.source} · ${col.field}`"
             >
-              步骤{{ col.stepIndex + 1 }} - {{ col.kind === 'var' ? col.varName : col.field }}
+              步骤{{ col.stepIndex + 1 }} - {{ col.varName }}
               <span
-                v-if="col.kind === 'var' && col.varName && sharedVarNames.has(col.varName)"
+                v-if="segSharedVars.has(col.varName)"
                 class="shared-mark"
                 title="该变量被多个步骤引用 — 数据行里改一处,所有引用处生效"
               >共享</span>
+              <span
+                v-if="col.source === 'expect'"
+                class="exp-col-badge"
+                :title="`期望列 — 断言 ${col.expect?.target} ${col.expect?.operator}`"
+              >期望</span>
             </th>
             <th class="th-action" />
           </tr>
@@ -233,26 +268,19 @@
               />
             </td>
             <td
-              v-for="(col, ci) in allColumns"
-              :key="`c:${i}:${col.stepIndex}:${col.source}:${col.field}`"
-              :class="['td-data', cellClass(row, col), isPromotableVar(col) ? 'col-promoted' : '', isStepStart(ci) ? 'is-step-start' : '']"
-              :title="col.kind === 'var' ? col.baseline : col.baseline || '空'"
+              v-for="(col, ci) in visibleColumns"
+              :key="`c:${i}:${col.stepIndex}:${col.source}:${col.varName}`"
+              :class="['td-data', cellClass(row, bcOf(col)), col.source === 'expect' ? 'col-expect' : '', isPromotableVar(bcOf(col)) ? 'col-promoted' : '', activeSegment === 'all' && isStepStart(ci) ? 'is-step-start' : '']"
+              :title="bcOf(col).baseline"
             >
+              <!-- 期望列与输入列同款单元格:行键 = varName,期望列 baseline
+                   = config.vars 值(Task 1 契约),placeholder 显基线 -->
               <input
-                v-if="col.kind === 'var'"
-                :value="row[col.varName!] ?? ''"
+                :value="row[col.varName] ?? ''"
                 class="data-cell-input"
-                :placeholder="col.baseline"
-                @input="(e: Event) => onCellInput(i, col, (e.target as HTMLInputElement).value)"
-                @paste="(e: ClipboardEvent) => onCellPaste(e, col, i)"
-              />
-              <!-- 直填列:数据行里所有数据共享同一字面值;编辑即改 step 字面值(基线 dirty) -->
-              <input
-                v-else
-                :value="directBaselineValue(col)"
-                class="data-cell-input data-cell-direct"
-                :placeholder="col.baseline || '空'"
-                @input="(e: Event) => setDirectBaseline(col, (e.target as HTMLInputElement).value)"
+                :placeholder="col.baseline === undefined || col.baseline === null ? '' : String(col.baseline)"
+                @input="(e: Event) => onCellInput(i, bcOf(col), (e.target as HTMLInputElement).value)"
+                @paste="(e: ClipboardEvent) => onCellPaste(e, bcOf(col), i)"
               />
             </td>
             <td class="td-action">
@@ -291,7 +319,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Back, DataAnalysis, Delete } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -304,8 +332,11 @@ import { deriveBaselineColumns, fieldsOf, type BaselineColumn } from '@/utils/da
 import {
   cellDisplay, gridStats, groupByStepLocation,
   matchesQuery, parseTsvPaste, applyPastePlan,
-  varOnlyPalette,
 } from '@/utils/dataset-grid'
+import {
+  deriveSegments, gridColumnsOf, sharedVarNames, deadRowKeys,
+  type GridVarColumn,
+} from '@/utils/dataset-segments'
 import { exportDataSetCsv, importDataSetCsv } from '@/utils/csv-dataset'
 import { useFieldDescriptions } from '@/composables/useFieldDescriptions'
 
@@ -346,14 +377,59 @@ const baselineQuery = ref('')
 const allColumns = computed<BaselineColumn[]>(() =>
   draft.value ? deriveBaselineColumns(draft.value.definition) : [],
 )
-const varColumns = computed(() => varOnlyPalette(allColumns.value))
 const baselineGroups = computed(() => groupByStepLocation(allColumns.value))
 
+// ── 段网格(spec §6.2)────────────────────────────────────────
+/** 段派生(spec §6.2):打开编辑器对场景一次引用扫描(纯前端投影) */
+const segments = computed(() => deriveSegments(
+  draft.value?.definition?.steps ?? [],
+  draft.value?.definition?.config?.vars ?? {},
+))
+const segSharedVars = computed(() => sharedVarNames(segments.value))
+const ALL_THRESHOLD = 8   // "全部"仅小场景:全段列数 ≤8 默认全部(spec §6.2 初值)
+
+type SegSel = 'all' | number
+const activeSegment = ref<SegSel>('all')
+const segInitialized = ref(false)
+watch(segments, (segs) => {
+  if (segInitialized.value || !segs.length) return
+  segInitialized.value = true
+  const total = segs.reduce((n, s) => n + gridColumnsOf(s).length, 0)
+  activeSegment.value = total <= ALL_THRESHOLD ? 'all' : 0
+}, { immediate: true })
+
+/** 段内可编辑列(行键 = varName);'all' = 全段并排(小场景) */
+const visibleColumns = computed<GridVarColumn[]>(() => {
+  if (activeSegment.value === 'all') return segments.value.flatMap(gridColumnsOf)
+  const seg = segments.value[activeSegment.value]
+  return seg ? gridColumnsOf(seg) : []
+})
+
+/** GridVarColumn → BaselineColumn 适配:cellClass/onCellInput/onCellPaste/
+ *  isPromotableVar 既有签名消费完整 BaselineColumn 形状(最小适配对象补齐
+ *  stepIndex/source/field;期望列 source 无 'expect' 域 — 落 'body' 后
+ *  fieldsOf 按断言 target 查不到键,恒 false,安全)。 */
+function bcOf(col: GridVarColumn): BaselineColumn {
+  return {
+    stepIndex: col.stepIndex,
+    source: col.source === 'headers' ? 'headers' : 'body',
+    field: col.field,
+    kind: 'var',
+    varName: col.varName,
+    baseline: col.baseline === undefined || col.baseline === null ? '' : String(col.baseline),
+  }
+}
+
+/** 段内可编辑 var 列(粘贴列定位 / CSV 描述行 / 导出按钮消费;粘贴语义 = 当前段)。
+ *  CSV 导入导出的列宇宙走 allColumns(全量,不随段过滤)。 */
+const varColumns = computed<BaselineColumn[]>(() => visibleColumns.value.map(bcOf))
+
 // ── 步骤分组表头(P1.4:横多列时按 step 视觉分组,零后端)─────────
-/** 列序上同 stepIndex 的连续段(merge 相邻同段,colspan 呈现)。 */
+/** 列序上同 stepIndex 的连续段(merge 相邻同段,colspan 呈现)。
+ *  段网格下仅在 'all'(全段并排)渲染;单段模式段边界由 tabs 承载。 */
 const stepGroups = computed(() => {
   const groups: Array<{ stepIndex: number; colspan: number }> = []
-  for (const col of allColumns.value) {
+  for (const col of visibleColumns.value) {
     const last = groups[groups.length - 1]
     if (last && last.stepIndex === col.stepIndex) last.colspan++
     else groups.push({ stepIndex: col.stepIndex, colspan: 1 })
@@ -366,22 +442,12 @@ function stepLabel(i: number): string {
   const name = draft.value?.orchestration?.steps?.[i]?.name
   return name || `Step ${i + 1}`
 }
-/** 该列是所属步骤段的首列 → 渲染左分隔线(表头到数据行贯穿)。 */
+/** 该列是所属步骤段的首列 → 渲染左分隔线(表头到数据行贯穿)。
+ *  段网格下仅 'all' 模式消费(模板侧短路);单段模式无段间边界。 */
 function isStepStart(ci: number): boolean {
-  const cols = allColumns.value
+  const cols = visibleColumns.value
   return ci === 0 || cols[ci - 1].stepIndex !== cols[ci].stepIndex
 }
-/** 被多个 (step, source) 列引用的 varName — 字段行标「共享」。
- *  共享 var 改一处全局生效(config.vars 单值),提示用户跨步骤影响。 */
-const sharedVarNames = computed(() => {
-  const seen = new Set<string>()
-  const shared = new Set<string>()
-  for (const c of varColumns.value) {
-    if (seen.has(c.varName)) shared.add(c.varName)
-    else seen.add(c.varName)
-  }
-  return shared
-})
 const filteredGroups = computed(() => {
   const q = baselineQuery.value
   return baselineGroups.value
@@ -886,7 +952,18 @@ onMounted(async () => {
 .field-path.direct { color: #475569; }
 .field-sub { font-size: 11px; color: var(--color-text-secondary); }
 .baseline-edit { display: flex; align-items: center; gap: 8px; }
-.direct-val { font-family: var(--font-mono); font-size: 12px; color: #475569; }
+/* 直填行编辑输入(直填列退场数据表格后,字面值在基线区改)— 与数据格同形 */
+.baseline-direct-input {
+  width: 180px;
+  border: 1px solid #cbd5e1; background: #fff; border-radius: 4px;
+  padding: 4px 6px; font-family: var(--font-mono); font-size: 12px;
+  outline: none; box-sizing: border-box; color: var(--color-text-primary);
+}
+.baseline-direct-input:hover { border-color: #94a3b8; }
+.baseline-direct-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
 
 /* ── 数据表格 ── */
 .grid-card {
@@ -898,6 +975,11 @@ onMounted(async () => {
   padding: 10px 16px; border-bottom: 1px solid var(--color-border-tertiary);
   background: #f8fafc;
 }
+
+/* ── 段 tabs(spec §6.2):列作用域切换 ── */
+.seg-tabs { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 12px 0; }
+.seg-tab { border: 1px solid #e6e8ec; background: #fff; border-radius: 6px; padding: 4px 12px; font-size: 12px; cursor: pointer; color: #475569; }
+.seg-tab.active { border-color: #4f46e5; color: #4f46e5; background: #eef2ff; font-weight: 600; }
 
 /* 横向滚动:列少时表格仍占满(width:100%),列多时按 colgroup 定宽展开
    (min-width:max-content 赢),拖滚动条查看右侧列 */
@@ -960,6 +1042,9 @@ onMounted(async () => {
   font-size: 10px; line-height: 16px;
   vertical-align: middle;
 }
+/* 期望列(spec §6.2):列头徽标 + 淡紫底,与输入列并排但可辨识 */
+.col-expect .exp-col-badge { font-size: 10px; font-weight: 700; color: #6b21a8; background: #f3e8ff; padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
+.th-data.col-expect { background: #faf5ff; }
 .data-table .th-label, .data-table .td-label {
   background: #f8fafc; color: var(--accent);
   font-weight: 700; text-align: center;
@@ -1008,15 +1093,6 @@ onMounted(async () => {
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
   background: #fff;
 }
-
-/* 直填列:可编辑 input,改 step 字面值(所有数据共享)。视觉上跟 var 一致,
-   但用略浅的背景暗示「这是 baseline,不是 per-data 配置」。 */
-.data-table td.td-direct { background: #f8fafc; }
-.data-table .data-cell-direct {
-  /* 跟 var input 同形状,但稍淡的边框让用户感知「这是 baseline」 */
-  border-color: #e2e8f0;
-}
-.data-table .data-cell-direct:hover { border-color: #cbd5e1; }
 
 /* 三态单元格(只对 var 列有意义) */
 /* inherit 状态:背景与 override-value 区分(让用户知道「可编辑但当前用基线」) */
