@@ -240,6 +240,17 @@
     <!-- 用户认证(2026-08-25):场景级 users 快照 — 手动配置或凭证池导入 -->
     <UsersCard v-model="local.users" />
 
+    <!-- 断言管理(偏离注入)入口卡(spec v2 §7)— 跳独立编辑器 -->
+    <div class="c-card are-entry-card">
+      <div class="c-card-head">
+        <div>
+          <h3>断言管理</h3>
+          <p class="c-head-desc">偏离注入条目({{ assertionCount ?? 0 }})— 值偏离 + 期望配对,运行时与数据集并列选择</p>
+        </div>
+        <button class="c-add" @click="goAssertions">管理断言 →</button>
+      </div>
+    </div>
+
     <!--
       导出入口已统一上移到:
         - CaseComposer 顶栏 (任意 step 都可见)
@@ -252,10 +263,13 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import type { ConfigView, RetryPolicyView } from '@/types/plate'
 import { parseJson } from '../../utils/json'
 import { deriveBase } from '@/utils/service-alias'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
+import { scenarioAssertionsUrl } from '@/utils/links'
 import UsersCard from './UsersCard.vue'
 
 // plate TimePolicy 只有两态:record / timeout(带 seconds)。
@@ -270,9 +284,17 @@ const SYS_LABELS: Record<string, string> = {
 }
 function systemLabel(s: string) { return SYS_LABELS[s] || s }
 
-// 单一 props: modelValue 绑 plate ConfigView
-const props = defineProps<{ modelValue: ConfigView }>()
+// 单一 props: modelValue 绑 plate ConfigView;scenarioId/assertionCount
+// 供断言管理入口卡跳转/计数(spec v2 §7,Task 3)
+const props = defineProps<{ modelValue: ConfigView; scenarioId?: string; assertionCount?: number }>()
 const emit = defineEmits<{ 'update:modelValue': [ConfigView] }>()
+
+const router = useRouter()
+/** 跳断言管理编辑器;新建未保存场景没有落库 id — 提示先保存 */
+function goAssertions() {
+  if (!props.scenarioId || props.scenarioId === 'new') { ElMessage.warning('请先保存场景'); return }
+  router.push(scenarioAssertionsUrl(props.scenarioId))
+}
 
 const local = reactive<ConfigView>({
   setup: [...(props.modelValue?.setup || [])],
@@ -442,7 +464,7 @@ function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: 
 .c-page {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-.vars-card, .svc-card, .users-card { grid-column: 1 / -1; }
+.vars-card, .svc-card, .users-card, .are-entry-card { grid-column: 1 / -1; }
 @media (max-width: 960px) {
   .c-page { grid-template-columns: 1fr; }
 }
@@ -509,4 +531,7 @@ function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: 
 }
 .c-ns-grid { display: flex; flex-direction: column; gap: 12px; }
 .c-ns-group .c-kv-row:last-child { margin-bottom: 0; }
+
+/* 断言管理入口卡:头行右侧跳转按钮(共享 .c-card-head flex) */
+.are-entry-card .c-card-head .c-add { margin-left: auto; align-self: center; }
 </style>

@@ -144,6 +144,8 @@
               v-else-if="stepIdx === 2"
               key="config"
               v-model="definition.config"
+              :scenario-id="scenarioId"
+              :assertion-count="registry.entries.length"
             />
 
             <!-- ④ Canvas -->

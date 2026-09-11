@@ -27,3 +27,8 @@ export function scenarioDataSetUrl(
 ): string {
   return `/scenarios/${encodeURIComponent(scenarioId)}/data-sets/${encodeURIComponent(datasetId)}`
 }
+
+/** 断言管理(偏离注入)编辑器 — 场景级注册表(spec v2 §7) */
+export function scenarioAssertionsUrl(scenarioId: string): string {
+  return `/scenarios/${encodeURIComponent(scenarioId)}/assertions`
+}
