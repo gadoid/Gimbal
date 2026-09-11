@@ -64,7 +64,7 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             <span>已提取 · 运行时读取整个区块</span>
           </span>
-          <span v-if="nodeTpl(item.n)" class="node-tpl-badge" title="整容器引用变量模板 — 展开可编辑,清空恢复结构编辑">引用变量</span>
+          <span v-if="nodeTpl(item.n)" class="node-tpl-badge" title="扰动位 — 整容器由 ${var.*} 模板供值,数据集行可逐行换值">扰动位</span>
           <FieldStateSelect
             v-if="stateControl"
             :state="item.n.state"
@@ -165,7 +165,7 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             <span>已提取 · 运行时读取整个区块</span>
           </span>
-          <span v-if="nodeTpl(item.n)" class="node-tpl-badge" title="整容器引用变量模板 — 展开可编辑,清空恢复结构编辑">引用变量</span>
+          <span v-if="nodeTpl(item.n)" class="node-tpl-badge" title="扰动位 — 整容器由 ${var.*} 模板供值,数据集行可逐行换值">扰动位</span>
           <FieldStateSelect
             v-if="stateControl"
             :state="item.n.state"
@@ -288,7 +288,7 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             <span>已提取 · 运行时读取整个区块</span>
           </span>
-          <span v-if="nodeTpl(item.n)" class="node-tpl-badge" title="整容器引用变量模板 — 展开可编辑,清空恢复结构编辑">引用变量</span>
+          <span v-if="nodeTpl(item.n)" class="node-tpl-badge" title="扰动位 — 整容器由 ${var.*} 模板供值,数据集行可逐行换值">扰动位</span>
           <FieldStateSelect
             v-if="stateControl"
             :state="item.n.state"
@@ -400,6 +400,13 @@
           <template v-else-if="item.f.source_kind === 'generated'">dynamic · Assign</template>
           <template v-else>{{ item.f.source_kind }}</template>
         </span>
+        <!-- 扰动位徽标(spec §5.1):叶子值整串 ${var.x} → 数据集行可逐行
+             换值的身份呈现(仅徽标,零新通路) -->
+        <span
+          v-if="isPerturb(item.f)"
+          class="perturb-badge"
+          title="扰动位 — 该字段值由 ${var.*} 模板供值,数据集行可逐行换值(spec §5.1)"
+        >扰动位</span>
         <!-- 字段状态控制(§5.4):行尾状态下拉,写 step.field_states 增量
              (状态回写与值回写两通路分离) -->
         <FieldStateSelect
@@ -1305,6 +1312,12 @@ function isTpl(v: unknown): boolean {
   return typeof v === 'string' && v.includes('${')
 }
 
+/** 扰动位(spec §5.1):叶子值整串 ${var.x} 模板 → 徽标(身份呈现,零新通路) */
+function isPerturb(f: IOFieldBinding): boolean {
+  const v = getValue(f)
+  return typeof v === 'string' && /^\$\{var\.[A-Za-z0-9_.]+\}$/.test(v)
+}
+
 /** enum select 写值包裹(spec §7.1):select.value 恒为 string — number 型
  *  enum(type integer/number)写回 body 前 Number 包裹,不然落 "2" 字符串;
  *  空串维持 ''(D8 清空语义:深层剪枝/平铺空串,与既有分支同约定) */
@@ -1709,6 +1722,11 @@ function formatJson(v: unknown): string {
   background: #e0e7ff; color: #4338ca;
 }
 .strategy-tag:hover { background: #c7d2fe; color: #3730ea; }
+/* 扰动位徽标(spec §5.1):蓝族 — 叶子值整串 ${var.x},数据集行可逐行换值 */
+.perturb-badge {
+  font-size: 10px; font-weight: 700; color: #1d4ed8;
+  background: #dbeafe; padding: 1px 5px; border-radius: 3px; flex-shrink: 0;
+}
 /* 动态取数源查钮(§7):青绿族 — 与策略角标(靛)区分,指向查询动作 */
 .vs-query-btn {
   font-size: 10px; font-weight: 700;

@@ -355,6 +355,7 @@
                   :start-expanded="idx === justAddedStrategyIdx"
                   :candidates="strategyCandidates(s)"
                   :tag-label="currentTagLabels[idx]"
+                  :sibling-perturbs="siblingPerturbs"
                   :expand-when="jumpSeq > 0 && idx === jumpTargetIdx"
                   @remove="removeStrategy(currentStep, s)"
                   @exp-promote="onExpPromote(idx)"
@@ -587,6 +588,8 @@ const props = defineProps<{
   orchestration: Orchestration
   /** 场景服务声明 dict(config.services)—— 别名下拉/双写消费(spec §1.4) */
   services?: Record<string, string>
+  /** 跨路由跳转消费(spec §5.3 期望列头→断言卡):挂载后一次性切步+定位 */
+  focusJump?: { stepIdx: number; strategyIdx: number } | null
 }>()
 const emit = defineEmits<{
   'update:steps': [StepView[]]
@@ -962,12 +965,39 @@ function onFieldAssert(f: IOFieldBinding, domain: 'request' | 'response') {
  *  完成,此处给引导提示 */
 function onVarInsert(_f: IOFieldBinding, name: string) {
   ElMessage.success(`已插入 \${var.${name}}(启动前展开,查不到将拒启)`)
+  warnMultiViewVar(name)
 }
 
 /** 菜单"设为变量":FieldForm 已完成值替换与命名,默认值上报 CaseComposer 登记 config.vars */
 function onVarPromote(_f: IOFieldBinding, name: string, value: unknown) {
   emit('varPromote', name, value)
   ElMessage.success(`已设为变量 ${name} — 默认值登记到 ③ 共享变量,保存草稿后生效`)
+  warnMultiViewVar(name)
+}
+
+/** §5.1 多视图前移提示:引用该 var 的字段,其端点声明 value_source 视图 >1
+ *  → 软提示(§8.4 查钮将退化手输)。声明面复用 vs 查钮的既有分组查找
+ *  (valueSourceGroups,onFieldQuery 同源 — 模板路径键控,剥 [i] 匹配)。 */
+function warnMultiViewVar(name: string) {
+  const step = currentStep.value
+  if (!step) return
+  const views = new Set<string>()
+  const visit = (v: unknown, fullPath: string): void => {
+    if (typeof v === 'string') {
+      if (v === `\${var.${name}}`) {
+        const tmpl = toTemplatePath(`$.${fullPath}`)
+        const g = valueSourceGroups.value.find((x) => x.fields.some((f) => f.path === tmpl))
+        if (g) views.add(g.view)
+      }
+    } else if (Array.isArray(v)) v.forEach((item, i) => visit(item, `${fullPath}[${i}]`))
+    else if (v && typeof v === 'object') {
+      for (const [k, child] of Object.entries(v)) visit(child, fullPath ? `${fullPath}.${k}` : k)
+    }
+  }
+  visit(step.request?.body, '')
+  if (views.size > 1) {
+    ElMessage.warning(`同 var 多视图(${[...views].join('、')})— 数据集查钮将退化手输(§8.4);统一视图绑定或拆 var 名可解除`)
+  }
 }
 
 // ── 期望变量提升(spec §5.2):断言卡动作行的值落地 ───────────────────
@@ -1159,6 +1189,24 @@ const vsBadges = ref<Record<string, { view: string; fetchedAt?: string }>>({})
  *  两组同 view 各自打开选择器,前端不复用结果、不跨组覆写)。 */
 const valueSourceGroups = computed<ValueSourceGroup[]>(() =>
   groupValueSources(stepDecls(currentStep.value)))
+
+/** 同步骤扰动位(spec §5.3):当前步请求侧值整串 ${var.x} 的 var 名集 */
+const siblingPerturbs = computed<string[]>(() => {
+  const step = currentStep.value
+  if (!step) return []
+  const names = new Set<string>()
+  const visit = (v: unknown): void => {
+    if (typeof v === 'string') {
+      const m = TPL_FULL_RE.exec(v)
+      if (m) names.add(m[1])
+    } else if (Array.isArray(v)) v.forEach(visit)
+    else if (v && typeof v === 'object') Object.values(v).forEach(visit)
+  }
+  visit(step.request?.body)
+  const headers = step.api?.headers
+  if (headers && typeof headers === 'object') visit(headers)
+  return [...names]
+})
 
 /**
  * 查询上下文(§7.2/§6.1):服务 URL 与查询别名同源于**当前 step** —
@@ -1510,6 +1558,18 @@ function onStrategyJump(idx: number) {
     el.classList.add('sf-flash')
   })
 }
+
+/** focusJump 一次性消费(spec §5.3):跨路由到达后切步 + 定位策略卡
+ *  (sf-flash/展开复用 B4 角标跳转通路)。focusApplied 防重放 — 后续
+ *  props 更新(父级 query 再变)不再触发,跳转语义是"到达即定位"。 */
+let focusApplied = false
+watch(() => props.focusJump, (j) => {
+  if (!j || focusApplied) return
+  focusApplied = true
+  const maxIdx = Math.max(0, (props.steps?.length ?? 1) - 1)
+  activeStepIdx.value = Math.min(Math.max(0, j.stepIdx), maxIdx)
+  nextTick(() => onStrategyJump(Math.max(0, j.strategyIdx)))
+}, { immediate: true })
 
 /** 模板里 refStatus 的第二参:已知 alias 集合 = 凭证池 ∪ 草稿 config.users
  *  (③ 用户认证快照 — 场景本地用户执行期由 Config.users 解析,不能误标悬空) */

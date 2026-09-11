@@ -165,6 +165,21 @@ vi.mock('@/api/scenario-composer', () => ({
               required: false, description: '', assertable: false,
               value_source: { view: 'customer_part', column: 'handover_form.client_expand_name' },
             } as any]
+          : endpointId === 'ep-vs2'
+          ? [{
+              // Task 3 multi-N3 用例:$.a/$.b 各绑**不同**视图(v1/v2)→
+              // 同 var 双引用时 warnMultiViewVar 的多视图判定源
+              name: 'a', path: '$.a',
+              ui_kind: 'text', source_kind: 'independent',
+              required: false, description: '', assertable: false,
+              value_source: { view: 'v1', column: 'x' },
+            } as any,
+            {
+              name: 'b', path: '$.b',
+              ui_kind: 'text', source_kind: 'independent',
+              required: false, description: '', assertable: false,
+              value_source: { view: 'v2', column: 'y' },
+            } as any]
           : [{
               name: 'orderId', path: '$.orderId',
               ui_kind: 'text', source_kind: 'independent',
@@ -2715,5 +2730,135 @@ describe('CaseComposerCanvas — 期望变量提升(§5.2)', () => {
     expEl.click()                                                      // 可选
     await flush()
     w.unmount()
+  })
+})
+
+// ─── 扰动位呈现与跳转(spec §5.1/§5.3)───────────────────────────────
+// 同步骤扰动位列表 + focusJump 跨路由定位(期望列头↔断言卡)+
+// 多视图前移软提示。用例名前缀 pert-/nav-/multi-(与「请求侧提取
+// 域感知」describe 的 N1-N4 区分,控制者裁定)。
+
+describe('CaseComposerCanvas — 扰动位呈现与跳转(§5.3)', () => {
+  it('pert-N1: 断言卡显示"同步骤扰动位"var 名列表(诚实粒度 = 同步骤)', async () => {
+    const { listStrategyKinds } = await import('@/api/scenario-composer')
+    const kindsMock = (listStrategyKinds as any).getMockImplementation()
+    ;(listStrategyKinds as any).mockResolvedValue([{ kind: 'assertion', label: '断言' }])
+    try {
+      const s0 = mkStep({
+        request: {
+          kind: 'request',
+          body: { amount: '${var.amount}', policy_id: '${var.policy_id}', plain: 'x' },
+        },
+        strategy: [
+          { kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: '${var.exp_code}' } as any,
+        ],
+      })
+      const { w } = mountCanvas([s0])
+      await flushPromises()
+      await w.find('.sf-head').trigger('click')   // 展开断言卡
+      await flush()
+      const row = w.find('.sf-perturb-row')
+      expect(row.exists()).toBe(true)
+      expect(row.text()).toContain('同步骤扰动位')
+      expect(row.text()).toContain('amount')
+      expect(row.text()).toContain('policy_id')
+      expect(row.text()).not.toContain('plain')     // 字面量不是扰动位
+      expect(row.text()).not.toContain('exp_code')  // 期望列自身不进扰动位列表
+      w.unmount()
+    } finally {
+      ;(listStrategyKinds as any).mockImplementation(kindsMock)
+    }
+  })
+
+  it('nav-N2: focusJump prop → 切步 + 定位策略卡(sf-flash 复用 B4 通路)', async () => {
+    const { listStrategyKinds } = await import('@/api/scenario-composer')
+    const kindsMock = (listStrategyKinds as any).getMockImplementation()
+    ;(listStrategyKinds as any).mockResolvedValue([{ kind: 'assertion', label: '断言' }])
+    const origScroll = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = function () {}
+    try {
+      const s0 = mkStep()
+      const s1 = mkStep({
+        strategy: [
+          { kind: 'assertion', target: '$.response_body.a', operator: 'eq', expected: null } as any,
+          { kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: '${var.exp_code}' } as any,
+        ],
+      })
+      // 本地复制 mountCanvas 骨架(控制者裁定:不改公用 mountCanvas),
+      // 加 :focus-jump prop;attach 挂真 document(onStrategyJump 经
+      // getElementById 寻卡)
+      const orch = ref<Orchestration>(mkOrch(2))
+      const inserter = useInsertTarget()
+      const Parent = defineComponent({
+        setup() {
+          provide(INSERT_TARGET_KEY, inserter)
+          return () => h(CaseComposerCanvas, {
+            steps: [s0, s1],
+            orchestration: orch.value,
+            focusJump: { stepIdx: 1, strategyIdx: 1 },
+            'onUpdate:steps': () => {},
+            'onUpdate:orchestration': () => {},
+          })
+        },
+      })
+      const w = mount(Parent, {
+        global: { plugins: [ElementPlus, activePinia] },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      await flush()
+      // 切步:中栏标题输入值 = s2(orchestration step 2 展示名)
+      expect((w.find('.title-input').element as HTMLInputElement).value).toBe('s2')
+      // 定位:#strategy-card-1 sf-flash + 展开;卡 0 不动
+      const card1 = document.getElementById('strategy-card-1')!
+      expect(card1).toBeTruthy()
+      expect(card1.classList.contains('sf-flash')).toBe(true)
+      expect(w.find('#strategy-card-1 .sf-body').isVisible()).toBe(true)
+      expect(w.find('#strategy-card-0 .sf-body').isVisible()).toBe(false)
+      w.unmount()
+    } finally {
+      ;(listStrategyKinds as any).mockImplementation(kindsMock)
+      Element.prototype.scrollIntoView = origScroll
+    }
+  })
+
+  it('multi-N3: 多视图前移提示 — 同 var 引用字段声明视图 >1 → 软提示(§5.1)', async () => {
+    const { listStrategyKinds, ElMessage } = await Promise.all([
+      import('@/api/scenario-composer'),
+      import('element-plus'),
+    ]).then(([a, b]) => ({ listStrategyKinds: a.listStrategyKinds, ElMessage: b.ElMessage }))
+    const kindsMock = (listStrategyKinds as any).getMockImplementation()
+    ;(listStrategyKinds as any).mockResolvedValue([{ kind: 'assertion', label: '断言' }])
+    const warnSpy = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({} as any))
+    try {
+      // fixture:ep-vs2($.a 绑 view v1,$.b 绑 view v2);两字段同引 var.q
+      // → 引用插入后 warnMultiViewVar(q) 检出双视图
+      const draft = useScenarioDraftStore()
+      draft.draft!.definition.config.vars = { base_url: 'http://x', q: 'Q0' }
+      const s0 = mkStep({
+        api: {
+          kind: 'api', service: 'fin', method: 'POST', path: '/order',
+          headers: {}, view_hints: { endpoint_id: 'ep-vs2' },
+        },
+        request: { kind: 'request', body: { a: '${var.q}', b: '${var.q}' } },
+      })
+      const { w } = mountCanvas([s0])
+      await flushPromises()
+      // DOM 通路:字段 a 菜单 → 引用共享变量 → 选 q(varInsert → 软提示)
+      await w.findAll('.fa-menu-btn')[0].trigger('click')
+      await flush()
+      await w.findAll('.fa-item').find((b) => b.text().includes('引用共享变量'))!.trigger('click')
+      await flush()
+      await w.findAll('.fa-var-item').find((b) => b.text().includes('q'))!.trigger('click')
+      await flush()
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      const msg = String(warnSpy.mock.calls[0][0])
+      expect(msg).toContain('多视图')
+      expect(msg).toContain('手输')
+      w.unmount()
+    } finally {
+      warnSpy.mockRestore()
+      ;(listStrategyKinds as any).mockImplementation(kindsMock)
+    }
   })
 })

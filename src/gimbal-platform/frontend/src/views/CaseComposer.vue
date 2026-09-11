@@ -154,10 +154,12 @@
               v-model:orchestration="orchestration"
               :scenario="scenario"
               :services="definition.config?.services ?? {}"
+              :focus-jump="focusJump"
               @update:services="onServicesUpdate"
               @var-promote="onVarPromote"
               @var-demote="onVarDemote"
               @seed-var="seedPoolVar"
+              @exp-nav="onExpNav"
             />
           </transition>
         </div>
@@ -267,7 +269,7 @@ import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { showError } from '@/utils/errorFallback'
 import { relTime } from '@/utils/datetime'
-import { executionUrl, composerUrl } from '@/utils/links'
+import { executionUrl, composerUrl, scenarioDataSetsUrl } from '@/utils/links'
 import { confirmAction } from '@/utils/confirmAction'
 import { lintDraft } from '@/utils/draft-lint'
 import * as api from '@/api/scenario-composer'
@@ -293,6 +295,9 @@ const router = useRouter()
 const store = useScenarioComposerStore()
 
 const stepIdx = ref(0)
+/** 跨路由定位(spec §5.3 期望列头→断言卡):focusStep/focusStrategy query
+ *  解析产物,Canvas 挂载后一次性消费;null = 无跳转意图 */
+const focusJump = ref<{ stepIdx: number; strategyIdx: number } | null>(null)
 const scenarioId = computed(() => route.params.scenarioId as string | undefined)
 const saving = ref(false)
 const dirty = ref(false)
@@ -500,6 +505,12 @@ function onVarDemote(name: string) {
   definition.value = { ...definition.value, config: { ...config, vars: rest } }
 }
 
+/** 断言卡"↗ 数据集"(spec §5.3 反向):跳该场景的数据集列表页 */
+function onExpNav() {
+  const sid = scenario.value?.meta.scenarioId ?? scenarioId.value
+  if (sid) router.push(scenarioDataSetsUrl(sid))
+}
+
 /** Canvas 内联创建别名双写的声明面落库(config.services 整表替换) */
 function onServicesUpdate(services: Record<string, string>) {
   definition.value = {
@@ -569,6 +580,14 @@ onBeforeRouteLeave(async () => {
 onMounted(async () => {
   const stepParam = parseInt(route.query.step as string) || 1
   stepIdx.value = Math.max(0, Math.min(3, stepParam - 1))
+  // focusStep/focusStrategy(spec §5.3,0-based):数据集期望列头跳转到达 —
+  // 直入 ④ Canvas 向导页,定位意图交给 Canvas 一次性消费
+  const fs = Number(route.query.focusStep)
+  const fy = Number(route.query.focusStrategy)
+  if (Number.isInteger(fs) && Number.isInteger(fy) && fs >= 0 && fy >= 0) {
+    stepIdx.value = 3
+    focusJump.value = { stepIdx: fs, strategyIdx: fy }
+  }
 
   if (scenarioId.value && scenarioId.value !== 'new') {
     await loadScenario()
