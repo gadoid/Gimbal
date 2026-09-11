@@ -85,3 +85,54 @@ def test_draft_to_full_fills_missing_create_time() -> None:
     assert out["meta"]["createTime"]  # some ISO timestamp filled
     assert out["meta"]["owner"] == "bob"  # owner filled from router
 
+
+# ── assertion_registry 第三键(spec v2 §3)───────────────────────────
+# API 层 roundtrip:PUT(重铸 payload)不丢条目、GET /draft 原样回读、
+# 旧客户端缺省回落空 dict。骨架仿 test_run_schemes_endpoint 的
+# 「建场景 + GET /draft → PUT 回写」用例(共享 helpers.make_draft)。
+from httpx import AsyncClient
+
+from .helpers import make_draft as _minimal_draft
+from .helpers import register_and_login as _register_and_login
+
+
+async def _create_scenario(client: AsyncClient, headers: dict) -> str:
+    """POST 最小合法 draft 建场景(仿 run_schemes 的 _saved_scenario)。"""
+    r = await client.post("/api/scenarios", headers=headers,
+                          json=_minimal_draft())
+    assert r.status_code in (200, 201), r.text
+    return "sc-test"                    # make_draft 缺省 scenario_id
+
+
+async def test_draft_roundtrips_assertion_registry(client):
+    """spec v2 §3:assertion_registry 与 orchestration 同级,create/update/draft 全链携带。"""
+    entry = {"entries": [{
+        "id": "inj-1", "name": "金额为负",
+        "anchor": {"stepIndex": 0, "source": "body", "jsonpath": "$.amount",
+                   "varName": "amount"},
+        "injection": [{"varName": "amount", "value": "-1"}],
+        "asserts": [{"stepIndex": 0, "target": "$.response_body.code",
+                     "operator": "eq", "expected": "400", "mode": "override"}],
+    }]}
+    # 先注册一次性 admin 吃掉 bootstrap,再拿普通成员 headers(仿 _member)
+    await _register_and_login(client, "admin0", "admin0pass123")
+    owner_headers = await _register_and_login(client, "bob")
+    sid = await _create_scenario(client, owner_headers)
+    draft = _minimal_draft(sid)
+    draft["assertion_registry"] = entry
+    resp = await client.put(f"/api/scenarios/{sid}", json=draft,
+                            headers=owner_headers)
+    assert resp.status_code == 200
+    # GET draft 原样回读
+    out = (await client.get(f"/api/scenarios/{sid}/draft",
+                            headers=owner_headers)).json()
+    assert out["assertion_registry"] == entry
+    # 不带 registry 的 PUT(旧客户端)→ 字段回落空 dict,不炸不 422
+    draft.pop("assertion_registry")
+    resp2 = await client.put(f"/api/scenarios/{sid}", json=draft,
+                             headers=owner_headers)
+    assert resp2.status_code == 200
+    out2 = (await client.get(f"/api/scenarios/{sid}/draft",
+                             headers=owner_headers)).json()
+    assert out2["assertion_registry"] == {}
+

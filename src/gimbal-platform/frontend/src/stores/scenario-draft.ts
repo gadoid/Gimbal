@@ -23,11 +23,14 @@ import { exportTimestamp } from '@/utils/datetime'
 import { ElMessage } from 'element-plus'
 import type { ScenarioDraft, Orchestration } from '@/types/scenario-composer'
 import type { ScenarioView } from '@/types/plate'
+import type { AssertionRegistry } from '@/types/assertion-registry'
 import type { RunScheme, RunOverlay } from '@/api/scenario-composer'
 
 interface DraftSnapshot {
   definition: ScenarioView
   orchestration: Orchestration
+  /** 断言管理注册表(spec v2 §3);缺省 = 空(旧场景/旧客户端) */
+  assertion_registry?: AssertionRegistry
   /** 编辑中场景的 id (新建时为 null) — 决定导出文件名 */
   scenarioId: string | null
 }

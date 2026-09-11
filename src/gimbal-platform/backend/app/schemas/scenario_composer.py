@@ -129,11 +129,15 @@ class ScenarioDraft(BaseModel):
                 model it themselves").
     orchestration: platform-only rendering/orchestration fields, never sent
                    to plate (plate doesn't know about them).
+    assertion_registry: 断言管理注册表(spec v2 §3)— 平台侧偏离注入条目,
+                与 orchestration 同级;引擎不感知,不进 plate convert。自由 dict,
+                条目形状权威在前端 types/assertion-registry.ts 与运行时物化函数。
     """
     model_config = _CAMEL
 
     definition: dict[str, Any]
     orchestration: Orchestration = Field(default_factory=Orchestration)
+    assertion_registry: dict[str, Any] = Field(default_factory=dict)
 
 
 # ─── data-set ──────────────────────────────────────────────────────

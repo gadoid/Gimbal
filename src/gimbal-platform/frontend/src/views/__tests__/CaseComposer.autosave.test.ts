@@ -84,6 +84,8 @@ async function mountPage(path = '/composer/sc-demo') {
 beforeEach(() => {
   vi.restoreAllMocks()
   vi.spyOn(api, 'listDataSets').mockResolvedValue([])
+  // loadScenario 二级取数(spec v2 §3 断言注册表):mock 掉防真实 XHR 悬挂
+  vi.spyOn(api, 'getScenarioDraft').mockResolvedValue({} as any)
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 })
 afterEach(() => {

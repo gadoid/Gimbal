@@ -281,6 +281,7 @@ import type {
 import type {
   Scenario, DataSetSummary, Orchestration, ScenarioDraft,
 } from '@/types/scenario-composer'
+import type { AssertionRegistry } from '@/types/assertion-registry'
 import type { ScenarioView, StepView } from '@/types/plate'
 
 const STEPS = [
@@ -368,6 +369,10 @@ const orchestration = ref<OrchestrationWithSchemes>({
   resourceMeta: {},
 })
 
+/** 断言管理注册表(spec v2 §3)— 与 orchestration 同级住场景文档;
+ *  编排器保存整包携带(本任务只做回路,编辑 UI 由后续任务接入)。 */
+const registry = ref<AssertionRegistry>({ entries: [] })
+
 // ── 选系统预填(仅新建场景)──────────────────────────────
 // meta 取 common 通用定义公共项;config 取 common 基座 + 各选中系统
 // services/users/vars 合并;resource 取各系统并集。仅首次、且
@@ -454,11 +459,12 @@ watch([definition, orchestration], () => {
 // ── 把进行中对象同步到共享 draft store (任意 step / 任意时刻都可达) ──
 const draftStore = useScenarioDraftStore()
 watch(
-  [definition, orchestration, scenario],
+  [definition, orchestration, registry, scenario],
   () => {
     draftStore.setDraft({
       definition: definition.value,
       orchestration: orchestration.value,
+      assertion_registry: registry.value,
       scenarioId: scenario.value?.meta?.scenarioId ?? null,
     })
   },
@@ -713,6 +719,15 @@ async function loadScenario() {
           resourceMeta: {},
           runSchemes: persistedSchemes,
         }
+    // 断言注册表(spec v2 §3):读侧 Scenario 不带该键,从 GET /draft 补 —
+    // 重载后编排器保存(整包 PUT)才不会把存量条目冲掉。二级数据降级
+    // (loadDataSets 同款):拉取失败不阻断 composer 加载,保持缺省空。
+    try {
+      registry.value = (await api.getScenarioDraft(scenarioId.value!)).assertion_registry
+        ?? { entries: [] }
+    } catch (e) {
+      showError('加载断言注册表', undefined, (e as Error).message)
+    }
     await loadDataSets()
     dirty.value = false
     editsDuringSave = false
@@ -796,6 +811,7 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
     const draft: ScenarioDraft = {
       definition: definition.value,
       orchestration: orchestration.value,
+      assertion_registry: registry.value,
     }
     let saved: Scenario | undefined
     if (scenario.value) {

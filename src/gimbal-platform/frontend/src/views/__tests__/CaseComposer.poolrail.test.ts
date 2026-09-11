@@ -89,6 +89,8 @@ function nextBtn(w: ReturnType<typeof mount>) {
 beforeEach(() => {
   vi.restoreAllMocks()
   vi.spyOn(api, 'listDataSets').mockResolvedValue([])
+  // loadScenario 二级取数(spec v2 §3 断言注册表):mock 掉防真实 XHR 悬挂
+  vi.spyOn(api, 'getScenarioDraft').mockResolvedValue({} as any)
   // constants/auth_sessions 走 vi.mock 工厂(restoreAllMocks 不影响工厂 mock)
 })
 

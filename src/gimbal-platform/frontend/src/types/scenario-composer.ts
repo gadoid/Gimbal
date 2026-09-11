@@ -11,6 +11,7 @@
  * plate 对外契约类型(ScenarioView/StepView/IOFieldBinding 等)在 @/types/plate。
  */
 import type { ScenarioView } from '@/types/plate'
+import type { AssertionRegistry } from '@/types/assertion-registry'
 
 // ─── 系统 / 模块 ──────────────────────────────────────────────────
 export type SystemTag = 'fin' | 'logi' | 'wms' | 'mall' | 'common' | string
@@ -36,6 +37,8 @@ export interface ScenarioDraft {
   definition: ScenarioView
   /** 平台渲染/编排辅助字段,易分离,不发给 plate */
   orchestration: Orchestration
+  /** 断言管理注册表(spec v2 §3);缺省 = 空(旧场景/旧客户端) */
+  assertion_registry?: AssertionRegistry
 }
 
 // ─── 读侧(列表/详情,非草稿)──────────────────────────────────────

@@ -66,6 +66,9 @@ async def create(
     payload = ScenarioDraft(
         definition=stored_definition,
         orchestration=draft.orchestration,
+        # 注册表随容器重铸透传(spec v2 §3)— 不传则回落 default {}
+        # 丢条目(copy 路径经 model_validate 后同样走到这里)。
+        assertion_registry=draft.assertion_registry,
     ).model_dump(by_alias=True, mode="json")
     row = ComposerScenario(
         scenario_id=server_owned.scenario_id,
@@ -141,6 +144,9 @@ async def update(
     row.payload = ScenarioDraft(
         definition=stored_definition,
         orchestration=Orchestration.model_validate(orch_data),
+        # 注册表编辑器整包替换语义(spec v2 §3):PUT 带就存、不带(旧
+        # 客户端)回落空 dict — 与 runSchemes 的窄端点透传保留相反,键归编排器。
+        assertion_registry=draft.assertion_registry,
     ).model_dump(by_alias=True, mode="json")
     await endpoint_ref_index.sync_scenario(db, scenario_id, row.payload)
     await db.commit()
