@@ -158,7 +158,7 @@
           >
             <el-button size="small" plain>导入 CSV</el-button>
           </el-upload>
-          <el-button size="small" plain :disabled="!varColumns.length" @click="onExportCsv">导出 CSV</el-button>
+          <el-button size="small" plain :disabled="!csvVarColumns.length" @click="onExportCsv">导出 CSV</el-button>
         </div>
       </div>
       <!-- 段 tabs(spec §6.2):>1 段才显示;列作用域 = 单 step 段,
@@ -420,9 +420,17 @@ function bcOf(col: GridVarColumn): BaselineColumn {
   }
 }
 
-/** 段内可编辑 var 列(粘贴列定位 / CSV 描述行 / 导出按钮消费;粘贴语义 = 当前段)。
- *  CSV 导入导出的列宇宙走 allColumns(全量,不随段过滤)。 */
+/** 段内可编辑 var 列(段语义消费面:粘贴列定位等;粘贴语义 = 当前段)。
+ *  CSV 导入导出不再吃它 — 见 csvVarColumns(brief ⑥ 全量宇宙)。 */
 const varColumns = computed<BaselineColumn[]>(() => visibleColumns.value.map(bcOf))
+
+/** CSV 导入导出链专用:全量 var 列宇宙(brief ⑥ — 不随段过滤)。
+ *  flatMap gridColumnsOf 覆盖 ALL 段(输入列 + 期望列);columns 与
+ *  descriptions 同源同序 → 单段模式下他段列不丢,(description) 行守卫
+ *  (descriptions.length === vars.length)恒满足,不再静默丢描述行。 */
+const csvVarColumns = computed<BaselineColumn[]>(() =>
+  segments.value.flatMap(gridColumnsOf).map(bcOf),
+)
 
 // ── 步骤分组表头(P1.4:横多列时按 step 视觉分组,零后端)─────────
 /** 列序上同 stepIndex 的连续段(merge 相邻同段,colspan 呈现)。
@@ -815,13 +823,14 @@ async function onDelete() {
 
 // ── CSV 导入 / 导出 ─────────────────────────────────────
 function onExportCsv() {
-  // 字段描述(按 varColumns 顺序,缺描述的列填空串)
-  const descriptions = varColumns.value.map(
+  // 字段描述(按 csvVarColumns 顺序,缺描述的列填空串)— 全量宇宙,
+  // 与 exportDataSetCsv 内部 varOnlyPalette(columns) 同源同序,不受段过滤影响
+  const descriptions = csvVarColumns.value.map(
     (c) => descriptionByColumnKey.value.get(`${c.stepIndex}:${c.source}:${c.field}`) ?? '',
   )
   exportDataSetCsv({
     datasetName: form.name || 'dataset',
-    columns: allColumns.value,
+    columns: csvVarColumns.value,
     rows: rows.value.map(toApiRow),
     caseNames: caseNames.value,
     descriptions,
@@ -832,7 +841,8 @@ async function onImportCsv(file: File) {
     const text = await file.text()
     const result = importDataSetCsv({
       fileText: text,
-      columns: allColumns.value,
+      // 与导出同宇宙(全段输入列 + 期望列,不随段过滤):导出的列可原样回导
+      columns: csvVarColumns.value,
       rows: rows.value.map(toApiRow),
       caseNames: caseNames.value,
       mode: 'merge-by-name',

@@ -157,4 +157,28 @@ describe('DataSetEditor — 段网格(§6.2)', () => {
     expect((nameInput.element as HTMLInputElement).value).toBe('edge-min')
     w.unmount()
   })
+
+  it('SEG-7(修轮回归): 单段模式下 CSV 导出覆盖全量 var 宇宙,段过滤不影响 CSV 链(brief ⑥)', async () => {
+    const w = await mountEditor(DEF_2SEG)
+    // 切到步骤1 段(段内仅 amount + exp_code)— CSV 链不得随之收缩
+    await w.findAll('.seg-tab').find((t) => t.text().includes('步骤1'))!.trigger('click')
+    await flushPromises()
+    const csv = await import('@/utils/csv-dataset')
+    const exportSpy = vi.spyOn(csv, 'exportDataSetCsv').mockImplementation(() => {})
+    const btn = w.findAll('button').find((b) => b.text().includes('导出 CSV'))
+    expect(btn).toBeTruthy()
+    await btn!.trigger('click')
+    await flushPromises()
+    expect(exportSpy).toHaveBeenCalled()
+    const args = exportSpy.mock.calls[0][0] as any
+    // 列宇宙 = 全段(步骤1 的 amount+exp_code 之外,步骤2 的 bl_no 不丢)
+    expect(args.columns.map((c: any) => c.varName)).toEqual(['amount', 'exp_code', 'bl_no'])
+    // descriptions 与列宇宙同长 → (description) 行守卫满足
+    expect(args.descriptions.length).toBe(3)
+    // 端到端:产出的 CSV 文本含 (description) 行,列头覆盖全宇宙
+    const text = csv.buildDataSetCsv(args)
+    expect(text).toContain('(description)')
+    expect(text.split('\n')[0]).toContain('bl_no')
+    w.unmount()
+  })
 })

@@ -147,23 +147,40 @@ it('data-table 存在;描述行 / 字段行 / 数据行 都在同一张 table', 
 it('每列宽度由 colgroup 决定;checkbox 列 + 数据名列 + 数据列 + 操作列 严格对齐', async () => {
   const w = mountEditor()
   await flushPromises()
-  // colgroup:1 选中 + 1 数据名 + 4 数据列 + 1 操作列 = 7
+  // colgroup:1 选中 + 1 数据名 + 2 var 数据列 + 1 操作列 = 5
+  // (直填列退场数据表格 spec §6.3:customer_id / size 不再占列)
   const cols = w.findAll('.data-table colgroup col')
-  expect(cols.length).toBe(7)
-  // 描述行 / 字段行 th 数都 = 7(rows.length=0 → tbody 暂空)
-  expect(w.find('.data-table tr.row-desc').element.children.length).toBe(7)
-  expect(w.find('.data-table tr.row-field').element.children.length).toBe(7)
+  expect(cols.length).toBe(5)
+  // 描述行 / 字段行 th 数都 = 5(rows.length=0 → tbody 暂空)
+  expect(w.find('.data-table tr.row-desc').element.children.length).toBe(5)
+  expect(w.find('.data-table tr.row-field').element.children.length).toBe(5)
   // 先添加一条数据,再校验 tbody 的数据行 td 数
   const addBtn = w.findAll('button').find((b) => b.text().includes('新增数据'))
   await addBtn!.trigger('click')
   await flushPromises()
   const firstDataRow = w.find('.data-table tbody tr.row-data')
-  expect(firstDataRow.element.children.length).toBe(7)
+  expect(firstDataRow.element.children.length).toBe(5)
 })
 
 // ── 字段描述行 + 字段名行(两个独立 row)──────────────────────
 
-it('row-desc 渲染所有字段的 description;空则显示 —', async () => {
+it('row-desc 渲染 var 列的 description;无描述显示 —;直填列描述随列退场(§6.3)', async () => {
+  // 加一个无 declaration 的 var 列(note)保留「空则显示 —」分支的可测性
+  // (直填列退场后,size 的空描述不再进网格,原「—」载体没了)
+  vi.spyOn(api, 'getScenarioDraft').mockResolvedValueOnce({
+    ...DRAFT,
+    definition: {
+      ...DRAFT.definition,
+      config: { vars: { ...DRAFT.definition.config.vars, note: '' } },
+      steps: [
+        {
+          ...DRAFT.definition.steps[0],
+          request: { body: { ...DRAFT.definition.steps[0].request.body, note: '${var.note}' } },
+        },
+        DRAFT.definition.steps[1],
+      ],
+    },
+  } as any)
   const w = mountEditor()
   await flushPromises()
   await flushPromises()
@@ -171,15 +188,16 @@ it('row-desc 渲染所有字段的 description;空则显示 —', async () => {
   const descRow = w.find('.data-table tr.row-desc')
   expect(descRow.exists()).toBe(true)
   expect(descRow.text()).toContain('描述')
-  // amount / customer_id / page 有 description
+  // var 列有 description:amount / page
   expect(descRow.text()).toContain('订单金额(分)')
-  expect(descRow.text()).toContain('客户编号')
   expect(descRow.text()).toContain('页码')
-  // size 无 description → 显示 —
+  // note 无 declaration → 显示 —
   expect(descRow.text()).toContain('—')
+  // 直填列退场:customer_id 的描述不再出现在网格描述行
+  expect(descRow.text()).not.toContain('客户编号')
 })
 
-it('row-field 渲染所有字段的「步骤N - 字段名」', async () => {
+it('row-field 渲染 var 列的「步骤N - 字段名」(直填列退场,§6.3)', async () => {
   const w = mountEditor()
   await flushPromises()
   await flushPromises()
@@ -187,22 +205,23 @@ it('row-field 渲染所有字段的「步骤N - 字段名」', async () => {
   const fieldRow = w.find('.data-table tr.row-field')
   expect(fieldRow.exists()).toBe(true)
   expect(fieldRow.text()).toContain('字段')
-  // stepIndex 是 0-based,展示 1-based
+  // stepIndex 是 0-based,展示 1-based;网格只剩 var 列
   expect(fieldRow.text()).toContain('步骤1 - amount')
-  expect(fieldRow.text()).toContain('步骤1 - customer_id')
   expect(fieldRow.text()).toContain('步骤2 - page')
-  expect(fieldRow.text()).toContain('步骤2 - size')
+  // 直填列退场:customer_id / size 不再进字段行(编辑走基线区)
+  expect(fieldRow.text()).not.toContain('customer_id')
+  expect(fieldRow.text()).not.toContain('size')
 })
 
-it('描述行 / 字段行 各 7 个 th(1 选中 + 1 标签 + 4 字段 + 1 操作占位)', async () => {
+it('描述行 / 字段行 各 5 个 th(1 选中 + 1 标签 + 2 var 字段 + 1 操作占位;直填列退场)', async () => {
   const w = mountEditor()
   await flushPromises()
   await flushPromises()
   await flushPromises()
   const descTh = w.findAll('.data-table tr.row-desc th')
   const fieldTh = w.findAll('.data-table tr.row-field th')
-  expect(descTh.length).toBe(7)
-  expect(fieldTh.length).toBe(7)
+  expect(descTh.length).toBe(5)
+  expect(fieldTh.length).toBe(5)
 })
 
 // ── 数据增删 ───────────────────────────────────────────────
@@ -217,12 +236,13 @@ it('点「+ 新增数据」按钮:在底部追加空白行', async () => {
   // 至少 1 个真实数据行
   const dataRows = w.findAll('.data-table tbody tr.row-data')
   expect(dataRows.length).toBe(1)
-  // 每行 = 数据名列 + 4 数据列(2 var + 2 direct,全部都是 input)
+  // 每行 = 数据名列 + 2 var 数据列(直填列退场 §6.3:全部输入都是 var,
+  // direct 格数为 0 — 直填编辑移基线区 .baseline-direct-input)
   const inputs = dataRows[0].findAll('input.data-cell-input')
   const varCount = inputs.filter((i) => !i.classes('data-cell-direct')).length
   const directCount = inputs.filter((i) => i.classes('data-cell-direct')).length
   expect(varCount).toBe(2)
-  expect(directCount).toBe(2)
+  expect(directCount).toBe(0)
 })
 
 it('点「+ 新增数据」多次 → 数据行连续追加', async () => {
@@ -278,15 +298,16 @@ it('用户自定义的非 data-N 命名不参与自增计算', async () => {
   expect(labels).toEqual(['edge-min', 'data-2', 'data-3'])
 })
 
-it('新增的数据行中,var 列是 input,direct 列也是 input(可编辑 baseline)', async () => {
+it('新增的数据行中,网格列全为可编辑 var input(直填编辑移基线区,§6.3)', async () => {
   const w = mountEditor()
   await flushPromises()
   const addBtn = w.findAll('button').find((b) => b.text().includes('新增数据'))
   await addBtn!.trigger('click')
   await flushPromises()
   const dataRow = w.find('.data-table tbody tr.row-data')
-  // 4 数据列全是 input(2 var + 2 direct),不再有只读 span
-  expect(dataRow.findAll('input.data-cell-input').length).toBe(4)
+  // 数据行只有 2 个 var 输入(直填列退场),不再有只读 span / direct 格
+  expect(dataRow.findAll('input.data-cell-input').length).toBe(2)
+  expect(dataRow.findAll('input.data-cell-direct').length).toBe(0)
   // 没有任何 readonly / disabled
   for (const inp of dataRow.findAll('input.data-cell-input')) {
     const el = inp.element as HTMLInputElement
@@ -295,42 +316,55 @@ it('新增的数据行中,var 列是 input,direct 列也是 input(可编辑 base
   }
 })
 
-it('编辑直填列 → 触发 baselineDirty(「保存基线」按钮出现 * 标记)', async () => {
+it('基线区编辑直填列 → 触发 baselineDirty(「保存基线」按钮出现 * 标记)', async () => {
   const w = mountEditor()
   await flushPromises()
-  const addBtn = w.findAll('button').find((b) => b.text().includes('新增数据'))
-  await addBtn!.trigger('click')
+  // 直填列退场网格(§6.3):编辑走基线区 — 展开基线折叠 + 全部步骤分组
+  await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
   await flushPromises()
-  const dataRow = w.find('.data-table tbody tr.row-data')
-  // 找到 customer_id 这列(c-index = 1,amount 之后)— 它是 direct,初值 '261'
-  // 直接用所有 data-cell-input 中的 direct(用 class 区分)
-  const directInput = dataRow.find('input.data-cell-direct')
-  expect(directInput.exists()).toBe(true)
-  expect((directInput.element as HTMLInputElement).value).toBe('261')
+  const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
+  for (const h of groupHeaders) await h.trigger('click')
+  await flushPromises()
+  // customer_id 直填行的编辑输入,初值 '261'
+  const directInput = w.findAll('input.baseline-direct-input')
+    .find((i) => (i.element as HTMLInputElement).value === '261')
+  expect(directInput).toBeTruthy()
+  expect((directInput!.element as HTMLInputElement).value).toBe('261')
   // 编辑
-  await directInput.setValue('999')
+  await directInput!.setValue('999')
   await flushPromises()
   // 「保存基线」按钮文字应包含 * 标记
   const saveBaselineBtn = w.findAll('button').find((b) => b.text().includes('保存基线'))
   expect(saveBaselineBtn!.text()).toContain('*')
 })
 
-it('编辑直填列后,所有数据行的同一字段同步显示新 baseline 值(共享语义)', async () => {
+it('基线区编辑直填后,所有数据行共享同一字面值(合并有效值同步,共享语义)', async () => {
   const w = mountEditor()
   await flushPromises()
   const addBtn = w.findAll('button').find((b) => b.text().includes('新增数据'))
   await addBtn!.trigger('click')  // data-1
   await addBtn!.trigger('click')  // data-2
   await flushPromises()
-  const dataRows = w.findAll('.data-table tbody tr.row-data')
-  expect(dataRows.length).toBe(2)
-  // data-1 的 customer_id(data-cell-direct,baseline=261)改成 999
-  const data1Direct = dataRows[0].find('input.data-cell-direct')
-  await data1Direct.setValue('999')
+  // 直填列退场网格(§6.3):共享语义 = 基线区单一输入,改一处全行生效
+  await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
   await flushPromises()
-  // data-2 的 customer_id 也应变成 999(共享 baseline)
-  const data2Direct = dataRows[1].find('input.data-cell-direct')
-  expect((data2Direct.element as HTMLInputElement).value).toBe('999')
+  const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
+  for (const h of groupHeaders) await h.trigger('click')
+  await flushPromises()
+  // customer_id 直填行的编辑输入(baseline=261)改成 999
+  const custInput = w.findAll('input.baseline-direct-input')
+    .find((i) => (i.element as HTMLInputElement).value === '261')
+  expect(custInput).toBeTruthy()
+  await custInput!.setValue('999')
+  await flushPromises()
+  // 两行数据的合并有效值都吃到新字面值(共享 baseline)
+  ;(w.vm as any).toggleRow(0, true)
+  ;(w.vm as any).toggleRow(1, true)
+  await flushPromises()
+  const items = (w.vm as any).previewedRows
+  expect(items.length).toBe(2)
+  expect(items[0].merged.customer_id).toBe('999')
+  expect(items[1].merged.customer_id).toBe('999')
 })
 
 it('var 输入框编辑不改 baseline(直接进 rows.value,不触发 baselineDirty)', async () => {
@@ -847,12 +881,12 @@ it('步骤分组行:orchestration 缺名降级 Step N;colspan 按连续段合并
   const groupRow = w.find('.data-table tr.row-step-group')
   expect(groupRow.exists()).toBe(true)
   const cells = groupRow.findAll('th.th-step-group')
-  // DRAFT:step0(amount/customer_id)+ step1(page/size)各 2 列
+  // DRAFT:直填列退场后 step0(amount)+ step1(page)各 1 个 var 列 → colspan=1
   expect(cells.length).toBe(2)
   expect(cells[0].text()).toBe('步骤 1 · Step 1')   // orchestration.steps 空 → 兜底
   expect(cells[1].text()).toBe('步骤 2 · Step 2')
-  expect(cells[0].attributes('colspan')).toBe('2')
-  expect(cells[1].attributes('colspan')).toBe('2')
+  expect(cells[0].attributes('colspan')).toBe('1')
+  expect(cells[1].attributes('colspan')).toBe('1')
   w.unmount()
 })
 
