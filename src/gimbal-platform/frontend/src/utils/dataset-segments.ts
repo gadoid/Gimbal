@@ -148,15 +148,6 @@ export function deadRowKeys(
   return [...dead]
 }
 
-/** 期望命名:exp_ + target 末段(spec §5.2;撞名由调用方对话框处理,不静默 _2)。
- *  末段分隔 = `.[]` 结构符 + `_`(spec 例:$.response_status → exp_status)+
- *  引号(bracket 成员语法 ['weird key'] → weird key → exp_weird_key)。 */
-export function expectVarNameOf(target: string): string {
-  const segs = target.split(/[._[\]'"]+/).filter(Boolean)
-  const last = segs.length ? segs[segs.length - 1] : 'value'
-  return `exp_${last.replace(/[^A-Za-z0-9_]/g, '_')}`
-}
-
 // ── 全叶子路径扫描(spec v2 §4)──────────────────────────────
 export interface FieldLeaf {
   source: 'body' | 'headers'

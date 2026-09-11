@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   deriveSegments, gridColumnsOf, sharedVarNames, deadRowKeys,
-  expectVarNameOf, fieldPathsOf, type SegmentStepShape,
+  fieldPathsOf, type SegmentStepShape,
 } from '../dataset-segments'
 
 const VARS = { amount: 100, exp_code: 200, exp_msg: 'ok' }
@@ -56,15 +56,6 @@ describe('deriveSegments', () => {
     expect(cols.map((c) => c.varName)).toEqual(['amount', 'bl_no', 'exp_code', 'exp_msg'])
     expect(cols[2].source).toBe('expect')
     expect(cols[2].expect).toEqual({ target: '$.response_body.code', operator: 'eq', strategyIdx: 1 })
-  })
-})
-
-describe('expectVarNameOf', () => {
-  it('E1: target 末段命名 + 非法字符压 _ + 空 target 兜底', () => {
-    expect(expectVarNameOf('$.response_body.code')).toBe('exp_code')
-    expect(expectVarNameOf('$.response_status')).toBe('exp_status')
-    expect(expectVarNameOf("$.data['weird key']")).toBe('exp_weird_key')
-    expect(expectVarNameOf('')).toBe('exp_value')
   })
 })
 

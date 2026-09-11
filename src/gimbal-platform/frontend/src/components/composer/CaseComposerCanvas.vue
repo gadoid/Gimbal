@@ -359,9 +359,6 @@
                   :sibling-perturbs="siblingPerturbs"
                   :expand-when="jumpSeq > 0 && idx === jumpTargetIdx"
                   @remove="removeStrategy(currentStep, s)"
-                  @exp-promote="onExpPromote(idx)"
-                  @exp-restore="onExpRestore(idx)"
-                  @exp-nav="onExpNav"
                 />
                 <el-dropdown trigger="click" @command="addStrategy(currentStep, $event as string)">
                   <!-- type="button": el-form 渲染原生 form,无 type 的按钮是 submit,
@@ -536,7 +533,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import draggable from 'vuedraggable'
 import CaseComposerCatalog from './CaseComposerCatalog.vue'
 import FieldForm from './FieldForm.vue'
@@ -550,7 +547,7 @@ import ValueSourcePicker from './ValueSourcePicker.vue'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { useConstantsStore } from '@/stores/constants'
 import { deriveVarRegistry } from '@/utils/var-registry'
-import { expectVarNameOf, TPL_FULL_RE } from '@/utils/dataset-segments'
+import { TPL_FULL_RE } from '@/utils/dataset-segments'
 import {
   getFullEndpoint, listStrategyKinds, getStrategyKindFull, resolveResponsePaths,
   validateEndpointFieldStates,
@@ -599,11 +596,7 @@ const emit = defineEmits<{
   /** 内联创建别名双写的声明面(config.services 整表替换) */
   'update:services': [Record<string, string>]
   'varPromote': [name: string, value: unknown]
-  /** 期望还原上报(§5.2 逆动作):CaseComposer 删 config.vars 键 */
-  'varDemote': [name: string]
   'seedVar': [name: string, spec: Record<string, unknown>],
-  /** 断言卡"↗ 数据集"导航:跳列表页由 CaseComposer 落(不知具体 datasetId) */
-  'expNav': [],
   /** 加入断言管理标记(spec v2 §4):FieldForm registryMark → anchor 组装
    *  上抛,CaseComposer 落 registry.entries(registry 住在编排器层) */
   'registryAdd': [anchor: AssertionAnchor]
@@ -1017,81 +1010,6 @@ function warnMultiViewVar(name: string) {
   if (views.size > 1) {
     ElMessage.warning(`同 var 多视图(${[...views].join('、')})— 数据集查钮将退化手输(§8.4);统一视图绑定或拆 var 名可解除`)
   }
-}
-
-// ── 期望变量提升(spec §5.2):断言卡动作行的值落地 ───────────────────
-//    StrategyForm 只发事件,跨层动作(expected 模板化/还原 + varPromote/
-//    varDemote 上抛)在此单一真源;命名用 Task 1 的 expectVarNameOf。
-
-/** 期望提升(spec §5.2):expected → ${var.exp_*};撞名对话框改名,不静默 _2。
- *  手输名也过同一闸:改名后仍撞既有 var → 循环再问,直到唯一(不静默覆写)。 */
-function onExpPromote(idx: number) {
-  const step = currentStep.value
-  if (!step) return
-  const st = step.strategy[idx] as { expected?: unknown; target?: unknown }
-  const base = expectVarNameOf(String(st.target ?? ''))
-  const vars = (draftStore.draft?.definition?.config?.vars ?? {}) as Record<string, unknown>
-  if (Object.prototype.hasOwnProperty.call(vars, base)) {
-    void promptUniqueExpName(base, vars).then((name) => {
-      if (name) applyExpPromote(st, name)
-    })
-    return
-  }
-  applyExpPromote(st, base)
-}
-
-/** 撞名改名循环(§5.2):prompt 直到名字不在 config.vars;空输入 = 取消;
- *  cancel → null。每轮把撞上的名字带进文案,用户看到的是具体冲突而非笼统报错。 */
-async function promptUniqueExpName(
-  base: string, vars: Record<string, unknown>,
-): Promise<string | null> {
-  let collided = base
-  for (;;) {
-    let value: string
-    try {
-      const r = await ElMessageBox.prompt(
-        `期望变量 ${collided} 已存在(③ 共享变量里有同名键)。请换一个名字:`,
-        '撞名 — 改名后继续',
-        {
-          confirmButtonText: '确定', cancelButtonText: '取消',
-          inputPattern: /^[A-Za-z_][A-Za-z0-9_]*$/,
-          inputErrorMessage: '变量名须以字母/下划线开头,仅含字母/数字/下划线',
-        },
-      )
-      value = (r.value ?? '').trim()
-    } catch {
-      return null   // 取消 = 放弃提升(不静默选别的名)
-    }
-    if (!value) return null                       // 空输入视为取消
-    if (!Object.prototype.hasOwnProperty.call(vars, value)) return value
-    collided = value                              // 二次撞名:带着撞上的名字再问一轮
-  }
-}
-
-function applyExpPromote(st: { expected?: unknown; target?: unknown }, name: string) {
-  const baseline = st.expected ?? null
-  ;(st as { expected?: unknown }).expected = `\${var.${name}}`
-  emit('varPromote', name, baseline)
-  ElMessage.success(`期望已模板化 \${var.${name}} — 数据集行可逐行供值;不挂数据集 = 基线`)
-}
-
-/** 逆动作:expected 写回基线字面量 + varDemote 删键;死键软提示(spec §5.2) */
-function onExpRestore(idx: number) {
-  const step = currentStep.value
-  if (!step) return
-  const st = step.strategy[idx] as { expected?: unknown }
-  const m = TPL_FULL_RE.exec(String(st.expected ?? ''))
-  if (!m) return
-  const name = m[1]
-  const vars = (draftStore.draft?.definition?.config?.vars ?? {}) as Record<string, unknown>
-  st.expected = (vars[name] as unknown) ?? null
-  emit('varDemote', name)
-  ElMessage.warning(`已还原为字面量;数据集行若引用 ${name} 将成死键(运行无效果,可在编辑器看到提示)`)
-}
-
-/** 断言卡"↗ 数据集"导航:跳列表页由 CaseComposer 落(编排器不知具体 datasetId) */
-function onExpNav() {
-  emit('expNav')
 }
 
 // ── 字段状态控制(§5.4 + 2026-09-07 §2.3/§2.4)───────────────────────

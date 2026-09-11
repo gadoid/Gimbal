@@ -36,12 +36,6 @@
         >
           <span class="var-name">
             {{ e.name }}
-            <!-- §5.2 期望变量标注:exp_* 数据集行供值键 — 双用合法,不禁选 -->
-            <span
-              v-if="e.name.startsWith('exp_')"
-              class="var-exp-tag"
-              title="期望变量 — 断言 expected 的数据集行供值;同值既输入又期望的双用合法,不禁选"
-            >期望</span>
           </span>
           <span class="var-badge" :class="e.origin">{{ e.origin }}</span>
           <span class="var-producer">
@@ -170,8 +164,6 @@ function confirm() {
 }
 .var-badge.extract { background: #d1fae5; color: #065f46; }
 .var-badge.config { background: #eef2ff; color: #4338ca; }
-/* §5.2 期望变量标注(exp_*):紫族徽标(与断言 phase 徽标同色系),不禁选 */
-.var-exp-tag { font-size: 10px; font-weight: 700; color: #6b21a8; background: #f3e8ff; padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
 .var-producer {
   color: var(--c-text-secondary);
   font-size: 11px;

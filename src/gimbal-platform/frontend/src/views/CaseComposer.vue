@@ -159,9 +159,7 @@
               :focus-jump="focusJump"
               @update:services="onServicesUpdate"
               @var-promote="onVarPromote"
-              @var-demote="onVarDemote"
               @seed-var="seedPoolVar"
-              @exp-nav="onExpNav"
               @registry-add="onRegistryAdd"
             />
           </transition>
@@ -274,7 +272,7 @@ import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { showError } from '@/utils/errorFallback'
 import { relTime } from '@/utils/datetime'
-import { executionUrl, composerUrl, scenarioDataSetsUrl } from '@/utils/links'
+import { executionUrl, composerUrl } from '@/utils/links'
 import { confirmAction } from '@/utils/confirmAction'
 import { lintDraft } from '@/utils/draft-lint'
 import * as api from '@/api/scenario-composer'
@@ -520,21 +518,6 @@ function onVarPromote(name: string, value: unknown) {
     ...definition.value,
     config: { ...config, vars: { ...(config.vars ?? {}), [name]: value } },
   }
-}
-
-/** Canvas 期望还原上报(spec §5.2 逆动作):config.vars 删键(immutable 替换) */
-function onVarDemote(name: string) {
-  const config = definition.value.config
-  if (!config?.vars || !(name in config.vars)) return
-  const { [name]: _removed, ...rest } = config.vars
-  definition.value = { ...definition.value, config: { ...config, vars: rest } }
-}
-
-/** 断言卡"↗ 数据集"(spec §5.3 反向):跳该场景的数据集列表页;
- *  未保存路由 'new' 拒跳(修轮1 — /scenarios/new/data-sets 是垃圾址) */
-function onExpNav() {
-  const sid = scenario.value?.meta.scenarioId ?? scenarioId.value
-  if (sid && sid !== 'new') router.push(scenarioDataSetsUrl(sid))
 }
 
 /**

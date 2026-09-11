@@ -74,30 +74,11 @@
           </option>
         </select>
       </div>
-      <!-- 期望变量提升(spec §5.2):expected 模板化 + 数据集行逐行供值;
-           值落地在 Canvas(跨层动作单一真源),此处只发事件 -->
-      <div v-if="isAssertion" class="sf-exp-row">
-        <template v-if="expVarName">
-          <span
-            class="sf-exp-badge"
-            :title="`期望列 ${expVarName} — 断言 expected 已模板化,数据集行可逐行供值(不挂数据集 = 基线)`"
-          >期望列 {{ expVarName }}</span>
-          <button type="button" class="sf-exp-nav" title="查看该场景的数据集" @click="emit('expNav')">↗ 数据集</button>
-          <button type="button" class="sf-exp-restore" title="expected 写回基线字面量,config.vars 删键;数据集行若引用该键将成死键" @click="emit('expRestore')">还原为字面量</button>
-        </template>
-        <button
-          v-else
-          type="button"
-          class="sf-exp-promote"
-          title="expected 提升为 ${var.exp_*} 模板,基线登记 ③ 共享变量 — 数据集行可逐行供值(负向数据驱动)"
-          @click="emit('expPromote')"
-        >⟳ 设为期望变量(数据集行可逐行供值)</button>
-        <!-- 同步骤扰动位列表(spec §5.3):与本断言的数据关联 = 数据集行
-             共现;导航粒度诚实停在同步骤 -->
-        <div v-if="siblingPerturbs && siblingPerturbs.length" class="sf-perturb-row">
-          <span class="sf-perturb-label" title="本步骤请求侧的扰动位 — 与本断言的数据关联 = 数据集行共现(spec §4.3,导航粒度诚实停在同步骤)">同步骤扰动位:</span>
-          <span v-for="p in siblingPerturbs" :key="p" class="sf-perturb-name">{{ p }}</span>
-        </div>
+      <!-- 同步骤扰动位列表(spec §5.3):与本断言的数据关联 = 数据集行
+           共现;导航粒度诚实停在同步骤 -->
+      <div v-if="isAssertion && siblingPerturbs && siblingPerturbs.length" class="sf-perturb-row">
+        <span class="sf-perturb-label" title="本步骤请求侧的扰动位 — 与本断言的数据关联 = 数据集行共现(spec §4.3,导航粒度诚实停在同步骤)">同步骤扰动位:</span>
+        <span v-for="p in siblingPerturbs" :key="p" class="sf-perturb-name">{{ p }}</span>
       </div>
     </div>
   </div>
@@ -107,7 +88,6 @@
 import { computed, ref, watch } from 'vue'
 import FieldForm from './FieldForm.vue'
 import { strategyLabelOf } from '@/utils/strategy-labels'
-import { TPL_FULL_RE } from '@/utils/dataset-segments'
 import type { StrategyView, StrategyKindDetailView, StrategyFieldDescView, IOFieldBinding } from '@/types/plate'
 
 const props = defineProps<{
@@ -129,9 +109,6 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   remove: []
-  expPromote: []
-  expRestore: []
-  expNav: []
 }>()
 
 const expanded = ref(!!props.startExpanded)
@@ -162,14 +139,8 @@ const orderInput = computed<string>(() => {
   return typeof v === 'number' && Number.isInteger(v) ? String(v) : ''
 })
 
-/** 期望变量提升面(spec §5.2,唯一策略面新增):kind=assertion 才渲染动作行 */
+/** kind=assertion 才渲染同步骤扰动位列表(spec §5.3) */
 const isAssertion = computed(() => props.detail.kind === 'assertion')
-/** expected 已是整串 ${var.x} 模板 → 已提升态(徽标 + 还原) */
-const expVarName = computed<string | null>(() => {
-  if (!isAssertion.value) return null
-  const m = TPL_FULL_RE.exec(String((props.strategy as any).expected ?? ''))
-  return m ? m[1] : null
-})
 
 function onOrderChange(e: Event) {
   const el = e.target as HTMLInputElement
@@ -365,19 +336,8 @@ const summary = computed<string>(() => {
 }
 .sf-onfail-select:focus { border-color: #4f46e5; background: #fff; }
 
-/* 期望变量提升动作行(spec §5.2):sf-body 尾部,配色随既有 sf 徽标族 */
-.sf-exp-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-top: 1px dashed #e6e8ec; }
-.sf-exp-badge { font-size: 11px; font-weight: 700; color: #6b21a8; background: #f3e8ff; padding: 2px 8px; border-radius: 4px; }
-.sf-exp-promote, .sf-exp-restore, .sf-exp-nav {
-  border: none; background: transparent; cursor: pointer;
-  font-size: 11px; color: #4f46e5; padding: 2px 6px; border-radius: 4px;
-}
-.sf-exp-promote:hover, .sf-exp-restore:hover, .sf-exp-nav:hover { background: #eef2ff; }
-.sf-exp-restore { color: #b45309; }
-.sf-exp-restore:hover { background: #fef3c7; }
-
 /* 同步骤扰动位列表(spec §5.3):蓝族 mono 名签,与 FieldForm 扰动位徽标同源 */
-.sf-perturb-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 4px 10px; }
+.sf-perturb-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 10px 4px; border-top: 1px dashed #e6e8ec; }
 .sf-perturb-label { font-size: 11px; color: #64748b; }
 .sf-perturb-name { font-family: var(--font-mono); font-size: 10px; color: #1d4ed8; background: #dbeafe; padding: 1px 5px; border-radius: 3px; }
 </style>
