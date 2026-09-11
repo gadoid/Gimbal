@@ -1,7 +1,8 @@
 <!--
   RunDialog.vue — 运行对话框(spec §4 重构 + 2026-08-27 D2/D3:环境退役)
   方案栏:临时手填 / 上次运行 / 已存方案(orchestration sidecar,plate 零感知);
-  主面板:数据集多选(空 = 基线)/ 基础设置(stepTo · nRuns×parallel)—
+  主面板:数据集多选(正常组,空 = 基线)+ 断言注入条目多选(异常组,
+  spec v2 §5 — 死条目禁选)/ 基础设置(stepTo · nRuns×parallel)—
   执行环境已随 D2 退役(URL 由 service 声明/绑定行承载);
   折叠区:用户与服务绑定 = 声明 ∪ 引用并集固定行(D3):service 名只读标签,
   auth 下拉 + URL 覆盖(唯一自由文本);未声明引用行标红「未声明」,现场填
@@ -90,6 +91,18 @@
                 </div>
               </label>
             </div>
+          </section>
+
+          <!-- 断言注入条目(异常组,spec v2 §5):跑在基线上,与数据集行并列生成 case;
+               死条目(悬空)禁选 — 死判定由 CaseComposer 预计算经 deadEntryIds 传入 -->
+          <section v-if="assertionEntries.length" class="run-section rd-injection">
+            <label class="run-label">断言注入条目 <span class="muted small">(异常组, 可多选 — 跑在基线上, 与数据集行并列生成 case)</span></label>
+            <el-checkbox-group v-model="injectionIds" class="rd-inj-group">
+              <el-checkbox v-for="e in assertionEntries" :key="e.id" :value="e.id" :disabled="deadIds.has(e.id)">
+                {{ e.name }}
+                <span v-if="deadIds.has(e.id)" class="rd-dead-note">悬空 — 不可选</span>
+              </el-checkbox>
+            </el-checkbox-group>
           </section>
 
           <!-- 基础设置(stepTo / nRuns × parallel;旧 凭证策略·前缀·预设 已退役) -->
@@ -191,6 +204,9 @@
             <span v-if="selectedDatasets.length" class="summary-chip">
               {{ selectedDatasets.length }} 数据集
             </span>
+            <span v-if="injectionIds.length" class="summary-chip">
+              {{ injectionIds.length }} 注入条目
+            </span>
             <span
               class="summary-chip total"
               :class="{ over: totalRuns > MAX_TOTAL_RUNS }"
@@ -227,6 +243,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { ServiceBinding, RunScheme, RunOverlay } from '@/api/scenario-composer'
 import type { Scenario, DataSetSummary } from '@/types/scenario-composer'
+import type { AssertionEntry } from '@/types/assertion-registry'
 
 /** 绑定行(spec D3):声明 ∪ 引用并集的固定行;declaredUrl null = 未声明引用行 */
 export interface ServiceRow { service: string; declaredUrl: string | null }
@@ -249,6 +266,10 @@ const props = withDefaults(defineProps<{
   authOptions: string[]
   /** 平台编排展示名(orchestration.steps[i].name,与 steps 同序);plate Step 无 name */
   stepOrchestrationNames?: string[]
+  /** 断言注册表条目(spec v2 §5 异常组):空 = 无注入区(整段隐藏) */
+  assertionEntries?: AssertionEntry[]
+  /** 死条目(悬空)id — CaseComposer 用 isDeadEntry 预计算,死条目禁选 */
+  deadEntryIds?: string[]
 }>(), {
   visible: true,
   scenario: null,
@@ -256,6 +277,8 @@ const props = withDefaults(defineProps<{
   lastRunId: null,
   lastRunError: null,
   stepOrchestrationNames: () => [] as string[],
+  assertionEntries: () => [] as AssertionEntry[],
+  deadEntryIds: () => [] as string[],
 })
 
 const emit = defineEmits<{
@@ -272,6 +295,9 @@ const emit = defineEmits<{
       /** service → {authAlias?, url?};空绑定条目不随 confirm 下发,
        *  预填未改动的声明 URL 也不算显式绑定不上送(D3) */
       serviceBindings?: Record<string, ServiceBinding>
+      /** 断言注入条目 id(spec v2 §5 异常组):与数据集行并列生成 case;
+       *  空选不随 confirm 下送 */
+      injectionEntryIds?: string[]
     },
   ]
   /** 存为方案:当前 ds/绑定快照(无 envId,plugins/logSub 预埋 no-op) */
@@ -302,15 +328,32 @@ function toggleBaseline() {
   if (useBaseline.value) selectedDatasets.value = []
 }
 
+// ── 断言注入条目(spec v2 §5 异常组)────────────────────────────
+// 与数据集(正常组)并列;每次打开弹框 = v-if 重挂载,选中态随之重置
+// (与 selectedDatasets 同款生命周期,无显式 visible watch)。
+const injectionIds = ref<string[]>([])
+/** 死条目(悬空)判定:CaseComposer 预计算传入(编辑器同款 isDeadEntry) */
+const deadIds = computed(() => new Set(props.deadEntryIds))
+/** 可回填集合 = 现存且未悬空:方案回填时已删/悬空 id 静默跳过
+ *  (悬空条目禁选,回填成勾选态会卡死 — 无法取消勾选的禁用框) */
+const liveEntryIds = computed(() =>
+  new Set(props.assertionEntries
+    .filter((e) => !deadIds.value.has(e.id))
+    .map((e) => e.id)))
+
 // ── 方案栏(spec §4):临时手填 / 上次运行 / 已存方案 ──────────────
 const selectedScheme = ref<string>('__adhoc__')   // '__adhoc__' | '__last__' | scheme.name
 const schemeNameDraft = ref('')
 
-/** 方案配置降级:方案里的数据集已被删 → 选项标注(不报废,选了可改) */
+/** 全部现存条目 id(方案悬空判定用;死条目不算悬空 — 条目还在,只是禁选) */
+const allEntryIds = computed(() => new Set(props.assertionEntries.map((e) => e.id)))
+
+/** 方案配置降级:方案里的数据集/注入条目已被删 → 选项标注(不报废,选了可改) */
 const schemeDegraded = computed(() =>
   props.schemes
     .filter((s) =>
-      s.dataSetIds.some((id) => !props.dataSets.some((d) => d.datasetId === id)))
+      s.dataSetIds.some((id) => !props.dataSets.some((d) => d.datasetId === id))
+      || (s.injectionEntryIds ?? []).some((id) => !allEntryIds.value.has(id)))
     .map((s) => s.name))
 
 const schemeOptions = computed(() => [
@@ -387,11 +430,12 @@ watch(() => props.serviceRows, (rows) => {
   bindings.value = next
 }, { immediate: true })
 
-// 选方案/上次运行 → 绑定整体替换预填 + ds 回填(已删项静默跳过 = 降级不报废)
+// 选方案/上次运行 → 绑定整体替换预填 + ds/注入条目回填(已删项静默跳过 = 降级不报废)
 watch(selectedScheme, (v) => {
   if (v === '__adhoc__') {
     bindings.value = Object.fromEntries(props.serviceRows.map(
       (r) => [r.service, { url: r.declaredUrl ?? undefined } as ServiceBinding]))
+    injectionIds.value = []   // 临时手填 = 全新状态
     return
   }
   const src = v === '__last__' ? props.lastRunOverlay : props.schemes.find((s) => s.name === v)
@@ -408,6 +452,13 @@ watch(selectedScheme, (v) => {
   // 不能沿用打开时的当前勾选。
   selectedDatasets.value = (src?.dataSetIds ?? []).filter((id) =>
     props.dataSets.some((d) => d.datasetId === id))
+  // 注入条目回填:仅已存方案携带;「上次运行」overlay 暂无该字段(引擎
+  // 回显接入后补)。已删/悬空 id 静默跳过 — 悬空条目禁选,回填成勾选态
+  // 会造出无法取消的选中项。
+  injectionIds.value = v === '__last__'
+    ? []
+    : (props.schemes.find((s) => s.name === v)?.injectionEntryIds ?? [])
+        .filter((id) => liveEntryIds.value.has(id))
 })
 
 /** 降级:绑定引用的 alias 已不在凭证选项(凭证被删)→ 行标红,不阻塞运行 */
@@ -448,12 +499,14 @@ function stepName(i: number): string {
 const MAX_TOTAL_RUNS = 200
 
 const totalRuns = computed(() => {
+  // 注入条目与数据集行并列计闸(spec v2 §5):每个选中条目 = 一条 case 行。
+  const inj = injectionIds.value.length
   // 基线或空选择都按一个隐式空行计(D12:confirm 原样透传空 dataSetIds 即基线,
   // 显示必须与派发语义一致,不能谎报 0 次)
-  if (useBaseline.value || selectedDatasets.value.length === 0) return 1 * (nRuns.value || 1)
-  return props.dataSets
+  if (useBaseline.value || selectedDatasets.value.length === 0) return (1 + inj) * (nRuns.value || 1)
+  return (props.dataSets
     .filter(d => selectedDatasets.value.includes(d.datasetId))
-    .reduce((sum, d) => sum + (d.rowCount || 0), 0) * (nRuns.value || 1)
+    .reduce((sum, d) => sum + (d.rowCount || 0), 0) + inj) * (nRuns.value || 1)
 })
 
 function onConfirm() {
@@ -476,6 +529,7 @@ function onConfirm() {
     ...(nRuns.value !== 1 ? { nRuns: nRuns.value } : {}),
     ...(parallel.value !== 1 ? { parallel: parallel.value } : {}),
     ...(Object.keys(serviceBindings).length ? { serviceBindings } : {}),
+    ...(injectionIds.value.length ? { injectionEntryIds: [...injectionIds.value] } : {}),
   })
 }
 
@@ -493,6 +547,7 @@ function onSaveScheme() {
   emit('saveScheme', {
     name,
     dataSetIds: [...selectedDatasets.value],
+    injectionEntryIds: [...injectionIds.value],
     serviceBindings: explicitServiceBindings(),
     plugins: null,
     logSub: null,
@@ -604,6 +659,13 @@ function goCreateDataSet() {
 
 .ds-grid-baseline { margin-bottom: 8px; }
 .ds-tile.baseline { border-style: dashed; }
+
+/* ── 断言注入条目(spec v2 §5 异常组)──────────────────────────── */
+.rd-inj-group {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+}
+/* 悬空标注:与条目名同行,红字弱化(条目本身禁选灰显) */
+.rd-dead-note { margin-left: 6px; font-size: 11px; color: #b91c1c; }
 
 .empty-data {
   display: flex; flex-direction: column; align-items: center; gap: 12px;

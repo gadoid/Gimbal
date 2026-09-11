@@ -243,6 +243,8 @@
       :last-run-overlay="lastRunOverlay"
       :service-rows="serviceRows"
       :auth-options="authOptions"
+      :assertion-entries="registry.entries"
+      :dead-entry-ids="deadEntryIds"
       @close="runDialogOpen = false"
       @confirm="onRunConfirm"
       @save-scheme="onSaveScheme"
@@ -284,9 +286,8 @@ import type {
 import type {
   Scenario, DataSetSummary, Orchestration, ScenarioDraft,
 } from '@/types/scenario-composer'
-import type { AssertionRegistry } from '@/types/assertion-registry'
-import type { AssertionAnchor } from '@/types/assertion-registry'
-import { genEntryId } from '@/utils/assertion-registry'
+import type { AssertionAnchor, AssertionRegistry } from '@/types/assertion-registry'
+import { genEntryId, isDeadEntry } from '@/utils/assertion-registry'
 import type { ScenarioView, StepView } from '@/types/plate'
 
 const STEPS = [
@@ -498,6 +499,19 @@ const authOptions = computed(() => [...new Set([
   ...ownerAuthAliases.value,
   ...Object.keys(definition.value.config?.users ?? {}),
 ])])
+
+/** 死条目(悬空)id 集(spec v2 §5):喂食函数编辑器同款内联
+ *  (AssertionRegistryEditor)— RunDialog 注入区据此禁选。 */
+const registryVarNames = computed(() =>
+  new Set(Object.keys(definition.value.config?.vars ?? {})))
+function registryAssertTargetsOf(si: number): ReadonlySet<string> {
+  const st = steps.value[si]?.strategy ?? []
+  return new Set(st.filter((x) => x.kind === 'assertion').map((x) => x.target))
+}
+const deadEntryIds = computed(() =>
+  registry.value.entries
+    .filter((e) => isDeadEntry(e, steps.value.length, registryVarNames.value, registryAssertTargetsOf))
+    .map((e) => e.id))
 
 /** Canvas"设为变量"上报:登记共享变量默认值(D8;vars 扁平 name→value,零 schema 变化) */
 function onVarPromote(name: string, value: unknown) {
@@ -972,6 +986,7 @@ async function onRunConfirm(
     nRuns?: number
     parallel?: number
     serviceBindings?: Record<string, ServiceBinding>
+    injectionEntryIds?: string[]
   },
 ) {
   if (!scenario.value) {
@@ -992,6 +1007,10 @@ async function onRunConfirm(
       ...(opts?.parallel && opts.parallel !== 1 ? { parallel: opts.parallel } : {}),
       ...(opts?.serviceBindings && Object.keys(opts.serviceBindings).length
         ? { serviceBindings: opts.serviceBindings } : {}),
+      // 断言注入条目(spec v2 §5 异常组):空选不随 body 上送;引擎侧
+      // 展开由后续任务接入,后端 extra=ignore 先行透传不炸。
+      ...(opts?.injectionEntryIds?.length
+        ? { injectionEntryIds: opts.injectionEntryIds } : {}),
     }
     const resp = await api.runScenario(body)
     lastRunId.value = resp.runId

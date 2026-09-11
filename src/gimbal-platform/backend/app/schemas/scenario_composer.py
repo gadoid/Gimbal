@@ -204,6 +204,10 @@ class RunScheme(BaseModel):
 
     name: str = Field(min_length=1, max_length=64)
     data_set_ids: list[str] = Field(default_factory=list, alias="dataSetIds")
+    # 断言注入条目(spec v2 §5):RunDialog 异常组多选,选中的条目与数据集
+    # 行并列生成 case;default 空 = 旧方案缺键不炸。
+    injection_entry_ids: list[str] = Field(default_factory=list,
+                                           alias="injectionEntryIds")
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
     plugins: Any = None        # 预埋,gimbal 就绪前 no-op

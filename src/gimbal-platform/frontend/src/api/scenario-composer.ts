@@ -125,6 +125,8 @@ export interface ServiceBinding {
 export interface RunScheme {
   name: string
   dataSetIds: string[]
+  /** 断言注入条目(spec v2 §5):RunDialog 异常组多选快照;可选 = 旧方案缺键不炸 */
+  injectionEntryIds?: string[]
   serviceBindings: Record<string, ServiceBinding>
   /** 预埋(gimbal 就绪前 no-op) */
   plugins?: unknown
@@ -143,6 +145,9 @@ export interface RunRequest {
   scenarioId: string
   /** D12:空数组合法 = 基线执行(一个隐式空覆盖行);非空 = 选中数据集 */
   dataSetIds: string[]
+  /** 断言注入条目(spec v2 §5):异常组 — 跑在基线上,与数据集行并列生成
+   *  case;缺省 = 不注入。引擎侧展开由后续任务接入。 */
+  injectionEntryIds?: string[]
   /** service → {authAlias?, url?} 绑定:注入清单 = 模板扫描(steps 里的
    * ${auth.*} 引用)∪ 绑定 authAlias;绑定 url 物化进 services(显式绑定
    * 最优先)。旧 auths/injectCredentials/prefix/mergePolicy 已退役(spec §6) */
