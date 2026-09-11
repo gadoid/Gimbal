@@ -8,7 +8,7 @@
  *   - 数据行是稀疏 dict;`undefined` ↔ 继承基线;`""` ↔ 显式空串覆盖。
  *     UI 必须保留这两种状态的区别(`override-empty` 红条)。
  *   - 后端 `_validate_rows` 只校验键 ⊆ palette,值任意 → cell 统一字符串。
- *   - `promote()` 是本地草稿 mutate,基线 PUT 走 `updateScenario`。
+ *   - 直填基线编辑(`setDirectBaseline()`)是本地草稿 mutate,基线 PUT 走 `updateScenario`。
  */
 
 import type { BaselineColumn } from './dataset-palette'

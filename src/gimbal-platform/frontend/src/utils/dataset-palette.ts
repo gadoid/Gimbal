@@ -55,8 +55,8 @@ export interface ScenarioDefinitionShape {
 }
 
 /** 取某 step 内某 source 的 fields dict;非对象(空 / 数组)返 null。
- *  导出给 DataSetEditor 共用 — 该逻辑在 promote / demote / setDirectBaseline /
- *  isPromotableVar / directBaselineValue 都重复过,集中后改一处生效。 */
+ *  导出给 DataSetEditor 共用 — 该逻辑在 setDirectBaseline /
+ *  directBaselineValue 都重复过,集中后改一处生效。 */
 export function fieldsOf(
   step: ScenarioStepShape | undefined | null,
   source: BaselineColumn['source'],

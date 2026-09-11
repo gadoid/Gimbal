@@ -93,7 +93,7 @@ it('基线默认折叠:摘要显示 N 变量 · M 直填', async () => {
   expect(baseItem.classes()).not.toContain('is-active')
 })
 
-it('展开基线后按 step · source 分组渲染,直填列有提升按钮', async () => {
+it('展开基线后按 step · source 分组渲染,直填行改可编辑输入(提升入口已退场)', async () => {
   const w = mountEditor()
   await flushPromises()
   // 点开折叠区
@@ -102,8 +102,9 @@ it('展开基线后按 step · source 分组渲染,直填列有提升按钮', as
   await flushPromises()
   // 现在有 baseline-rows
   expect(w.findAll('.baseline-rows').length).toBeGreaterThan(0)
-  // 直填列 customer_id 的提升按钮存在
-  expect(w.text()).toContain('提升为变量')
+  // 直填列提升入口已退场(裁定 A — 列宇宙 = config.vars,编辑器只消费不声明);
+  // 直填行是基线区可编辑输入(Task 4 语义,editing 细则另有用例)
+  expect(w.text()).not.toContain('提升为变量')
 })
 
 it('基线搜索过滤字段名', async () => {
@@ -624,9 +625,12 @@ it('CSV 导出带 (description) 行;body var 有描述(IOFieldBinding 命中)', 
   expect(args.descriptions[1]).toBe('页码')          // step1.body.page
 })
 
-// ── 提升为变量 + 撤销提升 ──────────────────────────────────────────
+// ── 提升退场(裁定 A:列宇宙 = config.vars,编辑器只消费不声明)──────
+// promote/demote/demoteLast/promotedKeys/promotedOrder/isPromotableVar/
+// col-promoted 整体移除(Task 6);直填行基线区编辑(Task 4)与 var 行
+// 基线编辑保留。本节钉死退场后语义:提升 / 撤销入口在任何位置不再出现。
 
-it('点「提升为变量」→ 该字段从 direct 变成 var,基线区出现「撤销提升」', async () => {
+it('提升已退场:基线区 / 顶栏无「提升为变量」「撤销提升」;直填与 var 行编辑保留', async () => {
   const w = mountEditor()
   await flushPromises()
   // 展开基线 + 所有步骤分组
@@ -635,242 +639,15 @@ it('点「提升为变量」→ 该字段从 direct 变成 var,基线区出现�
   const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
   for (const h of groupHeaders) await h.trigger('click')
   await flushPromises()
-  // 找到 customer_id 这行(direct)的「提升为变量」按钮
-  const promoteBtns = w.findAll('.baseline-collapse button').filter((b) => b.text().includes('提升为变量'))
-  expect(promoteBtns.length).toBeGreaterThan(0)
-  await promoteBtns[0].trigger('click')
-  await flushPromises()
-  // customer_id 应该变成 var;基线区里出现「撤销提升」按钮
-  expect(w.text()).toContain('撤销提升')
-  // 直填数从 2 减为 1,变量数从 2 升为 3(摘要更新)
-  expect(w.text()).toMatch(/变量\s*3\s*·\s*直填\s*1/)
-})
-
-it('提升后,对应字段列在转置表里加 .col-promoted(thead + tbody 同步)', async () => {
-  const w = mountEditor()
-  await flushPromises()
-  // 展开基线 + 步骤分组
-  await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
-  await flushPromises()
-  const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
-  for (const h of groupHeaders) await h.trigger('click')
-  await flushPromises()
-  // 提升 customer_id
-  const promoteBtn = w.findAll('.baseline-collapse button').find((b) => b.text().includes('提升为变量'))
-  await promoteBtn!.trigger('click')
-  await flushPromises()
-  // 加一条数据,便于验证 tbody 的 col-promoted
-  await w.findAll('button').find((b) => b.text().includes('新增数据'))!.trigger('click')
-  await flushPromises()
-  // thead + tbody 里都应该有 .col-promoted
-  const promotedInHead = w.findAll('.data-table thead th.col-promoted')
-  const promotedInBody = w.findAll('.data-table tbody td.col-promoted')
-  expect(promotedInHead.length).toBeGreaterThan(0)  // 描述行 + 字段行,每个 th 都被打标
-  expect(promotedInBody.length).toBeGreaterThan(0)
-})
-
-it('「撤销提升」→ 字段变回 direct,var 名从 config.vars 中移除', async () => {
-  const w = mountEditor()
-  await flushPromises()
-  // 展开基线 + 步骤分组
-  await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
-  await flushPromises()
-  const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
-  for (const h of groupHeaders) await h.trigger('click')
-  await flushPromises()
-  // 提升 customer_id(选「提升为变量」按钮 — 它只出现在 direct 行)
-  const promoteBtn = w.findAll('.baseline-collapse button').find((b) => b.text().includes('提升为变量'))
-  await promoteBtn!.trigger('click')
-  await flushPromises()
-  // 拿新的 var 名(从 draft 里读 — 通过 component.vm 反射)
-  const draftAfterPromote = (w.vm as any).draft
-  const promotedVarName = Object.keys(draftAfterPromote.definition.config.vars).find(
-    (k) => !['amount', 'page'].includes(k),
-  )
-  expect(promotedVarName).toBeTruthy()
-  // 现在 amount / page / customer_id 都是 var 形态 → 3 个撤销按钮
-  const demoteBtns = w.findAll('.baseline-collapse button').filter((b) => b.text().includes('撤销提升'))
-  expect(demoteBtns.length).toBe(3)
-  // DOM 渲染顺序 = 字段出现顺序:amount / customer_id / page / size — 撤销按钮也是这个顺序
-  // 找 customer_id 那一行的撤销按钮(顺序里的第 2 个)
-  await demoteBtns[1].trigger('click')
-  await flushPromises()
-  // vars 中不再含刚提升的 var;amount/page 还在
-  const draftAfterDemote = (w.vm as any).draft
-  expect(Object.keys(draftAfterDemote.definition.config.vars)).toContain('amount')
-  expect(Object.keys(draftAfterDemote.definition.config.vars)).toContain('page')
-  expect(Object.keys(draftAfterDemote.definition.config.vars)).not.toContain(promotedVarName)
-  // 摘要回到 2 变量 · 2 直填
-  expect(w.text()).toMatch(/变量\s*2\s*·\s*直填\s*2/)
-  // step.body.customer_id 恢复为字面值 '261'
-  expect(draftAfterDemote.definition.steps[0].request.body.customer_id).toBe('261')
-})
-
-it('撤销后 .col-promoted 仅在新撤销的那一列消失(已有 var 列仍保持浅灰)', async () => {
-  const w = mountEditor()
-  await flushPromises()
-  await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
-  await flushPromises()
-  const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
-  for (const h of groupHeaders) await h.trigger('click')
-  await flushPromises()
-  // 提升一个字段
-  await w.findAll('.baseline-collapse button').find((b) => b.text().includes('提升为变量'))!.trigger('click')
-  await flushPromises()
-  const promotedBefore = w.findAll('.data-table thead th.col-promoted').length
-  expect(promotedBefore).toBeGreaterThan(0)
-  // 撤销 — DOM 顺序:amount / customer_id / page / size → 撤销第 2 个(customer_id)
-  const demoteBtns = w.findAll('.baseline-collapse button').filter((b) => b.text().includes('撤销提升'))
-  await demoteBtns[1].trigger('click')
-  await flushPromises()
-  // col-promoted 数应减少(只少 customer_id 一列)
-  const promotedAfter = w.findAll('.data-table thead th.col-promoted').length
-  expect(promotedAfter).toBeLessThan(promotedBefore)
-  // amount/page 那两列仍然有 col-promoted(它们还是 var 形态)
-  expect(promotedAfter).toBeGreaterThan(0)
-})
-
-it('已有 var 字段也是 var 形态 → 显示「撤销提升」入口(不依赖会话状态)', async () => {
-  const w = mountEditor()
-  await flushPromises()
-  // 展开基线
-  await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
-  await flushPromises()
-  const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
-  for (const h of groupHeaders) await h.trigger('click')
-  await flushPromises()
-  // DRAFT 里 amount/page 都是 `${var.x}` 形态 → 应该有 2 个撤销按钮
-  const inBaseline = w.findAll('.baseline-collapse button').filter((b) => b.text().includes('撤销提升'))
-  expect(inBaseline.length).toBe(2)
-  // 顶栏入口仍不显示(本次会话没提升过)
-  const headerUndo = w.findAll('.header-actions button').filter((b) => b.text().includes('撤销提升'))
-  expect(headerUndo.length).toBe(0)
-})
-
-it('刷新场景(重新加载 draft)后,基线区撤销入口仍存在(不依赖会话状态)', async () => {
-  const w = mountEditor()
-  await flushPromises()
-  // 展开基线 + 步骤分组
-  await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
-  await flushPromises()
-  const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
-  for (const h of groupHeaders) await h.trigger('click')
-  await flushPromises()
-  // 初始:amount/page 两个已有 var → 2 个撤销按钮
-  expect(w.findAll('.baseline-collapse button').filter((b) => b.text().includes('撤销提升')).length).toBe(2)
-  // 模拟刷新:重置 promotedKeys / promotedOrder(对话状态清空)— 用 vm 反射改
-  ;(w.vm as any).promotedKeys = new Set()
-  ;(w.vm as any).promotedOrder = []
-  await flushPromises()
-  // 基线区的撤销按钮**仍然存在**(因为它走的是 isPromotableVar,不依赖会话)
-  expect(w.findAll('.baseline-collapse button').filter((b) => b.text().includes('撤销提升')).length).toBe(2)
-  // 顶栏入口消失(顶栏走的是会话 LIFO)
-  expect(w.findAll('.header-actions button').filter((b) => b.text().includes('撤销提升')).length).toBe(0)
-})
-
-it('点基线区「撤销提升」撤销已有 var 后,字段回到 direct 形态,vars 中删名', async () => {
-  const w = mountEditor()
-  await flushPromises()
-  // 展开基线
-  await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
-  await flushPromises()
-  const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
-  for (const h of groupHeaders) await h.trigger('click')
-  await flushPromises()
-  // 初始 vars 包含 amount / page
-  expect(Object.keys((w.vm as any).draft.definition.config.vars)).toEqual(['amount', 'page'])
-  // 点 amount 的撤销按钮(基线区里有 2 个撤销按钮,对应 amount / page)— 选第一个
-  const demoteBtns = w.findAll('.baseline-collapse button').filter((b) => b.text().includes('撤销提升'))
-  expect(demoteBtns.length).toBe(2)
-  await demoteBtns[0].trigger('click')
-  await flushPromises()
-  // vars 中 amount 已删除
-  expect(Object.keys((w.vm as any).draft.definition.config.vars)).toEqual(['page'])
-  // step0.body.amount 已经还原为 '100'(原 vars[amount] 值)
-  expect((w.vm as any).draft.definition.steps[0].request.body.amount).toBe('100')
-})
-
-// ── 顶栏「撤销提升」入口(常驻可见,不依赖折叠区展开) ──────────────────
-
-it('顶栏「撤销提升」按钮在 promotedOrder 非空时出现', async () => {
-  const w = mountEditor()
-  await flushPromises()
-  // 初始没提升 → 顶栏没有撤销按钮
-  expect(w.findAll('.header-actions button').filter((b) => b.text().includes('撤销提升')).length).toBe(0)
-  // 展开基线 + 步骤分组,提升一个 direct 字段
-  await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
-  await flushPromises()
-  const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
-  for (const h of groupHeaders) await h.trigger('click')
-  await flushPromises()
-  const promoteBtn = w.findAll('.baseline-collapse button').find((b) => b.text().includes('提升为变量'))
-  await promoteBtn!.trigger('click')
-  await flushPromises()
-  // 顶栏出现「↶ 撤销提升」
-  const headerUndo = w.findAll('.header-actions button').filter((b) => b.text().includes('撤销提升'))
-  expect(headerUndo.length).toBe(1)
-  expect(headerUndo[0].text()).toContain('撤销提升')
-})
-
-it('顶栏「撤销提升」不依赖折叠区展开也可见', async () => {
-  const w = mountEditor()
-  await flushPromises()
-  // 提升一个字段(不展开任何折叠项)
-  await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
-  await flushPromises()
-  const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
-  for (const h of groupHeaders) await h.trigger('click')
-  await flushPromises()
-  await w.findAll('.baseline-collapse button').find((b) => b.text().includes('提升为变量'))!.trigger('click')
-  await flushPromises()
-  // 把基线折叠回去
-  await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
-  await flushPromises()
-  // 验证:折叠基线区整体不可见(el-collapse 折叠时 wrap 是 display:none / height:0)
-  const wrap = w.find('.baseline-collapse .el-collapse-item__wrap')
-  expect(wrap.exists()).toBe(true)
-  const display = (wrap.element as HTMLElement).style.display
-  // 折叠后是 none;展开时是 ''
-  expect(['none', ''].includes(display) || (wrap.element as HTMLElement).offsetHeight === 0).toBe(true)
-  // 顶栏那个撤销按钮仍然可见
-  const headerUndo = w.findAll('.header-actions button').filter((b) => b.text().includes('撤销提升'))
-  expect(headerUndo.length).toBe(1)
-})
-
-it('点顶栏「撤销提升」→ LIFO 弹出最近一次提升,字段变回 direct,var 名从 config.vars 移除', async () => {
-  const w = mountEditor()
-  await flushPromises()
-  await w.find('.baseline-collapse .el-collapse-item__header').trigger('click')
-  await flushPromises()
-  const groupHeaders = w.findAll('.baseline-groups .el-collapse-item__header')
-  for (const h of groupHeaders) await h.trigger('click')
-  await flushPromises()
-  // 提升两次(customer_id + size)— 顺序是 LIFO,先撤销 size
-  const promoteBtns = w.findAll('.baseline-collapse button').filter((b) => b.text().includes('提升为变量'))
-  await promoteBtns[0].trigger('click')  // 第一个:customer_id
-  await flushPromises()
-  await promoteBtns[1].trigger('click')  // 第二个:size
-  await flushPromises()
-  // 摘要:4 变量 · 0 直填
-  expect(w.text()).toMatch(/变量\s*4\s*·\s*直填\s*0/)
-  // 顶栏按钮文案含「撤销提升 (2)」
-  const headerUndoBtn = w.findAll('.header-actions button').find((b) => b.text().includes('撤销提升'))!
-  expect(headerUndoBtn.text()).toContain('(2)')
-  // 验证 promotedOrder 长度
-  expect((w.vm as any).promotedOrder.length).toBe(2)
-  // 点顶栏撤销 → 撤销最近一次(size)
-  await headerUndoBtn.trigger('click')
-  await flushPromises()
-  // 摘要:3 变量 · 1 直填
-  expect(w.text()).toMatch(/变量\s*3\s*·\s*直填\s*1/)
-  // promotedOrder 现在剩 1 项(取自 vm)
-  expect((w.vm as any).promotedOrder.length).toBe(1)
-  // step1.request.body.size 已经还原为 '20'
-  const draft = (w.vm as any).draft
-  expect(draft.definition.steps[1].request.body.size).toBe('20')
-  // 顶栏按钮依然存在(还有 1 个待撤销)— 用 button 的 span 内容校验
-  const headerUndoBtn2 = w.findAll('.header-actions button').find((b) => b.text().includes('撤销提升'))
-  expect(headerUndoBtn2).toBeTruthy()
+  // 提升 / 撤销入口全数退场(基线区 + 顶栏;文案与按钮都不残留)
+  expect(w.text()).not.toContain('提升为变量')
+  expect(w.text()).not.toContain('撤销提升')
+  // 直填行基线区编辑保留(Task 4):customer_id=261 / size=20 两个直填输入
+  const directInputs = w.findAll('input.baseline-direct-input')
+  expect(directInputs.length).toBe(2)
+  expect(directInputs.some((i) => (i.element as HTMLInputElement).value === '261')).toBe(true)
+  // var 行基线编辑保留:amount / page 两个 el-input(config.vars 基线编辑入口)
+  expect(w.findAll('.baseline-edit .el-input').length).toBe(2)
 })
 
 // ── 步骤分组表头(P1.4)─────────────────────────────────────────

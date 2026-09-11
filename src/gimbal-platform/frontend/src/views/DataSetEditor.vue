@@ -29,15 +29,6 @@
       </div>
       <div class="header-actions">
         <el-button :icon="Back" @click="router.push(scenarioDataSetsUrl(scenarioId))">返回列表</el-button>
-        <el-button
-          v-if="promotedOrder.length"
-          plain
-          type="warning"
-          :title="`撤销最近一次提升(共 ${promotedOrder.length} 次)`"
-          @click="demoteLast"
-        >
-          ↶ 撤销提升{{ promotedOrder.length > 1 ? ` (${promotedOrder.length})` : '' }}
-        </el-button>
         <el-button :loading="savingBaseline" plain :disabled="!draft" @click="onSaveBaseline">
           保存基线{{ baselineDirty ? ' *' : '' }}
         </el-button>
@@ -115,18 +106,7 @@
                       :placeholder="col.baseline || '空'"
                       @input="(e: Event) => setDirectBaseline(col, (e.target as HTMLInputElement).value)"
                     />
-                    <el-button size="small" text type="primary" @click="promote(col)">提升为变量</el-button>
                   </template>
-                  <!-- 只要字段当前还是 `${var.x}` 形态就显示撤销入口(不依赖会话状态) -->
-                  <el-button
-                    v-if="isPromotableVar(col)"
-                    size="small"
-                    text
-                    type="warning"
-                    @click="demote(col)"
-                  >
-                    撤销提升
-                  </el-button>
                 </div>
               </div>
             </div>
@@ -222,7 +202,7 @@
             <th
               v-for="(col, ci) in visibleColumns"
               :key="`info-d:${col.stepIndex}:${col.source}:${col.varName}`"
-              :class="['th-data', col.source === 'expect' ? 'col-expect' : '', isPromotableVar(bcOf(col)) ? 'col-promoted' : '', activeSegment === 'all' && isStepStart(ci) ? 'is-step-start' : '']"
+              :class="['th-data', col.source === 'expect' ? 'col-expect' : '', activeSegment === 'all' && isStepStart(ci) ? 'is-step-start' : '']"
               :title="descriptionByColumnKey.get(`${col.stepIndex}:${col.source}:${col.field}`) || col.field"
             >
               {{ descriptionByColumnKey.get(`${col.stepIndex}:${col.source}:${col.field}`) || '—' }}
@@ -235,7 +215,7 @@
             <th
               v-for="(col, ci) in visibleColumns"
               :key="`info-f:${col.stepIndex}:${col.source}:${col.varName}`"
-              :class="['th-data', col.source === 'expect' ? 'col-expect' : '', isPromotableVar(bcOf(col)) ? 'col-promoted' : '', activeSegment === 'all' && isStepStart(ci) ? 'is-step-start' : '']"
+              :class="['th-data', col.source === 'expect' ? 'col-expect' : '', activeSegment === 'all' && isStepStart(ci) ? 'is-step-start' : '']"
               :title="col.source === 'expect'
                 ? `期望列 ${col.varName} — 断言 ${col.expect?.target} ${col.expect?.operator}(步骤${col.stepIndex + 1})`
                 : `${col.stepIndex + 1} 步 ${col.source} · ${col.field}`"
@@ -281,7 +261,7 @@
             <td
               v-for="(col, ci) in visibleColumns"
               :key="`c:${i}:${col.stepIndex}:${col.source}:${col.varName}`"
-              :class="['td-data', cellClass(row, bcOf(col)), col.source === 'expect' ? 'col-expect' : '', isPromotableVar(bcOf(col)) ? 'col-promoted' : '', activeSegment === 'all' && isStepStart(ci) ? 'is-step-start' : '']"
+              :class="['td-data', cellClass(row, bcOf(col)), col.source === 'expect' ? 'col-expect' : '', activeSegment === 'all' && isStepStart(ci) ? 'is-step-start' : '']"
               :title="bcOf(col).baseline"
             >
               <!-- 期望列与输入列同款单元格:行键 = varName,期望列 baseline
@@ -376,14 +356,6 @@ const caseNames = ref<string[]>([])
 /** 场景草稿本地副本 — 基线唯一事实源;「保存基线」整体 PUT 回场景 */
 const draft = ref<{ definition: any; orchestration: any } | null>(null)
 const baselineDirty = ref(false)
-/** 本会话内「提升过 / 撤销过」过的字段集合 — key = `${stepIndex}:${source}:${field}`。
- *  用于:① 提升后整列加浅灰底色提示「这是新提升的 var」;
- *       ② 撤销提升按钮的入口开关。
- *  重启页面 / 刷新会清空 — 不持久化,只影响会话内视觉与撤销能力。 */
-const promotedKeys = reactive<Set<string>>(new Set())
-/** 提升顺序栈 — LIFO 弹出,给顶栏「撤销最近一次提升」用。
- *  promotedKeys 是 Set 没有顺序;用数组维护 push/pop 顺序。 */
-const promotedOrder = ref<string[]>([])
 /** 选中的数据行索引集合(Set)。用于「预览选中的数据」入口。 */
 const selectedRows = reactive(new Set<number>())
 /** 预览弹窗显示开关 */
@@ -423,10 +395,9 @@ const visibleColumns = computed<GridVarColumn[]>(() => {
   return seg ? gridColumnsOf(seg) : []
 })
 
-/** GridVarColumn → BaselineColumn 适配:cellClass/onCellInput/onCellPaste/
- *  isPromotableVar 既有签名消费完整 BaselineColumn 形状(最小适配对象补齐
- *  stepIndex/source/field;期望列 source 无 'expect' 域 — 落 'body' 后
- *  fieldsOf 按断言 target 查不到键,恒 false,安全)。 */
+/** GridVarColumn → BaselineColumn 适配:cellClass/onCellInput/onCellPaste
+ *  既有签名消费完整 BaselineColumn 形状(最小适配对象补齐
+ *  stepIndex/source/field)。 */
 function bcOf(col: GridVarColumn): BaselineColumn {
   return {
     stepIndex: col.stepIndex,
@@ -437,10 +408,6 @@ function bcOf(col: GridVarColumn): BaselineColumn {
     baseline: col.baseline === undefined || col.baseline === null ? '' : String(col.baseline),
   }
 }
-
-/** 段内可编辑 var 列(段语义消费面:粘贴列定位等;粘贴语义 = 当前段)。
- *  CSV 导入导出不再吃它 — 见 csvVarColumns(brief ⑥ 全量宇宙)。 */
-const varColumns = computed<BaselineColumn[]>(() => visibleColumns.value.map(bcOf))
 
 /** CSV 导入导出链专用:全量 var 列宇宙(brief ⑥ — 不随段过滤)。
  *  flatMap gridColumnsOf 覆盖 ALL 段(输入列 + 期望列);columns 与
@@ -546,106 +513,6 @@ function mutateDraft(mutator: (clone: any) => boolean): void {
   if (!changed) return
   draft.value = clone
   baselineDirty.value = true
-}
-
-function promote(col: BaselineColumn) {
-  if (!draft.value) return
-  // promote 是 direct → var,新 var 名自生成(不读 col.varName)。
-  let name = ''
-  let original: unknown
-  mutateDraft((clone) => {
-    const step = clone.definition.steps[col.stepIndex]
-    const fields = fieldsOf(step, col.source)
-    if (!fields) return false
-    original = fields[col.field]
-    const vars = clone.definition.config?.vars ?? {}
-    const base = String(col.field).replace(/[^A-Za-z0-9_.]/g, '_').replace(/^_+|_+$/g, '') || 'var'
-    name = base
-    let n = 2
-    while (Object.prototype.hasOwnProperty.call(vars, name)) name = `${base}_${n++}`
-    fields[col.field] = `\${var.${name}}`
-    clone.definition.config = {
-      ...(clone.definition.config ?? {}),
-      vars: { ...vars, [name]: original },
-    }
-    return true
-  })
-  if (!name) return
-  // 标记为「本会话提升过」— 用于整列浅灰底色 + 撤销入口
-  const key = `${col.stepIndex}:${col.source}:${col.field}`
-  promotedKeys.add(key)
-  promotedOrder.value.push(key)
-  ElMessage.success(`已提升为变量 ${name}(默认值 = 原值)— 保存基线后生效`)
-}
-
-/** 撤销提升:把字段从 `\${var.x}` 还原为字面值,从 config.vars 移除 x。
- *  - 不依赖会话状态 — 只要字段当前是 `${var.x}` 形态 且 x 仍在 config.vars 里,
- *    就允许撤销(刷新页面 / 保存基线后仍可撤销)
- *  - baselineDirty = true,需要「保存基线」PUT 回去 */
-function demote(col: BaselineColumn) {
-  if (!draft.value || !col.varName) return
-  const fields = fieldsOf(draft.value.definition?.steps?.[col.stepIndex], col.source)
-  if (!fields) return
-  // 找到当前值里的 var 名(`${var.NAME}`)
-  // 字符集与 dataset-palette.ts 的 VAR_RE 对齐(允许 `<system>.key` 等点号命名空间)
-  const cur = fields[col.field]
-  const m = /^\$\{var\.([A-Za-z0-9_.]+)\}$/.exec(typeof cur === 'string' ? cur : '')
-  if (!m) {
-    // 已经不是 var 形态(可能被用户手动改过)→ 静默跳过
-    ElMessage.warning(`字段 ${col.field} 当前不是变量形态,无需撤销`)
-    return
-  }
-  const varName = m[1]
-  let applied = false
-  mutateDraft((clone) => {
-    const f = fieldsOf(clone.definition.steps[col.stepIndex], col.source)
-    if (!f) return false
-    const vars = { ...(clone.definition.config?.vars ?? {}) }
-    // 兜底:若 var 不在 vars 里(罕见,比如用户基线删过),用空串还原
-    const orig = vars[varName]
-    delete vars[varName]
-    f[col.field] = orig === undefined || orig === null ? '' : String(orig)
-    clone.definition.config = { ...(clone.definition.config ?? {}), vars }
-    applied = true
-    return true
-  })
-  if (!applied) return
-  // 同步会话级追踪(给顶栏「撤销最近」用)
-  const key = `${col.stepIndex}:${col.source}:${col.field}`
-  promotedKeys.delete(key)
-  promotedOrder.value = promotedOrder.value.filter((k) => k !== key)
-  ElMessage.success(`已撤销提升(变量 ${varName} 已移除)— 保存基线后生效`)
-}
-
-/** 判断一个字段是不是「可撤销提升」状态:当前值是 `${var.x}` 且 x 在 vars 里。
- *  不依赖会话状态 — 刷新页面后仍能识别。 */
-function isPromotableVar(col: BaselineColumn): boolean {
-  if (!draft.value) return false
-  if (col.kind !== 'var' || !col.varName) return false
-  const fields = fieldsOf(draft.value.definition?.steps?.[col.stepIndex], col.source)
-  if (!fields) return false
-  const cur = fields[col.field]
-  return typeof cur === 'string' && /^\$\{var\./.test(cur)
-}
-
-/** 顶栏入口:撤销最近一次提升(按 LIFO 顺序)。
- *  走的是同一份 demote 逻辑,只是从 promotedOrder 末尾弹 key,反查列。 */
-function demoteLast() {
-  if (!draft.value) return
-  const key = promotedOrder.value[promotedOrder.value.length - 1]
-  if (!key) return
-  const [stepIndexStr, source, field] = key.split(':')
-  const stepIndex = Number(stepIndexStr)
-  const col = allColumns.value.find(
-    (c) => c.stepIndex === stepIndex && c.source === source && c.field === field,
-  )
-  if (!col) {
-    // 字段已不在 columns 里(罕见)— 兜底,直接清栈
-    promotedKeys.delete(key)
-    promotedOrder.value.pop()
-    return
-  }
-  demote(col)
 }
 
 // ── 选中 / 预览选中 ──────────────────────────────────────────────
@@ -1186,16 +1053,6 @@ onMounted(async () => {
   box-shadow: inset 2px 0 0 #ef4444;
 }
 .data-table td.cell-override-value { background: #fff; }
-
-/* 提升过的字段列:浅灰底色(thead + tbody 同步),提示「这是本次新提升的 var」 */
-.data-table .col-promoted {
-  background: #f1f5f9;
-}
-.data-table .row-info .col-promoted {
-  background: #e2e8f0;  /* 表头再深一档,与 row-info 已有色阶一致 */
-}
-/* hover 高亮需要压过 promoted 的底色,保持「这是可交互列」的视觉 */
-.data-table .row-data:hover td.col-promoted { background: #e2e8f0; }
 
 .grid-title { font-weight: 600; font-size: 14px; }
 .grid-actions { margin-left: auto; display: flex; gap: 6px; }
