@@ -285,7 +285,7 @@ import type {
   Scenario, DataSetSummary, Orchestration, ScenarioDraft,
 } from '@/types/scenario-composer'
 import type { AssertionAnchor, AssertionRegistry } from '@/types/assertion-registry'
-import { genEntryId, isDeadEntry } from '@/utils/assertion-registry'
+import { genEntryId, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
 import type { ScenarioView, StepView } from '@/types/plate'
 
 const STEPS = [
@@ -759,8 +759,11 @@ async function loadScenario() {
     // 本地空 registry 不可信,saveDraft 落盘前会先重试水化(终审 F2)。
     registryHydrated = false
     try {
-      registry.value = (await api.getScenarioDraft(scenarioId.value!)).assertion_registry
-        ?? { entries: [] }
+      // 归一:旧场景 draft 该键经后端 default 补成 {}(无 entries,truthy,
+      // ?? 兜不住)→ 直灌会在 registry.entries.length 崩配置签渲染
+      registry.value = normalizeRegistry(
+        (await api.getScenarioDraft(scenarioId.value!)).assertion_registry,
+      )
       registryHydrated = true
     } catch (e) {
       showError('加载断言注册表', undefined, (e as Error).message)
@@ -848,7 +851,10 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
   if (!registryHydrated) {
     try {
       const sid = scenario.value?.meta.scenarioId ?? definition.value.scenarioId
-      const fetched = (await api.getScenarioDraft(sid)).assertion_registry ?? { entries: [] }
+      // 同 loadScenario:旧场景 {} 形状归一,防 fetched.entries 崩
+      const fetched = normalizeRegistry(
+        (await api.getScenarioDraft(sid)).assertion_registry,
+      )
       const localIds = new Set(registry.value.entries.map((e) => e.id))
       registry.value = {
         entries: [

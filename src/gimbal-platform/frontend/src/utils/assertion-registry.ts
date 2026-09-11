@@ -1,5 +1,5 @@
 // utils/assertion-registry.ts
-import type { AssertionEntry } from '@/types/assertion-registry'
+import type { AssertionEntry, AssertionRegistry } from '@/types/assertion-registry'
 
 export type RegistryIssue =
   | { kind: 'step-oob'; stepIndex: number }
@@ -41,6 +41,15 @@ export function isDeadEntry(
   assertTargetsOf: (stepIndex: number) => ReadonlySet<string>,
 ): boolean {
   return registryIssues(entry, stepCount, varNames, assertTargetsOf).length > 0
+}
+
+/** 注册表形状归一:服务端来源(draft)不可信 — V2 之前保存的场景无
+ *  assertion_registry 键,后端 pydantic default 补成 `{}`(truthy,无
+ *  entries)→ `?? { entries: [] }` 只兜 null 挡不住,直灌 registry 会
+ *  在 `registry.entries.length` 崩渲染。所有水化入口统一走这里。 */
+export function normalizeRegistry(raw: unknown): AssertionRegistry {
+  const entries = (raw as AssertionRegistry | undefined | null)?.entries
+  return { entries: Array.isArray(entries) ? entries : [] }
 }
 
 /** 条目 id:inj-<6位base36时间戳><3位随机>(genScenarioId 同款纪律,无依赖) */

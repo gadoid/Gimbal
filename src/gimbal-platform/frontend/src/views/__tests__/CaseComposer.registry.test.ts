@@ -160,6 +160,28 @@ describe('CaseComposer — registryAdd 落条目 + 保存调度(spec v2 §4)', (
   })
 })
 
+describe('CaseComposer — 存量空注册表形状归一(assertion_registry: {})', () => {
+  it('draft 返回 {} 形状(旧场景经 pydantic default 补形)→ 切配置签正常渲染', async () => {
+    // 真实后端形状:V2 之前保存的场景 payload 无该键,GET /draft 经
+    // ScenarioDraft.model_validate 重铸 → assertion_registry 补成 {}
+    // (无 entries,truthy)。修复前水化 ?? 只兜 null → registry.value={}
+    // → 配置签分支求值 registry.entries.length 抛 TypeError → 父渲染
+    // patch 中止 → 旧签内容残留(其余签不评估该 prop,故仅配置签切不进)。
+    vi.mocked(api.getScenarioDraft).mockResolvedValue({
+      definition: {},
+      orchestration: { steps: [], resourceMeta: {} },
+      assertion_registry: {},
+    } as any)
+    const w = await mountPage()   // ?step=4 → Canvas
+    expect(w.findComponent(CaseComposerCanvas).exists()).toBe(true)
+    await w.findAll('.stepper-inner .step')[2].trigger('click')   // → ③ 配置
+    await flushPromises()
+    expect(w.text()).toContain('时间策略')   // 配置签首卡渲染
+    expect(w.text()).toContain('断言管理')   // 入口卡(spec v2 §7)
+    w.unmount()
+  })
+})
+
 describe('CaseComposer — 注册表水化失败防擦除(终审 F2)', () => {
   const ANCHOR = { stepIndex: 0, source: 'body' as const, jsonpath: '$.base_url', varName: 'base_url' }
 

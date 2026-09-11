@@ -127,12 +127,14 @@ async def test_draft_roundtrips_assertion_registry(client):
     out = (await client.get(f"/api/scenarios/{sid}/draft",
                             headers=owner_headers)).json()
     assert out["assertion_registry"] == entry
-    # 不带 registry 的 PUT(旧客户端)→ 字段回落空 dict,不炸不 422
+    # 不带 registry 的 PUT(旧客户端)→ 字段回落默认,不炸不 422。默认形状
+    # 对齐前端权威契约 { entries: [] }(曾为裸 {}:truthy 无 entries,前端
+    # ?? 归一兜不住 → 配置签渲染崩,见 normalizeRegistry)
     draft.pop("assertion_registry")
     resp2 = await client.put(f"/api/scenarios/{sid}", json=draft,
                              headers=owner_headers)
     assert resp2.status_code == 200
     out2 = (await client.get(f"/api/scenarios/{sid}/draft",
                              headers=owner_headers)).json()
-    assert out2["assertion_registry"] == {}
+    assert out2["assertion_registry"] == {"entries": []}
 

@@ -162,7 +162,7 @@ import { Back } from '@element-plus/icons-vue'
 import { getScenarioDraft, updateScenario } from '@/api/scenario-composer'
 import type { ScenarioDraft } from '@/types/scenario-composer'
 import type { AssertionEntry, AssertionRegistry } from '@/types/assertion-registry'
-import { genEntryId, isDeadEntry, registryIssues } from '@/utils/assertion-registry'
+import { genEntryId, isDeadEntry, normalizeRegistry, registryIssues } from '@/utils/assertion-registry'
 import { composerUrl } from '@/utils/links'
 import { showError } from '@/utils/errorFallback'
 
@@ -223,7 +223,8 @@ const saving = ref(false)
 onMounted(async () => {
   try {
     draft.value = await getScenarioDraft(scenarioId)
-    registry.value = draft.value.assertion_registry ?? { entries: [] }
+    // 归一:旧场景 draft 该键经后端 default 补成 {}(truthy,?? 兜不住)
+    registry.value = normalizeRegistry(draft.value.assertion_registry)
   } catch (e) {
     showError('加载', e)
   }

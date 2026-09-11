@@ -137,7 +137,13 @@ class ScenarioDraft(BaseModel):
 
     definition: dict[str, Any]
     orchestration: Orchestration = Field(default_factory=Orchestration)
-    assertion_registry: dict[str, Any] = Field(default_factory=dict)
+    # 默认形状对齐前端权威契约(types/assertion-registry.ts:{ entries: [] })—
+    # V2 之前的存量 draft 无此键,default 补 {} 曾让前端 ?? 归一失效
+    # (truthy 无 entries)。前端水化已统一 normalizeRegistry,这里补形状
+    # 只是把同一契约立在后端出参上(防御纵深,非唯一防线)。
+    assertion_registry: dict[str, Any] = Field(
+        default_factory=lambda: {"entries": []}
+    )
 
 
 # ─── data-set ──────────────────────────────────────────────────────
