@@ -2822,6 +2822,65 @@ describe('CaseComposerCanvas — 扰动位呈现与跳转(§5.3)', () => {
     }
   })
 
+  it('nav-N4: focusJump 先于 steps 到达 — 空步不烧跳转,steps 到后一次性应用(场景加载竞态)', async () => {
+    const { listStrategyKinds } = await import('@/api/scenario-composer')
+    const kindsMock = (listStrategyKinds as any).getMockImplementation()
+    ;(listStrategyKinds as any).mockResolvedValue([{ kind: 'assertion', label: '断言' }])
+    const origScroll = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = function () {}
+    try {
+      // 竞态形态:Canvas 随空 steps 挂载(focusJump 已置 — 老时序在
+      // loadScenario 前赋值),场景加载完成后 steps 才到位。栅栏须
+      // hold 住跳转不烧 focusApplied,steps 到达后恰好一次应用。
+      const s0 = mkStep()
+      const s1 = mkStep({
+        strategy: [
+          { kind: 'assertion', target: '$.response_body.a', operator: 'eq', expected: null } as any,
+          { kind: 'assertion', target: '$.response_body.code', operator: 'eq', expected: '${var.exp_code}' } as any,
+        ],
+      })
+      const steps = ref<StepView[]>([])
+      const orch = ref<Orchestration>(mkOrch(0))
+      const inserter = useInsertTarget()
+      const Parent = defineComponent({
+        setup() {
+          provide(INSERT_TARGET_KEY, inserter)
+          return () => h(CaseComposerCanvas, {
+            steps: steps.value,
+            orchestration: orch.value,
+            focusJump: { stepIdx: 1, strategyIdx: 1 },
+            'onUpdate:steps': () => {},
+            'onUpdate:orchestration': () => {},
+          })
+        },
+      })
+      const w = mount(Parent, {
+        global: { plugins: [ElementPlus, activePinia] },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      await flush()
+      // 空步期:无卡可闪,跳转被 hold(不消费)
+      expect(document.getElementById('strategy-card-1')).toBeNull()
+      // steps 到位(场景加载完成)→ 跳转此时应用:切步 + 定位卡 1
+      steps.value = [s0, s1]
+      orch.value = mkOrch(2)
+      await flushPromises()
+      await flush()
+      expect((w.find('.title-input').element as HTMLInputElement).value).toBe('s2')
+      const card1 = document.getElementById('strategy-card-1')
+      expect(card1).toBeTruthy()
+      expect(card1!.classList.contains('sf-flash')).toBe(true)
+      const card0 = document.getElementById('strategy-card-0')
+      expect(card0).toBeTruthy()
+      expect(card0!.classList.contains('sf-flash')).toBe(false)
+      w.unmount()
+    } finally {
+      ;(listStrategyKinds as any).mockImplementation(kindsMock)
+      Element.prototype.scrollIntoView = origScroll
+    }
+  })
+
   it('multi-N3: 多视图前移提示 — 同 var 引用字段声明视图 >1 → 软提示(§5.1)', async () => {
     const { listStrategyKinds, ElMessage } = await Promise.all([
       import('@/api/scenario-composer'),

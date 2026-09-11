@@ -1561,12 +1561,16 @@ function onStrategyJump(idx: number) {
 
 /** focusJump 一次性消费(spec §5.3):跨路由到达后切步 + 定位策略卡
  *  (sf-flash/展开复用 B4 角标跳转通路)。focusApplied 防重放 — 后续
- *  props 更新(父级 query 再变)不再触发,跳转语义是"到达即定位"。 */
+ *  props 更新(父级 query 再变)不再触发,跳转语义是"到达即定位"。
+ *  空步栅栏(修轮1):steps 未到位(场景加载竞态)不消费不烧 —
+ *  steps 长度入 watch 源,有步可跳时才落;父级亦在加载后才置跳转,
+ *  双保险。 */
 let focusApplied = false
-watch(() => props.focusJump, (j) => {
+watch([() => props.focusJump, () => props.steps?.length], ([j]) => {
   if (!j || focusApplied) return
+  if (!props.steps?.length) return   // 空步:hold 住跳转(场景尚未加载)
   focusApplied = true
-  const maxIdx = Math.max(0, (props.steps?.length ?? 1) - 1)
+  const maxIdx = Math.max(0, props.steps!.length - 1)
   activeStepIdx.value = Math.min(Math.max(0, j.stepIdx), maxIdx)
   nextTick(() => onStrategyJump(Math.max(0, j.strategyIdx)))
 }, { immediate: true })
