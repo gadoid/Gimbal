@@ -114,4 +114,19 @@ describe('fieldPathsOf — 全叶子扫描(spec v2 §4)', () => {
     expect(fieldPathsOf({})).toEqual([])
     expect(fieldPathsOf({ request: {} })).toEqual([])
   })
+
+  it('FP-4: 根数组 body 路径带 $ 前缀(评审修复轮 1)', () => {
+    expect(fieldPathsOf({ request: { body: [1, '${var.x}'] } })).toEqual([
+      { source: 'body', path: '$[0]' },
+      { source: 'body', path: '$[1]', varName: 'x' },
+    ])
+  })
+
+  it('FP-5: 契约边界钉 — 根标量/null body 单叶 $;headers 浅扫不下钻;undefined header 无叶', () => {
+    expect(fieldPathsOf({ request: { body: 5 } })).toEqual([{ source: 'body', path: '$' }])
+    expect(fieldPathsOf({ request: { body: null } })).toEqual([{ source: 'body', path: '$' }])
+    expect(fieldPathsOf({ api: { headers: { A: { b: 1 } } }, request: {} }))
+      .toEqual([{ source: 'headers', path: '$.A' }])
+    expect(fieldPathsOf({ api: { headers: { A: undefined } }, request: {} })).toEqual([])
+  })
 })

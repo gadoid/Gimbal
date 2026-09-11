@@ -182,7 +182,7 @@ export function fieldPathsOf(step: SegmentStepShape | null | undefined): FieldLe
   if (!step) return out
   const walk = (v: unknown, path: string) => {
     if (v === undefined) return   // undefined = 无此叶(absent);null 是显式叶(报路径)
-    if (Array.isArray(v)) { v.forEach((it, i) => walk(it, `${path}[${i}]`)); return }
+    if (Array.isArray(v)) { v.forEach((it, i) => walk(it, `${path || '$'}[${i}]`)); return }
     if (v && typeof v === 'object') {
       for (const [k, val] of Object.entries(v)) walk(val, path ? `${path}.${k}` : `$.${k}`)
       return
@@ -191,6 +191,7 @@ export function fieldPathsOf(step: SegmentStepShape | null | undefined): FieldLe
   }
   walk(step?.request?.body, '')
   for (const [k, val] of Object.entries(step?.api?.headers ?? {})) {
+    if (val === undefined) continue   // JSON 不产 undefined;与 walk 的 undefined 守卫对称
     out.push(leafOf('headers', `$.${k}`, val))
   }
   return out
