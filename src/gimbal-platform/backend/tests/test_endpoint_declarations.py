@@ -2,6 +2,8 @@
 进程缓存 + TTL + fail-soft。"""
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 import pytest
 
@@ -57,6 +59,17 @@ async def test_ttl_zero_refetches(monkeypatch, _install_transport):
     monkeypatch.setattr(settings, "DECLARED_PATHS_TTL_SEC", 0.0)
     await declared_paths_of("fin.order.add")
     assert len(_install_transport) == 2
+
+
+async def test_concurrent_cold_calls_coalesce_to_one_fetch(_install_transport):
+    """在飞收敛:冷缓存并发同端点 → 只打一次 plate,拿到同一结果。"""
+    a, b = await asyncio.gather(
+        declared_paths_of("fin.order.add"),
+        declared_paths_of("fin.order.add"),
+    )
+    assert len(_install_transport) == 1          # 收敛为同一在飞请求
+    assert a is b and a is not None              # 两者拿到同一结果对象
+    assert {"$.bl_no", "$.customer_id", "$.items", "$.items.sku"} <= set(a)
 
 
 async def test_failure_returns_none_and_does_not_cache(monkeypatch):

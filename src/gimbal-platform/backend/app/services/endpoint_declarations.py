@@ -8,10 +8,14 @@
   返回 ``None``,调用方降级为「只认 body 面」(从严),绝不阻塞执行;
 * **不入缓存** — 失败不写缓存,下次调用可重试;
 * **进程缓存 + TTL** — 成功入缓存,``DECLARED_PATHS_TTL_SEC`` 到期重取;
-* **告警一次** — 同一端点在当前缓存窗口内至多一条 warning,不刷屏。
+* **在飞收敛** — 冷缓存下同一 endpoint 的并发调用复用同一在飞请求,
+  不重复打 plate(与前端 ``useEndpointFull`` 的 ``inFlight`` 同款);
+* **告警一次** — 同一端点在当前**失败链**内至多一条 warning:失败期间
+  只告警第一条,成功一次后重置(后续再失败会重新告警),不刷屏。
 """
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
@@ -22,21 +26,20 @@ from .field_state_resolution import catalog_paths
 from .plate_client import get_client
 
 _CACHE: dict[str, tuple[float, frozenset[str]]] = {}
+_INFLIGHT: dict[str, asyncio.Task[frozenset[str] | None]] = {}
 _WARNED: set[str] = set()
 
 
 def _reset_declared_paths_cache() -> None:
-    """测试钩子:清空缓存与告警去重集。"""
+    """测试钩子:清空缓存、在飞表与告警去重集。"""
     _CACHE.clear()
+    _INFLIGHT.clear()
     _WARNED.clear()
 
 
-async def declared_paths_of(endpoint_id: str) -> frozenset[str] | None:
-    """端点声明的 request body path 全集;取不到 → None(调用方从严降级)。"""
+async def _fetch_declared_paths(endpoint_id: str) -> frozenset[str] | None:
+    """真正打一次 plate;fail-soft 绝不抛,成功才入缓存。"""
     now = time.monotonic()
-    hit = _CACHE.get(endpoint_id)
-    if hit is not None and now - hit[0] < settings.DECLARED_PATHS_TTL_SEC:
-        return hit[1]
     try:
         resp = await get_client().get(f"/api/endpoint/{endpoint_id}/full")
         if resp.status_code != 200:
@@ -57,3 +60,21 @@ async def declared_paths_of(endpoint_id: str) -> frozenset[str] | None:
     _CACHE[endpoint_id] = (now, paths)
     _WARNED.discard(endpoint_id)
     return paths
+
+
+async def declared_paths_of(endpoint_id: str) -> frozenset[str] | None:
+    """端点声明的 request body path 全集;取不到 → None(调用方从严降级)。"""
+    now = time.monotonic()
+    hit = _CACHE.get(endpoint_id)
+    if hit is not None and now - hit[0] < settings.DECLARED_PATHS_TTL_SEC:
+        return hit[1]
+    inflight = _INFLIGHT.get(endpoint_id)
+    if inflight is not None:
+        return await inflight          # 冷缓存并发收敛:复用同一在飞请求
+    task = asyncio.ensure_future(_fetch_declared_paths(endpoint_id))
+    _INFLIGHT[endpoint_id] = task
+    try:
+        return await task
+    finally:
+        # 成功与失败都要移除 —— 否则一次失败会永久卡死该端点的后续调用。
+        _INFLIGHT.pop(endpoint_id, None)
