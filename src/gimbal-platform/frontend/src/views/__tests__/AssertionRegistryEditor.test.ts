@@ -1,7 +1,8 @@
 /**
- * AssertionRegistryEditor — 断言管理注册表编辑器(spec v2 §7):
- * 条目列表(锚定徽标/偏离摘要/死条目灰)+ 详情(anchor 跳编排器 +
- * injection/asserts 编辑)+ 手工新建 + 整体 PUT(只动 assertion_registry 键)。
+ * AssertionRegistryEditor — 断言管理编辑器(spec v3 §5):
+ * 条目列表(path 徽标/值摘要/期望数/死条目灰/旧版条目灰不可选)+
+ * 详情(path 只读跳编排器 / value 类型化编辑 / asserts 编辑)+
+ * 手工新建(步骤 + jsonpath)+ 整体 PUT(只动 assertion_registry 键)。
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -33,12 +34,15 @@ const DEF = {
 const REG = {
   entries: [
     { id: 'inj-1', name: '金额为负',
-      anchor: { stepIndex: 0, source: 'body', jsonpath: '$.amount', varName: 'amount' },
-      injection: [{ varName: 'amount', value: '-1' }],
+      path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' },
+      value: -1,
       asserts: [{ stepIndex: 0, target: '$.response_body.code', operator: 'eq', expected: '400', mode: 'override' }] },
-    { id: 'inj-dead', name: '死条目',
-      anchor: { stepIndex: 9, source: 'body', jsonpath: '$.x' },
-      injection: [{ varName: 'ghost', value: '1' }], asserts: [] },
+    { id: 'inj-dead', name: '悬空条目',
+      path: { stepIndex: 9, source: 'body', jsonpath: '$.x' },
+      value: 1, asserts: [] },
+    { id: 'inj-legacy', name: '旧版条目',
+      anchor: { stepIndex: 0, source: 'body', jsonpath: '$.amount', varName: 'amount' },
+      injection: [{ varName: 'amount', value: '-1' }], asserts: [] },
   ],
 }
 
@@ -53,26 +57,31 @@ async function mountEditor(draft: any = { definition: DEF, orchestration: { step
 beforeEach(() => { setActivePinia(createPinia()); routerMock.push.mockReset() })
 afterEach(() => { vi.restoreAllMocks() })
 
-it('ARE-1: 列表渲染条目(名称/锚定徽标/偏离摘要/期望数)', async () => {
+it('ARE-1: 列表渲染条目(名称/path 徽标/值摘要/期望数)', async () => {
   const w = await mountEditor()
   const rows = w.findAll('.are-row')
-  expect(rows.length).toBe(2)
+  expect(rows.length).toBe(3)
   expect(rows[0].text()).toContain('金额为负')
-  expect(rows[0].text()).toContain('步骤1 · $.amount')        // anchor 徽标
-  expect(rows[0].text()).toContain('amount = -1')             // injection 摘要
+  expect(rows[0].text()).toContain('步骤1 · $.amount')        // path 徽标
+  expect(rows[0].text()).toContain('-1')                      // value 摘要
   expect(rows[0].text()).toContain('1 期望')                  // asserts 数
   w.unmount()
 })
 
-it('ARE-2: 死条目标灰(stepIndex 越界 + var 未知);活条目不灰', async () => {
+it('ARE-2: 悬空条目灰(stepIndex 越界)+ 旧版条目灰且不可选;活条目不灰', async () => {
   const w = await mountEditor()
   const rows = w.findAll('.are-row')
   expect(rows[1].classes()).toContain('are-dead')
+  expect(rows[2].classes()).toContain('are-legacy')
   expect(rows[0].classes()).not.toContain('are-dead')
+  // 旧版条目点击不进详情(不可编辑,spec v3 §8)
+  await rows[2].trigger('click')
+  await flushPromises()
+  expect(w.find('.are-detail').exists()).toBe(false)
   w.unmount()
 })
 
-it('ARE-3: anchor ↗ 跳编排器(focusStep query)', async () => {
+it('ARE-3: path ↗ 跳编排器(focusStep query)', async () => {
   const w = await mountEditor()
   await w.findAll('.are-anchor-jump')[0].trigger('click')
   expect(routerMock.push).toHaveBeenCalledWith({
@@ -82,27 +91,30 @@ it('ARE-3: anchor ↗ 跳编排器(focusStep query)', async () => {
   w.unmount()
 })
 
-it('ARE-4: 手工新建 + injection 编辑(varName 候选 = config.vars)+ 保存只动 assertion_registry', async () => {
+it('ARE-4: 手工新建(步骤+jsonpath)+ value num 类型化编辑 + 保存只动 assertion_registry', async () => {
   const w = await mountEditor()
+  // 手工新建:pendingPath 填 $.bl_no → 新建条目
+  ;(w.vm as any).pendingPath.jsonpath = '$.bl_no'
   await w.findAll('button').find((b) => b.text().includes('新建条目'))!.trigger('click')
   await flushPromises()
-  expect(w.findAll('.are-row').length).toBe(3)
-  // 选中第 3 条:varName 下拉选 bl_no、值 BL9
+  expect(w.findAll('.are-row').length).toBe(4)
   const rows = w.findAll('.are-row')
-  await rows[2].trigger('click')
+  await rows[3].trigger('click')
   await flushPromises()
   const detail = w.find('.are-detail')
   expect(detail.exists()).toBe(true)
-  ;(w.vm as any).pendingInject.varName = 'bl_no'    // script setup binding 经 vm 可写(EP 纪律)
-  ;(w.vm as any).pendingInject.value = 'BL9'
-  await w.find('.are-detail .are-add-inject').trigger('click')
-  await flushPromises()
+  // value 类型化编辑:num 类 '-7' → 落条目为 number -7(原样不 coerce 串)
+  ;(w.vm as any).valueDraft.kind = 'num'
+  ;(w.vm as any).valueDraft.text = '-7'
+  ;(w.vm as any).applyValue()
   await w.findAll('button').find((b) => b.text().includes('保存'))!.trigger('click')
   await flushPromises()
   expect(api.updateScenario).toHaveBeenCalledTimes(1)
   const payload = vi.mocked(api.updateScenario).mock.calls[0][1] as any
   expect(payload.definition).toEqual(DEF)                        // definition 原样
-  expect(payload.assertion_registry.entries.length).toBe(3)
-  expect(payload.assertion_registry.entries[2].injection).toEqual([{ varName: 'bl_no', value: 'BL9' }])
+  const e3 = payload.assertion_registry.entries[3]
+  expect(e3.path).toEqual({ stepIndex: 0, source: 'body', jsonpath: '$.bl_no' })
+  expect(e3.value).toBe(-7)
+  expect(e3.asserts).toEqual([])
   w.unmount()
 })

@@ -1,16 +1,16 @@
 <!--
-  AssertionRegistryEditor.vue — 断言管理(偏离注入)编辑器(spec v2 §7)
+  AssertionRegistryEditor.vue — 断言管理编辑器(spec v3 §5/§8)
 
      场景级注册表的独立编辑视图(路由 /scenarios/:scenarioId/assertions):
-       - 条目列表:名称 / 锚定徽标(步骤N · jsonpath + ↗ 跳编排器)/
-         值偏离摘要 / 期望数;悬空条目(步骤越界 / 变量未声明 /
-         override 无匹配,registryIssues)标灰 + title 摘要,不阻断编辑
-       - 条目详情:anchor 只读展示 + 跳转;injection 编辑
-         (varName 候选 = config.vars);asserts 编辑
-         (步骤/target/操作符/期望值/mode,操作符允许自定义)
-       - 手工新建(genEntryId);整体 PUT 保存 — 只动 assertion_registry 键,
-         definition/orchestration 原样透传(编辑器不改被测系统)
-       - 值类别快捷/生成器等 v2 协议位不做(spec §7 收敛)
+       - 条目列表:名称 / path 徽标(步骤N · jsonpath + ↗ 跳编排器)/
+         值摘要 / 期望数;悬空条目(step-oob / path-unresolvable /
+         override-no-match,registryIssues)标灰;v2 旧条目(无 path)灰显
+         「旧版条目,请重建」,不可选不可编辑(保留原样不删)
+       - 条目详情:path 只读 + 跳编排器;value 类型化编辑
+         (str/num/bool/json,按字段当前字面量类型还原);
+         asserts 编辑(步骤/target/操作符/期望值/mode,继承 v2)
+       - 手工新建 = 步骤下拉 + jsonpath 输入(path 是注入地址,不预设
+         模板化);整体 PUT 保存 — 只动 assertion_registry 键
 -->
 <template>
   <section class="are-editor">
@@ -25,91 +25,105 @@
       </div>
       <div class="header-actions">
         <el-button :icon="Back" @click="router.push(composerUrl(scenarioId, 1))">返回编排器</el-button>
-        <el-button :disabled="!draft" @click="addEntry">新建条目</el-button>
         <el-button type="primary" plain :loading="saving" :disabled="!draft" @click="save">保存</el-button>
       </div>
     </header>
 
     <p class="are-lead">
-      每条 = 一次偏离注入:值偏离(运行时覆写 config.vars 基线)+ 期望配对
-      (override 覆写既有断言 / append 追加),执行时与数据集并列选择(spec v2 §3)。
-      悬空条目标灰只提示,不阻断编辑。
+      每条 = 一次偏离注入:定位 path(引擎 Assign 直补 request_body,与数据集 vars 解耦)
+      + 注入值 + 期望配对(override 覆写既有断言 / append 追加),执行时与数据集行
+      交叉(spec v3 §3/§4)。悬空条目标灰只提示,不阻断编辑。
     </p>
 
-    <!-- 条目列表:锚定徽标 / 偏离摘要 / 期望数 / 死条目灰 -->
+    <!-- 手工新建:步骤 + jsonpath(path 即注入地址) -->
+    <div class="are-new-bar">
+      <el-select
+        :model-value="pendingPath.stepIndex"
+        size="small"
+        class="are-step-select"
+        @update:model-value="(v: any) => (pendingPath.stepIndex = Number(v))"
+      >
+        <el-option v-for="(label, i) in stepLabels" :key="`np:${i}`" :value="i" :label="label" />
+      </el-select>
+      <el-input v-model="pendingPath.jsonpath" size="small" class="are-path-input" placeholder="jsonpath($.amount)" />
+      <el-button size="small" :disabled="!draft" @click="addEntry">新建条目</el-button>
+    </div>
+
+    <!-- 条目列表:path 徽标 / 值摘要 / 期望数 / 死条目灰 / 旧版条目灰 -->
     <div class="are-list-card">
       <div
         v-for="e in registry.entries"
         :key="e.id"
         class="are-row"
-        :class="{ 'are-dead': deadOf(e), 'are-active': selectedId === e.id }"
-        :title="deadOf(e) ? `悬空:${issueSummary(e)}` : ''"
-        @click="selectedId = e.id"
+        :class="{ 'are-dead': deadOf(e), 'are-legacy': isLegacyEntry(e), 'are-active': selectedId === e.id }"
+        :title="isLegacyEntry(e) ? '旧版条目,请重建' : deadOf(e) ? `悬空:${issueSummary(e)}` : ''"
+        @click="selectEntry(e)"
       >
         <span class="are-name">{{ e.name }}</span>
-        <span v-if="e.anchor" class="are-anchor">
-          步骤{{ e.anchor.stepIndex + 1 }} · {{ e.anchor.jsonpath }}
+        <span v-if="!isLegacyEntry(e)" class="are-anchor">
+          步骤{{ e.path.stepIndex + 1 }} · {{ e.path.jsonpath }}
           <button
             type="button"
             class="are-anchor-jump"
             title="跳编排器该步骤"
-            @click.stop="jumpToAnchor(e.anchor!.stepIndex)"
+            @click.stop="jumpToAnchor(e.path.stepIndex)"
           >↗</button>
         </span>
-        <span v-else class="are-anchor are-anchor-none">无锚点</span>
-        <span class="are-inject" :title="injectionSummary(e)">{{ injectionSummary(e) }}</span>
-        <span class="are-count">{{ e.asserts.length }} 期望</span>
-        <span v-if="deadOf(e)" class="are-dead-mark" :title="`悬空:${issueSummary(e)}`">悬空</span>
+        <span v-else class="are-anchor are-anchor-none">旧版条目,请重建</span>
+        <span class="are-inject" :title="valueSummary(e)">{{ valueSummary(e) }}</span>
+        <span class="are-count">{{ e.asserts?.length ?? 0 }} 期望</span>
+        <span v-if="isLegacyEntry(e)" class="are-legacy-mark">旧版</span>
+        <span v-else-if="deadOf(e)" class="are-dead-mark" :title="`悬空:${issueSummary(e)}`">悬空</span>
         <button type="button" class="are-del" title="删除条目" @click.stop="removeEntry(e.id)">×</button>
       </div>
       <div v-if="!registry.entries.length" class="are-empty">
-        还没有偏离注入条目 — 「新建条目」手工建,或在编排器标记锚点自动带来
+        还没有偏离注入条目 — 上方手工建,或在编排器字段菜单「加入断言管理」自动带来
       </div>
     </div>
 
-    <!-- 详情:anchor 只读 + injection / asserts 编辑 -->
-    <div v-if="selected" class="are-detail">
+    <!-- 详情:path 只读 + value 类型化编辑 / asserts 编辑 -->
+    <div v-if="selected && !isLegacyEntry(selected)" class="are-detail">
       <div class="are-detail-head">
         <el-input v-model="selected.name" class="are-name-input" size="small" placeholder="条目名称" />
-        <span v-if="selected.anchor" class="are-anchor">
-          锚点:步骤{{ selected.anchor.stepIndex + 1 }} · {{ selected.anchor.source }} · {{ selected.anchor.jsonpath }}
-          <template v-if="selected.anchor.varName"> · var {{ selected.anchor.varName }}</template>
+        <span class="are-anchor">
+          锚点:步骤{{ selected.path.stepIndex + 1 }} · {{ selected.path.source }} · {{ selected.path.jsonpath }}
           <button
             type="button"
             class="are-anchor-jump"
             title="跳编排器该步骤"
-            @click="jumpToAnchor(selected.anchor!.stepIndex)"
+            @click="jumpToAnchor(selected.path.stepIndex)"
           >↗</button>
         </span>
-        <span v-else class="are-anchor-none">无锚点(溯源面 — 编排器标记自动带来,执行不依赖)</span>
       </div>
 
-      <!-- 值偏离(injection)-->
+      <!-- 注入值(value)— 类型化编辑 -->
       <div class="are-sec">
-        <h4>值偏离(injection)<span class="are-sec-hint">物化 = 运行时覆写 config.vars 基线</span></h4>
-        <div v-if="!selected.injection.length" class="are-empty">没有值偏离 — varName 从 config.vars 候选选择</div>
-        <div v-for="(inj, i) in selected.injection" :key="`${inj.varName}:${i}`" class="are-kv">
-          <code>{{ inj.varName }}</code>
-          <span class="are-sep">=</span>
-          <code class="are-val">{{ fmtVal(inj.value) }}</code>
-          <button type="button" class="are-del" title="删除值偏离" @click="selected.injection.splice(i, 1)">×</button>
-        </div>
-        <div class="are-pending">
-          <el-select
-            v-model="pendingInject.varName"
-            size="small"
-            class="are-var-select"
-            placeholder="变量(config.vars)"
-            filterable
-          >
-            <el-option v-for="n in varNameOptions" :key="n" :value="n" :label="n" />
+        <h4>注入值(value)<span class="are-sec-hint">物化 = 引擎 Assign 直补 request_body(spec v3 §3);原样覆写不 coerce</span></h4>
+        <div class="are-value-edit">
+          <el-select v-model="valueDraft.kind" size="small" class="are-kind-select" @change="onKindChange">
+            <el-option value="str" label="str" />
+            <el-option value="num" label="num" />
+            <el-option value="bool" label="bool" />
+            <el-option value="json" label="json" />
           </el-select>
-          <el-input v-model="pendingInject.value" size="small" class="are-val-input" placeholder="偏离值(例:-1)" />
-          <button type="button" class="are-add-inject" @click="addInject">+ 添加值偏离</button>
+          <el-checkbox
+            v-if="valueDraft.kind === 'bool'"
+            v-model="valueDraft.bool"
+            @change="applyValue"
+          >true</el-checkbox>
+          <el-input
+            v-else
+            v-model="valueDraft.text"
+            size="small"
+            class="are-val-input"
+            placeholder="偏离值(例:-1 / &quot;中文&quot; / {&quot;a&quot;:1})"
+            @change="applyValue"
+          />
+          <code class="are-val-preview" :title="fmtVal(selected.value)">→ {{ fmtVal(selected.value) }}</code>
         </div>
       </div>
 
-      <!-- 期望配对(asserts)-->
+      <!-- 期望配对(asserts)— 继承 v2 段 -->
       <div class="are-sec">
         <h4>期望配对(asserts)<span class="are-sec-hint">override 覆写既有断言(匹配键 = 步骤+target)/ append 追加</span></h4>
         <div v-if="!selected.asserts.length" class="are-empty">没有期望配对</div>
@@ -150,19 +164,22 @@
         </div>
       </div>
     </div>
+    <div v-else-if="selected && isLegacyEntry(selected)" class="are-empty are-select-hint">旧版条目(v2 形状)— 不可编辑,请在编排器重新标记创建</div>
     <div v-else-if="draft" class="are-empty are-select-hint">点击上方条目查看详情</div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Back } from '@element-plus/icons-vue'
 import { getScenarioDraft, updateScenario } from '@/api/scenario-composer'
 import type { ScenarioDraft } from '@/types/scenario-composer'
-import type { AssertionEntry, AssertionRegistry } from '@/types/assertion-registry'
-import { genEntryId, isDeadEntry, normalizeRegistry, registryIssues } from '@/utils/assertion-registry'
+import type { AssertionEntry, AssertionRegistry, LegacyAssertionEntry } from '@/types/assertion-registry'
+import { isLegacyEntry } from '@/types/assertion-registry'
+import { bodyPathSetOf, genEntryId, isDeadEntry, normalizeRegistry, registryIssues } from '@/utils/assertion-registry'
+import { fieldPathsOf } from '@/utils/dataset-segments'
 import { composerUrl } from '@/utils/links'
 import { showError } from '@/utils/errorFallback'
 
@@ -175,36 +192,47 @@ const registry = ref<AssertionRegistry>({ entries: [] })
 const selectedId = ref<string | null>(null)
 const selected = computed(() => registry.value.entries.find((e) => e.id === selectedId.value) ?? null)
 const stepCount = computed(() => draft.value?.definition.steps?.length ?? 0)
-const varNames = computed(() => new Set(Object.keys(draft.value?.definition.config?.vars ?? {})))
-/** el-option 候选数组(Set 不进模板,vue-tsc 纪律) */
-const varNameOptions = computed(() => [...varNames.value])
+const steps = computed(() => (draft.value?.definition.steps ?? []) as Array<Record<string, unknown>>)
 const stepLabels = computed(() =>
-  (draft.value?.definition.steps ?? []).map((s: any, i: number) => `${i + 1}·${s?.description || `Step ${i + 1}`}`),
+  steps.value.map((s, i) => `${i + 1}·${(s as any)?.description || `Step ${i + 1}`}`),
 )
 const scenarioName = computed(() => draft.value?.definition?.meta?.name || scenarioId)
 
-/** steps[si].strategy 的 assertion target 集合(悬空检测喂食) */
-function assertTargetsOf(si: number): ReadonlySet<string> {
-  const st = (draft.value?.definition.steps ?? [])[si]?.strategy as any[] | undefined
-  return new Set((st ?? []).filter((x) => x?.kind === 'assertion').map((x) => String(x.target)))
+/** steps[si].request.body 叶子集合(悬空检测 path 维度,spec v3 §2) */
+function bodyPathsOfStep(si: number): ReadonlySet<string> {
+  return bodyPathSetOf(fieldPathsOf(steps.value[si] as any))
 }
-const deadOf = (e: AssertionEntry) => isDeadEntry(e, stepCount.value, varNames.value, assertTargetsOf)
+/** steps[si].strategy 的 assertion target 集合(悬空检测 override 维度) */
+function assertTargetsOf(si: number): ReadonlySet<string> {
+  const st = (steps.value[si]?.strategy as any[] | undefined) ?? []
+  return new Set(st.filter((x) => x?.kind === 'assertion').map((x) => String(x.target)))
+}
+const deadOf = (e: AssertionEntry | LegacyAssertionEntry) =>
+  isDeadEntry(e, stepCount.value, bodyPathsOfStep, assertTargetsOf)
 const deadCount = computed(() => registry.value.entries.filter(deadOf).length)
 
+/** 旧版条目不可选(不可编辑,spec v3 §8) */
+function selectEntry(e: AssertionEntry | LegacyAssertionEntry) {
+  if (isLegacyEntry(e)) return
+  selectedId.value = e.id
+}
+
 /** 悬空原因摘要(title 展示):registryIssues 人话投影 */
-function issueSummary(e: AssertionEntry): string {
-  return registryIssues(e, stepCount.value, varNames.value, assertTargetsOf)
+function issueSummary(e: AssertionEntry | LegacyAssertionEntry): string {
+  if (isLegacyEntry(e)) return '旧版条目(v2 形状),请在编排器重新标记创建'
+  return registryIssues(e, stepCount.value, bodyPathsOfStep, assertTargetsOf)
     .map((iss) => {
       if (iss.kind === 'step-oob') return `步骤${iss.stepIndex + 1} 越界(场景共 ${stepCount.value} 步)`
-      if (iss.kind === 'var-unknown') return `变量 ${iss.varName} 未在 config.vars 声明`
+      if (iss.kind === 'path-unresolvable') return `步骤${iss.stepIndex + 1} body 无字段 ${iss.jsonpath}`
       return `步骤${iss.stepIndex + 1} 无既有断言 ${iss.target}(override 无匹配)`
     })
     .join('; ')
 }
 
-/** 值偏离摘要:`var = value` 逗号连缀(空 = 长破折) */
-function injectionSummary(e: AssertionEntry): string {
-  return e.injection.map((inj) => `${inj.varName} = ${fmtVal(inj.value)}`).join(', ') || '—'
+/** 值摘要(列表展示) */
+function valueSummary(e: AssertionEntry | LegacyAssertionEntry): string {
+  if (isLegacyEntry(e)) return '—'
+  return fmtVal(e.value) || '—'
 }
 function fmtVal(v: unknown): string {
   if (v === null || v === undefined) return ''
@@ -212,8 +240,46 @@ function fmtVal(v: unknown): string {
   return JSON.stringify(v)
 }
 
-/** injection 行编辑的暂存(下拉 + 值,「添加」入条目) */
-const pendingInject = ref<{ varName: string; value: string }>({ varName: '', value: '' })
+// ── value 类型化编辑(str/num/bool/json,spec v3 §2)─────────────────
+type ValKind = 'str' | 'num' | 'bool' | 'json'
+/** 按字段当前字面量类型还原编辑形态 */
+function kindOf(v: unknown): ValKind {
+  if (typeof v === 'number') return 'num'
+  if (typeof v === 'boolean') return 'bool'
+  if (v !== null && typeof v === 'object') return 'json'
+  return 'str'
+}
+function tryJson(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+const valueDraft = ref<{ kind: ValKind; text: string; bool: boolean }>({ kind: 'str', text: '', bool: false })
+watch(selectedId, () => {
+  const e = selected.value
+  if (!e || isLegacyEntry(e)) return
+  valueDraft.value = { kind: kindOf(e.value), text: fmtVal(e.value), bool: e.value === true }
+})
+/** 落回条目:str 原样 / num Number(非数回落原串)/ bool 直取 / json parse 失败回落原串 */
+function applyValue() {
+  const e = selected.value
+  if (!e || isLegacyEntry(e)) return
+  const d = valueDraft.value
+  e.value = d.kind === 'num'
+    ? (Number.isFinite(Number(d.text)) ? Number(d.text) : d.text)
+    : d.kind === 'bool' ? d.bool
+    : d.kind === 'json' ? tryJson(d.text)
+    : d.text
+}
+/** 切类型立即按新形态落值(编辑器随时可切回原类型) */
+function onKindChange() {
+  applyValue()
+}
+
+/** 手工新建暂存:步骤 + jsonpath(path 是注入地址,不预设模板化) */
+const pendingPath = ref({ stepIndex: 0, jsonpath: '' })
 /** asserts 行编辑暂存(mode 字符串形态,入条目时收窄) */
 const pendingAssert = ref({ stepIndex: 0, target: '', operator: 'eq', expected: '', mode: 'override' as string })
 const OPERATORS = ['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'contains', 'exists']
@@ -231,28 +297,31 @@ onMounted(async () => {
 })
 
 function addEntry() {
+  if (!pendingPath.value.jsonpath.startsWith('$')) {
+    ElMessage.warning('jsonpath 需以 $ 开头(例:$.amount)')
+    return
+  }
   const e: AssertionEntry = {
     id: genEntryId(),
     name: `偏离 ${registry.value.entries.length + 1}`,
-    injection: [],
+    path: {
+      stepIndex: pendingPath.value.stepIndex,
+      source: 'body',
+      jsonpath: pendingPath.value.jsonpath,
+    },
+    value: '',
     asserts: [],
   }
   registry.value.entries.push(e)
   selectedId.value = e.id
-  pendingInject.value = { varName: varNameOptions.value[0] ?? '', value: '' }
-  pendingAssert.value = { stepIndex: 0, target: '', operator: 'eq', expected: '', mode: 'override' }
+  pendingPath.value = { stepIndex: pendingPath.value.stepIndex, jsonpath: '' }
 }
 function removeEntry(id: string) {
   registry.value.entries = registry.value.entries.filter((e) => e.id !== id)
   if (selectedId.value === id) selectedId.value = null
 }
-function addInject() {
-  if (!selected.value || !pendingInject.value.varName) return
-  selected.value.injection.push({ ...pendingInject.value })
-  pendingInject.value = { varName: pendingInject.value.varName, value: '' }
-}
 function addAssert() {
-  if (!selected.value || !pendingAssert.value.target) return
+  if (!selected.value || isLegacyEntry(selected.value) || !pendingAssert.value.target) return
   selected.value.asserts.push({
     stepIndex: pendingAssert.value.stepIndex,
     target: pendingAssert.value.target,
@@ -261,7 +330,7 @@ function addAssert() {
     mode: pendingAssert.value.mode === 'append' ? 'append' : 'override',
   })
 }
-/** anchor ↗:跳编排器画布聚焦该步骤(与 DataSetEditor jumpToRef 同契约) */
+/** path ↗:跳编排器画布聚焦该步骤(与 DataSetEditor jumpToRef 同契约) */
 function jumpToAnchor(si: number) {
   router.push({ path: `/composer/${encodeURIComponent(scenarioId)}`, query: { step: '4', focusStep: String(si) } })
 }
@@ -305,6 +374,12 @@ async function save() {
   color: var(--color-text-secondary);
 }
 
+/* ── 手工新建条 ── */
+.are-new-bar {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+}
+.are-path-input { width: 260px; }
+
 /* ── 条目列表 ── */
 .are-list-card {
   background: #fff; border: 1px solid var(--color-border-tertiary);
@@ -319,6 +394,7 @@ async function save() {
 .are-row:hover { background: #f8faff; }
 .are-row.are-active { background: #f0f5ff; box-shadow: inset 2px 0 0 var(--accent); }
 .are-row.are-dead { opacity: .55; }
+.are-row.are-legacy { opacity: .55; }
 .are-name { font-weight: 600; color: var(--color-text-primary); min-width: 96px; }
 .are-anchor {
   font-family: var(--font-mono); font-size: 11px; color: #4338ca;
@@ -339,6 +415,10 @@ async function save() {
 .are-dead-mark {
   font-size: 10px; font-weight: 700; color: #b45309;
   background: #fef3c7; border-radius: 3px; padding: 1px 5px;
+}
+.are-legacy-mark {
+  font-size: 10px; font-weight: 700; color: #64748b;
+  background: #f1f5f9; border-radius: 3px; padding: 1px 5px;
 }
 .are-empty { padding: 14px 16px; font-size: 12px; color: var(--color-text-secondary); }
 .are-select-hint { border: 1px dashed var(--color-border-tertiary); border-radius: 8px; }
@@ -374,6 +454,14 @@ async function save() {
 .are-kv .are-val { color: #0f172a; }
 .are-sep { color: var(--color-text-secondary); }
 .are-kv .are-del { margin-left: auto; }
+
+/* ── value 类型化编辑 ── */
+.are-value-edit { display: flex; align-items: center; gap: 8px; }
+.are-kind-select { width: 90px; }
+.are-val-preview {
+  font-family: var(--font-mono); font-size: 11px; color: #4338ca;
+  background: #eef2ff; border-radius: 3px; padding: 1px 6px;
+}
 
 .are-pending {
   display: flex; align-items: center; gap: 8px; margin-top: 8px;
