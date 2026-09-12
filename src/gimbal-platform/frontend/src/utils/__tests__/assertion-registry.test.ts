@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bodyPathSetOf, genEntryId, isDeadEntry, pathResolvable, registryIssues } from '../assertion-registry'
+import { bodyPathSetOf, genEntryId, isDeadEntry, normalizeRegistry, pathResolvable, registryIssues } from '../assertion-registry'
 import { isLegacyEntry } from '../../types/assertion-registry'
 import type { AssertionEntry, LegacyAssertionEntry } from '../../types/assertion-registry'
 
@@ -65,5 +65,59 @@ describe('registryIssues — 悬空检测(spec v3 §2)', () => {
       { source: 'body', path: '$.a' },
       { source: 'headers', path: '$.h' },
     ])).toEqual(new Set(['$.a']))
+  })
+})
+
+// ── 形状容忍(sidecar 是服务端/手改 JSON;与后端 entry_issues 同构)──
+
+describe('registryIssues/normalizeRegistry — 残缺条目不再炸渲染', () => {
+  it('RG-7: path 非对象(null/标量/数组)→ legacy-entry(后端 isinstance(path, dict) 同判)', () => {
+    const forms = [null, 0, 'body', [], ['$.amount']]
+    for (const p of forms) {
+      const e = { ...E(), path: p } as unknown as AssertionEntry
+      expect(isLegacyEntry(e)).toBe(true)
+      expect(registryIssues(e, 2, bodyPaths(BODY0), targets({}))).toEqual([{ kind: 'legacy-entry' }])
+    }
+    // 非对象**条目**同样按旧形状处理(不解引用 e.path)
+    expect(isLegacyEntry('junk' as unknown as AssertionEntry)).toBe(true)
+    expect(isLegacyEntry(null as unknown as AssertionEntry)).toBe(true)
+  })
+
+  it('RG-8: stepIndex 非整数("0"/null/1.5)→ step-oob(不再当活条目)', () => {
+    for (const si of ['0', null, 1.5, undefined]) {
+      const e = { ...E(), path: { stepIndex: si, source: 'body', jsonpath: '$.amount' } } as unknown as AssertionEntry
+      expect(isLegacyEntry(e)).toBe(false)
+      expect(registryIssues(e, 2, bodyPaths(BODY0), targets({})))
+        .toContainEqual({ kind: 'step-oob', stepIndex: si })
+      expect(isDeadEntry(e, 2, bodyPaths(BODY0), targets({}))).toBe(true)
+    }
+  })
+
+  it('RG-9: asserts 缺键 / 非数组 → 视作空(不抛);单条非对象或 stepIndex 非整数 → 跳过', () => {
+    for (const asserts of [undefined, null, 'x', 0]) {
+      const e = { ...E(), asserts } as unknown as AssertionEntry
+      expect(registryIssues(e, 2, bodyPaths(BODY0), targets({}))).toEqual([])
+    }
+    const mixed = {
+      ...E(),
+      asserts: ['junk', null, { stepIndex: '0', target: '$.x', mode: 'override' },
+        { stepIndex: 9, target: '$.y', mode: 'append' }],
+    } as unknown as AssertionEntry
+    expect(registryIssues(mixed, 2, bodyPaths(BODY0), targets({})))
+      .toEqual([{ kind: 'step-oob', stepIndex: 9 }])
+  })
+
+  it('RG-10: normalizeRegistry 丢弃非对象条目 + 补 asserts;合法条目零改动', () => {
+    const live = E()
+    const legacy = LEGACY
+    const out = normalizeRegistry({ entries: ['junk', null, 7, [], live, legacy, { id: 'x' }] })
+    expect(out.entries[0]).toBe(live)                       // 合法条目原样(浅引用不变)
+    expect(out.entries[1]).toBe(legacy)
+    expect(out.entries[2]).toEqual({ id: 'x', asserts: [] })  // 缺 asserts → 补空
+    expect(out.entries.length).toBe(3)
+    // 非数组 / 缺键 / null 三种垃圾容器 → 空注册表(原行为)
+    expect(normalizeRegistry(undefined).entries).toEqual([])
+    expect(normalizeRegistry({}).entries).toEqual([])
+    expect(normalizeRegistry({ entries: null }).entries).toEqual([])
   })
 })

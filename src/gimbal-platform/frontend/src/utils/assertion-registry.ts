@@ -38,12 +38,21 @@ export function registryIssues(
 ): RegistryIssue[] {
   if (isLegacyEntry(entry)) return [{ kind: 'legacy-entry' }]
   const issues: RegistryIssue[] = []
-  if (entry.path.stepIndex < 0 || entry.path.stepIndex >= stepCount) {
-    issues.push({ kind: 'step-oob', stepIndex: entry.path.stepIndex })
-  } else if (!pathResolvable(entry.path.jsonpath, bodyPathsOfStep(entry.path.stepIndex))) {
-    issues.push({ kind: 'path-unresolvable', stepIndex: entry.path.stepIndex, jsonpath: entry.path.jsonpath })
+  // stepIndex 非整数(手改 JSON:"0")与越界同判 step-oob —— 后端同守卫
+  // (`isinstance(si, int)`),否则前端把它当活条目,chip 宣称一次永不
+  // 触发的注入。
+  const si = entry.path.stepIndex
+  if (!Number.isInteger(si) || si < 0 || si >= stepCount) {
+    issues.push({ kind: 'step-oob', stepIndex: si })
+  } else if (!pathResolvable(entry.path.jsonpath, bodyPathsOfStep(si))) {
+    issues.push({ kind: 'path-unresolvable', stepIndex: si, jsonpath: entry.path.jsonpath })
   }
-  for (const a of entry.asserts) {
+  // asserts 缺键 / 非数组 → 视作空(后端 `entry.get("asserts") or []`);
+  // 单条 assert 非对象或 stepIndex 非整数 → 跳过(后端 `isinstance(a, dict)
+  // and isinstance(a.get("stepIndex"), int)`)。
+  const asserts = Array.isArray(entry.asserts) ? entry.asserts : []
+  for (const a of asserts) {
+    if (!a || typeof a !== 'object' || !Number.isInteger(a.stepIndex)) continue
     if (a.stepIndex < 0 || a.stepIndex >= stepCount) {
       issues.push({ kind: 'step-oob', stepIndex: a.stepIndex })
     } else if (a.mode === 'override' && !assertTargetsOf(a.stepIndex).has(a.target)) {
@@ -65,10 +74,29 @@ export function isDeadEntry(
 /** 注册表形状归一:服务端来源(draft)不可信 — V2 之前保存的场景无
  *  assertion_registry 键,后端 pydantic default 补成 `{}`(truthy,无
  *  entries)→ `?? { entries: [] }` 只兜 null 挡不住,直灌 registry 会
- *  在 `registry.entries.length` 崩渲染。所有水化入口统一走这里。 */
+ *  在 `registry.entries.length` 崩渲染。所有水化入口统一走这里。
+ *
+ *  逐条形状修复(与后端 run_injection.entry_issues 的容忍面看齐):
+ *  * 非对象条目(标量 / 数组 / null)→ 丢弃:模板渲染 `e.id` 先于任何
+ *    判定就 TypeError;后端对这些条目本就 500(entry.get),不可用;
+ *  * `asserts` 缺键或非数组 → 补 `[]`(后端 `entry.get("asserts") or []`):
+ *    否则编辑器详情 `selected.asserts.length` / `v-for` 崩渲染。
+ *  path 形状不在此处改(判据归 isLegacyEntry,与后端同构)。 */
 export function normalizeRegistry(raw: unknown): AssertionRegistry {
-  const entries = (raw as AssertionRegistry | undefined | null)?.entries
-  return { entries: Array.isArray(entries) ? entries : [] }
+  const rawEntries = (raw as { entries?: unknown } | undefined | null)?.entries
+  if (!Array.isArray(rawEntries)) return { entries: [] }
+  const entries: Array<AssertionEntry | LegacyAssertionEntry> = []
+  for (const e of rawEntries) {
+    if (typeof e !== 'object' || e === null || Array.isArray(e)) continue
+    const entry = e as AssertionEntry | LegacyAssertionEntry
+    entries.push(
+      Array.isArray((entry as { asserts?: unknown }).asserts)
+        ? entry
+        : ({ ...(entry as unknown as Record<string, unknown>), asserts: [] } as unknown as
+            AssertionEntry | LegacyAssertionEntry),
+    )
+  }
+  return { entries }
 }
 
 /** 条目 id:inj-<6位base36时间戳><3位随机>(genScenarioId 同款纪律,无依赖) */

@@ -168,3 +168,36 @@ it('ARE-7: 普通字面量值 → 无注记(不误报)', async () => {
     w.unmount()
   }
 })
+
+// ── 残缺条目形状容忍(与后端 run_injection.entry_issues 同面)────────
+
+it('ARE-8: path:null / 缺 asserts / 串 stepIndex / 标量条目 — 页面照常渲染', async () => {
+  const w = await mountEditor({
+    definition: DEF,
+    orchestration: { steps: [], resourceMeta: {} },
+    assertion_registry: { entries: [
+      { id: 'inj-null', name: '空 path', path: null, value: 1, asserts: [] },
+      { id: 'inj-noasserts', name: '缺 asserts',
+        path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 2 },
+      { id: 'inj-strstep', name: '串 stepIndex',
+        path: { stepIndex: '0', source: 'body', jsonpath: '$.amount' }, value: 3, asserts: [] },
+      'junk',
+    ] },
+  })
+  const rows = w.findAll('.are-row')
+  expect(rows.length).toBe(3)                       // 标量条目被归一丢弃,渲染面为零
+  // path:null → 旧形状分支(灰显不可选),不解引用 path.stepIndex
+  expect(rows[0].classes()).toContain('are-legacy')
+  await rows[0].trigger('click')
+  await flushPromises()
+  expect(w.find('.are-detail').exists()).toBe(false)
+  // 缺 asserts → 详情照开,期望区空(不是 undefined.length 崩渲染)
+  await rows[1].trigger('click')
+  await flushPromises()
+  expect(w.find('.are-detail').exists()).toBe(true)
+  expect(w.find('.are-detail').text()).toContain('没有期望配对')
+  // 串 stepIndex → 悬空(不再当活条目宣称一次永不触发的注入)
+  expect(rows[2].classes()).toContain('are-dead')
+  expect(rows[2].text()).toContain('悬空')
+  w.unmount()
+})

@@ -49,7 +49,13 @@ export interface AssertionRegistry {
   entries: Array<AssertionEntry | LegacyAssertionEntry>
 }
 
-/** v2 旧形状识别(spec v3 §7/§8):无 path 键 = 旧条目。 */
+/** v2 旧形状识别(spec v3 §7/§8):path 非对象(缺键 / null / 数组 / 标量)
+ *  = 旧条目或残缺条目。判据与后端 `run_injection.entry_issues` 的
+ *  `isinstance(path, dict)` 同构 —— sidecar 是服务端/手改 JSON,形状不可信,
+ *  `path: null` 若当 v3 条目处理,`entry.path.stepIndex` 会在模板渲染里
+ *  TypeError,整页白屏。非对象条目(条目本身是标量)一并按旧形状处理:
+ *  列表/详情都走灰显分支,不再解引用。 */
 export function isLegacyEntry(e: AssertionEntry | LegacyAssertionEntry): e is LegacyAssertionEntry {
-  return (e as AssertionEntry).path === undefined
+  const p = (e as { path?: unknown } | null | undefined)?.path
+  return typeof p !== 'object' || p === null || Array.isArray(p)
 }
