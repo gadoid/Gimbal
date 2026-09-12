@@ -73,6 +73,24 @@ def _isolate_marks(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_endpoint_declarations_cache():
+    """Clear the endpoint-declarations process cache between tests.
+
+    Since the carry / declared-paths merge, ``carry_injection`` and the
+    dangling-path judgement share ONE process cache (TTL
+    ``settings.DECLARED_PATHS_TTL_SEC``).  Several tests mock the *same*
+    endpoint id with *different* declarations, so whichever runs first
+    poisons the rest for the rest of the TTL — the same discipline the
+    frontend already applies per case to its ``/full`` cache.  Reset before
+    every test so each observes only its own plate mock.
+    """
+    from app.services.endpoint_declarations import _reset_declared_paths_cache
+
+    _reset_declared_paths_cache()
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _default_plate_stub():
     """Hermeticity default: safe plate stub for tests without an explicit mock.
 

@@ -16,7 +16,8 @@ from typing import Any
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import carry_store, plate_client, service_names
+from . import carry_store, service_names
+from .endpoint_declarations import declarations_of
 from .field_state_resolution import carry_face
 from .run_materialize import CarryContext
 
@@ -30,19 +31,13 @@ async def _endpoint_declarations(endpoint_id: str) -> list | None:
     降级 — 模块契约是「plate 全部失败 → 空面」,不让单端点的坏包
     打断整单 carry。None(降级)与合法空目录 ``[]`` 在调用侧同为
     空面;类型上分开,留降级遥测的口子。
+
+    2026-09-12 取数合并:本函数保留同名同签名的门面(:82 调用点与
+    既有测试不受影响),取数/缓存/在飞收敛统一走
+    ``endpoint_declarations.declarations_of`` —— 与悬空判定共用同一份
+    进程缓存,不再各打一次 plate。契约(上述 None 语义)逐字不变。
     """
-    client = plate_client.get_client()
-    try:
-        resp = await client.get(f"/api/endpoint/{endpoint_id}/full")
-        if resp.status_code != 200:
-            return None
-        item = (resp.json().get("data") or {}).get("item")
-    except Exception:  # noqa: BLE001 — httpx 全家 + 垃圾体,统一降级
-        return None
-    if not isinstance(item, dict):
-        return None
-    decls = ((item.get("request") or {}).get("declarations")) or []
-    return decls if isinstance(decls, list) else None
+    return await declarations_of(endpoint_id)
 
 
 def _endpoint_id(step: dict) -> Any:
