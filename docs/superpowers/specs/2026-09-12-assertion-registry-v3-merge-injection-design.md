@@ -5,6 +5,8 @@
 **分支**: feat/dataset-driven-refactor
 **取代**: `2026-09-11-assertion-registry-field-binding-design.md`(spec v2)的注册表面(T2-T5);v2 已实施数据集侧(T0/T1)与编辑器骨架不变部分见 §0
 
+**修订**: §2 的 `path-unresolvable` 判定面已被 `2026-09-12-injectable-path-surface-design.md`(spec v3.1)放宽为「契约声明 ∪ body 现存」;§1 裁定 2「任意字段直补」的成立范围随之覆盖 form/collapse/carry 三面
+
 ---
 
 ## 0. 背景与取代关系
