@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import httpx
 import pytest
@@ -454,3 +455,60 @@ async def test_stale_fallback_warning_carries_the_cause(monkeypatch):
     assert all("回退旧快照" in s for s in stale), seen
     plate_client.set_client_for_tests(None)
 
+
+# ── 判定软取有界(Z4)──────────────────────────────────────────────
+class _TimeoutEnforcingTransport(httpx.AsyncBaseTransport):
+    """按**真实传输层**语义施加读超时的 MockTransport 替身。
+
+    为什么不能用 ``httpx.MockTransport``(实测证据,勿"简化"回去):httpx 的
+    逐请求超时只经 ``request.extensions["timeout"]`` 交给传输层,而
+    ``MockTransport.handle_async_request`` 拿到该扩展**直接丢弃**。生产用的是
+    ``AsyncHTTPTransport``(读它、并据此中断),所以那条上限在 MockTransport 下
+    **测不到**:本用例在"传了 timeout"与"没传 timeout"两种实现下都等满 5s 并
+    成功(实测 5.01s,断言恒红、零判别力)。本替身照真实读超时语义施加
+    ``asyncio.wait_for``,断言于是测的是**生产链路**的行为,而不是替身的行为。
+    """
+
+    def __init__(self, handler) -> None:
+        self._handler = handler
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        read = (request.extensions.get("timeout") or {}).get("read")
+        if read is None:                      # 显式判 None(§5):0.0 也是"要给"的值
+            return await self._handler(request)
+        try:
+            # wait_for 在超时处**取消并回收**挂起的 handler ⇒ 不在事件循环上
+            # 遗留 pending task(裸 sleep 留给 loop teardown 会报
+            # "Task was destroyed but it is pending")。
+            return await asyncio.wait_for(self._handler(request), timeout=read)
+        except asyncio.TimeoutError:
+            raise httpx.ReadTimeout("read timeout", request=request) from None
+
+
+async def test_slow_plate_degrades_within_bounded_time(monkeypatch):
+    """Z4:判定取数是**软取** —— plate 慢时在 3s 内降级,不把 /runs 绑到 30s。
+
+    修的是这条链:dispatcher 同步段 ``gather(declared_paths_of(...))`` 一旦被
+    plate 拖满 ``PLATE_TIMEOUT_SEC``(30s),就与前端 axios 的 30s 撞在同一条
+    线上 —— 前端报失败、后端已建执行,用户重试即**重复执行**。故取数自带短
+    超时,超时即降级从严(只认 body 面)。
+
+    客户端的默认超时**照生产设 30s**:本用例要钉的正是「客户端 30s 不改,靠
+    逐请求超时把它压下来」(客户端不设则为 httpx 默认 5.0,与 handler 的 5s
+    睡眠撞车 → 用例不稳定)。
+    """
+    async def handler(request):
+        await asyncio.sleep(5)                     # 超过 3s 判定超时
+        return httpx.Response(200, json={"ok": True, "data": {"item": {}}})
+
+    monkeypatch.setattr(settings, "DECLARED_PATHS_TIMEOUT_SEC", 0.3)   # 测试里收紧
+    plate_client.set_client_for_tests(httpx.AsyncClient(
+        transport=_TimeoutEnforcingTransport(handler),
+        base_url="http://plate-test",
+        timeout=settings.PLATE_TIMEOUT_SEC,        # 生产同款 30s(与被测的逐请求超时无关)
+    ))
+    _reset_declared_paths_cache()
+    t0 = time.monotonic()
+    assert await declared_paths_of("ep-slow") is None       # 超时 → 降级
+    assert time.monotonic() - t0 < 2.0                      # 有界(远小于 5s)
+    plate_client.set_client_for_tests(None)

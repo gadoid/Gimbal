@@ -174,7 +174,10 @@ async def _fetch_declarations(endpoint_id: str, fail_reason: list[str]) -> list 
     回收,不是新的模块级状态。
     """
     try:
-        resp = await get_client().get(f"/api/endpoint/{endpoint_id}/full")
+        resp = await get_client().get(
+            f"/api/endpoint/{endpoint_id}/full",
+            timeout=settings.DECLARED_PATHS_TIMEOUT_SEC,
+        )
         if resp.status_code != 200:
             raise RuntimeError(f"plate status {resp.status_code}")
         # 缺省合并(例外,已核等价性 —— 不是「有意义 falsy 被真值合并」):

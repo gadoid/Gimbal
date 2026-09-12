@@ -97,6 +97,16 @@ class Settings(BaseSettings):
     # 的 stale_max_window = 86400s,本值保守)。
     DECLARED_PATHS_MAX_ENTRIES: int = 256
     DECLARED_PATHS_STALE_WINDOW_SEC: float = 3600.0
+    # 判定取数的**逐请求**超时(秒;spec 架构收敛 §3.1 Z4)。声明面是**软取**
+    # —— 判定只拿它做增强(悬空判定/carry 面),拿不到就**降级从严**(只认
+    # body 面),不是执行的前置条件。故这条取数必须短:它跑在 ``/runs`` 的
+    # **同步**段里(dispatcher 冷启动 gather(declared_paths_of(...))),
+    # 用 30s 就把「前端 axios 超时」和「后端 plate 超时」钉在同一条线上 ——
+    # plate 慢时前端报失败、后端其实已建执行,用户重试即**重复执行**。
+    # **方向勿读反**:超时即降级从严(不是拿到更多),故宁可短路也不等。
+    # **``PLATE_TIMEOUT_SEC`` 的 30s 不得改动**:那条服务 ``convert`` 等既有
+    # 链路(它们的超时语义是「等不到就报错」),本值只覆盖这一条软取。
+    DECLARED_PATHS_TIMEOUT_SEC: float = 3.0
 
     # Set in model_post_init — True when the corresponding secret was
     # freshly generated because env/.env didn't provide one.  Not part of
