@@ -97,15 +97,25 @@ class Settings(BaseSettings):
     # 的 stale_max_window = 86400s,本值保守)。
     DECLARED_PATHS_MAX_ENTRIES: int = 256
     DECLARED_PATHS_STALE_WINDOW_SEC: float = 3600.0
-    # 判定取数的**逐请求**超时(秒;spec 架构收敛 §3.1 Z4)。声明面是**软取**
-    # —— 判定只拿它做增强(悬空判定/carry 面),拿不到就**降级从严**(只认
-    # body 面),不是执行的前置条件。故这条取数必须短:它跑在 ``/runs`` 的
-    # **同步**段里(dispatcher 冷启动 gather(declared_paths_of(...))),
-    # 用 30s 就把「前端 axios 超时」和「后端 plate 超时」钉在同一条线上 ——
-    # plate 慢时前端报失败、后端其实已建执行,用户重试即**重复执行**。
+    # 声明面**软取**的**逐请求**超时(秒;spec 架构收敛 §3.1 Z4)。声明面是
+    # 软取 —— 判定拿它做增强(悬空判定),carry 拿它做契约面;拿不到就降级
+    # (判定从严只认 body 面 / carry 不注入),不是执行的前置条件。故这条
+    # 取数必须短:判定那一路跑在 ``/runs`` 的**同步**段里(dispatcher 冷启动
+    # gather(declared_paths_of(...))),用 30s 就把「前端 axios 超时」和
+    # 「后端 plate 超时」钉在同一条线上 —— plate 慢时前端报失败、后端其实
+    # 已建执行,用户重试即**重复执行**。
+    # **覆盖范围 = 本模块这一条共享软取**(``endpoint_declarations._fetch_declarations``),
+    # 即它的**两个消费面都受这个上限约束**:判定面(``declared_paths_of`` ←
+    # dispatcher 同步段)与 carry 面(``declarations_of`` ←
+    # ``carry_injection.build_carry_context``:后台 fan-out ``run_dispatcher.py:748``、
+    # 预览/导出 ``routers/scenarios.py:188``)。共享是**有意**的:取数在飞收敛
+    # (同端点同一个任务),按调用方分别传超时会让上限取决于「谁恰好先建了那个
+    # 在飞任务」,更不确定。代价要认下来:**carry 面不只在失败时降级,plate 慢过
+    # 本值(3s)时也降级**。
     # **方向勿读反**:超时即降级从严(不是拿到更多),故宁可短路也不等。
-    # **``PLATE_TIMEOUT_SEC`` 的 30s 不得改动**:那条服务 ``convert`` 等既有
-    # 链路(它们的超时语义是「等不到就报错」),本值只覆盖这一条软取。
+    # **``PLATE_TIMEOUT_SEC`` 的 30s 不得改动**:那条服务 ``convert``、``/full``
+    # 代理(``plate_client.py:73``)等既有链路(它们的超时语义是「等不到就报错」),
+    # 本值不覆盖它们。
     DECLARED_PATHS_TIMEOUT_SEC: float = 3.0
 
     # Set in model_post_init — True when the corresponding secret was

@@ -445,7 +445,7 @@ async def dispatch_run(
             needed_steps.add(si)
 
     def _endpoint_id_of(si: int) -> str | None:
-        step = raw_steps[si] if 0 <= si < step_count and isinstance(raw_steps[si], dict) else {}
+        step = _step_at(raw_steps, si)
         api = step.get("api")
         hints = (api.get("view_hints") or {}) if isinstance(api, dict) else {}   # B:守齐
         eid = hints.get("endpoint_id") if isinstance(hints, dict) else None
@@ -467,15 +467,13 @@ async def dispatch_run(
                 "锚在契约声明上的条目可能被误判为悬空并跳过", si,
             )
 
-    def _body_at(si: int) -> Any:
-        """该步的 request.body(判定用)。越界/非 dict 元素 → None:
-        stepIndex 越界由 entry_issues 的 step-oob 分支判死,**不能**在这里
-        抛 IndexError/AttributeError 把整单变 500(守齐,B/Z2)。"""
-        step = raw_steps[si] if 0 <= si < step_count and isinstance(raw_steps[si], dict) else {}
-        return (step.get("request") or {}).get("body")
+    # body 面(判定)与端点面(universe)**共用同一份投影** —— 两侧对同一下标
+    # 必须给同一答案:各写一份的话,一侧改了规则另一侧不动,判决与 universe
+    # 就静默分叉。投影本体见 :func:`_body_of`。
+    body_of_step = _body_of(raw_payload)
 
     universe_by_step: dict[int, set[str]] = {
-        si: injectable_universe(_body_at(si), face)
+        si: injectable_universe(body_of_step(si), face)
         for si, face in face_by_step.items()
     }
     # §5 例外:两侧同为该查表的缺省形(`set[str]` 的「只认 $ 根」),等价性一眼可判
@@ -485,7 +483,7 @@ async def dispatch_run(
     skipped_while_degraded: list[str] = []
     selected_entries: list[dict] = []
     for e in selected:
-        issues = entry_issues(e, step_count, _body_of(raw_payload),
+        issues = entry_issues(e, step_count, body_of_step,
                              _assert_targets_of(raw_payload), _universe_of)
         if issues:
             p = e.get("path")
@@ -1181,20 +1179,33 @@ async def _finalize_execution(
 
 
 # ─── helpers ──────────────────────────────────────────────────────
+def _step_at(steps: list, si: int) -> dict:
+    """``steps[si]`` 的 dict 元素;**越界 / 非 dict 元素 ⇒ 空 dict**。
+
+    判定链上「取某步」的**唯一**写法:body 面(判定)、端点面(universe)、
+    assert 目标面按同一条规则取步,否则同一下标在两侧得到不同答案、判决静默
+    分叉。越界与畸形元素都不抛 —— 判死归 ``entry_issues`` 的 step-oob 分支,
+    这里抛 IndexError/AttributeError 只会把整单变 500(守齐,B/Z2)。
+
+    §5 例外:空 dict 是**该投影的缺省形** —— 「无此步」与「空步骤」在三个消费
+    面(body 无 / api 无 / strategy 无)上等价,故同落一个值;判死不在这里。"""
+    if si < 0 or si >= len(steps) or not isinstance(steps[si], dict):
+        return {}
+    return steps[si]
+
+
 def _body_of(payload: dict | None) -> Callable[[int], Any]:
     """steps[si].request.body 投影(entry_issues 的 path-unresolvable
     检测输入,spec v3 §2;jsonpath.exists 在其上判路径可解析性)。
 
     取**原始** steps(不填 :func:`steps_from_payload` 的过滤版):判定与
     :func:`compose_injection_scenario` 的物化、与前端同用一个索引基数
-    (spec §1.1 Z2 —— 过滤版下标会把整个判定错位一位)。非 dict 元素
-    当无 body(守齐:判死走 step-oob,不走 AttributeError 500)。"""
+    (spec §1.1 Z2 —— 过滤版下标会把整个判定错位一位)。取步规则见
+    :func:`_step_at`(越界 / 非 dict ⇒ 无 body)。"""
     steps = definition_from_payload(payload).get("steps") or []
 
     def _body(si: int) -> Any:
-        if si < 0 or si >= len(steps) or not isinstance(steps[si], dict):
-            return None
-        return (steps[si].get("request") or {}).get("body")
+        return (_step_at(steps, si).get("request") or {}).get("body")
 
     return _body
 
@@ -1202,15 +1213,14 @@ def _body_of(payload: dict | None) -> Callable[[int], Any]:
 def _assert_targets_of(payload: dict | None) -> Callable[[int], set[str]]:
     """steps[si].strategy 的 assertion target 投影(entry_issues 的
     override-no-match 检测输入;匹配语义与 compose_injection_scenario
-    同源:kind=assertion 且 target 相等)。索引基数同上:原始 steps。"""
+    同源:kind=assertion 且 target 相等)。索引基数同上:原始 steps。
+    取步规则见 :func:`_step_at`(越界 / 非 dict ⇒ 无 strategy)。"""
     steps = definition_from_payload(payload).get("steps") or []
 
     def _targets(si: int) -> set[str]:
-        if si < 0 or si >= len(steps) or not isinstance(steps[si], dict):
-            return set()
         return {
             st.get("target")
-            for st in (steps[si].get("strategy") or [])
+            for st in (_step_at(steps, si).get("strategy") or [])
             if isinstance(st, dict) and st.get("kind") == "assertion"
         }
 

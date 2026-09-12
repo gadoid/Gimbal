@@ -474,12 +474,17 @@ class _TimeoutEnforcingTransport(httpx.AsyncBaseTransport):
 
     def __init__(self, handler) -> None:
         self._handler = handler
+        # 本替身**逐请求**观察到的读超时(生产链路经 timeout 扩展交给传输层的那个)。
+        # 用例据此断言「传下去的就是那条短超时」,而不是断言「用时 < 2s」——
+        # 后者在客户端级超时也被本替身强制时对「逐请求超时是否还在」零判别力。
+        self.seen_reads: list[float | None] = []
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         # §5 例外:两侧同为「未提供 timeout 扩展」的缺省形(``None`` / ``{}``),
         # 合并后 ``.get("read")`` 仍得 None;0.0 是**有意义的值**(显式要求零
         # 超时),不是被抹平的 falsy。
         read = (request.extensions.get("timeout") or {}).get("read")
+        self.seen_reads.append(read)
         if read is None:                      # 显式判 None(§5):0.0 也是"要给"的值
             return await self._handler(request)
         try:
@@ -502,14 +507,22 @@ async def test_slow_plate_degrades_within_bounded_time(monkeypatch):
     客户端的默认超时**照生产设 30s**:本用例要钉的正是「客户端 30s 不改,靠
     逐请求超时把它压下来」(客户端不设则为 httpx 默认 5.0,与 handler 的 5s
     睡眠撞车 → 用例不稳定)。
+
+    判别力钉在**传输层实际观察到的读超时**上(``transport.seen_reads``),不是
+    「用时 < 2s」:客户端级超时同样经 timeout 扩展交给传输层,若
+    ``PLATE_TIMEOUT_SEC`` 被配成 1.0,生产端去掉 ``timeout=`` kwarg 后本替身
+    照样按 1.0 中断 ⇒ ``is None`` 与「用时 < 2s」**双双照绿**(断言恒真的
+    latent-green)。断言观察值等于逐请求那条短超时,才把「短超时确实传到了
+    生产链路」钉住。
     """
     async def handler(request):
         await asyncio.sleep(5)                     # 超过 3s 判定超时
         return httpx.Response(200, json={"ok": True, "data": {"item": {}}})
 
     monkeypatch.setattr(settings, "DECLARED_PATHS_TIMEOUT_SEC", 0.3)   # 测试里收紧
+    transport = _TimeoutEnforcingTransport(handler)
     plate_client.set_client_for_tests(httpx.AsyncClient(
-        transport=_TimeoutEnforcingTransport(handler),
+        transport=transport,
         base_url="http://plate-test",
         timeout=settings.PLATE_TIMEOUT_SEC,        # 生产同款 30s(与被测的逐请求超时无关)
     ))
@@ -517,4 +530,7 @@ async def test_slow_plate_degrades_within_bounded_time(monkeypatch):
     t0 = time.monotonic()
     assert await declared_paths_of("ep-slow") is None       # 超时 → 降级
     assert time.monotonic() - t0 < 2.0                      # 有界(远小于 5s)
+    # 判别力所在:传输层观察到的是**逐请求**那条短超时(而非客户端级 30s)。
+    # 生产端去掉 timeout= kwarg ⇒ 这里读到客户端级值 ⇒ 红(不再恒绿)。
+    assert transport.seen_reads == [pytest.approx(settings.DECLARED_PATHS_TIMEOUT_SEC)]
     plate_client.set_client_for_tests(None)
