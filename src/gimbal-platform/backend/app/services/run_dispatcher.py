@@ -383,8 +383,23 @@ async def dispatch_run(
                 f"step_to={req.step_to} out of range (0..{len(steps) - 1})",
             )
 
-    selected_datasets: list[ComposerDataSet] = []
+    # 行级选择合并(spec v3 §4):dataSetSelection 权威,dataSetIds 兼容
+    # 读(映射为整库);同库多段合并行集,行集空 = 整库;某段整库则整库
+    # (整库 ⊇ 任意行集,合并取超集)。
+    sel_by_ds: dict[str, list[int] | None] = {}
+    for sel in req.data_set_selection:
+        ds_id = sel.dataset_id
+        if ds_id not in sel_by_ds:
+            sel_by_ds[ds_id] = list(sel.row_indexes) or None
+        elif sel_by_ds[ds_id] is not None and sel.row_indexes:
+            sel_by_ds[ds_id] = sorted(
+                set(sel_by_ds[ds_id]) | set(sel.row_indexes)
+            )
     for ds_id in req.data_set_ids:
+        sel_by_ds.setdefault(ds_id, None)
+
+    selected_datasets: list[ComposerDataSet] = []
+    for ds_id in sel_by_ds:
         ds = await _find_dataset_by_id(db, ds_id)
         if ds is None or ds.scenario_id != scen.scenario_id:
             raise NotFound(
@@ -392,8 +407,9 @@ async def dispatch_run(
             )
         selected_datasets.append(ds)
 
-    # 2.5 断言注入条目(spec v3 §8):被选中且悬空检测通过的条目 → 注入族;
-    # 死/旧条目 skip + 告警,绝不炸 dispatch。
+    # 2.5 断言注入条目(spec v3 §8):被选中且悬空检测通过的条目 → 注入族
+    # (与数据集行交叉派生 case,spec v3 §4);死/旧条目 skip + 告警,
+    # 绝不炸 dispatch。
     raw_payload = scen.payload or {}
     registry = raw_payload.get("assertion_registry") or {}
     entries = registry.get("entries") or []
@@ -421,20 +437,36 @@ async def dispatch_run(
     # row_count 列在 raw-SQL 迁移路径下不回填,NULL/过期会让计数器
     # 超过 total_runs 出现 failed > total 的怪状态。
     run_id = _new_run_id()
-    # D12 基线执行:未选数据集 = 一个隐式空覆盖行(纯基线,行键空集
-    # 全部回落 config.vars)。datasetId=None 在 JSONL 里如实记录。
-    # 新编辑器里行 0 基线虚行不落库 → 0 行数据集 = "只有基线",同样
-    # 回退一个隐式空覆盖行(否则 entries 为空,执行 0/0/0 秒完结)。
-    # 注入条目在场时注入族自身就是基线行(带偏离),不叠加隐式行。
-    fanout_datasets = [
-        {"datasetId": ds.dataset_id, "rows": list(ds.rows or []) or [{}]}
-        for ds in selected_datasets
-    ]
-    if not fanout_datasets and not selected_entries:
+    # 行级过滤(spec v3 §4):rowIndexes 选中行;越界 409。行集为空的
+    # 数据集 = 隐式空覆盖行(D12 基线语义);rowIndexes 校验对真实行数。
+    fanout_datasets: list[dict] = []
+    for ds in selected_datasets:
+        rows_raw = list(ds.rows or [])
+        sel = sel_by_ds.get(ds.dataset_id)
+        if sel is None:
+            fanout_datasets.append(
+                {"datasetId": ds.dataset_id, "rows": rows_raw or [{}]}
+            )
+        else:
+            for ri in sel:
+                if ri < 0 or ri >= len(rows_raw):
+                    raise Conflict(
+                        "row_index_out_of_range",
+                        f"rowIndex={ri} out of range for data set "
+                        f"{ds.dataset_id} (0..{len(rows_raw) - 1})",
+                    )
+            fanout_datasets.append(
+                {"datasetId": ds.dataset_id, "rows": [rows_raw[ri] for ri in sel]}
+            )
+    # 交叉矩阵(spec v3 §4):R(行集合,空={[基线]})× E(选中条目集合,
+    # 空={[无注入]})— 每 case = 一行 × 一条目,单一偏离可直接归因;
+    # 替代 v2 的 N+M 并集与 `not fanout and not entries` 特判。
+    injections = list(selected_entries) or [None]
+    if not fanout_datasets:
         fanout_datasets = [{"datasetId": None, "rows": [{}]}]
-    # 数据集族 + 注入族合计(rows x nRuns)。
+    # 数据集族 × 注入族合计(rows × entries × nRuns)。
     total_runs = (
-        sum(len(d["rows"]) for d in fanout_datasets) + len(selected_entries)
+        sum(len(d["rows"]) for d in fanout_datasets) * len(injections)
     ) * req.n_runs
     # P7:总量闸——行数 × nRuns 无上限时,万行数据集 × n_runs 会派生
     # 出十万级子进程。
@@ -465,6 +497,9 @@ async def dispatch_run(
             "runId": run_id,
             "scenarioId": scen.scenario_id,
             "dataSetIds": req.data_set_ids,
+            "dataSetSelection": [
+                s.model_dump(by_alias=True) for s in req.data_set_selection
+            ],
             # 执行环境键已随 D2 退役(不再写入);历史行旧键由前端
             # RECIPE_LABELS 标签保留可读。
             # 实际注入清单(扫描 ∪ 绑定)— 读侧据此展示认证列。缺 alias
@@ -526,7 +561,7 @@ async def _fanout(
     run_id: str,
     scenario_payload: dict,
     datasets: list[dict],
-    injections: list[dict] | tuple = (),
+    injections: list[dict | None] | tuple = (),
     owner_id: int,
     auth_aliases: list[str],
     halt_at: int | None = None,
@@ -545,9 +580,10 @@ async def _fanout(
     prefix/merge 策略等旧字段已随 RunRequest 收敛退役,spec §6)。
 
     spec v3 §8:``injections`` 为选中的断言注入条目(dispatch 已过滤死/
-    旧条目)— 与数据集族并集(条目 × repeat 笛卡尔),注入族在 definition
-    层经 ``compose_injection_scenario`` patch(Assign 直补 + asserts
-    patch,不触碰 config.vars)后再走 plate convert,``materialize_run_copy``
+    旧条目)— 与数据集行交叉(spec v3 §4:行 × 条目 × repeat 笛卡尔),
+    每 case 先行值合入 vars,再在 definition 层经
+    ``compose_injection_scenario`` patch(Assign 直补 + asserts patch,
+    不触碰 config.vars)后走 plate convert,``materialize_run_copy``
     其后照旧。
 
     V3.2:执行调用从 gimbal HTTP POST /run 改为落盘 case 文件后
@@ -583,7 +619,7 @@ async def _fanout(
             execution_id, e,
         )
         total_rows = (sum(len(ds["rows"]) for ds in datasets)
-                      + len(injections)) * n_runs
+                      * len(injections or [None])) * n_runs
         await _fail_whole_execution(
             db_factory, log_path, execution_id=execution_id, run_id=run_id,
             total_rows=total_rows, error=str(e),
@@ -640,7 +676,7 @@ async def _fanout(
 
     async def _row(ds: dict | None, row_idx: int, rep: int, seq: int,
                    injection: dict | None = None) -> None:
-        """One (dataset row × repeat) or (injection entry × repeat) entry —
+        """One (dataset row × injection entry × repeat) cross entry —
         compose + convert + launch."""
         state = row_states[seq]
         injection_id = (injection or {}).get("id")
@@ -667,23 +703,20 @@ async def _fanout(
                 state.status = "canceled"
                 state.finished_at = _utcnow().isoformat() + "Z"
                 return
+            # 交叉组合序(spec v3 §3):行值合入(vars)→ 条目 Assign 直补
+            # + asserts patch — 偏离最后生效。基线/无行维度 = 空行字典。
+            row_dict = dict(ds["rows"][row_idx] or {}) if ds is not None else {}
+            composed = _compose_scenario(scenario_payload, row_dict)
             if injection is not None:
-                # 注入族(spec v3 §3):definition 层 patch(Assign 直补 +
-                # asserts patch)在 plate convert 之前完成 — 替代数据集行的
-                # 行合并路径(compose 不触碰 vars,与数据集行注入正交);
-                # materialize 其后照旧。
-                composed = compose_injection_scenario(definition, injection)
-            else:
-                row_dict = dict(ds["rows"][row_idx] or {})
-                composed = _compose_scenario(scenario_payload, row_dict)
+                composed = compose_injection_scenario(composed, injection)
             # 每个 case 独立子目录:case.json(数据驱动用例快照)+ 引擎
             # 原生报告目录;stem 带 dataset/row/rep 定位,便于事后审计。
-            # 注入族 stem:entryId 占 datasetId 位(无 dataset/row 维度)。
+            # stem 三定位(spec v3 §4 审计):数据集(或 baseline)+ 行号
+            # + 条目 id(无注入省略)+ rep,如 case-003-ds-x-r1-inj-inj-2-n0。
             stem = (
-                f"case-{seq:03d}-inj-{injection_id}-r{rep}"
-                if injection is not None else
-                f"case-{seq:03d}-{ds['datasetId'] or 'baseline'}"
-                f"-r{row_idx}-n{rep}"
+                f"case-{seq:03d}-{ds['datasetId'] or 'baseline'}-r{row_idx}"
+                + (f"-inj-{injection_id}" if injection_id else "")
+                + f"-n{rep}"
             )
             case_dir = run_dir / stem
             ts = _utcnow().isoformat() + "Z"
@@ -842,18 +875,15 @@ async def _fanout(
                 db_factory, execution_id, passed=passed, failed=1 - passed
             )
 
-    # (dataset, row, repeat) 笛卡尔积;n_runs=1 时与旧逐行行为完全一致。
-    # 注入族(spec v2 §8)并集在后:选中条目 × repeat(跑在基线上,不与
-    # 数据集行交叉);dataset 维度缺省 None(rowIndex 恒 0)。
+    # (dataset row × injection entry × repeat) 交叉笛卡尔积(spec v3 §4):
+    # injections 已含 None 占位(未选条目时 = [None],恰一次无注入组合)。
     # seq 为 case 文件名里的全局序号(与 entries 顺序一致,单测可断言)。
+    injections = list(injections) or [None]
     entries = [
-        (ds, row_idx, rep, None)
+        (ds, row_idx, inj, rep)
         for ds in datasets
         for row_idx in range(len(ds["rows"]))
-        for rep in range(n_runs)
-    ] + [
-        (None, 0, rep, entry)
-        for entry in injections
+        for inj in injections
         for rep in range(n_runs)
     ]
     # spec §9.1:组完全部行任务后初始化行状态 registry(全部 queued;
@@ -867,11 +897,11 @@ async def _fanout(
             status="queued",
             injection_id=(inj or {}).get("id"),
         )
-        for seq, (ds, row_idx, rep, inj) in enumerate(entries)
+        for seq, (ds, row_idx, inj, rep) in enumerate(entries)
     ]
     await asyncio.gather(
         *(_row(ds, i, r, seq, inj)
-          for seq, (ds, i, r, inj) in enumerate(entries))
+          for seq, (ds, i, inj, r) in enumerate(entries))
     )
 
     # Terminal status + timestamps only (counters already maintained

@@ -204,6 +204,16 @@ class ServiceBinding(BaseModel):
     url: str | None = Field(default=None, alias="url", max_length=512)
 
 
+class DataSetSelection(BaseModel):
+    """行级数据集选择(spec v3 §4):datasetId + rowIndexes(0-based,
+    与编辑器行号一致;缺省/空 = 整库)。RunRequest/RunScheme 的权威
+    选择键;旧 dataSetIds 保留为兼容读(两键同发本键优先)。"""
+    model_config = _CAMEL
+
+    dataset_id: str = Field(alias="datasetId", min_length=1, max_length=128)
+    row_indexes: list[int] = Field(default_factory=list, alias="rowIndexes")
+
+
 class RunScheme(BaseModel):
     """场景级运行方案(orchestration sidecar,plate 零感知,spec §3.1)。"""
     model_config = _CAMEL
@@ -214,6 +224,10 @@ class RunScheme(BaseModel):
     # 行并列生成 case;default 空 = 旧方案缺键不炸。
     injection_entry_ids: list[str] = Field(default_factory=list,
                                            alias="injectionEntryIds")
+    # 行级数据集选择(spec v3 §4)— 权威键;旧方案无此键 = 整库回读。
+    data_set_selection: list[DataSetSelection] = Field(
+        default_factory=list, alias="dataSetSelection"
+    )
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
     plugins: Any = None        # 预埋,gimbal 就绪前 no-op
@@ -258,6 +272,10 @@ class RunRequest(BaseModel):
     )
     # D12:空列表 = 基线执行(一个隐式空覆盖行),不再强制 min_length=1
     data_set_ids: list[str] = Field(alias="dataSetIds", default_factory=list)
+    # 行级数据集选择(spec v3 §4)— 权威键;两键同发时本键优先,dataSetIds 忽略
+    data_set_selection: list[DataSetSelection] = Field(
+        default_factory=list, alias="dataSetSelection"
+    )
     # service → {authAlias?, url?} 绑定(spec §3.1/§5):注入清单 =
     # 模板扫描(steps 里的 ${auth.*} 引用)∪ 绑定 authAlias;绑定 url
     # 物化进 services(显式绑定最优先)。旧凭证策略四字段(auths /
@@ -357,6 +375,7 @@ class Scenario(BaseModel):
 __all__ = [
     "DataSet",
     "DataSetDraft",
+    "DataSetSelection",
     "DataSetSummary",
     "ExportOverlay",
     "Orchestration",
