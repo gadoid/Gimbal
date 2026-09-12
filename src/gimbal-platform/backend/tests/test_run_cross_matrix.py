@@ -30,6 +30,37 @@ def test_run_request_parses_data_set_selection():
     }).data_set_selection[0].row_indexes == [1]
 
 
+async def test_both_keys_selection_wins_ignores_data_set_ids(
+    client, plate_mock: PlateMock, monkeypatch
+):
+    """两键同发:dataSetSelection 非空 → dataSetIds 整键忽略(spec v3 §4
+    「dataSetSelection 优先」)— 兼容键只在权威键缺省时映射整库。"""
+    from .helpers import wait_until as _wait
+    from .test_run_m1_capabilities import _patch_launch_capture
+    from .test_scenario_visibility_and_copy import _member
+
+    bob = await _member(client, "bob")
+    ds_a = await _seed(client, bob, rows=[{"amount": 10}, {"amount": 20}])
+    r = await client.post("/api/scenarios/sc-test/data-sets", headers=bob,
+                          json={"name": "兼容库", "rows": [{"amount": 30}]})
+    assert r.status_code == 201, r.text
+    ds_b = r.json()["datasetId"]
+
+    plate_mock.behaviour = "echo"
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+
+    r = await client.post("/api/runs", headers=bob, json={
+        "scenarioId": "sc-test",
+        "dataSetSelection": [{"datasetId": ds_a, "rowIndexes": [0]}],
+        "dataSetIds": [ds_b],
+    })
+    assert r.status_code == 201, r.text
+    await _wait(lambda: len(cases) >= 1)
+    assert len(cases) == 1                          # 只有 ds_a 行 0;ds_b 被忽略
+    assert cases[0]["config"]["vars"]["amount"] == 10   # 30 = ds_b 未跑
+
+
 # ── 集成:交叉矩阵 ──────────────────────────────────────────────────
 _EXEC_FINAL = {"done", "failed", "canceled"}
 
@@ -136,7 +167,8 @@ async def test_cross_matrix_rows_times_entries(
 async def test_row_selection_single_row(
     client, plate_mock: PlateMock, monkeypatch
 ):
-    """dataSetSelection rowIndexes=[1] → 只跑该行(1 case,vars=行值)。"""
+    """dataSetSelection rowIndexes=[1] → 只跑该行(1 case,vars=行值);
+    审计三定位记原始编辑器行号(rows 回放 rowIndex=1,stem 含 -r1-)。"""
     from .helpers import wait_until as _wait
     from .test_run_m1_capabilities import _patch_launch_capture
     from .test_scenario_visibility_and_copy import _member
@@ -153,11 +185,19 @@ async def test_row_selection_single_row(
         "dataSetSelection": [{"datasetId": ds_id, "rowIndexes": [1]}],
     })
     assert r.status_code == 201, r.text
+    exec_id = r.json()["executionId"]
     await _wait(lambda: len(cases) >= 1)
     assert len(cases) == 1
     assert cases[0]["config"]["vars"]["amount"] == 20
     assert all("source" not in st or st.get("kind") != "assign"
                for st in cases[0]["steps"][0]["strategy"])   # 未选条目 = 无注入
+
+    await _await_final(client, bob, exec_id)
+    rows = (await client.get(f"/api/executions/{exec_id}/rows", headers=bob)
+            ).json()["items"]
+    assert len(rows) == 1
+    assert rows[0]["rowIndex"] == 1                 # 原始编辑器行号,非选集位置
+    assert "-r1-" in rows[0]["caseDir"]             # stem 同口径三定位
 
 
 async def test_row_index_out_of_range_409(client, plate_mock):

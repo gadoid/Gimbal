@@ -383,8 +383,9 @@ async def dispatch_run(
                 f"step_to={req.step_to} out of range (0..{len(steps) - 1})",
             )
 
-    # 行级选择合并(spec v3 §4):dataSetSelection 权威,dataSetIds 兼容
-    # 读(映射为整库);同库多段合并行集,行集空 = 整库;某段整库则整库
+    # 行级选择合并(spec v3 §4):dataSetSelection 权威键 — 仅当其缺省
+    # (空)时旧 dataSetIds 才生效(兼容读,映射整库);两键同发则旧键
+    # 整键忽略。同库多段合并行集,行集空 = 整库;某段整库则整库
     # (整库 ⊇ 任意行集,合并取超集)。
     sel_by_ds: dict[str, list[int] | None] = {}
     for sel in req.data_set_selection:
@@ -395,8 +396,9 @@ async def dispatch_run(
             sel_by_ds[ds_id] = sorted(
                 set(sel_by_ds[ds_id]) | set(sel.row_indexes)
             )
-    for ds_id in req.data_set_ids:
-        sel_by_ds.setdefault(ds_id, None)
+    if not sel_by_ds:
+        for ds_id in req.data_set_ids:
+            sel_by_ds[ds_id] = None
 
     selected_datasets: list[ComposerDataSet] = []
     for ds_id in sel_by_ds:
@@ -439,14 +441,17 @@ async def dispatch_run(
     run_id = _new_run_id()
     # 行级过滤(spec v3 §4):rowIndexes 选中行;越界 409。行集为空的
     # 数据集 = 隐式空覆盖行(D12 基线语义);rowIndexes 校验对真实行数。
+    # rows 携带 (原始行号, 行字典) 对 — 审计/stem 记编辑器行号,
+    # 稀疏选择不重排(整库选择即 0..N-1 原样)。
     fanout_datasets: list[dict] = []
     for ds in selected_datasets:
         rows_raw = list(ds.rows or [])
         sel = sel_by_ds.get(ds.dataset_id)
         if sel is None:
-            fanout_datasets.append(
-                {"datasetId": ds.dataset_id, "rows": rows_raw or [{}]}
-            )
+            fanout_datasets.append({
+                "datasetId": ds.dataset_id,
+                "rows": [(i, r) for i, r in enumerate(rows_raw)] or [(0, {})],
+            })
         else:
             for ri in sel:
                 if ri < 0 or ri >= len(rows_raw):
@@ -455,15 +460,16 @@ async def dispatch_run(
                         f"rowIndex={ri} out of range for data set "
                         f"{ds.dataset_id} (0..{len(rows_raw) - 1})",
                     )
-            fanout_datasets.append(
-                {"datasetId": ds.dataset_id, "rows": [rows_raw[ri] for ri in sel]}
-            )
+            fanout_datasets.append({
+                "datasetId": ds.dataset_id,
+                "rows": [(ri, rows_raw[ri]) for ri in sel],
+            })
     # 交叉矩阵(spec v3 §4):R(行集合,空={[基线]})× E(选中条目集合,
     # 空={[无注入]})— 每 case = 一行 × 一条目,单一偏离可直接归因;
     # 替代 v2 的 N+M 并集与 `not fanout and not entries` 特判。
     injections = list(selected_entries) or [None]
     if not fanout_datasets:
-        fanout_datasets = [{"datasetId": None, "rows": [{}]}]
+        fanout_datasets = [{"datasetId": None, "rows": [(0, {})]}]
     # 数据集族 × 注入族合计(rows × entries × nRuns)。
     total_runs = (
         sum(len(d["rows"]) for d in fanout_datasets) * len(injections)
@@ -674,10 +680,11 @@ async def _fanout(
             "run_dispatcher: carry context build failed; skipped")
         carry_ctx = None
 
-    async def _row(ds: dict | None, row_idx: int, rep: int, seq: int,
-                   injection: dict | None = None) -> None:
+    async def _row(ds: dict | None, row_idx: int, row: dict | None, rep: int,
+                   seq: int, injection: dict | None = None) -> None:
         """One (dataset row × injection entry × repeat) cross entry —
-        compose + convert + launch."""
+        compose + convert + launch.  ``row_idx`` 是编辑器原始行号
+        (``rows`` 携带 (原始行号, 行字典) 对,稀疏选择不重排)。"""
         state = row_states[seq]
         injection_id = (injection or {}).get("id")
         ds_id = ds["datasetId"] if ds is not None else None
@@ -705,7 +712,7 @@ async def _fanout(
                 return
             # 交叉组合序(spec v3 §3):行值合入(vars)→ 条目 Assign 直补
             # + asserts patch — 偏离最后生效。基线/无行维度 = 空行字典。
-            row_dict = dict(ds["rows"][row_idx] or {}) if ds is not None else {}
+            row_dict = dict(row or {})
             composed = _compose_scenario(scenario_payload, row_dict)
             if injection is not None:
                 composed = compose_injection_scenario(composed, injection)
@@ -877,12 +884,14 @@ async def _fanout(
 
     # (dataset row × injection entry × repeat) 交叉笛卡尔积(spec v3 §4):
     # injections 已含 None 占位(未选条目时 = [None],恰一次无注入组合)。
-    # seq 为 case 文件名里的全局序号(与 entries 顺序一致,单测可断言)。
+    # rows 携带 (原始行号, 行字典) 对 — row_idx 即编辑器行号,稀疏选择
+    # 不重排。seq 为 case 文件名里的全局序号(与 entries 顺序一致,
+    # 单测可断言)。
     injections = list(injections) or [None]
     entries = [
-        (ds, row_idx, inj, rep)
+        (ds, row_idx, row, inj, rep)
         for ds in datasets
-        for row_idx in range(len(ds["rows"]))
+        for row_idx, row in ds["rows"]
         for inj in injections
         for rep in range(n_runs)
     ]
@@ -897,11 +906,11 @@ async def _fanout(
             status="queued",
             injection_id=(inj or {}).get("id"),
         )
-        for seq, (ds, row_idx, inj, rep) in enumerate(entries)
+        for seq, (ds, row_idx, _, inj, rep) in enumerate(entries)
     ]
     await asyncio.gather(
-        *(_row(ds, i, r, seq, inj)
-          for seq, (ds, i, inj, r) in enumerate(entries))
+        *(_row(ds, i, row, r, seq, inj)
+          for seq, (ds, i, row, inj, r) in enumerate(entries))
     )
 
     # Terminal status + timestamps only (counters already maintained
