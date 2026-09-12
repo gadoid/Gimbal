@@ -120,8 +120,9 @@ import RunPanelHost from '@/components/composer/RunPanelHost.vue'
 import type { RunPreset } from '@/api/scenario-composer'
 import type { AssertionRegistry } from '@/types/assertion-registry'
 import { isLegacyEntry } from '@/types/assertion-registry'
-import { bodyPathSetOf, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
+import { injectablePathSetOf, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
 import { fieldPathsOf } from '@/utils/dataset-segments'
+import { endpointFullVersion, requestDeclarationsOf } from '@/composables/useEndpointFull'
 
 const route = useRoute()
 const router = useRouter()
@@ -133,15 +134,19 @@ const dataSets = computed(() => store.dataSetsOfScenario(scenarioId))
 // ── 断言条目区(spec v3 §5):draft 自取数(与编辑器同源)────────────
 const registry = ref<AssertionRegistry>({ entries: [] })
 const steps = ref<any[]>([])
-function bodyPathsOfStep(si: number): ReadonlySet<string> {
-  return bodyPathSetOf(fieldPathsOf(steps.value[si] as any))
+/** 可注入面(spec v3.1 §2.1):body 现存 ∪ 契约声明(全状态 form/collapse/carry)。
+ *  声明面来自共享 /full 缓存 —— 契约未回填时退化为 body 面(从严)。 */
+function injectablePathsOfStep(si: number): ReadonlySet<string> {
+  void endpointFullVersion.value
+  const step = steps.value[si]
+  return injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))
 }
 function assertTargetsOf(si: number): ReadonlySet<string> {
   const st = (steps.value[si]?.strategy as any[] | undefined) ?? []
   return new Set(st.filter((x) => x?.kind === 'assertion').map((x) => String(x.target)))
 }
 const deadOf = (e: AssertionRegistry['entries'][number]) =>
-  isDeadEntry(e, steps.value.length, bodyPathsOfStep, assertTargetsOf)
+  isDeadEntry(e, steps.value.length, injectablePathsOfStep, assertTargetsOf)
 function valueSummary(e: AssertionRegistry['entries'][number]): string {
   if (isLegacyEntry(e)) return '—'
   const v = (e as { value: unknown }).value

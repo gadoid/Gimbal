@@ -101,4 +101,20 @@ describe('JsonPathInput — 按层提示', () => {
     expect(items().length).toBe(0)
     expect(value.value).toBe('$.')
   })
+
+  it('JP-8: 有 stateOf → 逐行标注字段状态;carry 附「平台带入」说明', async () => {
+    const stateOf = (p: string) =>
+      p === '$.amount' ? ('form' as const) : p === '$.items' ? ('carry' as const) : undefined
+    const { input, items } = mountInput({ stateOf })
+    await input().setValue('$.')
+    expect(items()[0].text()).toContain('form')
+    expect(items()[1].text()).toContain('carry')
+    expect(items()[1].find('.jpi-state').attributes('title')).toContain('平台从上游带入')
+  })
+
+  it('JP-9: 无 stateOf → 不渲染状态徽标(零行为变化)', async () => {
+    const { input, items } = mountInput()
+    await input().setValue('$.')
+    expect(items()[0].find('.jpi-state').exists()).toBe(false)
+  })
 })

@@ -289,7 +289,8 @@ import type {
   Scenario, DataSetSummary, Orchestration, ScenarioDraft,
 } from '@/types/scenario-composer'
 import type { AssertionRegistry, EntryPath } from '@/types/assertion-registry'
-import { bodyPathSetOf, genEntryId, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
+import { genEntryId, injectablePathSetOf, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
+import { endpointFullVersion, requestDeclarationsOf } from '@/composables/useEndpointFull'
 import type { ScenarioView, StepView } from '@/types/plate'
 
 const STEPS = [
@@ -515,11 +516,15 @@ const authOptions = computed(() => [...new Set([
   ...Object.keys(definition.value.config?.users ?? {}),
 ])])
 
-/** 死条目(悬空)id 集(spec v3 §2):bodyPathsOfStep 与编辑器同构
+/** 死条目(悬空)id 集(spec v3 §2):injectablePathsOfStep 与编辑器同构
  *  (AssertionRegistryEditor)— RunDialog 注入区据此禁选;legacy 条目
- *  isDeadEntry 恒 true,一并计入。 */
-function registryBodyPathsOf(si: number): ReadonlySet<string> {
-  return bodyPathSetOf(fieldPathsOf(steps.value[si] as any))
+ *  isDeadEntry 恒 true,一并计入。
+ *  可注入面(spec v3.1 §2.1):body 现存 ∪ 契约声明(全状态 form/collapse/
+ *  carry)。声明面来自共享 /full 缓存 —— 契约未回填时退化为 body 面(从严)。 */
+function registryInjectablePathsOf(si: number): ReadonlySet<string> {
+  void endpointFullVersion.value
+  const step = steps.value[si]
+  return injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))
 }
 function registryAssertTargetsOf(si: number): ReadonlySet<string> {
   // 与 RunPanelHost/CaseDataSetsList/AssertionRegistryEditor 同口径:
@@ -529,7 +534,7 @@ function registryAssertTargetsOf(si: number): ReadonlySet<string> {
 }
 const deadEntryIds = computed(() =>
   registry.value.entries
-    .filter((e) => isDeadEntry(e, steps.value.length, registryBodyPathsOf, registryAssertTargetsOf))
+    .filter((e) => isDeadEntry(e, steps.value.length, registryInjectablePathsOf, registryAssertTargetsOf))
     .map((e) => e.id))
 
 /** 配置签「加入本次执行」(spec v3 §5):预勾该条目打开运行面板 */

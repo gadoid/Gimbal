@@ -5,7 +5,7 @@
   与场景入口同款 RunDialog,场景加载不绑死 CaseComposer。自取数:
   getScenario(展示名/步数)+ getScenarioDraft(definition/
   orchestration.runSchemes/assertion_registry)+ listDataSets + 凭证池。
-  dead 计算与 CaseComposer 同构(bodyPathSetOf(fieldPathsOf)维度)。
+  dead 计算与 CaseComposer 同构(可注入面 = body 现存 ∪ 契约声明,spec v3.1 §2.1)。
 -->
 <template>
   <RunDialog
@@ -43,8 +43,9 @@ import type {
 } from '@/api/scenario-composer'
 import type { DataSetSummary, Scenario } from '@/types/scenario-composer'
 import type { AssertionRegistry } from '@/types/assertion-registry'
-import { bodyPathSetOf, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
+import { injectablePathSetOf, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
 import { fieldPathsOf } from '@/utils/dataset-segments'
+import { endpointFullVersion, requestDeclarationsOf } from '@/composables/useEndpointFull'
 import { list as listAuthSessions } from '@/api/auth_sessions'
 import { showError } from '@/utils/errorFallback'
 import { executionUrl } from '@/utils/links'
@@ -89,9 +90,13 @@ const authOptions = computed(() => {
     ((draft.value?.definition.config as any)?.users ?? {}) as Record<string, unknown>)
   return [...new Set([...authAliases.value, ...users])]
 })
-/** dead 计算(spec v3 §2,与 CaseComposer 同构):body 字段树维度 */
-function bodyPathsOfStep(si: number): ReadonlySet<string> {
-  return bodyPathSetOf(fieldPathsOf(steps.value[si] as any))
+/** dead 计算(spec v3 §2,与 CaseComposer 同构)。
+ *  可注入面(spec v3.1 §2.1):body 现存 ∪ 契约声明(全状态 form/collapse/
+ *  carry)。声明面来自共享 /full 缓存 —— 契约未回填时退化为 body 面(从严)。 */
+function injectablePathsOfStep(si: number): ReadonlySet<string> {
+  void endpointFullVersion.value
+  const step = steps.value[si]
+  return injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))
 }
 function assertTargetsOf(si: number): ReadonlySet<string> {
   // String(x.target):兑现 ReadonlySet<string> 的类型承诺(裸 x.target 会
@@ -103,7 +108,7 @@ function assertTargetsOf(si: number): ReadonlySet<string> {
 }
 const deadEntryIds = computed(() =>
   registry.value.entries
-    .filter((e) => isDeadEntry(e, steps.value.length, bodyPathsOfStep, assertTargetsOf))
+    .filter((e) => isDeadEntry(e, steps.value.length, injectablePathsOfStep, assertTargetsOf))
     .map((e) => e.id))
 
 onMounted(async () => {

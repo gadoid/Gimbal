@@ -16,7 +16,7 @@
 import { ref, type Ref } from 'vue'
 
 import { getFullEndpoint } from '@/api/scenario-composer'
-import type { EndpointFullView } from '@/types/plate'
+import type { DeclarationEntryView, EndpointFullView } from '@/types/plate'
 
 const fullByEndpoint = new Map<string, EndpointFullView>()
 /** 进行中的请求(同 endpoint 并发收敛为同一 Promise) */
@@ -59,6 +59,16 @@ export function endpointFullState(endpointId: string | undefined): 'loading' | '
   if (!endpointId) return ''
   if (fullByEndpoint.has(endpointId)) return ''
   return failed.has(endpointId) ? 'failed' : 'loading'
+}
+
+/** 步骤的契约声明面(读共享缓存;未拉取则发起)。上层投影用。
+ *  无 endpoint_id / 未回填 → undefined(调用方降级为「只认 body 面」)。 */
+export function requestDeclarationsOf(step: unknown): DeclarationEntryView[] | undefined {
+  const eid = (step as { api?: { view_hints?: { endpoint_id?: string } } } | null | undefined)
+    ?.api?.view_hints?.endpoint_id
+  if (!eid) return undefined
+  void ensureEndpointFull(eid)
+  return getEndpointFull(eid)?.request?.declarations
 }
 
 /** 测试钩子:清空缓存。仅供单测使用。 */

@@ -18,6 +18,7 @@ vi.mock('vue-router', () => ({
 }))
 
 import * as api from '@/api/scenario-composer'
+import { _resetEndpointFullCacheForTest } from '@/composables/useEndpointFull'
 import JsonPathInput from '@/components/composer/JsonPathInput.vue'
 import AssertionRegistryEditor from '@/views/AssertionRegistryEditor.vue'
 
@@ -55,7 +56,13 @@ async function mountEditor(draft: any = { definition: DEF, orchestration: { step
   return w
 }
 
-beforeEach(() => { setActivePinia(createPinia()); routerMock.push.mockReset() })
+beforeEach(() => {
+  setActivePinia(createPinia())
+  routerMock.push.mockReset()
+  // /full 是**会话级**共享缓存(非每挂载一份)→ 用例间须显式清空,否则前一个
+  // 用例拉过的端点结构会串到后一个用例(CaseComposerCanvas.test.ts 同款纪律)。
+  _resetEndpointFullCacheForTest()
+})
 afterEach(() => { vi.restoreAllMocks() })
 
 it('ARE-1: 列表渲染条目(名称/path 徽标/值摘要/期望数)', async () => {
@@ -223,12 +230,12 @@ it('ARE-9: 新建条目的 path 输入 — 按所选步骤给出该步 body 字�
   const w = await mountEditor()
   const pathInput = w.findComponent(JsonPathInput)
   expect(pathInput.exists()).toBe(true)
-  // 步骤 1 的 body 叶子(容器前缀由候选层自行推导)
-  expect(pathInput.props('candidates')).toEqual(['$.amount'])
+  // 步骤 1 的 body 叶子(容器前缀由候选层自行推导)+ 可注入面恒含 '$'(spec v3.1 §2.1)
+  expect(pathInput.props('candidates')).toEqual(['$', '$.amount'])
   // 切到步骤 2 → 候选随步骤切换
   ;(w.vm as any).pendingPath.stepIndex = 1
   await flushPromises()
-  expect(w.findComponent(JsonPathInput).props('candidates')).toEqual(['$.bl_no'])
+  expect(w.findComponent(JsonPathInput).props('candidates')).toEqual(['$', '$.bl_no'])
   w.unmount()
 })
 
@@ -254,5 +261,42 @@ it('ARE-10: asserts.target 输入 — 按所选步骤的端点契约给出响应
   expect(inputs.length).toBe(2)                        // path 输入 + target 输入
   // 契约 assertable 面经 toScratchPath 归一到引擎域;assertable=false 不入选
   expect(inputs[1].props('candidates')).toEqual(['$.response_body.code', '$.response_body.msg'])
+  w.unmount()
+})
+
+it('ARE-11: 请求侧候选含契约声明的 carry 字段,并标注状态', async () => {
+  vi.spyOn(api, 'getFullEndpoint').mockResolvedValue({
+    id: 'ep-rg',
+    request: { declarations: [
+      { name: 'amount', path: '$.amount', state: 'form', required: true, description: '' },
+      { name: 'customer_id', path: '$.customer_id', state: 'carry', required: true, description: '' },
+    ] },
+  } as any)
+  const def = JSON.parse(JSON.stringify(DEF))
+  def.steps[0].api.view_hints = { endpoint_id: 'ep-rg' }
+  const w = await mountEditor({ definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG })
+  const pathInput = w.findComponent(JsonPathInput)
+  expect(pathInput.props('candidates')).toContain('$.customer_id')   // 声明面(body 里没有)
+  expect(pathInput.props('candidates')).toContain('$.amount')
+  expect((pathInput.props('stateOf') as any)('$.customer_id')).toBe('carry')
+  w.unmount()
+})
+
+it('ARE-12: 契约声明但 body 无的路径 → 不再判悬空(由死转活)', async () => {
+  vi.spyOn(api, 'getFullEndpoint').mockResolvedValue({
+    id: 'ep-rg',
+    request: { declarations: [
+      { name: 'amount', path: '$.amount', state: 'form', required: true, description: '' },
+      // body 没有 customer_id:活命只能靠声明面(本条用例的被测点)
+      { name: 'customer_id', path: '$.customer_id', state: 'carry', required: true, description: '' },
+    ] },
+  } as any)
+  const def = JSON.parse(JSON.stringify(DEF))
+  def.steps[0].api.view_hints = { endpoint_id: 'ep-rg' }
+  const reg = { entries: [{ id: 'inj-carry', name: 'carry 偏离',
+    path: { stepIndex: 0, source: 'body', jsonpath: '$.customer_id' }, value: 1, asserts: [] }] }
+  const w = await mountEditor({ definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: reg })
+  await flushPromises()
+  expect(w.findAll('.are-row')[0].classes()).not.toContain('are-dead')
   w.unmount()
 })

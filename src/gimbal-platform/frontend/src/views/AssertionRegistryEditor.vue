@@ -49,6 +49,7 @@
         v-model="pendingPath.jsonpath"
         class="are-path-input"
         :candidates="pathCandidates"
+        :state-of="stateOfPendingPath"
         placeholder="jsonpath($.amount)"
       />
       <el-button size="small" :disabled="!draft" @click="addEntry">新建条目</el-button>
@@ -191,12 +192,13 @@ import { getScenarioDraft, updateScenario } from '@/api/scenario-composer'
 import type { ScenarioDraft } from '@/types/scenario-composer'
 import type { AssertionEntry, AssertionRegistry, LegacyAssertionEntry } from '@/types/assertion-registry'
 import { isLegacyEntry } from '@/types/assertion-registry'
-import { bodyPathSetOf, genEntryId, isDeadEntry, normalizeRegistry, registryIssues } from '@/utils/assertion-registry'
+import { genEntryId, injectablePathSetOf, isDeadEntry, normalizeRegistry, registryIssues } from '@/utils/assertion-registry'
 import { fieldPathsOf } from '@/utils/dataset-segments'
-import { assertablePaths } from '@/utils/declarations'
+import { assertablePaths, iterFlat, resolveState, toTemplatePath } from '@/utils/declarations'
 import { toScratchPath } from '@/utils/scratch-path'
+import type { FieldState } from '@/types/plate'
 import {
-  endpointFullVersion, ensureEndpointFull, getEndpointFull,
+  endpointFullVersion, ensureEndpointFull, getEndpointFull, requestDeclarationsOf,
 } from '@/composables/useEndpointFull'
 import JsonPathInput from '@/components/composer/JsonPathInput.vue'
 import { composerUrl } from '@/utils/links'
@@ -217,9 +219,12 @@ const stepLabels = computed(() =>
 )
 const scenarioName = computed(() => draft.value?.definition?.meta?.name || scenarioId)
 
-/** steps[si].request.body 叶子集合(悬空检测 path 维度,spec v3 §2) */
-function bodyPathsOfStep(si: number): ReadonlySet<string> {
-  return bodyPathSetOf(fieldPathsOf(steps.value[si] as any))
+/** 可注入面(spec v3.1 §2.1):body 现存 ∪ 契约声明(全状态 form/collapse/carry)。
+ *  声明面来自共享 /full 缓存 —— 契约未回填时退化为 body 面(从严)。 */
+function injectablePathsOfStep(si: number): ReadonlySet<string> {
+  void endpointFullVersion.value
+  const step = steps.value[si]
+  return injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))
 }
 /** steps[si].strategy 的 assertion target 集合(悬空检测 override 维度) */
 function assertTargetsOf(si: number): ReadonlySet<string> {
@@ -227,7 +232,7 @@ function assertTargetsOf(si: number): ReadonlySet<string> {
   return new Set(st.filter((x) => x?.kind === 'assertion').map((x) => String(x.target)))
 }
 const deadOf = (e: AssertionEntry | LegacyAssertionEntry) =>
-  isDeadEntry(e, stepCount.value, bodyPathsOfStep, assertTargetsOf)
+  isDeadEntry(e, stepCount.value, injectablePathsOfStep, assertTargetsOf)
 const deadCount = computed(() => registry.value.entries.filter(deadOf).length)
 
 /** 旧版条目不可选(不可编辑,spec v3 §8) */
@@ -239,7 +244,7 @@ function selectEntry(e: AssertionEntry | LegacyAssertionEntry) {
 /** 悬空原因摘要(title 展示):registryIssues 人话投影 */
 function issueSummary(e: AssertionEntry | LegacyAssertionEntry): string {
   if (isLegacyEntry(e)) return '旧版条目(v2 形状),请在编排器重新标记创建'
-  return registryIssues(e, stepCount.value, bodyPathsOfStep, assertTargetsOf)
+  return registryIssues(e, stepCount.value, injectablePathsOfStep, assertTargetsOf)
     .map((iss) => {
       if (iss.kind === 'step-oob') return `步骤${iss.stepIndex + 1} 越界(场景共 ${stepCount.value} 步)`
       if (iss.kind === 'path-unresolvable') return `步骤${iss.stepIndex + 1} body 无字段 ${iss.jsonpath}`
@@ -336,10 +341,26 @@ const pendingPath = ref({ stepIndex: 0, jsonpath: '' })
 const pendingAssert = ref({ stepIndex: 0, target: '', operator: 'eq', expected: '', mode: 'override' as string })
 const OPERATORS = ['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'contains', 'exists']
 
-/** 新建条目的 path 候选 = 所选步骤请求 body 的全叶子(注入地址域)。
- *  只取 body 源:headers 是协议位,v1 path 不支持(spec v3 §1 裁定 9)。 */
-const pathCandidates = computed<string[]>(() =>
-  [...bodyPathSetOf(fieldPathsOf(steps.value[pendingPath.value.stepIndex] as any))])
+/** 请求侧候选(spec v3.1 §2.1)= 可注入面(body 现存 ∪ 契约声明全状态)。
+ *  body 源:headers 是协议位,v1 path 不支持(spec v3 §1 裁定 9)。 */
+const pathCandidates = computed<string[]>(() => {
+  void endpointFullVersion.value
+  const step = steps.value[pendingPath.value.stepIndex]
+  return [...injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))]
+})
+
+/** 建议行状态标注:契约共识 + 步骤增量(与画布同一解析链 resolveState) */
+function stateOfPendingPath(path: string): FieldState | undefined {
+  const step = steps.value[pendingPath.value.stepIndex] as any
+  const decls = requestDeclarationsOf(step)
+  if (!decls?.length) return undefined
+  const key = toTemplatePath(path)
+  for (const e of iterFlat(decls)) {
+    if (!e.path) continue   // /full 不可信:同 Ruling P2 真值守卫
+    if (toTemplatePath(e.path) === key) return resolveState(e.path, e.state, step?.field_states)
+  }
+  return undefined
+}
 
 /** asserts.target 候选 = 所选步骤**端点契约**的 assertable 面,经 toScratchPath
  *  归一到引擎域($.code → $.response_body.code)。契约是响应侧唯一标准定义

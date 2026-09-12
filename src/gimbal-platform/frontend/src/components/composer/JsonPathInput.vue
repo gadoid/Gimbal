@@ -31,6 +31,12 @@
         @click="accept(s)"
       >
         <code class="jpi-seg">{{ s.segment }}</code>
+        <span
+          v-if="stateOf && stateOf(s.path)"
+          class="jpi-state"
+          :class="`s-${stateOf(s.path)}`"
+          :title="stateTitle(s.path)"
+        >{{ stateOf(s.path) }}</span>
         <span class="jpi-kind">{{ s.kind === 'leaf' ? '叶子' : '容器' }}</span>
         <span v-if="s.count" class="jpi-count">共 {{ s.count }} 项</span>
       </button>
@@ -47,15 +53,23 @@ const props = withDefaults(defineProps<{
   modelValue: string
   /** 该地址域下的全叶子路径(请求侧 = body 字段树;响应侧 = 契约 assertable) */
   candidates?: readonly string[]
+  /** 建议行的字段状态标注(spec v3.1):无则完全不渲染徽标 */
+  stateOf?: (path: string) => 'form' | 'collapse' | 'carry' | undefined
   placeholder?: string
   disabled?: boolean
 }>(), {
   candidates: () => [],
+  stateOf: undefined,
   placeholder: 'jsonpath($.amount)',
   disabled: false,
 })
 
 const emit = defineEmits<{ 'update:modelValue': [v: string] }>()
+
+/** carry 的说明文案:平台整包注入,注入条目会覆盖它(spec §2.3 执行序) */
+function stateTitle(p: string): string {
+  return props.stateOf?.(p) === 'carry' ? '默认由平台从上游带入,注入条目会覆盖它' : ''
+}
 
 const open = ref(false)
 /** 打开即高亮首项:直接 Enter 即采纳第一条建议 */
@@ -140,6 +154,11 @@ function onKeydown(e: KeyboardEvent) {
 }
 .jpi-item:hover, .jpi-item.jpi-active { background: var(--c-bg-secondary, #f3f4f6); }
 .jpi-seg { font-family: var(--font-mono); font-size: 12px; color: var(--c-text-primary, #1f2937); }
+.jpi-state {
+  font-size: 10px; padding: 0 4px; border-radius: 3px;
+  background: var(--c-bg-secondary, #f3f4f6); color: var(--c-text-tertiary, #6b7280);
+}
+.jpi-state.s-carry { background: #fef3c7; color: #92400e; }
 .jpi-kind { font-size: 10px; color: var(--c-text-tertiary, #6b7280); }
 .jpi-count { font-size: 10px; color: var(--c-text-tertiary, #6b7280); margin-left: auto; }
 </style>
