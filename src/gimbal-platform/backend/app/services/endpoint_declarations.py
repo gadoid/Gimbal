@@ -25,8 +25,15 @@
 * **进程缓存 + TTL** — 成功入缓存,``DECLARED_PATHS_TTL_SEC`` 到期重取;
 * **在飞收敛 + 取消隔离** — 冷缓存下同一 endpoint 的并发调用复用同一
   在飞请求;各调用方一律 ``await asyncio.shield(...)``,故任何一个调用方
-  被取消都**不会**连带取消共享取数(裸 ``await task`` 会把取消扩散给
-  共享任务,进而波及创建者与其他等待方);
+  被取消都**不会**连带取消共享取数。
+  **为什么这不是可选优化**(动手"简化"之前请读完):等待方的取消若传导到
+  共享任务,创建者也会拿到 ``CancelledError``;而 dispatcher 侧
+  ``run_dispatcher`` 的 ``except Exception`` **不捕** ``CancelledError``
+  (它派生自 ``BaseException``),于是 fan-out 被判取消、**不写终止 JSONL
+  行**,执行卡在 ``running`` 直到下次进程重启(``reconcile_stale_executions``
+  只在启动跑)。故两条**不得**:**不得**把 shield 简化成裸 ``await task``;
+  **不得**把在飞项摘除改回创建者的 ``finally``(创建者一被取消就提前摘除,
+  而任务仍在飞 → 后续调用重复取数);
 * **告警一次** — 同一端点在当前**失败链**内至多一条 warning:失败期间
   只告警第一条,成功一次后重置(后续再失败会重新告警),不刷屏;
 * **空目录 ≠ 降级** — 真无声明(``[]`` / 封套缺 ``request.declarations``
@@ -122,8 +129,10 @@ async def declarations_of(endpoint_id: str) -> list | None:
         inflight.add_done_callback(
             partial(_forget_inflight, endpoint_id=endpoint_id)
         )
-    # shield:本调用方被取消只落自己,不连带取消共享取数(裸 await 会扩散),
-    # 故创建者/其他等待方照常拿到结果。
+    # shield:本调用方被取消只落自己,不连带取消共享取数 —— 裸 await 会把取消
+    # 扩散进共享任务(创建者随之收到 CancelledError);dispatcher 的
+    # except Exception 不捕 CancelledError → fan-out 被判取消、不写终止 JSONL
+    # 行、执行卡在 running。务必保留 shield,摘除务必留在完成回调(见模块 docstring)。
     decls = await asyncio.shield(inflight)
     return list(decls) if decls is not None else None
 
