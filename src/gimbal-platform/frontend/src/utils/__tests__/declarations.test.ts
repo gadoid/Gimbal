@@ -78,6 +78,21 @@ describe('iterFlat / catalogPaths — 先序平铺与模板路径宇宙', () => 
     expect(universe.has('$.items.sku')).toBe(true)
     expect(universe.size).toBe(2)
   })
+
+  it('catalogPaths 真值守卫:无 path 的畸形条目不收录、不抛', () => {
+    // 同族 carryPaths / searchCorpus / formBindings / assertablePaths 都写了
+    // `!e.path` 守卫;此处缺守卫会让 toTemplatePath(undefined) 抛 TypeError,
+    // 而渲染期开始喂 /full 响应(不可信来源)。
+    const decls = [
+      mkDecl({ path: '$.ok' }),
+      mkDecl({ path: undefined as any }),
+      mkDecl({ path: '' }),
+    ]
+    expect(() => catalogPaths(decls)).not.toThrow()
+    const universe = catalogPaths(decls)
+    expect(universe.has('$.ok')).toBe(true)
+    expect(universe.size).toBe(1)
+  })
 })
 
 // ─── carry 面祖先吸收(§4)──────────────────────────────────────────

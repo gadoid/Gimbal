@@ -57,11 +57,16 @@ export function iterFlat(
   return out
 }
 
-/** 目录宇宙(§3.4 交集容忍参照):树内全部条目 path(模板形态,无下标)。 */
+/** 目录宇宙(§3.4 交集容忍参照):树内全部条目 path(模板形态,无下标)。
+ *  真值守卫(与同族 carryPaths / searchCorpus / formBindings / assertablePaths
+ *  同口径):缺 path 的畸形条目不收录 —— /full 响应不可信,`toTemplatePath
+ *  (undefined)` 会在渲染期抛 TypeError(候选面就是从本函数派生)。 */
 export function catalogPaths(
   decls: DeclarationEntryView[] | undefined | null,
 ): Set<string> {
-  return new Set(iterFlat(decls).map((e) => e.path))
+  return new Set(
+    iterFlat(decls).map((e) => e.path).filter((p): p is string => !!p),
+  )
 }
 
 /**

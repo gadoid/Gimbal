@@ -169,4 +169,12 @@ describe('可注入面 — 契约声明字段地址化(spec v3.1 §2.1)', () => 
     expect(pathResolvable('$.items[0]', s)).toBe(true)
     expect(pathResolvable('$.items', s)).toBe(true)
   })
+
+  it('IS-6: 模板形态 + 容器前缀分支(声明面只有深层 child,无容器条目)', () => {
+    // 声明面没有 $.items 容器条目 — 命中只能经 form2(模板化)+ 前缀判定
+    const s = injectablePathSetOf([], [{ name: 'sku', path: '$.items.sku' } as any])
+    expect(s.has('$.items')).toBe(false)                  // 前提:容器条目确实缺席
+    expect(pathResolvable('$.items[0]', s)).toBe(true)    // form2 前缀:$.items. 命中
+    expect(pathResolvable('$.items[0].nope', s)).toBe(false)  // 深层不存在的段仍判死
+  })
 })
