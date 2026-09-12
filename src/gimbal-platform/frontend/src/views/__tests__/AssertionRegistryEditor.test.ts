@@ -18,6 +18,7 @@ vi.mock('vue-router', () => ({
 }))
 
 import * as api from '@/api/scenario-composer'
+import JsonPathInput from '@/components/composer/JsonPathInput.vue'
 import AssertionRegistryEditor from '@/views/AssertionRegistryEditor.vue'
 
 const DEF = {
@@ -215,5 +216,43 @@ it('ARE-8: path:null / 缺 asserts / 串 stepIndex / 标量条目 — 页面照�
   // 串 stepIndex → 悬空(不再当活条目宣称一次永不触发的注入)
   expect(rows[2].classes()).toContain('are-dead')
   expect(rows[2].text()).toContain('悬空')
+  w.unmount()
+})
+
+it('ARE-9: 新建条目的 path 输入 — 按所选步骤给出该步 body 字段树候选', async () => {
+  const w = await mountEditor()
+  const pathInput = w.findComponent(JsonPathInput)
+  expect(pathInput.exists()).toBe(true)
+  // 步骤 1 的 body 叶子(容器前缀由候选层自行推导)
+  expect(pathInput.props('candidates')).toEqual(['$.amount'])
+  // 切到步骤 2 → 候选随步骤切换
+  ;(w.vm as any).pendingPath.stepIndex = 1
+  await flushPromises()
+  expect(w.findComponent(JsonPathInput).props('candidates')).toEqual(['$.bl_no'])
+  w.unmount()
+})
+
+it('ARE-10: asserts.target 输入 — 按所选步骤的端点契约给出响应侧候选(scratch 域)', async () => {
+  vi.spyOn(api, 'getFullEndpoint').mockResolvedValue({
+    id: 'ep-rg',
+    responses: {
+      '200': {
+        declarations: [
+          { name: 'code', path: '$.code', assertable: true },
+          { name: 'msg', path: '$.msg', assertable: true },
+          { name: 'noise', path: '$.noise', assertable: false },
+        ],
+      },
+    },
+  } as any)
+  const def = JSON.parse(JSON.stringify(DEF))
+  def.steps[0].api.view_hints = { endpoint_id: 'ep-rg' }
+  const w = await mountEditor({ definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG })
+  await w.findAll('.are-row')[0].trigger('click')      // 选中活条目 → 详情出现
+  await flushPromises()
+  const inputs = w.findAllComponents(JsonPathInput)
+  expect(inputs.length).toBe(2)                        // path 输入 + target 输入
+  // 契约 assertable 面经 toScratchPath 归一到引擎域;assertable=false 不入选
+  expect(inputs[1].props('candidates')).toEqual(['$.response_body.code', '$.response_body.msg'])
   w.unmount()
 })

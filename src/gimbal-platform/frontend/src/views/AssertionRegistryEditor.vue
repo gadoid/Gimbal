@@ -45,7 +45,12 @@
       >
         <el-option v-for="(label, i) in stepLabels" :key="`np:${i}`" :value="i" :label="label" />
       </el-select>
-      <el-input v-model="pendingPath.jsonpath" size="small" class="are-path-input" placeholder="jsonpath($.amount)" />
+      <JsonPathInput
+        v-model="pendingPath.jsonpath"
+        class="are-path-input"
+        :candidates="pathCandidates"
+        placeholder="jsonpath($.amount)"
+      />
       <el-button size="small" :disabled="!draft" @click="addEntry">新建条目</el-button>
     </div>
 
@@ -154,7 +159,12 @@
           >
             <el-option v-for="(label, i) in stepLabels" :key="`sa:${i}`" :value="i" :label="label" />
           </el-select>
-          <el-input v-model="pendingAssert.target" size="small" class="are-target-input" placeholder="target($.response_body.code)" />
+          <JsonPathInput
+            v-model="pendingAssert.target"
+            class="are-target-input"
+            :candidates="targetCandidates"
+            placeholder="target($.response_body.code)"
+          />
           <el-select v-model="pendingAssert.operator" size="small" class="are-op-select" filterable allow-create>
             <el-option v-for="op in OPERATORS" :key="op" :value="op" :label="op" />
           </el-select>
@@ -183,6 +193,12 @@ import type { AssertionEntry, AssertionRegistry, LegacyAssertionEntry } from '@/
 import { isLegacyEntry } from '@/types/assertion-registry'
 import { bodyPathSetOf, genEntryId, isDeadEntry, normalizeRegistry, registryIssues } from '@/utils/assertion-registry'
 import { fieldPathsOf } from '@/utils/dataset-segments'
+import { assertablePaths } from '@/utils/declarations'
+import { toScratchPath } from '@/utils/scratch-path'
+import {
+  endpointFullVersion, ensureEndpointFull, getEndpointFull,
+} from '@/composables/useEndpointFull'
+import JsonPathInput from '@/components/composer/JsonPathInput.vue'
 import { composerUrl } from '@/utils/links'
 import { showError } from '@/utils/errorFallback'
 
@@ -319,6 +335,24 @@ const pendingPath = ref({ stepIndex: 0, jsonpath: '' })
 /** asserts 行编辑暂存(mode 字符串形态,入条目时收窄) */
 const pendingAssert = ref({ stepIndex: 0, target: '', operator: 'eq', expected: '', mode: 'override' as string })
 const OPERATORS = ['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'contains', 'exists']
+
+/** 新建条目的 path 候选 = 所选步骤请求 body 的全叶子(注入地址域)。
+ *  只取 body 源:headers 是协议位,v1 path 不支持(spec v3 §1 裁定 9)。 */
+const pathCandidates = computed<string[]>(() =>
+  [...bodyPathSetOf(fieldPathsOf(steps.value[pendingPath.value.stepIndex] as any))])
+
+/** asserts.target 候选 = 所选步骤**端点契约**的 assertable 面,经 toScratchPath
+ *  归一到引擎域($.code → $.response_body.code)。契约是响应侧唯一标准定义
+ *  —— 不引入样本等旁路;契约未声明的字段仍可手打,只是不提示。 */
+const targetCandidates = computed<string[]>(() => {
+  void endpointFullVersion.value            // /full 回填后重算
+  const step = steps.value[pendingAssert.value.stepIndex] as any
+  const eid = step?.api?.view_hints?.endpoint_id
+  if (!eid) return []
+  void ensureEndpointFull(eid)
+  const full = getEndpointFull(eid)
+  return assertablePaths(full?.responses?.['200']?.declarations).map(toScratchPath)
+})
 
 const saving = ref(false)
 

@@ -5,54 +5,22 @@
  *
  * 设计要点:
  *   - 仅 body 字段有 IOFieldBinding;headers 优雅降级为空串。
- *   - 复用 CaseComposerCanvas.vue:795-824 的会话级 Map + 并发收敛模式。
- *     共享模块级缓存,所以两个组件同时打开同一 scenario 也只拉一次。
+ *   - /full 取数与缓存走**共享模块** `useEndpointFull`(每 endpoint 会话内
+ *     恰好一次请求;并发收敛),所以本组合式与画布、编辑器共用同一份缓存。
  *   - 零持久化:Plate 是结构权威源,每次进编辑器拿最新结构(发版后零迁移)。
  *
  * 调用方约定:在 setup 阶段调用一次,响应式 draft 变化后,Map 自动重算。
  */
-import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
+import { computed, watch, type ComputedRef, type Ref } from 'vue'
 
-import { getFullEndpoint } from '@/api/scenario-composer'
+import {
+  _resetEndpointFullCacheForTest,
+  endpointFullState,
+  endpointFullVersion,
+  ensureEndpointFull,
+  getEndpointFull,
+} from '@/composables/useEndpointFull'
 import { formBindings } from '@/utils/declarations'
-import type { EndpointFullView } from '@/types/plate'
-
-// 会话级缓存(模块作用域;Vue 组件间共享)
-const fullByEndpoint = new Map<string, EndpointFullView>()
-const fullInFlight = new Map<string, Promise<EndpointFullView | undefined>>()
-/** 版本号 — Map 变化不触发 computed;bump 让 computed 重算 */
-const fullVersion = ref(0)
-
-async function ensureFull(eid: string): Promise<EndpointFullView | undefined> {
-  const cached = fullByEndpoint.get(eid)
-  if (cached) return cached
-  const inFlight = fullInFlight.get(eid)
-  if (inFlight) return inFlight
-  console.debug('[useFieldDescriptions] fetch /full for', eid)
-  fullState.value = 'loading'
-  const p = getFullEndpoint(eid)
-    .then((full) => {
-      console.debug(
-        '[useFieldDescriptions] /full ok', eid,
-        'declarations:', full?.request?.declarations?.length ?? 0,
-      )
-      fullByEndpoint.set(eid, full)
-      fullVersion.value++
-      fullState.value = ''
-      return full
-    })
-    .catch((e) => {
-      console.warn('[useFieldDescriptions] /full failed', eid, e?.message)
-      fullState.value = 'failed'
-      return undefined
-    })
-    .finally(() => fullInFlight.delete(eid))
-  fullInFlight.set(eid, p)
-  return p
-}
-
-/** 全局拉取状态(任一 endpoint 失败 → failed)。 */
-const fullState = ref<'loading' | 'failed' | ''>('')
 
 export interface FieldDescriptionsApi {
   /** 渲染「字段说明」行时按 columnKey 查询。
@@ -82,22 +50,33 @@ export function useFieldDescriptions(
   watch(
     eids,
     (ids) => {
-      console.debug('[useFieldDescriptions] eids changed:', ids)
-      for (const eid of ids) void ensureFull(eid)
+      for (const eid of ids) void ensureEndpointFull(eid)
     },
     { immediate: true },
   )
 
+  // 2b) 全局状态 = 各端点状态的聚合(失败优先于加载中)
+  const state = computed<'loading' | 'failed' | ''>(() => {
+    void endpointFullVersion.value
+    let loading = false
+    for (const eid of eids.value) {
+      const s = endpointFullState(eid)
+      if (s === 'failed') return 'failed'
+      if (s === 'loading') loading = true
+    }
+    return loading ? 'loading' : ''
+  })
+
   // 3) 计算 columnKey → description
   const descriptionByColumnKey = computed<Map<string, string>>(() => {
-    void fullVersion.value  // 显式依赖
+    void endpointFullVersion.value  // 显式依赖
     const map = new Map<string, string>()
     const steps = draft.value?.definition?.steps ?? []
     for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
       const step = steps[stepIndex]
       const eid = step?.api?.view_hints?.endpoint_id
       if (!eid) continue
-      const full = fullByEndpoint.get(eid)
+      const full = getEndpointFull(eid)
       if (!full?.request?.declarations) continue
       // 目录化:表单字段面 = 解析态非 carry 平铺投影(端点级读穿)
       const fieldsByName = new Map(
@@ -115,13 +94,10 @@ export function useFieldDescriptions(
     return map
   })
 
-  return { descriptionByColumnKey, state: computed(() => fullState.value) }
+  return { descriptionByColumnKey, state }
 }
 
-/** 测试钩子:清空缓存。仅供单测使用。 */
+/** 测试钩子:清空共享 /full 缓存。仅供单测使用。 */
 export function _resetFullCacheForTest() {
-  fullByEndpoint.clear()
-  fullInFlight.clear()
-  fullVersion.value++
-  fullState.value = ''
+  _resetEndpointFullCacheForTest()
 }

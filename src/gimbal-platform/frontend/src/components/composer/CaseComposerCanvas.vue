@@ -549,7 +549,7 @@ import { useConstantsStore } from '@/stores/constants'
 import { deriveVarRegistry } from '@/utils/var-registry'
 import { TPL_FULL_RE } from '@/utils/dataset-segments'
 import {
-  getFullEndpoint, listStrategyKinds, getStrategyKindFull, resolveResponsePaths,
+  listStrategyKinds, getStrategyKindFull, resolveResponsePaths,
   validateEndpointFieldStates,
 } from '@/api/scenario-composer'
 import { list as listAuths } from '@/api/auth_sessions'
@@ -572,6 +572,9 @@ import {
 import type { FieldTreeNode, ValueSourceGroup } from '@/utils/declarations'
 import { deriveBase } from '@/utils/service-alias'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
+import {
+  endpointFullState, endpointFullVersion, ensureEndpointFull, getEndpointFull,
+} from '@/composables/useEndpointFull'
 import { carryHint } from '@/utils/carry-hint'
 import type { CarrySource, CarryValues } from '@/utils/carry-hint'
 import type {
@@ -628,13 +631,13 @@ function inferProtocol(step: StepView | undefined): string {
 
 /** 当前 step 的请求目录(会话级按 endpoint_id 现拉 /full,不读持久化
  *  快照;step.request.fields_meta 不作数据源 — 退场记录见 docs/adr/0003)。
- *  读 fullVersion 建立响应依赖:回填后树/reqTypeC 自动重算。 */
+ *  读 endpointFullVersion 建立响应依赖:回填后树/reqTypeC 自动重算。 */
 function stepDecls(step: StepView | undefined) {
-  void fullVersion.value
+  void endpointFullVersion.value
   const eid = step?.api?.view_hints?.endpoint_id
   if (!eid) return undefined
   void ensureEndpointFull(eid)
-  return endpointFullByEndpoint.get(eid)?.request?.declarations
+  return getEndpointFull(eid)?.request?.declarations
 }
 
 /** 请求表单面平铺投影(解析态 != carry,先序)— reqTypeC 差集/描述
@@ -1571,59 +1574,28 @@ function sameSteps(a: readonly unknown[] | undefined, b: readonly unknown[]): bo
  */
 const CODE_TARGET_CANDIDATES = ['$.code', '$.data.code'] as const
 
-// ── /full 结构契约:单一会话缓存(容器原则) ─────────────────────────
+// ── /full 结构契约:会话缓存(容器原则) ─────────────────────────────
 // endpoint_id → plate /full 响应整包。所有结构渲染(请求字段表单/断言
 // 候选/响应契约/Type C 差集)都是这份缓存的 computed 切片 — 每个 endpoint
-// 会话内恰好一次请求。不随 draft 持久化:plate 是结构权威源,每次进
-// 编辑器都拿最新结构,发版后零迁移。
-const endpointFullByEndpoint = new Map<string, EndpointFullView>()
-/** 进行中的 /full 请求(同 endpoint 并发收敛为同一 Promise) */
-const fullInFlight = new Map<string, Promise<EndpointFullView | undefined>>()
-/** 响应式触发器:Map 变更不触发 computed,版本号 bump */
-const fullVersion = ref(0)
-/** 拉取失败端点记录(scoped 占位判定;Set 无响应性,经 fullVersion 触发重算) */
-const fullFailed = new Set<string>()
+// 会话内恰好一次请求。缓存本体已收编到共享模块 `useEndpointFull`
+// (画布 / useFieldDescriptions / 断言管理编辑器共用一份),此处只消费。
 
-/** 缓存 miss 时拉 /full 并回填(fail-soft:失败返回 undefined,消费方各自降级) */
-function ensureEndpointFull(endpointId: string): Promise<EndpointFullView | undefined> {
-  const cached = endpointFullByEndpoint.get(endpointId)
-  if (cached) return Promise.resolve(cached)
-  const inFlight = fullInFlight.get(endpointId)
-  if (inFlight) return inFlight
-  const p = getFullEndpoint(endpointId)
-    .then((full) => {
-      endpointFullByEndpoint.set(endpointId, full)
-      fullVersion.value++
-      return full
-    })
-    .catch(() => {
-      fullFailed.add(endpointId)
-      fullVersion.value++   // 失败也是状态变更:占位/徽标重算
-      return undefined
-    })
-    .finally(() => fullInFlight.delete(endpointId))
-  fullInFlight.set(endpointId, p)
-  return p
-}
 
 /** 当前 step 的 /full 拉取状态(scoped,2026-09-08):预拉让全部端点并发,
  *  全局单值会跨端点串台(另一步失败盖到当前步头);改按当前端点判 —
  *  缓存命中 → '' / 失败记录 → failed / 其余(未回填)→ loading。 */
 const currentFullState = computed<'loading' | 'failed' | ''>(() => {
-  void fullVersion.value
-  const eid = currentStep.value?.api?.view_hints?.endpoint_id
-  if (!eid) return ''
-  if (endpointFullByEndpoint.has(eid)) return ''
-  return fullFailed.has(eid) ? 'failed' : 'loading'
+  void endpointFullVersion.value
+  return endpointFullState(currentStep.value?.api?.view_hints?.endpoint_id)
 })
 
 /** 当前 step 的 /full 结构契约(拉取中/失败 → undefined) */
 const currentFull = computed<EndpointFullView | undefined>(() => {
-  void fullVersion.value
+  void endpointFullVersion.value
   const eid = currentStep.value?.api?.view_hints?.endpoint_id
   if (!eid) return undefined
   void ensureEndpointFull(eid)
-  return endpointFullByEndpoint.get(eid)
+  return getEndpointFull(eid)
 })
 
 /** carry 免抖预拉(2026-09-08):进页即拉全部 step 的 /full — 徽标从进页起
@@ -1755,10 +1727,10 @@ onMounted(async () => {
 
 /** step → 可注入的 carry 键清单(path → 来源);别名经 deriveBase 归锚点服务 */
 function carryInjectable(step: StepView): Map<string, CarrySource> {
-  void fullVersion.value  // /full 会话缓存回填(fullVersion bump)后徽标重算
+  void endpointFullVersion.value  // /full 会话缓存回填(fullVersion bump)后徽标重算
   if (!carryValues.value) return new Map()
   const eid = step.api?.view_hints?.endpoint_id
-  const full = eid ? endpointFullByEndpoint.get(eid) : undefined
+  const full = eid ? getEndpointFull(eid) : undefined
   const face = carryPaths(full?.request?.declarations)
   if (!face.length) return new Map()
   const base = deriveBase(step.api?.service || '', catalogNames.value)
