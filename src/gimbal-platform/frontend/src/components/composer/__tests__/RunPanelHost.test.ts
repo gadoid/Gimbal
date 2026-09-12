@@ -106,6 +106,20 @@ it('RH-2: confirm → runScenario 携带 dataSetSelection 权威键 → 跳执�
   w.unmount()
 })
 
+it('RH-2b: 空选 confirm → 省略 dataSetSelection 键 + dataSetIds 空数组', async () => {
+  // 无数据集(基线运行)是合法路径:权威键 dataSetSelection 不下送
+  // (spec v3 §4 空选 = 基线),兼容键 dataSetIds 仍送空数组。
+  vi.mocked(api.listDataSets).mockResolvedValue([])
+  const w = await mountHost()
+  await w.findAll('button').find((b) => b.text().includes('发起运行'))!.trigger('click')
+  await flushPromises()
+  expect(api.runScenario).toHaveBeenCalledTimes(1)
+  const body = vi.mocked(api.runScenario).mock.calls[0][0] as any
+  expect(body.dataSetIds).toEqual([])
+  expect('dataSetSelection' in body).toBe(false)
+  w.unmount()
+})
+
 it('RH-3: saveScheme → putRunSchemes(scenarioId, 整表含新方案)', async () => {
   const w = await mountHost()
   const scheme = { name: '回归', dataSetIds: [], dataSetSelection: [], injectionEntryIds: ['inj-live'], serviceBindings: {} }

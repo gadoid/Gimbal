@@ -275,7 +275,7 @@ const props = withDefaults(defineProps<{
   authOptions: string[]
   /** 平台编排展示名(orchestration.steps[i].name,与 steps 同序);plate Step 无 name */
   stepOrchestrationNames?: string[]
-  /** 断言注册表条目(spec v2 §5 异常组):空 = 无注入区(整段隐藏) */
+  /** 断言注册表条目(spec v3 §2/§4):与数据集行交叉成 case;空 = 无注入区(整段隐藏) */
   assertionEntries?: Array<AssertionEntry | LegacyAssertionEntry>
   /** 死条目(悬空)id — CaseComposer 用 isDeadEntry 预计算,死条目禁选 */
   deadEntryIds?: string[]
@@ -308,8 +308,8 @@ const emit = defineEmits<{
       /** service → {authAlias?, url?};空绑定条目不随 confirm 下发,
        *  预填未改动的声明 URL 也不算显式绑定不上送(D3) */
       serviceBindings?: Record<string, ServiceBinding>
-      /** 断言注入条目 id(spec v2 §5 异常组):与数据集行并列生成 case;
-       *  空选不随 confirm 下送 */
+      /** 断言注入条目 id(spec v3 §4):与数据集行**交叉**成 case
+       *  (R={选中行|基线} × E={选中条目}),非并列;空选不随 confirm 下送 */
       injectionEntryIds?: string[]
     },
   ]
@@ -371,9 +371,15 @@ watch([() => props.dataSets, () => props.preset], () => {
 const selectedScheme = ref<string>('__adhoc__')   // '__adhoc__' | '__last__' | scheme.name
 const schemeNameDraft = ref('')
 
-/** 方案引用的数据集 id 集 = dataSetSelection ∪ 兼容 dataSetIds(spec v3 §4 双键) */
+/** 方案引用的数据集 id 集 = dataSetSelection ∪ 兼容 dataSetIds(spec v3 §4 双键)。
+ *  sidecar 是服务端/手改 JSON:dataSetIds 在 TS 里必填但实际可缺,缺键
+ *  直展会在 schemeOptions 计算里抛错、整个弹框渲染不出来(与 :487 同款
+ *  `?? []` 兜底)。 */
 function schemeIdsOf(s: RunScheme): string[] {
-  return [...new Set([...(s.dataSetSelection ?? []).map((x) => x.datasetId), ...s.dataSetIds])]
+  return [...new Set([
+    ...(s.dataSetSelection ?? []).map((x) => x.datasetId),
+    ...(s.dataSetIds ?? []),
+  ])]
 }
 
 /** 方案配置降级:方案里的数据集已被删,或注入条目已删/悬空(死而现存
@@ -698,7 +704,7 @@ function goCreateDataSet() {
 .ds-grid-baseline { margin-bottom: 8px; }
 .ds-tile.baseline { border-style: dashed; }
 
-/* ── 断言注入条目(spec v2 §5 异常组)──────────────────────────── */
+/* ── 断言注入条目(spec v3 §2/§4 交叉组)──────────────────────── */
 .rd-inj-group {
   display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
 }

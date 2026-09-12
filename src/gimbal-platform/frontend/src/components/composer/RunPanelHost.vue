@@ -94,6 +94,10 @@ function bodyPathsOfStep(si: number): ReadonlySet<string> {
   return bodyPathSetOf(fieldPathsOf(steps.value[si] as any))
 }
 function assertTargetsOf(si: number): ReadonlySet<string> {
+  // String(x.target):兑现 ReadonlySet<string> 的类型承诺(裸 x.target 会
+  // 把 undefined 塞进 string 集合)。断言 target 在引擎/plate 双侧 schema
+  // 均必填,故对合法场景不可达;但四处 dead 投影必须同口径
+  // (CaseComposer / CaseDataSetsList / AssertionRegistryEditor 同写法)。
   const st = (steps.value[si]?.strategy as any[] | undefined) ?? []
   return new Set(st.filter((x) => x?.kind === 'assertion').map((x) => String(x.target)))
 }
@@ -109,6 +113,12 @@ onMounted(async () => {
       getScenarioDraft(props.scenarioId),
       listDataSets({ scenarioId: props.scenarioId }),
     ])
+    // ⚠ 下面 5 行必须在**同一个同步 tick** 内落完(dataSets / registry /
+    // draft 之间不得插 await):RunDialog 的 preset 预填 watch 双源
+    // dataSets+registry,预勾靠 defaultSelection 按 dataSets 收窄、按
+    // deadEntryIds(由 registry 派生)过滤。中间插一个 await 会让
+    // preset 先以空 dataSets/registry 求值一次 → 静默丢掉预勾的条目
+    // (「运行此行」/「加入本次执行」看上去没生效)。
     scenario.value = sc
     draft.value = dr
     dataSets.value = dss

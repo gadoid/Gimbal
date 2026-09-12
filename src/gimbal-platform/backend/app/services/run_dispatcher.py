@@ -205,7 +205,7 @@ def reset_cancel_state() -> None:
     _tasks_by_execution.clear()
 
 
-# ─── row-level live registry (spec §9.1) ──────────────────────────
+# ─── row-level live registry (spec v3 §4 审计三定位)────────────────
 # 行级可观测(Task 7):活跃执行的行状态驻内存,GET /executions/{id}/rows
 # 实时读取;执行终态化(fanout task 结束)后 pop,读侧自动回落到
 # JSONL 回放 —— 活跃读内存、历史读文件,两段式无缝切换。
@@ -221,7 +221,8 @@ class RowState:
     case_dir: str = ""                 # case stem(非全路径,不泄漏服务端布局)
     started_at: str | None = None
     finished_at: str | None = None
-    # 注入族行的条目 id(spec v2 §8);数据集行为 None。
+    # 交叉定位(spec v3 §4):注入条目 id + 数据集行两字段首次同时有值;
+    # 纯基线行/纯数据集的另一侧为 None。
     injection_id: str | None = None
 
 

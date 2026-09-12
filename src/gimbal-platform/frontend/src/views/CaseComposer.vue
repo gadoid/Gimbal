@@ -377,8 +377,9 @@ const orchestration = ref<OrchestrationWithSchemes>({
   resourceMeta: {},
 })
 
-/** 断言管理注册表(spec v2 §3)— 与 orchestration 同级住场景文档;
- *  编排器保存整包携带(本任务只做回路,编辑 UI 由后续任务接入)。 */
+/** 断言管理注册表(spec v3 §2)— 与 orchestration 同级住场景文档;
+ *  编排器保存整包携带;条目编辑 UI 在测试数据页/独立路由
+ *  AssertionRegistryEditor(编排器只做回路与标记入口)。 */
 const registry = ref<AssertionRegistry>({ entries: [] })
 
 /** registry 是否已从服务端水化(loadScenario 的 GET /draft 成功;新建场景
@@ -521,8 +522,10 @@ function registryBodyPathsOf(si: number): ReadonlySet<string> {
   return bodyPathSetOf(fieldPathsOf(steps.value[si] as any))
 }
 function registryAssertTargetsOf(si: number): ReadonlySet<string> {
+  // 与 RunPanelHost/CaseDataSetsList/AssertionRegistryEditor 同口径:
+  // String(x.target) 兑现 ReadonlySet<string>(裸值会把 undefined 塞进来)
   const st = steps.value[si]?.strategy ?? []
-  return new Set(st.filter((x) => x.kind === 'assertion').map((x) => x.target))
+  return new Set(st.filter((x) => x?.kind === 'assertion').map((x) => String(x.target)))
 }
 const deadEntryIds = computed(() =>
   registry.value.entries

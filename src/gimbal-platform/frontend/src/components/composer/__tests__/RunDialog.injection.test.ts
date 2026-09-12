@@ -52,6 +52,7 @@ describe('RunDialog — 注入条目 × 数据集交叉(spec v3 §4/§6)', () =>
     expect(boxes.length).toBe(3)
     expect(boxes[1].find('input').attributes('disabled')).toBeDefined()   // 悬空
     expect(boxes[2].find('input').attributes('disabled')).toBeDefined()   // 旧版(v2 形状)
+    expect(boxes[1].text()).toContain('悬空 — 不可选')                     // 悬空注记(不只是 disabled)
     expect(boxes[2].text()).toContain('旧版条目 — 不可选')
     w.unmount()
   })
@@ -129,6 +130,17 @@ describe('RunDialog — 注入条目 × 数据集交叉(spec v3 §4/§6)', () =>
     ;(w.vm as any).selectedScheme = '悬空方案'
     await flushPromises()
     expect((w.vm as any).injectionIds).toEqual(['inj-1'])   // 死条目不可回填勾选
+    w.unmount()
+  })
+
+  it('INJ-3d: 方案缺 dataSetIds 键(手改 sidecar)→ 弹框照常渲染,不白屏', async () => {
+    // 兼容读键在 TS 里必填,sidecar 实际可缺:裸展会在 schemeOptions
+    // 计算里抛错,整个运行面板渲染不出来(与 :487 同款 ?? [] 兜底)
+    const partial = { name: '旧方案', injectionEntryIds: [], serviceBindings: {} } as unknown as RunScheme
+    const w = mountDialog({ schemes: [partial] })
+    await flushPromises()
+    expect(w.find('.rd-injection').exists()).toBe(true)
+    expect(w.findAll('button').length).toBeGreaterThan(0)
     w.unmount()
   })
 
