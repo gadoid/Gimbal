@@ -115,6 +115,55 @@ async def _seed(client, headers, *, entries=None, rows=None):
     return r.json()["datasetId"]
 
 
+async def test_duplicate_segments_merge_order_independent(
+    client, plate_mock: PlateMock, monkeypatch
+):
+    """同库重复段合并取超集、段序无关:稀疏段 + 整库段(两种顺序)
+    → 都整库(2 cases,rowIndex {0,1}),不因段序退化为单行;
+    段内重复行号去重([0,0] 只跑一次行 0)。"""
+    from .helpers import wait_until as _wait
+    from .test_run_m1_capabilities import _patch_launch_capture
+    from .test_scenario_visibility_and_copy import _member
+
+    bob = await _member(client, "bob")
+    ds_id = await _seed(client, bob, rows=[{"amount": 10}, {"amount": 20}])
+
+    plate_mock.behaviour = "echo"
+
+    async def _run(selection):
+        cases: list[dict] = []
+        _patch_launch_capture(monkeypatch, cases)
+        r = await client.post("/api/runs", headers=bob, json={
+            "scenarioId": "sc-test", "dataSetSelection": selection,
+        })
+        assert r.status_code == 201, r.text
+        exec_id = r.json()["executionId"]
+        await _await_final(client, bob, exec_id)
+        rows = (await client.get(f"/api/executions/{exec_id}/rows",
+                                 headers=bob)).json()["items"]
+        return cases, rows
+
+    # [稀疏, 整库] 与 [整库, 稀疏] 都 = 整库(合并取超集,与段序无关)
+    cases_a, rows_a = await _run([
+        {"datasetId": ds_id, "rowIndexes": [0]},
+        {"datasetId": ds_id},
+    ])
+    cases_b, rows_b = await _run([
+        {"datasetId": ds_id},
+        {"datasetId": ds_id, "rowIndexes": [0]},
+    ])
+    for cases, rows in ((cases_a, rows_a), (cases_b, rows_b)):
+        assert len(cases) == 2                       # 整库 2 行,不退化为行 0
+        assert {c["config"]["vars"]["amount"] for c in cases} == {10, 20}
+        assert {row["rowIndex"] for row in rows} == {0, 1}
+    assert [r["rowIndex"] for r in rows_a] == [r["rowIndex"] for r in rows_b]
+
+    # 段内重复行号去重:[0,0] 只跑一次行 0
+    cases_d, rows_d = await _run([{"datasetId": ds_id, "rowIndexes": [0, 0]}])
+    assert len(cases_d) == 1
+    assert rows_d[0]["rowIndex"] == 0
+
+
 async def test_cross_matrix_rows_times_entries(
     client, plate_mock: PlateMock, monkeypatch
 ):

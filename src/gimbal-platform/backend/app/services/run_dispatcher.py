@@ -385,17 +385,20 @@ async def dispatch_run(
 
     # 行级选择合并(spec v3 §4):dataSetSelection 权威键 — 仅当其缺省
     # (空)时旧 dataSetIds 才生效(兼容读,映射整库);两键同发则旧键
-    # 整键忽略。同库多段合并行集,行集空 = 整库;某段整库则整库
-    # (整库 ⊇ 任意行集,合并取超集)。
+    # 整键忽略。同库多段合并取超集、段序无关:行集 ∪ 行集;任一段整库
+    # (行集空)则整库(整库 ⊇ 任意行集);段内行号去重。
     sel_by_ds: dict[str, list[int] | None] = {}
     for sel in req.data_set_selection:
         ds_id = sel.dataset_id
+        row_idxes = sorted(set(sel.row_indexes))
         if ds_id not in sel_by_ds:
-            sel_by_ds[ds_id] = list(sel.row_indexes) or None
-        elif sel_by_ds[ds_id] is not None and sel.row_indexes:
-            sel_by_ds[ds_id] = sorted(
-                set(sel_by_ds[ds_id]) | set(sel.row_indexes)
-            )
+            sel_by_ds[ds_id] = row_idxes or None
+        elif not row_idxes:
+            # 重复的整库段无论先后都提升为整库(超集语义)。
+            sel_by_ds[ds_id] = None
+        elif sel_by_ds[ds_id] is not None:
+            sel_by_ds[ds_id] = sorted(set(sel_by_ds[ds_id]) | set(row_idxes))
+        # else:已整库(None)遇行集段 — 整库 ⊇ 行集,保持整库。
     if not sel_by_ds:
         for ds_id in req.data_set_ids:
             sel_by_ds[ds_id] = None
