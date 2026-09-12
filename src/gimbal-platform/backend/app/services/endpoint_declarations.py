@@ -137,8 +137,7 @@ def _warn_once(endpoint_id: str, reason: object) -> None:
     last = _WARNED_AT.get(endpoint_id)
     if last is not None and now - last < _WARN_COOLDOWN_SEC:
         return
-    # 顺手老化解表(同 TtlLruCache.lookup 的惰性过期):只有窗内的条目还需要留档
-    # ⇒ 表大小 ~ 冷却窗内失败过的端点数,不再"每端点一条永不回收"。
+    # 顺手老化解表(同 TtlLruCache.lookup 的惰性过期)
     for aged in [k for k, t in _WARNED_AT.items() if now - t >= _WARN_COOLDOWN_SEC]:
         _WARNED_AT.pop(aged, None)
     _WARNED_AT[endpoint_id] = now

@@ -186,8 +186,8 @@ async def test_absent_declarations_is_empty_not_degraded(item):
     """真无声明(缺键 / null)≠ 降级 → 空 frozenset,而非 None。
 
     端点本就没有 body 声明是**成功**结果;若按「非 list → None」处理,
-    这类端点每个失败链都会误报一条降级告警,并压掉该端点在
-    ``_WARN_COOLDOWN_SEC`` 冷却窗内的真实告警。
+    这类端点每个 ``_WARN_COOLDOWN_SEC`` 冷却窗都会误报一条降级告警,并压掉
+    该端点在窗内的真实告警。
     """
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=_envelope(item))
