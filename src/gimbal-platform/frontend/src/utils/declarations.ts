@@ -58,14 +58,19 @@ export function iterFlat(
 }
 
 /** 目录宇宙(§3.4 交集容忍参照):树内全部条目 path(模板形态,无下标)。
- *  真值守卫(与同族 carryPaths / searchCorpus / formBindings / assertablePaths
- *  同口径):缺 path 的畸形条目不收录 —— /full 响应不可信,`toTemplatePath
- *  (undefined)` 会在渲染期抛 TypeError(候选面就是从本函数派生)。 */
+ *  守卫收**非空字符串**两条边都要挡:缺 path / `''`(falsy,既有语义)与
+ *  **真值但非字符串**的 path(如 `path: 7`)都不得收录。只挡 falsy 挡不住
+ *  后者 —— /full 响应不可信,而 `toTemplatePath` 是 `path.replace(...)`
+ *  ⇒ `7.replace` 渲染期 TypeError(候选面 / 可注入面都从本函数派生,
+ *  四个视图同崩)。F1 已给条目侧的 `jsonpath` 补过同款守卫,这是同一纪律
+ *  在**声明侧**的走穿(同族 carryPaths / searchCorpus / formBindings /
+ *  assertablePaths 仍只写 `!e.path`,见本波报告的遗留项)。 */
 export function catalogPaths(
   decls: DeclarationEntryView[] | undefined | null,
 ): Set<string> {
   return new Set(
-    iterFlat(decls).map((e) => e.path).filter((p): p is string => !!p),
+    iterFlat(decls).map((e) => e.path)
+      .filter((p): p is string => typeof p === 'string' && p !== ''),
   )
 }
 

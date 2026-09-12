@@ -13,6 +13,7 @@ import {
   formBindings, responseBindings, assertablePaths,
   buildTree, contractTree, leafSurface, containerSurface, extraBodyPaths, extraSurfaceBindings, prefillBindings,
 } from '@/utils/declarations'
+import { injectablePathSetOf } from '@/utils/assertion-registry'
 import type { DeclarationEntryView } from '@/types/plate'
 
 function mkDecl(over: Partial<DeclarationEntryView> = {}): DeclarationEntryView {
@@ -92,6 +93,27 @@ describe('iterFlat / catalogPaths — 先序平铺与模板路径宇宙', () => 
     const universe = catalogPaths(decls)
     expect(universe.has('$.ok')).toBe(true)
     expect(universe.size).toBe(1)
+  })
+
+  it('catalogPaths 真值守卫走穿:真值但**非字符串** path 不收录、不抛', () => {
+    // 上一条只挡 falsy(`!p`)—— 真值非串(手改 JSON / 旧写入方的 `path: 7`)
+    // 会穿过守卫进 toTemplatePath 的 `path.replace(...)`,在同样那四个视图
+    // (编辑器 deadOf / CaseComposer / CaseDataSetsList / RunPanelHost 的
+    // deadEntryIds,候选面与可注入面都从本函数派生)渲染期抛 TypeError。
+    const decls = [
+      mkDecl({ path: '$.ok' }),
+      mkDecl({ path: 7 as any }),
+      mkDecl({ path: { a: 1 } as any }),
+      mkDecl({ path: true as any }),
+    ]
+    // 真正的崩点在**消费侧**:可注入面投影对目录宇宙逐条 `toTemplatePath`
+    // (`path.replace(...)`)——非串不进集合,那条链才不会收到它(先断这一条,
+    // 它是四点里唯一直接落在渲染期 TypeError 上的)。
+    expect(() => injectablePathSetOf([], decls as any)).not.toThrow()
+    expect(() => catalogPaths(decls)).not.toThrow()
+    const universe = catalogPaths(decls)
+    expect(universe.has('$.ok')).toBe(true)
+    expect(universe.size).toBe(1)          // 三个真值非串一个都不收录
   })
 })
 
