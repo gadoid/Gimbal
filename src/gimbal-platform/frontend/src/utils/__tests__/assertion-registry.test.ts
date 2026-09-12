@@ -177,4 +177,22 @@ describe('可注入面 — 契约声明字段地址化(spec v3.1 §2.1)', () => 
     expect(pathResolvable('$.items[0]', s)).toBe(true)    // form2 前缀:$.items. 命中
     expect(pathResolvable('$.items[0].nope', s)).toBe(false)  // 深层不存在的段仍判死
   })
+
+  it('IS-7: body 面的容器前缀子句 — 终审 F2 两反例的前端一侧(parity 锚)', () => {
+    // 后端 body 面此前**替代**成 `jsonpath.exists`(实例精确判),这两例
+    // 「编辑器判活、dispatch 静默 skip」。此处把前端判活钉住,作为后端
+    // 补齐 `prefixes(body)` 的对拍基准(后端 tests/test_run_injection.py
+    // 的两条同名用例逐一对应)。
+    // 方向一:数组越界 —— toTemplatePath('$.tags[9]') = '$.tags' 命中前缀
+    const arr = injectablePathSetOf(
+      fieldPathsOf({ request: { body: { tags: ['a', 'b'] } } } as any), [])
+    expect(pathResolvable('$.tags[9]', arr)).toBe(true)
+    expect(pathResolvable('$.tags', arr)).toBe(true)       // 容器前缀本身也可寻址
+    // 方向二:键含点 —— 叶子 $.a.b.c 的容器前缀含 '$.a.b'(段边界字面比)
+    const dotted = injectablePathSetOf(
+      fieldPathsOf({ request: { body: { a: { 'b.c': 1 } } } } as any), [])
+    expect(pathResolvable('$.a.b', dotted)).toBe(true)
+    // 仍判死:越界段之后又拼了一段(两形态都不在前缀面上)
+    expect(pathResolvable('$.tags[9].nope', arr)).toBe(false)
+  })
 })

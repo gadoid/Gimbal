@@ -80,21 +80,74 @@ def _template_path(jsonpath: str) -> str:
     return _ARRAY_IDX_RE.sub("", jsonpath)
 
 
+def _body_leaf_paths(body: Any) -> list[str]:
+    """body 叶子路径(实例形态,数组带 ``[i]``)—— 与前端 ``fieldPathsOf``
+    的 body 面同语义:dict/list 递归、数组出 ``[i]``、标量收叶子。
+
+    根缺席(步骤无 ``request.body``)⇒ **无叶子**(前端 ``walk(undefined)``
+    早退);嵌套 JSON null 是**显式叶子**(前端同)。键含 ``.`` 时照抄原键
+    (路径因此不是可逆的段切分,但这正是两侧一致的形态 —— 前缀子句按
+    段边界字面比)。"""
+    out: list[str] = []
+
+    def walk(v: Any, path: str) -> None:
+        if isinstance(v, dict):
+            for k, val in v.items():
+                walk(val, f"{path}.{k}" if path else f"$.{k}")
+            return
+        if isinstance(v, list):
+            for i, item in enumerate(v):
+                walk(item, f"{path or '$'}[{i}]")
+            return
+        out.append(path or "$")
+
+    if body is not None:
+        walk(body, "")
+    return out
+
+
+def _container_prefixes(path: str) -> list[str]:
+    """路径的各级容器前缀(spec §2.1 ``prefixes``):段边界 —— ``.`` 之后 /
+    ``[`` 之前。``$.a.b`` → ``['$', '$.a']``;``$.tags[0]`` → ``['$', '$.tags']``。"""
+    return [path[:i] for i, ch in enumerate(path) if i and ch in ".["]
+
+
 def _path_resolvable(jsonpath: str, body: Any, declared: Any) -> bool:
-    """可解析 = 实例形态或模板形态命中声明面,或是某声明路径的容器前缀;
-    否则退回 body 存在性(既有语义,body 面按实例路径精确判)。
+    """可解析(spec v3.1 §2.1)= jp 或 normalize(jp) 命中**可注入面**,或是某
+    可注入路径的容器前缀;否则退回 body 精确存在性(既有兜底,不退化)。
+
+    可注入面(spec §2.1 公式) = body(si) ∪ prefixes(body(si))
+    ∪ normalize(declared(si)) ∪ prefixes(normalize(declared(si))) ∪ {"$"}。
+
+    body 面此前**替代**成了 ``exists(body, jp)``(实例精确判),少了
+    ``prefixes(body)`` 与两形态的前缀子句 ⇒ 「编辑器判活、dispatch 静默
+    skip」的残余:``body={"tags":["a","b"]}`` + ``$.tags[9]``(前端经
+    ``toTemplatePath`` 得 ``$.tags`` 命中前缀,后端越界判死)、
+    ``body={"a":{"b.c":1}}`` + ``$.a.b``(键含点,前端前缀命中 ``$.a.b.c``)。
 
     **两侧都归一**:声明面条目自身的路径形态是自由的(plate 只强制
     children 子树为模板态,顶层条目可带实例下标,如 ``$.supplier[0].code``),
     故 :func:`_template_path` 归一后再比 —— 与前端 ``injectablePathSetOf``
     的 ``toTemplatePath(p)`` 同落点(spec v3.1 §2.1)。不归一就会出现
     「编辑器判活、dispatch 静默 skip」的判定层分裂。
-    """
-    decl = {_template_path(p) for p in (declared or ()) if isinstance(p, str)}
+
+    保留 ``exists`` 兜底**不退化**:它比可注入面多认「空容器本身」
+    (``body={"items":[]}`` 的 ``$.items`` 无叶子、无前缀 ⇒ 前端判死而后端
+    判活)—— 这是既有行为,spec §2.1 明文容许(从严只在「少认」方向)。"""
+    universe: set[str] = {"$"}
+    for p in _body_leaf_paths(body):
+        universe.add(p)
+        universe.update(_container_prefixes(p))
+    for p in (declared or ()):
+        if not isinstance(p, str):
+            continue
+        t = _template_path(p)
+        universe.add(t)
+        universe.update(_container_prefixes(t))
     for form in (jsonpath, _template_path(jsonpath)):
-        if form in decl:
+        if form in universe:
             return True
-        for p in decl:
+        for p in universe:
             if p.startswith(form + ".") or p.startswith(form + "["):
                 return True
     return exists(body or {}, jsonpath)
@@ -112,11 +165,12 @@ def entry_issues(
     (契约声明 ∪ body 现存)上 / override 无匹配。四类 issue 的判序与守卫
     逐条对齐前端 ``registryIssues``。
 
-    可注入面的**一处已知差异**(spec v3.1 §2.1 明文容许):声明面两侧同构
-    (都按 `_template_path` 归一后再比较与容器前缀,见
-    :func:`_path_resolvable`);body 面上一侧是前端对 body 叶子集跑同一条
-    前缀规则,另一侧**退回 ``jsonpath.exists``**(实例路径精确判)—— 后者
-    是本模块的既有行为,不因本次放宽而变。
+    可注入面两侧同构(spec v3.1 §2.1 的四子句公式):body 叶子 ∪ 其容器前缀
+    ∪ 归一后的声明 ∪ 其容器前缀,两形态各跑一次前缀子句,见
+    :func:`_path_resolvable`。**剩余的一处差异**(spec v3.1 §2.1 明文容许的
+    ``exists`` 兜底):后端对本模块多认「空容器本身」(``body={"items":[]}``
+    的 ``$.items`` —— 无叶子可生前缀,前端判死),只会**少判死**,方向与
+    既有行为一致。
 
     ``declared_of`` 缺省 None → 只认 body 面(等于 spec v3 行为)。
     """

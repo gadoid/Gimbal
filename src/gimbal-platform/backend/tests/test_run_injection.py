@@ -185,6 +185,44 @@ def test_declared_face_is_normalized_like_frontend_injectable_path_set():
                      lambda si: declared)
 
 
+def test_body_face_covers_container_prefixes_like_frontend():
+    """终审 F2:body 面按 spec §2.1 公式补齐 —— 此前**替代**成了
+    `jsonpath.exists`(实例精确判),少了 `prefixes(body)` 与两形态的前缀
+    子句 ⇒ 下面两例「编辑器判活、dispatch 静默 skip」(终审给的正是这两个
+    反例方向,后端必须转活)。"""
+    def _entry(jp: str) -> dict:
+        return {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                        "jsonpath": jp},
+                "value": 1, "asserts": []}
+
+    # 方向一:数组越界 —— 前端 `toTemplatePath('$.tags[9]')='$.tags'`,命中
+    # 容器前缀($.tags[0] 以 '$.tags[' 开头)→ 判活;exists 越界 → 判死。
+    arr_body = _body_of([{"request": {"body": {"tags": ["a", "b"]}}}])
+    assert entry_issues(_entry("$.tags[9]"), 1, arr_body, lambda si: set()) == []
+    # 方向二:键含点 —— 叶子 `$.a.b.c` 的容器前缀含 `$.a.b`(段边界字面比),
+    # 前端前缀命中;`exists` 会去取 a→b(a 下没有键 b)→ 判死。
+    dotted = _body_of([{"request": {"body": {"a": {"b.c": 1}}}}])
+    assert entry_issues(_entry("$.a.b"), 1, dotted, lambda si: set()) == []
+    # 补前缀不等于放宽:越界段之后再拼一段,两形态都不命中 → 仍判死
+    assert {"kind": "path-unresolvable", "stepIndex": 0,
+            "jsonpath": "$.tags[9].nope"} in \
+        entry_issues(_entry("$.tags[9].nope"), 1, arr_body, lambda si: set())
+    # body 面外(拼写错误)仍判死 —— 与既有用例同向,新增前缀面不误救
+    assert {"kind": "path-unresolvable", "stepIndex": 0, "jsonpath": "$.tags2"} in \
+        entry_issues(_entry("$.tags2"), 1, arr_body, lambda si: set())
+
+
+def test_body_face_prefix_matches_frontend_injectable_path_set():
+    """同上两个方向,声明面为空(降级态)下也必须转活 —— 前缀子句跑的是
+    body ∪ declared 全集,不是「只有声明面才有前缀」。"""
+    body_of = _body_of([{"request": {"body": {"a": {"b.c": 1}, "tags": ["a"]}}}])
+    for jp in ("$.a.b", "$.tags[9]", "$.a", "$.tags"):
+        entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                         "jsonpath": jp}, "value": 1, "asserts": []}
+        assert entry_issues(entry, 1, body_of, lambda si: set(),
+                            lambda si: frozenset()) == [], jp
+
+
 # ── dispatcher 集成(spec v3 §3:Assign 直补落 case.json;skip 链)────
 # 骨架不变:建场景(assertion_registry 注入)→ POST /api/runs → 断言
 # case 数 / case.json patch / rows 回放。
