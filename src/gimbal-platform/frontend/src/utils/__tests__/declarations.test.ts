@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   resolveState, iterFlat, catalogPaths, carryPaths,
-  formBindings, responseBindings, assertablePaths,
+  formBindings, responseBindings, assertablePaths, hasUsablePath, searchCorpus,
   buildTree, contractTree, leafSurface, containerSurface, extraBodyPaths, extraSurfaceBindings, prefillBindings,
 } from '@/utils/declarations'
 import { injectablePathSetOf } from '@/utils/assertion-registry'
@@ -657,5 +657,29 @@ describe('prefillBindings — 新建步骤初始 body 预填面', () => {
       mkDecl({ path: '$.meta', state: 'carry' }),
     ]
     expect(prefillBindings(decls).map((f) => f.path)).toEqual(['$.a'])
+  })
+})
+
+describe('路径可用性唯一定义(spec 架构收敛 §2.3)', () => {
+  it('DP-1: 真值非字符串 path 不收录,且不抛;其 children 仍被遍历', () => {
+    const decls = [
+      { name: 'bad', path: 7 as any, children: [{ name: 'kid', path: '$.kid', required: false, description: '' }] },
+      { name: 'empty', path: '' as any },
+      { name: 'ok', path: '$.ok', required: false, description: '' },
+    ] as any
+    const flat = iterFlat(decls)
+    expect(flat.map((e) => e.path)).toEqual(['$.kid', '$.ok'])   // bad 自身剔除,但其子保留
+    expect(hasUsablePath({ path: 7 } as any)).toBe(false)
+    expect(hasUsablePath({ path: '' } as any)).toBe(false)
+    expect(hasUsablePath({ path: '$.a' } as any)).toBe(true)
+    expect(hasUsablePath(undefined)).toBe(false)
+  })
+
+  it('DP-2: 六个投影函数共享该判据(畸形条目既不入目录也不崩)', () => {
+    const decls = [{ name: 'bad', path: 7 as any }, { name: 'ok', path: '$.ok', required: false, description: '' }] as any
+    expect([...catalogPaths(decls)]).toEqual(['$.ok'])
+    expect(assertablePaths(decls.map((d: any) => ({ ...d, assertable: true })))).toEqual(['$.ok'])
+    expect(carryPaths(decls)).toEqual([])
+    expect(searchCorpus(decls).map((r) => r.path)).toEqual(['$.ok'])
   })
 })

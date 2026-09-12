@@ -351,14 +351,16 @@ const pathCandidates = computed<string[]>(() => {
   return [...injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))]
 })
 
-/** 建议行状态标注:契约共识 + 步骤增量(与画布同一解析链 resolveState) */
+/** 建议行状态标注:契约共识 + 步骤增量(与画布同一解析链 resolveState)。
+ *  路径可用性不在本处判 —— `iterFlat` 已在边界按 `hasUsablePath` 消毒
+ *  (§2.3 唯一定义),输出条目 path 必为非空字符串 ⇒ 下面直接
+ *  `toTemplatePath(e.path)` 不会收到真值非串(此前无守卫即白屏根因)。 */
 function stateOfPendingPath(path: string): FieldState | undefined {
   const step = steps.value[pendingPath.value.stepIndex] as any
   const decls = requestDeclarationsOf(step)
   if (!decls?.length) return undefined
   const key = toTemplatePath(path)
   for (const e of iterFlat(decls)) {
-    if (!e.path) continue   // /full 不可信:同 Ruling P2 真值守卫
     if (toTemplatePath(e.path) === key) return resolveState(e.path, e.state, step?.field_states)
   }
   return undefined

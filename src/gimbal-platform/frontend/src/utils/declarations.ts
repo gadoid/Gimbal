@@ -41,7 +41,18 @@ export function resolveState(
   return 'form'
 }
 
-/** children 树先序平铺(容器先于子孙);防御:非数组/非对象条目跳过。 */
+/** 路径可用性**唯一定义**(spec 架构收敛 §2.3):`/full` 是不可信来源,
+ *  真值但非字符串的 path(如 `path: 7`)会让下游 `toTemplatePath` 抛
+ *  `path.replace is not a function` —— 在**边界**判一次,消费方不再各自守卫
+ *  (与后端 `field_state_resolution.composite_states` 的「守卫一次、下游继承」同款)。 */
+export function hasUsablePath(e: DeclarationEntryView | null | undefined): boolean {
+  return typeof (e as { path?: unknown } | null | undefined)?.path === 'string'
+    && (e as unknown as { path: string }).path !== ''
+}
+
+/** children 树先序平铺(**只吐可用路径的条目**);防御:非数组/非对象跳过。
+ *  ⚠ 路径不可用的条目**自身剔除但仍遍历其 children** —— 容器条目缺 path 时
+ *  若整棵剪掉,其子孙会从树里消失(那是语义丢失,不是消毒)。 */
 export function iterFlat(
   decls: DeclarationEntryView[] | undefined | null,
 ): DeclarationEntryView[] {
@@ -49,7 +60,7 @@ export function iterFlat(
   const walk = (entries: DeclarationEntryView[] | undefined) => {
     for (const e of entries ?? []) {
       if (!e || typeof e !== 'object') continue
-      out.push(e)
+      if (hasUsablePath(e)) out.push(e)
       walk(e.children)
     }
   }
@@ -58,20 +69,13 @@ export function iterFlat(
 }
 
 /** 目录宇宙(§3.4 交集容忍参照):树内全部条目 path(模板形态,无下标)。
- *  守卫收**非空字符串**两条边都要挡:缺 path / `''`(falsy,既有语义)与
- *  **真值但非字符串**的 path(如 `path: 7`)都不得收录。只挡 falsy 挡不住
- *  后者 —— /full 响应不可信,而 `toTemplatePath` 是 `path.replace(...)`
- *  ⇒ `7.replace` 渲染期 TypeError(候选面 / 可注入面都从本函数派生,
- *  四个视图同崩)。F1 已给条目侧的 `jsonpath` 补过同款守卫,这是同一纪律
- *  在**声明侧**的走穿(同族 carryPaths / searchCorpus / formBindings /
- *  assertablePaths 仍只写 `!e.path`,见本波报告的遗留项)。 */
+ *  `iterFlat` 已按 :func:`hasUsablePath` 在边界消毒 ⇒ 此处零守卫:
+ *  真值非串的 path(如 `path: 7`)根本不会进集合,消费侧的
+ *  `toTemplatePath`(`path.replace(...)`)不会再收到它。 */
 export function catalogPaths(
   decls: DeclarationEntryView[] | undefined | null,
 ): Set<string> {
-  return new Set(
-    iterFlat(decls).map((e) => e.path)
-      .filter((p): p is string => typeof p === 'string' && p !== ''),
-  )
+  return new Set(iterFlat(decls).map((e) => e.path))
 }
 
 /**
@@ -87,7 +91,7 @@ export function carryPaths(
   const out: string[] = []
   const walk = (entries: DeclarationEntryView[] | undefined) => {
     for (const e of entries ?? []) {
-      if (!e || typeof e !== 'object' || !e.path) continue
+      if (!hasUsablePath(e)) continue
       if (resolveState(e.path, e.state, fieldStates) === 'carry') out.push(e.path)
       else walk(e.children)
     }
@@ -127,7 +131,7 @@ export function searchCorpus(
     ancestors: DeclarationEntryView[],
   ) => {
     for (const e of entries ?? []) {
-      if (!e || typeof e !== 'object' || !e.path) continue
+      if (!hasUsablePath(e)) continue
       out.push({
         path: e.path,
         name: e.name,
@@ -172,7 +176,7 @@ export function cascadeIncrements(
     entries: DeclarationEntryView[] | undefined,
   ): { entry: DeclarationEntryView; ancestors: DeclarationEntryView[] } | null => {
     for (const e of entries ?? []) {
-      if (!e || typeof e !== 'object' || !e.path) continue
+      if (!hasUsablePath(e)) continue
       if (e.path === path) return { entry: e, ancestors: [] }
       const deep = locate(e.children)
       if (deep) return { entry: deep.entry, ancestors: [e, ...deep.ancestors] }
@@ -187,7 +191,7 @@ export function cascadeIncrements(
     // sink:整树压平(解析态判,默认 form 与显式 form 增量都压)
     const sink = (entries: DeclarationEntryView[] | undefined) => {
       for (const e of entries ?? []) {
-        if (!e || typeof e !== 'object' || !e.path) continue
+        if (!hasUsablePath(e)) continue
         if (resolveState(e.path, e.state, fieldStates) !== 'carry') {
           out[e.path] = 'carry'
         }
@@ -230,7 +234,7 @@ export function groupValueSources(
   const out: ValueSourceGroup[] = []
   const byGroup = new Map<string, ValueSourceGroup>()
   for (const e of iterFlat(decls)) {
-    if (!e || typeof e !== 'object' || !e.path) continue
+    if (!hasUsablePath(e)) continue
     const vs = e.value_source
     if (!vs || !vs.view) continue
     const group = vs.group || vs.view
@@ -275,7 +279,7 @@ export function formBindings(
   const out: IOFieldBinding[] = []
   const walk = (entries: DeclarationEntryView[] | undefined) => {
     for (const e of entries ?? []) {
-      if (!e || typeof e !== 'object' || !e.path) continue
+      if (!hasUsablePath(e)) continue
       if (resolveState(e.path, e.state, fieldStates) === 'carry') continue
       out.push(toFieldBinding(e, e.path))
       walk(e.children)
@@ -285,25 +289,25 @@ export function formBindings(
   return out
 }
 
-/** 响应面单脸全量投影(§4:assertable 标记候选,state 不被读取)。 */
+/** 响应面单脸全量投影(§4:assertable 标记候选,state 不被读取)。
+ *  迭代源 `iterFlat` 已消毒 ⇒ 零二次守卫。 */
 export function responseBindings(
   decls: DeclarationEntryView[] | undefined | null,
 ): IOFieldBinding[] {
-  return iterFlat(decls).filter((e) => !!e.path).map((e) => toFieldBinding(e, e.path))
+  return iterFlat(decls).map((e) => toFieldBinding(e, e.path))
 }
 
 /** 断言候选面:assertable=True 条目 path 集(响应单脸 ✓ 标 / 策略候选)。
- *  守卫与 :func:`catalogPaths` 同口径(**非空字符串**):`!!e.path` 挡得住
- *  falsy 挡不住真值非串 —— `/full` 的 `responses.200.declarations` 是同一个
- *  不可信来源,而消费方 `AssertionRegistryEditor` 的 `targetCandidates`
- *  (**渲染期 computed**)对产出 `.map(toScratchPath)`,后者的
- *  `platePath.startsWith(...)` 遇到非串即抛 TypeError ⇒ 整页白屏
- *  (与 F1 的条目侧 jsonpath、`catalogPaths` 的声明侧守卫同一纪律)。 */
+ *  路径可用性由迭代源 `iterFlat`(§2.3 唯一定义)保证 —— `/full` 的
+ *  `responses.200.declarations` 是同一个不可信来源,而消费方
+ *  `AssertionRegistryEditor` 的 `targetCandidates`(**渲染期 computed**)
+ *  对产出 `.map(toScratchPath)`(后者 `platePath.startsWith(...)`)——
+ *  真值非串的 path 在此已不存在,无需再写第二份 `typeof === 'string'`。 */
 export function assertablePaths(
   decls: DeclarationEntryView[] | undefined | null,
 ): string[] {
   return iterFlat(decls)
-    .filter((e) => e.assertable && typeof e.path === 'string' && e.path !== '')
+    .filter((e) => e.assertable)
     .map((e) => e.path)
 }
 

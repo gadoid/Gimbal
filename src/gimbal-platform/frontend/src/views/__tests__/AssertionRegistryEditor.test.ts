@@ -312,6 +312,23 @@ it('ARE-11: 请求侧候选含契约声明的 carry 字段,并标注状态', asy
   w.unmount()
 })
 
+it('ARE-13: 契约含真值非字符串 path 的声明 → 编辑器不抛、正常渲染', async () => {
+  vi.spyOn(api, 'getFullEndpoint').mockResolvedValue({
+    id: 'ep-rg',
+    request: { declarations: [{ name: 'bad', path: 7 }, { name: 'amount', path: '$.amount', state: 'form', required: true, description: '' }] },
+  } as any)
+  const def = JSON.parse(JSON.stringify(DEF))
+  def.steps[0].api.view_hints = { endpoint_id: 'ep-rg' }
+  const w = await mountEditor({ definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG })
+  await w.find('.jpi-input').setValue('$.')    // 触发建议行渲染 → stateOf 逐条调用
+  await flushPromises()
+  expect(w.find('.are-editor').exists()).toBe(true)   // 未白屏
+  // 反空转:建议行确实渲染出且带解析态徽标(stateOf 真的被逐条调用过)
+  expect(w.findAll('.jpi-item').length).toBe(1)
+  expect(w.find('.jpi-state').text()).toBe('form')
+  w.unmount()
+})
+
 it('ARE-12: 契约声明但 body 无的路径 → 不再判悬空(由死转活)', async () => {
   vi.spyOn(api, 'getFullEndpoint').mockResolvedValue({
     id: 'ep-rg',
