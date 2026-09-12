@@ -482,7 +482,7 @@ async def dispatch_run(
     # —— 未预计算该步 ⇒ 与 entry_issues 内部的缺省 universe 同一张表。
     _universe_of = lambda si: universe_by_step.get(si, {"$"})   # noqa: E731
 
-    skipped_by_degradation: list[str] = []
+    skipped_while_degraded: list[str] = []
     selected_entries: list[dict] = []
     for e in selected:
         issues = entry_issues(e, step_count, _body_of(raw_payload),
@@ -491,7 +491,10 @@ async def dispatch_run(
             p = e.get("path")
             si = as_step_index(p.get("stepIndex")) if isinstance(p, dict) else None
             if si is not None and face_by_step.get(si) is None:
-                skipped_by_degradation.append(e.get("id"))      # Y:降级导致的跳过要可见
+                # Y:判定降级期间跳过的条目要可见。记录口径 = 「跳过发生在该步
+                # 声明面不可得的时刻」,跳过的**因由不限**(override-no-match、
+                # 真写错的 jsonpath 等与降级无关者一并计入)—— 不声称因果。
+                skipped_while_degraded.append(e.get("id"))
             logger.warning(
                 "run_dispatcher: injection entry %s dangling (%s) — skipped",
                 e.get("id"), issues,
@@ -584,9 +587,11 @@ async def dispatch_run(
             "stepTo": req.step_to,
             "nRuns": req.n_runs,
             "parallel": req.parallel,
-            # spec §1.1 Y:判定降级是可审计事实,不留静默窗口
-            **({"judgeDegraded": True, "entriesSkippedByDegradation": skipped_by_degradation}
-               if skipped_by_degradation else {}),
+            # spec §1.1 Y:判定降级是可审计事实,不留静默窗口。
+            # entriesSkippedWhileDegraded = 降级期间被跳过的条目 id(因由不限);
+            # 键缺席 = 本次执行没有「降级 + 跳过」同时发生,不是「零跳过」。
+            **({"judgeDegraded": True, "entriesSkippedWhileDegraded": skipped_while_degraded}
+               if skipped_while_degraded else {}),
         },
     )
 

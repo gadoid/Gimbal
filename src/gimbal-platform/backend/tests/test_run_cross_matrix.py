@@ -389,7 +389,7 @@ async def test_degraded_face_is_visible_in_run_record(client, plate_mock, monkey
     ex = (await client.get(f"/api/executions/{exec_id}", headers=bob)).json()
     cfg = ex.get("config") or {}
     assert cfg.get("judgeDegraded") is True
-    assert cfg.get("entriesSkippedByDegradation") == ["inj-d"]
+    assert cfg.get("entriesSkippedWhileDegraded") == ["inj-d"]
     # 正对照:端点**存在**但没有该声明 ⇒ 不是降级,不留标记
     plate_mock.fulls["ep-absent"] = {"request": {"declarations": []}}
     from app.services.endpoint_declarations import _reset_declared_paths_cache
