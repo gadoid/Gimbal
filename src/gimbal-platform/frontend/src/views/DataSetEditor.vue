@@ -234,15 +234,16 @@
               />
             </td>
             <td class="td-action">
-              <!-- 「运行此行」要求数据集已在服务端存在(spec v3 §6):/data-sets/new 上
-                   datasetId='new',预填的 dataSetSelection 指向不存在的库 → RunDialog
-                   选择面收窄为空、面板落基线模式,确认后静默空跑。故未保存前禁用
-                   (判定沿用页头「删除」的 'new' 特例)。 -->
+              <!-- 「运行此行」预填的是**本地行号**(spec v3 §4 rowIndexes),故两种
+                   情况下禁用:① /data-sets/new(datasetId='new')服务端无此库,
+                   预填指向不存在的库 → RunDialog 选择面收窄为空、面板落基线模式,
+                   确认后静默空跑;② 行表有未保存改动(增删/复制/改格)→ 服务端行号
+                   与屏幕上不是同一行。判定沿用页头「删除」的 'new' 特例。 -->
               <el-button
                 size="small" text :icon="VideoPlay"
                 :aria-label="`运行第 ${i + 1} 行`"
-                :disabled="datasetId === 'new'"
-                :title="datasetId === 'new' ? RUN_ROW_UNSAVED_HINT : undefined"
+                :disabled="datasetId === 'new' || rowsDirty"
+                :title="datasetId === 'new' || rowsDirty ? RUN_ROW_UNSAVED_HINT : undefined"
                 @click="runRow(i)"
               />
               <el-button size="small" text @click="cloneRow(i)">复制</el-button>
@@ -341,14 +342,24 @@ const previewDialogOpen = ref(false)
 const panelOpen = ref(false)
 const panelPreset = ref<RunPreset | null>(null)
 
-/** 未保存数据集不可运行此行的提示(按钮 title 与守卫共用一处文案) */
-const RUN_ROW_UNSAVED_HINT = '先「保存数据集」再运行此行 — 未保存的行尚未分配服务端行号'
+/** 行表未落库不可运行此行的提示(按钮 title 与守卫共用一处文案) */
+const RUN_ROW_UNSAVED_HINT = '先「保存数据集」再运行此行 — 行表有未保存的改动'
+  + '(增删行 / 复制行 / 改单元格 / CSV 导入),跑的是服务端存量行'
+  + '(新建数据集尚未分配服务端行号)'
+
+/** 行表脏标:本地 rows 模型 ≠ 服务端存量行。addRow/cloneRow/removeRow、
+ *  单元格编辑、TSV 粘贴、CSV 导入置位;载入与保存成功复位。
+ *  预填的 rowIndexes 是**本地行号**,行表脏时它指向服务端另一行
+ *  (删除后行号前移 → 跑被删的行;克隆 → 跑原件;新增 → 409 越界;
+ *  只改格 → 跑存量值),故必须落库后再运行。 */
+const rowsDirty = ref(false)
 
 /** 运行此行:行级 rowIndexes 预填(0-based = 行号)。
- *  守卫:「new」数据集在服务端不存在,预填会指向不存在的库 — RunDialog
- *  选择面收窄为空、面板落基线模式,确认后静默空跑,故直接拒绝。 */
+ *  守卫(与按钮 :disabled 同条件):「new」数据集在服务端不存在,预填会
+ *  指向不存在的库 — RunDialog 选择面收窄为空、面板落基线模式,确认后
+ *  静默空跑;行表脏时预填的本地行号与存量行不是同一行。两者都直接拒绝。 */
 function runRow(i: number) {
-  if (datasetId === 'new') {
+  if (datasetId === 'new' || rowsDirty.value) {
     ElMessage.warning(RUN_ROW_UNSAVED_HINT)
     return
   }
@@ -634,14 +645,18 @@ function nextDataNum(): number {
 function addRow() {
   rows.value.push({})
   caseNames.value.push(`data-${nextDataNum()}`)
+  rowsDirty.value = true
 }
 function cloneRow(i: number) {
   rows.value.splice(i + 1, 0, { ...rows.value[i] })
   caseNames.value.splice(i + 1, 0, caseNames.value[i] ?? `data-${nextDataNum()}`)
+  rowsDirty.value = true
 }
 function removeRow(i: number) {
   rows.value.splice(i, 1)
   caseNames.value.splice(i, 1)
+  // 行号前移:此后本地第 i 行是服务端第 i+1 行 → 必须落库
+  rowsDirty.value = true
 }
 
 /** 输入框编辑:空白字符串 = 显式空覆盖(留 key='');@blur 时区分
@@ -656,6 +671,7 @@ function onCellInput(rowIndex: number, col: BaselineColumn, v: string) {
     next[col.varName!] = v
   }
   rows.value[rowIndex] = next
+  rowsDirty.value = true
 }
 
 /** TSV 粘贴:从某个 cell 出发,把 tab 切的多行写入同一列。 */
@@ -668,6 +684,7 @@ function onCellPaste(e: ClipboardEvent, col: BaselineColumn, rowIndex: number) {
   e.preventDefault()
   const plan = parseTsvPaste(text, col.varName, rowIndex, rows.value.length)
   rows.value = applyPastePlan(rows.value, plan)
+  rowsDirty.value = true
   // 同步补 caseNames(用 data-N 占位)
   while (caseNames.value.length < rows.value.length) {
     caseNames.value.push(`data-${caseNames.value.length + 1}`)
@@ -710,6 +727,7 @@ async function onSaveRows() {
       rows: apiRows,
     })
     ElMessage.success('已保存')
+    rowsDirty.value = false          // 落库后本地行号 = 服务端行号
     router.push(scenarioDataSetsUrl(scenarioId))
   } catch (e) {
     showError('保存', e)
@@ -766,6 +784,7 @@ async function onImportCsv(file: File) {
     }
     rows.value = result.rows
     caseNames.value = result.caseNames
+    rowsDirty.value = true
   } catch (e) {
     showError('导入 CSV', e)
   }
@@ -782,6 +801,7 @@ onMounted(async () => {
       form.description = full.description ?? ''
       rows.value = full.rows.map((r) => ({ ...r }))
       caseNames.value = full.rows.map((_, i) => `data-${i + 1}`)
+      rowsDirty.value = false        // 本地模型 = 服务端存量,「运行此行」行号可用
     } else {
       form.name = '默认数据集'
       caseNames.value = []

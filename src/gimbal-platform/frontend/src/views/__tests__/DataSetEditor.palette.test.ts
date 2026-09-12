@@ -4,14 +4,18 @@ import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { createPinia, setActivePinia } from 'pinia'
 
+// 路由参数可变(vi.hoisted):dataset 入口既有 'new'(新建)又有已存库,
+// 「运行此行」守卫两种条件都要在真实路由态下测(见文件末组)。
+const ROUTE = vi.hoisted(() => ({ params: { scenarioId: 'sc-ds', datasetId: 'new' } }))
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { scenarioId: 'sc-ds', datasetId: 'new' } }),
+  useRoute: () => ROUTE,
   useRouter: () => ({ push: vi.fn() }),
   createRouter: () => ({ beforeEach: () => {}, push: vi.fn(), replace: vi.fn() }),
   createWebHistory: () => ({}),
 }))
 
 import * as api from '@/api/scenario-composer'
+vi.mock('@/api/auth_sessions', () => ({ list: async () => [] }))
 import DataSetEditor from '@/views/DataSetEditor.vue'
 import RunPanelHost from '@/components/composer/RunPanelHost.vue'
 
@@ -36,6 +40,15 @@ beforeEach(() => {
   vi.spyOn(api, 'getScenarioDraft').mockResolvedValue(DRAFT as any)
   vi.spyOn(api, 'updateScenario').mockResolvedValue({} as any)
   vi.spyOn(api, 'createDataSet').mockResolvedValue({ datasetId: 'ds-1', rows: [] } as any)
+  // 已存库载入面(「运行此行」守卫用例);'new' 用例走不到。
+  vi.spyOn(api, 'getDataSet').mockResolvedValue({
+    datasetId: 'ds-1', name: '边界集', description: '',
+    rows: [{ amount: '1' }, { amount: '2' }, { amount: '3' }],
+  } as any)
+  ROUTE.params.datasetId = 'new'
+  // 「运行此行」正控用例会真挂 RunPanelHost → 其自取数面一并桩掉(其余用例走不到)
+  vi.spyOn(api, 'getScenario').mockResolvedValue({ meta: {}, steps: [], stepCount: 0 } as any)
+  vi.spyOn(api, 'listDataSets').mockResolvedValue([] as any)
   // declarations mock — 字段状态目录形态(children 树 + state 共识默认;
   // 旧 channel 键已退役 §4.1,投影走 formBindings)
   vi.spyOn(api, 'getFullEndpoint').mockImplementation(async (eid: string) => ({
@@ -51,7 +64,9 @@ beforeEach(() => {
   } as any))
 })
 
-function mountEditor() {
+/** 挂载编辑器;datasetId 默认 'new'(既有用例),已存库传 'ds-1'。 */
+function mountEditor(datasetId: string = 'new') {
+  ROUTE.params.datasetId = datasetId
   return mount(DataSetEditor, { global: { plugins: [ElementPlus] } })
 }
 
@@ -709,6 +724,85 @@ it('未保存数据集(datasetId=new):「运行此行」禁用且点击不挂载
   expect(runBtn.attributes('title')).toContain('保存数据集')
   await runBtn.trigger('click')
   await flushPromises()
+  expect(w.findComponent(RunPanelHost).exists()).toBe(false)
+  w.unmount()
+})
+
+// ── 行表脏标守卫(「运行此行」预填的是本地行号)──────────────────
+// 注意:VTU 的 trigger 在 disabled 元素上**不派发**(isDisabled 短路),
+// 故「禁用态点不动」证明不了函数内守卫 —— 内层守卫一律直调 runRow 覆盖。
+
+it('已存库未改动:「运行此行」可用 → 直调 runRow 挂载面板并预填本行', async () => {
+  const w = mountEditor('ds-1')
+  await flushPromises()
+  const runBtn = w.find('button[aria-label="运行第 2 行"]')
+  expect(runBtn.exists()).toBe(true)
+  expect(runBtn.attributes('disabled')).toBeUndefined()   // 正控:守卫不空转
+  ;(w.vm as any).runRow(1)
+  await flushPromises()
+  // 预填 = 本地行号 1 → dataSetSelection 单行段
+  expect((w.vm as any).panelPreset).toEqual({ dataSetSelection: [{ datasetId: 'ds-1', rowIndexes: [1] }] })
+  expect(w.findComponent(RunPanelHost).exists()).toBe(true)
+  w.unmount()
+})
+
+it('删除行(结构编辑):按钮转禁用 + 内层守卫拒绝直调(跑的是被删行的数据)', async () => {
+  const w = mountEditor('ds-1')
+  await flushPromises()
+  expect(w.find('button[aria-label="运行第 1 行"]').attributes('disabled')).toBeUndefined()
+  await w.find('button[aria-label="删除数据 1"]').trigger('click')
+  await flushPromises()
+  const runBtn = w.find('button[aria-label="运行第 1 行"]')
+  expect(runBtn.attributes('disabled')).toBeDefined()
+  // 提示文案点出真实原因:行表有未保存改动(不是「未分配行号」)
+  expect(runBtn.attributes('title')).toContain('行表有未保存的改动')
+  ;(w.vm as any).runRow(0)                                 // 绕开 disabled 直击内层守卫
+  await flushPromises()
+  expect((w.vm as any).panelPreset).toBeNull()
+  expect(w.findComponent(RunPanelHost).exists()).toBe(false)
+  w.unmount()
+})
+
+it('克隆行(结构编辑):按钮转禁用 + 内层守卫拒绝直调(跑的是原件)', async () => {
+  const w = mountEditor('ds-1')
+  await flushPromises()
+  ;(w.findAll('button').find((b) => b.text().includes('复制'))!).trigger('click')
+  await flushPromises()
+  const runBtn = w.find('button[aria-label="运行第 2 行"]')
+  expect(runBtn.attributes('disabled')).toBeDefined()
+  ;(w.vm as any).runRow(1)
+  await flushPromises()
+  expect((w.vm as any).panelPreset).toBeNull()
+  expect(w.findComponent(RunPanelHost).exists()).toBe(false)
+  w.unmount()
+})
+
+it('新增行(结构编辑):越界行号同步被拦(服务端 409 row_index_out_of_range)', async () => {
+  const w = mountEditor('ds-1')
+  await flushPromises()
+  const addBtn = w.findAll('button').find((b) => b.text().includes('新增数据'))
+  await addBtn!.trigger('click')
+  await flushPromises()
+  // 第 4 行 = 本地新行,服务端只有 3 行
+  expect(w.find('button[aria-label="运行第 4 行"]').attributes('disabled')).toBeDefined()
+  ;(w.vm as any).runRow(3)
+  await flushPromises()
+  expect((w.vm as any).panelPreset).toBeNull()
+  w.unmount()
+})
+
+it('单元格编辑(值编辑):按钮转禁用 + 内层守卫拒绝直调(跑的是存量值)', async () => {
+  const w = mountEditor('ds-1')
+  await flushPromises()
+  const cell = w.findAll('input.data-cell-input')[0]
+  expect(cell).toBeTruthy()
+  await cell.setValue('999')
+  await flushPromises()
+  const runBtn = w.find('button[aria-label="运行第 1 行"]')
+  expect(runBtn.attributes('disabled')).toBeDefined()
+  ;(w.vm as any).runRow(0)
+  await flushPromises()
+  expect((w.vm as any).panelPreset).toBeNull()
   expect(w.findComponent(RunPanelHost).exists()).toBe(false)
   w.unmount()
 })
