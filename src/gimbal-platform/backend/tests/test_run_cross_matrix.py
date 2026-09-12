@@ -398,3 +398,42 @@ async def test_degraded_face_is_visible_in_run_record(client, plate_mock, monkey
         "scenarioId": "sc-test", "dataSetIds": [], "injectionEntryIds": ["inj-d"]})
     ex2 = (await client.get(f"/api/executions/{r2.json()['executionId']}", headers=bob)).json()
     assert (ex2.get("config") or {}).get("judgeDegraded") is None
+
+
+async def test_compose_tolerates_non_dict_step_like_out_of_range(client, plate_mock, monkeypatch):
+    """C24 ②:非 dict 步骤元素 + `jsonpath: "$"`(**判定判活**,直达物化)不得让
+    compose_injection_scenario 硬抛 —— `steps[si]` 使用前守卫,与「越界」同待遇:
+    跳过(该函数 docstring 声称的「悬空项静默跳过」修后才成立)。
+
+    注:此形状的真实症状**不是** POST 500 —— compose 在后台 _fanout 里(同步
+    路径之外),抛出去会掀掉整单 fan-out ⇒ 零 case + 执行永不落终态。"""
+    from .helpers import make_draft as _draft, wait_until as _wait
+    from .test_run_m1_capabilities import _patch_launch_capture
+    from .test_scenario_visibility_and_copy import _member
+
+    bob = await _member(client, "bob")
+    draft = _draft(steps=[{"id": "s1", "request": {"body": {}}, "strategy": []}])
+    draft["definition"]["steps"].insert(0, "GARBAGE")
+    draft["assertion_registry"] = {"entries": [{
+        "id": "inj-nondict", "name": "根锚在非 dict 步上",
+        "path": {"stepIndex": 0, "source": "body", "jsonpath": "$"},
+        "value": 7,
+        # asserts 侧同样指向非 dict 步 —— 两个 `steps[si]` 写入点都要跳过
+        "asserts": [{"stepIndex": 0, "mode": "append", "target": "$.response_body.code",
+                     "operator": "eq", "expected": "0"}]}]}
+    r = await client.post("/api/scenarios", headers=bob, json=draft)
+    assert r.status_code in (200, 201), r.text
+
+    plate_mock.behaviour = "echo"
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+    r = await client.post("/api/runs", headers=bob, json={
+        "scenarioId": "sc-test", "dataSetIds": [], "injectionEntryIds": ["inj-nondict"]})
+    assert r.status_code == 201, r.text
+    exec_id = r.json()["executionId"]
+
+    await _wait(lambda: len(cases) >= 1)
+    assert len(cases) == 1                       # 后台 fan-out 没被掀掉
+    assert cases[0]["steps"][0] == "GARBAGE"     # 原始 steps 原样入 case
+    assert cases[0]["steps"][1]["strategy"] == []   # 非 dict 步 = 跳过,不落策略
+    await _await_final(client, bob, exec_id)     # 整单仍收敛(非卡死)

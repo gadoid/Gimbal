@@ -244,7 +244,15 @@ def compose_injection_scenario(definition: dict[str, Any], entry: dict[str, Any]
     """Assign 直补 + asserts patch(spec v3 §3)。config.vars 零触碰 —
     数据集行值合入在 _compose_scenario(与 Assign 正交叠加,偏离最后生效:
     字段恰为模板串时被字面量整体替换,该 case 内行值对此字段不再起效)。
-    悬空项静默跳过 — dispatcher 层已先经 entry_issues 过滤,此处双保险。
+
+    **寻址口径与判定侧同构**(C24):`stepIndex` 一律过 :func:`as_step_index`
+    (拒 bool、收整数值浮点 —— 与前端 ``Number.isInteger`` 一致),`steps[si]`
+    **使用前**校验该元素是 dict;越界 / 非 dict 元素**同待遇:跳过**。
+    这不是「dispatcher 已过滤」的重复保险 —— entry_issues 判活的形状仍能
+    直达此处(`jsonpath: "$"` 锚在非 dict 步上时判定为活),故这里必须有
+    自己的守卫,否则 AttributeError 会掀掉后台 fan-out(零 case + 执行不
+    落终态),而不是像越界那样安静跳过。
+
     value 由用户显式编辑,原样覆写不 coerce —— 但引擎 `_resolve_source_value`
     只对**非字符串**直通,两类字符串会被解释:`$.` 前缀串按上下文 JSONPath
     读取(**已补 default/required 兜底**,读不到时仍写字面量);整串 `"${...}"`
@@ -255,9 +263,9 @@ def compose_injection_scenario(definition: dict[str, Any], entry: dict[str, Any]
     steps = out.get("steps") or []
     path = entry.get("path")
     if isinstance(path, dict):
-        si = path.get("stepIndex")
+        si = as_step_index(path.get("stepIndex"))
         jp = path.get("jsonpath")
-        if (isinstance(si, int) and 0 <= si < len(steps)
+        if (si is not None and 0 <= si < len(steps) and isinstance(steps[si], dict)
                 and isinstance(jp, str) and jp.startswith("$")):
             # $.amount → $.request_body.amount;根 "$" → $.request_body
             target = "$.request_body" + (jp[1:] if jp != "$" else "")
@@ -266,8 +274,8 @@ def compose_injection_scenario(definition: dict[str, Any], entry: dict[str, Any]
     for a in entry.get("asserts") or []:
         if not isinstance(a, dict):
             continue
-        si = a.get("stepIndex")
-        if not isinstance(si, int) or si < 0 or si >= len(steps):
+        si = as_step_index(a.get("stepIndex"))
+        if si is None or si < 0 or si >= len(steps) or not isinstance(steps[si], dict):
             continue
         strat = steps[si].setdefault("strategy", [])
         if a.get("mode") == "override":

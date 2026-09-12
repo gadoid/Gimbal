@@ -259,6 +259,26 @@ def test_injectable_universe_covers_body_prefixes_and_declared():
     assert {"$", "$.tags", "$.tags[0]", "$.tags[1]", "$.customer_id"} <= u
 
 
+def test_integral_float_step_index_materializes_like_judgment():
+    """C24 ①:Z3 的归一必须**收到物化侧** —— 判定判活的整数值浮点,物化必须
+    同样落出 Assign(两条路径都过 as_step_index)。修前:判定判活而物化零
+    偏离(静默少跑,rows 里还记着 injectionId)。"""
+    entry = {"id": "inj-float", "path": {"stepIndex": 1.0, "source": "body",
+                                         "jsonpath": "$.bl_no"},
+             "value": -1,
+             "asserts": [{"stepIndex": 1.0, "target": "$.response_body.msg",
+                          "operator": "eq", "expected": "e"}]}
+    body_of = _body_of(DEF["steps"])
+    assert entry_issues(entry, 2, body_of, _targets_of(DEF["steps"]),
+                        _universe_of(body_of, ())) == []            # 判活
+    out = compose_injection_scenario(DEF, entry)
+    assert out["steps"][1]["strategy"] == [                          # 物化
+        {"kind": "assign", "source": -1, "target": "$.request_body.bl_no"},
+        {"kind": "assertion", "target": "$.response_body.msg",
+         "operator": "eq", "expected": "e"}]
+    assert DEF["steps"][1]["strategy"] == []                         # 源零污染
+
+
 # ── dispatcher 集成(spec v3 §3:Assign 直补落 case.json;skip 链)────
 # 骨架不变:建场景(assertion_registry 注入)→ POST /api/runs → 断言
 # case 数 / case.json patch / rows 回放。
