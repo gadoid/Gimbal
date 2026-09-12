@@ -7,6 +7,10 @@
  * 终审 F2:loadScenario 的 GET /draft 失败(注册表未水化)→ 本地空
  * registry 不可信 — 保存前重试拉取合并;重试仍失败则中止保存,
  * 绝不带空 assertion_registry 整包 PUT(会把存量条目永久冲掉)。
+ *
+ * 骨架 = CaseComposer.vardemote.test.ts 的 mock 面(模块 mock 构造器 impl
+ * + 真实 vue-router memory history);挂载直取 ?step=4 进 Canvas 步,
+ * 断言落在 draft store 同步面与 updateScenario spy。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { nextTick } from 'vue'

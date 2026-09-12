@@ -2787,8 +2787,8 @@ describe('CaseComposerCanvas — 扰动位呈现与跳转(§5.3)', () => {
   })
 })
 
-describe('CaseComposerCanvas — 加入断言管理标记(spec v2 §4)', () => {
-  it('REG-MARK: FieldForm registryMark → Canvas 组装 anchor(stepIndex=activeStepIdx)上抛 registryAdd', async () => {
+describe('CaseComposerCanvas — 加入断言管理标记(spec v3 §5)', () => {
+  it('REG-MARK: FieldForm registryMark → Canvas 组装 path(stepIndex=activeStepIdx)+ value 直传上抛 registryAdd', async () => {
     const { w } = mountCanvas([mkStep()])
     await flushPromises()
     const canvas = w.findComponent(CaseComposerCanvas)
@@ -2796,16 +2796,18 @@ describe('CaseComposerCanvas — 加入断言管理标记(spec v2 §4)', () => {
     // → 无 StrategyForm 内嵌实例,findComponent 无歧义
     const ff = w.findComponent(FieldForm)
     expect(ff.props('fieldActions')).toBe(true)
-    ;(ff.vm as any).$emit('registryMark', { field: { name: 'amount', path: '$.amount' }, varName: 'amount' })
+    ;(ff.vm as any).$emit('registryMark', { field: { name: 'amount', path: '$.amount' }, value: '-1' })
     await flushPromises()
     const emits = canvas.emitted('registryAdd')
     expect(emits).toBeTruthy()
-    expect(emits![0][0]).toEqual({ stepIndex: 0, source: 'body', jsonpath: '$.amount', varName: 'amount' })
+    // 载荷无 varName:path 即注入地址,value = 字段当前字面量原样直传
+    expect(emits![0][0]).toEqual({ stepIndex: 0, source: 'body', jsonpath: '$.amount', value: '-1' })
     w.unmount()
   })
 
-  it('REG-GUARD: 值未模板化 → FieldForm 守卫拦下,不上抛 registryAdd', async () => {
-    // mkStep body orderId='ord-1'(非模板)→ 菜单点击后 TPL_FULL_RE 不中
+  it('REG-OPEN: 无模板守卫直通 — 非模板字段亦可偏离,上抛 registryAdd(value=字段当前字面量)', async () => {
+    // mkStep body orderId='ord-1'(非 ${var} 模板)→ v3 去守卫(spec §5
+    // 裁定 2「任意字段可偏离」):path 即注入地址,与模板化解耦,直通
     const { w } = mountCanvas([mkStep()])
     await flushPromises()
     const canvas = w.findComponent(CaseComposerCanvas)
@@ -2813,11 +2815,13 @@ describe('CaseComposerCanvas — 加入断言管理标记(spec v2 §4)', () => {
     await flush()
     await w.findAll('.fa-item').find((b) => b.text().includes('加入断言管理'))!.trigger('click')
     await flush()
-    expect(canvas.emitted('registryAdd')).toBeUndefined()
+    const emits = canvas.emitted('registryAdd')
+    expect(emits).toBeTruthy()
+    expect(emits![0][0]).toEqual({ stepIndex: 0, source: 'body', jsonpath: '$.orderId', value: 'ord-1' })
     w.unmount()
   })
 
-  it('REG-CHAIN: 模板化字段全链 DOM 点击 → registryAdd(jsonpath=$.orderId, varName=oid)', async () => {
+  it('REG-CHAIN: 模板化字段全链 DOM 点击 → registryAdd(jsonpath=$.orderId, value=${var.oid} 原样字面量)', async () => {
     const s0 = mkStep({ request: { kind: 'request', body: { orderId: '${var.oid}' } } as any })
     const { w } = mountCanvas([s0])
     await flushPromises()
@@ -2828,7 +2832,8 @@ describe('CaseComposerCanvas — 加入断言管理标记(spec v2 §4)', () => {
     await flush()
     const emits = canvas.emitted('registryAdd')
     expect(emits).toBeTruthy()
-    expect(emits![0][0]).toEqual({ stepIndex: 0, source: 'body', jsonpath: '$.orderId', varName: 'oid' })
+    // v3:模板串不再解析为 varName — 原样作 value 预填(用户在编辑器改成偏离值)
+    expect(emits![0][0]).toEqual({ stepIndex: 0, source: 'body', jsonpath: '$.orderId', value: '${var.oid}' })
     w.unmount()
   })
 })
