@@ -6,9 +6,10 @@
  * 预取时机、死因分组都在这里,**视图只消费**。
  *
  * 取数时机(修 F 的结构成因):**读 / 取分离** —— `ensure()` 是**唯一副作用**,
- * 由宿主在挂载 / 步骤面变化时调用;判定与候选走纯缓存读(`declarationsFor`,
- * 不经 `requestDeclarationsOf` —— 后者内部会 ensure),因此渲染期**零请求**
- * (IS-7 钉住)。纯判定不再与网络 I/O 耦合。
+ * 由宿主在挂载 / 步骤面变化时调用;判定与候选走纯缓存读(`declarationsFor`),
+ * 因此渲染期**零请求**(IS-7 钉住)。纯判定不再与网络 I/O 耦合。
+ * (原先经 `requestDeclarationsOf` —— 那个合体口内部会 ensure,已按 C18 删除;
+ * 任何人再造一个"读里带取"的口,IS-7 会立刻红。)
  *
  * 死因分组(修 C):`dead` 把判死条目分成两组 ——
  *   - `intrinsic`:任何时刻都死(legacy / step-oob / override-no-match,以及
@@ -60,11 +61,11 @@ export function useInjectableSurface(
     return typeof eid === 'string' && eid ? eid : undefined
   }
 
-  /* ── 读 / 取分离 ─────────────────────────────────────────────
+  /* ── 读 / 取分离(C18)─────────────────────────────────────────
    * **读**(本文件的 pathsOfStep / stateOf):纯缓存读,绝不取数 —— 渲染期
-   * 只走这里。`useEndpointFull.requestDeclarationsOf` **内部会 ensure**
-   * (`void ensureEndpointFull(eid)`),读路径经它 = 渲染期发请求,所以下面
-   * 一律走 `declarationsFor`(只读 getEndpointFull)。
+   * 只走这里。任何"读里带取"的合体口都不许入读路径:`useEndpointFull` 原先
+   * 的 `requestDeclarationsOf` 内部就 `void ensureEndpointFull(eid)`,读路径
+   * 经它 = 渲染期发请求(已随 C18 删除)。
    * **取**:`ensure()` 显式、幂等,由宿主在挂载 / 步骤面变化时调用,覆盖
    * **全部带 endpoint_id 的步骤** —— 读端不取数 ⇒ 取数必须一次取全,否则
    * "给新条目挑契约字段"这条路径(候选/取态要问任意 si,含无条目引用的 si)

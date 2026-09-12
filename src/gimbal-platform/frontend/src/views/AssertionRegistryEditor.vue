@@ -196,7 +196,7 @@ import { genEntryId, normalizeRegistry } from '@/utils/assertion-registry'
 import { assertablePaths } from '@/utils/declarations'
 import { toScratchPath } from '@/utils/scratch-path'
 import type { FieldState } from '@/types/plate'
-import { ensureEndpointFull, getEndpointFull } from '@/composables/useEndpointFull'
+import { getEndpointFull } from '@/composables/useEndpointFull'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
 import JsonPathInput from '@/components/composer/JsonPathInput.vue'
 import { composerUrl } from '@/utils/links'
@@ -350,12 +350,14 @@ function stateOfPendingPath(path: string): FieldState | undefined {
 
 /** asserts.target 候选 = 所选步骤**端点契约**的 assertable 面,经 toScratchPath
  *  归一到引擎域($.code → $.response_body.code)。契约是响应侧唯一标准定义
- *  —— 不引入样本等旁路;契约未声明的字段仍可手打,只是不提示。 */
+ *  —— 不引入样本等旁路;契约未声明的字段仍可手打,只是不提示。
+ *  **纯缓存读**(裁定 C19):不在此处 ensure —— 取数由 `surface.ensure()` 一次取全
+ *  (覆盖全部带 endpoint_id 的步骤),渲染期只读缓存(读 `shallowReactive`
+ *  容器即建立响应依赖,契约落定后本 computed 自动重算)。 */
 const targetCandidates = computed<string[]>(() => {
   const step = steps.value[pendingAssert.value.stepIndex] as any
   const eid = step?.api?.view_hints?.endpoint_id
   if (!eid) return []
-  void ensureEndpointFull(eid)
   const full = getEndpointFull(eid)
   return assertablePaths(full?.responses?.['200']?.declarations).map(toScratchPath)
 })

@@ -29,15 +29,17 @@
  *     此前「路径可用性守卫」在 iterFlat → buildTree → buildNode →
  *     prefillBindings 上逐个冒出来 —— 边界选错了;守卫只该有一个。
  *
- * 消费方约定:直接在 computed 里读 `getEndpointFull` / `endpointFullState` /
- * `requestDeclarationsOf` 即建立响应依赖;需要取数时调
- * `ensureEndpointFull(eid)`(幂等)。
+ * 消费方约定(**读 / 取分离**,裁定 C18):渲染期只在 computed 里读
+ * `getEndpointFull` / `endpointFullState`(读缓存即建立响应依赖,**不取数**);
+ * 需要取数时调 `ensureEndpointFull(eid)`(幂等,每端点每会话一次)。
+ * 此前那个「读 + 隐式取数」的合体口 `requestDeclarationsOf` 已删除 ——
+ * 它的名字在撒谎(叫读,内部却 `void ensureEndpointFull`),正是渲染期取数的入口。
  */
 import { reactive, shallowReactive } from 'vue'
 
 import { getFullEndpoint } from '@/api/scenario-composer'
 import { sanitizeEndpointFull } from '@/utils/declarations'
-import type { DeclarationEntryView, EndpointFullView } from '@/types/plate'
+import type { EndpointFullView } from '@/types/plate'
 
 /** 失败重试窗口(ms):窗口内不再发起,避免 plate 故障时渲染路径反复重发。 */
 export const FAILED_RETRY_MS = 10_000
@@ -90,17 +92,6 @@ export function endpointFullState(endpointId: string | undefined): 'loading' | '
   if (!endpointId) return ''
   if (fullByEndpoint.has(endpointId)) return ''
   return failedAt.has(endpointId) ? 'failed' : 'loading'
-}
-
-/** 步骤的契约声明面(读共享缓存;未拉取则发起)。上层投影用。
- *  无 endpoint_id / 未回填 → undefined(调用方降级为「只认 body 面」)。
- *  返回的即**入口消毒后**的树 ⇒ 消费方(含画布 `buildTree`)零守卫。 */
-export function requestDeclarationsOf(step: unknown): DeclarationEntryView[] | undefined {
-  const eid = (step as { api?: { view_hints?: { endpoint_id?: string } } } | null | undefined)
-    ?.api?.view_hints?.endpoint_id
-  if (!eid) return undefined
-  void ensureEndpointFull(eid)
-  return getEndpointFull(eid)?.request?.declarations
 }
 
 /** 测试钩子:清空缓存(含负缓存)。仅供单测使用。 */

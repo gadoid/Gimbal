@@ -19,6 +19,7 @@ vi.mock('vue-router', () => ({
 
 import * as api from '@/api/scenario-composer'
 import { _resetEndpointFullCacheForTest } from '@/composables/useEndpointFull'
+import * as endpointFull from '@/composables/useEndpointFull'
 import JsonPathInput from '@/components/composer/JsonPathInput.vue'
 import AssertionRegistryEditor from '@/views/AssertionRegistryEditor.vue'
 
@@ -326,6 +327,59 @@ it('ARE-13: 契约含真值非字符串 path 的声明 → 编辑器不抛、正
   // 反空转:建议行确实渲染出且带解析态徽标(stateOf 真的被逐条调用过)
   expect(w.findAll('.jpi-item').length).toBe(1)
   expect(w.find('.jpi-state').text()).toBe('form')
+  w.unmount()
+})
+
+it('ARE-15: 目标候选是**纯缓存读** —— 渲染期不触达取数口,取数只经 ensure()(裁定 C19)', async () => {
+  // 此前 targetCandidates 在自己的 computed 里 `void ensureEndpointFull(eid)`
+  // ⇒ 渲染期触达取数口,"渲染期只读缓存"这句话半假。收口后:候选只读缓存,
+  // 取数全部由 surface.ensure() 一次性完成(覆盖全部带 endpoint_id 的步骤)。
+  // 探针口径:挂载的 ensure() 已让该端点进入缓存 ⇒ **网络计数看不出差别**
+  // (ensureEndpointFull 命中缓存/在飞/负缓存时都不再发请求),故这里测的是
+  // **取数口的调用**:渲染期一次都不许碰它。纯 "不调 ensure ⇒ getFullEndpoint
+  // 零调用" 那条探针在 composable 读口上钉(IS-7)。
+  _resetEndpointFullCacheForTest()
+  const netSpy = vi.spyOn(api, 'getFullEndpoint').mockResolvedValue({
+    id: 'ep-rg',
+    responses: { '200': { declarations: [
+      { name: 'code', path: '$.code', assertable: true },
+      { name: 'msg', path: '$.msg', assertable: true },
+    ] } },
+  } as any)
+  const ensureSpy = vi.spyOn(endpointFull, 'ensureEndpointFull')
+  const def = JSON.parse(JSON.stringify(DEF))
+  def.steps[0].api = { headers: {}, view_hints: { endpoint_id: 'ep-rg' } }
+  const w = await mountEditor({ definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG })
+  await flushPromises()
+  // 挂载的 ensure() 就是**唯一**取数口:每端点每会话一次
+  expect(ensureSpy).toHaveBeenCalledWith('ep-rg')
+  expect(netSpy).toHaveBeenCalledTimes(1)
+
+  // 反空转:候选确实由这条读路径产出(否则下面"零调用"可能只是因为没算)
+  const targetInput = () => w.findAllComponents(JsonPathInput)[1]
+  await w.findAll('.are-row')[0].trigger('click')     // 选中活条目 → 详情/候选出现
+  await flushPromises()
+  expect(targetInput().props('candidates')).toEqual(['$.response_body.code', '$.response_body.msg'])
+
+  // 渲染色路径:清计数后反复重算候选(切步骤来回 + 重选条目)→ 取数口零调用
+  ensureSpy.mockClear()
+  netSpy.mockClear()
+  ;(w.vm as any).pendingAssert.stepIndex = 1          // 步骤 2:无 endpoint_id → 候选空
+  await flushPromises()
+  expect(targetInput().props('candidates')).toEqual([])
+  ;(w.vm as any).pendingAssert.stepIndex = 0          // 切回:候选从缓存重建(算过就说明重算过)
+  await flushPromises()
+  expect(targetInput().props('candidates')).toEqual(['$.response_body.code', '$.response_body.msg'])
+  await w.findAll('.are-row')[1].trigger('click')
+  await flushPromises()
+  expect(ensureSpy).not.toHaveBeenCalled()            // ← 渲染期不触达取数口
+  expect(netSpy).not.toHaveBeenCalled()               // ← 也没有新请求
+
+  // 显式 ensure() 幂等:已缓存 ⇒ 取数口被调用但零新请求
+  ;(w.vm as any).surface.ensure()
+  await flushPromises()
+  expect(ensureSpy).toHaveBeenCalledWith('ep-rg')
+  expect(netSpy).not.toHaveBeenCalled()
   w.unmount()
 })
 
