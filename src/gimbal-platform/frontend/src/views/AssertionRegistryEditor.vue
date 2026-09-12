@@ -121,7 +121,8 @@
           />
           <code class="are-val-preview" :title="fmtVal(selected.value)">→ {{ fmtVal(selected.value) }}</code>
         </div>
-        <!-- 送达面注记(spec v3 §3 引擎语义):两类形状引擎先当引用读 -->
+        <!-- 送达面注记(spec v3 §3 引擎语义):三类形状各自的真话 —
+             $. 类可兜 / ${...} 类预处理先行 / null 类送不到 -->
         <div v-if="valueRefNote" class="are-val-note">{{ valueRefNote }}</div>
       </div>
 
@@ -282,24 +283,33 @@ function onKindChange() {
 }
 
 /** 值送达面注记(与后端 run_injection._assign_strategy 同一份语义,
- *  两处必须同改):引擎 `_resolve_source_value` 只对非字符串直通,
- *  下面两类字符串先被当**引用**解析 ——
- *  · "$.xxx":按 JSONPath 从场景上下文读,解析不到得 None(平台已补
- *    default 兜底,仍写字面量);解析命中则被上下文值覆写(边界);
- *  · 整串 "${...}":同上,按变量名读。
- *  JSON null 则是**送不到**:plate 导出丢弃 source=null 的 Assign,
- *  引擎 Assign.source 必填 → 该用例加载即失败(无兜底可言)。 */
+ *  两处必须同改)。三类形状各自的**真话**,不得混用「default 兜底」——
+ *  那句话只对 `$.` 类成立:
+ *  · "$.xxx":引擎在 Assign 执行期按 JSONPath 从场景上下文读,读不到得
+ *    None —— 平台补的 default(=字面量)+ required:false 在此生效;
+ *    上下文恰好同名时解析命中,被上下文值覆写(边界三);
+ *  · 整串 "${...}":引擎**在任何策略执行之前**做模板展开(平台的
+ *    default 兜不住)—— 变量缺失 → 预处理阶段硬失败(比 Assign 早);
+ *    变量存在 → 写入变量值,不是本字面量;
+ *  · null / 缺 value 键:送不到 —— plate 导出丢弃 source=null 的
+ *    Assign,引擎 Assign.source 必填 → 该用例加载即失败。 */
 const valueRefNote = computed(() => {
   const e = selected.value
   if (!e || isLegacyEntry(e)) return ''
   const v = e.value
-  if (v === null) {
-    return 'null 送不到引擎:plate 导出会丢弃 source 为 null 的 Assign,该用例加载即失败。'
-      + '请改用字符串(如空串 / "null")表达,或删除本条目。'
+  if (v === null || v === undefined) {
+    return 'null(或缺 value 键)送不到引擎:plate 导出会丢弃 source 为 null 的 Assign,'
+      + '该用例加载即失败。请改用字符串(如空串 / "null")表达,或删除本条目。'
   }
-  if (typeof v === 'string' && (v.startsWith('$.') || (v.startsWith('${') && v.endsWith('}')))) {
-    return '此值形如上下文引用:引擎先按 JSONPath / 变量名解析,解析不到才写入本字面量'
-      + '(平台已补 default 兜底);若场景上下文里恰好存在同名路径/变量,会被上下文值覆写。'
+  if (typeof v !== 'string') return ''
+  if (v.startsWith('${') && v.endsWith('}')) {
+    return '整串 ${...} 是引擎的模板引用,平台补的 default 兜不住它:引擎在任何策略执行前'
+      + '先做模板展开 —— config.vars 缺同名变量则该用例在预处理阶段即失败;'
+      + '有同名变量则此处写入变量值,不是本字面量。'
+  }
+  if (v.startsWith('$.')) {
+    return '以 $. 开头:引擎先按 JSONPath 从场景上下文读,读不到才写入本字面量'
+      + '(平台已补 default 兜底);若场景上下文里恰好存在同名路径,会被上下文值覆写。'
   }
   return ''
 })

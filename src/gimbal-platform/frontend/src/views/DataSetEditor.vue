@@ -665,8 +665,10 @@ function removeRow(i: number) {
   rowsDirty.value = true
 }
 
-/** 输入框编辑:空白字符串 = 显式空覆盖(留 key='');@blur 时区分
- *  "用户没改"vs"覆盖为空"——空输入 = 删除 key(回 inherit)。 */
+/** 输入框编辑:'' = 显式空覆盖(留 key=''),非空 = 覆写为该值。
+ *  inherit 只由「从未写入该键」得到 —— 单元格一经编辑即落键,没有
+ *  blur 还原分支(旧注释描述的 @blur 归类已退场,文件内无 blur 处理器);
+ *  编辑即置 rowsDirty(本地行表 ≠ 服务端存量)。 */
 function onCellInput(rowIndex: number, col: BaselineColumn, v: string) {
   const cur = rows.value[rowIndex] ?? {}
   const next = { ...cur }

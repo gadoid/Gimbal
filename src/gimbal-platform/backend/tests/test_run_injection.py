@@ -392,3 +392,55 @@ async def test_json_null_value_boundary_is_recorded_not_silently_written():
     assert "source" not in data["converted"]["steps"][0]["strategy"][-1]
     with pytest.raises(ValidationError):
         Scenario.model_validate(data["converted"])
+
+
+def _preprocess(scenario_dict: dict) -> list:
+    """真引擎预处理(认证 + 模板展开),返回 resolved steps —— 策略执行的
+    上游:ScenarioPreprocessor 在**任何 strategy 执行之前**跑完整 scenario
+    (gimbal/core/scenario_runner.py:258-266)。延迟导入:只在真预处理
+    用例里加载引擎包。"""
+    from gimbal.config.models import BootstrapConfig
+    from gimbal.preprocessor.scenario_preprocessor import ScenarioPreprocessor
+    from gimbal.schema.scenario import Scenario
+
+    steps, _base_url, _services = ScenarioPreprocessor(
+        scenario_schema=Scenario.model_validate(scenario_dict),
+        bootstrap_config=BootstrapConfig(),
+    ).run()
+    return steps
+
+
+def test_jsonpath_value_class_passes_the_preprocessor_untouched():
+    """`$.` 前缀串**不是模板**(预处理器的模板正则只认 `${...}`,
+    gimbal/utils/jsonpath.py:603/736)→ 原样穿过预处理,default/required
+    也随之活到 Assign 执行期 —— 这正是平台侧兜底能生效的前提。"""
+    st = _preprocess(_compose("$.amount"))[0].strategy[-1]
+    assert st.source == "$.amount"
+    assert st.default == "$.amount"
+    assert st.required is False
+
+
+def test_template_value_class_fails_in_the_preprocessor_not_in_the_assign():
+    """边界(记录,不是期望行为):整串 `${...}` 类的**变量缺失**结局 ——
+    引擎在策略执行前做模板展开,`_resolve_strategy` 把 `Assign.source` 与
+    `Assign.default` 一并过 `_resolve_or_fail`(scenario_preprocessor.py:
+    416-429)→ 预处理阶段 `ValueError`,比 Assign 更早,平台补的 default
+    从未被读过(失败点不是 BEFORE_REQUEST)。"""
+    composed = _compose("${var.ghost}")          # config.vars 无 ghost
+    # 平台产出的形状本身合法(source/default/required 都在)
+    assert composed["steps"][0]["strategy"][-1]["default"] == "${var.ghost}"
+    # 失败点必须**是预处理器**(不是 Assign 的 resolved-to-None)
+    with pytest.raises(ValueError, match=r"\[Preprocessor\].*ghost"):
+        _preprocess(composed)
+
+
+def test_template_value_class_writes_the_vars_value_not_the_literal():
+    """边界(记录):整串 `${...}` 类的**变量存在**结局 —— source(以及
+    default)被预处理器改写成变量值 → 字面量**不写入**,该偏离对该字段
+    实际不生效。平台侧不修(修它就得往 config.vars 塞哨兵,spec §3 把
+    「compose 不触碰 config.vars」定为核心保证)。"""
+    composed = _compose("${var.amount}")          # config.vars.amount = 100
+    st = _preprocess(composed)[0].strategy[-1]
+    assert st.source == 100                       # 变量值,不是 "${var.amount}"
+    assert st.default == 100                      # default 同样被改写(死重,无害)
+    assert st.required is False

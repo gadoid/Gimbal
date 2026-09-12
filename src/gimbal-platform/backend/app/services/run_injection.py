@@ -15,8 +15,10 @@ def _is_context_readable(source: Any) -> bool:
     """引擎会把这两类字符串当**引用**解析,而不是字面量
     (gimbal/strategy/builtin/utils.py:63-106 `_resolve_source_value`):
     * ``"$.*"`` — scope 落到 STEP/SCENARIO(Assign 默认 SCENARIO)时按
-      JSONPath 从场景上下文读(jsonpath 查不到 → None);
-    * 整串 ``"${...}"`` — 按变量名从上下文读(读不到 → None)。
+      JSONPath 从场景上下文读(jsonpath 查不到 → None);**兜底只对这类有效**
+      (它穿过预处理,见 `_assign_strategy`);
+    * 整串 ``"${...}"`` — 按变量名从上下文读(读不到 → None);这类在
+      **预处理阶段**就被展开,平台侧兜不住(见 `_assign_strategy`)。
     其余字符串与全部非字符串(含 dict/list)一律原样直通。"""
     if not isinstance(source, str):
         return False
@@ -28,27 +30,38 @@ def _is_context_readable(source: Any) -> bool:
 def _assign_strategy(value: Any, target: str) -> dict[str, Any]:
     """偏离值 → Assign 策略 dict(spec v3 §3:引擎/plate 零改动)。
 
-    用户 value 的语义是「原样覆写不 coerce」,但引擎对上面两类字符串
-    优先做上下文解析:解析不到得 None,而 `required` 默认 True 时
-    Assign 直接 FAILED(assign.py:35-45),BEFORE_REQUEST 失败即
-    **整步不发请求**(statemachine/states.py:63 BEFORE_REQUEST→FAILED)。
-    故这两类形状额外带上 `default`(=该字面量)与 `required: false` —— assign.py
-    的顺序是先 default 后 required,解析不到时落字面量而非失败,解析
-    得到时 default 不参与。其余情形不带键:Assign 基座字段全取默认
-    (spec §3)。
+    用户 value 的语义是「原样覆写不 coerce」,但引擎对两类字符串会当
+    **引用**处理。`default` + `required: false` 只对 **`"$."` 前缀类**
+    是有效兜底:这类串不是模板(预处理器的模板正则只认 `${...}`,
+    gimbal/utils/jsonpath.py:603/736)→ 原样穿过预处理 → Assign 执行时
+    JSONPath 读不到得 None,而此时 `required` 默认 True 会整步 FAILED
+    (assign.py:35-45;BEFORE_REQUEST 失败即不发请求,statemachine/
+    states.py:63)。带上 `default`(=字面量)+ `required:false` 后:
+    assign.py 先 default 后 required,读不到时写字面量而非失败。
+    其余值(含普通字符串 / dict / list / null)不带键,基座字段全取默认。
 
-    残留边界一(引擎语义所限,记录不兜):上下文里**恰好存在**同名
-    JSONPath/变量时解析命中,该 value 被上下文值覆写而非字面量。
-    编辑器对此有可见提示(AssertionRegistryEditor「上下文引用形」)。
+    **整串 `"${...}"` 类不可兜**(引擎语义所限,记录不兜;不加键也不改
+    行为):引擎在**任何策略执行之前**先整体预处理整个 scenario
+    (gimbal/core/scenario_runner.py:258-266),`_resolve_strategy` 把
+    `Assign.source` 与 `Assign.default` **一并**过 `_resolve_or_fail`
+    (gimbal/preprocessor/scenario_preprocessor.py:416-429),于是
+      · config.vars 无同名变量 → 预处理阶段直接 `ValueError`
+        (…source 模板变量未找到)—— **比 Assign 早**,default 从未被
+        读过,失败点也不是 BEFORE_REQUEST;
+      · config.vars 有同名变量 → source/default 双双被改写成变量值 →
+        写下去的是 vars 值,**字面量不写入**(该偏离对该字段不生效)。
+    平台侧唯一的解法是往 config.vars 塞哨兵变量 —— spec §3 把「compose
+    不触碰 config.vars」定为核心保证,不做。编辑器对该类显形告警。
 
-    残留边界二(不可修,不是本函数能兜的):JSON null 偏离值无法送达
-    引擎 —— plate 导出 `model_dump(mode="json", exclude_none=True, ...)`
-    (gimbal_plate/export/gimbal.py:279 `GimbalScenarioExporter.render`)
-    把 `source: None` 整键丢弃,而引擎 `Assign.source: Any` 是必填
-    (gimbal/schema/strategy.py) → 该 case 加载即 `Scenario.model_validate`
-    失败。此处不置 `required: false`(改不了结局,只把「单步失败」
-    伪装成成功);编辑器对 null 值显形警告。
-    """
+    边界二(不可修):JSON null 偏离值无法送达 —— plate 导出
+    `model_dump(mode="json", exclude_none=True, ...)`
+    (gimbal_plate/export/gimbal.py:279)把 `source: None` 整键丢弃,而
+    引擎 `Assign.source: Any` 必填(gimbal/schema/strategy.py)→ 该 case
+    加载即 `Scenario.model_validate` 失败。此处不置 `required: false`
+    (改不了结局,只把失败点往后挪);编辑器对 null 值显形警告。
+
+    边界三(记录):`$.` 类若上下文里**恰好存在**同名 JSONPath,解析命中
+    优先于字面量 —— 该 value 被上下文值覆写。编辑器有可见提示。"""
     st: dict[str, Any] = {"kind": "assign", "source": value, "target": target}
     if _is_context_readable(value):
         st["default"] = value

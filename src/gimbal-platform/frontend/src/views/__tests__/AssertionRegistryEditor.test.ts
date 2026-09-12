@@ -138,25 +138,41 @@ async function selectOnlyRow(w: any) {
   await flushPromises()
 }
 
-it('ARE-5: 引用形字符串值($.x / ${...})→ 显形注记(引擎先当上下文读)', async () => {
-  for (const v of ['$.amount', '${var.amount}']) {
+it('ARE-5: `$.` 前缀值 → 显形注记(JSONPath 读取 + default 兜底才是对的)', async () => {
+  const w = await mountEditor(draftWithValue('$.amount'))
+  await selectOnlyRow(w)
+  const note = w.find('.are-val-note')
+  expect(note.exists()).toBe(true)
+  expect(note.text()).toContain('JSONPath')
+  expect(note.text()).toContain('default 兜底')   // 只对这类成立
+  expect(note.text()).toContain('覆写')
+  w.unmount()
+})
+
+it('ARE-5b: 整串 ${...} 值 → 注记按**模板**叙述(不得再提 default 兜底)', async () => {
+  const w = await mountEditor(draftWithValue('${var.amount}'))
+  await selectOnlyRow(w)
+  const note = w.find('.are-val-note')
+  expect(note.exists()).toBe(true)
+  // 真话:变量缺失 → 预处理阶段失败;变量存在 → 写入变量值
+  expect(note.text()).toContain('模板')
+  expect(note.text()).toContain('预处理')
+  expect(note.text()).toContain('变量值')
+  expect(note.text()).not.toContain('default 兜底')
+  w.unmount()
+})
+
+it('ARE-6: JSON null 值与缺 value 键 → 同一条「送不到引擎」注记', async () => {
+  for (const v of [null, undefined]) {
     const w = await mountEditor(draftWithValue(v))
     await selectOnlyRow(w)
     const note = w.find('.are-val-note')
     expect(note.exists()).toBe(true)
-    expect(note.text()).toContain('上下文引用')
-    expect(note.text()).toContain('覆写')
+    expect(note.text()).toContain('送不到引擎')
+    // null 分支不得复用 $. 类的兜底叙述
+    expect(note.text()).not.toContain('default 兜底')
     w.unmount()
   }
-})
-
-it('ARE-6: JSON null 值 → 显形注记(null 送不到引擎)', async () => {
-  const w = await mountEditor(draftWithValue(null))
-  await selectOnlyRow(w)
-  const note = w.find('.are-val-note')
-  expect(note.exists()).toBe(true)
-  expect(note.text()).toContain('送不到引擎')
-  w.unmount()
 })
 
 it('ARE-7: 普通字面量值 → 无注记(不误报)', async () => {
