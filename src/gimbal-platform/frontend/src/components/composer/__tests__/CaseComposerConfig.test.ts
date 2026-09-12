@@ -118,6 +118,9 @@ describe('断言管理纯展示列表(spec v3 §5)', () => {
       path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: -1, asserts: [] },
     { id: 'inj-old', name: '旧版条目',
       anchor: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, injection: [], asserts: [] },
+    // v3 形状但悬空:仅经 deadEntryIds 判死(isLegacyEntry 不覆盖此路径)
+    { id: 'inj-dangling', name: '悬空 v3 条目',
+      path: { stepIndex: 9, source: 'body', jsonpath: '$.x' }, value: 1, asserts: [] },
   ] as any[]
 
   /** 生产用法镜像(同 mountWithParent)+ 展示列表 props + runEntry 监听 */
@@ -139,13 +142,16 @@ describe('断言管理纯展示列表(spec v3 §5)', () => {
   }
 
   it('CFG-ARE-1: 列表渲染(path 徽标/期望数)+ 旧版条目灰显不可执行', async () => {
-    const { w } = mountAreList({ deadEntryIds: ['inj-old'] })
+    const { w } = mountAreList({ deadEntryIds: ['inj-old', 'inj-dangling'] })
     const rows = w.findAll('.are-row')
-    expect(rows).toHaveLength(2)
+    expect(rows).toHaveLength(3)
     expect(rows[0].text()).toContain('步骤1 · $.amount')
     expect(rows[1].classes()).toContain('is-dead')
     expect(rows[1].text()).toContain('旧版条目,请重建')
     expect(rows[1].find('.are-run').exists()).toBe(false)   // 旧版无「加入本次执行」
+    // v3 形状但悬空(deadEntryIds 判死 — legacy 分支不覆盖):同样无「加入本次执行」
+    expect(rows[2].classes()).toContain('is-dead')
+    expect(rows[2].find('.are-run').exists()).toBe(false)
   })
 
   it('CFG-ARE-2: 活条目「加入本次执行」→ emit runEntry(id)', async () => {

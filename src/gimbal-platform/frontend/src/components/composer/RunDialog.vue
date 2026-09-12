@@ -97,7 +97,7 @@
           <!-- 断言注入条目(spec v3 §4 异常组):与数据集行交叉生成 case(N 行 × M 条目);
                悬空/旧版条目禁选 — 死判定由宿主预计算经 deadEntryIds 传入 -->
           <section v-if="assertionEntries.length" class="run-section rd-injection">
-            <label class="run-label">断言注入条目 <span class="muted small">(异常组, 可多选 — 跑在基线上, 与数据集行并列生成 case)</span></label>
+            <label class="run-label">断言注入条目 <span class="muted small">(异常组, 可多选 — 与数据集行交叉生成 case:N 行 × M 条目)</span></label>
             <el-checkbox-group v-model="injectionIds" class="rd-inj-group">
               <el-checkbox v-for="e in assertionEntries" :key="e.id" :value="e.id"
                 :disabled="isLegacyEntry(e) || deadIds.has(e.id)">

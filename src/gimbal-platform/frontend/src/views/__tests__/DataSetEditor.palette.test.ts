@@ -13,6 +13,7 @@ vi.mock('vue-router', () => ({
 
 import * as api from '@/api/scenario-composer'
 import DataSetEditor from '@/views/DataSetEditor.vue'
+import RunPanelHost from '@/components/composer/RunPanelHost.vue'
 
 const DRAFT = {
   definition: {
@@ -690,5 +691,24 @@ it('非共享 var(默认 DRAFT):每列恰一枚引用徽标', async () => {
   const badges = w.findAll('.data-table tr.row-field .ref-badge')
   expect(badges.length).toBe(2)
   expect(w.findAll('.data-table .shared-mark').length).toBe(0)
+  w.unmount()
+})
+
+// ── 「运行此行」未保存守卫(spec v3 §6 数据集入口)────────────────
+
+it('未保存数据集(datasetId=new):「运行此行」禁用且点击不挂载运行面板', async () => {
+  const w = mountEditor()
+  await flushPromises()
+  const addBtn = w.findAll('button').find((b) => b.text().includes('新增数据'))
+  await addBtn!.trigger('click')
+  await flushPromises()
+  // 行可加,按钮在 — 但数据集尚未保存,预填会指向不存在的库
+  const runBtn = w.find('button[aria-label="运行第 1 行"]')
+  expect(runBtn.exists()).toBe(true)
+  expect(runBtn.attributes('disabled')).toBeDefined()
+  expect(runBtn.attributes('title')).toContain('保存数据集')
+  await runBtn.trigger('click')
+  await flushPromises()
+  expect(w.findComponent(RunPanelHost).exists()).toBe(false)
   w.unmount()
 })

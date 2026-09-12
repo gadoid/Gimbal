@@ -78,6 +78,7 @@ it('DSL-1: 测试数据页双区 — 数据集网格 + 断言条目网格(path �
   expect(entryCards).toHaveLength(3)
   expect(entryCards[0].text()).toContain('金额为负')
   expect(entryCards[0].text()).toContain('步骤1 · $.amount')          // path 徽标
+  expect(entryCards[0].classes()).not.toContain('is-dead')            // 活条目不灰(stepCount=0 会全灰 → 此处兜底)
   expect(entryCards[1].classes()).toContain('is-dead')                // 悬空灰
   expect(entryCards[2].classes()).toContain('is-dead')                // 旧版灰
   expect(entryCards[2].text()).toContain('旧版条目,请重建')

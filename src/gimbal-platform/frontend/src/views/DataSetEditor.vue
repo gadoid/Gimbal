@@ -234,7 +234,17 @@
               />
             </td>
             <td class="td-action">
-              <el-button size="small" text :icon="VideoPlay" :aria-label="`运行第 ${i + 1} 行`" @click="runRow(i)" />
+              <!-- 「运行此行」要求数据集已在服务端存在(spec v3 §6):/data-sets/new 上
+                   datasetId='new',预填的 dataSetSelection 指向不存在的库 → RunDialog
+                   选择面收窄为空、面板落基线模式,确认后静默空跑。故未保存前禁用
+                   (判定沿用页头「删除」的 'new' 特例)。 -->
+              <el-button
+                size="small" text :icon="VideoPlay"
+                :aria-label="`运行第 ${i + 1} 行`"
+                :disabled="datasetId === 'new'"
+                :title="datasetId === 'new' ? RUN_ROW_UNSAVED_HINT : undefined"
+                @click="runRow(i)"
+              />
               <el-button size="small" text @click="cloneRow(i)">复制</el-button>
               <el-button size="small" text :icon="Delete" :aria-label="`删除数据 ${i + 1}`" @click="removeRow(i)" />
             </td>
@@ -331,8 +341,17 @@ const previewDialogOpen = ref(false)
 const panelOpen = ref(false)
 const panelPreset = ref<RunPreset | null>(null)
 
-/** 运行此行:行级 rowIndexes 预填(0-based = 行号) */
+/** 未保存数据集不可运行此行的提示(按钮 title 与守卫共用一处文案) */
+const RUN_ROW_UNSAVED_HINT = '先「保存数据集」再运行此行 — 未保存的行尚未分配服务端行号'
+
+/** 运行此行:行级 rowIndexes 预填(0-based = 行号)。
+ *  守卫:「new」数据集在服务端不存在,预填会指向不存在的库 — RunDialog
+ *  选择面收窄为空、面板落基线模式,确认后静默空跑,故直接拒绝。 */
 function runRow(i: number) {
+  if (datasetId === 'new') {
+    ElMessage.warning(RUN_ROW_UNSAVED_HINT)
+    return
+  }
   panelPreset.value = { dataSetSelection: [{ datasetId, rowIndexes: [i] }] }
   panelOpen.value = true
 }
