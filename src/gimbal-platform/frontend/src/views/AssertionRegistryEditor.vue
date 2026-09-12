@@ -241,13 +241,15 @@ function selectEntry(e: AssertionEntry | LegacyAssertionEntry) {
   selectedId.value = e.id
 }
 
-/** 悬空原因摘要(title 展示):registryIssues 人话投影 */
+/** 悬空原因摘要(title 展示):registryIssues 人话投影。
+ *  path-unresolvable 的判据是**可注入面**(spec v3.1 §2.1)= body 现存 ∪ 契约
+ *  声明 —— 文案必须说全两面,否则「body 无」会让用户以为契约已查过。 */
 function issueSummary(e: AssertionEntry | LegacyAssertionEntry): string {
   if (isLegacyEntry(e)) return '旧版条目(v2 形状),请在编排器重新标记创建'
   return registryIssues(e, stepCount.value, injectablePathsOfStep, assertTargetsOf)
     .map((iss) => {
       if (iss.kind === 'step-oob') return `步骤${iss.stepIndex + 1} 越界(场景共 ${stepCount.value} 步)`
-      if (iss.kind === 'path-unresolvable') return `步骤${iss.stepIndex + 1} body 无字段 ${iss.jsonpath}`
+      if (iss.kind === 'path-unresolvable') return `步骤${iss.stepIndex + 1} 契约与 body 均无字段 ${iss.jsonpath}`
       if (iss.kind === 'override-no-match') return `步骤${iss.stepIndex + 1} 无既有断言 ${iss.target}(override 无匹配)`
       return '旧版条目(v2 形状),请在编排器重新标记创建'
     })
