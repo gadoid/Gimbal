@@ -84,9 +84,12 @@ class Settings(BaseSettings):
     # 2026-09-12 取数合并后,同一份缓存也承载 carry 面的**原始声明列表**
     # (endpoint_declarations.declarations_of),故本值同时是 carry 契约面
     # 的更新上界:plate 会话中途发版时,carry 面最多滞后本值才更新。
+    # **正常路径**成立;plate 故障期见 DECLARED_PATHS_STALE_WINDOW_SEC。
     DECLARED_PATHS_TTL_SEC: float = 300.0
     # 声明面快照缓存上界与回退窗(spec 架构收敛 §3.1):LRU 容量 + 过期后
     # 仍可回退服务的时间窗(stale-while-error,刷新失败时用旧快照)。
+    # 注意回退窗对上面那条「更新上界」的放宽:plate 持续故障时 carry 面
+    # 最多可滞后 TTL + 本值(旧快照仍在服务 ≠ 面是新的)。
     DECLARED_PATHS_MAX_ENTRIES: int = 256
     DECLARED_PATHS_STALE_WINDOW_SEC: float = 3600.0
 
