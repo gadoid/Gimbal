@@ -234,12 +234,18 @@ async def declarations_of(endpoint_id: str) -> list | None:
         return list(entry.payload[0])
     if entry is not None and not fresh:
         # 过期但在回退窗内:尝试刷新;**失败则回退旧快照**(spec §1.1 D)
+        reason = ""                     # 先声明:出 except 块 Python 即 del e(裁定 C23)
         try:
             refreshed = await _refresh(endpoint_id)
-        except Exception:               # noqa: BLE001
+        except Exception as e:          # noqa: BLE001
             refreshed = None
+            # 原因此刻就在手里(裁定 C23):_refresh 抛的 RuntimeError 消息永不为空
+            # (``fail_reason[0] or "declaration fetch failed"``)⇒ 无需缺省,不做真值合并(§5)。
+            reason = str(e)
         if refreshed is None:           # ← 显式,不用 or:合法空目录 [] 也有意义
-            _warn_once(endpoint_id, "刷新失败,回退旧快照")
+            # 告警带原因(C23):本分支是「静默供旧契约面」的第一现场,而 _warn_once
+            # 按端点 + 冷却窗去重 —— 哑告警会压掉带原因的那条。动作短语保留。
+            _warn_once(endpoint_id, f"刷新失败({reason}),回退旧快照")
             return list(entry.payload[0])
         return list(refreshed)
     try:

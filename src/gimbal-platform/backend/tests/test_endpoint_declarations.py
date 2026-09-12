@@ -411,3 +411,46 @@ async def test_degradation_warning_ages_out_by_time(monkeypatch):
     assert any("plate status 503" in s for s in seen), seen
     plate_client.set_client_for_tests(None)
 
+
+async def test_stale_fallback_warning_carries_the_cause(monkeypatch):
+    """D:回退分支的告警必须带失败原因(裁定 C23)。
+
+    回退分支正是「静默供旧契约面」(fail-open-to-old,见 ``config.py`` 的
+    ``DECLARED_PATHS_STALE_WINDOW_SEC`` 注释)—— 运维排查「carry 面为何陈旧」的
+    第一现场;而 ``_warn_once`` 按端点 + 冷却窗去重,先发的哑告警会**压掉**后发
+    的带原因那条 ⇒ 回退路径自己就得把原因带上(它此刻就在 ``_refresh`` 抛的
+    ``RuntimeError`` 里)。动作短语「回退旧快照」是运维的判读锚点,必须保留。
+    """
+    from loguru import logger
+
+    calls = {"n": 0, "fail": False}
+    PAY = _envelope({"request": {"declarations": [
+        {"name": "cid", "path": "$.customer_id", "state": "carry", "required": True}]}})
+
+    async def handler(request):
+        calls["n"] += 1
+        if calls["fail"]:
+            return httpx.Response(503, json={"ok": False})
+        return httpx.Response(200, json=PAY)
+
+    _install(handler)
+    _reset_declared_paths_cache()
+    monkeypatch.setattr(settings, "DECLARED_PATHS_TTL_SEC", 0.0)     # 立即过期
+    monkeypatch.setattr(settings, "DECLARED_PATHS_STALE_WINDOW_SEC", 3600.0)
+    assert await declared_paths_of("ep-s") == frozenset({"$.customer_id"})   # 先成功入缓存
+    calls["fail"] = True
+    seen: list[str] = []
+    sink_id = logger.add(lambda m: seen.append(str(m)), level="WARNING")
+    try:
+        got = await declared_paths_of("ep-s")
+    finally:
+        logger.remove(sink_id)
+    assert got == frozenset({"$.customer_id"}), "前置:必须真的走回退分支"
+    stale = [s for s in seen if "ep-s" in s]
+    assert stale, seen
+    # 原因:_refresh 的 RuntimeError 文本(plate status 503)必须出现在告警里
+    assert any("plate status 503" in s for s in stale), seen
+    # 动作短语仍在(裁定要的是「补原因」,不是推翻 D3/改动作语义)
+    assert all("回退旧快照" in s for s in stale), seen
+    plate_client.set_client_for_tests(None)
+
