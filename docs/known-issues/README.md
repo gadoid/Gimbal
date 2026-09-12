@@ -53,7 +53,7 @@
 > | [platform/registry/normalize-registry-writeback.md](platform/registry/normalize-registry-writeback.md) | platform/frontend | **P0**（候选） | 未修复（**待裁定**） | 阶段二 E：`normalizeRegistry` 丢弃的非对象条目随保存写回服务端 ⇒ 静默丢数据 |
 > | [platform/judgment-face/dollar-brace-backfill.md](platform/judgment-face/dollar-brace-backfill.md) | platform/backend | **P1** | 未修复（**待裁定**） | 阶段二 G：`${...}` 类值也补了 `default`/`required`（与 docstring 相反）⇒ 「变量存在但为 null」静默写 null |
 > | [platform/declaration-cache/cache-freshness-divergence.md](platform/declaration-cache/cache-freshness-divergence.md) | platform（前/后端） | P2 | 已接受局限 | 前端会话级无 TTL × 后端 300s TTL ⇒ plate 发版后同会话内判定面分歧（刷新即愈） |
-> | [platform/declaration-cache/full-prefetch-on-light-pages.md](platform/declaration-cache/full-prefetch-on-light-pages.md) | platform/frontend | P2 | 已接受局限 | 轻量页也预取「每步的 `/full`」：每会话每不同端点 ≤1 次（缓存 + 负缓存 + 在飞收敛兜底） |
+> | [platform/declaration-cache/full-prefetch-on-light-pages.md](platform/declaration-cache/full-prefetch-on-light-pages.md) | platform/frontend | P2 | 已接受局限 | 轻量页也预取「每步的 `/full`」：**成功端点**每会话 ≤1 次（缓存 + 在飞收敛）；失败端点见 `no-retry-after-degradation.md` |
 > | [platform/judgment-face/wildcard-normalization-gap.md](platform/judgment-face/wildcard-normalization-gap.md) | platform（前/后端） | P2 | 已接受局限 | `[*]` 不被归一：前端判死、后端靠 `exists` 兜底才可能判活（手写路径才触发） |
 > | [platform/judgment-face/declaration-template-granularity.md](platform/judgment-face/declaration-template-granularity.md) | platform × plate 契约 | P2 | 已接受局限 | 声明面是模板态（`[i]` 不进目录）⇒ 覆盖单位是模板，无法表达「只第 N 个」；写侧按 `_set_at` 补位 |
 > | [platform/run-journal/jsonl-append-race.md](platform/run-journal/jsonl-append-race.md) | platform/backend | **P1** | 未修复 | `_append_jsonl` 并发 append 非原子 ⇒ 撕裂行（现场物证 2026-09-12.jsonl:6764），并使两条测试误报 |
@@ -65,5 +65,6 @@
 > | [platform/scenario-store/step-count-filtered-base.md](platform/scenario-store/step-count-filtered-base.md) | platform/backend × 前端 | P2 | 未修复 | `Scenario.stepCount` 取自**过滤后**步骤列表；今天两侧口径一致，误用为**条目**下标上界时才分歧 |
 > | [platform/judgment-face/stale-snapshot-test-latent-green.md](platform/judgment-face/stale-snapshot-test-latent-green.md) | platform/backend/tests | P2 | 未修复 | **latent-green**：回退窗用例在 `age == 0` 时静默改走 TTL 命中分支，断言照样绿 |
 > | [platform/declaration-cache/judge-degraded-observability.md](platform/declaration-cache/judge-degraded-observability.md) | platform/backend | P2 | 未修复 | `judgeDegraded` 缺席无法区分「没降级」与「降级但零跳过」（逐步骤告警已补偿） |
+> | [platform/declaration-cache/no-retry-after-degradation.md](platform/declaration-cache/no-retry-after-degradation.md) | platform/frontend | **P1** | 未修复 | 挂载时刻 plate 抖动一次 ⇒ 负缓存写下后**无重试通道**（`ensure()` 只在挂载 / 步骤面变化时触发）⇒ 整个会话判定从严、契约声明上的条目被误标悬空且不可勾选 |
 > | [platform/documentation/pre-plan-retirement-comments.md](platform/documentation/pre-plan-retirement-comments.md) | docs/adr + 代码注释 | P2 | 未修复（**独立工作**） | 计划之前（早于 `bd99740`）的退场仍靠注释承载，ADR-0003 无对应行；补录是独立工作 |
 > | [platform/documentation/platform-api-doc-false-sections.md](platform/documentation/platform-api-doc-false-sections.md) | 文档（平台 API 文档） | **P1** | 未修复 | `/api/cases` 家族五节描述的端点已不存在 ⇒ 需**端点级重写**（逐行改名会把更大假陈述包装成「已核实」）；另附可独立修的组件名一处 |

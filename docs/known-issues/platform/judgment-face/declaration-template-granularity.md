@@ -46,7 +46,7 @@ if not e.path.startswith(parent.path + "."):
 - **「声明了模板」≠「该下标真的存在」**：条目锚 `$.items[9].sku` 时，判定按模板声明判**活**，但 body 里可能根本没有第 9 项。此时写侧的处置是**自动补位**而不是报错：
 
   ```python
-  # src/gimbal/utils/jsonpath.py:455-463
+  # src/gimbal/utils/jsonpath.py:461-463
   if idx >= 0:
       while len(data) <= idx:
           data.append(None)     # 自动扩展到该下标

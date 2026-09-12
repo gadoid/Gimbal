@@ -39,7 +39,20 @@ ADR-0003 把退场知识的归宿定成**唯一一处**：
 
 **本表核对**：ADR-0003 现有 8 行（`2026-09-09` ~ `2026-09-13`），全部归本计划及其前一轮的退场；`grep -n "D2\|环境\|prefix\|chip" docs/adr/0003-retired-features-log.md` **零命中** —— 即上表那些退场在 ADR-0003 里**没有行**。
 
-**范围是有界的、但我没有做精确清点**：用退场词表（`已退役|退役|已移除|原为|已删除|不再支持`）在 `src/gimbal-platform/{frontend/src,backend/app}` 上 grep 得到 **62 行 / 39 文件**。该数字是**候选上界**而非违规数 —— 其中一部分是「描述当前行为」的正常措辞（例如「该键不再写入」），不属历史叙述。逐条真伪需要逐文件读，本记录**不做这个清点**（见 §3）。
+**范围是有界的、但我没有做精确清点**：退场词表（`已退役|退役|已移除|原为|已删除|不再支持`）在同样两条路径上的计数**取决于搜索命令**（是否含非源码扩展名、是否只搜已跟踪文件），故把命令与数字一并写出，便于复现：
+
+```bash
+$ git grep -nE '已退役|退役|已移除|原为|已删除|不再支持' -- \
+    src/gimbal-platform/frontend/src src/gimbal-platform/backend/app | wc -l
+63        # 63 行 / 39 文件（git grep = 只搜已跟踪文件；比下一条多出的那 1 行是
+          # src/gimbal-platform/frontend/src/styles/status-colors.css 的一行注释）
+$ grep -rnE '已退役|退役|已移除|原为|已删除|不再支持' \
+    src/gimbal-platform/frontend/src src/gimbal-platform/backend/app \
+    --include=*.vue --include=*.ts --include=*.py | wc -l
+62        # 62 行 / 38 文件（把扩展名限制到 .vue / .ts / .py）
+```
+
+两个数字都是**候选上界**而非违规数 —— 其中一部分是「描述当前行为」的正常措辞（例如「该键不再写入」），不属历史叙述。逐条真伪需要逐文件读，本记录**不做这个清点**（见 §3）。
 
 ---
 

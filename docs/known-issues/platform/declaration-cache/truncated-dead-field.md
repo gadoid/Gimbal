@@ -37,7 +37,7 @@ _cache().put(endpoint_id, (decls, frozenset(catalog_paths(decls))), _now_iso())
 
 ## 1. 为什么接受
 
-这是**「一套缓存」裁定的固有代价**（spec §3.1）：把 `TtlLruCache` 的载荷从 `rows: list[dict]` 泛化为 `payload`（保留 `truncated` / `fetched_wall` / `fetched_mono`），让声明面与 query-view 行集共用同一套 TTL / LRU / 回退语义。`truncated` 属于**行集特有**的语义（查询结果被截断标记，`query_view_cache.py:7` 的模块说明「§5.1 截断标记随行集入缓存(命中也透出)」），泛化时选择**保留字段**而不是为两个消费者拆表/加分支 —— 因为拆表就等于放弃收敛。
+这是**「一套缓存」裁定的固有代价**（spec §3.1）：把 `TtlLruCache` 的载荷从 `rows: list[dict]` 泛化为 `payload`（保留 `truncated` / `fetched_wall` / `fetched_mono`），让声明面与 query-view 行集共用同一套 TTL / LRU / 回退语义。`truncated` 属于**行集特有**的语义（查询结果被截断标记，`query_view_cache.py:27` 的行内注释「§5.1 截断标记随行集入缓存(命中也透出)」），泛化时选择**保留字段**而不是为两个消费者拆表/加分支 —— 因为拆表就等于放弃收敛。
 
 - 代价：一个恒 `False`、无人读的字段挂在声明面条目上（字段名与实际语义不符的**轻度**形态）；
 - 收益：不用为第二个消费者复制一套 TTL/LRU/回退实现（spec §3.1 的整条理由）。
@@ -48,7 +48,7 @@ _cache().put(endpoint_id, (decls, frozenset(catalog_paths(decls))), _now_iso())
 
 **残余风险**：低，但有一个**读错的方向**值得点名 ——
 
-- 若有人看到声明面条目的 `truncated` 字段，**不要**据此认为「声明面可能被截断」。声明面是**完整**的原始列表：`_fetch_declarations`（`endpoint_declarations.py:163-197`）要么返回完整列表、要么 `None`（降级），**没有中间态**；`declarations` 非 list 时直接 `RuntimeError`（`:192-193`）而不是截断。
+- 若有人看到声明面条目的 `truncated` 字段，**不要**据此认为「声明面可能被截断」。声明面是**完整**的原始列表：`_fetch_declarations`（`endpoint_declarations.py:163-197`，函数边界以「下一处 `async def` 在 `:200`」为准）要么返回完整列表、要么 `None`（降级），**没有中间态**；`declarations` 非 list 时直接 `RuntimeError`（`:192-193`）而不是截断。
 - 反向：行集那条链的 `truncated` 是**活**的（`query_view_runner` 消费），改动缓存时不要为了「清掉死字段」把行集的语义一起删了。
 
 **读者应当怎么做**：把 `truncated` 读作「**行集**专用字段」；声明面的完整性靠 `None`（降级）与 `[]`（真无声明）的区分来表达（`endpoint_declarations.py:222-232` 的契约，spec §1.1 Y 的「不抹平」）。

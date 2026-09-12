@@ -36,7 +36,9 @@ watch(stepEndpointIds, () => ensure(), { immediate: false })
 
 后两个（数据页、断言管理编辑器）**不渲染画布**，只显示条目列表与数据集 —— 它们照样会把**该场景每个步骤的**端点契约全量拉一遍。
 
-**成本上界**：`ensureEndpointFull` 是每端点幂等的（命中缓存 / 在飞收敛 / 负缓存三条路径都直接返回，`useEndpointFull.ts:61-84`），所以**一次页面会话内，每个不同 endpoint 至多 1 次 `/full`**；N 个不同端点 ⇒ 至多 N 次。步骤面变化（`stepEndpointIds` 变化）时只补取**新出现**的端点。
+**成本上界（只对成功路径成立）**：`ensureEndpointFull` 对**已缓存**端点与**在飞**端点都直接返回（`useEndpointFull.ts:61-69`），所以**成功取回的端点在一次页面会话内至多 1 次 `/full`**；N 个不同端点 ⇒ 至多 N 次。步骤面变化（`stepEndpointIds` 变化）时只补取**新出现**的端点。
+
+**失败路径**不在这个上界内：失败的端点写负缓存 `failedAt`，只在 `FAILED_RETRY_MS = 10_000` 窗口内拦截（`useEndpointFull.ts:46`、`:64-67`）—— 窗口过后**再次调用 `ensure()`（重新挂载 / 步骤面变化）会重发**。即「每会话 ≤1 次」是成功端点的性质，不是端点的性质；失败端点既可能重发、也可能在无人触发 `ensure()` 时一直不重试（两面同见 `no-retry-after-degradation.md`）。
 
 ---
 
