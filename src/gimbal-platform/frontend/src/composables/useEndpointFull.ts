@@ -1,11 +1,20 @@
 /**
- * useEndpointFull.ts — plate `/full` 结构契约的**唯一**会话级缓存。
+ * useEndpointFull.ts — plate `/full` 结构契约的**会话级共享缓存**。
+ * 共享面 = 判定面(四处悬空投影:编辑器 / CaseComposer / CaseDataSetsList /
+ * RunPanelHost)∪ 画布渲染 ∪ useFieldDescriptions 的字段说明。
+ * **不是唯一取数口**:`CaseComposerCatalog` 的目录面板直接调
+ * `getFullEndpoint`(用户触发的浏览取数,不属判定路径,故不合并)。
  *
  * 抽取自两份同款实现(CaseComposerCanvas 的端点契约缓存、useFieldDescriptions
  * 的字段说明缓存)—— 同一模式留两份副本就会各自漂移,收成一份:
  *
  *   - 每 endpoint 一个会话内恰好一次请求;并发收敛为同一 Promise。
- *   - 零持久化:Plate 是结构权威源,每次进页面拿最新结构(发版后零迁移)。
+ *   - **会话级**(模块级 Map,非 `<script setup>` 实例变量):画布的契约缓存
+ *     收编进来时由「每挂载一份」升为「同一 SPA 会话内不再重取」——
+ *     plate 中途发版需刷新页面才见新结构(前端缓存**无 TTL**,与后端
+ *     `endpoint_declarations` 的 300s TTL 不同;差异方向:前端更粘)。
+ *   - 零持久化:缓存只活在本次页面会话(刷新即失效),不落库 / 不落
+ *     localStorage —— Plate 始终是结构权威源,平台侧不留结构快照。
  *   - 失败 fail-soft:返回 undefined 且**不入缓存**(下次调用可重试),
  *     端点级状态记 'failed' 供占位/徽标降级。
  *   - Map 变更不触发 computed → 用版本号 `endpointFullVersion` 显式依赖。

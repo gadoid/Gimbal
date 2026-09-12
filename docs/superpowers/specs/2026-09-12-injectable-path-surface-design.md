@@ -81,7 +81,7 @@ resolvable(jp) ⇔  ( jp ∈ injectable )                                   # �
 1. **取声明面**:在 §2.5 悬空过滤**之前**,收集被选中条目实际引用到的步骤索引,对有 `endpoint_id` 者并发取 `/full` 的声明面。
 2. **缓存**:进程级 `endpoint_id → (取数时刻, 原始声明列表)`(即 `_CACHE: dict[str, tuple[float, list]]`;`frozenset[str]` 形态的 path 全集由 `declared_paths_of` 从该列表派生);**带 TTL(默认 300s,可配)**,因为后端进程可能长时间存活,而 plate 发版是运维事件 —— TTL 用来给"快照过期"兜一个上界。不落库、不写场景文档(与前端 `useEndpointFull` 同一条纪律:plate 是结构权威,零持久化)。
    **行为记录 — carry 面取数的缓存化(2026-09-12 取数合并,T3)**:`carry_injection` 原本**每次 dispatch 现取**契约,取数合并进本模块的共享缓存后,**carry 面的契约取数也从「每 dispatch 现取」变为「进程缓存 + TTL 300s」**。影响:plate 在**会话中途发版**时,carry 面最多**滞后一个 TTL** 才更新;其间 carry 按**旧**契约面注入。性质:**有界、可配**(`DECLARED_PATHS_TTL_SEC`,`core/config.py`),且比前端那份「会话级、无 TTL」的同类缓存(`useEndpointFull` 的模块级 `Map`)**更严**。
-   **共用边界**(勿把本模块读作「唯一 `/full` 取数路径」):本缓存只收敛**两个**消费者 —— `declared_paths_of`(dispatch 悬空判定面)与 `declarations_of`(`carry_injection.build_carry_context` 的 carry 面);`adaptation_service._plate_full_endpoint`(其结果被 `routers/carry.py` / `carry_store.py` 当 declarations 读)与 `routers/endpoint_catalog.py` 各有**自己的**取数,**不共享**本缓存。
+   **共用边界**(勿把本模块读作「唯一 `/full` 取数路径」):本缓存只收敛**两个**消费者 —— `declared_paths_of`(dispatch 悬空判定面)与 `declarations_of`(`carry_injection.build_carry_context` 的 carry 面);`adaptation_service._plate_full_endpoint`(其结果被 `routers/carry.py` / `carry_store.py` 当 declarations 读)与 `routers/endpoint_catalog.py` 各有**自己的**取数,**不共享**本缓存。前端侧同理:`composables/useEndpointFull.ts` 是**判定面与画布/字段说明面的会话级共享缓存**,不是「唯一 `/full` 取数口」—— `components/composer/CaseComposerCatalog.vue` 直接调 `getFullEndpoint`(用户触发的浏览取数,不属判定路径,本轮明确**不合并**)。
 3. **`entry_issues` 签名**:增参
    `declared_paths_of: Callable[[int], set[str]]`(缺省 `lambda si: set()` 时行为等于今天);path 判定改为 §2.1 的 `injectable`。
 4. **失败与告警**:取数失败 → 空集 + 降级 warning;熔断沿用既有 plate 熔断计数(P6),不新增机制。
@@ -104,6 +104,7 @@ resolvable(jp) ⇔  ( jp ∈ injectable )                                   # �
 2. **只放宽、不收紧**:没有任何路径会变得更严,不会出现「原本能跑的条目突然被判死」。
 3. **审计与回放不变**:审计三定位(datasetId + rowIndex + injectionId)与 stem 命名不动。
 4. **降级可见**:plate 不可达时判定从严 + 一条 warning,不会静默放宽。
+5. **行为变化 — 画布契约缓存由「每挂载一份」升为「会话级共享」**(2026-09-12 缓存收编,`81b46d8`):画布原先那份 `/full` 缓存写在 `<script setup>` 里,实际是**每挂载一份**(每次重挂载都重拉,同名注释声称「会话级」名不副实);收编进 `composables/useEndpointFull.ts` 的模块级 Map 后,画布 / 判定面 / 字段说明共用一份。影响:**同一 SPA 会话内每端点只拉一次**,plate 在会话中途发版需**刷新页面**才见新结构(前端缓存**无 TTL**,与 §3 后端那份 300s TTL 的差异方向:前端更粘 —— 后端至少有界可配,前端只随页面刷新失效)。
 
 ## 6. 边界与协议位(YAGNI,本次不做)
 

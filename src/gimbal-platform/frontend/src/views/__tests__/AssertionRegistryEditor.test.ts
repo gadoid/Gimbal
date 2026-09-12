@@ -256,7 +256,7 @@ it('ARE-8b: path.jsonpath 非字符串(缺键 / 数字 / 对象)→ 不崩渲染
   w.unmount()
 })
 
-it('ARE-9: 新建条目的 path 输入 — 按所选步骤给出该步 body 字段树候选', async () => {
+it('ARE-9: 新建条目的 path 输入 — 按所选步骤给出该步可注入面候选(body 现存 ∪ 契约声明,spec v3.1 §2.1)', async () => {
   const w = await mountEditor()
   const pathInput = w.findComponent(JsonPathInput)
   expect(pathInput.exists()).toBe(true)

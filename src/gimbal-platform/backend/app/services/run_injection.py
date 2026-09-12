@@ -160,10 +160,10 @@ def entry_issues(
     assert_targets_of: Callable[[int], set[str]],
     declared_of: Callable[[int], Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """悬空检测(前端 utils/assertion-registry.ts 的 Python 同构,spec v3 §2):
-    旧形状条目(无 path)/ stepIndex 越界 / path 不落在该步**可注入面**
-    (契约声明 ∪ body 现存)上 / override 无匹配。四类 issue 的判序与守卫
-    逐条对齐前端 ``registryIssues``。
+    """悬空检测(前端 utils/assertion-registry.ts 的**近乎同构**,已知差异见下;
+    spec v3 §2):旧形状条目(无 path)/ stepIndex 越界 / path 不落在该步
+    **可注入面**(契约声明 ∪ body 现存)上 / override 无匹配。四类 issue 的
+    判序与守卫逐条对齐前端 ``registryIssues``。
 
     可注入面两侧同构(spec v3.1 §2.1 的四子句公式):body 叶子 ∪ 其容器前缀
     ∪ 归一后的声明 ∪ 其容器前缀,两形态各跑一次前缀子句,见

@@ -152,7 +152,7 @@ describe('可注入面 — 契约声明字段地址化(spec v3.1 §2.1)', () => 
     const s = injectablePathSetOf(fieldPathsOf(STEP_FORM_ONLY as any), DECLS)
     expect(pathResolvable('$.customer_id', s)).toBe(true)   // carry:放宽后可用
     expect(pathResolvable('$.items[0].sku', s)).toBe(true)  // 实例形态对齐模板声明
-    expect(pathResolvable('$.items[1]', s)).toBe(true)      // 容器前缀
+    expect(pathResolvable('$.items[1]', s)).toBe(true)      // 模板形态精确命中声明容器条目 $.items
     expect(pathResolvable('$.nope', s)).toBe(false)         // 两边都没有 → 仍判死(拼写错误仍被抓)
   })
 
