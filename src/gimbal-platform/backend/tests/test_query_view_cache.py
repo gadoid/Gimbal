@@ -13,7 +13,7 @@ def test_fresh_hit():
     c, t = _cache()
     c.put("v", [{"a": 1}], "2026-09-08T00:00:00Z")
     e, fresh = c.lookup("v")
-    assert fresh and e.rows == [{"a": 1}] and e.fetched_wall == "2026-09-08T00:00:00Z"
+    assert fresh and e.payload == [{"a": 1}] and e.fetched_wall == "2026-09-08T00:00:00Z"
 
 
 def test_lazy_expiry_then_stale_window():
@@ -21,7 +21,7 @@ def test_lazy_expiry_then_stale_window():
     c.put("v", [{}], "w1")
     t["now"] += 301            # 过 TTL,仍在 stale 窗
     e, fresh = c.lookup("v")
-    assert not fresh and e is not None and e.rows == [{}]
+    assert not fresh and e is not None and e.payload == [{}]
 
 
 def test_beyond_stale_window_is_true_miss():

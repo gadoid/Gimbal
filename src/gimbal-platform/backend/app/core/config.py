@@ -85,6 +85,10 @@ class Settings(BaseSettings):
     # (endpoint_declarations.declarations_of),故本值同时是 carry 契约面
     # 的更新上界:plate 会话中途发版时,carry 面最多滞后本值才更新。
     DECLARED_PATHS_TTL_SEC: float = 300.0
+    # 声明面快照缓存上界与回退窗(spec 架构收敛 §3.1):LRU 容量 + 过期后
+    # 仍可回退服务的时间窗(stale-while-error,刷新失败时用旧快照)。
+    DECLARED_PATHS_MAX_ENTRIES: int = 256
+    DECLARED_PATHS_STALE_WINDOW_SEC: float = 3600.0
 
     # Set in model_post_init — True when the corresponding secret was
     # freshly generated because env/.env didn't provide one.  Not part of

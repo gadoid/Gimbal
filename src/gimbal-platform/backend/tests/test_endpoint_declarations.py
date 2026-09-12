@@ -273,3 +273,141 @@ async def test_cancelled_creator_still_clears_inflight():
     assert await _wait_until(lambda: "ep-slow" not in _INFLIGHT)
     assert isinstance(await shared, list)    # 结果就绪且可用(未被打断)
 
+
+# ── 声明面缓存收编 TtlLruCache(spec 架构收敛 §3.1;D/S/R/U)─────────────
+
+async def test_stale_snapshot_survives_a_failed_refresh(monkeypatch):
+    """D:TTL 过期后刷新失败 → **旧快照仍服务**(stale-while-error)。"""
+    calls = {"n": 0, "fail": False}
+    PAY = {"ok": True, "dim": "endpoint", "data": {"item": {"request": {"declarations": [
+        {"name": "cid", "path": "$.customer_id", "state": "carry", "required": True}]}}}}
+
+    async def handler(request):
+        calls["n"] += 1
+        if calls["fail"]:
+            return httpx.Response(503, json={"ok": False})
+        return httpx.Response(200, json=PAY)
+
+    plate_client.set_client_for_tests(httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://plate-test"))
+    _reset_declared_paths_cache()
+    monkeypatch.setattr(settings, "DECLARED_PATHS_TTL_SEC", 0.0)        # 立即过期
+    monkeypatch.setattr(settings, "DECLARED_PATHS_STALE_WINDOW_SEC", 3600.0)
+    assert await declared_paths_of("ep-s") == frozenset({"$.customer_id"})   # 先成功入缓存
+    calls["fail"] = True
+    got = await declared_paths_of("ep-s")
+    assert got == frozenset({"$.customer_id"}), "刷新失败时应回退旧快照,而不是降级为 None"
+    plate_client.set_client_for_tests(None)
+
+
+async def test_projection_is_cached_not_recomputed(monkeypatch):
+    """R:投影只在**取数**时算一次;TTL 命中路径不再重算(以 catalog_paths 调用计数断言)。"""
+    import app.services.endpoint_declarations as ed
+
+    calls = {"n": 0}
+    real = ed.catalog_paths
+
+    def _counting(decls):
+        calls["n"] += 1
+        return real(decls)
+
+    async def _ok_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"ok": True, "dim": "endpoint", "data": {"item": {
+            "request": {"declarations": [{"name": "a", "path": "$.a", "state": "form", "required": True}]}}}})
+
+    monkeypatch.setattr(ed, "catalog_paths", _counting)
+    plate_client.set_client_for_tests(httpx.AsyncClient(
+        transport=httpx.MockTransport(_ok_handler), base_url="http://plate-test"))
+    _reset_declared_paths_cache()
+    await declared_paths_of("ep-p")
+    after_first = calls["n"]
+    await declared_paths_of("ep-p")          # TTL 内命中缓存
+    assert calls["n"] == after_first == 1     # 投影没有第二次遍历
+    plate_client.set_client_for_tests(None)
+
+
+async def test_cache_has_lru_bound(monkeypatch):
+    """S:超过 max_entries 时逐出最旧 —— 不再是"永不淘汰"。"""
+    hits: list[str] = []
+
+    async def handler(request):
+        hits.append(request.url.path)
+        return httpx.Response(200, json={"ok": True, "dim": "endpoint",
+                                         "data": {"item": {"request": {"declarations": []}}}})
+
+    monkeypatch.setattr(settings, "DECLARED_PATHS_MAX_ENTRIES", 1)
+    plate_client.set_client_for_tests(httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://plate-test"))
+    _reset_declared_paths_cache()
+    await declared_paths_of("ep-1")
+    await declared_paths_of("ep-2")
+    await declared_paths_of("ep-1")           # ep-1 已被逐出 ⇒ 必须重取
+    assert len(hits) == 3
+    plate_client.set_client_for_tests(None)
+
+
+async def test_fresh_window_starts_at_success_not_at_request_start(monkeypatch):
+    """U:TTL 起点取在**成功之后**,不是请求发起时。
+
+    取数耗时 > TTL 时,时间戳若打在请求发起时,条目**一入缓存即已过期**
+    ⇒ 每次调用都重取(声明面缓存在慢 plate 上退化为无缓存)。
+    """
+    hits: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        hits.append(request.url.path)
+        await asyncio.sleep(0.4)             # 慢取数:耗时 > TTL
+        return httpx.Response(200, json=_envelope(_declarations_item()))
+
+    monkeypatch.setattr(settings, "DECLARED_PATHS_TTL_SEC", 0.25)
+    _install(handler)
+    _reset_declared_paths_cache()
+    assert await declared_paths_of("ep-slow-ttl") == _PATHS     # 取数耗时 0.4s > TTL 0.25s
+    assert await declared_paths_of("ep-slow-ttl") == _PATHS
+    assert len(hits) == 1, "时间戳应在取数成功后打点(否则慢取数一入缓存即过期)"
+    plate_client.set_client_for_tests(None)
+
+
+async def test_cold_fetch_path_returns_a_copy_too(_install_transport):
+    """冷取数路径同样返回浅拷贝(投影入缓存后,这条不再被上一条用例间接覆盖)。
+
+    投影随取数缓存后,``declared_paths_of`` 只读缓存里那次算好的 frozenset ——
+    ``test_returned_list_is_a_copy_not_the_cached_object`` 清空列表后仍能拿到
+    path 集,对**冷取数路径是否拷贝**已无判别力。本用例直接钉住缓存载荷。
+    """
+    first = await declarations_of("fin.order.add")       # 冷路径:唯一一次取数
+    assert first is not None and len(first) == 3
+    first.clear()                                       # 疏忽/恶意的调用方
+    again = await declarations_of("fin.order.add")      # 缓存命中路径
+    assert again is not None and len(again) == 3, "冷取数路径也必须是浅拷贝:缓存载荷被调用方清空了"
+    assert len(_install_transport) == 1                 # 缓存未破坏 → 未重取
+
+
+async def test_degradation_warning_ages_out_by_time(monkeypatch):
+    """S:降级告警按**时间窗**老化,不再只在「同 id 后来成功」时才清。
+
+    旧实现 ``_WARNED`` 是集合:同一端点在**当前失败链**内只告警一次,清空
+    仅由「同 id 后来成功」驱动 —— 一个长期失败的端点在恢复前彻底失声。
+    冷却窗设 0 ⇒ 每次失败都该重新告警(判别力:计数 2,旧实现恒为 1)。
+    """
+    import app.services.endpoint_declarations as ed
+    from loguru import logger
+
+    async def handler(request):
+        return httpx.Response(503, json={"ok": False})
+
+    _install(handler)
+    _reset_declared_paths_cache()
+    monkeypatch.setattr(ed, "_WARN_COOLDOWN_SEC", 0.0)
+    seen: list[str] = []
+    sink_id = logger.add(lambda m: seen.append(str(m)), level="WARNING")
+    try:
+        assert await declared_paths_of("ep-warn") is None
+        assert await declared_paths_of("ep-warn") is None
+    finally:
+        logger.remove(sink_id)
+    assert len([s for s in seen if "ep-warn" in s]) == 2
+    # 告警必须带着**失败原因**(告警是降级链路上唯一的遥测:plate 503 / 信封缺
+    # item / 连接失败要分得出来)。
+    assert any("plate status 503" in s for s in seen), seen
+    plate_client.set_client_for_tests(None)
+
