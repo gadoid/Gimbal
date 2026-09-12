@@ -113,6 +113,55 @@ def test_entry_issues_path_unresolvable_and_legacy():
     assert entry_issues(legacy, 2, body_of, targets) == [{"kind": "legacy-entry"}]
 
 
+# ── 可注入面(spec v3.1 §2.1):声明命中的路径不再判悬空 ──────────────
+_DECLARED = frozenset({"$.bl_no", "$.customer_id", "$.items", "$.items.sku"})
+
+
+def test_declared_path_is_resolvable_even_when_absent_from_body():
+    """carry 字段(契约声明、body 无)放宽后可寻址 —— 本次 spec 的核心。
+
+    缺省(第 5 参不传)→ 行为等于今天:只认 body 面 → 该 path 仍判死
+    (兼容面,见 test_empty_declared_of_falls_back_to_body_only)。"""
+    entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                     "jsonpath": "$.customer_id"},
+             "value": 1, "asserts": []}
+    body_of = _body_of(DEF["steps"])          # DEF 的 body 只有 $.amount/$.bl_no
+    targets = _targets_of(DEF["steps"])
+    assert {"kind": "path-unresolvable", "stepIndex": 0,
+            "jsonpath": "$.customer_id"} in entry_issues(entry, 2, body_of, targets)
+    assert entry_issues(entry, 2, body_of, targets, lambda si: _DECLARED) == []
+
+
+def test_undeclared_path_still_dangling():
+    """两边都没有 → 仍判死(拼写错误仍被抓)。"""
+    entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                     "jsonpath": "$.ghost"},
+             "value": 1, "asserts": []}
+    issues = entry_issues(entry, 2, _body_of(DEF["steps"]), _targets_of(DEF["steps"]),
+                          lambda si: _DECLARED)
+    assert {"kind": "path-unresolvable", "stepIndex": 0, "jsonpath": "$.ghost"} in issues
+
+
+def test_instance_path_matches_template_declaration():
+    """实例路径 $.items[0].sku 对齐契约模板声明 $.items.sku。"""
+    body_of = _body_of([{"request": {"body": {}}}])       # body 里没有 items
+    entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                     "jsonpath": "$.items[0].sku"},
+             "value": 1, "asserts": []}
+    assert entry_issues(entry, 1, body_of, lambda si: set(),
+                        lambda si: _DECLARED) == []
+
+
+def test_empty_declared_of_falls_back_to_body_only():
+    """降级:声明面为空集 → 判定等于旧的 body 面(从严)。"""
+    entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                     "jsonpath": "$.customer_id"},
+             "value": 1, "asserts": []}
+    assert {"kind": "path-unresolvable", "stepIndex": 0, "jsonpath": "$.customer_id"} in \
+        entry_issues(entry, 2, _body_of(DEF["steps"]), _targets_of(DEF["steps"]),
+                     lambda si: frozenset())
+
+
 # ── dispatcher 集成(spec v3 §3:Assign 直补落 case.json;skip 链)────
 # 骨架不变:建场景(assertion_registry 注入)→ POST /api/runs → 断言
 # case 数 / case.json patch / rows 回放。
@@ -210,6 +259,125 @@ async def test_dispatcher_fans_out_injection_entries(
     assert len(rows) == 2
     assert all(row["injectionId"] == "inj-live" for row in rows)
     assert all(row["datasetId"] is None for row in rows)
+
+
+async def test_dispatcher_keeps_entry_anchored_on_declared_carry_path(
+    client, plate_mock: PlateMock, monkeypatch
+):
+    """契约声明了 $.customer_id(carry,body 无)→ 条目不再被 skip;
+    plate 不可得声明面时该条目仍被 skip(降级从严)。"""
+    from .helpers import make_draft as _draft, wait_until as _wait
+    from .test_run_m1_capabilities import _patch_launch_capture
+    from .test_scenario_visibility_and_copy import _member
+
+    bob = await _member(client, "bob")
+    draft = _draft(steps=[
+        {"id": "s1", "api": {"kind": "api", "service": "fin-svc", "method": "POST",
+                             "path": "/order", "headers": {},
+                             "view_hints": {"endpoint_id": "ep-carry-x"}},
+         "request": {"body": {"bl_no": "${var.bl_no}"}}, "strategy": []},
+        {"id": "s2", "strategy": []},
+    ], vars_map={"bl_no": "BL1"})
+    draft["assertion_registry"] = {"entries": [{
+        "id": "inj-carry", "name": "carry 偏离",
+        "path": {"stepIndex": 0, "source": "body", "jsonpath": "$.customer_id"},
+        "value": 261, "asserts": []}]}
+    r = await client.post("/api/scenarios", headers=bob, json=draft)
+    assert r.status_code in (200, 201), r.text
+
+    plate_mock.behaviour = "echo"
+    plate_mock.fulls["ep-carry-x"] = {"request": {"declarations": [
+        {"name": "bl_no", "path": "$.bl_no", "state": "form", "required": True},
+        {"name": "customer_id", "path": "$.customer_id", "state": "carry", "required": True},
+    ]}}
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+
+    r = await client.post("/api/runs", headers=bob, json={
+        "scenarioId": "sc-test", "dataSetIds": [], "injectionEntryIds": ["inj-carry"]})
+    assert r.status_code == 201, r.text
+    await _wait(lambda: len(cases) >= 1)
+    assert len(cases) == 1                      # 未被 skip(此前会是 0 case)
+    st = cases[0]["steps"][0]["strategy"]
+    assert {"kind": "assign", "source": 261, "target": "$.request_body.customer_id"} in st
+
+    # 降级:声明面不可得 → 同一条目重新被判死(skip),不炸 dispatch
+    plate_mock.fulls.pop("ep-carry-x")
+    from app.services.endpoint_declarations import _reset_declared_paths_cache
+    _reset_declared_paths_cache()
+    cases.clear()
+    r = await client.post("/api/runs", headers=bob, json={
+        "scenarioId": "sc-test", "dataSetIds": [], "injectionEntryIds": ["inj-carry"]})
+    assert r.status_code == 201, r.text
+    # 降级从严:条目仍被判死 → skip;派发的只剩基线 case(无该条目的
+    # Assign 直补)—— 判定退回 body 面,不是"整单不发"。
+    await _wait(lambda: len(cases) >= 1)
+    assert len(cases) == 1
+    assert {"kind": "assign", "source": 261,
+            "target": "$.request_body.customer_id"} not in \
+        cases[0]["steps"][0]["strategy"]
+
+
+async def test_dispatcher_fetches_declaration_face_only_for_referenced_steps(
+    client, plate_mock: PlateMock, monkeypatch
+):
+    """懒取(任务口径 §2):只为**被选中条目实际引用到的步骤**取声明面 ——
+    未选中条目的 step 与无 ``view_hints.endpoint_id`` 的 step 一次都不取
+    (无谓 plate 往返为零);无声明面步骤的条目照旧按 body 面判定。"""
+    from .helpers import make_draft as _draft, wait_until as _wait
+    from .test_run_m1_capabilities import _patch_launch_capture
+    from .test_scenario_visibility_and_copy import _member
+    from app.services import run_dispatcher as _disp
+
+    bob = await _member(client, "bob")
+    draft = _draft(steps=[
+        {"id": "s1", "api": {"view_hints": {"endpoint_id": "ep-a"}},
+         "request": {"body": {"bl_no": "${var.bl_no}"}}, "strategy": []},
+        {"id": "s2", "api": {"view_hints": {"endpoint_id": "ep-b"}},
+         "request": {"body": {"x": 1}}, "strategy": []},
+        {"id": "s3", "request": {"body": {"y": 1}}, "strategy": []},   # 无 endpoint_id
+    ], vars_map={"bl_no": "BL1"})
+    draft["assertion_registry"] = {"entries": [
+        {"id": "inj-a",                                  # 选中:step 0(有声明面)
+         "path": {"stepIndex": 0, "source": "body", "jsonpath": "$.customer_id"},
+         "value": 1, "asserts": []},
+        {"id": "inj-b",                                  # 未选中 → 其 step 不取数
+         "path": {"stepIndex": 1, "source": "body", "jsonpath": "$.nope"},
+         "value": 1, "asserts": []},
+        {"id": "inj-c",                                  # 选中:step 2(无 endpoint_id)
+         "path": {"stepIndex": 2, "source": "body", "jsonpath": "$.y"},
+         "value": 1, "asserts": []},
+    ]}
+    r = await client.post("/api/scenarios", headers=bob, json=draft)
+    assert r.status_code in (200, 201), r.text
+
+    plate_mock.behaviour = "echo"
+    plate_mock.fulls["ep-a"] = {"request": {"declarations": [
+        {"name": "customer_id", "path": "$.customer_id", "state": "carry"},
+    ]}}
+    plate_mock.fulls["ep-b"] = {"request": {"declarations": [
+        {"name": "nope", "path": "$.nope", "state": "carry"},
+    ]}}
+
+    seen: list[str] = []
+    _real = _disp.declared_paths_of
+
+    async def _spy(eid):
+        seen.append(eid)
+        return await _real(eid)
+
+    monkeypatch.setattr(_disp, "declared_paths_of", _spy)
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+
+    r = await client.post("/api/runs", headers=bob, json={
+        "scenarioId": "sc-test", "dataSetIds": [],
+        "injectionEntryIds": ["inj-a", "inj-c"]})
+    assert r.status_code == 201, r.text
+    # 取数在 dispatch 同步段完成:响应回来时清单已定格(无竞态)。
+    assert seen == ["ep-a"]                 # ep-b 未被选中 → 不取;step2 无 eid → 不取
+    await _wait(lambda: len(cases) >= 2)
+    assert len(cases) == 2                  # 两条选中条目都存活(一条走声明面,一条走 body 面)
 
 
 # ── 真解析 / 真 convert(spec §3「convert 穿越」)──────────────────────

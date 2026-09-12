@@ -6,6 +6,7 @@ assertion_registry 条目在 plate convert 之前落进 definition(steps[si].str
 值注入与数据集 vars 注入完全解耦(正交叠加):compose 不触碰 config.vars。
 """
 import copy
+import re
 from typing import Any, Callable
 
 from .jsonpath import exists
@@ -69,16 +70,43 @@ def _assign_strategy(value: Any, target: str) -> dict[str, Any]:
     return st
 
 
+_ARRAY_IDX_RE = re.compile(r"\[\d+\]")
+
+
+def _template_path(jsonpath: str) -> str:
+    """实例路径 → 模板形态(剥数组下标:$ .items[0].sku → $.items.sku)。
+    复用前端 `declarations.toTemplatePath` 的同一规则 —— 契约声明是模板
+    路径,条目路径是实例路径,判定必须两形态都试(spec v3.1 §2.1)。"""
+    return _ARRAY_IDX_RE.sub("", jsonpath)
+
+
+def _path_resolvable(jsonpath: str, body: Any, declared: Any) -> bool:
+    """可解析 = 实例形态或模板形态命中声明面,或是某声明路径的容器前缀;
+    否则退回 body 存在性(既有语义,body 面按实例路径精确判)。"""
+    declared = declared or ()
+    for form in (jsonpath, _template_path(jsonpath)):
+        if form in declared:
+            return True
+        for p in declared:
+            if p.startswith(form + ".") or p.startswith(form + "["):
+                return True
+    return exists(body or {}, jsonpath)
+
+
 def entry_issues(
     entry: dict[str, Any],
     step_count: int,
     body_of: Callable[[int], Any],
     assert_targets_of: Callable[[int], set[str]],
+    declared_of: Callable[[int], Any] | None = None,
 ) -> list[dict[str, Any]]:
     """悬空检测(前端 utils/assertion-registry.ts 的 Python 同构,spec v3 §2):
-    旧形状条目(无 path)/ stepIndex 越界 / path 不落在该步 request body
-    字段树(jsonpath.exists;str body 无可索引字段恒不可解析)/ override
-    无匹配。"""
+    旧形状条目(无 path)/ stepIndex 越界 / path 不落在该步**可注入面**
+    (契约声明 ∪ body 现存)上 / override 无匹配。
+
+    ``declared_of`` 缺省 None → 只认 body 面(等于 spec v3 行为)。
+    """
+    _declared = declared_of or (lambda si: ())
     issues: list[dict[str, Any]] = []
     path = entry.get("path")
     if not isinstance(path, dict):
@@ -88,7 +116,7 @@ def entry_issues(
     jp = path.get("jsonpath")
     if not isinstance(si, int) or si < 0 or si >= step_count:
         issues.append({"kind": "step-oob", "stepIndex": si})
-    elif not isinstance(jp, str) or not exists(body_of(si) or {}, jp):
+    elif not isinstance(jp, str) or not _path_resolvable(jp, body_of(si), _declared(si)):
         issues.append({"kind": "path-unresolvable", "stepIndex": si, "jsonpath": jp})
     for a in entry.get("asserts") or []:
         if isinstance(a, dict) and isinstance(a.get("stepIndex"), int):

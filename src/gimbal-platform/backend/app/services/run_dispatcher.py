@@ -60,6 +60,7 @@ from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import RunRequest, RunResponse, ServiceBinding
 from . import gimbal_launcher, plate_client
 from .auth_ref_scan import scan_auth_aliases
+from .endpoint_declarations import declared_paths_of
 from .run_injection import compose_injection_scenario, entry_issues
 from .run_materialize import materialize_run_copy
 
@@ -420,6 +421,32 @@ async def dispatch_run(
     registry = raw_payload.get("assertion_registry") or {}
     entries = registry.get("entries") or []
     selected_ids = set(req.injection_entry_ids or [])
+    # spec v3.1 §2.1/§3:判定面 = 契约声明 ∪ body 现存。只为**被选中条目
+    # 实际引用到的步骤**取声明面(懒取,避免无谓的 plate 调用);
+    # 取不到 → 空集 → 该步退回 body 面判定(从严,fail-soft 不阻塞)。
+    steps_all = steps_from_payload(raw_payload) or []
+    needed_steps: set[int] = set()
+    for e in entries:
+        if not isinstance(e, dict) or e.get("id") not in selected_ids:
+            continue
+        p = e.get("path")
+        if isinstance(p, dict) and isinstance(p.get("stepIndex"), int):
+            needed_steps.add(p["stepIndex"])
+
+    async def _declared_for(si: int) -> tuple[int, frozenset[str]]:
+        if si < 0 or si >= len(steps_all):
+            return si, frozenset()
+        step = steps_all[si] if isinstance(steps_all[si], dict) else {}
+        eid = ((step.get("api") or {}).get("view_hints") or {}).get("endpoint_id")
+        if not isinstance(eid, str) or not eid:
+            return si, frozenset()
+        got = await declared_paths_of(eid)
+        return si, got or frozenset()
+
+    declared_by_step: dict[int, frozenset[str]] = dict(
+        await asyncio.gather(*[_declared_for(si) for si in sorted(needed_steps)])
+    ) if needed_steps else {}
+    _declared_of = lambda si: declared_by_step.get(si, frozenset())  # noqa: E731
     selected_entries: list[dict] = []
     for e in entries:
         if not isinstance(e, dict) or e.get("id") not in selected_ids:
@@ -429,6 +456,7 @@ async def dispatch_run(
             len(steps_from_payload(raw_payload) or []),
             _body_of(raw_payload),
             _assert_targets_of(raw_payload),
+            _declared_of,
         )
         if issues:
             logger.warning(
