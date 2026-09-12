@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bodyPathSetOf, genEntryId, injectablePathSetOf, isDeadEntry, normalizeRegistry, pathResolvable, registryIssues } from '../assertion-registry'
+import { bodyPathSetOf, genEntryId, injectablePathSetOf, normalizeRegistry, pathResolvable, registryIssues } from '../assertion-registry'
 import { fieldPathsOf } from '../../utils/dataset-segments'
 import { isLegacyEntry } from '../../types/assertion-registry'
 import type { AssertionEntry, LegacyAssertionEntry } from '../../types/assertion-registry'
@@ -24,7 +24,6 @@ const BODY0 = { 0: ['$.amount', '$.bl_no', '$.items[0].sku'] }
 describe('registryIssues — 悬空检测(spec v3 §2)', () => {
   it('RG-1: 全匹配零 issue(path 落在 body 字段树 + override 有匹配)', () => {
     expect(registryIssues(E(), 2, bodyPaths(BODY0), targets({ 0: ['$.response_body.code'] }))).toEqual([])
-    expect(isDeadEntry(E(), 2, bodyPaths(BODY0), targets({ 0: ['$.response_body.code'] }))).toBe(false)
   })
   it('RG-2: path/asserts 各自的 stepIndex 越界 → step-oob', () => {
     const e = E({ path: { stepIndex: 5, source: 'body', jsonpath: '$.x' } })
@@ -56,7 +55,6 @@ describe('registryIssues — 悬空检测(spec v3 §2)', () => {
     expect(isLegacyEntry(LEGACY)).toBe(true)
     expect(isLegacyEntry(E())).toBe(false)
     expect(registryIssues(LEGACY, 2, bodyPaths(BODY0), targets({}))).toEqual([{ kind: 'legacy-entry' }])
-    expect(isDeadEntry(LEGACY, 2, bodyPaths(BODY0), targets({}))).toBe(true)
   })
   it('RG-6: genEntryId 不变;bodyPathSetOf 只收 body 源叶子', () => {
     const a = genEntryId()
@@ -90,7 +88,6 @@ describe('registryIssues/normalizeRegistry — 残缺条目不再炸渲染', () 
       expect(isLegacyEntry(e)).toBe(false)
       expect(registryIssues(e, 2, bodyPaths(BODY0), targets({})))
         .toContainEqual({ kind: 'step-oob', stepIndex: si })
-      expect(isDeadEntry(e, 2, bodyPaths(BODY0), targets({}))).toBe(true)
     }
   })
 

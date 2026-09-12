@@ -95,15 +95,6 @@ export function registryIssues(
   return issues
 }
 
-export function isDeadEntry(
-  entry: AssertionEntry | LegacyAssertionEntry,
-  stepCount: number,
-  injectablePathsOfStep: (stepIndex: number) => ReadonlySet<string>,
-  assertTargetsOf: (stepIndex: number) => ReadonlySet<string>,
-): boolean {
-  return registryIssues(entry, stepCount, injectablePathsOfStep, assertTargetsOf).length > 0
-}
-
 /** 注册表形状归一:服务端来源(draft)不可信 — V2 之前保存的场景无
  *  assertion_registry 键,后端 pydantic default 补成 `{}`(truthy,无
  *  entries)→ `?? { entries: [] }` 只兜 null 挡不住,直灌 registry 会

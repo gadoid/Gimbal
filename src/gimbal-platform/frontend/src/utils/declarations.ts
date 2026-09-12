@@ -81,11 +81,13 @@ export function iterFlat(
  *
  * **保证的范围(只此一条,勿外推)**:返回树中**任意深度**都不存在
  * `hasUsablePath` 为假的条目 —— 「按构造干净的」指的只是**路径可用性**。
- * **不保证 `children` 的形状**:非数组 children(如 `{"0": {...}}`)原样放行,
- * 而 `iterFlat` / `formBindings` 的 `for (const e of entries ?? [])` 对普通对象
- * 会硬抛(`TypeError: entries is not iterable`)。该形状是否归一是**待定取舍**
- * (静默丢弃畸形 children = 字段树悄悄变瘦 vs 保持硬抛 = 白屏但响亮),
- * 未在本轮处理 —— 消费方不得据此声称「声明树已全形式干净」。
+ * **不保证 `children` 的形状**:非数组 children(如 `{"0": {...}}`)在**保留下来
+ * 的**条目上原样放行,而 `iterFlat` / `formBindings` 的 `for (const e of entries ?? [])`
+ * 对普通对象会硬抛(`TypeError: entries is not iterable`);条目**自身被剔除**时
+ * (路径不可用)这一条整份不进返回树,其畸形 children 只能随之消失 —— 那种情形
+ * 不是「放行」。该形状是否归一是**待定取舍**(静默丢弃畸形 children = 字段树悄悄
+ * 变瘦 vs 保持硬抛 = 白屏但响亮),未在本轮处理 —— 消费方不得据此声称
+ * 「声明树已全形式干净」。
  *
  * 递归下钻到**可用条目**的 children(画布递归只认 `entry.children`)。
  * 某层未发生改动时**保留原引用**(条目对象 / 整份 `/full` 原样返回),

@@ -14,6 +14,7 @@ import { nextTick, ref } from 'vue'
 import { flushPromises } from '@vue/test-utils'
 
 import * as api from '@/api/scenario-composer'
+import * as assertionRegistry from '@/utils/assertion-registry'
 import { _resetEndpointFullCacheForTest } from '@/composables/useEndpointFull'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
 
@@ -167,4 +168,35 @@ it('IS-7: 渲染期零请求 —— 不调 ensure() 时判定/候选/取态都�
   await flushPromises()
   expect(spy).toHaveBeenCalledTimes(1)
   expect([...s.pathsOfStep(0)]).toContain('$.amount')
+})
+
+it('IS-8: 记忆化**命中**面 — 同一 (si, 版本) 只投影一次,输入变化后才重建', async () => {
+  // spec §8 要求「前端集合按 `(stepIndex, 版本)` 记忆化(以调用计数断言)」。
+  // IS-5 / IS-6 钉的是**失效**面(陈旧集合不得粘住),命中面此前无人钉:删掉
+  // `pathsCache` 整块,全部用例照样绿。故这里**数投影的调用次数** —— 返回值
+  // 在「有缓存」与「每次重建」两种实现下同形,只有计数有判别力。
+  vi.spyOn(api, 'getFullEndpoint').mockResolvedValue(
+    { id: 'ep-a', request: { declarations: [] } } as any)
+  const project = vi.spyOn(assertionRegistry, 'injectablePathSetOf')
+  const steps = ref([
+    { request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-a' } } },
+  ])
+  const entries = ref([
+    { id: 'a', name: 'A', path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 1, asserts: [] },
+  ] as any)
+  const s = useInjectableSurface(steps, entries)
+  s.ensure()
+  await flushPromises()
+  const first = s.pathsOfStep(0)
+  const again = s.pathsOfStep(0)
+  expect(project).toHaveBeenCalledTimes(1)            // 同键第二次 → 命中,不再投影
+  expect(again).toBe(first)                           // 命中的是同一份(不是等值副本)
+  // 版本维变化(步骤面深变更)→ 键变 ⇒ 重建(且新集合含新字段)
+  const body = steps.value[0].request.body as Record<string, unknown>
+  body.amount2 = 'y'
+  await nextTick()
+  const rebuilt = s.pathsOfStep(0)
+  expect(project).toHaveBeenCalledTimes(2)
+  expect(rebuilt).not.toBe(first)
+  expect([...rebuilt]).toContain('$.amount2')
 })

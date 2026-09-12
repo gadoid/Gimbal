@@ -32,9 +32,15 @@
  * 消费方约定(**读 / 取分离**,裁定 C18):渲染期只在 computed 里读
  * `getEndpointFull` / `endpointFullState`(读缓存即建立响应依赖,**不取数**);
  * 需要取数时调 `ensureEndpointFull(eid)`(幂等,每端点每会话一次)。
- * **读函数不得内部取数**:一个「读里带取」的合体口把名字变成谎话(叫读,
- * 内部却 `void ensureEndpointFull`),而它正是渲染期请求的入口 —— 渲染期零
- * 请求(IS-7)就是靠这条纪律钉住的。
+ * **判定面的读函数不得内部取数**:一个「读里带取」的合体口把名字变成谎话
+ * (叫读,内部却 `void ensureEndpointFull`),而它正是渲染期请求的入口 ——
+ * 判定面渲染期零请求(IS-7)就是靠这条纪律钉住的。
+ * **这条纪律的落实范围 = 判定面**(`composables/useInjectableSurface.ts`);
+ * 画布 `components/composer/CaseComposerCanvas.vue:635-640` 的 `stepDecls` 与
+ * `:1591-1596` 的 `currentFull` 两个 computed 仍在内部
+ * `void ensureEndpointFull(eid)` —— 画布**渲染期会取数**,由会话缓存 + 负缓存
+ * 兜底(不自维持)。已知问题(非本文件可收口):
+ * `docs/known-issues/platform/declaration-cache/canvas-render-path-fetch.md`。
  */
 import { reactive, shallowReactive } from 'vue'
 

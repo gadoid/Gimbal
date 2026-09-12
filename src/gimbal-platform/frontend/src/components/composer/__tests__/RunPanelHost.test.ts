@@ -77,7 +77,7 @@ it('RH-1: 自取数装配 — RunDialog 挂载 + 条目/死条目透传(legacy �
   const dlg = w.findComponent(RunDialog)
   expect(dlg.exists()).toBe(true)
   expect(dlg.props('assertionEntries')).toHaveLength(2)
-  expect(dlg.props('deadEntryIds')).toEqual(['inj-old'])   // legacy 恒死(isDeadEntry)
+  expect(dlg.props('deadEntryIds')).toEqual(['inj-old'])   // legacy 恒死(判据 = surface.deadIds ← registryIssues 的 legacy-entry)
   expect(dlg.props('preset')).toBeNull()
   expect(dlg.props('serviceRows')).toEqual([{ service: 'fin.test', declaredUrl: 'http://fin' }])
   expect(dlg.props('stepOrchestrationNames')).toEqual(['下单', '查单'])
