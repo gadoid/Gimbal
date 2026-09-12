@@ -392,9 +392,8 @@ async def dispatch_run(
             )
         selected_datasets.append(ds)
 
-    # 2.5 断言注入条目(spec v2 §8):payload.assertion_registry 里被选中
-    # 且悬空检测通过的条目 → 注入族(与数据集族并集,不与数据集行交叉)。
-    # 死条目(越界/未知 var/override 无匹配)skip + 告警,绝不炸 dispatch。
+    # 2.5 断言注入条目(spec v3 §8):被选中且悬空检测通过的条目 → 注入族;
+    # 死/旧条目 skip + 告警,绝不炸 dispatch。
     raw_payload = scen.payload or {}
     registry = raw_payload.get("assertion_registry") or {}
     entries = registry.get("entries") or []
@@ -406,7 +405,7 @@ async def dispatch_run(
         issues = entry_issues(
             e,
             len(steps_from_payload(raw_payload) or []),
-            set(_definition_vars(raw_payload)),
+            _body_of(raw_payload),
             _assert_targets_of(raw_payload),
         )
         if issues:
@@ -545,10 +544,11 @@ async def _fanout(
     ``materialize_run_copy`` 物化 run 副本(users 合并固定 merge 语义;
     prefix/merge 策略等旧字段已随 RunRequest 收敛退役,spec §6)。
 
-    spec v2 §8:``injections`` 为选中的断言注入条目(dispatch 已过滤死
-    条目)— 与数据集族并集(条目 × repeat 笛卡尔),注入族在 definition
-    层经 ``compose_injection_scenario`` patch(基线 vars 覆写 + asserts
-    patch)后再走 plate convert,``materialize_run_copy`` 其后照旧。
+    spec v3 §8:``injections`` 为选中的断言注入条目(dispatch 已过滤死/
+    旧条目)— 与数据集族并集(条目 × repeat 笛卡尔),注入族在 definition
+    层经 ``compose_injection_scenario`` patch(Assign 直补 + asserts
+    patch,不触碰 config.vars)后再走 plate convert,``materialize_run_copy``
+    其后照旧。
 
     V3.2:执行调用从 gimbal HTTP POST /run 改为落盘 case 文件后
     ``gimbal run launch <case>`` 子进程(设计:2026-08-24 spec)。
@@ -668,9 +668,10 @@ async def _fanout(
                 state.finished_at = _utcnow().isoformat() + "Z"
                 return
             if injection is not None:
-                # 注入族(spec v2 §8):definition 层 patch(基线 vars 覆写 +
+                # 注入族(spec v3 §3):definition 层 patch(Assign 直补 +
                 # asserts patch)在 plate convert 之前完成 — 替代数据集行的
-                # 行合并路径(vars 已在 compose 内合并);materialize 其后照旧。
+                # 行合并路径(compose 不触碰 vars,与数据集行注入正交);
+                # materialize 其后照旧。
                 composed = compose_injection_scenario(definition, injection)
             else:
                 row_dict = dict(ds["rows"][row_idx] or {})
@@ -1068,11 +1069,17 @@ async def _finalize_execution(
 
 
 # ─── helpers ──────────────────────────────────────────────────────
-def _definition_vars(payload: dict | None) -> dict[str, Any]:
-    """definition.config.vars 投影(注入条目 varName 悬空检测的基线面)。"""
-    cfg = definition_from_payload(payload).get("config") or {}
-    vars_map = cfg.get("vars") if isinstance(cfg.get("vars"), dict) else {}
-    return vars_map or {}
+def _body_of(payload: dict | None) -> Callable[[int], Any]:
+    """steps[si].request.body 投影(entry_issues 的 path-unresolvable
+    检测输入,spec v3 §2;jsonpath.exists 在其上判路径可解析性)。"""
+    steps = steps_from_payload(payload)
+
+    def _body(si: int) -> Any:
+        if si < 0 or si >= len(steps):
+            return None
+        return (steps[si].get("request") or {}).get("body")
+
+    return _body
 
 
 def _assert_targets_of(payload: dict | None) -> Callable[[int], set[str]]:

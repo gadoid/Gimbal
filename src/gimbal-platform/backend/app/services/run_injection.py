@@ -1,62 +1,68 @@
-"""注入条目物化(spec v2 §8)— 平台层 patch,引擎零改动。
+"""注入条目物化(spec v3 §3)— 平台层 patch,引擎/plate 零改动。
 
 与 run_materialize.py 同纪律:纯函数、深拷贝进深拷贝出、执行链唯一物化语义。
-assertion_registry 条目在 plate convert 之前落进 definition(vars 覆写 +
-strategy patch),materialize_run_copy 其后照旧(services/users/carry)。
+assertion_registry 条目在 plate convert 之前落进 definition(steps[si].strategy
+追加 Assign 直补 + asserts patch),materialize_run_copy 其后照旧。
+值注入与数据集 vars 注入完全解耦(正交叠加):compose 不触碰 config.vars。
 """
 import copy
 from typing import Any, Callable
+
+from .jsonpath import exists
 
 
 def entry_issues(
     entry: dict[str, Any],
     step_count: int,
-    var_names: set[str],
+    body_of: Callable[[int], Any],
     assert_targets_of: Callable[[int], set[str]],
 ) -> list[dict[str, Any]]:
-    """悬空检测(前端 utils/assertion-registry.ts 的 Python 同构):
-    stepIndex 越界 / injection.varName ∉ vars / override 无匹配。"""
+    """悬空检测(前端 utils/assertion-registry.ts 的 Python 同构,spec v3 §2):
+    旧形状条目(无 path)/ stepIndex 越界 / path 不落在该步 request body
+    字段树(jsonpath.exists;str body 无可索引字段恒不可解析)/ override
+    无匹配。"""
     issues: list[dict[str, Any]] = []
-    idxs = set()
-    anchor = entry.get("anchor")
-    if isinstance(anchor, dict) and isinstance(anchor.get("stepIndex"), int):
-        idxs.add(anchor["stepIndex"])
+    path = entry.get("path")
+    if not isinstance(path, dict):
+        # v2 旧形状(anchor+injection)或残缺条目:全量 issue → skip(spec v3 §8)
+        return [{"kind": "legacy-entry"}]
+    si = path.get("stepIndex")
+    jp = path.get("jsonpath")
+    if not isinstance(si, int) or si < 0 or si >= step_count:
+        issues.append({"kind": "step-oob", "stepIndex": si})
+    elif not isinstance(jp, str) or not exists(body_of(si) or {}, jp):
+        issues.append({"kind": "path-unresolvable", "stepIndex": si, "jsonpath": jp})
     for a in entry.get("asserts") or []:
         if isinstance(a, dict) and isinstance(a.get("stepIndex"), int):
-            idxs.add(a["stepIndex"])
-    for si in idxs:
-        if si < 0 or si >= step_count:
-            issues.append({"kind": "step-oob", "stepIndex": si})
-    for inj in entry.get("injection") or []:
-        if isinstance(inj, dict) and inj.get("varName") not in var_names:
-            issues.append({"kind": "var-unknown", "varName": inj.get("varName")})
-    for a in entry.get("asserts") or []:
-        if (isinstance(a, dict) and a.get("mode") == "override"
-                and isinstance(a.get("stepIndex"), int)
-                and 0 <= a["stepIndex"] < step_count
-                and a.get("target") not in assert_targets_of(a["stepIndex"])):
-            issues.append({"kind": "override-no-match",
-                           "stepIndex": a["stepIndex"], "target": a.get("target")})
+            asi = a["stepIndex"]
+            if asi < 0 or asi >= step_count:
+                issues.append({"kind": "step-oob", "stepIndex": asi})
+            elif a.get("mode") == "override" and a.get("target") not in assert_targets_of(asi):
+                issues.append({"kind": "override-no-match",
+                               "stepIndex": asi, "target": a.get("target")})
     return issues
 
 
 def compose_injection_scenario(definition: dict[str, Any], entry: dict[str, Any]) -> dict[str, Any]:
-    """基线 vars + injection 覆写 + asserts patch(override 改 expected /
-    append 加条目);悬空项(越界/无匹配)静默跳过 — dispatcher 层已先经
-    entry_issues 过滤死条目,此处双保险。
-
-    injection.value 由用户显式编辑,**原样覆写不 coerce**(与数据集行的
-    ``_coerce_row_value`` 相反:条目值类型由前端输入态保证)。
+    """Assign 直补 + asserts patch(spec v3 §3)。config.vars 零触碰 —
+    数据集行值合入在 _compose_scenario(与 Assign 正交叠加,偏离最后生效:
+    字段恰为模板串时被字面量整体替换,该 case 内行值对此字段不再起效)。
+    悬空项静默跳过 — dispatcher 层已先经 entry_issues 过滤,此处双保险。
+    value 由用户显式编辑,原样覆写不 coerce(引擎 _resolve_source_value
+    对非模板 source 直通)。
     """
     out = copy.deepcopy(definition)
-    cfg = out.setdefault("config", {})
-    vars_map = dict(cfg.get("vars") or {})
-    for inj in entry.get("injection") or []:
-        if isinstance(inj, dict) and isinstance(inj.get("varName"), str):
-            vars_map[inj["varName"]] = inj.get("value")
-    cfg["vars"] = vars_map
-
     steps = out.get("steps") or []
+    path = entry.get("path")
+    if isinstance(path, dict):
+        si = path.get("stepIndex")
+        jp = path.get("jsonpath")
+        if (isinstance(si, int) and 0 <= si < len(steps)
+                and isinstance(jp, str) and jp.startswith("$")):
+            # $.amount → $.request_body.amount;根 "$" → $.request_body
+            target = "$.request_body" + (jp[1:] if jp != "$" else "")
+            steps[si].setdefault("strategy", []).append(
+                {"kind": "assign", "source": entry.get("value"), "target": target})
     for a in entry.get("asserts") or []:
         if not isinstance(a, dict):
             continue
