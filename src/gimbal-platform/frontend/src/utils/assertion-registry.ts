@@ -61,9 +61,18 @@ export function registryIssues(
   // (`isinstance(si, int)`),否则前端把它当活条目,chip 宣称一次永不
   // 触发的注入。
   const si = entry.path.stepIndex
+  // jsonpath 非字符串(手改 JSON / 旧写入方)与越界同判 path-unresolvable —
+  // 后端同守卫(`isinstance(jp, str)`,run_injection.py)。**不得**放它进
+  // pathResolvable:`toTemplatePath` 是 `path.replace(...)`,非串必抛
+  // TypeError,四个消费方(编辑器 deadOf / CaseComposer / CaseDataSetsList
+  // / RunPanelHost 的 deadEntryIds)都在渲染期调它 → 整页白屏。守卫前
+  // 前端崩、后端判死 = 判定层单向分裂。
+  // (RegistryIssue.jsonpath 静态类型是 string:与 EntryPath 一样,对
+  //  /draft 这份不可信 JSON 是静态承诺,这里按后端同口径送**原值**。)
+  const jp = entry.path.jsonpath as unknown
   if (!Number.isInteger(si) || si < 0 || si >= stepCount) {
     issues.push({ kind: 'step-oob', stepIndex: si })
-  } else if (!pathResolvable(entry.path.jsonpath, injectablePathsOfStep(si))) {
+  } else if (typeof jp !== 'string' || !pathResolvable(jp, injectablePathsOfStep(si))) {
     issues.push({ kind: 'path-unresolvable', stepIndex: si, jsonpath: entry.path.jsonpath })
   }
   // asserts 缺键 / 非数组 → 视作空(后端 `entry.get("asserts") or []`);

@@ -226,6 +226,36 @@ it('ARE-8: path:null / 缺 asserts / 串 stepIndex / 标量条目 — 页面照�
   w.unmount()
 })
 
+it('ARE-8b: path.jsonpath 非字符串(缺键 / 数字 / 对象)→ 不崩渲染,判悬空', async () => {
+  // 后端同输入是 path-unresolvable(run_injection.entry_issues 的
+  // `not isinstance(jp, str)`);前端此前会走进 pathResolvable →
+  // toTemplatePath(undefined) 的 `path.replace(...)` 抛 TypeError,而
+  // deadOf / 三个 deadEntryIds 都在**渲染期**调它 → 整页白屏(判定层
+  // 单向分裂:前端崩、后端判死)。
+  const w = await mountEditor({
+    definition: DEF,
+    orchestration: { steps: [], resourceMeta: {} },
+    assertion_registry: { entries: [
+      { id: 'inj-nojp', name: '缺 jsonpath',
+        path: { stepIndex: 0, source: 'body' }, value: 1, asserts: [] },
+      { id: 'inj-numjp', name: '数字 jsonpath',
+        path: { stepIndex: 0, source: 'body', jsonpath: 7 }, value: 2, asserts: [] },
+      { id: 'inj-objjp', name: '对象 jsonpath',
+        path: { stepIndex: 0, source: 'body', jsonpath: { a: 1 } }, value: 3, asserts: [] },
+      { id: 'inj-live', name: '活条目',
+        path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 4, asserts: [] },
+    ] },
+  })
+  const rows = w.findAll('.are-row')
+  expect(rows.length).toBe(4)
+  for (const i of [0, 1, 2]) {
+    expect(rows[i].classes()).toContain('are-dead')      // 与后端同判:悬空
+    expect(rows[i].text()).toContain('悬空')
+  }
+  expect(rows[3].classes()).not.toContain('are-dead')    // 守卫不外溢:正常路径照旧判活
+  w.unmount()
+})
+
 it('ARE-9: 新建条目的 path 输入 — 按所选步骤给出该步 body 字段树候选', async () => {
   const w = await mountEditor()
   const pathInput = w.findComponent(JsonPathInput)
