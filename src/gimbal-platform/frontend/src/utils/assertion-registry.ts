@@ -1,6 +1,8 @@
 // utils/assertion-registry.ts
 import { isLegacyEntry } from '@/types/assertion-registry'
 import type { AssertionEntry, AssertionRegistry, LegacyAssertionEntry } from '@/types/assertion-registry'
+import { catalogPaths, toTemplatePath } from '@/utils/declarations'
+import type { DeclarationEntryView } from '@/types/plate'
 
 export type RegistryIssue =
   | { kind: 'legacy-entry' }
@@ -17,23 +19,40 @@ export function bodyPathSetOf(
   return new Set(leaves.filter((l) => l.source === 'body').map((l) => l.path))
 }
 
-/** path 是否可解析:等于某叶子,或是某叶子的容器前缀(`p.` / `p[`
- *  开头)— 条目可锚在容器上,Assign 会整体覆写该容器(spec §2)。 */
-export function pathResolvable(jsonpath: string, bodyPaths: ReadonlySet<string>): boolean {
-  if (bodyPaths.has(jsonpath)) return true
-  for (const p of bodyPaths) {
-    if (p.startsWith(`${jsonpath}.`) || p.startsWith(`${jsonpath}[`)) return true
+/** 可注入面(spec v3.1 §2.1)= body 现存(body 源叶子)
+ *  ∪ 契约声明的 body 字段(全状态 form/collapse/carry,模板形态)。
+ *  声明面是本次放宽的核心:carry / 未落 body 的 collapse 字段此前不可寻址,
+ *  而引擎 Assign 对它们同样生效(spec §2.3 执行序)。 */
+export function injectablePathSetOf(
+  bodyLeaves: Array<{ source: string; path: string }>,
+  declarations?: DeclarationEntryView[] | null,
+): ReadonlySet<string> {
+  const out = new Set<string>(['$'])
+  for (const p of bodyPathSetOf(bodyLeaves)) out.add(p)
+  for (const p of catalogPaths(declarations)) out.add(toTemplatePath(p))
+  return out
+}
+
+/** path 是否可解析(spec v3.1 §2.1):实例形态对齐 body 面、模板形态对齐
+ *  契约声明面,二者任一命中即可;或为某路径的容器前缀(`p.` / `p[`
+ *  开头 —— 条目可锚在容器上,Assign 整体覆写该容器,spec §2)。 */
+export function pathResolvable(jsonpath: string, injectablePaths: ReadonlySet<string>): boolean {
+  for (const form of [jsonpath, toTemplatePath(jsonpath)]) {
+    if (injectablePaths.has(form)) return true
+    for (const p of injectablePaths) {
+      if (p.startsWith(`${form}.`) || p.startsWith(`${form}[`)) return true
+    }
   }
   return false
 }
 
 /** 悬空检测(spec v3 §2,软提示不阻断):legacy-entry / step-oob /
- *  path-unresolvable / override-no-match。bodyPathsOfStep 与
+ *  path-unresolvable / override-no-match。injectablePathsOfStep 与
  *  assertTargetsOf 由调用方从场景 definition 投影(编辑器/编排器同构)。 */
 export function registryIssues(
   entry: AssertionEntry | LegacyAssertionEntry,
   stepCount: number,
-  bodyPathsOfStep: (stepIndex: number) => ReadonlySet<string>,
+  injectablePathsOfStep: (stepIndex: number) => ReadonlySet<string>,
   assertTargetsOf: (stepIndex: number) => ReadonlySet<string>,
 ): RegistryIssue[] {
   if (isLegacyEntry(entry)) return [{ kind: 'legacy-entry' }]
@@ -44,7 +63,7 @@ export function registryIssues(
   const si = entry.path.stepIndex
   if (!Number.isInteger(si) || si < 0 || si >= stepCount) {
     issues.push({ kind: 'step-oob', stepIndex: si })
-  } else if (!pathResolvable(entry.path.jsonpath, bodyPathsOfStep(si))) {
+  } else if (!pathResolvable(entry.path.jsonpath, injectablePathsOfStep(si))) {
     issues.push({ kind: 'path-unresolvable', stepIndex: si, jsonpath: entry.path.jsonpath })
   }
   // asserts 缺键 / 非数组 → 视作空(后端 `entry.get("asserts") or []`);
@@ -65,10 +84,10 @@ export function registryIssues(
 export function isDeadEntry(
   entry: AssertionEntry | LegacyAssertionEntry,
   stepCount: number,
-  bodyPathsOfStep: (stepIndex: number) => ReadonlySet<string>,
+  injectablePathsOfStep: (stepIndex: number) => ReadonlySet<string>,
   assertTargetsOf: (stepIndex: number) => ReadonlySet<string>,
 ): boolean {
-  return registryIssues(entry, stepCount, bodyPathsOfStep, assertTargetsOf).length > 0
+  return registryIssues(entry, stepCount, injectablePathsOfStep, assertTargetsOf).length > 0
 }
 
 /** 注册表形状归一:服务端来源(draft)不可信 — V2 之前保存的场景无

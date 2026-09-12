@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { bodyPathSetOf, genEntryId, isDeadEntry, normalizeRegistry, pathResolvable, registryIssues } from '../assertion-registry'
+import { bodyPathSetOf, genEntryId, injectablePathSetOf, isDeadEntry, normalizeRegistry, pathResolvable, registryIssues } from '../assertion-registry'
+import { fieldPathsOf } from '../../utils/dataset-segments'
 import { isLegacyEntry } from '../../types/assertion-registry'
 import type { AssertionEntry, LegacyAssertionEntry } from '../../types/assertion-registry'
 
@@ -119,5 +120,53 @@ describe('registryIssues/normalizeRegistry — 残缺条目不再炸渲染', () 
     expect(normalizeRegistry(undefined).entries).toEqual([])
     expect(normalizeRegistry({}).entries).toEqual([])
     expect(normalizeRegistry({ entries: null }).entries).toEqual([])
+  })
+})
+
+// ── 可注入面(spec v3.1 §2.1):body 现存 ∪ 契约声明(全状态)──────────
+const DECLS = [
+  { name: 'bl_no', path: '$.bl_no', state: 'form', required: true, description: '' },
+  { name: 'customer_id', path: '$.customer_id', state: 'carry', required: true, description: '' },
+  { name: 'items', path: '$.items', state: 'form', required: false, description: '',
+    children: [{ name: 'sku', path: '$.items.sku', state: 'form', required: true, description: '' }] },
+] as any
+const STEP_FORM_ONLY = { request: { body: { bl_no: '${var.bl_no}' } } }
+
+describe('可注入面 — 契约声明字段地址化(spec v3.1 §2.1)', () => {
+  it('IS-1: 声明面进集合(含 carry 与容器条目,模板形态)', () => {
+    const s = injectablePathSetOf(fieldPathsOf(STEP_FORM_ONLY as any), DECLS)
+    expect(s.has('$')).toBe(true)
+    expect(s.has('$.bl_no')).toBe(true)          // form
+    expect(s.has('$.customer_id')).toBe(true)    // carry —— 本次放宽的核心对象
+    expect(s.has('$.items')).toBe(true)          // 容器条目自身也是合法地址
+    expect(s.has('$.items.sku')).toBe(true)      // children 平铺
+  })
+
+  it('IS-2: body 现存路径进集合(实例形态)', () => {
+    const step = { request: { body: { items: [{ sku: 'x' }] } } }
+    const s = injectablePathSetOf(fieldPathsOf(step as any), [])
+    expect(s.has('$.items[0].sku')).toBe(true)
+  })
+
+  it('IS-3: 声明命中即可解析 —— 实例与模板两种形态都试', () => {
+    const s = injectablePathSetOf(fieldPathsOf(STEP_FORM_ONLY as any), DECLS)
+    expect(pathResolvable('$.customer_id', s)).toBe(true)   // carry:放宽后可用
+    expect(pathResolvable('$.items[0].sku', s)).toBe(true)  // 实例形态对齐模板声明
+    expect(pathResolvable('$.items[1]', s)).toBe(true)      // 容器前缀
+    expect(pathResolvable('$.nope', s)).toBe(false)         // 两边都没有 → 仍判死(拼写错误仍被抓)
+  })
+
+  it('IS-4: 无声明面(降级)→ 判定等于旧的 body 面(从严)', () => {
+    const s = injectablePathSetOf(fieldPathsOf(STEP_FORM_ONLY as any), undefined)
+    expect(pathResolvable('$.bl_no', s)).toBe(true)
+    expect(pathResolvable('$.customer_id', s)).toBe(false)
+  })
+
+  it('IS-5: body 实例路径不因下标归一被吃掉(旧行为不回退)', () => {
+    const step = { request: { body: { items: [{ sku: 'x' }, { sku: 'y' }] } } }
+    const s = injectablePathSetOf(fieldPathsOf(step as any), [])
+    expect(pathResolvable('$.items[1].sku', s)).toBe(true)
+    expect(pathResolvable('$.items[0]', s)).toBe(true)
+    expect(pathResolvable('$.items', s)).toBe(true)
   })
 })
