@@ -162,6 +162,29 @@ def test_empty_declared_of_falls_back_to_body_only():
                      lambda si: frozenset())
 
 
+def test_declared_face_is_normalized_like_frontend_injectable_path_set():
+    """声明面条目自身可带实例下标(plate 只强制 children 子树为模板态)→
+    两侧都必须先归一,否则出现「编辑器判活、dispatch 静默 skip」的判定层
+    分裂(与前端 `injectablePathSetOf` 的 `toTemplatePath(p)` 同落点)。"""
+    declared = frozenset({"$.supplier[0].code", "$.bl_no"})
+    body_of = _body_of([{"request": {"body": {}}}])       # body 里没有 supplier
+
+    def _entry(jp: str) -> dict:
+        return {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                        "jsonpath": jp},
+                "value": 1, "asserts": []}
+
+    # 声明 `$.supplier[0].code` → 同实例、异实例、模板形态三种锚点都判活
+    for jp in ("$.supplier[0].code", "$.supplier[1].code", "$.supplier.code"):
+        assert entry_issues(_entry(jp), 1, body_of, lambda si: set(),
+                            lambda si: declared) == [], jp
+    # 归一不等于放宽:声明面外的路径仍判死(拼写错误仍被抓)
+    assert {"kind": "path-unresolvable", "stepIndex": 0,
+            "jsonpath": "$.supplier.name"} in \
+        entry_issues(_entry("$.supplier.name"), 1, body_of, lambda si: set(),
+                     lambda si: declared)
+
+
 # ── dispatcher 集成(spec v3 §3:Assign 直补落 case.json;skip 链)────
 # 骨架不变:建场景(assertion_registry 注入)→ POST /api/runs → 断言
 # case 数 / case.json patch / rows 回放。

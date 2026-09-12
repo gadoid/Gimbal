@@ -74,7 +74,7 @@ _ARRAY_IDX_RE = re.compile(r"\[\d+\]")
 
 
 def _template_path(jsonpath: str) -> str:
-    """实例路径 → 模板形态(剥数组下标:$ .items[0].sku → $.items.sku)。
+    """实例路径 → 模板形态(剥数组下标:$.items[0].sku → $.items.sku)。
     复用前端 `declarations.toTemplatePath` 的同一规则 —— 契约声明是模板
     路径,条目路径是实例路径,判定必须两形态都试(spec v3.1 §2.1)。"""
     return _ARRAY_IDX_RE.sub("", jsonpath)
@@ -82,12 +82,19 @@ def _template_path(jsonpath: str) -> str:
 
 def _path_resolvable(jsonpath: str, body: Any, declared: Any) -> bool:
     """可解析 = 实例形态或模板形态命中声明面,或是某声明路径的容器前缀;
-    否则退回 body 存在性(既有语义,body 面按实例路径精确判)。"""
-    declared = declared or ()
+    否则退回 body 存在性(既有语义,body 面按实例路径精确判)。
+
+    **两侧都归一**:声明面条目自身的路径形态是自由的(plate 只强制
+    children 子树为模板态,顶层条目可带实例下标,如 ``$.supplier[0].code``),
+    故 :func:`_template_path` 归一后再比 —— 与前端 ``injectablePathSetOf``
+    的 ``toTemplatePath(p)`` 同落点(spec v3.1 §2.1)。不归一就会出现
+    「编辑器判活、dispatch 静默 skip」的判定层分裂。
+    """
+    decl = {_template_path(p) for p in (declared or ()) if isinstance(p, str)}
     for form in (jsonpath, _template_path(jsonpath)):
-        if form in declared:
+        if form in decl:
             return True
-        for p in declared:
+        for p in decl:
             if p.startswith(form + ".") or p.startswith(form + "["):
                 return True
     return exists(body or {}, jsonpath)
@@ -102,7 +109,14 @@ def entry_issues(
 ) -> list[dict[str, Any]]:
     """悬空检测(前端 utils/assertion-registry.ts 的 Python 同构,spec v3 §2):
     旧形状条目(无 path)/ stepIndex 越界 / path 不落在该步**可注入面**
-    (契约声明 ∪ body 现存)上 / override 无匹配。
+    (契约声明 ∪ body 现存)上 / override 无匹配。四类 issue 的判序与守卫
+    逐条对齐前端 ``registryIssues``。
+
+    可注入面的**一处已知差异**(spec v3.1 §2.1 明文容许):声明面两侧同构
+    (都按 `_template_path` 归一后再比较与容器前缀,见
+    :func:`_path_resolvable`);body 面上一侧是前端对 body 叶子集跑同一条
+    前缀规则,另一侧**退回 ``jsonpath.exists``**(实例路径精确判)—— 后者
+    是本模块的既有行为,不因本次放宽而变。
 
     ``declared_of`` 缺省 None → 只认 body 面(等于 spec v3 行为)。
     """
