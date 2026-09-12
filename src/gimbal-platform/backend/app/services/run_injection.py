@@ -31,8 +31,8 @@ def _assign_strategy(value: Any, target: str) -> dict[str, Any]:
     用户 value 的语义是「原样覆写不 coerce」,但引擎对上面两类字符串
     优先做上下文解析:解析不到得 None,而 `required` 默认 True 时
     Assign 直接 FAILED(assign.py:35-45),BEFORE_REQUEST 失败即
-    **整步不发请求**(statemachine/states.py:63-69)。故这两类形状
-    额外带上 `default`(=该字面量)与 `required: false` —— assign.py
+    **整步不发请求**(statemachine/states.py:63 BEFORE_REQUEST→FAILED)。
+    故这两类形状额外带上 `default`(=该字面量)与 `required: false` —— assign.py
     的顺序是先 default 后 required,解析不到时落字面量而非失败,解析
     得到时 default 不参与。其余情形不带键:Assign 基座字段全取默认
     (spec §3)。
@@ -42,9 +42,10 @@ def _assign_strategy(value: Any, target: str) -> dict[str, Any]:
     编辑器对此有可见提示(AssertionRegistryEditor「上下文引用形」)。
 
     残留边界二(不可修,不是本函数能兜的):JSON null 偏离值无法送达
-    引擎 —— plate 导出 `model_dump(exclude_none=True)`(export/gimbal.py
-    `GimbalScenarioExporter.render`)把 `source: None` 整键丢弃,而引擎
-    `Assign.source` 是必填 → 该 case 加载即 `Scenario.model_validate`
+    引擎 —— plate 导出 `model_dump(mode="json", exclude_none=True, ...)`
+    (gimbal_plate/export/gimbal.py:279 `GimbalScenarioExporter.render`)
+    把 `source: None` 整键丢弃,而引擎 `Assign.source: Any` 是必填
+    (gimbal/schema/strategy.py) → 该 case 加载即 `Scenario.model_validate`
     失败。此处不置 `required: false`(改不了结局,只把「单步失败」
     伪装成成功);编辑器对 null 值显形警告。
     """
