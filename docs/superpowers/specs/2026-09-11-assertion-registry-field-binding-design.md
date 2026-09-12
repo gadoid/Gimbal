@@ -1,7 +1,7 @@
 # 断言管理(偏离注入)与测试数据字段绑定协议(spec v2)
 
 **日期**: 2026-09-11
-**状态**: 设计定稿待用户审 — 取代 `2026-09-10-dataset-driven-refactor-design.md` 的后续演进方向(该 spec 已实施部分不变,见 §0)
+**状态**: **已被 `2026-09-12-assertion-registry-v3-merge-injection-design.md`(spec v3)取代** — 注册表面(§3/§5/§7/§8 的注入机制、并集执行、配置区入口)按 v3 重铸;数据集侧(T0/T1)与 v3 §0 列明的保留项不变
 **分支**: feat/dataset-driven-refactor
 
 ---
