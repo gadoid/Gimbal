@@ -275,7 +275,6 @@ import { useConstantsStore } from '@/stores/constants'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { showError } from '@/utils/errorFallback'
-import { fieldPathsOf } from '@/utils/dataset-segments'
 import { relTime } from '@/utils/datetime'
 import { executionUrl, composerUrl } from '@/utils/links'
 import { confirmAction } from '@/utils/confirmAction'
@@ -290,8 +289,8 @@ import type {
   Scenario, DataSetSummary, Orchestration, ScenarioDraft,
 } from '@/types/scenario-composer'
 import type { AssertionRegistry, EntryPath } from '@/types/assertion-registry'
-import { genEntryId, injectablePathSetOf, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
-import { endpointFullState, requestDeclarationsOf } from '@/composables/useEndpointFull'
+import { genEntryId, normalizeRegistry } from '@/utils/assertion-registry'
+import { useInjectableSurface } from '@/composables/useInjectableSurface'
 import type { ScenarioView, StepView } from '@/types/plate'
 
 const STEPS = [
@@ -517,39 +516,20 @@ const authOptions = computed(() => [...new Set([
   ...Object.keys(definition.value.config?.users ?? {}),
 ])])
 
-/** 死条目(悬空)id 集(spec v3 §2):injectablePathsOfStep 与编辑器同构
- *  (AssertionRegistryEditor)— RunDialog 注入区据此禁选;legacy 条目
- *  isDeadEntry 恒 true,一并计入。
- *  可注入面(spec v3.1 §2.1):body 现存 ∪ 契约声明(全状态 form/collapse/
- *  carry)。声明面来自共享 /full 缓存 —— 契约未回填时退化为 body 面(从严)。 */
-function registryInjectablePathsOf(si: number): ReadonlySet<string> {
-  const step = steps.value[si]
-  return injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))
-}
-function registryAssertTargetsOf(si: number): ReadonlySet<string> {
-  // 与 RunPanelHost/CaseDataSetsList/AssertionRegistryEditor 同口径:
-  // String(x.target) 兑现 ReadonlySet<string>(裸值会把 undefined 塞进来)
-  const st = steps.value[si]?.strategy ?? []
-  return new Set(st.filter((x) => x?.kind === 'assertion').map((x) => String(x.target)))
-}
-const deadEntryIds = computed(() =>
-  registry.value.entries
-    .filter((e) => isDeadEntry(e, steps.value.length, registryInjectablePathsOf, registryAssertTargetsOf))
-    .map((e) => e.id))
-/** 契约面是否**在途**(spec v3.1 §2.1,与 RunPanelHost 同款):任一「被引用且
- *  带 endpoint_id」的步骤尚未回填 /full 声明 ⇒ deadEntryIds 只跑过 body 面。
- *  本页 draft 通常先就绪(Canvas 已拉过 /full),但首访/慢 plate 下仍可能命中
- *  —— 交 RunDialog 在 pending 期间不把「尚未判定」当「判死」,预勾(§5「加入
- *  本次执行」)才不会被静默丢掉。 */
-const contractPending = computed(() => {
-  for (const st of steps.value as StepView[]) {
-    const eid = st?.api?.view_hints?.endpoint_id
-    if (!eid) continue
-    requestDeclarationsOf(st)
-    if (endpointFullState(eid) === 'loading') return true
-  }
-  return false
-})
+/** 判定面(spec 架构收敛 §2.1):可注入面 / 悬空判定 / 死因分组 / 契约在途
+ *  信号唯一来源 = useInjectableSurface;本页只消费(与 RunPanelHost 同源)。 */
+const surface = useInjectableSurface(steps, computed(() => registry.value.entries))
+onMounted(() => surface.ensure())
+/** 契约面在途(spec v3.1 §2.1):与本页 deadEntryIds 的掩空决策**同源**。
+ *  本页 draft 通常先就绪(Canvas 已拉过 /full),但首访/慢 plate 下仍可能命中。 */
+const contractPending = computed(() => surface.pending.value)
+/** 当前生效的死条目 = 任何时刻都死的(intrinsic)∪ 契约落定后的悬置面;
+ *  契约在途时「尚未判定」≠「判死」(预勾 §5「加入本次执行」不被静默丢掉),
+ *  但**不依赖判定面**的死因(step-oob / legacy)恒在 intrinsic ⇒ 恒禁选。 */
+const deadEntryIds = computed(() => [
+  ...surface.dead.value.intrinsic,
+  ...(surface.pending.value ? [] : surface.dead.value.contractDependent),
+])
 
 /** 配置签「加入本次执行」(spec v3 §5):预勾该条目打开运行面板 */
 function onRunEntry(id: string) {

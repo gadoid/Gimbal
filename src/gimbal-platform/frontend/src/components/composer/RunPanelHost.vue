@@ -5,7 +5,8 @@
   与场景入口同款 RunDialog,场景加载不绑死 CaseComposer。自取数:
   getScenario(展示名/步数)+ getScenarioDraft(definition/
   orchestration.runSchemes/assertion_registry)+ listDataSets + 凭证池。
-  dead 计算与 CaseComposer 同构(可注入面 = body 现存 ∪ 契约声明,spec v3.1 §2.1)。
+  判定面消费 useInjectableSurface(唯一消费面,spec 架构收敛 §2.1);
+  掩空决策(契约在途时「尚未判定」≠「判死」)由本宿主做并传给 RunDialog。
 -->
 <template>
   <RunDialog
@@ -44,9 +45,8 @@ import type {
 } from '@/api/scenario-composer'
 import type { DataSetSummary, Scenario } from '@/types/scenario-composer'
 import type { AssertionRegistry } from '@/types/assertion-registry'
-import { injectablePathSetOf, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
-import { fieldPathsOf } from '@/utils/dataset-segments'
-import { endpointFullState, requestDeclarationsOf } from '@/composables/useEndpointFull'
+import { normalizeRegistry } from '@/utils/assertion-registry'
+import { useInjectableSurface } from '@/composables/useInjectableSurface'
 import { list as listAuthSessions } from '@/api/auth_sessions'
 import { showError } from '@/utils/errorFallback'
 import { executionUrl } from '@/utils/links'
@@ -91,42 +91,24 @@ const authOptions = computed(() => {
     ((draft.value?.definition.config as any)?.users ?? {}) as Record<string, unknown>)
   return [...new Set([...authAliases.value, ...users])]
 })
-/** dead 计算(spec v3 §2,与 CaseComposer 同构)。
- *  可注入面(spec v3.1 §2.1):body 现存 ∪ 契约声明(全状态 form/collapse/
- *  carry)。声明面来自共享 /full 缓存 —— 契约未回填时退化为 body 面(从严)。 */
-function injectablePathsOfStep(si: number): ReadonlySet<string> {
-  const step = steps.value[si]
-  return injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))
-}
-function assertTargetsOf(si: number): ReadonlySet<string> {
-  // String(x.target):兑现 ReadonlySet<string> 的类型承诺(裸 x.target 会
-  // 把 undefined 塞进 string 集合)。断言 target 在引擎/plate 双侧 schema
-  // 均必填,故对合法场景不可达;但四处 dead 投影必须同口径
-  // (CaseComposer / CaseDataSetsList / AssertionRegistryEditor 同写法)。
-  const st = (steps.value[si]?.strategy as any[] | undefined) ?? []
-  return new Set(st.filter((x) => x?.kind === 'assertion').map((x) => String(x.target)))
-}
-const deadEntryIds = computed(() =>
-  registry.value.entries
-    .filter((e) => isDeadEntry(e, steps.value.length, injectablePathsOfStep, assertTargetsOf))
-    .map((e) => e.id))
-/** 契约面是否**在途**(spec v3.1 §2.1):任一「被引用且带 endpoint_id」的步骤
- *  尚未回填 /full 声明 ⇒ 此刻的 deadEntryIds 只跑过 body 面,锚在 carry /
- *  未落 body 的 collapse 上的条目会被**误判**成悬空。时序坑:本宿主自取数后
- *  才挂 RunDialog,`/full` 与挂载同 tick 才发起 ⇒ 首判定必然是 body 面
- *  (此前 preset 锚在 carry 的预勾会被静默丢掉,且契约回来后 prop 不变、
- *  RunDialog 的 watch 不重跑 → 永不重放)。交 RunDialog 在 pending 期间
- *  不把「尚未判定」当「判死」。
- *  ensureEndpointFull 幂等:miss 时由 requestDeclarationsOf 发起取数。 */
-const contractPending = computed(() => {
-  for (const st of steps.value) {
-    const eid = (st as { api?: { view_hints?: { endpoint_id?: string } } })?.api?.view_hints?.endpoint_id
-    if (!eid) continue
-    requestDeclarationsOf(st)
-    if (endpointFullState(eid) === 'loading') return true
-  }
-  return false
-})
+/** 判定面(spec 架构收敛 §2.1):可注入面 / 悬空判定 / 死因分组 / 契约在途
+ *  信号全部收在 useInjectableSurface —— 本宿主只消费,不再持有副本。
+ *  时序坑仍在:本宿主自取数后才挂 RunDialog,`/full` 与挂载同 tick 才发起
+ *  ⇒ 首判定只有 body 面;契约在途时 contractDependent 那批**不并入**
+ *  deadEntryIds(而非在 RunDialog 侧掩空),preset 锚在 carry 的预勾才不会被
+ *  静默丢掉(契约回来后 prop 变化,RunDialog 的收窄 watch 自然重跑)。 */
+const surface = useInjectableSurface(steps, computed(() => registry.value.entries))
+onMounted(() => surface.ensure())
+/** 契约面在途(spec v3.1 §2.1)= 被条目引用的端点尚未回填 —— 传给 RunDialog 的
+ *  信号与 deadEntryIds 的掩空决策**同源**,两者必须同步。 */
+const contractPending = computed(() => surface.pending.value)
+/** 当前生效的死条目 = 任何时刻都死的(intrinsic)∪ 契约已落定后的悬置面。
+ *  掩空决策在**宿主**做:契约在途时 contractDependent 不判死(可能变活),
+ *  intrinsic 恒判死(step-oob / legacy / override-no-match 不依赖判定面)。 */
+const deadEntryIds = computed(() => [
+  ...surface.dead.value.intrinsic,
+  ...(surface.pending.value ? [] : surface.dead.value.contractDependent),
+])
 
 onMounted(async () => {
   try {

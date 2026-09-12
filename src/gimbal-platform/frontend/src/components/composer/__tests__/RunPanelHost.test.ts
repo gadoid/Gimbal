@@ -154,8 +154,11 @@ it('RH-4: 契约面在途(冷启动)→ preset 锚在 carry 声明的条目不�
   const w = await mountHost({ preset: { injectionEntryIds: ['inj-carry', 'inj-old'] } })
   const dlg = w.findComponent(RunDialog)
   expect(api.getFullEndpoint).toHaveBeenCalledWith('ep-carry')
-  // 前提:宿主此刻的 deadEntryIds 只跑过 body 面 —— carry 条目被判死
-  expect(dlg.props('deadEntryIds')).toContain('inj-carry')
+  // 前提:宿主此刻的判定只跑过 body 面 —— carry 条目只被契约面托着,属
+  // 「仅因契约未定而判死」⇒ 掩空决策上移后在 pending 期间**不进** deadEntryIds
+  // (此前是 deadEntryIds 照旧带上、由 RunDialog 整体掩空 —— 那会连
+  // step-oob/legacy 一起放行,RH-6 钉住该缺陷)
+  expect(dlg.props('deadEntryIds')).not.toContain('inj-carry')
   expect(dlg.props('contractPending')).toBe(true)
   // pending:尚未判定 ≠ 判死 → 不标悬空、不禁选、预勾保留
   const boxOf = () => dlg.findAll('.rd-injection .el-checkbox')
@@ -180,6 +183,42 @@ it('RH-4: 契约面在途(冷启动)→ preset 锚在 carry 声明的条目不�
   w.unmount()
 })
 
+it('RH-6: 契约 pending 期间 — intrinsic 死条目仍禁选,contractDependent 不标死', async () => {
+  // 修 C 的可观察面:此前 RunDialog 在 contractPending 期间把 deadIds **整体**
+  // 掩空 ⇒ 连不依赖判定面的死因(step-oob / legacy)也失去禁选,窗口内能勾上
+  // 真悬空条目并下发(后端 skip,对话框照旧承诺)。判据分组上移到宿主后:
+  // intrinsic 恒禁选,只有 contractDependent 在 pending 期间不标死。
+  const { _resetEndpointFullCacheForTest } = await import('@/composables/useEndpointFull')
+  _resetEndpointFullCacheForTest()
+
+  let release: (v: any) => void = () => {}
+  vi.spyOn(api, 'getFullEndpoint').mockReturnValue(new Promise((res) => { release = res }) as any)
+  vi.spyOn(api, 'getScenario').mockResolvedValue({ meta: { scenarioId: 'sc-h', name: 'h' }, steps: [], stepCount: 1 } as any)
+  vi.spyOn(api, 'getScenarioDraft').mockResolvedValue({
+    definition: { kind: 'scenario', scenarioId: 'sc-h', meta: { name: 'h' }, config: {},
+      steps: [{ kind: 'step', api: { kind: 'api', service: 's', method: 'POST', path: '/p', headers: {},
+        view_hints: { endpoint_id: 'ep-h' } }, request: { kind: 'request', body: {} }, strategy: [] }] },
+    orchestration: { steps: [], resourceMeta: {} },
+    assertion_registry: { entries: [
+      { id: 'inj-oob', name: '越界', path: { stepIndex: 9, source: 'body', jsonpath: '$.x' }, value: 1, asserts: [] },
+      { id: 'inj-carry', name: '契约依赖', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_x' }, value: 1, asserts: [] },
+    ] },
+  } as any)
+  const w = await mountHost()
+  await flushPromises()                  // /full 仍挂起 ⇒ pending 为真
+  const dlg = w.findComponent(RunDialog)
+  expect(dlg.props('contractPending')).toBe(true)
+  const boxes = dlg.findAll('.rd-injection .el-checkbox')
+  expect(boxes[0].find('input').attributes('disabled')).toBeDefined()   // step-oob:intrinsic ⇒ 仍禁选
+  expect(boxes[0].text()).toContain('悬空')
+  expect(boxes[1].find('input').attributes('disabled')).toBeUndefined() // 契约依赖 ⇒ pending 期间不禁选
+  release({ id: 'ep-h', request: { declarations: [] } })                // 契约落定后收窄
+  await flushPromises()
+  expect(w.findComponent(RunDialog).findAll('.rd-injection .el-checkbox')[1]
+    .find('input').attributes('disabled')).toBeDefined()
+  w.unmount()
+})
+
 it('RH-5: 契约落定后补一次收窄(只删不增)+ 用户手动勾选不被覆盖', async () => {
   // pending 期间条目一律不禁选 ⇒ 用户可以勾上一个**落定后才判死**的条目。
   // 留着它就是 disabled + 「悬空 — 不可选」却仍被 confirm 下送 / dispatch
@@ -194,6 +233,10 @@ it('RH-5: 契约落定后补一次收窄(只删不增)+ 用户手动勾选不被
     ...REG.entries,
     { id: 'inj-ghost', name: '拼写错的锚点',
       path: { stepIndex: 0, source: 'body', jsonpath: '$.ghost' }, value: 1, asserts: [] },
+    // 条目锚在步骤 1:在途面 = 「被条目引用到的端点」(useInjectableSurface),
+    // 无此条目则 ep-2 不进判定面,「只落定一步仍在途」这一档无法成立。
+    { id: 'inj-s1', name: '第二步条目',
+      path: { stepIndex: 1, source: 'body', jsonpath: '$.s1' }, value: 1, asserts: [] },
   ] }
   vi.spyOn(api, 'getScenarioDraft').mockResolvedValue(twoEid)
 

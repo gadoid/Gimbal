@@ -120,9 +120,8 @@ import RunPanelHost from '@/components/composer/RunPanelHost.vue'
 import type { RunPreset } from '@/api/scenario-composer'
 import type { AssertionRegistry } from '@/types/assertion-registry'
 import { isLegacyEntry } from '@/types/assertion-registry'
-import { injectablePathSetOf, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
-import { fieldPathsOf } from '@/utils/dataset-segments'
-import { requestDeclarationsOf } from '@/composables/useEndpointFull'
+import { normalizeRegistry } from '@/utils/assertion-registry'
+import { useInjectableSurface } from '@/composables/useInjectableSurface'
 
 const route = useRoute()
 const router = useRouter()
@@ -134,18 +133,12 @@ const dataSets = computed(() => store.dataSetsOfScenario(scenarioId))
 // ── 断言条目区(spec v3 §5):draft 自取数(与编辑器同源)────────────
 const registry = ref<AssertionRegistry>({ entries: [] })
 const steps = ref<any[]>([])
-/** 可注入面(spec v3.1 §2.1):body 现存 ∪ 契约声明(全状态 form/collapse/carry)。
- *  声明面来自共享 /full 缓存 —— 契约未回填时退化为 body 面(从严)。 */
-function injectablePathsOfStep(si: number): ReadonlySet<string> {
-  const step = steps.value[si]
-  return injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))
-}
-function assertTargetsOf(si: number): ReadonlySet<string> {
-  const st = (steps.value[si]?.strategy as any[] | undefined) ?? []
-  return new Set(st.filter((x) => x?.kind === 'assertion').map((x) => String(x.target)))
-}
-const deadOf = (e: AssertionRegistry['entries'][number]) =>
-  isDeadEntry(e, steps.value.length, injectablePathsOfStep, assertTargetsOf)
+/** 判定面(spec 架构收敛 §2.1):唯一消费面。本页只做展示(悬空灰显),
+ *  契约在途与否不改变展示口径 —— 卡片灰显用「任何时刻都死」的 intrinsic 面。 */
+const surface = useInjectableSurface(steps, computed(() => registry.value.entries))
+onMounted(() => surface.ensure())
+/** 悬空判定薄壳(模板按布尔消费:class / title / 摘要行) */
+const deadOf = (e: AssertionRegistry['entries'][number]) => surface.deadOf(e).length > 0
 function valueSummary(e: AssertionRegistry['entries'][number]): string {
   if (isLegacyEntry(e)) return '—'
   const v = (e as { value: unknown }).value

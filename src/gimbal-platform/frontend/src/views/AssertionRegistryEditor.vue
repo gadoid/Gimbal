@@ -192,14 +192,12 @@ import { getScenarioDraft, updateScenario } from '@/api/scenario-composer'
 import type { ScenarioDraft } from '@/types/scenario-composer'
 import type { AssertionEntry, AssertionRegistry, LegacyAssertionEntry } from '@/types/assertion-registry'
 import { isLegacyEntry } from '@/types/assertion-registry'
-import { genEntryId, injectablePathSetOf, isDeadEntry, normalizeRegistry, registryIssues } from '@/utils/assertion-registry'
-import { fieldPathsOf } from '@/utils/dataset-segments'
-import { assertablePaths, iterFlat, resolveState, toTemplatePath } from '@/utils/declarations'
+import { genEntryId, normalizeRegistry } from '@/utils/assertion-registry'
+import { assertablePaths } from '@/utils/declarations'
 import { toScratchPath } from '@/utils/scratch-path'
 import type { FieldState } from '@/types/plate'
-import {
-  ensureEndpointFull, getEndpointFull, requestDeclarationsOf,
-} from '@/composables/useEndpointFull'
+import { ensureEndpointFull, getEndpointFull } from '@/composables/useEndpointFull'
+import { useInjectableSurface } from '@/composables/useInjectableSurface'
 import JsonPathInput from '@/components/composer/JsonPathInput.vue'
 import { composerUrl } from '@/utils/links'
 import { showError } from '@/utils/errorFallback'
@@ -219,19 +217,12 @@ const stepLabels = computed(() =>
 )
 const scenarioName = computed(() => draft.value?.definition?.meta?.name || scenarioId)
 
-/** 可注入面(spec v3.1 §2.1):body 现存 ∪ 契约声明(全状态 form/collapse/carry)。
- *  声明面来自共享 /full 缓存 —— 契约未回填时退化为 body 面(从严)。 */
-function injectablePathsOfStep(si: number): ReadonlySet<string> {
-  const step = steps.value[si]
-  return injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))
-}
-/** steps[si].strategy 的 assertion target 集合(悬空检测 override 维度) */
-function assertTargetsOf(si: number): ReadonlySet<string> {
-  const st = (steps.value[si]?.strategy as any[] | undefined) ?? []
-  return new Set(st.filter((x) => x?.kind === 'assertion').map((x) => String(x.target)))
-}
-const deadOf = (e: AssertionEntry | LegacyAssertionEntry) =>
-  isDeadEntry(e, stepCount.value, injectablePathsOfStep, assertTargetsOf)
+/** 判定面(spec 架构收敛 §2.1):可注入面 / 悬空判定 / 契约在途信号唯一来源
+ *  = useInjectableSurface;本页只消费(与 RunPanelHost/CaseComposer 同源)。 */
+const surface = useInjectableSurface(steps, computed(() => registry.value.entries))
+onMounted(() => surface.ensure())
+/** 悬空判定薄壳(isDeadEntry 的布尔口径 —— 模板按真假消费 class/title/徽标) */
+const deadOf = (e: AssertionEntry | LegacyAssertionEntry) => surface.deadOf(e).length > 0
 const deadCount = computed(() => registry.value.entries.filter(deadOf).length)
 
 /** 旧版条目不可选(不可编辑,spec v3 §8) */
@@ -245,7 +236,7 @@ function selectEntry(e: AssertionEntry | LegacyAssertionEntry) {
  *  声明 —— 文案必须说全两面,否则「body 无」会让用户以为契约已查过。 */
 function issueSummary(e: AssertionEntry | LegacyAssertionEntry): string {
   if (isLegacyEntry(e)) return '旧版条目(v2 形状),请在编排器重新标记创建'
-  return registryIssues(e, stepCount.value, injectablePathsOfStep, assertTargetsOf)
+  return surface.deadOf(e)
     .map((iss) => {
       if (iss.kind === 'step-oob') return `步骤${iss.stepIndex + 1} 越界(场景共 ${stepCount.value} 步)`
       if (iss.kind === 'path-unresolvable') return `步骤${iss.stepIndex + 1} 契约与 body 均无字段 ${iss.jsonpath}`
@@ -344,24 +335,14 @@ const OPERATORS = ['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'contains', 'exists']
 
 /** 请求侧候选(spec v3.1 §2.1)= 可注入面(body 现存 ∪ 契约声明全状态)。
  *  body 源:headers 是协议位,v1 path 不支持(spec v3 §1 裁定 9)。 */
-const pathCandidates = computed<string[]>(() => {
-  const step = steps.value[pendingPath.value.stepIndex]
-  return [...injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))]
-})
+const pathCandidates = computed<string[]>(() => [
+  ...surface.pathsOfStep(pendingPath.value.stepIndex),
+])
 
-/** 建议行状态标注:契约共识 + 步骤增量(与画布同一解析链 resolveState)。
- *  路径可用性不在本处判 —— `iterFlat` 已在边界按 `hasUsablePath` 消毒
- *  (§2.3 唯一定义),输出条目 path 必为非空字符串 ⇒ 下面直接
- *  `toTemplatePath(e.path)` 不会收到真值非串(此前无守卫即白屏根因)。 */
+/** 建议行状态标注薄壳:判定面按步取态(composable 的 stateOf 显式收 si,
+ *  候选来自"当前待选步骤",该下标就在本页手里)。 */
 function stateOfPendingPath(path: string): FieldState | undefined {
-  const step = steps.value[pendingPath.value.stepIndex] as any
-  const decls = requestDeclarationsOf(step)
-  if (!decls?.length) return undefined
-  const key = toTemplatePath(path)
-  for (const e of iterFlat(decls)) {
-    if (toTemplatePath(e.path) === key) return resolveState(e.path, e.state, step?.field_states)
-  }
-  return undefined
+  return surface.stateOf(pendingPath.value.stepIndex, path)
 }
 
 /** asserts.target 候选 = 所选步骤**端点契约**的 assertable 面,经 toScratchPath

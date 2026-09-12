@@ -96,7 +96,7 @@
 
           <!-- 断言注入条目(spec v3 §4 异常组):与数据集行交叉生成 case(N 行 × M 条目);
                悬空/旧版条目禁选 — 死判定由宿主预计算经 deadEntryIds 传入
-               (契约面在途时悬空判定不生效:见 contractPending) -->
+               (契约面在途时**只有**契约依赖的那批不判死:宿主按 pending 摘除) -->
           <section v-if="assertionEntries.length" class="run-section rd-injection">
             <label class="run-label">断言注入条目 <span class="muted small">(异常组, 可多选 — 与数据集行交叉生成 case:N 行 × M 条目)</span></label>
             <el-checkbox-group v-model="injectionIds" class="rd-inj-group">
@@ -278,12 +278,13 @@ const props = withDefaults(defineProps<{
   stepOrchestrationNames?: string[]
   /** 断言注册表条目(spec v3 §2/§4):与数据集行交叉成 case;空 = 无注入区(整段隐藏) */
   assertionEntries?: Array<AssertionEntry | LegacyAssertionEntry>
-  /** 死条目(悬空)id — CaseComposer 用 isDeadEntry 预计算,死条目禁选 */
+  /** 死条目(悬空)id — 宿主预计算(useInjectableSurface 分组),死条目禁选。
+   *  契约在途时宿主只并入 intrinsic;contractDependent 由宿主按 pending 决定 */
   deadEntryIds?: string[]
-  /** 契约面(对端步骤的 /full 声明)是否**在途**:宿主传入(= 任一被引用
-   *  步骤的 endpoint 尚未回填)。为真时判定只跑过 body 面 —— 「尚未判定」
-   *  ≠「判死」:不过滤 preset、不标悬空、不禁选,契约落定后补一次收窄。
-   *  缺省 false(契约面已定 / 该场景无契约面)。 */
+  /** 契约面(对端步骤的 /full 声明)是否**在途**:宿主传入(与该宿主对
+   *  deadEntryIds 的掩空决策**同源**)。为真时 deadEntryIds 里不含
+   *  「仅因契约未定」的条目 ⇒ 不过滤 preset、不标悬空、不禁选,契约落定后
+   *  补一次收窄。缺省 false(契约面已定 / 该场景无契约面)。 */
   contractPending?: boolean
   /** 运行面板预填(spec v3 §6):数据集入口/「加入本次执行」传入;
    *  挂载时按此预勾(已删/悬空条目静默过滤),null = 无预填 */
@@ -353,17 +354,16 @@ function toggleBaseline() {
 // 与数据集(正常组)并列;每次打开弹框 = v-if 重挂载,选中态随之重置
 // (与 selection 同款生命周期,无显式 visible watch)。
 const injectionIds = ref<string[]>([])
-/** 死条目(悬空)判定:CaseComposer 预计算传入(编辑器同款 isDeadEntry)。
- *  契约面**在途**时恒为空集 —— 那时 deadEntryIds 只跑过 body 面,把它当
- *  判死会让条目先灰一下再翻活,并把锚在 carry 的预勾静默丢掉。 */
-const deadIds = computed(() =>
-  props.contractPending ? new Set<string>() : new Set(props.deadEntryIds))
-/** 可注入集合 = 现存 ∧ 非旧版 ∧ 未判死 —— 契约在途时 deadIds 已被掩成空集,
- *  故那时**不过滤判死**,只滤旧版。两处消费(预填/方案回填过滤、方案降级
- *  标注)同口径:悬空条目禁选,回填成勾选态会卡死。
- *  旧版条目必须在此显式排除:它平时靠 deadEntryIds 携带而进过滤面,而契约
- *  在途时那个集合被掩空 —— 不显式排除就会把 legacy 预勾成 disabled 的勾选
- *  态(旧版条目是**形状判** isLegacyEntry,与契约面无关,恒不可选)。 */
+/** 死条目(悬空)判定:宿主预计算传入,**本组件不再自行掩空** —— 契约在途
+ *  时该掩什么由宿主定(useInjectableSurface 的死因分组:不依赖判定面的死因
+ *  恒禁选,只有「仅因契约未定」的那批在窗口内不判死)。此前这里把 deadIds
+ *  整体掩空,连 step-oob / legacy 一起放行 ⇒ 窗口内能勾上真悬空条目并下发。 */
+const deadIds = computed(() => new Set(props.deadEntryIds))
+/** 可注入集合 = 现存 ∧ 非旧版 ∧ 未判死。两处消费(预填/方案回填过滤、方案
+ *  降级标注)同口径:悬空条目禁选,回填成勾选态会卡死。
+ *  旧版条目在此显式排除:它虽已由宿主计入 intrinsic(恒禁选),但形状判
+ *  isLegacyEntry 与判定面无关 —— 显式排除兑现「旧版条目恒不可选」,不依赖
+ *  宿主是否把它带进 deadEntryIds。 */
 const liveEntryIds = computed(() =>
   new Set(props.assertionEntries
     .filter((e) => !isLegacyEntry(e) && !deadIds.value.has(e.id))

@@ -201,6 +201,15 @@ describe('CaseComposer — RunDialog 对接(Task 12)', () => {
       view_hints: { endpoint_id: 'ep-cc' },
     }
     vi.spyOn(api, 'getScenario').mockResolvedValue(sc)
+    // 在途面 = 「被条目引用到的端点」(useInjectableSurface 的唯一消费面):
+    // 无条目引用则该端点不影响任何死判定,也就无所谓在途 —— 锚一条契约
+    // 依赖条目(路径 body 里没有,只能靠声明面活)把 ep-cc 带进判定面。
+    vi.spyOn(api, 'getScenarioDraft').mockResolvedValue({
+      assertion_registry: { entries: [
+        { id: 'inj-carry', name: 'carry 偏离',
+          path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_x' }, value: 1, asserts: [] },
+      ] },
+    } as any)
     let resolveFull!: (v: unknown) => void
     vi.spyOn(api, 'getFullEndpoint')
       .mockReturnValue(new Promise((res) => { resolveFull = res }) as any)
@@ -210,9 +219,12 @@ describe('CaseComposer — RunDialog 对接(Task 12)', () => {
     const dlg = await openRunDialog(w)
     expect(api.getFullEndpoint).toHaveBeenCalledWith('ep-cc')
     expect(dlg.props('contractPending')).toBe(true)       // 在途 → pending
+    // 在途:契约依赖条目不判死(掩空决策上移到宿主 —— deadEntryIds 里没有它)
+    expect(dlg.props('deadEntryIds')).not.toContain('inj-carry')
     resolveFull({ id: 'ep-cc', request: { declarations: [] } })
     await flushPromises()
     expect(dlg.props('contractPending')).toBe(false)      // 落定 → 判定面已完整
+    expect(dlg.props('deadEntryIds')).toContain('inj-carry')  // 落定后确实判死
     w.unmount()
   })
 
