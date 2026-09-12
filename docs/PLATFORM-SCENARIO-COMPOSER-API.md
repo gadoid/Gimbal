@@ -370,7 +370,9 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 
 ### 4.3 `GET /api/scenarios/{scenarioId}`
 
-**角色**：场景详情（前端 `ScenarioEditorMeta/Steps.vue`）
+**角色**：场景详情（前端 `views/CaseComposer.vue:726` 的 `loadScenario` —— 编排页
+按 scenarioId 取回整份 `{meta, steps, config, resource}` 重建 `definition`；运行面板
+`components/composer/RunPanelHost.vue:115` 同走此端点取展示名 / 步数）
 
 **响应**：`200 OK` → `Scenario`
 
@@ -643,8 +645,14 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
   的 `data.item.request.declarations`（`app/services/endpoint_declarations.py:163-197`）。
 - 这条取数是**软取**：只做增强，不是执行的前置条件。它带**自己的短超时**
   `DECLARED_PATHS_TIMEOUT_SEC`（缺省 **3.0 s**，
-  `app/core/config.py:100-109`），与 `PLATE_TIMEOUT_SEC`（30 s，`:76`）分离。
+  `app/core/config.py:100-118`），与 `PLATE_TIMEOUT_SEC`（30 s，`:76`）分离。
   **30 s 那条服务 `convert` 等既有链路（语义是「等不到就报错」），不得改动。**
+  该上限落在**共享的**声明面取数（`endpoint_declarations._fetch_declarations`）上，
+  **carry 面同样受它约束**（`declarations_of` 还服务
+  `carry_injection.build_carry_context`：后台 fan-out `run_dispatcher.py:748`、
+  预览/导出 `routers/scenarios.py:188`）—— 故 carry 面**不只在取数失败时降级，
+  plate 慢过 3 s 时也降级**（共享一个有界面的代价，`app/core/config.py:100-118`
+  已把这条代价写明）。
 - 为什么取数要短：它跑在 `/runs` 的**同步**段里。软取的上限是 3 s，而客户端
   超时是 30 s（`frontend/src/api/http.ts:98`）—— **3 s 远小于 30 s，故同步等待
   有界**。这是设计意图（`app/core/config.py:100-109`）：设计要避免的是两条超时
