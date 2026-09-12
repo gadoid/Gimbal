@@ -112,6 +112,49 @@ describe('CaseComposerConfig — 用户认证卡(2026-08-25)', () => {
   })
 })
 
+describe('断言管理纯展示列表(spec v3 §5)', () => {
+  const ENTRIES = [
+    { id: 'inj-1', name: '金额为负',
+      path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: -1, asserts: [] },
+    { id: 'inj-old', name: '旧版条目',
+      anchor: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, injection: [], asserts: [] },
+  ] as any[]
+
+  /** 生产用法镜像(同 mountWithParent)+ 展示列表 props + runEntry 监听 */
+  function mountAreList(props: Record<string, unknown> = {}) {
+    const config = ref<ConfigView>(makeConfig())
+    const runEntry = vi.fn()
+    const Parent = defineComponent({
+      setup() {
+        return () => h(CaseComposerConfig, {
+          modelValue: config.value,
+          'onUpdate:modelValue': (v: ConfigView) => { config.value = v },
+          assertionEntries: ENTRIES,
+          ...props,
+          onRunEntry: runEntry,
+        })
+      },
+    })
+    return { w: mount(Parent, { global: { plugins: [ElementPlus] } }), runEntry }
+  }
+
+  it('CFG-ARE-1: 列表渲染(path 徽标/期望数)+ 旧版条目灰显不可执行', async () => {
+    const { w } = mountAreList({ deadEntryIds: ['inj-old'] })
+    const rows = w.findAll('.are-row')
+    expect(rows).toHaveLength(2)
+    expect(rows[0].text()).toContain('步骤1 · $.amount')
+    expect(rows[1].classes()).toContain('is-dead')
+    expect(rows[1].text()).toContain('旧版条目,请重建')
+    expect(rows[1].find('.are-run').exists()).toBe(false)   // 旧版无「加入本次执行」
+  })
+
+  it('CFG-ARE-2: 活条目「加入本次执行」→ emit runEntry(id)', async () => {
+    const { w, runEntry } = mountAreList({ deadEntryIds: [] })
+    await w.find('.are-run').trigger('click')
+    expect(runEntry).toHaveBeenCalledWith('inj-1')
+  })
+})
+
 describe('CaseComposerConfig — 归属列(别名派生只读展示, spec §1.4)', () => {
   it('直引/别名行显示目录 base(同值两次);目录外违规键显示未挂目录', async () => {
     const initial = makeConfig()

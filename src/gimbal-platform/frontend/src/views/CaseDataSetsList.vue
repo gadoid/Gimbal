@@ -6,8 +6,8 @@
   <section class="ds-list">
     <header class="page-header">
       <div>
-        <h2 class="page-title"><el-icon><DataAnalysis /></el-icon>数据集列表</h2>
-        <p>场景 <code class="sid">{{ scenarioId }}</code> · 共 {{ dataSets.length }} 个数据集 · 1 : N</p>
+        <h2 class="page-title"><el-icon><DataAnalysis /></el-icon>测试数据</h2>
+        <p>场景 <code class="sid">{{ scenarioId }}</code> · {{ dataSets.length }} 数据集 · {{ registry.entries.length }} 断言条目</p>
       </div>
       <div class="header-actions">
         <el-button :icon="Back" @click="router.push(composerUrl(scenarioId))">编排器</el-button>
@@ -38,7 +38,7 @@
           <div class="ops" @click.stop>
             <el-button size="small" plain @click="open(d)">编辑</el-button>
             <el-button size="small" type="danger" plain @click="remove(d)">删除</el-button>
-            <el-button size="small" type="primary" plain @click="runOne(d)"><el-icon style="margin-right:3px"><VideoPlay /></el-icon>单条</el-button>
+            <el-button size="small" type="primary" plain @click="runDataset(d)"><el-icon style="margin-right:3px"><VideoPlay /></el-icon>运行</el-button>
           </div>
         </footer>
       </article>
@@ -55,19 +55,73 @@
     >
       <el-button type="primary" plain @click="onCreate">+ 新建数据集</el-button>
     </el-empty>
+
+    <!-- 断言条目网格(spec v3 §5):同页双区第二区 — 编辑入口(点击跳
+         断言管理编辑器);旧版条目灰显不可执行(保留原样不删) -->
+    <section class="td-entries">
+      <header class="page-header">
+        <div>
+          <h2 class="page-title sub">断言条目(偏离注入)</h2>
+          <p>{{ registry.entries.length }} 条 · 定位 path + 偏离值 + 期望配对 · 与数据集行交叉执行</p>
+        </div>
+        <div class="header-actions">
+          <el-button :icon="Back" @click="router.push(scenarioAssertionsUrl(scenarioId))">管理断言</el-button>
+        </div>
+      </header>
+      <div class="grid">
+        <article
+          v-for="e in registry.entries"
+          :key="e.id"
+          class="card td-entry"
+          :class="{ 'is-dead': isLegacyEntry(e) || deadOf(e) }"
+          :title="isLegacyEntry(e) ? '旧版条目,请重建' : deadOf(e) ? '悬空条目 — 不可执行' : '点击编辑'"
+          @click="openEntryEditor()"
+        >
+          <header class="card-head">
+            <div class="title">
+              <h3>{{ e.name }}</h3>
+              <span v-if="!isLegacyEntry(e)" class="row-count">步骤{{ e.path.stepIndex + 1 }} · {{ e.path.jsonpath }}</span>
+              <span v-else class="row-count">旧版条目,请重建</span>
+            </div>
+          </header>
+          <p class="preview">{{ valueSummary(e) }}</p>
+          <footer class="card-foot">
+            <div class="ops" @click.stop>
+              <span class="row-count">{{ e.asserts?.length ?? 0 }} 期望</span>
+              <span v-if="isLegacyEntry(e)" class="row-count">旧版</span>
+              <span v-else-if="deadOf(e)" class="row-count">悬空</span>
+            </div>
+          </footer>
+        </article>
+        <article class="card add-card" @click="openEntryEditor()">
+          <div class="add-icon">+</div>
+          <div class="add-text">新建断言条目</div>
+        </article>
+      </div>
+    </section>
+
+    <!-- 运行面板宿主(spec v3 §6 数据集入口):整库/单行预填 -->
+    <RunPanelHost v-if="panelOpen" :scenario-id="scenarioId" :preset="panelPreset" @close="panelOpen = false" />
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { Back, DataAnalysis, VideoPlay } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { showError } from '@/utils/errorFallback'
 import { confirmAction } from '@/utils/confirmAction'
-import { scenarioDataSetUrl, composerUrl } from '@/utils/links'
+import { scenarioDataSetUrl, composerUrl, scenarioAssertionsUrl } from '@/utils/links'
 import type { DataSetRow, DataSetSummary } from '@/types/scenario-composer'
+import { getScenarioDraft } from '@/api/scenario-composer'
+import RunPanelHost from '@/components/composer/RunPanelHost.vue'
+import type { RunPreset } from '@/api/scenario-composer'
+import type { AssertionRegistry } from '@/types/assertion-registry'
+import { isLegacyEntry } from '@/types/assertion-registry'
+import { bodyPathSetOf, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
+import { fieldPathsOf } from '@/utils/dataset-segments'
 
 const route = useRoute()
 const router = useRouter()
@@ -76,11 +130,50 @@ const scenarioId = route.params.scenarioId as string
 
 const dataSets = computed(() => store.dataSetsOfScenario(scenarioId))
 
+// ── 断言条目区(spec v3 §5):draft 自取数(与编辑器同源)────────────
+const registry = ref<AssertionRegistry>({ entries: [] })
+const steps = ref<any[]>([])
+function bodyPathsOfStep(si: number): ReadonlySet<string> {
+  return bodyPathSetOf(fieldPathsOf(steps.value[si] as any))
+}
+function assertTargetsOf(si: number): ReadonlySet<string> {
+  const st = (steps.value[si]?.strategy as any[] | undefined) ?? []
+  return new Set(st.filter((x) => x?.kind === 'assertion').map((x) => String(x.target)))
+}
+const deadOf = (e: AssertionRegistry['entries'][number]) =>
+  isDeadEntry(e, steps.value.length, bodyPathsOfStep, assertTargetsOf)
+function valueSummary(e: AssertionRegistry['entries'][number]): string {
+  if (isLegacyEntry(e)) return '—'
+  const v = (e as { value: unknown }).value
+  if (v === null || v === undefined) return '—'
+  return typeof v === 'string' ? v : JSON.stringify(v)
+}
+
+// ── 运行面板(spec v3 §6 数据集入口):preset 预填 ──────────────────
+const panelOpen = ref(false)
+const panelPreset = ref<RunPreset | null>(null)
+
+/** 数据集卡「运行」:整库单选预填(行级在 DataSetEditor「运行此行」)*/
+function runDataset(d: DataSetSummary) {
+  panelPreset.value = { dataSetSelection: [{ datasetId: d.datasetId }] }
+  panelOpen.value = true
+}
+function openEntryEditor() {
+  router.push(scenarioAssertionsUrl(scenarioId))
+}
+
 onMounted(async () => {
   try {
     await store.fetchDataSets(scenarioId)
   } catch (e) {
     showError('加载数据集', e)
+  }
+  try {
+    const draft = await getScenarioDraft(scenarioId)
+    registry.value = normalizeRegistry(draft.assertion_registry)
+    steps.value = (draft.definition.steps ?? []) as any[]
+  } catch (e) {
+    showError('加载断言条目', e)
   }
 })
 
@@ -104,11 +197,6 @@ async function remove(d: DataSetSummary) {
   } catch (e) {
     showError('删除数据集', e)
   }
-}
-
-/** 运行统一走编排器的 RunDialog(可在其中勾选该数据集发起运行) */
-async function runOne(_d: DataSetSummary) {
-  router.push(composerUrl(scenarioId))
 }
 
 /** 把首 3 行的首 3 列拼成预览文案。模板层 `v-if="d.preview.length"` 已守卫,
@@ -237,4 +325,9 @@ function previewLabel(rows: DataSetRow[]) {
   color: var(--accent);
 }
 .add-text { font-size: 12px; color: var(--accent); }
+
+/* 断言条目区(spec v3 §5):同页双区第二区 */
+.td-entries { margin-top: 28px; }
+.card.td-entry.is-dead { opacity: .55; }
+.page-title.sub { font-size: 16px; }
 </style>

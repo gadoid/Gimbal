@@ -234,6 +234,7 @@
               />
             </td>
             <td class="td-action">
+              <el-button size="small" text :icon="VideoPlay" :aria-label="`运行第 ${i + 1} 行`" @click="runRow(i)" />
               <el-button size="small" text @click="cloneRow(i)">复制</el-button>
               <el-button size="small" text :icon="Delete" :aria-label="`删除数据 ${i + 1}`" @click="removeRow(i)" />
             </td>
@@ -242,6 +243,9 @@
       </table>
       </div><!-- /grid-scroll -->
     </div>
+
+    <!-- 运行面板宿主(spec v3 §6 数据集入口):「运行此行」rowIndexes 预填 -->
+    <RunPanelHost v-if="panelOpen" :scenario-id="scenarioId" :preset="panelPreset" @close="panelOpen = false" />
   </section>
 
   <!-- 预览选中的数据:行详情(spec §6.2 v1 只读)— 按段分组垂直呈现 + 继承态标注。
@@ -277,11 +281,13 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { Back, DataAnalysis, Delete } from '@element-plus/icons-vue'
+import { Back, DataAnalysis, Delete, VideoPlay } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { getDataSet, getScenarioDraft, updateScenario } from '@/api/scenario-composer'
+import type { RunPreset } from '@/api/scenario-composer'
+import RunPanelHost from '@/components/composer/RunPanelHost.vue'
 import { showError } from '@/utils/errorFallback'
 import { confirmAction } from '@/utils/confirmAction'
 import { scenarioDataSetsUrl } from '@/utils/links'
@@ -320,6 +326,16 @@ const baselineDirty = ref(false)
 const selectedRows = reactive(new Set<number>())
 /** 预览弹窗显示开关 */
 const previewDialogOpen = ref(false)
+
+// ── 运行此行(spec v3 §6 数据集入口)──────────────────────────
+const panelOpen = ref(false)
+const panelPreset = ref<RunPreset | null>(null)
+
+/** 运行此行:行级 rowIndexes 预填(0-based = 行号) */
+function runRow(i: number) {
+  panelPreset.value = { dataSetSelection: [{ datasetId, rowIndexes: [i] }] }
+  panelOpen.value = true
+}
 
 // ── 变量优先双模式(spec v2 §6)──────────────────────────────
 /** 段派生(引用扫描,纯前端投影):引用徽标/行详情/未声明引用列的来源 */

@@ -240,15 +240,37 @@
     <!-- 用户认证(2026-08-25):场景级 users 快照 — 手动配置或凭证池导入 -->
     <UsersCard v-model="local.users" />
 
-    <!-- 断言管理(偏离注入)入口卡(spec v2 §7)— 跳独立编辑器 -->
+    <!-- 断言管理(偏离注入)纯展示列表(spec v3 §5)— 编辑入口搬家至
+         测试数据页;每条「加入本次执行」预勾运行面板(Task 6 preset) -->
     <div class="c-card are-entry-card">
       <div class="c-card-head">
         <div>
           <h3>断言管理</h3>
-          <p class="c-head-desc">偏离注入条目({{ assertionCount ?? 0 }})— 值偏离 + 期望配对,运行时与数据集并列选择</p>
+          <p class="c-head-desc">偏离注入条目({{ assertionEntries?.length ?? 0 }})— 定位 path + 偏离值 + 期望配对</p>
         </div>
-        <button class="c-add" @click="goAssertions">管理断言 →</button>
+        <button class="c-add" @click="goTestData">测试数据 →</button>
       </div>
+      <div v-if="!assertionEntries?.length" class="c-empty">
+        <p>还没有偏离注入条目</p>
+      </div>
+      <ul v-else class="are-list">
+        <li
+          v-for="e in assertionEntries"
+          :key="e.id"
+          class="are-row"
+          :class="{ 'is-dead': isLegacyEntry(e) || deadEntryIds?.includes(e.id) }"
+        >
+          <span class="are-name">{{ e.name }}</span>
+          <span v-if="!isLegacyEntry(e)" class="are-path">步骤{{ e.path.stepIndex + 1 }} · {{ e.path.jsonpath }}</span>
+          <span v-else class="are-path">旧版条目,请重建</span>
+          <span class="are-count">{{ e.asserts?.length ?? 0 }} 期望</span>
+          <button
+            v-if="!isLegacyEntry(e) && !deadEntryIds?.includes(e.id)"
+            class="are-run"
+            @click="emit('runEntry', e.id)"
+          >加入本次执行</button>
+        </li>
+      </ul>
     </div>
 
     <!--
@@ -269,7 +291,9 @@ import type { ConfigView, RetryPolicyView } from '@/types/plate'
 import { parseJson } from '../../utils/json'
 import { deriveBase } from '@/utils/service-alias'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
-import { scenarioAssertionsUrl } from '@/utils/links'
+import { scenarioDataSetsUrl } from '@/utils/links'
+import type { AssertionEntry, LegacyAssertionEntry } from '@/types/assertion-registry'
+import { isLegacyEntry } from '@/types/assertion-registry'
 import UsersCard from './UsersCard.vue'
 
 // plate TimePolicy 只有两态:record / timeout(带 seconds)。
@@ -284,16 +308,22 @@ const SYS_LABELS: Record<string, string> = {
 }
 function systemLabel(s: string) { return SYS_LABELS[s] || s }
 
-// 单一 props: modelValue 绑 plate ConfigView;scenarioId/assertionCount
-// 供断言管理入口卡跳转/计数(spec v2 §7,Task 3)
-const props = defineProps<{ modelValue: ConfigView; scenarioId?: string; assertionCount?: number }>()
-const emit = defineEmits<{ 'update:modelValue': [ConfigView] }>()
+// 单一 props: modelValue 绑 plate ConfigView;scenarioId/assertionEntries/
+// deadEntryIds 供断言管理纯展示列表(spec v3 §5)
+const props = defineProps<{
+  modelValue: ConfigView
+  scenarioId?: string
+  assertionEntries?: Array<AssertionEntry | LegacyAssertionEntry>
+  deadEntryIds?: string[]
+}>()
+const emit = defineEmits<{ 'update:modelValue': [ConfigView]; 'runEntry': [id: string] }>()
 
 const router = useRouter()
-/** 跳断言管理编辑器;新建未保存场景没有落库 id — 提示先保存 */
-function goAssertions() {
+/** 跳测试数据页(断言条目编辑入口搬家至此);新建未保存场景没有落库
+ *  id — 提示先保存 */
+function goTestData() {
   if (!props.scenarioId || props.scenarioId === 'new') { ElMessage.warning('请先保存场景'); return }
-  router.push(scenarioAssertionsUrl(props.scenarioId))
+  router.push(scenarioDataSetsUrl(props.scenarioId))
 }
 
 const local = reactive<ConfigView>({
@@ -534,4 +564,21 @@ function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: 
 
 /* 断言管理入口卡:头行右侧跳转按钮(共享 .c-card-head flex) */
 .are-entry-card .c-card-head .c-add { margin-left: auto; align-self: center; }
+
+/* 断言管理纯展示列表(spec v3 §5) */
+.are-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.are-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px; background: var(--c-bg-secondary); border-radius: 6px;
+  font-size: 12px;
+}
+.are-row.is-dead { opacity: .55; }
+.are-name { font-weight: 600; min-width: 96px; }
+.are-path { font-family: var(--font-mono); font-size: 11px; color: var(--c-text-secondary); flex: 1; }
+.are-count { color: var(--c-text-tertiary); font-size: 11px; }
+.are-run {
+  background: transparent; border: none; color: var(--c-accent);
+  font-size: 12px; cursor: pointer; padding: 0;
+}
+.are-run:hover { text-decoration: underline; }
 </style>

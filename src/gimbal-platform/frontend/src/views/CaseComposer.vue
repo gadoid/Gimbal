@@ -145,7 +145,9 @@
               key="config"
               v-model="definition.config"
               :scenario-id="scenarioId"
-              :assertion-count="registry.entries.length"
+              :assertion-entries="registry.entries"
+              :dead-entry-ids="deadEntryIds"
+              @run-entry="onRunEntry"
             />
 
             <!-- ④ Canvas -->
@@ -526,6 +528,12 @@ const deadEntryIds = computed(() =>
   registry.value.entries
     .filter((e) => isDeadEntry(e, steps.value.length, registryBodyPathsOf, registryAssertTargetsOf))
     .map((e) => e.id))
+
+/** 配置签「加入本次执行」(spec v3 §5):预勾该条目打开运行面板 */
+function onRunEntry(id: string) {
+  runPreset.value = { injectionEntryIds: [id] }
+  openRunDialog()
+}
 
 /** Canvas"设为变量"上报:登记共享变量默认值(D8;vars 扁平 name→value,零 schema 变化) */
 function onVarPromote(name: string, value: unknown) {

@@ -254,3 +254,57 @@ describe('CaseComposer — 注册表水化失败防擦除(终审 F2)', () => {
     w.unmount()
   })
 })
+
+/** 断言条目区/配置签共用的 fixture:步骤 0 的 request.body 带 $.amount 叶子
+ *  (path 可解析),注册表三条 = 可解析 / 越界 / 旧版。 */
+const TD_ENTRIES = [
+  { id: 'inj-alive', name: '可解析',
+    path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 1, asserts: [] },
+  { id: 'inj-oob', name: '越界',
+    path: { stepIndex: 9, source: 'body', jsonpath: '$.x' }, value: 1, asserts: [] },
+  { id: 'inj-old', name: '旧版',
+    anchor: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, injection: [], asserts: [] },
+]
+function mockBodyScenarioOnce() {
+  const scen = sampleScenario()
+  ;(scen.steps[0] as any).request = { kind: 'request', body: { amount: 100 } }
+  vi.mocked(api.getScenario).mockResolvedValue(scen)
+}
+
+describe('CaseComposer — deadEntryIds 计算(裁定 10:CaseComposer 侧无他测覆盖)', () => {
+  it('步骤树 + 注册表投影:越界/旧版判死,可解析条目不判死', async () => {
+    // RunPanelHost 的同款计算由 RH-* 锁定;CaseComposer 的这份副本此前无测试 —
+    // 回归会让运行面板整片灰掉且注入静默不可选,而全套测试仍绿。
+    mockBodyScenarioOnce()
+    vi.mocked(api.getScenarioDraft).mockResolvedValue({
+      definition: { steps: sampleScenario().steps },
+      orchestration: { steps: [], resourceMeta: {} },
+      assertion_registry: { entries: TD_ENTRIES },
+    } as any)
+    const w = await mountPage()
+    const page = w.findComponent(CaseComposer)
+    expect((page.vm as any).deadEntryIds).toEqual(['inj-oob', 'inj-old'])
+    w.unmount()
+  })
+})
+
+describe('CaseComposer — 配置签「加入本次执行」预勾运行面板(裁定 13)', () => {
+  it('onRunEntry(id) → runPreset = {injectionEntryIds: [id]} 且运行面板打开', async () => {
+    mockBodyScenarioOnce()
+    vi.mocked(api.getScenarioDraft).mockResolvedValue({
+      definition: { steps: sampleScenario().steps },
+      orchestration: { steps: [], resourceMeta: {} },
+      assertion_registry: { entries: TD_ENTRIES },
+    } as any)
+    // ?step=3 → ③ 配置签(断言管理纯展示列表在此)
+    const w = await mountPage('/composer/sc-demo?step=3')
+    const page = w.findComponent(CaseComposer)
+    expect((page.vm as any).runPreset).toBeNull()
+    expect((page.vm as any).runDialogOpen).toBe(false)
+    await w.find('.are-run').trigger('click')
+    await flushPromises()
+    expect((page.vm as any).runPreset).toEqual({ injectionEntryIds: ['inj-alive'] })
+    expect((page.vm as any).runDialogOpen).toBe(true)
+    w.unmount()
+  })
+})
