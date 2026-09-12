@@ -106,9 +106,11 @@ def compose_injection_scenario(definition: dict[str, Any], entry: dict[str, Any]
     数据集行值合入在 _compose_scenario(与 Assign 正交叠加,偏离最后生效:
     字段恰为模板串时被字面量整体替换,该 case 内行值对此字段不再起效)。
     悬空项静默跳过 — dispatcher 层已先经 entry_issues 过滤,此处双保险。
-    value 由用户显式编辑,原样覆写不 coerce —— 引擎 `_resolve_source_value`
-    只对**非字符串**直通,字符串里 "$.*" 与整串 "${...}" 会被当上下文引用
-    解析,见 `_assign_strategy`(default/required 兜底 + 两条残留边界)。
+    value 由用户显式编辑,原样覆写不 coerce —— 但引擎 `_resolve_source_value`
+    只对**非字符串**直通,两类字符串会被解释:`$.` 前缀串按上下文 JSONPath
+    读取(**已补 default/required 兜底**,读不到时仍写字面量);整串 `"${...}"`
+    在预处理阶段即被当模板变量读取、**兜不住**(缺变量 → ValueError,有变量
+    → 写入 vars 值)。三条边界与理由见 `_assign_strategy`。
     """
     out = copy.deepcopy(definition)
     steps = out.get("steps") or []
