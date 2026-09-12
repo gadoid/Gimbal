@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     # 调用 plate,直接记 plate_unavailable(P6:plate 宕机时避免逐行
     # 全超时等待)。
     PLATE_BREAKER_THRESHOLD: int = 3
+    # 声明面取数缓存 TTL(秒),spec v3.1 §3:dispatch 悬空判定用的
+    # 「契约声明 path 全集」进程缓存有效期。后端进程可能长期存活,
+    # 而 plate 发版是运维事件 —— TTL 给快照过期兜一个上界。
+    DECLARED_PATHS_TTL_SEC: float = 300.0
 
     # Set in model_post_init — True when the corresponding secret was
     # freshly generated because env/.env didn't provide one.  Not part of
