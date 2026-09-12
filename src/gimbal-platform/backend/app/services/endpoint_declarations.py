@@ -94,7 +94,14 @@ _WARN_COOLDOWN_SEC = 300.0
 
 
 def _cache() -> TtlLruCache:
-    """当前缓存实例;settings 的三个参数变了就换实例(见模块 docstring)。"""
+    """当前缓存实例;settings 的三个参数变了就**换实例**(裁定 C21)。
+
+    为什么不是模块级单例(别"简化"回去):``TtlLruCache`` 的 ttl/容量/回退窗
+    **构造即冻结**,而既有用例 ``test_ttl_zero_refetches`` 钉的语义是「TTL 被
+    **实时**读取」—— 它先取一次、再 monkeypatch ``DECLARED_PATHS_TTL_SEC``、
+    **中间不重置缓存**就再取一次并断言必然重取;单例下那条必红,而它不在本任务
+    可改清单里。生产 cfg 恒定 ⇒ 本分支永不触发,**等价单例**,只多一次元组比较。
+    """
     global _CACHE, _CACHE_CFG
     cfg = _cache_cfg()
     if cfg != _CACHE_CFG:

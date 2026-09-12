@@ -86,10 +86,15 @@ class Settings(BaseSettings):
     # 的更新上界:plate 会话中途发版时,carry 面最多滞后本值才更新。
     # **正常路径**成立;plate 故障期见 DECLARED_PATHS_STALE_WINDOW_SEC。
     DECLARED_PATHS_TTL_SEC: float = 300.0
-    # 声明面快照缓存上界与回退窗(spec 架构收敛 §3.1):LRU 容量 + 过期后
-    # 仍可回退服务的时间窗(stale-while-error,刷新失败时用旧快照)。
-    # 注意回退窗对上面那条「更新上界」的放宽:plate 持续故障时 carry 面
-    # 最多可滞后 TTL + 本值(旧快照仍在服务 ≠ 面是新的)。
+    # 声明面快照缓存上界与回退窗(spec 架构收敛 §3.1;裁定 C20):LRU 容量 +
+    # 过期后仍可回退服务的时间窗(stale-while-error,刷新失败时用旧快照)。
+    # **故障期语义方向变了,不是优化**:旧实现刷新失败即丢快照 ⇒ fail-closed
+    # (降级空面、悬空判定只认 body 面);现在旧快照继续服务 ⇒ **fail-open-to-old**,
+    # 故障期 carry 注入与悬空判定都按**旧契约面**(可能陈旧)进行 —— 宁可给一份
+    # 陈旧,也不要"静默少带上游的值"。
+    # **总上界** = ``DECLARED_PATHS_TTL_SEC + DECLARED_PATHS_STALE_WINDOW_SEC``
+    # (正常路径 300s;plate 持续故障时最长 3900s ≈ 65 分钟。对照 query_view_runner
+    # 的 stale_max_window = 86400s,本值保守)。
     DECLARED_PATHS_MAX_ENTRIES: int = 256
     DECLARED_PATHS_STALE_WINDOW_SEC: float = 3600.0
 
