@@ -292,11 +292,19 @@ export function responseBindings(
   return iterFlat(decls).filter((e) => !!e.path).map((e) => toFieldBinding(e, e.path))
 }
 
-/** 断言候选面:assertable=True 条目 path 集(响应单脸 ✓ 标 / 策略候选)。 */
+/** 断言候选面:assertable=True 条目 path 集(响应单脸 ✓ 标 / 策略候选)。
+ *  守卫与 :func:`catalogPaths` 同口径(**非空字符串**):`!!e.path` 挡得住
+ *  falsy 挡不住真值非串 —— `/full` 的 `responses.200.declarations` 是同一个
+ *  不可信来源,而消费方 `AssertionRegistryEditor` 的 `targetCandidates`
+ *  (**渲染期 computed**)对产出 `.map(toScratchPath)`,后者的
+ *  `platePath.startsWith(...)` 遇到非串即抛 TypeError ⇒ 整页白屏
+ *  (与 F1 的条目侧 jsonpath、`catalogPaths` 的声明侧守卫同一纪律)。 */
 export function assertablePaths(
   decls: DeclarationEntryView[] | undefined | null,
 ): string[] {
-  return iterFlat(decls).filter((e) => e.assertable && !!e.path).map((e) => e.path)
+  return iterFlat(decls)
+    .filter((e) => e.assertable && typeof e.path === 'string' && e.path !== '')
+    .map((e) => e.path)
 }
 
 // ─── §5.2 buildNode 值×结构合并树(三输入:目录/意图/值)──────────────

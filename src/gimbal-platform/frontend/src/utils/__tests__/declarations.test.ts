@@ -14,6 +14,7 @@ import {
   buildTree, contractTree, leafSurface, containerSurface, extraBodyPaths, extraSurfaceBindings, prefillBindings,
 } from '@/utils/declarations'
 import { injectablePathSetOf } from '@/utils/assertion-registry'
+import { toScratchPath } from '@/utils/scratch-path'
 import type { DeclarationEntryView } from '@/types/plate'
 
 function mkDecl(over: Partial<DeclarationEntryView> = {}): DeclarationEntryView {
@@ -183,6 +184,22 @@ describe('formBindings / responseBindings / assertablePaths — 面投影', () =
     ]
     expect(assertablePaths(resp)).toEqual(['$.code'])
     expect(assertablePaths(undefined)).toEqual([])
+  })
+
+  it('assertablePaths 守卫:真值非字符串 path 不收录,且消费链不抛', () => {
+    // `!!e.path` 挡 falsy 挡不住真值非串。/full 的 responses.200.declarations
+    // 是同一个不可信来源;编辑器 targetCandidates(渲染期 computed)对产出
+    // 逐条 `.map(toScratchPath)`(scratch-path.ts:20 `platePath.startsWith`),
+    // 非串即 TypeError ⇒ 整页白屏。下面这行就是编辑器那一行的原文。
+    const resp = [
+      mkDecl({ path: '$.code', assertable: true }),
+      mkDecl({ path: 7 as any, assertable: true }),
+      mkDecl({ path: { a: 1 } as any, assertable: true }),
+      mkDecl({ path: true as any, assertable: true }),
+      mkDecl({ path: '' as any, assertable: true }),
+    ]
+    expect(() => assertablePaths(resp).map(toScratchPath)).not.toThrow()
+    expect(assertablePaths(resp)).toEqual(['$.code'])   // 四个畸形一个都不收录
   })
 })
 
