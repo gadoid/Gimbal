@@ -308,7 +308,7 @@ Authorization: Bearer <access_token>
 | `/api/data-sets/{datasetId}` | PUT | 更新 | ⏳ |
 | `/api/data-sets/{datasetId}` | DELETE | 删除 | ⏳ |
 | `/api/cases/{caseId}/data-sets` | POST | 关联创建 | ⏳ |
-| `/api/envs` | GET | 列表执行环境 | ⏳ |
+| `/api/envs` | GET | 列表执行环境 | ❌ 已退役（D2，`0f136c7`） |
 | `/api/runs` | POST | 触发一次运行 | ⏳ |
 
 ---
@@ -436,7 +436,7 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 
 ### 4.7 `POST /api/scenarios/preview-plate`
 
-**角色**：把 Platform 拼好的 Scenario dict 一次性交给 Plate `/convert` 校验（前端 `CaseEditorBasic.vue` 的 🔍 按钮 + `CaseRunConfig.vue` 的预校验）
+**角色**：把 Platform 拼好的 Scenario dict 一次性交给 Plate `/convert` 校验（前端 `views/CaseComposer.vue:185-188` 的「预校验 Plate」按钮 → `api/scenario-composer.ts:211-219`；列表页的行级导出走同一路径：`views/Scenarios.vue:396` 的 `exportRow` → `stores/scenario-draft.ts:50`）
 
 **请求体**：`ScenarioDraft`
 
@@ -573,13 +573,17 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 
 ### 4.17 `GET /api/envs`
 
-**角色**：列出可执行环境（前端 `CaseRunConfig.vue`）
+**角色**：列出可执行环境 —— **该端点已退役**：执行环境链随 D2 整体删除
+（`RunEnv` / `/api/envs` / `envs.yaml` / `envId`，提交 `0f136c7`）。当前后端无该
+路由（`app/routers/` 下无 `envs.py`，`schemas/scenario_composer.py` 已无
+`RunEnv`），前端亦无调用方。
 
-**响应**：`200 OK` → `RunEnv[]`
-
-**数据来源**（实现层）：
-- 静态配置 `app/core/envs.yaml`
-- 或数据库表 `envs`（id / name / base_url / is_active）
+> 以下原文（响应形状与「静态配置 `app/core/envs.yaml` / 或数据库表 `envs`」的
+> 数据来源）描述的是**已删除的实现**：`app/core/envs.yaml`（11 行）与
+> `app/services/env_store.py`（39 行）同在上述提交中被删除。保留于此仅为记录
+> 历史契约，**不可按现行实现读**。
+>
+> 原响应形状：`200 OK` → `RunEnv[]`
 
 ---
 
@@ -651,8 +655,9 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
   什么则取决于缓存状态 —— 两条不同的路：
   - **冷缓存**，或**回退窗已过**：拿不到 → 判定**降级从严（只认 body 面）**；
   - **TTL 过期但仍在回退窗内**：刷新失败**回退旧快照**，判定跑在**（可能
-    陈旧的）旧契约面**上 —— **不降级、不留 `judgeDegraded`**（仍会告警，但告
-    警语是「刷新失败(…),回退旧快照」而非降级，`:250`、`:237-252`）。
+    陈旧的）旧契约面**上 —— **不降级、不发 `judgeDegraded`**。该路径**仍会
+    告警**，且**带着回退原因**（`:250` 把原因串传进 `_warn_once`；判据
+    `:237-252`）。
 - 成功取到的声明面进**进程内**缓存（TTL `DECLARED_PATHS_TTL_SEC` 缺省 300 s），
   **不是**每次 dispatch 打一次 plate（`:222-261`）。故障期「宁可给一份陈旧，
   也不要静默少带上游的值」是**有意**的语义（`fail-open-to-old`，
@@ -770,8 +775,17 @@ rows:
 `judgeDegraded` / `entriesSkippedWhileDegraded`（`run_dispatcher.py:570-595`）。
 该列还会被别的路径追加键：启动期 reconcile 写
 `config_json.reconciled`（`:319-323`）；存量历史行另有已退役的旧配方键。
-**无论哪条路径，其中都没有任何声明面快照**（`app/models/` 下无对应表，已核）。
-⇒ PG 迁移不需要为它们写迁移。
+**无论哪条路径，其中都没有任何判定面快照**（`app/models/` 下无**判定面**
+快照表/快照字段 —— 已核）。**这里要区分两种「快照」**：`catalog_versions.spec_json`
+（`app/models/catalog_version.py:17-25`）确实存了 plate `…/full` 的 `data.item`，
+其中**包含** `request.declarations`（写入 `app/services/adaptation_service.py:60-78`、
+`:153-156`；读取 `app/services/adaptation_ops.py:31-39`，后者自称
+「`CatalogVersion.spec_json` 快照」）—— 但那是**端点契约的版本快照**（派生缓存，
+可随时重拉 plate 重建），**不是**本约束所指的判定面（归一化后的 path 集）；
+两份 spec 的「不做快照表 / 快照字段」裁定指的也是后者
+（`2026-09-12-injectable-path-surface-design.md:116`、
+`2026-09-12-architecture-convergence-design.md:128`）。
+⇒ PG 迁移不需要为**判定面**写迁移。
 
 **约束二：不依赖 JSON 键序。** 判定与投影一律基于 **Set**，写入一律
 `model_dump`；**禁止**任何「按插入序读回」的假设 —— 键序**不由本层保证**
