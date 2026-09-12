@@ -913,11 +913,9 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import type { FieldState, IOFieldBinding } from '@/types/plate'
 import type { VarEntry } from '@/utils/var-registry'
 import { getByPath, pruneByPath, setByPath } from '@/utils/jsonpath'
-import { TPL_FULL_RE } from '@/utils/dataset-segments'
 import type {
   FieldArrayNode, FieldDictNode, FieldLeafNode, FieldObjectNode, FieldTreeNode,
 } from '@/utils/declarations'
@@ -1019,11 +1017,11 @@ const emit = defineEmits<{
    */
   'fieldQuery': [field: IOFieldBinding]
   /**
-   * 加入断言管理(spec v2 §4):FAM fieldRegistry 经守卫后上抛 — 值须整串
-   * ${var.x} 模板才放行(模板即偏离注入的地址),varName = 模板捕获组;
-   * 未模板化 warning 不上抛(先「设为变量」)。stepIndex 由 Canvas 补。
+   * 加入断言管理(spec v3 §5):FAM fieldRegistry 上抛,载荷带字段当前
+   * 字面量 value(任意字段可偏离 — path 即地址,不预设模板化,varName
+   * 不再采集)。stepIndex 由 Canvas 补。
    */
-  'registryMark': [payload: { field: IOFieldBinding; varName: string }]
+  'registryMark': [payload: { field: IOFieldBinding; value: unknown }]
 }>()
 
 // ─── 渲染行集:树模式(四节点)或平铺模式(叶子行)─────────────────
@@ -1324,17 +1322,12 @@ function onFieldPromote(f: IOFieldBinding) {
 }
 
 /**
- * 菜单「加入断言管理」守卫(spec v2 §4):值须整串 ${var.x} 模板 —
- * 模板即偏离注入的地址(未模板化先「设为变量」);取值与 onFieldPromote
- * 同源(getValue,body 寻址)。放行后上抛 registryMark,Canvas 组装 anchor。
+ * 菜单「加入断言管理」(spec v3 §5):无守卫直通 — 任意字段可偏离
+ * (path 即注入地址,与模板化解耦);取值与 onFieldPromote 同源
+ * (getValue,body 寻址)作 value 预填。Canvas 组装 path。
  */
 function onRegistryMenu(field: IOFieldBinding) {
-  const m = TPL_FULL_RE.exec(String(getValue(field) ?? ''))
-  if (!m) {
-    ElMessage.warning('该字段未模板化 — 请先「设为变量」再加入断言管理')
-    return
-  }
-  emit('registryMark', { field, varName: m[1] })
+  emit('registryMark', { field, value: getValue(field) })
   menuField.value = null
 }
 

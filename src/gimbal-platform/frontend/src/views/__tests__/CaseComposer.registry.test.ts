@@ -1,16 +1,12 @@
 /**
- * CaseComposer — registryAdd 落条目通路(spec v2 §4 / Task 4):Canvas
- * emit('registryAdd', anchor) → onRegistryAdd 落 registry.entries(偏离
- * injection 默认取基线 config.vars)+ 显式保存调度(registry 不在 dirty
- * watch 源 → 防抖自动 PUT 须携带 assertion_registry,标记不丢)。
+ * CaseComposer — registryAdd 落条目通路(spec v3 §5/Task 5):Canvas
+ * emit('registryAdd', mark) → onRegistryAdd 落 registry.entries(path 直取
+ * 标记载荷 + value 预填字段当前字面量)+ 显式保存调度(registry 不在
+ * dirty watch 源 → 防抖自动 PUT 须携带 assertion_registry,标记不丢)。
  *
  * 终审 F2:loadScenario 的 GET /draft 失败(注册表未水化)→ 本地空
  * registry 不可信 — 保存前重试拉取合并;重试仍失败则中止保存,
  * 绝不带空 assertion_registry 整包 PUT(会把存量条目永久冲掉)。
- *
- * 骨架 = CaseComposer.vardemote.test.ts 的 mock 面(模块 mock 构造器 impl
- * + 真实 vue-router memory history);挂载直取 ?step=4 进 Canvas 步,
- * 断言落在 draft store 同步面与 updateScenario spy。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { nextTick } from 'vue'
@@ -120,32 +116,31 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('CaseComposer — registryAdd 落条目 + 保存调度(spec v2 §4)', () => {
-  const ANCHOR = { stepIndex: 0, source: 'body' as const, jsonpath: '$.base_url', varName: 'base_url' }
+describe('CaseComposer — registryAdd 落条目 + 保存调度(spec v3 §5)', () => {
+  const MARK = { stepIndex: 0, source: 'body' as const, jsonpath: '$.base_url', value: 'http://x' }
 
-  it('registryAdd → registry.entries 落偏离条目(injection 取基线 vars)→ draft store 同步', async () => {
+  it('registryAdd → registry.entries 落偏离条目(path/value 直取载荷)→ draft store 同步', async () => {
     const w = await mountPage()
     const canvas = w.findComponent(CaseComposerCanvas)
     expect(canvas.exists()).toBe(true)
-    canvas.vm.$emit('registryAdd', ANCHOR)
+    canvas.vm.$emit('registryAdd', MARK)
     await nextTick()
     await flushPromises()
     const reg = (useScenarioDraftStore().draft as any).assertion_registry
     expect(reg.entries).toHaveLength(1)
     expect(reg.entries[0].id).toMatch(/^inj-/)
     expect(reg.entries[0].name).toBe('偏离 1')
-    expect(reg.entries[0].anchor).toEqual(ANCHOR)
-    // 偏离值默认取基线 config.vars.base_url
-    expect(reg.entries[0].injection).toEqual([{ varName: 'base_url', value: 'http://x' }])
+    expect(reg.entries[0].path).toEqual({ stepIndex: 0, source: 'body', jsonpath: '$.base_url' })
+    expect(reg.entries[0].value).toBe('http://x')      // 字段当前字面量预填
     expect(reg.entries[0].asserts).toEqual([])
     w.unmount()
   })
 
-  it('registryAdd 触发防抖自动保存 — PUT 携带 assertion_registry(registry 不在 dirty watch 源)', async () => {
+  it('registryAdd 触发防抖自动保存 — PUT 携带 assertion_registry(v3 形状)', async () => {
     const w = await mountPage()
     ;(api.updateScenario as any).mockClear()   // 隔离挂载期噪音
     const canvas = w.findComponent(CaseComposerCanvas)
-    canvas.vm.$emit('registryAdd', ANCHOR)
+    canvas.vm.$emit('registryAdd', MARK)
     await nextTick()
     await flushPromises()
     expect(api.updateScenario).not.toHaveBeenCalled()   // 防抖未到不发
@@ -155,7 +150,10 @@ describe('CaseComposer — registryAdd 落条目 + 保存调度(spec v2 §4)', (
     expect(api.updateScenario).toHaveBeenCalledTimes(1)
     const draft = (api.updateScenario as any).mock.calls[0][1]
     expect(draft.assertion_registry.entries).toHaveLength(1)
-    expect(draft.assertion_registry.entries[0].anchor).toEqual(ANCHOR)
+    expect(draft.assertion_registry.entries[0].path).toEqual({
+      stepIndex: 0, source: 'body', jsonpath: '$.base_url',
+    })
+    expect(draft.assertion_registry.entries[0].value).toBe('http://x')
     w.unmount()
   })
 })
@@ -183,7 +181,7 @@ describe('CaseComposer — 存量空注册表形状归一(assertion_registry: {}
 })
 
 describe('CaseComposer — 注册表水化失败防擦除(终审 F2)', () => {
-  const ANCHOR = { stepIndex: 0, source: 'body' as const, jsonpath: '$.base_url', varName: 'base_url' }
+  const MARK = { stepIndex: 0, source: 'body' as const, jsonpath: '$.base_url', value: 'http://x' }
 
   /** 服务端存量注册表(用户精心维护的条目 — 擦除事故的受害面) */
   const SERVER_DRAFT = {
@@ -206,7 +204,7 @@ describe('CaseComposer — 注册表水化失败防擦除(终审 F2)', () => {
     const w = await mountPage()
     ;(api.updateScenario as any).mockClear()
     const canvas = w.findComponent(CaseComposerCanvas)
-    canvas.vm.$emit('registryAdd', ANCHOR)
+    canvas.vm.$emit('registryAdd', MARK)
     await nextTick()
     await flushPromises()
     vi.advanceTimersByTime(2500)
@@ -227,7 +225,7 @@ describe('CaseComposer — 注册表水化失败防擦除(终审 F2)', () => {
     const w = await mountPage()
     ;(api.updateScenario as any).mockClear()
     const canvas = w.findComponent(CaseComposerCanvas)
-    canvas.vm.$emit('registryAdd', ANCHOR)   // 失败窗口内本地新增(偏离 1)
+    canvas.vm.$emit('registryAdd', MARK)   // 失败窗口内本地新增(偏离 1)
     await nextTick()
     await flushPromises()
     vi.advanceTimersByTime(2500)
@@ -241,7 +239,7 @@ describe('CaseComposer — 注册表水化失败防擦除(终审 F2)', () => {
     expect(entries[1].name).toBe('偏离 1')
 
     // 水化完成后:后续自动保存不再重拉 /draft(registryHydrated 已置位)
-    canvas.vm.$emit('registryAdd', ANCHOR)
+    canvas.vm.$emit('registryAdd', MARK)
     await nextTick()
     await flushPromises()
     vi.advanceTimersByTime(2500)

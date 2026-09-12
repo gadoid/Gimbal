@@ -579,7 +579,7 @@ import type {
   StrategyView, StrategyKindView, StrategyKindDetailView, FieldState,
 } from '@/types/plate'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
-import type { AssertionAnchor } from '@/types/assertion-registry'
+import type { EntryPath } from '@/types/assertion-registry'
 import { parseJson } from '../../utils/json'
 
 const props = defineProps<{
@@ -597,9 +597,10 @@ const emit = defineEmits<{
   'update:services': [Record<string, string>]
   'varPromote': [name: string, value: unknown]
   'seedVar': [name: string, spec: Record<string, unknown>],
-  /** 加入断言管理标记(spec v2 §4):FieldForm registryMark → anchor 组装
-   *  上抛,CaseComposer 落 registry.entries(registry 住在编排器层) */
-  'registryAdd': [anchor: AssertionAnchor]
+  /** 加入断言管理标记(spec v3 §5):FieldForm registryMark → path 组装
+   *  (+ 字段当前字面量 value 预填)上抛,CaseComposer 落 registry.entries
+   *  (registry 住在编排器层) */
+  'registryAdd': [mark: EntryPath & { value: unknown }]
 }>()
 
 const local = reactive<StepView[]>([...(props.steps || [])])
@@ -974,16 +975,17 @@ function onVarPromote(_f: IOFieldBinding, name: string, value: unknown) {
 }
 
 /**
- * 菜单"加入断言管理"(spec v2 §4):FieldForm 守卫后的 registryMark —
- * stepIndex 由本层补(FieldForm 无步骤上下文),anchor.jsonpath = 字段
- * 实例路径(溯源展示用);v1 请求体标记只产 source='body'(headers 不走字段卡)。
+ * 菜单"加入断言管理"(spec v3 §5):FieldForm registryMark — stepIndex
+ * 由本层补(FieldForm 无步骤上下文),jsonpath = 字段实例路径;value =
+ * 字段当前字面量(条目 value 预填,编辑器可改)。v1 请求体标记只产
+ * source='body'(headers = 协议位,spec v3 §1 裁定 9)。
  */
-function onRegistryMark(p: { field: IOFieldBinding; varName: string }) {
+function onRegistryMark(p: { field: IOFieldBinding; value: unknown }) {
   emit('registryAdd', {
     stepIndex: activeStepIdx.value,
     source: 'body',
     jsonpath: p.field.path,
-    varName: p.varName,
+    value: p.value,
   })
 }
 

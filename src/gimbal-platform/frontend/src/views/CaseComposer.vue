@@ -271,6 +271,7 @@ import { useConstantsStore } from '@/stores/constants'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { showError } from '@/utils/errorFallback'
+import { fieldPathsOf } from '@/utils/dataset-segments'
 import { relTime } from '@/utils/datetime'
 import { executionUrl, composerUrl } from '@/utils/links'
 import { confirmAction } from '@/utils/confirmAction'
@@ -284,8 +285,8 @@ import type {
 import type {
   Scenario, DataSetSummary, Orchestration, ScenarioDraft,
 } from '@/types/scenario-composer'
-import type { AssertionAnchor, AssertionRegistry } from '@/types/assertion-registry'
-import { genEntryId, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
+import type { AssertionRegistry, EntryPath } from '@/types/assertion-registry'
+import { bodyPathSetOf, genEntryId, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
 import type { ScenarioView, StepView } from '@/types/plate'
 
 const STEPS = [
@@ -504,17 +505,19 @@ const authOptions = computed(() => [...new Set([
   ...Object.keys(definition.value.config?.users ?? {}),
 ])])
 
-/** 死条目(悬空)id 集(spec v2 §5):喂食函数编辑器同款内联
- *  (AssertionRegistryEditor)— RunDialog 注入区据此禁选。 */
-const registryVarNames = computed(() =>
-  new Set(Object.keys(definition.value.config?.vars ?? {})))
+/** 死条目(悬空)id 集(spec v3 §2):bodyPathsOfStep 与编辑器同构
+ *  (AssertionRegistryEditor)— RunDialog 注入区据此禁选;legacy 条目
+ *  isDeadEntry 恒 true,一并计入。 */
+function registryBodyPathsOf(si: number): ReadonlySet<string> {
+  return bodyPathSetOf(fieldPathsOf(steps.value[si] as any))
+}
 function registryAssertTargetsOf(si: number): ReadonlySet<string> {
   const st = steps.value[si]?.strategy ?? []
   return new Set(st.filter((x) => x.kind === 'assertion').map((x) => x.target))
 }
 const deadEntryIds = computed(() =>
   registry.value.entries
-    .filter((e) => isDeadEntry(e, steps.value.length, registryVarNames.value, registryAssertTargetsOf))
+    .filter((e) => isDeadEntry(e, steps.value.length, registryBodyPathsOf, registryAssertTargetsOf))
     .map((e) => e.id))
 
 /** Canvas"设为变量"上报:登记共享变量默认值(D8;vars 扁平 name→value,零 schema 变化) */
@@ -527,21 +530,20 @@ function onVarPromote(name: string, value: unknown) {
 }
 
 /**
- * Canvas「加入断言管理」标记(spec v2 §4):落 registry 条目 — 偏离
- * injection 默认取基线 config.vars 值,asserts 留空由编辑器补(spec §7)。
- * registry 不在 dirty watch 源(watch [definition, orchestration])→
- * 显式走与单字段编辑同款保存调度:置 dirty + 防抖自动保存,标记不丢。
+ * Canvas「加入断言管理」标记(spec v3 §5):落 registry 条目 — path 直取
+ * 标记载荷,value 预填字段当前字面量,asserts 留空由编辑器补。registry
+ * 不在 dirty watch 源(watch [definition, orchestration])→ 显式走与
+ * 单字段编辑同款保存调度:置 dirty + 防抖自动保存,标记不丢。
  */
-function onRegistryAdd(anchor: AssertionAnchor) {
-  const base = definition.value.config?.vars?.[anchor.varName ?? ''] ?? ''
+function onRegistryAdd(mark: EntryPath & { value: unknown }) {
   registry.value.entries.push({
     id: genEntryId(),
     name: `偏离 ${registry.value.entries.length + 1}`,
-    anchor,
-    injection: anchor.varName ? [{ varName: anchor.varName, value: base }] : [],
+    path: { stepIndex: mark.stepIndex, source: mark.source, jsonpath: mark.jsonpath },
+    value: mark.value,
     asserts: [],
   })
-  ElMessage.success({ message: '已加入断言管理(偏离值默认取基线,请到断言管理编辑)', duration: 4000 })
+  ElMessage.success({ message: '已加入断言管理(偏离值预填字段当前值,请到断言管理编辑)', duration: 4000 })
   // 与 watch([definition, orchestration]) 体同款(dirty 标记 + 防抖调度)
   dirty.value = true
   if (saveState.value === 'saving') {
