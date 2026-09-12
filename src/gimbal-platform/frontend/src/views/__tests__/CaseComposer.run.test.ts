@@ -188,6 +188,34 @@ describe('CaseComposer — RunDialog 对接(Task 12)', () => {
     w.unmount()
   })
 
+  it('契约面在途 → RunDialog 收到 contractPending(RunPanelHost 同款信号)', async () => {
+    // F3 要求两处挂载点行为一致:契约面未回填时 RunDialog 不得把
+    // 「尚未判定」当「判死」(否则 preset 锚在 carry/collapse 的预勾被
+    // 静默丢掉且契约回来后不重放)。本页 draft 通常先就绪,但首访/慢
+    // plate 下 /full 仍在飞 —— 信号必须照样送达。
+    const { _resetEndpointFullCacheForTest } = await import('@/composables/useEndpointFull')
+    _resetEndpointFullCacheForTest()
+    const sc = sampleScenario()
+    ;(sc.steps[0] as { api: Record<string, unknown> }).api = {
+      service: 'fin-service', method: 'POST', path: '/x',
+      view_hints: { endpoint_id: 'ep-cc' },
+    }
+    vi.spyOn(api, 'getScenario').mockResolvedValue(sc)
+    let resolveFull!: (v: unknown) => void
+    vi.spyOn(api, 'getFullEndpoint')
+      .mockReturnValue(new Promise((res) => { resolveFull = res }) as any)
+
+    const w = mountPage()
+    await flushPromises()
+    const dlg = await openRunDialog(w)
+    expect(api.getFullEndpoint).toHaveBeenCalledWith('ep-cc')
+    expect(dlg.props('contractPending')).toBe(true)       // 在途 → pending
+    resolveFull({ id: 'ep-cc', request: { declarations: [] } })
+    await flushPromises()
+    expect(dlg.props('contractPending')).toBe(false)      // 落定 → 判定面已完整
+    w.unmount()
+  })
+
   it('saveScheme → putRunSchemes 整表替换 + 草稿 store 回填', async () => {
     const saved = [{ name: '冒烟', dataSetIds: [], serviceBindings: {} }]
     const putRunSchemes = vi.fn().mockResolvedValue(saved)

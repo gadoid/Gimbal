@@ -22,6 +22,7 @@
     :step-orchestration-names="stepNames"
     :assertion-entries="registry.entries"
     :dead-entry-ids="deadEntryIds"
+    :contract-pending="contractPending"
     :preset="preset"
     @close="emit('close')"
     @confirm="onConfirm"
@@ -45,7 +46,7 @@ import type { DataSetSummary, Scenario } from '@/types/scenario-composer'
 import type { AssertionRegistry } from '@/types/assertion-registry'
 import { injectablePathSetOf, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
 import { fieldPathsOf } from '@/utils/dataset-segments'
-import { endpointFullVersion, requestDeclarationsOf } from '@/composables/useEndpointFull'
+import { endpointFullState, endpointFullVersion, requestDeclarationsOf } from '@/composables/useEndpointFull'
 import { list as listAuthSessions } from '@/api/auth_sessions'
 import { showError } from '@/utils/errorFallback'
 import { executionUrl } from '@/utils/links'
@@ -110,6 +111,24 @@ const deadEntryIds = computed(() =>
   registry.value.entries
     .filter((e) => isDeadEntry(e, steps.value.length, injectablePathsOfStep, assertTargetsOf))
     .map((e) => e.id))
+/** 契约面是否**在途**(spec v3.1 §2.1):任一「被引用且带 endpoint_id」的步骤
+ *  尚未回填 /full 声明 ⇒ 此刻的 deadEntryIds 只跑过 body 面,锚在 carry /
+ *  未落 body 的 collapse 上的条目会被**误判**成悬空。时序坑:本宿主自取数后
+ *  才挂 RunDialog,`/full` 与挂载同 tick 才发起 ⇒ 首判定必然是 body 面
+ *  (此前 preset 锚在 carry 的预勾会被静默丢掉,且契约回来后 prop 不变、
+ *  RunDialog 的 watch 不重跑 → 永不重放)。交 RunDialog 在 pending 期间
+ *  不把「尚未判定」当「判死」。
+ *  ensureEndpointFull 幂等:miss 时由 requestDeclarationsOf 发起取数。 */
+const contractPending = computed(() => {
+  void endpointFullVersion.value
+  for (const st of steps.value) {
+    const eid = (st as { api?: { view_hints?: { endpoint_id?: string } } })?.api?.view_hints?.endpoint_id
+    if (!eid) continue
+    requestDeclarationsOf(st)
+    if (endpointFullState(eid) === 'loading') return true
+  }
+  return false
+})
 
 onMounted(async () => {
   try {

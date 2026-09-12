@@ -95,7 +95,8 @@
           </section>
 
           <!-- 断言注入条目(spec v3 §4 异常组):与数据集行交叉生成 case(N 行 × M 条目);
-               悬空/旧版条目禁选 — 死判定由宿主预计算经 deadEntryIds 传入 -->
+               悬空/旧版条目禁选 — 死判定由宿主预计算经 deadEntryIds 传入
+               (契约面在途时悬空判定不生效:见 contractPending) -->
           <section v-if="assertionEntries.length" class="run-section rd-injection">
             <label class="run-label">断言注入条目 <span class="muted small">(异常组, 可多选 — 与数据集行交叉生成 case:N 行 × M 条目)</span></label>
             <el-checkbox-group v-model="injectionIds" class="rd-inj-group">
@@ -279,6 +280,11 @@ const props = withDefaults(defineProps<{
   assertionEntries?: Array<AssertionEntry | LegacyAssertionEntry>
   /** 死条目(悬空)id — CaseComposer 用 isDeadEntry 预计算,死条目禁选 */
   deadEntryIds?: string[]
+  /** 契约面(对端步骤的 /full 声明)是否**在途**:宿主传入(= 任一被引用
+   *  步骤的 endpoint 尚未回填)。为真时判定只跑过 body 面 —— 「尚未判定」
+   *  ≠「判死」:不过滤 preset、不标悬空、不禁选,契约落定后补一次收窄。
+   *  缺省 false(契约面已定 / 该场景无契约面)。 */
+  contractPending?: boolean
   /** 运行面板预填(spec v3 §6):数据集入口/「加入本次执行」传入;
    *  挂载时按此预勾(已删/悬空条目静默过滤),null = 无预填 */
   preset?: RunPreset | null
@@ -291,6 +297,7 @@ const props = withDefaults(defineProps<{
   stepOrchestrationNames: () => [] as string[],
   assertionEntries: () => [] as AssertionEntry[],
   deadEntryIds: () => [] as string[],
+  contractPending: false,
   preset: null,
 })
 
@@ -346,15 +353,30 @@ function toggleBaseline() {
 // 与数据集(正常组)并列;每次打开弹框 = v-if 重挂载,选中态随之重置
 // (与 selection 同款生命周期,无显式 visible watch)。
 const injectionIds = ref<string[]>([])
-/** 死条目(悬空)判定:CaseComposer 预计算传入(编辑器同款 isDeadEntry) */
-const deadIds = computed(() => new Set(props.deadEntryIds))
-/** 可注入集合 = 现存且未悬空:方案回填过滤(已删/悬空 id 静默跳过 —
- *  悬空条目禁选,回填成勾选态会卡死)与方案降级判定(死而现存同样
- *  降级)共用。 */
+/** 死条目(悬空)判定:CaseComposer 预计算传入(编辑器同款 isDeadEntry)。
+ *  契约面**在途**时恒为空集 —— 那时 deadEntryIds 只跑过 body 面,把它当
+ *  判死会让条目先灰一下再翻活,并把锚在 carry 的预勾静默丢掉。 */
+const deadIds = computed(() =>
+  props.contractPending ? new Set<string>() : new Set(props.deadEntryIds))
+/** 可注入集合 = 现存 ∧ 非旧版 ∧ 未判死 —— 契约在途时 deadIds 已被掩成空集,
+ *  故那时**不过滤判死**,只滤旧版。两处消费(预填/方案回填过滤、方案降级
+ *  标注)同口径:悬空条目禁选,回填成勾选态会卡死。
+ *  旧版条目必须在此显式排除:它平时靠 deadEntryIds 携带而进过滤面,而契约
+ *  在途时那个集合被掩空 —— 不显式排除就会把 legacy 预勾成 disabled 的勾选
+ *  态(旧版条目是**形状判** isLegacyEntry,与契约面无关,恒不可选)。 */
 const liveEntryIds = computed(() =>
   new Set(props.assertionEntries
-    .filter((e) => !deadIds.value.has(e.id))
+    .filter((e) => !isLegacyEntry(e) && !deadIds.value.has(e.id))
     .map((e) => e.id)))
+/** 契约落定后那次收窄是否已做过(幂等标记,dataSets/preset 重跑时重置) */
+const presetSettled = ref(false)
+
+/** preset → 注入条目预勾(spec v3 §6);过滤规则 = liveEntryIds(契约在途时
+ *  只滤旧版条目,不滤「当前判死」)。 */
+function applyPresetInjection() {
+  injectionIds.value = (props.preset?.injectionEntryIds ?? [])
+    .filter((id) => liveEntryIds.value.has(id))
+}
 
 // dataSets/preset 首达(spec v3 §6):选择与注入预填一次成型。RunDialog
 // 每次 v-if 重挂载,无中途 preset 变更场景;watch 双源只覆盖异步取数
@@ -363,9 +385,21 @@ watch([() => props.dataSets, () => props.preset], () => {
   selection.value = (props.dataSets.length || props.preset?.dataSetSelection?.length)
     ? defaultSelection()
     : []
-  injectionIds.value = (props.preset?.injectionEntryIds ?? [])
-    .filter((id) => liveEntryIds.value.has(id))
+  applyPresetInjection()
+  presetSettled.value = !props.contractPending
 }, { immediate: true })
+
+/** 契约落定(contractPending 真 → 假)→ 对勾选态补一次收窄(只删不增)。
+ *  为什么必须做:契约在途时条目一律不禁选,用户(或 pending 期间已回填的
+ *  preset)可能勾上一个**落定后才判死**的条目 —— 它随即变 disabled +
+ *  「悬空 — 不可选」,点不动,而 confirm 照样下送、dispatch 静默 skip,
+ *  正是既有过滤要防的卡死态。仍在判活的条目(含用户手动勾选)一律不动;
+ *  只做一次(幂等标记),此后用户再勾什么都不会被这里覆盖。 */
+watch(() => props.contractPending, (pending) => {
+  if (pending || presetSettled.value) return
+  presetSettled.value = true
+  injectionIds.value = injectionIds.value.filter((id) => liveEntryIds.value.has(id))
+})
 
 // ── 方案栏(spec §4):临时手填 / 上次运行 / 已存方案 ──────────────
 const selectedScheme = ref<string>('__adhoc__')   // '__adhoc__' | '__last__' | scheme.name

@@ -245,6 +245,7 @@
       :auth-options="authOptions"
       :assertion-entries="registry.entries"
       :dead-entry-ids="deadEntryIds"
+      :contract-pending="contractPending"
       :preset="runPreset"
       @close="closeRunDialog"
       @confirm="onRunConfirm"
@@ -290,7 +291,7 @@ import type {
 } from '@/types/scenario-composer'
 import type { AssertionRegistry, EntryPath } from '@/types/assertion-registry'
 import { genEntryId, injectablePathSetOf, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
-import { endpointFullVersion, requestDeclarationsOf } from '@/composables/useEndpointFull'
+import { endpointFullState, endpointFullVersion, requestDeclarationsOf } from '@/composables/useEndpointFull'
 import type { ScenarioView, StepView } from '@/types/plate'
 
 const STEPS = [
@@ -536,6 +537,21 @@ const deadEntryIds = computed(() =>
   registry.value.entries
     .filter((e) => isDeadEntry(e, steps.value.length, registryInjectablePathsOf, registryAssertTargetsOf))
     .map((e) => e.id))
+/** 契约面是否**在途**(spec v3.1 §2.1,与 RunPanelHost 同款):任一「被引用且
+ *  带 endpoint_id」的步骤尚未回填 /full 声明 ⇒ deadEntryIds 只跑过 body 面。
+ *  本页 draft 通常先就绪(Canvas 已拉过 /full),但首访/慢 plate 下仍可能命中
+ *  —— 交 RunDialog 在 pending 期间不把「尚未判定」当「判死」,预勾(§5「加入
+ *  本次执行」)才不会被静默丢掉。 */
+const contractPending = computed(() => {
+  void endpointFullVersion.value
+  for (const st of steps.value as StepView[]) {
+    const eid = st?.api?.view_hints?.endpoint_id
+    if (!eid) continue
+    requestDeclarationsOf(st)
+    if (endpointFullState(eid) === 'loading') return true
+  }
+  return false
+})
 
 /** 配置签「加入本次执行」(spec v3 §5):预勾该条目打开运行面板 */
 function onRunEntry(id: string) {

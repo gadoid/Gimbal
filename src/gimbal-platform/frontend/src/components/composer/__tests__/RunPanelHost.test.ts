@@ -128,3 +128,99 @@ it('RH-3: saveScheme → putRunSchemes(scenarioId, 整表含新方案)', async (
   expect(api.putRunSchemes).toHaveBeenCalledWith('sc-host', [scheme])
   w.unmount()
 })
+
+it('RH-4: 契约面在途(冷启动)→ preset 锚在 carry 声明的条目不被判死/丢预勾;落定后仍勾上', async () => {
+  // 复现入口:本宿主自取数后才挂 RunDialog,`/full` 与挂载同 tick 才发起
+  // ⇒ 首判定只有 body 面。若把「尚未判定」当「判死」:preset 的 carry 条目
+  // 被静默滤掉,而契约回来后 preset prop 不变、RunDialog 的 watch 不重跑
+  // → 预勾永不重放;同一个窗口里它还先渲染成「悬空 — 不可选」再翻活。
+  const { _resetEndpointFullCacheForTest } = await import('@/composables/useEndpointFull')
+  _resetEndpointFullCacheForTest()
+
+  const withEid = structuredClone(DRAFT) as any
+  withEid.definition.steps[0].api = { headers: {}, view_hints: { endpoint_id: 'ep-carry' } }
+  withEid.assertion_registry = { entries: [
+    ...REG.entries,
+    { id: 'inj-carry', name: 'carry 偏离',
+      path: { stepIndex: 0, source: 'body', jsonpath: '$.customer_id' }, value: 261, asserts: [] },
+  ] }
+  vi.spyOn(api, 'getScenarioDraft').mockResolvedValue(withEid)
+
+  // 契约取数延迟 resolve:挂载后仍在飞(pending 窗口)
+  let resolveFull!: (v: unknown) => void
+  const pendingFull = new Promise((res) => { resolveFull = res })
+  vi.spyOn(api, 'getFullEndpoint').mockReturnValue(pendingFull as any)
+
+  const w = await mountHost({ preset: { injectionEntryIds: ['inj-carry', 'inj-old'] } })
+  const dlg = w.findComponent(RunDialog)
+  expect(api.getFullEndpoint).toHaveBeenCalledWith('ep-carry')
+  // 前提:宿主此刻的 deadEntryIds 只跑过 body 面 —— carry 条目被判死
+  expect(dlg.props('deadEntryIds')).toContain('inj-carry')
+  expect(dlg.props('contractPending')).toBe(true)
+  // pending:尚未判定 ≠ 判死 → 不标悬空、不禁选、预勾保留
+  const boxOf = () => dlg.findAll('.rd-injection .el-checkbox')
+    .find((b) => b.text().includes('carry 偏离'))!
+  expect(boxOf().find('input').attributes('disabled')).toBeUndefined()
+  expect(boxOf().text()).not.toContain('悬空')
+  // 旧版条目是形状判,与契约面无关:pending 期间**仍**禁选、预勾仍被滤掉
+  // (悬空被掩空成不过滤时,legacy 若不显式排除会勾成 disabled 的卡死态)
+  const legacyBox = dlg.findAll('.rd-injection .el-checkbox')
+    .find((b) => b.text().includes('旧版条目'))!
+  expect(legacyBox.find('input').attributes('disabled')).toBeDefined()
+  expect((dlg.vm as any).injectionIds).toEqual(['inj-carry'])
+
+  // 契约落定:精确命中 carry 声明 → 判活;预勾仍在(收窄只删判死的)
+  resolveFull({ id: 'ep-carry', request: { declarations: [
+    { name: 'customer_id', path: '$.customer_id', state: 'carry', required: true }] } })
+  await flushPromises()
+  expect(dlg.props('contractPending')).toBe(false)
+  expect(dlg.props('deadEntryIds')).not.toContain('inj-carry')   // 由死转活
+  expect(boxOf().find('input').attributes('disabled')).toBeUndefined()
+  expect((dlg.vm as any).injectionIds).toEqual(['inj-carry'])    // 预勾未被丢
+  w.unmount()
+})
+
+it('RH-5: 契约落定后补一次收窄(只删不增)+ 用户手动勾选不被覆盖', async () => {
+  // pending 期间条目一律不禁选 ⇒ 用户可以勾上一个**落定后才判死**的条目。
+  // 留着它就是 disabled + 「悬空 — 不可选」却仍被 confirm 下送 / dispatch
+  // 静默 skip 的卡死态 ⇒ 落定后收窄一次;仍在判活的(含用户手动勾选)不动。
+  const { _resetEndpointFullCacheForTest } = await import('@/composables/useEndpointFull')
+  _resetEndpointFullCacheForTest()
+
+  const twoEid = structuredClone(DRAFT) as any
+  twoEid.definition.steps[0].api = { headers: {}, view_hints: { endpoint_id: 'ep-1' } }
+  twoEid.definition.steps[1].api = { headers: {}, view_hints: { endpoint_id: 'ep-2' } }
+  twoEid.assertion_registry = { entries: [
+    ...REG.entries,
+    { id: 'inj-ghost', name: '拼写错的锚点',
+      path: { stepIndex: 0, source: 'body', jsonpath: '$.ghost' }, value: 1, asserts: [] },
+  ] }
+  vi.spyOn(api, 'getScenarioDraft').mockResolvedValue(twoEid)
+
+  const deferred: Record<string, (v: unknown) => void> = {}
+  vi.spyOn(api, 'getFullEndpoint').mockImplementation((id: string) =>
+    new Promise((res) => { deferred[id] = res }) as any)
+
+  const w = await mountHost({ preset: { injectionEntryIds: ['inj-ghost'] } })
+  const dlg = w.findComponent(RunDialog)
+  expect(dlg.props('contractPending')).toBe(true)
+  expect((dlg.vm as any).injectionIds).toEqual(['inj-ghost'])    // pending:不过滤,先勾上
+
+  // 只落定其中一步 → 仍在途,不收窄
+  deferred['ep-1']({ id: 'ep-1', request: { declarations: [] } })
+  await flushPromises()
+  expect(dlg.props('contractPending')).toBe(true)
+  expect((dlg.vm as any).injectionIds).toEqual(['inj-ghost'])
+
+  // 用户在 pending 窗口里手动勾上一条判活的条目
+  ;(dlg.vm as any).injectionIds = ['inj-ghost', 'inj-live']
+  await flushPromises()
+
+  // 契约全部落定 → 收窄一次:判死的移出,手动勾的活条目原样保留
+  deferred['ep-2']({ id: 'ep-2', request: { declarations: [] } })
+  await flushPromises()
+  expect(dlg.props('contractPending')).toBe(false)
+  expect(dlg.props('deadEntryIds')).toContain('inj-ghost')       // 落定后确实判死
+  expect((dlg.vm as any).injectionIds).toEqual(['inj-live'])
+  w.unmount()
+})
