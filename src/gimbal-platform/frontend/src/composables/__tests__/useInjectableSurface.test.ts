@@ -84,10 +84,14 @@ it('IS-5: steps 就地编辑(body 删字段)→ 判定跟着走(记忆化不得�
   expect(s.dead.value.intrinsic).toEqual(['c'])           // 字段没了 → 判死(不是缓存的旧集合)
 })
 
-it('IS-4: 只对「被条目引用到的端点」在途 —— 无关端点挂起不悬置判定面', async () => {
+it('IS-4: `pending` 只看**被条目引用到**的端点 —— 无关端点在途不悬置判定面(但会被预取)', async () => {
   // 旧的四份 contractPending 遍历全部带 endpoint_id 的步骤:一个与条目无关的
   // 端点在途,就把整个判定面悬置(preset 预勾被推迟、禁选态闪烁)。
-  vi.spyOn(api, 'getFullEndpoint').mockReturnValue(new Promise(() => {}) as any)
+  // 预取面与在途面**故意不同**:预取要覆盖全部步骤(读端不取数,候选/取态
+  // 得问任意 si),在途面只认被引用到的(否则无关端点能悬置整个判定面)。
+  const deferred: Record<string, (v: unknown) => void> = {}
+  vi.spyOn(api, 'getFullEndpoint').mockImplementation((id: string) =>
+    new Promise((res) => { deferred[id] = res }) as any)
   const steps = ref([
     { request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-ref' } } },
     { request: { body: {} }, api: { view_hints: { endpoint_id: 'ep-unrelated' } } },
@@ -98,8 +102,69 @@ it('IS-4: 只对「被条目引用到的端点」在途 —— 无关端点挂�
   const s = useInjectableSurface(steps, entries)
   s.ensure()
   await nextTick()
-  expect(api.getFullEndpoint).toHaveBeenCalledWith('ep-ref')
-  expect(api.getFullEndpoint).not.toHaveBeenCalledWith('ep-unrelated')
   expect(s.pending.value).toBe(true)                  // 被引用端点在途 → 悬置
   expect(s.dead.value.contractDependent).toEqual(['c'])
+  // 预取面 = 全部带 endpoint_id 的步骤(幂等:每端点每会话一次)
+  expect(api.getFullEndpoint).toHaveBeenCalledWith('ep-ref')
+  expect(api.getFullEndpoint).toHaveBeenCalledWith('ep-unrelated')
+  // 只落定被引用端点 ⇒ 在途面清空;无关端点即便仍挂着也不悬置
+  deferred['ep-ref']({ id: 'ep-ref', request: { declarations: [] } })
+  await flushPromises()
+  expect(s.pending.value).toBe(false)
+  expect(s.dead.value.intrinsic).toEqual(['c'])       // 有答案 ⇒ 从严判死
+  expect(s.dead.value.contractDependent).toEqual([])
+})
+
+it('IS-6: 未被条目引用的 si —— 该步端点落定后其声明面仍须进候选(键含该 si 自身的端点态)', async () => {
+  // 复核探针 PROBE-A:键若用「被引用端点的联合版本」,无条目引用的 si 落定
+  // 既不换键也不清缓存 ⇒ 候选永久停在 body 面 —— 而编辑器给新条目挑字段
+  // (v3.1 §2.1 放宽服务的那条路径)问的正是这种 si。
+  const deferred: Record<string, (v: unknown) => void> = {}
+  vi.spyOn(api, 'getFullEndpoint').mockImplementation((id: string) =>
+    new Promise((res) => { deferred[id] = res }) as any)
+  const steps = ref([
+    { request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-a' } } },
+    { request: { body: {} }, api: { view_hints: { endpoint_id: 'ep-b' } } },
+  ])
+  const entries = ref([
+    { id: 'a', name: 'A', path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 1, asserts: [] },
+  ] as any)
+  const s = useInjectableSurface(steps, entries)
+  s.ensure()
+  await nextTick()
+  expect([...s.pathsOfStep(1)]).toEqual(['$'])        // 步骤 1 无条目引用:此刻只有 body 面
+  deferred['ep-b']({ id: 'ep-b', request: { declarations: [
+    { name: 'carry_x', path: '$.carry_x', state: 'carry', required: true, description: '' }] } })
+  await flushPromises()
+  expect([...s.pathsOfStep(1)]).toContain('$.carry_x')   // 落定 ⇒ 立即进候选
+  expect(s.stateOf(1, '$.carry_x')).toBe('carry')        // 取态同一条读路径
+})
+
+it('IS-7: 渲染期零请求 —— 不调 ensure() 时判定/候选/取态都不触达取数口', async () => {
+  // 复核探针:此前 pathsOfStep / stateOf 都经 useEndpointFull.requestDeclarationsOf,
+  // 而它**内部会 ensure** ⇒ 只 watchEffect 读一下 deadIds、全程不调 ensure(),
+  // getFullEndpoint 照样被调用。读 / 取分离后,渲染色路径是纯缓存读。
+  const spy = vi.spyOn(api, 'getFullEndpoint')
+    .mockResolvedValue({ id: 'ep-a', request: { declarations: [] } } as any)
+  const steps = ref([{ request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-a' } } }])
+  const entries = ref([
+    { id: 'a', name: 'A', path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 1, asserts: [] },
+  ] as any)
+  const s = useInjectableSurface(steps, entries)
+  // 渲染色路径:computed 消费判定面(宿主与展示面都这么读)
+  void s.deadIds.value
+  void s.dead.value
+  void s.pathsOfStep(0)
+  void s.stateOf(0, '$.amount')
+  void s.deadOf(entries.value[0])
+  void s.pending.value
+  await nextTick()
+  expect(spy).not.toHaveBeenCalled()                  // ← 全程未调 ensure() ⇒ 零请求
+  // 反空转:显式 ensure() 才取数,且幂等(第二次不再发)
+  s.ensure()
+  await flushPromises()
+  s.ensure()
+  await flushPromises()
+  expect(spy).toHaveBeenCalledTimes(1)
+  expect([...s.pathsOfStep(0)]).toContain('$.amount')
 })

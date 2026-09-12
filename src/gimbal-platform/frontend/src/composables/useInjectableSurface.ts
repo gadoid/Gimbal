@@ -5,19 +5,21 @@
  * contractPending(四份副本,且已在同一波内漂移)。收敛后:判定、记忆化、
  * 预取时机、死因分组都在这里,**视图只消费**。
  *
- * 取数时机(修 F 的结构成因):`ensure()` 是**显式副作用**,由宿主在挂载 /
- * 步骤变化时调用;渲染期只读缓存 —— 纯判定不再与网络 I/O 耦合。
+ * 取数时机(修 F 的结构成因):**读 / 取分离** —— `ensure()` 是**唯一副作用**,
+ * 由宿主在挂载 / 步骤面变化时调用;判定与候选走纯缓存读(`declarationsFor`,
+ * 不经 `requestDeclarationsOf` —— 后者内部会 ensure),因此渲染期**零请求**
+ * (IS-7 钉住)。纯判定不再与网络 I/O 耦合。
  *
  * 死因分组(修 C):`dead` 把判死条目分成两组 ——
  *   - `intrinsic`:任何时刻都死(legacy / step-oob / override-no-match,以及
  *     **判定面已给答案**时的 path-unresolvable)。宿主把它无条件并入
  *     `deadEntryIds` ⇒ 契约在途窗口里,真悬空条目照旧禁选(此前
  *     RunDialog 把整个 deadIds 掩空,连不依赖契约的死因一起放行);
- *   - `contractDependent`:仅因**契约未落定**而暂判 path-unresolvable 的那批
- *     (契约到位后可能变活)⇒ 只在契约落定后并入。
- *   `pending` = "还没答案"(任一被引用端点在途);`failed` = "答案拿不到"
- *   ⇒ 判定**从严**(声明面退回 body 面),此时 path-unresolvable 即真死,
- *   归 `intrinsic` 而**不悬置**。
+ *   - `contractDependent`:仅因**契约未落定(在途)**而暂判 path-unresolvable
+ *     的那批(契约到位后可能变活)⇒ 只在契约落定后并入。
+ *   `pending` = "还没答案"(任一被引用端点在途)。取数**失败**不是悬置理由
+ *   ——失败也是答案:声明面退回 body 面 ⇒ 此时 path-unresolvable 即真死,
+ *   归 `intrinsic`(IS-3 钉住)。
  */
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { isLegacyEntry } from '@/types/assertion-registry'
@@ -26,15 +28,16 @@ import { injectablePathSetOf, registryIssues } from '@/utils/assertion-registry'
 import type { RegistryIssue } from '@/utils/assertion-registry'
 import { fieldPathsOf } from '@/utils/dataset-segments'
 import { iterFlat, resolveState, toTemplatePath } from '@/utils/declarations'
-import type { FieldState } from '@/types/plate'
+import type { DeclarationEntryView, FieldState } from '@/types/plate'
 import {
-  endpointFullState, ensureEndpointFull, getEndpointFull, requestDeclarationsOf,
+  endpointFullState, ensureEndpointFull, getEndpointFull,
 } from '@/composables/useEndpointFull'
 
 export interface InjectableSurface {
   pathsOfStep(si: number): ReadonlySet<string>
   deadOf(e: AssertionEntry | LegacyAssertionEntry): RegistryIssue[]
-  /** 死因分组(spec §2.1):intrinsic 任何时刻都死;contractDependent 仅因契约未定/取数失败而判死 */
+  /** 死因分组(spec §2.1):intrinsic 任何时刻都死;contractDependent 仅因契约
+   *  **在途**(还没答案)而暂判死 —— 取数失败 ⇒ 从严归 intrinsic */
   dead: ComputedRef<{ intrinsic: string[]; contractDependent: string[] }>
   /** **门控后**的死条目 id 集 = `intrinsic ∪ (pending ? ∅ : contractDependent)`
    *  —— 禁选(RunDialog)与「悬空」标注(数据页 / 断言管理)共用的唯一派生:
@@ -50,58 +53,88 @@ export function useInjectableSurface(
   steps: Ref<any[]>,
   entries: Ref<Array<AssertionEntry | LegacyAssertionEntry>>,
 ): InjectableSurface {
-  /* ── 预取:只为"被条目引用到的步骤"的 endpoint 取数(显式副作用) ──
-   * 未被任何条目引用的端点,其契约状态不可能影响 dead 判定 ⇒ 不进在途面
-   * (旧的四份 contractPending 遍历全部带 endpoint_id 的步骤,慢 plate 下
-   * 一个无关端点就能把判定面整个悬置)。 */
+  /** steps[si] 的契约端点 id(**读,不取数**) */
+  function endpointIdOf(si: number): string | undefined {
+    const eid = (steps.value[si] as { api?: { view_hints?: { endpoint_id?: string } } } | null)
+      ?.api?.view_hints?.endpoint_id
+    return typeof eid === 'string' && eid ? eid : undefined
+  }
+
+  /* ── 读 / 取分离 ─────────────────────────────────────────────
+   * **读**(本文件的 pathsOfStep / stateOf):纯缓存读,绝不取数 —— 渲染期
+   * 只走这里。`useEndpointFull.requestDeclarationsOf` **内部会 ensure**
+   * (`void ensureEndpointFull(eid)`),读路径经它 = 渲染期发请求,所以下面
+   * 一律走 `declarationsFor`(只读 getEndpointFull)。
+   * **取**:`ensure()` 显式、幂等,由宿主在挂载 / 步骤面变化时调用,覆盖
+   * **全部带 endpoint_id 的步骤** —— 读端不取数 ⇒ 取数必须一次取全,否则
+   * "给新条目挑契约字段"这条路径(候选/取态要问任意 si,含无条目引用的 si)
+   * 永远没有数据。幂等 + 负缓存 ⇒ 每端点每会话仍只一次请求。 */
+  const stepEndpointIds = computed<string[]>(() => {
+    const out = new Set<string>()
+    for (let si = 0; si < steps.value.length; si++) {
+      const eid = endpointIdOf(si)
+      if (eid) out.add(eid)
+    }
+    return [...out]
+  })
+  function ensure(): void {
+    for (const eid of stepEndpointIds.value) void ensureEndpointFull(eid)
+  }
+  watch(stepEndpointIds, () => ensure(), { immediate: false })
+
+  /* ── 在途面:只为"被条目引用到的步骤"的端点 ──
+   * 与预取面**故意不同**:未被引用的端点不可能影响任何条目的死判定(它不进
+   * dead 投影),却足以让判定面整体悬置 ⇒ 不进 pending(旧的四份
+   * contractPending 遍历全部步骤,慢 plate 下一个无关端点就能把判定面整个
+   * 悬置)。 */
   const neededEndpoints = computed<string[]>(() => {
     const out = new Set<string>()
     for (const e of entries.value) {
       if (isLegacyEntry(e)) continue
       const si = e.path?.stepIndex
       if (!Number.isInteger(si)) continue
-      const eid = steps.value[si]?.api?.view_hints?.endpoint_id
-      if (typeof eid === 'string' && eid) out.add(eid)
+      const eid = endpointIdOf(si)
+      if (eid) out.add(eid)
     }
     return [...out]
   })
-  function ensure(): void {
-    for (const eid of neededEndpoints.value) void ensureEndpointFull(eid)
-  }
-  watch(neededEndpoints, () => ensure(), { immediate: false })
 
   /** 契约是否尚未落定:任一被引用端点状态为 'loading' */
   const pending = computed(() =>
     neededEndpoints.value.some((eid) => endpointFullState(eid) === 'loading'))
 
-  /* ── 记忆化:同一 (si, 步骤面版本, 契约版本) 只重建一次 ──
-   * 投影 = body 现状 × 契约声明,两维都得进键:
-   *  · **契约版本** = 每个被引用端点的取数态(缓存命中 = 'v',否则 loading/
-   *    failed)。契约回填 / 失败 / 负缓存重试都改版本 —— 只按 si 缓存而靠
-   *    「端点集合变化」来清会在**契约落定**这条主路径上失效(集合没变,
-   *    变的只是它的答案);
-   *  · **步骤面版本** = steps 的深变更计数(整表替换 / body 就地编辑)。
-   *    光靠端点集合的整表替换只能顺带清掉一部分:它只跟踪 view_hints,
-   *    不跟踪 body —— 就地删一个字段时不重算,旧集合会被一直复用,
-   *    判活判死静默漂移(IS-5 钉住)。
-   *  ⚠ 下面这个 **deep** watch 不是顺手加的、别当冗余删:键必须覆盖投影读的
-   *  每一个输入(body 就是被 neededEndpoints 漏掉的那一维)。删掉它 = 重新
-   *  引入"编辑 body 后判定滞后"的静默缺陷(副本时代不存在,因为那时无缓存)。
+  /** 读:纯缓存读,绝不取数(渲染期只走这里) */
+  function declarationsFor(si: number): DeclarationEntryView[] | undefined {
+    const eid = endpointIdOf(si)
+    if (!eid) return undefined
+    return getEndpointFull(eid)?.request?.declarations
+  }
+
+  /* ── 记忆化:同一 (si, 步骤面版本, 该 si 自身端点态) 只重建一次 ──
+   * 键必须覆盖投影读的**每一个**输入:
+   *  · **步骤面版本** = steps 的深变更计数(整表替换 / body 就地编辑);
+   *  · **该 si 自身的端点态** = `endpointFullState(endpointIdOf(si))`
+   *    ('' = 已回填 / 'loading' / 'failed';读 `shallowReactive` 容器的
+   *    `has` ⇒ 本身响应式,契约落定时键即变)。
+   *  ⚠ 键里用**该 si 自己的**端点态,不是"被引用端点的联合版本":
+   *  `pathsOfStep(si)` 会被**无条目引用**的 si 调(编辑器 `pendingPath`
+   *  给新条目挑字段),那种 si 的端点不在联合版本里 ⇒ 它落定既不改键也不清
+   *  缓存,候选集会永久停在 body 面(v3.1 §2.1 放宽服务的那条路径直接失效)。
+   *  ⚠ 下面这个 **deep** watch 不是顺手加的、别当冗余删:body 就是被端点集合
+   *  漏掉的那一维,删掉 = 重新引入"编辑 body 后判定滞后"的静默缺陷。
    *  开销:每次 steps 深变更多一遍遍历(O(steps)),**不是**每渲染 —— 可接受。 */
   const stepsRev = ref(0)
   watch(steps, () => { stepsRev.value++ }, { deep: true })
-  const contractVersion = computed(() =>
-    neededEndpoints.value
-      .map((eid) => `${eid}:${getEndpointFull(eid) ? 'v' : endpointFullState(eid)}`)
-      .join('|'))
+  const endpointStatesKey = computed(() =>
+    stepEndpointIds.value.map((eid) => `${eid}:${endpointFullState(eid)}`).join('|'))
   const pathsCache = new Map<string, ReadonlySet<string>>()
-  watch([stepsRev, contractVersion], () => pathsCache.clear())
+  watch([stepsRev, endpointStatesKey], () => pathsCache.clear())
   function pathsOfStep(si: number): ReadonlySet<string> {
-    const key = `${si}|${stepsRev.value}|${contractVersion.value}`
+    const key = `${si}|${stepsRev.value}|${endpointFullState(endpointIdOf(si))}`
     const hit = pathsCache.get(key)
     if (hit) return hit
     const step = steps.value[si]
-    const built = injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))
+    const built = injectablePathSetOf(fieldPathsOf(step as any), declarationsFor(si))
     pathsCache.set(key, built)
     return built
   }
@@ -143,7 +176,7 @@ export function useInjectableSurface(
   function stateOf(si: number, path: string): FieldState | undefined {
     const step = steps.value[si] as any
     const key = toTemplatePath(path)
-    for (const d of iterFlat(requestDeclarationsOf(step))) {
+    for (const d of iterFlat(declarationsFor(si))) {
       if (toTemplatePath(d.path) === key) {
         return resolveState(d.path, d.state, step?.field_states)
       }
