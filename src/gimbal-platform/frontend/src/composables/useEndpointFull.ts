@@ -16,9 +16,9 @@
  *   - 零持久化:缓存只活在本次页面会话(刷新即失效),不落库 / 不落
  *     localStorage —— Plate 始终是结构权威源,平台侧不留结构快照。
  *   - **响应式容器(Vue 原生)**:消费方**读缓存即建立依赖**(Map.get /
- *     Map.has 被 Vue 跟踪),回填后 computed 自动重算 —— 旧的
- *     「手工版本号 + `void x.value`」协议已退役:
- *     那套协议要每个消费方在每处 computed 里手写声明,漏一处即静默不重算。
+ *     Map.has 被 Vue 跟踪),回填后 computed 自动重算。消费方**不需要**任何
+ *     手工版本号或「读一下让它失效」的声明 —— 手工协议要求每个消费方在每处
+ *     computed 里手写,漏一处即静默不重算(本容器不欠这份债)。
  *   - **失败负缓存**:失败记 `failedAt`,窗口 `FAILED_RETRY_MS` 内不再发起
  *     (plate 故障时渲染路径不再反复重发),窗口过后允许重试。
  *   - **消毒(Ruling C7/C8b/C9)**:`/full` 是不可信来源。消毒上移到
@@ -32,8 +32,9 @@
  * 消费方约定(**读 / 取分离**,裁定 C18):渲染期只在 computed 里读
  * `getEndpointFull` / `endpointFullState`(读缓存即建立响应依赖,**不取数**);
  * 需要取数时调 `ensureEndpointFull(eid)`(幂等,每端点每会话一次)。
- * 此前那个「读 + 隐式取数」的合体口 `requestDeclarationsOf` 已删除 ——
- * 它的名字在撒谎(叫读,内部却 `void ensureEndpointFull`),正是渲染期取数的入口。
+ * **读函数不得内部取数**:一个「读里带取」的合体口把名字变成谎话(叫读,
+ * 内部却 `void ensureEndpointFull`),而它正是渲染期请求的入口 —— 渲染期零
+ * 请求(IS-7)就是靠这条纪律钉住的。
  */
 import { reactive, shallowReactive } from 'vue'
 

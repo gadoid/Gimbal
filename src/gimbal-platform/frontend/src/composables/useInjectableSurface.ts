@@ -1,15 +1,15 @@
 /**
  * useInjectableSurface —— 判定面的**唯一消费面**(spec 架构收敛 §2.1)。
  *
- * 收敛前:四个视图各自定义 injectablePathsOfStep / assertTargetsOf / deadOf /
- * contractPending(四份副本,且已在同一波内漂移)。收敛后:判定、记忆化、
- * 预取时机、死因分组都在这里,**视图只消费**。
+ * 判定、记忆化、预取时机、死因分组都在这里,**视图只消费**:可注入面 / 断言
+ * 目标 / 死判 / 契约在途信号(本文件导出为 `pathsOfStep` / `deadOf` /
+ * `pending` / `deadIds` 等)只有这一份派生 —— 视图**不得**各自复刻,同一波内
+ * 的多份副本必然漂移(死因分组、pending 口径各说各话)。
  *
  * 取数时机(修 F 的结构成因):**读 / 取分离** —— `ensure()` 是**唯一副作用**,
  * 由宿主在挂载 / 步骤面变化时调用;判定与候选走纯缓存读(`declarationsFor`),
- * 因此渲染期**零请求**(IS-7 钉住)。纯判定不再与网络 I/O 耦合。
- * (原先经 `requestDeclarationsOf` —— 那个合体口内部会 ensure,已按 C18 删除;
- * 任何人再造一个"读里带取"的口,IS-7 会立刻红。)
+ * 因此渲染期**零请求**(IS-7 钉住)。纯判定不与网络 I/O 耦合:任何人再造一个
+ * "读里带取"的口(内部 `void ensureEndpointFull(eid)`),IS-7 会立刻红。
  *
  * 死因分组(修 C):`dead` 把判死条目分成两组 ——
  *   - `intrinsic`:任何时刻都死(legacy / step-oob / override-no-match,以及
@@ -63,9 +63,8 @@ export function useInjectableSurface(
 
   /* ── 读 / 取分离(C18)─────────────────────────────────────────
    * **读**(本文件的 pathsOfStep / stateOf):纯缓存读,绝不取数 —— 渲染期
-   * 只走这里。任何"读里带取"的合体口都不许入读路径:`useEndpointFull` 原先
-   * 的 `requestDeclarationsOf` 内部就 `void ensureEndpointFull(eid)`,读路径
-   * 经它 = 渲染期发请求(已随 C18 删除)。
+   * 只走这里。任何"读里带取"的合体口都不许入读路径:读函数内部若
+   * `void ensureEndpointFull(eid)`,读路径经它 = 渲染期发请求。
    * **取**:`ensure()` 显式、幂等,由宿主在挂载 / 步骤面变化时调用,覆盖
    * **全部带 endpoint_id 的步骤** —— 读端不取数 ⇒ 取数必须一次取全,否则
    * "给新条目挑契约字段"这条路径(候选/取态要问任意 si,含无条目引用的 si)
@@ -85,9 +84,9 @@ export function useInjectableSurface(
 
   /* ── 在途面:只为"被条目引用到的步骤"的端点 ──
    * 与预取面**故意不同**:未被引用的端点不可能影响任何条目的死判定(它不进
-   * dead 投影),却足以让判定面整体悬置 ⇒ 不进 pending(旧的四份
-   * contractPending 遍历全部步骤,慢 plate 下一个无关端点就能把判定面整个
-   * 悬置)。 */
+   * dead 投影),却足以让判定面整体悬置 ⇒ 不进 pending。
+   * ⚠ 别"简化"成遍历全部带 endpoint_id 的步骤:那样慢 plate 下一个与条目
+   * 无关的端点就能把整个判定面悬置。 */
   const neededEndpoints = computed<string[]>(() => {
     const out = new Set<string>()
     for (const e of entries.value) {

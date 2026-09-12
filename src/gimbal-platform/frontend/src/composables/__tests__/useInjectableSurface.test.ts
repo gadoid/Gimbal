@@ -141,10 +141,9 @@ it('IS-6: 未被条目引用的 si —— 该步端点落定后其声明面仍�
 })
 
 it('IS-7: 渲染期零请求 —— 不调 ensure() 时判定/候选/取态都不触达取数口', async () => {
-  // 复核探针:此前 pathsOfStep / stateOf 都经 useEndpointFull.requestDeclarationsOf
-  // (该合体口已按裁定 C18 删除 —— 读里带取,名字在撒谎),
-  // 而它**内部会 ensure** ⇒ 只 watchEffect 读一下 deadIds、全程不调 ensure(),
-  // getFullEndpoint 照样被调用。读 / 取分离后,渲染色路径是纯缓存读。
+  // 复核探针:读路径必须纯缓存读 —— 若任何读函数内部 `void ensureEndpointFull`,
+  // 则只 watchEffect 读一下 deadIds、全程不调 ensure(),getFullEndpoint 照样
+  // 被调用(正是本用例要拦的形状)。读 / 取分离 ⇒ 渲染色路径是纯缓存读。
   const spy = vi.spyOn(api, 'getFullEndpoint')
     .mockResolvedValue({ id: 'ep-a', request: { declarations: [] } } as any)
   const steps = ref([{ request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-a' } } }])

@@ -39,6 +39,11 @@ export function injectablePathSetOf(
 export function pathResolvable(jsonpath: string, injectablePaths: ReadonlySet<string>): boolean {
   for (const form of [jsonpath, toTemplatePath(jsonpath)]) {
     if (injectablePaths.has(form)) return true
+    // 容器前缀扫描**承重,别当死代码删**:本文件 `injectablePathSetOf` 只放
+    // body 叶子与契约声明路径,**不**预展开各级容器前缀(后端
+    // `injectable_universe` 走的是另一条路 —— 它把 `_container_prefixes`
+    // materialize 进 universe,故后端那边同形的扫描才可省)。这里若照抄删掉
+    // 本段,活着的容器路径(`$.items` 之于叶子 `$.items.sku`)会被判成悬空。
     for (const p of injectablePaths) {
       if (p.startsWith(`${form}.`) || p.startsWith(`${form}[`)) return true
     }
@@ -58,8 +63,8 @@ export function registryIssues(
   if (isLegacyEntry(entry)) return [{ kind: 'legacy-entry' }]
   const issues: RegistryIssue[] = []
   // stepIndex 非整数(手改 JSON:"0")与越界同判 step-oob —— 后端同守卫
-  // (`isinstance(si, int)`),否则前端把它当活条目,chip 宣称一次永不
-  // 触发的注入。
+  // (`as_step_index`:拒 bool、收整数值浮点 —— 与这里的 `Number.isInteger`
+  // 同构),否则前端把它当活条目,chip 宣称一次永不触发的注入。
   const si = entry.path.stepIndex
   // jsonpath 非字符串(手改 JSON / 旧写入方)与越界同判 path-unresolvable —
   // 后端同守卫(`isinstance(jp, str)`,run_injection.py)。**不得**放它进
@@ -76,8 +81,8 @@ export function registryIssues(
     issues.push({ kind: 'path-unresolvable', stepIndex: si, jsonpath: entry.path.jsonpath })
   }
   // asserts 缺键 / 非数组 → 视作空(后端 `entry.get("asserts") or []`);
-  // 单条 assert 非对象或 stepIndex 非整数 → 跳过(后端 `isinstance(a, dict)
-  // and isinstance(a.get("stepIndex"), int)`)。
+  // 单条 assert 非对象或 stepIndex 非整数 → 跳过(后端 `isinstance(a, dict)`
+  // 且 `as_step_index(a.get("stepIndex"))` 为 None → continue)。
   const asserts = Array.isArray(entry.asserts) ? entry.asserts : []
   for (const a of asserts) {
     if (!a || typeof a !== 'object' || !Number.isInteger(a.stepIndex)) continue

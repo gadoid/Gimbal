@@ -102,8 +102,9 @@ async def test_concurrent_cold_calls_coalesce_to_one_fetch(_install_transport):
         declared_paths_of("fin.order.add"),
     )
     assert len(_install_transport) == 1          # 收敛为同一在飞请求
-    # == 而非 is:缓存的是原始声明列表,path 集每次调用派生(见模块设计),
-    # 但两者必等值 —— 收敛要保的是「同一次取数」,不是同一个对象。
+    # == 而非 is:投影随取数入缓存,两条返回路径都直接取那份算好的 frozenset
+    # (不重派生)—— 但断言取**等值**而非同一对象:收敛要保的是「同一次取数」,
+    # 不是同一个对象。
     assert a is not None and a == b
     assert {"$.bl_no", "$.customer_id", "$.items", "$.items.sku"} <= set(a)
 
@@ -185,7 +186,8 @@ async def test_absent_declarations_is_empty_not_degraded(item):
     """真无声明(缺键 / null)≠ 降级 → 空 frozenset,而非 None。
 
     端点本就没有 body 声明是**成功**结果;若按「非 list → None」处理,
-    这类端点每个失败链都会误报一条告警并占用 ``_WARNED``。
+    这类端点每个失败链都会误报一条降级告警,并压掉该端点在
+    ``_WARN_COOLDOWN_SEC`` 冷却窗内的真实告警。
     """
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=_envelope(item))
@@ -384,11 +386,12 @@ async def test_cold_fetch_path_returns_a_copy_too(_install_transport):
 
 
 async def test_degradation_warning_ages_out_by_time(monkeypatch):
-    """S:降级告警按**时间窗**老化,不再只在「同 id 后来成功」时才清。
+    """S:降级告警按**时间窗**老化 —— 告警表(``_WARNED_AT``)只按
+    ``_WARN_COOLDOWN_SEC`` 冷却窗去重,成功事件**不**重置它;一个长期失败的
+    端点在每个冷却窗过后重新告警,不会一直失声。
 
-    旧实现 ``_WARNED`` 是集合:同一端点在**当前失败链**内只告警一次,清空
-    仅由「同 id 后来成功」驱动 —— 一个长期失败的端点在恢复前彻底失声。
-    冷却窗设 0 ⇒ 每次失败都该重新告警(判别力:计数 2,旧实现恒为 1)。
+    冷却窗设 0 ⇒ 每次失败都该重新告警(判别力:计数 2;若去重口径退化成
+    「同一失败链内一次」,计数恒为 1 —— 本断言即钉住时间窗语义)。
     """
     import app.services.endpoint_declarations as ed
     from loguru import logger
@@ -473,6 +476,9 @@ class _TimeoutEnforcingTransport(httpx.AsyncBaseTransport):
         self._handler = handler
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        # §5 例外:两侧同为「未提供 timeout 扩展」的缺省形(``None`` / ``{}``),
+        # 合并后 ``.get("read")`` 仍得 None;0.0 是**有意义的值**(显式要求零
+        # 超时),不是被抹平的 falsy。
         read = (request.extensions.get("timeout") or {}).get("read")
         if read is None:                      # 显式判 None(§5):0.0 也是"要给"的值
             return await self._handler(request)

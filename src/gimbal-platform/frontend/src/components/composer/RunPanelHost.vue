@@ -92,7 +92,8 @@ const authOptions = computed(() => {
   return [...new Set([...authAliases.value, ...users])]
 })
 /** 判定面(spec 架构收敛 §2.1):可注入面 / 悬空判定 / 死因分组 / 契约在途
- *  信号全部收在 useInjectableSurface —— 本宿主只消费,不再持有副本。
+ *  信号全部收在 useInjectableSurface —— 本宿主**只消费,不持有副本**(复刻
+ *  一份即与编辑器/数据页的判据漂移)。
  *  时序坑仍在:本宿主自取数后才挂 RunDialog,`/full` 与挂载同 tick 才发起
  *  ⇒ 首判定只有 body 面;契约在途时 contractDependent 那批**不并入**
  *  deadEntryIds(而非在 RunDialog 侧掩空),preset 锚在 carry 的预勾才不会被

@@ -82,8 +82,9 @@ def test_override_and_append_patch_keep_v2_semantics():
 
 
 def test_dangling_path_and_unmatched_override_skipped():
-    """悬空项静默跳过(dispatcher 已过滤,双保险):越界 stepIndex 不落
-    Assign;无匹配 override 不动既有断言。issues 同构断言四种。"""
+    """悬空项静默跳过 —— 守卫在 compose_injection_scenario **自身**,不是
+    「dispatcher 已过滤」的重复保险(entry_issues 判活的形状仍能直达此处):
+    越界 stepIndex 不落 Assign;无匹配 override 不动既有断言。issues 同构断言四种。"""
     entry = {"id": "inj-1", "path": {"stepIndex": 9, "source": "body", "jsonpath": "$.x"},
              "value": 1, "asserts": [
                  {"stepIndex": 0, "target": "$.nope", "operator": "eq", "expected": "1", "mode": "override"}]}

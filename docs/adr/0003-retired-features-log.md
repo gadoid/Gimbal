@@ -14,6 +14,10 @@
 | 2 | DataSetEditor 基线区 / 直填列 / 提升入口 | 2026-09-11 | 列宇宙 = `config.vars`(引用扫描派生);var 基线编辑入口 = 置顶基线行;字面值编辑的家在编排器 FieldForm | `bd15cc5`(spec v2 §6/T0) |
 | 3 | 期望提升链(exp_*) | 2026-09-11 | 期望偏离的语义位置 = 断言管理注册表(条目自含 injection + asserts,`assertion_registry` 场景级节) | `b912d59`(spec v2 §2/§9) |
 | 4 | `step.request.fields_meta` 作为请求目录数据源 | (随会话级现拉改造) | 数据源 = 会话级按 `endpoint_id` 现拉 `/full`,不读持久化快照 | (见 CaseComposerCanvas `stepDecls`) |
+| 5 | 契约缓存手工版本号协议 `endpointFullVersion` | 2026-09-13 | 缓存容器本身是 Vue 响应式(`shallowReactive` Map)—— 消费方读缓存即建立依赖,无需手写版本号 | `c756984` |
+| 6 | 四个视图各自的本地判定函数副本(`injectablePathsOfStep` / `assertTargetsOf` / `deadOf` / `contractPending`) | 2026-09-13 | 判定面唯一来源 = `useInjectableSurface` composable,视图只消费 | `c719fda` |
+| 7 | `endpoint_declarations` 自持 `_CACHE` dict + `_WARNED` 集合 | 2026-09-13 | 共享 `TtlLruCache`(LRU 上界 + 回退窗 + 成功那刻打点)+ 时间老化告警表 `_WARNED_AT` | `ec904ec` |
+| 8 | `requestDeclarationsOf`(「读 + 隐式取数」合体口) | 2026-09-13 | 读 / 取分离(裁定 C18):读 = `getEndpointFull` / `endpointFullState`(纯缓存读),取 = `ensureEndpointFull`(幂等,宿主显式触发) | `7ead7d6` |
 
 ## 各条详情
 
@@ -42,6 +46,34 @@
 
 - **原语义**:`step.request.fields_meta` 持久化字段目录曾作为请求目录数据源。
 - **现语义**:会话级按 `endpoint_id` 现拉 `/full`,不读持久化快照(`stepDecls`);`fields_meta` 不再被任何代码读取。
+
+### 5. `endpointFullVersion`(2026-09-13,提交 `c756984`)
+
+- **原语义**:`composables/useEndpointFull.ts` 的手工版本号协议 —— `const endpointFullVersion: Ref<number>` 在**每次缓存写入**(成功回填)与**每次失败**时自增(`endpointFullVersion.value++`),因为「Map 变更不触发 computed」。每个消费方必须在**每一处** computed 里手写 `void endpointFullVersion.value` 才能建立响应依赖:全仓 14 处该语句 + 6 个消费文件的 import(`CaseComposerCanvas.vue` / `RunPanelHost.vue` / `useFieldDescriptions.ts` / `AssertionRegistryEditor.vue` / `CaseComposer.vue` / `CaseDataSetsList.vue`)。漏一处即**静默不重算**。
+- **现语义**:缓存容器本身是 Vue 原生响应式 —— `fullByEndpoint` 为 `shallowReactive(new Map(...))`,`failedAt` 为 `reactive(new Map(...))`;消费方读缓存(`Map.get` / `Map.has`)即建立依赖,回填后 computed 自动重算,无需任何手工声明。同批引入**失败负缓存**(`FAILED_RETRY_MS` 窗口内不重发)。
+- **存量处置**:无 —— 纯会话级内存状态(刷新即空),不落库 / 不落 localStorage,无外部 wire 面。
+- **涉及面**:`composables/useEndpointFull.ts` 及其六个消费文件。
+
+### 6. 四视图本地判定函数副本(2026-09-13,提交 `c719fda`)
+
+- **原语义**:可注入面 / 断言目标 / 死判 / 契约在途信号在四个视图里各有一份本地副本:`RunPanelHost.vue`、`AssertionRegistryEditor.vue`、`CaseDataSetsList.vue` 各自定义 `injectablePathsOfStep` + `assertTargetsOf`(附各自的 `deadOf` / `contractPending`),`CaseComposer.vue` 的同款副本名为 `registryInjectablePathsOf` / `registryAssertTargetsOf`(附 `deadEntryIds` / `contractPending`)。同一波内已各自漂移(死因分组、pending 口径不一致)。
+- **现语义**:判定面唯一来源 = `composables/useInjectableSurface.ts` —— 导出 `pathsOfStep` / `assertTargetsOf` / `deadOf` / `dead`(`intrinsic` 与 `contractDependent` 死因分组)/ `deadIds`(门控后死集:禁选与「悬空」标注共用)/ `pending` / `stateOf` / `ensure()`;视图**只消费**。取数由 `ensure()` 显式触发,判定与候选走纯缓存读(渲染期零请求)。
+- **存量处置**:无 —— 纯前端派生数据,无持久化、无 wire 面。
+- **涉及面**:`composables/useInjectableSurface.ts`(新增)、`components/composer/RunPanelHost.vue`、`components/composer/RunDialog.vue`、`views/AssertionRegistryEditor.vue`、`views/CaseComposer.vue`、`views/CaseDataSetsList.vue`。
+
+### 7. `endpoint_declarations` 自持 `_CACHE` / `_WARNED`(2026-09-13,提交 `ec904ec`)
+
+- **原语义**:模块自持进程字典 `_CACHE: dict[str, tuple[float, list]]` —— `time.monotonic()` 取在**请求发起时**(慢 plate 上条目一入缓存即已过期,缓存退化);**无容量上界**;刷新失败 `_CACHE.pop(endpoint_id)`(一次 plate 抖动就把声明面从「有面」降级成「空面」)。告警用 `_WARNED: set[str]` —— 同一端点在**当前失败链**内只告警一次,**仅由「同 id 后来成功」清空**(长期失败的端点在恢复前彻底失声,而它的告警正是降级的唯一遥测)。
+- **现语义**:复用共享 `services/query_view_cache.py` 的 `TtlLruCache`(ttl / 容量 / 回退窗**构造即冻结**,实例随 settings 惰性重建):成功那刻由 `put` 打点,`DECLARED_PATHS_MAX_ENTRIES` LRU 逐出,TTL 过期后刷新失败**保留旧快照**直到 `DECLARED_PATHS_STALE_WINDOW_SEC` 回退窗走完;条目载荷 = `(decls, frozenset(catalog_paths(decls)))`(投影随取数缓存)。告警表改为 `_WARNED_AT: dict[str, float]`(eid → 最近一次告警时刻),只随 `_WARN_COOLDOWN_SEC` **时间**老化,成功事件不重置。
+- **存量处置**:无 —— 纯每进程内存状态(PG 部署下多 worker 各一份,有界、无害),重启即空,无持久化格式。
+- **涉及面**:`services/endpoint_declarations.py`、`services/query_view_cache.py`、`core/config.py`(三个 `DECLARED_PATHS_*` settings)。
+
+### 8. `requestDeclarationsOf`(2026-09-13,提交 `7ead7d6`)
+
+- **原语义**:`composables/useEndpointFull.ts` 导出的「读 + 隐式取数」合体口 —— 名字是**读**,内部却 `void ensureEndpointFull(eid)` 并在无缓存时发起取数。渲染期的判定面读经它进行,即渲染期发请求(名实不符,也是渲染期 I/O 的入口)。
+- **现语义**:读 / 取分离(裁定 C18)。**读**(纯缓存读,渲染期只走这里)= `getEndpointFull(endpointId)`(端点契约)/ `endpointFullState(endpointId)`(取数状态);**取** = `ensureEndpointFull(endpointId)`(幂等,每端点每会话一次,由宿主 `useInjectableSurface.ensure()` 在挂载 / 步骤面变化时显式调用)。`getEndpointFull` / `endpointFullState` 签名不变。
+- **存量处置**:无 —— 模块内导出,无持久化、无 wire 面;调用方全部在同仓内改完。
+- **涉及面**:`composables/useEndpointFull.ts`、`composables/useInjectableSurface.ts`、`views/AssertionRegistryEditor.vue`。
 
 ## 维护约定
 

@@ -23,19 +23,18 @@
   悬空判定只认 body 面),绝不阻塞执行;
 * **失败不写缓存 + 旧快照回退**(2026-09-13 架构收敛 §3.1,D)—— 失败不写
   缓存,下次调用可重试;TTL 过期后**刷新失败时旧快照继续服务**,直到回退窗
-  ``DECLARED_PATHS_STALE_WINDOW_SEC`` 走完才真过期。旧实现是「刷新失败
-  ``_CACHE.pop``」⇒ 一次 plate 抖动就把声明面从「有面」降级成「空面」;
-* **LRU 容量上界**(S)—— ``DECLARED_PATHS_MAX_ENTRIES`` 逐出最旧。旧实现是
-  自持 dict,「永不淘汰」;
+  ``DECLARED_PATHS_STALE_WINDOW_SEC`` 走完才真过期(一次 plate 抖动不得把
+  声明面从「有面」降级成「空面」);
+* **LRU 容量上界**(S)—— ``DECLARED_PATHS_MAX_ENTRIES`` 逐出最旧;
 * **时间戳取在成功之后**(U)—— 入缓存统一由 ``_refresh`` 在**成功那刻**做,
-  由 ``TtlLruCache.put`` 自己打点。旧实现把 ``time.monotonic()`` 取在**请求
-  发起时** ⇒ 慢 plate(取数耗时 > TTL)上条目一入缓存即已过期,缓存退化;
+  由 ``TtlLruCache.put`` 自己打点(不是请求发起时 —— 否则慢 plate 上条目
+  一入缓存即已过期,缓存退化);
 * **投影随取数缓存**(R)—— 条目载荷 = ``(decls, frozenset(catalog_paths(decls)))``,
   TTL 命中路径直接取投影,不再遍历声明树(``declared_paths_of`` 每次
   dispatch 都会被问);
 * **告警按时间窗老化**(S)—— 同一端点在 ``_WARN_COOLDOWN_SEC`` 内至多一条
-  warning。旧 ``_WARNED`` 集合只在「同 id 后来成功」时清 ⇒ 长期失败的端点
-  在恢复前彻底失声(而它的告警正是降级的唯一遥测);
+  warning;告警表 ``_WARNED_AT`` 只随**时间**老化,成功事件不重置它 ——
+  否则长期失败的端点在恢复前彻底失声(而它的告警正是降级的唯一遥测);
 * **缓存实例随 settings 惰性重建** —— ``TtlLruCache`` 的 ttl/容量/回退窗
   **构造即冻结**,而这三个值来自 settings(测试 monkeypatch、运维热改都要求
   即刻生效)⇒ ``_cache()`` 比对当前 cfg 与建例时的 cfg,不一致就换实例
@@ -89,7 +88,7 @@ def _build_cache() -> TtlLruCache:
 _CACHE: TtlLruCache = _build_cache()
 _CACHE_CFG: tuple[float, int, float] = _cache_cfg()
 _INFLIGHT: dict[str, asyncio.Task[list | None]] = {}
-_WARNED_AT: dict[str, float] = {}          # eid → 最近一次告警时刻(时间老化,不再只在成功时清)
+_WARNED_AT: dict[str, float] = {}          # eid → 最近一次告警时刻(冷却窗 = _WARN_COOLDOWN_SEC)
 _WARN_COOLDOWN_SEC = 300.0
 
 
@@ -131,8 +130,9 @@ def _now_iso() -> str:
 def _warn_once(endpoint_id: str, reason: object) -> None:
     """降级告警(**时间老化**):同一端点在 `_WARN_COOLDOWN_SEC` 内至多一条。
 
-    旧实现只在"同 id 后来成功"时才清 `_WARNED` ⇒ 调用方字符串(错拼/改名)驱动的
-    无界增长(spec §1.1 S);改为按时间窗老化,与 `TtlLruCache` 的惰性过期同风格。"""
+    表大小 ~ 冷却窗内失败过的端点数:下表顺手回收窗外的条目,故调用方字符串
+    (错拼/改名)驱动的增长有界(spec §1.1 S);回收时机与 `TtlLruCache.lookup`
+    的惰性过期同风格。"""
     now = time.monotonic()
     last = _WARNED_AT.get(endpoint_id)
     if last is not None and now - last < _WARN_COOLDOWN_SEC:

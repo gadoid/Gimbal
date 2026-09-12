@@ -129,6 +129,9 @@ def injectable_universe(body: Any, declared: Any) -> set[str]:
     for p in _body_leaf_paths(body):
         universe.add(p)
         universe.update(_container_prefixes(p))
+    # §5 例外:两侧同为「本步无声明」的缺省形(``None`` / ``frozenset()``),
+    # 等价性一眼可判 —— 循环体一次不跑,结果同。``None`` 作为降级标记的含义
+    # 属于调用方(dispatcher 的 ``face_by_step``),本函数不区分二者。
     for p in (declared or ()):
         if not isinstance(p, str):
             continue
