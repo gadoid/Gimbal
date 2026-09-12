@@ -224,7 +224,8 @@ function issueSummary(e: AssertionEntry | LegacyAssertionEntry): string {
     .map((iss) => {
       if (iss.kind === 'step-oob') return `步骤${iss.stepIndex + 1} 越界(场景共 ${stepCount.value} 步)`
       if (iss.kind === 'path-unresolvable') return `步骤${iss.stepIndex + 1} body 无字段 ${iss.jsonpath}`
-      return `步骤${iss.stepIndex + 1} 无既有断言 ${iss.target}(override 无匹配)`
+      if (iss.kind === 'override-no-match') return `步骤${iss.stepIndex + 1} 无既有断言 ${iss.target}(override 无匹配)`
+      return '旧版条目(v2 形状),请在编排器重新标记创建'
     })
     .join('; ')
 }

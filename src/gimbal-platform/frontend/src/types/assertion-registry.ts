@@ -35,6 +35,10 @@ export interface AssertionEntry {
 export interface LegacyAssertionEntry {
   id: string
   name: string
+  /** 判别键(spec v3 §8):v3 条目必有 path,旧条目禁止携带(never)。
+   *  缺此键则 AssertionEntry 可赋给本类型 → isLegacyEntry 的否定分支
+   *  收窄为 never,v-if="!isLegacyEntry(e)" 内访问 e.path 报 TS2339。 */
+  path?: never
   anchor?: { stepIndex: number; source: 'body' | 'headers'; jsonpath: string; varName?: string }
   injection?: Array<{ varName: string; value: unknown }>
   asserts?: AssertPatch[]

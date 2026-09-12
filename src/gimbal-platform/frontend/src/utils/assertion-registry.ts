@@ -1,6 +1,6 @@
 // utils/assertion-registry.ts
 import { isLegacyEntry } from '@/types/assertion-registry'
-import type { AssertionEntry, LegacyAssertionEntry } from '@/types/assertion-registry'
+import type { AssertionEntry, AssertionRegistry, LegacyAssertionEntry } from '@/types/assertion-registry'
 
 export type RegistryIssue =
   | { kind: 'legacy-entry' }
