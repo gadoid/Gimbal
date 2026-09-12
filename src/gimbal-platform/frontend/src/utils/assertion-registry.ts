@@ -1,33 +1,52 @@
 // utils/assertion-registry.ts
-import type { AssertionEntry, AssertionRegistry } from '@/types/assertion-registry'
+import { isLegacyEntry } from '@/types/assertion-registry'
+import type { AssertionEntry, LegacyAssertionEntry } from '@/types/assertion-registry'
 
 export type RegistryIssue =
+  | { kind: 'legacy-entry' }
   | { kind: 'step-oob'; stepIndex: number }
-  | { kind: 'var-unknown'; varName: string }
+  | { kind: 'path-unresolvable'; stepIndex: number; jsonpath: string }
   | { kind: 'override-no-match'; stepIndex: number; target: string }
 
-/** 悬空检测(spec §3):stepIndex 越界 / injection.varName ∉ config.vars /
- *  override 匹配不到既有断言。assertTargetsOf 由调用方从 steps[si].strategy
- *  的 assertion 条目投影(target 集合)。 */
+/** body 叶子路径投影(spec v3 §2 path-unresolvable 检测输入):
+ *  调用方从 fieldPathsOf(step)(utils/dataset-segments)取叶子列表,
+ *  这里滤出 body 源(headers 源 v1 不支持 path 注入,spec §1 裁定 9)。 */
+export function bodyPathSetOf(
+  leaves: Array<{ source: string; path: string }>,
+): ReadonlySet<string> {
+  return new Set(leaves.filter((l) => l.source === 'body').map((l) => l.path))
+}
+
+/** path 是否可解析:等于某叶子,或是某叶子的容器前缀(`p.` / `p[`
+ *  开头)— 条目可锚在容器上,Assign 会整体覆写该容器(spec §2)。 */
+export function pathResolvable(jsonpath: string, bodyPaths: ReadonlySet<string>): boolean {
+  if (bodyPaths.has(jsonpath)) return true
+  for (const p of bodyPaths) {
+    if (p.startsWith(`${jsonpath}.`) || p.startsWith(`${jsonpath}[`)) return true
+  }
+  return false
+}
+
+/** 悬空检测(spec v3 §2,软提示不阻断):legacy-entry / step-oob /
+ *  path-unresolvable / override-no-match。bodyPathsOfStep 与
+ *  assertTargetsOf 由调用方从场景 definition 投影(编辑器/编排器同构)。 */
 export function registryIssues(
-  entry: AssertionEntry,
+  entry: AssertionEntry | LegacyAssertionEntry,
   stepCount: number,
-  varNames: ReadonlySet<string>,
+  bodyPathsOfStep: (stepIndex: number) => ReadonlySet<string>,
   assertTargetsOf: (stepIndex: number) => ReadonlySet<string>,
 ): RegistryIssue[] {
+  if (isLegacyEntry(entry)) return [{ kind: 'legacy-entry' }]
   const issues: RegistryIssue[] = []
-  const idxs = new Set<number>()
-  if (entry.anchor) idxs.add(entry.anchor.stepIndex)
-  for (const a of entry.asserts) idxs.add(a.stepIndex)
-  for (const si of idxs) {
-    if (si < 0 || si >= stepCount) issues.push({ kind: 'step-oob', stepIndex: si })
-  }
-  for (const inj of entry.injection) {
-    if (!varNames.has(inj.varName)) issues.push({ kind: 'var-unknown', varName: inj.varName })
+  if (entry.path.stepIndex < 0 || entry.path.stepIndex >= stepCount) {
+    issues.push({ kind: 'step-oob', stepIndex: entry.path.stepIndex })
+  } else if (!pathResolvable(entry.path.jsonpath, bodyPathsOfStep(entry.path.stepIndex))) {
+    issues.push({ kind: 'path-unresolvable', stepIndex: entry.path.stepIndex, jsonpath: entry.path.jsonpath })
   }
   for (const a of entry.asserts) {
-    if (a.mode === 'override' && a.stepIndex >= 0 && a.stepIndex < stepCount
-      && !assertTargetsOf(a.stepIndex).has(a.target)) {
+    if (a.stepIndex < 0 || a.stepIndex >= stepCount) {
+      issues.push({ kind: 'step-oob', stepIndex: a.stepIndex })
+    } else if (a.mode === 'override' && !assertTargetsOf(a.stepIndex).has(a.target)) {
       issues.push({ kind: 'override-no-match', stepIndex: a.stepIndex, target: a.target })
     }
   }
@@ -35,12 +54,12 @@ export function registryIssues(
 }
 
 export function isDeadEntry(
-  entry: AssertionEntry,
+  entry: AssertionEntry | LegacyAssertionEntry,
   stepCount: number,
-  varNames: ReadonlySet<string>,
+  bodyPathsOfStep: (stepIndex: number) => ReadonlySet<string>,
   assertTargetsOf: (stepIndex: number) => ReadonlySet<string>,
 ): boolean {
-  return registryIssues(entry, stepCount, varNames, assertTargetsOf).length > 0
+  return registryIssues(entry, stepCount, bodyPathsOfStep, assertTargetsOf).length > 0
 }
 
 /** 注册表形状归一:服务端来源(draft)不可信 — V2 之前保存的场景无

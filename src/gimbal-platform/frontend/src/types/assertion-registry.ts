@@ -1,20 +1,13 @@
 // types/assertion-registry.ts
-/** 断言管理注册表(spec v2 §3)— 平台侧偏离注入条目,场景级资产,
+/** 断言管理注册表(spec v3 §2)— 平台侧偏离注入条目,场景级资产,
  *  住场景文档 payload.assertion_registry(与 orchestration 同级,引擎不感知)。 */
 
-/** 溯源面:编排器标记自动带来;编辑器联动/展示用,执行不依赖 */
-export interface AssertionAnchor {
+/** 定位面:锁定到该元素的地址。jsonpath 根 = 该步请求 body */
+export interface EntryPath {
   stepIndex: number
-  source: 'body' | 'headers'
+  source: 'body'
   /** jsonpath 风格,$. 前缀(实例路径,数组带 [i]) */
   jsonpath: string
-  varName?: string
-}
-
-/** 值偏离面:物化 = 基线 vars 覆写 */
-export interface AssertionInject {
-  varName: string
-  value: unknown
 }
 
 /** 期望偏离面:override 覆写既有断言(匹配键 = stepIndex+target)/ append 追加 */
@@ -26,14 +19,33 @@ export interface AssertPatch {
   mode: 'override' | 'append'
 }
 
+/** v3 条目三元组:定位 path + 注入值 + 期望配对(spec v3 §2) */
 export interface AssertionEntry {
   id: string
   name: string
-  anchor?: AssertionAnchor
-  injection: AssertionInject[]
+  path: EntryPath
+  /** 注入面:替换该字段的值(字面量,原样覆写不 coerce;
+   *  物化 = 引擎 Assign 直补 $.request_body,与 config.vars 零耦合) */
+  value: unknown
   asserts: AssertPatch[]
 }
 
+/** v2 旧形状(anchor + injection)— 仅识别不编辑(spec v3 §8 灰显);
+ *  保留原样不删,不可编辑、不可选中执行 */
+export interface LegacyAssertionEntry {
+  id: string
+  name: string
+  anchor?: { stepIndex: number; source: 'body' | 'headers'; jsonpath: string; varName?: string }
+  injection?: Array<{ varName: string; value: unknown }>
+  asserts?: AssertPatch[]
+}
+
+/** 注册表容器:v3 条目与旧条目共存于同一 entries 数组(spec v3 §8) */
 export interface AssertionRegistry {
-  entries: AssertionEntry[]
+  entries: Array<AssertionEntry | LegacyAssertionEntry>
+}
+
+/** v2 旧形状识别(spec v3 §7/§8):无 path 键 = 旧条目。 */
+export function isLegacyEntry(e: AssertionEntry | LegacyAssertionEntry): e is LegacyAssertionEntry {
+  return (e as AssertionEntry).path === undefined
 }
