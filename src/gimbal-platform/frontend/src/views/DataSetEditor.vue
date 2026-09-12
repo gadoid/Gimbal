@@ -234,16 +234,17 @@
               />
             </td>
             <td class="td-action">
-              <!-- 「运行此行」预填的是**本地行号**(spec v3 §4 rowIndexes),故两种
+              <!-- 「运行此行」预填的是**本地行号**(spec v3 §4 rowIndexes),故三种
                    情况下禁用:① /data-sets/new(datasetId='new')服务端无此库,
                    预填指向不存在的库 → RunDialog 选择面收窄为空、面板落基线模式,
                    确认后静默空跑;② 行表有未保存改动(增删/复制/改格)→ 服务端行号
-                   与屏幕上不是同一行。判定沿用页头「删除」的 'new' 特例。 -->
+                   与屏幕上不是同一行;③ 基线有未保存改动(baselineDirty)→ 继承格
+                   取的是存储的旧 config.vars。判定沿用页头「删除」的 'new' 特例。 -->
               <el-button
                 size="small" text :icon="VideoPlay"
                 :aria-label="`运行第 ${i + 1} 行`"
-                :disabled="datasetId === 'new' || rowsDirty"
-                :title="datasetId === 'new' || rowsDirty ? RUN_ROW_UNSAVED_HINT : undefined"
+                :disabled="datasetId === 'new' || rowsDirty || baselineDirty"
+                :title="datasetId === 'new' || rowsDirty || baselineDirty ? RUN_ROW_UNSAVED_HINT : undefined"
                 @click="runRow(i)"
               />
               <el-button size="small" text @click="cloneRow(i)">复制</el-button>
@@ -342,10 +343,12 @@ const previewDialogOpen = ref(false)
 const panelOpen = ref(false)
 const panelPreset = ref<RunPreset | null>(null)
 
-/** 行表未落库不可运行此行的提示(按钮 title 与守卫共用一处文案) */
-const RUN_ROW_UNSAVED_HINT = '先「保存数据集」再运行此行 — 行表有未保存的改动'
-  + '(增删行 / 复制行 / 改单元格 / CSV 导入),跑的是服务端存量行'
-  + '(新建数据集尚未分配服务端行号)'
+/** 行表/基线未落库不可运行此行的提示(按钮 title 与守卫共用一处文案)。
+ *  两种成因各自成句并写清保存入口 ——「保存数据集」/「保存基线」。 */
+const RUN_ROW_UNSAVED_HINT = '先「保存数据集」/「保存基线」再运行此行 — '
+  + '行表有未保存的改动(增删行 / 复制行 / 改单元格 / CSV 导入)'
+  + '或基线有未保存的编辑(config.vars 值),'
+  + '跑的是服务端存量行与旧基线(新建数据集尚未分配服务端行号)'
 
 /** 行表脏标:本地 rows 模型 ≠ 服务端存量行。addRow/cloneRow/removeRow、
  *  单元格编辑、TSV 粘贴、CSV 导入置位;载入与保存成功复位。
@@ -355,11 +358,14 @@ const RUN_ROW_UNSAVED_HINT = '先「保存数据集」再运行此行 — 行表
 const rowsDirty = ref(false)
 
 /** 运行此行:行级 rowIndexes 预填(0-based = 行号)。
- *  守卫(与按钮 :disabled 同条件):「new」数据集在服务端不存在,预填会
- *  指向不存在的库 — RunDialog 选择面收窄为空、面板落基线模式,确认后
- *  静默空跑;行表脏时预填的本地行号与存量行不是同一行。两者都直接拒绝。 */
+ *  守卫(与按钮 :disabled 同条件,三选一都直接拒绝):
+ *  ①「new」数据集在服务端不存在,预填会指向不存在的库 — RunDialog 选择面
+ *    收窄为空、面板落基线模式,确认后静默空跑;
+ *  ② 行表脏:预填的本地行号与存量行不是同一行;
+ *  ③ 基线脏(baselineDirty,setBaseline 置位 / 保存基线复位):运行取的是
+ *    **存储的** config.vars,继承格(cell-inherit)的值与屏幕上不同。 */
 function runRow(i: number) {
-  if (datasetId === 'new' || rowsDirty.value) {
+  if (datasetId === 'new' || rowsDirty.value || baselineDirty.value) {
     ElMessage.warning(RUN_ROW_UNSAVED_HINT)
     return
   }

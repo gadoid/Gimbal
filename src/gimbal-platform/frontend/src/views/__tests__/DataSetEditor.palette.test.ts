@@ -806,3 +806,39 @@ it('单元格编辑(值编辑):按钮转禁用 + 内层守卫拒绝直调(跑的
   expect(w.findComponent(RunPanelHost).exists()).toBe(false)
   w.unmount()
 })
+
+it('基线未保存(改置顶基线行):按钮转禁用 + 内层守卫拒绝直调(继承格取旧 config.vars)', async () => {
+  const w = mountEditor('ds-1')
+  await flushPromises()
+  expect(w.find('button[aria-label="运行第 1 行"]').attributes('disabled')).toBeUndefined()
+  // 置顶基线行 amount 格 '100' → '999'(setBaseline → baselineDirty)
+  const baseInput = w.findAll('input.baseline-cell-input')[0]
+  await baseInput.setValue('999')
+  await flushPromises()
+  expect((w.vm as any).baselineDirty).toBe(true)
+  const runBtn = w.find('button[aria-label="运行第 1 行"]')
+  expect(runBtn.attributes('disabled')).toBeDefined()
+  // 文案覆盖两种成因:行表 **和** 基线各自成句,保存入口都点名
+  expect(runBtn.attributes('title')).toContain('保存数据集')
+  expect(runBtn.attributes('title')).toContain('保存基线')
+  expect(runBtn.attributes('title')).toContain('行表有未保存的改动')
+  expect(runBtn.attributes('title')).toContain('基线有未保存的编辑')
+  ;(w.vm as any).runRow(0)          // 绕开 disabled 直击内层守卫
+  await flushPromises()
+  expect((w.vm as any).panelPreset).toBeNull()
+  expect(w.findComponent(RunPanelHost).exists()).toBe(false)
+  w.unmount()
+})
+
+it('基线保存后基线脏标复位:「运行此行」恢复可用', async () => {
+  const w = mountEditor('ds-1')
+  await flushPromises()
+  await w.findAll('input.baseline-cell-input')[0].setValue('999')
+  await flushPromises()
+  expect(w.find('button[aria-label="运行第 1 行"]').attributes('disabled')).toBeDefined()
+  await w.findAll('button').find((b) => b.text().includes('保存基线'))!.trigger('click')
+  await flushPromises()
+  expect((w.vm as any).baselineDirty).toBe(false)
+  expect(w.find('button[aria-label="运行第 1 行"]').attributes('disabled')).toBeUndefined()
+  w.unmount()
+})
