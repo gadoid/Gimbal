@@ -46,7 +46,7 @@
 
 ---
 
-### Task S1: 边界消毒一次(`iterFlat` 唯一定义,修 A)
+### Task 1(S1): 边界消毒一次(`iterFlat` 唯一定义,修 A)
 
 **Files:**
 - Modify: `src/gimbal-platform/frontend/src/utils/declarations.ts`
@@ -164,7 +164,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 ---
 
-### Task S2: `useEndpointFull` 改 Vue 原生响应式 + 负缓存(修 F/L)
+### Task 2(S2): `useEndpointFull` 改 Vue 原生响应式 + 负缓存(修 F/L)
 
 **Files:**
 - Modify: `src/gimbal-platform/frontend/src/composables/useEndpointFull.ts`
@@ -280,7 +280,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 ---
 
-### Task S3: `useInjectableSurface` + 四视图接线 + 死因分组(修 C、消 K、收 Q)
+### Task 3(S3): `useInjectableSurface` + 四视图接线 + 死因分组(修 C、消 K、收 Q)
 
 **Files:**
 - Create: `src/gimbal-platform/frontend/src/composables/useInjectableSurface.ts`
@@ -524,7 +524,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 ---
 
-### Task S4: `TtlLruCache` 载荷泛化 + `endpoint_declarations` 改持该缓存(修 D/S/R/U)
+### Task 4(S4): `TtlLruCache` 载荷泛化 + `endpoint_declarations` 改持该缓存(修 D/S/R/U)
 
 **Files:**
 - Modify: `src/gimbal-platform/backend/app/services/query_view_cache.py`、`app/services/query_view_runner.py`、`app/core/config.py`
@@ -726,7 +726,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 ---
 
-### Task S5: 判定收口(修 B/Y/Z2/Z3/P/T)
+### Task 5(S5): 判定收口(修 B/Y/Z2/Z3/P/T)
 
 **Files:**
 - Modify: `src/gimbal-platform/backend/app/services/run_injection.py`、`app/services/run_dispatcher.py`
@@ -1019,7 +1019,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 ---
 
-### Task S6: 判定取数改 3s 有界软取(修 Z4)
+### Task 6(S6): 判定取数改 3s 有界软取(修 Z4)
 
 **Files:**
 - Modify: `src/gimbal-platform/backend/app/core/config.py`、`app/services/endpoint_declarations.py`
@@ -1061,7 +1061,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 ---
 
-### Task S7: 文档收敛(spec §6 五项)
+### Task 7(S7): 文档收敛(spec §6 五项)
 
 **Files:**
 - Modify: `docs/PLATFORM-SCENARIO-COMPOSER-API.md`(§2.6 / §4.18 / §5 + 新增一节)
@@ -1084,7 +1084,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 ---
 
-### Task S8: 全量回归 + 四道门收口
+### Task 8(S8): 全量回归 + 四道门收口
 
 - [ ] **Step 1: 后端全量** `cd /d/Gimbal/Gimbal/src/gimbal-platform/backend && python -m pytest -q` → 期望 ≥513 passed / 0 failed(新增用例后更多)。
 - [ ] **Step 2: 前端全量 + 类型** `cd /d/Gimbal/Gimbal/src/gimbal-platform/frontend && npx vitest run` 与 `npm run typecheck` → 全绿 / 0 错误。
