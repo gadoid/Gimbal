@@ -1045,7 +1045,10 @@ async function onRunConfirm(
     const resp = await api.runScenario(body)
     lastRunId.value = resp.runId
     ElMessage.success(`运行已发起: ${resp.runId}`)
-    runDialogOpen.value = false
+    // 同走 closeRunDialog(而非只置 runDialogOpen):关窗同时清 runPreset,
+    // 否则下一次从「运行」入口打开会静默复用上一次的行级/条目预填
+    // (Ruling 12)。失败路径不关窗(原样保留错误态),预填随之保留可重试。
+    closeRunDialog()
     // Jump straight to the execution detail page. Older backends don't
     // return executionId — fall back to the list. runDispatching stays
     // true until navigation so the confirm button can't double-fire in
