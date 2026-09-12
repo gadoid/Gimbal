@@ -218,11 +218,14 @@ const stepLabels = computed(() =>
 const scenarioName = computed(() => draft.value?.definition?.meta?.name || scenarioId)
 
 /** 判定面(spec 架构收敛 §2.1):可注入面 / 悬空判定 / 契约在途信号唯一来源
- *  = useInjectableSurface;本页只消费(与 RunPanelHost/CaseComposer 同源)。 */
+ *  = useInjectableSurface;本页只消费(与 RunPanelHost/CaseComposer 同源)。
+ *  行内「悬空」标注读**门控后死集** —— 契约未落定期间不把契约依赖条目判死
+ *  (与运行面板的禁选同口径;`deadOf` 的原始 issue 明细只用于 tooltip 文案)。 */
 const surface = useInjectableSurface(steps, computed(() => registry.value.entries))
 onMounted(() => surface.ensure())
-/** 悬空判定薄壳(isDeadEntry 的布尔口径 —— 模板按真假消费 class/title/徽标) */
-const deadOf = (e: AssertionEntry | LegacyAssertionEntry) => surface.deadOf(e).length > 0
+/** 悬空判定薄壳(模板按布尔消费 class/title/徽标;口径 = 门控后死集) */
+const deadOf = (e: AssertionEntry | LegacyAssertionEntry) =>
+  surface.deadIds.value.includes(e.id)
 const deadCount = computed(() => registry.value.entries.filter(deadOf).length)
 
 /** 旧版条目不可选(不可编辑,spec v3 §8) */

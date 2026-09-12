@@ -523,13 +523,11 @@ onMounted(() => surface.ensure())
 /** 契约面在途(spec v3.1 §2.1):与本页 deadEntryIds 的掩空决策**同源**。
  *  本页 draft 通常先就绪(Canvas 已拉过 /full),但首访/慢 plate 下仍可能命中。 */
 const contractPending = computed(() => surface.pending.value)
-/** 当前生效的死条目 = 任何时刻都死的(intrinsic)∪ 契约落定后的悬置面;
- *  契约在途时「尚未判定」≠「判死」(预勾 §5「加入本次执行」不被静默丢掉),
- *  但**不依赖判定面**的死因(step-oob / legacy)恒在 intrinsic ⇒ 恒禁选。 */
-const deadEntryIds = computed(() => [
-  ...surface.dead.value.intrinsic,
-  ...(surface.pending.value ? [] : surface.dead.value.contractDependent),
-])
+/** 当前生效的死条目 = composable 的**门控后死集**:契约在途时「尚未判定」
+ *  ≠「判死」(预勾 §5「加入本次执行」不被静默丢掉),但**不依赖判定面**的死因
+ *  (step-oob / legacy)恒在 intrinsic ⇒ 恒禁选。运行面板的禁选与配置签列表的
+ *  「悬空」标注读**同一份**派生(同一页同口径,不留第二个落点)。 */
+const deadEntryIds = surface.deadIds
 
 /** 配置签「加入本次执行」(spec v3 §5):预勾该条目打开运行面板 */
 function onRunEntry(id: string) {

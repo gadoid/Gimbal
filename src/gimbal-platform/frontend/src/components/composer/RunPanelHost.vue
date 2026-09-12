@@ -102,13 +102,11 @@ onMounted(() => surface.ensure())
 /** 契约面在途(spec v3.1 §2.1)= 被条目引用的端点尚未回填 —— 传给 RunDialog 的
  *  信号与 deadEntryIds 的掩空决策**同源**,两者必须同步。 */
 const contractPending = computed(() => surface.pending.value)
-/** 当前生效的死条目 = 任何时刻都死的(intrinsic)∪ 契约已落定后的悬置面。
- *  掩空决策在**宿主**做:契约在途时 contractDependent 不判死(可能变活),
- *  intrinsic 恒判死(step-oob / legacy / override-no-match 不依赖判定面)。 */
-const deadEntryIds = computed(() => [
-  ...surface.dead.value.intrinsic,
-  ...(surface.pending.value ? [] : surface.dead.value.contractDependent),
-])
+/** 当前生效的死条目 = composable 的**门控后死集**(intrinsic ∪ 落定后的
+ *  contractDependent):契约在途时 contractDependent 不判死(可能变活),
+ *  intrinsic 恒判死(step-oob / legacy / override-no-match 不依赖判定面)。
+ *  直接取 surface.deadIds —— 掩空决策**没有第二个落点**,展示面同这一份。 */
+const deadEntryIds = surface.deadIds
 
 onMounted(async () => {
   try {

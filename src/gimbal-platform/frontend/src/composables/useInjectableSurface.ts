@@ -36,6 +36,11 @@ export interface InjectableSurface {
   deadOf(e: AssertionEntry | LegacyAssertionEntry): RegistryIssue[]
   /** 死因分组(spec §2.1):intrinsic 任何时刻都死;contractDependent 仅因契约未定/取数失败而判死 */
   dead: ComputedRef<{ intrinsic: string[]; contractDependent: string[] }>
+  /** **门控后**的死条目 id 集 = `intrinsic ∪ (pending ? ∅ : contractDependent)`
+   *  —— 禁选(RunDialog)与「悬空」标注(数据页 / 断言管理)共用的唯一派生:
+   *  同一页里"能不能勾"与"标不标悬空"必须同口径,否则用户在数据页看到
+   *  「悬空」、在运行面板看到可勾,正是 C 要消灭的自相矛盾。 */
+  deadIds: ComputedRef<string[]>
   stateOf(si: number, path: string): FieldState | undefined
   pending: ComputedRef<boolean>
   ensure(): void
@@ -78,7 +83,11 @@ export function useInjectableSurface(
    *  · **步骤面版本** = steps 的深变更计数(整表替换 / body 就地编辑)。
    *    光靠端点集合的整表替换只能顺带清掉一部分:它只跟踪 view_hints,
    *    不跟踪 body —— 就地删一个字段时不重算,旧集合会被一直复用,
-   *    判活判死静默漂移(IS-5 钉住)。 */
+   *    判活判死静默漂移(IS-5 钉住)。
+   *  ⚠ 下面这个 **deep** watch 不是顺手加的、别当冗余删:键必须覆盖投影读的
+   *  每一个输入(body 就是被 neededEndpoints 漏掉的那一维)。删掉它 = 重新
+   *  引入"编辑 body 后判定滞后"的静默缺陷(副本时代不存在,因为那时无缓存)。
+   *  开销:每次 steps 深变更多一遍遍历(O(steps)),**不是**每渲染 —— 可接受。 */
   const stepsRev = ref(0)
   watch(steps, () => { stepsRev.value++ }, { deep: true })
   const contractVersion = computed(() =>
@@ -120,6 +129,15 @@ export function useInjectableSurface(
     return { intrinsic, contractDependent }
   })
 
+  /** 门控后的死集(唯一派生):契约**在途**时只有 intrinsic 算死 ——
+   *  contractDependent 是"还没答案",不是"判死"(spec §2.1)。
+   *  宿主传给 RunDialog 的 deadEntryIds 与各视图的「悬空」标注都读这一份,
+   *  掩空决策**没有第二个落点**,不可能再分叉。 */
+  const deadIds = computed<string[]>(() => [
+    ...dead.value.intrinsic,
+    ...(pending.value ? [] : dead.value.contractDependent),
+  ])
+
   /** 提示行的字段状态标注(原编辑器 stateOfPendingPath 的实现搬入并**显式按步**)。
    *  `si` 必填:编辑器候选来自"当前待选步骤",调用方(编辑器)手里就有该下标。 */
   function stateOf(si: number, path: string): FieldState | undefined {
@@ -133,5 +151,5 @@ export function useInjectableSurface(
     return undefined
   }
 
-  return { pathsOfStep, deadOf, dead, stateOf, pending, ensure }
+  return { pathsOfStep, deadOf, dead, deadIds, stateOf, pending, ensure }
 }

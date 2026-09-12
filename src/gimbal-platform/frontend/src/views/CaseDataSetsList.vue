@@ -134,11 +134,13 @@ const dataSets = computed(() => store.dataSetsOfScenario(scenarioId))
 const registry = ref<AssertionRegistry>({ entries: [] })
 const steps = ref<any[]>([])
 /** 判定面(spec 架构收敛 §2.1):唯一消费面。本页只做展示(悬空灰显),
- *  契约在途与否不改变展示口径 —— 卡片灰显用「任何时刻都死」的 intrinsic 面。 */
+ *  与运行面板同口径 —— 读 composable 的**门控后死集**:契约未落定期间
+ *  不把契约依赖条目标成悬空(它们不是"悬空",是"还没答案")。 */
 const surface = useInjectableSurface(steps, computed(() => registry.value.entries))
 onMounted(() => surface.ensure())
 /** 悬空判定薄壳(模板按布尔消费:class / title / 摘要行) */
-const deadOf = (e: AssertionRegistry['entries'][number]) => surface.deadOf(e).length > 0
+const deadOf = (e: AssertionRegistry['entries'][number]) =>
+  surface.deadIds.value.includes(e.id)
 function valueSummary(e: AssertionRegistry['entries'][number]): string {
   if (isLegacyEntry(e)) return '—'
   const v = (e as { value: unknown }).value

@@ -329,6 +329,36 @@ it('ARE-13: 契约含真值非字符串 path 的声明 → 编辑器不抛、正
   w.unmount()
 })
 
+it('ARE-14: 契约在途 → 契约依赖条目不标悬空(与运行面板同口径);intrinsic 照常标;落定后按实际结果标', async () => {
+  // 展示面读 composable 的门控后死集:契约未落定期间不把"只被契约托着"的
+  // 条目标成悬空(它们不是"悬空",是"还没答案")—— 否则同一场景在数据页/断言
+  // 管理说「悬空」、在运行面板却可勾,正是 C 要消灭的自相矛盾。
+  _resetEndpointFullCacheForTest()
+  const def = JSON.parse(JSON.stringify(DEF))
+  def.steps[0].api = { headers: {}, view_hints: { endpoint_id: 'ep-gate' } }
+  let release: (v: unknown) => void = () => {}
+  vi.spyOn(api, 'getFullEndpoint').mockReturnValue(new Promise((res) => { release = res }) as any)
+  const w = await mountEditor({
+    definition: def,
+    orchestration: { steps: [], resourceMeta: {} },
+    assertion_registry: { entries: [
+      { id: 'inj-oob', name: '越界', path: { stepIndex: 9, source: 'body', jsonpath: '$.x' }, value: 1, asserts: [] },
+      { id: 'inj-carry', name: '契约依赖', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_x' }, value: 1, asserts: [] },
+    ] },
+  })
+  const rows = () => w.findAll('.are-row')
+  expect(rows()[0].classes()).toContain('are-dead')          // intrinsic:恒标
+  expect(rows()[0].text()).toContain('悬空')
+  expect(rows()[1].classes()).not.toContain('are-dead')      // 契约依赖:在途 ⇒ 尚未判定
+  expect(w.find('.page-header p').text()).toContain('悬空 1 条')   // 计数同口径
+  release({ id: 'ep-gate', request: { declarations: [] } })  // 声明面无此字段 ⇒ 有答案了
+  await flushPromises()
+  expect(rows()[1].classes()).toContain('are-dead')          // 落定 ⇒ 按实际结果标
+  expect(rows()[1].text()).toContain('悬空')
+  expect(w.find('.page-header p').text()).toContain('悬空 2 条')
+  w.unmount()
+})
+
 it('ARE-12: 契约声明但 body 无的路径 → 不再判悬空(由死转活)', async () => {
   vi.spyOn(api, 'getFullEndpoint').mockResolvedValue({
     id: 'ep-rg',

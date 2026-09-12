@@ -103,3 +103,32 @@ it('DSL-3: 条目卡点击 → 跳断言管理编辑器', async () => {
   expect(pushMock.push).toHaveBeenCalledWith(scenarioAssertionsUrl('sc-td'))
   w.unmount()
 })
+
+it('DSL-4: 契约在途 → 契约依赖条目**不**标悬空(pending ≠ 判死),intrinsic 照常标;落定后按实际结果标', async () => {
+  // 展示面与运行面板同口径(读 composable 的门控后死集):同一页里
+  // 「能不能勾」与「标不标悬空」必须说同一句话 —— 契约未落定时那批条目
+  // 不是"悬空",是"还没答案"。
+  const { _resetEndpointFullCacheForTest } = await import('@/composables/useEndpointFull')
+  _resetEndpointFullCacheForTest()
+  const def = structuredClone(DEF) as any
+  def.steps[0].api = { headers: {}, view_hints: { endpoint_id: 'ep-gate' } }
+  vi.spyOn(api, 'getScenarioDraft').mockResolvedValue({
+    definition: def,
+    orchestration: { steps: [], resourceMeta: {} },
+    assertion_registry: { entries: [
+      { id: 'inj-oob', name: '越界', path: { stepIndex: 9, source: 'body', jsonpath: '$.x' }, value: 1, asserts: [] },
+      { id: 'inj-carry', name: '契约依赖', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_x' }, value: 1, asserts: [] },
+    ] },
+  } as any)
+  let release: (v: unknown) => void = () => {}
+  vi.spyOn(api, 'getFullEndpoint').mockReturnValue(new Promise((res) => { release = res }) as any)
+
+  const w = await mountList()
+  const cards = () => w.findAll('.td-entry')
+  expect(cards()[0].classes()).toContain('is-dead')        // intrinsic(step-oob):恒标
+  expect(cards()[1].classes()).not.toContain('is-dead')    // 契约依赖:在途 ⇒ 尚未判定
+  release({ id: 'ep-gate', request: { declarations: [] } })   // 声明面无此字段 ⇒ 有答案了
+  await flushPromises()
+  expect(cards()[1].classes()).toContain('is-dead')        // 落定 ⇒ 按实际结果标
+  w.unmount()
+})
