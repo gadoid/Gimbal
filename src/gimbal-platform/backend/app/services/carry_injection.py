@@ -32,7 +32,7 @@ async def _endpoint_declarations(endpoint_id: str) -> list | None:
     打断整单 carry。None(降级)与合法空目录 ``[]`` 在调用侧同为
     空面;类型上分开,留降级遥测的口子。
 
-    2026-09-12 取数合并:本函数保留同名同签名的门面(:82 调用点与
+    2026-09-12 取数合并:本函数保留同名同签名的门面(:77 调用点与
     既有测试不受影响),取数/缓存/在飞收敛统一走
     ``endpoint_declarations.declarations_of`` —— 与悬空判定共用同一份
     进程缓存,不再各打一次 plate。契约(上述 None 语义)逐字不变。

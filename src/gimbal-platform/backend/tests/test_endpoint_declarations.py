@@ -11,8 +11,40 @@ from app.core.config import settings
 from app.services import plate_client
 from app.services.carry_injection import _endpoint_declarations
 from app.services.endpoint_declarations import (
-    _reset_declared_paths_cache, declared_paths_of,
+    _INFLIGHT, _reset_declared_paths_cache, declarations_of, declared_paths_of,
 )
+
+_PATHS = frozenset({"$.bl_no", "$.customer_id", "$.items", "$.items.sku"})
+
+
+def _envelope(item: dict) -> dict:
+    """plate /full 信封(只用到 data.item 一层)。"""
+    return {"ok": True, "dim": "endpoint", "data": {"item": item}}
+
+
+def _declarations_item() -> dict:
+    return {"request": {"declarations": [
+        {"name": "bl_no", "path": "$.bl_no", "state": "form", "required": True},
+        {"name": "cid", "path": "$.customer_id", "state": "carry", "required": True},
+        {"name": "items", "path": "$.items", "state": "form", "required": False,
+         "children": [{"name": "sku", "path": "$.items.sku", "state": "form",
+                       "required": True}]},
+    ]}}
+
+
+def _install(client_handler):
+    plate_client.set_client_for_tests(httpx.AsyncClient(
+        transport=httpx.MockTransport(client_handler), base_url="http://plate-test",
+    ))
+
+
+async def _wait_until(pred, tries: int = 500) -> bool:
+    """推进事件循环直到 pred 为真(避免靠固定 sleep(0) 次数猜调度)。"""
+    for _ in range(tries):
+        if pred():
+            return True
+        await asyncio.sleep(0)
+    return pred()
 
 
 @pytest.fixture(autouse=True)
@@ -108,3 +140,136 @@ async def test_failure_returns_none_and_does_not_cache(monkeypatch):
     assert await declared_paths_of("ep-x") == frozenset({"$.a"})   # 失败不入缓存 → 可重试
     assert state["calls"] == 2
     plate_client.set_client_for_tests(None)
+
+
+async def test_returned_list_is_a_copy_not_the_cached_object(_install_transport):
+    """返回浅拷贝:调用方改自己那份不污染进程缓存(它现在是共享公共面)。
+
+    两条返回路径**都要**是拷贝 —— 取数路径与缓存命中路径各覆盖一次。
+    """
+    first = await declarations_of("fin.order.add")       # 取数路径
+    first.clear()                                        # 疏忽/恶意的调用方
+    second = await declarations_of("fin.order.add")      # 缓存命中路径
+    second.clear()
+    # 两条路径若漏了拷贝,缓存已被清空 → 这里会得到空集
+    assert await declared_paths_of("fin.order.add") == _PATHS
+    assert len(_install_transport) == 1                  # 缓存未破坏 → 未重取
+
+
+async def test_empty_declarations_is_empty_frozenset_not_none():
+    """合法空目录 ≠ 降级:``[]`` → 空 frozenset(**非 None**)。
+
+    这个区分承载「真无声明 vs 降级」;只钉降级那一半(失败 → None)
+    会漏掉本半,把空目录误当失败即本用例要拦的变异。
+    """
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_envelope({"request": {"declarations": []}}))
+
+    _install(handler)
+    _reset_declared_paths_cache()
+    paths = await declared_paths_of("ep-empty")
+    assert paths is not None                 # 关键区分:不是降级
+    assert isinstance(paths, frozenset)
+    assert paths == frozenset()
+    # 原始列表侧同款:空列表,不是 None
+    assert await declarations_of("ep-empty") == []
+    plate_client.set_client_for_tests(None)
+
+
+@pytest.mark.parametrize("item", [
+    {"request": {}},                       # 封套合法但缺 declarations 键
+    {"request": {"declarations": None}},   # declarations: null
+])
+async def test_absent_declarations_is_empty_not_degraded(item):
+    """真无声明(缺键 / null)≠ 降级 → 空 frozenset,而非 None。
+
+    端点本就没有 body 声明是**成功**结果;若按「非 list → None」处理,
+    这类端点每个失败链都会误报一条告警并占用 ``_WARNED``。
+    """
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_envelope(item))
+
+    _install(handler)
+    _reset_declared_paths_cache()
+    assert await declared_paths_of("ep-nobody") == frozenset()
+    assert await declarations_of("ep-nobody") == []
+    plate_client.set_client_for_tests(None)
+
+
+async def test_garbage_declarations_is_degraded():
+    """非 list 的垃圾值(字符串)才是降级 → None(与空目录区分开)。"""
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_envelope(
+            {"request": {"declarations": "$.oops"}}))
+
+    _install(handler)
+    _reset_declared_paths_cache()
+    assert await declared_paths_of("ep-garbage") is None
+    plate_client.set_client_for_tests(None)
+
+
+async def test_cancelled_waiter_does_not_kill_shared_fetch():
+    """等待方被取消不得连带取消共享取数(取消只落自己)。
+
+    裸 ``await task`` 会把取消扩散进共享任务:创建者收到 CancelledError、
+    其他等待方也全军覆没 —— 真链路上那会让 fan-out 被判取消、不写终止
+    JSONL 行,执行卡在 running。
+    """
+    release = asyncio.Event()
+    calls: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        await release.wait()                 # 挂住,制造稳定的在飞窗口
+        return httpx.Response(200, json=_envelope(_declarations_item()))
+
+    _install(handler)
+    _reset_declared_paths_cache()
+    creator = asyncio.ensure_future(declared_paths_of("ep-slow"))
+    assert await _wait_until(lambda: "ep-slow" in _INFLIGHT)
+    shared = _INFLIGHT["ep-slow"]
+    try:
+        # 第二个等待方:在飞期间被取消(取消落在它自己的 shield 等待上)
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(declared_paths_of("ep-slow"), timeout=0.05)
+        assert shared.cancelled() is False   # 共享任务未被连带取消
+        assert not creator.done()            # 创建者仍在等,没被波及
+
+        release.set()
+        assert await creator == _PATHS       # 创建者照常拿到结果
+        assert len(calls) == 1               # 全程只打一次 plate
+    finally:
+        release.set()
+        plate_client.set_client_for_tests(None)
+
+
+async def test_cancelled_creator_still_clears_inflight():
+    """创建者被取消 → 在飞项仍会在**完成时**被摘除(不是永久锈住)。
+
+    摘除由任务完成回调驱动,不依赖创建者的 ``finally``;否则创建者一被
+    取消,该端点的在飞项就永远留着,后续调用全被钉在死任务上。
+    """
+    release = asyncio.Event()
+    calls: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        await release.wait()
+        return httpx.Response(200, json=_envelope(_declarations_item()))
+
+    _install(handler)
+    _reset_declared_paths_cache()
+    creator = asyncio.ensure_future(declared_paths_of("ep-slow"))
+    assert await _wait_until(lambda: "ep-slow" in _INFLIGHT)
+    shared = _INFLIGHT["ep-slow"]
+
+    creator.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await creator
+    assert shared.cancelled() is False       # 取消不扩散,共享取数还活着
+    assert "ep-slow" in _INFLIGHT            # 尚未完成,仍在飞
+
+    release.set()
+    assert await _wait_until(lambda: "ep-slow" not in _INFLIGHT)
+    assert isinstance(await shared, list)    # 结果就绪且可用(未被打断)
+

@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     # 声明面取数缓存 TTL(秒),spec v3.1 §3:dispatch 悬空判定用的
     # 「契约声明 path 全集」进程缓存有效期。后端进程可能长期存活,
     # 而 plate 发版是运维事件 —— TTL 给快照过期兜一个上界。
+    # 2026-09-12 取数合并后,同一份缓存也承载 carry 面的**原始声明列表**
+    # (endpoint_declarations.declarations_of),故本值同时是 carry 契约面
+    # 的跟新上界:plate 会话中途发版时,carry 面最多滞后本值才跟新。
     DECLARED_PATHS_TTL_SEC: float = 300.0
 
     # Set in model_post_init — True when the corresponding secret was
