@@ -118,3 +118,53 @@ it('ARE-4: 手工新建(步骤+jsonpath)+ value num 类型化编辑 + 保存只�
   expect(e3.asserts).toEqual([])
   w.unmount()
 })
+
+
+// ── 值送达面注记(与后端 run_injection._assign_strategy 同语义)──────
+
+function draftWithValue(value: unknown) {
+  return {
+    definition: DEF,
+    orchestration: { steps: [], resourceMeta: {} },
+    assertion_registry: { entries: [
+      { id: 'inj-v', name: '值形状', path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' },
+        value, asserts: [] },
+    ] },
+  }
+}
+
+async function selectOnlyRow(w: any) {
+  await w.findAll('.are-row')[0].trigger('click')
+  await flushPromises()
+}
+
+it('ARE-5: 引用形字符串值($.x / ${...})→ 显形注记(引擎先当上下文读)', async () => {
+  for (const v of ['$.amount', '${var.amount}']) {
+    const w = await mountEditor(draftWithValue(v))
+    await selectOnlyRow(w)
+    const note = w.find('.are-val-note')
+    expect(note.exists()).toBe(true)
+    expect(note.text()).toContain('上下文引用')
+    expect(note.text()).toContain('覆写')
+    w.unmount()
+  }
+})
+
+it('ARE-6: JSON null 值 → 显形注记(null 送不到引擎)', async () => {
+  const w = await mountEditor(draftWithValue(null))
+  await selectOnlyRow(w)
+  const note = w.find('.are-val-note')
+  expect(note.exists()).toBe(true)
+  expect(note.text()).toContain('送不到引擎')
+  w.unmount()
+})
+
+it('ARE-7: 普通字面量值 → 无注记(不误报)', async () => {
+  for (const v of ['hello', '-1', 0, false, { a: 1 }]) {
+    const w = await mountEditor(draftWithValue(v))
+    await selectOnlyRow(w)
+    expect(w.find('.are-detail').exists()).toBe(true)   // 详情在,注记不在
+    expect(w.find('.are-val-note').exists()).toBe(false)
+    w.unmount()
+  }
+})

@@ -121,6 +121,8 @@
           />
           <code class="are-val-preview" :title="fmtVal(selected.value)">→ {{ fmtVal(selected.value) }}</code>
         </div>
+        <!-- 送达面注记(spec v3 §3 引擎语义):两类形状引擎先当引用读 -->
+        <div v-if="valueRefNote" class="are-val-note">{{ valueRefNote }}</div>
       </div>
 
       <!-- 期望配对(asserts)— 继承 v2 段 -->
@@ -278,6 +280,29 @@ function applyValue() {
 function onKindChange() {
   applyValue()
 }
+
+/** 值送达面注记(与后端 run_injection._assign_strategy 同一份语义,
+ *  两处必须同改):引擎 `_resolve_source_value` 只对非字符串直通,
+ *  下面两类字符串先被当**引用**解析 ——
+ *  · "$.xxx":按 JSONPath 从场景上下文读,解析不到得 None(平台已补
+ *    default 兜底,仍写字面量);解析命中则被上下文值覆写(边界);
+ *  · 整串 "${...}":同上,按变量名读。
+ *  JSON null 则是**送不到**:plate 导出丢弃 source=null 的 Assign,
+ *  引擎 Assign.source 必填 → 该用例加载即失败(无兜底可言)。 */
+const valueRefNote = computed(() => {
+  const e = selected.value
+  if (!e || isLegacyEntry(e)) return ''
+  const v = e.value
+  if (v === null) {
+    return 'null 送不到引擎:plate 导出会丢弃 source 为 null 的 Assign,该用例加载即失败。'
+      + '请改用字符串(如空串 / "null")表达,或删除本条目。'
+  }
+  if (typeof v === 'string' && (v.startsWith('$.') || (v.startsWith('${') && v.endsWith('}')))) {
+    return '此值形如上下文引用:引擎先按 JSONPath / 变量名解析,解析不到才写入本字面量'
+      + '(平台已补 default 兜底);若场景上下文里恰好存在同名路径/变量,会被上下文值覆写。'
+  }
+  return ''
+})
 
 /** 手工新建暂存:步骤 + jsonpath(path 是注入地址,不预设模板化) */
 const pendingPath = ref({ stepIndex: 0, jsonpath: '' })
@@ -462,6 +487,13 @@ async function save() {
 .are-val-preview {
   font-family: var(--font-mono); font-size: 11px; color: #4338ca;
   background: #eef2ff; border-radius: 3px; padding: 1px 6px;
+}
+/* 送达面注记:引擎把该类值先当上下文引用读 / null 送不到 — 橙底软提示,
+   不阻断编辑(条目照常保存,只是运行语义与字面直觉不同) */
+.are-val-note {
+  margin-top: 6px; font-size: 11px; line-height: 1.5;
+  color: #92400e; background: #fef3c7;
+  border-radius: 4px; padding: 4px 8px;
 }
 
 .are-pending {

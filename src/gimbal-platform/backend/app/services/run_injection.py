@@ -11,6 +11,50 @@ from typing import Any, Callable
 from .jsonpath import exists
 
 
+def _is_context_readable(source: Any) -> bool:
+    """引擎会把这两类字符串当**引用**解析,而不是字面量
+    (gimbal/strategy/builtin/utils.py:63-106 `_resolve_source_value`):
+    * ``"$.*"`` — scope 落到 STEP/SCENARIO(Assign 默认 SCENARIO)时按
+      JSONPath 从场景上下文读(jsonpath 查不到 → None);
+    * 整串 ``"${...}"`` — 按变量名从上下文读(读不到 → None)。
+    其余字符串与全部非字符串(含 dict/list)一律原样直通。"""
+    if not isinstance(source, str):
+        return False
+    if source.startswith("$."):
+        return True
+    return source.startswith("${") and source.endswith("}")
+
+
+def _assign_strategy(value: Any, target: str) -> dict[str, Any]:
+    """偏离值 → Assign 策略 dict(spec v3 §3:引擎/plate 零改动)。
+
+    用户 value 的语义是「原样覆写不 coerce」,但引擎对上面两类字符串
+    优先做上下文解析:解析不到得 None,而 `required` 默认 True 时
+    Assign 直接 FAILED(assign.py:35-45),BEFORE_REQUEST 失败即
+    **整步不发请求**(statemachine/states.py:63-69)。故这两类形状
+    额外带上 `default`(=该字面量)与 `required: false` —— assign.py
+    的顺序是先 default 后 required,解析不到时落字面量而非失败,解析
+    得到时 default 不参与。其余情形不带键:Assign 基座字段全取默认
+    (spec §3)。
+
+    残留边界一(引擎语义所限,记录不兜):上下文里**恰好存在**同名
+    JSONPath/变量时解析命中,该 value 被上下文值覆写而非字面量。
+    编辑器对此有可见提示(AssertionRegistryEditor「上下文引用形」)。
+
+    残留边界二(不可修,不是本函数能兜的):JSON null 偏离值无法送达
+    引擎 —— plate 导出 `model_dump(exclude_none=True)`(export/gimbal.py
+    `GimbalScenarioExporter.render`)把 `source: None` 整键丢弃,而引擎
+    `Assign.source` 是必填 → 该 case 加载即 `Scenario.model_validate`
+    失败。此处不置 `required: false`(改不了结局,只把「单步失败」
+    伪装成成功);编辑器对 null 值显形警告。
+    """
+    st: dict[str, Any] = {"kind": "assign", "source": value, "target": target}
+    if _is_context_readable(value):
+        st["default"] = value
+        st["required"] = False
+    return st
+
+
 def entry_issues(
     entry: dict[str, Any],
     step_count: int,
@@ -48,8 +92,9 @@ def compose_injection_scenario(definition: dict[str, Any], entry: dict[str, Any]
     数据集行值合入在 _compose_scenario(与 Assign 正交叠加,偏离最后生效:
     字段恰为模板串时被字面量整体替换,该 case 内行值对此字段不再起效)。
     悬空项静默跳过 — dispatcher 层已先经 entry_issues 过滤,此处双保险。
-    value 由用户显式编辑,原样覆写不 coerce(引擎 _resolve_source_value
-    对非模板 source 直通)。
+    value 由用户显式编辑,原样覆写不 coerce —— 引擎 `_resolve_source_value`
+    只对**非字符串**直通,字符串里 "$.*" 与整串 "${...}" 会被当上下文引用
+    解析,见 `_assign_strategy`(default/required 兜底 + 两条残留边界)。
     """
     out = copy.deepcopy(definition)
     steps = out.get("steps") or []
@@ -62,7 +107,7 @@ def compose_injection_scenario(definition: dict[str, Any], entry: dict[str, Any]
             # $.amount → $.request_body.amount;根 "$" → $.request_body
             target = "$.request_body" + (jp[1:] if jp != "$" else "")
             steps[si].setdefault("strategy", []).append(
-                {"kind": "assign", "source": entry.get("value"), "target": target})
+                _assign_strategy(entry.get("value"), target))
     for a in entry.get("asserts") or []:
         if not isinstance(a, dict):
             continue
