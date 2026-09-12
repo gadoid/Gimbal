@@ -107,6 +107,15 @@ describe('useEndpointFull — /full 会话级缓存', () => {
     expect(spy).toHaveBeenCalledTimes(2)                     // 窗口后允许重试
   })
 
+  it('EF-8(新): 失败侧响应式 — computed 读 endpointFullState 在失败后**自己**转 failed', async () => {
+    vi.spyOn(api, 'getFullEndpoint').mockRejectedValue(new Error('boom'))
+    // 画布 currentFullState 同形:computed 只读状态,失败后不得靠任何命令式重算
+    const seen = computed(() => endpointFullState('ep-fs'))
+    expect(seen.value).toBe('loading')
+    await ensureEndpointFull('ep-fs')
+    expect(seen.value).toBe('failed')        // 无手工 bump、无重新调用
+  })
+
   it('DP-7(C7): 入口消毒 — 合法容器下挂 path:7 的子条目 → 剔除自身、子孙提升,画布递归不硬抛', async () => {
     // 畸形子条目自身不可用,但它带着一层**子孙**(提升纪律:绝不整棵剪枝)
     const malformed = decl({

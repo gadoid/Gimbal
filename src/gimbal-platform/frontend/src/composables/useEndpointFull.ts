@@ -24,7 +24,8 @@
  *   - **消毒(Ruling C7/C8b/C9)**:`/full` 是不可信来源。消毒上移到
  *     `getFullEndpoint` **出口**(`sanitizeEndpointFull`,request + 每个 response;
  *     含不经本缓存的 `CaseComposerCatalog` 浏览面板)⇒ 所有消费方按构造拿到
- *     干净声明树;本缓存**入口**再做一次(幂等)兜住被 mock 掉的出口。
+ *     **路径可用性**干净的声明树(范围见 `sanitizeDeclarations`);本缓存
+ *     **入口**再做一次(幂等)兜住被 mock 掉的出口。
  *     此前「路径可用性守卫」在 iterFlat → buildTree → buildNode →
  *     prefillBindings 上逐个冒出来 —— 边界选错了;守卫只该有一个。
  *

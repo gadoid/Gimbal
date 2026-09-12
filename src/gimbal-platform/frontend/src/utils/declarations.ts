@@ -77,8 +77,15 @@ export function iterFlat(
  * 为什么必须在**边界一次**做:`/full` 是不可信来源,真值非串的 path(如 `path: 7`)
  * 会让画布递归 `buildNode → suffixOf` 的 `childPath.startsWith(...)` 在**渲染期
  * 硬抛**(白屏)。逐处点修只会让守卫不断从下一个消费方冒出来 —— 消毒在
- * `getFullEndpoint` **出口**与共享缓存**入口**各做一次(幂等),消费方
- * 按构造拿到干净树、零守卫、零逐调用开销。
+ * `getFullEndpoint` **出口**与共享缓存**入口**各做一次(幂等)。
+ *
+ * **保证的范围(只此一条,勿外推)**:返回树中**任意深度**都不存在
+ * `hasUsablePath` 为假的条目 —— 「按构造干净的」指的只是**路径可用性**。
+ * **不保证 `children` 的形状**:非数组 children(如 `{"0": {...}}`)原样放行,
+ * 而 `iterFlat` / `formBindings` 的 `for (const e of entries ?? [])` 对普通对象
+ * 会硬抛(`TypeError: entries is not iterable`)。该形状是否归一是**待定取舍**
+ * (静默丢弃畸形 children = 字段树悄悄变瘦 vs 保持硬抛 = 白屏但响亮),
+ * 未在本轮处理 —— 消费方不得据此声称「声明树已全形式干净」。
  *
  * 递归下钻到**可用条目**的 children(画布递归只认 `entry.children`)。
  * 某层未发生改动时**保留原引用**(条目对象 / 整份 `/full` 原样返回),
@@ -115,6 +122,7 @@ function isSameRefs(raw: unknown[], cleaned: DeclarationEntryView[]): boolean {
  * (裁定 C9 —— 半边留着就是同一形状)。响应声明今天经 `iterFlat` 系投影
  * (`assertablePaths` / `responseBindings`)不抛,但同一个 `path: 7` 只要
  * 将来换个消费方就会重开一族;在出口一次关死。
+ * 保证范围同 :func:`sanitizeDeclarations`(仅路径可用性;`children` 形状未归一)。
  */
 export function sanitizeEndpointFull(full: EndpointFullView): EndpointFullView {
   const request = sanitizeRequestSpec(full?.request)

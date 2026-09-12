@@ -2,7 +2,8 @@
  * api/scenario-composer.getFullEndpoint — **出口消毒**(裁定 C8b)单测。
  *
  * `/full` 是不可信来源。消毒在 `getFullEndpoint` **出口**一次做掉,让**每一个**
- * 消费方按构造拿到干净声明树 —— 含**不经**共享缓存的 `CaseComposerCatalog`
+ * 消费方按构造拿到**路径可用性**干净的声明树(范围与边界见
+ * `sanitizeDeclarations`;`children` 形状未归一)—— 含**不经**共享缓存的 `CaseComposerCatalog`
  * 浏览面板(它按设计直连本 API)。范围 = `request` + **每个 response**(裁定 C9)。
  *
  * 纪律与 `iterFlat` 逐字同:不可用路径条目**自身剔除、children 提升**到原位置,

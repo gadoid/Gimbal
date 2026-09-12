@@ -226,7 +226,8 @@ export async function previewPlateDraft(
 
 /** plate `/full` 取数 —— **出口消毒**(裁定 C8b):`/full` 是不可信来源,
  *  `request` 与每个 `response` 的 declarations 在此一次消毒 ⇒ **每一个**消费方
- *  (含不经共享缓存的 `CaseComposerCatalog` 浏览面板)按构造拿到干净声明树。
+ *  (含不经共享缓存的 `CaseComposerCatalog` 浏览面板)按构造拿到**路径可用性**
+ *  干净的声明树(保证范围与边界见 `sanitizeDeclarations`;`children` 形状未归一)。
  *  容器内未发生改动时返回原对象(对干净响应零扰动)。 */
 export async function getFullEndpoint(endpointId: string): Promise<EndpointFullView> {
   const { data } = await http.get<EndpointFullView>(`/endpoint-catalog/${encodeURIComponent(endpointId)}/full`)
