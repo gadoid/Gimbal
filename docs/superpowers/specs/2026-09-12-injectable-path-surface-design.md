@@ -4,6 +4,7 @@
 **状态**: 设计定稿待用户审
 **分支**: feat/dataset-driven-refactor
 **修订**: `2026-09-12-assertion-registry-v3-merge-injection-design.md`(spec v3)的 §2 悬空判定面 与 §1 裁定 2「任意字段直补」的成立范围;其余不动
+**修订(2026-09-13)**: 阶段一落地后由 `2026-09-12-architecture-convergence-design.md`(架构收敛)接续 —— 本文 §2.1 判定面的取数所有权、有界软取与存储可迁移性约束,以该 spec 为准
 
 ---
 

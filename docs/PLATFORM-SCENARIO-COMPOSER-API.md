@@ -201,28 +201,71 @@ Authorization: Bearer <access_token>
 
 ### 2.6 RunRequest
 
+> 一次执行的配方（recipe）：数据集选择 / 注入条目 / service 绑定全是纯值。
+> 旧 `caseId` / `env` / `auths` / `retry` 键**已退役**（Case 层解散、执行环境
+> 随 D2 退役、运行级 retry 不做）。旧客户端多发的键**不报 422**：`RunRequest`
+> 的 `model_config` 是 `_CAMEL`
+> （`ConfigDict(populate_by_name=True, str_strip_whitespace=True)`，
+> `scenario_composer.py:28`），**未设 `extra`**，走 pydantic 缺省的
+> `ignore`，故只是静默失效。
+
 ```json
 {
-  "caseId": "case-001",
+  "scenarioId": "sc-order-create",
+  "dataSetSelection": [
+    { "datasetId": "ds-001", "rowIndexes": [0, 2] },
+    { "datasetId": "ds-002", "rowIndexes": [] }
+  ],
   "dataSetIds": ["ds-001"],
-  "env": { "envId": "test-env-A", "name": "test-env-A", "baseUrl": "http://..." },
-  "auths": ["admin@fin", "qa1"],
-  "retry": { "maxAttempts": 0, "intervalMs": 500 }
+  "injectionEntryIds": ["inj-1"],
+  "serviceBindings": {
+    "fin-order": { "authAlias": "admin@fin", "url": "http://test-a.fin.local:8000" }
+  },
+  "stepTo": 3,
+  "nRuns": 1,
+  "parallel": 2
 }
 ```
 
-> `auths`（数组）是执行用认证多选，替代旧的 `auth`（单选字符串，已废）。
-> dispatcher 按 alias 解密（fernet）后注入**仅 run 副本**的 `Config.users` —
-> convert 那份不带明文（防凭据流进 plate 校验/日志）。headers 里的
-> `${auth.<alias>.<field>}` 在 Gimbal 运行期解析。执行记录写
-> `Execution.config_json.exec_auth_alias`（与读侧契约对齐；此前误写 `"auth"`
-> 导致详情页认证列恒空，已修）。
+字段与约束（行内 `:N` 指 `app/schemas/scenario_composer.py`）：
+
+| 字段 | 类型 / 约束 | 说明 |
+| --- | --- | --- |
+| `scenarioId` | string，正则 `^sc-[a-z0-9-]+$`，3–128 | 必填（`:267-272`） |
+| `dataSetSelection` | `DataSetSelection[]`，缺省 `[]` | **行级数据集选择的权威键**（`:276-278`） |
+| `dataSetIds` | string[]，缺省 `[]` | **兼容读**：仅在新键缺省（空）时生效（`:274`） |
+| `injectionEntryIds` | string[]，缺省 `[]` | 断言注入条目 id（§10.1）；空 = 不注入（`:290-291`） |
+| `serviceBindings` | `{service: {authAlias?, url?}}`，缺省 `{}` | 注入清单 = 模板扫描 ∪ 绑定（`:284-286`） |
+| `stepTo` | int ≥ 0，可选 | 0-based **含端点**，透传引擎 halt（`:294`） |
+| `nRuns` | int，1–1000，缺省 1 | 每行数据的重复执行次数（`:297`） |
+| `parallel` | int，1–200，缺省 1 | fan-out 并发度（`:299`） |
+
+`DataSetSelection`（`:207-214`）：`datasetId`（string，1–128）+ `rowIndexes`
+（int[]，缺省 `[]`）。**`rowIndexes` 缺省或为空 = 整库**（该数据集全部行）。
+
+**两键同发的优先级**：`dataSetSelection` 是权威键。dispatcher 先按
+`dataSetSelection` 归并出「数据集 → 行集」映射，**只有在这个映射为空**
+（该键缺省 / 为 `[]`）**时**才回落到 `dataSetIds`（每个 id 记为整库）。即：
+只要 `dataSetSelection` 选中了至少一个数据集，`dataSetIds` 就被**整键忽略**
+（`run_dispatcher.py:397-411`）。反向的边界是：空 `dataSetSelection` +
+非空 `dataSetIds` 仍按旧键执行。
+
+> 执行认证：`serviceBindings[*].authAlias` ∪ 场景模板扫到的 `${auth.*}`
+> 引用构成注入清单，dispatcher 按 alias 解密（fernet）后注入**仅 run 副本**
+> 的 `Config.users` —— convert 那份不带明文（防凭据流进 plate 校验/日志）。
+> headers 里的 `${auth.<alias>.<field>}` 在 Gimbal 运行期解析。执行记录写
+> `Execution.config_json.injectedAuths`（数组 = 扫描 ∪ 绑定，
+> `run_dispatcher.py:553-558`、`:581`）。
 
 ### 2.7 RunResponse
 
 ```json
-{ "runId": "run-20260812-001" }
+{ "runId": "run-20260812-001", "executionId": 42 }
 ```
+
+> `executionId` 是本次 dispatch 的数值 Execution 行 id —— 前端据此直接跳
+> `/executions/{id}`（字符串 `runId` 自身没有路由）
+> （`scenario_composer.py:302-309`）。
 
 ### 2.8 PreviewPlateResponse
 
@@ -542,28 +585,99 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 
 ### 4.18 `POST /api/runs`
 
-**角色**：触发一次用例运行（前端 `CaseRunConfig.vue` 的 ▶ 提交运行按钮）
+**角色**：触发一次场景运行（前端 `CaseRunConfig.vue` 的 ▶ 提交运行按钮）  
+**权限**：场景的 owner 或 admin，否则 `403 not_owner`（`app/routers/runs.py:62-69`）
 
 **请求体**：`RunRequest`（§2.6）
 
-**内部流程**：
+**响应**：`201 Created` → `RunResponse`（§2.7）。**派发后立即返回** —— 行级执行
+跑在后台任务里，进度看 `GET /api/executions/{id}`。
 
-1. 校验 `caseId` 存在、所属 `env` 在 `/api/envs` 中、`dataSetIds[]` 都属于该 case。
-2. 计算 `totalRuns = Σ dataSet.rowCount`。
-3. 对每行调用：
-   - 拼完整 `Scenario` dict（含行值替换 `vars`）
-   - 调 Plate `POST /api/scenario/action/convert`（结构校验 + 翻译为 gimbal 可执行 dict）
-   - 调 Gimbal runner `POST /run`（`GIMBAL_BASE_URL`，默认 127.0.0.1:8766，`gimbal run server` 启动；body 为 convert 产物 `converted` + 解密注入的 `Config.users` 副本，见 §2.6 注。同步返回 RunResult，`exitCode` 决定该行 pass/fail 计数）
-4. 汇总 `runId` 返回。
-5. 在 `executions` 表创建一行 `status=pending`。
+**内部流程**（`app/services/run_dispatcher.py:342-632`）：
 
-**响应**：`201 Created` → `RunResponse`（§2.7）
+1. 优雅关闭窗口内直接拒单（`409 shutting_down`）—— 不建行、不 spawn，
+   避免造出「201 返回但永远停在 queued」的僵尸单（`:363-367`）。
+2. 载入场景（PK 是字符串 `scenario_id`）→ 查不到 `404 scenario_not_found`
+   （`:369-376`）。
+3. `stepTo` 校验（仅在显式给出时）：场景无 steps → `404 no_steps`；
+   `stepTo >= len(steps)` → `409 step_to_out_of_range`（`:382-391`）。
+4. **行级选择归并**（§2.6 的优先级规则）后逐个数据集校验：不存在、或不属于
+   该场景 → `404 data_set_not_found`（`:393-420`）。
+5. **断言注入条目筛选**（§10）：按 `injectionEntryIds` 选中条目，对每条跑
+   悬空检测；悬空的条目 skip + 告警，**绝不炸 dispatch**（`:422-503`）。
+6. 建 `Execution` 行（`status=queued`）→ spawn 后台 fan-out → 返回
+   `RunResponse`（`:505-632`）。
 
-**错误**：
+后台 fan-out 的每 case 链路：`_compose_scenario`（场景定义 + 一行数据，
+行值合入 `config.vars`）→ 注入 patch（有选中条目时）→ plate
+`POST /api/scenario/action/convert` → `materialize_run_copy`（物化明文
+`Config.users`，只进 run 副本）→ 落盘 `case.json` → 子进程
+`gimbal run launch <case>`，stdout 的 RunResult 驱动行级计数
+（`:636-999`）。
 
-- `404 case_not_found` / `env_not_found` / `data_set_not_found`
-- `409 no_data_selected`：未选数据集
-- `502 plate_unavailable`：Plate 调用失败
+**行级选择归并公式**（代码注释同源，`run_dispatcher.py:393-411`）：
+
+- **段内去重**：同一条目的 `rowIndexes` 取 `sorted(set(...))`（`:400`）；
+- **同库多段合并取超集、段序无关**：同一 `datasetId` 出现多段时行集取
+  **并集**（`:407`）—— 段在前还是在后不影响结果；
+- **整库 ⊇ 任意行集**：任一段的行集为空（= 整库）则整个数据集记为整库，
+  与段序无关（`:402-408`）；
+- **空数据集 = 隐式基线行**：整库选择下 `rows` 为空的数据集派发一行空行
+  `(0, {})`（`:519-522`）。
+
+**交叉矩阵与总量**：派发量 = `Σ 选中行数 × 选中条目数`（无选中条目记 1）
+`× nRuns`（`:535-544`）。超过 `MAX_RUNS_PER_EXECUTION`（缺省 200，
+`app/core/config.py:59`）→ `409 too_many_runs`（`:545-552`）。**数据集行集为空**
+时补一个基线行组合 `(datasetId=None, rows=[(0, {})])`（`:539-540`）—— 故
+「什么都不选」是一次合法的基线执行，不是错误。
+
+**有界软取（判定取数不拖住 `/runs` 的同步段）**：
+
+- 悬空判定要读「契约声明面」，来源是 plate `GET /api/endpoint/{id}/full`
+  的 `data.item.request.declarations`（`app/services/endpoint_declarations.py:163-197`）。
+- 这条取数是**软取**：只做增强，不是执行的前置条件。它带**自己的短超时**
+  `DECLARED_PATHS_TIMEOUT_SEC`（缺省 **3.0 s**，
+  `app/core/config.py:100-109`），与 `PLATE_TIMEOUT_SEC`（30 s，`:76`）分离。
+  **30 s 那条服务 `convert` 等既有链路（语义是「等不到就报错」），不得改动。**
+- 为什么必须短：取数跑在 `/runs` 的**同步**段里；用 30 s 就把后端 plate 超时
+  与前端 axios 的 30 s 超时线钉在同一条线上（`frontend/src/api/http.ts:98`），
+  于是 plate 慢时**前端报失败、后端其实已建执行**，用户重试即**重复执行**。
+- 超时 / 失败 / 信封不可用 → 判定**降级从严（只认 body 面）**，
+  **不阻塞执行**（`endpoint_declarations.py:20-23`、`:195-197`）。
+- 成功取到的声明面进**进程内**缓存（TTL `DECLARED_PATHS_TTL_SEC` 缺省 300 s；
+  过期后刷新失败仍回退旧快照），**不是**每次 dispatch 打一次 plate
+  （`:222-261`）。
+
+**悬空 skip 的可见性（降级时）**：
+
+- 降级期间的跳过记进该次执行的 `Execution.config_json`，两个键：
+  `judgeDegraded: true` 与 `entriesSkippedWhileDegraded: [<entryId>, ...]`
+  （`run_dispatcher.py:590-594`）。
+- **键名如实描述所算**：它记录的是「跳过发生在该步声明面不可得的**时刻**」，
+  **跳过的因由不限** —— 与降级无关的 `override-no-match`、写错的 jsonpath
+  等一并计入。**它不断言因果**（`:493-497`）。
+- **键缺席的含义**：本次执行**没有**发生「降级 + 跳过」的组合 ——
+  **不是**「零跳过」（`:591-592`）。
+- 对照：端点**真的没有**该声明时取到的是空集而不是 `None`，判定不降级、
+  **不留标记**（`endpoint_declarations.py:55-57`）。
+
+**错误**（`app/routers/runs.py:76-79` 把 dispatcher 的 `NotFound` / `Conflict`
+翻成 404 / 409；`detail` 一律是 `{code, message}` 对象）：
+
+| HTTP | `code` | 触发 |
+| --- | --- | --- |
+| 403 | `not_owner` | 非场景 owner 且非 admin |
+| 404 | `scenario_not_found` | 场景不存在（router 与 dispatcher 同一个 code） |
+| 404 | `no_steps` | 给了 `stepTo` 但场景没有 steps |
+| 404 | `data_set_not_found` | 选中的数据集不存在或不属于该场景 |
+| 409 | `step_to_out_of_range` | `stepTo` ≥ steps 数 |
+| 409 | `row_index_out_of_range` | `rowIndexes` 有 `< 0` 或 `>= 该数据集行数` 的下标（`run_dispatcher.py:524-530`） |
+| 409 | `too_many_runs` | 派生总量超过 `MAX_RUNS_PER_EXECUTION` |
+| 409 | `shutting_down` | 优雅关闭窗口内拒单 |
+
+> **plate / 引擎侧故障不是 HTTP 错误**：fan-out 中途 plate 不可达、plate
+> 拒绝、引擎拒绝、launch 超时等一律记进 `Execution` 行与 JSONL，响应仍是
+> **201 + runId**（`app/routers/runs.py:15-22`）。
 
 ---
 
@@ -571,15 +685,22 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 
 ### 5.1 文件 vs 数据库
 
-Platform 当前后端（`cases.py`）以文件 + JSON 为持久化（与一期 Plate 对齐）。V3 场景编排建议：
+Scenario / DataSet / Execution 落 **SQLAlchemy 表**；定义体与配方存在 JSON 列里。
+文件面只剩收藏标记与执行审计：
 
-| 资源 | 存储 | 路径 |
+| 资源 | 存储 | 位置 |
 | --- | --- | --- |
-| `Scenario` | 文件 | `data/scenarios/{scenarioId}.yaml` |
-| `Case` | 文件 | `data/cases/{caseId}.yaml` |
-| `DataSet` | 文件 | `data/data-sets/{datasetId}.yaml` |
-| `stars` | JSON | `data/stars.json`（同 `favorites.json` 模式） |
-| `runs` | JSONL | `data/runs/{YYYY-MM-DD}.jsonl`（追加；与现有 `executions` 表并行记录） |
+| `Scenario` | DB 表 | `composer_scenarios`，定义体在 `payload = {definition, orchestration}` JSON 列（`app/models/composer_scenario.py:23`、`:43`） |
+| `DataSet` | DB 表 | `composer_data_sets`，行矩阵在 `rows` JSON 列（`app/models/composer_data_set.py:21`、`:34`） |
+| `Execution` | DB 表 | `executions`，配方在 `config_json`、场景快照在 `scenario_snapshot`（`app/models/execution.py:35`、`:47`、`:57`） |
+| `stars` | JSON 文件 | `data/stars.json`（`app/services/marks_store.py:122`） |
+| 行级执行日志 | JSONL 文件 | `data/runs/{YYYY-MM-DD}.jsonl`（追加，`run_dispatcher.py:1349-1350`） |
+| 每 run 的 case 快照 | 文件目录 | `data/runs/cases/{runId}/`（`case.json` + 引擎报告，`:1353-1355`） |
+
+> **Case 层已解散** —— 旧的 `Case` 资源不存在了；数据集直接挂在场景上
+> （`app/models/composer_data_set.py:4-6`、`app/models/execution.py:7-8`）。
+> 下面的 §5.2 / §5.3 是**示意形态**（`payload.definition` 与数据集行的
+> 逻辑形状），不是磁盘上的存储形式。
 
 ### 5.2 YAML 形态示例（scenario）
 
@@ -615,13 +736,53 @@ steps:
 
 ```yaml
 datasetId: ds-001
-caseId: case-001
+scenarioId: sc-order-create
 name: 正常订单集
 description: qty=1~100 的正常路径
 rows:
   - { customer_id: A001, qty: 1, expected_status: 200 }
   - { customer_id: A002, qty: 2, expected_status: 200 }
 ```
+
+### 5.4 存储可迁移性约束（SQLite → PostgreSQL）
+
+下面三条与判定面 / 取数缓存 / JSON 列有关。改存储引擎时必须保持
+（出处：`docs/superpowers/specs/2026-09-12-architecture-convergence-design.md` §4）。
+
+**约束一：判定面不持久化。** 悬空判定用的「契约声明面」运行时从 plate 契约
+派生，**只存在于进程内**（`endpoint_declarations.py` 的 `TtlLruCache` + 在飞
+收敛表），不落表、不落字段（该模块 docstring `endpoint_declarations.py:1-58`；
+裁决见可注入面 spec §6：「明确选了 dispatch 取 + 缓存，不做快照表/快照字段」）。
+`run_dispatcher` 写进 `Execution.config_json` 的只有纯值配方 —— `runId` /
+`scenarioId` / `dataSetIds` / `dataSetSelection` / `injectedAuths` /
+`serviceBindings` / `stepTo` / `nRuns` / `parallel`，外加可选的
+`judgeDegraded` / `entriesSkippedWhileDegraded`（`run_dispatcher.py:570-595`）
+—— **没有任何声明面快照**。⇒ PG 迁移不需要为它们写迁移。
+
+**约束二：不依赖 JSON 键序。** 平台 JSON 列用 SQLAlchemy 通用 `JSON`
+（SQLite 存 TEXT / PG 存 `JSON`）。PG 的 `JSON` 保留原文，但**未来若改
+`JSONB` 会规范化键序与重复键** ⇒ 判定与投影一律基于 **Set**，写入一律
+`model_dump`；**禁止**任何「按插入序读回」的假设。代码侧落点：可注入面是
+`set`（`run_injection.py:128`）、声明 path 全集是 `frozenset`
+（`endpoint_declarations.py:264`）、目录宇宙是 `set`
+（`field_state_resolution.py:124-126`）；行集并集是 `set` 运算
+（`run_dispatcher.py:400`、`:407`）；写 `config_json` 一律
+`model_dump(by_alias=True)`（`:575`、`:584`）；convert memo 的键用
+`json.dumps(..., sort_keys=True)`（`:1276-1279`）。
+
+**约束三：显式 null 语义。** `None` / `0` / `""` / `[]` / `False` 一律
+**显式判别**，不得用真值（falsy）合并 —— 这是全仓编码约定
+（收敛 spec §5）。本仓库既有的同款约定：`carry_binding` 明文「行存在即声明
+注入，`value=NULL` 注入 JSON null（显式空）」
+（`app/models/carry_binding.py:3`）。代码侧落点：
+
+| 面 | 语义 |
+| --- | --- |
+| 声明面取数 | 合法空声明 `[]` → 空集（**不是**降级）；只有**拿不到**才是 `None`（`endpoint_declarations.py:55-57`、`:222-232`） |
+| 判定面 | `None`（降级）与 `frozenset()`（真无声明）**分别下传**，调用侧显式 `is None` 判别（`run_dispatcher.py:454-458`） |
+| `config_json` | `judgeDegraded` **键缺席** ≠ `false`（`run_dispatcher.py:591-592`）；`serviceBindings` 的 `None` 键不落盘（`exclude_none=True`，`:584`） |
+| JSONL 回放 | 旧行缺 `injectionId` 键 → 读作 `None`，不炸（`run_dispatcher.py:270-273`） |
+| 数据集行 | 缺键 = 继承基线 `config.vars`；`""` = **显式空覆盖**（`run_dispatcher.py:1239-1242`） |
 
 ---
 
@@ -680,3 +841,109 @@ PLATE_TIMEOUT_SEC: float = 30.0
 | `docs/PLATFORM_REQUIREMENTS.md` | Platform 整体需求；本文件是其中「场景编排」章节的细化 |
 | `frontend/src/api/scenario-composer.ts` | 本文件的**前端实现**（一一对应每个端点） |
 | `frontend/src/types/scenario-composer.ts` | 与本文件 §2 数据模型一一对应 |
+
+---
+
+## 10. 断言条目与可注入面
+
+> 本节是 §4.18「悬空判定 + 注入物化」的口径来源。实现：
+> `app/services/run_injection.py`（纯函数）、`app/services/run_dispatcher.py`
+> （接线）、`app/routers/endpoint_catalog.py`（契约面代理）。
+
+### 10.1 断言条目的三元组
+
+一个断言条目是 `{定位 path, 注入值 value, 断言 asserts}` 三元组，外加一个
+身份键 `id`：
+
+| 键 | 作用 | 运行时消费点 |
+| --- | --- | --- |
+| `id` | 条目身份；`RunRequest.injectionEntryIds` 按它选中条目 | `run_dispatcher.py:428`、`:438` |
+| `path` | 注入地址；后端读 `{stepIndex, jsonpath}` 两键 | `run_injection.py:222-232` |
+| `value` | 写进该地址的字面量（**原样覆写、不 coerce**） | `run_injection.py:276` |
+| `asserts[]` | 断言 patch；后端读 `{stepIndex, mode, target, operator?, expected?}` | `run_injection.py:233-242`、`:277-291` |
+
+`stepIndex` 是 **0-based、`definition.steps` 的原始下标**（不填
+`steps_from_payload` 的过滤版 —— 过滤版下标会整体错位一位）
+（`run_dispatcher.py:433-437`、`:1184-1199`）。
+
+**物化**：`compose_injection_scenario` 在 **plate convert 之前** 就地改
+`definition.steps[si]` —— 追加一条 `kind=assign` 的策略，target 是
+`$.request_body` + jsonpath 尾（根 `"$"` → `$.request_body`）；`asserts[]`
+里 `mode == "override"` 的改既有 assertion 的 `expected`，其余追加一条
+`kind=assertion`（`run_injection.py:246-292`）。**它不触碰 `config.vars`**：
+数据集行值是正交的另一路叠加（§4.18）。
+
+> 两条已知边界（**记录，不是缺陷**）：`value` 为 JSON `null` 无法送达（plate
+> 导出会把 `source: None` 整键丢弃，而引擎 `Assign.source` 必填）；整串
+> `"${...}"` 形态的 `value` 会被引擎当模板变量解析、平台侧兜不住
+> （`run_injection.py:44-65`）。
+
+### 10.2 可注入面的定义
+
+某一步的**可注入面**是「哪些 jsonpath 可以锚条目」的判据集合，公式
+（`run_injection.py:115-141`）：
+
+```text
+body 叶子路径 ∪ 这些叶子的容器前缀
+  ∪ normalize(契约声明路径) ∪ 这些前缀
+  ∪ {"$"}
+```
+
+- **body 叶子**：该步 `request.body` 递归走出的标量叶子，数组带 `[i]` 实例
+  下标；**根缺席（无 `request.body`）⇒ 无叶子**；嵌套 JSON `null` 是显式叶子
+  （`run_injection.py:83-106`）。
+- **容器前缀**：路径的各级容器，按段边界切（`.` 之后 / `[` 之前）——
+  `$.a.b` → `['$', '$.a']`；`$.tags[0]` → `['$', '$.tags']`（`:109-112`）。
+- **normalize**：声明面一律过 `_template_path` 剥掉数字下标
+  （`$.items[0].sku` → `$.items.sku`）—— 契约声明是**模板**路径、条目路径是
+  **实例**路径，判定必须两形态都试（`:76-80`、`:169-171`）。
+- **`{"$"}`**：根恒可注入。
+
+**判定**：条目 jsonpath 的实例形态**或**模板形态命中该集合即判活；否则退回
+`jsonpath.exists(body, path)` 兜底（`run_injection.py:144-172`）。兜底比可注入
+面**多认「空容器本身」**（`body={"items":[]}` 的 `$.items`）—— 只会**少判死**，
+方向与历史行为一致（`:166-168`）。
+
+> **已知局限（不在本设计的覆盖范围内，勿读作已支持）**：
+> normalize 只吃**数字下标**（正则 `\[\d+\]`，`run_injection.py:73`；前端同款
+> `frontend/src/utils/declarations.ts:766`）—— `$.items[*].sku` 这类 **`[*]`
+> 写法不被归一**，**无覆盖**。声明面的**模板粒度**边界同理：归一后的模板路径
+> 不再区分具体下标，这是**已接受的局限**。两者都将由 `docs/known-issues/`
+> 的记录承载（由文档收敛的后续工作建立）。
+
+### 10.3 悬空检查
+
+dispatch 时对每个**被选中**的条目跑 `entry_issues`，产出 issue 列表；
+**非空 = 悬空 ⇒ 跳过该条目 + 告警**，绝不炸 dispatch
+（`run_dispatcher.py:487-503`）。四类 issue（`run_injection.py:189-243`）：
+
+| kind | 判据 |
+| --- | --- |
+| `legacy-entry` | `path` 不是 dict（v2 旧形状 `anchor+injection` 或残缺条目） |
+| `step-oob` | `path.stepIndex` 归一后越界 / 为负 / 非整数；或某个 `asserts[].stepIndex` 越界 / 为负（**该处归一为 `None` 时不产生 issue** —— 无从寻址，直接跳过） |
+| `path-unresolvable` | `jsonpath` 非字符串，或**不落在该步的可注入面上**（§10.2） |
+| `override-no-match` | `asserts[]` 里 `mode == "override"` 的 `target` 在该步既有 assertion 策略里找不到 |
+
+`stepIndex` 一律过 `as_step_index`：**拒 `bool`、收整数与整数值浮点**
+（`run_injection.py:175-186`），与前端 `Number.isInteger` 同构。
+
+### 10.4 `/endpoint-catalog/{id}/full` 代理职责
+
+平台把 plate 的端点契约代理给前端，让前端只认平台一个 API 面
+（`app/routers/endpoint_catalog.py:1-11`）：
+
+- **路由**：`GET /api/endpoint-catalog/{endpoint_id:path}/full`，需登录
+  （`:41-45`）。
+- **上游**：`GET {plate}/api/endpoint/{id}/full`，走 `plate_client` 的进程级
+  `AsyncClient` 单例（共享连接池）。**不覆盖超时** ⇒ 用客户端缺省的
+  `PLATE_TIMEOUT_SEC`（30 s，`plate_client.py:68-75`）—— 与 §4.18 判定侧那条
+  3 s 软取（`endpoint_declarations.py:176-179`）是**两条不同的取数**。
+- **出参**：解开封套、**原样返回 `data.item`**（带完整的
+  `request.declarations`），不重排、不改写（`:67-74`）。
+- **错误映射**（`routers/strategy_catalog.py:26-61`）：plate ≥ 500 或连接失败
+  → `502 plate_unavailable`；plate 404 → `404 endpoint_not_found`；其余非 200
+  → 透传 plate 的状态码与 error 封套；200 但封套缺 `item` →
+  `502 plate_invalid_envelope`（`:69-73`）。
+- 同一路由前缀下另有 `POST /resolve-paths`（响应样本 → 候选 JSONPath）与
+  `POST /{id}/field-states/validate`（§3.5 配置编辑校验），后者同样以 `/full`
+  取目录（`:77-143`）。
