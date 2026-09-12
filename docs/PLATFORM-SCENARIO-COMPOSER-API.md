@@ -585,7 +585,9 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 
 ### 4.18 `POST /api/runs`
 
-**角色**：触发一次场景运行（前端 `CaseRunConfig.vue` 的 ▶ 提交运行按钮）  
+**角色**：触发一次场景运行（前端运行对话框 `components/composer/RunDialog.vue`；
+入口见 `views/CaseComposer.vue:80` 的「运行」与 `views/ScenarioDetailView.vue:36`
+的「▶ 立即运行」）  
 **权限**：场景的 owner 或 admin，否则 `403 not_owner`（`app/routers/runs.py:62-69`）
 
 **请求体**：`RunRequest`（§2.6）
@@ -639,14 +641,23 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
   `DECLARED_PATHS_TIMEOUT_SEC`（缺省 **3.0 s**，
   `app/core/config.py:100-109`），与 `PLATE_TIMEOUT_SEC`（30 s，`:76`）分离。
   **30 s 那条服务 `convert` 等既有链路（语义是「等不到就报错」），不得改动。**
-- 为什么必须短：取数跑在 `/runs` 的**同步**段里；用 30 s 就把后端 plate 超时
-  与前端 axios 的 30 s 超时线钉在同一条线上（`frontend/src/api/http.ts:98`），
-  于是 plate 慢时**前端报失败、后端其实已建执行**，用户重试即**重复执行**。
-- 超时 / 失败 / 信封不可用 → 判定**降级从严（只认 body 面）**，
-  **不阻塞执行**（`endpoint_declarations.py:20-23`、`:195-197`）。
-- 成功取到的声明面进**进程内**缓存（TTL `DECLARED_PATHS_TTL_SEC` 缺省 300 s；
-  过期后刷新失败仍回退旧快照），**不是**每次 dispatch 打一次 plate
-  （`:222-261`）。
+- 为什么取数要短：它跑在 `/runs` 的**同步**段里。软取的上限是 3 s，而客户端
+  超时是 30 s（`frontend/src/api/http.ts:98`）—— **3 s 远小于 30 s，故同步等待
+  有界**。这是设计意图（`app/core/config.py:100-109`）：设计要避免的是两条超时
+  线取同值 —— 按该处注释的说法，那样 plate 慢时前端已报失败而后端其实已建出
+  执行，用户重试即重复执行。（两个常量可证；该时序本身是设计说明，本文件未
+  另行实测。）
+- 取数**绝不阻塞执行**（`endpoint_declarations.py:20-23`、`:195-197`）。拿到
+  什么则取决于缓存状态 —— 两条不同的路：
+  - **冷缓存**，或**回退窗已过**：拿不到 → 判定**降级从严（只认 body 面）**；
+  - **TTL 过期但仍在回退窗内**：刷新失败**回退旧快照**，判定跑在**（可能
+    陈旧的）旧契约面**上 —— **不降级、不留 `judgeDegraded`**（仍会告警，但告
+    警语是「刷新失败(…),回退旧快照」而非降级，`:250`、`:237-252`）。
+- 成功取到的声明面进**进程内**缓存（TTL `DECLARED_PATHS_TTL_SEC` 缺省 300 s），
+  **不是**每次 dispatch 打一次 plate（`:222-261`）。故障期「宁可给一份陈旧，
+  也不要静默少带上游的值」是**有意**的语义（`fail-open-to-old`，
+  `app/core/config.py:89-99`）；总上界 = TTL + `DECLARED_PATHS_STALE_WINDOW_SEC`
+  = 300 s + 3600 s。
 
 **悬空 skip 的可见性（降级时）**：
 
@@ -753,17 +764,20 @@ rows:
 派生，**只存在于进程内**（`endpoint_declarations.py` 的 `TtlLruCache` + 在飞
 收敛表），不落表、不落字段（该模块 docstring `endpoint_declarations.py:1-58`；
 裁决见可注入面 spec §6：「明确选了 dispatch 取 + 缓存，不做快照表/快照字段」）。
-`run_dispatcher` 写进 `Execution.config_json` 的只有纯值配方 —— `runId` /
+`run_dispatcher` 写进 `Execution.config_json` 的是纯值配方 —— `runId` /
 `scenarioId` / `dataSetIds` / `dataSetSelection` / `injectedAuths` /
 `serviceBindings` / `stepTo` / `nRuns` / `parallel`，外加可选的
-`judgeDegraded` / `entriesSkippedWhileDegraded`（`run_dispatcher.py:570-595`）
-—— **没有任何声明面快照**。⇒ PG 迁移不需要为它们写迁移。
+`judgeDegraded` / `entriesSkippedWhileDegraded`（`run_dispatcher.py:570-595`）。
+该列还会被别的路径追加键：启动期 reconcile 写
+`config_json.reconciled`（`:319-323`）；存量历史行另有已退役的旧配方键。
+**无论哪条路径，其中都没有任何声明面快照**（`app/models/` 下无对应表，已核）。
+⇒ PG 迁移不需要为它们写迁移。
 
-**约束二：不依赖 JSON 键序。** 平台 JSON 列用 SQLAlchemy 通用 `JSON`
-（SQLite 存 TEXT / PG 存 `JSON`）。PG 的 `JSON` 保留原文，但**未来若改
-`JSONB` 会规范化键序与重复键** ⇒ 判定与投影一律基于 **Set**，写入一律
-`model_dump`；**禁止**任何「按插入序读回」的假设。代码侧落点：可注入面是
-`set`（`run_injection.py:128`）、声明 path 全集是 `frozenset`
+**约束二：不依赖 JSON 键序。** 判定与投影一律基于 **Set**，写入一律
+`model_dump`；**禁止**任何「按插入序读回」的假设 —— 键序**不由本层保证**
+（本层只承诺「不依赖」这个方向；PG 侧列型的实际行为属外部引擎、不在本仓可证
+范围）。代码侧落点：可注入面是 `set`（`run_injection.py:128`）、
+声明 path 全集是 `frozenset`
 （`endpoint_declarations.py:264`）、目录宇宙是 `set`
 （`field_state_resolution.py:124-126`）；行集并集是 `set` 运算
 （`run_dispatcher.py:400`、`:407`）；写 `config_json` 一律
@@ -866,17 +880,20 @@ PLATE_TIMEOUT_SEC: float = 30.0
 `steps_from_payload` 的过滤版 —— 过滤版下标会整体错位一位）
 （`run_dispatcher.py:433-437`、`:1184-1199`）。
 
-**物化**：`compose_injection_scenario` 在 **plate convert 之前** 就地改
-`definition.steps[si]` —— 追加一条 `kind=assign` 的策略，target 是
+**物化**：`compose_injection_scenario` 在 **plate convert 之前**改**副本**的
+`definition.steps[si]`（先 `copy.deepcopy`，`run_injection.py:265` —— 该函数是
+纯函数，不改入参）—— 追加一条 `kind=assign` 的策略，target 是
 `$.request_body` + jsonpath 尾（根 `"$"` → `$.request_body`）；`asserts[]`
 里 `mode == "override"` 的改既有 assertion 的 `expected`，其余追加一条
 `kind=assertion`（`run_injection.py:246-292`）。**它不触碰 `config.vars`**：
 数据集行值是正交的另一路叠加（§4.18）。
 
-> 两条已知边界（**记录，不是缺陷**）：`value` 为 JSON `null` 无法送达（plate
+> 三条已知边界（**记录，不是缺陷**）：`value` 为 JSON `null` 无法送达（plate
 > 导出会把 `source: None` 整键丢弃，而引擎 `Assign.source` 必填）；整串
-> `"${...}"` 形态的 `value` 会被引擎当模板变量解析、平台侧兜不住
-> （`run_injection.py:44-65`）。
+> `"${...}"` 形态的 `value` 会被引擎当模板变量解析、平台侧兜不住；
+> **`$.` 前缀**的 `value` 若上下文里恰好存在同名 JSONPath，解析命中优先于
+> 字面量 —— 该值被上下文值覆写（`run_injection.py:44-65`）。第三条是上面
+> 「原样覆写、不 coerce」的反例，故显式列出。
 
 ### 10.2 可注入面的定义
 
@@ -942,8 +959,9 @@ dispatch 时对每个**被选中**的条目跑 `entry_issues`，产出 issue 列
   `request.declarations`），不重排、不改写（`:67-74`）。
 - **错误映射**（`routers/strategy_catalog.py:26-61`）：plate ≥ 500 或连接失败
   → `502 plate_unavailable`；plate 404 → `404 endpoint_not_found`；其余非 200
-  → 透传 plate 的状态码与 error 封套；200 但封套缺 `item` →
-  `502 plate_invalid_envelope`（`:69-73`）。
+  → 透传 plate 的状态码与 error 封套；200 但封套**缺 `item` 或 `item` 为空**
+  （判据是 `if not item`，故 `{}` 同样命中）→ `502 plate_invalid_envelope`
+  （`:69-73`）。
 - 同一路由前缀下另有 `POST /resolve-paths`（响应样本 → 候选 JSONPath）与
   `POST /{id}/field-states/validate`（§3.5 配置编辑校验），后者同样以 `/full`
   取目录（`:77-143`）。
