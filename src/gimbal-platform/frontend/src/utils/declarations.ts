@@ -13,7 +13,7 @@
  * 值回写走 body,状态回写走 step.field_states —— 两通路分离(§5.4)。
  */
 import type {
-  DeclarationEntryView, FieldState, IOFieldBinding,
+  DeclarationEntryView, EndpointFullView, FieldState, IOFieldBinding,
 } from '@/types/plate'
 import { getByPath } from './jsonpath'
 
@@ -66,6 +66,92 @@ export function iterFlat(
   }
   walk(decls ?? [])
   return out
+}
+
+/**
+ * 声明树**入口消毒**(纯函数,不改入参):路径不可用条目(判据 = :func:`hasUsablePath`)
+ * **自身剔除、children 提升**到原位置(数组且非空则拼接;非数组则丢弃)——
+ * 与 `iterFlat` 逐字同纪律,**绝不整棵剪枝**(容器缺 path 时整棵剪掉会让子孙
+ * 从树里消失 = 语义丢失)。
+ *
+ * 为什么必须在**边界一次**做:`/full` 是不可信来源,真值非串的 path(如 `path: 7`)
+ * 会让画布递归 `buildNode → suffixOf` 的 `childPath.startsWith(...)` 在**渲染期
+ * 硬抛**(白屏)。逐处点修只会让守卫不断从下一个消费方冒出来 —— 消毒在
+ * `getFullEndpoint` **出口**与共享缓存**入口**各做一次(幂等),消费方
+ * 按构造拿到干净树、零守卫、零逐调用开销。
+ *
+ * 递归下钻到**可用条目**的 children(画布递归只认 `entry.children`)。
+ * 某层未发生改动时**保留原引用**(条目对象 / 整份 `/full` 原样返回),
+ * 对干净入参零扰动 —— 现有身份与浅比较语义不变。
+ */
+export function sanitizeDeclarations(
+  decls: DeclarationEntryView[] | undefined | null,
+): DeclarationEntryView[] {
+  const out: DeclarationEntryView[] = []
+  for (const e of decls ?? []) {
+    if (!e || typeof e !== 'object') continue
+    const kids = (e as { children?: unknown }).children
+    const cleaned = Array.isArray(kids)
+      ? sanitizeDeclarations(kids as DeclarationEntryView[])
+      : undefined
+    if (!hasUsablePath(e)) {
+      // 自身不可用:剔除自身,children 提升到原位置(非数组/空 → 丢弃)
+      if (cleaned?.length) out.push(...cleaned)
+      continue
+    }
+    if (!Array.isArray(kids) || isSameRefs(kids, cleaned!)) { out.push(e); continue }
+    out.push({ ...e, children: cleaned })
+  }
+  return out
+}
+
+/** cleaned 与 raw 逐位同一引用(消毒对该层无改动)⇒ 保留原条目对象。 */
+function isSameRefs(raw: unknown[], cleaned: DeclarationEntryView[]): boolean {
+  return cleaned.length === raw.length && cleaned.every((c, i) => c === raw[i])
+}
+
+/**
+ * `/full` 出口消毒:**request** 与**每个 response** 的 declarations 各一次
+ * (裁定 C9 —— 半边留着就是同一形状)。响应声明今天经 `iterFlat` 系投影
+ * (`assertablePaths` / `responseBindings`)不抛,但同一个 `path: 7` 只要
+ * 将来换个消费方就会重开一族;在出口一次关死。
+ */
+export function sanitizeEndpointFull(full: EndpointFullView): EndpointFullView {
+  const request = sanitizeRequestSpec(full?.request)
+  const responses = sanitizeResponses(full?.responses)
+  if (request === full?.request && responses === full?.responses) return full
+  return { ...full, request, responses }
+}
+
+/** RequestSpecView 的 declarations 消毒(无改动 → 原对象)。 */
+function sanitizeRequestSpec(
+  spec: EndpointFullView['request'],
+): EndpointFullView['request'] {
+  const decls = spec?.declarations
+  if (!Array.isArray(decls)) return spec
+  const clean = sanitizeDeclarations(decls)
+  if (isSameRefs(decls, clean)) return spec
+  return { ...spec!, declarations: clean }
+}
+
+/** responses 逐状态码消毒(无改动 → 原对象)。 */
+function sanitizeResponses(
+  responses: EndpointFullView['responses'],
+): EndpointFullView['responses'] {
+  if (!responses || typeof responses !== 'object') return responses
+  let changed = false
+  const out: EndpointFullView['responses'] = {}
+  for (const [status, spec] of Object.entries(responses)) {
+    const decls = spec?.declarations
+    const clean = Array.isArray(decls) ? sanitizeDeclarations(decls) : undefined
+    if (clean && !isSameRefs(decls, clean)) {
+      out[status] = { ...spec, declarations: clean }
+      changed = true
+    } else {
+      out[status] = spec
+    }
+  }
+  return changed ? out : responses
 }
 
 /** 目录宇宙(§3.4 交集容忍参照):树内全部条目 path(模板形态,无下标)。

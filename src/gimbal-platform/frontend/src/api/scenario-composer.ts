@@ -6,6 +6,7 @@
  * Case 层已解散 — RunRequest 即执行配方,直接挂 scenario。
  */
 import http from '@/api/http'
+import { sanitizeEndpointFull } from '@/utils/declarations'
 import type {
   Scenario, DataSet, DataSetSummary,
   ScenarioDraft, DataSetDraft,
@@ -223,9 +224,13 @@ export async function previewPlateDraft(
 // 它是 plate 对外契约的前端完整结构表述;本文件不再重复声明。
 // 详见 @/types/plate.ts 头注释。
 
+/** plate `/full` 取数 —— **出口消毒**(裁定 C8b):`/full` 是不可信来源,
+ *  `request` 与每个 `response` 的 declarations 在此一次消毒 ⇒ **每一个**消费方
+ *  (含不经共享缓存的 `CaseComposerCatalog` 浏览面板)按构造拿到干净声明树。
+ *  容器内未发生改动时返回原对象(对干净响应零扰动)。 */
 export async function getFullEndpoint(endpointId: string): Promise<EndpointFullView> {
   const { data } = await http.get<EndpointFullView>(`/endpoint-catalog/${encodeURIComponent(endpointId)}/full`)
-  return data
+  return sanitizeEndpointFull(data)
 }
 
 /** B1 路径推断候选(plate resolve-paths: 响应样本 → JSONPath,数组出下标) */

@@ -21,9 +21,10 @@
  *     那套协议要每个消费方在每处 computed 里手写声明,漏一处即静默不重算。
  *   - **失败负缓存**:失败记 `failedAt`,窗口 `FAILED_RETRY_MS` 内不再发起
  *     (plate 故障时渲染路径不再反复重发),窗口过后允许重试。
- *   - **入口消毒(Ruling C7)**:`/full` 是不可信来源,入缓存时**一次**
- *     `sanitizeDeclarations` ⇒ 所有消费方(画布 `buildNode`/`suffixOf`、
- *     编辑器、后续 composable)拿到的**按构造就是干净的**,且零逐调用开销。
+ *   - **消毒(Ruling C7/C8b/C9)**:`/full` 是不可信来源。消毒上移到
+ *     `getFullEndpoint` **出口**(`sanitizeEndpointFull`,request + 每个 response;
+ *     含不经本缓存的 `CaseComposerCatalog` 浏览面板)⇒ 所有消费方按构造拿到
+ *     干净声明树;本缓存**入口**再做一次(幂等)兜住被 mock 掉的出口。
  *     此前「路径可用性守卫」在 iterFlat → buildTree → buildNode →
  *     prefillBindings 上逐个冒出来 —— 边界选错了;守卫只该有一个。
  *
@@ -34,70 +35,24 @@
 import { reactive, shallowReactive } from 'vue'
 
 import { getFullEndpoint } from '@/api/scenario-composer'
-import { hasUsablePath } from '@/utils/declarations'
+import { sanitizeEndpointFull } from '@/utils/declarations'
 import type { DeclarationEntryView, EndpointFullView } from '@/types/plate'
 
 /** 失败重试窗口(ms):窗口内不再发起,避免 plate 故障时渲染路径反复重发。 */
 export const FAILED_RETRY_MS = 10_000
 
-/** 会话级缓存 —— Vue 原生响应式容器。**shallow**:只跟踪「哪个 endpoint 有
- *  条目」,不回填值身份 ⇒ 读回的是 `EndpointFullView` 本体而非 deep Proxy
- *  (EF-1 的 `toBe` 身份断言与画布渲染热路径都依赖这一点;声明树每次渲染会被
- *  `buildTree` 全量遍历,deep Proxy 的逐属性代理是白付的开销 —— 缓存条目
- *  是 API 快照,只有「入缓存」这一个变更事件,shallow 正是该语义)。 */
+/** 会话级缓存 —— Vue 原生响应式容器。**shallow**(裁定 C8a):只跟踪「哪个 endpoint
+ *  有条目」,不回填值身份 ⇒ 读回 `EndpointFullView` 本体而非 deep Proxy ——
+ *  ①身份断言(`toBe`)比结构断言强,不该为 deep 代理降级成 `toEqual`;
+ *  ②缓存条目是 API 不可变快照,只有「入缓存」一个变更事件,deep 跟踪的是永不
+ *  变化的嵌套属性,而声明树每渲染被 `buildTree` 全量遍历 ⇒ 逐属性代理是白付开销。 */
 const fullByEndpoint = shallowReactive(new Map<string, EndpointFullView>())
 /** 进行中的请求(同 endpoint 并发收敛为同一 Promise) */
 const inFlight = new Map<string, Promise<EndpointFullView | undefined>>()
 /** eid → 失败时刻(ms);**负缓存**:窗口内不重发。值为标量,deep reactive 无副作用。 */
 const failedAt = reactive(new Map<string, number>())
 
-/**
- * 声明树入口消毒(**纯函数**,不改入参):路径不可用(`path: 7` / `path: ''`,
- * 判据 = `hasUsablePath` 唯一定义)的条目**自身剔除、children 提升**到原位置
- * (children 为数组且非空时拼接;非数组则直接丢弃)—— 与 `iterFlat` 逐字同纪律,
- * **绝不整棵剪枝**(容器缺 path 时整棵剪掉会让子孙从树里消失 = 语义丢失)。
- *
- * 递归下钻到可用条目的 children:画布 `buildNode` 的递归下降只认
- * `entry.children`,故子孙也必须在入缓存时一并干净。可用条目的 children
- * 未被改动时**原对象原样返回**(不造新对象/新数组),保证对干净入参零扰动
- * ——画布/编辑器的既有身份与浅比较语义不变。
- */
-export function sanitizeDeclarations(
-  decls: DeclarationEntryView[] | undefined | null,
-): DeclarationEntryView[] {
-  const out: DeclarationEntryView[] = []
-  for (const e of decls ?? []) {
-    if (!e || typeof e !== 'object') continue
-    const kids = (e as { children?: unknown }).children
-    const cleaned = Array.isArray(kids)
-      ? sanitizeDeclarations(kids as DeclarationEntryView[])
-      : undefined
-    if (!hasUsablePath(e)) {
-      // 自身不可用:剔除自身,children 提升到原位置(非数组/空 → 丢弃)
-      if (cleaned?.length) out.push(...cleaned)
-      continue
-    }
-    if (!Array.isArray(kids) || isSameRefs(kids, cleaned!)) { out.push(e); continue }
-    out.push({ ...e, children: cleaned })
-  }
-  return out
-}
-
-/** cleaned 与 raw 逐位同一引用(消毒对该层无改动)⇒ 保留原条目对象。 */
-function isSameRefs(raw: unknown[], cleaned: DeclarationEntryView[]): boolean {
-  return cleaned.length === raw.length && cleaned.every((c, i) => c === raw[i])
-}
-
-/** `/full` → 消毒后的 `/full`;request.declarations 无改动时**原对象原样返回**。 */
-function sanitizeFull(full: EndpointFullView): EndpointFullView {
-  const decls = full?.request?.declarations
-  if (!Array.isArray(decls)) return full
-  const clean = sanitizeDeclarations(decls)
-  if (clean.length === decls.length && clean.every((d, i) => d === decls[i])) return full
-  return { ...full, request: { ...full.request!, declarations: clean } }
-}
-
-/** 缓存 miss 时拉 /full、**入口消毒**并回填(fail-soft);
+/** 缓存 miss 时拉 /full、**入口消毒**(幂等:出口已消毒一次,见 C8b)并回填(fail-soft);
  *  命中缓存 / 负缓存窗口内 / 在飞 → 直接返回。 */
 export function ensureEndpointFull(endpointId: string): Promise<EndpointFullView | undefined> {
   const cached = fullByEndpoint.get(endpointId)
@@ -110,7 +65,7 @@ export function ensureEndpointFull(endpointId: string): Promise<EndpointFullView
   if (pending) return pending
   const p = getFullEndpoint(endpointId)
     .then((full) => {
-      const clean = sanitizeFull(full)
+      const clean = sanitizeEndpointFull(full)
       fullByEndpoint.set(endpointId, clean)
       failedAt.delete(endpointId)
       return clean
