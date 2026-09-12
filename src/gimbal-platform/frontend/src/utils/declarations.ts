@@ -496,16 +496,27 @@ function synthRowNode(
   }
 }
 
-/** §5.1 三输入合一:目录 + 意图(field_states)+ 值(body)→ 渲染树。 */
+/** §5.1 三输入合一:目录 + 意图(field_states)+ 值(body)→ 渲染树。
+ *  顶层路径可用性走 :func:`hasUsablePath` 唯一定义(§2.3):不可用条目
+ *  **自身剔除、其 children 提升为顶层节点**(与 `iterFlat` 同纪律)——
+ *  直接整棵丢弃会让子孙从树里消失(语义丢失),而放行会让 `templatePath`
+ *  变成真值非串(如 `7`),污染下游按模板路径的键宇宙。 */
 export function buildTree(
   decls: DeclarationEntryView[] | undefined | null,
   fieldStates?: Record<string, string> | null,
   body?: unknown,
 ): FieldTreeNode[] {
-  return (decls ?? [])
-    .map((e) => (e && typeof e === 'object' && e.path
-      ? buildNode(e, e.path, body, fieldStates) : null))
-    .filter((n): n is FieldTreeNode => n !== null)
+  const out: FieldTreeNode[] = []
+  const walk = (entries: DeclarationEntryView[] | undefined) => {
+    for (const e of entries ?? []) {
+      if (!e || typeof e !== 'object') continue
+      if (!hasUsablePath(e)) { walk(e.children); continue }
+      const node = buildNode(e, e.path, body, fieldStates)
+      if (node) out.push(node)
+    }
+  }
+  walk(decls ?? [])
+  return out
 }
 
 /**
@@ -762,7 +773,7 @@ export function prefillBindings(
 ): IOFieldBinding[] {
   const out: IOFieldBinding[] = []
   for (const e of decls ?? []) {
-    if (!e || typeof e !== 'object' || !e.path) continue
+    if (!hasUsablePath(e)) continue
     if (Array.isArray(e.children) && e.children.length) continue // 容器不预填
     if (resolveState(e.path, e.state, undefined) === 'carry') continue
     const rel = e.path.replace(/^\$\.?/, '')

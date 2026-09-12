@@ -682,4 +682,25 @@ describe('路径可用性唯一定义(spec 架构收敛 §2.3)', () => {
     expect(carryPaths(decls)).toEqual([])
     expect(searchCorpus(decls).map((r) => r.path)).toEqual(['$.ok'])
   })
+
+  it('DP-3: buildTree 不产出以不可用 path 为 templatePath 的节点,但其 children 仍入树', () => {
+    const decls = [
+      { name: 'bad', path: 7 as any, type: 'object', children: [
+        { name: 'kid', path: '$.kid', required: false, description: '' },
+      ] },
+      { name: 'ok', path: '$.ok', required: false, description: '' },
+    ] as any
+    const tree = buildTree(decls, undefined, { kid: 1, ok: 2 })
+    // bad 自身剔除(不得出现 templatePath === 7 的节点),但其子提升为顶层节点
+    expect(tree.map((n) => n.templatePath)).toEqual(['$.kid', '$.ok'])
+    expect(tree.some((n) => (n.templatePath as unknown) === 7)).toBe(false)
+  })
+
+  it('DP-4: prefillBindings 不收录 path 不可用条目', () => {
+    const decls = [
+      { name: 'bad', path: 7 as any, required: false, description: '' },
+      { name: 'ok', path: '$.ok', required: false, description: '' },
+    ] as any
+    expect(prefillBindings(decls).map((f) => f.path)).toEqual(['$.ok'])
+  })
 })
