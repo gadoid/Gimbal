@@ -46,7 +46,7 @@ import type { DataSetSummary, Scenario } from '@/types/scenario-composer'
 import type { AssertionRegistry } from '@/types/assertion-registry'
 import { injectablePathSetOf, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
 import { fieldPathsOf } from '@/utils/dataset-segments'
-import { endpointFullState, endpointFullVersion, requestDeclarationsOf } from '@/composables/useEndpointFull'
+import { endpointFullState, requestDeclarationsOf } from '@/composables/useEndpointFull'
 import { list as listAuthSessions } from '@/api/auth_sessions'
 import { showError } from '@/utils/errorFallback'
 import { executionUrl } from '@/utils/links'
@@ -95,7 +95,6 @@ const authOptions = computed(() => {
  *  可注入面(spec v3.1 §2.1):body 现存 ∪ 契约声明(全状态 form/collapse/
  *  carry)。声明面来自共享 /full 缓存 —— 契约未回填时退化为 body 面(从严)。 */
 function injectablePathsOfStep(si: number): ReadonlySet<string> {
-  void endpointFullVersion.value
   const step = steps.value[si]
   return injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))
 }
@@ -120,7 +119,6 @@ const deadEntryIds = computed(() =>
  *  不把「尚未判定」当「判死」。
  *  ensureEndpointFull 幂等:miss 时由 requestDeclarationsOf 发起取数。 */
 const contractPending = computed(() => {
-  void endpointFullVersion.value
   for (const st of steps.value) {
     const eid = (st as { api?: { view_hints?: { endpoint_id?: string } } })?.api?.view_hints?.endpoint_id
     if (!eid) continue

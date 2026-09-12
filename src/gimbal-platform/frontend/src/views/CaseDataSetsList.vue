@@ -122,7 +122,7 @@ import type { AssertionRegistry } from '@/types/assertion-registry'
 import { isLegacyEntry } from '@/types/assertion-registry'
 import { injectablePathSetOf, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
 import { fieldPathsOf } from '@/utils/dataset-segments'
-import { endpointFullVersion, requestDeclarationsOf } from '@/composables/useEndpointFull'
+import { requestDeclarationsOf } from '@/composables/useEndpointFull'
 
 const route = useRoute()
 const router = useRouter()
@@ -137,7 +137,6 @@ const steps = ref<any[]>([])
 /** 可注入面(spec v3.1 §2.1):body 现存 ∪ 契约声明(全状态 form/collapse/carry)。
  *  声明面来自共享 /full 缓存 —— 契约未回填时退化为 body 面(从严)。 */
 function injectablePathsOfStep(si: number): ReadonlySet<string> {
-  void endpointFullVersion.value
   const step = steps.value[si]
   return injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))
 }

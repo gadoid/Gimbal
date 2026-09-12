@@ -16,7 +16,6 @@ import { computed, watch, type ComputedRef, type Ref } from 'vue'
 import {
   _resetEndpointFullCacheForTest,
   endpointFullState,
-  endpointFullVersion,
   ensureEndpointFull,
   getEndpointFull,
 } from '@/composables/useEndpointFull'
@@ -57,7 +56,6 @@ export function useFieldDescriptions(
 
   // 2b) 全局状态 = 各端点状态的聚合(失败优先于加载中)
   const state = computed<'loading' | 'failed' | ''>(() => {
-    void endpointFullVersion.value
     let loading = false
     for (const eid of eids.value) {
       const s = endpointFullState(eid)
@@ -69,7 +67,6 @@ export function useFieldDescriptions(
 
   // 3) 计算 columnKey → description
   const descriptionByColumnKey = computed<Map<string, string>>(() => {
-    void endpointFullVersion.value  // 显式依赖
     const map = new Map<string, string>()
     const steps = draft.value?.definition?.steps ?? []
     for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {

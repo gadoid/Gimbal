@@ -291,7 +291,7 @@ import type {
 } from '@/types/scenario-composer'
 import type { AssertionRegistry, EntryPath } from '@/types/assertion-registry'
 import { genEntryId, injectablePathSetOf, isDeadEntry, normalizeRegistry } from '@/utils/assertion-registry'
-import { endpointFullState, endpointFullVersion, requestDeclarationsOf } from '@/composables/useEndpointFull'
+import { endpointFullState, requestDeclarationsOf } from '@/composables/useEndpointFull'
 import type { ScenarioView, StepView } from '@/types/plate'
 
 const STEPS = [
@@ -523,7 +523,6 @@ const authOptions = computed(() => [...new Set([
  *  可注入面(spec v3.1 §2.1):body 现存 ∪ 契约声明(全状态 form/collapse/
  *  carry)。声明面来自共享 /full 缓存 —— 契约未回填时退化为 body 面(从严)。 */
 function registryInjectablePathsOf(si: number): ReadonlySet<string> {
-  void endpointFullVersion.value
   const step = steps.value[si]
   return injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))
 }
@@ -543,7 +542,6 @@ const deadEntryIds = computed(() =>
  *  —— 交 RunDialog 在 pending 期间不把「尚未判定」当「判死」,预勾(§5「加入
  *  本次执行」)才不会被静默丢掉。 */
 const contractPending = computed(() => {
-  void endpointFullVersion.value
   for (const st of steps.value as StepView[]) {
     const eid = st?.api?.view_hints?.endpoint_id
     if (!eid) continue

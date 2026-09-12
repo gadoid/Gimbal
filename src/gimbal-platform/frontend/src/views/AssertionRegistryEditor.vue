@@ -198,7 +198,7 @@ import { assertablePaths, iterFlat, resolveState, toTemplatePath } from '@/utils
 import { toScratchPath } from '@/utils/scratch-path'
 import type { FieldState } from '@/types/plate'
 import {
-  endpointFullVersion, ensureEndpointFull, getEndpointFull, requestDeclarationsOf,
+  ensureEndpointFull, getEndpointFull, requestDeclarationsOf,
 } from '@/composables/useEndpointFull'
 import JsonPathInput from '@/components/composer/JsonPathInput.vue'
 import { composerUrl } from '@/utils/links'
@@ -222,7 +222,6 @@ const scenarioName = computed(() => draft.value?.definition?.meta?.name || scena
 /** 可注入面(spec v3.1 §2.1):body 现存 ∪ 契约声明(全状态 form/collapse/carry)。
  *  声明面来自共享 /full 缓存 —— 契约未回填时退化为 body 面(从严)。 */
 function injectablePathsOfStep(si: number): ReadonlySet<string> {
-  void endpointFullVersion.value
   const step = steps.value[si]
   return injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))
 }
@@ -346,7 +345,6 @@ const OPERATORS = ['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'contains', 'exists']
 /** 请求侧候选(spec v3.1 §2.1)= 可注入面(body 现存 ∪ 契约声明全状态)。
  *  body 源:headers 是协议位,v1 path 不支持(spec v3 §1 裁定 9)。 */
 const pathCandidates = computed<string[]>(() => {
-  void endpointFullVersion.value
   const step = steps.value[pendingPath.value.stepIndex]
   return [...injectablePathSetOf(fieldPathsOf(step as any), requestDeclarationsOf(step))]
 })
@@ -370,7 +368,6 @@ function stateOfPendingPath(path: string): FieldState | undefined {
  *  归一到引擎域($.code → $.response_body.code)。契约是响应侧唯一标准定义
  *  —— 不引入样本等旁路;契约未声明的字段仍可手打,只是不提示。 */
 const targetCandidates = computed<string[]>(() => {
-  void endpointFullVersion.value            // /full 回填后重算
   const step = steps.value[pendingAssert.value.stepIndex] as any
   const eid = step?.api?.view_hints?.endpoint_id
   if (!eid) return []

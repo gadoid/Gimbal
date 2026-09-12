@@ -573,7 +573,7 @@ import type { FieldTreeNode, ValueSourceGroup } from '@/utils/declarations'
 import { deriveBase } from '@/utils/service-alias'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
 import {
-  endpointFullState, endpointFullVersion, ensureEndpointFull, getEndpointFull,
+  endpointFullState, ensureEndpointFull, getEndpointFull,
 } from '@/composables/useEndpointFull'
 import { carryHint } from '@/utils/carry-hint'
 import type { CarrySource, CarryValues } from '@/utils/carry-hint'
@@ -631,9 +631,8 @@ function inferProtocol(step: StepView | undefined): string {
 
 /** 当前 step 的请求目录(会话级按 endpoint_id 现拉 /full,不读持久化
  *  快照;step.request.fields_meta 不作数据源 — 退场记录见 docs/adr/0003)。
- *  读 endpointFullVersion 建立响应依赖:回填后树/reqTypeC 自动重算。 */
+ *  读缓存(getEndpointFull)即建立响应依赖:回填后树/reqTypeC 自动重算。 */
 function stepDecls(step: StepView | undefined) {
-  void endpointFullVersion.value
   const eid = step?.api?.view_hints?.endpoint_id
   if (!eid) return undefined
   void ensureEndpointFull(eid)
@@ -1585,13 +1584,11 @@ const CODE_TARGET_CANDIDATES = ['$.code', '$.data.code'] as const
  *  全局单值会跨端点串台(另一步失败盖到当前步头);改按当前端点判 —
  *  缓存命中 → '' / 失败记录 → failed / 其余(未回填)→ loading。 */
 const currentFullState = computed<'loading' | 'failed' | ''>(() => {
-  void endpointFullVersion.value
   return endpointFullState(currentStep.value?.api?.view_hints?.endpoint_id)
 })
 
 /** 当前 step 的 /full 结构契约(拉取中/失败 → undefined) */
 const currentFull = computed<EndpointFullView | undefined>(() => {
-  void endpointFullVersion.value
   const eid = currentStep.value?.api?.view_hints?.endpoint_id
   if (!eid) return undefined
   void ensureEndpointFull(eid)
@@ -1727,7 +1724,6 @@ onMounted(async () => {
 
 /** step → 可注入的 carry 键清单(path → 来源);别名经 deriveBase 归锚点服务 */
 function carryInjectable(step: StepView): Map<string, CarrySource> {
-  void endpointFullVersion.value  // /full 会话缓存回填(fullVersion bump)后徽标重算
   if (!carryValues.value) return new Map()
   const eid = step.api?.view_hints?.endpoint_id
   const full = eid ? getEndpointFull(eid) : undefined
