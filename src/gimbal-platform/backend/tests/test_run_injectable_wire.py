@@ -80,11 +80,15 @@ def _isolate_data_dir(tmp_path, monkeypatch):
 
 
 async def test_carry_anchored_entry_runs_and_overrides_on_the_wire(
-    client, plate_mock, stub_sut
+    client, plate_mock, stub_sut, tmp_path
 ):
     """归因唯一:条目未被 skip,且平台侧**没有**值可带入(carry face 缺服务
     目录 → 降级),故 ``case.json`` 里 ``customer_id`` 只出现在 Assign 的
     target 上 —— stub 实收的 261 只能由该 Assign 产生。
+
+    「平台不为该字段供值」这一步**是断言出来的**(下方 ``"customer_id" not in
+    body``),不是靠今天恰好如此:否则平台日后多一个值来源时,本用例照样绿
+    而这句 docstring 变假。
 
     「覆盖平台带入值」那半由
     :func:`test_carry_anchored_entry_overrides_platform_carried_value` 负责。
@@ -144,8 +148,17 @@ async def test_carry_anchored_entry_runs_and_overrides_on_the_wire(
     rows = (await client.get(f"/api/executions/{exec_id}/rows", headers=bob)).json()["items"]
     assert len(rows) == 1
     assert rows[0]["injectionId"] == "inj-carry"      # 未被 skip(放宽生效)
+
+    # 兑现 docstring「归因唯一」那半:平台侧**不**为该字段供值 —— case.json 的
+    # body 里没有 customer_id(它只以 Assign target 的形式出现),故线上实收值
+    # 只能来自该 Assign。
+    case_files = sorted(tmp_path.glob("runs/cases/*/*/case.json"))
+    assert len(case_files) == 1, case_files
+    body = json.loads(case_files[0].read_text(encoding="utf-8"))["steps"][0]["request"]["body"]
+    assert "customer_id" not in body, body
+
     assert len(_StubSut.hits) == 1                    # 真引擎发出去了
-    assert _StubSut.hits[0].get("customer_id") == 261 # Assign 覆盖:偏离落到线上
+    assert _StubSut.hits[0].get("customer_id") == 261 # Assign 落到线上
 
 
 async def test_carry_anchored_entry_overrides_platform_carried_value(
