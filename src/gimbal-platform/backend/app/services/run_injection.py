@@ -112,28 +112,19 @@ def _container_prefixes(path: str) -> list[str]:
     return [path[:i] for i, ch in enumerate(path) if i and ch in ".["]
 
 
-def _path_resolvable(jsonpath: str, body: Any, declared: Any) -> bool:
-    """可解析(spec v3.1 §2.1)= jp 或 normalize(jp) 命中**可注入面**,或是某
-    可注入路径的容器前缀;否则退回 body 精确存在性(既有兜底,不退化)。
+def injectable_universe(body: Any, declared: Any) -> set[str]:
+    """每步的可注入面(spec v3.1 §2.1 公式;**纯函数**,由调用方按步骤记忆化复用):
+    body 叶子 ∪ 其容器前缀 ∪ normalize(declared) ∪ 其前缀 ∪ {"$"}。
 
-    可注入面(spec §2.1 公式) = body(si) ∪ prefixes(body(si))
-    ∪ normalize(declared(si)) ∪ prefixes(normalize(declared(si))) ∪ {"$"}。
+    此前这段公式**藏在** :func:`_path_resolvable` 里、每次判定都重建一遍
+    (且重建的那份只在函数内可见)。抽成纯函数后:调用方(dispatcher)按步
+    预计算一次、判定只查表(spec §2.1 的「判定面不耦合网络 I/O」),并且
+    它自己可被单测钉住。
 
-    body 面此前**替代**成了 ``exists(body, jp)``(实例精确判),少了
-    ``prefixes(body)`` 与两形态的前缀子句 ⇒ 「编辑器判活、dispatch 静默
-    skip」的残余:``body={"tags":["a","b"]}`` + ``$.tags[9]``(前端经
-    ``toTemplatePath`` 得 ``$.tags`` 命中前缀,后端越界判死)、
-    ``body={"a":{"b.c":1}}`` + ``$.a.b``(键含点,前端前缀命中 ``$.a.b.c``)。
-
-    **两侧都归一**:声明面条目自身的路径形态是自由的(plate 只强制
-    children 子树为模板态,顶层条目可带实例下标,如 ``$.supplier[0].code``),
-    故 :func:`_template_path` 归一后再比 —— 与前端 ``injectablePathSetOf``
-    的 ``toTemplatePath(p)`` 同落点(spec v3.1 §2.1)。不归一就会出现
-    「编辑器判活、dispatch 静默 skip」的判定层分裂。
-
-    保留 ``exists`` 兜底**不退化**:它比可注入面多认「空容器本身」
-    (``body={"items":[]}`` 的 ``$.items`` 无叶子、无前缀 ⇒ 前端判死而后端
-    判活)—— 这是既有行为,spec §2.1 明文容许(从严只在「少认」方向)。"""
+    ``declared`` 侧一律过 :func:`_template_path` 归一 —— 声明面条目自身的
+    路径形态是自由的(plate 只强制 children 子树为模板态,顶层条目可带实例
+    下标,如 ``$.supplier[0].code``),不归一就会出现「编辑器判活、dispatch
+    静默 skip」的判定层分裂(与前端 ``injectablePathSetOf`` 的落点一致)。"""
     universe: set[str] = {"$"}
     for p in _body_leaf_paths(body):
         universe.add(p)
@@ -144,13 +135,52 @@ def _path_resolvable(jsonpath: str, body: Any, declared: Any) -> bool:
         t = _template_path(p)
         universe.add(t)
         universe.update(_container_prefixes(t))
+    return universe
+
+
+def _path_resolvable(jsonpath: str, body: Any, universe: set[str]) -> bool:
+    """判定(spec v3.1 §2.1):两形态命中 universe 即活;否则退回 body 精确存在性
+    (既有兜底不退化 —— 它多认"空容器本身",方向是"少判死")。
+
+    可注入面(spec §2.1 公式)= :func:`injectable_universe`,由**调用方**预计算
+    后传入(此前每次判定就地重建):
+    body(si) ∪ prefixes(body(si)) ∪ normalize(declared(si))
+    ∪ prefixes(normalize(declared(si))) ∪ {"$"}。
+
+    body 面此前**替代**成了 ``exists(body, jp)``(实例精确判),少了
+    ``prefixes(body)`` 与两形态的前缀子句 ⇒ 「编辑器判活、dispatch 静默
+    skip」的残余:``body={"tags":["a","b"]}`` + ``$.tags[9]``(前端经
+    ``toTemplatePath`` 得 ``$.tags`` 命中前缀,后端越界判死)、
+    ``body={"a":{"b.c":1}}`` + ``$.a.b``(键含点,前端前缀命中 ``$.a.b.c``)。
+
+    **前缀子句随 universe 一起预计算**:universe 建时已把每个叶子/声明路径的
+    各级容器前缀(`_container_prefixes`)**materialize** 成成员,故原先那段
+    「遍历 universe 找 ``form + "."`/``form + "["`` 前缀」的扫描是**死代码**
+    —— 命中它的 p 必然意味着 form 是 p 的容器前缀、form 已在 universe 里,
+    成员判定先一步就返回了。删掉它不改变任何判定结果(等价性由既有用例与
+    ``test_body_face_covers_container_prefixes_like_frontend`` 系列钉住)。
+
+    保留 ``exists`` 兜底**不退化**:它比可注入面多认「空容器本身」
+    (``body={"items":[]}`` 的 ``$.items`` 无叶子、无前缀 ⇒ 前端判死而后端
+    判活)—— 这是既有行为,spec §2.1 明文容许(从严只在「少认」方向)。"""
     for form in (jsonpath, _template_path(jsonpath)):
         if form in universe:
             return True
-        for p in universe:
-            if p.startswith(form + ".") or p.startswith(form + "["):
-                return True
     return exists(body or {}, jsonpath)
+
+
+def as_step_index(x: Any) -> int | None:
+    """stepIndex 归一(Z3):拒 bool;收整数与**整数值浮点**。
+    JSON 只有一种数字类型 ⇒ 前端 ``Number.isInteger(1.0)`` 为真,后端必须同判;
+    ``true`` 在前端是 false(``Number.isInteger(true)``),后端
+    ``isinstance(True, int)`` 却为真 —— 那是分裂,故显式拒绝。"""
+    if isinstance(x, bool):
+        return None
+    if isinstance(x, int):
+        return x
+    if isinstance(x, float) and x.is_integer():
+        return int(x)
+    return None
 
 
 def entry_issues(
@@ -158,37 +188,50 @@ def entry_issues(
     step_count: int,
     body_of: Callable[[int], Any],
     assert_targets_of: Callable[[int], set[str]],
-    declared_of: Callable[[int], Any] | None = None,
+    universe_of: Callable[[int], set[str]] | None = None,
 ) -> list[dict[str, Any]]:
     """悬空检测(前端 utils/assertion-registry.ts 的**近乎同构**,已知差异见下;
     spec v3 §2):旧形状条目(无 path)/ stepIndex 越界 / path 不落在该步
     **可注入面**(契约声明 ∪ body 现存)上 / override 无匹配。四类 issue 的
     判序与守卫逐条对齐前端 ``registryIssues``。
 
-    可注入面两侧同构(spec v3.1 §2.1 的四子句公式):body 叶子 ∪ 其容器前缀
-    ∪ 归一后的声明 ∪ 其容器前缀,两形态各跑一次前缀子句,见
-    :func:`_path_resolvable`。**剩余的一处差异**(spec v3.1 §2.1 明文容许的
-    ``exists`` 兜底):后端对本模块多认「空容器本身」(``body={"items":[]}``
+    可注入面两侧同构(spec v3.1 §2.1 的四子句公式,见
+    :func:`injectable_universe`)。**剩余的一处差异**(spec v3.1 §2.1 明文容许
+    的 ``exists`` 兜底):后端对本模块多认「空容器本身」(``body={"items":[]}``
     的 ``$.items`` —— 无叶子可生前缀,前端判死),只会**少判死**,方向与
     既有行为一致。
 
-    ``declared_of`` 缺省 None → 只认 body 面(等于 spec v3 行为)。
+    ``universe_of`` 是**预计算好的**可注入面查表(``Callable[[int], set[str]]``,
+    spec §2.1「判定面不耦合网络 I/O」):判定的第 5 参由 ``declared_of``(声明
+    路径集)改为 ``universe_of``(该步的 universe)—— 归一与前缀展开都已在
+    生产侧由 :func:`injectable_universe` 完成,这里只做成员判定。
+
+    stepIndex 一律过 :func:`as_step_index`(Z3:拒 bool、收整数值浮点),
+    与前端 ``Number.isInteger`` 同构。
+
+    ``universe_of`` 缺省 None → 只有 ``{"$"}``(等于 spec v3 的从严行为:
+    除根以外一律退回 body 精确存在性)。
     """
-    _declared = declared_of or (lambda si: ())
+    # §5 例外:两侧同为 Optional[Callable] 的缺省形,等价性一眼可判 —— 缺省
+    # 查表恰好就是「只认 $ 根」的那张表。
+    _universe = universe_of or (lambda si: {"$"})
     issues: list[dict[str, Any]] = []
     path = entry.get("path")
     if not isinstance(path, dict):
         # v2 旧形状(anchor+injection)或残缺条目:全量 issue → skip(spec v3 §8)
         return [{"kind": "legacy-entry"}]
-    si = path.get("stepIndex")
+    si = as_step_index(path.get("stepIndex"))
     jp = path.get("jsonpath")
-    if not isinstance(si, int) or si < 0 or si >= step_count:
-        issues.append({"kind": "step-oob", "stepIndex": si})
-    elif not isinstance(jp, str) or not _path_resolvable(jp, body_of(si), _declared(si)):
+    if si is None or si < 0 or si >= step_count:
+        # issue 里记**原始值**(未归一的 path 值)—— 便于前端回显错在哪
+        issues.append({"kind": "step-oob", "stepIndex": path.get("stepIndex")})
+    elif not isinstance(jp, str) or not _path_resolvable(jp, body_of(si), _universe(si)):
         issues.append({"kind": "path-unresolvable", "stepIndex": si, "jsonpath": jp})
     for a in entry.get("asserts") or []:
-        if isinstance(a, dict) and isinstance(a.get("stepIndex"), int):
-            asi = a["stepIndex"]
+        if isinstance(a, dict):
+            asi = as_step_index(a.get("stepIndex"))
+            if asi is None:
+                continue                     # 非数字 stepIndex = 无从寻址,不产生 issue
             if asi < 0 or asi >= step_count:
                 issues.append({"kind": "step-oob", "stepIndex": asi})
             elif a.get("mode") == "override" and a.get("target") not in assert_targets_of(asi):

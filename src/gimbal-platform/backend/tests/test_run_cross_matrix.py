@@ -290,3 +290,111 @@ async def test_both_empty_single_baseline(
     assert cases[0]["config"]["vars"]["amount"] == 100        # 基线 vars
     detail = (await client.get(f"/api/executions/{exec_id}", headers=bob)).json()
     assert detail["total_runs"] == 1
+
+
+# ── 索引基数(Z2)/ 守齐(B)/ 降级可见(Y)────────────────────────────
+async def test_dispatcher_uses_raw_step_index_base(client, plate_mock, monkeypatch):
+    """Z2:definition.steps 混入非 dict 元素时,声明面/body/asserts 仍按**原始**下标寻址
+    (与前端 compose_injection_scenario 同一基准)。"""
+    from .helpers import make_draft as _draft, wait_until as _wait
+    from .test_run_m1_capabilities import _patch_launch_capture
+    from .test_scenario_visibility_and_copy import _member
+
+    bob = await _member(client, "bob")
+    draft = _draft(
+        steps=[{"id": "s1",
+                "api": {"kind": "api", "service": "svc", "method": "POST", "path": "/a", "headers": {},
+                        "view_hints": {"endpoint_id": "ep-raw"}},
+                "request": {"body": {"amount": "${var.amount}"}}, "strategy": []}],
+        vars_map={"amount": 1},
+    )
+    draft["definition"]["steps"].insert(0, "GARBAGE")     # 过滤版下标会整体前移一位
+    draft["assertion_registry"] = {"entries": [{
+        "id": "inj-raw", "name": "原始下标",
+        "path": {"stepIndex": 1, "source": "body", "jsonpath": "$.amount"},
+        "value": 9, "asserts": []}]}
+    r = await client.post("/api/scenarios", headers=bob, json=draft)
+    assert r.status_code in (200, 201), r.text
+
+    plate_mock.behaviour = "echo"
+    plate_mock.fulls["ep-raw"] = {"request": {"declarations": [
+        {"name": "amount", "path": "$.amount", "state": "form", "required": True}]}}
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+
+    r = await client.post("/api/runs", headers=bob, json={
+        "scenarioId": "sc-test", "dataSetIds": [], "injectionEntryIds": ["inj-raw"]})
+    assert r.status_code == 201, r.text
+    await _wait(lambda: len(cases) >= 1)
+    assert len(cases) == 1                      # 原始下标 1 = 唯一真实步骤 ⇒ 判活并执行
+    # case.json 原样保留**原始** steps(含 0 位的非 dict 元素)—— 这正是判定与
+    # 物化必须同一基数的原因:Assign 落在原始下标 1 上(过滤版会落到 0 位)。
+    assert cases[0]["steps"][0] == "GARBAGE"
+    assert {"kind": "assign", "source": 9, "target": "$.request_body.amount"} in \
+        cases[0]["steps"][1]["strategy"]
+
+
+async def test_dispatcher_tolerates_non_dict_api(client, plate_mock, monkeypatch):
+    """B:step.api 为字符串时不再 500(守齐),按无 endpoint_id 降级为 body 面。"""
+    from .helpers import make_draft as _draft, wait_until as _wait
+    from .test_run_m1_capabilities import _patch_launch_capture
+    from .test_scenario_visibility_and_copy import _member
+
+    bob = await _member(client, "bob")
+    draft = _draft(
+        steps=[{"id": "s1", "api": "svc",                    # ← 非 dict
+                "request": {"body": {"amount": "${var.amount}"}}, "strategy": []}],
+        vars_map={"amount": 1},
+    )
+    draft["assertion_registry"] = {"entries": [{
+        "id": "inj-b", "name": "body 面可判",
+        "path": {"stepIndex": 0, "source": "body", "jsonpath": "$.amount"},
+        "value": 5, "asserts": []}]}
+    r = await client.post("/api/scenarios", headers=bob, json=draft)
+    assert r.status_code in (200, 201), r.text
+
+    plate_mock.behaviour = "echo"
+    cases: list[dict] = []
+    _patch_launch_capture(monkeypatch, cases)
+    r = await client.post("/api/runs", headers=bob, json={
+        "scenarioId": "sc-test", "dataSetIds": [], "injectionEntryIds": ["inj-b"]})
+    assert r.status_code == 201, r.text                      # 不是 500
+    await _wait(lambda: len(cases) >= 1)
+    assert len(cases) == 1
+
+
+async def test_degraded_face_is_visible_in_run_record(client, plate_mock, monkeypatch):
+    """Y:声明面**取数失败**导致的跳过与"端点本无声明"可区分 —— 前者在 run 记录里留标记。"""
+    from .helpers import make_draft as _draft
+    from .test_scenario_visibility_and_copy import _member
+
+    bob = await _member(client, "bob")
+    draft = _draft(
+        steps=[{"id": "s1",
+                "api": {"kind": "api", "service": "svc", "method": "POST", "path": "/a", "headers": {},
+                        "view_hints": {"endpoint_id": "ep-absent"}},   # fulls 里不注册 ⇒ 404
+                "request": {"body": {}}, "strategy": []}])
+    draft["assertion_registry"] = {"entries": [{
+        "id": "inj-d", "name": "锚在契约声明上",
+        "path": {"stepIndex": 0, "source": "body", "jsonpath": "$.customer_id"},
+        "value": 1, "asserts": []}]}
+    r = await client.post("/api/scenarios", headers=bob, json=draft)
+    assert r.status_code in (200, 201), r.text
+    plate_mock.behaviour = "echo"
+
+    r = await client.post("/api/runs", headers=bob, json={
+        "scenarioId": "sc-test", "dataSetIds": [], "injectionEntryIds": ["inj-d"]})
+    assert r.status_code == 201, r.text
+    exec_id = r.json()["executionId"]
+    ex = (await client.get(f"/api/executions/{exec_id}", headers=bob)).json()
+    cfg = ex.get("config") or {}
+    assert cfg.get("judgeDegraded") is True
+    assert cfg.get("entriesSkippedByDegradation") == ["inj-d"]
+    # 正对照:端点**存在**但没有该声明 ⇒ 不是降级,不留标记
+    plate_mock.fulls["ep-absent"] = {"request": {"declarations": []}}
+    from app.services.endpoint_declarations import _reset_declared_paths_cache
+    _reset_declared_paths_cache()
+    r2 = await client.post("/api/runs", headers=bob, json={
+        "scenarioId": "sc-test", "dataSetIds": [], "injectionEntryIds": ["inj-d"]})
+    ex2 = (await client.get(f"/api/executions/{r2.json()['executionId']}", headers=bob)).json()
+    assert (ex2.get("config") or {}).get("judgeDegraded") is None

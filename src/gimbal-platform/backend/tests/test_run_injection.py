@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from app.services.run_injection import compose_injection_scenario, entry_issues
+from app.services.run_injection import (
+    as_step_index,
+    compose_injection_scenario,
+    entry_issues,
+    injectable_universe,
+)
 from .test_scenario_composer_plate_integration import (
     PlateMock,
     plate_mock,  # noqa: F401  pytest fixture re-export
@@ -117,10 +122,18 @@ def test_entry_issues_path_unresolvable_and_legacy():
 _DECLARED = frozenset({"$.bl_no", "$.customer_id", "$.items", "$.items.sku"})
 
 
+def _universe_of(body_of, declared):
+    """``entry_issues`` 的第 5 参现在是**预计算好的**可注入面查表
+    (``Callable[[int], set[str]]``),不再是声明路径集 —— 归一/前缀展开由
+    生产侧 :func:`injectable_universe` 统一做。本帮助函数即该预计算
+    (等价于本模块历史上在 ``_path_resolvable`` 内部就地重建的那份)。"""
+    return lambda si: injectable_universe(body_of(si), declared)
+
+
 def test_declared_path_is_resolvable_even_when_absent_from_body():
     """carry 字段(契约声明、body 无)放宽后可寻址 —— 本次 spec 的核心。
 
-    缺省(第 5 参不传)→ 行为等于今天:只认 body 面 → 该 path 仍判死
+    universe_of 缺省(不传)→ 只剩 ``{"$"}`` 那张表 → 该 path 仍判死
     (兼容面,见 test_empty_declared_of_falls_back_to_body_only)。"""
     entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
                                      "jsonpath": "$.customer_id"},
@@ -129,7 +142,8 @@ def test_declared_path_is_resolvable_even_when_absent_from_body():
     targets = _targets_of(DEF["steps"])
     assert {"kind": "path-unresolvable", "stepIndex": 0,
             "jsonpath": "$.customer_id"} in entry_issues(entry, 2, body_of, targets)
-    assert entry_issues(entry, 2, body_of, targets, lambda si: _DECLARED) == []
+    assert entry_issues(entry, 2, body_of, targets,
+                        _universe_of(body_of, _DECLARED)) == []
 
 
 def test_undeclared_path_still_dangling():
@@ -137,8 +151,9 @@ def test_undeclared_path_still_dangling():
     entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
                                      "jsonpath": "$.ghost"},
              "value": 1, "asserts": []}
-    issues = entry_issues(entry, 2, _body_of(DEF["steps"]), _targets_of(DEF["steps"]),
-                          lambda si: _DECLARED)
+    body_of = _body_of(DEF["steps"])
+    issues = entry_issues(entry, 2, body_of, _targets_of(DEF["steps"]),
+                          _universe_of(body_of, _DECLARED))
     assert {"kind": "path-unresolvable", "stepIndex": 0, "jsonpath": "$.ghost"} in issues
 
 
@@ -149,17 +164,18 @@ def test_instance_path_matches_template_declaration():
                                      "jsonpath": "$.items[0].sku"},
              "value": 1, "asserts": []}
     assert entry_issues(entry, 1, body_of, lambda si: set(),
-                        lambda si: _DECLARED) == []
+                        _universe_of(body_of, _DECLARED)) == []
 
 
 def test_empty_declared_of_falls_back_to_body_only():
-    """降级:声明面为空集 → 判定等于旧的 body 面(从严)。"""
+    """降级:声明面为空集 → universe 只剩 body 面 ∪ {"$"}(从严)。"""
     entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
                                      "jsonpath": "$.customer_id"},
              "value": 1, "asserts": []}
+    body_of = _body_of(DEF["steps"])
     assert {"kind": "path-unresolvable", "stepIndex": 0, "jsonpath": "$.customer_id"} in \
-        entry_issues(entry, 2, _body_of(DEF["steps"]), _targets_of(DEF["steps"]),
-                     lambda si: frozenset())
+        entry_issues(entry, 2, body_of, _targets_of(DEF["steps"]),
+                     _universe_of(body_of, ()))
 
 
 def test_declared_face_is_normalized_like_frontend_injectable_path_set():
@@ -177,12 +193,12 @@ def test_declared_face_is_normalized_like_frontend_injectable_path_set():
     # 声明 `$.supplier[0].code` → 同实例、异实例、模板形态三种锚点都判活
     for jp in ("$.supplier[0].code", "$.supplier[1].code", "$.supplier.code"):
         assert entry_issues(_entry(jp), 1, body_of, lambda si: set(),
-                            lambda si: declared) == [], jp
+                            _universe_of(body_of, declared)) == [], jp
     # 归一不等于放宽:声明面外的路径仍判死(拼写错误仍被抓)
     assert {"kind": "path-unresolvable", "stepIndex": 0,
             "jsonpath": "$.supplier.name"} in \
         entry_issues(_entry("$.supplier.name"), 1, body_of, lambda si: set(),
-                     lambda si: declared)
+                     _universe_of(body_of, declared))
 
 
 def test_body_face_covers_container_prefixes_like_frontend():
@@ -196,31 +212,51 @@ def test_body_face_covers_container_prefixes_like_frontend():
                 "value": 1, "asserts": []}
 
     # 方向一:数组越界 —— 前端 `toTemplatePath('$.tags[9]')='$.tags'`,命中
-    # 容器前缀($.tags[0] 以 '$.tags[' 开头)→ 判活;exists 越界 → 判死。
+    # 容器前缀(universe 建时已 materialize 出 `$.tags`)→ 判活;exists 越界 → 判死。
     arr_body = _body_of([{"request": {"body": {"tags": ["a", "b"]}}}])
-    assert entry_issues(_entry("$.tags[9]"), 1, arr_body, lambda si: set()) == []
+    assert entry_issues(_entry("$.tags[9]"), 1, arr_body, lambda si: set(),
+                        _universe_of(arr_body, ())) == []
     # 方向二:键含点 —— 叶子 `$.a.b.c` 的容器前缀含 `$.a.b`(段边界字面比),
-    # 前端前缀命中;`exists` 会去取 a→b(a 下没有键 b)→ 判死。
+    # universe 命中;`exists` 会去取 a→b(a 下没有键 b)→ 判死。
     dotted = _body_of([{"request": {"body": {"a": {"b.c": 1}}}}])
-    assert entry_issues(_entry("$.a.b"), 1, dotted, lambda si: set()) == []
+    assert entry_issues(_entry("$.a.b"), 1, dotted, lambda si: set(),
+                        _universe_of(dotted, ())) == []
     # 补前缀不等于放宽:越界段之后再拼一段,两形态都不命中 → 仍判死
     assert {"kind": "path-unresolvable", "stepIndex": 0,
             "jsonpath": "$.tags[9].nope"} in \
-        entry_issues(_entry("$.tags[9].nope"), 1, arr_body, lambda si: set())
+        entry_issues(_entry("$.tags[9].nope"), 1, arr_body, lambda si: set(),
+                     _universe_of(arr_body, ()))
     # body 面外(拼写错误)仍判死 —— 与既有用例同向,新增前缀面不误救
     assert {"kind": "path-unresolvable", "stepIndex": 0, "jsonpath": "$.tags2"} in \
-        entry_issues(_entry("$.tags2"), 1, arr_body, lambda si: set())
+        entry_issues(_entry("$.tags2"), 1, arr_body, lambda si: set(),
+                     _universe_of(arr_body, ()))
 
 
 def test_body_face_prefix_matches_frontend_injectable_path_set():
-    """同上两个方向,声明面为空(降级态)下也必须转活 —— 前缀子句跑的是
-    body ∪ declared 全集,不是「只有声明面才有前缀」。"""
+    """同上两个方向,声明面为空(降级态)下也必须转活 —— universe 是
+    body ∪ declared 的全集,不是「只有声明面才有前缀」。"""
     body_of = _body_of([{"request": {"body": {"a": {"b.c": 1}, "tags": ["a"]}}}])
     for jp in ("$.a.b", "$.tags[9]", "$.a", "$.tags"):
         entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
                                          "jsonpath": jp}, "value": 1, "asserts": []}
         assert entry_issues(entry, 1, body_of, lambda si: set(),
-                            lambda si: frozenset()) == [], jp
+                            _universe_of(body_of, ())) == [], jp
+
+
+# ── stepIndex 归一(Z3)/ 可注入面纯函数化(P)────────────────────────
+def test_step_index_accepts_integral_float_rejects_bool():
+    """Z3:JSON 只有一种数字类型 —— 后端与前端的 Number.isInteger 同构。"""
+    assert as_step_index(1) == 1
+    assert as_step_index(1.0) == 1          # JSON 1.0 → JS 也是整数
+    assert as_step_index(True) is None      # bool 不是数字(前端 Number.isInteger(true) 为假)
+    assert as_step_index("0") is None
+    assert as_step_index(None) is None
+
+
+def test_injectable_universe_covers_body_prefixes_and_declared():
+    """P/§2.1:universe 是纯函数,可单测(不再藏在判定里每次重建)。"""
+    u = injectable_universe({"tags": ["a", "b"]}, frozenset({"$.customer_id"}))
+    assert {"$", "$.tags", "$.tags[0]", "$.tags[1]", "$.customer_id"} <= u
 
 
 # ── dispatcher 集成(spec v3 §3:Assign 直补落 case.json;skip 链)────

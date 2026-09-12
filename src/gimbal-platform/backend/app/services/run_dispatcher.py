@@ -61,7 +61,12 @@ from ..schemas.scenario_composer import RunRequest, RunResponse, ServiceBinding
 from . import gimbal_launcher, plate_client
 from .auth_ref_scan import scan_auth_aliases
 from .endpoint_declarations import declared_paths_of
-from .run_injection import compose_injection_scenario, entry_issues
+from .run_injection import (
+    as_step_index,
+    compose_injection_scenario,
+    entry_issues,
+    injectable_universe,
+)
 from .run_materialize import materialize_run_copy
 
 # 物理迁移自 gimbal 后:用平台侧标准 AuthSession 替代自创 ResolvedAuth dataclass。
@@ -423,42 +428,70 @@ async def dispatch_run(
     selected_ids = set(req.injection_entry_ids or [])
     # spec v3.1 §2.1/§3:判定面 = 契约声明 ∪ body 现存。只为**被选中条目
     # 实际引用到的步骤**取声明面(懒取,避免无谓的 plate 调用);
-    # 取不到 → 空集 → 该步退回 body 面判定(从严,fail-soft 不阻塞)。
-    steps_all = steps_from_payload(raw_payload) or []
+    # 取不到 → None(**降级,不抹平** —— Y:与「端点真无声明」可区分)。
+    #
+    # 索引基数(spec §1.1 Z2):声明面/body/asserts 与前端、与
+    # compose_injection_scenario 一律按 definition.steps 的**原始**下标寻址
+    # (carry_injection docstring 的既定契约「原始列表索引」)。
+    raw_steps = definition_from_payload(raw_payload).get("steps") or []
+    step_count = len(raw_steps)
+    selected = [e for e in entries if isinstance(e, dict) and e.get("id") in selected_ids]
+
     needed_steps: set[int] = set()
-    for e in entries:
-        if not isinstance(e, dict) or e.get("id") not in selected_ids:
-            continue
+    for e in selected:
         p = e.get("path")
-        if isinstance(p, dict) and isinstance(p.get("stepIndex"), int):
-            needed_steps.add(p["stepIndex"])
+        si = as_step_index(p.get("stepIndex")) if isinstance(p, dict) else None
+        if si is not None:
+            needed_steps.add(si)
 
-    async def _declared_for(si: int) -> tuple[int, frozenset[str]]:
-        if si < 0 or si >= len(steps_all):
-            return si, frozenset()
-        step = steps_all[si] if isinstance(steps_all[si], dict) else {}
-        eid = ((step.get("api") or {}).get("view_hints") or {}).get("endpoint_id")
-        if not isinstance(eid, str) or not eid:
-            return si, frozenset()
-        got = await declared_paths_of(eid)
-        return si, got or frozenset()
+    def _endpoint_id_of(si: int) -> str | None:
+        step = raw_steps[si] if 0 <= si < step_count and isinstance(raw_steps[si], dict) else {}
+        api = step.get("api")
+        hints = (api.get("view_hints") or {}) if isinstance(api, dict) else {}   # B:守齐
+        eid = hints.get("endpoint_id") if isinstance(hints, dict) else None
+        return eid if isinstance(eid, str) and eid else None
 
-    declared_by_step: dict[int, frozenset[str]] = dict(
-        await asyncio.gather(*[_declared_for(si) for si in sorted(needed_steps)])
+    async def _face_of(si: int) -> tuple[int, frozenset[str] | None]:
+        eid = _endpoint_id_of(si)
+        if eid is None:
+            return si, frozenset()            # 无端点 = 真无声明(非得降级)
+        return si, await declared_paths_of(eid)   # None = 降级(**不抹平**,Y)
+
+    face_by_step: dict[int, frozenset[str] | None] = dict(
+        await asyncio.gather(*[_face_of(si) for si in sorted(needed_steps)])
     ) if needed_steps else {}
-    _declared_of = lambda si: declared_by_step.get(si, frozenset())  # noqa: E731
+    for si, face in face_by_step.items():
+        if face is None:
+            logger.warning(
+                "run_dispatcher: step %s 声明面不可得(plate 降级)— 该步判定只认 body 面,"
+                "锚在契约声明上的条目可能被误判为悬空并跳过", si,
+            )
+
+    def _body_at(si: int) -> Any:
+        """该步的 request.body(判定用)。越界/非 dict 元素 → None:
+        stepIndex 越界由 entry_issues 的 step-oob 分支判死,**不能**在这里
+        抛 IndexError/AttributeError 把整单变 500(守齐,B/Z2)。"""
+        step = raw_steps[si] if 0 <= si < step_count and isinstance(raw_steps[si], dict) else {}
+        return (step.get("request") or {}).get("body")
+
+    universe_by_step: dict[int, set[str]] = {
+        si: injectable_universe(_body_at(si), face)
+        for si, face in face_by_step.items()
+    }
+    # §5 例外:两侧同为该查表的缺省形(`set[str]` 的「只认 $ 根」),等价性一眼可判
+    # —— 未预计算该步 ⇒ 与 entry_issues 内部的缺省 universe 同一张表。
+    _universe_of = lambda si: universe_by_step.get(si, {"$"})   # noqa: E731
+
+    skipped_by_degradation: list[str] = []
     selected_entries: list[dict] = []
-    for e in entries:
-        if not isinstance(e, dict) or e.get("id") not in selected_ids:
-            continue
-        issues = entry_issues(
-            e,
-            len(steps_from_payload(raw_payload) or []),
-            _body_of(raw_payload),
-            _assert_targets_of(raw_payload),
-            _declared_of,
-        )
+    for e in selected:
+        issues = entry_issues(e, step_count, _body_of(raw_payload),
+                             _assert_targets_of(raw_payload), _universe_of)
         if issues:
+            p = e.get("path")
+            si = as_step_index(p.get("stepIndex")) if isinstance(p, dict) else None
+            if si is not None and face_by_step.get(si) is None:
+                skipped_by_degradation.append(e.get("id"))      # Y:降级导致的跳过要可见
             logger.warning(
                 "run_dispatcher: injection entry %s dangling (%s) — skipped",
                 e.get("id"), issues,
@@ -551,6 +584,9 @@ async def dispatch_run(
             "stepTo": req.step_to,
             "nRuns": req.n_runs,
             "parallel": req.parallel,
+            # spec §1.1 Y:判定降级是可审计事实,不留静默窗口
+            **({"judgeDegraded": True, "entriesSkippedByDegradation": skipped_by_degradation}
+               if skipped_by_degradation else {}),
         },
     )
 
@@ -1142,11 +1178,16 @@ async def _finalize_execution(
 # ─── helpers ──────────────────────────────────────────────────────
 def _body_of(payload: dict | None) -> Callable[[int], Any]:
     """steps[si].request.body 投影(entry_issues 的 path-unresolvable
-    检测输入,spec v3 §2;jsonpath.exists 在其上判路径可解析性)。"""
-    steps = steps_from_payload(payload)
+    检测输入,spec v3 §2;jsonpath.exists 在其上判路径可解析性)。
+
+    取**原始** steps(不填 :func:`steps_from_payload` 的过滤版):判定与
+    :func:`compose_injection_scenario` 的物化、与前端同用一个索引基数
+    (spec §1.1 Z2 —— 过滤版下标会把整个判定错位一位)。非 dict 元素
+    当无 body(守齐:判死走 step-oob,不走 AttributeError 500)。"""
+    steps = definition_from_payload(payload).get("steps") or []
 
     def _body(si: int) -> Any:
-        if si < 0 or si >= len(steps):
+        if si < 0 or si >= len(steps) or not isinstance(steps[si], dict):
             return None
         return (steps[si].get("request") or {}).get("body")
 
@@ -1156,11 +1197,11 @@ def _body_of(payload: dict | None) -> Callable[[int], Any]:
 def _assert_targets_of(payload: dict | None) -> Callable[[int], set[str]]:
     """steps[si].strategy 的 assertion target 投影(entry_issues 的
     override-no-match 检测输入;匹配语义与 compose_injection_scenario
-    同源:kind=assertion 且 target 相等)。"""
-    steps = steps_from_payload(payload)
+    同源:kind=assertion 且 target 相等)。索引基数同上:原始 steps。"""
+    steps = definition_from_payload(payload).get("steps") or []
 
     def _targets(si: int) -> set[str]:
-        if si < 0 or si >= len(steps):
+        if si < 0 or si >= len(steps) or not isinstance(steps[si], dict):
             return set()
         return {
             st.get("target")
