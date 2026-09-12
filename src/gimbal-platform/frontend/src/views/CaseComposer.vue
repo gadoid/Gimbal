@@ -243,7 +243,8 @@
       :auth-options="authOptions"
       :assertion-entries="registry.entries"
       :dead-entry-ids="deadEntryIds"
-      @close="runDialogOpen = false"
+      :preset="runPreset"
+      @close="closeRunDialog"
       @confirm="onRunConfirm"
       @save-scheme="onSaveScheme"
       @delete-scheme="onDeleteScheme"
@@ -280,7 +281,7 @@ import * as api from '@/api/scenario-composer'
 import { list as listAuthSessions } from '@/api/auth_sessions'
 import { listExecutions } from '@/api/executions'
 import type {
-  RunRequest, RunScheme, RunOverlay, ServiceBinding,
+  RunRequest, RunScheme, RunOverlay, ServiceBinding, DataSetSelection, RunPreset,
 } from '@/api/scenario-composer'
 import type {
   Scenario, DataSetSummary, Orchestration, ScenarioDraft,
@@ -397,6 +398,12 @@ const steps = computed(() => definition.value.steps)
 
 // Run dialog
 const runDialogOpen = ref(false)
+/** 运行面板预填(spec v3 §6):配置签「加入本次执行」置入;Task 7 消费 */
+const runPreset = ref<RunPreset | null>(null)
+function closeRunDialog() {
+  runDialogOpen.value = false
+  runPreset.value = null
+}
 const runDispatching = ref(false)
 const lastRunId = ref<string | null>(null)
 const lastRunError = ref<string | null>(null)
@@ -1002,7 +1009,7 @@ async function onPreview() {
 }
 
 async function onRunConfirm(
-  dataSetIds: string[],
+  dataSetSelection: DataSetSelection[],
   opts?: {
     stepTo?: number
     nRuns?: number
@@ -1023,7 +1030,8 @@ async function onRunConfirm(
     // 只在 null/undefined 时缺省;nRuns/parallel 仅非默认上送。
     const body: RunRequest = {
       scenarioId: scenario.value.meta.scenarioId,
-      dataSetIds,
+      dataSetIds: dataSetSelection.map((s) => s.datasetId),
+      ...(dataSetSelection.length ? { dataSetSelection } : {}),
       ...(opts?.stepTo != null ? { stepTo: opts.stepTo } : {}),
       ...(opts?.nRuns && opts.nRuns !== 1 ? { nRuns: opts.nRuns } : {}),
       ...(opts?.parallel && opts.parallel !== 1 ? { parallel: opts.parallel } : {}),

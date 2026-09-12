@@ -1,16 +1,15 @@
 /**
- * RunDialog — 注入条目多选(spec v2 §5,异常组)
+ * RunDialog — 注入条目 × 数据集交叉选择(spec v3 §4/§6)
  *
- * 断言注册表条目在运行对话框以「异常组」与数据集(正常组)并列多选:
- * - INJ-1 条目区渲染 + 死条目(悬空)禁选(deadEntryIds 由 CaseComposer 预计算)
- * - INJ-2 勾选条目 → confirm 载荷含 injectionEntryIds;总量闸计入条目数
- *   ((Σ数据集行数 + 选中条目数)× nRuns ≤ 200;仅条目(无数据集)态
- *   = 条目数 × nRuns — 隐式基线抑制,对齐 dispatch 抑制语义,不 +1)
- *   INJ-2b 补数据集分支的 (Σrows + 条目数)× nRuns 数值断言
- *   INJ-2c 合并态(数据集 + 条目)× nRuns>1:两族合计,无基线加算
- * - INJ-3 方案回填链:选中条目存方案 → saveScheme 载荷含 injectionEntryIds
- *   → 重新选择该方案 → injectionIds 回填(核心透传链,双向)
- *   INJ-3b 已删条目 / INJ-3c 死而现存条目:降级标注 + 回填静默过滤
+ * - INJ-1 条目区渲染:悬空禁选「悬空 — 不可选」;旧版条目(v2 形状)
+ *   禁选「旧版条目 — 不可选」(isLegacyEntry)
+ * - INJ-2 交叉总量:基线 × 1 条目 = 1(条目空 = [无注入] 单元,不叠基线);
+ *   confirm 首参 = dataSetSelection(空选 = [])
+ *   INJ-2b 数据集分支:3 行 × 1 条目 = 3(交叉,非并集 4)
+ *   INJ-2c 合并态:(2+3 行)× 2 条目 × nRuns=2 = 20
+ * - INJ-3 方案回填链:saveScheme 快照携带 dataSetSelection + injectionEntryIds
+ *   → 重选方案 → selection/injectionIds 回填;INJ-3b/3c 降级 + 过滤
+ * - INJ-4 preset 预填(spec v3 §6):dataSetSelection 行级段 + 条目预勾
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -20,8 +19,12 @@ import RunDialog from '../RunDialog.vue'
 import type { RunScheme } from '@/api/scenario-composer'
 
 const ENTRIES = [
-  { id: 'inj-1', name: '金额为负', injection: [{ varName: 'amount', value: '-1' }], asserts: [] },
-  { id: 'inj-dead', name: '死条目', injection: [{ varName: 'ghost', value: '1' }], asserts: [] },
+  { id: 'inj-1', name: '金额为负',
+    path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: -1, asserts: [] },
+  { id: 'inj-dead', name: '死条目',
+    path: { stepIndex: 9, source: 'body', jsonpath: '$.x' }, value: 1, asserts: [] },
+  { id: 'inj-old', name: '旧版条目',
+    anchor: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, injection: [], asserts: [] },
 ] as any[]
 
 function mountDialog(over: Record<string, unknown> = {}) {
@@ -32,7 +35,7 @@ function mountDialog(over: Record<string, unknown> = {}) {
       lastRunOverlay: null,
       serviceRows: [], authOptions: [], stepOrchestrationNames: [],
       assertionEntries: ENTRIES,
-      deadEntryIds: ['inj-dead'],
+      deadEntryIds: ['inj-dead', 'inj-old'],
       ...over,
     } as any,
     global: { plugins: [ElementPlus], stubs: { teleport: true } },
@@ -41,37 +44,40 @@ function mountDialog(over: Record<string, unknown> = {}) {
 
 beforeEach(() => setActivePinia(createPinia()))
 
-describe('RunDialog — 注入条目多选(spec v2 §5)', () => {
-  it('INJ-1: 条目区渲染 + 死条目禁选', async () => {
+describe('RunDialog — 注入条目 × 数据集交叉(spec v3 §4/§6)', () => {
+  it('INJ-1: 条目区渲染 + 悬空/旧版条目禁选', async () => {
     const w = mountDialog()
     await flushPromises()
     const boxes = w.findAll('.rd-injection .el-checkbox')
-    expect(boxes.length).toBe(2)
-    expect(boxes[1].find('input').attributes('disabled')).toBeDefined()
+    expect(boxes.length).toBe(3)
+    expect(boxes[1].find('input').attributes('disabled')).toBeDefined()   // 悬空
+    expect(boxes[2].find('input').attributes('disabled')).toBeDefined()   // 旧版(v2 形状)
+    expect(boxes[2].text()).toContain('旧版条目 — 不可选')
     w.unmount()
   })
 
-  it('INJ-2: 勾选条目 → confirm 载荷含 injectionEntryIds;总量闸计入条目数', async () => {
+  it('INJ-2: 勾选条目 → confirm 首参 dataSetSelection + 载荷含 injectionEntryIds;交叉总量', async () => {
     const w = mountDialog()
     await flushPromises()
     ;(w.vm as any).injectionIds = ['inj-1']
     await flushPromises()
-    // 无数据集 = 仅注入条目态:dispatch 抑制隐式基线(注入族自身就是基线行,
-    // run_dispatcher: not fanout_datasets and not selected_entries 才补基线)→
-    // total = 1 条目 × nRuns=1,不 +1;基线 ×1 chip 不得承诺不会跑的纯基线 case
+    // 无数据集 = R={[基线]} × E={inj-1} = 1 case(交叉:条目空缺不叠基线)
     expect(w.find('.summary-chip.total').text()).toBe('1 次运行')
     expect(w.text()).not.toContain('基线 ×1')
     await w.findAll('button').find((b) => b.text().includes('发起运行'))!.trigger('click')
     const emitted = w.emitted('confirm')
     expect(emitted).toBeTruthy()
-    const [, opts] = emitted![0] as [string[], any]
+    const [selection, opts] = emitted![0] as [any[], any]
+    expect(selection).toEqual([])                              // 空选 = 基线(dataSetSelection 空)
     expect(opts.injectionEntryIds).toEqual(['inj-1'])
     w.unmount()
   })
 
-  it('INJ-3: 选中条目存方案 → 重新选择该方案 → injectionIds 回填', async () => {
-    // 半程:勾选 inj-1 存方案,saveScheme 载荷携带 injectionEntryIds
-    const w = mountDialog()
+  it('INJ-3: 存方案快照携带 dataSetSelection/injectionEntryIds → 重选回填', async () => {
+    // 半程:默认全选 ds-1 + 勾 inj-1 存方案
+    const w = mountDialog({
+      dataSets: [{ datasetId: 'ds-1', scenarioId: 'sc-1', name: 'A', rowCount: 2, preview: [] }],
+    })
     await flushPromises()
     ;(w.vm as any).injectionIds = ['inj-1']
     ;(w.vm as any).schemeNameDraft = '异常回归'
@@ -80,16 +86,21 @@ describe('RunDialog — 注入条目多选(spec v2 §5)', () => {
     const saved = w.emitted('saveScheme')
     expect(saved).toBeTruthy()
     const scheme = saved![0][0] as RunScheme
-    expect(scheme.name).toBe('异常回归')
     expect(scheme.injectionEntryIds).toEqual(['inj-1'])
+    expect(scheme.dataSetSelection).toEqual([{ datasetId: 'ds-1' }])
+    expect(scheme.dataSetIds).toEqual(['ds-1'])                 // 兼容键同存(旧读方)
     w.unmount()
 
-    // 回程:带着已存方案重新挂载 → 选中该方案 → injectionIds 回填
-    const w2 = mountDialog({ schemes: [scheme] })
+    // 回程:重挂载 → 选中该方案 → selection/injectionIds 回填
+    const w2 = mountDialog({
+      dataSets: [{ datasetId: 'ds-1', scenarioId: 'sc-1', name: 'A', rowCount: 2, preview: [] }],
+      schemes: [scheme],
+    })
     await flushPromises()
     ;(w2.vm as any).selectedScheme = '异常回归'
     await flushPromises()
     expect((w2.vm as any).injectionIds).toEqual(['inj-1'])
+    expect((w2.vm as any).selectedDatasetIds).toEqual(['ds-1'])
     w2.unmount()
   })
 
@@ -108,7 +119,6 @@ describe('RunDialog — 注入条目多选(spec v2 §5)', () => {
   })
 
   it('INJ-3c: 方案引用死而现存条目 → 同样降级标注 + 回填被过滤', async () => {
-    // inj-dead 现存但悬空(deadEntryIds)— 条目未删,方案仍算配置失效
     const deadRef = {
       name: '悬空方案', dataSetIds: [], injectionEntryIds: ['inj-1', 'inj-dead'],
       serviceBindings: {},
@@ -122,39 +132,54 @@ describe('RunDialog — 注入条目多选(spec v2 §5)', () => {
     w.unmount()
   })
 
-  it('INJ-2b: 总量闸数据集分支 = (Σrows + 选中条目数) × nRuns', async () => {
+  it('INJ-2b: 交叉总量数据集分支 = Σrows × 条目数 × nRuns', async () => {
     const w = mountDialog({
       dataSets: [{ datasetId: 'ds-1', scenarioId: 'sc-1', name: 'A', rowCount: 3, preview: [] }],
     })
     await flushPromises()
     ;(w.vm as any).injectionIds = ['inj-1']
     await flushPromises()
-    // 数据集默认全选(3 行)+ 1 注入条目 = (3 + 1) × nRuns=1
-    expect(w.find('.summary-chip.total').text()).toBe('4 次运行')
+    // 3 行 × 1 条目 × nRuns=1 = 3(交叉,非 v2 并集的 3+1=4)
+    expect(w.find('.summary-chip.total').text()).toBe('3 次运行')
     w.unmount()
   })
 
-  it('INJ-2c: 合并态(数据集 + 条目)× nRuns>1 = (Σrows + 条目数)× nRuns,无基线加算', async () => {
+  it('INJ-2c: 合并态 (Σrows) × 条目数 × nRuns>1,无基线加算', async () => {
     const w = mountDialog({
       dataSets: [
         { datasetId: 'ds-1', scenarioId: 'sc-1', name: 'A', rowCount: 2, preview: [] },
         { datasetId: 'ds-2', scenarioId: 'sc-1', name: 'B', rowCount: 3, preview: [] },
       ],
       assertionEntries: [
-        { id: 'inj-a', name: '金额为负', injection: [], asserts: [] },
-        { id: 'inj-b', name: '超时偏离', injection: [], asserts: [] },
+        { id: 'inj-a', name: '金额为负', path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: -1, asserts: [] },
+        { id: 'inj-b', name: '超时偏离', path: { stepIndex: 0, source: 'body', jsonpath: '$.timeout' }, value: 0, asserts: [] },
       ] as any[],
       deadEntryIds: [],
     })
     await flushPromises()
     ;(w.vm as any).injectionIds = ['inj-a', 'inj-b']
-    // 高级区第一个 number input = nRuns(第二个是 parallel;totalRuns 同款)
     await w.findAll('input[type="number"]')[0].setValue('2')
     await flushPromises()
-    // 两数据集默认全选(2+3 行)+ 2 注入条目,× nRuns=2 = (5+2)×2 = 14;
-    // 有数据集行即无隐式基线,总数只含两族合计
-    expect(w.find('.summary-chip.total').text()).toBe('14 次运行')
+    // (2+3) 行 × 2 条目 × nRuns=2 = 20(交叉矩阵)
+    expect(w.find('.summary-chip.total').text()).toBe('20 次运行')
     expect(w.text()).not.toContain('基线 ×1')
+    w.unmount()
+  })
+
+  it('INJ-4: preset 预填 — 行级段 + 条目预勾(数据集入口/「加入本次执行」)', async () => {
+    const w = mountDialog({
+      dataSets: [{ datasetId: 'ds-1', scenarioId: 'sc-1', name: 'A', rowCount: 3, preview: [] }],
+      preset: {
+        dataSetSelection: [{ datasetId: 'ds-1', rowIndexes: [1] }],
+        injectionEntryIds: ['inj-1'],
+      },
+    })
+    await flushPromises()
+    expect((w.vm as any).selectedDatasetIds).toEqual(['ds-1'])
+    expect((w.vm as any).selection).toEqual([{ datasetId: 'ds-1', rowIndexes: [1] }])
+    expect((w.vm as any).injectionIds).toEqual(['inj-1'])
+    // 1 行 × 1 条目 × nRuns=1 = 1
+    expect(w.find('.summary-chip.total').text()).toBe('1 次运行')
     w.unmount()
   })
 })

@@ -120,6 +120,21 @@ export interface ServiceBinding {
   url?: string
 }
 
+/** 行级数据集选择(spec v3 §4):datasetId + rowIndexes(0-based,与编辑器
+ *  行号一致;缺省/空 = 整库)。RunRequest/RunScheme 的权威选择键;
+ *  旧 dataSetIds 保留为兼容读(两键同发本键优先)。 */
+export interface DataSetSelection {
+  datasetId: string
+  rowIndexes?: number[]
+}
+
+/** 运行面板预填(spec v3 §6):数据集入口(整库/单行)与配置签「加入本次
+ *  执行」传入;RunDialog 挂载时按此预勾(已删/悬空条目静默过滤)。 */
+export interface RunPreset {
+  dataSetSelection?: DataSetSelection[]
+  injectionEntryIds?: string[]
+}
+
 /** 场景级运行方案(orchestration sidecar,plate 零感知,spec §3.1;
  *  envId 已随 D2 退役) */
 export interface RunScheme {
@@ -127,6 +142,8 @@ export interface RunScheme {
   dataSetIds: string[]
   /** 断言注入条目(spec v2 §5):RunDialog 异常组多选快照;可选 = 旧方案缺键不炸 */
   injectionEntryIds?: string[]
+  /** 行级数据集选择快照(spec v3 §4)— 权威键;dataSetIds 同存供旧读方 */
+  dataSetSelection?: DataSetSelection[]
   serviceBindings: Record<string, ServiceBinding>
   /** 预埋(gimbal 就绪前 no-op) */
   plugins?: unknown
@@ -145,6 +162,9 @@ export interface RunRequest {
   scenarioId: string
   /** D12:空数组合法 = 基线执行(一个隐式空覆盖行);非空 = 选中数据集 */
   dataSetIds: string[]
+  /** 行级数据集选择(spec v3 §4)— 权威键;两键同发时本键优先,
+   *  dataSetIds 忽略(兼容读保留) */
+  dataSetSelection?: DataSetSelection[]
   /** 断言注入条目(spec v2 §5):异常组 — 跑在基线上,与数据集行并列生成
    *  case;缺省 = 不注入。引擎侧展开由后续任务接入。 */
   injectionEntryIds?: string[]

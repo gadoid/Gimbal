@@ -47,11 +47,11 @@
               <button class="link-btn" @click="goCreateDataSet" type="button">+ 新建数据集</button>
             </div>
             <div class="ds-grid ds-grid-baseline">
-              <label class="ds-tile baseline" :class="{ active: useBaseline || selectedDatasets.length === 0 }">
+              <label class="ds-tile baseline" :class="{ active: selectedDatasetIds.length === 0 }">
                 <input
                   type="checkbox"
                   data-test="baseline"
-                  :checked="useBaseline"
+                  :checked="selectedDatasetIds.length === 0"
                   @change="toggleBaseline"
                 />
                 <div class="ds-info">
@@ -73,12 +73,13 @@
                 v-for="ds in dataSets"
                 :key="ds.datasetId"
                 class="ds-tile"
-                :class="{ active: selectedDatasets.includes(ds.datasetId) }"
+                :class="{ active: selectedDatasetIds.includes(ds.datasetId) }"
               >
                 <input
                   type="checkbox"
                   :value="ds.datasetId"
-                  v-model="selectedDatasets"
+                  :checked="selectedDatasetIds.includes(ds.datasetId)"
+                  @change="toggleDataset(ds.datasetId, ($event.target as HTMLInputElement).checked)"
                 />
                 <div class="ds-info">
                   <div class="ds-name">{{ ds.name }}</div>
@@ -93,14 +94,16 @@
             </div>
           </section>
 
-          <!-- 断言注入条目(异常组,spec v2 §5):跑在基线上,与数据集行并列生成 case;
-               死条目(悬空)禁选 — 死判定由 CaseComposer 预计算经 deadEntryIds 传入 -->
+          <!-- 断言注入条目(spec v3 §4 异常组):与数据集行交叉生成 case(N 行 × M 条目);
+               悬空/旧版条目禁选 — 死判定由宿主预计算经 deadEntryIds 传入 -->
           <section v-if="assertionEntries.length" class="run-section rd-injection">
             <label class="run-label">断言注入条目 <span class="muted small">(异常组, 可多选 — 跑在基线上, 与数据集行并列生成 case)</span></label>
             <el-checkbox-group v-model="injectionIds" class="rd-inj-group">
-              <el-checkbox v-for="e in assertionEntries" :key="e.id" :value="e.id" :disabled="deadIds.has(e.id)">
+              <el-checkbox v-for="e in assertionEntries" :key="e.id" :value="e.id"
+                :disabled="isLegacyEntry(e) || deadIds.has(e.id)">
                 {{ e.name }}
-                <span v-if="deadIds.has(e.id)" class="rd-dead-note">悬空 — 不可选</span>
+                <span v-if="isLegacyEntry(e)" class="rd-dead-note">旧版条目 — 不可选</span>
+                <span v-else-if="deadIds.has(e.id)" class="rd-dead-note">悬空 — 不可选</span>
               </el-checkbox>
             </el-checkbox-group>
           </section>
@@ -203,11 +206,11 @@
             <!-- 仅注入条目(无数据集行)时隐式基线被抑制(dispatch 只派注入族) —
                  不承诺一个不会跑的纯基线 case,该分支的 case 来源由注入条目 chip 承载 -->
             <span
-              v-if="(useBaseline || selectedDatasets.length === 0) && !injectionIds.length"
+              v-if="selectedDatasetIds.length === 0 && !injectionIds.length"
               class="summary-chip"
             >基线 ×1</span>
-            <span v-if="selectedDatasets.length" class="summary-chip">
-              {{ selectedDatasets.length }} 数据集
+            <span v-if="selectedDatasetIds.length" class="summary-chip">
+              {{ selectedDatasetIds.length }} 数据集
             </span>
             <span v-if="injectionIds.length" class="summary-chip">
               {{ injectionIds.length }} 注入条目
@@ -246,9 +249,10 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import type { ServiceBinding, RunScheme, RunOverlay } from '@/api/scenario-composer'
+import type { DataSetSelection, RunPreset, ServiceBinding, RunScheme, RunOverlay } from '@/api/scenario-composer'
 import type { Scenario, DataSetSummary } from '@/types/scenario-composer'
-import type { AssertionEntry } from '@/types/assertion-registry'
+import type { AssertionEntry, LegacyAssertionEntry } from '@/types/assertion-registry'
+import { isLegacyEntry } from '@/types/assertion-registry'
 
 /** 绑定行(spec D3):声明 ∪ 引用并集的固定行;declaredUrl null = 未声明引用行 */
 export interface ServiceRow { service: string; declaredUrl: string | null }
@@ -272,9 +276,12 @@ const props = withDefaults(defineProps<{
   /** 平台编排展示名(orchestration.steps[i].name,与 steps 同序);plate Step 无 name */
   stepOrchestrationNames?: string[]
   /** 断言注册表条目(spec v2 §5 异常组):空 = 无注入区(整段隐藏) */
-  assertionEntries?: AssertionEntry[]
+  assertionEntries?: Array<AssertionEntry | LegacyAssertionEntry>
   /** 死条目(悬空)id — CaseComposer 用 isDeadEntry 预计算,死条目禁选 */
   deadEntryIds?: string[]
+  /** 运行面板预填(spec v3 §6):数据集入口/「加入本次执行」传入;
+   *  挂载时按此预勾(已删/悬空条目静默过滤),null = 无预填 */
+  preset?: RunPreset | null
 }>(), {
   visible: true,
   scenario: null,
@@ -284,12 +291,13 @@ const props = withDefaults(defineProps<{
   stepOrchestrationNames: () => [] as string[],
   assertionEntries: () => [] as AssertionEntry[],
   deadEntryIds: () => [] as string[],
+  preset: null,
 })
 
 const emit = defineEmits<{
   close: []
   confirm: [
-    dataSetIds: string[],
+    dataSetSelection: DataSetSelection[],
     opts: {
       /** 0-based 含端点(引擎 halt_at);缺省 = 全量运行 */
       stepTo?: number
@@ -311,31 +319,32 @@ const emit = defineEmits<{
   deleteScheme: [name: string]
 }>()
 
-// ── 数据集(既有语义保留;执行环境已随 D2 退役)─────────────────
-const selectedDatasets = ref<string[]>([])
-// D12 基线执行:不选数据集 = 直填值 + 共享变量默认值跑一次(一个隐式空覆盖行)
-const useBaseline = ref(false)
-
-watch(() => props.dataSets, (ds) => {
-  if (ds.length) {
-    selectedDatasets.value = ds.map(d => d.datasetId)  // 默认全选(基线关)
-  } else {
-    useBaseline.value = true   // 无数据集:唯一可跑的就是基线
-    selectedDatasets.value = []
+// ── 数据集行级选择(spec v3 §4):dataSetSelection 权威形状 ──────────
+const selection = ref<DataSetSelection[]>([])
+/** 勾选态数据集 id 集(同库多段去重;整库切换见 toggleDataset) */
+const selectedDatasetIds = computed(() => [...new Set(selection.value.map((s) => s.datasetId))])
+/** 初始选择:preset 携带选择时按现存数据集过滤收窄;否则全选(整库) */
+function defaultSelection(): DataSetSelection[] {
+  if (props.preset?.dataSetSelection?.length) {
+    const exists = new Set(props.dataSets.map((d) => d.datasetId))
+    return props.preset.dataSetSelection.filter((s) => exists.has(s.datasetId))
   }
-}, { immediate: true })
-
-// 勾回任一数据集 → 退出基线(基线与数据集互斥:基线 = 空覆盖行)
-watch(selectedDatasets, (v) => { if (v.length) useBaseline.value = false })
-
+  return props.dataSets.map((d) => ({ datasetId: d.datasetId }))
+}
+/** 勾/取消一库(整库段,不带 rowIndexes;行级选择由 preset 预填) */
+function toggleDataset(id: string, on: boolean) {
+  selection.value = on
+    ? [...selection.value, { datasetId: id }]
+    : selection.value.filter((s) => s.datasetId !== id)
+}
+/** 基线 ↔ 数据集互斥(D12):有任一库勾选 = 非基线;全空 = 基线 */
 function toggleBaseline() {
-  useBaseline.value = !useBaseline.value
-  if (useBaseline.value) selectedDatasets.value = []
+  selection.value = selectedDatasetIds.value.length ? [] : defaultSelection()
 }
 
 // ── 断言注入条目(spec v2 §5 异常组)────────────────────────────
 // 与数据集(正常组)并列;每次打开弹框 = v-if 重挂载,选中态随之重置
-// (与 selectedDatasets 同款生命周期,无显式 visible watch)。
+// (与 selection 同款生命周期,无显式 visible watch)。
 const injectionIds = ref<string[]>([])
 /** 死条目(悬空)判定:CaseComposer 预计算传入(编辑器同款 isDeadEntry) */
 const deadIds = computed(() => new Set(props.deadEntryIds))
@@ -347,16 +356,32 @@ const liveEntryIds = computed(() =>
     .filter((e) => !deadIds.value.has(e.id))
     .map((e) => e.id)))
 
+// dataSets/preset 首达(spec v3 §6):选择与注入预填一次成型。RunDialog
+// 每次 v-if 重挂载,无中途 preset 变更场景;watch 双源只覆盖异步取数
+// 先后(dataSets 晚于 preset 到达时按 preset 收窄)。
+watch([() => props.dataSets, () => props.preset], () => {
+  selection.value = (props.dataSets.length || props.preset?.dataSetSelection?.length)
+    ? defaultSelection()
+    : []
+  injectionIds.value = (props.preset?.injectionEntryIds ?? [])
+    .filter((id) => liveEntryIds.value.has(id))
+}, { immediate: true })
+
 // ── 方案栏(spec §4):临时手填 / 上次运行 / 已存方案 ──────────────
 const selectedScheme = ref<string>('__adhoc__')   // '__adhoc__' | '__last__' | scheme.name
 const schemeNameDraft = ref('')
+
+/** 方案引用的数据集 id 集 = dataSetSelection ∪ 兼容 dataSetIds(spec v3 §4 双键) */
+function schemeIdsOf(s: RunScheme): string[] {
+  return [...new Set([...(s.dataSetSelection ?? []).map((x) => x.datasetId), ...s.dataSetIds])]
+}
 
 /** 方案配置降级:方案里的数据集已被删,或注入条目已删/悬空(死而现存
  *  同样降级 — 回填会被过滤,用户需重选)→ 选项标注(不报废,选了可改) */
 const schemeDegraded = computed(() =>
   props.schemes
     .filter((s) =>
-      s.dataSetIds.some((id) => !props.dataSets.some((d) => d.datasetId === id))
+      schemeIdsOf(s).some((id) => !props.dataSets.some((d) => d.datasetId === id))
       || (s.injectionEntryIds ?? []).some((id) => !liveEntryIds.value.has(id)))
     .map((s) => s.name))
 
@@ -452,10 +477,15 @@ watch(selectedScheme, (v) => {
     }
   }
   bindings.value = next
-  // 无条件回填:基线方案(dataSetIds: [])也要把勾选重置回基线,
-  // 不能沿用打开时的当前勾选。
-  selectedDatasets.value = (src?.dataSetIds ?? []).filter((id) =>
-    props.dataSets.some((d) => d.datasetId === id))
+  // 选择回填(spec v3 §4):dataSetSelection 优先;旧方案无此键回落
+  // dataSetIds 兼容读(映射为整库段)。已删数据集静默跳过 = 降级不报废。
+  const selFromSrc = (src as { dataSetSelection?: DataSetSelection[] } | undefined | null)?.dataSetSelection
+  selection.value = selFromSrc?.length
+    ? selFromSrc
+        .filter((s) => props.dataSets.some((d) => d.datasetId === s.datasetId))
+        .map((s) => ({ ...s }))
+    : (src?.dataSetIds ?? []).filter((id) =>
+        props.dataSets.some((d) => d.datasetId === id)).map((id) => ({ datasetId: id }))
   // 注入条目回填:仅已存方案携带;「上次运行」overlay 暂无该字段(引擎
   // 回显接入后补)。已删/悬空 id 静默跳过 — 悬空条目禁选,回填成勾选态
   // 会造出无法取消的选中项。
@@ -503,19 +533,17 @@ function stepName(i: number): string {
 const MAX_TOTAL_RUNS = 200
 
 const totalRuns = computed(() => {
-  // 注入条目与数据集行并列计闸(spec v2 §5):每个选中条目 = 一条 case 行。
-  const inj = injectionIds.value.length
-  // 基线或空选择(且无注入条目)按一个隐式空行计(D12:confirm 原样透传空
-  // dataSetIds 即基线,显示必须与派发语义一致,不能谎报 0 次)。仅注入条目
-  // 时隐式基线被抑制 — dispatch 侧注入族自身就是基线行(带偏离),不再
-  // 叠加隐式空行(run_dispatcher: not fanout_datasets and not selected_entries
-  // 才补基线)→ total = 条目数 × nRuns,不得 +1。
-  if (useBaseline.value || selectedDatasets.value.length === 0) {
-    return (inj > 0 ? inj : 1) * (nRuns.value || 1)
-  }
-  return (props.dataSets
-    .filter(d => selectedDatasets.value.includes(d.datasetId))
-    .reduce((sum, d) => sum + (d.rowCount || 0), 0) + inj) * (nRuns.value || 1)
+  // 交叉矩阵(spec v3 §4):Σ(选中行数) × max(选中条目数, 1) × nRuns —
+  // 与后端 dispatch 同公式。行数:段带 rowIndexes 按段计,缺省段 = 整库
+  // (空库按 1 隐式行);全空(基线)= 1。条目空 = [无注入] 单元,不叠基线。
+  const rows = selection.value.length
+    ? selection.value.reduce((sum, s) => {
+        if (s.rowIndexes?.length) return sum + s.rowIndexes.length
+        const ds = props.dataSets.find((d) => d.datasetId === s.datasetId)
+        return sum + Math.max(ds?.rowCount ?? 0, 1)
+      }, 0)
+    : 1
+  return rows * Math.max(injectionIds.value.length, 1) * (nRuns.value || 1)
 })
 
 function onConfirm() {
@@ -533,7 +561,7 @@ function onConfirm() {
   // 用户与服务绑定装配(D3):与存方案快照同口径(explicitServiceBindings)
   // — 预填未改动的声明 URL 不算显式绑定不上送,空绑定条目不随 confirm 下发。
   const serviceBindings = explicitServiceBindings()
-  emit('confirm', selectedDatasets.value, {
+  emit('confirm', selection.value.map((s) => ({ ...s })), {
     ...(stepTo.value !== null ? { stepTo: stepTo.value } : {}),
     ...(nRuns.value !== 1 ? { nRuns: nRuns.value } : {}),
     ...(parallel.value !== 1 ? { parallel: parallel.value } : {}),
@@ -555,7 +583,8 @@ function onSaveScheme() {
   }
   emit('saveScheme', {
     name,
-    dataSetIds: [...selectedDatasets.value],
+    dataSetIds: [...selectedDatasetIds.value],
+    dataSetSelection: selection.value.map((s) => ({ ...s })),
     injectionEntryIds: [...injectionIds.value],
     serviceBindings: explicitServiceBindings(),
     plugins: null,
