@@ -286,9 +286,14 @@ function issueSummary(e: AssertionEntry | LegacyAssertionEntry): string {
   if (isLegacyEntry(e)) return '旧版条目(v2 形状),请在编排器重新标记创建'
   return surface.deadOf(e)
     .map((iss) => {
-      if (iss.kind === 'step-oob') return `步骤${iss.stepIndex + 1} 越界(场景共 ${stepCount.value} 步)`
-      if (iss.kind === 'path-unresolvable') return `步骤${iss.stepIndex + 1} 契约与 body 均无字段 ${iss.jsonpath}`
-      if (iss.kind === 'override-no-match') return `步骤${iss.stepIndex + 1} 无既有断言 ${iss.target}(override 无匹配)`
+      if (iss.kind === 'step-oob') return `第 ${iss.stepIndex + 1} 步不存在(场景共 ${stepCount.value} 步)`
+      if (iss.kind === 'path-unresolvable') {
+        return `第 ${iss.stepIndex + 1} 步的请求体与接口契约里都没有 ${iss.jsonpath}`
+      }
+      if (iss.kind === 'override-no-match') {
+        // 动作列已改叫「改写已有」—— 这里不得再印 override(两边同改)
+        return `第 ${iss.stepIndex + 1} 步没有 ${iss.target} 的断言 —— 「改写已有」没有可改写的对象`
+      }
       return '旧版条目(v2 形状),请在编排器重新标记创建'
     })
     .join('; ')
