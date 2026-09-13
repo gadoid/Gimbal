@@ -1,10 +1,11 @@
 /**
  * CaseDataSetsList — 测试数据页双区(spec v3 §5):
- * - DSL-1 同页双区:数据集卡片网格(store)与断言条目卡片网格
- *   (getScenarioDraft + normalizeRegistry)同屏;v3 条目带 path 徽标,
- *   悬空灰;旧版条目灰显「旧版条目,请重建」不可执行
+ * - DSL-1 同页双区,两区**各用其形**:数据集 = 卡片网格(可打开的资产),
+ *   断言条目 = 紧凑表格(字段齐整的配置记录,一条一行)
  * - DSL-2 数据集卡「运行」→ RunPanelHost 挂载且 preset = 整库单选
- * - DSL-3 条目卡点击 → 跳断言管理编辑器(编辑入口搬家至测试数据页)
+ * - DSL-3 条目标题行点击 → 跳断言管理编辑器(编辑入口搬家至测试数据页)
+ * - DSL-4 契约在途 → 契约依赖条目**不**标悬空(pending ≠ 判死)
+ * - DSL-5 数据集卡预览 = 列清单(字段名定宽 + 该列取值),行/列截断都显式标出
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -44,11 +45,12 @@ const REG = {
   ],
 }
 
+/** 单条数据集(无预览行)—— 默认夹具;DSL-5 自备带预览的一份 */
+const DS_ONE = { datasetId: 'ds-1', scenarioId: 'sc-td', name: '正负流', rowCount: 2, preview: [] }
+
 const storeMock = vi.hoisted(() => ({
   dataSetsStatus: 'idle',
-  dataSetsOfScenario: () => [
-    { datasetId: 'ds-1', scenarioId: 'sc-td', name: '正负流', rowCount: 2, preview: [] },
-  ],
+  dataSetsOfScenario: vi.fn(),
   fetchDataSets: vi.fn(async () => {}),
   removeDataSet: vi.fn(async () => {}),
 }))
@@ -59,6 +61,8 @@ vi.mock('@/stores/scenario-composer', () => ({
 beforeEach(() => {
   setActivePinia(createPinia())
   pushMock.push.mockReset()
+  storeMock.dataSetsOfScenario.mockReset()
+  storeMock.dataSetsOfScenario.mockReturnValue([DS_ONE])
   vi.spyOn(api, 'getScenarioDraft').mockResolvedValue(
     { definition: DEF, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG } as any)
 })
@@ -70,18 +74,31 @@ async function mountList() {
   return w
 }
 
-it('DSL-1: 测试数据页双区 — 数据集网格 + 断言条目网格(path 徽标/悬空灰/旧版灰)', async () => {
+it('DSL-1: 双区各用其形 — 数据集卡片网格 + 断言条目紧凑表格(path/悬空/旧版)', async () => {
   const w = await mountList()
   expect(w.find('.page-title').text()).toContain('测试数据')
-  expect(w.findAll('.card:not(.add-card):not(.td-entry)')).toHaveLength(1)   // 数据集区(条目区排除)
-  const entryCards = w.findAll('.td-entry')
-  expect(entryCards).toHaveLength(3)
-  expect(entryCards[0].text()).toContain('金额为负')
-  expect(entryCards[0].text()).toContain('步骤1 · $.amount')          // path 徽标
-  expect(entryCards[0].classes()).not.toContain('is-dead')            // 活条目不灰(stepCount=0 会全灰 → 此处兜底)
-  expect(entryCards[1].classes()).toContain('is-dead')                // 悬空灰
-  expect(entryCards[2].classes()).toContain('is-dead')                // 旧版灰
-  expect(entryCards[2].text()).toContain('旧版条目,请重建')
+
+  // 区标题 + 数量徽章
+  expect(w.findAll('.zone-name').map((n) => n.text())).toEqual(['数据集', '断言条目'])
+  expect(w.findAll('.zone-count').map((n) => n.text())).toEqual(['1', '3'])
+
+  // 区一:数据集 = 卡片(不是表格)
+  expect(w.findAll('.ds-card')).toHaveLength(1)
+
+  // 区二:断言条目 = 表格,一条一行
+  const rows = w.findAll('.atbl-row')
+  expect(rows).toHaveLength(3)
+
+  const cells = (i: number) => rows[i].findAll('td').map((td) => td.text())
+  expect(cells(0)).toEqual(['金额为负', '1', '$.amount', '-1', '0 条', ''])
+  expect(rows[0].classes()).not.toContain('is-dead')       // 活条目不灰
+
+  expect(cells(1).slice(0, 4)).toEqual(['悬空', '10', '$.x', '1'])
+  expect(rows[1].classes()).toContain('is-dead')           // 悬空灰
+  expect(cells(1)[5]).toBe('不进运行')                      // 状态列说明死因
+
+  expect(rows[2].classes()).toContain('is-dead')           // 旧版灰
+  expect(cells(2)).toEqual(['旧版条目', '—', '旧版条目,请重建', '—', '0 条', '旧版'])
   w.unmount()
 })
 
@@ -97,9 +114,9 @@ it('DSL-2: 数据集卡「运行」→ RunPanelHost 挂载且 preset = 整库单
   w.unmount()
 })
 
-it('DSL-3: 条目卡点击 → 跳断言管理编辑器', async () => {
+it('DSL-3: 条目行点击 → 跳断言管理编辑器', async () => {
   const w = await mountList()
-  await w.findAll('.td-entry')[0].trigger('click')
+  await w.findAll('.atbl-row')[0].trigger('click')
   expect(pushMock.push).toHaveBeenCalledWith(scenarioAssertionsUrl('sc-td'))
   w.unmount()
 })
@@ -124,11 +141,55 @@ it('DSL-4: 契约在途 → 契约依赖条目**不**标悬空(pending ≠ 判�
   vi.spyOn(api, 'getFullEndpoint').mockReturnValue(new Promise((res) => { release = res }) as any)
 
   const w = await mountList()
-  const cards = () => w.findAll('.td-entry')
-  expect(cards()[0].classes()).toContain('is-dead')        // intrinsic(step-oob):恒标
-  expect(cards()[1].classes()).not.toContain('is-dead')    // 契约依赖:在途 ⇒ 尚未判定
+  const rows = () => w.findAll('.atbl-row')
+  expect(rows()[0].classes()).toContain('is-dead')        // intrinsic(step-oob):恒标
+  expect(rows()[1].classes()).not.toContain('is-dead')    // 契约依赖:在途 ⇒ 尚未判定
   release({ id: 'ep-gate', request: { declarations: [] } })   // 声明面无此字段 ⇒ 有答案了
   await flushPromises()
-  expect(cards()[1].classes()).toContain('is-dead')        // 落定 ⇒ 按实际结果标
+  expect(rows()[1].classes()).toContain('is-dead')        // 落定 ⇒ 按实际结果标
+  w.unmount()
+})
+
+it('DSL-5: 卡片预览 = 列清单(字段名定宽 + 该列取值);行/列截断都显式标出', async () => {
+  storeMock.dataSetsOfScenario.mockReturnValue([{
+    datasetId: 'ds-2', scenarioId: 'sc-td', name: '边界 amount 集',
+    rowCount: 12,
+    preview: [
+      { amount: 0, channel: 'APP', orderNo: 'ORD-0001', remark: '零值', extra: 'x' },
+      { amount: 1, channel: 'APP', orderNo: 'ORD-0002', remark: '最小值', extra: 'y' },
+      { amount: 999, channel: 'H5', orderNo: 'ORD-0003', remark: '接近上限', extra: 'z' },
+    ],
+  }])
+  const w = await mountList()
+
+  const rows = w.findAll('.pv tbody tr')
+  expect(rows).toHaveLength(4)                                   // 5 列 → 截到上限 4
+  expect(rows.map((r) => r.find('th').text()))
+    .toEqual(['amount', 'channel', 'orderNo', 'remark'])
+  expect(rows[0].find('td').text()).toBe('0 · 1 · 999 …')
+  // 尾缀判据是**整库行数** > 预览行数(后端 preview 上限 3 行),故每列都带 …
+  expect(rows[3].find('td').text()).toBe('零值 · 最小值 · 接近上限 …')
+
+  expect(w.find('.pv-more').text()).toBe('…另 1 个字段')          // 被截掉的列不能不说
+  expect(w.find('.ds-card .row-count').text()).toBe('12 条')
+  w.unmount()
+})
+
+it('DSL-6: 行数与列数都没超上限 ⇒ 既不出现 … 尾缀,也不出现「另 N 个字段」', async () => {
+  // DSL-5 的反面:两条截断判据都必须能"静默",否则 DSL-5 的 … / 另 N 个字段
+  // 可能只是恒定渲染,而不是真的在判截断。
+  storeMock.dataSetsOfScenario.mockReturnValue([{
+    datasetId: 'ds-3', scenarioId: 'sc-td', name: '整库',
+    rowCount: 3,
+    preview: [
+      { a: '1', b: 'x' }, { a: '2', b: 'y' }, { a: '3', b: 'z' },
+    ],
+  }])
+  const w = await mountList()
+
+  const rows = w.findAll('.pv tbody tr')
+  expect(rows).toHaveLength(2)
+  expect(rows[0].find('td').text()).toBe('1 · 2 · 3')            // 3 行 = 预览行数 ⇒ 无尾缀
+  expect(w.find('.pv-more').exists()).toBe(false)                // 2 列 < 上限 ⇒ 无提示
   w.unmount()
 })
