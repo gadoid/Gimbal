@@ -18,8 +18,10 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from ..core.deps import CurrentUser
+from ..services.endpoint_declarations import declared_paths_of
 from ..services.field_state_resolution import validate_field_states
-from ..services.plate_client import get_client
+from ..services.plate_client import get_client, get_endpoint_full
+from ..services.run_injection import injectable_universe
 from .strategy_catalog import proxy_error, unavailable
 
 router = APIRouter(prefix="/endpoint-catalog", tags=["endpoint-catalog"])
@@ -43,35 +45,45 @@ async def get_full_endpoint(
     user: CurrentUser,
     endpoint_id: str,
 ) -> dict:
-    """Proxy ``GET {plate}/api/endpoint/{id}/full`` and unwrap the envelope.
+    """Proxy ``GET {plate}/api/endpoint/{id}/full``.
 
-    Returns the ``item`` payload (with full ``request.declarations``
-    carrying ``DeclarationEntry`` shape; response assertion candidates
-    are the ``assertable=True`` entries — 响应面单脸,state 不被读取,
-    2026-09-05 目录化). Surfaces Plate's status code + error envelope
-    to the client.
+    走 ``plate_client.get_endpoint_full`` —— 与 dispatch 侧**同一条缓存条目**,
+    故编辑器浏览与 dispatch 判定看到的是**同一份快照**(阶段二·① I)。超时随之
+    统一为那条软取的 3s(``DECLARED_PATHS_TIMEOUT_SEC``),不再是
+    ``PLATE_TIMEOUT_SEC`` 的 30s。
+
+    返回 = plate 的 item **原样** + 一个后端算好的 ``declared_surface``:
+    声明侧可注入面的**扁平字符串集合**(归一化、容器前缀、模板形态全部展开)。
+    前端据此不再自己算声明半(§2.2)。item 另有消费者(候选树 UI),故**只增
+    字段、不裁 item**;展开成新 dict 而非就地改 —— 缓存里那份 item 是进程级
+    共享只读面(``EndpointFull.item`` 的契约)。
+
+    ``declared_surface`` 为 ``None`` ⇒ 该端点的**声明面**不可解析(降级),前端
+    从严只认 body 面。**不用 [] 冒充**:空目录(真无声明,给 ``["$"]``)与降级
+    是两件事。契约 item 本身不可得时本路由直接 502/404,客户端看不到这个字段。
     """
-    client = get_client()
-    try:
-        resp = await client.get(f"/api/endpoint/{endpoint_id}/full")
-    except httpx.HTTPError as e:
-        raise unavailable(e) from e
-    if resp.status_code != 200:
-        raise proxy_error(
-            resp,
-            context=endpoint_id,
-            not_found_code="endpoint_not_found",
-            not_found_msg="endpoint not found",
-        )
+    res = await get_endpoint_full(endpoint_id)
+    if res.item is None:
+        # 状态映射:plate 404 → endpoint_not_found;拿到响应但信封无 item →
+        # plate_invalid_envelope;其余(连接失败 / 5xx)→ unavailable。
+        # 必须嵌在 item is None 里:刷新失败时旧快照仍在回退窗内 ⇒ item 是好的
+        # 而 status 可能是那次失败的 404 —— 无条件映射会把「健康的旧契约服务」
+        # 报成「端点不存在」。
+        if res.status == 404:
+            raise HTTPException(status_code=404, detail={
+                "code": "endpoint_not_found", "message": "endpoint not found"})
+        if res.status is not None and res.status < 500:
+            raise HTTPException(status_code=502, detail={
+                "code": "plate_invalid_envelope",
+                "message": f"no item in response ({res.reason})"})
+        raise HTTPException(status_code=502, detail={
+            "code": "plate_unavailable", "message": res.reason})
 
-    envelope = resp.json()
-    item = (envelope.get("data") or {}).get("item")
-    if not item:
-        raise HTTPException(
-            status_code=502,
-            detail={"code": "plate_invalid_envelope", "message": "no item in response"},
-        )
-    return item
+    paths = await declared_paths_of(endpoint_id)
+    # 降级判定在 injectable_universe 之前:它对 None 与 () 不加区分(run_injection
+    # 明文),先算会把降级错报成「只有 $」。
+    surface = None if paths is None else sorted(injectable_universe(None, paths))
+    return {**res.item, "declared_surface": surface}
 
 
 @router.post("/resolve-paths")

@@ -11,12 +11,13 @@
 ``/full`` 契约、整份 item 的 TTL/LRU/回退窗与在飞收敛都归那一层;本模块
 只从 item 派生声明面,并把自己那份 path 投影另存一份(见 ``_proj_cache``)。
 
-**本模块不是唯一的 ``/full`` 取数路径**(勿读作「唯一」):
+**共享取数缓存之外仍有别的 ``/full`` 取数路径**:
 ``adaptation_service._plate_full_endpoint`` 也打同一个端点,其结果被
-``routers/carry.py`` / ``carry_store.py`` 当 declarations 读;
-``routers/endpoint_catalog.py`` 亦有自己的取数(composer 代理等)。这几条
-各自独立、**不共享** ``plate_client`` 的 item 缓存 —— 本模块只收敛上面那
-两个消费者。
+``routers/carry.py`` / ``carry_store.py`` 当 declarations 读 —— 它**不共享**
+``plate_client`` 的 item 缓存(``routers/endpoint_catalog.py`` 的
+``field-states/validate`` 那条也自取,同上)。共享该缓存的消费侧是:本模块的
+两个门面(``declarations_of`` / ``declared_paths_of``)与
+``routers/endpoint_catalog.py`` 的 ``/full`` 代理(编辑器候选树)。
 
 纪律(与 carry 同款:增强不是前置条件):
 * **fail-soft** — 任何故障(plate 不可达 / 非 200 / 信封缺 dict item /

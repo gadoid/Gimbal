@@ -393,8 +393,11 @@ async def get_endpoint_full(endpoint_id: str, *, timeout: float | None = None) -
     **软取**,plate 慢过该值即降级从严,不把调用方绑到 ``PLATE_TIMEOUT_SEC``
     —— 那条 30s 服务 ``convert`` 一类「等不到就报错」的链路。
 
-    边界:``adaptation_service._plate_full_endpoint`` / 目录代理各有自己的 /full
-    取数,**不共享**本缓存 —— 本缓存只服务经本函数取数的消费者。
+    边界:``adaptation_service._plate_full_endpoint`` 与
+    ``routers/endpoint_catalog.py`` 的 ``field-states/validate`` 各有自己的 /full
+    取数,**不共享**本缓存;经本函数取数的是 ``endpoint_declarations`` 的两个门面
+    与 ``routers/endpoint_catalog.py`` 的 ``/full`` 代理 —— 后者因此与 dispatch
+    判定读**同一条缓存条目**。
     """
     eff_timeout = settings.DECLARED_PATHS_TIMEOUT_SEC if timeout is None else timeout
     entry, fresh = _full_cache().lookup(endpoint_id)

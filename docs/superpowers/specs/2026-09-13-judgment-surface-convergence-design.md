@@ -159,6 +159,20 @@ declared_surface = None if paths is None else sorted(injectable_universe(None, p
 
 本裁定触发 `docs/known-issues/platform/declaration-cache/cache-freshness-divergence.md` 的「何时重开」第 2 条(原文:*H 落点裁定:若判定面收为「后端算、前端消费」,前端这份缓存的意义与 TTL 必须重新定*)。该记录状态须从「已接受」改为**已按本 spec 收口**,并追加 `## 修复记录` 段(README 约定:改记录、保留历史、不删文件)。
 
+### 3.5 超时统一
+
+§3.1 的取数统一把 `/full` 代理接到同一条缓存上,而那条取数是**软取**(`DECLARED_PATHS_TIMEOUT_SEC`,3s)⇒ **代理随之受这个上限约束**。这不是为代理另挑一个超时,而是取数统一的**推论**:
+
+- **不能用 30s**(`PLATE_TIMEOUT_SEC`)。30s 恰是阶段一 Z4 修掉的那条线:判定那一路跑在 `/runs` 的**同步**段,30s 会把「前端 axios 超时」与「后端 plate 超时」钉在同一条线上 —— plate 慢时前端报失败、后端其实已建执行,用户重试即**重复执行**。让代理走 30s 等于在代理这条链上推翻 Z4,而代理与判定读的是同一条取数:同一进程内同一次取数不可能有两个上限。
+- **也不能「按调用方各传超时」**。该方案已被代码库否决,论证在 `config.py` 的 `DECLARED_PATHS_TIMEOUT_SEC` 注释里:取数在飞收敛(同端点同一个任务),按调用方分别传超时会让上限取决于「谁恰好先建了那个在飞任务」,更不确定。
+
+故 **3s 是推论而非选择**。要认下来的**行为变更与其方向**(候选树):
+
+1. **冷缓存 + 慢 plate** ⇒ 代理 **3s 就失败**(此前等到 30s);
+2. **有缓存(含回退窗内的旧快照)** ⇒ 改为**供上一份契约**而不是报错 —— 与 §3.2 保住的 D(stale-while-error)同向,是 fail-open-to-old 在浏览面上的显影。
+
+**取数缓存统一的实际范围**(勿读大):共享这条缓存的是**判定面**(`declared_paths_of`)、**carry 面**(`declarations_of`)与**编辑浏览面**(`/full` 代理)。`adaptation_service._plate_full_endpoint`(`carry_store` / `routers/carry.py` 的契约面)与 `routers/endpoint_catalog.py` 的 `field-states/validate` 仍各自取数,**不共享**这条缓存 —— 故全后端仍有多条 `/full` 取数路径。
+
 ---
 
 ## 4. Z1 `exists` 属性洞

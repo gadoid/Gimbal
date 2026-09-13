@@ -105,17 +105,26 @@ class Settings(BaseSettings):
     # 「后端 plate 超时」钉在同一条线上 —— plate 慢时前端报失败、后端其实
     # 已建执行,用户重试即**重复执行**。
     # **覆盖范围 = 这一条共享软取**(``plate_client.get_endpoint_full``),
-    # 即它的**两个消费面都受这个上限约束**:判定面(``declared_paths_of`` ←
-    # dispatcher 同步段)与 carry 面(``declarations_of`` ←
+    # 即它的**三个消费面都受这个上限约束**:判定面(``declared_paths_of`` ←
+    # dispatcher 同步段)、carry 面(``declarations_of`` ←
     # ``carry_injection.build_carry_context``:后台 fan-out ``run_dispatcher.py:748``、
-    # 预览/导出 ``routers/scenarios.py:188``)。共享是**有意**的:取数在飞收敛
-    # (同端点同一个任务),按调用方分别传超时会让上限取决于「谁恰好先建了那个
-    # 在飞任务」,更不确定。代价要认下来:**carry 面不只在失败时降级,plate 慢过
-    # 本值(3s)时也降级**。
+    # 预览/导出 ``routers/scenarios.py:188``)与 ``/full`` 代理
+    # (``routers/endpoint_catalog.py`` 的 GET /{endpoint_id}/full ← 编辑器候选树)。
+    # 共享是**有意**的:取数在飞收敛(同端点同一个任务),按调用方分别传超时会让
+    # 上限取决于「谁恰好先建了那个在飞任务」,更不确定。代价要认下来:**三个面
+    # 都不只在失败时降级,plate 慢过本值(3s)时也降级**。
     # **方向勿读反**:超时即降级从严(不是拿到更多),故宁可短路也不等。
-    # **``PLATE_TIMEOUT_SEC`` 的 30s 不得改动**:那条服务 ``convert``、``/full``
-    # 代理(``plate_client.py:73``)等既有链路(它们的超时语义是「等不到就报错」),
-    # 本值不覆盖它们。
+    # **``/full`` 代理随取数统一受本值约束,这是一处行为变更,方向写明**:
+    # * 冷缓存 + 慢 plate ⇒ 候选树 **3s 就失败**(等待从 ``PLATE_TIMEOUT_SEC``
+    #   的 30s 缩到本值);
+    # * 有缓存(含回退窗内的旧快照)⇒ 改为**供上一份契约**而不是报错
+    #   (fail-open-to-old,见 ``DECLARED_PATHS_STALE_WINDOW_SEC``)。
+    # 两条都是「声明面是软取」的应有代价,不是意外。
+    # **``PLATE_TIMEOUT_SEC`` 的 30s 不得改动**:那条是进程级单例客户端的默认
+    # 上限,服务 ``convert``、目录/列表代理与
+    # ``adaptation_service._plate_full_endpoint``(``routers/carry.py`` /
+    # ``carry_store`` 当 declarations 读的那条 /full)等**其余**链路 —— 它们的
+    # 语义是「等不到就报错」,本值不覆盖它们。
     DECLARED_PATHS_TIMEOUT_SEC: float = 3.0
 
     # Set in model_post_init — True when the corresponding secret was
