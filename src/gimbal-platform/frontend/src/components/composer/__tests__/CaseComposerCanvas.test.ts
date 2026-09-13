@@ -309,6 +309,22 @@ function mkStep(over: Partial<StepView> = {}): StepView {
   } as StepView
 }
 
+/** ep-resp step:响应 200 目录 = $.data 对象容器(orderId 叶 + items 数组容器
+ *  (sku 叶))— 请求侧落 else 分支(orderId 平铺叶)无关紧要。
+ *  住模块作用域(原在 P7 describe 内):响应侧用例散在多个 describe(§5 标记 /
+ *  P7 契约树 / C2 双签),fixture 只应有这一份。 */
+function respStep(over: Partial<StepView> = {}): StepView {
+  return mkStep({
+    description: 'resp',
+    api: {
+      kind: 'api', service: 'fin', method: 'POST', path: '/order',
+      headers: {}, view_hints: { endpoint_id: 'ep-resp' },
+    },
+    request: { kind: 'request', body: {} },
+    ...over,
+  })
+}
+
 function mkOrch(n: number): Orchestration {
   return {
     steps: Array.from({ length: n }, (_, i) => ({ enabled: true, name: `s${i + 1}` })) as StepOrchestration[],
@@ -504,7 +520,7 @@ describe('CaseComposerCanvas — addExtract scope(#8)', () => {
 })
 
 describe('CaseComposerCanvas — IO 双签卡片(C2)', () => {
-  it('T13: 切 Response 签 → 全状态码契约渲染;菜单两项;提取落 scratch 域', async () => {
+  it('T13: 切 Response 签 → 全状态码契约渲染;菜单三项;提取落 scratch 域', async () => {
     const steps = [mkStep()]
     const { w } = mountCanvas(steps)
     await flushPromises()
@@ -1580,17 +1596,6 @@ describe('CaseComposerCanvas — 整容器注入态/角标(P6)', () => {
  * 菜单文案同步去响应化(提取该字段/向该字段动态注入)。
  */
 describe('CaseComposerCanvas — 响应契约树(P7)', () => {
-  /** ep-resp step:响应 200 目录 = $.data 对象容器(orderId 叶 + items
-   *  数组容器(sku 叶))— 请求侧落 else 分支(orderId 平铺叶)无关紧要 */
-  const respStep = (over: Partial<StepView> = {}): StepView => ({
-    kind: 'step',
-    description: 'resp',
-    api: { kind: 'api', service: 'fin', method: 'POST', path: '/order', headers: {}, view_hints: { endpoint_id: 'ep-resp' } },
-    request: { kind: 'request', body: {} },
-    strategy: [],
-    ...over,
-  } as StepView)
-
   it('P7-1: 响应签照目录嵌套渲染 — 容器面板 + 一行模板集(无 [i])+ example 只读值 + ✓ 标', async () => {
     const { w } = mountCanvas([respStep()])
     await flushPromises()
@@ -2827,6 +2832,28 @@ describe('CaseComposerCanvas — 加入断言管理标记(spec v3 §5)', () => {
     const emits = canvas.emitted('registryAdd')
     expect(emits).toBeTruthy()
     expect(emits![0][0]).toEqual({ kind: 'inject', stepIndex: 0, source: 'body', jsonpath: '$.orderId', value: 'ord-1' })
+    w.unmount()
+  })
+
+  it('REG-RESP: 响应侧标记 → registryAdd(kind=assert, target=scratch 域路径);与请求侧分支不串', async () => {
+    // 接线面唯一覆盖:菜单项存在(T13/P7-3)不等于**点在响应侧 FieldForm 上
+    // 上抛的是响应域 handler** —— 接错成 onRegistryMark 会静默产出请求侧形状
+    // (路径落错域、运行期永不生效),而菜单与条目 UI 都照常。
+    const { w } = mountCanvas([respStep()])
+    await flushPromises()
+    const canvas = w.findComponent(CaseComposerCanvas)
+    const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
+    await respTab.trigger('click')
+    await flush()
+    await w.find('.obj-node .field .fa-menu-btn').trigger('click')
+    await flush()
+    await w.findAll('.fa-item').find((b) => b.text().includes('加入断言管理'))!.trigger('click')
+    await flush()
+    const emits = canvas.emitted('registryAdd')
+    expect(emits).toBeTruthy()
+    expect(emits![0][0]).toEqual({
+      kind: 'assert', stepIndex: 0, target: '$.response_body.data.orderId',
+    })
     w.unmount()
   })
 
