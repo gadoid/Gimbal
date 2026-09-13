@@ -5,8 +5,9 @@
 > **来源**：架构收敛终稿复核（controller 裁定：画布本体本波不动，记录在案）
 >
 > 正文**保留原记载**（其中三处记载与分析结论有误，更正见文末 [修复记录](#修复记录) §2）。
-> **就地改真**的只有：正文里已失效的 `useEndpointFull.ts` 行号（按符号改指，**只换指法、
-> 不改断言**）与 §3 第 2 条那句「画布是已知例外」的判定（该处改动说明就地写在同一条里）。
+> **就地改真**的只有：正文里已失效的 `useEndpointFull.ts` / `CaseComposerCanvas.vue` 行号
+> （按符号改指，**只换指法、不改断言**）与 §3 第 2 条那句「画布是已知例外」的判定（该处
+> 改动说明就地写在同一条里）。
 
 ---
 
@@ -30,7 +31,7 @@
 **画布没有**：两个 computed 仍在内部取数 ——
 
 ```ts
-// src/components/composer/CaseComposerCanvas.vue:635-640
+// src/components/composer/CaseComposerCanvas.vue（`function stepDecls`）
 function stepDecls(step: StepView | undefined) {
   const eid = step?.api?.view_hints?.endpoint_id
   if (!eid) return undefined
@@ -38,7 +39,7 @@ function stepDecls(step: StepView | undefined) {
   return getEndpointFull(eid)?.request?.declarations
 }
 
-// src/components/composer/CaseComposerCanvas.vue:1591-1596
+// src/components/composer/CaseComposerCanvas.vue（`const currentFull`）
 const currentFull = computed<EndpointFullView | undefined>(() => {
   const eid = currentStep.value?.api?.view_hints?.endpoint_id
   if (!eid) return undefined

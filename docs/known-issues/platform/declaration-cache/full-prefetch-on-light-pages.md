@@ -29,7 +29,7 @@ watch(stepEndpointIds, () => ensure(), { immediate: false })
 
 | 宿主 | 挂载点 |
 |---|---|
-| 编排器运行面板 `components/composer/RunPanelHost.vue` | `:102` `onMounted(() => surface.ensure())` |
+| 编排器运行面板 `components/composer/RunPanelHost.vue` | `onMounted(() => surface.ensure())` |
 | 断言管理编辑器 `views/AssertionRegistryEditor.vue` | `:225` |
 | 编排器 `views/CaseComposer.vue` | `:522` |
 | 数据页 `views/CaseDataSetsList.vue` | `:140` |
