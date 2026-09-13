@@ -1582,12 +1582,14 @@ const CODE_TARGET_CANDIDATES = ['$.code', '$.data.code'] as const
 
 /** 当前 step 的 /full 拉取状态(scoped,2026-09-08):预拉让全部端点并发,
  *  全局单值会跨端点串台(另一步失败盖到当前步头);改按当前端点判 —
- *  缓存命中 → '' / 失败记录 → failed / 其余(未回填)→ loading。 */
+ *  失败记录 → failed(**优先**,即便缓存里还留着上一份面)/
+ *  缓存命中 → '' / 其余(未回填)→ loading。 */
 const currentFullState = computed<'loading' | 'failed' | ''>(() => {
   return endpointFullState(currentStep.value?.api?.view_hints?.endpoint_id)
 })
 
-/** 当前 step 的 /full 结构契约(拉取中/失败 → undefined) */
+/** 当前 step 的 /full 结构契约:**有缓存则照旧返回那份**(读口不看 TTL ——
+ *  重取在飞与重取失败都仍供旧面),只有从未取回时才是 undefined。 */
 const currentFull = computed<EndpointFullView | undefined>(() => {
   const eid = currentStep.value?.api?.view_hints?.endpoint_id
   if (!eid) return undefined

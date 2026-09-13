@@ -256,28 +256,41 @@ it('IS-9: 换面即重判 —— 面变后按新面重算 dead(灰显),勾选保
 
 it('IS-10: 面没变的重取不惊动记忆化 —— 版本不动 ⇒ 投影不重算', async () => {
   vi.useFakeTimers()
-  const same = { id: 'ep-s', request: { declarations: [] }, declared_surface: ['$'] } as any
+  // 两条条目故意都**靠声明面**才判得准:一条只在面里活(body 无 $.carry_x),
+  // 一条谁都不认(面里也没有 $.nowhere)。⇒ 断言有了判别力:重取若把面闪掉
+  // (在飞窗口里缓存被清 / 读口返 undefined),键就变、重算成 body 面,
+  // 'alive' 当场判死 —— `['dead']` 立刻对不上。空跑的实现(body 面也判得对)
+  // 则永远看不出差别,故**必须在在飞窗口里读一次**。
+  const same = { id: 'ep-s', request: { declarations: [] }, declared_surface: ['$', '$.carry_x'] } as any
+  let release!: (v: unknown) => void
   const spy = vi.spyOn(api, 'getFullEndpoint')
     .mockResolvedValueOnce(same)
-    .mockResolvedValue({ ...same } as any)                // 逐字相同、另一份对象
+    .mockReturnValueOnce(new Promise((res) => { release = res }) as any)  // 重取挂在在飞窗口里
   const project = vi.spyOn(assertionRegistry, 'injectablePathSetOf')
   const steps = ref([{ request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-s' } } }])
   const entries = ref([
-    { id: 'a', name: 'A', path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 1, asserts: [] },
+    { id: 'alive', name: 'A', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_x' }, value: 1, asserts: [] },
+    { id: 'dead', name: 'D', path: { stepIndex: 0, source: 'body', jsonpath: '$.nowhere' }, value: 1, asserts: [] },
   ] as any)
   const s = useInjectableSurface(steps, entries)
   s.ensure()
   await flushPromises()
   const first = s.pathsOfStep(0)
   expect(project).toHaveBeenCalledTimes(1)
+  expect(s.deadIds.value).toEqual(['dead'])             // 面在 ⇒ 'alive' 活(不靠 body)、'dead' 死
   vi.advanceTimersByTime(FULL_TTL_MS + 1)
   s.ensure()
+  // 重取**在飞**:读口不看 TTL ⇒ 面照旧被服务,判定与投影都原地不动(不闪空)
+  expect(s.deadIds.value).toEqual(['dead'])
+  expect(s.pathsOfStep(0)).toBe(first)
+  expect(project).toHaveBeenCalledTimes(1)
+  release({ ...same })                                  // 逐字相同、另一份对象 ⇒ 落定
   await flushPromises()
   expect(spy).toHaveBeenCalledTimes(2)                  // 到期重取了
   expect(s.surfaceChanged.value).toBe(false)            // 但面没变 ⇒ 不算换面
   expect(s.pathsOfStep(0)).toBe(first)                  // 命中同一份投影
   expect(project).toHaveBeenCalledTimes(1)              // 没白算一遍
-  expect(s.deadIds.value).toEqual([])                   // 判定面照旧:活条目没被无谓作废
+  expect(s.deadIds.value).toEqual(['dead'])             // 落定后判定照旧
 })
 
 it('IS-11: 换面重判锚在**记忆化键**上 —— 不靠「清缓存 watch」的冲刷时机', async () => {
