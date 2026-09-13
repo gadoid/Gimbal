@@ -49,7 +49,7 @@
 > |------|------|--------|------|------|
 > | [preprocessor/template-substitution.md](preprocessor/template-substitution.md) | preprocessor + utils | P0/P1/P2 | 未修复（设计妥协） | 模板变量替换机制的若干遗留问题 |
 > | [plugins/collector/README.md](plugins/collector/README.md) | plugins/collector | P0/P1/P2 | 已实现（功能有局限） | 报告插件：缺请求头详情、缺断言详情、无脱敏、单一格式 |
-> | [platform/judgment-face/exists-property-hole.md](platform/judgment-face/exists-property-hole.md) | platform/backend + 引擎写侧 | **P0**（候选） | 未修复（**待裁定**） | 阶段二 Z1：`exists` 兜底穿透 str 属性 ⇒ 后端判活、前端判死，非 UI 下发可把字符串字段改形 |
+> | [platform/judgment-face/exists-property-hole.md](platform/judgment-face/exists-property-hole.md) | platform/backend + 引擎写侧 | **P0**（候选） | **行为已收口**（阶段二 Task 6）；**承诺文本待用户过目** | 阶段二 Z1：`exists` 兜底不再穿透非 dict 宿主（`$.note.replace` 类判死）+ 写侧按同一判据拦截；**空容器宽容按裁定保留**；公开承诺修订稿未落盘（待过目） |
 > | [platform/registry/normalize-registry-writeback.md](platform/registry/normalize-registry-writeback.md) | platform/frontend | **P0**（候选） | 未修复（**待裁定**） | 阶段二 E：`normalizeRegistry` 丢弃的非对象条目随保存写回服务端 ⇒ 静默丢数据 |
 > | [platform/judgment-face/dollar-brace-backfill.md](platform/judgment-face/dollar-brace-backfill.md) | platform/backend | **P1** | 未修复（**待裁定**） | 阶段二 G：`${...}` 类值也补了 `default`/`required`（与 docstring 相反）⇒ 「变量存在但为 null」静默写 null |
 > | [platform/declaration-cache/cache-freshness-divergence.md](platform/declaration-cache/cache-freshness-divergence.md) | platform（前/后端） | P2 | **已按阶段二·① 收口** | 前后端 TTL 同量级（均 300s）⇒ plate 发版后两侧各自在 ~5 分钟内收敛；只消窗口、不消份数（仍各一份缓存） |
