@@ -10,18 +10,24 @@
  * /full 是**会话级**共享缓存 → 用例间必须显式清空(useEndpointFull.test 同款纪律)。
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { nextTick, ref } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import { flushPromises } from '@vue/test-utils'
 
 import * as api from '@/api/scenario-composer'
 import * as assertionRegistry from '@/utils/assertion-registry'
-import { _resetEndpointFullCacheForTest } from '@/composables/useEndpointFull'
+import {
+  _resetEndpointFullCacheForTest, FULL_TTL_MS, surfaceVersion,
+} from '@/composables/useEndpointFull'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
 
 beforeEach(() => {
+  vi.useRealTimers()          // 隔离上一条用例的假时钟
   _resetEndpointFullCacheForTest()
 })
-afterEach(() => { vi.restoreAllMocks() })
+afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+})
 
 it('IS-1: dead 分两组 — step-oob/legacy 入 intrinsic,契约未定而 path-unresolvable 入 contractDependent', async () => {
   // 契约未回填(getFullEndpoint 挂起)→ pending=true
@@ -111,7 +117,7 @@ it('IS-4: `pending` 只看**被条目引用到**的端点 —— 无关端点在
   await nextTick()
   expect(s.pending.value).toBe(true)                  // 被引用端点在途 → 悬置
   expect(s.dead.value.contractDependent).toEqual(['c'])
-  // 预取面 = 全部带 endpoint_id 的步骤(幂等:每端点每会话一次)
+  // 预取面 = 全部带 endpoint_id 的步骤(幂等:每端点在面 TTL 内一次)
   expect(api.getFullEndpoint).toHaveBeenCalledWith('ep-ref')
   expect(api.getFullEndpoint).toHaveBeenCalledWith('ep-unrelated')
   // 只落定被引用端点 ⇒ 在途面清空;无关端点即便仍挂着也不悬置
@@ -168,7 +174,7 @@ it('IS-7: 渲染期零请求 —— 不调 ensure() 时判定/候选/取态都�
   void s.pending.value
   await nextTick()
   expect(spy).not.toHaveBeenCalled()                  // ← 全程未调 ensure() ⇒ 零请求
-  // 反空转:显式 ensure() 才取数,且幂等(第二次不再发)
+  // 反空转:显式 ensure() 才取数,且幂等(第二次在面 TTL 内不再发)
   s.ensure()
   await flushPromises()
   s.ensure()
@@ -206,4 +212,104 @@ it('IS-8: 记忆化**命中**面 — 同一 (si, 版本) 只投影一次,输入�
   expect(project).toHaveBeenCalledTimes(2)
   expect(rebuilt).not.toBe(first)
   expect([...rebuilt]).toContain('$.amount2')
+})
+
+it('IS-9: 换面即重判 —— 面变后按新面重算 dead(灰显),勾选保留、不阻断提交', async () => {
+  // spec §3.3 换面 policy:前端缓存的 300s TTL 到期重取 ⇒ 会话中途会换面。
+  // 换面 = 面变了(不是面悬置):判定按新面重算,因新面而悬空的条目进 deadIds
+  // (悬空标注的唯一口径 ⇒ 灰显);**勾选保留** —— 判定面从不改写 entries,
+  // 已选中条目交 dispatch 侧既有 dangling skip 兜底,不新造失败态。
+  vi.useFakeTimers()
+  const spy = vi.spyOn(api, 'getFullEndpoint')
+    .mockResolvedValueOnce({
+      id: 'ep-s',
+      request: { declarations: [
+        { name: 'carry_field', path: '$.carry_field', state: 'carry', required: true, description: '' }] },
+      declared_surface: ['$', '$.carry_field'],
+    } as any)
+    .mockResolvedValue({                                    // 重取回来的新面:carry_field 没了
+      id: 'ep-s', request: { declarations: [] }, declared_surface: ['$'],
+    } as any)
+  const entry = { id: 'c', name: 'C', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_field' }, value: 1, asserts: [] }
+  const steps = ref([{ request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-s' } } }])
+  const entries = ref([entry] as any)
+  const s = useInjectableSurface(steps, entries)
+  const selectedBefore = entries.value[0]                // 宿主选中的那条(ref 的代理身份)
+  const stepBefore = steps.value[0]
+  s.ensure()
+  await flushPromises()
+  expect(s.dead.value.intrinsic).toEqual([])            // v1 面:条目活
+  expect(s.surfaceChanged.value).toBe(false)            // 还没换过面
+  vi.advanceTimersByTime(FULL_TTL_MS + 1)
+  s.ensure()
+  await flushPromises()
+  expect(spy).toHaveBeenCalledTimes(2)                  // 面确实重取了
+  expect(s.dead.value.intrinsic).toEqual(['c'])         // 新面下悬空 ⇒ 重判(不是粘住的旧集合)
+  expect(s.deadIds.value).toContain('c')                // 灰显口径 = 门控后死集
+  expect(s.pending.value).toBe(false)                   // 换面 ≠ 面悬置:pending 语义不动(§3.3)
+  expect(s.surfaceChanged.value).toBe(true)             // 非阻断提示的信号(呈现位由视图绑定)
+  expect(entries.value).toHaveLength(1)                 // 条目**不被改写**:判死不等于删条目
+  expect(entries.value[0]).toBe(selectedBefore)         // 同一份:勾选状态原样保留
+  expect(entries.value[0].path).toEqual(entry.path)     // 路径也没被判定面动过
+  expect(steps.value[0]).toBe(stepBefore)               // 步骤面同样不被改写
+})
+
+it('IS-10: 面没变的重取不惊动记忆化 —— 版本不动 ⇒ 投影不重算', async () => {
+  vi.useFakeTimers()
+  const same = { id: 'ep-s', request: { declarations: [] }, declared_surface: ['$'] } as any
+  const spy = vi.spyOn(api, 'getFullEndpoint')
+    .mockResolvedValueOnce(same)
+    .mockResolvedValue({ ...same } as any)                // 逐字相同、另一份对象
+  const project = vi.spyOn(assertionRegistry, 'injectablePathSetOf')
+  const steps = ref([{ request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-s' } } }])
+  const entries = ref([
+    { id: 'a', name: 'A', path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 1, asserts: [] },
+  ] as any)
+  const s = useInjectableSurface(steps, entries)
+  s.ensure()
+  await flushPromises()
+  const first = s.pathsOfStep(0)
+  expect(project).toHaveBeenCalledTimes(1)
+  vi.advanceTimersByTime(FULL_TTL_MS + 1)
+  s.ensure()
+  await flushPromises()
+  expect(spy).toHaveBeenCalledTimes(2)                  // 到期重取了
+  expect(s.surfaceChanged.value).toBe(false)            // 但面没变 ⇒ 不算换面
+  expect(s.pathsOfStep(0)).toBe(first)                  // 命中同一份投影
+  expect(project).toHaveBeenCalledTimes(1)              // 没白算一遍
+  expect(s.deadIds.value).toEqual([])                   // 判定面照旧:活条目没被无谓作废
+})
+
+it('IS-11: 换面重判锚在**记忆化键**上 —— 不靠「清缓存 watch」的冲刷时机', async () => {
+  // 键必须覆盖投影读的每一个输入,换面即键变 —— 这条**正确性**不能依赖调度
+  // 时机(清缓存的 pre-flush watch 谁先谁后)。探针用 flush:'sync' 的 watcher
+  // 在面版本变化的**同一次**变更里读 pathsOfStep:此刻清缓存的 watch 还没跑,
+  // 键若不带面版本,读到的就是按旧面算出的陈旧集合(IS-9 由清缓存兜住,**看不出
+  // 这个差别** —— 删掉键里的版本那一半,本例红、IS-9 仍绿)。
+  vi.useFakeTimers()
+  vi.spyOn(api, 'getFullEndpoint')
+    .mockResolvedValueOnce({
+      id: 'ep-s', request: { declarations: [] }, declared_surface: ['$', '$.carry_x'],
+    } as any)
+    .mockResolvedValue({
+      id: 'ep-s', request: { declarations: [] }, declared_surface: ['$'],
+    } as any)
+  const steps = ref([{ request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-s' } } }])
+  const entries = ref([] as any)
+  const s = useInjectableSurface(steps, entries)
+  s.ensure()
+  await flushPromises()
+  expect([...s.pathsOfStep(0)]).toContain('$.carry_x')  // v1 面
+  const seen: string[][] = []
+  const stop = watch(() => surfaceVersion('ep-s'), () => {
+    seen.push([...s.pathsOfStep(0)])
+  }, { flush: 'sync' })
+  vi.advanceTimersByTime(FULL_TTL_MS + 1)
+  s.ensure()
+  await flushPromises()
+  stop()
+  expect(seen).toHaveLength(1)                          // 面版本恰好变了一次
+  expect(seen[0]).toContain('$.amount')                 // 是**真投影**(不是空集)
+  expect(seen[0]).not.toContain('$.carry_x')            // 当场已按新面重判,不是陈旧集合
+  vi.useRealTimers()
 })

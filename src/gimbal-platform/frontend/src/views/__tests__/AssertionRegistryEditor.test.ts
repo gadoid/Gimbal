@@ -354,7 +354,7 @@ it('ARE-15: 目标候选是**纯缓存读** —— 渲染期不触达取数口,�
   def.steps[0].api = { headers: {}, view_hints: { endpoint_id: 'ep-rg' } }
   const w = await mountEditor({ definition: def, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG })
   await flushPromises()
-  // 挂载的 ensure() 就是**唯一**取数口:每端点每会话一次
+  // 挂载的 ensure() 就是**唯一**取数口:每端点在面 TTL 内一次
   expect(ensureSpy).toHaveBeenCalledWith('ep-rg')
   expect(netSpy).toHaveBeenCalledTimes(1)
 

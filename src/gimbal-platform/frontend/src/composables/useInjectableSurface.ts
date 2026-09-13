@@ -32,7 +32,7 @@ import { fieldPathsOf } from '@/utils/dataset-segments'
 import { iterFlat, resolveState, toTemplatePath } from '@/utils/declarations'
 import type { DeclarationEntryView, FieldState } from '@/types/plate'
 import {
-  endpointFullState, ensureEndpointFull, getEndpointFull,
+  endpointFullState, ensureEndpointFull, getEndpointFull, surfaceVersion,
 } from '@/composables/useEndpointFull'
 
 export interface InjectableSurface {
@@ -48,6 +48,13 @@ export interface InjectableSurface {
   deadIds: ComputedRef<string[]>
   stateOf(si: number, path: string): FieldState | undefined
   pending: ComputedRef<boolean>
+  /** 换面信号(spec §3.3):**被条目引用**的端点中至少一个在本会话内换过面
+   *  (`surfaceVersion` 越过首取的那一版)。换面即重判 —— dead 集合已按新面
+   *  重算,因新面而悬空的条目照常进 `deadIds`(悬空标注的唯一口径 ⇒ 灰显)。
+   *  **非阻断**:本组合式从不改写 `entries`,勾选状态原样保留,提交也不因它
+   *  被拦 —— 已选中的悬空条目交 dispatch 侧既有的 dangling skip 兜底,
+   *  不新造失败态。**呈现位**由视图绑定(与其他判定面信号同一处)。 */
+  surfaceChanged: ComputedRef<boolean>
   ensure(): void
 }
 
@@ -69,7 +76,7 @@ export function useInjectableSurface(
    * **取**:`ensure()` 显式、幂等,由宿主在挂载 / 步骤面变化时调用,覆盖
    * **全部带 endpoint_id 的步骤** —— 读端不取数 ⇒ 取数必须一次取全,否则
    * "给新条目挑契约字段"这条路径(候选/取态要问任意 si,含无条目引用的 si)
-   * 永远没有数据。幂等 + 负缓存 ⇒ 每端点每会话仍只一次请求。 */
+   * 永远没有数据。幂等 + 面 TTL + 负缓存 ⇒ 同一端点在 TTL 内只取一次。 */
   const stepEndpointIds = computed<string[]>(() => {
     const out = new Set<string>()
     for (let si = 0; si < steps.value.length; si++) {
@@ -104,6 +111,11 @@ export function useInjectableSurface(
   const pending = computed(() =>
     neededEndpoints.value.some((eid) => endpointFullState(eid) === 'loading'))
 
+  /** 本会话内是否换过面:被引用端点里至少一个的面版本越过了首取那一版(1)。
+   *  换面**不是**面悬置 —— `pending` 语义不因它改(spec §3.3)。 */
+  const surfaceChanged = computed(() =>
+    neededEndpoints.value.some((eid) => surfaceVersion(eid) > 1))
+
   /** 读:纯缓存读,绝不取数(渲染期只走这里)—— 声明**树**(条目 + children),
    *  供 `stateOf` 取条目自身的 state;判定面的声明半不走这里(见下)。 */
   function declarationsFor(si: number): DeclarationEntryView[] | undefined {
@@ -121,13 +133,15 @@ export function useInjectableSurface(
     return getEndpointFull(eid)?.declared_surface
   }
 
-  /* ── 记忆化:同一 (si, 步骤面版本, 该 si 自身端点态) 只重建一次 ──
+  /* ── 记忆化:同一 (si, 步骤面版本, 该 si 自身的面版本) 只重建一次 ──
    * 键必须覆盖投影读的**每一个**输入:
    *  · **步骤面版本** = steps 的深变更计数(整表替换 / body 就地编辑);
-   *  · **该 si 自身的端点态** = `endpointFullState(endpointIdOf(si))`
-   *    ('' = 已回填 / 'loading' / 'failed';读 `shallowReactive` 容器的
-   *    `has` ⇒ 本身响应式,契约落定时键即变)。
-   *  ⚠ 键里用**该 si 自己的**端点态,不是"被引用端点的联合版本":
+   *  · **该 si 自身的面版本** = `surfaceVersion(endpointIdOf(si))`
+   *    (0 = 尚无面 / 取数失败 —— 判定面只剩 body 面;首取起 1,换面再 +1。
+   *    读 `shallowReactive` 容器的条目 ⇒ 本身响应式,契约落定与**换面**
+   *    (spec §3.3)都让键变 ⇒ 判定立即按新面重算;面没变的重取版本不动
+   *    ⇒ 已算好的投影不被无谓作废)。
+   *  ⚠ 键里用**该 si 自己的**面版本,不是"被引用端点的联合版本":
    *  `pathsOfStep(si)` 会被**无条目引用**的 si 调(编辑器 `pendingPath`
    *  给新条目挑字段),那种 si 的端点不在联合版本里 ⇒ 它落定既不改键也不清
    *  缓存,候选集会永久停在 body 面(v3.1 §2.1 放宽服务的那条路径直接失效)。
@@ -136,12 +150,13 @@ export function useInjectableSurface(
    *  开销:每次 steps 深变更多一遍遍历(O(steps)),**不是**每渲染 —— 可接受。 */
   const stepsRev = ref(0)
   watch(steps, () => { stepsRev.value++ }, { deep: true })
-  const endpointStatesKey = computed(() =>
-    stepEndpointIds.value.map((eid) => `${eid}:${endpointFullState(eid)}`).join('|'))
+  const endpointSurfacesKey = computed(() =>
+    stepEndpointIds.value.map((eid) => `${eid}:${surfaceVersion(eid)}`).join('|'))
   const pathsCache = new Map<string, ReadonlySet<string>>()
-  watch([stepsRev, endpointStatesKey], () => pathsCache.clear())
+  watch([stepsRev, endpointSurfacesKey], () => pathsCache.clear())
   function pathsOfStep(si: number): ReadonlySet<string> {
-    const key = `${si}|${stepsRev.value}|${endpointFullState(endpointIdOf(si))}`
+    const eid = endpointIdOf(si)
+    const key = `${si}|${stepsRev.value}|${eid ? surfaceVersion(eid) : 0}`
     const hit = pathsCache.get(key)
     if (hit) return hit
     const step = steps.value[si]
@@ -195,5 +210,5 @@ export function useInjectableSurface(
     return undefined
   }
 
-  return { pathsOfStep, deadOf, dead, deadIds, stateOf, pending, ensure }
+  return { pathsOfStep, deadOf, dead, deadIds, stateOf, pending, surfaceChanged, ensure }
 }

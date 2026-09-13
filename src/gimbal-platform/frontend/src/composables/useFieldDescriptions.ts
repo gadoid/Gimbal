@@ -5,8 +5,8 @@
  *
  * 设计要点:
  *   - 仅 body 字段有 IOFieldBinding;headers 优雅降级为空串。
- *   - /full 取数与缓存走**共享模块** `useEndpointFull`(每 endpoint 会话内
- *     恰好一次请求;并发收敛),所以本组合式与画布、编辑器共用同一份缓存。
+ *   - /full 取数与缓存走**共享模块** `useEndpointFull`(每 endpoint 一次取数,
+ *     面 TTL 内不重取;并发收敛),所以本组合式与画布、编辑器共用同一份缓存。
  *   - 零持久化:Plate 是结构权威源,每次进编辑器拿最新结构(发版后零迁移)。
  *
  * 调用方约定:在 setup 阶段调用一次,响应式 draft 变化后,Map 自动重算。
@@ -45,7 +45,7 @@ export function useFieldDescriptions(
     return [...s]
   })
 
-  // 2) draft 变化(eids 变化)时,触发 fetch;同一 endpoint 不重复请求
+  // 2) draft 变化(eids 变化)时,触发 fetch;同一 endpoint 在面 TTL 内不重复请求
   watch(
     eids,
     (ids) => {

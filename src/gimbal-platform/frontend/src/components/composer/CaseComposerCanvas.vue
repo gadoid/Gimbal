@@ -1576,7 +1576,7 @@ const CODE_TARGET_CANDIDATES = ['$.code', '$.data.code'] as const
 // ── /full 结构契约:会话缓存(容器原则) ─────────────────────────────
 // endpoint_id → plate /full 响应整包。所有结构渲染(请求字段表单/断言
 // 候选/响应契约/Type C 差集)都是这份缓存的 computed 切片 — 每个 endpoint
-// 会话内恰好一次请求。缓存本体已收编到共享模块 `useEndpointFull`
+// 一次取数(TTL 内不重取)。缓存本体已收编到共享模块 `useEndpointFull`
 // (画布 / useFieldDescriptions / 断言管理编辑器共用一份),此处只消费。
 
 
