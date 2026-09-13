@@ -66,8 +66,11 @@
       >
         <span class="fa-label">向该字段动态注入</span><span class="fa-note">DynamicAssign</span>
       </button>
+      <!-- 加入断言管理**不按域门控**:响应字段的路径是断言目标(落
+           asserts[0].target),请求字段的路径是注入地址(落 entry.path)——
+           两侧都成立,只是落点不同(域分流在 Canvas 的 handler)。
+           其余四项都写请求体的值,响应侧无从写起 ⇒ 仍按域门控。 -->
       <button
-        v-if="domain !== 'response'"
         type="button"
         class="fa-item"
         :class="{ disabled: injected }"

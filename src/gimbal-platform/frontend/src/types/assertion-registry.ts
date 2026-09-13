@@ -49,6 +49,19 @@ export interface AssertionRegistry {
   entries: Array<AssertionEntry | LegacyAssertionEntry>
 }
 
+/** 编排器标记载荷(Canvas → CaseComposer)。字段路径的**落点分侧**:
+ *  * `inject` 请求侧 —— 路径是**注入地址**,落 `entry.path`;`value`
+ *    预填字段当前字面量。
+ *  * `assert` 响应侧 —— 路径是**断言目标**(scratch 域),落
+ *    `entry.asserts[0].target`;该条目没有注入面,注入地址留空待用户补齐
+ *    (补齐前判 path-unresolvable,整条在运行期 skip)。
+ *
+ *  判别式**必填**:两种形状的必填面不同,给缺省推断会让响应侧标记静默按
+ *  请求侧落条目 —— 路径落错域,且运行期永不生效。 */
+export type RegistryMark =
+  | { kind: 'inject'; stepIndex: number; source: 'body'; jsonpath: string; value: unknown }
+  | { kind: 'assert'; stepIndex: number; target: string }
+
 /** v2 旧形状识别(spec v3 §7/§8):path 非对象(缺键 / null / 数组 / 标量)
  *  = 旧条目或残缺条目。判据与后端 `run_injection.entry_issues` 的
  *  `isinstance(path, dict)` 同构 —— sidecar 是服务端/手改 JSON,形状不可信,

@@ -188,7 +188,7 @@ describe('FieldForm — IO 双签卡片 props(C2)', () => {
     expect(w.findAll('.fa-menu-btn').length).toBe(1)
   })
 
-  it('T17: domain=response → 菜单仅 提取/断言 两项', async () => {
+  it('T17: domain=response → 菜单三项(提取/加入断言管理/断言)', async () => {
     const { w } = mountWithParent({
       bindings: [mkBinding()],
       fieldActions: true,
@@ -199,9 +199,10 @@ describe('FieldForm — IO 双签卡片 props(C2)', () => {
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
     const items = w.findAll('.fa-item')
-    expect(items.length).toBe(2)
-    expect(w.text()).toContain('提取该字段')
-    expect(w.text()).toContain('断言该字段')
+    expect(items.length).toBe(3)
+    expect(items[0].text()).toContain('提取该字段')
+    expect(items[1].text()).toContain('加入断言管理')
+    expect(items[2].text()).toContain('断言该字段')
     expect(w.text()).not.toContain('引用共享变量')
     expect(w.text()).not.toContain('向该字段动态注入')
   })

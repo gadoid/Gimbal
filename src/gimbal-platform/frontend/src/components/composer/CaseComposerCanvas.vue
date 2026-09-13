@@ -294,8 +294,9 @@
             <!-- 请求侧 Type C(schema 有、binding 无)已并入 FieldForm「其他字段」
                  折叠区(unbound-fields) — 可见可编辑,不再单独设只读块。 -->
             <!-- Response 页:/full responses 全状态码契约,只读参考(设计 §3.1)。
-                 ☰ 菜单仅 提取/断言 两项;提取/断言域感知 — 响应侧路径经
-                 respPathOf → toScratchPath,请求侧见各自 handler 域分流 -->
+                 ☰ 菜单**三项**:提取/断言/加入断言管理(值写入三项仍按域门控
+                 不出现 —— 响应侧无从写请求体的值)。三项都域感知 — 响应侧路径
+                 一律经 respPathOf → toScratchPath,请求侧见各自 handler 域分流 -->
             <template v-if="activeIoTab === 'response'">
               <div v-if="currentRespSpecs.length" class="resp-specs">
                 <div v-for="spec in currentRespSpecs" :key="spec.status" class="resp-spec">
@@ -318,6 +319,7 @@
                     @strategy-jump="onStrategyJump"
                     @field-extract="(f) => onFieldExtract(f, 'response')"
                     @field-assert="(f) => onFieldAssert(f, 'response')"
+                    @registry-mark="onRegistryMarkResp"
                   />
                   <p v-else class="resp-spec-empty">该状态码未声明字段契约</p>
                 </div>
@@ -597,7 +599,7 @@ import type {
   StrategyView, StrategyKindView, StrategyKindDetailView, FieldState,
 } from '@/types/plate'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
-import type { EntryPath } from '@/types/assertion-registry'
+import type { RegistryMark } from '@/types/assertion-registry'
 import { parseJson } from '../../utils/json'
 
 const props = defineProps<{
@@ -615,10 +617,10 @@ const emit = defineEmits<{
   'update:services': [Record<string, string>]
   'varPromote': [name: string, value: unknown]
   'seedVar': [name: string, spec: Record<string, unknown>],
-  /** 加入断言管理标记(spec v3 §5):FieldForm registryMark → path 组装
-   *  (+ 字段当前字面量 value 预填)上抛,CaseComposer 落 registry.entries
-   *  (registry 住在编排器层) */
-  'registryAdd': [mark: EntryPath & { value: unknown }]
+  /** 加入断言管理标记(spec v3 §5):FieldForm registryMark → **按域**组装
+   *  上抛(请求侧落注入地址,响应侧落断言目标),CaseComposer 落
+   *  registry.entries(registry 住在编排器层) */
+  'registryAdd': [mark: RegistryMark]
 }>()
 
 const local = reactive<StepView[]>([...(props.steps || [])])
@@ -992,17 +994,33 @@ function onVarPromote(_f: IOFieldBinding, name: string, value: unknown) {
 }
 
 /**
- * 菜单"加入断言管理"(spec v3 §5):FieldForm registryMark — stepIndex
- * 由本层补(FieldForm 无步骤上下文),jsonpath = 字段实例路径;value =
- * 字段当前字面量(条目 value 预填,编辑器可改)。v1 请求体标记只产
+ * 菜单"加入断言管理" —— 请求侧(spec v3 §5):FieldForm registryMark —
+ * stepIndex 由本层补(FieldForm 无步骤上下文),jsonpath = 字段实例路径;
+ * value = 字段当前字面量(条目 value 预填,编辑器可改)。v1 请求体标记只产
  * source='body'(headers = 协议位,spec v3 §1 裁定 9)。
  */
 function onRegistryMark(p: { field: IOFieldBinding; value: unknown }) {
   emit('registryAdd', {
+    kind: 'inject',
     stepIndex: activeStepIdx.value,
     source: 'body',
     jsonpath: p.field.path,
     value: p.value,
+  })
+}
+
+/**
+ * 菜单"加入断言管理" —— 响应侧(spec v3 §5):字段自身路径即**断言目标**
+ * (`respPathOf` 归一 scratch 域,与「断言该字段」同源)。该条目没有注入面 ——
+ * 注入地址由 CaseComposer 留空,待用户到断言管理补齐(补齐前整条判悬空、
+ * 运行期 skip)。**value 由 FieldForm 按域给空串**,本层不取字段值:响应字段
+ * 只读,其 example 不是用户想注入的东西。
+ */
+function onRegistryMarkResp(p: { field: IOFieldBinding }) {
+  emit('registryAdd', {
+    kind: 'assert',
+    stepIndex: activeStepIdx.value,
+    target: respPathOf(p.field),
   })
 }
 

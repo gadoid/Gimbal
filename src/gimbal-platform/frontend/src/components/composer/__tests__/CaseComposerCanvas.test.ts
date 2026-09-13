@@ -519,13 +519,15 @@ describe('CaseComposerCanvas — IO 双签卡片(C2)', () => {
     const ctl = w.find('.io-card input.ctl')
     expect((ctl.element as HTMLInputElement).disabled).toBe(true)
     expect((ctl.element as HTMLInputElement).value).toBe('ord-9')
-    // 菜单仅 提取/断言 两项
+    // 菜单三项:提取 / 加入断言管理 / 断言(值写入三项仍不出现 ——
+    // 响应侧无从写请求体的值)
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
     const items = w.findAll('.fa-item')
-    expect(items.length).toBe(2)
-    expect(w.text()).toContain('提取该字段')
-    expect(w.text()).toContain('断言该字段')
+    expect(items.length).toBe(3)
+    expect(items.map((b) => b.text()).join('|')).toContain('提取该字段')
+    expect(items.map((b) => b.text()).join('|')).toContain('加入断言管理')
+    expect(items.map((b) => b.text()).join('|')).toContain('断言该字段')
     expect(w.text()).not.toContain('引用共享变量')
     expect(w.text()).not.toContain('向该字段动态注入')
     // 点提取 → strategy 落 scratch 域路径
@@ -1645,7 +1647,7 @@ describe('CaseComposerCanvas — 响应契约树(P7)', () => {
     w.unmount()
   })
 
-  it('P7-3: 响应侧菜单 — 嵌套叶与容器头 ☰ 均仅 提取该字段/断言该字段 两项(更名后文案)', async () => {
+  it('P7-3: 响应侧菜单 — 嵌套叶与容器头 ☰ 均三项(提取/加入断言管理/断言)', async () => {
     const { w } = mountCanvas([respStep()])
     await flushPromises()
     const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
@@ -1655,22 +1657,24 @@ describe('CaseComposerCanvas — 响应契约树(P7)', () => {
     await w.find('.obj-node .field .fa-menu-btn').trigger('click')
     await flush()
     let items = w.findAll('.fa-item')
-    expect(items).toHaveLength(2)
+    expect(items).toHaveLength(3)
     expect(items[0].text()).toContain('提取该字段')
-    expect(items[1].text()).toContain('断言该字段')
+    expect(items[1].text()).toContain('加入断言管理')
+    expect(items[2].text()).toContain('断言该字段')
     expect(w.text()).not.toContain('引用共享变量')
     expect(w.text()).not.toContain('向该字段动态注入')
     // 收起叶菜单(叶子与容器头菜单分属不同 FieldForm 实例,状态各自独立)
     await w.find('.obj-node .field .fa-menu-btn').trigger('click')
     await flush()
     expect(w.findAll('.fa-item')).toHaveLength(0)
-    // 容器头 ☰(P3 structured 菜单在响应侧同款两项)
+    // 容器头 ☰(P3 structured 菜单在响应侧同款三项)
     await w.find('.obj-node > .node-head .node-fa .fa-menu-btn').trigger('click')
     await flush()
     items = w.findAll('.fa-item')
-    expect(items).toHaveLength(2)
-    expect(items.map((b) => b.text()).join()).toContain('提取该字段')
-    expect(items.map((b) => b.text()).join()).toContain('断言该字段')
+    expect(items).toHaveLength(3)
+    expect(items.map((b) => b.text()).join('|')).toContain('提取该字段')
+    expect(items.map((b) => b.text()).join('|')).toContain('加入断言管理')
+    expect(items.map((b) => b.text()).join('|')).toContain('断言该字段')
     w.unmount()
   })
 
@@ -2806,7 +2810,7 @@ describe('CaseComposerCanvas — 加入断言管理标记(spec v3 §5)', () => {
     const emits = canvas.emitted('registryAdd')
     expect(emits).toBeTruthy()
     // 载荷无 varName:path 即注入地址,value = 字段当前字面量原样直传
-    expect(emits![0][0]).toEqual({ stepIndex: 0, source: 'body', jsonpath: '$.amount', value: '-1' })
+    expect(emits![0][0]).toEqual({ kind: 'inject', stepIndex: 0, source: 'body', jsonpath: '$.amount', value: '-1' })
     w.unmount()
   })
 
@@ -2822,7 +2826,7 @@ describe('CaseComposerCanvas — 加入断言管理标记(spec v3 §5)', () => {
     await flush()
     const emits = canvas.emitted('registryAdd')
     expect(emits).toBeTruthy()
-    expect(emits![0][0]).toEqual({ stepIndex: 0, source: 'body', jsonpath: '$.orderId', value: 'ord-1' })
+    expect(emits![0][0]).toEqual({ kind: 'inject', stepIndex: 0, source: 'body', jsonpath: '$.orderId', value: 'ord-1' })
     w.unmount()
   })
 
@@ -2838,7 +2842,7 @@ describe('CaseComposerCanvas — 加入断言管理标记(spec v3 §5)', () => {
     const emits = canvas.emitted('registryAdd')
     expect(emits).toBeTruthy()
     // v3:模板串不再解析为 varName — 原样作 value 预填(用户在编辑器改成偏离值)
-    expect(emits![0][0]).toEqual({ stepIndex: 0, source: 'body', jsonpath: '$.orderId', value: '${var.oid}' })
+    expect(emits![0][0]).toEqual({ kind: 'inject', stepIndex: 0, source: 'body', jsonpath: '$.orderId', value: '${var.oid}' })
     w.unmount()
   })
 })

@@ -121,7 +121,7 @@ afterEach(() => {
 })
 
 describe('CaseComposer — registryAdd 落条目 + 保存调度(spec v3 §5)', () => {
-  const MARK = { stepIndex: 0, source: 'body' as const, jsonpath: '$.base_url', value: 'http://x' }
+  const MARK = { kind: 'inject' as const, stepIndex: 0, source: 'body' as const, jsonpath: '$.base_url', value: 'http://x' }
 
   it('registryAdd → registry.entries 落偏离条目(path/value 直取载荷)→ draft store 同步', async () => {
     const w = await mountPage()
@@ -185,7 +185,7 @@ describe('CaseComposer — 存量空注册表形状归一(assertion_registry: {}
 })
 
 describe('CaseComposer — 注册表水化失败防擦除(终审 F2)', () => {
-  const MARK = { stepIndex: 0, source: 'body' as const, jsonpath: '$.base_url', value: 'http://x' }
+  const MARK = { kind: 'inject' as const, stepIndex: 0, source: 'body' as const, jsonpath: '$.base_url', value: 'http://x' }
 
   /** 服务端存量注册表(用户精心维护的条目 — 擦除事故的受害面) */
   const SERVER_DRAFT = {
@@ -270,6 +270,33 @@ function mockBodyScenarioOnce() {
   ;(scen.steps[0] as any).request = { kind: 'request', body: { amount: 100 } }
   vi.mocked(api.getScenario).mockResolvedValue(scen)
 }
+
+describe('CaseComposer — 响应侧标记落**草稿**条目(判定 ①②③④)', () => {
+  const RESP_MARK = { kind: 'assert' as const, stepIndex: 0, target: '$.response_body.code' }
+
+  it('kind=assert → 注入地址空 / value 空 / asserts[0] 为**追加式** exists', async () => {
+    const w = await mountPage()
+    const canvas = w.findComponent(CaseComposerCanvas)
+    canvas.vm.$emit('registryAdd', RESP_MARK)
+    await nextTick()
+    await flushPromises()
+    const reg = (useScenarioDraftStore().draft as any).assertion_registry
+    expect(reg.entries).toHaveLength(1)
+    const e = reg.entries[0]
+    expect(e.id).toMatch(/^inj-/)
+    expect(e.name).toBe('断言 code')
+    // 草稿:注入地址留空 —— 用户到断言管理补齐后该条目才在运行期生效
+    expect(e.path).toEqual({ stepIndex: 0, source: 'body', jsonpath: '' })
+    expect(e.value).toBe('')
+    // mode 必须 append:override 的语义是「覆写既有断言(匹配键=步骤+target)」,
+    // 而新建的断言没有可覆写对象 —— 前端判 override-no-match,后端 override
+    // 分支找不到匹配就什么都不做,等于这条断言永不生效。
+    expect(e.asserts).toEqual([
+      { stepIndex: 0, target: '$.response_body.code', operator: 'exists', expected: '', mode: 'append' },
+    ])
+    w.unmount()
+  })
+})
 
 describe('CaseComposer — deadEntryIds 计算(裁定 10:CaseComposer 侧无他测覆盖)', () => {
   it('步骤树 + 注册表投影:越界/旧版判死,可解析条目不判死', async () => {

@@ -290,7 +290,7 @@ import type {
 import type {
   Scenario, DataSetSummary, Orchestration, ScenarioDraft,
 } from '@/types/scenario-composer'
-import type { AssertionRegistry, EntryPath } from '@/types/assertion-registry'
+import type { AssertionRegistry, RegistryMark } from '@/types/assertion-registry'
 import { genEntryId, normalizeRegistry } from '@/utils/assertion-registry'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
 import type { ScenarioView, StepView } from '@/types/plate'
@@ -549,21 +549,56 @@ function onVarPromote(name: string, value: unknown) {
   }
 }
 
+/** 断言目标末段(`$.response_body.items[0].sku` → `sku`)—— 草稿条目命名用 */
+function lastPathSeg(p: string): string {
+  return p.split(/[.[\]]/).filter(Boolean).pop() ?? p
+}
+
 /**
- * Canvas「加入断言管理」标记(spec v3 §5):落 registry 条目 — path 直取
- * 标记载荷,value 预填字段当前字面量,asserts 留空由编辑器补。registry
- * 不在 dirty watch 源(watch [definition, orchestration])→ 显式走与
+ * Canvas「加入断言管理」标记(spec v3 §5):落 registry 条目,**按域分两种** ——
+ *  * `inject` 请求侧:path 直取标记载荷(注入地址),value 预填字段当前字面量,
+ *    asserts 留空由编辑器补。
+ *  * `assert` 响应侧:字段路径是**断言目标**,落 `asserts[0].target`。`mode`
+ *    必须是 **append** —— override 的语义是「覆写既有断言(匹配键 = 步骤+target)」,
+ *    而新建的断言没有可覆写对象(前端判 override-no-match、后端 override 分支
+ *    找不到匹配就什么都不做),用它等于这条断言永不生效。该条目没有注入面 ⇒
+ *    注入地址留空,判 path-unresolvable(悬空灰)是**预期的草稿态**:用户到
+ *    断言管理补齐地址后才在运行期生效(补齐前 dispatcher 整条 skip)。名字不叫
+ *    「偏离」—— 草稿里没有偏离,名字不得跑在实物前面。
+ *
+ * registry 不在 dirty watch 源(watch [definition, orchestration])→ 显式走与
  * 单字段编辑同款保存调度:置 dirty + 防抖自动保存,标记不丢。
  */
-function onRegistryAdd(mark: EntryPath & { value: unknown }) {
-  registry.value.entries.push({
-    id: genEntryId(),
-    name: `偏离 ${registry.value.entries.length + 1}`,
-    path: { stepIndex: mark.stepIndex, source: mark.source, jsonpath: mark.jsonpath },
-    value: mark.value,
-    asserts: [],
-  })
-  ElMessage.success({ message: '已加入断言管理(偏离值预填字段当前值,请到断言管理编辑)', duration: 4000 })
+function onRegistryAdd(mark: RegistryMark) {
+  if (mark.kind === 'assert') {
+    registry.value.entries.push({
+      id: genEntryId(),
+      name: `断言 ${lastPathSeg(mark.target)}`,
+      // 草稿:注入地址留空,待用户到断言管理补齐
+      path: { stepIndex: mark.stepIndex, source: 'body', jsonpath: '' },
+      value: '',
+      asserts: [{
+        stepIndex: mark.stepIndex,
+        target: mark.target,
+        operator: 'exists',
+        expected: '',
+        mode: 'append',
+      }],
+    })
+    ElMessage.success({
+      message: '已加入断言管理(该响应字段已建为一条断言;注入地址留空,到断言管理补齐后才会生效)',
+      duration: 5000,
+    })
+  } else {
+    registry.value.entries.push({
+      id: genEntryId(),
+      name: `偏离 ${registry.value.entries.length + 1}`,
+      path: { stepIndex: mark.stepIndex, source: mark.source, jsonpath: mark.jsonpath },
+      value: mark.value,
+      asserts: [],
+    })
+    ElMessage.success({ message: '已加入断言管理(偏离值预填字段当前值,请到断言管理编辑)', duration: 4000 })
+  }
   // 与 watch([definition, orchestration]) 体同款(dirty 标记 + 防抖调度)
   dirty.value = true
   if (saveState.value === 'saving') {

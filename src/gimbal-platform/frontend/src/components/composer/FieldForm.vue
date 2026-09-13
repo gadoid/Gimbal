@@ -1327,7 +1327,11 @@ function onFieldPromote(f: IOFieldBinding) {
  * (getValue,body 寻址)作 value 预填。Canvas 组装 path。
  */
 function onRegistryMenu(field: IOFieldBinding) {
-  emit('registryMark', { field, value: getValue(field) })
+  // 响应侧字段是**只读契约树**(body=null),getValue 会回落到 example ——
+  // 把那个 example 当 value 存进条目,用户之后补上注入地址的那一刻它就成
+  // 了真正注入请求体的值(隐蔽陷阱)。响应侧条目本无注入面,故一律空串。
+  const value = props.domain === 'response' ? '' : getValue(field)
+  emit('registryMark', { field, value })
   menuField.value = null
 }
 

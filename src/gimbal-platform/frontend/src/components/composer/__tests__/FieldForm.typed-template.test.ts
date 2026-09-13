@@ -9,7 +9,7 @@
  *   前端不再 Number() 强转吞模板);
  * - number 清空 → ''(对齐「其他字段」分支约定,不再是幻影 0);
  * - domain 转发到全部 ui_kind 分支(boolean/select/textarea/json 修漏):
- *   response 契约卡上菜单仅 提取/断言 两项。
+ *   response 契约卡上菜单三项(提取/加入断言管理/断言;值写入项仍不出现)。
  */
 import { describe, it, expect } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
@@ -224,7 +224,7 @@ describe('FieldForm — domain 转发到全部 ui_kind(菜单去重的漏传修�
     }), { st: 'a' }],
     ['textarea', mkBinding({ name: 'note', path: '$.note', ui_kind: 'textarea' }), { note: 'n' }],
     ['json', mkBinding({ name: 'ext', path: '$.ext', ui_kind: 'json' }), { ext: { a: 1 } }],
-  ])('%s 字段:domain=response → 菜单仅 提取/断言 两项', async (_kind, binding, bodyVal) => {
+  ])('%s 字段:domain=response → 菜单三项(提取/加入断言管理/断言)', async (_kind, binding, bodyVal) => {
     const { w } = mountWithParent({
       bindings: [binding],
       body: bodyVal,
@@ -234,9 +234,10 @@ describe('FieldForm — domain 转发到全部 ui_kind(菜单去重的漏传修�
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
     const items = w.findAll('.fa-item')
-    expect(items.length).toBe(2)
-    expect(w.text()).toContain('提取该字段')
-    expect(w.text()).toContain('断言该字段')
+    expect(items.length).toBe(3)
+    expect(items[0].text()).toContain('提取该字段')
+    expect(items[1].text()).toContain('加入断言管理')
+    expect(items[2].text()).toContain('断言该字段')
     expect(w.text()).not.toContain('引用共享变量')
     expect(w.text()).not.toContain('设为变量')
   })
