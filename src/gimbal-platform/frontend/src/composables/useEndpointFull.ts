@@ -25,7 +25,7 @@
  *     手工版本号或「读一下让它失效」的声明 —— 手工协议要求每个消费方在每处
  *     computed 里手写,漏一处即静默不重算(本容器不欠这份债)。
  *   - **失败负缓存**:失败记 `failedAt`,窗口 `FAILED_RETRY_MS` 内不再发起
- *     (plate 故障时渲染路径不再反复重发),窗口过后允许重试。
+ *     (plate 故障时不反复重发),窗口过后允许重试。
  *     **优先于 TTL**:面到期不足以让一个刚失败的端点重发。
  *   - **消毒(Ruling C7/C8b/C9)**:`/full` 是不可信来源。消毒上移到
  *     `getFullEndpoint` **出口**(`sanitizeEndpointFull`,request + 每个 response;
@@ -39,15 +39,13 @@
  * `getEndpointFull` / `endpointFullState`(读缓存即建立响应依赖,**不取数**);
  * 需要取数时调 `ensureEndpointFull(eid)`(幂等;面 TTL 内不重取,
  * 负缓存窗口内不重发)。
- * **判定面的读函数不得内部取数**:一个「读里带取」的合体口把名字变成谎话
+ * **读函数不得内部取数**:一个「读里带取」的合体口把名字变成谎话
  * (叫读,内部却 `void ensureEndpointFull`),而它正是渲染期请求的入口 ——
- * 判定面渲染期零请求(IS-7)就是靠这条纪律钉住的。
- * **这条纪律的落实范围 = 判定面**(`composables/useInjectableSurface.ts`);
- * 画布 `components/composer/CaseComposerCanvas.vue:635-640` 的 `stepDecls` 与
- * `:1591-1596` 的 `currentFull` 两个 computed 仍在内部
- * `void ensureEndpointFull(eid)` —— 画布**渲染期会取数**,由会话缓存 + 负缓存
- * 兜底(不自维持)。已知问题(非本文件可收口):
- * `docs/known-issues/platform/declaration-cache/canvas-render-path-fetch.md`。
+ * 渲染期零请求(判定面 IS-7 / 画布 CANVAS-FETCH-2)就是靠这条纪律钉住的。
+ * 取数时机由宿主显式给出:判定面是 `useInjectableSurface.ensure()`,
+ * 画布是 `CaseComposerCanvas` 里按 step 端点集 `immediate: true` 的那次预拉
+ * —— 它走的就是 `stepDecls` 会问到的同一份 step 列表(`local`),
+ * **覆盖面**由 CANVAS-FETCH-1 钉住。
  */
 import { reactive, shallowReactive } from 'vue'
 

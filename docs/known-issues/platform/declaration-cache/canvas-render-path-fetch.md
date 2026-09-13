@@ -1,8 +1,11 @@
 # 画布在渲染期取数（读 / 取分离只落到判定面）
 
 > **模块**：`gimbal-platform/frontend`（`CaseComposerCanvas.vue` × `useEndpointFull` 的读 / 取分离约定）
-> **状态**：已知未修复（**阶段二**）
+> **状态**：已修复（**阶段二 Task 7**）
 > **来源**：架构收敛终稿复核（controller 裁定：画布本体本波不动，记录在案）
+>
+> 以下正文是**修复前**的记载（保留历史，不改写）。其中三处记载与分析结论有误，
+> 逐条更正见文末 [修复记录](#修复记录)。
 
 ---
 
@@ -112,3 +115,67 @@ if (pending) return pending
 3. `useEndpointFull` 的负缓存窗口 / 在飞收敛语义被改动 —— §1 的「有界」结论要重核；
 4. 「读函数不得取数」被提升为全仓 lint / 测试约束（届时本文件的 `stepDecls` /
    `currentFull` 会直接变红）。
+
+## 修复记录
+
+**阶段二 Task 7（画布渲染期取数收口）**：删掉 `CaseComposerCanvas.vue` 里两处
+`void ensureEndpointFull(eid)` —— `stepDecls`（**函数**）与 `currentFull`（`computed`）
+各一处。读路径从此是纯缓存读（`getEndpointFull` / `endpointFullState`）。
+
+### 1. 为什么删掉是安全的：取数时机早就在
+
+画布**已有**一条显式取数时机 —— 按 step 端点集 `immediate: true` 的预拉：
+
+```ts
+// CaseComposerCanvas.vue（`stepEndpointIds` 与它的 watch）
+const stepEndpointIds = computed(() =>
+  local.map((s) => s.api?.view_hints?.endpoint_id).filter((v): v is string => !!v))
+watch(stepEndpointIds, (ids) => {
+  for (const id of ids) void ensureEndpointFull(id)
+}, { immediate: true })
+```
+
+它遍历 `local`（画布持有的 step 列表），`immediate: true` ⇒ 挂载即拉全量；
+而两处读的输入面**同样**只来自 `local`：`stepDecls` 的每个调用点传的都是
+`currentStep.value`（= `local[activeStepIdx.value]`，模板侧是 `fieldBindings(currentStep)`），
+`currentFull` 与之同源。⇒ **预拉的覆盖面 ⊇ 读的输入面**，两处内部取数纯属冗余。
+
+⇒ 本条不必「收口要动画布」：只删两行，不动任何消费面、不动任何重算时机
+（读 `shallowReactive` 容器照样建立响应依赖）。
+
+覆盖面不靠「读代码时记得」维持，另有两条测试钉住（`CaseComposerCanvas.test.ts`）：
+
+- `CANVAS-FETCH-1`：预拉覆盖 `stepDecls` 会问到的**每一个**端点（把预拉窄成
+  「只拉当前 step」即红）；
+- `CANVAS-FETCH-2`：渲染不再驱动取数（把任一处的 `void ensureEndpointFull`
+  加回来即红）。
+
+### 2. 更正三处记载
+
+1. **`stepDecls` 是 `function`，不是 computed。** 正文 §0 / §2、§3 第 1 条以及
+   README 索引行的「两个 computed」有误 —— 只有 `currentFull` 是 `computed`。
+2. **`currentFull` 的取数是冗余的，理由是预拉已覆盖全量**（见上）。正文 §2 结尾与
+   §3 第 3 条给的收口方向（「改成纯读需要给画布补一个显式的取数时机」）因此不成立：
+   时机不必补，那次 `immediate: true` 预拉就是 —— 本条的修复因此只是删两行，
+   不必动画布的消费面。
+3. **兜底机制不是「会话缓存 + 负缓存」。** 正文 §1 / §2 的「每端点每会话最多一次
+   成功请求」在阶段二 Task 5 之后不再成立：会话缓存有了 `FULL_TTL_MS`（**300s**）
+   有效期，**不再永久抑制重取** —— 面到期即允许重取（plate 发版后消费方在 ~5 分钟内
+   收敛到新面）。失败后的节奏改由**负缓存**界定：失败记 `failedAt`，
+   `FAILED_RETRY_MS`（**10s**）窗口内不重发，窗口过后允许重试；负缓存**优先于 TTL**
+   （面已到期也不让刚失败的端点立刻重发）。⇒ 成功端点：每 300s 至多一次；
+   失败端点：每 10s 窗口至多一次。
+
+### 3. 修复后的形状
+
+画布内 `ensureEndpointFull` 只剩两处：上面那次预拉，与**目录加入**
+（`onAddEndpoint`，用户动作）。另有 `CaseComposerCatalog` 浏览面板直接调
+`getFullEndpoint`（不经本缓存，见 `useEndpointFull` 文件头），亦非渲染驱动。
+渲染期（任何 computed / 模板）只读缓存：`stepDecls` → `getEndpointFull`、
+`currentFull` → `getEndpointFull`、`currentFullState` → `endpointFullState`。
+
+### 4. 本条关闭
+
+正文 §4 的四条「何时重开」不再适用于本条（第 1 条已被本波命中并落实，第 3 条的
+负缓存 / 在飞语义未动、§1 的「有界」结论已按上条第 3 项重述）。
+`docs/known-issues/README.md` 索引行的状态同步更新。

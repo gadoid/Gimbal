@@ -2842,3 +2842,47 @@ describe('CaseComposerCanvas — 加入断言管理标记(spec v3 §5)', () => {
     w.unmount()
   })
 })
+
+describe('CaseComposerCanvas — 渲染期取数收口(阶段二 Task 7)', () => {
+  /** 只带接口身份引用的最小 step(stepDecls 的输入面)。 */
+  function stepWith(eid: string): StepView {
+    return {
+      kind: 'step',
+      description: eid,
+      api: {
+        kind: 'api', service: 'fin', method: 'POST', path: '/x',
+        headers: {}, view_hints: { endpoint_id: eid },
+      },
+      request: { kind: 'request', body: {} },
+      strategy: [],
+    } as StepView
+  }
+
+  it('CANVAS-FETCH-1: 预拉覆盖 stepDecls 会问到的每一个端点', async () => {
+    const full = vi.mocked(getFullEndpoint)
+    full.mockClear()
+    const { w } = mountCanvas({ steps: [stepWith('ep-a'), stepWith('ep-b'), stepWith('ep-c')] })
+    await flushPromises()
+    // stepDecls 只在 local 里的 step 上被调用(currentStep 与模板 v-for 同源),
+    // 预拉走的正是 local —— 故三者相等即「问得到 ⇒ 已预拉」。
+    expect(new Set(full.mock.calls.map((c) => c[0])))
+      .toEqual(new Set(['ep-a', 'ep-b', 'ep-c']))
+    w.unmount()
+  })
+
+  it('CANVAS-FETCH-2: 渲染不再驱动取数', async () => {
+    const full = vi.mocked(getFullEndpoint)
+    full.mockClear()
+    const { w } = mountCanvas({ steps: [stepWith('ep-a')] })
+    await flushPromises()
+    const afterMount = full.mock.calls.length
+    // 「渲染期零请求」的可执行判据:预拉只在 stepEndpointIds 变化时触发,清空面 +
+    // 逼一次重渲染,造出的正是「预拉没覆盖到这个端点」的形状 —— 读口若内部取数,
+    // 渲染就会在这里发请求。
+    _resetEndpointFullCacheForTest()
+    await w.vm.$nextTick()
+    await flushPromises()
+    expect(full.mock.calls.length).toBe(afterMount)
+    w.unmount()
+  })
+})

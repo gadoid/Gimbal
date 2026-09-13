@@ -629,13 +629,13 @@ function inferProtocol(step: StepView | undefined): string {
   return 'step'
 }
 
-/** 当前 step 的请求目录(会话级按 endpoint_id 现拉 /full,不读持久化
- *  快照;step.request.fields_meta 不作数据源 — 退场记录见 docs/adr/0003)。
- *  读缓存(getEndpointFull)即建立响应依赖:回填后树/reqTypeC 自动重算。 */
+/** 当前 step 的请求目录(**纯缓存读**:目录按 endpoint_id 由本文件的预拉
+ *  取回,不读持久化快照;step.request.fields_meta 不作数据源 — 退场记录见
+ *  docs/adr/0003)。读缓存(getEndpointFull)即建立响应依赖:回填后树/reqTypeC
+ *  自动重算。 */
 function stepDecls(step: StepView | undefined) {
   const eid = step?.api?.view_hints?.endpoint_id
   if (!eid) return undefined
-  void ensureEndpointFull(eid)
   return getEndpointFull(eid)?.request?.declarations
 }
 
@@ -1593,7 +1593,6 @@ const currentFullState = computed<'loading' | 'failed' | ''>(() => {
 const currentFull = computed<EndpointFullView | undefined>(() => {
   const eid = currentStep.value?.api?.view_hints?.endpoint_id
   if (!eid) return undefined
-  void ensureEndpointFull(eid)
   return getEndpointFull(eid)
 })
 
