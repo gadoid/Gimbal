@@ -175,6 +175,12 @@ PG 部署下后端可能多 worker:`TtlLruCache`、`_WARNED`、在飞收敛**均
 - **Z1 `exists` 属性洞**:修它意味着**收紧**判定面(与可注入面 spec §5.2「只放宽不收紧」承诺相左)⇒ 需要显式裁定与 spec 修订。
 - **I `/full` 取数所有权**:收编到 `plate_client.get_endpoint_full(eid, ttl=…)`(承接仓库既有的「plate_client 拥有 plate 契约知识」原则)。
 
+  > **交付注(阶段二·① 实装后补,2026-09-13)**:上面那个 `ttl=…` 是**设计时刻的提案**,不是交付签名。
+  > 交付的签名是 `get_endpoint_full(endpoint_id, *, timeout=None)` —— **TTL 不是形参**:它由
+  > `DECLARED_PATHS_TTL_SEC` 在**缓存实例构造时冻结**(settings 热改即刻生效,裁定 C21),故没有
+  > 「按调用方传 ttl」这回事;逐请求形参只有 `timeout`(缺省取软取上限 `DECLARED_PATHS_TIMEOUT_SEC`,
+  > 3 s)。实装见 `src/gimbal-platform/backend/app/services/plate_client.py`。
+
 ## 8. 验收要点(阶段一)
 
 - **A**:`path: 7` 的声明不再使编辑器抛错;守卫只在 `iterFlat` 一处(删除重复);

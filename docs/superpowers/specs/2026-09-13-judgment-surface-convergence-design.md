@@ -309,7 +309,7 @@ a1 后「声明面那半」自动消散。剩下的差异是**服务对象不同
 | # | 任务 | 层 | 依赖 |
 |---|---|---|---|
 | T1 | `plate_client.get_endpoint_full(eid, *, timeout=…)` 统一取数(TTL 不是形参,见 §3.1;缓存载荷 = 完整 item);`endpoint_declarations` 改为消费它,**回退窗与「无旧值才降级」一并搬运**(保 D) | 后端 | — |
-| T2 | 代理返回 `declared_surface`(复用 `declared_paths_of` + `injectable_universe`),`item` 原样保留;降级时缺席而非 `[]` | 后端 | T1 |
+| T2 | 代理返回 `declared_surface`(复用 `declared_paths_of` + `injectable_universe`),`item` 原样保留;降级时取**显式 `null`**(不是缺席,也不得用 `[]` 冒充 —— 见 §2.2) | 后端 | T1 |
 | T3 | 前端消费 `declared_surface`;`bodyPathSetOf` 物化前缀;删 `pathResolvable` 前缀扫描;配跨语言对拍 | 前端 | T2 |
 | T4 | `useEndpointFull` 加 300s TTL + 换面 policy(重判 / 灰显 / 非阻断提示 / 勾选保留) | 前端 | T3 |
 | T5 | Z1:收紧 `exists`(保空容器宽容)+ 写侧按悬空拦截 | 后端 | — |
