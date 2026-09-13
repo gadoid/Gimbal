@@ -133,7 +133,7 @@ describe('CaseComposer — registryAdd 落条目 + 保存调度(spec v3 §5)', (
     const reg = (useScenarioDraftStore().draft as any).assertion_registry
     expect(reg.entries).toHaveLength(1)
     expect(reg.entries[0].id).toMatch(/^inj-/)
-    expect(reg.entries[0].name).toBe('偏离 1')
+    expect(reg.entries[0].name).toBe('$.base_url')
     expect(reg.entries[0].path).toEqual({ stepIndex: 0, source: 'body', jsonpath: '$.base_url' })
     expect(reg.entries[0].value).toBe('http://x')      // 字段当前字面量预填
     expect(reg.entries[0].asserts).toEqual([])
@@ -240,7 +240,7 @@ describe('CaseComposer — 注册表水化失败防擦除(终审 F2)', () => {
     // 并集:服务端存量在前,本地新增在后(按 id 不重不丢)
     expect(entries).toHaveLength(2)
     expect(entries[0].id).toBe('inj-server-1')
-    expect(entries[1].name).toBe('偏离 1')
+    expect(entries[1].name).toBe('$.base_url')
 
     // 水化完成后:后续自动保存不再重拉 /draft(registryHydrated 已置位)
     canvas.vm.$emit('registryAdd', MARK)
@@ -284,7 +284,7 @@ describe('CaseComposer — 响应侧标记落**草稿**条目(判定 ①②③�
     expect(reg.entries).toHaveLength(1)
     const e = reg.entries[0]
     expect(e.id).toMatch(/^inj-/)
-    expect(e.name).toBe('断言 code')
+    expect(e.name).toBe('$.response_body.code')
     // 草稿:注入地址留空 —— 用户到断言管理补齐后该条目才在运行期生效
     expect(e.path).toEqual({ stepIndex: 0, source: 'body', jsonpath: '' })
     expect(e.value).toBe('')

@@ -50,7 +50,13 @@ const REG = {
 }
 
 async function mountEditor(draft: any = { definition: DEF, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG }) {
-  vi.spyOn(api, 'getScenarioDraft').mockResolvedValue(draft as any)
+  // **深拷贝**:水化后的条目与 fixture **同引用**(normalizeRegistry 只在
+  // `asserts` 缺键时才展开,否则原样透传),而本页的编辑就是往条目里 push ——
+  // 不拷贝则前一个用例加的绑定会出现在后一个用例的行数里(顺序耦合)。
+  // 夹具里的值全是 JSON 安全面;`undefined` 经此变成「缺 value 键」,正是
+  // ARE-6 要测的形状。
+  const fresh = JSON.parse(JSON.stringify(draft))
+  vi.spyOn(api, 'getScenarioDraft').mockResolvedValue(fresh as any)
   vi.spyOn(api, 'updateScenario').mockResolvedValue({} as any)
   const w = mount(AssertionRegistryEditor, { global: { plugins: [ElementPlus] } })
   await flushPromises()
@@ -147,39 +153,42 @@ async function selectOnlyRow(w: any) {
   await flushPromises()
 }
 
-it('ARE-5: `$.` 前缀值 → 显形注记(JSONPath 读取 + default 兜底才是对的)', async () => {
+it('ARE-5: `$.` 前缀值 → 注记按**路径读取 + 读不到才兜底**叙述(不得说成变量引用)', async () => {
   const w = await mountEditor(draftWithValue('$.amount'))
   await selectOnlyRow(w)
   const note = w.find('.are-val-note')
   expect(note.exists()).toBe(true)
-  expect(note.text()).toContain('JSONPath')
-  expect(note.text()).toContain('default 兜底')   // 只对这类成立
-  expect(note.text()).toContain('覆写')
+  expect(note.text()).toContain('路径')
+  expect(note.text()).toContain('兜底')            // 读不到才用这里的字面量
+  expect(note.text()).toContain('覆写')            // 上下文同名时的边界
+  // 判别力:这一类**不是**变量引用 —— 说成变量引用就是把另一支的话搬过来
+  expect(note.text()).not.toContain('变量引用')
   w.unmount()
 })
 
-it('ARE-5b: 整串 ${...} 值 → 注记按**模板**叙述(不得再提 default 兜底)', async () => {
+it('ARE-5b: 整串 ${...} 值 → 注记按**变量引用先展开**叙述(不得再提兜底)', async () => {
   const w = await mountEditor(draftWithValue('${var.amount}'))
   await selectOnlyRow(w)
   const note = w.find('.are-val-note')
   expect(note.exists()).toBe(true)
-  // 真话:变量缺失 → 预处理阶段失败;变量存在 → 写入变量值
-  expect(note.text()).toContain('模板')
-  expect(note.text()).toContain('预处理')
-  expect(note.text()).toContain('变量值')
-  expect(note.text()).not.toContain('default 兜底')
+  // 真话:变量缺失 → 开始前即失败;变量存在 → 写入的是变量值
+  expect(note.text()).toContain('变量引用')
+  expect(note.text()).toContain('失败')
+  expect(note.text()).toContain('变量的值')
+  // 判别力:这一类**兜不住**,不得搬 $. 类的兜底叙述
+  expect(note.text()).not.toContain('兜底')
   w.unmount()
 })
 
-it('ARE-6: JSON null 值与缺 value 键 → 同一条「送不到引擎」注记', async () => {
+it('ARE-6: 空值(null / 缺 value 键)→ 同一条「送不到执行引擎」注记', async () => {
   for (const v of [null, undefined]) {
     const w = await mountEditor(draftWithValue(v))
     await selectOnlyRow(w)
     const note = w.find('.are-val-note')
     expect(note.exists()).toBe(true)
-    expect(note.text()).toContain('送不到引擎')
+    expect(note.text()).toContain('送不到执行引擎')
     // null 分支不得复用 $. 类的兜底叙述
-    expect(note.text()).not.toContain('default 兜底')
+    expect(note.text()).not.toContain('兜底')
     w.unmount()
   }
 })
@@ -216,11 +225,11 @@ it('ARE-8: path:null / 缺 asserts / 串 stepIndex / 标量条目 — 页面照�
   await rows[0].trigger('click')
   await flushPromises()
   expect(w.find('.are-detail').exists()).toBe(false)
-  // 缺 asserts → 详情照开,期望区空(不是 undefined.length 崩渲染)
+  // 缺 asserts → 详情照开,绑定断言区空(不是 undefined.length 崩渲染)
   await rows[1].trigger('click')
   await flushPromises()
   expect(w.find('.are-detail').exists()).toBe(true)
-  expect(w.find('.are-detail').text()).toContain('没有期望配对')
+  expect(w.find('.are-detail').text()).toContain('还没有绑定断言')
   // 串 stepIndex → 悬空(不再当活条目宣称一次永不触发的注入)
   expect(rows[2].classes()).toContain('are-dead')
   expect(rows[2].text()).toContain('悬空')
@@ -517,7 +526,7 @@ it('ARE-17: 换面提示绑在判定面上 —— 会话粘性的换面信号可
 // 下面两条互为判别对:空 target 必须出声且不改数据;填了 target 必须落条目
 // 且不误报。
 
-it('ARE-18: target 为空 → 点「添加期望」给可见告警,且不静默落一条无目标期望', async () => {
+it('ARE-18: 未填「断言哪个响应字段」→ 点「添加期望」给可见告警,不静默落一条无目标绑定', async () => {
   const warn = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({}) as any)
   const w = await mountEditor()
   await w.findAll('.are-row')[0].trigger('click')     // 选中活条目(inj-1,原有 1 条期望)
@@ -526,7 +535,7 @@ it('ARE-18: target 为空 → 点「添加期望」给可见告警,且不静默�
   await w.find('.are-add-assert').trigger('click')
   await flushPromises()
   expect(warn).toHaveBeenCalledTimes(1)
-  expect(String(warn.mock.calls[0][0])).toContain('target')
+  expect(String(warn.mock.calls[0][0])).toContain('断言哪个响应字段')
   // 反面:不得把空 target 当成合法值落进条目
   expect(w.find('.are-asserts tbody').findAll('tr').length).toBe(1)
   w.unmount()
@@ -544,5 +553,42 @@ it('ARE-19: target 填好 → 点「添加期望」正常追加,且不误报告�
   const rows = w.find('.are-asserts tbody').findAll('tr')
   expect(rows.length).toBe(2)
   expect(rows[1].text()).toContain('$.response_body.msg')
+  // 默认动作必须是「新增」—— 默认落「改写已有」会选中一个没有对象的动作,
+  // 那一条静默无效(见 ARE-21 的拦截)
+  expect(rows[1].text()).toContain('新增')
+  w.unmount()
+})
+
+// ── 「改写已有」的两面(判别对:可改写 / 无可改写)───────────────────
+
+it('ARE-20: 「改写已有」+ 该步骤确有同目标断言 → 落条目,动作列显示「改写」', async () => {
+  const w = await mountEditor()
+  await w.findAll('.are-row')[0].trigger('click')     // inj-1
+  await flushPromises()
+  // DEF.steps[0] 的 strategy 里确有 target = $.response_body.code 的断言
+  ;(w.vm as any).pendingAssert.target = '$.response_body.code'
+  ;(w.vm as any).pendingAssert.mode = 'override'
+  await w.find('.are-add-assert').trigger('click')
+  await flushPromises()
+  const rows = w.find('.are-asserts tbody').findAll('tr')
+  expect(rows.length).toBe(2)
+  expect(rows[1].text()).toContain('改写')
+  w.unmount()
+})
+
+it('ARE-21: 「改写已有」+ 该步骤无该目标断言 → 拦下并说明,不落一条静默无效的绑定', async () => {
+  const warn = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({}) as any)
+  const w = await mountEditor()
+  await w.findAll('.are-row')[0].trigger('click')
+  await flushPromises()
+  // 步骤上**没有** target = $.response_body.msg 的断言:后端 override 分支
+  // 找不到匹配就什么都不做 —— 落下去等于一条永不生效的绑定。
+  ;(w.vm as any).pendingAssert.target = '$.response_body.msg'
+  ;(w.vm as any).pendingAssert.mode = 'override'
+  await w.find('.are-add-assert').trigger('click')
+  await flushPromises()
+  expect(warn).toHaveBeenCalledTimes(1)
+  expect(String(warn.mock.calls[0][0])).toContain('改写已有')
+  expect(w.find('.are-asserts tbody').findAll('tr').length).toBe(1)   // 未落
   w.unmount()
 })

@@ -549,11 +549,6 @@ function onVarPromote(name: string, value: unknown) {
   }
 }
 
-/** 断言目标末段(`$.response_body.items[0].sku` → `sku`)—— 草稿条目命名用 */
-function lastPathSeg(p: string): string {
-  return p.split(/[.[\]]/).filter(Boolean).pop() ?? p
-}
-
 /**
  * Canvas「加入断言管理」标记(spec v3 §5):落 registry 条目,**按域分两种** ——
  *  * `inject` 请求侧:path 直取标记载荷(注入地址),value 预填字段当前字面量,
@@ -563,8 +558,8 @@ function lastPathSeg(p: string): string {
  *    而新建的断言没有可覆写对象(前端判 override-no-match、后端 override 分支
  *    找不到匹配就什么都不做),用它等于这条断言永不生效。该条目没有注入面 ⇒
  *    注入地址留空,判 path-unresolvable(悬空灰)是**预期的草稿态**:用户到
- *    断言管理补齐地址后才在运行期生效(补齐前 dispatcher 整条 skip)。名字不叫
- *    「偏离」—— 草稿里没有偏离,名字不得跑在实物前面。
+ *    断言管理补齐地址后才在运行期生效(补齐前 dispatcher 整条 skip)。命名两态统一
+ *    成「这条记录针对哪个地址」:请求侧 = 注入路径,响应侧草稿 = 绑定断言的响应字段。
  *
  * registry 不在 dirty watch 源(watch [definition, orchestration])→ 显式走与
  * 单字段编辑同款保存调度:置 dirty + 防抖自动保存,标记不丢。
@@ -573,7 +568,8 @@ function onRegistryAdd(mark: RegistryMark) {
   if (mark.kind === 'assert') {
     registry.value.entries.push({
       id: genEntryId(),
-      name: `断言 ${lastPathSeg(mark.target)}`,
+      // 名字用绑定断言的响应字段地址 —— 草稿还没有注入路径,它此刻的身份就是这个
+      name: mark.target,
       // 草稿:注入地址留空,待用户到断言管理补齐
       path: { stepIndex: mark.stepIndex, source: 'body', jsonpath: '' },
       value: '',
@@ -592,7 +588,8 @@ function onRegistryAdd(mark: RegistryMark) {
   } else {
     registry.value.entries.push({
       id: genEntryId(),
-      name: `偏离 ${registry.value.entries.length + 1}`,
+      // 名字用注入路径 —— 三元组的第一个元素即这条记录的身份,不另发明编号
+      name: mark.jsonpath,
       path: { stepIndex: mark.stepIndex, source: mark.source, jsonpath: mark.jsonpath },
       value: mark.value,
       asserts: [],

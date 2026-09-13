@@ -11,12 +11,15 @@
          asserts 编辑(步骤/target/操作符/期望值/mode,继承 v2)
        - 手工新建 = 步骤下拉 + jsonpath 输入(path 是注入地址,不预设
          模板化);整体 PUT 保存 — 只动 assertion_registry 键
+
+  **界面词汇 ↔ 字段**(每次改动两边同改;界面一律用户词,不印引擎术语):
+    注入路径 = `path` · 注入值 = `value` · 绑定断言 = `asserts[]`
 -->
 <template>
   <section class="are-editor">
     <header class="page-header">
       <div>
-        <h2 class="page-title">断言管理(偏离注入)</h2>
+        <h2 class="page-title">断言管理</h2>
         <p>
           场景 <strong class="scenario-name">{{ scenarioName }}</strong>
           <code class="sid">{{ scenarioId }}</code>
@@ -30,9 +33,9 @@
     </header>
 
     <p class="are-lead">
-      每条 = 一次偏离注入:定位 path(引擎 Assign 直补 request_body,与数据集 vars 解耦)
-      + 注入值 + 期望配对(override 覆写既有断言 / append 追加),执行时与数据集行
-      交叉(spec v3 §3/§4)。悬空条目标灰只提示,不阻断编辑。
+      每条 = 一次注入,由三部分构成:<strong>注入路径</strong>(把哪一步请求体里的哪个字段改掉)、
+      <strong>注入值</strong>(改成什么)、<strong>绑定断言</strong>(这次改动之后应当看到什么)。
+      运行时与数据集行交叉组合。条目标灰只提示地址失效,不阻断编辑。
     </p>
 
     <!-- 判定面提示位:降级 / 换面两种状态共用一条(SurfaceNotice,三处宿主同一份
@@ -60,7 +63,7 @@
         class="are-path-input"
         :candidates="pathCandidates"
         :state-of="stateOfPendingPath"
-        placeholder="jsonpath($.amount)"
+        placeholder="注入路径(例:$.amount)"
       />
       <el-button size="small" :disabled="!draft" @click="addEntry">新建条目</el-button>
     </div>
@@ -93,7 +96,7 @@
         <button type="button" class="are-del" title="删除条目" @click.stop="removeEntry(e.id)">×</button>
       </div>
       <div v-if="!registry.entries.length" class="are-empty">
-        还没有偏离注入条目 — 上方手工建,或在编排器字段菜单「加入断言管理」自动带来
+        还没有条目 — 上方手工建,或在编排器字段菜单「加入断言管理」自动带来
       </div>
     </div>
 
@@ -102,7 +105,7 @@
       <div class="are-detail-head">
         <el-input v-model="selected.name" class="are-name-input" size="small" placeholder="条目名称" />
         <span class="are-anchor">
-          锚点:步骤{{ selected.path.stepIndex + 1 }} · {{ selected.path.source }} · {{ selected.path.jsonpath }}
+          注入路径:第 {{ selected.path.stepIndex + 1 }} 步请求体 · <code>{{ selected.path.jsonpath }}</code>
           <button
             type="button"
             class="are-anchor-jump"
@@ -114,7 +117,7 @@
 
       <!-- 注入值(value)— 类型化编辑 -->
       <div class="are-sec">
-        <h4>注入值(value)<span class="are-sec-hint">物化 = 引擎 Assign 直补 request_body(spec v3 §3);原样覆写不 coerce</span></h4>
+        <h4>注入值<span class="are-sec-hint">运行时把这个字段改成下面的值;原样写入,不做类型转换</span></h4>
         <div class="are-value-edit">
           <el-select v-model="valueDraft.kind" size="small" class="are-kind-select" @change="onKindChange">
             <el-option value="str" label="str" />
@@ -142,13 +145,13 @@
         <div v-if="valueRefNote" class="are-val-note">{{ valueRefNote }}</div>
       </div>
 
-      <!-- 期望配对(asserts)— 继承 v2 段 -->
+      <!-- 绑定断言(asserts)— 继承 v2 段 -->
       <div class="are-sec">
-        <h4>期望配对(asserts)<span class="are-sec-hint">override 覆写既有断言(匹配键 = 步骤+target)/ append 追加</span></h4>
-        <div v-if="!selected.asserts.length" class="are-empty">没有期望配对</div>
+        <h4>绑定断言<span class="are-sec-hint">这次注入之后,应当看到什么</span></h4>
+        <div v-if="!selected.asserts.length" class="are-empty">还没有绑定断言</div>
         <table v-else class="are-asserts">
           <thead>
-            <tr><th>步骤</th><th>target</th><th>op</th><th>expected</th><th>mode</th><th /></tr>
+            <tr><th>步骤</th><th>断言哪个响应字段</th><th>判据</th><th>期望值</th><th>动作</th><th /></tr>
           </thead>
           <tbody>
             <tr v-for="(a, i) in selected.asserts" :key="`${a.stepIndex}:${a.target}:${i}`">
@@ -156,7 +159,7 @@
               <td><code>{{ a.target }}</code></td>
               <td>{{ a.operator }}</td>
               <td><code class="are-val">{{ fmtVal(a.expected) }}</code></td>
-              <td><span class="are-mode" :class="`m-${a.mode}`">{{ a.mode }}</span></td>
+              <td><span class="are-mode" :class="`m-${a.mode}`">{{ a.mode === 'append' ? '新增' : '改写' }}</span></td>
               <td><button type="button" class="are-del" title="删除期望" @click="selected.asserts.splice(i, 1)">×</button></td>
             </tr>
           </tbody>
@@ -174,15 +177,15 @@
             v-model="pendingAssert.target"
             class="are-target-input"
             :candidates="targetCandidates"
-            placeholder="target($.response_body.code)"
+            placeholder="断言哪个响应字段(例:$.response_body.code)"
           />
           <el-select v-model="pendingAssert.operator" size="small" class="are-op-select" filterable allow-create>
             <el-option v-for="op in OPERATORS" :key="op" :value="op" :label="op" />
           </el-select>
           <el-input v-model="pendingAssert.expected" size="small" class="are-exp-input" placeholder="期望值" />
           <el-select v-model="pendingAssert.mode" size="small" class="are-mode-select">
-            <el-option value="override" label="override" />
-            <el-option value="append" label="append" />
+            <el-option value="append" label="新增一条" />
+            <el-option value="override" label="改写已有" />
           </el-select>
           <button type="button" class="are-add-assert" @click="addAssert">+ 添加期望</button>
         </div>
@@ -356,26 +359,28 @@ const valueRefNote = computed(() => {
   if (!e || isLegacyEntry(e)) return ''
   const v = e.value
   if (v === null || v === undefined) {
-    return 'null(或缺 value 键)送不到引擎:plate 导出会丢弃 source 为 null 的 Assign,'
-      + '该用例加载即失败。请改用字符串(如空串 / "null")表达,或删除本条目。'
+    return '值为空(null)时送不到执行引擎 —— 导出时会丢掉它,这条用例一加载就失败。'
+      + '请改用字符串表达(如空串 或 "null"),或删除本条。'
   }
   if (typeof v !== 'string') return ''
   if (v.startsWith('${') && v.endsWith('}')) {
-    return '整串 ${...} 是引擎的模板引用,平台补的 default 兜不住它:引擎在任何策略执行前'
-      + '先做模板展开 —— config.vars 缺同名变量则该用例在预处理阶段即失败;'
-      + '有同名变量则此处写入变量值,不是本字面量。'
+    return '整串 ${...} 会被当作**变量引用**先展开,不是在运行时才替换:'
+      + '共享变量里没有同名变量 → 这条用例在开始前就失败;'
+      + '有同名变量 → 实际写入的是**变量的值**,不是这里填的字面量。'
   }
   if (v.startsWith('$.')) {
-    return '以 $. 开头:引擎先按 JSONPath 从场景上下文读,读不到才写入本字面量'
-      + '(平台已补 default 兜底);若场景上下文里恰好存在同名路径,会被上下文值覆写。'
+    return '以 $. 开头会被当作**路径**先去场景上下文里读,读不到才用这里的字面量兜底;'
+      + '若上下文里恰好有同名路径,会被它覆写。'
   }
   return ''
 })
 
-/** 手工新建暂存:步骤 + jsonpath(path 是注入地址,不预设模板化) */
+/** 手工新建暂存:步骤 + 注入路径(不预设模板化) */
 const pendingPath = ref({ stepIndex: 0, jsonpath: '' })
-/** asserts 行编辑暂存(mode 字符串形态,入条目时收窄) */
-const pendingAssert = ref({ stepIndex: 0, target: '', operator: 'eq', expected: '', mode: 'override' as string })
+/** 绑定断言行编辑暂存(mode 字符串形态,入条目时收窄)。
+ *  **默认 `append`**:新建一条绑定时选「改写已有」是没有对象的 —— 那一条会
+ *  静默无效(见 addAssert 的拦截)。默认值必须落在恒成立的那一侧。 */
+const pendingAssert = ref({ stepIndex: 0, target: '', operator: 'eq', expected: '', mode: 'append' as string })
 const OPERATORS = ['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'contains', 'exists']
 
 /** 请求侧候选(spec v3.1 §2.1)= 可注入面(body 现存 ∪ 契约声明全状态)。
@@ -383,6 +388,21 @@ const OPERATORS = ['eq', 'ne', 'gt', 'ge', 'lt', 'le', 'contains', 'exists']
 const pathCandidates = computed<string[]>(() => [
   ...surface.pathsOfStep(pendingPath.value.stepIndex),
 ])
+
+/** 所选步骤上**已存在**的断言目标(scratch 域)= 「改写已有」的匹配面。
+ *  判据与后端 `compose_injection_scenario` 的 override 分支同源
+ *  (kind==='assertion' 且 target 相等);取步容错(越界 / 畸形 ⇒ 空集,
+ *  与 registryIssues 的 `_step_at` 同口径 —— 判死不在这里)。 */
+const existingAssertTargets = computed<Set<string>>(() => {
+  const step = steps.value[pendingAssert.value.stepIndex] as Record<string, unknown> | undefined
+  const strat = Array.isArray(step?.strategy) ? (step.strategy as unknown[]) : []
+  return new Set(
+    strat
+      .filter((s): s is Record<string, unknown> => !!s && typeof s === 'object')
+      .filter((s) => s.kind === 'assertion')
+      .map((s) => String(s.target)),
+  )
+})
 
 /** 建议行状态标注薄壳:判定面按步取态(composable 的 stateOf 显式收 si,
  *  候选来自"当前待选步骤",该下标就在本页手里)。 */
@@ -418,12 +438,14 @@ onMounted(async () => {
 
 function addEntry() {
   if (!pendingPath.value.jsonpath.startsWith('$')) {
-    ElMessage.warning('jsonpath 需以 $ 开头(例:$.amount)')
+    ElMessage.warning('注入路径需以 $ 开头(例:$.amount)')
     return
   }
   const e: AssertionEntry = {
     id: genEntryId(),
-    name: `偏离 ${registry.value.entries.length + 1}`,
+    // 名字就用注入路径 —— 三元组的第一个元素本身就是这条记录的身份。
+    // 不另发明编号(编号没有信息量),也不用「偏离」(对还没有注入面的草稿是假话)。
+    name: pendingPath.value.jsonpath,
     path: {
       stepIndex: pendingPath.value.stepIndex,
       source: 'body',
@@ -442,10 +464,21 @@ function removeEntry(id: string) {
 }
 function addAssert() {
   if (!selected.value || isLegacyEntry(selected.value)) return
-  // target 是期望的必备项,缺了就落不了条目 —— 但**必须出声**:按钮就在那儿
+  // 绑定断言的两项必备内容,缺了就落不了条目 —— 但**必须出声**:按钮就在那儿
   // 摆着,静默 return 等于「点了没反应」,用户无从知道差什么(与 addEntry 同口径)
   if (!pendingAssert.value.target) {
-    ElMessage.warning('target 不能为空(例:$.response_body.code)')
+    ElMessage.warning('要先填「断言哪个响应字段」(例:$.response_body.code)')
+    return
+  }
+  const mode = pendingAssert.value.mode === 'append' ? 'append' : 'override'
+  // 「改写已有」的匹配面 = 该步骤上**已存在**的断言目标(与后端
+  // compose_injection_scenario 的 override 分支同判据)。没有可改写的对象时
+  // 后端什么都不做 —— 落下去就是一条静默无效的绑定,故在此拦下并说清差什么。
+  if (mode === 'override' && !existingAssertTargets.value.has(pendingAssert.value.target)) {
+    ElMessage.warning(
+      '「改写已有」只对步骤上已存在的同目标断言生效 —— 这一步没有该目标的断言,'
+      + '这条会什么都不做。要新增请选「新增一条」',
+    )
     return
   }
   selected.value.asserts.push({
@@ -453,7 +486,7 @@ function addAssert() {
     target: pendingAssert.value.target,
     operator: pendingAssert.value.operator,
     expected: pendingAssert.value.expected,
-    mode: pendingAssert.value.mode === 'append' ? 'append' : 'override',
+    mode,
   })
 }
 /** path ↗:跳编排器画布聚焦该步骤(与 DataSetEditor jumpToRef 同契约) */
