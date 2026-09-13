@@ -61,21 +61,29 @@ async def get_full_endpoint(
     ``declared_surface`` 为 ``None`` ⇒ 该端点的**声明面**不可解析(降级),前端
     从严只认 body 面。**不用 [] 冒充**:空目录(真无声明,给 ``["$"]``)与降级
     是两件事。契约 item 本身不可得时本路由直接 502/404,客户端看不到这个字段。
+
+    item 只要是 dict 就原样透传(**空 item ``{}`` 也算**):它得到一个空声明树
+    与 ``["$"]``,不视为错误 —— 不得用真值判等把 ``{}`` 并成 ``None``(§5)。
     """
     res = await get_endpoint_full(endpoint_id)
     if res.item is None:
-        # 状态映射:plate 404 → endpoint_not_found;拿到响应但信封无 item →
-        # plate_invalid_envelope;其余(连接失败 / 5xx)→ unavailable。
+        # 状态映射(四种失败各有各的码,不合并 —— §5):404 → 端点不存在;
+        # 200 → 信封里没有可用 item;其余 4xx → plate 拒了这次请求(带真实状态码);
+        # 5xx / 压根没拿到响应(None)→ plate 不可达。
         # 必须嵌在 item is None 里:刷新失败时旧快照仍在回退窗内 ⇒ item 是好的
         # 而 status 可能是那次失败的 404 —— 无条件映射会把「健康的旧契约服务」
         # 报成「端点不存在」。
         if res.status == 404:
             raise HTTPException(status_code=404, detail={
                 "code": "endpoint_not_found", "message": "endpoint not found"})
-        if res.status is not None and res.status < 500:
+        if res.status == 200:
             raise HTTPException(status_code=502, detail={
                 "code": "plate_invalid_envelope",
                 "message": f"no item in response ({res.reason})"})
+        if res.status is not None and res.status < 500:
+            raise HTTPException(status_code=502, detail={
+                "code": "plate_rejected",
+                "message": f"plate rejected the request (status {res.status})"})
         raise HTTPException(status_code=502, detail={
             "code": "plate_unavailable", "message": res.reason})
 

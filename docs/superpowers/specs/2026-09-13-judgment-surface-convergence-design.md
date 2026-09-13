@@ -143,7 +143,7 @@ declared_surface = None if paths is None else sorted(injectable_universe(None, p
 
 ### 3.2 必须保住阶段一的 D 修复
 
-阶段一的 D(失败保留旧快照)语义**实现在 `endpoint_declarations` 的缓存消费路径上**(`declarations_of` 的过期分支,`endpoint_declarations.py:222` 起;回退窗 3600s,`config.py:99`)。
+阶段一的 D(失败保留旧快照)语义**实现在 `endpoint_declarations` 的缓存消费路径上**(设计时刻的落点:`declarations_of` 的过期分支,`endpoint_declarations.py:222` 起;回退窗 3600s,`config.py:99`)。
 
 **取数上移时,回退语义必须一并上移且不被削弱** —— 失败时返回旧快照、仅在**无旧值**时才降级。这是 ① 里**回归风险最高的一处**:移动缓存是机械的,而以「取数失败就报错」的直觉重写这段是错的。任务必须显式携带:回退窗与「无旧值才降级」两条,并保留/搬运既有用例(`stale-snapshot` 系列)。
 

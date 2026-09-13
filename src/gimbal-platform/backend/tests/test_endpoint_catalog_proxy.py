@@ -35,8 +35,9 @@ _SAMPLE = {"code": 0, "data": {"data": [{"order_id": "BL123"}], "total": 1}}
 class EndpointPlateMock:
     """Programmable Plate mock for the endpoint resolve-paths action.
 
-    behaviour: ok | server_error | unavailable | bad_envelope | not_found
-    (``not_found`` 只作用于 /full:plate 答 404,用于端点不存在的映射)。
+    behaviour: ok | server_error | unavailable | bad_envelope | not_found | rejected
+    (``not_found`` / ``rejected`` 只作用于 /full:plate 分别答 404 与 401,
+    用于「端点不存在」与「plate 拒了这次请求」两条映射)。
     ``full_envelope`` 是 /full 的响应信封;None ⇒ /full 走 404。
     (GeneratorPlateMock 模式: install() 换 plate_client 单例,
     handler 按当前 behaviour 分派。)
@@ -60,6 +61,8 @@ class EndpointPlateMock:
             if request.url.path.endswith("/full"):
                 if mock.behaviour == "not_found":
                     return httpx.Response(404, json={"ok": False})
+                if mock.behaviour == "rejected":
+                    return httpx.Response(401, json={"ok": False})
                 if mock.full_envelope is None:
                     return httpx.Response(404)
                 return httpx.Response(200, json=mock.full_envelope)
@@ -159,7 +162,9 @@ async def test_full_surface_is_declared_half_only(
     assert r.status_code == 200
     body = r.json()
     assert body["declared_surface"] == ["$", "$.customer", "$.customer.id"]
-    assert body["request"] == _FULL_ENVELOPE["data"]["item"]["request"]
+    # 整体比对(不只看 request):漏了 responses 键同样是「裁剪 item」,也要红。
+    assert {k: v for k, v in body.items() if k != "declared_surface"} == \
+        _FULL_ENVELOPE["data"]["item"]
 
 
 async def test_full_surface_empty_decls_is_just_dollar(
@@ -173,6 +178,26 @@ async def test_full_surface_empty_decls_is_just_dollar(
     headers = await _auth(client)
     r = await client.get("/api/endpoint-catalog/ep-1/full", headers=headers)
     assert r.json()["declared_surface"] == ["$"]
+
+
+async def test_full_empty_item_is_served_not_an_error(
+    client: AsyncClient, endpoint_plate_mock: EndpointPlateMock
+) -> None:
+    """空 item ``{}`` 是**合法 item** → 200 + 空声明树 ``["$"]``,不是信封坏。
+
+    取数层只校验 item 是 dict,故 ``{}`` 通过并入缓存;代理据此判 ``is None`` 判真
+    ⇒ 正常服务。**不得**改用真值判等(`if not item`)把它并成「信封不可用」——
+    ``{}`` 是有意义的 falsy 值(§5),它意味着「这个端点还没有声明树」。
+    """
+    endpoint_plate_mock.full_envelope = {
+        "ok": True, "dim": "endpoint", "data": {"item": {}},
+    }
+    headers = await _auth(client)
+    r = await client.get("/api/endpoint-catalog/ep-1/full", headers=headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert {k: v for k, v in body.items() if k != "declared_surface"} == {}
+    assert body["declared_surface"] == ["$"]
 
 
 async def test_full_surface_is_null_when_declarations_are_garbage(
@@ -195,20 +220,31 @@ async def test_full_surface_is_null_when_declarations_are_garbage(
 
 @pytest.mark.parametrize("behaviour,expected,code", [
     ("unavailable", 502, "plate_unavailable"),        # 连不上:没拿到响应
+    ("server_error", 502, "plate_unavailable"),       # 5xx:plate 挂了
     ("not_found", 404, "endpoint_not_found"),         # 拿到了 404
+    ("rejected", 502, "plate_rejected"),              # 非 404 的 4xx:plate 拒了请求
     ("bad_envelope", 502, "plate_invalid_envelope"),  # 200 但信封里没有 item
 ])
 async def test_full_failure_states(
     client: AsyncClient, endpoint_plate_mock: EndpointPlateMock,
     behaviour: str, expected: int, code: str,
 ) -> None:
-    """三种失败各有各的码:连不上 / 端点不存在 / 信封不可用不得合并(§5)。"""
+    """四种失败各有各的码,不得合并(§5):连不上 / 5xx / 端点不存在 / plate 拒绝 / 信封不可用。
+
+    `plate_invalid_envelope` **收窄到 200**:它专指「拿到了 200 但信封里没有可用
+    item」。plate 的 4xx(此处 401)是**它拒绝了这次请求**,不是信封坏 —— 压成
+    `plate_invalid_envelope` 会把两个状态合并,并让前端看不出该不该重试。
+    """
     endpoint_plate_mock.full_envelope = _FULL_ENVELOPE
     endpoint_plate_mock.behaviour = behaviour
     headers = await _auth(client)
     r = await client.get("/api/endpoint-catalog/ep-1/full", headers=headers)
     assert r.status_code == expected
-    assert r.json()["detail"]["code"] == code
+    detail = r.json()["detail"]
+    assert detail["code"] == code
+    if behaviour == "rejected":
+        # message 必须带上 plate 的真实状态码(否则 4xx 的真话在链路上丢了)
+        assert "401" in detail["message"]
 
 
 async def test_full_stale_snapshot_survives_a_refresh_404(
@@ -233,7 +269,8 @@ async def test_full_stale_snapshot_survives_a_refresh_404(
     r = await client.get("/api/endpoint-catalog/ep-1/full", headers=headers)
     assert r.status_code == 200
     body = r.json()
-    assert body["request"] == _FULL_ENVELOPE["data"]["item"]["request"]
+    assert {k: v for k, v in body.items() if k != "declared_surface"} == \
+        _FULL_ENVELOPE["data"]["item"]
     assert body["declared_surface"] == ["$", "$.customer", "$.customer.id"]
 
 
