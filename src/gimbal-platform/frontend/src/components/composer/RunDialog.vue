@@ -99,6 +99,15 @@
                (契约面在途时**只有**契约依赖的那批不判死:宿主按 pending 摘除) -->
           <section v-if="assertionEntries.length" class="run-section rd-injection">
             <label class="run-label">断言注入条目 <span class="muted small">(异常组, 可多选 — 与数据集行交叉生成 case:N 行 × M 条目)</span></label>
+            <!-- 契约降级提示:下面那批「悬空 — 不可选」正是这里最刺眼的症状,而它是
+                 plate 取数失败造成的、可以重试 —— 不给这句话,用户看到的就是
+                 「条目灰着、点不动」而不知道为什么。与编辑器/画布同一份呈现。 -->
+            <SurfaceNotice
+              v-if="contractDegraded"
+              kind="degraded"
+              text="契约取数失败 —— 依赖契约的条目可能被判悬空、不可勾选;可重试恢复"
+              @retry="emit('retryContract')"
+            />
             <el-checkbox-group v-model="injectionIds" class="rd-inj-group">
               <el-checkbox v-for="e in assertionEntries" :key="e.id" :value="e.id"
                 :disabled="isLegacyEntry(e) || deadIds.has(e.id)">
@@ -254,6 +263,7 @@ import type { DataSetSelection, RunPreset, ServiceBinding, RunScheme, RunOverlay
 import type { Scenario, DataSetSummary } from '@/types/scenario-composer'
 import type { AssertionEntry, LegacyAssertionEntry } from '@/types/assertion-registry'
 import { isLegacyEntry } from '@/types/assertion-registry'
+import SurfaceNotice from './SurfaceNotice.vue'
 
 /** 绑定行(spec D3):声明 ∪ 引用并集的固定行;declaredUrl null = 未声明引用行 */
 export interface ServiceRow { service: string; declaredUrl: string | null }
@@ -286,6 +296,10 @@ const props = withDefaults(defineProps<{
    *  「仅因契约未定」的条目 ⇒ 不过滤 preset、不标悬空、不禁选,契约落定后
    *  补一次收窄。缺省 false(契约面已定 / 该场景无契约面)。 */
   contractPending?: boolean
+  /** 契约面**降级**(被引用端点取数失败):宿主传 `surface.degraded`。为真时
+   *  悬空条目按从严判定(不可勾选)—— 必须让用户看见原因并给重试入口,否则
+   *  他看到的是「条目灰着、点不动」。缺省 false。 */
+  contractDegraded?: boolean
   /** 运行面板预填(spec v3 §6):数据集入口/「加入本次执行」传入;
    *  挂载时按此预勾(已删/悬空条目静默过滤),null = 无预填 */
   preset?: RunPreset | null
@@ -299,11 +313,14 @@ const props = withDefaults(defineProps<{
   assertionEntries: () => [] as AssertionEntry[],
   deadEntryIds: () => [] as string[],
   contractPending: false,
+  contractDegraded: false,
   preset: null,
 })
 
 const emit = defineEmits<{
   close: []
+  /** 契约降级提示上的「重试」:宿主用自己的判定面取数口重取(`ensure({ force: true })`) */
+  retryContract: []
   confirm: [
     dataSetSelection: DataSetSelection[],
     opts: {

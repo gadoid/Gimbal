@@ -19,7 +19,8 @@ import { flushPromises } from '@vue/test-utils'
 import * as api from '@/api/scenario-composer'
 import * as assertionRegistry from '@/utils/assertion-registry'
 import {
-  _resetEndpointFullCacheForTest, FULL_TTL_MS, getEndpointFull, surfaceVersion,
+  _resetEndpointFullCacheForTest, ensureEndpointFull, FULL_TTL_MS, getEndpointFull,
+  surfaceVersion,
 } from '@/composables/useEndpointFull'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
 
@@ -436,6 +437,26 @@ it('IS-16: 退避重试覆盖**全部**步骤端点 —— 无条目引用的那
     .toEqual(new Set(['ep-ref', 'ep-canvas']))       // ← 覆盖的是全部步骤端点
   expect(getEndpointFull('ep-canvas')).toBeDefined()  // 画布那一侧一并恢复
   expect(s.degraded.value).toBe(false)
+})
+
+it('IS-17: 退避**每一档都不是空操作** —— 他处重取失败刷新了负缓存,退避照样真发', async () => {
+  // 首档 10s 与负缓存窗 FAILED_RETRY_MS 同宽:退避若走「自发取数」那道闸,
+  // 只要别的消费者(画布/另一宿主的手动重试)在第一档到期前刚失败过一次,
+  // 窗口就被刷新到更近 ⇒ 这一档被静默吞掉,链子表面在跑、实际少试一次。
+  vi.useFakeTimers()
+  const spy = vi.spyOn(api, 'getFullEndpoint').mockRejectedValue(new Error('plate down'))
+  const { s } = surfaceOf('ep-down')
+  s.ensure()
+  await flushPromises()
+  expect(s.degraded.value).toBe(true)
+  expect(spy).toHaveBeenCalledTimes(1)
+  vi.advanceTimersByTime(9_500)                      // 距第一档还有 0.5s
+  await flushPromises()
+  await ensureEndpointFull('ep-down', { force: true })   // 他处的显式重试:真发,且失败
+  expect(spy).toHaveBeenCalledTimes(2)               // ⇒ 负缓存刷新到 t=9.5s
+  vi.advanceTimersByTime(500)                        // t=10s:退避第一档到期
+  await flushPromises()
+  expect(spy).toHaveBeenCalledTimes(3)               // ← 第一档真发了(不是空操作)
 })
 
 it('IS-14: degraded 的宽定义 —— 含「续用旧面」那一格(刷新失败,旧面仍被服务)', async () => {

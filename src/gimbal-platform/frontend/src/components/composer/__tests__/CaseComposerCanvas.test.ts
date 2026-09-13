@@ -2939,16 +2939,13 @@ describe('CaseComposerCanvas — 契约降级重试入口(阶段二 Task 8)', ()
       expect(full.mock.calls.length).toBe(1)
       // 失败态可见,且给的是**取数入口**(可点,不是静态说明文字)
       expect(w.text()).toContain('plate 不可达')
-      const retry = w.find('.full-degraded-retry')
+      const retry = w.find('.surface-notice-retry')
       expect(retry.exists()).toBe(true)
 
-      // 负缓存窗(10s)内的点击由共享缓存挡下(不锤打故障中的 plate)⇒ 把墙钟
-      // 推过窗口再点 —— 用户真正的恢复路径就是窗口过后的那一次点击。
-      vi.useFakeTimers({ toFake: ['Date'] })
-      vi.setSystemTime(Date.now() + 20_000)
+      // 点下去**当场**真发 —— 此刻还在失败负缓存窗(10s)之内,正说明显式动作
+      // 不走那道闸(force 的判别器:退化成自发取数 ⇒ 这次点击被静默吞掉)。
       await retry.trigger('click')
       await flushPromises()
-      vi.useRealTimers()
 
       expect(full.mock.calls.length).toBe(2)              // ← 点出来的那次取数
       expect(w.text()).not.toContain('plate 不可达')        // 恢复 ⇒ 失败态提示消失
@@ -2972,7 +2969,7 @@ describe('CaseComposerCanvas — 契约降级重试入口(阶段二 Task 8)', ()
         .mockRejectedValue(new Error('plate down'))          // 之后的刷新全失败
       const { w, stepsRef } = mountCanvasLive([stepWith('ep-a', { orderId: 'ord-1' })])
       await flushPromises()
-      expect(w.find('.full-degraded').exists()).toBe(false)
+      expect(w.find('.surface-notice').exists()).toBe(false)
       expect(w.text()).toContain('orderId')                 // 反空转:面确实在生产树
 
       // 面 TTL 到期 ⇒ 用户动作(加一步)经预拉重取 ⇒ 本次刷新失败
@@ -2983,7 +2980,7 @@ describe('CaseComposerCanvas — 契约降级重试入口(阶段二 Task 8)', ()
       vi.useRealTimers()
 
       expect(full.mock.calls.length).toBeGreaterThan(1)      // 预拉确实重跑了
-      const notice = w.find('.full-degraded')
+      const notice = w.find('.surface-notice')
       expect(notice.exists()).toBe(true)                     // 刷新失败 ⇒ 降级可见
       expect(notice.text()).toContain('刷新失败')
       expect(w.text()).toContain('orderId')                  // 旧面照旧:不是靠清面换来的降级

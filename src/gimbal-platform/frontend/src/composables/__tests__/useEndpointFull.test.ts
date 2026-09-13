@@ -119,6 +119,36 @@ describe('useEndpointFull — /full 会话级缓存', () => {
     expect(spy).toHaveBeenCalledTimes(2)                     // 窗口后允许重试
   })
 
+  it('EF-9(新): force = 显式「重试」—— 负缓存窗内也真发,两道闸都跳过', async () => {
+    const spy = vi.spyOn(api, 'getFullEndpoint').mockRejectedValue(new Error('boom'))
+    expect(await ensureEndpointFull('ep-force')).toBeUndefined()
+    expect(spy).toHaveBeenCalledTimes(1)
+    // 窗口内**自发**取数照旧被挡下(既有防抖纪律不变)
+    expect(await ensureEndpointFull('ep-force')).toBeUndefined()
+    expect(spy).toHaveBeenCalledTimes(1)
+    // 窗口内**显式**重试照样真发 —— 一个点了没反应的「重试」比没有按钮更糟
+    expect(await ensureEndpointFull('ep-force', { force: true })).toBeUndefined()
+    expect(spy).toHaveBeenCalledTimes(2)
+    // 成功路径同样:面 TTL 内的 force 也重取(用户的「刷新」意图),非 force 不重取
+    spy.mockResolvedValue(FULL)
+    expect(await ensureEndpointFull('ep-force', { force: true })).toBe(FULL)
+    expect(spy).toHaveBeenCalledTimes(3)
+    expect(await ensureEndpointFull('ep-force')).toBe(FULL)
+    expect(spy).toHaveBeenCalledTimes(3)
+  })
+
+  it('EF-10(新): force 不重复发 —— 已在飞时复用那个 Promise(同一份结果)', async () => {
+    const deferred: { res?: (v: unknown) => void } = {}
+    const spy = vi.spyOn(api, 'getFullEndpoint')
+      .mockImplementation(() => new Promise((res) => { deferred.res = res }) as any)
+    const a = ensureEndpointFull('ep-inflight')
+    const b = ensureEndpointFull('ep-inflight', { force: true })
+    expect(spy).toHaveBeenCalledTimes(1)
+    deferred.res!(FULL)
+    expect(await a).toBe(FULL)
+    expect(await b).toBe(FULL)          // 同一份:不是第二次请求的结果
+  })
+
   it('EF-8(新): 失败侧响应式 — computed 读 endpointFullState 在失败后**自己**转 failed', async () => {
     vi.spyOn(api, 'getFullEndpoint').mockRejectedValue(new Error('boom'))
     // 画布 currentFullState 同形:computed 只读状态,失败后不得靠任何命令式重算

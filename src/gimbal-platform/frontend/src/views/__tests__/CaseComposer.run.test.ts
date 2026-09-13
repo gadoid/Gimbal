@@ -14,7 +14,7 @@
  * 交互走真实 DOM(顶栏运行按钮 + RunDialog 控件),弹层 Teleport 以
  * stubs: { teleport: true } 收回到 wrapper 内(RunDialog 兄弟测试同款)。
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
@@ -22,6 +22,7 @@ import CaseComposer from '@/views/CaseComposer.vue'
 import * as api from '@/api/scenario-composer'
 import type { Scenario } from '@/types/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
+import { _resetEndpointFullCacheForTest } from '@/composables/useEndpointFull'
 
 const mockRoute: { params: { scenarioId: string }; query: Record<string, string> } = {
   params: { scenarioId: 'sc-demo' },
@@ -272,6 +273,55 @@ describe('CaseComposer — RunDialog 对接(Task 12)', () => {
       orchestration?: { runSchemes?: unknown[] }
     }
     expect(draft?.orchestration?.runSchemes).toEqual([])
+    w.unmount()
+  })
+})
+
+describe('CaseComposer — 契约降级提示(阶段二 Task 8)', () => {
+  afterEach(() => { _resetEndpointFullCacheForTest() })
+
+  it('编排器侧的运行弹层同样给出提示 + 重试入口(与数据集入口同款,不只在编辑器/画布)', async () => {
+    // known-issue 的症状是「条目灰着、点不动」,现场在这个弹层里;提示若只接在
+    // RunPanelHost 那一侧,从编排器「运行」进来的用户看到的仍是静默降级。
+    _resetEndpointFullCacheForTest()
+    const sc = sampleScenario()
+    sc.steps = [{
+      kind: 'step', description: 's',
+      api: {
+        kind: 'api', service: 'fin-service', method: 'POST', path: '/x',
+        headers: {}, view_hints: { endpoint_id: 'ep-cp' },
+      },
+      request: { kind: 'request', body: {} }, strategy: [],
+    }] as Scenario['steps']
+    vi.spyOn(api, 'getScenario').mockResolvedValue(sc)
+    vi.spyOn(api, 'getScenarioDraft').mockResolvedValue({
+      assertion_registry: { entries: [
+        { id: 'inj-c', name: '契约依赖',
+          path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_x' }, value: 1, asserts: [] }] },
+    } as any)
+    const net = vi.spyOn(api, 'getFullEndpoint')
+      .mockRejectedValueOnce(new Error('plate down'))       // 挂载那一次失败
+      .mockResolvedValue({                                  // 重试时 plate 已恢复
+        id: 'ep-cp',
+        request: { declarations: [
+          { name: 'carry_x', path: '$.carry_x', state: 'carry', required: true, description: '' }] },
+        declared_surface: ['$', '$.carry_x'],
+      } as any)
+
+    const w = mountPage()
+    await flushPromises()
+    const dlg = await openRunDialog(w)
+    expect(dlg.props('contractDegraded')).toBe(true)
+    expect(dlg.props('deadEntryIds')).toEqual(['inj-c'])    // 从严判定 ⇒ 在这里不可勾选
+    const notice = dlg.find('.surface-notice')
+    expect(notice.exists()).toBe(true)
+    expect(notice.text()).toContain('契约取数失败')
+
+    await notice.find('.surface-notice-retry').trigger('click')   // 窗口内的显式动作也真发
+    await flushPromises()
+    expect(net).toHaveBeenCalledTimes(2)                    // ← 点出来的那次取数
+    expect(dlg.props('contractDegraded')).toBe(false)       // 恢复 ⇒ 提示消失
+    expect(dlg.props('deadEntryIds')).toEqual([])           // 条目由死转活
     w.unmount()
   })
 })

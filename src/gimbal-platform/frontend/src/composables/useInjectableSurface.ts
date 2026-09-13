@@ -62,7 +62,9 @@ export interface InjectableSurface {
    *  (失败也是答案,IS-3),自动重试通道即由这个信号驱动。
    *  **不收窄成「没有可用面」**:只要本次取数失败即为真,与旧面是否仍可用无关。 */
   degraded: ComputedRef<boolean>
-  ensure(): void
+  /** 取数(唯一副作用口)。`opts.force` = **界面上的「重试」**:跳过共享缓存的
+   *  TTL 与失败负缓存,无条件真发一次 —— 显式用户动作不受无人看管时的防抖约束。 */
+  ensure(opts?: { force?: boolean }): void
 }
 
 /** 降级后的重试退避表(ms):三档各试一次,**试满即停** —— 有界,不是常驻轮询。
@@ -84,10 +86,11 @@ export function useInjectableSurface(
    * **读**(本文件的 pathsOfStep / stateOf):纯缓存读,绝不取数 —— 渲染期
    * 只走这里。任何"读里带取"的合体口都不许入读路径:读函数内部若
    * `void ensureEndpointFull(eid)`,读路径经它 = 渲染期发请求。
-   * **取**:`ensure()` 显式、幂等,由宿主在挂载 / 步骤面变化时调用,覆盖
-   * **全部带 endpoint_id 的步骤** —— 读端不取数 ⇒ 取数必须一次取全,否则
-   * "给新条目挑契约字段"这条路径(候选/取态要问任意 si,含无条目引用的 si)
-   * 永远没有数据。幂等 + 面 TTL + 负缓存 ⇒ 同一端点在 TTL 内只取一次。 */
+   * **取**:`ensure()` 显式、幂等,由宿主在挂载 / 步骤面变化时(以及降级后的
+   * 退避)调用,覆盖**全部带 endpoint_id 的步骤** —— 读端不取数 ⇒ 取数必须
+   * 一次取全,否则 "给新条目挑契约字段"这条路径(候选/取态要问任意 si,含无
+   * 条目引用的 si)永远没有数据。幂等 + 面 TTL + 负缓存 ⇒ 自发取数在 TTL 内
+   * 只取一次;`ensure({ force: true })` 是界面「重试」的入口,不受两道闸约束。 */
   const stepEndpointIds = computed<string[]>(() => {
     const out = new Set<string>()
     for (let si = 0; si < steps.value.length; si++) {
@@ -96,8 +99,14 @@ export function useInjectableSurface(
     }
     return [...out]
   })
-  function ensure(): void {
-    for (const eid of stepEndpointIds.value) void ensureEndpointFull(eid)
+  function ensure(opts?: { force?: boolean }): void {
+    // 不要求 force 时按**单参**调用:自发取数的调用形状保持不变(消费方的
+    // `toHaveBeenCalledWith(eid)` 类断言按签名取值,不该为可选形参而变形)
+    for (const eid of stepEndpointIds.value) {
+      void (opts?.force === true
+        ? ensureEndpointFull(eid, { force: true })
+        : ensureEndpointFull(eid))
+    }
   }
   watch(stepEndpointIds, () => ensure(), { immediate: false })
 
@@ -168,10 +177,13 @@ export function useInjectableSurface(
   /** 重试一档:覆盖面与 `ensure()` 相同 —— **全部**带 endpoint_id 的步骤,不是
    *  只有被引用那几个。读端不取数 ⇒ 取数须一次取全;画布与判定面读同一份缓存,
    *  故这一次重试两侧同时恢复。落定后再排下一档(成功 ⇒ `degraded` 转 false,
-   *  下一次 `scheduleRetry` 自己收尾)。 */
+   *  下一次 `scheduleRetry` 自己收尾)。
+   *  **`force`**:每一档都是排好的取数,不该被共享缓存的负缓存窗二次节流 ——
+   *  否则别的消费者恰好在前一刻失败(刷新了 `failedAt`),这一档就成**空操作**,
+   *  链子表面在跑、实际少试了一次(首档与窗口同为 10s,正踩在这条边界上)。 */
   async function retryOnce(): Promise<void> {
     retryTier += 1
-    await Promise.all(stepEndpointIds.value.map((eid) => ensureEndpointFull(eid)))
+    await Promise.all(stepEndpointIds.value.map((eid) => ensureEndpointFull(eid, { force: true })))
     scheduleRetry()
   }
 

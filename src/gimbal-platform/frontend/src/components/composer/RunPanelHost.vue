@@ -24,8 +24,10 @@
     :assertion-entries="registry.entries"
     :dead-entry-ids="deadEntryIds"
     :contract-pending="contractPending"
+    :contract-degraded="contractDegraded"
     :preset="preset"
     @close="emit('close')"
+    @retry-contract="surface.ensure({ force: true })"
     @confirm="onConfirm"
     @save-scheme="onSaveScheme"
     @delete-scheme="onDeleteScheme"
@@ -103,6 +105,10 @@ onMounted(() => surface.ensure())
 /** 契约面在途(spec v3.1 §2.1)= 被条目引用的端点尚未回填 —— 传给 RunDialog 的
  *  信号与 deadEntryIds 的掩空决策**同源**,两者必须同步。 */
 const contractPending = computed(() => surface.pending.value)
+/** 契约面**降级**(被引用端点取数失败)= 悬空条目此刻从严判定(不可勾选)。
+ *  与 deadEntryIds 同源,一起传给 RunDialog:那里正是用户看见「条目灰着、点不动」
+ *  的地方,提示与重试入口必须在那儿,不能只留在编辑器/画布。 */
+const contractDegraded = computed(() => surface.degraded.value)
 /** 当前生效的死条目 = composable 的**门控后死集**(intrinsic ∪ 落定后的
  *  contractDependent):契约在途时 contractDependent 不判死(可能变活),
  *  intrinsic 恒判死(step-oob / legacy / override-no-match 不依赖判定面)。

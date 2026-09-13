@@ -268,3 +268,39 @@ it('RH-5: 契约落定后补一次收窄(只删不增)+ 用户手动勾选不被
   expect((dlg.vm as any).injectionIds).toEqual(['inj-live'])
   w.unmount()
 })
+
+it('RH-4: 契约降级 → 运行对话框里给出提示 + 重试入口;重试成功即恢复(症状现场必须看得见)', async () => {
+  // 这条 known-issue 的症状是「条目灰着、点不动」,而那正是发生在**这个对话框**里:
+  // 提示与重试入口若只留在编辑器/画布,用户在症状现场看到的仍是"不知道为什么"。
+  const draft = JSON.parse(JSON.stringify(DRAFT))
+  draft.definition.steps[0].api = { headers: {}, view_hints: { endpoint_id: 'ep-host' } }
+  draft.assertion_registry = { entries: [
+    { id: 'inj-c', name: '契约依赖',
+      path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_x' }, value: 1, asserts: [] }] }
+  vi.mocked(api.getScenarioDraft).mockResolvedValue(draft as any)
+  const net = vi.spyOn(api, 'getFullEndpoint')
+    .mockRejectedValueOnce(new Error('plate down'))          // 挂载那一次失败
+    .mockResolvedValue({                                     // 重试时 plate 已恢复
+      id: 'ep-host',
+      request: { declarations: [
+        { name: 'carry_x', path: '$.carry_x', state: 'carry', required: true, description: '' }] },
+      declared_surface: ['$', '$.carry_x'],
+    } as any)
+
+  const w = await mountHost()
+  const dlg = w.findComponent(RunDialog)
+  // 降级姿势的可观测后果:只被契约托着的条目被从严判死 ⇒ 对话框里不可勾选
+  expect(dlg.props('contractDegraded')).toBe(true)
+  expect(dlg.props('deadEntryIds')).toEqual(['inj-c'])
+  const notice = dlg.find('.surface-notice')
+  expect(notice.exists()).toBe(true)
+  expect(notice.text()).toContain('契约取数失败')
+
+  // 重试入口:窗口内的**显式**动作也真发(不受负缓存约束)
+  await notice.find('.surface-notice-retry').trigger('click')
+  await flushPromises()
+  expect(net).toHaveBeenCalledTimes(2)                     // ← 点出来的那次取数
+  expect(dlg.props('contractDegraded')).toBe(false)        // 恢复 ⇒ 提示消失
+  expect(dlg.props('deadEntryIds')).toEqual([])            // 条目由死转活(可勾选)
+  w.unmount()
+})

@@ -246,8 +246,10 @@
       :assertion-entries="registry.entries"
       :dead-entry-ids="deadEntryIds"
       :contract-pending="contractPending"
+      :contract-degraded="contractDegraded"
       :preset="runPreset"
       @close="closeRunDialog"
+      @retry-contract="surface.ensure({ force: true })"
       @confirm="onRunConfirm"
       @save-scheme="onSaveScheme"
       @delete-scheme="onDeleteScheme"
@@ -523,6 +525,9 @@ onMounted(() => surface.ensure())
 /** 契约面在途(spec v3.1 §2.1):与本页 deadEntryIds 的掩空决策**同源**。
  *  本页 draft 通常先就绪(Canvas 已拉过 /full),但首访/慢 plate 下仍可能命中。 */
 const contractPending = computed(() => surface.pending.value)
+/** 契约面降级 ⇒ RunDialog 里那批悬空条目从严禁选:提示 + 重试入口必须同时到
+ *  (与 RunPanelHost 同源同款;用户在这两个入口看到的不是两种说法)。 */
+const contractDegraded = computed(() => surface.degraded.value)
 /** 当前生效的死条目 = composable 的**门控后死集**:契约在途时「尚未判定」
  *  ≠「判死」(预勾 §5「加入本次执行」不被静默丢掉),但**不依赖判定面**的死因
  *  (step-oob / legacy)恒在 intrinsic ⇒ 恒禁选。运行面板的禁选与配置签列表的

@@ -458,20 +458,18 @@ it('ARE-16: 契约取数失败 → 降级提示可见 + 可点重试;重试成�
   await flushPromises()
   expect(net).toHaveBeenCalledTimes(1)
   // 失败态可见
-  const notice = w.find('.are-notice')
+  const notice = w.find('.surface-notice')
   expect(notice.exists()).toBe(true)
   expect(notice.text()).toContain('契约取数失败')
   // 且确为**真降级**:只被契约托着的条目此刻从严判死(悬空)
   expect(w.findAll('.are-row')[0].classes()).toContain('are-dead')
-  // 可点重试:负缓存窗(10s)内由共享缓存挡下(不锤打故障中的 plate)⇒
-  // 把墙钟推过窗口再点 —— 用户真正的恢复路径就是窗口过后的那一次点击。
-  vi.useFakeTimers({ toFake: ['Date'] })
-  vi.setSystemTime(Date.now() + 20_000)
-  await notice.find('.are-notice-retry').trigger('click')
+  // 可点重试:点下去**当场**真发 —— 此刻还在失败负缓存窗(10s)之内,正说明
+  // 显式动作不走那道闸(点了没反应比没有按钮更糟)。这一格是 force 的判别器:
+  // 退化成自发取数 ⇒ 这一次点击被静默吞掉,下面的计数与恢复断言全红。
+  await notice.find('.surface-notice-retry').trigger('click')
   await flushPromises()
-  vi.useRealTimers()
   expect(net).toHaveBeenCalledTimes(2)                    // ← 点出来的那次取数
-  expect(w.find('.are-notice').exists()).toBe(false)      // 恢复 ⇒ 提示消失
+  expect(w.find('.surface-notice').exists()).toBe(false)      // 恢复 ⇒ 提示消失
   expect(w.findAll('.are-row')[0].classes()).not.toContain('are-dead')
   w.unmount()
 })
@@ -491,7 +489,7 @@ it('ARE-17: 换面提示绑在判定面上 —— 会话粘性的换面信号可
   })
   await flushPromises()
   expect(net).toHaveBeenCalledTimes(1)
-  expect(w.find('.are-notice').exists()).toBe(false)      // 首取不算换面
+  expect(w.find('.surface-notice').exists()).toBe(false)      // 首取不算换面
   // 面到期后的重取 = ensure() 的第二类触发口(步骤面变化 / 重新挂载)
   // 整表假时钟(而非只假 Date):click 的受理与 Vue 的事件时间戳有关 ——
   // 监听器记下 attach 时刻,`_vts` 早于它的点击**会被静默丢掉**。把时钟往未来
@@ -501,14 +499,14 @@ it('ARE-17: 换面提示绑在判定面上 —— 会话粘性的换面信号可
   ;(w.vm as any).surface.ensure()
   await flushPromises()
   expect(net).toHaveBeenCalledTimes(2)
-  const notice = w.find('.are-notice')
+  const notice = w.find('.surface-notice')
   expect(notice.exists()).toBe(true)
   expect(notice.text()).toContain('契约已更新')
   // 换面是会话粘性的(越过首取那一版就永不回落)⇒ 呈现位必须可关,
   // 否则这条横幅在整会话里永远挂着
-  await notice.find('.are-notice-close').trigger('click')
+  await notice.find('.surface-notice-close').trigger('click')
   await flushPromises()
-  expect(w.find('.are-notice').exists()).toBe(false)
+  expect(w.find('.surface-notice').exists()).toBe(false)
   vi.useRealTimers()
   w.unmount()
 })

@@ -27,6 +27,8 @@
  *   - **失败负缓存**:失败记 `failedAt`,窗口 `FAILED_RETRY_MS` 内不再发起
  *     (plate 故障时不反复重发),窗口过后允许重试。
  *     **优先于 TTL**:面到期不足以让一个刚失败的端点重发。
+ *     只约束**自发**取数:`ensureEndpointFull(eid, { force: true })` 是显式
+ *     用户动作的入口,两道闸都跳过(见其 docstring)。
  *   - **消毒(Ruling C7/C8b/C9)**:`/full` 是不可信来源。消毒上移到
  *     `getFullEndpoint` **出口**(`sanitizeEndpointFull`,request + 每个 response;
  *     含不经本缓存的 `CaseComposerCatalog` 浏览面板)⇒ 所有消费方按构造拿到
@@ -102,12 +104,19 @@ function storeFetched(endpointId: string, clean: EndpointFullView) {
 
 /** 缓存未到期 / 负缓存窗口内 / 在飞 → 直接返回;否则拉 /full、**入口消毒**
  *  (幂等:出口已消毒一次,见 C8b)并回填(fail-soft)。
- *  **TTL 只在这里把守**:`FULL_TTL_MS` 到期才重取。 */
-export function ensureEndpointFull(endpointId: string): Promise<EndpointFullView | undefined> {
+ *  **TTL 只在这里把守**:`FULL_TTL_MS` 到期才重取。
+ *  `force` = **显式用户动作**(界面上的「重试」):跳过 TTL 与负缓存两道闸,
+ *  无条件真发一次(已在飞则复用那个 Promise,不重复发)。负缓存抑制的是
+ *  「无人看管时的反复重发」,不是拒绝人的意图 —— 一个点了没反应的「重试」
+ *  比没有按钮更糟,所以显式动作不受窗口约束;反复点击的上界由用户的手决定。 */
+export function ensureEndpointFull(
+  endpointId: string, opts?: { force?: boolean },
+): Promise<EndpointFullView | undefined> {
+  const force = opts?.force === true
   const entry = fullByEndpoint.get(endpointId)
-  if (entry && Date.now() - entry.at < FULL_TTL_MS) return Promise.resolve(entry.view)
+  if (!force && entry && Date.now() - entry.at < FULL_TTL_MS) return Promise.resolve(entry.view)
   const at = failedAt.get(endpointId)
-  if (at !== undefined && Date.now() - at < FAILED_RETRY_MS) {
+  if (!force && at !== undefined && Date.now() - at < FAILED_RETRY_MS) {
     return Promise.resolve(undefined)          // 负缓存命中:窗口内不重发(**面到期也不例外**)
   }
   const pending = inFlight.get(endpointId)
