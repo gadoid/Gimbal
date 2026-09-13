@@ -11,7 +11,7 @@ from typing import Any, Callable
 
 from loguru import logger
 
-from .jsonpath import exists
+from .jsonpath import JsonPathError, NodeKind, _parse, exists
 
 
 def _is_context_readable(source: Any) -> bool:
@@ -198,20 +198,30 @@ def _path_resolvable(jsonpath: str, body: Any, universe: set[str]) -> bool:
 
 
 def _host_conflict(body: Any, target: str) -> bool:
-    """``target`` 的路径是否落在非 dict 宿主上 —— 是则不可安全物化。
+    """``target`` 的路径是否落在**不称职的宿主容器**上 —— 是则不可安全物化。
 
-    引擎 ``_set_at`` 遇非 dict 即 ``data={}``,故往字符串/数字/列表的**内部**
-    写值会把整个宿主改形(``$.request_body.note.replace`` 之于
-    ``{"note":"hello"}`` ⇒ ``note`` 被整体换成 ``{"replace": v}``)。
+    引擎 ``_set_at`` 的 FIELD 段遇非 dict 即 ``data={}``、INDEX 段遇非 list 即
+    ``data=[]``,故往字符串/数字/别的容器**内部**写值会把整个宿主改形:
+    ``$.request_body.note.replace`` 之于 ``{"note":"hello"}`` ⇒ ``note`` 整体
+    换成 ``{"replace": v}``;``$.request_body.items[0].replace`` 之于
+    ``{"items":["abc"]}`` ⇒ 元素 ``"abc"`` 换成 ``{"replace": v}``。
+
+    分段走 **jsonpath 自己的解析器**的 token(``items[0]`` 是 FIELD+INDEX 两段,
+    不是字面键 ``"items[0]"``)—— 与被判的引擎 ``_set_at`` 同一套分段。每段:
+    宿主容器类型不符(该段 FIELD 要求 dict / INDEX 要求 list)⇒ **冲突**;
+    段**缺失** / 索引**越界** ⇒ **不算冲突**(引擎按类型创建 / 扩展列表);
+    末段落点的值本身不判(覆写叶子是 Assign 的正常语义)。
 
     三条**不算冲突**(都是 Assign 的正常语义或可创建情形):
     * target 就是 ``$.request_body`` 本身 —— 整体覆写 body;
     * ``body`` 为 ``None``(无 body)—— Assign 会创建;
-    * 路径段**缺失** —— 同样由 Assign 创建。
+    * 路径段**缺失** / 索引**越界** —— 同样由 Assign 创建。
 
     ``target`` 形如 ``$.request_body.note.replace``:前两段是调用点
     (:func:`_body_target` 固定加的前缀)拼接的,不是 body 的段,**必须剥掉
-    再走**;不匹配则不判、不猜。
+    再走**;不匹配则不判、不猜(``[`` 紧贴 ``request_body`` 的形态在点分段
+    判据下即不匹配;通配 / 过滤 / 递归段引擎 ``_set_at`` 直接 ``JsonPathError``,
+    同样不判)。
     """
     segs = [s for s in target.split(".") if s]
     if segs[:2] != ["$", "request_body"]:
@@ -221,15 +231,32 @@ def _host_conflict(body: Any, target: str) -> bool:
         return False
     if body is None:
         return False
-    if not isinstance(body, dict):
-        return True                 # body 存在但非 dict ⇒ 整段会被改形
+    try:
+        nodes = _parse(target)
+    except JsonPathError:           # 解析不了 ⇒ 不判、不猜
+        return False
+    if (not nodes or nodes[0].kind is not NodeKind.FIELD
+            or nodes[0].value != "request_body"):
+        return False                # 前缀不是纯 ``request_body`` 段 ⇒ 不判、不猜
     cur: Any = body
-    for seg in rest[:-1]:           # 末段不判:覆写叶子是 Assign 的正常语义
-        if seg not in cur:
-            return False            # 缺失 ⇒ 后续由 Assign 创建
-        cur = cur[seg]
-        if not isinstance(cur, dict):
-            return True
+    for node in nodes[1:]:
+        if node.kind is NodeKind.FIELD:
+            required: type = dict
+        elif node.kind is NodeKind.INDEX:
+            required = list
+        else:                       # 通配 / 过滤 / 递归:引擎写不进去,不判
+            return False
+        if not isinstance(cur, required):
+            return True             # 现存值不是所需容器 ⇒ 引擎会把它整段换掉
+        if node.kind is NodeKind.FIELD:
+            if node.value not in cur:
+                return False        # 缺失 ⇒ 后续由 Assign 创建
+            cur = cur[node.value]
+        else:
+            idx = node.value
+            if idx < 0 or idx >= len(cur):
+                return False        # 越界 ⇒ 同样由 Assign 创建
+            cur = cur[idx]
     return False
 
 

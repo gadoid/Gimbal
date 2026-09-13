@@ -313,6 +313,81 @@ def test_host_conflict_guard_leaves_normal_assign_semantics_alone():
         {"kind": "assign", "source": 1, "target": "$.request_body.b.c"}]
 
 
+def test_bracket_path_into_str_element_is_skipped():
+    """``$.items[0].replace`` —— 数组元素的宿主非 dict,同样判死 + 不物化。
+
+    ``items[0]`` 是 FIELD+INDEX **两段**,不是字面键 ``"items[0]"``:引擎
+    ``_set_at`` 的 INDEX 分支 ``data[idx] = _set_at(data[idx], rest, value)``
+    取出 ``"abc"``,下一个 FIELD 段遇非 dict 即 ``data = {}`` ⇒ 元素由
+    ``"abc"`` 变成 ``{"replace": v}``(与 ``$.note.replace`` 同类改形)。
+    """
+    from loguru import logger
+
+    body = {"items": ["abc"]}
+    body_of = _body_of([{"request": {"body": body}}])
+    entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                     "jsonpath": "$.items[0].replace"},
+             "value": "x", "asserts": []}
+    assert {"kind": "path-unresolvable", "stepIndex": 0,
+            "jsonpath": "$.items[0].replace"} in \
+        entry_issues(entry, 1, body_of, lambda si: set(),
+                     _universe_of(body_of, None))
+    seen: list[str] = []
+    sink_id = logger.add(lambda m: seen.append(str(m)), level="WARNING")
+    try:
+        out = compose_injection_scenario(
+            {"steps": [{"request": {"body": body}}]}, entry)
+    finally:
+        logger.remove(sink_id)
+    assert out["steps"][0].get("strategy") in (None, [])          # 未物化
+    assert any("$.items[0].replace" in s for s in seen), seen     # 告警带路径
+
+
+def test_bracket_path_into_dict_element_still_materializes():
+    """``$.items[0].sku``(``items[0]`` 本身是 dict)—— 合法注入,照常物化。
+
+    收紧只针对**宿主容器类型**:数组段要求宿主是 list、元素本身是 dict 时
+    下一段落点正常,与 ``$.a.b`` 同语义。数组体在真实请求里很常见,这条钉住
+    「别把方括号路径一律跳过」。"""
+    body = {"items": [{"sku": 1}]}
+    body_of = _body_of([{"request": {"body": body}}])
+    entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                     "jsonpath": "$.items[0].sku"},
+             "value": 9, "asserts": []}
+    assert entry_issues(entry, 1, body_of, lambda si: set(),
+                        _universe_of(body_of, None)) == []        # 判活
+    out = compose_injection_scenario(
+        {"steps": [{"request": {"body": body}}]}, entry)
+    assert out["steps"][0]["strategy"] == [                       # 照常物化
+        {"kind": "assign", "source": 9, "target": "$.request_body.items[0].sku"}]
+
+
+def test_out_of_range_index_is_not_a_conflict():
+    """索引越界 ⇒ 不冲突(引擎扩展列表创建),照常物化 —— 与「段缺失」同向。"""
+    out = compose_injection_scenario(
+        {"steps": [{"request": {"body": {"items": []}}}]},
+        {"path": {"stepIndex": 0, "jsonpath": "$.items[5].sku"}, "value": 9})
+    assert out["steps"][0]["strategy"] == [
+        {"kind": "assign", "source": 9, "target": "$.request_body.items[5].sku"}]
+
+
+def test_root_non_dict_body_is_caught_by_the_root_host_check():
+    """根宿主非 dict 的同类改形(``body=["abc"]`` + ``$[0].replace``)仍判死。
+
+    挡它的是 :func:`_path_resolvable` 里那条 ``not isinstance(body, dict)``:
+    ``$.request_body[0].replace`` 的 ``[`` 紧贴前缀段,``_host_conflict`` 的
+    点分段前缀判据不匹配 ⇒ **不判、不猜**,根侧由类型判据兜住。删掉那行,
+    ``exists(["abc"], "$[0].replace")`` 会取到绑定的 ``str.replace`` 而判活。"""
+    body_of = _body_of([{"request": {"body": ["abc"]}}])
+    entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                     "jsonpath": "$[0].replace"},
+             "value": "x", "asserts": []}
+    assert {"kind": "path-unresolvable", "stepIndex": 0,
+            "jsonpath": "$[0].replace"} in \
+        entry_issues(entry, 1, body_of, lambda si: set(),
+                     _universe_of(body_of, None))
+
+
 # ── stepIndex 归一(Z3)/ 可注入面纯函数化(P)────────────────────────
 def test_step_index_accepts_integral_float_rejects_bool():
     """Z3:JSON 只有一种数字类型 —— 后端与前端的 Number.isInteger 同构。"""
