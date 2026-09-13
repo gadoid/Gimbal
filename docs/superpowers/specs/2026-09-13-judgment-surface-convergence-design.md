@@ -109,15 +109,18 @@ declared_surface = None if paths is None else sorted(injectable_universe(None, p
 
 1. `injectablePathSetOf` 的声明半改为**直接并入 `declared_surface`**(不再调 `catalogPaths` + `toTemplatePath`)。
 2. **body 半改为物化前缀**:`bodyPathSetOf` 展平各级容器前缀,与后端 `_container_prefixes` 同构。
-3. 完成 1+2 后,`pathResolvable:47-49` 的前缀扫描**成为死代码**,与阶段一在后端删掉的那段**同形同理**,可删。删前必须证明等价(见 §9)。
-4. `toTemplatePath` 从**判定路径**上退场(后端已给双形态);它若仍被候选 UI 消费则保留,但不再是判定面的一环。
+3. 完成 1+2 后,`pathResolvable` 的容器前缀扫描**成为死代码**,与阶段一在后端删掉的那段**同形同理**,可删(交付时已删,退场记录见 `docs/adr/0003-retired-features-log.md`)。删前必须证明等价(见 §9)。
+4. **`toTemplatePath` 的退场范围(2026-09-13 交付后改真)**:退场的只是**声明半那条推导链** —— `injectablePathSetOf` 不再逐条声明去 `toTemplatePath`(声明面由后端展开双形态,见第 1 条)。它**仍在判定路径上承重**,初稿那句「从判定路径上退场」是**假的**:
+   - `pathResolvable` 仍要试 `[jsonpath, toTemplatePath(jsonpath)]` —— **条目自身**给出的路径是**实例**形态(用户手打 / 前端候选),必须转成**模板**形态才能与集合里的声明半比对,同时保留实例形态与 body 半比对;
+   - `useInjectableSurface.stateOf` 仍用它把**候选路径**与**声明树**对齐(声明树条目的路径形态是自由的 —— 顶层条目可带实例下标,见后端 `_template_path` 的注释)。
+   ⇒ 「后端已给双形态」免掉的是**声明半的归一化**,不是**条目路径 vs 集合比对**这一步。
 
 ### 2.4 a1 的诚实边界(**不得写成「H 已解决」**)
 
 可注入面 = `body 半 ∪ declared 半 ∪ {"$"}`。**declared 半归后端**(§2.2),但 **body 半来自草稿态** —— 编辑中的请求体未保存,后端拿不到。
 
-- **死掉的**:「容器前缀」三份里的**两份**(`pathResolvable` 内联扫描、后端 `_container_prefixes` 的声明侧调用),以及 `toTemplatePath` ↔ `_template_path` 的跨语言同构负担。
-- **活下来的**:**body 半的叶子 + 容器前缀逻辑仍在 TS**(§2.3 第 2 条)。
+- **死掉的**:「容器前缀」三份里的**两份**(`pathResolvable` 内联扫描、后端 `_container_prefixes` 的声明侧调用),以及**声明半**上 `toTemplatePath` ↔ `_template_path` 的同构负担。
+- **活下来的**:**body 半的叶子 + 容器前缀逻辑仍在 TS**(§2.3 第 2 条);**以及 `toTemplatePath` 本身** —— 条目路径 vs 集合比对仍要它(§2.3 第 4 条)。
 
 因此 ① 交付后的准确表述是:
 
