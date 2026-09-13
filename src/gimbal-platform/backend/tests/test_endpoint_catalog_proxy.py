@@ -229,7 +229,7 @@ async def test_full_failure_states(
     client: AsyncClient, endpoint_plate_mock: EndpointPlateMock,
     behaviour: str, expected: int, code: str,
 ) -> None:
-    """四种失败各有各的码,不得合并(§5):连不上 / 5xx / 端点不存在 / plate 拒绝 / 信封不可用。
+    """五种失败各有各的码,不得合并(§5):连不上 / 5xx / 端点不存在 / plate 拒绝 / 信封不可用。
 
     `plate_invalid_envelope` **收窄到 200**:它专指「拿到了 200 但信封里没有可用
     item」。plate 的 4xx(此处 401)是**它拒绝了这次请求**,不是信封坏 —— 压成

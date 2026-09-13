@@ -200,6 +200,11 @@ def _path_resolvable(jsonpath: str, body: Any, universe: set[str]) -> bool:
 def _host_conflict(body: Any, target: str) -> bool:
     """``target`` 是否**不可安全物化** —— 宿主容器不称职,或形状写不进去。
 
+    **名字只点了第一件事**:判据实际回答两件事 —— ①宿主容器不称职(类型不符);
+    ②**形状根本写不进去**(通配 / 过滤器 / 递归下降 / ``_parse`` 失败,见下
+    「规则」)。②是本判据的一半语义,读调用点(:func:`_path_resolvable` /
+    :func:`compose_injection_scenario`)时不得只按名字理解。
+
     引擎 ``_set_at`` 的 FIELD 段遇非 dict 即 ``data={}``、INDEX 段遇非 list 即
     ``data=[]``,故往字符串/数字/别的容器**内部**写值会把整个宿主改形:
     ``$.request_body.note.replace`` 之于 ``{"note":"hello"}`` ⇒ ``note`` 整体
@@ -360,9 +365,12 @@ def compose_injection_scenario(definition: dict[str, Any], entry: dict[str, Any]
     自己的守卫,否则 AttributeError 会掀掉后台 fan-out(零 case + 执行不
     落终态),而不是像越界那样安静跳过。
 
-    **宿主冲突同待遇:跳过 + 告警**(Z1)。target 落在非 dict 宿主内部时
-    (``$.request_body.note.replace`` 之于 ``{"note":"hello"}``)物化会让引擎
-    ``_set_at`` 把整个宿主改形,故不落 Assign —— 判据见 :func:`_host_conflict`。
+    **不可安全物化的目标同待遇:跳过 + 告警**(Z1)。两类目标不落 Assign,判据
+    同归 :func:`_host_conflict`:① target 落在非 dict 宿主内部
+    (``$.request_body.note.replace`` 之于 ``{"note":"hello"}``)时物化会让引擎
+    ``_set_at`` 把整个宿主改形;② target 的形状**写不进去**(通配 / 过滤器 /
+    递归下降 / ``_parse`` 失败)时物化只会把「一次跳过 + 告警」换成「一次失败的
+    运行」。
     同样不是「判定侧已收口」的重复保险:非 UI 下发(直连 POST /runs、脚本)
     不经前端,且此处是物化的最后一道。不引入新 error code、不让请求失败。
 

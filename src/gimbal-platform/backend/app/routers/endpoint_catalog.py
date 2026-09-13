@@ -68,7 +68,8 @@ async def get_full_endpoint(
     res = await get_endpoint_full(endpoint_id)
     if res.item is None:
         # 状态映射(四种失败各有各的码,不合并 —— §5):404 → 端点不存在;
-        # 200 → 信封里没有可用 item;其余 4xx → plate 拒了这次请求(带真实状态码);
+        # 200 → 信封里没有可用 item;其余 <500 → plate 拒了这次请求(带真实状态码;
+        # 谓词是 ``< 500`` 而非「4xx」—— 204 / 301 这类也落这条,同报 plate_rejected);
         # 5xx / 压根没拿到响应(None)→ plate 不可达。
         # 必须嵌在 item is None 里:刷新失败时旧快照仍在回退窗内 ⇒ item 是好的
         # 而 status 可能是那次失败的 404 —— 无条件映射会把「健康的旧契约服务」

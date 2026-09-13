@@ -18,9 +18,11 @@ the platform's preview / run use-case.  This wrapper:
   rejected, and the message carries plate's real status code).
   见 docs/PLATFORM-SCENARIO-COMPOSER-API.md §4.7(preview/convert)
   与 §10.4(``/full`` 代理)。
-* Owns the process-wide cache for the ``GET /api/endpoint/{id}/full``
+* Owns a process-wide cache for the ``GET /api/endpoint/{id}/full``
   contract fetch (:func:`get_endpoint_full`) — TTL/LRU/stale-while-error
-  都在这里,见文件末尾「/full 契约取数」一节。
+  都在这里,见「/full 契约取数(进程级缓存)」一节(该节在 ``# ─── helpers
+  ───`` 分隔线**之前**,不在文件末尾)。**不是**全仓唯一一条 /full 取数:
+  别的 /full 路径不共享这条缓存,边界见 :func:`get_endpoint_full` 的末段。
 
 Run 执行链(V3.2):dispatcher convert 成功后把注入完成的用例落盘,
 交 ``gimbal_launcher.launch`` 子进程(``gimbal run launch``)执行。
@@ -444,7 +446,11 @@ async def get_endpoint_full(endpoint_id: str, *, timeout: float | None = None) -
         return EndpointFull(item=None, stale=False, status=e.status, reason=str(e))
     except Exception as e:                          # noqa: BLE001 — 兜底:非取数层的意外错误
         return EndpointFull(item=None, stale=False, status=None, reason=str(e))
-    if refreshed is None:                           # 显式(不用 or):_refresh_full 靠 raise 报失败
+    # 当前**不可达**(防御性保留,与 ``convert`` 里 _raise_rejected 之后那条同款):
+    # _refresh_full 要么返回 dict、要么抛 _FullFetchError,失败已由上面两个 except
+    # 出口返回。判据不写成 ``or``:``{}`` 是合法 item(§5),真值合并会把空契约错报
+    # 成取数失败。
+    if refreshed is None:
         return EndpointFull(item=None, stale=False, status=None, reason="取数失败")
     return EndpointFull(item=refreshed, stale=False, status=200, reason="")
 
