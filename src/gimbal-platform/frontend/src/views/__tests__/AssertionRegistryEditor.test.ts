@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
+import ElementPlus, { ElMessage } from 'element-plus'
 import { createPinia, setActivePinia } from 'pinia'
 
 const routerMock = vi.hoisted(() => ({ push: vi.fn() }))
@@ -508,5 +508,41 @@ it('ARE-17: 换面提示绑在判定面上 —— 会话粘性的换面信号可
   await flushPromises()
   expect(w.find('.surface-notice').exists()).toBe(false)
   vi.useRealTimers()
+  w.unmount()
+})
+
+// ── 「添加期望」的可见反馈(点击不得静默无反应)─────────────────────
+// 守卫 `!pendingAssert.target → return` 是**静默**的:按钮可见、条目可编辑、
+// 用户点了却什么都不发生,也没有任何提示 —— 同族的 addEntry 就会 warning。
+// 下面两条互为判别对:空 target 必须出声且不改数据;填了 target 必须落条目
+// 且不误报。
+
+it('ARE-18: target 为空 → 点「添加期望」给可见告警,且不静默落一条无目标期望', async () => {
+  const warn = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({}) as any)
+  const w = await mountEditor()
+  await w.findAll('.are-row')[0].trigger('click')     // 选中活条目(inj-1,原有 1 条期望)
+  await flushPromises()
+  // pendingAssert.target 保持空 —— 用户没填就点了按钮
+  await w.find('.are-add-assert').trigger('click')
+  await flushPromises()
+  expect(warn).toHaveBeenCalledTimes(1)
+  expect(String(warn.mock.calls[0][0])).toContain('target')
+  // 反面:不得把空 target 当成合法值落进条目
+  expect(w.find('.are-asserts tbody').findAll('tr').length).toBe(1)
+  w.unmount()
+})
+
+it('ARE-19: target 填好 → 点「添加期望」正常追加,且不误报告警', async () => {
+  const warn = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({}) as any)
+  const w = await mountEditor()
+  await w.findAll('.are-row')[0].trigger('click')
+  await flushPromises()
+  ;(w.vm as any).pendingAssert.target = '$.response_body.msg'
+  await w.find('.are-add-assert').trigger('click')
+  await flushPromises()
+  expect(warn).not.toHaveBeenCalled()
+  const rows = w.find('.are-asserts tbody').findAll('tr')
+  expect(rows.length).toBe(2)
+  expect(rows[1].text()).toContain('$.response_body.msg')
   w.unmount()
 })

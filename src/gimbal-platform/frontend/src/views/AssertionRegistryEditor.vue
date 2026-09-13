@@ -441,7 +441,13 @@ function removeEntry(id: string) {
   if (selectedId.value === id) selectedId.value = null
 }
 function addAssert() {
-  if (!selected.value || isLegacyEntry(selected.value) || !pendingAssert.value.target) return
+  if (!selected.value || isLegacyEntry(selected.value)) return
+  // target 是期望的必备项,缺了就落不了条目 —— 但**必须出声**:按钮就在那儿
+  // 摆着,静默 return 等于「点了没反应」,用户无从知道差什么(与 addEntry 同口径)
+  if (!pendingAssert.value.target) {
+    ElMessage.warning('target 不能为空(例:$.response_body.code)')
+    return
+  }
   selected.value.asserts.push({
     stepIndex: pendingAssert.value.stepIndex,
     target: pendingAssert.value.target,
