@@ -119,13 +119,24 @@ def _warn_once(endpoint_id: str, reason: object) -> None:
 
 
 def _decls_of_item(item: dict[str, Any]) -> list | None:
-    """从 item 取 ``request.declarations``;垃圾值 → None(降级)。
+    """从 item 取 ``request.declarations``;垃圾形状 → None(降级)。
 
-    缺省合并(例外,已核等价性 —— 不是「有意义 falsy 被真值合并」):信封缺
-    ``request`` 键 / 其值为 ``{}`` / ``declarations`` 为 ``null`` 三种「未提供」
-    都落到真无声明 ``[]``;真·垃圾值(字符串/数字等非 list)才是降级。
+    缺省合并(例外,已核等价性 —— 不是「有意义 falsy 被真值合并」):``request``
+    缺失 / ``None`` / 其它 falsy(``{}`` / ``0`` / ``""`` / ``[]``)都落到缺省 ``{}``,
+    与 ``declarations`` 为 ``None``(缺键 / ``null``)同款 —— 两者都得真无声明 ``[]``。
+
+    降级(读不出声明面)只认两种形状:``request`` 为**真值**非 dict(``"oops"`` /
+    ``5`` / ``[1]``),或 ``declarations`` 非 list(此处 falsy 也算 —— ``0`` / ``""`` /
+    ``{}`` 都降级;与 ``request`` 侧走缺省合并不对称,是既有语义)。
+
+    为什么显式判类型而不包一层 ``except``:取数层 ``get_endpoint_full`` 已保证绝不抛,
+    本函数只剩「读两个键」—— 试错式捕获会把无关的编程错误一并吞成降级;而 plate 只
+    校验 item 是 dict(``_fetch_full_raw``),点明这两种形状正是本层的判据。
     """
-    decls = (item.get("request") or {}).get("declarations")
+    req = item.get("request") or {}      # §5 例外:缺省合并(未提供 → {})
+    if not isinstance(req, dict):
+        return None                      # 真值非 dict 的 request = 拿不到契约面
+    decls = req.get("declarations")
     if decls is None:
         return []
     if not isinstance(decls, list):
@@ -146,7 +157,9 @@ async def declarations_of(endpoint_id: str) -> list | None:
         _warn_once(endpoint_id, f"刷新失败({res.reason}),回退旧快照")
     decls = _decls_of_item(res.item)
     if decls is None:
-        _warn_once(endpoint_id, "declarations 不是 list")
+        # 两种垃圾形状都到这里,故原因串把两条都点出来(告警是降级链路唯一的遥测,
+        # 写成单侧会让另一种形状的现场指向错误的键)。
+        _warn_once(endpoint_id, "声明面形状不可解析(request 非 dict 或 declarations 非 list)")
     return None if decls is None else list(decls)
 
 

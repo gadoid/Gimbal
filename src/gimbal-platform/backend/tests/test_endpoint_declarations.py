@@ -147,6 +147,47 @@ async def test_garbage_declarations_is_degraded():
     plate_client.set_client_for_tests(None)
 
 
+@pytest.mark.parametrize("item", [
+    {"request": "oops"},                   # 字符串
+    {"request": 5},                        # 数字
+    {"request": [1]},                      # 列表
+])
+async def test_unreadable_request_shape_is_degraded_not_raised(item):
+    """``request`` 是**真值**非 dict ⇒ 读不出声明面 → 降级 None,且**两条公开面都不抛**。
+
+    plate 只校验 item 是 dict,``request`` 的形状它不解读 ⇒ 兜这一形状是派生层的事。
+    抛出去无人接:``carry_injection`` 是纯转交,异常会穿到后台 fan-out 与预览/导出;
+    ``declared_paths_of`` 更跑在 dispatcher 的**同步**段 ``gather`` 里 —— 正是本模块
+    声明「绝不阻塞执行」的那条链。
+    """
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_envelope(item))
+
+    _install(handler)
+    _reset_declared_paths_cache()
+    assert await declared_paths_of("ep-shape") is None
+    assert await declarations_of("ep-shape") is None
+    plate_client.set_client_for_tests(None)
+
+
+@pytest.mark.parametrize("request_value", [None, 0, "", []])
+async def test_falsy_request_shape_is_empty_not_degraded(request_value):
+    """falsy 的 ``request``(``None`` / ``0`` / ``""`` / ``[]``)与缺键同款 = 「未提供」→ ``[]``。
+
+    守的是上一条判据的边界:**真值**非 dict 才降级,falsy 非 dict 不是 —— 混为
+    一谈会把这几种「未提供」形状报成声明面不可得(每个冷却窗白响一条告警,还会
+    压掉该端点在窗内的真实告警)。
+    """
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_envelope({"request": request_value}))
+
+    _install(handler)
+    _reset_declared_paths_cache()
+    assert await declared_paths_of("ep-falsy") == frozenset()
+    assert await declarations_of("ep-falsy") == []
+    plate_client.set_client_for_tests(None)
+
+
 async def test_projection_is_cached_not_recomputed(monkeypatch):
     """R:投影只在**取数**时算一次;TTL 命中路径不再重算(以 catalog_paths 调用计数断言)。"""
     import app.services.endpoint_declarations as ed
