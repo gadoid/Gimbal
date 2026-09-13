@@ -81,10 +81,10 @@ Authorization: Bearer <access_token>
 | 400 | 请求体字段缺失 / 字段值非法 | `scenarioId` 不符合 `^sc-[a-z0-9-]+$` |
 | 401 | 缺失 / 过期 access token | Bearer 为空 |
 | 403 | 无权修改他人私有场景 | `is_admin=false` 改他人 scenario |
-| 404 | 资源不存在 | `GET /api/scenarios/sc-not-exist` |
+| 404 | 资源不存在 | `GET /api/scenarios/sc-not-exist`；`/full` 代理的上游 404 → `endpoint_not_found`（§10.4） |
 | 409 | 唯一性冲突 | `scenarioId` 已存在 |
 | 422 | 请求体语义被下游拒绝 | 数据集 row 缺字段（行的 keys 与首行不一致）；Plate 拒了 convert（`plate_rejected`，§4.7） |
-| 502 | 网关侧调用失败 | Plate 不可达 / 超时（`plate_unavailable`）；`/full` 代理的上游非 200（§10.4） |
+| 502 | 网关侧调用失败 | Plate 不可达 / 超时（`plate_unavailable`）；`/full` 代理的上游 5xx / 无响应 → `plate_unavailable`、上游 4xx 非 404 → `plate_rejected`、上游 200 但信封无 `item` → `plate_invalid_envelope`（四格详见 §10.4） |
 
 ---
 
@@ -950,9 +950,12 @@ body 叶子路径 ∪ 这些叶子的容器前缀
 - **`{"$"}`**：根恒可注入。
 
 **判定**：条目 jsonpath 的实例形态**或**模板形态命中该集合即判活；否则退回
-`jsonpath.exists(body, path)` 兜底（`_path_resolvable()`）。兜底比可注入
-面**多认「空容器本身」**（`body={"items":[]}` 的 `$.items`）—— 只会**少判死**，
-方向与既有行为一致（该兜底分支的 docstring 已写明这一方向）。
+`jsonpath.exists(body, path)` 兜底（`_path_resolvable()`）—— 兜底**只对 dict 宿主**生效，
+且还要过写侧**同一判据** `_host_conflict`（Z1：非 dict 宿主上不再取 `getattr` 的属性可达性，
+故 `$.note.replace` 这类在宿主是字符串时**判死**；见 spec §4.2 / §4.4）。兜底比可注入面
+**多认「空容器本身」**（`body={"items":[]}` 的 `$.items`）—— 这一格**只会少判死**，
+方向与既有行为一致（该兜底分支的 docstring 已写明：空容器的宿主就是 dict，
+与上面那条收紧是两件事）。
 
 **候选面在两处的差异是有意的**（画布的策略路径多一份「用户粘贴的响应样本」，编辑器只有声明面）—— 裁定 M，见 §10.5。
 
