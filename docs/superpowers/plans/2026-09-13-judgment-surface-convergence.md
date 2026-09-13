@@ -19,7 +19,7 @@
 - **不 push**:分支 `feat/dataset-driven-refactor` 保持现状。
 - **`PLATE_TIMEOUT_SEC` 的 30s 不得改动**:它服务 `convert` 等「等不到就报错」的链路。
 - **测试命令**(backend 工作目录 `src/gimbal-platform/backend`):`D:/python/python.exe -m pytest <path> -v`;全量 `D:/python/python.exe -m pytest -q`。
-- **测试命令**(frontend 工作目录 `src/gimbal-platform/frontend`):`npm run test:run -- <path>`;全量 `npm run test:run`;类型检查 `npm run typecheck`。
+- **测试命令**(frontend 工作目录 `src/gimbal-platform/frontend`):`npm test -- <path>`;全量 `npm test`;类型检查 `npm run typecheck`。
 - **既有环境噪声**:后端全量在 uvicorn 运行时会有 **2 条既有失败**(`test_run_cancel.py::test_cancel_skips_remaining_rows`、`test_run_plate_resilience.py::test_breaker_opens_after_consecutive_unavailable`),根因是运行中的 uvicorn 并发写 `backend/data/runs/*.jsonl` 造成的撕裂行(属 ③ 的范围)。**本计划的验收必须区分「既有 2 条」与「本次引入的失败」**。
 
 ---
@@ -673,7 +673,7 @@ describe('containerPrefixes 与后端 _container_prefixes 同构', () => {
 
 - [ ] **Step 2: 运行确认失败**
 
-Run: `npm run test:run -- src/utils/__tests__/assertion-registry.test.ts`
+Run: `npm test -- src/utils/__tests__/assertion-registry.test.ts`
 Expected: FAIL — `containerPrefixes is not a function`
 
 - [ ] **Step 3: 实现**
@@ -741,7 +741,7 @@ export function pathResolvable(jsonpath: string, injectablePaths: ReadonlySet<st
 
 - [ ] **Step 4: 运行**
 
-Run: `npm run test:run -- src/utils/__tests__/assertion-registry.test.ts`
+Run: `npm test -- src/utils/__tests__/assertion-registry.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: 接线 `useInjectableSurface` 与类型**
@@ -750,7 +750,7 @@ Expected: PASS
 
 - [ ] **Step 6: 全前端回归**
 
-Run: `npm run test:run && npm run typecheck`
+Run: `npm test && npm run typecheck`
 Expected: 全绿(阶段一基线:86 files / 819 tests)+ `vue-tsc` exit 0
 
 - [ ] **Step 7: 提交**
@@ -824,7 +824,7 @@ it('EF-TTL-3: 过期但重取失败时,getEndpointFull 仍返回旧面(不闪空
 
 - [ ] **Step 2: 运行确认失败**
 
-Run: `npm run test:run -- src/composables/__tests__/useEndpointFull.test.ts`
+Run: `npm test -- src/composables/__tests__/useEndpointFull.test.ts`
 Expected: FAIL — `surfaceVersion is not a function` / TTL 相关断言红
 
 - [ ] **Step 3: 实现(TTL 语义:读与取**各管一头**)**
@@ -844,7 +844,7 @@ Expected: FAIL — `surfaceVersion is not a function` / TTL 相关断言红
 
 - [ ] **Step 4: 运行**
 
-Run: `npm run test:run -- src/composables && npm run typecheck`
+Run: `npm test -- src/composables && npm run typecheck`
 Expected: PASS
 
 - [ ] **Step 5: 提交**
@@ -1015,7 +1015,7 @@ it('CANVAS-FETCH-2: 渲染不再驱动取数', async () => {
 
 - [ ] **Step 2: 运行确认第二条失败**
 
-Run: `npm run test:run -- src/components/composer/__tests__/CaseComposerCanvas.test.ts`
+Run: `npm test -- src/components/composer/__tests__/CaseComposerCanvas.test.ts`
 Expected: 第二条 FAIL(渲染期确有取数)
 
 - [ ] **Step 3: 删两行**
@@ -1028,7 +1028,7 @@ Expected: 第二条 FAIL(渲染期确有取数)
 
 - [ ] **Step 5: 运行**
 
-Run: `npm run test:run && npm run typecheck`
+Run: `npm test && npm run typecheck`
 Expected: 全绿
 
 - [ ] **Step 6: 提交**
@@ -1079,7 +1079,7 @@ it('RETRY-2: 失败态可见', async () => {
 
 - [ ] **Step 2: 运行确认失败**
 
-Run: `npm run test:run -- src/composables/__tests__/useInjectableSurface.test.ts`
+Run: `npm test -- src/composables/__tests__/useInjectableSurface.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: 实现**
@@ -1088,7 +1088,7 @@ Expected: FAIL
 
 - [ ] **Step 4: 运行**
 
-Run: `npm run test:run -- src/composables && npm run typecheck`
+Run: `npm test -- src/composables && npm run typecheck`
 Expected: PASS
 
 - [ ] **Step 5: 提交**
@@ -1133,7 +1133,7 @@ Expected: **只允许**那 2 条既有环境失败(撕裂行根因);任何新增
 
 - [ ] **Step 2: 前端全量 + 类型**
 
-Run: `cd src/gimbal-platform/frontend && npm run test:run && npm run typecheck`
+Run: `cd src/gimbal-platform/frontend && npm test && npm run typecheck`
 Expected: 全绿(基线 86 files / 819 tests);`vue-tsc` exit 0
 
 - [ ] **Step 3: plate + 执行核零改动**
