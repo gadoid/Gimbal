@@ -728,8 +728,8 @@ Scenario / DataSet / Execution 落 **SQLAlchemy 表**；定义体与配方存在
 | `DataSet` | DB 表 | `composer_data_sets`，行矩阵在 `rows` JSON 列（`app/models/composer_data_set.py:21`、`:34`） |
 | `Execution` | DB 表 | `executions`，配方在 `config_json`、场景快照在 `scenario_snapshot`（`app/models/execution.py:35`、`:47`、`:57`） |
 | `stars` | JSON 文件 | `data/stars.json`（`app/services/marks_store.py:122`） |
-| 行级执行日志 | JSONL 文件 | `data/runs/{YYYY-MM-DD}.jsonl`（追加，`run_dispatcher.py:1349-1350`） |
-| 每 run 的 case 快照 | 文件目录 | `data/runs/cases/{runId}/`（`case.json` + 引擎报告，`:1353-1355`） |
+| 行级执行日志 | JSONL 文件 | `data/runs/{YYYY-MM-DD}.jsonl`（追加，`run_dispatcher.py` 的 `_jsonl_path()` / `_append_jsonl()`） |
+| 每 run 的 case 快照 | 文件目录 | `data/runs/cases/{runId}/`（`case.json` + 引擎报告，`run_dispatcher.py` 的 `_run_dir()`（公开别名 `run_dir`）/ `_write_case_file()`） |
 
 > **Case 层已解散** —— 旧的 `Case` 资源不存在了；数据集直接挂在场景上
 > （`app/models/composer_data_set.py:4-6`、`app/models/execution.py:7-8`）。
@@ -809,7 +809,7 @@ rows:
 **约束二：不依赖 JSON 键序。** 判定与投影一律基于 **Set**，写入一律
 `model_dump`；**禁止**任何「按插入序读回」的假设 —— 键序**不由本层保证**
 （本层只承诺「不依赖」这个方向；PG 侧列型的实际行为属外部引擎、不在本仓可证
-范围）。代码侧落点：可注入面是 `set`（`run_injection.py:128`）、
+范围）。代码侧落点：可注入面是 `set`（`injectable_universe()` 内部的 `universe: set[str]`）、
 声明 path 全集是 `frozenset`
 （`declared_paths_of` 返回的 `frozenset`）、目录宇宙是 `set`
 （`field_state_resolution.py:124-126`）；行集并集是 `set` 运算
@@ -829,7 +829,7 @@ rows:
 | 判定面 | `None`（降级）与 `frozenset()`（真无声明）**分别下传**，调用侧显式 `is None` 判别（`run_dispatcher.py:454-458`） |
 | `config_json` | `judgeDegraded` **键缺席** ≠ `false`（`run_dispatcher.py:591-592`）；`serviceBindings` 的 `None` 键不落盘（`exclude_none=True`，`:584`） |
 | JSONL 回放 | 旧行缺 `injectionId` 键 → 读作 `None`，不炸（`run_dispatcher.py:270-273`） |
-| 数据集行 | 缺键 = 继承基线 `config.vars`；`""` = **显式空覆盖**（`run_dispatcher.py:1239-1242`） |
+| 数据集行 | 缺键 = 继承基线 `config.vars`；`""` = **显式空覆盖**（`run_dispatcher._compose_scenario()` 的 `vars_map` 合入段） |
 
 ---
 
@@ -905,33 +905,33 @@ PLATE_TIMEOUT_SEC: float = 30.0
 | 键 | 作用 | 运行时消费点 |
 | --- | --- | --- |
 | `id` | 条目身份；`RunRequest.injectionEntryIds` 按它选中条目 | `run_dispatcher.py:428`、`:438` |
-| `path` | 注入地址；后端读 `{stepIndex, jsonpath}` 两键 | `run_injection.py:222-232` |
-| `value` | 写进该地址的字面量（**原样覆写、不 coerce**） | `run_injection.py:276` |
-| `asserts[]` | 断言 patch；后端读 `{stepIndex, mode, target, operator?, expected?}` | `run_injection.py:233-242`、`:277-291` |
+| `path` | 注入地址；后端读 `{stepIndex, jsonpath}` 两键 | `run_injection.entry_issues()` |
+| `value` | 写进该地址的字面量（**原样覆写、不 coerce**） | `compose_injection_scenario()`（值经 `_assign_strategy()`） |
+| `asserts[]` | 断言 patch；后端读 `{stepIndex, mode, target, operator?, expected?}` | 读 = `entry_issues()`；物化 = `compose_injection_scenario()` |
 
 `stepIndex` 是 **0-based、`definition.steps` 的原始下标**（不填
 `steps_from_payload` 的过滤版 —— 过滤版下标会整体错位一位）
 （`run_dispatcher.py:433-437`、`:1184-1199`）。
 
 **物化**：`compose_injection_scenario` 在 **plate convert 之前**改**副本**的
-`definition.steps[si]`（先 `copy.deepcopy`，`run_injection.py:265` —— 该函数是
+`definition.steps[si]`（先 `copy.deepcopy(definition)`，见 `compose_injection_scenario()` —— 该函数是
 纯函数，不改入参）—— 追加一条 `kind=assign` 的策略，target 是
 `$.request_body` + jsonpath 尾（根 `"$"` → `$.request_body`）；`asserts[]`
 里 `mode == "override"` 的改既有 assertion 的 `expected`，其余追加一条
-`kind=assertion`（`run_injection.py:246-292`）。**它不触碰 `config.vars`**：
+`kind=assertion`（同在 `compose_injection_scenario()`）。**它不触碰 `config.vars`**：
 数据集行值是正交的另一路叠加（§4.18）。
 
 > 三条已知边界（**记录，不是缺陷**）：`value` 为 JSON `null` 无法送达（plate
 > 导出会把 `source: None` 整键丢弃，而引擎 `Assign.source` 必填）；整串
 > `"${...}"` 形态的 `value` 会被引擎当模板变量解析、平台侧兜不住；
 > **`$.` 前缀**的 `value` 若上下文里恰好存在同名 JSONPath，解析命中优先于
-> 字面量 —— 该值被上下文值覆写（`run_injection.py:44-65`）。第三条是上面
+> 字面量 —— 该值被上下文值覆写（`_assign_strategy()` 的值解析）。第三条是上面
 > 「原样覆写、不 coerce」的反例，故显式列出。
 
 ### 10.2 可注入面的定义
 
 某一步的**可注入面**是「哪些 jsonpath 可以锚条目」的判据集合，公式
-（`run_injection.py:115-141`）：
+（`injectable_universe()`）：
 
 ```text
 body 叶子路径 ∪ 这些叶子的容器前缀
@@ -941,24 +941,24 @@ body 叶子路径 ∪ 这些叶子的容器前缀
 
 - **body 叶子**：该步 `request.body` 递归走出的标量叶子，数组带 `[i]` 实例
   下标；**根缺席（无 `request.body`）⇒ 无叶子**；嵌套 JSON `null` 是显式叶子
-  （`run_injection.py:83-106`）。
+  （`_body_leaf_paths()`）。
 - **容器前缀**：路径的各级容器，按段边界切（`.` 之后 / `[` 之前）——
-  `$.a.b` → `['$', '$.a']`；`$.tags[0]` → `['$', '$.tags']`（`:109-112`）。
+  `$.a.b` → `['$', '$.a']`；`$.tags[0]` → `['$', '$.tags']`（`_container_prefixes()`）。
 - **normalize**：声明面一律过 `_template_path` 剥掉数字下标
   （`$.items[0].sku` → `$.items.sku`）—— 契约声明是**模板**路径、条目路径是
-  **实例**路径，判定必须两形态都试（`:76-80`、`:169-171`）。
+  **实例**路径，判定必须两形态都试（`_template_path()` + `_path_resolvable()` 的两次成员测试）。
 - **`{"$"}`**：根恒可注入。
 
 **判定**：条目 jsonpath 的实例形态**或**模板形态命中该集合即判活；否则退回
-`jsonpath.exists(body, path)` 兜底（`run_injection.py:144-172`）。兜底比可注入
+`jsonpath.exists(body, path)` 兜底（`_path_resolvable()`）。兜底比可注入
 面**多认「空容器本身」**（`body={"items":[]}` 的 `$.items`）—— 只会**少判死**，
-方向与历史行为一致（`:166-168`）。
+方向与既有行为一致（该兜底分支的 docstring 已写明这一方向）。
 
 **候选面在两处的差异是有意的**（画布的策略路径多一份「用户粘贴的响应样本」，编辑器只有声明面）—— 裁定 M，见 §10.5。
 
 > **已知局限（不在本设计的覆盖范围内，勿读作已支持）**：
-> normalize 只吃**数字下标**（正则 `\[\d+\]`，`run_injection.py:73`；前端同款
-> `frontend/src/utils/declarations.ts:766`）—— `$.items[*].sku` 这类 **`[*]`
+> normalize 只吃**数字下标**（`run_injection._ARRAY_IDX_RE`；前端同款 =
+> `frontend/src/utils/declarations.ts` 的 `toTemplatePath()`，`path.replace(/\[\d+\]/g, '')`）—— `$.items[*].sku` 这类 **`[*]`
 > 写法不被归一**，**无覆盖**。声明面的**模板粒度**边界同理：归一后的模板路径
 > 不再区分具体下标，这是**已接受的局限**。两者都将由 `docs/known-issues/`
 > 的记录承载（由文档收敛的后续工作建立）。
@@ -967,7 +967,7 @@ body 叶子路径 ∪ 这些叶子的容器前缀
 
 dispatch 时对每个**被选中**的条目跑 `entry_issues`，产出 issue 列表；
 **非空 = 悬空 ⇒ 跳过该条目 + 告警**，绝不炸 dispatch
-（`run_dispatcher.py:487-503`）。四类 issue（`run_injection.py:189-243`）：
+（`run_dispatcher.py:487-503`）。四类 issue（`run_injection.entry_issues()`）：
 
 | kind | 判据 |
 | --- | --- |
@@ -977,7 +977,7 @@ dispatch 时对每个**被选中**的条目跑 `entry_issues`，产出 issue 列
 | `override-no-match` | `asserts[]` 里 `mode == "override"` 的 `target` 在该步既有 assertion 策略里找不到 |
 
 `stepIndex` 一律过 `as_step_index`：**拒 `bool`、收整数与整数值浮点**
-（`run_injection.py:175-186`），与前端 `Number.isInteger` 同构。
+（`as_step_index()`），与前端 `Number.isInteger` 同构。
 
 ### 10.4 `/endpoint-catalog/{id}/full` 代理职责
 
