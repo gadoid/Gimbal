@@ -5,8 +5,9 @@
 > **来源**：`docs/superpowers/specs/2026-09-12-architecture-convergence-design.md` §6.3 / §7（Z1）
 > **适用范围**：`run_injection._path_resolvable` 的 `exists` 兜底 —— dispatch 侧悬空判定与注入物化。
 >
-> 以下正文是**修复前**的记载（保留历史）。失效的行号已按符号改指；被裁定作废的
-> 「待裁定」清单见 §3 顶部的指引与文末 [修复记录](#修复记录)。
+> 以下正文是**修复前**的记载（保留历史）。**就地改真**只两处：失效的行号改按符号指、
+> §1 第 3 条那句前端机制解释（前缀扫描已退场）—— 逐条列在文末 [修复记录](#修复记录) §2；
+> 被裁定作废的「待裁定」清单同见 §3 顶部的指引。
 
 ---
 
@@ -63,7 +64,7 @@ set_value({'note':'hello'}, '$.note.replace', 'X') -> {'note': {'replace': 'X'}}
 **影响**：条目通过悬空检测 → 被物化 → 请求体被**静默改形**。链如下：
 
 1. `compose_injection_scenario` 把条目路径拼成注入目标
-   （`run_injection.py:271-276`：`target = "$.request_body" + jp[1:]` ⇒ `$.request_body.note.replace`）；
+   （`_body_target()`：`target = "$.request_body" + jp[1:]` ⇒ `$.request_body.note.replace`）；
 2. 引擎 `Assign` 写该目标：`write_scratch` → `StepScratch.set`（`src/gimbal/context/step.py:37-54`）→ `set_value`；
 3. `_set_at` 的 FIELD 分支遇非 dict **静默换成空 dict**
    （`src/gimbal/utils/jsonpath.py:449-454`：`if not isinstance(data, dict): data = {}`）；
@@ -95,7 +96,7 @@ set_value({'note':'hello'}, '$.note.replace', 'X') -> {'note': {'replace': 'X'}}
 
 **相关的既有事实**（供裁定参考，不是结论）：
 
-- 兜底对**空容器**的宽容（`body={"items":[]}` 的 `$.items` → True）是**有意保留**的行为，方向是「少判死」，spec 明文容许（`run_injection.py:166-168`）。收紧时**不要把这一类一起收掉** —— 它与属性洞是两件事。
+- 兜底对**空容器**的宽容（`body={"items":[]}` 的 `$.items` → True）是**有意保留**的行为，方向是「少判死」，spec 明文容许（`_path_resolvable` 的 docstring 已写明）。收紧时**不要把这一类一起收掉** —— 它与属性洞是两件事。
 - 前端 `registryIssues` 与后端 `entry_issues` 是两份实现（H 项的结构证据；spec §7 H 待裁定），本洞是「同一契约两语言各写一版」的下游后果之一。
 
 ---

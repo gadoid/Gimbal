@@ -4,9 +4,9 @@
 > **状态**：已修复（**阶段二 Task 7**）
 > **来源**：架构收敛终稿复核（controller 裁定：画布本体本波不动，记录在案）
 >
-> 正文**保留原记载**（其中三处记载与分析结论有误，逐条更正见文末
-> [修复记录](#修复记录) §2；另有一处已失效的「已知例外」判定与死行号**就地改真**，
-> 即 §3 的第 2 条，改动说明同在该处）。
+> 正文**保留原记载**（其中三处记载与分析结论有误，更正见文末 [修复记录](#修复记录) §2）。
+> **就地改真**的只有：正文里已失效的 `useEndpointFull.ts` 行号（按符号改指，**只换指法、
+> 不改断言**）与 §3 第 2 条那句「画布是已知例外」的判定（该处改动说明就地写在同一条里）。
 
 ---
 
@@ -16,7 +16,7 @@
 （`getEndpointFull` / `endpointFullState`），取数只由宿主显式调 `ensureEndpointFull(eid)`：
 
 ```ts
-// src/gimbal-platform/frontend/src/composables/useEndpointFull.ts:32-43（约定）
+// src/gimbal-platform/frontend/src/composables/useEndpointFull.ts（文件头的「读 / 取分离」约定段）
 // 「判定面的读函数不得内部取数 …… 判定面渲染期零请求（IS-7）就是靠这条纪律钉住的」
 ```
 
@@ -59,11 +59,11 @@ const currentFull = computed<EndpointFullView | undefined>(() => {
 ## 1. 后果
 
 **不会**自维持成请求风暴：`ensureEndpointFull` 命中缓存 / 负缓存窗口内 / 在飞时直接返回
-（`src/composables/useEndpointFull.ts:67-90`），失败写 10s 负缓存
-（`FAILED_RETRY_MS`，`:46`）：
+（`ensureEndpointFull` 的早返回段），失败写 10s 负缓存
+（`FAILED_RETRY_MS`）：
 
 ```ts
-// useEndpointFull.ts:68-75
+// useEndpointFull.ts（ensureEndpointFull 的早返回段，修复前形态）
 const cached = fullByEndpoint.get(endpointId)
 if (cached) return Promise.resolve(cached)
 const at = failedAt.get(endpointId)
@@ -78,7 +78,7 @@ if (pending) return pending
 **真正的代价**有两条：
 
 1. **约定半真**：「读函数不得内部取数」这条纪律**只在判定面成立**。按旧形状新写消费方
-   时，画布是两个现成反例 —— 只读约定会得出错误结论（`useEndpointFull.ts:38-43` 已把
+   时，画布是两个现成反例 —— 只读约定会得出错误结论（`useEndpointFull.ts` 的文件头已把
    落实范围写明并指向本条）。
 2. **取数时机由渲染决定**：`platform/declaration-cache/no-retry-after-degradation.md`
    的「挂载即失败 ⇒ 一整个会话从严」在画布上**不适用** —— 画布只要重新渲染就会在负缓存
