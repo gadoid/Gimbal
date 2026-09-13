@@ -61,8 +61,8 @@
     <section class="td-entries">
       <header class="page-header">
         <div>
-          <h2 class="page-title sub">断言条目(偏离注入)</h2>
-          <p>{{ registry.entries.length }} 条 · 定位 path + 偏离值 + 期望配对 · 与数据集行交叉执行</p>
+          <h2 class="page-title sub">断言条目</h2>
+          <p>{{ registry.entries.length }} 条 · 注入路径 + 注入值 + 绑定断言 · 与数据集行交叉执行</p>
         </div>
         <div class="header-actions">
           <el-button :icon="Back" @click="router.push(scenarioAssertionsUrl(scenarioId))">管理断言</el-button>

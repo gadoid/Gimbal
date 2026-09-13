@@ -52,7 +52,7 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    // 断言管理(偏离注入)编辑器 — 场景级注册表(spec v2 §7)
+    // 断言管理编辑器 — 场景级注册表(spec v2 §7)
     path: '/scenarios/:scenarioId/assertions',
     component: () => import('@/views/AssertionRegistryEditor.vue'),
     meta: { requiresAuth: true },

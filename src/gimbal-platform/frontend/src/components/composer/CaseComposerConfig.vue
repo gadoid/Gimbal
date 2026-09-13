@@ -240,18 +240,18 @@
     <!-- 用户认证(2026-08-25):场景级 users 快照 — 手动配置或凭证池导入 -->
     <UsersCard v-model="local.users" />
 
-    <!-- 断言管理(偏离注入)纯展示列表(spec v3 §5)— 编辑入口搬家至
-         测试数据页;每条「加入本次执行」预勾运行面板(Task 6 preset) -->
+    <!-- 断言管理纯展示列表(spec v3 §5)— 编辑入口搬家至测试数据页;
+         每条「加入本次执行」预勾运行面板(Task 6 preset) -->
     <div class="c-card are-entry-card">
       <div class="c-card-head">
         <div>
           <h3>断言管理</h3>
-          <p class="c-head-desc">偏离注入条目({{ assertionEntries?.length ?? 0 }})— 定位 path + 偏离值 + 期望配对</p>
+          <p class="c-head-desc">注入条目({{ assertionEntries?.length ?? 0 }})— 注入路径 + 注入值 + 绑定断言</p>
         </div>
         <button class="c-add" @click="goTestData">测试数据 →</button>
       </div>
       <div v-if="!assertionEntries?.length" class="c-empty">
-        <p>还没有偏离注入条目</p>
+        <p>还没有条目</p>
       </div>
       <ul v-else class="are-list">
         <li

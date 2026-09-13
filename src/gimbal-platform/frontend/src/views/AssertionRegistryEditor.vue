@@ -135,7 +135,7 @@
             v-model="valueDraft.text"
             size="small"
             class="are-val-input"
-            placeholder="偏离值(例:-1 / &quot;中文&quot; / {&quot;a&quot;:1})"
+            placeholder="注入值(例:-1 / &quot;中文&quot; / {&quot;a&quot;:1})"
             @change="applyValue"
           />
           <code class="are-val-preview" :title="fmtVal(selected.value)">→ {{ fmtVal(selected.value) }}</code>

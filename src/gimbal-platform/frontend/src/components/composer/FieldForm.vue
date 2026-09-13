@@ -1011,7 +1011,7 @@ const emit = defineEmits<{
   'fieldQuery': [field: IOFieldBinding]
   /**
    * 加入断言管理(spec v3 §5):FAM fieldRegistry 上抛,载荷带字段当前
-   * 字面量 value(任意字段可偏离 — path 即地址,不预设模板化,varName
+   * 字面量 value(任意字段可注入 — path 即地址,不预设模板化,varName
    * 不再采集)。stepIndex 由 Canvas 补。
    */
   'registryMark': [payload: { field: IOFieldBinding; value: unknown }]
@@ -1315,7 +1315,7 @@ function onFieldPromote(f: IOFieldBinding) {
 }
 
 /**
- * 菜单「加入断言管理」(spec v3 §5):无守卫直通 — 任意字段可偏离
+ * 菜单「加入断言管理」(spec v3 §5):无守卫直通 — 任意字段可注入
  * (path 即注入地址,与模板化解耦);取值与 onFieldPromote 同源
  * (getValue,body 寻址)作 value 预填。Canvas 组装 path。
  */

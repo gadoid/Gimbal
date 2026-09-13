@@ -673,7 +673,7 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-/* 注入族行角标(spec v2 §8):偏离注入条目 id,警示色系 */
+/* 注入族行角标(spec v2 §8):注入条目 id,警示色系 */
 .inj-badge {
   display: inline-flex;
   padding: 2px 8px;

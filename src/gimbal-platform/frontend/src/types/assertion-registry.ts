@@ -1,5 +1,5 @@
 // types/assertion-registry.ts
-/** 断言管理注册表(spec v3 §2)— 平台侧偏离注入条目,场景级资产,
+/** 断言管理注册表(spec v3 §2)— 平台侧注入条目,场景级资产,
  *  住场景文档 payload.assertion_registry(与 orchestration 同级,引擎不感知)。 */
 
 /** 定位面:锁定到该元素的地址。jsonpath 根 = 该步请求 body */
@@ -10,7 +10,7 @@ export interface EntryPath {
   jsonpath: string
 }
 
-/** 期望偏离面:override 覆写既有断言(匹配键 = stepIndex+target)/ append 追加 */
+/** 绑定断言的补齐面:override 改写既有(匹配键 = stepIndex+target)/ append 新增 */
 export interface AssertPatch {
   stepIndex: number
   target: string

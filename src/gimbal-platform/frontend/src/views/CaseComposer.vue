@@ -594,7 +594,7 @@ function onRegistryAdd(mark: RegistryMark) {
       value: mark.value,
       asserts: [],
     })
-    ElMessage.success({ message: '已加入断言管理(偏离值预填字段当前值,请到断言管理编辑)', duration: 4000 })
+    ElMessage.success({ message: '已加入断言管理(注入值已预填字段当前值,请到断言管理编辑)', duration: 4000 })
   }
   // 与 watch([definition, orchestration]) 体同款(dirty 标记 + 防抖调度)
   dirty.value = true
