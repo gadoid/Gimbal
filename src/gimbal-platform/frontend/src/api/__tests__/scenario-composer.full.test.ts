@@ -111,4 +111,21 @@ describe('getFullEndpoint — 出口消毒(C8b/C9)', () => {
     expect(full.request!.declarations).toBe(payload.request.declarations)
     expect(full.responses['200'].declarations).toBe(payload.responses['200'].declarations)
   })
+
+  it('FE-4(§2.2): declared_surface 形态归一 —— 非数组 → null;数组留字符串;[] 保持 []', async () => {
+    const spy = vi.spyOn(http, 'get')
+    const surfaceOf = async (surface: unknown) => {
+      spy.mockResolvedValue(
+        { data: { id: 'ep-s', request: { declarations: [] }, declared_surface: surface } } as any)
+      return (await getFullEndpoint('ep-s')).declared_surface
+    }
+    // 判定面把它直接 `for...of` 进集合:字符串会静默并成 '$'/'.'/'a' 这类垃圾
+    // 成员(路径判定悄悄错判),数字渲染期硬抛 ⇒ 出口一次挡死
+    expect(await surfaceOf('$.abc')).toBe(null)
+    expect(await surfaceOf(7)).toBe(null)
+    expect(await surfaceOf({ a: 1 })).toBe(null)
+    // 数组:非字符串元素丢弃;`[]` 是「真无声明」,不并成降级(§5)
+    expect(await surfaceOf(['$', 7, '$.a'])).toEqual(['$', '$.a'])
+    expect(await surfaceOf([])).toEqual([])
+  })
 })

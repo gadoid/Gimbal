@@ -156,7 +156,7 @@ describe('可注入面 — 契约声明字段地址化(spec v3.1 §2.1)', () => 
     expect(s.has('$.bl_no')).toBe(true)          // form
     expect(s.has('$.customer_id')).toBe(true)    // carry —— 放宽的核心对象
     expect(s.has('$.items')).toBe(true)          // 容器条目自身也是合法地址
-    expect(s.has('$.items.sku')).toBe(true)      // children 平铺
+    expect(s.has('$.items.sku')).toBe(true)      // 面已是扁平形态(child 是面的一个成员)
   })
 
   it('IS-2: body 现存路径进集合(实例形态)', () => {
@@ -194,10 +194,14 @@ describe('可注入面 — 契约声明字段地址化(spec v3.1 §2.1)', () => 
 
   it('IS-6: 声明面只有深层 child 时,容器锚点仍可寻址(前缀由后端物化)', () => {
     // 深层声明的各级容器前缀是声明面的成员(spec §2.2)⇒ 容器路径靠成员命中
-    const s = injectablePathSetOf([], ['$', '$.items', '$.items.sku'])
+    const surface = ['$', '$.items', '$.items.sku']
+    const s = injectablePathSetOf([], surface)
     expect(pathResolvable('$.items[0]', s)).toBe(true)        // 模板形态 $.items 命中
     expect(pathResolvable('$.items', s)).toBe(true)           // 容器锚点自身也可寻址
     expect(pathResolvable('$.items[0].nope', s)).toBe(false)  // 深层不存在的段仍判死
+    // 声明半**逐字并入**:不自己展开(不因 $.items.sku 在场就多产前缀/形态),
+    // 也不丢成员 —— 集合恒等于后端给的面 ∪ body 半 ∪ {'$'}
+    expect(injectablePathSetOf([], surface)).toEqual(new Set(surface))
   })
 
   it('IS-7: body 面的容器前缀物化 — 与后端同两条反例(parity 锚)', () => {

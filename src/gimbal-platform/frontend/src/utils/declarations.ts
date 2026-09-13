@@ -121,16 +121,45 @@ function isSameRefs(raw: unknown[], cleaned: DeclarationEntryView[]): boolean {
 
 /**
  * `/full` 出口消毒:**request** 与**每个 response** 的 declarations 各一次
- * (裁定 C9 —— 半边留着就是同一形状)。响应声明今天经 `iterFlat` 系投影
+ * (裁定 C9 —— 半边留着就是同一形状),外加 **`declared_surface` 的形态归一**
+ * (见 :func:`sanitizeDeclaredSurface`)。响应声明今天经 `iterFlat` 系投影
  * (`assertablePaths` / `responseBindings`)不抛,但同一个 `path: 7` 只要
  * 将来换个消费方就会重开一族;在出口一次关死。
  * 保证范围同 :func:`sanitizeDeclarations`(仅路径可用性;`children` 形状未归一)。
+ * 无改动 → 原对象(身份保持不变)。
  */
 export function sanitizeEndpointFull(full: EndpointFullView): EndpointFullView {
   const request = sanitizeRequestSpec(full?.request)
   const responses = sanitizeResponses(full?.responses)
-  if (request === full?.request && responses === full?.responses) return full
-  return { ...full, request, responses }
+  const declared = sanitizeDeclaredSurface(full?.declared_surface)
+  if (request === full?.request && responses === full?.responses
+      && declared === full?.declared_surface) {
+    return full
+  }
+  const out = { ...full, request, responses }
+  // 键只在它本身被归一时才重挂:缺席与 null 都原样(消费侧同判降级,不动键 = 不改 wire 形状)
+  if (declared !== full?.declared_surface) out.declared_surface = declared
+  return out
+}
+
+/**
+ * `declared_surface` 归一 —— 判定面把这个字段直接 `for...of` 进判定集
+ * (`injectablePathSetOf`),故它必须是 `string[] | null`,否则不可信来源的
+ * 失效是**静默**的:字符串会被逐字符并成 `'$'` / `'.'` / `'a'` 这类垃圾成员,
+ * 路径判定从此悄悄错判而无一处报错;数字等非可迭代值更是渲染期硬抛。
+ * (与 `sanitizeDeclarations` 同纪律:在**边界一次**挡掉,别让消费方各自防。)
+ *
+ * - 数组 → 只留字符串元素(非字符串元素丢弃);
+ * - `[]` → 保持 `[]`:真无声明是合法形态,不是降级(§5);
+ * - `null` → `null`(降级);非数组的真值 → `null`(降级从严);
+ * - 键缺席 → 原样不动(缺省即降级,消费侧同判;不动键 = 身份保持);
+ * - 无改动 → 返回**原数组**(身份不变)。
+ */
+function sanitizeDeclaredSurface(raw: unknown): string[] | null | undefined {
+  if (raw === undefined || raw === null) return raw
+  if (!Array.isArray(raw)) return null
+  const kept = raw.filter((p): p is string => typeof p === 'string')
+  return kept.length === raw.length ? (raw as string[]) : kept
 }
 
 /** RequestSpecView 的 declarations 消毒(无改动 → 原对象)。 */

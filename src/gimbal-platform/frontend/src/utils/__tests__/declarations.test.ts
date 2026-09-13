@@ -5,13 +5,15 @@
  * 值×结构合并(§5:模板/实例路径分离、行数跟 body)、contractTree
  * 响应契约模板树(P7:state 无视、一行模板集)、leafSurface
  * 匹配面、extraBodyPaths 目录外残留(§4 深浅皆收)、prefillBindings
- * 浅层预填(D7 语义保持)。
+ * 浅层预填(D7 语义保持)、sanitizeEndpointFull 出口消毒(含
+ * `declared_surface` 的形态归一)。
  */
 import { describe, it, expect } from 'vitest'
 import {
   resolveState, iterFlat, catalogPaths, carryPaths,
   formBindings, responseBindings, assertablePaths, hasUsablePath, searchCorpus,
   buildTree, contractTree, leafSurface, containerSurface, extraBodyPaths, extraSurfaceBindings, prefillBindings,
+  sanitizeEndpointFull,
 } from '@/utils/declarations'
 import { injectablePathSetOf } from '@/utils/assertion-registry'
 import { toScratchPath } from '@/utils/scratch-path'
@@ -702,5 +704,51 @@ describe('路径可用性唯一定义(spec 架构收敛 §2.3)', () => {
       { name: 'ok', path: '$.ok', required: false, description: '' },
     ] as any
     expect(prefillBindings(decls).map((f) => f.path)).toEqual(['$.ok'])
+  })
+})
+
+// ─── declared_surface 归一(sanitizeEndpointFull;不可信来源的判定面)──────
+// 判定面把这个字段逐字 `for...of` 进集合(`injectablePathSetOf`)⇒ 非数组必须在
+// **出口一次**挡掉:字符串会被逐字符并成垃圾成员(静默错判),数字渲染期硬抛。
+// 断言口径 = 归一后的面喂给判定面,集合**只含 `$`**(降级从严)且不抛。
+describe('sanitizeEndpointFull — declared_surface 归一', () => {
+  const full = (surface: unknown) => ({ id: 'ep-s', declared_surface: surface } as any)
+
+  it('DS-1: 非数组的真值(字符串 / 数字 / 对象)→ null(降级从严),集合只剩 $', () => {
+    for (const junk of ['$.abc', 7, { a: 1 }, true]) {
+      const clean = sanitizeEndpointFull(full(junk))
+      expect(clean.declared_surface).toBe(null)
+      let set: ReadonlySet<string> | undefined
+      expect(() => { set = injectablePathSetOf([], clean.declared_surface) }).not.toThrow()
+      expect([...set!]).toEqual(['$'])      // 字符串不会被逐字符并进来
+    }
+  })
+
+  it('DS-2: 数组里的非字符串元素丢弃,字符串成员原样保留', () => {
+    const clean = sanitizeEndpointFull(full(['$', '$.a', 7, null, {}, '$.b']))
+    expect(clean.declared_surface).toEqual(['$', '$.a', '$.b'])
+    expect([...injectablePathSetOf([], clean.declared_surface)].sort())
+      .toEqual(['$', '$.a', '$.b'])
+  })
+
+  it('DS-3: [] 保持 [] —— 真无声明不是降级(§5)', () => {
+    const clean = sanitizeEndpointFull(full([]))
+    expect(clean.declared_surface).toEqual([])
+    expect([...injectablePathSetOf([], clean.declared_surface)]).toEqual(['$'])
+  })
+
+  it('DS-4: null / 缺键原样(缺省即降级),干净入参零扰动(身份不变)', () => {
+    const withNull = full(null)
+    expect(sanitizeEndpointFull(withNull)).toBe(withNull)          // 无改动 → 原对象
+    expect(sanitizeEndpointFull(withNull).declared_surface).toBe(null)
+    const without = { id: 'ep-s' } as any
+    const out = sanitizeEndpointFull(without)
+    expect(out).toBe(without)
+    expect('declared_surface' in out).toBe(false)                  // 不动键 = 不改 wire 形状
+    // 干净数组同样身份不变(归一无需重建数组)
+    const arr = ['$', '$.a']
+    const withArr = full(arr)
+    expect(sanitizeEndpointFull(withArr)).toBe(withArr)
+    expect(sanitizeEndpointFull(withArr).declared_surface).toBe(arr)
   })
 })
