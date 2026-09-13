@@ -198,7 +198,7 @@ def _path_resolvable(jsonpath: str, body: Any, universe: set[str]) -> bool:
 
 
 def _host_conflict(body: Any, target: str) -> bool:
-    """``target`` 的路径是否落在**不称职的宿主容器**上 —— 是则不可安全物化。
+    """``target`` 是否**不可安全物化** —— 宿主容器不称职,或形状写不进去。
 
     引擎 ``_set_at`` 的 FIELD 段遇非 dict 即 ``data={}``、INDEX 段遇非 list 即
     ``data=[]``,故往字符串/数字/别的容器**内部**写值会把整个宿主改形:
@@ -209,8 +209,11 @@ def _host_conflict(body: Any, target: str) -> bool:
     分段走 **jsonpath 自己的解析器**的 token(``items[0]`` 是 FIELD+INDEX 两段,
     不是字面键 ``"items[0]"``)—— 与被判的引擎 ``_set_at`` 同一套分段。每段:
     宿主容器类型不符(该段 FIELD 要求 dict / INDEX 要求 list)⇒ **冲突**;
-    段**缺失** / 索引**越界** ⇒ **不算冲突**(引擎按类型创建 / 扩展列表);
-    末段落点的值本身不判(覆写叶子是 Assign 的正常语义)。
+    **dict 键缺失** ⇒ **不算冲突**(引擎按类型创建);
+    **list 下标**先按 Python 语义归一(负索引 ``+= len(cur)``)再判 ——
+    归一后仍在范围外(空 list 亦然)⇒ **冲突**(引擎 ``data[idx]`` 抛
+    ``IndexError``),**正**越界则**不算冲突**(引擎 ``while len(data) <= idx``
+    自动扩展列表,写得进去);末段落点的值本身不判(覆写叶子是 Assign 的正常语义)。
 
     **规则:走不动 / 无法求值的形状一律算冲突。** 通配(``*``)、过滤器
     (``[?...]``)、递归下降(``..``),以及 ``_parse`` 抛 ``JsonPathError`` 的
@@ -218,11 +221,13 @@ def _host_conflict(body: Any, target: str) -> bool:
     物化这种目标只能把「一次跳过 + 告警」换成「一次失败的运行」,没有任何
     收益,故按「不确定就别写」判冲突 —— 判据是**守卫的目的**(不确定就别写),
     不是「改不改形」:这两侧的宿主都不会被改形,但「不写」才是守卫该答的话。
+    这条**先整条扫一遍再走 walk**(见下),否则早退的段之后藏着走不动形状时,
+    「一律」就只对「走得到该段」成立。
 
     三条**不算冲突**(都是 Assign 的正常语义或可创建情形):
     * target 就是 ``$.request_body`` 本身 —— 整体覆写 body;
     * ``body`` 为 ``None``(无 body)—— Assign 会创建;
-    * 路径段**缺失** / 索引**越界** —— 同样由 Assign 创建。
+    * **dict 键**缺失 / **list 正**越界 —— 同样由 Assign 创建(列表自动扩展)。
 
     ``target`` 形如 ``$.request_body.note.replace``:首段是调用点
     (:func:`_body_target` 固定加的前缀)拼接的 FIELD ``request_body``(根
@@ -243,24 +248,30 @@ def _host_conflict(body: Any, target: str) -> bool:
         return False                # 恰为 ``$.request_body`` ⇒ 整体覆写
     if body is None:
         return False                # 无 body ⇒ Assign 会创建
+    # 走不动的形状**整条先扫一遍**(规则见上):walk 会在「段缺失 / 下标越界」
+    # 处早退,晚段的通配 / 过滤 / 递归就永不被看见 —— 那样「一律」只对
+    # 「走得到该段」成立。只读扫描不碰 body,也不影响下面三条边界。
+    if any(n.kind is not NodeKind.FIELD and n.kind is not NodeKind.INDEX
+           for n in rest):
+        return True
     cur: Any = body
     for node in rest:
         if node.kind is NodeKind.FIELD:
-            required: type = dict
-        elif node.kind is NodeKind.INDEX:
-            required = list
-        else:                       # 通配 / 过滤 / 递归:走不动 ⇒ 冲突
-            return True
-        if not isinstance(cur, required):
-            return True             # 现存值不是所需容器 ⇒ 引擎会把它整段换掉
-        if node.kind is NodeKind.FIELD:
+            if not isinstance(cur, dict):
+                return True         # 现存值不是所需容器 ⇒ 引擎会把它整段换掉
             if node.value not in cur:
-                return False        # 缺失 ⇒ 后续由 Assign 创建
+                return False        # 键缺失 ⇒ 后续由 Assign 创建
             cur = cur[node.value]
-        else:
+        else:                       # INDEX(扫描已排除其余 kind)
+            if not isinstance(cur, list):
+                return True         # 引擎 data=[] 会把现存值整段换掉
             idx = node.value
-            if idx < 0 or idx >= len(cur):
-                return False        # 越界 ⇒ 同样由 Assign 创建
+            if idx < 0:
+                idx += len(cur)     # 引擎按 Python 语义取倒序:先归一再判
+            if idx < 0:
+                return True         # 归一后仍在范围外(空 list 亦然)⇒ IndexError
+            if idx >= len(cur):
+                return False        # **正**越界:引擎自动扩展列表,写得进去
             cur = cur[idx]
     return False
 
@@ -375,8 +386,9 @@ def compose_injection_scenario(definition: dict[str, Any], entry: dict[str, Any]
             body = (steps[si].get("request") or {}).get("body")
             if _host_conflict(body, target):
                 logger.warning(
-                    "injection entry skipped: 目标路径 {} 落在非 dict 宿主上 "
-                    "(物化会改形宿主,target={})", jp, target)
+                    "injection entry skipped: 目标 {} 不可安全物化 —— 宿主容器"
+                    "类型不符或形状写不进去(物化会改形宿主或让整步失败),"
+                    "target={}", jp, target)
             else:
                 steps[si].setdefault("strategy", []).append(
                     _assign_strategy(entry.get("value"), target))

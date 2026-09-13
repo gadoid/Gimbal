@@ -1,5 +1,6 @@
 """run_injection — 注入条目物化纯函数 + 集成(spec v3 §3)。"""
 import asyncio
+import contextlib
 import sys
 from pathlib import Path
 
@@ -245,6 +246,21 @@ def test_body_face_prefix_matches_frontend_injectable_path_set():
 
 
 # ── Z1:exists 兜底不穿非 dict 宿主 + 写侧宿主冲突拦截 ────────────────
+@contextlib.contextmanager
+def _captured_warnings():
+    """收集 loguru WARNING 文本(同 test_endpoint_declarations.py:250 的做法)。
+
+    ``logger.remove`` 放在 finally:漏摘会让后续用例的告警流进这条 sink。"""
+    from loguru import logger
+
+    seen: list[str] = []
+    sink_id = logger.add(lambda m: seen.append(str(m)), level="WARNING")
+    try:
+        yield seen
+    finally:
+        logger.remove(sink_id)
+
+
 def test_exists_fallback_does_not_pierce_str_attributes():
     """``$.note.replace`` 不再判活 —— ``exists`` 兜底前先判宿主。
 
@@ -321,8 +337,6 @@ def test_bracket_path_into_str_element_is_skipped():
     取出 ``"abc"``,下一个 FIELD 段遇非 dict 即 ``data = {}`` ⇒ 元素由
     ``"abc"`` 变成 ``{"replace": v}``(与 ``$.note.replace`` 同类改形)。
     """
-    from loguru import logger
-
     body = {"items": ["abc"]}
     body_of = _body_of([{"request": {"body": body}}])
     entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
@@ -332,13 +346,9 @@ def test_bracket_path_into_str_element_is_skipped():
             "jsonpath": "$.items[0].replace"} in \
         entry_issues(entry, 1, body_of, lambda si: set(),
                      _universe_of(body_of, None))
-    seen: list[str] = []
-    sink_id = logger.add(lambda m: seen.append(str(m)), level="WARNING")
-    try:
+    with _captured_warnings() as seen:
         out = compose_injection_scenario(
             {"steps": [{"request": {"body": body}}]}, entry)
-    finally:
-        logger.remove(sink_id)
     assert out["steps"][0].get("strategy") in (None, [])          # 未物化
     assert any("$.items[0].replace" in s for s in seen), seen     # 告警带路径
 
@@ -362,13 +372,86 @@ def test_bracket_path_into_dict_element_still_materializes():
         {"kind": "assign", "source": 9, "target": "$.request_body.items[0].sku"}]
 
 
-def test_out_of_range_index_is_not_a_conflict():
-    """索引越界 ⇒ 不冲突(引擎扩展列表创建),照常物化 —— 与「段缺失」同向。"""
+def test_positive_out_of_range_index_is_not_a_conflict():
+    """**正**越界下标:不冲突,照常物化 —— 引擎 ``while len(data) <= idx:
+    data.append(None)`` 自动扩展,写**得**进去(实测 ``set_value`` 返回
+    ``{'items': [None…, {'sku': 'x'}]}``,不抛错)。
+
+    **与复核二轮裁定的分歧(如实记录)**:该轮裁定「越界(含正越界)一并判冲突」,
+    理由「引擎在那里抛 IndexError」—— 该理由对**负**索引成立(见下一条用例),
+    对正越界**不成立**。本实现保留「不冲突」,依据两条:①裁定 ① 自身的判据是
+    「写不进去就别物化」,而正越界写得进去;②``$.tags[9]`` 这类命中**容器前缀**
+    的路径判定侧判活(``test_body_face_covers_container_prefixes_like_frontend``
+    钉住),物化侧若跳过就造出本计划一直在消除的「判活 / 静默 skip」分裂 ——
+    正是否决方案 (b) 的同一条理由(静默丢掉有效注入更糟)。少一行即改:
+    ``idx >= len(cur)`` 处 ``return False`` 改 ``return True``。"""
     out = compose_injection_scenario(
         {"steps": [{"request": {"body": {"items": []}}}]},
         {"path": {"stepIndex": 0, "jsonpath": "$.items[5].sku"}, "value": 9})
     assert out["steps"][0]["strategy"] == [
         {"kind": "assign", "source": 9, "target": "$.request_body.items[5].sku"}]
+
+
+def test_negative_index_is_normalised_before_descending():
+    """负索引先归一为 ``len(cur) + idx`` 再下降,不整体当「越界」放行。
+
+    引擎对**非空** list 的负索引是写进现存元素:``[1, 2]`` + ``$.items[-1].sku``
+    ⇒ 元素 ``2`` 被 ``{'sku': 'x'}`` 顶掉(与 finding 1 同类改形);对**空** list
+    则 ``data[-1]`` 抛 ``IndexError`` ⇒ ``JsonPathError``,写不进去。所以:
+    归一后仍在范围外 ⇒ 冲突;在范围内 ⇒ 继续下降,由后续段判。"""
+    # 归一后在范围外(空 list)→ 冲突
+    out = compose_injection_scenario(
+        {"steps": [{"request": {"body": {"items": []}}}]},
+        {"path": {"stepIndex": 0, "jsonpath": "$.items[-1].sku"}, "value": 9})
+    assert out["steps"][0].get("strategy") in (None, [])
+    # 归一后落到非 dict 元素 → 冲突(不物化 + 告警)
+    with _captured_warnings() as seen:
+        out = compose_injection_scenario(
+            {"steps": [{"request": {"body": {"items": [1, 2]}}}]},
+            {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                     "jsonpath": "$.items[-1].sku"}, "value": 9})
+    assert out["steps"][0].get("strategy") in (None, []), out["steps"][0]
+    assert any("$.items[-1].sku" in s for s in seen), seen
+    # 归一后落到 dict 元素 → 照常物化(别修过头)
+    out = compose_injection_scenario(
+        {"steps": [{"request": {"body": {"items": [{"sku": 1}]}}}]},
+        {"path": {"stepIndex": 0, "jsonpath": "$.items[-1].sku"}, "value": 9})
+    assert out["steps"][0]["strategy"] == [
+        {"kind": "assign", "source": 9, "target": "$.request_body.items[-1].sku"}]
+
+
+def test_index_into_a_non_dict_element_is_a_conflict():
+    """下标在范围内但元素非 dict:同类改形(``[1, 2]`` 的 ``items[0]`` 是 int)。
+
+    引擎实测:``set_value({'items': [1, 2]}, '$.items[0].sku', 'x')`` →
+    ``{'items': [{'sku': 'x'}, 2]}`` —— 第一个元素被整体顶掉。"""
+    with _captured_warnings() as seen:
+        out = compose_injection_scenario(
+            {"steps": [{"request": {"body": {"items": [1, 2]}}}]},
+            {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                     "jsonpath": "$.items[0].sku"}, "value": 9})
+    assert out["steps"][0].get("strategy") in (None, [])
+    assert any("$.items[0].sku" in s for s in seen), seen
+
+
+def test_unwalkable_shape_after_a_missing_or_out_of_range_segment_is_a_conflict():
+    """走不动的形状**先扫一遍**再走 —— 不能因为前段缺失/越界早退就漏判。
+
+    「一律」必须是真的「一律」:段缺失与下标越界都先短路返回,若扫描放在
+    walk 里,晚段的通配/过滤/递归就永不被看见(实测这四种形状引擎**全抛**
+    ``JsonPathError``,其中越界+通配那例还会先把 list 撑长一堆 ``None``)。
+    """
+    for body, jp in (({"a": 1}, "$.b[*].c"),                 # 段缺失 + 通配
+                     ({"a": 1}, "$.b[?(@.x==1)].c"),         # 段缺失 + 过滤
+                     ({"a": 1}, "$.b..c"),                   # 段缺失 + 递归
+                     ({"items": []}, "$.items[5].x[*]")):    # 越界 + 通配
+        with _captured_warnings() as seen:
+            out = compose_injection_scenario(
+                {"steps": [{"request": {"body": body}}]},
+                {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                         "jsonpath": jp}, "value": "x"})
+        assert out["steps"][0].get("strategy") in (None, []), jp
+        assert any(jp in s for s in seen), (jp, seen)
 
 
 def test_root_non_dict_body_is_caught_by_the_root_host_check():
@@ -408,19 +491,13 @@ def test_list_body_bracket_root_path_is_skipped_by_the_guard():
     ``"abc"``,下一个 FIELD 段遇非 dict 即 ``{}`` ⇒ 元素改形。上一条钉判定侧,
     这条钉**物化侧**(直接调 ``compose_injection_scenario``、不经 ``entry_issues``
     过滤的那条路)。"""
-    from loguru import logger
-
     body = ["abc"]
     entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
                                      "jsonpath": "$[0].replace"},
              "value": "x"}
-    seen: list[str] = []
-    sink_id = logger.add(lambda m: seen.append(str(m)), level="WARNING")
-    try:
+    with _captured_warnings() as seen:
         out = compose_injection_scenario(
             {"steps": [{"request": {"body": body}}]}, entry)
-    finally:
-        logger.remove(sink_id)
     assert out["steps"][0].get("strategy") in (None, [])          # 未物化
     assert any("$[0].replace" in s for s in seen), seen           # 告警带路径
 
@@ -432,20 +509,14 @@ def test_unwalkable_shape_is_a_conflict():
     不了的路径同样抛 —— 写不进去的东西物化它,只会把「一次跳过」换成「一次
     失败的运行」。故规则是:不确定就别写。通配段无论父宿主是不是 dict 都走
     不动(它不是「宿主类型不符」那一类,而是形状本身求不了值)。"""
-    from loguru import logger
-
     for body, jp in (({"foo": "str"}, "$.foo.*"),        # 父宿主非 dict
                      ({"foo": {"bar": 1}}, "$.foo.*"),   # 父宿主是 dict
                      ({"foo": 1}, "$.foo[")):            # 解析不了
-        seen: list[str] = []
-        sink_id = logger.add(lambda m: seen.append(str(m)), level="WARNING")
-        try:
+        with _captured_warnings() as seen:
             out = compose_injection_scenario(
                 {"steps": [{"request": {"body": body}}]},
                 {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
                                          "jsonpath": jp}, "value": "x"})
-        finally:
-            logger.remove(sink_id)
         assert out["steps"][0].get("strategy") in (None, []), jp   # 未物化
         assert any(jp in s for s in seen), (jp, seen)              # 告警带路径
 
