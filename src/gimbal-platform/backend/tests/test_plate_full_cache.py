@@ -110,7 +110,8 @@ async def test_stale_snapshot_survives_a_failed_refresh(monkeypatch, install_tra
     """D:TTL 过期后刷新失败 → **旧快照仍服务**(stale-while-error)。
 
     一次 plate 抖动不得把契约面从「有面」降级成「空面」;``stale=True`` 是
-    调用方发降级告警的唯一依据。
+    调用方发降级告警的唯一依据。回退路径的 ``status`` 是那次**刷新失败**的状态
+    (item 非 None + ``stale=True`` 已经说明「这份是旧的」,状态位回答「为什么旧」)。
     """
     state = {"fail": False}
 
@@ -130,6 +131,7 @@ async def test_stale_snapshot_survives_a_failed_refresh(monkeypatch, install_tra
     assert got.item is not None, "刷新失败时应回退旧快照,而不是降级为 None"
     assert got.item["request"]["declarations"] == [{"path": "$.customer_id"}]
     assert got.stale is True
+    assert got.status == 503, "回退时的状态是那次刷新失败的状态(不是回退快照的)"
     assert got.reason, "回退分支的告警必须带失败原因(它此刻就在 reason 里)"
 
 
@@ -157,6 +159,48 @@ async def test_stale_window_does_not_swallow_an_empty_item(monkeypatch, install_
     assert got.item == {}                 # 刷新成功 → 新快照,不是回退
     assert got.stale is False
     assert got.reason == ""
+    assert got.status == 200              # 刷新成功 ⇒ 200(空 item 不是失败)
+
+
+# ── status:三种失败情形分得开(错误码映射的承重面)─────────────────
+
+async def test_plate_404_reports_the_real_status(install_transport):
+    """plate 非 200 → ``status`` 是**那个真实状态码**(尤其 404)。
+
+    「拿到了 404」(端点不存在)与「连不上」(plate 不可达)必须分得开 ——
+    status 只剩 200-or-None 会让 404 那条映射永不触发。
+    """
+    install_transport(lambda req: httpx.Response(404, json={"ok": False}))
+    res = await plate_client.get_endpoint_full("ep-missing")
+    assert res.item is None
+    assert res.stale is False
+    assert res.status == 404
+    assert "plate status 404" in res.reason
+
+
+async def test_connection_failure_has_no_status(install_transport):
+    """连接失败 / 超时 = **没拿到响应** ⇒ ``status is None``(与 404 是两件事)。"""
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    install_transport(handler)
+    res = await plate_client.get_endpoint_full("ep-down")
+    assert res.item is None
+    assert res.status is None             # 没拿到响应 → 没有状态码可报
+    assert res.reason
+
+
+async def test_invalid_envelope_is_not_reported_as_unreachable(install_transport):
+    """200 但信封无 dict item = 第三种情形:``status == 200`` 配 ``item is None``。
+
+    若这里落 None,就与「连不上」合并成同一格 —— 调用方再也分不出
+    「plate 回了话但信封不可用」。
+    """
+    install_transport(lambda req: httpx.Response(200, json={"ok": True, "data": {}}))
+    res = await plate_client.get_endpoint_full("ep-noitem")
+    assert res.item is None
+    assert res.status == 200
+    assert res.reason == "no item in plate envelope"
 
 
 async def test_cache_has_lru_bound(monkeypatch, install_transport):
@@ -261,7 +305,9 @@ async def test_cancelled_creator_still_clears_inflight(install_transport):
 
         release.set()
         assert await _wait_until(lambda: "ep-slow" not in plate_client._FULL_INFLIGHT)
-        assert isinstance(await shared, dict)        # 结果就绪且可用(未被打断)
+        shared_item, shared_status = await shared     # 结果就绪且可用(未被打断)
+        assert isinstance(shared_item, dict)
+        assert shared_status == 200
     finally:
         release.set()
         plate_client.set_client_for_tests(None)

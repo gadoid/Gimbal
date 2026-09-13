@@ -73,20 +73,25 @@ def _isolate_marks(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _isolate_endpoint_declarations_cache():
-    """Clear the endpoint-declarations process cache between tests.
+def _isolate_plate_contract_caches():
+    """Reset the process-wide ``/full`` contract caches between tests.
+
+    Two caches hold the same plate contract: ``endpoint_declarations``
+    (declarations + projection) and ``plate_client`` (the whole item).
 
     Since the carry / declared-paths merge, ``carry_injection`` and the
     dangling-path judgement share ONE process cache (TTL
     ``settings.DECLARED_PATHS_TTL_SEC``).  Several tests mock the *same*
     endpoint id with *different* declarations, so whichever runs first
     poisons the rest for the rest of the TTL — the same discipline the
-    frontend already applies per case to its ``/full`` cache.  Reset before
-    every test so each observes only its own plate mock.
+    frontend already applies per case to its ``/full`` cache.  Reset both
+    before every test so each observes only its own plate mock.
     """
+    from app.services import plate_client
     from app.services.endpoint_declarations import _reset_declared_paths_cache
 
     _reset_declared_paths_cache()
+    plate_client._reset_full_cache_for_test()
     yield
 
 

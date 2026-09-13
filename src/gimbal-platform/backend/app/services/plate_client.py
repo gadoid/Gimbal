@@ -206,18 +206,25 @@ class EndpointFull:
     """``GET /api/endpoint/{id}/full`` 的一次取数结果。
 
     ``item`` 为 None ⇒ **不可得**(调用方降级)。``stale`` 为 True ⇒ item 来自
-    **回退的旧快照**(刷新失败时旧快照继续服务,直到回退窗走完)。``status`` 是
-    plate 的 HTTP 状态;None ⇒ 本次没有可用的成功响应(连接失败 / 超时 / 非 200,
-    细节在 ``reason``)。``reason`` 是失败原因(**告警链路上唯一的遥测**,空串
-    表示成功且非回退)。
+    **回退的旧快照**(刷新失败时旧快照继续服务,直到回退窗走完)。``reason`` 是
+    失败原因(**告警链路上唯一的遥测**,空串表示成功且非回退)。
+
+    ``status`` 是**这次取数拿到的 plate HTTP 状态**,各情形都有确定含义:
+    * 刷新成功(含 TTL 命中)→ ``200``;
+    * 回退旧快照(``stale=True``)→ 那次**刷新失败**的状态码 —— item 是旧的,
+      状态位回答的是「为什么旧」,不是快照本身的状态;
+    * 不可得(``item is None``)→ 失败时拿到的状态码;``200`` 配 ``item is None``
+      是「响应拿到了,但信封里没有 dict item」;
+    * ``None`` ⇒ **压根没拿到响应**(连接失败 / 超时)—— 与「拿到了 404」是
+      两件事,不得合并(§5):前者「plate 不可达」、后者「端点不存在」。
 
     **``item`` 是缓存对象本身(只读,不是拷贝)**:本缓存是进程级共享面,本层
     不为每个消费者拷贝整份契约 item。消费者**不得就地修改**它 —— 要改的调用方
     **先自己 ``copy``**,再改自己那份(容器内的嵌套条目仍是共享的,同款只读
     契约)。
 
-    为什么带回 stale/status/reason 而不是只返回 item:降级告警与代理的错误码
-    映射都需要这层区分 —— 三者都是**有意义的值**,不得被真值合并(§5)。
+    为什么带回 stale/status/reason 而不是只返回 item:降级告警与错误码映射都需要
+    这层区分 —— 三者都是**有意义的值**,不得被真值合并(§5)。
     """
 
     item: dict[str, Any] | None
@@ -241,7 +248,7 @@ def _build_full_cache() -> TtlLruCache:
 
 _FULL_CACHE: TtlLruCache = _build_full_cache()
 _FULL_CACHE_CFG: tuple[float, int, float] = _full_cache_cfg()
-_FULL_INFLIGHT: dict[str, asyncio.Task[dict[str, Any] | None]] = {}
+_FULL_INFLIGHT: dict[str, asyncio.Task[tuple[dict[str, Any] | None, int | None]]] = {}
 
 
 def _full_cache() -> TtlLruCache:
@@ -273,8 +280,10 @@ def _reset_full_cache_for_test() -> None:
     _FULL_INFLIGHT.clear()
 
 
-def _forget_full_inflight(task: asyncio.Task[dict[str, Any] | None],
-                          endpoint_id: str) -> None:
+def _forget_full_inflight(
+    task: asyncio.Task[tuple[dict[str, Any] | None, int | None]],
+    endpoint_id: str,
+) -> None:
     """任务完成回调:摘除**自己那个**在飞项(校验身份,迟到回调不误删后来者)。
 
     由完成回调驱动,而不是某个调用方的 ``finally`` —— 创建者可能被取消、等待方
@@ -286,21 +295,29 @@ def _forget_full_inflight(task: asyncio.Task[dict[str, Any] | None],
 
 
 async def _fetch_full_raw(endpoint_id: str, *, timeout: float,
-                          fail_reason: list[str]) -> dict[str, Any] | None:
+                          fail_reason: list[str]) -> tuple[dict[str, Any] | None, int | None]:
     """真正打一次 plate。**fail-soft 绝不抛,也绝不写缓存**。
 
     入缓存统一由 ``_refresh_full`` 在**成功之后**做(U:时间戳由 ``TtlLruCache.put``
-    在成功那一刻打点,不是本函数入口)。失败返回 None 且**不动**缓存 —— 旧快照
-    因此能留到回退窗,由调用侧决定是否回退(D)。
+    在成功那一刻打点,不是本函数入口)。失败返回 ``(None, status)`` 且**不动**
+    缓存 —— 旧快照因此能留到回退窗,由调用侧决定是否回退(D)。
+
+    ``status`` 是**本次拿到的 plate HTTP 状态**,``None`` 表示压根没拿到响应
+    (连接失败 / 超时)。这个区分是承重件:拿到了 404 与「连不上」是两件事,
+    调用方要据此分开映射(端点不存在 vs plate 不可达),不得合并(§5)。注意
+    ``status == 200`` 配 ``item is None`` 是第三种:响应拿到了,但信封里没有
+    dict item。
 
     ``fail_reason[0]`` 回填失败原因(调用方组进 ``EndpointFull.reason``):告警是
     降级链路上唯一的遥测,「plate status 503 / 信封缺 item / 连接失败」必须透得
     出来。这个 list 由 ``_refresh_full`` 随本次取数创建、随任务一起回收,不是新的
     模块级状态。
     """
+    status: int | None = None
     try:
         resp = await get_client().get(
             f"/api/endpoint/{endpoint_id}/full", timeout=timeout)
+        status = resp.status_code
         if resp.status_code != 200:
             raise RuntimeError(f"plate status {resp.status_code}")
         # 缺省合并(例外,已核等价性 —— 不是「有意义 falsy 被真值合并」):信封缺
@@ -312,10 +329,24 @@ async def _fetch_full_raw(endpoint_id: str, *, timeout: float,
         # (空目录)是派生层的事:那是成功拿到 item,只是它里面没有声明。
         if not isinstance(item, dict):
             raise RuntimeError("no item in plate envelope")
-        return item
+        return item, status
     except Exception as e:  # noqa: BLE001 — 契约不可得绝不阻塞判定
         fail_reason[0] = str(e)
-        return None
+        return None, status
+
+
+class _FullFetchError(RuntimeError):
+    """取数失败的内部出口,携带 plate 的 HTTP 状态(``None`` = 没拿到响应)。
+
+    取数结果的两个分量(``item`` / ``status``)都是承重件,故失败也一并交出来 ——
+    调用方要区分「拿到了 404」「信封不可用」「连不上」三种情形。只在
+    ``plate_client`` 内部流转(``get_endpoint_full`` 把它折成
+    ``EndpointFull``),调用方不捕获它。
+    """
+
+    def __init__(self, message: str, status: int | None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 async def _refresh_full(endpoint_id: str, *, timeout: float) -> dict[str, Any] | None:
@@ -334,11 +365,12 @@ async def _refresh_full(endpoint_id: str, *, timeout: float) -> dict[str, Any] |
             endpoint_id, timeout=timeout, fail_reason=fail_reason))
         _FULL_INFLIGHT[endpoint_id] = inflight
         inflight.add_done_callback(partial(_forget_full_inflight, endpoint_id=endpoint_id))
-    item = await asyncio.shield(inflight)
+    item, status = await asyncio.shield(inflight)
     if item is None:
-        # 复用他人在飞任务的等待方手上没有 fail_reason(空串 = 「未提供」,与缺省
-        # 串等价),落缺省串;真正的原因由创建者那份 ``EndpointFull.reason`` 透出。
-        raise RuntimeError(fail_reason[0] or "endpoint full fetch failed")
+        # 状态随**任务结果**回来,故复用他人在飞任务的等待方也拿得到真实状态码;
+        # 只有原因串依赖创建者手上的 fail_reason(空串 = 「未提供」,与缺省串等价),
+        # 复用者落缺省串 —— 真正的原因由创建者那份 ``EndpointFull.reason`` 透出。
+        raise _FullFetchError(fail_reason[0] or "endpoint full fetch failed", status)
     # 成功才 put ⇒ 时间戳打在成功那刻(U),不是请求发起时。
     _full_cache().put(endpoint_id, item, _now_iso())
     return item
@@ -349,8 +381,11 @@ async def get_endpoint_full(endpoint_id: str, *, timeout: float | None = None) -
 
     * 命中且未过期 → 直接返回缓存 item(``stale=False``,``status=200``);
     * 过期但在**回退窗**内 → 尝试刷新,**失败则回退旧快照**(D)并置
-      ``stale=True``(调用方据此告警),``reason`` 带失败原因;
-    * 无缓存或已出回退窗 → 刷新;**失败即 ``item=None`` + reason**(调用侧降级)。
+      ``stale=True``(调用方据此告警),``reason`` 带失败原因、``status`` 带那次
+      刷新失败的 plate 状态;
+    * 无缓存或已出回退窗 → 刷新;**失败即 ``item=None`` + reason**(调用侧降级),
+      ``status`` 同款带失败状态(``None`` 表示连响应都没拿到 —— 见
+      :class:`EndpointFull` 的四种情形)。
 
     TTL **不是形参**:它由 ``DECLARED_PATHS_TTL_SEC`` 在**缓存实例构造时冻结**
     (裁定 C21 —— 这样 settings 热改即刻生效),故没有「按调用方传 ttl」这回事。
@@ -367,23 +402,30 @@ async def get_endpoint_full(endpoint_id: str, *, timeout: float | None = None) -
         return EndpointFull(item=entry.payload, stale=False, status=200, reason="")
     if entry is not None and not fresh:
         reason = ""                     # 先声明:出 except 块 Python 即 del e(裁定 C23)
+        status: int | None = None       # 刷新失败时 plate 的真实状态(None = 没拿到响应)
         try:
             refreshed = await _refresh_full(endpoint_id, timeout=eff_timeout)
-        except Exception as e:                      # noqa: BLE001
+        except _FullFetchError as e:
             refreshed = None
-            # 原因此刻就在手里(裁定 C23):_refresh_full 抛的 RuntimeError 消息永不为空
+            # 原因此刻就在手里(裁定 C23):_FullFetchError 的消息永不为空
             # (``fail_reason[0] or "endpoint full fetch failed"``)⇒ 无需缺省,不做真值合并(§5)。
+            reason, status = str(e), e.status
+        except Exception as e:                      # noqa: BLE001 — 兜底:非取数层的意外错误没有 plate 状态
+            refreshed = None
             reason = str(e)
         if refreshed is None:                       # ← 显式,不用 or:``{}`` 是合法 item(§5)
             # 回退旧快照(D):告警由消费者发 —— 它按端点 + 冷却窗去重,故本层交出的
             # ``reason`` 必须带着原因,否则「静默供旧契约面」就没有任何遥测。
-            return EndpointFull(item=entry.payload, stale=True, status=None, reason=reason)
+            # ``status`` 是那次**刷新失败**的状态(不是回退快照的状态):item 非 None
+            # + ``stale=True`` 已经说明「这份是旧的」,状态位留给调用方看「为什么旧」。
+            return EndpointFull(item=entry.payload, stale=True, status=status, reason=reason)
         return EndpointFull(item=refreshed, stale=False, status=200, reason="")
     try:
         refreshed = await _refresh_full(endpoint_id, timeout=eff_timeout)
-    except Exception as e:                          # noqa: BLE001
-        reason = str(e)
-        return EndpointFull(item=None, stale=False, status=None, reason=reason)
+    except _FullFetchError as e:                    # 不可得:状态码随异常上来(可能是 404)
+        return EndpointFull(item=None, stale=False, status=e.status, reason=str(e))
+    except Exception as e:                          # noqa: BLE001 — 兜底:非取数层的意外错误
+        return EndpointFull(item=None, stale=False, status=None, reason=str(e))
     if refreshed is None:                           # 显式(不用 or):_refresh_full 靠 raise 报失败
         return EndpointFull(item=None, stale=False, status=None, reason="取数失败")
     return EndpointFull(item=refreshed, stale=False, status=200, reason="")

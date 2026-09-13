@@ -6,10 +6,11 @@
 修订 11:同视图异凭证各自缓存,权限视角不在缓存层串台)。
 
 **载荷泛化**(2026-09-13,架构收敛 §3.1):条目载荷是 ``payload`` 而非
-``rows`` —— 一套 TTL/LRU/回退语义由两个消费者共用:query-view 行集
-(``list[dict]``)与契约声明面的 ``(decls, frozenset(catalog_paths(decls)))``。
-字段叫 ``rows`` 会让第二个消费者"名不副实";``truncated`` 仍只对行集有意义
-(声明面恒为默认 ``False``)。
+``rows`` —— 一套 TTL/LRU/回退语义由三个消费者共用:query-view 行集
+(``list[dict]``)、契约声明面的 ``(decls, frozenset(catalog_paths(decls)))``
+与 ``plate_client.get_endpoint_full`` 的整份契约 item。
+字段叫 ``rows`` 会让后两个消费者"名不副实";``truncated`` 仍只对行集有意义
+(声明面 / 契约 item 恒为默认 ``False``)。
 """
 from __future__ import annotations
 
