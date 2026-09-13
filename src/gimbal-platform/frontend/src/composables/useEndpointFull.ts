@@ -53,7 +53,7 @@ import { getFullEndpoint } from '@/api/scenario-composer'
 import { sanitizeEndpointFull } from '@/utils/declarations'
 import type { EndpointFullView } from '@/types/plate'
 
-/** 失败重试窗口(ms):窗口内不再发起,避免 plate 故障时渲染路径反复重发。
+/** 失败重试窗口(ms):窗口内不再发起,避免 plate 故障时反复重发。
  *  **优先于 `/full` 面的 TTL**:刚失败的端点即便面已到期也不重发。 */
 export const FAILED_RETRY_MS = 10_000
 
