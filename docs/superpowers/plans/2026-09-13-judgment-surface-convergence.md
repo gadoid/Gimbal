@@ -59,8 +59,9 @@
 - Consumes: `settings.DECLARED_PATHS_TTL_SEC` / `_MAX_ENTRIES` / `_STALE_WINDOW_SEC` / `_TIMEOUT_SEC`;`query_view_cache.TtlLruCache`;`get_client()`
 - Produces:
   - `class EndpointFull` — frozen dataclass,字段 `item: dict[str, Any] | None`、`stale: bool`、`status: int | None`、`reason: str`
-  - `async def get_endpoint_full(endpoint_id: str, *, ttl: float | None = None, timeout: float | None = None) -> EndpointFull`
+  - `async def get_endpoint_full(endpoint_id: str, *, timeout: float | None = None) -> EndpointFull`(**无 `ttl` 形参**:TTL 由缓存实例构造时冻结,见 Step 3 的 docstring)
   - `def _reset_full_cache_for_test() -> None`
+- **`status` 的契约(T3 依赖它,必须真)**:成功 = `200`;**plate 返回非 200 = 那个真实状态码**(404 必须透出来,T3 靠它映射 `endpoint_not_found`);**没拿到响应**(连接失败 / 超时)= `None`。「拿到了 404」与「没拿到响应」是两件事,不得合并成同一个值。回退旧快照那条路径的 `status` 取值须在 docstring 写明,不留歧义。
 
 - [ ] **Step 1: 写失败用例 —— 冷取成功返回 item**
 
@@ -238,6 +239,10 @@ async def _fetch_full_raw(endpoint_id: str, *, timeout: float,
 ```
 
 同文件再追加 `_refresh_full` 与 `get_endpoint_full`:
+
+> ⚠ **实施修正(T1 实施者发现,已采纳)**:上面 `_fetch_full_raw` 的草图返回 `(item, status)` 元组,而下面 `_refresh_full` 写的是 `item = await asyncio.shield(inflight)` —— 照抄会把**元组**当 item 入缓存,Step 1 的 `res.item["request"]` 直接 TypeError。**形状由实施者定**,但两条契约必须成立:
+> 1. 入缓存的载荷是 **item 本身**(不是元组/包装);
+> 2. 真实 plate 状态必须能到达 `EndpointFull.status` —— 注意在飞收敛下**等待方读不到创建者的局部变量**(`fail_reason` 同款问题),所以状态要**随任务结果回来**,不能只塞进侧面单元。`stale` 回退路径的 `status` 取值须在 docstring 写明。
 
 ```python
 async def _refresh_full(endpoint_id: str, *, timeout: float) -> dict[str, Any] | None:
