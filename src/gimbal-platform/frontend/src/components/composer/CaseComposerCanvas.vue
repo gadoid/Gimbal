@@ -372,7 +372,6 @@
                   :start-expanded="idx === justAddedStrategyIdx"
                   :candidates="strategyCandidates(s)"
                   :tag-label="currentTagLabels[idx]"
-                  :sibling-perturbs="siblingPerturbs"
                   :expand-when="jumpSeq > 0 && idx === jumpTargetIdx"
                   @remove="removeStrategy(currentStep, s)"
                 />
@@ -564,7 +563,6 @@ import ValueSourcePicker from './ValueSourcePicker.vue'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { useConstantsStore } from '@/stores/constants'
 import { deriveVarRegistry } from '@/utils/var-registry'
-import { TPL_FULL_RE } from '@/utils/dataset-segments'
 import {
   listStrategyKinds, getStrategyKindFull, resolveResponsePaths,
   validateEndpointFieldStates,
@@ -1163,24 +1161,6 @@ const vsBadges = ref<Record<string, { view: string; fetchedAt?: string }>>({})
  *  两组同 view 各自打开选择器,前端不复用结果、不跨组覆写)。 */
 const valueSourceGroups = computed<ValueSourceGroup[]>(() =>
   groupValueSources(stepDecls(currentStep.value)))
-
-/** 同步骤扰动位(spec §5.3):当前步请求侧值整串 ${var.x} 的 var 名集 */
-const siblingPerturbs = computed<string[]>(() => {
-  const step = currentStep.value
-  if (!step) return []
-  const names = new Set<string>()
-  const visit = (v: unknown): void => {
-    if (typeof v === 'string') {
-      const m = TPL_FULL_RE.exec(v)
-      if (m) names.add(m[1])
-    } else if (Array.isArray(v)) v.forEach(visit)
-    else if (v && typeof v === 'object') Object.values(v).forEach(visit)
-  }
-  visit(step.request?.body)
-  const headers = step.api?.headers
-  if (headers && typeof headers === 'object') visit(headers)
-  return [...names]
-})
 
 /**
  * 查询上下文(§7.2/§6.1):服务 URL 与查询别名同源于**当前 step** —

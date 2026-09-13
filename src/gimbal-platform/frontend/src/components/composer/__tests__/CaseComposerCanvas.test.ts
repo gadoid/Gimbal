@@ -2612,13 +2612,15 @@ describe('CaseComposerCanvas — 期望提升链退场(spec v2 §2)', () => {
   })
 })
 
-// ─── 扰动位呈现与跳转(spec §5.1/§5.3)───────────────────────────────
-// 同步骤扰动位列表 + focusJump 跨路由定位(期望列头↔断言卡)+
-// 多视图前移软提示。用例名前缀 pert-/nav-/multi-(与「请求侧提取
-// 域感知」describe 的 N1-N4 区分,控制者裁定)。
+// ─── 断言卡呈现与跳转(§5.3)─────────────────────────────────────────
+// focusJump 跨路由定位(期望列头↔断言卡)+ 多视图前移软提示 + 「同步骤
+// 扰动位」列表的**退场**(2026-09-13 裁定:该列表与编排侧徽标同一过时前提 ——
+// 值整串 ${var.x} 只说明是模板,不说明是扰动点;权威扰动点列表 = 断言管理
+// 条目的 path)。用例名前缀 pert-/nav-/multi-(与「请求侧提取域感知」
+// describe 的 N1-N4 区分,控制者裁定)。
 
-describe('CaseComposerCanvas — 扰动位呈现与跳转(§5.3)', () => {
-  it('pert-N1: 断言卡显示"同步骤扰动位"var 名列表(诚实粒度 = 同步骤)', async () => {
+describe('CaseComposerCanvas — 断言卡呈现与跳转(§5.3)', () => {
+  it('pert-N1: 断言卡**不再**渲染「同步骤扰动位」列表(卡本身照常展开)', async () => {
     const { listStrategyKinds } = await import('@/api/scenario-composer')
     const kindsMock = (listStrategyKinds as any).getMockImplementation()
     ;(listStrategyKinds as any).mockResolvedValue([{ kind: 'assertion', label: '断言' }])
@@ -2636,13 +2638,9 @@ describe('CaseComposerCanvas — 扰动位呈现与跳转(§5.3)', () => {
       await flushPromises()
       await w.find('.sf-head').trigger('click')   // 展开断言卡
       await flush()
-      const row = w.find('.sf-perturb-row')
-      expect(row.exists()).toBe(true)
-      expect(row.text()).toContain('同步骤扰动位')
-      expect(row.text()).toContain('amount')
-      expect(row.text()).toContain('policy_id')
-      expect(row.text()).not.toContain('plain')     // 字面量不是扰动位
-      expect(row.text()).not.toContain('exp_code')  // 期望列自身不进扰动位列表
+      // 非空洞:卡确实展开了(期望值渲染出来)—— 删的是列表,不是断言卡
+      expect(w.text()).toContain('exp_code')
+      expect(w.find('.sf-perturb-row').exists()).toBe(false)
       w.unmount()
     } finally {
       ;(listStrategyKinds as any).mockImplementation(kindsMock)

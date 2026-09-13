@@ -74,12 +74,6 @@
           </option>
         </select>
       </div>
-      <!-- 同步骤扰动位列表(spec §5.3):与本断言的数据关联 = 数据集行
-           共现;导航粒度诚实停在同步骤 -->
-      <div v-if="isAssertion && siblingPerturbs && siblingPerturbs.length" class="sf-perturb-row">
-        <span class="sf-perturb-label" title="本步骤请求侧的扰动位 — 与本断言的数据关联 = 数据集行共现(spec §4.3,导航粒度诚实停在同步骤)">同步骤扰动位:</span>
-        <span v-for="p in siblingPerturbs" :key="p" class="sf-perturb-name">{{ p }}</span>
-      </div>
     </div>
   </div>
 </template>
@@ -104,8 +98,6 @@ const props = defineProps<{
   expandWhen?: boolean
   /** 头部 kind 标文本(Canvas 传编号形态 extract_2,与字段行角标对应) */
   tagLabel?: string
-  /** 同步骤扰动位列表(spec §5.3 反向导航):Canvas 推导的当前步 ${var.*} 名集 */
-  siblingPerturbs?: string[]
 }>()
 const emit = defineEmits<{
   remove: []
@@ -138,9 +130,6 @@ const orderInput = computed<string>(() => {
   const v = (props.strategy as any).order
   return typeof v === 'number' && Number.isInteger(v) ? String(v) : ''
 })
-
-/** kind=assertion 才渲染同步骤扰动位列表(spec §5.3) */
-const isAssertion = computed(() => props.detail.kind === 'assertion')
 
 function onOrderChange(e: Event) {
   const el = e.target as HTMLInputElement
@@ -335,9 +324,4 @@ const summary = computed<string>(() => {
   outline: none;
 }
 .sf-onfail-select:focus { border-color: #4f46e5; background: #fff; }
-
-/* 同步骤扰动位列表(spec §5.3):蓝族 mono 名签,与 FieldForm 扰动位徽标同源 */
-.sf-perturb-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 10px 4px; border-top: 1px dashed #e6e8ec; }
-.sf-perturb-label { font-size: 11px; color: #64748b; }
-.sf-perturb-name { font-family: var(--font-mono); font-size: 10px; color: #1d4ed8; background: #dbeafe; padding: 1px 5px; border-radius: 3px; }
 </style>
