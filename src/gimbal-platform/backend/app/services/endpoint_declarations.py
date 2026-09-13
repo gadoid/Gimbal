@@ -20,8 +20,8 @@
 
 纪律(与 carry 同款:增强不是前置条件):
 * **fail-soft** — 任何故障(plate 不可达 / 非 200 / 信封缺 dict item /
-  ``declarations`` 为垃圾值)返回 ``None``,调用方降级(carry 空面 /
-  悬空判定只认 body 面),绝不阻塞执行;取数侧那半归 ``plate_client``;
+  ``request`` 非 dict / ``declarations`` 非 list)返回 ``None``,调用方降级
+  (carry 空面 / 悬空判定只认 body 面),绝不阻塞执行;取数侧那半归 ``plate_client``;
 * **告警在本模块** — 「声明面不可得」是**消费者侧**判断:取数层只交
   ``reason`` / ``stale``,由本模块按端点 + 冷却窗去重后发 warning。告警表
   ``_WARNED_AT`` 只随**时间**老化,成功事件不重置它 —— 否则长期失败的端点
