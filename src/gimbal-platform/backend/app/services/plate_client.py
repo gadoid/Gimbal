@@ -8,9 +8,16 @@ the platform's preview / run use-case.  This wrapper:
 * Translates Plate's ``{ok, dim, data, error}`` envelope into Platform's
   flat error model (HTTPException with ``{detail: {code, message,
   errors[]}}``).
-* Surfaces two typed errors the routers map to 502 ``plate_unavailable``
-  vs 502 ``plate_rejected`` per docs/PLATFORM-SCENARIO-COMPOSER-API.md
-  §4.7.
+* Surfaces two typed errors.  ``PlateUnavailableError`` → 502
+  ``plate_unavailable`` everywhere; ``PlateRejectedError`` has **two**
+  landing points (同名不同码), so its status depends on the route:
+  422 ``plate_rejected`` in the preview route (``routers/scenarios.py``
+  — the 4xx is a verdict on the *client's draft*, not a gateway
+  failure) vs 502 ``plate_rejected`` in the ``/full`` proxy
+  (``routers/endpoint_catalog.py`` — there the upstream call itself was
+  rejected, and the message carries plate's real status code).
+  见 docs/PLATFORM-SCENARIO-COMPOSER-API.md §4.7(preview/convert)
+  与 §10.4(``/full`` 代理)。
 * Owns the process-wide cache for the ``GET /api/endpoint/{id}/full``
   contract fetch (:func:`get_endpoint_full`) — TTL/LRU/stale-while-error
   都在这里,见文件末尾「/full 契约取数」一节。
@@ -47,10 +54,18 @@ class PlateUnavailableError(Exception):
 class PlateRejectedError(Exception):
     """Plate validated the call but rejected the payload (4xx).
 
-    Routers map this to HTTP 422 ``plate_rejected`` (preview: the
-    verdict is on the *client's draft*, not a gateway failure) carrying
-    the upstream ``errors[]`` array so the frontend can render
-    field-level hints.
+    **Two landing points — same code, different status**(同名不同码):
+
+    * preview/convert(``routers/scenarios.py``)→ HTTP **422**
+      ``plate_rejected`` —— 上游 4xx 是对**客户端草稿**的裁决,不是网关故障,
+      故按「输入被拒」报 422 而非 502(502 会让运维去追一个并不存在的 Plate
+      故障);上游 ``errors[]`` 原样回传,前端据此渲染字段级提示;
+    * ``/full`` 代理(``routers/endpoint_catalog.py``)→ HTTP **502**
+      ``plate_rejected`` —— 那里是**代理的上游调用失败**,``message`` 里带
+      plate 的真实状态码。
+
+    取舍依据见 docs/PLATFORM-SCENARIO-COMPOSER-API.md §4.7(preview/convert)
+    与 §10.4(``/full`` 代理)。
     """
 
     def __init__(
