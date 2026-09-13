@@ -8,7 +8,7 @@
  * plate 代理 API(listStrategyKinds/getStrategyKindFull/getFullEndpoint/
  * listAuths)全部 mock — 挂载级测试不碰网络。
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { provide, defineComponent, h, ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
@@ -21,7 +21,7 @@ import {
 import type { StepView } from '@/types/plate'
 import type { Orchestration, StepOrchestration } from '@/types/scenario-composer'
 import { useScenarioDraftStore } from '@/stores/scenario-draft'
-import { _resetEndpointFullCacheForTest } from '@/composables/useEndpointFull'
+import { _resetEndpointFullCacheForTest, FULL_TTL_MS } from '@/composables/useEndpointFull'
 import { useInsertTarget, INSERT_TARGET_KEY } from '@/composables/useInsertTarget'
 import { useConstantsStore } from '@/stores/constants'
 import type { ConstantEntry } from '@/types/constants'
@@ -2884,5 +2884,112 @@ describe('CaseComposerCanvas — 渲染期取数收口(阶段二 Task 7)', () =>
     await flushPromises()
     expect(full.mock.calls.length).toBe(afterMount)
     w.unmount()
+  })
+})
+
+describe('CaseComposerCanvas — 契约降级重试入口(阶段二 Task 8)', () => {
+  afterEach(() => { vi.useRealTimers() })
+
+  /** 只带接口身份引用的最小 step(stepDecls 的输入面)。 */
+  function stepWith(eid: string, body: Record<string, unknown> = {}): StepView {
+    return {
+      kind: 'step',
+      description: eid,
+      api: {
+        kind: 'api', service: 'fin', method: 'POST', path: '/x',
+        headers: {}, view_hints: { endpoint_id: eid },
+      },
+      request: { kind: 'request', body },
+      strategy: [],
+    } as StepView
+  }
+
+  /** 可换 steps 的挂载壳:换 steps = 用户动作(加/删 step),经既有预拉 watch
+   *  重跑一次取数 —— 本组用它造「续用旧面」那一格(面到期后的那次刷新失败)。 */
+  function mountCanvasLive(initial: StepView[]) {
+    const stepsRef = ref<StepView[]>(initial)
+    const orch = ref<Orchestration>(mkOrch(initial.length))
+    const inserter = useInsertTarget()
+    const Parent = defineComponent({
+      setup() {
+        provide(INSERT_TARGET_KEY, inserter)
+        return () => h(CaseComposerCanvas, {
+          steps: stepsRef.value,
+          orchestration: orch.value,
+          'onUpdate:steps': () => {},
+          'onUpdate:orchestration': () => {},
+        })
+      },
+    })
+    const w = mount(Parent, { global: { plugins: [ElementPlus, activePinia] } })
+    return { w, stepsRef }
+  }
+
+  it('CANVAS-RETRY-1: 失败态给可点重试入口 —— 点出来的那次取数真的发生', async () => {
+    const full = vi.mocked(getFullEndpoint)
+    const origImpl = full.getMockImplementation()!
+    full.mockClear()
+    try {
+      full.mockRejectedValueOnce(new Error('plate down'))   // 挂载预拉失败
+        .mockResolvedValue({                                 // 重试时 plate 已恢复
+          description: 'ep', request: { declarations: [] }, responses: {},
+        } as any)
+      const { w } = mountCanvas([stepWith('ep-a')])
+      await flushPromises()
+      expect(full.mock.calls.length).toBe(1)
+      // 失败态可见 + 有可点的重试入口(此前是纯静态文字)
+      expect(w.text()).toContain('plate 不可达')
+      const retry = w.find('.full-degraded-retry')
+      expect(retry.exists()).toBe(true)
+
+      // 负缓存窗(10s)内的点击由共享缓存挡下(不锤打故障中的 plate)⇒ 把墙钟
+      // 推过窗口再点 —— 用户真正的恢复路径就是窗口过后的那一次点击。
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(Date.now() + 20_000)
+      await retry.trigger('click')
+      await flushPromises()
+      vi.useRealTimers()
+
+      expect(full.mock.calls.length).toBe(2)              // ← 点出来的那次取数
+      expect(w.text()).not.toContain('plate 不可达')        // 恢复 ⇒ 失败态提示消失
+      w.unmount()
+    } finally {
+      full.mockImplementation(origImpl)
+    }
+  })
+
+  it('CANVAS-RETRY-2: 续用旧面那一格也标降级(裁定 R21)—— 树照旧渲染,提示照旧出现', async () => {
+    const full = vi.mocked(getFullEndpoint)
+    const origImpl = full.getMockImplementation()!
+    full.mockClear()
+    try {
+      full.mockResolvedValueOnce({                           // 首取:有声明面 ⇒ 树渲染
+        description: 'ep',
+        request: { declarations: [
+          { name: 'orderId', path: '$.orderId', ui_kind: 'text', source_kind: 'independent', required: true, description: '', assertable: false }] },
+        responses: {},
+      } as any)
+        .mockRejectedValue(new Error('plate down'))          // 之后的刷新全失败
+      const { w, stepsRef } = mountCanvasLive([stepWith('ep-a', { orderId: 'ord-1' })])
+      await flushPromises()
+      expect(w.find('.full-degraded').exists()).toBe(false)
+      expect(w.text()).toContain('orderId')                 // 反空转:面确实在生产树
+
+      // 面 TTL 到期 ⇒ 用户动作(加一步)经预拉重取 ⇒ 本次刷新失败
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(Date.now() + FULL_TTL_MS + 1)
+      stepsRef.value = [...stepsRef.value, stepWith('ep-b')]
+      await flushPromises()
+      vi.useRealTimers()
+
+      expect(full.mock.calls.length).toBeGreaterThan(1)      // 预拉确实重跑了
+      const notice = w.find('.full-degraded')
+      expect(notice.exists()).toBe(true)                     // 刷新失败 ⇒ 降级可见
+      expect(notice.text()).toContain('刷新失败')
+      expect(w.text()).toContain('orderId')                  // 旧面照旧:不是靠清面换来的降级
+      w.unmount()
+    } finally {
+      full.mockImplementation(origImpl)
+    }
   })
 })

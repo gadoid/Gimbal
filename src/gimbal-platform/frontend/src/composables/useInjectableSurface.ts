@@ -6,8 +6,9 @@
  * `pending` / `deadIds` 等)只有这一份派生 —— 视图**不得**各自复刻:同一判据
  * 不许有多种命名,契约在途信号也不许只落在一部分视图里。
  *
- * 取数时机(修 F 的结构成因):**读 / 取分离** —— `ensure()` 是**唯一副作用**,
- * 由宿主在挂载 / 步骤面变化时调用;判定与候选走纯缓存读(面 →
+ * 取数时机(修 F 的结构成因):**读 / 取分离** —— 取数只发生在**显式时机**上:
+ * 宿主在挂载 / 步骤面变化时调 `ensure()`,降级后由本组合式内的有界退避定时器
+ * 再试三档(`RETRY_BACKOFF_MS`);判定与候选走纯缓存读(面 →
  * `declaredSurfaceFor`,取态 → `declarationsFor`),因此渲染期**零请求**
  * (IS-7 钉住)。纯判定不与网络 I/O 耦合:任何人再造一个
  * "读里带取"的口(内部 `void ensureEndpointFull(eid)`),IS-7 会立刻红。
@@ -23,7 +24,7 @@
  *   ——失败也是答案:声明面退回 body 面 ⇒ 此时 path-unresolvable 即真死,
  *   归 `intrinsic`(IS-3 钉住)。
  */
-import { computed, ref, watch, type ComputedRef, type Ref } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { isLegacyEntry } from '@/types/assertion-registry'
 import type { AssertionEntry, LegacyAssertionEntry } from '@/types/assertion-registry'
 import { injectablePathSetOf, registryIssues } from '@/utils/assertion-registry'
@@ -53,10 +54,20 @@ export interface InjectableSurface {
    *  重算,因新面而悬空的条目照常进 `deadIds`(悬空标注的唯一口径 ⇒ 灰显)。
    *  **非阻断**:本组合式从不改写 `entries`,勾选状态原样保留,提交也不因它
    *  被拦 —— 已选中的悬空条目交 dispatch 侧既有的 dangling skip 兜底,
-   *  不新造失败态。**呈现位**由视图绑定(与其他判定面信号同一处)。 */
+   *  不新造失败态。**呈现位**由视图绑定(与其他判定面信号同一处),且因它是
+   *  **会话粘性**的(越过首取那一版就永不回落),视图侧须可关闭。 */
   surfaceChanged: ComputedRef<boolean>
+  /** **降级**:被条目引用的端点中至少一个「**上一次取数失败**」—— 含
+   *  **续用旧面**那一格(面还在服务,但契约没刷新)。降级期间判定面从严
+   *  (失败也是答案,IS-3),自动重试通道即由这个信号驱动。
+   *  **不收窄成「没有可用面」**:只要本次取数失败即为真,与旧面是否仍可用无关。 */
+  degraded: ComputedRef<boolean>
   ensure(): void
 }
+
+/** 降级后的重试退避表(ms):三档各试一次,**试满即停** —— 有界,不是常驻轮询。
+ *  首档与 `/full` 缓存的失败负缓存窗同宽(10s):窗口一过就试第一次。 */
+const RETRY_BACKOFF_MS = [10_000, 30_000, 60_000]
 
 export function useInjectableSurface(
   steps: Ref<any[]>,
@@ -115,6 +126,58 @@ export function useInjectableSurface(
    *  换面**不是**面悬置 —— `pending` 语义不因它改(spec §3.3)。 */
   const surfaceChanged = computed(() =>
     neededEndpoints.value.some((eid) => surfaceVersion(eid) > 1))
+
+  /** 降级(R21):被引用端点的**上一次取数失败**。**含续用旧面那一格** ——
+   *  面还在服务但契约没刷新,同样是「该重试」的信号,不做「没有可用面」的收窄。 */
+  const degraded = computed(() =>
+    neededEndpoints.value.some((eid) => endpointFullState(eid) === 'failed'))
+
+  /* ── 降级后的重试(有界退避)─────────────────────────────────────
+   * 取数时机原本只有两个:挂载 / 步骤面变化时的 `ensure()`。于是挂载时刻的一次
+   * plate 抖动把判定面锁在从严姿态**整个会话**(悬空条目不可勾选),而失败本身
+   * 对用户不可见。这里补上第三个时机:降级后按 `RETRY_BACKOFF_MS` 三档各试一次,
+   * 试满即停。定时器落在组合式内 —— 它是「取」,与挂载时的 `ensure()` 同类,
+   * 读路径仍不发请求(IS-7 不受影响):重试走的是同一个取数口。 */
+  let retryTimer: ReturnType<typeof setTimeout> | undefined
+  /** 已消耗的退避档数(降级解除或新的降级 ⇒ 归零) */
+  let retryTier = 0
+
+  function cancelRetry(): void {
+    if (retryTimer !== undefined) {
+      clearTimeout(retryTimer)
+      retryTimer = undefined
+    }
+  }
+
+  /** 排下一档;降级已解除 / 三档试满 ⇒ 不排(先清旧定时器,可重复调用)。 */
+  function scheduleRetry(): void {
+    cancelRetry()
+    if (!degraded.value) return
+    const delay = RETRY_BACKOFF_MS[retryTier]
+    if (delay === undefined) return          // 退避表试满 ⇒ 停(有界)
+    retryTimer = setTimeout(() => {
+      retryTimer = undefined
+      void retryOnce()
+    }, delay)
+  }
+
+  /** 重试一档:覆盖面与 `ensure()` 相同 —— **全部**带 endpoint_id 的步骤,不是
+   *  只有被引用那几个。读端不取数 ⇒ 取数须一次取全;画布与判定面读同一份缓存,
+   *  故这一次重试两侧同时恢复。落定后再排下一档(成功 ⇒ `degraded` 转 false,
+   *  下一次 `scheduleRetry` 自己收尾)。 */
+  async function retryOnce(): Promise<void> {
+    retryTier += 1
+    await Promise.all(stepEndpointIds.value.map((eid) => ensureEndpointFull(eid)))
+    scheduleRetry()
+  }
+
+  watch(degraded, () => {
+    retryTier = 0                            // 新的降级 ⇒ 退避表从头
+    scheduleRetry()                          // 降级已解除 ⇒ 内部直接收尾
+  })
+
+  // 退避链与宿主同生共死(同作用域内的 watch 也是这个生命周期)
+  if (getCurrentScope()) onScopeDispose(cancelRetry)
 
   /** 读:纯缓存读,绝不取数(渲染期只走这里)—— 声明**树**(条目 + children),
    *  供 `stateOf` 取条目自身的 state;判定面的声明半不走这里(见下)。 */
@@ -210,5 +273,7 @@ export function useInjectableSurface(
     return undefined
   }
 
-  return { pathsOfStep, deadOf, dead, deadIds, stateOf, pending, surfaceChanged, ensure }
+  return {
+    pathsOfStep, deadOf, dead, deadIds, stateOf, pending, surfaceChanged, degraded, ensure,
+  }
 }

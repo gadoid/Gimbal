@@ -35,6 +35,29 @@
       交叉(spec v3 §3/§4)。悬空条目标灰只提示,不阻断编辑。
     </p>
 
+    <!-- 判定面提示位:两种状态共用同一条,不另造第二套 ——
+         ①**降级**(被引用端点取数失败):判定面已退回从严(悬空条目不可勾选),
+           给手动重试入口。自动退避只有三档、试满即停,故它不能是唯一恢复路径;
+         ②**换面**(会话内面变 ⇒ 已按新面重判):只提示,不阻断编辑/保存。
+         ②的信号是会话粘性的(越过首取那一版就永不回落),故这条必须可关,
+         否则整会话挂着一条关不掉的横幅。降级优先于换面:降级自带恢复动作。 -->
+    <div v-if="notice" class="are-notice" :class="`are-notice-${notice.kind}`">
+      <span class="are-notice-text">{{ notice.text }}</span>
+      <button
+        v-if="notice.kind === 'degraded'"
+        type="button"
+        class="are-notice-retry"
+        @click="retryDegraded"
+      >重试</button>
+      <button
+        v-else
+        type="button"
+        class="are-notice-close"
+        title="关闭提示"
+        @click="acknowledgeChanged"
+      >×</button>
+    </div>
+
     <!-- 手工新建:步骤 + jsonpath(path 即注入地址) -->
     <div class="are-new-bar">
       <el-select
@@ -227,6 +250,36 @@ onMounted(() => surface.ensure())
 const deadOf = (e: AssertionEntry | LegacyAssertionEntry) =>
   surface.deadIds.value.includes(e.id)
 const deadCount = computed(() => registry.value.entries.filter(deadOf).length)
+
+/** 判定面提示位:降级 / 换面两态共用(见模板注释)。二者都只提示,不阻断。 */
+const changedAcknowledged = ref(false)
+/** 换面提示是会话粘性的 ⇒ 呈现位给一个「看过了」的关闭口(仅本视图、本次挂载) */
+function acknowledgeChanged() {
+  changedAcknowledged.value = true
+}
+const notice = computed<{ kind: 'degraded' | 'changed'; text: string } | null>(() => {
+  if (surface.degraded.value) {
+    return {
+      kind: 'degraded',
+      text: '契约取数失败 —— 判定面退回从严(悬空条目不可勾选);可重试恢复',
+    }
+  }
+  if (surface.surfaceChanged.value && !changedAcknowledged.value) {
+    return {
+      kind: 'changed',
+      text: '契约已更新 —— 判定已按新面重算(因新面悬空的条目已标灰)',
+    }
+  }
+  return null
+})
+
+/** 手动重试:走判定面唯一的取数口(渲染期仍零请求 —— 只有这一次显式动作取数)。
+ *  `ensure()` 幂等、且由共享缓存的失败负缓存(10s)去抖:窗口内的点击不重发;
+ *  按钮不给「重试中」态 —— `ensure()` 是同步返回、取数在缓存内进行,失败态本身
+ *  由 `degraded` 如实驱动(恢复即消失),不谎报一个观察不到的状态。 */
+function retryDegraded() {
+  surface.ensure()
+}
 
 /** 旧版条目不可选(不可编辑,spec v3 §8) */
 function selectEntry(e: AssertionEntry | LegacyAssertionEntry) {
@@ -450,6 +503,26 @@ async function save() {
 .are-lead {
   margin: 0 0 14px; font-size: 12px; line-height: 1.6;
   color: var(--color-text-secondary);
+}
+
+/* ── 判定面提示(降级 / 换面共用一条) ── */
+.are-notice {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 0 12px; padding: 8px 12px;
+  font-size: 12px; border-radius: 6px;
+  border: 1px solid transparent;
+}
+.are-notice-text { flex: 1; }
+.are-notice-degraded { color: #92400e; background: #fef3c7; border-color: #fcd34d; }
+.are-notice-changed { color: #3730a3; background: #eef2ff; border-color: #c7d2fe; }
+.are-notice-retry {
+  border: 1px solid currentColor; background: transparent; border-radius: 4px;
+  color: inherit; cursor: pointer; font-size: 12px; padding: 2px 10px;
+}
+.are-notice-retry:hover { background: rgba(255, 255, 255, .6); }
+.are-notice-close {
+  border: none; background: transparent; color: inherit; cursor: pointer;
+  font-size: 15px; line-height: 1; padding: 0 2px;
 }
 
 /* ── 手工新建条 ── */

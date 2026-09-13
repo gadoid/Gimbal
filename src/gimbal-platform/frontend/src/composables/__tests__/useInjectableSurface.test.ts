@@ -5,29 +5,44 @@
  *   仅因**契约未定**而判 path-unresolvable 的入 contractDependent(可能变活)
  * - IS-2 契约落定(声明面命中)→ contractDependent 清空
  * - IS-3 契约取数**失败** → 判定从严:path-unresolvable 归 intrinsic(不悬置)
+ * - IS-12..IS-15 降级重试通道:有界退避([10s,30s,60s] 试满即停)、重试成功即解除
+ *   降级、`degraded` 的宽定义(含续用旧面那一格 R21)、退避链随宿主作用域而停
  *
- * 取数纪律:`ensure()` 是唯一副作用入口(宿主调用);判定只读共享缓存。
+ * 取数纪律:取数只发生在显式时机(宿主调 `ensure()` / 降级后的有界退避定时器);
+ * 判定只读共享缓存。
  * /full 是**会话级**共享缓存 → 用例间必须显式清空(useEndpointFull.test 同款纪律)。
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { nextTick, ref, watch } from 'vue'
+import { effectScope, nextTick, ref, watch, type Ref } from 'vue'
 import { flushPromises } from '@vue/test-utils'
 
 import * as api from '@/api/scenario-composer'
 import * as assertionRegistry from '@/utils/assertion-registry'
 import {
-  _resetEndpointFullCacheForTest, FULL_TTL_MS, surfaceVersion,
+  _resetEndpointFullCacheForTest, FULL_TTL_MS, getEndpointFull, surfaceVersion,
 } from '@/composables/useEndpointFull'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
 
 beforeEach(() => {
   vi.useRealTimers()          // 隔离上一条用例的假时钟
   _resetEndpointFullCacheForTest()
+  caseScope = effectScope()   // 每个用例一个宿主作用域(见 surface)
 })
 afterEach(() => {
+  caseScope?.stop()           // 停作用域 = 宿主卸载:退避定时器随之取消
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
+
+/** 用例级**宿主作用域** + 实例工厂:实例一律挂在这里,用例结束统一停。
+ *  这不是测试脚手架 —— 真实宿主就是视图 setup,卸载即销毁。退避链是**定时器**,
+ *  不销毁的实例会把定时器漏给下一个用例的新假时钟;更隐蔽的是:两个实例读同一份
+ *  模块级 `failedAt`,同 eid 的旧实例会被新用例的失败**唤醒**并替它重取
+ *  (计数凭空多一次,而断言看上去只是"多了个请求")。 */
+let caseScope: ReturnType<typeof effectScope>
+function surface(steps: Ref<any[]>, entries: Ref<any>) {
+  return caseScope.run(() => useInjectableSurface(steps, entries))!
+}
 
 it('IS-1: dead 分两组 — step-oob/legacy 入 intrinsic,契约未定而 path-unresolvable 入 contractDependent', async () => {
   // 契约未回填(getFullEndpoint 挂起)→ pending=true
@@ -38,7 +53,7 @@ it('IS-1: dead 分两组 — step-oob/legacy 入 intrinsic,契约未定而 path-
     { id: 'b', name: 'B', anchor: {}, asserts: [] },                                                            // legacy → intrinsic
     { id: 'c', name: 'C', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_field' }, value: 1, asserts: [] }, // 契约未定 → contractDependent
   ] as any)
-  const s = useInjectableSurface(steps, entries)
+  const s = surface(steps, entries)
   s.ensure()
   await nextTick()
   expect(s.pending.value).toBe(true)
@@ -61,7 +76,7 @@ it('IS-2: 契约落定后 contractDependent 清空(声明面命中)', async () =
     { id: 'b', name: 'B', anchor: {}, asserts: [] },
     { id: 'c', name: 'C', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_field' }, value: 1, asserts: [] },
   ] as any)
-  const s = useInjectableSurface(steps, entries)
+  const s = surface(steps, entries)
   s.ensure()
   await flushPromises()
   expect(s.pending.value).toBe(false)
@@ -74,7 +89,7 @@ it('IS-3: 契约取数**失败** → 判定从严,path-unresolvable 归 intrinsi
   vi.spyOn(api, 'getFullEndpoint').mockRejectedValue(new Error('plate down'))
   const steps = ref([{ request: { body: {} }, api: { view_hints: { endpoint_id: 'ep-down' } } }])
   const entries = ref([{ id: 'c', name: 'C', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_field' }, value: 1, asserts: [] }] as any)
-  const s = useInjectableSurface(steps, entries)
+  const s = surface(steps, entries)
   s.ensure()
   await flushPromises()
   expect(s.pending.value).toBe(false)                 // 有答案了(失败也是答案)
@@ -90,7 +105,7 @@ it('IS-5: steps 就地编辑(body 删字段)→ 判定跟着走(记忆化不得�
   const entries = ref([
     { id: 'c', name: 'C', path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 1, asserts: [] },
   ] as any)
-  const s = useInjectableSurface(steps, entries)
+  const s = surface(steps, entries)
   expect(s.dead.value.intrinsic).toEqual([])              // body 里有 $.amount → 活
   delete (steps.value[0].request.body as Record<string, unknown>).amount
   await nextTick()
@@ -112,7 +127,7 @@ it('IS-4: `pending` 只看**被条目引用到**的端点 —— 无关端点在
   const entries = ref([
     { id: 'c', name: 'C', path: { stepIndex: 0, source: 'body', jsonpath: '$.ghost' }, value: 1, asserts: [] },
   ] as any)
-  const s = useInjectableSurface(steps, entries)
+  const s = surface(steps, entries)
   s.ensure()
   await nextTick()
   expect(s.pending.value).toBe(true)                  // 被引用端点在途 → 悬置
@@ -142,7 +157,7 @@ it('IS-6: 未被条目引用的 si —— 该步端点落定后其声明面仍�
   const entries = ref([
     { id: 'a', name: 'A', path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 1, asserts: [] },
   ] as any)
-  const s = useInjectableSurface(steps, entries)
+  const s = surface(steps, entries)
   s.ensure()
   await nextTick()
   expect([...s.pathsOfStep(1)]).toEqual(['$'])        // 步骤 1 无条目引用:此刻只有 body 面
@@ -164,7 +179,7 @@ it('IS-7: 渲染期零请求 —— 不调 ensure() 时判定/候选/取态都�
   const entries = ref([
     { id: 'a', name: 'A', path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 1, asserts: [] },
   ] as any)
-  const s = useInjectableSurface(steps, entries)
+  const s = surface(steps, entries)
   // 渲染色路径:computed 消费判定面(宿主与展示面都这么读)
   void s.deadIds.value
   void s.dead.value
@@ -197,7 +212,7 @@ it('IS-8: 记忆化**命中**面 — 同一 (si, 版本) 只投影一次,输入�
   const entries = ref([
     { id: 'a', name: 'A', path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 1, asserts: [] },
   ] as any)
-  const s = useInjectableSurface(steps, entries)
+  const s = surface(steps, entries)
   s.ensure()
   await flushPromises()
   const first = s.pathsOfStep(0)
@@ -233,7 +248,7 @@ it('IS-9: 换面即重判 —— 面变后按新面重算 dead(灰显),勾选保
   const entry = { id: 'c', name: 'C', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_field' }, value: 1, asserts: [] }
   const steps = ref([{ request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-s' } } }])
   const entries = ref([entry] as any)
-  const s = useInjectableSurface(steps, entries)
+  const s = surface(steps, entries)
   const selectedBefore = entries.value[0]                // 宿主选中的那条(ref 的代理身份)
   const stepBefore = steps.value[0]
   s.ensure()
@@ -272,7 +287,7 @@ it('IS-10: 面没变的重取不惊动记忆化 —— 版本不动 ⇒ 投影�
     { id: 'alive', name: 'A', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_x' }, value: 1, asserts: [] },
     { id: 'dead', name: 'D', path: { stepIndex: 0, source: 'body', jsonpath: '$.nowhere' }, value: 1, asserts: [] },
   ] as any)
-  const s = useInjectableSurface(steps, entries)
+  const s = surface(steps, entries)
   s.ensure()
   await flushPromises()
   const first = s.pathsOfStep(0)
@@ -309,7 +324,7 @@ it('IS-11: 换面重判锚在**记忆化键**上 —— 不靠「清缓存 watch
     } as any)
   const steps = ref([{ request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-s' } } }])
   const entries = ref([] as any)
-  const s = useInjectableSurface(steps, entries)
+  const s = surface(steps, entries)
   s.ensure()
   await flushPromises()
   expect([...s.pathsOfStep(0)]).toContain('$.carry_x')  // v1 面
@@ -325,4 +340,139 @@ it('IS-11: 换面重判锚在**记忆化键**上 —— 不靠「清缓存 watch
   expect(seen[0]).toContain('$.amount')                 // 是**真投影**(不是空集)
   expect(seen[0]).not.toContain('$.carry_x')            // 当场已按新面重判,不是陈旧集合
   vi.useRealTimers()
+})
+
+/* ── 降级重试通道(有界退避 + 失败态可见)────────────────────────────
+ * 公共夹具:单步 + 单条**只被契约托着**的条目($.carry_field 在 body 里没有)
+ * ⇒ 判定面全靠 /full 的声明面,取数失败即从严判死、条目不可勾选。 */
+
+/** 声明面含 $.carry_field 的成功响应(退避重试恢复后的那一份)。 */
+const FULL_WITH_CARRY = {
+  id: 'ep-s',
+  request: { declarations: [
+    { name: 'carry_field', path: '$.carry_field', state: 'carry', required: true, description: '' }] },
+  declared_surface: ['$', '$.carry_field'],
+} as any
+
+/** 降级夹具:单步 + 单条只被契约托着的条目(见上)。实例走用例作用域。 */
+function surfaceOf(eid = 'ep-s') {
+  const steps = ref([{ request: { body: {} }, api: { view_hints: { endpoint_id: eid } } }])
+  const entries = ref([
+    { id: 'c', name: 'C', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_field' }, value: 1, asserts: [] },
+  ] as any)
+  return { s: surface(steps, entries), steps, entries }
+}
+
+it('IS-12: 降级后按 [10s,30s,60s] 自动重试三次 —— 试满即停(有界)', async () => {
+  vi.useFakeTimers()
+  const spy = vi.spyOn(api, 'getFullEndpoint').mockRejectedValue(new Error('plate down'))
+  const { s } = surfaceOf('ep-down')
+  s.ensure()
+  await flushPromises()
+  expect(s.degraded.value).toBe(true)
+  expect(spy).toHaveBeenCalledTimes(1)               // 此刻只有挂载那一次取数
+  // 三档退避各试一次(下一档在上一档落定后才排 ⇒ 逐档推进 + 冲刷)
+  for (const tier of [10_000, 30_000, 60_000]) {
+    vi.advanceTimersByTime(tier)
+    await flushPromises()
+  }
+  expect(spy).toHaveBeenCalledTimes(4)               // 1 首取 + 3 档退避各一次
+  // **有界**:退避表试满即停 —— 再等十分钟也不会变成常驻轮询
+  vi.advanceTimersByTime(600_000)
+  await flushPromises()
+  expect(spy).toHaveBeenCalledTimes(4)
+})
+
+it('IS-13: 退避重试成功 ⇒ 降级解除、条目由死转活(通道真的自愈)', async () => {
+  vi.useFakeTimers()
+  const spy = vi.spyOn(api, 'getFullEndpoint')
+    .mockRejectedValueOnce(new Error('plate down'))  // 挂载首取失败
+    .mockResolvedValue(FULL_WITH_CARRY)              // 退避那一档:plate 已恢复
+  const { s } = surfaceOf()
+  s.ensure()
+  await flushPromises()
+  expect(s.degraded.value).toBe(true)
+  // 降级姿态的**可观测后果**:只被契约托着的条目被从严判死 ⇒ 不可勾选
+  expect(s.dead.value.intrinsic).toEqual(['c'])
+  expect(s.deadIds.value).toEqual(['c'])
+  vi.advanceTimersByTime(10_000)                     // 退避第一档(与负缓存窗同宽)
+  await flushPromises()
+  expect(spy).toHaveBeenCalledTimes(2)               // ← 自动重试真的发了取数
+  expect(s.degraded.value).toBe(false)               // 取回面 ⇒ 降级解除
+  expect(s.dead.value.intrinsic).toEqual([])         // 条目由死转活(恢复可勾选)
+  expect([...s.pathsOfStep(0)]).toContain('$.carry_field')
+  // 解除即断链:再等十分钟不再重取
+  vi.advanceTimersByTime(600_000)
+  await flushPromises()
+  expect(spy).toHaveBeenCalledTimes(2)
+})
+
+it('IS-16: 退避重试覆盖**全部**步骤端点 —— 无条目引用的那一步(画布侧)同时恢复', async () => {
+  // 裁定 R29:画布与判定面读同一份缓存,但画布只靠预拉的覆盖面 —— 重试若只重取
+  // 被条目引用那几个端点,画布当前步的声明树就整会话不自愈(降级成手写 JSON)。
+  // 本用例两个端点挂载时都失败:步骤 0 **被条目引用**(降级的信号源),步骤 1
+  // 无任何条目引用(画布那一侧)。一次退避必须把两个都取回来。
+  vi.useFakeTimers()
+  const spy = vi.spyOn(api, 'getFullEndpoint')
+    .mockRejectedValueOnce(new Error('plate down'))   // ep-ref 挂载首取失败
+    .mockRejectedValueOnce(new Error('plate down'))   // ep-canvas 挂载首取失败
+    .mockResolvedValue(FULL_WITH_CARRY)               // 退避那一档:plate 已恢复
+  const steps = ref([
+    { request: { body: {} }, api: { view_hints: { endpoint_id: 'ep-ref' } } },
+    { request: { body: {} }, api: { view_hints: { endpoint_id: 'ep-canvas' } } },
+  ])
+  const entries = ref([
+    { id: 'c', name: 'C', path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_field' }, value: 1, asserts: [] },
+  ] as any)
+  const s = surface(steps, entries)
+  s.ensure()
+  await flushPromises()
+  expect(s.degraded.value).toBe(true)
+  expect(spy).toHaveBeenCalledTimes(2)               // 预拉:两个端点各一次
+  expect(getEndpointFull('ep-canvas')).toBeUndefined()
+  vi.advanceTimersByTime(10_000)
+  await flushPromises()
+  expect(new Set(spy.mock.calls.slice(2).map((c) => c[0])))
+    .toEqual(new Set(['ep-ref', 'ep-canvas']))       // ← 覆盖的是全部步骤端点
+  expect(getEndpointFull('ep-canvas')).toBeDefined()  // 画布那一侧一并恢复
+  expect(s.degraded.value).toBe(false)
+})
+
+it('IS-14: degraded 的宽定义 —— 含「续用旧面」那一格(刷新失败,旧面仍被服务)', async () => {
+  // 裁定 R21:降级的判据是「本次取数失败」,**不**收窄成「没有可用面」——
+  // 该重试的信号与旧面是否仍在服务无关。故这一格必须同时为真:
+  // degraded=true,而 getEndpointFull/pathsOfStep 照旧供着那份旧面。
+  vi.useFakeTimers()
+  const spy = vi.spyOn(api, 'getFullEndpoint')
+    .mockResolvedValueOnce(FULL_WITH_CARRY)
+    .mockRejectedValue(new Error('plate down'))      // 面 TTL 到期后的那次刷新失败
+  const { s } = surfaceOf()
+  s.ensure()
+  await flushPromises()
+  expect(s.degraded.value).toBe(false)
+  expect([...s.pathsOfStep(0)]).toContain('$.carry_field')
+  vi.advanceTimersByTime(FULL_TTL_MS + 1)
+  s.ensure()
+  await flushPromises()
+  expect(spy).toHaveBeenCalledTimes(2)               // 面到期确实重取了
+  expect(s.degraded.value).toBe(true)                // 刷新失败 ⇒ 降级(尽管旧面还在)
+  // 反空转:这一格的「旧面仍在服务」是事实,不是靠把面清空换来的降级
+  expect(getEndpointFull('ep-s')).toBeDefined()
+  expect([...s.pathsOfStep(0)]).toContain('$.carry_field')
+  expect(s.dead.value.intrinsic).toEqual([])         // 判定照旧(降级 ≠ 清面)
+  expect(s.pending.value).toBe(false)                // 失败也是答案,不悬置(IS-3 同口径)
+})
+
+it('IS-15: 退避链随宿主作用域销毁而停 —— 卸载后不再重取', async () => {
+  vi.useFakeTimers()
+  const spy = vi.spyOn(api, 'getFullEndpoint').mockRejectedValue(new Error('plate down'))
+  const { s } = surfaceOf('ep-down')
+  s.ensure()
+  await flushPromises()
+  // 反空转:链确实排上了(没排上的实现同样"不再重取",但那是空跑)
+  expect(s.degraded.value).toBe(true)
+  caseScope.stop()                                   // 宿主卸载 ⇒ 组合式同生共死
+  vi.advanceTimersByTime(600_000)
+  await flushPromises()
+  expect(spy).toHaveBeenCalledTimes(1)
 })

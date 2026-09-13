@@ -147,6 +147,25 @@
               <div class="svc-ref-url">URL: {{ declaredUrlOf(currentStep.api?.service || '') || '(未声明 — 运行前需补 URL)' }}</div>
             </div>
           </div>
+          <!-- 契约降级提示:失败态**可见** + 可点重试入口。两种降级形态共用一条 ——
+               无可用面(下方回落 JSON 编辑)与**续用旧面**(树照旧渲染,但契约本次
+               没刷新);后者同样要标出来,否则用户把陈旧声明面当成当前的。 -->
+          <div
+            v-if="currentFullState === 'failed' && hasEndpointRef(currentStep)"
+            class="full-degraded"
+          >
+            <span class="full-degraded-text">
+              {{ currentFull
+                ? '契约刷新失败 — 正显示上次取回的声明面(可能过时)'
+                : 'plate 不可达,字段表单暂不可用 — 已降级为 JSON 编辑' }}
+            </span>
+            <button
+              type="button"
+              class="full-degraded-retry"
+              :disabled="fullRetrying"
+              @click="retryCurrentFull"
+            >{{ fullRetrying ? '重试中…' : '重试' }}</button>
+          </div>
           <el-form label-position="top" size="small" class="c-form">
             <!-- description 事实源是 plate /full(选定接口的契约描述,拉到即显);
                  step.description 是加入时落草稿的快照(老草稿可能存的是 name 兜底)——
@@ -274,8 +293,9 @@
                 :rows="5"
                 class="code-input"
               />
-              <span v-if="currentFullState === 'failed' && hasEndpointRef(currentStep)" class="hint">plate 不可达,字段表单暂不可用 — 已降级为 JSON 编辑</span>
-              <span v-else class="hint">提示: 该接口未声明请求字段契约,或 plate 拉取中</span>
+              <!-- 取数失败那一格由上方 .full-degraded 统一说明(含重试入口),
+                   这里不再复述,免得同一页出现两处同义提示 -->
+              <span v-if="currentFullState !== 'failed'" class="hint">提示: 该接口未声明请求字段契约,或 plate 拉取中</span>
             </el-form-item>
             <!-- 请求侧 Type C(schema 有、binding 无)已并入 FieldForm「其他字段」
                  折叠区(unbound-fields) — 可见可编辑,不再单独设只读块。 -->
@@ -1596,6 +1616,18 @@ const currentFull = computed<EndpointFullView | undefined>(() => {
   return getEndpointFull(eid)
 })
 
+/** 失败态的手动重试入口:走与预拉**同一个取数口** —— 渲染期仍零请求,只有这
+ *  一次显式点击取数(预拉不因此回到渲染期)。取数在共享缓存内进行,失败负缓存
+ *  窗(10s)内的点击会被挡下(不锤打故障中的 plate);自动退避的首档恰在窗口
+ *  边界上。画布与判定面读同一份缓存 ⇒ 这一次重试两侧同时恢复。 */
+const fullRetrying = ref(false)
+async function retryCurrentFull(): Promise<void> {
+  const eid = currentStep.value?.api?.view_hints?.endpoint_id
+  if (!eid || fullRetrying.value) return
+  fullRetrying.value = true
+  try { await ensureEndpointFull(eid) } finally { fullRetrying.value = false }
+}
+
 /** carry 免抖预拉(2026-09-08):进页即拉全部 step 的 /full — 徽标从进页起
  *  即终值,点击卡片不再触发徽标补显(布局抖动根因)。同端点经会话缓存/
  *  in-flight 去重;这些请求原本在逐个点开时也要发,只是提前。 */
@@ -2189,6 +2221,22 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
 
 /* fields editor */
 .fields-shell { flex: 1; }
+
+/* 契约降级提示:amber 软提示(与本文件 .extra-* / .t-* 同色系),不阻断编辑 */
+.full-degraded {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 12px; padding: 6px 10px;
+  font-size: 12px; color: #92400e;
+  background: #fef3c7; border: 1px solid #fcd34d; border-radius: 6px;
+}
+.full-degraded-text { flex: 1; }
+.full-degraded-retry {
+  border: 1px solid currentColor; background: transparent; border-radius: 4px;
+  color: inherit; cursor: pointer; font-size: 12px; padding: 2px 10px;
+  white-space: nowrap;
+}
+.full-degraded-retry:hover:not(:disabled) { background: rgba(255, 255, 255, .6); }
+.full-degraded-retry:disabled { opacity: .6; cursor: default; }
 .fields-head {
   padding-bottom: 14px;
   border-bottom: 1px solid var(--c-divider);
