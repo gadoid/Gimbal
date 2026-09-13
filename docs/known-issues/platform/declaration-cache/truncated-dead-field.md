@@ -18,19 +18,19 @@ class CacheEntry:
         self.truncated = truncated   # §5.1 截断标记随行集入缓存(命中也透出)
 ```
 
-`put` 的默认值是 `False`（`:54-55`），而**声明面**入缓存时**不传**它：
+`put` 的默认值是 `False`（`TtlLruCache.put` 的 `truncated: bool = False`），而声明面的条目入缓存时都**不传**它 —— 取数层缓存的是 plate 的**整份 item**（`plate_client.get_endpoint_full`），派生层缓存的是 path 投影：
 
 ```python
-# src/gimbal-platform/backend/app/services/endpoint_declarations.py:218
-_cache().put(endpoint_id, (decls, frozenset(catalog_paths(decls))), _now_iso())
+# src/gimbal-platform/backend/app/services/endpoint_declarations.py（declared_paths_of）
+_proj_cache().put(endpoint_id, proj, _now_iso())
 ```
 
 ⇒ 声明面条目上的 `truncated` **恒为 `False`**，且**没有任何读取方**。这一事实已写在缓存模块自己的 docstring 里：
 
 ```python
-# src/gimbal-platform/backend/app/services/query_view_cache.py:11-12
-字段叫 ``rows`` 会让第二个消费者"名不副实";``truncated`` 仍只对行集有意义
-(声明面恒为默认 ``False``)。
+# src/gimbal-platform/backend/app/services/query_view_cache.py（模块 docstring）
+字段叫 ``rows`` 会让后两个消费者"名不副实";``truncated`` 仍只对行集有意义
+(声明面 / 契约 item 恒为默认 ``False``)。
 ```
 
 ---
@@ -48,10 +48,10 @@ _cache().put(endpoint_id, (decls, frozenset(catalog_paths(decls))), _now_iso())
 
 **残余风险**：低，但有一个**读错的方向**值得点名 ——
 
-- 若有人看到声明面条目的 `truncated` 字段，**不要**据此认为「声明面可能被截断」。声明面是**完整**的原始列表：`_fetch_declarations`（`endpoint_declarations.py:163-197`，函数边界以「下一处 `async def` 在 `:200`」为准）要么返回完整列表、要么 `None`（降级），**没有中间态**；`declarations` 非 list 时直接 `RuntimeError`（`:192-193`）而不是截断。
+- 若有人看到声明面条目的 `truncated` 字段，**不要**据此认为「声明面可能被截断」。声明面是**完整**的原始列表：`endpoint_declarations` 是派生层（取数归 `plate_client.get_endpoint_full`），`declarations_of` 从 item 里解出 `request.declarations`，要么返回完整列表、要么 `None`（降级），**没有中间态**；`declarations` 真值非 list 时降级为 `None`（`_decls_of_item` 的类型判据）而不是截断。
 - 反向：行集那条链的 `truncated` 是**活**的（`query_view_runner` 消费），改动缓存时不要为了「清掉死字段」把行集的语义一起删了。
 
-**读者应当怎么做**：把 `truncated` 读作「**行集**专用字段」；声明面的完整性靠 `None`（降级）与 `[]`（真无声明）的区分来表达（`endpoint_declarations.py:222-232` 的契约，spec §1.1 Y 的「不抹平」）。
+**读者应当怎么做**：把 `truncated` 读作「**行集**专用字段」；声明面的完整性靠 `None`（降级）与 `[]`（真无声明）的区分来表达（`declarations_of` / `_decls_of_item` 的契约，spec §1.1 Y 的「不抹平」）。
 
 ---
 

@@ -25,8 +25,8 @@ children: "list[DeclarationEntry] | None" = None
 
 **② 平台侧的声明面是现拉、不落库**：
 
-- 后端：`endpoint_declarations._fetch_declarations`（`src/gimbal-platform/backend/app/services/endpoint_declarations.py:163-197`）每次取数都打 `GET /api/endpoint/{id}/full` 并解 `data.item.request.declarations`；进程内 `TtlLruCache` 只是缓存（`config.py:88` 的 300s TTL），**没有持久化快照表/快照字段**（spec §4.1 的裁定；同轮文档已把「无快照表」措辞收窄到「判定面无快照表/快照字段」）；
-- 前端：`useEndpointFull.ts:16-17` 明文「**零持久化**：缓存只活在本次页面会话（刷新即失效），不落库 / 不落 localStorage」。
+- 后端：取数归 `plate_client.get_endpoint_full`（`src/gimbal-platform/backend/app/services/plate_client.py`）—— 每次取数打 `GET /api/endpoint/{id}/full` 并缓存整份 item；`endpoint_declarations` 是它上面的**派生层**（`declarations_of` 解 `data.item.request.declarations`）。进程内 `TtlLruCache` 只是缓存（`config.py` 的 `DECLARED_PATHS_TTL_SEC` = 300s），**没有持久化快照表/快照字段**（spec §4.1 的裁定；同轮文档已把「无快照表」措辞收窄到「判定面无快照表/快照字段」）；
+- 前端：`useEndpointFull.ts` 文件头明文「**零持久化**：缓存只活在本次页面会话（刷新即失效），不落库 / 不落 localStorage」。
 
 ⇒ 平台侧**不存在**「用户手改声明面 → 存进平台 → 再把畸形 children 读回来」这条链；形状唯一来源就是 plate，而 plate 那一关已被 pydantic 拦住。
 
