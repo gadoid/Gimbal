@@ -36,7 +36,7 @@ watch(stepEndpointIds, () => ensure(), { immediate: false })
 
 后两个（数据页、断言管理编辑器）**不渲染画布**，只显示条目列表与数据集 —— 它们照样会把**该场景每个步骤的**端点契约全量拉一遍。
 
-**成本上界（只对成功路径成立）**：`ensureEndpointFull` 对**未过期**的缓存条目与**在飞**端点都直接返回（`useEndpointFull.ts` 的 `ensureEndpointFull`：TTL 命中 / 在飞收敛各一条早返回），所以**成功取回的端点每个 `FULL_TTL_MS`（300 s）窗口内至多 1 次 `/full`**；N 个不同端点 ⇒ 每窗口至多 N 次。步骤面变化（`stepEndpointIds` 变化）时只补取**新出现**的端点（已缓存且未过期的照旧早返回）。
+**成本上界（只对成功路径成立）**：`ensureEndpointFull` 对**未过期**的缓存条目与**在飞**端点都直接返回（`useEndpointFull.ts` 的 `ensureEndpointFull`：TTL 命中 / 在飞收敛各一条早返回），所以**成功取回的端点每个 `FULL_TTL_MS`（300 s）窗口内至多 1 次 `/full`**；N 个不同端点 ⇒ 每窗口至多 N 次。步骤面变化（`stepEndpointIds` 变化）时只补取**新出现**的端点（已缓存且未过期的照旧早返回）。**这个上界只约束自发取数**：用户手动重试与降级退避走 `force`，会跳过 TTL 与负缓存两道闸（故它们各自的次数另有上界，不计入本行的 N 次）。
 
 **失败路径**不在这个上界内：失败的端点写负缓存 `failedAt`，只在 `FAILED_RETRY_MS = 10_000` 窗口内拦截（`useEndpointFull.ts` 的 `FAILED_RETRY_MS` / `ensureEndpointFull`）—— 窗口过后允许重发；自发重发由 `ensure()` 触发，**降级后另有 `useInjectableSurface` 的有界退避自动重试（`[10s, 30s, 60s]` 三档，试满即停）**与三处宿主的手动重试入口兜住（见 `no-retry-after-degradation.md` 的修复记录）。即「每窗口 ≤1 次」是成功端点的性质，不是端点的性质。
 
