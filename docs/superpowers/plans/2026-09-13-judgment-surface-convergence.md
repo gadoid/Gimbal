@@ -1045,10 +1045,18 @@ git commit -m "fix(canvas): 删两处渲染期取数,预拉覆盖面加测试钉
 **Files:**
 - Modify: `src/gimbal-platform/frontend/src/composables/useInjectableSurface.ts`
 - Modify: `src/gimbal-platform/frontend/src/views/AssertionRegistryEditor.vue`(失败态呈现)
+- Modify: `src/gimbal-platform/frontend/src/components/composer/CaseComposerCanvas.vue`(**画布侧的重试入口 —— 见下,这条不是可选项**)
 - Test: `src/gimbal-platform/frontend/src/composables/__tests__/useInjectableSurface.test.ts`
 
 **Interfaces:**
 - Produces: `useInjectableSurface(...)` 返回值新增 `degraded: ComputedRef<boolean>`
+
+**画布也是本任务的范围(T7 复核 R29 的承接)** —— 上一任务删掉了画布两处渲染期取数,那是成功路径上的冗余、**但也是失败路径上画布唯一的自愈通道**:删除前每次重渲染都会经模板直调的 `fieldBindings(currentStep)` 落到 `stepDecls`,故挂载期一次 plate 抖动后、10s 负缓存窗一过,用户任何交互引发的重渲染都会重取;删除后画布只剩预拉与 `onAddEndpoint` 两个取数点,`CaseComposerCanvas.vue:277` 的失败提示是**静态文字、无重试入口**。一次挂载期失败 ⇒ 该 step 整会话目录树为空、降级成手写 JSON,与 `docs/known-issues/platform/declaration-cache/no-retry-after-degradation.md`(P1)同型。
+
+**因此本任务的重试通道必须同时覆盖画布与判定面**,不是二选一:
+- 画布的失败态(`currentFullState === 'failed'`)要给出**可点的重试入口**,或让预拉在明确的用户动作下重跑 —— **不得**以"恢复渲染期取数"的方式解决(那是 T7 收口掉的东西);
+- 退避的那次自动重试同样要覆盖画布:被引用端点失败后退避重试,画布与编辑器看到的是同一份缓存,故重试一次两侧都恢复;
+- **终审须核这一条是否真被关闭** —— 若只覆盖判定面,本计划交付后画布声明面在挂载期一次抖动后整会话不可自愈。
 
 - [ ] **Step 1: 写失败用例**
 
