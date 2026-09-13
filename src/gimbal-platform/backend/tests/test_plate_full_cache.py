@@ -6,7 +6,7 @@
 (3s 软取上限,不是客户端级的 30s)、本层不解读声明(空目录 / 缺键 / 空 item
 都照常返回 item,不是降级)。
 
-``endpoint_declarations`` 另有一套取数(自带缓存 + 派生层),由
+``endpoint_declarations`` 在派生层消费本层的 item(声明面 + path 投影),由
 ``tests/test_endpoint_declarations.py`` 覆盖;本文件只钉 ``plate_client`` 这一层。
 """
 from __future__ import annotations

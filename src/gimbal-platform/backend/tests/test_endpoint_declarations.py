@@ -1,5 +1,11 @@
-"""声明面取数(spec v3.1 §3):契约 request.declarations 的 path 全集,
-进程缓存 + TTL + fail-soft。"""
+"""声明面派生层(spec v3.1 §3):契约 ``request.declarations`` 的原始列表与
+其 path 投影。
+
+取数与整份 item 的缓存归 ``plate_client``(TTL/LRU/回退窗/在飞收敛),
+由 ``tests/test_plate_full_cache.py`` 覆盖;本文件钉**派生层**的判据:空目录
+与降级之分、投影缓存、降级告警、软取上限。本文件里断言「打了几次 plate」的
+用例一律经 ``plate_client`` 的 transport(计数点就在那一层)。
+"""
 from __future__ import annotations
 
 import asyncio
@@ -12,7 +18,7 @@ from app.core.config import settings
 from app.services import plate_client
 from app.services.carry_injection import _endpoint_declarations
 from app.services.endpoint_declarations import (
-    _INFLIGHT, _reset_declared_paths_cache, declarations_of, declared_paths_of,
+    _reset_declared_paths_cache, declarations_of, declared_paths_of,
 )
 
 _PATHS = frozenset({"$.bl_no", "$.customer_id", "$.items", "$.items.sku"})
@@ -23,29 +29,10 @@ def _envelope(item: dict) -> dict:
     return {"ok": True, "dim": "endpoint", "data": {"item": item}}
 
 
-def _declarations_item() -> dict:
-    return {"request": {"declarations": [
-        {"name": "bl_no", "path": "$.bl_no", "state": "form", "required": True},
-        {"name": "cid", "path": "$.customer_id", "state": "carry", "required": True},
-        {"name": "items", "path": "$.items", "state": "form", "required": False,
-         "children": [{"name": "sku", "path": "$.items.sku", "state": "form",
-                       "required": True}]},
-    ]}}
-
-
 def _install(client_handler):
     plate_client.set_client_for_tests(httpx.AsyncClient(
         transport=httpx.MockTransport(client_handler), base_url="http://plate-test",
     ))
-
-
-async def _wait_until(pred, tries: int = 500) -> bool:
-    """推进事件循环直到 pred 为真(避免靠固定 sleep(0) 次数猜调度)。"""
-    for _ in range(tries):
-        if pred():
-            return True
-        await asyncio.sleep(0)
-    return pred()
 
 
 @pytest.fixture(autouse=True)
@@ -82,33 +69,6 @@ async def test_declared_paths_of_returns_flat_path_set(_install_transport):
     assert len(_install_transport) == 1
 
 
-async def test_second_call_hits_cache(_install_transport):
-    await declared_paths_of("fin.order.add")
-    await declared_paths_of("fin.order.add")
-    assert len(_install_transport) == 1          # 缓存命中,只拉一次
-
-
-async def test_ttl_zero_refetches(monkeypatch, _install_transport):
-    await declared_paths_of("fin.order.add")
-    monkeypatch.setattr(settings, "DECLARED_PATHS_TTL_SEC", 0.0)
-    await declared_paths_of("fin.order.add")
-    assert len(_install_transport) == 2
-
-
-async def test_concurrent_cold_calls_coalesce_to_one_fetch(_install_transport):
-    """在飞收敛:冷缓存并发同端点 → 只打一次 plate,两者同一结果。"""
-    a, b = await asyncio.gather(
-        declared_paths_of("fin.order.add"),
-        declared_paths_of("fin.order.add"),
-    )
-    assert len(_install_transport) == 1          # 收敛为同一在飞请求
-    # == 而非 is:投影随取数入缓存,两条返回路径都直接取那份算好的 frozenset
-    # (不重派生)—— 但断言取**等值**而非同一对象:收敛要保的是「同一次取数」,
-    # 不是同一个对象。
-    assert a is not None and a == b
-    assert {"$.bl_no", "$.customer_id", "$.items", "$.items.sku"} <= set(a)
-
-
 async def test_carry_delegate_and_paths_share_one_fetch(_install_transport):
     """跨消费者共用取数:carry 侧门面与 declared_paths_of 只打一次 plate。"""
     decls = await _endpoint_declarations("fin.order.add")
@@ -118,30 +78,6 @@ async def test_carry_delegate_and_paths_share_one_fetch(_install_transport):
     assert paths == frozenset(
         {"$.bl_no", "$.customer_id", "$.items", "$.items.sku"}
     )
-
-
-async def test_failure_returns_none_and_does_not_cache(monkeypatch):
-    state = {"fail": True, "calls": 0}
-
-    async def handler(request: httpx.Request) -> httpx.Response:
-        state["calls"] += 1
-        if state["fail"]:
-            return httpx.Response(503, json={"ok": False})
-        return httpx.Response(200, json={
-            "ok": True, "dim": "endpoint",
-            "data": {"item": {"request": {"declarations": [
-                {"name": "a", "path": "$.a", "state": "form", "required": True}]}}},
-        })
-
-    plate_client.set_client_for_tests(
-        httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://plate-test")
-    )
-    _reset_declared_paths_cache()
-    assert await declared_paths_of("ep-x") is None      # 失败 → 降级信号
-    state["fail"] = False
-    assert await declared_paths_of("ep-x") == frozenset({"$.a"})   # 失败不入缓存 → 可重试
-    assert state["calls"] == 2
-    plate_client.set_client_for_tests(None)
 
 
 async def test_returned_list_is_a_copy_not_the_cached_object(_install_transport):
@@ -211,97 +147,6 @@ async def test_garbage_declarations_is_degraded():
     plate_client.set_client_for_tests(None)
 
 
-async def test_cancelled_waiter_does_not_kill_shared_fetch():
-    """等待方被取消不得连带取消共享取数(取消只落自己)。
-
-    裸 ``await task`` 会把取消扩散进共享任务:创建者收到 CancelledError、
-    其他等待方也全军覆没 —— 真链路上那会让 fan-out 被判取消、不写终止
-    JSONL 行,执行卡在 running。
-    """
-    release = asyncio.Event()
-    calls: list[str] = []
-
-    async def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(request.url.path)
-        await release.wait()                 # 挂住,制造稳定的在飞窗口
-        return httpx.Response(200, json=_envelope(_declarations_item()))
-
-    _install(handler)
-    _reset_declared_paths_cache()
-    creator = asyncio.ensure_future(declared_paths_of("ep-slow"))
-    assert await _wait_until(lambda: "ep-slow" in _INFLIGHT)
-    shared = _INFLIGHT["ep-slow"]
-    try:
-        # 第二个等待方:在飞期间被取消(取消落在它自己的 shield 等待上)
-        with pytest.raises(asyncio.TimeoutError):
-            await asyncio.wait_for(declared_paths_of("ep-slow"), timeout=0.05)
-        assert shared.cancelled() is False   # 共享任务未被连带取消
-        assert not creator.done()            # 创建者仍在等,没被波及
-
-        release.set()
-        assert await creator == _PATHS       # 创建者照常拿到结果
-        assert len(calls) == 1               # 全程只打一次 plate
-    finally:
-        release.set()
-        plate_client.set_client_for_tests(None)
-
-
-async def test_cancelled_creator_still_clears_inflight():
-    """创建者被取消 → 在飞项仍会在**完成时**被摘除(不是永久锈住)。
-
-    摘除由任务完成回调驱动,不依赖创建者的 ``finally``;否则创建者一被
-    取消,该端点的在飞项就永远留着,后续调用全被钉在死任务上。
-    """
-    release = asyncio.Event()
-    calls: list[str] = []
-
-    async def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(request.url.path)
-        await release.wait()
-        return httpx.Response(200, json=_envelope(_declarations_item()))
-
-    _install(handler)
-    _reset_declared_paths_cache()
-    creator = asyncio.ensure_future(declared_paths_of("ep-slow"))
-    assert await _wait_until(lambda: "ep-slow" in _INFLIGHT)
-    shared = _INFLIGHT["ep-slow"]
-
-    creator.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await creator
-    assert shared.cancelled() is False       # 取消不扩散,共享取数还活着
-    assert "ep-slow" in _INFLIGHT            # 尚未完成,仍在飞
-
-    release.set()
-    assert await _wait_until(lambda: "ep-slow" not in _INFLIGHT)
-    assert isinstance(await shared, list)    # 结果就绪且可用(未被打断)
-
-
-# ── 声明面缓存收编 TtlLruCache(spec 架构收敛 §3.1;D/S/R/U)─────────────
-
-async def test_stale_snapshot_survives_a_failed_refresh(monkeypatch):
-    """D:TTL 过期后刷新失败 → **旧快照仍服务**(stale-while-error)。"""
-    calls = {"n": 0, "fail": False}
-    PAY = {"ok": True, "dim": "endpoint", "data": {"item": {"request": {"declarations": [
-        {"name": "cid", "path": "$.customer_id", "state": "carry", "required": True}]}}}}
-
-    async def handler(request):
-        calls["n"] += 1
-        if calls["fail"]:
-            return httpx.Response(503, json={"ok": False})
-        return httpx.Response(200, json=PAY)
-
-    plate_client.set_client_for_tests(httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://plate-test"))
-    _reset_declared_paths_cache()
-    monkeypatch.setattr(settings, "DECLARED_PATHS_TTL_SEC", 0.0)        # 立即过期
-    monkeypatch.setattr(settings, "DECLARED_PATHS_STALE_WINDOW_SEC", 3600.0)
-    assert await declared_paths_of("ep-s") == frozenset({"$.customer_id"})   # 先成功入缓存
-    calls["fail"] = True
-    got = await declared_paths_of("ep-s")
-    assert got == frozenset({"$.customer_id"}), "刷新失败时应回退旧快照,而不是降级为 None"
-    plate_client.set_client_for_tests(None)
-
-
 async def test_projection_is_cached_not_recomputed(monkeypatch):
     """R:投影只在**取数**时算一次;TTL 命中路径不再重算(以 catalog_paths 调用计数断言)。"""
     import app.services.endpoint_declarations as ed
@@ -325,48 +170,6 @@ async def test_projection_is_cached_not_recomputed(monkeypatch):
     after_first = calls["n"]
     await declared_paths_of("ep-p")          # TTL 内命中缓存
     assert calls["n"] == after_first == 1     # 投影没有第二次遍历
-    plate_client.set_client_for_tests(None)
-
-
-async def test_cache_has_lru_bound(monkeypatch):
-    """S:超过 max_entries 时逐出最旧 —— 不再是"永不淘汰"。"""
-    hits: list[str] = []
-
-    async def handler(request):
-        hits.append(request.url.path)
-        return httpx.Response(200, json={"ok": True, "dim": "endpoint",
-                                         "data": {"item": {"request": {"declarations": []}}}})
-
-    monkeypatch.setattr(settings, "DECLARED_PATHS_MAX_ENTRIES", 1)
-    plate_client.set_client_for_tests(httpx.AsyncClient(
-        transport=httpx.MockTransport(handler), base_url="http://plate-test"))
-    _reset_declared_paths_cache()
-    await declared_paths_of("ep-1")
-    await declared_paths_of("ep-2")
-    await declared_paths_of("ep-1")           # ep-1 已被逐出 ⇒ 必须重取
-    assert len(hits) == 3
-    plate_client.set_client_for_tests(None)
-
-
-async def test_fresh_window_starts_at_success_not_at_request_start(monkeypatch):
-    """U:TTL 起点取在**成功之后**,不是请求发起时。
-
-    取数耗时 > TTL 时,时间戳若打在请求发起时,条目**一入缓存即已过期**
-    ⇒ 每次调用都重取(声明面缓存在慢 plate 上退化为无缓存)。
-    """
-    hits: list[str] = []
-
-    async def handler(request: httpx.Request) -> httpx.Response:
-        hits.append(request.url.path)
-        await asyncio.sleep(0.4)             # 慢取数:耗时 > TTL
-        return httpx.Response(200, json=_envelope(_declarations_item()))
-
-    monkeypatch.setattr(settings, "DECLARED_PATHS_TTL_SEC", 0.25)
-    _install(handler)
-    _reset_declared_paths_cache()
-    assert await declared_paths_of("ep-slow-ttl") == _PATHS     # 取数耗时 0.4s > TTL 0.25s
-    assert await declared_paths_of("ep-slow-ttl") == _PATHS
-    assert len(hits) == 1, "时间戳应在取数成功后打点(否则慢取数一入缓存即过期)"
     plate_client.set_client_for_tests(None)
 
 
@@ -422,8 +225,8 @@ async def test_stale_fallback_warning_carries_the_cause(monkeypatch):
     回退分支正是「静默供旧契约面」(fail-open-to-old,见 ``config.py`` 的
     ``DECLARED_PATHS_STALE_WINDOW_SEC`` 注释)—— 运维排查「carry 面为何陈旧」的
     第一现场;而 ``_warn_once`` 按端点 + 冷却窗去重,先发的哑告警会**压掉**后发
-    的带原因那条 ⇒ 回退路径自己就得把原因带上(它此刻就在 ``_refresh`` 抛的
-    ``RuntimeError`` 里)。动作短语「回退旧快照」是运维的判读锚点,必须保留。
+    的带原因那条 ⇒ 回退路径自己就得把原因带上(它此刻就在 ``get_endpoint_full``
+    交出的 ``reason`` 里)。动作短语「回退旧快照」是运维的判读锚点,必须保留。
     """
     from loguru import logger
 
@@ -452,7 +255,7 @@ async def test_stale_fallback_warning_carries_the_cause(monkeypatch):
     assert got == frozenset({"$.customer_id"}), "前置:必须真的走回退分支"
     stale = [s for s in seen if "ep-s" in s]
     assert stale, seen
-    # 原因:_refresh 的 RuntimeError 文本(plate status 503)必须出现在告警里
+    # 原因:取数层交出的 reason(plate status 503)必须出现在告警里
     assert any("plate status 503" in s for s in stale), seen
     # 动作短语仍在(裁定要的是「补原因」,不是推翻 D3/改动作语义)
     assert all("回退旧快照" in s for s in stale), seen

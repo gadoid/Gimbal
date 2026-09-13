@@ -104,7 +104,7 @@ class Settings(BaseSettings):
     # gather(declared_paths_of(...))),用 30s 就把「前端 axios 超时」和
     # 「后端 plate 超时」钉在同一条线上 —— plate 慢时前端报失败、后端其实
     # 已建执行,用户重试即**重复执行**。
-    # **覆盖范围 = 本模块这一条共享软取**(``endpoint_declarations._fetch_declarations``),
+    # **覆盖范围 = 这一条共享软取**(``plate_client.get_endpoint_full``),
     # 即它的**两个消费面都受这个上限约束**:判定面(``declared_paths_of`` ←
     # dispatcher 同步段)与 carry 面(``declarations_of`` ←
     # ``carry_injection.build_carry_context``:后台 fan-out ``run_dispatcher.py:748``、
