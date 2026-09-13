@@ -29,23 +29,36 @@ def _item(decls):
 
 
 @pytest.fixture
-def install_transport(monkeypatch):
-    """把 plate_client 的单例换成 MockTransport 客户端,并记录请求数。"""
+async def install_transport(monkeypatch):
+    """把 plate_client 的单例换成 MockTransport 客户端,并记录请求数。
+
+    卸载时**关闭**本次装过的每个客户端,不止 ``set_client_for_tests(None)``:
+    解绑只是 rebind 全局,裸 ``AsyncClient`` 被 GC 时会漏一条 ``ResourceWarning``
+    —— 那是**本工作引入**的噪声,不该花掉门禁里「既有噪声」的预算(用例自己
+    提前 ``set_client_for_tests(None)`` 的,也在这里关)。
+    """
     calls: list[str] = []
+    installed: list[httpx.AsyncClient] = []
 
     def make(handler):
         def _wrapped(request: httpx.Request) -> httpx.Response:
             calls.append(str(request.url))
             return handler(request)
-        plate_client.set_client_for_tests(
-            httpx.AsyncClient(transport=httpx.MockTransport(_wrapped),
-                              base_url=settings.PLATE_BASE_URL))
+        client = httpx.AsyncClient(transport=httpx.MockTransport(_wrapped),
+                                   base_url=settings.PLATE_BASE_URL)
+        installed.append(client)
+        plate_client.set_client_for_tests(client)
         return calls
 
     plate_client._reset_full_cache_for_test()
-    yield make
-    plate_client.set_client_for_tests(None)
-    plate_client._reset_full_cache_for_test()
+    try:
+        yield make
+    finally:
+        for client in installed:
+            if not client.is_closed:
+                await client.aclose()
+        plate_client.set_client_for_tests(None)
+        plate_client._reset_full_cache_for_test()
 
 
 async def test_cold_fetch_returns_item(install_transport):
