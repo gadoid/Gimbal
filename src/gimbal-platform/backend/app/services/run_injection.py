@@ -212,40 +212,45 @@ def _host_conflict(body: Any, target: str) -> bool:
     段**缺失** / 索引**越界** ⇒ **不算冲突**(引擎按类型创建 / 扩展列表);
     末段落点的值本身不判(覆写叶子是 Assign 的正常语义)。
 
+    **规则:走不动 / 无法求值的形状一律算冲突。** 通配(``*``)、过滤器
+    (``[?...]``)、递归下降(``..``),以及 ``_parse`` 抛 ``JsonPathError`` 的
+    路径,引擎 ``_set_at`` 都对它们抛 ``JsonPathError`` —— **写不进去**。
+    物化这种目标只能把「一次跳过 + 告警」换成「一次失败的运行」,没有任何
+    收益,故按「不确定就别写」判冲突。**这是明文规则,不是巧合**(它曾经落在
+    「不算冲突」那一侧,那是个没被论证过的默认方向)。
+
     三条**不算冲突**(都是 Assign 的正常语义或可创建情形):
     * target 就是 ``$.request_body`` 本身 —— 整体覆写 body;
     * ``body`` 为 ``None``(无 body)—— Assign 会创建;
     * 路径段**缺失** / 索引**越界** —— 同样由 Assign 创建。
 
-    ``target`` 形如 ``$.request_body.note.replace``:前两段是调用点
-    (:func:`_body_target` 固定加的前缀)拼接的,不是 body 的段,**必须剥掉
-    再走**;不匹配则不判、不猜(``[`` 紧贴 ``request_body`` 的形态在点分段
-    判据下即不匹配;通配 / 过滤 / 递归段引擎 ``_set_at`` 直接 ``JsonPathError``,
-    同样不判)。
+    ``target`` 形如 ``$.request_body.note.replace``:首段是调用点
+    (:func:`_body_target` 固定加的前缀)拼接的 FIELD ``request_body``(根
+    ``$`` 由 ``_parse`` 吸收),不是 body 的段,**必须剥掉再走**。前缀也按
+    token 认,不按字符串切分 —— 否则 ``$.request_body[0].replace`` 这种
+    ``[`` 紧贴前缀形态会被误判成「不是 body 内部」而放行,而它恰恰是同类改形
+    (「是不是 body 内部」由 walk 回答)。首段不是 ``request_body`` ⇒ 不判、不猜。
     """
-    segs = [s for s in target.split(".") if s]
-    if segs[:2] != ["$", "request_body"]:
-        return False
-    rest = segs[2:]
-    if not rest:
-        return False
-    if body is None:
-        return False
     try:
         nodes = _parse(target)
-    except JsonPathError:           # 解析不了 ⇒ 不判、不猜
-        return False
+    except JsonPathError:           # 解析不了 ⇒ 走不动 ⇒ 冲突(见上「规则」)
+        return True
     if (not nodes or nodes[0].kind is not NodeKind.FIELD
             or nodes[0].value != "request_body"):
-        return False                # 前缀不是纯 ``request_body`` 段 ⇒ 不判、不猜
+        return False                # 不是 body 内部路径 ⇒ 不判、不猜
+    rest = nodes[1:]
+    if not rest:
+        return False                # 恰为 ``$.request_body`` ⇒ 整体覆写
+    if body is None:
+        return False                # 无 body ⇒ Assign 会创建
     cur: Any = body
-    for node in nodes[1:]:
+    for node in rest:
         if node.kind is NodeKind.FIELD:
             required: type = dict
         elif node.kind is NodeKind.INDEX:
             required = list
-        else:                       # 通配 / 过滤 / 递归:引擎写不进去,不判
-            return False
+        else:                       # 通配 / 过滤 / 递归:走不动 ⇒ 冲突
+            return True
         if not isinstance(cur, required):
             return True             # 现存值不是所需容器 ⇒ 引擎会把它整段换掉
         if node.kind is NodeKind.FIELD:

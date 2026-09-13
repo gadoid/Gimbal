@@ -372,12 +372,15 @@ def test_out_of_range_index_is_not_a_conflict():
 
 
 def test_root_non_dict_body_is_caught_by_the_root_host_check():
-    """根宿主非 dict 的同类改形(``body=["abc"]`` + ``$[0].replace``)仍判死。
+    """根宿主非 dict:同类改形仍判死(第一段),且根类型判据**自身**有判别力(第二段)。
 
-    挡它的是 :func:`_path_resolvable` 里那条 ``not isinstance(body, dict)``:
-    ``$.request_body[0].replace`` 的 ``[`` 紧贴前缀段,``_host_conflict`` 的
-    点分段前缀判据不匹配 ⇒ **不判、不猜**,根侧由类型判据兜住。删掉那行,
-    ``exists(["abc"], "$[0].replace")`` 会取到绑定的 ``str.replace`` 而判活。"""
+    第一段 ``body=["abc"]`` + ``$[0].replace``:判定侧判死,但**:func:`_host_conflict`
+    此后也拦得住这个形状**,故它钉的是**结局**,不归因到某一行。
+
+    第二段才是归因到 :func:`_path_resolvable` 里那条 ``not isinstance(body, dict)``
+    的:``body=None`` + ``$.__class__`` 的宿主判据不拦(无 body ⇒ Assign 创建,
+    ``_host_conflict`` 按设计返回 False),只有那条在 ``exists`` 之前把
+    ``getattr(None, "__class__")`` 这类**属性穿透**挡在门外。删掉它,该路径判活。"""
     body_of = _body_of([{"request": {"body": ["abc"]}}])
     entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
                                      "jsonpath": "$[0].replace"},
@@ -386,6 +389,65 @@ def test_root_non_dict_body_is_caught_by_the_root_host_check():
             "jsonpath": "$[0].replace"} in \
         entry_issues(entry, 1, body_of, lambda si: set(),
                      _universe_of(body_of, None))
+    # 归因段:无 body 时宿主判据不拦(Assign 会创建),挡 ``getattr`` 穿透的是根类型判据
+    empty_body = _body_of([{"request": {}}])
+    piercing = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                        "jsonpath": "$.__class__"},
+                "value": "x", "asserts": []}
+    assert {"kind": "path-unresolvable", "stepIndex": 0,
+            "jsonpath": "$.__class__"} in \
+        entry_issues(piercing, 1, empty_body, lambda si: set(),
+                     _universe_of(empty_body, None))
+
+
+def test_list_body_bracket_root_path_is_skipped_by_the_guard():
+    """列表 body + ``$[0].replace``:守卫**自身**也要挡(纵深防御)。
+
+    ``$.request_body[0].replace`` 的前缀段是 FIELD ``request_body`` + INDEX(0)
+    —— 按 token 判前缀即「在 body 内部」,于是 walk 继续:INDEX(0) 下降进元素
+    ``"abc"``,下一个 FIELD 段遇非 dict 即 ``{}`` ⇒ 元素改形。上一条钉判定侧,
+    这条钉**物化侧**(直接调 ``compose_injection_scenario``、不经 ``entry_issues``
+    过滤的那条路)。"""
+    from loguru import logger
+
+    body = ["abc"]
+    entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                     "jsonpath": "$[0].replace"},
+             "value": "x"}
+    seen: list[str] = []
+    sink_id = logger.add(lambda m: seen.append(str(m)), level="WARNING")
+    try:
+        out = compose_injection_scenario(
+            {"steps": [{"request": {"body": body}}]}, entry)
+    finally:
+        logger.remove(sink_id)
+    assert out["steps"][0].get("strategy") in (None, [])          # 未物化
+    assert any("$[0].replace" in s for s in seen), seen           # 告警带路径
+
+
+def test_unwalkable_shape_is_a_conflict():
+    """走不动 / 无法求值的形状一律**算冲突**(skip + 告警),不是「不判」。
+
+    引擎 ``_set_at`` 对通配 / 过滤 / 递归段直接抛 ``JsonPathError``、对解析
+    不了的路径同样抛 —— 写不进去的东西物化它,只会把「一次跳过」换成「一次
+    失败的运行」。故规则是:不确定就别写。通配段无论父宿主是不是 dict 都走
+    不动(它不是「宿主类型不符」那一类,而是形状本身求不了值)。"""
+    from loguru import logger
+
+    for body, jp in (({"foo": "str"}, "$.foo.*"),        # 父宿主非 dict
+                     ({"foo": {"bar": 1}}, "$.foo.*"),   # 父宿主是 dict
+                     ({"foo": 1}, "$.foo[")):            # 解析不了
+        seen: list[str] = []
+        sink_id = logger.add(lambda m: seen.append(str(m)), level="WARNING")
+        try:
+            out = compose_injection_scenario(
+                {"steps": [{"request": {"body": body}}]},
+                {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                         "jsonpath": jp}, "value": "x"})
+        finally:
+            logger.remove(sink_id)
+        assert out["steps"][0].get("strategy") in (None, []), jp   # 未物化
+        assert any(jp in s for s in seen), (jp, seen)              # 告警带路径
 
 
 # ── stepIndex 归一(Z3)/ 可注入面纯函数化(P)────────────────────────
