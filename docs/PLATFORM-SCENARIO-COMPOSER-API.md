@@ -784,8 +784,9 @@ rows:
 （出处：`docs/superpowers/specs/2026-09-12-architecture-convergence-design.md` §4）。
 
 **约束一：判定面不持久化。** 悬空判定用的「契约声明面」运行时从 plate 契约
-派生，**只存在于进程内**（`endpoint_declarations.py` 的 `TtlLruCache` + 在飞
-收敛表），不落表、不落字段（该模块 docstring `endpoint_declarations.py:1-58`；
+派生，**只存在于进程内**（取数与缓存是 `plate_client.get_endpoint_full` 的
+`TtlLruCache` + 在飞收敛表，path 投影是 `endpoint_declarations` 的 `_proj_cache`），
+不落表、不落字段（见 `endpoint_declarations` 模块 docstring；
 裁决见可注入面 spec §6：「明确选了 dispatch 取 + 缓存，不做快照表/快照字段」）。
 `run_dispatcher` 写进 `Execution.config_json` 的是纯值配方 —— `runId` /
 `scenarioId` / `dataSetIds` / `dataSetSelection` / `injectedAuths` /
@@ -810,7 +811,7 @@ rows:
 （本层只承诺「不依赖」这个方向；PG 侧列型的实际行为属外部引擎、不在本仓可证
 范围）。代码侧落点：可注入面是 `set`（`run_injection.py:128`）、
 声明 path 全集是 `frozenset`
-（`endpoint_declarations.py:264`）、目录宇宙是 `set`
+（`declared_paths_of` 返回的 `frozenset`）、目录宇宙是 `set`
 （`field_state_resolution.py:124-126`）；行集并集是 `set` 运算
 （`run_dispatcher.py:400`、`:407`）；写 `config_json` 一律
 `model_dump(by_alias=True)`（`:575`、`:584`）；convert memo 的键用
@@ -824,7 +825,7 @@ rows:
 
 | 面 | 语义 |
 | --- | --- |
-| 声明面取数 | 合法空声明 `[]` → 空集（**不是**降级）；只有**拿不到**才是 `None`（`endpoint_declarations.py:55-57`、`:222-232`） |
+| 声明面取数 | 合法空声明 `[]` → 空集（**不是**降级）；只有**拿不到**才是 `None`（`declarations_of` / `_decls_of_item` 的契约） |
 | 判定面 | `None`（降级）与 `frozenset()`（真无声明）**分别下传**，调用侧显式 `is None` 判别（`run_dispatcher.py:454-458`） |
 | `config_json` | `judgeDegraded` **键缺席** ≠ `false`（`run_dispatcher.py:591-592`）；`serviceBindings` 的 `None` 键不落盘（`exclude_none=True`，`:584`） |
 | JSONL 回放 | 旧行缺 `injectionId` 键 → 读作 `None`，不炸（`run_dispatcher.py:270-273`） |
