@@ -9,6 +9,8 @@ import copy
 import re
 from typing import Any, Callable
 
+from loguru import logger
+
 from .jsonpath import exists
 
 
@@ -141,9 +143,20 @@ def injectable_universe(body: Any, declared: Any) -> set[str]:
     return universe
 
 
+def _body_target(jsonpath: str) -> str:
+    """条目路径 → Assign 的 target:``$.amount`` → ``$.request_body.amount``;
+    根 ``"$"`` → ``$.request_body``。
+
+    **判定与物化共用**(Z1)::func:`_path_resolvable` 的宿主判据与
+    :func:`compose_injection_scenario` 的物化必须是同一个 target 串 ——
+    各拼一份的话,一侧改了前缀另一侧不动,判决与物化就静默分叉。"""
+    return "$.request_body" + (jsonpath[1:] if jsonpath != "$" else "")
+
+
 def _path_resolvable(jsonpath: str, body: Any, universe: set[str]) -> bool:
     """判定(spec v3.1 §2.1):两形态命中 universe 即活;否则退回 body 精确存在性
-    (既有兜底不退化 —— 它多认"空容器本身",方向是"少判死")。
+    (兜底吃 **dict 宿主**,见末段 —— 它比可注入面多认「空容器本身」,方向是
+    「少判死」)。
 
     可注入面(spec §2.1 公式)= :func:`injectable_universe`,由**调用方**预计算
     后传入(此前每次判定就地重建):
@@ -163,13 +176,61 @@ def _path_resolvable(jsonpath: str, body: Any, universe: set[str]) -> bool:
     成员判定先一步就返回了。删掉它不改变任何判定结果(等价性由既有用例与
     ``test_body_face_covers_container_prefixes_like_frontend`` 系列钉住)。
 
-    保留 ``exists`` 兜底**不退化**:它比可注入面多认「空容器本身」
+    ``exists`` 兜底**只对 dict 宿主**生效(Z1):兜底前先过 :func:`_host_conflict`
+    —— 与写侧**同一判据、同一段走法**,判定与物化不得各写一份。非 dict 宿主上
+    ``_eval_nodes`` 的 FIELD 分支走 ``getattr``,于是
+    ``exists({'note':'hello'}, '$.note.replace')`` 取到绑定的 ``str.replace``
+    方法 ⇒ 判活,而写侧 ``_set_at`` 遇非 dict 即 ``data={}`` ⇒ ``note`` 整体换成
+    ``{"replace": v}``(请求体改形)。中间宿主(``$.note`` 之于 ``{'note':'hello'}``)
+    与**根** body 本身(``exists("raw", "$.upper")``)都算宿主,两处都挡。
+    宿主是 dict 时兜底照旧:它比可注入面多认「空容器本身」
     (``body={"items":[]}`` 的 ``$.items`` 无叶子、无前缀 ⇒ 前端判死而后端
-    判活)—— 这是既有行为,spec §2.1 明文容许(从严只在「少认」方向)。"""
+    判活)—— 这是既有行为,spec §2.1 明文容许(从严只在「少认」方向);空容器的
+    宿主就是 dict,与上面的非 dict 收口是**两件事**。"""
     for form in (jsonpath, _template_path(jsonpath)):
         if form in universe:
             return True
-    return exists(body or {}, jsonpath)
+    if not isinstance(body, dict):
+        return False
+    if _host_conflict(body, _body_target(jsonpath)):
+        return False
+    return exists(body, jsonpath)
+
+
+def _host_conflict(body: Any, target: str) -> bool:
+    """``target`` 的路径是否落在非 dict 宿主上 —— 是则不可安全物化。
+
+    引擎 ``_set_at`` 遇非 dict 即 ``data={}``,故往字符串/数字/列表的**内部**
+    写值会把整个宿主改形(``$.request_body.note.replace`` 之于
+    ``{"note":"hello"}`` ⇒ ``note`` 被整体换成 ``{"replace": v}``)。
+
+    三条**不算冲突**(都是 Assign 的正常语义或可创建情形):
+    * target 就是 ``$.request_body`` 本身 —— 整体覆写 body;
+    * ``body`` 为 ``None``(无 body)—— Assign 会创建;
+    * 路径段**缺失** —— 同样由 Assign 创建。
+
+    ``target`` 形如 ``$.request_body.note.replace``:前两段是调用点
+    (:func:`_body_target` 固定加的前缀)拼接的,不是 body 的段,**必须剥掉
+    再走**;不匹配则不判、不猜。
+    """
+    segs = [s for s in target.split(".") if s]
+    if segs[:2] != ["$", "request_body"]:
+        return False
+    rest = segs[2:]
+    if not rest:
+        return False
+    if body is None:
+        return False
+    if not isinstance(body, dict):
+        return True                 # body 存在但非 dict ⇒ 整段会被改形
+    cur: Any = body
+    for seg in rest[:-1]:           # 末段不判:覆写叶子是 Assign 的正常语义
+        if seg not in cur:
+            return False            # 缺失 ⇒ 后续由 Assign 创建
+        cur = cur[seg]
+        if not isinstance(cur, dict):
+            return True
+    return False
 
 
 def as_step_index(x: Any) -> int | None:
@@ -256,6 +317,12 @@ def compose_injection_scenario(definition: dict[str, Any], entry: dict[str, Any]
     自己的守卫,否则 AttributeError 会掀掉后台 fan-out(零 case + 执行不
     落终态),而不是像越界那样安静跳过。
 
+    **宿主冲突同待遇:跳过 + 告警**(Z1)。target 落在非 dict 宿主内部时
+    (``$.request_body.note.replace`` 之于 ``{"note":"hello"}``)物化会让引擎
+    ``_set_at`` 把整个宿主改形,故不落 Assign —— 判据见 :func:`_host_conflict`。
+    同样不是「判定侧已收口」的重复保险:非 UI 下发(直连 POST /runs、脚本)
+    不经前端,且此处是物化的最后一道。不引入新 error code、不让请求失败。
+
     value 由用户显式编辑,原样覆写不 coerce —— 但引擎 `_resolve_source_value`
     只对**非字符串**直通,两类字符串会被解释:`$.` 前缀串按上下文 JSONPath
     读取(**已补 default/required 兜底**,读不到时仍写字面量);整串 `"${...}"`
@@ -270,10 +337,17 @@ def compose_injection_scenario(definition: dict[str, Any], entry: dict[str, Any]
         jp = path.get("jsonpath")
         if (si is not None and 0 <= si < len(steps) and isinstance(steps[si], dict)
                 and isinstance(jp, str) and jp.startswith("$")):
-            # $.amount → $.request_body.amount;根 "$" → $.request_body
-            target = "$.request_body" + (jp[1:] if jp != "$" else "")
-            steps[si].setdefault("strategy", []).append(
-                _assign_strategy(entry.get("value"), target))
+            target = _body_target(jp)
+            # §5 例外:缺 ``request`` 与空 ``request`` 同为「本步无请求」这一
+            # 缺省形,在 :func:`_host_conflict` 与 Assign 创建语义下等价。
+            body = (steps[si].get("request") or {}).get("body")
+            if _host_conflict(body, target):
+                logger.warning(
+                    "injection entry skipped: 目标路径 {} 落在非 dict 宿主上 "
+                    "(物化会改形宿主,target={})", jp, target)
+            else:
+                steps[si].setdefault("strategy", []).append(
+                    _assign_strategy(entry.get("value"), target))
     for a in entry.get("asserts") or []:
         if not isinstance(a, dict):
             continue

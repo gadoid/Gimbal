@@ -244,6 +244,75 @@ def test_body_face_prefix_matches_frontend_injectable_path_set():
                             _universe_of(body_of, ())) == [], jp
 
 
+# ── Z1:exists 兜底不穿非 dict 宿主 + 写侧宿主冲突拦截 ────────────────
+def test_exists_fallback_does_not_pierce_str_attributes():
+    """``$.note.replace`` 不再判活 —— ``exists`` 兜底前先判宿主。
+
+    非 dict 宿主上 ``_eval_nodes`` 的 FIELD 分支走 ``getattr``:
+    ``exists({'note':'hello'}, '$.note.replace')`` 取到绑定的 ``str.replace``
+    ⇒ 判活;而写侧 ``_set_at`` 遇非 dict 即 ``data={}`` ⇒ ``note`` 整体换成
+    ``{"replace": v}``(请求体改形)。非 UI 下发(直连 POST /runs、脚本)
+    不经前端,故判定侧本身必须收口。"""
+    body_of = _body_of([{"request": {"body": {"note": "hello"}}}])
+    entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                     "jsonpath": "$.note.replace"},
+             "value": "x", "asserts": []}
+    assert {"kind": "path-unresolvable", "stepIndex": 0,
+            "jsonpath": "$.note.replace"} in \
+        entry_issues(entry, 1, body_of, lambda si: set(),
+                     _universe_of(body_of, None))
+
+
+def test_empty_container_leniency_is_kept():
+    """空容器宽容**不得**被一起收掉(``_path_resolvable`` docstring 明文容许)。
+
+    ``{"items":[]}`` 的 ``$.items`` 无叶子、无容器前缀 ⇒ universe 里只有
+    ``{"$"}``,判活只能来自 ``exists`` 兜底。收紧只针对**宿主类型**,而这里
+    的宿主 ``{"items":[]}`` 本体就是 dict ⇒ 仍判活(方向是「少判死」)。"""
+    body_of = _body_of([{"request": {"body": {"items": []}}}])
+    entry = {"id": "inj-1", "path": {"stepIndex": 0, "source": "body",
+                                     "jsonpath": "$.items"},
+             "value": 1, "asserts": []}
+    assert entry_issues(entry, 1, body_of, lambda si: set(),
+                        _universe_of(body_of, None)) == []
+
+
+def test_write_side_skips_string_host_conflict():
+    """绕过 UI 下发 ``$.note.replace`` 时按悬空 skip,不把字符串改形。
+
+    守卫在 ``compose_injection_scenario`` **自身**(与悬空条目同待遇):
+    判定侧已收口,但物化侧仍须自守 —— 这是「跳过」,不是错误:不引入新
+    error code、不让请求失败。"""
+    definition = {"steps": [{"request": {"body": {"note": "hello"}}}]}
+    entry = {"id": "inj-1",
+             "path": {"stepIndex": 0, "source": "body", "jsonpath": "$.note.replace"},
+             "value": "x"}
+    out = compose_injection_scenario(definition, entry)
+    assert out["steps"][0].get("strategy") in (None, [])       # 未物化
+
+
+def test_host_conflict_guard_leaves_normal_assign_semantics_alone():
+    """三条**不算冲突**(Assign 的正常语义或可创建情形)—— 收紧不误伤。"""
+    # target 恰为 ``$.request_body``:整体覆写 body,宿主类型无所谓
+    out = compose_injection_scenario(
+        {"steps": [{"request": {"body": "raw"}}]},
+        {"path": {"stepIndex": 0, "jsonpath": "$"}, "value": {"a": 1}})
+    assert out["steps"][0]["strategy"] == [
+        {"kind": "assign", "source": {"a": 1}, "target": "$.request_body"}]
+    # body 为 None(无 ``request.body``)→ 由 Assign 创建
+    out = compose_injection_scenario(
+        {"steps": [{"request": {}}]},
+        {"path": {"stepIndex": 0, "jsonpath": "$.x.y"}, "value": 1})
+    assert out["steps"][0]["strategy"] == [
+        {"kind": "assign", "source": 1, "target": "$.request_body.x.y"}]
+    # 路径段缺失 → 同样由 Assign 创建(不猜、不拦)
+    out = compose_injection_scenario(
+        {"steps": [{"request": {"body": {"a": 1}}}]},
+        {"path": {"stepIndex": 0, "jsonpath": "$.b.c"}, "value": 1})
+    assert out["steps"][0]["strategy"] == [
+        {"kind": "assign", "source": 1, "target": "$.request_body.b.c"}]
+
+
 # ── stepIndex 归一(Z3)/ 可注入面纯函数化(P)────────────────────────
 def test_step_index_accepts_integral_float_rejects_bool():
     """Z3:JSON 只有一种数字类型 —— 后端与前端的 Number.isInteger 同构。"""
