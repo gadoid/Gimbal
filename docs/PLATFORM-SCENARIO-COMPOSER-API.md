@@ -83,8 +83,8 @@ Authorization: Bearer <access_token>
 | 403 | 无权修改他人私有场景 | `is_admin=false` 改他人 scenario |
 | 404 | 资源不存在 | `GET /api/scenarios/sc-not-exist` |
 | 409 | 唯一性冲突 | `scenarioId` 已存在 |
-| 422 | 数据集 row 缺字段 | 行的 keys 与首行不一致 |
-| 502 | Plate /convert 调用失败 | 平台拼好的 dict 被 Plate 拒绝 |
+| 422 | 请求体语义被下游拒绝 | 数据集 row 缺字段（行的 keys 与首行不一致）；Plate 拒了 convert（`plate_rejected`，§4.7） |
+| 502 | 网关侧调用失败 | Plate 不可达 / 超时（`plate_unavailable`）；`/full` 代理的上游非 200（§10.4） |
 
 ---
 
@@ -453,7 +453,12 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 **错误**：
 
 - `502 plate_unavailable`：Plate 接口调用失败（超时 / 网络错误）
-- `502 plate_rejected`：Plate 返回 4xx，错误详情原样回传
+- `422 plate_rejected`：Plate 返回 4xx —— 上游 4xx 是对**客户端草稿**的裁决，不是网关故障，
+  故按「输入被拒」报 422 而非 502（`routers/scenarios.py` 的 `preview_plate` 分支注释写明了
+  这个取舍：502 会让运维去追一个并不存在的 Plate 故障）；上游 `errors[]` 原样回传
+
+> **同名不同码**：端点目录的 `/full` 代理**也**会发 `plate_rejected`，但那里报 **502**
+> （语义是「代理的上游调用失败」，不是「客户端草稿被拒」）—— 见 §10.4。
 
 ---
 
@@ -642,12 +647,16 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 **有界软取（判定取数不拖住 `/runs` 的同步段）**：
 
 - 悬空判定要读「契约声明面」，来源是 plate `GET /api/endpoint/{id}/full`
-  的 `data.item.request.declarations`（`app/services/endpoint_declarations.py:163-197`）。
+  的 `data.item.request.declarations`；**取数归 `plate_client.get_endpoint_full`**
+  （进程级 TTL / LRU / 回退窗 / 在飞收敛都在那一层），`endpoint_declarations` 是它
+  上面的**派生层**（`declarations_of` / `declared_paths_of` 从同一份 item 派生，
+  并另存一份 path 投影）。
 - 这条取数是**软取**：只做增强，不是执行的前置条件。它带**自己的短超时**
   `DECLARED_PATHS_TIMEOUT_SEC`（缺省 **3.0 s**，
   `app/core/config.py:100-118`），与 `PLATE_TIMEOUT_SEC`（30 s，`:76`）分离。
   **30 s 那条服务 `convert` 等既有链路（语义是「等不到就报错」），不得改动。**
-  该上限落在**共享的**声明面取数（`endpoint_declarations._fetch_declarations`）上，
+  该上限落在**共享的**声明面取数（`plate_client.get_endpoint_full`；`endpoint_declarations`
+  只是它上面的派生层）上，
   **carry 面同样受它约束**（`declarations_of` 还服务
   `carry_injection.build_carry_context`：后台 fan-out `run_dispatcher.py:748`、
   预览/导出 `routers/scenarios.py:188`）—— 故 carry 面**不只在取数失败时降级，
@@ -659,15 +668,16 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
   线取同值 —— 按该处注释的说法，那样 plate 慢时前端已报失败而后端其实已建出
   执行，用户重试即重复执行。（两个常量可证；该时序本身是设计说明，本文件未
   另行实测。）
-- 取数**绝不阻塞执行**（`endpoint_declarations.py:20-23`、`:195-197`）。拿到
+- 取数**绝不阻塞执行**（`endpoint_declarations` 的 fail-soft 纪律：任何故障返回 `None`；
+  取数层 `plate_client.get_endpoint_full` 绝不抛，失败经 `EndpointFull` 交 `reason`）。拿到
   什么则取决于缓存状态 —— 两条不同的路：
   - **冷缓存**，或**回退窗已过**：拿不到 → 判定**降级从严（只认 body 面）**；
   - **TTL 过期但仍在回退窗内**：刷新失败**回退旧快照**，判定跑在**（可能
     陈旧的）旧契约面**上 —— **不降级、不发 `judgeDegraded`**。该路径**仍会
-    告警**，且**带着回退原因**（`:250` 把原因串传进 `_warn_once`；判据
-    `:237-252`）。
+    告警**，且**带着回退原因**（`plate_client.get_endpoint_full` 的过期分支把
+    失败原因放进 `EndpointFull.reason`，`declarations_of` 据此发 `_warn_once`）。
 - 成功取到的声明面进**进程内**缓存（TTL `DECLARED_PATHS_TTL_SEC` 缺省 300 s），
-  **不是**每次 dispatch 打一次 plate（`:222-261`）。故障期「宁可给一份陈旧，
+  **不是**每次 dispatch 打一次 plate（缓存与打点都在 `plate_client.get_endpoint_full`）。故障期「宁可给一份陈旧，
   也不要静默少带上游的值」是**有意**的语义（`fail-open-to-old`，
   `app/core/config.py:89-99`）；总上界 = TTL + `DECLARED_PATHS_STALE_WINDOW_SEC`
   = 300 s + 3600 s。
@@ -683,7 +693,7 @@ curl 'http://localhost:8000/api/scenarios?system=fin&priority=1' \
 - **键缺席的含义**：本次执行**没有**发生「降级 + 跳过」的组合 ——
   **不是**「零跳过」（`:591-592`）。
 - 对照：端点**真的没有**该声明时取到的是空集而不是 `None`，判定不降级、
-  **不留标记**（`endpoint_declarations.py:55-57`）。
+  **不留标记**（`declarations_of` 的 `None`（拿不到）/ `[]`（真无声明）契约）。
 
 **错误**（`app/routers/runs.py:76-79` 把 dispatcher 的 `NotFound` / `Conflict`
 翻成 404 / 409；`detail` 一律是 `{code, message}` 对象）：
@@ -943,6 +953,8 @@ body 叶子路径 ∪ 这些叶子的容器前缀
 面**多认「空容器本身」**（`body={"items":[]}` 的 `$.items`）—— 只会**少判死**，
 方向与历史行为一致（`:166-168`）。
 
+**候选面在两处的差异是有意的**（画布的策略路径多一份「用户粘贴的响应样本」，编辑器只有声明面）—— 裁定 M，见 §10.5。
+
 > **已知局限（不在本设计的覆盖范围内，勿读作已支持）**：
 > normalize 只吃**数字下标**（正则 `\[\d+\]`，`run_injection.py:73`；前端同款
 > `frontend/src/utils/declarations.ts:766`）—— `$.items[*].sku` 这类 **`[*]`
@@ -969,21 +981,66 @@ dispatch 时对每个**被选中**的条目跑 `entry_issues`，产出 issue 列
 ### 10.4 `/endpoint-catalog/{id}/full` 代理职责
 
 平台把 plate 的端点契约代理给前端，让前端只认平台一个 API 面
-（`app/routers/endpoint_catalog.py:1-11`）：
+（`app/routers/endpoint_catalog.py`）：
 
-- **路由**：`GET /api/endpoint-catalog/{endpoint_id:path}/full`，需登录
-  （`:41-45`）。
-- **上游**：`GET {plate}/api/endpoint/{id}/full`，走 `plate_client` 的进程级
-  `AsyncClient` 单例（共享连接池）。**不覆盖超时** ⇒ 用客户端缺省的
-  `PLATE_TIMEOUT_SEC`（30 s，`plate_client.py:68-75`）—— 与 §4.18 判定侧那条
-  3 s 软取（`endpoint_declarations.py:176-179`）是**两条不同的取数**。
-- **出参**：解开封套、**原样返回 `data.item`**（带完整的
-  `request.declarations`），不重排、不改写（`:67-74`）。
-- **错误映射**（`routers/strategy_catalog.py:26-61`）：plate ≥ 500 或连接失败
-  → `502 plate_unavailable`；plate 404 → `404 endpoint_not_found`；其余非 200
-  → 透传 plate 的状态码与 error 封套；200 但封套**缺 `item` 或 `item` 为空**
-  （判据是 `if not item`，故 `{}` 同样命中）→ `502 plate_invalid_envelope`
-  （`:69-73`）。
+- **路由**：`GET /api/endpoint-catalog/{endpoint_id:path}/full`，需登录。
+- **上游**：`GET {plate}/api/endpoint/{id}/full`，**走 `plate_client.get_endpoint_full`**
+  —— 与 §4.18 判定侧那条软取**同一条缓存条目**（同进程内 dispatch 判定与编辑器浏览
+  看到同一份快照），故超时也随之统一为 `DECLARED_PATHS_TIMEOUT_SEC`（**3 s** 软取上限，
+  不是 `PLATE_TIMEOUT_SEC` 的 30 s）；有缓存（含回退窗内的旧快照）时供上一份契约
+  而不是报错。取数层的 TTL/LRU/回退窗/在飞收敛都在 plate_client 那一层。
+- **出参**：plate 的 `data.item`（含完整的 `request.declarations`）**原样**透传，
+  **另加**一个后端算好的 `declared_surface` —— 声明侧可注入面的**扁平字符串集合**
+  （归一化、容器前缀、模板形态全部展开；复用既有纯函数
+  `injectable_universe(None, paths)`，未新写投影）。前端据此不再自己推导声明半（§10.2）。
+  `declared_surface` 的三种取值（§5 的「不得用真值合并有意义但 falsy 的值」）：
+  - **`null`**：该端点的声明面**不可解析**（降级，`declared_paths_of` 返回 `None`）
+    ⇒ 前端从严只认 body 面；
+  - **`["$"]`**：目录**真无声明**（合法空目录）⇒ 并进来的只有恒在的 `$`；
+  - 其余：声明半的完整展开。
+
+  `item` 本身只要是 dict 就原样透传（**空 item `{}` 也算**：它得到空声明树与 `["$"]`，
+  不视为错误 —— 不得用真值判等把 `{}` 并成 `None`）。item 另有消费者（候选树 UI），
+  故**只增字段、不裁 item**；`declared_surface` 是展开出的新 dict 里的字段，缓存里
+  那份 item 是进程级共享只读面，不被就地改写。
+- **错误映射**（`routers/endpoint_catalog.py`；状态位取自 `EndpointFull.status`）：
+  plate 404 → `404 endpoint_not_found`；**200 但封套里没有可用 `item`**
+  （`item is None` 且 `status == 200`）→ `502 plate_invalid_envelope`；
+  **其余 4xx → `502 plate_rejected`**（`message` 里带 plate 的真实状态码，形如
+  `plate rejected the request (status 401)`）；5xx 或压根没拿到响应 →
+  `502 plate_unavailable`。两条纪律：
+  1. 映射**嵌在 `item is None` 里** —— 刷新失败时旧快照仍在回退窗内，`item` 是好的
+     而 `status` 可能是那次失败的 404，无条件映射会把「健康的旧契约服务」报成
+     「端点不存在」；
+  2. `plate_rejected` 与 preview/convert 那条**同名不同码**：那里是 **422**（上游 4xx =
+     对客户端草稿的裁决，§4.7），这里是 **502**（代理的上游调用失败）。
 - 同一路由前缀下另有 `POST /resolve-paths`（响应样本 → 候选 JSONPath）与
   `POST /{id}/field-states/validate`（§3.5 配置编辑校验），后者同样以 `/full`
-  取目录（`:77-143`）。
+  取目录，但**自取**（`get_client().get(...)`，不共享 `plate_client` 的缓存），
+  错误映射仍用 `routers/strategy_catalog.py` 的 `proxy_error` / `unavailable`
+  helper（与 `resolve-paths` 同一套）。
+
+### 10.5 两处「路径候选」的差异是**有意**的（裁定 M）
+
+「候选从哪里来」在两处的口径**不同**，这是阶段二·① 记录下来的裁定，**不是**遗漏：
+
+| | 候选来源 | 触发方式 |
+| --- | --- | --- |
+| 画布的策略路径字段（`strategy.target` / `extract.expression`） | 端点的**声明面** ∪ 用户**粘贴的响应样本**解析出的路径（`POST /resolve-paths`，§10.4） | 样本路径**由用户显式触发**（点「解析路径」），不是渲染驱动 |
+| 断言管理编辑器的 `asserts[].target` | **只有**端点契约的 `assertable` 面（§10.2 的声明半） | 纯缓存读，随判定面一并取数 |
+
+**为什么有意不同**：
+
+1. **服务的对象不同**。画布那条是**运行期表达式**（引擎域 `$.response_body...`），
+   「真实响应里到底有什么」比「契约声明了什么」更贴近它的正确性 —— 而契约未声明、
+   运行期却真出现的字段（数组下标、动态键）只能靠样本拿；编辑器那条是**断言目标**，
+   契约的响应面就是它的唯一标准定义，引入样本等于给同一件事开第二个口径。
+2. **样本路径是显式用户动作**。粘贴样本 → 点「解析路径」→ 才产生候选：它**不**在渲染期
+   取数，也**不**自动发生（渲染期零请求的纪律因此不受影响）；且候选是**用户自己给的**
+   样本的产物，误用风险由用户承担。
+3. **不合并的方向已被否决**（编辑器那侧**不**引入样本旁路）：合并会让
+   「同一场景里两处判定用的候选集不同」变成「必须解释为什么不同」，而收益只是省一次
+   用户动作。约定写进本节，避免后人把这条差异当缺陷修掉。
+
+> 另一处**已评估、不做**的候选差异（编辑器的分层选择器 vs 画布的扁平候选列表）见
+> `docs/known-issues/platform/registry/candidate-dropdown-duplication.md`。
