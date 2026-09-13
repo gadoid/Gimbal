@@ -767,8 +767,8 @@ git commit -m "refactor(frontend): 消费后端 declared_surface,body 半物化�
 **Interfaces:**
 - Produces:
   - `export const FULL_TTL_MS = 300_000`
-  - `endpointFullState(eid)` 新增返回值 `'stale'`(面已换、需重判时)
   - `export function surfaceVersion(eid: string): number` — 面每变一次自增,供消费方做记忆化键
+- **不改 `endpointFullState` 的返回域**:它已有消费者按 `'loading'` / `''` 比较,新增第三个值会波及 `useInjectableSurface.pending` 与画布 `currentFullState`。面的新鲜度**一律由 `surfaceVersion` 表达**。
 
 - [ ] **Step 1: 写失败用例**
 
@@ -909,22 +909,38 @@ def _path_resolvable(jsonpath: str, body: Any, universe: set[str]) -> bool:
 - [ ] **Step 4: 实现写侧拦截**
 
 ```python
-def _host_conflict(body: Any, path: str) -> bool:
-    """路径的**中间段**是否落在非 dict 宿主上 —— 是则该路径不可安全物化。
+def _host_conflict(body: Any, target: str) -> bool:
+    """``target`` 的路径是否落在非 dict 宿主上 —— 是则不可安全物化。
 
     引擎 ``_set_at`` 遇非 dict 即 ``data={}``,故往字符串/数字/列表的**内部**
-    写值会把整个宿主改形。中间段「缺失」是**合法**的(Assign 会创建它),
-    只有「存在且非 dict」才是冲突。末段不判:覆写叶子是 Assign 的正常语义。
+    写值会把整个宿主改形(``$.request_body.note.replace`` 之于
+    ``{"note":"hello"}`` ⇒ ``note`` 被整体换成 ``{"replace": v}``)。
+
+    三条**不算冲突**(都是 Assign 的正常语义或可创建情形):
+    * target 就是 ``$.request_body`` 本身 —— 整体覆写 body;
+    * ``body`` 为 ``None``(无 body)—— Assign 会创建;
+    * 路径段**缺失** —— 同样由 Assign 创建。
+
+    ``target`` 形如 ``$.request_body.note.replace``:前两段是调用点(``:271``)
+    固定加的前缀,不是 body 的段,**必须剥掉再走**;不匹配则不判、不猜。
     """
-    segs = [s for s in path.split(".") if s]
-    # 去掉 "$" 与 "request_body" 两段(调用方传入的是 $.request_body 之后的路径)
+    segs = [s for s in target.split(".") if s]
+    if segs[:2] != ["$", "request_body"]:
+        return False
+    rest = segs[2:]
+    if not rest:
+        return False
+    if body is None:
+        return False
+    if not isinstance(body, dict):
+        return True                 # body 存在但非 dict ⇒ 整段会被改形
     cur: Any = body
-    for seg in segs[:-1]:
+    for seg in rest[:-1]:           # 末段不判:覆写叶子是 Assign 的正常语义
+        if seg not in cur:
+            return False            # 缺失 ⇒ 后续由 Assign 创建
+        cur = cur[seg]
         if not isinstance(cur, dict):
             return True
-        if seg not in cur:
-            return False          # 缺失 ⇒ Assign 会创建,合法
-        cur = cur[seg]
     return False
 ```
 
@@ -938,6 +954,8 @@ def _host_conflict(body: Any, path: str) -> bool:
                     "(物化会改形宿主,target={})", jp, target)
                 continue
 ```
+
+**必须逐字照抄上面这个实现** —— 计划初稿的版本漏了「剥掉 `$.request_body` 前缀」这一步,导致首段 `"$"` 永远不在 body 里、**永远返回 False**(预检 R6)。若你按注释自行重写,请自行补齐边界:`body is None` / 路径段缺失 / target 恰为 `$.request_body` 三种情形都**不算**冲突。
 
 - [ ] **Step 5: 运行**
 
