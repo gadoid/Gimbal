@@ -131,11 +131,13 @@ declared_surface = None if paths is None else sorted(injectable_universe(None, p
 
 ## 3. 取数所有权(I)
 
-### 3.1 `plate_client` 成为唯一取数入口
+### 3.1 契约取数缓存收敛到 `plate_client`
 
-现状:`routers/endpoint_catalog.py:54-56` 用 `get_client().get(f"/api/endpoint/{endpoint_id}/full")` **自己直取**;`endpoint_declarations` 另有自己的一套取数与缓存 ⇒ 同一进程内两条路径、两份缓存。
+现状(设计时刻):`routers/endpoint_catalog.py:54-56` 用 `get_client().get(f"/api/endpoint/{endpoint_id}/full")` **自己直取**;`endpoint_declarations` 另有自己的一套取数与缓存 ⇒ 同一进程内两条路径、两份缓存。
 
-改:`plate_client.get_endpoint_full(endpoint_id, ttl=...)` 成为唯一入口,`endpoint_declarations` 与 `endpoint_catalog` 代理**都经它取** ⇒ 同进程内**同一份缓存**,dispatch 与编辑浏览看到同快照。
+改:`plate_client.get_endpoint_full(endpoint_id, *, timeout=None)` 承载这条共享缓存 —— `endpoint_declarations`(判定面 / carry 面)与 `routers/endpoint_catalog.py` 的 `/full` 代理(编辑浏览面)**都经它取** ⇒ 同进程内**同一条缓存条目**,dispatch 与编辑浏览看到同快照。**TTL 不是形参**:它在缓存实例构造时从 `DECLARED_PATHS_TTL_SEC` 冻结(裁定 C21 —— `get_endpoint_full` 按当前 cfg 惰性重建实例,settings 热改即刻生效);`timeout` 才是逐请求形参,缺省取软取上限 `DECLARED_PATHS_TIMEOUT_SEC`(§3.5)。
+
+**收敛的边界(勿读大)**:本阶段做到的是 **dispatch 判定与 `/full` 代理共用同一条缓存条目**,不是把取数收成一条路径。`adaptation_service._plate_full_endpoint`(`carry_store` / `routers/carry.py` 的契约面)与 `routers/endpoint_catalog.py` 的 `field-states/validate` **仍是各自独立的取数路径**,不共享本缓存。
 
 **缓存载体**:复用既有 `TtlLruCache`(`query_view_cache.py`,阶段一已把载荷泛化为 `payload`),缓存的载荷是 **plate 的完整 `item`**(而非仅 declarations)—— 因为代理要透传 `item`,而 `endpoint_declarations` 要从同一份 item 里派生声明与投影。
 
@@ -171,7 +173,7 @@ declared_surface = None if paths is None else sorted(injectable_universe(None, p
 1. **冷缓存 + 慢 plate** ⇒ 代理 **3s 就失败**(此前等到 30s);
 2. **有缓存(含回退窗内的旧快照)** ⇒ 改为**供上一份契约**而不是报错 —— 与 §3.2 保住的 D(stale-while-error)同向,是 fail-open-to-old 在浏览面上的显影。
 
-**取数缓存统一的实际范围**(勿读大):共享这条缓存的是**判定面**(`declared_paths_of`)、**carry 面**(`declarations_of`)与**编辑浏览面**(`/full` 代理)。`adaptation_service._plate_full_endpoint`(`carry_store` / `routers/carry.py` 的契约面)与 `routers/endpoint_catalog.py` 的 `field-states/validate` 仍各自取数,**不共享**这条缓存 —— 故全后端仍有多条 `/full` 取数路径。
+**本条覆盖谁**:共享 §3.1 那条缓存的**判定面**(`declared_paths_of`)、**carry 面**(`declarations_of`)与**编辑浏览面**(`/full` 代理)。不共享那条缓存的取数路径(见 §3.1「收敛的边界」)**不受本条约束** —— 它们各有各的超时语义。
 
 ---
 
@@ -306,7 +308,7 @@ a1 后「声明面那半」自动消散。剩下的差异是**服务对象不同
 
 | # | 任务 | 层 | 依赖 |
 |---|---|---|---|
-| T1 | `plate_client.get_endpoint_full(eid, ttl=…)` 统一取数(缓存载荷 = 完整 item);`endpoint_declarations` 改为消费它,**回退窗与「无旧值才降级」一并搬运**(保 D) | 后端 | — |
+| T1 | `plate_client.get_endpoint_full(eid, *, timeout=…)` 统一取数(TTL 不是形参,见 §3.1;缓存载荷 = 完整 item);`endpoint_declarations` 改为消费它,**回退窗与「无旧值才降级」一并搬运**(保 D) | 后端 | — |
 | T2 | 代理返回 `declared_surface`(复用 `declared_paths_of` + `injectable_universe`),`item` 原样保留;降级时缺席而非 `[]` | 后端 | T1 |
 | T3 | 前端消费 `declared_surface`;`bodyPathSetOf` 物化前缀;删 `pathResolvable` 前缀扫描;配跨语言对拍 | 前端 | T2 |
 | T4 | `useEndpointFull` 加 300s TTL + 换面 policy(重判 / 灰显 / 非阻断提示 / 勾选保留) | 前端 | T3 |
