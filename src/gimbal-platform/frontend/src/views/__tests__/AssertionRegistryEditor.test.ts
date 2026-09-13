@@ -649,3 +649,16 @@ it('ARE-26: 聚焦态删除口 —— 悬空条目不阻断编辑,删完自动�
   expect(payload.assertion_registry.entries.map((e: any) => e.id)).toEqual(['inj-1', 'inj-legacy'])
   w.unmount()
 })
+
+it('ARE-27: 草稿到位前不渲染列表 —— 加载中不是「还没有条目」,聚焦态也不会先闪一下列表', async () => {
+  vi.spyOn(api, 'getScenarioDraft').mockResolvedValue(
+    { definition: DEF, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG } as any)
+  vi.spyOn(api, 'updateScenario').mockResolvedValue({} as any)
+  const w = mount(AssertionRegistryEditor, { global: { plugins: [ElementPlus] } })
+  // 尚未 flushPromises:draft 还在路上
+  expect(w.find('.are-list-card').exists()).toBe(false)
+  expect(w.text()).not.toContain('还没有条目')      // 加载中 ≠ 没有(说了就是假话)
+  await flushPromises()
+  expect(w.find('.are-list-card').exists()).toBe(true)
+  w.unmount()
+})
