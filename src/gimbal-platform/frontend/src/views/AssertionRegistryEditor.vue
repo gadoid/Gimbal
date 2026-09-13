@@ -27,6 +27,7 @@
         </p>
       </div>
       <div class="header-actions">
+        <el-button v-if="focusMode" :icon="Back" @click="exitFocus">全部条目</el-button>
         <el-button :icon="Back" @click="router.push(composerUrl(scenarioId, 1))">返回编排器</el-button>
         <el-button type="primary" plain :loading="saving" :disabled="!draft" @click="save">保存</el-button>
       </div>
@@ -48,8 +49,11 @@
       @close="acknowledgeChanged"
     />
 
-    <!-- 手工新建:步骤 + jsonpath(path 即注入地址) -->
-    <div class="are-new-bar">
+    <!-- 草稿到位前不渲染列表/详情:加载中不是「没有」,先闪一句
+         「还没有条目」是假话;聚焦态还会先闪一下列表再收起 -->
+    <template v-if="draft">
+    <!-- 手工新建:步骤 + jsonpath(path 即注入地址);聚焦态收起 -->
+    <div v-if="!focusMode" class="are-new-bar">
       <el-select
         :model-value="pendingPath.stepIndex"
         size="small"
@@ -68,8 +72,9 @@
       <el-button size="small" :disabled="!draft" @click="addEntry">新建条目</el-button>
     </div>
 
-    <!-- 条目列表:path 徽标 / 值摘要 / 期望数 / 死条目灰 / 旧版条目灰 -->
-    <div class="are-list-card">
+    <!-- 条目列表:path 徽标 / 值摘要 / 期望数 / 死条目灰 / 旧版条目灰;
+         聚焦态收起(只面对进来的那一条) -->
+    <div v-if="!focusMode" class="are-list-card">
       <div
         v-for="e in registry.entries"
         :key="e.id"
@@ -113,6 +118,14 @@
             @click="jumpToAnchor(selected.path.stepIndex)"
           >↗</button>
         </span>
+        <!-- 聚焦态没有列表行,删除口只剩这里 —— 不补就等于把删除功能弄丢了
+             (全量态仍由列表行的 × 承担,不重复出两个删除口) -->
+        <button
+          v-if="focusMode"
+          type="button"
+          class="are-del-focus"
+          @click="removeEntry(selected.id)"
+        >删除此条</button>
       </div>
 
       <!-- 注入值(value)— 类型化编辑 -->
@@ -192,7 +205,8 @@
       </div>
     </div>
     <div v-else-if="selected && isLegacyEntry(selected)" class="are-empty are-select-hint">旧版条目(v2 形状)— 不可编辑,请在编排器重新标记创建</div>
-    <div v-else-if="draft" class="are-empty are-select-hint">点击上方条目查看详情</div>
+    <div v-else-if="!focusMode" class="are-empty are-select-hint">点击上方条目查看详情</div>
+    </template>
   </section>
 </template>
 
@@ -213,7 +227,7 @@ import { getEndpointFull } from '@/composables/useEndpointFull'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
 import JsonPathInput from '@/components/composer/JsonPathInput.vue'
 import SurfaceNotice from '@/components/composer/SurfaceNotice.vue'
-import { composerUrl } from '@/utils/links'
+import { composerUrl, scenarioAssertionsUrl } from '@/utils/links'
 import { showError } from '@/utils/errorFallback'
 
 const route = useRoute()
@@ -223,7 +237,22 @@ const scenarioId = route.params.scenarioId as string
 const draft = ref<ScenarioDraft | null>(null)
 const registry = ref<AssertionRegistry>({ entries: [] })
 const selectedId = ref<string | null>(null)
-const selected = computed(() => registry.value.entries.find((e) => e.id === selectedId.value) ?? null)
+
+/** 聚焦单条:`?entry=<id>` 命中且可编辑 ⇒ 只渲染该条详情,条目列表与
+ *  手工新建栏收起(测试数据页点某一行进来走这条)。**指不到东西就安静
+ *  回落**全量视图 —— id 不存在、或指向旧版条目(旧版本就不可编辑,
+ *  不能假装能编);回落不报错,列表照常可用。 */
+const focusedEntry = computed<AssertionEntry | null>(() => {
+  const q = route.query.entry
+  const id = typeof q === 'string' && q ? q : null
+  if (!id) return null
+  const e = registry.value.entries.find((x) => x.id === id)
+  return e && !isLegacyEntry(e) ? e : null
+})
+/** 聚焦态打开的是哪一条(全量态走 selectedId) */
+const selected = computed(() =>
+  focusedEntry.value ?? registry.value.entries.find((e) => e.id === selectedId.value) ?? null)
+const focusMode = computed(() => focusedEntry.value !== null)
 const stepCount = computed(() => draft.value?.definition.steps?.length ?? 0)
 const steps = computed(() => (draft.value?.definition.steps ?? []) as Array<Record<string, unknown>>)
 const stepLabels = computed(() =>
@@ -279,6 +308,12 @@ function selectEntry(e: AssertionEntry | LegacyAssertionEntry) {
   selectedId.value = e.id
 }
 
+/** 聚焦态 → 全量视图:清掉 query(条目列表与手工新建栏回来)。
+ *  用 push 不用 replace —— 浏览器后退能回到刚才那一条。 */
+function exitFocus() {
+  router.push(scenarioAssertionsUrl(scenarioId))
+}
+
 /** 悬空原因摘要(title 展示):registryIssues 人话投影。
  *  path-unresolvable 的判据是**可注入面**(spec v3.1 §2.1)= body 现存 ∪ 契约
  *  声明 —— 文案必须说全两面,否则「body 无」会让用户以为契约已查过。 */
@@ -327,7 +362,9 @@ function tryJson(text: string): unknown {
   }
 }
 const valueDraft = ref<{ kind: ValKind; text: string; bool: boolean }>({ kind: 'str', text: '', bool: false })
-watch(selectedId, () => {
+/** 监听**打开的是哪一条**(不是 selectedId):聚焦态下 selectedId 恒为 null,
+ *  监听它则聚焦进来时值编辑器永不初始化,注入值那一栏是空的。 */
+watch(() => selected.value?.id, () => {
   const e = selected.value
   if (!e || isLegacyEntry(e)) return
   valueDraft.value = { kind: kindOf(e.value), text: fmtVal(e.value), bool: e.value === true }
@@ -604,6 +641,13 @@ async function save() {
   padding-bottom: 10px; border-bottom: 1px solid var(--color-border-tertiary);
 }
 .are-name-input { width: 220px; }
+/* 聚焦态的删除口(全量态不出,删除仍由列表行的 × 承担) */
+.are-del-focus {
+  margin-left: auto; padding: 3px 10px; font-size: 12px;
+  color: #dc2626; background: #fff; border: 1px solid #fecaca; border-radius: 4px;
+  cursor: pointer; white-space: nowrap;
+}
+.are-del-focus:hover { background: #fef2f2; border-color: #ef4444; }
 .are-anchor-none { font-size: 11px; }
 
 .are-sec { margin-top: 12px; }

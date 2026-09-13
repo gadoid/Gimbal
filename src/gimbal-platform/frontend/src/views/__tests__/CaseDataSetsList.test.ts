@@ -114,9 +114,21 @@ it('DSL-2: 数据集卡「运行」→ RunPanelHost 挂载且 preset = 整库单
   w.unmount()
 })
 
-it('DSL-3: 条目行点击 → 跳断言管理编辑器', async () => {
+it('DSL-3: 条目行点击 → 跳断言管理编辑器并带上**该行自己的** id(聚焦单条)', async () => {
   const w = await mountList()
   await w.findAll('.atbl-row')[0].trigger('click')
+  expect(pushMock.push).toHaveBeenCalledWith(scenarioAssertionsUrl('sc-td', 'inj-1'))
+  pushMock.push.mockReset()
+  await w.findAll('.atbl-row')[1].trigger('click')
+  expect(pushMock.push).toHaveBeenCalledWith(scenarioAssertionsUrl('sc-td', 'inj-dead'))
+  w.unmount()
+})
+
+it('DSL-3b: 区标题「管理断言」与空列表的「去新建一条」→ 不带 id(全量视图,不是聚焦)', async () => {
+  // 与 DSL-3 配对:两条入口都不该指向某一条 —— 带上 id 会落进一个
+  // 无来由的聚焦态,用户就看不到列表了。
+  const w = await mountList()
+  await w.findAll('button').find((b) => b.text().includes('管理断言'))!.trigger('click')
   expect(pushMock.push).toHaveBeenCalledWith(scenarioAssertionsUrl('sc-td'))
   w.unmount()
 })

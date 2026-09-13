@@ -9,9 +9,9 @@ import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus, { ElMessage } from 'element-plus'
 import { createPinia, setActivePinia } from 'pinia'
 
-const routerMock = vi.hoisted(() => ({ push: vi.fn() }))
+const routerMock = vi.hoisted(() => ({ push: vi.fn(), query: {} as Record<string, unknown> }))
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { scenarioId: 'sc-rg' } }),
+  useRoute: () => ({ params: { scenarioId: 'sc-rg' }, query: routerMock.query }),
   useRouter: () => ({ push: routerMock.push }),
   createRouter: () => ({ beforeEach: () => {}, push: vi.fn(), replace: vi.fn() }),
   createWebHistory: () => ({}),
@@ -66,6 +66,7 @@ async function mountEditor(draft: any = { definition: DEF, orchestration: { step
 beforeEach(() => {
   setActivePinia(createPinia())
   routerMock.push.mockReset()
+  routerMock.query = {}          // 默认全量视图;聚焦态用例各自覆写
   // /full 是**会话级**共享缓存(非每挂载一份)→ 用例间须显式清空,否则前一个
   // 用例拉过的端点结构会串到后一个用例(CaseComposerCanvas.test.ts 同款纪律)。
   _resetEndpointFullCacheForTest()
@@ -590,5 +591,61 @@ it('ARE-21: 「改写已有」+ 该步骤无该目标断言 → 拦下并说明,
   expect(warn).toHaveBeenCalledTimes(1)
   expect(String(warn.mock.calls[0][0])).toContain('改写已有')
   expect(w.find('.are-asserts tbody').findAll('tr').length).toBe(1)   // 未落
+  w.unmount()
+})
+
+it('ARE-22: `?entry=` 命中 ⇒ 聚焦态只渲染该条 —— 列表与手工新建栏收起,详情直接打开', async () => {
+  routerMock.query = { entry: 'inj-1' }
+  const w = await mountEditor()
+  expect(w.findAll('.are-row')).toHaveLength(0)            // 条目列表收起
+  expect(w.find('.are-new-bar').exists()).toBe(false)      // 手工新建收起
+  const detail = w.find('.are-detail')
+  expect(detail.exists()).toBe(true)                       // 详情直接打开,不用再点一次
+  expect((detail.find('.are-name-input input').element as HTMLInputElement).value).toBe('金额为负')
+  expect(detail.text()).toContain('$.amount')
+  // 值编辑器按该条初始化:聚焦态 selectedId 恒为 null,监听 selectedId 的写法
+  // 在这里永不触发 ⇒ 注入值那一栏会空着(读到的是别人的值 / 空串)。
+  expect((w.vm as any).valueDraft).toEqual({ kind: 'num', text: '-1', bool: false })
+  w.unmount()
+})
+
+it('ARE-23: `?entry=` 指不到的 id ⇒ 安静回落全量视图(不报错,列表照常可用)', async () => {
+  routerMock.query = { entry: 'inj-nope' }
+  const w = await mountEditor()
+  expect(w.findAll('.are-row')).toHaveLength(3)
+  expect(w.find('.are-new-bar').exists()).toBe(true)
+  expect(w.find('.are-detail').exists()).toBe(false)       // 没有假装选中了谁
+  w.unmount()
+})
+
+it('ARE-24: `?entry=` 指向旧版条目 ⇒ 同样回落 —— 旧版本就不可编辑,不假装能编', async () => {
+  // 与 ARE-23 是一对:只看「id 存不存在」的写法能过 ARE-23 却会在这里
+  // 把一条 v2 旧条目渲染成可编辑详情。
+  routerMock.query = { entry: 'inj-legacy' }
+  const w = await mountEditor()
+  expect(w.findAll('.are-row')).toHaveLength(3)
+  expect(w.find('.are-detail').exists()).toBe(false)
+  w.unmount()
+})
+
+it('ARE-25: 聚焦态出口 —— 「全部条目」清掉 query 回全量视图', async () => {
+  routerMock.query = { entry: 'inj-1' }
+  const w = await mountEditor()
+  await w.findAll('button').find((b) => b.text().includes('全部条目'))!.trigger('click')
+  expect(routerMock.push).toHaveBeenCalledWith('/scenarios/sc-rg/assertions')
+  w.unmount()
+})
+
+it('ARE-26: 聚焦态删除口 —— 悬空条目不阻断编辑,删完自动回列表(不留指向空气的聚焦态)', async () => {
+  routerMock.query = { entry: 'inj-dead' }
+  const w = await mountEditor()
+  expect(w.findAll('.are-row')).toHaveLength(0)            // 聚焦态没有列表行 ⇒ 删除口只剩这里
+  await w.find('.are-del-focus').trigger('click')
+  await flushPromises()
+  expect(w.findAll('.are-row')).toHaveLength(2)            // id 解析不到 ⇒ 自动回落全量视图
+  await w.findAll('button').find((b) => b.text().includes('保存'))!.trigger('click')
+  await flushPromises()
+  const payload = vi.mocked(api.updateScenario).mock.calls[0][1] as any
+  expect(payload.assertion_registry.entries.map((e: any) => e.id)).toEqual(['inj-1', 'inj-legacy'])
   w.unmount()
 })

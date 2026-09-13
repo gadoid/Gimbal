@@ -117,7 +117,7 @@
               class="atbl-row"
               :class="{ 'is-dead': isLegacyEntry(e) || deadOf(e) }"
               :title="isLegacyEntry(e) ? '旧版条目,请重建' : deadOf(e) ? '悬空条目 — 不可执行' : '点击编辑'"
-              @click="openEntryEditor()"
+              @click="openEntryEditor(e.id)"
             >
               <td class="nm">{{ e.name }}</td>
               <template v-if="isLegacyEntry(e)">
@@ -221,8 +221,10 @@ function runDataset(d: DataSetSummary) {
   panelPreset.value = { dataSetSelection: [{ datasetId: d.datasetId }] }
   panelOpen.value = true
 }
-function openEntryEditor() {
-  router.push(scenarioAssertionsUrl(scenarioId))
+/** 点某一行 ⇒ 编辑器「聚焦单条」;不给 id(空列表的「去新建一条」、
+ *  区标题的「管理断言」)⇒ 全量视图 */
+function openEntryEditor(entryId?: string) {
+  router.push(scenarioAssertionsUrl(scenarioId, entryId))
 }
 
 onMounted(async () => {

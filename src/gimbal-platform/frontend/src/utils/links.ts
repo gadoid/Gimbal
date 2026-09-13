@@ -28,7 +28,10 @@ export function scenarioDataSetUrl(
   return `/scenarios/${encodeURIComponent(scenarioId)}/data-sets/${encodeURIComponent(datasetId)}`
 }
 
-/** 断言管理编辑器 — 场景级注册表(spec v2 §7) */
-export function scenarioAssertionsUrl(scenarioId: string): string {
-  return `/scenarios/${encodeURIComponent(scenarioId)}/assertions`
+/** 断言管理编辑器 — 场景级注册表(spec v2 §7)。
+ *  entryId 给定时带 `?entry=` —— 编辑器进入「聚焦单条」态(只渲染该条);
+ *  省略则进全量视图(列表 + 手工新建)。 */
+export function scenarioAssertionsUrl(scenarioId: string, entryId?: string): string {
+  const base = `/scenarios/${encodeURIComponent(scenarioId)}/assertions`
+  return entryId ? `${base}?entry=${encodeURIComponent(entryId)}` : base
 }
