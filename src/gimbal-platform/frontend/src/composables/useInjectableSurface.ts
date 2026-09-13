@@ -62,8 +62,9 @@ export interface InjectableSurface {
    *  (失败也是答案,IS-3),自动重试通道即由这个信号驱动。
    *  **不收窄成「没有可用面」**:只要本次取数失败即为真,与旧面是否仍可用无关。 */
   degraded: ComputedRef<boolean>
-  /** 取数(唯一副作用口)。`opts.force` = **界面上的「重试」**:跳过共享缓存的
-   *  TTL 与失败负缓存,无条件真发一次 —— 显式用户动作不受无人看管时的防抖约束。 */
+  /** 取数(**宿主侧**唯一的取数口;组合式内另有降级退避定时器,见下)。
+   *  `opts.force` = **界面上的「重试」**:跳过共享缓存的 TTL 与失败负缓存,
+   *  无条件真发一次 —— 显式用户动作不受无人看管时的防抖约束。 */
   ensure(opts?: { force?: boolean }): void
 }
 
@@ -154,6 +155,12 @@ export function useInjectableSurface(
   let retryTimer: ReturnType<typeof setTimeout> | undefined
   /** 已消耗的退避档数(降级解除或新的降级 ⇒ 归零) */
   let retryTier = 0
+  /** 宿主是否已销毁。**必须有**:`cancelRetry` 只能清掉**待定**的定时器,而
+   *  在飞那一档的尾部(`retryOnce` 的 `await` 之后)是**无条件**排下一档的 ——
+   *  取数正卡着时卸载宿主,尾部会在销毁之后重新挂上,之后几十秒里继续 force
+   *  取数所有步骤端点,**打向一个已死的视图**(停掉的 computed 仍能求值,
+   *  所以 `scheduleRetry` 不会自己退出)。 */
+  let disposed = false
 
   function cancelRetry(): void {
     if (retryTimer !== undefined) {
@@ -162,10 +169,10 @@ export function useInjectableSurface(
     }
   }
 
-  /** 排下一档;降级已解除 / 三档试满 ⇒ 不排(先清旧定时器,可重复调用)。 */
+  /** 排下一档;宿主已销毁 / 降级已解除 / 三档试满 ⇒ 不排(先清旧定时器,可重复调用)。 */
   function scheduleRetry(): void {
     cancelRetry()
-    if (!degraded.value) return
+    if (disposed || !degraded.value) return
     const delay = RETRY_BACKOFF_MS[retryTier]
     if (delay === undefined) return          // 退避表试满 ⇒ 停(有界)
     retryTimer = setTimeout(() => {
@@ -192,8 +199,14 @@ export function useInjectableSurface(
     scheduleRetry()                          // 降级已解除 ⇒ 内部直接收尾
   })
 
-  // 退避链与宿主同生共死(同作用域内的 watch 也是这个生命周期)
-  if (getCurrentScope()) onScopeDispose(cancelRetry)
+  // 退避链与宿主同生共死(同作用域内的 watch 也是这个生命周期):置 disposed
+  // 之外还要清掉待定的那一档 —— 两条路径各管一半,少一条都会"死而不僵"。
+  if (getCurrentScope()) {
+    onScopeDispose(() => {
+      disposed = true
+      cancelRetry()
+    })
+  }
 
   /** 读:纯缓存读,绝不取数(渲染期只走这里)—— 声明**树**(条目 + children),
    *  供 `stateOf` 取条目自身的 state;判定面的声明半不走这里(见下)。 */

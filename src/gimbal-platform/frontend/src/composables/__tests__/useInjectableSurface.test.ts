@@ -484,8 +484,10 @@ it('IS-14: degraded 的宽定义 —— 含「续用旧面」那一格(刷新失
   expect(s.pending.value).toBe(false)                // 失败也是答案,不悬置(IS-3 同口径)
 })
 
-it('IS-15: 退避链随宿主作用域销毁而停 —— 卸载后不再重取', async () => {
+it('IS-15: 退避链随宿主作用域销毁而停 —— **待定**与**在飞**两条路径都不例外', async () => {
   vi.useFakeTimers()
+
+  // ① 待定时的那一半:定时器已排上、还没到点 ⇒ 随作用域一起清掉
   const spy = vi.spyOn(api, 'getFullEndpoint').mockRejectedValue(new Error('plate down'))
   const { s } = surfaceOf('ep-down')
   s.ensure()
@@ -496,4 +498,28 @@ it('IS-15: 退避链随宿主作用域销毁而停 —— 卸载后不再重取'
   vi.advanceTimersByTime(600_000)
   await flushPromises()
   expect(spy).toHaveBeenCalledTimes(1)
+
+  // ② **在飞**的那一半(更隐蔽):某一档已经发出、plate 卡着不答时卸载 ——
+  //    该档的尾部不得在销毁之后**重挂**下一档(它会在之后几十秒里继续取数,
+  //    打向一个已死的视图)。只清待定定时器挡不住这一条。
+  caseScope = effectScope()                            // 换一个新宿主
+  _resetEndpointFullCacheForTest()                     // 新宿主从"未降级"起步(否则首次求值即为真,watch 不触发)
+  let failInFlight!: (e: Error) => void
+  const spy2 = vi.spyOn(api, 'getFullEndpoint')
+    .mockRejectedValueOnce(new Error('plate down'))    // 挂载首取失败
+    .mockReturnValueOnce(new Promise((_res, rej) => { failInFlight = rej }) as any)
+  const s2 = surfaceOf('ep-down').s
+  s2.ensure()
+  await flushPromises()
+  expect(s2.degraded.value).toBe(true)
+  spy2.mockClear()
+  vi.advanceTimersByTime(10_000)                       // 第一档发出
+  await flushPromises()
+  expect(spy2).toHaveBeenCalledTimes(1)                // 确实发了,且仍在飞
+  caseScope.stop()                                     // 宿主卸载(plate 还卡着)
+  failInFlight(new Error('plate down'))                // 这时请求才落定(失败)
+  await flushPromises()
+  vi.advanceTimersByTime(600_000)
+  await flushPromises()
+  expect(spy2).toHaveBeenCalledTimes(1)                // ← 没有重挂第二档
 })
