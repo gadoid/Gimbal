@@ -21,6 +21,7 @@
 | 9 | 前端对**声明半**的自行归一化 / 展开(`injectablePathSetOf` 吃 `DeclarationEntryView[]`,内部 `catalogPaths` + `toTemplatePath` 推导) | 2026-09-13 | 声明面由**后端**随 `/full` 算好(`declared_surface`:归一化 / 容器前缀 / 模板形态全部展开的扁平集合),前端只并入(`injectablePathSetOf` 的入参由声明树数组换成扁平字符串数组或 `null`) | `e3c80cd`(后端出口 `84aef02`) |
 | 10 | `pathResolvable` 的**容器前缀扫描**(`p.startsWith(form + '.')` / `form + '['`) | 2026-09-13 | 两侧集合都**物化**前缀:body 半由 `bodyPathSetOf` 展平(`containerPrefixes`,与后端 `_container_prefixes` 同构件),声明半由后端加进 `declared_surface` ⇒ 判定只剩两次成员测试 | `e3c80cd` |
 | 11 | `endpoint_declarations` 自持的 `/full` **取数与缓存**(`_fetch_declarations` / `_refresh` / `_cache()` / `_CACHE` / `_CACHE_CFG` / `_cache_cfg` / `_build_cache` / `_INFLIGHT` / `_forget_inflight`) | 2026-09-13 | 取数与缓存归 `plate_client.get_endpoint_full`(整份 item 的 TTL/LRU/回退窗/在飞收敛都在那一层);本模块退化为**派生层** —— 只从 item 派生 `declarations` 与 path 投影(`_proj_cache` 留在本模块),降级告警仍在本地 | `b3cec6a`(上移 `f5e43d8`) |
+| 12 | 编排侧「扰动位」标记(FieldForm 叶子 `.perturb-badge` / 容器 `.node-tpl-badge` 文案 / StrategyForm「同步骤扰动位」列表) | 2026-09-13 | 值整串 `${var.x}` 只说明「这是模板」,不说明「这是扰动点」—— 权威扰动点列表 = 断言管理条目的 `path`。容器标签**回退**为「引用变量」 | `3447b7a` |
 
 ## 各条详情
 
@@ -98,6 +99,14 @@
 - **现语义**:取数与缓存归 `plate_client.get_endpoint_full`(整份契约 **item** 的 TTL/LRU/回退窗/在飞收敛都在那一层;TTL 不是形参,见该函数 docstring);`endpoint_declarations` 退化为**派生层** —— 从 `EndpointFull.item` 派生 `declarations`(`_decls_of_item`,含 `request` 非 dict / `declarations` 非 list 的降级判据),path 投影另存一份 `_proj_cache`(纯函数关系,与 item 缓存同 ttl ⇒ 永不分歧)。**降级告警(`_warn_once` / `_WARNED_AT`)留在本地** —— 「声明面不可得」是消费者侧语义,不是「取数失败」。
 - **存量处置**:无 —— 纯每进程内存状态(PG 部署下多 worker 各一份,有界、无害),重启即空,无持久化格式。
 - **涉及面**:`services/endpoint_declarations.py`、`services/plate_client.py`、`routers/endpoint_catalog.py`。(本行的退场对象是**取数与缓存那一层**;第 7 行记的是它更早一次「自持 dict → 共享 `TtlLruCache`」的退场,两行不可互替。)
+
+### 12. 编排侧「扰动位」标记(2026-09-13,提交 `3447b7a`)
+
+- **原语义**:值整串 `${var.x}` 的叶子行挂「扰动位」徽标(`isPerturb`,纯正则);容器模板态徽标文案为「扰动位」;断言卡另挂「同步骤扰动位」var 名列表(Canvas `siblingPerturbs` 推导)。三者共同宣称「该位置是数据集行可逐行换值的扰动点」。
+- **退场理由**:判据是**纯正则**(`/^\$\{var\.[A-Za-z0-9_.]+\}$/`),既不查数据集也不查断言管理 ⇒ 它标的是「**模板化**」,不是「**扰动**」。模板一部分是正常业务过程的模板化、另一部分才是扰动,编排侧无从分辨;故该标记既**冗余**(权威列表在断言管理)又 **over-claim**。其前提本身也已过时:徽标建于 2026-09-10 的「数据集行 = 扰动矩阵」模型,而 2026-09-11 v2 裁定改为「数据集 = 正常数据变体(行 = 纯 var-dict,全部应过场景默认断言),偏离注入在断言管理」。
+- **现语义**:编排侧不做扰动标记;权威扰动点列表 = **断言管理条目的 `path`**(其语义即注入地址)。容器模板态保留 `.node-tpl-badge`,文案**回退**为「引用变量」—— 它只说「这是模板串,不是字面量」,该事实独立成立且不 over-claim。
+- **存量处置**:无 —— 纯呈现层,零持久化、零 wire 面。`${var.x}` 值本身照旧显示在控件里,`☰` 菜单的变量入口不动(删的是**标记**,不是能力)。
+- **涉及面**:`components/composer/FieldForm.vue`(`isPerturb` 已删;三处 `node-tpl-badge` 文案回退)、`components/composer/StrategyForm.vue`(「同步骤扰动位」列表 + `siblingPerturbs` prop + `isAssertion` 已删)、`components/composer/CaseComposerCanvas.vue`(`siblingPerturbs` 推导已删,随之失去唯一用途的 `TPL_FULL_RE` import 一并删)。
 
 ## 维护约定
 

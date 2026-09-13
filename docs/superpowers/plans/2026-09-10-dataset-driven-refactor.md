@@ -740,6 +740,11 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 ### Task 3: 编排器呈现与导航(扰动位徽标 + 同步骤扰动位列表 + focusJump 跨路由跳转 + 多视图前移提示)
 
+> **2026-09-13 部分退场**:本任务交付的「扰动位徽标」(叶子 + 容器文案)与
+> 「同步骤扰动位列表」**已删** —— 前提过时:值整串 `${var.x}` 只说明是模板,
+> 不说明是扰动点。**focusJump 跨路由跳转与多视图前移提示保留**。
+> 见 `docs/adr/0003-retired-features-log.md` 第 12 条(提交 `3447b7a`)。
+
 **Files:**
 - Modify: `src/gimbal-platform/frontend/src/components/composer/FieldForm.vue`(叶子行扰动位徽标 + 容器模板态徽标文案升级 —— **用户 WIP 同文件,选择性暂存纪律见 Global Constraints**)
 - Modify: `src/gimbal-platform/frontend/src/components/composer/StrategyForm.vue`(新 prop siblingPerturbs + 同步骤扰动位列表行)
