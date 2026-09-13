@@ -174,7 +174,8 @@ it('RH-4: 契约面在途(冷启动)→ preset 锚在 carry 声明的条目不�
 
   // 契约落定:精确命中 carry 声明 → 判活;预勾仍在(收窄只删判死的)
   resolveFull({ id: 'ep-carry', request: { declarations: [
-    { name: 'customer_id', path: '$.customer_id', state: 'carry', required: true }] } })
+    { name: 'customer_id', path: '$.customer_id', state: 'carry', required: true }] },
+    declared_surface: ['$', '$.customer_id'] })
   await flushPromises()
   expect(dlg.props('contractPending')).toBe(false)
   expect(dlg.props('deadEntryIds')).not.toContain('inj-carry')   // 由死转活
@@ -212,7 +213,7 @@ it('RH-6: 契约 pending 期间 — intrinsic 死条目仍禁选,contractDepende
   expect(boxes[0].find('input').attributes('disabled')).toBeDefined()   // step-oob:intrinsic ⇒ 仍禁选
   expect(boxes[0].text()).toContain('悬空')
   expect(boxes[1].find('input').attributes('disabled')).toBeUndefined() // 契约依赖 ⇒ pending 期间不禁选
-  release({ id: 'ep-h', request: { declarations: [] } })                // 契约落定后收窄
+  release({ id: 'ep-h', request: { declarations: [] }, declared_surface: ['$'] })  // 契约落定后收窄
   await flushPromises()
   expect(w.findComponent(RunDialog).findAll('.rd-injection .el-checkbox')[1]
     .find('input').attributes('disabled')).toBeDefined()

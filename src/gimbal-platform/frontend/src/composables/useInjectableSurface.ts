@@ -103,11 +103,21 @@ export function useInjectableSurface(
   const pending = computed(() =>
     neededEndpoints.value.some((eid) => endpointFullState(eid) === 'loading'))
 
-  /** 读:纯缓存读,绝不取数(渲染期只走这里) */
+  /** 读:纯缓存读,绝不取数(渲染期只走这里)—— 声明**树**(条目 + children),
+   *  供 `stateOf` 取条目自身的 state;判定面的声明半不走这里(见下)。 */
   function declarationsFor(si: number): DeclarationEntryView[] | undefined {
     const eid = endpointIdOf(si)
     if (!eid) return undefined
     return getEndpointFull(eid)?.request?.declarations
+  }
+
+  /** 读:该步端点的**声明面** —— 后端随 /full 算好的扁平面(归一化 / 容器
+   *  前缀 / 模板形态全展开,spec §2.2),归一化在平台侧完成。
+   *  `null` / 缺席 = 声明面不可解析(降级)⇒ 可注入面只剩 body 半。 */
+  function declaredSurfaceFor(si: number): readonly string[] | null | undefined {
+    const eid = endpointIdOf(si)
+    if (!eid) return undefined
+    return getEndpointFull(eid)?.declared_surface
   }
 
   /* ── 记忆化:同一 (si, 步骤面版本, 该 si 自身端点态) 只重建一次 ──
@@ -134,7 +144,7 @@ export function useInjectableSurface(
     const hit = pathsCache.get(key)
     if (hit) return hit
     const step = steps.value[si]
-    const built = injectablePathSetOf(fieldPathsOf(step as any), declarationsFor(si))
+    const built = injectablePathSetOf(fieldPathsOf(step as any), declaredSurfaceFor(si))
     pathsCache.set(key, built)
     return built
   }

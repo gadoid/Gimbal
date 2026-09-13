@@ -218,6 +218,16 @@ export interface EndpointFullView {
   metadata: EndpointMetadataView
   version: string
   updated_at: string | null
+  /**
+   * 声明侧的**可注入面**(platform 代理 `GET /api/endpoint-catalog/{id}/full`
+   * 附加字段,非 plate EndpointDetailView 的键):扁平字符串列表,每级容器前缀
+   * 与模板形态都已展开(spec §2.2)⇒ 消费侧只做成员判定,不再自己归一。
+   *
+   * - `null` = 声明面**不可解析**(降级)⇒ 判定从严,只剩 body 面;
+   * - `["$"]` = 真无声明 —— 与降级不是一件事,不得用真值判等把二者合并(§5);
+   * - 字段缺席(旧缓存替身 / 未经代理的响应)同样按降级处理。
+   */
+  declared_surface?: string[] | null
 }
 
 // ─── 策略语法 dim 视图(对齐 plate http/views.py StrategyKindView/DetailView)──

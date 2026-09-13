@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bodyPathSetOf, genEntryId, injectablePathSetOf, normalizeRegistry, pathResolvable, registryIssues } from '../assertion-registry'
+import { bodyPathSetOf, containerPrefixes, genEntryId, injectablePathSetOf, normalizeRegistry, pathResolvable, registryIssues } from '../assertion-registry'
 import { fieldPathsOf } from '../../utils/dataset-segments'
 import { isLegacyEntry } from '../../types/assertion-registry'
 import type { AssertionEntry, LegacyAssertionEntry } from '../../types/assertion-registry'
@@ -17,7 +17,11 @@ const LEGACY: LegacyAssertionEntry = {
   injection: [{ varName: 'amount', value: '-1' }],
   asserts: [],
 }
-const bodyPaths = (sets: Record<number, string[]>) => (si: number) => new Set(sets[si] ?? [])
+/** registryIssues 的入参是**已物化容器前缀**的可注入面 —— 调用方
+ *  (`injectablePathSetOf` / `bodyPathSetOf`)造的就是这种集合,测试照同一构造造,
+ *  不手写裸叶子集(裸集不是判定输入,见 RG-3)。 */
+const bodyPaths = (sets: Record<number, string[]>) => (si: number) =>
+  bodyPathSetOf((sets[si] ?? []).map((path) => ({ source: 'body', path })))
 const targets = (sets: Record<number, string[]>) => (si: number) => new Set(sets[si] ?? [])
 const BODY0 = { 0: ['$.amount', '$.bl_no', '$.items[0].sku'] }
 
@@ -40,9 +44,12 @@ describe('registryIssues — 悬空检测(spec v3 §2)', () => {
     // 容器锚点:叶子是它的子路径 → 可解析(Assign 整体覆写该容器)
     const container = E({ path: { stepIndex: 0, source: 'body', jsonpath: '$.items' } })
     expect(registryIssues(container, 2, bodyPaths(BODY0), targets({ 0: ['$.response_body.code'] }))).toEqual([])
-    expect(pathResolvable('$.items[0]', new Set(['$.items[0].sku']))).toBe(true)
+    // 容器路径靠集合里的**前缀成员**命中(该成员由集合构造侧物化)
+    expect(pathResolvable('$.items[0]', bodyPaths(BODY0)(0))).toBe(true)
     expect(pathResolvable('$.amount', new Set(['$.amount']))).toBe(true)
     expect(pathResolvable('$.amoun', new Set(['$.amount']))).toBe(false)   // 前缀字符串不算
+    // 反向钉住责任边界:未物化前缀的裸集合不是判定输入 ⇒ 前缀是**造集合**的活
+    expect(pathResolvable('$.items[0]', new Set(['$.items[0].sku']))).toBe(false)
   })
   it('RG-4: override 匹配不到既有断言 → override-no-match;append 不查匹配', () => {
     const base = { 0: ['$.response_body.other'] }
@@ -56,14 +63,14 @@ describe('registryIssues — 悬空检测(spec v3 §2)', () => {
     expect(isLegacyEntry(E())).toBe(false)
     expect(registryIssues(LEGACY, 2, bodyPaths(BODY0), targets({}))).toEqual([{ kind: 'legacy-entry' }])
   })
-  it('RG-6: genEntryId 不变;bodyPathSetOf 只收 body 源叶子', () => {
+  it('RG-6: genEntryId 不变;bodyPathSetOf 只收 body 源叶子(并物化其容器前缀)', () => {
     const a = genEntryId()
     expect(a).toMatch(/^inj-[a-z0-9]{9}$/)
     expect(new Set([a, genEntryId(), genEntryId()]).size).toBe(3)
     expect(bodyPathSetOf([
       { source: 'body', path: '$.a' },
       { source: 'headers', path: '$.h' },
-    ])).toEqual(new Set(['$.a']))
+    ])).toEqual(new Set(['$.a', '$']))          // headers 源不进面;$ 是 $.a 的容器前缀
   })
 })
 
@@ -120,21 +127,34 @@ describe('registryIssues/normalizeRegistry — 残缺条目不再炸渲染', () 
   })
 })
 
+// ── 容器前缀(run_injection._container_prefixes 的前端同构件)────────
+
+describe('containerPrefixes 与后端 _container_prefixes 同构', () => {
+  // 后端语义(run_injection.py:112):段边界 —— `.` 之后 / `[` 之前
+  it.each([
+    ['$.a.b', ['$', '$.a']],
+    ['$.tags[0]', ['$', '$.tags']],
+    ['$.a.b.c', ['$', '$.a', '$.a.b']],
+    ['$', []],
+    ['$.a.b[0].c', ['$', '$.a', '$.a.b', '$.a.b[0]']],
+  ])('%s → %j', (path, expected) => {
+    expect(containerPrefixes(path)).toEqual(expected)
+  })
+})
+
 // ── 可注入面(spec v3.1 §2.1):body 现存 ∪ 契约声明(全状态)──────────
-const DECLS = [
-  { name: 'bl_no', path: '$.bl_no', state: 'form', required: true, description: '' },
-  { name: 'customer_id', path: '$.customer_id', state: 'carry', required: true, description: '' },
-  { name: 'items', path: '$.items', state: 'form', required: false, description: '',
-    children: [{ name: 'sku', path: '$.items.sku', state: 'form', required: true, description: '' }] },
-] as any
+// 声明面由后端算好、随 /full 送达(扁平面:归一化 / 容器前缀 / 模板形态全展开,
+// spec §2.2)。对应目录条目:bl_no(form) / customer_id(carry) /
+// items(容器条目,child sku)—— 候选树 UI 仍读这棵树,判定面只读这个面。
+const DECLS_SURFACE = ['$', '$.bl_no', '$.customer_id', '$.items', '$.items.sku']
 const STEP_FORM_ONLY = { request: { body: { bl_no: '${var.bl_no}' } } }
 
 describe('可注入面 — 契约声明字段地址化(spec v3.1 §2.1)', () => {
-  it('IS-1: 声明面进集合(含 carry 与容器条目,模板形态)', () => {
-    const s = injectablePathSetOf(fieldPathsOf(STEP_FORM_ONLY as any), DECLS)
+  it('IS-1: 声明面进集合(含 carry 与容器条目)', () => {
+    const s = injectablePathSetOf(fieldPathsOf(STEP_FORM_ONLY as any), DECLS_SURFACE)
     expect(s.has('$')).toBe(true)
     expect(s.has('$.bl_no')).toBe(true)          // form
-    expect(s.has('$.customer_id')).toBe(true)    // carry —— 本次放宽的核心对象
+    expect(s.has('$.customer_id')).toBe(true)    // carry —— 放宽的核心对象
     expect(s.has('$.items')).toBe(true)          // 容器条目自身也是合法地址
     expect(s.has('$.items.sku')).toBe(true)      // children 平铺
   })
@@ -146,17 +166,22 @@ describe('可注入面 — 契约声明字段地址化(spec v3.1 §2.1)', () => 
   })
 
   it('IS-3: 声明命中即可解析 —— 实例与模板两种形态都试', () => {
-    const s = injectablePathSetOf(fieldPathsOf(STEP_FORM_ONLY as any), DECLS)
-    expect(pathResolvable('$.customer_id', s)).toBe(true)   // carry:放宽后可用
+    const s = injectablePathSetOf(fieldPathsOf(STEP_FORM_ONLY as any), DECLS_SURFACE)
+    expect(pathResolvable('$.customer_id', s)).toBe(true)   // carry:可用
     expect(pathResolvable('$.items[0].sku', s)).toBe(true)  // 实例形态对齐模板声明
     expect(pathResolvable('$.items[1]', s)).toBe(true)      // 模板形态精确命中声明容器条目 $.items
     expect(pathResolvable('$.nope', s)).toBe(false)         // 两边都没有 → 仍判死(拼写错误仍被抓)
   })
 
-  it('IS-4: 无声明面(降级)→ 判定等于旧的 body 面(从严)', () => {
-    const s = injectablePathSetOf(fieldPathsOf(STEP_FORM_ONLY as any), undefined)
-    expect(pathResolvable('$.bl_no', s)).toBe(true)
-    expect(pathResolvable('$.customer_id', s)).toBe(false)
+  it('IS-4: 无声明面(降级)→ 判定从严,只剩 body 面', () => {
+    // null = 契约在、声明面不可解析(后端给 null);undefined = 面字段缺席;
+    // [] = 真无声明。三者的声明半都添不进成员,判定一律只剩 body 面 ——
+    // 「降级 vs 真无声明」的区别由后端保留(§5),前端这里没有可并的语义
+    for (const surface of [null, undefined, [] as string[]]) {
+      const s = injectablePathSetOf(fieldPathsOf(STEP_FORM_ONLY as any), surface)
+      expect(pathResolvable('$.bl_no', s)).toBe(true)
+      expect(pathResolvable('$.customer_id', s)).toBe(false)
+    }
   })
 
   it('IS-5: body 实例路径不因下标归一被吃掉(旧行为不回退)', () => {
@@ -167,20 +192,20 @@ describe('可注入面 — 契约声明字段地址化(spec v3.1 §2.1)', () => 
     expect(pathResolvable('$.items', s)).toBe(true)
   })
 
-  it('IS-6: 模板形态 + 容器前缀分支(声明面只有深层 child,无容器条目)', () => {
-    // 声明面没有 $.items 容器条目 — 命中只能经 form2(模板化)+ 前缀判定
-    const s = injectablePathSetOf([], [{ name: 'sku', path: '$.items.sku' } as any])
-    expect(s.has('$.items')).toBe(false)                  // 前提:容器条目确实缺席
-    expect(pathResolvable('$.items[0]', s)).toBe(true)    // form2 前缀:$.items. 命中
+  it('IS-6: 声明面只有深层 child 时,容器锚点仍可寻址(前缀由后端物化)', () => {
+    // 深层声明的各级容器前缀是声明面的成员(spec §2.2)⇒ 容器路径靠成员命中
+    const s = injectablePathSetOf([], ['$', '$.items', '$.items.sku'])
+    expect(pathResolvable('$.items[0]', s)).toBe(true)        // 模板形态 $.items 命中
+    expect(pathResolvable('$.items', s)).toBe(true)           // 容器锚点自身也可寻址
     expect(pathResolvable('$.items[0].nope', s)).toBe(false)  // 深层不存在的段仍判死
   })
 
-  it('IS-7: body 面的容器前缀子句 — 终审 F2 两反例的前端一侧(parity 锚)', () => {
-    // 后端 body 面此前**替代**成 `jsonpath.exists`(实例精确判),这两例
-    // 「编辑器判活、dispatch 静默 skip」。此处把前端判活钉住,作为后端
-    // 补齐 `prefixes(body)` 的对拍基准(后端 tests/test_run_injection.py
-    // 的两条同名用例逐一对应)。
-    // 方向一:数组越界 —— toTemplatePath('$.tags[9]') = '$.tags' 命中前缀
+  it('IS-7: body 面的容器前缀物化 — 与后端同两条反例(parity 锚)', () => {
+    // body 半同样物化容器前缀(`bodyPathSetOf`),与后端 universe 的
+    // `prefixes(body)` 同形;下列两例与后端
+    // tests/test_run_injection.py::test_body_face_covers_container_prefixes_like_frontend
+    // 逐一对应(此处声明面为空 = 降级态,前缀照样来自 body 半)。
+    // 方向一:数组越界 —— toTemplatePath('$.tags[9]') = '$.tags' 命中前缀成员
     const arr = injectablePathSetOf(
       fieldPathsOf({ request: { body: { tags: ['a', 'b'] } } } as any), [])
     expect(pathResolvable('$.tags[9]', arr)).toBe(true)

@@ -296,12 +296,15 @@ it('ARE-10: asserts.target 输入 — 按所选步骤的端点契约给出响应
 })
 
 it('ARE-11: 请求侧候选含契约声明的 carry 字段,并标注状态', async () => {
+  // /full 的声明面由后端算好(declared_surface):候选与判定都读它,
+  // 取态仍读 declarations 树(条目自己的 state 在树里)
   vi.spyOn(api, 'getFullEndpoint').mockResolvedValue({
     id: 'ep-rg',
     request: { declarations: [
       { name: 'amount', path: '$.amount', state: 'form', required: true, description: '' },
       { name: 'customer_id', path: '$.customer_id', state: 'carry', required: true, description: '' },
     ] },
+    declared_surface: ['$', '$.amount', '$.customer_id'],
   } as any)
   const def = JSON.parse(JSON.stringify(DEF))
   def.steps[0].api.view_hints = { endpoint_id: 'ep-rg' }
@@ -405,7 +408,7 @@ it('ARE-14: 契约在途 → 契约依赖条目不标悬空(与运行面板同�
   expect(rows()[0].text()).toContain('悬空')
   expect(rows()[1].classes()).not.toContain('are-dead')      // 契约依赖:在途 ⇒ 尚未判定
   expect(w.find('.page-header p').text()).toContain('悬空 1 条')   // 计数同口径
-  release({ id: 'ep-gate', request: { declarations: [] } })  // 声明面无此字段 ⇒ 有答案了
+  release({ id: 'ep-gate', request: { declarations: [] }, declared_surface: ['$'] })  // 真无声明 ⇒ 有答案了
   await flushPromises()
   expect(rows()[1].classes()).toContain('are-dead')          // 落定 ⇒ 按实际结果标
   expect(rows()[1].text()).toContain('悬空')
@@ -421,6 +424,7 @@ it('ARE-12: 契约声明但 body 无的路径 → 不再判悬空(由死转活)'
       // body 没有 customer_id:活命只能靠声明面(本条用例的被测点)
       { name: 'customer_id', path: '$.customer_id', state: 'carry', required: true, description: '' },
     ] },
+    declared_surface: ['$', '$.amount', '$.customer_id'],
   } as any)
   const def = JSON.parse(JSON.stringify(DEF))
   def.steps[0].api.view_hints = { endpoint_id: 'ep-rg' }

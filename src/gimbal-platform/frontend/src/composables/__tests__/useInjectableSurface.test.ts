@@ -41,8 +41,14 @@ it('IS-1: dead 分两组 — step-oob/legacy 入 intrinsic,契约未定而 path-
 })
 
 it('IS-2: 契约落定后 contractDependent 清空(声明面命中)', async () => {
-  vi.spyOn(api, 'getFullEndpoint').mockResolvedValue({ id: 'ep-x', request: { declarations: [
-    { name: 'carry_field', path: '$.carry_field', state: 'carry', required: true, description: '' }] } } as any)
+  // declared_surface 是后端算好的声明面(容器前缀 / 模板形态已展开)——
+  // 判定面的声明半只读它,归一化在平台侧完成
+  vi.spyOn(api, 'getFullEndpoint').mockResolvedValue({
+    id: 'ep-x',
+    request: { declarations: [
+      { name: 'carry_field', path: '$.carry_field', state: 'carry', required: true, description: '' }] },
+    declared_surface: ['$', '$.carry_field'],
+  } as any)
   const steps = ref([{ request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-x' } } }])
   const entries = ref([
     { id: 'a', name: 'A', path: { stepIndex: 9, source: 'body', jsonpath: '$.z' }, value: 1, asserts: [] },
@@ -109,7 +115,7 @@ it('IS-4: `pending` 只看**被条目引用到**的端点 —— 无关端点在
   expect(api.getFullEndpoint).toHaveBeenCalledWith('ep-ref')
   expect(api.getFullEndpoint).toHaveBeenCalledWith('ep-unrelated')
   // 只落定被引用端点 ⇒ 在途面清空;无关端点即便仍挂着也不悬置
-  deferred['ep-ref']({ id: 'ep-ref', request: { declarations: [] } })
+  deferred['ep-ref']({ id: 'ep-ref', request: { declarations: [] }, declared_surface: ['$'] })
   await flushPromises()
   expect(s.pending.value).toBe(false)
   expect(s.dead.value.intrinsic).toEqual(['c'])       // 有答案 ⇒ 从严判死
@@ -135,7 +141,8 @@ it('IS-6: 未被条目引用的 si —— 该步端点落定后其声明面仍�
   await nextTick()
   expect([...s.pathsOfStep(1)]).toEqual(['$'])        // 步骤 1 无条目引用:此刻只有 body 面
   deferred['ep-b']({ id: 'ep-b', request: { declarations: [
-    { name: 'carry_x', path: '$.carry_x', state: 'carry', required: true, description: '' }] } })
+    { name: 'carry_x', path: '$.carry_x', state: 'carry', required: true, description: '' }] },
+    declared_surface: ['$', '$.carry_x'] })
   await flushPromises()
   expect([...s.pathsOfStep(1)]).toContain('$.carry_x')   // 落定 ⇒ 立即进候选
   expect(s.stateOf(1, '$.carry_x')).toBe('carry')        // 取态同一条读路径
@@ -146,7 +153,7 @@ it('IS-7: 渲染期零请求 —— 不调 ensure() 时判定/候选/取态都�
   // 则只 watchEffect 读一下 deadIds、全程不调 ensure(),getFullEndpoint 照样
   // 被调用(正是本用例要拦的形状)。读 / 取分离 ⇒ 渲染色路径是纯缓存读。
   const spy = vi.spyOn(api, 'getFullEndpoint')
-    .mockResolvedValue({ id: 'ep-a', request: { declarations: [] } } as any)
+    .mockResolvedValue({ id: 'ep-a', request: { declarations: [] }, declared_surface: ['$'] } as any)
   const steps = ref([{ request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-a' } } }])
   const entries = ref([
     { id: 'a', name: 'A', path: { stepIndex: 0, source: 'body', jsonpath: '$.amount' }, value: 1, asserts: [] },
@@ -176,7 +183,7 @@ it('IS-8: 记忆化**命中**面 — 同一 (si, 版本) 只投影一次,输入�
   // `pathsCache` 整块,全部用例照样绿。故这里**数投影的调用次数** —— 返回值
   // 在「有缓存」与「每次重建」两种实现下同形,只有计数有判别力。
   vi.spyOn(api, 'getFullEndpoint').mockResolvedValue(
-    { id: 'ep-a', request: { declarations: [] } } as any)
+    { id: 'ep-a', request: { declarations: [] }, declared_surface: ['$'] } as any)
   const project = vi.spyOn(assertionRegistry, 'injectablePathSetOf')
   const steps = ref([
     { request: { body: { amount: 'x' } }, api: { view_hints: { endpoint_id: 'ep-a' } } },

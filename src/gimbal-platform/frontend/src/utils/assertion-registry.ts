@@ -1,8 +1,7 @@
 // utils/assertion-registry.ts
 import { isLegacyEntry } from '@/types/assertion-registry'
 import type { AssertionEntry, AssertionRegistry, LegacyAssertionEntry } from '@/types/assertion-registry'
-import { catalogPaths, toTemplatePath } from '@/utils/declarations'
-import type { DeclarationEntryView } from '@/types/plate'
+import { toTemplatePath } from '@/utils/declarations'
 
 export type RegistryIssue =
   | { kind: 'legacy-entry' }
@@ -10,43 +9,69 @@ export type RegistryIssue =
   | { kind: 'path-unresolvable'; stepIndex: number; jsonpath: string }
   | { kind: 'override-no-match'; stepIndex: number; target: string }
 
+/** 路径的各级容器前缀 —— 后端 `_container_prefixes`
+ *  (run_injection.py:112)的同构件,**同一套语义**:段边界 = `.` 之后 /
+ *  `[` 之前。`$.a.b` → `['$', '$.a']`,`$.tags[0]` → `['$', '$.tags']`,
+ *  顶层 `$` → `[]`(下标 0 不是段边界)。
+ *
+ *  可注入面的两侧都**物化**前缀:body 半由 :func:`bodyPathSetOf` 加,
+ *  声明半由后端加进 `declared_surface`(spec §2.2)⇒ 判定侧
+ *  (:func:`pathResolvable`)就是两次成员测试。 */
+export function containerPrefixes(path: string): string[] {
+  const out: string[] = []
+  for (let i = 1; i < path.length; i++) {
+    const ch = path[i]
+    if (ch === '.' || ch === '[') out.push(path.slice(0, i))
+  }
+  return out
+}
+
 /** body 叶子路径投影(spec v3 §2 path-unresolvable 检测输入):
  *  调用方从 fieldPathsOf(step)(utils/dataset-segments)取叶子列表,
- *  这里滤出 body 源(headers 源 v1 不支持 path 注入,spec §1 裁定 9)。 */
+ *  这里滤出 body 源(headers 源 v1 不支持 path 注入,spec §1 裁定 9),
+ *  并物化各级容器前缀 —— 容器锚点(`$.items` 之于叶子 `$.items.sku`)靠
+ *  它寻址,与后端 body 半的 `prefixes(body)` 同形。 */
 export function bodyPathSetOf(
   leaves: Array<{ source: string; path: string }>,
 ): ReadonlySet<string> {
-  return new Set(leaves.filter((l) => l.source === 'body').map((l) => l.path))
+  const out = new Set<string>()
+  for (const l of leaves) {
+    if (l.source !== 'body') continue
+    out.add(l.path)
+    for (const p of containerPrefixes(l.path)) out.add(p)
+  }
+  return out
 }
 
-/** 可注入面(spec v3.1 §2.1)= body 现存(body 源叶子)
- *  ∪ 契约声明的 body 字段(全状态 form/collapse/carry,模板形态)。
- *  声明面是本次放宽的核心:carry / 未落 body 的 collapse 字段此前不可寻址,
- *  而引擎 Assign 对它们同样生效(spec §2.3 执行序)。 */
+/** 可注入面(spec v3.1 §2.1)= body 现存(body 源叶子及其容器前缀)
+ *  ∪ 契约声明的 body 字段(全状态 form/collapse/carry)。
+ *  carry / 未落 body 的 collapse 字段同样是合法地址:引擎 Assign 对它们
+ *  同样生效(spec §2.3 执行序)。
+ *
+ *  声明半由后端算好 —— 归一化 / 容器前缀 / 模板形态全部展开成扁平列表
+ *  (spec §2.2),这里只并入。`declaredSurface` 为 `null` / 缺省 ⇒ 声明面
+ *  不可解析(降级),从严只认 body 面;真无声明的目录给 `["$"]`,并进来的
+ *  只有恒在的 `$`。两种输入语义不同(§5),落在本集合上恰好同形。 */
 export function injectablePathSetOf(
   bodyLeaves: Array<{ source: string; path: string }>,
-  declarations?: DeclarationEntryView[] | null,
+  declaredSurface?: readonly string[] | null,
 ): ReadonlySet<string> {
   const out = new Set<string>(['$'])
   for (const p of bodyPathSetOf(bodyLeaves)) out.add(p)
-  for (const p of catalogPaths(declarations)) out.add(toTemplatePath(p))
+  for (const p of declaredSurface ?? []) out.add(p)
   return out
 }
 
 /** path 是否可解析(spec v3.1 §2.1):实例形态对齐 body 面、模板形态对齐
- *  契约声明面,二者任一命中即可;或为某路径的容器前缀(`p.` / `p[`
- *  开头 —— 条目可锚在容器上,Assign 整体覆写该容器,spec §2)。 */
+ *  契约声明面,二者任一命中即可。
+ *
+ *  判定只做这两次成员测试:两侧集合(body 半的叶子与容器前缀、后端
+ *  `declared_surface` 的声明半)都已把容器前缀物化成成员,故容器锚点
+ *  (`$.items` 之于叶子 `$.items.sku`)与被替换掉的下标(实例 `$.tags[9]`
+ *  经 `toTemplatePath` 得 `$.tags`)都由成员命中覆盖。 */
 export function pathResolvable(jsonpath: string, injectablePaths: ReadonlySet<string>): boolean {
   for (const form of [jsonpath, toTemplatePath(jsonpath)]) {
     if (injectablePaths.has(form)) return true
-    // 容器前缀扫描**承重,别当死代码删**:本文件 `injectablePathSetOf` 只放
-    // body 叶子与契约声明路径,**不**预展开各级容器前缀(后端
-    // `injectable_universe` 走的是另一条路 —— 它把 `_container_prefixes`
-    // materialize 进 universe,故后端那边同形的扫描才可省)。这里若照抄删掉
-    // 本段,活着的容器路径(`$.items` 之于叶子 `$.items.sku`)会被判成悬空。
-    for (const p of injectablePaths) {
-      if (p.startsWith(`${form}.`) || p.startsWith(`${form}[`)) return true
-    }
   }
   return false
 }
