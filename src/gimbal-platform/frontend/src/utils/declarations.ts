@@ -331,6 +331,24 @@ export function cascadeIncrements(
         out[a.path] = 'collapse'
       }
     }
+    // 拉起共识默认 carry 的子孙(2026-09-14,sink 镜像):目录 carry 家族
+    // 翻面后,子孙条目仍 carry 会被 buildTree 剪枝(不可见不可配)—
+    // 共识默认跟家族走,整树拉起落 target。显式 carry 增量的子孙不动
+    // (form 容器下的 carry 叶子是合法局部传递意图,后端 carry_face
+    // 承接;与祖先拉起不同 — 祖先不拉子树整体被剪,属必要性驱动)。
+    const lift = (entries: DeclarationEntryView[] | undefined) => {
+      for (const e of entries ?? []) {
+        if (!hasUsablePath(e)) continue
+        // 显式 carry 增量 = 局部传递意图,整枝保留(子树单独拉起会造出
+        // carry 容器 ⇒ 非 carry 子孙的 tree_inconsistency,拒存)
+        if (fieldStates?.[e.path] === 'carry') continue
+        if (resolveState(e.path, e.state, fieldStates) === 'carry') {
+          out[e.path] = target
+        }
+        lift(e.children)
+      }
+    }
+    lift(entry.children)
   }
   return out
 }

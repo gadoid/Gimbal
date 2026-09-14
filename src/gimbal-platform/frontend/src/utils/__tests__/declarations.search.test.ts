@@ -143,6 +143,50 @@ describe('cascadeIncrements — 级联规则(§2.3)', () => {
     expect(out).toEqual({ '$.ext': 'form' })
   })
 
+  it('surface 共识 carry 家族:目录 carry 子孙整树拉起落 target(2026-09-14)', () => {
+    // 目录家族:容器与子孙全部 state=carry(共识默认)— 容器提升为 form
+    // 时子孙不拉起会被 buildTree 剪枝(不可见不可配),家族随行一步到位
+    const FAM: DeclarationEntryView[] = [
+      mkDecl({ name: 'box', path: '$.box', state: 'carry', type: 'object', children: [
+        mkDecl({ name: 'a', path: '$.box.a', state: 'carry', type: 'string' }),
+        mkDecl({ name: 'sub', path: '$.box.sub', state: 'carry', type: 'object', children: [
+          mkDecl({ name: 'b', path: '$.box.sub.b', state: 'carry', type: 'string' }),
+        ] }),
+      ] }),
+    ]
+    expect(cascadeIncrements(FAM, null, '$.box', 'form')).toEqual({
+      '$.box': 'form',
+      '$.box.a': 'form',
+      '$.box.sub': 'form',
+      '$.box.sub.b': 'form',
+    })
+    // collapse 同式(拉起落 collapse,折叠区可见可编辑)
+    expect(cascadeIncrements(FAM, null, '$.box', 'collapse')).toEqual({
+      '$.box': 'collapse',
+      '$.box.a': 'collapse',
+      '$.box.sub': 'collapse',
+      '$.box.sub.b': 'collapse',
+    })
+  })
+
+  it('surface 家族:显式 carry 增量子孙整枝保留(不造 tree_inconsistency)', () => {
+    const FAM: DeclarationEntryView[] = [
+      mkDecl({ name: 'box', path: '$.box', state: 'carry', type: 'object', children: [
+        mkDecl({ name: 'a', path: '$.box.a', state: 'carry', type: 'string' }),
+        mkDecl({ name: 'sub', path: '$.box.sub', state: 'carry', type: 'object', children: [
+          mkDecl({ name: 'b', path: '$.box.sub.b', state: 'carry', type: 'string' }),
+        ] }),
+      ] }),
+    ]
+    // $.box.sub 有显式 carry 增量 = 局部传递意图:整枝(含目录 carry 的
+    // 子孙 b)保留不拉 — 单独拉 b 会造 carry 容器 ⇒ 非 carry 子孙拒存
+    const out = cascadeIncrements(FAM, { '$.box.sub': 'carry' }, '$.box', 'form')
+    expect(out).toEqual({
+      '$.box': 'form',
+      '$.box.a': 'form',
+    })
+  })
+
   it('目录外 path → 空对象(防御,不上抛)', () => {
     expect(cascadeIncrements(FIX, null, '$.ghost', 'form')).toEqual({})
     expect(cascadeIncrements(null, null, '$.order_id', 'carry')).toEqual({})
