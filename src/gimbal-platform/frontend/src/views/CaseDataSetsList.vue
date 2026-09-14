@@ -217,7 +217,7 @@ function previewVals(d: DataSetSummary, col: string): string {
 const panelOpen = ref(false)
 
 /** 数据集卡「运行」(阶段③ v2:无整库预填 — 数据集勾选区移入方案工作台;
- *  行级在 DataSetEditor「运行此行」同款退役) */
+ *  行级在 DataSetEditor「运行」同款退役) */
 function runDataset() {
   panelOpen.value = true
 }

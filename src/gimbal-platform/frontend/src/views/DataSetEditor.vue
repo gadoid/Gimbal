@@ -247,16 +247,18 @@
               />
             </td>
             <td class="td-action">
-              <!-- 「运行此行」(阶段③ v2:无行级预填,打开运行面板),故三种
-                   情况下禁用:① /data-sets/new(datasetId='new')服务端无此库;
+              <!-- 行级「运行」(阶段③:自「运行此行」更名 — 无预填下保留旧名
+                   会误导;入口只打开标准运行弹窗,行级精确执行经先建方案获得,
+                   可用态 title 引导建方案),故三种情况下禁用:
+                   ① /data-sets/new(datasetId='new')服务端无此库;
                    ② 行表有未保存改动(增删/复制/改格)→ 服务端行与屏幕上
                    不是同一行;③ 基线有未保存改动(baselineDirty)→ 继承格
                    取的是存储的旧 config.vars。判定沿用页头「删除」的 'new' 特例。 -->
               <el-button
                 size="small" text :icon="VideoPlay"
-                :aria-label="`运行第 ${i + 1} 行`"
+                aria-label="运行"
                 :disabled="datasetId === 'new' || rowsDirty || baselineDirty"
-                :title="datasetId === 'new' || rowsDirty || baselineDirty ? RUN_ROW_UNSAVED_HINT : undefined"
+                :title="datasetId === 'new' || rowsDirty || baselineDirty ? RUN_ROW_UNSAVED_HINT : RUN_ROW_SCHEME_HINT"
                 @click="runRow()"
               />
               <el-button size="small" text @click="cloneRow(i)">复制</el-button>
@@ -268,8 +270,8 @@
       </div><!-- /grid-scroll -->
     </div>
 
-    <!-- 运行面板宿主(阶段③ v2):「运行此行」的行级预填已随 preset 退役
-         (数据集勾选区移入方案工作台),入口保留为打开运行面板 -->
+    <!-- 运行面板宿主(阶段③ v2):「运行」的行级预填已随 preset 退役
+         (数据集勾选区移入方案工作台),入口保留为打开运行面板(默认方案态) -->
     <RunPanelHost v-if="panelOpen" :scenario-id="scenarioId" @close="panelOpen = false" />
   </section>
 
@@ -352,15 +354,18 @@ const selectedRows = reactive(new Set<number>())
 /** 预览弹窗显示开关 */
 const previewDialogOpen = ref(false)
 
-// ── 运行此行(spec v3 §6 数据集入口;阶段③:预填退役,保留打开面板)──
+// ── 运行(spec v3 §6 数据集入口;阶段③:预填退役,保留打开面板)──
 const panelOpen = ref(false)
 
-/** 行表/基线未落库不可运行此行的提示(按钮 title 与守卫共用一处文案)。
+/** 行表/基线未落库不可运行的提示(按钮禁用态 title 与守卫共用一处文案)。
  *  两种成因各自成句并写清保存入口 ——「保存数据集」/「保存基线」。 */
 const RUN_ROW_UNSAVED_HINT = '先「保存数据集」/「保存基线」再运行此行 — '
   + '行表有未保存的改动(增删行 / 复制行 / 改单元格 / CSV 导入)'
   + '或基线有未保存的编辑(config.vars 值),'
   + '跑的是服务端存量行与旧基线(新建数据集尚未分配服务端行号)'
+
+/** 可用态 title 引导(D9:行级精确性通过先建方案获得 — 入口只开标准弹窗) */
+const RUN_ROW_SCHEME_HINT = '行级精确执行请先在方案工作台建方案'
 
 /** 行表脏标:本地 rows 模型 ≠ 服务端存量行。addRow/cloneRow/removeRow、
  *  单元格编辑、TSV 粘贴、CSV 导入置位;载入与保存成功复位。
@@ -368,8 +373,8 @@ const RUN_ROW_UNSAVED_HINT = '先「保存数据集」/「保存基线」再运�
  *  克隆 → 跑原件;新增 → 409 越界;只改格 → 跑存量值),故必须落库后再运行。 */
 const rowsDirty = ref(false)
 
-/** 运行此行(阶段③ v2:无行级预填 — preset 随数据集勾选区移入方案工作台,
- *  入口保留为打开运行面板;守卫仍要求先落库,跑的是服务端存量)。
+/** 运行(阶段③:自「运行此行」更名 — 无行级预填,preset 随数据集勾选区
+ *  移入方案工作台,入口保留为打开运行面板;守卫仍要求先落库,跑的是服务端存量)。
  *  守卫(与按钮 :disabled 同条件,三选一都直接拒绝):
  *  ①「new」数据集在服务端不存在;
  *  ② 行表脏:屏幕上的行与存量行不是同一行;
@@ -830,7 +835,7 @@ onMounted(async () => {
       form.description = full.description ?? ''
       rows.value = full.rows.map((r) => ({ ...r }))
       caseNames.value = full.rows.map((_, i) => `data-${i + 1}`)
-      rowsDirty.value = false        // 本地模型 = 服务端存量,「运行此行」行号可用
+      rowsDirty.value = false        // 本地模型 = 服务端存量,「运行」守卫前提成立
     } else {
       form.name = '默认数据集'
       caseNames.value = []

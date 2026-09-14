@@ -1,7 +1,7 @@
 <!--
   RunPanelHost.vue — 运行面板宿主(方案工作台阶段③,spec 2026-09-15 §7)
 
-  两个执行入口共用的装配层:数据集入口(测试数据页「运行」/「运行此行」)
+  两个执行入口共用的装配层:数据集入口(测试数据页卡片「运行」/数据集编辑器行级「运行」)
   与场景入口同款 RunDialog,场景加载不绑死 CaseComposer。自取数:
   getScenario(展示名/步数)+ getScenarioDraft(definition/
   assertion_registry)+ listDataSets + listRunSchemes(V2 直连新 CRUD,

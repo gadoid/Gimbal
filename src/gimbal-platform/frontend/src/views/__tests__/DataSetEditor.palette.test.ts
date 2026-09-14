@@ -5,7 +5,7 @@ import ElementPlus from 'element-plus'
 import { createPinia, setActivePinia } from 'pinia'
 
 // 路由参数可变(vi.hoisted):dataset 入口既有 'new'(新建)又有已存库,
-// 「运行此行」守卫两种条件都要在真实路由态下测(见文件末组)。
+// 「运行」守卫两种条件都要在真实路由态下测(见文件末组)。
 const ROUTE = vi.hoisted(() => ({ params: { scenarioId: 'sc-ds', datasetId: 'new' } }))
 vi.mock('vue-router', () => ({
   useRoute: () => ROUTE,
@@ -40,13 +40,13 @@ beforeEach(() => {
   vi.spyOn(api, 'getScenarioDraft').mockResolvedValue(DRAFT as any)
   vi.spyOn(api, 'updateScenario').mockResolvedValue({} as any)
   vi.spyOn(api, 'createDataSet').mockResolvedValue({ datasetId: 'ds-1', rows: [] } as any)
-  // 已存库载入面(「运行此行」守卫用例);'new' 用例走不到。
+  // 已存库载入面(「运行」守卫用例);'new' 用例走不到。
   vi.spyOn(api, 'getDataSet').mockResolvedValue({
     datasetId: 'ds-1', name: '边界集', description: '',
     rows: [{ amount: '1' }, { amount: '2' }, { amount: '3' }],
   } as any)
   ROUTE.params.datasetId = 'new'
-  // 「运行此行」正控用例会真挂 RunPanelHost → 其自取数面一并桩掉(其余用例走不到)
+  // 「运行」正控用例会真挂 RunPanelHost → 其自取数面一并桩掉(其余用例走不到)
   vi.spyOn(api, 'getScenario').mockResolvedValue({ meta: {}, steps: [], stepCount: 0 } as any)
   vi.spyOn(api, 'listDataSets').mockResolvedValue([] as any)
   // declarations mock — 字段状态目录形态(children 树 + state 共识默认;
@@ -69,6 +69,10 @@ function mountEditor(datasetId: string = 'new') {
   ROUTE.params.datasetId = datasetId
   return mount(DataSetEditor, { global: { plugins: [ElementPlus] } })
 }
+
+/** 行级「运行」按钮(阶段③:预填退役后统一 aria-label「运行」,按行序取)。 */
+const runBtnAt = (w: ReturnType<typeof mountEditor>, i: number) =>
+  w.findAll('button[aria-label="运行"]')[i]
 
 // 让 vi.spyOn 不会跨测试泄漏(否则改 mockImplementation 会污染后续测试)。
 afterEach(() => {
@@ -709,16 +713,16 @@ it('非共享 var(默认 DRAFT):每列恰一枚引用徽标', async () => {
   w.unmount()
 })
 
-// ── 「运行此行」未保存守卫(spec v3 §6 数据集入口)────────────────
+// ── 「运行」未保存守卫(spec v3 §6 数据集入口;预填已随 preset 退役)──
 
-it('未保存数据集(datasetId=new):「运行此行」禁用且点击不挂载运行面板', async () => {
+it('未保存数据集(datasetId=new):「运行」禁用且点击不挂载运行面板', async () => {
   const w = mountEditor()
   await flushPromises()
   const addBtn = w.findAll('button').find((b) => b.text().includes('新增数据'))
   await addBtn!.trigger('click')
   await flushPromises()
-  // 行可加,按钮在 — 但数据集尚未保存,预填会指向不存在的库
-  const runBtn = w.find('button[aria-label="运行第 1 行"]')
+  // 行可加,按钮在 — 但「新建」在服务端无此库,守卫(语义保留)要求先落库
+  const runBtn = runBtnAt(w, 0)
   expect(runBtn.exists()).toBe(true)
   expect(runBtn.attributes('disabled')).toBeDefined()
   expect(runBtn.attributes('title')).toContain('保存数据集')
@@ -728,16 +732,18 @@ it('未保存数据集(datasetId=new):「运行此行」禁用且点击不挂载
   w.unmount()
 })
 
-// ── 行表脏标守卫(「运行此行」阶段③ v2:预填已退役,守卫语义不变)──
+// ── 行表脏标守卫(「运行」阶段③ v2:预填已退役,守卫语义不变)──
 // 注意:VTU 的 trigger 在 disabled 元素上**不派发**(isDisabled 短路),
 // 故「禁用态点不动」证明不了函数内守卫 —— 内层守卫一律直调 runRow 覆盖。
 
-it('已存库未改动:「运行此行」可用 → 直调 runRow 挂载面板', async () => {
+it('已存库未改动:「运行」可用,title 引导建方案 → 直调 runRow 挂载面板(默认方案态)', async () => {
   const w = mountEditor('ds-1')
   await flushPromises()
-  const runBtn = w.find('button[aria-label="运行第 2 行"]')
-  expect(runBtn.exists()).toBe(true)
+  const runBtn = runBtnAt(w, 1)
+  expect(runBtn).toBeTruthy()
   expect(runBtn.attributes('disabled')).toBeUndefined()   // 正控:守卫不空转
+  // 可用态 title = 行级精确性引导(D9:经先建方案获得,入口只开标准弹窗)
+  expect(runBtn.attributes('title')).toBe('行级精确执行请先在方案工作台建方案')
   ;(w.vm as any).runRow()
   await flushPromises()
   expect(w.findComponent(RunPanelHost).exists()).toBe(true)
@@ -747,10 +753,10 @@ it('已存库未改动:「运行此行」可用 → 直调 runRow 挂载面板',
 it('删除行(结构编辑):按钮转禁用 + 内层守卫拒绝直调(跑的是被删行的数据)', async () => {
   const w = mountEditor('ds-1')
   await flushPromises()
-  expect(w.find('button[aria-label="运行第 1 行"]').attributes('disabled')).toBeUndefined()
+  expect(runBtnAt(w, 0).attributes('disabled')).toBeUndefined()
   await w.find('button[aria-label="删除数据 1"]').trigger('click')
   await flushPromises()
-  const runBtn = w.find('button[aria-label="运行第 1 行"]')
+  const runBtn = runBtnAt(w, 0)
   expect(runBtn.attributes('disabled')).toBeDefined()
   // 提示文案点出真实原因:行表有未保存改动(不是「未分配行号」)
   expect(runBtn.attributes('title')).toContain('行表有未保存的改动')
@@ -765,7 +771,7 @@ it('克隆行(结构编辑):按钮转禁用 + 内层守卫拒绝直调(跑的是
   await flushPromises()
   ;(w.findAll('button').find((b) => b.text().includes('复制'))!).trigger('click')
   await flushPromises()
-  const runBtn = w.find('button[aria-label="运行第 2 行"]')
+  const runBtn = runBtnAt(w, 1)
   expect(runBtn.attributes('disabled')).toBeDefined()
   ;(w.vm as any).runRow()
   await flushPromises()
@@ -780,7 +786,7 @@ it('新增行(结构编辑):越界行号同步被拦(服务端 409 row_index_out
   await addBtn!.trigger('click')
   await flushPromises()
   // 第 4 行 = 本地新行,服务端只有 3 行
-  expect(w.find('button[aria-label="运行第 4 行"]').attributes('disabled')).toBeDefined()
+  expect(runBtnAt(w, 3).attributes('disabled')).toBeDefined()
   ;(w.vm as any).runRow()
   await flushPromises()
   expect(w.findComponent(RunPanelHost).exists()).toBe(false)
@@ -794,7 +800,7 @@ it('单元格编辑(值编辑):按钮转禁用 + 内层守卫拒绝直调(跑的
   expect(cell).toBeTruthy()
   await cell.setValue('999')
   await flushPromises()
-  const runBtn = w.find('button[aria-label="运行第 1 行"]')
+  const runBtn = runBtnAt(w, 0)
   expect(runBtn.attributes('disabled')).toBeDefined()
   ;(w.vm as any).runRow()
   await flushPromises()
@@ -805,13 +811,13 @@ it('单元格编辑(值编辑):按钮转禁用 + 内层守卫拒绝直调(跑的
 it('基线未保存(改置顶基线行):按钮转禁用 + 内层守卫拒绝直调(继承格取旧 config.vars)', async () => {
   const w = mountEditor('ds-1')
   await flushPromises()
-  expect(w.find('button[aria-label="运行第 1 行"]').attributes('disabled')).toBeUndefined()
+  expect(runBtnAt(w, 0).attributes('disabled')).toBeUndefined()
   // 置顶基线行 amount 格 '100' → '999'(setBaseline → baselineDirty)
   const baseInput = w.findAll('input.baseline-cell-input')[0]
   await baseInput.setValue('999')
   await flushPromises()
   expect((w.vm as any).baselineDirty).toBe(true)
-  const runBtn = w.find('button[aria-label="运行第 1 行"]')
+  const runBtn = runBtnAt(w, 0)
   expect(runBtn.attributes('disabled')).toBeDefined()
   // 文案覆盖两种成因:行表 **和** 基线各自成句,保存入口都点名
   expect(runBtn.attributes('title')).toContain('保存数据集')
@@ -824,15 +830,15 @@ it('基线未保存(改置顶基线行):按钮转禁用 + 内层守卫拒绝直�
   w.unmount()
 })
 
-it('基线保存后基线脏标复位:「运行此行」恢复可用', async () => {
+it('基线保存后基线脏标复位:「运行」恢复可用', async () => {
   const w = mountEditor('ds-1')
   await flushPromises()
   await w.findAll('input.baseline-cell-input')[0].setValue('999')
   await flushPromises()
-  expect(w.find('button[aria-label="运行第 1 行"]').attributes('disabled')).toBeDefined()
+  expect(runBtnAt(w, 0).attributes('disabled')).toBeDefined()
   await w.findAll('button').find((b) => b.text().includes('保存基线'))!.trigger('click')
   await flushPromises()
   expect((w.vm as any).baselineDirty).toBe(false)
-  expect(w.find('button[aria-label="运行第 1 行"]').attributes('disabled')).toBeUndefined()
+  expect(runBtnAt(w, 0).attributes('disabled')).toBeUndefined()
   w.unmount()
 })
