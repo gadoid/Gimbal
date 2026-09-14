@@ -13,7 +13,7 @@ import {
   resolveState, iterFlat, catalogPaths, carryPaths,
   formBindings, responseBindings, assertablePaths, hasUsablePath, searchCorpus,
   buildTree, contractTree, leafSurface, containerSurface, extraBodyPaths, extraSurfaceBindings, prefillBindings,
-  sanitizeEndpointFull,
+  sanitizeEndpointFull, promotedDecls, entryPaths,
 } from '@/utils/declarations'
 import { injectablePathSetOf } from '@/utils/assertion-registry'
 import { toScratchPath } from '@/utils/scratch-path'
@@ -750,5 +750,90 @@ describe('sanitizeEndpointFull — declared_surface 归一', () => {
     const withArr = full(arr)
     expect(sanitizeEndpointFull(withArr)).toBe(withArr)
     expect(sanitizeEndpointFull(withArr).declared_surface).toBe(arr)
+  })
+})
+
+// ─── 目录外字段提升(2026-09-14 spec §4.1/§4.2)─────────────────────
+
+describe('promotedDecls — 提升条目合成(§4.2)', () => {
+  it('PR-1: 顶层标量提升 → 单叶合成条目(number 类型推断)', () => {
+    const out = promotedDecls(undefined, { '$.extra': 'form' }, { extra: 7 })
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({
+      name: 'extra', path: '$.extra', type: 'number', state: 'form',
+      required: false, ui_kind: 'number', source_kind: 'independent',
+    })
+  })
+
+  it('PR-2: 容器根提升 → object 条目,children 按 body 键递归展开(整子树进树)', () => {
+    const out = promotedDecls(undefined, { '$.box': 'form' }, { box: { a: 1, nest: { b: 'x' } } })
+    expect(out).toHaveLength(1)
+    expect(out[0].type).toBe('object')
+    const names = (out[0].children ?? []).map((c) => c.name)
+    expect(names).toEqual(['a', 'nest'])
+    const nest = out[0].children![1]
+    expect(nest.type).toBe('object')
+    expect(nest.children).toHaveLength(1)
+    expect(nest.children![0]).toMatchObject({ name: 'b', type: 'string' })
+  })
+
+  it('PR-3: 深层叶提升 → 合成父壳只含提升子(兄弟键不成子,残留归 extras)', () => {
+    const out = promotedDecls(undefined, { '$.box.b': 'form' }, { box: { a: 1, b: 'x' } })
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ path: '$.box', type: 'object' })
+    expect(out[0].children).toHaveLength(1)
+    expect(out[0].children![0]).toMatchObject({ path: '$.box.b', type: 'string' })
+  })
+
+  it('PR-4: 同根多深层候选折叠进同一父容器', () => {
+    const out = promotedDecls(
+      undefined, { '$.box.b': 'form', '$.box.c': 'collapse' }, { box: {} })
+    expect(out).toHaveLength(1)
+    expect((out[0].children ?? []).map((c) => c.path)).toEqual(['$.box.b', '$.box.c'])
+  })
+
+  it('PR-5: body 无值(schema 差集行提升)→ string 叶条目', () => {
+    const out = promotedDecls(undefined, { '$.ghost': 'form' }, {})
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ path: '$.ghost', type: 'string', ui_kind: 'text' })
+  })
+
+  it('PR-6: carry 值 / 目录内 path / 祖先子孙重叠 → 零产出(目录赢)', () => {
+    const decls = [mkDecl({ name: 'y', path: '$.y' })]
+    // carry 值:不是提升态
+    expect(promotedDecls(decls, { '$.e': 'carry' }, { e: 1 })).toEqual([])
+    // 目录内 path
+    expect(promotedDecls(decls, { '$.y': 'form' }, { y: 1 })).toEqual([])
+    // 目录条目的子孙($.y.z)与祖先($.y 命中)皆让位
+    expect(promotedDecls(decls, { '$.y.z': 'form' }, { y: { z: 1 } })).toEqual([])
+    expect(promotedDecls([mkDecl({ name: 'z', path: '$.y.z' })], { '$.y': 'form' }, { y: { z: 1 } })).toEqual([])
+  })
+
+  it('PR-7: 数组值 → children-less array 条目(行渲染交 buildNode 值驱动)', () => {
+    const out = promotedDecls(undefined, { '$.arr': 'form' }, { arr: [1, 2] })
+    expect(out).toHaveLength(1)
+    expect(out[0]).toMatchObject({ type: 'array', ui_kind: 'json' })
+    expect(out[0].children).toBeUndefined()
+  })
+
+  it('PR-8: entryPaths 深层 path 全收集(含容器自身)', () => {
+    const entries = [mkDecl({ name: 'cfg', path: '$.cfg', type: 'object', children: [
+      mkDecl({ name: 't', path: '$.cfg.t' }),
+    ] })]
+    expect(entryPaths(entries)).toEqual(new Set(['$.cfg', '$.cfg.t']))
+  })
+
+  it('PR-9: 拼接后 extraBodyPaths 残留行消失(§4.1 单点拼接语义)', () => {
+    const decls = [mkDecl({ name: 'y', path: '$.y' })]
+    const body = { y: 1, extra: 'E' }
+    const fs = { '$.extra': 'form' }
+    // 提升前:残留
+    expect(extraBodyPaths(body, decls, fs)).toEqual([{ path: '$.extra', top: false }])
+    // 提升后(拼接 effectiveDecls):残留消失
+    const effective = [...decls, ...promotedDecls(decls, fs, body)]
+    expect(extraBodyPaths(body, effective, fs)).toEqual([])
+    // 树内出现该节点
+    const tree = buildTree(effective, fs, body)
+    expect(tree.map((n) => n.path)).toContain('$.extra')
   })
 })

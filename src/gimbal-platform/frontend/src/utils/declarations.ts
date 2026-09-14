@@ -907,3 +907,121 @@ export function prefillBindings(
   }
   return out
 }
+
+// ─── 目录外字段提升(2026-09-14 spec §4.1/§4.2)───────────────────────
+
+/** 条目树全 path 集(含 children 深层)— Canvas 的 noCarry 门禁集合。 */
+export function entryPaths(
+  entries: DeclarationEntryView[] | undefined | null,
+): Set<string> {
+  const out = new Set<string>()
+  const walk = (es: DeclarationEntryView[] | undefined) => {
+    for (const e of es ?? []) {
+      if (!hasUsablePath(e)) continue
+      out.add(e.path)
+      walk(e.children)
+    }
+  }
+  walk(entries ?? [])
+  return out
+}
+
+/** 合成条目基座(§4.2:required=false/描述空/independent;state 固定
+ *  'form' —— 真实意图在 field_states 增量里,resolveState 链正常解析)。 */
+function mkPromotedEntry(
+  path: string, name: string,
+  type: string, ui: DeclarationEntryView['ui_kind'],
+): DeclarationEntryView {
+  return {
+    name, path, state: 'form', type,
+    required: false, default: null, example: null,
+    description: '', enum: null,
+    ui_kind: ui, source_kind: 'independent', value_source: null,
+    assertable: false,
+  }
+}
+
+/**
+ * 提升条目合成(spec §4.2):field_states 中值 ∈ {form, collapse} 且
+ * 目录外的 path(模板化;精确与祖先/子孙重叠皆让位目录,§9)→ 合成
+ * DeclarationEntryView 树。结构折叠:候选按**顶层段**分组 —— 顶层
+ * 候选即根;深层候选挂合成父壳(壳链沿 path 逐段合成,同根多候选
+ * 折叠进同一父容器)。容器根(候选自身是 object 且 body 值为对象)
+ * 的 children 按 body 实际键**递归整子树**展开;纯父壳只含提升子
+ * (兄弟键不成子,残留归 extras)。数组候选 children-less(行渲染
+ * 交 buildNode 值驱动;有深层候选则作行模板)。值不搬家 —— body 是
+ * 唯一真源,这里只产渲染/编辑面的目录形状。
+ */
+export function promotedDecls(
+  decls: DeclarationEntryView[] | undefined | null,
+  fieldStates: Record<string, string> | null | undefined,
+  body: unknown,
+): DeclarationEntryView[] {
+  const universe = catalogPaths(decls)
+  const overlaps = (p: string, c: string) =>
+    p === c || c.startsWith(`${p}.`) || p.startsWith(`${c}.`)
+  const candidates = new Set<string>()
+  for (const [rawP, s] of Object.entries(fieldStates ?? {})) {
+    if (s !== 'form' && s !== 'collapse') continue
+    const p = toTemplatePath(rawP)
+    if (p === '$' || !p.startsWith('$.')) continue   // '$' 整包无提升语义
+    let covered = false
+    for (const c of universe) {
+      if (overlaps(p, c)) { covered = true; break }
+    }
+    if (!covered) candidates.add(p)
+  }
+  if (!candidates.size) return []
+  const relOf = (p: string) => p.replace(/^\$\.?/, '')
+  const synth = (path: string, value: unknown): DeclarationEntryView => {
+    const name = path.slice(path.lastIndexOf('.') + 1)
+    if (Array.isArray(value)) return mkPromotedEntry(path, name, 'array', 'json')
+    if (value !== null && typeof value === 'object') {
+      return mkPromotedEntry(path, name, 'object', 'json')
+    }
+    if (typeof value === 'number') return mkPromotedEntry(path, name, 'number', 'number')
+    if (typeof value === 'boolean') return mkPromotedEntry(path, name, 'boolean', 'boolean')
+    return mkPromotedEntry(path, name, 'string', 'text')
+  }
+  const build = (
+    path: string, deeper: Set<string>, expand: boolean,
+  ): DeclarationEntryView => {
+    const value = getByPath(body, relOf(path))
+    const entry = synth(path, value)
+    // 容器根提升 → body 整子树进树(zone 内子孙全展开);纯父壳只收
+    // 提升子方向(兄弟 body 键不成子,残留归 extras)
+    const zone = expand
+      || (candidates.has(path) && entry.type === 'object')
+    const childPaths = new Set<string>()
+    if (zone && entry.type === 'object'
+      && value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      for (const k of Object.keys(value as Record<string, unknown>)) {
+        childPaths.add(`${path}.${k}`)
+      }
+    }
+    // 深层候选折挂:按 path 下一段收敛(Set 去重,同段候选/壳合并)
+    for (const d of deeper) {
+      childPaths.add(`${path}.${d.slice(path.length + 1).split('.')[0]}`)
+    }
+    // array:children-less(行渲染交 buildNode 值驱动);有深层候选则
+    // 作行模板(children 数组语义,buildNode 按行实例化)
+    if (!childPaths.size) return entry
+    return {
+      ...entry,
+      children: [...childPaths].map((cp) => build(
+        cp,
+        new Set([...deeper].filter((x) => x.startsWith(`${cp}.`))),
+        zone,
+      )),
+    }
+  }
+  // 根分组:候选顶层段(顶层候选即自身;深层候选的顶段必不在目录
+  // 宇宙 —— 祖先若在目录,候选已被 overlaps 让位,无路径冲突)。
+  const roots = new Set<string>()
+  for (const p of candidates) roots.add(`$.${p.slice(2).split('.')[0]}`)
+  return [...roots].map((r) => build(
+    r,
+    new Set([...candidates].filter((c) => c !== r && c.startsWith(`${r}.`))),
+    false,
+  ))
+}
