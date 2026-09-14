@@ -215,10 +215,15 @@ class DataSetSelection(BaseModel):
 
 
 class RunScheme(BaseModel):
-    """场景级运行方案(orchestration sidecar,plate 零感知,spec §3.1)。"""
+    """场景级运行方案(工作台一等实体,plate 零感知,spec §4)。
+
+    阶段①存储已迁 composer_run_schemes 表;本 schema 仍是 wire 契约,
+    isDefault/stepTo/nRuns/parallel 为工作台新增键。
+    """
     model_config = _CAMEL
 
     name: str = Field(min_length=1, max_length=64)
+    is_default: bool = Field(default=False, alias="isDefault")
     data_set_ids: list[str] = Field(default_factory=list, alias="dataSetIds")
     # 断言注入条目(spec v2 §5):RunDialog 异常组多选,选中的条目与数据集
     # 行并列生成 case;default 空 = 旧方案缺键不炸。
@@ -230,6 +235,9 @@ class RunScheme(BaseModel):
     )
     service_bindings: dict[str, ServiceBinding] = Field(default_factory=dict,
                                                         alias="serviceBindings")
+    step_to: int | None = Field(default=None, alias="stepTo", ge=0)
+    n_runs: int = Field(default=1, alias="nRuns", ge=1, le=1000)
+    parallel: int = Field(default=1, alias="parallel", ge=1, le=200)
     plugins: Any = None        # 预埋,gimbal 就绪前 no-op
     log_sub: Any = Field(default=None, alias="logSub")  # 预埋,同上
 

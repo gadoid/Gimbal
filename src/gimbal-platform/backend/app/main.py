@@ -27,6 +27,7 @@ from .routers import (
     generator_catalog,
     query_views,
     runs,
+    run_schemes,
     scenarios,
     strategy_catalog,
     users,
@@ -130,6 +131,9 @@ def create_app() -> FastAPI:
     # 序(scenarios prefix 是 /scenarios,与 /query-views 无实际路由
     # 冲突)。
     app.include_router(query_views.router, prefix="/api")
+    # run-schemes CRUD lives on scenario-nested paths; register BEFORE
+    # scenarios' /{scenario_id} catch-all.
+    app.include_router(run_schemes.router, prefix="/api")
     app.include_router(scenarios.router, prefix="/api")  # MUST be last — has /{scenario_id}
 
     @app.get("/api/health")
