@@ -583,6 +583,9 @@ async def dispatch_run(
                 for k, b in req.service_bindings.items()
             },
             "stepTo": req.step_to,
+            # 方案溯源快照(spec §5,阶段③):纯记录,无分发语义
+            "schemeId": req.scheme_id,
+            "schemeName": req.scheme_name,
             "nRuns": req.n_runs,
             "parallel": req.parallel,
             # spec §1.1 Y:判定降级是可审计事实,不留静默窗口。

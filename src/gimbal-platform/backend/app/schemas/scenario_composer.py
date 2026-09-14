@@ -305,6 +305,11 @@ class RunRequest(BaseModel):
     n_runs: int = Field(default=1, ge=1, le=1000, alias="nRuns")
     # fan-out 并发度(asyncio.Semaphore 上限)。
     parallel: int = Field(default=1, ge=1, le=200, alias="parallel")
+    # 方案溯源(spec §5,阶段③):config_json 快照语义 — 记录本次执行
+    # 来自哪个方案(改名不断链:schemeId 权威,name 仅展示)。可选 —
+    # 基线/旧客户端不传;纯记录,不参与任何分发语义。
+    scheme_id: str | None = Field(default=None, alias="schemeId", max_length=128)
+    scheme_name: str | None = Field(default=None, alias="schemeName", max_length=64)
 
 
 class RunResponse(BaseModel):
