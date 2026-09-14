@@ -5,12 +5,17 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listRunSchemes, getScenarioDraft, listDataSets, createRunScheme, updateRunScheme,
-  type SchemeV2,
+  updateScenario, type SchemeV2,
 } from '@/api/scenario-composer'
-import type { DataSetSummary } from '@/types/scenario-composer'
-import { composerUrl } from '@/utils/links'
+import type { DataSetSummary, ScenarioDraft } from '@/types/scenario-composer'
+import type { AssertionEntry, AssertionRegistry } from '@/types/assertion-registry'
+import { isLegacyEntry } from '@/types/assertion-registry'
+import { genEntryId, normalizeRegistry } from '@/utils/assertion-registry'
+import { useInjectableSurface } from '@/composables/useInjectableSurface'
+import { composerUrl, scenarioAssertionsUrl } from '@/utils/links'
 import SchemeListPanel from '@/components/schemes/SchemeListPanel.vue'
 import SchemeDataSection from '@/components/schemes/SchemeDataSection.vue'
+import SchemeInjectionSection from '@/components/schemes/SchemeInjectionSection.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -61,6 +66,64 @@ function discardDraft() {
   dirty.value = false
 }
 
+// ── 断言注入区(Task 6)──────────────────────────────────────────────
+/** 场景 draft 载荷留存(原 onMounted 只消费 dataSets):注入区的 steps/registry
+ *  派生与快建保存(updateScenario 整包 PUT 需 definition/orchestration 原样
+ *  透传,与 AssertionRegistryEditor.save 同机制)都吃它。 */
+const scenarioDraft = ref<ScenarioDraft | null>(null)
+const registry = ref<AssertionRegistry>({ entries: [] })
+const steps = computed(() =>
+  (scenarioDraft.value?.definition.steps ?? []) as Array<Record<string, unknown>>)
+
+/** 判定面唯一消费面(spec §2.1):死集/契约在途信号只从这里出,本页不复刻。 */
+const surface = useInjectableSurface(steps, computed(() => registry.value.entries))
+onMounted(() => surface.ensure())
+
+/** 注入区条目行:id + 步骤/jsonpath 摘要(旧形状条目无 path,用 name 摘要)。 */
+const injectionEntries = computed(() => registry.value.entries.map((e) => ({
+  id: e.id,
+  label: isLegacyEntry(e) ? (e.name || e.id) : `步骤${e.path.stepIndex} ${e.path.jsonpath}`,
+})))
+/** 死条目集:surface.deadIds 是数组,组件 prop 收 Set(受控口径)。 */
+const injectionDeadIds = computed(() => new Set(surface.deadIds.value))
+
+const registrySaving = ref(false)
+
+/** 快建落库:条目造形抄 CaseComposer.onRegistryAdd 请求侧(id=genEntryId /
+ *  name=jsonpath / path 三元组 source='body' / value 空串预填 / asserts 空);
+ *  保存机制与 AssertionRegistryEditor.save 同款 —— 整体 PUT,只动
+ *  assertion_registry 键,definition/orchestration 原样透传。 */
+async function onQuickCreate(q: { stepIndex: number; jsonpath: string }) {
+  if (!scenarioDraft.value || registrySaving.value) return
+  registrySaving.value = true
+  try {
+    const entry: AssertionEntry = {
+      id: genEntryId(),
+      name: q.jsonpath,
+      path: { stepIndex: q.stepIndex, source: 'body', jsonpath: q.jsonpath },
+      value: '',
+      asserts: [],
+    }
+    const next: AssertionRegistry = { entries: [...registry.value.entries, entry] }
+    await updateScenario(scenarioId, { ...scenarioDraft.value, assertion_registry: next })
+    registry.value = next
+    scenarioDraft.value = { ...scenarioDraft.value, assertion_registry: next }
+    // 写入注册表并自动勾选:深 watch 即脏,随方案「保存」落库
+    if (draft.value && !draft.value.injectionEntryIds.includes(entry.id)) {
+      draft.value.injectionEntryIds.push(entry.id)
+    }
+    ElMessage.success('已快建断言条目并勾选(记得保存方案)')
+  } catch (e) {
+    ElMessage.error(`快建条目失败:${e instanceof Error ? e.message : String(e)}`)
+  } finally {
+    registrySaving.value = false
+  }
+}
+
+function onManageAssertions() {
+  router.push(scenarioAssertionsUrl(scenarioId))
+}
+
 /** 切换选中:脏态下先确认丢弃(cancel 走 reject,吞掉留在原方案)。 */
 async function onSelect(id: string) {
   if (id === selectedId.value) return
@@ -105,7 +168,12 @@ onMounted(async () => {
   await refresh()
   try {
     await Promise.all([
-      getScenarioDraft(scenarioId),   // steps/registry 后续任务消费
+      // draft 载荷留存(Task 6):注入区 steps/registry 与快建整包 PUT 都吃它;
+      // registry 归一(旧场景该键后端 default 补 {},?? 兜不住 — 与编辑器同款)
+      getScenarioDraft(scenarioId).then((d) => {
+        scenarioDraft.value = d
+        registry.value = normalizeRegistry(d.assertion_registry)
+      }),
       // listDataSets 收对象参数:{ scenarioId?: string }(api/scenario-composer.ts)
       listDataSets({ scenarioId }).then((d) => { dataSets.value = d }),
     ])
@@ -151,7 +219,16 @@ onMounted(async () => {
             :data-sets="dataSets"
             :scenario-id="scenarioId"
           />
-          <p v-else class="hint">默认方案不可编辑数据区(始终全量基线执行)。</p>
+          <SchemeInjectionSection
+            v-if="!draft.isDefault"
+            v-model="draft.injectionEntryIds"
+            :entries="injectionEntries"
+            :dead-ids="injectionDeadIds"
+            :locked="registrySaving"
+            @quick-create="onQuickCreate"
+            @manage="onManageAssertions"
+          />
+          <p v-if="draft.isDefault" class="hint">默认方案不可编辑数据区(始终全量基线执行)。</p>
         </template>
         <el-empty v-else description="选择左侧方案" />
       </div>
