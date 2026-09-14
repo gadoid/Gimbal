@@ -69,6 +69,8 @@ export interface Scenario {
   orchestration?: Orchestration
   dataSetCount: number
   stepCount: number
+  /** 运行方案数(读侧聚合,wire camelCase 透传;缺省 = 旧缓存过渡,入口不显示数字) */
+  schemeCount?: number
   /** 兼容镜像:后端恒等于 meta.tags(scenario_store 序列化时逐字拷贝)。
    *  真源是 meta.tags,新代码请读 meta.tags;此字段仅服务既有列表/过滤消费方。 */
   tags: string[]

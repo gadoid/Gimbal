@@ -35,6 +35,7 @@
       <div class="head-actions">
         <button class="btn primary" @click="goRun">▶ 立即运行</button>
         <button class="btn" @click="goScenario(4)">修改编排</button>
+        <button class="btn" @click="router.push(scenarioSchemesUrl(scenarioId))">方案</button>
         <button class="btn" @click="router.push(scenarioDataSetsUrl(scenarioId))">管理数据集</button>
         <button class="btn ghost" @click="router.back()">返回</button>
       </div>
@@ -149,7 +150,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { showError } from '@/utils/errorFallback'
-import { composerUrl, scenarioDataSetsUrl } from '@/utils/links'
+import { composerUrl, scenarioDataSetsUrl, scenarioSchemesUrl } from '@/utils/links'
 import { relTime } from '@/utils/datetime'
 import { valueJson } from '@/utils/value-display'
 import type { ExtractView, AssignView, AssertionView } from '@/types/plate'

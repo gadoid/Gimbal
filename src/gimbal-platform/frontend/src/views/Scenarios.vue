@@ -144,8 +144,18 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="操作" width="80" align="center" fixed="right">
+      <el-table-column label="操作" width="140" align="center" fixed="right">
         <template #default="{ row }">
+          <!-- 方案工作台直接入口(Task 8):从 ⋯ 菜单提为一级动作,
+               徽标「 ·N」仅在有 schemeCount 时显示(旧缓存过渡兼容)。 -->
+          <button
+            class="schemes-btn"
+            data-testid="schemes-entry"
+            type="button"
+            @click.stop="router.push(scenarioSchemesUrl(row.meta.scenarioId))"
+          >
+            方案<template v-if="row.schemeCount"> ·{{ row.schemeCount }}</template>
+          </button>
           <el-dropdown trigger="click" @command="(c: string) => onCmd(c, row)">
             <button class="more-btn" @click.stop>⋯</button>
             <template #dropdown>
@@ -210,7 +220,7 @@ import { convertDraftToExecutable, schemeToOverlay } from '@/stores/scenario-dra
 import { downloadFile } from '@/utils/download'
 import { useListSearch } from '@/utils/useListSearch'
 import { confirmAction } from '@/utils/confirmAction'
-import { composerUrl, scenarioDataSetsUrl, scenarioDetailUrl } from '@/utils/links'
+import { composerUrl, scenarioDataSetsUrl, scenarioDetailUrl, scenarioSchemesUrl } from '@/utils/links'
 import { showError } from '@/utils/errorFallback'
 import { shortDateTime, exportTimestamp } from '@/utils/datetime'
 import FilterPopover from '@/components/FilterPopover.vue'
@@ -627,6 +637,20 @@ async function onCmd(cmd: string, row: Scenario) {
   cursor: pointer;
 }
 .more-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* 「方案」直接入口 —— 与 ⋯ dropdown 并列(操作列已放宽到 140);
+ * 仿 .more-btn 但主色文字,把方案工作台从菜单里提为一级动作。 */
+.schemes-btn {
+  margin-right: 6px;
+  padding: 3px 9px;
+  font-size: 14px;
+  color: var(--accent);
+  background: #fff;
+  border: 0.5px solid #e2e8f0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.schemes-btn:hover { border-color: var(--accent); }
 
 .loading-state {
   padding: 28px;
