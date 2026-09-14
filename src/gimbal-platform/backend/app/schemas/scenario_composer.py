@@ -373,6 +373,7 @@ class Scenario(BaseModel):
     resource: dict[str, Any] | None = None
     orchestration: Orchestration | None = None
     data_set_count: int = Field(default=0, ge=0, alias="dataSetCount")
+    scheme_count: int = Field(default=0, ge=0, alias="schemeCount")
     step_count: int = Field(default=0, ge=0, alias="stepCount")
     tags: list[str] = Field(default_factory=list)
     starred: bool = False

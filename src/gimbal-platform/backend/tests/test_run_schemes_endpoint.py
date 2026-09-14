@@ -25,7 +25,7 @@ async def test_put_and_get_roundtrip(client):
     resp = await client.put(f"/api/scenarios/{sid}/run-schemes",
                             headers=bob, json={"schemes": SCHEMES})
     assert resp.status_code == 200, resp.text
-    assert [s["name"] for s in resp.json()] == ["冒烟-qa1"]
+    assert [s["name"] for s in resp.json()] == ["默认方案", "冒烟-qa1"]
     # 保存后 GET 场景:orchestration.runSchemes 可见(serviceBindings 键随存随读)
     got = (await client.get(f"/api/scenarios/{sid}", headers=bob)).json()
     assert "serviceBindings" in got["orchestration"]["runSchemes"][0]
@@ -53,7 +53,8 @@ async def test_composer_save_never_overwrites_schemes(client):
     resp = await client.put(f"/api/scenarios/{sid}", headers=bob, json=cur)
     assert resp.status_code == 200
     got = (await client.get(f"/api/scenarios/{sid}", headers=bob)).json()
-    assert [s["name"] for s in got["orchestration"]["runSchemes"]] == ["冒烟-qa1"]
+    assert [s["name"] for s in got["orchestration"]["runSchemes"]] == [
+        "默认方案", "冒烟-qa1"]
 
 
 async def test_invalid_refs_accepted_warn_level(client):
@@ -79,7 +80,8 @@ async def test_legacy_envid_schemes_silently_dropped(client):
                                 "dataSetIds": [], "serviceBindings": {},
                             }]})
     assert resp.status_code == 200
-    assert "envId" not in resp.json()[0]
+    legacy = next(s for s in resp.json() if s["name"] == "legacy")
+    assert "envId" not in legacy
 
 
 async def test_owner_enforced(client):

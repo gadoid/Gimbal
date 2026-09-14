@@ -42,7 +42,7 @@ from ..schemas.scenario_composer import (
     ScenarioDraft,
     StarIn,
 )
-from ..services import plate_client, run_dispatcher, scenario_store
+from ..services import plate_client, run_dispatcher, scheme_store, scenario_store
 from ..services.auth_ref_scan import scan_auth_aliases
 from ..services.carry_injection import build_carry_context
 from ..services.marks_store import stars
@@ -249,9 +249,11 @@ async def list_scenarios(
     if visibility:
         readable = [r for r in readable if (r.visibility or "private") == visibility]
     ds_counts = await scenario_store.dataset_counts(db)
+    sch_counts = await scheme_store.scheme_counts(db)
     return [
         await scenario_store.to_read_shape(
-            db, r, user_id=user.id, data_set_count=ds_counts.get(r.scenario_id, 0)
+            db, r, user_id=user.id, data_set_count=ds_counts.get(r.scenario_id, 0),
+            scheme_count=sch_counts.get(r.scenario_id, 0),
         )
         for r in readable
     ]
@@ -428,7 +430,12 @@ async def get_scenario_draft(
 ) -> ScenarioDraft:
     row = await _load_row(db, scenario_id)
     _require_reader(user, row)
-    payload = row.payload or {}
+    payload = dict(row.payload or {})
+    # 方案已迁独立表(spec §4):draft 的 runSchemes 从新表回填,
+    # payload 里的键迁移后恒为 [](旧客户端读侧无感)。
+    orch = dict(payload.get("orchestration") or {})
+    orch["runSchemes"] = await scheme_store.list_schemes(db, scenario_id)
+    payload["orchestration"] = orch
     try:
         return ScenarioDraft.model_validate(payload)
     except Exception as e:  # noqa: BLE001

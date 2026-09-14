@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.composer_scenario import ComposerScenario
 from ..models.composer_data_set import ComposerDataSet
+from ..models.composer_run_scheme import ComposerRunScheme
 # 删除 ScenarioStep;ScenarioMeta 仍保留(读侧用)
 from ..schemas.scenario_composer import (
     Orchestration,
@@ -27,6 +28,7 @@ from ..schemas.scenario_composer import (
     ScenarioMeta,
 )
 from . import endpoint_ref_index
+from . import scheme_store
 from .marks_store import stars
 
 
@@ -87,6 +89,9 @@ async def create(
         await db.rollback()
         raise ValueError(f"scenario_id_exists: {scenario_id}") from e
     await db.refresh(row)
+    # 场景创建即物化默认方案(工作台 spec §4.3/§5;
+    # GET /run-schemes 侧的 ensure_default 是自愈兜底)。
+    await scheme_store.ensure_default_scheme(db, server_owned.scenario_id)
     return await to_read_shape(db, row)
 
 
@@ -157,19 +162,15 @@ async def update(
 async def put_run_schemes(
     db: AsyncSession, scenario_id: str, schemes: list[RunScheme]
 ) -> list[RunScheme]:
-    """整键替换 orchestration.runSchemes(窄端点专用写路径)。
+    """整键替换(旧窄端点桥接):数据已迁 composer_run_schemes 表。
 
-    只动 runSchemes 一个键,definition/steps/resourceMeta 原样保留;
-    调用方(路由)已做存在性/属主/重名校验。返回入参 schemes 原样。
+    返回新表全量列表(含置顶默认方案)— 旧客户端多看到的这一条是
+    设计内变化(D8 全物化),阶段③ RunDialog v2 切换后消化。
     """
-    row = await get_row(db, scenario_id)          # None → 调用方 404
-    payload = dict(row.payload or {})
-    orch = dict(payload.get("orchestration") or {})
-    orch["runSchemes"] = [s.model_dump(by_alias=True, mode="json") for s in schemes]
-    payload["orchestration"] = orch
-    row.payload = payload
-    await db.commit()
-    return schemes
+    wire = [s.model_dump(by_alias=True, mode="json") for s in schemes]
+    await scheme_store.replace_all(db, scenario_id, wire)
+    got = await scheme_store.list_schemes(db, scenario_id)
+    return [RunScheme.model_validate(s) for s in got]
 
 
 async def delete(db: AsyncSession, scenario_id: str) -> None:
@@ -184,6 +185,11 @@ async def delete(db: AsyncSession, scenario_id: str) -> None:
     await db.execute(
         sa_delete(ComposerDataSet).where(
             ComposerDataSet.scenario_id == scenario_id
+        )
+    )
+    await db.execute(
+        sa_delete(ComposerRunScheme).where(
+            ComposerRunScheme.scenario_id == scenario_id
         )
     )
     await db.delete(row)
@@ -255,6 +261,9 @@ async def copy_scenario(
             rows=_copy.deepcopy(ds.rows or []),
             row_count=ds.row_count,
         ))
+    # 方案随场景深拷贝 — 迁出 payload 后不再随 deepcopy 自动带走,
+    # 显式复制(新 scheme_id,仿上方 data_sets 循环)。
+    await scheme_store.copy_schemes(db, scenario_id, new_sid)
     await db.commit()
     return await to_read_shape(db, await _get_row(db, new_sid))
 
@@ -383,6 +392,7 @@ async def to_read_shape(
     *,
     user_id: int | None = None,
     data_set_count: int | None = None,
+    scheme_count: int | None = None,
 ) -> Scenario:
     """Reconstruct the full Scenario response shape from DB row + joins.
 
@@ -399,11 +409,27 @@ async def to_read_shape(
         )
         data_set_count = sum(int(r[0] or 0) for r in ds_res.all())
 
+    if scheme_count is None:
+        sch_res = await db.execute(
+            select(func.count()).select_from(ComposerRunScheme).where(
+                ComposerRunScheme.scenario_id == row.scenario_id
+            )
+        )
+        scheme_count = int(sch_res.scalar_one() or 0)
+
     meta = _meta_from_row(row)
     steps = steps_from_payload(row.payload)
     # stepCount is derived from the payload (the mirror column was
     # retired); len() of the persisted steps list is authoritative.
     config, resource, orchestration = _extras_from_payload(row.payload)
+    if orchestration is not None:
+        # 方案已迁独立表(spec §4):读侧从新表回填,payload 键迁移后
+        # 恒为 []。每行一次索引查询(列表 N+1)在单机场景量级可接受,
+        # 阶段④随旧读侧整体退役。
+        orchestration.run_schemes = [
+            RunScheme.model_validate(s)
+            for s in await scheme_store.list_schemes(db, row.scenario_id)
+        ]
     starred = (
         stars.has(user_id, row.scenario_id)
         if user_id is not None
@@ -416,6 +442,7 @@ async def to_read_shape(
         resource=resource,
         orchestration=orchestration,
         dataSetCount=data_set_count,
+        schemeCount=scheme_count,
         stepCount=len(steps),
         tags=list(meta.tags or []),
         starred=starred,

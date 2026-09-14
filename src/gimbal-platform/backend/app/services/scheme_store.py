@@ -187,7 +187,16 @@ async def copy_schemes(
     db: AsyncSession, src_scenario_id: str, dst_scenario_id: str,
 ) -> None:
     """逐行复制(重新分配 scheme_id)。不 commit — 调用方
-    (scenario_store.copy_scenario)把它并进自己的事务。"""
+    (scenario_store.copy_scenario)把它并进自己的事务。
+
+    dst 侧先整组清空再复制:copy_scenario 先走 create(),其钩子已为
+    dst 物化默认方案,直接补插源侧 default 行会撞「每场景恰一默认」
+    的部分唯一索引(及 (scenario, name) 唯一索引);整组替换保证
+    dst ≡ src(含默认方案的 payload 定制)。
+    """
+    await db.execute(sa_delete(ComposerRunScheme).where(
+        ComposerRunScheme.scenario_id == dst_scenario_id
+    ))
     rows = (await db.execute(
         select(ComposerRunScheme)
         .where(ComposerRunScheme.scenario_id == src_scenario_id)
