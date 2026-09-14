@@ -350,7 +350,11 @@ function explicitServiceBindings(): Record<string, ServiceBinding> {
 
 // serviceRows 变化(异步补齐/场景变更)→ 补行、清孤儿;行内 v-model 直写
 // bindings[svc].authAlias,必须保证每个 svc 有落点对象。声明行预填声明 URL。
-watch([() => props.schemes, () => props.serviceRows], () => {
+// 依赖含 selected:深链自建方案挂载时本 watch guard return 过一次,切回
+// 默认方案必须重算填充 — 否则 bindings 恒空,绑定行 v-model 对 undefined
+// 求值直接渲染崩溃。切换即重置(与参数 watch(selected) 同语义);用户
+// 编辑中的默认态 selected 不变,不会被无谓重置。
+watch([() => props.schemes, () => props.serviceRows, selected], () => {
   if (!selected.value?.isDefault) return
   const d = props.schemes.find((s) => s.isDefault)
   const next: Record<string, ServiceBinding> = {}

@@ -120,4 +120,24 @@ describe('RunDialog v2 — 两路径', () => {
     // 2 行 × 1 注入条目 × 3 次 = 6
     expect(w.find('.summary-chip.total').text()).toContain('6')
   })
+
+  it('深链自建方案后切回默认方案:绑定区重算渲染不崩溃 + confirm 正常发出', async () => {
+    // 回归:绑定 watch 曾仅依赖 schemes/serviceRows — 深链自建挂载时 guard
+    // return 致 bindings 恒空,切回默认后 v-model 对 undefined 求值抛 TypeError
+    const w = mountDialog({ initialSchemeId: 'rs-002' })
+    expect(w.find('[data-testid="scheme-chip-rs-002"]').classes()).toContain('active')
+    await w.find('[data-testid="scheme-chip-rs-001"]').trigger('click')
+    expect(w.findAll('.rd-bind-row').length).toBe(1)           // 绑定行已填充可渲染
+    await w.find('[data-testid="run-confirm"]').trigger('click')
+    expect(w.emitted('confirm')!.at(-1)![1]).toMatchObject({ schemeId: 'rs-001' })
+  })
+
+  it('失效判定 — 注入条目悬空分支:禁跑 + 失效文案', async () => {
+    // 数据集仍存在,仅注入条目被删(inj-1 不在 assertionEntries)→ 同样失效
+    const w = mountDialog({ assertionEntries: [] })
+    await w.find('[data-testid="scheme-chip-rs-002"]').trigger('click')
+    expect(w.text()).toContain('配置已失效')
+    expect(w.text()).toContain('注入条目已悬空或删除')
+    expect(w.find('[data-testid="run-confirm"]').attributes('disabled')).toBeDefined()
+  })
 })
