@@ -247,6 +247,7 @@ async function refresh() {
 }
 
 async function onCreate() {
+  if (!(await confirmDiscardForOps())) return   // 脏态闸同 rename/duplicate/delete(终审 M-1)
   try {
     const made = await createRunScheme(scenarioId, {
       name: `方案 ${schemes.value.length}`, dataSetSelection: [],

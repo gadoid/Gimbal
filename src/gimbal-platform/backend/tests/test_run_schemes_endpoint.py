@@ -91,3 +91,26 @@ async def test_owner_enforced(client):
     resp = await client.put(f"/api/scenarios/{sid}/run-schemes",
                             headers=eve, json={"schemes": SCHEMES})
     assert resp.status_code == 403
+
+
+async def test_reserved_name_precheck_409_keeps_existing(client):
+    """终审 I-1:入参含「默认方案」且不带 isDefault(旧 RunDialog 形状)→
+    调 replace_all 之前 409 拒绝;存量方案原样保留 — 关闭「先删后建
+    中途保留名抛错」的部分替换窗口。"""
+    bob = await _member(client, "bob")
+    sid = await _saved_scenario(client, bob)
+    assert (await client.put(f"/api/scenarios/{sid}/run-schemes",
+                             headers=bob, json={"schemes": SCHEMES})).status_code == 200
+    resp = await client.put(f"/api/scenarios/{sid}/run-schemes",
+                            headers=bob, json={"schemes": [
+                                # 无 isDefault 键 → pydantic 默认 False → 保留名冲突
+                                {"name": "默认方案", "dataSetIds": [],
+                                 "serviceBindings": {}},
+                                SCHEMES[0],
+                            ]})
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["detail"]["code"] == "run_scheme_name_conflict"
+    # 预检先于任何删改:存量自定义方案未被部分替换吞掉(读侧回填新表)
+    got = (await client.get(f"/api/scenarios/{sid}", headers=bob)).json()
+    assert [s["name"] for s in got["orchestration"]["runSchemes"]] == [
+        "默认方案", "冒烟-qa1"]

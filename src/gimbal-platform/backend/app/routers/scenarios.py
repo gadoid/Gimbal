@@ -404,6 +404,17 @@ async def put_run_schemes(
             detail={"code": "run_scheme_name_conflict",
                     "message": "方案名场景内唯一"},
         )
+    # 保留名预检(终审 I-1):「默认方案」只能以 isDefault 位携带;旧弹窗
+    # 不传该位 → create_scheme 中途抛 name_conflict 前,replace_all 已把
+    # 存量非 default 行删掉(先删后建非原子)→ 500 + 部分替换态。在任何
+    # 删改之前拒 409,与窄端点语义/错误形状对齐。
+    if any(s.name == scheme_store.DEFAULT_SCHEME_NAME and not s.is_default
+           for s in body.schemes):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "run_scheme_name_conflict",
+                    "message": "方案名场景内唯一(「默认方案」为保留名)"},
+        )
     await _warn_dangling_refs(db, row, user, body.schemes)
     return await scenario_store.put_run_schemes(db, scenario_id, body.schemes)
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import ElementPlus, { ElMessage } from 'element-plus'
+import ElementPlus, { ElMessage, ElMessageBox } from 'element-plus'
 import { createPinia, setActivePinia } from 'pinia'
 import * as api from '@/api/scenario-composer'
 import SchemeWorkbench from '@/views/SchemeWorkbench.vue'
@@ -118,6 +118,20 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
     expect(body.dataSetSelection).toEqual([{ datasetId: 'ds-001', rowIndexes: [0] }])
     expect(body.nRuns).toBe(2)
     expect(w.find('.scheme-item.selected').text()).toContain('冒烟 副本')
+  })
+
+  // ── 左栏:新建(终审 M-1:onCreate 与 rename/duplicate/delete 同款脏态闸)──
+  it('脏态新建 → 脏确认拒绝 → 不发 createRunScheme(未保存修改不被刷新吞掉)', async () => {
+    vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue('cancel')
+    const spy = vi.spyOn(api, 'createRunScheme').mockResolvedValue(SCHEME_COPY)
+    const w = await mountWb()
+    // 绑定变更 → 脏(运行配置区 default 亦可见,与上文 save 断言同款设置法)
+    await w.findAll('select')[0].setValue('alias-1')
+    expect((w.find('[data-testid="save-scheme"]').element as HTMLButtonElement).disabled).toBe(false)
+    await w.findComponent(SchemeListPanel).vm.$emit('create')
+    await flushPromises()
+    expect(ElMessageBox.confirm).toHaveBeenCalled()
+    expect(spy).not.toHaveBeenCalled()
   })
 
   // ── 左栏:重命名 ──────────────────────────────────────────────────
