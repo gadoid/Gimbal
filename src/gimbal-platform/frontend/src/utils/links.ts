@@ -35,3 +35,9 @@ export function scenarioAssertionsUrl(scenarioId: string, entryId?: string): str
   const base = `/scenarios/${encodeURIComponent(scenarioId)}/assertions`
   return entryId ? `${base}?entry=${encodeURIComponent(entryId)}` : base
 }
+
+/** 方案工作台(spec 2026-09-14 §6);schemeId 用于深链右栏选中态 */
+export function scenarioSchemesUrl(scenarioId: string, schemeId?: string): string {
+  const base = `/scenarios/${encodeURIComponent(scenarioId)}/schemes`
+  return schemeId ? `${base}?scheme=${encodeURIComponent(schemeId)}` : base
+}

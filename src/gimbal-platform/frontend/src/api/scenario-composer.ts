@@ -198,6 +198,46 @@ export async function putRunSchemes(scenarioId: string, schemes: RunScheme[]): P
   return data
 }
 
+/** 方案 wire 形状(阶段② 新 CRUD;阶段③ RunDialog 切换后统一) */
+export interface SchemeV2 {
+  schemeId: string
+  name: string
+  isDefault: boolean
+  dataSetIds?: string[]
+  dataSetSelection: { datasetId: string; rowIndexes?: number[] }[]
+  injectionEntryIds: string[]
+  serviceBindings: Record<string, ServiceBinding>
+  stepTo: number | null
+  nRuns: number
+  parallel: number
+  plugins?: unknown
+  logSub?: unknown
+}
+export async function listRunSchemes(scenarioId: string): Promise<SchemeV2[]> {
+  const { data } = await http.get<SchemeV2[]>(`/scenarios/${enc(scenarioId)}/run-schemes`)
+  return data
+}
+export async function createRunScheme(
+  scenarioId: string, body: Omit<SchemeV2, 'schemeId' | 'isDefault'>,
+): Promise<SchemeV2> {
+  const { data } = await http.post<SchemeV2>(
+    `/scenarios/${enc(scenarioId)}/run-schemes`, body)
+  return data
+}
+export async function updateRunScheme(
+  scenarioId: string, schemeId: string,
+  body: Omit<SchemeV2, 'schemeId' | 'isDefault'>,
+): Promise<SchemeV2> {
+  const { data } = await http.put<SchemeV2>(
+    `/scenarios/${enc(scenarioId)}/run-schemes/${enc(schemeId)}`, body)
+  return data
+}
+export async function deleteRunScheme(
+  scenarioId: string, schemeId: string,
+): Promise<void> {
+  await http.delete(`/scenarios/${enc(scenarioId)}/run-schemes/${enc(schemeId)}`)
+}
+
 // ── plate /convert 预校验 + 导出 ─────────────────────────────────
 export interface PreviewPlateResult {
   ok: boolean
