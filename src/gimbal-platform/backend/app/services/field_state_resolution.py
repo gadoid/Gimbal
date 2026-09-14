@@ -128,29 +128,8 @@ def catalog_paths(declarations: Any) -> set[str]:
 
 # ── 配置编辑校验(§3.5;D2/D3 语境继任)────────────────────────────
 
-def _body_template_paths(body: Any) -> set[str]:
-    """body 实例路径集合(模板形态:$.a.b,数组下标剥除)—— stale 判定
-    的实有参照(2026-09-14 §5.1)。容器自身与叶子都收:提升根($.a 容器)
-    与提升叶($.a.b)都应命中。防御:非 dict 读穿为空集。"""
-    out: set[str] = set()
-
-    def _walk(node: Any, prefix: str) -> None:
-        if isinstance(node, dict):
-            for k, v in node.items():
-                p = f"{prefix}.{k}" if prefix != "$" else f"$.{k}"
-                out.add(p)
-                _walk(v, p)
-        elif isinstance(node, list):
-            for item in node:
-                _walk(item, prefix)
-
-    if isinstance(body, dict):
-        _walk(body, "$")
-    return out
-
-
 def validate_field_states(
-    declarations: Any, field_states: Any = None, body: Any = None,
+    declarations: Any, field_states: Any = None,
 ) -> dict[str, list[dict]]:
     """合成态校验:plate 默认 + step 增量合并后的树一致性 + 双软警告。
 
@@ -164,9 +143,8 @@ def validate_field_states(
       ("确认值表有兜底,否则请求必挂");
     * ``descriptive_form``(warning):DESCRIPTIVE 词表条目解析态 ==
       form(备注族进渲染面 → 提示,plate 政策建议 carry);
-    * ``stale_path``(warning):field_states 含目录外 path 且 body
-      无实有(§5.1,2026-09-14:提升字段 = 目录外但 body 实有 → 放行;
-      不传 body = 旧行为,全部目录外报 stale)。
+    * ``stale_path``(warning):field_states 含目录外 path
+      (§3.4 交集容忍 —— 忽略但可见,composer 显示 stale 警告)。
     """
     errors: list[dict] = []
     warnings: list[dict] = []
@@ -216,10 +194,7 @@ def validate_field_states(
 
     if isinstance(field_states, dict):
         universe = catalog_paths(declarations)
-        body_paths = _body_template_paths(body) if body is not None else None
         for path in sorted(set(field_states) - universe):
-            if body_paths is not None and path in body_paths:
-                continue
             warnings.append({
                 "code": "stale_path", "path": path,
                 "message": f"目录外 path {path}(plate 目录未声明;已忽略)",

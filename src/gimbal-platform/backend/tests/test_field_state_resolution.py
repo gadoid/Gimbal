@@ -293,30 +293,6 @@ class TestValidateFieldStates:
         assert [w["code"] for w in out["warnings"]] == ["stale_path", "stale_path"]
         assert [w["path"] for w in out["warnings"]] == ["$.ghost", "$.gone.form"]
 
-    def test_stale_path_body_present_relaxed(self) -> None:
-        """2026-09-14 §5.1:目录外但 body 实有(提升字段)→ 不报 stale。"""
-        body = {"ghost": 1, "gone": {"form": 1}, "arr": [{"x": 1}]}
-        out = validate_field_states(
-            [_TOP_FORM_LEAF],
-            {"$.ghost": "form", "$.gone.form": "form", "$.arr.x": "form"},
-            body,
-        )
-        assert out["warnings"] == []
-
-    def test_stale_path_body_partial(self) -> None:
-        """body 传了但该 path 无实有 → 仍 stale(诚实警告)。"""
-        out = validate_field_states(
-            [_TOP_FORM_LEAF], {"$.ghost": "form"}, {"other": 1})
-        assert [w["code"] for w in out["warnings"]] == ["stale_path"]
-        assert out["warnings"][0]["path"] == "$.ghost"
-
-    def test_stale_path_no_body_arg_unchanged(self) -> None:
-        """不传 body(旧调用方)→ 行为不变(全部目录外报 stale)。"""
-        out = validate_field_states(
-            [_TOP_FORM_LEAF], {"$.ghost": "form", "$.gone.form": "form"},
-            None)
-        assert [w["code"] for w in out["warnings"]] == ["stale_path", "stale_path"]
-
     def test_garbage_tolerated(self) -> None:
         """垃圾输入零崩溃:decls 非 list / field_states 非 dict → 干净通过。"""
         assert validate_field_states(None) == {"errors": [], "warnings": []}
@@ -378,18 +354,3 @@ async def test_validate_route_unknown_endpoint_404(client, plate) -> None:
         "/api/endpoint-catalog/fin.nope/field-states/validate",
         headers=headers, json={"field_states": {}})
     assert r.status_code == 404, r.text
-
-
-async def test_validate_route_body_relaxes_stale(client, plate) -> None:
-    """§5.1:请求体随行 → 提升字段(目录外 body 实有)不报 stale。"""
-    plate.fulls = {"fin.settlement.create_order":
-                   {"request": {"declarations": _VALIDATE_DECLS}}}
-    headers = await register_and_login(client)
-    r = await client.post(
-        "/api/endpoint-catalog/fin.settlement.create_order"
-        "/field-states/validate",
-        headers=headers,
-        json={"field_states": {"$.extra_flag": "form"},
-              "body": {"extra_flag": True}})
-    assert r.status_code == 200, r.text
-    assert r.json() == {"errors": [], "warnings": []}

@@ -257,11 +257,9 @@
                   :extracted="requestExtracted"
                   :state-control="true"
                   :overlay="currentStep.field_states"
-                  :promoted-paths="promotedPathSet"
                   :query-badges="vsBadges"
                   @strategy-jump="onStrategyJump"
                   @update:body="(v: unknown) => currentStep.request.body = v"
-                  @promote="(p: string) => applyFieldStates({ [p]: 'form' })"
                   @field-extract="(f) => onFieldExtract(f, 'request')"
                   @field-assign="(f, name) => onFieldAssign(f, name)"
                   @field-assert="(f) => onFieldAssert(f, 'request')"
@@ -582,9 +580,9 @@ import { toScratchPath } from '@/utils/scratch-path'
 import { strategyLabelOf } from '@/utils/strategy-labels'
 import {
   assertablePaths, buildTree, carryPaths, cascadeIncrements, containerSurface,
-  contractTree, entryPaths, extraBodyPaths, extraSurfaceBindings, formBindings,
-  groupValueSources, iterFlat, leafSurface, prefillBindings, promotedDecls,
-  responseBindings, searchCorpus, toTemplatePath,
+  contractTree, extraBodyPaths, extraSurfaceBindings, formBindings,
+  groupValueSources, iterFlat, leafSurface, prefillBindings, responseBindings,
+  searchCorpus, toTemplatePath,
 } from '@/utils/declarations'
 import type { FieldTreeNode, ValueSourceGroup } from '@/utils/declarations'
 import { deriveBase } from '@/utils/service-alias'
@@ -656,51 +654,27 @@ function stepDecls(step: StepView | undefined) {
   return getEndpointFull(eid)?.request?.declarations
 }
 
-/** 提升条目(2026-09-14 spec §4.1):field_states 目录外 form/collapse
- *  增量 → 合成目录条目,拼进 effectiveDecls —— buildTree/searchCorpus/
- *  cascadeIncrements/extraBodyPaths 天然获得提升语义(单点拼接)。 */
-const promotedList = computed(() => promotedDecls(
-  stepDecls(currentStep.value), currentStep.value?.field_states,
-  currentStep.value?.request?.body))
-
-/** 目录 + 提升条目(消费面一律喂这个;目录在前,文档序稳定) */
-const effectiveDecls = computed(() => [
-  ...(stepDecls(currentStep.value) ?? []),
-  ...promotedList.value,
-])
-
-/** 提升面 path 集(含合成子树深层)— noCarry 门禁(FieldForm/cascade) */
-const promotedPathSet = computed(() => entryPaths(promotedList.value))
-
 /** 请求表单面平铺投影(解析态 != carry,先序)— reqTypeC 差集/描述
- *  索引消费;渲染树走 requestNodes(buildTree 值×结构合并,§5)。
- *  接任意 step:每步各自拼接目录 + 该步提升条目(不能复用 currentStep
- *  的 effectiveDecls computed,同式内联)。 */
+ *  索引消费;渲染树走 requestNodes(buildTree 值×结构合并,§5)。 */
 function fieldBindings(step: StepView | undefined): IOFieldBinding[] {
-  const decls = stepDecls(step)
-  return formBindings(
-    [...(decls ?? []), ...promotedDecls(decls, step?.field_states, step?.request?.body)],
-    step?.field_states)
+  return formBindings(stepDecls(step), step?.field_states)
 }
 
 /** 请求体渲染树(§5.1 三输入:目录 + 意图 field_states + 值 body)。
  *  行数跟 body、结构跟目录;carry 不进树(值表整包注入零感知)。 */
 const requestNodes = computed<FieldTreeNode[]>(() => {
   const step = currentStep.value
-  return buildTree(effectiveDecls.value, step?.field_states, step?.request?.body)
+  return buildTree(stepDecls(step), step?.field_states, step?.request?.body)
 })
 
 /** 字段找回搜索语料(2026-09-07 §2.1):全量目录含 carry(carry 正是
- *  搜索语料,09-05 §5.4);仅请求签挂载(响应面 state 无视)。提升行
- *  标 promoted(§4.4)→ 搜索行下拉禁 carry。 */
+ *  搜索语料,09-05 §5.4);仅请求签挂载(响应面 state 无视)。 */
 const fieldSearchCorpus = computed(() =>
-  searchCorpus(effectiveDecls.value, currentStep.value?.field_states)
-    .map((r) => ({ ...r, promoted: promotedPathSet.value.has(r.path) })))
+  searchCorpus(stepDecls(currentStep.value), currentStep.value?.field_states))
 
-/** 「其他字段」区 body 残留行(§4:目录外深浅皆收,Canvas 投影单一真源;
- *  提升条目已入 effectiveDecls 宇宙 → 提升后残留行消失) */
+/** 「其他字段」区 body 残留行(§4:目录外深浅皆收,Canvas 投影单一真源) */
 const requestExtras = computed(() =>
-  extraBodyPaths(currentStep.value?.request?.body, effectiveDecls.value, currentStep.value?.field_states))
+  extraBodyPaths(currentStep.value?.request?.body, stepDecls(currentStep.value), currentStep.value?.field_states))
 
 /** step 是否携带接口身份引用(决定 loading/failed 占位是否适用) */
 function hasEndpointRef(step: StepView | undefined): boolean {
@@ -1097,8 +1071,7 @@ async function applyFieldStates(increments: Record<string, FieldState | null>) {
   const eid = step.api?.view_hints?.endpoint_id
   if (!eid) return
   try {
-    const verdict = await validateEndpointFieldStates(
-      eid, step.field_states ?? {}, step.request?.body)
+    const verdict = await validateEndpointFieldStates(eid, step.field_states ?? {})
     if (verdict.errors.length) {
       if (before) step.field_states = before
       else delete step.field_states
@@ -1126,8 +1099,7 @@ async function onFieldState(path: string, state: FieldState | null) {
     return
   }
   await applyFieldStates(
-    cascadeIncrements(effectiveDecls.value, step.field_states, path, state,
-      promotedPathSet.value))
+    cascadeIncrements(stepDecls(step), step.field_states, path, state))
 }
 
 /** 搜索框(§2.2):命中行 select/reset —— 与行尾同通路,级联归此。 */
@@ -1447,11 +1419,8 @@ function strategyMatchesField(s: StrategyView, domain: 'request' | 'response', f
  *  path 匹配全部复用;与 FieldForm 渲染同源(buildTree/extraBodyPaths
  *  单一真源),防键漂移。 */
 function requestFieldSurface(step: StepView | undefined): IOFieldBinding[] {
-  const catalog = stepDecls(step)
-  if (!catalog) return []
-  // 每步拼接目录 + 提升条目(§4.1,与 fieldBindings/effectiveDecls 同式):
-  // 提升容器下的深层叶与目录叶同源进角标/注入/提取匹配面(防键漂移)
-  const decls = [...catalog, ...promotedDecls(catalog, step?.field_states, step?.request?.body)]
+  const decls = stepDecls(step)
+  if (!decls) return []
   const fs = step?.field_states
   const tree = buildTree(decls, fs, step?.request?.body)
   return [

@@ -35,11 +35,9 @@ class ResolvePathsRequest(BaseModel):
 
 
 class FieldStatesValidateRequest(BaseModel):
-    """§3.5 配置编辑校验入参:step 的 field_states 增量(可空)+
-    step.request.body(可选,2026-09-14 §5.1:stale 判定实有参照)。"""
+    """§3.5 配置编辑校验入参:step 的 field_states 增量(可空)。"""
 
     field_states: dict[str, str] = Field(default_factory=dict)
-    body: Any | None = None
 
 
 @router.get("/{endpoint_id:path}/full")
@@ -163,4 +161,4 @@ async def validate_step_field_states(
                     "message": "no item in response"},
         )
     decls = ((item.get("request") or {}).get("declarations")) or []
-    return validate_field_states(decls, body.field_states, body.body)
+    return validate_field_states(decls, body.field_states)

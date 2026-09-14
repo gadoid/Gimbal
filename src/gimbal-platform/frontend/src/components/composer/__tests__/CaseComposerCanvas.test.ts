@@ -11,7 +11,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { provide, defineComponent, h, ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
-import type { VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import CaseComposerCanvas from '@/components/composer/CaseComposerCanvas.vue'
@@ -1928,8 +1927,7 @@ describe('CaseComposerCanvas — 字段状态控制门禁(§3.5)', () => {
     await sel.setValue('carry')
     await flushPromises()
     expect(steps[0].field_states).toEqual({ '$.orderId': 'carry' })
-    // T7(§5.1):validate 携 body 三参 — 断言随调用形状更新
-    expect(validateEndpointFieldStates).toHaveBeenCalledWith('ep-1', { '$.orderId': 'carry' }, { orderId: 'ord-1' })
+    expect(validateEndpointFieldStates).toHaveBeenCalledWith('ep-1', { '$.orderId': 'carry' })
   })
 
   it('G2: 校验 errors 非空 → 回滚本次写入(首次写入 field_states 整键不落)', async () => {
@@ -2039,7 +2037,7 @@ describe('CaseComposerCanvas — 级联与找回(2026-09-07 §2.3/§2.4)', () =>
     expect(validateEndpointFieldStates).toHaveBeenCalledWith('ep-carry-tree', {
       '$.supplier.order_supplier_id': 'form',
       '$.supplier': 'collapse',
-    }, { orderId: 'ord-1' })
+    })
   })
 
   it('C3: 校验拒绝 → 整批回滚(不落半套增量)', async () => {
@@ -3019,95 +3017,5 @@ describe('CaseComposerCanvas — 契约降级重试入口(阶段二 Task 8)', ()
     } finally {
       full.mockImplementation(origImpl)
     }
-  })
-})
-
-// ── 目录外字段提升(2026-09-14 spec §4)──────────────────────────
-//
-// 选择器注(brief 裁定:以实际渲染为准,断言语义不变):
-// - 树内 path 面 = `.path-badge`(容器头/深层行)∪ `.field .field-path`
-//   (平铺叶行,path == $.+name 时 FieldForm 渲染 .field-path 而非
-//   .path-badge,§D5);extras 残留行住 `.extra-row`,不与树行混叠。
-// - 提升叶行 = 树内 `.field` 行(行内 `.field-path` 文本 = 模板 path)。
-
-describe('CaseComposerCanvas — 目录外字段提升(#3)', () => {
-  /** 树内可见 path 文本集(容器 + 平铺叶并集) */
-  const treePaths = (w: VueWrapper) =>
-    w.findAll('.path-badge, .field .field-path').map((b) => b.text())
-
-  it('PROMO-1: extras 残留提升 → field_states 落键/树出现/extras 消失/validate 携 body', async () => {
-    vi.mocked(validateEndpointFieldStates).mockClear()
-    const steps = [mkStep({
-      request: { kind: 'request', body: { orderId: 'ord-1', extra: 'E' } } as any,
-    })]
-    const { w } = mountCanvas(steps)
-    await flushPromises()
-    // extras 区默认折叠:展开后见 $.extra 残留行 + 提升按钮
-    await w.find('.extras-toggle').trigger('click')
-    const btn = w.find('.extra-promote')
-    expect(btn.exists()).toBe(true)
-    expect(treePaths(w)).not.toContain('$.extra')
-    await btn.trigger('click')
-    await flushPromises()
-    // field_states 落 form 增量;validate 携 body(§5.1)
-    expect((steps[0] as any).field_states).toEqual({ '$.extra': 'form' })
-    expect(validateEndpointFieldStates).toHaveBeenCalledWith('ep-1', { '$.extra': 'form' },
-      { orderId: 'ord-1', extra: 'E' })
-    // 树内出现 $.extra 节点;extras 区 $.extra 残留行消失
-    // (ep-1 fixture 的 hidden_req 契约差集行常驻 extras,其 ↥ 不受影响 —
-    //  断言钉在「$.extra 行」上,不要求 extras 区整体清空)
-    expect(treePaths(w)).toContain('$.extra')
-    expect(w.findAll('.extra-row .field-path').map((b) => b.text())).not.toContain('$.extra')
-  })
-
-  it('PROMO-2: 提升节点行尾下拉两态无 carry;↺ 重置回 extras', async () => {
-    vi.mocked(validateEndpointFieldStates).mockClear()
-    const steps = [mkStep({
-      request: { kind: 'request', body: { orderId: 'ord-1', extra: 'E' } } as any,
-      field_states: { '$.extra': 'form' } as any,
-    })]
-    const { w } = mountCanvas(steps)
-    await flushPromises()
-    // 树内 $.extra 平铺叶行(树行 = .field;extras 残留行 = .extra-row 不混入)
-    const extraRow = w.findAll('.field')
-      .filter((r) => r.find('.field-path').text() === '$.extra')[0]
-    expect(extraRow).toBeDefined()
-    // 行尾下拉两态(提升面禁 carry,§4.4)
-    const sel = extraRow.find('select.fss-sel')
-    expect(sel.findAll('option').map((o) => (o.element as HTMLOptionElement).value))
-      .toEqual(['form', 'collapse'])
-    // ↺ 重置(overlay 行)→ field_states 清空 → 回 extras
-    await extraRow.find('.fss-reset').trigger('click')
-    await flushPromises()
-    expect((steps[0] as any).field_states).toBeUndefined()
-    expect(treePaths(w)).not.toContain('$.extra')
-    // 回 extras:残留行重现,行内 ↥ 可再提升
-    await w.find('.extras-toggle').trigger('click')
-    expect(w.findAll('.extra-row .field-path').map((b) => b.text())).toContain('$.extra')
-    expect(w.find('.extra-promote').exists()).toBe(true)
-  })
-
-  it('PROMO-3: 深层提升叶与目录叶同源命中(assign 角标 + 注入态只读)', async () => {
-    const steps = [mkStep({
-      request: { kind: 'request', body: { orderId: 'ord-1', cfg: { timeout: 30 } } } as any,
-      field_states: { '$.cfg.timeout': 'form' } as any,
-      strategy: [{
-        kind: 'assign', source: '$.tok', target: '$.request_body.cfg.timeout',
-        scope: 'scenario', required: true,
-      } as any],
-    })]
-    const { w } = mountCanvas(steps)
-    await flushPromises()
-    // 深层提升叶($.cfg.timeout,挂合成父壳 $.cfg 下)与目录叶同源:
-    // requestFieldSurface 拼接提升条目 → assign 角标命中(与 §D9 匹配面一致)
-    const deepRow = w.findAll('.field')
-      .filter((r) => {
-        const badge = r.find('.path-badge')
-        return badge.exists() && badge.text() === '$.cfg.timeout'
-      })[0]
-    expect(deepRow).toBeDefined()
-    expect(deepRow.find('.field-label .strategy-tag').text()).toBe('assign')
-    // 注入态:assign 命中 → 值控件换只读提示条(目录叶同款行为)
-    expect(deepRow.find('.field-control input.ctl').exists()).toBe(false)
   })
 })

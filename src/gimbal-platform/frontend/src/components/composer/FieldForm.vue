@@ -69,7 +69,6 @@
             v-if="stateControl"
             :state="item.n.state"
             :overlay="hasOverlay(item)"
-            :no-carry="promotedPaths?.has(templatePathOf(item))"
             @change="(s) => emit('fieldState', templatePathOf(item), s)"
             @reset="() => emit('fieldState', templatePathOf(item), null)"
           />
@@ -123,7 +122,6 @@
             :injected="injected"
             :extracted="extracted"
             :state-control="stateControl"
-            :promoted-paths="promotedPaths"
             :overlay="overlay"
             :query-badges="queryBadges"
             @update:body="(v: any) => emit('update:body', v)"
@@ -174,7 +172,6 @@
             v-if="stateControl"
             :state="item.n.state"
             :overlay="hasOverlay(item)"
-            :no-carry="promotedPaths?.has(templatePathOf(item))"
             @change="(s) => emit('fieldState', templatePathOf(item), s)"
             @reset="() => emit('fieldState', templatePathOf(item), null)"
           />
@@ -239,7 +236,6 @@
               :injected="injected"
               :extracted="extracted"
               :state-control="stateControl"
-              :promoted-paths="promotedPaths"
               :overlay="overlay"
               :query-badges="queryBadges"
               @update:body="(v: any) => emit('update:body', v)"
@@ -301,7 +297,6 @@
             v-if="stateControl"
             :state="item.n.state"
             :overlay="hasOverlay(item)"
-            :no-carry="promotedPaths?.has(templatePathOf(item))"
             @change="(s) => emit('fieldState', templatePathOf(item), s)"
             @reset="() => emit('fieldState', templatePathOf(item), null)"
           />
@@ -416,7 +411,6 @@
           v-if="stateControl"
           :state="stateOf(item)"
           :overlay="hasOverlay(item)"
-          :no-carry="promotedPaths?.has(templatePathOf(item))"
           @change="(s) => emit('fieldState', templatePathOf(item), s)"
           @reset="() => emit('fieldState', templatePathOf(item), null)"
         />
@@ -765,7 +759,6 @@
               v-if="stateControl"
               :state="r.lf.state"
               :overlay="overlay?.[r.lf.templatePath] !== undefined"
-              :no-carry="promotedPaths?.has(r.lf.templatePath)"
               @change="(s: FieldState) => emit('fieldState', r.lf.templatePath, s)"
               @reset="() => emit('fieldState', r.lf.templatePath, null)"
             />
@@ -904,16 +897,6 @@
               :disabled="readonly"
               @click="removeExtra(row)"
             >×</button>
-            <!-- 残留行提升(§4.3):在删除按钮外 — 契约差集行(inBody=false)
-                 也可提升。path 模板化(剥 [i])上抛,Canvas 落 field_states 增量 -->
-            <button
-              v-if="stateControl"
-              type="button"
-              class="extra-promote"
-              title="提升进 form 树(field_states 记增量,值不动;↺ 重置回此区)"
-              :disabled="readonly"
-              @click="emit('promote', toTemplatePath(row.path))"
-            >↥</button>
           </div>
         </div>
       </div>
@@ -929,7 +912,6 @@ import { getByPath, pruneByPath, setByPath } from '@/utils/jsonpath'
 import type {
   FieldArrayNode, FieldDictNode, FieldLeafNode, FieldObjectNode, FieldTreeNode,
 } from '@/utils/declarations'
-import { toTemplatePath } from '@/utils/declarations'
 import FieldActionMenu from './FieldActionMenu.vue'
 import FieldStateSelect from './FieldStateSelect.vue'
 import { parseJson } from '../../utils/json'
@@ -995,10 +977,6 @@ const props = defineProps<{
   /** 字段状态控制门控(§5.4):行尾状态下拉写 step.field_states —
    *  仅 Canvas 请求体场景传;只读/响应/策略表单复用处不传 → 零控件。 */
   stateControl?: boolean
-  /** 提升面 path 集(Canvas 传入,entryPaths(promotedDecls(...))):
-   *  命中节点的行尾下拉禁 carry(§4.4 — 目录外结构上不可能 carry)。
-   *  复用处不传 → 行为不变。 */
-  promotedPaths?: Set<string>
   /** step.field_states 增量(Canvas 传入):标记显式覆盖行(可重置)。 */
   overlay?: Record<string, FieldState>
   /** 动态取数源 view 徽标(2026-09-07 §7.5,Canvas 传入):path → 命中
@@ -1026,10 +1004,6 @@ const emit = defineEmits<{
    * Canvas 落地为 step.field_states 稀疏写入(§3.1)。
    */
   'fieldState': [path: string, state: FieldState | null]
-  /** extras 残留行提升(§4.3):path 已模板化(剥 [i]);Canvas 落
-   *  applyFieldStates({[path]: 'form'})—— 不走 cascade(提升时
-   *  合成条目尚不存在,级联定位必然空批)。 */
-  'promote': [path: string]
   /**
    * 动态取数源查询(2026-09-07 §7):查钮点击,field 携带 value_source —
    * Canvas 定位绑定分组并打开 ValueSourcePicker(一查多填)。
@@ -1960,12 +1934,4 @@ function formatJson(v: unknown): string {
 .extra-src.schema { background: #ecf5ff; color: #409eff; }
 .extra-control { display: flex; gap: 6px; align-items: flex-start; }
 .extra-control .ctl { flex: 1; min-width: 0; }
-/* 残留行提升按钮(§4.3):靛族 — 与删除钮(红 hover)区分,指向提升动作 */
-.extra-promote {
-  border: 1px solid #cbd5e1; border-radius: 4px; background: #f8fafc;
-  color: #4f46e5; font-size: 11px; line-height: 1; cursor: pointer;
-  padding: 3px 6px;
-}
-.extra-promote:hover { border-color: var(--accent); background: #eef2ff; }
-.extra-promote:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

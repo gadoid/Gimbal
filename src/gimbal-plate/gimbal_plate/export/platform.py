@@ -279,7 +279,6 @@ def _render_request_view(
     - 反向转 gimbal:Scenario.model_validate(platform_dict) 直接接受 fields_meta;
       GimbalScenarioExporter.to_dict() 通过 model_dump(exclude=...) 过滤掉,
       body 已是 Scenario 校验通过的完整字段,gimbal 零适配
-    - 顶层目录外键整块并入(2026-09-14):步骤 4 差集补全,声明根不受影响
     - 注:fields_meta 必须用普通字段名(不能 _fields_meta),因为 Pydantic 把
       下划线前缀视为 PrivateAttr,会静默丢弃(PLATE_V3_DESIGN.md §7.1)
     """
@@ -347,21 +346,6 @@ def _render_request_view(
                 # 丢弃返回 = 值静默蒸发(整 body 为数组是正确导出形态);
                 # dict 首段原位变异返回同对象,赋值无副作用
                 full_body = _set_by_path(full_body, segs, value)
-        # 4) 顶层目录外键整块并入(2026-09-14 提升配套):目录只覆盖声明
-        #    面,顶层未声明键(含子树)在三步全不沾会被静默丢弃 ——
-        #    platform→gimbal 往返子集契约破坏。与步骤 1 同式整块保留;
-        #    声明根不进差集(三步已覆盖,值优先级不变)。
-        #    full_body 非 dict(dict body + INDEX 根矛盾输入被 _set_by_path
-        #    翻成 list)时跳过 —— 宁静默不炸导出。
-        if isinstance(body, dict) and isinstance(full_body, dict):
-            declared_roots = {
-                segs[0]
-                for e in iter_declarations(decls)
-                if (segs := _path_segs(e.path)) and isinstance(segs[0], str)
-            }
-            for k, v in body.items():
-                if k not in declared_roots:
-                    full_body[k] = v
     else:
         full_body = dict(body)
     return {
