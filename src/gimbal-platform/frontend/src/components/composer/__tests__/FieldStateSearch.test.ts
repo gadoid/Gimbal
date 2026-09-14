@@ -89,11 +89,13 @@ describe('FieldStateSearch — 渲染与过滤', () => {
     expect(w.find('.fss-search-panel').exists()).toBe(false)
   })
 
-  it('失焦收起面板(v-if 移除;面板 mousedown.prevent 防点击丢焦)', async () => {
+  it('失焦收起面板(focusout 焦点包含判定;面板内下拉/↺ 点击不误关)', async () => {
     const w = mount(FieldStateSearch, { props: { corpus: CORPUS } })
     await type(w, 'phone')
     expect(w.find('.fss-search-panel').exists()).toBe(true)
-    await w.find('input.fss-search-input').trigger('blur')
+    // 焦点移出组件(relatedTarget 空)→ 收起。原 @mousedown.prevent 保焦
+    // 会压制面板内原生 <select> 下拉展开(真浏览器点不开,setValue 测不出)
+    await w.find('input.fss-search-input').trigger('focusout')
     expect(w.find('.fss-search-panel').exists()).toBe(false)
     // 重新聚焦 + 查询仍在 → 面板回来(查询词不清,继续缩小范围)
     await w.find('input.fss-search-input').trigger('focus')

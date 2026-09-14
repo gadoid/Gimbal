@@ -7,20 +7,19 @@
   落地由 Canvas 统一(与行尾下拉同通路,§2.3/§2.4)。
 -->
 <template>
-  <div class="fss-search">
+  <div class="fss-search" @focusout="onFocusOut">
     <input
       v-model="raw"
       class="fss-search-input"
       type="text"
       placeholder="搜索字段(含 carry 传递面)"
       @focus="panelOpen = true"
-      @blur="panelOpen = false"
       @keydown.esc="clear"
     />
     <div
       v-if="query && hits.length && panelOpen"
       class="fss-search-panel"
-      @mousedown.prevent
+      tabindex="-1"
     >
       <div v-if="hits.length > LIMIT" class="fss-search-more">
         命中 {{ hits.length }} 条,显示前 {{ LIMIT }} 条(继续输入缩小范围)
@@ -96,6 +95,15 @@ function clear(): void {
   query.value = ''
   panelOpen.value = false
 }
+
+/** 焦点离开整组件(输入框 + 面板)才收起 —— 点击面板内的状态下拉/
+ *  ↺ 不会误关。此前 @mousedown.prevent 保焦,但 preventDefault 连带
+ *  压制原生 <select> 下拉展开(真浏览器点不开,测试 setValue 测不出)。 */
+function onFocusOut(e: FocusEvent): void {
+  const next = e.relatedTarget as Node | null
+  if (next && (e.currentTarget as HTMLElement).contains(next)) return
+  panelOpen.value = false
+}
 </script>
 
 <style scoped>
@@ -111,6 +119,7 @@ function clear(): void {
 }
 .fss-search-input:focus { outline: none; border-color: var(--el-color-primary, #409eff); }
 .fss-search-panel {
+  outline: none; /* tabindex=-1 聚焦锚(点击面板空白不失焦),不显聚焦框 */
   position: absolute;
   z-index: 30;
   top: calc(100% + 4px);
