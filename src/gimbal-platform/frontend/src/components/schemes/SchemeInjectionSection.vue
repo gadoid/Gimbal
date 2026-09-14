@@ -1,7 +1,10 @@
 <script setup lang="ts">
 /** 方案工作台 · 断言注入区:注册表条目复选(死条目禁选 + 灰显 + 悬空 title)、
  *  快建弹层(步骤号 + jsonpath → quickCreate)、「管理断言」跳编辑器(manage)。
- *  纯展示组件:条目/死集进 props,勾选/快建/管理出事件;持久化与导航归壳。 */
+ *  纯展示组件:条目/死集进 props,勾选/快建/管理出事件;持久化与导航归壳。
+ *  快建失败回调化(§13 T6-1):quickCreate 契约 = [draft, onDone(ok)] —
+ *  关闭/清空只在壳回报成功(onDone(true))后发生;PUT 失败 onDone(false)
+ *  → 弹层保持打开、输入保留,用户改完可直接重试(乐观关闭会吞掉输入)。 */
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
@@ -13,7 +16,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   'update:modelValue': [v: string[]]
-  quickCreate: [draft: { stepIndex: number; jsonpath: string }]  // 快建弹层确认
+  quickCreate: [draft: { stepIndex: number; jsonpath: string }, onDone: (ok: boolean) => void]
   manage: []                                                      // 跳断言编辑器
 }>()
 
@@ -43,9 +46,13 @@ function confirmQuick() {
     ElMessage.warning('注入路径需以 $ 开头(例:$.amount)')
     return
   }
-  emit('quickCreate', { stepIndex, jsonpath: pendingJsonpath.value })
-  showQuick.value = false
-  pendingJsonpath.value = ''
+  // 收尾交结果回调:壳 PUT 成功才关弹层清输入,失败则原样保留
+  emit('quickCreate', { stepIndex, jsonpath: pendingJsonpath.value }, (ok: boolean) => {
+    if (ok) {
+      showQuick.value = false
+      pendingJsonpath.value = ''
+    }
+  })
 }
 </script>
 
@@ -53,6 +60,8 @@ function confirmQuick() {
   <section class="wb-section">
     <header class="zone-head">
       <span class="zone-name">断言注入</span>
+      <span class="zone-count">{{ entries.length }}</span>
+      <span class="zone-spacer"></span>
       <div class="zone-ops">
         <el-button size="small" text type="primary" data-testid="quick-add"
           @click="showQuick = !showQuick">+ 快建条目</el-button>
@@ -79,21 +88,63 @@ function confirmQuick() {
           @change="toggle(e.id, ($event.target as HTMLInputElement).checked)" />
         {{ e.label ?? e.id }}
       </label>
-      <p v-if="!entries.length" class="hint">暂无断言条目 — 可「+ 快建条目」或到断言管理器维护。</p>
+      <div v-if="!entries.length" class="empty-state">
+        <p>暂无断言条目 — 可「+ 快建条目」或到断言管理器维护。</p>
+        <el-button size="small" type="primary" plain @click="showQuick = true">+ 快建条目</el-button>
+      </div>
     </div>
   </section>
 </template>
 
 <style scoped>
-.wb-section { border: 1px solid var(--el-border-color-light); border-radius: 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
-.zone-head { display: flex; align-items: center; justify-content: space-between; }
-.zone-name { font-weight: 600; }
+/* 分区卡片:对齐平台卡片体系(CaseDataSetsList .card / 编辑器 .meta) */
+.wb-section {
+  background: #fff; border: 1px solid var(--color-border-tertiary);
+  border-radius: 8px; padding: 12px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+/* zone-head 体系(CaseDataSetsList 同款):左竖线标题 + 计数徽标 + 弹性空位 */
+.zone-head { display: flex; align-items: center; gap: 10px; }
+.zone-name {
+  font-size: 14px; font-weight: 700; color: var(--color-text-primary);
+  padding-left: 10px; border-left: 3px solid var(--accent);
+}
+.zone-count {
+  padding: 1px 6px; font-size: 11px; font-weight: 600;
+  color: var(--color-text-secondary); background: #f1f5f9; border-radius: 3px;
+}
+.zone-spacer { flex: 1; }
 .zone-ops { display: flex; gap: 4px; }
-.quick-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px dashed var(--el-border-color); border-radius: 6px; }
+
+/* 快建行:dashed 软面板(基准 .add-card / dead-keys-bar 的浅底虚线语言) */
+.quick-row {
+  display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+  border: 1px dashed var(--accent-soft-border); border-radius: 6px; background: #fafbff;
+}
 .quick-row .qa-step { width: 110px; flex: none; }
 .quick-row .qa-path { flex: 1; }
-.inj-list { display: flex; flex-direction: column; gap: 4px; }
-.inj-item { cursor: pointer; }
-.inj-item.dead { color: var(--el-text-color-secondary); cursor: not-allowed; text-decoration: line-through; }
-.hint { color: var(--el-text-color-secondary); }
+
+/* 条目行:行距 + hover(平台行交互语言 #f8faff,AssertionRegistryEditor .are-row 同款) */
+.inj-list { display: flex; flex-direction: column; gap: 2px; }
+.inj-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13px;
+  transition: background 0.15s ease;
+}
+.inj-item:hover { background: #f8faff; }
+.inj-item input[type="checkbox"] { accent-color: var(--accent); }
+/* 死条目:禁选 + 灰显 + 删除线(hover 不给反馈 — 不可选的东西不该亮) */
+.inj-item.dead {
+  color: var(--color-text-tertiary); cursor: not-allowed;
+  text-decoration: line-through; opacity: 0.65;
+}
+.inj-item.dead:hover { background: none; }
+
+/* 空态(三处统一形状:dashed 框 + muted 文案 + 引导按钮) */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 18px 16px; text-align: center;
+  border: 1px dashed var(--color-border-tertiary); border-radius: 8px;
+}
+.empty-state p { margin: 0; font-size: 12px; color: var(--color-text-tertiary); }
 </style>

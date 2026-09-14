@@ -108,6 +108,7 @@ const logSubText = computed({
     <section class="wb-section">
       <header class="zone-head">
         <span class="zone-name">用户与服务</span>
+        <span class="zone-spacer"></span>
         <span class="zone-hint">仅显式绑定入库;与声明相同的 URL 不记录</span>
       </header>
       <div v-if="serviceRows.length" class="bind-list">
@@ -137,7 +138,8 @@ const logSubText = computed({
     <section class="wb-section">
       <header class="zone-head">
         <span class="zone-name">运行参数</span>
-        <span class="zone-hint">总量预览:<span data-testid="total-preview"
+        <span class="zone-spacer"></span>
+        <span class="zone-hint">总量预览:<span data-testid="total-preview" class="total-chip"
           :class="{ 'total-over': overLimit }">{{ nRuns }} × {{ parallel }} = {{ totalRuns }}</span></span>
       </header>
       <div class="param-row">
@@ -185,26 +187,74 @@ const logSubText = computed({
 </template>
 
 <style scoped>
-.wb-section { border: 1px solid var(--el-border-color-light); border-radius: 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
-.zone-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.zone-name { font-weight: 600; }
-.zone-hint { font-size: 12px; color: var(--el-text-color-secondary); }
-.run-config { display: flex; flex-direction: column; gap: 12px; }
-.bind-list { display: flex; flex-direction: column; gap: 6px; }
-.bind-row { display: grid; grid-template-columns: minmax(120px, 1fr) 150px minmax(160px, 1.2fr); gap: 8px; align-items: center; }
-.bind-svc { min-width: 0; display: flex; flex-direction: column; }
-.svc-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.svc-declared { font-size: 12px; color: var(--el-text-color-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.svc-nodeclared { font-size: 12px; color: var(--el-color-warning); }
-.bind-alias, .bind-url { border: 1px solid var(--el-border-color); border-radius: 4px; padding: 4px 8px; font-size: 13px; min-width: 0; background: var(--el-fill-color-blank); color: var(--el-text-color-primary); }
-.param-row { display: flex; align-items: center; gap: 10px; }
-.param-row label { width: 150px; flex: none; font-size: 13px; }
-.param-hint { font-size: 12px; color: var(--el-text-color-secondary); }
-.total-over { color: var(--el-color-danger); font-weight: 600; }
-.total-warn { margin: 0; color: var(--el-color-danger); font-size: 12px; }
+/* 分区卡片:对齐平台卡片体系(CaseDataSetsList .card / 编辑器 .meta) */
+.wb-section {
+  background: #fff; border: 1px solid var(--color-border-tertiary);
+  border-radius: 8px; padding: 12px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+/* zone-head 体系(CaseDataSetsList 同款):左竖线标题 + 弹性空位 + note */
+.zone-head { display: flex; align-items: center; gap: 10px; }
+.zone-name {
+  font-size: 14px; font-weight: 700; color: var(--color-text-primary);
+  padding-left: 10px; border-left: 3px solid var(--accent);
+}
+.zone-spacer { flex: 1; }
+.zone-hint { font-size: 11px; color: var(--color-text-secondary); }
+.run-config { display: flex; flex-direction: column; gap: 16px; }
+
+/* ① 绑定行:列表行语言(分隔线 + 行距,atbl td 同款) */
+.bind-list { display: flex; flex-direction: column; }
+.bind-row {
+  display: grid; grid-template-columns: minmax(120px, 1fr) 150px minmax(160px, 1.2fr);
+  gap: 8px; align-items: center; padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.bind-row:last-child { border-bottom: none; }
+.bind-svc { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.svc-name {
+  font-weight: 600; font-size: 13px; color: var(--color-text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.svc-declared {
+  font-family: var(--font-mono); font-size: 11px; color: var(--color-text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.svc-nodeclared { font-size: 11px; color: #b45309; }
+.bind-alias, .bind-url {
+  border: 1px solid var(--color-border-secondary); border-radius: 4px;
+  padding: 4px 8px; font-size: 13px; min-width: 0;
+  background: #fff; color: var(--color-text-primary);
+}
+.bind-alias:focus, .bind-url:focus {
+  border-color: var(--accent); outline: none;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+/* ② 参数行:行距节奏(8px 行高步进) */
+.param-row { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
+.param-row label { width: 150px; flex: none; font-size: 13px; color: var(--color-text-primary); }
+.param-hint { font-size: 11px; color: var(--color-text-secondary); }
+/* 总量预览 chip:平台摘要 chip 形制(row-count/zone-count 同族,mono 数字) */
+.total-chip {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  padding: 1px 6px; border-radius: 3px;
+  color: var(--color-text-secondary); background: #f1f5f9;
+}
+.total-chip.total-over { color: #b91c1c; background: #fef2f2; }
+.total-warn { margin: 0; color: #b91c1c; font-size: 12px; }
+
+/* ③ 预埋区 */
 .reserve-row { display: flex; flex-direction: column; gap: 4px; }
-.reserve-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
-.tag-reserve { font-size: 12px; padding: 0 6px; border-radius: 4px; background: var(--el-fill-color); color: var(--el-text-color-secondary); font-weight: 400; }
-.hint { color: var(--el-text-color-secondary); }
+.reserve-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600; color: var(--color-text-primary);
+}
+/* 「待引擎支持」:平台 muted tag(CaseDataSetsList .tag 同款形制) */
+.tag-reserve {
+  font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px;
+  color: var(--color-text-secondary); background: #f1f5f9; white-space: nowrap;
+}
+.hint { color: var(--color-text-secondary); }
 @media (max-width: 1280px) { .bind-row { grid-template-columns: 1fr; } }
 </style>

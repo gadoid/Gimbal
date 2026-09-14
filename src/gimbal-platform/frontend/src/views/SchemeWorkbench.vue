@@ -95,9 +95,19 @@ const registrySaving = ref(false)
 /** 快建落库:条目造形抄 CaseComposer.onRegistryAdd 请求侧(id=genEntryId /
  *  name=jsonpath / path 三元组 source='body' / value 空串预填 / asserts 空);
  *  保存机制与 AssertionRegistryEditor.save 同款 —— 整体 PUT,只动
- *  assertion_registry 键,definition/orchestration 原样透传。 */
-async function onQuickCreate(q: { stepIndex: number; jsonpath: string }) {
-  if (!scenarioDraft.value || registrySaving.value) return
+ *  assertion_registry 键,definition/orchestration 原样透传。
+ *  失败回调化(§13 T6-1):结果经 onDone 回传组件 — 成功 true 才关弹层,
+ *  失败 false 弹层保持打开、输入保留(不再乐观关闭吞掉用户输入)。 */
+async function onQuickCreate(
+  q: { stepIndex: number; jsonpath: string },
+  onDone: (ok: boolean) => void,
+) {
+  if (!scenarioDraft.value) {
+    ElMessage.error('快建条目失败:场景草稿未加载')
+    onDone(false)
+    return
+  }
+  if (registrySaving.value) { onDone(false); return }
   registrySaving.value = true
   try {
     const entry: AssertionEntry = {
@@ -116,8 +126,10 @@ async function onQuickCreate(q: { stepIndex: number; jsonpath: string }) {
       draft.value.injectionEntryIds.push(entry.id)
     }
     ElMessage.success('已快建断言条目并勾选(记得保存方案)')
+    onDone(true)
   } catch (e) {
     ElMessage.error(`快建条目失败:${e instanceof Error ? e.message : String(e)}`)
+    onDone(false)
   } finally {
     registrySaving.value = false
   }
@@ -310,7 +322,12 @@ onMounted(async () => {
       <div class="wb-editor">
         <template v-if="draft">
           <header class="editor-head">
-            <h3>{{ draft.name }}</h3>
+            <div class="editor-title">
+              <h3>{{ draft.name }}</h3>
+              <span class="save-state" :class="dirty ? 'is-dirty' : 'is-clean'">
+                {{ dirty ? '未保存' : '已保存' }}
+              </span>
+            </div>
             <div class="editor-ops">
               <el-button data-testid="save-scheme" type="primary" size="small"
                 :disabled="!dirty" :loading="saving" @click="saveScheme">保存</el-button>
@@ -355,17 +372,61 @@ onMounted(async () => {
             :step-count="stepCount"
           />
         </template>
-        <el-empty v-else description="选择左侧方案" />
+        <div v-else class="wb-empty">
+          <el-empty description="选择左侧方案">
+            <el-button type="primary" plain @click="onCreate">+ 新建方案</el-button>
+          </el-empty>
+        </div>
       </div>
     </div>
   </section>
 </template>
 
 <style scoped>
-.wb-body { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 16px; min-height: 500px; }
-.wb-editor { border: 1px solid var(--el-border-color-light); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.editor-head { display: flex; align-items: center; justify-content: space-between; }
-.editor-head h3 { margin: 0; }
-.editor-ops { display: flex; gap: 8px; }
+/* 页面容器:对齐平台视图容器(AssertionRegistryEditor / DataSetEditor 同款) */
+.scheme-workbench {
+  max-width: 1480px; min-height: calc(100vh - 48px);
+  padding: 28px 32px 48px; margin: 0 auto; box-sizing: border-box;
+}
+.page-header {
+  display: flex; gap: 24px; align-items: center;
+  justify-content: space-between; margin-bottom: 16px;
+}
+.page-header h2 { margin: 0; font-size: 22px; color: var(--color-text-primary); }
+.page-header p { margin: 5px 0 0; font-size: 12px; color: var(--color-text-secondary); }
+.page-header code.sid {
+  padding: 1px 4px; font-family: var(--font-mono); font-size: 11px;
+  background: var(--accent-soft); border-radius: 3px;
+}
+.header-actions { display: flex; gap: 8px; }
+
+.wb-body {
+  display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 20px; align-items: start; min-height: 400px;
+}
+/* 编辑区:外框退役 — 各分区自带卡片,直接以统一节奏(16px)排列 */
+.wb-editor { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+/* 编辑头:方案名 + 保存状态 + 操作(底边框分隔,AssertionRegistryEditor 详情头同款) */
+.editor-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding-bottom: 12px; border-bottom: 1px solid var(--color-border-tertiary);
+}
+.editor-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.editor-title h3 {
+  margin: 0; font-size: 16px; font-weight: 700; color: var(--color-text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 保存状态:脏 = 平台 warn tag(amber),净 = muted tag */
+.save-state {
+  flex: none; font-size: 11px; font-weight: 600;
+  padding: 1px 6px; border-radius: 3px; white-space: nowrap;
+}
+.save-state.is-dirty { color: #b45309; background: #fef3c7; }
+.save-state.is-clean { color: var(--color-text-secondary); background: #f1f5f9; }
+.editor-ops { display: flex; gap: 8px; flex: none; }
+
+.hint { margin: 0; padding: 8px 12px; font-size: 12px; color: var(--color-text-secondary); background: #f8fafc; border-radius: 6px; }
+.wb-empty { background: #fff; border: 1px dashed var(--color-border-tertiary); border-radius: 8px; }
 @media (max-width: 1280px) { .wb-body { grid-template-columns: minmax(0, 1fr); } }
 </style>
