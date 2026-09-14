@@ -233,7 +233,7 @@
             </el-form-item>
             <!-- 字段状态找回(2026-09-07 §2.2):独立于渲染树挂载 ——
                  全 carry 树空时也须可达(找回入口恰在最需要时不得消失) -->
-            <el-form-item v-if="activeIoTab === 'request' && fieldSearchCorpus.length" label="字段状态">
+            <el-form-item v-if="activeIoTab === 'request' && fieldSearchCorpus.length" label="字段管理">
               <FieldStateSearch
                 :corpus="fieldSearchCorpus"
                 @select="onSearchFieldState"

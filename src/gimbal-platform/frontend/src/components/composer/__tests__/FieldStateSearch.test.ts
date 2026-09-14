@@ -71,6 +71,31 @@ describe('FieldStateSearch — 渲染与过滤', () => {
     expect(w.find('.fss-search-panel').exists()).toBe(false)
   })
 
+  it('描述入条目(命中行渲染 fss-search-desc;无描述不渲染空壳)', async () => {
+    const w = mount(FieldStateSearch, { props: { corpus: CORPUS } })
+    await type(w, 'remark')
+    const desc = w.find('.fss-search-desc')
+    expect(desc.exists()).toBe(true)
+    expect(desc.text()).toBe('订单备注')
+    // 命中行文本含描述 — 描述是条目信息的一部分(2026-09-14 字段管理改版)
+    expect(w.find('.fss-search-row').text()).toContain('订单备注')
+
+    // 无描述字段(supplier)不渲染描述 span
+    await type(w, '$.supplier')
+    expect(w.find('.fss-search-row.fss-search-desc').exists()).toBe(false)
+    expect(w.findAll('.fss-search-desc')).toHaveLength(0)
+  })
+
+  it('行外层不再单列 state 文本(状态由行尾选框自显)', async () => {
+    const w = mount(FieldStateSearch, { props: { corpus: CORPUS } })
+    await type(w, 'supplier')
+    expect(w.find('.fss-search-res').exists()).toBe(false)
+    // 选框仍在且携带解析态(状态下拉功能不受累)
+    const sel = w.find('.fss-search-row select.fss-sel')
+    expect(sel.exists()).toBe(true)
+    expect((sel.element as HTMLSelectElement).value).toBe('carry')
+  })
+
   it('命中 >50 折叠为前 50 + 计数提示', async () => {
     const big = Array.from({ length: 60 }, (_, i) =>
       mkRow({ path: `$.f${i}`, name: `f${i}` }))

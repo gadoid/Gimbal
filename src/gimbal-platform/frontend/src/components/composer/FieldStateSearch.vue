@@ -12,7 +12,7 @@
       v-model="raw"
       class="fss-search-input"
       type="text"
-      placeholder="搜索字段(含 carry 传递面)"
+      placeholder="搜索字段/描述(含 carry 传递面)"
       @focus="panelOpen = true"
       @keydown.esc="clear"
     />
@@ -29,7 +29,9 @@
           <span v-if="row.breadcrumb" class="fss-breadcrumb">{{ row.breadcrumb }} › </span>{{ row.name }}
           <code class="fss-search-type">{{ row.type }}</code>
         </span>
-        <span class="fss-search-res" :data-state="row.resolved">{{ row.resolved }}</span>
+        <!-- 描述入条目(与 name/path 同为搜索面):状态文本不单列,
+             由行尾 FieldStateSelect 选框自显 — 2026-09-14 字段管理改版 -->
+        <span v-if="row.description" class="fss-search-desc">{{ row.description }}</span>
         <FieldStateSelect
           :state="row.resolved"
           :overlay="row.overlay"
@@ -126,7 +128,7 @@ function onFocusOut(e: FocusEvent): void {
   left: 0;
   max-height: 300px;
   overflow-y: auto;
-  min-width: 380px;
+  min-width: 440px;
   padding: 4px 6px;
   background: var(--el-bg-color-overlay, #fff);
   border: 1px solid var(--el-border-color-light, #e4e7ed);
@@ -146,6 +148,10 @@ function onFocusOut(e: FocusEvent): void {
 .fss-search-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fss-breadcrumb { color: var(--el-text-color-secondary, #909399); }
 .fss-search-type { margin-left: 4px; color: var(--el-text-color-secondary, #909399); }
-.fss-search-res { color: var(--el-text-color-secondary, #909399); min-width: 46px; text-align: right; }
-.fss-search-res[data-state='carry'] { color: var(--el-color-info, #909399); font-style: italic; }
+.fss-search-desc {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--el-text-color-secondary, #909399);
+}
+
 </style>
