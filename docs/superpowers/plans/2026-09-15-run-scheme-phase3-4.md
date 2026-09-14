@@ -511,7 +511,7 @@ function onConfirm() {
     })
     return
   }
-  // 自建方案:原样展平(不allowed运行时篡改,D3)
+  // 自建方案:原样展平(不允许运行时篡改,D3)
   emit('confirm', s.dataSetSelection.map((x) => ({ ...x })), {
     ...common,
     ...(s.stepTo !== null ? { stepTo: s.stepTo } : {}),
