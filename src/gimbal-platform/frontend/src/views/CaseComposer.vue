@@ -673,6 +673,9 @@ onMounted(async () => {
   }
   if (wantsFocus) focusJump.value = { stepIdx: fs, strategyIdx: fy }
   // 工作台「▶ 运行此方案」深链(阶段③):?runScheme=rs-xxx 打开弹窗并预选。
+  // 前提:深链仅 onMounted 首载可达(draft 刚加载,dirty 恒 false),故
+  // 直开弹窗不经 openRunDialog 的 dirty-flush;若未来把深链入口扩展到
+  // 已加载页面(如页内跳转),必须改走 openRunDialog() 复用落库守卫。
   // 读取后 router.replace 清 query — 防刷新/分享时重复弹窗;方案列表由
   // watch(runDialogOpen) 统一拉取,到达后 RunDialog 的 schemes watch
   // 按 initialSchemeId 落位预选(列表先空不丢预选)。

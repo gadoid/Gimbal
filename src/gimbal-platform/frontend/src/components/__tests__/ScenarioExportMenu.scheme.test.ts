@@ -58,7 +58,7 @@ function mountMenu() {
   })
 }
 
-/** 点开菜单(visible-change 触发 listRunSchemes),返回 teleport 到 body
+/** 点开菜单(trigger 按钮 @click 触发 listRunSchemes),返回 teleport 到 body
  *  的下拉项 — flushPromises 等异步取数落定后再检索。 */
 async function openMenu(w: ReturnType<typeof mountMenu>): Promise<HTMLElement[]> {
   await w.find('.se-trigger').trigger('click')

@@ -74,4 +74,33 @@ describe('SchemeRunConfigSection', () => {
     expect(w.find('[data-testid="total-preview"]').text()).toContain('202')
     expect(w.text()).toContain('超出单次执行总量上限 200')
   })
+
+  // ── I-2:凭证别名被删 → 绑定行警示(spec §9)───────────────────────
+  it('存量别名已删:行标红警示 + select 以 disabled option 显示原别名', () => {
+    const w = mount(SchemeRunConfigSection, {
+      props: {
+        ...BASE,
+        serviceBindings: { 'svc-a': { authAlias: 'ghost' } },  // ghost 不在 authOptions
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    const row = w.findAll('.bind-row')[0]                       // svc-a 行
+    expect(row.classes()).toContain('is-degraded')
+    expect(w.text()).toContain('凭证已删,请重选')
+    // select 值保住:已删 alias 有对应 option(disabled,防重选但可见可存)
+    const sel = w.findAll('[data-testid="binding-alias"]')[0]
+    const opt = sel.findAll('option').find((o) => o.attributes('value') === 'ghost')
+    expect(opt).toBeTruthy()
+    expect(opt!.attributes('disabled')).toBeDefined()
+    expect(opt!.text()).toContain('ghost')
+  })
+
+  it('存量别名仍活:不标降级行(对照组)', () => {
+    const w = mount(SchemeRunConfigSection, {
+      props: { ...BASE, serviceBindings: { 'svc-a': { authAlias: 'alias-1' } } },
+      global: { plugins: [ElementPlus] },
+    })
+    expect(w.findAll('.bind-row')[0].classes()).not.toContain('is-degraded')
+    expect(w.text()).not.toContain('凭证已删')
+  })
 })

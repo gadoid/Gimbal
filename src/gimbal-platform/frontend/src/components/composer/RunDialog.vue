@@ -126,8 +126,10 @@
                 <span class="rd-sum-label">绑定</span>
                 <span class="rd-sum-value">
                   <template v-if="Object.keys(selected.serviceBindings).length">
-                    <span v-for="(b, svc) in selected.serviceBindings" :key="svc" class="rd-sum-bind">
+                    <span v-for="(b, svc) in selected.serviceBindings" :key="svc" class="rd-sum-bind"
+                      :class="{ 'is-degraded': degradedAlias(b.authAlias) }">
                       {{ svc }}{{ b.authAlias ? ` → ${b.authAlias}` : '' }}{{ b.url ? `(URL 覆盖)` : '' }}
+                      <span v-if="degradedAlias(b.authAlias)" class="rd-sum-warn">凭证已删,去工作台重选</span>
                     </span>
                   </template>
                   <template v-else>无显式绑定</template>
@@ -268,8 +270,6 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   close: []
-  /** 契约取数降级重试入口(消费面随注入勾选区退役,契约保留供宿主过渡) */
-  retryContract: []
   confirm: [
     dataSetSelection: DataSetSelection[],
     opts: {
@@ -368,10 +368,16 @@ watch([() => props.schemes, () => props.serviceRows, selected], () => {
   bindings.value = next
 }, { immediate: true })
 
-/** 降级:绑定引用的 alias 已不在凭证选项(凭证被删)→ 行标红,不阻塞运行 */
+/** 降级口径(spec §9):alias 非空且已不在凭证选项(凭证被删)。
+ *  两态共用 — 默认方案态看编辑中的 bindings,自建方案态(概要只读)
+ *  看方案存量 serviceBindings;标红警示,不阻塞运行。 */
+function degradedAlias(alias: string | undefined): boolean {
+  return !!alias && !props.authOptions.includes(alias)
+}
+
+/** 默认方案态绑定行降级(读编辑中的 bindings) */
 function degraded(svc: string): boolean {
-  const a = bindings.value[svc]?.authAlias
-  return !!a && !props.authOptions.includes(a)
+  return degradedAlias(bindings.value[svc]?.authAlias)
 }
 
 // ── 自建方案失效判定(spec §9)─────────────────────────────────
@@ -466,8 +472,10 @@ function onConfirm() {
   parallel.value = Math.min(200, Math.max(1, Math.floor(parallel.value || 1)))
   // 总量闸前置:dispatch 侧 rows × nRuns > 200 整单 409 too_many_runs,
   // 同闸提前拦(后端权威定义:app/core/config.py MAX_RUNS_PER_EXECUTION)。
+  // 文案分态:自建方案参数只读 → 指去工作台;默认方案态参数就地可调。
   if (totalRuns.value > MAX_TOTAL_RUNS) {
-    ElMessage.warning(`总运行次数 ${totalRuns.value} 超过平台上限 ${MAX_TOTAL_RUNS} — 请调整方案参数`)
+    const hint = s.isDefault ? '请调整方案参数' : '请到方案工作台调整方案参数'
+    ElMessage.warning(`总运行次数 ${totalRuns.value} 超过平台上限 ${MAX_TOTAL_RUNS} — ${hint}`)
     return
   }
   if (!s.isDefault && isSchemeInvalid(s)) return   // 失效禁跑(按钮也禁,双保险)
@@ -661,6 +669,9 @@ function onConfirm() {
   font-family: var(--font-mono); font-size: 11px;
   background: #f1f5f9; padding: 1px 6px; border-radius: 4px;
 }
+/* 降级(概要态,spec §9):绑定 alias 已删 — 底色微红 + 警示(与默认态 .is-degraded 同口径) */
+.rd-sum-bind.is-degraded { background: #fef2f2; color: #b91c1c; }
+.rd-sum-warn { margin-left: 4px; font-family: inherit; }
 
 /* 失效横幅内的修复按钮 */
 .rd-fix-btn { margin-top: 8px; padding: 5px 10px; font-size: 12px; }

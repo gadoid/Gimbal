@@ -63,6 +63,14 @@ function setRowBinding(svc: string, patch: ServiceBinding) {
   emit('update:serviceBindings', next)
 }
 
+/** 降级(spec §9,口径镜像 RunDialog.degraded):存量 authAlias 非空且
+ *  不在 authOptions(凭证被删)→ 行标红警示;select 为该 alias 渲染
+ *  disabled option,保住值可见可存,用户重选即恢复。 */
+function degraded(svc: string): boolean {
+  const a = props.serviceBindings[svc]?.authAlias
+  return !!a && !props.authOptions.includes(a)
+}
+
 // ── ② 运行参数(钳位与后端 schema 上限一致,防 422)─────────────────
 /** 总量闸口径同 RunDialog.MAX_TOTAL_RUNS(后端 app/core/config.py
  *  MAX_RUNS_PER_EXECUTION);此处是预览告警,真正拦截在发起运行侧。 */
@@ -112,11 +120,13 @@ const logSubText = computed({
         <span class="zone-hint">仅显式绑定入库;与声明相同的 URL 不记录</span>
       </header>
       <div v-if="serviceRows.length" class="bind-list">
-        <div v-for="r in serviceRows" :key="r.service" class="bind-row">
+        <div v-for="r in serviceRows" :key="r.service" class="bind-row"
+          :class="{ 'is-degraded': degraded(r.service) }">
           <div class="bind-svc">
             <span class="svc-name">{{ r.service }}</span>
             <span v-if="r.declaredUrl" class="svc-declared" :title="r.declaredUrl">{{ r.declaredUrl }}</span>
             <span v-else class="svc-nodeclared">未声明引用</span>
+            <span v-if="degraded(r.service)" class="svc-degraded" data-testid="binding-degraded-warn">凭证已删,请重选</span>
           </div>
           <!-- 原生 select/input(与数据区/注入区原生控件约定一致,测试直驱) -->
           <select class="bind-alias" data-testid="binding-alias"
@@ -124,6 +134,10 @@ const logSubText = computed({
             @change="setRowBinding(r.service, { authAlias: ($event.target as HTMLSelectElement).value })">
             <option value="">— 不绑定 —</option>
             <option v-for="a in authOptions" :key="a" :value="a">{{ a }}</option>
+            <!-- 已删别名:disabled option 显示原别名 — 值不丢(可见可存),不可再选 -->
+            <option v-if="degraded(r.service)" :value="serviceBindings[r.service]!.authAlias" disabled>
+              {{ serviceBindings[r.service]!.authAlias }}(已删)
+            </option>
           </select>
           <input class="bind-url" type="text" data-testid="binding-url"
             :value="serviceBindings[r.service]?.url ?? ''"
@@ -221,6 +235,10 @@ const logSubText = computed({
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .svc-nodeclared { font-size: 11px; color: #b45309; }
+/* 降级行(spec §9):凭证已删 — 底色微红 + 警示文案(与 RunDialog .is-degraded 同口径) */
+.bind-row.is-degraded { background: #fef2f2; }
+.bind-row.is-degraded .bind-alias { border-color: #fca5a5; }
+.svc-degraded { font-size: 11px; color: #b91c1c; }
 .bind-alias, .bind-url {
   border: 1px solid var(--color-border-secondary); border-radius: 4px;
   padding: 4px 8px; font-size: 13px; min-width: 0;

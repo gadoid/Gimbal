@@ -140,4 +140,17 @@ describe('RunDialog v2 — 两路径', () => {
     expect(w.text()).toContain('注入条目已悬空或删除')
     expect(w.find('[data-testid="run-confirm"]').attributes('disabled')).toBeDefined()
   })
+
+  // ── I-3:自建方案概要绑定 chip 降级标注(spec §9,口径同默认态 degraded)──
+  it('自建方案绑定已删别名 → 概要绑定 chip 标红提示,原别名可见且不禁跑', async () => {
+    // SCHEME_A 绑定 svc-a → alias-1;凭证池清空 → alias-1 视为已删
+    const w = mountDialog({ authOptions: [] })
+    await w.find('[data-testid="scheme-chip-rs-002"]').trigger('click')
+    const chip = w.find('.rd-sum-bind.is-degraded')
+    expect(chip.exists()).toBe(true)
+    expect(chip.text()).toContain('alias-1')                       // 原别名仍可见
+    expect(w.text()).toContain('凭证已删,去工作台重选')
+    // 不禁跑:alias 降级是警示不是失效(dispatch 侧 fail-fast 兜底语义不变)
+    expect(w.find('[data-testid="run-confirm"]').attributes('disabled')).toBeUndefined()
+  })
 })
