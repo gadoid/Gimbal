@@ -267,10 +267,11 @@ export interface FieldStatesVerdict {
 export async function validateEndpointFieldStates(
   endpointId: string,
   fieldStates: Record<string, string>,
+  body?: unknown,
 ): Promise<FieldStatesVerdict> {
   const { data } = await http.post<FieldStatesVerdict>(
     `/endpoint-catalog/${encodeURIComponent(endpointId)}/field-states/validate`,
-    { field_states: fieldStates },
+    { field_states: fieldStates, ...(body !== undefined ? { body } : {}) },
   )
   return data
 }
