@@ -1447,8 +1447,11 @@ function strategyMatchesField(s: StrategyView, domain: 'request' | 'response', f
  *  path 匹配全部复用;与 FieldForm 渲染同源(buildTree/extraBodyPaths
  *  单一真源),防键漂移。 */
 function requestFieldSurface(step: StepView | undefined): IOFieldBinding[] {
-  const decls = stepDecls(step)
-  if (!decls) return []
+  const catalog = stepDecls(step)
+  if (!catalog) return []
+  // 每步拼接目录 + 提升条目(§4.1,与 fieldBindings/effectiveDecls 同式):
+  // 提升容器下的深层叶与目录叶同源进角标/注入/提取匹配面(防键漂移)
+  const decls = [...catalog, ...promotedDecls(catalog, step?.field_states, step?.request?.body)]
   const fs = step?.field_states
   const tree = buildTree(decls, fs, step?.request?.body)
   return [

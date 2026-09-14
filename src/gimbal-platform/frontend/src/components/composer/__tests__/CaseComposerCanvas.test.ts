@@ -3086,4 +3086,28 @@ describe('CaseComposerCanvas — 目录外字段提升(#3)', () => {
     expect(w.findAll('.extra-row .field-path').map((b) => b.text())).toContain('$.extra')
     expect(w.find('.extra-promote').exists()).toBe(true)
   })
+
+  it('PROMO-3: 深层提升叶与目录叶同源命中(assign 角标 + 注入态只读)', async () => {
+    const steps = [mkStep({
+      request: { kind: 'request', body: { orderId: 'ord-1', cfg: { timeout: 30 } } } as any,
+      field_states: { '$.cfg.timeout': 'form' } as any,
+      strategy: [{
+        kind: 'assign', source: '$.tok', target: '$.request_body.cfg.timeout',
+        scope: 'scenario', required: true,
+      } as any],
+    })]
+    const { w } = mountCanvas(steps)
+    await flushPromises()
+    // 深层提升叶($.cfg.timeout,挂合成父壳 $.cfg 下)与目录叶同源:
+    // requestFieldSurface 拼接提升条目 → assign 角标命中(与 §D9 匹配面一致)
+    const deepRow = w.findAll('.field')
+      .filter((r) => {
+        const badge = r.find('.path-badge')
+        return badge.exists() && badge.text() === '$.cfg.timeout'
+      })[0]
+    expect(deepRow).toBeDefined()
+    expect(deepRow.find('.field-label .strategy-tag').text()).toBe('assign')
+    // 注入态:assign 命中 → 值控件换只读提示条(目录叶同款行为)
+    expect(deepRow.find('.field-control input.ctl').exists()).toBe(false)
+  })
 })
