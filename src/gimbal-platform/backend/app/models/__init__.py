@@ -4,6 +4,7 @@ from .constant_entry import ConstantEntry
 from .execution import Execution
 from .composer_scenario import ComposerScenario
 from .composer_data_set import ComposerDataSet
+from .composer_run_scheme import ComposerRunScheme
 from .scenario_endpoint_ref import ScenarioEndpointRef
 from .catalog_version import CatalogVersion
 from .adaptation_batch import AdaptationBatch
@@ -18,6 +19,7 @@ __all__ = [
     "Execution",
     "ComposerScenario",
     "ComposerDataSet",
+    "ComposerRunScheme",
     "ScenarioEndpointRef",
     "CatalogVersion",
     "AdaptationBatch",
