@@ -22,7 +22,6 @@ from ..models.composer_run_scheme import ComposerRunScheme
 # 删除 ScenarioStep;ScenarioMeta 仍保留(读侧用)
 from ..schemas.scenario_composer import (
     Orchestration,
-    RunScheme,
     Scenario,
     ScenarioDraft,
     ScenarioMeta,
@@ -140,37 +139,20 @@ async def update(
         "meta": server_owned.model_dump(by_alias=True, mode="json"),
     }
     row.owner = effective_owner
-    # runSchemes 键归窄端点(PUT /{id}/run-schemes)专管:整体替换前从现有
-    # payload 透传保留 — 编辑器 PUT(orchestration 不带 runSchemes)永不
-    # 覆盖已存方案(spec §3.2)。存量场景无此键 → 保留为空列表。
-    stored_orch = ((row.payload or {}).get("orchestration") or {})
+    # 方案不经 payload(阶段④:runSchemes sidecar 键下线)— 编排容器
+    # 原样落库,方案读写唯一面是 /run-schemes CRUD(scheme_store)。
     orch_data = draft.orchestration.model_dump(by_alias=True, mode="json")
-    orch_data["runSchemes"] = stored_orch.get("runSchemes") or []   # 窄端点专管键
     row.payload = ScenarioDraft(
         definition=stored_definition,
         orchestration=Orchestration.model_validate(orch_data),
         # 注册表编辑器整包替换语义(spec v2 §3):PUT 带就存、不带(旧
-        # 客户端)回落空 dict — 与 runSchemes 的窄端点透传保留相反,键归编排器。
+        # 客户端)回落空 dict — 键归编排器。
         assertion_registry=draft.assertion_registry,
     ).model_dump(by_alias=True, mode="json")
     await endpoint_ref_index.sync_scenario(db, scenario_id, row.payload)
     await db.commit()
     await db.refresh(row)
     return await to_read_shape(db, row, user_id=user_id)
-
-
-async def put_run_schemes(
-    db: AsyncSession, scenario_id: str, schemes: list[RunScheme]
-) -> list[RunScheme]:
-    """整键替换(旧窄端点桥接):数据已迁 composer_run_schemes 表。
-
-    返回新表全量列表(含置顶默认方案)— 旧客户端多看到的这一条是
-    设计内变化(D8 全物化),阶段③ RunDialog v2 切换后消化。
-    """
-    wire = [s.model_dump(by_alias=True, mode="json") for s in schemes]
-    await scheme_store.replace_all(db, scenario_id, wire)
-    got = await scheme_store.list_schemes(db, scenario_id)
-    return [RunScheme.model_validate(s) for s in got]
 
 
 async def delete(db: AsyncSession, scenario_id: str) -> None:
@@ -421,15 +403,9 @@ async def to_read_shape(
     steps = steps_from_payload(row.payload)
     # stepCount is derived from the payload (the mirror column was
     # retired); len() of the persisted steps list is authoritative.
+    # 方案不经 payload(阶段④:runSchemes sidecar 读侧回填下线)—
+    # 方案列表唯一读面是 /run-schemes CRUD。
     config, resource, orchestration = _extras_from_payload(row.payload)
-    if orchestration is not None:
-        # 方案已迁独立表(spec §4):读侧从新表回填,payload 键迁移后
-        # 恒为 []。每行一次索引查询(列表 N+1)在单机场景量级可接受,
-        # 阶段④随旧读侧整体退役。
-        orchestration.run_schemes = [
-            RunScheme.model_validate(s)
-            for s in await scheme_store.list_schemes(db, row.scenario_id)
-        ]
     starred = (
         stars.has(user_id, row.scenario_id)
         if user_id is not None

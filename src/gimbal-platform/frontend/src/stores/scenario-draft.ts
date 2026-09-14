@@ -24,7 +24,7 @@ import { ElMessage } from 'element-plus'
 import type { ScenarioDraft, Orchestration } from '@/types/scenario-composer'
 import type { ScenarioView } from '@/types/plate'
 import type { AssertionRegistry } from '@/types/assertion-registry'
-import type { RunScheme, RunOverlay } from '@/api/scenario-composer'
+import type { RunOverlay, ServiceBinding } from '@/api/scenario-composer'
 
 interface DraftSnapshot {
   definition: ScenarioView
@@ -35,9 +35,12 @@ interface DraftSnapshot {
   scenarioId: string | null
 }
 
-/** RunScheme → 导出 overlay(spec §8):只带 serviceBindings — envId 已随
- *  D2 退役,dataSetIds 有意不带(导出是场景级产物,v1 忽略行语义)。 */
-export function schemeToOverlay(s: RunScheme): RunOverlay {
+/** SchemeV2(方案工作台新 CRUD 形状)→ 导出 overlay(spec §8):只带
+ *  serviceBindings — dataSetIds 有意不带(导出是场景级产物,行级展开
+ *  是非目标)。 */
+export function schemeToOverlay(
+  s: { serviceBindings: Record<string, ServiceBinding> },
+): RunOverlay {
   return { serviceBindings: s.serviceBindings }
 }
 

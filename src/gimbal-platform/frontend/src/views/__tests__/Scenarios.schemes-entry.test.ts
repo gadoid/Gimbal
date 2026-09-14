@@ -7,7 +7,8 @@
  *   不带数字(旧缓存过渡兼容)
  * - 点击 → router.push(scenarioSchemesUrl(id)) 跳方案工作台;@click.stop
  *   不触发行点开(openScenario)
- * - ⋯ dropdown 菜单项不在本任务契约内(datasets 项收敛属计划 B 阶段③)
+ * - ⋯ dropdown 菜单项不在本任务契约内(「查看数据集」项已随阶段③ Task 5
+ *   收敛下线 — 数据集深层编辑走工作台数据区/详情页,见下方负控用例)
  *
  * 骨架仿 CaseDataSetsList.test.ts(store mock + router push spy);
  * 行形状按 Scenarios.vue 实际消费的读侧 Scenario。

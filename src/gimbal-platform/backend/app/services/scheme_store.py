@@ -166,23 +166,6 @@ async def delete_scheme(
     await db.commit()
 
 
-async def replace_all(
-    db: AsyncSession, scenario_id: str, schemes: list[dict],
-) -> list[dict]:
-    """整表替换(旧 PUT /run-schemes 端点的桥接语义)。"""
-    await db.execute(sa_delete(ComposerRunScheme).where(
-        ComposerRunScheme.scenario_id == scenario_id,
-        ComposerRunScheme.is_default.is_(False),
-    ))
-    for s in schemes:
-        if s.get("isDefault"):
-            continue  # default 行只更新不重建(调用方一般也不会传)
-        await create_scheme(db, scenario_id,
-            name=s["name"], payload=s, is_default=False)
-    await ensure_default_scheme(db, scenario_id)
-    return await list_schemes(db, scenario_id)
-
-
 async def copy_schemes(
     db: AsyncSession, src_scenario_id: str, dst_scenario_id: str,
 ) -> None:

@@ -122,39 +122,17 @@ export interface ServiceBinding {
 }
 
 /** 行级数据集选择(spec v3 §4):datasetId + rowIndexes(0-based,与编辑器
- *  行号一致;缺省/空 = 整库)。RunRequest/RunScheme 的权威选择键;
+ *  行号一致;缺省/空 = 整库)。RunRequest/SchemeV2 的权威选择键;
  *  旧 dataSetIds 保留为兼容读(两键同发本键优先)。 */
 export interface DataSetSelection {
   datasetId: string
   rowIndexes?: number[]
 }
 
-/** 运行面板预填(spec v3 §6):数据集入口(整库/单行)与配置签「加入本次
- *  执行」传入;RunDialog 挂载时按此预勾(已删/悬空条目静默过滤)。 */
-export interface RunPreset {
-  dataSetSelection?: DataSetSelection[]
-  injectionEntryIds?: string[]
-}
-
-/** 场景级运行方案(orchestration sidecar,plate 零感知,spec §3.1;
- *  envId 已随 D2 退役) */
-export interface RunScheme {
-  name: string
-  dataSetIds: string[]
-  /** 断言注入条目(spec v2 §5):RunDialog 异常组多选快照;可选 = 旧方案缺键不炸 */
-  injectionEntryIds?: string[]
-  /** 行级数据集选择快照(spec v3 §4)— 权威键;dataSetIds 同存供旧读方 */
-  dataSetSelection?: DataSetSelection[]
-  serviceBindings: Record<string, ServiceBinding>
-  /** 预埋(gimbal 就绪前 no-op) */
-  plugins?: unknown
-  logSub?: unknown
-}
-
-/** 运行方案覆盖层:RunDialog 上次运行回填 / 按方案导出共用(spec §8;
- *  envId 已随 D2 退役) */
+/** 运行方案覆盖层:按方案导出(spec §8)— POST /scenarios/preview-plate
+ *  的 overlay wire 形状,与后端 ExportOverlay 同形。仅 serviceBindings:
+ *  dataSetIds 有意不收(导出是场景级产物,行级展开是非目标)。 */
 export interface RunOverlay {
-  dataSetIds?: string[]
   serviceBindings?: Record<string, ServiceBinding>
 }
 
@@ -196,11 +174,9 @@ export async function runScenario(req: RunRequest): Promise<RunScenarioResult> {
   return data
 }
 
-/** PUT 场景级运行方案(整表替换);返回落库后的完整列表 */
-export async function putRunSchemes(scenarioId: string, schemes: RunScheme[]): Promise<RunScheme[]> {
-  const { data } = await http.put<RunScheme[]>(`/scenarios/${enc(scenarioId)}/run-schemes`, { schemes })
-  return data
-}
+// ── run schemes(工作台新 CRUD,方案唯一读写面)──────────────────
+// 旧 PUT /scenarios/{id}/run-schemes 整表替换端点与 orchestration.runSchemes
+// sidecar 已随阶段④清理下线(2026-09)。
 
 /** 方案 wire 形状(阶段② 新 CRUD;阶段③ RunDialog 切换后统一) */
 export interface SchemeV2 {

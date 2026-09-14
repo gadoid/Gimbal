@@ -74,3 +74,28 @@ async def test_owner_enforced(client):
     bob = await _member(client, "bob")
     assert (await client.get(BASE, headers=bob)).status_code == 403
     assert (await client.post(BASE, headers=bob, json=_body("B"))).status_code == 403
+
+
+async def test_update_delete_404_unknown_scheme_id(client):
+    """§13 T2-2 错误面:PUT/DELETE 不存在的 scheme_id → 404 run_scheme_not_found。"""
+    h = await _setup(client)
+    r = await client.put(f"{BASE}/rs-999", headers=h, json=_body("X"))
+    assert r.status_code == 404
+    assert r.json()["detail"]["code"] == "run_scheme_not_found"
+    r = await client.delete(f"{BASE}/rs-999", headers=h)
+    assert r.status_code == 404
+    assert r.json()["detail"]["code"] == "run_scheme_not_found"
+
+
+async def test_update_delete_owner_enforced(client):
+    """§13 T2-2 错误面:非属主 PUT/DELETE → 403,且不产生副作用。"""
+    alice = await _setup(client, "alice")
+    made = (await client.post(BASE, headers=alice, json=_body("A"))).json()
+    bob = await _member(client, "bob")
+    assert (await client.put(
+        f"{BASE}/{made['schemeId']}", headers=bob, json=_body("B"))).status_code == 403
+    assert (await client.delete(
+        f"{BASE}/{made['schemeId']}", headers=bob)).status_code == 403
+    # bob 的 403 未动 alice 的数据(仅默认方案 + A)
+    lst = (await client.get(BASE, headers=alice)).json()
+    assert [s["name"] for s in lst if not s["isDefault"]] == ["A"]

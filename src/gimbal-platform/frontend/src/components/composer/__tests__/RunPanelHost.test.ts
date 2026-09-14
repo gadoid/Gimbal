@@ -53,7 +53,7 @@ const REG = {
 }
 const DRAFT = {
   definition: DEF,
-  orchestration: { steps: [{ name: '下单', enabled: true }, { name: '查单', enabled: true }], resourceMeta: {}, runSchemes: [] },
+  orchestration: { steps: [{ name: '下单', enabled: true }, { name: '查单', enabled: true }], resourceMeta: {} },
   assertion_registry: REG,
 }
 

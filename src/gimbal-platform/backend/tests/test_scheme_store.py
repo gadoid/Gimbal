@@ -1,4 +1,4 @@
-"""scheme_store 单元测试:默认方案保证、CRUD 约束、整表替换、复制。"""
+"""scheme_store 单元测试:默认方案保证、CRUD 约束、复制。"""
 import pytest
 
 from app.services import scheme_store
@@ -82,20 +82,3 @@ async def test_delete_default_protected(client):
         d = (await scheme_store.list_schemes(db, sid))[0]
         with pytest.raises(ValueError, match="default_protected"):
             await scheme_store.delete_scheme(db, sid, d["schemeId"])
-
-
-async def test_replace_all_keeps_exactly_one_default(client):
-    _, sid = await _mk_scenario(client)
-    from app.core.db import SessionLocal
-
-    P = {"dataSetSelection": [], "injectionEntryIds": [], "serviceBindings": {},
-         "stepTo": None, "nRuns": 1, "parallel": 1, "plugins": None, "logSub": None}
-    async with SessionLocal() as db:
-        lst = await scheme_store.replace_all(db, sid, [
-            {"name": "A", "isDefault": False, **P},
-            {"name": "B", "isDefault": False, **P},
-        ])
-        assert [s["name"] for s in lst] == [
-            scheme_store.DEFAULT_SCHEME_NAME, "A", "B"]
-        lst2 = await scheme_store.replace_all(db, sid, [{"name": "C", "isDefault": False, **P}])
-        assert [s["name"] for s in lst2] == [scheme_store.DEFAULT_SCHEME_NAME, "C"]

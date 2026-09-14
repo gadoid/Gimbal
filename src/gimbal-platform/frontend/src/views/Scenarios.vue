@@ -215,8 +215,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Collection, Search, Star, StarFilled } from '@element-plus/icons-vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useAuthStore } from '@/stores/auth'
-import { getScenarioDraft } from '@/api/scenario-composer'
-import type { RunScheme, RunOverlay } from '@/api/scenario-composer'
+import { getScenarioDraft, listRunSchemes } from '@/api/scenario-composer'
+import type { RunOverlay, SchemeV2 } from '@/api/scenario-composer'
 import { convertDraftToExecutable, schemeToOverlay } from '@/stores/scenario-draft'
 import { downloadFile } from '@/utils/download'
 import { useListSearch } from '@/utils/useListSearch'
@@ -229,7 +229,7 @@ import TagPill from '@/components/TagPill.vue'
 import SystemChip from '@/components/SystemChip.vue'
 import PriorityPill from '@/components/PriorityPill.vue'
 import { applyFiltersToList, emptyFilters, type ScenarioFilters } from '@/utils/filters'
-import type { Scenario, Orchestration } from '@/types/scenario-composer'
+import type { Scenario } from '@/types/scenario-composer'
 
 const store = useScenarioComposerStore()
 const auth = useAuthStore()
@@ -345,18 +345,14 @@ function onCreate() {
   router.push('/composer/new?step=1')
 }
 
-/** Orchestration + 运行方案 sidecar 键(后端 Task 10 起收录 runSchemes,
- *  前端 Orchestration 类型尚未声明 — 与 CaseComposer.vue 同款约定)。 */
-type OrchestrationWithSchemes = Orchestration & { runSchemes?: RunScheme[] }
-
 /** 行级「按方案导出」选择器(spec §8):ElMessageBox + 原生 radio 简易
  *  下拉(遵循本文件 ElMessageBox 的既有交互风格;原生控件不经 teleport
  *  弹层嵌套,行为可预期)。
- *  返回:RunScheme = 选中方案;null = 默认导出(不套方案);undefined = 取消。 */
+ *  返回:SchemeV2 = 选中方案;null = 默认导出(不套方案);undefined = 取消。 */
 async function pickExportScheme(
-  schemes: RunScheme[],
+  schemes: SchemeV2[],
   scenarioName: string,
-): Promise<RunScheme | null | undefined> {
+): Promise<SchemeV2 | null | undefined> {
   const chosen = ref('')
   const option = (value: string, label: string) => h(
     'label',
@@ -407,8 +403,14 @@ async function pickExportScheme(
 async function exportRow(row: Scenario) {
   try {
     const draft = await getScenarioDraft(row.meta.scenarioId)
+    // 按方案导出迁方案工作台 CRUD(阶段④:V1 sidecar 读侧回填下线)—
+    // 方案列表属主可见,非属主(公共场景读者)403 → 静默降级默认导出
+    // (与无方案场景同款路径,不阻断导出)。
+    let schemes: SchemeV2[] = []
+    try {
+      schemes = await listRunSchemes(row.meta.scenarioId)
+    } catch { /* 非属主读不到方案 — 默认导出 */ }
     let overlay: RunOverlay | undefined
-    const schemes = (draft.orchestration as OrchestrationWithSchemes | undefined)?.runSchemes ?? []
     if (schemes.length) {
       const picked = await pickExportScheme(schemes, row.meta.name || row.meta.scenarioId)
       if (picked === undefined) return // 用户取消

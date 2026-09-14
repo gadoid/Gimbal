@@ -40,19 +40,8 @@ async def lifespan(app: FastAPI):
     Shutdown: drain in-flight dispatches and close the shared Plate /
     Gimbal httpx clients."""
     await init_db()
-    # 一次性迁移:payload.runSchemes → composer_run_schemes(幂等;对
-    # 「schema 变更随 DB 重建」惯例的有记录偏离,见 migration_run_schemes
-    # docstring)。失败不阻断启动 — 方案数据仍在 payload,下次启动重试。
-    from .core.db import SessionLocal
-    from .services.migration_run_schemes import migrate_run_schemes_to_table
-    try:
-        async with SessionLocal() as db:
-            n = await migrate_run_schemes_to_table(db)
-            if n:
-                logger.info("lifespan: migrated runSchemes for {} scenario(s)", n)
-    except Exception as e:  # noqa: BLE001
-        logger.error(
-            "lifespan: run-scheme migration failed (will retry next start): {}", e)
+    # (runSchemes → composer_run_schemes 一次性迁移已随阶段④清理下线 —
+    #  迁移窗口已过,方案读写唯一面是 /run-schemes CRUD。)
     # Loud, actionable warnings when crypto secrets are ephemeral — every
     # restart silently rotates them otherwise (all sessions dropped, all
     # Fernet-encrypted credentials undecryptable).

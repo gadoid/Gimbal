@@ -279,7 +279,7 @@ import { lintDraft } from '@/utils/draft-lint'
 import * as api from '@/api/scenario-composer'
 import { list as listAuthSessions } from '@/api/auth_sessions'
 import type {
-  RunRequest, RunScheme, SchemeV2, ServiceBinding, DataSetSelection,
+  RunRequest, SchemeV2, ServiceBinding, DataSetSelection,
 } from '@/api/scenario-composer'
 import type {
   Scenario, DataSetSummary, Orchestration, ScenarioDraft,
@@ -366,11 +366,9 @@ const definition = ref<ScenarioView>({
   resource: {},
   steps: [],
 })
-/** Orchestration + 运行方案 sidecar 键(draft 侧 V1 sidecar 仍在,阶段③
- *  读侧回填保留、保存整包透传 — 运行弹窗已直连 V2 CRUD 不再读这里;
- *  前端 types 侧 Orchestration 尚未补 — 本地交叉类型桥接,不改共享类型)。 */
-type OrchestrationWithSchemes = Orchestration & { runSchemes?: RunScheme[] }
-const orchestration = ref<OrchestrationWithSchemes>({
+/** 编排容器(阶段④:V1 runSchemes sidecar 已下线 — 方案唯一读写面是
+ *  方案工作台 CRUD,runSchemes ref 直连 listRunSchemes,不经这里)。 */
+const orchestration = ref<Orchestration>({
   steps: [],
   resourceMeta: {},
 })
@@ -785,23 +783,18 @@ async function loadScenario() {
     // orchestration 与 definition.steps 同序同长。
     // 优先用持久化值 (s.orchestration);缺失或长度不齐 (编辑过步骤后过期)
     // 时回退到默认重建 (全启用、展示名空、resourceMeta 空),保证 index 对齐。
-    // runSchemes(V1 sidecar)与步骤无关,两条分支都原样带回 — 保存时
-    // 整包透传保留该键(阶段③ 过渡:写侧走 V2 CRUD,但 draft 键不得丢)。
+    // (runSchemes sidecar 已随阶段④下线 — 方案读写全走 V2 CRUD。)
     const persistedOrch = s.orchestration
-    const persistedSchemes
-      = (persistedOrch as OrchestrationWithSchemes | undefined)?.runSchemes
     const inSync = persistedOrch
       && persistedOrch.steps.length === definition.value.steps.length
     orchestration.value = inSync
       ? {
           steps: persistedOrch!.steps,
           resourceMeta: persistedOrch!.resourceMeta ?? {},
-          runSchemes: persistedSchemes,
         }
       : {
           steps: definition.value.steps.map(() => ({ enabled: true, name: '' })),
           resourceMeta: {},
-          runSchemes: persistedSchemes,
         }
     // 断言注册表(spec v2 §3):读侧 Scenario 不带该键,从 GET /draft 补 —
     // 重载后编排器保存(整包 PUT)才不会把存量条目冲掉。拉取失败不阻断

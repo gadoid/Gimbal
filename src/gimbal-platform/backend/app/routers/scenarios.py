@@ -8,7 +8,6 @@ Path layout (per docs/PLATFORM-SCENARIO-COMPOSER-API.md §4.1–4.7):
 * ``POST /api/scenarios/{id}/star``       — toggle star
 * ``GET  /api/scenarios/{id}``            — detail
 * ``PUT  /api/scenarios/{id}``            — replace
-* ``PUT  /api/scenarios/{id}/run-schemes`` — run-scheme sidecar(专管键)
 * ``DELETE /api/scenarios/{id}``          — cascade
 
 **Order matters** (FastAPI matches top-to-bottom).  Static suffixes
@@ -22,22 +21,17 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from loguru import logger
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
 from ..core.deps import CurrentUser
 from ._ownership import can_read_scenario, ensure_owner
 from ._error_mapping import key_error_404, not_found_404, value_error_http
-from ..models.auth_session import AuthSession as DBAuthSession
-from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..schemas.scenario_composer import (
     PreviewPlateError,
     PreviewPlateIn,
     PreviewPlateResponse,
-    RunScheme,
-    RunSchemesIn,
     Scenario,
     ScenarioDraft,
     StarIn,
@@ -324,101 +318,6 @@ async def copy_scenario_to_me(
         raise value_error_http(e, {"scenario_id_exists": 409})
 
 
-# ── 4.3) PUT /{id}/run-schemes — 运行方案 sidecar 窄端点 ────────────
-async def _warn_dangling_refs(
-    db: AsyncSession,
-    row: ComposerScenario,
-    user: CurrentUser,
-    schemes: list[RunScheme],
-) -> None:
-    """警告级校验(spec §3.2 降级预填原则):失效引用仅 logger.warning,
-    绝不拒写(数据集删除/凭证移除后方案照存,运行对话框前端
-    标红提示)。告警路径自身的任何异常也吞掉 — 它永远不能变成写入
-    路径的故障点。
-    """
-    try:
-        ds_ids = set(
-            (
-                await db.execute(
-                    select(ComposerDataSet.dataset_id).where(
-                        ComposerDataSet.scenario_id == row.scenario_id
-                    )
-                )
-            ).scalars().all()
-        )
-        # authAlias ∈ owner 凭证池 ∪ 场景内置 users(与 dispatch 的注入
-        # 清单同源:绑定 alias 可解 = 池内有同名 alias)。
-        owner_aliases = set(
-            (
-                await db.execute(
-                    select(DBAuthSession.alias).where(
-                        DBAuthSession.owner_id == user.id
-                    )
-                )
-            ).scalars().all()
-        )
-        def_cfg = (
-            scenario_store.definition_from_payload(row.payload).get("config") or {}
-        )
-        built_in = (
-            def_cfg.get("users") if isinstance(def_cfg.get("users"), dict) else {}
-        )
-        known_aliases = {*owner_aliases, *(built_in or {}).keys()}
-        for s in schemes:
-            for ds_id in s.data_set_ids:
-                if ds_id not in ds_ids:
-                    logger.warning(
-                        "run_scheme dataSetId not under scenario: scenario={} dataSetId={}",
-                        row.scenario_id, ds_id,
-                    )
-            for svc, binding in s.service_bindings.items():
-                if binding.auth_alias and binding.auth_alias not in known_aliases:
-                    logger.warning(
-                        "run_scheme authAlias not resolvable: scenario={} "
-                        "service={} authAlias={}",
-                        row.scenario_id, svc, binding.auth_alias,
-                    )
-    except Exception:  # noqa: BLE001 — 告警路径永不拒写
-        logger.exception(
-            "run_scheme warn-level validation failed (ignored): scenario={}",
-            row.scenario_id,
-        )
-
-
-@router.put("/{scenario_id}/run-schemes", response_model=list[RunScheme])
-async def put_run_schemes(
-    user: CurrentUser,
-    db: DbSession,
-    scenario_id: str,
-    body: RunSchemesIn,
-) -> list[RunScheme]:
-    """orchestration.runSchemes 专管键(spec §3.2/§11):方案的增删改只走
-    这里;整体 PUT /scenarios/{id} 对该键透传保留(scenario_store.update),
-    编辑器保存永不覆盖方案。404/403 与相邻场景端点同款拒绝写法。"""
-    row = await _load_row(db, scenario_id)
-    _require_owner(user, row)
-    names = [s.name for s in body.schemes]
-    if len(names) != len(set(names)):
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "run_scheme_name_conflict",
-                    "message": "方案名场景内唯一"},
-        )
-    # 保留名预检(终审 I-1):「默认方案」只能以 isDefault 位携带;旧弹窗
-    # 不传该位 → create_scheme 中途抛 name_conflict 前,replace_all 已把
-    # 存量非 default 行删掉(先删后建非原子)→ 500 + 部分替换态。在任何
-    # 删改之前拒 409,与窄端点语义/错误形状对齐。
-    if any(s.name == scheme_store.DEFAULT_SCHEME_NAME and not s.is_default
-           for s in body.schemes):
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "run_scheme_name_conflict",
-                    "message": "方案名场景内唯一(「默认方案」为保留名)"},
-        )
-    await _warn_dangling_refs(db, row, user, body.schemes)
-    return await scenario_store.put_run_schemes(db, scenario_id, body.schemes)
-
-
 # ── 5) GET /{id} ───────────────────────────────────────────────────
 @router.get("/{scenario_id}", response_model=Scenario)
 async def get_scenario(
@@ -441,12 +340,10 @@ async def get_scenario_draft(
 ) -> ScenarioDraft:
     row = await _load_row(db, scenario_id)
     _require_reader(user, row)
+    # 方案读写唯一面 = /run-schemes CRUD(阶段④:V1 sidecar 读侧回填下线,
+    # draft 不再携带 runSchemes 键;存量 payload 中的同键被 extra=ignore
+    # 静默忽略)。
     payload = dict(row.payload or {})
-    # 方案已迁独立表(spec §4):draft 的 runSchemes 从新表回填,
-    # payload 里的键迁移后恒为 [](旧客户端读侧无感)。
-    orch = dict(payload.get("orchestration") or {})
-    orch["runSchemes"] = await scheme_store.list_schemes(db, scenario_id)
-    payload["orchestration"] = orch
     try:
         return ScenarioDraft.model_validate(payload)
     except Exception as e:  # noqa: BLE001

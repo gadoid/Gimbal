@@ -12,7 +12,11 @@
     :disabled="!hasDraft"
     @command="onCommand"
   >
-    <button type="button" :class="['se-trigger', `se-${variant}`, { 'se-disabled': !hasDraft }]">
+    <button
+      type="button"
+      :class="['se-trigger', `se-${variant}`, { 'se-disabled': !hasDraft }]"
+      @click="refreshSchemes"
+    >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
         <polyline points="7 10 12 15 17 10"/>
@@ -55,12 +59,8 @@
 import { computed, ref } from 'vue'
 import { useScenarioDraftStore, schemeToOverlay } from '@/stores/scenario-draft'
 import { ElMessage } from 'element-plus'
-import type { RunScheme } from '@/api/scenario-composer'
-import type { Orchestration } from '@/types/scenario-composer'
-
-/** Orchestration + 运行方案 sidecar 键(后端 Task 10 起收录 runSchemes,
- *  前端 Orchestration 类型尚未声明 — 与 CaseComposer.vue 同款约定)。 */
-type OrchestrationWithSchemes = Orchestration & { runSchemes?: RunScheme[] }
+import { listRunSchemes } from '@/api/scenario-composer'
+import type { SchemeV2 } from '@/api/scenario-composer'
 
 withDefaults(defineProps<{
   variant?: 'topbar'
@@ -72,8 +72,23 @@ const exporting = ref(false)
 const hasDraft = computed(() => !!store.draft)
 const labelText = computed(() => hasDraft.value ? '导出' : '导出 (无草稿)')
 
-const schemes = computed<RunScheme[]>(() =>
-  (store.draft?.orchestration as OrchestrationWithSchemes | undefined)?.runSchemes ?? [])
+/** 按方案导出迁方案工作台 CRUD(阶段④:V1 sidecar 读侧回填下线)— 点开
+ * 菜单(触发按钮 click,即开菜单手势)重取方案列表(运行弹窗「另存为
+ * 方案」后此处即时可见);新建未保存场景无服务端 id / 非属主 403 →
+ * 空列表,菜单只剩原三动作(静默降级)。 */
+const schemes = ref<SchemeV2[]>([])
+async function refreshSchemes() {
+  const sid = store.draft?.scenarioId
+  if (!sid) {
+    schemes.value = []
+    return
+  }
+  try {
+    schemes.value = await listRunSchemes(sid)
+  } catch {
+    schemes.value = [] // 非属主等读侧失败 — 默认导出不受影响
+  }
+}
 
 async function onCommand(cmd: string) {
   if (!hasDraft.value) {

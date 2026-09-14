@@ -106,18 +106,14 @@ class Orchestration(BaseModel):
 
     steps is index-aligned with definition.steps (same order, same length).
     resourceMeta is name-aligned with definition.resource keys.
-    runSchemes is the run-scheme sidecar (spec §3.1): owned exclusively by
-    PUT /scenarios/{id}/run-schemes — composer saves pass the stored value
-    through untouched (scenario_store.update), so the key never round-trips
-    through the editor. Old payloads without the key deserialize to [].
+    (runSchemes sidecar 键已随阶段④下线 — 方案不经场景 payload,唯一
+    读写面是 /run-schemes CRUD;存量 payload 中的同键被 extra=ignore
+    静默忽略。)
     """
     model_config = _CAMEL
 
     steps: list[StepOrchestration] = Field(default_factory=list)
     resourceMeta: dict[str, str] = Field(default_factory=dict)
-    # RunScheme 定义在后文(依赖 ServiceBinding);future annotations 使该
-    # 前向引用延迟解析,Orchestration.model_rebuild() 在其定义后闭合。
-    run_schemes: list[RunScheme] = Field(default_factory=list, alias="runSchemes")
 
 
 class ScenarioDraft(BaseModel):
@@ -217,8 +213,8 @@ class DataSetSelection(BaseModel):
 class RunScheme(BaseModel):
     """场景级运行方案(工作台一等实体,plate 零感知,spec §4)。
 
-    阶段①存储已迁 composer_run_schemes 表;本 schema 仍是 wire 契约,
-    isDefault/stepTo/nRuns/parallel 为工作台新增键。
+    /run-schemes CRUD(方案唯一读写面)的请求/响应 wire 契约;
+    isDefault/stepTo/nRuns/parallel 为工作台键。
     """
     model_config = _CAMEL
 
@@ -240,17 +236,6 @@ class RunScheme(BaseModel):
     parallel: int = Field(default=1, alias="parallel", ge=1, le=200)
     plugins: Any = None        # 预埋,gimbal 就绪前 no-op
     log_sub: Any = Field(default=None, alias="logSub")  # 预埋,同上
-
-
-class RunSchemesIn(BaseModel):
-    """PUT /scenarios/{id}/run-schemes 请求体。"""
-    model_config = _CAMEL
-
-    schemes: list[RunScheme]
-
-
-# Orchestration.run_schemes 的前向引用在此闭合(见 Orchestration 字段注释)。
-Orchestration.model_rebuild()
 
 
 class ExportOverlay(BaseModel):
@@ -399,7 +384,6 @@ __all__ = [
     "RunRequest",
     "RunResponse",
     "RunScheme",
-    "RunSchemesIn",
     "Scenario",
     "ScenarioDraft",
     "ScenarioMeta",
