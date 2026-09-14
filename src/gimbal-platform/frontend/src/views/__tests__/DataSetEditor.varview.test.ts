@@ -92,6 +92,14 @@ const DEF_OLD_PROMOTE = {
   ],
 }
 
+/** 容器基线:box = 对象、items = 数组(常量池 spec / 容器头提升来源)。
+ *  语义提示面(VAR-12):不腐化成 [object Object],只读 chip + tooltip JSON,
+ *  CSV (baseline) 行保持紧凑 JSON。 */
+const DEF_BOX = {
+  ...DEF_2SEG,
+  config: { vars: { amount: 100, exp_code: 200, bl_no: 'BL1', box: { a: 1, b: 2 }, items: [] } },
+}
+
 /** 挂载工厂:getDataSet 返回 rows(默认 [{amount:'-1'}]),draft 返回入参 definition;
  *  orchestration.steps 带 name(= step.description)供徽标读步骤展示名。 */
 async function mountEditor(def: typeof DEF_2SEG, rows: Array<Record<string, any>> = [{ amount: '-1' }]) {
@@ -347,6 +355,42 @@ describe('DataSetEditor — 「单变量」详情面板(§6)', () => {
       path: '/composer/sc-ds',
       query: { step: '4', focusStep: '0', focusStrategy: '0' },
     })
+    w.unmount()
+  })
+})
+
+describe('DataSetEditor — 容器基线语义提示(§6)', () => {
+  it('VAR-12: 容器基线 = 只读 chip(对象 · N 字段/空数组),无输入框不可腐化;tooltip/CSV 走紧凑 JSON', async () => {
+    const w = await mountEditor(DEF_BOX as any)
+    // 全文绝不出现 String() 腐化产物
+    expect(w.text()).not.toContain('[object Object]')
+    // 基线行:结构化列无输入框(编辑通路堵死),只读 chip + 语义提示
+    const baseLabels = w.findAll('.row-baseline input.baseline-cell-input')
+      .map((i) => i.attributes('aria-label'))
+    expect(baseLabels).toEqual(['基线 amount', '基线 exp_code', '基线 bl_no'])   // box/items 无输入
+    const chips = w.findAll('.row-baseline .baseline-chip')
+    expect(chips.length).toBe(2)
+    expect(chips[0].text()).toBe('对象 · 2 字段')
+    expect(chips[1].text()).toBe('空数组')
+    expect(chips[0].attributes('title')).toBe('{"a":1,"b":2}')
+    // 行格 placeholder = 按基线(语义提示);td tooltip = JSON
+    const cell = w.findAll('input.data-cell-input')[3]   // 第 4 数据列 = box
+    expect(cell.attributes('placeholder')).toBe('按基线(对象 · 2 字段)')
+    // CSV (baseline) 行 = 紧凑 JSON(机读通道不换语义提示;wire 形态有
+    // CSV 引号转义,断言查列值本体 + wire 行不含腐化产物)
+    const csvColumns = (w.vm as any).csvVarColumns as Array<{ varName: string; baseline: string }>
+    expect(csvColumns.find(c => c.varName === 'box')!.baseline).toBe('{"a":1,"b":2}')
+    expect(csvColumns.find(c => c.varName === 'items')!.baseline).toBe('[]')
+    const csv = await import('@/utils/csv-dataset')
+    const args = { columns: csvColumns, rows: (w.vm as any).rows,
+      caseNames: (w.vm as any).caseNames, descriptions: [] } as any
+    const baselineRow = csv.buildDataSetCsv(args).split('\n')
+      .find((l: string) => l.startsWith('(baseline)'))!
+    expect(baselineRow).not.toContain('[object Object]')
+    expect(baselineRow).toContain('a')          // box JSON 在 baseline 行
+    // 标量列行为零回归:基线输入与 placeholder 原样
+    const amountBase = w.findAll('.row-baseline input.baseline-cell-input')[0]
+    expect((amountBase.element as HTMLInputElement).value).toBe('100')
     w.unmount()
   })
 })

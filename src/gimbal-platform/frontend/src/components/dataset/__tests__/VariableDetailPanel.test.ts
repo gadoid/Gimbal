@@ -117,6 +117,29 @@ describe('VariableDetailPanel — 四段面渲染 + emits', () => {
   })
 })
 
+describe('VariableDetailPanel — 容器基线(语义提示)', () => {
+  it('PANEL-5: 结构化基线 = 只读 chip(语义提示 + tooltip JSON),无输入框 → set-baseline 不可达;行值 placeholder 同提示', async () => {
+    qvMock.fetchQueryViewIndex.mockResolvedValue([])
+    const w = mountPanel({
+      baseline: '对象 · 2 字段',
+      baselineStructured: true,
+      baselineJson: '{"a":1,"b":2}',
+    })
+    await flushPromises()
+    // 基线段:chip 而非输入框(编辑通路堵死 — 容器值不可字符串覆写)
+    expect(w.find('input[aria-label="基线 bl_no"]').exists()).toBe(false)
+    const chip = w.find('.vdp-baseline-chip')
+    expect(chip.exists()).toBe(true)
+    expect(chip.text()).toBe('对象 · 2 字段')
+    expect(chip.attributes('title')).toBe('{"a":1,"b":2}')
+    // 行值:继承态 placeholder = 语义提示(不腐化)
+    expect((w.find('input[aria-label="case-b bl_no"]').element as HTMLInputElement).placeholder)
+      .toBe('对象 · 2 字段')
+    expect(w.text()).not.toContain('[object Object]')
+    w.unmount()
+  })
+})
+
 describe('VariableDetailPanel — 取数链(ValueSourcePicker 复用)', () => {
   it('PANEL-2: 索引 query_safe 过滤 → 默认首视图 → 查询(resolveQueryCtx:headers auth 优先)→ 行选 → 列选值 → 设为基线/写入行', async () => {
     qvMock.fetchQueryViewIndex.mockResolvedValue([IDX_UNSAFE, IDX_SAFE])

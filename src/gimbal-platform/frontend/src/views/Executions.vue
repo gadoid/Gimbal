@@ -225,6 +225,7 @@ import { useExecutionsStore } from '@/stores/executions'
 import { convertDraftToExecutable } from '@/stores/scenario-draft'
 import { downloadFile } from '@/utils/download'
 import { exportTimestamp } from '@/utils/datetime'
+import { valueJson } from '@/utils/value-display'
 
 const route = useRoute()
 const router = useRouter()
@@ -302,7 +303,7 @@ function formatRecipeValue(v: unknown): string {
   if (Array.isArray(v)) return v.length ? v.join(', ') : '使用基线配置'
   // serviceBindings 等对象值:紧凑 JSON 保结构可读,不出现 [object Object]
   if (v !== null && typeof v === 'object') {
-    return Object.keys(v).length ? JSON.stringify(v) : '使用基线配置'
+    return Object.keys(v).length ? valueJson(v) : '使用基线配置'
   }
   if (v === null || v === '') return '使用基线配置'
   return String(v)

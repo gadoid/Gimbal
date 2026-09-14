@@ -166,6 +166,7 @@ import type { RunPreset } from '@/api/scenario-composer'
 import type { AssertionRegistry } from '@/types/assertion-registry'
 import { isLegacyEntry } from '@/types/assertion-registry'
 import { normalizeRegistry } from '@/utils/assertion-registry'
+import { valueJson } from '@/utils/value-display'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
 
 const route = useRoute()
@@ -190,7 +191,7 @@ function valueSummary(e: AssertionRegistry['entries'][number]): string {
   if (isLegacyEntry(e)) return '—'
   const v = (e as { value: unknown }).value
   if (v === null || v === undefined) return '—'
-  return typeof v === 'string' ? v : JSON.stringify(v)
+  return valueJson(v)   // 容器紧凑 JSON / 标量原样(value-display 共享收口)
 }
 
 // ── 数据集卡片预览(列清单)──────────────────────────────────

@@ -23,7 +23,16 @@
 
     <section class="vdp-card">
       <div class="vdp-card-title">基线(config.vars)</div>
+      <!-- 容器值(对象/数组):只读 chip — 语义提示辨有无值,tooltip 出
+           紧凑 JSON;不可编辑(字符串覆写会毁掉 config.vars 里的原对象) -->
+      <span
+        v-if="baselineStructured"
+        class="vdp-input vdp-baseline-chip"
+        :aria-label="`基线 ${varName}`"
+        :title="baselineJson"
+      >{{ baseline }}</span>
       <input
+        v-else
         class="vdp-input"
         :value="baseline"
         :aria-label="`基线 ${varName}`"
@@ -153,8 +162,12 @@ import type { GridVarColumn } from '@/utils/dataset-segments'
 
 const props = defineProps<{
   varName: string
-  /** config.vars[varName] 显示串(未声明 = '') */
+  /** config.vars[varName] 显示串(未声明 = '';容器值 = 语义提示) */
   baseline: string
+  /** 基线为容器值(对象/数组):基线段渲染只读 chip,编辑通路堵死 */
+  baselineStructured?: boolean
+  /** 容器基线紧凑 JSON(tooltip 机读面) */
+  baselineJson?: string
   /** 该变量全部引用位(含期望引用) */
   refs: GridVarColumn[]
   rows: Array<Record<string, any>>
@@ -364,6 +377,11 @@ function onApplyRow() {
 }
 .vdp-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15); }
 .vdp-input::placeholder { color: #94a3b8; }
+/* 容器基线只读 chip(语义提示;背景灰与可编辑输入框区分) */
+.vdp-baseline-chip {
+  display: inline-block; background: #f1f5f9; cursor: help;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 /* 引用面 */
 .vdp-ref { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 2px 0; }

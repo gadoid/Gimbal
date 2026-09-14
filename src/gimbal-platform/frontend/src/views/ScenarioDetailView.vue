@@ -151,6 +151,7 @@ import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { showError } from '@/utils/errorFallback'
 import { composerUrl, scenarioDataSetsUrl } from '@/utils/links'
 import { relTime } from '@/utils/datetime'
+import { valueJson } from '@/utils/value-display'
 import type { ExtractView, AssignView, AssertionView } from '@/types/plate'
 
 const route = useRoute()
@@ -248,7 +249,7 @@ const updateTimeText = computed(() => {
 const varEntries = computed<[string, unknown][]>(() =>
   Object.entries(((scenario.value?.config as Record<string, unknown> | undefined)?.vars as Record<string, unknown>) || {}),
 )
-const prettyVal = (v: unknown) => (typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v))
+const prettyVal = valueJson   // 容器紧凑 JSON / 标量原样(value-display 共享收口)
 
 // ── 数据集字段 ──────────────────────────────────────────────
 function dsFields(d: { preview?: Record<string, unknown>[] }): string[] {

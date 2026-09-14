@@ -107,6 +107,8 @@
         :key="varChoice"
         :var-name="currentVarColumn.varName"
         :baseline="currentVarColumn.baseline"
+        :baseline-structured="currentVarColumn.baselineStructured"
+        :baseline-json="currentVarColumn.baselineJson"
         :refs="currentVarColumn.refs"
         :rows="rows"
         :case-names="caseNames"
@@ -193,7 +195,17 @@
               :key="`b:${col.varName}`"
               :class="['td-data', col.expect ? 'col-expect' : '', col.unreferenced ? 'col-unreferenced' : '']"
             >
+              <!-- 容器基线(对象/数组):只读 chip — 语义提示辨有无值,
+                   tooltip 出紧凑 JSON;无输入框 → setBaseline 不可达,
+                   原对象不会被字符串覆写腐化(标量列行为不变) -->
+              <span
+                v-if="col.baselineStructured"
+                class="baseline-chip"
+                :aria-label="`基线 ${col.varName}`"
+                :title="col.baselineJson"
+              >{{ col.baseline }}</span>
               <input
+                v-else
                 class="baseline-cell-input"
                 :value="col.baseline"
                 :aria-label="`基线 ${col.varName}`"
@@ -221,14 +233,15 @@
               v-for="col in varColumns"
               :key="`c:${i}:${col.varName}`"
               :class="['td-data', cellClass(row, bcOf(col)), col.expect ? 'col-expect' : '']"
-              :title="col.baseline"
+              :title="col.baselineStructured ? col.baselineJson : col.baseline"
             >
               <!-- 一变量一列:行键 = varName,baseline = config.vars 值,
-                   placeholder 显基线(继承态线索) -->
+                   placeholder 显基线(继承态线索;容器值给「按基线(语义提示)」,
+                   原始结构经 tooltip 悬停查看) -->
               <input
                 :value="row[col.varName] ?? ''"
                 class="data-cell-input"
-                :placeholder="col.baseline"
+                :placeholder="col.baselineStructured ? `按基线(${col.baseline})` : col.baseline"
                 @input="(e: Event) => onCellInput(i, bcOf(col), (e.target as HTMLInputElement).value)"
                 @paste="(e: ClipboardEvent) => onCellPaste(e, bcOf(col), i)"
               />
@@ -281,7 +294,7 @@
           <div v-for="(it, gi) in g.items" :key="`${g.stepIndex}:${gi}:${it.varName}`" class="detail-row">
             <span class="detail-name mono">{{ it.varName }}</span>
             <span v-if="it.expect" class="exp-col-badge" :title="`断言 ${it.expect.target} ${it.expect.operator}`">期望</span>
-            <span class="detail-val mono">{{ it.value === undefined ? '(未声明基线)' : JSON.stringify(it.value) }}</span>
+            <span class="detail-val mono">{{ it.value === undefined ? '(未声明基线)' : valueJson(it.value) }}</span>
             <span class="detail-flag" :class="it.inherited ? 'inh' : 'ovr'">{{ it.inherited ? '继承基线' : '覆写' }}</span>
           </div>
         </div>
@@ -302,6 +315,7 @@ import type { RunPreset } from '@/api/scenario-composer'
 import RunPanelHost from '@/components/composer/RunPanelHost.vue'
 import { showError } from '@/utils/errorFallback'
 import { confirmAction } from '@/utils/confirmAction'
+import { isStructuredValue, valueHint, valueJson } from '@/utils/value-display'
 import { scenarioDataSetsUrl } from '@/utils/links'
 import { type BaselineColumn } from '@/utils/dataset-palette'
 import {
@@ -396,8 +410,13 @@ const refsByVar = computed(() => {
  *  基线行输入即声明)。未引用列标灰(引用语义面在单变量面板展开)。 */
 interface VarViewColumn {
   varName: string
-  /** config.vars 显示串(未声明 = '') */
+  /** config.vars 显示串(未声明 = '';容器值 = 语义提示,如「对象 · 2 字段」) */
   baseline: string
+  /** 基线为容器值(对象/数组 — 容器头提升/常量池 spec 来源):只读展示,
+   *  编辑通路堵死(字符串覆写会毁掉 config.vars 里的原对象) */
+  baselineStructured: boolean
+  /** 容器基线紧凑 JSON(tooltip / CSV 机读面) */
+  baselineJson: string
   /** 声明于 config.vars */
   declared: boolean
   /** 全部引用位(含期望) */
@@ -427,9 +446,12 @@ const varColumns = computed<VarViewColumn[]>(() => {
     }
     const firstInput = refs.find(r => r.source !== 'expect') ?? null
     const bv = vars[name]
+    const structured = isStructuredValue(bv)
     return {
       varName: name,
-      baseline: bv === undefined || bv === null ? '' : String(bv),
+      baseline: valueHint(bv),
+      baselineStructured: structured,
+      baselineJson: structured ? valueJson(bv) : '',
       declared: declared.includes(name),
       refs,
       expect,
@@ -466,7 +488,9 @@ function bcOf(col: VarViewColumn): BaselineColumn {
     field: first?.field ?? col.varName,
     kind: 'var',
     varName: col.varName,
-    baseline: col.baseline,
+    // 容器基线在机读通道(CSV/CellDisplay placeholder)走紧凑 JSON,
+    // UI 通道(基线行/格 placeholder)才用语义提示
+    baseline: col.baselineStructured ? col.baselineJson : col.baseline,
   }
 }
 
@@ -960,6 +984,14 @@ onMounted(async () => {
 .baseline-cell-input:focus {
   border-color: var(--accent); border-style: solid;
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+/* 容器基线只读 chip(语义提示;灰底 + help 光标,与可编辑虚线框区分) */
+.baseline-chip {
+  display: inline-block; width: 100%; box-sizing: border-box;
+  border: 1px dashed #cbd5e1; background: #eef2f7; border-radius: 4px;
+  padding: 4px 6px; font-family: var(--font-mono); font-size: 12px;
+  color: var(--color-text-primary); cursor: help;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
 /* data-name input:默认就有可见边框(否则跟普通文本没区别,误以为只读) */
