@@ -1,5 +1,5 @@
 /**
- * RunDialog — stepTo 下拉步骤名(P0)
+ * RunDialog — stepTo 下拉步骤名(P0,阶段③ v2 改写:fixture 换 SchemeV2)
  *
  * 锁死:
  * - 步骤名读 stepOrchestrationNames(平台编排视图),不再是 steps[i].name/id
@@ -10,9 +10,16 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import RunDialog from '../RunDialog.vue'
+import type { SchemeV2 } from '@/api/scenario-composer'
 import type { Scenario } from '@/types/scenario-composer'
 
 const DS: Array<{ datasetId: string; scenarioId: string; name: string; rowCount: number; preview: never[] }> = []
+
+const DEFAULT_SCHEME: SchemeV2 = {
+  schemeId: 'rs-def', name: '默认方案', isDefault: true,
+  dataSetSelection: [], injectionEntryIds: [], serviceBindings: {},
+  stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
+}
 
 function sampleScenario(stepCount: number): Scenario {
   return {
@@ -31,7 +38,7 @@ function mountDialog(scenario: Scenario, orchestrationNames: string[]) {
     props: {
       scenario, dataSets: DS,
       running: false, lastRunId: null, lastRunError: null,
-      schemes: [], lastRunOverlay: null, serviceRows: [], authOptions: [],
+      schemes: [DEFAULT_SCHEME], serviceRows: [], authOptions: [],
       stepOrchestrationNames: orchestrationNames,
     },
     global: { plugins: [ElementPlus], stubs: { teleport: true } },
