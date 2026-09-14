@@ -21,7 +21,7 @@
     >
       <option value="form">form</option>
       <option value="collapse">collapse</option>
-      <option value="carry">carry</option>
+      <option v-if="!noCarry" value="carry">carry</option>
     </select>
     <button
       v-if="overlay"
@@ -41,6 +41,9 @@ defineProps<{
   state: FieldState
   /** 该条目存在显式覆盖(显示 ↺ 重置入口) */
   overlay?: boolean
+  /** 提升面门禁(2026-09-14 §4.4):carry 不提供 —— 目录外结构上
+   *  不可能 carry(carry 面/值表只遍历目录),选了会静默丢渲染。 */
+  noCarry?: boolean
 }>()
 const emit = defineEmits<{
   /** 选择状态(写增量);值 = 目标态 */
