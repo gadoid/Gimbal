@@ -237,6 +237,8 @@ export interface FieldSearchRow {
   resolved: FieldState
   /** 有合法显式增量(FieldStateSelect ↺ 重置语义直连) */
   overlay: boolean
+  /** 提升面行(2026-09-14 §4.4):Canvas 投影写入;搜索行下拉禁 carry */
+  promoted?: boolean
   /** 祖先 name 链(» 分隔;顶层为空) */
   breadcrumb: string
 }

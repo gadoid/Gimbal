@@ -34,6 +34,7 @@
         <FieldStateSelect
           :state="row.resolved"
           :overlay="row.overlay"
+          :no-carry="row.promoted"
           @change="(t) => emit('select', row.path, t)"
           @reset="emit('reset', row.path)"
         />

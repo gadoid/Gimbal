@@ -122,3 +122,22 @@ describe('FieldStateSearch — 状态上抛(级联归 Canvas)', () => {
     expect(w.emitted<'$.remark'[]>('reset')![0]).toEqual(['$.remark'])
   })
 })
+
+describe('FieldStateSearch — 提升行(promoted)', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('提升行(promoted)下拉无 carry — 搜索旁路门禁(§4.4)', async () => {
+    const w = mount(FieldStateSearch, {
+      props: {
+        corpus: [
+          mkRow({ path: '$.extra', name: 'extra', overlay: true, promoted: true }),
+        ],
+      },
+    })
+    await type(w, 'extra')
+    const sel = w.find('.fss-search-row select.fss-sel')
+    expect(sel.findAll('option').map((o) => o.attributes('value')))
+      .toEqual(['form', 'collapse'])
+  })
+})
