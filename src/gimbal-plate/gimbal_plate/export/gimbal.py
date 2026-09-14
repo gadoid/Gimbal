@@ -10,7 +10,7 @@ V3.1 设计(PLATE_V3_DESIGN.md §7):
 - 真相源是 gimbal_plate.schema.Scenario(中性数据类)
 - GimbalScenarioExporter 接收 Scenario,产出 gimbal 可执行 dict
 - 通过 model_dump(exclude=...) 过滤掉平台视图扩展字段(endpoints/navigation/
-  config_summary/api.view_hints/request.fields_meta/strategy[*].view_note)
+  config_summary/api.view_hints/field_states/request.fields_meta/strategy[*].view_note)
 - 端到端链路:platform 落库 dict → Scenario.model_validate(仅改 kind) →
   GimbalScenarioExporter.to_dict() → gimbal 可执行 dict(无需任何预处理)
 - EndpointCaseExporter 仍可独立使用(供单 endpoint 维度的精细控制)
@@ -239,6 +239,9 @@ class GimbalScenarioExporter(ScenarioExporter):
         (PLATE_V3_DESIGN.md §7.3.2):
         - Scenario 顶层: endpoints / navigation / config_summary
         - steps[*].api: view_hints
+        - steps[*]: field_states(字段状态目录增量 — 编辑器覆盖键,
+          gimbal 引擎 Step 模型 extra="forbid" 拒收;carry 物化用的
+          解析面在 convert 前 / 平台侧已消费,导出物不再需要它)
         - steps[*].request: fields_meta
         - steps[*].strategy[*]: view_note
         """
@@ -270,6 +273,12 @@ class GimbalScenarioExporter(ScenarioExporter):
             "steps": {
                 "__all__": {
                     "api": {"view_hints": True},
+                    # field_states 是编辑器的状态覆盖键(09-05 字段状态
+                    # 目录):gimbal 引擎 Step 模型 extra="forbid",带出即
+                    # 拒载。carry 物化的面解析(platform 视图渲染/平台侧
+                    # build_carry_context)都发生在 dump 之前,导出物无需
+                    # 再携带(2026-09-14 导出泄漏修复)。
+                    "field_states": True,
                     "request": {"fields_meta": True},
                     "strategy": {"__all__": {"view_note": True}},
                 }

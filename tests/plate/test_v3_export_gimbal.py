@@ -185,3 +185,20 @@ class TestGimbalScenarioExporter:
         sc = _load_scenario()
         d = GimbalScenarioExporter(sc).to_dict()
         assert d["meta"]["system"] == ["fin"]
+
+    def test_field_states_stripped_from_export(self) -> None:
+        """steps[*].field_states(字段状态目录编辑器覆盖键)不得泄入导出物。
+
+        gimbal 引擎 Step 模型 extra="forbid" — 带出即拒载(2026-09-14
+        导出泄漏回归:平台导出场景携带 field_states 导致 gimbal 无法执行)。
+        面解析(carry 物化/平台视图渲染)全部发生在 dump 之前,导出物
+        不需要该键。
+        """
+        sc = _load_scenario()
+        sc.steps[0].field_states = {"$.bl_no": "carry"}
+        d = GimbalScenarioExporter(sc).to_dict()
+        for s in d["steps"]:
+            assert "field_states" not in s
+        # 其余 step 键不受累(api/request/strategy 照旧)
+        s0 = d["steps"][0]
+        assert {"kind", "api", "request", "strategy"} <= set(s0.keys())
