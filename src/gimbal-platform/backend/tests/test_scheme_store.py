@@ -82,3 +82,47 @@ async def test_delete_default_protected(client):
         d = (await scheme_store.list_schemes(db, sid))[0]
         with pytest.raises(ValueError, match="default_protected"):
             await scheme_store.delete_scheme(db, sid, d["schemeId"])
+
+
+def _scheme_body(name: str, **over) -> dict:
+    b = {"name": name, "dataSetSelection": [], "injectionEntryIds": [],
+         "serviceBindings": {}, "stepTo": None, "nRuns": 1, "parallel": 1,
+         "plugins": None, "logSub": None}
+    b.update(over)
+    return b
+
+
+async def test_copy_scenario_deep_copies_schemes(client):
+    """场景深拷贝随带方案(I-1):copy_schemes 覆盖随 test_scheme_migration.py
+    删除而丢失 — 经 POST /copy 全链断言:方案数一致/名字一致/default 存在。"""
+    h, sid = await _mk_scenario(client)
+    for name in ("冒烟", "回归"):
+        r = await client.post(f"/api/scenarios/{sid}/run-schemes",
+                              headers=h, json=_scheme_body(name, nRuns=2))
+        assert r.status_code == 201, r.text
+    src = (await client.get(f"/api/scenarios/{sid}/run-schemes", headers=h)).json()
+
+    # 属主可复制自己的私有场景(读权限放行);POST /copy 现有端点
+    r = await client.post(f"/api/scenarios/{sid}/copy", headers=h)
+    assert r.status_code == 201, r.text
+    new_sid = r.json()["meta"]["scenarioId"]
+
+    dst = (await client.get(f"/api/scenarios/{new_sid}/run-schemes", headers=h)).json()
+    assert len(dst) == len(src)                                    # 方案数一致
+    assert [s["name"] for s in dst] == [s["name"] for s in src]    # 名字一致(同序)
+    assert any(s["isDefault"] for s in dst)                        # default 存在
+    # scheme_id 重新分配,不与源侧相撞
+    assert {s["schemeId"] for s in dst}.isdisjoint({s["schemeId"] for s in src})
+
+
+async def test_list_scenarios_scheme_count(client):
+    """scheme_counts 直接覆盖(I-1):GET /scenarios 列表项 schemeCount
+    与建方案数一致(默认钩子 1 + 自建 2 = 3)。"""
+    h, sid = await _mk_scenario(client, "s02")
+    for name in ("冒烟", "回归"):
+        r = await client.post(f"/api/scenarios/{sid}/run-schemes",
+                              headers=h, json=_scheme_body(name))
+        assert r.status_code == 201, r.text
+    r = await client.get("/api/scenarios", headers=h)
+    mine = next(s for s in r.json() if s["meta"]["scenarioId"] == sid)
+    assert mine["schemeCount"] == 3

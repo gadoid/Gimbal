@@ -88,8 +88,8 @@ def test_draft_to_full_fills_missing_create_time() -> None:
 
 # ── assertion_registry 第三键(spec v2 §3)───────────────────────────
 # API 层 roundtrip:PUT(重铸 payload)不丢条目、GET /draft 原样回读、
-# 旧客户端缺省回落空 dict。骨架仿 test_run_schemes_endpoint 的
-# 「建场景 + GET /draft → PUT 回写」用例(共享 helpers.make_draft)。
+# 旧客户端缺省回落空 dict。骨架 = 「建场景 + GET /draft → PUT 回写」
+# (共享 helpers.make_draft)。
 from httpx import AsyncClient
 
 from .helpers import make_draft as _minimal_draft
