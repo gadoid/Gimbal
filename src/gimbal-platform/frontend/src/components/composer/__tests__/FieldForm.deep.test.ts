@@ -11,17 +11,14 @@
  * - 折叠区(§5.4):collapse 目录叶子不占直接渲染面,收进顶部
  *   「已折叠字段」区(展开编辑/行尾状态下拉翻回 form;合成标量行
  *   随容器折叠不收);
- * - 字段状态控制(§5.4):行尾下拉上抛 fieldState(模板路径,两通路分离);
- * - 「其他字段」区(§4):deepExtras 深浅残留 + unboundFields 契约差集
- *   按 path 归并;删除走 D8 连锁剪枝。
+ * - 字段状态控制(§5.4):行尾下拉上抛 fieldState(模板路径,两通路分离)。
  */
 import { describe, it, expect } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import FieldForm from '@/components/composer/FieldForm.vue'
-import { buildTree, extraBodyPaths } from '@/utils/declarations'
-import type { ExtraBodyRow } from '@/utils/declarations'
+import { buildTree } from '@/utils/declarations'
 import type { DeclarationEntryView, FieldState, IOFieldBinding } from '@/types/plate'
 import type { VarEntry } from '@/utils/var-registry'
 
@@ -40,14 +37,13 @@ function mkDecl(over: Partial<DeclarationEntryView> = {}): DeclarationEntryView 
   }
 }
 
-/** 生产用法镜像(Canvas):父持 body ref,nodes/deepExtras 随 body 重算
+/** 生产用法镜像(Canvas):父持 body ref,nodes 随 body 重算
  *  (computed 语义 — 值编辑/加删行后树自动重建,行数跟 body 生效)。 */
 function mountTree(opts: {
   decls: DeclarationEntryView[]
   body?: unknown
   fieldStates?: Record<string, FieldState>
   stateControl?: boolean
-  unboundFields?: Array<{ name: string; path: string; type?: string; default?: unknown }>
   injected?: Record<string, Array<{ source: string; target: string }>>
   strategyTags?: Record<string, Array<{ label: string; idx: number }>>
   readonly?: boolean
@@ -67,11 +63,9 @@ function mountTree(opts: {
     setup() {
       return () => h(FieldForm, {
         nodes: buildTree(opts.decls, opts.fieldStates, body.value),
-        deepExtras: extraBodyPaths(body.value, opts.decls, opts.fieldStates),
         body: body.value,
         overlay: opts.fieldStates,
         stateControl: opts.stateControl,
-        unboundFields: opts.unboundFields,
         injected: opts.injected,
         strategyTags: opts.strategyTags,
         readonly: opts.readonly,
@@ -293,7 +287,7 @@ describe('FieldForm 树模式 — 数组行组(§5.3)', () => {
     ] } })
   })
 
-  it('A9: 无模板数组对象行 — 字典 KV 行渲染(对象值不落 text 洗型);extras 不双重展示;删行 splice', async () => {
+  it('A9: 无模板数组对象行 — 字典 KV 行渲染(对象值不落 text 洗型);删行 splice', async () => {
     const decls = [mkDecl({ name: 'misc', path: '$.misc', type: 'array' })]
     const { w, body } = mountTree({ decls, body: { misc: [{ a: '1', b: 'x' }] } })
     // 对象行 → 字典 KV 编辑器承载行内键(此前合成 text 行,对象值显示
@@ -304,8 +298,6 @@ describe('FieldForm 树模式 — 数组行组(§5.3)', () => {
     await w.findAll('.kv-row input.ctl')[1].setValue('y')
     await flush()
     expect(body.value).toEqual({ misc: [{ a: '1', b: 'y' }] })
-    // 树内已自渲染 → 「其他字段」区整体缺席(无双重展示)
-    expect(w.find('[data-testid="extra-fields"]').exists()).toBe(false)
     // 删行 = splice(行删按钮是 .arr-row 直系子级;KV 删键同类名需区分);
     // 空数组壳保留(删行不走 D8 剪枝,同 A3 语义)
     await w.find('.arr-row > .arr-del').trigger('click')
@@ -874,56 +866,6 @@ describe('FieldForm 树模式 — 字段状态控制(§5.4)', () => {
     const decls = [mkDecl({ name: 'open', path: '$.open' })]
     const { w } = mountTree({ decls, body: {}, stateControl: true })
     expect(w.find('.fss-reset').exists()).toBe(false)
-  })
-})
-
-// ─── 「其他字段」区(§4:目录外残留深浅皆收 + 契约差集归并)──────────
-
-describe('FieldForm 树模式 — 其他字段区(§4)', () => {
-  it('E1: 深层残留成行(相对路径 key + 完整 path);编辑写入 body 深层', async () => {
-    const decls = [
-      mkDecl({ name: 'order', path: '$.order', type: 'object', children: [
-        mkDecl({ name: 'id', path: '$.order.id' }),
-      ] }),
-    ]
-    const { w, body } = mountTree({ decls, body: { order: { id: 1, memo: 'x' } } })
-    await w.find('.extras-toggle').trigger('click')
-    const row = w.find('.extra-row')
-    expect(row.find('.label-text').text()).toBe('order.memo')
-    expect(row.find('.field-path').text()).toBe('$.order.memo')
-    await row.find('input.ctl').setValue('y')
-    await flush()
-    expect(body.value).toEqual({ order: { id: 1, memo: 'y' } })
-  })
-
-  it('E2: 顶层未覆盖容器 → JSON 整行(top);删除走 D8 连锁剪枝', async () => {
-    const decls = [mkDecl({ name: 'id', path: '$.id' })]
-    const { w, body } = mountTree({ decls, body: { id: 1, extra: { a: 1 } } })
-    await w.find('.extras-toggle').trigger('click')
-    const del = w.find('.extra-del')
-    expect(del.exists()).toBe(true)
-    await del.trigger('click')
-    await flush()
-    expect(body.value).toEqual({ id: 1 })
-  })
-
-  it('E3: 契约差集键与 body 实有键按 path 归并(schema 标 + inBody 删除入口)', async () => {
-    const decls = [mkDecl({ name: 'id', path: '$.id' })]
-    const { w } = mountTree({
-      decls,
-      body: { id: 1, trace: 't1' },
-      unboundFields: [{ name: 'trace', path: '$.trace', type: 'string' }],
-    })
-    await w.find('.extras-toggle').trigger('click')
-    const row = w.find('.extra-row')
-    expect(row.find('.extra-src').text()).toBe('契约')
-    expect(row.find('.extra-del').exists()).toBe(true) // inBody → 可删
-  })
-
-  it('E4: 无残留 → 区块整体缺席', () => {
-    const decls = [mkDecl({ name: 'id', path: '$.id' })]
-    const { w } = mountTree({ decls, body: { id: 1 } })
-    expect(w.find('[data-testid="extra-fields"]').exists()).toBe(false)
   })
 })
 

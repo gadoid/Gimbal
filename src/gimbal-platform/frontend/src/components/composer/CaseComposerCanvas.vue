@@ -250,8 +250,6 @@
                   :field-actions="true"
                   :var-choices="referenceVarChoices"
                   :inject-choices="injectVarChoices"
-                  :unbound-fields="reqTypeC"
-                  :deep-extras="requestExtras"
                   :strategy-tags="requestStrategyTags"
                   :injected="requestInjected"
                   :extracted="requestExtracted"
@@ -291,8 +289,6 @@
                    这里不再复述,免得同一页出现两处同义提示 -->
               <span v-if="currentFullState !== 'failed'" class="hint">提示: 该接口未声明请求字段契约,或 plate 拉取中</span>
             </el-form-item>
-            <!-- 请求侧 Type C(schema 有、binding 无)已并入 FieldForm「其他字段」
-                 折叠区(unbound-fields) — 可见可编辑,不再单独设只读块。 -->
             <!-- Response 页:/full responses 全状态码契约,只读参考(设计 §3.1)。
                  ☰ 菜单**三项**:提取/断言/加入断言管理(值写入三项仍按域门控
                  不出现 —— 响应侧无从写请求体的值)。三项都域感知 — 响应侧路径
@@ -580,7 +576,7 @@ import { toScratchPath } from '@/utils/scratch-path'
 import { strategyLabelOf } from '@/utils/strategy-labels'
 import {
   assertablePaths, buildTree, carryPaths, cascadeIncrements, containerSurface,
-  contractTree, extraBodyPaths, extraSurfaceBindings, formBindings,
+  contractTree, extraSurfaceBindings, formBindings,
   groupValueSources, iterFlat, leafSurface, prefillBindings, responseBindings,
   searchCorpus, toTemplatePath,
 } from '@/utils/declarations'
@@ -646,7 +642,7 @@ function inferProtocol(step: StepView | undefined): string {
 
 /** 当前 step 的请求目录(**纯缓存读**:目录按 endpoint_id 由本文件的预拉
  *  取回,不读持久化快照;step.request.fields_meta 不作数据源 — 退场记录见
- *  docs/adr/0003)。读缓存(getEndpointFull)即建立响应依赖:回填后树/reqTypeC
+ *  docs/adr/0003)。读缓存(getEndpointFull)即建立响应依赖:回填后树
  *  自动重算。 */
 function stepDecls(step: StepView | undefined) {
   const eid = step?.api?.view_hints?.endpoint_id
@@ -671,10 +667,6 @@ const requestNodes = computed<FieldTreeNode[]>(() => {
  *  搜索语料,09-05 §5.4);仅请求签挂载(响应面 state 无视)。 */
 const fieldSearchCorpus = computed(() =>
   searchCorpus(stepDecls(currentStep.value), currentStep.value?.field_states))
-
-/** 「其他字段」区 body 残留行(§4:目录外深浅皆收,Canvas 投影单一真源) */
-const requestExtras = computed(() =>
-  extraBodyPaths(currentStep.value?.request?.body, stepDecls(currentStep.value), currentStep.value?.field_states))
 
 /** step 是否携带接口身份引用(决定 loading/failed 占位是否适用) */
 function hasEndpointRef(step: StepView | undefined): boolean {
@@ -1415,9 +1407,9 @@ function strategyMatchesField(s: StrategyView, domain: 'request' | 'response', f
 
 /** 请求字段匹配面(§5 值×结构合并树继任 D9):树叶子 + 容器节点
  *  (实例路径,含数组行 [i];容器面 = 注入粒度 P6,整容器 assign 与
- *  叶子同式命中)+ 目录外残留合成行 — 注入只读态/请求侧策略角标按
- *  path 匹配全部复用;与 FieldForm 渲染同源(buildTree/extraBodyPaths
- *  单一真源),防键漂移。 */
+ *  叶子同式命中)+ 目录外残留合成行(extraSurfaceBindings 隐形管线,
+ *  「其他字段」编辑区已撤销但注入/assign 匹配面仍需覆盖 body 残留键)—
+ *  注入只读态/请求侧策略角标按 path 匹配全部复用,防键漂移。 */
 function requestFieldSurface(step: StepView | undefined): IOFieldBinding[] {
   const decls = stepDecls(step)
   if (!decls) return []
@@ -1670,9 +1662,6 @@ const currentRespSpecs = computed<RespSpecLite[]>(() => {
 })
 
 /** 请求侧契约 schema(Type C 差集源) */
-const currentReqSchema = computed<Record<string, unknown> | undefined>(
-  () => currentFull.value?.request?.schema
-)
 
 // ── 策略区说明:request/response 共用 step.strategy 单数组(执行序即数组
 //    序,plate Step 契约不变);不按签页过滤,避免"Request 页添加的策略
@@ -1682,8 +1671,8 @@ const currentReqSchema = computed<Record<string, unknown> | undefined>(
 interface TypeCField { name: string; type: string; path: string; default?: unknown }
 /**
  * schema.properties 键集 与 已绑定 fields[].path(掐头 `$.`)求差集。
- * 响应侧仍为纯查看;请求侧经 reqTypeC 传入 FieldForm「其他字段」,
- * default 作契约行 placeholder(编辑写入 body)。
+ * 响应侧纯查看(Schema 未绑定字段折叠块);请求侧差集已随「其他字段」
+ * 区撤销退场(2026-09-14)。
  */
 function typeCFields(
   schema: Record<string, unknown> | undefined,
@@ -1700,14 +1689,6 @@ function typeCFields(
       default: props[k]?.default,
     }))
 }
-/** 请求侧 Type C(挂 Request 签页底部;carry 键排除 — 传递面零感知)
- *  目录化后:解析态 carry 面 path 集(端点级读穿 — 值表跟共识默认走) */
-const reqCarryPaths = computed<Set<string>>(() =>
-  new Set(carryPaths(currentFull.value?.request?.declarations)))
-const reqTypeC = computed<TypeCField[]>(() =>
-  typeCFields(currentReqSchema.value, fieldBindings(currentStep.value).map((f) => f.path))
-    .filter((f) => !reqCarryPaths.value.has(f.path))
-)
 /** 响应侧 Type C(200 契约 schema 差集,挂 Response 签页底部) */
 const respTypeC = computed<TypeCField[]>(() => {
   const spec200 = currentRespSpecs.value.find((s) => s.status === 200)

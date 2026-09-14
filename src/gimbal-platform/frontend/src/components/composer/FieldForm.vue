@@ -18,10 +18,10 @@
     collapse 的两副面孔:容器(对象/数组/字典)原地折叠面板;叶子
     不占直接渲染面,收进「已折叠字段」区(§5.4 折叠区 — 顶部汇总,
     展开编辑,行尾状态下拉可翻回 form;合成标量行随容器折叠,不收)。
-    carry 不进树(值表整包注入,编排面零感知);深层残留不在此 ——
-    「其他字段」区承接目录外 body 键(深浅皆收)。
+    carry 不进树(值表整包注入,编排面零感知);目录外 body 键不设
+    编辑面(「其他字段」区已撤销,2026-09-14 设计否决)。
   - 平铺模式(bindings):StrategyForm / 响应契约参考。IOFieldBinding[]
-    直渲染叶子行,无树无 extras 深层扩展。
+    直渲染叶子行,无树。
 
   值回写走 body(setValue + D8 深层清空剪枝);状态回写走 step.field_states
   (fieldState 事件上抛,§5.4 两通路分离)。行尾状态下拉 = 字段状态控制
@@ -828,79 +828,6 @@
         </div>
       </div>
     </div>
-
-    <!-- 其他字段(§4:目录外 body 残留,深浅皆收 + 契约差集行)。树模式
-         行集由 Canvas 投影(deepExtras = extraBodyPaths 单一真源);平铺
-         模式维持顶层平铺键 − binding 根段(StrategyForm 复用不受影响)。
-         实有键随请求发送;契约字段编辑即写入 body — 默认折叠。 -->
-    <div v-if="!nested && extraRows.length" class="extras" data-testid="extra-fields">
-      <button type="button" class="extras-toggle" @click="extrasOpen = !extrasOpen">
-        <span class="extras-arrow" :class="{ open: extrasOpen }">▸</span>
-        <span class="extras-title">其他字段 · {{ extraRows.length }}</span>
-        <span class="extras-hint">不在接口目录中 · 已写入的随请求发送</span>
-      </button>
-      <div v-if="extrasOpen" class="extras-body">
-        <div v-for="row in extraRows" :key="row.path" class="extra-row">
-          <label class="extra-label">
-            <span class="label-text">{{ row.key }}</span>
-            <span class="field-path">{{ row.path }}</span>
-            <span
-              class="extra-src"
-              :class="row.source"
-              :title="row.source === 'schema'
-                ? (row.inBody ? 'plate 契约声明,已写入请求体' : 'plate 契约声明;编辑后写入请求体')
-                : '请求体实有键,随请求发送'"
-            >{{ row.source === 'schema' ? '契约' : '实有' }}</span>
-          </label>
-          <div class="extra-control">
-            <textarea
-              v-if="isStructured(extraValue(row)) || row.type === 'object' || row.type === 'array'"
-              class="ctl ctl-code"
-              rows="3"
-              :value="formatJson(extraValue(row))"
-              :placeholder="extraPlaceholder(row)"
-              :disabled="readonly"
-              @input="e => setExtra(row, parseJsonOrRaw((e.target as HTMLTextAreaElement).value))"
-            />
-            <label v-else-if="row.type === 'boolean'" class="ctl-bool">
-              <input
-                type="checkbox"
-                :checked="Boolean(extraValue(row))"
-                :disabled="readonly"
-                @change="e => setExtra(row, (e.target as HTMLInputElement).checked)"
-              />
-              <span>{{ extraValue(row) ? 'true' : 'false' }}</span>
-            </label>
-            <input
-              v-else-if="row.type === 'number'"
-              type="number"
-              class="ctl"
-              :value="extraValue(row) ?? ''"
-              :placeholder="extraPlaceholder(row)"
-              :disabled="readonly"
-              @input="e => setExtra(row, (e.target as HTMLInputElement).value === '' ? '' : Number((e.target as HTMLInputElement).value))"
-            />
-            <input
-              v-else
-              type="text"
-              class="ctl"
-              :value="String(extraValue(row) ?? '')"
-              :placeholder="extraPlaceholder(row)"
-              :disabled="readonly"
-              @input="e => setExtra(row, (e.target as HTMLInputElement).value)"
-            />
-            <button
-              v-if="row.inBody"
-              type="button"
-              class="extra-del"
-              title="从请求体移除该字段(深层清空连锁剪枝容器)"
-              :disabled="readonly"
-              @click="removeExtra(row)"
-            >×</button>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -951,13 +878,6 @@ const props = defineProps<{
   domain?: 'request' | 'response'
   /** 可断言字段的 plate 域路径列表(Response 页 ✓ 标线) */
   assertable?: string[]
-  /**
-   * plate 契约差集行(schema 有、目录渲染面无 — Canvas 的 reqTypeC):
-   * 并入「其他字段」折叠区,可编辑;编辑即写入 body(未编辑不随请求发送)。
-   */
-  unboundFields?: Array<{ name: string; path: string; type?: string; default?: unknown }>
-  /** 目录外 body 残留行(Canvas 投影:extraBodyPaths 单一真源,深浅皆收) */
-  deepExtras?: Array<{ path: string; top: boolean }>
   /** 策略角标(需求1):字段 path → 角标数组(label 由 Canvas 预计算含编号,
    *  idx = step.strategy 数组下标);点击上抛 strategyJump 由 Canvas 定位
    *  下方策略卡。key = path(实例地址,唯一)— name 在数组行间共享会
@@ -1399,126 +1319,11 @@ function setValueTplNum(f: IOFieldBinding, v: string) {
   setValue(f, v)
 }
 
-// ─── 「其他字段」区(§4:目录外 body 残留深浅皆收 + 契约差集)────────
-
-/**
- * 其他字段行视图:
- * - 树模式:deepExtras(Canvas 投影的目录外 body 残留,深浅皆收)+
- *   unboundFields(契约差集行)按 path 去重合并(body 实有的契约键
- *   归并为 schema 行 inBody=true,旧语义保持);
- * - 平铺模式:body 顶层键 − binding 根段 + unboundFields(StrategyForm
- *   复用路径,行为与旧版一致)。
- * source=行来源标签;inBody=是否已写入 body(决定随请求发送 + 可删除)。
- */
-interface ExtraRowView {
-  key: string
-  path: string
-  source: 'body' | 'schema'
-  inBody: boolean
-  /** schema 声明类型(body 实有行无) — 控件按此渲染:boolean 勾选/number 数字框/object·array JSON 域 */
-  type?: string
-  /** schema 默认值(契约行):未写入 body 时以 placeholder 透出,编辑写入 */
-  default?: unknown
-}
-
-const extraRows = computed<ExtraRowView[]>(() => {
-  if (props.nested) return []
-  const relOf = (p: string) => p.replace(/^\$\.?/, '')
-  const rows: ExtraRowView[] = []
-  if (props.nodes) {
-    const byPath = new Map<string, ExtraRowView>()
-    for (const r of props.deepExtras ?? []) {
-      const row: ExtraRowView = {
-        key: relOf(r.path), path: r.path, source: 'body', inBody: true,
-      }
-      byPath.set(r.path, row)
-      rows.push(row)
-    }
-    for (const f of props.unboundFields ?? []) {
-      const p = f.path || `$.${f.name}`
-      const ex = byPath.get(p)
-      if (ex) {
-        // 契约键已被 body 实有 → 归并为契约行(旧 dedupe 语义)
-        ex.source = 'schema'
-        ex.type = f.type
-        ex.default = f.default
-        continue
-      }
-      rows.push({
-        key: relOf(p), path: p, source: 'schema', inBody: false,
-        type: f.type, default: f.default,
-      })
-    }
-    return rows
-  }
-  // 平铺模式(StrategyForm / 无目录步骤):顶层平铺键 − binding 根段
-  const bodyObj =
-    props.body && typeof props.body === 'object' && !Array.isArray(props.body)
-      ? (props.body as Record<string, unknown>)
-      : null
-  // binding 覆盖面的根段(数组下标不拆根,容器整体归入覆盖面)
-  const roots = new Set(
-    (props.bindings ?? []).map((b) => b.path.replace(/^\$\.?/, '').split(/[.[\]]/)[0]),
-  )
-  const schemaTypes = new Map(
-    (props.unboundFields ?? []).map((f) => [f.name, f.type ?? 'string']),
-  )
-  for (const k of bodyObj ? Object.keys(bodyObj) : []) {
-    if (roots.has(k)) continue
-    rows.push({
-      key: k, path: `$.${k}`,
-      source: schemaTypes.has(k) ? 'schema' : 'body',
-      inBody: true, type: schemaTypes.get(k),
-    })
-  }
-  const schemaDefaults = new Map(
-    (props.unboundFields ?? []).map((f) => [f.name, f.default]),
-  )
-  for (const f of props.unboundFields ?? []) {
-    if (bodyObj && f.name in bodyObj) continue
-    if (roots.has(f.name)) continue
-    rows.push({
-      key: f.name, path: f.path || `$.${f.name}`,
-      source: 'schema', inBody: false,
-      type: f.type ?? 'string', default: schemaDefaults.get(f.name),
-    })
-  }
-  return rows
-})
-
-/** 折叠区默认收起(挂载即折叠,不跨步骤记忆) */
-const extrasOpen = ref(false)
-
-function extraValue(row: ExtraRowView): unknown {
-  return getByPath(props.body, row.path.replace(/^\$\.?/, ''))
-}
+// ─── 「其他字段」区已撤销(2026-09-14 设计否决)──────────────────────
 
 /** 结构值(对象/数组)走 JSON 域,其余按原始值文本编辑(未声明 → 类型未知,text 是诚实兜底) */
 function isStructured(v: unknown): boolean {
   return typeof v === 'object' && v !== null
-}
-
-function setExtra(row: ExtraRowView, val: unknown) {
-  if (props.readonly) return
-  const rel = row.path.replace(/^\$\.?/, '')
-  const next = copyBody(rel)
-  setByPath(next, rel, val)
-  emit('update:body', next)
-}
-
-function removeExtra(row: ExtraRowView) {
-  if (props.readonly) return
-  const rel = row.path.replace(/^\$\.?/, '')
-  const next = copyBody(rel)
-  pruneByPath(next, rel) // 深层残留删除连锁剪枝空容器(D8 同款)
-  emit('update:body', next)
-}
-
-/** 契约行未写入时以 schema 默认值作 placeholder(灰字提示 ≠ 值,不随请求发送) */
-function extraPlaceholder(row: ExtraRowView): string {
-  if (row.inBody || row.default === undefined || row.default === null) return ''
-  if (typeof row.default === 'object') return JSON.stringify(row.default, null, 2)
-  return String(row.default)
 }
 
 // ─── 值读写(path 寻址;深层清空 D8 剪枝)────────────────────────────
@@ -1623,16 +1428,16 @@ function formatJson(v: unknown): string {
   color: #6366f1; background: #eef2ff; border-radius: 3px; padding: 1px 0;
 }
 .arr-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.arr-del, .extra-del {
+.arr-del {
   flex-shrink: 0; width: 26px; height: 32px;
   background: #fafbfc; border: 1.5px solid #e6e8ec; border-radius: 8px;
   color: #94a3b8; cursor: pointer; font-size: 14px; line-height: 1;
   transition: all 0.15s;
 }
-.arr-del:hover:not(:disabled), .extra-del:hover:not(:disabled) {
+.arr-del:hover:not(:disabled) {
   border-color: #fca5a5; background: #fef2f2; color: #ef4444;
 }
-.arr-del:disabled, .extra-del:disabled { cursor: not-allowed; opacity: 0.5; }
+.arr-del:disabled { cursor: not-allowed; opacity: 0.5; }
 .arr-empty, .dict-empty {
   margin: 0; font-size: 11px; color: #94a3b8; font-style: normal;
 }
@@ -1902,36 +1707,4 @@ function formatJson(v: unknown): string {
 .folded-row { display: flex; flex-direction: column; gap: 4px; padding-left: 6px; }
 .folded-label { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 .folded-control .ctl { width: 100%; }
-
-/* ── 其他字段折叠区:琥珀警示(浅底 + 左条),与 sk-generated 橙同族 ── */
-.extras {
-  padding: 8px 10px 8px 12px;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-left: 3px solid #f59e0b;
-  border-radius: 8px;
-}
-.extras-toggle {
-  display: flex; align-items: center; gap: 6px;
-  width: 100%; padding: 0; border: none; background: transparent;
-  font-size: 12px; text-align: left; cursor: pointer;
-}
-.extras-arrow {
-  display: inline-block; font-size: 10px; color: #b45309;
-  transition: transform 0.15s;
-}
-.extras-arrow.open { transform: rotate(90deg); }
-.extras-title { font-weight: 600; color: #92400e; }
-.extras-hint { margin-left: auto; font-size: 11px; color: #b45309; }
-.extras-body { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
-.extra-row { display: flex; flex-direction: column; gap: 4px; padding-left: 6px; }
-.extra-label { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-/* 来源标签:实有(body 键,随请求发送)/ 契约(plate 契约声明) */
-.extra-src {
-  font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
-  background: #fef3c7; color: #92400e; cursor: default;
-}
-.extra-src.schema { background: #ecf5ff; color: #409eff; }
-.extra-control { display: flex; gap: 6px; align-items: flex-start; }
-.extra-control .ctl { flex: 1; min-width: 0; }
 </style>

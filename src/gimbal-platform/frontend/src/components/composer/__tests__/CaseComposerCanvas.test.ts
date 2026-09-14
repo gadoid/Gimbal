@@ -54,7 +54,7 @@ vi.mock('@/api/scenario-composer', () => ({
       // declarations = 字段状态目录(children 树 + state 共识默认;
       // 旧 channel/fields 键已退役)。ep-1: orderId 平铺叶;
       // ep-2(T6 嵌套注入用): 深叶 $.nested.oid(目录可直声明深叶);
-      // ep-carry(reqTypeC carry 过滤用例): $.remark 共识 carry
+      // ep-carry(carry 零感知不变式用例): $.remark 共识 carry
       // 且 schema properties 另含 remark + hidden_req → 差集须滤 carry 键;
       // ep-deep(R1 数组行注入用): $.supplier 数组容器 + 行模板叶
       // $.supplier.order_supplier_id,body 2 行 → 行数跟 body;
@@ -623,32 +623,25 @@ describe('CaseComposerCanvas — 右栏分流 + Type C(C3)', () => {
     expect(info.find('.assertable-mark').exists()).toBe(true)
   })
 
-  it('T21: Type C — 请求侧 hidden_req 并入「其他字段」可编辑 / 响应侧 trace_id 只读块', async () => {
+  it('T21: Type C — 请求侧差集随「其他字段」区撤销退场 / 响应侧 trace_id 只读块', async () => {
     const { w } = mountCanvas([mkStep()])
     await flushPromises()
-    // request 签:请求 schema 差集(/full 绑定字段只有 orderId,schema 另有 hidden_req)
-    // → 不再有只读 typec-block,并入 FieldForm「其他字段」折叠区(契约行,可编辑)
+    // request 签:请求 schema 差集(hidden_req)无编辑面 —「其他字段」区
+    // 已撤销(2026-09-14),目录外/差集键不进编排 UI(值仍随 body 透传)
     expect(w.findAll('.typec-block').length).toBe(0)
-    const extras = w.find('[data-testid="extra-fields"]')
-    expect(extras.exists()).toBe(true)
-    await w.find('.extras-toggle').trigger('click')
-    expect(extras.text()).toContain('hidden_req')
-    expect(extras.find('.extra-src.schema').exists()).toBe(true)
-    // schema default 以 placeholder 透出(未写入 body,不随请求发送)
-    const input = extras.find('input.ctl')
-    expect((input.element as HTMLInputElement).placeholder).toBe('hd-default')
+    expect(w.find('[data-testid="extra-fields"]').exists()).toBe(false)
+    expect(w.text()).not.toContain('hidden_req')
     const respTab = w.findAll('.io-tab').find((b) => b.text().includes('Response'))!
     await respTab.trigger('click')
     await flush()
-    // response 签:200 契约 schema 差集 trace_id(响应侧仍为只读块)
+    // response 签:200 契约 schema 差集 trace_id(响应侧只读块保留)
     expect(w.findAll('.typec-block').length).toBe(1)
     expect(w.find('.typec-block').text()).toContain('trace_id')
   })
 
-  it('T21b: reqTypeC carry 过滤 — request.carry 声明键不进「其他字段」', async () => {
-    // ep-carry:schema 差集 = hidden_req + remark,其中 $.remark 声明在
-    // request.carry(值由 platform 运行时注入,编排面零感知)→ 必须滤除;
-    // hidden_req 非传递键,照常进「其他字段」证明过滤是选择性的。
+  it('T21b: carry 声明键不进请求编排面(值由运行时注入,零感知不变式)', async () => {
+    // ep-carry:$.remark 声明在 request.carry → 编排面无任何 remark 入口
+    // (此前经「其他字段」差集行过滤钉住;extras 撤销后整面缺席即天然满足)
     const s0 = mkStep({
       api: {
         kind: 'api', service: 'fin', method: 'POST', path: '/order',
@@ -657,12 +650,8 @@ describe('CaseComposerCanvas — 右栏分流 + Type C(C3)', () => {
     })
     const { w } = mountCanvas([s0])
     await flushPromises()
-    const extras = w.find('[data-testid="extra-fields"]')
-    expect(extras.exists()).toBe(true)
-    await w.find('.extras-toggle').trigger('click')
-    expect(extras.text()).toContain('hidden_req')
-    expect(extras.text()).not.toContain('remark')
-    // 请求签整体不出现 remark 输入(未被滤除即会产生重复注入入口)
+    expect(w.find('[data-testid="extra-fields"]').exists()).toBe(false)
+    // 请求签整体不出现 remark(编排面零感知,无重复注入入口)
     expect(w.text()).not.toContain('remark')
     w.unmount()
   })
