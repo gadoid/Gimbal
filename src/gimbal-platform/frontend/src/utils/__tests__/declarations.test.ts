@@ -13,7 +13,7 @@ import {
   resolveState, iterFlat, catalogPaths, carryPaths,
   formBindings, responseBindings, assertablePaths, hasUsablePath, searchCorpus,
   buildTree, contractTree, leafSurface, containerSurface, extraBodyPaths, extraSurfaceBindings, prefillBindings,
-  sanitizeEndpointFull, promotedDecls, entryPaths,
+  sanitizeEndpointFull, promotedDecls, entryPaths, cascadeIncrements,
 } from '@/utils/declarations'
 import { injectablePathSetOf } from '@/utils/assertion-registry'
 import { toScratchPath } from '@/utils/scratch-path'
@@ -835,5 +835,26 @@ describe('promotedDecls — 提升条目合成(§4.2)', () => {
     // 树内出现该节点
     const tree = buildTree(effective, fs, body)
     expect(tree.map((n) => n.path)).toContain('$.extra')
+  })
+})
+
+describe('cascadeIncrements — 提升面 carry 防御(2026-09-14 §4.4)', () => {
+  // 合成条目(promotedDecls 产物形状;locate 可命中)
+  const SYNTH = [mkDecl({ name: 'extra', path: '$.extra', type: 'string' })]
+  const noCarry = new Set(['$.extra'])
+
+  it('PR-10: noCarryPaths 命中 + 目标 carry → 空批(目录外不可能 carry)', () => {
+    expect(cascadeIncrements(SYNTH, { '$.extra': 'form' }, '$.extra', 'carry', noCarry))
+      .toEqual({})
+  })
+
+  it('PR-11: noCarryPaths 命中 + 目标 form/collapse → 正常单条增量', () => {
+    expect(cascadeIncrements(SYNTH, { '$.extra': 'form' }, '$.extra', 'collapse', noCarry))
+      .toEqual({ '$.extra': 'collapse' })
+  })
+
+  it('PR-12: 不传 noCarryPaths(旧调用方)→ 行为不变', () => {
+    expect(cascadeIncrements(SYNTH, { '$.extra': 'form' }, '$.extra', 'carry'))
+      .toEqual({ '$.extra': 'carry' })
   })
 })

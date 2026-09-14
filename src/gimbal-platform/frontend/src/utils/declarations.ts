@@ -283,7 +283,8 @@ export function searchCorpus(
  * - sink(target=carry):path 落 carry + 每个**解析态非 carry** 的子孙
  *   压 carry(§3.5 tree_inconsistency 不变式:carry 容器 ⇒ 子孙必 carry);
  * - 同值仍写显式增量(↺ 可回;显式覆盖是漂移保护凭据,§3.3);
- * - 目录外 path / 词表外 target → 空对象(防御,不上抛)。
+ * - 目录外 path(不在 decls 中)/ 词表外 target → 空对象;noCarryPaths
+ *   命中且目标 carry → 空批(防御,不上抛;§4.4)。
  *
  * 返回值是"待合并批",由 Canvas 乐观合并 + 整批校验 + 失败整批回滚
  * (§2.4);行尾下拉与搜索行共用此通路(零分叉)。
@@ -293,9 +294,14 @@ export function cascadeIncrements(
   fieldStates: Record<string, string> | null | undefined,
   path: string,
   target: FieldState,
+  noCarryPaths?: Set<string>,
 ): Record<string, FieldState> {
   const out: Record<string, FieldState> = {}
   if (!isValidState(target)) return out
+  // 提升面 carry 防御纵深(2026-09-14 §4.4):目录外 path 结构上不可能
+  // carry(carry 面/值表只遍历目录)—— UI 门禁(FieldStateSelect.noCarry)
+  // 是第一道,这里兜底搜索框等旁路。form/collapse 不受限。
+  if (target === 'carry' && noCarryPaths?.has(path)) return out
   // 定位条目并收集祖先链(先序深搜;目录外 path → 空批)
   const locate = (
     entries: DeclarationEntryView[] | undefined,
