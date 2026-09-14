@@ -316,11 +316,12 @@ onMounted(async () => {
                 :disabled="!dirty" :loading="saving" @click="saveScheme">保存</el-button>
               <el-button data-testid="discard-scheme" size="small"
                 :disabled="!dirty" @click="discardDraft">放弃</el-button>
-              <!-- 阶段②:跳编排器(现有 RunDialog 在那);阶段③ RunDialog v2
-                   深链 — 此按钮 click 是唯一改动点。dirty 禁用:跑的须与看见的一致 -->
+              <!-- 阶段③:RunDialog v2 深链 — ?runScheme= 选中方案 id,编排器
+                   onMounted 打开弹窗并预选(读后 replace 清 query)。composerUrl
+                   已含 ?step=1,故用 & 追加。dirty 禁用:跑的须与看见的一致 -->
               <el-button type="primary" data-testid="run-scheme"
                 :disabled="dirty" title="先保存再运行"
-                @click="router.push(composerUrl(scenarioId))">▶ 运行此方案</el-button>
+                @click="router.push(composerUrl(scenarioId) + '&runScheme=' + encodeURIComponent(draft.schemeId))">▶ 运行此方案</el-button>
             </div>
           </header>
           <SchemeDataSection

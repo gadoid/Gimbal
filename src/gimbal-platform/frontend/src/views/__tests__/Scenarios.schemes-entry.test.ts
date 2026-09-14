@@ -12,7 +12,7 @@
  * 骨架仿 CaseDataSetsList.test.ts(store mock + router push spy);
  * 行形状按 Scenarios.vue 实际消费的读侧 Scenario。
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { createPinia, setActivePinia } from 'pinia'
@@ -56,7 +56,9 @@ function row(over: Partial<Scenario> = {}): Scenario {
 }
 
 async function mountList() {
-  const w = mount(Scenarios, { global: { plugins: [ElementPlus] } })
+  // attachTo: ⋯ dropdown(el-dropdown)经 teleport 渲染到 body —
+  // 挂真实 DOM 才能在用例里断言菜单项(与 Scenarios.expire.test 同款)
+  const w = mount(Scenarios, { global: { plugins: [ElementPlus] }, attachTo: document.body })
   await flushPromises()
   return w
 }
@@ -67,6 +69,8 @@ beforeEach(() => {
   storeMock.fetchScenarios.mockClear()
   storeMock.scenarios = []
 })
+
+afterEach(() => { document.body.innerHTML = '' })
 
 describe('Scenarios — 「方案」直接入口', () => {
   it('行内渲染「方案 ·3」直接按钮并跳工作台', async () => {
@@ -87,6 +91,21 @@ describe('Scenarios — 「方案」直接入口', () => {
     expect(btn.text()).toBe('方案')
     await btn.trigger('click')
     expect(pushMock.push).toHaveBeenCalledWith('/scenarios/sc-x/schemes')
+    w.unmount()
+  })
+
+  // ── 入口收敛(阶段③ Task 5):dropdown 移除「查看数据集」─────────────
+  it('⋯ dropdown 菜单不含「查看数据集」(数据集深层编辑收敛到工作台数据区/详情页)', async () => {
+    storeMock.scenarios = [row()]
+    const w = await mountList()
+    await w.find('.more-btn').trigger('click')
+    await flushPromises()
+    const items = Array.from(document.querySelectorAll('.el-dropdown-menu__item'))
+      .map((el) => el.textContent?.trim())
+    // 哨兵:菜单确实打开且保留项还在 — 保证 not.toContain 断言有效
+    expect(items).toContain('查看详情')
+    expect(items).toContain('编辑场景')
+    expect(items).not.toContain('查看数据集')
     w.unmount()
   })
 })

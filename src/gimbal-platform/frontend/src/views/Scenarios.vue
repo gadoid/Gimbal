@@ -162,7 +162,8 @@
               <el-dropdown-menu>
                 <el-dropdown-item command="detail">查看详情</el-dropdown-item>
                 <el-dropdown-item command="edit">编辑场景</el-dropdown-item>
-                <el-dropdown-item command="datasets">查看数据集</el-dropdown-item>
+                <!-- 「查看数据集」已收敛(阶段③ Task 5):数据集深层编辑走
+                     工作台数据区/详情页入口,数据集列表路由保留 -->
                 <el-dropdown-item command="export" divided>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                   导出 (JSON/YAML)
@@ -220,7 +221,7 @@ import { convertDraftToExecutable, schemeToOverlay } from '@/stores/scenario-dra
 import { downloadFile } from '@/utils/download'
 import { useListSearch } from '@/utils/useListSearch'
 import { confirmAction } from '@/utils/confirmAction'
-import { composerUrl, scenarioDataSetsUrl, scenarioDetailUrl, scenarioSchemesUrl } from '@/utils/links'
+import { composerUrl, scenarioDetailUrl, scenarioSchemesUrl } from '@/utils/links'
 import { showError } from '@/utils/errorFallback'
 import { shortDateTime, exportTimestamp } from '@/utils/datetime'
 import FilterPopover from '@/components/FilterPopover.vue'
@@ -434,10 +435,6 @@ async function toggleStar(row: Scenario) {
 async function onCmd(cmd: string, row: Scenario) {
   if (cmd === 'detail') return router.push(scenarioDetailUrl(row.meta.scenarioId))
   if (cmd === 'edit') return openScenario(row)
-  if (cmd === 'datasets') {
-    // 数据集直接挂场景(Case 层已解散)— 打开场景的数据集列表页
-    return router.push(scenarioDataSetsUrl(row.meta.scenarioId))
-  }
   if (cmd === 'copy') {
     try {
       const saved = await store.copyScenario(row.meta.scenarioId)

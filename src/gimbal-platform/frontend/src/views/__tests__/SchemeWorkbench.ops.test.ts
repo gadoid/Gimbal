@@ -90,16 +90,30 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
       expect.objectContaining({ serviceBindings: { 'svc-decl': { authAlias: 'alias-1' } } }))
   })
 
-  // ── 头部「▶ 运行此方案」────────────────────────────────────────────
-  it('运行按钮:干净态跳编排器;脏态禁用', async () => {
+  // ── 头部「▶ 运行此方案」(阶段③:深链预选)──────────────────────────
+  it('运行按钮:干净态深链跳编排器(?runScheme=选中方案);脏态禁用不导航(负控)', async () => {
     const w = await mountWb()
     const btn = w.find('[data-testid="run-scheme"]')
     expect((btn.element as HTMLButtonElement).disabled).toBe(false)
     await btn.trigger('click')
-    expect(push).toHaveBeenCalledWith(composerUrl('sc-wb'))
-    // 绑定变更 → 脏 → 禁用(先保存再运行)
+    // 默认选中置顶 default(rs-001)→ 深链预选该方案(composerUrl 已含
+    // ?step=1,故用 & 追加 runScheme)
+    expect(push).toHaveBeenCalledWith(`${composerUrl('sc-wb')}&runScheme=rs-001`)
+    // 绑定变更 → 脏 → 禁用(先保存再运行);禁用态再点不产生导航
     await w.findAll('select')[0].setValue('alias-1')
     expect((btn.element as HTMLButtonElement).disabled).toBe(true)
+    await btn.trigger('click')
+    expect(push).toHaveBeenCalledTimes(1)
+  })
+
+  it('运行按钮:选中非默认方案 → 深链 runScheme=rs-002(按所见即所跑)', async () => {
+    const w = await mountWb()
+    await w.findAll('.scheme-item')[1].trigger('click')   // 选中「冒烟」rs-002
+    expect(w.find('.scheme-item.selected').text()).toContain('冒烟')
+    const btn = w.find('[data-testid="run-scheme"]')
+    expect((btn.element as HTMLButtonElement).disabled).toBe(false)
+    await btn.trigger('click')
+    expect(push).toHaveBeenCalledWith(`${composerUrl('sc-wb')}&runScheme=${encodeURIComponent('rs-002')}`)
   })
 
   // ── 左栏:复制派生 ──────────────────────────────────────────────────

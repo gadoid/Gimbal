@@ -36,7 +36,9 @@
         <button class="btn primary" @click="goRun">▶ 立即运行</button>
         <button class="btn" @click="goScenario(4)">修改编排</button>
         <button class="btn" @click="router.push(scenarioSchemesUrl(scenarioId))">方案</button>
-        <button class="btn" @click="router.push(scenarioDataSetsUrl(scenarioId))">管理数据集</button>
+        <!-- 「管理数据集」改指方案工作台(阶段③ Task 5):工作台数据区
+             承担「+ 新建数据集」与 tile 管理职能 -->
+        <button class="btn" @click="router.push(scenarioSchemesUrl(scenarioId))">管理数据集</button>
         <button class="btn ghost" @click="router.back()">返回</button>
       </div>
     </header>
