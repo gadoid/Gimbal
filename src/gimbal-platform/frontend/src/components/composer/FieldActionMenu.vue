@@ -198,7 +198,7 @@ function emitRegistry() { emit('fieldRegistry', props.field); emit('close') }
 </script>
 
 <style scoped>
-/* ☰ 触发按钮(原 FieldForm 内联,收编进本组件 — 与候选 ▾ 同位同尺寸) */
+/* ☰ 触发按钮基础态(与 FieldForm 候选 ▾ 同源的旧内联样式,保留兜底) */
 .cand-btn {
   position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
   width: 20px; height: 20px;
@@ -207,8 +207,22 @@ function emitRegistry() { emit('fieldRegistry', props.field); emit('close') }
   display: flex; align-items: center; justify-content: center;
 }
 .cand-btn:hover { background: #e2e8f0; color: #475569; }
-.fa-menu-btn { color: #4f46e5; }
-.fa-menu-btn:hover { background: #e0e7ff; color: #3730a3; }
+/* ☰ 外置侧钮(2026-09-14 改版):此前 absolute 叠在填写框内
+   (right:4px,与候选 ▾ 同位)— 改静态 flex 项放置到填写框旁边,
+   增大加粗;样式对齐 FieldForm .var-btn 侧钮先例(30px/1.5px 边)。
+   行排分支随输入框拉伸高度(align-items:stretch);col 分支
+   (textarea/json)落框下方右缘;容器头 .node-fa 内容自适应。 */
+.fa-menu-btn {
+  position: static; transform: none;
+  flex-shrink: 0;
+  width: 30px; height: auto; min-height: 26px;
+  border: 1.5px solid #e2e8f0; border-radius: 8px; background: #fafbfc;
+  color: #4f46e5; cursor: pointer;
+  font-size: 13px; font-weight: 700; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.fa-menu-btn:hover { background: #e0e7ff; border-color: #c7d2fe; color: #3730a3; }
 
 /* 就地浮层(与 FieldForm cand-list 同模式:绝对定位 + 阴影) */
 .fa-menu {

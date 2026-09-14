@@ -1393,11 +1393,10 @@ function formatJson(v: unknown): string {
 .obj-toggle svg { transition: transform 0.15s; }
 .obj-toggle svg.open { transform: rotate(0deg); }
 .obj-toggle svg:not(.open) { transform: rotate(-90deg); }
-/* 容器级策略菜单锚点(P3):☰ 绝对定位需要 positioned 祖先;
-   显式 22×20 占位(0 宽锚点会让 ☰ 向左溢出压到角标/状态下拉) */
+/* 容器级策略菜单锚点(P3):浮层 .fa-menu 需要 positioned 祖先;
+   ☰ 已改外置静态按钮(2026-09-14),锚内容自适应不再固定 22×20 */
 .node-fa {
   position: relative; flex-shrink: 0;
-  width: 22px; height: 20px;
   margin-left: 2px;
 }
 .obj-body {
@@ -1451,8 +1450,10 @@ function formatJson(v: unknown): string {
 .kv-key:focus { outline: none; border-color: #6366f1; background: #fff; }
 .kv-value { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 
-/* 控件 + Ⓥ 按钮同排(text)/叠排(textarea/json) */
-.ctl-with-var { display: flex; gap: 6px; align-items: stretch; }
+/* 控件 + Ⓥ 按钮同排(text)/叠排(textarea/json)。
+   relative:☰ 菜单浮层的锚点(enum/bool/textarea/json 分支没有
+   .ctl-cand-wrap,2026-09-14 ☰ 外置后统一在本层挂靠) */
+.ctl-with-var { display: flex; gap: 6px; align-items: stretch; position: relative; }
 .ctl-with-var .ctl { flex: 1; min-width: 0; }
 .ctl-with-var.col { flex-direction: column; align-items: flex-end; }
 .var-btn {
