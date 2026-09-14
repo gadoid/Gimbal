@@ -351,7 +351,9 @@ def _render_request_view(
         #    面,顶层未声明键(含子树)在三步全不沾会被静默丢弃 ——
         #    platform→gimbal 往返子集契约破坏。与步骤 1 同式整块保留;
         #    声明根不进差集(三步已覆盖,值优先级不变)。
-        if isinstance(body, dict):
+        #    full_body 非 dict(dict body + INDEX 根矛盾输入被 _set_by_path
+        #    翻成 list)时跳过 —— 宁静默不炸导出。
+        if isinstance(body, dict) and isinstance(full_body, dict):
             declared_roots = {
                 segs[0]
                 for e in iter_declarations(decls)

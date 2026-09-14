@@ -16,7 +16,9 @@
       class="fss-sel"
       :class="`s-${state}`"
       :value="state"
-      title="字段状态:form 表单 / collapse 折叠 / carry 传递(写 step.field_states 增量)"
+      :title="noCarry
+        ? '字段状态:form 表单 / collapse 折叠(写 step.field_states 增量)'
+        : '字段状态:form 表单 / collapse 折叠 / carry 传递(写 step.field_states 增量)'"
       @change="e => emit('change', (e.target as HTMLSelectElement).value as FieldState)"
     >
       <option value="form">form</option>

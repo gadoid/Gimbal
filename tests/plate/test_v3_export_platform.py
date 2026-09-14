@@ -482,3 +482,15 @@ class TestOutOfCatalogTopLevelKeys:
             name="sku", path="$[0].sku", type='string')])
         out = _render_request_view(Request(body=[{"sku": "S-1"}]), ep)
         assert out["body"] == [{"sku": "S-1"}]
+
+    def test_dict_body_index_root_full_body_flipped_guard(self) -> None:
+        """dict body + INDEX 根声明(矛盾输入):步骤 3 _set_by_path 首段
+        INDEX 新建 list 容器把 full_body 翻成 list,步骤 4 差集并入
+        full_body[k]=v 抛 TypeError —— 修复后二重守卫跳过并入,不炸
+        导出(守卫跳过并入 — extra 不并入 list,步骤 3 形状保留)。"""
+        ep = _deep_binding_ep([DeclarationEntry(
+            name="sku", path="$[0].sku", type='string',
+            default="S")])
+        out = _render_request_view(
+            Request(body={"sku": "S-1", "extra": True}), ep)
+        assert out["body"] == [{"sku": "S"}]
