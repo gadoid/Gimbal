@@ -66,7 +66,7 @@
             <div class="ops" @click.stop>
               <el-button size="small" plain @click="open(d)">编辑</el-button>
               <el-button size="small" type="danger" plain @click="remove(d)">删除</el-button>
-              <el-button size="small" type="primary" plain @click="runDataset(d)"><el-icon style="margin-right:3px"><VideoPlay /></el-icon>运行</el-button>
+              <el-button size="small" type="primary" plain @click="runDataset()"><el-icon style="margin-right:3px"><VideoPlay /></el-icon>运行</el-button>
             </div>
           </footer>
         </article>
@@ -145,8 +145,9 @@
       </p>
     </section>
 
-    <!-- 运行面板宿主(spec v3 §6 数据集入口):整库/单行预填 -->
-    <RunPanelHost v-if="panelOpen" :scenario-id="scenarioId" :preset="panelPreset" @close="panelOpen = false" />
+    <!-- 运行面板宿主(阶段③ v2):整库/单行预填已随 preset 退役
+         (数据集勾选区移入方案工作台),入口保留为打开运行面板 -->
+    <RunPanelHost v-if="panelOpen" :scenario-id="scenarioId" @close="panelOpen = false" />
   </section>
 </template>
 
@@ -162,7 +163,6 @@ import { scenarioDataSetUrl, composerUrl, scenarioAssertionsUrl } from '@/utils/
 import type { DataSetSummary } from '@/types/scenario-composer'
 import { getScenarioDraft } from '@/api/scenario-composer'
 import RunPanelHost from '@/components/composer/RunPanelHost.vue'
-import type { RunPreset } from '@/api/scenario-composer'
 import type { AssertionRegistry } from '@/types/assertion-registry'
 import { isLegacyEntry } from '@/types/assertion-registry'
 import { normalizeRegistry } from '@/utils/assertion-registry'
@@ -213,13 +213,12 @@ function previewVals(d: DataSetSummary, col: string): string {
   return vals.join(' · ') + (d.rowCount > vals.length ? ' …' : '')
 }
 
-// ── 运行面板(spec v3 §6 数据集入口):preset 预填 ──────────────────
+// ── 运行面板(spec v3 §6 数据集入口;阶段③:预填退役,保留打开面板)──
 const panelOpen = ref(false)
-const panelPreset = ref<RunPreset | null>(null)
 
-/** 数据集卡「运行」:整库单选预填(行级在 DataSetEditor「运行此行」)*/
-function runDataset(d: DataSetSummary) {
-  panelPreset.value = { dataSetSelection: [{ datasetId: d.datasetId }] }
+/** 数据集卡「运行」(阶段③ v2:无整库预填 — 数据集勾选区移入方案工作台;
+ *  行级在 DataSetEditor「运行此行」同款退役) */
+function runDataset() {
   panelOpen.value = true
 }
 /** 点某一行 ⇒ 编辑器「聚焦单条」;不给 id(空列表的「去新建一条」、

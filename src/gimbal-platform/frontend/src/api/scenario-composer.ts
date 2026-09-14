@@ -161,6 +161,10 @@ export interface RunOverlay {
 /** 执行配方(recipe):Case 层解散后 RunRequest 即配方本身,直接挂 scenario */
 export interface RunRequest {
   scenarioId: string
+  /** 溯源(方案工作台阶段③,Task 1 后端已接受):本次执行按哪个方案发起 —
+   *  默认/自建两态都带(wire camelCase) */
+  schemeId?: string
+  schemeName?: string
   /** D12:空数组合法 = 基线执行(一个隐式空覆盖行);非空 = 选中数据集 */
   dataSetIds: string[]
   /** 行级数据集选择(spec v3 §4)— 权威键;两键同发时本键优先,

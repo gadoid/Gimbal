@@ -1,10 +1,16 @@
 /**
- * RunPanelHost — 运行面板宿主(spec v3 §6):两个执行入口共用的装配层。
- * - RH-1 自取数装配:getScenario + getScenarioDraft + listDataSets → RunDialog
- *   挂载,assertionEntries/deadEntryIds(含 legacy)透传
- * - RH-2 confirm → runScenario(dataSetIds 派生 + dataSetSelection 权威键)
- *   → 跳执行详情
- * - RH-3 saveScheme → putRunSchemes(scenarioId, 整表)
+ * RunPanelHost — 运行面板宿主(方案工作台阶段③):两个执行入口共用的装配层。
+ * - RH-1 自取数装配:getScenario + getScenarioDraft + listDataSets +
+ *   listRunSchemes(V2,default 置顶)→ RunDialog 挂载,assertionEntries/
+ *   deadEntryIds(含 legacy)透传
+ * - RH-2 confirm → runScenario(dataSetIds 派生 + dataSetSelection 权威键 +
+ *   schemeId/schemeName 溯源)→ 跳执行详情
+ * - RH-2b 默认方案基线 confirm → 空选省略权威键,溯源带默认方案
+ * - RH-3 saveAsScheme → createRunScheme(POST,name 断言)→ 重取 listRunSchemes
+ * - RH-4/5/6 契约面掩空/收窄:deadEntryIds 是 RunDialog v2 自建方案失效判定的
+ *   输入(injectionEntryIds 悬空 → 方案「失效 · 不可跑」)— pending 不判死、
+ *   intrinsic 恒死、落定后收窄
+ * - RH-7 契约降级 → 从严判定(只被契约托着的条目进 deadEntryIds)
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -21,6 +27,7 @@ vi.mock('vue-router', () => ({
 vi.mock('@/api/auth_sessions', () => ({ list: async () => [{ alias: 'owner-1' }] }))
 
 import * as api from '@/api/scenario-composer'
+import type { SchemeV2 } from '@/api/scenario-composer'
 import RunPanelHost from '@/components/composer/RunPanelHost.vue'
 import RunDialog from '@/components/composer/RunDialog.vue'
 import { executionUrl } from '@/utils/links'
@@ -50,6 +57,13 @@ const DRAFT = {
   assertion_registry: REG,
 }
 
+/** V2 fixture:listRunSchemes 保证 default 置顶(宿主直连新 CRUD,不经 draft) */
+const DEFAULT_SCHEME: SchemeV2 = {
+  schemeId: 'rs-dft', name: '默认方案', isDefault: true,
+  dataSetSelection: [], injectionEntryIds: [], serviceBindings: {},
+  stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
+}
+
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.spyOn(api, 'getScenario').mockResolvedValue(
@@ -57,8 +71,10 @@ beforeEach(() => {
   vi.spyOn(api, 'getScenarioDraft').mockResolvedValue(DRAFT as any)
   vi.spyOn(api, 'listDataSets').mockResolvedValue([
     { datasetId: 'ds-1', scenarioId: 'sc-host', name: 'A', rowCount: 2, preview: [] }] as any)
+  vi.spyOn(api, 'listRunSchemes').mockResolvedValue([DEFAULT_SCHEME] as any)
+  vi.spyOn(api, 'createRunScheme').mockResolvedValue(
+    { ...DEFAULT_SCHEME, schemeId: 'rs-new', name: '回归', isDefault: false } as any)
   vi.spyOn(api, 'runScenario').mockResolvedValue({ runId: 'r-1', executionId: 7 } as any)
-  vi.spyOn(api, 'putRunSchemes').mockResolvedValue([] as any)
   pushMock.push.mockReset()
 })
 afterEach(() => { vi.restoreAllMocks() })
@@ -72,32 +88,32 @@ async function mountHost(props: Record<string, unknown> = {}) {
   return w
 }
 
-it('RH-1: 自取数装配 — RunDialog 挂载 + 条目/死条目透传(legacy 入 deadEntryIds)', async () => {
+it('RH-1: 自取数装配 — schemes V2(default 置顶)+ 条目/死条目透传(legacy 入 deadEntryIds)', async () => {
   const w = await mountHost()
   const dlg = w.findComponent(RunDialog)
   expect(dlg.exists()).toBe(true)
+  expect(api.listRunSchemes).toHaveBeenCalledWith('sc-host')
+  expect(dlg.props('schemes')).toEqual([DEFAULT_SCHEME])   // V2 形状(含 schemeId/isDefault)
+  expect(dlg.props('initialSchemeId')).toBeNull()          // 本宿主无深链来源
   expect(dlg.props('assertionEntries')).toHaveLength(2)
   expect(dlg.props('deadEntryIds')).toEqual(['inj-old'])   // legacy 恒死(判据 = surface.deadIds ← registryIssues 的 legacy-entry)
-  expect(dlg.props('preset')).toBeNull()
   expect(dlg.props('serviceRows')).toEqual([{ service: 'fin.test', declaredUrl: 'http://fin' }])
   expect(dlg.props('stepOrchestrationNames')).toEqual(['下单', '查单'])
   w.unmount()
 })
 
-it('RH-2: confirm → runScenario 携带 dataSetSelection 权威键 → 跳执行详情', async () => {
-  const w = await mountHost({
-    preset: { dataSetSelection: [{ datasetId: 'ds-1', rowIndexes: [1] }], injectionEntryIds: ['inj-live'] },
-  })
+it('RH-2: confirm → runScenario 携带 dataSetSelection 权威键 + schemeId/schemeName 溯源 → 跳执行详情', async () => {
+  const w = await mountHost()
   const dlg = w.findComponent(RunDialog)
-  expect(dlg.props('preset')).toEqual({
-    dataSetSelection: [{ datasetId: 'ds-1', rowIndexes: [1] }],
-    injectionEntryIds: ['inj-live'],
+  dlg.vm.$emit('confirm', [{ datasetId: 'ds-1', rowIndexes: [1] }], {
+    schemeId: 'rs-a', schemeName: '冒烟', injectionEntryIds: ['inj-live'],
   })
-  dlg.vm.$emit('confirm', [{ datasetId: 'ds-1', rowIndexes: [1] }], { injectionEntryIds: ['inj-live'] })
   await flushPromises()
   expect(api.runScenario).toHaveBeenCalledTimes(1)
   const body = vi.mocked(api.runScenario).mock.calls[0][0] as any
   expect(body.scenarioId).toBe('sc-host')
+  expect(body.schemeId).toBe('rs-a')        // 溯源两键透传(Task 1 后端已接受)
+  expect(body.schemeName).toBe('冒烟')
   expect(body.dataSetIds).toEqual(['ds-1'])
   expect(body.dataSetSelection).toEqual([{ datasetId: 'ds-1', rowIndexes: [1] }])
   expect(body.injectionEntryIds).toEqual(['inj-live'])
@@ -106,9 +122,9 @@ it('RH-2: confirm → runScenario 携带 dataSetSelection 权威键 → 跳执�
   w.unmount()
 })
 
-it('RH-2b: 空选 confirm → 省略 dataSetSelection 键 + dataSetIds 空数组', async () => {
+it('RH-2b: 空选 confirm(默认方案基线)→ 省略 dataSetSelection 键 + 溯源带默认方案', async () => {
   // 无数据集(基线运行)是合法路径:权威键 dataSetSelection 不下送
-  // (spec v3 §4 空选 = 基线),兼容键 dataSetIds 仍送空数组。
+  // (空选 = 基线),兼容键 dataSetIds 仍送空数组;溯源两键恒带。
   vi.mocked(api.listDataSets).mockResolvedValue([])
   const w = await mountHost()
   await w.findAll('button').find((b) => b.text().includes('发起运行'))!.trigger('click')
@@ -117,23 +133,31 @@ it('RH-2b: 空选 confirm → 省略 dataSetSelection 键 + dataSetIds 空数组
   const body = vi.mocked(api.runScenario).mock.calls[0][0] as any
   expect(body.dataSetIds).toEqual([])
   expect('dataSetSelection' in body).toBe(false)
+  expect(body.schemeId).toBe('rs-dft')     // 默认方案也有真实 schemeId(v2)
+  expect(body.schemeName).toBe('默认方案')
   w.unmount()
 })
 
-it('RH-3: saveScheme → putRunSchemes(scenarioId, 整表含新方案)', async () => {
+it('RH-3: saveAsScheme → createRunScheme POST(name 断言)→ 重取 schemes 整表替换', async () => {
   const w = await mountHost()
-  const scheme = { name: '回归', dataSetIds: [], dataSetSelection: [], injectionEntryIds: ['inj-live'], serviceBindings: {} }
-  w.findComponent(RunDialog).vm.$emit('saveScheme', scheme)
+  const callsBefore = vi.mocked(api.listRunSchemes).mock.calls.length
+  const body = {
+    name: '回归', dataSetSelection: [], injectionEntryIds: [], serviceBindings: {},
+    stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
+  }
+  w.findComponent(RunDialog).vm.$emit('saveAsScheme', body)
   await flushPromises()
-  expect(api.putRunSchemes).toHaveBeenCalledWith('sc-host', [scheme])
+  expect(api.createRunScheme).toHaveBeenCalledWith('sc-host', body)
+  // 另存成功后重取(整表替换 → RunDialog schemes watch 重置默认态绑定 = 已知 deferred 行为)
+  expect(api.listRunSchemes).toHaveBeenCalledTimes(callsBefore + 1)
   w.unmount()
 })
 
-it('RH-4: 契约面在途(冷启动)→ preset 锚在 carry 声明的条目不被判死/丢预勾;落定后仍勾上', async () => {
-  // 复现入口:本宿主自取数后才挂 RunDialog,`/full` 与挂载同 tick 才发起
-  // ⇒ 首判定只有 body 面。若把「尚未判定」当「判死」:preset 的 carry 条目
-  // 被静默滤掉,而契约回来后 preset prop 不变、RunDialog 的 watch 不重跑
-  // → 预勾永不重放;同一个窗口里它还先渲染成「悬空 — 不可选」再翻活。
+it('RH-4: 契约面在途(冷启动)→ 契约依赖条目不被判死(掩空);legacy 恒死;落定后仍活', async () => {
+  // 消费面(v2):deadEntryIds 是 RunDialog 自建方案失效判定的输入 —
+  // 若把「尚未判定」当「判死」,锚定该条目的自建方案会误报「配置已失效 —
+  // 不可运行」。本宿主自取数后才挂 RunDialog,`/full` 与挂载同 tick 才发起
+  // ⇒ 首判定只有 body 面,正是 pending 窗口。
   const { _resetEndpointFullCacheForTest } = await import('@/composables/useEndpointFull')
   _resetEndpointFullCacheForTest()
 
@@ -151,44 +175,27 @@ it('RH-4: 契约面在途(冷启动)→ preset 锚在 carry 声明的条目不�
   const pendingFull = new Promise((res) => { resolveFull = res })
   vi.spyOn(api, 'getFullEndpoint').mockReturnValue(pendingFull as any)
 
-  const w = await mountHost({ preset: { injectionEntryIds: ['inj-carry', 'inj-old'] } })
+  const w = await mountHost()
   const dlg = w.findComponent(RunDialog)
   expect(api.getFullEndpoint).toHaveBeenCalledWith('ep-carry')
-  // 前提:宿主此刻的判定只跑过 body 面 —— carry 条目只被契约面托着,属
-  // 「仅因契约未定而判死」⇒ 掩空决策上移后在 pending 期间**不进** deadEntryIds
-  // (此前是 deadEntryIds 照旧带上、由 RunDialog 整体掩空 —— 那会连
-  // step-oob/legacy 一起放行,RH-6 钉住该缺陷)
+  // pending:尚未判定 ≠ 判死 ⇒ 掩空决策上移后在 pending 期间不进 deadEntryIds
   expect(dlg.props('deadEntryIds')).not.toContain('inj-carry')
-  expect(dlg.props('contractPending')).toBe(true)
-  // pending:尚未判定 ≠ 判死 → 不标悬空、不禁选、预勾保留
-  const boxOf = () => dlg.findAll('.rd-injection .el-checkbox')
-    .find((b) => b.text().includes('carry 偏离'))!
-  expect(boxOf().find('input').attributes('disabled')).toBeUndefined()
-  expect(boxOf().text()).not.toContain('悬空')
-  // 旧版条目是形状判,与契约面无关:pending 期间**仍**禁选、预勾仍被滤掉
-  // (悬空被掩空成不过滤时,legacy 若不显式排除会勾成 disabled 的卡死态)
-  const legacyBox = dlg.findAll('.rd-injection .el-checkbox')
-    .find((b) => b.text().includes('旧版条目'))!
-  expect(legacyBox.find('input').attributes('disabled')).toBeDefined()
-  expect((dlg.vm as any).injectionIds).toEqual(['inj-carry'])
+  // 旧版条目是形状判(intrinsic),与契约面无关:pending 期间仍恒死
+  expect(dlg.props('deadEntryIds')).toContain('inj-old')
 
-  // 契约落定:精确命中 carry 声明 → 判活;预勾仍在(收窄只删判死的)
+  // 契约落定:精确命中 carry 声明 → 判活(由死转活不发生,维持不判死)
   resolveFull({ id: 'ep-carry', request: { declarations: [
     { name: 'customer_id', path: '$.customer_id', state: 'carry', required: true }] },
     declared_surface: ['$', '$.customer_id'] })
   await flushPromises()
-  expect(dlg.props('contractPending')).toBe(false)
-  expect(dlg.props('deadEntryIds')).not.toContain('inj-carry')   // 由死转活
-  expect(boxOf().find('input').attributes('disabled')).toBeUndefined()
-  expect((dlg.vm as any).injectionIds).toEqual(['inj-carry'])    // 预勾未被丢
+  expect(dlg.props('deadEntryIds')).not.toContain('inj-carry')
   w.unmount()
 })
 
-it('RH-6: 契约 pending 期间 — intrinsic 死条目仍禁选,contractDependent 不标死', async () => {
-  // 修 C 的可观察面:此前 RunDialog 在 contractPending 期间把 deadIds **整体**
-  // 掩空 ⇒ 连不依赖判定面的死因(step-oob / legacy)也失去禁选,窗口内能勾上
-  // 真悬空条目并下发(后端 skip,对话框照旧承诺)。判据分组上移到宿主后:
-  // intrinsic 恒禁选,只有 contractDependent 在 pending 期间不标死。
+it('RH-6: 契约 pending 期间 — intrinsic(step-oob)恒在 deadEntryIds,contractDependent 不判死;落定后并入', async () => {
+  // 分组语义(阶段③ 消费面 = 自建方案失效判定):intrinsic 死因不依赖判定面,
+  // pending 期间也不放行(否则锚定越界条目的方案在窗口内可跑);contractDependent
+  // 只在契约落定后并入(可能变活)。
   const { _resetEndpointFullCacheForTest } = await import('@/composables/useEndpointFull')
   _resetEndpointFullCacheForTest()
 
@@ -208,22 +215,18 @@ it('RH-6: 契约 pending 期间 — intrinsic 死条目仍禁选,contractDepende
   const w = await mountHost()
   await flushPromises()                  // /full 仍挂起 ⇒ pending 为真
   const dlg = w.findComponent(RunDialog)
-  expect(dlg.props('contractPending')).toBe(true)
-  const boxes = dlg.findAll('.rd-injection .el-checkbox')
-  expect(boxes[0].find('input').attributes('disabled')).toBeDefined()   // step-oob:intrinsic ⇒ 仍禁选
-  expect(boxes[0].text()).toContain('悬空')
-  expect(boxes[1].find('input').attributes('disabled')).toBeUndefined() // 契约依赖 ⇒ pending 期间不禁选
+  const dead = dlg.props('deadEntryIds') as string[]
+  expect(dead).toContain('inj-oob')        // step-oob:intrinsic ⇒ 恒死
+  expect(dead).not.toContain('inj-carry')  // 契约依赖 ⇒ pending 期间不判死
   release({ id: 'ep-h', request: { declarations: [] }, declared_surface: ['$'] })  // 契约落定后收窄
   await flushPromises()
-  expect(w.findComponent(RunDialog).findAll('.rd-injection .el-checkbox')[1]
-    .find('input').attributes('disabled')).toBeDefined()
+  expect(w.findComponent(RunDialog).props('deadEntryIds')).toContain('inj-carry')
   w.unmount()
 })
 
-it('RH-5: 契约落定后补一次收窄(只删不增)+ 用户手动勾选不被覆盖', async () => {
-  // pending 期间条目一律不禁选 ⇒ 用户可以勾上一个**落定后才判死**的条目。
-  // 留着它就是 disabled + 「悬空 — 不可选」却仍被 confirm 下送 / dispatch
-  // 静默 skip 的卡死态 ⇒ 落定后收窄一次;仍在判活的(含用户手动勾选)不动。
+it('RH-5: 契约落定后收窄(只删不增)— 拼错锚点的条目落定后进 deadEntryIds', async () => {
+  // pending 期间契约依赖条目不判死 ⇒ 方案暂不失效;落定后仍无声明支撑的
+  // (锚点拼写错)此时才进 deadEntryIds — 收窄只删不增,判活的不动。
   const { _resetEndpointFullCacheForTest } = await import('@/composables/useEndpointFull')
   _resetEndpointFullCacheForTest()
 
@@ -245,62 +248,37 @@ it('RH-5: 契约落定后补一次收窄(只删不增)+ 用户手动勾选不被
   vi.spyOn(api, 'getFullEndpoint').mockImplementation((id: string) =>
     new Promise((res) => { deferred[id] = res }) as any)
 
-  const w = await mountHost({ preset: { injectionEntryIds: ['inj-ghost'] } })
+  const w = await mountHost()
   const dlg = w.findComponent(RunDialog)
-  expect(dlg.props('contractPending')).toBe(true)
-  expect((dlg.vm as any).injectionIds).toEqual(['inj-ghost'])    // pending:不过滤,先勾上
+  expect(dlg.props('deadEntryIds')).not.toContain('inj-ghost')   // pending:不过滤,先不判死
 
   // 只落定其中一步 → 仍在途,不收窄
   deferred['ep-1']({ id: 'ep-1', request: { declarations: [] } })
   await flushPromises()
-  expect(dlg.props('contractPending')).toBe(true)
-  expect((dlg.vm as any).injectionIds).toEqual(['inj-ghost'])
+  expect(dlg.props('deadEntryIds')).not.toContain('inj-ghost')
 
-  // 用户在 pending 窗口里手动勾上一条判活的条目
-  ;(dlg.vm as any).injectionIds = ['inj-ghost', 'inj-live']
-  await flushPromises()
-
-  // 契约全部落定 → 收窄一次:判死的移出,手动勾的活条目原样保留
+  // 契约全部落定 → 收窄一次:判死的进入,判活的(inj-live)不动
   deferred['ep-2']({ id: 'ep-2', request: { declarations: [] } })
   await flushPromises()
-  expect(dlg.props('contractPending')).toBe(false)
-  expect(dlg.props('deadEntryIds')).toContain('inj-ghost')       // 落定后确实判死
-  expect((dlg.vm as any).injectionIds).toEqual(['inj-live'])
+  const dead = dlg.props('deadEntryIds') as string[]
+  expect(dead).toContain('inj-ghost')                            // 落定后确实判死
+  expect(dead).not.toContain('inj-live')
   w.unmount()
 })
 
-it('RH-7: 契约降级 → 运行对话框里给出提示 + 重试入口;重试成功即恢复(症状现场必须看得见)', async () => {
-  // 这条 known-issue 的症状是「条目灰着、点不动」,而那正是发生在**这个对话框**里:
-  // 提示与重试入口若只留在编辑器/画布,用户在症状现场看到的仍是"不知道为什么"。
+it('RH-7: 契约降级 → 从严判定:只被契约托着的条目进 deadEntryIds(自建方案失效判定从严)', async () => {
+  // 降级的可观测后果(v2):失败也是答案 — 声明面退回 body 面,此刻
+  // path-unresolvable 即真死 ⇒ 锚定该条目的自建方案判「失效 · 不可跑」。
   const draft = JSON.parse(JSON.stringify(DRAFT))
   draft.definition.steps[0].api = { headers: {}, view_hints: { endpoint_id: 'ep-host' } }
   draft.assertion_registry = { entries: [
     { id: 'inj-c', name: '契约依赖',
       path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_x' }, value: 1, asserts: [] }] }
   vi.mocked(api.getScenarioDraft).mockResolvedValue(draft as any)
-  const net = vi.spyOn(api, 'getFullEndpoint')
-    .mockRejectedValueOnce(new Error('plate down'))          // 挂载那一次失败
-    .mockResolvedValue({                                     // 重试时 plate 已恢复
-      id: 'ep-host',
-      request: { declarations: [
-        { name: 'carry_x', path: '$.carry_x', state: 'carry', required: true, description: '' }] },
-      declared_surface: ['$', '$.carry_x'],
-    } as any)
+  vi.spyOn(api, 'getFullEndpoint').mockRejectedValue(new Error('plate down'))
 
   const w = await mountHost()
   const dlg = w.findComponent(RunDialog)
-  // 降级姿势的可观测后果:只被契约托着的条目被从严判死 ⇒ 对话框里不可勾选
-  expect(dlg.props('contractDegraded')).toBe(true)
-  expect(dlg.props('deadEntryIds')).toEqual(['inj-c'])
-  const notice = dlg.find('.surface-notice')
-  expect(notice.exists()).toBe(true)
-  expect(notice.text()).toContain('契约取数失败')
-
-  // 重试入口:窗口内的**显式**动作也真发(不受负缓存约束)
-  await notice.find('.surface-notice-retry').trigger('click')
-  await flushPromises()
-  expect(net).toHaveBeenCalledTimes(2)                     // ← 点出来的那次取数
-  expect(dlg.props('contractDegraded')).toBe(false)        // 恢复 ⇒ 提示消失
-  expect(dlg.props('deadEntryIds')).toEqual([])            // 条目由死转活(可勾选)
+  expect(dlg.props('deadEntryIds')).toEqual(['inj-c'])   // 从严判定 ⇒ 锚定方案不可跑
   w.unmount()
 })

@@ -147,10 +147,10 @@ describe('CaseComposer — 防抖自动保存', () => {
     // 开弹窗前已 flush:防「运行跑的是最后一次保存的旧版」
     expect(update).toHaveBeenCalledTimes(1)
 
-    // 弹窗内确认 → runScenario 在 flush 之后发生
+    // 弹窗内确认 → runScenario 在 flush 之后发生(v2 confirm 第二参必带溯源)
     const dlg = w.findComponent({ name: 'RunDialog' })
     expect(dlg.exists()).toBe(true)
-    dlg.vm.$emit('confirm', [])
+    dlg.vm.$emit('confirm', [], { schemeId: 'rs-dft', schemeName: '默认方案' })
     await flushPromises()
     expect(runScenario).toHaveBeenCalledTimes(1)
     expect(update.mock.invocationCallOrder[0])

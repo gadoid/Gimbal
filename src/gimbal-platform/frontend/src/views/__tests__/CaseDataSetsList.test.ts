@@ -2,7 +2,7 @@
  * CaseDataSetsList — 测试数据页双区(spec v3 §5):
  * - DSL-1 同页双区,两区**各用其形**:数据集 = 卡片网格(可打开的资产),
  *   断言条目 = 紧凑表格(字段齐整的配置记录,一条一行)
- * - DSL-2 数据集卡「运行」→ RunPanelHost 挂载且 preset = 整库单选
+ * - DSL-2 数据集卡「运行」→ RunPanelHost 挂载(阶段③:preset 预填退役)
  * - DSL-3 条目标题行点击 → 跳断言管理编辑器(编辑入口搬家至测试数据页)
  * - DSL-4 契约在途 → 契约依赖条目**不**标悬空(pending ≠ 判死)
  * - DSL-5 数据集卡预览 = 列清单(字段名定宽 + 该列取值),行/列截断都显式标出
@@ -102,7 +102,7 @@ it('DSL-1: 双区各用其形 — 数据集卡片网格 + 断言条目紧凑表�
   w.unmount()
 })
 
-it('DSL-2: 数据集卡「运行」→ RunPanelHost 挂载且 preset = 整库单选', async () => {
+it('DSL-2: 数据集卡「运行」→ RunPanelHost 挂载(阶段③:preset 预填随 v2 退役)', async () => {
   const w = await mountList()
   expect(w.findComponent(RunPanelHost).exists()).toBe(false)
   await w.findAll('button').find((b) => b.text() === '运行')!.trigger('click')
@@ -110,7 +110,6 @@ it('DSL-2: 数据集卡「运行」→ RunPanelHost 挂载且 preset = 整库单
   const panel = w.findComponent(RunPanelHost)
   expect(panel.exists()).toBe(true)
   expect(panel.props('scenarioId')).toBe('sc-td')
-  expect(panel.props('preset')).toEqual({ dataSetSelection: [{ datasetId: 'ds-1' }] })
   w.unmount()
 })
 

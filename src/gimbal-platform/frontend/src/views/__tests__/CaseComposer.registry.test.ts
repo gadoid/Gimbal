@@ -315,8 +315,8 @@ describe('CaseComposer — deadEntryIds 计算(裁定 10:CaseComposer 侧无他�
   })
 })
 
-describe('CaseComposer — 配置签「加入本次执行」预勾运行面板(裁定 13)', () => {
-  it('onRunEntry(id) → runPreset = {injectionEntryIds: [id]} 且运行面板打开', async () => {
+describe('CaseComposer — 配置签「加入本次执行」打开运行面板(裁定 13;阶段③ v2:预填退役)', () => {
+  it('onRunEntry(id) → 运行面板打开(注入预填随 preset 退役 — 移入方案工作台)', async () => {
     mockBodyScenarioOnce()
     vi.mocked(api.getScenarioDraft).mockResolvedValue({
       definition: { steps: sampleScenario().steps },
@@ -326,11 +326,9 @@ describe('CaseComposer — 配置签「加入本次执行」预勾运行面板(�
     // ?step=3 → ③ 配置签(断言管理纯展示列表在此)
     const w = await mountPage('/composer/sc-demo?step=3')
     const page = w.findComponent(CaseComposer)
-    expect((page.vm as any).runPreset).toBeNull()
     expect((page.vm as any).runDialogOpen).toBe(false)
     await w.find('.are-run').trigger('click')
     await flushPromises()
-    expect((page.vm as any).runPreset).toEqual({ injectionEntryIds: ['inj-alive'] })
     expect((page.vm as any).runDialogOpen).toBe(true)
     w.unmount()
   })

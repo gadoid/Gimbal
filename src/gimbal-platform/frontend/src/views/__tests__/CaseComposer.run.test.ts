@@ -1,13 +1,14 @@
 /**
- * CaseComposer — Task 12 RunDialog 对接(2026-08-27 D2/D3 适配):
- * - openRunDialog 装配 lastRunOverlay(GET /executions?limit=1 只取 overlay
- *   两字段:dataSetIds / serviceBindings;envId 已随 D2 退役,历史
- *   config_json 里的 envId 键静默忽略;base_config 其余键不回填);
+ * CaseComposer — RunDialog v2 对接(方案工作台阶段③):
+ * - 打开/关闭/confirm 主链路:schemes 直连 listRunSchemes(V2,default 置顶),
+ *   lastRunOverlay/preset/契约 props 退役(整块删除);confirm 溯源带
+ *   schemeId/schemeName(Task 1);
  * - serviceRows = 声明 ∪ 引用并集(steps 引用未声明 → declaredUrl null);
- * - confirm 新签名(dataSetIds 首参,无 envId):serviceBindings 原样上送,
- *   RunRequest 无 env,退役键(prefix/mergePolicy/auths/injectCredentials)不出现;
+ * - confirm 新签名:serviceBindings 原样上送,RunRequest 无 env,退役键
+ *   (prefix/mergePolicy/auths/injectCredentials)不出现;
  * - stepTo=0 合法(0-based halt 索引,首步后停)不被 falsy 过滤;
- * - saveScheme → putRunSchemes 整表替换 + 草稿 store 回填。
+ * - saveAsScheme → createRunScheme POST + 重取 listRunSchemes 整表替换;
+ * - 深链 ?runScheme=rs-xxx → 打开弹窗并预选,query 即清(防刷新重复弹)。
  *
  * 建件/mock 结构抄 CaseComposer.poolrail.test.ts(vi.hoisted + 构造器 impl
  * 工厂 mock 防 vi.restoreAllMocks 清实现;scenario-composer 走 spyOn)。
@@ -20,45 +21,27 @@ import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import CaseComposer from '@/views/CaseComposer.vue'
 import * as api from '@/api/scenario-composer'
+import type { SchemeV2 } from '@/api/scenario-composer'
 import type { Scenario } from '@/types/scenario-composer'
-import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { _resetEndpointFullCacheForTest } from '@/composables/useEndpointFull'
 
 const mockRoute: { params: { scenarioId: string }; query: Record<string, string> } = {
   params: { scenarioId: 'sc-demo' },
   query: {},
 }
+const routerMock = vi.hoisted(() => ({
+  push: vi.fn(),
+  replace: vi.fn().mockResolvedValue(undefined),
+}))
 vi.mock('vue-router', async (importOriginal) => {
   const actual = await importOriginal<typeof import('vue-router')>()
   return {
     ...actual,
     useRoute: () => mockRoute,
-    useRouter: () => ({ push: vi.fn(), replace: vi.fn().mockResolvedValue(undefined) }),
+    useRouter: () => routerMock,
   }
 })
 
-// vi.hoisted:vi.mock 工厂提升到文件顶部,引用必须先行提升。config 里掺
-// 杂 overlay 两字段以外的键(envId/runId/nRuns/parallel/stepTo/injectedAuths),
-// 证明装配只取两字段(envId 随 D2 退役被静默忽略)、base_config 不整体回填。
-const LAST_RUN = vi.hoisted(() => ({
-  id: 7,
-  config: {
-    envId: 'dev',
-    dataSetIds: ['ds-1'],
-    serviceBindings: { 'fin-service': { authAlias: 'qa1' } },
-    runId: 'run-7',
-    scenarioId: 'sc-demo',
-    injectedAuths: ['qa1'],
-    stepTo: 2,
-    nRuns: 3,
-    parallel: 2,
-  },
-}))
-vi.mock('@/api/executions', () => ({
-  // 构造器 impl(非 mockResolvedValue):beforeEach 的 vi.restoreAllMocks
-  // 会清掉后者、保留前者 — poolrail GEN_ENTRY 同款坑。
-  listExecutions: vi.fn(() => Promise.resolve({ items: [LAST_RUN], total: 1 })),
-}))
 vi.mock('@/api/constants', () => ({
   list: vi.fn(() => Promise.resolve([])),
   create: vi.fn(),
@@ -68,11 +51,19 @@ vi.mock('@/api/constants', () => ({
 vi.mock('@/api/auth_sessions', () => ({
   list: vi.fn(() => Promise.resolve([{ alias: 'qa1' }])),
 }))
-// 删除方案走 confirmAction 确认 — jsdom 下 ElMessageBox 无人可点,
-// mock 自动确认(取消路径由 RunDialog/confirmAction 各自单测覆盖)。
-vi.mock('@/utils/confirmAction', () => ({
-  confirmAction: vi.fn(async () => true),
-}))
+
+/** V2 fixture:listRunSchemes 保证 default 置顶 */
+const DEFAULT_SCHEME: SchemeV2 = {
+  schemeId: 'rs-dft', name: '默认方案', isDefault: true,
+  dataSetSelection: [], injectionEntryIds: [], serviceBindings: {},
+  stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
+}
+const SCHEME_B: SchemeV2 = {
+  schemeId: 'rs-002', name: '冒烟', isDefault: false,
+  dataSetSelection: [{ datasetId: 'ds-1', rowIndexes: [0] }],
+  injectionEntryIds: [], serviceBindings: { 'fin-service': { authAlias: 'qa1' } },
+  stepTo: null, nRuns: 1, parallel: 1, plugins: null, logSub: null,
+}
 
 function sampleScenario(): Scenario {
   return {
@@ -130,35 +121,39 @@ async function openRunDialog(w: ReturnType<typeof mount>) {
 }
 
 beforeEach(() => {
+  mockRoute.query = {}
+  routerMock.push.mockReset()
+  routerMock.replace.mockClear()
   vi.restoreAllMocks()
   vi.spyOn(api, 'listDataSets').mockResolvedValue([])
+  vi.spyOn(api, 'listRunSchemes').mockResolvedValue([DEFAULT_SCHEME, SCHEME_B])
+  vi.spyOn(api, 'createRunScheme').mockResolvedValue(
+    { ...SCHEME_B, schemeId: 'rs-new', name: '回归集' } as any)
 })
 
-describe('CaseComposer — RunDialog 对接(Task 12)', () => {
-  it('上次运行只回填 overlay 两字段(base_config 其余键不回填)', async () => {
+describe('CaseComposer — RunDialog v2 对接(阶段③)', () => {
+  it('打开弹窗装配:schemes 直连 listRunSchemes(V2 default 置顶)+ serviceRows 并集;overlay 已退役', async () => {
     const w = await mountComposerWithDraft()
     const dlg = await openRunDialog(w)
 
-    expect(dlg.props('lastRunOverlay')).toEqual({
-      dataSetIds: ['ds-1'],
-      serviceBindings: { 'fin-service': { authAlias: 'qa1' } },
-    })
-    // 方案/绑定行装配:无已存方案;steps 引用未声明的 service →
-    // declaredUrl null(RunDialog 标红可救燃)
-    expect(dlg.props('schemes')).toEqual([])
+    expect(api.listRunSchemes).toHaveBeenCalledWith('sc-demo')
+    expect(dlg.props('schemes')).toEqual([DEFAULT_SCHEME, SCHEME_B])
+    expect(dlg.props('initialSchemeId')).toBeNull()        // 非深链入口
+    // 方案/绑定行装配:steps 引用未声明的 service → declaredUrl null
+    //(RunDialog 标红可救燃)
     expect(dlg.props('serviceRows')).toEqual([
       { service: 'fin-service', declaredUrl: null },
     ])
     w.unmount()
   })
 
-  it('onRunConfirm 转发 serviceBindings,无 env、不含退役键', async () => {
+  it('onRunConfirm 转发 serviceBindings + 溯源两键,无 env、不含退役键', async () => {
     const runScenario = vi.fn().mockResolvedValue({ runId: 'r-1', executionId: 1 })
     vi.spyOn(api, 'runScenario').mockImplementation(runScenario)
     const w = await mountComposerWithDraft()
     const dlg = await openRunDialog(w)
 
-    // 折叠区默认 v-show 隐藏,select 仍可寻址(RunDialog.auths 同款)
+    // 默认方案态绑定行平铺(不折叠),select 直接可寻址
     await dlg.find('.rd-bind-user').setValue('qa1')
     await dlg.find('[data-testid="run-confirm"]').trigger('click')
     await flushPromises()
@@ -166,6 +161,8 @@ describe('CaseComposer — RunDialog 对接(Task 12)', () => {
     expect(runScenario).toHaveBeenCalledTimes(1)
     const body = runScenario.mock.calls[0][0]
     expect(body.scenarioId).toBe('sc-demo')
+    expect(body.schemeId).toBe('rs-dft')                  // 溯源:默认方案两态都带
+    expect(body.schemeName).toBe('默认方案')
     expect('env' in body).toBe(false)
     expect(body.serviceBindings).toEqual({ 'fin-service': { authAlias: 'qa1' } })
     expect('prefix' in body || 'mergePolicy' in body || 'auths' in body
@@ -189,11 +186,10 @@ describe('CaseComposer — RunDialog 对接(Task 12)', () => {
     w.unmount()
   })
 
-  it('契约面在途 → RunDialog 收到 contractPending(RunPanelHost 同款信号)', async () => {
-    // F3 要求两处挂载点行为一致:契约面未回填时 RunDialog 不得把
-    // 「尚未判定」当「判死」(否则 preset 锚在 carry/collapse 的预勾被
-    // 静默丢掉且契约回来后不重放)。本页 draft 通常先就绪,但首访/慢
-    // plate 下 /full 仍在飞 —— 信号必须照样送达。
+  it('契约面在途 → 契约依赖条目不进 deadEntryIds;落定后收窄判死(与 RunPanelHost 同款掩空)', async () => {
+    // deadEntryIds 是 RunDialog v2 自建方案失效判定的输入:契约未回填时
+    // 不得把「尚未判定」当「判死」(否则锚定该条目的方案误报失效)。
+    // 本页 draft 通常先就绪,但首访/慢 plate 下 /full 仍在飞 — 信号必须照样送达。
     const { _resetEndpointFullCacheForTest } = await import('@/composables/useEndpointFull')
     _resetEndpointFullCacheForTest()
     const sc = sampleScenario()
@@ -219,70 +215,66 @@ describe('CaseComposer — RunDialog 对接(Task 12)', () => {
     await flushPromises()
     const dlg = await openRunDialog(w)
     expect(api.getFullEndpoint).toHaveBeenCalledWith('ep-cc')
-    expect(dlg.props('contractPending')).toBe(true)       // 在途 → pending
     // 在途:契约依赖条目不判死(掩空决策上移到宿主 —— deadEntryIds 里没有它)
     expect(dlg.props('deadEntryIds')).not.toContain('inj-carry')
     resolveFull({ id: 'ep-cc', request: { declarations: [] } })
     await flushPromises()
-    expect(dlg.props('contractPending')).toBe(false)      // 落定 → 判定面已完整
     expect(dlg.props('deadEntryIds')).toContain('inj-carry')  // 落定后确实判死
     w.unmount()
   })
 
-  it('saveScheme → putRunSchemes 整表替换 + 草稿 store 回填', async () => {
-    const saved = [{ name: '冒烟', dataSetIds: [], serviceBindings: {} }]
-    const putRunSchemes = vi.fn().mockResolvedValue(saved)
-    vi.spyOn(api, 'putRunSchemes').mockImplementation(putRunSchemes)
+  it('saveAsScheme → createRunScheme POST + 重取 listRunSchemes 整表替换', async () => {
+    const created: SchemeV2 = { ...SCHEME_B, schemeId: 'rs-new', name: '回归集' }
+    vi.mocked(api.listRunSchemes)
+      .mockResolvedValueOnce([DEFAULT_SCHEME, SCHEME_B])
+      .mockResolvedValueOnce([DEFAULT_SCHEME, SCHEME_B, created])
+    vi.mocked(api.createRunScheme).mockResolvedValue(created)
     const w = await mountComposerWithDraft()
     const dlg = await openRunDialog(w)
 
-    await dlg.find('.rd-scheme-name').setValue('冒烟')
-    await dlg.find('[data-testid="save-scheme"]').trigger('click')
+    await dlg.find('[data-testid="scheme-name-input"]').setValue('回归集')
+    await dlg.find('[data-testid="save-as-scheme"]').trigger('click')
     await flushPromises()
 
-    expect(putRunSchemes).toHaveBeenCalledTimes(1)
-    expect(putRunSchemes).toHaveBeenCalledWith('sc-demo', [expect.objectContaining({ name: '冒烟' })])
-    // 落库返回值回填共享草稿(RunDialog schemes prop 数据源)
-    const draft = useScenarioDraftStore().draft as unknown as {
-      orchestration?: { runSchemes?: unknown[] }
-    }
-    expect(draft?.orchestration?.runSchemes).toEqual(saved)
+    expect(api.createRunScheme).toHaveBeenCalledTimes(1)
+    expect(api.createRunScheme).toHaveBeenCalledWith('sc-demo',
+      expect.objectContaining({ name: '回归集', dataSetSelection: [] }))
+    // 另存成功后重取(整表替换 → RunDialog 收到含新方案的 V2 列表)
+    expect(api.listRunSchemes).toHaveBeenCalledTimes(2)
+    expect(dlg.props('schemes')).toEqual([DEFAULT_SCHEME, SCHEME_B, created])
     w.unmount()
   })
 
-  it('deleteScheme → 确认后整表 PUT 去掉该项 + 草稿回填收缩', async () => {
-    const withSchemes = sampleScenario()
-    ;(withSchemes.orchestration as unknown as Record<string, unknown>).runSchemes = [
-      { name: '冒烟-qa1', dataSetIds: [], serviceBindings: {} },
-    ]
-    vi.spyOn(api, 'getScenario').mockResolvedValue(withSchemes)
-    const putRunSchemes = vi.fn().mockResolvedValue([])
-    vi.spyOn(api, 'putRunSchemes').mockImplementation(putRunSchemes)
+  it('深链 ?runScheme=rs-002 → 自动打开运行弹窗并预选该方案,query 即清', async () => {
+    mockRoute.query = { runScheme: 'rs-002' }
+    vi.spyOn(api, 'getScenario').mockResolvedValue(sampleScenario())
+    // 深链块在 loadScenario 完成后执行 — draft 必须落定(真实 axios 会挂起
+    // 整个 onMounted 链,深链永不触发)。
+    vi.spyOn(api, 'getScenarioDraft').mockResolvedValue({
+      assertion_registry: { entries: [] },
+    } as any)
     const w = mountPage()
     await flushPromises()
-    const dlg = await openRunDialog(w)
 
-    await dlg.find('.rd-scheme-select').setValue('冒烟-qa1')
-    await dlg.find('[data-testid="delete-scheme"]').trigger('click')
-    await flushPromises()
-
-    // 整表 PUT 去掉选中项(窄端点整键替换语义,后端零改动)
-    expect(putRunSchemes).toHaveBeenCalledWith('sc-demo', [])
-    // 落库返回值回填共享草稿 → RunDialog schemes prop 收缩自动回临时手填
-    const draft = useScenarioDraftStore().draft as unknown as {
-      orchestration?: { runSchemes?: unknown[] }
-    }
-    expect(draft?.orchestration?.runSchemes).toEqual([])
+    const dlg = w.findComponent({ name: 'RunDialog' })
+    expect(dlg.exists()).toBe(true)                          // 深链自动开窗(无需点「运行」)
+    expect(dlg.props('initialSchemeId')).toBe('rs-002')      // 预选传入
+    // schemes 到达后 watch 重跑 → 预选落位(非默认 chip active)
+    expect(dlg.find('[data-testid="scheme-chip-rs-002"]').classes()).toContain('active')
+    // 读取后清 query(防刷新重复弹)
+    expect(routerMock.replace).toHaveBeenCalledWith(expect.objectContaining({
+      query: expect.objectContaining({ runScheme: undefined }),
+    }))
     w.unmount()
   })
 })
 
-describe('CaseComposer — 契约降级提示(阶段二 Task 8)', () => {
+describe('CaseComposer — 契约降级(阶段二 Task 8 → 阶段③ v2 消费面)', () => {
   afterEach(() => { _resetEndpointFullCacheForTest() })
 
-  it('编排器侧的运行弹层同样给出提示 + 重试入口(与数据集入口同款,不只在编辑器/画布)', async () => {
-    // known-issue 的症状是「条目灰着、点不动」,现场在这个弹层里;提示若只接在
-    // RunPanelHost 那一侧,从编排器「运行」进来的用户看到的仍是静默降级。
+  it('降级 → 从严判定:只被契约托着的条目进 deadEntryIds(锚定方案判失效)', async () => {
+    // 失败也是答案:声明面退回 body 面 ⇒ 此刻 path-unresolvable 即真死,
+    // 锚定该条目的自建方案在运行弹层里判「配置已失效 — 不可运行」。
     _resetEndpointFullCacheForTest()
     const sc = sampleScenario()
     sc.steps = [{
@@ -299,29 +291,12 @@ describe('CaseComposer — 契约降级提示(阶段二 Task 8)', () => {
         { id: 'inj-c', name: '契约依赖',
           path: { stepIndex: 0, source: 'body', jsonpath: '$.carry_x' }, value: 1, asserts: [] }] },
     } as any)
-    const net = vi.spyOn(api, 'getFullEndpoint')
-      .mockRejectedValueOnce(new Error('plate down'))       // 挂载那一次失败
-      .mockResolvedValue({                                  // 重试时 plate 已恢复
-        id: 'ep-cp',
-        request: { declarations: [
-          { name: 'carry_x', path: '$.carry_x', state: 'carry', required: true, description: '' }] },
-        declared_surface: ['$', '$.carry_x'],
-      } as any)
+    vi.spyOn(api, 'getFullEndpoint').mockRejectedValue(new Error('plate down'))
 
     const w = mountPage()
     await flushPromises()
     const dlg = await openRunDialog(w)
-    expect(dlg.props('contractDegraded')).toBe(true)
-    expect(dlg.props('deadEntryIds')).toEqual(['inj-c'])    // 从严判定 ⇒ 在这里不可勾选
-    const notice = dlg.find('.surface-notice')
-    expect(notice.exists()).toBe(true)
-    expect(notice.text()).toContain('契约取数失败')
-
-    await notice.find('.surface-notice-retry').trigger('click')   // 窗口内的显式动作也真发
-    await flushPromises()
-    expect(net).toHaveBeenCalledTimes(2)                    // ← 点出来的那次取数
-    expect(dlg.props('contractDegraded')).toBe(false)       // 恢复 ⇒ 提示消失
-    expect(dlg.props('deadEntryIds')).toEqual([])           // 条目由死转活
+    expect(dlg.props('deadEntryIds')).toEqual(['inj-c'])    // 从严判定 ⇒ 锚定方案不可跑
     w.unmount()
   })
 })

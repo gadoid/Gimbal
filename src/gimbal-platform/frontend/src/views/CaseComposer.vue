@@ -230,7 +230,7 @@
       </svg>
     </el-backtop>
 
-    <!-- ═══════ Run dialog (方案栏 + ds + 声明∪引用并集绑定行) ═══════ -->
+    <!-- ═══════ Run dialog v2(方案 chip 两路径 + 声明∪引用并集绑定行)═══════ -->
     <RunDialog
       v-if="runDialogOpen"
       :scenario="scenario"
@@ -240,19 +240,14 @@
       :last-run-error="lastRunError"
       :step-orchestration-names="stepNames"
       :schemes="runSchemes"
-      :last-run-overlay="lastRunOverlay"
+      :initial-scheme-id="initialSchemeId"
       :service-rows="serviceRows"
       :auth-options="authOptions"
       :assertion-entries="registry.entries"
       :dead-entry-ids="deadEntryIds"
-      :contract-pending="contractPending"
-      :contract-degraded="contractDegraded"
-      :preset="runPreset"
       @close="closeRunDialog"
-      @retry-contract="surface.ensure({ force: true })"
       @confirm="onRunConfirm"
-      @save-scheme="onSaveScheme"
-      @delete-scheme="onDeleteScheme"
+      @save-as-scheme="onSaveAsScheme"
     />
   </div>
 </template>
@@ -283,9 +278,8 @@ import { confirmAction } from '@/utils/confirmAction'
 import { lintDraft } from '@/utils/draft-lint'
 import * as api from '@/api/scenario-composer'
 import { list as listAuthSessions } from '@/api/auth_sessions'
-import { listExecutions } from '@/api/executions'
 import type {
-  RunRequest, RunScheme, RunOverlay, ServiceBinding, DataSetSelection, RunPreset,
+  RunRequest, RunScheme, SchemeV2, ServiceBinding, DataSetSelection,
 } from '@/api/scenario-composer'
 import type {
   Scenario, DataSetSummary, Orchestration, ScenarioDraft,
@@ -372,7 +366,8 @@ const definition = ref<ScenarioView>({
   resource: {},
   steps: [],
 })
-/** Orchestration + 运行方案 sidecar 键(后端 Task 10 已收录 runSchemes,
+/** Orchestration + 运行方案 sidecar 键(draft 侧 V1 sidecar 仍在,阶段③
+ *  读侧回填保留、保存整包透传 — 运行弹窗已直连 V2 CRUD 不再读这里;
  *  前端 types 侧 Orchestration 尚未补 — 本地交叉类型桥接,不改共享类型)。 */
 type OrchestrationWithSchemes = Orchestration & { runSchemes?: RunScheme[] }
 const orchestration = ref<OrchestrationWithSchemes>({
@@ -404,17 +399,16 @@ const steps = computed(() => definition.value.steps)
 
 // Run dialog
 const runDialogOpen = ref(false)
-/** 运行面板预填(spec v3 §6):配置签「加入本次执行」置入;Task 7 消费 */
-const runPreset = ref<RunPreset | null>(null)
+/** 深链预选(方案工作台「▶ 运行此方案」,阶段③):?runScheme=rs-xxx 传入;
+ *  关窗即清 — 深链语义是一次性的,再次从「运行」入口打开不复活旧预选。 */
+const initialSchemeId = ref<string | null>(null)
 function closeRunDialog() {
   runDialogOpen.value = false
-  runPreset.value = null
+  initialSchemeId.value = null
 }
 const runDispatching = ref(false)
 const lastRunId = ref<string | null>(null)
 const lastRunError = ref<string | null>(null)
-/** 上次运行覆盖层(方案栏「上次运行」回填源;openRunDialog 拉取,仅两字段) */
-const lastRunOverlay = ref<RunOverlay | null>(null)
 // owner 凭证池别名(懒加载:首次打开运行弹框时拉取;失败静默 — 不阻塞运行)
 const ownerAuthAliases = ref<string[]>([])
 
@@ -425,8 +419,7 @@ const stepNames = computed(() => orchestration.value.steps.map((s) => s.name))
 
 /** 打开运行弹框:dirty 时先 flush 落库(运行按 scenarioId 取服务端版本,
  *  不 flush 则跑的是最后一次保存的旧编排);flush 失败中止 — 宁可不跑,
- *  不跑旧版。之后先开弹层(网络慢不阻塞交互),再并行拉 上次运行覆盖层
- *  与 owner 凭证池别名(两者失败均静默 — 不阻塞运行)。 */
+ *  不跑旧版。弹窗打开由 watch(runDialogOpen) 统一拉方案列表(含深链入口)。 */
 async function openRunDialog() {
   if (!scenarioId.value) return
   if (scenario.value && dirty.value && meta.value.name) {
@@ -439,20 +432,6 @@ async function openRunDialog() {
       .then((sessions) => { ownerAuthAliases.value = sessions.map((s) => s.alias) })
       .catch(() => { /* 凭证池不可达不阻塞运行 */ })
   }
-  // 「上次运行」按持久化 id 查(新建保存后路由仍停留 /scenarios/new,
-  // 路由参数查 'new' 恒空 → 回填永不出现);未保存场景无执行历史,跳过。
-  const sid = scenario.value?.meta.scenarioId
-  if (!sid) return
-  try {
-    const res = await listExecutions({ scenarioId: sid, limit: 1 })
-    const cfg = res.items[0]?.config
-    // 只回填 overlay 两字段:envId 已随 D2 退役(历史 config_json 里的
-    // envId 键静默忽略);stepTo/nRuns/parallel 等其余 base_config 键
-    // 不进方案栏(方案快照语义),两字段全缺 → 视为无可回填。
-    lastRunOverlay.value = cfg && (cfg.dataSetIds?.length || cfg.serviceBindings)
-      ? { dataSetIds: cfg.dataSetIds ?? [], serviceBindings: cfg.serviceBindings ?? {} }
-      : null
-  } catch { lastRunOverlay.value = null }
 }
 
 // 步骤条进度 (0% → 100%) — 当前 step 之前的部分用绿色,之后用灰色
@@ -495,11 +474,23 @@ watch(
   { deep: true, immediate: true },
 )
 
-// ── RunDialog props 装配(Task 12)────────────────────────────────
-/** 已存运行方案:orchestration sidecar(Task 10 窄端点专管键,编辑器
- *  PUT 对该键透传保留 — 这里只读,写走 onSaveScheme → putRunSchemes)。 */
-const runSchemes = computed<RunScheme[]>(() =>
-  (draftStore.draft?.orchestration as OrchestrationWithSchemes | undefined)?.runSchemes ?? [])
+// ── RunDialog props 装配(阶段③:方案直连新 CRUD)────────────────────
+/** 运行方案(阶段② CRUD wire,default 置顶由后端保证):不再经 draft 侧
+ *  orchestration.runSchemes 读 — 弹窗每次打开(含深链)重取,另存为方案
+ *  成功后整表替换(新数组引用 → RunDialog 绑定 watch 重置默认态绑定 =
+ *  已知 deferred 行为,接受)。 */
+const runSchemes = ref<SchemeV2[]>([])
+async function refreshRunSchemes() {
+  const sid = scenarioId.value
+  if (!sid || sid === 'new') return
+  try {
+    runSchemes.value = await api.listRunSchemes(sid)
+  } catch (e) {
+    showError('加载运行方案', undefined, (e as Error).message)
+  }
+}
+// 开窗统一触发取数(手动「运行」/深链/配置签入口共用一个落点)
+watch(runDialogOpen, (open) => { if (open) void refreshRunSchemes() })
 /** 绑定行 = 声明 ∪ 引用并集(spec D3):声明行带 declaredUrl,
  *  引用未声明的键 declaredUrl=null(RunDialog 标红可救燃)。
  *  声明源 = definition.config.services(service → URL);引用源 = steps[].api.service。 */
@@ -522,21 +513,16 @@ const authOptions = computed(() => [...new Set([
  *  信号唯一来源 = useInjectableSurface;本页只消费(与 RunPanelHost 同源)。 */
 const surface = useInjectableSurface(steps, computed(() => registry.value.entries))
 onMounted(() => surface.ensure())
-/** 契约面在途(spec v3.1 §2.1):与本页 deadEntryIds 的掩空决策**同源**。
- *  本页 draft 通常先就绪(Canvas 已拉过 /full),但首访/慢 plate 下仍可能命中。 */
-const contractPending = computed(() => surface.pending.value)
-/** 契约面降级 ⇒ RunDialog 里那批悬空条目从严禁选:提示 + 重试入口必须同时到
- *  (与 RunPanelHost 同源同款;用户在这两个入口看到的不是两种说法)。 */
-const contractDegraded = computed(() => surface.degraded.value)
 /** 当前生效的死条目 = composable 的**门控后死集**:契约在途时「尚未判定」
- *  ≠「判死」(预勾 §5「加入本次执行」不被静默丢掉),但**不依赖判定面**的死因
- *  (step-oob / legacy)恒在 intrinsic ⇒ 恒禁选。运行面板的禁选与配置签列表的
- *  「悬空」标注读**同一份**派生(同一页同口径,不留第二个落点)。 */
+ *  ≠「判死」,但**不依赖判定面**的死因(step-oob / legacy)恒在 intrinsic
+ *  ⇒ 恒禁选。配置签列表的「悬空」标注与 RunDialog 自建方案失效判定
+ *  读**同一份**派生(同一页同口径,不留第二个落点;阶段③ v2 无契约
+ *  props — pending/degraded 只经 deadEntryIds 生效)。 */
 const deadEntryIds = surface.deadIds
 
-/** 配置签「加入本次执行」(spec v3 §5):预勾该条目打开运行面板 */
-function onRunEntry(id: string) {
-  runPreset.value = { injectionEntryIds: [id] }
+/** 配置签「加入本次执行」(spec v3 §5;阶段③:v2 无注入预填 — 预填语义随
+ *  数据集/注入勾选区移入方案工作台,此入口保留为打开运行面板) */
+function onRunEntry(_id: string) {
   openRunDialog()
 }
 
@@ -688,6 +674,16 @@ onMounted(async () => {
     await loadScenario()
   }
   if (wantsFocus) focusJump.value = { stepIdx: fs, strategyIdx: fy }
+  // 工作台「▶ 运行此方案」深链(阶段③):?runScheme=rs-xxx 打开弹窗并预选。
+  // 读取后 router.replace 清 query — 防刷新/分享时重复弹窗;方案列表由
+  // watch(runDialogOpen) 统一拉取,到达后 RunDialog 的 schemes watch
+  // 按 initialSchemeId 落位预选(列表先空不丢预选)。
+  const runSchemeQ = route.query.runScheme
+  if (typeof runSchemeQ === 'string' && runSchemeQ) {
+    runDialogOpen.value = true
+    initialSchemeId.value = runSchemeQ
+    router.replace({ query: { ...route.query, runScheme: undefined } })
+  }
   // 目录名非阻塞拉取(fire-and-forget, 不 await):到达晚于下方首次
   // checkSystemMismatch → 由 watch 重算;失败静默降级。
   loadCatalogServiceNames()
@@ -789,8 +785,8 @@ async function loadScenario() {
     // orchestration 与 definition.steps 同序同长。
     // 优先用持久化值 (s.orchestration);缺失或长度不齐 (编辑过步骤后过期)
     // 时回退到默认重建 (全启用、展示名空、resourceMeta 空),保证 index 对齐。
-    // runSchemes 与步骤无关,两条分支都原样带回 — 否则重载后方案丢失,
-    // 下次存方案会整表覆盖掉已存方案。
+    // runSchemes(V1 sidecar)与步骤无关,两条分支都原样带回 — 保存时
+    // 整包透传保留该键(阶段③ 过渡:写侧走 V2 CRUD,但 draft 键不得丢)。
     const persistedOrch = s.orchestration
     const persistedSchemes
       = (persistedOrch as OrchestrationWithSchemes | undefined)?.runSchemes
@@ -1055,7 +1051,10 @@ async function onPreview() {
 
 async function onRunConfirm(
   dataSetSelection: DataSetSelection[],
-  opts?: {
+  opts: {
+    /** 溯源:本次执行按哪个方案发起(默认/自建两态都带) */
+    schemeId: string
+    schemeName: string
     stepTo?: number
     nRuns?: number
     parallel?: number
@@ -1072,27 +1071,30 @@ async function onRunConfirm(
   try {
     // RunRequest 新配方(spec §6,D2 后无 env):serviceBindings 取代
     // auths/prefix/mergePolicy/injectCredentials;stepTo 0 合法(首步后停),
-    // 只在 null/undefined 时缺省;nRuns/parallel 仅非默认上送。
+    // 只在 null/undefined 时缺省;nRuns/parallel 仅非默认上送;溯源两键
+    // (阶段③,Task 1)恒带 — 默认/自建方案都带真实 schemeId。
     const body: RunRequest = {
       scenarioId: scenario.value.meta.scenarioId,
+      schemeId: opts.schemeId,
+      schemeName: opts.schemeName,
       dataSetIds: dataSetSelection.map((s) => s.datasetId),
       ...(dataSetSelection.length ? { dataSetSelection } : {}),
-      ...(opts?.stepTo != null ? { stepTo: opts.stepTo } : {}),
-      ...(opts?.nRuns && opts.nRuns !== 1 ? { nRuns: opts.nRuns } : {}),
-      ...(opts?.parallel && opts.parallel !== 1 ? { parallel: opts.parallel } : {}),
-      ...(opts?.serviceBindings && Object.keys(opts.serviceBindings).length
+      ...(opts.stepTo != null ? { stepTo: opts.stepTo } : {}),
+      ...(opts.nRuns && opts.nRuns !== 1 ? { nRuns: opts.nRuns } : {}),
+      ...(opts.parallel && opts.parallel !== 1 ? { parallel: opts.parallel } : {}),
+      ...(opts.serviceBindings && Object.keys(opts.serviceBindings).length
         ? { serviceBindings: opts.serviceBindings } : {}),
       // 断言注入条目(spec v2 §5 异常组):空选不随 body 上送;键已建模
       // (RunRequest.injection_entry_ids)且 dispatcher 消费生成注入族。
-      ...(opts?.injectionEntryIds?.length
+      ...(opts.injectionEntryIds?.length
         ? { injectionEntryIds: opts.injectionEntryIds } : {}),
     }
     const resp = await api.runScenario(body)
     lastRunId.value = resp.runId
     ElMessage.success(`运行已发起: ${resp.runId}`)
-    // 同走 closeRunDialog(而非只置 runDialogOpen):关窗同时清 runPreset,
-    // 否则下一次从「运行」入口打开会静默复用上一次的行级/条目预填
-    // (Ruling 12)。失败路径不关窗(原样保留错误态),预填随之保留可重试。
+    // 同走 closeRunDialog(而非只置 runDialogOpen):关窗同时清深链预选
+    // initialSchemeId,否则下一次从「运行」入口打开会复活旧的深链预选
+    // (Ruling 12 同款语义)。失败路径不关窗(原样保留错误态,可重试)。
     closeRunDialog()
     // Jump straight to the execution detail page. Older backends don't
     // return executionId — fall back to the list. runDispatching stays
@@ -1111,51 +1113,24 @@ async function onRunConfirm(
   }
 }
 
-/** 存为方案:同名覆盖,整表 PUT(Task 10 窄端点);落库返回值回填共享
- *  草稿(RunDialog schemes prop 数据源)。失败弹错且不清空方案名草稿
- *  (409 重名等用户改名即可重试)。 */
-async function onSaveScheme(scheme: RunScheme) {
+/** 另存为方案(仅默认方案态,阶段③):POST createRunScheme(重名 409)
+ *  → 成功后重取 listRunSchemes 整表替换 runSchemes(RunDialog schemes prop
+ *  数据源;新数组引用 → 其绑定 watch 重置默认态绑定 = 已知 deferred 行为,
+ *  接受)。失败弹错不关弹窗(409 重名等用户改名即可重试)。 */
+async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
   // 新建场景首次保存后路由仍停留 /scenarios/new — 路由参数不可作场景 id
-  // (PUT /api/scenarios/new/run-schemes 会 404);用持久化 scenario 的真实 id。
+  // (POST /api/scenarios/new/run-schemes 会 404);用持久化 scenario 的真实 id。
   const id = scenario.value?.meta.scenarioId
   if (!id) {
-    ElMessage.warning('场景尚未保存 — 请先保存场景,再存为方案')
+    ElMessage.warning('场景尚未保存 — 请先保存场景,再另存为方案')
     return
   }
   try {
-    const next = [...runSchemes.value.filter(s => s.name !== scheme.name), scheme]
-    const saved = await api.putRunSchemes(id, next)
-    if (draftStore.draft) {
-      ;(draftStore.draft.orchestration as OrchestrationWithSchemes).runSchemes = saved
-    }
+    await api.createRunScheme(id, body)
+    runSchemes.value = await api.listRunSchemes(id)
+    ElMessage.success(`方案「${body.name}」已另存`)
   } catch (e) {
-    showError('存方案', undefined, (e as Error).message)
-  }
-}
-
-/** 删除方案:确认后整表 PUT 去掉该项(窄端点整键替换语义,后端零改动);
- *  落库返回值回填共享草稿 → RunDialog schemes prop 收缩,其内部 watch
- *  检测选中项消失自动回「临时手填」。取消(含 ESC/遮罩)静默不动。 */
-async function onDeleteScheme(name: string) {
-  const id = scenario.value?.meta.scenarioId
-  if (!id) {
-    ElMessage.warning('场景尚未保存 — 无已存方案可删')
-    return
-  }
-  const ok = await confirmAction(
-    `删除方案 "${name}"?此操作不可撤销。`,
-    '删除方案',
-    { type: 'warning' },
-  )
-  if (!ok) return
-  try {
-    const saved = await api.putRunSchemes(id, runSchemes.value.filter(s => s.name !== name))
-    if (draftStore.draft) {
-      ;(draftStore.draft.orchestration as OrchestrationWithSchemes).runSchemes = saved
-    }
-    ElMessage.success(`已删除方案 ${name}`)
-  } catch (e) {
-    showError('删方案', undefined, (e as Error).message)
+    showError('另存为方案', undefined, (e as Error).message)
   }
 }
 </script>

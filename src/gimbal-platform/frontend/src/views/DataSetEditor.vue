@@ -247,18 +247,17 @@
               />
             </td>
             <td class="td-action">
-              <!-- 「运行此行」预填的是**本地行号**(spec v3 §4 rowIndexes),故三种
-                   情况下禁用:① /data-sets/new(datasetId='new')服务端无此库,
-                   预填指向不存在的库 → RunDialog 选择面收窄为空、面板落基线模式,
-                   确认后静默空跑;② 行表有未保存改动(增删/复制/改格)→ 服务端行号
-                   与屏幕上不是同一行;③ 基线有未保存改动(baselineDirty)→ 继承格
+              <!-- 「运行此行」(阶段③ v2:无行级预填,打开运行面板),故三种
+                   情况下禁用:① /data-sets/new(datasetId='new')服务端无此库;
+                   ② 行表有未保存改动(增删/复制/改格)→ 服务端行与屏幕上
+                   不是同一行;③ 基线有未保存改动(baselineDirty)→ 继承格
                    取的是存储的旧 config.vars。判定沿用页头「删除」的 'new' 特例。 -->
               <el-button
                 size="small" text :icon="VideoPlay"
                 :aria-label="`运行第 ${i + 1} 行`"
                 :disabled="datasetId === 'new' || rowsDirty || baselineDirty"
                 :title="datasetId === 'new' || rowsDirty || baselineDirty ? RUN_ROW_UNSAVED_HINT : undefined"
-                @click="runRow(i)"
+                @click="runRow()"
               />
               <el-button size="small" text @click="cloneRow(i)">复制</el-button>
               <el-button size="small" text :icon="Delete" :aria-label="`删除数据 ${i + 1}`" @click="removeRow(i)" />
@@ -269,8 +268,9 @@
       </div><!-- /grid-scroll -->
     </div>
 
-    <!-- 运行面板宿主(spec v3 §6 数据集入口):「运行此行」rowIndexes 预填 -->
-    <RunPanelHost v-if="panelOpen" :scenario-id="scenarioId" :preset="panelPreset" @close="panelOpen = false" />
+    <!-- 运行面板宿主(阶段③ v2):「运行此行」的行级预填已随 preset 退役
+         (数据集勾选区移入方案工作台),入口保留为打开运行面板 -->
+    <RunPanelHost v-if="panelOpen" :scenario-id="scenarioId" @close="panelOpen = false" />
   </section>
 
   <!-- 预览选中的数据:行详情(spec §6.2 v1 只读)— 按段分组垂直呈现 + 继承态标注。
@@ -311,7 +311,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { getDataSet, getScenarioDraft, updateScenario } from '@/api/scenario-composer'
-import type { RunPreset } from '@/api/scenario-composer'
 import RunPanelHost from '@/components/composer/RunPanelHost.vue'
 import { showError } from '@/utils/errorFallback'
 import { confirmAction } from '@/utils/confirmAction'
@@ -353,9 +352,8 @@ const selectedRows = reactive(new Set<number>())
 /** 预览弹窗显示开关 */
 const previewDialogOpen = ref(false)
 
-// ── 运行此行(spec v3 §6 数据集入口)──────────────────────────
+// ── 运行此行(spec v3 §6 数据集入口;阶段③:预填退役,保留打开面板)──
 const panelOpen = ref(false)
-const panelPreset = ref<RunPreset | null>(null)
 
 /** 行表/基线未落库不可运行此行的提示(按钮 title 与守卫共用一处文案)。
  *  两种成因各自成句并写清保存入口 ——「保存数据集」/「保存基线」。 */
@@ -366,24 +364,22 @@ const RUN_ROW_UNSAVED_HINT = '先「保存数据集」/「保存基线」再运�
 
 /** 行表脏标:本地 rows 模型 ≠ 服务端存量行。addRow/cloneRow/removeRow、
  *  单元格编辑、TSV 粘贴、CSV 导入置位;载入与保存成功复位。
- *  预填的 rowIndexes 是**本地行号**,行表脏时它指向服务端另一行
- *  (删除后行号前移 → 跑被删的行;克隆 → 跑原件;新增 → 409 越界;
- *  只改格 → 跑存量值),故必须落库后再运行。 */
+ *  行表脏时屏幕上的行与服务端不是同一行(删除后行号前移 → 跑被删的行;
+ *  克隆 → 跑原件;新增 → 409 越界;只改格 → 跑存量值),故必须落库后再运行。 */
 const rowsDirty = ref(false)
 
-/** 运行此行:行级 rowIndexes 预填(0-based = 行号)。
+/** 运行此行(阶段③ v2:无行级预填 — preset 随数据集勾选区移入方案工作台,
+ *  入口保留为打开运行面板;守卫仍要求先落库,跑的是服务端存量)。
  *  守卫(与按钮 :disabled 同条件,三选一都直接拒绝):
- *  ①「new」数据集在服务端不存在,预填会指向不存在的库 — RunDialog 选择面
- *    收窄为空、面板落基线模式,确认后静默空跑;
- *  ② 行表脏:预填的本地行号与存量行不是同一行;
+ *  ①「new」数据集在服务端不存在;
+ *  ② 行表脏:屏幕上的行与存量行不是同一行;
  *  ③ 基线脏(baselineDirty,setBaseline 置位 / 保存基线复位):运行取的是
  *    **存储的** config.vars,继承格(cell-inherit)的值与屏幕上不同。 */
-function runRow(i: number) {
+function runRow() {
   if (datasetId === 'new' || rowsDirty.value || baselineDirty.value) {
     ElMessage.warning(RUN_ROW_UNSAVED_HINT)
     return
   }
-  panelPreset.value = { dataSetSelection: [{ datasetId, rowIndexes: [i] }] }
   panelOpen.value = true
 }
 
