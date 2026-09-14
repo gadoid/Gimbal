@@ -1554,7 +1554,8 @@ describe('SchemeDataSection', () => {
       props: { modelValue: [], dataSets: DS, scenarioId: 'sc-x' },
       global: { plugins: [ElementPlus] },
     })
-    await w.findAll('[data-testid="ds-tile"]')[0].trigger('change')
+    // @change 绑在 tile 内部 input 上 — 从 input 驱动(setValue 设 checked 并触发 change)
+    await w.findAll('[data-testid="ds-tile"] input[type="checkbox"]')[0].setValue(true)
     const emitted = w.emitted('update:modelValue')!
     expect(emitted.at(-1)![0]).toEqual([
       { datasetId: 'ds-001', rowIndexes: [0, 1, 2] },
@@ -1685,7 +1686,7 @@ function dropDead() {
 it('编辑数据集勾选 → 保存走 PUT updateRunScheme', async () => {
   vi.spyOn(api, 'updateRunScheme').mockResolvedValue(SCHEME_A)
   const w = await mountWb()
-  await w.findAll('[data-testid="ds-tile"]')[0].trigger('change')  // 需先让 dataSets 有值(见 beforeEach mock listDataSets)
+  await w.findAll('[data-testid="ds-tile"] input[type="checkbox"]')[0].setValue(true)  // 需先让 dataSets 有值(见 beforeEach mock listDataSets)
   await w.find('[data-testid="save-scheme"]').trigger('click')
   await flushPromises()
   expect(api.updateRunScheme).toHaveBeenCalledWith('sc-wb', 'rs-002',
