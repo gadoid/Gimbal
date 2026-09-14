@@ -36,12 +36,13 @@ function refCols(): GridVarColumn[] {
   ]
 }
 
-/** 步骤上下文:步骤0 服务 fin + headers auth u2 引用(修订 11 首命中);
- *  步骤1 无引用。users 表:u1 同域 fin(修订 10 域内首键应是 u1,但被
- *  headers 引用 u2 压过 — PANEL-2 断言的正是这个优先序)。 */
+/** 步骤上下文:步骤0 服务 fin + 端点 e1 + headers auth u2 引用(修订 11
+ *  首命中);步骤1 无引用无端点(未绑定接口目录)。users 表:u1 同域 fin
+ *  (修订 10 域内首键应是 u1,但被 headers 引用 u2 压过 — PANEL-2 断言的
+ *  正是这个优先序)。 */
 function stepCtxs(): PanelStepContext[] {
   return [
-    { index: 0, label: '下单', service: 'fin', headers: { Authorization: 'Bearer ${auth.u2.token}' }, bodyTop: { bl_no: 'BL123' } },
+    { index: 0, label: '下单', service: 'fin', endpointId: 'e1', headers: { Authorization: 'Bearer ${auth.u2.token}' }, bodyTop: { bl_no: 'BL123' } },
     { index: 1, label: '查单', service: 'ops', headers: {}, bodyTop: {} },
   ]
 }
@@ -166,6 +167,7 @@ describe('VariableDetailPanel — 取数链(ValueSourcePicker 复用)', () => {
       refresh: false,
       serviceUrl: 'http://fin.example.com',
       queryAlias: 'u2',
+      service: 'fin',
     })
     expect(w.find('.vsp-overlay').exists()).toBe(true)
     // 行选(第二行)→ picker 关,列选 overlay 开
@@ -210,6 +212,7 @@ describe('VariableDetailPanel — 取数链(ValueSourcePicker 复用)', () => {
       refresh: false,
       serviceUrl: 'http://fin.example.com',
       queryAlias: 'u2',
+      service: 'fin',
       params: { bl_no: 'BL555' },
     })
     // 行选 → 列选(name 列)→ 取数值
@@ -233,12 +236,35 @@ describe('VariableDetailPanel — 取数链(ValueSourcePicker 复用)', () => {
     await w.find('.vdp-error .vdp-linkbtn').trigger('click')
     await flushPromises()
     expect(w.find('.vdp-error').exists()).toBe(false)
-    // 空索引态(独立挂载:未引用提示 + 无可取数视图文案)
+    // 空索引态(独立挂载:未引用提示 + 该接口无可取数视图文案)
     qvMock.fetchQueryViewIndex.mockResolvedValue([])
     const w2 = mountPanel({ refs: [] })
     await flushPromises()
-    expect(w2.text()).toContain('无 query-safe 查询视图可取数')
+    expect(w2.text()).toContain('该接口无可取数查询视图')
     expect(w2.text()).toContain('未被引用')
+    w.unmount()
+    w2.unmount()
+  })
+
+  it('PANEL-6: 端点严格收窄 — 未绑定端点的步骤不给全量;端点不符的视图被滤掉', async () => {
+    // 未绑定接口目录的步骤(步骤1 无 endpointId):不倒全量索引,显式空态
+    qvMock.fetchQueryViewIndex.mockResolvedValue([IDX_SAFE, IDX_UNSAFE])
+    const w = mountPanel()
+    await flushPromises()
+    ;(w.vm as any).stepChoice = 1
+    await flushPromises()
+    expect(w.text()).toContain('该步骤未绑定接口目录')
+    const qbtn = w.findAll('button').find((b) => b.text().includes('查询取数'))!
+    expect(qbtn.attributes('disabled')).toBeDefined()
+    // 端点不符:步骤0 绑 fin.other,索引里的视图全属 e1 → 可见视图为空
+    const w2 = mountPanel({
+      stepContexts: [{ ...stepCtxs()[0], endpointId: 'fin.other' }, stepCtxs()[1]],
+    })
+    await flushPromises()
+    expect((w2.vm as any).views.length).toBe(1)          // query_safe 过滤后存量 1
+    expect((w2.vm as any).visibleViews.length).toBe(0)   // 端点收窄后 0
+    expect((w2.vm as any).viewChoice).toBe('')
+    expect(w2.text()).toContain('该接口无可取数查询视图')
     w.unmount()
     w2.unmount()
   })

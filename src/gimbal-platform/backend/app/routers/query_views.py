@@ -61,6 +61,7 @@ async def get_rows(
     refresh: bool = False,
     service_url: str = "",
     query_alias: str | None = None,
+    service: str | None = None,
     params: str = "",
 ) -> dict:
     click: dict[str, Any] | None = None
@@ -87,7 +88,7 @@ async def get_rows(
     try:
         r = await query_view_runner.fetch_rows(
             name, refresh=refresh, service_url=service_url,
-            owner_id=user.id, query_alias=query_alias,
+            owner_id=user.id, query_alias=query_alias, service=service,
             load_credential=_loader(db), click_params=click)
     except query_view_runner.QueryViewError as e:
         raise HTTPException(status_code=e.status,

@@ -320,7 +320,7 @@ describe('DataSetEditor — 「单变量」详情面板(§6)', () => {
     expect(rowsAfter).not.toBe(rowsBefore)   // 只反映面板编辑,无额外形状变化
     // 取数段在场(空索引 → 空态文案;取数面行为由面板级测试覆盖)
     expect(w.text()).toContain('取数')
-    expect(w.text()).toContain('无 query-safe 查询视图可取数')
+    expect(w.text()).toContain('该接口无可取数查询视图')
     // 回「全部」→ 网格回来
     ;(w.vm as any).varChoice = 'all'
     await flushPromises()

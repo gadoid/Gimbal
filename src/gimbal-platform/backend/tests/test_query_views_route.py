@@ -153,18 +153,57 @@ async def test_rows_params_non_scalar_value_422(client):
     assert r.json()["detail"]["code"] == "bad_params"
 
 
+# ── 同源兜底(2026-09-14 取数收窄 #2):service = 调用步骤的服务名 ────
+
+async def test_rows_service_mismatch_422(client, monkeypatch):
+    """视图声明 service=svc,调用步骤 service=other → 跨端点错配拒
+    (否则请求打到 other 服务的 URL 上打 svc 端点的 path)。"""
+    _install_plate(monkeypatch, _IDX)
+    h = await register_and_login(client)
+    r = await client.get("/api/query-views/v1/rows",
+                         params={"service_url": "http://sut",
+                                 "service": "other"}, headers=h)
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "service_mismatch"
+
+
+async def test_rows_service_match_ok(client, monkeypatch):
+    _install_plate(monkeypatch, _IDX)   # v1 service=svc
+    monkeypatch.setattr(httpx, "request", lambda m, u, **kw: httpx.Response(
+        200, json={"d": [{"nm": "x"}]}))
+    h = await register_and_login(client)
+    r = await client.get("/api/query-views/v1/rows",
+                         params={"service_url": "http://sut",
+                                 "service": "svc"}, headers=h)
+    assert r.status_code == 200, r.text
+
+
+async def test_rows_service_absent_no_check(client, monkeypatch):
+    """不传 service(旧调用方)→ 不校验,既有行为不变。"""
+    _install_plate(monkeypatch, _IDX)
+    monkeypatch.setattr(httpx, "request", lambda m, u, **kw: httpx.Response(
+        200, json={"d": [{"nm": "x"}]}))
+    h = await register_and_login(client)
+    r = await client.get("/api/query-views/v1/rows",
+                         params={"service_url": "http://sut"}, headers=h)
+    assert r.status_code == 200, r.text
+
+
 async def test_rows_params_passes_click_params(client, monkeypatch):
     captured = {}
 
     async def fake_fetch(name, *, refresh, service_url, owner_id,
-                         query_alias, load_credential, click_params=None):
+                         query_alias, load_credential, click_params=None,
+                         service=None):
         captured["click"] = click_params
+        captured["service"] = service
         return run.RowsResult(name, [], False, "t", False, False)
 
     monkeypatch.setattr(run, "fetch_rows", fake_fetch)
     h = await register_and_login(client)
     r = await client.get("/api/query-views/customer_part/rows",
-                         params={"service_url": "http://s",
+                         params={"service_url": "http://s", "service": "svc",
                                  "params": '{"customer_id":"1"}'}, headers=h)
     assert r.status_code == 200, r.text
     assert captured["click"] == {"customer_id": "1"}
+    assert captured["service"] == "svc"

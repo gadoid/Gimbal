@@ -69,13 +69,16 @@
         <label class="vdp-query-item">
           <span class="vdp-query-label">查询视图</span>
           <el-select v-model="viewChoice" size="small" class="vdp-select" :loading="viewsLoading">
-            <el-option v-for="v in views" :key="v.name" :value="v.name" :label="`${v.name}(${v.path})`" />
+            <el-option v-for="v in visibleViews" :key="v.name" :value="v.name" :label="`${v.name}(${v.path})`" />
           </el-select>
         </label>
         <el-button size="small" type="primary" plain :disabled="!viewChoice" @click="onQuery">查询取数</el-button>
       </div>
       <div v-if="viewsError" class="vdp-error">视图索引加载失败:{{ viewsError }} — <button type="button" class="vdp-linkbtn" @click="loadViews">重试</button></div>
-      <div v-else-if="!viewsLoading && !views.length" class="muted vdp-empty">无 query-safe 查询视图可取数</div>
+      <!-- 端点严格收窄:未绑定端点的步骤不倒全量;绑定了但端点无
+           query-safe 视图(未声明/非安全)→ 区分报,不混全量语义 -->
+      <div v-else-if="!viewsLoading && !ctxStepOf()?.endpointId" class="muted vdp-empty">该步骤未绑定接口目录 — 无法取数(换绑定了 Plate 端点的步骤)</div>
+      <div v-else-if="!viewsLoading && !visibleViews.length" class="muted vdp-empty">该接口无可取数查询视图(未声明或非 query-safe)</div>
 
       <!-- 取数结果 + 应用 -->
       <div v-if="pickedValue !== '' || pickedTouched" class="vdp-apply">
@@ -152,7 +155,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import ValueSourcePicker from '@/components/composer/ValueSourcePicker.vue'
 import { ApiError } from '@/api/http'
@@ -189,27 +192,12 @@ function hasOwn(row: Record<string, any>): boolean {
   return Object.prototype.hasOwnProperty.call(row, props.varName)
 }
 
-// ── 取数:视图索引(query_safe 过滤 — 编辑期查询不得打变更型端点)──────
+// ── 取数:视图索引(query_safe 过滤 — 编辑期查询不得打变更型端点;
+//    端点严格收窄 — 视图候选 = 所选步骤绑定端点声明的视图,不倒全量)──────
 const views = ref<QueryViewIndexEntry[]>([])
 const viewsLoading = ref(false)
 const viewsError = ref('')
 const viewChoice = ref('')
-
-async function loadViews() {
-  viewsLoading.value = true
-  viewsError.value = ''
-  try {
-    const idx = await fetchQueryViewIndex()
-    views.value = idx.filter(v => v.query_safe)
-    if (!views.value.some(v => v.name === viewChoice.value)) {
-      viewChoice.value = views.value[0]?.name ?? ''
-    }
-  } catch (e) {
-    viewsError.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    viewsLoading.value = false
-  }
-}
 
 /** 步骤上下文默认 = 首个引用位所在步骤;无引用退第 1 步(取数不强依赖引用) */
 const stepChoice = ref(
@@ -217,6 +205,38 @@ const stepChoice = ref(
     ?? props.stepContexts[0]?.index
     ?? 0,
 )
+
+/** 当前步骤上下文(stepChoice → stepContexts;面板内多处消费) */
+function ctxStepOf() {
+  return props.stepContexts.find(s => s.index === stepChoice.value)
+}
+
+/** 端点收窄后的可见视图:该步骤端点声明的 query-safe 视图 */
+const visibleViews = computed(() => {
+  const eid = ctxStepOf()?.endpointId
+  if (!eid) return []
+  return views.value.filter(v => v.endpoint_id === eid)
+})
+
+/** 步骤切换/索引刷新 → viewChoice 必须落在可见集内(否则回退首项/空) */
+watch(visibleViews, (vis) => {
+  if (!vis.some(v => v.name === viewChoice.value)) {
+    viewChoice.value = vis[0]?.name ?? ''
+  }
+})
+
+async function loadViews() {
+  viewsLoading.value = true
+  viewsError.value = ''
+  try {
+    const idx = await fetchQueryViewIndex()
+    views.value = idx.filter(v => v.query_safe)
+  } catch (e) {
+    viewsError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    viewsLoading.value = false
+  }
+}
 
 onMounted(() => { void loadViews() })
 
@@ -236,7 +256,7 @@ const pParamPrefill = ref<Record<string, string>>({})
 let lastParams: Record<string, string> | null = null
 
 function currentView(): QueryViewIndexEntry | undefined {
-  return views.value.find(v => v.name === viewChoice.value)
+  return visibleViews.value.find(v => v.name === viewChoice.value)
 }
 
 /** 查询取数:先定参数面(§13.5 同名约定预填自步骤上下文 body 顶层字面量),
@@ -290,6 +310,7 @@ async function loadRows(refresh: boolean, params: Record<string, string> | null)
       refresh,
       serviceUrl: ctx.serviceUrl,
       queryAlias: ctx.queryAlias,
+      service: ctxStep.service || undefined,   // 同源兜底:步骤服务名(后端比对视图声明)
       ...(params && Object.keys(params).length ? { params } : {}),
     })
     pRows.value = res.rows

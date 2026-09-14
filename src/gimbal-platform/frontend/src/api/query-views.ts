@@ -43,6 +43,8 @@ export async function fetchQueryViewRows(
     refresh?: boolean
     serviceUrl?: string
     queryAlias?: string | null
+    /** 调用步骤的服务名(同源兜底:与视图声明的 service 不符 → 后端 422) */
+    service?: string | null
     /** §13.5 点击期参数(序列化为 JSON-object 字符串查询参;空对象不携带) */
     params?: Record<string, unknown>
   } = {},
@@ -52,6 +54,7 @@ export async function fetchQueryViewRows(
       refresh: opts.refresh ? 1 : 0,
       ...(opts.serviceUrl ? { service_url: opts.serviceUrl } : {}),
       ...(opts.queryAlias ? { query_alias: opts.queryAlias } : {}),
+      ...(opts.service ? { service: opts.service } : {}),
       ...(opts.params && Object.keys(opts.params).length
         ? { params: JSON.stringify(opts.params) } : {}),
     },

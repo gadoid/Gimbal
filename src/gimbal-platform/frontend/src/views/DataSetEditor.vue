@@ -537,6 +537,7 @@ const stepContexts = computed<PanelStepContext[]>(() => {
     index: i,
     label: stepLabel(i),
     service: s?.api?.service ?? '',
+    endpointId: s?.api?.view_hints?.endpoint_id ?? null,
     headers: s?.api?.headers ?? {},
     bodyTop: s?.request?.body && typeof s.request.body === 'object' && !Array.isArray(s.request.body)
       ? s.request.body

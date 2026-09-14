@@ -346,12 +346,23 @@ async def fetch_rows(
     query_alias: "str | None",
     load_credential: "Callable[[int, str], AuthSession | None | Awaitable[AuthSession | None]] | None",
     click_params: "dict[str, Any] | None" = None,
+    service: "str | None" = None,
 ) -> RowsResult:
     """取一行集:L1 缓存 → 熔断 → 单飞锁 → 凭证闸 → SUT 查询 → 缓存回填。"""
     index = await fetch_query_view_index()
     view = next((v for v in index if v.get("name") == name), None)
     if view is None:
         raise QueryViewError("unknown_view", f"未知视图 {name!r}", status=404)
+    # 同源兜底(取数收窄):service = 调用步骤声明的服务名;与视图声明的
+    # service 不符 = 跨端点错配(URL = 步骤服务 + 视图 path,会打到 A 服务
+    # 上请求 B 端点的路径)→ 422 拒。不传不校验(旧调用方无该语境);
+    # 索引缺 service 键(旧 plate)读穿不拦。
+    view_service = view.get("service")
+    if service and isinstance(view_service, str) and view_service and view_service != service:
+        raise QueryViewError(
+            "service_mismatch",
+            f"视图 {name} 属服务 {view_service},与调用步骤服务 {service} 不符",
+            status=422)
     click_params = click_params or {}
     has_param_face = bool(view.get("query_params"))   # §13.3 参数面视图
     # §13.7 手工逃生口:携参调用即使打在未声明参数面的视图上,也按参数面口径

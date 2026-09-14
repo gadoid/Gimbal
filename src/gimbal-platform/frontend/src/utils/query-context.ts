@@ -32,6 +32,9 @@ export interface PanelStepContext extends QueryCtxStep {
   index: number
   /** 展示名(orchestration 步骤名,缺名降级 Step N) */
   label: string
+  /** step.api.view_hints.endpoint_id — 取数视图按端点严格收窄的关联键
+   *  (缺席 = 手工步骤,该步骤不可取数,不倒全量索引) */
+  endpointId?: string | null
   /** request.body 顶层平对象(数组/非对象 → 空) */
   bodyTop: Record<string, unknown>
 }
