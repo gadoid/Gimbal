@@ -17,9 +17,12 @@ from .php_ast import ParsedFile, load, text_of, classes, is_string_literal
 from .ir import RuleEntry, ActionIR
 
 # 被注释规则行:行尾 // 中文注可有可无(真源 orderAddRules 实测有 11 行无尾注,
-# 如 `//        'settle_type' => 'present|num|in:1,2',` —— 只认尾注会整行丢)
+# 如 `//        'settle_type' => 'present|num|in:1,2',` —— 只认尾注会整行丢);
+# 键/值引号对各自独立单双均可(真源 CustomerRelateValidator:18 实测
+# `//        'business_type' => "present|length_max:32",//业务类型`)
 _RE_COMMENTED_RULE = re.compile(
-    r"//\s*'([A-Za-z0-9_]+)'\s*=>\s*'([^']*)'\s*,?(?:\s*//\s*(.+))?$"
+    r"//\s*['\"]([A-Za-z0-9_]+)['\"]\s*=>\s*['\"]([^'\"]*)['\"]\s*,?"
+    r"(?:\s*//\s*(.+))?$"
 )
 
 

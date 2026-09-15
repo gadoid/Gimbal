@@ -12,5 +12,6 @@ class OrderValidator
 
     public static $orderEditRules = [
         'remark'              => 'present', //备注
+        //        'business_type' => "present|length_max:32",//业务类型
     ];
 }

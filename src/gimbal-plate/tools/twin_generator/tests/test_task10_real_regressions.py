@@ -34,6 +34,12 @@ def test_double_quoted_rule_rows_captured():
     assert entries["settle_type"].rules == "present|num|in:1,2"
     assert entries["settle_type"].zh == ""
     assert entries["settle_type"].enum_values() == ["1", "2"]
+    # 评审 Minor-2:注释行的双引号值(真源 CustomerRelateValidator:18 形态)
+    #   //        'business_type' => "present|length_max:32",//业务类型
+    edit = {e.key: e for e in rules["orderEditRules"]}
+    bq = edit["business_type"]
+    assert bq.active is False and bq.zh == "业务类型"
+    assert bq.rules == "present|length_max:32"
     # 常规行不受影响
     assert entries["num"].required() is False and entries["num"].zh == "件数"
 
@@ -57,10 +63,22 @@ def test_indirect_ruleset_binding_via_local_var():
 def test_fallback_prefers_same_module_validator():
     acts_list = scan_actions(APP2)
     attach_rules(acts_list, APP2)
-    rel = next(a for a in acts_list if a.action == "batchChangeRelated")
+    rel = next(a for a in acts_list
+               if a.action == "batchChangeRelated" and a.module == "Customer")
     # batchChangeRelatedRules 在 Customer(CustomerValidator)与 Order
     # (OrderEntrustValidator)撞名;Customer 控制器回退须取同模块
     assert [(e.key, e.zh) for e in rel.rules] == [("related_id", "关联ID")]
+
+
+def test_fallback_same_module_order_side():
+    """评审 Important-1:同模块优先的反面(Customer 侧)也要钉死 ——
+    去掉兜底的 (same or hits)[0] 偏好,回退按文件序会串到 Customer 模块。"""
+    acts_list = scan_actions(APP2)
+    attach_rules(acts_list, APP2)
+    rel = next(a for a in acts_list
+               if a.action == "batchChangeRelated" and a.module == "Order")
+    # 必须命中同模块 OrderEntrustValidator,而非字母序在前的 CustomerValidator
+    assert [(e.key, e.zh) for e in rel.rules] == [("order_ids", "订单ID集")]
 
 
 def test_double_quoted_read_keys():

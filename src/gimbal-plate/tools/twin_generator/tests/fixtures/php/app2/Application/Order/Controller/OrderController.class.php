@@ -35,4 +35,13 @@ class OrderController extends BaseController
         OrderSvc::getInstance()->selfFetch();
         $this->returnSuccess();
     }
+
+    // task-10 评审 Important-1:Order 模块动作无显式绑定,batchChangeRelatedRules
+    // 在 Customer(CustomerValidator)与 Order(OrderEntrustValidator)撞名 ——
+    // 兜底必须取同模块,否则串到别模块的规则集
+    public function batchChangeRelated()
+    {
+        $requestData = getRequestParam();
+        $this->returnSuccess();
+    }
 }
