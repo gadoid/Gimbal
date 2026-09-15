@@ -175,7 +175,7 @@
             <span class="c-ns-sys" :class="`s-${sys}`">{{ systemLabel(sys) }}</span>
             <span class="c-ns-count">{{ group.length }} keys</span>
           </div>
-          <div v-for="(v, j) in group" :key="j" class="c-kv-row">
+          <div v-for="(v, j) in group" :key="j" class="c-kv-row var-row">
             <el-input
               :model-value="v.key"
               @update:model-value="(val: string) => v.key = val"
@@ -189,6 +189,16 @@
               placeholder="值 / 引用"
               size="small"
             />
+            <button
+              class="c-kv-lock"
+              :class="{ 'is-on': v.locked }"
+              :aria-label="v.locked ? '解锁变量' : '锁定为过程变量'"
+              :aria-pressed="!!v.locked"
+              :title="v.locked
+                ? '已锁定为过程变量 — 数据集编辑面默认隐藏该列(可在数据集本地放开)'
+                : '锁定为过程变量(数据集编辑面默认隐藏该列)'"
+              @click="v.locked = !v.locked"
+            >{{ v.locked ? '🔒' : '🔓' }}</button>
             <button class="c-kv-del" @click="removeVar(v)">×</button>
           </div>
         </div>
@@ -353,9 +363,12 @@ const serviceRows = ref<Array<{ alias: string; baseUrl: string }>>(
 // ── vars list<->dict 边界 (pre-flight ruling #1) ──
 // plate vars 是 Record<string, unknown>;UI 维护按命名空间分组的 rows 编辑,
 // 在 load/emit 时与 dict 互转。
-interface VarRow { key: string; value: unknown }
+interface VarRow { key: string; value: unknown; locked?: boolean }
 const varsRows = ref<VarRow[]>(
-  Object.entries(props.modelValue?.vars ?? {}).map(([key, value]) => ({ key, value }))
+  Object.entries(props.modelValue?.vars ?? {}).map(([key, value]) => ({
+    key, value,
+    locked: props.modelValue?.var_locks?.includes(key) ?? false,
+  }))
 )
 
 // 按 <system>.key 命名空间分组 (PRD §5.3)
@@ -406,6 +419,7 @@ function emitShape(): ConfigView {
   for (const r of varsRows.value) {
     if (r.key) varsDict[r.key] = r.value
   }
+  const varLocks = varsRows.value.filter(r => r.locked && r.key).map(r => r.key)
   return {
     setup: [...setupList.value],
     teardown: [...teardownList.value],
@@ -416,6 +430,7 @@ function emitShape(): ConfigView {
     timePolicy: local.timePolicy,
     retry: local.retry,
     vars: varsDict,
+    ...(varLocks.length ? { var_locks: varLocks } : {}),
   }
 }
 
@@ -435,7 +450,10 @@ watch(() => props.modelValue, (v) => {
   serviceRows.value = Object.entries(v.services || {}).map(([alias, baseUrl]) => ({ alias, baseUrl: baseUrl as string }))
   setupList.value = ((v as any).setup as any[]) || []
   teardownList.value = ((v as any).teardown as any[]) || []
-  varsRows.value = Object.entries(v.vars || {}).map(([key, value]) => ({ key, value }))
+  const locks = v.var_locks ?? []
+  varsRows.value = Object.entries(v.vars || {}).map(
+    ([key, value]) => ({ key, value, locked: locks.includes(key) })
+  )
 }, { deep: true })
 
 watch([local, serviceRows, setupList, teardownList, varsRows], () => {
@@ -457,7 +475,7 @@ function onRetryToggle(on: boolean) {
 }
 
 // ── vars 编辑 (操作 varsRows,emit 时折叠回 dict) ──
-function addVar() { varsRows.value.push({ key: '', value: '' }) }
+function addVar() { varsRows.value.push({ key: '', value: '', locked: false }) }
 function removeVar(row: VarRow) {
   varsRows.value = varsRows.value.filter(r => r !== row)
 }
@@ -548,6 +566,19 @@ function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: 
 /* vars / services 行 (c-kv-row 共享栅格) */
 .c-kv-row { margin-bottom: 4px; }
 .c-kv-row :deep(.el-input__wrapper) { background: var(--c-surface); }
+.c-kv-lock {
+  border: none; background: none; cursor: pointer; font-size: 13px;
+  line-height: 1; padding: 2px 4px; opacity: 0.45;
+}
+.c-kv-lock.is-on { opacity: 1; }
+.c-kv-lock:hover { opacity: 1; }
+/* var-row 在共享 4 列栅格上扩一列锁钮(同 .svc-row 扩列先例):
+ * key | = | value | 锁 | × — 不扩列则第 5 子元素折到隐式第二行 */
+.var-row { grid-template-columns: minmax(140px, 220px) 24px minmax(0, 1fr) 24px 28px; }
+@media (max-width: 720px) {
+  /* 与共享层同款窄屏降级:key 轨道放宽为 1fr 可收缩;5 子元素仍单行 */
+  .var-row { grid-template-columns: 1fr 24px minmax(0, 1fr) 24px 28px; }
+}
 /* svc-row 在共享 4 列栅格上扩一列归属标签: alias | 归属 | → | url | × */
 .svc-row { grid-template-columns: minmax(140px, 220px) minmax(96px, 150px) 24px minmax(0, 1fr) 28px; }
 .svc-owner {

@@ -401,6 +401,9 @@ export interface ConfigView {
   timePolicy: TimePolicyView
   retry: RetryPolicyView | null
   vars: Record<string, unknown>
+  /** 变量锁清单(平台旁挂,plate Config extra=ignore 静默剥除)— 锁定 =
+   *  过程变量,数据集编辑面默认沉底/只读(var-lock spec §3.1) */
+  var_locks?: string[]
 }
 
 /** plate Resource 变体。对齐 gimbal_plate/schema/resource.py。 */

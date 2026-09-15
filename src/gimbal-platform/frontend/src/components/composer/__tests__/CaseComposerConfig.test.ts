@@ -161,6 +161,56 @@ describe('断言管理纯展示列表(spec v3 §5)', () => {
   })
 })
 
+describe('CaseComposerConfig — 变量锁(var-lock spec §2)', () => {
+  const LOCKED_CFG = () => ({
+    ...makeConfig(),
+    vars: { 'fin.env': 'qa', 'fin.amount': 100 },
+    var_locks: ['fin.env'],
+  }) as ConfigView
+
+  /** 行级锁按钮(c-kv-row 内;键输入框之前定位不可靠,按 class 找) */
+  const lockBtns = (w: ReturnType<typeof mountWithParent>['w']) =>
+    w.findAll('button.c-kv-lock')
+
+  it('CFG-LOCK-1: 外部 config 带 var_locks → 对应行锁钮呈开态', async () => {
+    const { w } = mountWithParent(LOCKED_CFG())
+    await flush()
+    const btns = lockBtns(w)
+    expect(btns.length).toBe(2)                       // 一变量一钮
+    expect(btns[0].classes()).toContain('is-on')      // fin.env(首行)
+    expect(btns[1].classes()).not.toContain('is-on')  // fin.amount
+  })
+
+  it('CFG-LOCK-2: 点锁钮 → 父 config.var_locks 增/删该键', async () => {
+    const initial = LOCKED_CFG()
+    const { w, config } = mountWithParent(initial)
+    await flush()
+    // 锁上 fin.amount(第 2 行)
+    await lockBtns(w)[1].trigger('click')
+    await flush()
+    expect(config.value.var_locks).toEqual(['fin.env', 'fin.amount'])
+    // 再解锁 fin.env(第 1 行)
+    await lockBtns(w)[0].trigger('click')
+    await flush()
+    expect(config.value.var_locks).toEqual(['fin.amount'])
+  })
+
+  it('CFG-LOCK-3: 全部解锁 → var_locks 键省略(非空数组),不残留空清单', async () => {
+    const { w, config } = mountWithParent(LOCKED_CFG())
+    await flush()
+    await lockBtns(w)[0].trigger('click')
+    await flush()
+    expect(config.value.var_locks).toBeUndefined()
+    expect('var_locks' in config.value).toBe(false)
+  })
+
+  it('CFG-LOCK-4: 锁状态不参与 vars 值折叠(锁不是值形状变化)', async () => {
+    const { w, config } = mountWithParent(LOCKED_CFG())
+    await flush()
+    expect(config.value.vars).toEqual({ 'fin.env': 'qa', 'fin.amount': 100 })
+  })
+})
+
 describe('CaseComposerConfig — 归属列(别名派生只读展示, spec §1.4)', () => {
   it('直引/别名行显示目录 base(同值两次);目录外违规键显示未挂目录', async () => {
     const initial = makeConfig()
