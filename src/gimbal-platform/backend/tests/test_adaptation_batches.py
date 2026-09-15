@@ -16,6 +16,7 @@ from app.models.adaptation_op import AdaptationOp
 from app.models.catalog_version import CatalogVersion
 from app.schemas.scenario_composer import DataSetDraft, ScenarioDraft
 from app.services import adaptation_service, data_set_store, scenario_store
+from app.services.adaptation_ops import apply_to_definition, rename_in_list
 
 from .helpers import make_draft
 
@@ -523,3 +524,93 @@ async def test_manual_rename_var_snapshots_datasets(fresh_db, plate):
     assert scenario_b.payload["definition"]["config"]["vars"] == {"amount": 100}
     assert restored_rows == [{"amount": 7}]  # 列名随快照还原
     assert saved.rows == [{"amount": 8}]
+
+
+# ─── renameVar 双清单迁移(var-lock spec §4.1.2)─────────────────
+async def test_rename_var_migrates_lock_lists(fresh_db, plate):
+    """renameVar 迁移 config.var_locks + 数据集 var_unlocks(否则按名存储的
+    清单陈旧,锁语义静默丢失)。"""
+    draft = make_draft("sc-batch", steps=_steps(), vars_map={"amount": 100})
+    draft["definition"]["config"]["var_locks"] = ["amount"]
+    async with await _session() as s:
+        await scenario_store.create(
+            s, ScenarioDraft.model_validate(draft), owner="alice", owner_id=1,
+        )
+        await data_set_store.create(s, "sc-batch", DataSetDraft(
+            name="主数据集", rows=[{"amount": 5}], var_unlocks=["amount"],
+        ))
+    await _seed_stamp()
+    _install_plate(plate)
+    async with await _session() as s:
+        detail = await adaptation_service.open_batch(s, endpoint_id=EP, operator_id=1)
+        s.add(AdaptationOp(
+            batch_id=detail["batchId"], scenario_id="sc-batch", dataset_id=None,
+            op_type="renameVar", payload={"from": "amount", "to": "amt"},
+            status="pending",
+        ))
+        await s.commit()
+        op_id = (await s.execute(
+            select(AdaptationOp).where(AdaptationOp.op_type == "renameVar")
+        )).scalar_one().id
+        res = await adaptation_service.apply_op(s, op_id)
+        scenario = await scenario_store.get_row(s, "sc-batch")
+        ds = await data_set_store.get_row(s, "ds-001")
+    assert res["status"] == "applied"
+    assert scenario.payload["definition"]["config"]["var_locks"] == ["amt"]
+    assert ds.rows == [{"amt": 5}]
+    assert ds.var_unlocks == ["amt"]
+
+
+async def test_rename_var_rollback_restores_lock_lists(fresh_db, plate):
+    """回滚:场景侧 payload 快照整包恢复(var_locks 随之);数据集侧
+    before+ops 重放比对必须覆盖 var_unlocks,恢复写带原清单。"""
+    draft = make_draft("sc-batch", steps=_steps(), vars_map={"amount": 100})
+    draft["definition"]["config"]["var_locks"] = ["amount"]
+    async with await _session() as s:
+        await scenario_store.create(
+            s, ScenarioDraft.model_validate(draft), owner="alice", owner_id=1,
+        )
+        await data_set_store.create(s, "sc-batch", DataSetDraft(
+            name="主数据集", rows=[{"amount": 5}], var_unlocks=["amount"],
+        ))
+    await _seed_stamp()
+    _install_plate(plate)
+    async with await _session() as s:
+        detail = await adaptation_service.open_batch(s, endpoint_id=EP, operator_id=1)
+        s.add(AdaptationOp(
+            batch_id=detail["batchId"], scenario_id="sc-batch", dataset_id=None,
+            op_type="renameVar", payload={"from": "amount", "to": "amt"},
+            status="pending",
+        ))
+        await s.commit()
+        op_id = (await s.execute(
+            select(AdaptationOp).where(AdaptationOp.op_type == "renameVar")
+        )).scalar_one().id
+        await adaptation_service.apply_op(s, op_id)
+        result = await adaptation_service.rollback_batch(s, detail["batchId"])
+        scenario = await scenario_store.get_row(s, "sc-batch")
+        ds = await data_set_store.get_row(s, "ds-001")
+    assert not result["conflicts"], result["conflicts"]
+    assert scenario.payload["definition"]["config"]["vars"] == {"amount": 100}
+    assert scenario.payload["definition"]["config"]["var_locks"] == ["amount"]
+    assert ds.rows == [{"amount": 5}]
+    assert ds.var_unlocks == ["amount"]
+
+
+def test_rename_in_list_convergent():
+    """纯函数:src 在场且 dst 缺席才改(与 _apply_rename_var 的 vars 键改名
+    同一收敛语义);src 缺席 = 已达终态,dst 已在 = 不撞。"""
+    assert rename_in_list(["a", "b"], "a", "c") == ["c", "b"]
+    assert rename_in_list(["b"], "a", "c") == ["b"]       # src 缺席
+    assert rename_in_list(["a", "c"], "a", "c") == ["a", "c"]  # dst 已在
+
+
+def test_apply_rename_var_migrates_var_locks_in_definition():
+    """纯引擎:definition.config.var_locks 键随 renameVar 改名。"""
+    definition = {
+        "config": {"vars": {"amount": 100}, "var_locks": ["amount"]},
+        "steps": [],
+    }
+    apply_to_definition(definition, {"op": "renameVar", "from": "amount", "to": "amt"})
+    assert definition["config"]["vars"] == {"amt": 100}
+    assert definition["config"]["var_locks"] == ["amt"]

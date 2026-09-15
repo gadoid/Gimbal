@@ -242,6 +242,9 @@ async def copy_scenario(
             description=ds.description,
             rows=_copy.deepcopy(ds.rows or []),
             row_count=ds.row_count,
+            # 变量锁本地放开清单按名存储 — 深拷贝必须带走,否则分叉
+            # 场景的解锁语义静默丢失
+            var_unlocks=list(ds.var_unlocks or []),
         ))
     # 方案随场景深拷贝 — 迁出 payload 后不再随 deepcopy 自动带走,
     # 显式复制(新 scheme_id,仿上方 data_sets 循环)。

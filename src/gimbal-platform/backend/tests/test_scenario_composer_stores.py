@@ -378,3 +378,25 @@ async def test_data_set_var_unlocks_default_empty(fresh_db) -> None:
             db, "sc-test", DataSetDraft(name="a", rows=[{"x": 1}])
         )
         assert created.var_unlocks == []
+
+
+async def test_scenario_copy_carries_dataset_var_unlocks(fresh_db) -> None:
+    """fork(copy_scenario)深拷贝数据集必须带走 var_unlocks(变量锁本地
+    放开清单按名存储 — 漏拷则分叉场景的解锁语义静默丢失)。"""
+    async with _session() as db:
+        await scenario_store.create(
+            db, _make_draft(config_vars={"x": 0}), owner="alice"
+        )
+        await data_set_store.create(
+            db, "sc-test",
+            DataSetDraft(name="a", rows=[{"x": 1}], var_unlocks=["x"]),
+        )
+        copied = await scenario_store.copy_scenario(
+            db, "sc-test", new_owner="bob", new_owner_id=2,
+        )
+        copied_ds = await data_set_store.list_for_scenario(
+            db, copied.meta.scenario_id
+        )
+        assert len(copied_ds) == 1
+        assert copied_ds[0].rows == [{"x": 1}]
+        assert copied_ds[0].var_unlocks == ["x"]

@@ -180,10 +180,19 @@ def _apply_step_op(step: dict, op: dict, definition: dict) -> None:
         raise ValueError(f"unknown_step_op: {kind}")
 
 
+def rename_in_list(names: list, src: str, dst: str) -> list:
+    """清单改名(收敛):src 在场且 dst 缺席才改;就地修改并返回同一列表。
+    var_locks / var_unlocks 都按名存储,renameVar 双清单迁移共用。"""
+    if src in names and dst not in names:
+        names[names.index(src)] = dst
+    return names
+
+
 def _apply_rename_var(definition: dict, op: dict) -> None:
     """renameVar:definition 内全部 ``${var.from}`` → ``${var.to}``
     (深走字符串替换,body/headers/strategy 文本通吃)+ config.vars
-    键改名。数据集列联动走 apply_to_rows(另一通路,由 service 编排)。"""
+    键改名 + config.var_locks 清单改名(按名存储,否则锁语义陈旧)。
+    数据集列联动走 apply_to_rows(另一通路,由 service 编排)。"""
     src, dst = op["from"], op["to"]
     pattern = f"${{var.{src}}}"
     replacement = f"${{var.{dst}}}"
@@ -204,6 +213,9 @@ def _apply_rename_var(definition: dict, op: dict) -> None:
     vars_map = (definition.get("config") or {}).get("vars")
     if isinstance(vars_map, dict) and src in vars_map and dst not in vars_map:
         vars_map[dst] = vars_map.pop(src)
+    locks = (definition.get("config") or {}).get("var_locks")
+    if isinstance(locks, list):
+        rename_in_list(locks, src, dst)
 
 
 def apply_to_rows(rows: list[dict], op: dict) -> list[dict]:

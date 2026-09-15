@@ -33,6 +33,7 @@ from .adaptation_ops import (
     apply_to_rows,
     check_step_addressable,
     diff_field_specs,
+    rename_in_list,
 )
 from .plate_client import PlateUnavailableError
 
@@ -319,6 +320,7 @@ async def open_batch(
                 "scenarioId": d.scenario_id, "name": d.name,
                 "description": d.description,
                 "rows": copy.deepcopy(d.rows or []),
+                "varUnlocks": list(d.var_unlocks or []),
             },
         ))
 
@@ -557,7 +559,9 @@ async def _apply_scenario_op(
             rows = apply_to_rows(copy.deepcopy(d.rows or []), op_view)
             await data_set_store.update(db, d.dataset_id, DataSetDraft(
                 name=d.name, description=d.description, rows=rows,
-                var_unlocks=list(d.var_unlocks or []),
+                var_unlocks=rename_in_list(
+                    list(d.var_unlocks or []), op_view["from"], op_view["to"]
+                ),
             ))
 
 
@@ -816,21 +820,26 @@ async def _rollback_dataset(
         )
     before = snap.before_json or {}
     expected_rows = copy.deepcopy(before.get("rows") or [])
+    expected_unlocks = list(before.get("varUnlocks") or [])
     try:
         for op in applied_ops:
             op_view = {"op": op.op_type, **(op.payload or {})}
             if (op.op_type == "renameVar"
                     and op.scenario_id == before.get("scenarioId")):
                 expected_rows = apply_to_rows(expected_rows, op_view)
+                expected_unlocks = rename_in_list(
+                    expected_unlocks, op_view["from"], op_view["to"]
+                )
             elif op.op_type in DATASET_OPS and op.dataset_id == snap.entity_id:
                 expected_rows = apply_to_rows(expected_rows, op_view)
     except (KeyError, ValueError) as e:
         raise _RollbackConflict(f"replay_failed: {e}") from e
     current = {"name": d.name, "description": d.description,
-               "rows": d.rows or []}
+               "rows": d.rows or [], "varUnlocks": list(d.var_unlocks or [])}
     if current != {"name": before.get("name"),
                    "description": before.get("description"),
-                   "rows": expected_rows}:
+                   "rows": expected_rows,
+                   "varUnlocks": expected_unlocks}:
         raise _RollbackConflict(
             "edited_beyond_batch: current != before+ops replay"
         )
@@ -839,6 +848,7 @@ async def _rollback_dataset(
             name=before.get("name") or d.name,
             description=before.get("description") or "",
             rows=before.get("rows") or [],
+            var_unlocks=list(before.get("varUnlocks") or []),
         ))
     except ValueError as e:
         raise _RollbackConflict(f"restore_failed: {e}") from e
@@ -1015,5 +1025,6 @@ async def _ensure_dataset_snapshot(
             "scenarioId": d.scenario_id, "name": d.name,
             "description": d.description,
             "rows": copy.deepcopy(d.rows or []),
+            "varUnlocks": list(d.var_unlocks or []),
         },
     ))
