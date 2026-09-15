@@ -557,6 +557,7 @@ async def _apply_scenario_op(
             rows = apply_to_rows(copy.deepcopy(d.rows or []), op_view)
             await data_set_store.update(db, d.dataset_id, DataSetDraft(
                 name=d.name, description=d.description, rows=rows,
+                var_unlocks=list(d.var_unlocks or []),
             ))
 
 
@@ -569,6 +570,7 @@ async def _apply_dataset_op(db: AsyncSession, op: AdaptationOp, payload: dict) -
     rows = apply_to_rows(copy.deepcopy(d.rows or []), {"op": op.op_type, **payload})
     await data_set_store.update(db, op.dataset_id, DataSetDraft(
         name=d.name, description=d.description, rows=rows,
+        var_unlocks=list(d.var_unlocks or []),
     ))
 
 

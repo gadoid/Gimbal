@@ -33,6 +33,9 @@ class ComposerDataSet(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     rows: Mapped[list] = mapped_column(JSON, default=list)
     row_count: Mapped[int] = mapped_column(Integer, default=0)
+    var_unlocks: Mapped[list] = mapped_column(JSON, default=list)
+    # 变量锁本地放开清单(spec 2026-09-15 §3.2):数据集级元数据,
+    # 与场景级 config.var_locks 互不影响;引擎不读。
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()
     )

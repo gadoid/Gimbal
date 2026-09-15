@@ -342,3 +342,39 @@ async def test_data_set_summary_preview_truncated_to_3(fresh_db) -> None:
         assert summaries[0].scenario_id == "sc-test"
         assert summaries[0].row_count == 5
         assert len(summaries[0].preview) == 3  # truncated
+
+
+async def test_data_set_var_unlocks_roundtrip(fresh_db) -> None:
+    """var_unlocks(变量锁本地放开清单)随创建落库、读取回显、更新重写。"""
+    async with _session() as db:
+        await scenario_store.create(
+            db, _make_draft(config_vars={"x": 0}), owner="alice"
+        )
+        created = await data_set_store.create(
+            db, "sc-test",
+            DataSetDraft(name="a", rows=[{"x": 1}], var_unlocks=["x"]),
+        )
+        assert created.var_unlocks == ["x"]
+
+        fetched = await data_set_store.get(db, created.dataset_id)
+        assert fetched.var_unlocks == ["x"]
+
+        updated = await data_set_store.update(
+            db, created.dataset_id,
+            DataSetDraft(name="a", rows=[{"x": 2}], var_unlocks=[]),
+        )
+        assert updated.var_unlocks == []
+        # wire 键 = varUnlocks(camelCase 出参)
+        assert updated.model_dump(by_alias=True)["varUnlocks"] == []
+
+
+async def test_data_set_var_unlocks_default_empty(fresh_db) -> None:
+    """旧客户端不传 var_unlocks → 缺省空清单(不是 None),读写不炸。"""
+    async with _session() as db:
+        await scenario_store.create(
+            db, _make_draft(config_vars={"x": 0}), owner="alice"
+        )
+        created = await data_set_store.create(
+            db, "sc-test", DataSetDraft(name="a", rows=[{"x": 1}])
+        )
+        assert created.var_unlocks == []

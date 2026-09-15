@@ -159,6 +159,7 @@ class DataSet(BaseModel):
     description: str = Field(default="", max_length=2048)
     row_count: int = Field(default=0, ge=0, alias="rowCount")
     rows: list[dict[str, Any]] = Field(default_factory=list)
+    var_unlocks: list[str] = Field(default_factory=list, alias="varUnlocks")
 
 
 class DataSetSummary(BaseModel):
@@ -186,6 +187,7 @@ class DataSetDraft(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     description: str = Field(default="", max_length=2048)
     rows: list[dict[str, Any]] = Field(default_factory=list)
+    var_unlocks: list[str] = Field(default_factory=list, alias="varUnlocks")
 
 
 # ─── runs ───────────────────────────────────────────────────────────
