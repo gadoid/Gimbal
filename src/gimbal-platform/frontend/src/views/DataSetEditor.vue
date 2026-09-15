@@ -898,8 +898,9 @@ async function onImportCsv(file: File) {
     const text = await file.text()
     const result = importDataSetCsv({
       fileText: text,
-      // 与导出同宇宙(全段输入列 + 期望列,不随段过滤):导出的列可原样回导;
-      // 锁定列保持全量在场(旧模板可含锁定列头),只经 lockedVars 分流行为
+      // 全量宇宙(全段输入列 + 期望列,不随段过滤)— 与导出不同源:
+      // 导出已排除未放开锁定列,导入仍全量在场(旧模板可含锁定列头),
+      // 只经 lockedVars 分流行为
       columns: csvVarColumns.value,
       lockedVars: varColumns.value.filter(c => isLockedHidden(c.varName)).map(c => c.varName),
       rows: rows.value.map(toApiRow),
