@@ -480,7 +480,7 @@ function isLockedHidden(name: string): boolean {
 function isLockDeclared(name: string): boolean {
   return varLocks.value.includes(name)
 }
-/** 本地放开/收回:写本数据集 var_unlocks,永不写场景配置(spec §2 边界) */
+/** 本地放开/收回:写本数据集 varUnlocks(wire 键 camelCase),永不写场景配置(spec §2 边界) */
 function unlockVar(name: string) {
   if (!varUnlocks.value.includes(name)) varUnlocks.value.push(name)
 }
@@ -851,7 +851,7 @@ async function onSaveRows() {
       description: form.description,
       rows: apiRows,
       // 空清单不携键(缺省 ≡ 空)— 既有无锁定场景的 draft 形状零变化
-      ...(varUnlocks.value.length ? { var_unlocks: [...varUnlocks.value] } : {}),
+      ...(varUnlocks.value.length ? { varUnlocks: [...varUnlocks.value] } : {}),
     })
     ElMessage.success('已保存')
     rowsDirty.value = false          // 落库后本地行号 = 服务端行号
@@ -934,7 +934,7 @@ onMounted(async () => {
       form.description = full.description ?? ''
       rows.value = full.rows.map((r) => ({ ...r }))
       caseNames.value = full.rows.map((_, i) => `data-${i + 1}`)
-      varUnlocks.value = [...(full.var_unlocks ?? [])]
+      varUnlocks.value = [...(full.varUnlocks ?? [])]
       rowsDirty.value = false        // 本地模型 = 服务端存量,「运行」守卫前提成立
     } else {
       form.name = '默认数据集'

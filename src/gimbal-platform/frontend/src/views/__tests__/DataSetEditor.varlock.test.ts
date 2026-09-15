@@ -1,6 +1,6 @@
 /**
  * DataSetEditor 变量锁定(var-lock spec §2):
- * 锁定未放开的列沉底/只读/带锁徽标;本地放开写 var_unlocks;
+ * 锁定未放开的列沉底/只读/带锁徽标;本地放开写 varUnlocks(wire 键 camelCase);
  * 恢复默认 = 清全部行键 + 撤放开;TSV 拒写;CSV 导出排除 + 导入跳过提示。
  * 骨架(api mock + mountEditor)复制 DataSetEditor.varview.test.ts。
  */
@@ -33,7 +33,7 @@ const DEF_LOCKED = {
   ],
 }
 
-/** mountEditor:var_unlocks 由 getDataSet 回显(默认 [])*/
+/** mountEditor:varUnlocks(wire 键)由 getDataSet 回显(默认 [])*/
 async function mountEditor(
   def: typeof DEF_LOCKED,
   rows: Array<Record<string, any>> = [{ amount: '-1', env: 'prod' }],
@@ -44,7 +44,7 @@ async function mountEditor(
   )
   vi.spyOn(api, 'updateScenario').mockResolvedValue({} as any)
   vi.spyOn(api, 'getDataSet').mockResolvedValue(
-    { name: 'n', description: '', rows, var_unlocks: varUnlocks } as any,
+    { name: 'n', description: '', rows, varUnlocks: varUnlocks } as any,
   )
   vi.spyOn(api, 'getFullEndpoint').mockImplementation(async (eid: string) => ({
     id: eid, request: { declarations: [] },
@@ -77,7 +77,7 @@ describe('DataSetEditor — 锁定列编辑面(var-lock)', () => {
     w.unmount()
   })
 
-  it('LOCK-3: 列头「放开」→ var_unlocks 增员 + 格可编辑;「收回」逆操作', async () => {
+  it('LOCK-3: 列头「放开」→ varUnlocks 增员 + 格可编辑;「收回」逆操作', async () => {
     const w = await mountEditor(DEF_LOCKED)
     const unlockBtn = w.findAll('button.col-unlock').find((b) => b.text().includes('放开'))
     expect(unlockBtn).toBeTruthy()
@@ -149,7 +149,7 @@ describe('DataSetEditor — 锁定列编辑面(var-lock)', () => {
     w.unmount()
   })
 
-  it('LOCK-8: 保存数据集携带 var_unlocks;载入回显', async () => {
+  it('LOCK-8: 保存数据集携带 varUnlocks(wire 键);载入回显', async () => {
     const w = await mountEditor(DEF_LOCKED, [{ amount: '-1', env: 'prod' }], ['env'])
     expect((w.vm as any).varUnlocks).toEqual(['env'])
     const saveSpy = vi.spyOn(api, 'updateDataSet').mockResolvedValue({} as any)
@@ -160,8 +160,23 @@ describe('DataSetEditor — 锁定列编辑面(var-lock)', () => {
     await flushPromises()
     expect(store.saveDataSet).toHaveBeenCalled()
     const draft = store.saveDataSet.mock.calls[0][2]
-    expect(draft.var_unlocks).toEqual(['env'])
+    expect(draft.varUnlocks).toEqual(['env'])
     saveSpy.mockRestore()
+    w.unmount()
+  })
+
+  it('LOCK-9: 死放开键(共享侧已删变量)静默忽略,载入/保存不崩', async () => {
+    // ghost 不在场景 vars(env/amount)中 = 交叉态死配置(spec §5.4:
+    // 编辑器静默忽略、不崩溃不清洗,原样保留)
+    const w = await mountEditor(DEF_LOCKED, [{ amount: '-1', env: 'prod' }], ['ghost'])
+    expect((w.vm as any).varUnlocks).toEqual(['ghost'])
+    const store = (w.vm as any).store
+    store.saveDataSet = vi.fn(async (_sid: string, _did: string | null, draft: any) => draft)
+    const btn = w.findAll('button').find((b) => b.text().includes('保存数据集'))
+    await btn!.trigger('click')
+    await flushPromises()
+    expect(store.saveDataSet).toHaveBeenCalled()
+    expect(store.saveDataSet.mock.calls[0][2].varUnlocks).toEqual(['ghost'])
     w.unmount()
   })
 })
