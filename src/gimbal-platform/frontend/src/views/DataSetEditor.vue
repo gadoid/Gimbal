@@ -189,7 +189,10 @@
                 v-if="isLockDeclared(col.varName)"
                 class="lock-col-badge"
                 title="过程变量 · 默认用共享侧配置(运行取值规则不变)"
-              >🔒</span>
+              >
+                <svg v-if="isLockedHidden(col.varName)" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>
+                <svg v-else viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 4.9-.7"/></svg>
+              </span>
               <button
                 v-if="isLockDeclared(col.varName)"
                 type="button"
@@ -1054,15 +1057,39 @@ onMounted(async () => {
    数据格保持三态语义不参与) */
 .data-table th.col-unreferenced { background: #f1f5f9; color: #94a3b8; }
 .data-table .row-baseline td.col-unreferenced { color: #94a3b8; }
-/* 锁定列(var-lock):沉底组的表头/格子灰化 + 锁徽标 */
-.data-table th.col-locked { background: #f8fafc; color: #94a3b8; }
-.data-table .row-baseline td.col-locked { color: #94a3b8; }
-.lock-col-badge { margin-left: 4px; font-size: 11px; }
-.col-unlock, .col-reset {
-  border: none; background: none; cursor: pointer; font-size: 10px;
-  color: #64748b; padding: 0 3px; margin-left: 4px;
+/* 锁定列(var-lock):冻结列视觉 — 白底 muted + 左缘 2px 竖条;锁徽标 =
+   线性 SVG(闭合 = 锁定隐藏,开环 = 已本地放开) */
+.data-table th.col-locked {
+  background: #fff; color: #94a3b8;
+  box-shadow: inset 2px 0 0 #cbd5e1;
 }
-.col-unlock:hover, .col-reset:hover { color: var(--accent); text-decoration: underline; }
+.data-table .row-baseline td.col-locked { color: #94a3b8; }
+.lock-col-badge {
+  margin-left: 4px; color: #94a3b8; vertical-align: middle;
+  display: inline-flex; align-items: center;
+}
+/* 放开/收回、恢复默认:pill ghost 钮(1px 边框,hover 淡填充) */
+.col-unlock, .col-reset {
+  border: 1px solid #cbd5e1; border-radius: 999px; background: #fff;
+  cursor: pointer; font-size: 10px; line-height: 1;
+  color: #64748b; padding: 2px 8px; margin-left: 4px;
+}
+.col-unlock:hover, .col-reset:hover {
+  color: var(--accent); border-color: var(--accent); background: var(--accent-soft);
+}
+/* 锁定格平化 readonly:呈纯文本(无边框/无背景),悬停聚焦不抬升;
+   语义守卫仍在 onCellInput/onCellPaste,这里只是视觉面 */
+.data-table td.col-locked .data-cell-input {
+  border-color: transparent; background: transparent;
+  color: #94a3b8; cursor: default;
+}
+.data-table td.col-locked .data-cell-input:hover { border-color: transparent; }
+.data-table td.col-locked .data-cell-input:focus {
+  border-color: transparent; box-shadow: none; background: transparent;
+}
+/* 锁定列的历史覆盖格:淡琥珀左条保留信息层级(继承格纯平) */
+.data-table td.col-locked.cell-override-value,
+.data-table td.col-locked.cell-override-empty { box-shadow: inset 2px 0 0 #f59e0b; }
 /* 期望列(spec §6.2):列头徽标 + 淡紫底,与输入列并排但可辨识 */
 .col-expect .exp-col-badge { font-size: 10px; font-weight: 700; color: #6b21a8; background: #f3e8ff; padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
 .th-data.col-expect { background: #faf5ff; }

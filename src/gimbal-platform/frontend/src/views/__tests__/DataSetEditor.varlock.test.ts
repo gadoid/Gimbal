@@ -63,7 +63,8 @@ describe('DataSetEditor — 锁定列编辑面(var-lock)', () => {
     const heads = w.findAll('.row-field .th-data').map((t) => t.text())
     expect(heads[0]).toContain('amount')            // 业务变量在前
     expect(heads[1]).toContain('env')               // 锁定列沉底
-    expect(heads[1]).toContain('🔒')                 // 锁徽标
+    // 锁徽标 = 线性 SVG(闭合锁),仅锁定列头渲染
+    expect(w.findAll('.row-field .th-data .lock-col-badge svg').length).toBe(1)
     w.unmount()
   })
 

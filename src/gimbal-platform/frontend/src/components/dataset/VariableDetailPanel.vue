@@ -24,7 +24,9 @@
     <!-- 锁条(var-lock spec §2):过程变量标识 + 本地放开开关 + 恢复默认;
          基线卡不受锁约束(锁的是数据集编辑面姿态,不是共享侧声明) -->
     <div v-if="locked" class="vdp-lockbar">
-      <span class="vdp-lock-tag">🔒 过程变量 · 默认用共享侧配置</span>
+      <span class="vdp-lock-tag">
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>
+        过程变量 · 默认用共享侧配置</span>
       <button
         type="button"
         class="vdp-linkbtn vdp-lock-toggle"
@@ -409,13 +411,24 @@ function onApplyRow() {
 .muted { color: var(--color-text-secondary); font-size: 12px; }
 .mono { font-family: var(--font-mono); }
 
-/* 锁条(var-lock spec §2):过程变量标识 + 本地放开/恢复默认 */
+/* 锁条(var-lock spec §2):过程变量标识 + 本地放开/恢复默认 — 淡 indigo
+   信息条 + 线性锁图标;条内动作钮 = pill ghost(覆盖 .vdp-linkbtn 全局样式) */
 .vdp-lockbar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  border: 1px solid #e2e8f0; background: #f8fafc;
-  border-radius: 6px; padding: 6px 10px; font-size: 11px;
+  border: 1px solid #c7d2fe; background: #eef2ff;
+  border-radius: 8px; padding: 6px 10px; font-size: 11px;
 }
-.vdp-lock-tag { color: #64748b; }
+.vdp-lock-tag {
+  color: #4f46e5; display: inline-flex; align-items: center; gap: 4px;
+  font-weight: 500;
+}
+.vdp-lockbar .vdp-linkbtn {
+  border: 1px solid #c7d2fe; border-radius: 999px; background: #fff;
+  padding: 2px 10px;
+}
+.vdp-lockbar .vdp-linkbtn:hover {
+  background: #fff; border-color: #4f46e5; text-decoration: none;
+}
 .vdp-rowval-note { font-size: 11px; color: #b45309; }
 
 .vdp-card {

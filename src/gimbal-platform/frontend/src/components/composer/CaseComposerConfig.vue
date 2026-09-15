@@ -198,7 +198,10 @@
                 ? '已锁定为过程变量 — 数据集编辑面默认隐藏该列(可在数据集本地放开)'
                 : '锁定为过程变量(数据集编辑面默认隐藏该列)'"
               @click="v.locked = !v.locked"
-            >{{ v.locked ? '🔒' : '🔓' }}</button>
+            >
+              <svg v-if="v.locked" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>
+              <svg v-else viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 4.9-.7"/></svg>
+            </button>
             <button class="c-kv-del" @click="removeVar(v)">×</button>
           </div>
         </div>
@@ -566,11 +569,14 @@ function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: 
 /* vars / services 行 (c-kv-row 共享栅格) */
 .c-kv-row { margin-bottom: 4px; }
 .c-kv-row :deep(.el-input__wrapper) { background: var(--c-surface); }
+/* 行级锁钮(var-lock):线性 SVG(闭合 = 锁定,开环 = 未锁);锁定态
+   提亮 + accent 色,未锁态低透明度弱化 */
 .c-kv-lock {
-  border: none; background: none; cursor: pointer; font-size: 13px;
-  line-height: 1; padding: 2px 4px; opacity: 0.45;
+  border: none; background: none; cursor: pointer;
+  display: inline-flex; align-items: center; line-height: 1;
+  padding: 2px 4px; color: #64748b; opacity: 0.45;
 }
-.c-kv-lock.is-on { opacity: 1; }
+.c-kv-lock.is-on { opacity: 1; color: var(--accent); }
 .c-kv-lock:hover { opacity: 1; }
 /* var-row 在共享 4 列栅格上扩一列锁钮(同 .svc-row 扩列先例):
  * key | = | value | 锁 | × — 不扩列则第 5 子元素折到隐式第二行 */
