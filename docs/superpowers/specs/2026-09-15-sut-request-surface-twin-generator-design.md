@@ -19,7 +19,7 @@ Schema 基线: `D:\fin-test\fin_test_struct.sql`(304 表,Navicat 仅结构,TiDB 
 |---|---|---|
 | ① 接口标本 | 路由/字段面/中文名/类型/枚举/默认值/state | **本 spec**(4 源静态生成) |
 | ② 取数活性 | value_source 挂查询视图,值运行时实时拉 | **本 spec**(同名匹配 + 外键线索) |
-| ③ 响应面 | ResponseSpec 形状/children 行形/断言面 | 实跑渐进积累(生成期留空,标 needs_capture) |
+| ③ 响应面 | ResponseSpec 形状/children 行形/断言面 | gimbal 执行渐进积累(生成期留空,标 needs_capture;执行产物收割) |
 | ④ 行为面 | 流转/状态机/联动校验/副作用时序 | **场景用例是唯一载体**,不做代码逆向 |
 
 ## 2. 核心裁决(会话已拍板,不再讨论)
@@ -34,6 +34,9 @@ Schema 基线: `D:\fin-test\fin_test_struct.sql`(304 表,Navicat 仅结构,TiDB 
 3. **行为面零逆向**:「调 A 后 B 应怎样」是场景用例的语言,不是代码逆向的语言。
 4. **手建优先**:生成器不覆盖已存在的 endpoint 定义,只报告碰撞。
 5. **响应面照抄现状**:responses 只有 200 空壳,与现有手建一致。
+6. **实跑载体 = gimbal,不依赖 curl/浏览器**:认证走 `config.users` token 模板
+   + 平台凭证池;请求/响应自动落执行记录(exec 产物),响应面/children 行形/
+   首跑真值从执行产物回收。curl 导入是手建时代工艺,新管线退役。
 
 ## 3. 四源清单(全部已实证)
 
