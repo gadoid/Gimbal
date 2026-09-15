@@ -1,0 +1,7 @@
+"TABLE_NAME","COLUMN_NAME","COLUMN_TYPE","IS_NULLABLE","COLUMN_DEFAULT","COLUMN_COMMENT"
+"sys_order","order_id","bigint","NO",,""
+"sys_order","bl_no","varchar(50)","NO","","业务订单ID"
+"sys_order","customer_id","bigint","NO","0","客户ID"
+"sys_order","etd","int","NO","0","预计开航日"
+"sys_order","gross_weight","decimal(10,2)","YES",,"毛重"
+"sys_order","create_time","datetime","NO",,"创建时间"
