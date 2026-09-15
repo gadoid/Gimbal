@@ -13,11 +13,13 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .php_ast import ParsedFile, load, text_of, classes
+from .php_ast import ParsedFile, load, text_of, classes, is_string_literal
 from .ir import RuleEntry, ActionIR
 
+# 被注释规则行:行尾 // 中文注可有可无(真源 orderAddRules 实测有 11 行无尾注,
+# 如 `//        'settle_type' => 'present|num|in:1,2',` —— 只认尾注会整行丢)
 _RE_COMMENTED_RULE = re.compile(
-    r"//\s*'([A-Za-z0-9_]+)'\s*=>\s*'([^']*)'.*?//\s*(.+)$"
+    r"//\s*'([A-Za-z0-9_]+)'\s*=>\s*'([^']*)'\s*,?(?:\s*//\s*(.+))?$"
 )
 
 
@@ -48,7 +50,8 @@ def _parse_decl(pf: ParsedFile, decl, out: dict) -> None:
         children = list(arr.named_children) if arr is not None else []
         for i, node in enumerate(children):
             if node.type == "array_element_initializer":
-                strs = [c for c in node.children if c.type == "string"]
+                # 双引号值是 encapsed_string(task-10 真源实测),不只 string
+                strs = [c for c in node.children if is_string_literal(c)]
                 if len(strs) != 2:
                     continue
                 zh = ""
@@ -66,7 +69,7 @@ def _parse_decl(pf: ParsedFile, decl, out: dict) -> None:
                 if m:
                     entries.append(RuleEntry(
                         key=m.group(1), rules=m.group(2),
-                        zh=m.group(3).strip(), active=False,
+                        zh=(m.group(3) or "").strip(), active=False,
                     ))
         out[text_of(pf, name_n)] = entries
 
@@ -91,21 +94,27 @@ def _unquote(t: str) -> str:
 
 def attach_rules(actions: list[ActionIR], app_root: Path) -> None:
     """显式 ruleset 绑定优先;无绑定时按 $<action>Rules / $<action>Rule 兜底。
-    Validator 文件按 Application/*/Validator/*.class.php 扫描一次建索引。"""
+    Validator 文件按 Application/*/Validator/*.class.php 扫描一次建索引。
+    兜底重名撞车时优先同模块类(task-10:changeSettlementDateRuleS 在
+    Customer 模块 Customer/Supplier 两 Validator 重名,Order 模块亦多处)。"""
     index: dict[str, dict[str, list[RuleEntry]]] = {}   # 类名 → prop → entries
+    mod_of: dict[str, str] = {}                          # 类名 → 模块
     for f in sorted(app_root.glob("*/Validator/*.class.php")):
+        module = f.parent.parent.name
         for cname, *_ in classes(load(f)):
             index[cname] = parse_rules_file(f)
+            mod_of[cname] = module
     for act in actions:
         if act.ruleset:
             cls, prop = act.ruleset
             act.rules = list(index.get(cls, {}).get(prop, []))
             continue
         for suffix in ("Rules", "Rule"):
-            for cls, props in index.items():
-                hit = props.get(act.action + suffix)
-                if hit:
-                    act.rules = list(hit)
-                    break
-            if act.rules:
+            name = act.action + suffix
+            hits = [(cls, props[name]) for cls, props in index.items()
+                    if props.get(name)]
+            if hits:
+                same = [h for h in hits if mod_of[h[0]] == act.module]
+                cls, entries = (same or hits)[0]
+                act.rules = list(entries)
                 break

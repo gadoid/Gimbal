@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .php_ast import ParsedFile, load, text_of, classes
+from .php_ast import ParsedFile, load, text_of, classes, is_string_literal
 from .ir import ActionIR, Read
 
 _GET_DATA = {"getDataString", "getDataInt", "getDataFloat",
@@ -61,7 +61,10 @@ def _params(pf: ParsedFile, method_node) -> list[str]:
 
 def _string_content(pf: ParsedFile, str_node) -> str:
     sc = next((c for c in str_node.children if c.type == "string_content"), None)
-    return text_of(pf, sc) if sc else text_of(pf, str_node).strip("'")
+    if sc is not None:
+        return text_of(pf, sc)
+    t = text_of(pf, str_node)
+    return t[1:-1] if len(t) >= 2 and t[0] in "'\"" else t
 
 
 def _collect(pf: ParsedFile, method_node, known: set[str], edges: list,
@@ -108,9 +111,14 @@ def _collect(pf: ParsedFile, method_node, known: set[str], edges: list,
             # 实测:$x = $y → [variable_name, '='(匿名), variable_name],源在 kids[2]
             kids = n.children
             if len(kids) == 3 and kids[0].type == "variable_name" \
-                    and kids[1].type == "=" and kids[2].type == "variable_name":
-                src = _var_name(pf, kids[2])
-                if src in known:
+                    and kids[1].type == "=":
+                if kids[2].type == "variable_name":
+                    src = _var_name(pf, kids[2])
+                    if src in known:
+                        known.add(_var_name(pf, kids[0]))
+                elif kids[2].type == "function_call_expression" \
+                        and _call_name(pf, kids[2]) == "getRequestParam":
+                    # Service 自取请求(getRequestParam() 是全局函数,返回即请求体)
                     known.add(_var_name(pf, kids[0]))
         elif t == "member_call_expression":
             base = n.children[0] if n.children else None
@@ -160,9 +168,16 @@ def _arg_var(pf: ParsedFile, arg) -> str:
     return _var_name(pf, node) if node is not None and node.type == "variable_name" else ""
 
 
+def _call_name(pf: ParsedFile, call_node) -> str:
+    """function_call_expression 的函数名直接子节点。"""
+    n = next((c for c in call_node.children if c.type == "name"), None)
+    return text_of(pf, n) if n else ""
+
+
 def _first_string(arg):
-    """argument 内第一个 string 字面量节点;没有(如 [] 默认参)返回 None。"""
-    return next((c for c in arg.children if c.type == "string"), None)
+    """argument 内第一个字符串字面量节点(含双引号 encapsed_string,
+    task-10 真源实测);没有(如 [] 默认参)返回 None。"""
+    return next((c for c in arg.children if is_string_literal(c)), None)
 
 
 def _subscript_parts(pf: ParsedFile, node) -> tuple[str, str] | None:
@@ -171,7 +186,7 @@ def _subscript_parts(pf: ParsedFile, node) -> tuple[str, str] | None:
     for c in node.children:
         if c.type == "variable_name":
             var = _var_name(pf, c)
-        elif c.type == "string":
+        elif is_string_literal(c):
             key = _string_content(pf, c)
     return (var, key) if var and key else None
 
@@ -183,14 +198,32 @@ def collect_reads(actions: list[ActionIR], app_root: Path) -> None:
         visited: set[tuple[str, str]] = set()
         reads: dict[str, Read] = {}
         # 队列:(类, 方法, 进入时已知的变量名集)
-        queue: list[tuple[str, str, frozenset]] = [
-            (ctl_class, act.action, frozenset({"requestData"}))
-        ]
-        for cls, meth in [(c, m) for c, m in act.callees]:
-            queue.append((cls, meth, frozenset({"requestData"})))
-        for chk in act.validator_checks:
-            queue.append((act.controller + "Validator", chk,
-                          frozenset({"requestData"})))
+        # 根动作与 Validator 校验方法确实持有 $requestData;Service 边一律经
+        # 实参位置链接传入(task-10 实测:无条件种 requestData + 形参全量入
+        # known 会把 OrderService::orderBook 的读取面串给 orderBookUpdate ——
+        # 它实际只传 order_id)。
+        queue: list[tuple[str, str, frozenset]] = []
+        # 根动作与 Validator 校验方法确实持有 $requestData:种 requestData 并
+        # 并入各自形参名(校验方法形参即请求体);控制器直调的 Service 以形参名
+        # 判定(形参恰名 requestData 视为请求载体);此后 known 只经实参链接
+        # 传递,不再把被调方法形参全量当已知 —— task-10 实测:orderBookUpdate
+        # 只传 order_id,却因 orderBook 形参恰名 requestData 被串进整张订单读取面。
+        plan: list[tuple[str, str, set]] = [
+            (ctl_class, act.action, {"requestData"}),
+            *((act.controller + "Validator", chk, {"requestData"})
+              for chk in act.validator_checks)]
+        for e_cls, e_meth in act.callees:
+            entry1 = idx.methods.get(e_cls, {}).get(e_meth)
+            if entry1 is None:
+                continue
+            holds_request = "requestData" in set(_params(entry1[1], entry1[0]))
+            plan.append((e_cls, e_meth, {"requestData"} if holds_request else set()))
+        for cls, meth, extra in plan:
+            entry0 = idx.methods.get(cls, {}).get(meth)
+            if not entry0:
+                continue
+            queue.append((cls, meth,
+                          frozenset(extra | set(_params(entry0[1], entry0[0])))))
         while queue:
             cls, meth, known = queue.pop(0)
             if (cls, meth) in visited:
@@ -200,7 +233,7 @@ def collect_reads(actions: list[ActionIR], app_root: Path) -> None:
             if not entry:
                 continue
             node, pf = entry
-            k = set(known) | set(_params(pf, node))
+            k = set(known)
             edges: list[tuple[str, str, list[int]]] = []
             _collect(pf, node, k, edges, reads)
             for e_cls, e_meth, positions in edges:

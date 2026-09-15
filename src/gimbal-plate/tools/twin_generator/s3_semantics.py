@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .php_ast import ParsedFile, load, text_of, classes
+from .php_ast import ParsedFile, load, text_of, classes, is_string_literal
 from .ir import ActionIR, FieldIR, RuleEntry
 from .schema_source import ColumnCatalog
 
@@ -38,7 +38,8 @@ def load_enums(app_root: Path) -> dict[str, list[tuple[str, str]]]:
                     if name is None:
                         continue
                     val_n = next((c for c in el.children
-                                  if c.type in ("integer", "string")), None)
+                                  if c.type == "integer" or is_string_literal(c)),
+                                 None)
                     nxt = children[i + 1] if i + 1 < len(children) else None
                     zh = ""
                     if nxt is not None and nxt.type == "comment" \

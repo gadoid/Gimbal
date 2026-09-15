@@ -57,6 +57,23 @@ def scan_actions(app_root: Path) -> list[ActionIR]:
 
 def _bind(pf: ParsedFile, method_node, module: str, controller: str, action: str) -> ActionIR:
     act = ActionIR(module=module, controller=controller, action=action)
+    # 真源实测(task-10 OrderController::orderAdd):规则可经局部变量间接绑定
+    # ($rule = OrderValidator::$orderAddRules; ... paramVerification($rule))。
+    # 先整树扫一遍建 变量名 → (Validator 类, 属性) 映射,再解析调用。
+    var_rules: dict[str, tuple[str, str]] = {}
+    scan = [method_node]
+    while scan:
+        n = scan.pop()
+        scan.extend(n.children)
+        if n.type != "assignment_expression":
+            continue
+        kids = n.children
+        if len(kids) == 3 and kids[0].type == "variable_name":
+            m = _RE_RULESET.match(text_of(pf, kids[2]).strip())
+            if m:
+                # variable_name 文本带 $;键存裸名与 paramVerification($var) 对齐
+                var_rules[text_of(pf, kids[0]).lstrip("$")] = (
+                    m.group(1), m.group(2))
     stack = [method_node]
     while stack:
         n = stack.pop()
@@ -68,9 +85,12 @@ def _bind(pf: ParsedFile, method_node, module: str, controller: str, action: str
                 and _callee(pf, n) == "paramVerification"):
             args = [c for c in n.children if c.type == "arguments"]
             for arg in _arg_nodes(args[0]) if args else []:
-                m = _RE_RULESET.match(text_of(pf, arg).strip())
+                txt = text_of(pf, arg).strip()
+                m = _RE_RULESET.match(txt)
                 if m:
                     act.ruleset = (m.group(1), m.group(2))
+                elif txt.startswith("$") and txt[1:] in var_rules:
+                    act.ruleset = var_rules[txt[1:]]
         elif t == "scoped_call_expression":
             names = [c for c in n.children if c.type == "name"]
             if len(names) == 2:
