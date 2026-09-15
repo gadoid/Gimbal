@@ -165,6 +165,9 @@ const authOptions = computed(() => {
 
 /** stepTo 钳位上限(0..stepCount;留空 = 全量) */
 const stepCount = computed(() => steps.value.length)
+/** stepTo 下拉的步骤名(orchestration 平台编排态;plate Step 无 name) */
+const stepNames = computed<string[]>(() =>
+  (scenarioDraft.value?.orchestration?.steps ?? []).map((s: { name?: string }) => s.name ?? ''))
 
 // ── 左栏操作(Task 7):重命名 / 复制派生 / 删除 ──────────────────────
 /** 操作前的脏态闸:三个操作都会 refresh → schemes 换新引用 → watch(selected)
@@ -370,6 +373,7 @@ onMounted(async () => {
             :service-rows="serviceRows"
             :auth-options="authOptions"
             :step-count="stepCount"
+            :step-names="stepNames"
           />
         </template>
         <div v-else class="wb-empty">

@@ -103,4 +103,31 @@ describe('SchemeRunConfigSection', () => {
     expect(w.findAll('.bind-row')[0].classes()).not.toContain('is-degraded')
     expect(w.text()).not.toContain('凭证已删')
   })
+
+  // ── stepTo 原生 select(替换 el-input-number:spinner 对空值发射 min(0)
+  //    会把「全量」静默写成「第1步后停止」;下拉里 0 只能显式选)──────────
+  it('stepTo=null → 选中「运行全部步骤」;选停步索引 → 发射数字', async () => {
+    const w = mount(SchemeRunConfigSection, { props: { ...BASE }, global: { plugins: [ElementPlus] } })
+    const sel = w.find('[data-testid="param-stepto"]')
+    expect((sel.element as HTMLSelectElement).value).toBe('')   // null → 空串哨兵
+    await sel.setValue('2')
+    expect(w.emitted('update:stepTo')!.at(-1)![0]).toBe(2)
+    await sel.setValue('0')                                     // 0 合法(首步后停),显式选才可达
+    expect(w.emitted('update:stepTo')!.at(-1)![0]).toBe(0)
+    await sel.setValue('')
+    expect(w.emitted('update:stepTo')!.at(-1)![0]).toBe(null)  // 回到全量
+  })
+
+  it('stepTo 存量 0 → select 回显第1步后停止;选项带编排步骤名', async () => {
+    const w = mount(SchemeRunConfigSection, {
+      props: { ...BASE, stepTo: 0, stepNames: ['下单', '支付', '发货'] },
+      global: { plugins: [ElementPlus] },
+    })
+    const sel = w.find('[data-testid="param-stepto"]')
+    expect((sel.element as HTMLSelectElement).value).toBe('0')
+    const opts = sel.findAll('option')
+    expect(opts[0].text()).toContain('运行全部步骤')
+    expect(opts[1].text()).toContain('第 1 步后停止 · 下单')
+    expect(opts[3].text()).toContain('第 3 步后停止 · 发货')
+  })
 })

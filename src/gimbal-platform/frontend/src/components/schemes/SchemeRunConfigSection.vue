@@ -18,6 +18,8 @@ const props = defineProps<{
   parallel: number
   /** stepTo 钳位上限(0..stepCount) */
   stepCount: number
+  /** 平台编排态步骤名(orchestration.steps[].name;缺名时选项不带名) */
+  stepNames?: string[]
   /** 预埋自由文本(字符串/JSON;非字符串按空展示,不回写不丢库值) */
   plugins?: unknown
   logSub?: unknown
@@ -86,6 +88,10 @@ const stepToModel = computed<number | null | undefined>({
   set: (v) => emit('update:stepTo',
     v == null ? null : clampInt(v, 0, Math.max(0, props.stepCount))),
 })
+/** select 原生 option 值是字符串:空串哨兵 = null(全量),数字串 → 钳位索引 */
+function onStepToChange(raw: string) {
+  stepToModel.value = raw === '' ? null : Number(raw)
+}
 const nRunsModel = computed<number | undefined>({
   get: () => props.nRuns,
   set: (v) => emit('update:nRuns', clampInt(v, 1, 1000)),
@@ -158,9 +164,18 @@ const logSubText = computed({
       </header>
       <div class="param-row">
         <label>截断步骤(stepTo)</label>
-        <el-input-number v-model="stepToModel" :min="0" :max="stepCount"
-          size="small" data-testid="param-stepto" />
-        <span class="param-hint">留空 = 全量(0..{{ stepCount }})</span>
+        <!-- 原生 select(非 el-input-number):空值(null=全量)不能被
+             spinner 误写 0 — element-plus 空 displayValue 点 ▼/▲ 会发射
+             min(0),把「全量」静默改成「第1步后停止」;下拉里 0 只能显式选 -->
+        <select class="bind-alias stepto-select" data-testid="param-stepto"
+          :value="stepTo === null ? '' : String(stepTo)"
+          @change="onStepToChange(($event.target as HTMLSelectElement).value)">
+          <option value="">运行全部步骤</option>
+          <option v-for="i in stepCount" :key="i" :value="String(i - 1)">
+            第 {{ i }} 步后停止{{ stepNames?.[i - 1] ? ` · ${stepNames[i - 1]}` : '' }}
+          </option>
+        </select>
+        <span class="param-hint">0-based 含端点(0..{{ stepCount }})</span>
       </div>
       <div class="param-row">
         <label>每行重复(nRuns)</label>
@@ -251,6 +266,8 @@ const logSubText = computed({
 
 /* ② 参数行:行距节奏(8px 行高步进) */
 .param-row { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
+/* stepTo 下拉:选项文案较长,给足最小宽防抖动 */
+.stepto-select { min-width: 200px; }
 .param-row label { width: 150px; flex: none; font-size: 13px; color: var(--color-text-primary); }
 .param-hint { font-size: 11px; color: var(--color-text-secondary); }
 /* 总量预览 chip:平台摘要 chip 形制(row-count/zone-count 同族,mono 数字) */
