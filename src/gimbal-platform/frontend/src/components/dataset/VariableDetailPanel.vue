@@ -200,7 +200,7 @@ const props = defineProps<{
   queryConfig: QueryCtxConfig
   /** 声明锁定(config.var_locks 在场)— 行值区默认只读 */
   locked?: boolean
-  /** 本数据集已本地放开(var_unlocks 在场)— 行值恢复可编辑 */
+  /** 本数据集已本地放开(varUnlocks 在场)— 行值恢复可编辑 */
   unlocked?: boolean
 }>()
 
