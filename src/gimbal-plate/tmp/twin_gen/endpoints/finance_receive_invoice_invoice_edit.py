@@ -1,0 +1,75 @@
+"""fin.receive_invoice.invoice_edit —— 孪生生成器产物(请求面;行为面归场景用例)。
+
+来源: 代码生成 | 基线: fin-test@2026-09-15 | 生成时间: 2026-09-15T11:13:18+00:00
+needs_capture(首跑经 gimbal 执行回填): (无)
+"""
+from typing import Final
+
+from gimbal_plate.systems.fin.system_info import (
+    FIN_DEFAULT_MODULE,
+    FIN_DEFAULT_OWNER,
+    FIN_DEFAULT_PRIORITY,
+    FIN_DEFAULT_TAGS,
+    FIN_DEFAULT_VERSION,
+    FIN_SYSTEM,
+)
+
+from gimbal_plate.schema.endpoint import (
+    ApiSpec,
+    EndpointSpec,
+    DeclarationEntry,
+    RequestSpec,
+    ResponseSpec,
+    EndpointMetadata,
+    ValueSource,
+)
+
+RECEIVE_INVOICE_INVOICE_EDIT: Final[EndpointSpec] = EndpointSpec(
+    id='fin.receive_invoice.invoice_edit',
+    system='fin',
+    service='fin-service',
+    name='ReceiveInvoice.invoiceEdit',
+    description='ReceiveInvoice.invoiceEdit' + ' [generated:fin-test@2026-09-15]',
+    api=ApiSpec(
+        service='fin-service',
+        method='POST',
+        path='/api/finance/receiveInvoice/invoiceEdit',
+        headers={},
+        consumes=[],
+        produces=[],
+    ),
+    request=RequestSpec(
+        body_type='json',
+        declarations=[
+            DeclarationEntry(name='receive_invoice_id', path=f'$.receive_invoice_id', type='integer', state='form', required=True, description='发票id'),
+            DeclarationEntry(name='invoice_number', path=f'$.invoice_number', type='string', state='form', required=True, description='发票号码'),
+            DeclarationEntry(name='invoice_type', path=f'$.invoice_type', type='integer', state='form', required=True, description='发票类型 1:增值税普通发票 2:增值税专用发票', enum=['1', '2']),
+            DeclarationEntry(name='invoice_amount', path=f'$.invoice_amount', type='number', state='form', required=True, default='0.00', description='发票金额'),
+            DeclarationEntry(name='invoice_tax_amount', path=f'$.invoice_tax_amount', type='number', state='form', required=True, default='0.00', description='发票税额'),
+            DeclarationEntry(name='invoice_date', path=f'$.invoice_date', type='string', state='form', required=True, description='发票日期'),
+            DeclarationEntry(name='currency', path=f'$.currency', type='string', state='form', required=True, description='发票币种', enum=['CNY', 'USD']),
+            DeclarationEntry(name='usd_amount', path=f'$.usd_amount', type='number', state='form', default='0.00', description='美元金额'),
+            DeclarationEntry(name='invoice_exchange_rate', path=f'$.invoice_exchange_rate', type='string', state='form', description='发票汇率'),
+            DeclarationEntry(name='invoice_original', path=f'$.invoice_original', type='string', state='form', required=True, description='发票原件'),
+            DeclarationEntry(name='buyer_chinese_header', path=f'$.buyer_chinese_header', type='string', state='form', required=True, description='购买方中文抬头'),
+            DeclarationEntry(name='buyer_identifier_no', path=f'$.buyer_identifier_no', type='string', state='form', required=True, description='购买方纳税人识别号'),
+            DeclarationEntry(name='buyer_identity', path=f'$.buyer_identity', type='string', state='form', description='买方身份（可选，传入时按身份精确匹配应收结算对象）', enum=['customer', 'main']),
+            DeclarationEntry(name='seller_chinese_header', path=f'$.seller_chinese_header', type='string', state='form', required=True, description='销售方中文抬头'),
+            DeclarationEntry(name='seller_identifier_no', path=f'$.seller_identifier_no', type='string', state='form', required=True, description='销售方纳税人识别号'),
+            DeclarationEntry(name='seller_identity', path=f'$.seller_identity', type='string', state='carry', description='卖方身份（可选，销售方须为系统内主体，费用主体随税号联动）', enum=['main']),
+            DeclarationEntry(name='bl_no', path=f'$.bl_no', type='string', state='form', description='提单号'),
+            DeclarationEntry(name='invoice_image_name', path=f'$.invoice_image_name', type='string', state='form', description='发票图片'),
+        ],
+    ),
+    responses={
+        200: ResponseSpec(
+            status=200,
+        ),
+    },
+    version=FIN_DEFAULT_VERSION,
+    metadata=EndpointMetadata(
+        module=FIN_DEFAULT_MODULE,
+        owner=FIN_DEFAULT_OWNER,
+        tags=list(FIN_DEFAULT_TAGS),
+    ),
+)

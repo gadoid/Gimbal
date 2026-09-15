@@ -1,0 +1,110 @@
+"""fin.index.update_repayment_date —— 孪生生成器产物(请求面;行为面归场景用例)。
+
+来源: 代码生成 | 基线: fin-test@2026-09-15 | 生成时间: 2026-09-15T11:13:18+00:00
+needs_capture(首跑经 gimbal 执行回填): (无)
+"""
+from typing import Final
+
+from gimbal_plate.systems.fin.system_info import (
+    FIN_DEFAULT_MODULE,
+    FIN_DEFAULT_OWNER,
+    FIN_DEFAULT_PRIORITY,
+    FIN_DEFAULT_TAGS,
+    FIN_DEFAULT_VERSION,
+    FIN_SYSTEM,
+)
+
+from gimbal_plate.schema.endpoint import (
+    ApiSpec,
+    EndpointSpec,
+    DeclarationEntry,
+    RequestSpec,
+    ResponseSpec,
+    EndpointMetadata,
+    ValueSource,
+)
+
+INDEX_UPDATE_REPAYMENT_DATE: Final[EndpointSpec] = EndpointSpec(
+    id='fin.index.update_repayment_date',
+    system='fin',
+    service='fin-service',
+    name='Index.updateRepaymentDate',
+    description='Index.updateRepaymentDate' + ' [generated:fin-test@2026-09-15]',
+    api=ApiSpec(
+        service='fin-service',
+        method='POST',
+        path='/api/api/index/updateRepaymentDate',
+        headers={},
+        consumes=[],
+        produces=[],
+    ),
+    request=RequestSpec(
+        body_type='json',
+        declarations=[
+            DeclarationEntry(name='data', path=f'$.data', type='string', state='form'),
+            DeclarationEntry(name='customer_id', path=f'$.customer_id', type='integer', state='form', default='0', description='客户ID'),
+            DeclarationEntry(name='type', path=f'$.type', type='string', state='form'),
+            DeclarationEntry(name='old_data', path=f'$.old_data', type='string', state='form'),
+            DeclarationEntry(name='user_ids', path=f'$.user_ids', type='string', state='form', description='留言对象'),
+            DeclarationEntry(name='deposit_refund_day_error', path=f'$.deposit_refund_day_error', type='string', state='form'),
+            DeclarationEntry(name='callback_data', path=f'$.callback_data', type='string', state='form', description='回调数据'),
+            DeclarationEntry(name='audit_status', path=f'$.audit_status', type='integer', state='form', default='1', description='审批状态 1待处理 2通过 3驳回 4撤销'),
+            DeclarationEntry(name='supplier_id', path=f'$.supplier_id', type='integer', state='form', default='0', description='变更账期供应商ID'),
+            DeclarationEntry(name='main_id', path=f'$.main_id', type='integer', state='form', default='0', description='费用主体ID'),
+            DeclarationEntry(name='order_id', path=f'$.order_id', type='integer', state='form', default='0', description='业务订单ID'),
+            DeclarationEntry(name='order', path=f'$.order', type='string', state='form'),
+            DeclarationEntry(name='state', path=f'$.state', type='string', state='form'),
+            DeclarationEntry(name='policy_id', path=f'$.policy_id', type='integer', state='form', default='0', description='服务策略ID'),
+            DeclarationEntry(name='etd', path=f'$.etd', type='string', state='form'),
+            DeclarationEntry(name='del_service_item', path=f'$.del_service_item', type='string', state='form'),
+            DeclarationEntry(name='order_supplier_id', path=f'$.order_supplier_id', type='integer', state='form'),
+            DeclarationEntry(name='atd', path=f'$.atd', type='integer', state='form', default='0', description='实际开航日'),
+            DeclarationEntry(name='order_ids', path=f'$.order_ids', type='string', state='form'),
+            DeclarationEntry(name='relation_id', path=f'$.relation_id', type='integer', state='form', default='0', description='业务ID'),
+            DeclarationEntry(name='operation', path=f'$.operation', type='string', state='form', default='order_cancel', description='业务操作'),
+            DeclarationEntry(name='execute_action', path=f'$.execute_action', type='string', state='form'),
+            DeclarationEntry(name='symbol', path=f'$.symbol', type='integer', state='form', default='0', description='应收应付 0 应付  1应收'),
+            DeclarationEntry(name='checkData', path=f'$.checkData', type='string', state='form'),
+            DeclarationEntry(name='voucher_fee_real_ids', path=f'$.voucher_fee_real_ids', type='string', state='form'),
+            DeclarationEntry(name='settle_object_id', path=f'$.settle_object_id', type='integer', state='form', default='0', description='超期应收结算对象'),
+            DeclarationEntry(name='settle_object', path=f'$.settle_object', type='string', state='form'),
+            DeclarationEntry(name='pay_account_ids', path=f'$.pay_account_ids', type='string', state='form'),
+            DeclarationEntry(name='receive_account_ids', path=f'$.receive_account_ids', type='string', state='form'),
+            DeclarationEntry(name='pay_account_id', path=f'$.pay_account_id', type='integer', state='form', default='0', description='应付对账'),
+            DeclarationEntry(name='receive_account_id', path=f'$.receive_account_id', type='integer', state='form'),
+            DeclarationEntry(name='order_fee_real_ids', path=f'$.order_fee_real_ids', type='string', state='form'),
+            DeclarationEntry(name='fee_invoice_arr', path=f'$.fee_invoice_arr', type='string', state='form'),
+            DeclarationEntry(name='pay_invoice_apply_id', path=f'$.pay_invoice_apply_id', type='integer', state='form', default='0', description='应付开票申请ID'),
+            DeclarationEntry(name='invoice_arr', path=f'$.invoice_arr', type='string', state='form'),
+            DeclarationEntry(name='data_apply', path=f'$.data_apply', type='string', state='form'),
+            DeclarationEntry(name='data_invoice_arr', path=f'$.data_invoice_arr', type='string', state='form'),
+            DeclarationEntry(name='receive_invoice_apply_id', path=f'$.receive_invoice_apply_id', type='integer', state='form', default='0', description='开票申请ID'),
+            DeclarationEntry(name='apply_registration_list', path=f'$.apply_registration_list', type='string', state='form'),
+            DeclarationEntry(name='order_fee_real_id_arr', path=f'$.order_fee_real_id_arr', type='string', state='form'),
+            DeclarationEntry(name='data_invoice', path=f'$.data_invoice', type='string', state='form'),
+            DeclarationEntry(name='pay_invoice_id', path=f'$.pay_invoice_id', type='string', state='form', default='0', description='发票ID'),
+            DeclarationEntry(name='pay_demand_id', path=f'$.pay_demand_id', type='integer', state='form', default='0', description='付款需求ID'),
+            DeclarationEntry(name='is_callBack', path=f'$.is_callBack', type='string', state='form'),
+            DeclarationEntry(name='service_project', path=f'$.service_project', type='string', state='form', description='服务项目'),
+            DeclarationEntry(name='import_status', path=f'$.import_status', type='string', state='form'),
+            DeclarationEntry(name='modify_type', path=f'$.modify_type', type='string', state='form'),
+            DeclarationEntry(name='currency', path=f'$.currency', type='string', state='form', description='币值'),
+            DeclarationEntry(name='old_put_settle_object_id', path=f'$.old_put_settle_object_id', type='string', state='form'),
+            DeclarationEntry(name='old_pay_settle_object_id', path=f'$.old_pay_settle_object_id', type='string', state='form'),
+            DeclarationEntry(name='order_fee_real_id', path=f'$.order_fee_real_id', type='integer', state='form', default='0'),
+            DeclarationEntry(name='put_settle_object_id', path=f'$.put_settle_object_id', type='integer', state='form', default='0', description='应收结算对象ID'),
+            DeclarationEntry(name='pay_settle_object_id', path=f'$.pay_settle_object_id', type='integer', state='form', default='0', description='应收结算对象ID'),
+        ],
+    ),
+    responses={
+        200: ResponseSpec(
+            status=200,
+        ),
+    },
+    version=FIN_DEFAULT_VERSION,
+    metadata=EndpointMetadata(
+        module=FIN_DEFAULT_MODULE,
+        owner=FIN_DEFAULT_OWNER,
+        tags=list(FIN_DEFAULT_TAGS),
+    ),
+)

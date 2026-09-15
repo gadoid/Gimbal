@@ -1,0 +1,4346 @@
+[
+  {
+    "id": "fin.finance.generate_invoice_file",
+    "path": "/api/api/finance/generateInvoiceFile",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.finance.generate_pay_account_email_attachment",
+    "path": "/api/api/finance/generatePayAccountEmailAttachment",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.index.update_loan_status",
+    "path": "/api/api/index/updateLoanStatus",
+    "rules": 0,
+    "reads": 53
+  },
+  {
+    "id": "fin.index.order_fee",
+    "path": "/api/api/index/orderFee",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.index.update_financing_status",
+    "path": "/api/api/index/updateFinancingStatus",
+    "rules": 0,
+    "reads": 53
+  },
+  {
+    "id": "fin.index.update_repayment_date",
+    "path": "/api/api/index/updateRepaymentDate",
+    "rules": 0,
+    "reads": 53
+  },
+  {
+    "id": "fin.index.get_order_pdf",
+    "path": "/api/api/index/getOrderPDF",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.index.get_order_container",
+    "path": "/api/api/index/getOrderContainer",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.index.test",
+    "path": "/api/api/index/test",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.order.revoke_order_update",
+    "path": "/api/api/order/revokeOrderUpdate",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.track.receive_track",
+    "path": "/api/api/track/receiveTrack",
+    "rules": 0,
+    "reads": 33
+  },
+  {
+    "id": "fin.track.test_receive_track",
+    "path": "/api/api/track/testReceiveTrack",
+    "rules": 0,
+    "reads": 33
+  },
+  {
+    "id": "fin.voucher.generate_voucher",
+    "path": "/api/api/voucher/generateVoucher",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.customer.customer_edit",
+    "path": "/api/customer/customer/customerEdit",
+    "rules": 0,
+    "reads": 17
+  },
+  {
+    "id": "fin.customer.customer_add",
+    "path": "/api/customer/customer/customerAdd",
+    "rules": 16,
+    "reads": 17
+  },
+  {
+    "id": "fin.customer.check_base",
+    "path": "/api/customer/customer/checkBase",
+    "rules": 4,
+    "reads": 8
+  },
+  {
+    "id": "fin.customer.check_logic",
+    "path": "/api/customer/customer/checkLogic",
+    "rules": 0,
+    "reads": 13
+  },
+  {
+    "id": "fin.customer.customer_page",
+    "path": "/api/customer/customer/customerPage",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.customer.customer_del",
+    "path": "/api/customer/customer/customerDel",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.customer.customer_detail",
+    "path": "/api/customer/customer/customerDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.customer.batch_change_related",
+    "path": "/api/customer/customer/batchChangeRelated",
+    "rules": 4,
+    "reads": 5
+  },
+  {
+    "id": "fin.customer.batch_operate_add",
+    "path": "/api/customer/customer/batchOperateAdd",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.customer.customer_import",
+    "path": "/api/customer/customer/customerImport",
+    "rules": 0,
+    "reads": 15
+  },
+  {
+    "id": "fin.customer.effective_customer",
+    "path": "/api/customer/customer/effectiveCustomer",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.customer.customer_list",
+    "path": "/api/customer/customer/customerList",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.customer.customer_export",
+    "path": "/api/customer/customer/customerExport",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.customer.change_settlement_date_rule_s",
+    "path": "/api/customer/customer/changeSettlementDateRuleS",
+    "rules": 0,
+    "reads": 9
+  },
+  {
+    "id": "fin.customer.customer_part",
+    "path": "/api/customer/customer/customerPart",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.customer.customer_overdue_record",
+    "path": "/api/customer/customer/customerOverdueRecord",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.customer.get_customer_discount_proportion",
+    "path": "/api/customer/customer/getCustomerDiscountProportion",
+    "rules": 0,
+    "reads": 6
+  },
+  {
+    "id": "fin.customer.get_subsidy",
+    "path": "/api/customer/customer/getSubsidy",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.customer.subsidy_edit",
+    "path": "/api/customer/customer/subsidyEdit",
+    "rules": 1,
+    "reads": 8
+  },
+  {
+    "id": "fin.customer_product_rel.get_settle_type",
+    "path": "/api/customer/customerProductRel/getSettleType",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.customer_product_rel.get_customer_product",
+    "path": "/api/customer/customerProductRel/getCustomerProduct",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.delivery_receipt.delivery_receipt_page",
+    "path": "/api/customer/deliveryReceipt/deliveryReceiptPage",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.delivery_receipt.delivery_receipt_detail",
+    "path": "/api/customer/deliveryReceipt/deliveryReceiptDetail",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.delivery_receipt.delivery_receipt_import",
+    "path": "/api/customer/deliveryReceipt/deliveryReceiptImport",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.delivery_receipt.delivery_receipt_export",
+    "path": "/api/customer/deliveryReceipt/deliveryReceiptExport",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.handover_form.list_page",
+    "path": "/api/customer/handoverForm/listPage",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.handover_form.hf_search_info",
+    "path": "/api/customer/handoverForm/hfSearchInfo",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.handover_form.detail",
+    "path": "/api/customer/handoverForm/detail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.handover_form.customer_hf_sync",
+    "path": "/api/customer/handoverForm/customerHfSync",
+    "rules": 7,
+    "reads": 0
+  },
+  {
+    "id": "fin.handover_form.supplier_hf_sync",
+    "path": "/api/customer/handoverForm/supplierHfSync",
+    "rules": 6,
+    "reads": 0
+  },
+  {
+    "id": "fin.handover_form.supplier_info_sync",
+    "path": "/api/customer/handoverForm/supplierInfoSync",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.handover_form.verify_sync",
+    "path": "/api/customer/handoverForm/verifySync",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.handover_form.supplier_page",
+    "path": "/api/customer/handoverForm/supplierPage",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.handover_form.supplier_detail",
+    "path": "/api/customer/handoverForm/supplierDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.handover_form.supplier_search_info",
+    "path": "/api/customer/handoverForm/supplierSearchInfo",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.handover_form.client_expand_all",
+    "path": "/api/customer/handoverForm/clientExpandAll",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.policy.policy_add",
+    "path": "/api/customer/policy/policyAdd",
+    "rules": 3,
+    "reads": 6
+  },
+  {
+    "id": "fin.policy.check_logic",
+    "path": "/api/customer/policy/checkLogic",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.policy.check_base",
+    "path": "/api/customer/policy/checkBase",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.policy.policy_page",
+    "path": "/api/customer/policy/policyPage",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.policy.customer_policy_change",
+    "path": "/api/customer/policy/customerPolicyChange",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.policy.policy_detail",
+    "path": "/api/customer/policy/policyDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.policy.change_policy_status",
+    "path": "/api/customer/policy/changePolicyStatus",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.policy.policy_export",
+    "path": "/api/customer/policy/policyExport",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.policy.get_customer_policy",
+    "path": "/api/customer/policy/getCustomerPolicy",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.policy.get_policy_main",
+    "path": "/api/customer/policy/getPolicyMain",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.relate.relate_add",
+    "path": "/api/customer/relate/relateAdd",
+    "rules": 7,
+    "reads": 11
+  },
+  {
+    "id": "fin.relate.relate_edit",
+    "path": "/api/customer/relate/relateEdit",
+    "rules": 0,
+    "reads": 11
+  },
+  {
+    "id": "fin.relate.supplier_relate",
+    "path": "/api/customer/relate/supplierRelate",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.relate.check_base",
+    "path": "/api/customer/relate/checkBase",
+    "rules": 4,
+    "reads": 4
+  },
+  {
+    "id": "fin.relate.check_logic",
+    "path": "/api/customer/relate/checkLogic",
+    "rules": 0,
+    "reads": 7
+  },
+  {
+    "id": "fin.relate.relate_page",
+    "path": "/api/customer/relate/relatePage",
+    "rules": 0,
+    "reads": 8
+  },
+  {
+    "id": "fin.relate.relate_change_status",
+    "path": "/api/customer/relate/relateChangeStatus",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.relate.relate_detail",
+    "path": "/api/customer/relate/relateDetail",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.relate.relate_import",
+    "path": "/api/customer/relate/relateImport",
+    "rules": 0,
+    "reads": 9
+  },
+  {
+    "id": "fin.relate.relate_export",
+    "path": "/api/customer/relate/relateExport",
+    "rules": 0,
+    "reads": 8
+  },
+  {
+    "id": "fin.relate.change_period_rule",
+    "path": "/api/customer/relate/changePeriodRule",
+    "rules": 0,
+    "reads": 8
+  },
+  {
+    "id": "fin.relate.get_customer_max_period",
+    "path": "/api/customer/relate/getCustomerMaxPeriod",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.supplier.supplier_add",
+    "path": "/api/customer/supplier/supplierAdd",
+    "rules": 11,
+    "reads": 12
+  },
+  {
+    "id": "fin.supplier.supplier_edit",
+    "path": "/api/customer/supplier/supplierEdit",
+    "rules": 0,
+    "reads": 12
+  },
+  {
+    "id": "fin.supplier.check_base",
+    "path": "/api/customer/supplier/checkBase",
+    "rules": 9,
+    "reads": 5
+  },
+  {
+    "id": "fin.supplier.check_logic",
+    "path": "/api/customer/supplier/checkLogic",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.supplier.supplier_page",
+    "path": "/api/customer/supplier/supplierPage",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.supplier.supplier_del",
+    "path": "/api/customer/supplier/supplierDel",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.supplier.supplier_detail",
+    "path": "/api/customer/supplier/supplierDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.supplier.supplier_import",
+    "path": "/api/customer/supplier/supplierImport",
+    "rules": 0,
+    "reads": 10
+  },
+  {
+    "id": "fin.supplier.supplier_list",
+    "path": "/api/customer/supplier/supplierList",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.supplier.supplier_account",
+    "path": "/api/customer/supplier/supplierAccount",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.supplier.supplier_export",
+    "path": "/api/customer/supplier/supplierExport",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.supplier.change_settlement_date_rule_s",
+    "path": "/api/customer/supplier/changeSettlementDateRuleS",
+    "rules": 0,
+    "reads": 9
+  },
+  {
+    "id": "fin.account_fee.finance_put_list",
+    "path": "/api/finance/accountFee/financePutList",
+    "rules": 3,
+    "reads": 15
+  },
+  {
+    "id": "fin.account_fee.finance_put_export",
+    "path": "/api/finance/accountFee/financePutExport",
+    "rules": 3,
+    "reads": 4
+  },
+  {
+    "id": "fin.account_fee.finance_pay_list",
+    "path": "/api/finance/accountFee/financePayList",
+    "rules": 1,
+    "reads": 15
+  },
+  {
+    "id": "fin.account_fee.finance_pay_export",
+    "path": "/api/finance/accountFee/financePayExport",
+    "rules": 3,
+    "reads": 15
+  },
+  {
+    "id": "fin.account_fee.sub_settle_list",
+    "path": "/api/finance/accountFee/subSettleList",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.estimate.estimate_page",
+    "path": "/api/finance/estimate/estimatePage",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.estimate.estimate_create",
+    "path": "/api/finance/estimate/estimateCreate",
+    "rules": 5,
+    "reads": 6
+  },
+  {
+    "id": "fin.invoice_link.generate_pay_batch",
+    "path": "/api/finance/invoiceLink/generatePayBatch",
+    "rules": 1,
+    "reads": 5
+  },
+  {
+    "id": "fin.invoice_link.generate_receive_batch",
+    "path": "/api/finance/invoiceLink/generateReceiveBatch",
+    "rules": 1,
+    "reads": 11
+  },
+  {
+    "id": "fin.king_dee.sync_customer",
+    "path": "/api/finance/kingDee/syncCustomer",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee.sync_batch_customer",
+    "path": "/api/finance/kingDee/syncBatchCustomer",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee.sync_supplier",
+    "path": "/api/finance/kingDee/syncSupplier",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee.sync_batch_supplier",
+    "path": "/api/finance/kingDee/syncBatchSupplier",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee.allocate_customer",
+    "path": "/api/finance/kingDee/allocateCustomer",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee.allocate_supplier",
+    "path": "/api/finance/kingDee/allocateSupplier",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee.voucher_save",
+    "path": "/api/finance/kingDee/voucherSave",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee.voucher_batch_save",
+    "path": "/api/finance/kingDee/voucherBatchSave",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee.get_account_book_info",
+    "path": "/api/finance/kingDee/getAccountBookInfo",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee.get_history_account_book",
+    "path": "/api/finance/kingDee/getHistoryAccountBook",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee.sync_c",
+    "path": "/api/finance/kingDee/syncC",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee.sync_ca",
+    "path": "/api/finance/kingDee/syncCA",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee.sync_sa",
+    "path": "/api/finance/kingDee/syncSA",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee.sync_s",
+    "path": "/api/finance/kingDee/syncS",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee.sync_voucher",
+    "path": "/api/finance/kingDee/syncVoucher",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.king_dee.update_finance_date",
+    "path": "/api/finance/kingDee/updateFinanceDate",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.king_dee.update_history_voucher",
+    "path": "/api/finance/kingDee/updateHistoryVoucher",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.king_dee.sync_main_to_cs",
+    "path": "/api/finance/kingDee/syncMainToCs",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee.get_org_info",
+    "path": "/api/finance/kingDee/getOrgInfo",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee_export.lock_fee_pay_export",
+    "path": "/api/finance/kingDeeExport/lockFeePayExport",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.king_dee_export.unlock_fee_pay_export",
+    "path": "/api/finance/kingDeeExport/unlockFeePayExport",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.king_dee_export.lock_fee_put_export",
+    "path": "/api/finance/kingDeeExport/lockFeePutExport",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.king_dee_export.unlock_fee_put_export",
+    "path": "/api/finance/kingDeeExport/unlockFeePutExport",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.king_dee_export.invoice_fee_pay_export",
+    "path": "/api/finance/kingDeeExport/invoiceFeePayExport",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.king_dee_export.un_invoice_fee_pay_export",
+    "path": "/api/finance/kingDeeExport/unInvoiceFeePayExport",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.king_dee_export.invoice_fee_put_export",
+    "path": "/api/finance/kingDeeExport/invoiceFeePutExport",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.king_dee_export.un_invoice_fee_put_export",
+    "path": "/api/finance/kingDeeExport/unInvoiceFeePutExport",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.king_dee_export.write_off_fee_pay_export",
+    "path": "/api/finance/kingDeeExport/writeOffFeePayExport",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.king_dee_export.un_write_off_fee_pay_export",
+    "path": "/api/finance/kingDeeExport/unWriteOffFeePayExport",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.king_dee_export.write_off_fee_put_export",
+    "path": "/api/finance/kingDeeExport/writeOffFeePutExport",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.king_dee_export.un_write_off_fee_put_export",
+    "path": "/api/finance/kingDeeExport/unWriteOffFeePutExport",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.king_dee_export.statement_export",
+    "path": "/api/finance/kingDeeExport/statementExport",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.king_dee_log.create_voucher_log_test",
+    "path": "/api/finance/kingDeeLog/createVoucherLogTest",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.king_dee_log.generate_voucher_test",
+    "path": "/api/finance/kingDeeLog/generateVoucherTest",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.king_dee_log.voucher_log_page",
+    "path": "/api/finance/kingDeeLog/voucherLogPage",
+    "rules": 0,
+    "reads": 14
+  },
+  {
+    "id": "fin.king_dee_log.voucher_log_export",
+    "path": "/api/finance/kingDeeLog/voucherLogExport",
+    "rules": 0,
+    "reads": 12
+  },
+  {
+    "id": "fin.king_dee_log.voucher_priority",
+    "path": "/api/finance/kingDeeLog/voucherPriority",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.king_dee_log.reset_voucher_log",
+    "path": "/api/finance/kingDeeLog/resetVoucherLog",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.king_dee_log.get_voucher_log_type",
+    "path": "/api/finance/kingDeeLog/getVoucherLogType",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.pay_account.pay_account_page",
+    "path": "/api/finance/payAccount/payAccountPage",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.pay_account.pay_account_detail",
+    "path": "/api/finance/payAccount/payAccountDetail",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.pay_account.pay_account_fee_item",
+    "path": "/api/finance/payAccount/payAccountFeeItem",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_account.remove_order_list",
+    "path": "/api/finance/payAccount/removeOrderList",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_account.remove_account_order",
+    "path": "/api/finance/payAccount/removeAccountOrder",
+    "rules": 0,
+    "reads": 10
+  },
+  {
+    "id": "fin.pay_account.export_exception_fees",
+    "path": "/api/finance/payAccount/exportExceptionFees",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_account.order_pay_account_edit",
+    "path": "/api/finance/payAccount/orderPayAccountEdit",
+    "rules": 1,
+    "reads": 17
+  },
+  {
+    "id": "fin.pay_account.amount_pay_account_edit",
+    "path": "/api/finance/payAccount/amountPayAccountEdit",
+    "rules": 1,
+    "reads": 17
+  },
+  {
+    "id": "fin.pay_account.upload_supplier_bill",
+    "path": "/api/finance/payAccount/uploadSupplierBill",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.pay_account.start_bill",
+    "path": "/api/finance/payAccount/startBill",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_account.confirm_bill",
+    "path": "/api/finance/payAccount/confirmBill",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.pay_account.send_verify",
+    "path": "/api/finance/payAccount/sendVerify",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_account.confirm_verify",
+    "path": "/api/finance/payAccount/confirmVerify",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_account.verify_bill_result",
+    "path": "/api/finance/payAccount/verifyBillResult",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_account.account_cancel",
+    "path": "/api/finance/payAccount/accountCancel",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.pay_account.cancel_export_exception_fee",
+    "path": "/api/finance/payAccount/cancelExportExceptionFee",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_account.pay_confirm_list",
+    "path": "/api/finance/payAccount/payConfirmList",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.pay_account.account_confirm",
+    "path": "/api/finance/payAccount/accountConfirm",
+    "rules": 0,
+    "reads": 7
+  },
+  {
+    "id": "fin.pay_account.confirm_quick_account",
+    "path": "/api/finance/payAccount/confirmQuickAccount",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_account.get_customer_supplier_list",
+    "path": "/api/finance/payAccount/getCustomerSupplierList",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_account.export_account_summary",
+    "path": "/api/finance/payAccount/exportAccountSummary",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.pay_account.export_account_item",
+    "path": "/api/finance/payAccount/exportAccountItem",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.pay_account.account_round_list",
+    "path": "/api/finance/payAccount/accountRoundList",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_account.pay_account_export",
+    "path": "/api/finance/payAccount/payAccountExport",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.pay_account.pay_account_round_export",
+    "path": "/api/finance/payAccount/payAccountRoundExport",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_account_email.email_page",
+    "path": "/api/finance/payAccountEmail/emailPage",
+    "rules": 0,
+    "reads": 12
+  },
+  {
+    "id": "fin.pay_account_email.email_detail",
+    "path": "/api/finance/payAccountEmail/emailDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_account_email.email_edit",
+    "path": "/api/finance/payAccountEmail/emailEdit",
+    "rules": 5,
+    "reads": 3
+  },
+  {
+    "id": "fin.pay_account_email.batch_send_email",
+    "path": "/api/finance/payAccountEmail/batchSendEmail",
+    "rules": 2,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_account_email.manual_generate",
+    "path": "/api/finance/payAccountEmail/manualGenerate",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_demand.demand_page",
+    "path": "/api/finance/payDemand/demandPage",
+    "rules": 0,
+    "reads": 20
+  },
+  {
+    "id": "fin.pay_demand.demand_detail",
+    "path": "/api/finance/payDemand/demandDetail",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_demand.payment_list",
+    "path": "/api/finance/payDemand/paymentList",
+    "rules": 0,
+    "reads": 9
+  },
+  {
+    "id": "fin.pay_demand.demand_edit_by_order",
+    "path": "/api/finance/payDemand/demandEditByOrder",
+    "rules": 0,
+    "reads": 28
+  },
+  {
+    "id": "fin.pay_demand.demand_edit_by_fee",
+    "path": "/api/finance/payDemand/demandEditByFee",
+    "rules": 0,
+    "reads": 28
+  },
+  {
+    "id": "fin.pay_demand.demand_cancel",
+    "path": "/api/finance/payDemand/demandCancel",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_demand.demand_revoke_audit",
+    "path": "/api/finance/payDemand/demandRevokeAudit",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_demand.pay_demand_export",
+    "path": "/api/finance/payDemand/payDemandExport",
+    "rules": 0,
+    "reads": 18
+  },
+  {
+    "id": "fin.pay_form.form_page",
+    "path": "/api/finance/payForm/formPage",
+    "rules": 0,
+    "reads": 29
+  },
+  {
+    "id": "fin.pay_form.form_detail",
+    "path": "/api/finance/payForm/formDetail",
+    "rules": 2,
+    "reads": 3
+  },
+  {
+    "id": "fin.pay_form.form_cancel",
+    "path": "/api/finance/payForm/formCancel",
+    "rules": 1,
+    "reads": 5
+  },
+  {
+    "id": "fin.pay_form.cancel_export_exception_fee",
+    "path": "/api/finance/payForm/cancelExportExceptionFee",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_form.remark_edit",
+    "path": "/api/finance/payForm/remarkEdit",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_form.finance_detail",
+    "path": "/api/finance/payForm/financeDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_form.receive_account_edit",
+    "path": "/api/finance/payForm/receiveAccountEdit",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_form.download",
+    "path": "/api/finance/payForm/download",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_form.batch_print",
+    "path": "/api/finance/payForm/batchPrint",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_form.pay_form_export",
+    "path": "/api/finance/payForm/payFormExport",
+    "rules": 0,
+    "reads": 27
+  },
+  {
+    "id": "fin.pay_form.download_invoice",
+    "path": "/api/finance/payForm/downloadInvoice",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_invoice_batch.check_step1",
+    "path": "/api/finance/payInvoiceBatch/checkStep1",
+    "rules": 0,
+    "reads": 14
+  },
+  {
+    "id": "fin.pay_invoice_batch.check_step2",
+    "path": "/api/finance/payInvoiceBatch/checkStep2",
+    "rules": 0,
+    "reads": 9
+  },
+  {
+    "id": "fin.pay_invoice_batch.check_step3",
+    "path": "/api/finance/payInvoiceBatch/checkStep3",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.pay_invoice_batch.batch_fee_edit",
+    "path": "/api/finance/payInvoiceBatch/batchFeeEdit",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.pay_invoice_batch.batch_order_edit",
+    "path": "/api/finance/payInvoiceBatch/batchOrderEdit",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.pay_invoice_batch.check_project",
+    "path": "/api/finance/payInvoiceBatch/checkProject",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_invoice_batch.batch_edit",
+    "path": "/api/finance/payInvoiceBatch/batchEdit",
+    "rules": 15,
+    "reads": 73
+  },
+  {
+    "id": "fin.pay_invoice_batch.batchpage",
+    "path": "/api/finance/payInvoiceBatch/batchpage",
+    "rules": 0,
+    "reads": 11
+  },
+  {
+    "id": "fin.pay_invoice_batch.apply_page",
+    "path": "/api/finance/payInvoiceBatch/applyPage",
+    "rules": 0,
+    "reads": 16
+  },
+  {
+    "id": "fin.pay_invoice_batch.batch_detail",
+    "path": "/api/finance/payInvoiceBatch/batchDetail",
+    "rules": 1,
+    "reads": 5
+  },
+  {
+    "id": "fin.pay_invoice_batch.allocation_invoice_fee",
+    "path": "/api/finance/payInvoiceBatch/allocationInvoiceFee",
+    "rules": 2,
+    "reads": 6
+  },
+  {
+    "id": "fin.pay_invoice_batch.allocation_invoice_order",
+    "path": "/api/finance/payInvoiceBatch/allocationInvoiceOrder",
+    "rules": 2,
+    "reads": 6
+  },
+  {
+    "id": "fin.pay_invoice_batch.cancel_invoice_registration",
+    "path": "/api/finance/payInvoiceBatch/cancelInvoiceRegistration",
+    "rules": 2,
+    "reads": 5
+  },
+  {
+    "id": "fin.pay_invoice_batch.upload_order_invoice",
+    "path": "/api/finance/payInvoiceBatch/uploadOrderInvoice",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_invoice_batch.apply_detail",
+    "path": "/api/finance/payInvoiceBatch/applyDetail",
+    "rules": 1,
+    "reads": 5
+  },
+  {
+    "id": "fin.pay_invoice_batch.apply_edit",
+    "path": "/api/finance/payInvoiceBatch/applyEdit",
+    "rules": 11,
+    "reads": 16
+  },
+  {
+    "id": "fin.pay_invoice_batch.apply_cancel",
+    "path": "/api/finance/payInvoiceBatch/applyCancel",
+    "rules": 1,
+    "reads": 5
+  },
+  {
+    "id": "fin.pay_invoice_batch.cancel_export_exception_fee",
+    "path": "/api/finance/payInvoiceBatch/cancelExportExceptionFee",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_invoice_batch.batch_cancel",
+    "path": "/api/finance/payInvoiceBatch/batchCancel",
+    "rules": 1,
+    "reads": 4
+  },
+  {
+    "id": "fin.pay_invoice_batch.cancel_batch_audit",
+    "path": "/api/finance/payInvoiceBatch/cancelBatchAudit",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_invoice_batch.export_invoice_summary",
+    "path": "/api/finance/payInvoiceBatch/exportInvoiceSummary",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_invoice_batch.export_invoice_item",
+    "path": "/api/finance/payInvoiceBatch/exportInvoiceItem",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_invoice_batch.batch_edit_after",
+    "path": "/api/finance/payInvoiceBatch/batchEditAfter",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.pay_invoice_batch.get_order_info_by_fee_id",
+    "path": "/api/finance/payInvoiceBatch/getOrderInfoByFeeId",
+    "rules": 0,
+    "reads": 12
+  },
+  {
+    "id": "fin.pay_invoice_batch.get_company_obj_list",
+    "path": "/api/finance/payInvoiceBatch/getCompanyObjList",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_invoice_batch.batch_export",
+    "path": "/api/finance/payInvoiceBatch/batchExport",
+    "rules": 0,
+    "reads": 11
+  },
+  {
+    "id": "fin.pay_invoice_batch.apply_export",
+    "path": "/api/finance/payInvoiceBatch/applyExport",
+    "rules": 0,
+    "reads": 16
+  },
+  {
+    "id": "fin.pay_invoice_batch.get_last_require",
+    "path": "/api/finance/payInvoiceBatch/getLastRequire",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_invoice_batch.get_apply_company_obj_list",
+    "path": "/api/finance/payInvoiceBatch/getApplyCompanyObjList",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_invoice_batch.get_amount_statistics",
+    "path": "/api/finance/payInvoiceBatch/getAmountStatistics",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_invoice_batch.get_bl_no_amount_statistics",
+    "path": "/api/finance/payInvoiceBatch/getBlNoAmountStatistics",
+    "rules": 3,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_invoice_batch.apply_invoice_export",
+    "path": "/api/finance/payInvoiceBatch/applyInvoiceExport",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.pay_invoice_batch.remove_conn_bl",
+    "path": "/api/finance/payInvoiceBatch/removeConnBl",
+    "rules": 3,
+    "reads": 3
+  },
+  {
+    "id": "fin.pay_invoice_batch.invoice_apply_download",
+    "path": "/api/finance/payInvoiceBatch/invoiceApplyDownload",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_invoice.invoice_page",
+    "path": "/api/finance/payInvoice/invoicePage",
+    "rules": 0,
+    "reads": 33
+  },
+  {
+    "id": "fin.pay_invoice.invoice_detail",
+    "path": "/api/finance/payInvoice/invoiceDetail",
+    "rules": 2,
+    "reads": 3
+  },
+  {
+    "id": "fin.pay_invoice.invoice_query",
+    "path": "/api/finance/payInvoice/invoiceQuery",
+    "rules": 2,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_invoice.invoice_add",
+    "path": "/api/finance/payInvoice/invoiceAdd",
+    "rules": 15,
+    "reads": 0
+  },
+  {
+    "id": "fin.pay_invoice.invoice_replace",
+    "path": "/api/finance/payInvoice/invoiceReplace",
+    "rules": 14,
+    "reads": 4
+  },
+  {
+    "id": "fin.pay_invoice.invoice_cancel",
+    "path": "/api/finance/payInvoice/invoiceCancel",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_invoice.invoice_add_check",
+    "path": "/api/finance/payInvoice/invoiceAddCheck",
+    "rules": 13,
+    "reads": 15
+  },
+  {
+    "id": "fin.pay_invoice.invoice_edit",
+    "path": "/api/finance/payInvoice/invoiceEdit",
+    "rules": 16,
+    "reads": 17
+  },
+  {
+    "id": "fin.pay_invoice.invoice_writeoff_check",
+    "path": "/api/finance/payInvoice/invoiceWriteoffCheck",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_invoice.invoice_list",
+    "path": "/api/finance/payInvoice/invoiceList",
+    "rules": 2,
+    "reads": 31
+  },
+  {
+    "id": "fin.pay_invoice.invoice_export",
+    "path": "/api/finance/payInvoice/invoiceExport",
+    "rules": 0,
+    "reads": 31
+  },
+  {
+    "id": "fin.pay_writeoff.writeoff_page",
+    "path": "/api/finance/payWriteoff/writeoffPage",
+    "rules": 0,
+    "reads": 28
+  },
+  {
+    "id": "fin.pay_writeoff.writeoff_detail",
+    "path": "/api/finance/payWriteoff/writeoffDetail",
+    "rules": 2,
+    "reads": 3
+  },
+  {
+    "id": "fin.pay_writeoff.writeoff_pay_form_list",
+    "path": "/api/finance/payWriteoff/writeoffPayFormList",
+    "rules": 1,
+    "reads": 27
+  },
+  {
+    "id": "fin.pay_writeoff.writeoff_conn_order_list",
+    "path": "/api/finance/payWriteoff/writeoffConnOrderList",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_writeoff.writeoff_conn_invoice_list",
+    "path": "/api/finance/payWriteoff/writeoffConnInvoiceList",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_writeoff.order_fee_page",
+    "path": "/api/finance/payWriteoff/orderFeePage",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_writeoff.writeoff_batch",
+    "path": "/api/finance/payWriteoff/writeoffBatch",
+    "rules": 7,
+    "reads": 19
+  },
+  {
+    "id": "fin.pay_writeoff.writeoff_batch_force",
+    "path": "/api/finance/payWriteoff/writeoffBatchForce",
+    "rules": 7,
+    "reads": 21
+  },
+  {
+    "id": "fin.pay_writeoff.writeoff_cancel",
+    "path": "/api/finance/payWriteoff/writeoffCancel",
+    "rules": 1,
+    "reads": 4
+  },
+  {
+    "id": "fin.pay_writeoff.writeoff_revoke_audit",
+    "path": "/api/finance/payWriteoff/writeoffRevokeAudit",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_writeoff.pay_form_writeoff_check",
+    "path": "/api/finance/payWriteoff/payFormWriteoffCheck",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.pay_writeoff.auto_receive_writeoff",
+    "path": "/api/finance/payWriteoff/autoReceiveWriteoff",
+    "rules": 1,
+    "reads": 5
+  },
+  {
+    "id": "fin.pay_writeoff.writeoff_export",
+    "path": "/api/finance/payWriteoff/writeoffExport",
+    "rules": 0,
+    "reads": 26
+  },
+  {
+    "id": "fin.receive_account.receive_account_page",
+    "path": "/api/finance/receiveAccount/receiveAccountPage",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.receive_account.customer_supplier_list",
+    "path": "/api/finance/receiveAccount/customerSupplierList",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_account.put_settle_list",
+    "path": "/api/finance/receiveAccount/putSettleList",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_account.receive_account_edit",
+    "path": "/api/finance/receiveAccount/receiveAccountEdit",
+    "rules": 3,
+    "reads": 15
+  },
+  {
+    "id": "fin.receive_account.order_receive_account_edit",
+    "path": "/api/finance/receiveAccount/orderReceiveAccountEdit",
+    "rules": 3,
+    "reads": 15
+  },
+  {
+    "id": "fin.receive_account.amount_receive_account_edit",
+    "path": "/api/finance/receiveAccount/amountReceiveAccountEdit",
+    "rules": 3,
+    "reads": 15
+  },
+  {
+    "id": "fin.receive_account.receive_account_detail",
+    "path": "/api/finance/receiveAccount/receiveAccountDetail",
+    "rules": 2,
+    "reads": 3
+  },
+  {
+    "id": "fin.receive_account.receive_account_fee_item",
+    "path": "/api/finance/receiveAccount/receiveAccountFeeItem",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.receive_account.remove_order_list",
+    "path": "/api/finance/receiveAccount/removeOrderList",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_account.remove_account_order",
+    "path": "/api/finance/receiveAccount/removeAccountOrder",
+    "rules": 0,
+    "reads": 10
+  },
+  {
+    "id": "fin.receive_account.export_exception_fees",
+    "path": "/api/finance/receiveAccount/exportExceptionFees",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_account.receive_confirm_list",
+    "path": "/api/finance/receiveAccount/receiveConfirmList",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.receive_account.account_confirm",
+    "path": "/api/finance/receiveAccount/accountConfirm",
+    "rules": 0,
+    "reads": 6
+  },
+  {
+    "id": "fin.receive_account.quick_confirm",
+    "path": "/api/finance/receiveAccount/quickConfirm",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.receive_account.export_account_summary",
+    "path": "/api/finance/receiveAccount/exportAccountSummary",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.receive_account.export_account_item",
+    "path": "/api/finance/receiveAccount/exportAccountItem",
+    "rules": 0,
+    "reads": 6
+  },
+  {
+    "id": "fin.receive_account.account_cancel",
+    "path": "/api/finance/receiveAccount/accountCancel",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.receive_account.cancel_export_exception_fee",
+    "path": "/api/finance/receiveAccount/cancelExportExceptionFee",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_account.receive_account_export",
+    "path": "/api/finance/receiveAccount/receiveAccountExport",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.receive_invoice_batch.check_step1",
+    "path": "/api/finance/receiveInvoiceBatch/checkStep1",
+    "rules": 0,
+    "reads": 18
+  },
+  {
+    "id": "fin.receive_invoice_batch.check_step2",
+    "path": "/api/finance/receiveInvoiceBatch/checkStep2",
+    "rules": 0,
+    "reads": 9
+  },
+  {
+    "id": "fin.receive_invoice_batch.check_step3",
+    "path": "/api/finance/receiveInvoiceBatch/checkStep3",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.receive_invoice_batch.batch_fee_edit",
+    "path": "/api/finance/receiveInvoiceBatch/batchFeeEdit",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.receive_invoice_batch.batch_order_edit",
+    "path": "/api/finance/receiveInvoiceBatch/batchOrderEdit",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.receive_invoice_batch.check_project",
+    "path": "/api/finance/receiveInvoiceBatch/checkProject",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_invoice_batch.batch_edit",
+    "path": "/api/finance/receiveInvoiceBatch/batchEdit",
+    "rules": 15,
+    "reads": 77
+  },
+  {
+    "id": "fin.receive_invoice_batch.batchpage",
+    "path": "/api/finance/receiveInvoiceBatch/batchpage",
+    "rules": 0,
+    "reads": 11
+  },
+  {
+    "id": "fin.receive_invoice_batch.apply_page",
+    "path": "/api/finance/receiveInvoiceBatch/applyPage",
+    "rules": 0,
+    "reads": 14
+  },
+  {
+    "id": "fin.receive_invoice_batch.batch_detail",
+    "path": "/api/finance/receiveInvoiceBatch/batchDetail",
+    "rules": 1,
+    "reads": 4
+  },
+  {
+    "id": "fin.receive_invoice_batch.allocation_invoice_fee",
+    "path": "/api/finance/receiveInvoiceBatch/allocationInvoiceFee",
+    "rules": 2,
+    "reads": 6
+  },
+  {
+    "id": "fin.receive_invoice_batch.allocation_invoice_order",
+    "path": "/api/finance/receiveInvoiceBatch/allocationInvoiceOrder",
+    "rules": 2,
+    "reads": 6
+  },
+  {
+    "id": "fin.receive_invoice_batch.cancel_invoice_registration",
+    "path": "/api/finance/receiveInvoiceBatch/cancelInvoiceRegistration",
+    "rules": 2,
+    "reads": 5
+  },
+  {
+    "id": "fin.receive_invoice_batch.upload_order_invoice",
+    "path": "/api/finance/receiveInvoiceBatch/uploadOrderInvoice",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_invoice_batch.apply_detail",
+    "path": "/api/finance/receiveInvoiceBatch/applyDetail",
+    "rules": 1,
+    "reads": 4
+  },
+  {
+    "id": "fin.receive_invoice_batch.apply_cancel",
+    "path": "/api/finance/receiveInvoiceBatch/applyCancel",
+    "rules": 1,
+    "reads": 5
+  },
+  {
+    "id": "fin.receive_invoice_batch.cancel_export_exception_fee",
+    "path": "/api/finance/receiveInvoiceBatch/cancelExportExceptionFee",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_invoice_batch.batch_cancel",
+    "path": "/api/finance/receiveInvoiceBatch/batchCancel",
+    "rules": 1,
+    "reads": 4
+  },
+  {
+    "id": "fin.receive_invoice_batch.cancel_batch_audit",
+    "path": "/api/finance/receiveInvoiceBatch/cancelBatchAudit",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.receive_invoice_batch.export_invoice_summary",
+    "path": "/api/finance/receiveInvoiceBatch/exportInvoiceSummary",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.receive_invoice_batch.export_invoice_item",
+    "path": "/api/finance/receiveInvoiceBatch/exportInvoiceItem",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_invoice_batch.batch_edit_after",
+    "path": "/api/finance/receiveInvoiceBatch/batchEditAfter",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.receive_invoice_batch.get_order_info_by_fee_id",
+    "path": "/api/finance/receiveInvoiceBatch/getOrderInfoByFeeId",
+    "rules": 0,
+    "reads": 12
+  },
+  {
+    "id": "fin.receive_invoice_batch.get_company_obj_list",
+    "path": "/api/finance/receiveInvoiceBatch/getCompanyObjList",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_invoice_batch.get_pay_registration_invoice",
+    "path": "/api/finance/receiveInvoiceBatch/getPayRegistrationInvoice",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_invoice_batch.get_supplier_pr_invoice",
+    "path": "/api/finance/receiveInvoiceBatch/getSupplierPrInvoice",
+    "rules": 3,
+    "reads": 7
+  },
+  {
+    "id": "fin.receive_invoice_batch.batch_export",
+    "path": "/api/finance/receiveInvoiceBatch/batchExport",
+    "rules": 0,
+    "reads": 11
+  },
+  {
+    "id": "fin.receive_invoice_batch.apply_export",
+    "path": "/api/finance/receiveInvoiceBatch/applyExport",
+    "rules": 0,
+    "reads": 14
+  },
+  {
+    "id": "fin.receive_invoice_batch.get_sell_info",
+    "path": "/api/finance/receiveInvoiceBatch/getSellInfo",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_invoice_batch.get_apply_company_obj_list",
+    "path": "/api/finance/receiveInvoiceBatch/getApplyCompanyObjList",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_invoice_batch.get_amount_statistics",
+    "path": "/api/finance/receiveInvoiceBatch/getAmountStatistics",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_invoice_batch.get_bl_no_amount_statistics",
+    "path": "/api/finance/receiveInvoiceBatch/getBlNoAmountStatistics",
+    "rules": 3,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_invoice_batch.get_batch_fund_name",
+    "path": "/api/finance/receiveInvoiceBatch/getBatchFundName",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.receive_invoice_batch.generate_pay_batch",
+    "path": "/api/finance/receiveInvoiceBatch/generatePayBatch",
+    "rules": 1,
+    "reads": 5
+  },
+  {
+    "id": "fin.receive_invoice_batch.apply_invoice_export",
+    "path": "/api/finance/receiveInvoiceBatch/applyInvoiceExport",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_invoice_batch.remove_conn_bl",
+    "path": "/api/finance/receiveInvoiceBatch/removeConnBl",
+    "rules": 3,
+    "reads": 3
+  },
+  {
+    "id": "fin.receive_invoice_batch.invoice_apply_download",
+    "path": "/api/finance/receiveInvoiceBatch/invoiceApplyDownload",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.receive_invoice.invoice_page",
+    "path": "/api/finance/receiveInvoice/invoicePage",
+    "rules": 0,
+    "reads": 32
+  },
+  {
+    "id": "fin.receive_invoice.invoice_detail",
+    "path": "/api/finance/receiveInvoice/invoiceDetail",
+    "rules": 2,
+    "reads": 3
+  },
+  {
+    "id": "fin.receive_invoice.invoice_query",
+    "path": "/api/finance/receiveInvoice/invoiceQuery",
+    "rules": 2,
+    "reads": 1
+  },
+  {
+    "id": "fin.receive_invoice.invoice_add",
+    "path": "/api/finance/receiveInvoice/invoiceAdd",
+    "rules": 15,
+    "reads": 0
+  },
+  {
+    "id": "fin.receive_invoice.invoice_replace",
+    "path": "/api/finance/receiveInvoice/invoiceReplace",
+    "rules": 14,
+    "reads": 4
+  },
+  {
+    "id": "fin.receive_invoice.invoice_cancel",
+    "path": "/api/finance/receiveInvoice/invoiceCancel",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.receive_invoice.invoice_add_check",
+    "path": "/api/finance/receiveInvoice/invoiceAddCheck",
+    "rules": 15,
+    "reads": 16
+  },
+  {
+    "id": "fin.receive_invoice.invoice_edit",
+    "path": "/api/finance/receiveInvoice/invoiceEdit",
+    "rules": 16,
+    "reads": 17
+  },
+  {
+    "id": "fin.receive_invoice.invoice_writeoff_check",
+    "path": "/api/finance/receiveInvoice/invoiceWriteoffCheck",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.receive_invoice.invoice_list",
+    "path": "/api/finance/receiveInvoice/invoiceList",
+    "rules": 2,
+    "reads": 30
+  },
+  {
+    "id": "fin.receive_invoice.invoice_export",
+    "path": "/api/finance/receiveInvoice/invoiceExport",
+    "rules": 0,
+    "reads": 30
+  },
+  {
+    "id": "fin.receive_writeoff.writeoff_page",
+    "path": "/api/finance/receiveWriteoff/writeoffPage",
+    "rules": 0,
+    "reads": 28
+  },
+  {
+    "id": "fin.receive_writeoff.writeoff_detail",
+    "path": "/api/finance/receiveWriteoff/writeoffDetail",
+    "rules": 2,
+    "reads": 3
+  },
+  {
+    "id": "fin.receive_writeoff.writeoff_fee_page",
+    "path": "/api/finance/receiveWriteoff/writeoffFeePage",
+    "rules": 1,
+    "reads": 4
+  },
+  {
+    "id": "fin.receive_writeoff.writeoff_invoice_page",
+    "path": "/api/finance/receiveWriteoff/writeoffInvoicePage",
+    "rules": 1,
+    "reads": 30
+  },
+  {
+    "id": "fin.receive_writeoff.writeoff_order_page",
+    "path": "/api/finance/receiveWriteoff/writeoffOrderPage",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.receive_writeoff.writeoff_conn_order_list",
+    "path": "/api/finance/receiveWriteoff/writeoffConnOrderList",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.receive_writeoff.writeoff_conn_invoice_list",
+    "path": "/api/finance/receiveWriteoff/writeoffConnInvoiceList",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.receive_writeoff.order_fee_page",
+    "path": "/api/finance/receiveWriteoff/orderFeePage",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.receive_writeoff.writeoff_batch",
+    "path": "/api/finance/receiveWriteoff/writeoffBatch",
+    "rules": 8,
+    "reads": 25
+  },
+  {
+    "id": "fin.receive_writeoff.writeoff_batch_force",
+    "path": "/api/finance/receiveWriteoff/writeoffBatchForce",
+    "rules": 8,
+    "reads": 27
+  },
+  {
+    "id": "fin.receive_writeoff.writeoff_cancel",
+    "path": "/api/finance/receiveWriteoff/writeoffCancel",
+    "rules": 1,
+    "reads": 9
+  },
+  {
+    "id": "fin.receive_writeoff.writeoff_revoke_audit",
+    "path": "/api/finance/receiveWriteoff/writeoffRevokeAudit",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.receive_writeoff.fee_writeoff_check",
+    "path": "/api/finance/receiveWriteoff/feeWriteoffCheck",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.receive_writeoff.order_writeoff_check",
+    "path": "/api/finance/receiveWriteoff/orderWriteoffCheck",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.receive_writeoff.writeoff_export",
+    "path": "/api/finance/receiveWriteoff/writeoffExport",
+    "rules": 0,
+    "reads": 26
+  },
+  {
+    "id": "fin.receive_writeoff.confirm_receive_writeoff",
+    "path": "/api/finance/receiveWriteoff/confirmReceiveWriteoff",
+    "rules": 2,
+    "reads": 4
+  },
+  {
+    "id": "fin.voucher.voucher_page",
+    "path": "/api/finance/voucher/voucherPage",
+    "rules": 0,
+    "reads": 6
+  },
+  {
+    "id": "fin.voucher.voucher_list",
+    "path": "/api/finance/voucher/voucherList",
+    "rules": 0,
+    "reads": 6
+  },
+  {
+    "id": "fin.voucher.voucher_detail",
+    "path": "/api/finance/voucher/voucherDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.voucher.voucher_fee_page",
+    "path": "/api/finance/voucher/voucherFeePage",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.voucher.voucher_fee_export",
+    "path": "/api/finance/voucher/voucherFeeExport",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.voucher.voucher_fee_list",
+    "path": "/api/finance/voucher/voucherFeeList",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.voucher.voucher_sync_page",
+    "path": "/api/finance/voucher/voucherSyncPage",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.voucher.voucher_sync_detail",
+    "path": "/api/finance/voucher/voucherSyncDetail",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.voucher.voucher_down_load",
+    "path": "/api/finance/voucher/voucherDownLoad",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.voucher.voucher_export",
+    "path": "/api/finance/voucher/voucherExport",
+    "rules": 0,
+    "reads": 6
+  },
+  {
+    "id": "fin.voucher.voucher_sync_export",
+    "path": "/api/finance/voucher/voucherSyncExport",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.assign.assign_page",
+    "path": "/api/home/assign/assignPage",
+    "rules": 0,
+    "reads": 11
+  },
+  {
+    "id": "fin.assign.assign_detail",
+    "path": "/api/home/assign/assignDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.assign.assign_execute",
+    "path": "/api/home/assign/assignExecute",
+    "rules": 3,
+    "reads": 3
+  },
+  {
+    "id": "fin.assign.assign_add",
+    "path": "/api/home/assign/assignAdd",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.assign.assign_record",
+    "path": "/api/home/assign/assignRecord",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.assign.assign_transfer",
+    "path": "/api/home/assign/assignTransfer",
+    "rules": 3,
+    "reads": 3
+  },
+  {
+    "id": "fin.assign.send_message",
+    "path": "/api/home/assign/sendMessage",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.audit.audit_page",
+    "path": "/api/home/audit/auditPage",
+    "rules": 0,
+    "reads": 27
+  },
+  {
+    "id": "fin.audit.audit_detail",
+    "path": "/api/home/audit/auditDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.audit.audit_add",
+    "path": "/api/home/audit/auditAdd",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.audit.audit_execute",
+    "path": "/api/home/audit/auditExecute",
+    "rules": 3,
+    "reads": 3
+  },
+  {
+    "id": "fin.audit.audit_cancel",
+    "path": "/api/home/audit/auditCancel",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.audit.audit_record",
+    "path": "/api/home/audit/auditRecord",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.audit.audit_general_record",
+    "path": "/api/home/audit/auditGeneralRecord",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.audit.audit_type_list",
+    "path": "/api/home/audit/auditTypeList",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.audit.audit_expedite",
+    "path": "/api/home/audit/auditExpedite",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.audit.carbon_copy_add",
+    "path": "/api/home/audit/carbonCopyAdd",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.audit.audit_note_add",
+    "path": "/api/home/audit/auditNoteAdd",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.audit.audit_invoice_batch_export",
+    "path": "/api/home/audit/auditInvoiceBatchExport",
+    "rules": 0,
+    "reads": 25
+  },
+  {
+    "id": "fin.audit_flow.flow_page",
+    "path": "/api/home/auditFlow/flowPage",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.audit_flow.flow_detail",
+    "path": "/api/home/auditFlow/flowDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.audit_flow.flow_edit",
+    "path": "/api/home/auditFlow/flowEdit",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.audit_flow.flow_node_type",
+    "path": "/api/home/auditFlow/flowNodeType",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.audit_flow.flow_rule_list",
+    "path": "/api/home/auditFlow/flowRuleList",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.common.get_company_info",
+    "path": "/api/home/common/getCompanyInfo",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.common.get_discount",
+    "path": "/api/home/common/getDiscount",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.common.get_enums",
+    "path": "/api/home/common/getEnums",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.common.enums_detail",
+    "path": "/api/home/common/enumsDetail",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.common.upload_file",
+    "path": "/api/home/common/uploadFile",
+    "rules": 1,
+    "reads": 7
+  },
+  {
+    "id": "fin.common.download_file",
+    "path": "/api/home/common/downloadFile",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.common.get_short_url",
+    "path": "/api/home/common/getShortUrl",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.common.pdf_to_png",
+    "path": "/api/home/common/pdfToPng",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.common.download_template",
+    "path": "/api/home/common/downloadTemplate",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.common.download_excel",
+    "path": "/api/home/common/downloadExcel",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.common.change_record_page",
+    "path": "/api/home/common/changeRecordPage",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.common.attachment_list",
+    "path": "/api/home/common/attachmentList",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.common.verify_code",
+    "path": "/api/home/common/verifyCode",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.common.invoice_ocr",
+    "path": "/api/home/common/invoiceOcr",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.common.delete_attachment",
+    "path": "/api/home/common/deleteAttachment",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.common.voucher_subject",
+    "path": "/api/home/common/voucherSubject",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.common.oper_log_detail",
+    "path": "/api/home/common/operLogDetail",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.common.excel_to_pdf",
+    "path": "/api/home/common/excelToPDF",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.config.config_by_key",
+    "path": "/api/home/config/configByKey",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.cost.cost_page",
+    "path": "/api/home/cost/costPage",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.cost.cost_list",
+    "path": "/api/home/cost/costList",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.cost.cost_edit",
+    "path": "/api/home/cost/costEdit",
+    "rules": 5,
+    "reads": 12
+  },
+  {
+    "id": "fin.cost.cost_add",
+    "path": "/api/home/cost/costAdd",
+    "rules": 5,
+    "reads": 12
+  },
+  {
+    "id": "fin.cost.cost_detail",
+    "path": "/api/home/cost/costDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.cost.cost_import",
+    "path": "/api/home/cost/costImport",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.cost.cost_export",
+    "path": "/api/home/cost/costExport",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.cost.amount_cost_list",
+    "path": "/api/home/cost/amountCostList",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.country.country_list",
+    "path": "/api/home/country/countryList",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.dept.dept_tree",
+    "path": "/api/home/dept/deptTree",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.dept.dept_list",
+    "path": "/api/home/dept/deptList",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.dept.dept_edit",
+    "path": "/api/home/dept/deptEdit",
+    "rules": 2,
+    "reads": 11
+  },
+  {
+    "id": "fin.dept.dept_detail",
+    "path": "/api/home/dept/deptDetail",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.dept.dept_del",
+    "path": "/api/home/dept/deptDel",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.dept.dept_menu_tree",
+    "path": "/api/home/dept/deptMenuTree",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.dict_data.dict_data_by_type",
+    "path": "/api/home/dictData/dictDataByType",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.dict_data.dict_data_page",
+    "path": "/api/home/dictData/dictDataPage",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.dict_data.dict_data_detail",
+    "path": "/api/home/dictData/dictDataDetail",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.dict_data.dict_data_edit",
+    "path": "/api/home/dictData/dictDataEdit",
+    "rules": 5,
+    "reads": 11
+  },
+  {
+    "id": "fin.dict_data.dict_data_del",
+    "path": "/api/home/dictData/dictDataDel",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.dict_type.dict_type_page",
+    "path": "/api/home/dictType/dictTypePage",
+    "rules": 0,
+    "reads": 7
+  },
+  {
+    "id": "fin.dict_type.get_dict_type_list",
+    "path": "/api/home/dictType/getDictTypeList",
+    "rules": 0,
+    "reads": 6
+  },
+  {
+    "id": "fin.dict_type.dict_type_detail",
+    "path": "/api/home/dictType/dictTypeDetail",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.dict_type.dict_type_edit",
+    "path": "/api/home/dictType/dictTypeEdit",
+    "rules": 4,
+    "reads": 7
+  },
+  {
+    "id": "fin.dict_type.dict_type_del",
+    "path": "/api/home/dictType/dictTypeDel",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.dict_type.delete_dict_type_cache",
+    "path": "/api/home/dictType/deleteDictTypeCache",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.exchange_rate.exchange_rate_page",
+    "path": "/api/home/exchangeRate/exchangeRatePage",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.exchange_rate.exchange_rate_add",
+    "path": "/api/home/exchangeRate/exchangeRateAdd",
+    "rules": 5,
+    "reads": 7
+  },
+  {
+    "id": "fin.exchange_rate.exchange_rate_edit",
+    "path": "/api/home/exchangeRate/exchangeRateEdit",
+    "rules": 5,
+    "reads": 7
+  },
+  {
+    "id": "fin.exchange_rate.exchange_rate_detail",
+    "path": "/api/home/exchangeRate/exchangeRateDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.exchange_rate.exchange_rate_export",
+    "path": "/api/home/exchangeRate/exchangeRateExport",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.exchange_rate.month_exchange_rate",
+    "path": "/api/home/exchangeRate/monthExchangeRate",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.fund.fund_list",
+    "path": "/api/home/fund/fundList",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.login.user_login",
+    "path": "/api/home/login/userLogin",
+    "rules": 2,
+    "reads": 3
+  },
+  {
+    "id": "fin.login.user_logout",
+    "path": "/api/home/login/userLogout",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.login.get_info",
+    "path": "/api/home/login/getInfo",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.login.get_routers",
+    "path": "/api/home/login/getRouters",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.login.clear_cache",
+    "path": "/api/home/login/clearCache",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.main.main_page",
+    "path": "/api/home/main/mainPage",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.main.main_list",
+    "path": "/api/home/main/mainList",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.main.main_edit",
+    "path": "/api/home/main/mainEdit",
+    "rules": 15,
+    "reads": 30
+  },
+  {
+    "id": "fin.main.main_add",
+    "path": "/api/home/main/mainAdd",
+    "rules": 0,
+    "reads": 30
+  },
+  {
+    "id": "fin.main.main_detail",
+    "path": "/api/home/main/mainDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.main.main_delete",
+    "path": "/api/home/main/mainDelete",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.main.main_export",
+    "path": "/api/home/main/mainExport",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.main.main_part",
+    "path": "/api/home/main/mainPart",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.menu.get_menu_list",
+    "path": "/api/home/menu/getMenuList",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.menu.menu_tree",
+    "path": "/api/home/menu/menuTree",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.menu.menu_detail",
+    "path": "/api/home/menu/menuDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.menu.menu_edit",
+    "path": "/api/home/menu/menuEdit",
+    "rules": 2,
+    "reads": 14
+  },
+  {
+    "id": "fin.menu.menu_del",
+    "path": "/api/home/menu/menuDel",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.menu.clear_menu",
+    "path": "/api/home/menu/clearMenu",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.message_board.message_board_list",
+    "path": "/api/home/messageBoard/messageBoardList",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.message.message_page",
+    "path": "/api/home/message/messagePage",
+    "rules": 0,
+    "reads": 13
+  },
+  {
+    "id": "fin.message.message_mark_as_read",
+    "path": "/api/home/message/messageMarkAsRead",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.message.message_type_list",
+    "path": "/api/home/message/messageTypeList",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.policy.policy_page",
+    "path": "/api/home/policy/policyPage",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.policy.policy_list",
+    "path": "/api/home/policy/policyList",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.policy.policy_add",
+    "path": "/api/home/policy/policyAdd",
+    "rules": 3,
+    "reads": 6
+  },
+  {
+    "id": "fin.policy.policy_detail",
+    "path": "/api/home/policy/policyDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.policy.policy_sub_list",
+    "path": "/api/home/policy/policySubList",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.policy.policy_sub_detail",
+    "path": "/api/home/policy/policySubDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.policy.policy_export",
+    "path": "/api/home/policy/policyExport",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.port.port_list",
+    "path": "/api/home/port/portList",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.post.post_page",
+    "path": "/api/home/post/postPage",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.post.post_edit",
+    "path": "/api/home/post/postEdit",
+    "rules": 3,
+    "reads": 7
+  },
+  {
+    "id": "fin.post.post_detail",
+    "path": "/api/home/post/postDetail",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.post.post_del",
+    "path": "/api/home/post/postDel",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.product.product_page",
+    "path": "/api/home/product/productPage",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.role.role_page",
+    "path": "/api/home/role/rolePage",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.role.role_list",
+    "path": "/api/home/role/roleList",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.role.role_add",
+    "path": "/api/home/role/roleAdd",
+    "rules": 5,
+    "reads": 11
+  },
+  {
+    "id": "fin.role.role_edit",
+    "path": "/api/home/role/roleEdit",
+    "rules": 5,
+    "reads": 11
+  },
+  {
+    "id": "fin.role.role_detail",
+    "path": "/api/home/role/roleDetail",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.role.role_del",
+    "path": "/api/home/role/roleDel",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.role.role_menu_tree",
+    "path": "/api/home/role/roleMenuTree",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.role.role_export",
+    "path": "/api/home/role/roleExport",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.role.role_status",
+    "path": "/api/home/role/roleStatus",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.settle_object.settle_object_detail",
+    "path": "/api/home/settleObject/settleObjectDetail",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.settle_object.settle_object_list",
+    "path": "/api/home/settleObject/settleObjectList",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.ship_company.ship_company_list",
+    "path": "/api/home/shipCompany/shipCompanyList",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.subsidy.get_proportion_scope",
+    "path": "/api/home/subsidy/getProportionScope",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.subsidy.get_subsidy",
+    "path": "/api/home/subsidy/getSubsidy",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.user.user_page",
+    "path": "/api/home/user/userPage",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.user.user_list",
+    "path": "/api/home/user/userList",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.user.user_pwd",
+    "path": "/api/home/user/userPwd",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.user.user_status",
+    "path": "/api/home/user/userStatus",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.user.user_add",
+    "path": "/api/home/user/userAdd",
+    "rules": 8,
+    "reads": 16
+  },
+  {
+    "id": "fin.user.user_edit",
+    "path": "/api/home/user/userEdit",
+    "rules": 8,
+    "reads": 16
+  },
+  {
+    "id": "fin.user.user_profile",
+    "path": "/api/home/user/userProfile",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.user.profile_avatar",
+    "path": "/api/home/user/profileAvatar",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.user.profile_pwd",
+    "path": "/api/home/user/profilePwd",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.user.user_detail",
+    "path": "/api/home/user/userDetail",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.user.user_del",
+    "path": "/api/home/user/userDel",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.user.user_import",
+    "path": "/api/home/user/userImport",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.user.user_export",
+    "path": "/api/home/user/userExport",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.user.set_user_screen",
+    "path": "/api/home/user/setUserScreen",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.user.get_user_screen",
+    "path": "/api/home/user/getUserScreen",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.user.batch_edit_user_main",
+    "path": "/api/home/user/batchEditUserMain",
+    "rules": 3,
+    "reads": 3
+  },
+  {
+    "id": "fin.added_service.get_list",
+    "path": "/api/operation/addedService/getList",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.added_service.create_service",
+    "path": "/api/operation/addedService/createService",
+    "rules": 5,
+    "reads": 9
+  },
+  {
+    "id": "fin.added_service.edit_service",
+    "path": "/api/operation/addedService/editService",
+    "rules": 6,
+    "reads": 9
+  },
+  {
+    "id": "fin.added_service.edit_service_status",
+    "path": "/api/operation/addedService/editServiceStatus",
+    "rules": 2,
+    "reads": 0
+  },
+  {
+    "id": "fin.common.upload_file",
+    "path": "/api/operation/common/uploadFile",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.credit_rating.list_page",
+    "path": "/api/operation/creditRating/listPage",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.credit_rating.refuse",
+    "path": "/api/operation/creditRating/refuse",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.credit_rating.upload_report",
+    "path": "/api/operation/creditRating/uploadReport",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.credit_rating.del_report",
+    "path": "/api/operation/creditRating/delReport",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.credit_rating.get_credit_enterprise",
+    "path": "/api/operation/creditRating/getCreditEnterprise",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.finance.funding_plan_page",
+    "path": "/api/operation/finance/fundingPlanPage",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.finance.monthly_funding_plan_page",
+    "path": "/api/operation/finance/monthlyFundingPlanPage",
+    "rules": 3,
+    "reads": 2
+  },
+  {
+    "id": "fin.finance.funding_plan_apa_edit",
+    "path": "/api/operation/finance/fundingPlanApaEdit",
+    "rules": 2,
+    "reads": 1
+  },
+  {
+    "id": "fin.finance.funding_plan_spa_edit",
+    "path": "/api/operation/finance/fundingPlanSpaEdit",
+    "rules": 3,
+    "reads": 0
+  },
+  {
+    "id": "fin.finance_notify.index",
+    "path": "/api/operation/financeNotify/index",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.finance_notify.change_fail_account_file",
+    "path": "/api/operation/financeNotify/changeFailAccountFile",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.logistics_company.customer_page",
+    "path": "/api/operation/logisticsCompany/customerPage",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.logistics_company.customer_detail",
+    "path": "/api/operation/logisticsCompany/customerDetail",
+    "rules": 2,
+    "reads": 1
+  },
+  {
+    "id": "fin.logistics_company.supplier_page",
+    "path": "/api/operation/logisticsCompany/supplierPage",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.logistics_company.supplier_detail",
+    "path": "/api/operation/logisticsCompany/supplierDetail",
+    "rules": 2,
+    "reads": 1
+  },
+  {
+    "id": "fin.logistics_company.add_track_company",
+    "path": "/api/operation/logisticsCompany/addTrackCompany",
+    "rules": 2,
+    "reads": 0
+  },
+  {
+    "id": "fin.logistics_order.order_page",
+    "path": "/api/operation/logisticsOrder/orderPage",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.logistics_order.download_file",
+    "path": "/api/operation/logisticsOrder/downloadFile",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.logistics_order.get_opt_operation",
+    "path": "/api/operation/logisticsOrder/getOptOperation",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.logistics_order.bill_reminder",
+    "path": "/api/operation/logisticsOrder/billReminder",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.logistics_user.supplier_account_page",
+    "path": "/api/operation/logisticsUser/supplierAccountPage",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.logistics_user.customer_account_page",
+    "path": "/api/operation/logisticsUser/customerAccountPage",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.logistics_user.change_customer_account_status",
+    "path": "/api/operation/logisticsUser/changeCustomerAccountStatus",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.logistics_user.change_supplier_account_status",
+    "path": "/api/operation/logisticsUser/changeSupplierAccountStatus",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.logistics_user.change_supplier_account_verify",
+    "path": "/api/operation/logisticsUser/changeSupplierAccountVerify",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.logistics_user.customer_company_list",
+    "path": "/api/operation/logisticsUser/customerCompanyList",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.logistics_user.supplier_company_list",
+    "path": "/api/operation/logisticsUser/supplierCompanyList",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.logistics_user.customer_account_detail",
+    "path": "/api/operation/logisticsUser/customerAccountDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.logistics_user.supplier_account_detail",
+    "path": "/api/operation/logisticsUser/supplierAccountDetail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.monthly_reconciliation.list",
+    "path": "/api/operation/monthlyReconciliation/list",
+    "rules": 0,
+    "reads": 16
+  },
+  {
+    "id": "fin.monthly_reconciliation.detail",
+    "path": "/api/operation/monthlyReconciliation/detail",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.monthly_reconciliation.confirm",
+    "path": "/api/operation/monthlyReconciliation/confirm",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.monthly_reconciliation.reject",
+    "path": "/api/operation/monthlyReconciliation/reject",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.monthly_reconciliation.cancel",
+    "path": "/api/operation/monthlyReconciliation/cancel",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.payable_order.list_page",
+    "path": "/api/operation/payableOrder/listPage",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.payable_order.get_payment_info",
+    "path": "/api/operation/payableOrder/getPaymentInfo",
+    "rules": 2,
+    "reads": 3
+  },
+  {
+    "id": "fin.payable_order.create_payment",
+    "path": "/api/operation/payableOrder/createPayment",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.payment_fee.pending_approval_page",
+    "path": "/api/operation/paymentFee/pendingApprovalPage",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.payment_fee.change_payment_approval",
+    "path": "/api/operation/paymentFee/changePaymentApproval",
+    "rules": 3,
+    "reads": 2
+  },
+  {
+    "id": "fin.payment_fee.pending_approval_detail",
+    "path": "/api/operation/paymentFee/pendingApprovalDetail",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.export_pa_order",
+    "path": "/api/operation/paymentFee/exportPaOrder",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.to_enter_page",
+    "path": "/api/operation/paymentFee/toEnterPage",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.payment_fee.to_enter_detail",
+    "path": "/api/operation/paymentFee/toEnterDetail",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.change_to_enter",
+    "path": "/api/operation/paymentFee/changeToEnter",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.change_to_enter_verify",
+    "path": "/api/operation/paymentFee/changeToEnterVerify",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.export_to_enter",
+    "path": "/api/operation/paymentFee/exportToEnter",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.payment_fee.invoice_approval_page",
+    "path": "/api/operation/paymentFee/invoiceApprovalPage",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.payment_fee.invoice_approval_detail",
+    "path": "/api/operation/paymentFee/invoiceApprovalDetail",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.export_ia_order",
+    "path": "/api/operation/paymentFee/exportIaOrder",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.download_invoice",
+    "path": "/api/operation/paymentFee/downloadInvoice",
+    "rules": 2,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.invoice_time_verify",
+    "path": "/api/operation/paymentFee/invoiceTimeVerify",
+    "rules": 2,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.change_invoice_status",
+    "path": "/api/operation/paymentFee/changeInvoiceStatus",
+    "rules": 3,
+    "reads": 1
+  },
+  {
+    "id": "fin.payment_fee.pending_payments_page",
+    "path": "/api/operation/paymentFee/pendingPaymentsPage",
+    "rules": 0,
+    "reads": 5
+  },
+  {
+    "id": "fin.payment_fee.pending_payments_detail",
+    "path": "/api/operation/paymentFee/pendingPaymentsDetail",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.change_payment_status",
+    "path": "/api/operation/paymentFee/changePaymentStatus",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.export_pp_order",
+    "path": "/api/operation/paymentFee/exportPpOrder",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.download_pp_invoice",
+    "path": "/api/operation/paymentFee/downloadPpInvoice",
+    "rules": 2,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.pp_invoice_time_verify",
+    "path": "/api/operation/paymentFee/ppInvoiceTimeVerify",
+    "rules": 2,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.payable_payment_page",
+    "path": "/api/operation/paymentFee/payablePaymentPage",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.payment_fee.payable_payment_detail",
+    "path": "/api/operation/paymentFee/payablePaymentDetail",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.export_payable_payment_order",
+    "path": "/api/operation/paymentFee/exportPayablePaymentOrder",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.change_discard_status",
+    "path": "/api/operation/paymentFee/changeDiscardStatus",
+    "rules": 1,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.get_payment_info",
+    "path": "/api/operation/paymentFee/getPaymentInfo",
+    "rules": 2,
+    "reads": 1
+  },
+  {
+    "id": "fin.payment_fee.edit_delay_payment",
+    "path": "/api/operation/paymentFee/editDelayPayment",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.payment_fee.edit_advance_payment",
+    "path": "/api/operation/paymentFee/editAdvancePayment",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.payment_fee.create_payment_notice",
+    "path": "/api/operation/paymentFee/createPaymentNotice",
+    "rules": 2,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.get_main_list",
+    "path": "/api/operation/paymentFee/getMainList",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.payment_fee.sync_biz_pay_time",
+    "path": "/api/operation/paymentFee/syncBizPayTime",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.payment_fee.sync_biz_expected_pay_time",
+    "path": "/api/operation/paymentFee/syncBizExpectedPayTime",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.payment_fee.biz_get_payment_info",
+    "path": "/api/operation/paymentFee/bizGetPaymentInfo",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.payment_fee.add_sync_biz_log",
+    "path": "/api/operation/paymentFee/addSyncBizLog",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.production_finance.sync_supplier_company",
+    "path": "/api/operation/productionFinance/syncSupplierCompany",
+    "rules": 8,
+    "reads": 0
+  },
+  {
+    "id": "fin.production_finance.sync_customer_company",
+    "path": "/api/operation/productionFinance/syncCustomerCompany",
+    "rules": 8,
+    "reads": 0
+  },
+  {
+    "id": "fin.production_finance.sync_supplier_user_account",
+    "path": "/api/operation/productionFinance/syncSupplierUserAccount",
+    "rules": 6,
+    "reads": 1
+  },
+  {
+    "id": "fin.production_finance.sync_customer_user_account",
+    "path": "/api/operation/productionFinance/syncCustomerUserAccount",
+    "rules": 6,
+    "reads": 1
+  },
+  {
+    "id": "fin.production_finance.sync_company_user",
+    "path": "/api/operation/productionFinance/syncCompanyUser",
+    "rules": 8,
+    "reads": 0
+  },
+  {
+    "id": "fin.production_finance.sync_info",
+    "path": "/api/operation/productionFinance/syncInfo",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.production_finance.sync_user_account_status",
+    "path": "/api/operation/productionFinance/syncUserAccountStatus",
+    "rules": 3,
+    "reads": 0
+  },
+  {
+    "id": "fin.production_finance.sync_company_user_status",
+    "path": "/api/operation/productionFinance/syncCompanyUserStatus",
+    "rules": 4,
+    "reads": 0
+  },
+  {
+    "id": "fin.register_company.list_page",
+    "path": "/api/operation/registerCompany/listPage",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.register_company.change_status",
+    "path": "/api/operation/registerCompany/changeStatus",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.register_company.upload_intent_file",
+    "path": "/api/operation/registerCompany/uploadIntentFile",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.register_company.get_detail",
+    "path": "/api/operation/registerCompany/getDetail",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.register_review.list_page",
+    "path": "/api/operation/registerReview/listPage",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.register_review.get_detail",
+    "path": "/api/operation/registerReview/getDetail",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.register_review.change_status",
+    "path": "/api/operation/registerReview/changeStatus",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.register_review.record_page",
+    "path": "/api/operation/registerReview/recordPage",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.register_review.get_record_detail",
+    "path": "/api/operation/registerReview/getRecordDetail",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.register_user.list_page",
+    "path": "/api/operation/registerUser/listPage",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.register_user.change_status",
+    "path": "/api/operation/registerUser/changeStatus",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.supplier_credit_rate.credit_rate_page",
+    "path": "/api/operation/supplierCreditRate/creditRatePage",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.supplier_credit_rate.credit_rate_add",
+    "path": "/api/operation/supplierCreditRate/creditRateAdd",
+    "rules": 10,
+    "reads": 0
+  },
+  {
+    "id": "fin.supplier_credit_rate.credit_rate_edit",
+    "path": "/api/operation/supplierCreditRate/creditRateEdit",
+    "rules": 10,
+    "reads": 0
+  },
+  {
+    "id": "fin.supplier_credit_rate.change_credit_rate_status",
+    "path": "/api/operation/supplierCreditRate/changeCreditRateStatus",
+    "rules": 2,
+    "reads": 0
+  },
+  {
+    "id": "fin.order.order_page",
+    "path": "/api/order/order/orderPage",
+    "rules": 0,
+    "reads": 99
+  },
+  {
+    "id": "fin.order.order_sub_page",
+    "path": "/api/order/order/orderSubPage",
+    "rules": 0,
+    "reads": 65
+  },
+  {
+    "id": "fin.order.order_detail",
+    "path": "/api/order/order/orderDetail",
+    "rules": 1,
+    "reads": 75
+  },
+  {
+    "id": "fin.order.other_order_page",
+    "path": "/api/order/order/otherOrderPage",
+    "rules": 0,
+    "reads": 104
+  },
+  {
+    "id": "fin.order.other_order_detail",
+    "path": "/api/order/order/otherOrderDetail",
+    "rules": 1,
+    "reads": 75
+  },
+  {
+    "id": "fin.order.order_relate_team",
+    "path": "/api/order/order/orderRelateTeam",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.order.order_related_del",
+    "path": "/api/order/order/orderRelatedDel",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.order.order_add",
+    "path": "/api/order/order/orderAdd",
+    "rules": 46,
+    "reads": 27
+  },
+  {
+    "id": "fin.order.order_edit",
+    "path": "/api/order/order/orderEdit",
+    "rules": 36,
+    "reads": 26
+  },
+  {
+    "id": "fin.order.order_book",
+    "path": "/api/order/order/orderBook",
+    "rules": 47,
+    "reads": 33
+  },
+  {
+    "id": "fin.order.order_book_update",
+    "path": "/api/order/order/orderBookUpdate",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.order.order_notice",
+    "path": "/api/order/order/orderNotice",
+    "rules": 1,
+    "reads": 6
+  },
+  {
+    "id": "fin.order.order_confirm_account",
+    "path": "/api/order/order/orderConfirmAccount",
+    "rules": 1,
+    "reads": 6
+  },
+  {
+    "id": "fin.order.order_confirm_loan",
+    "path": "/api/order/order/orderConfirmLoan",
+    "rules": 1,
+    "reads": 6
+  },
+  {
+    "id": "fin.order.order_copy",
+    "path": "/api/order/order/orderCopy",
+    "rules": 1,
+    "reads": 3
+  },
+  {
+    "id": "fin.order.order_update_atd",
+    "path": "/api/order/order/orderUpdateAtd",
+    "rules": 2,
+    "reads": 5
+  },
+  {
+    "id": "fin.order.order_batch_import",
+    "path": "/api/order/order/orderBatchImport",
+    "rules": 1,
+    "reads": 3
+  },
+  {
+    "id": "fin.order.order_del",
+    "path": "/api/order/order/orderDel",
+    "rules": 1,
+    "reads": 3
+  },
+  {
+    "id": "fin.order.order_cancel",
+    "path": "/api/order/order/orderCancel",
+    "rules": 2,
+    "reads": 8
+  },
+  {
+    "id": "fin.order.change_policy_type",
+    "path": "/api/order/order/changePolicyType",
+    "rules": 2,
+    "reads": 7
+  },
+  {
+    "id": "fin.order.change_policy",
+    "path": "/api/order/order/changePolicy",
+    "rules": 2,
+    "reads": 7
+  },
+  {
+    "id": "fin.order.change_period_rule",
+    "path": "/api/order/order/changePeriodRule",
+    "rules": 0,
+    "reads": 12
+  },
+  {
+    "id": "fin.order.change_account_rule",
+    "path": "/api/order/order/changeAccountRule",
+    "rules": 1,
+    "reads": 21
+  },
+  {
+    "id": "fin.order.change_tak_pay_rule",
+    "path": "/api/order/order/changeTakPayRule",
+    "rules": 1,
+    "reads": 20
+  },
+  {
+    "id": "fin.order.change_special_pay_rules",
+    "path": "/api/order/order/changeSpecialPayRules",
+    "rules": 1,
+    "reads": 13
+  },
+  {
+    "id": "fin.order.change_invoice_apply",
+    "path": "/api/order/order/changeInvoiceApply",
+    "rules": 1,
+    "reads": 13
+  },
+  {
+    "id": "fin.order.batch_change_related",
+    "path": "/api/order/order/batchChangeRelated",
+    "rules": 9,
+    "reads": 13
+  },
+  {
+    "id": "fin.order.change_finance_date",
+    "path": "/api/order/order/changeFinanceDate",
+    "rules": 1,
+    "reads": 3
+  },
+  {
+    "id": "fin.order.message_board_add",
+    "path": "/api/order/order/messageBoardAdd",
+    "rules": 4,
+    "reads": 3
+  },
+  {
+    "id": "fin.order.main_finance",
+    "path": "/api/order/order/mainFinance",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.order.order_export",
+    "path": "/api/order/order/orderExport",
+    "rules": 0,
+    "reads": 97
+  },
+  {
+    "id": "fin.order.order_sub_export",
+    "path": "/api/order/order/orderSubExport",
+    "rules": 0,
+    "reads": 63
+  },
+  {
+    "id": "fin.order.order_supplier",
+    "path": "/api/order/order/orderSupplier",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.order.batch_policy_list",
+    "path": "/api/order/order/batchPolicyList",
+    "rules": 2,
+    "reads": 4
+  },
+  {
+    "id": "fin.order.batch_change_policy",
+    "path": "/api/order/order/batchChangePolicy",
+    "rules": 2,
+    "reads": 9
+  },
+  {
+    "id": "fin.order.customer_policy_type",
+    "path": "/api/order/order/customerPolicyType",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.order.batch_policy_type_list",
+    "path": "/api/order/order/batchPolicyTypeList",
+    "rules": 2,
+    "reads": 5
+  },
+  {
+    "id": "fin.order.batch_change_policy_type",
+    "path": "/api/order/order/batchChangePolicyType",
+    "rules": 2,
+    "reads": 10
+  },
+  {
+    "id": "fin.order.check_change_order",
+    "path": "/api/order/order/checkChangeOrder",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.order.conn_order_list",
+    "path": "/api/order/order/connOrderList",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.order.audit_type_list",
+    "path": "/api/order/order/auditTypeList",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.order.export_receive_fee_data",
+    "path": "/api/order/order/exportReceiveFeeData",
+    "rules": 0,
+    "reads": 99
+  },
+  {
+    "id": "fin.order.get_exchange_object",
+    "path": "/api/order/order/getExchangeObject",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.order.down_document",
+    "path": "/api/order/order/downDocument",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.order.down_attachment",
+    "path": "/api/order/order/downAttachment",
+    "rules": 2,
+    "reads": 2
+  },
+  {
+    "id": "fin.order.generate_order_sub",
+    "path": "/api/order/order/generateOrderSub",
+    "rules": 1,
+    "reads": 3
+  },
+  {
+    "id": "fin.order.check_generate_order_sub",
+    "path": "/api/order/order/checkGenerateOrderSub",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.order.batch_put_settle_object_edit",
+    "path": "/api/order/order/batchPutSettleObjectEdit",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.order.batch_pay_settle_object_edit",
+    "path": "/api/order/order/batchPaySettleObjectEdit",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.order.batch_edit_settle_object",
+    "path": "/api/order/order/batchEditSettleObject",
+    "rules": 0,
+    "reads": 23
+  },
+  {
+    "id": "fin.order.export_customer_account_fee",
+    "path": "/api/order/order/exportCustomerAccountFee",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.order.confirm_customer_account_fee",
+    "path": "/api/order/order/confirmCustomerAccountFee",
+    "rules": 0,
+    "reads": 99
+  },
+  {
+    "id": "fin.order.error_order_file",
+    "path": "/api/order/order/errorOrderFile",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.order.check_self_fee_update",
+    "path": "/api/order/order/checkSelfFeeUpdate",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.order.get_subsidy_proportion",
+    "path": "/api/order/order/getSubsidyProportion",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.order.revoke_order",
+    "path": "/api/order/order/revokeOrder",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.order.revoke_intent",
+    "path": "/api/order/order/revokeIntent",
+    "rules": 2,
+    "reads": 4
+  },
+  {
+    "id": "fin.order_document.upload_order_document",
+    "path": "/api/order/orderDocument/uploadOrderDocument",
+    "rules": 2,
+    "reads": 9
+  },
+  {
+    "id": "fin.order_document.order_document_page",
+    "path": "/api/order/orderDocument/orderDocumentPage",
+    "rules": 0,
+    "reads": 6
+  },
+  {
+    "id": "fin.order_document.order_document_cancel",
+    "path": "/api/order/orderDocument/orderDocumentCancel",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.order_document.order_document_del",
+    "path": "/api/order/orderDocument/orderDocumentDel",
+    "rules": 1,
+    "reads": 4
+  },
+  {
+    "id": "fin.order_entrust.order_page",
+    "path": "/api/order/orderEntrust/orderPage",
+    "rules": 0,
+    "reads": 103
+  },
+  {
+    "id": "fin.order_entrust.order_sub_page",
+    "path": "/api/order/orderEntrust/orderSubPage",
+    "rules": 0,
+    "reads": 65
+  },
+  {
+    "id": "fin.order_entrust.order_detail",
+    "path": "/api/order/orderEntrust/orderDetail",
+    "rules": 1,
+    "reads": 68
+  },
+  {
+    "id": "fin.order_entrust.order_relate_team",
+    "path": "/api/order/orderEntrust/orderRelateTeam",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.order_entrust.order_related_del",
+    "path": "/api/order/orderEntrust/orderRelatedDel",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.order_entrust.check_order_customer_container",
+    "path": "/api/order/orderEntrust/checkOrderCustomerContainer",
+    "rules": 2,
+    "reads": 4
+  },
+  {
+    "id": "fin.order_entrust.order_add",
+    "path": "/api/order/orderEntrust/orderAdd",
+    "rules": 47,
+    "reads": 23
+  },
+  {
+    "id": "fin.order_entrust.order_distribute",
+    "path": "/api/order/orderEntrust/orderDistribute",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.order_entrust.order_edit",
+    "path": "/api/order/orderEntrust/orderEdit",
+    "rules": 36,
+    "reads": 24
+  },
+  {
+    "id": "fin.order_entrust.order_book",
+    "path": "/api/order/orderEntrust/orderBook",
+    "rules": 47,
+    "reads": 30
+  },
+  {
+    "id": "fin.order_entrust.order_notice",
+    "path": "/api/order/orderEntrust/orderNotice",
+    "rules": 1,
+    "reads": 6
+  },
+  {
+    "id": "fin.order_entrust.order_confirm_account",
+    "path": "/api/order/orderEntrust/orderConfirmAccount",
+    "rules": 1,
+    "reads": 6
+  },
+  {
+    "id": "fin.order_entrust.order_confirm_loan",
+    "path": "/api/order/orderEntrust/orderConfirmLoan",
+    "rules": 1,
+    "reads": 6
+  },
+  {
+    "id": "fin.order_entrust.order_copy",
+    "path": "/api/order/orderEntrust/orderCopy",
+    "rules": 1,
+    "reads": 3
+  },
+  {
+    "id": "fin.order_entrust.order_update_atd",
+    "path": "/api/order/orderEntrust/orderUpdateAtd",
+    "rules": 2,
+    "reads": 5
+  },
+  {
+    "id": "fin.order_entrust.order_batch_import",
+    "path": "/api/order/orderEntrust/orderBatchImport",
+    "rules": 1,
+    "reads": 3
+  },
+  {
+    "id": "fin.order_entrust.order_del",
+    "path": "/api/order/orderEntrust/orderDel",
+    "rules": 1,
+    "reads": 3
+  },
+  {
+    "id": "fin.order_entrust.order_cancel",
+    "path": "/api/order/orderEntrust/orderCancel",
+    "rules": 2,
+    "reads": 7
+  },
+  {
+    "id": "fin.order_entrust.change_policy_type",
+    "path": "/api/order/orderEntrust/changePolicyType",
+    "rules": 2,
+    "reads": 7
+  },
+  {
+    "id": "fin.order_entrust.change_policy",
+    "path": "/api/order/orderEntrust/changePolicy",
+    "rules": 2,
+    "reads": 7
+  },
+  {
+    "id": "fin.order_entrust.change_period_rule",
+    "path": "/api/order/orderEntrust/changePeriodRule",
+    "rules": 0,
+    "reads": 7
+  },
+  {
+    "id": "fin.order_entrust.change_account_rule",
+    "path": "/api/order/orderEntrust/changeAccountRule",
+    "rules": 1,
+    "reads": 11
+  },
+  {
+    "id": "fin.order_entrust.change_tak_pay_rule",
+    "path": "/api/order/orderEntrust/changeTakPayRule",
+    "rules": 1,
+    "reads": 10
+  },
+  {
+    "id": "fin.order_entrust.change_special_pay_rules",
+    "path": "/api/order/orderEntrust/changeSpecialPayRules",
+    "rules": 1,
+    "reads": 9
+  },
+  {
+    "id": "fin.order_entrust.batch_change_related",
+    "path": "/api/order/orderEntrust/batchChangeRelated",
+    "rules": 9,
+    "reads": 12
+  },
+  {
+    "id": "fin.order_entrust.change_finance_date",
+    "path": "/api/order/orderEntrust/changeFinanceDate",
+    "rules": 1,
+    "reads": 3
+  },
+  {
+    "id": "fin.order_entrust.message_board_add",
+    "path": "/api/order/orderEntrust/messageBoardAdd",
+    "rules": 4,
+    "reads": 3
+  },
+  {
+    "id": "fin.order_entrust.main_finance",
+    "path": "/api/order/orderEntrust/mainFinance",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.order_entrust.order_export",
+    "path": "/api/order/orderEntrust/orderExport",
+    "rules": 0,
+    "reads": 101
+  },
+  {
+    "id": "fin.order_entrust.order_sub_export",
+    "path": "/api/order/orderEntrust/orderSubExport",
+    "rules": 0,
+    "reads": 63
+  },
+  {
+    "id": "fin.order_entrust.order_supplier",
+    "path": "/api/order/orderEntrust/orderSupplier",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.order_entrust.order_entrust",
+    "path": "/api/order/orderEntrust/orderEntrust",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.order_fee.generate_sub_order",
+    "path": "/api/order/orderFee/generateSubOrder",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.order_fee.fee_page",
+    "path": "/api/order/orderFee/feePage",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.order_fee.fee_take_page",
+    "path": "/api/order/orderFee/feeTakePage",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.order_fee.fee_pay_page",
+    "path": "/api/order/orderFee/feePayPage",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.order_fee.fee_order_page",
+    "path": "/api/order/orderFee/feeOrderPage",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.order_fee.put_order_item",
+    "path": "/api/order/orderFee/putOrderItem",
+    "rules": 2,
+    "reads": 3
+  },
+  {
+    "id": "fin.order_fee.fee_total",
+    "path": "/api/order/orderFee/feeTotal",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.order_fee.adjust_amount_edit",
+    "path": "/api/order/orderFee/adjustAmountEdit",
+    "rules": 0,
+    "reads": 13
+  },
+  {
+    "id": "fin.order_fee.adjust_amount_edit_detail",
+    "path": "/api/order/orderFee/adjustAmountEditDetail",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.order_fee.settle_object_list",
+    "path": "/api/order/orderFee/settleObjectList",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.order_fee.put_order_item_export",
+    "path": "/api/order/orderFee/putOrderItemExport",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.order_fee.fee_export",
+    "path": "/api/order/orderFee/feeExport",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.order_fee.other_order_fee_page",
+    "path": "/api/order/orderFee/otherOrderFeePage",
+    "rules": 1,
+    "reads": 7
+  },
+  {
+    "id": "fin.order_fee.real_amount_submit",
+    "path": "/api/order/orderFee/realAmountSubmit",
+    "rules": 0,
+    "reads": 25
+  },
+  {
+    "id": "fin.order_fee.real_amount_lock_submit",
+    "path": "/api/order/orderFee/realAmountLockSubmit",
+    "rules": 0,
+    "reads": 24
+  },
+  {
+    "id": "fin.order_fee.real_amount_un_lock",
+    "path": "/api/order/orderFee/realAmountUnLock",
+    "rules": 1,
+    "reads": 13
+  },
+  {
+    "id": "fin.order_fee.update_real_sub_policy",
+    "path": "/api/order/orderFee/updateRealSubPolicy",
+    "rules": 0,
+    "reads": 10
+  },
+  {
+    "id": "fin.order_fee.update_real_discount",
+    "path": "/api/order/orderFee/updateRealDiscount",
+    "rules": 0,
+    "reads": 4
+  },
+  {
+    "id": "fin.order_fee.book_real_amount_edit",
+    "path": "/api/order/orderFee/bookRealAmountEdit",
+    "rules": 0,
+    "reads": 11
+  },
+  {
+    "id": "fin.order_fee.customs_real_amount_edit",
+    "path": "/api/order/orderFee/customsRealAmountEdit",
+    "rules": 0,
+    "reads": 11
+  },
+  {
+    "id": "fin.order_fee.manifest_real_amount_edit",
+    "path": "/api/order/orderFee/manifestRealAmountEdit",
+    "rules": 0,
+    "reads": 11
+  },
+  {
+    "id": "fin.order_fee.insurance_real_amount_edit",
+    "path": "/api/order/orderFee/insuranceRealAmountEdit",
+    "rules": 0,
+    "reads": 11
+  },
+  {
+    "id": "fin.order_fee.toggle_real_amount",
+    "path": "/api/order/orderFee/toggleRealAmount",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.order_fee.real_amount_list",
+    "path": "/api/order/orderFee/realAmountList",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.order_fee.real_amount_edit_detail",
+    "path": "/api/order/orderFee/realAmountEditDetail",
+    "rules": 1,
+    "reads": 2
+  },
+  {
+    "id": "fin.order_fee.trailer_real_amount_edit",
+    "path": "/api/order/orderFee/trailerRealAmountEdit",
+    "rules": 0,
+    "reads": 11
+  },
+  {
+    "id": "fin.order_fee.real_amount_un_lock_confirm",
+    "path": "/api/order/orderFee/realAmountUnLockConfirm",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.order_fee.order_fee_real_release",
+    "path": "/api/order/orderFee/orderFeeRealRelease",
+    "rules": 0,
+    "reads": 13
+  },
+  {
+    "id": "fin.order_fee.asset_push",
+    "path": "/api/order/orderFee/assetPush",
+    "rules": 0,
+    "reads": 11
+  },
+  {
+    "id": "fin.order_fee.asset_push_cancel",
+    "path": "/api/order/orderFee/assetPushCancel",
+    "rules": 1,
+    "reads": 1
+  },
+  {
+    "id": "fin.order_fee.asset_revoke",
+    "path": "/api/order/orderFee/assetRevoke",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.order_fee.batch_pay_settle_object_edit",
+    "path": "/api/order/orderFee/batchPaySettleObjectEdit",
+    "rules": 2,
+    "reads": 0
+  },
+  {
+    "id": "fin.order_fee.batch_put_settle_object_edit",
+    "path": "/api/order/orderFee/batchPutSettleObjectEdit",
+    "rules": 2,
+    "reads": 0
+  },
+  {
+    "id": "fin.order_fee.un_lock_account_fee_list",
+    "path": "/api/order/orderFee/unLockAccountFeeList",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.order_fee.fee_lock_list",
+    "path": "/api/order/orderFee/feeLockList",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.order_fee_dashboard.fee_summary_page",
+    "path": "/api/order/orderFeeDashboard/feeSummaryPage",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.order_fee_dashboard.manual_update",
+    "path": "/api/order/orderFeeDashboard/manualUpdate",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.order_fee_dashboard.fee_summary_total",
+    "path": "/api/order/orderFeeDashboard/feeSummaryTotal",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.order_fee_dashboard.fee_summary_export",
+    "path": "/api/order/orderFeeDashboard/feeSummaryExport",
+    "rules": 0,
+    "reads": 3
+  },
+  {
+    "id": "fin.order_self.order_page",
+    "path": "/api/order/orderSelf/orderPage",
+    "rules": 0,
+    "reads": 2
+  },
+  {
+    "id": "fin.order_self.order_export",
+    "path": "/api/order/orderSelf/orderExport",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.order_self.self_supplier",
+    "path": "/api/order/orderSelf/selfSupplier",
+    "rules": 1,
+    "reads": 5
+  },
+  {
+    "id": "fin.order_self.order_detail",
+    "path": "/api/order/orderSelf/orderDetail",
+    "rules": 1,
+    "reads": 46
+  },
+  {
+    "id": "fin.order_self.order_self_edit",
+    "path": "/api/order/orderSelf/orderSelfEdit",
+    "rules": 1,
+    "reads": 11
+  },
+  {
+    "id": "fin.order_self.batch_update_supplier",
+    "path": "/api/order/orderSelf/batchUpdateSupplier",
+    "rules": 3,
+    "reads": 9
+  },
+  {
+    "id": "fin.order_self_fee.toggle_real_amount",
+    "path": "/api/order/orderSelfFee/toggleRealAmount",
+    "rules": 1,
+    "reads": 4
+  },
+  {
+    "id": "fin.order_self_fee.batch_fee_add",
+    "path": "/api/order/orderSelfFee/batchFeeAdd",
+    "rules": 2,
+    "reads": 5
+  },
+  {
+    "id": "fin.order_self_fee.batch_fee_add_error_bl_no",
+    "path": "/api/order/orderSelfFee/batchFeeAddErrorBlNo",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.order_self_fee.book_real_amount_edit",
+    "path": "/api/order/orderSelfFee/bookRealAmountEdit",
+    "rules": 2,
+    "reads": 4
+  },
+  {
+    "id": "fin.order_self_fee.batch_confirm_complete",
+    "path": "/api/order/orderSelfFee/batchConfirmComplete",
+    "rules": 2,
+    "reads": 5
+  },
+  {
+    "id": "fin.order_self_fee.edit_create_status",
+    "path": "/api/order/orderSelfFee/editCreateStatus",
+    "rules": 2,
+    "reads": 5
+  },
+  {
+    "id": "fin.order_self_fee.confirm_complete",
+    "path": "/api/order/orderSelfFee/confirmComplete",
+    "rules": 2,
+    "reads": 5
+  },
+  {
+    "id": "fin.order_self_fee.get_self_fee_list",
+    "path": "/api/order/orderSelfFee/getSelfFeeList",
+    "rules": 2,
+    "reads": 3
+  },
+  {
+    "id": "fin.order_self_fee.other_order_fee_page",
+    "path": "/api/order/orderSelfFee/otherOrderFeePage",
+    "rules": 1,
+    "reads": 5
+  },
+  {
+    "id": "fin.order_self_fee.fee_export",
+    "path": "/api/order/orderSelfFee/feeExport",
+    "rules": 0,
+    "reads": 1
+  },
+  {
+    "id": "fin.order_task.get_tasks_by_assignee",
+    "path": "/api/order/orderTask/getTasksByAssignee",
+    "rules": 0,
+    "reads": 12
+  },
+  {
+    "id": "fin.order_task.get_task_count_by_assignee",
+    "path": "/api/order/orderTask/getTaskCountByAssignee",
+    "rules": 0,
+    "reads": 0
+  },
+  {
+    "id": "fin.order_task.order_task_export",
+    "path": "/api/order/orderTask/orderTaskExport",
+    "rules": 0,
+    "reads": 10
+  }
+]
