@@ -83,6 +83,9 @@ export interface CsvImportInput {
   caseNames?: string[]        // 已存在的 data 名(用于「按名匹配替换」策略)
   mode: 'replace' | 'append' | 'merge-by-name'
   rows: Array<Record<string, string>>
+  /** 锁定且未本地放开的变量名 — 这些列跳过写键并计入 skippedLocked
+   *  (提示不是报错,与未知列 error 分流;var-lock spec §5.5) */
+  lockedVars?: string[]
 }
 
 export interface CsvImportResult {
@@ -90,6 +93,8 @@ export interface CsvImportResult {
   caseNames: string[]
   /** 解析 / 校验错误。空数组 = 成功。 */
   errors: string[]
+  /** 被跳过的锁定列名(去重,首现序)— 调用方据此弹「N 列已锁定,已忽略」 */
+  skippedLocked: string[]
 }
 
 /** 解析 CSV → 行。CSV 形状:
@@ -120,7 +125,7 @@ export function importDataSetCsv(input: CsvImportInput): CsvImportResult {
   }
   const data = parsed.data
   if (data.length < 1) {
-    return { rows: [], caseNames: [], errors: ['CSV 为空'] }
+    return { rows: [], caseNames: [], errors: ['CSV 为空'], skippedLocked: [] }
   }
   // 第一行 = header
   const headerRow = data[0]
@@ -147,7 +152,14 @@ export function importDataSetCsv(input: CsvImportInput): CsvImportResult {
   // 校验 header keys ⊆ palette
   const palette = varOnlyPalette(input.columns)
   const paletteByVar = new Map(palette.map((c) => [c.varName!, c]))
+  // 锁定列分流:在 palette 内(锁定≠删除)→ 不报未知列,但跳过写键并计入 skippedLocked
+  const lockedSet = new Set(input.lockedVars ?? [])
+  const skippedLocked: string[] = []
   for (const name of headerCols) {
+    if (lockedSet.has(name)) {
+      if (!skippedLocked.includes(name)) skippedLocked.push(name)
+      continue
+    }
     if (!paletteByVar.has(name)) {
       errors.push(`未知列: ${name}(不在场景变量调色板中)`)
     }
@@ -163,6 +175,8 @@ export function importDataSetCsv(input: CsvImportInput): CsvImportResult {
       const colName = headerCols[j]
       // 跳过未知列(已在上面 errors 记录);仍保留有效列
       if (!paletteByVar.has(colName)) continue
+      // 锁定列跳过写键(var-lock spec §2 CSV 行)— 提示在 skippedLocked,不是 error
+      if (lockedSet.has(colName)) continue
       const baseline = baselineValues[j] ?? ''
       const raw = r[j + 1] ?? ''
       // 若值 == 基线值 → 不写 key(继承);否则写 key(覆盖)
@@ -200,5 +214,5 @@ export function importDataSetCsv(input: CsvImportInput): CsvImportResult {
     })
   }
 
-  return { rows: outRows, caseNames: outCaseNames, errors }
+  return { rows: outRows, caseNames: outCaseNames, errors, skippedLocked }
 }

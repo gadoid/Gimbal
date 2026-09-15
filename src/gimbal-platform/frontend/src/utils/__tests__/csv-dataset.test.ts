@@ -214,6 +214,50 @@ describe('importDataSetCsv', () => {
   })
 })
 
+// ── 锁定列跳过(var-lock)─────────────────────────────────
+
+describe('importDataSetCsv — 锁定列跳过(var-lock spec §2 CSV 行)', () => {
+  const cols = [
+    { stepIndex: 0, source: 'body', field: 'amount', kind: 'var', varName: 'amount', baseline: '1' },
+    { stepIndex: 0, source: 'body', field: 'env', kind: 'var', varName: 'env', baseline: 'qa' },
+  ] as any[]
+
+  const csv = [
+    '__case_name,amount,env,ghost',
+    '(baseline),1,qa,',
+    'data-1,5,qa,x',
+  ].join('\n')
+
+  it('锁定列跳过写键 + 计入 skippedLocked;不进未知列 error', () => {
+    const res = importDataSetCsv({
+      fileText: csv, columns: cols, rows: [], mode: 'replace',
+      lockedVars: ['env'],
+    })
+    expect(res.errors).toEqual(['未知列: ghost(不在场景变量调色板中)'])
+    expect(res.skippedLocked).toEqual(['env'])
+    // env 在 palette 内(锁定≠删除)→ 不报未知;但数据行不写 env 键
+    expect(res.rows).toEqual([{ amount: '5' }])
+  })
+
+  it('不传 lockedVars → 行为与旧版完全一致(锁定分流不激活)', () => {
+    const res = importDataSetCsv({
+      fileText: csv, columns: cols, rows: [], mode: 'replace',
+    })
+    expect(res.errors).toEqual(['未知列: ghost(不在场景变量调色板中)'])
+    expect(res.skippedLocked).toEqual([])
+    expect(res.rows).toEqual([{ amount: '5' }])  // env 'qa' == baseline → 继承不写键(旧版行为)
+  })
+
+  it('未锁定的列正常参与覆盖语义', () => {
+    const res = importDataSetCsv({
+      fileText: '__case_name,amount\n(baseline),1\ndata-1,9\n',
+      columns: [cols[0]], rows: [], mode: 'replace',
+      lockedVars: ['env'],
+    })
+    expect(res.rows).toEqual([{ amount: '9' }])
+  })
+})
+
 // ── UTF-8 BOM ──────────────────────────────────────────────
 
 describe('UTF-8 BOM(Excel 兼容)', () => {
