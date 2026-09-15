@@ -21,6 +21,23 @@
       <span v-else class="muted">{{ refs.length }} 处引用</span>
     </div>
 
+    <!-- 锁条(var-lock spec §2):过程变量标识 + 本地放开开关 + 恢复默认;
+         基线卡不受锁约束(锁的是数据集编辑面姿态,不是共享侧声明) -->
+    <div v-if="locked" class="vdp-lockbar">
+      <span class="vdp-lock-tag">🔒 过程变量 · 默认用共享侧配置</span>
+      <button
+        type="button"
+        class="vdp-linkbtn vdp-lock-toggle"
+        @click="emit('toggle-unlock', varName, !unlocked)"
+      >{{ unlocked ? '收回本地放开' : '本数据集放开编辑' }}</button>
+      <button
+        v-if="rows.some(r => Object.prototype.hasOwnProperty.call(r, varName)) || unlocked"
+        type="button"
+        class="vdp-linkbtn vdp-reset"
+        @click="emit('reset-default', varName)"
+      >恢复默认(清全部覆盖)</button>
+    </div>
+
     <section class="vdp-card">
       <div class="vdp-card-title">基线(config.vars)</div>
       <!-- 容器值(对象/数组):只读 chip — 语义提示辨有无值,tooltip 出
@@ -96,6 +113,9 @@
 
     <section class="vdp-card">
       <div class="vdp-card-title">行值</div>
+      <div v-if="locked && !unlocked" class="muted vdp-rowval-note">
+        已锁定为过程变量,本数据集使用自有值 — 可「本数据集放开编辑」或「恢复默认」回到共享侧配置
+      </div>
       <div v-if="!rows.length" class="muted vdp-empty">暂无数据行</div>
       <div v-for="(row, i) in rows" :key="`rv:${i}`" class="vdp-rowval">
         <span class="vdp-rowval-name mono">{{ caseNames[i] || `data-${i + 1}` }}</span>
@@ -105,6 +125,7 @@
           :value="row[varName] ?? ''"
           :placeholder="baseline"
           :aria-label="`${caseNames[i] || `data-${i + 1}`} ${varName}`"
+          :readonly="locked && !unlocked"
           @input="(e: Event) => emit('set-cell', i, (e.target as HTMLInputElement).value)"
         />
       </div>
@@ -177,12 +198,18 @@ const props = defineProps<{
   caseNames: string[]
   stepContexts: PanelStepContext[]
   queryConfig: QueryCtxConfig
+  /** 声明锁定(config.var_locks 在场)— 行值区默认只读 */
+  locked?: boolean
+  /** 本数据集已本地放开(var_unlocks 在场)— 行值恢复可编辑 */
+  unlocked?: boolean
 }>()
 
 const emit = defineEmits<{
   'set-baseline': [value: string]
   'set-cell': [rowIndex: number, value: string]
   'jump': [ref: GridVarColumn]
+  'toggle-unlock': [name: string, on: boolean]
+  'reset-default': [name: string]
 }>()
 
 function stepLabelOf(i: number): string {
@@ -381,6 +408,15 @@ function onApplyRow() {
 .vdp-unref { font-size: 11px; color: var(--color-text-secondary); background: #f1f5f9; padding: 2px 8px; border-radius: 3px; }
 .muted { color: var(--color-text-secondary); font-size: 12px; }
 .mono { font-family: var(--font-mono); }
+
+/* 锁条(var-lock spec §2):过程变量标识 + 本地放开/恢复默认 */
+.vdp-lockbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  border: 1px solid #e2e8f0; background: #f8fafc;
+  border-radius: 6px; padding: 6px 10px; font-size: 11px;
+}
+.vdp-lock-tag { color: #64748b; }
+.vdp-rowval-note { font-size: 11px; color: #b45309; }
 
 .vdp-card {
   border: 1px solid var(--color-border-tertiary);

@@ -80,7 +80,7 @@
           >
             <el-button size="small" plain>导入 CSV</el-button>
           </el-upload>
-          <el-button size="small" plain :disabled="!csvVarColumns.length" @click="onExportCsv">导出 CSV</el-button>
+          <el-button size="small" plain :disabled="!exportVarColumns.length" @click="onExportCsv">导出 CSV</el-button>
         </div>
       </div>
       <!-- 变量选择器(spec v2 §6 变量优先双模式):>1 变量才显示;
@@ -114,9 +114,13 @@
         :case-names="caseNames"
         :step-contexts="stepContexts"
         :query-config="queryConfig"
+        :locked="isLockDeclared(currentVarColumn.varName)"
+        :unlocked="varUnlocks.includes(currentVarColumn.varName)"
         @set-baseline="onPanelBaseline"
         @set-cell="onPanelCell"
         @jump="jumpToRef"
+        @toggle-unlock="(name, on) => on ? unlockVar(name) : relockVar(name)"
+        @reset-default="resetVarDefault"
       />
       <!-- 横向滚动容器:「全部」变量网格;列多时按 colgroup 定宽展开,
            拖动条查看;工具栏留在滚动区外不随之移动 -->
@@ -484,8 +488,12 @@ function relockVar(name: string) {
   varUnlocks.value = varUnlocks.value.filter(n => n !== name)
 }
 /** 恢复默认(全覆盖撤销):清该变量全部行键 + 撤销本地放开 → 回到
- *  「锁定、继承共享侧值」的默认态(spec §2) */
+ *  「锁定、继承共享侧值」的默认态(spec §2)。无覆盖且未放开 = no-op
+ *  早退(不置 rowsDirty、不 toast,与 relockVar 的无副作用语义一致 —
+ *  面板「恢复默认」钮在 unlocked 无覆盖态也可达) */
 function resetVarDefault(name: string) {
+  const hasOverride = rows.value.some(r => Object.prototype.hasOwnProperty.call(r, name))
+  if (!hasOverride && !varUnlocks.value.includes(name)) return
   for (const r of rows.value) delete r[name]
   varUnlocks.value = varUnlocks.value.filter(n => n !== name)
   rowsDirty.value = true
@@ -570,7 +578,8 @@ function bcOf(col: VarViewColumn): BaselineColumn {
 const csvVarColumns = computed<BaselineColumn[]>(() => varColumns.value.map(bcOf))
 
 /** CSV 导出列宇宙:排除未本地放开的锁定列(spec §2 CSV 导出行)。
- *  本地放开的列照常参与。导入 columns 用同源(回导模板即导出形状)。 */
+ *  本地放开的列照常参与。导入用全量宇宙 csvVarColumns(见 onImportCsv),
+ *  与导出不同源 — 旧模板可含锁定列头。 */
 const exportVarColumns = computed<BaselineColumn[]>(() =>
   csvVarColumns.value.filter(c => !isLockedHidden(c.varName!)))
 

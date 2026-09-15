@@ -141,6 +141,63 @@ describe('VariableDetailPanel — 容器基线(语义提示)', () => {
   })
 })
 
+describe('VariableDetailPanel — 锁定态(var-lock spec §4.2.4)', () => {
+  it('PANEL-LOCK-1: locked 且未放开 → 顶部「本地放开」开关在场(关),行值输入只读 + 锁提示;基线卡仍可编辑', async () => {
+    const w = mountPanel({
+      varName: 'env', baseline: 'qa',
+      rows: [{ env: 'prod' }], caseNames: ['data-1'],
+      locked: true, unlocked: false,
+    })
+    await flushPromises()
+    expect(w.find('.vdp-lockbar').exists()).toBe(true)
+    expect(w.find('.vdp-lockbar').text()).toContain('过程变量')
+    const rowInput = w.find('input[aria-label="data-1 env"]')
+    expect(rowInput.attributes('readonly')).toBeDefined()
+    expect(w.find('.vdp-rowval-note').text()).toContain('已锁定为过程变量,本数据集使用自有值')
+    // 基线卡不受锁约束(共享侧编辑面)
+    const baseInput = w.find('input[aria-label="基线 env"]')
+    expect(baseInput.attributes('readonly')).toBeUndefined()
+    w.unmount()
+  })
+
+  it('PANEL-LOCK-2: 开关 → emit toggle-unlock(name, true/false);恢复默认 → emit reset-default(name)', async () => {
+    const w = mountPanel({
+      varName: 'env', baseline: 'qa',
+      rows: [{ env: 'prod' }], caseNames: ['data-1'],
+      locked: true, unlocked: false,
+    })
+    await flushPromises()
+    await w.find('.vdp-lockbar button.vdp-lock-toggle').trigger('click')
+    expect(w.emitted('toggle-unlock')![0]).toEqual(['env', true])
+    await w.find('.vdp-lockbar button.vdp-reset').trigger('click')
+    expect(w.emitted('reset-default')![0]).toEqual(['env'])
+    w.unmount()
+  })
+
+  it('PANEL-LOCK-3: unlocked = true → 行值可编辑,开关呈开态', async () => {
+    const w = mountPanel({
+      varName: 'env', baseline: 'qa',
+      rows: [{ env: 'prod' }], caseNames: ['data-1'],
+      locked: true, unlocked: true,
+    })
+    await flushPromises()
+    expect(w.find('button.vdp-lock-toggle').text()).toContain('收回')
+    expect(w.find('input[aria-label="data-1 env"]').attributes('readonly')).toBeUndefined()
+    w.unmount()
+  })
+
+  it('PANEL-LOCK-4: 未锁定变量 → 无锁面(开关/提示均不在场)', async () => {
+    const w = mountPanel({
+      varName: 'amount', baseline: '100',
+      rows: [{ amount: '1' }], caseNames: ['data-1'],
+      locked: false, unlocked: false,
+    })
+    await flushPromises()
+    expect(w.find('.vdp-lockbar').exists()).toBe(false)
+    w.unmount()
+  })
+})
+
 describe('VariableDetailPanel — 取数链(ValueSourcePicker 复用)', () => {
   it('PANEL-2: 索引 query_safe 过滤 → 默认首视图 → 查询(resolveQueryCtx:headers auth 优先)→ 行选 → 列选值 → 设为基线/写入行', async () => {
     qvMock.fetchQueryViewIndex.mockResolvedValue([IDX_UNSAFE, IDX_SAFE])
