@@ -22,8 +22,10 @@ def test_enrich():
     assert by_key["customer_id"].read is True
     # bl_no:rule 注释「提单号」优先于 column「业务订单ID」
     assert by_key["bl_no"].zh == "提单号"
-    # 被注释行 carrier:无 column 匹配 → zh 来自 rule 注释
+    # 被注释行 carrier:无 column 匹配 → zh 来自 rule 注释;
+    # 但校验派生只认活跃行 —— 注释 present 不产 required
     assert by_key["carrier"].zh == "船公司/承运人"
+    assert by_key["carrier"].required is False
     # 类型:etd column int → integer;default 来自 getDataString 第三参
     assert by_key["etd"].type_ == "integer"
     assert by_key["action"].default == "submit"

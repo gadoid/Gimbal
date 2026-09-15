@@ -86,11 +86,13 @@ def enrich(actions: list[ActionIR], catalog: ColumnCatalog
             f = FieldIR(
                 key=key,
                 read=read is not None,
-                required=bool(rule and rule.required()),
-                must_include=bool(rule and (rule.required() or rule.must_include())),
+                # 校验派生只认活跃行;被注释行仅贡献 zh(保留注释行的目的)
+                required=bool(rule and rule.active and rule.required()),
+                must_include=bool(rule and rule.active
+                                  and (rule.required() or rule.must_include())),
                 zh=rule.zh if rule and rule.zh else "",
                 zh_source="rule" if rule and rule.zh else "",
-                enum_values=rule.enum_values() if rule else None,
+                enum_values=rule.enum_values() if rule and rule.active else None,
                 default=read.default if read and read.default is not None else None,
                 col_comment=cols[0].comment if cols else "",
                 col_type=cols[0].col_type if cols else "",
