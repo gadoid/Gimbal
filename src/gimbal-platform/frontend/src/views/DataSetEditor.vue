@@ -156,7 +156,8 @@
             <th
               v-for="col in varColumns"
               :key="`info-f:${col.varName}`"
-              :class="['th-data', col.expect ? 'col-expect' : '', col.unreferenced ? 'col-unreferenced' : '']"
+              :class="['th-data', col.expect ? 'col-expect' : '', col.unreferenced ? 'col-unreferenced' : '',
+                       isLockedHidden(col.varName) ? 'col-locked' : '']"
               :title="col.badges.length
                 ? `${col.varName} — 被 ${col.badges.map(b => `步骤${b.stepIndex + 1}·${b.label}`).join(' / ')} 引用`
                 : `${col.varName} — 未被引用`"
@@ -180,6 +181,27 @@
                 :title="`跳编排器断言卡 — ${col.expect.field} ${col.expect.expect?.operator}`"
                 @click.stop="jumpToAssertion(col)"
               >↗</button>
+              <span
+                v-if="isLockDeclared(col.varName)"
+                class="lock-col-badge"
+                title="过程变量 · 默认用共享侧配置(运行取值规则不变)"
+              >🔒</span>
+              <button
+                v-if="isLockDeclared(col.varName)"
+                type="button"
+                class="col-unlock"
+                :title="isLockedHidden(col.varName)
+                  ? '本数据集放开该列编辑(不碰共享侧、不碰其他数据集)'
+                  : '收回本地放开 — 回到锁定只读态'"
+                @click.stop="isLockedHidden(col.varName) ? unlockVar(col.varName) : relockVar(col.varName)"
+              >{{ isLockedHidden(col.varName) ? '放开' : '收回' }}</button>
+              <button
+                v-if="isLockDeclared(col.varName) && rows.some(r => Object.prototype.hasOwnProperty.call(r, col.varName))"
+                type="button"
+                class="col-reset"
+                title="清掉本数据集所有行里该变量的覆盖键 + 撤销本地放开"
+                @click.stop="resetVarDefault(col.varName)"
+              >恢复默认</button>
             </th>
             <th class="th-action" />
           </tr>
@@ -193,7 +215,8 @@
             <td
               v-for="col in varColumns"
               :key="`b:${col.varName}`"
-              :class="['td-data', col.expect ? 'col-expect' : '', col.unreferenced ? 'col-unreferenced' : '']"
+              :class="['td-data', col.expect ? 'col-expect' : '', col.unreferenced ? 'col-unreferenced' : '',
+                       isLockedHidden(col.varName) ? 'col-locked' : '']"
             >
               <!-- 容器基线(对象/数组):只读 chip — 语义提示辨有无值,
                    tooltip 出紧凑 JSON;无输入框 → setBaseline 不可达,
@@ -232,15 +255,20 @@
             <td
               v-for="col in varColumns"
               :key="`c:${i}:${col.varName}`"
-              :class="['td-data', cellClass(row, bcOf(col)), col.expect ? 'col-expect' : '']"
-              :title="col.baselineStructured ? col.baselineJson : col.baseline"
+              :class="['td-data', cellClass(row, bcOf(col)), col.expect ? 'col-expect' : '',
+                       isLockedHidden(col.varName) ? 'col-locked' : '']"
+              :title="isLockedHidden(col.varName) && Object.prototype.hasOwnProperty.call(row, col.varName)
+                ? '已锁定为过程变量,本数据集使用自有值 — 可「恢复默认」回到共享侧配置'
+                : (col.baselineStructured ? col.baselineJson : col.baseline)"
             >
               <!-- 一变量一列:行键 = varName,baseline = config.vars 值,
                    placeholder 显基线(继承态线索;容器值给「按基线(语义提示)」,
-                   原始结构经 tooltip 悬停查看) -->
+                   原始结构经 tooltip 悬停查看);锁定未放开的格只读(语义守卫
+                   在 onCellInput/onCellPaste,readonly 只是第一道 UI 面) -->
               <input
                 :value="row[col.varName] ?? ''"
                 class="data-cell-input"
+                :readonly="isLockedHidden(col.varName)"
                 :placeholder="col.baselineStructured ? `按基线(${col.baseline})` : col.baseline"
                 @input="(e: Event) => onCellInput(i, bcOf(col), (e.target as HTMLInputElement).value)"
                 @paste="(e: ClipboardEvent) => onCellPaste(e, bcOf(col), i)"
@@ -434,11 +462,41 @@ interface VarViewColumn {
   unreferenced: boolean
 }
 
+// ── 变量锁定(var-lock spec §2)─────────────────────────────
+/** 数据集本地放开清单(数据集级元数据,随「保存数据集」落库) */
+const varUnlocks = ref<string[]>([])
+/** 场景级锁清单(definition.config.var_locks 旁挂,只读消费) */
+const varLocks = computed<string[]>(() =>
+  (draft.value?.definition?.config?.var_locks ?? []) as string[])
+/** 锁定且未本地放开 = 编辑面隐藏态(沉底/只读/CSV 排除) */
+function isLockedHidden(name: string): boolean {
+  return varLocks.value.includes(name) && !varUnlocks.value.includes(name)
+}
+/** 声明锁定(含已本地放开 — 「收回」钮与面板放开开关的判定面) */
+function isLockDeclared(name: string): boolean {
+  return varLocks.value.includes(name)
+}
+/** 本地放开/收回:写本数据集 var_unlocks,永不写场景配置(spec §2 边界) */
+function unlockVar(name: string) {
+  if (!varUnlocks.value.includes(name)) varUnlocks.value.push(name)
+}
+function relockVar(name: string) {
+  varUnlocks.value = varUnlocks.value.filter(n => n !== name)
+}
+/** 恢复默认(全覆盖撤销):清该变量全部行键 + 撤销本地放开 → 回到
+ *  「锁定、继承共享侧值」的默认态(spec §2) */
+function resetVarDefault(name: string) {
+  for (const r of rows.value) delete r[name]
+  varUnlocks.value = varUnlocks.value.filter(n => n !== name)
+  rowsDirty.value = true
+  ElMessage.success(`已恢复默认:「${name}」全部覆盖已清,回到共享侧配置`)
+}
+
 const varColumns = computed<VarViewColumn[]>(() => {
   const vars = (draft.value?.definition?.config?.vars ?? {}) as Record<string, unknown>
   const declared = Object.keys(vars)
   const undeclared = [...refsByVar.value.keys()].filter(n => !declared.includes(n))
-  return [...declared, ...undeclared].map((name) => {
+  const cols = [...declared, ...undeclared].map((name) => {
     const refs = refsByVar.value.get(name) ?? []
     const expect = refs.find(r => r.source === 'expect') ?? null
     const badgeIdx = new Set<number>()
@@ -466,6 +524,12 @@ const varColumns = computed<VarViewColumn[]>(() => {
       unreferenced: refs.length === 0,
     }
   })
+  // 声明锁定的列沉底(组内保持声明序;spec §2 数据集网格行)。按声明而非
+  // 隐藏态排序:本地放开/收回时列不弹跳(放开列仍在沉底组,只是恢复可编辑)
+  return [
+    ...cols.filter(c => !isLockDeclared(c.varName)),
+    ...cols.filter(c => isLockDeclared(c.varName)),
+  ]
 })
 
 /** 变量选择:'all' = 变量网格;字符串 = varName(单变量详情面板) */
@@ -504,6 +568,11 @@ function bcOf(col: VarViewColumn): BaselineColumn {
  *  不随单变量视图过滤(brief ⑥);columns 与 descriptions 同源同序,
  *  (description) 行守卫恒满足。 */
 const csvVarColumns = computed<BaselineColumn[]>(() => varColumns.value.map(bcOf))
+
+/** CSV 导出列宇宙:排除未本地放开的锁定列(spec §2 CSV 导出行)。
+ *  本地放开的列照常参与。导入 columns 用同源(回导模板即导出形状)。 */
+const exportVarColumns = computed<BaselineColumn[]>(() =>
+  csvVarColumns.value.filter(c => !isLockedHidden(c.varName!)))
 
 /** 步骤展示名:读 orchestration.steps[i].name(平台编排视图,plate Step
  *  无 name 字段);缺名/越界降级 Step N(同 RunDialog stepTo 下拉语义)。 */
@@ -699,6 +768,9 @@ function removeRow(i: number) {
  *  blur 还原分支(旧注释描述的 @blur 归类已退场,文件内无 blur 处理器);
  *  编辑即置 rowsDirty(本地行表 ≠ 服务端存量)。 */
 function onCellInput(rowIndex: number, col: BaselineColumn, v: string) {
+  // 锁定未放开的列:语义守卫(readonly UI 是第一道,这里是第二道 —
+  // 面板 set-cell 等程序化写入也经此)静默拒绝,不落键
+  if (col.varName && isLockedHidden(col.varName)) return
   const cur = rows.value[rowIndex] ?? {}
   const next = { ...cur }
   if (v === '') {
@@ -714,6 +786,13 @@ function onCellInput(rowIndex: number, col: BaselineColumn, v: string) {
 /** TSV 粘贴:从某个 cell 出发,把 tab 切的多行写入同一列。 */
 function onCellPaste(e: ClipboardEvent, col: BaselineColumn, rowIndex: number) {
   if (!col.varName) return
+  // 锁定未放开的列拒写(spec §2 TSV 拒写行):preventDefault 阻止原生
+  // 粘贴落值,提示引导列头「放开」— 不落键
+  if (isLockedHidden(col.varName)) {
+    e.preventDefault()
+    ElMessage.warning(`「${col.varName}」已锁定为过程变量 — 如需编辑请先在列头「放开」`)
+    return
+  }
   const text = e.clipboardData?.getData('text/plain') ?? ''
   if (!text) return
   // 仅当含 \t 或 \n 才接管;普通文本不接管
@@ -762,6 +841,8 @@ async function onSaveRows() {
       name: form.name,
       description: form.description,
       rows: apiRows,
+      // 空清单不携键(缺省 ≡ 空)— 既有无锁定场景的 draft 形状零变化
+      ...(varUnlocks.value.length ? { var_unlocks: [...varUnlocks.value] } : {}),
     })
     ElMessage.success('已保存')
     rowsDirty.value = false          // 落库后本地行号 = 服务端行号
@@ -790,14 +871,14 @@ async function onDelete() {
 
 // ── CSV 导入 / 导出 ─────────────────────────────────────
 function onExportCsv() {
-  // 字段描述(按 csvVarColumns 顺序,缺描述的列填空串)— 全量宇宙,
-  // 与 exportDataSetCsv 内部 varOnlyPalette(columns) 同源同序,不受段过滤影响
-  const descriptions = csvVarColumns.value.map(
+  // 字段描述(按导出列顺序,缺描述的列填空串)— 与 exportDataSetCsv
+  // 内部 varOnlyPalette(columns) 同源同序,不受段过滤/锁定排除影响
+  const descriptions = exportVarColumns.value.map(
     (c) => descriptionByColumnKey.value.get(`${c.stepIndex}:${c.source}:${c.field}`) ?? '',
   )
   exportDataSetCsv({
     datasetName: form.name || 'dataset',
-    columns: csvVarColumns.value,
+    columns: exportVarColumns.value,
     rows: rows.value.map(toApiRow),
     caseNames: caseNames.value,
     descriptions,
@@ -808,8 +889,10 @@ async function onImportCsv(file: File) {
     const text = await file.text()
     const result = importDataSetCsv({
       fileText: text,
-      // 与导出同宇宙(全段输入列 + 期望列,不随段过滤):导出的列可原样回导
+      // 与导出同宇宙(全段输入列 + 期望列,不随段过滤):导出的列可原样回导;
+      // 锁定列保持全量在场(旧模板可含锁定列头),只经 lockedVars 分流行为
       columns: csvVarColumns.value,
+      lockedVars: varColumns.value.filter(c => isLockedHidden(c.varName)).map(c => c.varName),
       rows: rows.value.map(toApiRow),
       caseNames: caseNames.value,
       mode: 'merge-by-name',
@@ -818,6 +901,9 @@ async function onImportCsv(file: File) {
       ElMessage.warning(`CSV 导入有问题:${result.errors.join('; ')}`)
     } else {
       ElMessage.success(`CSV 导入成功(共 ${result.rows.length} 条数据)`)
+    }
+    if (result.skippedLocked?.length) {
+      ElMessage.info(`${result.skippedLocked.length} 列已锁定,已忽略:${result.skippedLocked.join(', ')}`)
     }
     rows.value = result.rows
     caseNames.value = result.caseNames
@@ -838,6 +924,7 @@ onMounted(async () => {
       form.description = full.description ?? ''
       rows.value = full.rows.map((r) => ({ ...r }))
       caseNames.value = full.rows.map((_, i) => `data-${i + 1}`)
+      varUnlocks.value = [...(full.var_unlocks ?? [])]
       rowsDirty.value = false        // 本地模型 = 服务端存量,「运行」守卫前提成立
     } else {
       form.name = '默认数据集'
@@ -957,6 +1044,15 @@ onMounted(async () => {
    数据格保持三态语义不参与) */
 .data-table th.col-unreferenced { background: #f1f5f9; color: #94a3b8; }
 .data-table .row-baseline td.col-unreferenced { color: #94a3b8; }
+/* 锁定列(var-lock):沉底组的表头/格子灰化 + 锁徽标 */
+.data-table th.col-locked { background: #f8fafc; color: #94a3b8; }
+.data-table .row-baseline td.col-locked { color: #94a3b8; }
+.lock-col-badge { margin-left: 4px; font-size: 11px; }
+.col-unlock, .col-reset {
+  border: none; background: none; cursor: pointer; font-size: 10px;
+  color: #64748b; padding: 0 3px; margin-left: 4px;
+}
+.col-unlock:hover, .col-reset:hover { color: var(--accent); text-decoration: underline; }
 /* 期望列(spec §6.2):列头徽标 + 淡紫底,与输入列并排但可辨识 */
 .col-expect .exp-col-badge { font-size: 10px; font-weight: 700; color: #6b21a8; background: #f3e8ff; padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
 .th-data.col-expect { background: #faf5ff; }

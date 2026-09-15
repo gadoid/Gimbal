@@ -205,7 +205,17 @@ export function importDataSetCsv(input: CsvImportInput): CsvImportResult {
     parsedRows.forEach((p) => {
       const idx = byName.get(p.name)
       if (idx !== undefined) {
-        outRows[idx] = p.row
+        // 锁定列键承接(var-lock spec §2「CSV 不管理锁定列」):CSV 行永不
+        // 携带锁定列的键(解析端已跳过),整行替换时把既有行的锁定列键值
+        // 原样带过来 — 否则同名替换会悄悄把锁定覆盖清回基线。
+        let merged = p.row
+        if (lockedSet.size) {
+          const prev = outRows[idx]
+          for (const k of Object.keys(prev)) {
+            if (lockedSet.has(k)) merged = { ...merged, [k]: prev[k] }
+          }
+        }
+        outRows[idx] = merged
       } else {
         outRows.push(p.row)
         outCaseNames.push(p.name)

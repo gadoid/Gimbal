@@ -256,6 +256,22 @@ describe('importDataSetCsv — 锁定列跳过(var-lock spec §2 CSV 行)', () =
     })
     expect(res.rows).toEqual([{ amount: '9' }])
   })
+
+  it('merge-by-name + lockedVars:同名替换保留既有行的锁定列键(CSV 不管理锁定列)', () => {
+    // 旧模板回导场景:CSV 只带 amount;既有行 env 覆盖('prod')不得被
+    // 整行替换悄悄清掉(锁定 ≠ 删除 — spec §2「CSV 导出行」)
+    const res = importDataSetCsv({
+      fileText: '__case_name,amount\n(baseline),1\ndata-1,9\n',
+      columns: cols,
+      rows: [{ amount: '1', env: 'prod' }],
+      caseNames: ['data-1'],
+      mode: 'merge-by-name',
+      lockedVars: ['env'],
+    })
+    expect(res.errors).toEqual([])
+    expect(res.skippedLocked).toEqual([])
+    expect(res.rows[0]).toEqual({ amount: '9', env: 'prod' })  // env 键保留
+  })
 })
 
 // ── UTF-8 BOM ──────────────────────────────────────────────

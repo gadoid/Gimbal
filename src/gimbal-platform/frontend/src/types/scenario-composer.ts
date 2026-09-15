@@ -89,6 +89,9 @@ export interface DataSet {
   description?: string
   rowCount: number
   rows: DataSetRow[]
+  /** 变量锁本地放开清单(var-lock spec §3.2)— 数据集级元数据,
+   *  与场景级 config.var_locks 互不影响 */
+  var_unlocks?: string[]
 }
 
 export interface DataSetSummary {
@@ -105,4 +108,7 @@ export interface DataSetDraft {
   name: string
   description?: string
   rows: DataSetRow[]
+  /** 变量锁本地放开清单(var-lock spec §3.2)— 数据集级元数据,
+   *  与场景级 config.var_locks 互不影响 */
+  var_unlocks?: string[]
 }
