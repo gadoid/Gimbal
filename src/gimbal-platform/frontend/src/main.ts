@@ -5,6 +5,7 @@ import 'element-plus/dist/index.css'
 import './styles/theme.css'
 import './styles/override.css'
 import './styles/composer.css'
+import './styles/tailwind.css'
 
 import App from './App.vue'
 import router from './router'

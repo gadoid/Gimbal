@@ -1,0 +1,10 @@
+/*
+ * tailwind.css — Tailwind 入口(重构方案 Phase 0)。
+ *
+ * preflight 已在 tailwind.config.js 关闭,@tailwind base 只剩空层;
+ * utilities 按需生成(content 扫描 src/**),未用类不进产物。
+ * 迁移中的页面从 element-plus 侧切到 Signal token 时引本文件即可。
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
