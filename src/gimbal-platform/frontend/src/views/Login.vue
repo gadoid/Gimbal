@@ -1,100 +1,103 @@
-<!-- Login.vue — wireframe 2.
-     Centered 380px card on light-purple gradient. Element Plus primitives only. -->
+<!-- Login.vue — 登录页(重构方案 Phase 2 批次 1:Element Plus 退场首战)。
+     新栈:shadcn Input/Button/Alert + Tailwind token;校验为轻量手写
+     (提交时校验 + 输入即清错;表单范式统一(vee-validate)待 5 个
+     表单文件批次一起定,不在此页单方面引入依赖)。 -->
 <template>
-  <div class="login-page">
-    <el-card class="login-card" shadow="never">
+  <div class="login-page flex min-h-screen items-center justify-center bg-gradient-to-br from-signal-soft to-signal-canvas p-6">
+    <div class="auth-card w-[380px] max-w-full rounded-card border border-signal-line bg-signal-card px-7 pb-6 pt-7 shadow-sig-hover">
       <!-- Brand header -->
-      <div class="brand">
-        <div class="brand-logo" aria-hidden="true"></div>
-        <div class="brand-text">
-          <div class="brand-title">Gimbal Platform</div>
-          <div class="brand-sub">用例配置 &amp; 执行平台 · v0.1</div>
+      <div class="mb-6 flex items-center gap-3">
+        <div class="h-9 w-9 shrink-0 rounded-lg bg-gradient-to-br from-signal to-signal-dot" aria-hidden="true"></div>
+        <div class="flex flex-col">
+          <div class="text-body font-semibold leading-tight text-signal-ink">Gimbal Platform</div>
+          <div class="mt-0.5 text-caption text-muted-foreground">用例配置 &amp; 执行平台 · v0.1</div>
         </div>
       </div>
 
       <!-- Title + subtitle -->
-      <div class="title-block">
-        <div class="title">登录</div>
-        <div class="subtitle">账号密码登录 · 首次注册的用户自动成为管理员</div>
+      <div class="mb-[18px]">
+        <div class="text-[20px] font-semibold text-signal-ink">登录</div>
+        <div class="mt-1 text-caption text-muted-foreground">账号密码登录 · 首次注册的用户自动成为管理员</div>
       </div>
 
       <!-- Error strip (only on login failure) -->
-      <div v-if="errorMsg" class="error-strip">
-        <el-alert type="error" :closable="false" show-icon :title="errorMsg" />
-      </div>
+      <Alert v-if="errorMsg" variant="destructive" class="mb-3.5">
+        <AlertTitle>{{ errorMsg }}</AlertTitle>
+      </Alert>
 
-      <!-- Form -->
-      <el-form
-        ref="formRef"
-        :model="form"
-        :rules="rules"
-        class="login-form"
-        label-position="top"
-        @keyup.enter="onSubmit"
-      >
-        <el-form-item prop="username" label="用户名">
-          <template #label>
-            <span class="form-label">用户名<span class="required-dot">*</span></span>
-          </template>
-          <el-input
+      <!-- Form:Enter 提交;提交时校验,输入即清错 -->
+      <form class="flex flex-col gap-4" @submit.prevent="onSubmit" @keyup.enter="onSubmit">
+        <div class="flex flex-col gap-1.5">
+          <label class="form-label" for="login-username">用户名<span class="required-dot">*</span></label>
+          <Input
+            id="login-username"
             v-model="form.username"
             placeholder="请输入用户名"
             autocomplete="username"
-            clearable
+            :aria-invalid="!!errors.username"
+            @input="delete errors.username"
           />
-        </el-form-item>
-
-        <el-form-item prop="password" label="密码">
-          <template #label>
-            <span class="form-label">密码<span class="required-dot">*</span></span>
-          </template>
-          <el-input
-            v-model="form.password"
-            :type="showPassword ? 'text' : 'password'"
-            placeholder="请输入密码"
-            autocomplete="current-password"
-          >
-            <template #suffix>
-              <el-button
-                type="primary"
-                link
-                class="eye-btn"
-                :title="showPassword ? '隐藏密码' : '显示密码'"
-                @click="showPassword = !showPassword"
-              >
-                <el-icon><Hide v-if="showPassword" /><View v-else /></el-icon>
-              </el-button>
-            </template>
-          </el-input>
-        </el-form-item>
-
-        <div class="row-between">
-          <span class="keep-hint">登录状态将在此设备上保持</span>
-          <el-link type="primary" :underline="false" disabled>忘记密码？</el-link>
+          <p v-if="errors.username" class="field-error">{{ errors.username }}</p>
         </div>
 
-        <el-button
-          type="primary"
-          :loading="loading"
-          class="submit-btn"
-          @click="onSubmit"
-        >登 录</el-button>
-      </el-form>
+        <div class="flex flex-col gap-1.5">
+          <label class="form-label" for="login-password">密码<span class="required-dot">*</span></label>
+          <div class="relative">
+            <Input
+              id="login-password"
+              v-model="form.password"
+              :type="showPassword ? 'text' : 'password'"
+              placeholder="请输入密码"
+              autocomplete="current-password"
+              class="pr-9"
+              :aria-invalid="!!errors.password"
+              @input="delete errors.password"
+            />
+            <button
+              type="button"
+              class="absolute right-2 top-1/2 -translate-y-1/2 rounded-chip p-1 text-muted-foreground transition-colors hover:text-signal"
+              :title="showPassword ? '隐藏密码' : '显示密码'"
+              @click="showPassword = !showPassword"
+            >
+              <!-- 眼睛图标(内联 SVG,随 text-current 变色) -->
+              <svg v-if="showPassword" viewBox="0 0 16 16" class="h-4 w-4" fill="currentColor" aria-hidden="true">
+                <path d="M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
+                <path d="M13.966 8.255a.5.5 0 0 0 0-.51C12.915 5.99 10.727 4 8 4S3.085 5.99 2.034 7.745a.5.5 0 0 0 0 .51C3.085 10.01 5.273 12 8 12s4.915-1.99 5.966-3.745ZM8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z" />
+                <path d="M1.5 1.5 14.5 14.5" stroke="currentColor" stroke-width="1.2" />
+              </svg>
+              <svg v-else viewBox="0 0 16 16" class="h-4 w-4" fill="currentColor" aria-hidden="true">
+                <path d="M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
+                <path d="M13.966 8.255a.5.5 0 0 0 0-.51C12.915 5.99 10.727 4 8 4S3.085 5.99 2.034 7.745a.5.5 0 0 0 0 .51C3.085 10.01 5.273 12 8 12s4.915-1.99 5.966-3.745ZM8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z" />
+              </svg>
+            </button>
+          </div>
+          <p v-if="errors.password" class="field-error">{{ errors.password }}</p>
+        </div>
 
-      <div class="register-link">
-        还没有账号？<router-link to="/register" custom v-slot="{ navigate }">
-          <el-link type="primary" :underline="false" @click="navigate">立即注册</el-link>
-        </router-link>
+        <div class="flex items-center justify-between">
+          <span class="text-caption text-muted-foreground">登录状态将在此设备上保持</span>
+          <span class="text-caption text-muted-foreground/60 select-none" title="未开放">忘记密码？</span>
+        </div>
+
+        <Button class="h-[38px] w-full tracking-widest" :disabled="loading" type="submit">
+          {{ loading ? '登录中…' : '登 录' }}
+        </Button>
+      </form>
+
+      <div class="mt-[18px] text-center text-body text-muted-foreground">
+        还没有账号？
+        <router-link to="/register" class="text-signal no-underline hover:underline">立即注册</router-link>
       </div>
-    </el-card>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { Hide, View } from '@element-plus/icons-vue'
+import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { type FormInstance, type FormRules } from 'element-plus'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Alert, AlertTitle } from '@/components/ui/alert'
 import { toast } from '@/utils/toast'
 import { useAuthStore } from '@/stores/auth'
 
@@ -102,7 +105,6 @@ const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 
-const formRef = ref<FormInstance | null>(null)
 const loading = ref(false)
 const showPassword = ref(false)
 const errorMsg = ref('')
@@ -112,22 +114,20 @@ const form = reactive({
   password: '',
 })
 
-const rules: FormRules = {
-  username: [
-    { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 32, message: '长度 3-32 字符', trigger: 'blur' },
-  ],
-  password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 1, message: '密码不能为空', trigger: 'blur' },
-  ],
+const errors = reactive<{ username?: string; password?: string }>({})
+
+function validate(): boolean {
+  delete errors.username
+  delete errors.password
+  if (!form.username) errors.username = '请输入用户名'
+  else if (form.username.length < 3 || form.username.length > 32) errors.username = '长度 3-32 字符'
+  if (!form.password) errors.password = '请输入密码'
+  return !errors.username && !errors.password
 }
 
 async function onSubmit() {
   errorMsg.value = ''
-  if (!formRef.value) return
-  const valid = await formRef.value.validate().catch(() => false)
-  if (!valid) return
+  if (!validate()) return
   loading.value = true
   try {
     await auth.login(form.username, form.password)
@@ -146,131 +146,15 @@ async function onSubmit() {
 </script>
 
 <style scoped>
-.login-page {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: linear-gradient(135deg, var(--accent-soft) 0%, #f5f3ff 100%);
-}
-
-.login-card {
-  width: 380px;
-  max-width: 100%;
-  border: 1px solid var(--accent-soft-border);
-  border-radius: 8px;
-  padding: 4px;
-}
-
-.login-card :deep(.el-card__body) {
-  padding: 28px 28px 24px;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.brand-logo {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--accent) 0%, #6366f1 100%);
-  flex-shrink: 0;
-}
-
-.brand-text {
-  display: flex;
-  flex-direction: column;
-}
-
-.brand-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  line-height: 1.2;
-}
-
-.brand-sub {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  margin-top: 2px;
-}
-
-.title-block {
-  margin-bottom: 18px;
-}
-
-.title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.subtitle {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  margin-top: 4px;
-}
-
-.error-strip {
-  margin-bottom: 14px;
-}
-
 .form-label {
-  display: inline-flex;
-  align-items: center;
-  font-weight: 500;
-  color: var(--color-text-primary);
+  @apply inline-flex items-center text-label font-medium text-signal-ink;
 }
 
 .required-dot {
-  color: var(--red);
-  margin-left: 4px;
-  font-weight: 700;
+  @apply ml-1 font-bold text-signal-failed;
 }
 
-.eye-btn {
-  font-size: 16px;
-  padding: 0 4px;
-}
-
-.row-between {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  margin-top: -4px;
-}
-
-.keep-hint {
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-}
-
-.submit-btn {
-  width: 100%;
-  height: 38px;
-  font-weight: 500;
-  letter-spacing: 2px;
-}
-
-.register-link {
-  margin-top: 18px;
-  text-align: center;
-  font-size: 13px;
-  color: var(--color-text-secondary);
-}
-
-.login-form :deep(.el-form-item) {
-  margin-bottom: 16px;
-}
-
-.login-form :deep(.el-form-item__label) {
-  padding-bottom: 4px;
-  font-weight: 500;
+.field-error {
+  @apply m-0 text-caption text-signal-failed;
 }
 </style>
