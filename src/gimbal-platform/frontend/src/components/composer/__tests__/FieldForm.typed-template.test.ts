@@ -14,7 +14,6 @@
 import { describe, it, expect } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 import { mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import FieldForm from '@/components/composer/FieldForm.vue'
 import type { IOFieldBinding } from '@/types/plate'
 import type { VarEntry } from '@/utils/var-registry'
@@ -62,7 +61,7 @@ function mountWithParent(opts: {
       })
     },
   })
-  const w = mount(Parent, { global: { plugins: [ElementPlus] } })
+  const w = mount(Parent, { global: { plugins: [] } })
   return { w, body, promoted }
 }
 
@@ -181,7 +180,7 @@ describe('FieldActionMenu — 子列表选中即返回(需求2:免 ‹ 返回)',
         })
       },
     })
-    const w = mount(Parent, { global: { plugins: [ElementPlus] } })
+    const w = mount(Parent, { global: { plugins: [] } })
     await w.find('.fa-menu-btn').trigger('click')
     await flush()
     await w.findAll('.fa-item').find((b) => b.text().includes('向该字段动态注入'))!.trigger('click')

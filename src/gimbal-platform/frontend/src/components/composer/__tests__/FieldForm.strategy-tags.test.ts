@@ -8,7 +8,6 @@
 import { describe, it, expect } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 import { mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import FieldForm from '@/components/composer/FieldForm.vue'
 import type { IOFieldBinding } from '@/types/plate'
 
@@ -38,7 +37,7 @@ describe('FieldForm — 策略角标(需求1)', () => {
         })
       },
     })
-    const w = mount(Parent, { global: { plugins: [ElementPlus] } })
+    const w = mount(Parent, { global: { plugins: [] } })
     const tag = w.find('.field-label .strategy-tag')
     expect(tag.exists()).toBe(true)
     expect(tag.text()).toBe('extract_1')
@@ -53,11 +52,11 @@ describe('FieldForm — 策略角标(需求1)', () => {
         bindings: [mkBinding()], body: {},
         strategyTags: { '$.other': [{ label: 'extract', idx: 0 }] },
       }),
-    }), { global: { plugins: [ElementPlus] } })
+    }), { global: { plugins: [] } })
     expect(a.find('.strategy-tag').exists()).toBe(false)
     const b = mount(defineComponent({
       setup: () => () => h(FieldForm, { bindings: [mkBinding()], body: {} }),
-    }), { global: { plugins: [ElementPlus] } })
+    }), { global: { plugins: [] } })
     expect(b.find('.strategy-tag').exists()).toBe(false)
   })
 })

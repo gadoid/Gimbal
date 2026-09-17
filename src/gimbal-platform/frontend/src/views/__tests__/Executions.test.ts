@@ -20,7 +20,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import ElementPlus from 'element-plus'
 import Executions from '@/views/Executions.vue'
 import ExecutionsList from '@/views/ExecutionsList.vue'
 import { listExecutions } from '@/api/executions'
@@ -95,7 +94,7 @@ async function mountPage(id = 1) {
   router.push(`/executions/${id}`)
   await router.isReady()
   const wrapper = mount(Executions, {
-    global: { plugins: [router, ElementPlus] },
+    global: { plugins: [router] },
   })
   await flushPromises()
   return wrapper

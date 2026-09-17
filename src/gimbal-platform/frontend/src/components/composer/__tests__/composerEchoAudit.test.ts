@@ -12,7 +12,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import ElementPlus from 'element-plus'
 import CaseComposerMeta from '@/components/composer/CaseComposerMeta.vue'
 import CaseComposerResource from '@/components/composer/CaseComposerResource.vue'
 import type { MetaView, ResourceView } from '@/types/plate'
@@ -46,7 +45,7 @@ describe('CaseComposerMeta — 回声审计(预期收敛,锁死不回归)', () =
         'onUpdate:modelValue': (v: MetaView) => { meta.value = v },
       }),
     })
-    const w = mount(Parent, { global: { plugins: [ElementPlus] } })
+    const w = mount(Parent, { global: { plugins: [] } })
     const input = w.find('input[placeholder="订单创建 e2e"]')
     await input.setValue('订单 e2e')
     await flush()
@@ -66,7 +65,7 @@ describe('CaseComposerResource — 回声审计', () => {
         'onUpdate:resourceMeta': (v: Record<string, string>) => { resourceMeta.value = v },
       }),
     })
-    const w = mount(Parent, { global: { plugins: [ElementPlus] } })
+    const w = mount(Parent, { global: { plugins: [] } })
     return { w, resource }
   }
 

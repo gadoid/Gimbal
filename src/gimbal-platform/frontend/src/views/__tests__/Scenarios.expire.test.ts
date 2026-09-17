@@ -7,7 +7,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
 import Scenarios from '@/views/Scenarios.vue'
 import * as api from '@/api/scenario-composer'
 import type { Scenario } from '@/types/scenario-composer'
@@ -35,7 +34,7 @@ function row(over: Partial<Scenario['meta']>): Scenario {
 
 function mountPage() {
   return mount(Scenarios, {
-    global: { plugins: [ElementPlus, createPinia()] },
+    global: { plugins: [createPinia()] },
     attachTo: document.body,
   })
 }

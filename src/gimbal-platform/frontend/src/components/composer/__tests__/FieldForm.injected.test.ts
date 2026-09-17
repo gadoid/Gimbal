@@ -9,7 +9,6 @@
 import { describe, it, expect } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import FieldForm from '@/components/composer/FieldForm.vue'
 import type { IOFieldBinding } from '@/types/plate'
 
@@ -34,7 +33,7 @@ describe('FieldForm — 动态注入只读态', () => {
         body: { orderId: 'ord-1' },
         injected: INJ,
       }),
-    }), { global: { plugins: [ElementPlus] } })
+    }), { global: { plugins: [] } })
     expect(w.find('.ctl-injected').exists()).toBe(true)
     expect(w.text()).toContain('已使用动态策略注入')
     expect(w.find('.field-control input.ctl').exists()).toBe(false)
@@ -52,7 +51,7 @@ describe('FieldForm — 动态注入只读态', () => {
         body: {},
         injected: INJ,
       }),
-    }), { global: { plugins: [ElementPlus] } })
+    }), { global: { plugins: [] } })
     expect(w.find('.injected-fallback').text()).toContain('(空)')
   })
 
@@ -66,7 +65,7 @@ describe('FieldForm — 动态注入只读态', () => {
           { source: '$.b', target: '$.request_body.orderId' },
         ] },
       }),
-    }), { global: { plugins: [ElementPlus] } })
+    }), { global: { plugins: [] } })
     expect(w.find('.ctl-injected').attributes('title'))
       .toBe('$.a → $.request_body.orderId\n$.b → $.request_body.orderId')
   })
@@ -79,7 +78,7 @@ describe('FieldForm — 动态注入只读态', () => {
           body: { orderId: 'ord-1' },
           ...(injected ? { injected } : {}),
         }),
-      }), { global: { plugins: [ElementPlus] } })
+      }), { global: { plugins: [] } })
     const a = mk({ '$.other': [{ source: '$.x', target: '$.request_body.other' }] })
     expect(a.find('.ctl-injected').exists()).toBe(false)
     expect((a.find('input.ctl').element as HTMLInputElement).value).toBe('ord-1')
@@ -97,7 +96,7 @@ describe('FieldForm — 动态注入只读态', () => {
         strategyTags: { '$.orderId': [{ label: 'assign', idx: 0 }] },
         onStrategyJump: (idx: number) => jumped.push(idx),
       }),
-    }), { global: { plugins: [ElementPlus] } })
+    }), { global: { plugins: [] } })
     const tag = w.find('.field-label .strategy-tag')
     expect(tag.exists()).toBe(true)
     expect(tag.text()).toBe('assign')

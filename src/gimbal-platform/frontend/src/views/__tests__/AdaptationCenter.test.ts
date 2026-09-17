@@ -11,7 +11,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import ElementPlus from 'element-plus'
 import AdaptationCenter from '@/views/AdaptationCenter.vue'
 import ImpactDrawer from '@/components/adaptations/ImpactDrawer.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -41,7 +40,7 @@ async function mountPage() {
   const router = makeRouter()
   router.push('/adaptations')
   await router.isReady()
-  const w = mount(AdaptationCenter, { global: { plugins: [router, ElementPlus] } })
+  const w = mount(AdaptationCenter, { global: { plugins: [router] } })
   await flushPromises()
   return { w, router }
 }

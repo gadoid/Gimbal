@@ -12,7 +12,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { provide, defineComponent, h, ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import ElementPlus from 'element-plus'
 import CaseComposerCanvas from '@/components/composer/CaseComposerCanvas.vue'
 import FieldForm from '@/components/composer/FieldForm.vue'
 import {
@@ -373,7 +372,7 @@ function mountCanvas(stepsOrOpts: StepView[] | CanvasMountOpts, activeIdx = 0, a
   // attach=B4 角标跳转用:VTU 默认挂脱离 document 的 div,
   // document.getElementById(策略卡 id) 落空 → 跳转 no-op
   const w = mount(Parent, {
-    global: { plugins: [ElementPlus, activePinia] },
+    global: { plugins: [activePinia] },
     ...(attach ? { attachTo: document.body } : {}),
   })
   return { w }
@@ -690,7 +689,7 @@ describe('VarSelectorModal 分流(#7)', () => {
           { name: 'token', origin: 'extract', stepIdx: 0, expression: '$.t' },
         ],
       },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
       attachTo: document.body,
     })
     await flush()
@@ -787,7 +786,7 @@ describe('CaseComposerCanvas — 常量池 col-info 常驻(F12/F13)', () => {
       },
     })
     return mount(Parent, {
-      global: { plugins: [ElementPlus, activePinia] },
+      global: { plugins: [activePinia] },
       attachTo: document.body,
     })
   }
@@ -1156,7 +1155,7 @@ describe('CaseComposerCanvas — description 取 plate(问题2)', () => {
           })
         },
       })
-      const w = mount(Parent, { global: { plugins: [ElementPlus, activePinia] } })
+      const w = mount(Parent, { global: { plugins: [activePinia] } })
       await flushPromises()
       await w.find('.add-step').trigger('click')
       await flushPromises()
@@ -2665,7 +2664,7 @@ describe('CaseComposerCanvas — 断言卡呈现与跳转(§5.3)', () => {
         },
       })
       const w = mount(Parent, {
-        global: { plugins: [ElementPlus, activePinia] },
+        global: { plugins: [activePinia] },
         attachTo: document.body,
       })
       await flushPromises()
@@ -2718,7 +2717,7 @@ describe('CaseComposerCanvas — 断言卡呈现与跳转(§5.3)', () => {
         },
       })
       const w = mount(Parent, {
-        global: { plugins: [ElementPlus, activePinia] },
+        global: { plugins: [activePinia] },
         attachTo: document.body,
       })
       await flushPromises()
@@ -2937,7 +2936,7 @@ describe('CaseComposerCanvas — 契约降级重试入口(阶段二 Task 8)', ()
         })
       },
     })
-    const w = mount(Parent, { global: { plugins: [ElementPlus, activePinia] } })
+    const w = mount(Parent, { global: { plugins: [activePinia] } })
     return { w, stepsRef }
   }
 

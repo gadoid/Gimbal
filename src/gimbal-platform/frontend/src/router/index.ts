@@ -109,14 +109,7 @@ const routes = [
     component: () => import('@/views/Executions.vue'),
     meta: { requiresAuth: true },
   },
-  {
-    // Phase 0 双栈隔离验证页(重构方案 §3 验收):Element Plus 与
-    // shadcn-vue 同页渲染,验证 preflight:false 下互不污染。
-    // 迁移期临时页,Phase 3 退役。
-    path: '/dev/dual-stack',
-    component: () => import('@/views/dev/DualStackLab.vue'),
-    meta: { requiresAuth: true },
-  },
+  // /dev/dual-stack 双栈验证页已随 Phase 3 退役(EP 摘除,使命完成)
 ]
 
 const router = createRouter({

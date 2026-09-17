@@ -7,7 +7,6 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import OpConstructDialog from '@/components/adaptations/OpConstructDialog.vue'
 import * as api from '@/api/adaptations'
 import type { OpOut } from '@/api/adaptations'
@@ -32,7 +31,7 @@ const created = {
 async function mountDialog(props: Record<string, unknown> = {}) {
   const w = mount(OpConstructDialog, {
     props: { modelValue: true, batchId: 'bt-1', ...props },
-    global: { plugins: [ElementPlus] },
+    global: { plugins: [] },
   })
   await flushPromises()
   return w

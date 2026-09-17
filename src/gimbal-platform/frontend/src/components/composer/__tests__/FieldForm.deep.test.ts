@@ -16,7 +16,6 @@
 import { describe, it, expect } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 import { mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import FieldForm from '@/components/composer/FieldForm.vue'
 import { buildTree } from '@/utils/declarations'
 import type { DeclarationEntryView, FieldState, IOFieldBinding } from '@/types/plate'
@@ -85,7 +84,7 @@ function mountTree(opts: {
       })
     },
   })
-  const w = mount(Parent, { global: { plugins: [ElementPlus] } })
+  const w = mount(Parent, { global: { plugins: [] } })
   return { w, body, emitted, extracted, assigned, asserted, jumps, varInserted, promoted }
 }
 
@@ -905,7 +904,7 @@ describe('FieldForm 树模式 — 注入只读态复用', () => {
         body,
         strategyTags: { '$.items[1].sku': [{ label: 'assign', idx: 0 }] },
       },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     expect(w.findAll('.strategy-tag')).toHaveLength(1)
     expect(w.findAll('.arr-row')[1].find('.strategy-tag').exists()).toBe(true)

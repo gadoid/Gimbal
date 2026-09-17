@@ -15,7 +15,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
-import ElementPlus from 'element-plus'
 import * as confirmModule from '@/utils/confirmAction'
 import CaseComposer from '@/views/CaseComposer.vue'
 import * as api from '@/api/scenario-composer'
@@ -79,7 +78,7 @@ async function mountPage(path = '/composer/sc-demo') {
   router.push(path)
   await router.isReady()
   const w = mount({ template: '<router-view />' }, {
-    global: { plugins: [router, ElementPlus, createPinia()] },
+    global: { plugins: [router, createPinia()] },
     attachTo: document.body,
   })
   await flushPromises()

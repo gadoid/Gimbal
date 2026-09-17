@@ -7,7 +7,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import ElementPlus from 'element-plus'
 import CaseComposer from '@/views/CaseComposer.vue'
 import * as api from '@/api/scenario-composer'
 import type { Scenario } from '@/types/scenario-composer'
@@ -75,7 +74,7 @@ function sampleScenario(steps: unknown[]): Scenario {
 
 function mountPage() {
   return mount(CaseComposer, {
-    global: { plugins: [ElementPlus, createPinia()] },
+    global: { plugins: [createPinia()] },
     attachTo: document.body,
   })
 }

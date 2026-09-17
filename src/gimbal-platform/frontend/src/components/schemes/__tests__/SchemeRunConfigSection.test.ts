@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import SchemeRunConfigSection from '../SchemeRunConfigSection.vue'
 
 const BASE = {
@@ -14,7 +13,7 @@ const BASE = {
 
 describe('SchemeRunConfigSection', () => {
   it('选凭证别名 → update:serviceBindings(仅显式绑定入对象)', async () => {
-    const w = mount(SchemeRunConfigSection, { props: { ...BASE }, global: { plugins: [ElementPlus] } })
+    const w = mount(SchemeRunConfigSection, { props: { ...BASE }, global: { plugins: [] } })
     const sel = w.findAll('select')[0]  // svc-a 行的别名下拉(原生 select 简化实现)
     await sel.setValue('alias-1')
     expect(w.emitted('update:serviceBindings')!.at(-1)![0]).toEqual({
@@ -23,12 +22,12 @@ describe('SchemeRunConfigSection', () => {
   })
 
   it('运行参数钳位:nRuns 上限 1000,总量预览 = nRuns×parallel 可见', async () => {
-    const w = mount(SchemeRunConfigSection, { props: { ...BASE, nRuns: 5, parallel: 4 }, global: { plugins: [ElementPlus] } })
+    const w = mount(SchemeRunConfigSection, { props: { ...BASE, nRuns: 5, parallel: 4 }, global: { plugins: [] } })
     expect(w.find('[data-testid="total-preview"]').text()).toContain('20')
   })
 
   it('预埋区可见且标注待引擎支持', () => {
-    const w = mount(SchemeRunConfigSection, { props: { ...BASE }, global: { plugins: [ElementPlus] } })
+    const w = mount(SchemeRunConfigSection, { props: { ...BASE }, global: { plugins: [] } })
     expect(w.text()).toContain('插件列表')
     expect(w.text()).toContain('日志订阅')
     expect(w.text()).toContain('待引擎支持')
@@ -36,7 +35,7 @@ describe('SchemeRunConfigSection', () => {
 
   // ── 显式绑定口径(镜像 RunDialog.explicitBindingOf,D3)──────────────
   it('URL 覆盖:与声明相同不算显式(键移除);不同才带入 url', async () => {
-    const w = mount(SchemeRunConfigSection, { props: { ...BASE }, global: { plugins: [ElementPlus] } })
+    const w = mount(SchemeRunConfigSection, { props: { ...BASE }, global: { plugins: [] } })
     const url = w.findAll('[data-testid="binding-url"]')[0]  // svc-a 行(声明 http://a)
     await url.setValue('http://a')          // = 声明 → 非显式,不下发
     expect(w.emitted('update:serviceBindings')!.at(-1)![0]).toEqual({})
@@ -49,7 +48,7 @@ describe('SchemeRunConfigSection', () => {
   it('清空别名 → 移除该服务键', async () => {
     const w = mount(SchemeRunConfigSection, {
       props: { ...BASE, serviceBindings: { 'svc-a': { authAlias: 'alias-1' } } },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     await w.findAll('select')[0].setValue('')  // 「— 不绑定 —」
     expect(w.emitted('update:serviceBindings')!.at(-1)![0]).toEqual({})
@@ -58,7 +57,7 @@ describe('SchemeRunConfigSection', () => {
   it('别名 + URL 覆盖并存 → 两个显式字段一起下发', async () => {
     const w = mount(SchemeRunConfigSection, {
       props: { ...BASE, serviceBindings: { 'svc-a': { authAlias: 'alias-1' } } },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     await w.findAll('[data-testid="binding-url"]')[0].setValue('http://x')
     expect(w.emitted('update:serviceBindings')!.at(-1)![0]).toEqual({
@@ -69,7 +68,7 @@ describe('SchemeRunConfigSection', () => {
   it('总量超 200 → 红字提示超出上限', () => {
     const w = mount(SchemeRunConfigSection, {
       props: { ...BASE, nRuns: 101, parallel: 2 },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     expect(w.find('[data-testid="total-preview"]').text()).toContain('202')
     expect(w.text()).toContain('超出单次执行总量上限 200')
@@ -82,7 +81,7 @@ describe('SchemeRunConfigSection', () => {
         ...BASE,
         serviceBindings: { 'svc-a': { authAlias: 'ghost' } },  // ghost 不在 authOptions
       },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     const row = w.findAll('.bind-row')[0]                       // svc-a 行
     expect(row.classes()).toContain('is-degraded')
@@ -98,7 +97,7 @@ describe('SchemeRunConfigSection', () => {
   it('存量别名仍活:不标降级行(对照组)', () => {
     const w = mount(SchemeRunConfigSection, {
       props: { ...BASE, serviceBindings: { 'svc-a': { authAlias: 'alias-1' } } },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     expect(w.findAll('.bind-row')[0].classes()).not.toContain('is-degraded')
     expect(w.text()).not.toContain('凭证已删')
@@ -107,7 +106,7 @@ describe('SchemeRunConfigSection', () => {
   // ── stepTo 原生 select(替换 el-input-number:spinner 对空值发射 min(0)
   //    会把「全量」静默写成「第1步后停止」;下拉里 0 只能显式选)──────────
   it('stepTo=null → 选中「运行全部步骤」;选停步索引 → 发射数字', async () => {
-    const w = mount(SchemeRunConfigSection, { props: { ...BASE }, global: { plugins: [ElementPlus] } })
+    const w = mount(SchemeRunConfigSection, { props: { ...BASE }, global: { plugins: [] } })
     const sel = w.find('[data-testid="param-stepto"]')
     expect((sel.element as HTMLSelectElement).value).toBe('')   // null → 空串哨兵
     await sel.setValue('2')
@@ -121,7 +120,7 @@ describe('SchemeRunConfigSection', () => {
   it('stepTo 存量 0 → select 回显第1步后停止;选项带编排步骤名', async () => {
     const w = mount(SchemeRunConfigSection, {
       props: { ...BASE, stepTo: 0, stepNames: ['下单', '支付', '发货'] },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     const sel = w.find('[data-testid="param-stepto"]')
     expect((sel.element as HTMLSelectElement).value).toBe('0')

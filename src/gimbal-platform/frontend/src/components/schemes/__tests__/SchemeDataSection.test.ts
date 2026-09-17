@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import SchemeDataSection from '../SchemeDataSection.vue'
 import * as api from '@/api/scenario-composer'
 import * as download from '@/utils/download'
@@ -40,7 +39,7 @@ const DS = [
 function mountSection() {
   return mount(SchemeDataSection, {
     props: { modelValue: [], dataSets: DS, scenarioId: 'sc-x' },
-    global: { plugins: [ElementPlus] },
+    global: { plugins: [] },
   })
 }
 
@@ -62,7 +61,7 @@ describe('SchemeDataSection', () => {
         dataSets: DS,
         scenarioId: 'sc-x',
       },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     expect(w.text()).toContain('已删除')
     await w.find('[data-testid="drop-dead"]').trigger('click')
@@ -72,7 +71,7 @@ describe('SchemeDataSection', () => {
   it('行级勾选增删(行 r ↔ rowIndex r,0 基)', async () => {
     const w = mount(SchemeDataSection, {
       props: { modelValue: [{ datasetId: 'ds-001', rowIndexes: [0] }], dataSets: DS, scenarioId: 'sc-x' },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     const rows = w.findAll('.ds-tile')[0].findAll('.row-pick input[type="checkbox"]')
     expect(rows).toHaveLength(3)  // rowCount=3 → 行0/行1/行2
@@ -93,7 +92,7 @@ describe('SchemeDataSection', () => {
   it('行全清 = 取消整库', async () => {
     const w = mount(SchemeDataSection, {
       props: { modelValue: [{ datasetId: 'ds-001', rowIndexes: [0] }], dataSets: DS, scenarioId: 'sc-x' },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     await w.findAll('.ds-tile')[0].findAll('.row-pick input[type="checkbox"]')[0].setValue(false)
     expect(w.emitted('update:modelValue')!.at(-1)![0]).toEqual([])

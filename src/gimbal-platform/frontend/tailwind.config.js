@@ -4,11 +4,8 @@ import tailwindcssAnimate from 'tailwindcss-animate'
 /*
  * Signal 视觉体系 Tailwind 配置(重构方案 Phase 0)。
  *
- * 双栈共存关键约束:
- * - `corePlugins.preflight: false`:关闭全局 reset,Tailwind 只作 utility 层,
- *   不污染尚未迁移的 Element Plus 页面(方案 §3 Phase 0)。
- * - token 全部录在这里,不零散写 hex;与 theme.css(Spec-1)并存,
- *   页面逐批迁移逐批切换。
+ * Phase 3 起 preflight 已复位(双栈期结束,reset 全局生效);token
+ * 全部录在这里,与 theme.css(Spec-1)并存。
  *
  * token 来源:D-palette / E-scale 原型图核录(2026-09-17)。
  * 未定项:
@@ -18,10 +15,6 @@ import tailwindcssAnimate from 'tailwindcss-animate'
  */
 export default {
   content: ['./index.html', './src/**/*.{vue,ts}'],
-  corePlugins: {
-    // 双栈隔离:不输出 preflight reset(见文件头注释)
-    preflight: false,
-  },
   theme: {
     extend: {
       colors: {

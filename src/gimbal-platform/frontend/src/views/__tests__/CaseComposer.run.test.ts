@@ -18,7 +18,6 @@
 import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
 import CaseComposer from '@/views/CaseComposer.vue'
 import * as api from '@/api/scenario-composer'
 import type { SchemeV2 } from '@/api/scenario-composer'
@@ -95,7 +94,7 @@ function mountPage() {
   // 与 teleport stub 叠加会在 jsdom 下递归更新爆表 — 与本对接无关,一并 stub。
   return mount(CaseComposer, {
     global: {
-      plugins: [ElementPlus, createPinia()],
+      plugins: [createPinia()],
       stubs: { teleport: true, ScenarioExportMenu: true, CaseComposerMeta: true },
     },
   })

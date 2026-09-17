@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import SchemeInjectionSection from '../SchemeInjectionSection.vue'
 
 const ENTRIES = [
@@ -14,7 +13,7 @@ describe('SchemeInjectionSection', () => {
   it('死条目禁选且灰显', () => {
     const w = mount(SchemeInjectionSection, {
       props: { modelValue: [], entries: ENTRIES, deadIds: new Set(['inj-dead']) },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     const boxes = w.findAll('input[type="checkbox"]')
     expect(boxes[2].attributes('disabled')).toBeDefined()
@@ -24,7 +23,7 @@ describe('SchemeInjectionSection', () => {
   it('勾选发出 update:modelValue;管理按钮跳断言编辑器', async () => {
     const w = mount(SchemeInjectionSection, {
       props: { modelValue: [], entries: ENTRIES, deadIds: new Set<string>() },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     await w.findAll('input[type="checkbox"]')[0].setValue(true)
     expect(w.emitted('update:modelValue')!.at(-1)![0]).toEqual(['inj-1'])
@@ -35,7 +34,7 @@ describe('SchemeInjectionSection', () => {
   it('快建弹层确认发出 quickCreate', async () => {
     const w = mount(SchemeInjectionSection, {
       props: { modelValue: [], entries: [], deadIds: new Set<string>() },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     await w.find('[data-testid="quick-add"]').trigger('click')
     await w.find('[data-testid="qa-step"]').setValue('0')
@@ -49,7 +48,7 @@ describe('SchemeInjectionSection', () => {
   it('快建失败回调:onDone(false) → 弹层仍开、输入保留;onDone(true) → 关闭', async () => {
     const w = mount(SchemeInjectionSection, {
       props: { modelValue: [], entries: [], deadIds: new Set<string>() },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     await w.find('[data-testid="quick-add"]').trigger('click')
     await w.find('[data-testid="qa-step"]').setValue('2')

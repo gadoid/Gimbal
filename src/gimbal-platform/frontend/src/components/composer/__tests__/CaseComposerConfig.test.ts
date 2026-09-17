@@ -15,7 +15,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 import { mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import CaseComposerConfig from '@/components/composer/CaseComposerConfig.vue'
 import UsersCard from '@/components/composer/UsersCard.vue'
 import type { ConfigView } from '@/types/plate'
@@ -49,7 +48,7 @@ function mountWithParent(initial: ConfigView) {
       })
     },
   })
-  const w = mount(Parent, { global: { plugins: [ElementPlus] } })
+  const w = mount(Parent, { global: { plugins: [] } })
   return { w, config }
 }
 
@@ -138,7 +137,7 @@ describe('断言管理纯展示列表(spec v3 §5)', () => {
         })
       },
     })
-    return { w: mount(Parent, { global: { plugins: [ElementPlus] } }), runEntry }
+    return { w: mount(Parent, { global: { plugins: [] } }), runEntry }
   }
 
   it('CFG-ARE-1: 列表渲染(path 徽标/期望数)+ 旧版条目灰显不可执行', async () => {

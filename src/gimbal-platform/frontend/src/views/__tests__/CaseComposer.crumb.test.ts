@@ -9,7 +9,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
 import CaseComposer from '@/views/CaseComposer.vue'
 import * as api from '@/api/scenario-composer'
 import type { Scenario } from '@/types/scenario-composer'
@@ -68,7 +67,7 @@ function mountPage() {
   // stubs 与 run.test.ts 同款:teleport 收弹层 + popper 类组件防 jsdom 递归爆表
   return mount(CaseComposer, {
     global: {
-      plugins: [ElementPlus, createPinia()],
+      plugins: [createPinia()],
       stubs: { teleport: true, ScenarioExportMenu: true, CaseComposerMeta: true },
     },
   })

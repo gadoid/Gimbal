@@ -15,7 +15,6 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import { createPinia, setActivePinia } from 'pinia'
 
 const pushMock = vi.hoisted(() => ({ push: vi.fn() }))
@@ -59,7 +58,7 @@ function row(over: Partial<Scenario> = {}): Scenario {
 async function mountList() {
   // attachTo: ⋯ dropdown(el-dropdown)经 teleport 渲染到 body —
   // 挂真实 DOM 才能在用例里断言菜单项(与 Scenarios.expire.test 同款)
-  const w = mount(Scenarios, { global: { plugins: [ElementPlus] }, attachTo: document.body })
+  const w = mount(Scenarios, { global: { plugins: [] }, attachTo: document.body })
   await flushPromises()
   return w
 }

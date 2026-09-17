@@ -15,7 +15,6 @@
  */
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import RunDialog from '../RunDialog.vue'
 import type { SchemeV2 } from '@/api/scenario-composer'
 
@@ -48,7 +47,7 @@ const BASE_PROPS = {
 function mountDialog(props: Record<string, unknown> = {}) {
   return mount(RunDialog, {
     props: { ...BASE_PROPS, ...props },
-    global: { plugins: [ElementPlus], stubs: { teleport: true } },
+    global: { plugins: [], stubs: { teleport: true } },
   })
 }
 

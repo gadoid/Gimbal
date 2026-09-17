@@ -6,7 +6,6 @@
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import { toast } from '@/utils/toast'
 import { createPinia, setActivePinia } from 'pinia'
 
@@ -59,7 +58,7 @@ async function mountEditor(draft: any = { definition: DEF, orchestration: { step
   const fresh = JSON.parse(JSON.stringify(draft))
   vi.spyOn(api, 'getScenarioDraft').mockResolvedValue(fresh as any)
   vi.spyOn(api, 'updateScenario').mockResolvedValue({} as any)
-  const w = mount(AssertionRegistryEditor, { global: { plugins: [ElementPlus] } })
+  const w = mount(AssertionRegistryEditor, { global: { plugins: [] } })
   await flushPromises()
   return w
 }
@@ -655,7 +654,7 @@ it('ARE-27: 草稿到位前不渲染列表 —— 加载中不是「还没有条
   vi.spyOn(api, 'getScenarioDraft').mockResolvedValue(
     { definition: DEF, orchestration: { steps: [], resourceMeta: {} }, assertion_registry: REG } as any)
   vi.spyOn(api, 'updateScenario').mockResolvedValue({} as any)
-  const w = mount(AssertionRegistryEditor, { global: { plugins: [ElementPlus] } })
+  const w = mount(AssertionRegistryEditor, { global: { plugins: [] } })
   // 尚未 flushPromises:draft 还在路上
   expect(w.find('.are-list-card').exists()).toBe(false)
   expect(w.text()).not.toContain('还没有条目')      // 加载中 ≠ 没有(说了就是假话)

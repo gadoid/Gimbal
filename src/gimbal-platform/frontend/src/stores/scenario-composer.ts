@@ -124,24 +124,8 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
       }
     },
 
-    async saveDataSet(scenarioId: string, datasetId: string | null, draft: DataSetDraft) {
-      const saved = datasetId
-        ? await api.updateDataSet(datasetId, draft)
-        : await api.createDataSet(scenarioId, draft)
-      const toSummary = (base: Partial<DataSetSummary>) => ({
-        ...base,
-        ...saved,
-        rowCount: saved.rows.length,
-        preview: saved.rows.slice(0, 3),
-      })
-      upsertBy(this.dataSets, (d) => d.datasetId === saved.datasetId, toSummary({}))
-      return saved
-    },
+// saveDataSet/removeDataSet 已随数据集独立路由退役移除(Phase 3 清理,
+// 批次 0 登记):创建/编辑/删除由方案工作台 SchemeDataSection 直连 api 承接。
 
-    /** 删除数据集:204 后刷新该场景的数据集列表(编辑器/列表卡片共用)。 */
-    async removeDataSet(scenarioId: string, datasetId: string) {
-      await api.deleteDataSet(datasetId)
-      await this.fetchDataSets(scenarioId)
-    },
   },
 })

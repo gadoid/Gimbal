@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import { toast } from '@/utils/toast'
 import { createPinia, setActivePinia } from 'pinia'
 import * as api from '@/api/scenario-composer'
@@ -57,7 +56,7 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
   afterEach(() => vi.restoreAllMocks())
 
   async function mountWb() {
-    const w = mount(SchemeWorkbench, { global: { plugins: [ElementPlus] } })
+    const w = mount(SchemeWorkbench, { global: { plugins: [] } })
     await flushPromises()
     return w
   }

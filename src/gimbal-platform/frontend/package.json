@@ -12,14 +12,12 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "@element-plus/icons-vue": "^2.3.2",
     "@radix-icons/vue": "^1.0.0",
     "@vee-validate/zod": "^4.15.1",
     "@vueuse/core": "^15.0.0",
     "axios": "^1.7.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "element-plus": "^2.8.0",
     "papaparse": "^5.6.0",
     "pinia": "^2.2.0",
     "reka-ui": "^2.10.4",

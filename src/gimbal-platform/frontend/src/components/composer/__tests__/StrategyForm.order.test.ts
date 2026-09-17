@@ -8,7 +8,6 @@
 import { describe, it, expect } from 'vitest'
 import { defineComponent, h, reactive } from 'vue'
 import { mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import StrategyForm from '@/components/composer/StrategyForm.vue'
 import type { StrategyKindDetailView, StrategyView } from '@/types/plate'
 
@@ -32,7 +31,7 @@ function mountWith(strategy: StrategyView) {
   const s = reactive(strategy) as StrategyView
   const w = mount(defineComponent({
     setup: () => () => h(StrategyForm, { strategy: s, detail, startExpanded: true }),
-  }), { global: { plugins: [ElementPlus] } })
+  }), { global: { plugins: [] } })
   return { w, s }
 }
 
@@ -85,7 +84,7 @@ describe('StrategyForm — order 可配置', () => {
         strategy: { kind: 'assign', target: '$.a', source: 1 } as StrategyView,
         detail: noOrder, startExpanded: true,
       }),
-    }), { global: { plugins: [ElementPlus] } })
+    }), { global: { plugins: [] } })
     expect(w.find('.sf-order-input').exists()).toBe(false)
     expect(w.find('.sf-order').exists()).toBe(false)
   })

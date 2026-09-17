@@ -14,7 +14,6 @@
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import { createPinia, setActivePinia } from 'pinia'
 
 const pushMock = vi.hoisted(() => ({ push: vi.fn() }))
@@ -82,7 +81,7 @@ afterEach(() => { vi.restoreAllMocks() })
 async function mountHost(props: Record<string, unknown> = {}) {
   const w = mount(RunPanelHost, {
     props: { scenarioId: 'sc-host', ...props } as any,
-    global: { plugins: [ElementPlus], stubs: { teleport: true } },
+    global: { plugins: [], stubs: { teleport: true } },
   })
   await flushPromises()
   return w

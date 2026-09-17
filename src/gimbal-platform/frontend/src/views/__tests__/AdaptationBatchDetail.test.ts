@@ -10,7 +10,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import ElementPlus from 'element-plus'
 import AdaptationBatchDetail from '@/views/AdaptationBatchDetail.vue'
 import OpConstructDialog from '@/components/adaptations/OpConstructDialog.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -72,7 +71,7 @@ async function mountPage() {
   router.push('/adaptations/batches/bt-1')
   await router.isReady()
   const w = mount(AdaptationBatchDetail, {
-    global: { plugins: [router, ElementPlus] },
+    global: { plugins: [router] },
   })
   await flushPromises()
   return w

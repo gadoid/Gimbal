@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import ValueSourcePicker from '../ValueSourcePicker.vue'
 
 const rows = [
@@ -20,7 +19,7 @@ function mountPicker(over: Record<string, unknown> = {}) {
     // RouterLink 无 router 上下文不解析 — 按 TopNav.pool.test.ts 惯例补
     // href 透传 stub(§7.5 认证页直达链接的 a[href] 断言面)。
     global: {
-      plugins: [ElementPlus],
+      plugins: [],
       stubs: {
         RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
       },

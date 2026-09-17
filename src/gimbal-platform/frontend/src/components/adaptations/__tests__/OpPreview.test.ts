@@ -8,7 +8,6 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import OpPreview from '@/components/adaptations/OpPreview.vue'
 import * as scenarioApi from '@/api/scenario-composer'
 import type { OpOut } from '@/api/adaptations'
@@ -38,7 +37,7 @@ function op(partial: Partial<OpOut>): OpOut {
 function mountOp(o: OpOut) {
   return mount(OpPreview, {
     props: { op: o },
-    global: { plugins: [ElementPlus] },
+    global: { plugins: [] },
   })
 }
 

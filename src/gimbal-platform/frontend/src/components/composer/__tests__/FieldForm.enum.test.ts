@@ -9,7 +9,6 @@
 import { describe, expect, it } from 'vitest'
 import { h, ref } from 'vue'
 import { mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import FieldForm from '../FieldForm.vue'
 import type { IOFieldBinding } from '@/types/plate'
 
@@ -25,7 +24,7 @@ function mountField(entry: Partial<IOFieldBinding>, body: unknown) {
         'onUpdate:body': (v: unknown) => { b.value = v },
       })
     },
-  }, { global: { plugins: [ElementPlus] } })
+  }, { global: { plugins: [] } })
   return { w, b }
 }
 

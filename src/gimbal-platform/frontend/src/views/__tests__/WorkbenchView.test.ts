@@ -3,7 +3,7 @@
  * 承接 TopNav.pool.test F20 的意图迁移:常量池入口对 member/admin 均
  * 可达 —— 落点从顶导航改为工作台卡(F-sitemap:完整页不再占侧栏坑位)。
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import WorkbenchView from '@/views/WorkbenchView.vue'

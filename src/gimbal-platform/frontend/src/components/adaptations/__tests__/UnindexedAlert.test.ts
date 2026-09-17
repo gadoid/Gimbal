@@ -5,7 +5,6 @@
  */
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import UnindexedAlert from '@/components/adaptations/UnindexedAlert.vue'
 
@@ -23,7 +22,7 @@ function mountIt(props: { steps: typeof steps | [] }) {
   })
   return mount(UnindexedAlert, {
     props,
-    global: { plugins: [router, ElementPlus] },
+    global: { plugins: [router] },
   })
 }
 

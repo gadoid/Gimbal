@@ -8,7 +8,6 @@
  */
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import RunDialog from '../RunDialog.vue'
 import type { SchemeV2 } from '@/api/scenario-composer'
 import type { Scenario } from '@/types/scenario-composer'
@@ -41,7 +40,7 @@ function mountDialog(scenario: Scenario, orchestrationNames: string[]) {
       schemes: [DEFAULT_SCHEME], serviceRows: [], authOptions: [],
       stepOrchestrationNames: orchestrationNames,
     },
-    global: { plugins: [ElementPlus], stubs: { teleport: true } },
+    global: { plugins: [], stubs: { teleport: true } },
   })
 }
 

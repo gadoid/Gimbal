@@ -9,7 +9,6 @@
 import { describe, it, expect } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 import { mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import FieldForm from '@/components/composer/FieldForm.vue'
 import type { IOFieldBinding } from '@/types/plate'
 import type { VarEntry } from '@/utils/var-registry'
@@ -68,7 +67,7 @@ function mountWithParent(opts: {
       })
     },
   })
-  const w = mount(Parent, { global: { plugins: [ElementPlus] } })
+  const w = mount(Parent, { global: { plugins: [] } })
   return { w, body, received }
 }
 

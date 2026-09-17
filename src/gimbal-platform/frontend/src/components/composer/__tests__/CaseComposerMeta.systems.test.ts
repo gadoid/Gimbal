@@ -12,7 +12,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import ElementPlus from 'element-plus'
 import CaseComposerMeta from '@/components/composer/CaseComposerMeta.vue'
 import { useAuthStore } from '@/stores/auth'
 import type { MetaView } from '@/types/plate'
@@ -59,7 +58,7 @@ describe('CaseComposerMeta 归属系统动态选项', () => {
     auth.accessToken = 'tok'
     const w = mount(CaseComposerMeta, {
       props: { modelValue: meta() },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     await flushPromises()
 
@@ -75,7 +74,7 @@ describe('CaseComposerMeta 归属系统动态选项', () => {
   it('不再提供硬编码的 logi/wms/mall/common 默认项', async () => {
     const w = mount(CaseComposerMeta, {
       props: { modelValue: meta() },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     await flushPromises()
     const all = (await openSystemOptions(w)).join('\n')
@@ -88,7 +87,7 @@ describe('CaseComposerMeta 归属系统动态选项', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
     const w = mount(CaseComposerMeta, {
       props: { modelValue: meta() },
-      global: { plugins: [ElementPlus] },
+      global: { plugins: [] },
     })
     await flushPromises()
     expect(await openSystemOptions(w)).toHaveLength(0)
