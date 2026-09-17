@@ -9,7 +9,9 @@
  * 5. 数据契约:卡片复用既有 list API,不拉全量截断(常量池本身小数据量);
  * 6. 深链语义:目标页 meta.chromeMode 照旧;计数徽标与完整页同源。
  *
- * 显式延后(§7):拖拽布局/卡片市场(v2)、卡片间联动(禁止)、⌘K(另立项)。
+ * 组装能力(v2 已落地):layout.ts 管启用集/顺序(localStorage 按用户
+ * 分键),卡片市场 = registry 里未被启用的卡;拖拽 = vuedraggable。
+ * 仍显式延后:卡片间联动(禁止)、⌘K(另立项)、服务端布局同步。
  */
 import type { Component } from 'vue'
 
@@ -22,11 +24,21 @@ export interface WorkbenchCardDef {
   refreshMs?: number            // 需要轮询的卡(执行状态)声明;缺省不刷
 }
 
-/** 注册顺序 = 默认渲染顺序;首个注册卡 = 常量池卡(§7 落地节奏) */
+/** 注册顺序 = 默认布局顺序;工作台组装(添加/删除/拖拽)的候选全集 */
 export const workbenchRegistry: WorkbenchCardDef[] = [
   {
     id: 'constants',
     title: '常量池',
     component: () => import('./ConstantsSummaryCard.vue'),
+  },
+  {
+    id: 'recent-executions',
+    title: '最近执行',
+    component: () => import('./RecentExecutionsCard.vue'),
+  },
+  {
+    id: 'starred-scenarios',
+    title: '收藏场景',
+    component: () => import('./StarredScenariosCard.vue'),
   },
 ]
