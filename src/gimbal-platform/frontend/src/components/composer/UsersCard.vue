@@ -20,30 +20,25 @@
     <div v-if="!rows.length" class="c-empty">
       <p>还没有用户认证 — 手动添加或从凭证池导入</p>
     </div>
-    <el-table v-else :data="rows" size="small" class="users-table">
-      <el-table-column label="alias" min-width="110">
-        <template #default="{ row }">
-          <code class="alias">{{ row.alias }}</code>
-        </template>
-      </el-table-column>
-      <el-table-column prop="user.url" label="url" min-width="180" show-overflow-tooltip />
-      <el-table-column prop="user.username" label="username" min-width="110" />
-      <el-table-column label="password" min-width="120">
-        <template #default="{ row }">
-          <code class="pw">{{ row.user.password ?? '—' }}</code>
-        </template>
-      </el-table-column>
-      <el-table-column prop="user.token_type" label="token_type" width="100" />
-      <el-table-column label="expires_in" width="90">
-        <template #default="{ row }">{{ fmtExpires(row.user.expires_in) }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="110" align="center">
-        <template #default="{ row }">
-          <el-button link type="primary" size="small" @click="openEdit(row.alias)">编辑</el-button>
-          <el-button link type="danger" size="small" @click="removeUser(row.alias)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <table v-else class="users-table">
+      <thead><tr><th>alias</th><th>url</th><th>username</th><th>password</th><th>token_type</th><th>expires_in</th><th></th></tr></thead>
+      <tbody>
+        <tr v-for="row in rows" :key="row.alias">
+          <td><code class="alias">{{ row.alias }}</code></td>
+          <td class="cell-url" :title="row.user.url">{{ row.user.url }}</td>
+          <td>{{ row.user.username }}</td>
+          <td><code class="pw">{{ row.user.password ?? '—' }}</code></td>
+          <td>{{ row.user.token_type }}</td>
+          <td>{{ fmtExpires(row.user.expires_in) }}</td>
+          <td>
+            <div class="uc-ops">
+              <Button variant="link" size="sm" class="uc-op" data-testid="uc-edit" @click="openEdit(row.alias)">编辑</Button>
+              <Button variant="link" size="sm" class="uc-op uc-del" data-testid="uc-del" @click="removeUser(row.alias)">删除</Button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
 
     <div class="users-actions">
       <button type="button" class="c-add" @click="openCreate">+ 添加用户</button>
@@ -51,81 +46,131 @@
     </div>
 
     <!-- ── 手动新增 / 编辑(字段与认证管理一致;差异:password 明文)── -->
-    <el-dialog
-      v-model="formOpen"
-      :title="editingAlias ? '编辑用户' : '+ 添加用户'"
-      width="520px"
-      :close-on-click-modal="false"
-    >
-      <el-form ref="formRef" :model="form" :rules="formRules" label-position="top" @submit.prevent>
-        <el-form-item label="alias" prop="alias" required>
-          <el-input v-model="form.alias" :disabled="!!editingAlias"
-            placeholder="例 qa1 / staging-codfish（users 的 key，${auth.<alias>.*} 引用它）" />
-        </el-form-item>
-        <el-form-item label="登录 URL" prop="url" required>
-          <el-input v-model="form.url" placeholder="https://target/auth/login" />
-        </el-form-item>
-        <el-form-item label="username" prop="username" required>
-          <el-input v-model="form.username" placeholder="登录用户名" />
-        </el-form-item>
-        <el-form-item label="password" prop="password" required>
-          <el-input v-model="form.password" type="text"
-            placeholder="登录密码（内网测试环境，明文保存于场景）" />
-        </el-form-item>
-        <el-form-item label="token_type">
-          <el-select v-model="form.token_type" style="width:100%">
-            <el-option label="Bearer" value="Bearer" />
-            <el-option label="Basic" value="Basic" />
-            <el-option label="Cookie" value="Cookie" />
-            <el-option label="Authorization（整段头）" value="Authorization" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="expires_in（秒）">
-          <el-input-number v-model="form.expires_in" :min="0" :max="86400" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="formOpen = false">取消</el-button>
-        <el-button type="primary" @click="submitForm">{{ editingAlias ? '保存' : '添加' }}</el-button>
-      </template>
-    </el-dialog>
+<Dialog :open="formOpen" @update:open="formOpen = $event">
+      <DialogContent class="max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>{{ editingAlias ? '编辑用户' : '+ 添加用户' }}</DialogTitle>
+        </DialogHeader>
+        <form class="flex flex-col gap-3" @submit="onSubmitForm">
+          <FormField v-slot="{ componentField }" name="alias">
+            <FormItem>
+              <FormLabel>alias<span class="req">*</span></FormLabel>
+              <FormControl>
+                <Input v-bind="componentField" :disabled="!!editingAlias"
+                  placeholder="例 qa1 / staging-codfish（users 的 key，${auth.&lt;alias&gt;.*} 引用它）" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+          <FormField v-slot="{ componentField }" name="url">
+            <FormItem>
+              <FormLabel>登录 URL<span class="req">*</span></FormLabel>
+              <FormControl>
+                <Input v-bind="componentField" placeholder="https://target/auth/login" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+          <FormField v-slot="{ componentField }" name="username">
+            <FormItem>
+              <FormLabel>username<span class="req">*</span></FormLabel>
+              <FormControl>
+                <Input v-bind="componentField" placeholder="登录用户名" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+          <FormField v-slot="{ componentField }" name="password">
+            <FormItem>
+              <FormLabel>password<span class="req">*</span></FormLabel>
+              <FormControl>
+                <Input v-bind="componentField" type="text"
+                  placeholder="登录密码（内网测试环境，明文保存于场景）" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+          <FormField v-slot="{ componentField }" name="token_type">
+            <FormItem>
+              <FormLabel>token_type</FormLabel>
+              <FormControl>
+                <Select v-bind="componentField">
+                  <SelectTrigger class="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Bearer">Bearer</SelectItem>
+                    <SelectItem value="Basic">Basic</SelectItem>
+                    <SelectItem value="Cookie">Cookie</SelectItem>
+                    <SelectItem value="Authorization">Authorization（整段头）</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+          <FormField v-slot="{ componentField }" name="expires_in">
+            <FormItem>
+              <FormLabel>expires_in（秒）</FormLabel>
+              <FormControl>
+                <Input v-bind="componentField" type="number" :min="0" :max="86400" class="w-[140px]" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+          <DialogFooter class="mt-1">
+            <Button type="button" variant="outline" @click="formOpen = false">取消</Button>
+            <Button type="submit">{{ editingAlias ? '保存' : '添加' }}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
 
     <!-- ── 凭证池导入(快照拷贝:导入的是当前值副本,池后续修改不影响)── -->
-    <el-dialog v-model="importOpen" title="从凭证池导入" width="640px">
-      <p class="import-hint">
-        选择要快照到本场景的凭证 — 导入后与凭证池解耦;凭证池更新不会同步,如需刷新请删除该行后重新导入。
-      </p>
-      <div v-loading="poolLoading" class="pool-list">
-        <div
-          v-for="row in pool"
-          :key="row.id"
-          class="pool-item"
-          :class="{ disabled: isTaken(row.alias), selected: isSelected(row.id) }"
-          :title="isTaken(row.alias) ? '场景中已存在，如需刷新请先删除该行' : undefined"
-          @click="toggleSel(row)"
-        >
-          <code class="alias">{{ row.alias }}</code>
-          <span class="pool-user">{{ row.username }}</span>
-          <span class="pool-url">{{ row.url }}</span>
-          <span v-if="isTaken(row.alias)" class="taken">已存在</span>
+<Dialog :open="importOpen" @update:open="importOpen = $event">
+      <DialogContent class="max-w-[640px]">
+        <DialogHeader><DialogTitle>从凭证池导入</DialogTitle></DialogHeader>
+        <p class="import-hint">
+          选择要快照到本场景的凭证 — 导入后与凭证池解耦;凭证池更新不会同步,如需刷新请删除该行后重新导入。
+        </p>
+        <div class="pool-list">
+          <p v-if="poolLoading" class="c-empty m-0">凭证池加载中…</p>
+          <div
+            v-for="row in pool"
+            :key="row.id"
+            class="pool-item"
+            :class="{ disabled: isTaken(row.alias), selected: isSelected(row.id) }"
+            :title="isTaken(row.alias) ? '场景中已存在，如需刷新请先删除该行' : undefined"
+            @click="toggleSel(row)"
+          >
+            <code class="alias">{{ row.alias }}</code>
+            <span class="pool-user">{{ row.username }}</span>
+            <span class="pool-url">{{ row.url }}</span>
+            <span v-if="isTaken(row.alias)" class="taken">已存在</span>
+          </div>
+          <p v-if="!poolLoading && !pool.length" class="c-empty">凭证池为空 — 先到「认证管理」添加</p>
         </div>
-        <p v-if="!poolLoading && !pool.length" class="c-empty">凭证池为空 — 先到「认证管理」添加</p>
-      </div>
-      <template #footer>
-        <el-button @click="importOpen = false">取消</el-button>
-        <el-button type="primary" :disabled="!selectedIds.length" :loading="importing" @click="submitImport">
-          导入{{ selectedIds.length ? ` (${selectedIds.length})` : '' }}
-        </el-button>
-      </template>
-    </el-dialog>
+        <DialogFooter>
+          <Button variant="outline" @click="importOpen = false">取消</Button>
+          <Button :disabled="!selectedIds.length || importing" @click="submitImport">
+            {{ importing ? '导入中…' : `导入${selectedIds.length ? ` (${selectedIds.length})` : ''}` }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
-import { type FormInstance } from 'element-plus'
+import { computed, ref } from 'vue'
+import { toTypedSchema } from '@vee-validate/zod'
+import { z } from 'zod'
+import { useForm } from 'vee-validate'
 import { toast } from '@/utils/toast'
 import { list as listAuths, get as getAuth } from '@/api/auth_sessions'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
 import type { AuthSession } from '@/api/auth_sessions'
 import type { UserAuthView } from '@/types/plate'
 
@@ -157,27 +202,30 @@ function fmtExpires(s?: number): string {
 // ── 手动表单(字段/校验对齐 Auths.vue;差异:password 明文输入框)──
 const formOpen = ref(false)
 const editingAlias = ref<string | null>(null)
-const formRef = ref<FormInstance | null>(null)
-const form = reactive({
-  alias: '', url: '', username: '', password: '',
-  token_type: 'Bearer', expires_in: 7200,
-})
+// 定稿表单范式:useForm + zod(规则逐条对齐原 formRules)
+const formSchema = toTypedSchema(z.object({
+  alias: z.string()
+    .min(1, '请输入 alias')
+    .regex(/^[A-Za-z0-9_-]{1,64}$/, '1-64 位字母数字下划线连字符'),
+  url: z.string().min(1, '请输入登录 URL'),
+  username: z.string().min(1, '请输入 username'),
+  password: z.string().min(1, '请输入 password'),
+  token_type: z.enum(['Bearer', 'Basic', 'Cookie', 'Authorization']),
+  expires_in: z.coerce.number().int().min(0).max(86400),
+}))
 
-const formRules = {
-  alias: [
-    { required: true, message: '请输入 alias', trigger: 'blur' },
-    { pattern: /^[A-Za-z0-9_-]{1,64}$/, message: '1-64 位字母数字下划线连字符', trigger: 'blur' },
-  ],
-  url: [{ required: true, message: '请输入登录 URL', trigger: 'blur' }],
-  username: [{ required: true, message: '请输入 username', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入 password', trigger: 'blur' }],
-}
+const { handleSubmit, resetForm } = useForm({
+  validationSchema: formSchema,
+  initialValues: {
+    alias: '', url: '', username: '', password: '',
+    token_type: 'Bearer' as const, expires_in: 7200,
+  },
+})
 
 function openCreate() {
   editingAlias.value = null
-  Object.assign(form, {
-    alias: '', url: '', username: '', password: '',
-    token_type: 'Bearer', expires_in: 7200,
+  resetForm({
+    values: { alias: '', url: '', username: '', password: '', token_type: 'Bearer', expires_in: 7200 },
   })
   formOpen.value = true
 }
@@ -185,40 +233,36 @@ function openCreate() {
 function openEdit(alias: string) {
   const u = props.modelValue[alias] || {}
   editingAlias.value = alias
-  Object.assign(form, {
-    alias,
-    url: u.url ?? '',
-    username: u.username ?? '',
-    password: u.password ?? '',
-    token_type: u.token_type ?? 'Bearer',
-    expires_in: u.expires_in ?? 7200,
+  resetForm({
+    values: {
+      alias,
+      url: u.url ?? '',
+      username: u.username ?? '',
+      password: u.password ?? '',
+      token_type: (u.token_type ?? 'Bearer') as 'Bearer',
+      expires_in: u.expires_in ?? 7200,
+    },
   })
   formOpen.value = true
 }
 
-async function submitForm() {
-  if (!formRef.value) return
-  try {
-    await formRef.value.validate()
-  } catch {
-    return
-  }
-  if (!editingAlias.value && Object.hasOwn(props.modelValue || {}, form.alias)) {
-    toast.warning(`alias ${form.alias} 已存在 — 不做覆盖,如需刷新请先删除该行`)
+const onSubmitForm = handleSubmit((values) => {
+  if (!editingAlias.value && Object.hasOwn(props.modelValue || {}, values.alias)) {
+    toast.warning(`alias ${values.alias} 已存在 — 不做覆盖,如需刷新请先删除该行`)
     return
   }
   setUsers({
     ...props.modelValue,
-    [form.alias]: {
-      url: form.url,
-      username: form.username,
-      password: form.password,
-      token_type: form.token_type,
-      expires_in: form.expires_in,
+    [values.alias]: {
+      url: values.url,
+      username: values.username,
+      password: values.password,
+      token_type: values.token_type,
+      expires_in: values.expires_in,
     },
   })
   formOpen.value = false
-}
+})
 
 // ── 凭证池导入(快照拷贝;单条 422 → 提示并跳过,其余继续)──
 const importOpen = ref(false)
@@ -375,4 +419,15 @@ async function submitImport() {
   background: #fef9c3;
   border-radius: 4px;
 }
+.users-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.users-table th {
+  text-align: left; padding: 5px 8px; font-size: 10.5px; font-weight: 600;
+  color: #64748b; background: #f8fafc; border-bottom: 1px solid #e1e5eb;
+}
+.users-table td { padding: 6px 8px; border-bottom: 0.5px solid #f1f5f9; }
+.cell-url { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.uc-ops { display: flex; align-items: center; justify-content: center; gap: 2px; }
+.uc-op { height: 24px; padding: 0 6px; font-size: 11px; }
+.uc-del { color: #dc2626; }
+.req { margin-left: 3px; color: #dc2626; font-weight: 700; }
 </style>

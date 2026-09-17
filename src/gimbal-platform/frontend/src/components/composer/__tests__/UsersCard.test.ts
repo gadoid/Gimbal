@@ -8,7 +8,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import UsersCard from '@/components/composer/UsersCard.vue'
 import { list, get } from '@/api/auth_sessions'
 import type { UserAuthView } from '@/types/plate'
@@ -49,22 +48,32 @@ function mountCard(initial: Record<string, UserAuthView>) {
       })
     },
   })
-  const w = mount(Parent, { global: { plugins: [ElementPlus] }, attachTo: document.body })
+  const w = mount(Parent, { attachTo: document.body })
   return { w, users }
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
+/** shadcn Dialog 经 Portal 渲染到 body — 输入/按钮都从 body 找。 */
 function setInput(placeholderPrefix: string, value: string) {
-  const el = [...document.querySelectorAll('.el-dialog input')]
+  const el = [...document.querySelectorAll('input')]
     .find((i) => (i as HTMLInputElement).placeholder.startsWith(placeholderPrefix)) as HTMLInputElement
   el.value = value
   el.dispatchEvent(new Event('input'))
 }
 
 function clickDialogButton(text: string) {
-  ;([...document.querySelectorAll('.el-dialog__footer button')]
-    .find((b) => b.textContent!.includes(text)) as HTMLElement).click()
+  if (text === '添加') {
+    // jsdom 原生 click 不触发 form submit — 直接派发 submit 事件
+    document.querySelector('form')!.dispatchEvent(
+      new Event('submit', { bubbles: true, cancelable: true }),
+    )
+    return
+  }
+  // 导入等非表单动作:点 DialogFooter 按钮(在 body 的对话框尾部)
+  const btns = [...document.querySelectorAll('button')] as HTMLElement[]
+  const target = btns.reverse().find((b) => b.textContent!.includes(text))
+  target!.click()
 }
 
 describe('UsersCard — 渲染与手动 CRUD', () => {
@@ -72,7 +81,7 @@ describe('UsersCard — 渲染与手动 CRUD', () => {
     const { w } = mountCard({
       qa1: { url: 'https://x/auth', username: 'alice', password: 'plain-pw', token_type: 'Bearer', expires_in: 3600 },
     })
-    await flush() // el-table 列注册在 mounted 后微任务刷新,同步读 DOM 拿不到行
+    await flush()
     expect(w.text()).toContain('qa1')
     expect(w.text()).toContain('plain-pw')
     w.unmount()
@@ -81,14 +90,14 @@ describe('UsersCard — 渲染与手动 CRUD', () => {
   it('手动添加用户 → emit 5 字段快照', async () => {
     const { w, users } = mountCard({})
     await w.findAll('button').filter((b) => b.text().includes('添加用户'))[0].trigger('click')
-    await flush()
+    await flushPromises()
     setInput('例 qa1', 'new-user')
     setInput('https://target', 'https://y/login')
     setInput('登录用户名', 'u1')
     setInput('登录密码', 'p1')
-    await flush()
-    clickDialogButton('添加')
     await flushPromises()
+    clickDialogButton('添加')
+    await vi.waitFor(() => expect(users.value['new-user']).toBeTruthy())
     expect(users.value['new-user']).toEqual({
       url: 'https://y/login', username: 'u1', password: 'p1',
       token_type: 'Bearer', expires_in: 7200,
@@ -101,12 +110,12 @@ describe('UsersCard — 渲染与手动 CRUD', () => {
       qa1: { url: 'https://x', username: 'a', password: 'p', token_type: 'Bearer', expires_in: 60 },
     })
     await w.findAll('button').filter((b) => b.text().includes('添加用户'))[0].trigger('click')
-    await flush()
+    await flushPromises()
     setInput('例 qa1', 'qa1')
     setInput('https://target', 'https://y')
     setInput('登录用户名', 'u2')
     setInput('登录密码', 'p2')
-    await flush()
+    await flushPromises()
     clickDialogButton('添加')
     await flushPromises()
     expect(users.value['qa1'].username).toBe('a') // 未被覆盖
@@ -116,14 +125,15 @@ describe('UsersCard — 渲染与手动 CRUD', () => {
   it('空表时 alias=constructor(原型链同名属性)不被误判已存在', async () => {
     const { w, users } = mountCard({})
     await w.findAll('button').filter((b) => b.text().includes('添加用户'))[0].trigger('click')
-    await flush()
+    await flushPromises()
     setInput('例 qa1', 'constructor')
     setInput('https://target', 'https://y/login')
     setInput('登录用户名', 'u1')
     setInput('登录密码', 'p1')
-    await flush()
-    clickDialogButton('添加')
     await flushPromises()
+    clickDialogButton('添加')
+    // constructor 在 {} 上恒 truthy(原型链)— 用自有键判定
+    await vi.waitFor(() => expect(Object.hasOwn(users.value, 'constructor')).toBe(true))
     expect(users.value['constructor']).toEqual({
       url: 'https://y/login', username: 'u1', password: 'p1',
       token_type: 'Bearer', expires_in: 7200,

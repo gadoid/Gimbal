@@ -908,36 +908,33 @@ describe('CaseComposerCanvas — headers 常用 key 下拉', () => {
     return { w, step: s0 }
   }
 
-  /** 定位 header key 的 ElSelect(.hdr-key class 落在组件根元素上) */
-  function findHeaderKeySelect(w: ReturnType<typeof mountCanvas>['w']) {
-    return w.findAllComponents({ name: 'ElSelect' })
-      .find((c) => c.classes().includes('hdr-key'))
+  /** 定位 header key 输入(迁移后 Input+datalist;.hdr-key 落原生 input) */
+  function findHeaderKeyInput(w: ReturnType<typeof mountCanvas>['w']) {
+    return w.findAll('input.hdr-key').at(0)
   }
 
-  it('H1: 预设选项含标准头与网关/链路追踪常用头,选中后 key 重命名', async () => {
+  it('H1: 预设含标准头与网关/链路追踪常用头(datalist 候选);改值即 key 重命名', async () => {
     const { w, step } = await mountWithHeader()
-    const sel = findHeaderKeySelect(w)
-    expect(sel).toBeTruthy()
-    const labels = sel!.findAllComponents({ name: 'ElOption' }).map((o) => o.props('label'))
-    // 标准 + 内网网关/链路追踪两组各抽代表
-    expect(labels).toContain('Authorization')
-    expect(labels).toContain('Content-Type')
-    expect(labels).toContain('X-Request-ID')
-    expect(labels).toContain('traceparent')
-    // 选中预设 → 既有 value 保留,key 重命名
-    sel!.vm.$emit('update:modelValue', 'Authorization')
+    const input = findHeaderKeyInput(w)
+    expect(input).toBeTruthy()
+    // datalist 候选 = COMMON_HEADER_KEYS(render 进 body)
+    const opts = w.findAll('#canvas-header-keys option').map((o) => o.attributes('value'))
+    expect(opts).toContain('Authorization')
+    expect(opts).toContain('Content-Type')
+    expect(opts).toContain('X-Request-ID')
+    expect(opts).toContain('traceparent')
+    // 改 key → 既有 value 保留,key 重命名(Input 的 update 管道)
+    await input!.setValue('Authorization')
     await flush()
     expect(step.api.headers).toEqual({ Authorization: 'v' })
     w.unmount()
   })
 
-  it('H2: allow-create — 自定义 key 仍可输入(不锁死预设清单)', async () => {
+  it('H2: allow-create 等价 — 自定义 key 仍可自由输入(不锁死预设)', async () => {
     const { w, step } = await mountWithHeader()
-    const sel = findHeaderKeySelect(w)
-    expect(sel).toBeTruthy()
-    expect(sel!.props('filterable')).toBe(true)
-    expect(sel!.props('allowCreate')).toBe(true)
-    sel!.vm.$emit('update:modelValue', 'X-Custom-Trace')
+    const input = findHeaderKeyInput(w)
+    expect(input).toBeTruthy()
+    await input!.setValue('X-Custom-Trace')
     await flush()
     expect(step.api.headers).toEqual({ 'X-Custom-Trace': 'v' })
     w.unmount()

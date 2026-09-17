@@ -53,24 +53,25 @@
                   <div class="step-main">
                     <div class="step-idx">{{ i + 1 }}</div>
                     <div class="step-name">{{ orch.steps[i]?.name || s.api?.path || 'step' }}</div>
-                    <el-switch v-if="orch.steps[i]" v-model="orch.steps[i].enabled" size="small" @click.stop />
+                    <Switch v-if="orch.steps[i]" v-model="orch.steps[i].enabled" class="scale-75" @click.stop />
                   </div>
                   <div class="step-meta">
                     <span v-if="s.api?.method" class="method-badge" :class="`m-${s.api.method.toLowerCase()}`">{{ s.api.method }}</span>
                     <span v-if="s.api?.service" class="svc-tag">{{ s.api.service }}</span>
                     <!-- carry 只读提示:字段面∩值表非空才出现;悬停列键来源(服务绑定/全局默认);
                          与 method/service 同行定高(2026-09-08 免抖:预拉 /full 后点击不再补显) -->
-                    <el-tooltip
-                      v-if="carryInjectable(s).size"
-                      placement="top"
-                    >
-                      <template #content>
-                        <div v-for="[p, src] of carryInjectable(s)" :key="p">
-                          {{ p }} ← {{ src }}
-                        </div>
-                      </template>
-                      <span class="carry-badge">carry {{ carryInjectable(s).size }}</span>
-                    </el-tooltip>
+                    <TooltipProvider :delay-duration="200">
+                      <Tooltip v-if="carryInjectable(s).size">
+                        <TooltipTrigger as-child>
+                          <span class="carry-badge">carry {{ carryInjectable(s).size }}</span>
+                        </TooltipTrigger>
+                        <TooltipContent class="max-w-[260px]">
+                          <div v-for="[p, src] of carryInjectable(s)" :key="p">
+                            {{ p }} ← {{ src }}
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
                   <div v-if="s.api?.path" class="ep-path">{{ s.api.path }}</div>
                   <div class="step-actions">
@@ -160,13 +161,13 @@
               : 'plate 不可达,字段表单暂不可用 — 已降级为 JSON 编辑'"
             @retry="retryCurrentFull"
           />
-          <el-form label-position="top" size="small" class="c-form">
+          <div class="c-form">
             <!-- description 事实源是 plate /full(选定接口的契约描述,拉到即显);
                  step.description 是加入时落草稿的快照(老草稿可能存的是 name 兜底)——
                  展示链 plate 优先,老草稿显示侧自愈 — 只读展示 -->
-            <el-form-item label="description">
+            <div class="cf-item"><span class="cf-label">description</span>
               <p class="desc-readonly">{{ currentFull?.description || currentStep.description || '—' }}</p>
-            </el-form-item>
+            </div>
 
             <!-- IO 重叠页签(Chrome 造型):选中签与下方 io-card 面板连体;
                  内容按 activeIoTab 切,值在 request.body / strategy 数组,
@@ -197,26 +198,25 @@
             <!-- headers: KV 行编辑。value 支持 ${auth.<alias>.<field>} 模板 —
                  点 ⓘ 从认证列表选(草稿只存引用,token 明文永不进前端),
                  引用徽章提示悬空(alias 不在 /api/auths) -->
-            <el-form-item v-if="activeIoTab === 'request'" label="headers (点 ⓘ 注入 ${auth.<alias>.<field>})">
+            <div v-if="activeIoTab === 'request'" class="cf-item"><span class="cf-label">headers (点 ⓘ 注入 ${auth.&lt;alias&gt;.&lt;field&gt;})</span>
               <div class="hdr-rows">
                 <div v-for="(value, key) in currentStep.api.headers" :key="String(key)" class="hdr-row">
                   <!-- key: 常用预设下拉 + allow-create 手输(规范大小写由预设带出) -->
-                  <el-select
+                  <Input
                     :model-value="String(key)"
-                    size="small"
-                    filterable allow-create default-first-option
+                    list="canvas-header-keys"
                     placeholder="选择或输入 header"
-                    class="hdr-key"
-                    @update:model-value="(v: string) => updateHeaderKey(currentStep, String(key), v)"
-                  >
-                    <el-option v-for="k in COMMON_HEADER_KEYS" :key="k" :value="k" :label="k" />
-                  </el-select>
-                  <el-input
+                    class="hdr-key h-8"
+                    @update:model-value="(v) => updateHeaderKey(currentStep, String(key), String(v))"
+                  />
+                  <datalist id="canvas-header-keys">
+                    <option v-for="k in COMMON_HEADER_KEYS" :key="k" :value="k" />
+                  </datalist>
+                  <Input
                     :model-value="String(value)"
-                    size="small"
                     placeholder="value (如 ${auth.qa1.token})"
-                    class="hdr-val"
-                    @update:model-value="(v: string) => updateHeaderValue(currentStep, String(key), v)"
+                    class="hdr-val h-8"
+                    @update:model-value="(v) => updateHeaderValue(currentStep, String(key), String(v))"
                   />
                   <button type="button" class="c-kv-del hdr-pick" title="选择认证" @click="openAuthPicker(String(key), String(value))">ⓘ</button>
                   <button type="button" class="c-kv-del hdr-pick hdr-var" title="选择变量" @click="openVarPicker(String(key), String(value))">Ⓥ</button>
@@ -230,19 +230,19 @@
                 </div>
                 <button type="button" class="c-add" @click="addHeader(currentStep)">+ 新增 header</button>
               </div>
-            </el-form-item>
+            </div>
             <!-- 字段状态找回(2026-09-07 §2.2):独立于渲染树挂载 ——
                  全 carry 树空时也须可达(找回入口恰在最需要时不得消失) -->
-            <el-form-item v-if="activeIoTab === 'request' && fieldSearchCorpus.length" label="字段管理">
+            <div v-if="activeIoTab === 'request' && fieldSearchCorpus.length" class="cf-item"><span class="cf-label">字段管理</span>
               <FieldStateSearch
                 :corpus="fieldSearchCorpus"
                 @select="onSearchFieldState"
                 @reset="onSearchFieldReset"
               />
-            </el-form-item>
+            </div>
             <!-- body: 由 plate /full 目录实时驱动渲染树(会话级现拉,非持久快照;
                  §5 值×结构合并:行数跟 body、结构跟目录,carry 不进树) -->
-            <el-form-item v-if="activeIoTab === 'request' && requestNodes.length" label="请求体 (由字段状态目录驱动)">
+            <div v-if="activeIoTab === 'request' && requestNodes.length" class="cf-item"><span class="cf-label">请求体 (由字段状态目录驱动)</span>
               <div class="field-form-wrap">
                 <FieldForm
                   :nodes="requestNodes"
@@ -273,22 +273,21 @@
                   · {{ requestNodes.length }} 个顶层节点 · 行尾下拉切换 form/collapse/carry
                 </p>
               </div>
-            </el-form-item>
-            <el-form-item v-else-if="activeIoTab === 'request' && currentFullState === 'loading' && hasEndpointRef(currentStep)" label="请求体">
+            </div>
+            <div v-else-if="activeIoTab === 'request' && currentFullState === 'loading' && hasEndpointRef(currentStep)" class="cf-item"><span class="cf-label">请求体</span>
               <p class="resp-spec-empty">正在从 plate 拉取接口字段契约…</p>
-            </el-form-item>
-            <el-form-item v-else-if="activeIoTab === 'request'" label="body (JSON)">
-              <el-input
-                :model-value="JSON.stringify(currentStep.request.body || {}, null, 2)"
-                @update:model-value="(v: string) => currentStep.request.body = parseJson(v, {})"
-                type="textarea"
-                :rows="5"
+            </div>
+            <div v-else-if="activeIoTab === 'request'" class="cf-item"><span class="cf-label">body (JSON)</span>
+              <textarea
+                :value="JSON.stringify(currentStep.request.body || {}, null, 2)"
+                rows="5"
                 class="code-input"
-              />
+                @input="(e) => currentStep.request.body = parseJson((e.target as HTMLTextAreaElement).value, {})"
+              ></textarea>
               <!-- 取数失败那一格由上方 SurfaceNotice 统一说明(含重试入口),
                    这里不再复述,免得同一页出现两处同义提示 -->
               <span v-if="currentFullState !== 'failed'" class="hint">提示: 该接口未声明请求字段契约,或 plate 拉取中</span>
-            </el-form-item>
+            </div>
             <!-- Response 页:/full responses 全状态码契约,只读参考(设计 §3.1)。
                  ☰ 菜单**三项**:提取/断言/加入断言管理(值写入三项仍按域门控
                  不出现 —— 响应侧无从写请求体的值)。三项都域感知 — 响应侧路径
@@ -335,7 +334,7 @@
 
             <!-- 策略区: plate 策略语法 dim 驱动;request/response 共用同一列表
                  (执行序即数组序,不按签页过滤 — 添加即见);失败降级 extract 专用 UI -->
-            <el-form-item v-if="strategyKinds.length" label="策略 (request · response 共用)">
+            <div class="cf-item" v-if="strategyKinds.length" label="策略 (request · response 共用)">
               <div class="strategy-area">
                 <!-- B1 响应样本:端点无 assertable 时路径只能猜(数组丢 [0] 段)
                      → 粘真实样本解析候选,数组下标天然正确 -->
@@ -371,49 +370,47 @@
                   :expand-when="jumpSeq > 0 && idx === jumpTargetIdx"
                   @remove="removeStrategy(currentStep, s)"
                 />
-                <el-dropdown trigger="click" @command="addStrategy(currentStep, $event as string)">
-                  <!-- type="button": el-form 渲染原生 form,无 type 的按钮是 submit,
-                       点击会触发整页表单提交丢掉 ?step= query -->
-                  <button type="button" class="c-add add-strategy">
-                    + 添加策略 ▾
-                  </button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item
-                        v-for="k in strategyKinds"
-                        :key="k.kind"
-                        :command="k.kind"
-                      >
-                        {{ strategyLabelOf(k.kind, k.label) }}<span class="strat-kind-tag">{{ k.kind }}</span>
-                      </el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
+                <DropdownMenu>
+                  <!-- type="button": 页面有原生 form,无 type 的按钮是 submit -->
+                  <DropdownMenuTrigger as-child>
+                    <button type="button" class="c-add add-strategy">
+                      + 添加策略 ▾
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem
+                      v-for="k in strategyKinds"
+                      :key="k.kind"
+                      @click="addStrategy(currentStep, k.kind)"
+                    >
+                      {{ strategyLabelOf(k.kind, k.label) }}<span class="strat-kind-tag">{{ k.kind }}</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-            </el-form-item>
-            <el-form-item v-else label="extract (从响应提取变量 → strategy)">
+            </div>
+            <div class="cf-item" v-else label="extract (从响应提取变量 → strategy)">
               <div v-for="(ex, j) in extractStrategies(currentStep)" :key="j" class="extract-row c-kv-row">
-                <el-input
+                <Input
                   :model-value="ex.target"
-                  @update:model-value="(v: string) => ex.target = v"
+                  @update:model-value="(v) => (ex.target = String(v))"
                   placeholder="变量名 (target)"
-                  size="small"
+                  class="h-8 w-[130px]"
                 />
                 <span class="c-kv-sep">←</span>
-                <el-input
+                <Input
                   :model-value="ex.expression"
-                  @update:model-value="(v: string) => ex.expression = v"
+                  @update:model-value="(v) => (ex.expression = String(v))"
                   placeholder="$.data.orderId"
-                  size="small"
-                  class="ex-path"
+                  class="ex-path h-8"
                 />
                 <button type="button" class="c-kv-del" @click="removeExtract(currentStep, ex)">×</button>
               </div>
               <button type="button" class="c-add add-extract" @click="addExtract(currentStep)">
                 + 添加 extract
               </button>
-            </el-form-item>
-          </el-form>
+            </div>
+          </div>
         </div>
         <div v-else class="fields-empty">
           <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -549,6 +546,10 @@ import draggable from 'vuedraggable'
 import CaseComposerCatalog from './CaseComposerCatalog.vue'
 import SurfaceNotice from './SurfaceNotice.vue'
 import FieldForm from './FieldForm.vue'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import FieldStateSearch from './FieldStateSearch.vue'
 import StrategyForm from './StrategyForm.vue'
 import VariableRegistryPanel from './VariableRegistryPanel.vue'
@@ -2549,4 +2550,6 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
 .typec-line { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
 .typec-line code { font-family: var(--font-mono); font-size: 11px; color: #334155; }
 .typec-path { font-family: var(--font-mono); font-size: 10px; color: #94a3b8; }
+.cf-item { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.cf-label { font-size: 11px; font-weight: 600; color: var(--color-text-secondary, #64748b); }
 </style>
