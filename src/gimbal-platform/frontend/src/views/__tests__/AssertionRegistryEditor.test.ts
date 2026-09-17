@@ -602,7 +602,7 @@ it('ARE-22: `?entry=` 命中 ⇒ 聚焦态只渲染该条 —— 列表与手工
   expect(w.find('.are-new-bar').exists()).toBe(false)      // 手工新建收起
   const detail = w.find('.are-detail')
   expect(detail.exists()).toBe(true)                       // 详情直接打开,不用再点一次
-  expect((detail.find('.are-name-input input').element as HTMLInputElement).value).toBe('金额为负')
+  expect((detail.find('.are-name-input').element as HTMLInputElement).value).toBe('金额为负')
   expect(detail.text()).toContain('$.amount')
   // 值编辑器按该条初始化:聚焦态 selectedId 恒为 null,监听 selectedId 的写法
   // 在这里永不触发 ⇒ 注入值那一栏会空着(读到的是别人的值 / 空串)。

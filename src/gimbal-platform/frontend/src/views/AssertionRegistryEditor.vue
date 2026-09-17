@@ -27,9 +27,9 @@
         </p>
       </div>
       <div class="header-actions">
-        <el-button v-if="focusMode" :icon="Back" @click="exitFocus">全部条目</el-button>
-        <el-button :icon="Back" @click="router.push(composerUrl(scenarioId, 1))">返回编排器</el-button>
-        <el-button type="primary" plain :loading="saving" :disabled="!draft" @click="save">保存</el-button>
+        <Button v-if="focusMode" variant="outline" size="sm" @click="exitFocus">全部条目</Button>
+        <Button variant="outline" size="sm" data-testid="back-composer" @click="router.push(composerUrl(scenarioId, 1))">← 返回编排器</Button>
+        <Button size="sm" :disabled="saving || !draft" data-testid="are-save" @click="save">{{ saving ? '保存中…' : '保存' }}</Button>
       </div>
     </header>
 
@@ -54,14 +54,16 @@
     <template v-if="draft">
     <!-- 手工新建:步骤 + jsonpath(path 即注入地址);聚焦态收起 -->
     <div v-if="!focusMode" class="are-new-bar">
-      <el-select
-        :model-value="pendingPath.stepIndex"
-        size="small"
+      <Select
+        :model-value="String(pendingPath.stepIndex)"
         class="are-step-select"
-        @update:model-value="(v: any) => (pendingPath.stepIndex = Number(v))"
+        @update:model-value="(v) => (pendingPath.stepIndex = Number(v))"
       >
-        <el-option v-for="(label, i) in stepLabels" :key="`np:${i}`" :value="i" :label="label" />
-      </el-select>
+        <SelectTrigger class="h-8"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem v-for="(label, i) in stepLabels" :key="`np:${i}`" :value="String(i)">{{ label }}</SelectItem>
+        </SelectContent>
+      </Select>
       <JsonPathInput
         v-model="pendingPath.jsonpath"
         class="are-path-input"
@@ -69,7 +71,7 @@
         :state-of="stateOfPendingPath"
         placeholder="注入路径(例:$.amount)"
       />
-      <el-button size="small" :disabled="!draft" @click="addEntry">新建条目</el-button>
+      <Button size="sm" variant="outline" :disabled="!draft" @click="addEntry">新建条目</Button>
     </div>
 
     <!-- 条目列表:path 徽标 / 值摘要 / 期望数 / 死条目灰 / 旧版条目灰;
@@ -108,7 +110,7 @@
     <!-- 详情:path 只读 + value 类型化编辑 / asserts 编辑 -->
     <div v-if="selected && !isLegacyEntry(selected)" class="are-detail">
       <div class="are-detail-head">
-        <el-input v-model="selected.name" class="are-name-input" size="small" placeholder="条目名称" />
+        <Input v-model="selected.name" class="are-name-input h-8 w-[180px]" placeholder="条目名称" />
         <span class="are-anchor">
           注入路径:第 {{ selected.path.stepIndex + 1 }} 步请求体 · <code>{{ selected.path.jsonpath }}</code>
           <button
@@ -132,22 +134,22 @@
       <div class="are-sec">
         <h4>注入值<span class="are-sec-hint">运行时把这个字段改成下面的值;原样写入,不做类型转换</span></h4>
         <div class="are-value-edit">
-          <el-select v-model="valueDraft.kind" size="small" class="are-kind-select" @change="onKindChange">
-            <el-option value="str" label="str" />
-            <el-option value="num" label="num" />
-            <el-option value="bool" label="bool" />
-            <el-option value="json" label="json" />
-          </el-select>
-          <el-checkbox
-            v-if="valueDraft.kind === 'bool'"
-            v-model="valueDraft.bool"
-            @change="applyValue"
-          >true</el-checkbox>
-          <el-input
+          <Select v-model="valueDraft.kind" class="are-kind-select" @update:model-value="onKindChange">
+            <SelectTrigger class="h-8"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="str">str</SelectItem>
+              <SelectItem value="num">num</SelectItem>
+              <SelectItem value="bool">bool</SelectItem>
+              <SelectItem value="json">json</SelectItem>
+            </SelectContent>
+          </Select>
+          <label v-if="valueDraft.kind === 'bool'" class="are-bool-check">
+            <input v-model="valueDraft.bool" type="checkbox" @change="applyValue" /> true
+          </label>
+          <Input
             v-else
             v-model="valueDraft.text"
-            size="small"
-            class="are-val-input"
+            class="are-val-input h-8"
             placeholder="注入值(例:-1 / &quot;中文&quot; / {&quot;a&quot;:1})"
             @change="applyValue"
           />
@@ -178,28 +180,36 @@
           </tbody>
         </table>
         <div class="are-pending are-pending-assert">
-          <el-select
-            :model-value="pendingAssert.stepIndex"
-            size="small"
+          <Select
+            :model-value="String(pendingAssert.stepIndex)"
             class="are-step-select"
-            @update:model-value="(v: any) => (pendingAssert.stepIndex = Number(v))"
+            @update:model-value="(v) => (pendingAssert.stepIndex = Number(v))"
           >
-            <el-option v-for="(label, i) in stepLabels" :key="`sa:${i}`" :value="i" :label="label" />
-          </el-select>
+            <SelectTrigger class="h-8"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="(label, i) in stepLabels" :key="`sa:${i}`" :value="String(i)">{{ label }}</SelectItem>
+            </SelectContent>
+          </Select>
           <JsonPathInput
             v-model="pendingAssert.target"
             class="are-target-input"
             :candidates="targetCandidates"
             placeholder="断言哪个响应字段(例:$.response_body.code)"
           />
-          <el-select v-model="pendingAssert.operator" size="small" class="are-op-select" filterable allow-create>
-            <el-option v-for="op in OPERATORS" :key="op" :value="op" :label="op" />
-          </el-select>
-          <el-input v-model="pendingAssert.expected" size="small" class="are-exp-input" placeholder="期望值" />
-          <el-select v-model="pendingAssert.mode" size="small" class="are-mode-select">
-            <el-option value="append" label="新增一条" />
-            <el-option value="override" label="改写已有" />
-          </el-select>
+          <!-- operator 需自由输入(原 filterable allow-create)→
+               Input + datalist:候选 = OPERATORS,可键入任意算子 -->
+          <Input v-model="pendingAssert.operator" list="are-operators" class="are-op-select h-8 font-mono" placeholder="判据" />
+          <datalist id="are-operators">
+            <option v-for="op in OPERATORS" :key="op" :value="op" />
+          </datalist>
+          <Input v-model="pendingAssert.expected" class="are-exp-input h-8" placeholder="期望值" />
+          <Select v-model="pendingAssert.mode" class="are-mode-select">
+            <SelectTrigger class="h-8"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="append">新增一条</SelectItem>
+              <SelectItem value="override">改写已有</SelectItem>
+            </SelectContent>
+          </Select>
           <button type="button" class="are-add-assert" @click="addAssert">+ 添加期望</button>
         </div>
       </div>
@@ -214,7 +224,6 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
-import { Back } from '@element-plus/icons-vue'
 import { getScenarioDraft, updateScenario } from '@/api/scenario-composer'
 import type { ScenarioDraft } from '@/types/scenario-composer'
 import type { AssertionEntry, AssertionRegistry, LegacyAssertionEntry } from '@/types/assertion-registry'
@@ -226,6 +235,9 @@ import type { FieldState } from '@/types/plate'
 import { getEndpointFull } from '@/composables/useEndpointFull'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
 import JsonPathInput from '@/components/composer/JsonPathInput.vue'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import SurfaceNotice from '@/components/composer/SurfaceNotice.vue'
 import { composerUrl, scenarioAssertionsUrl } from '@/utils/links'
 import { showError } from '@/utils/errorFallback'
