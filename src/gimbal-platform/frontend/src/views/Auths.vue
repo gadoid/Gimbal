@@ -1,212 +1,245 @@
-<!-- Auths.vue — Spec-2 §4.4 D 凭证池管理页.
-     列表 + 搜索 + token_type 筛选 + 创建/编辑 modal + 测试连通 + 删除. -->
+<!-- Auths.vue — Spec-2 §4.4 D 凭证池管理页。批次 2 迁移新栈:
+     ListPage 骨架 + shadcn Table/Select/Dialog + 定稿表单范式
+     (useForm + zod)。编辑态 password 条件必填(留空 = 不修改)由
+     submit 内 setFieldError 承接(schema 静态化,规则仍单点)。
+     测试弹框状态机(开框即认证中 → 成功/失败终态)语义原样保留。 -->
 <template>
-  <section class="auths">
-    <header class="page-header">
-      <div>
-        <h2>认证管理</h2>
-        <p>{{ metaText }}</p>
-      </div>
-
-      <div class="header-actions">
-        <el-input
-          v-model="searchQuery"
-          class="search-input"
-          clearable
-          :prefix-icon="Search"
-          placeholder="搜索 alias / username / url"
-        />
-        <el-select v-model="tokenTypeFilter" class="tt-filter">
-          <el-option label="全部 token_type" value="all" />
-          <el-option label="Bearer" value="Bearer" />
-          <el-option label="Basic" value="Basic" />
-          <el-option label="Cookie" value="Cookie" />
-          <el-option label="Authorization（整段头）" value="Authorization" />
-        </el-select>
-        <el-button type="primary" @click="openCreate">+ 新增认证</el-button>
-      </div>
-    </header>
-
-    <el-table
-      v-if="visibleAuths.length > 0"
-      v-loading="store.fetchStatus === 'loading'"
-      :data="visibleAuths"
-      class="auths-table"
-    >
-      <el-table-column label="alias" min-width="110">
-        <template #default="{ row }">
-          <code class="alias">{{ row.alias }}</code>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="URL" min-width="220">
-        <template #default="{ row }">
-          <span class="url mono">{{ row.url }}</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="username" min-width="140">
-        <template #default="{ row }">
-          <code class="mono">{{ row.username }}</code>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="token_type" width="120">
-        <template #default="{ row }">
-          <span :class="['tt-badge', `tt-${row.token_type.toLowerCase()}`]">
-            {{ row.token_type }}
-          </span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="expires_in" width="110">
-        <template #default="{ row }">
-          <span class="muted">{{ formatExpires(row.expires_in) }}</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="操作" width="200" align="center" fixed="right">
-        <template #default="{ row }">
-          <el-button link type="primary" @click="runTest(row)">测试</el-button>
-          <el-button link @click="openEdit(row)">编辑</el-button>
-          <el-button link type="danger" @click="openDelete(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-
-    <el-empty
-      v-else-if="store.fetchStatus !== 'loading'"
-      description="暂无认证 — 复制用例中的 alias 在此登记"
-    >
-      <el-button type="primary" plain @click="openCreate">+ 新增认证</el-button>
-    </el-empty>
-
-    <!-- ── Create / Edit dialog ─────────────────────── -->
-    <el-dialog
-      v-model="createOpen"
-      :title="editingId ? '编辑认证' : '+ 新增认证'"
-      width="520px"
-      :close-on-click-modal="false"
-    >
-      <el-form
-        ref="formRef"
-        :model="form"
-        :rules="formRules"
-        label-position="top"
-        @submit.prevent
+  <ListPage title="认证管理" :subtitle="metaText">
+    <template #actions>
+      <Input
+        v-model="searchQuery"
+        class="w-[260px] max-w-full"
+        placeholder="搜索 alias / username / url"
+        data-testid="auth-search"
+      />
+      <Select
+        :model-value="tokenTypeFilter"
+        class="w-[200px]"
+        @update:model-value="tokenTypeFilter = $event as typeof tokenTypeFilter"
       >
-        <el-form-item label="alias" prop="alias" required>
-          <el-input v-model="form.alias" :disabled="!!editingId"
-            placeholder="例 qa1 / staging-codfish（同 owner 内唯一）" />
-        </el-form-item>
-        <el-form-item label="登录 URL" prop="url" required>
-          <el-input v-model="form.url" placeholder="https://target/auth/login" />
-        </el-form-item>
-        <el-form-item label="username" prop="username" required>
-          <el-input v-model="form.username" placeholder="登录用户名" />
-        </el-form-item>
-        <el-form-item label="password" prop="password" :required="!editingId">
-          <el-input
-            v-model="form.password"
-            type="password"
-            show-password
-            :placeholder="editingId ? '留空表示不修改' : '登录密码'"
-          />
-        </el-form-item>
-        <el-form-item label="token_type">
-          <el-select v-model="form.token_type" style="width:100%">
-            <el-option label="Bearer" value="Bearer" />
-            <el-option label="Basic" value="Basic" />
-            <el-option label="Cookie" value="Cookie" />
-            <el-option label="Authorization（整段头）" value="Authorization" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="expires_in（秒）">
-          <el-input-number v-model="form.expires_in" :min="0" :max="86400" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="createOpen = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" native-type="button" @click="submitForm">
-          {{ editingId ? '保存' : '创建' }}
-        </el-button>
-      </template>
-    </el-dialog>
+        <SelectTrigger data-testid="tt-filter"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">全部 token_type</SelectItem>
+          <SelectItem value="Bearer">Bearer</SelectItem>
+          <SelectItem value="Basic">Basic</SelectItem>
+          <SelectItem value="Cookie">Cookie</SelectItem>
+          <SelectItem value="Authorization">Authorization（整段头）</SelectItem>
+        </SelectContent>
+      </Select>
+      <Button data-testid="open-create" @click="openCreate">+ 新增认证</Button>
+    </template>
 
-    <!-- ── Test result dialog(状态主视觉式)────────────── -->
-    <el-dialog v-model="testOpen" title="认证测试" width="460px">
-      <div v-if="testTarget" class="test-hero">
-        <div class="test-sub">{{ testTarget.alias }} · {{ testTarget.url }}</div>
+    <Table v-if="visibleAuths.length" class="rounded-field border border-signal-line bg-signal-card">
+      <TableHeader>
+        <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
+          <TableHead class="text-caption font-semibold text-muted-foreground">alias</TableHead>
+          <TableHead class="text-caption font-semibold text-muted-foreground">URL</TableHead>
+          <TableHead class="text-caption font-semibold text-muted-foreground">username</TableHead>
+          <TableHead class="w-[110px] text-caption font-semibold text-muted-foreground">token_type</TableHead>
+          <TableHead class="w-[100px] text-caption font-semibold text-muted-foreground">expires_in</TableHead>
+          <TableHead class="w-[180px] text-center text-caption font-semibold text-muted-foreground">操作</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow v-for="row in visibleAuths" :key="row.id" :data-testid="`auth-row-${row.id}`">
+          <TableCell><code class="alias">{{ row.alias }}</code></TableCell>
+          <TableCell><span class="url font-mono">{{ row.url }}</span></TableCell>
+          <TableCell><code class="font-mono">{{ row.username }}</code></TableCell>
+          <TableCell>
+            <span class="tt-badge" :class="ttClass[row.token_type] ?? 'tt-other'">{{ row.token_type }}</span>
+          </TableCell>
+          <TableCell><span class="text-caption text-muted-foreground">{{ formatExpires(row.expires_in) }}</span></TableCell>
+          <TableCell>
+            <div class="flex items-center justify-center gap-0.5">
+              <Button variant="link" size="sm" class="h-7 px-2" data-testid="auth-test" @click="runTest(row)">测试</Button>
+              <Button variant="link" size="sm" class="h-7 px-2" data-testid="auth-edit" @click="openEdit(row)">编辑</Button>
+              <Button variant="link" size="sm" class="h-7 px-2 text-signal-failed" data-testid="auth-del" @click="openDelete(row)">删除</Button>
+            </div>
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
 
-        <div v-if="testPhase === 'testing'" class="test-state testing">
-          <span class="test-icon spinner" />
-          <span class="test-word">认证中…</span>
-        </div>
+    <div v-else-if="store.fetchStatus === 'loading'" class="py-10 text-center text-body text-muted-foreground">加载中…</div>
+    <div v-else class="empty-cta" data-testid="auths-empty">
+      <p>暂无认证 — 复制用例中的 alias 在此登记</p>
+      <Button variant="outline" size="sm" @click="openCreate">+ 新增认证</Button>
+    </div>
 
-        <template v-else-if="testResult">
-          <div class="test-state" :class="testPhase">
-            <span class="test-icon">{{ testPhase === 'success' ? '✓' : '✗' }}</span>
-            <span class="test-word">{{ testPhase === 'success' ? '认证成功' : '认证失败' }}</span>
-            <span v-if="testResult.status_code != null" class="test-code">
-              HTTP {{ testResult.status_code }}
-            </span>
+    <!-- ── 创建 / 编辑(定稿表单范式)──────────────────────────── -->
+    <Dialog :open="createOpen" @update:open="createOpen = $event">
+      <DialogContent class="max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>{{ editingId ? '编辑认证' : '+ 新增认证' }}</DialogTitle>
+        </DialogHeader>
+        <form class="flex flex-col gap-3" @submit="onSubmitForm">
+          <FormField v-slot="{ componentField }" name="alias">
+            <FormItem>
+              <FormLabel>alias<span class="required-dot">*</span></FormLabel>
+              <FormControl>
+                <Input v-bind="componentField" :disabled="!!editingId"
+                  placeholder="例 qa1 / staging-codfish（同 owner 内唯一）" data-testid="f-alias" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+
+          <FormField v-slot="{ componentField }" name="url">
+            <FormItem>
+              <FormLabel>登录 URL<span class="required-dot">*</span></FormLabel>
+              <FormControl>
+                <Input v-bind="componentField" placeholder="https://target/auth/login" data-testid="f-url" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+
+          <FormField v-slot="{ componentField }" name="username">
+            <FormItem>
+              <FormLabel>username<span class="required-dot">*</span></FormLabel>
+              <FormControl>
+                <Input v-bind="componentField" placeholder="登录用户名" data-testid="f-username" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+
+          <FormField v-slot="{ componentField }" name="password">
+            <FormItem>
+              <FormLabel>password<span v-if="!editingId" class="required-dot">*</span></FormLabel>
+              <FormControl>
+                <Input v-bind="componentField" type="password"
+                  :placeholder="editingId ? '留空表示不修改' : '登录密码'" data-testid="f-password" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+
+          <FormField v-slot="{ componentField }" name="token_type">
+            <FormItem>
+              <FormLabel>token_type</FormLabel>
+              <FormControl>
+                <Select v-bind="componentField">
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Bearer">Bearer</SelectItem>
+                    <SelectItem value="Basic">Basic</SelectItem>
+                    <SelectItem value="Cookie">Cookie</SelectItem>
+                    <SelectItem value="Authorization">Authorization（整段头）</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+
+          <FormField v-slot="{ componentField }" name="expires_in">
+            <FormItem>
+              <FormLabel>expires_in（秒）</FormLabel>
+              <FormControl>
+                <Input v-bind="componentField" type="number" :min="0" :max="86400" class="w-[140px]" data-testid="f-expires" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+
+          <DialogFooter class="mt-1">
+            <Button type="button" variant="outline" @click="createOpen = false">取消</Button>
+            <Button type="submit" :disabled="submitting">{{ editingId ? '保存' : '创建' }}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+
+    <!-- ── 测试结果弹框(状态主视觉式)─────────────────────────── -->
+    <Dialog :open="testOpen" @update:open="testOpen = $event">
+      <DialogContent class="max-w-[460px]">
+        <DialogHeader>
+          <DialogTitle>认证测试</DialogTitle>
+        </DialogHeader>
+        <div v-if="testTarget" class="test-hero">
+          <div class="test-sub">{{ testTarget.alias }} · {{ testTarget.url }}</div>
+
+          <div v-if="testPhase === 'testing'" class="test-state testing">
+            <span class="test-icon spinner" />
+            <span class="test-word">认证中…</span>
           </div>
-          <button class="detail-toggle" @click="testDetailOpen = !testDetailOpen">
-            {{ testDetailOpen ? '▾' : '▸' }} 详情
-          </button>
-          <code v-if="testDetailOpen" class="mono detail">{{ testResult.message }}</code>
-        </template>
-      </div>
-      <template #footer>
-        <el-button v-if="testPhase !== 'testing' && testTarget" @click="runTest(testTarget)">
-          重新测试
-        </el-button>
-        <el-button type="primary" @click="testOpen = false">关闭</el-button>
-      </template>
-    </el-dialog>
 
-    <!-- ── Delete confirm ───────────────────────────── -->
-    <el-dialog
-      v-model="deleteOpen"
-      title="删除认证"
-      width="420px"
-      :close-on-click-modal="false"
-    >
-      <div v-if="deleteTarget" class="delete-body">
-        <p>
-          此操作不可撤销。alias <code class="mono">{{ deleteTarget.alias }}</code>
-          将从凭证池中移除（已使用此 alias 的历史执行记录不受影响）。
-        </p>
-        <p>要继续请输入 <code class="mono">{{ deleteTarget.alias }}</code> 确认：</p>
-        <el-input
-          v-model="deleteConfirmInput"
-          :placeholder="`输入 ${deleteTarget.alias} 以确认`"
-        />
-      </div>
-      <template #footer>
-        <el-button @click="deleteOpen = false">取消</el-button>
-        <el-button
-          type="danger"
-          :disabled="!deleteConfirmed"
-          :loading="deleteSubmitting"
-          @click="submitDelete"
-        >确认删除</el-button>
-      </template>
-    </el-dialog>
-  </section>
+          <template v-else-if="testResult">
+            <div class="test-state" :class="testPhase">
+              <span class="test-icon">{{ testPhase === 'success' ? '✓' : '✗' }}</span>
+              <span class="test-word">{{ testPhase === 'success' ? '认证成功' : '认证失败' }}</span>
+              <span v-if="testResult.status_code != null" class="test-code">
+                HTTP {{ testResult.status_code }}
+              </span>
+            </div>
+            <button class="detail-toggle" type="button" @click="testDetailOpen = !testDetailOpen">
+              {{ testDetailOpen ? '▾' : '▸' }} 详情
+            </button>
+            <code v-if="testDetailOpen" class="mono detail">{{ testResult.message }}</code>
+          </template>
+        </div>
+        <DialogFooter>
+          <Button v-if="testPhase !== 'testing' && testTarget" variant="outline" @click="runTest(testTarget)">
+            重新测试
+          </Button>
+          <Button @click="testOpen = false">关闭</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- ── 删除确认(输入 alias 硬确认)────────────────────────── -->
+    <Dialog :open="deleteOpen" @update:open="deleteOpen = $event">
+      <DialogContent class="max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>删除认证</DialogTitle>
+        </DialogHeader>
+        <div v-if="deleteTarget" class="flex flex-col gap-3">
+          <p class="m-0 text-body leading-relaxed">
+            此操作不可撤销。alias <code class="rounded-chip bg-signal-failed/10 px-1.5 font-mono text-signal-failed">{{ deleteTarget.alias }}</code>
+            将从凭证池中移除（已使用此 alias 的历史执行记录不受影响）。
+          </p>
+          <p class="m-0 text-body">要继续请输入 <code class="font-mono">{{ deleteTarget.alias }}</code> 确认：</p>
+          <Input v-model="deleteConfirmInput" :placeholder="`输入 ${deleteTarget.alias} 以确认`" data-testid="del-confirm" />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="deleteOpen = false">取消</Button>
+          <Button variant="destructive" :disabled="!deleteConfirmed || deleteSubmitting" data-testid="del-submit" @click="submitDelete">
+            确认删除
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </ListPage>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { Search } from '@element-plus/icons-vue'
+import { computed, onMounted, ref } from 'vue'
+import { toTypedSchema } from '@vee-validate/zod'
+import { z } from 'zod'
+import { useForm } from 'vee-validate'
 import { useListSearch } from '@/utils/useListSearch'
-import { type FormInstance } from 'element-plus'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import { useAuthSessionsStore } from '@/stores/auth_sessions'
 import type { AuthSession, TestResult } from '@/api/auth_sessions'
+import ListPage from '@/layouts/ListPage.vue'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
 
 const store = useAuthSessionsStore()
+
+/** token_type → chip 样式类(色板见下方 scoped) */
+const ttClass: Record<string, string> = {
+  Bearer: 'tt-bearer',
+  Basic: 'tt-basic',
+  Cookie: 'tt-cookie',
+  Authorization: 'tt-authorization',
+}
 
 // ── filters ────────────────────────────────────────────────────
 // Search via the shared composable; the token-type chip filter is
@@ -235,93 +268,84 @@ function formatExpires(seconds: number): string {
   return `${seconds}s`
 }
 
-// ── create / edit ──────────────────────────────────────────────
+// ── create / edit(定稿范式;password 条件必填在 submit 内补判)──
 const createOpen = ref(false)
 const editingId = ref<number | null>(null)
 const submitting = ref(false)
-const formRef = ref<FormInstance | null>(null)
-const form = reactive({
-  alias: '',
-  url: '',
-  username: '',
-  password: '',
-  token_type: 'Bearer',
-  expires_in: 7200,
-})
 
-const formRules = {
-  alias: [
-    { required: true, message: '请输入 alias', trigger: 'blur' },
-    { pattern: /^[A-Za-z0-9_-]{1,64}$/, message: '1-64 位字母数字下划线连字符', trigger: 'blur' },
-  ],
-  url: [
-    { required: true, message: '请输入登录 URL', trigger: 'blur' },
-    { type: 'url' as const, message: 'URL 格式不正确', trigger: 'blur' },
-  ],
-  username: [{ required: true, message: '请输入 username', trigger: 'blur' }],
-  password: [
-    {
-      validator: (_: unknown, v: string, cb: (e?: Error) => void) => {
-        if (!editingId.value && (!v || v.length < 1)) {
-          cb(new Error('请输入 password'))
-        } else cb()
-      },
-      trigger: 'blur',
-    },
-  ],
-}
+const schema = toTypedSchema(z.object({
+  alias: z.string()
+    .min(1, '请输入 alias')
+    .regex(/^[A-Za-z0-9_-]{1,64}$/, '1-64 位字母数字下划线连字符'),
+  url: z.string().min(1, '请输入登录 URL').url('URL 格式不正确'),
+  username: z.string().min(1, '请输入 username'),
+  // 编辑态可留空(= 不修改) — 创建态必填由 onSubmitForm 补判
+  password: z.string(),
+  token_type: z.enum(['Bearer', 'Basic', 'Cookie', 'Authorization']),
+  expires_in: z.coerce.number().int('整数秒').min(0).max(86400, '最大 86400'),
+}))
+
+const { handleSubmit, resetForm, setFieldError } = useForm({
+  validationSchema: schema,
+  initialValues: {
+    alias: '', url: '', username: '', password: '',
+    token_type: 'Bearer' as const, expires_in: 7200,
+  },
+})
 
 function openCreate() {
   editingId.value = null
-  form.alias = ''
-  form.url = ''
-  form.username = ''
-  form.password = ''
-  form.token_type = 'Bearer'
-  form.expires_in = 7200
+  resetForm({
+    values: { alias: '', url: '', username: '', password: '', token_type: 'Bearer', expires_in: 7200 },
+  })
   createOpen.value = true
 }
 
 function openEdit(row: AuthSession) {
   editingId.value = row.id
-  form.alias = row.alias
-  form.url = row.url
-  form.username = row.username
-  form.password = ''
-  form.token_type = row.token_type
-  form.expires_in = row.expires_in
+  resetForm({
+    values: {
+      alias: row.alias,
+      url: row.url,
+      username: row.username,
+      password: '',
+      // AuthSession.token_type 是宽 string;schema 是枚举 — 数据源即四选一
+      token_type: row.token_type as 'Bearer' | 'Basic' | 'Cookie' | 'Authorization',
+      expires_in: row.expires_in,
+    },
+  })
   createOpen.value = true
 }
 
-async function submitForm() {
-  if (!formRef.value) return
-  try {
-    await formRef.value.validate()
-  } catch {
+const onSubmitForm = handleSubmit(async (values) => {
+  if (submitting.value) return
+  // 创建态 password 必填(schema 静态化,条件规则在此单点补判)
+  if (!editingId.value && !values.password) {
+    setFieldError('password', '请输入 password')
     return
   }
   submitting.value = true
   try {
     if (editingId.value) {
       const patch: Record<string, unknown> = {
-        url: form.url,
-        username: form.username,
-        token_type: form.token_type,
-        expires_in: form.expires_in,
+        url: values.url,
+        username: values.username,
+        token_type: values.token_type,
+        expires_in: values.expires_in,
       }
-      if (form.password) patch.password = form.password
+      if (values.password) patch.password = values.password
       await store.patchAuth(editingId.value, patch)
       toast.success('已保存')
     } else {
       await store.createAuth({
-        alias: form.alias,
-        url: form.url,
-        username: form.username,
-        password: form.password,
-        token_type: form.token_type,
-        expires_in: form.expires_in,
+        alias: values.alias,
+        url: values.url,
+        username: values.username,
+        password: values.password,
+        token_type: values.token_type,
+        expires_in: values.expires_in,
       })
-      toast.success(`已创建 ${form.alias}`)
+      toast.success(`已创建 ${values.alias}`)
     }
     createOpen.value = false
   } catch (e) {
@@ -331,7 +355,7 @@ async function submitForm() {
   } finally {
     submitting.value = false
   }
-}
+})
 
 // ── test ───────────────────────────────────────────────────────
 // 状态机:开弹框即 testing(修复历史 bug — 标题三元把 null 折叠成
@@ -405,136 +429,48 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.auths {
-  max-width: 1480px;
-  min-height: calc(100vh - 48px);
-  padding: 28px 32px 48px;
-  margin: 0 auto;
-  box-sizing: border-box;
-}
-
-.page-header {
-  display: flex;
-  gap: 24px;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.page-header h2 {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: 22px;
-  line-height: 1.25;
-}
-
-.page-header p {
-  margin: 5px 0 0;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-}
-
-.header-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.search-input {
-  width: 260px;
-}
-
-.tt-filter {
-  width: 200px;
-}
-
-.auths-table {
-  width: 100%;
-  border: 1px solid var(--color-border-tertiary);
-  border-radius: 6px;
-}
-
 .alias {
-  padding: 2px 6px;
-  color: var(--accent);
-  font-weight: 600;
-  background: var(--accent-soft);
-  border-radius: 4px;
+  @apply rounded-chip bg-signal-soft px-1.5 py-0.5 font-mono font-semibold text-signal;
 }
 
 .url {
-  color: var(--color-text-secondary);
-  font-size: 11px;
+  @apply text-caption text-muted-foreground;
 }
 
 .tt-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 8px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 600;
-  border-radius: 4px;
+  @apply inline-flex items-center rounded-chip px-2 py-0.5 font-mono text-[10.5px] font-semibold;
 }
 
 .tt-bearer {
-  color: #4338ca;
-  background: #eef2ff;
-  border: 0.5px solid #c7d2fe;
+  @apply bg-signal-soft text-signal;
 }
 
 .tt-basic {
-  color: #854d0e;
-  background: #fef9c3;
-  border: 0.5px solid #fde68a;
+  @apply bg-amber-50 text-amber-800;
 }
 
 .tt-cookie {
-  color: #166534;
-  background: #dcfce7;
-  border: 0.5px solid #bbf7d0;
+  @apply bg-signal-done/10 text-signal-done;
 }
 
 .tt-authorization {
-  color: #991b1b;
-  background: #fef2f2;
-  border: 0.5px solid #fecaca;
+  @apply bg-signal-failed/10 text-signal-failed;
 }
 
-/* dialog internals */
-.kv {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  padding: 4px 0;
+.tt-other {
+  @apply bg-muted text-muted-foreground;
 }
 
-.kv-block {
-  display: block;
+.empty-cta {
+  @apply flex flex-col items-center gap-2.5 rounded-empty border border-signal-line bg-signal-card py-10 text-center;
 }
 
-.kv-label {
-  width: 80px;
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  text-align: right;
+.empty-cta p {
+  @apply m-0 text-body text-muted-foreground;
 }
 
-.kv-block .kv-label {
-  display: block;
-  width: auto;
-  text-align: left;
-  margin-bottom: 4px;
-}
-
-.detail {
-  display: block;
-  padding: 8px 10px;
-  color: var(--color-text-primary);
-  background: #f8fafc;
-  border-radius: 4px;
-  word-break: break-all;
+.required-dot {
+  @apply ml-1 font-bold text-signal-failed;
 }
 
 /* 测试弹框 — 状态主视觉式 */
@@ -543,7 +479,6 @@ onMounted(async () => {
 .test-sub {
   margin-bottom: 18px;
   overflow: hidden;
-  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--color-text-secondary);
   text-overflow: ellipsis;
@@ -575,20 +510,28 @@ onMounted(async () => {
   animation: test-spin 0.9s linear infinite;
 }
 
-.success .test-icon { color: #166534; background: #dcfce7; }
-.fail .test-icon { color: #991b1b; background: #fef2f2; }
+.success .test-icon { color: var(--signal-done, #15803d); background: #dcfce7; }
+.fail .test-icon { color: var(--signal-failed, #dc2626); background: #fef2f2; }
 
 .test-word { font-size: 16px; font-weight: 600; }
 .testing .test-word { color: var(--color-text-secondary); }
-.success .test-word { color: #166534; }
-.fail .test-word { color: #991b1b; }
+.success .test-word { color: var(--signal-done, #15803d); }
+.fail .test-word { color: var(--signal-failed, #dc2626); }
 
 .test-code {
   padding: 2px 8px;
-  font-family: var(--font-mono);
   font-size: 11px;
   background: #f1f5f9;
   border-radius: 4px;
+}
+
+.detail {
+  display: block;
+  padding: 8px 10px;
+  color: var(--color-text-primary);
+  background: #f8fafc;
+  border-radius: 4px;
+  word-break: break-all;
 }
 
 .detail-toggle {
@@ -600,52 +543,4 @@ onMounted(async () => {
 }
 
 @keyframes test-spin { to { transform: rotate(360deg); } }
-
-.delete-body p {
-  margin: 0 0 10px;
-  color: var(--color-text-primary);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.delete-body code {
-  padding: 2px 6px;
-  color: #991b1b;
-  background: #fef2f2;
-  border-radius: 3px;
-}
-
-:deep(.el-table th.el-table__cell) {
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 600;
-  background: #f8fafc;
-}
-
-:deep(.el-table td.el-table__cell) {
-  padding: 10px 0;
-  font-size: 12.5px;
-}
-
-:deep(.el-table__row:hover > td.el-table__cell) {
-  background: var(--accent-soft) !important;
-}
-
-@media (max-width: 900px) {
-  .auths {
-    padding: 20px 16px 36px;
-  }
-  .page-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .header-actions {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-  .search-input,
-  .tt-filter {
-    width: min(100%, 320px);
-  }
-}
 </style>
