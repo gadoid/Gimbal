@@ -1,13 +1,18 @@
 <script setup lang="ts">
 /**
- * 方案工作台 · 数据区:数据集多选(行级勾选)、失效标注与移除、内联新建。
+ * 方案工作台 · 数据区:数据集多选(行级勾选)、失效标注与移除、内联维护。
  *
- * 数据集独立路由已退役(D1,重构方案 Phase 2 批次 0):创建能力由本区
- * 内联承接(名称 + 行数据粘贴),不再跳独立编辑器页。
+ * D1 能力承接(数据集独立路由退役后,"维护方案数据集"全部在此可做):
+ * 新建 / 编辑(改名 + 行数据)/ 删除;行数据粘贴支持 JSON / TSV / CSV,
+ * CSV 导出为简单序列化(union 列头),与粘贴导入互为往返 — 不复活已
+ * 作废的 var-palette 模板协议(dataset v2 T6-T8,D1 作废)。
+ * 编辑保存保留既有 varUnlocks(PUT 整体替换语义,不带会被清空)。
  */
 import { computed, ref } from 'vue'
 import type { DataSetRow, DataSetSummary } from '@/types/scenario-composer'
-import { createDataSet } from '@/api/scenario-composer'
+import { createDataSet, updateDataSet, getDataSet } from '@/api/scenario-composer'
+import { downloadFile } from '@/utils/download'
+import Papa from 'papaparse'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import { confirmAction } from '@/utils/confirmAction'
@@ -19,12 +24,7 @@ const props = defineProps<{
   dataSets: DataSetSummary[]
   scenarioId: string
 }>()
-const emit = defineEmits<{
-  'update:modelValue': [v: Sel[]]
-  created: []
-  /** 用户已在区内确认;落库(refetch)由工作台处理 */
-  delete: [datasetId: string]
-}>()
+const emit = defineEmits<{ 'update:modelValue': [v: Sel[]]; saved: []; delete: [datasetId: string] }>()
 
 const liveIds = computed(() => new Set(props.dataSets.map((d) => d.datasetId)))
 const dead = computed(() => props.modelValue.filter((s) => !liveIds.value.has(s.datasetId)))
@@ -69,26 +69,47 @@ async function removeDataset(d: DataSetSummary) {
   if (ok) emit('delete', d.datasetId)
 }
 
-// ── 内联新建(编辑器页退役后的创建承接)──────────────────────────
-const createOpen = ref(false)
-const createName = ref('')
-const createRowsText = ref('[]')
-const creating = ref(false)
+// ── 内联维护对话框(新建 / 编辑)─────────────────────────────────
+const dialogOpen = ref(false)
+const mode = ref<'create' | 'edit'>('create')
+const formName = ref('')
+const rowsText = ref('[]')
+const saving = ref(false)
+/** 编辑目标:varUnlocks 随保存原样带回(PUT 整体替换,不带会清空)。 */
+const editing = ref<{ datasetId: string; varUnlocks?: string[] } | null>(null)
+const loadingExisting = ref(false)
 
 function openCreate() {
-  createName.value = `数据集 ${props.dataSets.length + 1}`
-  createRowsText.value = '[]'
-  createOpen.value = true
+  mode.value = 'create'
+  editing.value = null
+  formName.value = `数据集 ${props.dataSets.length + 1}`
+  rowsText.value = '[]'
+  dialogOpen.value = true
 }
 
-/** 解析粘贴的行数据:数组 + 每行对象 + 值限标量(DataSetRow 契约)。 */
-function parseRows(text: string): { rows?: DataSetRow[]; error?: string } {
-  let parsed: unknown
+async function openEdit(d: DataSetSummary) {
+  mode.value = 'edit'
+  editing.value = null
+  formName.value = d.name || d.datasetId
+  rowsText.value = '[]'
+  dialogOpen.value = true
+  loadingExisting.value = true
   try {
-    parsed = JSON.parse(text)
-  } catch {
-    return { error: '不是合法 JSON' }
+    const full = await getDataSet(d.datasetId)
+    formName.value = full.name
+    rowsText.value = JSON.stringify(full.rows, null, 2)
+    editing.value = { datasetId: full.datasetId, varUnlocks: full.varUnlocks }
+  } catch (e) {
+    showError('加载', e)
+    dialogOpen.value = false
+  } finally {
+    loadingExisting.value = false
   }
+}
+
+// ── 行数据解析:JSON → TSV → CSV(自动识别)──────────────────────
+/** 数组形态校验:每行对象 + 值限标量(DataSetRow 契约)。 */
+function coerceRows(parsed: unknown): { rows?: DataSetRow[]; error?: string } {
   if (!Array.isArray(parsed) || !parsed.length) return { error: '需要非空数组,每行一个对象' }
   const rows: DataSetRow[] = []
   for (let i = 0; i < parsed.length; i++) {
@@ -107,25 +128,86 @@ function parseRows(text: string): { rows?: DataSetRow[]; error?: string } {
   return { rows }
 }
 
-const parsedPreview = computed(() => parseRows(createRowsText.value))
+function parseTsv(text: string): { rows?: DataSetRow[]; error?: string } {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim())
+  if (lines.length < 2) return { error: 'TSV 需要表头行 + 至少一行数据(以 Tab 分隔)' }
+  const header = lines[0].split('\t').map((h) => h.trim())
+  const rows = lines.slice(1).map((line) => {
+    const cells = line.split('\t')
+    const row: DataSetRow = {}
+    header.forEach((h, i) => { row[h || `col${i}`] = (cells[i] ?? '').trim() })
+    return row
+  })
+  return { rows }
+}
 
-async function submitCreate() {
-  // 复用实时预览的解析结果(同一数据源,submit 时再断言一次兜底)
-  const { rows, error } = parsedPreview.value
-  if (error || !rows) return
-  creating.value = true
+function parseCsv(text: string): { rows?: DataSetRow[]; error?: string } {
+  const res = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true })
+  if (res.errors.length) return { error: `CSV 解析失败:${res.errors[0].message}` }
+  if (!res.data.length) return { error: '需要表头行 + 至少一行数据(以逗号分隔)' }
+  return { rows: res.data as DataSetRow[] }
+}
+
+/** 粘贴内容自动识别:JSON(以 [ 开头)/ TSV(含 Tab)/ CSV 兜底。 */
+function parseInput(text: string): { rows?: DataSetRow[]; error?: string; format?: string } {
+  const trimmed = text.trim()
+  if (!trimmed) return { error: '内容为空' }
+  if (trimmed.startsWith('[')) {
+    try {
+      return { format: 'JSON', ...coerceRows(JSON.parse(trimmed)) }
+    } catch {
+      return { error: '不是合法 JSON' }
+    }
+  }
+  if (trimmed.startsWith('{')) return { error: '不是合法 JSON(需要数组,每行一个对象)' }
+  if (trimmed.includes('\t')) return { format: 'TSV', ...parseTsv(trimmed) }
+  return { format: 'CSV', ...parseCsv(trimmed) }
+}
+
+const parsed = computed(() => parseInput(rowsText.value))
+
+/** 简单 CSV 序列化(union 列头,首见序;与粘贴导入互为往返)。 */
+function toCsv(rows: DataSetRow[]): string {
+  const cols: string[] = []
+  for (const r of rows) {
+    for (const k of Object.keys(r)) if (!cols.includes(k)) cols.push(k)
+  }
+  const esc = (v: unknown) => {
+    const s = String(v ?? '')
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  return [cols.join(','), ...rows.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\n')
+}
+
+function exportCsv() {
+  const { rows } = parsed.value
+  if (!rows) return
+  const base = (formName.value.trim() || editing.value?.datasetId || 'dataset').replace(/[\\/:*?"<>|]/g, '_')
+  downloadFile(`${base}.csv`, toCsv(rows), 'text/csv')
+}
+
+async function submit() {
+  const { rows } = parsed.value
+  if (!rows || saving.value || loadingExisting.value) return
+  const name = formName.value.trim() || `数据集 ${props.dataSets.length + 1}`
+  saving.value = true
   try {
-    const created = await createDataSet(props.scenarioId, {
-      name: createName.value.trim() || `数据集 ${props.dataSets.length + 1}`,
-      rows,
-    })
-    toast.success(`已创建数据集「${created.name || created.datasetId}」(${rows.length} 行)`)
-    createOpen.value = false
-    emit('created')
+    if (mode.value === 'create') {
+      const made = await createDataSet(props.scenarioId, { name, rows })
+      toast.success(`已创建数据集「${made.name || made.datasetId}」(${rows.length} 行)`)
+    } else if (editing.value) {
+      // varUnlocks 原样带回:PUT 整体替换,不带会把既有放开清单清掉
+      const draft: Parameters<typeof updateDataSet>[1] = { name, rows }
+      if (editing.value.varUnlocks?.length) draft.varUnlocks = editing.value.varUnlocks
+      await updateDataSet(editing.value.datasetId, draft)
+      toast.success(`已保存数据集「${name}」(${rows.length} 行)`)
+    }
+    dialogOpen.value = false
+    emit('saved')
   } catch (e) {
-    showError('创建', e)
+    showError(mode.value === 'create' ? '创建' : '保存', e)
   } finally {
-    creating.value = false
+    saving.value = false
   }
 }
 </script>
@@ -153,16 +235,18 @@ async function submitCreate() {
           <span class="ds-name">{{ d.name || d.datasetId }}</span>
           <span class="row-count">{{ rowsOf(d).length }} 行</span>
         </label>
+        <div v-if="isSelected(d.datasetId)" class="row-picks">
+          <!-- rowsOf 已是 0 基索引数组,v-for 取数组值后直接用 r(原稿 i-1 会错位成 -1,0,1) -->
+          <label v-for="r in rowsOf(d)" :key="r" class="row-pick">
+            <input type="checkbox" :checked="rowChecked(d.datasetId, r)"
+              @change="toggleRow(d.datasetId, r, ($event.target as HTMLInputElement).checked)" />
+            行{{ r }}
+          </label>
+        </div>
         <div class="ds-tile-foot">
-          <div v-if="isSelected(d.datasetId)" class="row-picks">
-            <!-- rowsOf 已是 0 基索引数组,v-for 取数组值后直接用 r(原稿 i-1 会错位成 -1,0,1) -->
-            <label v-for="r in rowsOf(d)" :key="r" class="row-pick">
-              <input type="checkbox" :checked="rowChecked(d.datasetId, r)"
-                @change="toggleRow(d.datasetId, r, ($event.target as HTMLInputElement).checked)" />
-              行{{ r }}
-            </label>
-          </div>
-          <el-button class="ds-del" size="small" text type="danger"
+          <el-button class="ds-act" size="small" text type="primary"
+            :data-testid="`ds-edit-${d.datasetId}`" @click="openEdit(d)">编辑</el-button>
+          <el-button class="ds-act" size="small" text type="danger"
             :data-testid="`ds-del-${d.datasetId}`" @click="removeDataset(d)">删除</el-button>
         </div>
       </div>
@@ -173,30 +257,31 @@ async function submitCreate() {
       </div>
     </div>
 
-    <!-- 内联新建:名称 + 行数据(JSON 粘贴),校验通过才落库 -->
-    <el-dialog v-model="createOpen" title="新建数据集" width="560px">
+    <!-- 内联维护:名称 + 行数据(JSON/TSV/CSV 粘贴),校验通过才落库 -->
+    <el-dialog v-model="dialogOpen" :title="mode === 'create' ? '新建数据集' : '编辑数据集'" width="560px">
       <div class="create-form" data-testid="create-form">
         <label class="create-label">名称</label>
-        <el-input v-model="createName" placeholder="数据集 N" data-testid="create-name" />
-        <label class="create-label">行数据(JSON 数组,每行一个对象)</label>
+        <el-input v-model="formName" placeholder="数据集 N" data-testid="create-name" />
+        <label class="create-label">行数据(支持粘贴 JSON 数组 / TSV / CSV,自动识别)</label>
         <el-input
-          v-model="createRowsText"
+          v-model="rowsText"
           type="textarea"
           :rows="8"
           data-testid="create-rows"
-          placeholder='[{"amount": 100, "channel": "alipay"}, {"amount": 200, "channel": "wechat"}]'
+          :placeholder="loadingExisting ? '载入中…' : '粘贴 JSON 数组,或直接从 Excel 粘贴(Tab 分隔)/ CSV 文本'"
         />
-        <p v-if="parsedPreview.rows" class="create-hint ok" data-testid="create-preview">
-          可解析:{{ parsedPreview.rows.length }} 行
+        <p v-if="parsed.rows" class="create-hint ok" data-testid="create-preview">
+          {{ parsed.format }} 可解析:{{ parsed.rows.length }} 行
         </p>
-        <p v-else-if="parsedPreview.error" class="create-hint bad" data-testid="create-error">
-          {{ parsedPreview.error }}
+        <p v-else-if="parsed.error" class="create-hint bad" data-testid="create-error">
+          {{ parsed.error }}
         </p>
       </div>
       <template #footer>
-        <el-button @click="createOpen = false">取消</el-button>
-        <el-button type="primary" :disabled="!parsedPreview.rows || creating" data-testid="create-submit"
-          @click="submitCreate">{{ creating ? '创建中…' : '创建' }}</el-button>
+        <el-button :disabled="!parsed.rows" data-testid="export-csv" @click="exportCsv">导出 CSV</el-button>
+        <el-button @click="dialogOpen = false">取消</el-button>
+        <el-button type="primary" :disabled="!parsed.rows || saving || loadingExisting" data-testid="create-submit"
+          @click="submit">{{ mode === 'create' ? '创建' : saving ? '保存中…' : '保存' }}</el-button>
       </template>
     </el-dialog>
   </section>
@@ -257,10 +342,8 @@ async function submitCreate() {
 }
 
 /* 行级勾选展开态:换行排版 + 虚线分隔(选中 tile 的附属区) */
-.ds-tile-foot { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
-.ds-del { align-self: flex-end; height: 22px; padding: 0 6px; font-size: 11px; }
 .row-picks {
-  display: flex; flex-wrap: wrap; gap: 4px 6px; padding-top: 8px;
+  display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 8px; padding-top: 8px;
   border-top: 1px dashed var(--color-border-tertiary);
 }
 .row-pick {
@@ -271,6 +354,10 @@ async function submitCreate() {
 .row-pick:hover { border-color: var(--color-border-tertiary); background: #fff; }
 .row-pick input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
 
+/* tile 操作位:编辑/删除靠右,不触发 label 勾选 */
+.ds-tile-foot { margin-top: 6px; display: flex; justify-content: flex-end; gap: 2px; }
+.ds-act { height: 22px; padding: 0 6px; font-size: 11px; }
+
 /* 空态(三处统一形状:dashed 框 + muted 文案 + 引导按钮) */
 .empty-state {
   grid-column: 1 / -1;
@@ -280,7 +367,7 @@ async function submitCreate() {
 }
 .empty-state p { margin: 0; font-size: 12px; color: var(--color-text-tertiary); }
 
-/* 内联新建表单 */
+/* 内联维护表单 */
 .create-form { display: flex; flex-direction: column; gap: 6px; }
 .create-label { font-size: 12px; font-weight: 600; color: var(--color-text-secondary); margin-top: 4px; }
 .create-hint { margin: 0; font-size: 12px; }

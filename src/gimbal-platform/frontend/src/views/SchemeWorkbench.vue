@@ -301,7 +301,7 @@ onMounted(async () => {
   }
 })
 
-/** 数据区内联新建成功后刷新数据集列表(D1:创建能力承接进工作台) */
+/** 数据区内联维护(新建/编辑)落库后刷新列表(D1 能力承接) */
 async function reloadDataSets() {
   try {
     dataSets.value = await listDataSets({ scenarioId })
@@ -376,7 +376,7 @@ async function onDeleteDataSet(datasetId: string) {
             v-model="draft.dataSetSelection"
             :data-sets="dataSets"
             :scenario-id="scenarioId"
-            @created="reloadDataSets"
+            @saved="reloadDataSets"
             @delete="onDeleteDataSet"
           />
           <SchemeInjectionSection
