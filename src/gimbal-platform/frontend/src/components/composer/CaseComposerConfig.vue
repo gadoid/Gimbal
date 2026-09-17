@@ -175,35 +175,35 @@
             <span class="c-ns-sys" :class="`s-${sys}`">{{ systemLabel(sys) }}</span>
             <span class="c-ns-count">{{ group.length }} keys</span>
           </div>
-          <div v-for="(v, j) in group" :key="j" class="c-kv-row var-row">
-            <el-input
-              :model-value="v.key"
-              @update:model-value="(val: string) => v.key = val"
-              placeholder="变量名"
-              size="small"
-            />
-            <span class="c-kv-sep">=</span>
-            <el-input
-              :model-value="formatVarValue(v.value)"
-              @update:model-value="(val: string) => v.value = parseVarValue(val)"
-              placeholder="值 / 引用"
-              size="small"
-            />
-            <button
-              class="c-kv-lock"
-              :class="{ 'is-on': v.locked }"
-              :aria-label="v.locked ? '解锁变量' : '锁定为过程变量'"
-              :aria-pressed="!!v.locked"
-              :title="v.locked
-                ? '已锁定为过程变量 — 数据集编辑面默认隐藏该列(可在数据集本地放开)'
-                : '锁定为过程变量(数据集编辑面默认隐藏该列)'"
-              @click="v.locked = !v.locked"
-            >
-              <svg v-if="v.locked" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>
-              <svg v-else viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 4.9-.7"/></svg>
-            </button>
-            <button class="c-kv-del" @click="removeVar(v)">×</button>
-          </div>
+          <KeyValueRow
+            v-for="(v, j) in group"
+            :key="j"
+            class="var-row"
+            :key-value="v.key"
+            :value="formatVarValue(v.value)"
+            key-placeholder="变量名"
+            value-placeholder="值 / 引用"
+            delete-label="删除变量"
+            @update:key-value="(val: string) => v.key = val"
+            @update:value="(val: string) => v.value = parseVarValue(val)"
+            @remove="removeVar(v)"
+          >
+            <template #beforeDelete>
+              <button
+                class="c-kv-lock"
+                :class="{ 'is-on': v.locked }"
+                :aria-label="v.locked ? '解锁变量' : '锁定为过程变量'"
+                :aria-pressed="!!v.locked"
+                :title="v.locked
+                  ? '已锁定为过程变量 — 数据集编辑面默认隐藏该列(可在数据集本地放开)'
+                  : '锁定为过程变量(数据集编辑面默认隐藏该列)'"
+                @click="v.locked = !v.locked"
+              >
+                <svg v-if="v.locked" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>
+                <svg v-else viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 4.9-.7"/></svg>
+              </button>
+            </template>
+          </KeyValueRow>
         </div>
       </div>
       <button class="c-add" @click="addVar">+ 添加变量</button>
@@ -227,24 +227,25 @@
             <span class="c-ns-sys" :class="`s-${sys}`">{{ systemLabel(sys) }}</span>
             <span class="c-ns-count">{{ group.length }} services</span>
           </div>
-          <div v-for="(s, i) in group" :key="i" class="c-kv-row svc-row">
-            <el-input
-              :model-value="s.alias"
-              @update:model-value="(val: string) => s.alias = val"
-              placeholder="alias (例: tidb-test-service)"
-              size="small"
-            />
-            <span class="svc-owner" :title="ownerLabel(s.alias)">{{ ownerLabel(s.alias) }}</span>
-            <span class="c-kv-sep">→</span>
-            <el-input
-              :model-value="s.baseUrl"
-              @update:model-value="(val: string) => s.baseUrl = val"
-              placeholder="baseUrl"
-              size="small"
-              class="svc-url"
-            />
-            <button class="c-kv-del" @click="removeService(sys, i)">×</button>
-          </div>
+          <KeyValueRow
+            v-for="(s, i) in group"
+            :key="i"
+            class="svc-row"
+            :key-value="s.alias"
+            :value="s.baseUrl"
+            key-placeholder="alias (例: tidb-test-service)"
+            value-placeholder="baseUrl"
+            value-class="svc-url"
+            sep="→"
+            delete-label="删除服务映射"
+            @update:key-value="(val: string) => s.alias = val"
+            @update:value="(val: string) => s.baseUrl = val"
+            @remove="removeService(sys, i)"
+          >
+            <template #afterKey>
+              <span class="svc-owner" :title="ownerLabel(s.alias)">{{ ownerLabel(s.alias) }}</span>
+            </template>
+          </KeyValueRow>
         </div>
       </div>
       <button class="c-add" @click="addService">+ 添加服务</button>
@@ -308,6 +309,7 @@ import { scenarioDataSetsUrl } from '@/utils/links'
 import type { AssertionEntry, LegacyAssertionEntry } from '@/types/assertion-registry'
 import { isLegacyEntry } from '@/types/assertion-registry'
 import UsersCard from './UsersCard.vue'
+import KeyValueRow from './KeyValueRow.vue'
 
 // plate TimePolicy 只有两态:record / timeout(带 seconds)。
 // 砍掉原 cost-collect / intervalMs — 不在 plate 契约内。
@@ -578,23 +580,12 @@ function addTeardown() { teardownList.value.push({ name: '', kind: '', payload: 
 }
 .c-kv-lock.is-on { opacity: 1; color: var(--accent); }
 .c-kv-lock:hover { opacity: 1; }
-/* var-row 在共享 4 列栅格上扩一列锁钮(同 .svc-row 扩列先例):
- * key | = | value | 锁 | × — 不扩列则第 5 子元素折到隐式第二行 */
-.var-row { grid-template-columns: minmax(140px, 220px) 24px minmax(0, 1fr) 24px 28px; }
-@media (max-width: 720px) {
-  /* 与共享层同款窄屏降级:key 轨道放宽为 1fr 可收缩;5 子元素仍单行 */
-  .var-row { grid-template-columns: 1fr 24px minmax(0, 1fr) 24px 28px; }
-}
-/* svc-row 在共享 4 列栅格上扩一列归属标签: alias | 归属 | → | url | × */
-.svc-row { grid-template-columns: minmax(140px, 220px) minmax(96px, 150px) 24px minmax(0, 1fr) 28px; }
+/* var-row/svc-row 的额外列宽(锁钮 24px / 归属标签)与窄屏降级现由
+ * KeyValueRow.vue 的 .has-before-delete/.has-after-key 统一承担;这里
+ * 只保留各自槽位内容自己的排版。 */
 .svc-owner {
   font-family: var(--font-mono); font-size: 11px; color: var(--c-text-tertiary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.svc-row .svc-url :deep(.el-input__wrapper) { font-family: var(--font-mono); }
-@media (max-width: 720px) {
-  /* 与共享层 .c-kv-sep 同款降级:窄屏收起归属列,退回 2 列行为 */
-  .svc-row .svc-owner { display: none; }
 }
 .c-ns-grid { display: flex; flex-direction: column; gap: 12px; }
 .c-ns-group .c-kv-row:last-child { margin-bottom: 0; }

@@ -952,7 +952,7 @@ onMounted(async () => {
 
 <style scoped>
 .ds-editor {
-  max-width: 1480px; min-height: calc(100vh - 48px);
+  max-width: 1480px; min-height: 100vh;
   padding: 28px 32px 48px; margin: 0 auto; box-sizing: border-box;
 }
 .page-header {

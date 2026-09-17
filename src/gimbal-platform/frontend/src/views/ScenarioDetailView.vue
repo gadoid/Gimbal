@@ -317,33 +317,35 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* 通用文档排版:窄幅、细线表格、代码块;内容随数据伸缩 */
+/* 通用文档排版:窄幅、细线表格、代码块;内容随数据伸缩。
+   v2:配色/圆角改走全局 token(与其余页面同一套 indigo + slate 体系,
+   不再是独立的近黑色方言);字号/字重(26px/700,题头 2px 粗线)保留
+   ——「这是一份文档」的信号是真实的,只是承载它的颜色/圆角要统一。 */
 .doc {
   max-width: 920px;
   padding: 36px 44px 64px;
   margin: 0 auto;
   font-size: 13px;
   line-height: 1.8;
-  color: #1f2937;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 4px;
+  color: var(--color-text-primary);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-secondary);
+  border-radius: 8px;
   box-sizing: border-box;
-  min-height: calc(100vh - 48px);
+  min-height: 100vh;
 }
 
 /* 题头 */
-.head { padding-bottom: 18px; border-bottom: 2px solid #111827; }
+.head { padding-bottom: 18px; border-bottom: 2px solid var(--accent); }
 .head-top { display: flex; gap: 16px; align-items: baseline; justify-content: space-between; }
 .title {
   margin: 0;
-  font-family: 'Noto Serif SC', 'Songti SC', serif;
   font-size: 26px;
-  font-weight: 900;
-  color: #111827;
+  font-weight: 700;
+  color: var(--color-text-primary);
 }
-.doc-no { font-size: 11px; color: #9ca3af; }
-.desc { margin: 6px 0 14px; font-size: 12.5px; color: #4b5563; }
+.doc-no { font-size: 11px; color: var(--color-text-tertiary); }
+.desc { margin: 6px 0 14px; font-size: 12.5px; color: var(--color-text-secondary); }
 .meta-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -351,7 +353,7 @@ onMounted(async () => {
   margin: 0;
 }
 .meta-grid > div { display: flex; gap: 6px; font-size: 12px; min-width: 0; }
-.meta-grid dt { flex-shrink: 0; color: #9ca3af; }
+.meta-grid dt { flex-shrink: 0; color: var(--color-text-tertiary); }
 .meta-grid dt::after { content: "："; }
 .meta-grid dd { margin: 0; word-break: break-all; }
 .head-actions { display: flex; gap: 8px; margin-top: 16px; }
@@ -359,25 +361,25 @@ onMounted(async () => {
 .btn {
   padding: 6px 14px;
   font-size: 12px;
-  color: #374151;
-  background: #fff;
-  border: 1px solid #d1d5db;
-  border-radius: 3px;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-secondary);
+  border-radius: 6px;
   cursor: pointer;
 }
-.btn:hover { color: #111827; border-color: #9ca3af; }
+.btn:hover { color: var(--color-text-primary); border-color: var(--accent-soft-border); }
 .btn.primary {
-  color: #fff;
-  background: #111827;
-  border-color: #111827;
+  color: var(--on-accent, #fff);
+  background: var(--accent);
+  border-color: var(--accent);
 }
-.btn.primary:hover { background: #374151; }
-.btn.ghost { border-color: transparent; color: #6b7280; }
-.btn.ghost:hover { color: #374151; border-color: #d1d5db; }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.ghost { border-color: transparent; color: var(--color-text-secondary); }
+.btn.ghost:hover { color: var(--color-text-primary); border-color: var(--color-border-secondary); }
 .linklike {
   padding: 0;
   font: inherit;
-  color: #4338ca;
+  color: var(--accent);
   background: none;
   border: none;
   cursor: pointer;
@@ -391,10 +393,10 @@ onMounted(async () => {
   gap: 6px 28px;
   padding: 14px 0;
   font-size: 12px;
-  color: #4b5563;
-  border-bottom: 1px solid #f3f4f6;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border-tertiary);
 }
-.sum-item b { font-size: 16px; font-weight: 700; color: #111827; margin-right: 4px; }
+.sum-item b { font-size: 16px; font-weight: 700; color: var(--color-text-primary); margin-right: 4px; }
 
 /* 章节 */
 .chapter { padding: 22px 0 6px; }
@@ -402,14 +404,14 @@ onMounted(async () => {
   margin: 0 0 10px;
   font-size: 15px;
   font-weight: 700;
-  color: #111827;
-  border-left: 3px solid #111827;
+  color: var(--color-text-primary);
+  border-left: 3px solid var(--accent);
   padding-left: 10px;
 }
 .count {
   font-size: 11px;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 .hint { margin: 4px 0 8px; font-size: 12px; }
 
@@ -419,33 +421,33 @@ onMounted(async () => {
   padding: 7px 12px;
   text-align: left;
   vertical-align: top;
-  border: 1px solid #f3f4f6;
+  border: 1px solid var(--color-border-tertiary);
 }
 .kv-table th {
   width: 220px;
   font-weight: 500;
-  color: #6b7280;
-  background: #fafafa;
+  color: var(--color-text-secondary);
+  background: var(--c-bg-secondary, #f8fafc);
 }
 
 /* 数据集 */
 .ds-entry {
   margin: 10px 0;
   padding: 10px 14px;
-  border: 1px solid #f3f4f6;
-  border-radius: 4px;
+  border: 1px solid var(--color-border-tertiary);
+  border-radius: 6px;
 }
 .ds-title { display: flex; gap: 8px; align-items: center; }
 .ds-idx {
   font-size: 11px;
-  color: #fff;
-  background: #111827;
-  border-radius: 2px;
+  color: var(--on-accent, #fff);
+  background: var(--accent);
+  border-radius: 4px;
   padding: 1px 6px;
 }
 .ds-count {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   font-family: var(--font-mono, monospace);
 }
 .ds-id { font-size: 10px; margin-left: auto; }
@@ -455,8 +457,8 @@ onMounted(async () => {
 .proc-step {
   margin: 14px 0;
   padding: 12px 16px;
-  border: 1px solid #f3f4f6;
-  border-radius: 4px;
+  border: 1px solid var(--color-border-tertiary);
+  border-radius: 6px;
 }
 .proc-head {
   display: flex;
@@ -467,38 +469,40 @@ onMounted(async () => {
 .proc-no {
   font-family: var(--font-mono, monospace);
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--color-text-tertiary);
 }
 .proc-name { font-size: 13px; }
+/* http-* tokens(v2)—与 HttpMethodBadge 组件、theme.css 同一份颜色定义,
+   不再是本文件独有的 ad hoc hex。 */
 .proc-method {
   padding: 1px 6px;
   font-size: 10px;
   font-weight: 700;
   font-family: var(--font-mono, monospace);
-  border-radius: 2px;
+  border-radius: 4px;
   color: #fff;
 }
-.proc-method.get { background: #0ea5e9; }
-.proc-method.post { background: #22c55e; }
-.proc-method.put { background: #f59e0b; }
-.proc-method.delete { background: #ef4444; }
-.proc-method.patch { background: #8b5cf6; }
+.proc-method.get { background: var(--http-get); }
+.proc-method.post { background: var(--http-post); }
+.proc-method.put { background: var(--http-put); }
+.proc-method.delete { background: var(--http-delete); }
+.proc-method.patch { background: var(--http-patch); }
 .proc-service {
   font-size: 11px;
-  color: #4338ca;
+  color: var(--accent);
 }
 .proc-path {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   word-break: break-all;
 }
-.proc-desc { margin: 6px 0 0; font-size: 12px; color: #4b5563; }
+.proc-desc { margin: 6px 0 0; font-size: 12px; color: var(--color-text-secondary); }
 
-.sub { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #f3f4f6; }
+.sub { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--color-border-tertiary); }
 .sub-title {
   font-size: 11px;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--color-text-secondary);
   margin-bottom: 4px;
 }
 .st-list { margin: 0; padding: 0; list-style: none; }
@@ -511,7 +515,7 @@ onMounted(async () => {
 }
 .st-kind {
   font-size: 10px;
-  color: #9ca3af;
+  color: var(--color-text-tertiary);
 }
 .st-expr { font-size: 11.5px; word-break: break-all; }
 .st-note { font-size: 11px; }
@@ -523,15 +527,15 @@ onMounted(async () => {
   font-family: var(--font-mono, monospace);
   font-size: 11px;
   line-height: 1.6;
-  color: #334155;
-  background: #f8fafc;
-  border: 1px solid #f1f5f9;
-  border-radius: 4px;
+  color: var(--color-text-primary);
+  background: var(--c-bg-secondary, #f8fafc);
+  border: 1px solid var(--color-border-tertiary);
+  border-radius: 6px;
   overflow-x: auto;
 }
 .req-detail summary {
   font-size: 11px;
-  color: #4338ca;
+  color: var(--accent);
   cursor: pointer;
   user-select: none;
 }
@@ -542,7 +546,7 @@ onMounted(async () => {
   margin: 12px 0;
   padding: 10px 14px;
   font-size: 12px;
-  border-radius: 4px;
+  border-radius: 6px;
 }
 .notice.warn {
   color: #92400e;
@@ -553,21 +557,21 @@ onMounted(async () => {
   max-width: 400px;
   margin: 80px auto;
   text-align: center;
-  color: #6b7280;
-  background: #fafafa;
-  border: 1px solid #f3f4f6;
+  color: var(--color-text-secondary);
+  background: var(--c-bg-secondary, #f8fafc);
+  border: 1px solid var(--color-border-tertiary);
 }
 
 /* 附注 */
 .colophon {
   padding-top: 20px;
   margin-top: 10px;
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid var(--color-border-tertiary);
 }
 .colophon-line {
   margin: 0;
   font-size: 10.5px;
-  color: #9ca3af;
+  color: var(--color-text-tertiary);
 }
 
 </style>

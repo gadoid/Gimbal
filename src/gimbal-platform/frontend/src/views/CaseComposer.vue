@@ -1337,9 +1337,19 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
    (body 限宽 1800 居中)+ clamp(.body 右内边距)→ 内容右缘;
    + 252px = col-info(300)+ 列距 16 − 按钮宽 44 − 20px 手调右移 → 按钮左缘
    在 step 信息卡左边线右侧 20px(探入卡内)。≤1280 三栏塌缩(信息面板下移)锚点失效,退回贴边。
-   el-backtop 把 right 写进 inline style,须 !important 压制。 */
+   el-backtop 把 right 写进 inline style,须 !important 压制。
+   v2 sidebar 修正:el-backtop 用 position:fixed,`right`/`50%`/`50vw` 都相对
+   整个视口,而不是 .app-main.with-sidebar 的内容区(已被 padding-left:
+   var(--sidebar-width) 让出左侧)。内容区中心相对视口中心右移了
+   sidebar-width/2,body 的可用宽度也从 100vw 变成 100vw - sidebar-width,
+   所以原公式里的 50%/50vw 都要先减去 sidebar-width/2 才是内容区自己的
+   "视口坐标系"。 */
 .backtop-btn {
-  right: calc(50% - min(50vw, 900px) + clamp(16px, 3vw, 48px) + 252px) !important;
+  --sidebar-half: calc(var(--sidebar-width, 220px) / 2);
+  right: calc(
+    50% - var(--sidebar-half) - min(calc(50vw - var(--sidebar-half)), 900px) +
+      clamp(16px, 3vw, 48px) + 252px
+  ) !important;
   width: 44px;
   height: 44px;
   border-radius: 12px;

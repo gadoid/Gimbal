@@ -370,7 +370,7 @@ onMounted(() => {
 /* 页面容器:对齐 CaseDataSetsList 的页面规范(居中 + 大边距)。 */
 .adaptation-center {
   max-width: 1480px;
-  min-height: calc(100vh - 48px);
+  min-height: 100vh;
   padding: 28px 32px 48px;
   margin: 0 auto;
   box-sizing: border-box;

@@ -93,22 +93,20 @@
         </div>
         <div class="row-field port-mapping">
           <label>端口映射 (portMapping · host→container)</label>
-          <div v-for="(pm, j) in (portRows[m.name] || [])" :key="j" class="c-kv-row port-row">
-            <el-input
-              :model-value="pm.host"
-              @update:model-value="(val: string) => (pm.host = val, syncPortMapping(m.name))"
-              placeholder="8080"
-              size="small"
-            />
-            <span class="c-kv-sep">→</span>
-            <el-input
-              :model-value="pm.container"
-              @update:model-value="(val: string) => (pm.container = val, syncPortMapping(m.name))"
-              placeholder="8080"
-              size="small"
-            />
-            <button class="c-kv-del" @click="portRows[m.name].splice(j, 1); syncPortMapping(m.name)">×</button>
-          </div>
+          <KeyValueRow
+            v-for="(pm, j) in (portRows[m.name] || [])"
+            :key="j"
+            class="port-row"
+            :key-value="pm.host"
+            :value="pm.container"
+            key-placeholder="8080"
+            value-placeholder="8080"
+            sep="→"
+            delete-label="删除端口映射"
+            @update:key-value="(val: string) => (pm.host = val, syncPortMapping(m.name))"
+            @update:value="(val: string) => (pm.container = val, syncPortMapping(m.name))"
+            @remove="portRows[m.name].splice(j, 1); syncPortMapping(m.name)"
+          />
           <button class="c-add port-add" @click="addPortRow(m.name)">+ 添加端口映射</button>
         </div>
       </div>
@@ -180,6 +178,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { ResourceView, MockView, FileView } from '@/types/plate'
 import { parseJson } from '../../utils/json'
+import KeyValueRow from './KeyValueRow.vue'
 
 const props = defineProps<{
   resource: Record<string, ResourceView>

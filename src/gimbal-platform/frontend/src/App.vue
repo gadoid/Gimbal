@@ -1,10 +1,10 @@
-<!-- App.vue — Spec-1 layout shell.
-     TopNav renders only when authenticated, so /login + /register
-     remain clean (no chrome). Content area is offset by 48px via
-     padding-top so it doesn't slide under the fixed topbar. -->
+<!-- App.vue — v2 layout shell.
+     Sidebar renders only when authenticated, so /login + /register
+     remain clean (no chrome). Content area is offset by --sidebar-width
+     via padding-left so it doesn't slide under the fixed sidebar. -->
 <template>
-  <TopNav v-if="auth.isAuthenticated" />
-  <main class="app-main" :class="{ 'with-topnav': auth.isAuthenticated }">
+  <Sidebar v-if="auth.isAuthenticated" />
+  <main class="app-main" :class="{ 'with-sidebar': auth.isAuthenticated }">
     <router-view />
   </main>
 </template>
@@ -12,7 +12,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import TopNav from '@/components/TopNav.vue'
+import Sidebar from '@/components/Sidebar.vue'
 
 const auth = useAuthStore()
 
@@ -35,7 +35,7 @@ onMounted(async () => {
   min-height: 100vh;
 }
 
-.app-main.with-topnav {
-  padding-top: 48px;
+.app-main.with-sidebar {
+  padding-left: var(--sidebar-width, 220px);
 }
 </style>

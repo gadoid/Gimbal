@@ -389,7 +389,7 @@ onMounted(async () => {
 <style scoped>
 /* 页面容器:对齐平台视图容器(AssertionRegistryEditor / DataSetEditor 同款) */
 .scheme-workbench {
-  max-width: 1480px; min-height: calc(100vh - 48px);
+  max-width: 1480px; min-height: 100vh;
   padding: 28px 32px 48px; margin: 0 auto; box-sizing: border-box;
 }
 .page-header {
