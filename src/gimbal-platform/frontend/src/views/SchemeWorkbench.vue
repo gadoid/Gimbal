@@ -310,7 +310,9 @@ async function reloadDataSets() {
   }
 }
 
-/** 删除数据集(数据区已确认):落库 → 剪枝选中引用 → 刷新 */
+/** 删除数据集(数据区已确认):落库 → 剪枝选中引用 → 刷新。
+ *  剪枝直接改 draft,deep watch 会把方案标脏 — 这是有意的:剪枝后的
+ *  选中集需要保存才生效(用户没编辑方案但方案变脏,答案在这里)。 */
 async function onDeleteDataSet(datasetId: string) {
   if (!draft.value) return
   try {

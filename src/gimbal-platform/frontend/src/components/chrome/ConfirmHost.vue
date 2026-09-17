@@ -41,7 +41,7 @@
       />
 
       <DialogFooter>
-        <Button ref="cancelBtnRef" variant="outline" @click="cancelDialog">
+        <Button variant="outline" @click="cancelDialog">
           {{ dialogState.current.options.cancelButtonText || '取消' }}
         </Button>
         <Button
@@ -74,7 +74,7 @@ function onOpenChange(open: boolean): void {
 
 type ElRef = { $el: HTMLElement } | null
 const inputRef = ref<ElRef>(null)
-const confirmBtnRef = ref<ElRef>(null)
+const confirmBtnRef = ref<ElRef>(null)  // 良性确认的初始焦点目标
 
 function focusEl(el: HTMLElement | null | undefined): void {
   el?.focus()

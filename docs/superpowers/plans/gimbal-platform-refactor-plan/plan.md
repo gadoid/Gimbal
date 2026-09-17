@@ -8,9 +8,11 @@
 >
 > **v2.2 定稿(2026-09-17,开工版)**:①新增 **§7 工作台卡片规范**(薄版六条)与 **§8 阶段路线**(架构重构 → 运行中心优化 → 工作台卡片化);②Phase 1 骨架规范补 **collapsed topbar 统一面包屑**(替代各页自造返回);③原型修订小项(断言徽标可点、数据集计数联动、编排器向导交互修正等)落入对应批次验收;④**D2 基线修正**:实测 `main` 分支上的前端落后当前工作树 252 文件 / +45,789 行(var-lock、carry-lift 等近期工作均在 twin-gen 线上未合回),故实现分支从**当前前端态**(d3dcdf50)另起 `feat/frontend-signal-refactor`——"不与孪生产物混线"的意图不变,靠新分支 + 选择性暂存保证。
 >
-> **表单范式决策(2026-09-17,批次 2 前置,方案 A 定稿)**:表单校验统一采用 **vee-validate v4 + zod schema + shadcn-vue Form 族**(官方集成,CLI 落地 `ui/form/`),Login/Register 已统一迁入;批次 1 曾采用的手写校验废弃。选 A 否决手写 composable 的理由:后续表单长尾(运行中心/工作台/适配)按架构统一,不逐页自造。版本约束:`@vee-validate/zod@4.15` 对 zod **3.25.x 的 v3/v4 混合内核不兼容**(校验静默失效),锁定 `zod@3.24.4`。测试纪律:zod `safeParseAsync` 管线是异步的,断言错误渲染用 `vi.waitFor`,固定双 flushPromises 不可靠。
+> **表单范式决策(2026-09-17,批次 2 前置,方案 A 定稿)**:表单校验统一采用 **vee-validate v4 + zod schema + shadcn-vue Form 族**(官方集成,CLI 落地 `ui/form/`),Login/Register 已统一迁入;批次 1 曾采用的手写校验废弃。选 A 否决手写 composable 的理由:后续表单长尾(运行中心/工作台/适配)按架构统一,不逐页自造。**统一写法 = shadcn-vue 官方示例范式**:`useForm({ validationSchema, initialValues })` + 原生 `<form @submit="handleSubmit(...)">` + `<FormField v-slot="{ componentField }">`/`FormMessage`;**不用** vee-validate 的 `<Form>` 组件包装(两页曾一度混用两种写法,分支评审 P2 后统一,批次 2 起照此)。checkbox 用官方 `field` 绑定(`type="checkbox"` + `:value`/`:unchecked-value`)。版本约束:`@vee-validate/zod@4.15` 对 zod **3.25.x 的 v3/v4 混合内核不兼容**(校验静默失效),锁定 `zod@3.24.4`(**exact pin,caret 会重新放进 3.25**)。测试纪律:zod `safeParseAsync` 管线是异步的,断言错误渲染用 `vi.waitFor`,固定双 flushPromises 不可靠;新栈 Input 无静态 id,选择器用 `data-testid`(透传到原生元素)。
 >
 > **原型图使用口径(2026-09-17,用户定调)**:原型图的比例与实际平台不一致、部分功能未渲染。**强制基准只有两项——目录结构(四域信息架构/导航归属)与配色方案(Signal token)**;其余渲染(布局比例、组件摆位、示意性内容)均为参考,实现时**功能优先**:现有功能不因原型未画出而被裁掉,原型画出的比例不作为像素级走查标准。走查验收据此判"结构对不对、色对不对",不判"像不像原图"。
+>
+> **实施进度(2026-09-17,随批次更新)**:Phase 0 ✅(9c93d21/1b6f347/49d084e)→ Phase 1 ✅(c7feecd 交叉切面 + 1352649 结构层 + 4a3747f 评审回应)→ 批次 0 ✅(6c072bb 数据集路由退役 + c5803db 删除能力承接)→ 批次 1 ✅(c00bbc7 + f5326c9 Enter 双发修复)→ 表单范式 A 落地 ✅(b4af2c9 + Login 统一组合式)。测试数 924 → 853:批次 0 退役约 120 条(随视图),新增约 50 条(toast/confirm/Sidebar/面包屑/App 三态/路由 meta/登录注册/数据区),**非丢失**。每笔提交点全量 vitest + vue-tsc + vite build 三绿。待办:全路由侧边栏模式手动走查(需后端在场,Phase 1 验收遗留项)、批次 2-6、Phase 3 清理(store 死 action `saveDataSet`/`removeDataSet`、`/dev/dual-stack` 退场、EP 依赖移除)。
 
 ---
 

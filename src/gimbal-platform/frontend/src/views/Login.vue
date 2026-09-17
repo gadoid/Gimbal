@@ -26,15 +26,9 @@
         <AlertTitle>{{ errorMsg }}</AlertTitle>
       </Alert>
 
-      <!-- Form:vee-validate Form 组件承载表单上下文,校验通过才发
-           submit;isSubmitting 兜提交期禁用;Enter 走隐式提交单通道 -->
-      <Form
-        class="flex flex-col gap-4"
-        :validation-schema="schema"
-        :initial-values="{ username: '', password: '' }"
-        v-slot="{ isSubmitting }"
-        @submit="onSubmit"
-      >
+      <!-- 表单范式 = shadcn-vue 官方示例:useForm + 原生 <form> +
+           handleSubmit(校验不过不进回调);Enter 走隐式提交单通道 -->
+      <form class="flex flex-col gap-4" @submit="onSubmit">
         <FormField v-slot="{ componentField }" name="username">
           <FormItem>
             <FormLabel>用户名<span class="required-dot">*</span></FormLabel>
@@ -85,10 +79,10 @@
           <span class="select-none text-caption text-muted-foreground/60" title="未开放">忘记密码？</span>
         </div>
 
-        <Button class="h-[38px] w-full tracking-widest" :disabled="loading || isSubmitting" type="submit">
+        <Button class="h-[38px] w-full tracking-widest" :disabled="loading" type="submit">
           {{ loading ? '登录中…' : '登 录' }}
         </Button>
-      </Form>
+      </form>
 
       <div class="mt-[18px] text-center text-body text-muted-foreground">
         还没有账号？
@@ -106,7 +100,8 @@ import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Alert, AlertTitle } from '@/components/ui/alert'
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
+import { FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
+import { useForm } from 'vee-validate'
 import { toast } from '@/utils/toast'
 import { useAuthStore } from '@/stores/auth'
 
@@ -126,8 +121,14 @@ const schema = toTypedSchema(z.object({
   password: z.string().min(1, '请输入密码'),
 }))
 
-// Form @submit:校验通过才回调(真源在 schema);loading 防重入兜底
-async function onSubmit(values: Record<string, string>) {
+// 空串初始值:防 undefined 触发 zod 默认 "Required" 文案(自定义消息要可见)
+const { handleSubmit } = useForm({
+  validationSchema: schema,
+  initialValues: { username: '', password: '' },
+})
+
+// handleSubmit:校验不过不进回调(真源在 schema);loading 防重入兜底
+const onSubmit = handleSubmit(async (values) => {
   if (loading.value) return
   loading.value = true
   try {
@@ -143,5 +144,5 @@ async function onSubmit(values: Record<string, string>) {
   } finally {
     loading.value = false
   }
-}
+})
 </script>

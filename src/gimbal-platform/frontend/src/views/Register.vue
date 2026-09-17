@@ -248,6 +248,8 @@ function barClass(idx: number): string {
 const confirmMatch = computed(() =>
   !!values.confirmPassword && pwd.value === values.confirmPassword)
 
+/** 展示层按钮门控(与 schema 规则同源但简化;校验真源在 schema,
+ *  提交仍会被 handleSubmit 拦截 — 两处规则漂移时以 schema 为准)。 */
 const canSubmit = computed(() =>
   (values.username ?? '').length >= 3
   && pwd.value.length > 0
