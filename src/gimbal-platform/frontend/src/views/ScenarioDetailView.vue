@@ -34,8 +34,18 @@
       </dl>
       <div class="head-actions">
         <button class="btn primary" @click="goRun">▶ 立即运行</button>
-        <button class="btn" @click="goScenario(4)">修改编排</button>
+        <button class="btn" @click="goScenario(4)">编排</button>
         <button class="btn" @click="router.push(scenarioSchemesUrl(scenarioId))">方案</button>
+        <!-- 断言覆盖率徽标(原型修订 v2.2:整体可点直达注册表,不与
+             「断言注册表→」链接割裂 — 徽标即入口)。覆盖口径:
+             含 assertion 策略的步骤 / 总步骤。 -->
+        <button
+          class="cov-badge"
+          :class="coverageClass"
+          data-testid="assert-cov-badge"
+          title="逐步骤断言覆盖情况 — 点击进入断言注册表"
+          @click="router.push(scenarioAssertionsUrl(scenarioId))"
+        >断言覆盖 {{ coveredSteps }}/{{ steps.length }}</button>
         <!-- 「管理数据集」改指方案工作台(阶段③ Task 5):工作台数据区
              承担「+ 新建数据集」与 tile 管理职能 -->
         <button class="btn" @click="router.push(scenarioSchemesUrl(scenarioId))">管理数据集</button>
@@ -66,7 +76,11 @@
 
       <!-- ── 数据集 ───────────────────────────────────────── -->
       <article class="chapter">
-        <h2>数据集 <span class="count">{{ dataSets.length }}</span></h2>
+        <h2>数据集
+          <!-- 原型修订 v2.2:计数可点直达方案工作台(数据集管理承接处) -->
+          <button class="count-link" data-testid="ds-count-link" title="到方案工作台管理数据集"
+            @click="router.push(scenarioSchemesUrl(scenarioId))">{{ dataSets.length }}</button>
+        </h2>
         <p v-if="dataSets.length" class="hint dim">
           每组数据的每一行都是一次独立运行的输入;行内字段以
           <code class="mono">${'{'}var.字段名{'}'}</code> 方式注入各步骤。
@@ -153,7 +167,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { showError } from '@/utils/errorFallback'
-import { composerUrl, scenarioSchemesUrl } from '@/utils/links'
+import { composerUrl, scenarioSchemesUrl, scenarioAssertionsUrl } from '@/utils/links'
 import { relTime } from '@/utils/datetime'
 import { valueJson } from '@/utils/value-display'
 import type { ExtractView, AssignView, AssertionView } from '@/types/plate'
@@ -207,6 +221,16 @@ const bodyFields = (s: unknown): string[] => {
   return []
 }
 const strategiesOf = (s: unknown) => (pick<unknown[]>(s, 'strategy') || []) as Array<Record<string, unknown>>
+
+// ── 断言覆盖率(徽标数据:含 assertion 策略的步骤 / 总步骤)─────
+const coveredSteps = computed(() =>
+  steps.value.filter(s => strategiesOf(s).some(t => t.kind === 'assertion')).length)
+const coverageClass = computed(() => {
+  if (!steps.value.length) return 'cov-none'
+  if (coveredSteps.value === steps.value.length) return 'cov-full'
+  if (coveredSteps.value === 0) return 'cov-zero'
+  return 'cov-part'
+})
 
 // ── 摘要:全部由数据统计 ─────────────────────────────────────
 const assertionCount = computed(() =>
@@ -375,6 +399,37 @@ onMounted(async () => {
 .btn.primary:hover { background: #374151; }
 .btn.ghost { border-color: transparent; color: #6b7280; }
 .btn.ghost:hover { color: #374151; border-color: #d1d5db; }
+
+/* 断言覆盖率徽标(即注册表入口):三态 Signal 色 */
+.cov-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.cov-full { color: #15803d; background: #e8f5ec; border-color: #bbe3c8; }
+.cov-part { color: #92400e; background: #fef9c3; border-color: #fde68a; }
+.cov-zero { color: #dc2626; background: #fdecec; border-color: #f6c6c6; }
+.cov-none { color: #6b7280; background: #f3f4f6; border-color: #e5e7eb; }
+
+/* 数据集计数可点(linklike 同语言) */
+.count-link {
+  padding: 0 2px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2f6fed;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .linklike {
   padding: 0;
   font: inherit;
