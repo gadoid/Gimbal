@@ -6,14 +6,9 @@
   <section class="executions" v-if="execStore.detail">
     <!-- Poller gave up (failure budget) while the last detail snapshot
          stays rendered — tell the user the data may be stale. -->
-    <el-alert
-      v-if="execStore.pollError"
-      :title="execStore.pollError"
-      type="warning"
-      :closable="false"
-      show-icon
-      class="poll-warn"
-    />
+    <Alert v-if="execStore.pollError" class="poll-warn">
+      <AlertTitle>{{ execStore.pollError }}</AlertTitle>
+    </Alert>
     <header class="page-header">
       <div>
         <h2>执行 #{{ execStore.detail.id }}</h2>
@@ -21,62 +16,55 @@
           {{ execStore.detail.scenario_id }} · 状态 {{ statusText }}
           <template v-if="startedAtLabel"> · 开始 {{ startedAtLabel }}</template>
           <template v-if="finishedAtLabel"> · 结束 {{ finishedAtLabel }}</template>
-          <el-tag
+          <span
             v-if="stepToLabel"
-            type="info"
-            size="small"
             class="step-to-pill"
             title="本次执行在 --step-to 模式下运行（仅跑到第 N 步后停止）"
-          >执行到第 {{ stepToLabel }} 步</el-tag>
+          >执行到第 {{ stepToLabel }} 步</span>
         </p>
       </div>
       <div class="header-actions">
         <span :class="['status-tag', `status-${execStore.detail.status}`]">
           {{ statusText }}
         </span>
-        <el-tooltip
-          content="该执行早于快照功能上线，无执行时场景快照"
-          :disabled="execStore.detail.has_scenario_snapshot"
-          placement="top"
-        >
-          <span>
-            <el-button
-              link
-              type="primary"
-              :disabled="!execStore.detail.has_scenario_snapshot"
-              data-testid="exec-export-scenario"
-              @click="exportScenario"
-            >导出场景</el-button>
-          </span>
-        </el-tooltip>
-        <el-button
+        <TooltipProvider>
+          <Tooltip :open="execStore.detail.has_scenario_snapshot ? undefined : false">
+            <TooltipTrigger as-child>
+              <span>
+                <Button
+                  variant="link"
+                  size="sm"
+                  class="h-7 px-2"
+                  :disabled="!execStore.detail.has_scenario_snapshot"
+                  data-testid="exec-export-scenario"
+                  @click="exportScenario"
+                >导出场景</Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent v-if="!execStore.detail.has_scenario_snapshot">
+              该执行早于快照功能上线，无执行时场景快照
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        <Button
           v-if="canCancel"
-          link
-          type="warning"
+          variant="link"
+          size="sm"
+          class="h-7 px-2 text-amber-700"
           @click="cancelExec"
-        >取消</el-button>
-        <el-button link @click="refreshNow">手动刷新</el-button>
-        <el-button link type="danger" @click="removeExec">删除</el-button>
+        >取消</Button>
+        <Button variant="link" size="sm" class="h-7 px-2" @click="refreshNow">手动刷新</Button>
+        <Button variant="link" size="sm" class="h-7 px-2 text-signal-failed" @click="removeExec">删除</Button>
       </div>
     </header>
 
     <!-- 系统标记:reconcile 收敛 / 计数器漂移(不进配方 dl)-->
-    <el-alert
-      v-if="execStore.detail.config?.reconciled"
-      type="warning"
-      :closable="false"
-      show-icon
-      class="sys-alert"
-      title="后端重启：本单由启动期 reconcile 收敛为 failed（详见执行信息外的 reconciled 记录）"
-    />
-    <el-alert
-      v-if="execStore.detail.config?.counterDrift"
-      type="error"
-      :closable="false"
-      show-icon
-      class="sys-alert"
-      title="计数器漂移：通过+失败 ≠ 总执行，真值以 data/runs/<date>.jsonl 调度日志为准"
-    />
+    <Alert v-if="execStore.detail.config?.reconciled" class="sys-alert">
+      <AlertTitle>后端重启：本单由启动期 reconcile 收敛为 failed（详见执行信息外的 reconciled 记录）</AlertTitle>
+    </Alert>
+    <Alert v-if="execStore.detail.config?.counterDrift" variant="destructive" class="sys-alert">
+      <AlertTitle>计数器漂移：通过+失败 ≠ 总执行，真值以 data/runs/&lt;date&gt;.jsonl 调度日志为准</AlertTitle>
+    </Alert>
 
     <div class="counters">
       <div class="counter">
@@ -112,12 +100,13 @@
       <p class="rows-hint">
         每行 = 数据集 × 行 × 重复（数据驱动场景按数据集展开）；状态随 1s 轮询刷新，引擎日志与步骤明细按需加载。
       </p>
-      <el-button
-        link
-        type="primary"
+      <Button
+        variant="link"
+        size="sm"
+        class="h-7 px-2"
         :data-testid="`exec-row-${execStore.detail.id}`"
         @click="toggleRows"
-      >{{ isExpanded ? '收起行级表格' : '展开行级表格' }}</el-button>
+      >{{ isExpanded ? '收起行级表格' : '展开行级表格' }}</Button>
     </div>
     <div v-if="isExpanded" class="rows-panel">
       <p v-if="rowsLoading" class="rows-empty">行级数据加载中…</p>
@@ -156,22 +145,22 @@
               <td class="mono dim">{{ row.caseDir || '—' }}</td>
               <td>
                 <span class="row-actions">
-                  <el-button
-                    link
-                    type="primary"
-                    size="small"
+                  <Button
+                    variant="link"
+                    size="sm"
+                    class="h-6 px-1.5"
                     :disabled="!row.caseDir"
                     :data-testid="`row-artifact-${row.seq}-engine-log`"
                     @click="toggleArtifact(row, 'engine-log')"
-                  >{{ isArtifactShown(row, 'engine-log') ? '收起日志' : '引擎日志' }}</el-button>
-                  <el-button
-                    link
-                    type="primary"
-                    size="small"
+                  >{{ isArtifactShown(row, 'engine-log') ? '收起日志' : '引擎日志' }}</Button>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    class="h-6 px-1.5"
                     :disabled="!row.caseDir"
                     :data-testid="`row-artifact-${row.seq}-result`"
                     @click="toggleArtifact(row, 'result')"
-                  >{{ isArtifactShown(row, 'result') ? '收起明细' : '步骤明细' }}</el-button>
+                  >{{ isArtifactShown(row, 'result') ? '收起明细' : '步骤明细' }}</Button>
                 </span>
               </td>
             </tr>
@@ -195,20 +184,17 @@
   </section>
 
   <section v-else-if="execStore.pollError" class="state error-state">
-    <el-alert
-      :title="execStore.pollError"
-      type="error"
-      :closable="false"
-      show-icon
-    />
+    <Alert variant="destructive">
+      <AlertTitle>{{ execStore.pollError }}</AlertTitle>
+    </Alert>
     <div class="error-actions">
-      <el-button type="primary" @click="refreshNow">重新加载</el-button>
-      <el-button @click="router.push('/executions')">返回执行列表</el-button>
+      <Button @click="refreshNow">重新加载</Button>
+      <Button variant="outline" @click="router.push('/executions')">返回执行列表</Button>
     </div>
   </section>
 
   <section v-else class="state loading-state">
-    <el-skeleton :rows="5" animated />
+    <p class="m-0 py-10 text-center text-body text-muted-foreground">加载执行详情…</p>
   </section>
 </template>
 
@@ -226,6 +212,9 @@ import { convertDraftToExecutable } from '@/stores/scenario-draft'
 import { downloadFile } from '@/utils/download'
 import { exportTimestamp } from '@/utils/datetime'
 import { valueJson } from '@/utils/value-display'
+import { Button } from '@/components/ui/button'
+import { Alert, AlertTitle } from '@/components/ui/alert'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 const route = useRoute()
 const router = useRouter()
@@ -468,6 +457,11 @@ async function cancelExec() {
 
 onMounted(async () => {
   if (!executionId.value) return
+  // 原型修订(v2.2):列表页失败数字入口带 ?rows=failed →
+  // 自动展开行级表格(失败用例清单即行级表),省一次手动点击
+  if (route.query.rows === 'failed') {
+    execStore.toggleExpanded(executionId.value)
+  }
   try {
     await execStore.fetchDetail(executionId.value)
   } catch (e) {
@@ -517,7 +511,15 @@ onUnmounted(() => {
   font-size: 12px;
 }
 .step-to-pill {
+  display: inline-flex;
+  align-items: center;
   margin-left: 8px;
+  padding: 1px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  border-radius: 4px;
   vertical-align: middle;
 }
 
@@ -563,11 +565,11 @@ onUnmounted(() => {
 }
 
 .counter.ok .counter-value {
-  color: #166534;
+  color: #15803d;
 }
 
 .counter.fail .counter-value {
-  color: #991b1b;
+  color: #dc2626;
 }
 
 .recipe-title,

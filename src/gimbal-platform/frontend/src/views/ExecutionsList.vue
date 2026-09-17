@@ -1,69 +1,79 @@
-<!-- ExecutionsList.vue — 列出当前用户的所有 execution. -->
+<!-- ExecutionsList.vue — 列出当前用户的所有 execution。批次 4 迁移新栈:
+     shadcn Table/Button/Alert;状态色统一 Signal(status-colors.css)。
+     原型修订项(v2.2):失败数字红色可点 → 直达详情并自动展开行级表格
+     (失败用例清单即行级表);时间列已含日期(YYYY-MM-DD HH:MM:SS)。 -->
 <template>
-  <section class="executions-list">
+  <section class="executions-list mx-auto max-w-[1480px] px-8 pb-12 pt-7">
     <header class="page-header">
       <div>
-        <h2>执行历史</h2>
-        <p>{{ store.list.length }} 条记录 · 实时状态每 1s 刷新（详情页）</p>
+        <h2 class="m-0 text-display text-signal-ink">执行历史</h2>
+        <p class="mt-1 mb-0 text-caption text-muted-foreground">{{ store.list.length }} 条记录 · 实时状态每 1s 刷新（详情页）</p>
       </div>
     </header>
 
-    <el-table
-      v-if="store.list.length > 0"
-      v-loading="store.loading"
-      :data="store.list"
-      class="exec-table"
-    >
-      <el-table-column label="#" prop="id" width="60" />
-      <el-table-column label="scenario_id" min-width="180">
-        <template #default="{ row }">
-          <code class="mono">{{ row.scenario_id }}</code>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="120">
-        <template #default="{ row }">
-          <span :class="['status-tag', `status-${row.status}`]">
-            {{ executionStatusText(row.status) }}
-          </span>
-        </template>
-      </el-table-column>
-      <el-table-column label="通过 / 失败 / 总" width="160">
-        <template #default="{ row }">
-          <span class="mono">{{ row.passed }} / {{ row.failed }} / {{ row.total_runs }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="开始时间" width="180">
-        <template #default="{ row }">
-          <span class="mono dim">{{ row.started_at?.slice(0, 19).replace('T', ' ') || '—' }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="160" align="center" fixed="right">
-        <template #default="{ row }">
-          <el-button link type="primary" @click="open(row.id)">详情</el-button>
-          <el-button
-            v-if="row.status === 'queued' || row.status === 'running'"
-            link
-            type="warning"
-            @click="cancel(row.id)"
-            >取消</el-button
-          >
-          <el-button link type="danger" @click="remove(row.id)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <div v-if="store.loading" class="mt-3.5 py-8 text-center text-body text-muted-foreground">加载中…</div>
+    <Table v-else-if="store.list.length > 0" class="exec-table mt-3.5 rounded-field border border-signal-line bg-signal-card">
+      <TableHeader>
+        <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
+          <TableHead class="w-[54px] text-caption font-semibold text-muted-foreground">#</TableHead>
+          <TableHead class="text-caption font-semibold text-muted-foreground">scenario_id</TableHead>
+          <TableHead class="w-[110px] text-caption font-semibold text-muted-foreground">状态</TableHead>
+          <TableHead class="w-[150px] text-caption font-semibold text-muted-foreground">通过 / 失败 / 总</TableHead>
+          <TableHead class="w-[160px] text-caption font-semibold text-muted-foreground">开始时间</TableHead>
+          <TableHead class="w-[150px] text-center text-caption font-semibold text-muted-foreground">操作</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow v-for="row in store.list" :key="row.id" :data-testid="`exec-list-row-${row.id}`">
+          <TableCell class="mono">{{ row.id }}</TableCell>
+          <TableCell><code class="mono">{{ row.scenario_id }}</code></TableCell>
+          <TableCell>
+            <span :class="['status-tag', `status-${row.status}`]">
+              {{ executionStatusText(row.status) }}
+            </span>
+          </TableCell>
+          <TableCell>
+            <span class="mono">
+              {{ row.passed }} /
+              <!-- 原型修订:失败数字红色可点 → 详情自动展开行级表(失败用例清单) -->
+              <button
+                v-if="row.failed > 0"
+                type="button"
+                class="fail-link"
+                :data-testid="`exec-failed-${row.id}`"
+                title="查看失败用例"
+                @click="open(row.id, true)"
+              >{{ row.failed }}</button>
+              <template v-else>{{ row.failed }}</template>
+              / {{ row.total_runs }}
+            </span>
+          </TableCell>
+          <TableCell>
+            <span class="mono dim">{{ row.started_at?.slice(0, 19).replace('T', ' ') || '—' }}</span>
+          </TableCell>
+          <TableCell class="text-center">
+            <div class="flex items-center justify-center gap-0.5">
+              <Button variant="link" size="sm" class="h-7 px-2" @click="open(row.id)">详情</Button>
+              <Button
+                v-if="row.status === 'queued' || row.status === 'running'"
+                variant="link"
+                size="sm"
+                class="h-7 px-2 text-amber-700"
+                @click="cancel(row.id)"
+              >取消</Button>
+              <Button variant="link" size="sm" class="h-7 px-2 text-signal-failed" @click="remove(row.id)">删除</Button>
+            </div>
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
 
-    <el-alert
-      v-else-if="store.lastError"
-      :title="`加载执行历史失败：${store.lastError}`"
-      type="error"
-      :closable="false"
-      show-icon
-      class="load-error"
-    />
-    <el-empty
-      v-else-if="!store.loading"
-      description="暂无执行记录 — 在场景编排页点击「运行」发起执行"
-    />
+    <Alert v-else-if="store.lastError" variant="destructive" class="mt-3.5">
+      <AlertTitle>加载执行历史失败：{{ store.lastError }}</AlertTitle>
+    </Alert>
+    <div v-else class="empty-note">
+      <p>暂无执行记录 — 在场景编排页点击「运行」发起执行</p>
+    </div>
   </section>
 </template>
 
@@ -77,12 +87,16 @@ import { executionStatusText } from '@/utils/executionStatus'
 import { executionUrl } from '@/utils/links'
 import { removeExecution } from '@/utils/removeExecution'
 import { showError } from '@/utils/errorFallback'
+import { Button } from '@/components/ui/button'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Alert, AlertTitle } from '@/components/ui/alert'
 
 const router = useRouter()
 const store = useExecutionsStore()
 
-function open(id: number) {
-  router.push(executionUrl(id))
+/** focusFailed:失败数字入口 → 详情页带 ?rows=failed 自动展开行级表。 */
+function open(id: number, focusFailed = false) {
+  router.push(focusFailed ? `${executionUrl(id)}?rows=failed` : executionUrl(id))
 }
 
 async function remove(id: number) {
@@ -124,35 +138,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.executions-list {
-  max-width: 1480px;
-  padding: 28px 32px 48px;
-  margin: 0 auto;
-}
-
-.page-header h2 {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: 22px;
-}
-
-.page-header p {
-  margin: 5px 0 0;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-}
-
-.exec-table {
-  width: 100%;
-  margin-top: 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-}
-
-.load-error {
-  margin-top: 14px;
-}
-
 .status-tag {
   display: inline-flex;
   padding: 2px 8px;
@@ -161,7 +146,33 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
-/* 状态配色统一在 @/styles/status-colors.css（见文件末尾引入） */
+/* 失败数字:红 + 可点(原型修订 v2.2) */
+.fail-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #dc2626;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.empty-note {
+  margin-top: 14px;
+  padding: 40px 16px;
+  text-align: center;
+  font-size: 12.5px;
+  color: #94a3b8;
+  border: 1px dashed #e1e5eb;
+  border-radius: 8px;
+}
+
+.empty-note p { margin: 0; }
+
+.mono { font-family: var(--font-mono); }
+.dim { color: var(--color-text-tertiary); }
 </style>
 
 <style src="@/styles/status-colors.css"></style>

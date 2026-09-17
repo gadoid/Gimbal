@@ -22,6 +22,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import ElementPlus from 'element-plus'
 import Executions from '@/views/Executions.vue'
+import ExecutionsList from '@/views/ExecutionsList.vue'
+import { listExecutions } from '@/api/executions'
 import { useExecutionsStore } from '@/stores/executions'
 import { cancelExecution, getExecutionRows, getCaseArtifact, getScenarioSnapshot } from '@/api/executions'
 import { previewPlateDraft } from '@/api/scenario-composer'
@@ -33,6 +35,7 @@ vi.mock('@/api/executions', async (importOriginal) => {
   return {
     ...orig,
     cancelExecution: vi.fn().mockResolvedValue(undefined),
+    listExecutions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     // T13 行级可观测:rows/artifact 默认空实现,各用例按需 mockResolvedValue。
     getExecutionRows: vi.fn().mockResolvedValue({ items: [] }),
     getCaseArtifact: vi.fn().mockResolvedValue(''),
@@ -239,7 +242,7 @@ describe('Executions.vue — P1 detail upgrades', () => {
     expect(dtTexts).not.toContain('reconciled')
     expect(dtTexts).not.toContain('counterDrift')
     // counterDrift → 警告条;reconciled → 收敛说明条
-    const alerts = wrapper.findAll('.el-alert')
+    const alerts = wrapper.findAll('.sys-alert')   // 迁移后语义类(原 .el-alert)
     const alertText = alerts.map((a) => a.text()).join('\n')
     expect(alertText).toContain('计数器漂移')
     expect(alertText).toContain('重启')
@@ -518,6 +521,60 @@ describe('Executions.vue — 执行信息(标题 + 使用基线配置)', () => {
     // 第 2 列(数据集):基线虚行 → 使用基线配置(旧行为是 '—')
     const cells = w.findAll('.ex-table-row')[0].findAll('td')
     expect(cells[1].text()).toBe('使用基线配置')
+    w.unmount()
+  })
+})
+
+describe('批次 4 原型修订项 — 失败数字直达失败用例', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('列表:failed>0 → 红色可点 → 跳详情并带 ?rows=failed;failed=0 纯文本', async () => {
+    vi.mocked(listExecutions).mockResolvedValue({ items: [
+      { id: 1, scenario_id: 'sc_a', status: 'done', passed: 2, failed: 2, total_runs: 4,
+        started_at: '2026-09-17T10:00:00Z', finished_at: '2026-09-17T10:01:00Z' },
+      { id: 2, scenario_id: 'sc_b', status: 'done', passed: 3, failed: 0, total_runs: 3,
+        started_at: '2026-09-17T11:00:00Z', finished_at: '2026-09-17T11:01:00Z' },
+    ] as never, total: 2 })
+    const router = makeRouter()
+    router.push('/executions')
+    await router.isReady()
+    const w = mount(ExecutionsList, { global: { plugins: [router] } })
+    await flushPromises()
+
+    // 时间列带日期(修订项另一条:实测已含)
+    expect(w.text()).toContain('2026-09-17')
+
+    const failLink = w.find('[data-testid="exec-failed-1"]')
+    expect(failLink.exists()).toBe(true)
+    expect(w.find('[data-testid="exec-failed-2"]').exists()).toBe(false)  // 0 失败纯文本
+    await failLink.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe('/executions/1?rows=failed')
+    w.unmount()
+  })
+
+  it('详情:?rows=failed → 行级表格自动展开(失败用例清单即行级表)', async () => {
+    vi.mocked(getExecutionRows).mockResolvedValue({ items: [
+      { seq: 0, datasetId: null, rowIndex: 0, rep: 0, status: 'failed',
+        caseDir: 'case-000', startedAt: 't1', finishedAt: 't2' } ] })
+    const execStore = useExecutionsStore()
+    const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
+    execStore.detail = detail7
+    execStore.fetchDetail = vi.fn().mockResolvedValue(detail7)
+
+    const router = makeRouter()
+    router.push('/executions/7?rows=failed')
+    await router.isReady()
+    const w = mount(Executions, { global: { plugins: [router] } })
+    await flushPromises()
+
+    // 未手点 exec-row-7,行级表已展开并拉取
+    expect(getExecutionRows).toHaveBeenCalledWith(7)
+    expect(w.findAll('.ex-table-row')).toHaveLength(1)
+    expect(w.text()).toContain('failed')
     w.unmount()
   })
 })

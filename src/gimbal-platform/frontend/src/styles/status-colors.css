@@ -5,26 +5,28 @@
  * .status-* 与 .run-*）收敛于此。新增状态时只改这里。
  * Execution 状态集:queued/running/done/failed/canceled(run 级状态
  * 已随 exec_runs 退役)。
- * 颜色语义：queued 靛、running 蓝、done 绿、failed 红、canceled 灰。
+ * 颜色语义(批次 4 起统一 Signal token,见 tailwind.config signal.*):
+ * queued 灰、running 电光蓝、done Signal 绿、failed Signal 红、
+ * canceled 冷灰。
  */
 .status-queued {
-  color: #4338ca;
-  background: #eef2ff;
+  color: #475569;
+  background: #f1f5f9;
 }
 
 .status-running {
-  color: #1d4ed8;
-  background: #dbeafe;
+  color: #2f6fed;
+  background: #e7efff;
 }
 
 .status-done {
-  color: #166534;
-  background: #dcfce7;
+  color: #15803d;
+  background: #e8f5ec;
 }
 
 .status-failed {
-  color: #991b1b;
-  background: #fee2e2;
+  color: #dc2626;
+  background: #fdecec;
 }
 
 .status-canceled {
