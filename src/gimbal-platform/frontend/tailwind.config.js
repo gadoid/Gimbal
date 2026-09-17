@@ -26,7 +26,8 @@ export default {
   theme: {
     extend: {
       colors: {
-        // 冷灰中性阶(D-palette)
+        // ── Signal 原子层(D-palette 核录,唯一 hex 真源)─────────
+        // 冷灰中性阶
         signal: {
           sidebar: '#0B0E14',
           ink: '#10151C',
@@ -50,38 +51,7 @@ export default {
           mall: '#B0568E',
           common: '#6B7280',
         },
-      },
-      fontSize: {
-        // E-scale 字号阶:字号/字重(行高原型未标,先按 1.5 倍近邻取值)
-        'display-lg': ['26px', { fontWeight: '700' }],
-        display: ['22px', { fontWeight: '600' }],
-        heading: ['14px', { fontWeight: '600' }],
-        body: ['13px', { fontWeight: '400' }],
-        label: ['12px', { fontWeight: '500' }],
-        caption: ['11px', { fontWeight: '400' }],
-      },
-      borderRadius: {
-        // E-scale 圆角阶:3 卡片/代码 · 4 chip/徽标 · 6 表单/表格 · 8 空状态 · 10 主卡片
-        none: '0',
-        sm: '3px',
-        chip: '4px',
-        field: '6px',
-        empty: '8px',
-        card: '10px',
-        full: '9999px',
-        // shadcn-vue 组件消费的语义圆角(lg=8/md=6/sm=4,由 --radius 推导)
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        DEFAULT: 'calc(var(--radius) - 2px)',
-      },
-      // 间距沿用 Tailwind 默认 4px 网格(4/8/12/.../32),与 E-scale 一致,不重录
-      boxShadow: {
-        // 双阴影语义;数值 E-scale 未标,暂定值,组件走查(G-chrome)时定稿
-        'sig-hover': '0 1px 2px rgba(16, 21, 28, 0.06)',
-        'sig-float': '0 8px 24px rgba(16, 21, 28, 0.12)',
-      },
-      colors: {
-        // shadcn-vue 语义层:变量值来自 tailwind.css :root(Signal token,非默认 slate)
+        // ── shadcn-vue 语义层(变量值来自 tailwind.css :root,即 Signal token)──
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
@@ -115,6 +85,35 @@ export default {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+      },
+      fontSize: {
+        // E-scale 字号阶:字号/字重(行高原型未标,先按 1.5 倍近邻取值)
+        'display-lg': ['26px', { fontWeight: '700' }],
+        display: ['22px', { fontWeight: '600' }],
+        heading: ['14px', { fontWeight: '600' }],
+        body: ['13px', { fontWeight: '400' }],
+        label: ['12px', { fontWeight: '500' }],
+        caption: ['11px', { fontWeight: '400' }],
+      },
+      borderRadius: {
+        // E-scale 圆角阶:3 卡片/代码 · 4 chip/徽标 · 6 表单/表格 · 8 空状态 · 10 主卡片
+        none: '0',
+        sm: '3px',
+        chip: '4px',
+        field: '6px',
+        empty: '8px',
+        card: '10px',
+        full: '9999px',
+        // shadcn-vue 组件消费的语义圆角(lg=8/md=6/sm=4,由 --radius 推导)
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        DEFAULT: 'calc(var(--radius) - 2px)',
+      },
+      // 间距沿用 Tailwind 默认 4px 网格(4/8/12/.../32),与 E-scale 一致,不重录
+      boxShadow: {
+        // 双阴影语义;数值 E-scale 未标,暂定值,组件走查(G-chrome)时定稿
+        'sig-hover': '0 1px 2px rgba(16, 21, 28, 0.06)',
+        'sig-float': '0 8px 24px rgba(16, 21, 28, 0.12)',
       },
     },
   },
