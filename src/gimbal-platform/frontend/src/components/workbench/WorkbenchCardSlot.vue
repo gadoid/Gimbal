@@ -64,7 +64,10 @@ onErrorCaptured(() => {
 }
 .span-2 { grid-column: span 2; }
 
-/* 组装控件:右上角浮层,hover 显形(平时零视觉噪音) */
+/* 组装控件:右上角浮层,hover 显形(平时零视觉噪音)。
+   pointer-events:none 于容器 — opacity:0 时浮层仍会拦截鼠标,
+   曾吞掉卡片头"管理→"等链接的点击(感知为卡死/失灵);
+   仅把手与移除钮恢复 auto。 */
 .slot-ops {
   position: absolute;
   top: 6px;
@@ -73,10 +76,12 @@ onErrorCaptured(() => {
   display: flex;
   gap: 4px;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.12s ease;
 }
 .card-slot:hover .slot-ops { opacity: 1; }
 .card-handle {
+  pointer-events: auto;
   cursor: grab;
   color: #94a3b8;
   font-size: 14px;
@@ -86,6 +91,7 @@ onErrorCaptured(() => {
 }
 .card-handle:active { cursor: grabbing; }
 .slot-remove {
+  pointer-events: auto;
   padding: 2px 6px;
   font-size: 11px;
   line-height: 1.2;
