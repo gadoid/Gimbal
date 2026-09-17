@@ -62,13 +62,19 @@ const available = computed(() =>
 <style scoped>
 .gal-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
 .gal-item {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; padding: 10px 12px;
-  background: #fff; border: 1px solid #e1e5eb; border-radius: 8px;
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 14px;
+  background: #fff; border: 1px solid #e1e5eb; border-radius: 10px;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
-.gal-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.gal-title { font-size: 13px; font-weight: 600; color: #10151c; }
-.gal-id { font-size: 11px; color: #94a3b8; }
+.gal-item:hover { border-color: #2f6fed; box-shadow: 0 2px 8px rgba(47, 111, 237, 0.1); }
+.gal-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex: none;
+  background: linear-gradient(135deg, #2f6fed, #22d3ee);
+}
+.gal-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.gal-title { font-size: 13px; font-weight: 700; color: #10151c; }
+.gal-desc { font-size: 11.5px; color: #64748b; }
 .gal-empty { margin: 0; padding: 18px 0; text-align: center; font-size: 12.5px; color: #64748b; }
 .mono { font-family: var(--font-mono, monospace); }
 </style>

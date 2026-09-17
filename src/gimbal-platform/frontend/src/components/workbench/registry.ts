@@ -18,6 +18,8 @@ import type { Component } from 'vue'
 export interface WorkbenchCardDef {
   id: string                    // 'constants' | 'recent-executions' | ...
   title: string
+  /** 市场画廊里的一句话说明 */
+  description?: string
   component: () => Promise<Component>   // 懒加载
   span?: 1 | 2                  // 两列栅格占位,缺省 1
   adminOnly?: boolean           // 复用侧栏同一权限判定源,不另写一套
@@ -29,16 +31,19 @@ export const workbenchRegistry: WorkbenchCardDef[] = [
   {
     id: 'constants',
     title: '常量池',
+    description: '业务常量与生成器,一键复制引用键',
     component: () => import('./ConstantsSummaryCard.vue'),
   },
   {
     id: 'recent-executions',
     title: '最近执行',
+    description: '最近 5 次执行的状态、通过率与直达详情',
     component: () => import('./RecentExecutionsCard.vue'),
   },
   {
     id: 'starred-scenarios',
     title: '收藏场景',
+    description: '★ 收藏的场景快捷入口,直达详情页',
     component: () => import('./StarredScenariosCard.vue'),
   },
 ]

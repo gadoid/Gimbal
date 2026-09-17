@@ -1,31 +1,37 @@
 <!--
-  ConstantsSummaryCard.vue — 工作台首张注册卡(§7 落地节奏;参照物 =
-  编排页常量池面板的"三行键值 + 快捷操作 + 管理深链"形制,但这是
-  独立摘要组件 — 复用 store 取数,不复用面板组件)。
-
-  数据契约(§7 第 5 条):常量池本身小数据量,list API 直取;
-  快捷操作 = 复制生成器 key / 字面量值(与编排面板同款 payload)。
+  ConstantsSummaryCard.vue — 工作台首张注册卡(§7;参照物 = 编排页
+  常量池面板"三行键值 + 快捷操作 + 管理深链",独立摘要组件)。
+  视觉框架由 WorkbenchCardSlot 统一供给 — 本组件只出内容
+  (图标题头 + 键值行 + 空态 CTA)。
 -->
 <template>
-  <div class="card-root" data-testid="wb-card-constants">
-    <header class="card-head">
-      <span class="card-title">常量池</span>
-      <span class="card-count">{{ state.entries.length }}</span>
-      <span class="spacer" />
+  <div data-testid="wb-card-constants" class="wcard">
+    <header class="chead">
+      <span class="chead-icon ci-blue">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <ellipse cx="12" cy="5" rx="8" ry="3" />
+          <path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5" />
+          <path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" />
+        </svg>
+      </span>
+      <span class="chead-title">常量池</span>
+      <span class="chead-count">{{ state.entries.length }}</span>
+      <span class="chead-spacer" />
       <router-link to="/constants" class="manage-link">管理 →</router-link>
     </header>
 
-    <!-- 三行键值(最近 3 条;空态 = 引导 CTA,§7 第 3 条) -->
-    <div v-if="state.entries.length" class="kv-list">
+    <div v-if="state.entries.length" class="rows">
       <div v-for="e in state.entries.slice(0, 3)" :key="e.id" class="kv-row">
-        <span class="kv-name mono">{{ e.name }}</span>
-        <span class="kv-kind">{{ e.entry_kind === 'generator' ? '生成器' : '常量' }}</span>
-        <button
-          class="kv-copy"
-          type="button"
-          title="复制值 / 生成器 key"
-          @click="copyEntry(e)"
-        >复制</button>
+        <span class="kv-name mono" :title="e.name">{{ e.name }}</span>
+        <span class="kv-kind" :class="e.entry_kind === 'generator' ? 'kg-gen' : 'kg-lit'">
+          {{ e.entry_kind === 'generator' ? '生成器' : '常量' }}
+        </span>
+        <button class="kv-copy" type="button" title="复制值 / 生成器 key" @click="copyEntry(e)">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+          </svg>
+          复制
+        </button>
       </div>
       <p v-if="state.entries.length > 3" class="more-hint">
         还有 {{ state.entries.length - 3 }} 条 — 到完整页查看
@@ -47,8 +53,6 @@ import type { ConstantEntry } from '@/types/constants'
 
 const store = useConstantsStore()
 
-/** 卡片喂给包装层的三态数据面(§7 第 3 条:loading/empty/error 由
- *  工作台统一样式;本卡 list 失败静默回空 — 完整页有重试入口)。 */
 const state = reactive({ entries: [] as ConstantEntry[] })
 
 onMounted(async () => {
@@ -59,8 +63,7 @@ onMounted(async () => {
   }
 })
 
-/** 快捷操作:复制载荷与编排面板同款 — 生成器复制 ${var.name} key,
- *  字面量复制值文本(§7 参照物:ConstantPoolPanel F5)。 */
+/** 复制载荷与编排面板同款(ConstantPoolPanel F5)。 */
 async function copyEntry(e: ConstantEntry): Promise<void> {
   const payload = e.entry_kind === 'generator'
     ? `\${var.${e.name}}`
@@ -72,56 +75,71 @@ async function copyEntry(e: ConstantEntry): Promise<void> {
 </script>
 
 <style scoped>
-.card-root {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
-  background: #fff;
-  border: 1px solid #e1e5eb;
-  border-radius: 10px;
-  box-shadow: 0 1px 2px rgba(16, 21, 28, 0.06);
-  height: 100%;
-  box-sizing: border-box;
-}
+.wcard { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 
-.card-head { display: flex; align-items: center; gap: 8px; }
-.card-title { font-size: 14px; font-weight: 700; color: #10151c; }
-.card-count {
-  padding: 1px 6px; font-size: 11px; font-weight: 600;
-  color: #64748b; background: #f1f5f9; border-radius: 3px;
+/* ── 题头(三卡共用形制)────────────────────────────────── */
+.chead { display: flex; align-items: center; gap: 8px; }
+.chead-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 7px; flex: none;
 }
-.spacer { flex: 1; }
-.manage-link { font-size: 12px; font-weight: 500; color: #2f6fed; text-decoration: none; }
+.ci-blue { color: #2f6fed; background: #e7efff; }
+.chead-title { font-size: 13.5px; font-weight: 700; color: #10151c; }
+.chead-count {
+  padding: 0 7px; font-size: 11px; font-weight: 700; line-height: 17px;
+  color: #64748b; background: #f1f5f9; border-radius: 999px;
+}
+.chead-spacer { flex: 1; }
+.manage-link { font-size: 12px; font-weight: 600; color: #2f6fed; text-decoration: none; }
 .manage-link:hover { text-decoration: underline; }
 
-.kv-list { display: flex; flex-direction: column; gap: 4px; }
+/* ── 键值行(网格列:名称 1fr / 类型 chip / 复制钮 — 不重叠)── */
+.rows { display: flex; flex-direction: column; gap: 2px; }
 .kv-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 4px 0; font-size: 12.5px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  transition: background 0.12s ease;
 }
-.kv-name { flex: 1; min-width: 0; font-weight: 600; color: #10151c;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kv-row:hover { background: #f6f8fa; }
+.kv-name {
+  min-width: 0; font-weight: 600; color: #10151c;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .kv-kind {
-  flex: none; padding: 0 6px; font-size: 10.5px; font-weight: 600;
-  color: #475569; background: #f1f5f9; border-radius: 3px;
+  padding: 1px 7px; font-size: 10.5px; font-weight: 600; border-radius: 4px;
+  white-space: nowrap;
 }
+.kg-gen { color: #92400e; background: #fef3c7; }
+.kg-lit { color: #475569; background: #f1f5f9; }
 .kv-copy {
-  flex: none; padding: 1px 8px; font-size: 11px;
-  color: #5a6273; background: transparent;
-  border: 1px solid #e1e5eb; border-radius: 4px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; font-size: 11px; font-weight: 500;
+  color: #64748b; background: transparent;
+  border: 1px solid #e1e5eb; border-radius: 5px; cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
 }
-.kv-copy:hover { color: #2f6fed; border-color: #2f6fed; }
-.more-hint { margin: 2px 0 0; font-size: 11px; color: #94a3b8; }
+.kv-row:hover .kv-copy { color: #2f6fed; border-color: #2f6fed; }
+.more-hint { margin: 4px 0 0; font-size: 11px; color: #94a3b8; }
 
-/* 空态 = 引导 CTA(不是虚线占位,§7 第 3 条) */
+/* ── 空态 = 引导 CTA(非虚线占位,§7 第 3 条)─────────────── */
 .card-empty {
   display: flex; flex-direction: column; align-items: center;
-  gap: 8px; padding: 14px 0; text-align: center;
+  gap: 8px; padding: 16px 0 8px; text-align: center;
 }
 .card-empty p { margin: 0; font-size: 12px; color: #64748b; }
-.cta { font-size: 12.5px; font-weight: 600; color: #2f6fed; text-decoration: none; }
-.cta:hover { text-decoration: underline; }
+.cta {
+  padding: 4px 14px; font-size: 12.5px; font-weight: 600;
+  color: #2f6fed; text-decoration: none;
+  border: 1px solid #bcd0f7; border-radius: 6px;
+  transition: background 0.12s ease;
+}
+.cta:hover { background: #e7efff; }
 
 .mono { font-family: var(--font-mono, monospace); }
 </style>

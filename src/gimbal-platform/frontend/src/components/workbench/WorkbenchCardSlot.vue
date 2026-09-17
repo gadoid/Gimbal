@@ -1,12 +1,12 @@
 <!-- WorkbenchCardSlot.vue — 工作台卡片包装层(§7 第 3/4 条 + v2 组装)。
-     职责:
-     - 懒加载(Suspense fallback = 统一 loading 态);
-     - 渲染期异常隔离(onErrorCaptured 返回 false,单卡崩溃只落本槽
-       error 态,不白屏工作台,可重试);
-     - 组装控件:拖拽把手(.card-handle,vuedraggable handle 选择器)
-       与移除钮(×,hover 显形)— 控件在卡片框外的槽层,卡片组件
-       保持纯内容(加卡/删卡不需要改任何卡片代码)。
-     栅格占位由外层 grid + span 类承担。 -->
+     结构(文档流,零重叠):
+       section.card-slot(栅格项)
+         └ .slot-frame(卡片视觉框架:统一底/描边/阴影/hover —
+            §7 第 3 条"样式由工作台统一提供",卡片组件只出内容)
+             ├ .slot-toolbar(组装控件行:把手+移除,文档流占位,
+             │   hover 显形 — 不再 absolute 浮层,永不盖住卡片内容)
+             └ 内容(错误态 / Suspense 懒加载)
+     懒加载 + onErrorCaptured 故障隔离语义不变。 -->
 <template>
   <section
     class="card-slot"
@@ -14,22 +14,42 @@
     :data-testid="`wb-slot-${def.id}`"
     :aria-label="def.title"
   >
-    <!-- 组装控件条(把手 + 移除;hover 显形,不占内容空间) -->
-    <div v-if="removable" class="slot-ops">
-      <span class="card-handle" title="拖拽排序">⠿</span>
-      <button type="button" class="slot-remove" title="移除卡片" :data-testid="`wb-remove-${def.id}`" @click.stop="emit('remove')">✕</button>
-    </div>
+    <div class="slot-frame">
+      <!-- 组装控件行:文档流常驻占位(高度恒定,卡片不对齐漂移),
+           hover 显形;未 hover 时把手不接鼠标(防隐形拖拽误触) -->
+      <div class="slot-toolbar">
+        <span class="card-handle" :data-testid="`wb-handle-${def.id}`" title="拖拽排序">
+          <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
+            <circle cx="2.5" cy="2.5" r="1.5" /><circle cx="7.5" cy="2.5" r="1.5" />
+            <circle cx="2.5" cy="8" r="1.5" /><circle cx="7.5" cy="8" r="1.5" />
+            <circle cx="2.5" cy="13.5" r="1.5" /><circle cx="7.5" cy="13.5" r="1.5" />
+          </svg>
+        </span>
+        <button
+          v-if="removable"
+          type="button"
+          class="slot-remove"
+          :data-testid="`wb-remove-${def.id}`"
+          title="移除卡片"
+          @click.stop="emit('remove')"
+        >
+          <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <path d="M2 2l8 8M10 2l-8 8" />
+          </svg>
+        </button>
+      </div>
 
-    <div v-if="errored" class="card-state bad" :data-testid="`wb-slot-${def.id}-error`">
-      此卡片渲染失败 — 其余卡片不受影响。
-      <button type="button" class="retry" @click="errored = false">重试</button>
+      <div v-if="errored" class="card-state bad" :data-testid="`wb-slot-${def.id}-error`">
+        此卡片渲染失败 — 其余卡片不受影响。
+        <button type="button" class="retry" @click="errored = false">重试</button>
+      </div>
+      <Suspense v-else>
+        <component :is="asyncComp" />
+        <template #fallback>
+          <div class="card-state">加载中…</div>
+        </template>
+      </Suspense>
     </div>
-    <Suspense v-else>
-      <component :is="asyncComp" />
-      <template #fallback>
-        <div class="card-state">加载中…</div>
-      </template>
-    </Suspense>
   </section>
 </template>
 
@@ -39,7 +59,7 @@ import type { WorkbenchCardDef } from './registry'
 
 const props = defineProps<{
   def: WorkbenchCardDef
-  /** 组装模式:显示把手/移除钮(布局为空时最后一张不可删,防空工作台) */
+  /** 组装模式:显示移除钮(布局为空时最后一张不可删,防空工作台) */
   removable?: boolean
 }>()
 const emit = defineEmits<{ remove: [] }>()
@@ -60,56 +80,83 @@ onErrorCaptured(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  position: relative;
 }
 .span-2 { grid-column: span 2; }
 
-/* 组装控件:右上角浮层,hover 显形(平时零视觉噪音)。
-   pointer-events:none 于容器 — opacity:0 时浮层仍会拦截鼠标,
-   曾吞掉卡片头"管理→"等链接的点击(感知为卡死/失灵);
-   仅把手与移除钮恢复 auto。 */
-.slot-ops {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  z-index: 5;
+/* ── 卡片视觉框架(统一供给,§7 第 3 条)────────────────────── */
+.slot-frame {
+  flex: 1;
   display: flex;
-  gap: 4px;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-}
-.card-slot:hover .slot-ops { opacity: 1; }
-.card-handle {
-  pointer-events: auto;
-  cursor: grab;
-  color: #94a3b8;
-  font-size: 14px;
-  line-height: 1;
-  padding: 3px 4px;
-  user-select: none;
-}
-.card-handle:active { cursor: grabbing; }
-.slot-remove {
-  pointer-events: auto;
-  padding: 2px 6px;
-  font-size: 11px;
-  line-height: 1.2;
-  color: #64748b;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid #e1e5eb;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.slot-remove:hover { color: #dc2626; border-color: #f6c6c6; }
-
-.card-state {
-  padding: 20px 16px;
-  font-size: 12.5px;
-  color: #64748b;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 16px;
   background: #fff;
   border: 1px solid #e1e5eb;
-  border-radius: 10px;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(16, 21, 28, 0.05);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.card-slot:hover .slot-frame {
+  border-color: #c9d4ea;
+  box-shadow: 0 4px 16px rgba(16, 21, 28, 0.08);
+}
+/* 拖拽反馈 */
+.card-slot.sortable-ghost .slot-frame { opacity: 0.4; border-style: dashed; }
+.card-slot.sortable-chosen .slot-frame { border-color: #2f6fed; }
+
+/* ── 组装控件行(文档流;hover 显形)────────────────────────── */
+.slot-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  height: 20px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.card-slot:hover .slot-toolbar { opacity: 1; }
+
+.card-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 20px;
+  color: #94a3b8;
+  cursor: grab;
+  border-radius: 5px;
+  user-select: none;
+  pointer-events: auto;
+}
+.card-handle:hover { color: #2f6fed; background: #e7efff; }
+.card-handle:active { cursor: grabbing; }
+/* 未 hover 卡片时隐形把手不接鼠标 — 防误触拖拽 */
+.card-slot:not(:hover) .card-handle { pointer-events: none; }
+
+.slot-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: #94a3b8;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.card-slot:not(:hover) .slot-remove { pointer-events: none; }
+.slot-remove:hover { color: #dc2626; background: #fdecec; }
+
+/* ── 状态面(loading / error)────────────────────────────── */
+.card-state {
+  padding: 22px 16px;
+  font-size: 12.5px;
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px dashed #e1e5eb;
+  border-radius: 8px;
   text-align: center;
 }
 .card-state.bad { color: #dc2626; border-color: #f6c6c6; background: #fdf5f5; }
@@ -118,8 +165,4 @@ onErrorCaptured(() => {
   color: #2f6fed; background: none;
   border: 1px solid #2f6fed; border-radius: 4px; cursor: pointer;
 }
-
-/* 拖拽中的源槽:半透明占位感 */
-.card-slot.sortable-ghost { opacity: 0.35; }
-.card-slot.sortable-chosen { cursor: grabbing; }
 </style>

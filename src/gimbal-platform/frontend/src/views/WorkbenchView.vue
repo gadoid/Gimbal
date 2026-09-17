@@ -40,7 +40,7 @@
       handle=".card-handle"
       :animation="150"
       tag="div"
-      class="grid grid-cols-1 gap-3 md:grid-cols-2"
+      class="grid grid-cols-1 gap-4 md:grid-cols-2"
       data-testid="wb-grid"
     >
       <template #item="{ element: id }">

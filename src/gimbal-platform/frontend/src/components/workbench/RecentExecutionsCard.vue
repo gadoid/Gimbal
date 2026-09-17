@@ -1,16 +1,21 @@
 <!-- RecentExecutionsCard.vue — 工作台注册卡:最近执行。
-     数据契约(§7 第 5 条):复用 list API + limit(5),不拉全量。
-     行 = 状态色 chip + passed/failed/total + 相对时间;点行直达详情。 -->
+     框架由 slot 供给;行 = 网格列(#id / 场景 1fr / 状态 chip /
+     计数 / 时间),flex-none 各列不重叠。点行直达详情。 -->
 <template>
-  <div class="card-root" data-testid="wb-card-recent-executions">
-    <header class="card-head">
-      <span class="card-title">最近执行</span>
-      <span class="card-count">{{ state.rows.length }}</span>
-      <span class="spacer" />
+  <div data-testid="wb-card-recent-executions" class="wcard">
+    <header class="chead">
+      <span class="chead-icon ci-green">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+        </svg>
+      </span>
+      <span class="chead-title">最近执行</span>
+      <span class="chead-count">{{ state.rows.length }}</span>
+      <span class="chead-spacer" />
       <router-link to="/executions" class="manage-link">全部 →</router-link>
     </header>
 
-    <div v-if="state.rows.length" class="ex-list">
+    <div v-if="state.rows.length" class="rows">
       <router-link
         v-for="ex in state.rows"
         :key="ex.id"
@@ -19,9 +24,9 @@
         :data-testid="`wb-ex-row-${ex.id}`"
       >
         <span class="ex-id mono">#{{ ex.id }}</span>
-        <span class="ex-scenario mono">{{ ex.scenario_id }}</span>
+        <span class="ex-scenario mono" :title="ex.scenario_id">{{ ex.scenario_id }}</span>
         <span :class="['ex-status', `status-${ex.status}`]">{{ statusText(ex.status) }}</span>
-        <span class="ex-counts mono">{{ ex.passed }}/{{ ex.failed }}/{{ ex.total_runs }}</span>
+        <span class="ex-counts mono">{{ ex.passed }}<em>/</em>{{ ex.failed }}<em>/</em>{{ ex.total_runs }}</span>
         <span class="ex-time">{{ relTime(ex.started_at) }}</span>
       </router-link>
     </div>
@@ -51,56 +56,69 @@ onMounted(async () => {
     const res = await listExecutions({ limit: 5 })
     state.rows = res.items
   } catch {
-    state.error = true   // §7 三态:取数失败显式说,不给假空态
+    state.error = true
   }
 })
 </script>
 
 <style scoped>
-.card-root {
-  display: flex; flex-direction: column; gap: 10px;
-  padding: 14px 16px; background: #fff;
-  border: 1px solid #e1e5eb; border-radius: 10px;
-  box-shadow: 0 1px 2px rgba(16, 21, 28, 0.06);
-  height: 100%; box-sizing: border-box;
+.wcard { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+
+.chead { display: flex; align-items: center; gap: 8px; }
+.chead-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 7px; flex: none;
 }
-.card-head { display: flex; align-items: center; gap: 8px; }
-.card-title { font-size: 14px; font-weight: 700; color: #10151c; }
-.card-count {
-  padding: 1px 6px; font-size: 11px; font-weight: 600;
-  color: #64748b; background: #f1f5f9; border-radius: 3px;
+.ci-green { color: #15803d; background: #e8f5ec; }
+.chead-title { font-size: 13.5px; font-weight: 700; color: #10151c; }
+.chead-count {
+  padding: 0 7px; font-size: 11px; font-weight: 700; line-height: 17px;
+  color: #64748b; background: #f1f5f9; border-radius: 999px;
 }
-.spacer { flex: 1; }
-.manage-link { font-size: 12px; font-weight: 500; color: #2f6fed; text-decoration: none; }
+.chead-spacer { flex: 1; }
+.manage-link { font-size: 12px; font-weight: 600; color: #2f6fed; text-decoration: none; }
 .manage-link:hover { text-decoration: underline; }
 
-.ex-list { display: flex; flex-direction: column; gap: 2px; }
+/* ── 执行行(网格列:id / 场景 1fr / 状态 / 计数 / 时间)──── */
+.rows { display: flex; flex-direction: column; gap: 2px; }
 .ex-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 5px 6px; font-size: 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  font-size: 12px;
   color: inherit; text-decoration: none;
-  border-radius: 6px;
+  border-radius: 7px;
+  transition: background 0.12s ease;
 }
 .ex-row:hover { background: #f6f8fa; }
-.ex-id { color: #94a3b8; flex: none; }
+.ex-id { color: #94a3b8; }
 .ex-scenario {
-  flex: 1; min-width: 0; font-weight: 600; color: #10151c;
+  min-width: 0; font-weight: 600; color: #10151c;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ex-status {
-  flex: none; padding: 1px 7px; font-size: 10.5px; font-weight: 600;
-  border-radius: 4px;
+  padding: 1px 7px; font-size: 10.5px; font-weight: 600;
+  border-radius: 4px; white-space: nowrap;
 }
-.ex-counts { flex: none; color: #64748b; }
-.ex-time { flex: none; font-size: 11px; color: #94a3b8; }
+.ex-counts { color: #64748b; white-space: nowrap; }
+.ex-counts em { font-style: normal; color: #cbd5e1; padding: 0 1px; }
+.ex-time { font-size: 11px; color: #94a3b8; white-space: nowrap; }
 
 .card-empty {
   display: flex; flex-direction: column; align-items: center;
-  gap: 8px; padding: 14px 0; text-align: center;
+  gap: 8px; padding: 16px 0 8px; text-align: center;
 }
 .card-empty p { margin: 0; font-size: 12px; color: #64748b; }
-.cta { font-size: 12.5px; font-weight: 600; color: #2f6fed; text-decoration: none; }
-.cta:hover { text-decoration: underline; }
+.cta {
+  padding: 4px 14px; font-size: 12.5px; font-weight: 600;
+  color: #2f6fed; text-decoration: none;
+  border: 1px solid #bcd0f7; border-radius: 6px;
+  transition: background 0.12s ease;
+}
+.cta:hover { background: #e7efff; }
 
 .mono { font-family: var(--font-mono, monospace); }
 </style>
