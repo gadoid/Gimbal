@@ -6,6 +6,8 @@
 import { computed } from 'vue'
 import type { ServiceBinding } from '@/api/scenario-composer'
 
+import { Input } from '@/components/ui/input'
+
 const props = defineProps<{
   serviceBindings: Record<string, ServiceBinding>
   /** 声明 ∪ 引用并集行(spec D3,RunDialog ServiceRow 同款);壳从 draft 派生 */
@@ -179,12 +181,12 @@ const logSubText = computed({
       </div>
       <div class="param-row">
         <label>每行重复(nRuns)</label>
-        <el-input-number v-model="nRunsModel" :min="1" :max="1000"
+        <Input v-model="nRunsModel" type="number" min="1" max="1000" class="h-8 w-[110px]"
           size="small" data-testid="param-nruns" />
       </div>
       <div class="param-row">
         <label>并发度(parallel)</label>
-        <el-input-number v-model="parallelModel" :min="1" :max="200"
+        <Input v-model="parallelModel" type="number" min="1" max="200" class="h-8 w-[110px]"
           size="small" data-testid="param-parallel" />
       </div>
       <p v-if="overLimit" class="total-warn">超出单次执行总量上限 200</p>
@@ -200,16 +202,18 @@ const logSubText = computed({
           <span>插件列表</span>
           <span class="tag-reserve">待引擎支持</span>
         </div>
-        <el-input v-model="pluginsText" type="textarea" :rows="2"
-          data-testid="reserve-plugins" placeholder="插件配置(字符串/JSON 自由文本,引擎接入后生效)" />
+        <textarea v-model="pluginsText" rows="2"
+          data-testid="reserve-plugins" class="w-full rounded-field border border-input bg-transparent p-2 text-body"
+          placeholder="插件配置(字符串/JSON 自由文本,引擎接入后生效)"></textarea>
       </div>
       <div class="reserve-row">
         <div class="reserve-head">
           <span>日志订阅</span>
           <span class="tag-reserve">待引擎支持</span>
         </div>
-        <el-input v-model="logSubText" type="textarea" :rows="2"
-          data-testid="reserve-logsub" placeholder="日志订阅(字符串/JSON 自由文本,引擎接入后生效)" />
+        <textarea v-model="logSubText" rows="2"
+          data-testid="reserve-logsub" class="w-full rounded-field border border-input bg-transparent p-2 text-body"
+          placeholder="日志订阅(字符串/JSON 自由文本,引擎接入后生效)"></textarea>
       </div>
     </section>
   </div>

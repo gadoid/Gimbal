@@ -6,6 +6,14 @@ import * as api from '@/api/scenario-composer'
 import * as download from '@/utils/download'
 import { toast } from '@/utils/toast'
 import { confirmAction } from '@/utils/confirmAction'
+import { DOMWrapper } from '@vue/test-utils'
+
+/** Portal 内元素查询(shadcn Dialog 渲染在 body) */
+function q(sel: string): DOMWrapper<Element> {
+  const el = document.body.querySelector(sel)
+  if (!el) throw new Error(`body 里找不到 ${sel}`)
+  return new DOMWrapper(el)
+}
 
 vi.mock('@/api/scenario-composer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/scenario-composer')>()),
@@ -100,26 +108,26 @@ describe('SchemeDataSection — 粘贴解析', () => {
     const w = mountSection()
     await w.find('[data-testid="open-create"]').trigger('click')
     await flushPromises()
-    await w.find('[data-testid="create-rows"]').setValue(text)
+    await q('[data-testid="create-rows"]').setValue(text)
     return w
   }
 
   it('非法 JSON / 空数组 / 非标量值 → 报错不落库', async () => {
     const w = await setInput('{not json')
-    expect(w.find('[data-testid="create-error"]').text()).toContain('不是合法 JSON')
-    await w.find('[data-testid="create-rows"]').setValue('[]')
-    expect(w.find('[data-testid="create-error"]').text()).toContain('需要非空数组')
-    await w.find('[data-testid="create-rows"]').setValue('[["a"]]')
-    expect(w.find('[data-testid="create-error"]').text()).toContain('第 1 行不是对象')
-    await w.find('[data-testid="create-rows"]').setValue('[{"v": {"x": 1}}]')
-    expect(w.find('[data-testid="create-error"]').text()).toContain('的值必须是字符串/数字/布尔')
+    expect(q('[data-testid="create-error"]').text()).toContain('不是合法 JSON')
+    await q('[data-testid="create-rows"]').setValue('[]')
+    expect(q('[data-testid="create-error"]').text()).toContain('需要非空数组')
+    await q('[data-testid="create-rows"]').setValue('[["a"]]')
+    expect(q('[data-testid="create-error"]').text()).toContain('第 1 行不是对象')
+    await q('[data-testid="create-rows"]').setValue('[{"v": {"x": 1}}]')
+    expect(q('[data-testid="create-error"]').text()).toContain('的值必须是字符串/数字/布尔')
     expect(api.createDataSet).not.toHaveBeenCalled()
     w.unmount()
   })
 
   it('JSON 合法 → 预览格式与行数', async () => {
     const w = await setInput('[{"amount": 100}, {"amount": 200}]')
-    const hint = w.find('[data-testid="create-preview"]').text()
+    const hint = q('[data-testid="create-preview"]').text()
     expect(hint).toContain('JSON')
     expect(hint).toContain('2 行')
     w.unmount()
@@ -127,14 +135,14 @@ describe('SchemeDataSection — 粘贴解析', () => {
 
   it('TSV 粘贴(Excel 直贴)→ 表头行 + 数据行转对象', async () => {
     const w = await setInput('amount\tchannel\n100\talipay\n200\twechat')
-    const hint = w.find('[data-testid="create-preview"]').text()
+    const hint = q('[data-testid="create-preview"]').text()
     expect(hint).toContain('TSV')
     expect(hint).toContain('2 行')
     // 落库载荷校验:提交后 createDataSet 收到转换后的对象行
     vi.mocked(api.createDataSet).mockResolvedValue({
       datasetId: 'ds-new', scenarioId: 'sc-x', name: 'x', rowCount: 2, preview: [],
     } as never)
-    await w.find('[data-testid="create-submit"]').trigger('click')
+    await q('[data-testid="create-submit"]').trigger('click')
     await flushPromises()
     expect(api.createDataSet).toHaveBeenCalledWith('sc-x', {
       name: expect.any(String),
@@ -148,13 +156,13 @@ describe('SchemeDataSection — 粘贴解析', () => {
 
   it('CSV 文本(含引号转义的逗号值)→ papaparse 解析', async () => {
     const w = await setInput('name,note\n"x,1",ok')
-    const hint = w.find('[data-testid="create-preview"]').text()
+    const hint = q('[data-testid="create-preview"]').text()
     expect(hint).toContain('CSV')
     expect(hint).toContain('1 行')
     vi.mocked(api.createDataSet).mockResolvedValue({
       datasetId: 'ds-new', scenarioId: 'sc-x', name: 'x', rowCount: 1, preview: [],
     } as never)
-    await w.find('[data-testid="create-submit"]').trigger('click')
+    await q('[data-testid="create-submit"]').trigger('click')
     await flushPromises()
     expect(api.createDataSet).toHaveBeenCalledWith('sc-x', {
       name: expect.any(String),
@@ -165,7 +173,7 @@ describe('SchemeDataSection — 粘贴解析', () => {
 
   it('CSV 导出:union 列头 + 引号转义,与粘贴导入互为往返', async () => {
     const w = await setInput('[{"a": "x,y", "b": "2"}, {"b": "3"}]')
-    await w.find('[data-testid="export-csv"]').trigger('click')
+    await q('[data-testid="export-csv"]').trigger('click')
     expect(download.downloadFile).toHaveBeenCalledWith(
       expect.stringMatching(/\.csv$/),
       'a,b\n"x,y",2\n,3',
@@ -186,10 +194,10 @@ describe('SchemeDataSection — 新建', () => {
     const w = mountSection()
     await w.find('[data-testid="open-create"]').trigger('click')
     await flushPromises()
-    await w.find('[data-testid="create-name"]').setValue('新库')
-    await w.find('[data-testid="create-rows"]')
+    await q('[data-testid="create-name"]').setValue('新库')
+    await q('[data-testid="create-rows"]')
       .setValue('[{"amount": 100}, {"amount": 200, "channel": "alipay"}]')
-    await w.find('[data-testid="create-submit"]').trigger('click')
+    await q('[data-testid="create-submit"]').trigger('click')
     await flushPromises()
 
     expect(api.createDataSet).toHaveBeenCalledWith('sc-x', {
@@ -206,8 +214,8 @@ describe('SchemeDataSection — 新建', () => {
     const w = mountSection()
     await w.find('[data-testid="open-create"]').trigger('click')
     await flushPromises()
-    await w.find('[data-testid="create-rows"]').setValue('[{"a": 1}]')
-    await w.find('[data-testid="create-submit"]').trigger('click')
+    await q('[data-testid="create-rows"]').setValue('[{"a": 1}]')
+    await q('[data-testid="create-submit"]').trigger('click')
     await flushPromises()
     expect(vi.mocked(toast.error)).toHaveBeenCalled()
     expect(w.emitted('saved')).toBeUndefined()
@@ -235,16 +243,16 @@ describe('SchemeDataSection — 编辑', () => {
 
     // 预填:名称 + 行 JSON
     expect(api.getDataSet).toHaveBeenCalledWith('ds-001')
-    expect(w.find('[data-testid="create-name"]').element as HTMLInputElement).toBeTruthy()
-    const nameInput = w.find('[data-testid="create-name"]')
+    expect(q('[data-testid="create-name"]').element as HTMLInputElement).toBeTruthy()
+    const nameInput = q('[data-testid="create-name"]')
     expect((nameInput.element as HTMLInputElement).value).toBe('主流程')
-    const rowsBox = w.find('[data-testid="create-rows"]').element as HTMLTextAreaElement
+    const rowsBox = q('[data-testid="create-rows"]').element as HTMLTextAreaElement
     expect(rowsBox.value).toContain('"amount": 100')
 
     // 改名 + 改行
     await nameInput.setValue('主流程 v2')
-    await w.find('[data-testid="create-rows"]').setValue('[{"amount": 999}]')
-    await w.find('[data-testid="create-submit"]').trigger('click')
+    await q('[data-testid="create-rows"]').setValue('[{"amount": 999}]')
+    await q('[data-testid="create-submit"]').trigger('click')
     await flushPromises()
 
     expect(api.updateDataSet).toHaveBeenCalledWith('ds-001', {
@@ -268,7 +276,7 @@ describe('SchemeDataSection — 编辑', () => {
     const w = mountSection()
     await w.find('[data-testid="ds-edit-ds-002"]').trigger('click')
     await flushPromises()
-    await w.find('[data-testid="create-submit"]').trigger('click')
+    await q('[data-testid="create-submit"]').trigger('click')
     await flushPromises()
     const payload = vi.mocked(api.updateDataSet).mock.calls[0][1]
     expect(payload).toEqual({ name: '异常', rows: [{ code: 1 }] })

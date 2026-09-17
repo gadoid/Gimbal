@@ -1,6 +1,10 @@
 <script setup lang="ts">
 /** 方案工作台左栏:列表(默认置顶)、选中、新建、重命名/复制/删除。 */
 import type { SchemeV2 } from '@/api/scenario-composer'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 defineProps<{
   schemes: SchemeV2[]          // default 已置顶(后端保证)
@@ -34,16 +38,18 @@ defineEmits<{
         <div class="scheme-main">
           <span class="scheme-name">{{ s.name }}</span>
           <span class="scheme-ops" @click.stop>
-            <el-dropdown trigger="click" @command="(c: string) => c === 'rename' ? $emit('rename', s) : c === 'duplicate' ? $emit('duplicate', s) : $emit('delete', s)">
-              <button class="more-btn" type="button" title="更多操作">⋯</button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item v-if="!s.isDefault" command="rename">重命名</el-dropdown-item>
-                  <el-dropdown-item command="duplicate">复制派生</el-dropdown-item>
-                  <el-dropdown-item v-if="!s.isDefault" command="delete" class="is-danger">删除</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
+            <DropdownMenu>
+              <DropdownMenuTrigger class="more-btn" title="更多操作">⋯</DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem v-if="!s.isDefault" @click="$emit('rename', s)">重命名</DropdownMenuItem>
+                <DropdownMenuItem @click="$emit('duplicate', s)">复制派生</DropdownMenuItem>
+                <DropdownMenuItem
+                  v-if="!s.isDefault"
+                  class="text-signal-failed focus:bg-signal-failed/10 focus:text-signal-failed"
+                  @click="$emit('delete', s)"
+                >删除</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </span>
         </div>
         <div class="scheme-meta">
@@ -55,10 +61,10 @@ defineEmits<{
     </ul>
     <div v-if="!schemes.length" class="empty-state">
       <p>还没有方案 — 默认方案始终全量基线执行,可复制派生微调。</p>
-      <el-button size="small" type="primary" plain @click="$emit('create')">+ 新建方案</el-button>
+      <Button size="sm" variant="outline" @click="$emit('create')">+ 新建方案</Button>
     </div>
     <footer class="list-footer">
-      <el-button type="primary" size="small" @click="$emit('create')">+ 新建方案</el-button>
+      <Button size="sm" @click="$emit('create')">+ 新建方案</Button>
     </footer>
   </aside>
 </template>

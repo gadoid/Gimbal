@@ -8,6 +8,9 @@
 import { ref } from 'vue'
 import { toast } from '@/utils/toast'
 
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+
 const props = defineProps<{
   modelValue: string[]                 // injectionEntryIds(受控)
   entries: Array<{ id: string; label?: string }>   // 壳从 assertion_registry.entries 映射
@@ -63,20 +66,19 @@ function confirmQuick() {
       <span class="zone-count">{{ entries.length }}</span>
       <span class="zone-spacer"></span>
       <div class="zone-ops">
-        <el-button size="small" text type="primary" data-testid="quick-add"
-          @click="showQuick = !showQuick">+ 快建条目</el-button>
-        <el-button size="small" text type="primary" data-testid="manage-assertions"
-          @click="emit('manage')">管理断言</el-button>
+        <Button size="sm" variant="link" class="h-7 px-2" data-testid="quick-add"
+          @click="showQuick = !showQuick">+ 快建条目</Button>
+        <Button size="sm" variant="link" class="h-7 px-2" data-testid="manage-assertions"
+          @click="emit('manage')">管理断言</Button>
       </div>
     </header>
 
     <div v-if="showQuick" class="quick-row">
-      <el-input v-model="pendingStep" data-testid="qa-step" type="number"
-        :disabled="locked" class="qa-step" placeholder="步骤号" />
-      <el-input v-model="pendingJsonpath" data-testid="qa-path"
-        :disabled="locked" class="qa-path" placeholder="注入路径,如 $.amount" />
-      <el-button size="small" type="primary" data-testid="qa-ok"
-        :disabled="locked" @click="confirmQuick">创建</el-button>
+      <Input v-model="pendingStep" data-testid="qa-step" type="number"
+        :disabled="locked" class="qa-step h-8" placeholder="步骤号" />
+      <Input v-model="pendingJsonpath" data-testid="qa-path"
+        :disabled="locked" class="qa-path h-8" placeholder="注入路径,如 $.amount" />
+      <Button size="sm" data-testid="qa-ok" :disabled="locked" @click="confirmQuick">创建</Button>
     </div>
 
     <div class="inj-list">
@@ -90,7 +92,7 @@ function confirmQuick() {
       </label>
       <div v-if="!entries.length" class="empty-state">
         <p>暂无断言条目 — 可「+ 快建条目」或到断言管理器维护。</p>
-        <el-button size="small" type="primary" plain @click="showQuick = true">+ 快建条目</el-button>
+        <Button size="sm" variant="outline" @click="showQuick = true">+ 快建条目</Button>
       </div>
     </div>
   </section>

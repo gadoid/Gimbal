@@ -1,11 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import ElementPlus, { ElMessageBox } from 'element-plus'
+import ElementPlus from 'element-plus'
 import { createPinia, setActivePinia } from 'pinia'
 import * as api from '@/api/scenario-composer'
 import SchemeWorkbench from '@/views/SchemeWorkbench.vue'
+import { confirmAction } from '@/utils/confirmAction'
 
 const push = vi.hoisted(() => vi.fn())
+vi.mock('@/utils/confirmAction', () => ({
+  confirmAction: vi.fn(async () => true),
+  promptAction: vi.fn(async () => null),
+}))
 vi.mock('vue-router', () => ({
   // query.scheme 深链:刷新后自动选中「冒烟」(rs-002,非 default → 数据区可见)
   useRoute: () => ({ params: { scenarioId: 'sc-wb' }, query: { scheme: 'rs-002' } }),
@@ -91,12 +96,12 @@ describe('SchemeWorkbench 保存链路', () => {
   })
 
   it('脏态切换方案 → ElMessageBox.confirm 确认后切换并清脏', async () => {
-    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue({ action: 'confirm' } as never)
+    vi.mocked(confirmAction).mockResolvedValueOnce(true)
     const w = await mountWb()
     await w.findAll('[data-testid="ds-tile"] input[type="checkbox"]')[0].setValue(true)
     await w.findAll('.scheme-item')[0].trigger('click')  // 切到默认方案
     await flushPromises()
-    expect(ElMessageBox.confirm).toHaveBeenCalled()
+    expect(confirmAction).toHaveBeenCalled()
     expect(w.find('.scheme-item.selected').text()).toContain('默认方案')
     expect(saveDisabled(w)).toBe(true)
     // 默认方案 → 数据区隐藏

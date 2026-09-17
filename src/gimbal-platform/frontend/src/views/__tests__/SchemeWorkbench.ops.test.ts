@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import ElementPlus, { ElMessageBox } from 'element-plus'
+import ElementPlus from 'element-plus'
 import { toast } from '@/utils/toast'
 import { createPinia, setActivePinia } from 'pinia'
 import * as api from '@/api/scenario-composer'
@@ -15,12 +15,13 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
 }))
 vi.mock('@/api/http', () => ({ default: { get: vi.fn(), put: vi.fn(), post: vi.fn(), delete: vi.fn() } }))
-// 左栏操作确认/改名走 confirmAction/promptAction 封装(ElMessageBox 的
-// 单一出口)— jsdom 下无人可点,按 CaseComposer.run.test 同款 mock 掉
+// 左栏操作确认/改名走 confirmAction/promptAction 封装(确认单一出口)
+// — jsdom 下无人可点,mock 掉;脏态闸的确认也已切到 confirmAction
 vi.mock('@/utils/confirmAction', () => ({
   confirmAction: vi.fn(async () => true),
   promptAction: vi.fn(async () => null),
 }))
+
 // 运行配置区别名下拉:owner 凭证池(RunPanelHost 同款取数口)
 vi.mock('@/api/auth_sessions', () => ({ list: vi.fn(async () => [{ alias: 'alias-1' }]) }))
 
@@ -137,7 +138,7 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
 
   // ── 左栏:新建(终审 M-1:onCreate 与 rename/duplicate/delete 同款脏态闸)──
   it('脏态新建 → 脏确认拒绝 → 不发 createRunScheme(未保存修改不被刷新吞掉)', async () => {
-    vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue('cancel')
+    vi.mocked(confirmAction).mockResolvedValueOnce(false)
     const spy = vi.spyOn(api, 'createRunScheme').mockResolvedValue(SCHEME_COPY)
     const w = await mountWb()
     // 绑定变更 → 脏(运行配置区 default 亦可见,与上文 save 断言同款设置法)
@@ -145,7 +146,7 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
     expect((w.find('[data-testid="save-scheme"]').element as HTMLButtonElement).disabled).toBe(false)
     await w.findComponent(SchemeListPanel).vm.$emit('create')
     await flushPromises()
-    expect(ElMessageBox.confirm).toHaveBeenCalled()
+    expect(confirmAction).toHaveBeenCalled()
     expect(spy).not.toHaveBeenCalled()
   })
 

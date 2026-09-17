@@ -2,9 +2,9 @@
 /** 方案工作台壳:左右分栏、取数编排、选中态;编辑区 = 数据区(Task 5)+ 后续任务区。 */
 import { computed, onMounted, ref, toRaw, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
+import { Button } from '@/components/ui/button'
 import {
   listRunSchemes, getScenarioDraft, listDataSets, createRunScheme, updateRunScheme,
   deleteRunScheme, updateScenario, deleteDataSet, type SchemeV2,
@@ -176,13 +176,11 @@ const stepNames = computed<string[]>(() =>
  *  重快照 → 未保存修改静默丢(无论操作目标是否为当前选中),脏态下先确认。 */
 async function confirmDiscardForOps(): Promise<boolean> {
   if (!dirty.value) return true
-  try {
-    await ElMessageBox.confirm('当前方案有未保存的修改,此操作将刷新列表并放弃这些修改。',
-      '未保存修改', { type: 'warning', confirmButtonText: '放弃修改', cancelButtonText: '取消操作' })
-    return true
-  } catch {
-    return false
-  }
+  return confirmAction(
+    '当前方案有未保存的修改,此操作将刷新列表并放弃这些修改。',
+    '未保存修改',
+    { type: 'warning', danger: true, confirmButtonText: '放弃修改', cancelButtonText: '取消操作' },
+  )
 }
 
 /** 重命名:prompt 新名 → 以存储载荷(name 除外)整包 PUT → 刷新。 */
@@ -241,12 +239,11 @@ async function onDelete(s: SchemeV2) {
 async function onSelect(id: string) {
   if (id === selectedId.value) return
   if (dirty.value) {
-    try {
-      await ElMessageBox.confirm('当前方案有未保存的修改,切换将放弃这些修改。', '未保存修改',
-        { type: 'warning', confirmButtonText: '放弃修改', cancelButtonText: '留在本方案' })
-    } catch {
-      return
-    }
+    const ok = await confirmAction(
+      '当前方案有未保存的修改,切换将放弃这些修改。', '未保存修改',
+      { type: 'warning', danger: true, confirmButtonText: '放弃修改', cancelButtonText: '留在本方案' },
+    )
+    if (!ok) return
   }
   selectedId.value = id
 }
@@ -335,7 +332,7 @@ async function onDeleteDataSet(datasetId: string) {
         <p>场景 <code class="sid">{{ scenarioId }}</code></p>
       </div>
       <div class="header-actions">
-        <el-button @click="router.push(composerUrl(scenarioId))">编排器</el-button>
+        <Button variant="outline" size="sm" @click="router.push(composerUrl(scenarioId))">编排器</Button>
       </div>
     </header>
     <div class="wb-body">
@@ -359,16 +356,16 @@ async function onDeleteDataSet(datasetId: string) {
               </span>
             </div>
             <div class="editor-ops">
-              <el-button data-testid="save-scheme" type="primary" size="small"
-                :disabled="!dirty" :loading="saving" @click="saveScheme">保存</el-button>
-              <el-button data-testid="discard-scheme" size="small"
-                :disabled="!dirty" @click="discardDraft">放弃</el-button>
+              <Button data-testid="save-scheme" size="sm"
+                :disabled="!dirty || saving" @click="saveScheme">{{ saving ? '保存中…' : '保存' }}</Button>
+              <Button data-testid="discard-scheme" size="sm" variant="outline"
+                :disabled="!dirty" @click="discardDraft">放弃</Button>
               <!-- 阶段③:RunDialog v2 深链 — ?runScheme= 选中方案 id,编排器
                    onMounted 打开弹窗并预选(读后 replace 清 query)。composerUrl
                    已含 ?step=1,故用 & 追加。dirty 禁用:跑的须与看见的一致 -->
-              <el-button type="primary" data-testid="run-scheme"
+              <Button data-testid="run-scheme"
                 :disabled="dirty" title="先保存再运行"
-                @click="router.push(composerUrl(scenarioId) + '&runScheme=' + encodeURIComponent(draft.schemeId))">▶ 运行此方案</el-button>
+                @click="router.push(composerUrl(scenarioId) + '&runScheme=' + encodeURIComponent(draft.schemeId))">▶ 运行此方案</Button>
             </div>
           </header>
           <SchemeDataSection
@@ -406,9 +403,10 @@ async function onDeleteDataSet(datasetId: string) {
           />
         </template>
         <div v-else class="wb-empty">
-          <el-empty description="选择左侧方案">
-            <el-button type="primary" plain @click="onCreate">+ 新建方案</el-button>
-          </el-empty>
+          <div class="wb-empty">
+            <p>选择左侧方案</p>
+            <Button variant="outline" size="sm" @click="onCreate">+ 新建方案</Button>
+          </div>
         </div>
       </div>
     </div>
@@ -416,6 +414,14 @@ async function onDeleteDataSet(datasetId: string) {
 </template>
 
 <style scoped>
+/* 右栏空态 */
+.wb-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 60px 16px; text-align: center;
+  border: 1px dashed var(--color-border-tertiary); border-radius: 8px;
+}
+.wb-empty p { margin: 0; font-size: 12.5px; color: var(--color-text-tertiary); }
+
 /* 页面容器:对齐平台视图容器(AssertionRegistryEditor / DataSetEditor 同款) */
 .scheme-workbench {
   max-width: 1480px; min-height: calc(100vh - 48px);

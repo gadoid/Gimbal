@@ -16,6 +16,9 @@ import Papa from 'papaparse'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import { confirmAction } from '@/utils/confirmAction'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 type Sel = { datasetId: string; rowIndexes?: number[] }
 
@@ -218,13 +221,13 @@ async function submit() {
       <span class="zone-name">数据</span>
       <span class="zone-count">{{ dataSets.length }}</span>
       <span class="zone-spacer"></span>
-      <el-button size="small" text type="primary" data-testid="open-create"
-        @click="openCreate">+ 新建数据集</el-button>
+      <Button size="sm" variant="link" class="h-7 px-2" data-testid="open-create"
+        @click="openCreate">+ 新建数据集</Button>
     </header>
 
     <div v-if="dead.length" class="dead-row" data-testid="dead-row">
       <span>{{ dead.map((d) => d.datasetId).join('、') }} 已删除</span>
-      <el-button size="small" type="danger" text data-testid="drop-dead" @click="dropDead">一键移除</el-button>
+      <Button size="sm" variant="link" class="h-7 px-2 text-signal-failed" data-testid="drop-dead" @click="dropDead">一键移除</Button>
     </div>
 
     <div class="ds-tiles">
@@ -244,46 +247,51 @@ async function submit() {
           </label>
         </div>
         <div class="ds-tile-foot">
-          <el-button class="ds-act" size="small" text type="primary"
-            :data-testid="`ds-edit-${d.datasetId}`" @click="openEdit(d)">编辑</el-button>
-          <el-button class="ds-act" size="small" text type="danger"
-            :data-testid="`ds-del-${d.datasetId}`" @click="removeDataset(d)">删除</el-button>
+          <Button class="ds-act" size="sm" variant="link"
+            :data-testid="`ds-edit-${d.datasetId}`" @click="openEdit(d)">编辑</Button>
+          <Button class="ds-act ds-del" size="sm" variant="link"
+            :data-testid="`ds-del-${d.datasetId}`" @click="removeDataset(d)">删除</Button>
         </div>
       </div>
       <div v-if="!dataSets.length" class="empty-state">
         <p>场景暂无数据集 — 不选即基线执行。</p>
-        <el-button size="small" type="primary" plain data-testid="open-create-empty"
-          @click="openCreate">+ 新建数据集</el-button>
+        <Button size="sm" variant="outline" data-testid="open-create-empty"
+          @click="openCreate">+ 新建数据集</Button>
       </div>
     </div>
 
     <!-- 内联维护:名称 + 行数据(JSON/TSV/CSV 粘贴),校验通过才落库 -->
-    <el-dialog v-model="dialogOpen" :title="mode === 'create' ? '新建数据集' : '编辑数据集'" width="560px">
-      <div class="create-form" data-testid="create-form">
-        <label class="create-label">名称</label>
-        <el-input v-model="formName" placeholder="数据集 N" data-testid="create-name" />
-        <label class="create-label">行数据(支持粘贴 JSON 数组 / TSV / CSV,自动识别)</label>
-        <el-input
-          v-model="rowsText"
-          type="textarea"
-          :rows="8"
-          data-testid="create-rows"
-          :placeholder="loadingExisting ? '载入中…' : '粘贴 JSON 数组,或直接从 Excel 粘贴(Tab 分隔)/ CSV 文本'"
-        />
-        <p v-if="parsed.rows" class="create-hint ok" data-testid="create-preview">
-          {{ parsed.format }} 可解析:{{ parsed.rows.length }} 行
-        </p>
-        <p v-else-if="parsed.error" class="create-hint bad" data-testid="create-error">
-          {{ parsed.error }}
-        </p>
-      </div>
-      <template #footer>
-        <el-button :disabled="!parsed.rows" data-testid="export-csv" @click="exportCsv">导出 CSV</el-button>
-        <el-button @click="dialogOpen = false">取消</el-button>
-        <el-button type="primary" :disabled="!parsed.rows || saving || loadingExisting" data-testid="create-submit"
-          @click="submit">{{ mode === 'create' ? '创建' : saving ? '保存中…' : '保存' }}</el-button>
-      </template>
-    </el-dialog>
+    <Dialog :open="dialogOpen" @update:open="dialogOpen = $event">
+      <DialogContent class="max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle>{{ mode === 'create' ? '新建数据集' : '编辑数据集' }}</DialogTitle>
+        </DialogHeader>
+        <div class="create-form" data-testid="create-form">
+          <label class="create-label">名称</label>
+          <Input v-model="formName" placeholder="数据集 N" data-testid="create-name" />
+          <label class="create-label">行数据(支持粘贴 JSON 数组 / TSV / CSV,自动识别)</label>
+          <textarea
+            v-model="rowsText"
+            rows="8"
+            data-testid="create-rows"
+            class="w-full rounded-field border border-input bg-transparent p-2 font-mono text-body"
+            :placeholder="loadingExisting ? '载入中…' : '粘贴 JSON 数组,或直接从 Excel 粘贴(Tab 分隔)/ CSV 文本'"
+          ></textarea>
+          <p v-if="parsed.rows" class="create-hint ok" data-testid="create-preview">
+            {{ parsed.format }} 可解析:{{ parsed.rows.length }} 行
+          </p>
+          <p v-else-if="parsed.error" class="create-hint bad" data-testid="create-error">
+            {{ parsed.error }}
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" :disabled="!parsed.rows" data-testid="export-csv" @click="exportCsv">导出 CSV</Button>
+          <Button variant="outline" @click="dialogOpen = false">取消</Button>
+          <Button :disabled="!parsed.rows || saving || loadingExisting" data-testid="create-submit"
+            @click="submit">{{ mode === 'create' ? '创建' : saving ? '保存中…' : '保存' }}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </section>
 </template>
 
