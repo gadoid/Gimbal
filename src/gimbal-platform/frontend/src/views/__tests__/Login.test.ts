@@ -40,8 +40,8 @@ function mountLogin(query: Record<string, string> = {}) {
 }
 
 async function fillAndSubmit(w: ReturnType<typeof mount>, username = 'alice', password = 'pw') {
-  await w.find('#login-username').setValue(username)
-  await w.find('#login-password').setValue(password)
+  await w.findAll('input')[0].setValue(username)
+  await w.findAll('input')[1].setValue(password)
   await w.find('form').trigger('submit')
   await flushPromises()
 }
@@ -58,9 +58,11 @@ describe('Login — 校验拦截', () => {
     const auth = useAuthStore()
     const spy = vi.spyOn(auth, 'login')
     await w.find('form').trigger('submit')
-    await flushPromises()
-    expect(w.text()).toContain('请输入用户名')
-    expect(w.text()).toContain('请输入密码')
+    // zod 校验管线是异步的:waitFor 轮询到错误渲染(固定延时不可靠)
+    await vi.waitFor(() => {
+      expect(w.text()).toContain('请输入用户名')
+      expect(w.text()).toContain('请输入密码')
+    })
     expect(spy).not.toHaveBeenCalled()
     w.unmount()
   })
@@ -68,7 +70,7 @@ describe('Login — 校验拦截', () => {
   it('用户名 <3 字符 → 提示长度 3-32,不发请求', async () => {
     const w = mountLogin()
     await fillAndSubmit(w, 'ab', 'pw')
-    expect(w.text()).toContain('长度 3-32 字符')
+    await vi.waitFor(() => expect(w.text()).toContain('长度 3-32 字符'))
     w.unmount()
   })
 })
@@ -85,7 +87,7 @@ describe('Login — 提交流', () => {
     const auth = useAuthStore()
     const spy = vi.spyOn(auth, 'login').mockResolvedValue(undefined as never)
     await fillAndSubmit(w)
-    expect(spy).toHaveBeenCalledWith('alice', 'pw')
+    await vi.waitFor(() => expect(spy).toHaveBeenCalledWith('alice', 'pw'))
     expect(vi.mocked(toast.success)).toHaveBeenCalledWith('登录成功')
     expect(push).toHaveBeenCalledWith('/home')
     w.unmount()
@@ -96,7 +98,7 @@ describe('Login — 提交流', () => {
     const auth = useAuthStore()
     vi.spyOn(auth, 'login').mockResolvedValue(undefined as never)
     await fillAndSubmit(w)
-    expect(push).toHaveBeenCalledWith('/scenarios')
+    await vi.waitFor(() => expect(push).toHaveBeenCalledWith('/scenarios'))
     w.unmount()
   })
 
@@ -105,7 +107,7 @@ describe('Login — 提交流', () => {
     const auth = useAuthStore()
     vi.spyOn(auth, 'login').mockRejectedValue({ msg: '用户名或密码错误' })
     await fillAndSubmit(w)
-    expect(w.text()).toContain('用户名或密码错误')
+    await vi.waitFor(() => expect(w.text()).toContain('用户名或密码错误'))
     w.unmount()
   })
 
@@ -113,13 +115,13 @@ describe('Login — 提交流', () => {
     const w = mountLogin()
     const auth = useAuthStore()
     const spy = vi.spyOn(auth, 'login').mockResolvedValue(undefined as never)
-    await w.find('#login-username').setValue('alice')
-    await w.find('#login-password').setValue('pw')
+    await w.findAll('input')[0].setValue('alice')
+    await w.findAll('input')[1].setValue('pw')
     // 模拟真实键盘序列:Enter 的 keydown/keyup + 隐式表单提交几乎同时到
-    await w.find('#login-password').trigger('keydown.enter')
-    await w.find('#login-password').trigger('keyup.enter')
+    await w.findAll('input')[1].trigger('keydown.enter')
+    await w.findAll('input')[1].trigger('keyup.enter')
     await w.find('form').trigger('submit')
-    await flushPromises()
+    await vi.waitFor(() => expect(spy).toHaveBeenCalled())
     expect(spy).toHaveBeenCalledTimes(1)
     w.unmount()
   })

@@ -30,9 +30,9 @@ const WEAK = 'abc'
 const STRONG = 'Str0ng!Pass'
 
 async function fill(w: ReturnType<typeof mount>, over: Partial<Record<string, string>> = {}) {
-  await w.find('#reg-username').setValue(over.username ?? 'alice')
-  await w.find('#reg-password').setValue(over.password ?? STRONG)
-  await w.find('#reg-confirm').setValue(over.confirm ?? over.password ?? STRONG)
+  await w.find('[data-testid="reg-username"]').setValue(over.username ?? 'alice')
+  await w.find('[data-testid="reg-password"]').setValue(over.password ?? STRONG)
+  await w.find('[data-testid="reg-confirm"]').setValue(over.confirm ?? over.password ?? STRONG)
 }
 
 const STUBS = {
@@ -61,9 +61,12 @@ describe('Register — canSubmit 门控', () => {
     expect(w.text()).toContain('✗')
     expect((w.find('button[type="submit"]').element as HTMLButtonElement).disabled).toBe(true)
 
-    await w.find('#reg-confirm').setValue(STRONG)
+    await w.find('[data-testid="reg-confirm"]').setValue(STRONG)
+    await flushPromises()
     expect(w.find('[data-testid="confirm-match"]').text()).toBe('✓')
-    expect((w.find('button[type="submit"]').element as HTMLButtonElement).disabled).toBe(false)
+    await vi.waitFor(() => {
+      expect((w.find('button[type="submit"]').element as HTMLButtonElement).disabled).toBe(false)
+    })
     w.unmount()
   })
 
@@ -71,7 +74,10 @@ describe('Register — canSubmit 门控', () => {
     const w = mountPage()
     await fill(w)
     await w.find('[data-testid="privacy-check"]').setValue(false)
-    expect((w.find('button[type="submit"]').element as HTMLButtonElement).disabled).toBe(true)
+    await flushPromises()
+    await vi.waitFor(() => {
+      expect((w.find('button[type="submit"]').element as HTMLButtonElement).disabled).toBe(true)
+    })
     w.unmount()
   })
 
@@ -79,8 +85,7 @@ describe('Register — canSubmit 门控', () => {
     const w = mountPage()
     await fill(w, { username: '非法 名!' })
     await w.find('form').trigger('submit')
-    await flushPromises()
-    expect(w.text()).toContain('仅允许字母、数字、下划线和连字符')
+    await vi.waitFor(() => expect(w.text()).toContain('仅允许字母、数字、下划线和连字符'))
     w.unmount()
   })
 })
@@ -113,8 +118,7 @@ describe('Register — 提交流', () => {
     vi.spyOn(auth, 'register').mockRejectedValue({ msg: '用户名已存在' })
     await fill(w)
     await w.find('form').trigger('submit')
-    await vi.advanceTimersByTimeAsync(0)
-    expect(w.text()).toContain('用户名已存在')
+    await vi.waitFor(() => expect(w.text()).toContain('用户名已存在'))
     expect((w.find('button[type="submit"]').element as HTMLButtonElement).disabled).toBe(false)
     w.unmount()
   })
