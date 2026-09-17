@@ -8,3 +8,34 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * shadcn-vue 语义主题变量:值全部来自 Signal token(D-palette 核录),
+ * 不用 shadcn 默认 slate 主题。组件用 bg-primary / border-input 等
+ * 语义类消费;换肤只动这里。
+ * secondary-foreground / accent-foreground 用 #265FD4(暂定 hover 深蓝档)。
+ */
+@layer base {
+  :root {
+    --background: 216 26% 96%;      /* canvas #F3F5F8 */
+    --foreground: 215 27% 9%;       /* ink #10151C */
+    --card: 0 0% 100%;              /* card #FFFFFF */
+    --card-foreground: 215 27% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 27% 9%;
+    --primary: 220 84% 56%;         /* accent #2F6FED */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 100% 95%;      /* accent-soft #E7EFFF */
+    --secondary-foreground: 220 70% 49%;
+    --muted: 216 20% 90%;           /* line #E1E5EB 兼浅灰底 */
+    --muted-foreground: 220 9% 46%; /* 冷灰中文字 */
+    --accent: 220 100% 95%;         /* accent-soft #E7EFFF */
+    --accent-foreground: 220 70% 49%;
+    --destructive: 0 72% 51%;       /* failed #DC2626 */
+    --destructive-foreground: 0 0% 100%;
+    --border: 216 20% 90%;          /* line #E1E5EB */
+    --input: 216 20% 90%;
+    --ring: 220 84% 56%;            /* accent */
+    --radius: 0.5rem;               /* E-scale:lg=8 空状态,md=6 表单,sm=4 chip */
+  }
+}

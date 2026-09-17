@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 // ESM 导出:package.json 是 "type": "module"
+import tailwindcssAnimate from 'tailwindcss-animate'
 /*
  * Signal 视觉体系 Tailwind 配置(重构方案 Phase 0)。
  *
@@ -68,6 +69,10 @@ export default {
         empty: '8px',
         card: '10px',
         full: '9999px',
+        // shadcn-vue 组件消费的语义圆角(lg=8/md=6/sm=4,由 --radius 推导)
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        DEFAULT: 'calc(var(--radius) - 2px)',
       },
       // 间距沿用 Tailwind 默认 4px 网格(4/8/12/.../32),与 E-scale 一致,不重录
       boxShadow: {
@@ -75,7 +80,43 @@ export default {
         'sig-hover': '0 1px 2px rgba(16, 21, 28, 0.06)',
         'sig-float': '0 8px 24px rgba(16, 21, 28, 0.12)',
       },
+      colors: {
+        // shadcn-vue 语义层:变量值来自 tailwind.css :root(Signal token,非默认 slate)
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        primary: {
+          DEFAULT: 'hsl(var(--primary))',
+          foreground: 'hsl(var(--primary-foreground))',
+        },
+        secondary: {
+          DEFAULT: 'hsl(var(--secondary))',
+          foreground: 'hsl(var(--secondary-foreground))',
+        },
+        destructive: {
+          DEFAULT: 'hsl(var(--destructive))',
+          foreground: 'hsl(var(--destructive-foreground))',
+        },
+        muted: {
+          DEFAULT: 'hsl(var(--muted))',
+          foreground: 'hsl(var(--muted-foreground))',
+        },
+        accent: {
+          DEFAULT: 'hsl(var(--accent))',
+          foreground: 'hsl(var(--accent-foreground))',
+        },
+        popover: {
+          DEFAULT: 'hsl(var(--popover))',
+          foreground: 'hsl(var(--popover-foreground))',
+        },
+        card: {
+          DEFAULT: 'hsl(var(--card))',
+          foreground: 'hsl(var(--card-foreground))',
+        },
+      },
     },
   },
-  plugins: [],
+  plugins: [tailwindcssAnimate],
 }
