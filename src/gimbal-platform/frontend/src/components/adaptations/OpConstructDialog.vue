@@ -2,149 +2,126 @@
      op;mergeSeed 预填)。CARRY_OPS 免场景落点(后端 D1):值表层,
      service 缺省 = 全局默认表。 -->
 <template>
-  <el-dialog
-    :model-value="modelValue"
-    :title="mergeSeed ? '合并为 renameField' : '构造 op'"
-    width="560px"
-    @update:model-value="emit('update:modelValue', $event)"
-    @open="onOpen"
-  >
-    <el-form label-width="110px">
-      <el-form-item label="类型">
-        <el-select v-model="form.opType" :disabled="Boolean(mergeSeed)">
-          <el-option
-            v-for="t in OP_TYPES"
-            :key="t.value"
-            :label="t.label"
-            :value="t.value"
-          />
-        </el-select>
-      </el-form-item>
+  <Dialog :open="modelValue" @update:open="emit('update:modelValue', $event)">
+    <DialogContent class="max-w-[560px]" @interact-outside="!modelValue || undefined">
+    <DialogHeader>
+      <DialogTitle>{{ mergeSeed ? '合并为 renameField' : '构造 op' }}</DialogTitle>
+    </DialogHeader>
+    <div class="ocd-form">
+      <div class="ocd-row"><span class="ocd-label">类型</span>
+        <select v-model="form.opType" class="ocd-select" :disabled="Boolean(mergeSeed)">
+          <option v-for="t in OP_TYPES" :key="t.value" :value="t.value">{{ t.label }}</option>
+        </select>
+      </div>
       <!-- carry 值表 op 无场景落点:不渲染场景选择,提交也不校验 -->
-      <el-form-item v-if="!isCarryOp" label="场景">
-        <el-select v-model="form.scenarioId" placeholder="选择场景">
-          <el-option
-            v-for="s in scenarios"
-            :key="s.scenarioId"
-            :label="s.scenarioId"
-            :value="s.scenarioId"
-          />
-        </el-select>
-      </el-form-item>
+      <div class="ocd-row"><span class="ocd-label">场景</span>
+        <select v-model="form.scenarioId" class="ocd-select">
+          <option value="" disabled>选择场景</option>
+          <option v-for="sc in scenarios" :key="sc.scenarioId" :value="sc.scenarioId">{{ sc.scenarioId }}</option>
+        </select>
+      </div>
 
       <!-- 数据集 op:数据集 + 列 -->
       <template v-if="opTypeIn(['renameDatasetColumn', 'mapDatasetValues'])">
-        <el-form-item label="数据集">
-          <el-select v-model="form.datasetId" placeholder="选择数据集">
-            <el-option
-              v-for="d in datasets"
-              :key="d.datasetId"
-              :label="d.datasetId"
-              :value="d.datasetId"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item
-          v-if="form.opType === 'mapDatasetValues'"
-          label="列名(column)"
-        >
-          <el-input v-model="form.column" />
-        </el-form-item>
-        <el-form-item v-else label="列 from → to">
-          <el-input v-model="form.from" placeholder="from" />
-          <el-input v-model="form.to" placeholder="to" class="pair" />
-        </el-form-item>
+        <div class="ocd-row"><span class="ocd-label">数据集</span>
+          <select v-model="form.datasetId" class="ocd-select">
+            <option value="" disabled>选择数据集</option>
+            <option v-for="d in datasets" :key="d.datasetId" :value="d.datasetId">{{ d.datasetId }}</option>
+          </select>
+        </div>
+        <div v-if="form.opType === 'mapDatasetValues'"><span class="ocd-label">列名(column)</span>
+          <Input v-model="form.column" class="h-8" />
+        </div>
+        <div class="ocd-row"><span class="ocd-label">列 from → to</span>
+          <Input v-model="form.from" placeholder="from" />
+          <Input v-model="form.to" placeholder="to" class="pair" />
+        </div>
       </template>
 
       <!-- renameVar:调色板下拉 -->
       <template v-else-if="form.opType === 'renameVar'">
-        <el-form-item label="var from → to">
-          <el-select v-model="form.from" placeholder="from">
-            <el-option v-for="v in varNames" :key="v" :label="v" :value="v" />
-          </el-select>
-          <el-select v-model="form.to" placeholder="to" class="pair">
-            <el-option v-for="v in varNames" :key="v" :label="v" :value="v" />
-          </el-select>
-        </el-form-item>
+        <div class="ocd-row"><span class="ocd-label">var from → to</span>
+          <select v-model="form.from" class="ocd-select">
+            <option value="" disabled>from</option>
+            <option v-for="v in varNames" :key="v" :value="v">{{ v }}</option>
+          </select>
+          <select v-model="form.to" class="ocd-select pair">
+            <option value="" disabled>to</option>
+            <option v-for="v in varNames" :key="v" :value="v">{{ v }}</option>
+          </select>
+        </div>
       </template>
 
       <!-- CARRY_OPS(T16):值表三层字段 —— service 缺省 = 全局默认表;
            from/to 输入对模式同 renameField。 -->
       <template v-else-if="isCarryOp">
-        <el-form-item label="服务(service)">
-          <el-input
-            v-model="form.service"
+        <div class="ocd-row"><span class="ocd-label">服务(service)</span>
+          <Input v-model="form.service"
             placeholder="缺省 = 全局默认表"
           />
-        </el-form-item>
-        <el-form-item v-if="form.opType === 'renameCarryPath'" label="路径 from → to">
-          <el-input v-model="form.from" placeholder="from" />
-          <el-input v-model="form.to" placeholder="to" class="pair" />
-        </el-form-item>
-        <el-form-item v-else label="路径(path)">
-          <el-input v-model="form.field" placeholder="$.carry.path" />
-        </el-form-item>
-        <el-form-item v-if="form.opType === 'addCarryBinding'" label="值(value)">
-          <el-input v-model="form.value" placeholder="空串合法;显式 null 用批详情编辑 JSON" />
-        </el-form-item>
+        </div>
+        <div class="ocd-row"><span class="ocd-label">路径 from → to</span>
+          <Input v-model="form.from" placeholder="from" />
+          <Input v-model="form.to" placeholder="to" class="pair" />
+        </div>
+        <div class="ocd-row"><span class="ocd-label">路径(path)</span>
+          <Input v-model="form.field" placeholder="$.carry.path" />
+        </div>
+        <div class="ocd-row"><span class="ocd-label">值(value)</span>
+          <Input v-model="form.value" placeholder="空串合法;显式 null 用批详情编辑 JSON" />
+        </div>
       </template>
 
       <!-- STEP_OPS -->
       <template v-else>
-        <el-form-item label="步骤(step)">
-          <el-input-number v-model="form.step" :min="0" />
-        </el-form-item>
-        <el-form-item label="字段">
-          <el-input
-            v-model="fieldModel"
+        <div class="ocd-row"><span class="ocd-label">步骤(step)</span>
+          <Input v-model="form.step" type="number" min="0" class="h-8 w-[100px]" />
+        </div>
+        <div class="ocd-row"><span class="ocd-label">字段</span>
+          <Input v-model="fieldModel"
             :placeholder="form.opType === 'renameField' ? 'from' : 'field'"
           />
-          <el-input
+          <Input
             v-if="form.opType === 'renameField'"
             v-model="form.to"
             placeholder="to"
-            class="pair"
+            class="pair h-8"
           />
-        </el-form-item>
-        <el-form-item v-if="form.opType === 'addField'" label="值(value)">
-          <el-input v-model="form.value" />
-        </el-form-item>
-        <el-form-item v-if="form.opType === 'rebindField'" label="目标 var">
-          <el-select v-model="form.varName" placeholder="调色板">
-            <el-option v-for="v in varNames" :key="v" :label="v" :value="v" />
-          </el-select>
-        </el-form-item>
+        </div>
+        <div class="ocd-row"><span class="ocd-label">值(value)</span>
+          <Input v-model="form.value" class="h-8" />
+        </div>
+        <div class="ocd-row"><span class="ocd-label">目标 var</span>
+          <select v-model="form.varName" class="ocd-select">
+            <option value="" disabled>调色板</option>
+            <option v-for="v in varNames" :key="v" :value="v">{{ v }}</option>
+          </select>
+        </div>
       </template>
 
       <!-- map 编辑器(mapValue / mapDatasetValues) -->
-      <el-form-item
-        v-if="opTypeIn(['mapValue', 'mapDatasetValues'])"
-        label="值映射(map)"
-      >
+      <div v-if="opTypeIn(['mapValue', 'mapDatasetValues'])"><span class="ocd-label">值映射(map)</span>
         <div class="map-rows">
           <div v-for="(row, i) in form.mapRows" :key="i" class="map-row">
-            <el-input v-model="row.key" placeholder="原值(键手输)" />
+            <Input v-model="row.key" placeholder="原值(键手输)" />
             <span>→</span>
-            <el-input v-model="row.value" placeholder="新值" />
-            <el-button link type="danger" @click="form.mapRows.splice(i, 1)">
-              删
-            </el-button>
+            <Input v-model="row.value" placeholder="新值" />
+            <Button variant="link" size="sm" class="h-7 px-2 text-signal-failed" @click="form.mapRows.splice(i, 1)">删</Button>
           </div>
-          <el-button link type="primary" @click="form.mapRows.push({ key: '', value: '' })">
-            + 加一行
-          </el-button>
+          <Button variant="link" size="sm" class="h-7 px-2" @click="form.mapRows.push({ key: '', value: '' })">+ 加一行</Button>
           <p class="hint">草案 payload 不含值域;候选可从预览的当前值抄录</p>
         </div>
-      </el-form-item>
-    </el-form>
+      </div>
+    </div>
 
-    <template #footer>
-      <el-button @click="emit('update:modelValue', false)">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="submit">
-        创建
-      </el-button>
-    </template>
-  </el-dialog>
+    <DialogFooter>
+      <Button variant="outline" @click="emit('update:modelValue', false)">取消</Button>
+      <Button :disabled="submitting" @click="submit">
+        {{ submitting ? '创建中…' : '创建' }}
+      </Button>
+    </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
@@ -153,6 +130,9 @@ import { toast } from '@/utils/toast'
 import * as api from '@/api/adaptations'
 import type { MergeSeed, OpOut } from '@/api/adaptations'
 import { getScenario, listDataSets, listScenarios } from '@/api/scenario-composer'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 const props = defineProps<{
   modelValue: boolean
@@ -342,4 +322,14 @@ defineExpose({ form, submit })
 .map-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .map-row .el-input { flex: 1; }
 .hint { color: #909399; font-size: 12px; margin: 6px 0 0; }
+.ocd-form { display: flex; flex-direction: column; gap: 10px; }
+.ocd-row { display: grid; grid-template-columns: 110px 1fr; gap: 8px; align-items: center; }
+.ocd-label { font-size: 12px; font-weight: 500; color: #5a6273; text-align: right; }
+.ocd-select {
+  height: 32px; padding: 0 8px; font-size: 13px;
+  color: #10151c; background: #fff;
+  border: 1px solid #e1e5eb; border-radius: 6px;
+  min-width: 0;
+}
+.pair { margin-left: 6px; }
 </style>

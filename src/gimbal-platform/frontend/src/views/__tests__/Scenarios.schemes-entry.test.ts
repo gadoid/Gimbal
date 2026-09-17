@@ -101,7 +101,8 @@ describe('Scenarios — 「方案」直接入口', () => {
     const w = await mountList()
     await w.find('.more-btn').trigger('click')
     await flushPromises()
-    const items = Array.from(document.querySelectorAll('.el-dropdown-menu__item'))
+    await flushPromises()
+    const items = Array.from(document.querySelectorAll('[role=menuitem]'))
       .map((el) => el.textContent?.trim())
     // 哨兵:菜单确实打开且保留项还在 — 保证 not.toContain 断言有效
     expect(items).toContain('查看详情')

@@ -15,7 +15,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
-import ElementPlus, { ElMessageBox, type MessageBoxData } from 'element-plus'
+import ElementPlus from 'element-plus'
+import * as confirmModule from '@/utils/confirmAction'
 import CaseComposer from '@/views/CaseComposer.vue'
 import * as api from '@/api/scenario-composer'
 import type { Scenario } from '@/types/scenario-composer'
@@ -25,6 +26,10 @@ const AUTOSAVE_MS = 2500
 
 // 模块 mock(构造器 impl 防 vi.restoreAllMocks 清实现,run 测试同款):
 // openRunDialog 会拉执行历史/凭证池,onMounted 拉常量池 — 全部静默化。
+vi.mock('@/utils/confirmAction', () => ({
+  confirmAction: vi.fn(async () => false),
+  promptAction: vi.fn(async () => null),
+}))
 vi.mock('@/api/executions', () => ({
   listExecutions: vi.fn(() => Promise.resolve({ items: [], total: 0 })),
 }))
@@ -216,11 +221,11 @@ describe('CaseComposer — 防抖自动保存', () => {
     await w.find('button[role="switch"]').trigger('click')
     await flushPromises()
 
-    // cancel 按钮(distinguishCancelAndClose:reject 'cancel')
-    vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue('cancel')
-    await router.push('/scenarios')
+    // 取消(v2.2 修订两态收敛:原"放弃并离开"捷径取消,取消=留下)
+    vi.mocked(confirmModule.confirmAction).mockResolvedValueOnce(false)
+    await router.push('/scenarios').catch(() => { /* 守卫中止导航 */ })
     await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/scenarios')
+    expect(router.currentRoute.value.path).toBe('/composer/sc-demo')
     expect(update).not.toHaveBeenCalled()
     w.unmount()
   })
@@ -233,8 +238,7 @@ describe('CaseComposer — 防抖自动保存', () => {
     let w = await mountPage()
     await w.find('button[role="switch"]').trigger('click')
     await flushPromises()
-    vi.spyOn(ElMessageBox, 'confirm')
-      .mockResolvedValue({ action: 'confirm' } as MessageBoxData)
+    vi.mocked(confirmModule.confirmAction).mockResolvedValueOnce(true)
     await router.push('/scenarios')
     await flushPromises()
     expect(router.currentRoute.value.path).toBe('/scenarios')
@@ -247,11 +251,10 @@ describe('CaseComposer — 防抖自动保存', () => {
     // 开关编辑被误抑制 → dirty=false → 守卫误放行。改为重设各 spy 行为。
     vi.spyOn(api, 'getScenario').mockResolvedValue(sampleScenario(false))
     update.mockClear()
-    vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue('close')
+    vi.mocked(confirmModule.confirmAction).mockResolvedValue(false)
     w = await mountPage()
     await w.find('button[role="switch"]').trigger('click')
     await flushPromises()
-    vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue('close')
     await router.push('/scenarios').catch(() => { /* 守卫中止导航 */ })
     await flushPromises()
     expect(router.currentRoute.value.path).toBe('/composer/sc-demo')
@@ -261,8 +264,7 @@ describe('CaseComposer — 防抖自动保存', () => {
 
   it('clean 离开路由:直接放行,不弹确认', async () => {
     vi.spyOn(api, 'getScenario').mockResolvedValue(sampleScenario(false))
-    const confirmSpy = vi.spyOn(ElMessageBox, 'confirm')
-      .mockResolvedValue({ action: 'confirm' } as MessageBoxData)
+    const confirmSpy = vi.mocked(confirmModule.confirmAction)
     const w = await mountPage()
 
     await router.push('/scenarios')

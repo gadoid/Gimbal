@@ -8,11 +8,12 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createPinia } from 'pinia'
+import { createPinia, getActivePinia, setActivePinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import Scenarios from '@/views/Scenarios.vue'
 import * as api from '@/api/scenario-composer'
 import { confirmAction } from '@/utils/confirmAction'
+import { useAuthStore } from '@/stores/auth'
 import { toast } from '@/utils/toast'
 import type { Scenario } from '@/types/scenario-composer'
 
@@ -54,19 +55,28 @@ function row(over: Partial<Scenario['meta']>): Scenario {
 
 function mountPage() {
   return mount(Scenarios, {
-    global: { plugins: [ElementPlus, createPinia()] },
+    global: { plugins: [ElementPlus, getActivePinia()!] },
     attachTo: document.body,
   })
 }
 
 /** 通过第一行 dropdown 的 @command 真实链路触发 onCmd(与生产绑定同一条路)。 */
+/** 走真实菜单链路:点开 ⋯ 菜单 → 点对应项(经 body,Portal 渲染) */
 async function emitCommand(w: ReturnType<typeof mountPage>, cmd: string) {
-  w.findComponent({ name: 'ElDropdown' }).vm.$emit('command', cmd)
+  await w.find('.more-btn').trigger('click')
+  await flushPromises()
+  const label = { delete: '删除', copy: '复制到我的' }[cmd] ?? cmd
+  const item = [...document.querySelectorAll('[role="menuitem"]')]
+    .find((el) => el.textContent!.includes(label))
+  if (!item) throw new Error(`menu item ${label} not found`)
+  item.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   await flushPromises()
 }
 
 describe('Scenarios — 删除/复制文案用 name', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
+    useAuthStore().currentUser = { id: 1, username: 'qa', is_admin: true } as never
     vi.restoreAllMocks()
     // restoreAllMocks 会清 mockResolvedValue — 构造器 impl 的自动确认
     // 存活,但保险起见显式重建(run.test.ts 同款防御注释)。

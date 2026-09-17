@@ -58,7 +58,7 @@ describe('Scenarios — 过期条目置灰', () => {
     expect(expiredRows[0].text()).toContain('过期用例')
     expect(expiredRows[0].text()).toContain('已过期')
 
-    const allRows = w.findAll('tr.el-table__row')
+    const allRows = w.findAll('tbody tr')
     expect(allRows).toHaveLength(2)
     const normal = allRows.find((r) => !r.classes().includes('row-expired'))!
     expect(normal.text()).toContain('在用用例')

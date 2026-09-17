@@ -6,214 +6,142 @@
   <section class="scenarios">
     <header class="page-header">
       <div>
-        <h2 class="page-title"><el-icon><Collection /></el-icon>场景库</h2>
+        <h2 class="page-title">场景库</h2>
         <p>共 {{ store.scenarios.length }} 个场景 · 1:N 数据集</p>
       </div>
       <div class="header-actions">
-        <el-input
-          v-model="q"
-          class="search-input"
-          clearable
-          :prefix-icon="Search"
-          placeholder="按名 / 模块 / 系统 / scenarioId / tag 搜索"
-        />
+        <Input v-model="q" class="search-input" data-testid="scen-search"
+          placeholder="按名 / 模块 / 系统 / scenarioId / tag 搜索" />
         <!-- pool = filterableRows：module/author/priority 已从 meta.* 摊平的形状 -->
         <FilterPopover v-model="filters" :pool="filterableRows" />
-        <el-button type="primary" @click="onCreate">+ 新建场景</el-button>
+        <Button data-testid="scen-create" @click="onCreate">+ 新建场景</Button>
       </div>
     </header>
 
     <!-- Tabs (PRD §6.1) -->
-    <el-tabs v-model="activeTab" class="home-tabs">
-      <el-tab-pane :label="`我的编排 (${myCount})`" name="mine" />
-      <el-tab-pane :label="`公共编排 (${publicCount})`" name="public" />
-      <el-tab-pane :label="`收藏 (${favoriteCount})`" name="favorite" />
-    </el-tabs>
+    <Tabs v-model="activeTab" class="home-tabs" data-testid="scen-tabs">
+      <TabsList>
+        <TabsTrigger value="mine">我的编排 ({{ myCount }})</TabsTrigger>
+        <TabsTrigger value="public">公共编排 ({{ publicCount }})</TabsTrigger>
+        <TabsTrigger value="favorite">收藏 ({{ favoriteCount }})</TabsTrigger>
+      </TabsList>
+    </Tabs>
 
-    <el-table
-      v-if="visible.length > 0"
-      v-loading="store.scenariosStatus === 'loading'"
-      :data="paged"
-      :row-key="rowKey"
-      :row-class-name="rowClassName"
-      class="scenarios-table"
-      @row-click="openScenario"
-    >
-      <el-table-column label="收藏" width="54" align="center">
-        <template #default="{ row }">
-          <button
-            class="star-btn"
-            :class="{ active: row.starred }"
-            :aria-label="row.starred ? '取消收藏' : '收藏场景'"
-            @click.stop="toggleStar(row)"
-          ><el-icon :size="18"><StarFilled v-if="row.starred" /><Star v-else /></el-icon></button>
-        </template>
-      </el-table-column>
+    <div v-if="store.scenariosStatus === 'loading'" class="loading-state py-8 text-center text-body text-muted-foreground">加载中…</div>
+    <Table v-else-if="visible.length > 0" class="scenarios-table rounded-field border border-signal-line bg-signal-card">
+      <TableHeader>
+        <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
+          <TableHead class="w-[46px]"></TableHead>
+          <TableHead class="text-caption font-semibold text-muted-foreground">场景名</TableHead>
+          <TableHead class="w-[140px] text-caption font-semibold text-muted-foreground">系统</TableHead>
+          <TableHead class="w-[100px] text-caption font-semibold text-muted-foreground">模块</TableHead>
+          <TableHead class="w-[70px] text-center text-caption font-semibold text-muted-foreground">优先级</TableHead>
+          <TableHead class="w-[60px] text-center text-caption font-semibold text-muted-foreground">数据集</TableHead>
+          <TableHead class="w-[54px] text-center text-caption font-semibold text-muted-foreground">步骤</TableHead>
+          <TableHead class="w-[54px] text-center text-caption font-semibold text-muted-foreground">变量</TableHead>
+          <TableHead class="w-[80px] text-caption font-semibold text-muted-foreground">作者</TableHead>
+          <TableHead class="w-[100px] text-caption font-semibold text-muted-foreground">最后编辑</TableHead>
+          <TableHead class="text-caption font-semibold text-muted-foreground">Tags</TableHead>
+          <TableHead class="w-[130px] text-center text-caption font-semibold text-muted-foreground">操作</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow v-for="row in paged" :key="rowKey(row)" :class="rowClassName({ row })" class="cursor-pointer" @click="openScenario(row)">
+          <TableCell class="text-center">
+            <button class="star-btn" :class="{ active: row.starred }" :aria-label="row.starred ? '取消收藏' : '收藏场景'" @click.stop="toggleStar(row)">
+              <svg v-if="row.starred" width="18" height="18" viewBox="0 0 24 24" fill="#eab308"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+              <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+            </button>
+          </TableCell>
+          <TableCell>
+            <button class="name" @click.stop="openScenario(row)">{{ row.meta.name || row.meta.scenarioId }}</button>
+            <span v-if="row.visibility === 'public'" class="vis-tag vis-public" title="公共:所有登录用户可读">公共</span>
+            <span v-if="row.meta.expire" class="vis-tag vis-expired" title="已过期:① 基本信息中标记为过期的场景">已过期</span>
+            <div class="sid">{{ row.meta.scenarioId }}</div>
+            <div class="desc">{{ row.meta.description }}</div>
+          </TableCell>
+          <TableCell><div class="sys-list"><SystemChip v-for="sys in row.meta.system" :key="sys" :sys="sys" /></div></TableCell>
+          <TableCell><TagPill :label="row.meta.module || '未分类'" /></TableCell>
+          <TableCell class="text-center"><PriorityPill :priority="row.meta.priority" /></TableCell>
+          <TableCell class="text-center"><span class="num">{{ row.dataSetCount }}</span></TableCell>
+          <TableCell class="text-center"><span class="num">{{ row.stepCount }}</span></TableCell>
+          <TableCell class="text-center"><span class="num">{{ Object.keys(row.config?.vars || {}).length }}</span></TableCell>
+          <TableCell><span class="muted">{{ row.meta.author || row.meta.owner || '—' }}</span></TableCell>
+          <TableCell><span class="muted">{{ formatTime(row.meta?.updateTime) }}</span></TableCell>
+          <TableCell>
+            <div v-if="row.tags.length" class="tag-list">
+              <TagPill v-for="t in row.tags.slice(0, MAX)" :key="t" :label="t" tone="accent" />
+              <TagPill v-if="row.tags.length > MAX" :label="`+${row.tags.length - MAX}`" />
+            </div>
+            <span v-else class="muted">—</span>
+          </TableCell>
+          <TableCell class="text-center">
+            <div class="flex items-center justify-center gap-1">
+              <button class="schemes-btn" data-testid="schemes-entry" type="button" @click.stop="router.push(scenarioSchemesUrl(row.meta.scenarioId))">
+                方案<template v-if="row.schemeCount"> ·{{ row.schemeCount }}</template>
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger class="more-btn" data-testid="scen-more" @click.stop>⋯</DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem data-testid="cmd-detail" @click="onCmd('detail', row)">查看详情</DropdownMenuItem>
+                  <DropdownMenuItem data-testid="cmd-edit" @click="onCmd('edit', row)">编辑场景</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem data-testid="cmd-export" @click="onCmd('export', row)">导出 (JSON/YAML)</DropdownMenuItem>
+                  <DropdownMenuItem data-testid="cmd-copy" @click="onCmd('copy', row)">复制到我的</DropdownMenuItem>
+                  <DropdownMenuItem v-if="isMine(row) && row.visibility !== 'public'" data-testid="cmd-publish" @click="onCmd('publish', row)">发布到公共库</DropdownMenuItem>
+                  <DropdownMenuItem v-if="isMine(row) && row.visibility === 'public'" @click="onCmd('unpublish', row)">下架为私有</DropdownMenuItem>
+                  <DropdownMenuItem v-if="isMine(row)" class="text-signal-failed focus:bg-signal-failed/10 focus:text-signal-failed" data-testid="cmd-delete" @click="onCmd('delete', row)">删除</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
 
-      <el-table-column label="场景名" min-width="240">
-        <template #default="{ row }">
-          <button class="name" @click.stop="openScenario(row)">
-            {{ row.meta.name || row.meta.scenarioId }}
-          </button>
-          <span
-            v-if="row.visibility === 'public'"
-            class="vis-tag vis-public"
-            title="公共:所有登录用户可读"
-          >公共</span>
-          <span
-            v-if="row.meta.expire"
-            class="vis-tag vis-expired"
-            title="已过期:① 基本信息中标记为过期的场景"
-          >已过期</span>
-          <div class="sid">{{ row.meta.scenarioId }}</div>
-          <div class="desc">{{ row.meta.description }}</div>
-        </template>
-      </el-table-column>
+    <div v-else class="empty-note">
+      <p>暂无场景 — 新建第一个场景开始编排</p>
+      <Button variant="outline" size="sm" @click="onCreate">+ 新建场景</Button>
+    </div>
 
-      <el-table-column label="系统" width="160">
-        <template #default="{ row }">
-          <div class="sys-list">
-            <SystemChip
-              v-for="s in row.meta.system"
-              :key="s"
-              :sys="s"
-            />
-          </div>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="模块" width="110">
-        <template #default="{ row }">
-          <TagPill :label="row.meta.module || '未分类'" />
-        </template>
-      </el-table-column>
-
-      <el-table-column label="优先级" width="80" align="center">
-        <template #default="{ row }">
-          <PriorityPill :priority="row.meta.priority" />
-        </template>
-      </el-table-column>
-
-      <el-table-column label="数据集" width="70" align="center">
-        <template #default="{ row }">
-          <span class="num">{{ row.dataSetCount }}</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="步骤" width="62" align="center">
-        <template #default="{ row }">
-          <span class="num">{{ row.stepCount }}</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="变量" width="62" align="center">
-        <template #default="{ row }">
-          <!-- config.vars 是对象（生成式 spec 映射），不是数组 —
-               用 Object.keys 计数（旧写法 [].length 恒为空）。 -->
-          <span class="num">{{ Object.keys(row.config?.vars || {}).length }}</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="作者" width="90">
-        <template #default="{ row }">
-          <span class="muted">{{ row.meta.author || row.meta.owner || '—' }}</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="最后编辑" width="110">
-        <template #default="{ row }">
-          <span class="muted">{{ formatTime(row.meta?.updateTime) }}</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="Tags" min-width="180">
-        <template #default="{ row }">
-          <div v-if="row.tags.length" class="tag-list">
-            <TagPill
-              v-for="t in row.tags.slice(0, MAX)"
-              :key="t"
-              :label="t"
-              tone="accent"
-            />
-            <TagPill
-              v-if="row.tags.length > MAX"
-              :label="`+${row.tags.length - MAX}`"
-            />
-          </div>
-          <span v-else class="muted">—</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="操作" width="140" align="center" fixed="right">
-        <template #default="{ row }">
-          <!-- 方案工作台直接入口(Task 8):从 ⋯ 菜单提为一级动作,
-               徽标「 ·N」仅在有 schemeCount 时显示(旧缓存过渡兼容)。 -->
-          <button
-            class="schemes-btn"
-            data-testid="schemes-entry"
-            type="button"
-            @click.stop="router.push(scenarioSchemesUrl(row.meta.scenarioId))"
-          >
-            方案<template v-if="row.schemeCount"> ·{{ row.schemeCount }}</template>
-          </button>
-          <el-dropdown trigger="click" @command="(c: string) => onCmd(c, row)">
-            <button class="more-btn" @click.stop>⋯</button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="detail">查看详情</el-dropdown-item>
-                <el-dropdown-item command="edit">编辑场景</el-dropdown-item>
-                <!-- 「查看数据集」已收敛(阶段③ Task 5):数据集深层编辑走
-                     工作台数据区/详情页入口,数据集列表路由保留 -->
-                <el-dropdown-item command="export" divided>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  导出 (JSON/YAML)
-                </el-dropdown-item>
-                <el-dropdown-item command="copy">复制到我的</el-dropdown-item>
-                <el-dropdown-item
-                  v-if="isMine(row) && row.visibility !== 'public'"
-                  command="publish"
-                >发布到公共库</el-dropdown-item>
-                <el-dropdown-item
-                  v-if="isMine(row) && row.visibility === 'public'"
-                  command="unpublish"
-                >下架为私有</el-dropdown-item>
-                <el-dropdown-item
-                  v-if="isMine(row)"
-                  command="delete"
-                  class="is-danger"
-                >删除</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-        </template>
-      </el-table-column>
-    </el-table>
-
-    <el-empty v-else-if="store.scenariosStatus !== 'loading'" description="暂无场景 — 新建第一个场景开始编排">
-      <el-button type="primary" plain @click="onCreate">+ 新建场景</el-button>
-    </el-empty>
-
-    <div v-else class="loading-state"><el-skeleton :rows="5" animated /></div>
-
-    <el-pagination
-      v-if="total > pageSize"
-      class="pager"
-      :current-page="page"
-      :page-size="pageSize"
-      :total="total"
-      layout="prev, pager, next, total"
-      background
-      @current-change="(p: number) => (page = p)"
-    />
-  </section>
+<div v-if="total > pageSize" class="pager">
+      <button type="button" class="pg-btn" :disabled="page <= 1" data-testid="pg-prev" @click="page--">&#8249;</button>
+      <button
+        v-for="p in pageCount"
+        :key="p"
+        type="button"
+        class="pg-btn"
+        :class="{ active: p === page }"
+        @click="page = p"
+      >{{ p }}</button>
+      <button type="button" class="pg-btn" :disabled="page >= pageCount" data-testid="pg-next" @click="page++">&#8250;</button>
+      <span class="pg-total">共 {{ total }} 条</span>
+    </div>
+  
+    <!-- 按方案导出选择器(自绘轻量模态;替代原 ElMessageBox render-fn) -->
+    <div v-if="exportPicker.open" class="exp-modal" data-testid="export-picker">
+      <div class="exp-panel">
+        <h4>导出场景 {{ exportPicker.scenarioName }}</h4>
+        <p class="exp-hint">该场景存有运行方案 — 按方案导出会把方案的服务绑定物化进导出文件。</p>
+        <label class="exp-opt">
+          <input v-model="exportPicker.chosen" type="radio" value="" /> 默认导出(不套方案)
+        </label>
+        <label v-for="sc in exportPicker.schemes" :key="sc.name" class="exp-opt">
+          <input v-model="exportPicker.chosen" type="radio" :value="sc.name" /> 按方案导出 · {{ sc.name }}
+        </label>
+        <div class="exp-foot">
+          <button type="button" class="ghost-btn" @click="settleExportPicker(undefined)">取消</button>
+          <button type="button" class="primary-btn" data-testid="export-picker-ok" @click="confirmExportPicker">导出</button>
+        </div>
+      </div>
+    </div>
+</section>
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
 import { toast } from '@/utils/toast'
-import { Collection, Search, Star, StarFilled } from '@element-plus/icons-vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useAuthStore } from '@/stores/auth'
 import { getScenarioDraft, listRunSchemes } from '@/api/scenario-composer'
@@ -226,6 +154,11 @@ import { composerUrl, scenarioDetailUrl, scenarioSchemesUrl } from '@/utils/link
 import { showError } from '@/utils/errorFallback'
 import { shortDateTime, exportTimestamp } from '@/utils/datetime'
 import FilterPopover from '@/components/FilterPopover.vue'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import TagPill from '@/components/TagPill.vue'
 import SystemChip from '@/components/SystemChip.vue'
 import PriorityPill from '@/components/PriorityPill.vue'
@@ -287,6 +220,7 @@ const visible = computed(() => {
   return rows.filter((r) => r.visibility !== 'public')
 })
 const total = computed(() => visible.value.length)
+const pageCount = computed(() => Math.ceil(total.value / pageSize))
 
 // Real pagination — slice for the current page (the pager used to
 // render but never slice, so every page showed all rows).
@@ -346,50 +280,40 @@ function onCreate() {
   router.push('/composer/new?step=1')
 }
 
-/** 行级「按方案导出」选择器(spec §8):ElMessageBox + 原生 radio 简易
- *  下拉(遵循本文件 ElMessageBox 的既有交互风格;原生控件不经 teleport
- *  弹层嵌套,行为可预期)。
+/** 行级「按方案导出」选择器(spec §8):自绘轻量模态(radio 单选,
+ *  原 ElMessageBox + render-fn 迁移;不经 Dialog Portal,原生控件
+ *  行为可预期)。
  *  返回:SchemeV2 = 选中方案;null = 默认导出(不套方案);undefined = 取消。 */
-async function pickExportScheme(
+const exportPicker = reactive<{
+  open: boolean
+  schemes: SchemeV2[]
+  scenarioName: string
+  chosen: string
+  resolve: ((v: SchemeV2 | null | undefined) => void) | null
+}>({ open: false, schemes: [], scenarioName: '', chosen: '', resolve: null })
+
+function pickExportScheme(
   schemes: SchemeV2[],
   scenarioName: string,
 ): Promise<SchemeV2 | null | undefined> {
-  const chosen = ref('')
-  const option = (value: string, label: string) => h(
-    'label',
-    { style: 'display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer' },
-    [
-      h('input', {
-        type: 'radio',
-        name: 'export-scheme',
-        value,
-        checked: chosen.value === value,
-        onChange: () => { chosen.value = value },
-      }),
-      h('span', null, label),
-    ],
+  exportPicker.schemes = schemes
+  exportPicker.scenarioName = scenarioName
+  exportPicker.chosen = ''
+  exportPicker.open = true
+  return new Promise((resolve) => { exportPicker.resolve = resolve })
+}
+
+function settleExportPicker(v: SchemeV2 | null | undefined) {
+  exportPicker.open = false
+  exportPicker.resolve?.(v)
+  exportPicker.resolve = null
+}
+
+function confirmExportPicker() {
+  const chosen = exportPicker.chosen
+  settleExportPicker(
+    chosen ? (exportPicker.schemes.find((s) => s.name === chosen) ?? null) : null,
   )
-  // 内联组件让 message 的渲染函数闭包 chosen — radio 点击可重渲染选中态。
-  const PickerBody = defineComponent({
-    setup: () => () => h('div', null, [
-      h('p', { style: 'margin:0 0 10px;color:#5a6273' },
-        '该场景存有运行方案 — 按方案导出会把方案的服务绑定物化进导出文件。'),
-      option('', '默认导出(不套方案)'),
-      ...schemes.map((s) => option(
-        s.name,
-        `按方案导出 · ${s.name}`,
-      )),
-    ]),
-  })
-  try {
-    await ElMessageBox.confirm(h(PickerBody), `导出场景 ${scenarioName}`, {
-      confirmButtonText: '导出',
-      cancelButtonText: '取消',
-    })
-  } catch {
-    return undefined // cancel / close 都不是错误
-  }
-  return chosen.value ? (schemes.find((s) => s.name === chosen.value) ?? null) : null
 }
 
 /** 行级导出 — 不污染共享 store 的"进行中"对象。
@@ -679,4 +603,49 @@ async function onCmd(cmd: string, row: Scenario) {
   .scenarios { padding: 20px 16px 36px; }
   .page-header { flex-direction: column; align-items: flex-start; }
 }
+.pg-btn {
+  min-width: 28px; height: 28px; margin-right: 4px;
+  font-size: 12px; text-align: center;
+  color: #374151; background: #fff;
+  border: 1px solid #e1e5eb; border-radius: 6px;
+  cursor: pointer;
+}
+.pg-btn.active { color: #fff; background: #2f6fed; border-color: #2f6fed; font-weight: 600; }
+.pg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.pg-total { font-size: 11.5px; color: #64748b; margin-left: 6px; }
+.empty-note {
+  padding: 40px 16px; text-align: center;
+  font-size: 12.5px; color: #94a3b8;
+  border: 1px dashed #e1e5eb; border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.empty-note p { margin: 0; }
+.exp-modal {
+  position: fixed; inset: 0; z-index: 2000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(16, 21, 28, 0.4);
+}
+.exp-panel {
+  width: 440px; max-width: calc(100vw - 32px);
+  padding: 18px 20px; background: #fff;
+  border-radius: 10px; box-shadow: 0 8px 24px rgba(16, 21, 28, 0.12);
+}
+.exp-panel h4 { margin: 0 0 6px; font-size: 14px; }
+.exp-hint { margin: 0 0 12px; font-size: 12px; color: #5a6273; }
+.exp-opt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0; font-size: 12.5px; cursor: pointer;
+}
+.exp-opt input { accent-color: #2f6fed; }
+.exp-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.ghost-btn {
+  padding: 6px 14px; font-size: 12.5px;
+  color: #5a6273; background: transparent;
+  border: 1px solid #e1e5eb; border-radius: 8px; cursor: pointer;
+}
+.primary-btn {
+  padding: 6px 16px; font-size: 12.5px; font-weight: 600;
+  color: #fff; background: #2f6fed; border: none; border-radius: 8px; cursor: pointer;
+}
+.primary-btn:hover { background: #265fd4; }
 </style>

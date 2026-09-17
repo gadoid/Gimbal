@@ -217,18 +217,18 @@
     <!-- ═══════ 步骤编辑(step4)回顶:字段编辑器列随字段数增长,页面较长;
          滚过 240px 浮现,bottom 76 避开 sticky footer;横向锚定 step 信息卡
          左缘(.backtop-btn 覆写 inline right) ═══════ -->
-    <el-backtop
-      v-if="stepIdx === 3"
-      :right="28"
-      :bottom="76"
-      :visibility-height="240"
+    <button
+      v-if="stepIdx === 3 && showBacktop"
+      type="button"
       class="backtop-btn"
+      title="回到顶部"
+      @click="scrollToTop"
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 19V5" />
         <path d="M5 12l7-7 7 7" />
       </svg>
-    </el-backtop>
+    </button>
 
     <!-- ═══════ Run dialog v2(方案 chip 两路径 + 声明∪引用并集绑定行)═══════ -->
     <RunDialog
@@ -255,7 +255,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
 import { toast } from '@/utils/toast'
 import ScenarioExportMenu from '@/components/ScenarioExportMenu.vue'
 import CaseComposerMeta from '@/components/composer/CaseComposerMeta.vue'
@@ -639,23 +638,31 @@ function onBeforeUnload(e: BeforeUnloadEvent): void {
 onBeforeRouteLeave(async () => {
   if (!dirty.value) return true
   const canSave = Boolean(scenario.value && meta.value.name)
-  try {
-    await ElMessageBox.confirm(
-      `当前有未保存的修改${canSave ? '' : '(场景尚未保存过)'},离开将丢失本次编辑。`,
-      '未保存的修改',
-      {
-        type: 'warning',
-        distinguishCancelAndClose: true,
-        confirmButtonText: canSave ? '保存并离开' : '离开',
-        cancelButtonText: '放弃修改并离开',
-      },
-    )
-  } catch (action) {
-    if (action === 'cancel') return true   // 放弃修改并离开
-    return false                           // close(ESC/×)→ 留下
-  }
+  // 原型修订 v2.2:未保存离开拦截走 confirmAction(两态收敛 —
+  // 原"放弃修改并离开"捷径取消,想放弃可先手动放弃再离开)
+  const ok = await confirmAction(
+    `当前有未保存的修改${canSave ? '' : '(场景尚未保存过)'},离开将丢失本次编辑。`,
+    '未保存的修改',
+    {
+      type: 'warning',
+      confirmButtonText: canSave ? '保存并离开' : '离开',
+      cancelButtonText: '留在本页',
+    },
+  )
+  if (!ok) return false                    // 取消/ESC → 留下
   return canSave ? await saveDraft(false, false, false) : true
 })
+
+// ── 回顶(step4 字段编辑器长页面;el-backtop 内建行为的等价自绘)──
+const showBacktop = ref(false)
+function onScrollForBacktop() {
+  showBacktop.value = window.scrollY >= 240
+}
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+onMounted(() => window.addEventListener('scroll', onScrollForBacktop, { passive: true }))
+onUnmounted(() => window.removeEventListener('scroll', onScrollForBacktop))
 
 // ── lifecycle ──
 onMounted(async () => {
@@ -1345,6 +1352,9 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
    在 step 信息卡左边线右侧 20px(探入卡内)。≤1280 三栏塌缩(信息面板下移)锚点失效,退回贴边。
    el-backtop 把 right 写进 inline style,须 !important 压制。 */
 .backtop-btn {
+  position: fixed;
+  bottom: 76px;
+  z-index: 100;
   right: calc(50% - min(50vw, 900px) + clamp(16px, 3vw, 48px) + 252px) !important;
   width: 44px;
   height: 44px;
