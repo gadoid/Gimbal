@@ -65,8 +65,7 @@ export function useWorkbenchLayout(username: Ref<string>): {
   watch(username, reload)
 
   function commit(next: string[]) {
-    orderedIds.value = next
-    if (username.value) persist(username.value, next)
+    orderedIds.value = next   // 持久化由下方 deep watch 统一承担
   }
 
   function add(id: string) {
@@ -90,6 +89,13 @@ export function useWorkbenchLayout(username: Ref<string>): {
   function reset() {
     commit(defaultLayout())
   }
+
+  // 单一持久化出口:布局数组的任何变更(经 commit 的 add/remove/
+  // move/reset,或 draggable 拖拽时对数组的直接 splice)都落盘。
+  // reload 的回写是同键同值幂等,无害。
+  watch(orderedIds, (v) => {
+    if (username.value) persist(username.value, v)
+  }, { deep: true })
 
   return { orderedIds, add, remove, move, reset }
 }

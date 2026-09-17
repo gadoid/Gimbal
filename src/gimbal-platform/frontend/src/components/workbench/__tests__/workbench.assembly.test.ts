@@ -56,6 +56,19 @@ async function waitCards(w: ReturnType<typeof mountPage>, n: number) {
   })
 }
 
+describe('工作台组装 — draggable 接线(卡死根因防回归)', () => {
+  it('itemKey 必须是函数(静态字符串会让所有 key=undefined → 拖拽死循环)', () => {
+    const w = mountPage()
+    const drag = w.findComponent({ name: 'draggable' })
+    expect(drag.exists()).toBe(true)
+    expect(drag.props('itemKey')).toBeTypeOf('function')
+    // 函数对 string 元素返回自身(键唯一)
+    const keyFn = drag.props('itemKey') as (el: string) => string
+    expect(keyFn('constants')).toBe('constants')
+    w.unmount()
+  })
+})
+
 describe('工作台组装 — 添加卡片(市场)', () => {
   it('默认渲染全部注册卡;「+ 添加卡片」打开市场,候选 = 未启用卡', async () => {
     const w = mountPage()

@@ -19,15 +19,22 @@ beforeEach(() => {
   localStorage.clear()
 })
 
+/** 持久化经 deep watch(flush: pre)— 断言前 flush 微任务 */
+async function flushed() {
+  await nextTick()
+  await nextTick()
+}
+
 describe('useWorkbenchLayout', () => {
   it('无存档 → 默认 = registry 全量按注册序', () => {
     const { orderedIds } = useWorkbenchLayout(ref(USER))
     expect(orderedIds.value).toEqual(ids())
   })
 
-  it('remove → 集合收缩并持久化;重载(新挂载)不复活', () => {
+  it('remove → 集合收缩并持久化;重载(新挂载)不复活', async () => {
     const { remove } = useWorkbenchLayout(ref(USER))
     remove(ids()[0])
+    await flushed()
     expect(localStorage.getItem('workbench.layout.v1:alice')).toBe(JSON.stringify(ids().slice(1)))
 
     // 新挂载读取同一存档
@@ -35,24 +42,27 @@ describe('useWorkbenchLayout', () => {
     expect(again.orderedIds.value).toEqual(ids().slice(1))
   })
 
-  it('add → 追加到尾部;重复 add 幂等;未知 id 拒收', () => {
+  it('add → 追加到尾部;重复 add 幂等;未知 id 拒收', async () => {
     const { remove, add } = useWorkbenchLayout(ref(USER))
     remove(ids()[0])
     add(ids()[0])
+    await flushed()
     // add 追加到尾部(非回原位)— 契约 = 集合恢复,顺序 = 追加序
     const afterAdd = JSON.parse(localStorage.getItem('workbench.layout.v1:alice')!)
     expect([...afterAdd].sort()).toEqual([...ids()].sort())
     expect(afterAdd[afterAdd.length - 1]).toBe(ids()[0])
     add(ids()[0])                        // 已在场 — 幂等
     add('not-a-card')                    // 未知 — 拒收
+    await flushed()
     const final = JSON.parse(localStorage.getItem('workbench.layout.v1:alice')!)
     expect([...final].sort()).toEqual([...ids()].sort())
     expect(final[final.length - 1]).toBe(ids()[0])   // 未重复追加
   })
 
-  it('move → 换序持久化(拖拽落点的纯函数面)', () => {
+  it('move → 换序持久化(拖拽落点的纯函数面)', async () => {
     const { move } = useWorkbenchLayout(ref(USER))
     move(0, 2)   // [a,b,c] → [b,c,a]
+    await flushed()
     const expect_ = [...ids()]
     const [first] = expect_.splice(0, 1)
     expect_.splice(2, 0, first)
@@ -60,6 +70,7 @@ describe('useWorkbenchLayout', () => {
     // 越界拒收(不变)
     move(-1, 0)
     move(0, 99)
+    await flushed()
     expect(JSON.parse(localStorage.getItem('workbench.layout.v1:alice')!)).toEqual(expect_)
   })
 
@@ -84,11 +95,12 @@ describe('useWorkbenchLayout', () => {
     expect(orderedIds.value).toEqual([ids()[1]])   // 切到 bob → 读 bob 的存档
   })
 
-  it('reset → 回默认序', () => {
+  it('reset → 回默认序', async () => {
     const { move, remove, reset } = useWorkbenchLayout(ref(USER))
     move(0, 2)
     remove(ids()[2])
     reset()
+    await flushed()
     expect(JSON.parse(localStorage.getItem('workbench.layout.v1:alice')!)).toEqual(ids())
   })
 })

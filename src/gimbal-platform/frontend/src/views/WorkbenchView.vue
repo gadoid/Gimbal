@@ -28,16 +28,20 @@
     </header>
 
     <!-- registry 卡片区:draggable 换序(handle = 卡槽把手) -->
+    <!-- item-key 必须**绑定**函数(静态字符串会被当作属性名去 string
+         元素上取 key → 全 undefined → 拖拽 DOM 追踪错乱死循环,
+         曾经卡死的根因)。:list 直接绑 orderedIds:draggable 的
+         splice 作用在 ref 的 reactive 数组上,持久化由 layout.ts
+         的 deep watch 统一承担。 -->
     <draggable
       v-if="orderedIds.length"
-      :list="dragList"
-      item-key="(id: string) => id"
+      :list="orderedIds"
+      :item-key="cardKey"
       handle=".card-handle"
       :animation="150"
       tag="div"
       class="grid grid-cols-1 gap-3 md:grid-cols-2"
       data-testid="wb-grid"
-      @end="onDragEnd"
     >
       <template #item="{ element: id }">
         <WorkbenchCardSlot
@@ -81,7 +85,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import draggable from 'vuedraggable'
 import { workbenchRegistry, type WorkbenchCardDef } from '@/components/workbench/registry'
 import { useWorkbenchLayout } from '@/components/workbench/layout'
@@ -102,19 +106,8 @@ const username = computed(() =>
   auth.currentUser?.username || auth.currentUser?.display_name || '')
 const { orderedIds, add, remove, move, reset } = useWorkbenchLayout(username)
 
-/** draggable 受控副本(:list 直改数组本身 — 同步回布局状态) */
-const dragList = computed({
-  get: () => orderedIds.value,
-  set: (v: string[]) => { orderedIds.value = v },
-})
-
-/** vuedraggable 已重排 dragList;@end 落持久化(经 move 走 commit 路径) */
-function onDragEnd(evt: { oldIndex?: number; newIndex?: number }) {
-  if (evt.oldIndex === undefined || evt.newIndex === undefined) return
-  if (evt.oldIndex === evt.newIndex) return
-  // dragList 已是新序 — 直接以新序写回(避免二次 move)
-  orderedIds.value = [...dragList.value]
-}
+/** draggable item-key:元素本身是 string id,键 = 自身 */
+const cardKey = (id: string) => id
 
 function defOf(id: string): WorkbenchCardDef | undefined {
   return visibleRegistry.value.find((d) => d.id === id)
@@ -133,9 +126,6 @@ const layoutDirty = computed(() => {
   return orderedIds.value.length !== def.length
     || orderedIds.value.some((id, i) => def[i] !== id)
 })
-
-// 开发防御:orderedIds 变化直接持久化(watch 在 layout.ts 的 commit 内)
-void watch
 </script>
 
 <style scoped>
