@@ -1,14 +1,9 @@
 <template>
   <div class="tag-input" :class="{ 'has-tags': modelValue.length }">
-    <el-tag
-      v-for="(t, i) in modelValue"
-      :key="`${t}-${i}`"
-      type="info"
-      effect="plain"
-      closable
-      :disable-transitions="true"
-      @close="remove(i)"
-    >{{ t }}</el-tag>
+    <span v-for="(t, i) in modelValue" :key="`${t}-${i}`" class="tag-chip">
+      {{ t }}
+      <button type="button" class="tag-x" :data-testid="`tag-x-${i}`" @click="remove(i)">×</button>
+    </span>
     <input
       ref="inputEl"
       v-model="draft"
@@ -79,14 +74,14 @@ defineExpose({ focus })
   gap: 6px;
   min-height: 32px;
   padding: 4px 8px;
-  background: var(--el-fill-color-blank, #fff);
-  border: 1px solid var(--el-border-color, #dcdfe6);
+  background: #fff;
+  border: 1px solid #d1d5db;
   border-radius: 6px;
   transition: border-color 0.2s;
 }
 .tag-input:focus-within {
-  border-color: var(--el-color-primary, #4338ca);
-  box-shadow: 0 0 0 1px var(--el-color-primary, #4338ca) inset;
+  border-color: #2f6fed;
+  box-shadow: 0 0 0 1px #2f6fed inset;
 }
 .tag-input__input {
   flex: 1 1 80px;
@@ -101,7 +96,26 @@ defineExpose({ focus })
 .tag-input__input::placeholder {
   color: var(--color-text-tertiary, #94a3b8);
 }
-.tag-input :deep(.el-tag) {
-  margin: 0;
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 8px;
+  font-size: 11.5px;
+  color: #475569;
+  background: #f1f5f9;
+  border: 0.5px solid #e1e5eb;
+  border-radius: 4px;
+  line-height: 1.7;
 }
+.tag-x {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.tag-x:hover { color: #dc2626; }
 </style>

@@ -1,19 +1,16 @@
 <!--
-  ScenarioExportMenu.vue — 复用的场景导出菜单
-  - 通过 dropdown (Element Plus) 展示三个动作: JSON / YAML / 复制
+  ScenarioExportMenu.vue — 复用的场景导出菜单(批次 6 迁移 shadcn DropdownMenu)
+  - 三个动作: JSON / YAML / 复制(+ 按方案导出)
   - 内部直接读 Pinia store (scenario-draft),所以挂载点不需要传 props
   - 没有进行中草稿时,菜单禁用并提示
   - 用法:
       <ScenarioExportMenu variant="topbar" />     <!-- 顶栏,中等大小按钮 -->
 -->
 <template>
-  <el-dropdown
-    trigger="click"
-    :disabled="!hasDraft"
-    @command="onCommand"
-  >
-    <button
-      type="button"
+  <DropdownMenu>
+    <DropdownMenuTrigger
+      as-child
+      :disabled="!hasDraft"
       :class="['se-trigger', `se-${variant}`, { 'se-disabled': !hasDraft }]"
       @click="refreshSchemes"
     >
@@ -26,33 +23,30 @@
       <svg class="se-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <polyline points="6 9 12 15 18 9"/>
       </svg>
-    </button>
-    <template #dropdown>
-      <el-dropdown-menu>
-        <el-dropdown-item command="json" :disabled="exporting">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 6"/></svg>
-          导出 JSON
-        </el-dropdown-item>
-        <el-dropdown-item command="yaml" :disabled="exporting">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          导出 YAML
-        </el-dropdown-item>
-        <el-dropdown-item command="copy" :disabled="exporting" divided>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-          复制 JSON
-        </el-dropdown-item>
-        <!-- 按方案导出(spec §8):方案的 serviceBindings 物化进导出(envId 已退役)。
-             首项 divided 与上方动作分组;统一走 exportJson(overlay)。 -->
-        <el-dropdown-item
-          v-for="(s, i) in schemes"
-          :key="s.name"
-          :command="`scheme:${s.name}`"
-          :disabled="exporting"
-          :divided="i === 0"
-        >按方案导出 · {{ s.name }}</el-dropdown-item>
-      </el-dropdown-menu>
-    </template>
-  </el-dropdown>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end">
+      <DropdownMenuItem :disabled="exporting" @click="onCommand('json')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 6"/></svg>
+        导出 JSON
+      </DropdownMenuItem>
+      <DropdownMenuItem :disabled="exporting" @click="onCommand('yaml')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        导出 YAML
+      </DropdownMenuItem>
+      <DropdownMenuItem :disabled="exporting" @click="onCommand('copy')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        复制 JSON
+      </DropdownMenuItem>
+      <!-- 按方案导出(spec §8):方案的 serviceBindings 物化进导出(envId 已退役)。
+           首项 Separator 与上方动作分组;统一走 exportJson(overlay)。 -->
+      <template v-for="(s, i) in schemes" :key="s.name">
+        <DropdownMenuSeparator v-if="i === 0" />
+        <DropdownMenuItem :disabled="exporting" @click="onCommand(`scheme:${s.name}`)">
+          按方案导出 · {{ s.name }}
+        </DropdownMenuItem>
+      </template>
+    </DropdownMenuContent>
+  </DropdownMenu>
 </template>
 
 <script setup lang="ts">
@@ -60,6 +54,10 @@ import { computed, ref } from 'vue'
 import { useScenarioDraftStore, schemeToOverlay } from '@/stores/scenario-draft'
 import { toast } from '@/utils/toast'
 import { listRunSchemes } from '@/api/scenario-composer'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import type { SchemeV2 } from '@/api/scenario-composer'
 
 withDefaults(defineProps<{

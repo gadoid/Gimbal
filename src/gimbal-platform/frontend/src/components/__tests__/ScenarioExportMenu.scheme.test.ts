@@ -16,7 +16,6 @@
  */
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
 import ScenarioExportMenu from '../ScenarioExportMenu.vue'
 
 /** 组件与测试共享的 mock store 单例(draft 可按测试覆写;组件只读
@@ -53,7 +52,7 @@ const schemes = [
 
 function mountMenu() {
   return mount(ScenarioExportMenu, {
-    global: { plugins: [ElementPlus] },
+    global: {},
     attachTo: document.body,
   })
 }
@@ -63,7 +62,7 @@ function mountMenu() {
 async function openMenu(w: ReturnType<typeof mountMenu>): Promise<HTMLElement[]> {
   await w.find('.se-trigger').trigger('click')
   await flushPromises()
-  return [...document.querySelectorAll('.el-dropdown-menu__item')] as HTMLElement[]
+  return [...document.querySelectorAll('[role=menuitem]')] as HTMLElement[]
 }
 
 beforeEach(() => {
@@ -77,7 +76,7 @@ beforeEach(() => {
 afterEach(() => {
   // jsdom 不跑 transition,卸载时处于开态的下拉 popper 残留在 body —
   // 手工摘除,避免跨测试串到 document.querySelectorAll 的结果里。
-  document.querySelectorAll('.el-dropdown__popper').forEach((el) => el.remove())
+  document.body.innerHTML = ''
 })
 
 describe('ScenarioExportMenu — 按方案导出(新 CRUD 取数)', () => {

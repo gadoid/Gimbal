@@ -6,23 +6,16 @@
   (Canvas/FieldForm) 从 var-registry 纯函数推导后传入 — 本组件零 IO。
 -->
 <template>
-  <el-dialog
-    :model-value="modelValue"
-    title="Ⓥ 选择变量（${var.<name>} 模板）"
-    width="560px"
-    @update:model-value="(v: boolean) => emit('update:modelValue', v)"
-  >
+  <Dialog :open="modelValue" @update:open="(v: boolean) => emit('update:modelValue', v)">
+    <DialogContent class="max-w-[560px]">
+    <DialogHeader>
+      <DialogTitle>Ⓥ 选择变量（${var.&lt;name&gt;} 模板）</DialogTitle>
+    </DialogHeader>
     <div v-if="!entries.length" class="empty">
       <p>注册表为空 — 先在 ③ 配置步添加共享变量,或在步骤里配置 extract 策略</p>
     </div>
     <template v-else>
-      <el-input
-        v-model="filter"
-        placeholder="按变量名过滤…"
-        clearable
-        size="small"
-        style="margin-bottom: 10px"
-      />
+      <Input v-model="filter" placeholder="按变量名过滤…" class="mb-2.5 h-8" />
       <div class="var-list">
         <button
           v-for="e in filtered"
@@ -56,18 +49,22 @@
         </template>
       </p>
     </template>
-    <template #footer>
-      <el-button @click="emit('update:modelValue', false)">取消</el-button>
-      <el-button type="primary" :disabled="!selected" @click="confirm">
+    <DialogFooter>
+      <Button variant="outline" @click="emit('update:modelValue', false)">取消</Button>
+      <Button :disabled="!selected" @click="confirm">
         确认插入
-      </el-button>
-    </template>
-  </el-dialog>
+      </Button>
+    </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { VarEntry } from '@/utils/var-registry'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 const props = defineProps<{
   modelValue: boolean
