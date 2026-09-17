@@ -222,7 +222,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import type { DataSetSelection, ServiceBinding, SchemeV2 } from '@/api/scenario-composer'
 import { scenarioSchemesUrl } from '@/utils/links'
 import type { Scenario, DataSetSummary } from '@/types/scenario-composer'
@@ -439,8 +439,8 @@ watch(selected, (s) => {
 // ── 另存为方案(仅默认方案态)──────────────────────────────────
 function onSaveAsScheme() {
   const name = saveAsName.value.trim()
-  if (!name) { ElMessage.warning('请填写方案名'); return }
-  if (name === '默认方案') { ElMessage.warning('「默认方案」为保留名'); return }
+  if (!name) { toast.warning('请填写方案名'); return }
+  if (name === '默认方案') { toast.warning('「默认方案」为保留名'); return }
   emit('saveAsScheme', {
     name, dataSetSelection: [], injectionEntryIds: [],
     serviceBindings: explicitServiceBindings(),
@@ -475,7 +475,7 @@ function onConfirm() {
   // 文案分态:自建方案参数只读 → 指去工作台;默认方案态参数就地可调。
   if (totalRuns.value > MAX_TOTAL_RUNS) {
     const hint = s.isDefault ? '请调整方案参数' : '请到方案工作台调整方案参数'
-    ElMessage.warning(`总运行次数 ${totalRuns.value} 超过平台上限 ${MAX_TOTAL_RUNS} — ${hint}`)
+    toast.warning(`总运行次数 ${totalRuns.value} 超过平台上限 ${MAX_TOTAL_RUNS} — ${hint}`)
     return
   }
   if (!s.isDefault && isSchemeInvalid(s)) return   // 失效禁跑(按钮也禁,双保险)

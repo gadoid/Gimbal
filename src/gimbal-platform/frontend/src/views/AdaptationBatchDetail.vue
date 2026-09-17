@@ -146,7 +146,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { toast } from '@/utils/toast'
 import * as api from '@/api/adaptations'
 import type { OpOut, RollbackReport } from '@/api/adaptations'
 import { ApiError } from '@/api/http'
@@ -207,7 +208,7 @@ async function reload(): Promise<void> {
     detail.value = await api.getBatch(String(route.params.batchId))
   } catch (e) {
     if (isAdminOnly(e)) adminOnly.value = true
-    else ElMessage.error(api.errMsg(e, '批次加载失败'))
+    else toast.error(api.errMsg(e, '批次加载失败'))
   } finally {
     loaded.value = true
   }
@@ -218,7 +219,7 @@ async function onApply(op: OpOut): Promise<void> {
     await api.applyOp(op.id)
     await reload()
   } catch (e) {
-    ElMessage.error(api.errMsg(e, '应用失败'))
+    toast.error(api.errMsg(e, '应用失败'))
   }
 }
 
@@ -227,7 +228,7 @@ async function onSkip(op: OpOut): Promise<void> {
     await api.skipOp(op.id)
     await reload()
   } catch (e) {
-    ElMessage.error(api.errMsg(e, '跳过失败'))
+    toast.error(api.errMsg(e, '跳过失败'))
   }
 }
 
@@ -245,7 +246,7 @@ async function saveEdit(): Promise<void> {
     editOpen.value = false
     await reload()
   } catch (e) {
-    ElMessage.error(e instanceof SyntaxError
+    toast.error(e instanceof SyntaxError
       ? 'JSON 解析失败' : api.errMsg(e, '保存失败(可能已非 pending)'))
   }
 }
@@ -253,7 +254,7 @@ async function saveEdit(): Promise<void> {
 function startMerge(): void {
   const seed = mergeSeedFrom(selectedOps.value)
   if (!seed) {
-    ElMessage.warning('需勾选同一 step 的一删一增两条 pending 草案')
+    toast.warning('需勾选同一 step 的一删一增两条 pending 草案')
     return
   }
   activeSeed.value = seed
@@ -285,7 +286,7 @@ async function onCreated(op: OpOut): Promise<void> {
     }
   } catch (e) {
     // F3:skip 串联失败 → 报错兜底,下方 finally 重载以真实状态示人
-    ElMessage.error(api.errMsg(e, '跳过原草案失败'))
+    toast.error(api.errMsg(e, '跳过原草案失败'))
   } finally {
     if (seed) {
       selectedOps.value = []
@@ -311,7 +312,7 @@ async function onRollback(): Promise<void> {
     reportOpen.value = true
     await reload()
   } catch (e) {
-    ElMessage.error(api.errMsg(e, '回滚失败(批次可能尚未 completed)'))
+    toast.error(api.errMsg(e, '回滚失败(批次可能尚未 completed)'))
   }
 }
 

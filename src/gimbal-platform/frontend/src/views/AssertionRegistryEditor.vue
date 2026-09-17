@@ -213,7 +213,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { Back } from '@element-plus/icons-vue'
 import { getScenarioDraft, updateScenario } from '@/api/scenario-composer'
 import type { ScenarioDraft } from '@/types/scenario-composer'
@@ -480,7 +480,7 @@ onMounted(async () => {
 
 function addEntry() {
   if (!pendingPath.value.jsonpath.startsWith('$')) {
-    ElMessage.warning('注入路径需以 $ 开头(例:$.amount)')
+    toast.warning('注入路径需以 $ 开头(例:$.amount)')
     return
   }
   const e: AssertionEntry = {
@@ -509,7 +509,7 @@ function addAssert() {
   // 绑定断言的两项必备内容,缺了就落不了条目 —— 但**必须出声**:按钮就在那儿
   // 摆着,静默 return 等于「点了没反应」,用户无从知道差什么(与 addEntry 同口径)
   if (!pendingAssert.value.target) {
-    ElMessage.warning('要先填「断言哪个响应字段」(例:$.response_body.code)')
+    toast.warning('要先填「断言哪个响应字段」(例:$.response_body.code)')
     return
   }
   const mode = pendingAssert.value.mode === 'append' ? 'append' : 'override'
@@ -517,7 +517,7 @@ function addAssert() {
   // compose_injection_scenario 的 override 分支同判据)。没有可改写的对象时
   // 后端什么都不做 —— 落下去就是一条静默无效的绑定,故在此拦下并说清差什么。
   if (mode === 'override' && !existingAssertTargets.value.has(pendingAssert.value.target)) {
-    ElMessage.warning(
+    toast.warning(
       '「改写已有」只对步骤上已存在的同目标断言生效 —— 这一步没有该目标的断言,'
       + '这条会什么都不做。要新增请选「新增一条」',
     )
@@ -541,7 +541,7 @@ async function save() {
   saving.value = true
   try {
     await updateScenario(scenarioId, { ...draft.value, assertion_registry: registry.value })
-    ElMessage.success('断言管理已保存')
+    toast.success('断言管理已保存')
   } catch (e) {
     showError('保存', e)
   } finally {

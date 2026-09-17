@@ -4,18 +4,18 @@
  * F5 复制载荷(字面量值文本、生成器 key、生成器 spec JSON);
  * F6 生成器 key 插入成功 → 追加引用 + emit seedVar;
  * F7 value 插入纯文本(生成器 spec JSON / 字面量值)不 emit seedVar;
- * F8 无插入目标 → ElMessage.info 且不 emit。
+ * F8 无插入目标 → toast.info 且不 emit。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ConstantPoolPanel from '@/components/composer/ConstantPoolPanel.vue'
 import { INSERT_TARGET_KEY, useInsertTarget } from '@/composables/useInsertTarget'
 import { copyText } from '@/utils/clipboard'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import type { ConstantEntry } from '@/types/constants'
 
-vi.mock('element-plus', () => ({
-  ElMessage: { success: vi.fn(), info: vi.fn(), error: vi.fn(), warning: vi.fn() },
+vi.mock('@/utils/toast', () => ({
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }))
 vi.mock('@/utils/clipboard', () => ({ copyText: vi.fn().mockResolvedValue(true) }))
 
@@ -132,10 +132,10 @@ describe('ConstantPoolPanel', () => {
     w.unmount()
   })
 
-  it('F8: 无插入目标 → ElMessage.info 且不 emit、不复制', async () => {
+  it('F8: 无插入目标 → toast.info 且不 emit、不复制', async () => {
     const { w } = mountPanel([GEN])
     await w.find('[data-entry="bl_no"] .act-insert-key').trigger('click')
-    expect(ElMessage.info).toHaveBeenCalledWith(
+    expect(toast.info).toHaveBeenCalledWith(
       expect.stringContaining('请先点击'),
     )
     expect(w.emitted('seedVar')).toBeFalsy()

@@ -94,7 +94,8 @@
 import { ref, reactive } from 'vue'
 import { Hide, View } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { type FormInstance, type FormRules } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -130,7 +131,7 @@ async function onSubmit() {
   loading.value = true
   try {
     await auth.login(form.username, form.password)
-    ElMessage.success('登录成功')
+    toast.success('登录成功')
     const redirect = (route.query.redirect as string) || '/scenarios'
     router.push(redirect)
   } catch (e) {

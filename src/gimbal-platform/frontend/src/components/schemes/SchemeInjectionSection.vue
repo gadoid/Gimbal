@@ -6,7 +6,7 @@
  *  关闭/清空只在壳回报成功(onDone(true))后发生;PUT 失败 onDone(false)
  *  → 弹层保持打开、输入保留,用户改完可直接重试(乐观关闭会吞掉输入)。 */
 import { ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 
 const props = defineProps<{
   modelValue: string[]                 // injectionEntryIds(受控)
@@ -39,11 +39,11 @@ function confirmQuick() {
   const stepIndex = Number(pendingStep.value)
   if (pendingStep.value === '' || pendingStep.value === null
     || !Number.isInteger(stepIndex) || stepIndex < 0) {
-    ElMessage.warning('要填步骤号(从 0 开始)')
+    toast.warning('要填步骤号(从 0 开始)')
     return
   }
   if (!pendingJsonpath.value.startsWith('$')) {
-    ElMessage.warning('注入路径需以 $ 开头(例:$.amount)')
+    toast.warning('注入路径需以 $ 开头(例:$.amount)')
     return
   }
   // 收尾交结果回调:壳 PUT 成功才关弹层清输入,失败则原样保留

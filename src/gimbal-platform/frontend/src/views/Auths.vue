@@ -200,7 +200,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { useListSearch } from '@/utils/useListSearch'
-import { ElMessage, type FormInstance } from 'element-plus'
+import { type FormInstance } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import { useAuthSessionsStore } from '@/stores/auth_sessions'
 import type { AuthSession, TestResult } from '@/api/auth_sessions'
@@ -310,7 +311,7 @@ async function submitForm() {
       }
       if (form.password) patch.password = form.password
       await store.patchAuth(editingId.value, patch)
-      ElMessage.success('已保存')
+      toast.success('已保存')
     } else {
       await store.createAuth({
         alias: form.alias,
@@ -320,7 +321,7 @@ async function submitForm() {
         token_type: form.token_type,
         expires_in: form.expires_in,
       })
-      ElMessage.success(`已创建 ${form.alias}`)
+      toast.success(`已创建 ${form.alias}`)
     }
     createOpen.value = false
   } catch (e) {
@@ -383,7 +384,7 @@ async function submitDelete() {
   deleteSubmitting.value = true
   try {
     await store.deleteAuth(deleteTarget.value.id)
-    ElMessage.success(`已删除 ${deleteTarget.value.alias}`)
+    toast.success(`已删除 ${deleteTarget.value.alias}`)
     deleteOpen.value = false
   } catch (e) {
     // deleteAuth 直连 api 并 rethrow — store 没有 lastError, 必须用真实错误

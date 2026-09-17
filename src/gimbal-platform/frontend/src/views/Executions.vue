@@ -215,7 +215,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { executionStatusText, isTerminalExecutionStatus } from '@/utils/executionStatus'
 import { cancelExecution, getScenarioSnapshot } from '@/api/executions'
 import type { ExecutionRow } from '@/api/executions'
@@ -442,7 +442,7 @@ async function exportScenario(): Promise<void> {
     const filename =
       `${execStore.detail.scenario_id}-exec${execStore.detail.id}-${exportTimestamp()}.json`
     downloadFile(filename, JSON.stringify(converted, null, 2), 'application/json')
-    ElMessage.success(`已导出 ${filename}（执行时版本）`)
+    toast.success(`已导出 ${filename}（执行时版本）`)
   } catch (e) {
     showError('导出场景', e)
   }
@@ -453,11 +453,11 @@ async function cancelExec() {
   if (!execStore.detail) return
   try {
     await cancelExecution(execStore.detail.id)
-    ElMessage.success('已请求取消 — 在飞行收敛后生效')
+    toast.success('已请求取消 — 在飞行收敛后生效')
   } catch (e) {
     if ((e as { status?: number }).status === 409) {
       // 终态竞态:刷新让按钮消失即可,不算失败。
-      ElMessage.info('该执行已结束,无法取消')
+      toast.info('该执行已结束,无法取消')
     } else {
       showError('取消', e)
       return

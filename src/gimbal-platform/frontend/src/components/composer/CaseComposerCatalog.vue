@@ -253,7 +253,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { ArrowLeft, Search } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { getFullEndpoint } from '@/api/scenario-composer'
 import { assertablePaths, formBindings, responseBindings } from '@/utils/declarations'
 import { useAuthStore } from '@/stores/auth'
@@ -397,7 +397,7 @@ async function selectEndpoint(ep: CatalogRow) {
   try {
     selectedFull.value = await getFullEndpoint(ep.id)
   } catch (e) {
-    ElMessage.error('加载接口详情失败: ' + (e as Error).message)
+    toast.error('加载接口详情失败: ' + (e as Error).message)
   } finally {
     detailLoading.value = false
   }
@@ -457,10 +457,10 @@ async function refetch() {
         openServices.value = servicesForFilteredSystem(sys).map(svc => `${sys}.${svc}`)
       }
     } else {
-      ElMessage.warning('无法加载接口目录: HTTP ' + r.status)
+      toast.warning('无法加载接口目录: HTTP ' + r.status)
     }
   } catch (e) {
-    ElMessage.error('接口目录加载失败: ' + (e as Error).message)
+    toast.error('接口目录加载失败: ' + (e as Error).message)
   } finally {
     loading.value = false
   }

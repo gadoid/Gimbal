@@ -179,7 +179,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import ValueSourcePicker from '@/components/composer/ValueSourcePicker.vue'
 import { ApiError } from '@/api/http'
 import { fetchQueryViewIndex, fetchQueryViewRows, type QueryViewIndexEntry } from '@/api/query-views'
@@ -393,13 +393,13 @@ function onPickColumn(col: string) {
 
 function onApplyBaseline() {
   emit('set-baseline', pickedValue.value)
-  ElMessage.success(`已应用到基线 ${props.varName}(记得「保存基线」)`)
+  toast.success(`已应用到基线 ${props.varName}(记得「保存基线」)`)
 }
 
 function onApplyRow() {
   if (applyRowChoice.value === null || applyRowChoice.value === undefined) return
   emit('set-cell', applyRowChoice.value, pickedValue.value)
-  ElMessage.success(`已写入第 ${applyRowChoice.value + 1} 行 ${props.varName}`)
+  toast.success(`已写入第 ${applyRowChoice.value + 1} 行 ${props.varName}`)
 }
 </script>
 

@@ -204,7 +204,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import * as api from '@/api/adaptations'
 import type { BatchOut, PendingChange, UnindexedStep } from '@/api/adaptations'
 import { getDrift, type ServiceDrift } from '@/api/carry'
@@ -258,7 +258,7 @@ async function loadBatches(scope?: 'mine'): Promise<void> {
   try {
     batchRows.value = await api.listBatches(scope)
   } catch (e) {
-    ElMessage.error(api.errMsg(e, '批次列表加载失败'))
+    toast.error(api.errMsg(e, '批次列表加载失败'))
     batchRows.value = []
   } finally {
     batchesLoading.value = false
@@ -288,7 +288,7 @@ async function onOpenBatch(): Promise<void> {
     drawerOpen.value = false
     await router.push(`/adaptations/batches/${detail.batchId}`)
   } catch (e) {
-    ElMessage.error(api.errMsg(e, '开批次失败(no_pending_change 等),请刷新后重试'))
+    toast.error(api.errMsg(e, '开批次失败(no_pending_change 等),请刷新后重试'))
   }
 }
 
@@ -319,7 +319,7 @@ async function loadCarryDrift(): Promise<void> {
     carryChecked.value = []
   } catch (e) {
     carryLoadFailed.value = true
-    ElMessage.error(api.errMsg(e, 'carry 漂移拉取失败'))
+    toast.error(api.errMsg(e, 'carry 漂移拉取失败'))
   } finally {
     carryDriftLoading.value = false
   }
@@ -345,11 +345,11 @@ async function openCarryBatchFromDrift(): Promise<void> {
       }
     }
     carryChecked.value = []
-    ElMessage.success('carry 批已生成,请在批次详情页按序逐条应用')
+    toast.success('carry 批已生成,请在批次详情页按序逐条应用')
     await loadBatches()
     await router.push(`/adaptations/batches/${lastBatchId}`)
   } catch (e) {
-    ElMessage.error(api.errMsg(e, 'carry 批生成失败'))
+    toast.error(api.errMsg(e, 'carry 批生成失败'))
     await loadBatches()   // 中途失败也可能已建批:刷新让列表反映真实
   } finally {
     carryGenerating.value = false

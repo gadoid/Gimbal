@@ -20,7 +20,7 @@ import { previewPlateDraft } from '@/api/scenario-composer'
 import { copyText } from '@/utils/clipboard'
 import { downloadFile } from '@/utils/download'
 import { exportTimestamp } from '@/utils/datetime'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import type { ScenarioDraft, Orchestration } from '@/types/scenario-composer'
 import type { ScenarioView } from '@/types/plate'
 import type { AssertionRegistry } from '@/types/assertion-registry'
@@ -101,7 +101,7 @@ export const useScenarioDraftStore = defineStore('scenario-draft', () => {
     const converted = await fetchConverted(overlay)
     const base = fileBase()
     downloadFile(`${base}.json`, JSON.stringify(converted, null, 2), 'application/json')
-    ElMessage.success(`已导出 ${base}.json (plate 转换后)`)
+    toast.success(`已导出 ${base}.json (plate 转换后)`)
   }
 
   async function exportYaml(overlay?: RunOverlay): Promise<void> {
@@ -109,14 +109,14 @@ export const useScenarioDraftStore = defineStore('scenario-draft', () => {
     const base = fileBase()
     const content = yaml.dump(converted, { lineWidth: 120, noRefs: true })
     downloadFile(`${base}.yaml`, content, 'application/x-yaml')
-    ElMessage.success(`已导出 ${base}.yaml (plate 转换后)`)
+    toast.success(`已导出 ${base}.yaml (plate 转换后)`)
   }
 
   async function copyJson(): Promise<void> {
     const converted = await fetchConverted()
     const ok = await copyText(JSON.stringify(converted, null, 2))
-    if (ok) ElMessage.success('plate 转换后的 JSON 已复制到剪贴板')
-    else ElMessage.error('复制失败 — 请手动复制')
+    if (ok) toast.success('plate 转换后的 JSON 已复制到剪贴板')
+    else toast.error('复制失败 — 请手动复制')
   }
 
   return {

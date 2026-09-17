@@ -58,7 +58,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useScenarioDraftStore, schemeToOverlay } from '@/stores/scenario-draft'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { listRunSchemes } from '@/api/scenario-composer'
 import type { SchemeV2 } from '@/api/scenario-composer'
 
@@ -92,7 +92,7 @@ async function refreshSchemes() {
 
 async function onCommand(cmd: string) {
   if (!hasDraft.value) {
-    ElMessage.warning('当前没有正在编辑的草稿,请先在 CaseComposer 里打开 / 新建一个场景')
+    toast.warning('当前没有正在编辑的草稿,请先在 CaseComposer 里打开 / 新建一个场景')
     return
   }
   exporting.value = true
@@ -105,7 +105,7 @@ async function onCommand(cmd: string) {
     else if (cmd === 'yaml') await store.exportYaml()
     else if (cmd === 'copy') await store.copyJson()
   } catch (e) {
-    ElMessage.error(`导出失败: ${(e as Error).message}`)
+    toast.error(`导出失败: ${(e as Error).message}`)
   } finally {
     exporting.value = false
   }

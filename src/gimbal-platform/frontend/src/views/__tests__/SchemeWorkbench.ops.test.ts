@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import ElementPlus, { ElMessage, ElMessageBox } from 'element-plus'
+import ElementPlus, { ElMessageBox } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { createPinia, setActivePinia } from 'pinia'
 import * as api from '@/api/scenario-composer'
 import SchemeWorkbench from '@/views/SchemeWorkbench.vue'
@@ -198,7 +199,7 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
   it('删除 405(default 兜底)→ 提示默认方案不可删除', async () => {
     vi.spyOn(api, 'deleteRunScheme')
       .mockRejectedValue(Object.assign(new Error('Method Not Allowed'), { status: 405 }))
-    const warn = vi.spyOn(ElMessage, 'warning')
+    const warn = vi.spyOn(toast, 'warning')
     const w = await mountWb()
     await w.findComponent(SchemeListPanel).vm.$emit('delete', SCHEME_DEFAULT)
     await flushPromises()

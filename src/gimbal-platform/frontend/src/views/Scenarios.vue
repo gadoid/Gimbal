@@ -211,7 +211,8 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { Collection, Search, Star, StarFilled } from '@element-plus/icons-vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useAuthStore } from '@/stores/auth'
@@ -420,9 +421,9 @@ async function exportRow(row: Scenario) {
     const ts = exportTimestamp()
     const filename = `${row.meta.scenarioId}-${ts}.json`
     downloadFile(filename, JSON.stringify(converted, null, 2), 'application/json')
-    ElMessage.success(`已导出 ${filename}`)
+    toast.success(`已导出 ${filename}`)
   } catch (e) {
-    ElMessage.error(`导出失败: ${(e as Error).message}`)
+    toast.error(`导出失败: ${(e as Error).message}`)
   }
 }
 
@@ -440,7 +441,7 @@ async function onCmd(cmd: string, row: Scenario) {
   if (cmd === 'copy') {
     try {
       const saved = await store.copyScenario(row.meta.scenarioId)
-      ElMessage.success(`已复制到我的场景：${saved.meta.name || saved.meta.scenarioId}`)
+      toast.success(`已复制到我的场景：${saved.meta.name || saved.meta.scenarioId}`)
     } catch (e) {
       showError('复制', undefined, (e as Error).message)
     }
@@ -455,7 +456,7 @@ async function onCmd(cmd: string, row: Scenario) {
     if (!ok) return
     try {
       await store.publishScenario(row.meta.scenarioId)
-      ElMessage.success('已发布')
+      toast.success('已发布')
     } catch (e) {
       showError('发布', undefined, (e as Error).message)
     }
@@ -470,7 +471,7 @@ async function onCmd(cmd: string, row: Scenario) {
     if (!ok) return
     try {
       await store.unpublishScenario(row.meta.scenarioId)
-      ElMessage.success('已下架为私有')
+      toast.success('已下架为私有')
     } catch (e) {
       showError('下架', undefined, (e as Error).message)
     }
@@ -486,7 +487,7 @@ async function onCmd(cmd: string, row: Scenario) {
     if (!ok) return // 用户取消
     try {
       await store.removeScenario(row.meta.scenarioId)
-      ElMessage.success(`已删除：${row.meta.name || row.meta.scenarioId}`)
+      toast.success(`已删除：${row.meta.name || row.meta.scenarioId}`)
     } catch (e) {
       showError('删除', undefined, (e as Error).message)
     }

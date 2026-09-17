@@ -70,7 +70,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { useExecutionsStore } from '@/stores/executions'
 import { cancelExecution } from '@/api/executions'
 import { executionStatusText } from '@/utils/executionStatus'
@@ -95,11 +95,11 @@ async function remove(id: number) {
 async function cancel(id: number) {
   try {
     await cancelExecution(id)
-    ElMessage.success('已请求取消')
+    toast.success('已请求取消')
   } catch (e) {
     if ((e as { status?: number }).status === 409) {
       // 终态竞态:刷新让取消按钮消失即可,不算失败。
-      ElMessage.info('该执行已结束,无法取消')
+      toast.info('该执行已结束,无法取消')
     } else {
       showError('取消', e)
       return

@@ -12,7 +12,7 @@
     value 插入=纯文本追加(它本身就是声明,无播种)。
 
   插入走 useSharedInsertTarget(composer 根 provide);无目标时
-  ElMessage.info 提示且不播种。
+  toast.info 提示且不播种。
 -->
 <template>
   <div class="cp-panel">
@@ -55,7 +55,7 @@
 </template>
 
 <script setup lang="ts">
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { copyText } from '@/utils/clipboard'
 import { useSharedInsertTarget } from '@/composables/useInsertTarget'
 import type { ConstantEntry } from '@/types/constants'
@@ -81,22 +81,22 @@ const NO_TARGET_MSG = '请先点击要插入的输入框'
 
 function copyKey(e: ConstantEntry): void {
   void copyText(keyText(e)).then((ok) => {
-    if (ok) ElMessage.success('已复制引用')
-    else ElMessage.error('复制失败 — 请手动复制')
+    if (ok) toast.success('已复制引用')
+    else toast.error('复制失败 — 请手动复制')
   })
 }
 
 function copyValue(e: ConstantEntry): void {
   void copyText(valueText(e)).then((ok) => {
-    if (ok) ElMessage.success('已复制')
-    else ElMessage.error('复制失败 — 请手动复制')
+    if (ok) toast.success('已复制')
+    else toast.error('复制失败 — 请手动复制')
   })
 }
 
 /** key 插入: 追加引用文本;成功才 emit seedVar(快照播种,写入点在 CaseComposer)。 */
 function insertKey(e: ConstantEntry): void {
   if (!inserter.appendValue(keyText(e))) {
-    ElMessage.info(NO_TARGET_MSG)
+    toast.info(NO_TARGET_MSG)
     return
   }
   emit('seedVar', e.name, (e.spec ?? {}) as Record<string, unknown>)
@@ -105,7 +105,7 @@ function insertKey(e: ConstantEntry): void {
 /** value 插入: 纯文本追加 — 字面量=值文本,生成器=spec JSON(本身即声明,无播种)。 */
 function insertValue(e: ConstantEntry): void {
   if (!inserter.appendValue(valueText(e))) {
-    ElMessage.info(NO_TARGET_MSG)
+    toast.info(NO_TARGET_MSG)
   }
 }
 </script>

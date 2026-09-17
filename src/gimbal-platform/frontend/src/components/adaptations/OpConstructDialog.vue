@@ -149,7 +149,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import * as api from '@/api/adaptations'
 import type { MergeSeed, OpOut } from '@/api/adaptations'
 import { getScenario, listDataSets, listScenarios } from '@/api/scenario-composer'
@@ -304,12 +304,12 @@ function buildPayload(): Record<string, unknown> {
 async function submit(): Promise<void> {
   // CARRY_OPS 免场景(值表 op);场景 op 仍必选
   if (!isCarryOp.value && !form.scenarioId) {
-    ElMessage.warning('请选择场景')
+    toast.warning('请选择场景')
     return
   }
   const datasetOp = opTypeIn(['renameDatasetColumn', 'mapDatasetValues'])
   if (datasetOp && !form.datasetId) {
-    ElMessage.warning('请选择数据集')
+    toast.warning('请选择数据集')
     return
   }
   submitting.value = true
@@ -327,7 +327,7 @@ async function submit(): Promise<void> {
     emit('created', op)
     emit('update:modelValue', false)
   } catch (e) {
-    ElMessage.error(api.errMsg(e, '创建失败(批次可能已不在 open 状态)'))
+    toast.error(api.errMsg(e, '创建失败(批次可能已不在 open 状态)'))
   } finally {
     submitting.value = false
   }

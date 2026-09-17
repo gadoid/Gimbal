@@ -6,7 +6,7 @@
  *
  * Returns true when the row was actually deleted (caller may navigate).
  */
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { confirmAction } from './confirmAction'
 import { showError } from './errorFallback'
 
@@ -26,6 +26,6 @@ export async function removeExecution(
     showError('删除', e)
     return false
   }
-  ElMessage.success('已删除')
+  toast.success('已删除')
   return true
 }

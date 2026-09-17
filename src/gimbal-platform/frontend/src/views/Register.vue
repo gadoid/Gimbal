@@ -108,7 +108,8 @@
 import { ref, reactive, computed, onBeforeUnmount } from 'vue'
 import { Hide, View } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { type FormInstance, type FormRules } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -243,7 +244,7 @@ async function onSubmit() {
       form.displayName || '',
     )
     successMsg.value = `注册成功！${redirectCountdown} 秒后跳转…`
-    ElMessage.success('注册成功')
+    toast.success('注册成功')
     startCountdown()
   } catch (e) {
     const msg = (e as { msg?: string; message?: string }).msg

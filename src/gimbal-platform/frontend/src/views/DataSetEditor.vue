@@ -345,7 +345,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Back, DataAnalysis, Delete, VideoPlay } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { getDataSet, getScenarioDraft, updateScenario } from '@/api/scenario-composer'
 import RunPanelHost from '@/components/composer/RunPanelHost.vue'
@@ -420,7 +420,7 @@ const rowsDirty = ref(false)
  *    **存储的** config.vars,继承格(cell-inherit)的值与屏幕上不同。 */
 function runRow() {
   if (datasetId === 'new' || rowsDirty.value || baselineDirty.value) {
-    ElMessage.warning(RUN_ROW_UNSAVED_HINT)
+    toast.warning(RUN_ROW_UNSAVED_HINT)
     return
   }
   panelOpen.value = true
@@ -500,7 +500,7 @@ function resetVarDefault(name: string) {
   for (const r of rows.value) delete r[name]
   varUnlocks.value = varUnlocks.value.filter(n => n !== name)
   rowsDirty.value = true
-  ElMessage.success(`已恢复默认:「${name}」全部覆盖已清,回到共享侧配置`)
+  toast.success(`已恢复默认:「${name}」全部覆盖已清,回到共享侧配置`)
 }
 
 const varColumns = computed<VarViewColumn[]>(() => {
@@ -735,7 +735,7 @@ async function onSaveBaseline() {
   try {
     await updateScenario(scenarioId, draft.value)
     baselineDirty.value = false
-    ElMessage.success('基线已保存')
+    toast.success('基线已保存')
   } catch (e) {
     showError('保存基线', e)
   } finally {
@@ -802,7 +802,7 @@ function onCellPaste(e: ClipboardEvent, col: BaselineColumn, rowIndex: number) {
   // 粘贴落值,提示引导列头「放开」— 不落键
   if (isLockedHidden(col.varName)) {
     e.preventDefault()
-    ElMessage.warning(`「${col.varName}」已锁定为过程变量 — 如需编辑请先在列头「放开」`)
+    toast.warning(`「${col.varName}」已锁定为过程变量 — 如需编辑请先在列头「放开」`)
     return
   }
   const text = e.clipboardData?.getData('text/plain') ?? ''
@@ -818,9 +818,9 @@ function onCellPaste(e: ClipboardEvent, col: BaselineColumn, rowIndex: number) {
     caseNames.value.push(`data-${caseNames.value.length + 1}`)
   }
   if (plan.needsAppend > 0) {
-    ElMessage.success(`已粘贴 ${plan.cells.length} 行(自动新增 ${plan.needsAppend} 行)`)
+    toast.success(`已粘贴 ${plan.cells.length} 行(自动新增 ${plan.needsAppend} 行)`)
   } else {
-    ElMessage.success(`已粘贴 ${plan.cells.length} 行`)
+    toast.success(`已粘贴 ${plan.cells.length} 行`)
   }
 }
 
@@ -843,7 +843,7 @@ function toApiRow(r: Record<string, any>): Record<string, string> {
 async function onSaveRows() {
   if (savingRows.value) return
   if (!form.name) {
-    ElMessage.warning('请填写数据集名称')
+    toast.warning('请填写数据集名称')
     return
   }
   savingRows.value = true
@@ -856,7 +856,7 @@ async function onSaveRows() {
       // 空清单不携键(缺省 ≡ 空)— 既有无锁定场景的 draft 形状零变化
       ...(varUnlocks.value.length ? { varUnlocks: [...varUnlocks.value] } : {}),
     })
-    ElMessage.success('已保存')
+    toast.success('已保存')
     rowsDirty.value = false          // 落库后本地行号 = 服务端行号
     router.push(scenarioDataSetsUrl(scenarioId))
   } catch (e) {
@@ -874,7 +874,7 @@ async function onDelete() {
   if (!ok) return
   try {
     await store.removeDataSet(scenarioId, datasetId)
-    ElMessage.success('已删除')
+    toast.success('已删除')
     router.push(scenarioDataSetsUrl(scenarioId))
   } catch (e) {
     showError('删除数据集', e)
@@ -911,12 +911,12 @@ async function onImportCsv(file: File) {
       mode: 'merge-by-name',
     })
     if (result.errors.length) {
-      ElMessage.warning(`CSV 导入有问题:${result.errors.join('; ')}`)
+      toast.warning(`CSV 导入有问题:${result.errors.join('; ')}`)
     } else {
-      ElMessage.success(`CSV 导入成功(共 ${result.rows.length} 条数据)`)
+      toast.success(`CSV 导入成功(共 ${result.rows.length} 条数据)`)
     }
     if (result.skippedLocked?.length) {
-      ElMessage.info(`${result.skippedLocked.length} 列已锁定,已忽略:${result.skippedLocked.join(', ')}`)
+      toast.info(`${result.skippedLocked.length} 列已锁定,已忽略:${result.skippedLocked.join(', ')}`)
     }
     rows.value = result.rows
     caseNames.value = result.caseNames

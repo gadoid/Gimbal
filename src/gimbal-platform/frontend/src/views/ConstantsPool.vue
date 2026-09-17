@@ -211,7 +211,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { useConstantsStore } from '@/stores/constants'
 import { getGeneratorKindFull } from '@/api/generator_catalog'
 import { copyText } from '@/utils/clipboard'
@@ -224,7 +225,7 @@ import type {
 const constantsStore = useConstantsStore()
 
 onMounted(() => {
-  void constantsStore.ensureEntries().catch(() => ElMessage.error('常量池加载失败'))
+  void constantsStore.ensureEntries().catch(() => toast.error('常量池加载失败'))
   void constantsStore.ensureCatalog()
 })
 
@@ -248,7 +249,7 @@ async function ensureFull(kind: string): Promise<void> {
   try {
     fulls.value = { ...fulls.value, [kind]: await getGeneratorKindFull(kind) }
   } catch {
-    ElMessage.error(`加载 ${kind} 说明失败`)
+    toast.error(`加载 ${kind} 说明失败`)
   }
 }
 
@@ -262,7 +263,7 @@ function paramRange(p: GeneratorParamDesc): string {
 
 function copyExample(full: GeneratorKindDetailView): void {
   void copyText(JSON.stringify(full.example)).then((ok) => {
-    if (ok) ElMessage.success('已复制示例 JSON')
+    if (ok) toast.success('已复制示例 JSON')
   })
 }
 
@@ -279,9 +280,9 @@ async function onDelete(row: ConstantEntry): Promise<void> {
   }
   try {
     await constantsStore.removeEntry(row.id)
-    ElMessage.success('已删除')
+    toast.success('已删除')
   } catch {
-    ElMessage.error('删除失败')
+    toast.error('删除失败')
   }
 }
 
@@ -422,7 +423,7 @@ async function onSubmit(): Promise<void> {
       if (form.entry_kind === 'literal') payload.value = literalValueFromForm()
       else payload.spec = buildSpec()
       await constantsStore.patchEntry(editing.value.id, payload)
-      ElMessage.success('已保存')
+      toast.success('已保存')
     } else if (form.entry_kind === 'literal') {
       await constantsStore.createEntry({
         name: form.name,
@@ -430,7 +431,7 @@ async function onSubmit(): Promise<void> {
         entry_kind: 'literal',
         value: literalValueFromForm(),
       })
-      ElMessage.success('已新增')
+      toast.success('已新增')
     } else {
       await constantsStore.createEntry({
         name: form.name,
@@ -438,11 +439,11 @@ async function onSubmit(): Promise<void> {
         entry_kind: 'generator',
         spec: buildSpec() ?? undefined,
       })
-      ElMessage.success('已新增')
+      toast.success('已新增')
     }
     dialogOpen.value = false
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '保存失败')
+    toast.error(e instanceof Error ? e.message : '保存失败')
   }
 }
 
@@ -450,7 +451,7 @@ function copySpec(): void {
   const spec = buildSpec()
   if (!spec) return
   void copyText(JSON.stringify(spec)).then((ok) => {
-    if (ok) ElMessage.success('已复制 spec')
+    if (ok) toast.success('已复制 spec')
   })
 }
 </script>

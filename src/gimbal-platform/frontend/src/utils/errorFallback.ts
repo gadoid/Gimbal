@@ -12,7 +12,7 @@
  * store 层错误请直接 `throw` 出来,由 catch 块交给 showError —
  * 双参签名之外不受支持。
  */
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 
 /** 常用操作标签(仅文档作用;``op`` 实际接受任意短标签,
  *  传时**不带**"失败"后缀 —— 后缀由 showError 拼接)。 */
@@ -52,5 +52,5 @@ export function showError(
     (err as ErrorLike | null | undefined)?.message ||
     storeLastError ||
     ''
-  ElMessage.error(detail ? `${op}失败: ${detail}` : `${op}失败`)
+  toast.error(detail ? `${op}失败: ${detail}` : `${op}失败`)
 }

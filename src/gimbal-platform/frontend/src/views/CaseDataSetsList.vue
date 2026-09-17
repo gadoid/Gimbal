@@ -155,7 +155,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { Back, DataAnalysis, VideoPlay } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { showError } from '@/utils/errorFallback'
 import { confirmAction } from '@/utils/confirmAction'
@@ -258,7 +258,7 @@ async function remove(d: DataSetSummary) {
   if (!ok) return
   try {
     await store.removeDataSet(scenarioId, d.datasetId)
-    ElMessage.success('已删除')
+    toast.success('已删除')
   } catch (e) {
     showError('删除数据集', e)
   }

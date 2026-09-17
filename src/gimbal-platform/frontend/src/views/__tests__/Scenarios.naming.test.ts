@@ -9,10 +9,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import ElementPlus, { ElMessage } from 'element-plus'
+import ElementPlus from 'element-plus'
 import Scenarios from '@/views/Scenarios.vue'
 import * as api from '@/api/scenario-composer'
 import { confirmAction } from '@/utils/confirmAction'
+import { toast } from '@/utils/toast'
 import type { Scenario } from '@/types/scenario-composer'
 
 vi.mock('vue-router', async (importOriginal) => {
@@ -75,7 +76,7 @@ describe('Scenarios — 删除/复制文案用 name', () => {
   it('删除确认与删除成功 toast 都用 name', async () => {
     vi.spyOn(api, 'listScenarios').mockResolvedValue([row({})])
     vi.spyOn(api, 'deleteScenario').mockResolvedValue(undefined)
-    const toast = vi.spyOn(ElMessage, 'success').mockImplementation(() => ({}) as never)
+    const successSpy = vi.spyOn(toast, 'success').mockImplementation(() => 0)
 
     const w = mountPage()
     await flushPromises()
@@ -84,7 +85,7 @@ describe('Scenarios — 删除/复制文案用 name', () => {
     const confirmMsg = vi.mocked(confirmAction).mock.calls[0][0] as string
     expect(confirmMsg).toContain('订单查询')
     expect(confirmMsg).not.toContain('sc-x')
-    expect(toast).toHaveBeenCalledWith('已删除：订单查询')
+    expect(successSpy).toHaveBeenCalledWith('已删除：订单查询')
     w.unmount()
   })
 
@@ -93,13 +94,13 @@ describe('Scenarios — 删除/复制文案用 name', () => {
     vi.spyOn(api, 'copyScenario').mockResolvedValue(
       row({ scenarioId: 'sc-copy', name: '订单查询' }),
     )
-    const toast = vi.spyOn(ElMessage, 'success').mockImplementation(() => ({}) as never)
+    const successSpy = vi.spyOn(toast, 'success').mockImplementation(() => 0)
 
     const w = mountPage()
     await flushPromises()
     await emitCommand(w, 'copy')
 
-    expect(toast).toHaveBeenCalledWith('已复制到我的场景：订单查询')
+    expect(successSpy).toHaveBeenCalledWith('已复制到我的场景：订单查询')
     w.unmount()
   })
 })

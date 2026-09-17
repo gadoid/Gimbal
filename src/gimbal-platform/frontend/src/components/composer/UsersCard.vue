@@ -123,7 +123,8 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { ElMessage, type FormInstance } from 'element-plus'
+import { type FormInstance } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { list as listAuths, get as getAuth } from '@/api/auth_sessions'
 import type { AuthSession } from '@/api/auth_sessions'
 import type { UserAuthView } from '@/types/plate'
@@ -203,7 +204,7 @@ async function submitForm() {
     return
   }
   if (!editingAlias.value && Object.hasOwn(props.modelValue || {}, form.alias)) {
-    ElMessage.warning(`alias ${form.alias} 已存在 — 不做覆盖,如需刷新请先删除该行`)
+    toast.warning(`alias ${form.alias} 已存在 — 不做覆盖,如需刷新请先删除该行`)
     return
   }
   setUsers({
@@ -247,7 +248,7 @@ async function openImport() {
   try {
     pool.value = await listAuths()
   } catch (e) {
-    ElMessage.error(`凭证池加载失败：${(e as Error).message}`)
+    toast.error(`凭证池加载失败：${(e as Error).message}`)
     importOpen.value = false
   } finally {
     poolLoading.value = false
@@ -273,13 +274,13 @@ async function submitImport() {
       }
       imported++
     } catch (e) {
-      ElMessage.warning(`${row.alias} 导入失败：${(e as Error).message}（已跳过）`)
+      toast.warning(`${row.alias} 导入失败：${(e as Error).message}（已跳过）`)
     }
   }
   importing.value = false
   if (imported > 0) {
     setUsers(next)
-    ElMessage.success(`已导入 ${imported} 条用户快照`)
+    toast.success(`已导入 ${imported} 条用户快照`)
   }
   importOpen.value = false
 }

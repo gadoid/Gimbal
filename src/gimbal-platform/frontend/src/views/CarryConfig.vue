@@ -217,7 +217,7 @@
  * 全局默认 tab:整表编辑;常驻提示纯 path 跨服务生效(§6)。
  */
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import { buildServiceEntries, type ServiceCarryRow } from '@/utils/carry-entries'
 import {
@@ -347,7 +347,7 @@ async function onCsvPicked(e: Event) {
     parsed = parseCarryCsv(await file.text())
   } catch (err) {
     if (err instanceof CarryCsvError) {
-      ElMessage.error(`CSV 格式错误:${err.message}`)
+      toast.error(`CSV 格式错误:${err.message}`)
     } else {
       showError('读取 CSV', err)
     }
@@ -356,13 +356,13 @@ async function onCsvPicked(e: Event) {
   const report = mergeCarryCsv(rows.value, parsed)
   const unsaved = '尚未保存,请核对后点「保存」'
   if (report.skippedUnknown.length > 0) {
-    ElMessage.warning(
+    toast.warning(
       `已导入 ${report.applied} 条(${unsaved});` +
       `面外跳过 ${report.skippedUnknown.length} 条(未声明,门控会滤掉):` +
       report.skippedUnknown.join('、'),
     )
   } else {
-    ElMessage.success(`已导入 ${report.applied} 条(${unsaved})`)
+    toast.success(`已导入 ${report.applied} 条(${unsaved})`)
   }
 }
 
@@ -381,7 +381,7 @@ async function saveService() {
   const entries = buildServiceEntries(rows.value)
   try {
     await putBindings(service.value, entries)
-    ElMessage.success('已保存')
+    toast.success('已保存')
     // 回读:让 hasRow/isNull 与刚落库的状态一致(新建行亮出「删行」)
     void onServiceChange()
     // allow-create 的新服务入库后刷新候选列表
@@ -435,14 +435,14 @@ async function onDefaultsCsvPicked(e: Event) {
     parsed = parseCarryCsv(await file.text())
   } catch (err) {
     if (err instanceof CarryCsvError) {
-      ElMessage.error(`CSV 格式错误:${err.message}`)
+      toast.error(`CSV 格式错误:${err.message}`)
     } else {
       showError('读取 CSV', err)
     }
     return
   }
   const report = mergeDefaultsCsv(defaultRows.value, parsed)
-  ElMessage.success(
+  toast.success(
     `已导入:更新 ${report.updated} 条、新增 ${report.added} 条(尚未保存,请核对后点「保存」)`,
   )
 }
@@ -461,7 +461,7 @@ function firstDuplicatePath(rows: DefaultCarryRow[]): string | null {
 async function saveDefaults() {
   const dup = firstDuplicatePath(defaultRows.value)
   if (dup) {
-    ElMessage.warning(`字段路径重复:${dup} — 保存会静默覆盖,请先去重`)
+    toast.warning(`字段路径重复:${dup} — 保存会静默覆盖,请先去重`)
     return
   }
   const entries: CarryValues = {}
@@ -471,7 +471,7 @@ async function saveDefaults() {
   }
   try {
     await putDefaults(entries)
-    ElMessage.success('已保存')
+    toast.success('已保存')
     // 回读:让 isNull/value 与后端规范化结果一致,并刷新服务 tab 的默认 placeholder
     await loadDefaults()
   } catch (e) {

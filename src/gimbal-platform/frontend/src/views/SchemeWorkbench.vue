@@ -2,7 +2,8 @@
 /** 方案工作台壳:左右分栏、取数编排、选中态;编辑区 = 数据区(Task 5)+ 后续任务区。 */
 import { computed, onMounted, ref, toRaw, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { toast } from '@/utils/toast'
 import {
   listRunSchemes, getScenarioDraft, listDataSets, createRunScheme, updateRunScheme,
   deleteRunScheme, updateScenario, type SchemeV2,
@@ -56,9 +57,9 @@ async function saveScheme() {
     await refresh()
     draft.value = selected.value ? structuredClone(toRaw(selected.value)) : null
     dirty.value = false
-    ElMessage.success('方案已保存')
+    toast.success('方案已保存')
   } catch (e) {
-    ElMessage.error(`保存方案失败:${e instanceof Error ? e.message : String(e)}`)
+    toast.error(`保存方案失败:${e instanceof Error ? e.message : String(e)}`)
   } finally {
     saving.value = false
   }
@@ -103,7 +104,7 @@ async function onQuickCreate(
   onDone: (ok: boolean) => void,
 ) {
   if (!scenarioDraft.value) {
-    ElMessage.error('快建条目失败:场景草稿未加载')
+    toast.error('快建条目失败:场景草稿未加载')
     onDone(false)
     return
   }
@@ -125,10 +126,10 @@ async function onQuickCreate(
     if (draft.value && !draft.value.injectionEntryIds.includes(entry.id)) {
       draft.value.injectionEntryIds.push(entry.id)
     }
-    ElMessage.success('已快建断言条目并勾选(记得保存方案)')
+    toast.success('已快建断言条目并勾选(记得保存方案)')
     onDone(true)
   } catch (e) {
-    ElMessage.error(`快建条目失败:${e instanceof Error ? e.message : String(e)}`)
+    toast.error(`快建条目失败:${e instanceof Error ? e.message : String(e)}`)
     onDone(false)
   } finally {
     registrySaving.value = false
@@ -190,16 +191,16 @@ async function onRename(s: SchemeV2) {
   if (name === null) return
   const trimmed = name.trim()
   if (!trimmed) {
-    ElMessage.warning('方案名不能为空')
+    toast.warning('方案名不能为空')
     return
   }
   try {
     const { schemeId: _s, isDefault: _d, ...body } = s
     await updateRunScheme(scenarioId, s.schemeId, { ...body, name: trimmed })
     await refresh()
-    ElMessage.success('方案已重命名')
+    toast.success('方案已重命名')
   } catch (e) {
-    ElMessage.error(`重命名失败:${e instanceof Error ? e.message : String(e)}`)
+    toast.error(`重命名失败:${e instanceof Error ? e.message : String(e)}`)
   }
 }
 
@@ -211,9 +212,9 @@ async function onDuplicate(s: SchemeV2) {
     const made = await createRunScheme(scenarioId, { ...body, name: `${s.name} 副本` })
     await refresh()
     selectedId.value = made.schemeId
-    ElMessage.success('已复制派生方案')
+    toast.success('已复制派生方案')
   } catch (e) {
-    ElMessage.error(`复制派生失败:${e instanceof Error ? e.message : String(e)}`)
+    toast.error(`复制派生失败:${e instanceof Error ? e.message : String(e)}`)
   }
 }
 
@@ -228,10 +229,10 @@ async function onDelete(s: SchemeV2) {
     await deleteRunScheme(scenarioId, s.schemeId)
     await refresh()
     if (selectedId.value === s.schemeId) selectedId.value = schemes.value[0]?.schemeId ?? null
-    ElMessage.success('方案已删除')
+    toast.success('方案已删除')
   } catch (e) {
-    if ((e as { status?: number })?.status === 405) ElMessage.warning('默认方案不可删除')
-    else ElMessage.error(`删除方案失败:${e instanceof Error ? e.message : String(e)}`)
+    if ((e as { status?: number })?.status === 405) toast.warning('默认方案不可删除')
+    else toast.error(`删除方案失败:${e instanceof Error ? e.message : String(e)}`)
   }
 }
 
@@ -272,7 +273,7 @@ async function onCreate() {
     await refresh()
     selectedId.value = made.schemeId
   } catch (e) {
-    ElMessage.error(`新建方案失败:${e instanceof Error ? e.message : String(e)}`)
+    toast.error(`新建方案失败:${e instanceof Error ? e.message : String(e)}`)
   }
 }
 
@@ -295,7 +296,7 @@ onMounted(async () => {
       listDataSets({ scenarioId }).then((d) => { dataSets.value = d }),
     ])
   } catch (e) {
-    ElMessage.error(`加载场景失败:${e instanceof Error ? e.message : String(e)}`)
+    toast.error(`加载场景失败:${e instanceof Error ? e.message : String(e)}`)
   }
 })
 </script>

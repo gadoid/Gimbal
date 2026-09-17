@@ -255,7 +255,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { toast } from '@/utils/toast'
 import ScenarioExportMenu from '@/components/ScenarioExportMenu.vue'
 import CaseComposerMeta from '@/components/composer/CaseComposerMeta.vue'
 import CaseComposerResource from '@/components/composer/CaseComposerResource.vue'
@@ -565,7 +566,7 @@ function onRegistryAdd(mark: RegistryMark) {
         mode: 'append',
       }],
     })
-    ElMessage.success({
+    toast.success({
       message: '已加入断言管理(该响应字段已建为一条断言;注入地址留空,到断言管理补齐后才会生效)',
       duration: 5000,
     })
@@ -578,7 +579,7 @@ function onRegistryAdd(mark: RegistryMark) {
       value: mark.value,
       asserts: [],
     })
-    ElMessage.success({ message: '已加入断言管理(注入值已预填字段当前值,请到断言管理编辑)', duration: 4000 })
+    toast.success({ message: '已加入断言管理(注入值已预填字段当前值,请到断言管理编辑)', duration: 4000 })
   }
   // 与 watch([definition, orchestration]) 体同款(dirty 标记 + 防抖调度)
   dirty.value = true
@@ -611,7 +612,7 @@ function seedPoolVar(name: string, spec: Record<string, unknown>): void {
   const result = seedPoolVarIntoDefinition(definition.value, name, spec)
   definition.value = result.definition
   if (!result.seeded) {
-    ElMessage.info(`config.vars 已有同名变量 ${name},使用现有值`)
+    toast.info(`config.vars 已有同名变量 ${name},使用现有值`)
   }
 }
 
@@ -875,14 +876,14 @@ function genScenarioId(name: string): string {
 async function saveDraft(advance = false, manual = true, silent = false): Promise<boolean> {
   if (!meta.value.name) {
     // scenarioId 不再前端必填校验:新建时自动生成,编辑时由路由回填并锁定。
-    ElMessage.warning('请先在 ① 基本信息 中填写 name')
+    toast.warning('请先在 ① 基本信息 中填写 name')
     onStepClick(0)
     return false
   }
   // 保存前 lint(C10/§4.3):不拦截保存,只提醒;自动保存(步进)不弹 toast
   const lintWarns = lintDraft(definition.value as Parameters<typeof lintDraft>[0])
   if (lintWarns.length && manual) {
-    ElMessage.warning({ message: `草稿提醒:${lintWarns.join(';')}`, duration: 6000 })
+    toast.warning({ message: `草稿提醒:${lintWarns.join(';')}`, duration: 6000 })
   }
   // 新建场景:生成唯一 id 替换占位 'sc-new'。后端以此 id 作 DB 主键原样采用。
   // 编辑场景:definition.scenarioId 已由 loadScenario 从路由回填,update 时锁定不变。
@@ -993,7 +994,7 @@ async function onDuplicate() {
     // 复制统一走服务端 copyScenario(生成唯一新 id),
     // 不再本地拼 `${id}-copy`(重复复制会撞号)。
     const saved = await store.copyScenario(scenario.value.meta.scenarioId)
-    ElMessage.success('已复制')
+    toast.success('已复制')
     router.push(composerUrl(saved.meta.scenarioId))
   } catch (e) {
     showError('复制', undefined, (e as Error).message)
@@ -1010,7 +1011,7 @@ async function onDelete() {
   if (!ok) return // 用户取消或 ESC 关闭
   try {
     await store.removeScenario(scenario.value.meta.scenarioId)
-    ElMessage.success('已删除')
+    toast.success('已删除')
     router.push('/scenarios')
   } catch (e) {
     showError('删除', undefined, (e as Error).message)
@@ -1019,7 +1020,7 @@ async function onDelete() {
 
 async function onPreview() {
   if (!meta.value.name) {
-    ElMessage.warning('请先填写 name')
+    toast.warning('请先填写 name')
     return
   }
   // 新建场景:预校验也要发真实 id 给 plate /convert(替换占位 'sc-new')。
@@ -1034,9 +1035,9 @@ async function onPreview() {
     }
     const res = await api.previewPlateDraft(draft)
     if (res.ok) {
-      ElMessage.success('Plate 预校验通过 ✓')
+      toast.success('Plate 预校验通过 ✓')
     } else {
-      ElMessage.warning(`Plate 校验失败: ${res.errors?.length || 0} 个错误`)
+      toast.warning(`Plate 校验失败: ${res.errors?.length || 0} 个错误`)
     }
   } catch (e) {
     showError('预校验', undefined, (e as Error).message)
@@ -1059,7 +1060,7 @@ async function onRunConfirm(
   },
 ) {
   if (!scenario.value) {
-    ElMessage.warning('请先保存草稿')
+    toast.warning('请先保存草稿')
     return
   }
   runDispatching.value = true
@@ -1087,7 +1088,7 @@ async function onRunConfirm(
     }
     const resp = await api.runScenario(body)
     lastRunId.value = resp.runId
-    ElMessage.success(`运行已发起: ${resp.runId}`)
+    toast.success(`运行已发起: ${resp.runId}`)
     // 同走 closeRunDialog(而非只置 runDialogOpen):关窗同时清深链预选
     // initialSchemeId,否则下一次从「运行」入口打开会复活旧的深链预选
     // (Ruling 12 同款语义)。失败路径不关窗(原样保留错误态,可重试)。
@@ -1118,13 +1119,13 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
   // (POST /api/scenarios/new/run-schemes 会 404);用持久化 scenario 的真实 id。
   const id = scenario.value?.meta.scenarioId
   if (!id) {
-    ElMessage.warning('场景尚未保存 — 请先保存场景,再另存为方案')
+    toast.warning('场景尚未保存 — 请先保存场景,再另存为方案')
     return
   }
   try {
     await api.createRunScheme(id, body)
     runSchemes.value = await api.listRunSchemes(id)
-    ElMessage.success(`方案「${body.name}」已另存`)
+    toast.success(`方案「${body.name}」已另存`)
   } catch (e) {
     showError('另存为方案', undefined, (e as Error).message)
   }

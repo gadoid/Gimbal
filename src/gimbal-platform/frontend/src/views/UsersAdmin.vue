@@ -262,7 +262,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { DocumentCopy, Search } from '@element-plus/icons-vue'
 import { useListSearch } from '@/utils/useListSearch'
-import { ElMessage, type FormInstance } from 'element-plus'
+import { type FormInstance } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import { useUsersStore } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
@@ -346,7 +347,7 @@ async function onCommand(cmd: string, row: UserOut): Promise<void> {
 async function toggleRole(row: UserOut): Promise<void> {
   try {
     await usersStore.patchUser(row.id, { is_admin: !row.is_admin })
-    ElMessage.success(`已${row.is_admin ? '降级' : '升级'} ${row.username}`)
+    toast.success(`已${row.is_admin ? '降级' : '升级'} ${row.username}`)
   } catch {
     showError('修改', undefined, usersStore.lastError)
   }
@@ -355,7 +356,7 @@ async function toggleRole(row: UserOut): Promise<void> {
 async function setActive(row: UserOut, active: boolean): Promise<void> {
   try {
     await usersStore.patchUser(row.id, { is_active: active })
-    ElMessage.success(`已${active ? '启用' : '停用'} ${row.username}`)
+    toast.success(`已${active ? '启用' : '停用'} ${row.username}`)
   } catch {
     showError('修改', undefined, usersStore.lastError)
   }
@@ -379,9 +380,9 @@ async function copyResetPw() {
   if (!resetResult.value) return
   try {
     await navigator.clipboard.writeText(resetResult.value.new_password)
-    ElMessage.success('已复制到剪贴板')
+    toast.success('已复制到剪贴板')
   } catch {
-    ElMessage.warning('复制失败，请手动复制')
+    toast.warning('复制失败，请手动复制')
   }
 }
 
@@ -453,7 +454,7 @@ async function submitCreate() {
       password: createForm.password,
       is_admin: createForm.is_admin,
     })
-    ElMessage.success(`已创建用户 ${createForm.username}`)
+    toast.success(`已创建用户 ${createForm.username}`)
     createOpen.value = false
   } catch {
     showError('创建', undefined, usersStore.lastError)
@@ -481,7 +482,7 @@ async function submitEdit() {
     await usersStore.patchUser(editTarget.value.id, {
       display_name: editForm.display_name,
     })
-    ElMessage.success(`已更新 ${editTarget.value.username}`)
+    toast.success(`已更新 ${editTarget.value.username}`)
     editOpen.value = false
   } catch {
     showError('保存', undefined, usersStore.lastError)
@@ -511,7 +512,7 @@ async function submitDelete() {
   deleteSubmitting.value = true
   try {
     await usersStore.deleteUser(deleteTarget.value.id)
-    ElMessage.success(`已删除 ${deleteTarget.value.username}`)
+    toast.success(`已删除 ${deleteTarget.value.username}`)
     deleteOpen.value = false
   } catch {
     showError('删除', undefined, usersStore.lastError)

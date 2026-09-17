@@ -2748,13 +2748,14 @@ describe('CaseComposerCanvas — 断言卡呈现与跳转(§5.3)', () => {
   })
 
   it('multi-N3: 多视图前移提示 — 同 var 引用字段声明视图 >1 → 软提示(§5.1)', async () => {
-    const { listStrategyKinds, ElMessage } = await Promise.all([
+    const [a, b] = await Promise.all([
       import('@/api/scenario-composer'),
-      import('element-plus'),
-    ]).then(([a, b]) => ({ listStrategyKinds: a.listStrategyKinds, ElMessage: b.ElMessage }))
+      import('@/utils/toast'),
+    ])
+    const listStrategyKinds = a.listStrategyKinds
     const kindsMock = (listStrategyKinds as any).getMockImplementation()
     ;(listStrategyKinds as any).mockResolvedValue([{ kind: 'assertion', label: '断言' }])
-    const warnSpy = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({} as any))
+    const warnSpy = vi.spyOn(b.toast, 'warning').mockImplementation(() => ({} as any))
     try {
       // fixture:ep-vs2($.a 绑 view v1,$.b 绑 view v2);两字段同引 var.q
       // → 引用插入后 warnMultiViewVar(q) 检出双视图

@@ -33,7 +33,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import RunDialog from './RunDialog.vue'
 import {
   createRunScheme, getScenario, getScenarioDraft, listDataSets, listRunSchemes,
@@ -163,7 +163,7 @@ async function onConfirm(
       ...(opts.injectionEntryIds?.length
         ? { injectionEntryIds: opts.injectionEntryIds } : {}),
     })
-    ElMessage.success(`运行已发起: ${resp.runId}`)
+    toast.success(`运行已发起: ${resp.runId}`)
     emit('close')
     if (resp.executionId != null) router.push(executionUrl(resp.executionId))
     else router.push('/executions')
@@ -182,7 +182,7 @@ async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
   try {
     await createRunScheme(props.scenarioId, body)
     schemes.value = await listRunSchemes(props.scenarioId)
-    ElMessage.success(`方案「${body.name}」已另存`)
+    toast.success(`方案「${body.name}」已另存`)
   } catch (e) {
     showError('另存为方案', e)
   }

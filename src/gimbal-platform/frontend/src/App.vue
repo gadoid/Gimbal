@@ -3,6 +3,8 @@
      remain clean (no chrome). Content area is offset by 48px via
      padding-top so it doesn't slide under the fixed topbar. -->
 <template>
+  <ToastHost />
+  <ConfirmHost />
   <TopNav v-if="auth.isAuthenticated" />
   <main class="app-main" :class="{ 'with-topnav': auth.isAuthenticated }">
     <router-view />
@@ -13,6 +15,8 @@
 import { onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import TopNav from '@/components/TopNav.vue'
+import ToastHost from '@/components/chrome/ToastHost.vue'
+import ConfirmHost from '@/components/chrome/ConfirmHost.vue'
 
 const auth = useAuthStore()
 

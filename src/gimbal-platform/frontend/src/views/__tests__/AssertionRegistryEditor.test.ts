@@ -6,7 +6,8 @@
  */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus, { ElMessage } from 'element-plus'
+import ElementPlus from 'element-plus'
+import { toast } from '@/utils/toast'
 import { createPinia, setActivePinia } from 'pinia'
 
 const routerMock = vi.hoisted(() => ({ push: vi.fn(), query: {} as Record<string, unknown> }))
@@ -528,7 +529,7 @@ it('ARE-17: 换面提示绑在判定面上 —— 会话粘性的换面信号可
 // 且不误报。
 
 it('ARE-18: 未填「断言哪个响应字段」→ 点「添加期望」给可见告警,不静默落一条无目标绑定', async () => {
-  const warn = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({}) as any)
+  const warn = vi.spyOn(toast, 'warning').mockImplementation(() => ({}) as any)
   const w = await mountEditor()
   await w.findAll('.are-row')[0].trigger('click')     // 选中活条目(inj-1,原有 1 条期望)
   await flushPromises()
@@ -543,7 +544,7 @@ it('ARE-18: 未填「断言哪个响应字段」→ 点「添加期望」给可�
 })
 
 it('ARE-19: target 填好 → 点「添加期望」正常追加,且不误报告警', async () => {
-  const warn = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({}) as any)
+  const warn = vi.spyOn(toast, 'warning').mockImplementation(() => ({}) as any)
   const w = await mountEditor()
   await w.findAll('.are-row')[0].trigger('click')
   await flushPromises()
@@ -578,7 +579,7 @@ it('ARE-20: 「改写已有」+ 该步骤确有同目标断言 → 落条目,动
 })
 
 it('ARE-21: 「改写已有」+ 该步骤无该目标断言 → 拦下并说明,不落一条静默无效的绑定', async () => {
-  const warn = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({}) as any)
+  const warn = vi.spyOn(toast, 'warning').mockImplementation(() => ({}) as any)
   const w = await mountEditor()
   await w.findAll('.are-row')[0].trigger('click')
   await flushPromises()

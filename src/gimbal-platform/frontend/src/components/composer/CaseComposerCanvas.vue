@@ -544,7 +544,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import draggable from 'vuedraggable'
 import CaseComposerCatalog from './CaseComposerCatalog.vue'
 import SurfaceNotice from './SurfaceNotice.vue'
@@ -741,7 +741,7 @@ function strategyDetail(s: StrategyView): StrategyKindDetailView {
 async function addStrategy(step: StepView, kind: string) {
   const d = await ensureStrategyDetail(kind)
   if (!d) {
-    ElMessage.error(`拉取策略 ${kind} 结构失败, 请重试`)
+    toast.error(`拉取策略 ${kind} 结构失败, 请重试`)
     return
   }
   // 骨架 = {kind 判别字段 + 按 detail.fields 的 default 展开}
@@ -972,14 +972,14 @@ function onFieldAssert(f: IOFieldBinding, domain: 'request' | 'response') {
 /** 菜单"引用共享变量":值写入(先清空再写入 ${var.x})已由 FieldForm
  *  完成,此处给引导提示 */
 function onVarInsert(_f: IOFieldBinding, name: string) {
-  ElMessage.success(`已插入 \${var.${name}}(启动前展开,查不到将拒启)`)
+  toast.success(`已插入 \${var.${name}}(启动前展开,查不到将拒启)`)
   warnMultiViewVar(name)
 }
 
 /** 菜单"设为变量":FieldForm 已完成值替换与命名,默认值上报 CaseComposer 登记 config.vars */
 function onVarPromote(_f: IOFieldBinding, name: string, value: unknown) {
   emit('varPromote', name, value)
-  ElMessage.success(`已设为变量 ${name} — 默认值登记到 ③ 共享变量,保存草稿后生效`)
+  toast.success(`已设为变量 ${name} — 默认值登记到 ③ 共享变量,保存草稿后生效`)
   warnMultiViewVar(name)
 }
 
@@ -1035,7 +1035,7 @@ function warnMultiViewVar(name: string) {
   }
   visit(step.request?.body, '')
   if (views.size > 1) {
-    ElMessage.warning(`同 var 多视图(${[...views].join('、')})— 数据集查钮将退化手输(§8.4);统一视图绑定或拆 var 名可解除`)
+    toast.warning(`同 var 多视图(${[...views].join('、')})— 数据集查钮将退化手输(§8.4);统一视图绑定或拆 var 名可解除`)
   }
 }
 
@@ -1067,11 +1067,11 @@ async function applyFieldStates(increments: Record<string, FieldState | null>) {
     if (verdict.errors.length) {
       if (before) step.field_states = before
       else delete step.field_states
-      ElMessage.error(`字段状态被拒:${verdict.errors[0].message}`)
+      toast.error(`字段状态被拒:${verdict.errors[0].message}`)
       return
     }
     if (verdict.warnings.length) {
-      ElMessage.warning(verdict.warnings.map((w) => w.message).join(';\n'))
+      toast.warning(verdict.warnings.map((w) => w.message).join(';\n'))
     }
   } catch {
     // 校验服务不可达 → 不阻塞编辑(§3.5 门禁在保存链路兜底)
@@ -1806,12 +1806,12 @@ function confirmAliasCreate(step: StepView) {
   const anchor = serviceAnchor.value
   const suffix = aliasSuffix.value.trim()
   const url = aliasUrl.value.trim()
-  if (!anchor) { ElMessage.warning('未知目录服务,无法创建别名'); return }
-  if (!suffix) { ElMessage.warning('后缀不能为空'); return }
-  if (suffix.includes('-')) { ElMessage.warning('后缀不能含 "-"(分隔符保留)'); return }
+  if (!anchor) { toast.warning('未知目录服务,无法创建别名'); return }
+  if (!suffix) { toast.warning('后缀不能为空'); return }
+  if (suffix.includes('-')) { toast.warning('后缀不能含 "-"(分隔符保留)'); return }
   const full = `${anchor}-${suffix}`
-  if (full in (props.services ?? {})) { ElMessage.warning(`别名 ${full} 已存在`); return }
-  if (!url) { ElMessage.warning('baseUrl 不能为空'); return }
+  if (full in (props.services ?? {})) { toast.warning(`别名 ${full} 已存在`); return }
+  if (!url) { toast.warning('baseUrl 不能为空'); return }
   // 一次动作双写 ①声明(config.services,经 emit 由父级落 definition)
   // ②引用(steps[k].api.service,local 直改经既有 watch 传播)
   emit('update:services', { ...(props.services ?? {}), [full]: url })
@@ -1819,7 +1819,7 @@ function confirmAliasCreate(step: StepView) {
   creatingAlias.value = false
   aliasSuffix.value = ''
   aliasUrl.value = ''
-  ElMessage.success(`已创建别名 ${full} 并切换引用`)
+  toast.success(`已创建别名 ${full} 并切换引用`)
 }
 
 /** 策略表单候选映射(#2):kind 定字段名 — assertion 用 target,extract 用 expression */
@@ -1898,7 +1898,7 @@ async function onAddEndpoint(ep: any) {
     // (assertable 面 / success_criteria);失败仍以原始信息加入
     // (用户投诉过的"裸 JSON"兜底)。
     const full = await ensureEndpointFull(ep.id)
-    if (!full) ElMessage.warning('拉取完整接口定义失败, 仍以原始信息加入')
+    if (!full) toast.warning('拉取完整接口定义失败, 仍以原始信息加入')
     // 预填面:解析态 != carry 的浅层叶子(新步骤零增量 → 读共识默认);
     // 深层/数组子孙不落库(D7:深层默认只展示,防挡 carry 整包注入,
     // 模板路径落数组子孙会物化 dict 顶替 array 的错误形态)
@@ -1931,7 +1931,7 @@ async function onAddEndpoint(ep: any) {
     orch.steps.push({ enabled: true, name: ep.name })
     activeStepIdx.value = local.length - 1
     subView.value = null  // 直接落盘, 关闭目录回到画布
-    ElMessage.success(`已加入 step: ${ep.name} (${fields.length} 字段)`)
+    toast.success(`已加入 step: ${ep.name} (${fields.length} 字段)`)
   } finally {
     adding.value = false
   }
@@ -1957,7 +1957,7 @@ function copyStep(i: number) {
     name: `${name}(副本)`,
   })
   activeStepIdx.value = i + 1
-  ElMessage.success(`已复制 step ${i + 1}(副本插入其后,可改名单独编排)`)
+  toast.success(`已复制 step ${i + 1}(副本插入其后,可改名单独编排)`)
 }
 
 // ── 步骤拖拽重排(#5) ─────────────────────────────────────────────
