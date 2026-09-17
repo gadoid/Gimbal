@@ -1,27 +1,25 @@
-<!-- CarryConfig.vue — 传递字段配置(spec §6)。
-     页壳对齐 Auths.vue;分区走 composer.css 共享层 .c-card。
-     服务绑定 tab:选服务 → 拉该服务 carry 字段面并集 → 逐字段填值;
-       placeholder = 全局默认值(无行时);删行 = 不注入(回退全局默认);
-       「设 null」= 显式注入 JSON null(§3.1)。
-       CSV 三件套(导入/模板/导出,两 tab 同一三列格式)= 表编辑动作:
-       解析/合并走 utils/carry-csv,导入后仍须手动保存,不绕 degraded 门控;
-       服务绑定导出仅已绑定行,全局默认导入为 upsert(无 face 门控)。
-     全局默认 tab:整表编辑;常驻提示纯 path 跨服务生效(§6)。
-     三态说明:el-input 的 v-model 会把 null 折叠成 '',故 null 用独立
-     isNull 布尔承载,无行用 hasRow 承载 —— 空串值/null/无行三种状态
-     在 el-input 里不可区分,必须显式列(task-15 执行注)。 -->
+<!-- CarryConfig.vue — 传递字段配置(spec §6)。批次 2 迁移新栈:
+     shadcn Tabs/Table/Tooltip/Alert/Button/Input;服务选择器用原生
+     datalist 组合框(shadcn Select 不支持 allow-create 自由输入,
+     原 el-select filterable+allow-create 的能力由 Input+datalist 承接)。
+     业务逻辑零改动:三态(hasRow/isNull/值)编码、CSV 三件套、
+     degraded 门控、R1-B1/R1-M2 修复语义全部保留(真源在
+     utils/carry-csv + carry-entries + api/carry)。 -->
 <template>
-  <section class="carry-config">
-    <header class="page-header">
-      <div>
-        <h2>传递字段配置</h2>
-        <p>carry 值表两层:服务绑定(覆盖)→ 全局默认;删行 = 不注入,null = 显式注入 JSON null</p>
-      </div>
+  <section class="carry-config mx-auto max-w-[1480px] px-8 pb-12 pt-7">
+    <header class="mb-3.5">
+      <h2 class="m-0 text-display text-signal-ink">传递字段配置</h2>
+      <p class="mt-1 mb-0 text-caption text-muted-foreground">carry 值表两层:服务绑定(覆盖)→ 全局默认;删行 = 不注入,null = 显式注入 JSON null</p>
     </header>
 
-    <el-tabs v-model="activeTab" class="carry-tabs">
+    <Tabs v-model="activeTab" class="carry-tabs">
       <!-- ── 服务绑定 ─────────────────────────────── -->
-      <el-tab-pane label="服务绑定" name="service">
+      <TabsList>
+        <TabsTrigger value="service">服务绑定</TabsTrigger>
+        <TabsTrigger value="defaults">全局默认</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="service">
         <div class="c-card">
           <div class="c-card-head">
             <svg class="c-head-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
@@ -31,99 +29,109 @@
             </div>
           </div>
 
+          <TooltipProvider>
           <div class="svc-bar">
-            <el-select
+            <Input
               v-model="service"
-              class="svc-select"
-              filterable
-              allow-create
+              class="w-[320px] max-w-full"
+              list="carry-known-services"
               placeholder="选择或输入目录服务名"
+              data-testid="svc-input"
               @change="onServiceChange"
-            >
-              <el-option v-for="s in knownServices" :key="s" :label="s" :value="s" />
-            </el-select>
-            <el-tooltip
-              content="CSV 三列:path,value,is_null —— 表头按名定位(列序任意);is_null=1 为显式 null,两列都留空 = 该行不导入;面外字段会被跳过"
-              placement="top"
-            >
-              <el-button :disabled="!service || !rows.length" @click="pickCsv">导入 CSV</el-button>
-            </el-tooltip>
-            <el-tooltip
-              content="按当前服务的字段面生成模板(预填全部 path 与已绑定值);不改直接导回 = 绑定态不变"
-              placement="top"
-            >
-              <el-button :disabled="!rows.length" @click="downloadTemplate">下载模板</el-button>
-            </el-tooltip>
-            <el-tooltip
-              content="导出该服务的已绑定行(未绑定的面字段不进文件);导出→不改→导回 = 绑定态不变"
-              placement="top"
-            >
-              <el-button :disabled="!hasBoundRows" @click="downloadBoundCsv">导出 CSV</el-button>
-            </el-tooltip>
+            />
+            <datalist id="carry-known-services">
+              <option v-for="s in knownServices" :key="s" :value="s" />
+            </datalist>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button variant="outline" :disabled="!service || !rows.length" data-testid="import-csv" @click="pickCsv">导入 CSV</Button>
+              </TooltipTrigger>
+              <TooltipContent class="max-w-[320px]">
+                CSV 三列:path,value,is_null —— 表头按名定位(列序任意);is_null=1 为显式 null,两列都留空 = 该行不导入;面外字段会被跳过
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button variant="outline" :disabled="!rows.length" data-testid="dl-template" @click="downloadTemplate">下载模板</Button>
+              </TooltipTrigger>
+              <TooltipContent class="max-w-[320px]">
+                按当前服务的字段面生成模板(预填全部 path 与已绑定值);不改直接导回 = 绑定态不变
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button variant="outline" :disabled="!hasBoundRows" data-testid="export-csv" @click="downloadBoundCsv">导出 CSV</Button>
+              </TooltipTrigger>
+              <TooltipContent class="max-w-[320px]">
+                导出该服务的已绑定行(未绑定的面字段不进文件);导出→不改→导回 = 绑定态不变
+              </TooltipContent>
+            </Tooltip>
             <input
               ref="csvInput"
               type="file"
               accept=".csv,text/csv"
-              class="csv-input"
+              class="hidden"
               @change="onCsvPicked"
             />
           </div>
+          </TooltipProvider>
 
-          <el-alert
-            v-if="degraded"
-            type="warning"
-            :closable="false"
-            show-icon
-            class="degraded-alert"
-            title="字段面部分降级,保存已禁用"
-            description="字段面部分降级(部分端点不可达),保存会删除不可见端点的绑定值,已禁用;请稍后刷新重试"
-          />
+          <Alert v-if="degraded" variant="destructive" class="mb-3.5">
+            <AlertTitle>字段面部分降级,保存已禁用</AlertTitle>
+            <AlertDescription>
+              字段面部分降级(部分端点不可达),保存会删除不可见端点的绑定值,已禁用;请稍后刷新重试
+            </AlertDescription>
+          </Alert>
 
-          <el-table
-            v-if="rows.length"
-            v-loading="loadingFields"
-            :data="rows"
-            class="carry-table"
-          >
-            <el-table-column prop="path" label="字段路径" width="260">
-              <template #default="{ row }">
-                <code class="mono path">{{ row.path }}</code>
-              </template>
-            </el-table-column>
-            <el-table-column prop="type" label="类型" width="100" />
-            <el-table-column prop="description" label="说明" min-width="160" />
-            <el-table-column label="值" min-width="220">
-              <template #default="{ row }">
-                <el-input
-                  v-model="row.value"
-                  :disabled="row.isNull"
-                  :placeholder="valuePlaceholder(row)"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="" width="160">
-              <template #default="{ row }">
-                <el-button link @click="toggleNull(row)">
-                  {{ row.isNull ? '取消 null' : '设 null' }}
-                </el-button>
-                <el-button v-if="row.hasRow" link type="danger" @click="removeBindingRow(row)">
-                  删行
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
+          <div v-if="loadingFields" class="py-6 text-center text-body text-muted-foreground">加载字段面…</div>
+          <Table v-else-if="rows.length" class="rounded-field border border-signal-line bg-signal-card">
+            <TableHeader>
+              <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
+                <TableHead class="text-caption font-semibold text-muted-foreground">字段路径</TableHead>
+                <TableHead class="w-[90px] text-caption font-semibold text-muted-foreground">类型</TableHead>
+                <TableHead class="text-caption font-semibold text-muted-foreground">说明</TableHead>
+                <TableHead class="text-caption font-semibold text-muted-foreground">值</TableHead>
+                <TableHead class="w-[150px]" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="row in rows" :key="row.path" :data-testid="`svc-row-${row.path}`">
+                <TableCell><code class="path font-mono font-semibold text-signal">{{ row.path }}</code></TableCell>
+                <TableCell class="text-caption text-muted-foreground">{{ row.type }}</TableCell>
+                <TableCell class="text-caption text-muted-foreground">{{ row.description }}</TableCell>
+                <TableCell>
+                  <Input
+                    v-model="row.value"
+                    :disabled="row.isNull"
+                    :placeholder="valuePlaceholder(row)"
+                    class="h-8"
+                  />
+                </TableCell>
+                <TableCell>
+                  <div class="flex items-center gap-1">
+                    <Button variant="link" size="sm" class="h-7 px-2" @click="toggleNull(row)">
+                      {{ row.isNull ? '取消 null' : '设 null' }}
+                    </Button>
+                    <Button v-if="row.hasRow" variant="link" size="sm" class="h-7 px-2 text-signal-failed" @click="removeBindingRow(row)">
+                      删行
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
           <div v-else class="c-empty">
             <p>{{ service ? '该服务无声明的 carry 字段(plate 未声明或服务名未命中)' : '先选择或输入服务名,拉取字段面' }}</p>
           </div>
 
           <div class="card-footer">
-            <el-button type="primary" :disabled="!service || degraded" @click="saveService">保存</el-button>
+            <Button data-testid="save-service" :disabled="!service || degraded" @click="saveService">保存</Button>
           </div>
         </div>
-      </el-tab-pane>
+      </TabsContent>
 
       <!-- ── 全局默认 ─────────────────────────────── -->
-      <el-tab-pane label="全局默认" name="defaults">
+      <TabsContent value="defaults">
         <div class="c-card">
           <div class="c-card-head">
             <svg class="c-head-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
@@ -133,78 +141,94 @@
             </div>
           </div>
 
-          <el-alert
-            type="info"
-            :closable="false"
-            show-icon
-            class="defaults-alert"
-            title="全局默认按纯 path 跨服务生效 —— 契约门控只保证不注入未声明字段;"
-            description="$.type 类语义敏感路径请用服务绑定覆盖兜底(配置纪律,spec §6)。"
-          />
+          <Alert class="mb-3.5">
+            <AlertTitle>全局默认按纯 path 跨服务生效 —— 契约门控只保证不注入未声明字段;</AlertTitle>
+            <AlertDescription>
+              $.type 类语义敏感路径请用服务绑定覆盖兜底(配置纪律,spec §6)。
+            </AlertDescription>
+          </Alert>
 
+          <TooltipProvider>
           <div class="svc-bar">
-            <el-tooltip
-              content="CSV 三列:path,value,is_null —— 表头按名定位(列序任意);已有 path 更新、新 path 追加,两列都留空 = 该行不导入;导入后仍须手动保存"
-              placement="top"
-            >
-              <el-button @click="pickDefaultsCsv">导入 CSV</el-button>
-            </el-tooltip>
-            <el-tooltip
-              content="表头 + 一行示例(path 已填、值列留空 → 原样导回也是无操作)"
-              placement="top"
-            >
-              <el-button @click="downloadDefaultsTemplate">下载模板</el-button>
-            </el-tooltip>
-            <el-tooltip
-              content="导出当前全部默认行;导出→不改→导回 = 默认态不变"
-              placement="top"
-            >
-              <el-button :disabled="!hasDefaultRows" @click="downloadDefaultsCsv">导出 CSV</el-button>
-            </el-tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button variant="outline" data-testid="import-defaults-csv" @click="pickDefaultsCsv">导入 CSV</Button>
+              </TooltipTrigger>
+              <TooltipContent class="max-w-[320px]">
+                CSV 三列:path,value,is_null —— 表头按名定位(列序任意);已有 path 更新、新 path 追加,两列都留空 = 该行不导入;导入后仍须手动保存
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button variant="outline" data-testid="dl-defaults-template" @click="downloadDefaultsTemplate">下载模板</Button>
+              </TooltipTrigger>
+              <TooltipContent class="max-w-[320px]">
+                表头 + 一行示例(path 已填、值列留空 → 原样导回也是无操作)
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button variant="outline" :disabled="!hasDefaultRows" data-testid="export-defaults-csv" @click="downloadDefaultsCsv">导出 CSV</Button>
+              </TooltipTrigger>
+              <TooltipContent class="max-w-[320px]">
+                导出当前全部默认行;导出→不改→导回 = 默认态不变
+              </TooltipContent>
+            </Tooltip>
             <input
               ref="defaultsCsvInput"
               type="file"
               accept=".csv,text/csv"
-              class="csv-input"
+              class="hidden"
               @change="onDefaultsCsvPicked"
             />
           </div>
+          </TooltipProvider>
 
-          <el-table v-if="defaultRows.length" :data="defaultRows" class="carry-table">
-            <el-table-column label="字段路径" width="300">
-              <template #default="{ row }">
-                <el-input v-model="row.path" placeholder="$.headers.X-Trace-Id" />
-              </template>
-            </el-table-column>
-            <el-table-column label="值" min-width="220">
-              <template #default="{ row }">
-                <el-input
-                  v-model="row.value"
-                  :disabled="row.isNull"
-                  :placeholder="row.isNull ? '显式 null(屏蔽注入)' : ''"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="" width="160">
-              <template #default="{ row, $index }">
-                <el-button link @click="row.isNull = !row.isNull">
-                  {{ row.isNull ? '取消 null' : '设 null' }}
-                </el-button>
-                <el-button link type="danger" @click="defaultRows.splice($index, 1)">删</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
+          <Table v-if="defaultRows.length" class="rounded-field border border-signal-line bg-signal-card">
+            <TableHeader>
+              <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
+                <TableHead class="text-caption font-semibold text-muted-foreground">字段路径</TableHead>
+                <TableHead class="text-caption font-semibold text-muted-foreground">值</TableHead>
+                <TableHead class="w-[130px]" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="(row, i) in defaultRows" :key="i" :data-testid="`defaults-row-${i}`">
+                <TableCell>
+                  <Input v-model="row.path" placeholder="$.headers.X-Trace-Id" class="h-8" />
+                </TableCell>
+                <TableCell>
+                  <Input
+                    v-model="row.value"
+                    :disabled="row.isNull"
+                    :placeholder="row.isNull ? '显式 null(屏蔽注入)' : ''"
+                    class="h-8"
+                  />
+                </TableCell>
+                <TableCell>
+                  <div class="flex items-center gap-1">
+                    <Button variant="link" size="sm" class="h-7 px-2" @click="row.isNull = !row.isNull">
+                      {{ row.isNull ? '取消 null' : '设 null' }}
+                    </Button>
+                    <Button variant="link" size="sm" class="h-7 px-2 text-signal-failed" @click="defaultRows.splice(i, 1)">
+                      删
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
           <div v-if="!defaultRows.length" class="c-empty">
             <p>还没有全局默认 — 加一行(例 $.headers.X-Trace-Id)</p>
           </div>
 
           <div class="card-footer">
-            <el-button @click="addDefaultRow">加一行</el-button>
-            <el-button type="primary" @click="saveDefaults">保存</el-button>
+            <Button variant="outline" data-testid="add-default-row" @click="addDefaultRow">加一行</Button>
+            <Button data-testid="save-defaults" @click="saveDefaults">保存</Button>
           </div>
         </div>
-      </el-tab-pane>
-    </el-tabs>
+      </TabsContent>
+    </Tabs>
   </section>
 </template>
 
@@ -229,12 +253,18 @@ import {
   getDefaults, putDefaults, getBindings, getBindingsFor, putBindings, getServiceFields,
   type CarryFieldFace, type CarryValues,
 } from '@/api/carry'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 const activeTab = ref('service')
 
 // ── 服务绑定 ──────────────────────────────────────────────
 /** 行三态:hasRow=false 无行;isNull=true 显式 null;否则空串/字串值。
- *  拆成布尔列是必须的 —— el-input 的 v-model 会把 null 折叠成 '',
+ *  拆成布尔列是必须的 —— Input 的 v-model 会把 null 折叠成 '',
  *  空串值/null/无行在输入框里不可区分(task-15 执行注)。
  *  保存编码(任何输入即建行,修复 R1-B1)收敛在 buildServiceEntries。 */
 interface ServiceRow extends ServiceCarryRow {
@@ -384,7 +414,7 @@ async function saveService() {
     toast.success('已保存')
     // 回读:让 hasRow/isNull 与刚落库的状态一致(新建行亮出「删行」)
     void onServiceChange()
-    // allow-create 的新服务入库后刷新候选列表
+    // 自由输入的新服务入库后刷新候选列表(datalist)
     loadBindings().catch(() => { /* 候选列表刷新失败不惊动已成功的保存提示 */ })
   } catch (e) {
     showError('保存', e)
@@ -487,57 +517,16 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 页壳对齐 Auths.vue(独立管理页,非编排页步骤) */
-.carry-config {
-  max-width: 1480px;
-  min-height: calc(100vh - 48px);
-  padding: 28px 32px 48px;
-  margin: 0 auto;
-  box-sizing: border-box;
-}
-
-.page-header {
-  display: flex;
-  gap: 24px;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.page-header h2 {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: 22px;
-  line-height: 1.25;
-}
-
-.page-header p {
-  margin: 5px 0 0;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-}
-
 .svc-bar {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
   margin-bottom: 14px;
 }
 
-.svc-select {
-  width: 320px;
-}
-
-.csv-input {
-  display: none;
-}
-
-.defaults-alert {
-  margin-bottom: 14px;
-}
-
-.degraded-alert {
-  margin-bottom: 14px;
+.path {
+  word-break: break-all;
 }
 
 .card-footer {
@@ -545,34 +534,5 @@ onMounted(() => {
   gap: 8px;
   justify-content: flex-end;
   margin-top: 14px;
-}
-
-.carry-table {
-  width: 100%;
-  border: 1px solid var(--color-border-tertiary);
-  border-radius: 6px;
-}
-
-.path {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-:deep(.el-table th.el-table__cell) {
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 600;
-  background: #f8fafc;
-}
-
-:deep(.el-table td.el-table__cell) {
-  padding: 8px 0;
-  font-size: 12.5px;
-}
-
-@media (max-width: 900px) {
-  .carry-config {
-    padding: 20px 16px 36px;
-  }
 }
 </style>
