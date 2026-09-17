@@ -1,18 +1,19 @@
 /**
- * ConstantsPool 管理页 — F14-F18:
+ * ConstantsPool 管理页 — F14-F18(批次 3 新栈迁移后适配,语义不变):
  * F14 目录卡片渲染(kind/summary,展开拉 full);
  * F15 字面量新增(默认 string 类型,POST 载荷含 value 文本);
  * F16 生成器新增(目录驱动动态表单 + spec 预览,POST 载荷含 spec);
- * F17 编辑预填 + 删除确认流;
- * F18 目录降级(降级条 + 生成器不可选;字面量 CRUD 不受影响)。
+ * F17 编辑预填 + 删除确认流(新栈 confirmAction);
+ * F18 目录降级(降级条 + 生成器类型禁用;字面量 CRUD 不受影响)。
+ * 交互注意:shadcn Dialog 经 Portal 渲染 → body 查询(DOMWrapper)。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
-import { createPinia, setActivePinia } from 'pinia'
-import ElementPlus, { ElMessageBox } from 'element-plus'
+import { mount, flushPromises, DOMWrapper } from '@vue/test-utils'
+import { createPinia, getActivePinia, setActivePinia } from 'pinia'
 import ConstantsPool from '@/views/ConstantsPool.vue'
 import * as constantsApi from '@/api/constants'
 import * as catalogApi from '@/api/generator_catalog'
+import { confirmAction } from '@/utils/confirmAction'
 
 vi.mock('@/api/constants', () => ({
   list: vi.fn().mockResolvedValue([]),
@@ -24,10 +25,9 @@ vi.mock('@/api/generator_catalog', () => ({
   listGeneratorKinds: vi.fn(),
   getGeneratorKindFull: vi.fn(),
 }))
-vi.mock('element-plus', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('element-plus')>()
-  return { ...actual, ElMessageBox: { confirm: vi.fn().mockResolvedValue('confirm') } }
-})
+vi.mock('@/utils/confirmAction', () => ({
+  confirmAction: vi.fn(async () => true),
+}))
 
 const SEQ_FULL = {
   kind: 'seq',
@@ -52,9 +52,15 @@ const GEN_ROW = {
   updated_at: '2026-08-26T00:00:00Z',
 }
 
+function q(sel: string): DOMWrapper<Element> {
+  const el = document.body.querySelector(sel)
+  if (!el) throw new Error(`body 里找不到 ${sel}`)
+  return new DOMWrapper(el)
+}
+
 function mountPage() {
   return mount(ConstantsPool, {
-    global: { plugins: [ElementPlus, createPinia()] },
+    global: { plugins: [getActivePinia()!] },
     attachTo: document.body,
   })
 }
@@ -100,10 +106,10 @@ describe('ConstantsPool — 目录', () => {
 
     await w.find('[data-action="pool-create"]').trigger('click') // 字面量 CRUD 入口仍在
     await flushPromises()
-    const radios = w.findAll('.el-radio-button')
-    expect(radios.some((r) => r.classes().includes('is-disabled'))).toBe(true)
-    expect(w.find('[data-testid="entry-dialog"]').exists()).toBe(true)
-    expect(w.findAll('.el-table__row')).toHaveLength(1)
+    // 生成器分段钮禁用(目录降级)
+    expect(q('[data-testid="entry-dialog"]').exists()).toBe(true)
+    expect((q('[data-field="entry_kind"] [data-value="generator"]').element as HTMLButtonElement).disabled).toBe(true)
+    expect(w.findAll('[data-testid="entries-table"] tr')).toHaveLength(1)
     w.unmount()
   })
 })
@@ -116,9 +122,9 @@ describe('ConstantsPool — 条目 CRUD', () => {
 
     await w.find('[data-action="pool-create"]').trigger('click')
     await flushPromises()
-    await w.find('[data-field="name"]').setValue('bank_id')
-    await w.find('[data-field="valueStr"]').setValue('319666690256273408')
-    await w.find('[data-action="submit"]').trigger('click')
+    await q('[data-field="name"]').setValue('bank_id')
+    await q('[data-field="valueStr"]').setValue('319666690256273408')
+    await q('[data-action="submit"]').trigger('click')
     await flushPromises()
 
     expect(constantsApi.create).toHaveBeenCalledWith({
@@ -137,16 +143,16 @@ describe('ConstantsPool — 条目 CRUD', () => {
 
     await w.find('[data-action="pool-create"]').trigger('click')
     await flushPromises()
-    await w.find('[data-field="entry_kind"] input[value="generator"]').trigger('click')
+    await q('[data-field="entry_kind"] [data-value="generator"]').trigger('click')
     await flushPromises()
-    await w.find('.kind-chip[data-kind="seq"]').trigger('click')
+    await q('.kind-chip[data-kind="seq"]').trigger('click')
     await flushPromises()
-    expect(w.find('[data-field="param-prefix"]').exists()).toBe(true)
+    expect(q('[data-field="param-prefix"]').exists()).toBe(true)
     // 默认预填: prefix='' 被剔除, width/start 取默认
-    expect(w.find('[data-testid="spec-preview"]').text()).toContain('"kind":"seq"')
+    expect(q('[data-testid="spec-preview"]').text()).toContain('"kind":"seq"')
 
-    await w.find('[data-field="name"]').setValue('order_seq')
-    await w.find('[data-action="submit"]').trigger('click')
+    await q('[data-field="name"]').setValue('order_seq')
+    await q('[data-action="submit"]').trigger('click')
     await flushPromises()
 
     expect(constantsApi.create).toHaveBeenCalledWith({
@@ -158,7 +164,7 @@ describe('ConstantsPool — 条目 CRUD', () => {
     w.unmount()
   })
 
-  it('F17: 编辑预填 + 删除确认', async () => {
+  it('F17: 编辑预填 + 删除确认(confirmAction)', async () => {
     vi.mocked(constantsApi.list).mockResolvedValue([GEN_ROW as never])
     vi.mocked(catalogApi.getGeneratorKindFull).mockResolvedValue(SEQ_FULL as never)
     vi.mocked(constantsApi.patch).mockResolvedValue(GEN_ROW as never)
@@ -167,10 +173,10 @@ describe('ConstantsPool — 条目 CRUD', () => {
 
     await w.find('[data-action="edit"]').trigger('click')
     await flushPromises()
-    const nameInput = w.find('[data-field="name"]')
-    expect((nameInput.element as HTMLInputElement).value).toBe('bl_no')
-    expect(w.find('[data-testid="spec-preview"]').text()).toContain('random_decorated')
-    await w.find('[data-action="submit"]').trigger('click')
+    const nameInput = q('[data-field="name"]').element as HTMLInputElement
+    expect(nameInput.value).toBe('bl_no')
+    expect(q('[data-testid="spec-preview"]').text()).toContain('random_decorated')
+    await q('[data-action="submit"]').trigger('click')
     await flushPromises()
     expect(constantsApi.patch).toHaveBeenCalledWith(
       1,
@@ -179,7 +185,7 @@ describe('ConstantsPool — 条目 CRUD', () => {
 
     await w.find('[data-action="delete"]').trigger('click')
     await flushPromises()
-    expect(ElMessageBox.confirm).toHaveBeenCalled()
+    expect(confirmAction).toHaveBeenCalled()
     expect(constantsApi.remove).toHaveBeenCalledWith(1)
     w.unmount()
   })
@@ -195,8 +201,8 @@ describe('ConstantsPool — 条目 CRUD', () => {
 
     await w.find('[data-action="edit"]').trigger('click')
     await flushPromises() // ensureFull 拒绝 → genParams 空(目录降级编辑)
-    await w.find('[data-field="description"]').setValue('只改说明')
-    await w.find('[data-action="submit"]').trigger('click')
+    await q('[data-field="description"]').setValue('只改说明')
+    await q('[data-action="submit"]').trigger('click')
     await flushPromises()
 
     // 已存 width/start 不因目录 full 拉取失败而被从 spec 中丢弃

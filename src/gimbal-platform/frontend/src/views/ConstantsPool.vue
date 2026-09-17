@@ -1,28 +1,31 @@
 <!--
-  ConstantsPool.vue — 常量池管理页(/constants)
+  ConstantsPool.vue — 常量池管理页(/constants)。批次 3 迁移新栈:
+  shadcn Table/Dialog/Select/Switch/Input;弹框保持 reactive form +
+  canSubmit 门控(动态控制面板,非简单校验表单 — 不套 vee-validate);
+  删除确认换新栈 confirmAction。
 
   上半: 生成器模板目录(只读,plate 代理;kind 可折叠卡片: 说明/参数表/
-  示例 JSON 复制)。下半: 我的常量池(el-table CRUD;新增/编辑共享弹框 —
+  示例 JSON 复制)。下半: 我的常量池(表格 CRUD;新增/编辑共享弹框 —
   字面量四型值控件 / 生成器目录驱动动态参数表单 + 实时 spec 预览)。
   降级: 目录不可用 → 模板区降级条 + 生成器类型禁用;字面量 CRUD 不受影响。
 -->
 <template>
-  <div class="constants-page">
+  <div class="constants-page mx-auto flex max-w-[1080px] flex-col gap-4 px-6 pb-12 pt-5">
     <header class="page-head">
-      <h1>常量池</h1>
-      <p class="muted">常用字面值与生成器声明 — 编排页右栏「常量池」面板可直接复制/插入</p>
+      <h1 class="mb-1 text-display text-signal-ink">常量池</h1>
+      <p class="muted m-0">常用字面值与生成器声明 — 编排页右栏「常量池」面板可直接复制/插入</p>
     </header>
 
     <!-- ── 生成器模板目录 ── -->
     <section class="card catalog">
       <div class="section-head">
-        <h2>生成器模板目录</h2>
+        <h2 class="text-heading text-signal-ink">生成器模板目录</h2>
         <span v-if="constantsStore.catalogError" class="degraded">
           {{ constantsStore.catalogError }} — 目录暂不可用,字面量条目不受影响
         </span>
       </div>
       <div v-for="k in constantsStore.catalog" :key="k.kind" class="kind-card" :data-kind="k.kind">
-        <button class="kind-head" @click="toggleKind(k.kind)">
+        <button class="kind-head" type="button" @click="toggleKind(k.kind)">
           <span class="chevron" :class="{ open: openKinds.has(k.kind) }">▸</span>
           <code class="kind-name">{{ k.kind }}</code>
           <span class="kind-summary">{{ k.summary }}</span>
@@ -48,7 +51,7 @@
             <p v-else class="muted">无参数</p>
             <div class="example-row">
               <pre class="example-json">{{ JSON.stringify(fulls[k.kind]!.example, null, 2) }}</pre>
-              <button class="ghost-btn" @click="copyExample(fulls[k.kind]!)">复制 JSON</button>
+              <button class="ghost-btn" type="button" @click="copyExample(fulls[k.kind]!)">复制 JSON</button>
             </div>
           </template>
         </div>
@@ -58,161 +61,197 @@
     <!-- ── 我的常量池 ── -->
     <section class="card entries">
       <div class="section-head">
-        <h2>我的常量池</h2>
-        <button class="primary-btn" data-action="pool-create" @click="openCreate">新增</button>
+        <h2 class="text-heading text-signal-ink">我的常量池</h2>
+        <button class="primary-btn" type="button" data-action="pool-create" @click="openCreate">新增</button>
       </div>
-      <el-table :data="constantsStore.entries" data-testid="entries-table">
-        <el-table-column prop="name" label="名称" width="180">
-          <template #default="{ row }"><code>{{ row.name }}</code></template>
-        </el-table-column>
-        <el-table-column label="类型" width="90">
-          <template #default="{ row }">
-            <el-tag :type="row.entry_kind === 'generator' ? 'warning' : 'info'" size="small">
-              {{ row.entry_kind === 'generator' ? '生成器' : '常量' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="内容">
-          <template #default="{ row }">
-            <code class="entry-value">{{ entryValueText(row) }}</code>
-          </template>
-        </el-table-column>
-        <el-table-column prop="description" label="说明" width="200" />
-        <el-table-column label="操作" width="150">
-          <template #default="{ row }">
-            <button class="ghost-btn" data-action="edit" @click="openEdit(row)">编辑</button>
-            <button class="ghost-btn danger" data-action="delete" @click="onDelete(row)">删除</button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <Table class="rounded-field border border-signal-line bg-signal-card">
+        <TableHeader>
+          <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
+            <TableHead class="text-caption font-semibold text-muted-foreground">名称</TableHead>
+            <TableHead class="w-[80px] text-caption font-semibold text-muted-foreground">类型</TableHead>
+            <TableHead class="text-caption font-semibold text-muted-foreground">内容</TableHead>
+            <TableHead class="w-[180px] text-caption font-semibold text-muted-foreground">说明</TableHead>
+            <TableHead class="w-[130px] text-caption font-semibold text-muted-foreground">操作</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody data-testid="entries-table">
+          <TableRow v-for="row in constantsStore.entries" :key="row.id">
+            <TableCell><code>{{ row.name }}</code></TableCell>
+            <TableCell>
+              <span class="chip" :class="row.entry_kind === 'generator'
+                ? 'bg-amber-50 text-amber-800' : 'bg-signal-soft text-signal'">
+                {{ row.entry_kind === 'generator' ? '生成器' : '常量' }}
+              </span>
+            </TableCell>
+            <TableCell><code class="entry-value">{{ entryValueText(row) }}</code></TableCell>
+            <TableCell class="text-caption text-muted-foreground">{{ row.description }}</TableCell>
+            <TableCell>
+              <div class="flex items-center gap-1">
+                <button class="ghost-btn" type="button" data-action="edit" @click="openEdit(row)">编辑</button>
+                <button class="ghost-btn danger" type="button" data-action="delete" @click="onDelete(row)">删除</button>
+              </div>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
     </section>
 
-    <!-- ── 新增/编辑弹框 ── -->
-    <el-dialog
-      v-model="dialogOpen"
-      :title="editing ? '编辑常量' : '新增常量'"
-      width="560px"
-      data-testid="entry-dialog"
-    >
-      <el-form label-width="90px">
-        <el-form-item label="名称" required>
-          <el-input
-            v-model="form.name"
-            data-field="name"
-            :disabled="editing"
-            placeholder="A-Z a-z 0-9 _,1-64 字符"
-          />
-        </el-form-item>
-        <el-form-item label="说明">
-          <el-input v-model="form.description" data-field="description" placeholder="可选" />
-        </el-form-item>
-        <el-form-item label="类型">
-          <el-radio-group v-model="form.entry_kind" :disabled="editing" data-field="entry_kind">
-            <el-radio-button value="literal">常量(字面值)</el-radio-button>
-            <el-radio-button value="generator" :disabled="!!constantsStore.catalogError">
-              生成器
-            </el-radio-button>
-          </el-radio-group>
-        </el-form-item>
+    <!-- ── 新增/编辑弹框(动态控制面板,reactive form + canSubmit 门控)── -->
+    <Dialog :open="dialogOpen" @update:open="dialogOpen = $event">
+      <DialogContent class="max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle>{{ editing ? '编辑常量' : '新增常量' }}</DialogTitle>
+        </DialogHeader>
 
-        <template v-if="form.entry_kind === 'literal'">
-          <el-form-item label="值类型">
-            <el-select v-model="form.valueType" data-field="valueType">
-              <el-option label="字符串" value="string" />
-              <el-option label="整数" value="integer" />
-              <el-option label="小数" value="decimal" />
-              <el-option label="布尔" value="boolean" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="值" required>
-            <el-switch
-              v-if="form.valueType === 'boolean'"
-              v-model="form.valueBool"
-              data-field="valueBool"
-            />
-            <el-input-number
-              v-else-if="form.valueType !== 'string'"
-              v-model="form.valueNum"
-              data-field="valueNum"
-            />
-            <el-input v-else v-model="form.valueStr" data-field="valueStr" placeholder="字面值文本" />
-          </el-form-item>
-        </template>
-
-        <template v-else>
-          <el-form-item label="生成器" required>
-            <div class="kind-chips">
+        <!-- data-testid 放内层真实元素:Portal 组件的 attrs 穿透不可查询 -->
+        <div class="flex flex-col gap-3" data-testid="entry-dialog">
+          <div class="grid grid-cols-[80px_1fr] items-center gap-2">
+            <span class="text-label font-medium text-signal-ink">名称 *</span>
+            <Input v-model="form.name" data-field="name" :disabled="!!editing" placeholder="A-Z a-z 0-9 _,1-64 字符" />
+          </div>
+          <div class="grid grid-cols-[80px_1fr] items-center gap-2">
+            <span class="text-label font-medium text-signal-ink">说明</span>
+            <Input v-model="form.description" data-field="description" placeholder="可选" />
+          </div>
+          <div class="grid grid-cols-[80px_1fr] items-center gap-2">
+            <span class="text-label font-medium text-signal-ink">类型</span>
+            <div class="seg" data-field="entry_kind">
               <button
-                v-for="k in constantsStore.catalog"
-                :key="k.kind"
                 type="button"
-                class="kind-chip"
-                :class="{ active: form.genKind === k.kind }"
-                :data-kind="k.kind"
-                :title="k.summary"
-                @click="selectGenKind(k.kind)"
-              >{{ k.kind }}</button>
+                class="seg-btn"
+                :class="{ active: form.entry_kind === 'literal' }"
+                :disabled="!!editing"
+                data-value="literal"
+                @click="!editing && (form.entry_kind = 'literal')"
+              >常量(字面值)</button>
+              <button
+                type="button"
+                class="seg-btn"
+                :class="{ active: form.entry_kind === 'generator' }"
+                :disabled="!!editing || !!constantsStore.catalogError"
+                data-value="generator"
+                @click="!editing && !constantsStore.catalogError && (form.entry_kind = 'generator')"
+              >生成器</button>
             </div>
-          </el-form-item>
-          <p v-if="constantsStore.catalogError" class="muted">目录不可用,无法配置生成器条目</p>
-          <el-form-item
-            v-for="p in genParams"
-            :key="p.name"
-            :label="p.name"
-            :required="p.required"
-          >
-            <el-select
-              v-if="p.enum"
-              :model-value="form.genParams[p.name]"
-              :data-field="`param-${p.name}`"
-              @update:model-value="(v: unknown) => setParam(p.name, v)"
+          </div>
+
+          <template v-if="form.entry_kind === 'literal'">
+            <div class="grid grid-cols-[80px_1fr] items-center gap-2">
+              <span class="text-label font-medium text-signal-ink">值类型</span>
+              <Select v-model="form.valueType">
+                <SelectTrigger data-field="valueType" class="h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="string">字符串</SelectItem>
+                  <SelectItem value="integer">整数</SelectItem>
+                  <SelectItem value="decimal">小数</SelectItem>
+                  <SelectItem value="boolean">布尔</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div class="grid grid-cols-[80px_1fr] items-center gap-2">
+              <span class="text-label font-medium text-signal-ink">值 *</span>
+              <Switch
+                v-if="form.valueType === 'boolean'"
+                v-model="form.valueBool"
+                data-field="valueBool"
+              />
+              <Input
+                v-else-if="form.valueType !== 'string'"
+                type="number"
+                :model-value="form.valueNum"
+                data-field="valueNum"
+                class="h-8 w-[160px]"
+                @update:model-value="(v) => (form.valueNum = Number(v))"
+              />
+              <Input v-else v-model="form.valueStr" data-field="valueStr" placeholder="字面值文本" />
+            </div>
+          </template>
+
+          <template v-else>
+            <div class="grid grid-cols-[80px_1fr] items-start gap-2">
+              <span class="mt-1.5 text-label font-medium text-signal-ink">生成器 *</span>
+              <div class="kind-chips">
+                <button
+                  v-for="k in constantsStore.catalog"
+                  :key="k.kind"
+                  type="button"
+                  class="kind-chip"
+                  :class="{ active: form.genKind === k.kind }"
+                  :data-kind="k.kind"
+                  :title="k.summary"
+                  @click="selectGenKind(k.kind)"
+                >{{ k.kind }}</button>
+              </div>
+            </div>
+            <p v-if="constantsStore.catalogError" class="muted m-0">目录不可用,无法配置生成器条目</p>
+            <div
+              v-for="p in genParams"
+              :key="p.name"
+              class="grid grid-cols-[80px_1fr] items-center gap-2"
             >
-              <el-option v-for="v in p.enum" :key="String(v)" :value="v" :label="String(v)" />
-            </el-select>
-            <el-switch
-              v-else-if="p.type === 'boolean'"
-              :model-value="form.genParams[p.name] === true"
-              :data-field="`param-${p.name}`"
-              @change="(v: unknown) => setParam(p.name, v === true)"
-            />
-            <el-input-number
-              v-else-if="p.type === 'integer' || p.type === 'number'"
-              :model-value="form.genParams[p.name] as number | undefined"
-              :min="p.min ?? undefined"
-              :max="p.max ?? undefined"
-              :data-field="`param-${p.name}`"
-              @update:model-value="(v: unknown) => setParam(p.name, v)"
-            />
-            <el-input
-              v-else
-              :model-value="String(form.genParams[p.name] ?? '')"
-              :data-field="`param-${p.name}`"
-              @update:model-value="(v: unknown) => setParam(p.name, v)"
-            />
-            <span class="muted param-hint">{{ p.description }}</span>
-          </el-form-item>
-          <el-form-item label="spec 预览">
-            <div class="spec-preview">
-              <pre data-testid="spec-preview">{{ specPreview }}</pre>
-              <button class="ghost-btn" data-action="copy-spec" @click="copySpec">复制</button>
+              <span class="text-label font-medium text-signal-ink">{{ p.name }}{{ p.required ? ' *' : '' }}</span>
+              <div class="flex flex-col gap-0.5">
+                <Select
+                  v-if="p.enum"
+                  :model-value="(form.genParams[p.name] as string | number | undefined)"
+                  @update:model-value="(v) => setParam(p.name, v as string | number)"
+                >
+                  <SelectTrigger :data-field="`param-${p.name}`" class="h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="v in p.enum" :key="String(v)" :value="(v as string | number)">{{ String(v) }}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Switch
+                  v-else-if="p.type === 'boolean'"
+                  :model-value="form.genParams[p.name] === true"
+                  :data-field="`param-${p.name}`"
+                  @update:model-value="(v: boolean) => setParam(p.name, v)"
+                />
+                <Input
+                  v-else-if="p.type === 'integer' || p.type === 'number'"
+                  type="number"
+                  :model-value="(form.genParams[p.name] as number | undefined) ?? ''"
+                  :min="p.min ?? undefined"
+                  :max="p.max ?? undefined"
+                  :data-field="`param-${p.name}`"
+                  class="h-8 w-[160px]"
+                  @update:model-value="(v) => setParam(p.name, v === '' ? undefined : Number(v))"
+                />
+                <Input
+                  v-else
+                  :model-value="String(form.genParams[p.name] ?? '')"
+                  :data-field="`param-${p.name}`"
+                  class="h-8"
+                  @update:model-value="(v) => setParam(p.name, v)"
+                />
+                <span class="muted param-hint">{{ p.description }}</span>
+              </div>
             </div>
-          </el-form-item>
-        </template>
-      </el-form>
-      <template #footer>
-        <button class="ghost-btn" @click="dialogOpen = false">取消</button>
-        <button class="primary-btn" data-action="submit" :disabled="!canSubmit" @click="onSubmit">
-          保存
-        </button>
-      </template>
-    </el-dialog>
+            <div class="grid grid-cols-[80px_1fr] items-center gap-2">
+              <span class="text-label font-medium text-signal-ink">spec 预览</span>
+              <div class="spec-preview">
+                <pre data-testid="spec-preview">{{ specPreview }}</pre>
+                <button class="ghost-btn" type="button" data-action="copy-spec" @click="copySpec">复制</button>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <DialogFooter>
+          <button class="ghost-btn" type="button" @click="dialogOpen = false">取消</button>
+          <button class="primary-btn" type="button" data-action="submit" :disabled="!canSubmit" @click="onSubmit">
+            保存
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessageBox } from 'element-plus'
 import { toast } from '@/utils/toast'
+import { confirmAction } from '@/utils/confirmAction'
 import { useConstantsStore } from '@/stores/constants'
 import { getGeneratorKindFull } from '@/api/generator_catalog'
 import { copyText } from '@/utils/clipboard'
@@ -221,6 +260,11 @@ import type {
   GeneratorKindDetailView,
   GeneratorParamDesc,
 } from '@/types/constants'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 
 const constantsStore = useConstantsStore()
 
@@ -273,11 +317,11 @@ function entryValueText(row: ConstantEntry): string {
 }
 
 async function onDelete(row: ConstantEntry): Promise<void> {
-  try {
-    await ElMessageBox.confirm(`删除常量「${row.name}」?`, '删除确认', { type: 'warning' })
-  } catch {
-    return
-  }
+  const ok = await confirmAction(
+    `删除常量「${row.name}」?`, '删除确认',
+    { type: 'warning', danger: true, confirmButtonText: '删除', cancelButtonText: '取消' },
+  )
+  if (!ok) return
   try {
     await constantsStore.removeEntry(row.id)
     toast.success('已删除')
@@ -457,19 +501,10 @@ function copySpec(): void {
 </script>
 
 <style scoped>
-.constants-page {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 20px 24px 48px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.page-head h1 { font-size: 18px; margin-bottom: 4px; }
-.muted { color: var(--c-text-tertiary); font-size: 12px; }
+.muted { color: var(--c-text-tertiary, #94a3b8); font-size: 12px; }
 .card {
-  background: var(--c-surface);
-  border: 1px solid var(--c-border);
+  background: var(--c-surface, #fff);
+  border: 1px solid var(--c-border, #e1e5eb);
   border-radius: 10px;
   padding: 14px 16px;
 }
@@ -479,9 +514,8 @@ function copySpec(): void {
   justify-content: space-between;
   margin-bottom: 10px;
 }
-.section-head h2 { font-size: 14px; }
 .degraded { color: #b45309; font-size: 12px; }
-.kind-card { border: 1px solid var(--c-border); border-radius: 8px; margin-bottom: 8px; }
+.kind-card { border: 1px solid var(--c-border, #e1e5eb); border-radius: 8px; margin-bottom: 8px; }
 .kind-head {
   display: flex;
   align-items: center;
@@ -494,62 +528,82 @@ function copySpec(): void {
   font-size: 12.5px;
   text-align: left;
 }
-.chevron { display: inline-block; transition: transform 0.15s ease; color: var(--c-text-tertiary); }
+.chevron { display: inline-block; transition: transform 0.15s ease; color: var(--c-text-tertiary, #94a3b8); }
 .chevron.open { transform: rotate(90deg); }
-.kind-name { font-family: var(--font-mono); font-weight: 600; }
-.kind-summary { color: var(--c-text-secondary, #64748b); }
+.kind-name { font-family: var(--font-mono, monospace); font-weight: 600; }
+.kind-summary { color: #64748b; }
 .kind-body { padding: 0 12px 10px; }
 .kind-desc { font-size: 12px; margin: 4px 0 8px; }
 /* 发丝线表格(去硬边框,横向分隔对齐全局表格惯例) */
 .params-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 .params-table th,
-.params-table td { border: none; border-bottom: 1px solid var(--c-divider); padding: 5px 8px; text-align: left; }
+.params-table td { border: none; border-bottom: 1px solid var(--c-divider, #eef1f5); padding: 5px 8px; text-align: left; }
 .params-table th {
   background: transparent;
   font-size: 10.5px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--c-text-tertiary);
+  color: var(--c-text-tertiary, #94a3b8);
 }
 .params-table tbody tr:last-child td { border-bottom: none; }
 .example-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .example-json {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono, monospace);
   font-size: 11px;
-  background: var(--c-bg-secondary);
+  background: #f6f8fa;
   border-radius: 6px;
   padding: 6px 10px;
   margin: 0;
 }
 .entry-value {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono, monospace);
   font-size: 11.5px;
   word-break: break-all;
 }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  border-radius: 4px;
+}
 .kind-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .kind-chip {
-  border: 1px solid var(--c-border);
-  background: var(--c-bg-secondary);
+  border: 1px solid var(--c-border, #e1e5eb);
+  background: #f6f8fa;
   border-radius: 12px;
   padding: 2px 10px;
-  font-family: var(--font-mono);
+  font-family: var(--font-mono, monospace);
   font-size: 11.5px;
   cursor: pointer;
 }
-/* 选中态对齐全局靛蓝 accent(替换此前的紫罗兰) */
+/* 选中态对齐 Signal accent */
 .kind-chip.active {
-  background: var(--c-accent-soft);
-  border-color: var(--c-accent-soft-border);
-  color: var(--c-accent);
+  background: #e7efff;
+  border-color: #2f6fed;
+  color: #2f6fed;
 }
+/* 类型分段选择(替代 el-radio-button) */
+.seg { display: inline-flex; border: 1px solid #e1e5eb; border-radius: 8px; overflow: hidden; }
+.seg-btn {
+  padding: 6px 14px;
+  font-size: 12.5px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #5a6273;
+}
+.seg-btn.active { background: #2f6fed; color: #fff; font-weight: 600; }
+.seg-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .param-hint { display: block; margin-top: 2px; }
 .spec-preview { display: flex; align-items: center; gap: 8px; width: 100%; }
 .spec-preview pre {
   flex: 1;
-  font-family: var(--font-mono);
+  font-family: var(--font-mono, monospace);
   font-size: 11px;
-  background: var(--c-bg-secondary);
+  background: #f6f8fa;
   border-radius: 6px;
   padding: 6px 10px;
   margin: 0;
@@ -558,18 +612,17 @@ function copySpec(): void {
 }
 .primary-btn {
   display: inline-flex; align-items: center; gap: 6px;
-  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+  background: #2f6fed;
   color: #fff; border: none; border-radius: 8px;
   padding: 8px 16px; font-size: 13px; font-weight: 600;
   cursor: pointer; transition: all 0.15s;
-  box-shadow: 0 1px 2px rgba(79, 70, 229, 0.2);
 }
-.primary-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3); }
-.primary-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.primary-btn:hover { background: #265fd4; }
+.primary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .ghost-btn {
   display: inline-flex; align-items: center; gap: 6px;
-  background: transparent; border: 1px solid #e6e8ec; border-radius: 8px;
-  padding: 8px 14px; font-size: 13px; color: #5a6273;
+  background: transparent; border: 1px solid #e1e5eb; border-radius: 8px;
+  padding: 6px 12px; font-size: 12.5px; color: #5a6273;
   cursor: pointer; transition: all 0.15s;
 }
 .ghost-btn:hover { background: #f5f6fa; color: #1a1d24; }
