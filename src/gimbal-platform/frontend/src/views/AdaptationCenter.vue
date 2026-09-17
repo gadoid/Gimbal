@@ -1,21 +1,25 @@
 <!-- AdaptationCenter —— P5 适配中心总览(spec §3/§5 + §7 carry 职能)。
+     批次 3 迁移新栈:shadcn Table/Button/Alert;tag → Signal chip;
+     勾选清单 → 原生 checkbox(label.drift-check)。
      admin:未索引警示 + 待适配卡片(C12 异常卡不可开批次)+ 全量批次表
        + carry 漂移面板(T16:三类勾选 → 生成值表批,plateReachable 先判);
      member:自动只读 owner 视图(仅批次表,scope=mine,无详情列 ——
-     批次工作台为 admin-only,member 直入得 403)。 -->
+       批次工作台为 admin-only,member 直入得 403)。 -->
 <template>
-  <section class="adaptation-center">
+  <section class="adaptation-center mx-auto max-w-[1480px] px-8 pb-12 pt-7">
     <header class="page-header">
       <div class="header-text">
-        <h2>适配中心</h2>
-        <p>{{ auth.isAdmin ? '目录变更检测与批次适配' : '仅显示触碰你场景的批次(只读)' }}</p>
+        <h2 class="m-0 text-display text-signal-ink">适配中心</h2>
+        <p class="mt-1 mb-0 text-caption text-muted-foreground">
+          {{ auth.isAdmin ? '目录变更检测与批次适配' : '仅显示触碰你场景的批次(只读)' }}
+        </p>
       </div>
-      <el-button
+      <Button
         v-if="auth.isAdmin"
-        type="primary"
-        :loading="adaptations.refreshing"
+        :disabled="adaptations.refreshing"
+        data-testid="refresh-all"
         @click="refreshAll"
-      >检查更新</el-button>
+      >{{ adaptations.refreshing ? '检查中…' : '检查更新' }}</Button>
     </header>
 
     <template v-if="auth.isAdmin">
@@ -28,16 +32,12 @@
           class="section-count"
         >{{ pendingCards.length + anomalies.length }} 个端点</span>
       </div>
-      <el-alert
-        v-if="adaptations.lastError"
-        type="error"
-        :title="adaptations.lastError"
-        :closable="false"
-      />
-      <el-empty
-        v-else-if="pendingCards.length === 0 && anomalies.length === 0"
-        description="目录无待适配变更"
-      />
+      <Alert v-if="adaptations.lastError" variant="destructive" data-testid="diff-error">
+        <AlertTitle>{{ adaptations.lastError }}</AlertTitle>
+      </Alert>
+      <div v-else-if="pendingCards.length === 0 && anomalies.length === 0" class="empty-note">
+        目录无待适配变更
+      </div>
       <div v-else class="cards">
         <div
           v-for="a in anomalies"
@@ -48,7 +48,7 @@
           <div class="card-top">
             <span class="dot" />
             <b class="mono endpoint">{{ a.endpointId }}</b>
-            <el-tag type="warning" size="small" effect="plain">异常</el-tag>
+            <span class="chip bg-amber-50 text-amber-800">异常</span>
           </div>
           <p class="detail">{{ a.detail }}</p>
           <p class="hint">版本未动不会自动适配 —— 请在 plate 侧确认是否忘 bump</p>
@@ -86,53 +86,53 @@
       <span class="section-title">批次</span>
     </div>
     <p v-if="!auth.isAdmin" class="hint mine-hint">仅显示触碰你场景的批次</p>
-    <el-table v-loading="batchesLoading" :data="batchRows">
-      <el-table-column prop="batchId" label="批次" min-width="140">
-        <template #default="{ row }">
-          <span class="mono">{{ row.batchId }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="endpointId" label="Endpoint" min-width="180">
-        <template #default="{ row }">
-          <span class="mono endpoint-cell">{{ row.endpointId }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="版本" min-width="130">
-        <template #default="{ row }">
-          <span class="ver-chip from">{{ row.fromVersion }}</span>
-          <span class="ver-arrow">→</span>
-          <span class="ver-chip to">{{ row.toVersion }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="120">
-        <template #default="{ row }">
-          <el-tag size="small" :type="batchTagType(row.status)">{{ row.status }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="ops" min-width="200">
-        <template #default="{ row }">
-          <el-tag
-            v-for="(n, s) in row.opCounts"
-            :key="s"
-            size="small"
-            :type="opTagType(String(s))"
-            class="op-tag"
-            effect="plain"
-          >{{ s }} {{ n }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="createdAt" label="创建时间" min-width="170" />
-      <!-- 详情入口仅 admin:GET /batches/{id} 为 admin-only,
-           member 点击只会得 403(死链),故整列不渲染。 -->
-      <el-table-column v-if="auth.isAdmin" label="操作" width="80">
-        <template #default="{ row }">
-          <router-link
-            :to="`/adaptations/batches/${row.batchId}`"
-            class="link"
-          >详情</router-link>
-        </template>
-      </el-table-column>
-    </el-table>
+    <div v-if="batchesLoading" class="py-6 text-center text-body text-muted-foreground">批次加载中…</div>
+    <Table v-else class="rounded-field border border-signal-line bg-signal-card">
+      <TableHeader>
+        <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
+          <TableHead class="text-caption font-semibold text-muted-foreground">批次</TableHead>
+          <TableHead class="text-caption font-semibold text-muted-foreground">Endpoint</TableHead>
+          <TableHead class="text-caption font-semibold text-muted-foreground">版本</TableHead>
+          <TableHead class="w-[110px] text-caption font-semibold text-muted-foreground">状态</TableHead>
+          <TableHead class="text-caption font-semibold text-muted-foreground">ops</TableHead>
+          <TableHead class="text-caption font-semibold text-muted-foreground">创建时间</TableHead>
+          <!-- 详情入口仅 admin:GET /batches/{id} 为 admin-only,
+               member 点击只会得 403(死链),故整列不渲染。 -->
+          <TableHead v-if="auth.isAdmin" class="w-[70px]" />
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow v-for="row in batchRows" :key="row.batchId">
+          <TableCell><span class="mono">{{ row.batchId }}</span></TableCell>
+          <TableCell><span class="mono endpoint-cell">{{ row.endpointId }}</span></TableCell>
+          <TableCell>
+            <span class="ver-chip from">{{ row.fromVersion }}</span>
+            <span class="ver-arrow">→</span>
+            <span class="ver-chip to">{{ row.toVersion }}</span>
+          </TableCell>
+          <TableCell>
+            <span class="chip" :class="batchStatusClass[row.status] ?? 'bg-muted text-muted-foreground'">
+              {{ row.status }}
+            </span>
+          </TableCell>
+          <TableCell>
+            <span
+              v-for="(n, s) in row.opCounts"
+              :key="s"
+              class="chip op-tag"
+              :class="opStatusClass[String(s)] ?? 'bg-muted text-muted-foreground'"
+            >{{ s }} {{ n }}</span>
+          </TableCell>
+          <TableCell class="text-caption text-muted-foreground">{{ row.createdAt }}</TableCell>
+          <TableCell v-if="auth.isAdmin">
+            <router-link
+              :to="`/adaptations/batches/${row.batchId}`"
+              class="link"
+            >详情</router-link>
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
 
     <!-- carry 漂移(T16,admin-only:后端 drift 为 AdminUser,member 403)。
          plateReachable=False → 不渲染清单 + 显式警示 + 禁批生成(T11 硬性
@@ -144,36 +144,28 @@
           {{ carryDriftTotal }} 项漂移 · {{ carryDrift.length }} 服务
         </span>
         <span class="section-actions">
-          <el-button
-            size="small"
-            :loading="carryDriftLoading"
+          <Button
+            variant="outline"
+            size="sm"
+            :disabled="carryDriftLoading"
             @click="loadCarryDrift"
-          >刷新</el-button>
-          <el-button
-            size="small"
-            type="primary"
+          >{{ carryDriftLoading ? '刷新中…' : '刷新' }}</Button>
+          <Button
+            size="sm"
             data-action="carry-generate"
             :disabled="!canGenerate"
-            :loading="carryGenerating"
             @click="openCarryBatchFromDrift"
-          >勾选生成批({{ carryChecked.length }})</el-button>
+          >{{ carryGenerating ? '生成中…' : `勾选生成批(${carryChecked.length})` }}</Button>
         </span>
       </div>
 
-      <el-alert
-        v-if="!carryPlateReachable"
-        type="warning"
-        :closable="false"
-        class="drift-alert"
-        title="plate 目录不可达:漂移数据可能失真(绑定可能被误报为孤儿),已禁用勾选与批生成"
-        description="清单已停止渲染,请先恢复 plate 目录后点刷新重查"
-      />
-      <el-empty
-        v-else-if="carryDrift.length === 0"
-        :description="carryLoadFailed
-          ? '加载失败,请刷新'
-          : '暂无服务 carry 数据(无绑定且 plate 面为空)'"
-      />
+      <Alert v-if="!carryPlateReachable" class="mt-2" data-testid="drift-unreachable">
+        <AlertTitle>plate 目录不可达:漂移数据可能失真(绑定可能被误报为孤儿),已禁用勾选与批生成</AlertTitle>
+        <AlertDescription>清单已停止渲染,请先恢复 plate 目录后点刷新重查</AlertDescription>
+      </Alert>
+      <div v-else-if="carryDrift.length === 0" class="empty-note">
+        {{ carryLoadFailed ? '加载失败,请刷新' : '暂无服务 carry 数据(无绑定且 plate 面为空)' }}
+      </div>
       <div v-else class="drift-list">
         <div
           v-for="s in carryDrift"
@@ -184,17 +176,12 @@
           <h4 class="mono">{{ s.service }}</h4>
           <!-- 对齐服务(三列表全空)正向确认,不渲染空壳(T11 评审契约) -->
           <p v-if="!hasCarryDrift(s)" class="hint drift-ok">已检查,无漂移</p>
-          <el-checkbox-group
-            v-else
-            v-model="carryChecked"
-            class="drift-checks"
-          >
-            <el-checkbox
-              v-for="opt in driftCheckOptions(s)"
-              :key="opt.key"
-              :value="opt.key"
-            >{{ opt.text }}</el-checkbox>
-          </el-checkbox-group>
+          <div v-else class="drift-checks">
+            <label v-for="opt in driftCheckOptions(s)" :key="opt.key" class="drift-check">
+              <input v-model="carryChecked" type="checkbox" :value="opt.key" />
+              {{ opt.text }}
+            </label>
+          </div>
         </div>
       </div>
     </template>
@@ -219,6 +206,9 @@ import { useAuthStore } from '@/stores/auth'
 import { useAdaptationsStore } from '@/stores/adaptations'
 import UnindexedAlert from '@/components/adaptations/UnindexedAlert.vue'
 import ImpactDrawer from '@/components/adaptations/ImpactDrawer.vue'
+import { Button } from '@/components/ui/button'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 const auth = useAuthStore()
 const adaptations = useAdaptationsStore()
@@ -237,20 +227,19 @@ const pendingCards = computed<PendingChange[]>(
   () => adaptations.diffReport?.pending ?? [])
 const anomalies = computed(() => adaptations.diffReport?.anomalies ?? [])
 
-function opTagType(status: string): 'success' | 'info' | 'danger' | 'warning' {
-  if (status === 'applied') return 'success'
-  if (status === 'conflict') return 'danger'
-  if (status === 'skipped') return 'info'
-  return 'warning' // pending
+/** 状态 → Signal chip 色(el-tag type 的语义迁移) */
+const opStatusClass: Record<string, string> = {
+  applied: 'bg-signal-done/10 text-signal-done',
+  conflict: 'bg-signal-failed/10 text-signal-failed',
+  skipped: 'bg-muted text-muted-foreground',
+  pending: 'bg-amber-50 text-amber-800',
 }
 
-function batchTagType(
-  status: string
-): 'success' | 'info' | 'warning' | 'danger' | 'primary' {
-  if (status === 'completed') return 'success'
-  if (status === 'applying') return 'primary'
-  if (status === 'open') return 'warning'
-  return 'info' // rolled_back
+const batchStatusClass: Record<string, string> = {
+  completed: 'bg-signal-done/10 text-signal-done',
+  applying: 'bg-signal-soft text-signal',
+  open: 'bg-amber-50 text-amber-800',
+  rolled_back: 'bg-muted text-muted-foreground',
 }
 
 async function loadBatches(scope?: 'mine'): Promise<void> {
@@ -305,7 +294,7 @@ const carryLoadFailed = ref(false)
 const carryDriftTotal = computed(() =>
   carryDrift.value.reduce((n, s) =>
     n + s.orphaned.length + s.uncovered.length + s.renamedSuggestions.length,
-    0))
+  0))
 const canGenerate = computed(
   () => canGenerateCarryBatch(carryPlateReachable.value, carryChecked.value.length))
 
@@ -367,148 +356,119 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 页面容器:对齐 CaseDataSetsList 的页面规范(居中 + 大边距)。 */
-.adaptation-center {
-  max-width: 1480px;
-  min-height: calc(100vh - 48px);
-  padding: 28px 32px 48px;
-  margin: 0 auto;
-  box-sizing: border-box;
-}
-
 /* ── 页头 ── */
 .page-header {
   display: flex;
-  justify-content: space-between;
+  gap: 24px;
   align-items: center;
-  margin-bottom: 8px;
+  justify-content: space-between;
+  margin-bottom: 18px;
 }
-.page-header h2 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-  color: #303133;
-}
-.header-text p { margin: 6px 0 0; color: #909399; font-size: 13px; }
 
-/* ── 小节头:标签 + 计数,与内容拉开层级 ── */
+/* ── 分节标题 ── */
 .section-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
-  margin: 26px 0 12px;
+  margin: 22px 0 10px;
 }
 .section-title {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  color: #606266;
+  font-size: 14px;
+  font-weight: 700;
+  color: #10151c;
+  padding-left: 10px;
+  border-left: 3px solid #2f6fed;
 }
-.section-count { font-size: 12px; color: #909399; }
+.section-count {
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+.section-actions { margin-left: auto; display: flex; gap: 8px; }
 
-/* ── 待适配卡片网格 ── */
+/* ── 待适配卡片 ── */
 .cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 12px;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 .card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border: 1px solid #e4e7ed;
+  background: #fff;
+  border: 1px solid #e1e5eb;
   border-radius: 8px;
-  padding: 14px 16px;
-  transition: border-color 0.2s, background-color 0.2s;
+  padding: 10px 14px;
 }
-.card-top {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #409eff;
-}
-.card.anomaly .dot { background: #e6a23c; }
-.endpoint {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  font-weight: 600;
-  color: #303133;
-}
-.card-bottom {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: auto;
-}
-.card.pending { cursor: pointer; }
-.card.pending:hover {
-  border-color: #409eff;
-  background: #f5faff;
-}
-.card.anomaly {
-  border-color: #f3d19e;
-  background: #fdf6ec;
-}
-.card .detail { margin: 0; font-size: 13px; color: #606266; }
-.hint { margin: 0; color: #909399; font-size: 12px; }
-.view { margin-left: auto; font-size: 12px; color: #909399; }
+.card.anomaly { border-color: #fde68a; background: #fffbeb; }
+.card.pending { cursor: pointer; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.card.pending:hover { border-color: #2f6fed; box-shadow: 0 1px 6px rgba(47, 111, 237, 0.12); }
+.card-top { display: flex; align-items: center; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #2f6fed; flex-shrink: 0; }
+.card.anomaly .dot { background: #eab308; }
+.endpoint { font-size: 13px; }
+.detail { margin: 6px 0 2px; font-size: 12px; color: #334155; }
+.card-bottom { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.view { margin-left: auto; font-size: 12px; color: #2f6fed; }
 
-/* ── 版本 chip(卡片与批次表共用) ── */
+/* ── 版本 chip ── */
 .ver-chip {
-  display: inline-block;
+  padding: 1px 8px;
   font-family: monospace;
-  font-size: 12px;
-  line-height: 1;
-  padding: 4px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
   border-radius: 4px;
 }
-.ver-chip.from { background: #f4f4f5; color: #909399; }
-.ver-chip.to { background: #ecf5ff; color: #409eff; }
-.ver-arrow { color: #c0c4cc; font-size: 12px; }
+.ver-chip.from { color: #64748b; background: #f1f5f9; }
+.ver-chip.to { color: #2f6fed; background: #e7efff; }
+.ver-arrow { color: #94a3b8; font-size: 11px; }
 
-/* ── 批次表 ── */
-.endpoint-cell { font-size: 13px; color: #303133; }
-.mine-hint { margin: 0 0 10px; }
-.op-tag { margin-right: 4px; }
-.link { color: #409eff; }
-.mono { font-family: monospace; }
-
-/* ── carry 漂移(T16)── */
-.section-actions {
-  margin-left: auto;
-  display: flex;
-  gap: 8px;
-}
-.drift-alert { margin: 0 0 12px; }
-.drift-svc {
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
-  padding: 10px 14px;
-  margin-bottom: 10px;
-}
-.drift-svc h4 {
-  margin: 0 0 8px;
-  font-size: 13px;
+/* ── 通用 chip(状态/ops)── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  font-size: 10.5px;
   font-weight: 600;
-  color: #303133;
+  border-radius: 4px;
 }
-.drift-checks { display: block; }
-.drift-checks :deep(.el-checkbox) {
-  height: auto;
-  min-height: 24px;
-  align-items: flex-start;
-  white-space: normal;
-  margin-right: 0;
+.op-tag { margin-right: 4px; }
+.endpoint-cell { font-size: 12px; }
+
+/* ── 空态/提示 ── */
+.empty-note {
+  padding: 18px 16px;
+  text-align: center;
+  font-size: 12.5px;
+  color: #94a3b8;
+  border: 1px dashed #e1e5eb;
+  border-radius: 8px;
 }
-.drift-ok { margin: 0; color: #67c23a; }
+.hint { font-size: 11.5px; color: #94a3b8; margin: 2px 0 0; }
+.mine-hint { margin: -4px 0 10px; }
+
+/* ── drift 清单 ── */
+.drift-list { display: flex; flex-direction: column; gap: 10px; }
+.drift-svc {
+  background: #fff;
+  border: 1px solid #e1e5eb;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+.drift-svc h4 { margin: 0 0 6px; font-size: 13px; }
+.drift-ok { color: #15803d; }
+.drift-checks { display: flex; flex-direction: column; gap: 4px; }
+.drift-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.drift-check input { accent-color: #2f6fed; }
+
+.mono { font-family: monospace; }
+.link { color: #2f6fed; }
 </style>

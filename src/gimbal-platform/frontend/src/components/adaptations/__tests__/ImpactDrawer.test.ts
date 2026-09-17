@@ -3,11 +3,11 @@
  *   - 打开时拉 impact(endpointId),按 field 分组;
  *   - 条目标注 直填/模板 与 datasetId.datasetColumn;
  *   - 底部 [开批次] emit openBatch。
+ * 交互注意:shadcn Drawer 经 Portal 渲染 → body 查询(DOMWrapper)。
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
-import { createPinia, setActivePinia } from 'pinia'
-import ElementPlus from 'element-plus'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { mount, flushPromises, DOMWrapper } from '@vue/test-utils'
+import { createPinia, getActivePinia, setActivePinia } from 'pinia'
 import ImpactDrawer from '@/components/adaptations/ImpactDrawer.vue'
 import * as api from '@/api/adaptations'
 
@@ -20,6 +20,10 @@ const items = [
     viaVar: null, datasetId: null, datasetColumn: null },
 ]
 
+function qAll(sel: string): DOMWrapper<Element>[] {
+  return [...document.body.querySelectorAll(sel)].map((el) => new DOMWrapper(el))
+}
+
 function mountIt() {
   return mount(ImpactDrawer, {
     props: {
@@ -28,7 +32,8 @@ function mountIt() {
       fromVersion: '1.0.0',
       toVersion: '1.1.0',
     },
-    global: { plugins: [ElementPlus] },
+    global: { plugins: [getActivePinia()!] },
+    attachTo: document.body,
   })
 }
 
@@ -37,6 +42,9 @@ describe('ImpactDrawer', () => {
     setActivePinia(createPinia())
     vi.restoreAllMocks()
   })
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
 
   it('打开时按 field 分组渲染 + 直填/模板与数据集标注', async () => {
     const spy = vi.spyOn(api, 'impact').mockResolvedValue(items as never)
@@ -44,7 +52,7 @@ describe('ImpactDrawer', () => {
     await flushPromises()
 
     expect(spy).toHaveBeenCalledWith('fin.order.add')
-    const groups = w.findAll('.field-group')
+    const groups = qAll('.field-group')
     expect(groups.length).toBe(2)          // amount(2 条) + q1(1 条)
 
     const amountText = groups[0].text()
@@ -61,7 +69,8 @@ describe('ImpactDrawer', () => {
     const w = mountIt()
     await flushPromises()
 
-    await w.find('.open-batch-btn').trigger('click')
+    const btn = qAll('.open-batch-btn')[0]
+    await btn.trigger('click')
     expect(w.emitted('openBatch')).toHaveLength(1)
     w.unmount()
   })

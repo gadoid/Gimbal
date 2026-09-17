@@ -128,7 +128,7 @@ describe('AdaptationCenter', () => {
     vi.spyOn(api, 'catalogDiff').mockRejectedValue(
       Object.assign(new Error('boom'), { status: 502 }))
     const { w: w2 } = await mountPage()
-    expect(w2.find('.el-alert--error').exists()).toBe(true)
+    expect(w2.find('[data-testid="diff-error"]').exists()).toBe(true)
     w2.unmount()
   })
 
@@ -213,7 +213,7 @@ describe('AdaptationCenter', () => {
     expect(w.text()).toContain('已检查,无漂移')
     // 无勾选 → 生成按钮禁用
     const gen = w.find('[data-action="carry-generate"]')
-    expect(gen.classes()).toContain('is-disabled')
+    expect((gen.element as HTMLButtonElement).disabled).toBe(true)
     w.unmount()
   })
 
@@ -224,13 +224,13 @@ describe('AdaptationCenter', () => {
 
     const { w } = await mountPage()
 
-    expect(w.find('.el-alert--warning').exists()).toBe(true)
+    expect(w.find('[data-testid="drift-unreachable"]').exists()).toBe(true)
     expect(w.text()).toContain('plate 目录不可达')
     expect(w.text()).toContain('已禁用勾选与批生成')
-    expect(w.find('.el-checkbox').exists()).toBe(false)   // 降级清单不渲染
+    expect(w.find('.drift-check').exists()).toBe(false)   // 降级清单不渲染
     expect(w.find('.drift-svc').exists()).toBe(false)
-    expect(w.find('[data-action="carry-generate"]').classes())
-      .toContain('is-disabled')
+    expect((w.find('[data-action="carry-generate"]').element as HTMLButtonElement).disabled)
+      .toBe(true)
     w.unmount()
   })
 
@@ -257,11 +257,11 @@ describe('AdaptationCenter', () => {
     const { w, router } = await mountPage()
 
     // 勾 2 项:fin.order 的孤儿移除 + fin.risk 的孤儿移除
-    const boxes = w.findAll('.drift-checks .el-checkbox')
+    const boxes = w.findAll('.drift-checks .drift-check')
     await boxes[0].find('input').setValue(true)   // fin.order remove
     await boxes[3].find('input').setValue(true)   // fin.risk remove
-    expect(w.find('[data-action="carry-generate"]').classes())
-      .not.toContain('is-disabled')
+    expect((w.find('[data-action="carry-generate"]').element as HTMLButtonElement).disabled)
+      .toBe(false)
 
     await w.find('[data-action="carry-generate"]').trigger('click')
     await flushPromises()
@@ -305,7 +305,7 @@ describe('AdaptationCenter', () => {
 
     // 勾选序 = 点击序:先勾第 2 项($.old_b)再勾第 1 项($.old_a)
     // — 断言 op 序跟勾选序而非选项渲染序
-    const boxes = w.findAll('.drift-checks .el-checkbox')
+    const boxes = w.findAll('.drift-checks .drift-check')
     expect(boxes.length).toBe(2)
     await boxes[1].find('input').setValue(true)
     await boxes[0].find('input').setValue(true)
