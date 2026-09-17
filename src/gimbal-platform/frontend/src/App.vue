@@ -15,18 +15,16 @@
 
   <template v-else-if="chromeMode === 'collapsed'">
     <CollapsedTopbar />
-    <main class="app-main collapsed">
+    <main class="min-h-screen pt-12">
       <router-view />
     </main>
   </template>
 
   <template v-else>
-    <div class="app-shell">
-      <Sidebar />
-      <main class="app-main full">
-        <router-view />
-      </main>
-    </div>
+    <Sidebar />
+    <main class="ml-[200px] min-h-screen min-w-0">
+      <router-view />
+    </main>
   </template>
 </template>
 
@@ -58,20 +56,3 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
-.app-shell {
-  display: flex;
-  min-height: 100vh;
-}
-
-.app-main.full {
-  flex: 1;
-  min-width: 0;
-  margin-left: 200px;
-}
-
-.app-main.collapsed {
-  min-height: 100vh;
-  padding-top: 48px;
-}
-</style>

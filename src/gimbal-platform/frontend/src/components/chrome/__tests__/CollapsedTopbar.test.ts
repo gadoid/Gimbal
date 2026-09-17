@@ -96,6 +96,19 @@ describe('CollapsedTopbar — 统一面包屑', () => {
     w.unmount()
   })
 
+  it('/composer/new 新建草稿:中间段「新建场景」不可点,且不发起取名请求', async () => {
+    mockRoute.path = '/composer/new'
+    mockRoute.params = { scenarioId: 'new' }
+    const w = mountBar()
+    await flushPromises()
+    // 可点段只剩「场景库」;不可点段 = 新建场景 + 末段编排
+    expect(w.findAll('a.crumb-link').map((l) => l.text())).toEqual(['场景库'])
+    expect(w.findAll('.crumb-current').map((s) => s.text())).toEqual(['新建场景', '编排'])
+    // 不对 'new' 发 getScenario(404 噪声归零)
+    expect(api.getScenario).not.toHaveBeenCalledWith('new')
+    w.unmount()
+  })
+
   it('方案工作台页:末段「方案」', async () => {
     mockRoute.path = '/scenarios/sc-demo/schemes'
     const w = mountBar()

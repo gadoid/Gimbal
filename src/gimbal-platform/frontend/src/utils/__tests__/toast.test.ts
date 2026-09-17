@@ -12,12 +12,13 @@ describe('toast', () => {
     vi.useRealTimers()
   })
 
-  it('四种 kind 入栈,duration 到点自动消退(默认 3000)', () => {
+  it('四种 kind 入栈(新消息置顶),duration 到点自动消退(默认 3000)', () => {
     toast.success('ok')
     toast.error('bad')
     toast.info('hint')
     toast.warning('care')
-    expect(toastState.items.map((i) => i.kind)).toEqual(['success', 'error', 'info', 'warning'])
+    // unshift:最新在顶
+    expect(toastState.items.map((i) => i.kind)).toEqual(['warning', 'info', 'error', 'success'])
 
     vi.advanceTimersByTime(2999)
     expect(toastState.items).toHaveLength(4)
@@ -43,9 +44,17 @@ describe('toast', () => {
     expect(() => vi.advanceTimersByTime(5000)).not.toThrow()
   })
 
-  it('后入先展示顺序 = push 顺序(stack 不倒序)', () => {
+  it('新消息置顶(与 ElMessage 堆叠方向一致)', () => {
     toast.success('a')
     toast.error('b')
-    expect(toastState.items.map((i) => i.message)).toEqual(['a', 'b'])
+    expect(toastState.items.map((i) => i.message)).toEqual(['b', 'a'])
+  })
+
+  it('duration:0 = 常驻不自动关(对齐 ElMessage)', () => {
+    toast.warning({ message: 'sticky', duration: 0 })
+    vi.advanceTimersByTime(60_000)
+    expect(toastState.items).toHaveLength(1)
+    dismissToast(toastState.items[0].id)
+    expect(toastState.items).toHaveLength(0)
   })
 })

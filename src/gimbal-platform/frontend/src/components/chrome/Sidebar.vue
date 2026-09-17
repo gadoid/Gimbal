@@ -3,40 +3,45 @@
      / 执行中心 / 平台 四组;常量池不再占侧边栏坑位(工作台卡片 +
      "管理"深链承接)。沿用 TopNav 的两条既有语义:adminOnly 过滤
      (用户管理 / 传递字段仅 admin 可见)与适配中心 pendingCount 徽标
-     (admin + >0 才显示)。常驻底部:用户身份 + 登出。 -->
+     (admin + >0 才显示)。常驻底部:用户身份 + 登出(UserBadge)。
+     颜色全部经 Signal token(@apply),组件内零散 hex 为零;暗底上的
+     灰阶用 Tailwind 标准 slate 阶(Signal 色板未定义暗底文字档)。 -->
 <template>
-  <aside class="sidebar">
-    <div class="brand">
-      <span class="status-dot" title="服务在线"></span>
-      <span class="brand-text">platform</span>
+  <aside class="sidebar fixed inset-y-0 left-0 z-[1000] flex w-[200px] flex-col bg-signal-sidebar text-slate-300">
+    <div class="flex items-center gap-2 px-4 pb-3 pt-3.5">
+      <span class="status-dot h-2 w-2 shrink-0 rounded-full bg-signal-dot" title="服务在线"></span>
+      <span class="text-body font-semibold tracking-wide text-slate-50">platform</span>
     </div>
 
-    <nav class="nav">
+    <nav class="flex-1 overflow-y-auto px-2">
       <router-link
         v-for="entry in flatEntries"
         :key="entry.path"
         :to="entry.path"
-        class="nav-item"
-        :class="{ active: isActive(entry.path), 'group-first': entry.firstOfGroup }"
+        class="nav-item block rounded-md"
+        :class="{ active: isActive(entry.path) }"
       >
-        <span class="group-label" v-if="entry.firstOfGroup && entry.group">{{ entry.group }}</span>
-        <span class="row">
-          <component :is="entry.icon" class="nav-icon" />
-          <span class="nav-text">{{ entry.label }}</span>
+        <span v-if="entry.firstOfGroup && entry.group" class="group-label block select-none px-2 pb-1 pt-4 text-caption text-slate-500">
+          {{ entry.group }}
+        </span>
+        <span
+          class="row flex h-8 items-center gap-2 rounded-md px-2 text-body transition-colors duration-150"
+          :class="isActive(entry.path)
+            ? 'bg-white/10 font-semibold text-white'
+            : 'text-slate-300 hover:bg-white/5 hover:text-white'"
+        >
+          <component :is="entry.icon" class="nav-icon h-3.5 w-3.5 shrink-0" />
+          <span class="nav-text flex-1 whitespace-nowrap">{{ entry.label }}</span>
           <span
             v-if="entry.path === '/adaptations' && auth.isAdmin && adaptations.pendingCount > 0"
-            class="nav-badge"
+            class="nav-badge h-[18px] min-w-[18px] rounded-full bg-signal-failed px-1.5 text-center text-caption leading-[18px] text-white"
           >{{ adaptations.pendingCount }}</span>
         </span>
       </router-link>
     </nav>
 
-    <div class="sidebar-footer">
-      <span class="user-info" v-if="auth.currentUser">
-        <span class="username">{{ auth.currentUser.display_name || auth.currentUser.username }}</span>
-        <span class="role">{{ auth.currentUser.is_admin ? 'admin' : 'member' }}</span>
-      </span>
-      <button class="logout-btn" @click="onLogout">登出</button>
+    <div class="flex items-center justify-between gap-2 border-t border-white/10 px-4 py-3">
+      <UserBadge />
     </div>
   </aside>
 </template>
@@ -44,7 +49,7 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
 import { computed, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import {
   ActivityLogIcon,
   ArchiveIcon,
@@ -56,9 +61,9 @@ import {
 } from '@radix-icons/vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAdaptationsStore } from '@/stores/adaptations'
+import UserBadge from '@/components/chrome/UserBadge.vue'
 
 const auth = useAuthStore()
-const router = useRouter()
 const route = useRoute()
 
 const adaptations = useAdaptationsStore()
@@ -121,168 +126,4 @@ const flatEntries = computed<FlatEntry[]>(() =>
 function isActive(path: string): boolean {
   return route.path === path || route.path.startsWith(path + '/')
 }
-
-async function onLogout() {
-  await auth.logout()
-  router.push('/login')
-}
 </script>
-
-<style scoped>
-/* preflight 关闭环境:尺寸/边距全部显式声明 */
-.sidebar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 200px;
-  display: flex;
-  flex-direction: column;
-  background: #0b0e14;
-  color: #cbd5e1;
-  z-index: 1000;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 16px 12px;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #22d3ee;
-  box-shadow: 0 0 4px rgba(34, 211, 238, 0.6);
-  flex-shrink: 0;
-}
-
-.brand-text {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  color: #f8fafc;
-}
-
-.nav {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 8px;
-}
-
-.nav-item {
-  display: block;
-  text-decoration: none;
-  border-radius: 6px;
-}
-
-/* 组标签:跟随组内第一条目渲染(非可点的纯标签) */
-.group-label {
-  display: block;
-  padding: 14px 8px 4px;
-  font-size: 11px;
-  color: #64748b;
-  user-select: none;
-}
-
-/* 置顶无组条目与组内条目的行高一致;组标签占额外高度 */
-.nav-item.group-first:not(:first-child) {
-  margin-top: 6px;
-}
-
-.row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 8px;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #cbd5e1;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.nav-item:hover .row {
-  background: rgba(255, 255, 255, 0.06);
-  color: #ffffff;
-}
-
-.nav-item.active .row {
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  font-weight: 600;
-}
-
-.nav-icon {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-
-.nav-text {
-  flex: 1;
-  white-space: nowrap;
-}
-
-.nav-badge {
-  min-width: 18px;
-  height: 18px;
-  line-height: 18px;
-  padding: 0 6px;
-  border-radius: 9px;
-  background: #dc2626;
-  color: #ffffff;
-  font-size: 11px;
-  text-align: center;
-}
-
-.sidebar-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.user-info {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-
-.username {
-  font-size: 12px;
-  color: #f8fafc;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.role {
-  font-size: 11px;
-  color: #64748b;
-  flex-shrink: 0;
-}
-
-.logout-btn {
-  height: 26px;
-  padding: 0 10px;
-  font-size: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-  background: transparent;
-  color: #cbd5e1;
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-
-.logout-btn:hover {
-  border-color: #2f6fed;
-  color: #ffffff;
-}
-</style>

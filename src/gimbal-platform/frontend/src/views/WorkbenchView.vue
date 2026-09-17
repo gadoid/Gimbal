@@ -4,97 +4,37 @@
      原 / → /scenarios 改为 / → /home),以及常量池从顶导航降级后的
      保底入口(空态 = 引导 CTA,不是虚线占位)。 -->
 <template>
-  <div class="wb">
-    <header class="wb-header">
-      <h1 class="wb-title">工作台</h1>
-      <p class="wb-sub">常用入口与摘要卡将在这里汇集。</p>
+  <div class="mx-auto max-w-[960px] px-4 py-6">
+    <header class="mb-5">
+      <h1 class="m-0 text-display font-semibold text-signal-ink">工作台</h1>
+      <p class="mb-0 mt-1 text-body text-muted-foreground">常用入口与摘要卡将在这里汇集。</p>
     </header>
 
-    <div class="wb-grid">
+    <div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
       <router-link to="/constants" class="wb-card">
-        <span class="wb-card-title">常量池</span>
-        <span class="wb-card-desc">业务常量与生成器;编排里可直接插入引用。</span>
-        <span class="wb-card-cta">进入常量池 →</span>
+        <span class="text-heading text-signal-ink">常量池</span>
+        <span class="text-caption text-muted-foreground">业务常量与生成器;编排里可直接插入引用。</span>
+        <span class="mt-1 text-caption font-medium text-signal">进入常量池 →</span>
       </router-link>
 
       <router-link to="/scenarios" class="wb-card">
-        <span class="wb-card-title">场景库</span>
-        <span class="wb-card-desc">我的 / 公共 / 收藏三视图。</span>
-        <span class="wb-card-cta">进入场景库 →</span>
+        <span class="text-heading text-signal-ink">场景库</span>
+        <span class="text-caption text-muted-foreground">我的 / 公共 / 收藏三视图。</span>
+        <span class="mt-1 text-caption font-medium text-signal">进入场景库 →</span>
       </router-link>
 
       <router-link to="/executions" class="wb-card">
-        <span class="wb-card-title">执行历史</span>
-        <span class="wb-card-desc">运行记录与结果下钻。</span>
-        <span class="wb-card-cta">进入执行历史 →</span>
+        <span class="text-heading text-signal-ink">执行历史</span>
+        <span class="text-caption text-muted-foreground">运行记录与结果下钻。</span>
+        <span class="mt-1 text-caption font-medium text-signal">进入执行历史 →</span>
       </router-link>
     </div>
   </div>
 </template>
 
 <style scoped>
-.wb {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px 16px;
-}
-
-.wb-header {
-  margin-bottom: 20px;
-}
-
-.wb-title {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 600;
-  color: #10151c;
-}
-
-.wb-sub {
-  margin: 4px 0 0;
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.wb-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
-}
-
+/* 卡片视觉 token:card/line/ink/accent + 双阴影语义(E-scale/D-palette) */
 .wb-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 16px;
-  background: #ffffff;
-  border: 1px solid #e1e5eb;
-  border-radius: 10px;
-  text-decoration: none;
-  box-shadow: 0 1px 2px rgba(16, 21, 28, 0.06);
-  transition: box-shadow 0.15s ease, border-color 0.15s ease;
-}
-
-.wb-card:hover {
-  border-color: #2f6fed;
-  box-shadow: 0 8px 24px rgba(16, 21, 28, 0.12);
-}
-
-.wb-card-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #10151c;
-}
-
-.wb-card-desc {
-  font-size: 12px;
-  color: #6b7280;
-}
-
-.wb-card-cta {
-  margin-top: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #2f6fed;
+  @apply flex flex-col gap-1.5 rounded-card border border-signal-line bg-signal-card p-4 no-underline shadow-sig-hover transition-shadow duration-150 hover:border-signal hover:shadow-sig-float;
 }
 </style>

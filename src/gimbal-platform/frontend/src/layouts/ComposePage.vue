@@ -4,45 +4,15 @@
      步骤条区(steps slot)+ 主体 + 底部操作条(footer slot)。批次 6
      迁移编排器/方案工作台/断言注册表时采用;规范禁止自带返回发明。 -->
 <template>
-  <div class="compose-page">
-    <div v-if="$slots.steps" class="cp-steps"><slot name="steps" /></div>
+  <div class="mx-auto flex min-h-[calc(100vh-48px)] max-w-[1100px] flex-col px-4 pb-6 pt-5">
+    <div v-if="$slots.steps" class="mb-4"><slot name="steps" /></div>
 
-    <div class="cp-body"><slot /></div>
+    <div class="min-w-0 flex-1"><slot /></div>
 
-    <footer v-if="$slots.footer" class="cp-footer">
+    <footer v-if="$slots.footer" class="mt-4 flex items-center justify-between gap-3 border-t border-signal-line pt-3">
       <slot name="footer" />
     </footer>
   </div>
 </template>
 
 <script setup lang="ts"></script>
-
-<style scoped>
-.compose-page {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 20px 16px 24px;
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100vh - 48px);
-}
-
-.cp-steps {
-  margin-bottom: 16px;
-}
-
-.cp-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.cp-footer {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid #e1e5eb;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-</style>

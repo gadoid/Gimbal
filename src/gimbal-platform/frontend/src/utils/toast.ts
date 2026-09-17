@@ -44,11 +44,17 @@ export function dismissToast(id: number): void {
 
 function push(kind: ToastKind, input: string | ToastInput): number {
   const message = typeof input === 'string' ? input : input.message
+  // duration:0 = 常驻不自动关(对齐 ElMessage 语义);缺省 3000
   const duration =
-    (typeof input === 'object' && input.duration) || DEFAULT_DURATION
+    typeof input === 'object' && input.duration !== undefined
+      ? input.duration
+      : DEFAULT_DURATION
   const id = ++seq
-  toastState.items.push({ id, kind, message })
-  timers.set(id, setTimeout(() => dismissToast(id), duration))
+  // 新消息置顶(与 ElMessage 堆叠方向一致)
+  toastState.items.unshift({ id, kind, message })
+  if (duration > 0) {
+    timers.set(id, setTimeout(() => dismissToast(id), duration))
+  }
   return id
 }
 
