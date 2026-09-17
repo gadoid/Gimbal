@@ -4,6 +4,7 @@ import ElementPlus from 'element-plus'
 import SchemeDataSection from '../SchemeDataSection.vue'
 import * as api from '@/api/scenario-composer'
 import { toast } from '@/utils/toast'
+import { confirmAction } from '@/utils/confirmAction'
 
 vi.mock('@/api/scenario-composer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/scenario-composer')>()),
@@ -11,6 +12,9 @@ vi.mock('@/api/scenario-composer', async (importOriginal) => ({
 }))
 vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn(), warning: vi.fn() },
+}))
+vi.mock('@/utils/confirmAction', () => ({
+  confirmAction: vi.fn(async () => true),
 }))
 
 // DataSetSummary 权威形状(@/types/scenario-composer):datasetId/scenarioId/name/rowCount/preview
@@ -135,6 +139,26 @@ describe('SchemeDataSection — 内联新建数据集', () => {
     await flushPromises()
     expect(vi.mocked(toast.error)).toHaveBeenCalled()
     expect(w.emitted('created')).toBeUndefined()
+    w.unmount()
+  })
+
+  // ── 删除(D1:列表页退役,删除能力一并承接;confirmAction 首个真视图消费)──
+  it('删除:确认 → emit delete(datasetId);取消 → 不 emit', async () => {
+    const w = mount(SchemeDataSection, {
+      props: { modelValue: [], dataSets: DS, scenarioId: 'sc-x' },
+      global: { plugins: [ElementPlus] },
+    })
+    // 确认分支
+    await w.find('[data-testid="ds-del-ds-001"]').trigger('click')
+    await flushPromises()
+    expect(confirmAction).toHaveBeenCalledTimes(1)
+    expect(w.emitted('delete')!.at(-1)).toEqual(['ds-001'])
+
+    // 取消分支(取消/ESC 统一 false)
+    vi.mocked(confirmAction).mockResolvedValue(false)
+    await w.find('[data-testid="ds-del-ds-002"]').trigger('click')
+    await flushPromises()
+    expect(w.emitted('delete')!.length).toBe(1)
     w.unmount()
   })
 })

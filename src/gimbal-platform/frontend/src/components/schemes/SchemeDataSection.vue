@@ -10,6 +10,7 @@ import type { DataSetRow, DataSetSummary } from '@/types/scenario-composer'
 import { createDataSet } from '@/api/scenario-composer'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
+import { confirmAction } from '@/utils/confirmAction'
 
 type Sel = { datasetId: string; rowIndexes?: number[] }
 
@@ -18,7 +19,12 @@ const props = defineProps<{
   dataSets: DataSetSummary[]
   scenarioId: string
 }>()
-const emit = defineEmits<{ 'update:modelValue': [v: Sel[]]; created: [] }>()
+const emit = defineEmits<{
+  'update:modelValue': [v: Sel[]]
+  created: []
+  /** 用户已在区内确认;落库(refetch)由工作台处理 */
+  delete: [datasetId: string]
+}>()
 
 const liveIds = computed(() => new Set(props.dataSets.map((d) => d.datasetId)))
 const dead = computed(() => props.modelValue.filter((s) => !liveIds.value.has(s.datasetId)))
@@ -52,17 +58,26 @@ function dropDead() {
   emit('update:modelValue', props.modelValue.filter((s) => liveIds.value.has(s.datasetId)))
 }
 
+/** 删除数据集:区内先确认(新栈 confirmAction,取消/ESC=false),
+ *  确认后上抛工作台落库。按钮在 label 外,避免触发 tile 的勾选。 */
+async function removeDataset(d: DataSetSummary) {
+  const name = d.name || d.datasetId
+  const ok = await confirmAction(
+    `删除数据集「${name}」?此操作不可恢复。`, '删除数据集',
+    { type: 'warning', danger: true, confirmButtonText: '删除', cancelButtonText: '取消' },
+  )
+  if (ok) emit('delete', d.datasetId)
+}
+
 // ── 内联新建(编辑器页退役后的创建承接)──────────────────────────
 const createOpen = ref(false)
 const createName = ref('')
 const createRowsText = ref('[]')
-const createError = ref('')
 const creating = ref(false)
 
 function openCreate() {
   createName.value = `数据集 ${props.dataSets.length + 1}`
   createRowsText.value = '[]'
-  createError.value = ''
   createOpen.value = true
 }
 
@@ -95,11 +110,9 @@ function parseRows(text: string): { rows?: DataSetRow[]; error?: string } {
 const parsedPreview = computed(() => parseRows(createRowsText.value))
 
 async function submitCreate() {
-  const { rows, error } = parseRows(createRowsText.value)
-  if (error || !rows) {
-    createError.value = error ?? '未知错误'
-    return
-  }
+  // 复用实时预览的解析结果(同一数据源,submit 时再断言一次兜底)
+  const { rows, error } = parsedPreview.value
+  if (error || !rows) return
   creating.value = true
   try {
     const created = await createDataSet(props.scenarioId, {
@@ -140,13 +153,17 @@ async function submitCreate() {
           <span class="ds-name">{{ d.name || d.datasetId }}</span>
           <span class="row-count">{{ rowsOf(d).length }} 行</span>
         </label>
-        <div v-if="isSelected(d.datasetId)" class="row-picks">
-          <!-- rowsOf 已是 0 基索引数组,v-for 取数组值后直接用 r(原稿 i-1 会错位成 -1,0,1) -->
-          <label v-for="r in rowsOf(d)" :key="r" class="row-pick">
-            <input type="checkbox" :checked="rowChecked(d.datasetId, r)"
-              @change="toggleRow(d.datasetId, r, ($event.target as HTMLInputElement).checked)" />
-            行{{ r }}
-          </label>
+        <div class="ds-tile-foot">
+          <div v-if="isSelected(d.datasetId)" class="row-picks">
+            <!-- rowsOf 已是 0 基索引数组,v-for 取数组值后直接用 r(原稿 i-1 会错位成 -1,0,1) -->
+            <label v-for="r in rowsOf(d)" :key="r" class="row-pick">
+              <input type="checkbox" :checked="rowChecked(d.datasetId, r)"
+                @change="toggleRow(d.datasetId, r, ($event.target as HTMLInputElement).checked)" />
+              行{{ r }}
+            </label>
+          </div>
+          <el-button class="ds-del" size="small" text type="danger"
+            :data-testid="`ds-del-${d.datasetId}`" @click="removeDataset(d)">删除</el-button>
         </div>
       </div>
       <div v-if="!dataSets.length" class="empty-state">
@@ -240,8 +257,10 @@ async function submitCreate() {
 }
 
 /* 行级勾选展开态:换行排版 + 虚线分隔(选中 tile 的附属区) */
+.ds-tile-foot { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.ds-del { align-self: flex-end; height: 22px; padding: 0 6px; font-size: 11px; }
 .row-picks {
-  display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 8px; padding-top: 8px;
+  display: flex; flex-wrap: wrap; gap: 4px 6px; padding-top: 8px;
   border-top: 1px dashed var(--color-border-tertiary);
 }
 .row-pick {

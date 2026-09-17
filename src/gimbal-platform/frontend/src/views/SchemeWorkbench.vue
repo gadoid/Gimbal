@@ -4,9 +4,10 @@ import { computed, onMounted, ref, toRaw, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { toast } from '@/utils/toast'
+import { showError } from '@/utils/errorFallback'
 import {
   listRunSchemes, getScenarioDraft, listDataSets, createRunScheme, updateRunScheme,
-  deleteRunScheme, updateScenario, type SchemeV2,
+  deleteRunScheme, updateScenario, deleteDataSet, type SchemeV2,
 } from '@/api/scenario-composer'
 import { list as listAuthSessions } from '@/api/auth_sessions'
 import { confirmAction, promptAction } from '@/utils/confirmAction'
@@ -308,6 +309,20 @@ async function reloadDataSets() {
     toast.error(`刷新数据集失败:${e instanceof Error ? e.message : String(e)}`)
   }
 }
+
+/** 删除数据集(数据区已确认):落库 → 剪枝选中引用 → 刷新 */
+async function onDeleteDataSet(datasetId: string) {
+  if (!draft.value) return
+  try {
+    await deleteDataSet(datasetId)
+    draft.value.dataSetSelection = draft.value.dataSetSelection
+      .filter((s) => s.datasetId !== datasetId)
+    await reloadDataSets()
+    toast.success('已删除')
+  } catch (e) {
+    showError('删除', e)
+  }
+}
 </script>
 
 <template>
@@ -360,6 +375,7 @@ async function reloadDataSets() {
             :data-sets="dataSets"
             :scenario-id="scenarioId"
             @created="reloadDataSets"
+            @delete="onDeleteDataSet"
           />
           <SchemeInjectionSection
             v-if="!draft.isDefault"
