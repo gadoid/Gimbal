@@ -132,7 +132,7 @@ async function onSubmit() {
   try {
     await auth.login(form.username, form.password)
     toast.success('登录成功')
-    const redirect = (route.query.redirect as string) || '/scenarios'
+    const redirect = (route.query.redirect as string) || '/home'
     router.push(redirect)
   } catch (e) {
     const msg = (e as { msg?: string; message?: string }).msg

@@ -10,9 +10,9 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const routes = [
-  // P3:场景库统一入口(原 /cases/mine 工作台 + /cases/public 公共库
-  // 已退役,合并进 /scenarios 的"我的/公共/收藏"三 tab)
-  { path: '/', redirect: '/scenarios' },
+  // F-sitemap v2:登录后默认落地 = 用户工作台 /home(原为 /scenarios)
+  { path: '/', redirect: '/home' },
+  { path: '/home', component: () => import('@/views/WorkbenchView.vue'), meta: { requiresAuth: true } },
   { path: '/login', component: () => import('@/views/Login.vue') },
   { path: '/register', component: () => import('@/views/Register.vue') },
   // protected
@@ -29,7 +29,7 @@ const routes = [
     // ?step=1..4            直接跳到某一步
     path: '/composer/:scenarioId',
     component: () => import('@/views/CaseComposer.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, chromeMode: 'collapsed' as const },
   },
   {
     // /scenarios/:scenarioId/detail — 场景详情页(数据驱动的可读渲染,
@@ -55,13 +55,13 @@ const routes = [
     // 断言管理编辑器 — 场景级注册表(spec v2 §7)
     path: '/scenarios/:scenarioId/assertions',
     component: () => import('@/views/AssertionRegistryEditor.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, chromeMode: 'collapsed' as const },
   },
   {
     // /scenarios/:scenarioId/schemes — 方案工作台(spec 2026-09-14 §6)
     path: '/scenarios/:scenarioId/schemes',
     component: () => import('@/views/SchemeWorkbench.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, chromeMode: 'collapsed' as const },
   },
   {
     // carry 值表配置页(T15)— admin 维护入口(TopNav adminOnly);
@@ -83,7 +83,8 @@ const routes = [
   {
     path: '/constants',
     component: () => import('@/views/ConstantsPool.vue'),
-    meta: { requiresAuth: true },
+    // 常量池:从顶导航降级,经工作台深链进入(侧边栏收起,见 H-constants)
+    meta: { requiresAuth: true, chromeMode: 'collapsed' as const },
   },
   {
     // P5 适配中心 —— admin 全量视图;member 自动只读 owner 视图(页内 scope=mine)
@@ -129,10 +130,10 @@ router.beforeEach((to) => {
   if (to.meta.requiresAdmin && !auth.isAdmin) {
     // Backend enforces admin-only on these endpoints too; this is the
     // UX-side guard so members never land on a page that 403s.
-    return { path: '/scenarios' }
+    return { path: '/home' }
   }
   if ((to.path === '/login' || to.path === '/register') && auth.accessToken) {
-    return { path: '/scenarios' }
+    return { path: '/home' }
   }
 })
 

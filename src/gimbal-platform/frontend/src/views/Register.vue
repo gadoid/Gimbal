@@ -260,7 +260,7 @@ function startCountdown() {
     redirectCountdown -= 1
     if (redirectCountdown <= 0) {
       if (countdownTimer) clearInterval(countdownTimer)
-      router.push('/scenarios')
+      router.push('/home')
     } else {
       successMsg.value = `注册成功！${redirectCountdown} 秒后跳转…`
     }

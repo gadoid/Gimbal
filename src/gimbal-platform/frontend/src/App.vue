@@ -1,24 +1,48 @@
-<!-- App.vue — Spec-1 layout shell.
-     TopNav renders only when authenticated, so /login + /register
-     remain clean (no chrome). Content area is offset by 48px via
-     padding-top so it doesn't slide under the fixed topbar. -->
+<!-- App.vue — 布局壳(重构方案 Phase 1:导航范式更换)。
+     三态 chrome:
+     - 未认证:无 chrome,裸 router-view(登录/注册);
+     - meta.chromeMode === 'collapsed'(编排器/方案工作台/断言注册表/
+       常量池等编辑流页):收起侧边栏,48px 收拢顶条承载统一面包屑;
+     - 默认 'full':四域侧边栏 + 内容区两栏。
+     ToastHost / ConfirmHost 是全站单点,任何 chrome 态都在场。 -->
 <template>
   <ToastHost />
   <ConfirmHost />
-  <TopNav v-if="auth.isAuthenticated" />
-  <main class="app-main" :class="{ 'with-topnav': auth.isAuthenticated }">
+
+  <template v-if="!auth.isAuthenticated">
     <router-view />
-  </main>
+  </template>
+
+  <template v-else-if="chromeMode === 'collapsed'">
+    <CollapsedTopbar />
+    <main class="app-main collapsed">
+      <router-view />
+    </main>
+  </template>
+
+  <template v-else>
+    <div class="app-shell">
+      <Sidebar />
+      <main class="app-main full">
+        <router-view />
+      </main>
+    </div>
+  </template>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import TopNav from '@/components/TopNav.vue'
+import Sidebar from '@/components/chrome/Sidebar.vue'
+import CollapsedTopbar from '@/components/chrome/CollapsedTopbar.vue'
 import ToastHost from '@/components/chrome/ToastHost.vue'
 import ConfirmHost from '@/components/chrome/ConfirmHost.vue'
 
 const auth = useAuthStore()
+const route = useRoute()
+
+const chromeMode = computed(() => (route.meta.chromeMode as 'full' | 'collapsed' | undefined) ?? 'full')
 
 // 页面刷新后只恢复了 accessToken，currentUser 是 null。
 // 依赖 currentUser 的页面(如按 owner 过滤的场景库)需要先确认身份。
@@ -35,11 +59,19 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.app-main {
+.app-shell {
+  display: flex;
   min-height: 100vh;
 }
 
-.app-main.with-topnav {
+.app-main.full {
+  flex: 1;
+  min-width: 0;
+  margin-left: 200px;
+}
+
+.app-main.collapsed {
+  min-height: 100vh;
   padding-top: 48px;
 }
 </style>
