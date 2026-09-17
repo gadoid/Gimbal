@@ -18,14 +18,15 @@ function mountPage() {
   })
 }
 
-describe('WorkbenchView — /home 占位', () => {
+vi.mock('@/api/constants', () => ({ list: vi.fn().mockResolvedValue([]) }))
+
+describe('WorkbenchView — /home(registry 宿主)', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
-  it('常量池深链在场(所有角色可达,无 admin 门控)', () => {
+  it('常量池入口由 registry 卡承载(所有角色可达,见 workbench.registry.test)', () => {
     const w = mountPage()
-    const link = w.findAll('a.wb-card').find((a) => a.text().includes('常量池'))
-    expect(link).toBeTruthy()
-    expect(link!.attributes('href')).toBe('/constants')
+    // 快捷区不再重复常量池(卡内"管理"深链承担);registry 槽在场
+    expect(w.findAll('a.wb-card').some((a) => a.text().includes('常量池'))).toBe(false)
     w.unmount()
   })
 
