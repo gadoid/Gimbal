@@ -14,8 +14,7 @@ import tailwindcssAnimate from 'tailwindcss-animate'
  * 未定项:
  * - accent 无 hover/pressed 分档(D-palette 未标)——按钮组件落地时补,走查(G-chrome)定稿;
  * - running 状态色 D-palette 未列(仅 signal 在线点 #22D3EE),沿用 status-colors.css;
- * - status 色与现状 status-colors.css(done #22c55e vs Signal #15803D)不同,
- *   批次 4 迁移执行历史时统一到 Signal,此前不动。
+ * - status 色已随批次 4 统一到 Signal(status-colors.css 与 token 同源)。
  */
 export default {
   content: ['./index.html', './src/**/*.{vue,ts}'],
