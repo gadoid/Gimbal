@@ -10,11 +10,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import ElementPlus, { ElMessageBox } from 'element-plus'
+import ElementPlus from 'element-plus'
 import AdaptationBatchDetail from '@/views/AdaptationBatchDetail.vue'
 import OpConstructDialog from '@/components/adaptations/OpConstructDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import * as api from '@/api/adaptations'
+import * as confirmModule from '@/utils/confirmAction'
 import { ApiError } from '@/api/http'
 import * as scenarioApi from '@/api/scenario-composer'
 
@@ -167,8 +168,8 @@ describe('AdaptationBatchDetail', () => {
 
   it('回滚:确认 → rollbackBatch → restored/conflicts 面板', async () => {
     login(true)
-    vi.spyOn(ElMessageBox, 'confirm')
-      .mockResolvedValue('confirm' as never)   // 只关心 resolve,值不用于类型
+    const confirmSpy = vi.spyOn(confirmModule, 'confirmAction')
+      .mockResolvedValue(true)   // 新栈确认(取消/ESC=false 语义在 confirmAction 单测)
     const rbSpy = vi.spyOn(api, 'rollbackBatch').mockResolvedValue({
       batchId: 'bt-1', status: 'rolled_back',
       restored: [{ entityType: 'scenario', entityId: 'sc-1' }],
@@ -182,8 +183,9 @@ describe('AdaptationBatchDetail', () => {
     await flushPromises()
 
     expect(rbSpy).toHaveBeenCalledWith('bt-1')
-    expect(w.text()).toContain('sc-1')
-    expect(w.text()).toContain('恢复写入被拒,已跳过')
+    // 报告对话框经 Portal 渲染 → body 断言
+    expect(document.body.textContent).toContain('sc-1')
+    expect(document.body.textContent).toContain('恢复写入被拒,已跳过')
     w.unmount()
   })
 })

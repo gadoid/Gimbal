@@ -63,7 +63,7 @@
       </table>
     </template>
 
-    <el-empty v-else description="步骤不存在(场景可能已变更)" :image-size="40" />
+    <p v-else class="m-0 py-4 text-center text-caption text-muted-foreground">步骤不存在(场景可能已变更)</p>
   </div>
 </template>
 

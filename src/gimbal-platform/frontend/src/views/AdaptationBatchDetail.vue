@@ -8,92 +8,93 @@
       <div>
         <h2>
           批次 <span class="mono">{{ detail.batchId }}</span>
-          <el-tag size="small" class="status-tag">{{ detail.status }}</el-tag>
+          <span class="chip" :class="statusClass[detail.status] ?? 'bg-muted text-muted-foreground'">{{ detail.status }}</span>
         </h2>
         <p class="mono">{{ detail.endpointId }} · {{ detail.fromVersion }} → {{ detail.toVersion }}</p>
         <p class="hint">
-          <el-tag
+          <span
             v-for="(n, s) in detail.opCounts"
             :key="s"
-            size="small"
-            class="op-tag"
-          >{{ s }} {{ n }}</el-tag>
+            class="chip op-tag"
+            :class="statusClass[String(s)] ?? 'bg-muted text-muted-foreground'"
+          >{{ s }} {{ n }}</span>
         </p>
       </div>
       <div v-if="auth.isAdmin" class="actions">
-        <el-button data-action="construct" @click="constructOpen = true">
+        <Button variant="outline" data-action="construct" @click="constructOpen = true">
           构造 op
-        </el-button>
-        <el-button
+        </Button>
+        <Button
+          variant="outline"
           data-action="merge"
           :disabled="!mergeReady"
           @click="startMerge"
-        >合并为 renameField</el-button>
-        <el-button
+        >合并为 renameField</Button>
+        <Button
           v-if="detail.status === 'open' || detail.status === 'applying'"
+          variant="destructive"
           data-action="rollback"
-          type="danger"
           @click="onRollback"
-        >整批回滚</el-button>
+        >整批回滚</Button>
       </div>
     </header>
 
-    <el-alert
-      v-if="!auth.isAdmin"
-      type="info"
-      :closable="false"
-      title="owner 只读视图:仅查看 op 与快照,操作请联系管理员"
-    />
+    <Alert v-if="!auth.isAdmin" class="mb-3">
+      <AlertTitle>owner 只读视图:仅查看 op 与快照,操作请联系管理员</AlertTitle>
+    </Alert>
 
     <div class="ops">
       <div v-for="op in detail.ops" :key="op.id" class="op-row">
         <div class="op-head">
-          <el-checkbox
+          <input
             v-if="auth.isAdmin && selectable(op)"
-            :model-value="selectedIds.has(op.id)"
+            type="checkbox"
+            class="op-check"
+            :data-testid="`op-check-${op.id}`"
+            :checked="selectedIds.has(op.id)"
             @change="toggleSelect(op)"
           />
-          <el-tag size="small" class="mono">{{ op.opType }}</el-tag>
-          <el-tag size="small" :type="statusTagType(op.status)">
+          <span class="chip mono bg-muted text-muted-foreground">{{ op.opType }}</span>
+          <span class="chip" :class="statusClass[op.status] ?? 'bg-muted text-muted-foreground'">
             {{ op.status }}
-          </el-tag>
+          </span>
           <span v-if="op.appliedAt" class="hint">{{ op.appliedAt }}</span>
           <span v-if="op.note" class="hint note">{{ op.note }}</span>
           <span v-if="auth.isAdmin && op.status === 'pending'" class="op-actions">
-            <el-button
-              size="small"
-              type="primary"
+            <Button
+              size="sm"
               class="op-action"
               data-action="apply"
               @click="onApply(op)"
-            >应用</el-button>
-            <el-button
-              size="small"
+            >应用</Button>
+            <Button
+              size="sm"
+              variant="outline"
               class="op-action"
               data-action="skip"
               @click="onSkip(op)"
-            >跳过</el-button>
-            <el-button
-              size="small"
+            >跳过</Button>
+            <Button
+              size="sm"
+              variant="outline"
               class="op-action"
               data-action="edit"
               @click="onEdit(op)"
-            >编辑</el-button>
+            >编辑</Button>
           </span>
         </div>
         <OpPreview :op="op" />
       </div>
     </div>
 
-    <el-collapse class="snapshots">
-      <el-collapse-item :title="`快照(${detail.snapshots.length})`">
-        <ul>
-          <li v-for="(s, i) in detail.snapshots" :key="i" class="mono">
-            {{ s.entityType }} · {{ s.entityId }}
-          </li>
-        </ul>
-      </el-collapse-item>
-    </el-collapse>
+    <details class="snapshots">
+      <summary>快照({{ detail.snapshots.length }})</summary>
+      <ul>
+        <li v-for="(s, i) in detail.snapshots" :key="i" class="mono">
+          {{ s.entityType }} · {{ s.entityId }}
+        </li>
+      </ul>
+    </details>
 
     <OpConstructDialog
       v-model="constructOpen"
@@ -102,52 +103,61 @@
       @created="onCreated"
     />
 
-    <el-dialog v-model="editOpen" title="编辑 payload(JSON,仅 pending)" width="520px">
-      <el-input
-        v-model="editJson"
-        type="textarea"
-        :rows="8"
-        class="mono"
-      />
-      <p class="hint">mapValue 骨架在此补 map 值;保存即整包替换</p>
-      <template #footer>
-        <el-button @click="editOpen = false">取消</el-button>
-        <el-button type="primary" @click="saveEdit">保存</el-button>
-      </template>
-    </el-dialog>
+    <Dialog :open="editOpen" @update:open="editOpen = $event">
+      <DialogContent class="max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>编辑 payload(JSON,仅 pending)</DialogTitle>
+        </DialogHeader>
+        <textarea
+          v-model="editJson"
+          rows="8"
+          class="w-full rounded-field border border-input bg-transparent p-2 font-mono text-body"
+          data-testid="edit-json"
+        ></textarea>
+        <p class="hint">mapValue 骨架在此补 map 值;保存即整包替换</p>
+        <DialogFooter>
+          <Button variant="outline" @click="editOpen = false">取消</Button>
+          <Button @click="saveEdit">保存</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
-    <el-dialog v-model="reportOpen" title="回滚报告" width="520px">
-      <h4>已恢复</h4>
-      <ul>
-        <li v-for="(r, i) in rollbackReport?.restored ?? []" :key="i" class="mono">
-          {{ r.entityType }} · {{ r.entityId }}
-        </li>
-      </ul>
-      <h4>冲突(跳过)</h4>
-      <ul>
-        <li v-for="(c, i) in rollbackReport?.conflicts ?? []" :key="i">
-          <span class="mono">{{ c.entityType }} · {{ c.entityId }}</span>
-          <span class="hint"> — {{ c.note }}</span>
-        </li>
-      </ul>
-    </el-dialog>
+    <Dialog :open="reportOpen" @update:open="reportOpen = $event">
+      <DialogContent class="max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>回滚报告</DialogTitle>
+        </DialogHeader>
+        <h4 class="m-0 mb-1 text-label font-semibold">已恢复</h4>
+        <ul>
+          <li v-for="(r, i) in rollbackReport?.restored ?? []" :key="i" class="mono">
+            {{ r.entityType }} · {{ r.entityId }}
+          </li>
+        </ul>
+        <h4 class="m-0 mb-1 mt-3 text-label font-semibold">冲突(跳过)</h4>
+        <ul>
+          <li v-for="(c, i) in rollbackReport?.conflicts ?? []" :key="i">
+            <span class="mono">{{ c.entityType }} · {{ c.entityId }}</span>
+            <span class="hint"> — {{ c.note }}</span>
+          </li>
+        </ul>
+      </DialogContent>
+    </Dialog>
   </section>
-  <el-empty
-    v-else-if="adminOnly"
-    description="仅管理员:批次工作台为管理员专用"
-  >
+  <div v-else-if="adminOnly" class="empty-note">
+    <p>仅管理员:批次工作台为管理员专用</p>
     <router-link to="/adaptations" class="link">返回适配中心</router-link>
-  </el-empty>
-  <el-empty v-else-if="loaded" description="批次不存在或已清理">
+  </div>
+  <div v-else-if="loaded" class="empty-note">
+    <p>批次不存在或已清理</p>
     <router-link to="/adaptations" class="link">返回适配中心</router-link>
-  </el-empty>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
 import { toast } from '@/utils/toast'
+import { confirmAction } from '@/utils/confirmAction'
 import * as api from '@/api/adaptations'
 import type { OpOut, RollbackReport } from '@/api/adaptations'
 import { ApiError } from '@/api/http'
@@ -155,6 +165,9 @@ import { useAuthStore } from '@/stores/auth'
 import OpPreview from '@/components/adaptations/OpPreview.vue'
 import OpConstructDialog from '@/components/adaptations/OpConstructDialog.vue'
 import { mergeSeedFrom } from '@/utils/adaptation-merge'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Alert, AlertTitle } from '@/components/ui/alert'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -189,11 +202,12 @@ function toggleSelect(op: OpOut): void {
   else selectedOps.value.push(op)
 }
 
-function statusTagType(s: string): 'success' | 'danger' | 'info' | 'warning' {
-  if (s === 'applied') return 'success'
-  if (s === 'conflict') return 'danger'
-  if (s === 'skipped') return 'info'
-  return 'warning'
+/** op 状态 → Signal chip 色(el-tag type 语义迁移) */
+const statusClass: Record<string, string> = {
+  applied: 'bg-signal-done/10 text-signal-done',
+  conflict: 'bg-signal-failed/10 text-signal-failed',
+  skipped: 'bg-muted text-muted-foreground',
+  pending: 'bg-amber-50 text-amber-800',
 }
 
 // F1:member 直入本页 → GET /batches/{id} 为 admin-only,403 detail 含
@@ -298,14 +312,12 @@ async function onCreated(op: OpOut): Promise<void> {
 }
 
 async function onRollback(): Promise<void> {
-  try {
-    await ElMessageBox.confirm(
-      '整批回滚将恢复快照 before 像(冲突实体跳过不盲写),确认?',
-      '回滚确认', { type: 'warning' },
-    )
-  } catch {
-    return   // 用户取消
-  }
+  const ok = await confirmAction(
+    '整批回滚将恢复快照 before 像(冲突实体跳过不盲写),确认?',
+    '回滚确认',
+    { type: 'warning', danger: true, confirmButtonText: '回滚', cancelButtonText: '取消' },
+  )
+  if (!ok) return   // 用户取消
   try {
     rollbackReport.value = await api.rollbackBatch(
       String(route.params.batchId))
@@ -332,6 +344,33 @@ onMounted(reload)
 .hint { color: #909399; font-size: 12px; }
 .status-tag { margin-left: 8px; }
 .op-tag { margin-right: 4px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  border-radius: 4px;
+}
+.op-check { accent-color: #2f6fed; flex: none; }
+.empty-note {
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 60px 16px;
+  text-align: center;
+  font-size: 12.5px;
+  color: #94a3b8;
+}
+.empty-note p { margin: 0 0 10px; }
+.snapshots summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #10151c;
+  margin: 18px 0 8px;
+}
+.snapshots ul { margin: 8px 0; padding-left: 18px; }
+.snapshots li { line-height: 1.9; font-size: 12px; }
 .op-row {
   border: 1px solid #ebeef5;
   border-radius: 6px;
