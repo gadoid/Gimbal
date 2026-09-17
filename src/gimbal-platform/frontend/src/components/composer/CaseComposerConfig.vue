@@ -304,7 +304,7 @@ import type { ConfigView, RetryPolicyView } from '@/types/plate'
 import { parseJson } from '../../utils/json'
 import { deriveBase } from '@/utils/service-alias'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
-import { scenarioDataSetsUrl } from '@/utils/links'
+import { scenarioSchemesUrl } from '@/utils/links'
 import type { AssertionEntry, LegacyAssertionEntry } from '@/types/assertion-registry'
 import { isLegacyEntry } from '@/types/assertion-registry'
 import UsersCard from './UsersCard.vue'
@@ -332,11 +332,11 @@ const props = defineProps<{
 const emit = defineEmits<{ 'update:modelValue': [ConfigView]; 'runEntry': [id: string] }>()
 
 const router = useRouter()
-/** 跳测试数据页(断言条目编辑入口搬家至此);新建未保存场景没有落库
- *  id — 提示先保存 */
+/** 跳方案工作台数据区(D1:数据集入口收拢进工作台,独立路由已退役);
+ *  新建未保存场景没有落库 id — 提示先保存 */
 function goTestData() {
   if (!props.scenarioId || props.scenarioId === 'new') { toast.warning('请先保存场景'); return }
-  router.push(scenarioDataSetsUrl(props.scenarioId))
+  router.push(scenarioSchemesUrl(props.scenarioId))
 }
 
 const local = reactive<ConfigView>({

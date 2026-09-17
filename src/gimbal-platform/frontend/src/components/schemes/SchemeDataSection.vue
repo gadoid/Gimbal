@@ -1,11 +1,15 @@
 <script setup lang="ts">
-/** 方案工作台 · 数据区:数据集多选(行级勾选)、失效标注与移除。 */
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
-import type { DataSetSummary } from '@/types/scenario-composer'
-import { scenarioDataSetUrl } from '@/utils/links'
-
-const router = useRouter()
+/**
+ * 方案工作台 · 数据区:数据集多选(行级勾选)、失效标注与移除、内联新建。
+ *
+ * 数据集独立路由已退役(D1,重构方案 Phase 2 批次 0):创建能力由本区
+ * 内联承接(名称 + 行数据粘贴),不再跳独立编辑器页。
+ */
+import { computed, ref } from 'vue'
+import type { DataSetRow, DataSetSummary } from '@/types/scenario-composer'
+import { createDataSet } from '@/api/scenario-composer'
+import { toast } from '@/utils/toast'
+import { showError } from '@/utils/errorFallback'
 
 type Sel = { datasetId: string; rowIndexes?: number[] }
 
@@ -14,7 +18,7 @@ const props = defineProps<{
   dataSets: DataSetSummary[]
   scenarioId: string
 }>()
-const emit = defineEmits<{ 'update:modelValue': [v: Sel[]] }>()
+const emit = defineEmits<{ 'update:modelValue': [v: Sel[]]; created: [] }>()
 
 const liveIds = computed(() => new Set(props.dataSets.map((d) => d.datasetId)))
 const dead = computed(() => props.modelValue.filter((s) => !liveIds.value.has(s.datasetId)))
@@ -47,6 +51,70 @@ const rowChecked = (dsId: string, i: number) =>
 function dropDead() {
   emit('update:modelValue', props.modelValue.filter((s) => liveIds.value.has(s.datasetId)))
 }
+
+// ── 内联新建(编辑器页退役后的创建承接)──────────────────────────
+const createOpen = ref(false)
+const createName = ref('')
+const createRowsText = ref('[]')
+const createError = ref('')
+const creating = ref(false)
+
+function openCreate() {
+  createName.value = `数据集 ${props.dataSets.length + 1}`
+  createRowsText.value = '[]'
+  createError.value = ''
+  createOpen.value = true
+}
+
+/** 解析粘贴的行数据:数组 + 每行对象 + 值限标量(DataSetRow 契约)。 */
+function parseRows(text: string): { rows?: DataSetRow[]; error?: string } {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return { error: '不是合法 JSON' }
+  }
+  if (!Array.isArray(parsed) || !parsed.length) return { error: '需要非空数组,每行一个对象' }
+  const rows: DataSetRow[] = []
+  for (let i = 0; i < parsed.length; i++) {
+    const row = parsed[i]
+    if (typeof row !== 'object' || row === null || Array.isArray(row)) {
+      return { error: `第 ${i + 1} 行不是对象` }
+    }
+    for (const [k, v] of Object.entries(row)) {
+      const t = typeof v
+      if (v !== null && t !== 'string' && t !== 'number' && t !== 'boolean') {
+        return { error: `第 ${i + 1} 行字段「${k}」的值必须是字符串/数字/布尔` }
+      }
+    }
+    rows.push(row as DataSetRow)
+  }
+  return { rows }
+}
+
+const parsedPreview = computed(() => parseRows(createRowsText.value))
+
+async function submitCreate() {
+  const { rows, error } = parseRows(createRowsText.value)
+  if (error || !rows) {
+    createError.value = error ?? '未知错误'
+    return
+  }
+  creating.value = true
+  try {
+    const created = await createDataSet(props.scenarioId, {
+      name: createName.value.trim() || `数据集 ${props.dataSets.length + 1}`,
+      rows,
+    })
+    toast.success(`已创建数据集「${created.name || created.datasetId}」(${rows.length} 行)`)
+    createOpen.value = false
+    emit('created')
+  } catch (e) {
+    showError('创建', e)
+  } finally {
+    creating.value = false
+  }
+}
 </script>
 
 <template>
@@ -55,8 +123,8 @@ function dropDead() {
       <span class="zone-name">数据</span>
       <span class="zone-count">{{ dataSets.length }}</span>
       <span class="zone-spacer"></span>
-      <el-button size="small" text type="primary"
-        @click="router.push(scenarioDataSetUrl(scenarioId, 'new'))">+ 新建数据集</el-button>
+      <el-button size="small" text type="primary" data-testid="open-create"
+        @click="openCreate">+ 新建数据集</el-button>
     </header>
 
     <div v-if="dead.length" class="dead-row" data-testid="dead-row">
@@ -83,10 +151,37 @@ function dropDead() {
       </div>
       <div v-if="!dataSets.length" class="empty-state">
         <p>场景暂无数据集 — 不选即基线执行。</p>
-        <el-button size="small" type="primary" plain
-          @click="router.push(scenarioDataSetUrl(scenarioId, 'new'))">+ 新建数据集</el-button>
+        <el-button size="small" type="primary" plain data-testid="open-create-empty"
+          @click="openCreate">+ 新建数据集</el-button>
       </div>
     </div>
+
+    <!-- 内联新建:名称 + 行数据(JSON 粘贴),校验通过才落库 -->
+    <el-dialog v-model="createOpen" title="新建数据集" width="560px">
+      <div class="create-form" data-testid="create-form">
+        <label class="create-label">名称</label>
+        <el-input v-model="createName" placeholder="数据集 N" data-testid="create-name" />
+        <label class="create-label">行数据(JSON 数组,每行一个对象)</label>
+        <el-input
+          v-model="createRowsText"
+          type="textarea"
+          :rows="8"
+          data-testid="create-rows"
+          placeholder='[{"amount": 100, "channel": "alipay"}, {"amount": 200, "channel": "wechat"}]'
+        />
+        <p v-if="parsedPreview.rows" class="create-hint ok" data-testid="create-preview">
+          可解析:{{ parsedPreview.rows.length }} 行
+        </p>
+        <p v-else-if="parsedPreview.error" class="create-hint bad" data-testid="create-error">
+          {{ parsedPreview.error }}
+        </p>
+      </div>
+      <template #footer>
+        <el-button @click="createOpen = false">取消</el-button>
+        <el-button type="primary" :disabled="!parsedPreview.rows || creating" data-testid="create-submit"
+          @click="submitCreate">{{ creating ? '创建中…' : '创建' }}</el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
@@ -165,4 +260,11 @@ function dropDead() {
   border: 1px dashed var(--color-border-tertiary); border-radius: 8px;
 }
 .empty-state p { margin: 0; font-size: 12px; color: var(--color-text-tertiary); }
+
+/* 内联新建表单 */
+.create-form { display: flex; flex-direction: column; gap: 6px; }
+.create-label { font-size: 12px; font-weight: 600; color: var(--color-text-secondary); margin-top: 4px; }
+.create-hint { margin: 0; font-size: 12px; }
+.create-hint.ok { color: var(--color-success, #15803d); }
+.create-hint.bad { color: var(--color-danger, #dc2626); }
 </style>

@@ -49,13 +49,12 @@ const scenarioId = computed(() => {
 })
 const scenarioName = useScenarioName(scenarioId)
 
-// 层级语义:composer=编排;schemes=方案;assertions=断言注册表;
-// data-sets(Phase 2 批次 0 退役前仍可达)=数据集。
+// 层级语义:composer=编排;schemes=方案;assertions=断言注册表。
+// 数据集页已退役(D1,批次 0),不设面包屑。
 const LEVEL_LABELS: Record<string, string> = {
   '/composer': '编排',
   'schemes': '方案',
   'assertions': '断言注册表',
-  'data-sets': '数据集',
 }
 
 function scenarioCrumb(level: string): CrumbSegment[] {
@@ -75,7 +74,6 @@ const segments = computed<CrumbSegment[]>(() => {
   if (path.startsWith('/composer/')) return scenarioCrumb(LEVEL_LABELS['/composer'])
   if (scenarioId.value && path.includes('/schemes')) return scenarioCrumb(LEVEL_LABELS['schemes'])
   if (scenarioId.value && path.includes('/assertions')) return scenarioCrumb(LEVEL_LABELS['assertions'])
-  if (scenarioId.value && path.includes('/data-sets')) return scenarioCrumb(LEVEL_LABELS['data-sets'])
   if (path.startsWith('/constants')) {
     return [{ label: '工作台', to: '/home' }, { label: '常量池' }]
   }

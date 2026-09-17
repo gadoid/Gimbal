@@ -38,19 +38,8 @@ const routes = [
     component: () => import('@/views/ScenarioDetailView.vue'),
     meta: { requiresAuth: true },
   },
-  {
-    // /scenarios/:scenarioId/data-sets (数据集列表 — 数据集直接挂场景 1:N;
-    // Case 层已解散)
-    path: '/scenarios/:scenarioId/data-sets',
-    component: () => import('@/views/CaseDataSetsList.vue'),
-    meta: { requiresAuth: true },
-  },
-  {
-    // /scenarios/:scenarioId/data-sets/new 或 /:datasetId
-    path: '/scenarios/:scenarioId/data-sets/:datasetId',
-    component: () => import('@/views/DataSetEditor.vue'),
-    meta: { requiresAuth: true },
-  },
+  // 数据集独立路由已退役(D1,重构方案 Phase 2 批次 0):数据集是方案的
+  // 实现模块,能力由方案工作台 SchemeDataSection 承接,不设独立入口。
   {
     // 断言管理编辑器 — 场景级注册表(spec v2 §7)
     path: '/scenarios/:scenarioId/assertions',

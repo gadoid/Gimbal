@@ -299,6 +299,15 @@ onMounted(async () => {
     toast.error(`加载场景失败:${e instanceof Error ? e.message : String(e)}`)
   }
 })
+
+/** 数据区内联新建成功后刷新数据集列表(D1:创建能力承接进工作台) */
+async function reloadDataSets() {
+  try {
+    dataSets.value = await listDataSets({ scenarioId })
+  } catch (e) {
+    toast.error(`刷新数据集失败:${e instanceof Error ? e.message : String(e)}`)
+  }
+}
 </script>
 
 <template>
@@ -350,6 +359,7 @@ onMounted(async () => {
             v-model="draft.dataSetSelection"
             :data-sets="dataSets"
             :scenario-id="scenarioId"
+            @created="reloadDataSets"
           />
           <SchemeInjectionSection
             v-if="!draft.isDefault"

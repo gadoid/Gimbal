@@ -1,7 +1,17 @@
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import SchemeDataSection from '../SchemeDataSection.vue'
+import * as api from '@/api/scenario-composer'
+import { toast } from '@/utils/toast'
+
+vi.mock('@/api/scenario-composer', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/scenario-composer')>()),
+  createDataSet: vi.fn(),
+}))
+vi.mock('@/utils/toast', () => ({
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn(), warning: vi.fn() },
+}))
 
 // DataSetSummary 权威形状(@/types/scenario-composer):datasetId/scenarioId/name/rowCount/preview
 const DS = [
@@ -65,5 +75,66 @@ describe('SchemeDataSection', () => {
     })
     await w.findAll('.ds-tile')[0].findAll('.row-pick input[type="checkbox"]')[0].setValue(false)
     expect(w.emitted('update:modelValue')!.at(-1)![0]).toEqual([])
+  })
+})
+
+// ── 内联新建(D1:编辑器页退役,创建能力承接进数据区)──────────────
+describe('SchemeDataSection — 内联新建数据集', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  async function openCreate(extraProps: Record<string, unknown> = {}) {
+    const w = mount(SchemeDataSection, {
+      props: { modelValue: [], dataSets: DS, scenarioId: 'sc-x', ...extraProps },
+      global: { plugins: [ElementPlus] },
+    })
+    await w.find('[data-testid="open-create"]').trigger('click')
+    await flushPromises()
+    return w
+  }
+
+  it('非法 JSON / 空数组 / 非标量值 → 报错不落库;合法 → createDataSet + created 事件', async () => {
+    const w = await openCreate()
+
+    const setError = async (text: string, err: string) => {
+      await w.find('[data-testid="create-rows"]').setValue(text)
+      expect(w.find('[data-testid="create-error"]').text()).toContain(err)
+    }
+    await setError('{not json', '不是合法 JSON')
+    await setError('[]', '需要非空数组')
+    await setError('[["a"]]', '第 1 行不是对象')
+    await setError('[{"v": {"x": 1}}]', '的值必须是字符串/数字/布尔')
+    expect(api.createDataSet).not.toHaveBeenCalled()
+
+    // 合法载荷 → 创建 → created 事件 + 成功 toast
+    vi.mocked(api.createDataSet).mockResolvedValue({
+      datasetId: 'ds-new', scenarioId: 'sc-x', name: '新库', rowCount: 2, preview: [],
+    } as never)
+    await w.find('[data-testid="create-name"]').setValue('新库')
+    await w.find('[data-testid="create-rows"]')
+      .setValue('[{"amount": 100}, {"amount": 200, "channel": "alipay"}]')
+    expect(w.find('[data-testid="create-preview"]').text()).toContain('2 行')
+    await w.find('[data-testid="create-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(api.createDataSet).toHaveBeenCalledWith('sc-x', {
+      name: '新库',
+      rows: [{ amount: 100 }, { amount: 200, channel: 'alipay' }],
+    })
+    expect(w.emitted('created')).toHaveLength(1)
+    expect(vi.mocked(toast.success).mock.calls[0][0]).toContain('已创建数据集「新库」(2 行)')
+    w.unmount()
+  })
+
+  it('创建失败 → showError 落 toast,不发 created', async () => {
+    vi.mocked(api.createDataSet).mockRejectedValue(new Error('boom'))
+    const w = await openCreate()
+    await w.find('[data-testid="create-rows"]').setValue('[{"a": 1}]')
+    await w.find('[data-testid="create-submit"]').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(toast.error)).toHaveBeenCalled()
+    expect(w.emitted('created')).toBeUndefined()
+    w.unmount()
   })
 })

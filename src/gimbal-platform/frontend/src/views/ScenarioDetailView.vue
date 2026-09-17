@@ -83,8 +83,9 @@
           <p v-else class="hint dim">（空数据集 — 运行时产生 1 次空输入执行）</p>
         </div>
         <p v-if="!dataSets.length" class="notice warn">
-          ⚠ 尚无数据集。请先
-          <button class="linklike" @click="router.push(scenarioDataSetsUrl(scenarioId))">创建一组数据</button>。
+          ⚠ 尚无数据集。请到
+          <button class="linklike" @click="router.push(scenarioSchemesUrl(scenarioId))">方案工作台</button>
+          创建一组数据。
         </p>
       </article>
 
@@ -152,7 +153,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { showError } from '@/utils/errorFallback'
-import { composerUrl, scenarioDataSetsUrl, scenarioSchemesUrl } from '@/utils/links'
+import { composerUrl, scenarioSchemesUrl } from '@/utils/links'
 import { relTime } from '@/utils/datetime'
 import { valueJson } from '@/utils/value-display'
 import type { ExtractView, AssignView, AssertionView } from '@/types/plate'
