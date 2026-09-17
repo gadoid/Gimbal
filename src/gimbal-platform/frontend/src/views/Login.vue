@@ -25,8 +25,9 @@
         <AlertTitle>{{ errorMsg }}</AlertTitle>
       </Alert>
 
-      <!-- Form:Enter 提交;提交时校验,输入即清错 -->
-      <form class="flex flex-col gap-4" @submit.prevent="onSubmit" @keyup.enter="onSubmit">
+      <!-- Form:Enter 走原生表单隐式提交(type=submit 在场),不另绑
+           keyup.enter —— 双绑定会让 onSubmit 一键双发(评审 P1) -->
+      <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
         <div class="flex flex-col gap-1.5">
           <label class="form-label" for="login-username">用户名<span class="required-dot">*</span></label>
           <Input
@@ -126,6 +127,7 @@ function validate(): boolean {
 }
 
 async function onSubmit() {
+  if (loading.value) return
   errorMsg.value = ''
   if (!validate()) return
   loading.value = true

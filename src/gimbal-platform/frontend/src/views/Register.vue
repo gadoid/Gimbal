@@ -226,6 +226,7 @@ function validate(): boolean {
 }
 
 async function onSubmit() {
+  if (loading.value) return
   errorMsg.value = ''
   successMsg.value = ''
   if (!canSubmit.value || !validate()) return

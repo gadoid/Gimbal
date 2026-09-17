@@ -108,4 +108,19 @@ describe('Login — 提交流', () => {
     expect(w.text()).toContain('用户名或密码错误')
     w.unmount()
   })
+
+  it('Enter 与原生 submit 同时到达 → login 只调一次(评审 P1 回归)', async () => {
+    const w = mountLogin()
+    const auth = useAuthStore()
+    const spy = vi.spyOn(auth, 'login').mockResolvedValue(undefined as never)
+    await w.find('#login-username').setValue('alice')
+    await w.find('#login-password').setValue('pw')
+    // 模拟真实键盘序列:Enter 的 keydown/keyup + 隐式表单提交几乎同时到
+    await w.find('#login-password').trigger('keydown.enter')
+    await w.find('#login-password').trigger('keyup.enter')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(spy).toHaveBeenCalledTimes(1)
+    w.unmount()
+  })
 })
