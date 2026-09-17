@@ -110,7 +110,10 @@ const { orderedIds, add, remove, move, reset } = useWorkbenchLayout(username)
 const cardKey = (id: string) => id
 
 function defOf(id: string): WorkbenchCardDef | undefined {
+  // 优先可见集;回退全量 registry — 防 admin 降级后布局残留的
+  // adminOnly 卡成"幽灵卡"(渲染不出、市场也看不到)
   return visibleRegistry.value.find((d) => d.id === id)
+    ?? workbenchRegistry.find((d) => d.id === id)
 }
 
 const galleryOpen = ref(false)
