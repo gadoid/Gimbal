@@ -9,7 +9,9 @@
         <h1 class="m-0 text-display font-semibold text-signal-ink">{{ title }}</h1>
         <div class="flex items-center gap-2"><slot name="actions" /></div>
       </div>
-      <p v-if="$slots.subtitle" class="mb-0 mt-1 text-caption text-muted-foreground"><slot name="subtitle" /></p>
+      <p v-if="subtitle || $slots.subtitle" class="mb-0 mt-1 text-caption text-muted-foreground">
+        <slot name="subtitle">{{ subtitle }}</slot>
+      </p>
     </header>
 
     <div v-if="$slots.tabs" class="mt-4"><slot name="tabs" /></div>
@@ -20,5 +22,5 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ title: string }>()
+defineProps<{ title: string; subtitle?: string }>()
 </script>

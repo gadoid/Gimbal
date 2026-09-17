@@ -1,280 +1,285 @@
-<!-- UsersAdmin.vue — wireframe 6/? 用户管理（admin）.
-     列表 + 搜索 + 角色筛选 + 创建用户 + 编辑 + 重置密码 + 启停 + 删除.
-     后端 /api/users 已在 task-6 实现完整 CRUD + 保护规则. -->
+<!-- UsersAdmin.vue — 用户管理(admin)。批次 2 迁移新栈:
+     ListPage 骨架 + shadcn Table/Select/DropdownMenu/Dialog/RadioGroup;
+     创建表单 = 定稿范式(useForm + zod + FormField);角色/状态用 Signal
+     状态色 chip。功能面与迁移前逐条对齐:搜索/角色筛选/创建/编辑昵称/
+     升降级(末位 admin 保护)/重置密码/启停/删除(输入用户名确认)。 -->
 <template>
-  <section class="users-admin">
-    <header class="page-header">
-      <div>
-        <h2>用户管理</h2>
-        <p>{{ metaText }}</p>
-      </div>
+  <ListPage title="用户管理" :subtitle="metaText">
+    <template #actions>
+      <Input
+        v-model="searchQuery"
+        class="w-[240px] max-w-full"
+        placeholder="搜索用户名 / 昵称"
+        data-testid="user-search"
+      />
+      <Select v-model="roleFilter" class="w-[130px]">
+        <SelectTrigger data-testid="role-filter"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">全部角色</SelectItem>
+          <SelectItem value="admin">admin</SelectItem>
+          <SelectItem value="member">成员</SelectItem>
+        </SelectContent>
+      </Select>
+      <Button data-testid="open-create" @click="openCreate">+ 创建用户</Button>
+    </template>
 
-      <div class="header-actions">
-        <el-input
-          v-model="searchQuery"
-          class="search-input"
-          clearable
-          :prefix-icon="Search"
-          placeholder="搜索用户名 / 昵称"
-        />
-        <el-select v-model="roleFilter" class="role-filter" placeholder="角色">
-          <el-option label="全部角色" value="all" />
-          <el-option label="admin" value="admin" />
-          <el-option label="成员" value="member" />
-        </el-select>
-        <el-button type="primary" @click="openCreate">+ 创建用户</el-button>
-      </div>
-    </header>
-
-    <el-table
-      v-if="visibleUsers.length > 0"
-      v-loading="usersStore.fetchStatus === 'loading'"
-      :data="visibleUsers"
-      :row-class-name="rowClassName"
-      class="users-table"
-    >
-      <el-table-column label="用户名" min-width="170">
-        <template #default="{ row }">
-          <span
-            class="avatar"
-            :style="{ background: avatarColor(row.id) }"
-          >{{ row.username.charAt(0).toUpperCase() }}</span>
-          <span :class="['username', { self: isSelf(row) }]">{{ row.username }}</span>
-          <span v-if="isSelf(row)" class="you-mark">你</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="昵称" min-width="130">
-        <template #default="{ row }">
-          <span :class="{ muted: !row.display_name }">
-            {{ row.display_name || '—' }}
-          </span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="角色" width="100">
-        <template #default="{ row }">
-          <span
-            :class="['role-badge', row.is_admin ? 'role-admin' : 'role-member']"
-          >{{ row.is_admin ? 'admin' : '成员' }}</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="状态" width="100">
-        <template #default="{ row }">
-          <span :class="['status-tag', row.is_active ? 'active' : 'inactive']">
-            {{ row.is_active ? '● 启用' : '○ 停用' }}
-          </span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="创建时间" width="120">
-        <template #default="{ row }">
-          <span class="mono dim">{{ formatDate(row.created_at) }}</span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="操作" width="100" align="center" fixed="right">
-        <template #default="{ row }">
-          <span v-if="isSelf(row)" class="self-hint">— 自助 —</span>
-          <el-dropdown
-            v-else
-            trigger="click"
-            @command="(cmd: string) => onCommand(cmd, row)"
-          >
-            <button
-              class="more-button"
-              type="button"
-              aria-label="更多操作"
-              @click.stop
-            >⋯</button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="edit">编辑昵称</el-dropdown-item>
-                <el-dropdown-item
-                  command="toggle-role"
+    <Table v-if="visibleUsers.length" class="rounded-field border border-signal-line bg-signal-card">
+      <TableHeader>
+        <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
+          <TableHead class="text-caption font-semibold text-muted-foreground">用户名</TableHead>
+          <TableHead class="text-caption font-semibold text-muted-foreground">昵称</TableHead>
+          <TableHead class="w-[90px] text-caption font-semibold text-muted-foreground">角色</TableHead>
+          <TableHead class="w-[90px] text-caption font-semibold text-muted-foreground">状态</TableHead>
+          <TableHead class="w-[110px] text-caption font-semibold text-muted-foreground">创建时间</TableHead>
+          <TableHead class="w-[90px] text-center text-caption font-semibold text-muted-foreground">操作</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow
+          v-for="row in visibleUsers"
+          :key="row.id"
+          :data-testid="`user-row-${row.id}`"
+          :class="rowClass(row)"
+        >
+          <TableCell>
+            <span class="avatar" :style="{ background: avatarColor(row.id) }">
+              {{ row.username.charAt(0).toUpperCase() }}
+            </span>
+            <span class="username" :class="{ self: isSelf(row) }">{{ row.username }}</span>
+            <span v-if="isSelf(row)" class="you-mark">你</span>
+          </TableCell>
+          <TableCell>
+            <span :class="!row.display_name ? 'text-muted-foreground' : ''">
+              {{ row.display_name || '—' }}
+            </span>
+          </TableCell>
+          <TableCell>
+            <span class="chip" :class="row.is_admin
+              ? 'bg-signal-failed/10 text-signal-failed'
+              : 'bg-signal-soft text-signal'">
+              {{ row.is_admin ? 'admin' : '成员' }}
+            </span>
+          </TableCell>
+          <TableCell>
+            <span class="chip" :class="row.is_active
+              ? 'bg-signal-done/10 text-signal-done'
+              : 'bg-muted text-muted-foreground'">
+              {{ row.is_active ? '● 启用' : '○ 停用' }}
+            </span>
+          </TableCell>
+          <TableCell class="font-mono text-caption text-muted-foreground">
+            {{ formatDate(row.created_at) }}
+          </TableCell>
+          <TableCell class="text-center">
+            <span v-if="isSelf(row)" class="text-caption text-muted-foreground">— 自助 —</span>
+            <DropdownMenu v-else>
+              <DropdownMenuTrigger
+                class="more-button rounded-chip border border-signal-line bg-signal-card px-2.5 py-0.5 text-body text-muted-foreground transition-colors hover:border-signal hover:text-signal-ink"
+                aria-label="更多操作"
+                :data-testid="`user-more-${row.id}`"
+              >⋯</DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem data-testid="act-edit" @click="onCommand('edit', row)">编辑昵称</DropdownMenuItem>
+                <DropdownMenuItem
+                  data-testid="act-toggle-role"
                   :disabled="!canToggleRole(row)"
                   :title="canToggleRole(row) ? '' : '不能降级最后一个 admin'"
-                >
-                  {{ row.is_admin ? '降级为成员' : '升级为 admin' }}
-                </el-dropdown-item>
-                <el-dropdown-item command="reset-pw">重置密码</el-dropdown-item>
-                <el-dropdown-item
-                  :command="row.is_active ? 'deactivate' : 'activate'"
-                >
+                  @click="onCommand('toggle-role', row)"
+                >{{ row.is_admin ? '降级为成员' : '升级为 admin' }}</DropdownMenuItem>
+                <DropdownMenuItem data-testid="act-reset-pw" @click="onCommand('reset-pw', row)">重置密码</DropdownMenuItem>
+                <DropdownMenuItem data-testid="act-toggle-active" @click="onCommand(row.is_active ? 'deactivate' : 'activate', row)">
                   {{ row.is_active ? '停用账号' : '启用账号' }}
-                </el-dropdown-item>
-                <el-dropdown-item divided command="delete" class="is-danger">
-                  删除
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-        </template>
-      </el-table-column>
-    </el-table>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  data-testid="act-delete"
+                  class="text-signal-failed focus:bg-signal-failed/10 focus:text-signal-failed"
+                  @click="onCommand('delete', row)"
+                >删除</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
 
-    <el-empty
-      v-else-if="usersStore.fetchStatus !== 'loading'"
-      description="暂无用户"
-    />
+    <div v-else-if="usersStore.fetchStatus === 'loading'" class="py-10 text-center text-body text-muted-foreground">
+      加载中…
+    </div>
+    <!-- 空态 = 引导 CTA(Signal 规范),非虚线占位 -->
+    <div v-else class="empty-cta" data-testid="users-empty">
+      <p>暂无用户</p>
+      <Button variant="outline" size="sm" @click="openCreate">创建第一个用户</Button>
+    </div>
 
-    <!-- ── Create user dialog ─────────────────────────────── -->
-    <el-dialog
-      v-model="createOpen"
-      title="+ 创建用户"
-      width="480px"
-      :close-on-click-modal="false"
-    >
-      <el-form
-        ref="createFormRef"
-        :model="createForm"
-        :rules="createRules"
-        label-position="top"
-      >
-        <el-form-item label="用户名" prop="username" required>
-          <el-input
-            v-model="createForm.username"
-            placeholder="仅字母数字下划线，3-32 位"
-          />
-        </el-form-item>
-        <el-form-item label="昵称" prop="display_name">
-          <el-input
-            v-model="createForm.display_name"
-            placeholder="可选，UI 显示用"
-          />
-        </el-form-item>
-        <el-form-item label="初始密码" prop="password" required>
-          <div class="pw-row">
-            <el-input
-              v-model="createForm.password"
-              type="text"
-              show-password
-              placeholder="至少 8 位含字母 + 数字"
-            />
-            <el-button @click="randomPassword">随机</el-button>
+    <!-- ── 创建用户:定稿表单范式(useForm + zod)───────────────── -->
+    <Dialog :open="createOpen" @update:open="createOpen = $event">
+      <DialogContent class="max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle>+ 创建用户</DialogTitle>
+        </DialogHeader>
+        <form class="flex flex-col gap-3" @submit="onCreateSubmit">
+          <FormField v-slot="{ componentField }" name="username">
+            <FormItem>
+              <FormLabel>用户名<span class="required-dot">*</span></FormLabel>
+              <FormControl>
+                <Input v-bind="componentField" placeholder="仅字母数字下划线，3-32 位" data-testid="create-username" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+
+          <FormField v-slot="{ componentField }" name="display_name">
+            <FormItem>
+              <FormLabel>昵称</FormLabel>
+              <FormControl>
+                <Input v-bind="componentField" placeholder="可选，UI 显示用" data-testid="create-display" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+
+          <FormField v-slot="{ componentField }" name="password">
+            <FormItem>
+              <FormLabel>初始密码<span class="required-dot">*</span></FormLabel>
+              <div class="flex gap-1.5">
+                <FormControl>
+                  <Input v-bind="componentField" type="text" placeholder="至少 8 位含字母 + 数字" class="font-mono" />
+                </FormControl>
+                <Button type="button" variant="outline" @click="randomPassword">随机</Button>
+              </div>
+              <p class="m-0 text-caption text-muted-foreground">首登录后强制修改 · 至少 8 位含字母 + 数字</p>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+
+          <FormField v-slot="{ componentField }" name="role">
+            <FormItem>
+              <FormLabel>角色</FormLabel>
+              <FormControl>
+                <RadioGroup v-bind="componentField" class="flex gap-5">
+                  <label class="flex cursor-pointer items-center gap-1.5 text-body">
+                    <RadioGroupItem value="member" /> 成员
+                  </label>
+                  <label class="flex cursor-pointer items-center gap-1.5 text-body">
+                    <RadioGroupItem value="admin" /> admin
+                  </label>
+                </RadioGroup>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+
+          <DialogFooter class="mt-1">
+            <Button type="button" variant="outline" @click="createOpen = false">取消</Button>
+            <Button type="submit" :disabled="creating">{{ creating ? '创建中…' : '创建' }}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+
+    <!-- ── 编辑昵称(单字段,无需校验真源,直受控)────────────────── -->
+    <Dialog :open="editOpen" @update:open="editOpen = $event">
+      <DialogContent class="max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>编辑用户</DialogTitle>
+        </DialogHeader>
+        <div v-if="editTarget" class="flex flex-col gap-3">
+          <div class="flex flex-col gap-1.5">
+            <span class="text-label font-medium text-signal-ink">用户名</span>
+            <Input :model-value="editTarget.username" disabled />
           </div>
-          <div class="pw-hint">
-            首登录后强制修改 · 至少 8 位含字母 + 数字
+          <div class="flex flex-col gap-1.5">
+            <span class="text-label font-medium text-signal-ink">昵称</span>
+            <Input v-model="editDisplayName" placeholder="可选" data-testid="edit-display" />
           </div>
-        </el-form-item>
-        <el-form-item label="角色" prop="is_admin">
-          <el-radio-group v-model="createForm.is_admin">
-            <el-radio :value="false">成员</el-radio>
-            <el-radio :value="true">admin</el-radio>
-          </el-radio-group>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="createOpen = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="createSubmitting"
-          @click="submitCreate"
-        >创建</el-button>
-      </template>
-    </el-dialog>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="editOpen = false">取消</Button>
+          <Button :disabled="editSubmitting" data-testid="edit-submit" @click="submitEdit">
+            {{ editSubmitting ? '保存中…' : '保存' }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
-    <!-- ── Edit user dialog ───────────────────────────────── -->
-    <el-dialog
-      v-model="editOpen"
-      title="编辑用户"
-      width="420px"
-      :close-on-click-modal="false"
-    >
-      <el-form
-        v-if="editTarget"
-        ref="editFormRef"
-        :model="editForm"
-        label-position="top"
-      >
-        <el-form-item label="用户名">
-          <el-input :model-value="editTarget.username" disabled />
-        </el-form-item>
-        <el-form-item label="昵称">
-          <el-input v-model="editForm.display_name" placeholder="可选" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="editOpen = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="editSubmitting"
-          @click="submitEdit"
-        >保存</el-button>
-      </template>
-    </el-dialog>
+    <!-- ── 重置密码结果(仅显示一次)────────────────────────────── -->
+    <Dialog :open="resetOpen" @update:open="resetOpen = $event">
+      <DialogContent class="max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>重置密码</DialogTitle>
+        </DialogHeader>
+        <div v-if="resetResult" class="flex flex-col items-center gap-2 text-center">
+          <p class="m-0 text-body">新密码已生成（仅显示一次）：</p>
+          <code class="rounded-field bg-signal-failed/10 px-4 py-2.5 font-mono text-[16px] font-bold text-signal-failed" data-testid="reset-pw">
+            {{ resetResult.new_password }}
+          </code>
+          <Button variant="outline" size="sm" @click="copyResetPw">复制</Button>
+          <p class="m-0 mt-2 text-caption leading-relaxed text-muted-foreground">
+            目标用户：<b>{{ resetResult.username }}</b>（{{ resetResult.user_id }}）<br>
+            首登录后强制修改 · 安全起见请通过安全渠道告知本人
+          </p>
+        </div>
+        <DialogFooter>
+          <Button @click="resetOpen = false">关闭</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
-    <!-- ── Reset password dialog ──────────────────────────── -->
-    <el-dialog
-      v-model="resetOpen"
-      title="重置密码"
-      width="420px"
-    >
-      <div v-if="resetResult" class="reset-result">
-        <p>新密码已生成（仅显示一次）：</p>
-        <code class="reset-pw mono">{{ resetResult.new_password }}</code>
-        <el-button @click="copyResetPw"><el-icon style="margin-right:4px"><DocumentCopy /></el-icon>复制</el-button>
-        <p class="reset-hint">
-          目标用户：<b>{{ resetResult.username }}</b>（{{ resetResult.user_id }}）<br>
-          首登录后强制修改 · 安全起见请通过安全渠道告知本人
-        </p>
-      </div>
-      <template #footer>
-        <el-button type="primary" @click="resetOpen = false">关闭</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- ── Delete confirm dialog ──────────────────────────── -->
-    <el-dialog
-      v-model="deleteOpen"
-      title="删除用户"
-      width="460px"
-      :close-on-click-modal="false"
-    >
-      <div v-if="deleteTarget" class="delete-body">
-        <p>
-          此操作不可撤销。用户 <code class="mono">{{ deleteTarget.username }}</code> 的所有收藏将被一并清除，
-          <b>该用户上传的私有用例保留</b>。
-        </p>
-        <p>
-          要继续请输入 <code class="mono">{{ deleteTarget.username }}</code> 确认：
-        </p>
-        <el-input
-          v-model="deleteConfirmInput"
-          :placeholder="`输入 ${deleteTarget.username} 以确认`"
-        />
-      </div>
-      <template #footer>
-        <el-button @click="deleteOpen = false">取消</el-button>
-        <el-button
-          type="danger"
-          :disabled="!deleteConfirmed"
-          :loading="deleteSubmitting"
-          @click="submitDelete"
-        >确认删除</el-button>
-      </template>
-    </el-dialog>
-  </section>
+    <!-- ── 删除确认:输入用户名才能执行(与旧版同款硬确认)────────── -->
+    <Dialog :open="deleteOpen" @update:open="deleteOpen = $event">
+      <DialogContent class="max-w-[460px]">
+        <DialogHeader>
+          <DialogTitle>删除用户</DialogTitle>
+        </DialogHeader>
+        <div v-if="deleteTarget" class="flex flex-col gap-3">
+          <p class="m-0 text-body leading-relaxed">
+            此操作不可撤销。用户 <code class="rounded-chip bg-signal-failed/10 px-1.5 font-mono text-signal-failed">{{ deleteTarget.username }}</code>
+            的所有收藏将被一并清除，<b>该用户上传的私有用例保留</b>。
+          </p>
+          <p class="m-0 text-body">要继续请输入 <code class="font-mono">{{ deleteTarget.username }}</code> 确认：</p>
+          <Input v-model="deleteConfirmInput" :placeholder="`输入 ${deleteTarget.username} 以确认`" data-testid="delete-confirm" />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="deleteOpen = false">取消</Button>
+          <Button
+            variant="destructive"
+            :disabled="!deleteConfirmed || deleteSubmitting"
+            data-testid="delete-submit"
+            @click="submitDelete"
+          >{{ deleteSubmitting ? '删除中…' : '确认删除' }}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </ListPage>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { DocumentCopy, Search } from '@element-plus/icons-vue'
+import { computed, onMounted, ref } from 'vue'
+import { toTypedSchema } from '@vee-validate/zod'
+import { z } from 'zod'
+import { useForm } from 'vee-validate'
 import { useListSearch } from '@/utils/useListSearch'
-import { type FormInstance } from 'element-plus'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import { useUsersStore } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
 import * as usersApi from '@/api/users'
 import type { UserOut, ResetPasswordOut } from '@/api/users'
+import ListPage from '@/layouts/ListPage.vue'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
 const usersStore = useUsersStore()
 const authStore = useAuthStore()
 
 // ── filters & visible rows ──────────────────────────────
-type RoleFilter = 'all' | 'admin' | 'member'
 // Search + role filter split: useListSearch handles substring
 // matching, the role filter stays as a separate predicate so the
 // composable stays generic.
@@ -282,7 +287,7 @@ const { query: searchQuery, filtered: searchFiltered } = useListSearch(
   () => usersStore.list,
   ['username', 'display_name'],
 )
-const roleFilter = ref<RoleFilter>('all')
+const roleFilter = ref<'all' | 'admin' | 'member'>('all')
 
 const visibleUsers = computed(() =>
   searchFiltered.value.filter((u) => {
@@ -311,11 +316,11 @@ function canToggleRole(row: UserOut): boolean {
   return true
 }
 
-function rowClassName({ row }: { row: UserOut }): string {
-  const cls: string[] = []
-  if (isSelf(row)) cls.push('self-row')
-  if (!row.is_active) cls.push('inactive-row')
-  return cls.join(' ')
+function rowClass(row: UserOut): string {
+  return [
+    isSelf(row) ? 'self-row' : '',
+    !row.is_active ? 'inactive-row' : '',
+  ].join(' ')
 }
 
 const AVATAR_COLORS = [
@@ -386,42 +391,25 @@ async function copyResetPw() {
   }
 }
 
-// ── create user ─────────────────────────────────────────
+// ── create user(定稿表单范式:useForm + zod)──────────────
 const createOpen = ref(false)
-const createSubmitting = ref(false)
-const createFormRef = ref<FormInstance | null>(null)
-const createForm = reactive({
-  username: '',
-  display_name: '',
-  password: '',
-  is_admin: false,
+const creating = ref(false)
+
+const createSchema = toTypedSchema(z.object({
+  username: z.string()
+    .min(1, '请输入用户名')
+    .regex(/^[A-Za-z0-9_]{3,32}$/, '3-32 位字母数字下划线'),
+  display_name: z.string().optional(),
+  password: z.string()
+    .min(1, '请输入初始密码')
+    .refine((v) => v.length >= 8 && /[A-Za-z]/.test(v) && /\d/.test(v), '至少 8 位含字母 + 数字'),
+  role: z.enum(['member', 'admin']),
+}))
+
+const { handleSubmit, resetForm, setFieldValue } = useForm({
+  validationSchema: createSchema,
+  initialValues: { username: '', display_name: '', password: '', role: 'member' as const },
 })
-
-const createRules = {
-  username: [
-    { required: true, message: '请输入用户名', trigger: 'blur' },
-    { pattern: /^[A-Za-z0-9_]{3,32}$/, message: '3-32 位字母数字下划线', trigger: 'blur' },
-  ],
-  password: [
-    { required: true, message: '请输入初始密码', trigger: 'blur' },
-    {
-      validator: (_: unknown, v: string, cb: (e?: Error) => void) => {
-        if (!v || v.length < 8 || !/[A-Za-z]/.test(v) || !/\d/.test(v)) {
-          cb(new Error('至少 8 位含字母 + 数字'))
-        } else cb()
-      },
-      trigger: 'blur',
-    },
-  ],
-}
-
-function openCreate() {
-  createForm.username = ''
-  createForm.display_name = ''
-  createForm.password = randomString(12)
-  createForm.is_admin = false
-  createOpen.value = true
-}
 
 function randomString(len: number): string {
   const chars = 'abcdefghjkmnpqrstuvwxyz23456789'
@@ -431,47 +419,54 @@ function randomString(len: number): string {
 }
 
 function randomPassword() {
-  // 保证含字母 + 数字
+  // 保证含字母 + 数字(只换密码字段,其余输入不动)
   let s = ''
   while (!(/[A-Za-z]/.test(s) && /\d/.test(s) && s.length >= 8)) {
     s = randomString(12)
   }
-  createForm.password = s
+  setFieldValue('password', s)
 }
 
-async function submitCreate() {
-  if (!createFormRef.value) return
-  try {
-    await createFormRef.value.validate()
-  } catch {
-    return
-  }
-  createSubmitting.value = true
+const onCreateSubmit = handleSubmit(async (values) => {
+  if (creating.value) return
+  creating.value = true
   try {
     await usersStore.createUser({
-      username: createForm.username,
-      display_name: createForm.display_name || undefined,
-      password: createForm.password,
-      is_admin: createForm.is_admin,
+      username: values.username,
+      display_name: values.display_name || undefined,
+      password: values.password,
+      is_admin: values.role === 'admin',
     })
-    toast.success(`已创建用户 ${createForm.username}`)
+    toast.success(`已创建用户 ${values.username}`)
     createOpen.value = false
   } catch {
     showError('创建', undefined, usersStore.lastError)
   } finally {
-    createSubmitting.value = false
+    creating.value = false
   }
+})
+
+function openCreate() {
+  resetForm({
+    values: {
+      username: '',
+      display_name: '',
+      password: randomString(12),
+      role: 'member',
+    },
+  })
+  createOpen.value = true
 }
 
-// ── edit user ───────────────────────────────────────────
+// ── edit user(单字段,无需 schema)─────────────────────────
 const editOpen = ref(false)
 const editSubmitting = ref(false)
 const editTarget = ref<UserOut | null>(null)
-const editForm = reactive({ display_name: '' })
+const editDisplayName = ref('')
 
 function openEdit(row: UserOut) {
   editTarget.value = row
-  editForm.display_name = row.display_name ?? ''
+  editDisplayName.value = row.display_name ?? ''
   editOpen.value = true
 }
 
@@ -480,7 +475,7 @@ async function submitEdit() {
   editSubmitting.value = true
   try {
     await usersStore.patchUser(editTarget.value.id, {
-      display_name: editForm.display_name,
+      display_name: editDisplayName.value,
     })
     toast.success(`已更新 ${editTarget.value.username}`)
     editOpen.value = false
@@ -491,7 +486,7 @@ async function submitEdit() {
   }
 }
 
-// ── delete user ─────────────────────────────────────────
+// ── delete user(输入用户名硬确认)─────────────────────────
 const deleteOpen = ref(false)
 const deleteSubmitting = ref(false)
 const deleteTarget = ref<UserOut | null>(null)
@@ -532,270 +527,41 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.users-admin {
-  max-width: 1480px;
-  min-height: calc(100vh - 48px);
-  padding: 28px 32px 48px;
-  margin: 0 auto;
-  box-sizing: border-box;
-}
-
-.page-header {
-  display: flex;
-  gap: 24px;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.page-header h2 {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: 22px;
-  line-height: 1.25;
-}
-
-.page-header p {
-  margin: 5px 0 0;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-}
-
-.header-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.search-input {
-  width: 240px;
-}
-
-.role-filter {
-  width: 130px;
-}
-
-.users-table {
-  width: 100%;
-  border: 1px solid var(--color-border-tertiary);
-  border-radius: 6px;
-}
-
-/* row cell content */
 .avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  border-radius: 50%;
-  margin-right: 6px;
+  @apply mr-1.5 inline-flex h-[18px] w-[18px] items-center justify-center rounded-full text-[10px] font-bold text-white;
 }
 
 .username {
-  color: var(--color-text-primary);
-  font-weight: 500;
+  @apply font-medium text-signal-ink;
 }
 
 .username.self {
-  font-weight: 600;
+  @apply font-semibold;
 }
 
 .you-mark {
-  display: inline-block;
-  padding: 0 5px;
-  margin-left: 4px;
-  color: #5b21b6;
-  font-size: 9.5px;
-  font-weight: 700;
-  background: #ede9fe;
-  border-radius: 3px;
+  @apply ml-1 rounded-chip bg-signal-soft px-[5px] text-[9.5px] font-bold text-signal;
 }
 
-.role-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  font-size: 10.5px;
-  font-weight: 700;
-  border-radius: 4px;
+.chip {
+  @apply inline-flex items-center rounded-chip px-2 py-0.5 text-[10.5px] font-semibold;
 }
 
-.role-admin {
-  color: #991b1b;
-  background: #fef2f2;
-  border: 0.5px solid #fecaca;
+/* 自现行浅绿底;停用行淡红底 + 用户名/昵称划线 */
+:deep(.self-row) {
+  background: rgba(34, 197, 94, 0.05);
 }
 
-.role-member {
-  color: #4338ca;
-  background: #eef2ff;
-  border: 0.5px solid #c7d2fe;
-}
-
-.status-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 8px;
-  font-size: 10.5px;
-  font-weight: 600;
-  border-radius: 4px;
-}
-
-.status-tag.active {
-  color: #166534;
-  background: #dcfce7;
-  border: 0.5px solid #bbf7d0;
-}
-
-.status-tag.inactive {
-  color: #64748b;
-  background: #f3f4f6;
-  border: 0.5px solid #e2e8f0;
-}
-
-.self-hint {
-  color: #94a3b8;
-  font-size: 11px;
-}
-
-.more-button {
-  padding: 3px 9px;
-  color: #64748b;
-  font-size: 14px;
-  background: #fff;
-  border: 0.5px solid #e2e8f0;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-.more-button:hover,
-.more-button:focus-visible {
-  color: var(--color-text-primary);
-  border-color: var(--accent);
-  outline: none;
-}
-
-/* dialog internals */
-.pw-row {
-  display: flex;
-  gap: 6px;
-  align-items: stretch;
-}
-
-.pw-row .el-input {
-  flex: 1;
-}
-
-.pw-hint {
-  margin-top: 4px;
-  color: #64748b;
-  font-size: 11px;
-}
-
-.reset-result {
-  text-align: center;
-}
-
-.reset-pw {
-  display: inline-block;
-  padding: 10px 18px;
-  margin: 8px 0 14px;
-  color: #991b1b;
-  font-size: 16px;
-  font-weight: 700;
-  background: #fef2f2;
-  border-radius: 6px;
-}
-
-.reset-hint {
-  margin-top: 14px;
-  color: #64748b;
-  font-size: 11px;
-  line-height: 1.6;
-}
-
-.delete-body p {
-  margin: 0 0 12px;
-  color: var(--color-text-primary);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.delete-body code {
-  padding: 2px 6px;
-  color: #991b1b;
-  background: #fef2f2;
-  border-radius: 3px;
-}
-
-/* table row states */
-:deep(.el-table th.el-table__cell) {
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 600;
-  background: #f8fafc;
-}
-
-:deep(.el-table td.el-table__cell) {
-  padding: 10px 0;
-  font-size: 12.5px;
-}
-
-:deep(.el-table .self-row > td.el-table__cell) {
-  background: #f0fdf4;
-}
-
-:deep(.el-table .inactive-row > td.el-table__cell) {
-  background: rgba(254, 226, 226, 0.18);
-}
-
-:deep(.el-table .inactive-row .username),
-:deep(.el-table .inactive-row .muted) {
+:deep(.inactive-row .username),
+:deep(.inactive-row .muted) {
   text-decoration: line-through;
 }
 
-:deep(.el-table__row:hover > td.el-table__cell) {
-  background: var(--accent-soft) !important;
+.empty-cta {
+  @apply flex flex-col items-center gap-2.5 rounded-empty border border-signal-line bg-signal-card py-10 text-center;
 }
 
-:deep(.el-dropdown-menu__item) {
-  justify-content: flex-start;
-  padding: 8px 14px;
-  font-size: 12px;
-  text-align: left;
-}
-
-:deep(.el-dropdown-menu__item.is-danger) {
-  color: #991b1b;
-}
-
-:deep(.el-dropdown-menu__item.is-danger:hover) {
-  background: #fef2f2 !important;
-}
-
-@media (max-width: 900px) {
-  .users-admin {
-    padding: 20px 16px 36px;
-  }
-
-  .page-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .header-actions {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .search-input,
-  .role-filter {
-    width: min(100%, 320px);
-  }
+.empty-cta p {
+  @apply m-0 text-body text-muted-foreground;
 }
 </style>
