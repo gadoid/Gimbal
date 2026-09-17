@@ -29,11 +29,11 @@
       <div v-if="local.timePolicy.kind === 'timeout'" class="c-inline-row" style="margin-top: 8px;">
         <span class="c-inline-label">超时秒数 (seconds)</span>
         <span class="c-inline-ctrl">
-          <el-input-number
+          <Input
             :model-value="(local.timePolicy as any).seconds"
-            @update:model-value="(v: any) => (local.timePolicy as any).seconds = v"
-            :min="1"
-            :max="3600"
+            type="number" min="1" max="3600"
+            class="h-8 w-[110px]"
+            @update:model-value="(v) => ((local.timePolicy as any).seconds = Number(v))"
             size="small"
           />
         </span>
@@ -53,9 +53,9 @@
         <div class="c-inline-row">
           <span class="c-inline-label">启用重试</span>
           <span class="c-inline-ctrl">
-            <el-switch
+            <Switch
               :model-value="local.retry !== null"
-              @update:model-value="(v: any) => onRetryToggle(!!v)"
+              @update:model-value="(v) => onRetryToggle(!!v)"
             />
           </span>
         </div>
@@ -63,11 +63,11 @@
           <div class="c-inline-row">
             <span class="c-inline-label">最大尝试次数 (maxAttempts)</span>
             <span class="c-inline-ctrl">
-              <el-input-number
-                v-model="local.retry.maxAttempts"
-                :min="1"
-                :max="10"
-                :step="1"
+              <Input
+                :model-value="local.retry.maxAttempts"
+                type="number" min="1" max="10" step="1"
+                class="h-8 w-[110px]"
+                @update:model-value="(v) => (local.retry!.maxAttempts = Number(v))"
                 size="small"
               />
             </span>
@@ -75,11 +75,11 @@
           <div class="c-inline-row">
             <span class="c-inline-label">退避秒数 (backoffSeconds)</span>
             <span class="c-inline-ctrl">
-              <el-input-number
-                v-model="local.retry.backoffSeconds"
-                :min="0"
-                :max="600"
-                :step="1"
+              <Input
+                :model-value="local.retry.backoffSeconds"
+                type="number" min="0" max="600" step="1"
+                class="h-8 w-[110px]"
+                @update:model-value="(v) => (local.retry!.backoffSeconds = Number(v))"
                 size="small"
               />
             </span>
@@ -108,8 +108,8 @@
             <button class="action-del" @click="setupList.splice(i, 1)">×</button>
           </div>
           <div class="action-row-grid">
-            <el-input v-model="s.name" placeholder="动作名 (例: clear-cache)" size="small" />
-            <el-input v-model="s.kind" placeholder="类型 (mock_seed / db_seed / ...)" size="small" />
+            <Input v-model="s.name" placeholder="动作名 (例: clear-cache)" class="h-8" />
+            <Input v-model="s.kind" placeholder="类型 (mock_seed / db_seed / ...)" class="h-8" />
           </div>
           <textarea
             :value="JSON.stringify(s.payload || {}, null, 2)"
@@ -142,8 +142,8 @@
             <button class="action-del" @click="teardownList.splice(i, 1)">×</button>
           </div>
           <div class="action-row-grid">
-            <el-input v-model="s.name" placeholder="动作名 (例: cleanup-mock)" size="small" />
-            <el-input v-model="s.kind" placeholder="类型" size="small" />
+            <Input v-model="s.name" placeholder="动作名 (例: cleanup-mock)" class="h-8" />
+            <Input v-model="s.kind" placeholder="类型" class="h-8" />
           </div>
           <textarea
             :value="JSON.stringify(s.payload || {}, null, 2)"
@@ -176,18 +176,18 @@
             <span class="c-ns-count">{{ group.length }} keys</span>
           </div>
           <div v-for="(v, j) in group" :key="j" class="c-kv-row var-row">
-            <el-input
+            <Input
               :model-value="v.key"
-              @update:model-value="(val: string) => v.key = val"
+              @update:model-value="(val) => (v.key = String(val))"
               placeholder="变量名"
-              size="small"
+              class="h-8"
             />
             <span class="c-kv-sep">=</span>
-            <el-input
+            <Input
               :model-value="formatVarValue(v.value)"
-              @update:model-value="(val: string) => v.value = parseVarValue(val)"
+              @update:model-value="(val) => (v.value = parseVarValue(String(val)))"
               placeholder="值 / 引用"
-              size="small"
+              class="h-8"
             />
             <button
               class="c-kv-lock"
@@ -228,19 +228,18 @@
             <span class="c-ns-count">{{ group.length }} services</span>
           </div>
           <div v-for="(s, i) in group" :key="i" class="c-kv-row svc-row">
-            <el-input
+            <Input
               :model-value="s.alias"
-              @update:model-value="(val: string) => s.alias = val"
+              @update:model-value="(val) => (s.alias = String(val))"
               placeholder="alias (例: tidb-test-service)"
-              size="small"
+              class="h-8"
             />
             <span class="svc-owner" :title="ownerLabel(s.alias)">{{ ownerLabel(s.alias) }}</span>
             <span class="c-kv-sep">→</span>
-            <el-input
+            <Input
               :model-value="s.baseUrl"
-              @update:model-value="(val: string) => s.baseUrl = val"
+              @update:model-value="(val) => (s.baseUrl = String(val))"
               placeholder="baseUrl"
-              size="small"
               class="svc-url"
             />
             <button class="c-kv-del" @click="removeService(sys, i)">×</button>
@@ -308,6 +307,8 @@ import { scenarioSchemesUrl } from '@/utils/links'
 import type { AssertionEntry, LegacyAssertionEntry } from '@/types/assertion-registry'
 import { isLegacyEntry } from '@/types/assertion-registry'
 import UsersCard from './UsersCard.vue'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 
 // plate TimePolicy 只有两态:record / timeout(带 seconds)。
 // 砍掉原 cost-collect / intervalMs — 不在 plate 契约内。

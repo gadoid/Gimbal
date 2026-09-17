@@ -35,17 +35,12 @@ function plateSystemsPayload(ids: string[]) {
   }
 }
 
-/** 点开「归属系统」下拉,返回其 teleport 到 body 的选项文本列表。
- *  页面里有 priority 等多个 el-select,必须按表单项定位触发器,
- *  且只取展开状态 (非 display:none) 的那个 popper 的选项。 */
+/** 归属系统选项文本(迁移后为内联 checkbox 芯片,不再有弹层)。
+ *  候选直接渲染在 .sys-chips 里,兼容旧断言语义。 */
 async function openSystemOptions(wrapper: ReturnType<typeof mount>): Promise<string[]> {
-  const sysItem = wrapper.findAll('.el-form-item').find((f) => f.text().includes('归属系统'))
-  await sysItem?.find('.el-select__wrapper').trigger('click')
   await flushPromises()
-  return Array.from(document.querySelectorAll<HTMLElement>('.el-select__popper'))
-    .filter((p) => p.style.display !== 'none')
-    .flatMap((p) => Array.from(p.querySelectorAll('.el-select-dropdown__item')))
-    .map((el) => el.textContent?.trim() || '')
+  return wrapper.findAll('[data-testid="meta-system"] .sys-chip')
+    .map((c) => c.text().trim())
 }
 
 describe('CaseComposerMeta 归属系统动态选项', () => {

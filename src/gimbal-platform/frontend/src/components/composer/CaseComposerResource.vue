@@ -59,11 +59,10 @@
       </div>
       <div v-for="m in mocks" :key="m.name" class="resource-row">
         <div class="row-header">
-          <el-input
+          <Input
             :model-value="m.name"
-            @update:model-value="(val: string) => renameResource(m.name, val)"
+            @update:model-value="(val) => renameResource(m.name, String(val))"
             placeholder="mock 名称 (例: fin-mock-default)"
-            size="small"
             class="row-name"
           />
           <span class="kind-tag t-mock">mock</span>
@@ -72,11 +71,10 @@
         <div class="row-grid">
           <div class="row-field">
             <label>镜像 (image)</label>
-            <el-input
+            <Input
               :model-value="m.image"
-              @update:model-value="(val: string) => m.image = val"
+              @update:model-value="(val) => (m.image = String(val))"
               placeholder="harbor.example.com/fin-mock:1.0.0"
-              size="small"
             />
             <span class="hint">格式: registry/repo:tag, 仅 Plate ImageWhitelist 内的镜像可启动</span>
           </div>
@@ -94,18 +92,16 @@
         <div class="row-field port-mapping">
           <label>端口映射 (portMapping · host→container)</label>
           <div v-for="(pm, j) in (portRows[m.name] || [])" :key="j" class="c-kv-row port-row">
-            <el-input
+            <Input
               :model-value="pm.host"
-              @update:model-value="(val: string) => (pm.host = val, syncPortMapping(m.name))"
+              @update:model-value="(val) => (pm.host = String(val), syncPortMapping(m.name))"
               placeholder="8080"
-              size="small"
             />
             <span class="c-kv-sep">→</span>
-            <el-input
+            <Input
               :model-value="pm.container"
-              @update:model-value="(val: string) => (pm.container = val, syncPortMapping(m.name))"
+              @update:model-value="(val) => (pm.container = String(val), syncPortMapping(m.name))"
               placeholder="8080"
-              size="small"
             />
             <button class="c-kv-del" @click="portRows[m.name].splice(j, 1); syncPortMapping(m.name)">×</button>
           </div>
@@ -130,11 +126,10 @@
       </div>
       <div v-for="f in files" :key="f.name" class="resource-row">
         <div class="row-header">
-          <el-input
+          <Input
             :model-value="f.name"
-            @update:model-value="(val: string) => renameResource(f.name, val)"
+            @update:model-value="(val) => renameResource(f.name, String(val))"
             placeholder="file 名称 (例: order-sample.json)"
-            size="small"
             class="row-name"
           />
           <span class="kind-tag t-file">file</span>
@@ -143,20 +138,18 @@
         <div class="row-grid">
           <div class="row-field">
             <label>路径 (path)</label>
-            <el-input
+            <Input
               :model-value="f.path"
-              @update:model-value="(val: string) => f.path = val"
+              @update:model-value="(val) => (f.path = String(val))"
               placeholder="/data/files/order-sample.json"
-              size="small"
             />
           </div>
           <div class="row-field">
             <label>描述 (可选 · 进 resourceMeta, 不进 plate)</label>
-            <el-input
+            <Input
               :model-value="props.resourceMeta[f.name] || ''"
-              @update:model-value="(val: string) => updateResourceMeta(f.name, val)"
+              @update:model-value="(val) => updateResourceMeta(f.name, String(val))"
               placeholder="JSON / CSV / PEM"
-              size="small"
             />
           </div>
         </div>
@@ -180,6 +173,8 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { ResourceView, MockView, FileView } from '@/types/plate'
 import { parseJson } from '../../utils/json'
+
+import { Input } from '@/components/ui/input'
 
 const props = defineProps<{
   resource: Record<string, ResourceView>
@@ -355,7 +350,7 @@ watch(local, () => {
 .resource-row:last-child { margin-bottom: 0; }
 .row-header { display: flex; align-items: center; gap: 8px; }
 .row-name { flex: 1; }
-.row-name :deep(.el-input__wrapper) { background: var(--c-surface); }
+.row-name { background: var(--c-surface); }
 .kind-tag { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .t-mock { background: #fef3c7; color: #92400e; }
 .t-file { background: #dbeafe; color: #1e40af; }
@@ -369,7 +364,7 @@ watch(local, () => {
 .row-field { display: flex; flex-direction: column; gap: 4px; }
 .row-field label { font-size: 11px; color: var(--c-text-secondary); font-weight: 500; }
 .row-field .hint { font-size: 10px; color: var(--c-text-tertiary); margin-top: 2px; }
-.row-field :deep(.el-input__wrapper) { background: var(--c-surface); }
+
 
 .port-mapping { grid-column: 1 / -1; }
 .port-row { margin-bottom: 4px; }

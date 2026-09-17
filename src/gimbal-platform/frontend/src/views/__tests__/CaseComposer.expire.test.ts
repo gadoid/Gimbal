@@ -92,13 +92,14 @@ describe('CaseComposer — expire 状态同步顶栏渲染', () => {
     const w = mountPage()
     await flushPromises()
 
-    // step① 默认展示;Meta 里唯一的 el-switch 就是 过期(expire)
-    await w.find('.el-switch').trigger('click')
+    // step① 默认展示;Meta 里唯一的 switch 就是 过期(expire)
+    // (shadcn Switch = button[role=switch],v-model 经点击切换)
+    await w.find('button[role="switch"]').trigger('click')
     await flushPromises()
     expect(w.find('.expire-pill').exists()).toBe(true)
     expect(w.find('h1.title').classes()).toContain('expired')
 
-    await w.find('.el-switch').trigger('click')
+    await w.find('button[role="switch"]').trigger('click')
     await flushPromises()
     expect(w.find('.expire-pill').exists()).toBe(false)
     w.unmount()

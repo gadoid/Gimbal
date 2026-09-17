@@ -24,37 +24,36 @@
           </p>
         </div>
       </div>
-      <el-form :model="local" label-position="top" class="c-form">
-        <el-form-item label="名称" required>
-          <el-input v-model="local.name" placeholder="订单创建 e2e" maxlength="64" show-word-limit />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input
-            v-model="local.description"
-            type="textarea"
-            :rows="3"
-            placeholder="覆盖订单创建主链路, 验证状态机 + 字段映射"
-            maxlength="2048"
-            show-word-limit
-          />
-        </el-form-item>
-        <div class="c-grid-3">
-          <el-form-item label="module" required>
-            <el-input v-model="local.module" placeholder="订单" maxlength="64" />
-          </el-form-item>
-          <el-form-item label="priority" required>
-            <el-select v-model.number="local.priority">
-              <el-option :value="0" label="P0 · 最高" />
-              <el-option :value="1" label="P1 · 高" />
-              <el-option :value="2" label="P2 · 中" />
-              <el-option :value="3" label="P3 · 低" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="version">
-            <el-input v-model="local.version" maxlength="32" />
-          </el-form-item>
+      <div class="c-form">
+        <div class="mf-item"><span class="mf-label">名称 *</span>
+          <Input v-model="local.name" placeholder="订单创建 e2e" maxlength="64" />
         </div>
-      </el-form>
+        <div class="mf-item"><span class="mf-label">描述</span>
+          <textarea
+            v-model="local.description"
+            rows="3"
+            maxlength="2048"
+            class="w-full rounded-field border border-input bg-transparent p-2 text-body"
+            placeholder="覆盖订单创建主链路, 验证状态机 + 字段映射"
+          ></textarea>
+        </div>
+        <div class="c-grid-3">
+          <div class="mf-item"><span class="mf-label">module *</span>
+            <Input v-model="local.module" placeholder="订单" maxlength="64" />
+          </div>
+          <div class="mf-item"><span class="mf-label">priority *</span>
+            <select v-model.number="local.priority" class="meta-select">
+              <option :value="0">P0 · 最高</option>
+              <option :value="1">P1 · 高</option>
+              <option :value="2">P2 · 中</option>
+              <option :value="3">P3 · 低</option>
+            </select>
+          </div>
+          <div class="mf-item"><span class="mf-label">version</span>
+            <Input v-model="local.version" maxlength="32" />
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="c-card">
@@ -67,35 +66,44 @@
           <p class="c-head-desc">owner 由服务端自动设为当前用户</p>
         </div>
       </div>
-      <el-form :model="local" label-position="top" class="c-form">
+      <div class="c-form">
         <div class="c-grid-2">
-          <el-form-item label="author">
-            <el-input v-model="local.author" placeholder="王" />
-          </el-form-item>
-          <el-form-item label="owner">
-            <el-input v-model="local.owner" placeholder="(由服务端覆盖)" disabled />
-          </el-form-item>
+          <div class="mf-item"><span class="mf-label">author</span>
+            <Input v-model="local.author" placeholder="王" />
+          </div>
+          <div class="mf-item"><span class="mf-label">owner</span>
+            <Input v-model="local.owner" placeholder="(由服务端覆盖)" disabled />
+          </div>
         </div>
-        <el-form-item label="归属系统 (V3.2 多系统)" required>
-          <el-select
-            v-model="local.system"
-            multiple filterable allow-create
-            placeholder="选择或输入被测系统"
-          >
-            <el-option v-for="s in plateSystems" :key="s" :value="s" :label="systemLabel(s)">
-              <span class="opt-sys">{{ systemLabel(s) }}</span>
-            </el-option>
-          </el-select>
+        <div class="mf-item"><span class="mf-label">归属系统 (V3.2 多系统) *</span>
+          <!-- multiple+allow-create:候选 checkbox 芯片 + 自由输入追加
+               (回车确认;键入非候选值即自建) -->
+          <div class="sys-chips" data-testid="meta-system">
+            <label v-for="c in plateSystems" :key="c" class="sys-chip" :class="{ on: local.system.includes(c) }">
+              <input
+                type="checkbox"
+                :value="c"
+                :checked="local.system.includes(c)"
+                @change="toggleSystem(c)"
+              />{{ systemLabel(c) }}
+            </label>
+            <input
+              v-model="systemDraft"
+              class="sys-add"
+              placeholder="+ 输入系统回车添加"
+              @keydown.enter.prevent="addSystem"
+            />
+          </div>
           <span class="hint">支持多选 — 跨系统编排 (如 fin+logi)</span>
-        </el-form-item>
-        <el-form-item label="tags">
+        </div>
+        <div class="mf-item"><span class="mf-label">tags</span>
           <TagInput v-model="local.tags" placeholder="按 Enter 添加 tag" />
-        </el-form-item>
-        <el-form-item>
-          <el-switch v-model="local.expire" />
+        </div>
+        <div class="mf-item">
+          <Switch v-model="local.expire" />
           <span class="switch-label">过期 (expire)</span>
-        </el-form-item>
-      </el-form>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -103,6 +111,8 @@
 <script setup lang="ts">
 import { reactive, ref, watch, onMounted } from 'vue'
 import TagInput from '@/components/TagInput.vue'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import { fetchPlateSystems } from '@/api/plate'
 import type { MetaView } from '@/types/plate'
 
@@ -118,6 +128,18 @@ function systemLabel(s: string) {
 }
 
 const plateSystems = ref<string[]>([])
+const systemDraft = ref('')
+
+function toggleSystem(s: string) {
+  const i = local.system.indexOf(s)
+  if (i >= 0) local.system.splice(i, 1)
+  else local.system.push(s)
+}
+function addSystem() {
+  const v = systemDraft.value.trim()
+  if (v && !local.system.includes(v)) local.system.push(v)
+  systemDraft.value = ''
+}
 
 onMounted(async () => {
   try {
@@ -160,4 +182,25 @@ watch(local, (v) => {
 .hint { display: block; font-size: 11px; color: var(--c-text-tertiary); margin-top: 4px; }
 .opt-sys { font-weight: 500; }
 .switch-label { margin-left: 12px; font-size: 13px; color: var(--c-text-secondary); }
+.mf-item { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.mf-label { font-size: 11px; font-weight: 600; color: var(--color-text-secondary, #64748b); }
+.meta-select {
+  height: 34px; padding: 0 8px; font-size: 13px;
+  color: #10151c; background: #fff;
+  border: 1px solid #e1e5eb; border-radius: 6px;
+}
+.sys-chips { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.sys-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 10px; font-size: 11.5px;
+  color: #374151; border: 1px solid #e1e5eb; border-radius: 10px;
+  cursor: pointer; user-select: none;
+}
+.sys-chip.on { color: #2f6fed; border-color: #2f6fed; background: #e7efff; }
+.sys-chip input { accent-color: #2f6fed; margin: 0; }
+.sys-add {
+  border: none; outline: none; background: transparent;
+  font-size: 11.5px; color: #2f6fed; width: 130px;
+}
+.sys-add::placeholder { color: #94a3b8; }
 </style>

@@ -100,8 +100,8 @@ describe('CaseComposer — 防抖自动保存', () => {
     const w = await mountPage()
     expect(update).not.toHaveBeenCalled()
 
-    // 编辑①:Meta 的唯一 el-switch = 过期开关 → definition.meta.expire=true
-    await w.find('.el-switch').trigger('click')
+    // 编辑①:Meta 的唯一 switch = 过期开关 → definition.meta.expire=true
+    await w.find('button[role="switch"]').trigger('click')
     await flushPromises()
     expect(update).not.toHaveBeenCalled()   // 未到防抖窗口不发
 
@@ -137,7 +137,7 @@ describe('CaseComposer — 防抖自动保存', () => {
     vi.spyOn(api, 'runScenario').mockImplementation(runScenario)
     const w = await mountPage()
 
-    await w.find('.el-switch').trigger('click')   // dirty,但不推进防抖时钟
+    await w.find('button[role="switch"]').trigger('click')   // dirty,但不推进防抖时钟
     await flushPromises()
     expect(update).not.toHaveBeenCalled()
 
@@ -168,7 +168,7 @@ describe('CaseComposer — 防抖自动保存', () => {
     const w = await mountPage()
 
     // 编辑① → 防抖到点 → save1 挂起(未 resolve)
-    await w.find('.el-switch').trigger('click')   // expire=true
+    await w.find('button[role="switch"]').trigger('click')   // expire=true
     await flushPromises()
     await vi.advanceTimersByTimeAsync(AUTOSAVE_MS)
     await flushPromises()
@@ -176,7 +176,7 @@ describe('CaseComposer — 防抖自动保存', () => {
 
     // 编辑②发生在 save1 进行中(expire 回到 false)— 不得被 save1 的
     // 「成功即 clean」吞掉:dirty 保留,防抖到点再存最新值
-    await w.find('.el-switch').trigger('click')
+    await w.find('button[role="switch"]').trigger('click')
     await flushPromises()
     resolveSave(sampleScenario(true))
     await flushPromises()
@@ -200,7 +200,7 @@ describe('CaseComposer — 防抖自动保存', () => {
     window.dispatchEvent(clean)
     expect(clean.defaultPrevented).toBe(false)
 
-    await w.find('.el-switch').trigger('click')
+    await w.find('button[role="switch"]').trigger('click')
     await flushPromises()
     const ev = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(ev)
@@ -213,7 +213,7 @@ describe('CaseComposer — 防抖自动保存', () => {
     const update = vi.fn().mockResolvedValue(sampleScenario(true))
     vi.spyOn(api, 'updateScenario').mockImplementation(update)
     const w = await mountPage()
-    await w.find('.el-switch').trigger('click')
+    await w.find('button[role="switch"]').trigger('click')
     await flushPromises()
 
     // cancel 按钮(distinguishCancelAndClose:reject 'cancel')
@@ -231,7 +231,7 @@ describe('CaseComposer — 防抖自动保存', () => {
     const update = vi.fn().mockResolvedValue(sampleScenario(true))
     vi.spyOn(api, 'updateScenario').mockImplementation(update)
     let w = await mountPage()
-    await w.find('.el-switch').trigger('click')
+    await w.find('button[role="switch"]').trigger('click')
     await flushPromises()
     vi.spyOn(ElMessageBox, 'confirm')
       .mockResolvedValue({ action: 'confirm' } as MessageBoxData)
@@ -249,7 +249,7 @@ describe('CaseComposer — 防抖自动保存', () => {
     update.mockClear()
     vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue('close')
     w = await mountPage()
-    await w.find('.el-switch').trigger('click')
+    await w.find('button[role="switch"]').trigger('click')
     await flushPromises()
     vi.spyOn(ElMessageBox, 'confirm').mockRejectedValue('close')
     await router.push('/scenarios').catch(() => { /* 守卫中止导航 */ })

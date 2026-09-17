@@ -18,25 +18,25 @@
           </span>
         </p>
       </div>
-      <a class="back-link" @click="$emit('back')"><el-icon style="margin-right:3px;vertical-align:-2px"><ArrowLeft /></el-icon>返回步骤编辑</a>
+      <a class="back-link" @click="$emit('back')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:3px;vertical-align:-2px"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>返回步骤编辑</a>
     </header>
 
     <div class="filter-row">
-      <el-select v-model="filterSystem" placeholder="系统" clearable @change="onFilterChanged" class="filter-sel">
-        <el-option v-for="s in systemsForFilter" :key="s" :value="s" :label="systemLabel(s)" />
-      </el-select>
-      <el-select v-model="filterService" placeholder="服务" clearable @change="onFilterChanged" :disabled="!filterSystem" class="filter-sel">
-        <el-option v-for="svc in servicesForFilter" :key="svc" :value="svc" :label="svc" />
-      </el-select>
-      <el-input
+      <select v-model="filterSystem" class="filter-sel native-sel" data-testid="catalog-sys" @change="onFilterChanged">
+        <option value="">全部系统</option>
+        <option v-for="s in systemsForFilter" :key="s" :value="s">{{ systemLabel(s) }}</option>
+      </select>
+      <select v-model="filterService" class="filter-sel native-sel" :disabled="!filterSystem" data-testid="catalog-svc" @change="onFilterChanged">
+        <option value="">全部服务</option>
+        <option v-for="svc in servicesForFilter" :key="svc" :value="svc">{{ svc }}</option>
+      </select>
+      <input
         v-model="filterQuery"
         placeholder="搜索接口路径 / 描述 / 名称"
-        clearable
+        class="filter-input native-input"
+        data-testid="catalog-query"
         @input="onFilterChanged"
-        class="filter-input"
-      >
-        <template #prefix><el-icon><Search /></el-icon></template>
-      </el-input>
+      />
     </div>
 
     <!-- active filter chips -->
@@ -104,7 +104,7 @@
       <!-- 右侧:endpoint 详情 (原 Detail 页内容合入) -->
       <main class="endpoint-detail">
         <div v-if="detailLoading && !selectedFull" class="empty-card">
-          <el-icon class="is-loading"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg></el-icon>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
           <p class="muted">加载接口详情...</p>
         </div>
         <div v-else-if="selected" class="detail-card">
@@ -123,7 +123,7 @@
             </div>
             <p v-if="selected.description" class="desc">{{ selected.description }}</p>
             <div v-if="selected.metadata" class="meta">
-              <el-tag v-for="t in selected.metadata.tags || []" :key="t" size="small" type="info">{{ t }}</el-tag>
+              <span v-for="t in selected.metadata.tags || []" :key="t" class="cat-chip">{{ t }}</span>
               <span v-if="selected.metadata.module" class="muted">module: {{ selected.metadata.module }}</span>
             </div>
           </div>
@@ -164,10 +164,10 @@
 
           <!-- 加入按钮:放在 summary 统计列上方 — 描述再长也无需滚到底部 -->
           <div class="add-bar">
-            <el-button type="primary" size="large" :loading="adding" @click="$emit('add', selected)">
+            <button class="cat-add-btn" :disabled="adding" @click="$emit('add', selected)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               加入编排画布
-            </el-button>
+            </button>
             <span class="add-hint">
               直接落盘为 step #{{ nextStepIdx }} · 字段编辑器按 IOFieldBinding 渲染
             </span>
@@ -196,39 +196,35 @@
           </div>
 
           <!-- 字段表 (请求 + 响应) -->
-          <el-tabs class="tabs">
-            <el-tab-pane label="请求字段" v-if="requestFields.length">
-              <el-table :data="requestFields" stripe size="small">
-                <el-table-column prop="name" label="name" width="160" />
-                <el-table-column prop="path" label="path" width="200" />
-                <el-table-column label="required" width="80">
-                  <template #default="{ row }">
-                    <el-tag v-if="row.required" type="danger" size="small">required</el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="ui_kind" label="ui" width="80" />
-                <el-table-column prop="description" label="description" />
-                <el-table-column label="example" width="160">
-                  <template #default="{ row }">
-                    <code v-if="row.example !== undefined">{{ JSON.stringify(row.example) }}</code>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </el-tab-pane>
-            <el-tab-pane label="响应字段" v-if="primaryResponseFields.length">
-              <el-table :data="primaryResponseFields" stripe size="small">
-                <el-table-column prop="name" label="name" width="160" />
-                <el-table-column prop="path" label="path" width="200" />
-                <el-table-column prop="description" label="description" />
-                <el-table-column label="assertable" width="100">
-                  <template #default="{ row }">
-                    <el-tag v-if="primaryAssertable.includes(row.path)" type="success" size="small">✓ assertable</el-tag>
-                    <el-tag v-else size="small" type="info">○ 未声明</el-tag>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </el-tab-pane>
-          </el-tabs>
+          <div class="tabs">
+            <table v-if="requestFields.length" class="cat-table">
+              <thead><tr><th>请求字段 · {{ requestFields.length }}</th><th>path</th><th>required</th><th>ui</th><th>description</th><th>example</th></tr></thead>
+              <tbody>
+                <tr v-for="row in requestFields" :key="row.path">
+                  <td>{{ row.name }}</td>
+                  <td><code>{{ row.path }}</code></td>
+                  <td><span v-if="row.required" class="cat-chip req">required</span></td>
+                  <td>{{ row.ui_kind }}</td>
+                  <td>{{ row.description }}</td>
+                  <td><code v-if="row.example !== undefined">{{ JSON.stringify(row.example) }}</code></td>
+                </tr>
+              </tbody>
+            </table>
+            <table v-if="primaryResponseFields.length" class="cat-table">
+              <thead><tr><th>响应字段 · {{ primaryResponseFields.length }}</th><th>path</th><th>description</th><th>assertable</th></tr></thead>
+              <tbody>
+                <tr v-for="row in primaryResponseFields" :key="row.path">
+                  <td>{{ row.name }}</td>
+                  <td><code>{{ row.path }}</code></td>
+                  <td>{{ row.description }}</td>
+                  <td>
+                    <span v-if="primaryAssertable.includes(row.path)" class="cat-chip ok">✓ assertable</span>
+                    <span v-else class="cat-chip">○ 未声明</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div v-else-if="!filtered.length" class="empty-card">
@@ -252,7 +248,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { ArrowLeft, Search } from '@element-plus/icons-vue'
 import { toast } from '@/utils/toast'
 import { getFullEndpoint } from '@/api/scenario-composer'
 import { assertablePaths, formBindings, responseBindings } from '@/utils/declarations'
@@ -479,8 +474,6 @@ onMounted(refetch)
 .back-link { color: var(--c-accent); cursor: pointer; font-size: 13px; }
 
 .filter-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 200px)) minmax(200px, 1fr); gap: 8px; margin-bottom: 12px; }
-.filter-sel :deep(.el-select__wrapper) { background: var(--c-field-bg); box-shadow: 0 0 0 1px var(--c-field-border); border-radius: 6px; }
-.filter-input :deep(.el-input__wrapper) { background: var(--c-field-bg); box-shadow: 0 0 0 1px var(--c-field-border); border-radius: 6px; padding: 4px 12px; }
 
 .active-filters { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
 .af-chip {
@@ -598,10 +591,6 @@ onMounted(refetch)
 
 /* Tabs */
 .tabs { margin-top: 4px; }
-.tabs :deep(.el-tabs__nav-wrap::after) { background: var(--c-divider); }
-.tabs :deep(.el-tabs__item) { font-size: 12px; }
-.tabs :deep(.el-table) { font-size: 11px; }
-.tabs :deep(.el-table th) { background: var(--c-bg-secondary); font-weight: 600; color: var(--c-text-secondary); }
 
 /* 加入按钮 bar:位于 summary 统计列上方(hero/业务卡之后),无底色 */
 .add-bar {
@@ -619,4 +608,47 @@ onMounted(refetch)
 .empty-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--c-text); }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+.cat-add-btn {
+  padding: 9px 22px; font-size: 13px; font-weight: 600;
+  color: #fff; background: #2f6fed; border: none; border-radius: 8px;
+  cursor: pointer;
+}
+.cat-add-btn:hover { background: #265fd4; }
+.cat-add-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.native-sel {
+  height: 30px; padding: 0 6px; font-size: 12.5px;
+  color: #10151c; background: #fff;
+  border: 1px solid #e1e5eb; border-radius: 6px;
+}
+.native-input {
+  height: 30px; padding: 0 8px; font-size: 12.5px;
+  color: #10151c; background: #fff;
+  border: 1px solid #e1e5eb; border-radius: 6px;
+  outline: none;
+}
+.native-input:focus { border-color: #2f6fed; }
+.cat-chip {
+  display: inline-flex; padding: 1px 7px; font-size: 10.5px;
+  font-weight: 600; border-radius: 4px;
+  color: #475569; background: #f1f5f9; margin-right: 4px;
+}
+.cat-chip.req { color: #dc2626; background: #fdecec; }
+.cat-chip.ok { color: #15803d; background: #e8f5ec; }
+.cat-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+  margin-bottom: 10px;
+}
+.cat-table th {
+  text-align: left; padding: 5px 8px; font-size: 10.5px; font-weight: 600;
+  color: #64748b; background: #f8fafc; border-bottom: 1px solid #e1e5eb;
+}
+.cat-table td { padding: 5px 8px; border-bottom: 0.5px solid #f1f5f9; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.cat-add-btn {
+  padding: 9px 22px; font-size: 13px; font-weight: 600;
+  color: #fff; background: #2f6fed; border: none; border-radius: 8px;
+  cursor: pointer;
+}
+.cat-add-btn:hover { background: #265fd4; }
+.cat-add-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>
