@@ -37,4 +37,20 @@ describe('router — chromeMode 标注', () => {
     const home = routes.find((r) => r.path === '/home')
     expect(home?.meta.requiresAuth).toBe(true)
   })
+
+  it('D1 退役数据集路由兜底:两条旧深链 redirect 到方案工作台(不白屏)', () => {
+    const retired = [
+      '/scenarios/:scenarioId/data-sets',
+      '/scenarios/:scenarioId/data-sets/:datasetId',
+    ].map((path) => router.options.routes.find((r) => r.path === path))
+    expect(retired.every(Boolean)).toBe(true)
+    for (const rec of retired) {
+      const redirect = (rec as unknown as { redirect: (to: unknown) => string }).redirect
+      expect(redirect).toBeTypeOf('function')
+      // 含空格的 id 也要编码正确(路由段语义)
+      expect(
+        redirect({ params: { scenarioId: 'sc x' } }),
+      ).toBe('/scenarios/sc%20x/schemes')
+    }
+  })
 })

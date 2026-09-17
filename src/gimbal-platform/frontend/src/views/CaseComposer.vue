@@ -275,6 +275,7 @@ import { useScenarioDraftStore } from '@/stores/scenario-draft'
 import { showError } from '@/utils/errorFallback'
 import { relTime } from '@/utils/datetime'
 import { executionUrl, composerUrl } from '@/utils/links'
+import { seedScenarioName } from '@/composables/useScenarioName'
 import { confirmAction } from '@/utils/confirmAction'
 import { lintDraft } from '@/utils/draft-lint'
 import * as api from '@/api/scenario-composer'
@@ -760,6 +761,8 @@ async function loadScenario() {
   try {
     const s = await api.getScenario(scenarioId.value!)
     scenario.value = s
+    // 顶条面包屑取名(composer 已拿到 meta,顶条零额外请求)
+    seedScenarioName(s.meta.scenarioId, s.meta.name)
     // 读侧返回 {meta, steps(plate dict), ...};重建 definition(plate 结构)
     const prevConfig = definition.value.config
     const prevResource = definition.value.resource
@@ -946,6 +949,8 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
       if (!saved) throw new Error('create failed: id 撞号重试耗尽')
     }
     scenario.value = saved
+    // 保存(含改名)后同步面包屑缓存:顶条即时显示新名,不待刷新
+    seedScenarioName(saved.meta.scenarioId, saved.meta.name)
     // 新建首次保存:路由仍停留 /composer/new → 替换为真实 id(F5 安全、
     // URL 可分享;router-view 无 key 不重挂载,内存态原样保留)。
     if (route.params.scenarioId === 'new') {

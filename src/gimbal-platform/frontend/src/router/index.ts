@@ -9,6 +9,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
+/** D1 退役路由兜底:旧数据集深链/书签 → 方案工作台(能力承接处),不白屏 */
+const dataSetsFallback = (to: { params: Record<string, string | string[]> }) =>
+  `/scenarios/${encodeURIComponent(String(to.params.scenarioId))}/schemes`
+
 const routes = [
   // F-sitemap v2:登录后默认落地 = 用户工作台 /home(原为 /scenarios)
   { path: '/', redirect: '/home' },
@@ -40,6 +44,15 @@ const routes = [
   },
   // 数据集独立路由已退役(D1,重构方案 Phase 2 批次 0):数据集是方案的
   // 实现模块,能力由方案工作台 SchemeDataSection 承接,不设独立入口。
+  // 旧深链/书签兜底重定向到方案工作台,不白屏。
+  {
+    path: '/scenarios/:scenarioId/data-sets',
+    redirect: dataSetsFallback,
+  },
+  {
+    path: '/scenarios/:scenarioId/data-sets/:datasetId',
+    redirect: dataSetsFallback,
+  },
   {
     // 断言管理编辑器 — 场景级注册表(spec v2 §7)
     path: '/scenarios/:scenarioId/assertions',
