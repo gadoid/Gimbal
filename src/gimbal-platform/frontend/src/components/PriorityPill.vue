@@ -10,15 +10,13 @@ defineProps<{ priority: number | null | undefined }>()
 
 <style scoped>
 .pill {
+  @apply text-micro font-bold;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 31px;
   padding: 2px 6px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 16px;
+  font-family: var(--font-mono, monospace);
   border-radius: 10px;
 }
 .p0 { color: #b91c1c; background: #fee2e2; }

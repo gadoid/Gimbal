@@ -24,13 +24,11 @@ const tone = computed(() => {
 
 <style scoped>
 .sys-chip {
+  @apply text-micro font-semibold;
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 16px;
+  font-family: var(--font-mono, monospace);
   border-radius: 4px;
 }
 

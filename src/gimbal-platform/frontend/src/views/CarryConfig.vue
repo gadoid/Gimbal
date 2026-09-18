@@ -46,7 +46,7 @@
               <TooltipTrigger as-child>
                 <Button variant="outline" :disabled="!service || !rows.length" data-testid="import-csv" @click="pickCsv">导入 CSV</Button>
               </TooltipTrigger>
-              <TooltipContent class="max-w-[320px]">
+              <TooltipContent class="max-w-[min(320px,calc(100vw-2rem))]">
                 CSV 三列:path,value,is_null —— 表头按名定位(列序任意);is_null=1 为显式 null,两列都留空 = 该行不导入;面外字段会被跳过
               </TooltipContent>
             </Tooltip>
@@ -54,7 +54,7 @@
               <TooltipTrigger as-child>
                 <Button variant="outline" :disabled="!rows.length" data-testid="dl-template" @click="downloadTemplate">下载模板</Button>
               </TooltipTrigger>
-              <TooltipContent class="max-w-[320px]">
+              <TooltipContent class="max-w-[min(320px,calc(100vw-2rem))]">
                 按当前服务的字段面生成模板(预填全部 path 与已绑定值);不改直接导回 = 绑定态不变
               </TooltipContent>
             </Tooltip>
@@ -62,7 +62,7 @@
               <TooltipTrigger as-child>
                 <Button variant="outline" :disabled="!hasBoundRows" data-testid="export-csv" @click="downloadBoundCsv">导出 CSV</Button>
               </TooltipTrigger>
-              <TooltipContent class="max-w-[320px]">
+              <TooltipContent class="max-w-[min(320px,calc(100vw-2rem))]">
                 导出该服务的已绑定行(未绑定的面字段不进文件);导出→不改→导回 = 绑定态不变
               </TooltipContent>
             </Tooltip>
@@ -154,7 +154,7 @@
               <TooltipTrigger as-child>
                 <Button variant="outline" data-testid="import-defaults-csv" @click="pickDefaultsCsv">导入 CSV</Button>
               </TooltipTrigger>
-              <TooltipContent class="max-w-[320px]">
+              <TooltipContent class="max-w-[min(320px,calc(100vw-2rem))]">
                 CSV 三列:path,value,is_null —— 表头按名定位(列序任意);已有 path 更新、新 path 追加,两列都留空 = 该行不导入;导入后仍须手动保存
               </TooltipContent>
             </Tooltip>
@@ -162,7 +162,7 @@
               <TooltipTrigger as-child>
                 <Button variant="outline" data-testid="dl-defaults-template" @click="downloadDefaultsTemplate">下载模板</Button>
               </TooltipTrigger>
-              <TooltipContent class="max-w-[320px]">
+              <TooltipContent class="max-w-[min(320px,calc(100vw-2rem))]">
                 表头 + 一行示例(path 已填、值列留空 → 原样导回也是无操作)
               </TooltipContent>
             </Tooltip>
@@ -170,7 +170,7 @@
               <TooltipTrigger as-child>
                 <Button variant="outline" :disabled="!hasDefaultRows" data-testid="export-defaults-csv" @click="downloadDefaultsCsv">导出 CSV</Button>
               </TooltipTrigger>
-              <TooltipContent class="max-w-[320px]">
+              <TooltipContent class="max-w-[min(320px,calc(100vw-2rem))]">
                 导出当前全部默认行;导出→不改→导回 = 默认态不变
               </TooltipContent>
             </Tooltip>

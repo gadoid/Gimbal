@@ -109,7 +109,7 @@ async function load(): Promise<void> {
 .field-group { margin-bottom: 14px; }
 .via { color: #94a3b8; }
 .error { color: #dc2626; }
-.mono { font-family: monospace; }
+.mono { font-family: var(--font-mono, monospace); }
 .chip {
   display: inline-flex;
   align-items: center;

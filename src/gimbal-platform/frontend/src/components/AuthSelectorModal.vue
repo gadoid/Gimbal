@@ -117,7 +117,7 @@ function confirm() {
 .seg-btn {
   padding: 5px 14px;
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--font-mono, monospace);
   background: transparent;
   border: none;
   cursor: pointer;

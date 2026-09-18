@@ -16,15 +16,13 @@ withDefaults(
 
 <style scoped>
 .tag-pill {
+  @apply text-micro;
   display: inline-flex;
   align-items: center;
   max-width: 100%;
   padding: 2px 8px;
   overflow: hidden;
   color: #5b21b6;
-  font-size: 10.5px;
-  font-weight: 500;
-  line-height: 18px;
   white-space: nowrap;
   text-overflow: ellipsis;
   background: #ede9fe;

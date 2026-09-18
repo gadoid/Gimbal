@@ -17,7 +17,7 @@
         <span v-if="activeCount > 0" class="filter-badge">{{ activeCount }}</span>
       </button>
     </PopoverTrigger>
-    <PopoverContent align="end" class="w-[380px] p-0">
+    <PopoverContent align="end" class="w-[min(380px,calc(100vw-2rem))] p-0">
       <div class="filter-panel">
         <header class="filter-panel-head">
           <span class="filter-panel-title">筛选条件</span>
@@ -249,7 +249,7 @@ function unique<T>(arr: T[]): T[] {
   flex-direction: column;
   gap: 10px;
   padding: 10px 12px 4px;
-  max-height: 46vh;
+  max-height: 50vh;
   overflow-y: auto;
 }
 

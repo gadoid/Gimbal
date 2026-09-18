@@ -176,5 +176,5 @@ onMounted(async () => {
 .map-table td { padding: 2px 8px; border: 1px solid #ebeef5; }
 .hint { margin-left: 8px; color: #909399; }
 .error { color: #f56c6c; }
-.mono { font-family: monospace; }
+.mono { font-family: var(--font-mono, monospace); }
 </style>

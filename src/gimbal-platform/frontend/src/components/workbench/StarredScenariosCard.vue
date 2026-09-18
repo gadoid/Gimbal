@@ -97,7 +97,8 @@ onMounted(async () => {
 .ci-star { color: #b45309; background: #fef6e0; }
 .chead-title { font-size: 13.5px; font-weight: 700; color: #10151c; }
 .chead-count {
-  padding: 0 7px; font-size: 11px; font-weight: 700; line-height: 17px;
+  @apply text-caption font-bold;
+  padding: 0 7px;
   color: #64748b; background: #f1f5f9; border-radius: 999px;
 }
 .chead-spacer { flex: 1; }
