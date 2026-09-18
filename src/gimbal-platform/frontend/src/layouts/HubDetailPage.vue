@@ -5,7 +5,7 @@
      题头 h1 下、粗线摘要上的小字行(时间对/endpoint·版本行)。 -->
 <template>
   <div
-    class="mx-auto w-full px-4 pb-6 pt-8"
+    class="mx-auto w-full px-4 pb-6 pt-14"
     :class="width === 'wide' ? 'max-w-[min(1480px,100%)]' : 'max-w-[min(1200px,100%)]'"
   >
     <header>
