@@ -3,24 +3,14 @@
      → 构造对话框 → 快照折叠。member 直入 → 403「仅管理员」占位(§8);
      页内 isAdmin 只读分支保留作双保险。 -->
 <template>
-  <section v-if="detail" class="batch-detail">
-    <header class="page-header">
-      <div>
-        <h2>
-          批次 <span class="mono">{{ detail.batchId }}</span>
-          <span class="chip" :class="statusClass[detail.status] ?? 'bg-muted text-muted-foreground'">{{ detail.status }}</span>
-        </h2>
-        <p class="mono">{{ detail.endpointId }} · {{ detail.fromVersion }} → {{ detail.toVersion }}</p>
-        <p class="hint">
-          <span
-            v-for="(n, s) in detail.opCounts"
-            :key="s"
-            class="chip op-tag"
-            :class="statusClass[String(s)] ?? 'bg-muted text-muted-foreground'"
-          >{{ s }} {{ n }}</span>
-        </p>
-      </div>
-      <div v-if="auth.isAdmin" class="actions">
+  <HubDetailPage v-if="detail" width="wide" :title="`批次 ${detail.batchId}`">
+    <template #meta>
+      <p class="mono m-0">{{ detail.endpointId }} · {{ detail.fromVersion }} → {{ detail.toVersion }}</p>
+    </template>
+
+    <template #actions>
+      <span class="chip" :class="statusClass[detail.status] ?? 'bg-muted text-muted-foreground'">{{ detail.status }}</span>
+      <template v-if="auth.isAdmin">
         <Button variant="outline" data-action="construct" @click="constructOpen = true">
           构造 op
         </Button>
@@ -36,8 +26,19 @@
           data-action="rollback"
           @click="onRollback"
         >整批回滚</Button>
-      </div>
-    </header>
+      </template>
+    </template>
+
+    <template #summary>
+      <p class="m-0">
+        <span
+          v-for="(n, s) in detail.opCounts"
+          :key="s"
+          class="chip op-tag"
+          :class="statusClass[String(s)] ?? 'bg-muted text-muted-foreground'"
+        >{{ s }} {{ n }}</span>
+      </p>
+    </template>
 
     <Alert v-if="!auth.isAdmin" class="mb-3">
       <AlertTitle>owner 只读视图:仅查看 op 与快照,操作请联系管理员</AlertTitle>
@@ -142,20 +143,25 @@
         </ul>
       </DialogContent>
     </Dialog>
-  </section>
-  <div v-else-if="adminOnly" class="empty-note">
-    <p>仅管理员:批次工作台为管理员专用</p>
-    <router-link to="/adaptations" class="link">返回适配中心</router-link>
+  </HubDetailPage>
+  <div v-else-if="adminOnly" class="mx-auto w-full max-w-[min(1480px,100%)] px-4 py-6">
+    <div class="empty-state">
+      <p>仅管理员:批次工作台为管理员专用</p>
+      <router-link to="/adaptations" class="link">返回适配中心</router-link>
+    </div>
   </div>
-  <div v-else-if="loaded" class="empty-note">
-    <p>批次不存在或已清理</p>
-    <router-link to="/adaptations" class="link">返回适配中心</router-link>
+  <div v-else-if="loaded" class="mx-auto w-full max-w-[min(1480px,100%)] px-4 py-6">
+    <div class="empty-state">
+      <p>批次不存在或已清理</p>
+      <router-link to="/adaptations" class="link">返回适配中心</router-link>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import HubDetailPage from '@/layouts/HubDetailPage.vue'
 import { toast } from '@/utils/toast'
 import { confirmAction } from '@/utils/confirmAction'
 import * as api from '@/api/adaptations'
@@ -334,43 +340,24 @@ onMounted(reload)
 </script>
 
 <style scoped>
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16px;
-}
-.page-header p { margin: 6px 0 0; }
-.hint { color: #909399; font-size: 12px; }
-.status-tag { margin-left: 8px; }
+.hint { @apply text-label font-normal; color: #909399; }
 .op-tag { margin-right: 4px; }
 .chip {
+  @apply text-micro font-semibold;
   display: inline-flex;
   align-items: center;
   padding: 1px 8px;
-  font-size: 10.5px;
-  font-weight: 600;
   border-radius: 4px;
 }
 .op-check { accent-color: #2f6fed; flex: none; }
-.empty-note {
-  max-width: 1480px;
-  margin: 0 auto;
-  padding: 60px 16px;
-  text-align: center;
-  font-size: 12.5px;
-  color: #94a3b8;
-}
-.empty-note p { margin: 0 0 10px; }
 .snapshots summary {
+  @apply text-body font-semibold;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
   color: #10151c;
   margin: 18px 0 8px;
 }
 .snapshots ul { margin: 8px 0; padding-left: 18px; }
-.snapshots li { line-height: 1.9; font-size: 12px; }
+.snapshots li { @apply text-label font-normal; }
 .op-row {
   border: 1px solid #ebeef5;
   border-radius: 6px;
@@ -383,5 +370,5 @@ onMounted(reload)
 .snapshots { margin-top: 18px; }
 .snapshots ul { padding-left: 18px; }
 .link { color: #409eff; }
-.mono { font-family: monospace; }
+.mono { font-family: var(--font-mono, monospace); }
 </style>
