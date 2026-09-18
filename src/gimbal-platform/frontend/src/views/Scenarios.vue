@@ -3,46 +3,46 @@
      表格列对齐 pencil 原型：收藏 / 场景名 / 系统 / 模块 / 优先级 / 数据集数 / 步骤数 / 标签 / 更新时间
 -->
 <template>
-  <section class="scenarios">
-    <header class="page-header">
-      <div>
-        <h2 class="page-title">场景库</h2>
-        <p>共 {{ store.scenarios.length }} 个场景 · 1:N 数据集</p>
-      </div>
-      <div class="header-actions">
-        <Input v-model="q" class="search-input" data-testid="scen-search"
-          placeholder="按名 / 模块 / 系统 / scenarioId / tag 搜索" />
-        <!-- pool = filterableRows：module/author/priority 已从 meta.* 摊平的形状 -->
-        <FilterPopover v-model="filters" :pool="filterableRows" />
-        <Button data-testid="scen-create" @click="onCreate">+ 新建场景</Button>
-      </div>
-    </header>
+  <ListPage
+    title="场景库"
+    width="wide"
+    :subtitle="`共 ${store.scenarios.length} 个场景 · 1:N 数据集`"
+  >
+    <template #toolbar>
+      <Input v-model="q" class="w-full max-w-[280px]" data-testid="scen-search"
+        placeholder="按名 / 模块 / 系统 / scenarioId / tag 搜索" />
+      <!-- pool = filterableRows：module/author/priority 已从 meta.* 摊平的形状 -->
+      <FilterPopover v-model="filters" :pool="filterableRows" />
+      <Button data-testid="scen-create" @click="onCreate">+ 新建场景</Button>
+    </template>
 
     <!-- Tabs (PRD §6.1) -->
-    <Tabs v-model="activeTab" class="home-tabs" data-testid="scen-tabs">
-      <TabsList>
-        <TabsTrigger value="mine">我的编排 ({{ myCount }})</TabsTrigger>
-        <TabsTrigger value="public">公共编排 ({{ publicCount }})</TabsTrigger>
-        <TabsTrigger value="favorite">收藏 ({{ favoriteCount }})</TabsTrigger>
-      </TabsList>
-    </Tabs>
+    <template #tabs>
+      <Tabs v-model="activeTab" data-testid="scen-tabs">
+        <TabsList>
+          <TabsTrigger value="mine">我的编排 ({{ myCount }})</TabsTrigger>
+          <TabsTrigger value="public">公共编排 ({{ publicCount }})</TabsTrigger>
+          <TabsTrigger value="favorite">收藏 ({{ favoriteCount }})</TabsTrigger>
+        </TabsList>
+      </Tabs>
+    </template>
 
-    <div v-if="store.scenariosStatus === 'loading'" class="loading-state py-8 text-center text-body text-muted-foreground">加载中…</div>
-    <Table v-else-if="visible.length > 0" class="scenarios-table rounded-field border border-signal-line bg-signal-card">
+    <div v-if="store.scenariosStatus === 'loading'" class="loading-state">加载中…</div>
+    <Table v-else-if="visible.length > 0" class="scenarios-table min-w-[1080px] table-fixed rounded-field border border-signal-line bg-signal-card">
       <TableHeader>
         <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
-          <TableHead class="w-[46px]"></TableHead>
-          <TableHead class="text-caption font-semibold text-muted-foreground">场景名</TableHead>
-          <TableHead class="w-[140px] text-caption font-semibold text-muted-foreground">系统</TableHead>
-          <TableHead class="w-[100px] text-caption font-semibold text-muted-foreground">模块</TableHead>
-          <TableHead class="w-[70px] text-center text-caption font-semibold text-muted-foreground">优先级</TableHead>
-          <TableHead class="w-[60px] text-center text-caption font-semibold text-muted-foreground">数据集</TableHead>
-          <TableHead class="w-[54px] text-center text-caption font-semibold text-muted-foreground">步骤</TableHead>
-          <TableHead class="w-[54px] text-center text-caption font-semibold text-muted-foreground">变量</TableHead>
-          <TableHead class="w-[80px] text-caption font-semibold text-muted-foreground">作者</TableHead>
-          <TableHead class="w-[100px] text-caption font-semibold text-muted-foreground">最后编辑</TableHead>
-          <TableHead class="text-caption font-semibold text-muted-foreground">Tags</TableHead>
-          <TableHead class="w-[130px] text-center text-caption font-semibold text-muted-foreground">操作</TableHead>
+          <TableHead class="w-[3%]"></TableHead>
+          <TableHead class="w-[24%] text-caption font-semibold text-muted-foreground">场景名</TableHead>
+          <TableHead class="w-[10%] text-caption font-semibold text-muted-foreground">系统</TableHead>
+          <TableHead class="w-[8%] text-caption font-semibold text-muted-foreground">模块</TableHead>
+          <TableHead class="w-[6%] text-center text-caption font-semibold text-muted-foreground">优先级</TableHead>
+          <TableHead class="w-[5%] text-center text-caption font-semibold text-muted-foreground">数据集</TableHead>
+          <TableHead class="w-[5%] text-center text-caption font-semibold text-muted-foreground">步骤</TableHead>
+          <TableHead class="w-[5%] text-center text-caption font-semibold text-muted-foreground">变量</TableHead>
+          <TableHead class="w-[7%] text-caption font-semibold text-muted-foreground">作者</TableHead>
+          <TableHead class="w-[9%] text-caption font-semibold text-muted-foreground">最后编辑</TableHead>
+          <TableHead class="w-[10%] text-caption font-semibold text-muted-foreground">Tags</TableHead>
+          <TableHead class="w-[8%] text-center text-caption font-semibold text-muted-foreground">操作</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -99,7 +99,7 @@
       </TableBody>
     </Table>
 
-    <div v-else class="empty-note">
+    <div v-else class="empty-state">
       <p>暂无场景 — 新建第一个场景开始编排</p>
       <Button variant="outline" size="sm" @click="onCreate">+ 新建场景</Button>
     </div>
@@ -130,17 +130,18 @@
           <input v-model="exportPicker.chosen" type="radio" :value="sc.name" /> 按方案导出 · {{ sc.name }}
         </label>
         <div class="exp-foot">
-          <button type="button" class="ghost-btn" @click="settleExportPicker(undefined)">取消</button>
-          <button type="button" class="primary-btn" data-testid="export-picker-ok" @click="confirmExportPicker">导出</button>
+          <Button variant="outline" @click="settleExportPicker(undefined)">取消</Button>
+          <Button data-testid="export-picker-ok" @click="confirmExportPicker">导出</Button>
         </div>
       </div>
     </div>
-</section>
+</ListPage>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import ListPage from '@/layouts/ListPage.vue'
 import { toast } from '@/utils/toast'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useAuthStore } from '@/stores/auth'
@@ -420,52 +421,6 @@ async function onCmd(cmd: string, row: Scenario) {
 </script>
 
 <style scoped>
-.home-tabs {
-  margin-bottom: 8px;
-}
-.home-tabs :deep(.el-tabs__nav-wrap)::after { background: transparent; }
-.home-tabs :deep(.el-tabs__item) {
-  font-size: 14px; font-weight: 600; color: #5a6273;
-  padding: 0 20px 12px;
-}
-.home-tabs :deep(.el-tabs__item.is-active) { color: #4f46e5; }
-.home-tabs :deep(.el-tabs__active-bar) { background: #4f46e5; height: 2px; }
-
-.scenarios {
-  max-width: 1480px;
-  min-height: calc(100vh - 48px);
-  padding: 28px 32px 48px;
-  margin: 0 auto;
-  box-sizing: border-box;
-}
-
-.page-header {
-  display: flex;
-  gap: 24px;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-.page-header h2 {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: 22px;
-  line-height: 1.25;
-}
-.page-header p {
-  margin: 5px 0 0;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-}
-
-.header-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-shrink: 0;
-}
-.search-input { width: 280px; }
-
 .scenarios-table {
   width: 100%;
   border: 1px solid var(--color-border-tertiary);
@@ -506,7 +461,6 @@ async function onCmd(cmd: string, row: Scenario) {
   margin-left: 6px;
   padding: 0 6px;
   font-size: 10px;
-  line-height: 16px;
   vertical-align: 1px;
   border-radius: 3px;
 }
@@ -521,11 +475,11 @@ async function onCmd(cmd: string, row: Scenario) {
 
 /* 过期条目整行置灰 — opacity 一次性压暗行内所有自带头色的小组件
  * (SystemChip/TagPill/PriorityPill…),比逐列改色一致。 */
-:deep(.el-table__row.row-expired td.el-table__cell) { opacity: 0.55; }
+:deep(tr.row-expired) { opacity: 0.55; }
 
 .sid {
   margin-top: 2px;
-  font-family: var(--font-mono);
+  font-family: var(--font-mono, monospace);
   font-size: 10px;
   color: var(--color-text-tertiary);
 }
@@ -545,7 +499,7 @@ async function onCmd(cmd: string, row: Scenario) {
 }
 
 .num {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono, monospace);
   font-size: 12px;
   font-weight: 600;
   color: var(--color-text-primary);
@@ -576,33 +530,8 @@ async function onCmd(cmd: string, row: Scenario) {
 }
 .schemes-btn:hover { border-color: var(--accent); }
 
-.loading-state {
-  padding: 28px;
-  border: 1px solid var(--color-border-tertiary);
-  border-radius: 6px;
-}
-
 .pager { justify-content: flex-end; margin-top: 12px; }
 
-:deep(.el-table th.el-table__cell) {
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 600;
-  background: #f8fafc;
-}
-:deep(.el-table td.el-table__cell) { padding: 9px 0; font-size: 12px; }
-:deep(.el-table__row:hover > td.el-table__cell) { background: var(--accent-soft) !important; }
-:deep(.el-dropdown-menu__item) {
-  padding: 8px 14px;
-  font-size: 12px;
-  text-align: left;
-}
-:deep(.el-dropdown-menu__item.is-danger) { color: #b91c1c; }
-
-@media (max-width: 900px) {
-  .scenarios { padding: 20px 16px 36px; }
-  .page-header { flex-direction: column; align-items: flex-start; }
-}
 .pg-btn {
   min-width: 28px; height: 28px; margin-right: 4px;
   font-size: 12px; text-align: center;
@@ -613,20 +542,13 @@ async function onCmd(cmd: string, row: Scenario) {
 .pg-btn.active { color: #fff; background: #2f6fed; border-color: #2f6fed; font-weight: 600; }
 .pg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .pg-total { font-size: 11.5px; color: #64748b; margin-left: 6px; }
-.empty-note {
-  padding: 40px 16px; text-align: center;
-  font-size: 12.5px; color: #94a3b8;
-  border: 1px dashed #e1e5eb; border-radius: 8px;
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
-}
-.empty-note p { margin: 0; }
 .exp-modal {
   position: fixed; inset: 0; z-index: 2000;
   display: flex; align-items: center; justify-content: center;
   background: rgba(16, 21, 28, 0.4);
 }
 .exp-panel {
-  width: 440px; max-width: calc(100vw - 32px);
+  width: min(440px, calc(100vw - 2rem));
   padding: 18px 20px; background: #fff;
   border-radius: 10px; box-shadow: 0 8px 24px rgba(16, 21, 28, 0.12);
 }
@@ -638,14 +560,4 @@ async function onCmd(cmd: string, row: Scenario) {
 }
 .exp-opt input { accent-color: #2f6fed; }
 .exp-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
-.ghost-btn {
-  padding: 6px 14px; font-size: 12.5px;
-  color: #5a6273; background: transparent;
-  border: 1px solid #e1e5eb; border-radius: 8px; cursor: pointer;
-}
-.primary-btn {
-  padding: 6px 16px; font-size: 12.5px; font-weight: 600;
-  color: #fff; background: #2f6fed; border: none; border-radius: 8px; cursor: pointer;
-}
-.primary-btn:hover { background: #265fd4; }
 </style>
