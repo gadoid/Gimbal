@@ -8,12 +8,13 @@
  * - 沿用语义:adminOnly 过滤(用户管理/传递字段)、适配中心 pendingCount
  *   徽标(仅 admin 且 >0)、真实 <a href> 导航、active 高亮。
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import Sidebar from '@/components/chrome/Sidebar.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useSidebarCollapse } from '@/composables/sidebar-collapse'
 import * as adaptationsApi from '@/api/adaptations'
 
 function makeRouter() {
@@ -167,5 +168,85 @@ describe('Sidebar — 适配中心 pendingCount 徽标(沿用 TopNav 语义)', (
     expect(w.find('.logout-btn').exists()).toBe(true)
     expect(w.find('.username').text()).toBe('Alice')
     w.unmount()
+  })
+})
+
+describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.spyOn(adaptationsApi, 'catalogDiff').mockResolvedValue({
+      pending: [], anomalies: [], baselinedNow: 0,
+    } as never)
+    // 折叠态是模块级共享 ref + localStorage:每组用例前归位展开态
+    localStorage.clear()
+    const { collapsed } = useSidebarCollapse()
+    collapsed.value = false
+  })
+
+  afterEach(() => {
+    const { collapsed } = useSidebarCollapse()
+    collapsed.value = false
+    localStorage.clear()
+  })
+
+  it('默认展开:brand 带 platform 文字 + 折叠钮在场', async () => {
+    const w = await mountSidebar({ isAdmin: true })
+    expect(w.find('aside').classes()).toContain('w-[200px]')
+    expect(w.text()).toContain('platform')
+    expect(w.find('[data-testid="sb-collapse"]').exists()).toBe(true)
+    expect(w.findAll('.nav-text').length).toBe(7)
+    w.unmount()
+  })
+
+  it('点 « 折叠:56px 图标轨道 — 无文字,图标 title 提示功能名', async () => {
+    const w = await mountSidebar({ isAdmin: true })
+    await w.find('[data-testid="sb-collapse"]').trigger('click')
+
+    const aside = w.find('aside')
+    expect(aside.classes()).toContain('w-[56px]')
+    expect(aside.classes()).not.toContain('w-[200px]')
+    // 折叠后不保留文字:brand 文字与条目文字全消失
+    expect(w.text()).not.toContain('platform')
+    expect(w.findAll('.nav-text').length).toBe(0)
+    // 二级按钮只留图标;悬浮 title = 功能名
+    const rows = w.findAll('.row')
+    expect(rows.length).toBe(7)
+    for (const row of rows) {
+      expect(row.attributes('title')).toBeTruthy()
+      expect(row.find('.nav-icon').exists()).toBe(true)
+    }
+    expect(w.find('[title="认证管理"]').exists()).toBe(true)
+    expect(w.find('[title="工作台"]').exists()).toBe(true)
+    // 折叠后切换钮方向翻转(展开入口)
+    expect(w.find('[data-testid="sb-collapse"]').exists()).toBe(false)
+    expect(w.find('[data-testid="sb-expand"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('折叠仍保留一级层次组标签(场景/服务/执行中心/平台)', async () => {
+    const w = await mountSidebar({ isAdmin: true })
+    await w.find('[data-testid="sb-collapse"]').trigger('click')
+    const labels = w.findAll('.group-label').map((l) => l.text())
+    expect(labels).toEqual(['场景', '服务', '执行中心', '平台'])
+    w.unmount()
+  })
+
+  it('折叠态导航仍可点(真实 <a href> 保留) + 偏好落 localStorage', async () => {
+    const w = await mountSidebar({ isAdmin: true })
+    await w.find('[data-testid="sb-collapse"]').trigger('click')
+    const links = w.findAll('a.nav-item')
+    expect(links.length).toBe(7)
+    expect(links[2].attributes('href')).toBe('/auths')
+    expect(localStorage.getItem('chrome.sidebar.collapsed:v1')).toBe('1')
+    w.unmount()
+  })
+
+  it('折叠偏好跨"刷新"保持(composable 重导出读 localStorage)', async () => {
+    localStorage.setItem('chrome.sidebar.collapsed:v1', '1')
+    vi.resetModules()
+    const { useSidebarCollapse: freshCollapse } = await import('@/composables/sidebar-collapse')
+    expect(freshCollapse().collapsed.value).toBe(true)
+    // 归位共享 ref,避免污染后续用例(重置后的模块是同一注册表实例)
+    freshCollapse().collapsed.value = false
   })
 })

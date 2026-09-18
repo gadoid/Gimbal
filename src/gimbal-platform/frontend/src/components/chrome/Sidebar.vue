@@ -1,19 +1,50 @@
-<!-- Sidebar.vue — 四域侧边栏(重构方案 Phase 1:导航范式更换)。
+<!-- Sidebar.vue — 四域侧边栏(重构方案 Phase 1:导航范式更换)+ 整体折叠。
      结构基准 = F-sitemap:工作台入口置顶,场景 / 服务(分组标签,不可点)
      / 执行中心 / 平台 四组;常量池不再占侧边栏坑位(工作台卡片 +
      "管理"深链承接)。沿用 TopNav 的两条既有语义:adminOnly 过滤
      (用户管理 / 传递字段仅 admin 可见)与适配中心 pendingCount 徽标
      (admin + >0 才显示)。常驻底部:用户身份 + 登出(UserBadge)。
+     折叠态(« 钮切换,localStorage 持久化):200px → 56px 图标轨道 —
+     brand 只留状态点;一级层次(组标签)保留小字;二级按钮只留图标,
+     悬浮 title 提示功能名;pendingCount 退化为图标角点。
      颜色全部经 Signal token(@apply),组件内零散 hex 为零;暗底上的
      灰阶用 Tailwind 标准 slate 阶(Signal 色板未定义暗底文字档)。 -->
 <template>
-  <aside class="sidebar fixed inset-y-0 left-0 z-[1000] flex w-[200px] flex-col bg-signal-sidebar text-slate-300">
-    <div class="flex items-center gap-2 px-4 pb-3 pt-3.5">
+  <aside
+    class="sidebar fixed inset-y-0 left-0 z-[1000] flex flex-col bg-signal-sidebar text-slate-300 transition-[width] duration-200"
+    :class="collapsed ? 'w-[56px]' : 'w-[200px]'"
+  >
+    <!-- brand 行:展开 = 状态点 + platform + 折叠钮;折叠 = 状态点 + 折叠钮纵排 -->
+    <div v-if="collapsed" class="flex flex-col items-center gap-2 pb-3 pt-3.5">
+      <span class="status-dot h-2 w-2 shrink-0 rounded-full bg-signal-dot" title="服务在线"></span>
+      <button
+        type="button"
+        class="collapse-toggle flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-slate-400 transition-colors duration-150 hover:bg-white/5 hover:text-white"
+        :data-testid="'sb-expand'"
+        title="展开侧边栏"
+        aria-label="展开侧边栏"
+        @click="toggle"
+      >
+        <ChevronRightIcon class="h-3.5 w-3.5" />
+      </button>
+    </div>
+    <div v-else class="flex items-center gap-2 px-4 pb-3 pt-3.5">
       <span class="status-dot h-2 w-2 shrink-0 rounded-full bg-signal-dot" title="服务在线"></span>
       <span class="text-body font-semibold tracking-wide text-slate-50">platform</span>
+      <span class="flex-1"></span>
+      <button
+        type="button"
+        class="collapse-toggle flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-slate-400 transition-colors duration-150 hover:bg-white/5 hover:text-white"
+        :data-testid="'sb-collapse'"
+        title="折叠侧边栏"
+        aria-label="折叠侧边栏"
+        @click="toggle"
+      >
+        <ChevronLeftIcon class="h-3.5 w-3.5" />
+      </button>
     </div>
 
-    <nav class="flex-1 overflow-y-auto px-2">
+    <nav class="flex-1 overflow-y-auto" :class="collapsed ? 'px-1.5' : 'px-2'">
       <router-link
         v-for="entry in flatEntries"
         :key="entry.path"
@@ -21,27 +52,47 @@
         class="nav-item block rounded-md"
         :class="{ active: isActive(entry.path) }"
       >
-        <span v-if="entry.firstOfGroup && entry.group" class="group-label block select-none px-2 pb-1 pt-4 text-caption text-slate-500">
+        <!-- 一级层次(组标签)两态都保留:折叠 = 居中小字(仅一级可见) -->
+        <span
+          v-if="entry.firstOfGroup && entry.group"
+          class="group-label block select-none pb-1 pt-4 text-caption text-slate-500"
+          :class="collapsed ? 'px-0 text-center text-[9px] leading-tight' : 'px-2'"
+        >
           {{ entry.group }}
         </span>
+        <!-- 二级按钮:折叠 = 只留图标,title 悬浮提示功能名 -->
         <span
-          class="row flex h-8 items-center gap-2 rounded-md px-2 text-body transition-colors duration-150"
-          :class="isActive(entry.path)
-            ? 'bg-white/10 font-semibold text-white'
-            : 'text-slate-300 hover:bg-white/5 hover:text-white'"
+          class="row relative flex h-8 items-center gap-2 rounded-md text-body transition-colors duration-150"
+          :class="[
+            collapsed ? 'justify-center px-0' : 'px-2',
+            isActive(entry.path)
+              ? 'bg-white/10 font-semibold text-white'
+              : 'text-slate-300 hover:bg-white/5 hover:text-white',
+          ]"
+          :title="collapsed ? entry.label : undefined"
+          :aria-label="collapsed ? entry.label : undefined"
         >
           <component :is="entry.icon" class="nav-icon h-3.5 w-3.5 shrink-0" />
-          <span class="nav-text flex-1 whitespace-nowrap">{{ entry.label }}</span>
+          <span v-if="!collapsed" class="nav-text flex-1 whitespace-nowrap">{{ entry.label }}</span>
           <span
-            v-if="entry.path === '/adaptations' && auth.isAdmin && adaptations.pendingCount > 0"
+            v-if="!collapsed && entry.path === '/adaptations' && auth.isAdmin && adaptations.pendingCount > 0"
             class="nav-badge h-[18px] min-w-[18px] rounded-full bg-signal-failed px-1.5 text-center text-caption leading-[18px] text-white"
           >{{ adaptations.pendingCount }}</span>
+          <!-- 折叠态徽标退化为图标右上角红点(title 带数值) -->
+          <span
+            v-if="collapsed && entry.path === '/adaptations' && auth.isAdmin && adaptations.pendingCount > 0"
+            class="nav-badge-dot absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-signal-failed"
+            :title="`${adaptations.pendingCount} 条适配待处理`"
+          ></span>
         </span>
       </router-link>
     </nav>
 
-    <div class="flex items-center justify-between gap-2 border-t border-white/10 px-4 py-3">
-      <UserBadge />
+    <div
+      class="flex items-center justify-between gap-2 border-t border-white/10 py-3"
+      :class="collapsed ? 'flex-col px-0' : 'px-4'"
+    >
+      <UserBadge :compact="collapsed" />
     </div>
   </aside>
 </template>
@@ -53,6 +104,8 @@ import { useRoute } from 'vue-router'
 import {
   ActivityLogIcon,
   ArchiveIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   CounterClockwiseClockIcon,
   GearIcon,
   HomeIcon,
@@ -61,12 +114,15 @@ import {
 } from '@radix-icons/vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAdaptationsStore } from '@/stores/adaptations'
+import { useSidebarCollapse } from '@/composables/sidebar-collapse'
 import UserBadge from '@/components/chrome/UserBadge.vue'
 
 const auth = useAuthStore()
 const route = useRoute()
 
 const adaptations = useAdaptationsStore()
+
+const { collapsed, toggle } = useSidebarCollapse()
 
 // D3:admin 登录/刷新后静默拉一次 diff(幂等,冷启动落基线属预期副作用)
 watch(

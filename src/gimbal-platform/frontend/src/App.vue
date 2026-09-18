@@ -22,7 +22,11 @@
 
   <template v-else>
     <Sidebar />
-    <main class="ml-[200px] min-h-screen min-w-0">
+    <!-- 内容区让位宽度跟侧边栏折叠态走(200px ↔ 56px 图标轨道) -->
+    <main
+      class="min-h-screen min-w-0 transition-[margin] duration-200"
+      :class="sidebarCollapsed ? 'ml-[56px]' : 'ml-[200px]'"
+    >
       <router-view />
     </main>
   </template>
@@ -36,9 +40,12 @@ import Sidebar from '@/components/chrome/Sidebar.vue'
 import CollapsedTopbar from '@/components/chrome/CollapsedTopbar.vue'
 import ToastHost from '@/components/chrome/ToastHost.vue'
 import ConfirmHost from '@/components/chrome/ConfirmHost.vue'
+import { useSidebarCollapse } from '@/composables/sidebar-collapse'
 
 const auth = useAuthStore()
 const route = useRoute()
+
+const { collapsed: sidebarCollapsed } = useSidebarCollapse()
 
 const chromeMode = computed(() => (route.meta.chromeMode as 'full' | 'collapsed' | undefined) ?? 'full')
 
