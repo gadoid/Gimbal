@@ -8,23 +8,17 @@
      - 布局按用户分键存 localStorage(layout.ts)。
      工作台仍只做两件事:按 registry+layout 渲染,管理布局配置。 -->
 <template>
-  <div class="mx-auto max-w-[960px] px-4 py-6">
-    <header class="mb-4 flex items-center justify-between gap-3">
-      <div>
-        <h1 class="m-0 text-display font-semibold text-signal-ink">工作台</h1>
-        <p class="mb-0 mt-1 text-body text-muted-foreground">摘要卡可添加 / 移除 / 拖拽排序,S/M/L 三档密度。</p>
-      </div>
-      <div class="flex items-center gap-2">
-        <Button
-          v-if="orderedIds.length > 0 && layoutDirty"
-          variant="ghost"
-          size="sm"
-          data-testid="wb-reset"
-          title="恢复默认布局"
-          @click="reset"
-        >重置布局</Button>
-      </div>
-    </header>
+  <ListPage title="工作台" subtitle="摘要卡可添加 / 移除 / 拖拽排序,S/M/L 三档密度。">
+    <template #actions>
+      <Button
+        v-if="orderedIds.length > 0 && layoutDirty"
+        variant="ghost"
+        size="sm"
+        data-testid="wb-reset"
+        title="恢复默认布局"
+        @click="reset"
+      >重置布局</Button>
+    </template>
 
     <!-- registry 卡片区:draggable 换序(handle = 卡槽左缘抓取条) -->
     <!-- item-key 必须**绑定**函数(静态字符串会被当作属性名去 string
@@ -61,7 +55,7 @@
 
     <!-- 布局被清空(理论上 ≤1 保护;防御渲染)— 添加条仍常驻 -->
     <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2" data-testid="wb-grid">
-      <div class="empty-note" data-testid="wb-no-cards">
+      <div class="empty-state" data-testid="wb-no-cards">
         <p>工作台没有卡片了</p>
       </div>
       <button type="button" class="add-strip" data-testid="wb-add-card" @click="galleryOpen = true">
@@ -91,12 +85,13 @@
       :enabled-ids="orderedIds"
       @add="onAddCard"
     />
-  </div>
+  </ListPage>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import draggable from 'vuedraggable'
+import ListPage from '@/layouts/ListPage.vue'
 import { workbenchRegistry, type WorkbenchCardDef } from '@/components/workbench/registry'
 import { useWorkbenchLayout } from '@/components/workbench/layout'
 import WorkbenchCardSlot from '@/components/workbench/WorkbenchCardSlot.vue'
@@ -142,11 +137,6 @@ const layoutDirty = computed(() => {
 </script>
 
 <style scoped>
-.empty-note {
-  @apply flex flex-col items-center justify-center gap-2.5 rounded-card border border-signal-line bg-signal-card py-10 text-center;
-}
-.empty-note p { @apply m-0 text-body text-muted-foreground; }
-
 /* 网格末尾常驻添加条(§3:虚线条,点开类型选择面板) */
 .add-strip {
   @apply flex min-h-[72px] items-center justify-center rounded-card border border-dashed border-signal-line
