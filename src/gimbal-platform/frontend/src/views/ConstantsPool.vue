@@ -10,12 +10,11 @@
   降级: 目录不可用 → 模板区降级条 + 生成器类型禁用;字面量 CRUD 不受影响。
 -->
 <template>
-  <div class="constants-page mx-auto flex max-w-[1080px] flex-col gap-4 px-6 pb-12 pt-5">
-    <header class="page-head">
-      <h1 class="mb-1 text-display text-signal-ink">常量池</h1>
-      <p class="muted m-0">常用字面值与生成器声明 — 编排页右栏「常量池」面板可直接复制/插入</p>
-    </header>
-
+  <ListPage
+    title="常量池"
+    subtitle="常用字面值与生成器声明 — 编排页右栏「常量池」面板可直接复制/插入"
+  >
+    <div class="flex flex-col gap-4">
     <!-- ── 生成器模板目录 ── -->
     <section class="card catalog">
       <div class="section-head">
@@ -51,7 +50,7 @@
             <p v-else class="muted">无参数</p>
             <div class="example-row">
               <pre class="example-json">{{ JSON.stringify(fulls[k.kind]!.example, null, 2) }}</pre>
-              <button class="ghost-btn" type="button" @click="copyExample(fulls[k.kind]!)">复制 JSON</button>
+              <Button variant="outline" size="sm" @click="copyExample(fulls[k.kind]!)">复制 JSON</Button>
             </div>
           </template>
         </div>
@@ -62,16 +61,16 @@
     <section class="card entries">
       <div class="section-head">
         <h2 class="text-heading text-signal-ink">我的常量池</h2>
-        <button class="primary-btn" type="button" data-action="pool-create" @click="openCreate">新增</button>
+        <Button data-action="pool-create" @click="openCreate">新增</Button>
       </div>
-      <Table class="rounded-field border border-signal-line bg-signal-card">
+      <Table class="table-fixed rounded-field border border-signal-line bg-signal-card">
         <TableHeader>
           <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
-            <TableHead class="text-caption font-semibold text-muted-foreground">名称</TableHead>
-            <TableHead class="w-[80px] text-caption font-semibold text-muted-foreground">类型</TableHead>
-            <TableHead class="text-caption font-semibold text-muted-foreground">内容</TableHead>
-            <TableHead class="w-[180px] text-caption font-semibold text-muted-foreground">说明</TableHead>
-            <TableHead class="w-[130px] text-caption font-semibold text-muted-foreground">操作</TableHead>
+            <TableHead class="w-[18%] text-caption font-semibold text-muted-foreground">名称</TableHead>
+            <TableHead class="w-[9%] text-caption font-semibold text-muted-foreground">类型</TableHead>
+            <TableHead class="w-[40%] text-caption font-semibold text-muted-foreground">内容</TableHead>
+            <TableHead class="w-[20%] text-caption font-semibold text-muted-foreground">说明</TableHead>
+            <TableHead class="w-[13%] text-caption font-semibold text-muted-foreground">操作</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody data-testid="entries-table">
@@ -87,8 +86,8 @@
             <TableCell class="text-caption text-muted-foreground">{{ row.description }}</TableCell>
             <TableCell>
               <div class="flex items-center gap-1">
-                <button class="ghost-btn" type="button" data-action="edit" @click="openEdit(row)">编辑</button>
-                <button class="ghost-btn danger" type="button" data-action="delete" @click="onDelete(row)">删除</button>
+                <Button variant="outline" size="sm" data-action="edit" @click="openEdit(row)">编辑</Button>
+                <Button variant="outline" size="sm" class="text-signal-failed" data-action="delete" @click="onDelete(row)">删除</Button>
               </div>
             </TableCell>
           </TableRow>
@@ -231,25 +230,27 @@
               <span class="text-label font-medium text-signal-ink">spec 预览</span>
               <div class="spec-preview">
                 <pre data-testid="spec-preview">{{ specPreview }}</pre>
-                <button class="ghost-btn" type="button" data-action="copy-spec" @click="copySpec">复制</button>
+                <Button variant="outline" size="sm" data-action="copy-spec" @click="copySpec">复制</Button>
               </div>
             </div>
           </template>
         </div>
 
         <DialogFooter>
-          <button class="ghost-btn" type="button" @click="dialogOpen = false">取消</button>
-          <button class="primary-btn" type="button" data-action="submit" :disabled="!canSubmit" @click="onSubmit">
+          <Button variant="outline" @click="dialogOpen = false">取消</Button>
+          <Button data-action="submit" :disabled="!canSubmit" @click="onSubmit">
             保存
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  </div>
+    </div>
+  </ListPage>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import ListPage from '@/layouts/ListPage.vue'
 import { toast } from '@/utils/toast'
 import { confirmAction } from '@/utils/confirmAction'
 import { useConstantsStore } from '@/stores/constants'
@@ -261,6 +262,7 @@ import type {
   GeneratorParamDesc,
 } from '@/types/constants'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -501,7 +503,7 @@ function copySpec(): void {
 </script>
 
 <style scoped>
-.muted { color: var(--c-text-tertiary, #94a3b8); font-size: 12px; }
+.muted { @apply text-label font-normal; color: var(--c-text-tertiary, #94a3b8); }
 .card {
   background: var(--c-surface, #fff);
   border: 1px solid var(--c-border, #e1e5eb);
@@ -514,9 +516,10 @@ function copySpec(): void {
   justify-content: space-between;
   margin-bottom: 10px;
 }
-.degraded { color: #b45309; font-size: 12px; }
+.degraded { @apply text-label font-normal; color: #b45309; }
 .kind-card { border: 1px solid var(--c-border, #e1e5eb); border-radius: 8px; margin-bottom: 8px; }
 .kind-head {
+  @apply text-label font-normal;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -525,7 +528,6 @@ function copySpec(): void {
   background: transparent;
   border: none;
   cursor: pointer;
-  font-size: 12.5px;
   text-align: left;
 }
 .chevron { display: inline-block; transition: transform 0.15s ease; color: var(--c-text-tertiary, #94a3b8); }
@@ -533,15 +535,14 @@ function copySpec(): void {
 .kind-name { font-family: var(--font-mono, monospace); font-weight: 600; }
 .kind-summary { color: #64748b; }
 .kind-body { padding: 0 12px 10px; }
-.kind-desc { font-size: 12px; margin: 4px 0 8px; }
+.kind-desc { @apply text-label font-normal; margin: 4px 0 8px; }
 /* 发丝线表格(去硬边框,横向分隔对齐全局表格惯例) */
-.params-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.params-table { @apply text-caption font-normal; width: 100%; border-collapse: collapse; }
 .params-table th,
 .params-table td { border: none; border-bottom: 1px solid var(--c-divider, #eef1f5); padding: 5px 8px; text-align: left; }
 .params-table th {
+  @apply text-micro font-semibold;
   background: transparent;
-  font-size: 10.5px;
-  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--c-text-tertiary, #94a3b8);
@@ -549,34 +550,33 @@ function copySpec(): void {
 .params-table tbody tr:last-child td { border-bottom: none; }
 .example-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .example-json {
+  @apply text-caption font-normal;
   font-family: var(--font-mono, monospace);
-  font-size: 11px;
   background: #f6f8fa;
   border-radius: 6px;
   padding: 6px 10px;
   margin: 0;
 }
 .entry-value {
+  @apply text-caption font-normal;
   font-family: var(--font-mono, monospace);
-  font-size: 11.5px;
   word-break: break-all;
 }
 .chip {
+  @apply text-micro font-semibold;
   display: inline-flex;
   align-items: center;
   padding: 1px 8px;
-  font-size: 10.5px;
-  font-weight: 600;
   border-radius: 4px;
 }
 .kind-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .kind-chip {
+  @apply text-caption font-normal;
   border: 1px solid var(--c-border, #e1e5eb);
   background: #f6f8fa;
   border-radius: 12px;
   padding: 2px 10px;
   font-family: var(--font-mono, monospace);
-  font-size: 11.5px;
   cursor: pointer;
 }
 /* 选中态对齐 Signal accent */
@@ -588,8 +588,8 @@ function copySpec(): void {
 /* 类型分段选择(替代 el-radio-button) */
 .seg { display: inline-flex; border: 1px solid #e1e5eb; border-radius: 8px; overflow: hidden; }
 .seg-btn {
+  @apply text-label font-normal;
   padding: 6px 14px;
-  font-size: 12.5px;
   background: transparent;
   border: none;
   cursor: pointer;
@@ -600,9 +600,9 @@ function copySpec(): void {
 .param-hint { display: block; margin-top: 2px; }
 .spec-preview { display: flex; align-items: center; gap: 8px; width: 100%; }
 .spec-preview pre {
+  @apply text-caption font-normal;
   flex: 1;
   font-family: var(--font-mono, monospace);
-  font-size: 11px;
   background: #f6f8fa;
   border-radius: 6px;
   padding: 6px 10px;
@@ -610,22 +610,4 @@ function copySpec(): void {
   white-space: pre-wrap;
   word-break: break-all;
 }
-.primary-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: #2f6fed;
-  color: #fff; border: none; border-radius: 8px;
-  padding: 8px 16px; font-size: 13px; font-weight: 600;
-  cursor: pointer; transition: all 0.15s;
-}
-.primary-btn:hover { background: #265fd4; }
-.primary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.ghost-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: transparent; border: 1px solid #e1e5eb; border-radius: 8px;
-  padding: 6px 12px; font-size: 12.5px; color: #5a6273;
-  cursor: pointer; transition: all 0.15s;
-}
-.ghost-btn:hover { background: #f5f6fa; color: #1a1d24; }
-.ghost-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.ghost-btn.danger { color: #dc2626; }
 </style>
