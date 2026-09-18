@@ -28,7 +28,8 @@
   box-sizing: border-box;
   max-width: 1480px;
   min-height: calc(100vh - 48px);
-  padding: 28px 32px 48px;
+  /* 顶垫 56px = 上游 ListPage 定稿的 pt-14 三壳标准,保证与执行历史/认证等兄弟列表页齐平 */
+  padding: 56px 32px 48px;
   margin: 0 auto;
   color: var(--sl-ink);
 }
