@@ -3,32 +3,25 @@
      原型修订项(v2.2):失败数字红色可点 → 直达详情并自动展开行级表格
      (失败用例清单即行级表);时间列已含日期(YYYY-MM-DD HH:MM:SS)。 -->
 <template>
-  <section class="executions-list mx-auto max-w-[1480px] px-8 pb-12 pt-7">
-    <header class="page-header">
-      <div>
-        <h2 class="m-0 text-display text-signal-ink">执行历史</h2>
-        <p class="mt-1 mb-0 text-caption text-muted-foreground">{{ store.list.length }} 条记录 · 实时状态每 1s 刷新（详情页）</p>
-      </div>
-    </header>
-
-    <div v-if="store.loading" class="mt-3.5 py-8 text-center text-body text-muted-foreground">加载中…</div>
-    <Table v-else-if="store.list.length > 0" class="exec-table mt-3.5 rounded-field border border-signal-line bg-signal-card">
+  <ListPage title="执行历史" width="wide" :subtitle="`${store.list.length} 条记录 · 实时状态每 1s 刷新（详情页）`">
+    <div v-if="store.loading" class="loading-state mt-3.5">加载中…</div>
+    <Table v-else-if="store.list.length > 0" class="exec-table mt-3.5 min-w-[1080px] table-fixed rounded-field border border-signal-line bg-signal-card">
       <TableHeader>
         <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
-          <TableHead class="w-[54px] text-caption font-semibold text-muted-foreground">#</TableHead>
-          <TableHead class="text-caption font-semibold text-muted-foreground">scenario_id</TableHead>
-          <TableHead class="w-[110px] text-caption font-semibold text-muted-foreground">状态</TableHead>
-          <TableHead class="w-[150px] text-caption font-semibold text-muted-foreground">通过 / 失败 / 总</TableHead>
-          <TableHead class="w-[160px] text-caption font-semibold text-muted-foreground">开始时间</TableHead>
-          <TableHead class="w-[150px] text-center text-caption font-semibold text-muted-foreground">操作</TableHead>
+          <TableHead class="w-[5%] text-caption font-semibold text-muted-foreground">#</TableHead>
+          <TableHead class="w-[48%] text-caption font-semibold text-muted-foreground">scenario_id</TableHead>
+          <TableHead class="w-[9%] text-caption font-semibold text-muted-foreground">状态</TableHead>
+          <TableHead class="w-[12%] text-caption font-semibold text-muted-foreground">通过 / 失败 / 总</TableHead>
+          <TableHead class="w-[14%] text-caption font-semibold text-muted-foreground">开始时间</TableHead>
+          <TableHead class="w-[12%] text-center text-caption font-semibold text-muted-foreground">操作</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         <TableRow v-for="row in store.list" :key="row.id" :data-testid="`exec-list-row-${row.id}`">
           <TableCell class="mono">{{ row.id }}</TableCell>
-          <TableCell><code class="mono">{{ row.scenario_id }}</code></TableCell>
+          <TableCell><code class="mono block truncate">{{ row.scenario_id }}</code></TableCell>
           <TableCell>
-            <span :class="['status-tag', `status-${row.status}`]">
+            <span :class="['status-tag', 'text-micro', 'font-semibold', `status-${row.status}`]">
               {{ executionStatusText(row.status) }}
             </span>
           </TableCell>
@@ -71,15 +64,16 @@
     <Alert v-else-if="store.lastError" variant="destructive" class="mt-3.5">
       <AlertTitle>加载执行历史失败：{{ store.lastError }}</AlertTitle>
     </Alert>
-    <div v-else class="empty-note">
+    <div v-else class="empty-state mt-3.5">
       <p>暂无执行记录 — 在场景编排页点击「运行」发起执行</p>
     </div>
-  </section>
+  </ListPage>
 </template>
 
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import ListPage from '@/layouts/ListPage.vue'
 import { toast } from '@/utils/toast'
 import { useExecutionsStore } from '@/stores/executions'
 import { cancelExecution } from '@/api/executions'
@@ -141,8 +135,6 @@ onUnmounted(() => {
 .status-tag {
   display: inline-flex;
   padding: 2px 8px;
-  font-size: 10.5px;
-  font-weight: 600;
   border-radius: 4px;
 }
 
@@ -159,19 +151,7 @@ onUnmounted(() => {
   text-underline-offset: 2px;
 }
 
-.empty-note {
-  margin-top: 14px;
-  padding: 40px 16px;
-  text-align: center;
-  font-size: 12.5px;
-  color: #94a3b8;
-  border: 1px dashed #e1e5eb;
-  border-radius: 8px;
-}
-
-.empty-note p { margin: 0; }
-
-.mono { font-family: var(--font-mono); }
+.mono { font-family: var(--font-mono, monospace); }
 .dim { color: var(--color-text-tertiary); }
 </style>
 
