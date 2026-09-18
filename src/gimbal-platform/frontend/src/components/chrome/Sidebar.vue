@@ -108,9 +108,11 @@ import {
   ChevronRightIcon,
   CounterClockwiseClockIcon,
   GearIcon,
+  GlobeIcon,
   HomeIcon,
   LockClosedIcon,
   MixerHorizontalIcon,
+  StarIcon,
 } from '@radix-icons/vue'
 import { useAuthStore } from '@/stores/auth'
 import { useAdaptationsStore } from '@/stores/adaptations'
@@ -151,7 +153,14 @@ interface SidebarGroup {
 // 常量池不进侧边栏(工作台卡片承接,/constants 仅深链可达)。
 const groups: SidebarGroup[] = [
   { label: null, entries: [{ path: '/home', label: '工作台', icon: HomeIcon }] },
-  { label: '场景', entries: [{ path: '/scenarios', label: '场景库', icon: ArchiveIcon }] },
+  {
+    label: '场景',
+    entries: [
+      { path: '/scenarios/mine', label: '我的场景', icon: ArchiveIcon },
+      { path: '/scenarios/public', label: '公共场景', icon: GlobeIcon },
+      { path: '/scenarios/follows', label: '关注', icon: StarIcon },
+    ],
+  },
   {
     label: '服务',
     entries: [

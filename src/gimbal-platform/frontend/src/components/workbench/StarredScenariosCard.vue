@@ -17,7 +17,7 @@
       <span class="chead-title">收藏场景</span>
       <span class="chead-count">{{ state.rows.length }}</span>
       <span class="chead-spacer" />
-      <router-link to="/scenarios" class="manage-link">场景库 →</router-link>
+      <router-link to="/scenarios/follows" class="manage-link">关注 →</router-link>
     </header>
 
     <!-- S 档:只出结论(大数字) -->
@@ -47,8 +47,8 @@
         <p>场景库加载失败 — 稍后在场景库页重试</p>
       </div>
       <div v-else class="card-empty">
-        <p>还没有收藏 — 在场景库里点 ★ 收藏常用场景</p>
-        <router-link to="/scenarios" class="cta">去场景库 →</router-link>
+        <p>还没有收藏 — 在场景库里点 ★ 关注常用场景</p>
+        <router-link to="/scenarios/follows" class="cta">去关注 →</router-link>
       </div>
     </template>
   </div>

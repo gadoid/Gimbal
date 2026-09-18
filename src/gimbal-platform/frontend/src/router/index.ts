@@ -21,9 +21,21 @@ const routes = [
   { path: '/register', component: () => import('@/views/Register.vue') },
   // protected
   // ── 场景编排 V3 ────────────────────────────────────────────
+  // 场景库拆三页(我的场景 / 公共场景 / 关注);/scenarios 旧入口重定向到我的场景。
+  { path: '/scenarios', redirect: '/scenarios/mine' },
   {
-    path: '/scenarios',
-    component: () => import('@/views/Scenarios.vue'),
+    path: '/scenarios/mine',
+    component: () => import('@/views/ScenariosMine.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/scenarios/public',
+    component: () => import('@/views/ScenariosPublic.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/scenarios/follows',
+    component: () => import('@/views/ScenarioFollows.vue'),
     meta: { requiresAuth: true },
   },
   {

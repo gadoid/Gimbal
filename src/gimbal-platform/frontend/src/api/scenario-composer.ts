@@ -193,6 +193,24 @@ export interface SchemeV2 {
   plugins?: unknown
   logSub?: unknown
 }
+
+/** 方案 → 执行配方:把方案锁定的选择/绑定/次数/并发物化成 RunRequest,
+ *  供列表页「▶ 执行」直跑(与 RunDialog 装配同源字段,不丢溯源)。 */
+export function schemeToRunRequest(scheme: SchemeV2, scenarioId: string): RunRequest {
+  return {
+    scenarioId,
+    schemeId: scheme.schemeId,
+    schemeName: scheme.name,
+    dataSetIds: scheme.dataSetIds ?? scheme.dataSetSelection.map((d) => d.datasetId),
+    dataSetSelection: scheme.dataSetSelection,
+    injectionEntryIds: scheme.injectionEntryIds,
+    serviceBindings: scheme.serviceBindings,
+    stepTo: scheme.stepTo ?? undefined,
+    nRuns: scheme.nRuns,
+    parallel: scheme.parallel,
+  }
+}
+
 export async function listRunSchemes(scenarioId: string): Promise<SchemeV2[]> {
   const { data } = await http.get<SchemeV2[]>(`/scenarios/${enc(scenarioId)}/run-schemes`)
   return data

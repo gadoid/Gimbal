@@ -22,7 +22,9 @@ function makeRouter() {
     history: createMemoryHistory(),
     routes: [
       { path: '/home', component: { template: '<div/>' } },
-      { path: '/scenarios', component: { template: '<div/>' } },
+      { path: '/scenarios/mine', component: { template: '<div/>' } },
+      { path: '/scenarios/public', component: { template: '<div/>' } },
+      { path: '/scenarios/follows', component: { template: '<div/>' } },
       { path: '/executions', component: { template: '<div/>' } },
       { path: '/auths', component: { template: '<div/>' } },
       { path: '/adaptations', component: { template: '<div/>' } },
@@ -43,7 +45,7 @@ async function mountSidebar(opts: { isAdmin: boolean; path?: string }) {
   } as never
 
   const router = makeRouter()
-  router.push(opts.path ?? '/scenarios')
+  router.push(opts.path ?? '/scenarios/mine')
   await router.isReady()
 
   const w = mount(Sidebar, { global: { plugins: [router] } })
@@ -62,11 +64,12 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
   it('admin 可见全部条目:工作台置顶 + 四组条目齐备', async () => {
     const w = await mountSidebar({ isAdmin: true })
     const links = w.findAll('a.nav-item')
-    // 常量池不占侧边栏坑位 → 7 条:工作台/场景库/认证/传递/适配/执行/用户
-    expect(links.length).toBe(7)
+    // 常量池不占侧边栏坑位 → 9 条:工作台/我的/公共/关注/认证/传递/适配/执行/用户
+    expect(links.length).toBe(9)
     const hrefs = links.map((l) => l.attributes('href'))
     expect(hrefs).toEqual([
-      '/home', '/scenarios', '/auths', '/carry-config', '/adaptations', '/executions', '/admin/users',
+      '/home', '/scenarios/mine', '/scenarios/public', '/scenarios/follows',
+      '/auths', '/carry-config', '/adaptations', '/executions', '/admin/users',
     ])
     w.unmount()
   })
@@ -106,12 +109,12 @@ describe('Sidebar — adminOnly 过滤(沿用 TopNav 语义)', () => {
     } as never)
   })
 
-  it('member 不见 用户管理/传递字段,其余 5 条可见', async () => {
+  it('member 不见 用户管理/传递字段,其余 7 条可见', async () => {
     const w = await mountSidebar({ isAdmin: false })
     const hrefs = w.findAll('a.nav-item').map((l) => l.attributes('href'))
     expect(hrefs).not.toContain('/admin/users')
     expect(hrefs).not.toContain('/carry-config')
-    expect(hrefs.length).toBe(5)
+    expect(hrefs.length).toBe(7)
     w.unmount()
   })
 })
@@ -144,7 +147,7 @@ describe('Sidebar — 适配中心 pendingCount 徽标(沿用 TopNav 语义)', (
       anomalies: [],
       baselinedNow: 0,
     } as never)
-    const w = await mountSidebar({ isAdmin: true, path: '/scenarios' })
+    const w = await mountSidebar({ isAdmin: true, path: '/scenarios/mine' })
     expect(w.find('.nav-badge').exists()).toBe(true)
     expect(w.find('.nav-badge').text()).toBe('1')
     w.unmount()
@@ -154,7 +157,7 @@ describe('Sidebar — 适配中心 pendingCount 徽标(沿用 TopNav 语义)', (
     vi.spyOn(adaptationsApi, 'catalogDiff').mockResolvedValue({
       pending: [], anomalies: [], baselinedNow: 0,
     } as never)
-    const w = await mountSidebar({ isAdmin: false, path: '/scenarios' })
+    const w = await mountSidebar({ isAdmin: false, path: '/scenarios/mine' })
     useAuthStore() // pinia 已就绪
     const { useAdaptationsStore } = await import('@/stores/adaptations')
     useAdaptationsStore().pendingCount = 3
@@ -194,7 +197,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.find('aside').classes()).toContain('w-[200px]')
     expect(w.text()).toContain('platform')
     expect(w.find('[data-testid="sb-collapse"]').exists()).toBe(true)
-    expect(w.findAll('.nav-text').length).toBe(7)
+    expect(w.findAll('.nav-text').length).toBe(9)
     w.unmount()
   })
 
@@ -210,7 +213,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.findAll('.nav-text').length).toBe(0)
     // 二级按钮只留图标;悬浮 title = 功能名
     const rows = w.findAll('.row')
-    expect(rows.length).toBe(7)
+    expect(rows.length).toBe(9)
     for (const row of rows) {
       expect(row.attributes('title')).toBeTruthy()
       expect(row.find('.nav-icon').exists()).toBe(true)
@@ -235,8 +238,9 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     const w = await mountSidebar({ isAdmin: true })
     await w.find('[data-testid="sb-collapse"]').trigger('click')
     const links = w.findAll('a.nav-item')
-    expect(links.length).toBe(7)
-    expect(links[2].attributes('href')).toBe('/auths')
+    expect(links.length).toBe(9)
+    // 三拆后场景占 3 坑,/auths 从索引 2 移到 4
+    expect(links[4].attributes('href')).toBe('/auths')
     expect(localStorage.getItem('chrome.sidebar.collapsed:v1')).toBe('1')
     w.unmount()
   })

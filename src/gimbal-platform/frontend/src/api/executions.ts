@@ -31,6 +31,10 @@ export interface Execution {
     stepTo?: number | null
     nRuns?: number
     parallel?: number
+    /** 方案溯源(run_dispatcher 写入):本次执行按哪个方案发起;
+     *  非方案发起(公共原件验证执行等)为 null/缺省。 */
+    schemeId?: string | null
+    schemeName?: string | null
     // 系统标记(后端按需写入;详情页转告警条,不进配方 dl)
     /** 启动期 reconcile 收敛记录(P3:进程重启僵尸单) */
     reconciled?: { at: string; reason: string }

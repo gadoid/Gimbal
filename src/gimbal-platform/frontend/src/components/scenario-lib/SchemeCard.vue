@@ -1,0 +1,94 @@
+<!-- SchemeCard.vue — 我的场景内联预览面板里的方案卡片(210px)。
+     顶部状态色描边 = 该方案最近一次执行结果;卡头两行(全名 / 默认徽章
+     + 状态 chip + 相对时间);卡底「次数」「并发」小徽章点击即编辑,
+     最右「▶ 执行」。深度编辑不在本卡(跳方案管理)。 -->
+<template>
+  <div class="scheme-card" :class="borderTone">
+    <div class="sc-head">
+      <div class="sc-name" :title="scheme.name">{{ scheme.name }}</div>
+      <div class="sc-sub">
+        <span v-if="scheme.isDefault" class="badge-default">默认</span>
+        <span class="status-chip" :class="chipTone">{{ chipText }}</span>
+        <span class="sc-time">{{ relTime(lastRun?.at) || '—' }}</span>
+      </div>
+    </div>
+    <div class="sc-foot">
+      <span
+        class="mini-badge"
+        :class="{ editing: editing === 'nRuns' }"
+        @click.stop="startEdit('nRuns')"
+      >
+        <template v-if="editing === 'nRuns'">
+          <input v-model="draft" type="number" min="1" @blur="commit" @keyup.enter="commit" @click.stop />
+        </template>
+        <template v-else>次数 <b>{{ scheme.nRuns }}</b></template>
+      </span>
+      <span
+        class="mini-badge"
+        :class="{ editing: editing === 'parallel' }"
+        @click.stop="startEdit('parallel')"
+      >
+        <template v-if="editing === 'parallel'">
+          <input v-model="draft" type="number" min="1" max="200" @blur="commit" @keyup.enter="commit" @click.stop />
+        </template>
+        <template v-else>并发 <b>{{ scheme.parallel }}</b></template>
+      </span>
+      <button type="button" class="run-link" @click.stop="$emit('run', scheme)">▶ 执行</button>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import type { SchemeV2 } from '@/api/scenario-composer'
+import { relTime } from '@/utils/datetime'
+
+const props = defineProps<{
+  scheme: SchemeV2
+  lastRun: { status: string; at: string | null } | null
+}>()
+const emit = defineEmits<{
+  run: [scheme: SchemeV2]
+  update: [scheme: SchemeV2, patch: { nRuns?: number; parallel?: number }]
+}>()
+
+const editing = ref<'nRuns' | 'parallel' | null>(null)
+const draft = ref('')
+
+const borderTone = computed(() => {
+  const s = props.lastRun?.status
+  if (s === 'done') return 'st-ok'
+  if (s === 'failed') return 'st-bad'
+  if (s === 'running' || s === 'queued') return 'st-run'
+  return ''
+})
+const chipTone = computed(() => {
+  const s = props.lastRun?.status
+  if (s === 'done') return 'ok'
+  if (s === 'failed') return 'bad'
+  if (s === 'running' || s === 'queued') return 'run'
+  return 'none'
+})
+const chipText = computed(() => {
+  const s = props.lastRun?.status
+  if (s === 'done') return '完成'
+  if (s === 'failed') return '失败'
+  if (s === 'running' || s === 'queued') return '执行中'
+  return '未执行'
+})
+
+function startEdit(field: 'nRuns' | 'parallel') {
+  editing.value = field
+  draft.value = String(field === 'nRuns' ? props.scheme.nRuns : props.scheme.parallel)
+}
+
+function commit() {
+  const field = editing.value
+  editing.value = null
+  if (!field) return
+  const n = Number.parseInt(draft.value, 10)
+  const cur = field === 'nRuns' ? props.scheme.nRuns : props.scheme.parallel
+  if (Number.isNaN(n) || n < 1 || n === cur) return
+  emit('update', props.scheme, { [field]: n })
+}
+</script>
