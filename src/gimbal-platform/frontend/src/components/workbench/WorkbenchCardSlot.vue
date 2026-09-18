@@ -1,15 +1,17 @@
 <!-- WorkbenchCardSlot.vue — 工作台卡片包装层(§7 第 3/4 条 + v3 设计文档)。
      结构(设计文档 §2/§3/§4):
        section.card-slot(栅格项;L 档 span 2)
-         └ .slot-frame(卡片视觉框架:顶部 3px 分类色边 + 统一底/描边/
-            hover 抬升 shadow-sig-float — §7 第 3 条"样式由工作台统一提供")
+         └ .slot-frame(卡片视觉框架:顶部 3px 分类色边 = border-top,
+            与卡片圆角/描边由浏览器一同绘制,天然对齐;统一底/描边/
+            hover 抬升 — §7 第 3 条"样式由工作台统一提供")
              ├ .card-handle(左边缘 16px 纵向抓取条,hover 显形 —
              │   draggable handle 锚点,类名不动)
-             ├ .corner-controls(右上角控件簇,hover 显形:「⤢ 尺寸」+
-             │   圆形 ✕ 删除徽标半悬浮边框外,独立热区)
-             ├ .card-menu(尺寸小菜单:S 紧凑/M 标准/L 展开 + 移除;
-             │   ⤢ 点击或 S 档右键呼出同一菜单)
-             └ 内容(错误态 / Suspense 懒加载;尺寸经 provide 注入卡片)
+             ├ .corner-controls(右上角控件簇,hover 显形,**所有尺寸
+             │   常驻**:「⤢ 尺寸」每次点击按序循环 紧凑→标准→展开 +
+             │   圆形 ✕ 删除徽标半悬浮边框外,独立热区。单一交互语言,
+             │   无右键/菜单第二套入口)
+             └ 内容(错误态 / Suspense 懒加载;尺寸经 provide 注入卡片;
+                 换档时内容做 size-pulse 微过渡,密度渐变更自然)
      懒加载 + onErrorCaptured 故障隔离语义不变。 -->
 <template>
   <section
@@ -17,12 +19,8 @@
     :class="size === 'L' ? 'span-2' : ''"
     :data-testid="`wb-slot-${def.id}`"
     :aria-label="def.title"
-    @contextmenu="onContextMenu"
   >
-    <div class="slot-frame" :class="`accent-${def.accent}`">
-      <!-- 顶部 3px 分类色边(§2:复用图标语义色,不引入新颜色) -->
-      <span class="accent-edge" aria-hidden="true" />
-
+    <div class="slot-frame" :class="[`accent-${def.accent}`, pulsing ? 'size-pulse' : '']">
       <!-- 左边缘拖拽条:hover 显形;未 hover 不接鼠标(防隐形拖拽误触) -->
       <span class="card-handle" :data-testid="`wb-handle-${def.id}`" title="拖拽排序" aria-hidden="true">
         <svg width="6" height="22" viewBox="0 0 6 22" fill="currentColor" aria-hidden="true">
@@ -33,14 +31,14 @@
         </svg>
       </span>
 
-      <!-- 右上角控件簇(S 档太窄不放,右键呼出同一菜单) -->
-      <div v-if="size !== 'S'" class="corner-controls">
+      <!-- 右上角控件簇(所有尺寸常驻):⤢ 点击循环 S→M→L + ✕ 删除 -->
+      <div class="corner-controls">
         <button
           type="button"
           class="ctl ctl-size"
           :data-testid="`wb-size-${def.id}`"
-          title="切换尺寸"
-          @click.stop="menuOpen = !menuOpen"
+          :title="`尺寸:${CARD_SIZE_LABELS[size]} — 点击切换为${CARD_SIZE_LABELS[nextSize]}`"
+          @click.stop="cycleSize"
         >
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
             <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
@@ -60,26 +58,6 @@
         </button>
       </div>
 
-      <!-- 尺寸菜单(⤢ / S 档右键 共用):S 紧凑 / M 标准 / L 展开 / 移除 -->
-      <div v-if="menuOpen" class="card-menu" :data-testid="`wb-menu-${def.id}`">
-        <button
-          v-for="s in CARD_SIZES"
-          :key="s"
-          type="button"
-          class="menu-item"
-          :class="{ active: s === size }"
-          :data-testid="`wb-menu-${def.id}-${s}`"
-          @click.stop="pickSize(s)"
-        >{{ s }} · {{ CARD_SIZE_LABELS[s] }}</button>
-        <button
-          v-if="removable"
-          type="button"
-          class="menu-item danger"
-          :data-testid="`wb-menu-${def.id}-remove`"
-          @click.stop="menuOpen = false; emit('remove')"
-        >✕ 移除卡片</button>
-      </div>
-
       <div v-if="errored" class="card-state bad" :data-testid="`wb-slot-${def.id}-error`">
         此卡片渲染失败 — 其余卡片不受影响。
         <button type="button" class="retry" @click="errored = false">重试</button>
@@ -95,8 +73,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onErrorCaptured, onBeforeUnmount, provide, ref } from 'vue'
-import { CARD_SIZES, CARD_SIZE_LABELS, cardSizeKey, type CardSize, type WorkbenchCardDef } from './registry'
+import { computed, defineAsyncComponent, nextTick, onErrorCaptured, provide, ref, watch } from 'vue'
+import { CARD_SIZE_LABELS, cardSizeKey, type CardSize, type WorkbenchCardDef } from './registry'
 
 const props = defineProps<{
   def: WorkbenchCardDef
@@ -123,33 +101,27 @@ onErrorCaptured(() => {
 /** 尺寸注入:卡片组件 useCardSize() 读取,三档密度渲染。 */
 provide(cardSizeKey, computed(() => props.size))
 
-// ── 尺寸菜单(⤢ 点击 / S 档右键 呼出;外点/Esc 关闭)────────────
-const menuOpen = ref(false)
+/** 单一交互语言:⤢ 每次点击按序循环 紧凑(S)→标准(M)→展开(L)。 */
+const SIZE_CYCLE: Record<CardSize, CardSize> = { S: 'M', M: 'L', L: 'S' }
+const nextSize = computed(() => SIZE_CYCLE[props.size])
 
-function pickSize(s: CardSize) {
-  menuOpen.value = false
-  emit('size', s)
-}
-
-/** S 档太窄放不下控件簇 — 右键呼出同一菜单(能力不打折,只换入口)。
-    M/L 档不拦截浏览器原生菜单。 */
-function onContextMenu(e: MouseEvent) {
-  if (props.size !== 'S') return
-  e.preventDefault()
-  menuOpen.value = true
+function cycleSize() {
+  emit('size', nextSize.value)
 }
 
-function onDocClick() {
-  menuOpen.value = false
-}
-function onEsc(e: KeyboardEvent) {
-  if (e.key === 'Escape') menuOpen.value = false
-}
-document.addEventListener('click', onDocClick)
-document.addEventListener('keydown', onEsc)
-onBeforeUnmount(() => {
-  document.removeEventListener('click', onDocClick)
-  document.removeEventListener('keydown', onEsc)
+// ── 换档微过渡 ──────────────────────────────────────────────
+// 内容做一次轻淡入(不 remount 卡片 — 保留卡内状态,如 L 档搜索词),
+// 密度变化不生硬。栅格 span 变化本身不可动画,pulse 承担"自然过渡"。
+const pulsing = ref(false)
+let pulseTimer: ReturnType<typeof setTimeout> | undefined
+
+watch(() => props.size, () => {
+  pulsing.value = false
+  void nextTick(() => {
+    pulsing.value = true
+    clearTimeout(pulseTimer)
+    pulseTimer = setTimeout(() => { pulsing.value = false }, 260)
+  })
 })
 </script>
 
@@ -163,41 +135,45 @@ onBeforeUnmount(() => {
 .span-2 { grid-column: span 2; }
 
 /* ── 卡片视觉框架(统一供给,§7 第 3 条 + 设计文档 §2)──────────
-     hover 抬升用 Signal token(sig-hover → sig-float),与页内
-     快捷入口卡同款;分类色边 = accent 语义色 3px。 */
+     分类色边 = border-top 3px:与卡片描边/圆角由浏览器一并绘制,
+     两端与卡片边线严格对齐(原绝对定位色条在圆角处会错位)。
+     hover 抬升与页内快捷入口卡同款双阴影。 */
 .slot-frame {
   flex: 1;
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 14px 16px 16px;
+  padding: 11px 16px 16px;
   background: #fff;
   border: 1px solid #e1e5eb;
+  border-top: 3px solid var(--card-accent, #2f6fed);
   border-radius: 12px;
   box-shadow: 0 1px 2px rgba(16, 21, 28, 0.06);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
+.accent-blue { --card-accent: #2f6fed; }
+.accent-green { --card-accent: #15803d; }
+.accent-gold { --card-accent: #eab308; }
+
 .card-slot:hover .slot-frame {
   border-color: #2f6fed;
+  border-top-color: var(--card-accent, #2f6fed);
   box-shadow: 0 8px 24px rgba(16, 21, 28, 0.12);
 }
 
-/* 顶部 3px 分类色边 */
-.accent-edge {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  border-radius: 12px 12px 0 0;   /* 贴上圆角,不露出圆角外 */
+/* 换档微过渡:轻淡入 + 微上移(不 remount,保卡内状态) */
+.size-pulse { animation: wb-size-in 0.24s ease; }
+@keyframes wb-size-in {
+  from { opacity: 0.45; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-.accent-blue .accent-edge { background: #2f6fed; }
-.accent-green .accent-edge { background: #15803d; }
-.accent-gold .accent-edge { background: #eab308; }
 
 /* 拖拽反馈:提起 = 轻微旋转 + 抬升;原位 = 虚线空位(§3) */
 .card-slot.sortable-ghost .slot-frame { opacity: 0.4; border-style: dashed; }
 .card-slot.sortable-chosen .slot-frame {
   border-color: #2f6fed;
+  border-top-color: var(--card-accent, #2f6fed);
   box-shadow: 0 8px 24px rgba(16, 21, 28, 0.12);
   transform: rotate(1deg);
 }
@@ -244,15 +220,17 @@ onBeforeUnmount(() => {
   border: 1px solid #e1e5eb;
   cursor: pointer;
   padding: 0;
+  transition: color 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
 }
 .card-slot:not(:hover) .corner-controls { pointer-events: none; }
-/* ⤢ 尺寸:小方钮 */
+/* ⤢ 尺寸:小方钮,点击循环 紧凑→标准→展开;按压有反馈 */
 .ctl-size {
   width: 22px; height: 22px;
   color: #64748b;
   border-radius: 6px;
 }
-.ctl-size:hover { color: #2f6fed; border-color: #2f6fed; }
+.ctl-size:hover { color: #2f6fed; border-color: #2f6fed; transform: scale(1.08); }
+.ctl-size:active { transform: scale(0.94); }
 /* ✕ 删除:圆形徽标,半悬浮边框外(可关闭标签页同款) */
 .ctl-remove {
   width: 20px; height: 20px;
@@ -261,36 +239,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 1px 4px rgba(16, 21, 28, 0.1);
 }
 .ctl-remove:hover { color: #dc2626; border-color: #f6c6c6; background: #fdf5f5; }
-
-/* ── 尺寸菜单(手写小浮层:⤢ 与 S 档右键共用同一菜单)────────── */
-.card-menu {
-  position: absolute;
-  top: 30px; right: 10px;
-  display: flex;
-  flex-direction: column;
-  min-width: 118px;
-  padding: 4px;
-  background: #fff;
-  border: 1px solid #e1e5eb;
-  border-radius: 9px;
-  box-shadow: 0 8px 24px rgba(16, 21, 28, 0.14);
-  z-index: 5;
-}
-.menu-item {
-  padding: 6px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #10151c;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  text-align: left;
-}
-.menu-item:hover { background: #e7efff; color: #2f6fed; }
-.menu-item.active { color: #2f6fed; font-weight: 700; }
-.menu-item.danger { color: #dc2626; }
-.menu-item.danger:hover { background: #fdecec; color: #dc2626; }
 
 /* ── 状态面(loading / error)────────────────────────────── */
 .card-state {

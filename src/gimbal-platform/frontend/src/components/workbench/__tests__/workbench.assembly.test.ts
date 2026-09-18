@@ -2,7 +2,7 @@
  * 工作台组装(Jira 看板式 + v3 设计文档)— 添加 / 删除 / 布局持久化 /
  * 尺寸系统 / 新卡渲染。拖拽落点的换序纯函数在 layout.test 已钉;
  * 此处验证视图接线(draggable 渲染按 orderedIds 顺序,removable 门控,
- * 市场已添加置灰,尺寸菜单切换三档密度)。
+ * 市场已添加置灰,⤢ 单钮循环切换三档密度 S→M→L)。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, DOMWrapper } from '@vue/test-utils'
@@ -136,7 +136,7 @@ describe('工作台组装 — 添加卡片(网格末尾添加条 + 市场置灰)
     w.unmount()
   })
 
-  it('最后一张卡不可移除(防空工作台;菜单里的移除项同步隐藏)', async () => {
+  it('最后一张卡不可移除(防空工作台;✕ 徽标同步隐藏)', async () => {
     const w = mountPage()
     await waitCards(w, 3)
     for (const id of ['recent-executions', 'starred-scenarios']) {
@@ -144,20 +144,14 @@ describe('工作台组装 — 添加卡片(网格末尾添加条 + 市场置灰)
       await flushPromises()
     }
     expect(w.find('[data-testid="wb-remove-constants"]').exists()).toBe(false)
-    // S 档右键菜单同样遵守 removable 门控(先切 S,入口换右键)
-    await w.find('[data-testid="wb-size-constants"]').trigger('click')
-    await flushPromises()
-    await w.find('[data-testid="wb-menu-constants-S"]').trigger('click')
-    await flushPromises()
-    await w.find('[data-testid="wb-slot-constants"]').trigger('contextmenu')
-    await flushPromises()
-    expect(w.find('[data-testid="wb-menu-constants-remove"]').exists()).toBe(false)
+    // 尺寸循环钮仍在(最后一张卡只禁删,不禁调尺寸)
+    expect(w.find('[data-testid="wb-size-constants"]').exists()).toBe(true)
     w.unmount()
   })
 })
 
-describe('工作台尺寸系统(S/M/L,设计文档 §4)', () => {
-  it('⤢ 打开菜单 → 选 L:slot 跨 2 列 + 常量池出现搜索框;持久化', async () => {
+describe('工作台尺寸系统(⤢ 单钮循环 S→M→L,设计文档 §4)', () => {
+  it('点 ⤢ 一次 M→L:slot 跨 2 列 + 常量池出现搜索框;持久化', async () => {
     const w = mountPage()
     await waitCards(w, 3)
     await vi.waitFor(() => {
@@ -165,8 +159,6 @@ describe('工作台尺寸系统(S/M/L,设计文档 §4)', () => {
     })
 
     await w.find('[data-testid="wb-size-constants"]').trigger('click')
-    await flushPromises()
-    await w.find('[data-testid="wb-menu-constants-L"]').trigger('click')
     await flushPromises()
     // L = span 2 + 卡内搜索框
     expect(w.find('[data-testid="wb-slot-constants"]').classes()).toContain('span-2')
@@ -176,28 +168,28 @@ describe('工作台尺寸系统(S/M/L,设计文档 §4)', () => {
     w.unmount()
   })
 
-  it('选 S:紧凑结论面(大数字),无控件簇;右键呼出菜单可换回 M', async () => {
+  it('连点 ⤢ 循环 M→L→S→M:紧凑结论面(大数字)控件簇仍在', async () => {
     const w = mountPage()
     await waitCards(w, 3)
     await vi.waitFor(() => {
       expect(w.find('[data-testid="wb-card-constants"]').exists()).toBe(true)
     })
 
+    // 两击:M→L→S(S = 紧凑结论;单一交互,⤢ 常驻不随档位消失)
     await w.find('[data-testid="wb-size-constants"]').trigger('click')
     await flushPromises()
-    await w.find('[data-testid="wb-menu-constants-S"]').trigger('click')
+    await w.find('[data-testid="wb-size-constants"]').trigger('click')
     await flushPromises()
-    // S = 紧凑结论 + 控件簇隐藏(入口换右键)
     expect(w.find('[data-testid="wb-card-constants-s"]').exists()).toBe(true)
-    expect(w.find('[data-testid="wb-size-constants"]').exists()).toBe(false)
+    expect(w.find('[data-testid="wb-size-constants"]').exists()).toBe(true)
+    expect(w.find('[data-testid="wb-slot-constants"]').classes()).not.toContain('span-2')
 
-    await w.find('[data-testid="wb-slot-constants"]').trigger('contextmenu')
-    await flushPromises()
-    expect(w.find('[data-testid="wb-menu-constants"]').exists()).toBe(true)
-    await w.find('[data-testid="wb-menu-constants-M"]').trigger('click')
+    // 第三击:S→M,回到明细
+    await w.find('[data-testid="wb-size-constants"]').trigger('click')
     await flushPromises()
     expect(w.find('[data-testid="wb-card-constants-s"]').exists()).toBe(false)
-    expect(w.find('[data-testid="wb-size-constants"]').exists()).toBe(true)
+    const stored = JSON.parse(localStorage.getItem('workbench.layout.v2:alice')!)
+    expect(stored.sizes.constants).toBe('M')
     w.unmount()
   })
 

@@ -3,38 +3,30 @@
      (读侧返回全量带 starred 标记,场景库收藏 tab 同款客户端过滤),
      取前 N 条截断 — 场景池规模 = 库本身,不引入额外端点。
      框架由 slot 供给;行 = 网格列(★ / 名称 1fr / 模块 chip / 时间)。
-     三档密度(设计文档 §4,useCardSize 注入):
+     卡头形制三档一致(图标+标题+计数+深链+分隔线);三档只换
+     正文密度(设计文档 §4,useCardSize 注入):
        S = 大数字结论(N 个收藏);M = 5 行;L = 8 行。 -->
 <template>
   <div data-testid="wb-card-starred-scenarios" class="wcard">
-    <!-- S 档:只出结论 -->
+    <header class="chead">
+      <span class="chead-icon ci-star">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" />
+        </svg>
+      </span>
+      <span class="chead-title">收藏场景</span>
+      <span class="chead-count">{{ state.rows.length }}</span>
+      <span class="chead-spacer" />
+      <router-link to="/scenarios" class="manage-link">场景库 →</router-link>
+    </header>
+
+    <!-- S 档:只出结论(大数字) -->
     <div v-if="size === 'S'" class="s-body" :data-testid="wbT('s')">
-      <header class="chead">
-        <span class="chead-icon ci-star">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" />
-          </svg>
-        </span>
-        <span class="chead-title">收藏场景</span>
-      </header>
       <p class="s-num">{{ state.rows.length }}</p>
       <p class="s-label">个收藏</p>
-      <router-link to="/scenarios" class="s-link">场景库 →</router-link>
     </div>
 
     <template v-else>
-      <header class="chead">
-        <span class="chead-icon ci-star">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" />
-          </svg>
-        </span>
-        <span class="chead-title">收藏场景</span>
-        <span class="chead-count">{{ state.rows.length }}</span>
-        <span class="chead-spacer" />
-        <router-link to="/scenarios" class="manage-link">场景库 →</router-link>
-      </header>
-
       <div v-if="state.rows.length" class="rows">
         <router-link
           v-for="s in visible"
@@ -113,12 +105,9 @@ onMounted(async () => {
 .manage-link:hover { text-decoration: underline; }
 
 /* ── S 档:结论面(大数字,§4"只出结论")───────────────────── */
-.s-body { display: flex; flex-direction: column; gap: 4px; }
-.s-body .chead { border-bottom: none; padding-bottom: 0; }
+.s-body { display: flex; flex-direction: column; gap: 2px; }
 .s-num { margin: 2px 0 0; font-size: 30px; font-weight: 700; line-height: 1.1; color: #10151c; }
 .s-label { margin: 0; font-size: 11px; color: #64748b; }
-.s-link { font-size: 11px; font-weight: 600; color: #2f6fed; text-decoration: none; }
-.s-link:hover { text-decoration: underline; }
 
 /* ── 场景行(网格列:★ / 名称 1fr / 模块 / 时间)──────────── */
 .rows { display: flex; flex-direction: column; gap: 2px; }

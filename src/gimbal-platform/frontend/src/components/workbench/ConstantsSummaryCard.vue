@@ -2,43 +2,34 @@
   ConstantsSummaryCard.vue — 工作台注册卡(§7;参照物 = 编排页
   常量池面板"三行键值 + 快捷操作 + 管理深链",独立摘要组件)。
   视觉框架由 WorkbenchCardSlot 统一供给 — 本组件只出内容。
-  三档密度(设计文档 §4,useCardSize 注入):
+  卡头形制三档一致(图标+标题+计数+管理深链+分隔线);三档只换
+  正文密度(设计文档 §4,useCardSize 注入):
     S = 大数字结论(N 项常量);M = 3 行键值;L = 搜索框 + 5 行 +
     行尾 icon-only 复制(§2:默认低透明度,行 hover 增强)。
 -->
 <template>
   <div data-testid="wb-card-constants" class="wcard">
-    <!-- S 档:只出结论 -->
+    <header class="chead">
+      <span class="chead-icon ci-blue">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <ellipse cx="12" cy="5" rx="8" ry="3" />
+          <path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5" />
+          <path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" />
+        </svg>
+      </span>
+      <span class="chead-title">常量池</span>
+      <span class="chead-count">{{ state.entries.length }} 项</span>
+      <span class="chead-spacer" />
+      <router-link to="/constants" class="manage-link">管理 →</router-link>
+    </header>
+
+    <!-- S 档:只出结论(大数字) -->
     <div v-if="size === 'S'" class="s-body" :data-testid="wbT('s')">
-      <header class="chead">
-        <span class="chead-icon ci-blue">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <ellipse cx="12" cy="5" rx="8" ry="3" />
-            <path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5" />
-            <path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" />
-          </svg>
-        </span>
-        <span class="chead-title">常量池</span>
-      </header>
       <p class="s-num">{{ state.entries.length }}</p>
       <p class="s-label">项常量</p>
     </div>
 
     <template v-else>
-      <header class="chead">
-        <span class="chead-icon ci-blue">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <ellipse cx="12" cy="5" rx="8" ry="3" />
-            <path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5" />
-            <path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" />
-          </svg>
-        </span>
-        <span class="chead-title">常量池</span>
-        <span class="chead-count">{{ state.entries.length }} 项</span>
-        <span class="chead-spacer" />
-        <router-link to="/constants" class="manage-link">管理 →</router-link>
-      </header>
-
       <!-- L 档专属:卡内搜索(常量多了翻找是真实需求,§4) -->
       <input
         v-if="size === 'L'"
@@ -148,8 +139,7 @@ async function copyEntry(e: ConstantEntry): Promise<void> {
 .manage-link:hover { text-decoration: underline; }
 
 /* ── S 档:结论面(大数字,§4"只出结论")───────────────────── */
-.s-body { display: flex; flex-direction: column; gap: 4px; }
-.s-body .chead { border-bottom: none; padding-bottom: 0; }
+.s-body { display: flex; flex-direction: column; gap: 2px; }
 .s-num { margin: 2px 0 0; font-size: 30px; font-weight: 700; line-height: 1.1; color: #10151c; }
 .s-label { margin: 0; font-size: 11px; color: #64748b; }
 

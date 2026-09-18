@@ -1,41 +1,33 @@
 <!-- RecentExecutionsCard.vue — 工作台注册卡:最近执行。
      框架由 slot 供给;行 = 网格列(#id / 场景 1fr / 状态 chip /
      计数 / 时间),flex-none 各列不重叠。点行直达详情。
-     三档密度(设计文档 §4,useCardSize 注入):
+     卡头形制三档一致(图标+标题+计数+深链+分隔线);三档只换
+     正文密度(设计文档 §4,useCardSize 注入):
        S = 结论统计(成功/失败/运行中大数字);M = 5 行;L = 8 行。 -->
 <template>
   <div data-testid="wb-card-recent-executions" class="wcard">
+    <header class="chead">
+      <span class="chead-icon ci-green">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+        </svg>
+      </span>
+      <span class="chead-title">最近执行</span>
+      <span class="chead-count">{{ state.rows.length }}</span>
+      <span class="chead-spacer" />
+      <router-link to="/executions" class="manage-link">全部 →</router-link>
+    </header>
+
     <!-- S 档:只出结论(近 N 次的状态分布) -->
     <div v-if="size === 'S'" class="s-body" :data-testid="wbT('s')">
-      <header class="chead">
-        <span class="chead-icon ci-green">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-          </svg>
-        </span>
-        <span class="chead-title">最近执行</span>
-      </header>
       <div class="s-stats">
         <span class="s-stat st-done"><b>{{ doneCount }}</b>成功</span>
         <span class="s-stat st-failed"><b>{{ failedCount }}</b>失败</span>
         <span class="s-stat st-running"><b>{{ runningCount }}</b>运行中</span>
       </div>
-      <router-link to="/executions" class="s-link">全部 →</router-link>
     </div>
 
     <template v-else>
-      <header class="chead">
-        <span class="chead-icon ci-green">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-          </svg>
-        </span>
-        <span class="chead-title">最近执行</span>
-        <span class="chead-count">{{ state.rows.length }}</span>
-        <span class="chead-spacer" />
-        <router-link to="/executions" class="manage-link">全部 →</router-link>
-      </header>
-
       <div v-if="state.rows.length" class="rows">
         <router-link
           v-for="ex in state.rows"
@@ -121,16 +113,13 @@ onMounted(async () => {
 .manage-link:hover { text-decoration: underline; }
 
 /* ── S 档:结论面(状态分布大数字,§4"只出结论")────────────── */
-.s-body { display: flex; flex-direction: column; gap: 6px; }
-.s-body .chead { border-bottom: none; padding-bottom: 0; }
+.s-body { display: flex; flex-direction: column; gap: 2px; }
 .s-stats { display: flex; gap: 14px; }
 .s-stat { font-size: 11px; color: #64748b; }
 .s-stat b { display: block; font-size: 22px; font-weight: 700; line-height: 1.15; }
 .st-done b { color: #15803d; }
 .st-failed b { color: #dc2626; }
 .st-running b { color: #2f6fed; }
-.s-link { font-size: 11px; font-weight: 600; color: #2f6fed; text-decoration: none; }
-.s-link:hover { text-decoration: underline; }
 
 /* ── 执行行(网格列:id / 场景 1fr / 状态 / 计数 / 时间)──── */
 .rows { display: flex; flex-direction: column; gap: 2px; }
