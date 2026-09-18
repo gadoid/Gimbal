@@ -78,14 +78,24 @@ export default {
           foreground: 'hsl(var(--card-foreground))',
         },
       },
+      fontFamily: {
+        // 与 theme.css --font-sans/--font-mono 同源;接入后 font-sans/font-mono
+        // utility 与 token 联动(此前同值纯属巧合)。scoped CSS 层仍走
+        // var(--font-mono, monospace)。
+        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto',
+          '"Helvetica Neue"', 'Arial', '"Noto Sans"', 'sans-serif'],
+        mono: ['var(--font-mono, monospace)'],
+      },
       fontSize: {
-        // E-scale 字号阶:字号/字重(行高原型未标,先按 1.5 倍近邻取值)
-        'display-lg': ['26px', { fontWeight: '700' }],
-        display: ['22px', { fontWeight: '600' }],
-        heading: ['14px', { fontWeight: '600' }],
-        body: ['13px', { fontWeight: '400' }],
-        label: ['12px', { fontWeight: '500' }],
-        caption: ['11px', { fontWeight: '400' }],
+        // E-scale 字号阶:字号/字重/行高(label/caption 同取 16 使 chip/pill
+        // 基线对齐;micro 收编 10px 徽标档,字重 500,确需 400 显式 font-normal)
+        'display-lg': ['26px', { fontWeight: '700', lineHeight: '34px' }],
+        display: ['22px', { fontWeight: '600', lineHeight: '30px' }],
+        heading: ['14px', { fontWeight: '600', lineHeight: '20px' }],
+        body: ['13px', { fontWeight: '400', lineHeight: '18px' }],
+        label: ['12px', { fontWeight: '500', lineHeight: '16px' }],
+        caption: ['11px', { fontWeight: '400', lineHeight: '16px' }],
+        micro: ['10px', { fontWeight: '500', lineHeight: '14px' }],
       },
       borderRadius: {
         // E-scale 圆角阶:3 卡片/代码 · 4 chip/徽标 · 6 表单/表格 · 8 空状态 · 10 主卡片

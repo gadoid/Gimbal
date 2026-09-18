@@ -39,3 +39,21 @@
     --radius: 0.5rem;               /* E-scale:lg=8 空状态,md=6 表单,sm=4 chip */
   }
 }
+
+/*
+ * 全站统一空态/加载态(样式归一第一批):此前 empty-cta/empty-note
+ * 五套并行定义收敛于此。空态 = 圆角卡 + line 边 + 居中文案(CTA 经
+ * 子元素传入);加载态 = py-8 定档(取代 py-6/8/10 三种)。
+ */
+@layer components {
+  .empty-state {
+    @apply flex w-full flex-col items-center justify-center gap-2.5
+      rounded-empty border border-signal-line bg-signal-card px-6 py-10 text-center;
+  }
+  .empty-state > p {
+    @apply m-0 text-body text-muted-foreground;
+  }
+  .loading-state {
+    @apply py-8 text-center text-body text-muted-foreground;
+  }
+}

@@ -20,7 +20,10 @@
   --color-border-tertiary: #e2e8f0;
   --color-border-secondary: #cbd5e1;
 
-  /* typography — system mono stack so we don't ship a webfont in spec-1 */
+  /* typography — system stacks so we don't ship a webfont in spec-1;
+     --font-sans 与 tailwind.config fontFamily.sans 同源(栈值上提为变量) */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
 
@@ -38,8 +41,7 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji",
+  font-family: var(--font-sans), "Apple Color Emoji",
     "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   font-size: 13px;
   line-height: 1.5;
