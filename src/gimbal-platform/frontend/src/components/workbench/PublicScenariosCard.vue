@@ -1,29 +1,29 @@
-<!-- StarredScenariosCard.vue — 工作台注册卡:关注场景。
-     数据契约注记(§7 第 5 条):starred 过滤在后端 list API 之外
-     (读侧返回全量带 starred 标记,关注页同款客户端过滤),
-     取前 N 条截断 — 场景池规模 = 库本身,不引入额外端点。
-     框架由 slot 供给;行 = 网格列(★ / 名称 1fr / 模块 chip / 时间)。
-     卡头形制三档一致(图标+标题+计数+深链+分隔线);三档只换
-     正文密度(设计文档 §4,useCardSize 注入):
-       S = 大数字结论(N 个关注);M = 5 行;L = 8 行。 -->
+<!-- PublicScenariosCard.vue — 工作台注册卡:公共场景(→ /scenarios/public)。
+     分桶谓词必须与完整页同源(visibility === 'public'),§7 第 6 条:
+     计数徽标与进入后的页面一致,不另写一套判定。
+     三档密度(§4):S = 公共数 + 贡献者数结论;M/L = 最新上架的场景行 5/8。
+     行 testid 前缀 wb-pub-row-*(关注卡用 wb-sc-row-*,不可复用)。 -->
 <template>
-  <div data-testid="wb-card-starred-scenarios" class="wcard">
+  <div data-testid="wb-card-public-scenarios" class="wcard">
     <header class="chead">
-      <span class="chead-icon ci-star">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" />
+      <span class="chead-icon ci-green">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
         </svg>
       </span>
-      <span class="chead-title">关注场景</span>
+      <span class="chead-title">公共场景</span>
       <span class="chead-count">{{ rows.length }}</span>
       <span class="chead-spacer" />
-      <router-link to="/scenarios/follows" class="manage-link">关注 →</router-link>
+      <router-link to="/scenarios/public" class="manage-link">公共场景 →</router-link>
     </header>
 
-    <!-- S 档:只出结论(大数字) -->
+    <!-- S 档:只出结论 -->
     <div v-if="size === 'S'" class="s-body" :data-testid="wbT('s')">
-      <p class="s-num">{{ rows.length }}</p>
-      <p class="s-label">个关注</p>
+      <div class="s-stats">
+        <p class="s-stat"><b>{{ rows.length }}</b>公共场景</p>
+        <p class="s-stat"><b>{{ authorCount }}</b>贡献者</p>
+      </div>
     </div>
 
     <template v-else>
@@ -33,22 +33,22 @@
           :key="s.meta.scenarioId"
           :to="scenarioDetailUrl(s.meta.scenarioId)"
           class="sc-row"
-          :data-testid="`wb-sc-row-${s.meta.scenarioId}`"
+          :data-testid="`wb-pub-row-${s.meta.scenarioId}`"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="#eab308" class="sc-star" aria-hidden="true">
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" />
-          </svg>
-          <span class="sc-name" :title="s.meta.name || s.meta.scenarioId">{{ s.meta.name || s.meta.scenarioId }}</span>
-          <span class="sc-module">{{ s.meta.module || '未分类' }}</span>
-          <span class="sc-time">{{ relTime(s.meta.updateTime || s.meta.createTime || '') }}</span>
+          <span class="sc-name">
+            {{ s.meta.name || s.meta.scenarioId }}
+            <span v-if="s.starred" class="sc-starred" title="已关注">★</span>
+          </span>
+          <span class="sc-author">{{ s.meta.author || s.meta.owner || '—' }}</span>
+          <span class="sc-time">{{ relTime(stampOf(s)) }}</span>
         </router-link>
       </div>
       <div v-else-if="failed" class="card-empty">
-        <p>场景库加载失败 — 稍后在场景库页重试</p>
+        <p>场景加载失败 — 稍后在公共场景页重试</p>
       </div>
       <div v-else class="card-empty">
-        <p>还没有关注的场景 — 在场景库里点 ★ 关注常用场景</p>
-        <router-link to="/scenarios/follows" class="cta">去关注 →</router-link>
+        <p>公共库还是空的 — 在我的场景里把可复用的编排发布上来</p>
+        <router-link to="/scenarios/public" class="cta">去公共场景 →</router-link>
       </div>
     </template>
   </div>
@@ -58,20 +58,30 @@
 import { computed, onMounted } from 'vue'
 import { useCardSize } from './registry'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
+import type { Scenario } from '@/types/scenario-composer'
 import { scenarioDetailUrl } from '@/utils/links'
 import { relTime } from '@/utils/datetime'
 
 const size = useCardSize()
 const store = useScenarioComposerStore()
 
-/** 与关注页同源(store.starredScenarios 同一谓词)*/
-const rows = computed(() => store.scenarios.filter((s) => s.starred))
+const stampOf = (s: Scenario) => s.meta.updateTime || s.meta.createTime || ''
+
+// 与 ScenariosPublic.vue 同一谓词:public 才进本卡 —— §7 第 6 条计数同源。
+const rows = computed(() =>
+  store.scenarios
+    .filter((s) => s.visibility === 'public')
+    .sort((a, b) => stampOf(b).localeCompare(stampOf(a))),
+)
 
 /** M = 5 行;L = 8 行 */
 const visible = computed(() => rows.value.slice(0, size.value === 'L' ? 8 : 5))
+const authorCount = computed(
+  () => new Set(rows.value.map((s) => s.meta.author || s.meta.owner).filter(Boolean)).size,
+)
 const failed = computed(() => store.scenariosStatus === 'error')
 
-const wbT = (suffix: string) => `wb-card-starred-scenarios-${suffix}`
+const wbT = (suffix: string) => `wb-card-public-scenarios-${suffix}`
 
 onMounted(() => { void store.ensureScenarios() })
 </script>
@@ -79,7 +89,7 @@ onMounted(() => { void store.ensureScenarios() })
 <style scoped>
 .wcard { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 
-/* ── 题头(三卡共用形制;底部分隔线,§2 卡头/卡身分区)──────── */
+/* ── 题头(卡形制统一:图标+标题+计数+深链+分隔线,§2)─────── */
 .chead {
   display: flex; align-items: center; gap: 8px;
   padding-bottom: 8px;
@@ -89,7 +99,7 @@ onMounted(() => { void store.ensureScenarios() })
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 7px; flex: none;
 }
-.ci-star { color: #b45309; background: #fef6e0; }
+.ci-green { color: #15803d; background: #e4f5ea; }
 .chead-title { font-size: 13.5px; font-weight: 700; color: #10151c; }
 .chead-count {
   @apply text-caption font-bold;
@@ -100,16 +110,17 @@ onMounted(() => { void store.ensureScenarios() })
 .manage-link { font-size: 12px; font-weight: 600; color: #2f6fed; text-decoration: none; }
 .manage-link:hover { text-decoration: underline; }
 
-/* ── S 档:结论面(大数字,§4"只出结论")───────────────────── */
+/* ── S 档:结论面 ───────────────────────────────────────────── */
 .s-body { display: flex; flex-direction: column; gap: 2px; }
-.s-num { margin: 2px 0 0; font-size: 30px; font-weight: 700; line-height: 1.1; color: #10151c; }
-.s-label { margin: 0; font-size: 11px; color: #64748b; }
+.s-stats { display: flex; gap: 14px; }
+.s-stat { margin: 0; font-size: 11px; color: #64748b; }
+.s-stat b { display: block; font-size: 22px; font-weight: 700; line-height: 1.15; color: #10151c; }
 
-/* ── 场景行(网格列:★ / 名称 1fr / 模块 / 时间)──────────── */
+/* ── 场景行(网格列:名称 1fr / 作者 / 时间)────────────────── */
 .rows { display: flex; flex-direction: column; gap: 2px; }
 .sc-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
   align-items: center;
   padding: 6px 8px;
@@ -120,12 +131,12 @@ onMounted(() => { void store.ensureScenarios() })
   transition: background 0.12s ease;
 }
 .sc-row:hover { background: #f6f8fa; }
-.sc-star { flex: none; }
 .sc-name {
   min-width: 0; font-weight: 600; color: #10151c;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.sc-module {
+.sc-starred { color: #eab308; }
+.sc-author {
   padding: 1px 7px; font-size: 10.5px; font-weight: 600;
   color: #475569; background: #f1f5f9; border-radius: 4px; white-space: nowrap;
 }

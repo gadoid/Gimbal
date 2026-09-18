@@ -135,4 +135,54 @@ describe('ScenariosMine — 拆分后的我的场景页', () => {
     )
     w.unmount()
   })
+
+  it('并发越界被拦下,不落 updateRunScheme', async () => {
+    const w = mountPage([scen('sc-a', 'private', 5)])
+    await flushPromises()
+    await w.find('.schemes-chip').trigger('click')
+    await flushPromises()
+    const badge = w.findAll('.mini-badge').find((b) => b.text().includes('并发'))!
+    await badge.trigger('click')
+    const input = w.find('.mini-badge.editing input')
+    // 本文件 beforeEach 不清 mock 史 → 断言"调用数不增加"而非 not.toHaveBeenCalled
+    const put = vi.mocked(composerApi.updateRunScheme)
+    const before = put.mock.calls.length
+    await input.setValue('9999')      // 上限 200;input 的 max 只是装饰
+    await input.trigger('blur')
+    await flushPromises()
+    expect(put.mock.calls.length).toBe(before)
+    w.unmount()
+  })
+
+  it('导出选择器以 schemeId 为键 —— 同名方案不得互相串台', async () => {
+    vi.mocked(composerApi.listRunSchemes).mockResolvedValueOnce([
+      { schemeId: 'sX', name: '同名方案', isDefault: true, dataSetSelection: [],
+        injectionEntryIds: [], serviceBindings: {}, stepTo: null, nRuns: 1, parallel: 1 },
+      { schemeId: 'sY', name: '同名方案', isDefault: false, dataSetSelection: [],
+        injectionEntryIds: [], serviceBindings: {}, stepTo: null, nRuns: 2, parallel: 3 },
+    ] as never)
+    const w = mountPage([scen('sc-a', 'private', 2)])
+    await flushPromises()
+    const item = w.findAll('.sl-menu-item').find((i) => i.text().includes('导出'))!
+    await item.trigger('click')
+    await flushPromises()
+    const picker = w.find('[data-testid="export-picker"]')
+    expect(picker.exists()).toBe(true)
+    const values = picker.findAll('input[type="radio"]').map((r) => (r.element as HTMLInputElement).value)
+    // 以 name 为键时这里会是两个一模一样的 '同名方案' → 选第二个仍拿第一个
+    expect(values).toContain('sX')
+    expect(values).toContain('sY')
+    expect(new Set(values).size).toBe(values.length)
+    w.unmount()
+  })
+
+  it('管理员看到的列表含他人私有 → 副标题不得自称"你的"', async () => {
+    const { useAuthStore } = await import('@/stores/auth')
+    useAuthStore().currentUser = { id: 1, username: 'root', display_name: 'root', is_admin: true } as never
+    const w = mountPage([scen('sc-a', 'private', 1)])
+    await flushPromises()
+    expect(w.find('.slib-sub').text()).toContain('管理员可见全员私有编排')
+    expect(w.find('.slib-sub').text()).not.toContain('你创建或拥有的')
+    w.unmount()
+  })
 })

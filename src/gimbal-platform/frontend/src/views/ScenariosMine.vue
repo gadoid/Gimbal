@@ -6,7 +6,7 @@
     <PageHead
       icon="folder"
       title="我的场景"
-      :subtitle="`共 ${rows.length} 个场景 · 你创建或拥有的编排`"
+      :subtitle="pageSubtitle"
     />
 
     <div class="slib-toolbar">
@@ -87,7 +87,7 @@
             </tr>
             <tr v-if="expandedId === row.meta.scenarioId" class="scheme-panel-row" @click.stop>
               <td :colspan="10">
-                <div v-if="schemesLoading" class="slib-loading">方案加载中…</div>
+                <div v-if="schemesLoadingId === row.meta.scenarioId" class="slib-loading">方案加载中…</div>
                 <div v-else class="scheme-panel">
                   <SchemeCard
                     v-for="sc in visibleSchemes(row.meta.scenarioId)"
@@ -111,8 +111,10 @@
     </div>
 
     <div v-else class="slib-empty">
-      <p>暂无场景 — 新建第一个场景开始编排</p>
-      <button type="button" class="slib-create" @click="onCreate">+ 新建场景</button>
+      <p>{{ filtering
+        ? '没有匹配的场景 — 换个关键词,或清掉筛选条件'
+        : '暂无场景 — 新建第一个场景开始编排' }}</p>
+      <button v-if="!filtering" type="button" class="slib-create" @click="onCreate">+ 新建场景</button>
     </div>
 
     <div v-if="total > pageSize" class="pager">
@@ -134,8 +136,8 @@
         <label class="exp-opt">
           <input v-model="exportPicker.chosen" type="radio" value="" /> 默认导出(不套方案)
         </label>
-        <label v-for="sc in exportPicker.schemes" :key="sc.name" class="exp-opt">
-          <input v-model="exportPicker.chosen" type="radio" :value="sc.name" /> 按方案导出 · {{ sc.name }}
+        <label v-for="sc in exportPicker.schemes" :key="sc.schemeId" class="exp-opt">
+          <input v-model="exportPicker.chosen" type="radio" :value="sc.schemeId" /> 按方案导出 · {{ sc.name }}
         </label>
         <div class="exp-foot">
           <button type="button" class="ghost-btn" @click="settleExportPicker(undefined)">取消</button>
@@ -151,6 +153,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
+import { useAuthStore } from '@/stores/auth'
 import {
   getScenarioDraft, listRunSchemes, updateRunScheme, runScenario, schemeToRunRequest,
   type SchemeV2, type RunOverlay,
@@ -162,7 +165,7 @@ import { confirmAction } from '@/utils/confirmAction'
 import { composerUrl, scenarioDetailUrl, scenarioSchemesUrl } from '@/utils/links'
 import { showError } from '@/utils/errorFallback'
 import { shortDateTime } from '@/utils/datetime'
-import { applyFiltersToList, emptyFilters, type ScenarioFilters } from '@/utils/filters'
+import { applyFiltersToList, emptyFilters, isFiltering, type ScenarioFilters } from '@/utils/filters'
 import { useScenarioRuns } from '@/composables/useScenarioRuns'
 import { FOLLOW_CAP } from '@/composables/useFollowLayout'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
@@ -180,6 +183,7 @@ const MAX = 3
 const pageSize = 20
 
 const store = useScenarioComposerStore()
+const auth = useAuthStore()
 const router = useRouter()
 const runs = useScenarioRuns()
 
@@ -187,7 +191,7 @@ const q = ref('')
 const filters = ref<ScenarioFilters>(emptyFilters())
 const page = ref(1)
 const expandedId = ref<string | null>(null)
-const schemesLoading = ref(false)
+const schemesLoadingId = ref<string | null>(null)
 const schemesByScenario = reactive(new Map<string, SchemeV2[]>())
 
 const { filtered } = useListSearch(
@@ -214,6 +218,14 @@ const rows = computed(() =>
     .filter((r) => r.visibility !== 'public'),
 )
 const total = computed(() => rows.value.length)
+/** 后端读侧「admin 全量;普通用户 = public + 自己的」→ 非 public 桶对管理员
+ *  装的是全员的私有场景,副标题必须说实话,不能对管理员自称"你的"。 */
+const pageSubtitle = computed(() =>
+  auth.isAdmin
+    ? `共 ${total.value} 个场景 · 管理员可见全员私有编排(含他人的)`
+    : `共 ${total.value} 个场景 · 你创建或拥有的编排`,
+)
+const filtering = computed(() => isFiltering(filters.value, q.value))
 const pageCount = computed(() => Math.ceil(total.value / pageSize))
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize
@@ -253,7 +265,7 @@ async function toggleExpand(row: Scenario) {
   }
   expandedId.value = id
   if (schemesByScenario.has(id)) return
-  schemesLoading.value = true
+  schemesLoadingId.value = id
   try {
     const [schemes] = await Promise.all([listRunSchemes(id), runs.load(id)])
     schemesByScenario.set(id, schemes)
@@ -261,7 +273,8 @@ async function toggleExpand(row: Scenario) {
     toast.error(`方案加载失败: ${(e as Error).message}`)
     schemesByScenario.set(id, [])
   } finally {
-    schemesLoading.value = false
+    // 只清自己的加载态:A 的慢请求回来时不得灭掉 B 正在显示的 spinner
+    if (schemesLoadingId.value === id) schemesLoadingId.value = null
   }
 }
 
@@ -332,8 +345,9 @@ function settleExportPicker(v: SchemeV2 | null | undefined) {
   exportPicker.resolve = null
 }
 function confirmExportPicker() {
+  // 以 schemeId 为键:同名方案曾是真 bug(name 比对会静默拿到第一个)
   const chosen = exportPicker.chosen
-  settleExportPicker(chosen ? (exportPicker.schemes.find((s) => s.name === chosen) ?? null) : null)
+  settleExportPicker(chosen ? (exportPicker.schemes.find((s) => s.schemeId === chosen) ?? null) : null)
 }
 
 async function exportRow(row: Scenario) {

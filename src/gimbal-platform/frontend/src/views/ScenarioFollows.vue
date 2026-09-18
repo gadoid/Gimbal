@@ -63,7 +63,11 @@
           </DropdownMenu>
         </div>
       </div>
-      <div v-else class="slib-empty"><p>常驻席为空 — 在下方堆叠卡片悬浮后点「设为常驻」</p></div>
+      <div v-else class="slib-empty">
+        <p>{{ followed.length
+          ? '常驻席为空 — 在下方堆叠卡片悬浮后点「设为常驻」'
+          : '还没有关注任何场景 — 到我的 / 公共场景页点 ★ 关注常用场景' }}</p>
+      </div>
 
       <div v-if="stackedRows.length" class="fav-section-label">更多关注 · {{ stackedRows.length }}</div>
       <div v-if="stackedRows.length" class="stack-wrap">
@@ -141,7 +145,7 @@ const rows = computed<FollowRow[]>(() =>
       return {
         s,
         isPublic: s.visibility === 'public',
-        schemeCount: s.schemeCount || 0,
+        schemeCount: sig ? sig.schemeCount : (s.schemeCount || 0),
         defaultSchemeName: sig?.defaultSchemeName ?? null,
         last: sig?.last ?? null,
         trend: sig?.trend ?? [],
@@ -166,10 +170,13 @@ onMounted(async () => {
     showError('加载场景', undefined, store.lastError)
     return
   }
-  layout.seed(followed.value.map((s) => s.meta.scenarioId))
+  const ids = followed.value.map((s) => s.meta.scenarioId)
+  // 先回收死席位再播种:prune 无变化时不写盘,所以首访(无 key)仍能播种
+  layout.prune(ids)
+  layout.seed(ids)
   // 先等影响面算完再装配信号,否则 hasChange 恒读到空集(竞态)。
   await change.ensure()
-  await Promise.all(followed.value.map((s) => loadSignals(s)))
+  await loadSignalsBounded(followed.value)
 })
 
 /** 单个关注对象的信号装配:执行趋势(我的锁默认方案 / 公共锁原件)+
@@ -207,6 +214,17 @@ async function loadSignals(s: Scenario) {
   })
 }
 
+/** 限并发装配信号:N 个关注 × (方案 + 执行) 全并发会瞬时打出数十个请求
+ *  (关注上限 20 → 最多 40+),把浏览器连接池和后端一起打满。信号逐行落
+ *  进响应式 Map,所以限流不减慢首屏 —— 卡片是一张张长出来的。 */
+async function loadSignalsBounded(list: Scenario[], width = 4) {
+  let i = 0
+  const worker = async () => {
+    while (i < list.length) await loadSignals(list[i++])
+  }
+  await Promise.all(Array.from({ length: Math.min(width, list.length) }, worker))
+}
+
 function firstRun(scenarioId: string): RunStamp | null {
   const list = runs.runsOf(scenarioId).value
   const e = list[0]
@@ -233,8 +251,10 @@ function pinRow(s: Scenario) {
 
 async function unfollow(s: Scenario) {
   try {
-    layout.unpin(s.meta.scenarioId)
     await store.toggleStar(s.meta.scenarioId)
+    // 取消成功后再摘常驻席:先 unpin 的话,请求失败会留下"仍在关注列表
+    // 却掉了常驻位"的静默不一致(toggleStar 失败会回滚并抛出)。
+    layout.unpin(s.meta.scenarioId)
   } catch (e) {
     showError('取消关注', undefined, (e as Error).message)
   }

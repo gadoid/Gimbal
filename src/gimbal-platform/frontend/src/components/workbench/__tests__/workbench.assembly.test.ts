@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, DOMWrapper } from '@vue/test-utils'
 import { createPinia, getActivePinia, setActivePinia } from 'pinia'
 import WorkbenchView from '@/views/WorkbenchView.vue'
+import { workbenchRegistry } from '@/components/workbench/registry'
 import * as constantsApi from '@/api/constants'
 import * as executionsApi from '@/api/executions'
 import * as scenarioApi from '@/api/scenario-composer'
@@ -72,16 +73,20 @@ describe('工作台组装 — draggable 接线(卡死根因防回归)', () => {
 describe('工作台组装 — 添加卡片(网格末尾添加条 + 市场置灰)', () => {
   it('默认渲染全部注册卡;添加条常驻网格末尾,打开市场 = 全类型清单(已添加置灰)', async () => {
     const w = mountPage()
-    await waitCards(w, 3)
+    await waitCards(w, workbenchRegistry.length)
     expect(w.find('[data-testid="wb-slot-constants"]').exists()).toBe(true)
     expect(w.find('[data-testid="wb-slot-recent-executions"]').exists()).toBe(true)
+    expect(w.find('[data-testid="wb-slot-my-scenarios"]').exists()).toBe(true)
+    expect(w.find('[data-testid="wb-slot-public-scenarios"]').exists()).toBe(true)
     expect(w.find('[data-testid="wb-slot-starred-scenarios"]').exists()).toBe(true)
 
     await w.find('[data-testid="wb-add-card"]').trigger('click')
     await flushPromises()
-    // 全部已启用 → 三项都在清单里且置灰(不隐藏)
+    // 全部已启用 → 五项都在清单里且置灰(不隐藏)
     expect(q('[data-testid="gal-added-constants"]').exists()).toBe(true)
     expect(q('[data-testid="gal-added-recent-executions"]').exists()).toBe(true)
+    expect(q('[data-testid="gal-added-my-scenarios"]').exists()).toBe(true)
+    expect(q('[data-testid="gal-added-public-scenarios"]').exists()).toBe(true)
     expect(q('[data-testid="gal-added-starred-scenarios"]').exists()).toBe(true)
     // q() 对"不存在"会抛 — 负断言直接查 DOM
     expect(document.body.querySelector('[data-testid="gal-add-constants"]')).toBeNull()
@@ -138,8 +143,9 @@ describe('工作台组装 — 添加卡片(网格末尾添加条 + 市场置灰)
 
   it('最后一张卡不可移除(防空工作台;✕ 徽标同步隐藏)', async () => {
     const w = mountPage()
-    await waitCards(w, 3)
-    for (const id of ['recent-executions', 'starred-scenarios']) {
+    await waitCards(w, workbenchRegistry.length)
+    // 删到只剩 constants —— 按注册表取「非 constants」,加多少卡都不用回改此用例
+    for (const id of workbenchRegistry.filter((d) => d.id !== 'constants').map((d) => d.id)) {
       await w.find(`[data-testid="wb-remove-${id}"]`).trigger('click')
       await flushPromises()
     }
@@ -240,6 +246,60 @@ describe('工作台新卡 — 收藏场景', () => {
     })
     expect(w.find('[data-testid="wb-sc-row-sc-b"]').exists()).toBe(false)   // 未收藏不进卡
     expect(w.find('[data-testid="wb-sc-row-sc-c"]').attributes('href')).toBe('/scenarios/sc-c/detail')
+    w.unmount()
+  })
+})
+
+describe('工作台新卡 — 我的场景 / 公共场景(场景库三页拆分)', () => {
+  const MIXED = [
+    { meta: { scenarioId: 'm-1', name: '我的A', module: '订单', updateTime: '2026-09-10T00:00:00Z' },
+      visibility: 'private' },
+    // visibility 缺省 → 与 ScenariosMine.vue 的 `!== 'public'` 同判定,归我的
+    { meta: { scenarioId: 'm-2', name: '过期B', module: '物流',
+      updateTime: '2026-09-09T00:00:00Z', expire: true } },
+    { meta: { scenarioId: 'p-1', name: '公共A', author: 'bob', updateTime: '2026-09-11T00:00:00Z' },
+      visibility: 'public', starred: true },
+  ] as never[]
+
+  beforeEach(() => {
+    vi.mocked(scenarioApi.listScenarios).mockResolvedValue(MIXED)
+  })
+
+  it('分桶与完整页同谓词:public 只进公共卡,非 public 只进我的卡', async () => {
+    const w = mountPage()
+    await vi.waitFor(() => {
+      expect(w.find('[data-testid="wb-mine-row-m-1"]').exists()).toBe(true)
+    })
+    expect(w.find('[data-testid="wb-mine-row-m-2"]').exists()).toBe(true)
+    expect(w.find('[data-testid="wb-mine-row-p-1"]').exists()).toBe(false)
+    expect(w.find('[data-testid="wb-pub-row-p-1"]').exists()).toBe(true)
+    expect(w.find('[data-testid="wb-pub-row-m-1"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('计数徽标 = 过滤后条数;过期带标记;行直达详情', async () => {
+    const w = mountPage()
+    await vi.waitFor(() => {
+      expect(w.find('[data-testid="wb-mine-row-m-1"]').exists()).toBe(true)
+    })
+    const mine = w.find('[data-testid="wb-card-my-scenarios"]')
+    const pub = w.find('[data-testid="wb-card-public-scenarios"]')
+    expect(mine.find('.chead-count').text()).toBe('2')
+    expect(pub.find('.chead-count').text()).toBe('1')
+    expect(w.find('[data-testid="wb-mine-row-m-2"]').text()).toContain('已过期')
+    expect(w.find('[data-testid="wb-pub-row-p-1"]').attributes('href')).toBe('/scenarios/p-1/detail')
+    w.unmount()
+  })
+
+  it('卡头深链指向各自的拆分页', async () => {
+    const w = mountPage()
+    await vi.waitFor(() => {
+      expect(w.find('[data-testid="wb-mine-row-m-1"]').exists()).toBe(true)
+    })
+    expect(w.find('[data-testid="wb-card-my-scenarios"] .manage-link').attributes('href'))
+      .toBe('/scenarios/mine')
+    expect(w.find('[data-testid="wb-card-public-scenarios"] .manage-link').attributes('href'))
+      .toBe('/scenarios/public')
     w.unmount()
   })
 })

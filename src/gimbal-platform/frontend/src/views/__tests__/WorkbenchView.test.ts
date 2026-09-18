@@ -30,10 +30,12 @@ describe('WorkbenchView — /home(registry 宿主)', () => {
     w.unmount()
   })
 
-  it('场景库 / 执行历史快捷入口在场', () => {
+  it('场景库快捷入口已清理(三页各有 registry 卡);执行历史仍在', () => {
     const w = mountPage()
     const hrefs = w.findAll('a.wb-card').map((a) => a.attributes('href'))
-    expect(hrefs).toContain('/scenarios')
+    // 场景库不再占固定快捷位:我的/公共/关注各自有卡,卡头深链即入口
+    expect(hrefs).not.toContain('/scenarios')
+    expect(hrefs).not.toContain('/scenarios/mine')
     expect(hrefs).toContain('/executions')
     w.unmount()
   })

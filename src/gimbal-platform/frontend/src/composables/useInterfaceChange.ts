@@ -12,6 +12,11 @@ const changed = ref<Set<string>>(new Set())
 const loaded = ref(false)
 let inflight: Promise<void> | null = null
 
+/** axios 错误上的状态码(非 HTTP 错误 / 无 response 时 undefined)。 */
+function httpStatus(e: unknown): number | undefined {
+  return (e as { response?: { status?: number } })?.response?.status
+}
+
 export function useInterfaceChange() {
   async function ensure(): Promise<void> {
     if (loaded.value) return
@@ -20,18 +25,31 @@ export function useInterfaceChange() {
       const set = new Set<string>()
       try {
         const report = await catalogDiff()
-        await Promise.all(
-          report.pending.map(async (p) => {
+        // 每个 pending 端点一次 impact,限并发:待处理端点可能十几个,
+        // 全并发会瞬时打出同数量请求。
+        const pending = report.pending
+        let i = 0
+        const worker = async () => {
+          while (i < pending.length) {
+            const p = pending[i++]
             try {
-              const items = await impact(p.endpointId)
-              for (const it of items) set.add(it.scenarioId)
+              for (const it of await impact(p.endpointId)) set.add(it.scenarioId)
             } catch { /* 单端点影响面失败不阻断整体信号 */ }
-          }),
-        )
-      } catch { /* member 无适配中心读权限 → 留白 */ }
-      changed.value = set
-      loaded.value = true
-      inflight = null
+          }
+        }
+        await Promise.all(Array.from({ length: Math.min(4, pending.length) }, worker))
+        changed.value = set
+        loaded.value = true
+      } catch (e) {
+        // 403 = member 无适配中心读权限,永久留白;其余(网络抖动/5xx)
+        // 不能置 loaded —— 否则一次抖动就把信号永久打死到刷新为止。
+        if (httpStatus(e) === 403) {
+          changed.value = set
+          loaded.value = true
+        }
+      } finally {
+        inflight = null
+      }
     })()
     return inflight
   }

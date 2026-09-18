@@ -50,6 +50,12 @@ export type FilterRow = Partial<ScenarioFilterRow> & { system?: string[] }
  * ``updated_at`` fields, so every field access below must tolerate
  * ``undefined`` instead of throwing mid-filter.
  */
+/** 搜索词或任一筛选项是否生效 —— 空态必须区分"库本身是空的"和"被
+ *  当前搜索/筛选滤空了",否则会把用户支去新建一个并不缺的东西。 */
+export function isFiltering(f: ScenarioFilters, q = ''): boolean {
+  return q.trim() !== '' || JSON.stringify(f) !== JSON.stringify(emptyFilters())
+}
+
 export function applyFiltersToList(
   pool: readonly FilterRow[],
   f: ScenarioFilters,

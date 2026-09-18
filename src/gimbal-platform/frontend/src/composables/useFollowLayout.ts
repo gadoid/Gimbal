@@ -66,5 +66,16 @@ export function useFollowLayout() {
     save()
   }
 
-  return { pinned, seed, isPinned, pin, unpin, move }
+  /** 剪掉已不在关注集内的 id。取消关注/删除场景后死 id 仍会白占
+   *  PINNED_MAX 预算 —— 常驻区只显示交集,用户会撞"上限 5 个"却看
+   *  不到任何占位卡,且没有逃生入口。 */
+  function prune(validIds: string[]) {
+    const valid = new Set(validIds)
+    const next = pinned.value.filter((x) => valid.has(x))
+    if (next.length === pinned.value.length) return
+    pinned.value = next
+    save()
+  }
+
+  return { pinned, seed, isPinned, pin, unpin, move, prune }
 }

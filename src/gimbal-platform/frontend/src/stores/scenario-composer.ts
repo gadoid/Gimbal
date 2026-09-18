@@ -21,6 +21,9 @@ function upsertBy<T>(list: T[], match: (x: T) => boolean, item: T): void {
   else list.unshift(item)
 }
 
+/** ensureScenarios 的单飞 promise —— module 作用域:Pinia state 不该持 Promise。 */
+let inflightScenarios: Promise<void> | null = null
+
 export const useScenarioComposerStore = defineStore('scenario-composer', {
   state: () => ({
     scenarios: [] as Scenario[],
@@ -28,6 +31,8 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
 
     scenariosStatus: 'idle' as FetchStatus,
     dataSetsStatus: 'idle' as FetchStatus,
+    /** 列表是否成功加载过至少一次 —— ensureScenarios 的复用判据。 */
+    scenariosLoaded: false,
 
     lastError: null as string | null,
   }),
@@ -55,10 +60,23 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
       try {
         this.scenarios = await api.listScenarios(params ?? {})
         this.scenariosStatus = 'idle'
+        this.scenariosLoaded = true
       } catch (e) {
         this.scenariosStatus = 'error'
+        this.scenariosLoaded = false
         this.lastError = (e as Error).message
       }
+    },
+
+    /** 多卡共享一次取数:已成功则直接复用,并发调用合流到同一条请求。
+     *  工作台三张场景卡同帧挂载时 GET /api/scenarios 只该打一次(§7 第 1
+     *  条「卡片复用 store 取数」);失败保持未加载态,下次进入自动重试。 */
+    async ensureScenarios(): Promise<Scenario[]> {
+      if (this.scenariosLoaded) return this.scenarios
+      const p = (inflightScenarios
+        ??= this.fetchScenarios().finally(() => { inflightScenarios = null }))
+      await p
+      return this.scenarios
     },
 
     async saveScenario(scenarioId: string | null, draft: ScenarioDraft) {

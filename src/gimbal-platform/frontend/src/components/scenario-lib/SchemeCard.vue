@@ -19,7 +19,7 @@
         @click.stop="startEdit('nRuns')"
       >
         <template v-if="editing === 'nRuns'">
-          <input v-model="draft" type="number" min="1" @blur="commit" @keyup.enter="commit" @click.stop />
+          <input v-model="draft" type="number" min="1" max="500" @blur="commit" @keyup.enter="commit" @click.stop />
         </template>
         <template v-else>次数 <b>{{ scheme.nRuns }}</b></template>
       </span>
@@ -40,6 +40,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { toast } from '@/utils/toast'
 import type { SchemeV2 } from '@/api/scenario-composer'
 import { relTime } from '@/utils/datetime'
 
@@ -82,13 +83,22 @@ function startEdit(field: 'nRuns' | 'parallel') {
   draft.value = String(field === 'nRuns' ? props.scheme.nRuns : props.scheme.parallel)
 }
 
+/** 上界与 input 的 max 同源 —— HTML max 只是原生 spinner 的装饰,
+ *  手动键入的越界值必须由 commit 自己拦,否则一路透传到后端。 */
+const MAX: Record<'nRuns' | 'parallel', number> = { nRuns: 500, parallel: 200 }
+const FIELD_LABEL: Record<'nRuns' | 'parallel', string> = { nRuns: '次数', parallel: '并发' }
+
 function commit() {
   const field = editing.value
   editing.value = null
   if (!field) return
   const n = Number.parseInt(draft.value, 10)
   const cur = field === 'nRuns' ? props.scheme.nRuns : props.scheme.parallel
-  if (Number.isNaN(n) || n < 1 || n === cur) return
+  if (Number.isNaN(n) || n === cur) return
+  if (n < 1 || n > MAX[field]) {
+    toast.error(`${FIELD_LABEL[field]} 取值范围 1–${MAX[field]}`)
+    return
+  }
   emit('update', props.scheme, { [field]: n })
 }
 </script>

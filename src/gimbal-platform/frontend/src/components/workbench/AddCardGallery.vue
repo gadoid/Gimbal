@@ -21,6 +21,7 @@
           <span class="gal-dot" :class="`dot-${def.accent}`" aria-hidden="true" />
           <div class="gal-info">
             <span class="gal-title">{{ def.title }}</span>
+            <span v-if="def.description" class="gal-desc">{{ def.description }}</span>
             <span class="gal-id mono">{{ def.id }}</span>
           </div>
           <Button
@@ -89,8 +90,9 @@ const allTypes = computed(() =>
 .dot-blue { background: #2f6fed; }
 .dot-green { background: #15803d; }
 .dot-gold { background: #eab308; }
-.gal-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.gal-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
 .gal-title { font-size: 13px; font-weight: 700; color: #10151c; }
+.gal-desc { font-size: 12px; color: #5b6472; line-height: 1.45; }
 .gal-id { font-size: 11px; color: #94a3b8; }
 .mono { font-family: var(--font-mono, monospace); }
 </style>

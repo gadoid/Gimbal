@@ -161,7 +161,12 @@ describe('useWorkbenchLayout — sizes(v3 尺寸系统)', () => {
     setSize(ids()[0], 'L')
     setSize(ids()[1], 'S')
     await flushed()
-    expect(readV2().sizes).toEqual({ [ids()[0]]: 'L', [ids()[1]]: 'S', [ids()[2]]: 'M' })
+    expect(readV2().sizes).toEqual({
+      [ids()[0]]: 'L',
+      [ids()[1]]: 'S',
+      // 其余未碰的卡一律取注册表 defaultSize(缺省 M)
+      ...Object.fromEntries(ids().slice(2).map((id) => [id, 'M'])),
+    })
     expect(sizeOf(ids()[0])).toBe('L')
 
     // 同值幂等(不触发写)

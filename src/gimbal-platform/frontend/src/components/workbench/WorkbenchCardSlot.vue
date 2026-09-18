@@ -73,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onErrorCaptured, provide, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onErrorCaptured, onUnmounted, provide, ref, watch } from 'vue'
 import { CARD_SIZE_LABELS, cardSizeKey, type CardSize, type WorkbenchCardDef } from './registry'
 
 const props = defineProps<{
@@ -123,6 +123,8 @@ watch(() => props.size, () => {
     pulseTimer = setTimeout(() => { pulsing.value = false }, 260)
   })
 })
+
+onUnmounted(() => clearTimeout(pulseTimer))
 </script>
 
 <style scoped>

@@ -71,7 +71,9 @@
     </div>
 
     <div v-else class="slib-empty">
-      <p>暂无公共场景 — 团队共享的模板会出现在这里</p>
+      <p>{{ filtering
+        ? '没有匹配的公共场景 — 换个关键词,或清掉筛选条件'
+        : '暂无公共场景 — 团队共享的模板会出现在这里' }}</p>
     </div>
 
     <div v-if="total > pageSize" class="pager">
@@ -95,7 +97,7 @@ import { listDataSets, runScenario } from '@/api/scenario-composer'
 import { useListSearch } from '@/utils/useListSearch'
 import { showError } from '@/utils/errorFallback'
 import { shortDateTime } from '@/utils/datetime'
-import { applyFiltersToList, emptyFilters, type ScenarioFilters } from '@/utils/filters'
+import { applyFiltersToList, emptyFilters, isFiltering, type ScenarioFilters } from '@/utils/filters'
 import { FOLLOW_CAP } from '@/composables/useFollowLayout'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
 import StarToggle from '@/components/scenario-lib/StarToggle.vue'
@@ -138,6 +140,7 @@ const rows = computed(() =>
     .filter((r) => r.visibility === 'public'),
 )
 const total = computed(() => rows.value.length)
+const filtering = computed(() => isFiltering(filters.value, q.value))
 const pageCount = computed(() => Math.ceil(total.value / pageSize))
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize
