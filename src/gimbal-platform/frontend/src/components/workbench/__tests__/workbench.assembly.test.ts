@@ -1,7 +1,8 @@
 /**
- * 工作台组装(Jira 看板式)— 添加 / 删除 / 布局持久化 / 新卡渲染。
- * 拖拽落点的换序纯函数在 layout.test 已钉;此处验证视图接线
- * (draggable 渲染按 orderedIds 顺序,removable 门控,市场候选)。
+ * 工作台组装(Jira 看板式 + v3 设计文档)— 添加 / 删除 / 布局持久化 /
+ * 尺寸系统 / 新卡渲染。拖拽落点的换序纯函数在 layout.test 已钉;
+ * 此处验证视图接线(draggable 渲染按 orderedIds 顺序,removable 门控,
+ * 市场已添加置灰,尺寸菜单切换三档密度)。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, DOMWrapper } from '@vue/test-utils'
@@ -62,15 +63,14 @@ describe('工作台组装 — draggable 接线(卡死根因防回归)', () => {
     const drag = w.findComponent({ name: 'draggable' })
     expect(drag.exists()).toBe(true)
     expect(drag.props('itemKey')).toBeTypeOf('function')
-    // 函数对 string 元素返回自身(键唯一)
     const keyFn = drag.props('itemKey') as (el: string) => string
     expect(keyFn('constants')).toBe('constants')
     w.unmount()
   })
 })
 
-describe('工作台组装 — 添加卡片(市场)', () => {
-  it('默认渲染全部注册卡;「+ 添加卡片」打开市场,候选 = 未启用卡', async () => {
+describe('工作台组装 — 添加卡片(网格末尾添加条 + 市场置灰)', () => {
+  it('默认渲染全部注册卡;添加条常驻网格末尾,打开市场 = 全类型清单(已添加置灰)', async () => {
     const w = mountPage()
     await waitCards(w, 3)
     expect(w.find('[data-testid="wb-slot-constants"]').exists()).toBe(true)
@@ -79,34 +79,41 @@ describe('工作台组装 — 添加卡片(市场)', () => {
 
     await w.find('[data-testid="wb-add-card"]').trigger('click')
     await flushPromises()
-    // 全部已启用 → 市场空态提示
-    expect(document.body.textContent).toContain('所有卡片都已在工作台上')
+    // 全部已启用 → 三项都在清单里且置灰(不隐藏)
+    expect(q('[data-testid="gal-added-constants"]').exists()).toBe(true)
+    expect(q('[data-testid="gal-added-recent-executions"]').exists()).toBe(true)
+    expect(q('[data-testid="gal-added-starred-scenarios"]').exists()).toBe(true)
+    // q() 对"不存在"会抛 — 负断言直接查 DOM
+    expect(document.body.querySelector('[data-testid="gal-add-constants"]')).toBeNull()
+    // 卸载前等内容 resolve:开着的 Dialog + pending Suspense 一起整页
+    // 卸载会把 vitest 模块运行器卡死(后续动态 import 返回空模块)
+    await vi.waitFor(() => {
+      expect(w.find('[data-testid="wb-card-constants"]').exists()).toBe(true)
+    })
     w.unmount()
   })
 
-  it('移除后市场出现该卡;点「添加」→ 卡片回到工作台且持久化', async () => {
+  it('移除后市场出现该卡;点「+ 添加」→ 卡片回到工作台且持久化(v2 键)', async () => {
     const w = mountPage()
     await waitCards(w, 3)
 
-    // 移除最近执行卡
     await w.find('[data-testid="wb-remove-recent-executions"]').trigger('click')
     await flushPromises()
     expect(w.find('[data-testid="wb-slot-recent-executions"]').exists()).toBe(false)
-    // 持久化:存档不含该卡
-    const stored = JSON.parse(localStorage.getItem('workbench.layout.v1:alice')!)
-    expect(stored).not.toContain('recent-executions')
+    const stored = JSON.parse(localStorage.getItem('workbench.layout.v2:alice')!)
+    expect(stored.order).not.toContain('recent-executions')
 
-    // 市场里出现,点添加 → 回来
     await w.find('[data-testid="wb-add-card"]').trigger('click')
     await flushPromises()
     const addBtn = q('[data-testid="gal-add-recent-executions"]')
     await addBtn.trigger('click')
+    // 等"内容"而非仅卡槽:加回的卡重新 pending,若卸载时仍有 pending
+    // 异步卡 + 开着的市场 Dialog,vitest 模块运行器会被卡死
     await vi.waitFor(() => {
-      expect(w.find('[data-testid="wb-slot-recent-executions"]').exists()).toBe(true)
+      expect(w.find('[data-testid="wb-card-recent-executions"]').exists()).toBe(true)
     })
-    // 追加到尾部
-    const after = JSON.parse(localStorage.getItem('workbench.layout.v1:alice')!)
-    expect(after[after.length - 1]).toBe('recent-executions')
+    const after = JSON.parse(localStorage.getItem('workbench.layout.v2:alice')!)
+    expect(after.order[after.order.length - 1]).toBe('recent-executions')
     w.unmount()
   })
 
@@ -118,12 +125,10 @@ describe('工作台组装 — 添加卡片(市场)', () => {
     w.unmount()
     document.body.innerHTML = ''
 
-    // 刷新:新挂载读存档 — 只有 2 卡
     w = mountPage()
     await waitCards(w, 2)
     expect(w.find('[data-testid="wb-slot-starred-scenarios"]').exists()).toBe(false)
 
-    // 重置 → 3 卡回默认
     await w.find('[data-testid="wb-reset"]').trigger('click')
     await vi.waitFor(() => {
       expect(w.find('[data-testid="wb-slot-starred-scenarios"]').exists()).toBe(true)
@@ -131,16 +136,79 @@ describe('工作台组装 — 添加卡片(市场)', () => {
     w.unmount()
   })
 
-  it('最后一张卡不可移除(防空工作台)', async () => {
+  it('最后一张卡不可移除(防空工作台;菜单里的移除项同步隐藏)', async () => {
     const w = mountPage()
     await waitCards(w, 3)
-    // 移到只剩一张
     for (const id of ['recent-executions', 'starred-scenarios']) {
       await w.find(`[data-testid="wb-remove-${id}"]`).trigger('click')
       await flushPromises()
     }
-    // 最后一张(constants)没有移除钮
     expect(w.find('[data-testid="wb-remove-constants"]').exists()).toBe(false)
+    // S 档右键菜单同样遵守 removable 门控(先切 S,入口换右键)
+    await w.find('[data-testid="wb-size-constants"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-testid="wb-menu-constants-S"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-testid="wb-slot-constants"]').trigger('contextmenu')
+    await flushPromises()
+    expect(w.find('[data-testid="wb-menu-constants-remove"]').exists()).toBe(false)
+    w.unmount()
+  })
+})
+
+describe('工作台尺寸系统(S/M/L,设计文档 §4)', () => {
+  it('⤢ 打开菜单 → 选 L:slot 跨 2 列 + 常量池出现搜索框;持久化', async () => {
+    const w = mountPage()
+    await waitCards(w, 3)
+    await vi.waitFor(() => {
+      expect(w.find('[data-testid="wb-card-constants"]').exists()).toBe(true)
+    })
+
+    await w.find('[data-testid="wb-size-constants"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-testid="wb-menu-constants-L"]').trigger('click')
+    await flushPromises()
+    // L = span 2 + 卡内搜索框
+    expect(w.find('[data-testid="wb-slot-constants"]').classes()).toContain('span-2')
+    expect(w.find('[data-testid="wb-card-constants-search"]').exists()).toBe(true)
+    const stored = JSON.parse(localStorage.getItem('workbench.layout.v2:alice')!)
+    expect(stored.sizes.constants).toBe('L')
+    w.unmount()
+  })
+
+  it('选 S:紧凑结论面(大数字),无控件簇;右键呼出菜单可换回 M', async () => {
+    const w = mountPage()
+    await waitCards(w, 3)
+    await vi.waitFor(() => {
+      expect(w.find('[data-testid="wb-card-constants"]').exists()).toBe(true)
+    })
+
+    await w.find('[data-testid="wb-size-constants"]').trigger('click')
+    await flushPromises()
+    await w.find('[data-testid="wb-menu-constants-S"]').trigger('click')
+    await flushPromises()
+    // S = 紧凑结论 + 控件簇隐藏(入口换右键)
+    expect(w.find('[data-testid="wb-card-constants-s"]').exists()).toBe(true)
+    expect(w.find('[data-testid="wb-size-constants"]').exists()).toBe(false)
+
+    await w.find('[data-testid="wb-slot-constants"]').trigger('contextmenu')
+    await flushPromises()
+    expect(w.find('[data-testid="wb-menu-constants"]').exists()).toBe(true)
+    await w.find('[data-testid="wb-menu-constants-M"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="wb-card-constants-s"]').exists()).toBe(false)
+    expect(w.find('[data-testid="wb-size-constants"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('v1 旧存档 → 刷新后 order 继承、v2 键落盘(迁移接线)', async () => {
+    localStorage.setItem('workbench.layout.v1:alice', JSON.stringify(['starred-scenarios', 'constants']))
+    const w = mountPage()
+    await waitCards(w, 2)
+    expect(w.find('[data-testid="wb-slot-starred-scenarios"]').exists()).toBe(true)
+    expect(w.find('[data-testid="wb-slot-recent-executions"]').exists()).toBe(false)
+    const stored = JSON.parse(localStorage.getItem('workbench.layout.v2:alice')!)
+    expect(stored.order).toEqual(['starred-scenarios', 'constants'])
     w.unmount()
   })
 })
@@ -158,7 +226,6 @@ describe('工作台新卡 — 最近执行', () => {
     await vi.waitFor(() => {
       expect(w.find('[data-testid="wb-ex-row-7"]').exists()).toBe(true)
     })
-    // limit 契约
     expect(executionsApi.listExecutions).toHaveBeenCalledWith({ limit: 5 })
     const row = w.find('[data-testid="wb-ex-row-7"]')
     expect(row.attributes('href')).toBe('/executions/7')
@@ -169,7 +236,7 @@ describe('工作台新卡 — 最近执行', () => {
 })
 
 describe('工作台新卡 — 收藏场景', () => {
-  it('starred 过滤 + top5 截断 + 行直达详情', async () => {
+  it('starred 过滤 + 行直达详情', async () => {
     vi.mocked(scenarioApi.listScenarios).mockResolvedValue([
       { meta: { scenarioId: 'sc-a', name: 'A', module: '订单' }, starred: true } as never,
       { meta: { scenarioId: 'sc-b', name: 'B', module: '订单' }, starred: false } as never,
