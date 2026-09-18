@@ -4,7 +4,7 @@
      submit 内 setFieldError 承接(schema 静态化,规则仍单点)。
      测试弹框状态机(开框即认证中 → 成功/失败终态)语义原样保留。 -->
 <template>
-  <ListPage title="认证管理" :subtitle="metaText">
+  <ListPage title="认证管理" width="wide" :subtitle="metaText">
     <template #actions>
       <Input
         v-model="searchQuery"

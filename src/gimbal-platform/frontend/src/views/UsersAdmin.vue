@@ -4,7 +4,7 @@
      状态色 chip。功能面与迁移前逐条对齐:搜索/角色筛选/创建/编辑昵称/
      升降级(末位 admin 保护)/重置密码/启停/删除(输入用户名确认)。 -->
 <template>
-  <ListPage title="用户管理" :subtitle="metaText">
+  <ListPage title="用户管理" width="wide" :subtitle="metaText">
     <template #actions>
       <Input
         v-model="searchQuery"

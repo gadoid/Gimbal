@@ -8,7 +8,7 @@
      - 布局按用户分键存 localStorage(layout.ts)。
      工作台仍只做两件事:按 registry+layout 渲染,管理布局配置。 -->
 <template>
-  <ListPage title="工作台" subtitle="摘要卡可添加 / 移除 / 拖拽排序,S/M/L 三档密度。">
+  <ListPage title="工作台" width="wide" subtitle="摘要卡可添加 / 移除 / 拖拽排序,S/M/L 三档密度。">
     <template #actions>
       <Button
         v-if="orderedIds.length > 0 && layoutDirty"
