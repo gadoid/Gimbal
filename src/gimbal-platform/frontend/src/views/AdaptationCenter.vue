@@ -6,21 +6,19 @@
      member:自动只读 owner 视图(仅批次表,scope=mine,无详情列 ——
        批次工作台为 admin-only,member 直入得 403)。 -->
 <template>
-  <section class="adaptation-center mx-auto max-w-[1480px] px-8 pb-12 pt-7">
-    <header class="page-header">
-      <div class="header-text">
-        <h2 class="m-0 text-display text-signal-ink">适配中心</h2>
-        <p class="mt-1 mb-0 text-caption text-muted-foreground">
-          {{ auth.isAdmin ? '目录变更检测与批次适配' : '仅显示触碰你场景的批次(只读)' }}
-        </p>
-      </div>
+  <ListPage
+    title="适配中心"
+    width="wide"
+    :subtitle="auth.isAdmin ? '目录变更检测与批次适配' : '仅显示触碰你场景的批次(只读)'"
+  >
+    <template #actions>
       <Button
         v-if="auth.isAdmin"
         :disabled="adaptations.refreshing"
         data-testid="refresh-all"
         @click="refreshAll"
       >{{ adaptations.refreshing ? '检查中…' : '检查更新' }}</Button>
-    </header>
+    </template>
 
     <template v-if="auth.isAdmin">
       <UnindexedAlert :steps="unindexed" />
@@ -35,8 +33,8 @@
       <Alert v-if="adaptations.lastError" variant="destructive" data-testid="diff-error">
         <AlertTitle>{{ adaptations.lastError }}</AlertTitle>
       </Alert>
-      <div v-else-if="pendingCards.length === 0 && anomalies.length === 0" class="empty-note">
-        目录无待适配变更
+      <div v-else-if="pendingCards.length === 0 && anomalies.length === 0" class="empty-state">
+        <p>目录无待适配变更</p>
       </div>
       <div v-else class="cards">
         <div
@@ -86,19 +84,19 @@
       <span class="section-title">批次</span>
     </div>
     <p v-if="!auth.isAdmin" class="hint mine-hint">仅显示触碰你场景的批次</p>
-    <div v-if="batchesLoading" class="py-6 text-center text-body text-muted-foreground">批次加载中…</div>
-    <Table v-else class="rounded-field border border-signal-line bg-signal-card">
+    <div v-if="batchesLoading" class="loading-state">批次加载中…</div>
+    <Table v-else class="min-w-[1080px] table-fixed rounded-field border border-signal-line bg-signal-card">
       <TableHeader>
         <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
-          <TableHead class="text-caption font-semibold text-muted-foreground">批次</TableHead>
-          <TableHead class="text-caption font-semibold text-muted-foreground">Endpoint</TableHead>
-          <TableHead class="text-caption font-semibold text-muted-foreground">版本</TableHead>
-          <TableHead class="w-[110px] text-caption font-semibold text-muted-foreground">状态</TableHead>
+          <TableHead class="w-[10%] text-caption font-semibold text-muted-foreground">批次</TableHead>
+          <TableHead class="w-[22%] text-caption font-semibold text-muted-foreground">Endpoint</TableHead>
+          <TableHead class="w-[12%] text-caption font-semibold text-muted-foreground">版本</TableHead>
+          <TableHead class="w-[8%] text-caption font-semibold text-muted-foreground">状态</TableHead>
           <TableHead class="text-caption font-semibold text-muted-foreground">ops</TableHead>
-          <TableHead class="text-caption font-semibold text-muted-foreground">创建时间</TableHead>
+          <TableHead class="w-[14%] text-caption font-semibold text-muted-foreground">创建时间</TableHead>
           <!-- 详情入口仅 admin:GET /batches/{id} 为 admin-only,
                member 点击只会得 403(死链),故整列不渲染。 -->
-          <TableHead v-if="auth.isAdmin" class="w-[70px]" />
+          <TableHead v-if="auth.isAdmin" class="w-[6%]" />
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -163,8 +161,8 @@
         <AlertTitle>plate 目录不可达:漂移数据可能失真(绑定可能被误报为孤儿),已禁用勾选与批生成</AlertTitle>
         <AlertDescription>清单已停止渲染,请先恢复 plate 目录后点刷新重查</AlertDescription>
       </Alert>
-      <div v-else-if="carryDrift.length === 0" class="empty-note">
-        {{ carryLoadFailed ? '加载失败,请刷新' : '暂无服务 carry 数据(无绑定且 plate 面为空)' }}
+      <div v-else-if="carryDrift.length === 0" class="empty-state">
+        <p>{{ carryLoadFailed ? '加载失败,请刷新' : '暂无服务 carry 数据(无绑定且 plate 面为空)' }}</p>
       </div>
       <div v-else class="drift-list">
         <div
@@ -185,12 +183,13 @@
         </div>
       </div>
     </template>
-  </section>
+  </ListPage>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import ListPage from '@/layouts/ListPage.vue'
 import { toast } from '@/utils/toast'
 import * as api from '@/api/adaptations'
 import type { BatchOut, PendingChange, UnindexedStep } from '@/api/adaptations'
@@ -356,15 +355,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* ── 页头 ── */
-.page-header {
-  display: flex;
-  gap: 24px;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 18px;
-}
-
 /* ── 分节标题 ── */
 .section-head {
   display: flex;
@@ -373,17 +363,13 @@ onMounted(() => {
   margin: 22px 0 10px;
 }
 .section-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #10151c;
+  @apply text-heading text-signal-ink;
   padding-left: 10px;
   border-left: 3px solid #2f6fed;
 }
 .section-count {
+  @apply text-caption font-semibold text-slate-500;
   padding: 1px 6px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #64748b;
   background: #f1f5f9;
   border-radius: 3px;
 }
@@ -408,45 +394,35 @@ onMounted(() => {
 .card-top { display: flex; align-items: center; gap: 8px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: #2f6fed; flex-shrink: 0; }
 .card.anomaly .dot { background: #eab308; }
-.endpoint { font-size: 13px; }
-.detail { margin: 6px 0 2px; font-size: 12px; color: #334155; }
+.endpoint { @apply text-body; }
+.detail { @apply text-label font-normal text-slate-700; margin: 6px 0 2px; }
 .card-bottom { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
-.view { margin-left: auto; font-size: 12px; color: #2f6fed; }
+.view { @apply text-label font-normal; margin-left: auto; color: #2f6fed; }
 
 /* ── 版本 chip ── */
 .ver-chip {
+  @apply text-micro font-semibold;
   padding: 1px 8px;
-  font-family: monospace;
-  font-size: 10.5px;
-  font-weight: 600;
+  font-family: var(--font-mono, monospace);
   border-radius: 4px;
 }
 .ver-chip.from { color: #64748b; background: #f1f5f9; }
 .ver-chip.to { color: #2f6fed; background: #e7efff; }
-.ver-arrow { color: #94a3b8; font-size: 11px; }
+.ver-arrow { @apply text-caption font-normal; color: #94a3b8; }
 
 /* ── 通用 chip(状态/ops)── */
 .chip {
+  @apply text-micro font-semibold;
   display: inline-flex;
   align-items: center;
   padding: 1px 8px;
-  font-size: 10.5px;
-  font-weight: 600;
   border-radius: 4px;
 }
 .op-tag { margin-right: 4px; }
-.endpoint-cell { font-size: 12px; }
+.endpoint-cell { @apply text-label font-normal; }
 
-/* ── 空态/提示 ── */
-.empty-note {
-  padding: 18px 16px;
-  text-align: center;
-  font-size: 12.5px;
-  color: #94a3b8;
-  border: 1px dashed #e1e5eb;
-  border-radius: 8px;
-}
-.hint { font-size: 11.5px; color: #94a3b8; margin: 2px 0 0; }
+/* ── 提示 ── */
+.hint { @apply text-caption font-normal; color: #94a3b8; margin: 2px 0 0; }
 .mine-hint { margin: -4px 0 10px; }
 
 /* ── drift 清单 ── */
@@ -457,18 +433,18 @@ onMounted(() => {
   border-radius: 8px;
   padding: 10px 14px;
 }
-.drift-svc h4 { margin: 0 0 6px; font-size: 13px; }
+.drift-svc h4 { @apply text-body font-semibold; margin: 0 0 6px; }
 .drift-ok { color: #15803d; }
 .drift-checks { display: flex; flex-direction: column; gap: 4px; }
 .drift-check {
+  @apply text-label font-normal;
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
   cursor: pointer;
 }
 .drift-check input { accent-color: #2f6fed; }
 
-.mono { font-family: monospace; }
+.mono { font-family: var(--font-mono, monospace); }
 .link { color: #2f6fed; }
 </style>
