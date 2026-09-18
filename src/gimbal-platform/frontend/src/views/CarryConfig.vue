@@ -6,13 +6,13 @@
      degraded 门控、R1-B1/R1-M2 修复语义全部保留(真源在
      utils/carry-csv + carry-entries + api/carry)。 -->
 <template>
-  <section class="carry-config mx-auto max-w-[1480px] px-8 pb-12 pt-7">
-    <header class="mb-3.5">
-      <h2 class="m-0 text-display text-signal-ink">传递字段配置</h2>
-      <p class="mt-1 mb-0 text-caption text-muted-foreground">carry 值表两层:服务绑定(覆盖)→ 全局默认;删行 = 不注入,null = 显式注入 JSON null</p>
-    </header>
-
-    <Tabs v-model="activeTab" class="carry-tabs">
+  <ListPage
+    title="传递字段配置"
+    width="wide"
+    subtitle="carry 值表两层:服务绑定(覆盖)→ 全局默认;删行 = 不注入,null = 显式注入 JSON null"
+  >
+    <template #tabs>
+      <Tabs v-model="activeTab" class="carry-tabs">
       <!-- ── 服务绑定 ─────────────────────────────── -->
       <TabsList>
         <TabsTrigger value="service">服务绑定</TabsTrigger>
@@ -33,7 +33,7 @@
           <div class="svc-bar">
             <Input
               v-model="service"
-              class="w-[320px] max-w-full"
+              class="w-[min(320px,100%)]"
               list="carry-known-services"
               placeholder="选择或输入目录服务名"
               data-testid="svc-input"
@@ -83,15 +83,15 @@
             </AlertDescription>
           </Alert>
 
-          <div v-if="loadingFields" class="py-6 text-center text-body text-muted-foreground">加载字段面…</div>
-          <Table v-else-if="rows.length" class="rounded-field border border-signal-line bg-signal-card">
+          <div v-if="loadingFields" class="loading-state">加载字段面…</div>
+          <Table v-else-if="rows.length" class="table-fixed rounded-field border border-signal-line bg-signal-card">
             <TableHeader>
               <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
-                <TableHead class="text-caption font-semibold text-muted-foreground">字段路径</TableHead>
-                <TableHead class="w-[90px] text-caption font-semibold text-muted-foreground">类型</TableHead>
-                <TableHead class="text-caption font-semibold text-muted-foreground">说明</TableHead>
-                <TableHead class="text-caption font-semibold text-muted-foreground">值</TableHead>
-                <TableHead class="w-[150px]" />
+                <TableHead class="w-[32%] text-caption font-semibold text-muted-foreground">字段路径</TableHead>
+                <TableHead class="w-[8%] text-caption font-semibold text-muted-foreground">类型</TableHead>
+                <TableHead class="w-[22%] text-caption font-semibold text-muted-foreground">说明</TableHead>
+                <TableHead class="w-[24%] text-caption font-semibold text-muted-foreground">值</TableHead>
+                <TableHead class="w-[14%]" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -184,12 +184,12 @@
           </div>
           </TooltipProvider>
 
-          <Table v-if="defaultRows.length" class="rounded-field border border-signal-line bg-signal-card">
+          <Table v-if="defaultRows.length" class="table-fixed rounded-field border border-signal-line bg-signal-card">
             <TableHeader>
               <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
-                <TableHead class="text-caption font-semibold text-muted-foreground">字段路径</TableHead>
-                <TableHead class="text-caption font-semibold text-muted-foreground">值</TableHead>
-                <TableHead class="w-[130px]" />
+                <TableHead class="w-[45%] text-caption font-semibold text-muted-foreground">字段路径</TableHead>
+                <TableHead class="w-[41%] text-caption font-semibold text-muted-foreground">值</TableHead>
+                <TableHead class="w-[14%]" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -228,8 +228,9 @@
           </div>
         </div>
       </TabsContent>
-    </Tabs>
-  </section>
+      </Tabs>
+    </template>
+  </ListPage>
 </template>
 
 <script setup lang="ts">
@@ -241,6 +242,7 @@
  * 全局默认 tab:整表编辑;常驻提示纯 path 跨服务生效(§6)。
  */
 import { computed, onMounted, ref } from 'vue'
+import ListPage from '@/layouts/ListPage.vue'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import { buildServiceEntries, type ServiceCarryRow } from '@/utils/carry-entries'
