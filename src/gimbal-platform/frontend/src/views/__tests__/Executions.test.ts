@@ -115,7 +115,7 @@ describe('Executions.vue — V3 detail page', () => {
 
     const values = wrapper.findAll('.counter-value').map((c) => c.text())
     expect(values).toEqual(['4', '3', '1', '0']) // total/passed/failed/未开始
-    expect(wrapper.find('h2').text()).toContain('#1')
+    expect(wrapper.find('h1').text()).toContain('#1')
 
     wrapper.unmount()
   })
@@ -213,7 +213,7 @@ describe('Executions.vue — P1 detail upgrades', () => {
     execStore.fetchDetail = vi.fn().mockResolvedValue(fakeDetail)
 
     const wrapper = await mountPage()
-    const p = wrapper.find('.page-header p').text()
+    const p = wrapper.find('[data-testid="exec-meta"]').text()
     expect(p).toContain('01:02:03')
     expect(p).toContain('01:03:04')
     wrapper.unmount()

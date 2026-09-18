@@ -3,60 +3,82 @@
      1s 轮询刷新；engine.log / result.json 工件按需加载）。
      V1 的每-run 报告/SSE 已退役。 -->
 <template>
-  <section class="executions" v-if="execStore.detail">
+  <HubDetailPage v-if="execStore.detail" :title="`执行 #${execStore.detail.id}`">
+    <template #meta>
+      <p data-testid="exec-meta" class="m-0">
+        {{ execStore.detail.scenario_id }} · 状态 {{ statusText }}
+        <template v-if="startedAtLabel"> · 开始 {{ startedAtLabel }}</template>
+        <template v-if="finishedAtLabel"> · 结束 {{ finishedAtLabel }}</template>
+        <span
+          v-if="stepToLabel"
+          class="step-to-pill"
+          title="本次执行在 --step-to 模式下运行（仅跑到第 N 步后停止）"
+        >执行到第 {{ stepToLabel }} 步</span>
+      </p>
+    </template>
+
+    <template #actions>
+      <span :class="['status-tag', `status-${execStore.detail.status}`]">
+        {{ statusText }}
+      </span>
+      <TooltipProvider>
+        <Tooltip :open="execStore.detail.has_scenario_snapshot ? undefined : false">
+          <TooltipTrigger as-child>
+            <span>
+              <Button
+                variant="link"
+                size="sm"
+                class="h-7 px-2"
+                :disabled="!execStore.detail.has_scenario_snapshot"
+                data-testid="exec-export-scenario"
+                @click="exportScenario"
+              >导出场景</Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent v-if="!execStore.detail.has_scenario_snapshot">
+            该执行早于快照功能上线，无执行时场景快照
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <Button
+        v-if="canCancel"
+        variant="link"
+        size="sm"
+        class="h-7 px-2 text-amber-700"
+        @click="cancelExec"
+      >取消</Button>
+      <Button variant="link" size="sm" class="h-7 px-2" @click="refreshNow">手动刷新</Button>
+      <Button variant="link" size="sm" class="h-7 px-2 text-signal-failed" @click="removeExec">删除</Button>
+    </template>
+
+    <template #summary>
+      <div class="counters">
+        <div class="counter">
+          <div class="counter-label">总执行</div>
+          <div class="counter-value">{{ execStore.detail.total_runs }}</div>
+        </div>
+        <div class="counter ok">
+          <div class="counter-label">通过</div>
+          <div class="counter-value">{{ execStore.detail.passed }}</div>
+        </div>
+        <div class="counter fail">
+          <div class="counter-label">失败</div>
+          <div class="counter-value">{{ execStore.detail.failed }}</div>
+        </div>
+        <div class="counter" title="未执行 / 行边界跳过 / 取消未跑的行">
+          <div class="counter-label">未完成</div>
+          <div class="counter-value">{{
+            Math.max(0, execStore.detail.total_runs - execStore.detail.passed - execStore.detail.failed)
+          }}</div>
+        </div>
+      </div>
+    </template>
+
     <!-- Poller gave up (failure budget) while the last detail snapshot
          stays rendered — tell the user the data may be stale. -->
     <Alert v-if="execStore.pollError" class="poll-warn">
       <AlertTitle>{{ execStore.pollError }}</AlertTitle>
     </Alert>
-    <header class="page-header">
-      <div>
-        <h2>执行 #{{ execStore.detail.id }}</h2>
-        <p>
-          {{ execStore.detail.scenario_id }} · 状态 {{ statusText }}
-          <template v-if="startedAtLabel"> · 开始 {{ startedAtLabel }}</template>
-          <template v-if="finishedAtLabel"> · 结束 {{ finishedAtLabel }}</template>
-          <span
-            v-if="stepToLabel"
-            class="step-to-pill"
-            title="本次执行在 --step-to 模式下运行（仅跑到第 N 步后停止）"
-          >执行到第 {{ stepToLabel }} 步</span>
-        </p>
-      </div>
-      <div class="header-actions">
-        <span :class="['status-tag', `status-${execStore.detail.status}`]">
-          {{ statusText }}
-        </span>
-        <TooltipProvider>
-          <Tooltip :open="execStore.detail.has_scenario_snapshot ? undefined : false">
-            <TooltipTrigger as-child>
-              <span>
-                <Button
-                  variant="link"
-                  size="sm"
-                  class="h-7 px-2"
-                  :disabled="!execStore.detail.has_scenario_snapshot"
-                  data-testid="exec-export-scenario"
-                  @click="exportScenario"
-                >导出场景</Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent v-if="!execStore.detail.has_scenario_snapshot">
-              该执行早于快照功能上线，无执行时场景快照
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <Button
-          v-if="canCancel"
-          variant="link"
-          size="sm"
-          class="h-7 px-2 text-amber-700"
-          @click="cancelExec"
-        >取消</Button>
-        <Button variant="link" size="sm" class="h-7 px-2" @click="refreshNow">手动刷新</Button>
-        <Button variant="link" size="sm" class="h-7 px-2 text-signal-failed" @click="removeExec">删除</Button>
-      </div>
-    </header>
 
     <!-- 系统标记:reconcile 收敛 / 计数器漂移(不进配方 dl)-->
     <Alert v-if="execStore.detail.config?.reconciled" class="sys-alert">
@@ -65,27 +87,6 @@
     <Alert v-if="execStore.detail.config?.counterDrift" variant="destructive" class="sys-alert">
       <AlertTitle>计数器漂移：通过+失败 ≠ 总执行，真值以 data/runs/&lt;date&gt;.jsonl 调度日志为准</AlertTitle>
     </Alert>
-
-    <div class="counters">
-      <div class="counter">
-        <div class="counter-label">总执行</div>
-        <div class="counter-value">{{ execStore.detail.total_runs }}</div>
-      </div>
-      <div class="counter ok">
-        <div class="counter-label">通过</div>
-        <div class="counter-value">{{ execStore.detail.passed }}</div>
-      </div>
-      <div class="counter fail">
-        <div class="counter-label">失败</div>
-        <div class="counter-value">{{ execStore.detail.failed }}</div>
-      </div>
-      <div class="counter" title="未执行 / 行边界跳过 / 取消未跑的行">
-        <div class="counter-label">未完成</div>
-        <div class="counter-value">{{
-          Math.max(0, execStore.detail.total_runs - execStore.detail.passed - execStore.detail.failed)
-        }}</div>
-      </div>
-    </div>
 
     <h3 class="recipe-title">执行信息</h3>
     <dl class="recipe">
@@ -181,7 +182,7 @@
         </tbody>
       </table>
     </div>
-  </section>
+  </HubDetailPage>
 
   <section v-else-if="execStore.pollError" class="state error-state">
     <Alert variant="destructive">
@@ -193,14 +194,13 @@
     </div>
   </section>
 
-  <section v-else class="state loading-state">
-    <p class="m-0 py-10 text-center text-body text-muted-foreground">加载执行详情…</p>
-  </section>
+  <div v-else class="loading-state">加载执行详情…</div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import HubDetailPage from '@/layouts/HubDetailPage.vue'
 import { toast } from '@/utils/toast'
 import { executionStatusText, isTerminalExecutionStatus } from '@/utils/executionStatus'
 import { cancelExecution, getScenarioSnapshot } from '@/api/executions'
@@ -484,55 +484,21 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.executions {
-  max-width: 1080px;
-  padding: 28px 32px 48px;
-  margin: 0 auto;
-}
-
-.page-header {
-  display: flex;
-  gap: 24px;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.page-header h2 {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: 22px;
-  line-height: 1.25;
-}
-
-.page-header p {
-  margin: 5px 0 0;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-}
 .step-to-pill {
+  @apply text-micro font-semibold;
   display: inline-flex;
   align-items: center;
   margin-left: 8px;
   padding: 1px 8px;
-  font-size: 10.5px;
-  font-weight: 600;
   color: #475569;
   background: #f1f5f9;
   border-radius: 4px;
   vertical-align: middle;
 }
 
-.header-actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
 .status-tag {
   padding: 4px 10px;
-  font-size: 11px;
-  font-weight: 600;
+  @apply text-caption font-semibold;
   border-radius: 4px;
 }
 
@@ -542,7 +508,6 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
-  margin-bottom: 24px;
 }
 
 .counter {
@@ -553,15 +518,14 @@ onUnmounted(() => {
 }
 
 .counter-label {
+  @apply text-caption font-normal;
   color: #64748b;
-  font-size: 11px;
 }
 
 .counter-value {
+  @apply text-display-lg;
   margin-top: 6px;
   color: var(--color-text-primary);
-  font-size: 24px;
-  font-weight: 700;
 }
 
 .counter.ok .counter-value {
@@ -574,9 +538,9 @@ onUnmounted(() => {
 
 .recipe-title,
 .rows-title {
+  @apply text-heading;
   margin: 0 0 12px;
   color: var(--color-text-primary);
-  font-size: 14px;
 }
 
 .rows-title {
@@ -589,7 +553,7 @@ onUnmounted(() => {
   gap: 6px 24px;
   padding: 14px 18px;
   margin: 0 0 16px;
-  font-size: 12px;
+  @apply text-label font-normal;
   background: #fff;
   border: 0.5px solid #e2e8f0;
   border-radius: 8px;
@@ -605,7 +569,7 @@ onUnmounted(() => {
 }
 
 .mono {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono, monospace);
 }
 
 .dim {
@@ -622,9 +586,9 @@ onUnmounted(() => {
 }
 
 .rows-hint {
+  @apply text-label font-normal;
   margin: 0;
   color: var(--color-text-tertiary);
-  font-size: 12px;
 }
 
 .rows-panel {
@@ -632,10 +596,10 @@ onUnmounted(() => {
 }
 
 .rows-empty {
+  @apply text-label font-normal;
   margin: 0;
   padding: 18px;
   color: var(--color-text-tertiary);
-  font-size: 12px;
   background: #fff;
   border: 0.5px dashed #e2e8f0;
   border-radius: 8px;
@@ -643,7 +607,7 @@ onUnmounted(() => {
 
 .ex-table {
   width: 100%;
-  font-size: 12px;
+  @apply text-label font-normal;
   background: #fff;
   border: 0.5px solid #e2e8f0;
   border-radius: 8px;
@@ -668,20 +632,18 @@ onUnmounted(() => {
 }
 
 .row-tag {
+  @apply text-micro font-semibold;
   display: inline-flex;
   padding: 2px 8px;
-  font-size: 10.5px;
-  font-weight: 600;
   border-radius: 4px;
   white-space: nowrap;
 }
 
 /* 注入族行角标(spec v2 §8):注入条目 id,警示色系 */
 .inj-badge {
+  @apply text-micro font-semibold;
   display: inline-flex;
   padding: 2px 8px;
-  font-size: 10.5px;
-  font-weight: 600;
   color: #92400e;
   background: #fef3c7;
   border-radius: 4px;
@@ -706,21 +668,20 @@ onUnmounted(() => {
 }
 
 .artifact-head {
+  @apply text-caption font-normal;
   display: flex;
   gap: 12px;
   align-items: baseline;
   margin-bottom: 6px;
   color: var(--color-text-secondary);
-  font-size: 11px;
 }
 
 .artifact-pre {
-  max-height: 320px;
+  max-height: 50vh;
   padding: 10px 12px;
   margin: 0;
   overflow: auto;
-  font-size: 11px;
-  line-height: 1.55;
+  @apply text-caption font-normal;
   white-space: pre-wrap;
   word-break: break-all;
   background: #fff;
