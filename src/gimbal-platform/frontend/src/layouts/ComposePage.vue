@@ -6,7 +6,7 @@
      容器双档(样式归一):standard=1200(默认)/ wide=1480,取代旧 1100 单档。 -->
 <template>
   <div
-    class="mx-auto flex min-h-[calc(100vh-48px)] w-full flex-col px-4 pb-6 pt-5"
+    class="mx-auto flex min-h-[calc(100vh-48px)] w-full flex-col px-4 pb-6 pt-4"
     :class="width === 'wide' ? 'max-w-[min(1480px,100%)]' : 'max-w-[min(1200px,100%)]'"
   >
     <header v-if="title || $slots.actions" class="mb-4 flex flex-wrap items-center justify-between gap-3">

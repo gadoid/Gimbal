@@ -6,7 +6,7 @@
      max-w-[min(Npx,100%)];lead = 标题下、tabs 上的整宽导语区。 -->
 <template>
   <div
-    class="mx-auto w-full px-4 py-6"
+    class="mx-auto w-full px-4 pb-6 pt-4"
     :class="width === 'wide' ? 'max-w-[min(1480px,100%)]' : 'max-w-[min(1200px,100%)]'"
   >
     <header>
