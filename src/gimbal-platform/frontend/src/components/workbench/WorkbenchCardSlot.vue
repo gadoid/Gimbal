@@ -139,7 +139,7 @@ onUnmounted(() => clearTimeout(pulseTimer))
 /* ── 卡片视觉框架(统一供给,§7 第 3 条 + 设计文档 §2)──────────
      分类色边 = border-top 3px:与卡片描边/圆角由浏览器一并绘制,
      两端与卡片边线严格对齐(原绝对定位色条在圆角处会错位)。
-     hover 抬升与页内快捷入口卡同款双阴影。 */
+     hover 抬一档阴影,与右栏两张固定卡同一套静止/悬浮深度。 */
 .slot-frame {
   flex: 1;
   position: relative;

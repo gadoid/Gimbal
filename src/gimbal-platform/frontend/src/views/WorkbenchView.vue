@@ -69,17 +69,6 @@
             + 添加卡片
           </button>
         </div>
-
-        <!-- 全局快捷入口(非 registry 卡;固定区不参与组装)。场景库不再占位:
-             三页各由自己的 registry 卡承载(我的/公共/关注),卡头深链即入口。 -->
-        <h2 class="mb-2 mt-6 text-heading text-signal-ink">快捷入口</h2>
-        <div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
-          <router-link to="/executions" class="wb-card">
-            <span class="text-heading text-signal-ink">执行历史</span>
-            <span class="text-caption text-muted-foreground">运行记录与结果下钻。</span>
-            <span class="mt-1 text-caption font-medium text-signal">进入执行历史 →</span>
-          </router-link>
-        </div>
       </div>
 
       <aside class="wb-rail">
@@ -180,8 +169,4 @@ const layoutDirty = computed(() => {
     transition-colors duration-150;
 }
 .add-strip:hover { @apply border-signal text-signal; }
-
-.wb-card {
-  @apply flex flex-col gap-1.5 rounded-card border border-signal-line bg-signal-card p-4 no-underline shadow-sig-hover transition-shadow duration-150 hover:border-signal hover:shadow-sig-float;
-}
 </style>
