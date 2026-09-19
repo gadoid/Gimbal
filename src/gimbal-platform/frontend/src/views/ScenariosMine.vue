@@ -117,20 +117,22 @@
       <button v-if="!filtering" type="button" class="slib-create" @click="onCreate">+ 新建场景</button>
     </div>
 
-    <div v-if="total > pageSize" class="pager">
-      <button type="button" class="pg-btn" :disabled="page <= 1" @click="page--">&#8249;</button>
-      <button v-for="p in pageCount" :key="p" type="button" class="pg-btn" :class="{ active: p === page }" @click="page = p">{{ p }}</button>
-      <button type="button" class="pg-btn" :disabled="page >= pageCount" @click="page++">&#8250;</button>
-      <span class="pg-total">共 {{ total }} 条</span>
-    </div>
+    <ListPager v-model:page="page" :total="total" :page-size="pageSize" />
 
     <p class="slib-note">
       「次数」「并发」是卡片底部两个独立的小徽章,平时只显示当前值,点一下变成可编辑输入框直接改数字;不需要额外弹一整层面板。更深的参数还是要进方案管理去改。方案卡片左上角的「默认」标记指这个场景的默认方案——关注页的执行健康趋势只统计默认方案的执行结果,不跨方案聚合。
     </p>
 
-    <!-- 按方案导出选择器 -->
-    <div v-if="exportPicker.open" class="exp-modal" data-testid="export-picker">
-      <div class="exp-panel">
+    <!-- 按方案导出选择器(点遮罩 / ESC = 取消,避免 promise 永挂)-->
+    <div
+      v-if="exportPicker.open"
+      class="exp-modal"
+      data-testid="export-picker"
+      role="presentation"
+      @click.self="settleExportPicker(undefined)"
+      @keyup.esc="settleExportPicker(undefined)"
+    >
+      <div ref="expPanel" class="exp-panel" role="dialog" aria-modal="true" aria-label="选择导出方案" tabindex="-1">
         <h4>导出场景 {{ exportPicker.scenarioName }}</h4>
         <p class="exp-hint">该场景存有运行方案 — 按方案导出会把方案的服务绑定物化进导出文件。</p>
         <label class="exp-opt">
@@ -149,10 +151,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
-import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { useAuthStore } from '@/stores/auth'
 import {
   getScenarioDraft, listRunSchemes, updateRunScheme, runScenario, schemeToRunRequest,
@@ -160,17 +161,17 @@ import {
 } from '@/api/scenario-composer'
 import { convertDraftToExecutable, schemeToOverlay } from '@/stores/scenario-draft'
 import { downloadFile } from '@/utils/download'
-import { useListSearch } from '@/utils/useListSearch'
 import { confirmAction } from '@/utils/confirmAction'
 import { composerUrl, scenarioDetailUrl, scenarioSchemesUrl } from '@/utils/links'
 import { showError } from '@/utils/errorFallback'
 import { shortDateTime } from '@/utils/datetime'
-import { applyFiltersToList, emptyFilters, isFiltering, type ScenarioFilters } from '@/utils/filters'
 import { useScenarioRuns } from '@/composables/useScenarioRuns'
-import { FOLLOW_CAP } from '@/composables/useFollowLayout'
+import { FollowCapError } from '@/composables/useFollowLayout'
+import { useScenarioListView } from '@/composables/useScenarioListView'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
 import StarToggle from '@/components/scenario-lib/StarToggle.vue'
 import SchemeCard from '@/components/scenario-lib/SchemeCard.vue'
+import ListPager from '@/components/scenario-lib/ListPager.vue'
 import FilterPopover from '@/components/FilterPopover.vue'
 import TagPill from '@/components/TagPill.vue'
 import SystemChip from '@/components/SystemChip.vue'
@@ -180,44 +181,21 @@ import type { Scenario } from '@/types/scenario-composer'
 
 const PREVIEW_MAX = 3
 const MAX = 3
-const pageSize = 20
 
-const store = useScenarioComposerStore()
 const auth = useAuthStore()
 const router = useRouter()
 const runs = useScenarioRuns()
 
-const q = ref('')
-const filters = ref<ScenarioFilters>(emptyFilters())
-const page = ref(1)
+// 我的场景 = 私有桶(公共场景在独立页,两页谓词互补)。搜索 / 筛选 / 分页
+// 的整套骨架在 useScenarioListView 里与公共页共用。
+const {
+  store, q, filters, page, paged, rows, total, filtering, filterableRows, load, pageSize,
+} = useScenarioListView((r) => r.visibility !== 'public')
+
 const expandedId = ref<string | null>(null)
 const schemesLoadingId = ref<string | null>(null)
 const schemesByScenario = reactive(new Map<string, SchemeV2[]>())
 
-const { filtered } = useListSearch(
-  () => store.scenarios,
-  ['meta.name', 'meta.scenarioId', 'meta.module', 'meta.description', 'meta.system', 'tags'],
-  q,
-)
-
-const filterableRows = computed(() =>
-  filtered.value.map((s) => ({
-    ...s,
-    module: s.meta.module,
-    author: s.meta.author || s.meta.owner,
-    priority: s.meta.priority,
-    updated_at: s.meta.updateTime,
-    system: s.meta.system,
-    tags: s.meta.tags,
-  })),
-)
-
-// 我的场景 = 私有(自己的);公共场景在独立页。
-const rows = computed(() =>
-  (applyFiltersToList(filterableRows.value, filters.value) as typeof filterableRows.value)
-    .filter((r) => r.visibility !== 'public'),
-)
-const total = computed(() => rows.value.length)
 /** 后端读侧「admin 全量;普通用户 = public + 自己的」→ 非 public 桶对管理员
  *  装的是全员的私有场景,副标题必须说实话,不能对管理员自称"你的"。 */
 const pageSubtitle = computed(() =>
@@ -225,26 +203,10 @@ const pageSubtitle = computed(() =>
     ? `共 ${total.value} 个场景 · 管理员可见全员私有编排(含他人的)`
     : `共 ${total.value} 个场景 · 你创建或拥有的编排`,
 )
-const filtering = computed(() => isFiltering(filters.value, q.value))
-const pageCount = computed(() => Math.ceil(total.value / pageSize))
-const paged = computed(() => {
-  const start = (page.value - 1) * pageSize
-  return rows.value.slice(start, start + pageSize)
-})
-watch(total, () => {
-  const maxPage = Math.max(1, Math.ceil(total.value / pageSize))
-  if (page.value > maxPage) page.value = maxPage
-})
 
 const formatTime = shortDateTime
 
-onMounted(async () => {
-  try {
-    await store.fetchScenarios()
-  } catch {
-    showError('加载场景', undefined, store.lastError)
-  }
-})
+onMounted(load)
 
 function openScenario(row: Scenario) {
   router.push(composerUrl(row.meta.scenarioId))
@@ -312,14 +274,12 @@ async function runScheme(row: Scenario, scheme: SchemeV2) {
 
 // ── 关注(20 上限)─────────────────────────────────────────────
 async function toggleStar(row: Scenario) {
-  if (!row.starred && store.starredScenarios.length >= FOLLOW_CAP) {
-    toast.error(`关注上限 ${FOLLOW_CAP} 个 — 请先在关注页取消部分关注`)
-    return
-  }
   try {
-    await store.toggleStar(row.meta.scenarioId)
+    await store.toggleStarWithCap(row.meta.scenarioId)
   } catch (e) {
-    showError('关注', undefined, (e as Error).message)
+    // 上限是预期分支 → 一句人话;其余才走通用错误兜底
+    if (e instanceof FollowCapError) toast.error(e.message)
+    else showError('关注', undefined, (e as Error).message)
   }
 }
 
@@ -332,11 +292,15 @@ const exportPicker = reactive<{
   resolve: ((v: SchemeV2 | null | undefined) => void) | null
 }>({ open: false, schemes: [], scenarioName: '', chosen: '', resolve: null })
 
+const expPanel = ref<HTMLElement | null>(null)
+
 function pickExportScheme(schemes: SchemeV2[], scenarioName: string): Promise<SchemeV2 | null | undefined> {
   exportPicker.schemes = schemes
   exportPicker.scenarioName = scenarioName
   exportPicker.chosen = ''
   exportPicker.open = true
+  // 焦点进弹层:否则 ESC / 键盘操作落不到它身上,读屏用户也听不到它开了
+  void nextTick(() => expPanel.value?.focus())
   return new Promise((resolve) => { exportPicker.resolve = resolve })
 }
 function settleExportPicker(v: SchemeV2 | null | undefined) {
@@ -426,17 +390,6 @@ async function onCmd(cmd: string, row: Scenario) {
 <style scoped>
 .sys-list { display: flex; flex-wrap: wrap; gap: 4px; }
 .row-expired td { opacity: 0.55; }
-.pager { display: flex; justify-content: flex-end; align-items: center; margin-top: 12px; }
-.pg-btn {
-  min-width: 28px; height: 28px; margin-right: 4px;
-  font-size: 12px; text-align: center;
-  color: #374151; background: #fff;
-  border: 1px solid #e1e5eb; border-radius: 6px;
-  cursor: pointer;
-}
-.pg-btn.active { color: #fff; background: #2f6fed; border-color: #2f6fed; font-weight: 600; }
-.pg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.pg-total { font-size: 11.5px; color: #64748b; margin-left: 6px; }
 .exp-modal {
   position: fixed; inset: 0; z-index: 2000;
   display: flex; align-items: center; justify-content: center;

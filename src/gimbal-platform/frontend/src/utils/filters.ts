@@ -56,10 +56,13 @@ export function isFiltering(f: ScenarioFilters, q = ''): boolean {
   return q.trim() !== '' || JSON.stringify(f) !== JSON.stringify(emptyFilters())
 }
 
-export function applyFiltersToList(
-  pool: readonly FilterRow[],
+/** 行类型透传:返回 ``T[]`` 而不是 ``FilterRow[]`` —— 后者会把调用方
+ *  拿到的行宽化成 Partial<ScenarioFilterRow>,下游只能靠 `as` 硬掰回
+ *  ScenarioListRow(断言即盲区:改错字段名编译器不会报)。 */
+export function applyFiltersToList<T extends FilterRow>(
+  pool: readonly T[],
   f: ScenarioFilters,
-): FilterRow[] {
+): T[] {
   const now = Date.now()
   const cutoff = (() => {
     switch (f.updatedWithin) {

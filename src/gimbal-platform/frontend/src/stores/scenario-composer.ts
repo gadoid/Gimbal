@@ -7,6 +7,7 @@
  */
 import { defineStore } from 'pinia'
 import * as api from '@/api/scenario-composer'
+import { FOLLOW_CAP, FollowCapError } from '@/composables/useFollowLayout'
 import type {
   Scenario, DataSet, DataSetSummary,
   ScenarioDraft, DataSetDraft,
@@ -101,6 +102,16 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
         cur.starred = !cur.starred
         throw new Error('收藏失败')
       }
+    },
+
+    /** ★ 切换 + 关注上限守卫。超限抛 FollowCapError,由视图翻成提示 ——
+     *  原先"查上限 → 同一句文案"在我的/公共两页各抄一份。 */
+    async toggleStarWithCap(scenarioId: string) {
+      const cur = this.scenarioById(scenarioId)
+      if (!cur?.starred && this.starredScenarios.length >= FOLLOW_CAP) {
+        throw new FollowCapError(`关注上限 ${FOLLOW_CAP} 个 — 请先在关注页取消部分关注`)
+      }
+      await this.toggleStar(scenarioId)
     },
 
     async removeScenario(scenarioId: string) {

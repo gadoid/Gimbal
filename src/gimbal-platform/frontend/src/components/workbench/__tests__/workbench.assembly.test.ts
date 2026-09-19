@@ -20,6 +20,10 @@ vi.mock('@/api/constants', () => ({
 vi.mock('@/api/executions', () => ({
   listExecutions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 }))
+// 右栏时间线会读适配批次 —— 不 mock 就打真网络,用例变慢且不稳定
+vi.mock('@/api/adaptations', () => ({
+  listBatches: vi.fn().mockResolvedValue([]),
+}))
 vi.mock('@/api/scenario-composer', () => ({
   listScenarios: vi.fn().mockResolvedValue([]),
 }))

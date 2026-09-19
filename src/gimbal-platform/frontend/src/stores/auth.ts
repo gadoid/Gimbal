@@ -19,6 +19,16 @@ const STORAGE_KEY = 'gimbal-auth'
 interface Persisted {
   accessToken: string
   refreshToken: string
+  /** 身份快照。工作台布局 / 关注常驻席 / 执行缓存全部按 username 分键,
+   *  而这些键在组件 setup 时就要读:等 /auth/me 回来再绑,首帧会先落到
+   *  匿名键(甚至把 seed 写错地方),用户看到的就是"刷新后设置丢了"。
+   *  只作身份提示用 —— 令牌是否有效仍以 fetchMe 为准(status 不提前翻)。 */
+  user?: UserPublic
+}
+
+function isUser(v: unknown): v is UserPublic {
+  const u = v as Partial<UserPublic> | null | undefined
+  return !!u && typeof u.username === 'string'
 }
 
 function readPersisted(): Persisted | null {
@@ -30,7 +40,11 @@ function readPersisted(): Persisted | null {
       typeof obj.accessToken === 'string' &&
       typeof obj.refreshToken === 'string'
     ) {
-      return { accessToken: obj.accessToken, refreshToken: obj.refreshToken }
+      return {
+        accessToken: obj.accessToken,
+        refreshToken: obj.refreshToken,
+        user: isUser(obj.user) ? obj.user : undefined,
+      }
     }
   } catch {
     // ignore corrupt storage
@@ -54,7 +68,7 @@ export const useAuthStore = defineStore('auth', () => {
   const persisted = readPersisted()
   const accessToken = ref<string>(persisted?.accessToken ?? '')
   const refreshToken = ref<string>(persisted?.refreshToken ?? '')
-  const currentUser = ref<UserPublic | null>(null)
+  const currentUser = ref<UserPublic | null>(persisted?.user ?? null)
   const status = ref<'unknown' | 'authenticated' | 'guest'>('unknown')
 
   const isAuthenticated = computed(() => !!accessToken.value)
@@ -64,11 +78,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Persist whenever tokens change.  watch runs on the .value mutations
   // we make below (setTokens / clear) and on initial assignment.
+  // currentUser 一并入档:刷新后的第一帧就要有身份(见 Persisted.user)。
   watch(
-    [accessToken, refreshToken],
-    ([a, r]) => {
+    [accessToken, refreshToken, currentUser],
+    ([a, r, u]) => {
       if (a && r) {
-        writePersisted({ accessToken: a, refreshToken: r })
+        writePersisted({ accessToken: a, refreshToken: r, user: u ?? undefined })
       } else {
         writePersisted(null)
       }

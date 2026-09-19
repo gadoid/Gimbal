@@ -13,25 +13,47 @@
       </div>
     </div>
     <div class="sc-foot">
-      <span
+      <!-- 非编辑态是真 <button>(可 Tab 聚焦、Enter 触发);编辑态换成 span
+           包 input —— 输入框不能嵌在 button 里。 -->
+      <button
+        v-if="editing !== 'nRuns'"
+        type="button"
         class="mini-badge"
-        :class="{ editing: editing === 'nRuns' }"
+        :aria-label="`修改执行次数(当前 ${scheme.nRuns})`"
         @click.stop="startEdit('nRuns')"
-      >
-        <template v-if="editing === 'nRuns'">
-          <input v-model="draft" type="number" min="1" max="500" @blur="commit" @keyup.enter="commit" @click.stop />
-        </template>
-        <template v-else>次数 <b>{{ scheme.nRuns }}</b></template>
+      >次数 <b>{{ scheme.nRuns }}</b></button>
+      <span v-else class="mini-badge editing">
+        <input
+          ref="inputEl"
+          v-model="draft"
+          type="number"
+          min="1"
+          max="500"
+          aria-label="执行次数"
+          @blur="commit"
+          @keyup.enter="commit"
+          @keyup.esc="cancel"
+        />
       </span>
-      <span
+      <button
+        v-if="editing !== 'parallel'"
+        type="button"
         class="mini-badge"
-        :class="{ editing: editing === 'parallel' }"
+        :aria-label="`修改并发数(当前 ${scheme.parallel})`"
         @click.stop="startEdit('parallel')"
-      >
-        <template v-if="editing === 'parallel'">
-          <input v-model="draft" type="number" min="1" max="200" @blur="commit" @keyup.enter="commit" @click.stop />
-        </template>
-        <template v-else>并发 <b>{{ scheme.parallel }}</b></template>
+      >并发 <b>{{ scheme.parallel }}</b></button>
+      <span v-else class="mini-badge editing">
+        <input
+          ref="inputEl"
+          v-model="draft"
+          type="number"
+          min="1"
+          max="200"
+          aria-label="并发数"
+          @blur="commit"
+          @keyup.enter="commit"
+          @keyup.esc="cancel"
+        />
       </span>
       <button type="button" class="run-link" @click.stop="$emit('run', scheme)">▶ 执行</button>
     </div>
@@ -39,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { toast } from '@/utils/toast'
 import type { SchemeV2 } from '@/api/scenario-composer'
 import { relTime } from '@/utils/datetime'
@@ -55,6 +77,8 @@ const emit = defineEmits<{
 
 const editing = ref<'nRuns' | 'parallel' | null>(null)
 const draft = ref('')
+/** 两个输入框同一时刻只渲染一个,共用一个模板 ref。 */
+const inputEl = ref<HTMLInputElement | null>(null)
 
 const borderTone = computed(() => {
   const s = props.lastRun?.status
@@ -81,6 +105,12 @@ const chipText = computed(() => {
 function startEdit(field: 'nRuns' | 'parallel') {
   editing.value = field
   draft.value = String(field === 'nRuns' ? props.scheme.nRuns : props.scheme.parallel)
+  // 键盘进来就该落在输入框上(否则 Enter 打开后焦点还停在已消失的按钮上)
+  void nextTick(() => { inputEl.value?.focus(); inputEl.value?.select() })
+}
+
+function cancel() {
+  editing.value = null
 }
 
 /** 上界与 input 的 max 同源 —— HTML max 只是原生 spinner 的装饰,

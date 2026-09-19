@@ -17,7 +17,7 @@
       <div class="fav-section-label">常驻 · {{ pinnedRows.length }} 席</div>
       <div v-if="pinnedRows.length" class="fav-list">
         <div
-          v-for="row in pinnedRows"
+          v-for="(row, idx) in pinnedRows"
           :key="row.s.meta.scenarioId"
           class="fav-card"
           :class="{ dragging: dragId === row.s.meta.scenarioId, 'drag-over': overId === row.s.meta.scenarioId }"
@@ -29,6 +29,26 @@
         >
           <span class="drag-handle" title="拖拽排序" aria-hidden="true">
             <svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor"><circle cx="3" cy="2.5" r="1.3"/><circle cx="9" cy="2.5" r="1.3"/><circle cx="3" cy="7" r="1.3"/><circle cx="9" cy="7" r="1.3"/><circle cx="3" cy="11.5" r="1.3"/><circle cx="9" cy="11.5" r="1.3"/></svg>
+          </span>
+          <!-- 常驻席顺序此前只有拖拽一条路径:键盘用户无法重排,且 move(id,null)
+               的「追加末尾」没有落点。补一对 ▲▼,顺带把最后一席接上。 -->
+          <span class="kb-order" draggable="false">
+            <button
+              type="button"
+              class="kb-btn"
+              :disabled="idx === 0"
+              :aria-label="`上移 ${row.s.meta.name || row.s.meta.scenarioId}`"
+              title="上移"
+              @click.stop="nudge(row.s.meta.scenarioId, -1)"
+            >▲</button>
+            <button
+              type="button"
+              class="kb-btn"
+              :disabled="idx === pinnedRows.length - 1"
+              :aria-label="`下移 ${row.s.meta.name || row.s.meta.scenarioId}`"
+              title="下移"
+              @click.stop="nudge(row.s.meta.scenarioId, 1)"
+            >▼</button>
           </span>
           <StarToggle :starred="true" @toggle="unfollow(row.s)" />
           <div class="fav-main">
@@ -93,7 +113,7 @@
       </div>
 
       <p class="slib-note">
-        关注页不放「执行」「复制到我的」这类操作按钮——不管来源是我的还是公共,统一只有一个「前往场景」链接,点了跳回原本的列表页(我的场景或公共场景),真要操作在那边完成,该有的权限边界也都留在原地。关注上限 20 个——超过这个量「把最想用的场景排在最前面」这件事本身就失效了,所以强制收敛。前 5 个是常驻区,拖拽把手手动排序,右侧信号区(执行健康趋势 + 接口变更提醒)一个常驻场景通下;其余关注对象收进「堆叠卡片」——常态只露出一张窄条(首字提示,完整名称走原生 title 悬浮),鼠标悬浮展开成完整卡片,这里同样不放操作入口,只看信号和「设为常驻」。信号区也是检测和候选池:20 个以内鼠标扫一遍比敲字搜索更快,堆叠区不做搜索框。「近5次执行」这个趋势只统计我的场景的默认方案、公共原件自身的验证执行,不跨方案聚合——避免像「边界值压测」这类故意测失败边界的方案把整体信号拉低,看着像出问题、其实是预期内。
+        关注页不放「执行」「复制到我的」这类操作按钮——不管来源是我的还是公共,统一只有一个「前往场景」链接,点了跳回原本的列表页(我的场景或公共场景),真要操作在那边完成,该有的权限边界也都留在原地。关注上限 20 个——超过这个量「把最想用的场景排在最前面」这件事本身就失效了,所以强制收敛。前 5 个是常驻区,拖拽把手或旁边的 ▲▼ 都能排序(键盘走 ▲▼),右侧信号区(执行健康趋势 + 接口变更提醒)一个常驻场景通下;其余关注对象收进「堆叠卡片」——常态只露出一张窄条(首字提示,完整名称走原生 title 悬浮),鼠标悬浮展开成完整卡片,这里同样不放操作入口,只看信号和「设为常驻」。信号区也是检测和候选池:20 个以内鼠标扫一遍比敲字搜索更快,堆叠区不做搜索框。「近5次执行」这个趋势只统计我的场景的默认方案、公共原件自身的验证执行,不跨方案聚合——避免像「边界值压测」这类故意测失败边界的方案把整体信号拉低,看着像出问题、其实是预期内。
       </p>
     </template>
   </section>
@@ -164,12 +184,17 @@ const stackedRows = computed(() =>
 )
 
 onMounted(async () => {
-  try {
-    await store.fetchScenarios()
-  } catch {
+  // 取数不等身份(列表先长出来);只有动常驻席存档的那两步要等 ——
+  // 抢在 currentUser 到位前 prune/seed,会把状态写到匿名键上,
+  // 表现成「刷新后常驻席顺序丢了」。
+  const identity = layout.whenReady()
+  // fetchScenarios 自己吞异常,不 reject → 看状态判定失败,别写 catch
+  await store.fetchScenarios()
+  if (store.scenariosStatus === 'error') {
     showError('加载场景', undefined, store.lastError)
     return
   }
+  await identity
   const ids = followed.value.map((s) => s.meta.scenarioId)
   // 先回收死席位再播种:prune 无变化时不写盘,所以首访(无 key)仍能播种
   layout.prune(ids)
@@ -241,6 +266,18 @@ function dotTone(last: RunStamp | null): string {
 function onDrop(targetId: string) {
   if (dragId.value && dragId.value !== targetId) layout.move(dragId.value, targetId)
   dragId.value = overId.value = null
+}
+
+/** 键盘重排:move() 会先把 id 从数组摘掉,所以「下移」要跳过两格
+ *  (原来的下一位摘除后顶到了 idx+1)。越过末尾取不到 target → 传 null,
+ *  正好落进 move 的「追加到末尾」分支,这也是拖拽够不到最后一席的缺口。 */
+function nudge(id: string, delta: -1 | 1) {
+  const arr = layout.pinned.value
+  const idx = arr.indexOf(id)
+  if (idx < 0) return
+  if (idx === 0 && delta < 0) return
+  if (idx === arr.length - 1 && delta > 0) return
+  layout.move(id, (delta < 0 ? arr[idx - 1] : arr[idx + 2]) ?? null)
 }
 
 function pinRow(s: Scenario) {

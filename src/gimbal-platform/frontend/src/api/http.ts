@@ -93,6 +93,18 @@ function normalizeError(err: AxiosError): ApiError {
   return new ApiError(status, code, msg)
 }
 
+/** 从被 reject 的错误上取 HTTP 状态码。
+ *
+ * 响应拦截器把 axios 错误统一换成了 ``ApiError``(原始 ``err.response``
+ * 不再外泄),所以判定 403/404 这类"按状态分流"的调用点必须走这里,
+ * 不要自己摸 ``e.response.status`` —— 那样在真实链路上永远读不到。
+ * 仍兼容手搓的 ``{ response: { status } }``(单测/非拦截器来源)。 */
+export function httpStatusOf(e: unknown): number | undefined {
+  if (e instanceof ApiError) return e.status
+  const anyErr = e as { status?: number; response?: { status?: number } } | null
+  return anyErr?.status ?? anyErr?.response?.status
+}
+
 const http = axios.create({
   baseURL: '/api',
   timeout: 30000,

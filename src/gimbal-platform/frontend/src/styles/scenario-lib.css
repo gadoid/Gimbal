@@ -311,6 +311,7 @@
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
+  font-family: inherit;   /* 徽章是 <button>(可聚焦/可键盘触发),需继承页面字体 */
   font-size: 10.5px;
   color: var(--sl-ink-2);
   background: var(--sl-divider);
@@ -318,6 +319,7 @@
   border-radius: 999px;
   cursor: pointer;
 }
+.mini-badge:focus-visible { outline: 2px solid var(--sl-accent); outline-offset: 1px; }
 .mini-badge:hover { border-color: var(--sl-accent); color: var(--sl-accent); }
 .mini-badge b { color: var(--sl-ink); font-weight: 700; }
 .mini-badge.editing {
@@ -440,6 +442,29 @@
   line-height: 0;
   flex: none;
 }
+/* 常驻席键盘重排:与拖拽把手并排的 ▲▼ */
+.kb-order {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: none;
+}
+.kb-btn {
+  padding: 0;
+  width: 14px;
+  height: 11px;
+  font: inherit;
+  font-size: 8px;
+  line-height: 1;
+  color: var(--sl-ink-3);
+  background: none;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.kb-btn:hover:not(:disabled) { color: var(--sl-accent); background: var(--sl-accent-soft); }
+.kb-btn:disabled { opacity: 0.3; cursor: default; }
+.kb-btn:focus-visible { outline: 2px solid var(--sl-accent); outline-offset: 1px; }
 .fav-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .fav-name-row { display: flex; align-items: center; gap: 8px; }
 .fav-name { font-size: 13px; font-weight: 700; color: var(--sl-ink); }

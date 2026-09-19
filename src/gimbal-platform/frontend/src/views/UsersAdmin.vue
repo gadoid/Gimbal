@@ -260,6 +260,7 @@ import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
 import { useForm } from 'vee-validate'
 import { useListSearch } from '@/utils/useListSearch'
+import { avatarColor } from '@/utils/avatarColor'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import { useUsersStore } from '@/stores/users'
@@ -321,14 +322,6 @@ function rowClass(row: UserOut): string {
     isSelf(row) ? 'self-row' : '',
     !row.is_active ? 'inactive-row' : '',
   ].join(' ')
-}
-
-const AVATAR_COLORS = [
-  '#22c55e', '#3b82f6', '#a855f7', '#f59e0b',
-  '#ef4444', '#06b6d4', '#8b5cf6', '#ec4899',
-]
-function avatarColor(id: number): string {
-  return AVATAR_COLORS[Math.abs(id) % AVATAR_COLORS.length]
 }
 
 function formatDate(value: string): string {

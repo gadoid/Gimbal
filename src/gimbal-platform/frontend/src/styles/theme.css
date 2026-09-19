@@ -37,6 +37,18 @@
   --red: #e24b4a;
   --green: #22c55e;
   --amber: #f59e0b;
+
+  /* avatar — 用户首字圆徽的分类色板(与 accent / 状态色解耦,只用来
+     区分"这是哪个账号")。取模规则见 utils/avatarColor.ts。
+     与既有 token 同值的两档直接引用,不重复录字面量。 */
+  --avatar-1: var(--green);
+  --avatar-2: #3b82f6;
+  --avatar-3: #a855f7;
+  --avatar-4: var(--amber);
+  --avatar-5: #ef4444;
+  --avatar-6: #06b6d4;
+  --avatar-7: #8b5cf6;
+  --avatar-8: #ec4899;
 }
 
 body {

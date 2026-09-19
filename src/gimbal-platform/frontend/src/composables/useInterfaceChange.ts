@@ -7,15 +7,11 @@
  */
 import { ref } from 'vue'
 import { catalogDiff, impact } from '@/api/adaptations'
+import { httpStatusOf } from '@/api/http'
 
 const changed = ref<Set<string>>(new Set())
 const loaded = ref(false)
 let inflight: Promise<void> | null = null
-
-/** axios 错误上的状态码(非 HTTP 错误 / 无 response 时 undefined)。 */
-function httpStatus(e: unknown): number | undefined {
-  return (e as { response?: { status?: number } })?.response?.status
-}
 
 export function useInterfaceChange() {
   async function ensure(): Promise<void> {
@@ -43,7 +39,7 @@ export function useInterfaceChange() {
       } catch (e) {
         // 403 = member 无适配中心读权限,永久留白;其余(网络抖动/5xx)
         // 不能置 loaded —— 否则一次抖动就把信号永久打死到刷新为止。
-        if (httpStatus(e) === 403) {
+        if (httpStatusOf(e) === 403) {
           changed.value = set
           loaded.value = true
         }

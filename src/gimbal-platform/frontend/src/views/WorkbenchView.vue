@@ -6,6 +6,8 @@
      - 编排:vuedraggable 左边缘抓取条重排,落点持久化;
      - 尺寸:每卡 S/M/L 三档密度(layout v2 持久化);
      - 布局按用户分键存 localStorage(layout.ts)。
+     右侧固定栏(身份卡 + 时间线)不属于 registry 组装区:页面级常驻
+     上下文,可添可删就会让人找不到。
      工作台仍只做两件事:按 registry+layout 渲染,管理布局配置。 -->
 <template>
   <ListPage title="工作台" width="wide" subtitle="摘要卡可添加 / 移除 / 拖拽排序,S/M/L 三档密度。">
@@ -20,58 +22,70 @@
       >重置布局</Button>
     </template>
 
-    <!-- registry 卡片区:draggable 换序(handle = 卡槽左缘抓取条) -->
-    <!-- item-key 必须**绑定**函数(静态字符串会被当作属性名去 string
-         元素上取 key → 全 undefined → 拖拽 DOM 追踪错乱死循环,
-         曾经卡死的根因)。:list 直接绑 orderedIds:draggable 的
-         splice 作用在 ref 的 reactive 数组上,持久化由 layout.ts
-         的 deep watch 统一承担。#footer = 网格末尾添加条(不可拖)。 -->
-    <draggable
-      v-if="orderedIds.length"
-      :list="orderedIds"
-      :item-key="cardKey"
-      handle=".card-handle"
-      :animation="150"
-      tag="div"
-      class="grid grid-cols-1 gap-4 md:grid-cols-2"
-      data-testid="wb-grid"
-    >
-      <template #item="{ element: id }">
-        <WorkbenchCardSlot
-          v-if="defOf(id)"
-          :def="defOf(id)!"
-          :size="sizeOf(id)"
-          :removable="orderedIds.length > 1"
-          @remove="remove(id)"
-          @size="(s) => setSize(id, s)"
-        />
-      </template>
-      <template #footer>
-        <button type="button" class="add-strip" data-testid="wb-add-card" @click="galleryOpen = true">
-          + 添加卡片
-        </button>
-      </template>
-    </draggable>
+    <!-- 两栏壳层:左 = registry 组装区(可添加/删除/拖拽),
+         右 = 固定信息栏(身份 + 时间线)。右栏不进 registry ——
+         它是页面级常驻上下文,不该被误删后在卡片市场里找不回来。 -->
+    <div class="wb-shell">
+      <div class="wb-main">
+        <!-- registry 卡片区:draggable 换序(handle = 卡槽左缘抓取条) -->
+        <!-- item-key 必须**绑定**函数(静态字符串会被当作属性名去 string
+             元素上取 key → 全 undefined → 拖拽 DOM 追踪错乱死循环,
+             曾经卡死的根因)。:list 直接绑 orderedIds:draggable 的
+             splice 作用在 ref 的 reactive 数组上,持久化由 layout.ts
+             的 deep watch 统一承担。#footer = 网格末尾添加条(不可拖)。 -->
+        <draggable
+          v-if="orderedIds.length"
+          :list="orderedIds"
+          :item-key="cardKey"
+          handle=".card-handle"
+          :animation="150"
+          tag="div"
+          class="grid grid-cols-1 gap-4 md:grid-cols-2"
+          data-testid="wb-grid"
+        >
+          <template #item="{ element: id }">
+            <WorkbenchCardSlot
+              v-if="defOf(id)"
+              :def="defOf(id)!"
+              :size="sizeOf(id)"
+              :removable="orderedIds.length > 1"
+              @remove="remove(id)"
+              @size="(s) => setSize(id, s)"
+            />
+          </template>
+          <template #footer>
+            <button type="button" class="add-strip" data-testid="wb-add-card" @click="galleryOpen = true">
+              + 添加卡片
+            </button>
+          </template>
+        </draggable>
 
-    <!-- 布局被清空(理论上 ≤1 保护;防御渲染)— 添加条仍常驻 -->
-    <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2" data-testid="wb-grid">
-      <div class="empty-state" data-testid="wb-no-cards">
-        <p>工作台没有卡片了</p>
+        <!-- 布局被清空(理论上 ≤1 保护;防御渲染)— 添加条仍常驻 -->
+        <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2" data-testid="wb-grid">
+          <div class="empty-state" data-testid="wb-no-cards">
+            <p>工作台没有卡片了</p>
+          </div>
+          <button type="button" class="add-strip" data-testid="wb-add-card" @click="galleryOpen = true">
+            + 添加卡片
+          </button>
+        </div>
+
+        <!-- 全局快捷入口(非 registry 卡;固定区不参与组装)。场景库不再占位:
+             三页各由自己的 registry 卡承载(我的/公共/关注),卡头深链即入口。 -->
+        <h2 class="mb-2 mt-6 text-heading text-signal-ink">快捷入口</h2>
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
+          <router-link to="/executions" class="wb-card">
+            <span class="text-heading text-signal-ink">执行历史</span>
+            <span class="text-caption text-muted-foreground">运行记录与结果下钻。</span>
+            <span class="mt-1 text-caption font-medium text-signal">进入执行历史 →</span>
+          </router-link>
+        </div>
       </div>
-      <button type="button" class="add-strip" data-testid="wb-add-card" @click="galleryOpen = true">
-        + 添加卡片
-      </button>
-    </div>
 
-    <!-- 全局快捷入口(非 registry 卡;固定区不参与组装)。场景库不再占位:
-         三页各由自己的 registry 卡承载(我的/公共/关注),卡头深链即入口。 -->
-    <h2 class="mb-2 mt-6 text-heading text-signal-ink">快捷入口</h2>
-    <div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
-      <router-link to="/executions" class="wb-card">
-        <span class="text-heading text-signal-ink">执行历史</span>
-        <span class="text-caption text-muted-foreground">运行记录与结果下钻。</span>
-        <span class="mt-1 text-caption font-medium text-signal">进入执行历史 →</span>
-      </router-link>
+      <aside class="wb-rail">
+        <UserIdentityCard />
+        <ActivityTimeline />
+      </aside>
     </div>
 
     <!-- 卡片市场 -->
@@ -92,6 +106,8 @@ import { workbenchRegistry, type WorkbenchCardDef } from '@/components/workbench
 import { useWorkbenchLayout } from '@/components/workbench/layout'
 import WorkbenchCardSlot from '@/components/workbench/WorkbenchCardSlot.vue'
 import AddCardGallery from '@/components/workbench/AddCardGallery.vue'
+import UserIdentityCard from '@/components/workbench/UserIdentityCard.vue'
+import ActivityTimeline from '@/components/workbench/ActivityTimeline.vue'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/stores/auth'
 
@@ -133,6 +149,30 @@ const layoutDirty = computed(() => {
 </script>
 
 <style scoped>
+/* ── 两栏壳层:左组装区 + 右固定栏 ─────────────────────────────
+   右栏 sticky 的 top 对齐 ListPage 的 pt-14(56px)内容起点。
+   滑轨只在时间线内部(见 ActivityTimeline .tl-scroll)—— 右栏整体一滚,
+   身份卡就会被推出视野,常驻信息栏不该有这种状态。
+   窄屏(<1180)折成单列,右栏落到主区之后。 */
+.wb-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 288px;
+  gap: 16px;
+  align-items: start;
+}
+.wb-main { min-width: 0; }
+.wb-rail {
+  position: sticky;
+  top: 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+@media (max-width: 1180px) {
+  .wb-shell { grid-template-columns: minmax(0, 1fr); }
+  .wb-rail { position: static; }
+}
+
 /* 网格末尾常驻添加条(§3:虚线条,点开类型选择面板) */
 .add-strip {
   @apply flex min-h-[72px] items-center justify-center rounded-card border border-dashed border-signal-line
