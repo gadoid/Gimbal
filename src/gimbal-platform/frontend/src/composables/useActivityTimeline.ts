@@ -114,11 +114,23 @@ export function useActivityTimeline() {
     exec: false, scen: false, adapt: false,
   })
 
-  /** 常态只露最近 TIMELINE_PREVIEW 条,展开后给到池子。 */
-  const events = computed<TimelineEvent[]>(() =>
-    expanded.value ? pooled.value : pooled.value.slice(0, TIMELINE_PREVIEW),
+  /** 颜色筛选:卡头圆点即「只看这一类」。null = 不筛,全给。 */
+  const only = ref<TimelineKind | null>(null)
+  const visible = computed<TimelineEvent[]>(() =>
+    only.value ? pooled.value.filter((e) => e.kind === only.value) : pooled.value,
   )
-  const canExpand = computed(() => pooled.value.length > TIMELINE_PREVIEW)
+  /** 池子里各类各有多少 —— 决定卡头哪几颗点可点、tooltip 报几个数。 */
+  const counts = computed<Record<TimelineKind, number>>(() => {
+    const m: Record<TimelineKind, number> = { execution: 0, scenario: 0, adaptation: 0 }
+    for (const e of pooled.value) m[e.kind] += 1
+    return m
+  })
+
+  /** 常态只露最近 TIMELINE_PREVIEW 条,展开后给到(筛选后的)池子。 */
+  const events = computed<TimelineEvent[]>(() =>
+    expanded.value ? visible.value : visible.value.slice(0, TIMELINE_PREVIEW),
+  )
+  const canExpand = computed(() => visible.value.length > TIMELINE_PREVIEW)
 
   const days = computed<TimelineDay[]>(() => {
     const out: TimelineDay[] = []
@@ -163,6 +175,15 @@ export function useActivityTimeline() {
 
     // 全源失败 = 真的读不到;有任一源成功而结果为空 = 真没活动,走空态
     status.value = degraded.value && !pooled.value.length ? 'error' : 'ready'
+    // 筛中的那一类这次一条都没取到 → 撤掉筛选,否则轴上是一片空白,
+    // 看起来像"没活动"而不是"这一类没活动"。
+    if (only.value && !counts.value[only.value]) only.value = null
+  }
+
+  /** 再点同一颗 = 取消筛选;换一类 = 回到预览态(别停在半截的展开列表上)。 */
+  function setOnly(kind: TimelineKind) {
+    only.value = only.value === kind ? null : kind
+    expanded.value = false
   }
 
   function toggleExpanded() {
@@ -172,5 +193,6 @@ export function useActivityTimeline() {
   return {
     pooled, events, days, status, sources, degraded,
     expanded, canExpand, toggleExpanded, load,
+    only, visible, counts, setOnly,
   }
 }

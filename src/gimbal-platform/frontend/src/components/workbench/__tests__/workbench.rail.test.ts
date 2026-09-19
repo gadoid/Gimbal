@@ -2,6 +2,7 @@
  * 工作台右侧固定栏:身份卡 + 时间线。
  * 钉住:头像色与用户名一一稳定(与用户管理表同一份 token 调色板)、
  * 计数读场景 store(不另发请求)、时间线按天分组且每行可下钻、
+ * 卡头圆点按颜色筛流、滚动渐隐只在真有剩余内容时出现、
  * member 无适配权限时不显示降级警示、右栏不进 registry(不可删/不可拖)。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -245,6 +246,40 @@ describe('ActivityTimeline — 右栏时间线', () => {
     Object.defineProperty(el, 'scrollTop', { value: 479, configurable: true })
     await scroller.trigger('scroll')
     expect(el.classList.contains('fade-foot')).toBe(false)
+    w.unmount()
+  })
+
+  it('卡头圆点即筛流:点一颗只剩那一类、再点还原;池里没有的那类不给点', async () => {
+    vi.mocked(executionsApi.listExecutions).mockResolvedValue({
+      total: 2,
+      items: [
+        { id: 12, scenario_id: 'sc-a', status: 'failed', passed: 0, failed: 1, total_runs: 1, started_at: ago(2), finished_at: ago(2), config: {} },
+        { id: 11, scenario_id: 'sc-a', status: 'done', passed: 1, failed: 0, total_runs: 1, started_at: ago(3), finished_at: ago(3), config: {} },
+      ],
+    } as never)
+    vi.mocked(composerApi.listScenarios).mockResolvedValue([scen('p1', 'private', ago(5))] as never)
+    vi.mocked(adaptationsApi.listBatches).mockResolvedValue([] as never)   // 适配一类为空
+    const w = mountWithRouter(ActivityTimeline)
+    await flushPromises()
+
+    const chips = w.findAll('[data-testid="wb-rail-filter"]')
+    expect(chips).toHaveLength(3)
+    // 点色跟着「配色」映射走,不是写死的
+    expect(chips[0]!.attributes('style')).toContain('var(--avatar-2)')
+    expect(chips[2]!.attributes('disabled')).toBeDefined()
+    expect(w.find('.chead-count').text()).toBe('3')
+
+    await chips[0]!.trigger('click')
+    const rows = w.findAll('.tl-item')
+    expect(rows).toHaveLength(2)
+    expect(rows.every((r) => r.attributes('data-testid') === 'wb-tl-execution')).toBe(true)
+    expect(w.find('.chead-count').text()).toBe('2')                 // 计数说的是"当前这条轴"
+    expect(w.findAll('.lg-item')[2]!.classes()).toContain('dim')     // 图例同步压暗
+    expect(chips[0]!.attributes('aria-pressed')).toBe('true')
+
+    await chips[0]!.trigger('click')
+    expect(w.findAll('.tl-item')).toHaveLength(3)
+    expect(w.findAll('.lg-item.dim')).toHaveLength(0)
     w.unmount()
   })
 

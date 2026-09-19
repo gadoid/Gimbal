@@ -3,6 +3,8 @@
      按日历日分组;常态只露最近 10 条,「查看更多」就地展开。
      圆点按**事件类型**着色,颜色与类型的映射由用户自己配(见
      useTimelineColors);图例就在轴下方,点「配色」即改。
+     卡头 title 右侧那组圆点是**筛流**:点一颗只看那一类事件,再点取消;
+     池子里没有的类型置灰,不给点了得到一条空轴。
      形制跟 registry 卡不同源:右栏是固定区,不参与添加/删除/拖拽。 -->
 <template>
   <section class="tl-card" data-testid="wb-rail-timeline">
@@ -14,7 +16,26 @@
         </svg>
       </span>
       <span class="chead-title">时间线</span>
-      <span class="chead-count">{{ pooled.length }}</span>
+      <span class="chead-count">{{ visible.length }}</span>
+
+      <!-- 卡头右侧 = 按颜色筛流:点哪颗就只看那一类,再点取消。
+          池子里没有的那类直接置灰 —— 点了会得到一条空轴,不如不让点。 -->
+      <span class="chead-filter" :class="{ filtered: !!only }" role="group" aria-label="按事件颜色筛选">
+        <button
+          v-for="k in TIMELINE_KINDS"
+          :key="k"
+          type="button"
+          class="flt"
+          :class="{ on: only === k }"
+          :style="{ '--flt': colorOf(k) }"
+          :disabled="!counts[k]"
+          :aria-pressed="only === k"
+          :title="`${KIND_LABEL[k]} · ${counts[k]} 条${counts[k] ? (only === k ? ' · 再点取消筛选' : ' · 只看这一类') : ' · 暂无'}`"
+          :aria-label="`只看${KIND_LABEL[k]}`"
+          data-testid="wb-rail-filter"
+          @click="setOnly(k)"
+        />
+      </span>
     </header>
 
     <div class="tl-main">
@@ -69,12 +90,13 @@
         data-testid="wb-rail-more"
         :aria-expanded="expanded"
         @click="toggleExpanded"
-      >{{ expanded ? '收起' : `查看更多 · 共 ${pooled.length} 条` }}</button>
+      >{{ expanded ? '收起' : `查看更多 · 共 ${visible.length} 条` }}</button>
 
-      <!-- 图例 = 颜色↔类型的唯一说明,同时也是配色入口 -->
+      <!-- 图例 = 颜色↔类型的唯一说明,同时也是配色入口;筛中某一类时其余压暗,
+          跟卡头那组圆点保持同一个事实 -->
       <footer class="tl-legend">
         <span class="lg-items">
-          <span v-for="k in TIMELINE_KINDS" :key="k" class="lg-item">
+          <span v-for="k in TIMELINE_KINDS" :key="k" class="lg-item" :class="{ dim: !!only && only !== k }">
             <i :style="{ background: colorOf(k) }" aria-hidden="true" />{{ KIND_LABEL[k] }}
           </span>
         </span>
@@ -118,7 +140,8 @@ import { useTimelineColors, DOT_PALETTE, TIMELINE_KINDS } from '@/composables/us
 import { relTime, shortDateTime } from '@/utils/datetime'
 
 const {
-  pooled, days, status, degraded, canExpand, expanded, toggleExpanded, load,
+  days, status, degraded, canExpand, expanded, toggleExpanded, load,
+  only, visible, counts, setOnly,
 } = useActivityTimeline()
 const { colorOf, setColor, reset } = useTimelineColors()
 
@@ -190,6 +213,25 @@ onBeforeUnmount(() => { resize?.disconnect() })
   @apply text-micro font-bold text-signal-done bg-signal-done/10;
   padding: 1px 8px; border-radius: 999px;
 }
+
+/* 卡头筛流的一组圆点:20px 靶心里嵌 11px 色点,点色即事件色(跟着「配色」走)。
+   选中态用同色外环 + 白隔离环,未选中的压到 32% —— 一眼看出"只剩这一路"。 */
+.chead-filter { @apply ml-auto flex items-center gap-1 flex-none; }
+.flt {
+  @apply relative w-5 h-5 flex-none p-0 rounded-full border-0 bg-transparent cursor-pointer;
+}
+.flt::before {
+  @apply absolute left-1/2 top-1/2 rounded-full;
+  content: ''; width: 11px; height: 11px; background: var(--flt);
+  transform: translate(-50%, -50%);
+  transition: transform 0.12s ease, opacity 0.12s ease, box-shadow 0.12s ease;
+}
+.flt:hover::before { transform: translate(-50%, -50%) scale(1.18); }
+.flt.on::before { box-shadow: 0 0 0 2px white, 0 0 0 3.5px var(--flt); }
+.chead-filter.filtered .flt:not(.on)::before { opacity: 0.32; }
+.flt:disabled { @apply cursor-not-allowed; }
+.flt:disabled::before { opacity: 0.2; }
+.flt:focus-visible { @apply outline-signal; outline: 2px solid; outline-offset: 1px; }
 .tl-main { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 16px; }
 
 /* 唯一会滚的一段 —— 身份卡与图例都留在滚动区外。
@@ -294,7 +336,8 @@ onBeforeUnmount(() => { resize?.disconnect() })
   padding-top: 12px;   /* 间距由 .tl-main 的 gap 给,这里只留分隔线下的呼吸 */
 }
 .lg-items { @apply flex items-center gap-2.5 flex-wrap; }
-.lg-item { @apply inline-flex items-center gap-1 text-label text-signal-ink/70; font-weight: 500; }
+.lg-item { @apply inline-flex items-center gap-1 text-label text-signal-ink/70; font-weight: 500; transition: opacity 0.12s ease; }
+.lg-item.dim { @apply opacity-40; }
 .lg-item i { @apply w-[9px] h-[9px] rounded-full; box-shadow: 0 0 0 2px white, 0 0 0 3px rgba(16, 21, 28, 0.08); }
 .lg-edit {
   @apply flex-none text-label font-semibold text-signal bg-signal-card border border-signal-line cursor-pointer;

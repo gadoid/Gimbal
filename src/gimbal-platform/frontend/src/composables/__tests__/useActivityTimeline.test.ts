@@ -2,7 +2,8 @@
  * useActivityTimeline — 右栏时间线的取数归一。
  * 钉住:三源合流后按时间倒序 + 截断、日历日分组、单源失败只丢该类事件、
  * member 的 403 是"确定性空集"而非降级、无时间戳的排队执行不进轴、
- * 公共原件的改动不算我的活动、场景事件有入池上限(否则刷满整轴)。
+ * 公共原件的改动不算我的活动、场景事件有入池上限(否则刷满整轴)、
+ * 卡头的颜色筛流是"单选可取消"且与预览位/展开态互不遗留。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
@@ -182,5 +183,53 @@ describe('useActivityTimeline', () => {
     expect(empty.status.value).toBe('ready')
     expect(empty.events.value).toHaveLength(0)
     expect(empty.degraded.value).toBe(false)
+  })
+
+  it('颜色筛流:只看一类 / 换一类不叠加 / 再点同一颗取消', async () => {
+    const t = await loadWith({
+      exec: [exec(1, 'done', ago(1)), exec(2, 'done', ago(2))],
+      adapt: [batch('b1', ago(3))],
+      scenarios: [scen('s1', 'private', ago(4))],
+    })
+    expect(t.only.value).toBeNull()
+    expect(t.counts.value).toEqual({ execution: 2, scenario: 1, adaptation: 1 })
+
+    t.setOnly('execution')
+    expect(t.visible.value.map((e) => e.kind)).toEqual(['execution', 'execution'])
+    expect(t.days.value).toHaveLength(1)                    // 筛后重新分组
+    t.setOnly('adaptation')
+    expect(t.visible.value.map((e) => e.kind)).toEqual(['adaptation'])
+    t.setOnly('adaptation')
+    expect(t.only.value).toBeNull()
+    expect(t.visible.value).toHaveLength(4)
+  })
+
+  it('筛流改的是「可见池」:预览位与「查看更多」都跟着它走', async () => {
+    const t = await loadWith({
+      exec: Array.from({ length: 20 }, (_, i) => exec(i + 1, 'done', ago(i + 1))),
+      adapt: [batch('b1', ago(1))],
+    })
+    expect(t.canExpand.value).toBe(true)
+    t.toggleExpanded()
+    expect(t.events.value).toHaveLength(21)
+    // 展开态下换筛选条件 → 回到预览位,不停在半截长列表上
+    t.setOnly('adaptation')
+    expect(t.expanded.value).toBe(false)
+    expect(t.events.value).toHaveLength(1)
+    expect(t.canExpand.value).toBe(false)                   // 筛后不足 10 条,不该再有出口
+  })
+
+  it('重新取数后筛中的那一类一条不剩 → 自动撤筛(空轴看着会像"没活动")', async () => {
+    vi.mocked(executionsApi.listExecutions).mockResolvedValue({ total: 1, items: [exec(1, 'done', ago(1))] } as never)
+    vi.mocked(adaptationsApi.listBatches).mockResolvedValue([] as never)
+    const t = useActivityTimeline()
+    await t.load()
+    t.setOnly('execution')
+    expect(t.visible.value).toHaveLength(1)
+
+    vi.mocked(executionsApi.listExecutions).mockRejectedValue(new Error('boom'))
+    await t.load()
+    expect(t.counts.value.execution).toBe(0)
+    expect(t.only.value).toBeNull()
   })
 })
