@@ -7,10 +7,16 @@ gimbal CLI 子进程)已退役;V3 场景执行的创建入口是 ``POST /api/run
 exec_runs 表(V1 每-run 明细/报告/日志/SSE)已随存量数据清理一并
 退役:V3 运行的可观测面是 Execution 计数器 + ``data/runs/*.jsonl``
 调度日志(无 API 消费,运维直读文件)。
+
+执行设计(2026-09)增补:列表加 status/发起时间/批次筛选、``GET
+/summary`` KPI 带、``POST /{id}/rerun`` 按 config_json 重建配方。
+**路由顺序**:``/summary`` 必须声明在 ``/{execution_id}`` 之前 —
+后者带 ``Path(ge=1)`` 的 int 转换,字面量 ``summary`` 会被它吃掉并 422。
 """
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -24,17 +30,108 @@ from ..core.timeutil import utcnow
 from ..models import Execution
 from ..models.execution import (
     STATUS_CANCELED,
+    STATUS_DONE,
+    STATUS_FAILED,
     STATUS_QUEUED,
     STATUS_RUNNING,
 )
-from ..schemas.execution import ExecutionListOut, ExecutionOut, ExecutionRowsOut
-from ..services import execution_store, run_dispatcher
+from ..schemas.execution import (
+    ExecutionListOut,
+    ExecutionOut,
+    ExecutionRowsOut,
+    ExecutionSummaryOut,
+)
+from ..schemas.scenario_composer import RunRequest, RunResponse
+from ..services import execution_store, run_dispatcher, scenario_store
+from ..services.run_dispatcher import Conflict, NotFound
+from ._ownership import ensure_owner
 
 router = APIRouter(prefix="/executions", tags=["executions"])
 
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 OwnedExecution = Annotated[Execution, Depends(get_owned_execution)]
+
+_KNOWN_STATUSES = frozenset({
+    STATUS_QUEUED, STATUS_RUNNING, STATUS_DONE, STATUS_FAILED, STATUS_CANCELED,
+})
+
+
+# ── summary(KPI 带;必须在 /{execution_id} 之前声明)────────────
+@router.get("/summary", response_model=ExecutionSummaryOut)
+async def executions_summary(
+    user: CurrentUser,
+    session: DbSession,
+    window_days: Annotated[int, Query(ge=1, le=90)] = 7,
+) -> ExecutionSummaryOut:
+    """顶部 KPI 带(执行设计 §3.5):Execution 计数器/时间戳就能算的量。
+
+    口径 = 查询者自己的执行(owner 隔离,§5.1 — 聚合不得突破个体);
+    窗口锚 ``created_at``(发起时间;queued/running 单 started_at 可空)。
+    行级分布(耗时/失败原因)不落库,这里给不了(§0 纪律 3)。"""
+    since = utcnow() - timedelta(days=window_days)
+    base = select(Execution).where(Execution.owner_id == user.id)
+
+    window_rows = (
+        (
+            await session.execute(
+                base.where(Execution.created_at >= since)
+                .with_only_columns(
+                    Execution.id,
+                    Execution.scenario_id,
+                    Execution.status,
+                    Execution.total_runs,
+                    Execution.passed,
+                    Execution.failed,
+                    Execution.started_at,
+                    Execution.finished_at,
+                )
+            )
+        )
+        .all()
+    )
+    active = (
+        await session.execute(
+            select(func.count())
+            .select_from(Execution)
+            .where(
+                Execution.owner_id == user.id,
+                Execution.status.in_((STATUS_QUEUED, STATUS_RUNNING)),
+            )
+        )
+    ).scalar_one()
+
+    total_runs = passed = failed = 0
+    durations: list[float] = []
+    failed_scenario_ids: set[str] = set()
+    for row in window_rows:
+        total_runs += row.total_runs
+        passed += row.passed
+        failed += row.failed
+        if row.started_at is not None and row.finished_at is not None:
+            durations.append((row.finished_at - row.started_at).total_seconds())
+        if row.status == STATUS_FAILED:
+            failed_scenario_ids.add(row.scenario_id)
+    streaks = await execution_store.consecutive_failure_streaks(session, user.id)
+    # 反复失败:窗内失败单里,所处失败链 ≥3 的 scenario(「反复」的阈值;
+    # 计数去重到 scenario — 执行记录页的信号列才逐单展开)。
+    repeat_scenarios = {
+        row.scenario_id
+        for row in window_rows
+        if row.status == STATUS_FAILED and streaks.get(row.id, 0) >= 3
+    }
+    denom = passed + failed
+    return ExecutionSummaryOut(
+        window_days=window_days,
+        total_executions=len(window_rows),
+        total_runs=total_runs,
+        passed_runs=passed,
+        failed_runs=failed,
+        pass_rate=(passed / denom) if denom else None,
+        avg_duration_sec=(sum(durations) / len(durations)) if durations else None,
+        repeat_failure_scenarios=len(repeat_scenarios),
+        active_executions=int(active),
+    )
 
 
 # ── list ────────────────────────────────────────────────────────
@@ -45,14 +142,36 @@ async def list_executions(
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
     scenario_id: Annotated[str | None, Query(max_length=64)] = None,
+    status_filter: Annotated[str | None, Query(alias="status", max_length=16)] = None,
+    batch_id: Annotated[str | None, Query(max_length=64)] = None,
+    created_from: Annotated[datetime | None, Query()] = None,
+    created_to: Annotated[datetime | None, Query()] = None,
 ) -> ExecutionListOut:
     """分页列表(P:此前全量返回,无界)。默认 200 与前端现状兼容。
 
     ``scenario_id`` 叠加在 owner 过滤之上(前端「上次运行」数据源)。
+    执行设计 §3.4 增补:``status`` / 发起时间范围(锚 ``created_at``,
+    queued 单 started_at 可空不作锚)/ ``batch_id``(队列归并视图)筛选。
     """
     base = select(Execution).where(Execution.owner_id == user.id)
     if scenario_id:
         base = base.where(Execution.scenario_id == scenario_id)
+    if status_filter:
+        if status_filter not in _KNOWN_STATUSES:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "bad_status_filter",
+                    "message": f"status ∈ {sorted(_KNOWN_STATUSES)}",
+                },
+            )
+        base = base.where(Execution.status == status_filter)
+    if batch_id:
+        base = base.where(Execution.batch_id == batch_id)
+    if created_from is not None:
+        base = base.where(Execution.created_at >= created_from)
+    if created_to is not None:
+        base = base.where(Execution.created_at < created_to)
     total = (
         await session.execute(select(func.count()).select_from(base.subquery()))
     ).scalar_one()
@@ -65,7 +184,15 @@ async def list_executions(
         .scalars()
         .all()
     )
-    items = [execution_store.execution_out(e) for e in rows]
+    # 「连续第 N 次失败」信号(§3.2):一次轻行扫描算好全量失败链,
+    # 逐单映射进列表行;detail 不带该字段(它是列表层的"值不值得点开")。
+    streaks = await execution_store.consecutive_failure_streaks(session, user.id)
+    items = [
+        execution_store.execution_out(
+            e, consecutive_failures=streaks.get(e.id, 0) if e.status == STATUS_FAILED else 0,
+        )
+        for e in rows
+    ]
     return ExecutionListOut(items=items, total=total)
 
 
@@ -151,6 +278,71 @@ async def delete_execution(
     session: DbSession,
 ) -> None:
     await execution_store.delete_execution(session, ex)
+
+
+# ── rerun(同配置重跑,执行设计 §3.4/§3.5)───────────────────────
+@router.post("/{execution_id}/rerun", response_model=RunResponse,
+             status_code=status.HTTP_201_CREATED)
+async def rerun_execution(
+    ex: OwnedExecution,
+    user: CurrentUser,
+    session: DbSession,
+) -> RunResponse:
+    """按 ``config_json`` 里的完整配方重建一次发起(设计 §3.4:配方已存,
+    重建即可)。语义与 ``POST /api/runs`` 完全同链(dispatch_run):同样过
+    owner 闸、总量闸、数据集存在性 — 场景已删 / 数据集已删 / 方案参数
+    越界分别 404/409,与新鲜发起一致。
+
+    重跑是**新的一次独立发起**:不带原单批次键(原批归并视图不被新单
+    混入),也不带 judgeDegraded 等上次运行的审计标记(那些描述上一次,
+    不描述这一次)。注入条目 id 随配方一并重放(dispatch 侧悬空 skip 兜
+    底 — 上次以后条目被删的重跑会少注入,JSONL/告警可见)。"""
+    cfg = ex.config_json or {}
+    req = RunRequest(
+        **{
+            "scenarioId": ex.scenario_id,
+            "dataSetIds": cfg.get("dataSetIds") or [],
+            "dataSetSelection": cfg.get("dataSetSelection") or [],
+            "serviceBindings": cfg.get("serviceBindings") or {},
+            "injectionEntryIds": cfg.get("injectionEntryIds") or [],
+            "stepTo": cfg.get("stepTo"),
+            "nRuns": cfg.get("nRuns") or 1,
+            "parallel": cfg.get("parallel") or 1,
+            "schemeId": cfg.get("schemeId"),
+            "schemeName": cfg.get("schemeName"),
+        }
+    )
+    scen = await scenario_store.get_row(session, ex.scenario_id)
+    if scen is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "scenario_not_found",
+                "message": f"scenario not found: {ex.scenario_id}",
+            },
+        )
+    ensure_owner(
+        user,
+        scen.owner_id,
+        {
+            "code": "not_owner",
+            "message": "only the scenario's owner (or admin) can run this scenario",
+        },
+    )
+    try:
+        return await run_dispatcher.dispatch_run(
+            session, user_id=user.id, req=req, preloaded_scenario=scen
+        )
+    except NotFound as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": e.code, "message": e.message},
+        )
+    except Conflict as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": e.code, "message": e.message},
+        )
 
 
 # ── cancel ──────────────────────────────────────────────────────

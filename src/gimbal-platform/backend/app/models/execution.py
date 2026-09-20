@@ -41,6 +41,12 @@ class Execution(Base):
     )
     status: Mapped[str] = mapped_column(String(16), default=STATUS_QUEUED)
     # queued / running(认证解析通过、行分发开始)/ done / failed / canceled
+    # 批次键(执行设计 §1.2/§6):前端队列一次挑 N 条逐条发起时共用一个
+    # batch_id,执行记录据此归并展示。平台一次只发一条的语义不变 —— 批
+    # 只是归并键,没有批级执行策略(串行/并行/失败即停)。单条发起(运行
+    # 对话框/重跑)为 NULL,记录页按无批单条渲染。历史行 NULL = 批功能
+    # 上线前,合法状态不迁移。
+    batch_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     total_runs: Mapped[int] = mapped_column(Integer, default=0)
     passed: Mapped[int] = mapped_column(Integer, default=0)
     failed: Mapped[int] = mapped_column(Integer, default=0)

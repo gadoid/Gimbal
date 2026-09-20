@@ -26,6 +26,7 @@ from .routers import (
     executions,
     generator_catalog,
     query_views,
+    run_precheck,
     runs,
     run_schemes,
     scenarios,
@@ -120,6 +121,8 @@ def create_app() -> FastAPI:
     # New V3 composer routers (registered in order so static suffixes
     # precede ``/{id}`` catch-alls).
     app.include_router(runs.router, prefix="/api")
+    # 执行器预检(执行设计 §1.6):失效判定的服务端唯一实现入口
+    app.include_router(run_precheck.router, prefix="/api")
     app.include_router(data_sets.router, prefix="/api")
     # Dataset-create lives on a scenario-nested path but in the
     # data_sets module; register BEFORE scenarios' /{scenario_id}

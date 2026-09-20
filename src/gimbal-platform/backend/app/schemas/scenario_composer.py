@@ -297,6 +297,11 @@ class RunRequest(BaseModel):
     # 基线/旧客户端不传;纯记录,不参与任何分发语义。
     scheme_id: str | None = Field(default=None, alias="schemeId", max_length=128)
     scheme_name: str | None = Field(default=None, alias="schemeName", max_length=64)
+    # 批次键(执行设计 §1.2/§6):前端队列逐条顺序发起时共用一个客户端
+    # 生成的 batch_id,Execution.batch_id 落列、执行记录据此归并。可选 —
+    # 单条发起(运行对话框/重跑)不传;纯归并键,不参与分发语义(每条
+    # 仍是独立 Execution,批级执行策略本期不存在)。
+    batch_id: str | None = Field(default=None, alias="batchId", max_length=64)
 
 
 class RunResponse(BaseModel):

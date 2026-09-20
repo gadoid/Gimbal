@@ -422,84 +422,17 @@ async def dispatch_run(
 
     # 2.5 断言注入条目(spec v3 §8):被选中且悬空检测通过的条目 → 注入族
     # (与数据集行交叉派生 case,spec v3 §4);死/旧条目 skip + 告警,
-    # 绝不炸 dispatch。
+    # 绝不炸 dispatch。判定本体 = filter_injection_entries(执行设计 §1.6:
+    # /run/precheck 与 dispatch 共用这**一份**实现,失效口径不开第二份)。
     raw_payload = scen.payload or {}
-    registry = raw_payload.get("assertion_registry") or {}
-    entries = registry.get("entries") or []
-    selected_ids = set(req.injection_entry_ids or [])
-    # spec v3.1 §2.1/§3:判定面 = 契约声明 ∪ body 现存。只为**被选中条目
-    # 实际引用到的步骤**取声明面(懒取,避免无谓的 plate 调用);
-    # 取不到 → None(**降级,不抹平** —— Y:与「端点真无声明」可区分)。
-    #
-    # 索引基数(spec §1.1 Z2):声明面/body/asserts 与前端、与
-    # compose_injection_scenario 一律按 definition.steps 的**原始**下标寻址
-    # (carry_injection docstring 的既定契约「原始列表索引」)。
-    raw_steps = definition_from_payload(raw_payload).get("steps") or []
-    step_count = len(raw_steps)
-    selected = [e for e in entries if isinstance(e, dict) and e.get("id") in selected_ids]
-
-    needed_steps: set[int] = set()
-    for e in selected:
-        p = e.get("path")
-        si = as_step_index(p.get("stepIndex")) if isinstance(p, dict) else None
-        if si is not None:
-            needed_steps.add(si)
-
-    def _endpoint_id_of(si: int) -> str | None:
-        step = _step_at(raw_steps, si)
-        api = step.get("api")
-        hints = (api.get("view_hints") or {}) if isinstance(api, dict) else {}   # B:守齐
-        eid = hints.get("endpoint_id") if isinstance(hints, dict) else None
-        return eid if isinstance(eid, str) and eid else None
-
-    async def _face_of(si: int) -> tuple[int, frozenset[str] | None]:
-        eid = _endpoint_id_of(si)
-        if eid is None:
-            return si, frozenset()            # 无端点 = 真无声明(非得降级)
-        return si, await declared_paths_of(eid)   # None = 降级(**不抹平**,Y)
-
-    face_by_step: dict[int, frozenset[str] | None] = dict(
-        await asyncio.gather(*[_face_of(si) for si in sorted(needed_steps)])
-    ) if needed_steps else {}
-    for si, face in face_by_step.items():
-        if face is None:
-            logger.warning(
-                "run_dispatcher: step %s 声明面不可得(plate 降级)— 该步判定只认 body 面,"
-                "锚在契约声明上的条目可能被误判为悬空并跳过", si,
-            )
-
-    # body 面(判定)与端点面(universe)**共用同一份投影** —— 两侧对同一下标
-    # 必须给同一答案:各写一份的话,一侧改了规则另一侧不动,判决与 universe
-    # 就静默分叉。投影本体见 :func:`_body_of`。
-    body_of_step = _body_of(raw_payload)
-
-    universe_by_step: dict[int, set[str]] = {
-        si: injectable_universe(body_of_step(si), face)
-        for si, face in face_by_step.items()
-    }
-    # §5 例外:两侧同为该查表的缺省形(`set[str]` 的「只认 $ 根」),等价性一眼可判
-    # —— 未预计算该步 ⇒ 与 entry_issues 内部的缺省 universe 同一张表。
-    _universe_of = lambda si: universe_by_step.get(si, {"$"})   # noqa: E731
-
-    skipped_while_degraded: list[str] = []
-    selected_entries: list[dict] = []
-    for e in selected:
-        issues = entry_issues(e, step_count, body_of_step,
-                             _assert_targets_of(raw_payload), _universe_of)
-        if issues:
-            p = e.get("path")
-            si = as_step_index(p.get("stepIndex")) if isinstance(p, dict) else None
-            if si is not None and face_by_step.get(si) is None:
-                # Y:判定降级期间跳过的条目要可见。记录口径 = 「跳过发生在该步
-                # 声明面不可得的时刻」,跳过的**因由不限**(override-no-match、
-                # 真写错的 jsonpath 等与降级无关者一并计入)—— 不声称因果。
-                skipped_while_degraded.append(e.get("id"))
-            logger.warning(
-                "run_dispatcher: injection entry %s dangling (%s) — skipped",
-                e.get("id"), issues,
-            )
-            continue
-        selected_entries.append(e)
+    selected_entries, dangling_ids, skipped_while_degraded = (
+        await filter_injection_entries(raw_payload, req.injection_entry_ids or [])
+    )
+    if dangling_ids:
+        logger.warning(
+            "run_dispatcher: dangling injection entries skipped: {}",
+            dangling_ids,
+        )
 
     # 3. Allocate runId + Execution row
     # total_runs 必须按实际行数算(与 _fanout 的迭代口径一致)— 旧的
@@ -582,6 +515,10 @@ async def dispatch_run(
         scenario_id=scen.scenario_id,
         owner_id=user_id,
         total_runs=total_runs,
+        # 批次键(执行设计 §1.2):前端队列逐条发起时共用,执行记录归并用;
+        # 单条发起为 None。列 + config_json 双落:列驱动筛选,config 驱动
+        # 重跑配方的原样保真。
+        batch_id=req.batch_id,
         # 执行时场景快照:与传给 _fanout 的 scenario_payload 同拍同源
         # (同一读取),保证"快照即所执行";深拷贝隔离后续 fanout 内的
         # setdefault 写穿,不污染快照。
@@ -604,9 +541,15 @@ async def dispatch_run(
                 for k, b in req.service_bindings.items()
             },
             "stepTo": req.step_to,
+            # 原始请求的注入条目 id(悬空过滤**前**):rerun 按配方重建的
+            # 唯一来源(执行设计 §3.4)—— 只记录请求,不记录判定结果。
+            "injectionEntryIds": req.injection_entry_ids,
             # 方案溯源快照(spec §5,阶段③):纯记录,无分发语义
             "schemeId": req.scheme_id,
             "schemeName": req.scheme_name,
+            # 批次键(执行设计 §1.2):与列同值;rerun 按 config_json 重建
+            # 配方时不带旧批(重跑是新的一次独立发起)。
+            "batchId": req.batch_id,
             "nRuns": req.n_runs,
             "parallel": req.parallel,
             # spec §1.1 Y:判定降级是可审计事实,不留静默窗口。
@@ -1071,6 +1014,21 @@ async def _fail_whole_execution(
         "status": "auth_resolve_failed",
         "error": error,
     })
+    # 认证快速失败标记(执行设计 §3.2「认证快速失败」信号的唯一依据):
+    # 写进 config_json,列表读侧不用扫 JSONL 就能标出"未分发行的单"。
+    try:
+        async with db_factory() as session:
+            ex = await session.get(Execution, execution_id)
+            if ex is not None:
+                cfg = dict(ex.config_json or {})
+                cfg["authFailFast"] = {"error": str(error)[:512]}
+                ex.config_json = cfg
+                await session.commit()
+    except Exception as e:  # noqa: BLE001 — 标记失败不影响 fail-fast 收尾
+        logger.warning(
+            "run_dispatcher: authFailFast marker failed for execution {}: {}",
+            execution_id, e,
+        )
     await _bump_counters(db_factory, execution_id, passed=0, failed=total_rows)
     await _finalize_execution(db_factory, execution_id)
 
@@ -1249,6 +1207,92 @@ def _assert_targets_of(payload: dict | None) -> Callable[[int], set[str]]:
         }
 
     return _targets
+
+
+# ─── injection-entry gating(dispatch 与 /run/precheck 的唯一实现)───
+async def filter_injection_entries(
+    raw_payload: dict, selected_ids: list[str]
+) -> tuple[list[dict], list[str], list[str]]:
+    """注入条目悬空判定 + 过滤(dispatch 与 ``POST /run/precheck`` 共用,
+    执行设计 §1.6:失效判定不开第二份实现)。
+
+    spec v3.1 §2.1/§3:判定面 = 契约声明 ∪ body 现存。只为**被选中条目
+    实际引用到的步骤**取声明面(懒取,避免无谓的 plate 调用);取不到 →
+    None(**降级,不抹平** —— Y:与「端点真无声明」可区分)。索引基数
+    (spec §1.1 Z2):声明面/body/asserts 与前端、与 compose_injection_scenario
+    一律按 definition.steps 的**原始**下标寻址。
+
+    返回 ``(存活条目, 悬空 id 列表, 降级窗口内跳过的 id 列表)``。
+    """
+    registry = raw_payload.get("assertion_registry") or {}
+    entries = registry.get("entries") or []
+    wanted = set(selected_ids)
+    selected = [e for e in entries if isinstance(e, dict) and e.get("id") in wanted]
+
+    raw_steps = definition_from_payload(raw_payload).get("steps") or []
+    step_count = len(raw_steps)
+
+    needed_steps: set[int] = set()
+    for e in selected:
+        p = e.get("path")
+        si = as_step_index(p.get("stepIndex")) if isinstance(p, dict) else None
+        if si is not None:
+            needed_steps.add(si)
+
+    def _endpoint_id_of(si: int) -> str | None:
+        step = _step_at(raw_steps, si)
+        api = step.get("api")
+        hints = (api.get("view_hints") or {}) if isinstance(api, dict) else {}   # B:守齐
+        eid = hints.get("endpoint_id") if isinstance(hints, dict) else None
+        return eid if isinstance(eid, str) and eid else None
+
+    async def _face_of(si: int) -> tuple[int, frozenset[str] | None]:
+        eid = _endpoint_id_of(si)
+        if eid is None:
+            return si, frozenset()            # 无端点 = 真无声明(非得降级)
+        return si, await declared_paths_of(eid)   # None = 降级(**不抹平**,Y)
+
+    face_by_step: dict[int, frozenset[str] | None] = dict(
+        await asyncio.gather(*[_face_of(si) for si in sorted(needed_steps)])
+    ) if needed_steps else {}
+    for si, face in face_by_step.items():
+        if face is None:
+            logger.warning(
+                "run_dispatcher: step %s 声明面不可得(plate 降级)— 该步判定只认 body 面,"
+                "锚在契约声明上的条目可能被误判为悬空并跳过", si,
+            )
+
+    # body 面(判定)与端点面(universe)**共用同一份投影** —— 两侧对同一下标
+    # 必须给同一答案:各写一份的话,一侧改了规则另一侧不动,判决与 universe
+    # 就静默分叉。投影本体见 :func:`_body_of`。
+    body_of_step = _body_of(raw_payload)
+
+    universe_by_step: dict[int, set[str]] = {
+        si: injectable_universe(body_of_step(si), face)
+        for si, face in face_by_step.items()
+    }
+    # §5 例外:两侧同为该查表的缺省形(`set[str]` 的「只认 $ 根」),等价性一眼可判
+    # —— 未预计算该步 ⇒ 与 entry_issues 内部的缺省 universe 同一张表。
+    _universe_of = lambda si: universe_by_step.get(si, {"$"})   # noqa: E731
+
+    skipped_while_degraded: list[str] = []
+    dangling_ids: list[str] = []
+    selected_entries: list[dict] = []
+    for e in selected:
+        issues = entry_issues(e, step_count, body_of_step,
+                             _assert_targets_of(raw_payload), _universe_of)
+        if issues:
+            p = e.get("path")
+            si = as_step_index(p.get("stepIndex")) if isinstance(p, dict) else None
+            if si is not None and face_by_step.get(si) is None:
+                # Y:判定降级期间跳过的条目要可见。记录口径 = 「跳过发生在该步
+                # 声明面不可得的时刻」,跳过的**因由不限**(override-no-match、
+                # 真写错的 jsonpath 等与降级无关者一并计入)—— 不声称因果。
+                skipped_while_degraded.append(e.get("id"))
+            dangling_ids.append(e.get("id"))
+            continue
+        selected_entries.append(e)
+    return selected_entries, dangling_ids, skipped_while_degraded
 
 
 def _built_in_users(scenario_payload: dict | None) -> dict[str, Any]:
@@ -1488,6 +1532,7 @@ async def _create_execution(
     total_runs: int,
     config_json: dict,
     scenario_snapshot: dict | None = None,
+    batch_id: str | None = None,
 ) -> Execution:
     """Insert an Execution row."""
     ex = Execution(
@@ -1499,6 +1544,7 @@ async def _create_execution(
         failed=0,
         config_json=config_json,
         scenario_snapshot=scenario_snapshot,
+        batch_id=batch_id,
     )
     db.add(ex)
     await db.commit()
