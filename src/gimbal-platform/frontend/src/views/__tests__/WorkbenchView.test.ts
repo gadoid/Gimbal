@@ -18,6 +18,12 @@ vi.mock('@/api/executions', () => ({
 // 右栏时间线会读场景与适配批次 —— 不 mock 就打真网络,用例慢且不稳
 vi.mock('@/api/adaptations', () => ({ listBatches: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/api/scenario-composer', () => ({ listScenarios: vi.fn().mockResolvedValue([]) }))
+// 新增的 registry 卡(认证管理 / 服务画像)同样不能打真网络
+vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/utils/catalog-services', () => ({
+  loadCatalogServiceRows: vi.fn().mockResolvedValue([]),
+  loadCatalogEntries: vi.fn().mockResolvedValue([]),
+}))
 
 function mountPage() {
   return mount(WorkbenchView, {

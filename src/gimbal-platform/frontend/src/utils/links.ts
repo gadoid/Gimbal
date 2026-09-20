@@ -8,6 +8,16 @@ export function executionUrl(id: number | string): string {
   return `/executions/${encodeURIComponent(String(id))}`
 }
 
+/** 执行器(执行设计 §1):发起入口升为页面 */
+export function runnerUrl(): string {
+  return '/run'
+}
+
+/** 执行记录 · 批次归并视图(§1.2):队列 N 条按 batch_id 归并查看 */
+export function executionsBatchUrl(batchId: string): string {
+  return `/executions?batch_id=${encodeURIComponent(batchId)}`
+}
+
 /** 场景详情页(数据驱动的可读渲染) */
 export function scenarioDetailUrl(scenarioId: string): string {
   return `/scenarios/${encodeURIComponent(scenarioId)}/detail`

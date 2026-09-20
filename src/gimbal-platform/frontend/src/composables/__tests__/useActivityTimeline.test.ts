@@ -5,7 +5,7 @@
  * 公共原件的改动不算我的活动、场景事件有入池上限(否则刷满整轴)、
  * 卡头的颜色筛流是"单选可取消"且与预览位/展开态互不遗留。
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useActivityTimeline } from '@/composables/useActivityTimeline'
 import { ApiError } from '@/api/http'
@@ -69,10 +69,16 @@ function listExecutionsShim() { return [] as never[] }
 
 describe('useActivityTimeline', () => {
   beforeEach(() => {
+    // 钉住时钟在午后:ago() 的历日归属不随真实运行时刻漂 ——
+    // 凌晨跑时 1h 前已落「昨天」,「今天/昨天」分组断言会自己烂掉。
+    vi.setSystemTime(new Date('2026-09-20T15:00:00'))
     setActivePinia(createPinia())
     useScenarioComposerStore().scenariosLoaded = false
     vi.clearAllMocks()
     vi.mocked(composerApi.listScenarios).mockResolvedValue([] as never)
+  })
+  afterEach(() => {
+    vi.useRealTimers()                        // 还原 setSystemTime 的 Date mock
   })
 
   it('三源合流按时间倒序', async () => {

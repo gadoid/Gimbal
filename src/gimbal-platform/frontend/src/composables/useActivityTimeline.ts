@@ -47,7 +47,8 @@ export const TIMELINE_POOL = 30
 const byUpdateDesc = (a: Scenario, b: Scenario) =>
   (b.meta.updateTime || '').localeCompare(a.meta.updateTime || '')
 
-const BATCH_LABEL: Record<BatchOut['status'], string> = {
+/** 批次状态文案 —— 时间线与工作台适配卡共用一份(两处各写一套必漂)。 */
+export const BATCH_LABEL: Record<BatchOut['status'], string> = {
   open: '待处理', applying: '处理中', completed: '已完成', rolled_back: '已回滚',
 }
 

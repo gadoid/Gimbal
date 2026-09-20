@@ -5,7 +5,7 @@
  * 卡头圆点按颜色筛流、滚动渐隐只在真有剩余内容时出现、
  * member 无适配权限时不显示降级警示、右栏不进 registry(不可删/不可拖)。
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
@@ -24,6 +24,12 @@ vi.mock('@/api/scenario-composer', () => ({
 vi.mock('@/api/executions', () => ({ listExecutions: vi.fn() }))
 vi.mock('@/api/adaptations', () => ({ listBatches: vi.fn() }))
 vi.mock('@/api/constants', () => ({ list: vi.fn().mockResolvedValue([]) }))
+// 新增的 registry 卡(认证管理 / 服务画像)同样不能打真网络
+vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/utils/catalog-services', () => ({
+  loadCatalogServiceRows: vi.fn().mockResolvedValue([]),
+  loadCatalogEntries: vi.fn().mockResolvedValue([]),
+}))
 
 const as = (over: Record<string, unknown> = {}) => ({
   id: 3, username: 'alice', display_name: 'Alice Zhang', is_admin: false,
@@ -109,12 +115,18 @@ describe('UserIdentityCard — 右栏身份卡', () => {
 
 describe('ActivityTimeline — 右栏时间线', () => {
   beforeEach(() => {
+    // 钉住时钟在午后:ago() 偏移的历日归属不随真实运行时刻漂 ——
+    // 凌晨跑时 2h 前落「昨天」,按天分组断言就是颗时间炸弹。
+    vi.setSystemTime(new Date('2026-09-20T15:00:00'))
     setActivePinia(createPinia())
     localStorage.clear()
     useAuthStore().currentUser = as() as never
     useTimelineColors().reset()              // 配色是 module 单例:用例间归零
     vi.mocked(composerApi.listScenarios).mockResolvedValue([] as never)
     vi.mocked(adaptationsApi.listBatches).mockResolvedValue([] as never)
+  })
+  afterEach(() => {
+    vi.useRealTimers()                        // 还原 setSystemTime 的 Date  mock
   })
 
   it('三源合流按天分组,每行深链到自己的详情页', async () => {

@@ -23,6 +23,11 @@ vi.mock('@/api/constants', () => ({
   patch: vi.fn(),
   remove: vi.fn(),
 }))
+vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/utils/catalog-services', () => ({
+  loadCatalogServiceRows: vi.fn().mockResolvedValue([]),
+  loadCatalogEntries: vi.fn().mockResolvedValue([]),
+}))
 vi.mock('@/utils/clipboard', () => ({ copyText: vi.fn().mockResolvedValue(true) }))
 vi.mock('@/utils/toast', () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn(), warning: vi.fn() },

@@ -4,13 +4,14 @@
        拖拽)→ 卡片市场(registry 全集,已添加置灰);
      - 删除卡片:卡槽右上角 ✕ 徽标(最后一张不可删,防空工作台);
      - 编排:vuedraggable 左边缘抓取条重排,落点持久化;
-     - 尺寸:每卡 S/M/L 三档密度(layout v2 持久化);
+     - 尺寸:每卡 S/M/L 三档 = 宽 1/4・1/2・1/1(四轨网格上 1/2/4 轨),
+       高度全卡统一;超高的内容卡内滚动 —— 板面形状由用户组织,不自动调整;
      - 布局按用户分键存 localStorage(layout.ts)。
      右侧固定栏(身份卡 + 时间线)不属于 registry 组装区:页面级常驻
      上下文,可添可删就会让人找不到。
      工作台仍只做两件事:按 registry+layout 渲染,管理布局配置。 -->
 <template>
-  <ListPage title="工作台" width="wide" subtitle="摘要卡可添加 / 移除 / 拖拽排序,S/M/L 三档密度。">
+  <ListPage title="工作台" width="wide" subtitle="摘要卡可添加 / 移除 / 拖拽排序;高度统一,宽度 S/M/L = 1/4・1/2・1/1,板面自己排。">
     <template #actions>
       <Button
         v-if="orderedIds.length > 0 && layoutDirty"
@@ -40,7 +41,7 @@
           handle=".card-handle"
           :animation="150"
           tag="div"
-          class="grid grid-cols-1 gap-4 md:grid-cols-2"
+          class="tile-grid"
           data-testid="wb-grid"
         >
           <template #item="{ element: id }">
@@ -54,18 +55,18 @@
             />
           </template>
           <template #footer>
-            <button type="button" class="add-strip" data-testid="wb-add-card" @click="galleryOpen = true">
+            <button type="button" class="add-strip tile" data-span="2" data-testid="wb-add-card" @click="galleryOpen = true">
               + 添加卡片
             </button>
           </template>
         </draggable>
 
         <!-- 布局被清空(理论上 ≤1 保护;防御渲染)— 添加条仍常驻 -->
-        <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2" data-testid="wb-grid">
+        <div v-else class="tile-grid" data-testid="wb-grid">
           <div class="empty-state" data-testid="wb-no-cards">
             <p>工作台没有卡片了</p>
           </div>
-          <button type="button" class="add-strip" data-testid="wb-add-card" @click="galleryOpen = true">
+          <button type="button" class="add-strip tile" data-span="2" data-testid="wb-add-card" @click="galleryOpen = true">
             + 添加卡片
           </button>
         </div>
@@ -107,10 +108,13 @@ const visibleRegistry = computed(() =>
   workbenchRegistry.filter((d) => !d.adminOnly || auth.isAdmin),
 )
 
-/** 布局按用户名分键(登录后才持久化;未认证 = 会话内默认) */
+/** 布局按用户名分键(登录后才持久化;未认证 = 会话内默认)。
+ *  默认板只铺可见集内的卡 —— adminOnly 卡不该出现在 member 的默认布局。 */
 const username = computed(() =>
   auth.currentUser?.username || auth.currentUser?.display_name || '')
-const { orderedIds, add, remove, move, reset, sizeOf, setSize } = useWorkbenchLayout(username)
+const eligibleIds = computed(() => visibleRegistry.value.map((d) => d.id))
+const { orderedIds, add, remove, move, reset, sizeOf, setSize } =
+  useWorkbenchLayout(username, eligibleIds)
 
 /** draggable item-key:元素本身是 string id,键 = 自身 */
 const cardKey = (id: string) => id
@@ -149,7 +153,11 @@ const layoutDirty = computed(() => {
   gap: 16px;
   align-items: start;
 }
-.wb-main { min-width: 0; }
+/* 主区是卡片网格的容器查询源:轨数看主区实际宽度,不看视口 ——
+   右栏折行后主区变宽,轨数该跟着变。网格与占位本身是基座构件
+   (.tile-grid / .tile[data-span],见 scenario-lib.css),这里只供容器。 */
+.wb-main { min-width: 0; container-type: inline-size; }
+
 .wb-rail {
   position: sticky;
   top: 56px;
@@ -162,9 +170,10 @@ const layoutDirty = computed(() => {
   .wb-rail { position: static; }
 }
 
-/* 网格末尾常驻添加条(§3:虚线条,点开类型选择面板) */
+/* 网格末尾常驻添加条(§3:虚线条,点开类型选择面板)。
+   它也是一张 tile(占 M 位 = 2 轨),空板末尾留一个标准卡位。 */
 .add-strip {
-  @apply flex min-h-[72px] items-center justify-center rounded-card border border-dashed border-signal-line
+  @apply flex items-center justify-center rounded-card border border-dashed border-signal-line
     bg-transparent text-label font-medium text-muted-foreground no-underline
     transition-colors duration-150;
 }

@@ -16,7 +16,9 @@
  */
 import { inject, ref, type InjectionKey, type Ref, type Component } from 'vue'
 
-/** 卡片尺寸三档(设计文档 §4):S 只出结论,M 出明细,L 跨两列加辅助操作。 */
+/** 卡片尺寸三档(设计文档 §4):高度全卡统一,档只定宽度 ——
+ *  S = 1/4(只出结论)、M = 1/2(出明细)、L = 1/1(跨满行加辅助操作)。
+ *  轨数映射见 WorkbenchCardSlot SPAN_TRACKS。 */
 export type CardSize = 'S' | 'M' | 'L'
 
 export const CARD_SIZES: readonly CardSize[] = ['S', 'M', 'L'] as const
@@ -88,5 +90,58 @@ export const workbenchRegistry: WorkbenchCardDef[] = [
     description: '★ 关注的场景快捷入口,直达场景详情;卡头进关注页',
     accent: 'gold',
     component: () => import('./StarredScenariosCard.vue'),
+  },
+  {
+    id: 'services',
+    title: '服务画像',
+    description: '目录里的服务与端点数,直达热力网格',
+    accent: 'blue',
+    component: () => import('./ServicesCard.vue'),
+  },
+  {
+    id: 'auths',
+    title: '认证管理',
+    description: '凭证池概况 — 多少条、多少条已没人引用可清理',
+    accent: 'blue',
+    component: () => import('./AuthSessionsCard.vue'),
+  },
+  {
+    id: 'adaptations',
+    title: '适配中心',
+    description: '待适配端点数与最近批次,直达批次详情',
+    accent: 'gold',
+    component: () => import('./AdaptationCard.vue'),
+  },
+  {
+    id: 'runner',
+    title: '执行器',
+    description: '能跑几个场景、哪些还缺方案 —— 卡住的那步先补上',
+    accent: 'green',
+    component: () => import('./RunnableScenariosCard.vue'),
+  },
+  {
+    id: 'service-aliases',
+    title: '服务信息管理',
+    description: '服务别名清单与未分组提醒(admin)',
+    accent: 'blue',
+    adminOnly: true,
+    component: () => import('./ServiceAliasCard.vue'),
+  },
+  {
+    id: 'carry',
+    title: '默认值',
+    description: '服务级传递默认值,行深链直达定位(admin)',
+    accent: 'blue',
+    adminOnly: true,
+    component: () => import('./CarryDefaultsCard.vue'),
+  },
+  {
+    id: 'users',
+    title: '用户管理',
+    description: '成员数与停用提醒(admin)',
+    accent: 'blue',
+    defaultSize: 'S',
+    adminOnly: true,
+    component: () => import('./UsersSummaryCard.vue'),
   },
 ]

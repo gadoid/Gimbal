@@ -33,10 +33,20 @@ async function flushed() {
 }
 
 describe('useWorkbenchLayout — order(v2 沿用 v1 契约)', () => {
-  it('无存档 → 默认 = registry 全量按注册序,sizes 全 defaultSize(缺省 M)', () => {
+  it('无存档 → 默认 = registry 全量按注册序,sizes 取各卡 defaultSize(未声明才 M)', () => {
     const { orderedIds, sizeOf } = useWorkbenchLayout(ref(USER))
     expect(orderedIds.value).toEqual(ids())
-    for (const id of ids()) expect(sizeOf(id)).toBe('M')
+    for (const d of workbenchRegistry) expect(sizeOf(d.id)).toBe(d.defaultSize ?? 'M')
+    // 用户管理只出两个计数,列表不是 glance 信息 —— 唯一刻意 S 起步的卡
+    expect(sizeOf('users')).toBe('S')
+  })
+
+  it('给 eligibleIds → 默认板只含可见集(adminOnly 卡不塞给 member)', () => {
+    const allow = ref(workbenchRegistry.filter((d) => !d.adminOnly).map((d) => d.id))
+    const { orderedIds } = useWorkbenchLayout(ref(USER), allow)
+    expect(orderedIds.value).toEqual(allow.value)
+    // 注册表里确有 adminOnly 卡,否则这条断言是空的
+    expect(allow.value.length).toBeLessThan(ids().length)
   })
 
   it('remove → 集合收缩并持久化(含 sizes 键清理);重载不复活', async () => {
@@ -164,8 +174,8 @@ describe('useWorkbenchLayout — sizes(v3 尺寸系统)', () => {
     expect(readV2().sizes).toEqual({
       [ids()[0]]: 'L',
       [ids()[1]]: 'S',
-      // 其余未碰的卡一律取注册表 defaultSize(缺省 M)
-      ...Object.fromEntries(ids().slice(2).map((id) => [id, 'M'])),
+      // 其余未碰的卡一律取注册表 defaultSize(未声明才 M)
+      ...Object.fromEntries(workbenchRegistry.slice(2).map((d) => [d.id, d.defaultSize ?? 'M'])),
     })
     expect(sizeOf(ids()[0])).toBe('L')
 

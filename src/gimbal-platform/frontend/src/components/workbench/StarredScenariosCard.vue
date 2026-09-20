@@ -9,10 +9,8 @@
 <template>
   <div data-testid="wb-card-starred-scenarios" class="wcard">
     <header class="chead">
-      <span class="chead-icon ci-star">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" />
-        </svg>
+      <span class="chead-icon ci-gold">
+        <SlibIcon name="star" :size="14" />
       </span>
       <span class="chead-title">关注场景</span>
       <span class="chead-count">{{ rows.length }}</span>
@@ -32,15 +30,15 @@
           v-for="s in visible"
           :key="s.meta.scenarioId"
           :to="scenarioDetailUrl(s.meta.scenarioId)"
-          class="sc-row"
+          class="sc-row wrow"
           :data-testid="`wb-sc-row-${s.meta.scenarioId}`"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="#eab308" class="sc-star" aria-hidden="true">
+          <svg width="12" height="12" viewBox="0 0 24 24" class="sc-star" aria-hidden="true">
             <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" />
           </svg>
-          <span class="sc-name" :title="s.meta.name || s.meta.scenarioId">{{ s.meta.name || s.meta.scenarioId }}</span>
-          <span class="sc-module">{{ s.meta.module || '未分类' }}</span>
-          <span class="sc-time">{{ relTime(s.meta.updateTime || s.meta.createTime || '') }}</span>
+          <span class="wrow-name" :title="s.meta.name || s.meta.scenarioId">{{ s.meta.name || s.meta.scenarioId }}</span>
+          <span class="wrow-tag">{{ s.meta.module || '未分类' }}</span>
+          <span class="wrow-time">{{ relTime(s.meta.updateTime || s.meta.createTime || '') }}</span>
         </router-link>
       </div>
       <div v-else-if="failed" class="card-empty">
@@ -57,6 +55,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useCardSize } from './registry'
+import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import { scenarioDetailUrl } from '@/utils/links'
 import { relTime } from '@/utils/datetime'
@@ -77,70 +76,8 @@ onMounted(() => { void store.ensureScenarios() })
 </script>
 
 <style scoped>
-.wcard { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
-
-/* ── 题头(三卡共用形制;底部分隔线,§2 卡头/卡身分区)──────── */
-.chead {
-  display: flex; align-items: center; gap: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e1e5eb;
-}
-.chead-icon {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; border-radius: 7px; flex: none;
-}
-.ci-star { color: #b45309; background: #fef6e0; }
-.chead-title { font-size: 13.5px; font-weight: 700; color: #10151c; }
-.chead-count {
-  @apply text-caption font-bold;
-  padding: 0 7px;
-  color: #64748b; background: #f1f5f9; border-radius: 999px;
-}
-.chead-spacer { flex: 1; }
-.manage-link { font-size: 12px; font-weight: 600; color: #2f6fed; text-decoration: none; }
-.manage-link:hover { text-decoration: underline; }
-
-/* ── S 档:结论面(大数字,§4"只出结论")───────────────────── */
-.s-body { display: flex; flex-direction: column; gap: 2px; }
-.s-num { margin: 2px 0 0; font-size: 30px; font-weight: 700; line-height: 1.1; color: #10151c; }
-.s-label { margin: 0; font-size: 11px; color: #64748b; }
-
-/* ── 场景行(网格列:★ / 名称 1fr / 模块 / 时间)──────────── */
-.rows { display: flex; flex-direction: column; gap: 2px; }
-.sc-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 8px;
-  margin: 0 -8px;
-  font-size: 12px;
-  color: inherit; text-decoration: none;
-  border-radius: 7px;
-  transition: background 0.12s ease;
-}
-.sc-row:hover { background: #f6f8fa; }
-.sc-star { flex: none; }
-.sc-name {
-  min-width: 0; font-weight: 600; color: #10151c;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.sc-module {
-  padding: 1px 7px; font-size: 10.5px; font-weight: 600;
-  color: #475569; background: #f1f5f9; border-radius: 4px; white-space: nowrap;
-}
-.sc-time { font-size: 11px; color: #94a3b8; white-space: nowrap; }
-
-.card-empty {
-  display: flex; flex-direction: column; align-items: center;
-  gap: 8px; padding: 16px 0 8px; text-align: center;
-}
-.card-empty p { margin: 0; font-size: 12px; color: #64748b; }
-.cta {
-  padding: 4px 14px; font-size: 12.5px; font-weight: 600;
-  color: #2f6fed; text-decoration: none;
-  border: 1px solid #bcd0f7; border-radius: 6px;
-  transition: background 0.12s ease;
-}
-.cta:hover { background: #e7efff; }
+/* 形制都在基座 scenario-lib.css(.wcard / .chead / .s-body / .wrow /
+   .card-empty / .cta);关注卡只剩自己的行列宽与那颗星。 */
+.sc-row { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+.sc-star { flex: none; fill: var(--sl-star); }
 </style>

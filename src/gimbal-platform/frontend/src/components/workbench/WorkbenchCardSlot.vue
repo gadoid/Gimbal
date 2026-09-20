@@ -1,6 +1,6 @@
 <!-- WorkbenchCardSlot.vue — 工作台卡片包装层(§7 第 3/4 条 + v3 设计文档)。
      结构(设计文档 §2/§3/§4):
-       section.card-slot(栅格项;L 档 span 2)
+       section.card-slot.tile(基座栅格项;data-span = 占位轨数 S1/M2/L4)
          └ .slot-frame(卡片视觉框架:顶部 3px 分类色边 = border-top,
             与卡片圆角/描边由浏览器一同绘制,天然对齐;统一底/描边/
             hover 抬升 — §7 第 3 条"样式由工作台统一提供")
@@ -15,8 +15,8 @@
      懒加载 + onErrorCaptured 故障隔离语义不变。 -->
 <template>
   <section
-    class="card-slot"
-    :class="size === 'L' ? 'span-2' : ''"
+    class="card-slot tile"
+    :data-span="SPAN_TRACKS[size]"
     :data-testid="`wb-slot-${def.id}`"
     :aria-label="def.title"
   >
@@ -58,16 +58,18 @@
         </button>
       </div>
 
-      <div v-if="errored" class="card-state bad" :data-testid="`wb-slot-${def.id}-error`">
-        此卡片渲染失败 — 其余卡片不受影响。
-        <button type="button" class="retry" @click="errored = false">重试</button>
+      <div class="slot-body">
+        <div v-if="errored" class="card-state bad" :data-testid="`wb-slot-${def.id}-error`">
+          此卡片渲染失败 — 其余卡片不受影响。
+          <button type="button" class="retry" @click="errored = false">重试</button>
+        </div>
+        <Suspense v-else>
+          <component :is="asyncComp" />
+          <template #fallback>
+            <div class="card-state">加载中…</div>
+          </template>
+        </Suspense>
       </div>
-      <Suspense v-else>
-        <component :is="asyncComp" />
-        <template #fallback>
-          <div class="card-state">加载中…</div>
-        </template>
-      </Suspense>
     </div>
   </section>
 </template>
@@ -78,12 +80,15 @@ import { CARD_SIZE_LABELS, cardSizeKey, type CardSize, type WorkbenchCardDef } f
 
 const props = defineProps<{
   def: WorkbenchCardDef
-  /** 当前尺寸档(layout.sizeOf;L = 跨 2 列,S = 紧凑结论) */
+  /** 当前尺寸档(layout.sizeOf;四轨网格上 S=1 / M=2 / L=4 轨) */
   size: CardSize
   /** 组装模式:显示移除钮(布局为空时最后一张不可删,防空工作台) */
   removable?: boolean
 }>()
 const emit = defineEmits<{ remove: []; size: [s: CardSize] }>()
+
+/** 尺寸档 → 栅格占位轨数(网格轨数由 WorkbenchView 的容器查询决定) */
+const SPAN_TRACKS: Record<CardSize, number> = { S: 1, M: 2, L: 4 }
 
 // setup 期一次性定义(不进 computed):def 随 slot 键控(id)不换身份,
 // computed 每次求值都会 new 一个异步包装器 — 重挂载/换尺寸时曾出
@@ -134,7 +139,12 @@ onUnmounted(() => clearTimeout(pulseTimer))
   flex-direction: column;
   position: relative;
 }
-.span-2 { grid-column: span 2; }
+
+/* 轨数占位与统一高度都在基座 .tile-grid / .tile[data-span]
+   (scenario-lib.css);这里只补一处卡内滚动层。
+   卡内行用 margin:0 -8px 往框垫白里出血,滚动层得自己让出同样的 8px,
+   否则出血会被裁成一条横向滚动条。 */
+.slot-body { flex: 1; min-height: 0; overflow: auto; margin: 0 -8px; padding: 0 8px; }
 
 /* ── 卡片视觉框架(统一供给,§7 第 3 条 + 设计文档 §2)──────────
      分类色边 = border-top 3px:与卡片描边/圆角由浏览器一并绘制,

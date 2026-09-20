@@ -11,11 +11,7 @@
   <div data-testid="wb-card-constants" class="wcard">
     <header class="chead">
       <span class="chead-icon ci-blue">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <ellipse cx="12" cy="5" rx="8" ry="3" />
-          <path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5" />
-          <path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" />
-        </svg>
+        <SlibIcon name="database" :size="14" />
       </span>
       <span class="chead-title">常量池</span>
       <span class="chead-count">{{ state.entries.length }} 项</span>
@@ -41,9 +37,9 @@
       >
 
       <div v-if="visible.length" class="rows">
-        <div v-for="e in visible" :key="e.id" class="kv-row">
-          <span class="kv-name mono" :title="e.name">{{ e.name }}</span>
-          <span class="kv-kind" :class="e.entry_kind === 'generator' ? 'kg-gen' : 'kg-lit'">
+        <div v-for="e in visible" :key="e.id" class="kv-row wrow">
+          <span class="wrow-name mono" :title="e.name">{{ e.name }}</span>
+          <span class="wrow-tag" :class="e.entry_kind === 'generator' ? 'kg-gen' : 'kg-lit'">
             {{ e.entry_kind === 'generator' ? '生成器' : '常量' }}
           </span>
           <button class="kv-copy" type="button" title="复制值 / 生成器 key" @click="copyEntry(e)">
@@ -73,6 +69,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useCardSize } from './registry'
+import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import { useConstantsStore } from '@/stores/constants'
 import { copyText } from '@/utils/clipboard'
 import { toast } from '@/utils/toast'
@@ -116,99 +113,38 @@ async function copyEntry(e: ConstantEntry): Promise<void> {
 </script>
 
 <style scoped>
-.wcard { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+/* 形制在基座 scenario-lib.css(.wcard / .chead / .s-body / .wrow /
+   .card-empty / .cta);常量卡只留自己的搜索框、行列宽与复制钮。 */
 
-/* ── 题头(三卡共用形制;底部分隔线,§2 卡头/卡身分区)──────── */
-.chead {
-  display: flex; align-items: center; gap: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e1e5eb;
-}
-.chead-icon {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; border-radius: 7px; flex: none;
-}
-.ci-blue { color: #2f6fed; background: #e7efff; }
-.chead-title { font-size: 13.5px; font-weight: 700; color: #10151c; }
-.chead-count {
-  @apply text-caption font-bold;
-  padding: 0 7px;
-  color: #64748b; background: #f1f5f9; border-radius: 999px;
-}
-.chead-spacer { flex: 1; }
-.manage-link { font-size: 12px; font-weight: 600; color: #2f6fed; text-decoration: none; }
-.manage-link:hover { text-decoration: underline; }
-
-/* ── S 档:结论面(大数字,§4"只出结论")───────────────────── */
-.s-body { display: flex; flex-direction: column; gap: 2px; }
-.s-num { margin: 2px 0 0; font-size: 30px; font-weight: 700; line-height: 1.1; color: #10151c; }
-.s-label { margin: 0; font-size: 11px; color: #64748b; }
-
-/* ── L 档搜索框(卡专属辅助,§4)──────────────────────────── */
+/* L 档专属:卡内搜索(常量多了翻找是真实需求,§4) */
 .l-search {
   width: 100%;
   padding: 5px 10px;
   font-size: 12px;
-  color: #10151c;
+  color: var(--sl-ink);
   background: #f8fafc;
-  border: 1px solid #e1e5eb;
+  border: 1px solid var(--sl-line);
   border-radius: 6px;
   outline: none;
   transition: border-color 0.12s ease, background 0.12s ease;
 }
-.l-search:focus { border-color: #2f6fed; background: #fff; }
+.l-search:focus { border-color: var(--sl-accent); background: #fff; }
 
-/* ── 键值行(网格列:名称 1fr / 类型 chip / 复制 icon)──────── */
-.rows { display: flex; flex-direction: column; gap: 2px; }
-.kv-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 8px;
-  margin: 0 -8px;
-  border-radius: 7px;
-  font-size: 12.5px;
-  transition: background 0.12s ease;
-}
-.kv-row:hover { background: #f6f8fa; }
-.kv-name {
-  min-width: 0; font-weight: 600; color: #10151c;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.kv-kind {
-  padding: 1px 7px; font-size: 10.5px; font-weight: 600; border-radius: 4px;
-  white-space: nowrap;
-}
+/* 键值行:名称 1fr / 类型 chip / 复制 icon */
+.kv-row { grid-template-columns: minmax(0, 1fr) auto auto; font-size: 12.5px; }
 .kg-gen { color: #92400e; background: #fef3c7; }
-.kg-lit { color: #475569; background: #f1f5f9; }
-/* §2 行内操作独立:icon-only,默认低透明度,行 hover 才增强 —
+.kg-lit { color: #475569; background: var(--sl-divider); }
+
+/* 行内操作独立:icon-only,默认低透明度,行 hover 才增强 —
    不抢 key/value 主内容的视觉权重 */
 .kv-copy {
   display: inline-flex; align-items: center; justify-content: center;
   width: 20px; height: 20px;
-  color: #64748b; opacity: 0.35;
+  color: var(--sl-ink-2); opacity: 0.35;
   background: transparent;
   border: none; border-radius: 5px; cursor: pointer;
   transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
 }
 .kv-row:hover .kv-copy { opacity: 1; }
-.kv-copy:hover { color: #2f6fed; background: #e7efff; }
-.more-hint { margin: 4px 0 0; font-size: 11px; color: #94a3b8; }
-
-/* ── 空态 = 引导 CTA(非虚线占位,§7 第 3 条)─────────────── */
-.card-empty {
-  display: flex; flex-direction: column; align-items: center;
-  gap: 8px; padding: 16px 0 8px; text-align: center;
-}
-.card-empty p { margin: 0; font-size: 12px; color: #64748b; }
-.cta {
-  padding: 4px 14px; font-size: 12.5px; font-weight: 600;
-  color: #2f6fed; text-decoration: none;
-  border: 1px solid #bcd0f7; border-radius: 6px;
-  transition: background 0.12s ease;
-}
-.cta:hover { background: #e7efff; }
-
-.mono { font-family: var(--font-mono, monospace); }
+.kv-copy:hover { color: var(--sl-accent); background: var(--sl-accent-soft); }
 </style>

@@ -30,19 +30,8 @@ function storageKey(username: string): string {
   return `${STORAGE_PREFIX}:${username}`
 }
 
-function defaultOrder(): string[] {
-  return workbenchRegistry.map((d) => d.id)
-}
-
 function defaultSizeOf(id: string): CardSize {
   return workbenchRegistry.find((d) => d.id === id)?.defaultSize ?? 'M'
-}
-
-function defaultLayout(): LayoutV2 {
-  return {
-    order: defaultOrder(),
-    sizes: Object.fromEntries(defaultOrder().map((id) => [id, defaultSizeOf(id)])),
-  }
 }
 
 function filterKnown(order: string[]): string[] {
@@ -96,8 +85,9 @@ function persist(username: string, layout: LayoutV2): void {
   }
 }
 
-/** 组装状态:启用卡的有序 id + 每卡尺寸。username 变化自动重载。 */
-export function useWorkbenchLayout(username: Ref<string>): {
+/** 组装状态:启用卡的有序 id + 每卡尺寸。username 变化自动重载。
+ *  eligibleIds = 该用户可见的卡 id(registry 去掉 adminOnly);不传按全量。 */
+export function useWorkbenchLayout(username: Ref<string>, eligibleIds?: Ref<string[]>): {
   orderedIds: Ref<string[]>
   add: (id: string) => void
   remove: (id: string) => void
@@ -110,6 +100,23 @@ export function useWorkbenchLayout(username: Ref<string>): {
 } {
   const orderedIds = ref<string[]>([])
   const sizes = ref<Record<string, CardSize>>({})
+
+  /** 默认板只铺这个用户看得见的卡 —— 注册表里现在有 adminOnly 卡,
+   *  照全量铺 member 就凭空多出几张取不到数的死卡。已存布局不在此列:
+   *  admin 降级后残留的卡仍按原样渲染(WorkbenchView 的既定语义)。 */
+  function defaultOrder(): string[] {
+    const allow = eligibleIds?.value
+    return workbenchRegistry
+      .filter((d) => !allow || allow.includes(d.id))
+      .map((d) => d.id)
+  }
+
+  function defaultLayout(): LayoutV2 {
+    return {
+      order: defaultOrder(),
+      sizes: Object.fromEntries(defaultOrder().map((id) => [id, defaultSizeOf(id)])),
+    }
+  }
 
   function reload() {
     const layout = username.value

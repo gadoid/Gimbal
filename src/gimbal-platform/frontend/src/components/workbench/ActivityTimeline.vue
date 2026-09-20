@@ -10,10 +10,7 @@
   <section class="tl-card" data-testid="wb-rail-timeline">
     <header class="chead">
       <span class="chead-icon">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 7v5l3 2" />
-        </svg>
+        <SlibIcon name="clock" :size="14" />
       </span>
       <span class="chead-title">时间线</span>
       <span class="chead-count">{{ visible.length }}</span>
@@ -138,6 +135,7 @@ import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useActivityTimeline, type TimelineKind } from '@/composables/useActivityTimeline'
 import { useTimelineColors, DOT_PALETTE, TIMELINE_KINDS } from '@/composables/useTimelineColors'
 import { relTime, shortDateTime } from '@/utils/datetime'
+import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 
 const {
   days, status, degraded, canExpand, expanded, toggleExpanded, load,

@@ -27,6 +27,12 @@ vi.mock('@/api/adaptations', () => ({
 vi.mock('@/api/scenario-composer', () => ({
   listScenarios: vi.fn().mockResolvedValue([]),
 }))
+// 新增的 registry 卡(认证管理 / 服务画像)同样不能打真网络
+vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/utils/catalog-services', () => ({
+  loadCatalogServiceRows: vi.fn().mockResolvedValue([]),
+  loadCatalogEntries: vi.fn().mockResolvedValue([]),
+}))
 
 function q(sel: string): DOMWrapper<Element> {
   const el = document.body.querySelector(sel)
@@ -62,6 +68,12 @@ async function waitCards(w: ReturnType<typeof mountPage>, n: number) {
   })
 }
 
+/** 本文件的用例都是 member(alice is_admin: false)—— member 的默认板
+ *  = 注册表去掉 adminOnly,那三张卡压根不该铺给他。 */
+function memberIds(): string[] {
+  return workbenchRegistry.filter((d) => !d.adminOnly).map((d) => d.id)
+}
+
 describe('工作台组装 — draggable 接线(卡死根因防回归)', () => {
   it('itemKey 必须是函数(静态字符串会让所有 key=undefined → 拖拽死循环)', () => {
     const w = mountPage()
@@ -75,9 +87,9 @@ describe('工作台组装 — draggable 接线(卡死根因防回归)', () => {
 })
 
 describe('工作台组装 — 添加卡片(网格末尾添加条 + 市场置灰)', () => {
-  it('默认渲染全部注册卡;添加条常驻网格末尾,打开市场 = 全类型清单(已添加置灰)', async () => {
+  it('默认渲染该角色可见的全部注册卡;添加条常驻网格末尾,打开市场 = 全类型清单(已添加置灰)', async () => {
     const w = mountPage()
-    await waitCards(w, workbenchRegistry.length)
+    await waitCards(w, memberIds().length)
     expect(w.find('[data-testid="wb-slot-constants"]').exists()).toBe(true)
     expect(w.find('[data-testid="wb-slot-recent-executions"]').exists()).toBe(true)
     expect(w.find('[data-testid="wb-slot-my-scenarios"]').exists()).toBe(true)
@@ -147,9 +159,9 @@ describe('工作台组装 — 添加卡片(网格末尾添加条 + 市场置灰)
 
   it('最后一张卡不可移除(防空工作台;✕ 徽标同步隐藏)', async () => {
     const w = mountPage()
-    await waitCards(w, workbenchRegistry.length)
-    // 删到只剩 constants —— 按注册表取「非 constants」,加多少卡都不用回改此用例
-    for (const id of workbenchRegistry.filter((d) => d.id !== 'constants').map((d) => d.id)) {
+    await waitCards(w, memberIds().length)
+    // 删到只剩 constants —— 按可见集取「非 constants」,加多少卡都不用回改此用例
+    for (const id of memberIds().filter((x) => x !== 'constants')) {
       await w.find(`[data-testid="wb-remove-${id}"]`).trigger('click')
       await flushPromises()
     }
@@ -161,7 +173,7 @@ describe('工作台组装 — 添加卡片(网格末尾添加条 + 市场置灰)
 })
 
 describe('工作台尺寸系统(⤢ 单钮循环 S→M→L,设计文档 §4)', () => {
-  it('点 ⤢ 一次 M→L:slot 跨 2 列 + 常量池出现搜索框;持久化', async () => {
+  it('点 ⤢ 一次 M→L:slot 占满 4 轨 + 常量池出现搜索框;持久化', async () => {
     const w = mountPage()
     await waitCards(w, 3)
     await vi.waitFor(() => {
@@ -170,8 +182,8 @@ describe('工作台尺寸系统(⤢ 单钮循环 S→M→L,设计文档 §4)', (
 
     await w.find('[data-testid="wb-size-constants"]').trigger('click')
     await flushPromises()
-    // L = span 2 + 卡内搜索框
-    expect(w.find('[data-testid="wb-slot-constants"]').classes()).toContain('span-2')
+    // L = 占 4 轨(跨满行)+ 卡内搜索框
+    expect(w.find('[data-testid="wb-slot-constants"]').attributes('data-span')).toBe('4')
     expect(w.find('[data-testid="wb-card-constants-search"]').exists()).toBe(true)
     const stored = JSON.parse(localStorage.getItem('workbench.layout.v2:alice')!)
     expect(stored.sizes.constants).toBe('L')
@@ -192,7 +204,7 @@ describe('工作台尺寸系统(⤢ 单钮循环 S→M→L,设计文档 §4)', (
     await flushPromises()
     expect(w.find('[data-testid="wb-card-constants-s"]').exists()).toBe(true)
     expect(w.find('[data-testid="wb-size-constants"]').exists()).toBe(true)
-    expect(w.find('[data-testid="wb-slot-constants"]').classes()).not.toContain('span-2')
+    expect(w.find('[data-testid="wb-slot-constants"]').attributes('data-span')).toBe('1')
 
     // 第三击:S→M,回到明细
     await w.find('[data-testid="wb-size-constants"]').trigger('click')
