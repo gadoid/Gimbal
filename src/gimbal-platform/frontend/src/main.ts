@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import './styles/theme.css'
 import './styles/composer.css'
 import './styles/scenario-lib.css'
+import './styles/service-area.css'
 import './styles/tailwind.css'
 
 import App from './App.vue'

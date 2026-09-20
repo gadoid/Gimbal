@@ -34,6 +34,28 @@ export default {
           done: '#15803D',
           failed: '#DC2626',
           star: '#EAB308',
+          // ── 执行设计附录补录(2026-09-20):此前无 token 归属的取值 ──
+          // 注:附录 carry/本别名底写 #E7EFFE,与既有 soft #E7EFFF 一位之差
+          // — 以既有 token 为准(视觉不可分),不另立第二值。
+          // 文字层级:次级 / 弱化(micro 图例、占位)
+          muted: '#5B6472',
+          faint: '#8B93A1',
+          // 分隔线 / 嵌套底(form 底同值)
+          hairline: '#EEF0F3',
+          // 表头三件套(scenario-lib 的 --sl-th-* 同值;此处供 utility 消费)
+          thbg: '#F6F8FC',
+          think: '#4A5A72',
+          thrule: '#2A3342',
+          // 待办 / 前置(琥珀;数据分析「延后」徽标同族)
+          warn: '#B45309',
+          warnsoft: '#FEF3C7',
+          // 通过底(与 done 前景配对)
+          passsoft: '#E4F5EA',
+          // 内容面青(数据集列 / 变量;蓝紫灰=配置面,青=内容面)
+          cyan: '#0E7490',
+          cyansoft: '#E0F2FE',
+          // 服务级紫底(与 domain.fin 前景配对;注入层·服务级)
+          svcsoft: '#F1ECFB',
         },
         // 业务域 chip 独立分类色板(v3:与 accent/状态色彻底解耦)
         domain: {

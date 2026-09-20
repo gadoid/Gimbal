@@ -58,6 +58,7 @@ const board: BoardResponse = {
 
 async function mountBoard() {
   const router = createRouter({ history: createMemoryHistory(), routes: [
+    { path: '/services/:name', component: { template: '<div/>' } },
     { path: '/services/:name/endpoints/:endpointId', component: EndpointBoard },
     { path: '/adaptations', component: { template: '<div/>' } },
   ] })

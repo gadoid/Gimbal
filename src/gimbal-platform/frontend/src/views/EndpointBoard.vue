@@ -5,31 +5,38 @@
      拖动坐标按主体存 localStorage(纯前端偏好,不进后端)。
      trails 由后端算好(方案 §3.2),前端只渲染红色高亮,不做业务推理。 -->
 <template>
-  <ListPage title="接口线索板" width="wide" :subtitle="crumb">
-    <template #actions>
-      <div class="flex items-center gap-1.5" data-testid="board-filters">
-        <button
-          v-for="q in viewChips"
-          :key="q.key"
-          type="button"
-          class="rounded-full border px-2.5 py-0.5 text-caption font-medium transition-colors"
-          :class="view === q.key
-            ? 'border-[#2F6FED] bg-[#E7EFFE] text-[#2F6FED]'
-            : 'border-signal-line bg-signal-card text-muted-foreground hover:text-foreground'"
-          :data-testid="`board-view-${q.key}`"
-          @click="view = q.key"
-        >{{ q.label }}</button>
-      </div>
-    </template>
+  <section class="slib">
+    <PageHead
+      icon="network"
+      title="接口线索板"
+      :count="endpointId"
+      :subtitle="board ? `${board.subject.name} · ${service}` : `热力网格 · ${service}`"
+      :hint="board ? `${board.subject.method} ${board.subject.path}` : undefined"
+    >
+      <template #right>
+        <div class="svc-stats tight" data-testid="board-filters">
+          <button
+            v-for="q in viewChips"
+            :key="q.key"
+            type="button"
+            class="svc-chip"
+            :class="{ on: view === q.key }"
+            :data-testid="`board-view-${q.key}`"
+            @click="view = q.key"
+          >{{ q.label }}</button>
+        </div>
+        <router-link class="goto-link" :to="`/services/${encodeURIComponent(service)}`">← 热力网格</router-link>
+      </template>
+    </PageHead>
 
-    <div v-if="loading" class="loading-state mt-3.5">加载中…</div>
-    <div v-else-if="error" class="mt-3.5 rounded-field border border-signal-line bg-signal-card p-4 text-sm text-muted-foreground" data-testid="board-error">
+    <div v-if="loading" class="slib-loading">加载中…</div>
+    <div v-else-if="error" class="svc-banner bad" data-testid="board-error">
       {{ error }}
     </div>
 
-    <div v-else-if="board" class="mt-3 flex gap-3">
+    <div v-else-if="board" class="board-wrap">
       <!-- 画布:四象限 + 主体 + 告警链 -->
-      <div class="board-canvas relative h-[calc(100vh-260px)] min-h-[520px] flex-1 overflow-hidden rounded-lg border border-[#AEB8C4] bg-[#F7F9FB] shadow-[inset_0_0_0_8px_#DFE5EC,inset_0_0_0_9px_#BFC8D3]">
+      <div class="board-canvas">
         <VueFlow
           :nodes-draggable="true"
           :min-zoom="0.3"
@@ -41,13 +48,14 @@
             <div
               :data-testid="`board-node-${nodeProps.id}`"
               class="board-node select-none"
-              :class="[kindClass(nodeProps.data.kind), nodeProps.data.kind === 'zone' ? 'w-[600px]' : 'w-[220px]']"
+              :class="[nodeProps.data.kind === 'card' ? 'is-card' : 'is-plain',
+                       nodeProps.data.kind === 'zone' ? 'w-[600px]' : 'w-[220px]']"
             >
               <!-- 象限占位区 -->
               <template v-if="nodeProps.data.kind === 'zone'">
-                <div class="flex h-[300px] flex-col items-center justify-center rounded-[10px] border border-dashed border-[#BCC6D2]">
-                  <div class="text-small font-semibold text-[#5B6472]">{{ nodeProps.data.label }}</div>
-                  <div v-if="nodeProps.data.state === 'unavailable'" class="mt-1 text-caption text-[#8B93A1]">
+                <div class="zone-box">
+                  <div class="zone-label">{{ nodeProps.data.label }}</div>
+                  <div v-if="nodeProps.data.state === 'unavailable'" class="zone-hint">
                     未接入 — {{ nodeProps.data.hint }}
                   </div>
                 </div>
@@ -56,37 +64,51 @@
               <template v-else>
                 <div class="flex items-center gap-1.5">
                   <span class="kind-tag">{{ kindLabel(nodeProps.data.kind) }}</span>
-                  <span v-if="nodeProps.data.kind === 'endpoint'" class="mono text-micro font-bold" :style="methodStyle(nodeProps.data.label)">{{ methodOf(nodeProps.data.label) }}</span>
+                  <span
+                    v-if="nodeProps.data.kind === 'endpoint'"
+                    class="svc-method"
+                    :class="methodClass(methodOf(nodeProps.data.label))"
+                  >{{ methodOf(nodeProps.data.label) }}</span>
                 </div>
-                <div class="mono mt-1 truncate text-micro" :title="nodeProps.data.label">{{ nodeProps.data.kind === 'endpoint' ? pathOf(nodeProps.data.label) : nodeProps.data.label }}</div>
-                <div v-if="nodeProps.data.badge" class="mt-1 text-micro" :class="nodeProps.data.badgeClass">{{ nodeProps.data.badge }}</div>
+                <div class="mono node-title" :title="nodeProps.data.label">
+                  {{ nodeProps.data.kind === 'endpoint' ? pathOf(nodeProps.data.label) : nodeProps.data.label }}
+                </div>
+                <div v-if="nodeProps.data.badge" class="node-badge" :class="nodeProps.data.badgeClass">
+                  {{ nodeProps.data.badge }}
+                </div>
               </template>
             </div>
           </template>
         </VueFlow>
         <!-- 图例 -->
-        <div class="pointer-events-none absolute bottom-2 left-2 z-10 rounded bg-white/90 px-2.5 py-1.5 text-micro text-[#5B6472] shadow-sm">
-          <span class="mr-2 inline-flex items-center gap-1"><span class="inline-block h-0.5 w-4 bg-[#C7CDD6]"></span>结构归属</span>
-          <span class="mr-2 inline-flex items-center gap-1"><span class="inline-block h-0.5 w-4 border-t border-dashed border-[#A8B0BC]"></span>注解/引用</span>
-          <span class="inline-flex items-center gap-1"><span class="inline-block h-[2.2px] w-4 bg-[#DC2626]"></span>告警链</span>
+        <div class="board-legend">
+          <span class="lg"><span class="lg-line"></span>结构归属</span>
+          <span class="lg"><span class="lg-line dashed"></span>注解/引用</span>
+          <span class="lg"><span class="lg-line trail"></span>告警链</span>
         </div>
       </div>
 
       <!-- 右栏:节点详情 + 自建卡 -->
-      <aside class="flex w-[340px] shrink-0 flex-col gap-3">
-        <div class="rounded-lg border border-signal-line bg-signal-card p-3">
-          <div class="text-caption font-semibold text-signal-ink">节点详情</div>
-          <div v-if="!selected" class="mt-2 text-caption text-muted-foreground" data-testid="board-detail-empty">单击画布节点查看</div>
-          <div v-else class="mt-2 space-y-1 text-caption" :data-testid="`board-detail-${selected.id}`">
-            <div class="mono break-all font-medium">{{ selected.label }}</div>
-            <div v-for="(v, k) in selectedDetailRows" :key="k" class="flex gap-2">
-              <span class="w-20 shrink-0 text-muted-foreground">{{ k }}</span>
-              <span class="mono break-all">{{ v }}</span>
-            </div>
+      <aside class="board-rail">
+        <div class="svc-panel">
+          <div class="svc-panel-head">
+            <span class="svc-panel-title">节点详情</span>
+          </div>
+          <div v-if="!selected" class="rail-empty" data-testid="board-detail-empty">
+            单击画布节点查看
+          </div>
+          <div v-else :data-testid="`board-detail-${selected.id}`">
+            <div class="mono node-detail-key">{{ selected.label }}</div>
+            <dl class="svc-kv-list">
+              <div v-for="(v, k) in selectedDetailRows" :key="k" class="svc-kv">
+                <dt>{{ k }}</dt>
+                <dd class="mono">{{ v }}</dd>
+              </div>
+            </dl>
             <button
               v-if="selected.kind === 'scenario'"
               type="button"
-              class="mt-1 text-caption font-medium text-[#2F6FED]"
+              class="svc-link mt-1"
               data-testid="board-expand"
               @click="expand(selected.id)"
             >{{ expanded === selected.id ? '收起二度' : '展开二度(它引用的其他接口)' }}</button>
@@ -94,60 +116,65 @@
             <button
               v-if="selected.kind === 'adaptation'"
               type="button"
-              class="mt-1 text-caption font-medium text-[#2F6FED]"
+              class="svc-link mt-1"
               data-testid="board-go-adaptations"
               @click="router.push(`/adaptations?focus=${encodeURIComponent(endpointId)}`)"
             >→ 去适配中心处理</button>
           </div>
         </div>
 
-        <div class="flex-1 overflow-y-auto rounded-lg border border-signal-line bg-signal-card p-3" data-testid="board-cards">
-          <div class="text-caption font-semibold text-signal-ink">自建卡 <span class="font-normal text-muted-foreground">({{ cards.length }})</span></div>
-          <div class="mt-2 space-y-2">
-            <div v-for="c in cards" :key="c.id" class="rounded border border-signal-line bg-white p-2 text-caption" :data-testid="`board-card-${c.id}`">
+        <div class="svc-panel flex-1 overflow-y-auto" data-testid="board-cards">
+          <div class="svc-panel-head">
+            <span class="svc-panel-title">自建卡</span>
+            <span class="svc-panel-desc">{{ cards.length }} 张 · 只有你知道的上下文</span>
+          </div>
+          <div class="space-y-2">
+            <div v-for="c in cards" :key="c.id" class="board-card" :data-testid="`board-card-${c.id}`">
               <div class="flex items-center justify-between gap-2">
-                <span class="rounded bg-[#10151C] px-1.5 py-px text-micro font-medium text-white">{{ c.isRoot ? 'ROOT' : quadrantLabel(c.quadrant) }}</span>
-                <span v-if="!c.mine" class="text-micro text-muted-foreground">他人只读</span>
+                <span class="svc-flag ink">{{ c.isRoot ? 'ROOT' : quadrantLabel(c.quadrant) }}</span>
+                <span v-if="!c.mine" class="card-readonly">他人只读</span>
               </div>
-              <p class="mt-1 mb-0 whitespace-pre-wrap break-words">{{ c.body }}</p>
-              <div v-if="c.mine" class="mt-1.5 flex flex-wrap gap-2">
-                <button type="button" class="font-medium text-[#2F6FED]" @click="startEdit(c)">编辑</button>
-                <button v-if="!c.isRoot" type="button" class="font-medium text-[#2F6FED]" :data-testid="`board-card-promote-${c.id}`" @click="promote(c)">↑ 设为 root</button>
-                <button v-else type="button" class="font-medium text-[#5B6472]" @click="demote(c)">↓ 降级</button>
-                <button type="button" class="font-medium text-[#DC2626]" @click="remove(c)">删除</button>
+              <p class="card-body">{{ c.body }}</p>
+              <div v-if="c.mine" class="card-acts">
+                <button type="button" class="svc-link" @click="startEdit(c)">编辑</button>
+                <button v-if="!c.isRoot" type="button" class="svc-link" :data-testid="`board-card-promote-${c.id}`" @click="promote(c)">↑ 设为 root</button>
+                <button v-else type="button" class="svc-link" @click="demote(c)">↓ 降级</button>
+                <button type="button" class="svc-link danger" @click="remove(c)">删除</button>
               </div>
             </div>
-            <div v-if="cards.length === 0" class="text-caption text-muted-foreground">还没有卡 —— 「这个坑当初为什么留下」只有你知道(方案 §3.3)。</div>
+            <div v-if="cards.length === 0" class="rail-empty">
+              还没有卡 —— 「这个坑当初为什么留下」只有你知道(方案 §3.3)。
+            </div>
           </div>
 
           <!-- 新建/编辑 -->
-          <div class="mt-3 border-t border-signal-line pt-3">
-            <div class="text-caption font-semibold text-signal-ink">{{ editing ? '编辑卡' : '新建卡' }}</div>
+          <div class="card-form">
+            <div class="svc-panel-title">{{ editing ? '编辑卡' : '新建卡' }}</div>
             <textarea
               v-model="draft.body"
               rows="3"
-              class="mt-1.5 w-full rounded border border-signal-line bg-white p-2 text-caption"
+              class="card-textarea"
               placeholder="例如:reason_code 是 09/18 契约新增,这次要拉订单组一起改"
               data-testid="board-card-body"
             ></textarea>
-            <div class="mt-1.5 flex items-center gap-1.5">
-              <select v-model="draft.quadrant" class="rounded border border-signal-line bg-white px-1.5 py-1 text-caption" data-testid="board-card-quadrant">
+            <div class="flex items-center gap-1.5">
+              <select v-model="draft.quadrant" class="card-select" data-testid="board-card-quadrant">
                 <option v-for="q in quadrantOptions" :key="q.value" :value="q.value">{{ q.label }}</option>
               </select>
-              <select v-model="draft.annotatesNodeId" class="min-w-0 flex-1 rounded border border-signal-line bg-white px-1.5 py-1 text-caption" data-testid="board-card-annotates">
+              <select v-model="draft.annotatesNodeId" class="card-select min-w-0 flex-1" data-testid="board-card-annotates">
                 <option value="">不注解节点</option>
                 <option v-for="n in annotatable" :key="n.id" :value="n.id">{{ n.label.slice(0, 24) }}</option>
               </select>
             </div>
-            <div class="mt-1.5 flex gap-2">
-              <button type="button" class="rounded bg-[#2F6FED] px-2.5 py-1 text-caption font-medium text-white" data-testid="board-card-save" @click="save">{{ editing ? '保存' : '创建' }}</button>
-              <button v-if="editing" type="button" class="rounded border border-signal-line px-2.5 py-1 text-caption" @click="cancelEdit">取消</button>
+            <div class="flex gap-2">
+              <button type="button" class="svc-btn primary" data-testid="board-card-save" @click="save">{{ editing ? '保存' : '创建' }}</button>
+              <button v-if="editing" type="button" class="svc-btn" @click="cancelEdit">取消</button>
             </div>
           </div>
         </div>
       </aside>
     </div>
-  </ListPage>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -157,11 +184,12 @@ import { MarkerType, useVueFlow, VueFlow } from '@vue-flow/core'
 import type { Edge, Node, NodeDragEvent, NodeMouseEvent } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
-import ListPage from '@/layouts/ListPage.vue'
+import PageHead from '@/components/scenario-lib/PageHead.vue'
 import {
   createCard, deleteCard, demoteCard, fetchBoard, patchCard, promoteCard,
   type BoardNode, type BoardResponse, type Quadrant,
 } from '@/api/service-profile'
+import { methodClass } from '@/utils/http-method'
 
 // 节点/边经 store 驱动(替换 nodes prop 不会重挂 vue-flow 内部状态,
 // 视角筛选/重载都走 setNodes/setEdges 才能稳定生效)
@@ -171,7 +199,6 @@ const route = useRoute()
 const router = useRouter()
 const service = computed(() => String(route.params.name || ''))
 const endpointId = computed(() => String(route.params.endpointId || ''))
-const crumb = computed(() => `热力网格 · ${service.value} / ${endpointId.value}`)
 
 const loading = ref(true)
 const error = ref('')
@@ -246,13 +273,13 @@ function badgeOf(node: BoardNode): { badge?: string; badgeClass?: string } {
   if (node.kind === 'execution') {
     const m = node.meta
     const ok = m.status === 'done'
-    return { badge: `通过 ${m.passed ?? 0} / 失败 ${m.failed ?? 0}`, badgeClass: ok ? 'text-[#15803D]' : 'text-[#DC2626]' }
+    return { badge: `通过 ${m.passed ?? 0} / 失败 ${m.failed ?? 0}`, badgeClass: ok ? 'ok' : 'bad' }
   }
   if (node.kind === 'adaptation') {
-    return { badge: `${node.meta.fromVersion} → ${node.meta.toVersion} · ${node.meta.openOps} 条未落定`, badgeClass: 'text-[#B45309]' }
+    return { badge: `${node.meta.fromVersion} → ${node.meta.toVersion} · ${node.meta.openOps} 条未落定`, badgeClass: 'warn' }
   }
   if (node.kind === 'card') {
-    return { badge: node.meta.isRoot ? '上下文底座' : undefined, badgeClass: 'text-[#5B6472]' }
+    return { badge: node.meta.isRoot ? '上下文底座' : undefined, badgeClass: 'mute' }
   }
   return {}
 }
@@ -344,30 +371,12 @@ function quadrantLabel(q: string): string {
   return ({ requirement: '需求', data: '数据', test: '测试', topology: '拓扑' } as Record<string, string>)[q] ?? q
 }
 
-function kindClass(kind: string): string {
-  if (kind === 'zone') return ''
-  if (kind === 'card') return 'border-2 border-[#10151C] bg-[#10151C] text-white shadow-sm'
-  return 'rounded-lg border bg-white p-2.5 shadow-sm'
-}
-
 function methodOf(label: string): string {
   return label.split(' ')[0] || '?'
 }
 
 function pathOf(label: string): string {
   return label.split(' ').slice(1).join(' ') || label
-}
-
-const METHOD_COLORS: Record<string, { color: string; background: string }> = {
-  GET: { color: '#2F6FED', background: '#E7EFFE' },
-  POST: { color: '#15803D', background: '#E4F5EA' },
-  PUT: { color: '#B45309', background: '#FEF3E2' },
-  DELETE: { color: '#DC2626', background: '#FEE2E2' },
-}
-
-function methodStyle(label: string) {
-  const s = METHOD_COLORS[methodOf(label).toUpperCase()]
-  return s ? { color: s.color, background: s.background } : { color: '#5B6472' }
 }
 
 const selectedDetailRows = computed<Record<string, string>>(() => {
@@ -488,16 +497,152 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* 点阵画布(方案「附」:#F7F9FB 底 + radial-gradient(#C8D1DB 1px) 18px) */
+/* ── 两栏:画布 + 右栏 ─────────────────────────────────────────
+   画布吃剩余宽度(节点坐标是绝对值,容器必须 min-width:0 才不会被
+   内容撑开);右栏固定 340px,窄屏折到画布之后。 */
+.board-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 14px;
+  align-items: start;
+}
+.board-rail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+@media (max-width: 1180px) {
+  .board-wrap { grid-template-columns: minmax(0, 1fr); }
+  .board-rail { flex-direction: row; align-items: stretch; }
+  .board-rail > * { flex: 1; min-width: 0; }
+}
+
+/* ── 画布(方案「附」:#F7F9FB 底 + radial-gradient(#C8D1DB 1px) 18px)
+   双层 inset 阴影 = 卡的"垫边",让象限框不与画布边线黏在一起 ── */
+.board-canvas {
+  position: relative;
+  height: calc(100vh - 300px);
+  min-height: 520px;
+  overflow: hidden;
+  background: #f7f9fb;
+  border: 1px solid #aeb8c4;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 8px #dfe5ec, inset 0 0 0 9px #bfc8d3;
+}
 .board-canvas :deep(.vue-flow__pane) {
   background-color: #f7f9fb;
   background-image: radial-gradient(#c8d1db 1px, transparent 1px);
   background-size: 18px 18px;
 }
+
+/* ── 节点 ────────────────────────────────────────────────────── */
 .board-node { border-radius: 10px; font-size: 12px; cursor: grab; }
-.board-node:not(.border-2) { border: 1px solid #E1E5EB; }
+.board-node.is-plain {
+  padding: 10px;
+  background: #fff;
+  border: 1px solid var(--sl-line);
+  box-shadow: 0 1px 2px rgba(16, 21, 28, 0.06);
+}
+/* 自建卡 = 黑底,与图上其他节点用材质区分(它是人写的上下文,不是索引项) */
+.board-node.is-card {
+  padding: 10px;
+  color: #fff;
+  background: var(--sl-ink);
+  border: 2px solid var(--sl-ink);
+  box-shadow: 0 2px 8px rgba(16, 21, 28, 0.18);
+}
+.node-title {
+  margin-top: 4px;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.node-badge { margin-top: 4px; font-size: 10px; font-weight: 500; }
+.node-badge.ok { color: var(--sl-ok); }
+.node-badge.bad { color: var(--sl-bad); }
+.node-badge.warn { color: var(--sl-warn); }
+.node-badge.mute { color: var(--sl-ink-2); }
+.is-card .node-badge.mute { color: rgba(255, 255, 255, 0.68); }
+.zone-box {
+  display: flex;
+  height: 300px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #bcc6d2;
+  border-radius: 10px;
+}
+.zone-label { font-size: 12.5px; font-weight: 600; color: var(--sl-ink-2); }
+.zone-hint { margin-top: 4px; font-size: 11px; color: var(--sl-ink-3); }
 .kind-tag {
   border-radius: 4px; padding: 0 5px; font-size: 10px; font-weight: 600;
-  background: #F3F5F8; color: #5B6472;
+  background: var(--sl-canvas); color: var(--sl-ink-2);
 }
+.is-card .kind-tag { background: rgba(255, 255, 255, 0.14); color: rgba(255, 255, 255, 0.82); }
+
+/* ── 图例 ────────────────────────────────────────────────────── */
+.board-legend {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 10;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 10px;
+  font-size: 10px;
+  color: var(--sl-ink-2);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--sl-line);
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(16, 21, 28, 0.06);
+  pointer-events: none;
+}
+.lg { display: inline-flex; align-items: center; gap: 5px; }
+.lg-line { display: inline-block; width: 16px; height: 2px; background: var(--sl-star-off); }
+.lg-line.dashed { height: 0; border-top: 1px dashed #a8b0bc; background: none; }
+.lg-line.trail { height: 2px; background: var(--sl-bad); }
+
+/* ── 右栏内容 ────────────────────────────────────────────────── */
+.rail-empty { font-size: 11.5px; line-height: 1.6; color: var(--sl-ink-3); }
+.node-detail-key {
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sl-ink);
+  overflow-wrap: anywhere;
+}
+.svc-kv-list { margin: 0; }
+.board-card {
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid var(--sl-line);
+  border-radius: 8px;
+  font-size: 11.5px;
+}
+.card-readonly { font-size: 10px; color: var(--sl-ink-3); }
+.card-body { margin: 5px 0 0; white-space: pre-wrap; overflow-wrap: break-word; color: var(--sl-ink); }
+.card-acts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.card-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--sl-divider); display: flex; flex-direction: column; gap: 6px; }
+.card-textarea {
+  width: 100%;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--sl-ink);
+  background: #fff;
+  border: 1px solid var(--sl-line);
+  border-radius: 6px;
+  outline: none;
+  resize: vertical;
+}
+.card-textarea:focus { border-color: var(--sl-accent); }
+.card-select {
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--sl-ink);
+  background: #fff;
+  border: 1px solid var(--sl-line);
+  border-radius: 6px;
+  outline: none;
+}
+.card-select:focus { border-color: var(--sl-accent); }
 </style>

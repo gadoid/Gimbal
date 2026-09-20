@@ -65,3 +65,24 @@ export function loadCatalogServiceNames(): Promise<string[]> {
 export function loadCatalogSystemByService(): Promise<Map<string, string>> {
   return loadCatalogEntries().then((es) => new Map(es.map((e) => [e.service, e.system])))
 }
+
+/** 按服务聚合的一行。服务画像落地页与工作台「服务画像」卡共用 ——
+ *  §7 第 6 条:卡上的服务数/端点数必须与点进完整页看到的一致,
+ *  所以聚合只能有一份。 */
+export interface CatalogServiceRow {
+  name: string
+  system: string
+  endpointCount: number
+}
+
+export function loadCatalogServiceRows(): Promise<CatalogServiceRow[]> {
+  return loadCatalogEntries().then((entries) => {
+    const byName = new Map<string, CatalogServiceRow>()
+    for (const e of entries) {
+      const row = byName.get(e.service)
+      if (row) row.endpointCount += 1
+      else byName.set(e.service, { name: e.service, system: e.system, endpointCount: 1 })
+    }
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name))
+  })
+}

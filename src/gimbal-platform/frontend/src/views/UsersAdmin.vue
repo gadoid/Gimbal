@@ -23,17 +23,18 @@
       <Button data-testid="open-create" @click="openCreate">+ 创建用户</Button>
     </template>
 
-    <Table v-if="visibleUsers.length" class="rounded-field border border-signal-line bg-signal-card">
-      <TableHeader>
-        <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
-          <TableHead class="text-caption font-semibold text-muted-foreground">用户名</TableHead>
-          <TableHead class="text-caption font-semibold text-muted-foreground">昵称</TableHead>
-          <TableHead class="w-[90px] text-caption font-semibold text-muted-foreground">角色</TableHead>
-          <TableHead class="w-[90px] text-caption font-semibold text-muted-foreground">状态</TableHead>
-          <TableHead class="w-[110px] text-caption font-semibold text-muted-foreground">创建时间</TableHead>
-          <TableHead class="w-[90px] text-center text-caption font-semibold text-muted-foreground">操作</TableHead>
-        </TableRow>
-      </TableHeader>
+    <div v-if="visibleUsers.length" class="lib-card">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>用户名</TableHead>
+            <TableHead>昵称</TableHead>
+            <TableHead class="w-[90px]">角色</TableHead>
+            <TableHead class="w-[90px]">状态</TableHead>
+            <TableHead class="w-[110px]">创建时间</TableHead>
+            <TableHead class="w-[90px] text-center">操作</TableHead>
+          </TableRow>
+        </TableHeader>
       <TableBody>
         <TableRow
           v-for="row in visibleUsers"
@@ -101,9 +102,10 @@
           </TableCell>
         </TableRow>
       </TableBody>
-    </Table>
+      </Table>
+    </div>
 
-    <div v-else-if="usersStore.fetchStatus === 'loading'" class="py-10 text-center text-body text-muted-foreground">
+    <div v-else-if="usersStore.fetchStatus === 'loading'" class="slib-loading">
       加载中…
     </div>
     <!-- 空态 = 引导 CTA(Signal 规范),非虚线占位 -->

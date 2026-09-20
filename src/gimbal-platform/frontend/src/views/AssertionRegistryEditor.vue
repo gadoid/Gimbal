@@ -164,7 +164,7 @@
       <div class="are-sec">
         <h4>绑定断言<span class="are-sec-hint">这次注入之后,应当看到什么</span></h4>
         <div v-if="!selected.asserts.length" class="are-empty">还没有绑定断言</div>
-        <table v-else class="are-asserts">
+        <table v-else class="are-asserts slib-table">
           <thead>
             <tr><th>步骤</th><th>断言哪个响应字段</th><th>判据</th><th>期望值</th><th>动作</th><th /></tr>
           </thead>
@@ -714,9 +714,8 @@ async function save() {
 }
 .are-asserts th, .are-asserts td {
   padding: 5px 8px; text-align: left;
-  border-bottom: 1px solid var(--color-border-tertiary);
 }
-.are-asserts th { color: var(--color-text-secondary); font-weight: normal; font-size: 11px; background: #f8fafc; }
+.are-asserts td { border-bottom: 1px solid var(--color-border-tertiary); }
 .are-mode { font-size: 10px; font-weight: 700; border-radius: 3px; padding: 1px 5px; }
 .are-mode.m-override { color: #b45309; background: #fef3c7; }
 .are-mode.m-append { color: #065f46; background: #d1fae5; }

@@ -6,19 +6,23 @@
      member:自动只读 owner 视图(仅批次表,scope=mine,无详情列 ——
        批次工作台为 admin-only,member 直入得 403)。 -->
 <template>
-  <ListPage
-    title="适配中心"
-    width="wide"
-    :subtitle="auth.isAdmin ? '目录变更检测与批次适配' : '仅显示触碰你场景的批次(只读)'"
-  >
-    <template #actions>
-      <Button
-        v-if="auth.isAdmin"
-        :disabled="adaptations.refreshing"
-        data-testid="refresh-all"
-        @click="refreshAll"
-      >{{ adaptations.refreshing ? '检查中…' : '检查更新' }}</Button>
-    </template>
+  <section class="slib">
+    <PageHead
+      icon="activity"
+      title="适配中心"
+      :count="auth.isAdmin && pendingCards.length + anomalies.length
+        ? `${pendingCards.length + anomalies.length} 个端点待处理` : undefined"
+      :subtitle="auth.isAdmin ? '目录变更检测与批次适配' : '仅显示触碰你场景的批次(只读)'"
+    >
+      <template #right>
+        <Button
+          v-if="auth.isAdmin"
+          :disabled="adaptations.refreshing"
+          data-testid="refresh-all"
+          @click="refreshAll"
+        >{{ adaptations.refreshing ? '检查中…' : '检查更新' }}</Button>
+      </template>
+    </PageHead>
 
     <template v-if="auth.isAdmin">
       <UnindexedAlert :steps="unindexed" />
@@ -131,53 +135,55 @@
       <span class="section-title">批次</span>
     </div>
     <p v-if="!auth.isAdmin" class="hint mine-hint">仅显示触碰你场景的批次</p>
-    <div v-if="batchesLoading" class="loading-state">批次加载中…</div>
-    <Table v-else class="min-w-[1080px] table-fixed rounded-field border border-signal-line bg-signal-card">
-      <TableHeader>
-        <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
-          <TableHead class="w-[10%] text-caption font-semibold text-muted-foreground">批次</TableHead>
-          <TableHead class="w-[22%] text-caption font-semibold text-muted-foreground">Endpoint</TableHead>
-          <TableHead class="w-[12%] text-caption font-semibold text-muted-foreground">版本</TableHead>
-          <TableHead class="w-[8%] text-caption font-semibold text-muted-foreground">状态</TableHead>
-          <TableHead class="text-caption font-semibold text-muted-foreground">ops</TableHead>
-          <TableHead class="w-[14%] text-caption font-semibold text-muted-foreground">创建时间</TableHead>
-          <!-- 详情入口仅 admin:GET /batches/{id} 为 admin-only,
-               member 点击只会得 403(死链),故整列不渲染。 -->
-          <TableHead v-if="auth.isAdmin" class="w-[6%]" />
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        <TableRow v-for="row in batchRows" :key="row.batchId">
-          <TableCell><span class="mono">{{ row.batchId }}</span></TableCell>
-          <TableCell><span class="mono endpoint-cell">{{ row.endpointId }}</span></TableCell>
-          <TableCell>
-            <span class="ver-chip from">{{ row.fromVersion }}</span>
-            <span class="ver-arrow">→</span>
-            <span class="ver-chip to">{{ row.toVersion }}</span>
-          </TableCell>
-          <TableCell>
-            <span class="chip" :class="batchStatusClass[row.status] ?? 'bg-muted text-muted-foreground'">
-              {{ row.status }}
-            </span>
-          </TableCell>
-          <TableCell>
-            <span
-              v-for="(n, s) in row.opCounts"
-              :key="s"
-              class="chip op-tag"
-              :class="opStatusClass[String(s)] ?? 'bg-muted text-muted-foreground'"
-            >{{ s }} {{ n }}</span>
-          </TableCell>
-          <TableCell class="text-caption text-muted-foreground">{{ row.createdAt }}</TableCell>
-          <TableCell v-if="auth.isAdmin">
-            <router-link
-              :to="`/adaptations/batches/${row.batchId}`"
-              class="link"
-            >详情</router-link>
-          </TableCell>
-        </TableRow>
-      </TableBody>
-    </Table>
+    <div v-if="batchesLoading" class="slib-loading">批次加载中…</div>
+    <div v-else class="lib-card">
+      <table class="slib-table">
+        <thead>
+          <tr>
+            <th style="width:10%">批次</th>
+            <th style="width:22%">Endpoint</th>
+            <th style="width:12%">版本</th>
+            <th style="width:8%">状态</th>
+            <th>ops</th>
+            <th style="width:14%">创建时间</th>
+            <!-- 详情入口仅 admin:GET /batches/{id} 为 admin-only,
+                 member 点击只会得 403(死链),故整列不渲染。 -->
+            <th v-if="auth.isAdmin" style="width:6%" class="c-center">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in batchRows" :key="row.batchId">
+            <td><span class="mono">{{ row.batchId }}</span></td>
+            <td><span class="mono endpoint-cell">{{ row.endpointId }}</span></td>
+            <td>
+              <span class="ver-chip from">{{ row.fromVersion }}</span>
+              <span class="ver-arrow">→</span>
+              <span class="ver-chip to">{{ row.toVersion }}</span>
+            </td>
+            <td>
+              <span class="chip" :class="batchStatusClass[row.status] ?? 'bg-muted text-muted-foreground'">
+                {{ row.status }}
+              </span>
+            </td>
+            <td>
+              <span
+                v-for="(n, s) in row.opCounts"
+                :key="s"
+                class="chip op-tag"
+                :class="opStatusClass[String(s)] ?? 'bg-muted text-muted-foreground'"
+              >{{ s }} {{ n }}</span>
+            </td>
+            <td class="muted">{{ row.createdAt }}</td>
+            <td v-if="auth.isAdmin" class="c-center">
+              <router-link
+                :to="`/adaptations/batches/${row.batchId}`"
+                class="link"
+              >详情</router-link>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <!-- carry 漂移(T16,admin-only:后端 drift 为 AdminUser,member 403)。
          plateReachable=False → 不渲染清单 + 显式警示 + 禁批生成(T11 硬性
@@ -230,13 +236,13 @@
         </div>
       </div>
     </template>
-  </ListPage>
+  </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import ListPage from '@/layouts/ListPage.vue'
+import PageHead from '@/components/scenario-lib/PageHead.vue'
 import { toast } from '@/utils/toast'
 import * as api from '@/api/adaptations'
 import type {
@@ -256,7 +262,6 @@ import { useAdaptationsStore } from '@/stores/adaptations'
 import UnindexedAlert from '@/components/adaptations/UnindexedAlert.vue'
 import ImpactDrawer from '@/components/adaptations/ImpactDrawer.vue'
 import { Button } from '@/components/ui/button'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 const auth = useAuthStore()
@@ -437,70 +442,96 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* ── 分节标题 ── */
+/* 配色全部落在 --sl-* 令牌上(scenario-lib.css :root)—— 这一页与场景库 /
+   服务画像同属一套语言,散 hex 会让同一语义在不同页长出不同颜色。 */
+
+/* ── 分节标题 ─────────────────────────────────────────────── */
 .section-head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 10px;
   margin: 22px 0 10px;
 }
 .section-title {
-  @apply text-heading text-signal-ink;
+  position: relative;
   padding-left: 10px;
-  border-left: 3px solid #2f6fed;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sl-ink);
+}
+.section-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 13px;
+  margin-top: -6.5px;
+  background: var(--sl-accent);
+  border-radius: 2px;
 }
 .section-count {
-  @apply text-caption font-semibold text-slate-500;
-  padding: 1px 6px;
-  background: #f1f5f9;
-  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sl-ink-2);
+  padding: 1px 7px;
+  background: var(--sl-divider);
+  border-radius: 4px;
 }
 .section-actions { margin-left: auto; display: flex; gap: 8px; }
 
 /* ── 本批影响面摘要(配套方案 §3.2;原型 H-adaptations-v2 淡蓝底)── */
 .impact-summary {
-  margin: 12px 0 4px;
+  margin: 0 0 4px;
   padding: 12px 14px;
-  border: 1px solid #2f6fed33;
-  border-radius: 8px;
-  background: #eef3fe;
+  border: 1px solid var(--sl-line);
+  border-top: 3px solid var(--sl-accent);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 21, 28, 0.04);
 }
 
 .is-title {
   font-size: 13px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--sl-ink);
   margin-bottom: 4px;
 }
 
-/* 原型:区头右侧「查看完整 diff ›」灰链 */
+/* 原型 H-adaptations-v2:区头右侧「查看完整 diff ›」灰链 */
 .full-diff-link {
   margin-left: auto;
   border: 0;
   background: transparent;
   padding: 0;
-  color: #64748b;
-  font-size: 12px;
+  color: var(--sl-ink-3);
+  font-size: 11.5px;
   cursor: pointer;
 }
 
-.full-diff-link:hover { color: #2f6fed; }
+.full-diff-link:hover { color: var(--sl-accent); }
 
 .is-bar {
-  font-size: 13px;
-  color: var(--signal-ink, #1f2937);
+  font-size: 12px;
+  color: var(--sl-ink-2);
 }
 
-.is-bar b { color: #2f6fed; }
-.is-bar .is-fail { color: var(--signal-failed, #dc2626); }
+.is-bar b {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--sl-ink);
+}
+.is-bar .is-fail { color: var(--sl-bad); }
 
 .is-scope {
   margin-left: 8px;
   padding: 1px 6px;
-  font-size: 11px;
-  color: #64748b;
-  background: #eef2f7;
-  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--sl-ink-2);
+  background: var(--sl-divider);
+  border-radius: 4px;
   cursor: help;
 }
 
@@ -511,47 +542,53 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   padding: 6px 10px;
-  border: 1px solid var(--signal-line, #e2e8f0);
-  border-radius: 6px;
+  border: 1px solid var(--sl-line);
+  border-radius: 8px;
   background: #fff;
   cursor: pointer;
   text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.is-svc:hover { border-color: #2f6fed; }
-.is-name { font-weight: 600; min-width: 180px; }
-.is-meta { font-size: 12px; color: #64748b; }
+.is-svc:hover {
+  border-color: var(--sl-accent);
+  box-shadow: 0 1px 6px rgba(47, 111, 237, 0.12);
+}
+.is-name { font-weight: 600; font-size: 12px; min-width: 180px; color: var(--sl-ink); }
+.is-meta { font-size: 11px; color: var(--sl-ink-3); }
 
 .is-fail-chip {
-  padding: 1px 6px;
-  font-size: 11px;
-  color: #b91c1c;
-  background: #fef2f2;
-  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--sl-bad);
+  background: var(--sl-bad-soft);
+  border-radius: 4px;
 }
 
-.is-go { margin-left: auto; font-size: 12px; color: #2f6fed; }
+.is-go { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--sl-accent); }
 
 /* ── focus 深链高亮(?focus=,线索板反链落点)── */
 .card.focused {
-  outline: 2px solid #2f6fed;
+  outline: 2px solid var(--sl-accent);
   outline-offset: 1px;
 }
 
 .board-link {
   margin-left: auto;
   padding: 1px 8px;
-  font-size: 12px;
-  color: #2f6fed;
-  background: #e7efe0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--sl-accent);
+  background: var(--sl-accent-soft);
   border: none;
   border-radius: 4px;
   cursor: pointer;
 }
 
-.board-link:hover { background: #d8e7d0; }
+.board-link:hover { background: #d8e6fd; }
 
-/* ── 待适配卡片 ── */
+/* ── 待适配卡片(点进影响面;异常卡不可点,C12)──────────────── */
 .cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -560,67 +597,76 @@ onMounted(() => {
 }
 .card {
   background: #fff;
-  border: 1px solid #e1e5eb;
-  border-radius: 8px;
+  border: 1px solid var(--sl-line);
+  border-radius: 10px;
   padding: 10px 14px;
+  box-shadow: 0 1px 2px rgba(16, 21, 28, 0.04);
 }
-.card.anomaly { border-color: #fde68a; background: #fffbeb; }
+.card.anomaly { border-color: #f0d9ac; background: var(--sl-warn-soft); }
 .card.pending { cursor: pointer; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
-.card.pending:hover { border-color: #2f6fed; box-shadow: 0 1px 6px rgba(47, 111, 237, 0.12); }
+.card.pending:hover {
+  border-color: var(--sl-accent);
+  box-shadow: 0 8px 24px rgba(16, 21, 28, 0.12);
+}
 .card-top { display: flex; align-items: center; gap: 8px; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: #2f6fed; flex-shrink: 0; }
-.card.anomaly .dot { background: #eab308; }
-.endpoint { @apply text-body; }
-.detail { @apply text-label font-normal text-slate-700; margin: 6px 0 2px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sl-accent); flex-shrink: 0; }
+.card.anomaly .dot { background: var(--sl-star); }
+.endpoint { font-size: 13px; font-weight: 700; color: var(--sl-ink); }
+.detail { font-size: 11.5px; color: var(--sl-ink-2); margin: 6px 0 2px; }
 .card-bottom { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
-.view { @apply text-label font-normal; margin-left: auto; color: #2f6fed; }
+.view { font-size: 11.5px; margin-left: auto; color: var(--sl-accent); font-weight: 600; }
 
-/* ── 版本 chip ── */
+/* ── 版本 chip(旧版灰 → 新版蓝:方向就是这次变更本身)──────────── */
 .ver-chip {
-  @apply text-micro font-semibold;
   padding: 1px 8px;
-  font-family: var(--font-mono, monospace);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 600;
   border-radius: 4px;
 }
-.ver-chip.from { color: #64748b; background: #f1f5f9; }
-.ver-chip.to { color: #2f6fed; background: #e7efff; }
-.ver-arrow { @apply text-caption font-normal; color: #94a3b8; }
+.ver-chip.from { color: var(--sl-ink-3); background: var(--sl-canvas); }
+.ver-chip.to { color: var(--sl-accent); background: var(--sl-accent-soft); }
+.ver-arrow { font-size: 11px; color: var(--sl-star-off); margin: 0 2px; }
 
-/* ── 通用 chip(状态/ops)── */
+/* ── 通用 chip(状态 / ops):色由脚本给 Signal token 类 ───────── */
 .chip {
-  @apply text-micro font-semibold;
   display: inline-flex;
   align-items: center;
   padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 600;
   border-radius: 4px;
 }
 .op-tag { margin-right: 4px; }
-.endpoint-cell { @apply text-label font-normal; }
+.endpoint-cell { font-size: 11.5px; }
 
-/* ── 提示 ── */
-.hint { @apply text-caption font-normal; color: #94a3b8; margin: 2px 0 0; }
+/* ── 提示 ─────────────────────────────────────────────────── */
+.hint { font-size: 11px; color: var(--sl-ink-3); margin: 2px 0 0; }
 .mine-hint { margin: -4px 0 10px; }
 
-/* ── drift 清单 ── */
+/* ── drift 清单 ───────────────────────────────────────────── */
 .drift-list { display: flex; flex-direction: column; gap: 10px; }
 .drift-svc {
   background: #fff;
-  border: 1px solid #e1e5eb;
-  border-radius: 8px;
+  border: 1px solid var(--sl-line);
+  border-radius: 10px;
   padding: 10px 14px;
+  box-shadow: 0 1px 2px rgba(16, 21, 28, 0.04);
 }
-.drift-svc h4 { @apply text-body font-semibold; margin: 0 0 6px; }
-.drift-ok { color: #15803d; }
+.drift-svc h4 { font-size: 12.5px; font-weight: 700; color: var(--sl-ink); margin: 0 0 6px; }
+.drift-ok { color: var(--sl-ok); }
 .drift-checks { display: flex; flex-direction: column; gap: 4px; }
 .drift-check {
-  @apply text-label font-normal;
   display: flex;
   align-items: center;
   gap: 8px;
+  font-size: 12px;
+  color: var(--sl-ink);
   cursor: pointer;
 }
-.drift-check input { accent-color: #2f6fed; }
+.drift-check input { accent-color: var(--sl-accent); }
 
 .mono { font-family: var(--font-mono, monospace); }
-.link { color: #2f6fed; }
+.link { color: var(--sl-accent); }
+.link:hover { text-decoration: underline; }
 </style>

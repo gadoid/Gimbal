@@ -32,7 +32,7 @@
         <div v-if="openKinds.has(k.kind)" class="kind-body">
           <template v-if="fulls[k.kind]">
             <p class="kind-desc">{{ fulls[k.kind]!.description }}</p>
-            <table v-if="fulls[k.kind]!.params.length" class="params-table">
+            <table v-if="fulls[k.kind]!.params.length" class="params-table slib-table">
               <thead>
                 <tr><th>参数</th><th>类型</th><th>必填</th><th>默认</th><th>可选值/范围</th><th>说明</th></tr>
               </thead>
@@ -63,17 +63,18 @@
         <h2 class="text-heading text-signal-ink">我的常量池</h2>
         <Button data-action="pool-create" @click="openCreate">新增</Button>
       </div>
-      <Table class="table-fixed rounded-field border border-signal-line bg-signal-card">
-        <TableHeader>
-          <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
-            <TableHead class="w-[18%] text-caption font-semibold text-muted-foreground">名称</TableHead>
-            <TableHead class="w-[9%] text-caption font-semibold text-muted-foreground">类型</TableHead>
-            <TableHead class="w-[40%] text-caption font-semibold text-muted-foreground">内容</TableHead>
-            <TableHead class="w-[20%] text-caption font-semibold text-muted-foreground">说明</TableHead>
-            <TableHead class="w-[13%] text-caption font-semibold text-muted-foreground">操作</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody data-testid="entries-table">
+      <div class="lib-card">
+        <Table class="table-fixed">
+          <TableHeader>
+            <TableRow>
+              <TableHead class="w-[18%]">名称</TableHead>
+              <TableHead class="w-[9%]">类型</TableHead>
+              <TableHead class="w-[40%]">内容</TableHead>
+              <TableHead class="w-[20%]">说明</TableHead>
+              <TableHead class="w-[13%]">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody data-testid="entries-table">
           <TableRow v-for="row in constantsStore.entries" :key="row.id">
             <TableCell><code>{{ row.name }}</code></TableCell>
             <TableCell>
@@ -92,7 +93,8 @@
             </TableCell>
           </TableRow>
         </TableBody>
-      </Table>
+        </Table>
+      </div>
     </section>
 
     <!-- ── 新增/编辑弹框(动态控制面板,reactive form + canSubmit 门控)── -->
@@ -536,17 +538,11 @@ function copySpec(): void {
 .kind-summary { color: #64748b; }
 .kind-body { padding: 0 12px 10px; }
 .kind-desc { @apply text-label font-normal; margin: 4px 0 8px; }
-/* 发丝线表格(去硬边框,横向分隔对齐全局表格惯例) */
+/* 发丝线表格;列头形制统一走 .slib-table thead th,这里只压密度 */
 .params-table { @apply text-caption font-normal; width: 100%; border-collapse: collapse; }
 .params-table th,
-.params-table td { border: none; border-bottom: 1px solid var(--c-divider, #eef1f5); padding: 5px 8px; text-align: left; }
-.params-table th {
-  @apply text-micro font-semibold;
-  background: transparent;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--c-text-tertiary, #94a3b8);
-}
+.params-table td { padding: 5px 8px; text-align: left; }
+.params-table td { border-bottom: 1px solid var(--c-divider, #eef1f5); }
 .params-table tbody tr:last-child td { border-bottom: none; }
 .example-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .example-json {

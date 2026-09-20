@@ -4,32 +4,44 @@
      本页只留跨服务的全局兜底层。三态编码、CSV 三件套、R1-M2 重复
      path 拦截原样(真源 utils/carry-csv + api/carry)。 -->
 <template>
-  <ListPage
-    title="默认值"
-    width="wide"
-    subtitle="哪个服务 / 别名都没配时生效(兜底层);删行 = 不注入,null = 显式注入 JSON null"
-  >
-    <div class="c-card mt-3">
-      <div class="c-card-head">
-        <svg class="c-head-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
-        <div>
-          <h3>全局默认(兜底层)</h3>
-          <p class="c-head-desc">保存 = 整表替换;删行后保存即移除该默认。服务 / 别名级的覆盖层在服务信息管理的键详情里配</p>
-        </div>
+  <section class="slib">
+    <PageHead
+      icon="sliders"
+      title="默认值"
+      :count="loading ? '' : `${defaultRows.length} 行`"
+      subtitle="哪个服务 / 别名都没配时生效(兜底层);删行 = 不注入,null = 显式注入 JSON null"
+    />
+
+    <div v-if="loading" class="slib-loading">加载中…</div>
+
+    <div v-else class="svc-panel">
+      <div class="svc-panel-head">
+        <span class="svc-panel-title">
+          <span class="icon-badge" aria-hidden="true">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 7h16M4 12h16M4 17h16" />
+              <circle cx="9" cy="7" r="2.2" />
+              <circle cx="15" cy="12" r="2.2" />
+              <circle cx="7" cy="17" r="2.2" />
+            </svg>
+          </span>
+          全局默认(兜底层)
+        </span>
+        <span class="svc-panel-desc">保存 = 整表替换;删行后保存即移除该默认。服务 / 别名级的覆盖层在服务信息管理的键详情里配</span>
       </div>
 
-      <Alert class="mb-3.5">
-        <AlertTitle>全局默认按纯 path 跨服务生效 —— 契约门控只保证不注入未声明字段;</AlertTitle>
-        <AlertDescription>
+      <div class="svc-banner warn">
+        <span>
+          <b>全局默认按纯 path 跨服务生效</b> —— 契约门控只保证不注入未声明字段;
           $.type 类语义敏感路径请用服务绑定覆盖兜底(配置纪律,spec §6)。
-        </AlertDescription>
-      </Alert>
+        </span>
+      </div>
 
       <TooltipProvider>
         <div class="svc-bar">
           <Tooltip>
             <TooltipTrigger as-child>
-              <Button variant="outline" data-testid="import-defaults-csv" @click="pickDefaultsCsv">导入 CSV</Button>
+              <Button variant="outline" size="sm" data-testid="import-defaults-csv" @click="pickDefaultsCsv">导入 CSV</Button>
             </TooltipTrigger>
             <TooltipContent class="max-w-[min(320px,calc(100vw-2rem))]">
               CSV 三列:path,value,is_null —— 表头按名定位(列序任意);已有 path 更新、新 path 追加,两列都留空 = 该行不导入;导入后仍须手动保存
@@ -37,7 +49,7 @@
           </Tooltip>
           <Tooltip>
             <TooltipTrigger as-child>
-              <Button variant="outline" data-testid="dl-defaults-template" @click="downloadDefaultsTemplate">下载模板</Button>
+              <Button variant="outline" size="sm" data-testid="dl-defaults-template" @click="downloadDefaultsTemplate">下载模板</Button>
             </TooltipTrigger>
             <TooltipContent class="max-w-[min(320px,calc(100vw-2rem))]">
               表头 + 一行示例(path 已填、值列留空 → 原样导回也是无操作)
@@ -45,7 +57,7 @@
           </Tooltip>
           <Tooltip>
             <TooltipTrigger as-child>
-              <Button variant="outline" :disabled="!hasDefaultRows" data-testid="export-defaults-csv" @click="downloadDefaultsCsv">导出 CSV</Button>
+              <Button variant="outline" size="sm" :disabled="!hasDefaultRows" data-testid="export-defaults-csv" @click="downloadDefaultsCsv">导出 CSV</Button>
             </TooltipTrigger>
             <TooltipContent class="max-w-[min(320px,calc(100vw-2rem))]">
               导出当前全部默认行;导出→不改→导回 = 默认态不变
@@ -61,56 +73,56 @@
         </div>
       </TooltipProvider>
 
-      <Table v-if="defaultRows.length" class="table-fixed rounded-field border border-signal-line bg-signal-card">
-        <TableHeader>
-          <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
-            <TableHead class="w-[45%] text-caption font-semibold text-muted-foreground">字段路径</TableHead>
-            <TableHead class="w-[41%] text-caption font-semibold text-muted-foreground">值</TableHead>
-            <TableHead class="w-[14%]" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <TableRow
-            v-for="(row, i) in defaultRows"
-            :key="i"
-            :data-testid="`defaults-row-${i}`"
-            :data-path="row.path"
-            :class="{ 'path-hit': !!highlightPath && row.path === highlightPath }"
-          >
-            <TableCell>
-              <Input v-model="row.path" placeholder="$.headers.X-Trace-Id" class="h-8" />
-            </TableCell>
-            <TableCell>
-              <Input
-                v-model="row.value"
-                :disabled="row.isNull"
-                :placeholder="row.isNull ? '显式 null(屏蔽注入)' : ''"
-                class="h-8"
-              />
-            </TableCell>
-            <TableCell>
-              <div class="flex items-center gap-1">
-                <Button variant="link" size="sm" class="h-7 px-2" @click="row.isNull = !row.isNull">
-                  {{ row.isNull ? '取消 null' : '设 null' }}
-                </Button>
-                <Button variant="link" size="sm" class="h-7 px-2 text-signal-failed" @click="defaultRows.splice(i, 1)">
-                  删
-                </Button>
-              </div>
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-      <div v-if="!defaultRows.length" class="c-empty">
-        <p>还没有全局默认 — 加一行(例 $.headers.X-Trace-Id)</p>
+      <div v-if="defaultRows.length" class="lib-card">
+        <table class="slib-table">
+          <thead>
+            <tr>
+              <th style="width:45%">字段路径</th>
+              <th style="width:41%">值</th>
+              <th style="width:14%" class="c-center">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(row, i) in defaultRows"
+              :key="i"
+              :data-testid="`defaults-row-${i}`"
+              :data-path="row.path"
+              :class="{ 'path-hit': !!highlightPath && row.path === highlightPath }"
+            >
+              <td><Input v-model="row.path" placeholder="$.headers.X-Trace-Id" class="h-8" /></td>
+              <td>
+                <Input
+                  v-model="row.value"
+                  :disabled="row.isNull"
+                  :placeholder="row.isNull ? '显式 null(屏蔽注入)' : ''"
+                  class="h-8"
+                />
+              </td>
+              <td class="c-center">
+                <div class="row-acts">
+                  <button type="button" class="svc-link" @click="row.isNull = !row.isNull">
+                    {{ row.isNull ? '取消 null' : '设 null' }}
+                  </button>
+                  <button type="button" class="svc-link danger" @click="defaultRows.splice(i, 1)">删</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-else class="slib-empty">
+        <p>还没有全局默认 —— 加一行(例 <code class="mono">$.headers.X-Trace-Id</code>)</p>
       </div>
 
-      <div class="card-footer">
-        <Button variant="outline" data-testid="add-default-row" @click="addDefaultRow">加一行</Button>
-        <Button data-testid="save-defaults" @click="saveDefaults">保存</Button>
+      <div class="svc-foot">
+        <span class="svc-foot-right">
+          <Button variant="outline" data-testid="add-default-row" @click="addDefaultRow">加一行</Button>
+          <Button data-testid="save-defaults" @click="saveDefaults">保存</Button>
+        </span>
       </div>
     </div>
-  </ListPage>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -120,7 +132,7 @@
  */
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import ListPage from '@/layouts/ListPage.vue'
+import PageHead from '@/components/scenario-lib/PageHead.vue'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import {
@@ -130,10 +142,9 @@ import {
 import { getDefaults, putDefaults, type CarryValues } from '@/api/carry'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
+const loading = ref(true)
 const defaultRows = ref<DefaultCarryRow[]>([])
 
 async function loadDefaults() {
@@ -245,8 +256,10 @@ onMounted(async () => {
     await loadDefaults()
   } catch (e) {
     showError('加载', e)
+    loading.value = false
     return
   }
+  loading.value = false
   if (highlightPath.value) {
     await nextTick()
     // 不用 CSS.escape(jsdom 无 CSS 全局):按属性值直接比较
@@ -258,28 +271,13 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.svc-bar {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-
-.card-footer {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 14px;
-}
-
 /* ?path= 深链命中行:蓝环 + 淡蓝底高亮 */
 .path-hit td {
-  background: #eef3fe;
+  background: var(--sl-accent-soft);
 }
 
 .path-hit {
-  outline: 2px solid #2f6fed;
+  outline: 2px solid var(--sl-accent);
   outline-offset: -2px;
 }
 </style>

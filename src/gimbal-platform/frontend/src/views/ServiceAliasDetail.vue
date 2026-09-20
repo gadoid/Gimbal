@@ -7,54 +7,45 @@
     tab = 服务级默认层。
   锚点与凭证绑定同处(以前配一个别名要在两个页面来回跳)。
   编辑别名本身(分组/凭证/删除)留在服务信息管理列表 — 本页只读键身份。
+  形制与服务区域其余页共用 .slib 基座 + service-area.css 构件。
 -->
 <template>
-  <ListPage width="wide" :title="pageTitle" :subtitle="pageSubtitle">
-    <div v-if="loading" class="loading-state mt-3.5">加载中…</div>
+  <section class="slib">
+    <PageHead
+      icon="key"
+      :title="pageTitle"
+      :count="loading ? '' : key"
+      :subtitle="pageSubtitle"
+    />
 
-    <div v-else-if="missing" class="mt-6 rounded-lg border border-signal-line bg-signal-card p-6 text-center">
-      <p class="text-body text-signal-ink">找不到 <code class="mono">{{ key }}</code></p>
-      <p class="mt-1 text-caption text-muted-foreground">
-        既不是已登记别名,也不在 Plate 目录服务内。别名登记请回服务信息管理。
-      </p>
-      <div class="mt-3">
-        <Button variant="outline" data-testid="back-admin" @click="router.push('/service-admin')">返回服务信息管理</Button>
-      </div>
+    <div v-if="loading" class="slib-loading">加载中…</div>
+
+    <div v-else-if="missing" class="slib-empty">
+      <p>找不到 <code class="mono">{{ key }}</code> —— 既不是已登记别名,也不在 Plate 目录服务内。</p>
+      <p class="slib-note mt-0">别名登记在服务信息管理;键拼错了也会落到这里。</p>
+      <Button variant="outline" data-testid="back-admin" @click="router.push('/service-admin')">返回服务信息管理</Button>
     </div>
 
     <template v-else>
-      <!-- 键身份卡 -->
-      <div class="mt-3 rounded-lg border border-signal-line bg-signal-card p-3.5">
-        <div class="flex flex-wrap items-center gap-2">
-          <code class="mono text-body font-semibold text-signal-ink">{{ key }}</code>
-          <span class="rounded px-1.5 py-px text-micro font-medium" :class="isAliasMode ? 'bg-[#EDF7ED] text-[#2F6F4F]' : 'bg-[#E7EFFE] text-[#2F6FED]'">
-            {{ isAliasMode ? '别名' : '目录服务' }}
-          </span>
-          <span v-if="isAliasMode && row!.groupTag" class="rounded bg-signal-canvas px-1.5 py-px text-micro">{{ row!.groupTag }}</span>
-          <!-- 原型 H-alias-detail:头部直接亮出凭证绑定状态(红字 = 未绑定) -->
-          <span
-            v-if="isAliasMode"
-            class="rounded px-1.5 py-px text-micro font-medium"
-            :class="row!.credentialAlias
-              ? 'bg-[#EDF7ED] text-[#2F6F4F]'
-              : 'bg-[#FDECEC] text-[#B42318]'"
-            :data-testid="row!.credentialAlias ? 'cred-bound-badge' : 'cred-unbound-badge'"
-          >{{ row!.credentialAlias ? `凭证 ${row!.credentialAlias}` : '凭证未绑定' }}</span>
-          <span class="flex-1" />
-          <Button variant="outline" size="sm" data-testid="open-grid" @click="router.push(`/services/${encodeURIComponent(baseService)}`)">
-            ↗ 打开 {{ baseService }} 的画像
-          </Button>
-          <Button variant="outline" size="sm" data-testid="back-admin" @click="router.push('/service-admin')">返回服务信息管理</Button>
-        </div>
-        <p v-if="isAliasMode" class="mt-1.5 mb-0 text-micro text-muted-foreground">
-          绑定键 = 别名全名;运行时解析:<b>精确命中本别名</b> → {{ baseService }} 服务级默认 → 全局默认 → 无行 = 不注入
-        </p>
-        <p v-else class="mt-1.5 mb-0 text-micro text-muted-foreground">
-          绑定键 = 服务名(服务级默认层);运行时解析:精确命中本服务 → 全局默认 → 无行 = 不注入
-        </p>
+      <!-- 键身份行:是什么键 / 哪个分组 / 凭证绑没绑,扫完再下钻 -->
+      <div class="svc-stats">
+        <span class="svc-flag" :class="isAliasMode ? 'blue' : 'ink'">{{ isAliasMode ? '别名' : '目录服务' }}</span>
+        <span v-if="isAliasMode && row!.groupTag" class="svc-flag">{{ row!.groupTag }}</span>
+        <!-- 原型 H-alias-detail:头部直接亮出凭证绑定状态(红字 = 未绑定) -->
+        <span
+          v-if="isAliasMode"
+          class="svc-flag"
+          :class="row!.credentialAlias ? 'green' : 'red'"
+          :data-testid="row!.credentialAlias ? 'cred-bound-badge' : 'cred-unbound-badge'"
+        >{{ row!.credentialAlias ? `凭证 ${row!.credentialAlias}` : '凭证未绑定' }}</span>
+        <span class="flex-1" />
+        <Button variant="outline" size="sm" data-testid="open-grid" @click="router.push(`/services/${encodeURIComponent(baseService)}`)">
+          ↗ 打开 {{ baseService }} 的画像
+        </Button>
+        <Button variant="outline" size="sm" data-testid="back-admin" @click="router.push('/service-admin')">返回服务信息管理</Button>
       </div>
 
-      <Tabs v-model="activeTab" class="mt-3">
+      <Tabs v-model="activeTab">
         <TabsList>
           <TabsTrigger value="fields">字段默认值</TabsTrigger>
           <TabsTrigger v-if="isAliasMode" value="credential">凭证</TabsTrigger>
@@ -68,36 +59,34 @@
         </TabsContent>
 
         <TabsContent v-if="isAliasMode" value="credential">
-          <div class="c-card">
-            <div class="c-card-head">
-              <svg class="c-head-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-              <div>
-                <h3>凭证绑定</h3>
-                <p class="c-head-desc">别名行携带的凭证引用(名字,非外键)— 编排 config 选凭据、执行注入都从此带出</p>
-              </div>
+          <div class="svc-panel">
+            <div class="svc-panel-head">
+              <span class="svc-panel-title">
+                <span class="icon-badge" aria-hidden="true">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="4" y="11" width="16" height="10" rx="2" />
+                    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                  </svg>
+                </span>
+                凭证绑定
+              </span>
+              <span class="svc-panel-desc">别名行携带的凭证引用(名字,非外键)— 编排 config 选凭据、执行注入都从此带出</span>
             </div>
-            <div class="cred-body">
-              <template v-if="row!.credentialAlias">
-                <p class="cred-line">
-                  绑定凭证别名:<code class="mono font-semibold">{{ row!.credentialAlias }}</code>
-                </p>
-                <p class="cred-note">
-                  按<b>执行者本人</b>的认证管理池解析 — 同一别名被不同人执行时各拿各的同名凭证;
-                  凭证本体的建 / 测连通 / 轮换在认证管理。
-                </p>
-                <div class="mt-2">
-                  <Button variant="outline" size="sm" data-testid="open-auths" @click="router.push('/auths')">打开认证管理</Button>
-                </div>
-              </template>
-              <p v-else class="cred-note">
-                未绑定凭证 — 执行时走场景显式绑定 / 无凭证路径;可在服务信息管理编辑本别名补绑。
-              </p>
+            <p class="cred-line">
+              绑定凭证别名:<code class="mono font-semibold">{{ row!.credentialAlias }}</code>
+            </p>
+            <p class="cred-note">
+              按<b>执行者本人</b>的认证管理池解析 — 同一别名被不同人执行时各拿各的同名凭证;
+              凭证本体的建 / 测连通 / 轮换在认证管理。
+            </p>
+            <div class="mt-2">
+              <Button variant="outline" size="sm" data-testid="open-auths" @click="router.push('/auths')">打开认证管理</Button>
             </div>
           </div>
         </TabsContent>
       </Tabs>
     </template>
-  </ListPage>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -109,7 +98,7 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import ListPage from '@/layouts/ListPage.vue'
+import PageHead from '@/components/scenario-lib/PageHead.vue'
 import ServiceBindingEditor from '@/components/carry/ServiceBindingEditor.vue'
 import { showError } from '@/utils/errorFallback'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
@@ -132,9 +121,12 @@ const missing = computed(() =>
 const baseService = computed(() => row.value?.baseService ?? key.value)
 
 const pageTitle = computed(() =>
-  loading.value ? '键详情' : `${key.value}${isAliasMode.value ? ' · 别名详情' : ' · 服务详情'}`)
+  loading.value ? '键详情' : isAliasMode.value ? '别名详情' : '服务详情')
+/** 三层回退是这个页面存在的全部理由,所以写在副标而不是藏在卡里 */
 const pageSubtitle = computed(() =>
-  '字段默认值按层回退:本键 → 服务级(derive_base 归一)→ 默认值;删行 = 不注入,null = 显式注入 JSON null')
+  isAliasMode.value
+    ? `绑定键 = 别名全名;运行时解析:精确命中本别名 → ${baseService.value} 服务级默认 → 全局默认 → 无行 = 不注入`
+    : '绑定键 = 服务名(服务级默认层);运行时解析:精确命中本服务 → 全局默认 → 无行 = 不注入')
 
 const activeTab = ref(route.query.tab === 'credential' ? 'credential' : 'fields')
 
@@ -153,18 +145,16 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.cred-body {
-  padding: 10px 2px 2px;
-}
-
 .cred-line {
-  font-size: var(--text-caption, 12px);
-  margin-bottom: 6px;
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--sl-ink);
 }
 
 .cred-note {
-  font-size: var(--text-micro, 11px);
-  color: var(--muted-foreground, #6b7280);
-  margin-bottom: 0;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--sl-ink-3);
 }
 </style>

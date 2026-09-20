@@ -9,16 +9,16 @@
   R1-B1 编码修复全部原样(真源 utils/carry-entries + carry-csv)。
 -->
 <template>
-  <div class="c-card">
-    <div class="c-card-head">
-      <svg class="c-head-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-      <div>
-        <h3>{{ ownLabel }}绑定(覆盖层)</h3>
-        <p class="c-head-desc">
-          <code class="c-code">{{ serviceKey }}</code> → 拉取 carry 字段面(plate 声明并集)→ 逐字段填值;
-          保存 = 本键整表替换{{ isAlias ? ',只写别名键的行,其余层不动' : '' }}
-        </p>
-      </div>
+  <div class="svc-panel">
+    <div class="svc-panel-head">
+      <span class="svc-panel-title">
+      <svg class="head-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+        {{ ownLabel }}绑定(覆盖层)
+      </span>
+      <span class="svc-panel-desc">
+        <code class="mono">{{ serviceKey }}</code> → 拉取 carry 字段面(plate 声明并集)→ 逐字段填值;
+        保存 = 本键整表替换{{ isAlias ? ',只写别名键的行,其余层不动' : '' }}
+      </span>
     </div>
 
     <TooltipProvider>
@@ -64,76 +64,79 @@
       </AlertDescription>
     </Alert>
 
-    <div v-if="loadingFields" class="loading-state">加载字段面…</div>
-    <Table v-else-if="rows.length" class="table-fixed rounded-field border border-signal-line bg-signal-card">
-      <TableHeader>
-        <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
-          <TableHead class="w-[28%] text-caption font-semibold text-muted-foreground">字段路径</TableHead>
-          <TableHead class="w-[7%] text-caption font-semibold text-muted-foreground">类型</TableHead>
-          <TableHead class="w-[11%] text-caption font-semibold text-muted-foreground">来源</TableHead>
-          <TableHead class="w-[18%] text-caption font-semibold text-muted-foreground">说明</TableHead>
-          <TableHead class="w-[24%] text-caption font-semibold text-muted-foreground">值</TableHead>
-          <TableHead class="w-[12%]" />
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        <TableRow v-for="row in rows" :key="row.path" :data-testid="`svc-row-${row.path}`">
-          <TableCell><code class="path font-mono font-semibold text-signal">{{ row.path }}</code></TableCell>
-          <TableCell class="text-caption text-muted-foreground">{{ row.type }}</TableCell>
-          <TableCell>
-            <!-- 「默认值」来源 chip 可点(配套方案附录5):跳默认值页定位该 path。
-                 其余来源是本页/键详情内的层,不可跳。 -->
-            <button
-              v-if="sourceOf(row) === 'default'"
-              type="button"
-              class="src-chip src-default src-link"
-              :data-testid="`svc-source-${row.path}`"
-              :title="`该兜底值在「默认值」页的位置(${row.path})`"
-              @click="router.push(`/carry-config?path=${encodeURIComponent(row.path)}`)"
-            >{{ sourceLabel(row) }} ↗</button>
-            <span
-              v-else
-              class="src-chip"
-              :class="`src-${sourceOf(row)}`"
-              :data-testid="`svc-source-${row.path}`"
-            >
-              {{ sourceLabel(row) }}
-            </span>
-          </TableCell>
-          <TableCell class="text-caption text-muted-foreground">{{ row.description }}</TableCell>
-          <TableCell>
-            <Input
-              v-model="row.value"
-              :disabled="row.isNull"
-              :placeholder="valuePlaceholder(row)"
-              class="h-8"
-            />
-          </TableCell>
-          <TableCell>
-            <div class="flex items-center gap-1">
-              <Button variant="link" size="sm" class="h-7 px-2" @click="toggleNull(row)">
-                {{ row.isNull ? '取消 null' : '设 null' }}
-              </Button>
-              <Button v-if="row.hasRow" variant="link" size="sm" class="h-7 px-2 text-signal-failed" @click="removeBindingRow(row)">
-                删行
-              </Button>
-            </div>
-          </TableCell>
-        </TableRow>
-      </TableBody>
-    </Table>
-    <div v-else class="c-empty">
+    <div v-if="loadingFields" class="slib-loading">加载字段面…</div>
+    <div v-else-if="rows.length" class="lib-card">
+      <table class="slib-table">
+        <thead>
+          <tr>
+            <th style="width:28%">字段路径</th>
+            <th style="width:7%">类型</th>
+            <th style="width:11%">来源</th>
+            <th style="width:18%">说明</th>
+            <th style="width:24%">值</th>
+            <th style="width:12%" class="c-center">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in rows" :key="row.path" :data-testid="`svc-row-${row.path}`">
+            <td><code class="path">{{ row.path }}</code></td>
+            <td class="muted">{{ row.type }}</td>
+            <td>
+              <!-- 「来源」= 三层链的落点,配色与键详情那条链同一族:
+                   本键蓝 · 服务级紫 · 默认值(可点跳兜底层)· 无行虚线 -->
+              <button
+                v-if="sourceOf(row) === 'default'"
+                type="button"
+                class="svc-flag src-link"
+                :data-testid="`svc-source-${row.path}`"
+                :title="`该兜底值在「默认值」页的位置(${row.path})`"
+                @click="router.push(`/carry-config?path=${encodeURIComponent(row.path)}`)"
+              >{{ sourceLabel(row) }} ↗</button>
+              <span
+                v-else
+                class="svc-flag"
+                :class="`src-${sourceOf(row)}`"
+                :data-testid="`svc-source-${row.path}`"
+              >
+                {{ sourceLabel(row) }}
+              </span>
+            </td>
+            <td class="muted">{{ row.description }}</td>
+            <td>
+              <Input
+                v-model="row.value"
+                :disabled="row.isNull"
+                :placeholder="valuePlaceholder(row)"
+                class="h-8"
+              />
+            </td>
+            <td class="c-center">
+              <div class="row-acts">
+                <button type="button" class="svc-link" @click="toggleNull(row)">
+                  {{ row.isNull ? '取消 null' : '设 null' }}
+                </button>
+                <button v-if="row.hasRow" type="button" class="svc-link danger" @click="removeBindingRow(row)">
+                  删行
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div v-else class="slib-empty">
       <p>该键无声明的 carry 字段(plate 未声明或服务名未命中)</p>
     </div>
 
-    <div class="card-footer">
+    <div class="svc-foot">
       <!-- 原型 H-alias-detail 表底统计:共 N 字段 · 本键已覆盖 N · 兜底完整度 -->
       <span class="footer-stats" data-testid="editor-stats">
         共 {{ rows.length }} 字段 · {{ ownLabel }}已覆盖 {{ ownCount }} · 链路兜底完整度 {{ coveredCount }}/{{ rows.length }}
       </span>
-      <span class="flex-1" />
-      <Button variant="outline" :disabled="loadingFields || degraded" data-testid="reload-face" @click="reload">刷新</Button>
-      <Button data-testid="save-service" :disabled="degraded" @click="save">保存</Button>
+      <span class="svc-foot-right">
+        <Button variant="outline" :disabled="loadingFields || degraded" data-testid="reload-face" @click="reload">刷新</Button>
+        <Button data-testid="save-service" :disabled="degraded" @click="save">保存</Button>
+      </span>
     </div>
   </div>
 </template>
@@ -162,7 +165,6 @@ import {
 } from '@/api/carry'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
@@ -360,67 +362,28 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.svc-bar {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
+.head-icon { flex: none; color: var(--sl-accent); }
 
+/* 字段路径 = 这张表的主键:等宽、加粗、可折行 */
 .path {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sl-ink);
   word-break: break-all;
 }
 
-.card-footer {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 14px;
-}
+.footer-stats { font-size: 11px; color: var(--sl-ink-3); }
 
-.src-chip {
-  display: inline-block;
-  border-radius: 9999px;
-  padding: 1px 8px;
-  font-size: var(--text-micro, 11px);
-  line-height: 1.5;
-  white-space: nowrap;
-}
-
-.src-own {
-  background: #e7efe0;
-  color: #3f6212;
-}
-
-.src-service {
-  background: #e7efe0;
-  color: #3f6212;
-}
-
-.src-default {
-  background: #e7ecf5;
-  color: #2f6fed;
-}
-
+/* 「来源」四档 = 三层查找链的读法:本键蓝 → 服务级紫 → 默认值灰 → 无行虚线。
+   无行(不注入)是语义终点,所以它必须占一个可见的位置,而不是留白。 */
+.src-own { color: var(--sl-accent); background: var(--sl-accent-soft); }
+.src-service { color: var(--sv-violet); background: var(--sv-violet-soft); }
 .src-none {
+  color: var(--sl-ink-3);
   background: transparent;
-  color: var(--muted-foreground, #6b7280);
-  border: 1px dashed currentColor;
+  border: 1px dashed var(--sl-star-off);
 }
-
-/* 「默认值」来源 chip:可点跳转态 */
-.src-link {
-  cursor: pointer;
-  border: 0;
-}
-
-.src-link:hover {
-  text-decoration: underline;
-}
-
-.footer-stats {
-  font-size: var(--text-micro, 11px);
-  color: var(--muted-foreground, #6b7280);
-}
+.src-link { cursor: pointer; border: 0; }
+.src-link:hover { color: var(--sl-accent); text-decoration: underline; }
 </style>

@@ -340,7 +340,8 @@ onMounted(reload)
 </script>
 
 <style scoped>
-.hint { @apply text-label font-normal; color: #909399; }
+/* 配色对齐服务区域基座令牌(此前残留 Element-Plus 蓝 #409eff 与灰阶) */
+.hint { @apply text-label font-normal; color: var(--sl-ink-3); }
 .op-tag { margin-right: 4px; }
 .chip {
   @apply text-micro font-semibold;
@@ -349,26 +350,28 @@ onMounted(reload)
   padding: 1px 8px;
   border-radius: 4px;
 }
-.op-check { accent-color: #2f6fed; flex: none; }
+.op-check { accent-color: var(--sl-accent); flex: none; }
 .snapshots summary {
   @apply text-body font-semibold;
   cursor: pointer;
-  color: #10151c;
+  color: var(--sl-ink);
   margin: 18px 0 8px;
 }
 .snapshots ul { margin: 8px 0; padding-left: 18px; }
 .snapshots li { @apply text-label font-normal; }
 .op-row {
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
+  border: 1px solid var(--sl-line);
+  border-radius: 10px;
   padding: 10px 14px;
   margin-bottom: 10px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 21, 28, 0.04);
 }
 .op-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .op-actions { margin-left: auto; }
 .note { max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
 .snapshots { margin-top: 18px; }
 .snapshots ul { padding-left: 18px; }
-.link { color: #409eff; }
+.link { color: var(--sl-accent); }
 .mono { font-family: var(--font-mono, monospace); }
 </style>

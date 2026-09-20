@@ -321,14 +321,14 @@ defineExpose({ form, submit })
 .map-rows { width: 100%; }
 .map-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .map-row .el-input { flex: 1; }
-.hint { color: #909399; font-size: 12px; margin: 6px 0 0; }
+.hint { color: var(--sl-ink-3); font-size: 12px; margin: 6px 0 0; }
 .ocd-form { display: flex; flex-direction: column; gap: 10px; }
 .ocd-row { display: grid; grid-template-columns: 110px 1fr; gap: 8px; align-items: center; }
-.ocd-label { font-size: 12px; font-weight: 500; color: #5a6273; text-align: right; }
+.ocd-label { font-size: 12px; font-weight: 500; color: var(--sl-ink-2); text-align: right; }
 .ocd-select {
   height: 32px; padding: 0 8px; font-size: 13px;
-  color: #10151c; background: #fff;
-  border: 1px solid #e1e5eb; border-radius: 6px;
+  color: var(--sl-ink); background: #fff;
+  border: 1px solid var(--sl-line); border-radius: 6px;
   min-width: 0;
 }
 .pair { margin-left: 6px; }

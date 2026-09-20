@@ -1,13 +1,18 @@
 /* ──────────────────────────────────────────────────────────────────
- * scenario-lib.css — 场景库三页(我的场景 / 公共场景 / 关注)共用设计系统。
+ * scenario-lib.css — 全站列表页设计系统基座。
  *
- * 色板 / 组件规范照 docs/superpowers/plans/scenario_refector_design
- * §五「跨页设计系统」。三个页面统一引用本文件,保证 .icon-badge /
- * .lib-card / 表头 / .chip / ★ 等视觉语言逐像素一致。
+ * 起于场景库三页(我的场景 / 公共场景 / 关注),色板 / 组件规范照
+ * docs/superpowers/plans/scenario_refector_design §五「跨页设计系统」。
+ * 服务区域五页(画像 / 信息管理 / 键详情 / 认证管理 / 适配中心)同样
+ * 落在本基座上(页壳 .slib、表 .slib-table、卡 .lib-card、chip / 空态),
+ * 只在本文件之外补它没有的构件 —— 见 service-area.css。
+ *
+ * 令牌挂 :root 而非 .slib:消费方面向整个平台,不只场景库;两处
+ * 各自算一套色值一定会漂移,所以只有这一份。
  * ────────────────────────────────────────────────────────────────── */
 
 /* ── 色板(§五)────────────────────────────────────────────────── */
-.slib {
+:root {
   --sl-accent: #2f6fed;
   --sl-accent-soft: #e7effe;
   --sl-ok: #15803d;
@@ -25,6 +30,15 @@
   --sl-star: #eab308;
   --sl-star-off: #c7cdd6;
 
+  /* 表头三档(冷墨阶)。此前是「浅灰带 + 纯黑 700 字 + 2px 纯黑线」——
+     报纸味重,而且暖灰带压在冷白页底上显脏。换成偏冷的蓝白带、深海军蓝字、
+     细一档的墨线:层级没丢,颜色更沉。 */
+  --sl-th-bg: #f1f5fb;
+  --sl-th-ink: #3d5578;
+  --sl-th-rule: #2a3342;
+}
+
+.slib {
   box-sizing: border-box;
   max-width: 1480px;
   min-height: calc(100vh - 48px);
@@ -73,6 +87,14 @@
   color: var(--sl-ink-2);
   font-size: 12px;
 }
+/* 第三行 = 深链上下文(接口路径 / 场景 id 这类机器串),等宽 + 再弱一档 */
+.slib-hint {
+  margin: 3px 0 0;
+  color: var(--sl-ink-3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
 .slib-head-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
 /* ── 工具条(搜索 + 高级过滤 + 新建)──────────────────────────── */
@@ -110,6 +132,7 @@
 .slib-create {
   margin-left: auto;
   height: 34px;
+  flex: none;
   padding: 0 16px;
   font-size: 12.5px;
   font-weight: 600;
@@ -118,6 +141,8 @@
   border: none;
   border-radius: 8px;
   cursor: pointer;
+  /* 工具条挤窄时主按钮不许换行 —— 「+ 新增认证」断成两行会读成两个动作 */
+  white-space: nowrap;
 }
 .slib-create:hover { background: #265fd4; }
 
@@ -130,16 +155,22 @@
   overflow: hidden;
 }
 
-/* ── 表头规范(§五):填色 + 黑线 ──────────────────────────────── */
+/* ── 表头规范:冷蓝白带 + 深海军蓝字 + 细墨线(全站唯一实现)────────
+   两个消费面共用这一条规则:`.slib-table`(设计系统表)与 `.sig-th`
+   (shadcn `TableHead` 的默认类)。写成选择器列表而不是两份声明 ——
+   两处各自演值一定会漂。各页想压密度,只覆盖 padding 即可:scoped 样式
+   自带 [data-v-*] 属性,权重高于本条。 */
 .slib-table { width: 100%; border-collapse: collapse; }
-.slib-table thead th {
+.slib-table thead th,
+.sig-th {
   padding: 10px 12px;
   text-align: left;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--sl-ink);
-  background: var(--sl-divider);
-  border-bottom: 2px solid var(--sl-ink);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--sl-th-ink);
+  background: var(--sl-th-bg);
+  border-bottom: 1.5px solid var(--sl-th-rule);
   white-space: nowrap;
 }
 .slib-table tbody td {
@@ -621,6 +652,143 @@
   font-size: 11px;
   line-height: 1.7;
   color: var(--sl-ink-3);
+}
+
+/* ── .wcard 摘要卡形制(工作台卡片板;全站唯一实现)──────────────
+   原先 5 张卡各自复制一份卡头/结论面/空态,色值已经漂了 —— 同一个
+   ci-blue 底是 #e7efff 还是 #e7effe,两张卡各说一套。形制收在这里,
+   卡片只留自己的行网格与专属操作(复制钮、卡内搜索那种)。 */
+.wcard { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+
+.chead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--sl-line);
+}
+.chead-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 7px;
+}
+.ci-blue  { color: var(--sl-accent); background: var(--sl-accent-soft); }
+.ci-green { color: var(--sl-ok);     background: var(--sl-ok-soft); }
+.ci-gold  { color: var(--sl-warn);   background: var(--sl-warn-soft); }
+.ci-red   { color: var(--sl-bad);    background: var(--sl-bad-soft); }
+.ci-ink   { color: var(--sl-ink-2);  background: var(--sl-divider); }
+.chead-title { font-size: 13.5px; font-weight: 700; color: var(--sl-ink); }
+.chead-count {
+  padding: 0 7px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--sl-ink-2);
+  background: var(--sl-divider);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.chead-spacer { flex: 1; }
+.manage-link { font-size: 12px; font-weight: 600; color: var(--sl-accent); text-decoration: none; white-space: nowrap; }
+.manage-link:hover { text-decoration: underline; }
+
+/* S 档 = 只出结论(大数字 + 一行说明) */
+.s-body { display: flex; flex-direction: column; gap: 2px; }
+.s-num { margin: 2px 0 0; font-size: 30px; font-weight: 700; line-height: 1.1; color: var(--sl-ink); }
+.s-label { margin: 0; font-size: 11px; color: var(--sl-ink-2); }
+/* S 档变体:两三个结论数字并排(状态分布 / 总数+过期数 / 总数+贡献者) */
+.s-stats { display: flex; gap: 14px; }
+.s-stat { margin: 0; font-size: 11px; color: var(--sl-ink-2); }
+.s-stat b { display: block; font-size: 22px; font-weight: 700; line-height: 1.15; color: var(--sl-ink); }
+
+/* 行:左右各出血 8px 落进卡垫白(卡槽 .slot-body 已让出同样宽度 ——
+   两边必须成对改,否则出血会被裁成一条横向滚动条)。列由卡片自己定,
+   所以 .wrow 只给公共的网格骨架与 hover。 */
+.rows { display: flex; flex-direction: column; gap: 2px; }
+.wrow {
+  display: grid;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  font-size: 12px;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 7px;
+  transition: background 0.12s ease;
+}
+.wrow:hover { background: #f6f8fa; }
+.wrow-name {
+  min-width: 0;
+  font-weight: 600;
+  color: var(--sl-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wrow-tag {
+  padding: 1px 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--sl-ink-2);
+  background: var(--sl-divider);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.wrow-time { font-size: 11px; color: var(--sl-ink-3); white-space: nowrap; }
+.more-hint { margin: 4px 0 0; font-size: 11px; color: var(--sl-ink-3); }
+
+/* 空态 = 引导 CTA(§7 第 3 条:不是虚线占位) */
+.card-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0 8px;
+  text-align: center;
+}
+.card-empty p { margin: 0; font-size: 12px; color: var(--sl-ink-2); }
+.cta {
+  padding: 4px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--sl-accent);
+  text-decoration: none;
+  border: 1px solid #bcd0f7;   /* accent 的中间调,色板里没有第二档 */
+  border-radius: 6px;
+  transition: background 0.12s ease;
+}
+.cta:hover { background: var(--sl-accent-soft); }
+
+/* ── .tile-grid 自由占位网格(全站唯一实现;工作台卡片板是首个消费者)──
+   消费者给外层容器加 `container-type: inline-size`:轨数看容器实宽,
+   不看视口 —— 右栏/侧栏折行后容器变宽,轨数该跟着变。
+   占位 = .tile[data-span]:1 → 1/4,2 → 1/2,4 → 1/1;容器收窄时高 span
+   逐级降档(两段 @container),单轨档不写 span(写死会撑出隐式列横溢)。
+   高度全档统一:尺寸档只改宽度,每行齐平 —— 分行高时行与行参差,板面
+   就散了。超出高度的内容交给消费者自己的滚动层兜,不撑破外框。 */
+:root {
+  --tile-h: 224px;
+  --tile-gap: 16px;
+}
+.tile-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--tile-gap);
+}
+.tile-grid > .tile { height: var(--tile-h); min-width: 0; }
+@container (min-width: 640px) {
+  .tile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tile-grid > .tile[data-span='4'] { grid-column: span 2; }
+}
+/* 820 下限:再窄,四分之一轨就容不下一张结论卡了 */
+@container (min-width: 820px) {
+  .tile-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .tile-grid > .tile[data-span='2'] { grid-column: span 2; }
+  .tile-grid > .tile[data-span='4'] { grid-column: span 4; }
 }
 
 @media (max-width: 900px) {

@@ -99,16 +99,15 @@ const expanded = ref(true)
   padding: 0;
 }
 
-/* 原型:白卡 + 4px 橙色左边粗条 */
+/* 原型:白卡 + 4px 琥珀左边粗条(色走服务区域基座令牌) */
 .ux-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  border: 1px solid #e5e7eb;
-  border-left: 4px solid #f59e0b;
+  border: 1px solid var(--sl-line);
+  border-left: 4px solid var(--sl-warn);
   border-radius: 8px;
-  background: #ffffff;
+  background: #fff;
   padding: 8px 12px;
 }
 
@@ -119,22 +118,22 @@ const expanded = ref(true)
 }
 
 .ux-sc {
-  color: #1f2937;
+  color: var(--sl-ink);
   font-size: 12px;
   font-weight: 700;
 }
 
 .ux-dim {
-  color: #6b7280;
+  color: var(--sl-ink-3);
   font-size: 12px;
 }
 
 .ux-go {
   flex-shrink: 0;
-  border: 1px solid #f59e0b;
+  border: 1px solid #f0d9ac;
   border-radius: 6px;
   background: transparent;
-  color: #b45309;
+  color: var(--sl-warn);
   font-size: 12px;
   font-weight: 500;
   padding: 3px 10px;
@@ -143,6 +142,6 @@ const expanded = ref(true)
 }
 
 .ux-go:hover {
-  background: #fef3e2;
+  background: var(--sl-warn-soft);
 }
 </style>

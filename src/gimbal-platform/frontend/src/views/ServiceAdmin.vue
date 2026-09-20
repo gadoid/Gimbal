@@ -7,123 +7,139 @@
        把三层查找顺序摊开:精确命中别名 → 该服务的默认 → 全局共享默认。
      写面 admin(同传递字段纪律);读面全员——但页面入口收在 admin。 -->
 <template>
-  <ListPage title="服务信息管理" width="wide" subtitle="配置池 — 别名登记与凭证 / 分组绑定;画像探索请用服务画像">
-    <div v-if="loading" class="loading-state mt-3.5">加载中…</div>
+  <section class="slib">
+    <PageHead
+      icon="layers"
+      title="服务信息管理"
+      :count="loading ? '' : `${aliases.length} 个别名`"
+      subtitle="配置池 — 别名登记与凭证 / 分组绑定;探索覆盖与告警请用服务画像"
+    />
 
-    <div v-else class="mt-3 flex gap-3 items-stretch">
+    <div v-if="loading" class="slib-loading">加载中…</div>
+
+    <div v-else class="svc-split">
       <!-- 左栏:系统 → 服务两层树,只到服务级 -->
-      <aside class="w-64 shrink-0 rounded-lg border border-signal-line bg-signal-card p-3">
-        <div class="flex items-center justify-between">
-          <span class="text-caption font-semibold text-signal-ink">全部服务</span>
-          <span class="text-micro text-muted-foreground">{{ treeServices.length }}</span>
+      <aside class="svc-rail">
+        <div class="svc-rail-title">
+          全部服务
+          <span class="svc-rail-hint">{{ treeServices.length }} 系统 · {{ serviceCount }} 服务</span>
         </div>
-        <p class="mt-0.5 text-micro text-muted-foreground">按系统 · 只列到服务级</p>
-        <div class="mt-2 space-y-2.5">
-          <div v-for="g in treeServices" :key="g.system">
-            <div class="flex items-center gap-1.5 text-micro font-semibold text-muted-foreground">
-              <span class="h-2 w-2 rounded-sm bg-[#7C5CBF]"></span>{{ g.system }}
-              <span class="font-normal">({{ g.services.length }})</span>
-            </div>
-            <div
-              v-for="s in g.services"
-              :key="s.name"
-              class="mt-0.5 flex w-full items-center gap-0.5 rounded px-1.5 py-1 transition-colors"
-              :class="selectedService === s.name
-                ? 'bg-[#E7EFFE] text-[#2F6FED]' : 'hover:bg-signal-canvas'"
+        <p class="svc-rail-hint">按系统分组 · 只列到服务级</p>
+        <div v-for="g in treeServices" :key="g.system">
+          <div class="svc-tree-group">
+            <SystemChip :sys="g.system" />
+            <span class="n">({{ g.services.length }})</span>
+          </div>
+          <div
+            v-for="s in g.services"
+            :key="s.name"
+            class="svc-tree-row"
+            :class="{ on: selectedService === s.name }"
+          >
+            <button
+              type="button"
+              class="svc-tree-item"
+              :data-testid="`svc-tree-${s.name}`"
+              @click="selectService(selectedService === s.name ? '' : s.name)"
             >
-              <button
-                type="button"
-                class="flex min-w-0 flex-1 items-center justify-between text-left text-caption"
-                :data-testid="`svc-tree-${s.name}`"
-                @click="selectService(selectedService === s.name ? '' : s.name)"
-              >
-                <span class="mono truncate">{{ s.name }}</span>
-                <span class="shrink-0 text-micro text-muted-foreground">{{ aliasCount(s.name) }}</span>
-              </button>
-              <button
-                type="button"
-                class="shrink-0 rounded px-1 text-micro text-muted-foreground hover:text-[#2F6FED]"
-                title="配置该服务的字段默认值(服务级默认层)"
-                :data-testid="`svc-config-${s.name}`"
-                @click.stop="router.push(`/service-admin/${encodeURIComponent(s.name)}`)"
-              >字段</button>
-            </div>
+              <span class="nm">{{ s.name }}</span>
+              <span class="n">{{ aliasCount(s.name) }}</span>
+            </button>
+            <button
+              type="button"
+              class="svc-tree-act"
+              title="配置该服务的字段默认值(服务级默认层)"
+              :data-testid="`svc-config-${s.name}`"
+              @click.stop="router.push(`/service-admin/${encodeURIComponent(s.name)}`)"
+            >字段</button>
           </div>
         </div>
       </aside>
 
       <!-- 右侧:顶部分组筛选 + 别名表 -->
-      <div class="min-w-0 flex-1">
-        <div class="flex flex-wrap items-center gap-2" data-testid="alias-group-chips">
-          <span class="text-caption text-muted-foreground">
-            {{ selectedService ? `${selectedService} 下` : '全部服务' }} · {{ filtered.length }} 条别名
+      <div>
+        <div class="svc-stats" data-testid="alias-group-chips">
+          <span>
+            {{ selectedService ? `${selectedService} 下` : '全部服务' }} ·
+            <b>{{ filtered.length }}</b> 条别名
           </span>
+          <span v-if="groupChips.length" class="svc-stat-sep"></span>
           <button
             v-for="c in groupChips"
             :key="c"
             type="button"
-            class="rounded-full border px-2.5 py-0.5 text-caption font-medium transition-colors"
-            :class="selectedGroup === c
-              ? 'border-[#2F6FED] bg-[#E7EFFE] text-[#2F6FED]'
-              : 'border-signal-line bg-signal-card text-muted-foreground hover:text-foreground'"
+            class="svc-chip"
+            :class="{ on: selectedGroup === c }"
             :data-testid="`alias-chip-${c}`"
             @click="selectedGroup = selectedGroup === c ? '' : c"
           >{{ c }}</button>
+          <button v-if="selectedService || selectedGroup" type="button" class="svc-link" @click="clearFilters">
+            清掉筛选
+          </button>
         </div>
 
-        <Table class="mt-2.5 min-w-[880px] table-fixed rounded-field border border-signal-line bg-signal-card">
-          <TableHeader>
-            <TableRow class="bg-signal-canvas/60 hover:bg-signal-canvas/60">
-              <TableHead class="w-[26%] text-caption font-semibold text-muted-foreground">别名</TableHead>
-              <TableHead class="w-[18%] text-caption font-semibold text-muted-foreground">所属服务</TableHead>
-              <TableHead class="w-[12%] text-caption font-semibold text-muted-foreground">分组</TableHead>
-              <TableHead class="w-[18%] text-caption font-semibold text-muted-foreground">凭证</TableHead>
-              <TableHead class="w-[10%] text-caption font-semibold text-muted-foreground">归属</TableHead>
-              <TableHead class="w-[16%] text-center text-caption font-semibold text-muted-foreground">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="a in filtered" :key="a.aliasName" :data-testid="`alias-row-${a.aliasName}`">
-              <TableCell class="mono break-all">
-                {{ a.aliasName }}
-                <span
-                  v-if="a.aliasName === a.baseService"
-                  class="ml-1 rounded bg-[#E7EFFE] px-1.5 py-px text-micro font-medium text-[#2F6FED]"
-                  title="三层查找的中间层:精确命中别名 → 该服务的默认 → 全局共享默认"
-                >服务级默认</span>
-              </TableCell>
-              <TableCell class="mono dim">{{ a.baseService }}</TableCell>
-              <TableCell>
-                <span v-if="a.groupTag" class="rounded bg-signal-canvas px-1.5 py-px text-micro">{{ a.groupTag }}</span>
-                <span v-else class="text-micro text-muted-foreground">未分组</span>
-              </TableCell>
-              <TableCell>
-                <span v-if="a.credentialAlias" class="mono text-caption">{{ a.credentialAlias }}</span>
-                <span v-else class="text-micro text-muted-foreground">不绑</span>
-              </TableCell>
-              <TableCell>
-                <span class="text-micro">{{ a.ownerUserId == null ? '团队共享' : `个人(#${a.ownerUserId})` }}</span>
-              </TableCell>
-              <TableCell class="text-center">
-                <div class="flex items-center justify-center gap-0.5">
-                  <Button variant="link" size="sm" class="h-7 px-2" :data-testid="`alias-detail-${a.aliasName}`" @click="router.push(`/service-admin/${encodeURIComponent(a.aliasName)}`)">详情</Button>
-                  <Button variant="link" size="sm" class="h-7 px-2" :data-testid="`alias-edit-${a.aliasName}`" @click="startEdit(a)">编辑</Button>
-                  <Button variant="link" size="sm" class="h-7 px-2 text-destructive" :data-testid="`alias-del-${a.aliasName}`" @click="remove(a)">删除</Button>
-                </div>
-              </TableCell>
-            </TableRow>
-            <TableRow v-if="filtered.length === 0">
-              <TableCell colspan="6" class="py-6 text-center text-caption text-muted-foreground">
-                {{ selectedService ? '该服务下还没有登记别名' : '还没有登记别名 —— 别名 = <服务名>-<后缀>,前缀必须落在 Plate 目录内' }}
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+        <div class="lib-card">
+          <table class="slib-table">
+            <thead>
+              <tr>
+                <th style="width:26%">别名</th>
+                <th style="width:18%">所属服务</th>
+                <th style="width:12%">分组</th>
+                <th style="width:18%">凭证</th>
+                <th style="width:10%">归属</th>
+                <th style="width:132px" class="c-center">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="a in filtered" :key="a.aliasName" :data-testid="`alias-row-${a.aliasName}`">
+                <td>
+                  <span class="mono svc-key">{{ a.aliasName }}</span>
+                  <span
+                    v-if="a.aliasName === a.baseService"
+                    class="svc-flag blue ml-1"
+                    title="三层查找的中间层:精确命中别名 → 该服务的默认 → 全局共享默认"
+                  >服务级默认</span>
+                </td>
+                <td class="mono muted">{{ a.baseService }}</td>
+                <td>
+                  <span v-if="a.groupTag" class="svc-flag">{{ a.groupTag }}</span>
+                  <span v-else class="muted">未分组</span>
+                </td>
+                <td>
+                  <span v-if="a.credentialAlias" class="mono">{{ a.credentialAlias }}</span>
+                  <span v-else class="muted">不绑</span>
+                </td>
+                <td>
+                  <span class="svc-flag" :class="{ violet: a.ownerUserId == null }">
+                    {{ a.ownerUserId == null ? '团队共享' : `个人(#${a.ownerUserId})` }}
+                  </span>
+                </td>
+                <td class="c-center">
+                  <div class="row-acts">
+                    <button type="button" class="svc-link" :data-testid="`alias-detail-${a.aliasName}`" @click="router.push(`/service-admin/${encodeURIComponent(a.aliasName)}`)">详情</button>
+                    <button type="button" class="svc-link" :data-testid="`alias-edit-${a.aliasName}`" @click="startEdit(a)">编辑</button>
+                    <button type="button" class="svc-link danger" :data-testid="`alias-del-${a.aliasName}`" @click="remove(a)">删除</button>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="filtered.length === 0">
+                <td colspan="6" class="c-center">
+                  <span class="muted">
+                    {{ selectedService ? '该服务下还没有登记别名' : '还没有登记别名 —— 别名 = <服务名>-<后缀>,前缀必须落在 Plate 目录内' }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
         <!-- 新建 / 编辑 -->
-        <div class="mt-3 rounded-lg border border-signal-line bg-signal-card p-3">
-          <div class="text-caption font-semibold text-signal-ink">{{ editing ? '编辑别名' : '登记别名' }}</div>
-          <div class="mt-2 flex flex-wrap items-center gap-2">
+        <div class="svc-panel mt-3.5">
+          <div class="svc-panel-head">
+            <span class="svc-panel-title">{{ editing ? '编辑别名' : '登记别名' }}</span>
+            <span v-if="editing" class="svc-panel-desc">别名是主键,编辑态不可改</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
             <Input
               v-model="draft.aliasName"
               class="w-[240px]"
@@ -147,19 +163,20 @@
             </Button>
             <Button v-if="editing" variant="outline" data-testid="alias-cancel" @click="cancelEdit">取消</Button>
           </div>
-          <p class="mt-1.5 mb-0 text-micro text-muted-foreground">
+          <p class="slib-note">
             凭证按<b>执行者本人</b>的认证管理池解析(团队共享别名同样各拿各的);登记校验强约束:Plate 目录不可达时暂不能登记。
           </p>
         </div>
       </div>
     </div>
-  </ListPage>
+  </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import ListPage from '@/layouts/ListPage.vue'
+import PageHead from '@/components/scenario-lib/PageHead.vue'
+import SystemChip from '@/components/SystemChip.vue'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import { confirmAction } from '@/utils/confirmAction'
@@ -171,9 +188,6 @@ import {
 import { list as listMyCredentials } from '@/api/auth_sessions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table'
 
 const loading = ref(true)
 const router = useRouter()
@@ -214,6 +228,8 @@ const treeServices = computed<ServiceGroup[]>(() => {
 
 const catalogEntries = ref<{ service: string; system: string }[]>([])
 
+const serviceCount = computed(() => treeServices.value.reduce((n, g) => n + g.services.length, 0))
+
 function aliasCount(service: string): number {
   return aliases.value.filter((a) => a.baseService === service).length
 }
@@ -235,6 +251,11 @@ const filtered = computed<ServiceAliasRow[]>(() =>
 function selectService(name: string): void {
   selectedService.value = name
   selectedGroup.value = '' // 切服务后分组域变化,重选
+}
+
+function clearFilters(): void {
+  selectedService.value = ''
+  selectedGroup.value = ''
 }
 
 function startEdit(a: ServiceAliasRow): void {

@@ -35,6 +35,7 @@ const sample: ServiceGridData = {
 
 async function mountPage(path = '/services/fin-service') {
   const router = createRouter({ history: createMemoryHistory(), routes: [
+    { path: '/services', component: { template: '<div data-testid="index-stub"/>' } },
     { path: '/services/:name', component: ServiceGrid },
     {
       path: '/services/:name/endpoints/:endpointId',
@@ -102,4 +103,18 @@ it('点瓦片 → 线索板深链(endpoint_id 保持原样)', async () => {
   await w.find('[data-testid="grid-tile-fin.order.add"]').trigger('click')
   await flushPromises()
   expect(w.vm.$route.fullPath).toBe('/services/fin-service/endpoints/fin.order.add')
+})
+
+/** 设计语言锁定:服务区域页共用场景库基座(.slib 壳 + PageHead)与
+ *  service-area.css 构件(瓦片 / chip / 四格条)—— 散写 hex 会漂移。 */
+it('页壳与构件走共用设计系统,不是每页各画一套', async () => {
+  vi.spyOn(api, 'fetchGrid').mockResolvedValue(sample)
+  const w = await mountPage()
+  await flushPromises()
+  expect(w.find('section.slib').exists()).toBe(true)
+  expect(w.find('.slib-head .icon-badge').exists()).toBe(true)
+  expect(w.find('.slib-title').text()).toContain('fin-service')
+  expect(w.findAll('button.svc-tile')).toHaveLength(4)
+  expect(w.findAll('button.svc-chip')).toHaveLength(4)
+  expect(w.find('[data-testid="grid-slots-fin.order.add"]').classes()).toContain('svc-slots')
 })

@@ -1,0 +1,445 @@
+/* ──────────────────────────────────────────────────────────────────
+ * service-area.css — 服务区域(服务画像 / 服务信息管理 / 键详情 /
+ * 认证管理 / 默认值 / 适配中心)的构件层。
+ *
+ * 位置:基座(scenario-lib.css 的令牌 / 页壳 / 表 / 卡 / 空态)负责
+ * 「和场景库、工作台长得一样」;本文件只补基座里没有的东西 —— 瓦片、
+ * 筛选 chip、方法徽标、四格状态条、左栏树、面板卡、说明条。
+ * 因此这里**不重定义**基座已经定过的形制(圆角、阴影、字号阶、hover 抬升),
+ * 只引用同一批 --sl-* 令牌。两套值 = 迟早漂移。
+ * ────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* 基座色板之外的两档:注入层的「服务级」用紫,与别名(蓝)/ 默认值(灰)
+     在同一架梯子上分得开;接口告警边框用淡红。 */
+  --sv-violet: #7c5cbf;
+  --sv-violet-soft: #f1ecfb;
+  --sv-bad-line: #f3cbcb;
+}
+
+/* ── 两栏壳:左 = 服务树(常驻),右 = 主内容 ─────────────────────
+   与工作台右栏同一处理:sticky 顶对齐 .slib 的 56px 页垫,滚轨只
+   在树内部 —— 整栏一起滚会让人找不到当前服务。 */
+.svc-split {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.svc-split > * { min-width: 0; }
+.svc-rail {
+  position: sticky;
+  top: 56px;
+  max-height: calc(100vh - 88px);
+  overflow-y: auto;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid var(--sl-line);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(16, 21, 28, 0.04);
+}
+.svc-rail-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--sl-ink);
+}
+.svc-rail-hint {
+  margin: 2px 0 0;
+  font-size: 10.5px;
+  color: var(--sl-ink-3);
+}
+.svc-tree-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--sl-ink-3);
+}
+.svc-tree-group .n { font-weight: 400; letter-spacing: 0; }
+/* 一行 = 一个服务:整行可选(按钮),「字段」快捷入口挂在按钮之外
+   —— 按钮里套按钮不是合法 HTML,也不是可用的点按语义。 */
+.svc-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+  border-radius: 6px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.svc-tree-row:hover { background: var(--sl-canvas); }
+.svc-tree-row.on { background: var(--sl-accent-soft); color: var(--sl-accent); font-weight: 600; }
+.svc-tree-item {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+/* 树条目里的服务名:等宽 + 省略号,计数贴右缘 */
+.svc-tree-item .nm {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.svc-tree-item .n { flex: none; font-size: 10px; color: var(--sl-ink-3); }
+.svc-tree-row.on .n { color: var(--sl-accent); }
+.svc-tree-act {
+  flex: none;
+  padding: 0 4px;
+  font: inherit;
+  font-size: 10px;
+  color: var(--sl-ink-3);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.svc-tree-act:hover { color: var(--sl-accent); }
+@media (max-width: 1180px) {
+  /* 与服务区域所有两栏页一致:窄屏折单列,树落到主内容之前 */
+  .svc-split { grid-template-columns: minmax(0, 1fr); }
+  .svc-rail { position: static; max-height: none; }
+}
+
+/* ── 统计条 + 筛选 chip ─────────────────────────────────────────
+   chip 是「筛」不是「tab」:单选可取消,选中态用浅蓝底 + 蓝边,
+   与 .schemes-chip 同族;计数走等宽字,和表内 .num 同一读法。 */
+.svc-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-size: 11.5px;
+  color: var(--sl-ink-2);
+}
+/* 嵌在页头右侧等紧凑场合: margins 归零(比 !important 覆盖好用) */
+.svc-stats.tight { margin-bottom: 0; gap: 6px; }
+.svc-stats b {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sl-ink);
+}
+.svc-stat-sep { width: 1px; height: 16px; background: var(--sl-line); }
+.svc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 11px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--sl-ink-2);
+  background: #fff;
+  border: 1px solid var(--sl-line);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+.svc-chip:hover { color: var(--sl-accent); border-color: var(--sl-accent); }
+.svc-chip.on { color: var(--sl-accent); background: var(--sl-accent-soft); border-color: #bcd0f7; }
+.svc-chip:disabled { color: var(--sl-ink-3); opacity: 0.5; cursor: default; }
+.svc-chip:disabled:hover { border-color: var(--sl-line); }
+.svc-chip .n {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  color: var(--sl-ink-3);
+}
+.svc-chip.on .n { color: var(--sl-accent); }
+
+/* ── 瓦片网格(服务 / 接口,点进型)──────────────────────────────
+   形制跟工作台卡一致:白底 + 1px 描边 + 顶部 3px 分类色边 + hover 抬
+   一档阴影。顶部色边在这里表达「这格的结论」,所以随状态变,不做装饰。 */
+.svc-tiles {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(216px, 1fr));
+}
+/* 接口瓦片比服务瓦片密一档:一格只有方法 + 名 + 路径 + 四格条 */
+.svc-tiles.dense { grid-template-columns: repeat(auto-fill, minmax(184px, 1fr)); }
+.svc-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px 13px 12px;
+  font: inherit;
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--sl-line);
+  border-top: 3px solid var(--sl-divider);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(16, 21, 28, 0.04);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.svc-tile:hover {
+  border-color: var(--sl-accent);
+  border-top-color: var(--sl-accent);
+  box-shadow: 0 8px 24px rgba(16, 21, 28, 0.12);
+}
+.svc-tile.st-bad { border-top-color: var(--sl-bad); }
+.svc-tile.st-ok { border-top-color: var(--sl-ok); }
+.svc-tile.st-warn { border-top-color: var(--sl-warn); }
+.svc-tile-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.svc-tile-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sl-ink);
+}
+.svc-tile-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  color: var(--sl-ink-3);
+}
+.svc-tile-meta { font-size: 11px; color: var(--sl-ink-2); }
+.svc-tile-go { color: var(--sl-accent); font-weight: 600; }
+
+/* ── HTTP 方法徽标 ──────────────────────────────────────────────
+   同一张色对在画像与线索板共用,不再各写一份 METHOD_STYLES。 */
+.svc-method {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding: 1px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+}
+.svc-method.get { color: var(--sl-accent); background: var(--sl-accent-soft); }
+.svc-method.post { color: var(--sl-ok); background: var(--sl-ok-soft); }
+.svc-method.put { color: var(--sl-warn); background: var(--sl-warn-soft); }
+.svc-method.del { color: var(--sl-bad); background: var(--sl-bad-soft); }
+.svc-method.other { color: var(--sl-ink-2); background: var(--sl-canvas); }
+
+/* ── 四格状态条(①需求 ②用例 ③最近执行 ④适配告警)────────────────
+   槽位顺序恒定是这张图的全部信息量 —— 用户扫的是竖直色块模式,
+   所以「未接入」必须占格(斜纹)而不是不画。 */
+.svc-slots { display: flex; gap: 4px; margin-top: auto; padding-top: 8px; }
+.svc-slots > span {
+  flex: 1;
+  height: 5px;
+  border-radius: 2px;
+  background: var(--sl-divider);
+}
+.svc-slots > span.ok { background: var(--sl-ok); }
+.svc-slots > span.warn { background: var(--sl-warn); }
+.svc-slots > span.bad { background: var(--sl-bad); }
+.svc-slots > span.na {
+  background: repeating-linear-gradient(45deg, #e4e8ee 0 3px, var(--sl-canvas) 3px 6px);
+}
+
+/* ── 徽标 / 标记(键身份、层归属、状态)────────────────────────── */
+/* 表内主键单元格(别名 / 凭证 alias):机器串靠等宽读,加粗到与场景名
+   同一档 —— 它是这一行的身份,不是描述文字。 */
+.svc-key {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sl-ink);
+}
+.svc-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  white-space: nowrap;
+  color: var(--sl-ink-2);
+  background: var(--sl-divider);
+}
+.svc-flag.blue { color: var(--sl-accent); background: var(--sl-accent-soft); }
+.svc-flag.violet { color: var(--sv-violet); background: var(--sv-violet-soft); }
+.svc-flag.green { color: var(--sl-ok); background: var(--sl-ok-soft); }
+.svc-flag.red { color: var(--sl-bad); background: var(--sl-bad-soft); }
+.svc-flag.amber { color: var(--sl-warn); background: var(--sl-warn-soft); }
+.svc-flag.ink { color: var(--sl-ink); background: var(--sl-divider); }
+
+/* ── 面板卡(容器 + 卡头)──────────────────────────────────────
+   与 .lib-card 同一张底/描边/圆角,只是带内边距:配置池里那些
+   「一屏一格」的表单块、节点详情块都用它。 */
+.svc-panel {
+  background: #fff;
+  border: 1px solid var(--sl-line);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(16, 21, 28, 0.04);
+  padding: 14px 16px;
+}
+.svc-panel + .svc-panel { margin-top: 14px; }
+.svc-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--sl-divider);
+}
+.svc-panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sl-ink);
+}
+.svc-panel-title .icon-badge { width: 22px; height: 22px; margin-top: 0; border-radius: 6px; }
+.svc-panel-title .icon-badge svg { width: 12px; height: 12px; }
+.svc-panel-desc { font-size: 11px; font-weight: 400; color: var(--sl-ink-3); }
+.svc-panel-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+/* ── 说明 / 降级 / 告警条 ─────────────────────────────────────── */
+.svc-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 9px 12px;
+  font-size: 11.5px;
+  line-height: 1.65;
+  border-radius: 8px;
+  color: var(--sl-ink-2);
+  background: var(--sl-canvas);
+  border: 1px solid var(--sl-line);
+}
+.svc-banner.warn { color: var(--sl-warn); background: var(--sl-warn-soft); border-color: #f0d9ac; }
+.svc-banner.bad { color: var(--sl-bad); background: var(--sl-bad-soft); border-color: var(--sv-bad-line); }
+.svc-banner b { font-weight: 700; }
+
+/* ── 键值明细行(节点详情、绑定明细、反查面板)────────────────── */
+.svc-kv {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 3px 0;
+  font-size: 11.5px;
+}
+.svc-kv dt {
+  flex: none;
+  width: 76px;
+  color: var(--sl-ink-3);
+}
+.svc-kv dd { margin: 0; min-width: 0; color: var(--sl-ink); overflow-wrap: anywhere; }
+
+/* ── 区内标题(适配中心 / 长页分段)──────────────────────────── */
+.svc-sec {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 22px 0 10px;
+}
+.svc-sec .t {
+  position: relative;
+  padding-left: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sl-ink);
+}
+.svc-sec .t::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 13px;
+  margin-top: -6.5px;
+  background: var(--sl-accent);
+  border-radius: 2px;
+}
+.svc-sec .n { font-size: 11px; color: var(--sl-ink-3); }
+.svc-sec .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+/* ── 面板内工具条 / 面板脚 ─────────────────────────────────────
+   两者都是「这张表的动作」,不是页面动作 —— 所以贴着表放,用比
+   .slib-toolbar / .slib-create 小一档的密度。 */
+.svc-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.svc-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--sl-divider);
+}
+.svc-foot-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+/* 行内操作簇(详情 / 编辑 / 删除):文字钮并排,不用整排按钮抢注意力 */
+.row-acts { display: inline-flex; align-items: center; justify-content: center; gap: 12px; }
+
+/* ── 弱链接 / 文字钮(行内动作,不抢主按钮的视觉重量)─────────── */
+.svc-link {
+  padding: 0;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--sl-accent);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.svc-link:hover { text-decoration: underline; }
+.svc-link.danger { color: var(--sl-bad); }
+
+/* ── 小尺寸动作钮(面板脚 / 卡内提交)──────────────────────────
+   .slib-create 是页级动作档(34px),面板里再摆一个会和页头抢重量。 */
+.svc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--sl-ink);
+  background: #fff;
+  border: 1px solid var(--sl-line);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.svc-btn:hover { color: var(--sl-accent); border-color: var(--sl-accent); }
+.svc-btn:disabled { opacity: 0.5; cursor: default; }
+.svc-btn.primary { color: #fff; background: var(--sl-accent); border-color: var(--sl-accent); }
+.svc-btn.primary:hover { color: #fff; background: #265fd4; }

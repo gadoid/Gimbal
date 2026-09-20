@@ -2,14 +2,25 @@
      一屏全接口瓦片 + 顶部盲区统计与筛选 chip;纯读,编辑与关系展开都在
      接口级线索板。四格状态条位置恒定(①需求 ②用例 ③最近执行 ④适配告警),
      用户扫竖直色块模式;槽① P1 为「未接入」占位格(斜纹),P2 reference
-     dim 落地后点亮,格位不迁移。取色对齐方案「附:设计系统取值」。 -->
+     dim 落地后点亮,格位不迁移。
+     形制走服务区域共用语言:.slib 页壳 + PageHead + .svc-tile / .svc-chip。 -->
 <template>
-  <ListPage title="服务画像" width="wide" :subtitle="`热力网格 · ${service}`">
-    <div v-if="loading" class="loading-state mt-3.5">加载中…</div>
+  <section class="slib">
+    <PageHead
+      icon="grid"
+      :title="`服务画像 · ${service}`"
+      :subtitle="loading ? '正在读取覆盖与执行信号…' : `${stats.total} 个接口 · 点瓦片进线索板`"
+    >
+      <template #right>
+        <router-link class="goto-link" to="/services">← 服务清单</router-link>
+      </template>
+    </PageHead>
+
+    <div v-if="loading" class="slib-loading">加载中…</div>
 
     <div
       v-else-if="error"
-      class="mt-3.5 rounded-field border border-signal-line bg-signal-card p-4 text-sm text-muted-foreground"
+      class="svc-banner bad"
       data-testid="grid-error"
     >
       {{ error }}
@@ -19,99 +30,83 @@
       <!-- 降级横幅:瓦片清单来自 plate 轻量列表,不可达 ≠ 白屏(§2.4) -->
       <div
         v-if="!grid!.plateReachable"
-        class="mt-3.5 rounded-field border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+        class="svc-banner warn"
         data-testid="grid-plate-down"
       >
         Plate 目录不可达,接口清单暂不可用——覆盖 / 执行 / 告警信号仍按索引计算,恢复后刷新即可。
       </div>
 
       <!-- 统计条 + 筛选 chip(§2.1):点一下即筛 -->
-      <div class="mt-3.5 flex flex-wrap items-center gap-2" data-testid="grid-stats">
-        <span class="text-caption text-muted-foreground">
-          {{ grid!.stats.total }} 个接口 · {{ grid!.stats.noCases }} 个没有用例覆盖 ·
-          {{ grid!.stats.hasAlarm }} 个有未处理适配告警 · {{ grid!.stats.neverRun }} 个从未执行
-        </span>
-        <span class="mx-1 h-4 w-px bg-signal-line"></span>
+      <div class="svc-stats" data-testid="grid-stats">
+        <b>{{ stats.total }}</b> 个接口 ·
+        <b>{{ stats.noCases }}</b> 个没有用例覆盖 ·
+        <b>{{ stats.hasAlarm }}</b> 个有未处理适配告警 ·
+        <b>{{ stats.neverRun }}</b> 个从未执行
+        <span class="svc-stat-sep"></span>
         <button
           v-for="c in chips"
           :key="c.key"
           type="button"
           :data-testid="`grid-chip-${c.key}`"
-          class="rounded-full border px-2.5 py-0.5 text-caption font-medium transition-colors"
-          :class="filter === c.key
-            ? 'border-[#2F6FED] bg-[#E7EFFE] text-[#2F6FED]'
-            : 'border-signal-line bg-signal-card text-muted-foreground hover:text-foreground'"
+          class="svc-chip"
+          :class="{ on: filter === c.key }"
           @click="filter = c.key"
         >
           {{ c.label }}（{{ c.count }}）
         </button>
       </div>
 
-      <!-- 瓦片网格(§2.3):180px 底宽,有告警时边框转红 -->
+      <!-- 瓦片网格(§2.3):告警瓦片顶部色边转红 -->
       <div
         v-if="filtered.length > 0"
-        class="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]"
+        class="svc-tiles dense"
       >
         <button
           v-for="ep in filtered"
           :key="ep.id"
           type="button"
           :data-testid="`grid-tile-${ep.id}`"
-          class="group rounded-lg border bg-white p-3 text-left transition-shadow hover:shadow-sm"
-          :class="ep.signals.alarm ? 'border-[#F3CBCB]' : 'border-[#E1E5EB]'"
+          class="svc-tile"
+          :class="{ 'st-bad': ep.signals.alarm }"
           :title="`${ep.method} ${ep.path} — 点开线索板`"
           @click="openBoard(ep.id)"
         >
-          <div class="flex items-center gap-1.5">
-            <span
-              class="shrink-0 rounded px-1.5 py-px text-micro font-bold"
-              :style="methodStyle(ep.method)"
-            >{{ ep.method || '?' }}</span>
-            <span class="truncate text-small font-medium">{{ ep.name || ep.id }}</span>
+          <div class="svc-tile-top">
+            <span class="svc-method" :class="methodClass(ep.method)">{{ ep.method || '?' }}</span>
+            <span class="svc-tile-name">{{ ep.name || ep.id }}</span>
           </div>
-          <div class="mono mt-1 truncate text-micro text-muted-foreground">{{ ep.path }}</div>
-          <!-- 四格状态条:位置固定是关键(§2.3) -->
-          <div class="mt-2.5 flex gap-1" :data-testid="`grid-slots-${ep.id}`">
+          <div class="svc-tile-sub">{{ ep.path }}</div>
+          <!-- 四格状态条:槽位顺序固定是关键(§2.3) -->
+          <div class="svc-slots" :data-testid="`grid-slots-${ep.id}`">
+            <span class="na" title="需求关联:未接入(P2)"></span>
             <span
-              class="h-1.5 flex-1 rounded-sm bg-[repeating-linear-gradient(45deg,#E4E8EE_0_3px,#F3F5F8_3px_6px)]"
-              title="需求关联:未接入(P2)"
-            ></span>
-            <span
-              class="h-1.5 flex-1 rounded-sm"
-              :class="ep.signals.cases ? 'bg-[#15803D]' : 'bg-[#F0B429]'"
+              :class="ep.signals.cases ? 'ok' : 'warn'"
               :title="ep.signals.cases ? `有用例(${ep.caseCount} 个场景)` : '无用例'"
             ></span>
-            <span
-              class="h-1.5 flex-1 rounded-sm"
-              :class="ep.signals.lastRun === 'pass' ? 'bg-[#15803D]'
-                : ep.signals.lastRun === 'fail' ? 'bg-[#DC2626]' : 'bg-[#E4E8EE]'"
-              :title="lastRunTitle(ep)"
-            ></span>
-            <span
-              class="h-1.5 flex-1 rounded-sm"
-              :class="ep.signals.alarm ? 'bg-[#DC2626]' : 'bg-[#E4E8EE]'"
-              :title="ep.signals.alarm ? '有未处理适配告警' : '无未处理告警'"
-            ></span>
+            <span :class="lastRunClass(ep)" :title="lastRunTitle(ep)"></span>
+            <span :class="{ bad: ep.signals.alarm }" :title="ep.signals.alarm ? '有未处理适配告警' : '无未处理告警'"></span>
           </div>
         </button>
       </div>
 
       <div
         v-else-if="grid!.plateReachable"
-        class="mt-6 text-sm text-muted-foreground"
+        class="slib-empty"
         data-testid="grid-empty"
       >
-        {{ filter === 'all' ? '该服务下没有登记接口' : '当前筛选下没有接口' }}
+        <p>{{ filter === 'all' ? '该服务下没有登记接口' : '当前筛选下没有接口' }}</p>
+        <button v-if="filter !== 'all'" type="button" class="svc-chip" @click="filter = 'all'">看全部接口</button>
       </div>
     </template>
-  </ListPage>
+  </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import ListPage from '@/layouts/ListPage.vue'
+import PageHead from '@/components/scenario-lib/PageHead.vue'
 import { fetchGrid, type GridEndpoint, type ServiceGrid } from '@/api/service-profile'
+import { methodClass } from '@/utils/http-method'
 
 const route = useRoute()
 const router = useRouter()
@@ -124,15 +119,15 @@ const grid = ref<ServiceGrid | null>(null)
 type FilterKey = 'all' | 'noCases' | 'hasAlarm' | 'neverRun'
 const filter = ref<FilterKey>('all')
 
-const chips = computed(() => {
-  const s = grid.value?.stats
-  return [
-    { key: 'all' as FilterKey, label: '全部', count: s?.total ?? 0 },
-    { key: 'noCases' as FilterKey, label: '无用例覆盖', count: s?.noCases ?? 0 },
-    { key: 'hasAlarm' as FilterKey, label: '有告警', count: s?.hasAlarm ?? 0 },
-    { key: 'neverRun' as FilterKey, label: '从未执行', count: s?.neverRun ?? 0 },
-  ]
-})
+const EMPTY_STATS = { total: 0, noCases: 0, hasAlarm: 0, neverRun: 0 }
+const stats = computed(() => grid.value?.stats ?? EMPTY_STATS)
+
+const chips = computed(() => [
+  { key: 'all' as FilterKey, label: '全部', count: stats.value.total },
+  { key: 'noCases' as FilterKey, label: '无用例覆盖', count: stats.value.noCases },
+  { key: 'hasAlarm' as FilterKey, label: '有告警', count: stats.value.hasAlarm },
+  { key: 'neverRun' as FilterKey, label: '从未执行', count: stats.value.neverRun },
+])
 
 const filtered = computed<GridEndpoint[]>(() => {
   const eps = grid.value?.endpoints ?? []
@@ -144,17 +139,10 @@ const filtered = computed<GridEndpoint[]>(() => {
   }
 })
 
-/** HTTP 方法配色(方案「附」):文字色/底色成对 */
-const METHOD_STYLES: Record<string, { color: string; background: string }> = {
-  GET: { color: '#2F6FED', background: '#E7EFFE' },
-  POST: { color: '#15803D', background: '#E4F5EA' },
-  PUT: { color: '#B45309', background: '#FEF3E2' },
-  DELETE: { color: '#DC2626', background: '#FEE2E2' },
-}
-
-function methodStyle(method: string) {
-  const s = METHOD_STYLES[method.toUpperCase()]
-  return s ? { color: s.color, background: s.background } : { color: '#5B6472', background: '#F3F5F8' }
+function lastRunClass(ep: GridEndpoint): string {
+  if (ep.signals.lastRun === 'pass') return 'ok'
+  if (ep.signals.lastRun === 'fail') return 'bad'
+  return ''
 }
 
 function lastRunTitle(ep: GridEndpoint): string {
