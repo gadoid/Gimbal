@@ -35,6 +35,10 @@ describe('SchemeWorkbench 保存链路', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.spyOn(api, 'listRunSchemes').mockResolvedValue([SCHEME_DEFAULT, SCHEME_A])
+    // 装配公共体(useRunAssembly)4 路取数之一:场景 meta/stepCount(§1.5)
+    vi.spyOn(api, 'getScenario').mockResolvedValue({
+      meta: { scenarioId: 'sc-wb', name: 'WB' }, steps: [], stepCount: 1,
+    } as never)
     vi.spyOn(api, 'getScenarioDraft').mockResolvedValue({
       definition: { steps: [], config: { vars: {}, services: {} } },
       orchestration: { steps: [], resourceMeta: {} },

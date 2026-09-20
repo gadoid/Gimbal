@@ -64,22 +64,38 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
   it('admin 可见全部条目:工作台置顶 + 四组条目齐备', async () => {
     const w = await mountSidebar({ isAdmin: true })
     const links = w.findAll('a.nav-item')
-    // 常量池不占侧边栏坑位 → 11 条:工作台/我的/公共/关注/认证/传递/适配/画像/服务信息/执行/用户
-    expect(links.length).toBe(11)
+    // 常量池不占侧边栏坑位 → 13 条:工作台/我的/公共/关注/认证/传递/适配/
+    // 画像/服务信息/执行器/执行记录/数据分析/用户。字段来源分析(E2a 未建)
+    // 是 span 不是 a;数据分析延后但有自己的说明页,置灰可点(§4.4)
+    expect(links.length).toBe(13)
     const hrefs = links.map((l) => l.attributes('href'))
     expect(hrefs).toEqual([
       '/home', '/scenarios/mine', '/scenarios/public', '/scenarios/follows',
       // 服务组(配套方案 §4.1 顺序):画像/服务信息/认证/默认值/适配
       '/services', '/service-admin', '/auths', '/carry-config', '/adaptations',
-      '/executions', '/admin/users',
+      // 执行组(执行设计 §0):执行器/执行记录;数据分析置灰保留、可点进说明页
+      '/run', '/executions', '/analytics', '/admin/users',
     ])
     w.unmount()
   })
 
-  it('组标签为纯文本:场景/服务/执行中心/平台,不是可点页(F-sitemap)', async () => {
+  it('§4.4 两态:字段来源分析 = 置灰 span;数据分析 = 置灰 <a>(点进说明页)', async () => {
+    const w = await mountSidebar({ isAdmin: true })
+    const fieldTrace = w.findAll('.nav-item').find((n) => n.text().includes('字段来源分析'))
+    expect(fieldTrace).toBeTruthy()
+    expect(fieldTrace!.element.tagName).toBe('SPAN')
+    expect(fieldTrace!.classes()).toContain('opacity-[.42]')
+    const analytics = w.findAll('a.nav-item').find((n) => n.text().includes('数据分析'))
+    expect(analytics).toBeTruthy()
+    expect(analytics!.attributes('href')).toBe('/analytics')
+    expect(analytics!.classes()).toContain('opacity-[.42]')
+    w.unmount()
+  })
+
+  it('组标签为纯文本:场景/服务/执行/平台,不是可点页(F-sitemap + 执行设计 §0)', async () => {
     const w = await mountSidebar({ isAdmin: true })
     const labels = w.findAll('.group-label').map((l) => l.text())
-    expect(labels).toEqual(['场景', '服务', '执行中心', '平台'])
+    expect(labels).toEqual(['场景', '服务', '执行', '平台'])
     // 组标签不得是链接
     for (const label of w.findAll('.group-label')) {
       expect(label.element.tagName).toBe('SPAN')
@@ -111,13 +127,13 @@ describe('Sidebar — adminOnly 过滤(沿用 TopNav 语义)', () => {
     } as never)
   })
 
-  it('member 不见 用户管理/传递字段/服务信息管理,其余 8 条可见', async () => {
+  it('member 不见 用户管理/传递字段/服务信息管理,其余 10 条可见', async () => {
     const w = await mountSidebar({ isAdmin: false })
     const hrefs = w.findAll('a.nav-item').map((l) => l.attributes('href'))
     expect(hrefs).not.toContain('/admin/users')
     expect(hrefs).not.toContain('/carry-config')
     expect(hrefs).not.toContain('/service-admin')
-    expect(hrefs.length).toBe(8)
+    expect(hrefs.length).toBe(10)
     w.unmount()
   })
 })
@@ -200,7 +216,8 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.find('aside').classes()).toContain('w-[200px]')
     expect(w.text()).toContain('platform')
     expect(w.find('[data-testid="sb-collapse"]').exists()).toBe(true)
-    expect(w.findAll('.nav-text').length).toBe(11)
+    // 14 = 13 可点(含置灰可点的数据分析)+ 1 置灰 span(字段来源分析,§4.4)
+    expect(w.findAll('.nav-text').length).toBe(14)
     w.unmount()
   })
 
@@ -216,7 +233,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.findAll('.nav-text').length).toBe(0)
     // 二级按钮只留图标;悬浮 title = 功能名
     const rows = w.findAll('.row')
-    expect(rows.length).toBe(11)
+    expect(rows.length).toBe(14)   // 13 可点 + 1 置灰 span
     for (const row of rows) {
       expect(row.attributes('title')).toBeTruthy()
       expect(row.find('.nav-icon').exists()).toBe(true)
@@ -233,7 +250,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     const w = await mountSidebar({ isAdmin: true })
     await w.find('[data-testid="sb-collapse"]').trigger('click')
     const labels = w.findAll('.group-label').map((l) => l.text())
-    expect(labels).toEqual(['场景', '服务', '执行中心', '平台'])
+    expect(labels).toEqual(['场景', '服务', '执行', '平台'])
     w.unmount()
   })
 
@@ -241,7 +258,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     const w = await mountSidebar({ isAdmin: true })
     await w.find('[data-testid="sb-collapse"]').trigger('click')
     const links = w.findAll('a.nav-item')
-    expect(links.length).toBe(11)
+    expect(links.length).toBe(13)
     // 配套方案 §4.1 服务组排序:画像/服务信息在前,/auths 从索引 4 移到 6
     expect(links[4].attributes('href')).toBe('/services')
     expect(links[6].attributes('href')).toBe('/auths')

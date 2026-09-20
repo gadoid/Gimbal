@@ -45,12 +45,15 @@
     </div>
 
     <nav class="flex-1 overflow-y-auto" :class="collapsed ? 'px-1.5' : 'px-2'">
-      <router-link
+      <component
+        :is="entry.disabled ? 'span' : 'router-link'"
         v-for="entry in flatEntries"
         :key="entry.path"
-        :to="entry.path"
+        :to="entry.disabled ? undefined : entry.path"
         class="nav-item block rounded-md"
-        :class="{ active: isActive(entry.path) }"
+        :class="{ active: isActive(entry.path), 'opacity-[.42]': entry.disabled || entry.dimmed }"
+        :title="entry.disabled ? (entry.disabledTitle ?? entry.label)
+          : entry.dimmed ? (entry.dimmedTitle ?? entry.label) : undefined"
       >
         <!-- 一级层次(组标签)两态都保留:折叠 = 居中小字(仅一级可见) -->
         <span
@@ -67,7 +70,9 @@
             collapsed ? 'justify-center px-0' : 'px-2',
             isActive(entry.path)
               ? 'bg-white/10 font-semibold text-white'
-              : 'text-slate-300 hover:bg-white/5 hover:text-white',
+              : entry.disabled
+                ? 'cursor-default text-slate-300'
+                : 'text-slate-300 hover:bg-white/5 hover:text-white',
           ]"
           :title="collapsed ? entry.label : undefined"
           :aria-label="collapsed ? entry.label : undefined"
@@ -85,7 +90,7 @@
             :title="`${adaptations.pendingCount} 条适配待处理`"
           ></span>
         </span>
-      </router-link>
+      </component>
     </nav>
 
     <div
@@ -104,6 +109,7 @@ import { useRoute } from 'vue-router'
 import {
   ActivityLogIcon,
   ArchiveIcon,
+  BarChartIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CounterClockwiseClockIcon,
@@ -113,7 +119,9 @@ import {
   HomeIcon,
   LayersIcon,
   LockClosedIcon,
+  MagnifyingGlassIcon,
   MixerHorizontalIcon,
+  PlayIcon,
   StarIcon,
 } from '@radix-icons/vue'
 import { useAuthStore } from '@/stores/auth'
@@ -143,6 +151,13 @@ interface SidebarEntry {
   icon: Component
   /** Render only for admins (route guard would bounce members anyway). */
   adminOnly?: boolean
+  /** 未落地入口:置灰且不可点(字段来源分析 — E2 未建,无页面可落)。 */
+  disabled?: boolean
+  disabledTitle?: string
+  /** 延后但有自己的说明页(§4.4):置灰保留、可点进去撞上那条说明;
+   *  它自己这一页正常高亮 + 延后小标。 */
+  dimmed?: boolean
+  dimmedTitle?: string
 }
 
 interface SidebarGroup {
@@ -175,7 +190,15 @@ const groups: SidebarGroup[] = [
       { path: '/adaptations', label: '适配中心', icon: ActivityLogIcon },
     ],
   },
-  { label: '执行中心', entries: [{ path: '/executions', label: '执行历史', icon: CounterClockwiseClockIcon }] },
+  // 执行组(执行设计 §0):执行器(/run)/ 执行记录;字段来源分析(E2a)
+  // 置灰不可点;数据分析(延后)置灰但可点 — §4.4:延后的东西藏起来会被
+  // 遗忘,留灰入口,点进去撞上那条说明;opacity .42,不加角标。
+  { label: '执行', entries: [
+    { path: '/run', label: '执行器', icon: PlayIcon },
+    { path: '/field-trace', label: '字段来源分析', icon: MagnifyingGlassIcon, disabled: true, disabledTitle: '字段来源分析 — 待 E2a 落地(预测模式无前置,事实模式等执行时快照)' },
+    { path: '/executions', label: '执行记录', icon: CounterClockwiseClockIcon },
+    { path: '/analytics', label: '数据分析', icon: BarChartIcon, dimmed: true, dimmedTitle: '数据分析已延后 — 解锁前置:行级/步骤级结果落库。点进去看说明' },
+  ] },
   { label: '平台', entries: [{ path: '/admin/users', label: '用户管理', icon: GearIcon, adminOnly: true }] },
 ]
 

@@ -79,6 +79,8 @@ const fakeDetail = {
   started_at: null,
   finished_at: null,
   has_scenario_snapshot: true,
+  batch_id: null,
+  consecutive_failures: 0,
   config: {
     runId: 'run-42',
     scenarioId: 'sc_demo',

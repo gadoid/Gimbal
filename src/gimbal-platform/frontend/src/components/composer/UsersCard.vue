@@ -20,7 +20,7 @@
     <div v-if="!rows.length" class="c-empty">
       <p>还没有用户认证 — 手动添加或从凭证池导入</p>
     </div>
-    <table v-else class="users-table">
+    <table v-else class="users-table slib-table">
       <thead><tr><th>alias</th><th>url</th><th>username</th><th>password</th><th>token_type</th><th>expires_in</th><th></th></tr></thead>
       <tbody>
         <tr v-for="row in rows" :key="row.alias">
@@ -421,8 +421,8 @@ async function submitImport() {
 }
 .users-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .users-table th {
-  text-align: left; padding: 5px 8px; font-size: 10.5px; font-weight: 600;
-  color: #64748b; background: #f8fafc; border-bottom: 1px solid #e1e5eb;
+  /* 形制走 .slib-table thead th;这里只压密度 */
+  padding: 5px 8px;
 }
 .users-table td { padding: 6px 8px; border-bottom: 0.5px solid #f1f5f9; }
 .cell-url { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

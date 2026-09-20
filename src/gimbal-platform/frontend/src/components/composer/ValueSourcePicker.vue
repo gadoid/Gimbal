@@ -78,7 +78,7 @@
           </p>
           <div v-if="loading && !rows.length" class="vsp-empty">加载中…</div>
           <div v-else-if="!rows.length" class="vsp-empty">行集为空</div>
-          <table v-else class="vsp-table">
+          <table v-else class="vsp-table slib-table">
             <thead>
               <tr>
                 <th v-for="c in displayColumns" :key="c">{{ c }}</th>
@@ -308,16 +308,11 @@ const filtered = computed(() => {
   font-size: 12px;
 }
 .vsp-table th {
+  /* 形制走 .slib-table thead th;表体可滚,所以列头要粘住 */
   position: sticky;
   top: 0;
-  text-align: left;
   padding: 6px 10px;
-  background: var(--c-bg-secondary);
-  border-bottom: 1px solid var(--c-border);
   font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--c-text-secondary);
-  white-space: nowrap;
 }
 .vsp-table td {
   padding: 6px 10px;

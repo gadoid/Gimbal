@@ -1,5 +1,6 @@
 /**
- * CaseComposer — RunDialog v2 对接(方案工作台阶段③):
+ * CaseComposer — RunDialog v2 对接(方案工作台阶段③;执行设计 §1.5 后
+ * 装配派生读 useRunAssembly 的服务端 draft 快照,测试同步 mock 4 路取数):
  * - 打开/关闭/confirm 主链路:schemes 直连 listRunSchemes(V2,default 置顶),
  *   lastRunOverlay/preset/契约 props 退役(整块删除);confirm 溯源带
  *   schemeId/schemeName(Task 1);
@@ -128,6 +129,19 @@ beforeEach(() => {
   vi.spyOn(api, 'listRunSchemes').mockResolvedValue([DEFAULT_SCHEME, SCHEME_B])
   vi.spyOn(api, 'createRunScheme').mockResolvedValue(
     { ...SCHEME_B, schemeId: 'rs-new', name: '回归集' } as any)
+  // 装配公共体(useRunAssembly)开窗 4 路取数之一:draft 承载 serviceRows
+  // / authOptions 派生(执行设计 §1.5 收编后,派生读服务端 draft 快照,
+  // 不再读本页 definition)— 与 sampleScenario 同构:steps 引用
+  // fin-service 且 config 未声明,期望并集行 declaredUrl=null。
+  vi.spyOn(api, 'getScenarioDraft').mockResolvedValue({
+    definition: {
+      kind: 'scenario', scenarioId: 'sc-demo',
+      config: { services: {}, users: {} },
+      steps: [{ api: { service: 'fin-service' } }],
+    },
+    orchestration: { steps: [], resourceMeta: {} },
+    assertion_registry: { entries: [] },
+  } as any)
 })
 
 describe('CaseComposer — RunDialog v2 对接(阶段③)', () => {

@@ -42,6 +42,10 @@ describe('SchemeWorkbench 左栏操作 + 运行配置区', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.spyOn(api, 'listRunSchemes').mockResolvedValue([SCHEME_DEFAULT, SCHEME_A])
+    // 装配公共体(useRunAssembly)4 路取数之一:场景 meta/stepCount(§1.5)
+    vi.spyOn(api, 'getScenario').mockResolvedValue({
+      meta: { scenarioId: 'sc-wb', name: 'WB' }, steps: [], stepCount: 1,
+    } as never)
     vi.spyOn(api, 'getScenarioDraft').mockResolvedValue({
       definition: {
         steps: [{ api: { service: 'svc-ref' } }],   // 引用行(未声明)

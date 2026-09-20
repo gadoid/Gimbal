@@ -18,6 +18,8 @@ const POLL_INTERVAL_MS = 1000
 
 export const useExecutionsStore = defineStore('executions', () => {
   const list = ref<Execution[]>([])
+  /** 筛选后的总数(执行记录页筛选行显示;fetchList 不筛时 = list.length 对应总数) */
+  const total = ref(0)
   const detail = ref<Execution | null>(null)
   const loading = ref(false)
   const lastError = ref('')
@@ -102,6 +104,7 @@ export const useExecutionsStore = defineStore('executions', () => {
     try {
       const r = await api.listExecutions()
       list.value = r.items
+      total.value = r.total
       lastError.value = ''
       return r.items
     } catch (e) {
@@ -228,6 +231,7 @@ export const useExecutionsStore = defineStore('executions', () => {
 
   return {
     list,
+    total,
     detail,
     loading,
     lastError,

@@ -16,6 +16,10 @@ export interface Execution {
   finished_at: string | null
   /** 执行时场景快照是否存在(存量行 false → 详情页"导出场景"置灰)。 */
   has_scenario_snapshot: boolean
+  /** 批次键(执行设计 §1.2):队列逐条发起的 N 条共用;单条发起/历史行 null。 */
+  batch_id: string | null
+  /** 连续第 N 次失败(§3.2 信号列;仅 failed 行非 0)— 同 scenario 连续失败链长。 */
+  consecutive_failures: number
   config: {
     // V3 dispatcher 写入的配方键(run_dispatcher._create_execution,
     // 与 RunRequest 创建入参一一对应;camelCase)。
@@ -36,6 +40,10 @@ export interface Execution {
     schemeId?: string | null
     schemeName?: string | null
     // 系统标记(后端按需写入;详情页转告警条,不进配方 dl)
+    /** 认证快速失败标记(§3.2 信号):dispatch 侧凭证解析 fail-fast 写入 */
+    authFailFast?: { error: string }
+    /** 批次键(与 Execution.batch_id 同值;rerun 重建配方时读) */
+    batchId?: string | null
     /** 启动期 reconcile 收敛记录(P3:进程重启僵尸单) */
     reconciled?: { at: string; reason: string }
     /** 计数器漂移:passed+failed ≠ total_runs(P8 校账,真值以 JSONL 为准) */
@@ -57,12 +65,58 @@ export interface ExecutionRow {
   finishedAt: string | null
 }
 
-export function listExecutions(params?: { scenarioId?: string; limit?: number }) {
-  // 后端 Query 形参是 snake_case scenario_id — 出参侧保持 camelCase。
+export function listExecutions(params?: {
+  scenarioId?: string
+  limit?: number
+  offset?: number
+  /** 状态筛(执行设计 §3.4);后端校验非法值 422 */
+  status?: ExecutionStatus
+  /** 批次筛(队列归并视图) */
+  batchId?: string
+  /** 发起时间范围 ISO(锚 created_at;queued 单 started_at 可空不作锚) */
+  createdFrom?: string
+  createdTo?: string
+}) {
+  // 后端 Query 形参是 snake_case — 出参侧保持 snake_case(既有约定)。
   return http
     .get<{ items: Execution[]; total: number }>('/executions', {
-      params: { scenario_id: params?.scenarioId, limit: params?.limit },
+      params: {
+        scenario_id: params?.scenarioId,
+        limit: params?.limit,
+        offset: params?.offset,
+        status: params?.status,
+        batch_id: params?.batchId,
+        created_from: params?.createdFrom,
+        created_to: params?.createdTo,
+      },
     })
+    .then((r) => r.data)
+}
+
+/** 顶部 KPI 带(执行设计 §3.5):Execution 计数器/时间戳就能算的量。
+ *  口径 = 查询者自己的执行(owner 隔离);行级分布不落库,不在响应里。 */
+export interface ExecutionsSummary {
+  windowDays: number
+  totalExecutions: number
+  totalRuns: number
+  passedRuns: number
+  failedRuns: number
+  passRate: number | null
+  avgDurationSec: number | null
+  repeatFailureScenarios: number
+  activeExecutions: number
+}
+
+export function getExecutionsSummary(windowDays = 7): Promise<ExecutionsSummary> {
+  return http
+    .get<ExecutionsSummary>('/executions/summary', { params: { window_days: windowDays } })
+    .then((r) => r.data)
+}
+
+/** 同配置重跑(§3.4):按 config_json 重建配方,新的一次独立发起(不带原批)。 */
+export function rerunExecution(id: number): Promise<{ runId: string; executionId: number }> {
+  return http
+    .post<{ runId: string; executionId: number }>(`/executions/${id}/rerun`)
     .then((r) => r.data)
 }
 

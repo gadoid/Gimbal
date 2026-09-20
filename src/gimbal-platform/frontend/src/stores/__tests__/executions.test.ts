@@ -20,6 +20,8 @@ function makeExec(id: number, status: api.ExecutionStatus): api.Execution {
     finished_at: null,
     config: {},
     has_scenario_snapshot: false,
+    batch_id: null,
+    consecutive_failures: 0,
   }
 }
 

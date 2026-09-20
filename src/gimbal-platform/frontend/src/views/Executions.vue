@@ -114,7 +114,7 @@
       <p v-else-if="rows.length === 0" class="rows-empty">
         无行级数据 — 预部署/认证快速失败等未分发行的单不产生行级记录
       </p>
-      <table v-else class="ex-table">
+      <table v-else class="ex-table slib-table">
         <thead>
           <tr>
             <th>#</th>
@@ -615,13 +615,8 @@ onUnmounted(() => {
 }
 
 .ex-table th {
+  /* 形制走 .slib-table thead th;这里只压密度 */
   padding: 8px 10px;
-  color: var(--color-text-secondary);
-  font-weight: 600;
-  text-align: left;
-  background: #f8fafc;
-  border-bottom: 0.5px solid #e2e8f0;
-  white-space: nowrap;
 }
 
 .ex-table td {

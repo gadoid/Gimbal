@@ -197,7 +197,7 @@
 
           <!-- 字段表 (请求 + 响应) -->
           <div class="tabs">
-            <table v-if="requestFields.length" class="cat-table">
+            <table v-if="requestFields.length" class="cat-table slib-table">
               <thead><tr><th>请求字段 · {{ requestFields.length }}</th><th>path</th><th>required</th><th>ui</th><th>description</th><th>example</th></tr></thead>
               <tbody>
                 <tr v-for="row in requestFields" :key="row.path">
@@ -210,7 +210,7 @@
                 </tr>
               </tbody>
             </table>
-            <table v-if="primaryResponseFields.length" class="cat-table">
+            <table v-if="primaryResponseFields.length" class="cat-table slib-table">
               <thead><tr><th>响应字段 · {{ primaryResponseFields.length }}</th><th>path</th><th>description</th><th>assertable</th></tr></thead>
               <tbody>
                 <tr v-for="row in primaryResponseFields" :key="row.path">
@@ -639,8 +639,8 @@ onMounted(refetch)
   margin-bottom: 10px;
 }
 .cat-table th {
-  text-align: left; padding: 5px 8px; font-size: 10.5px; font-weight: 600;
-  color: #64748b; background: #f8fafc; border-bottom: 1px solid #e1e5eb;
+  /* 形制走 .slib-table thead th;这里只压密度 */
+  padding: 5px 8px;
 }
 .cat-table td { padding: 5px 8px; border-bottom: 0.5px solid #f1f5f9; }
 @keyframes spin { to { transform: rotate(360deg); } }

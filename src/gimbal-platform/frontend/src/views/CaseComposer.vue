@@ -241,8 +241,8 @@
       :step-orchestration-names="stepNames"
       :schemes="runSchemes"
       :initial-scheme-id="initialSchemeId"
-      :service-rows="serviceRows"
-      :auth-options="authOptions"
+      :service-rows="runServiceRows"
+      :auth-options="runAuthOptions"
       :assertion-entries="registry.entries"
       :dead-entry-ids="deadEntryIds"
       @close="closeRunDialog"
@@ -278,9 +278,8 @@ import { seedScenarioName } from '@/composables/useScenarioName'
 import { confirmAction } from '@/utils/confirmAction'
 import { lintDraft } from '@/utils/draft-lint'
 import * as api from '@/api/scenario-composer'
-import { list as listAuthSessions } from '@/api/auth_sessions'
 import type {
-  RunRequest, SchemeV2, ServiceBinding, DataSetSelection,
+  DataSetSelection, SchemeV2, ServiceBinding,
 } from '@/api/scenario-composer'
 import type {
   Scenario, DataSetSummary, Orchestration, ScenarioDraft,
@@ -288,6 +287,7 @@ import type {
 import type { AssertionRegistry, RegistryMark } from '@/types/assertion-registry'
 import { genEntryId, normalizeRegistry } from '@/utils/assertion-registry'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
+import { useRunAssembly } from '@/composables/useRunAssembly'
 import type { ScenarioView, StepView } from '@/types/plate'
 
 const STEPS = [
@@ -408,17 +408,29 @@ function closeRunDialog() {
 const runDispatching = ref(false)
 const lastRunId = ref<string | null>(null)
 const lastRunError = ref<string | null>(null)
-// owner 凭证池别名(懒加载:首次打开运行弹框时拉取;失败静默 — 不阻塞运行)
-const ownerAuthAliases = ref<string[]>([])
 
 const canRun = computed(() => !!scenario.value && steps.value.length > 0)
 
 /** stepTo 下拉的展示名:平台编排态 orchestration.steps[].name(plate Step 无 name) */
 const stepNames = computed(() => orchestration.value.steps.map((s) => s.name))
 
+/** 执行装配公共体(执行设计 §1.5):schemes / serviceRows / authOptions 派生
+ *  与 dispatch/另存动作的唯一来源 — 本页不再持有副本。取数在开窗时统一
+ *  触发(load 内部含契约面 ensure 的消费面);页面级 dataSets/scenario 仍是
+ *  编排编辑态,弹层展示与判定用装配体自己拉的服务端快照。 */
+const {
+  schemes: runSchemes,
+  serviceRows: runServiceRows,
+  authOptions: runAuthOptions,
+  load: loadRunAssembly,
+  dispatch: dispatchRunAssembly,
+  saveAsScheme: saveAsSchemeViaAssembly,
+} = useRunAssembly(scenarioId)
+
 /** 打开运行弹框:dirty 时先 flush 落库(运行按 scenarioId 取服务端版本,
  *  不 flush 则跑的是最后一次保存的旧编排);flush 失败中止 — 宁可不跑,
- *  不跑旧版。弹窗打开由 watch(runDialogOpen) 统一拉方案列表(含深链入口)。 */
+ *  不跑旧版。装配取数(方案/绑定行/凭证池)由 watch(runDialogOpen) 统一
+ *  触发(含深链入口)。 */
 async function openRunDialog() {
   if (!scenarioId.value) return
   if (scenario.value && dirty.value && meta.value.name) {
@@ -426,11 +438,6 @@ async function openRunDialog() {
     if (!flushed) return
   }
   runDialogOpen.value = true
-  if (ownerAuthAliases.value.length === 0) {
-    listAuthSessions()
-      .then((sessions) => { ownerAuthAliases.value = sessions.map((s) => s.alias) })
-      .catch(() => { /* 凭证池不可达不阻塞运行 */ })
-  }
 }
 
 // 步骤条进度 (0% → 100%) — 当前 step 之前的部分用绿色,之后用灰色
@@ -473,40 +480,10 @@ watch(
   { deep: true, immediate: true },
 )
 
-// ── RunDialog props 装配(阶段③:方案直连新 CRUD)────────────────────
-/** 运行方案(阶段② CRUD wire,default 置顶由后端保证):不再经 draft 侧
- *  orchestration.runSchemes 读 — 弹窗每次打开(含深链)重取,另存为方案
- *  成功后整表替换(新数组引用 → RunDialog 绑定 watch 重置默认态绑定 =
- *  已知 deferred 行为,接受)。 */
-const runSchemes = ref<SchemeV2[]>([])
-async function refreshRunSchemes() {
-  const sid = scenarioId.value
-  if (!sid || sid === 'new') return
-  try {
-    runSchemes.value = await api.listRunSchemes(sid)
-  } catch (e) {
-    showError('加载运行方案', undefined, (e as Error).message)
-  }
-}
-// 开窗统一触发取数(手动「运行」/深链/配置签入口共用一个落点)
-watch(runDialogOpen, (open) => { if (open) void refreshRunSchemes() })
-/** 绑定行 = 声明 ∪ 引用并集(spec D3):声明行带 declaredUrl,
- *  引用未声明的键 declaredUrl=null(RunDialog 标红可救燃)。
- *  声明源 = definition.config.services(service → URL);引用源 = steps[].api.service。 */
-const serviceRows = computed(() => {
-  const declared = definition.value.config?.services ?? {}
-  const rows = new Map<string, string | null>()
-  for (const [k, v] of Object.entries(declared))
-    rows.set(k, typeof v === 'string' ? v : null)
-  for (const st of (definition.value.steps ?? []) as { api?: { service?: string } }[])
-    if (st?.api?.service && !rows.has(st.api.service)) rows.set(st.api.service, null)
-  return [...rows].map(([service, declaredUrl]) => ({ service, declaredUrl }))
-})
-/** 绑定下拉选项:owner 凭证池别名 ∪ 场景内置 users 键 */
-const authOptions = computed(() => [...new Set([
-  ...ownerAuthAliases.value,
-  ...Object.keys(definition.value.config?.users ?? {}),
-])])
+// ── RunDialog props 装配(执行设计 §1.5:公共体收编,本页无副本)──────
+// 开窗统一触发装配取数(手动「运行」/深链/配置签入口共用一个落点);
+// 派生(serviceRows / authOptions)与方案表都来自 useRunAssembly。
+watch(runDialogOpen, (open) => { if (open) void loadRunAssembly() })
 
 /** 判定面(spec 架构收敛 §2.1):可注入面 / 悬空判定 / 死因分组 / 契约在途
  *  信号唯一来源 = useInjectableSurface;本页只消费(与 RunPanelHost 同源)。 */
@@ -1078,27 +1055,10 @@ async function onRunConfirm(
   runDispatching.value = true
   lastRunError.value = null
   try {
-    // RunRequest 新配方(spec §6,D2 后无 env):serviceBindings 取代
-    // auths/prefix/mergePolicy/injectCredentials;stepTo 0 合法(首步后停),
-    // 只在 null/undefined 时缺省;nRuns/parallel 仅非默认上送;溯源两键
-    // (阶段③,Task 1)恒带 — 默认/自建方案都带真实 schemeId。
-    const body: RunRequest = {
-      scenarioId: scenario.value.meta.scenarioId,
-      schemeId: opts.schemeId,
-      schemeName: opts.schemeName,
-      dataSetIds: dataSetSelection.map((s) => s.datasetId),
-      ...(dataSetSelection.length ? { dataSetSelection } : {}),
-      ...(opts.stepTo != null ? { stepTo: opts.stepTo } : {}),
-      ...(opts.nRuns && opts.nRuns !== 1 ? { nRuns: opts.nRuns } : {}),
-      ...(opts.parallel && opts.parallel !== 1 ? { parallel: opts.parallel } : {}),
-      ...(opts.serviceBindings && Object.keys(opts.serviceBindings).length
-        ? { serviceBindings: opts.serviceBindings } : {}),
-      // 断言注入条目(spec v2 §5 异常组):空选不随 body 上送;键已建模
-      // (RunRequest.injection_entry_ids)且 dispatcher 消费生成注入族。
-      ...(opts.injectionEntryIds?.length
-        ? { injectionEntryIds: opts.injectionEntryIds } : {}),
-    }
-    const resp = await api.runScenario(body)
+    // RunRequest 装配收编在 useRunAssembly.dispatch(spec §6 配方键);
+    // 本页只保留 composer 专属的后半段:toast + 关窗 + 800ms 导航延时
+    // (runDispatching 保持 true 防确认键在窗口内双发)。
+    const resp = await dispatchRunAssembly(dataSetSelection, opts)
     lastRunId.value = resp.runId
     toast.success(`运行已发起: ${resp.runId}`)
     // 同走 closeRunDialog(而非只置 runDialogOpen):关窗同时清深链预选
@@ -1122,21 +1082,19 @@ async function onRunConfirm(
   }
 }
 
-/** 另存为方案(仅默认方案态,阶段③):POST createRunScheme(重名 409)
- *  → 成功后重取 listRunSchemes 整表替换 runSchemes(RunDialog schemes prop
- *  数据源;新数组引用 → 其绑定 watch 重置默认态绑定 = 已知 deferred 行为,
- *  接受)。失败弹错不关弹窗(409 重名等用户改名即可重试)。 */
+/** 另存为方案(仅默认方案态):装配体 POST createRunScheme(重名 409)
+ *  → 重取整表替换 runSchemes(新数组引用 → 面板绑定 watch 重置默认态
+ *  绑定 = 已知 deferred 行为,接受)。失败弹错不关弹窗(409 重名等
+ *  用户改名即可重试)。 */
 async function onSaveAsScheme(body: Omit<SchemeV2, 'schemeId' | 'isDefault'>) {
-  // 新建场景首次保存后路由仍停留 /scenarios/new — 路由参数不可作场景 id
+  // 新建场景首次保存后路由仍停留 /composer/new — 路由参数不可作场景 id
   // (POST /api/scenarios/new/run-schemes 会 404);用持久化 scenario 的真实 id。
-  const id = scenario.value?.meta.scenarioId
-  if (!id) {
+  if (!scenario.value) {
     toast.warning('场景尚未保存 — 请先保存场景,再另存为方案')
     return
   }
   try {
-    await api.createRunScheme(id, body)
-    runSchemes.value = await api.listRunSchemes(id)
+    await saveAsSchemeViaAssembly(body)
     toast.success(`方案「${body.name}」已另存`)
   } catch (e) {
     showError('另存为方案', undefined, (e as Error).message)

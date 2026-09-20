@@ -161,6 +161,9 @@ export interface RunRequest {
   nRuns?: number
   /** M1 执行能力:fan-out 并发度(1–200) */
   parallel?: number
+  /** 批次键(执行设计 §1.2):执行器队列逐条顺序发起时共用;纯归并键,
+   *  不参与分发语义 — 每条仍是独立 execution。单条发起不传。 */
+  batchId?: string
 }
 
 export interface RunScenarioResult {
@@ -317,6 +320,37 @@ export async function validateEndpointFieldStates(
 //
 // 策略语法(M6 第 8 dim)的引用数据:哪些 kind、每个 kind 哪些字段。
 // 只用于"添加策略"的结构渲染,不进 draft —— 策略实例是 StepView.strategy。
+
+// ── 执行器预检(执行设计 §1.6)────────────────────────────────
+/** 「这条用例 × 这个方案」预检入参 */
+export interface PrecheckItem {
+  scenarioId: string
+  schemeId: string
+}
+
+/** 单条预检结论 — 全部是「这条方案配置」的事实,不是用例状态(§1.4) */
+export interface PrecheckResult {
+  scenarioId: string
+  schemeId: string
+  /** false = 场景不可读/不存在(不泄露存在性);此时其余字段无意义 */
+  found: boolean
+  /** 方案本体存在(被删 → 不可跑,去工作台重建) */
+  schemeFound: boolean
+  /** 「这个方案跑不了,换一个方案就能跑」— 不是用例禁跑 */
+  schemeValid: boolean
+  /** 方案引用但已删的数据集 */
+  deadDatasetIds: string[]
+  /** dispatch 侧同口径判死的注入条目 id(执行时会被跳过) */
+  danglingEntryIds: string[]
+  /** steps 引用了、但声明 URL 与绑定 URL 双缺的 service */
+  unboundServices: string[]
+}
+
+/** 批量预检:队列 N 条一次发回判定面(失效判定的服务端唯一实现,§1.6) */
+export async function precheckRun(items: PrecheckItem[]): Promise<PrecheckResult[]> {
+  const { data } = await http.post<PrecheckResult[]>('/run/precheck', items)
+  return data
+}
 
 export async function listStrategyKinds(): Promise<StrategyKindView[]> {
   const { data } = await http.get<StrategyKindView[]>('/strategy-catalog')
