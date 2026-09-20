@@ -52,6 +52,17 @@ def scan_actions(app_root: Path) -> list[ActionIR]:
                     continue
                 act = _bind(load(ctl_file), child, module, controller, mname)
                 out.append(act)
+    # 同名控制器跨模块(PolicyController@Customer/Home)→ id 加模块前缀,
+    # 否则 fin.policy.policy_add 两端点撞 id(路径仍不同,撞的是 id/文件常量)。
+    # 整控制器 scoped(不按 action 对):同一控制器混两种 id 前缀更难追踪。
+    from collections import Counter
+    ctrl_mods: dict[str, set[str]] = {}
+    for a in out:
+        ctrl_mods.setdefault(a.controller, set()).add(a.module)
+    clash = {c for c, mods in ctrl_mods.items() if len(mods) > 1}
+    for a in out:
+        if a.controller in clash:
+            a.module_scoped = True
     return out
 
 

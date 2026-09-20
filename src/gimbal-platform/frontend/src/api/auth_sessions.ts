@@ -11,6 +11,30 @@ export interface AuthSession {
   created_at: string
   updated_at: string
   password_masked: string
+  /** 反查双计数(配套方案 §1.2):N 别名 / N 场景(模板∪方案绑定,快照不计)。 */
+  alias_ref_count?: number
+  scenario_ref_count?: number
+}
+
+/** 反查面板(配套方案 §1.3):四类引用,读时实时扫。 */
+export interface AliasRefItem {
+  alias_name: string
+  base_service: string
+  group_tag: string | null
+}
+
+/** kinds ⊆ {template, scheme, snapshot}(snake 契约对齐后端 auth schema)。 */
+export interface ScenarioRefItem {
+  scenario_id: string
+  name: string
+  kinds: string[]
+  /** 与 DELETE 409 同口径的拦截预告:本人场景的 template/scheme 才阻断。 */
+  owner_id: number
+}
+
+export interface AuthReferences {
+  alias_refs: AliasRefItem[]
+  scenario_refs: { visible: ScenarioRefItem[]; hidden_count: number }
 }
 
 export interface AuthSessionCreateIn {
@@ -50,6 +74,12 @@ export function patch(id: number, payload: AuthSessionPatchIn) {
 
 export function remove(id: number) {
   return http.delete(`/auths/${id}`).then(() => undefined)
+}
+
+/** 反查面板数据:谁在用这个凭证名(别名绑定 + 场景引用,可见性过滤在后端)。 */
+export function getReferences(alias: string) {
+  return http.get<AuthReferences>(
+    `/auths/${encodeURIComponent(alias)}/references`).then((r) => r.data)
 }
 
 export function testConnection(id: number) {

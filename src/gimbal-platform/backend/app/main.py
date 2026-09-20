@@ -29,6 +29,8 @@ from .routers import (
     runs,
     run_schemes,
     scenarios,
+    service_aliases,
+    service_profile,
     strategy_catalog,
     users,
 )
@@ -133,6 +135,12 @@ def create_app() -> FastAPI:
     # 序(scenarios prefix 是 /scenarios,与 /query-views 无实际路由
     # 冲突)。
     app.include_router(query_views.router, prefix="/api")
+    # 服务画像 P1(热力网格 + 线索板 + 自建卡):纯读派生层 + 作者权限的卡片写面
+    app.include_router(service_profile.router, prefix="/api")
+    app.include_router(service_profile.board_router, prefix="/api")
+    app.include_router(service_profile.cards_router, prefix="/api")
+    # 服务别名基础层(§4.1):读全员 / 写 admin;读侧挂 carry/凭证两条解析链
+    app.include_router(service_aliases.router, prefix="/api")
     # run-schemes CRUD lives on scenario-nested paths; register BEFORE
     # scenarios' /{scenario_id} catch-all.
     app.include_router(run_schemes.router, prefix="/api")

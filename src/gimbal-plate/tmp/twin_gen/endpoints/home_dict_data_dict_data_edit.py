@@ -1,7 +1,8 @@
 """fin.dict_data.dict_data_edit —— 孪生生成器产物(请求面;行为面归场景用例)。
 
-来源: 代码生成 | 基线: fin-test@2026-09-15 | 生成时间: 2026-09-15T11:13:18+00:00
-needs_capture(首跑经 gimbal 执行回填): (无)
+来源: 代码生成 | 基线: fin-test@2026-09-15 | 生成时间: 2026-09-20T04:38:13+00:00
+needs_capture(首跑经 gimbal 执行回填): status
+溯源统计: column=12, frontend=3, 无zh=2 | fe_high=4, enum=0
 """
 from typing import Final
 
@@ -41,22 +42,44 @@ DICT_DATA_DICT_DATA_EDIT: Final[EndpointSpec] = EndpointSpec(
     request=RequestSpec(
         body_type='json',
         declarations=[
-            DeclarationEntry(name='dict_label', path=f'$.dict_label', type='string', state='form', required=True, description='字典标签'),
-            DeclarationEntry(name='dict_type', path=f'$.dict_type', type='string', state='form', required=True, description='字典类型'),
-            DeclarationEntry(name='dict_value', path=f'$.dict_value', type='string', state='form', required=True, description='字典键值'),
-            DeclarationEntry(name='dict_sort', path=f'$.dict_sort', type='integer', state='form', required=True, default='0', description='字典排序'),
-            DeclarationEntry(name='remark', path=f'$.remark', type='string', state='form', description='备注'),
-            DeclarationEntry(name='operator', path=f'$.operator', type='string', state='form'),
-            DeclarationEntry(name='dict_code', path=f'$.dict_code', type='integer', state='form', description='字典编码'),
-            DeclarationEntry(name='parent_id', path=f'$.parent_id', type='integer', state='form', default='0', description='父菜单ID'),
-            DeclarationEntry(name='css_class', path=f'$.css_class', type='string', state='form', description='样式属性（其他样式扩展）'),
-            DeclarationEntry(name='list_class', path=f'$.list_class', type='string', state='form', default='default', description='表格回显样式'),
-            DeclarationEntry(name='status', path=f'$.status', type='integer', state='form', default='0', description='状态 1未通知 2已通知'),
+            DeclarationEntry(name='dict_label', path=f'$.dict_label', type='string', state='form', ui_kind='text', description='字典标签'),
+            DeclarationEntry(name='dict_type', path=f'$.dict_type', type='string', state='form', ui_kind='select', description='字典名称'),
+            DeclarationEntry(name='dict_value', path=f'$.dict_value', type='string', state='form', ui_kind='text', description='字典键值'),
+            DeclarationEntry(name='dict_sort', path=f'$.dict_sort', type='integer', state='form', ui_kind='number', default='0', description='字典排序'),
+            DeclarationEntry(name='remark', path=f'$.remark', type='string', state='form', ui_kind='text', description='备注'),
+            DeclarationEntry(name='dict_code', path=f'$.dict_code', type='integer', state='form', ui_kind='number', description='字典编码'),
+            DeclarationEntry(name='status', path=f'$.status', type='integer', state='form', ui_kind='select', default='0', description='状态'),  # zh_ambiguous
+            DeclarationEntry(name='operator', path=f'$.operator', type='string', state='form', ui_kind='text'),
+            DeclarationEntry(name='parent_id', path=f'$.parent_id', type='integer', state='form', ui_kind='number', default='0', description='父菜单ID'),
+            DeclarationEntry(name='css_class', path=f'$.css_class', type='string', state='form', ui_kind='text', description='样式属性（其他样式扩展）'),
+            DeclarationEntry(name='list_class', path=f'$.list_class', type='string', state='form', ui_kind='text', default='default', description='表格回显样式'),
+            DeclarationEntry(name='is_default', path=f'$.is_default', type='string', state='carry', ui_kind='text', description='是否默认（Y是 N否）'),
+            DeclarationEntry(name='create_by', path=f'$.create_by', type='string', state='carry', ui_kind='text', description='创建者'),
+            DeclarationEntry(name='create_time', path=f'$.create_time', type='string', state='carry', ui_kind='text', description='创建时间'),
+            DeclarationEntry(name='update_by', path=f'$.update_by', type='string', state='carry', ui_kind='text', description='更新者'),
+            DeclarationEntry(name='update_time', path=f'$.update_time', type='string', state='carry', ui_kind='text', description='更新时间'),
+            DeclarationEntry(name='sys_upttime', path=f'$.sys_upttime', type='string', state='carry', ui_kind='text'),
         ],
     ),
     responses={
         200: ResponseSpec(
             status=200,
+            description='成功(信封统一;data 行形状归场景用例)',
+            declarations=[
+            DeclarationEntry(name='code', path='$.code', type='number',
+                             required=False, ui_kind='number',
+                             description='业务状态码(200=成功)', assertable=True),
+            DeclarationEntry(name='msg', path='$.msg', type='string',
+                             required=False, ui_kind='text',
+                             description='业务提示信息', assertable=True),
+            DeclarationEntry(name='data', path='$.data', type='object',
+                             required=False, ui_kind='json',
+                             description='业务数据(行形状归场景用例)', assertable=True),
+            DeclarationEntry(name='request_id', path='$.request_id', type='string',
+                             required=False, ui_kind='text',
+                             description='请求追踪ID', assertable=True),
+
+            ],
         ),
     },
     version=FIN_DEFAULT_VERSION,

@@ -56,9 +56,16 @@ async def carry_drift(db) -> dict:
     orphaned)— 调用方须先看信号再渲染清单,防把不可达误读成漂移;
     单端点 /full 失败 → 该端点面缺席,不阻塞其余。
 
+    键归一(配套方案 §2.3):``service_name`` 允许存别名全名(稀疏覆盖
+    层)。Plate 面只有目录服务,别名键的 face 取其 ``derive_base`` base
+    的面;别名行只报 orphaned(别名是覆盖层,uncovered 是 base 行的
+    事),``baseService`` 标注归一关系供面板标注「别名 → base」。
+    plate 不可达时无从归一,键原样参与(既有全 orphaned 降级不变)。
+
     返回 ``{"services": [...], "plateReachable": bool}``。
     """
     from .adaptation_service import _plate_list_endpoints, _plate_full_endpoint
+    from . import service_names
     from .plate_client import PlateUnavailableError
 
     rows = (await db.execute(select(CarryServiceBinding))).scalars().all()
@@ -66,8 +73,9 @@ async def carry_drift(db) -> dict:
     for r in rows:
         bound_by_service.setdefault(r.service_name, set()).add(r.field_path)
 
-    # 面并集(按服务)
+    # 面并集(按服务);plate_services = 目录服务全集(键归一的解析域)
     face_by_service: dict[str, set[str]] = {}
+    plate_services: set[str] = set()
     reachable = True
     try:
         items = await _plate_list_endpoints()
@@ -79,6 +87,7 @@ async def carry_drift(db) -> dict:
         eid = item.get("id")
         if not svc or not eid:
             continue
+        plate_services.add(svc)
         try:
             full = await _plate_full_endpoint(eid)
         except PlateUnavailableError:
@@ -96,12 +105,22 @@ async def carry_drift(db) -> dict:
     out: list[dict] = []
     for svc in sorted(set(bound_by_service) | set(face_by_service)):
         bound = bound_by_service.get(svc, set())
+        # 键归一:别名键(不在目录)→ 对 base 的面做 diff;只出 orphaned
+        if reachable and svc not in face_by_service:
+            base = service_names.derive_base(svc, plate_services)
+            if base and base != svc:
+                face = face_by_service.get(base, set())
+                out.append({"service": svc, "baseService": base,
+                            "orphaned": sorted(bound - face),
+                            "uncovered": [], "renamedSuggestions": []})
+                continue
         face = face_by_service.get(svc, set())
         orphaned = sorted(bound - face)
         uncovered = sorted(face - bound)
         suggestions = ([{"from": orphaned[0], "to": uncovered[0]}]
                        if len(orphaned) == 1 and len(uncovered) == 1 else [])
-        out.append({"service": svc, "orphaned": orphaned,
+        out.append({"service": svc, "baseService": None,
+                    "orphaned": orphaned,
                     "uncovered": uncovered,
                     "renamedSuggestions": suggestions})
     return {"services": out, "plateReachable": reachable}

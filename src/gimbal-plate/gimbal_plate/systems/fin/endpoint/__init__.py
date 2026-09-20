@@ -37,6 +37,10 @@ from gimbal_plate.systems.fin.endpoint.order_entrust_order_page import (
 from gimbal_plate.systems.fin.endpoint.order_order_add import (
     ORDER_ORDER_ADD,
 )
+# ⚠️ 临时测试脚手架(2026-09-09,不入册不提交):级联参数手验副本,测完删
+from gimbal_plate.systems.fin.endpoint.order_order_add_demo import (
+    ORDER_ORDER_ADD_DEMO,
+)
 from gimbal_plate.systems.fin.endpoint.order_order_detail import (
     ORDER_ORDER_DETAIL,
 )
@@ -91,6 +95,7 @@ ALL_ENDPOINTS = [
     ORDER_ENTRUST_ORDER_DISPATCH,
     ORDER_ENTRUST_ORDER_PAGE,
     ORDER_ORDER_ADD,
+    ORDER_ORDER_ADD_DEMO,   # ⚠️ 临时测试脚手架,测完删
     ORDER_ORDER_DETAIL,
     ORDER_ORDER_PAGE,
     ORDER_ORDER_BOOK,
@@ -119,6 +124,7 @@ __all__ = [
     "ORDER_ENTRUST_CHECK_ORDER_CUSTOMER_CONTAINER",
     "ORDER_ENTRUST_ORDER_ADD",
     "ORDER_ORDER_ADD",
+    "ORDER_ORDER_ADD_DEMO",   # ⚠️ 临时测试脚手架,测完删
     "ORDER_ENTRUST_ORDER_DISPATCH",
     "ORDER_ENTRUST_ORDER_PAGE",
     "ORDER_ORDER_DETAIL",

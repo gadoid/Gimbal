@@ -92,8 +92,9 @@ def test_double_quoted_read_keys():
 
 def test_double_quoted_enum_const():
     enums = load_enums(APP2)
-    assert enums["PAY_TYPE"] == [("1", "付款")]
-    assert enums["PUT_TYPE"] == [("2", "收款")]
+    # T3.2 起键为类名;双引号/单引号常量值都可解析
+    assert ("1", "付款") in enums["CostEnum"]
+    assert ("2", "收款") in enums["CostEnum"]
 
 
 def test_reads_do_not_leak_across_chained_services():

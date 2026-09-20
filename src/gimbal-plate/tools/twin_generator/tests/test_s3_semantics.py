@@ -13,7 +13,8 @@ def test_enrich():
     attach_rules(acts, APP)
     collect_reads(acts, APP)
     enums = load_enums(APP)
-    assert ("0", "创建中") in enums["EXPECT_CREATING"]
+    # T3.2 起键为类名(const + $list 合并)
+    assert ("0", "创建中") in enums["OrderEnum"]
     fields = enrich(acts, load_columns(FIXTURES / "schema" / "fin_test_search.csv"))
     by_key = {f.key: f for f in fields["fin.order_entrust.order_add"]}
     # zh 优先级:rule(客户ID) > column > derived
@@ -26,8 +27,13 @@ def test_enrich():
     # 但校验派生只认活跃行 —— 注释 present 不产 required
     assert by_key["carrier"].zh == "船公司/承运人"
     assert by_key["carrier"].required is False
-    # 类型:etd column int → integer;default 来自 getDataString 第三参
-    assert by_key["etd"].type_ == "integer"
+    # T4.4:service-origin 读取(etd/service_items 在 OrderTaskService
+    # 第 2 层读)无 FE 佐证不入字段集;request-origin 保持。
+    # 主表列并入(order_add 实证 save-all):etd 改经 sys_order 列入集,
+    # zh 直取列注释;service_items 非表列仍不入
+    assert by_key["etd"].zh == "预计开航日" and by_key["etd"].zh_source == "column"
+    assert by_key["etd"].read is False            # 列并入 ≠ 读取 → carry
+    assert "service_items" not in by_key
     assert by_key["action"].default == "submit"
     # enum:rule in: 优先且为字符串
     assert by_key["settle_type"].enum_values == ["1", "2"]

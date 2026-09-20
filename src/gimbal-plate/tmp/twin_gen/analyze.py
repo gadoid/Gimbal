@@ -7,7 +7,7 @@ REPO = Path(r"D:\Gimbal\Gimbal")
 sys.path.insert(0, str(REPO / "src" / "gimbal-plate"))
 from gimbal_plate.systems.fin.endpoint import ALL_ENDPOINTS  # noqa: E402
 
-TWIN = REPO / "gimbal-tmp" / "twin_gen"
+TWIN = REPO / "src/gimbal-plate/tmp/twin_gen"
 routes = json.load(open(TWIN / "routes.json", encoding="utf-8"))
 fields_raw = json.load(open(TWIN / "fields.json", encoding="utf-8"))
 

@@ -29,13 +29,14 @@ from ..core.deps import CurrentUser
 from ..core.security import fernet_decrypt, fernet_encrypt
 from ..models import AuthSession
 from ..schemas.auth_session import (
+    AuthReferencesOut,
     AuthSessionCreateIn,
     AuthSessionOut,
     AuthSessionPatchIn,
     AuthSessionSecretsOut,
     TestResult,
 )
-from ..services import auth_probe, query_view_runner
+from ..services import auth_probe, auth_references, query_view_runner
 
 router = APIRouter(prefix="/auths", tags=["auths"])
 
@@ -86,6 +87,9 @@ async def _get_owned(session: AsyncSession, auth_id: int, owner_id: int) -> Auth
 async def list_auths(
     user: CurrentUser, session: DbSession
 ) -> list[AuthSessionOut]:
+    """双计数一次扫描服务全部行(配套方案 §1.2):
+    alias_ref_count = service_aliases 绑定数;scenario_ref_count =
+    模板 ∪ 方案绑定去重场景数(快照不进计数 — 面板里按 kind 展示)。"""
     rows = (
         (
             await session.execute(
@@ -97,7 +101,22 @@ async def list_auths(
         .scalars()
         .all()
     )
-    return [_to_out(a) for a in rows]
+    counts = await auth_references.counts(session)
+    return [
+        AuthSessionOut(
+            id=a.id,
+            alias=a.alias,
+            url=a.url,
+            username=_safe_decrypt(a.username_enc),
+            token_type=a.token_type,
+            expires_in=a.expires_in,
+            created_at=a.created_at,
+            updated_at=a.updated_at,
+            alias_ref_count=counts.get(a.alias, {}).get("alias_count", 0),
+            scenario_ref_count=counts.get(a.alias, {}).get("scenario_count", 0),
+        )
+        for a in rows
+    ]
 
 
 # ── create ──────────────────────────────────────────────────────
@@ -198,6 +217,20 @@ async def patch_auth(
 
 
 # ── delete ─────────────────────────────────────────────────────
+@router.get("/{alias}/references", response_model=AuthReferencesOut)
+async def get_references(
+    alias: Annotated[str, PathParam(min_length=1, max_length=64)],
+    user: CurrentUser,
+    session: DbSession,
+) -> AuthReferencesOut:
+    """反查面板:谁在用这个凭证名(配套方案 §1.3)。四类引用,读时实时
+    扫(单一事实源,不建反向索引);计数照给、场景名按 can_read_scenario
+    过滤(admin 全量 / public / owner),剩余 = hidden_count(§1.4)。
+    名字命中 ≠ 对象引用 — 引用解析按执行者本人池,文案须如实。"""
+    return AuthReferencesOut.model_validate(
+        await auth_references.references(session, user=user, alias=alias))
+
+
 @router.delete("/{auth_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_auth(
     auth_id: Annotated[int, PathParam(ge=1)],
@@ -205,6 +238,23 @@ async def delete_auth(
     session: DbSession,
 ) -> None:
     a = await _get_owned(session, auth_id, user.id)
+    # 删除拦截(窄口径,方案 §1.4.3/§1.5 拍板):仅本人场景的模板/方案
+    # 绑定引用硬拦 — 这些下次运行会真失效;别名绑定、同名他场景、
+    # config.users 快照不阻断(名字引用,别人解析各自的同名凭证)。
+    blocking = await auth_references.blocking_refs(
+        session, user=user, alias=a.alias)
+    if blocking:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": (
+                    f"凭证 {a.alias!r} 被 {len(blocking)} 个本人场景引用"
+                    "(模板/方案绑定),删除会让这些场景下次运行失效;"
+                    "请先在场景中移除引用后再删除"
+                ),
+                "ownScenarioIds": blocking,
+            },
+        )
     await session.delete(a)
     await session.commit()
     query_view_runner.drop_credential(user.id, a.alias)

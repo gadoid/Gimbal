@@ -68,6 +68,22 @@ def test_add_field_defaults_body_and_idempotent():
     assert d == before
 
 
+def test_add_field_creates_containers_on_bodyless_step():
+    """锚点行硬化的应用侧闭环:零字段锚点步(GET 无参典型)没有
+    request.body,addField 的 setdefault 链须自建容器落字段——否则
+    open_batch 新生成的那批 op 应用时静默丢失。"""
+    d = {"steps": [
+        {"api": {"view_hints": {"endpoint_id": EP}, "headers": {}}},
+    ]}
+    op = {"op": "addField", "step": 0, "field": "reason_code", "value": "R1"}
+    assert check_step_addressable(d, op, EP) is None
+    apply_to_definition(d, op)
+    assert d["steps"][0]["request"]["body"] == {"reason_code": "R1"}
+    before = copy.deepcopy(d)
+    apply_to_definition(d, op)  # 幂等
+    assert d == before
+
+
 def test_remove_field_all_sources():
     d = _definition()
     d["steps"][0]["api"]["headers"]["Token2"] = "t2"

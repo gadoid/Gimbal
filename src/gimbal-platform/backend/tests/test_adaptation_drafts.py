@@ -101,7 +101,8 @@ def test_diff_sees_carry_entries_too():
 def test_diff_flattens_children_tree():
     """children 树先序展开(iter_flat):容器与叶子都在字段宇宙里 —
     叶子消失/新增同样产 removeField/addField(容器行壳跟 children,
-    §4 值×结构分离)。"""
+    §4 值×结构分离)。条目带 path 时草案随附 path(供 open_batch 做
+    祖先容器匹配;path 不落 op payload)。"""
     old = _spec([
         {"name": "supplier", "path": "$.supplier", "state": "carry",
          "type": "array", "children": [
@@ -116,5 +117,21 @@ def test_diff_flattens_children_tree():
              {"name": "order_id", "path": "$.supplier.order_id"}]},
     ])
     assert diff_field_specs(old, new) == [
-        {"op": "addField", "field": "order_id", "value": ""},
+        {"op": "addField", "field": "order_id", "value": "",
+         "path": "$.supplier.order_id"},
     ]
+
+
+def test_field_match_names_flat_and_nested():
+    """removeField/mapValue 的匹配名集合:平铺退化为精确;嵌套带上
+    path 首段(容器键);path 缺失/首段同名字段 → 单元素,行为与扩前一致。"""
+    from app.services.adaptation_ops import field_match_names
+
+    assert field_match_names("amount", "$.amount") == ("amount",)
+    assert field_match_names("amount", None) == ("amount",)
+    # 嵌套:name=city、path=$.address.city → step 顶层容器键 address 也命中
+    assert field_match_names("city", "$.address.city") == ("city", "address")
+    # 实例态数组下标防御:首段取 [ 前的部分
+    assert field_match_names("city", "$.address[0].city") == ("city", "address")
+    # path 无 $. 前缀(防御)同样取首段
+    assert field_match_names("city", "address.city") == ("city", "address")

@@ -115,3 +115,37 @@ async def test_unindexed_steps_reports_api_less_step(fresh_db):
     assert report == [
         {"scenario_id": "sc-un", "step_index": 1, "reason": "no_endpoint_id"},
     ]
+
+
+async def test_anchor_row_for_zero_field_step(fresh_db):
+    """锚定但 body/headers 全空的 step 发一行锚点行(source=anchor,
+    field_name='')——零字段步对 endpoint→scenario 影响查询可见;
+    有字段行的 step 不发(语义不变);无锚点 step 照旧零行 + 进未索引报告。"""
+    from app.services.endpoint_ref_index import ANCHOR_FIELD, ANCHOR_SOURCE
+
+    steps = [
+        # ① 零字段锚点步(GET 无参典型):一行锚点行
+        {"api": {"view_hints": {"endpoint_id": "fin.order.get"},
+                 "headers": {}},
+         "request": {"body": {}}},
+        # ② 有字段锚点步:字段行,无锚点行
+        {"api": {"view_hints": {"endpoint_id": "fin.order.add"}},
+         "request": {"body": {"amount": 1}}},
+        # ③ 无锚点步:零行(进未索引报告)
+        {"request": {"body": {"x": "1"}}},
+    ]
+    async with db_module.SessionLocal() as s:
+        await scenario_store.create(s, _draft("sc-anc", steps), owner="alice")
+    assert await _refs() == {
+        ("sc-anc", 0, ANCHOR_SOURCE, ANCHOR_FIELD, "fin.order.get", None),
+        ("sc-anc", 1, "body", "amount", "fin.order.add", None),
+    }
+    # rebuild 全等:锚点行同样可重建(升级迁移路径)
+    from app.services import endpoint_ref_index as idx
+    async with db_module.SessionLocal() as s:
+        report = await idx.rebuild(s)
+    assert report["refs"] == 2
+    assert await _refs() == {
+        ("sc-anc", 0, ANCHOR_SOURCE, ANCHOR_FIELD, "fin.order.get", None),
+        ("sc-anc", 1, "body", "amount", "fin.order.add", None),
+    }

@@ -64,12 +64,14 @@ describe('Sidebar — 四域分组结构(F-sitemap 基准)', () => {
   it('admin 可见全部条目:工作台置顶 + 四组条目齐备', async () => {
     const w = await mountSidebar({ isAdmin: true })
     const links = w.findAll('a.nav-item')
-    // 常量池不占侧边栏坑位 → 9 条:工作台/我的/公共/关注/认证/传递/适配/执行/用户
-    expect(links.length).toBe(9)
+    // 常量池不占侧边栏坑位 → 11 条:工作台/我的/公共/关注/认证/传递/适配/画像/服务信息/执行/用户
+    expect(links.length).toBe(11)
     const hrefs = links.map((l) => l.attributes('href'))
     expect(hrefs).toEqual([
       '/home', '/scenarios/mine', '/scenarios/public', '/scenarios/follows',
-      '/auths', '/carry-config', '/adaptations', '/executions', '/admin/users',
+      // 服务组(配套方案 §4.1 顺序):画像/服务信息/认证/默认值/适配
+      '/services', '/service-admin', '/auths', '/carry-config', '/adaptations',
+      '/executions', '/admin/users',
     ])
     w.unmount()
   })
@@ -109,12 +111,13 @@ describe('Sidebar — adminOnly 过滤(沿用 TopNav 语义)', () => {
     } as never)
   })
 
-  it('member 不见 用户管理/传递字段,其余 7 条可见', async () => {
+  it('member 不见 用户管理/传递字段/服务信息管理,其余 8 条可见', async () => {
     const w = await mountSidebar({ isAdmin: false })
     const hrefs = w.findAll('a.nav-item').map((l) => l.attributes('href'))
     expect(hrefs).not.toContain('/admin/users')
     expect(hrefs).not.toContain('/carry-config')
-    expect(hrefs.length).toBe(7)
+    expect(hrefs).not.toContain('/service-admin')
+    expect(hrefs.length).toBe(8)
     w.unmount()
   })
 })
@@ -197,7 +200,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.find('aside').classes()).toContain('w-[200px]')
     expect(w.text()).toContain('platform')
     expect(w.find('[data-testid="sb-collapse"]').exists()).toBe(true)
-    expect(w.findAll('.nav-text').length).toBe(9)
+    expect(w.findAll('.nav-text').length).toBe(11)
     w.unmount()
   })
 
@@ -213,7 +216,7 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     expect(w.findAll('.nav-text').length).toBe(0)
     // 二级按钮只留图标;悬浮 title = 功能名
     const rows = w.findAll('.row')
-    expect(rows.length).toBe(9)
+    expect(rows.length).toBe(11)
     for (const row of rows) {
       expect(row.attributes('title')).toBeTruthy()
       expect(row.find('.nav-icon').exists()).toBe(true)
@@ -238,9 +241,10 @@ describe('Sidebar — 整体折叠(« 钮:56px 图标轨道)', () => {
     const w = await mountSidebar({ isAdmin: true })
     await w.find('[data-testid="sb-collapse"]').trigger('click')
     const links = w.findAll('a.nav-item')
-    expect(links.length).toBe(9)
-    // 三拆后场景占 3 坑,/auths 从索引 2 移到 4
-    expect(links[4].attributes('href')).toBe('/auths')
+    expect(links.length).toBe(11)
+    // 配套方案 §4.1 服务组排序:画像/服务信息在前,/auths 从索引 4 移到 6
+    expect(links[4].attributes('href')).toBe('/services')
+    expect(links[6].attributes('href')).toBe('/auths')
     expect(localStorage.getItem('chrome.sidebar.collapsed:v1')).toBe('1')
     w.unmount()
   })

@@ -61,6 +61,7 @@ ORDER_FEE_BOOK_REAL_AMOUNT_EDIT: Final[EndpointSpec] = EndpointSpec(
                                         value_source=ValueSource(view='cost_list', column='cost_id', group='cost_list#to_customer')),
                                     DeclarationEntry(name='settle_object_id', path='$.to_customer.put_amount.standard_list.settle_object_id', state='form', type='string', ui_kind='text'),
                                     DeclarationEntry(name='subsidy_category', path='$.to_customer.put_amount.standard_list.subsidy_category', state='form', type='string', ui_kind='text'),
+                                    DeclarationEntry(name='subsidy_id', path='$.to_customer.put_amount.standard_list.subsidy_id', state='form', type='string', ui_kind='text'),
                                     DeclarationEntry(name='currency', path='$.to_customer.put_amount.standard_list.currency', state='form', type='string', ui_kind='text'),
                                     DeclarationEntry(name='unit_price', path='$.to_customer.put_amount.standard_list.unit_price', state='form', type='string', ui_kind='text'),
                                     DeclarationEntry(name='unit', path='$.to_customer.put_amount.standard_list.unit', state='form', type='string', ui_kind='text'),

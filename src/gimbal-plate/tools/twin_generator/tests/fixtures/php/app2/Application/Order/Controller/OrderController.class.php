@@ -10,6 +10,7 @@ class OrderController extends BaseController
             unset($rule['num']);
         }
         $errorMsg = $this->paramVerification($rule, false);
+        OrderValidator::checkContainer($requestData);
         $this->returnSuccess();
     }
 

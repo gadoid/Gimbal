@@ -21,10 +21,12 @@ from ..schemas.adaptations import (
     CarryBatchIn,
     CatalogDiffReport,
     ImpactItem,
+    ImpactSummaryReport,
     OpenBatchIn,
     OpCreateIn,
     OpOut,
     OpPatchIn,
+    RefsDriftReport,
     RollbackReport,
     UnindexedStepOut,
 )
@@ -71,6 +73,26 @@ async def unindexed_steps(user: AdminUser, db: DbSession) -> list[UnindexedStepO
         })
         for i in await collect_unindexed(db)
     ]
+
+
+@router.get("/refs-drift", response_model=RefsDriftReport)
+async def refs_drift(user: AdminUser, db: DbSession) -> RefsDriftReport:
+    """倒排索引 vs plate 接口目录 diff(只读):悬空引用 / 全网零引用。"""
+    return RefsDriftReport.model_validate(await adaptation_service.refs_drift(db))
+
+
+@router.get("/impact-summary", response_model=ImpactSummaryReport)
+async def impact_summary(
+    user: AdminUser,
+    db: DbSession,
+    endpointIds: list[str] = Query(default=[]),
+) -> ImpactSummaryReport:
+    """本批影响面摘要(配套方案 §3.2):pending 端点集(客户端从
+    catalog/diff 拿到后传入)→ 按服务聚合的 波及用例 / 最近失败 数。
+    纯读 —— 不复算 diff(catalog_diff 带基线写副作用,不藏进 GET);
+    recentFail 全站口径(跨 owner 聚合数,方案 §3.5)。"""
+    return ImpactSummaryReport.model_validate(
+        await adaptation_service.impact_summary(db, endpoint_ids=endpointIds))
 
 
 @router.post("/batches", response_model=BatchDetail, status_code=201)

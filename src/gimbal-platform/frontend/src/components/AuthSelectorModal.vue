@@ -1,6 +1,8 @@
 <!-- AuthSelectorModal.vue — Spec-2-4 §4.3 C4 认证注入选择器.
      用户在编辑 header value 时，弹此 modal 选 alias + 字段。
-     模板格式: ${auth.<alias>.<field>}，运行时由 executor 解密。 -->
+     模板格式: ${auth.<alias>.<field>}，运行时由 executor 解密。
+     配套方案 §1.1(C3a):步骤服务是已绑凭证的别名/服务时,preselectAlias
+     自动预填绑定凭证(从服务信息管理的绑定带出);手工改选仍是逃生舱。 -->
 <template>
   <Dialog :open="modelValue" @update:open="(v: boolean) => emit('update:modelValue', v)">
     <DialogContent class="max-w-[520px]">
@@ -18,6 +20,10 @@
               {{ a.alias }} · {{ a.username }} · {{ a.token_type }}
             </option>
           </select>
+          <p v-if="originNote" class="origin-note" data-testid="auth-origin-note">⤷ {{ originNote }}</p>
+          <p v-if="preselectMissing" class="origin-note" data-testid="auth-preselect-missing">
+            绑定凭证不在你当前凭证池 — 模板仍可插入,执行时按执行者本人池解析
+          </p>
         </div>
         <div class="flex flex-col gap-1.5">
           <span class="text-label font-medium text-signal-ink">字段</span>
@@ -55,6 +61,10 @@ import { Button } from '@/components/ui/button'
 const props = defineProps<{
   modelValue: boolean
   auths: AuthSession[]
+  /** 别名绑定带出的预填凭证名(配套方案 §1.1);null = 无绑定,不预填。 */
+  preselectAlias?: string | null
+  /** 预填来源说明(如「fin-service-uat 的绑定凭证」)。 */
+  originNote?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -71,11 +81,15 @@ watch(
   () => props.modelValue,
   (open) => {
     if (open) {
-      alias.value = ''
+      alias.value = props.preselectAlias ?? ''
       field.value = 'token'
     }
   },
 )
+
+/** 预填名不在本人池:模板仍可插(执行时按执行者池解析),提示说清。 */
+const preselectMissing = computed(() =>
+  !!props.preselectAlias && !props.auths.some((a) => a.alias === props.preselectAlias))
 
 const templatePreview = computed(() => {
   if (!alias.value) return ''
@@ -96,6 +110,12 @@ function confirm() {
   color: var(--accent);
   background: var(--accent-soft);
   border-radius: 4px;
+}
+
+.origin-note {
+  margin: 2px 0 0;
+  color: var(--color-text-secondary, #6b7280);
+  font-size: 11px;
 }
 
 .preview-hint {

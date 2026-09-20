@@ -1,12 +1,12 @@
 [
   {
-    "id": "fin.finance.generate_invoice_file",
+    "id": "fin.api_finance.generate_invoice_file",
     "path": "/api/api/finance/generateInvoiceFile",
     "rules": 0,
     "reads": 2
   },
   {
-    "id": "fin.finance.generate_pay_account_email_attachment",
+    "id": "fin.api_finance.generate_pay_account_email_attachment",
     "path": "/api/api/finance/generatePayAccountEmailAttachment",
     "rules": 2,
     "reads": 2
@@ -54,7 +54,7 @@
     "reads": 0
   },
   {
-    "id": "fin.order.revoke_order_update",
+    "id": "fin.api_order.revoke_order_update",
     "path": "/api/api/order/revokeOrderUpdate",
     "rules": 0,
     "reads": 4
@@ -72,7 +72,7 @@
     "reads": 33
   },
   {
-    "id": "fin.voucher.generate_voucher",
+    "id": "fin.api_voucher.generate_voucher",
     "path": "/api/api/voucher/generateVoucher",
     "rules": 0,
     "reads": 1
@@ -294,61 +294,61 @@
     "reads": 0
   },
   {
-    "id": "fin.policy.policy_add",
+    "id": "fin.customer_policy.policy_add",
     "path": "/api/customer/policy/policyAdd",
     "rules": 3,
     "reads": 6
   },
   {
-    "id": "fin.policy.check_logic",
+    "id": "fin.customer_policy.check_logic",
     "path": "/api/customer/policy/checkLogic",
     "rules": 0,
     "reads": 1
   },
   {
-    "id": "fin.policy.check_base",
+    "id": "fin.customer_policy.check_base",
     "path": "/api/customer/policy/checkBase",
     "rules": 0,
     "reads": 0
   },
   {
-    "id": "fin.policy.policy_page",
+    "id": "fin.customer_policy.policy_page",
     "path": "/api/customer/policy/policyPage",
     "rules": 0,
     "reads": 2
   },
   {
-    "id": "fin.policy.customer_policy_change",
+    "id": "fin.customer_policy.customer_policy_change",
     "path": "/api/customer/policy/customerPolicyChange",
     "rules": 0,
     "reads": 2
   },
   {
-    "id": "fin.policy.policy_detail",
+    "id": "fin.customer_policy.policy_detail",
     "path": "/api/customer/policy/policyDetail",
     "rules": 1,
     "reads": 1
   },
   {
-    "id": "fin.policy.change_policy_status",
+    "id": "fin.customer_policy.change_policy_status",
     "path": "/api/customer/policy/changePolicyStatus",
     "rules": 0,
     "reads": 2
   },
   {
-    "id": "fin.policy.policy_export",
+    "id": "fin.customer_policy.policy_export",
     "path": "/api/customer/policy/policyExport",
     "rules": 0,
     "reads": 3
   },
   {
-    "id": "fin.policy.get_customer_policy",
+    "id": "fin.customer_policy.get_customer_policy",
     "path": "/api/customer/policy/getCustomerPolicy",
     "rules": 0,
     "reads": 2
   },
   {
-    "id": "fin.policy.get_policy_main",
+    "id": "fin.customer_policy.get_policy_main",
     "path": "/api/customer/policy/getPolicyMain",
     "rules": 0,
     "reads": 1
@@ -1926,67 +1926,67 @@
     "reads": 4
   },
   {
-    "id": "fin.voucher.voucher_page",
+    "id": "fin.finance_voucher.voucher_page",
     "path": "/api/finance/voucher/voucherPage",
     "rules": 0,
     "reads": 6
   },
   {
-    "id": "fin.voucher.voucher_list",
+    "id": "fin.finance_voucher.voucher_list",
     "path": "/api/finance/voucher/voucherList",
     "rules": 0,
     "reads": 6
   },
   {
-    "id": "fin.voucher.voucher_detail",
+    "id": "fin.finance_voucher.voucher_detail",
     "path": "/api/finance/voucher/voucherDetail",
     "rules": 1,
     "reads": 1
   },
   {
-    "id": "fin.voucher.voucher_fee_page",
+    "id": "fin.finance_voucher.voucher_fee_page",
     "path": "/api/finance/voucher/voucherFeePage",
     "rules": 0,
     "reads": 3
   },
   {
-    "id": "fin.voucher.voucher_fee_export",
+    "id": "fin.finance_voucher.voucher_fee_export",
     "path": "/api/finance/voucher/voucherFeeExport",
     "rules": 0,
     "reads": 3
   },
   {
-    "id": "fin.voucher.voucher_fee_list",
+    "id": "fin.finance_voucher.voucher_fee_list",
     "path": "/api/finance/voucher/voucherFeeList",
     "rules": 0,
     "reads": 5
   },
   {
-    "id": "fin.voucher.voucher_sync_page",
+    "id": "fin.finance_voucher.voucher_sync_page",
     "path": "/api/finance/voucher/voucherSyncPage",
     "rules": 0,
     "reads": 5
   },
   {
-    "id": "fin.voucher.voucher_sync_detail",
+    "id": "fin.finance_voucher.voucher_sync_detail",
     "path": "/api/finance/voucher/voucherSyncDetail",
     "rules": 0,
     "reads": 1
   },
   {
-    "id": "fin.voucher.voucher_down_load",
+    "id": "fin.finance_voucher.voucher_down_load",
     "path": "/api/finance/voucher/voucherDownLoad",
     "rules": 0,
     "reads": 2
   },
   {
-    "id": "fin.voucher.voucher_export",
+    "id": "fin.finance_voucher.voucher_export",
     "path": "/api/finance/voucher/voucherExport",
     "rules": 0,
     "reads": 6
   },
   {
-    "id": "fin.voucher.voucher_sync_export",
+    "id": "fin.finance_voucher.voucher_sync_export",
     "path": "/api/finance/voucher/voucherSyncExport",
     "rules": 0,
     "reads": 5
@@ -2136,109 +2136,109 @@
     "reads": 1
   },
   {
-    "id": "fin.common.get_company_info",
+    "id": "fin.home_common.get_company_info",
     "path": "/api/home/common/getCompanyInfo",
     "rules": 0,
     "reads": 2
   },
   {
-    "id": "fin.common.get_discount",
+    "id": "fin.home_common.get_discount",
     "path": "/api/home/common/getDiscount",
     "rules": 0,
     "reads": 3
   },
   {
-    "id": "fin.common.get_enums",
+    "id": "fin.home_common.get_enums",
     "path": "/api/home/common/getEnums",
     "rules": 0,
     "reads": 1
   },
   {
-    "id": "fin.common.enums_detail",
+    "id": "fin.home_common.enums_detail",
     "path": "/api/home/common/enumsDetail",
     "rules": 0,
     "reads": 1
   },
   {
-    "id": "fin.common.upload_file",
+    "id": "fin.home_common.upload_file",
     "path": "/api/home/common/uploadFile",
     "rules": 1,
     "reads": 7
   },
   {
-    "id": "fin.common.download_file",
+    "id": "fin.home_common.download_file",
     "path": "/api/home/common/downloadFile",
     "rules": 1,
     "reads": 2
   },
   {
-    "id": "fin.common.get_short_url",
+    "id": "fin.home_common.get_short_url",
     "path": "/api/home/common/getShortUrl",
     "rules": 0,
     "reads": 1
   },
   {
-    "id": "fin.common.pdf_to_png",
+    "id": "fin.home_common.pdf_to_png",
     "path": "/api/home/common/pdfToPng",
     "rules": 0,
     "reads": 0
   },
   {
-    "id": "fin.common.download_template",
+    "id": "fin.home_common.download_template",
     "path": "/api/home/common/downloadTemplate",
     "rules": 0,
     "reads": 1
   },
   {
-    "id": "fin.common.download_excel",
+    "id": "fin.home_common.download_excel",
     "path": "/api/home/common/downloadExcel",
     "rules": 0,
     "reads": 1
   },
   {
-    "id": "fin.common.change_record_page",
+    "id": "fin.home_common.change_record_page",
     "path": "/api/home/common/changeRecordPage",
     "rules": 0,
     "reads": 4
   },
   {
-    "id": "fin.common.attachment_list",
+    "id": "fin.home_common.attachment_list",
     "path": "/api/home/common/attachmentList",
     "rules": 0,
     "reads": 2
   },
   {
-    "id": "fin.common.verify_code",
+    "id": "fin.home_common.verify_code",
     "path": "/api/home/common/verifyCode",
     "rules": 0,
     "reads": 0
   },
   {
-    "id": "fin.common.invoice_ocr",
+    "id": "fin.home_common.invoice_ocr",
     "path": "/api/home/common/invoiceOcr",
     "rules": 0,
     "reads": 2
   },
   {
-    "id": "fin.common.delete_attachment",
+    "id": "fin.home_common.delete_attachment",
     "path": "/api/home/common/deleteAttachment",
     "rules": 0,
     "reads": 1
   },
   {
-    "id": "fin.common.voucher_subject",
+    "id": "fin.home_common.voucher_subject",
     "path": "/api/home/common/voucherSubject",
     "rules": 0,
     "reads": 0
   },
   {
-    "id": "fin.common.oper_log_detail",
+    "id": "fin.home_common.oper_log_detail",
     "path": "/api/home/common/operLogDetail",
     "rules": 0,
     "reads": 3
   },
   {
-    "id": "fin.common.excel_to_pdf",
+    "id": "fin.home_common.excel_to_pdf",
     "path": "/api/home/common/excelToPDF",
     "rules": 0,
     "reads": 0
@@ -2586,43 +2586,43 @@
     "reads": 0
   },
   {
-    "id": "fin.policy.policy_page",
+    "id": "fin.home_policy.policy_page",
     "path": "/api/home/policy/policyPage",
     "rules": 0,
     "reads": 2
   },
   {
-    "id": "fin.policy.policy_list",
+    "id": "fin.home_policy.policy_list",
     "path": "/api/home/policy/policyList",
     "rules": 0,
     "reads": 0
   },
   {
-    "id": "fin.policy.policy_add",
+    "id": "fin.home_policy.policy_add",
     "path": "/api/home/policy/policyAdd",
     "rules": 3,
     "reads": 6
   },
   {
-    "id": "fin.policy.policy_detail",
+    "id": "fin.home_policy.policy_detail",
     "path": "/api/home/policy/policyDetail",
     "rules": 1,
     "reads": 1
   },
   {
-    "id": "fin.policy.policy_sub_list",
+    "id": "fin.home_policy.policy_sub_list",
     "path": "/api/home/policy/policySubList",
     "rules": 1,
     "reads": 1
   },
   {
-    "id": "fin.policy.policy_sub_detail",
+    "id": "fin.home_policy.policy_sub_detail",
     "path": "/api/home/policy/policySubDetail",
     "rules": 1,
     "reads": 1
   },
   {
-    "id": "fin.policy.policy_export",
+    "id": "fin.home_policy.policy_export",
     "path": "/api/home/policy/policyExport",
     "rules": 0,
     "reads": 1
@@ -2868,7 +2868,7 @@
     "reads": 0
   },
   {
-    "id": "fin.common.upload_file",
+    "id": "fin.operation_common.upload_file",
     "path": "/api/operation/common/uploadFile",
     "rules": 1,
     "reads": 0
@@ -2904,25 +2904,25 @@
     "reads": 0
   },
   {
-    "id": "fin.finance.funding_plan_page",
+    "id": "fin.operation_finance.funding_plan_page",
     "path": "/api/operation/finance/fundingPlanPage",
     "rules": 1,
     "reads": 0
   },
   {
-    "id": "fin.finance.monthly_funding_plan_page",
+    "id": "fin.operation_finance.monthly_funding_plan_page",
     "path": "/api/operation/finance/monthlyFundingPlanPage",
     "rules": 3,
     "reads": 2
   },
   {
-    "id": "fin.finance.funding_plan_apa_edit",
+    "id": "fin.operation_finance.funding_plan_apa_edit",
     "path": "/api/operation/finance/fundingPlanApaEdit",
     "rules": 2,
     "reads": 1
   },
   {
-    "id": "fin.finance.funding_plan_spa_edit",
+    "id": "fin.operation_finance.funding_plan_spa_edit",
     "path": "/api/operation/finance/fundingPlanSpaEdit",
     "rules": 3,
     "reads": 0
@@ -3438,343 +3438,343 @@
     "reads": 0
   },
   {
-    "id": "fin.order.order_page",
+    "id": "fin.order_order.order_page",
     "path": "/api/order/order/orderPage",
     "rules": 0,
     "reads": 99
   },
   {
-    "id": "fin.order.order_sub_page",
+    "id": "fin.order_order.order_sub_page",
     "path": "/api/order/order/orderSubPage",
     "rules": 0,
     "reads": 65
   },
   {
-    "id": "fin.order.order_detail",
+    "id": "fin.order_order.order_detail",
     "path": "/api/order/order/orderDetail",
     "rules": 1,
     "reads": 75
   },
   {
-    "id": "fin.order.other_order_page",
+    "id": "fin.order_order.other_order_page",
     "path": "/api/order/order/otherOrderPage",
     "rules": 0,
     "reads": 104
   },
   {
-    "id": "fin.order.other_order_detail",
+    "id": "fin.order_order.other_order_detail",
     "path": "/api/order/order/otherOrderDetail",
     "rules": 1,
     "reads": 75
   },
   {
-    "id": "fin.order.order_relate_team",
+    "id": "fin.order_order.order_relate_team",
     "path": "/api/order/order/orderRelateTeam",
     "rules": 1,
     "reads": 1
   },
   {
-    "id": "fin.order.order_related_del",
+    "id": "fin.order_order.order_related_del",
     "path": "/api/order/order/orderRelatedDel",
     "rules": 1,
     "reads": 1
   },
   {
-    "id": "fin.order.order_add",
+    "id": "fin.order_order.order_add",
     "path": "/api/order/order/orderAdd",
     "rules": 46,
     "reads": 27
   },
   {
-    "id": "fin.order.order_edit",
+    "id": "fin.order_order.order_edit",
     "path": "/api/order/order/orderEdit",
     "rules": 36,
     "reads": 26
   },
   {
-    "id": "fin.order.order_book",
+    "id": "fin.order_order.order_book",
     "path": "/api/order/order/orderBook",
     "rules": 47,
     "reads": 33
   },
   {
-    "id": "fin.order.order_book_update",
+    "id": "fin.order_order.order_book_update",
     "path": "/api/order/order/orderBookUpdate",
     "rules": 1,
     "reads": 1
   },
   {
-    "id": "fin.order.order_notice",
+    "id": "fin.order_order.order_notice",
     "path": "/api/order/order/orderNotice",
     "rules": 1,
     "reads": 6
   },
   {
-    "id": "fin.order.order_confirm_account",
+    "id": "fin.order_order.order_confirm_account",
     "path": "/api/order/order/orderConfirmAccount",
     "rules": 1,
     "reads": 6
   },
   {
-    "id": "fin.order.order_confirm_loan",
+    "id": "fin.order_order.order_confirm_loan",
     "path": "/api/order/order/orderConfirmLoan",
     "rules": 1,
     "reads": 6
   },
   {
-    "id": "fin.order.order_copy",
+    "id": "fin.order_order.order_copy",
     "path": "/api/order/order/orderCopy",
     "rules": 1,
     "reads": 3
   },
   {
-    "id": "fin.order.order_update_atd",
+    "id": "fin.order_order.order_update_atd",
     "path": "/api/order/order/orderUpdateAtd",
     "rules": 2,
     "reads": 5
   },
   {
-    "id": "fin.order.order_batch_import",
+    "id": "fin.order_order.order_batch_import",
     "path": "/api/order/order/orderBatchImport",
     "rules": 1,
     "reads": 3
   },
   {
-    "id": "fin.order.order_del",
+    "id": "fin.order_order.order_del",
     "path": "/api/order/order/orderDel",
     "rules": 1,
     "reads": 3
   },
   {
-    "id": "fin.order.order_cancel",
+    "id": "fin.order_order.order_cancel",
     "path": "/api/order/order/orderCancel",
     "rules": 2,
     "reads": 8
   },
   {
-    "id": "fin.order.change_policy_type",
+    "id": "fin.order_order.change_policy_type",
     "path": "/api/order/order/changePolicyType",
     "rules": 2,
     "reads": 7
   },
   {
-    "id": "fin.order.change_policy",
+    "id": "fin.order_order.change_policy",
     "path": "/api/order/order/changePolicy",
     "rules": 2,
     "reads": 7
   },
   {
-    "id": "fin.order.change_period_rule",
+    "id": "fin.order_order.change_period_rule",
     "path": "/api/order/order/changePeriodRule",
     "rules": 0,
     "reads": 12
   },
   {
-    "id": "fin.order.change_account_rule",
+    "id": "fin.order_order.change_account_rule",
     "path": "/api/order/order/changeAccountRule",
     "rules": 1,
     "reads": 21
   },
   {
-    "id": "fin.order.change_tak_pay_rule",
+    "id": "fin.order_order.change_tak_pay_rule",
     "path": "/api/order/order/changeTakPayRule",
     "rules": 1,
     "reads": 20
   },
   {
-    "id": "fin.order.change_special_pay_rules",
+    "id": "fin.order_order.change_special_pay_rules",
     "path": "/api/order/order/changeSpecialPayRules",
     "rules": 1,
     "reads": 13
   },
   {
-    "id": "fin.order.change_invoice_apply",
+    "id": "fin.order_order.change_invoice_apply",
     "path": "/api/order/order/changeInvoiceApply",
     "rules": 1,
     "reads": 13
   },
   {
-    "id": "fin.order.batch_change_related",
+    "id": "fin.order_order.batch_change_related",
     "path": "/api/order/order/batchChangeRelated",
     "rules": 9,
     "reads": 13
   },
   {
-    "id": "fin.order.change_finance_date",
+    "id": "fin.order_order.change_finance_date",
     "path": "/api/order/order/changeFinanceDate",
     "rules": 1,
     "reads": 3
   },
   {
-    "id": "fin.order.message_board_add",
+    "id": "fin.order_order.message_board_add",
     "path": "/api/order/order/messageBoardAdd",
     "rules": 4,
     "reads": 3
   },
   {
-    "id": "fin.order.main_finance",
+    "id": "fin.order_order.main_finance",
     "path": "/api/order/order/mainFinance",
     "rules": 1,
     "reads": 1
   },
   {
-    "id": "fin.order.order_export",
+    "id": "fin.order_order.order_export",
     "path": "/api/order/order/orderExport",
     "rules": 0,
     "reads": 97
   },
   {
-    "id": "fin.order.order_sub_export",
+    "id": "fin.order_order.order_sub_export",
     "path": "/api/order/order/orderSubExport",
     "rules": 0,
     "reads": 63
   },
   {
-    "id": "fin.order.order_supplier",
+    "id": "fin.order_order.order_supplier",
     "path": "/api/order/order/orderSupplier",
     "rules": 1,
     "reads": 1
   },
   {
-    "id": "fin.order.batch_policy_list",
+    "id": "fin.order_order.batch_policy_list",
     "path": "/api/order/order/batchPolicyList",
     "rules": 2,
     "reads": 4
   },
   {
-    "id": "fin.order.batch_change_policy",
+    "id": "fin.order_order.batch_change_policy",
     "path": "/api/order/order/batchChangePolicy",
     "rules": 2,
     "reads": 9
   },
   {
-    "id": "fin.order.customer_policy_type",
+    "id": "fin.order_order.customer_policy_type",
     "path": "/api/order/order/customerPolicyType",
     "rules": 0,
     "reads": 1
   },
   {
-    "id": "fin.order.batch_policy_type_list",
+    "id": "fin.order_order.batch_policy_type_list",
     "path": "/api/order/order/batchPolicyTypeList",
     "rules": 2,
     "reads": 5
   },
   {
-    "id": "fin.order.batch_change_policy_type",
+    "id": "fin.order_order.batch_change_policy_type",
     "path": "/api/order/order/batchChangePolicyType",
     "rules": 2,
     "reads": 10
   },
   {
-    "id": "fin.order.check_change_order",
+    "id": "fin.order_order.check_change_order",
     "path": "/api/order/order/checkChangeOrder",
     "rules": 0,
     "reads": 2
   },
   {
-    "id": "fin.order.conn_order_list",
+    "id": "fin.order_order.conn_order_list",
     "path": "/api/order/order/connOrderList",
     "rules": 1,
     "reads": 2
   },
   {
-    "id": "fin.order.audit_type_list",
+    "id": "fin.order_order.audit_type_list",
     "path": "/api/order/order/auditTypeList",
     "rules": 0,
     "reads": 0
   },
   {
-    "id": "fin.order.export_receive_fee_data",
+    "id": "fin.order_order.export_receive_fee_data",
     "path": "/api/order/order/exportReceiveFeeData",
     "rules": 0,
     "reads": 99
   },
   {
-    "id": "fin.order.get_exchange_object",
+    "id": "fin.order_order.get_exchange_object",
     "path": "/api/order/order/getExchangeObject",
     "rules": 2,
     "reads": 2
   },
   {
-    "id": "fin.order.down_document",
+    "id": "fin.order_order.down_document",
     "path": "/api/order/order/downDocument",
     "rules": 2,
     "reads": 2
   },
   {
-    "id": "fin.order.down_attachment",
+    "id": "fin.order_order.down_attachment",
     "path": "/api/order/order/downAttachment",
     "rules": 2,
     "reads": 2
   },
   {
-    "id": "fin.order.generate_order_sub",
+    "id": "fin.order_order.generate_order_sub",
     "path": "/api/order/order/generateOrderSub",
     "rules": 1,
     "reads": 3
   },
   {
-    "id": "fin.order.check_generate_order_sub",
+    "id": "fin.order_order.check_generate_order_sub",
     "path": "/api/order/order/checkGenerateOrderSub",
     "rules": 1,
     "reads": 1
   },
   {
-    "id": "fin.order.batch_put_settle_object_edit",
+    "id": "fin.order_order.batch_put_settle_object_edit",
     "path": "/api/order/order/batchPutSettleObjectEdit",
     "rules": 0,
     "reads": 0
   },
   {
-    "id": "fin.order.batch_pay_settle_object_edit",
+    "id": "fin.order_order.batch_pay_settle_object_edit",
     "path": "/api/order/order/batchPaySettleObjectEdit",
     "rules": 0,
     "reads": 0
   },
   {
-    "id": "fin.order.batch_edit_settle_object",
+    "id": "fin.order_order.batch_edit_settle_object",
     "path": "/api/order/order/batchEditSettleObject",
     "rules": 0,
     "reads": 23
   },
   {
-    "id": "fin.order.export_customer_account_fee",
+    "id": "fin.order_order.export_customer_account_fee",
     "path": "/api/order/order/exportCustomerAccountFee",
     "rules": 1,
     "reads": 2
   },
   {
-    "id": "fin.order.confirm_customer_account_fee",
+    "id": "fin.order_order.confirm_customer_account_fee",
     "path": "/api/order/order/confirmCustomerAccountFee",
     "rules": 0,
     "reads": 99
   },
   {
-    "id": "fin.order.error_order_file",
+    "id": "fin.order_order.error_order_file",
     "path": "/api/order/order/errorOrderFile",
     "rules": 0,
     "reads": 0
   },
   {
-    "id": "fin.order.check_self_fee_update",
+    "id": "fin.order_order.check_self_fee_update",
     "path": "/api/order/order/checkSelfFeeUpdate",
     "rules": 0,
     "reads": 3
   },
   {
-    "id": "fin.order.get_subsidy_proportion",
+    "id": "fin.order_order.get_subsidy_proportion",
     "path": "/api/order/order/getSubsidyProportion",
     "rules": 1,
     "reads": 1
   },
   {
-    "id": "fin.order.revoke_order",
+    "id": "fin.order_order.revoke_order",
     "path": "/api/order/order/revokeOrder",
     "rules": 0,
     "reads": 4
   },
   {
-    "id": "fin.order.revoke_intent",
+    "id": "fin.order_order.revoke_intent",
     "path": "/api/order/order/revokeIntent",
     "rules": 2,
     "reads": 4

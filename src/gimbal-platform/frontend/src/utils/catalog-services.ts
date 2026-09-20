@@ -15,15 +15,22 @@
  */
 import { useAuthStore } from '@/stores/auth'
 
-/** 目录 endpoint 条目中派生所需的两个字段。 */
+/** 目录 endpoint 条目中派生所需的字段(id 供 endpoint→service 映射,
+ *  如适配中心待适配卡跳接口线索板;个别脏行可缺)。 */
 interface CatalogServiceEntry {
   service: string
   system: string
+  id?: string
 }
 
 let cached: Promise<CatalogServiceEntry[]> | null = null
 
-function loadCatalogEntries(): Promise<CatalogServiceEntry[]> {
+/**
+ * 目录条目全集(service×system,每 endpoint 一行)。
+ * 消费方:服务画像落地页按服务聚合计数(2026-09-20 起);
+ * 与另两个 loader 共享同一次缓存拉取。
+ */
+export function loadCatalogEntries(): Promise<CatalogServiceEntry[]> {
   if (cached) return cached
   const p: Promise<CatalogServiceEntry[]> = (async () => {
     const token = useAuthStore().accessToken || ''
@@ -34,7 +41,7 @@ function loadCatalogEntries(): Promise<CatalogServiceEntry[]> {
     const data: any = await r.json()
     const items = data?.data?.items || data?.items || (Array.isArray(data) ? data : [])
     return items
-      .map((e: any) => ({ service: e.service, system: e.system }))
+      .map((e: any) => ({ service: e.service, system: e.system, id: e.id }))
       .filter((e: CatalogServiceEntry) => e.service && e.system)
   })().catch((e) => {
     cached = null          // 失败不缓存,下次可重试
@@ -42,6 +49,13 @@ function loadCatalogEntries(): Promise<CatalogServiceEntry[]> {
   })
   cached = p
   return p
+}
+
+/** endpoint_id → service 映射(适配中心「看影响面」跳线索板要用;
+ *  与其他 loader 共享同一次缓存拉取)。 */
+export function loadCatalogEndpointServiceMap(): Promise<Map<string, string>> {
+  return loadCatalogEntries().then(
+    (es) => new Map(es.filter((e) => e.id).map((e) => [e.id!, e.service])))
 }
 
 export function loadCatalogServiceNames(): Promise<string[]> {

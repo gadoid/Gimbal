@@ -16,6 +16,7 @@ import ImpactDrawer from '@/components/adaptations/ImpactDrawer.vue'
 import { useAuthStore } from '@/stores/auth'
 import * as api from '@/api/adaptations'
 import * as carryApi from '@/api/carry'
+import * as catalog from '@/utils/catalog-services'
 import type { ServiceDrift } from '@/api/carry'
 
 function makeRouter() {
@@ -25,6 +26,8 @@ function makeRouter() {
       { path: '/adaptations', component: { template: '<div/>' } },
       { path: '/adaptations/batches/:batchId', component: { template: '<div/>' } },
       { path: '/scenarios/:scenarioId/detail', component: { template: '<div/>' } },
+      { path: '/services/:name', component: { template: '<div/>' } },
+      { path: '/services/:name/endpoints/:endpointId', component: { template: '<div/>' } },
     ],
   })
 }
@@ -99,8 +102,12 @@ describe('AdaptationCenter', () => {
     const { w } = await mountPage()
 
     expect(diffSpy).toHaveBeenCalledTimes(1)   // 打开页面强制刷新(D3)
-    expect(w.text()).toContain('1 个步骤缺 endpoint_id')
+    expect(w.text()).toContain('未索引 · 1')   // 原型形态:琥珀区 + 计数
+    expect(w.findAll('.ux-card').length).toBe(1)
+    expect(w.find('[data-testid="unindexed-go-0"]').exists()).toBe(true)
     expect(w.findAll('.card.pending').length).toBe(1)
+    // 原型 H-adaptations-v2:区头右侧「查看完整 diff ›」(有待适配卡才显示)
+    expect(w.find('[data-testid="view-full-diff"]').exists()).toBe(true)
     const anomaly = w.find('.card.anomaly')
     expect(anomaly.exists()).toBe(true)
     expect(anomaly.text()).toContain('fin.order.cancel')
@@ -326,6 +333,85 @@ describe('AdaptationCenter', () => {
     })
     // 生成完成后批次表刷新(首进 1 次 + 生成后 1 次)
     expect(listSpy).toHaveBeenCalledTimes(2)
+    w.unmount()
+  })
+})
+
+describe('AdaptationCenter — 影响面摘要与跳板(配套方案 C1)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.restoreAllMocks()
+  })
+
+  function mockPending() {
+    vi.spyOn(api, 'catalogDiff').mockResolvedValue({
+      pending: [{ endpointId: 'fin.order.add', fromVersion: '1.0.0',
+                  toVersion: '1.1.0' }],
+      anomalies: [], baselinedNow: 0,
+    } as never)
+    vi.spyOn(api, 'unindexedSteps').mockResolvedValue([] as never)
+    vi.spyOn(api, 'listBatches').mockResolvedValue([] as never)
+    mockDrift([])
+  }
+
+  it('pending 非空 → impactSummary(pending ids) → 摘要条 + 每服务条;服务条跳画像', async () => {
+    login(true)
+    mockPending()
+    const sumSpy = vi.spyOn(api, 'impactSummary').mockResolvedValue({
+      services: [{ name: 'fin.order', changeCount: 1, caseCount: 2,
+                   recentFailCount: 1 }],
+      totals: { changeCount: 1, serviceCount: 1, caseCount: 2,
+                recentFailCount: 1 },
+    })
+    vi.spyOn(catalog, 'loadCatalogEndpointServiceMap').mockResolvedValue(new Map())
+
+    const { w, router } = await mountPage()
+    expect(sumSpy).toHaveBeenCalledWith(['fin.order.add'])
+    expect(w.find('[data-testid="impact-summary"]').exists()).toBe(true)
+    expect(w.text()).toContain('波及 1 个服务')
+    expect(w.text()).toContain('全站口径')
+
+    await w.find('[data-testid="impact-svc-fin.order"]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/services/fin.order')
+    w.unmount()
+  })
+
+  it('目录映射有 service → 「看影响面」跳线索板;无映射不渲染', async () => {
+    login(true)
+    mockPending()
+    vi.spyOn(api, 'impactSummary').mockResolvedValue({
+      services: [], totals: { changeCount: 1, serviceCount: 0,
+        caseCount: 0, recentFailCount: 0 },
+    })
+    vi.spyOn(catalog, 'loadCatalogEndpointServiceMap')
+      .mockResolvedValue(new Map([['fin.order.add', 'fin.order']]))
+
+    const { w, router } = await mountPage()
+    const link = w.find('[data-testid="board-link-fin.order.add"]')
+    expect(link.exists()).toBe(true)
+    await link.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.path)
+      .toBe('/services/fin.order/endpoints/fin.order.add')
+    w.unmount()
+  })
+
+  it('?focus 深链 → 对应待适配卡高亮(线索板反链落点)', async () => {
+    login(true)
+    mockPending()
+    vi.spyOn(api, 'impactSummary').mockResolvedValue({
+      services: [], totals: { changeCount: 1, serviceCount: 0,
+        caseCount: 0, recentFailCount: 0 },
+    })
+    vi.spyOn(catalog, 'loadCatalogEndpointServiceMap').mockResolvedValue(new Map())
+
+    const router = makeRouter()
+    router.push('/adaptations?focus=fin.order.add')
+    await router.isReady()
+    const w = mount(AdaptationCenter, { global: { plugins: [router] } })
+    await flushPromises()
+    expect(w.find('.card.pending.focused').exists()).toBe(true)
     w.unmount()
   })
 })

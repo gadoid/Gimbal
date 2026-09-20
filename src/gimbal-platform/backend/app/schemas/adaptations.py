@@ -45,6 +45,51 @@ class ImpactItem(BaseModel):
     dataset_column: str | None = Field(default=None, alias="datasetColumn")
 
 
+class RefsDriftReport(BaseModel):
+    """倒排索引 endpoint 面 vs plate 目录 diff(只读;结构同 carry drift)。
+
+    dangling:refs 有、plate 无(悬空引用);zeroRef:plate 有、refs 无
+    (全网零引用);plateReachable=False 时两清单不可信,先看信号。
+    """
+
+    model_config = _CAMEL
+
+    dangling: list[str] = Field(default_factory=list)
+    zero_ref: list[str] = Field(default_factory=list, alias="zeroRef")
+    plate_reachable: bool = Field(alias="plateReachable")
+
+
+class ImpactSummaryService(BaseModel):
+    """impact-summary 单服务条(配套方案 §3.2):pending 归组 + 波及面。"""
+
+    model_config = _CAMEL
+
+    name: str
+    change_count: int = Field(alias="changeCount", ge=0)
+    case_count: int = Field(alias="caseCount", ge=0)
+    recent_fail_count: int = Field(alias="recentFailCount", ge=0)
+
+
+class ImpactSummaryTotals(BaseModel):
+    model_config = _CAMEL
+
+    change_count: int = Field(alias="changeCount", ge=0)
+    service_count: int = Field(alias="serviceCount", ge=0)
+    case_count: int = Field(alias="caseCount", ge=0)
+    recent_fail_count: int = Field(alias="recentFailCount", ge=0)
+
+
+class ImpactSummaryReport(BaseModel):
+    """GET /adaptations/impact-summary:客户端传入 pending endpointIds
+    (catalog/diff 的产物),本接口纯读聚合 —— recentFail 为全站口径
+    (跨 owner),不回执行详情/场景标题。"""
+
+    model_config = _CAMEL
+
+    services: list[ImpactSummaryService] = Field(default_factory=list)
+    totals: ImpactSummaryTotals
+
+
 class OpenBatchIn(BaseModel):
     model_config = _CAMEL
 

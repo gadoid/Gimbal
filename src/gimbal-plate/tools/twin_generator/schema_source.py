@@ -22,8 +22,10 @@ class ColumnInfo:
 class ColumnCatalog:
     def __init__(self, rows: list[ColumnInfo]):
         self.by_name: dict[str, list[ColumnInfo]] = {}
+        self.by_table: dict[str, list[ColumnInfo]] = {}
         for r in rows:
             self.by_name.setdefault(r.column, []).append(r)
+            self.by_table.setdefault(r.table, []).append(r)
 
     def not_null_no_default(self, column: str) -> bool:
         """该列名在全部出现表中都 NOT NULL 且无默认 → 第三判据成立。

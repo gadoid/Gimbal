@@ -110,7 +110,15 @@ async def build_carry_context(db: AsyncSession, definition: dict) -> CarryContex
                 "跳过 carry 填充", raw)
             service_bindings[raw] = None
         else:
-            service_bindings[raw] = await carry_store.get_bindings(db, base)
+            rows = await carry_store.get_bindings(db, base)
+            if base != raw:
+                # 别名键稀疏覆盖(服务画像方案 §4.1 三层解析的 P1 落地):
+                # 精确别名键 > base 服务键 > 全局默认 —— 字段级 merge,
+                # 别名行只覆盖它填的那几个字段,其余继承 base。
+                override = await carry_store.get_bindings(db, raw)
+                if override:
+                    rows = {**rows, **override}
+            service_bindings[raw] = rows
 
     return CarryContext(step_fields=step_fields,
                         service_bindings=service_bindings,

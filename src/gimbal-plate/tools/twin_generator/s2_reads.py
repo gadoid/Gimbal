@@ -68,7 +68,7 @@ def _string_content(pf: ParsedFile, str_node) -> str:
 
 
 def _collect(pf: ParsedFile, method_node, known: set[str], edges: list,
-             reads: dict[str, Read]) -> None:
+             reads: dict[str, Read], origin: str = "request") -> None:
     """单方法体一次遍历:读三类 + 调用边(带实参位置) + 单级别名。"""
     skip: set[int] = set()          # isset/empty 已消费的 subscript 节点
     # children 逆序入栈 → pop 出来是源码顺序:别名($data = $requestData)先于
@@ -93,20 +93,22 @@ def _collect(pf: ParsedFile, method_node, known: set[str], edges: list,
                         dn = _first_string(args[2])
                         default = _string_content(pf, dn) if dn else None
                     key = _string_content(pf, key_n)
-                    reads.setdefault(key, Read(key=key, default=default, via="getData"))
+                    reads.setdefault(key, Read(key=key, default=default, via="getData",
+                                      origin=origin))
             elif name in _ISSET and args:
                 # 实测:args[0] 是 argument 包裹节点,subscript 是其子
                 a0 = args[0].children[0] if args[0].children else args[0]
                 if a0.type == "subscript_expression":
                     sub = _subscript_parts(pf, a0)
                     if sub and sub[0] in known:
-                        reads.setdefault(sub[1], Read(key=sub[1], via="isset"))
+                        reads.setdefault(sub[1], Read(key=sub[1], via="isset", origin=origin))
                         skip.add(a0.id)
         elif t == "subscript_expression":
             if n.id not in skip:
                 sub = _subscript_parts(pf, n)
                 if sub and sub[0] in known:
-                    reads.setdefault(sub[1], Read(key=sub[1], via="subscript"))
+                    reads.setdefault(sub[1], Read(key=sub[1], via="subscript",
+                                         origin=origin))
         elif t == "assignment_expression":
             # 实测:$x = $y → [variable_name, '='(匿名), variable_name],源在 kids[2]
             kids = n.children
@@ -223,9 +225,10 @@ def collect_reads(actions: list[ActionIR], app_root: Path) -> None:
             if not entry0:
                 continue
             queue.append((cls, meth,
-                          frozenset(extra | set(_params(entry0[1], entry0[0])))))
+                          frozenset(extra | set(_params(entry0[1], entry0[0]))),
+                          "request"))
         while queue:
-            cls, meth, known = queue.pop(0)
+            cls, meth, known, origin = queue.pop(0)
             if (cls, meth) in visited:
                 continue
             visited.add((cls, meth))
@@ -235,7 +238,9 @@ def collect_reads(actions: list[ActionIR], app_root: Path) -> None:
             node, pf = entry
             k = set(known)
             edges: list[tuple[str, str, list[int]]] = []
-            _collect(pf, node, k, edges, reads)
+            _collect(pf, node, k, edges, reads, origin)
+            # 后续 BFS 层是 Service 内部传播 → service-origin
+            # (T4.4:该类键需 FE 佐证才入字段集)
             for e_cls, e_meth, positions in edges:
                 entry2 = idx.methods.get(e_cls, {}).get(e_meth)
                 if not entry2:
@@ -243,5 +248,5 @@ def collect_reads(actions: list[ActionIR], app_root: Path) -> None:
                 callee_params = _params(entry2[1], entry2[0])
                 linked = {callee_params[p] for p in positions
                           if p < len(callee_params)}
-                queue.append((e_cls, e_meth, frozenset(linked)))
+                queue.append((e_cls, e_meth, frozenset(linked), "service"))
         act.reads = reads

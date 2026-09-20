@@ -1,8 +1,6 @@
-"""S4:状态赋值(spec §2 白名单判据)+ value_source 同名匹配。
+"""S4:状态赋值(state 判据真源在 state_rules)+ value_source 同名匹配。
 
-判据:read → form;
-     !read && (required | must_include | not_null_no_default) → carry + 须挂 value_source;
-     其余 → carry。
+!read && (required | must_include | not_null_no_default) → carry + 须挂 value_source;
 enum×value_source 互斥(io_spec):enum 字段跳过挂载,标 needs_capture:enum_required。
 """
 from __future__ import annotations
@@ -11,6 +9,7 @@ from dataclasses import dataclass, field
 
 from .ir import ActionIR, FieldIR
 from .schema_source import ColumnCatalog
+from .state_rules import state_of
 
 
 @dataclass
@@ -23,10 +22,14 @@ def assign(all_fields: dict, actions: list[ActionIR], catalog: ColumnCatalog,
     report = DisambigReport()
     for act in actions:
         for f in all_fields.get(act.id, []):
-            if f.read:
-                f.state = "form"
+            f.state = state_of(f)
+            if f.container:
+                # T5.3 行容器:子孙随容器 —— carry 容器 ⇒ 子孙全 carry
+                # (io_spec D 规则④);form 容器的行字段同为 form(手建同款)
+                for c in f.children:
+                    c.state = f.state
+            if f.state == "form":
                 continue
-            f.state = "carry"
             needs_value = (f.required or f.must_include
                            or catalog.not_null_no_default(f.key))
             if not needs_value:

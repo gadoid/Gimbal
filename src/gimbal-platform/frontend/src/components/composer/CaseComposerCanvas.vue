@@ -501,11 +501,14 @@
       </aside>
     </div>
 
-    <!-- 认证选择器(headers value 注入 ${auth.<alias>.<field>}) -->
+    <!-- 认证选择器(headers value 注入 ${auth.<alias>.<field>})。
+         步骤服务绑了凭证时预填(配套方案 §1.1,从服务信息管理带出) -->
     <AuthSelectorModal
       v-if="authPickerOpen"
       v-model="authPickerOpen"
       :auths="auths"
+      :preselect-alias="authPickerBound?.credentialAlias ?? null"
+      :origin-note="authPickerBound ? `${authPickerBound.aliasName} 的绑定凭证(可改选)` : null"
       @select="onAuthPicked"
     />
     <!-- 变量选择器(headers value 注入 ${var.<name>},#3) -->
@@ -565,6 +568,7 @@ import {
   validateEndpointFieldStates,
 } from '@/api/scenario-composer'
 import { list as listAuths } from '@/api/auth_sessions'
+import { listAliases } from '@/api/service-aliases'
 import { getBindings as getCarryBindings, getDefaults as getCarryDefaults } from '@/api/carry'
 import { fetchQueryViewIndex, fetchQueryViewRows } from '@/api/query-views'
 import type { QueryViewIndexEntry } from '@/api/query-views'
@@ -776,6 +780,8 @@ const authPickerOpen = ref(false)
 const authPickerKey = ref<string | null>(null)
 const authPickerVal = ref<string | null>(null)
 const authPickerStep = ref<StepView | null>(null)
+/** 打开选择器时定格的步骤服务绑定(配套方案 §1.1 预填源)。 */
+const authPickerBound = ref<BoundCredential | null>(null)
 
 function addHeader(step: StepView) {
   const h = (step.api.headers ||= {})
@@ -806,6 +812,7 @@ function openAuthPicker(key: string, value: string) {
   if (!authPickerStep.value) return
   authPickerKey.value = key
   authPickerVal.value = value
+  authPickerBound.value = boundCredentialFor(authPickerStep.value)
   authPickerOpen.value = true
 }
 /** 头部注入共用:按 key(或唯一 value 定位)写入模板串。 */
@@ -1709,6 +1716,36 @@ onMounted(() => {
     .then((ns) => { catalogNames.value = new Set(ns) })
     .catch(() => { /* 目录不可达 → 派生降级裸声明黄警,不阻塞编排 */ })
 })
+
+// ── 别名绑定凭证(配套方案 §1.1 C3a)────────────────────────────
+// 步骤服务命中已绑凭证的别名/服务级默认行时,认证选择器预填该凭证
+// (模板引用仍写凭证名,执行时按执行者本人池解析)。拉取失败静默 —
+// 预填只是辅助,不绑也能手工选。
+const aliasCredMap = ref<Record<string, string>>({})
+onMounted(() => {
+  listAliases()
+    .then((rows) => {
+      const m: Record<string, string> = {}
+      for (const r of rows) if (r.credentialAlias) m[r.aliasName] = r.credentialAlias
+      aliasCredMap.value = m
+    })
+    .catch(() => { /* 别名表不可达 → 无预填,手工选择不受影响 */ })
+})
+
+interface BoundCredential { aliasName: string; credentialAlias: string }
+
+/** step 服务 → 绑定凭证:精确别名键 → derive_base 到 base(服务级默认行)。
+ *  与运行时凭证链同构(显式绑定 > 别名表 > 无)。 */
+function boundCredentialFor(step: StepView | null): BoundCredential | null {
+  const raw = step?.api?.service || ''
+  if (!raw) return null
+  const hit = (k: string): BoundCredential | null => {
+    const c = aliasCredMap.value[k]
+    return c ? { aliasName: k, credentialAlias: c } : null
+  }
+  const base = deriveBase(raw, catalogNames.value)
+  return hit(raw) ?? (base ? hit(base) : null)
+}
 
 /** 本 endpoint 的目录服务锚点:/full 的 service(权威)→ 派生当前引用 → null */
 const serviceAnchor = computed<string | null>(() => {

@@ -23,12 +23,49 @@
     <template v-if="auth.isAdmin">
       <UnindexedAlert :steps="unindexed" />
 
+      <!-- 本批影响面摘要(配套方案 §3.2):pending 端点 → 按服务聚合;
+           recentFail 全站口径(跨 owner 聚合数,方案 §3.5);点服务条进画像。
+           原型 H-adaptations-v2:淡蓝底长条 + 粗体标题 + 计数 -->
+      <div v-if="summary" class="impact-summary" data-testid="impact-summary">
+        <div class="is-title">本批影响面摘要</div>
+        <div class="is-bar">
+          <b>{{ summary.totals.changeCount }}</b> 个未处理变更
+          · 波及 <b>{{ summary.totals.serviceCount }}</b> 个服务
+          · <b>{{ summary.totals.caseCount }}</b> 条用例
+          · 其中 <b class="is-fail">{{ summary.totals.recentFailCount }}</b> 条最近失败
+          <span class="is-scope" title="recentFail 跨 owner 统计,含他人场景的最近执行">全站口径</span>
+        </div>
+        <div class="is-svcs">
+          <button
+            v-for="s in summary.services"
+            :key="s.name"
+            type="button"
+            class="is-svc"
+            :data-testid="`impact-svc-${s.name}`"
+            @click="router.push(`/services/${encodeURIComponent(s.name)}`)"
+          >
+            <span class="mono is-name">{{ s.name }}</span>
+            <span class="is-meta">{{ s.changeCount }} 变更 · {{ s.caseCount }} 用例</span>
+            <span v-if="s.recentFailCount" class="is-fail-chip">{{ s.recentFailCount }} 最近失败</span>
+            <span class="is-go">画像 ↗</span>
+          </button>
+        </div>
+      </div>
+
       <div class="section-head">
         <span class="section-title">待适配</span>
         <span
           v-if="pendingCards.length + anomalies.length > 0"
           class="section-count"
         >{{ pendingCards.length + anomalies.length }} 个端点</span>
+        <!-- 原型 H-adaptations-v2:区头右侧「查看完整 diff ›」灰链 -->
+        <button
+          v-if="pendingCards.length"
+          type="button"
+          class="full-diff-link"
+          data-testid="view-full-diff"
+          @click="openDrawer(pendingCards[0])"
+        >查看完整 diff ›</button>
       </div>
       <Alert v-if="adaptations.lastError" variant="destructive" data-testid="diff-error">
         <AlertTitle>{{ adaptations.lastError }}</AlertTitle>
@@ -41,6 +78,7 @@
           v-for="a in anomalies"
           :key="a.endpointId"
           class="card anomaly"
+          :class="{ focused: a.endpointId === focusId }"
           data-testid="anomaly-card"
         >
           <div class="card-top">
@@ -55,6 +93,7 @@
           v-for="p in pendingCards"
           :key="p.endpointId"
           class="card pending"
+          :class="{ focused: p.endpointId === focusId }"
           data-testid="pending-card"
           @click="openDrawer(p)"
         >
@@ -66,6 +105,14 @@
             <span class="ver-chip from">{{ p.fromVersion }}</span>
             <span class="ver-arrow">→</span>
             <span class="ver-chip to">{{ p.toVersion }}</span>
+            <button
+              v-if="svcByEndpoint.get(p.endpointId)"
+              type="button"
+              class="board-link"
+              :data-testid="`board-link-${p.endpointId}`"
+              title="该接口的线索板(告警链展开)"
+              @click.stop="goBoard(p.endpointId)"
+            >↗ 看影响面</button>
             <span class="view">查看影响 →</span>
           </div>
         </div>
@@ -188,11 +235,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import ListPage from '@/layouts/ListPage.vue'
 import { toast } from '@/utils/toast'
 import * as api from '@/api/adaptations'
-import type { BatchOut, PendingChange, UnindexedStep } from '@/api/adaptations'
+import type {
+  BatchOut, ImpactSummaryReport, PendingChange, UnindexedStep,
+} from '@/api/adaptations'
+import { loadCatalogEndpointServiceMap } from '@/utils/catalog-services'
 import { getDrift, type ServiceDrift } from '@/api/carry'
 import {
   canGenerateCarryBatch,
@@ -212,6 +262,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 const auth = useAuthStore()
 const adaptations = useAdaptationsStore()
 const router = useRouter()
+const route = useRoute()
 
 const unindexed = ref<UnindexedStep[]>([])
 const batchRows = ref<BatchOut[]>([])
@@ -225,6 +276,33 @@ const drawerTo = ref('')
 const pendingCards = computed<PendingChange[]>(
   () => adaptations.diffReport?.pending ?? [])
 const anomalies = computed(() => adaptations.diffReport?.anomalies ?? [])
+
+// ── 本批影响面摘要 + 线索板跳转(配套方案 §3)──────────────────────
+const summary = ref<ImpactSummaryReport | null>(null)
+/** endpoint_id → service(轻列表权威):待适配卡「看影响面」跳线索板用。 */
+const svcByEndpoint = ref<Map<string, string>>(new Map())
+/** 深链定位(?focus={endpointId},线索板适配节点的反链落点)。 */
+const focusId = computed(() => String(route.query.focus ?? ''))
+
+async function loadSummary(): Promise<void> {
+  const ids = pendingCards.value.map((p) => p.endpointId)
+  if (!ids.length) {
+    summary.value = null
+    return
+  }
+  try {
+    summary.value = await api.impactSummary(ids)
+  } catch {
+    summary.value = null // 摘要失败不惊动主流程(面板照常工作)
+  }
+}
+
+function goBoard(endpointId: string): void {
+  const svc = svcByEndpoint.value.get(endpointId)
+  if (!svc) return
+  void router.push(
+    `/services/${encodeURIComponent(svc)}/endpoints/${encodeURIComponent(endpointId)}`)
+}
 
 /** 状态 → Signal chip 色(el-tag type 的语义迁移) */
 const opStatusClass: Record<string, string> = {
@@ -255,6 +333,7 @@ async function loadBatches(scope?: 'mine'): Promise<void> {
 
 async function refreshAll(): Promise<void> {
   await adaptations.refreshDiff(true)   // D3:打开/手动检查 → 强制刷新
+  void loadSummary()                    // 摘要跟随最新 pending(失败静默)
   try {
     unindexed.value = await api.unindexedSteps()
   } catch {
@@ -348,6 +427,9 @@ onMounted(() => {
   if (auth.isAdmin) {
     void refreshAll()
     void loadCarryDrift()
+    loadCatalogEndpointServiceMap()
+      .then((m) => { svcByEndpoint.value = m })
+      .catch(() => { /* 目录不可达 → 不显跳板链接,抽屉照常 */ })
   } else {
     void loadBatches('mine')
   }
@@ -374,6 +456,100 @@ onMounted(() => {
   border-radius: 3px;
 }
 .section-actions { margin-left: auto; display: flex; gap: 8px; }
+
+/* ── 本批影响面摘要(配套方案 §3.2;原型 H-adaptations-v2 淡蓝底)── */
+.impact-summary {
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid #2f6fed33;
+  border-radius: 8px;
+  background: #eef3fe;
+}
+
+.is-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 4px;
+}
+
+/* 原型:区头右侧「查看完整 diff ›」灰链 */
+.full-diff-link {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #64748b;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.full-diff-link:hover { color: #2f6fed; }
+
+.is-bar {
+  font-size: 13px;
+  color: var(--signal-ink, #1f2937);
+}
+
+.is-bar b { color: #2f6fed; }
+.is-bar .is-fail { color: var(--signal-failed, #dc2626); }
+
+.is-scope {
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-size: 11px;
+  color: #64748b;
+  background: #eef2f7;
+  border-radius: 3px;
+  cursor: help;
+}
+
+.is-svcs { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+
+.is-svc {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--signal-line, #e2e8f0);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.is-svc:hover { border-color: #2f6fed; }
+.is-name { font-weight: 600; min-width: 180px; }
+.is-meta { font-size: 12px; color: #64748b; }
+
+.is-fail-chip {
+  padding: 1px 6px;
+  font-size: 11px;
+  color: #b91c1c;
+  background: #fef2f2;
+  border-radius: 999px;
+}
+
+.is-go { margin-left: auto; font-size: 12px; color: #2f6fed; }
+
+/* ── focus 深链高亮(?focus=,线索板反链落点)── */
+.card.focused {
+  outline: 2px solid #2f6fed;
+  outline-offset: 1px;
+}
+
+.board-link {
+  margin-left: auto;
+  padding: 1px 8px;
+  font-size: 12px;
+  color: #2f6fed;
+  background: #e7efe0;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.board-link:hover { background: #d8e7d0; }
 
 /* ── 待适配卡片 ── */
 .cards {

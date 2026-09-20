@@ -1,15 +1,20 @@
 <!-- ImpactDrawer —— 影响清单抽屉(spec §5.2):按 field 分组,直填/模板 + 数据集列标注。
-     批次 3 迁移新栈:el-drawer → shadcn Drawer,tag → Signal chip。 -->
+     批次 3 迁移新栈:el-drawer → 右侧 Sheet(vaul Drawer 是底部抽屉,
+     加 max-w 后会变成底部居中窄条,与「抽屉」直觉不符,2026-09-20 修正)。 -->
 <template>
-  <Drawer
+  <Sheet
     :open="modelValue"
     @update:open="emit('update:modelValue', $event)"
   >
-    <DrawerContent class="max-w-[480px]" @interact-outside="!modelValue || undefined">
-      <DrawerHeader>
-        <DrawerTitle>{{ drawerTitle }}</DrawerTitle>
-        <DrawerDescription>按 field 分组的影响清单;开批次后到批次详情逐条应用</DrawerDescription>
-      </DrawerHeader>
+    <SheetContent
+      side="right"
+      class="flex w-[480px] max-w-[92vw] flex-col gap-0 p-0 sm:max-w-[480px]"
+      data-testid="impact-sheet"
+    >
+      <SheetHeader class="border-b border-signal-line px-4 py-3">
+        <SheetTitle class="text-left">{{ drawerTitle }}</SheetTitle>
+        <SheetDescription class="text-left">按 field 分组的影响清单;开批次后到批次详情逐条应用</SheetDescription>
+      </SheetHeader>
       <div class="flex-1 overflow-y-auto px-4">
         <p v-if="loading" class="m-0 py-4 text-center text-body text-muted-foreground">加载中…</p>
         <p v-else-if="error" class="error">{{ error }}</p>
@@ -36,22 +41,22 @@
           </ul>
         </div>
       </div>
-      <DrawerFooter>
+      <SheetFooter class="border-t border-signal-line px-4 py-3">
         <Button
           class="open-batch-btn w-full"
           :disabled="groups.length === 0"
           @click="emit('openBatch')"
         >开批次</Button>
-      </DrawerFooter>
-    </DrawerContent>
-  </Drawer>
+      </SheetFooter>
+    </SheetContent>
+  </Sheet>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import * as api from '@/api/adaptations'
 import type { ImpactItem } from '@/api/adaptations'
-import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 
 const props = defineProps<{

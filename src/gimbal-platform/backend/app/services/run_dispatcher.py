@@ -67,7 +67,8 @@ from .run_injection import (
     entry_issues,
     injectable_universe,
 )
-from .run_materialize import materialize_run_copy
+from .run_materialize import _referenced_services, materialize_run_copy
+from . import service_aliases
 
 # 物理迁移自 gimbal 后:用平台侧标准 AuthSession 替代自创 ResolvedAuth dataclass。
 # 下游 materialize_run_copy(_apply_users)仍消费 username/password/url/token_type/
@@ -553,7 +554,27 @@ async def dispatch_run(
     # authAlias 并入(即使 steps 未引用该 alias)。去重保序。
     scanned = scan_auth_aliases(definition_from_payload(scen.payload).get("steps") or [])
     bound = [b.auth_alias for b in req.service_bindings.values() if b.auth_alias]
-    auth_aliases: list[str] = list(dict.fromkeys([*scanned, *bound]))
+    auth_aliases: list[str] = [*scanned, *bound]
+    # 别名表凭证默认(服务画像方案 §4.1):raw 服务键精确命中
+    # service_aliases.credential_alias → 并入注入清单,按执行者本人
+    # 凭证池解析(_resolve_exec_auths 的 owner 过滤)。优先级:场景
+    # 显式绑定 > 别名表命中 —— 同键已绑 authAlias 的不吃默认。
+    # 存档口径(§4.1 拍板):config_json.serviceBindings 只记场景原始
+    # 绑定,别名默认只体现于 injectedAuths 清单与实际注入的 users。
+    # 查表失败降级跳过(别名默认是增强,不是前置条件)。
+    try:
+        alias_creds = await service_aliases.credential_aliases_for(
+            db, _referenced_services(
+                definition_from_payload(scen.payload).get("steps") or []))
+    except Exception:  # noqa: BLE001
+        logger.opt(exception=True).warning(
+            "run_dispatcher: service alias lookup failed; skipped")
+        alias_creds = {}
+    bound_keys = {k for k, b in req.service_bindings.items() if b.auth_alias}
+    auth_aliases = list(dict.fromkeys([
+        *auth_aliases,
+        *(cred for raw, cred in alias_creds.items() if raw not in bound_keys),
+    ]))
 
     execution = await _create_execution(
         db,

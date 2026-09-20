@@ -1,7 +1,8 @@
 """fin.added_service.create_service —— 孪生生成器产物(请求面;行为面归场景用例)。
 
-来源: 代码生成 | 基线: fin-test@2026-09-15 | 生成时间: 2026-09-15T11:13:18+00:00
-needs_capture(首跑经 gimbal 执行回填): company_no, effective_time_start
+来源: 代码生成 | 基线: fin-test@2026-09-15 | 生成时间: 2026-09-20T04:38:13+00:00
+needs_capture(首跑经 gimbal 执行回填): company_no, effective_time_start, source_type, type
+溯源统计: lang=8, column=2, 无zh=1 | fe_high=0, enum=0
 """
 from typing import Final
 
@@ -41,22 +42,38 @@ ADDED_SERVICE_CREATE_SERVICE: Final[EndpointSpec] = EndpointSpec(
     request=RequestSpec(
         body_type='json',
         declarations=[
-            DeclarationEntry(name='company_no', path=f'$.company_no', type='string', state='carry', required=True, description='企业社会统一信用代码'),  # needs_capture:value_source
-            DeclarationEntry(name='effective_time_start', path=f'$.effective_time_start', type='integer', state='carry', required=True, default='0', description='有效期起'),  # needs_capture:value_source
-            DeclarationEntry(name='effective_time_end', path=f'$.effective_time_end', type='integer', state='form', required=True, default='0', description='有效期止'),
-            DeclarationEntry(name='total_num', path=f'$.total_num', type='integer', state='form', default='0', description='总额度'),
-            DeclarationEntry(name='num', path=f'$.num', type='integer', state='form', default='0', description='数量'),
-            DeclarationEntry(name='service_type', path=f'$.service_type', type='string', state='form', default='track', description='服务类型   默认 轨迹订阅'),
-            DeclarationEntry(name='source_type', path=f'$.source_type', type='integer', state='form', default='1', description='来源类型(应收批次)1自主创建 2应付联动发起(0910)'),
-            DeclarationEntry(name='type', path=f'$.type', type='string', state='form'),
-            DeclarationEntry(name='credit_type', path=f'$.credit_type', type='string', state='form'),
-            DeclarationEntry(name='credit_total_num', path=f'$.credit_total_num', type='integer', state='form', default='0', description='资信报告总额度'),
-            DeclarationEntry(name='credit_num', path=f'$.credit_num', type='integer', state='form', default='0', description='资信报告剩余额度'),
+            DeclarationEntry(name='company_no', path=f'$.company_no', type='string', state='carry', ui_kind='text', required=True, description='企业'),  # zh_ambiguous, needs_capture:value_source
+            DeclarationEntry(name='effective_time_start', path=f'$.effective_time_start', type='integer', state='carry', ui_kind='number', required=True, default='0', description='有效期起'),  # needs_capture:value_source
+            DeclarationEntry(name='effective_time_end', path=f'$.effective_time_end', type='integer', state='form', ui_kind='number', required=True, default='0', description='有效期止'),
+            DeclarationEntry(name='total_num', path=f'$.total_num', type='integer', state='form', ui_kind='number', default='0', description='运踪订阅总额度'),
+            DeclarationEntry(name='num', path=f'$.num', type='integer', state='form', ui_kind='number', default='0', description='增加/减少运踪订阅配额量'),
+            DeclarationEntry(name='service_type', path=f'$.service_type', type='string', state='form', ui_kind='text', default='track', description='服务类型   默认 轨迹订阅'),
+            DeclarationEntry(name='source_type', path=f'$.source_type', type='string', state='form', ui_kind='text', description='来源类型'),  # zh_ambiguous
+            DeclarationEntry(name='type', path=f'$.type', type='integer', state='form', ui_kind='number', default='0', description='增加/减少配额类型'),  # zh_ambiguous
+            DeclarationEntry(name='credit_type', path=f'$.credit_type', type='string', state='form', ui_kind='text'),
+            DeclarationEntry(name='credit_total_num', path=f'$.credit_total_num', type='integer', state='form', ui_kind='number', default='0', description='企业资信报告查询总额度'),
+            DeclarationEntry(name='credit_num', path=f'$.credit_num', type='integer', state='form', ui_kind='number', default='0', description='增加/减少企业资信报告查询配额量'),
         ],
     ),
     responses={
         200: ResponseSpec(
             status=200,
+            description='成功(信封统一;data 行形状归场景用例)',
+            declarations=[
+            DeclarationEntry(name='code', path='$.code', type='number',
+                             required=False, ui_kind='number',
+                             description='业务状态码(200=成功)', assertable=True),
+            DeclarationEntry(name='msg', path='$.msg', type='string',
+                             required=False, ui_kind='text',
+                             description='业务提示信息', assertable=True),
+            DeclarationEntry(name='data', path='$.data', type='object',
+                             required=False, ui_kind='json',
+                             description='业务数据(行形状归场景用例)', assertable=True),
+            DeclarationEntry(name='request_id', path='$.request_id', type='string',
+                             required=False, ui_kind='text',
+                             description='请求追踪ID', assertable=True),
+
+            ],
         ),
     },
     version=FIN_DEFAULT_VERSION,

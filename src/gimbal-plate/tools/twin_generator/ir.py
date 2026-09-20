@@ -21,8 +21,17 @@ class RuleEntry:
     def parts(self) -> list[str]:
         return [p.strip() for p in self.rules.split("|") if p.strip()]
 
+    def hard_required(self) -> bool:
+        """require → 值非空(强校验)。"""
+        return any(p == "require" for p in self.parts())
+
+    def soft_present(self) -> bool:
+        """仅 present → 键要在、值可空(过滤语义;需结合 read 判读)。"""
+        return (not self.hard_required()
+                and any(p == "present" for p in self.parts()))
+
     def required(self) -> bool:
-        """require|present → 值非空(present 的 status 豁免分支按非空对待)。"""
+        """require|present → 值非空(v1 直译口径,保留给对照)。"""
         return any(p in ("require", "present") for p in self.parts())
 
     def must_include(self) -> bool:
@@ -44,10 +53,11 @@ class RuleEntry:
 
 @dataclass
 class Read:
-    """S2b 键读标记。via ∈ getData|subscript|isset。"""
+    """S2b 键读标记。via ∈ getData|subscript|isset;origin ∈ request|service。"""
     key: str
     default: str | None = None
     via: str = ""
+    origin: str = "request"   # 根层(控制器/Validator/持请求直调)=request
 
 
 @dataclass
@@ -63,6 +73,10 @@ class ActionIR:
     rules: list[RuleEntry] = field(default_factory=list)
     reads: dict[str, Read] = field(default_factory=dict)
     method: str = "POST"
+    # S2c 填:FE 无 URL 命中时 method 为假设值(v1 恒 POST 的缺口)
+    method_assumed: bool = True
+    # S1 尾道:同名控制器跨模块(Policy@Customer/Home)时 id 加模块前缀防撞
+    module_scoped: bool = False
 
     @property
     def path(self) -> str:
@@ -71,7 +85,9 @@ class ActionIR:
 
     @property
     def id(self) -> str:
-        return f"fin.{snake(self.controller)}.{snake(self.action)}"
+        ctrl = (f"{snake(self.module)}_{snake(self.controller)}"
+                if self.module_scoped else snake(self.controller))
+        return f"fin.{ctrl}.{snake(self.action)}"
 
     @property
     def const_name(self) -> str:
@@ -89,6 +105,7 @@ class FieldIR:
     zh_source: str = ""            # rule|column|derived|enum|""
     type_: str = "string"
     enum_values: list | None = None
+    enum_candidate: str = ""      # T3.2:挂载来源 Enum 类名(报告追溯)
     default: object = None
     col_comment: str = ""
     col_type: str = ""
@@ -97,3 +114,11 @@ class FieldIR:
     state: str = "carry"
     value_source: tuple[str, str] | None = None   # (view, column)
     flags: list[str] = field(default_factory=list)  # needs_capture:value_source 等
+    # S2c 前端面(高置信 form/payload;label 中置信仅 zh 兜底)
+    fe_zh: str = ""
+    fe_type: str = ""            # 前端控件类型原词(select/upload/...)
+    fe_confidence: str = ""      # high|medium|""
+    example: str = ""            # FE payload 字面量值(可空串=有键无值)
+    # T5.3 行容器:foreach + paramVerification 分组检测命中
+    container: bool = False      # 容器条目(type=array,emit 时带 children)
+    children: list = field(default_factory=list)   # 子 FieldIR(模板态 path)

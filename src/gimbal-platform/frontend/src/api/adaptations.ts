@@ -92,6 +92,26 @@ export interface UnindexedStep {
   reason: string
 }
 
+/** impact-summary 单服务条(配套方案 §3.2):pending 归组 + 波及面。 */
+export interface ImpactSummaryService {
+  name: string
+  changeCount: number
+  caseCount: number
+  recentFailCount: number
+}
+
+export interface ImpactSummaryTotals {
+  changeCount: number
+  serviceCount: number
+  caseCount: number
+  recentFailCount: number
+}
+
+export interface ImpactSummaryReport {
+  services: ImpactSummaryService[]
+  totals: ImpactSummaryTotals
+}
+
 export interface OpCreateIn {
   opType: string
   /** 场景 op 必填;CARRY_OPS 免(后端 OpCreateIn 已可空)—— carry 请求体不带该键。 */
@@ -123,6 +143,16 @@ export async function impact(endpointId: string, field?: string): Promise<Impact
   const { data } = await http.get<ImpactItem[]>('/adaptations/impact', {
     params: { endpointId, field: field || undefined },
   })
+  return data
+}
+
+/** 本批影响面摘要(配套方案 §3.2):传入客户端已拿到的 pending 端点集,
+ *  纯读聚合。数组参数手工拼 query —— axios 默认序列化带 ``[]`` 后缀,
+ *  FastAPI 的 repeated-param 不认。 */
+export async function impactSummary(endpointIds: string[]): Promise<ImpactSummaryReport> {
+  const qs = endpointIds.map((e) => `endpointIds=${encodeURIComponent(e)}`).join('&')
+  const { data } = await http.get<ImpactSummaryReport>(
+    `/adaptations/impact-summary${qs ? `?${qs}` : ''}`)
   return data
 }
 

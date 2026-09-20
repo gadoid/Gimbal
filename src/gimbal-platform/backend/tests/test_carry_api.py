@@ -61,6 +61,55 @@ async def test_service_fields_aggregates_carry_face(client, plate):
     assert r.json()["degraded"] is False
 
 
+async def test_service_fields_alias_key_normalizes_to_base(client, plate):
+    """键归一(配套方案 §2.3):传别名全名 → derive_base 到 base 再
+    过滤 Plate 面。修复前别名键精确匹配过滤不到任何端点 → 面恒空。"""
+    plate.services = [{"name": "fin-service"}]
+    plate.items = [{"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
+                    "service": "fin-service"}]
+    plate.fulls = {"fin.ep1": {"request": {"declarations": [
+        {"path": "$.remark", "state": "carry", "type": "string",
+         "description": "备注"},
+    ]}}}
+    admin = await _admin(client)
+    r = await client.get("/api/carry/bindings/fin-service-测试/fields",
+                         headers=admin)
+    assert r.status_code == 200, r.text
+    assert r.json()["fields"] == [
+        {"path": "$.remark", "type": "string", "description": "备注"}]
+    assert r.json()["degraded"] is False
+
+
+async def test_service_fields_bare_key_returns_empty_face(client, plate):
+    """裸声明键(目录内无此服务也无其 base):无面可言 —— 空面 +
+    degraded=False(空是确定结论,不是面不完整)。"""
+    plate.services = [{"name": "fin-service"}]
+    plate.items = [{"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
+                    "service": "fin-service"}]
+    plate.fulls = {"fin.ep1": {"request": {"declarations": [
+        {"path": "$.remark", "state": "carry", "type": "string"}]}}}
+    admin = await _admin(client)
+    r = await client.get("/api/carry/bindings/ghost-svc-x/fields",
+                         headers=admin)
+    assert r.status_code == 200, r.text
+    assert r.json() == {"fields": [], "degraded": False}
+
+
+async def test_service_fields_catalog_down_degrades_to_raw_key(client, plate):
+    """目录不可得(services dim 失败 → 空集):无从归一,原样过滤
+    (修复前行为)—— base 键照常工作,不因目录故障全局面瘫痪。"""
+    plate.services = []  # 目录空集
+    plate.items = [{"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
+                    "service": "fin-service"}]
+    plate.fulls = {"fin.ep1": {"request": {"declarations": [
+        {"path": "$.remark", "state": "carry", "type": "string"}]}}}
+    admin = await _admin(client)
+    r = await client.get("/api/carry/bindings/fin-service/fields",
+                         headers=admin)
+    assert r.status_code == 200, r.text
+    assert [f["path"] for f in r.json()["fields"]] == ["$.remark"]
+
+
 async def test_service_fields_degraded_when_single_full_fails(client, plate):
     """单端点 /full 失败(抛错或 404→None)→ degraded=True:面不完整,
     配置页整表替换保存会删不可见端点的绑定值,前端据此禁存。"""

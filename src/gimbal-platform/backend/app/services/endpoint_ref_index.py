@@ -7,6 +7,13 @@
 * ``rebuild``      全量重建 + 报告(Task 3)
 * ``unindexed_steps`` 未索引步骤只读清单(P5 适配中心挂牌)
 
+锚点行(2026-09-20):锚定了 endpoint 但 body/headers 全空的 step 也发
+一行哨兵行(``source=ANCHOR_SOURCE``、``field_name=ANCHOR_FIELD``)。
+此前这类 step 零行,对 endpoint→scenario 影响查询不可见——impact 靠
+全量 payload 兜底直扫补位(O(全部场景)/次),而 open_batch 的草案
+展开没有那份兜底,零字段步连 addField op 都漏生成。锚点行让两类
+消费方读同一份索引。升级部署后须跑一次 ``rebuild`` 补齐存量。
+
 注意:本模块**不得** import scenario_store(那里反向 import 本模块挂
 钩子,会成环)—— steps 提取用本地 walker,3 行,接受这点重复。
 """
@@ -28,6 +35,11 @@ _VAR_RE = re.compile(r"\$\{var\.([A-Za-z0-9_.]+)\}")
 # GET 查询参数约定放 request.body(executor 映射为 params=),body 管道天然覆盖。
 _SOURCES = ("body", "headers")
 
+# 锚点行哨兵值:PK 四列天然容纳(空串满足 NOT NULL);消费方按 source 判别。
+# 只为零字段锚点 step 发(有字段行的 step 无需占位),保持既有行的语义不变。
+ANCHOR_SOURCE = "anchor"
+ANCHOR_FIELD = ""
+
 
 def _steps(payload: dict | None) -> list[dict]:
     definition = (payload or {}).get("definition")
@@ -48,6 +60,9 @@ def parse_refs(
 
     via_var 取值中**第一个** ``${var.NAME}`` 匹配(多变量内嵌属尾部
     场景,P2 扩展可改列形状);非字符串值(数值/布尔)恒为直填。
+
+    锚定但业务字段全空(body/headers 皆空)的 step 发一行锚点行
+    (source=ANCHOR_SOURCE),保证影响查询可见;有字段行的 step 不发。
     """
     refs: list[ScenarioEndpointRef] = []
     unindexed: list[dict] = []
@@ -61,6 +76,7 @@ def parse_refs(
                 "reason": "no_endpoint_id",
             })
             continue
+        step_rows = 0
         for source in _SOURCES:
             for name, value in _fields(step, source).items():
                 via_var = None
@@ -72,14 +88,22 @@ def parse_refs(
                     field_name=str(name), endpoint_id=str(endpoint_id),
                     via_var=via_var,
                 ))
+                step_rows += 1
+        if step_rows == 0:
+            refs.append(ScenarioEndpointRef(
+                scenario_id=scenario_id, step_index=i,
+                source=ANCHOR_SOURCE, field_name=ANCHOR_FIELD,
+                endpoint_id=str(endpoint_id), via_var=None,
+            ))
     return refs, unindexed
 
 
 def anchor_step_indexes(payload: dict | None, endpoint_id: str) -> list[int]:
-    """锚点=endpoint_id 的全部 step 下标(含业务字段全空者)— impact 兜底直扫用。
+    """锚点=endpoint_id 的全部 step 下标(含业务字段全空者)。
 
-    parse_refs 只为有业务字段(body/headers)的锚点 step 产行;业务字段
-    全空的锚点 step 零行 → 影响查询对其不可见,须按锚点直扫 payload 补位。
+    锚点行上线前的 impact 兜底直扫用;现在 parse_refs 已为零字段锚点
+    step 发锚点行,本函数仅留作索引外的直扫工具(测试/排障),生产
+    路径不再依赖。
     """
     out: list[int] = []
     for i, step in enumerate(_steps(payload)):

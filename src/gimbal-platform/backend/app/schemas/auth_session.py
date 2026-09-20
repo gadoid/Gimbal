@@ -25,6 +25,43 @@ class AuthSessionOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     password_masked: str = Field(default="<REDACTED>")
+    # 反查双计数(配套方案 §1.2):N 别名 / N 场景(模板∪方案绑定,
+    # 快照不进计数)。默认 0 — 非列表调用方(detail/test)不填。
+    alias_ref_count: int = Field(default=0)
+    scenario_ref_count: int = Field(default=0)
+
+
+class AliasRefItem(BaseModel):
+    """反查面板 · 别名绑定行(service_aliases.credential_alias 命中)。"""
+
+    alias_name: str
+    base_service: str
+    group_tag: str | None = None
+
+
+class ScenarioRefItem(BaseModel):
+    """反查面板 · 单条场景引用:kinds ⊆ {template, scheme, snapshot}。
+
+    owner_id 供前端算「删除会被拦截」的预告(与 DELETE 409 同口径:
+    本人场景的 template/scheme 才阻断,schemas 见 auth_references)。
+    """
+
+    scenario_id: str
+    name: str
+    kinds: list[str]
+    owner_id: int
+
+
+class ScenarioRefsOut(BaseModel):
+    visible: list[ScenarioRefItem] = Field(default_factory=list)
+    hidden_count: int = 0
+
+
+class AuthReferencesOut(BaseModel):
+    """GET /auths/{alias}/references(配套方案 §1.3):实时扫,不建反向索引。"""
+
+    alias_refs: list[AliasRefItem] = Field(default_factory=list)
+    scenario_refs: ScenarioRefsOut = Field(default_factory=ScenarioRefsOut)
 
 
 class AuthSessionCreateIn(BaseModel):

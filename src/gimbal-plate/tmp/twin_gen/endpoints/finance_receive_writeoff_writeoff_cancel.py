@@ -1,7 +1,8 @@
 """fin.receive_writeoff.writeoff_cancel —— 孪生生成器产物(请求面;行为面归场景用例)。
 
-来源: 代码生成 | 基线: fin-test@2026-09-15 | 生成时间: 2026-09-15T11:13:18+00:00
-needs_capture(首跑经 gimbal 执行回填): (无)
+来源: 代码生成 | 基线: fin-test@2026-09-15 | 生成时间: 2026-09-20T04:38:13+00:00
+needs_capture(首跑经 gimbal 执行回填): writeoff_status
+溯源统计: column=5, lang=1 | fe_high=0, enum=0
 """
 from typing import Final
 
@@ -41,20 +42,33 @@ RECEIVE_WRITEOFF_WRITEOFF_CANCEL: Final[EndpointSpec] = EndpointSpec(
     request=RequestSpec(
         body_type='json',
         declarations=[
-            DeclarationEntry(name='receive_writeoff_id', path=f'$.receive_writeoff_id', type='string', state='form', required=True, description='核销ID集合'),
-            DeclarationEntry(name='writeoff_status', path=f'$.writeoff_status', type='integer', state='form', default='1', description='核销状态 1未核销 2已核销 3部分核销'),
-            DeclarationEntry(name='audit_status', path=f'$.audit_status', type='integer', state='form', default='1', description='审批状态 1待处理 2通过 3驳回 4撤销'),
-            DeclarationEntry(name='writeoff_type', path=f'$.writeoff_type', type='integer', state='form', default='0', description='核销类型 1正常核销 2强制核销'),
-            DeclarationEntry(name='writeoff_no', path=f'$.writeoff_no', type='string', state='form', description='应收核销记录编号'),
-            DeclarationEntry(name='writeoff_mode', path=f'$.writeoff_mode', type='string', state='form', description='核销方式 按费用核销fee 按发票核销 invoice 按提单核销order'),
-            DeclarationEntry(name='order_id', path=f'$.order_id', type='integer', state='form', default='0', description='业务订单ID'),
-            DeclarationEntry(name='policy_id', path=f'$.policy_id', type='integer', state='form', default='0', description='服务策略ID'),
-            DeclarationEntry(name='customer_id', path=f'$.customer_id', type='integer', state='form', default='0', description='客户ID'),
+            DeclarationEntry(name='receive_writeoff_id', path=f'$.receive_writeoff_id', type='integer', state='form', ui_kind='number', required=True, default='0', description='核销ID'),
+            DeclarationEntry(name='writeoff_status', path=f'$.writeoff_status', type='integer', state='form', ui_kind='number', default='1', description='核销状态'),  # zh_ambiguous
+            DeclarationEntry(name='audit_status', path=f'$.audit_status', type='integer', state='form', ui_kind='number', description='审核状态 0无状态 1审核中 2审核通过 3审核驳回 4审核撤销'),
+            DeclarationEntry(name='writeoff_type', path=f'$.writeoff_type', type='integer', state='form', ui_kind='number', default='0', description='核销类型 1正常核销 2强制核销'),
+            DeclarationEntry(name='writeoff_no', path=f'$.writeoff_no', type='string', state='form', ui_kind='textarea', description='关联核销记录编号'),
+            DeclarationEntry(name='writeoff_mode', path=f'$.writeoff_mode', type='string', state='form', ui_kind='text', description='核销方式 按费用核销fee 按发票核销 invoice 按提单核销order'),
         ],
     ),
     responses={
         200: ResponseSpec(
             status=200,
+            description='成功(信封统一;data 行形状归场景用例)',
+            declarations=[
+            DeclarationEntry(name='code', path='$.code', type='number',
+                             required=False, ui_kind='number',
+                             description='业务状态码(200=成功)', assertable=True),
+            DeclarationEntry(name='msg', path='$.msg', type='string',
+                             required=False, ui_kind='text',
+                             description='业务提示信息', assertable=True),
+            DeclarationEntry(name='data', path='$.data', type='object',
+                             required=False, ui_kind='json',
+                             description='业务数据(行形状归场景用例)', assertable=True),
+            DeclarationEntry(name='request_id', path='$.request_id', type='string',
+                             required=False, ui_kind='text',
+                             description='请求追踪ID', assertable=True),
+
+            ],
         ),
     },
     version=FIN_DEFAULT_VERSION,

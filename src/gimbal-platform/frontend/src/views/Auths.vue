@@ -37,6 +37,7 @@
           <TableHead class="text-caption font-semibold text-muted-foreground">username</TableHead>
           <TableHead class="w-[110px] text-caption font-semibold text-muted-foreground">token_type</TableHead>
           <TableHead class="w-[100px] text-caption font-semibold text-muted-foreground">expires_in</TableHead>
+          <TableHead class="w-[130px] text-caption font-semibold text-muted-foreground">被引用</TableHead>
           <TableHead class="w-[180px] text-center text-caption font-semibold text-muted-foreground">操作</TableHead>
         </TableRow>
       </TableHeader>
@@ -50,11 +51,47 @@
           </TableCell>
           <TableCell><span class="text-caption text-muted-foreground">{{ formatExpires(row.expires_in) }}</span></TableCell>
           <TableCell>
-            <div class="flex items-center justify-center gap-0.5">
-              <Button variant="link" size="sm" class="h-7 px-2" data-testid="auth-test" @click="runTest(row)">测试</Button>
-              <Button variant="link" size="sm" class="h-7 px-2" data-testid="auth-edit" @click="openEdit(row)">编辑</Button>
-              <Button variant="link" size="sm" class="h-7 px-2 text-signal-failed" data-testid="auth-del" @click="openDelete(row)">删除</Button>
+            <!-- 被引用(配套方案 §1.2):计数来自列表接口一次扫描;
+                 点开侧板看明细(名字引用语义在侧板说明) -->
+            <div class="flex flex-wrap items-center gap-1">
+              <button
+                v-if="row.alias_ref_count"
+                type="button"
+                class="ref-chip"
+                :data-testid="`refs-open-${row.alias}`"
+                @click="openRefs(row)"
+              >{{ row.alias_ref_count }} 别名</button>
+              <button
+                v-if="row.scenario_ref_count"
+                type="button"
+                class="ref-chip"
+                @click="openRefs(row)"
+              >{{ row.scenario_ref_count }} 场景</button>
+              <span
+                v-if="!row.alias_ref_count && !row.scenario_ref_count"
+                class="text-micro text-muted-foreground"
+                title="别名绑定与场景引用均为零(快照类不计)— 删除不触发 409 拦截"
+              >未被引用 · 可安全删除</span>
             </div>
+          </TableCell>
+          <TableCell>
+            <!-- 原型 H-auths-v2:行操作收进 ⋯ 下拉(轮换无后端,不列) -->
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                class="more-button rounded-chip border border-signal-line bg-signal-card px-2.5 py-0.5 text-body text-muted-foreground transition-colors hover:border-signal hover:text-signal-ink"
+                aria-label="更多操作"
+                :data-testid="`auth-more-${row.id}`"
+              >⋯</DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem data-testid="auth-test" @click="runTest(row)">测试连通</DropdownMenuItem>
+                <DropdownMenuItem data-testid="auth-edit" @click="openEdit(row)">编辑</DropdownMenuItem>
+                <DropdownMenuItem
+                  data-testid="auth-del"
+                  class="text-signal-failed focus:text-signal-failed"
+                  @click="openDelete(row)"
+                >删除</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </TableCell>
         </TableRow>
       </TableBody>
@@ -210,6 +247,68 @@
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <!-- ── 被引用反查侧板(配套方案 §1.2/§1.3)──────────────────
+         原型 H-auths-v2 = 右侧滑入面板:用 Sheet(side=right)。项目的 vaul
+         Drawer 是底部抽屉,先前把 max-w 加在它上面 = 底部居中窄条(位置不对)。 -->
+    <Sheet :open="refsOpen" @update:open="refsOpen = $event">
+      <SheetContent
+        side="right"
+        class="flex w-[460px] max-w-[92vw] flex-col gap-0 p-0 sm:max-w-[460px]"
+        data-testid="refs-sheet"
+      >
+        <SheetHeader class="border-b border-signal-line px-4 py-3">
+          <SheetTitle class="text-left">被引用 · {{ refsTarget?.alias }}</SheetTitle>
+          <SheetDescription class="text-left">
+            名字引用 — 场景与别名解析按执行者本人凭证池,非本条凭证对象(§1.4)
+          </SheetDescription>
+        </SheetHeader>
+        <div class="flex-1 overflow-y-auto px-4 py-3 text-caption">
+          <p v-if="refsLoading" class="m-0 py-4 text-center text-muted-foreground">扫描场景引用中…</p>
+          <template v-else-if="refsData">
+            <h4 class="m-0 mb-1.5 text-label font-semibold text-signal-ink">
+              别名绑定({{ refsData.alias_refs.length }})
+            </h4>
+            <div v-for="a in refsData.alias_refs" :key="a.alias_name" class="ref-row">
+              <router-link
+                :to="`/service-admin/${encodeURIComponent(a.alias_name)}?tab=credential`"
+                class="mono link"
+              >{{ a.alias_name }}</router-link>
+              <span class="ref-dim">→ {{ a.base_service }}{{ a.group_tag ? ` · ${a.group_tag}` : '' }}</span>
+            </div>
+            <p v-if="!refsData.alias_refs.length" class="ref-dim m-0">无别名绑定</p>
+
+            <h4 class="m-0 mb-1.5 mt-4 text-label font-semibold text-signal-ink">
+              场景引用(可见 {{ refsData.scenario_refs.visible.length }})
+            </h4>
+            <div v-for="v in refsData.scenario_refs.visible" :key="v.scenario_id" class="ref-row">
+              <router-link :to="`/scenarios/${v.scenario_id}/detail`" class="link">
+                {{ v.name }}
+              </router-link>
+              <span
+                v-for="k in v.kinds"
+                :key="k"
+                class="kind-chip"
+                :class="`kind-${k}`"
+                :title="kindTitle(k)"
+              >{{ kindLabel(k) }}</span>
+            </div>
+            <p v-if="!refsData.scenario_refs.visible.length" class="ref-dim m-0">无可见场景引用</p>
+            <p
+              v-if="refsData.scenario_refs.hidden_count"
+              class="ref-dim m-0 mt-1"
+              data-testid="refs-hidden-count"
+            >另有 {{ refsData.scenario_refs.hidden_count }} 条不可见(他人私有场景,仅计数不显名)</p>
+
+            <!-- 原型 H-auths-v2 抽屉底部淡红预警:与 DELETE 409 同口径
+                 (本人场景的模板/方案绑定才拦截)提前告知,避免撞 409 -->
+            <div v-if="drawerBlocking.length" class="drawer-warn" data-testid="refs-block-warn">
+              <p class="m-0 font-semibold">删除会被拦截:仍有 {{ drawerBlocking.length }} 个本人场景引用(模板 / 方案绑定)</p>
+              <p class="m-0 mt-0.5">先解除别名绑定,或先清理场景里的模板引用;他人场景与快照不会阻断删除。</p>
+            </div>
+          </template>
+        </div>
+      </SheetContent>
+    </Sheet>
   </ListPage>
 </template>
 
@@ -222,13 +321,16 @@ import { useListSearch } from '@/utils/useListSearch'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import { useAuthSessionsStore } from '@/stores/auth_sessions'
-import type { AuthSession, TestResult } from '@/api/auth_sessions'
+import { useAuthStore } from '@/stores/auth'
+import { getReferences, type AuthReferences, type AuthSession, type TestResult } from '@/api/auth_sessions'
 import ListPage from '@/layouts/ListPage.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
 
 const store = useAuthSessionsStore()
@@ -259,7 +361,10 @@ const visibleAuths = computed(() =>
 const metaText = computed(() => {
   const total = store.list.length
   if (total === 0) return '用户级独立凭证池 · 与 yaml 文件 Config.users 解耦'
-  return `${total} 个认证 · ${store.list.filter((a) => a.token_type === 'Bearer').length} Bearer · ${store.list.filter((a) => a.token_type === 'Authorization').length} 整段头`
+  const unref = store.list.filter((a) => !a.alias_ref_count && !a.scenario_ref_count).length
+  // 原型 H-auths-v2 统计行:「N 条凭证 · …未被任何引用」(已过期无数据源,不列)
+  const unrefSeg = unref ? ` · ${unref} 条未被任何引用` : ''
+  return `${total} 条凭证${unrefSeg} · ${store.list.filter((a) => a.token_type === 'Bearer').length} Bearer · ${store.list.filter((a) => a.token_type === 'Authorization').length} 整段头`
 })
 
 function formatExpires(seconds: number): string {
@@ -393,6 +498,60 @@ const deleteSubmitting = ref(false)
 const deleteTarget = ref<AuthSession | null>(null)
 const deleteConfirmInput = ref('')
 
+// ── 被引用反查侧板(配套方案 §1.2/§1.3)──────────────────────────
+const auth = useAuthStore()
+const refsOpen = ref(false)
+const refsTarget = ref<AuthSession | null>(null)
+const refsLoading = ref(false)
+const refsData = ref<AuthReferences | null>(null)
+
+/** 删除拦截预告(与后端 DELETE 409 同口径):可见引用里
+ *  「本人场景 × template/scheme」的条数 — 抽屉底部淡红警示。 */
+const drawerBlocking = computed(() => {
+  const me = auth.currentUser?.id
+  if (!refsData.value || me == null) return []
+  return refsData.value.scenario_refs.visible.filter(
+    (v) => v.owner_id === me && v.kinds.some((k) => k === 'template' || k === 'scheme'),
+  )
+})
+
+function openRefs(row: AuthSession) {
+  refsTarget.value = row
+  refsData.value = null
+  refsOpen.value = true
+  void loadRefs()
+}
+
+async function loadRefs() {
+  if (!refsTarget.value) return
+  refsLoading.value = true
+  try {
+    refsData.value = await getReferences(refsTarget.value.alias)
+  } catch (e) {
+    showError('反查', undefined, (e as Error).message)
+    refsData.value = null
+  } finally {
+    refsLoading.value = false
+  }
+}
+
+const KIND_LABELS: Record<string, string> = {
+  template: '模板', scheme: '方案', snapshot: '快照',
+}
+const KIND_TITLES: Record<string, string> = {
+  template: 'steps 里的 ${auth.<alias>.*} 模板 — 下次运行会用到',
+  scheme: '运行方案的 serviceBindings 绑定 — 方案启动的 run 会注入',
+  snapshot: 'config.users 的同名快照副本 — 自足,不随凭证池轮换',
+}
+
+function kindLabel(k: string): string {
+  return KIND_LABELS[k] ?? k
+}
+
+function kindTitle(k: string): string {
+  return KIND_TITLES[k] ?? k
+}
+
 const deleteConfirmed = computed(() =>
   Boolean(deleteTarget.value && deleteConfirmInput.value === deleteTarget.value.alias),
 )
@@ -411,7 +570,8 @@ async function submitDelete() {
     toast.success(`已删除 ${deleteTarget.value.alias}`)
     deleteOpen.value = false
   } catch (e) {
-    // deleteAuth 直连 api 并 rethrow — store 没有 lastError, 必须用真实错误
+    // 409 = 本人场景的模板/方案引用拦截(配套方案 §1.5 窄口径):
+    // 错误信息带场景清单 — 保持弹框开着让用户看完再处理
     showError('删除', undefined, (e as Error).message)
   } finally {
     deleteSubmitting.value = false
@@ -433,9 +593,55 @@ onMounted(async () => {
   @apply rounded-chip bg-signal-soft px-1.5 py-0.5 font-mono font-semibold text-signal;
 }
 
+/* 原型 H-auths-v2:抽屉底部淡红拦截预警区 */
+.drawer-warn {
+  margin-top: 14px;
+  padding: 8px 10px;
+  border: 1px solid #f3cbcb;
+  border-radius: 8px;
+  background: #fdf1f1;
+  color: #b42318;
+  font-size: var(--text-caption, 12px);
+  line-height: 1.6;
+}
+
 .url {
   @apply text-caption text-muted-foreground;
 }
+
+.ref-chip {
+  padding: 1px 7px;
+  font-size: 11px;
+  color: #2f6fed;
+  background: #e7ecf5;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.ref-chip:hover { background: #d8e2f5; }
+
+.ref-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  flex-wrap: wrap;
+}
+
+.ref-dim { font-size: 11px; color: var(--muted-foreground, #6b7280); }
+
+.link { color: #2f6fed; }
+
+.kind-chip {
+  padding: 0 6px;
+  font-size: 11px;
+  border-radius: 3px;
+}
+
+.kind-template { background: #e7efe0; color: #3f6212; }
+.kind-scheme { background: #fef3e2; color: #b45309; }
+.kind-snapshot { background: #eef2f7; color: #64748b; }
 
 .tt-badge {
   @apply inline-flex items-center rounded-chip px-2 py-0.5 font-mono text-[10.5px] font-semibold;

@@ -5,3 +5,6 @@
 "sys_order","etd","int","NO","0","预计开航日"
 "sys_order","gross_weight","decimal(10,2)","YES",,"毛重"
 "sys_order","create_time","datetime","NO",,"创建时间"
+"sys_order_container","container_id","bigint","NO",,""
+"sys_order_container","container_type","varchar(20)","NO","","箱型"
+"sys_order_container","quantity","int","NO","0","箱量"

@@ -150,6 +150,73 @@ async def test_open_batch_zero_refs_autocompletes(fresh_db, plate):
     assert stamp.spec_json == NEW_FULL
 
 
+# ─── 锚点行 × 草案展开(2026-09-20 硬化)────────────────────────
+async def test_open_batch_addfield_covers_zero_field_anchor_step(fresh_db, plate):
+    """零字段锚点步(GET 无参典型)曾零索引行 → addField 漏生成 op,
+    契约新增必填后该场景执行必挂。锚点行上线后 pairs 含该步:
+    addField 出 op;removeField/mapValue 仍只按字段命中(锚点行不中)。"""
+    async with await _session() as s:
+        await scenario_store.create(
+            s,
+            ScenarioDraft.model_validate(make_draft("sc-zero", steps=[{
+                "api": {"view_hints": {"endpoint_id": EP}, "headers": {}},
+                "request": {"body": {}},
+            }])),
+            owner="alice", owner_id=1,
+        )
+    await _seed_stamp()
+    _install_plate(plate)
+    async with await _session() as s:
+        detail = await adaptation_service.open_batch(s, endpoint_id=EP, operator_id=1)
+    ops = {(o["opType"], o["payload"].get("field")) for o in detail["ops"]}
+    assert ops == {("addField", "extra")}  # removeField/mapValue 不中锚点行
+    add_op = next(o for o in detail["ops"] if o["opType"] == "addField")
+    assert add_op["scenarioId"] == "sc-zero"
+    assert add_op["payload"]["step"] == 0
+    assert "path" not in add_op["payload"]  # path 只用于匹配,不落 op payload
+
+
+async def test_open_batch_nested_remove_targets_container_ref(fresh_db, plate):
+    """嵌套字段消失(name=city、path=$.address.city)时,step body 只持有
+    顶层容器键 address —— 匹配集 = {city, address},容器引用步命中;
+    op payload 不带 path。"""
+    old_nested = {"id": EP, "version": "1.0.0",
+                  "request": {"declarations": [
+                      {"name": "address", "path": "$.address", "state": "form",
+                       "type": "object", "children": [
+                           {"name": "city", "path": "$.address.city",
+                            "state": "form"}]},
+                  ]}}
+    new_nested = {"id": EP, "version": "1.1.0",
+                  "request": {"declarations": [
+                      {"name": "address", "path": "$.address",
+                       "state": "form", "type": "object"},
+                  ]}}
+    async with await _session() as s:
+        await scenario_store.create(
+            s,
+            ScenarioDraft.model_validate(make_draft("sc-nest", steps=[{
+                "api": {"view_hints": {"endpoint_id": EP}, "headers": {}},
+                "request": {"body": {"address": {"city": "SH"}}},
+            }])),
+            owner="alice", owner_id=1,
+        )
+        s.add(CatalogVersion(endpoint_id=EP, version="1.0.0",
+                             spec_json=old_nested, synced_at=datetime(2026, 1, 1)))
+        await s.commit()
+    plate.items = [{"id": EP, "version": "1.1.0",
+                    "updated_at": "2026-06-01T00:00:00Z"}]
+    plate.fulls = {EP: new_nested}
+    async with await _session() as s:
+        detail = await adaptation_service.open_batch(s, endpoint_id=EP, operator_id=1)
+    ops = {(o["opType"], o["payload"].get("field")) for o in detail["ops"]}
+    assert ops == {("removeField", "city")}
+    rm_op = detail["ops"][0]
+    assert rm_op["scenarioId"] == "sc-nest"
+    assert rm_op["payload"]["step"] == 0
+    assert "path" not in rm_op["payload"]
+
+
 # ─── apply_op(Task 8)─────────────────────────────────────────────
 async def test_apply_all_completes_and_advances_stamp(fresh_db, plate):
     await _seed_scenario()

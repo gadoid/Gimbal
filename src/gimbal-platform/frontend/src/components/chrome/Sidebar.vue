@@ -109,7 +109,9 @@ import {
   CounterClockwiseClockIcon,
   GearIcon,
   GlobeIcon,
+  GridIcon,
   HomeIcon,
+  LayersIcon,
   LockClosedIcon,
   MixerHorizontalIcon,
   StarIcon,
@@ -164,8 +166,12 @@ const groups: SidebarGroup[] = [
   {
     label: '服务',
     entries: [
+      { path: '/services', label: '服务画像', icon: GridIcon },
+      { path: '/service-admin', label: '服务信息管理', icon: LayersIcon, adminOnly: true },
       { path: '/auths', label: '认证管理', icon: LockClosedIcon },
-      { path: '/carry-config', label: '传递字段', icon: MixerHorizontalIcon, adminOnly: true },
+      // 配套方案 §2.2:传递字段 → 默认值(服务/别名绑定层已并进
+      // 服务信息管理的键详情,本页只剩跨服务兜底层)
+      { path: '/carry-config', label: '默认值', icon: MixerHorizontalIcon, adminOnly: true },
       { path: '/adaptations', label: '适配中心', icon: ActivityLogIcon },
     ],
   },

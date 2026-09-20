@@ -85,8 +85,10 @@ async def test_impact_var_default_path_when_no_dataset_has_column(fresh_db):
 
 
 async def test_impact_anchor_step_with_all_empty_fields(fresh_db):
-    """锚点 step 业务字段全空(body/headers 皆空)→ 零索引行,兜底直扫
-    出 {field: None} 条目(spec §7);字段过滤与兜底互斥(带 field 不扫)。"""
+    """锚点 step 业务字段全空(body/headers 皆空)→ 索引发锚点行
+    (source=anchor),impact 出 {source: None, field: None} 条目 —— 与
+    原 O(全部场景) 兜底直扫的产出同形(直扫已删);字段过滤天然排除
+    锚点行(field_name=''≠filter),与旧「带 field 不兜底」一致。"""
     async with db_module.SessionLocal() as s:
         await scenario_store.create(
             s,
@@ -104,5 +106,5 @@ async def test_impact_anchor_step_with_all_empty_fields(fresh_db):
             "field": None, "viaVar": None,
             "datasetId": None, "datasetColumn": None,
         }]
-        # 带 field 过滤 → 不兜底直扫(互斥),零命中
+        # 带 field 过滤 → 锚点行不命中,零条目
         assert await impact(s, EP, "amount") == []

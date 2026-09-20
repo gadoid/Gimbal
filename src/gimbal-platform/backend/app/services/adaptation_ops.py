@@ -74,17 +74,47 @@ def diff_field_specs(old_spec: dict | None, new_spec: dict | None) -> list[dict]
     drafts: list[dict] = []
     for name in sorted(set(new) - set(old)):
         default = new[name].get("default")
-        drafts.append({
+        draft = {
             "op": "addField", "field": name,
             "value": default if default is not None else "",
-        })
+        }
+        # path 供 open_batch 做祖先容器匹配(嵌套字段的 step 只持有
+        # 顶层容器键,见 field_match_names);条目无 path 则不携带,
+        # 保持既有草案形状。path 不落 op payload(应用侧不消费)。
+        if new[name].get("path"):
+            draft["path"] = str(new[name]["path"])
+        drafts.append(draft)
     for name in sorted(set(old) - set(new)):
-        drafts.append({"op": "removeField", "field": name})
+        draft = {"op": "removeField", "field": name}
+        if old[name].get("path"):
+            draft["path"] = str(old[name]["path"])
+        drafts.append(draft)
     for name in sorted(set(old) & set(new)):
         oe, ne = _enum_set(old[name]), _enum_set(new[name])
         if oe is not None and ne is not None and oe != ne:
-            drafts.append({"op": "mapValue", "field": name, "map": {}})
+            draft = {"op": "mapValue", "field": name, "map": {}}
+            if new[name].get("path"):
+                draft["path"] = str(new[name]["path"])
+            drafts.append(draft)
     return drafts
+
+
+def field_match_names(field: str, path: str | None) -> tuple[str, ...]:
+    """removeField/mapValue 的引用行匹配名集合:字段名 + 祖先容器名。
+
+    倒排索引的 field_name 是 step body 的**顶层键**;契约声明是树
+    (children),嵌套字段(如 ``$.address.city`` / name=city)变化时,
+    step 里只有容器键 "address"。匹配集 = {字段名} ∪ {path 首段},
+    使「改嵌套字段 → 引用容器的 step 也命中」;path 缺失或首段与
+    字段名相同(平铺契约)时退化为精确匹配,行为与扩前逐字一致。
+    """
+    if not path:
+        return (field,)
+    seg = path[2:] if path.startswith("$.") else path
+    top = seg.split(".", 1)[0].split("[", 1)[0]
+    if top and top != field:
+        return (field, top)
+    return (field,)
 
 
 # ─── 步骤寻址与字段容器(spec §9 C5 / §3.2)─────────────────────

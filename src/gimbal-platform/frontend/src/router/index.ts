@@ -121,6 +121,38 @@ const routes = [
     component: () => import('@/views/Executions.vue'),
     meta: { requiresAuth: true },
   },
+  // ── 服务画像 P1(服务画像方案 §5.4)───────────────────────────
+  {
+    // 落地页:列 plate 目录服务,点进 /services/:name 热力网格
+    path: '/services',
+    component: () => import('@/views/ServicesIndex.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    // 服务级热力网格(方案 §2);service 名可含 '-',路由段天然安全
+    path: '/services/:name',
+    component: () => import('@/views/ServiceGrid.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    // 接口级线索板(方案 §3);endpoint_id 是点分命名空间(如 fin.order.add)
+    path: '/services/:name/endpoints/:endpointId',
+    component: () => import('@/views/EndpointBoard.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    // 服务信息管理(方案 §4;P1 唯一净新增页面)— 配置池,admin 写面
+    path: '/service-admin',
+    component: () => import('@/views/ServiceAdmin.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    // 键详情(配套方案 §2.2):别名全名或 base 服务名同一详情页,
+    // 字段默认值 tab 在此编辑;?tab=credential 供认证管理反查深链
+    path: '/service-admin/:alias',
+    component: () => import('@/views/ServiceAliasDetail.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
   // /dev/dual-stack 双栈验证页已随 Phase 3 退役(EP 摘除,使命完成)
 ]
 
