@@ -33,26 +33,21 @@ Scenario (场景)
 使用 Pydantic 的 `Annotated[Union[...], Field(discriminator="kind")]` 实现类型安全的联合体：
 
 ```python
-StepUnion = Annotated[
-    Union[Step, StepRef],
+StrategyUnion = Annotated[
+    Union[Extract, Assign, Assertion],
     Field(discriminator="kind")
 ]
 ```
 
 序列化/反序列化时，Pydantic 自动根据 `kind` 字段选择正确的类型。
 
-### 3. 引用机制
-
-通过 `RefBase` 实现资产引用，支持：
-- 懒加载：先引用，后解析
-- 复用：同一资产可被多处引用
-- 追踪：通过 `ref` 字段追踪资产来源
-
-### 4. 扩展性
+### 3. 扩展性
 
 - 所有模型都支持 `kind` 字段用于类型识别
-- 新增资产类型只需继承基类并声明 `kind`
+- 新增模型类型只需继承基类并声明 `kind`
 - Union 类型便于未来扩展
+
+> 历史上有过 `*Ref` 引用类型，已随资产引用机制移除（用例的唯一去向是平台数据库，ref 节点零生产者）。
 
 ---
 
@@ -61,17 +56,16 @@ StepUnion = Annotated[
 | 文件 | 说明 | 导出类 |
 |------|------|--------|
 | `states.py` | 步骤执行状态枚举 | `StepState` |
-| `ref.py` | 引用基类 | `RefBase` |
-| `resource.py` | 资源模型 | `Resource`, `Mock`, `File`, `MockRef`, `FileRef`, `ResourceUnion` |
-| `api.py` | API 定义模型 | `Api`, `ApiRef`, `ApiUnion` |
-| `request.py` | 请求体模型 | `Request`, `RequestRef`, `RequestUnion` |
-| `step.py` | 测试步骤模型 | `Step`, `StepRef`, `StepUnion` |
-| `strategy.py` | 策略模型 | `Scope`, `AssertOperator`, `StrategyPhase`, `FailurePolicy`, `ExtractSource`, `StrategyBase`, `Extract`, `Assign`, `Assertion`, `StrategyRef`, `StrategyUnion` |
+| `resource.py` | 资源模型 | `Resource`, `Mock`, `File`, `ResourceUnion` |
+| `api.py` | API 定义模型 | `Api`, `ApiUnion` |
+| `request.py` | 请求体模型 | `Request`, `RequestUnion` |
+| `step.py` | 测试步骤模型 | `Step`, `StepUnion` |
+| `strategy.py` | 策略模型 | `Scope`, `AssertOperator`, `StrategyPhase`, `FailurePolicy`, `ExtractSource`, `StrategyBase`, `Extract`, `Assign`, `Assertion`, `StrategyUnion` |
 | `timepolicy.py` | 时间策略模型 | `TimePolicy`, `TimeoutPolicy`, `RecordPolicy`, `TimePolicyUnion` |
 | `retrypolicy.py` | 重试策略模型 | `RetryPolicy` |
-| `scenario.py` | 场景模型 | `Meta`, `Config`, `Scenario` |
-| `setup.py` | 前置动作模型 | `Setup`, `SetupRef`, `SetupUnion` |
-| `teardown.py` | 后置动作模型 | `Teardown`, `TeardownRef`, `TeardownUnion` |
+| `scenario.py` | 场景模型 | `Meta`, `Config`, `Scenario`, `Suite`, `RunUnion` |
+| `setup.py` | 前置动作模型 | `Setup`, `SetupUnion` |
+| `teardown.py` | 后置动作模型 | `Teardown`, `TeardownUnion` |
 
 ---
 
@@ -91,19 +85,7 @@ StepUnion = Annotated[
 
 ---
 
-## 2. ref.py
-
-### RefBase
-
-引用基类，用于实现对象引用功能。
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `ref` | `str` | 是 | 引用标识 |
-
----
-
-## 3. resource.py
+## 2. resource.py
 
 ### Resource
 
@@ -133,33 +115,15 @@ Mock 服务资源，继承自 `Resource`。
 |------|------|------|--------|------|
 | `name` | `str` | 是 | - | 资源名称（继承自 Resource） |
 | `kind` | `Literal["file"]` | 是 | `"file"` | 类型标识 |
-| `path` | `str` | 是 | - | 路径或 ref |
-
-### MockRef
-
-Mock 资源引用，继承自 `RefBase`。
-
-| 字段 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `ref` | `str` | 是 | - | 引用标识（继承自 RefBase） |
-| `kind` | `Literal["mock_ref"]` | 是 | `"mock_ref"` | 类型标识 |
-
-### FileRef
-
-文件资源引用，继承自 `RefBase`。
-
-| 字段 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `ref` | `str` | 是 | - | 引用标识（继承自 RefBase） |
-| `kind` | `Literal["file_ref"]` | 是 | `"file_ref"` | 类型标识 |
+| `path` | `str` | 是 | - | 路径 |
 
 ### ResourceUnion
 
-资源联合类型，由 `Mock`, `MockRef`, `File`, `FileRef` 组成，通过 `kind` 字段区分。
+资源联合类型，由 `Mock`, `File` 组成，通过 `kind` 字段区分。
 
 ---
 
-## 4. api.py
+## 3. api.py
 
 ### Api
 
@@ -174,22 +138,13 @@ API 定义模型。
 | `headers` | `dict[str, str]` | 否 | `{}` | 请求头字典 |
 | `timeout` | `float` | 否 | `30` | 超时时间（秒） |
 
-### ApiRef
-
-API 引用，继承自 `RefBase`。
-
-| 字段 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `ref` | `str` | 是 | - | 引用标识（继承自 RefBase） |
-| `kind` | `Literal["api_ref"]` | 是 | `"api_ref"` | 类型标识 |
-
 ### ApiUnion
 
-API 联合类型，由 `Api`, `ApiRef` 组成，通过 `kind` 字段区分。
+API 类型别名，现为单成员别名 `ApiUnion = Api`。
 
 ---
 
-## 5. request.py
+## 4. request.py
 
 ### Request
 
@@ -222,22 +177,13 @@ API 联合类型，由 `Api`, `ApiRef` 组成，通过 `kind` 字段区分。
 
   阶段 1 不在 schema 层强制限制，由文档告知用户；阶段 2 拆 `RawRequest`/`JsonRequest`/`FormRequest` 子类后可通过 Pydantic validator 收紧。
 
-### RequestRef
-
-请求引用，继承自 `RefBase`。
-
-| 字段 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `ref` | `str` | 是 | - | 引用标识（继承自 RefBase） |
-| `kind` | `Literal["request_ref"]` | 是 | `"request_ref"` | 类型标识 |
-
 ### RequestUnion
 
-请求联合类型，由 `Request`, `RequestRef` 组成，通过 `kind` 字段区分。
+请求体类型别名，现为单成员别名 `RequestUnion = Request`。
 
 ---
 
-## 6. step.py
+## 5. step.py
 
 ### Step
 
@@ -250,22 +196,13 @@ API 联合类型，由 `Api`, `ApiRef` 组成，通过 `kind` 字段区分。
 | `request` | `RequestUnion` | 是 | 当前步骤的请求体信息 |
 | `strategy` | `list[StrategyUnion]` | 是 | 当前步骤需要执行的策略集 |
 
-### StepRef
-
-步骤引用，继承自 `RefBase`。
-
-| 字段 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `ref` | `str` | 是 | - | 引用标识（继承自 RefBase） |
-| `kind` | `Literal["step_ref"]` | 是 | `"step_ref"` | 类型标识 |
-
 ### StepUnion
 
-步骤联合类型，由 `Step`, `StepRef` 组成，通过 `kind` 字段区分。
+步骤类型别名，现为单成员别名 `StepUnion = Step`。
 
 ---
 
-## 7. strategy.py
+## 6. strategy.py
 
 ### Scope
 
@@ -408,22 +345,13 @@ API 联合类型，由 `Api`, `ApiRef` 组成，通过 `kind` 字段区分。
 | `message` | `Optional[str]` | 否 | `None` | 断言失败时的信息 |
 | `soft` | `bool` | 否 | `False` | 是否为软断言 |
 
-### StrategyRef
-
-策略引用，继承自 `RefBase`。
-
-| 字段 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `ref` | `str` | 是 | - | 引用标识（继承自 RefBase） |
-| `kind` | `Literal["strategy_ref"]` | 是 | `"strategy_ref"` | 类型标识 |
-
 ### StrategyUnion
 
-策略联合类型，由 `Extract`, `Assign`, `Assertion`, `StrategyRef` 组成，通过 `kind` 字段区分。
+策略联合类型，由 `Extract`, `Assign`, `Assertion` 组成，通过 `kind` 字段区分。
 
 ---
 
-## 8. timepolicy.py
+## 7. timepolicy.py
 
 ### TimePolicy
 
@@ -454,7 +382,7 @@ API 联合类型，由 `Api`, `ApiRef` 组成，通过 `kind` 字段区分。
 
 ---
 
-## 9. retrypolicy.py
+## 8. retrypolicy.py
 
 ### RetryPolicy
 
@@ -469,7 +397,7 @@ API 联合类型，由 `Api`, `ApiRef` 组成，通过 `kind` 字段区分。
 
 ---
 
-## 10. scenario.py
+## 9. scenario.py
 
 ### Meta
 
@@ -487,7 +415,7 @@ API 联合类型，由 `Api`, `ApiRef` 组成，通过 `kind` 字段区分。
 | `version` | `str` | 否 | 用例版本号 |
 | `createTime` | `datetime` | 否 | 创建时间 |
 | `expire` | `bool` | 否 | 过期标志位 |
-| `requirementRef` | `list[RefBase]` | 否 | 需求关联链接列表 |
+| `requirementRef` | `list[str]` | 否 | 需求关联链接列表 |
 
 ### Config
 
@@ -516,7 +444,7 @@ API 联合类型，由 `Api`, `ApiRef` 组成，通过 `kind` 字段区分。
 
 ---
 
-## 11. setup.py
+## 10. setup.py
 
 ### Setup
 
@@ -526,22 +454,13 @@ API 联合类型，由 `Api`, `ApiRef` 组成，通过 `kind` 字段区分。
 |------|------|------|--------|------|
 | `kind` | `Literal["setup"]` | 是 | `"setup"` | 类型标识 |
 
-### SetupRef
-
-前置动作引用，继承自 `RefBase`。
-
-| 字段 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `ref` | `str` | 是 | - | 引用标识（继承自 RefBase） |
-| `kind` | `Literal["setup_ref"]` | 是 | `"setup_ref"` | 类型标识 |
-
 ### SetupUnion
 
-前置动作联合类型，由 `Setup`, `SetupRef` 组成，通过 `kind` 字段区分。
+前置动作类型别名，现为单成员别名 `SetupUnion = Setup`。
 
 ---
 
-## 12. teardown.py
+## 11. teardown.py
 
 ### Teardown
 
@@ -551,18 +470,9 @@ API 联合类型，由 `Api`, `ApiRef` 组成，通过 `kind` 字段区分。
 |------|------|------|--------|------|
 | `kind` | `Literal["teardown"]` | 是 | `"teardown"` | 类型标识 |
 
-### TeardownRef
-
-后置动作引用，继承自 `RefBase`。
-
-| 字段 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `ref` | `str` | 是 | - | 引用标识（继承自 RefBase） |
-| `kind` | `Literal["teardown_ref"]` | 是 | `"teardown_ref"` | 类型标识 |
-
 ### TeardownUnion
 
-后置动作联合类型，由 `Teardown`, `TeardownRef` 组成，通过 `kind` 字段区分。
+后置动作类型别名，现为单成员别名 `TeardownUnion = Teardown`。
 
 ---
 
@@ -578,22 +488,15 @@ Scenario
 │   └── retry: RetryPolicy
 ├── resource: dict[str, ResourceUnion]
 │   ├── Mock
-│   ├── MockRef
-│   ├── File
-│   └── FileRef
+│   └── File
 └── steps: list[StepUnion]
     └── Step
-        ├── api: ApiUnion
-        │   ├── Api
-        │   └── ApiRef
-        ├── request: RequestUnion
-        │   ├── Request
-        │   └── RequestRef
+        ├── api: ApiUnion (Api)
+        ├── request: RequestUnion (Request)
         └── strategy: list[StrategyUnion]
             ├── Extract
             ├── Assign
-            ├── Assertion
-            └── StrategyRef
+            └── Assertion
 ```
 
 ---
@@ -723,7 +626,6 @@ print(scenario.model_dump())
 ```bash
 # 使用 -m 方式运行模块测试
 python -m gimbal.schema.states
-python -m gimbal.schema.ref
 python -m gimbal.schema.resource
 python -m gimbal.schema.api
 python -m gimbal.schema.request

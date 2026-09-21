@@ -257,7 +257,7 @@ class ScenarioRunner:
         )
 
         # 3. 触发 SCENARIO_START 事件
-        #    step_count 用"实际会执行的 step 数"（不含未展开的 StepRef），
+        #    step_count 用"实际会执行的 step 数"（不含不可执行条目），
         #    reporter 拿到的数字与最终执行结果一致。
         executable_count = sum(
             1 for s in resolved_steps if hasattr(s, "api")
@@ -366,7 +366,7 @@ class ScenarioRunner:
                 break
 
             if not hasattr(step_union, "api"):
-                logger.warning("[ScenarioRunner] step[{}] 是未展开的 StepRef，跳过", idx)
+                logger.warning("[ScenarioRunner] step[{}] 缺少 api 字段，跳过", idx)
                 continue
 
             logger.debug(
@@ -417,7 +417,7 @@ class ScenarioRunner:
         入参:
             scenario:   Scenario 数据对象。
             sid:        scenario 唯一 ID。
-            step_count: 实际会执行的 step 数（不含未展开的 StepRef）。
+            step_count: 实际会执行的 step 数（不含不可执行条目）。
         副作用:
             发布事件，失败仅记 debug 日志。
         """

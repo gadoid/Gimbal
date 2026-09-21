@@ -193,7 +193,6 @@ def test_runtime_control_halt_at_triggers_halt(fake_dispatcher_and_ctx_factory):
             hook_registry=None,
             event_bus=None,
             auth_registry=None,
-            asset_store=None,
         )
         sc = F["FakeScenario"]()
         suite_ctx = F["FakeSuiteCtx"]()
@@ -264,7 +263,6 @@ def test_runtime_control_none_halt_at_skips_halt(fake_dispatcher_and_ctx_factory
             hook_registry=None,
             event_bus=None,
             auth_registry=None,
-            asset_store=None,
         )
         sc = F["FakeScenario"]()
         suite_ctx = F["FakeSuiteCtx"]()
@@ -306,7 +304,6 @@ def test_runtime_control_halt_at_beyond_step_count_does_not_trigger(fake_dispatc
             hook_registry=None,
             event_bus=None,
             auth_registry=None,
-            asset_store=None,
         )
         sc = F["FakeScenario"]()
         suite_ctx = F["FakeSuiteCtx"]()

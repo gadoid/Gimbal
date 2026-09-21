@@ -1,18 +1,18 @@
 # Preprocessor 模块
 
-> 预处理器模块：Scenario 执行前完成引用物化、认证、模板展开、base_url 提取等准备工作
+> 预处理器模块：Scenario 执行前完成认证、模板展开、base_url 提取等准备工作
 
 ## 目录结构
 
 ```
 gimbal/preprocessor/
 ├── __init__.py
-└── scenario_preprocessor.py  # ScenarioPreprocessor（核心入口；含 Phase 0 物化、Phase 1 认证、Phase 2~4 模板/URL 解析）
+└── scenario_preprocessor.py  # ScenarioPreprocessor（核心入口；含 Phase 1 认证、Phase 2~4 模板/URL 解析）
 ```
 
 > 旧 `preprocessor/hooks/` 子目录（ref_resolver / cycle_detector / completeness_checker / schema_validator）
 > 与 `pipeline.py` / `hook_base.py` / `cache.py` 等占位文件已清理——之前是 hook 管线风格的脚手架，
-> 实际逻辑由 `ScenarioPreprocessor` 内部阶段化承担，引用物化由 [`AssetMaterializer`](core.md#assetmaterializer内层递归还原-ref--数据类对象) 负责。
+> 实际逻辑由 `ScenarioPreprocessor` 内部阶段化承担。
 
 > **无任何 stub 文件**：本模块已精简到单文件实现。
 
@@ -29,11 +29,11 @@ class ScenarioPreprocessor:
             scenario_schema=scenario,
             bootstrap_config=cfg,
             auth_registry=auth_registry,
-            asset_store=asset_store,         # None 时跳过 Phase 0
         )
-        resolved_steps, base_url = pre.run()
+        resolved_steps, base_url, services = pre.run()
         # resolved_steps 中所有 ${} 模板已展开
         # base_url 供 StepRunner 构造完整 URL
+        # services 为场景声明的 per-step 查表（D7）
     """
 
     def __init__(
@@ -41,7 +41,6 @@ class ScenarioPreprocessor:
         scenario_schema: "Scenario",
         bootstrap_config: "BootstrapConfig",
         auth_registry: Optional["AuthRegistry"] = None,    # 认证目标容器
-        asset_store: Optional["AssetStore"] = None,        # Phase 0 注入
     ) -> None:
         # 缺省时构造一个空 registry（仅当 scenario 不需要认证时安全）
         if auth_registry is None:
@@ -50,51 +49,22 @@ class ScenarioPreprocessor:
         self._schema = scenario_schema
         self._cfg = bootstrap_config
         self._auth_registry = auth_registry
-        self._asset_store = asset_store
 
-    def run(self) -> tuple[list["StepUnion"], str]:
+    def run(self) -> tuple[list["StepUnion"], str, dict[str, str]]:
         """执行完整预处理入口。
 
         步骤：
-          0. 引用物化（asset_store 不为 None 时；递归替换 Ref 节点）
           1. 认证（填充 token 到 AuthRegistry）
           2. 构建查询根对象（两段优先级：scenario > bootstrap）
           3. 批量展开 steps 模板（${auth.*} / ${service.*} / ${var.*}）
-          4. 提取 base_url
+          4. 提取 base_url + 场景声明 services
 
         返回:
-            (resolved_steps, base_url) 元组
+            (resolved_steps, base_url, services) 元组
         """
 ```
 
-## 五段处理流程（Resolve Phases）
-
-### Phase 0：引用物化（资产仓库引用还原）
-
-在所有其他阶段**之前**完成对 scenario 中 `Ref` 节点的结构化还原。
-
-- 调用方传入 `AssetStore`（由 `ScenarioRunner` 持有）
-- 通过 [`AssetMaterializer`](core.md#assetmaterializer内层递归还原-ref--数据类对象) 递归识别 `RefBase` 子类（含 `StepRef` / `ApiRef` / `RequestRef` / `StrategyRef` 以及通用内联 `Ref`），从仓库拉取并替换为真实数据类对象
-- 递归到不动点（fixed-point），自动处理传递闭包
-- 显式环检测 + `max_depth=8` 兜底 → `AssetCycleError`
-- `asset_store is None` 时此阶段整体跳过（保持向后兼容）
-
-```python
-def _materialize_refs(self) -> None:
-    if self._asset_store is None:
-        logger.debug("[Preprocessor] 未提供 asset_store，跳过 Phase 0 物化")
-        return
-
-    from gimbal.core.asset_materializer import AssetMaterializer
-    materializer = AssetMaterializer(self._asset_store)
-    # 物化整个 scenario 图（包括 steps、api、request、strategy、body）
-    materializer.materialize(self._schema)
-```
-
-注意：
-- 直接修改 `self._schema`（Pydantic v2 默认非 frozen 即可 setattr）
-- 物化后的 `scenario.steps` 中应该全部是 `Step`，不再含 `StepRef`
-- 物化后 step 内 `body` 等 free-form dict 中的内联 Ref 也会被替换
+## 处理流程（Resolve Phases）
 
 ### Phase 1：认证
 
@@ -209,18 +179,10 @@ def _build_resolve_root(self) -> dict[str, Any]:
 
 ```python
 def _resolve_steps(self, root: dict) -> list["StepUnion"]:
-    """遍历所有 steps，对每个 Step 做模板展开，返回新列表。
-
-    StepRef 不做展开（未解析的引用，跳过）。
-    """
+    """遍历所有 steps，对每个 Step 做模板展开，返回新列表。"""
     resolved: list[Any] = []
-    for idx, step_union in enumerate(self._schema.steps):
-        if not hasattr(step_union, "api"):
-            # StepRef，原样保留
-            logger.debug("[Preprocessor] step[{}] 是 StepRef，跳过展开", idx)
-            resolved.append(step_union)
-            continue
-        resolved.append(self._resolve_step(step_union, root, idx))
+    for idx, step in enumerate(self._schema.steps):
+        resolved.append(self._resolve_step(step, root, idx))
     return resolved
 ```
 
@@ -231,12 +193,8 @@ def _resolve_steps(self, root: dict) -> list["StepUnion"]:
 ```python
 def _resolve_api(self, api, root: dict):
     """展开 Api 中的模板字段：解析 path 和 headers 中的 ${} 占位符；
-    若任一模板变量缺失则抛 ValueError（fail-fast）。
+    任一模板变量缺失则 fail-fast 抛 ValueError。
     """
-    # ApiRef 原样返回
-    if isinstance(api, ApiRef):
-        return api
-
     # 修复 B5：先解析所有 header；记录哪些解析失败
     resolved_headers = {}
     missing_headers = []
@@ -267,8 +225,6 @@ def _resolve_api(self, api, root: dict):
 ```python
 def _resolve_request(self, request, root: dict):
     """展开 Request 中的模板字段：递归解析 body 嵌套结构中的所有 ${} 占位符。"""
-    if isinstance(request, RequestRef):
-        return request
     return Request(
         kind=request.kind,
         body=self._resolve_nested(request.body or {}, root),
@@ -282,9 +238,6 @@ def _resolve_request(self, request, root: dict):
 ```python
 def _resolve_strategy(self, strategy, root: dict):
     """展开单条策略（Extract/Assign/Assertion）的模板字段，模板变量缺失时 fail-fast。"""
-    if isinstance(strategy, StrategyRef):
-        return strategy
-
     base = self._base_strategy_fields(strategy)
     owner = f"{type(strategy).__name__}#{strategy.name or '?'}"
 
@@ -392,8 +345,6 @@ def _pick_base_url(self) -> str:
 
 | 异常 | 触发条件 |
 |------|----------|
-| `AssetMaterializationError` | Phase 0：pull 失败 / 反序列化失败 / Ref 格式非法 |
-| `AssetCycleError` | Phase 0：引用图出现环 / 嵌套超过 `max_depth=8` |
 | `AuthError` / `AuthLoginFailed` | Phase 1：登录失败 |
 | `ValueError` | Phase 3：模板变量缺失（api header / api.path / strategy.expression 等） |
 
@@ -406,15 +357,11 @@ def _pick_base_url(self) -> str:
 5. **Token 自动刷新**：`AuthManager` 在执行期按需触发刷新，预处理不负责。
 6. **配置/状态分离**：认证结果写入 `AuthRegistry`（运行期容器），不污染 `BootstrapConfig`（frozen）。
 7. **类型保留**：单 `${}` 整体保留对象引用而非 dump，token 刷新后自动可见。
-<<<<<<< HEAD
+8. **fail-fast**：模板变量缺失时立即抛 `ValueError`，避免执行期 `expected=None` 这类误导性失败信息。
+9. **按需认证**：未在模板中引用的 user 跳过登录，节省 startup 时间。
 
 ## 已知问题
 
 模板变量替换机制（`_resolve_value` → `resolve_template` → `_get_nested`）当前能覆盖绝大多数用例，但存在若干已知遗留缺陷（`${}` 不支持 JSONPath 高级语法、嵌入式缺失静默原样保留、headers/body 对 None 处理不一致等）。
 
 完整登记与触发修复的信号见：[`docs/known-issues/preprocessor/template-substitution.md`](../known-issues/preprocessor/template-substitution.md)。
-=======
-8. **fail-fast**：模板变量缺失时立即抛 `ValueError`，避免执行期 `expected=None` 这类误导性失败信息。
-9. **按需认证**：未在模板中引用的 user 跳过登录，节省 startup 时间。
-10. **物化前置**：引用物化（Phase 0）必须在认证/模板替换之前完成，否则执行器会碰到未解析的 Ref 节点。
->>>>>>> 872479815603132e2dab0d5cb4e876c5c6fbf731

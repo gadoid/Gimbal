@@ -2,16 +2,15 @@
 
 > 一个面向现代 API 测试场景的自动化测试框架 (Python 3.11+)。
 
-Gimbal 把"场景编排 / 策略执行 / 状态机驱动 / 资产复用 / 插件扩展"装进同一条 CLI 链路，并提供仿 Docker Registry v2 的本地资产仓库，便于跨项目复用稳定的 Suite / Scenario 资产。
+Gimbal 把"场景编排 / 策略执行 / 状态机驱动 / 插件扩展"装进同一条 CLI 链路。
 
 ## 特性
 
-- **声明式场景**：Pydantic `Schema` + Discriminated Union（`Step` / `Api` / `Request` / `Strategy`），引用通过 `Ref` 节点统一表达。
+- **声明式场景**：Pydantic `Schema` + Discriminated Union（`Step` / `Api` / `Request` / `Strategy`）。
 - **多阶段策略执行**：`BEFORE_REQUEST` (Assign) → `CALLING` (Call) → `AFTER_REQUEST` (Extract) → `VERIFYING` (Assertion) → `TEARDOWN`，由状态机驱动。
 - **层级执行上下文**：`Framework → Suite → Scenario → Step`，每次 `Engine.run()` 独立创建、互不污染。
-- **完整的扩展点**：自定义 `StrategyExecutor` / `Reporter` / `Authenticator` / `ContentStore`；通过 `PluginLoader` 流水线以插件形式接入。
+- **完整的扩展点**：自定义 `StrategyExecutor` / `Reporter` / `Authenticator`；通过 `PluginLoader` 流水线以插件形式接入。
 - **Event + Hook 双总线**：Event 通知型，Hook 介入型可中断 / 改写 payload；均支持 `plugin_name` 精确热卸载。
-- **本地资产仓库**：仿 Docker Registry v2 的 push / pull / list / inspect / remove / tag / gc，digest 校验、tag 解析、JSON 自动解析。
 - **CI / Git 上下文透传**：run 前自动发布 `RunMetaEvent`（CI provider / build URL / commit / 触发人等）。
 
 ## 安装
@@ -30,13 +29,7 @@ pip install gimbal
 ## 30 秒快速开始
 
 ```bash
-# 1. 把一个 scenario 推入本地资产仓库
-gimbal asset push demo/hello:v1 -f examples/hello/scenario.yaml -k scenario
-
-# 2. 按 ID 执行
-gimbal run scenario demo/hello
-
-# 3. 跑一个本地文件（不走仓库）
+# 直接执行一个本地 scenario 文件
 gimbal run launch examples/hello/scenario.yaml
 ```
 
@@ -45,19 +38,10 @@ gimbal run launch examples/hello/scenario.yaml
 ```text
 gimbal
 ├── run
-│   ├── suite <REF>          按 ID 执行 Suite 资产（支持命名空间通配）
-│   ├── scenario <REF>...    按 ID 执行 Scenario 资产（支持命名空间通配）
-│   ├── match <GLOB>         按路径/模式匹配本地未注册的用例文件
+│   ├── match <GLOB>         按路径/模式匹配本地用例文件
 │   ├── server               作为服务监听端口接收任务（http / grpc / websocket）
-│   └── launch <PATH>        直接接收文件信息进行加载执行
-├── asset                    资产仓库管理（仿 Docker Registry v2，不走 bootstrap）
-│   ├── push    <REF> -f FILE    上传资产（支持 --kind、--meta、--overwrite）
-│   ├── pull    <REF> [-o FILE]  下载资产（自动 JSON 解析）
-│   ├── list    [NAMESPACE]      列出资产（table / json 两种输出）
-│   ├── inspect <REF>            查看元数据（不下载内容）
-│   ├── remove  <REF>            删除 tag（孤儿 blob 由 gc 回收）
-│   ├── tag     <SRC> <DST>      给已有 digest 添加新 tag
-│   └── gc                         清理孤儿 blob
+│   ├── launch <PATH>        直接接收文件信息进行加载执行
+│   └── show --from-path <FILE>  只读展示步骤索引（不执行）
 └── self-check               框架自检（集成测试级：bootstrap + 验证 event/hook 回路）
 ```
 
@@ -79,13 +63,6 @@ gimbal
 --reporter <name>       报告插件（可重复）
 --report-dir <dir>      报告输出目录
 -o / --output <fmt>     console / json
---source <auto|local|remote>  资产来源策略
---registry <path>       远端/本地注册表地址
---version <ver>         指定资产版本
---no-cache              强制重新拉取
---cache-only            仅本地缓存
---order <strategy>      多目标执行顺序：sequential / parallel / as-given
---continue-on-error     某目标失败后继续执行后续目标
 --yes / -y              跳过通配匹配多个时的确认提示
 --allow-empty           允许零匹配
 ```
@@ -95,7 +72,7 @@ gimbal
 ```text
 CLI (Typer)
   │
-  └── run suite / scenario / match / server / launch
+  └── run match / server / launch
         │
         ├── bootstrap(cli_ctx)
         │     ├── configure_logging
@@ -109,14 +86,13 @@ CLI (Typer)
         │
         ├── _publish_run_meta(configuration)        # 发布 RunMetaEvent
         │
-        ├── engine = Engine(configuration, asset_store=...)
+        ├── engine = Engine(configuration)
         ├── result = engine.run(scenario | suite)
         │     ├── 创建 FrameworkContext (run_id 唯一)
         │     ├── reporter_runtime.begin_all(...)
         │     ├── RunStartEvent
         │     ├── ScenarioRunner.run() / 多个
         │     │     ├── ScenarioPreprocessor.run()
-        │     │     │     ├── Phase 0 引用物化 (AssetMaterializer)
         │     │     │     ├── Phase 1 认证
         │     │     │     ├── Phase 2 构建查询根
         │     │     │     ├── Phase 3 模板展开
@@ -149,7 +125,6 @@ src/gimbal/
 ├── plugins/            # 插件机制：PluginLoader / spec / manifest / registry
 ├── preprocessor/       # Scenario 预处理器
 ├── reporter/           # 报告系统
-├── repository/         # 资产仓库（ContentStore / AssetStore / models）
 ├── resource/           # 资源管理
 ├── scheduler/          # 调度原语
 ├── schema/             # Pydantic 数据模型
@@ -173,7 +148,6 @@ src/gimbal/
 - **策略 Executor**：实现 `StrategyExecutor` 子类并 `dispatcher.register()`。
 - **Reporter**：实现 `Reporter` 接口并 `ReporterRegistry.register()`，CLI 用 `--reporter` 启用。
 - **Authenticator**：实现 `Authenticator` 子类并 `AuthRegistry.register()`。
-- **ContentStore 后端**：实现 `ContentStore` 协议并注入 `AssetStore(backend=...)`，即可替换资产仓库存储。
 
 详见 [docs/extending.md](docs/extending.md)。
 

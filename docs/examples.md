@@ -6,7 +6,6 @@
 
 ```
 examples/
-├── asset_library/          # 资产库示例（push / pull / list）
 ├── hello/                  # Hello World 最小示例
 ├── login_and_query/        # 登录与查询组合示例
 └── suites/                 # Suite 多场景编排示例
@@ -24,12 +23,6 @@ examples/
 gimbal run launch examples/hello/scenario.yaml
 ```
 
-或者按 ID 从本地资产仓库执行（先把 suite/scenario 推入仓库）：
-
-```bash
-gimbal run scenario hello/smoke
-```
-
 ### 2. 登录与查询
 
 展示多 Step 顺序执行、变量提取与传递、认证注入：
@@ -38,46 +31,7 @@ gimbal run scenario hello/smoke
 gimbal run launch examples/login_and_query/scenario.yaml
 ```
 
-### 3. 执行 Suite
-
-执行包含多个 Scenario 的 Suite：
-
-```bash
-gimbal run suite examples/suites/my-suite.yaml
-```
-
-或从资产库执行：
-
-```bash
-gimbal run suite my-suite:v1.0
-```
-
-### 4. 资产仓库操作（仿 Docker）
-
-```bash
-# 推入一个 suite 资产
-gimbal asset push customs/declare:v1.0 -f suite.json -k suite
-
-# 列出全部资产
-gimbal asset list
-
-# 查看某个资产的元数据（不下载内容）
-gimbal asset inspect customs/declare:v1.0
-
-# 拉取到本地
-gimbal asset pull customs/declare:v1.0 -o ./declare.json
-
-# 给已有 digest 打新 tag
-gimbal asset tag customs/declare:v1.0 customs/declare:stable
-
-# 删除某个 tag（孤儿 blob 由 gc 回收）
-gimbal asset remove customs/declare:v1.0
-
-# 清理孤儿 blob
-gimbal asset gc
-```
-
-### 5. 框架自检
+### 3. 框架自检
 
 ```bash
 gimbal self-check
@@ -116,20 +70,9 @@ gimbal self-check
 
 - 多个 Scenario 组合（顺序 / 并发可选）
 - Suite 级共享配置
-- `--fail-fast` / `--continue-on-error` 控制执行
+- `--fail-fast` 控制执行
 
 适用场景：回归测试集、CI smoke / full 套件的组织。
-
-### examples/asset_library/
-
-展示资产仓库的使用：
-
-- `gimbal asset push` 上传 suite / scenario / data 资产
-- 跨项目 / 跨环境复用同一资产
-- `gimbal asset list` / `inspect` / `pull` 浏览与消费
-- `gimbal asset tag` / `remove` / `gc` 维护仓库
-
-适用场景：把稳定的回归集 push 到共享仓库，新环境 pull 后直接 `gimbal run suite` 执行。
 
 ## 如何运行示例
 
@@ -138,11 +81,6 @@ gimbal self-check
 1. 准备 Python 3.11+ 环境。
 2. 安装框架：`pip install -e .`（开发模式）。
 3. 在仓库根目录准备好 `gimbal.yaml`（或使用默认配置）。
-4. （可选）把示例 suite / scenario 推入本地资产仓库：
-
-```bash
-gimbal asset push demo/hello:v1 -f examples/hello/scenario.yaml -k scenario
-```
 
 ### 常用执行命令
 
@@ -150,14 +88,11 @@ gimbal asset push demo/hello:v1 -f examples/hello/scenario.yaml -k scenario
 # 直接执行本地文件
 gimbal run launch examples/hello/scenario.yaml
 
-# 按 ID 执行（资产库优先）
-gimbal run scenario demo/hello
+# 按路径/模式匹配本地用例文件
+gimbal run match "examples/**/*.yaml"
 
-# 多 scenario 通配
-gimbal run scenario "demo/*"
-
-# 套件执行
-gimbal run suite examples/suites/my-suite.yaml
+# 只读查看步骤索引（决定 --step-to 设到几）
+gimbal run show --from-path examples/hello/scenario.yaml
 
 # 服务模式（接收远程任务）
 gimbal run server --port=8765
@@ -169,20 +104,17 @@ gimbal run launch examples/hello/scenario.yaml --output json
 gimbal run launch examples/hello/scenario.yaml --reporter html --report-dir ./report
 ```
 
-### 常用过滤 / 注入
+### 常用控制
 
 ```bash
-# 按 tag 过滤
-gimbal run suite examples/suites/my-suite.yaml --tag smoke --tag "not slow"
-
-# 注入变量
-gimbal run scenario demo/hello --var env=staging --var user=admin
-
-# 从变量文件加载
-gimbal run scenario demo/hello --var-file ./vars.yaml
-
 # 失败立即终止
-gimbal run suite examples/suites/my-suite.yaml --fail-fast
+gimbal run launch examples/hello/scenario.yaml --fail-fast
+
+# 只装配不真正执行
+gimbal run launch examples/hello/scenario.yaml --dry-run
+
+# 只收集不执行（run match）
+gimbal run match "examples/**/*.yaml" --collect-only
 ```
 
 ### 调试技巧

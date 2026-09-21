@@ -54,13 +54,12 @@ Engine
 
 | 模块 | 说明 |
 |------|------|
-| [preprocessor](modules/preprocessor.md) | 预处理：引用物化、认证、模板展开 |
+| [preprocessor](modules/preprocessor.md) | 预处理：认证、模板展开 |
 | [auth](modules/auth.md) | 认证管理 |
 | [cli](modules/cli.md) | 命令行接口 |
 | [compiler](modules/compiler.md) | 场景文件编译 |
 | [events](modules/events.md) | 事件系统 |
 | [reporter](modules/reporter.md) | 测试报告 |
-| [repository](modules/repository.md) | 资产仓库 |
 | [resource](modules/resource.md) | 资源管理 |
 | [scheduler](modules/scheduler.md) | 测试调度 |
 | [suite](modules/suite.md) | 套件管理 |
@@ -181,7 +180,7 @@ steps:
 ### 3. 执行测试
 
 ```bash
-gimbal run scenario login.yaml
+gimbal run launch login.yaml
 ```
 
 ## 设计原则

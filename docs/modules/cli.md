@@ -1,6 +1,6 @@
 # CLI 模块
 
-> 命令行接口模块（Typer），提供测试执行 / 资产仓库管理 / 框架自检的命令入口
+> 命令行接口模块（Typer），提供测试执行 / 框架自检的命令入口
 
 ## 目录结构
 
@@ -14,17 +14,15 @@ gimbal/cli/
 ├── exit_codes.py        # 退出码集中定义
 └── commands/
     ├── __init__.py
-    ├── run.py           # run 子命令组（Typer app）—— suite/scenario/match/server/launch
-    ├── run_suite.py     # 按 ID 执行 Suite 资产
-    ├── run_scenario.py  # 按 ID 执行 Scenario 资产
+    ├── run.py           # run 子命令组（Typer app）—— match/server/launch/show
     ├── run_match.py     # 按路径/模式匹配本地未注册文件执行
     ├── run_server.py    # 服务模式（HTTP/gRPC/Websocket）
     ├── run_launch.py    # 直接接收文件/stdin/inline 内容加载执行
-    ├── asset.py         # asset 子命令组（push/pull/list/inspect/remove/tag/gc）
+    ├── run_show.py      # 只读展示 Scenario 步骤索引（仅 --from-path 输入）
     ├── self_check.py    # 框架自检（集成测试级别）
-    ├── resolve.py       # 解析 ref → 内容（辅助）
-    ├── validate.py      # 校验资产 schema（辅助）
-    └── compile_case.py  # 编译用例（辅助）
+    ├── resolve.py       # 解析（占位）
+    ├── validate.py      # 校验（占位）
+    └── compile_case.py  # 编译用例（占位）
 ```
 
 ### 文件职责边界
@@ -34,7 +32,7 @@ gimbal/cli/
 | `main.py` | `starter` Typer 实例 + `cli_ctx` 注入 + SIGINT 处理 | `python -m gimbal` / `gimbal` 入口脚本 |
 | `params.py` | 顶层 OPT_*（`--config` / `--no-color` / `--version` / `--log-level`）+ 顶层子命令注册 | `starter` 自身 |
 | `context.py` | `CLIContext` 数据类 | 所有子命令通过 `ctx.obj` 取 |
-| `common.py` | 共享 enum + `*Opt` 共享参数类型别名 + `parse_*` / `_build_default_asset_store` / `_collect_run_meta` / `_publish_run_meta` / `_print_run_report` / `_total_duration_ms` 辅助 | 所有 `run_*` 子命令 |
+| `common.py` | 共享 enum + `*Opt` 共享参数类型别名 + `parse_*` / `_collect_run_meta` / `_publish_run_meta` / `_print_run_report` / `_total_duration_ms` 辅助 | 所有 `run_*` 子命令 |
 | `exit_codes.py` | 集中常量（避免与子命令模块循环导入） | 所有子命令 |
 | `commands/*` | 各子命令实现 | `starter` 通过 `add_typer` / `command` 注册 |
 
@@ -45,25 +43,16 @@ gimbal/cli/
 ```
 gimbal                                              [gimbal.cli.main.starter]
 ├── run                                            [gimbal.cli.commands.run]
-│   ├── suite     <SUITE_ID>...                   按 ID 执行 Suite 资产
-│   ├── scenario  <SCENARIO_ID>...                按 ID 执行 Scenario 资产
 │   ├── match     <PATTERN>...                    按模式匹配本地未注册文件
 │   ├── server    [--host] [--port]                服务监听（HTTP/gRPC/Websocket）
-│   └── launch    [SOURCE] [--inline STR]         直接接收文件/stdin/inline 内容
-├── asset                                          [gimbal.cli.commands.asset]
-│   ├── push     <REF> -f FILE                    上传资产
-│   ├── pull     <REF> [-o FILE]                  下载资产
-│   ├── list     [NAMESPACE]                      列出资产
-│   ├── inspect  <REF>                            查看元数据
-│   ├── remove   <REF>                            删除 tag
-│   ├── tag      <SRC> <DST>                      给 digest 加 tag
-│   └── gc                                        清理孤儿 blob
+│   ├── launch    [SOURCE] [--inline STR]         直接接收文件/stdin/inline 内容
+│   └── show      --from-path FILE                只读展示步骤索引（不执行）
 └── self-check                                     [gimbal.cli.commands.self_check]
 ```
 
-`asset` 和 `self-check` 是**顶层命令**（不是 `run` 的子命令）：
-- `asset` —— 不执行任何测试，只管理本地仓库
-- `self-check` —— 框架基础设施自检，不执行任何测试
+`self-check` 是**顶层命令**（不是 `run` 的子命令）——框架基础设施自检，不执行任何测试。
+
+> 历史备注：曾存在资产仓库管理顶层命令与按 ID 从资产仓库执行用例的两个子命令，已随资产引用机制移除（用例的唯一去向是平台数据库，ref 节点零生产者）。
 
 ---
 
@@ -121,17 +110,17 @@ EXIT_SYSTEM_ERROR    = 4   # 系统/运行时错误
 EXIT_NO_MATCH        = 5   # 无匹配
 ```
 
-> **约定**：所有 `run_*` / `asset` 子命令都用这套常量。**不要**直接 `typer.Exit(code=N)` 写裸数字。
+> **约定**：所有 `run_*` 子命令都用这套常量。**不要**直接 `typer.Exit(code=N)` 写裸数字。
 > 集中管理的原因是：CI 脚本要按退出码分流，必须有唯一权威定义。
 
 | 退出码 | 触发场景 | 子命令举例 |
 |--------|----------|------------|
-| 0 | 全部用例通过 / 校验通过 | `run scenario` 全 pass / `asset push` 成功 |
-| 1 | 有用例 failed | `run scenario` 有 fail |
-| 2 | 参数错误 / 校验失败 | `run scenario` ref 不是合法 Scenario / `--parallel=foo` / `--var-file` 根不是 mapping |
-| 3 | 单个 ref 找不到 | `asset pull nonexistent:v1` / `Engine.run()` 抛异常 |
+| 0 | 全部用例通过 / 校验通过 | `run launch` 全 pass |
+| 1 | 有用例 failed | `run launch` 有 fail |
+| 2 | 参数错误 / 校验失败 | `run launch` 内容不是合法 Scenario / `--parallel=foo` / `--var-file` 根不是 mapping |
+| 3 | 执行目标找不到 | `Engine.run()` 抛异常 |
 | 4 | 框架级错误 | `bootstrap()` 失败 |
-| 5 | 通配无匹配 | `run scenario "sc-*" --yes` 命中 0 个 |
+| 5 | 通配无匹配 | `run match "tests/**"` 命中 0 个 |
 
 ---
 
@@ -194,30 +183,23 @@ def _install_sigint_handler() -> None:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
-│ run_scenario() / run_suite() / run_launch()                                │
-│   src/gimbal/cli/commands/run_scenario.py:scenario()                       │
-│   src/gimbal/cli/commands/run_suite.py:suite()                             │
-│   src/gimbal/cli/commands/run_launch.py:launch()                           │
+│ run_launch()                                                                 │
+│   src/gimbal/cli/commands/run_launch.py:launch()                            │
 └────────────────────────────────────────────────────────────────────────────┘
-  │  1. resolve_source(source, no_cache, cache_only)            ← common.py
-  │  2. asset_store = _build_default_asset_store(registry)     ← common.py
-  │  3. resolver = AssetResolver(kind=..., asset_store=...)    ← core/asset_resolver.py
-  │  4. matched = resolver.resolve(scenario_ids)
-  │     ↑ 通配解析 + 通配空检查（→ EXIT_NO_MATCH=5 / EXIT_OK + --allow-empty）
-  │  5. 通配多匹配 + 交互式 TTY → typer.confirm
-  │  6. dry-run? → 校验不执行（→ Exit(0)）
-  │  7. cli_ctx.env / mode / log_level 注入
-  │  8. cli_ctx.extras["vars"] / ["reporters"] / ["report_dir"] 注入
-  │  9. configuration = bootstrap(cli_ctx)                     ← core/bootstrap.py
+  │  1. 步骤级控制参数互斥校验（--step-from / --step-to / --breakpoint）
+  │  2. cli_ctx.env / mode / log_level 注入
+  │  3. cli_ctx.extras["vars"] / ["reporters"] / ["report_dir"] 注入
+  │  4. configuration = bootstrap(cli_ctx)                     ← core/bootstrap.py
   │     ↑ EventBus / Archive / ContextManager / Dispatcher / HookRegistry /
   │       PluginRegistry / AuthRegistry + discover/load/activate plugins
-  │ 10. _publish_run_meta(configuration)                        ← common.py
+  │  5. _publish_run_meta(configuration)                        ← common.py
   │     ↑ RunMetaEvent 携带 CI/Git/触发人上下文，reporter 订阅
-  │ 11. parsed = Scenario.model_validate(matched[i].content.parsed)  ← Pydantic
-  │ 12. engine = Engine(configuration, asset_store=asset_store) ← core/runner.py
-  │ 13. result = engine.run(parsed)
+  │  6. payload = normalize_input(source, inline, fmt)          ← run_launch.py
+  │  7. dry-run? → 打印解析结果不执行（→ Exit(0)）
+  │  8. parsed = Scenario.model_validate(payload)               ← Pydantic
+  │  9. engine = Engine(configuration)                          ← core/runner.py
+  │ 10. result = engine.run(parsed, runtime_control=...)
   │     ↑ Engine → ScenarioRunner → ScenarioPreprocessor
-  │       └─ Phase 0: AssetMaterializer 还原 Ref 节点           ← core/asset_materializer.py
   │       └─ Phase 1: 认证（AuthManager.get_auth → 写 AuthRegistry）
   │       └─ Phase 2: 构建查询根
   │       └─ Phase 3: 模板展开（${auth.*} ${service.*} ${var.*}）
@@ -226,70 +208,20 @@ def _install_sigint_handler() -> None:
   │       StepRunner × n → StepStateMachine.run()              ← statemachine/engine.py
   │       ↓
   │       RunResult(exit_code, total, passed, failed, error, details)
-  │ 14. shutdown(configuration)                                 ← core/bootstrap.py
+  │ 11. shutdown(configuration)                                 ← core/bootstrap.py
   │     ↑ FRAMEWORK_TEARDOWN → PluginLoader.deactivate_all → hook_registry.clear → event_bus.stop
-  │ 15. _print_run_report(result, output, artifacts=engine.artifacts)  ← common.py
-  │ 16. typer.Exit(code=merged.exit_code)
+  │ 12. _print_run_report(result, output, artifacts=engine.artifacts)  ← common.py
+  │ 13. typer.Exit(code=result.exit_code)
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **关键点**：
-- `asset_store` 由 CLI 构造 → 注入 `Engine` → `Engine` 透传给 `ScenarioRunner` → `ScenarioRunner` 透传给 `ScenarioPreprocessor` → 供 `AssetMaterializer` 在 Phase 0 使用
-- `asset_store is None` 时 Phase 0 整体跳过（保持向后兼容）
 - `_publish_run_meta` 必须在 `bootstrap()` 之后、`Engine.run()` 之前；bus 不存在或 publish 失败时静默降级
 - 任何阶段异常都会被 try/except 捕获并映射到对应的退出码（4 / 2 / 3）
 
 ---
 
 ## run 子命令
-
-### gimbal run scenario
-
-执行已注册的 Scenario 资产。
-
-```bash
-gimbal run scenario <SCENARIO_ID>...  [选项]
-```
-
-**位置参数**：
-- `SCENARIO_ID...`：一个或多个 Scenario ID，支持命名空间通配如 `payment/sc-*`
-
-**专属选项**（步骤级控制，panel `步骤控制`）：
-- `--step-from INT`：从指定 step 开始执行
-- `--step-to INT`：执行到指定 step 停止
-- `--breakpoint INT`：在指定 step 暂停进入交互模式（可重复）
-
-**资产来源**（panel `资产来源`）：见 [公共参数 - 资产来源](#资产来源仅-suitescenario)
-**多目标控制**（panel `多目标控制`）：见 [公共参数 - 多目标控制](#多目标控制仅-suitescenario)
-**确认**（panel `确认行为`）：见 [公共参数 - 确认行为](#确认行为)
-**通用**：见 [公共参数](#公共参数)
-
-**示例**：
-```bash
-gimbal run scenario sc-payment-001
-gimbal run scenario sc-001 sc-002 --continue-on-error
-gimbal run scenario "payment/sc-*" --yes
-gimbal run scenario sc-001 --step-from=3 --breakpoint=5
-gimbal run scenario sc-001 --dry-run           # 只校验不执行
-gimbal run scenario sc-001 --output=json       # 机器可读输出
-gimbal run scenario sc-001 --registry /tmp/alt # 切换 registry 根
-```
-
-### gimbal run suite
-
-执行已注册的 Suite 资产。参数集与 `run scenario` 基本一致，外加：
-
-- `--include-scenario STR`：只跑 Suite 内指定的 scenario（可重复）
-- `--exclude-scenario STR`：排除 Suite 内特定 scenario（可重复）
-
-```bash
-gimbal run suite customs-declare
-gimbal run suite "customs/*" --yes
-gimbal run suite tax-refund --include-scenario=happy-path
-gimbal run suite tax-refund --exclude-scenario=corner-case
-gimbal run suite customs-declare forex-settle --order=parallel
-gimbal run suite customs/declare:v1.2 --source=remote
-```
 
 ### gimbal run match
 
@@ -373,7 +305,7 @@ gimbal run server --register-to=https://scheduler --auth=token --token-file=/etc
 
 ### gimbal run launch
 
-直接接收文件/stdin/inline 内容加载执行。走完整 bootstrap + Engine 路径，让 `ScenarioPreprocessor` Phase 0 启用对 `RefBase` 节点的物化（通过 `--registry` 注入 asset_store）。
+直接接收文件/stdin/inline 内容加载执行，走完整 bootstrap + Engine 路径。
 
 ```bash
 gimbal run launch [SOURCE] [选项]
@@ -393,6 +325,11 @@ gimbal run launch [SOURCE] [选项]
 - `--dry-run`：只装配不真正执行
 - `-P, --plugins STR`：加载插件（可重复）
 
+步骤控制（panel `步骤控制`）：
+- `--step-from INT`：从指定 step 开始执行（阶段 2 引入 StepResolver 后生效）
+- `--step-to INT`：执行到指定 step 停止（0-based）
+- `--breakpoint INT`：在指定 step 暂停（暂以首个为准）
+
 **示例**：
 ```bash
 # 文件路径
@@ -404,125 +341,26 @@ gimbal run launch --inline '{"name":"x"}' -f json
 # 标准输入（stdin）
 cat case.yaml | gimbal run launch - -f yaml
 
-# 走资产仓库（启用 Ref 物化）
-gimbal run launch ./test.yaml --registry ~/.gimbal/registry
+# 执行到指定步骤
+gimbal run launch ./debug.yaml --step-to=3
 ```
 
-`run launch` 是 `bootstrap() + _build_default_asset_store() + Engine(asset_store=...)` 的最小完整示例，可作为参考实现（见 [run_launch.py](../../src/gimbal/cli/commands/run_launch.py)）。
+`run launch` 是 `bootstrap() + Engine.run()` 的最小完整示例，可作为参考实现（见 [run_launch.py](../../src/gimbal/cli/commands/run_launch.py)）。
 
----
+### gimbal run show
 
-## asset 子命令
-
-[gimbal/cli/commands/asset.py](../../src/gimbal/cli/commands/asset.py) 实现仿 Docker 的本地仓库管理。
-
-设计哲学：**CLI 走"快路径"**——每个子命令直接构造 `LocalFsContentStore`，**不经过 `bootstrap()`**（asset 操作不需要 ContextManager / Plugins / Hooks）。
-
-### 共享选项
-
-所有 asset 子命令共享 `--registry PATH`（默认 `~/.gimbal/registry`）。
-
-### gimbal asset push
-
-上传资产到本地仓库。
+只读解析本地 Scenario 文件，输出步骤索引 → 描述的映射。不执行、不 bootstrap 框架。
 
 ```bash
-gimbal asset push <REF> [-f FILE] [选项]
+gimbal run show --from-path <FILE>
 ```
 
-- `<REF>`：目标 ref，如 `customs/declare:v1.0`
-- `-f, --file PATH`：从文件读取内容；不指定则从 stdin 读
-- `-k, --kind {suite,scenario,data,blob}`：资产类型（默认 `blob`）
-- `-m, --media-type MIME`：MIME 类型
-- `--meta KEY=VALUE`：附加元数据（可重复）
-- `--overwrite / --no-overwrite`：目标 tag 已存在时是否覆盖（默认不覆盖）
+**输入**只有一种来源：`--from-path` 本地 JSON/YAML 文件（历史上曾有按 ID 从资产仓库查的模式，已随引用机制移除）。
 
-```bash
-echo '{"scenarioId":"sc-001"}' | gimbal asset push customs/sc-001:v1 -k scenario -m application/json
-gimbal asset push customs/declare:v1.0 -f suite.json -k suite --meta author=alice
-```
-
-### gimbal asset pull
-
-下载资产。
-
-```bash
-gimbal asset pull <REF> [-o FILE] [选项]
-```
-
-- `<REF>`：资产 ref，如 `customs/declare:v1.0` 或 `@digest`
-- `-o, --output PATH`：写入文件；不指定则写到 stdout（适合 binary）
-- `--raw / --no-raw`：`--raw` 只写 raw bytes；默认会自动 JSON 解析（仅 stdout 模式生效）
-
-```bash
-gimbal asset pull customs/declare:v1.0 -o ./declare.json
-gimbal asset pull customs/declare:v1.0
-```
-
-### gimbal asset list
-
-列出资产（按 namespace）。
-
-```bash
-gimbal asset list [NAMESPACE] [--output {table,json}]
-```
-
-- `<NAMESPACE>`：限定 namespace；不传则全库
-- `-o, --output {table,json}`：输出格式（默认 `table`）
-
-```bash
-gimbal asset list customs
-gimbal asset list --output json
-```
-
-### gimbal asset inspect
-
-查看资产元数据（不下载内容字节）。
-
-```bash
-gimbal asset inspect <REF>
-```
-
-输出 ref / namespace / name / tag / digest / size / kind / media_type / created_at / updated_at / metadata。
-
-### gimbal asset remove
-
-删除资产的某个 tag（blob 在无引用时由 `gc` 回收）。
-
-```bash
-gimbal asset remove <REF> [-y]
-```
-
-- `<REF>`：资产 ref
-- `-y, --yes`：跳过确认
-
-### gimbal asset tag
-
-给已有 digest 加新 tag。
-
-```bash
-gimbal asset tag <SRC> <DST> [--overwrite/--no-overwrite]
-```
-
-- `<SRC>`：源 ref（必须已存在）
-- `<DST>`：目标 ref（要打的 tag）
-- `--overwrite / --no-overwrite`：目标 ref 已存在时是否覆盖
-
-```bash
-gimbal asset tag customs/declare:v1.0 customs/declare:latest
-```
-
-### gimbal asset gc
-
-清理孤儿 blob（无任何 tag 引用的内容）。
-
-```bash
-gimbal asset gc [-y]
-```
-
-- `-y, --yes`：跳过确认直接清理
-
-输出 `removed=N, remaining_blobs=M` 的统计。
+用途：
+- 人快速了解 scenario 内容
+- CLI 操作：决定 `--step-to=<idx>` 该设到几
+- AI 操作：把 step_map 当结构化上下文喂给 LLM
 
 ---
 
@@ -560,18 +398,6 @@ gimbal self-check
 ### 共享枚举
 
 ```python
-class SourceStrategy(str, Enum):
-    """资产来源策略。"""
-    auto = "auto"
-    local = "local"
-    remote = "remote"
-
-class OrderStrategy(str, Enum):
-    """多目标执行顺序。"""
-    sequential = "sequential"
-    parallel = "parallel"
-    as_given = "as-given"
-
 class InputFormat(str, Enum):
     auto = "auto"
     json = "json"
@@ -631,16 +457,6 @@ class AuthMode(str, Enum):
 | `VarOpt` | `--var` | 注入变量（`KEY=VALUE` 形式，可重复），如 `--var user=admin` |
 | `VarFileOpt` | `--var-file` | 变量文件（可重复，YAML 格式，根必须是 mapping） |
 
-### 资产来源（仅 suite/scenario，panel `资产来源`）
-
-| 别名 | 选项 | 说明 |
-|------|------|------|
-| `SourceOpt` | `--source` | `auto` / `local` / `remote`（默认 `auto`） |
-| `RegistryOpt` | `--registry` | 远端/本地 registry 地址（默认 `~/.gimbal/registry`） |
-| `VersionOpt` | `--version` | 指定资产版本（不指定则用 latest 或 pinned） |
-| `NoCacheOpt` | `--no-cache` | 强制重新拉取（等价于 `--source=remote`） |
-| `CacheOnlyOpt` | `--cache-only` | 仅本地缓存（等价于 `--source=local`） |
-
 ### 执行控制（panel `执行控制`）
 
 | 别名 | 选项 | 说明 |
@@ -651,13 +467,6 @@ class AuthMode(str, Enum):
 | `DryRunOpt` | `--dry-run` | 只校验不执行 |
 | `FailFastOpt` | `--fail-fast` | 首个失败即停止 |
 | `PluginsOpt` | `-P, --plugins` | 加载插件（可重复，panel `插件执行`） |
-
-### 多目标控制（仅 suite/scenario，panel `多目标控制`）
-
-| 别名 | 选项 | 说明 |
-|------|------|------|
-| `OrderOpt` | `--order` | `sequential` / `parallel` / `as-given`（默认 `as-given`） |
-| `ContinueOnErrorOpt` | `--continue-on-error` | 某目标失败后继续执行后续目标 |
 
 ### 确认行为（panel `确认行为`）
 
@@ -685,30 +494,6 @@ class AuthMode(str, Enum):
 ## 辅助函数
 
 定义在 [common.py](../../src/gimbal/cli/common.py) 底部，所有 `run_*` 子命令共用。
-
-### resolve_source(source, no_cache, cache_only)
-
-协调 `--source` / `--no-cache` / `--cache-only` 三者的互斥关系：
-
-```python
-def resolve_source(
-    source: SourceStrategy,
-    no_cache: bool,
-    cache_only: bool,
-) -> SourceStrategy:
-    if no_cache and cache_only:
-        raise typer.BadParameter("--no-cache 和 --cache-only 互斥。")
-    if no_cache:
-        return SourceStrategy.remote
-    if cache_only:
-        return SourceStrategy.local
-    return source
-```
-
-- `--no-cache` 和 `--cache-only` 同时存在 → `typer.BadParameter`
-- `--no-cache` → 强制 `SourceStrategy.remote`
-- `--cache-only` → 强制 `SourceStrategy.local`
-- 否则透传 `source`
 
 ### parse_vars(var_list)
 
@@ -743,17 +528,6 @@ def parse_parallel(value: str) -> int:
         return n
     except ValueError:
         raise typer.BadParameter(f"Invalid --parallel: {value!r}, expected integer or 'auto'.")
-```
-
-### _build_default_asset_store(registry=None)
-
-构造默认的 `AssetStore`，registry 路径由 `--registry` 覆盖。供 `run_scenario` / `run_suite` / `run_launch` 共用，**避免在多处重复构造**：
-
-```python
-def _build_default_asset_store(registry: Path | None = None) -> "AssetStore":
-    from gimbal.repository import AssetStore, LocalFsContentStore
-    root = (registry or Path("~/.gimbal/registry")).expanduser()
-    return AssetStore(backend=LocalFsContentStore(root=root))
 ```
 
 ### _collect_run_meta()
@@ -834,6 +608,6 @@ def _total_duration_ms(result: Any) -> float:
 3. **子命令分组**：通过 `Typer` 实例的 `command()` / `add_typer()` 方法注册
 4. **上下文传递**：通过 `ctx.obj`（`CLIContext`）在子命令间传递共享状态
 5. **退出码集中**：`exit_codes.py` 是唯一权威，禁止散落裸数字
-6. **辅助函数共用**：`run_scenario` / `run_suite` / `run_launch` 共享 `bootstrap() + Engine.run()` 模板
+6. **辅助函数共用**：`run_launch` / `run_match` 共享 `bootstrap() + Engine.run()` 模板
 7. **错误隔离**：每阶段异常 try/except 映射到对应退出码；`shutdown()` 一定在 `finally` 调用
 8. **SIGINT 协作式取消**：首次 Ctrl-C 等当前 step 完成后退出，第二次强制终止；handler 在 callback 期间注册而非 import 期（修复 #B7）

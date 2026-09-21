@@ -6,7 +6,7 @@ Gimbal 是一个面向现代 API 测试场景的自动化测试框架（Python 3
 
 **CLI → bootstrap(cli_ctx) → Engine.run → ScenarioRunner → StepRunner → StepStateMachine → StrategyDispatcher**。
 
-整体采用分层、不可变配置 + 可插拔扩展点（Event / Hook / Plugin / Reporter）的设计，并提供一个仿 Docker Registry v2 的本地资产仓库用于跨项目复用 Suite / Scenario 资产。
+整体采用分层、不可变配置 + 可插拔扩展点（Event / Hook / Plugin / Reporter）的设计。
 
 ## 顶层模块布局
 
@@ -20,16 +20,15 @@ src/gimbal/
 ├── context/            # 层级执行上下文（Framework → Suite → Scenario → Step / channels / views）
 ├── core/               # 框架核心：bootstrap、Engine、ScenarioRunner、StepRunner、hooks、plugin、server
 ├── events/             # 事件系统（bus / subscription / protocols / types）
-├── exceptions.py       # 全局异常类（AssetNotFound、StrategyError 等）
+├── exceptions.py       # 全局异常类（AuthError、StrategyError 等）
 ├── log/                # 日志系统（logger / formatters / setup / intercept / integration）
 ├── observability/      # 可观测性后端（日志/指标/快照/追踪）
 ├── plugins/            # 插件机制（PluginLoader / spec / manifest / registry / categories）
-├── preprocessor/       # Scenario 预处理器（引用物化、认证、模板展开、base_url 提取）
+├── preprocessor/       # Scenario 预处理器（认证、模板展开、base_url 提取）
 ├── reporter/           # 报告系统（base / runtime / registry / builtin）
-├── repository/         # 资产仓库（仿 Docker Registry v2：ContentStore / AssetStore / models）
 ├── resource/           # 资源管理（provider_base / handle / manager / providers）
 ├── scheduler/          # 调度原语（concurrency / dependency / retry / scheduler）
-├── schema/             # Pydantic 数据模型（Scenario / Suite / Step / Strategy / Auth / Ref）
+├── schema/             # Pydantic 数据模型（Scenario / Suite / Step / Strategy / Auth）
 ├── statemachine/       # 状态机引擎（engine / states）
 ├── strategy/           # 策略系统（executor_base / dispatcher / 内置 builtin）
 ├── suite/              # Suite 编排（environment / manager / plan / selector）
@@ -46,9 +45,9 @@ CLI (Typer)
     │
     ├── @starter.callback()         # 安装 SIGINT handler、构造 CLIContext
     │
-    └── 子命令（run / asset / self-check）
+    └── 子命令（run / self-check）
             │
-            ├── run suite / scenario / match / server / launch
+            ├── run match / server / launch / show
             │       │
             │       ├── bootstrap(cli_ctx)         # 配置合并 + 基础设施初始化
             │       │     ├── configure_logging_from_cli(cfg)
@@ -62,11 +61,10 @@ CLI (Typer)
             │       │
             │       ├── _publish_run_meta(configuration)        # 发布 RunMetaEvent（此时 reporter_runtime 已 setup 但未 begin_all，无内置 reporter 订阅）
             │       │
-            │       ├── engine = Engine(configuration, asset_store=...)
+            │       ├── engine = Engine(configuration)
             │       │     └── engine.run(scenario | suite)   # 内部：FrameworkContext → RUN_START → reporter_runtime.begin_all → 分发 → RUN_END → reporter_runtime.finalize_all
             │       └── _print_run_report(result, fmt, artifacts)  # 终端/JSON 输出
             │
-            ├── asset push / pull / list / inspect / remove / tag / gc   # 走"快路径"，不 bootstrap
             └── self-check            # bootstrap + exercise event_bus / hook_registry
 ```
 
@@ -74,14 +72,13 @@ CLI (Typer)
 
 - `bootstrap(cli_ctx)` 是框架启动的**唯一入口**，产出 frozen `Configuration`；不创建任何层级 Context。
 - `Engine.run(target)` 才是执行入口；每次调用都会创建独立的 `FrameworkContext`（含 `run_id`），保证多次执行互不影响。
-- `asset` 子命令组走"快路径"，不经过 bootstrap，直接构造 `LocalFsContentStore` + `AssetStore`，因为仓库管理不依赖 Context/Plugin/Hook。
 - `self-check` 是**集成测试级**的子命令，会真实 bootstrap + 手动驱动 EventBus / HookRegistry，验证基础设施回路。
 
 ### 2. 核心模块职责
 
 | 模块 | 主要文件 | 职责 |
 |------|----------|------|
-| **CLI** | `cli/main.py` / `cli/commands/` | Typer 命令树（`run` / `asset` / `self-check`），共享参数与参数解析 |
+| **CLI** | `cli/main.py` / `cli/commands/` | Typer 命令树（`run` / `self-check`），共享参数与参数解析 |
 | **bootstrap** | `core/bootstrap.py` | 配置合并、基础设施初始化、插件加载、Reporter 装配、FRAMEWORK_INIT 触发 |
 | **Engine** | `core/runner.py` | 接收 Scenario/Suite，派生 FrameworkContext，分发到 ScenarioRunner，驱动 Reporter 生命周期 |
 | **ScenarioRunner** | `core/scenario_runner.py` | 单个 Scenario 驱动：调用 Preprocessor → 遍历 StepRunner → 汇总结果 |
@@ -89,12 +86,11 @@ CLI (Typer)
 | **StepStateMachine** | `statemachine/engine.py` | 状态流转控制，PENDING → BEFORE_REQUEST → CALLING → AFTER_REQUEST → VERIFYING → TEARDOWN |
 | **StrategyDispatcher** | `strategy/dispatcher.py` | 策略分发执行（kind → StrategyExecutor），含 STRATEGY_BEFORE/AFTER 埋点、软失败标记 |
 | **ContextManager** | `context/manager.py` | 层级 Context 生命周期管理（Framework/Suite/Scenario/Step） |
-| **Preprocessor** | `preprocessor/scenario_preprocessor.py` | 引用物化、认证、变量生成、构建查询根、模板展开、提取 base_url |
+| **Preprocessor** | `preprocessor/scenario_preprocessor.py` | 认证、变量生成、构建查询根、模板展开、提取 base_url |
 | **EventBus** | `events/bus.py` | 进程内事件总线（filter / priority / SYNC/ASYNC/BATCH / 插件热卸载） |
 | **HookRegistry** | `core/hooks.py` | Hook 注册表（按 priority 升序、STOP 中断、payload 改写） |
 | **PluginLoader** | `plugins/loader.py` | 插件发现 / 依赖解析 / 加载 / 激活 / 卸载四阶段流水线 |
 | **ReporterRuntime** | `reporter/runtime.py` | Reporter 调度（begin_all / finalize_all），产出 `ReportArtifact` 列表 |
-| **AssetStore** | `repository/store.py` | 资产仓库门面：push/pull/list/inspect/remove/tag，digest 校验，tag 解析 |
 
 ### 3. Schema 数据模型
 
@@ -107,19 +103,18 @@ Scenario (场景)
 │   ├── users (认证信息)
 │   └── retry (重试策略)
 ├── resource (资源)
-└── steps: list[StepUnion]  # Step | StepRef
+└── steps: list[StepUnion]  # StepUnion = Step（单成员别名）
     └── Step
-        ├── api: ApiUnion                  # Api | ApiRef
-        ├── request: RequestUnion          # Request | RequestRef
-        └── strategy: list[StrategyUnion]  # Extract | Assign | Assertion | Call | StrategyRef | ...
+        ├── api: ApiUnion                  # ApiUnion = Api
+        ├── request: RequestUnion          # RequestUnion = Request
+        └── strategy: list[StrategyUnion]  # Extract | Assign | Assertion
 
 Suite (套件)
-├── suite: list[ScenarioUnion]   # Scenario | ScenarioRef
-└── …
+└── suite: list[Scenario]
 
-RunUnion  (外层, CLI 入口接受这几种)
-├── Scenario | ScenarioRef
-└── Suite    | SuiteRef
+RunUnion  (外层, CLI 入口接受这两种)
+├── Scenario
+└── Suite
 ```
 
 ### 4. Context 层次结构
@@ -187,13 +182,12 @@ TEARDOWN                                 # 执行清理策略
 
 使用 Pydantic `Annotated[Union[...], Field(discriminator="kind")]` 实现类型安全联合体：
 
-- `StepUnion` = `Step` | `StepRef`（内层，Phase 0 由 `AssetMaterializer` 递归还原）
-- `ApiUnion` = `Api` | `ApiRef`（同 Phase 0 还原）
-- `RequestUnion` = `Request` | `RequestRef`（同 Phase 0 还原）
-- `StrategyUnion` = `Extract` | `Assign` | `Assertion` | `Call` | `StrategyRef`（同 Phase 0 还原）
-- `RunUnion` = `Scenario` | `ScenarioRef` | `Suite` | `SuiteRef`（**外层**，CLI 入口直接接受这四种，由 `AssetResolver` / 仓库操作解析）
+- `StrategyUnion` = `Extract` | `Assign` | `Assertion`（discriminated union）
+- `ResourceUnion` = `Mock` | `File`（discriminated union）
+- `RunUnion` = `Scenario` | `Suite`（**外层**，CLI 入口直接接受这两种）
+- `StepUnion` / `ApiUnion` / `RequestUnion` / `SetupUnion` / `TeardownUnion` 现为单成员别名（历史上的 `*Ref` 引用分支已随资产引用机制移除）
 
-所有 `*Ref` 节点都通过 `kind` 字段（`"step_ref"` / `"api_ref"` / `"request_ref"` / `"strategy_ref"` / `"scenario_ref"` / `"suite_ref"`）被 Pydantic 自动分发到对应子类。
+所有 union 成员都通过 `kind` 字段（`"step"` / `"extract"` / `"mock"` / `"scenario"` 等）被 Pydantic 自动分发到对应子类。
 
 ### 8. Event 与 Hook 的区别
 
@@ -285,13 +279,7 @@ class CLIContext(BaseModel):
     extras: dict[str, Any] = Field(default_factory=dict)
 ```
 
-### AssetRef / AssetRecord / AssetContent
-
-仿 Docker Registry v2 的不可变数据模型（详见 `repository/models.py`）：
-
-- `AssetRef`：`namespace/name:tag` 或 `namespace/name@digest`
-- `AssetRecord`：digest + size + kind + media_type + metadata
-- `AssetContent`：record + raw bytes + (可选) 解析后的对象
+> 历史备注：曾有仿 Docker Registry v2 的资产仓库（`repository/` 包及其数据模型），已随资产引用机制移除——用例的唯一去向是平台数据库。
 
 ## 执行流程（端到端）
 
@@ -313,17 +301,12 @@ class CLIContext(BaseModel):
 5. ScenarioRunner.run()
      ├── 创建 ScenarioContext
      ├── ScenarioPreprocessor.run()
-     │     ├── Phase 0  引用物化（AssetMaterializer 递归还原内层 Ref）
-     │     │   ├── StepRef     → Step
-     │     │   ├── ApiRef      → Api
-     │     │   ├── RequestRef  → Request
-     │     │   └── StrategyRef → Extract/Assign/Assertion/Call
      │     ├── Phase 1  认证（AuthManager → AuthRegistry）
      │     ├── Phase 1.5  变量生成（合并 scenario.config.vars + BootstrapConfig.vars；CLI 赢；生成式调 Generator）  ★
      │     ├── Phase 2  构建查询根（services + auth.snapshot + vars）
      │     ├── Phase 3  模板展开（${auth.*} ${service.*} ${var.*}）
      │     └── Phase 4  提取 base_url
-     ├── 遍历已展开的 steps（此时已无 Ref 节点）
+     ├── 遍历已展开的 steps
      │   └── Step: 调用 StepRunner.run()
      └── 汇总结果，finalize
 6. StepRunner.run()

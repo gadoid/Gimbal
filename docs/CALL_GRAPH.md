@@ -5,7 +5,7 @@
 > 标注每个环节对应的 **模块 / 文件 / 方法**，以及
 > **配置 / 参数加载路径**与**文件来源**。
 >
-> 其它子命令（suite / scenario / match / server）共用同一套
+> 其它子命令（match / server / show）共用同一套
 > `bootstrap() → Engine.run() → ScenarioRunner.run() → StepStateMachine.run()` 链，
 > 差异仅在「参数注入」与「Suite 循环遍历」两点，详见末尾"差异点"一节。
 
@@ -25,7 +25,7 @@
        │   ├─ _install_sigint_handler()  [cli/main.py:57]           │
        │   └─ ctx.obj = CLIContext(config_file, no_color, log_level)│
        │                                                            │
-       │  派发到子命令 (run/asset/self-check)  src/gimbal/cli/params.py:40-44
+       │  派发到子命令 (run/self-check)  src/gimbal/cli/params.py:40-44
        └────────────────────────┬───────────────────────────────────┘
                                 │
         run launch <file>       ▼
@@ -38,11 +38,10 @@
        │  5) payload = normalize_input(source,..)  [run_launch.py:245]
        │  6) scenario = Scenario.model_validate()  [run_launch.py:255]
        │  7) 构造 RuntimeControl (--step-to/--breakpoint) [run_launch.py:264-273]
-       │  8) asset_store = _build_default_asset_store() [run_launch.py:284]
-       │  9) engine = Engine(configuration, asset_store) [run_launch.py:286]
-       │ 10) result = engine.run(scenario, runtime_control) [run_launch.py:288]
-       │ 11) shutdown(configuration)                [run_launch.py:291]
-       │ 12) _print_run_report(result, output,..)  [run_launch.py:292]
+       │  8) engine = Engine(configuration)               [run_launch.py:286]
+       │  9) result = engine.run(scenario, runtime_control) [run_launch.py:288]
+       │ 10) shutdown(configuration)                [run_launch.py:291]
+       │ 11) _print_run_report(result, output,..)  [run_launch.py:292]
        └────────────────────────┬───────────────────────────────────┘
                                 │
                                 ▼
@@ -179,7 +178,6 @@ ConfigLoader.load(cli_ctx)                                  src/gimbal/config/lo
 |------------------------------------------------------------------|-------------------------------------|----------------------------------|
 | `cli/commands/run_launch.py:232` `--report-dir`                | `extras["report_dir"]`              | `report_dir`                     |
 | `cli/commands/run_launch.py:235` `--reporter`                  | `extras["reporters"]`               | `reporters`                      |
-| `cli/commands/run_suite.py`  `--fail-fast / --var / --var-file` | `extras["fail_fast"]` / `vars`      | `fail_fast` / `vars`             |
 
 `Engine.run()` 之后还会从 `Configuration` 里读 `cfg.fail_fast` 决定 suite 失败是否提前终止
 [runner.py:354]。
@@ -253,7 +251,7 @@ Engine._run_scenario(scenario, framework_ctx, runtime_control)   [runner.py:200]
 └── ScenarioRunner(                                              [scenario_runner.py:178]
         dispatcher=framework_ctx.dispatcher,
         ctx_manager=framework_ctx.ctx_manager,
-        hook_registry, event_bus, auth_registry, asset_store
+        hook_registry, event_bus, auth_registry
     ).run(scenario, suite_ctx, runtime_control=runtime_control)  ─► 见 §7
 ```
 
@@ -281,13 +279,12 @@ ScenarioRunner.run(scenario_schema, suite_ctx, runtime_control)   src/gimbal/cor
 │         suite_ctx, scenario_id, scenario_name, description)
 │     └─ 发布 scenario.start 事件                                [scenario.py:scenario_started]
 │
-├── 2. 预处理 (Phase 0/1/1.5/2/3/4)                              ── 详见 §8 ──
+├── 2. 预处理 (Phase 1/1.5/2/3/4)                                ── 详见 §8 ──
 │     preprocessor = ScenarioPreprocessor(                        [preprocessor/scenario_preprocessor.py:53]
 │         scenario_schema,
 │         bootstrap_config=scenario_ctx.config,
-│         auth_registry=self._auth_registry,
-│         asset_store=self._asset_store)
-│     resolved_steps, base_url = preprocessor.run()               [scenario_preprocessor.py:94]
+│         auth_registry=self._auth_registry)
+│     resolved_steps, base_url, services = preprocessor.run()     [scenario_preprocessor.py:94]
 │
 ├── 3. _emit_scenario_start(scenario, sid, executable_count)      [scenario_runner.py:273, 421]
 │     └─ bus.publish(ScenarioStartEvent(...))                     src/gimbal/events/types.py
@@ -300,7 +297,6 @@ ScenarioRunner.run(scenario_schema, suite_ctx, runtime_control)   src/gimbal/cor
 │       ├─ 阶段 1 最小子集: runtime halt 检查                      [scenario_runner.py:329]
 │       ├─ B3:  cooperative timeout (cfg.scenario_timeout)        [scenario_runner.py:347]
 │       ├─ B8:  cancel flag (gimbal.cli.main.is_cancelled)        [scenario_runner.py:364]
-│       ├─ 跳过 StepRef (not hasattr(step_union, "api"))         [scenario_runner.py:375]
 │       └─ result = step_runner.run(step_union, scenario_ctx, idx) ─► 见 §9
 │
 ├── 6. ctx_manager.finalize_scenario(scenario_ctx, status)        [context/manager.py]
@@ -312,19 +308,12 @@ ScenarioRunner.run(scenario_schema, suite_ctx, runtime_control)   src/gimbal/cor
 
 ---
 
-## 8. 预处理：引用物化 / 认证 / 模板展开 / base_url
+## 8. 预处理：认证 / 模板展开 / base_url
 
 `ScenarioPreprocessor.run()`  [src/gimbal/preprocessor/scenario_preprocessor.py:94]
 
 ```
 ScenarioPreprocessor.run()
-│
-├── Phase 0 引用物化 (asset_store != None)                        [scenario_preprocessor.py:108, 135]
-│     materializer = AssetMaterializer(self._asset_store)          src/gimbal/core/asset_materializer.py
-│     materializer.materialize(self._schema)
-│       └─ 递归替换 scenario.{steps,api,request,strategy,body} 中所有
-│          StepRef/ApiRef/RequestRef/StrategyRef/RefBase 节点，
-│          从 AssetStore 拉取真实数据类对象
 │
 ├── Phase 1 认证                                                  [scenario_preprocessor.py:111, 164]
 │     for tag, entry in scenario.config.users.items():
@@ -485,15 +474,9 @@ reporter_runtime:  ReporterRuntime                                 src/gimbal/re
 
 ---
 
-## 12. 资产仓库 / 插件加载路径（补充）
+## 12. 插件加载路径（补充）
 
 ```
-asset_store (仅 run launch 走)                                    src/gimbal/repository/
-└─ _build_default_asset_store(Path(registry))                      cli/common.py:363
-   ├─ root = (registry or ~/.gimbal/registry).expanduser()
-   └─ AssetStore(backend=LocalFsContentStore(root=root))
-         └─ Phase 0 物化时调用 AssetMaterializer.materialize()     core/asset_materializer.py
-
 plugin loading                                                      src/gimbal/plugins/loader.py
 └─ _load_plugins(cfg, event_bus, hook_registry, plugin_registry, auth_registry)
    ├─ loader.discover()            扫描 {cfg.base_dir}/{cfg.plugins_dir} 与 entry_point
@@ -514,7 +497,6 @@ plugin loading                                                      src/gimbal/p
 | 子命令注册      | `src/gimbal/cli/params.py:40-44`                           | `starter.add_typer(...)`                        |
 | run launch      | `src/gimbal/cli/commands/run_launch.py:152`                | `launch()`                                      |
 | 输入归一化      | `run_launch.py:132`                                        | `normalize_input` / `_read_source` / `_detect_format` / `_parse_yaml` / `_parse_json` |
-| 资产仓库        | `src/gimbal/cli/common.py:363`                             | `_build_default_asset_store`                    |
 | 元数据发布      | `src/gimbal/cli/common.py:405`                             | `_publish_run_meta`                             |
 | 报告打印        | `src/gimbal/cli/common.py:432`                             | `_print_run_report`                             |
 | 框架启动        | `src/gimbal/core/bootstrap.py:52`                          | `bootstrap` / `_load_plugins` / `shutdown`      |
@@ -526,8 +508,7 @@ plugin loading                                                      src/gimbal/p
 | Step 执行       | `src/gimbal/core/scenario_runner.py:116`                   | `StepRunner.run`                                |
 | 状态机          | `src/gimbal/statemachine/engine.py:164`                    | `StepStateMachine.run` / `_handle_before_request/calling/after_request/verifying/teardown` |
 | 策略分发        | `src/gimbal/strategy/dispatcher.py:51`                     | `StrategyDispatcher.dispatch`                   |
-| 预处理          | `src/gimbal/preprocessor/scenario_preprocessor.py:94`      | `ScenarioPreprocessor.run` / `_materialize_refs` / `_setup_auth` / `_generate_vars` / `_build_resolve_root` / `_resolve_steps` / `_pick_base_url` |
-| 引用物化        | `src/gimbal/core/asset_materializer.py`                    | `AssetMaterializer.materialize`                 |
+| 预处理          | `src/gimbal/preprocessor/scenario_preprocessor.py:94`      | `ScenarioPreprocessor.run` / `_setup_auth` / `_generate_vars` / `_build_resolve_root` / `_resolve_steps` / `_pick_base_url` |
 | 认证            | `src/gimbal/auth/manager.py`                               | `AuthManager.get_auth`                          |
 | 变量生成        | `src/gimbal/generator/__init__.py`                         | `Generator.generate` / `build_default_registry` |
 | 模板解析        | `src/gimbal/utils/template.py` (经由 `_resolve_value`)     | resolve `${service.x}` / `${auth.x.token}` / `${var.x}` |
@@ -541,11 +522,9 @@ plugin loading                                                      src/gimbal/p
 | 子命令                                | 输入来源                          | 执行分发                                                                 |
 |---------------------------------------|-----------------------------------|--------------------------------------------------------------------------|
 | `run launch <file>`                   | 文件路径 / stdin / `--inline`     | 解析→`Scenario`→`Engine._run_scenario`                                   |
-| `run scenario <id> [id...]`           | 资产仓库 (AssetStore)              | 查仓库→`Scenario`→`Engine._run_scenario`；`--order` 决定顺序            |
-| `run suite <id> [id...]`              | 资产仓库                          | 查仓库→`Suite`→`Engine._run_suite`（循环 `_run_scenario`）              |
 | `run match <pattern>`                 | glob 匹配本地文件                  | 遍历 → 各文件 `Engine._run_scenario`                                     |
 | `run server --port=...`               | HTTP/gRPC/WS 任务                  | `core/server.py` 长驻监听，分发到 `Engine.run`                          |
-| `run show <id>`                       | 资产仓库                          | 只读打印 steps 索引，不执行                                                |
+| `run show --from-path <file>`         | 本地 JSON/YAML 文件                | 只读打印 steps 索引，不执行                                                |
 
 所有 run 子命令都共用 `bootstrap(cli_ctx)` + `Engine.run()` 这两个核心入口，
 差异仅在「如何把目标 schema 喂进 `Engine.run()`」以及「`Suite` 还是 `Scenario`」。

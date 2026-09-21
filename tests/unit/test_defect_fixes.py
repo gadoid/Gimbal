@@ -6,12 +6,12 @@ Covers the following fix points (numbers match the report):
   #23  RunEndEvent add skipped field
   #34/#79  HttpResponseEvent status_code conversion crash
   #45  Suite details add step_results
-  #57  step_count exclude unresolved StepRef
+  #57  step_count excludes non-executable steps
   #76  wl.py docstring fix
   #77  auth files f-string log -> loguru style
   #78  PreToken mode refresh skip
 
-Tests use a self-assert style (matches tests/unit/test_asset_materializer.py).
+Tests use a self-assert style.
 """
 import sys
 import os
@@ -300,7 +300,6 @@ def _():
         engine._ictx.hook_registry = MagicMock()
         engine._ictx.event_bus = None
         engine._ictx.auth_registry = MagicMock()
-        engine._asset_store = None
 
         result = engine._run_suite(suite, framework_ctx)
 
@@ -428,17 +427,17 @@ def _():
 
 
 # ════════════════════════════════════════════════════════════════════
-# #57  step_count excludes StepRef
+# #57  step_count excludes non-executable entries
 # ════════════════════════════════════════════════════════════════════
-print("\n[6] step_count excludes StepRef (#57)")
+print("\n[6] step_count excludes non-executable entries (#57)")
 
 
-@test("#57.1 executable_count filters out StepRef (no api attr)")
+@test("#57.1 executable_count filters out entries without api attr")
 def _():
     step_a = MagicMock(spec=["api"])
     step_b = MagicMock(spec=["api"])
-    # StepRef has no 'api' attribute
-    step_ref = type("StepRef", (), {})()
+    # 占位对象没有 'api' 属性，不计入可执行数
+    step_ref = type("Placeholder", (), {})()
     resolved = [step_a, step_ref, step_b]
     executable_count = sum(1 for s in resolved if hasattr(s, "api"))
     assert executable_count == 2, f"should have 2 executable, got {executable_count}"
@@ -1846,112 +1845,6 @@ def _():
 
 
 # ════════════════════════════════════════════════════════════════════
-# #17/#31  AssetMaterializer: frozen model field mutation
-# ════════════════════════════════════════════════════════════════════
-print("\n[20] AssetMaterializer frozen model handling (#17/#31)")
-
-
-@test("#17.1 AssetMaterializer mutates frozen model fields via object.__setattr__")
-def _():
-    from unittest.mock import MagicMock
-    from gimbal.core.asset_materializer import AssetMaterializer
-    from gimbal.context.step import StepInputs, AssertionResult
-    import tempfile, shutil, json, os
-    from gimbal.repository import AssetStore, LocalFsContentStore, AssetRef
-    from gimbal.schema.api import Api
-    from gimbal.schema.request import Request
-    from gimbal.schema.step import Step
-    from gimbal.exceptions import AssetMaterializationError
-
-    tmp = tempfile.mkdtemp(prefix="gimbal_mat_test_")
-    try:
-        # Create a real asset store with a Step that's NOT frozen (regular Pydantic)
-        store = AssetStore(backend=LocalFsContentStore(root=tmp))
-        ref = AssetRef.parse("smoke/sample-step:latest")
-        # Push a step as a scenario
-        step_dict = {
-            "kind": "step",
-            "api": {"kind": "api", "service": "test", "method": "GET", "path": "/x",
-                    "headers": {}, "timeout": 30.0},
-            "request": {"kind": "request", "body": {}},
-            "strategy": [],
-        }
-        store.push(ref, json.dumps(step_dict).encode())
-
-        # Build a frozen StepInputs (with the ref as strategy_kind)
-        frozen_inputs = StepInputs(
-            step_id="s1",
-            step_name="n1",
-            strategy_kind="smoke/sample-step:latest",  # this is a "ref" string
-            strategy_spec={},
-            resolved_vars={},
-        )
-        assert frozen_inputs.model_config.get("frozen") is True, (
-            "StepInputs should be frozen for this test to be meaningful"
-        )
-
-        # Materialize the frozen model
-        materializer = AssetMaterializer(store)
-        try:
-            result = materializer._walk_model(
-                frozen_inputs, depth=0, path="$"
-            )
-        except AssetMaterializationError:
-            # If pull failed, that's expected in this minimal test setup
-            # The key is that setattr failure should be handled, not crash
-            return
-        # If materialization succeeded, result should still be the same model object
-        assert result is frozen_inputs
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-
-
-@test("#17.2 regular (non-frozen) model still works via direct setattr")
-def _():
-    """Regression test: non-frozen models still work as before."""
-    from unittest.mock import MagicMock
-    from gimbal.core.asset_materializer import AssetMaterializer
-    from pydantic import BaseModel
-
-    class _Simple(BaseModel):
-        x: int = 0
-        y: str = "default"
-
-    store = MagicMock()
-    materializer = AssetMaterializer(store)
-
-    # Mock _walk to return new value for y
-    original = _Simple(x=1, y="old")
-    materializer._walk = MagicMock(return_value="new_value")
-
-    result = materializer._walk_model(original, depth=0, path="$")
-    assert result is original
-    assert result.y == "new_value"
-
-
-@test("#17.3 _walk_model does not crash when walk returns same object (idempotent)")
-def _():
-    from unittest.mock import MagicMock
-    from gimbal.core.asset_materializer import AssetMaterializer
-    from pydantic import BaseModel
-
-    class _Simple(BaseModel):
-        x: int = 0
-
-    store = MagicMock()
-    materializer = AssetMaterializer(store)
-
-    original = _Simple(x=1)
-    # _walk returns same object — no setattr should happen
-    materializer._walk = MagicMock(return_value=original.x)  # returns same value
-
-    result = materializer._walk_model(original, depth=0, path="$")
-    assert result is original
-    # x should be unchanged
-    assert result.x == 1
-
-
-# ════════════════════════════════════════════════════════════════════
 # Low-priority defect fixes
 # ════════════════════════════════════════════════════════════════════
 
@@ -2219,54 +2112,6 @@ def _():
     assert resolve_template("${var.api_key}", root) == "secret_123"
     # Embedded in string
     assert resolve_template("Bearer ${var.api_key}", root) == "Bearer secret_123"
-
-
-# ─── #89 typed ref kind error message ─────────────────────────────────
-print("\n[25] Low-priority: typed ref kind error (#89)")
-
-
-@test("#89.1 typed ref with parsed=None includes content_kind in error")
-def _():
-    from unittest.mock import MagicMock
-    from gimbal.core.asset_materializer import AssetMaterializer
-    from gimbal.exceptions import AssetMaterializationError
-    from gimbal.repository import AssetRecord
-
-    # Build a content with parsed=None and kind="blob"
-    fake_record = AssetRecord(
-        ref=__import__("gimbal.repository", fromlist=["AssetRef"]).AssetRef.parse("smoke/x:latest"),
-        digest="sha256:" + "0" * 64,
-        size=10,
-        kind="blob",  # not in (suite, scenario, data)
-        media_type="application/octet-stream",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
-    )
-    fake_content = MagicMock()
-    fake_content.parsed = None
-    fake_content.raw = b"{}"
-    fake_content.record = fake_record
-    fake_content.digest = "sha256:" + "0" * 64
-    fake_content.size = 10
-
-    fake_store = MagicMock()
-    fake_store.pull.return_value = fake_content
-
-    from gimbal.schema.api import ApiRef
-    ref = ApiRef(ref="smoke/x:latest")
-    materializer = AssetMaterializer(fake_store)
-
-    try:
-        materializer._materialize_ref(ref, depth=0, path="$")
-        assert False, "should have raised AssetMaterializationError"
-    except AssetMaterializationError as e:
-        msg = str(e)
-        assert "blob" in msg or "content_kind" in msg, (
-            f"error should mention actual content kind, got: {msg}"
-        )
-        assert "suite" in msg and "scenario" in msg and "data" in msg, (
-            f"error should list supported kinds, got: {msg}"
-        )
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -3193,7 +3038,6 @@ def _():
     pre._cfg.vars = {}
     registry = AuthRegistry()
     pre._auth_registry = registry
-    pre._asset_store = None
 
     from gimbal.auth import AuthManager
     call_log: list[str] = []
@@ -3243,7 +3087,6 @@ def _():
     pre._cfg = MagicMock()
     pre._cfg.vars = {}
     pre._auth_registry = AuthRegistry()
-    pre._asset_store = None
 
     from gimbal.auth import AuthManager
     call_log: list[str] = []

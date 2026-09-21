@@ -9,8 +9,7 @@
 
 Gimbal 是一个 **面向现代 API 测试场景的自动化测试框架**（Python 3.11+），核心定位：
 
-- 把"**场景编排 / 策略执行 / 状态机驱动 / 资产复用 / 插件扩展**"装进同一条 CLI 链路。
-- 提供**仿 Docker Registry v2 的本地资产仓库**，便于跨项目复用稳定的 Suite / Scenario 资产。
+- 把"**场景编排 / 策略执行 / 状态机驱动 / 插件扩展**"装进同一条 CLI 链路。
 - 服务于 **PHP → Java 迁移对账**（已落地的 `gimbal-tmp/test2.json` 等结算单对账场景样本），目标场景是货运/结算类业务系统的接口与数据一致性验证。
 
 ---
@@ -22,19 +21,19 @@ Gimbal 是一个 **面向现代 API 测试场景的自动化测试框架**（Pyt
 | # | 需求 | 落地点 |
 |---|---|---|
 | R-CLI-01 | 统一 CLI 入口 `gimbal`（基于 Typer） | [cli/main.py:71-86](src/gimbal/cli/main.py) |
-| R-CLI-02 | `gimbal run suite <REF>` 按 ID 执行 Suite 资产，支持命名空间通配 | [cli/commands/run_suite.py](src/gimbal/cli/commands/run_suite.py) |
-| R-CLI-03 | `gimbal run scenario <REF>...` 按 ID 执行 Scenario 资产，支持通配 | [cli/commands/run_scenario.py](src/gimbal/cli/commands/run_scenario.py) |
-| R-CLI-04 | `gimbal run match <GLOB>` 按路径/模式匹配本地未注册用例文件 | [cli/commands/run_match.py](src/gimbal/cli/commands/run_match.py) |
-| R-CLI-05 | `gimbal run server` 作为服务监听端口接收任务（http/grpc/websocket） | [cli/commands/run_server.py](src/gimbal/cli/commands/run_server.py) |
-| R-CLI-06 | `gimbal run launch <PATH>` 直接加载本地文件执行 | [cli/commands/run_launch.py](src/gimbal/cli/commands/run_launch.py) |
-| R-CLI-07 | `gimbal asset` 资产仓库管理（push/pull/list/inspect/remove/tag/gc） | [cli/commands/asset.py](src/gimbal/cli/commands/asset.py) |
-| R-CLI-08 | `gimbal self-check` 框架自检（集成测试级：bootstrap + 验证 event/hook 回路） | [cli/commands/self_check.py](src/gimbal/cli/commands/self_check.py) |
-| R-CLI-09 | 共享执行选项：`--env/--mode/--log-level/--tag/--var/--var-file/--parallel/--timeout/--retry/--dry-run/--fail-fast/--plugins/--reporter/--report-dir/--output/--source/--registry/--version/--no-cache/--cache-only/--order/--continue-on-error/--yes/--allow-empty` | [cli/params.py](src/gimbal/cli/params.py) |
-| R-CLI-10 | 步骤级断点控制：`--step-from/--step-to/--breakpoint` | [cli/commands/run_scenario.py](src/gimbal/cli/commands/run_scenario.py) |
-| R-CLI-11 | 匹配模式选项：`--path/--recursive/--include/--exclude/--changed-only/--changed-since/--last-failed/--last-failed-first/--collect-only/--shuffle/--seed` | [cli/commands/run_match.py](src/gimbal/cli/commands/run_match.py) |
-| R-CLI-12 | 统一退出码规范（0/1/2/3/4/5） | [cli/exit_codes.py](src/gimbal/cli/exit_codes.py) |
-| R-CLI-13 | SIGINT 优雅中断（首次标记取消、二次强退） | [cli/main.py:27-41](src/gimbal/cli/main.py) |
-| R-CLI-14 | `gimbal run launch` 支持 inline JSON / stdin 接收 | [cli/commands/run_launch.py:152-244](src/gimbal/cli/commands/run_launch.py) |
+| R-CLI-02 | `gimbal run match <GLOB>` 按路径/模式匹配本地用例文件 | [cli/commands/run_match.py](src/gimbal/cli/commands/run_match.py) |
+| R-CLI-03 | `gimbal run server` 作为服务监听端口接收任务（http/grpc/websocket） | [cli/commands/run_server.py](src/gimbal/cli/commands/run_server.py) |
+| R-CLI-04 | `gimbal run launch <PATH>` 直接加载本地文件执行 | [cli/commands/run_launch.py](src/gimbal/cli/commands/run_launch.py) |
+| R-CLI-05 | `gimbal run show --from-path <FILE>` 只读展示步骤索引（不执行） | [cli/commands/run_show.py](src/gimbal/cli/commands/run_show.py) |
+| R-CLI-06 | `gimbal self-check` 框架自检（集成测试级：bootstrap + 验证 event/hook 回路） | [cli/commands/self_check.py](src/gimbal/cli/commands/self_check.py) |
+| R-CLI-07 | 共享执行选项：`--env/--mode/--log-level/--tag/--var/--var-file/--parallel/--timeout/--retry/--dry-run/--fail-fast/--plugins/--reporter/--report-dir/--output/--yes/--allow-empty` | [cli/params.py](src/gimbal/cli/params.py) |
+| R-CLI-08 | 步骤级断点控制：`--step-from/--step-to/--breakpoint` | [cli/commands/run_launch.py](src/gimbal/cli/commands/run_launch.py) |
+| R-CLI-09 | 匹配模式选项：`--path/--recursive/--include/--exclude/--changed-only/--changed-since/--last-failed/--last-failed-first/--collect-only/--shuffle/--seed` | [cli/commands/run_match.py](src/gimbal/cli/commands/run_match.py) |
+| R-CLI-10 | 统一退出码规范（0/1/2/3/4/5） | [cli/exit_codes.py](src/gimbal/cli/exit_codes.py) |
+| R-CLI-11 | SIGINT 优雅中断（首次标记取消、二次强退） | [cli/main.py:27-41](src/gimbal/cli/main.py) |
+| R-CLI-12 | `gimbal run launch` 支持 inline JSON / stdin 接收 | [cli/commands/run_launch.py:152-244](src/gimbal/cli/commands/run_launch.py) |
+
+> 历史备注：曾实现按 ID 从资产仓库执行 Suite / Scenario 的两个子命令与资产仓库管理顶层命令，已随资产引用机制移除（用例的唯一去向是平台数据库，ref 节点零生产者）。
 
 ### 1.2 启动与配置（Bootstrap）
 
@@ -55,7 +54,7 @@ Gimbal 是一个 **面向现代 API 测试场景的自动化测试框架**（Pyt
 | R-SC-01 | 顶层模型：`Scenario` / `Suite` / `RunUnion`（多态） | [schema/scenario.py](src/gimbal/schema/scenario.py) |
 | R-SC-02 | 用例元信息 `Meta`（name/description/module/priority/author/owner/tags/version/createTime/expire/requirementRef） | [schema/scenario.py:13-25](src/gimbal/schema/scenario.py) |
 | R-SC-03 | 用例配置 `Config`（setup/teardown/services/users/timePolicy/retry/vars） | [schema/scenario.py:27-39](src/gimbal/schema/scenario.py) |
-| R-SC-04 | 资源模型 `Resource` / `Mock` / `File`（含 MockRef/FileRef） | [schema/resource.py](src/gimbal/schema/resource.py) |
+| R-SC-04 | 资源模型 `Resource` / `Mock` / `File` | [schema/resource.py](src/gimbal/schema/resource.py) |
 | R-SC-05 | `Api` 模型（service/method/path/headers/timeout） | [schema/api.py:5-11](src/gimbal/schema/api.py) |
 | R-SC-06 | `Request` 模型（body） | [schema/request.py:5-7](src/gimbal/schema/request.py) |
 | R-SC-07 | `Step` 模型（api / request / strategy 列表） | [schema/step.py:9-14](src/gimbal/schema/step.py) |
@@ -67,8 +66,6 @@ Gimbal 是一个 **面向现代 API 测试场景的自动化测试框架**（Pyt
 | R-SC-13 | 断言操作符 `AssertOperator`（EQ/NE/GT/GTE/LT/LTE/IN/NOT_IN/CONTAINS/NOT_CONTAINS/EXISTS/EMPTY/LENGTH_EQ/SCHEMA） | [schema/strategy.py:13-29](src/gimbal/schema/strategy.py) |
 | R-SC-14 | `RetryPolicy`（maxAttempts/backoffSeconds/retryOn） | [schema/retrypolicy.py:5-10](src/gimbal/schema/retrypolicy.py) |
 | R-SC-15 | `TimePolicy`（TimeoutPolicy / RecordPolicy） | [schema/timepolicy.py:4-19](src/gimbal/schema/timepolicy.py) |
-| R-SC-16 | 引用基类 `RefBase` + 通用 `Ref`（`{"kind":"ref","ref":"..."}` 内联引用） | [schema/ref.py:37-74](src/gimbal/schema/ref.py) |
-| R-SC-17 | 类型化引用 `StepRef` / `ApiRef` / `RequestRef` / `StrategyRef` / `ScenarioRef` / `SuiteRef` | 各 schema 模块 |
 | R-SC-18 | `Setup` / `Teardown` 模型 | [schema/setup.py](src/gimbal/schema/setup.py) / [schema/teardown.py](src/gimbal/schema/teardown.py) |
 | R-SC-19 | `AuthSession` 认证会话（含 token 刷新安全校验 CWE-93 防护） | [schema/auth.py:25-198](src/gimbal/schema/auth.py) |
 | R-SC-20 | `StepState` 状态枚举 | [schema/states.py](src/gimbal/schema/states.py) |
@@ -120,26 +117,9 @@ Gimbal 是一个 **面向现代 API 测试场景的自动化测试框架**（Pyt
 | R-ST-12 | `SqlExecutor`（占位，预留数据库执行） | [strategy/builtin/sql.py](src/gimbal/strategy/builtin/sql.py) |
 | R-ST-13 | `CompositeExecutor`（占位，预留子策略聚合） | [strategy/builtin/composite.py](src/gimbal/strategy/builtin/composite.py) |
 
-### 1.7 资产仓库（Repository，仿 Docker Registry v2）
+### 1.7 资产仓库（已移除）
 
-| # | 需求 | 落地点 |
-|---|---|---|
-| R-REP-01 | 仿 OCI 不可变内容寻址存储（CAS）模型 | [repository/models.py](src/gimbal/repository/models.py) |
-| R-REP-02 | `AssetRef` 双重形式：`namespace/name:tag` 或 `namespace/name@digest` | [repository/models.py:36-144](src/gimbal/repository/models.py) |
-| R-REP-03 | `AssetRecord` / `AssetContent` 不可变数据模型 | [repository/models.py:150-207](src/gimbal/repository/models.py) |
-| R-REP-04 | `ContentStore` Protocol（push_blob/pull_blob/has_blob/put_manifest/...） | [repository/store.py:44-90](src/gimbal/repository/store.py) |
-| R-REP-05 | `AssetStore` 门面：push/pull/inspect/list/remove/tag | [repository/store.py:98-267](src/gimbal/repository/store.py) |
-| R-REP-06 | sha256 摘要 + digest 校验 + 不可变 + 幂等 push | [repository/store.py](src/gimbal/repository/store.py) |
-| R-REP-07 | 多 tag 共享同一 digest | [repository/store.py:250-267](src/gimbal/repository/store.py) |
-| R-REP-08 | `LocalFsContentStore` 本地文件系统后端 | [repository/backends/filesystem.py:40-352](src/gimbal/repository/backends/filesystem.py) |
-| R-REP-09 | FS 三段式目录布局：`blobs/sha256/...` + `indexes/...` + `manifests/...` | [repository/backends/filesystem.py:62-81](src/gimbal/repository/backends/filesystem.py) |
-| R-REP-10 | 原子写（`tempfile + os.replace`，先 close 再 replace，Windows 兼容） | [repository/backends/filesystem.py:95-117](src/gimbal/repository/backends/filesystem.py) |
-| R-REP-11 | 孤儿 blob 检测 + 手动 `gc` 清理 | [repository/backends/filesystem.py:313-352](src/gimbal/repository/backends/filesystem.py) |
-| R-REP-12 | `AssetResolver`（CLI ID 解析 + 通配展开 + 拉取） | [core/asset_resolver.py](src/gimbal/core/asset_resolver.py) |
-| R-REP-13 | `AssetMaterializer`（图内嵌 Ref 节点递归替换，固定点算法） | [core/asset_materializer.py](src/gimbal/core/asset_materializer.py) |
-| R-REP-14 | 类型化 Ref → TypeAdapter 映射（StepRef/ApiRef/RequestRef/StrategyRef/ScenarioRef/SuiteRef） | [core/asset_materializer.py:47-75](src/gimbal/core/asset_materializer.py) |
-| R-REP-15 | 循环保护 + 深度兜底（默认 max_depth=8） | [core/asset_materializer.py:245-301](src/gimbal/core/asset_materializer.py) |
-| R-REP-16 | Asset 异常体系：`AssetNotFound` / `AssetDigestMismatch` / `AssetAlreadyExists` | [repository/exceptions.py](src/gimbal/repository/exceptions.py) |
+> 历史上曾实现仿 Docker Registry v2 的资产仓库（R-REP-01~16：内容寻址存储、tag 管理、引用解析与物化等），已随资产引用机制整体移除——用例的唯一去向是平台数据库，ref 节点零生产者。
 
 ### 1.8 插件系统（Plugins）
 
@@ -222,12 +202,11 @@ Gimbal 是一个 **面向现代 API 测试场景的自动化测试框架**（Pyt
 
 | # | 需求 | 落地点 |
 |---|---|---|
-| R-PP-01 | `ScenarioPreprocessor.run()` 5 阶段编排 | [preprocessor/scenario_preprocessor.py:94-131](src/gimbal/preprocessor/scenario_preprocessor.py) |
-| R-PP-02 | Phase 0 引用物化（递归还原内层 Ref 节点） | [preprocessor/scenario_preprocessor.py:135-160](src/gimbal/preprocessor/scenario_preprocessor.py) |
+| R-PP-01 | `ScenarioPreprocessor.run()` 阶段化编排（认证 / 变量生成 / 查询根 / 模板展开 / base_url） | [preprocessor/scenario_preprocessor.py:94-131](src/gimbal/preprocessor/scenario_preprocessor.py) |
 | R-PP-03 | Phase 1 认证（只登录被引用的 user，避免 25min 启动问题） | [preprocessor/scenario_preprocessor.py:164-228](src/gimbal/preprocessor/scenario_preprocessor.py) |
 | R-PP-04 | Phase 1.5 变量生成（合并 scenario_vars + cli_vars，CLI 胜） | [preprocessor/scenario_preprocessor.py:232-261](src/gimbal/preprocessor/scenario_preprocessor.py) |
 | R-PP-05 | Phase 2 构建查询根（services + auth.snapshot + vars） | [preprocessor/scenario_preprocessor.py:265-307](src/gimbal/preprocessor/scenario_preprocessor.py) |
-| R-PP-06 | Phase 3 批量展开 step 模板（保留 StepRef） | [preprocessor/scenario_preprocessor.py:311-337](src/gimbal/preprocessor/scenario_preprocessor.py) |
+| R-PP-06 | Phase 3 批量展开 step 模板 | [preprocessor/scenario_preprocessor.py:311-337](src/gimbal/preprocessor/scenario_preprocessor.py) |
 | R-PP-07 | Phase 4 提取 base_url（按实际引用 service 解析） | [preprocessor/scenario_preprocessor.py:518-582](src/gimbal/preprocessor/scenario_preprocessor.py) |
 | R-PP-08 | `find_template_var_refs` 扫描模板变量引用 | [utils/jsonpath.py:748-807](src/gimbal/utils/jsonpath.py) |
 
@@ -283,7 +262,6 @@ Gimbal 是一个 **面向现代 API 测试场景的自动化测试框架**（Pyt
 | # | 需求 | 落地点 |
 |---|---|---|
 | R-EX-01 | 全局基类 `GimbalError` | [exceptions.py](src/gimbal/exceptions.py) |
-| R-EX-02 | 资产相关：`AssetNotFound` / `AssetDigestMismatch` / `AssetAlreadyExists` / `InvalidAssetRef` / `AssetCycleError` / `AssetMaterializationError` | [exceptions.py](src/gimbal/exceptions.py) + [repository/exceptions.py](src/gimbal/repository/exceptions.py) |
 | R-EX-03 | 状态机：`InvalidTransitionError` | [statemachine/exceptions.py](src/gimbal/statemachine/exceptions.py) |
 | R-EX-04 | 上下文：`SealedContextError` | [context/exceptions.py](src/gimbal/context/exceptions.py) |
 | R-EX-05 | 认证：`AuthError` | [auth/exceptions.py](src/gimbal/auth/exceptions.py) |
@@ -336,7 +314,7 @@ Gimbal 是一个 **面向现代 API 测试场景的自动化测试框架**（Pyt
 | R-QA-03 | ModelRegistry 测试（aliases / concurrent_resolve / core / spec / zero_invasion） | [tests/model_registry/](tests/model_registry/) |
 | R-QA-04 | e2e smoke 脚本（`bootstrap -> Engine.run -> artifacts`） | [_e2e_smoke.py](_e2e_smoke.py) |
 | R-QA-05 | 缺陷修复单测矩阵（`test_defect_fixes.py` ~129KB，覆盖 B3/B6/B8/B9/B10 等历史缺陷） | [tests/unit/test_defect_fixes.py](tests/unit/test_defect_fixes.py) |
-| R-QA-06 | 资产仓库 + AssetMaterializer + Plugin 集成测试 | [tests/unit/](tests/unit/) |
+| R-QA-06 | Plugin 集成测试 | [tests/unit/](tests/unit/) |
 | R-QA-07 | 报告插件 collector 集成测试 | [tests/unit/test_collector_plugin.py](tests/unit/test_collector_plugin.py) |
 | R-QA-08 | pre-commit 钩子（ruff format + ruff check + mypy + 标准 hooks） | [.pre-commit-config.yaml](.pre-commit-config.yaml) |
 | R-QA-09 | ruff / mypy / pytest 工具链配置 | [pyproject.toml](pyproject.toml) |
@@ -348,7 +326,7 @@ Gimbal 是一个 **面向现代 API 测试场景的自动化测试框架**（Pyt
 | R-DOC-01 | 顶层 README（特性 + 快速开始 + CLI 树 + 架构） | [README.md](README.md) |
 | R-DOC-02 | 架构概览（执行链路 + 模块职责 + Schema 模型 + Context 层次 + 状态机 + 策略分发） | [docs/architecture.md](docs/architecture.md) |
 | R-DOC-03 | 23 个模块文档（每个模块 1 份） | [docs/modules/](docs/modules/) |
-| R-DOC-04 | 扩展指南（9 类扩展点：策略 / 插件 / Reporter / Authenticator / ContentStore / StrategyPhase / ConfigLoader） | [docs/extending.md](docs/extending.md) |
+| R-DOC-04 | 扩展指南（策略 / 插件 / Reporter / Authenticator / StrategyPhase / ConfigLoader 等扩展点） | [docs/extending.md](docs/extending.md) |
 | R-DOC-05 | 示例索引 + 常见用法 | [docs/examples.md](docs/examples.md) |
 | R-DOC-06 | 插件开发指南（写插件 / 订阅事件） | [docs/plugins/](docs/plugins/) |
 | R-DOC-07 | 设计定稿文档（变更方案 v1/v2/v3） | [change/](change/) |
@@ -367,11 +345,7 @@ Gimbal 是一个 **面向现代 API 测试场景的自动化测试框架**（Pyt
 | R-WIP-03 | `sql` strategy executor | 占位 | "TODO: 接入数据库执行" |
 | R-WIP-04 | `composite` strategy executor | 占位 | "TODO: 实现子策略列表的顺序执行和结果聚合" |
 | R-WIP-05 | `server.py` HTTP/gRPC/WebSocket 实际服务监听 | 骨架 | `start_server()` 仅打印 placeholder 日志；建议 FastAPI + uvicorn |
-| R-WIP-06 | `repository/backends/mysql.py` | 占位 | 仅 docstring |
-| R-WIP-07 | `repository/backends/python_module.py` | 占位 | 仅 docstring |
-| R-WIP-08 | `repository/base.py`（AssetRepository ABC） | 占位 | 已被 `AssetStore + ContentStore Protocol` 取代（README 明确） |
-| R-WIP-09 | `repository/router.py` | 占位 | 已被 AssetResolver 取代 |
-| R-WIP-10 | `compiler/assembler.py` / `compiler.py` / `validators.py` | 占位 | 实际编译逻辑由 `core/asset_materializer` + `preprocessor` + `schema` 承担 |
+| R-WIP-10 | `compiler/assembler.py` / `compiler.py` / `validators.py` | 占位 | 实际编译逻辑由 `preprocessor` + `schema` 承担 |
 | R-WIP-11 | `compiler/parsers/{yaml,markdown,text}.py` | 占位 | 当前 scenario 直接以 Pydantic 模型对象 + JSON/YAML 形式传入 |
 | R-WIP-12 | `scheduler/{concurrency,dependency,retry,scheduler}.py` | 占位 | 当前并发由 Engine.run() 同步循环；重试由 RetryPolicy + state machine 兜底 |
 | R-WIP-13 | `ai/{assistant_base,providers/anthropic,prompts/*}.py` | 占位 | 仅有 docstring |
@@ -379,7 +353,7 @@ Gimbal 是一个 **面向现代 API 测试场景的自动化测试框架**（Pyt
 | R-WIP-15 | `suite/{environment,manager,plan,selector}.py` | 占位 | Suite 编排由 `core/runner.py` Engine.run(suite) 实现 |
 | R-WIP-16 | `observability/{tracer,metrics,snapshot_recorder,logger,backends/*}.py` | 占位 | 仅有 docstring |
 | R-WIP-17 | ModelRegistry 完整 `settlement/` 等业务目录 | 未建 | 仅有 core/spec/_aliases 3 个核心文件，业务目录未填充 |
-| R-WIP-18 | `examples/{hello,login_and_query,suites,asset_library}/*` 实际示例文件 | 仅 .gitkeep | 实际示例未提交，README 文档假设存在 |
+| R-WIP-18 | `examples/{hello,login_and_query,suites}/*` 实际示例文件 | 仅 .gitkeep | 实际示例未提交，README 文档假设存在 |
 
 ---
 
@@ -403,10 +377,8 @@ Gimbal 是一个 **面向现代 API 测试场景的自动化测试框架**（Pyt
 7. **Event vs Hook 分离**：Event 通知型 fire-and-forget；Hook 介入型可中断/改写 payload。
 8. **name-based 插件清理**：精确热卸载通过 name 字段全链路清理，不依赖订阅 id 列表。
 9. **失败容错分层**：单 handler 异常不拖垮主流程。
-10. **类型化 Ref + 通用 Ref 双形态**：类型化走 `TypeAdapter(Union).validate_python`；通用 Ref 直接塞回 `parsed`。
-11. **固定点物化**：AssetMaterializer 递归至图中无 Ref 为止。
-12. **协作式超时**：每 step 前检查 elapsed 时间。
-13. **Teardown 软失败语义**：teardown 失败不污染业务结果。
+10. **协作式超时**：每 step 前检查 elapsed 时间。
+11. **Teardown 软失败语义**：teardown 失败不污染业务结果。
 
 ---
 
@@ -414,8 +386,8 @@ Gimbal 是一个 **面向现代 API 测试场景的自动化测试框架**（Pyt
 
 Gimbal 是一个**功能完整、模块边界清晰、扩展点齐备**的 API 测试框架。截至 2026-06-18：
 
-- **核心已实现**：CLI / Bootstrap / 4 层 Context / 状态机 / 9 个策略 executor / 仿 Docker 资产仓库 / 5 阶段插件流水线 / 7 个内置 Reporter / Event 三模式 / Hook 双侧同名埋点 / 5 种 Authenticator / 5 阶段 Preprocessor / 7 种变量生成器 / 零依赖 JSONPath / loguru 日志系统 / 23 个模块文档。
-- **核心已设计定稿但未完全实装**：ModelRegistry（v3 方案，data class + EndpointSpec 双场景复用）、`run server` 实际服务监听、4 个 strategy executor（chaos/poll/sql/composite）、多个仓储后端。
+- **核心已实现**：CLI / Bootstrap / 4 层 Context / 状态机 / 9 个策略 executor / 5 阶段插件流水线 / 7 个内置 Reporter / Event 三模式 / Hook 双侧同名埋点 / 5 种 Authenticator / 阶段化 Preprocessor / 7 种变量生成器 / 零依赖 JSONPath / loguru 日志系统 / 23 个模块文档。
+- **核心已设计定稿但未完全实装**：ModelRegistry（v3 方案，data class + EndpointSpec 双场景复用）、`run server` 实际服务监听、4 个 strategy executor（chaos/poll/sql/composite）。
 - **核心已设计但完全占位**：AI 辅助、Scheduler、Resource、Suite 编排模块、Observability、Compiler parsers/assemblers。
 - **核心业务落地**：海运订舱 / 报关 / 结算单对账（PHP→Java 迁移）已具备完整测试样本与场景定义。
 

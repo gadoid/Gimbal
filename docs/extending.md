@@ -8,7 +8,6 @@ Gimbal 是一个为"可扩展"而设计的测试框架。框架内置的扩展�
 - **自定义报告器 Reporter**：添加新的报告格式（HTML / JSON / IM 通知 / 平台上传等）
 - **自定义插件 Plugin**：通过 `PluginLoader` 流水线接入，订阅 Event / 注册 Hook / 注册 Strategy
 - **自定义 Authenticator**：添加新的登录方式
-- **自定义 ContentStore 后端**：替换资产仓库的存储介质
 - **自定义 ResourceProvider**：添加新的外部资源句柄
 
 下面按常见扩展点逐一给出最小可运行示例。
@@ -270,37 +269,7 @@ registry.register(MyAuthenticator())
 
 ---
 
-## 6. 替换资产仓库后端（ContentStore）
-
-`AssetStore` 接受一个实现了 `ContentStore` 协议的后端。框架内置 `LocalFsContentStore`，可以自行实现：
-
-```python
-from typing import BinaryIO
-from gimbal.repository.store import ContentStore
-from gimbal.repository.models import AssetRef, AssetRecord
-
-
-class S3ContentStore:
-    def push_blob(self, digest: str, data: bytes | BinaryIO) -> None: ...
-    def pull_blob(self, digest: str) -> bytes: ...
-    def has_blob(self, digest: str) -> bool: ...
-    def put_manifest(self, ref: AssetRef, digest: str, record_json: str) -> None: ...
-    def get_manifest(self, ref: AssetRef) -> tuple[str, str] | None: ...
-    def delete_manifest(self, ref: AssetRef) -> bool: ...
-    def list_tags(self, namespace: str, name: str) -> list[str]: ...
-    def list_assets(self, namespace: str | None = None) -> list[AssetRecord]: ...
-    def find_by_digest(self, digest: str) -> list[AssetRecord]: ...
-
-
-from gimbal.repository.store import AssetStore
-store = AssetStore(backend=S3ContentStore(...))
-```
-
-`asset` CLI 子命令组走"快路径"，需要 CLI 与 `AssetStore` 共享同一后端；可通过 `--registry` / 自定义入口扩展。
-
----
-
-## 7. 添加新的执行阶段（StrategyPhase）
+## 6. 添加新的执行阶段（StrategyPhase）
 
 如需新增 `StrategyPhase`：
 
@@ -313,7 +282,7 @@ store = AssetStore(backend=S3ContentStore(...))
 
 ---
 
-## 8. 扩展配置来源
+## 7. 扩展配置来源
 
 `ConfigLoader` 负责合并多来源配置（CLI > env > mode > gimbal.yaml > 默认值）。要插入新的来源：
 
@@ -331,7 +300,7 @@ class MyConfigLoader(ConfigLoader):
 
 ---
 
-## 9. 最佳实践
+## 8. 最佳实践
 
 1. **保持职责单一**：每个扩展只关注一个功能（策略 / 报告 / 认证 / 后端）。
 2. **使用插件而非全局副作用**：能写成 Plugin 就写成 Plugin，可享受自动激活 / 热卸载 / 配置注入。

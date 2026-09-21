@@ -22,19 +22,19 @@ schema_version: 1.0
 
 | target | 原因 | evidence | impact | hit_log | src | pin |
 |---|---|---|---|---|---|---|
-| pydantic | 所有模型基于 `BaseModel` 与 `Field` 构造；`Annotated[Union[...], Field(discriminator=...)]` 是 Ref Union 的语法基础 | schema/__init__.py:18-63（全部模型继承自 pydantic.BaseModel） | high | — | human | ◯ |
-| pydantic discriminated unions | `Annotated[Union[T, TRef], Field(discriminator="kind")]` 是 schema 全部 *Union 类型的统一模式（ApiUnion / RequestUnion / StepUnion / StrategyUnion / TimePolicyUnion / ResourceUnion / SetupUnion / TeardownUnion / RunUnion） | schema/api.py:16-19、request.py:12-15、step.py:19-22、strategy.py:81-84、timepolicy.py:17-20、resource.py:25-28、setup.py:13-16、teardown.py:14-17、scenario.py:60-63 | high | — | human | ◯ |
+| pydantic | 所有模型基于 `BaseModel` 与 `Field` 构造；`Annotated[Union[...], Field(discriminator=...)]` 是联合类型的语法基础 | schema/__init__.py:18-63（全部模型继承自 pydantic.BaseModel） | high | — | human | ◯ |
+| pydantic discriminated unions | `Annotated[Union[...], Field(discriminator="kind")]` 是 schema 全部 *Union 类型的统一模式（ApiUnion / RequestUnion / StepUnion / StrategyUnion / TimePolicyUnion / ResourceUnion / SetupUnion / TeardownUnion / RunUnion） | schema/api.py:16-19、request.py:12-15、step.py:19-22、strategy.py:81-84、timepolicy.py:17-20、resource.py:25-28、setup.py:13-16、teardown.py:14-17、scenario.py:60-63 | high | — | human | ◯ |
 | stdlib `enum` | `StepState`（执行状态）与 strategy.py 的 `Scope` / `AssertOperator` / `StrategyPhase` / `FailurePolicy` 四个枚举依赖 `str, Enum` 模式以同时支持字符串字面量 | schema/states.py:5-12、schema/strategy.py:6-42 | high | — | human | ◯ |
 | stdlib `datetime` | `AuthSession.expires_at`、`Meta.createTime` 字段类型 | schema/auth.py:8、schema/scenario.py:2、scenario.py:23 | medium | — | human | ◯ |
 | stdlib `typing`（Literal / Annotated / Union / Optional） | 全部模型字段类型注解基础 | 各 .py 文件首行 import | medium | — | human | ◯ |
 
-> 注：schema 内部各文件互为 `from .xxx` 的相对依赖（ref → 几乎所有文件；scenario → step/strategy/resource/setup/teardown/auth/timepolicy/retrypolicy），**内部依赖图极密**。这层内部关系不列在这里——它们属于"对内细节"，见 README.md。本表只列 **schema/ 之外的依赖**。
+> 注：schema 内部各文件互为 `from .xxx` 的相对依赖（scenario → step/strategy/resource/setup/teardown/auth/timepolicy/retrypolicy），**内部依赖图极密**。这层内部关系不列在这里——它们属于"对内细节"，见 README.md。本表只列 **schema/ 之外的依赖**。
 
 ## 2. Depended by（被谁依赖｜操作前：计算爆炸半径）
 > 判定：谁 import / 调用了我。改我时，真正的影响面在这张表。
 > 本区由 CapabilityGraph 反向索引自动生成，src 恒为 derived；人工权威在调用方自己的 Depends on。
 >
-> **单一职责原则**：本表只列"谁**用了** schema"的事实，**不**记录调用方"在代码里怎么用"——后者属于调用方自己的 NEIGHBOR.md。schema 不知道也不应该知道 core/asset_materializer 怎么物化 Ref，那是 core 的实现细节。
+> **单一职责原则**：本表只列"谁**用了** schema"的事实，**不**记录调用方"在代码里怎么用"——后者属于调用方自己的 NEIGHBOR.md。schema 不知道也不应该知道调用方怎么消费这些模型，那是调用方的实现细节。
 >
 > **当前阶段（v1.0 静态版）**：CapabilityGraph 未实装，§1.4 的"反向边自动派生"流水线未跑通。本节先列**已知调用方清单**（人工扫描产物，2026-06-18），等投影器上线后由其刷新。
 
@@ -79,9 +79,8 @@ schema_version: 1.0
 | `gimbal/__init__.py` 公开 API 表面 | create | [src/gimbal/__init__.py:6](../__init__.py#L6)（schema 47 个符号被 re-export，移除需同步改此处） | high | — | human |
 | `AuthSession` 对象内部状态（password→token 阶段切换） | write | auth.py:124（`apply_token`）/ auth.py:164（`clear_token`）/ auth.py:179（`clear_password`）分别写 token、expires_at、expires_in、password 字段 | medium | — | human |
 | `Meta.createTime` 字段（datetime） | write | scenario.py:23（构造时被调用方填入，反序列化时从 raw 还原） | low | — | human |
-| `RefBase.ref` 字符串 | read | ref.py:44（仅类型定义，真实写入由调用方完成） | low | — | human |
 
-> 注：schema 层**不直接读写文件**——它产出的对象由其他层（asset_materializer / preprocessor / repository）持久化。Touches 区主要关注"哪份数据被多个模块共享"。
+> 注：schema 层**不直接读写文件**——它产出的对象由其他层（preprocessor / core 等）在运行时构造与消费。Touches 区主要关注"哪份数据被多个模块共享"。
 
 ## 5. Hooks & Events
 
@@ -102,8 +101,6 @@ schema_version: 1.0
 | 机制 | 入口 | 状态 |
 |---|---|---|
 | 包级公开 API | `from gimbal import Scenario, Step, Api, ...`（47 个符号，详见 [gimbal/__init__.py:6-59](../__init__.py#L6-L59)） | 已支持 |
-| 通用内联引用 | `{"kind": "ref", "ref": "namespace/name:tag"}` 出现在 dict / list 任意位置（[schema/ref.py:47-74](./ref.py#L47-L74)） | 已支持 |
-| 类型化 Ref | 各领域 `XxxRef`（kind discriminator 如 `step_ref`、`api_ref`），物化时整对象替换父节点对应字段 | 已支持 |
 | discriminator 扩展点 | 新增子类型时在 `XxxUnion` 的 `Annotated[Union[...], Field(discriminator="kind")]` 中加新分支 | 已支持 |
 
 ### 6.2 计划中（架构预留，尚未实装）

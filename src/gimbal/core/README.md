@@ -60,7 +60,6 @@ CLI
 | `bootstrap.py` | `bootstrap()` 函数、`Configuration` dataclass |
 | `runner.py` | `Engine`、`RunResult` |
 | `scenario_runner.py` | `ScenarioRunner`、`StepRunner`、`ScenarioRunResult` |
-| `asset_resolver.py` | `AssetResolver`、`ResolvedAsset` |
 
 ---
 

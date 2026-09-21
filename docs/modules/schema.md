@@ -9,17 +9,16 @@ gimbal/schema/
 ├── __init__.py          # 统一 re-export：所有对外可用的模型/枚举
 ├── README.md
 ├── states.py            # StepState
-├── ref.py               # RefBase, Ref
-├── resource.py          # Resource, Mock, File, MockRef, FileRef, ResourceUnion
-├── api.py               # Api, ApiRef, ApiUnion
-├── request.py           # Request, RequestRef, RequestUnion
-├── step.py              # Step, StepRef, StepUnion
-├── strategy.py          # StrategyBase, Extract, Assign, Assertion, StrategyRef, StrategyUnion, Scope, AssertOperator, StrategyPhase, FailurePolicy
+├── resource.py          # Resource, Mock, File, ResourceUnion
+├── api.py               # Api, ApiUnion
+├── request.py           # Request, RequestUnion
+├── step.py              # Step, StepUnion
+├── strategy.py          # StrategyBase, Extract, Assign, Assertion, StrategyUnion, Scope, AssertOperator, StrategyPhase, FailurePolicy
 ├── timepolicy.py        # TimePolicy, TimeoutPolicy, RecordPolicy, TimePolicyUnion
 ├── retrypolicy.py       # RetryPolicy
-├── scenario.py          # Scenario, Meta, Config
-├── setup.py             # Setup, SetupRef, SetupUnion
-├── teardown.py          # Teardown, TeardownRef, TeardownUnion
+├── scenario.py          # Scenario, Meta, Config, Suite, RunUnion
+├── setup.py             # Setup, SetupUnion
+├── teardown.py          # Teardown, TeardownUnion
 └── auth.py              # AuthSession（含读写一体 token 状态、_aware_utc 工具函数）
 ```
 
@@ -40,20 +39,19 @@ gimbal/schema/
 
 ```python
 from .states import StepState
-from .ref import RefBase, Ref
-from .resource import Resource, Mock, File, MockRef, FileRef, ResourceUnion
-from .api import Api, ApiRef, ApiUnion
-from .request import Request, RequestRef, RequestUnion
-from .step import Step, StepRef, StepUnion
+from .resource import Resource, Mock, File, ResourceUnion
+from .api import Api, ApiUnion
+from .request import Request, RequestUnion
+from .step import Step, StepUnion
 from .strategy import (
-    StrategyBase, Extract, Assign, Assertion, StrategyRef, StrategyUnion,
+    StrategyBase, Extract, Assign, Assertion, StrategyUnion,
     Scope, AssertOperator, StrategyPhase, FailurePolicy,
 )
 from .timepolicy import TimePolicy, TimeoutPolicy, RecordPolicy, TimePolicyUnion
 from .retrypolicy import RetryPolicy
 from .scenario import Scenario, Meta, Config
-from .setup import Setup, SetupRef, SetupUnion
-from .teardown import Teardown, TeardownRef, TeardownUnion
+from .setup import Setup, SetupUnion
+from .teardown import Teardown, TeardownUnion
 from .auth import AuthSession
 ```
 
@@ -91,7 +89,7 @@ class Meta(BaseModel):
     version: str
     createTime: datetime
     expire: bool                  # 过期标志
-    requirementRef: list[RefBase] # 需求关联
+    requirementRef: list[str]      # 需求关联（需求管理系统链接）
 ```
 
 ### Config
@@ -147,11 +145,11 @@ class Mock(Resource): kind: Literal["mock"] = "mock"
 class File(Resource): kind: Literal["file"] = "file"
 ```
 
-配套引用类型：`MockRef`、`FileRef`，通过 `ResourceUnion` 在场景里以 `dict[str, ResourceUnion]` 索引。
+通过 `ResourceUnion` 在场景里以 `dict[str, ResourceUnion]` 索引。
 
 ### Request
 
-请求体定义（包含 `Request` 与 `RequestRef`），通过 `RequestUnion` 在 `Step` 里使用。
+请求体定义（`Request`），通过 `RequestUnion` 在 `Step` 里使用。
 
 ### Strategy 策略
 
@@ -196,7 +194,7 @@ class Assertion(StrategyBase):
 
 ### Setup / Teardown
 
-场景级的前置与后置动作，分别通过 `Setup` / `SetupRef` 与 `Teardown` / `TeardownRef` 建模，配合 `SetupUnion` / `TeardownUnion` 在 `Config` 中使用。
+场景级的前置与后置动作，分别通过 `Setup` 与 `Teardown` 建模，配合 `SetupUnion` / `TeardownUnion` 在 `Config` 中使用。
 
 ### TimePolicy
 
@@ -279,41 +277,29 @@ class StepState(str, Enum):
 
 ## 联合类型 (Union)
 
-使用 Pydantic v2 discriminated union（`kind` 字段做派发）：
+真正多成员的联合使用 Pydantic v2 discriminated union（`kind` 字段做派发）；历史上的 `*Ref` 引用分支已随资产引用机制移除，五个原本的"具体类型 + 引用类型"联合退化为单成员别名：
 
 ```python
-StepUnion = Annotated[
-    Union[Step, StepRef],
-    Field(discriminator="kind"),
-]
+# 单成员别名（保留 Union 命名以稳定 API 表面）
+StepUnion = Step
+ApiUnion = Api
+RequestUnion = Request
+SetupUnion = Setup
+TeardownUnion = Teardown
 
+# 真正的 discriminated union
 StrategyUnion = Annotated[
-    Union[Extract, Assign, Assertion, StrategyRef],
-    Field(discriminator="kind"),
-]
-
-ApiUnion = Annotated[
-    Union[Api, ApiRef],
-    Field(discriminator="kind"),
-]
-
-RequestUnion = Annotated[
-    Union[Request, RequestRef],
+    Union[Extract, Assign, Assertion],
     Field(discriminator="kind"),
 ]
 
 ResourceUnion = Annotated[
-    Union[Resource, Mock, File, MockRef, FileRef],
+    Union[Mock, File],
     Field(discriminator="kind"),
 ]
 
-SetupUnion = Annotated[
-    Union[Setup, SetupRef],
-    Field(discriminator="kind"),
-]
-
-TeardownUnion = Annotated[
-    Union[Teardown, TeardownRef],
+RunUnion = Annotated[
+    Union[Scenario, Suite],
     Field(discriminator="kind"),
 ]
 
@@ -376,7 +362,8 @@ def _aware_utc(dt: datetime) -> datetime:
 ## 设计原则
 
 1. **Discriminated Union**：使用 `Literal` + `Field(discriminator="kind")` 实现多态。所有 `*Union` 派生类都遵循这一约定。
-2. **引用分离**：`*Ref` 类型用于引用未展开的对象（懒加载/外部资产），与具体类型（如 `Step`）并列在 `*Union` 中。
-3. **不可变性优先**：除 `AuthSession` 等显式承担运行期状态的模型外，配置类（如 `BootstrapConfig`）使用 `frozen=True`。
-4. **分层建模**：从 `Scenario` → `Step` → `Api`/`Request`/`Strategy`，层层细化，资源与认证配置由 `Config` 集中管理。
-5. **运行期状态外移**：`Config.users` 中的 `AuthSession` 在 Bootstrap 阶段被解析后，token 状态迁移到 `AuthRegistry`；schema 层只保留静态描述（详见 `auth.md`）。
+2. **不可变性优先**：除 `AuthSession` 等显式承担运行期状态的模型外，配置类（如 `BootstrapConfig`）使用 `frozen=True`。
+3. **分层建模**：从 `Scenario` → `Step` → `Api`/`Request`/`Strategy`，层层细化，资源与认证配置由 `Config` 集中管理。
+4. **运行期状态外移**：`Config.users` 中的 `AuthSession` 在 Bootstrap 阶段被解析后，token 状态迁移到 `AuthRegistry`；schema 层只保留静态描述（详见 `auth.md`）。
+
+> 历史备注：schema 曾通过 `*Ref` 引用类型实现"引用分离"（懒加载/外部资产引用），已随资产引用机制整体移除——用例的唯一去向是平台数据库，ref 节点零生产者。

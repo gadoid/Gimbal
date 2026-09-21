@@ -46,7 +46,7 @@ NEIGHBOR.md 的"职责" = **本模块对外可见的拓扑事实**。任何想"�
 
 | 错误做法 | 问题 | 正确做法 |
 |---|---|---|
-| schema/NEIGHBOR.md §2 写 `core/asset_materializer.py:32,57-61 加载 Ref/ApiUnion/...` | schema 在记 core 的实现位置 | 改为：列出 core 为"调用方"，链接到 `core/NEIGHBOR.md` |
+| schema/NEIGHBOR.md §2 写 `core/runner.py:32,57-61 加载 Scenario/StepUnion/...` | schema 在记 core 的实现位置 | 改为：列出 core 为"调用方"，链接到 `core/NEIGHBOR.md` |
 | schema/NEIGHBOR.md §3 写 "events 携带 `step.api.path`" | 未读 events 代码的猜测 | 删除；等读了 events 源码再写"双方约定"或写进 events/NEIGHBOR.md |
 | schema/NEIGHBOR.md §1 写 `auth.py:124-169（apply_token / clear_token / clear_password 写 token...）` | 这是 auth.py 的实现细节 | 拆为具体行号（124/164/179）作为 schema/NEIGHBOR.md Touches 锚点——**这是 schema 的事实**（schema 的 AuthSession 字段被谁写），所以正确 |
 

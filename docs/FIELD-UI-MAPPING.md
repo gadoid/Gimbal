@@ -43,7 +43,6 @@
 | | should_refresh | bool | 是否应刷新 |
 | | auth_header | str \| None | 生成 Authorization 头 |
 | | remaining_seconds | int \| None | 距过期剩余秒 |
-| `RefBase` | ref | str | asset ref 字符串 |
 
 ### 1.2 `endpoint/` — 接口契约
 
@@ -114,7 +113,7 @@
 | | version | str | 版本 |
 | | createTime | datetime | 创建时间 |
 | | expire | bool | 过期 |
-| | requirementRef | list[RefBase] | 需求关联 |
+| | requirementRef | list[str] | 需求关联 |
 | | **system** | **list[str]** | **V3.2 归属系统列表** |
 | `Config` | setup | list[SetupUnion] | 前置动作 |
 | | teardown | list[TeardownUnion] | 后置动作 |
@@ -271,7 +270,7 @@
 | owner | `Meta.owner` | — |
 | tags | `Meta.tags` | list[str] |
 | version | `Meta.version` | — |
-| requirementRef | `Meta.requirementRef` | list[RefBase] |
+| requirementRef | `Meta.requirementRef` | list[str] |
 | expire | `Meta.expire` | bool |
 | Mock 服务列表 | `Scenario.resource[name]` | dict[str, Mock] |
 | Mock image | `Mock.image` | str |
@@ -390,7 +389,7 @@ schema 提供了 `ui_kind` 的 9 种字面量 + `source_kind` 的 3 种字面量
 
 **当前实现**：从 `Step.api.service.split(\".\")[0]` 反推 + 与 `Meta.system` 校验。**schema 字段够用**。
 
-**边界**：用户用 `ref` 引用（`ApiRef`）时，service 字段缺失，平台无法反推归属系统。**需要后端在 ApiRef 解析时填充 service 字段**。
+**边界**：历史上的 `ref` 引用（api 以引用形式内联）已随资产引用机制移除——`api` 总是完整定义，`service` 字段总是存在，平台可直接反推归属系统。
 
 ### 3.4 静态 vs 动态注入
 

@@ -1,6 +1,6 @@
 # Core 模块
 
-> 核心执行引擎模块：bootstrap / shutdown 入口、Hook 系统、Asset 物化、Engine / Runner
+> 核心执行引擎模块：bootstrap / shutdown 入口、Hook 系统、Engine / Runner
 
 ## 目录结构
 
@@ -10,8 +10,6 @@ gimbal/core/
 ├── bootstrap.py           # bootstrap() / shutdown() 入口、Configuration 容器
 ├── runner.py              # Engine 执行引擎
 ├── scenario_runner.py     # ScenarioRunner、StepRunner、ScenarioRunResult
-├── asset_resolver.py      # 资产解析器（外层：CLI/Suite 拉取完整 scenario，含通配展开）
-├── asset_materializer.py  # 资产物化器（内层：递归还原 Ref → 数据类对象，带环检测）
 ├── hooks.py               # HookPoint / Hook / HookResult / HookRegistry / HookTriggerer
 ├── plugin.py              # Plugin / PluginContext / PluginManifest / PluginState
 └── server.py              # 服务端占位实现
@@ -214,173 +212,11 @@ if not result:        # __bool__ → not self.stopped
 send(payload["request"])
 ```
 
-## Asset 系统
-
-### AssetResolver（外层：CLI/Suite 拉取完整资产）
-
-```python
-class AssetResolver:
-    """资产解析器（接入 AssetStore 的真实实现）。
-
-    解析策略：
-        - 单 ref 形式（namespace/name:tag / namespace/name@digest）→ 直接 pull
-        - 命名空间通配（namespace/* / namespace/*:tag）→ 展开为所有 name
-        - 完全通配（*）→ 展开为所有 namespace/name
-
-    失败容错：单个 ref 不存在时 warn-and-skip，不中断整个 batch。
-    """
-```
-
-`ResolvedAsset` 数据类：
-
-```python
-@dataclass
-class ResolvedAsset:
-    id: str                        # CLI 原始 ID 字符串
-    ref: AssetRef                  # 规范化后的 AssetRef
-    kind: AssetKind                # SUITE / SCENARIO / LOCAL
-    content: AssetContent
-    version: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-```
-
-`AssetResolver` 与 `AssetMaterializer` 的关系：
-- **AssetResolver**：CLI 传 `customs/declare:v1.0` / `customs/*:v1.*` 进来 → 整张图 pull 出来
-- **AssetMaterializer**：把整张图里的 Ref 节点（可能内嵌）逐个替换
-
-两件事在不同层互补。
-
-### AssetMaterializer（内层：递归还原 Ref → 数据类对象）
-
-```python
-class AssetMaterializer:
-    """引用物化器。
-
-    用法：
-        materializer = AssetMaterializer(asset_store=store, max_depth=8)
-        materialized = materializer.materialize(scenario_obj)
-    """
-```
-
-设计原则：
-1. **数据类无关** —— 只看 `isinstance(x, RefBase)`，不关心具体是 `StepRef` / `ApiRef` / `RequestRef` / `StrategyRef` / `Ref` 中的哪一种
-2. **固定点算法** —— 拉来的内容里可能又含 Ref，递归处理直到没有 Ref 为止
-3. **循环保护** —— 同时跟踪 `(RefClass, ref)` 栈与递归深度，避免无限递归
-4. **不可变遍历** —— 使用 frozenset 风格推进 visited 集合，避免兄弟分支互相污染
-
-公开入口：
-
-```python
-def materialize(self, obj: Any) -> Any:
-    """递归物化整个对象，返回物化后的版本。
-
-    入参 obj 可以是：
-      - Scenario / Step / Api / Request / Strategy ...（任意 BaseModel）
-      - dict / list（free-form 容器）
-      - 标量（str / int / float / bool / None）
-    """
-```
-
-便捷函数：
-
-```python
-def materialize(obj, asset_store, *, max_depth: int = 8) -> Any:
-    """一次性物化：构造 materializer 并跑一次。"""
-```
-
-#### Ref → Pydantic 目标类映射
-
-懒加载构造的映射表覆盖以下类型化 Ref：
-
-| Ref 类型 | 目标 Pydantic Union |
-|----------|---------------------|
-| `StepRef` | `StepUnion` |
-| `ApiRef` | `ApiUnion` |
-| `RequestRef` | `RequestUnion` |
-| `StrategyRef` | `StrategyUnion`（按 `kind` discriminator 选 Extract/Assign/Assertion） |
-| `ScenarioRef` | `RunUnion` |
-| `SuiteRef` | `RunUnion` |
-| 通用 `Ref` | 直接用 `content.parsed`（None 时回退 raw bytes 解码） |
-
-新增类型化 Ref 时只需在此追加一行，**物化器代码本身不需要改**。
-
-#### 环检测与 max_depth
-
-```python
-def __init__(
-    self,
-    asset_store: "AssetStore",
-    *,
-    max_depth: int = 8,          # 递归物化的最大深度
-) -> None:
-```
-
-两种触发 `AssetCycleError` 的情况：
-
-```python
-# 1. 显式环：同一 (RefClass, ref) 在递归栈中出现两次
-if ref_key in self._seen:
-    raise AssetCycleError(
-        f"Ref cycle detected: {ref_cls_name}({ref.ref!r}) at {path}",
-        ref=ref.ref, ref_class=ref_cls_name, path=path,
-    )
-
-# 2. 深度兜底：超过 max_depth → 视作环
-if depth >= self._max_depth:
-    raise AssetCycleError(
-        f"Ref nesting exceeded max_depth={self._max_depth} at {path}",
-        depth=depth, ref=ref.ref, ref_class=ref_cls_name, path=path,
-    )
-```
-
-`_seen` 推进时使用 frozenset 风格（用 `|` 构造新 set），不修改原集合——兄弟分支互不污染；退出时通过 `previous_seen` 恢复。
-
-#### frozen 模型字段替换（修复 #17/#31）
-
-`_walk_model` 在遇到 frozen Pydantic 模型（`frozen=True`）时，先尝试 `setattr`；失败后回退到 `object.__setattr__` 绕过 frozen 限制（Pydantic v2 推荐模式）：
-
-```python
-try:
-    setattr(model, field_name, new_value)
-except Exception:
-    try:
-        object.__setattr__(model, field_name, new_value)
-    except Exception:
-        logger.warning("字段无法 set: {}.{}", ...)
-```
-
-#### 典型用法
-
-```python
-from gimbal.core.asset_materializer import materialize
-from gimbal.repository import AssetStore, LocalFsContentStore
-
-asset_store = AssetStore(backend=LocalFsContentStore(root=Path("~/.gimbal/registry").expanduser()))
-materialized_scenario = materialize(scenario, asset_store, max_depth=8)
-```
-
-通常不在用户代码中直接调用——`ScenarioPreprocessor.run()` 的 Phase 0 会自动调用。
-
 ## 异常类型
 
-引用物化与状态机相关异常统一在 `gimbal.exceptions` 中定义：
+状态机相关异常统一在 `gimbal.exceptions` 中定义：
 
 ```python
-# Asset 物化相关（继承自 AssetError）
-class AssetMaterializationError(AssetError):
-    """引用物化失败。
-    例如：pull 出的内容无法反序列化为目标 Pydantic 类；
-    通用内联 Ref 既不是合法 JSON 也无法按 utf-8 解码。
-    """
-    code = "ASSET_MATERIALIZATION_ERROR"
-
-class AssetCycleError(AssetError):
-    """引用图出现环 / 嵌套超过 max_depth。
-    物化器 (AssetMaterializer) 显式检测到同一 (RefClass, ref) 再次入栈，
-    或递归深度超过 max_depth（默认 8）→ 兜底报错。
-    """
-    code = "ASSET_CYCLE"
-
 # 状态机相关（继承自 StateMachineError）
 class InvalidTransitionError(StateMachineError):
     """非法状态跃迁。"""
@@ -495,14 +331,8 @@ class Engine:
     所有执行相关的状态都在 run() 内部创建，保证每次 run() 相互独立。
     """
 
-    def __init__(
-        self,
-        configuration: Configuration,
-        *,
-        asset_store: Any = None,           # 注入供 Phase 0 引用物化使用
-    ) -> None:
+    def __init__(self, configuration: Configuration) -> None:
         self._ictx = configuration
-        self._asset_store = asset_store     # 透传给 ScenarioRunner
         # 最近一次 run() 产出的 ReportArtifact 列表
         self._artifacts: list = []
 
@@ -522,10 +352,6 @@ class Engine:
         """
 ```
 
-`asset_store` 是 keyword-only 参数（默认 `None`）：
-- `None` → 跳过 Phase 0 物化（保持向后兼容，scenario 体内不含 Ref 时足够）
-- 非 `None` → 透传给 `ScenarioRunner` → `ScenarioPreprocessor` → `AssetMaterializer`
-
 `artifacts` 属性在 `run()` 完成后非空，包含所有 reporter 产出的 `ReportArtifact`（metadata 写入，artifact 本身由 reporter 落盘）。CLI 用来打印。
 
 CLI 使用示例：
@@ -533,11 +359,9 @@ CLI 使用示例：
 ```python
 from gimbal.core.bootstrap import bootstrap
 from gimbal.core.runner import Engine
-from gimbal.repository import AssetStore, LocalFsContentStore
 
-asset_store = AssetStore(backend=LocalFsContentStore(root=Path("~/.gimbal/registry").expanduser()))
 configuration = bootstrap(cli_ctx)
-engine = Engine(configuration, asset_store=asset_store)
+engine = Engine(configuration)
 result = engine.run(scenario)
 print(engine.artifacts)        # 列出所有 ReportArtifact
 ```
@@ -555,7 +379,7 @@ print(engine.artifacts)        # 列出所有 ReportArtifact
 ```python
 @dataclass
 class RunResult:
-    exit_code: int = 0            # 0 = 全部通过；1 = 有失败；2 = 异常；3 = Ref 未展开
+    exit_code: int = 0            # 0 = 全部通过；1 = 有失败；2 = 异常；3 = 无法识别的执行目标类型
     total: int = 0
     passed: int = 0
     failed: int = 0
@@ -578,13 +402,11 @@ class ScenarioRunner:
         hook_registry: Any = None,
         event_bus: Any = None,
         auth_registry: Any = None,        # 注入运行期 token 容器
-        asset_store: Any = None,          # Phase 0：注入 AssetStore（供 Preprocessor 物化 Ref）
     ): ...
 
     def run(self, scenario_schema, suite_ctx) -> ScenarioRunResult:
         # 1. 派生 ScenarioContext
         # 2. 预处理：ScenarioPreprocessor
-        #    Phase 0  引用物化（asset_store 不为 None 时；AssetMaterializer 还原 Ref 节点）
         #    Phase 1  认证（写入 auth_registry）
         #    Phase 2  构建查询根
         #    Phase 3  模板展开（${} 替换为实际值，fail-fast）
@@ -648,15 +470,13 @@ class ScenarioRunResult:
 ## 执行流程
 
 ```
-CLI (run_scenario / run_suite)
-  │
-  │  asset_store = _build_default_asset_store(registry)   ← cli/common.py
+CLI (run launch / run match)
   │
   ▼
 bootstrap(cli_ctx) → Configuration
   │
   ▼
-Engine(configuration, asset_store=asset_store)           ← core/runner.py
+Engine(configuration)                                    ← core/runner.py
   │
   ├── run(Scenario | Suite)
   │     │
@@ -668,11 +488,10 @@ Engine(configuration, asset_store=asset_store)           ← core/runner.py
   │     │     │
   │     │     ├── derive_suite_context(...)        # suite_id="__default__"
   │     │     │
-  │     │     └── ScenarioRunner.run(..., asset_store=asset_store)
+  │     │     └── ScenarioRunner.run(...)
   │     │           │
   │     │           ├── derive_scenario_context(...)
-  │     │           ├── ScenarioPreprocessor.run(scenario, ctx, asset_store=asset_store)
-  │     │           │     ├─ Phase 0  引用物化 (AssetMaterializer, max_depth=8)   ← core/asset_materializer.py
+  │     │           ├── ScenarioPreprocessor.run(scenario, ctx)
   │     │           │     ├─ Phase 1  认证 (AuthManager → AuthRegistry)
   │     │           │     ├─ Phase 2  构建查询根 (scenario > bootstrap)
   │     │           │     ├─ Phase 3  模板展开 (${auth.*} ${service.*} ${var.*})
@@ -688,7 +507,7 @@ Engine(configuration, asset_store=asset_store)           ← core/runner.py
   │     └── Suite → _run_suite()
   │           │
   │           ├── derive_suite_context(...)        # 用 Suite 自身信息
-  │           └── for scenario in suite.suite: ScenarioRunner.run(..., asset_store=...)
+  │           └── for scenario in suite.suite: ScenarioRunner.run(...)
   │                 （fail_fast 时未通过即 break）
   │     │
   │     ├── 触发 RUN_END 事件
@@ -706,17 +525,6 @@ shutdown(configuration)
   └── event_bus.stop()
 ```
 
-`asset_store` 透传链：
-```
-CLI (run_scenario)
-  └─ Engine(configuration, asset_store=asset_store)            [core/runner.py]
-       └─ ScenarioRunner(..., asset_store=asset_store)         [core/scenario_runner.py]
-            └─ ScenarioPreprocessor(..., asset_store=asset_store)
-                 └─ Phase 0: AssetMaterializer(asset_store)   [core/asset_materializer.py]
-```
-
-`asset_store is None` 时 Phase 0 整体跳过（保持向后兼容，scenario 体内不含 Ref 时足够）。
-
 ## 设计原则
 
 1. **Configuration 不可变**：`frozen=True`，产出后只能读。**唯一可变**是 `auth_registry`（内部 `_sessions` 在运行期写入 token，但引用本身不变）。
@@ -726,5 +534,3 @@ CLI (run_scenario)
 5. **shutdown 兜底清空 hook**：有些代码路径绕过 `Plugin.register_hook` 直接调 `ctx.hook_registry.register()`，其 hook 未被任何 plugin 记录，deactivate_all 不会清掉。shutdown 阶段统一 `hook_registry.clear()`。
 6. **fail_fast 支持**：Suite 执行时可选首次失败即终止。
 7. **状态机隔离**：StepRunner 不感知状态流转，状态机自驱动运行，runner 只负责构造/收尾。
-8. **物化器数据类无关**：只看 `isinstance(x, RefBase)`，新增类型化 Ref 只需在映射表追加一行。
-9. **环检测双重保险**：显式 `(RefClass, ref)` 入栈检测 + `max_depth=8` 深度兜底。

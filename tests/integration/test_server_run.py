@@ -110,7 +110,7 @@ def fake_bootstrap(cli_ctx):
     return m
 
 class FakeEngine:
-    def __init__(self, configuration, *, asset_store=None):
+    def __init__(self, configuration):
         calls.append("engine_init")
     def run(self, target, runtime_control=None):
         calls.append("run")

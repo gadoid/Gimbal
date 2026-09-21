@@ -597,7 +597,7 @@ WebSocket：`/ws/executions/{id}`（V1；V0.1 用轮询）。
 4. **`resource` 字段**：原文提到"列出一级资源（meta, resource,steps,config）"，但 Gimbal 的 `resource` 字段是 `dict[str, ResourceUnion]`（包含 db / mock / file / variable 等多种 kind）。**需求仅"列出"即可吗？还是支持拖拽 + 编辑？建议 V0.1 仅展示 / 添加 / 删除 key（不编辑内容），完整编辑留 V1**。
 5. **`setup` / `teardown` 字段**：原文未提。Gimbal 中这两个是 `Config.setup: list[SetupUnion]`。建议 V0.1 默认折叠为单条占位（`+ setup` / `+ teardown`），与 resource 同样简化。
 6. **自定义变量替换 vs `vars` 注入机制**：原文"在最顶层支持自定义配置替换。其实就是映射了 config 中的vars进行替换"——平台只暴露 `Config.vars`，**不建议**再另造一套顶层 key→value 替换语法，以免双语法混淆。请确认。
-7. **`requirementRef`**：当前 Schema 里是 `list[RefBase]`，引用资产层；V0.1 建议前端展示为"字符串数组"（简化）。请确认简化可接受。
+7. **`requirementRef`**：当前 Schema 里是 `list[str]`（需求管理系统的关联链接，信息字段）；前端展示为"字符串数组"。
 
 ### 7.3 认证侧
 8. **认证管理页的"共享"语义**：原文给出 `users.codfish` 示例，但没有解释页面是"我的私有认证"还是"平台公共认证池"？建议：**v0.1 只做"我的私有认证"**（每个用户各自维护；用例执行时只能选自己的认证），公共认证池留 V1。需要您确认。
@@ -609,10 +609,9 @@ WebSocket：`/ws/executions/{id}`（V1；V0.1 用轮询）。
 
 ### 7.4 执行侧
 10. **"用例名触发执行"`gimbal run launch 用例名`"**：原文称"调用 gimbal run launch 用例名触发用例执行"，但 **`gimbal run launch` 只接受文件路径 / '-' stdin / --inline**，不接受名字。可能的解读：
-    - (a) `gimbal run scenario <id>` 触发走资产仓库；
-    - (b) 把用例落盘为 yaml 后 `gimbal run launch <yaml_path>`；
-    - (c) 通过 `gimbal run server` HTTP 通信触发。
-    建议默认 **(b)**：执行时把当前 scenario 渲染成 yaml → 落盘 → `gimbal run launch <abs.yaml>`。需要您拍板。
+    - (a) 把用例落盘为 yaml 后 `gimbal run launch <yaml_path>`；
+    - (b) 通过 `gimbal run server` HTTP 通信触发。
+    建议默认 **(a)**：执行时把当前 scenario 渲染成 yaml → 落盘 → `gimbal run launch <abs.yaml>`。需要您拍板。
 
 11. **并发执行次数 N 与 Config.retry 的关系**："执行次数 N=10 次并发"是平台调 N 次 launch 进程，每个进程内部 Gimbal 不会再跑 N 次；这与您说的"启动并发线程调用 gimbal run launch 用例名"一致。但**单次 launch 内部 --parallel 与外部进程并发是两件事**，请您确认：平台 N=10 即 **10 个独立 gimbal 进程**（每个进程内 --parallel=1）。
 12. **提单号前缀生成式**：前缀 `prefix` 是仅作为字面量字串？还是要配合 `uuid()` 生成变量？建议：在 vars 里加 `{prefix: prefix}` 字面量；如果用户想编号 + uuid，由用户在 vars 里手动写。如果只想用平台内置"runtime_vars"模板（如 `${exec.seq}`），可在文档中说明但 V0.1 不做。
