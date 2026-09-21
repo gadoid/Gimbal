@@ -14,8 +14,8 @@ from gimbal.core.runner import Engine
 from gimbal.core.bootstrap import bootstrap, shutdown
 from gimbal.cli.common import (
     DryRunOpt, EnvOpt, LogLevel, LogLevelOpt, InputFormat, FormatOpt, ModeOpt,
-    OutputFormat, OutputOpt, PluginsOpt, RegistryOpt, ReportDirOpt, ReporterOpt,
-    _build_default_asset_store, _print_run_report, _publish_run_meta,
+    OutputFormat, OutputOpt, PluginsOpt, ReportDirOpt, ReporterOpt,
+    _print_run_report, _publish_run_meta,
 )
 from gimbal.cli.context import CLIContext
 from gimbal.log import get_logger
@@ -185,7 +185,6 @@ def launch(
     ] = None,
     dry_run: DryRunOpt = False,
     plugins : PluginsOpt = [],
-    registry: RegistryOpt = None,
     # ========== 报告与输出 ==========
     reporter: ReporterOpt = None,
     report_dir: ReportDirOpt = "./reports",
@@ -279,11 +278,8 @@ def launch(
             fg=typer.colors.YELLOW, err=True,
         )
 
-    #8. 数据类有效，引用链接有效，执行器启动
-    #    注入资产仓库，让 ScenarioPreprocessor Phase 0 启用对 RefBase 节点的物化
-    asset_store = _build_default_asset_store(Path(registry) if registry else None)
-    logger.debug("[CLI] asset_store ready: backend={}", asset_store.backend_name)
-    engine = Engine(configuration, asset_store=asset_store)
+    #8. 数据类有效，执行器启动
+    engine = Engine(configuration)
     try:
         result = engine.run(scenario, runtime_control=runtime_control)
     finally:

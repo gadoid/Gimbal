@@ -383,10 +383,10 @@ class StepStateMachine:
 
         api = self._step_schema.api
         if not hasattr(api, "service"):
-            logger.error("[SM {}] API 是未解析的 Ref", self._step_id)
+            logger.error("[SM {}] API 缺少 service 字段，无法路由", self._step_id)
             return StrategyResult(
                 status=StrategyStatus.ERROR,
-                message="api is a ref that was not resolved before execution",
+                message="api is missing the 'service' field required for routing",
             )
 
         # D7 per-step 路由 + 修复 #6:先查场景声明 dict(api.service 是

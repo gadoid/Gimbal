@@ -1,1 +1,0 @@
-"""AssetRepository abstract interface."""

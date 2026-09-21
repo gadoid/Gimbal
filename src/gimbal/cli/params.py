@@ -7,7 +7,6 @@ import typer
 
 from gimbal.cli.commands.run import run_app
 from gimbal.cli.commands.self_check import self_check
-from gimbal.cli.commands.asset import asset_app
 
 # 退出码集中定义在 gimbal.cli.exit_codes，避免与子命令模块形成循环导入。
 from gimbal.cli.exit_codes import (  # noqa: E402,F401
@@ -24,12 +23,10 @@ starter = typer.Typer(
     help=(
         "gimbal_engine —— 一个为现代测试场景而生的自动化测试框架。\n\n"
         "常用示例：\n"
-        "  gimbal run suite customs-declare\n"
-        "  gimbal run scenario sc-001 sc-002\n"
         '  gimbal run match "tests/**/*.yaml"\n'
+        "  gimbal run launch ./debug.yaml\n"
         "  gimbal run server --port=8765\n"
-        "  gimbal asset push customs/declare:v1 -f suite.json\n"
-        "  gimbal asset list customs\n"
+        "  gimbal run show --from-path ./debug.yaml\n"
         "  gimbal self-check            验证框架基础设施"
     ),
     context_settings={"help_option_names": ["-h", "--help"]},
@@ -38,8 +35,6 @@ starter = typer.Typer(
     add_completion=True,
 )
 starter.add_typer(run_app, name="run")
-# asset 是顶层命令（不是 run 的子命令），因为它不执行任何测试，只管理仓库
-starter.add_typer(asset_app, name="asset")
 # self-check 是顶层命令（不是 run 的子命令），因为它不执行任何测试
 starter.command("self-check")(self_check)
 

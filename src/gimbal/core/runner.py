@@ -61,21 +61,16 @@ class Engine:
     所有执行相关的状态都在 run() 内部创建，保证每次 run() 相互独立。
     """
 
-    def __init__(self, configuration: Configuration, *, asset_store: Any = None) -> None:
+    def __init__(self, configuration: Configuration) -> None:
         """初始化 Engine，仅保存引用，不做任何 I/O 或状态初始化。
 
         入参:
             configuration: 由 bootstrap() 产出的不可变配置。
-            asset_store:   可选资产仓库；为 None 时 ScenarioRunner 会跳过引用物化。
         """
         self._ictx = configuration
-        self._asset_store = asset_store
         # 最近一次 run() 产出的 ReportArtifact 列表（CLI 用来打印）
         self._artifacts: list = []
-        logger.debug(
-            "[Engine] Engine 初始化完成: asset_store={}",
-            type(asset_store).__name__ if asset_store is not None else "None",
-        )
+        logger.debug("[Engine] Engine 初始化完成")
 
     @property
     def artifacts(self) -> list:
@@ -131,7 +126,7 @@ class Engine:
             elif isinstance(target, Suite):
                 result = self._run_suite(target, framework_ctx, runtime_control=runtime_control)
             else:
-                logger.error("[Engine] 收到未展开的 Ref: {}", type(target).__name__)
+                logger.error("[Engine] 收到无法识别的执行目标类型: {}", type(target).__name__)
                 result = RunResult(exit_code=3, error=1)
         except Exception as e:  # noqa: BLE001
             logger.exception("[Engine] 执行异常: {}", e)
@@ -233,7 +228,6 @@ class Engine:
             hook_registry=self._ictx.hook_registry,
             event_bus=self._ictx.event_bus,
             auth_registry=self._ictx.auth_registry,
-            asset_store=self._asset_store,
         ).run(
             scenario, suite_ctx, runtime_control=runtime_control,
         )
@@ -309,7 +303,6 @@ class Engine:
             hook_registry=self._ictx.hook_registry,
             event_bus=self._ictx.event_bus,
             auth_registry=self._ictx.auth_registry,
-            asset_store=self._asset_store,
         )
         cfg = framework_ctx.config
         total = passed = failed = error = halted = 0

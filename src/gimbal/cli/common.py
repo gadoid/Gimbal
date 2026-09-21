@@ -15,30 +15,14 @@ from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING
+from typing import Annotated
 
 import typer
-
-if TYPE_CHECKING:
-    from gimbal.repository import AssetStore
 
 
 # ============================================================
 # 枚举类型 —— Typer 会自动从 Enum 生成 --help 中的选项列表
 # ============================================================
-
-class SourceStrategy(str, Enum):
-    """资产来源策略。"""
-    auto = "auto"
-    local = "local"
-    remote = "remote"
-
-
-class OrderStrategy(str, Enum):
-    """多目标执行顺序。"""
-    sequential = "sequential"
-    parallel = "parallel"
-    as_given = "as-given"
 
 class InputFormat(str, Enum) :
     auto = "auto"
@@ -216,79 +200,6 @@ OutputOpt = Annotated[
 
 
 # ============================================================
-# 资产来源参数 —— 仅 suite/scenario 使用
-# ============================================================
-
-SourceOpt = Annotated[
-    SourceStrategy,
-    typer.Option(
-        "--source",
-        help="资产来源策略：auto=本地优先 / local=仅本地 / remote=强制远端。",
-        rich_help_panel="资产来源",
-    ),
-]
-
-RegistryOpt = Annotated[
-    str | None,
-    typer.Option(
-        "--registry",
-        help="远端资产库地址，覆盖默认配置。",
-        rich_help_panel="资产来源",
-    ),
-]
-
-VersionOpt = Annotated[
-    str | None,
-    typer.Option(
-        "--version",
-        help="指定资产版本，不指定则用 latest 或 pinned。",
-        rich_help_panel="资产来源",
-    ),
-]
-
-NoCacheOpt = Annotated[
-    bool,
-    typer.Option(
-        "--no-cache",
-        help="强制重新拉取。等价于 --source=remote。",
-        rich_help_panel="资产来源",
-    ),
-]
-
-CacheOnlyOpt = Annotated[
-    bool,
-    typer.Option(
-        "--cache-only",
-        help="仅本地缓存。等价于 --source=local。",
-        rich_help_panel="资产来源",
-    ),
-]
-
-
-# ============================================================
-# 多目标执行参数 —— suite/scenario 用
-# ============================================================
-
-OrderOpt = Annotated[
-    OrderStrategy,
-    typer.Option(
-        "--order",
-        help="多个目标的执行顺序。",
-        rich_help_panel="多目标控制",
-    ),
-]
-
-ContinueOnErrorOpt = Annotated[
-    bool,
-    typer.Option(
-        "--continue-on-error",
-        help="某目标失败后继续执行后续目标。",
-        rich_help_panel="多目标控制",
-    ),
-]
-
-
-# ============================================================
 # 通配匹配确认参数 —— 涉及通配/批量的子命令用
 # ============================================================
 
@@ -314,22 +225,6 @@ AllowEmptyOpt = Annotated[
 # ============================================================
 # 辅助函数
 # ============================================================
-
-def resolve_source(
-    source: SourceStrategy,
-    no_cache: bool,
-    cache_only: bool,
-) -> SourceStrategy:
-    """把 --source / --no-cache / --cache-only 三个互斥/覆盖关系的标志合并为最终 SourceStrategy。"""
-    """协调 --source / --no-cache / --cache-only。"""
-    if no_cache and cache_only:
-        raise typer.BadParameter("--no-cache 和 --cache-only 互斥。")
-    if no_cache:
-        return SourceStrategy.remote
-    if cache_only:
-        return SourceStrategy.local
-    return source
-
 
 def parse_vars(var_list: list[str] | None) -> dict[str, str]:
     """把 ['k=v', ...] 形式的输入拆为 {k: v} 字典；任一项缺 '=' 则抛 BadParameter。"""
@@ -358,18 +253,6 @@ def parse_parallel(value: str) -> int:
         return n
     except ValueError:
         raise typer.BadParameter(f"Invalid --parallel: {value!r}, expected integer or 'auto'.")
-
-
-def _build_default_asset_store(registry: Path | None = None) -> "AssetStore":
-    """按 ~/.gimbal/registry（可被 registry 参数覆盖）路径构造 LocalFsContentStore 并包装为 AssetStore 返回。"""
-    """构造默认的本地 AssetStore（registry 路径由 --registry 覆盖）。
-
-    供 suite / scenario CLI 子命令共用，避免在两处重复构造。
-    """
-    from gimbal.repository import AssetStore, LocalFsContentStore
-
-    root = (registry or Path("~/.gimbal/registry")).expanduser()
-    return AssetStore(backend=LocalFsContentStore(root=root))
 
 
 def _collect_run_meta() -> dict[str, Any]:

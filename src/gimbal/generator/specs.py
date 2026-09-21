@@ -189,8 +189,8 @@ class VarSpec:
         这样的 BaseModel-like API 来校验 scenario.config.vars 里的 dict 项
       - 因此在 _VarSpecUnion 之上包一层 TypeAdapter，对外暴露 classmethod
 
-    与 src/gimbal/schema/*Union 的差异：schema 那边是 TypeAdapter 包装在使用方
-    （如 asset_materializer.py:65-74），这里选择在使用方直接调用更省事。
+    与 src/gimbal/schema/*Union 的差异：schema 那边是裸的 Union 别名/Annotated，
+    这里在使用方直接经 TypeAdapter 调用更省事。
 
     Aliases: ``"sequence"`` is mapped to ``"seq"`` here BEFORE the union
     discriminator runs (per-model ``mode='before'`` validators fire AFTER

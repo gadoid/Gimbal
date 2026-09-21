@@ -13,7 +13,6 @@ from gimbal.cli.common import (
     parse_parallel, parse_vars,
 )
 from gimbal.cli.context import CLIContext
-from gimbal.core.asset_resolver import AssetKind
 from gimbal.core import bootstrap,runner
 
 

@@ -1,1 +1,0 @@
-"""MySQLRepository implementation."""

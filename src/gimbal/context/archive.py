@@ -3,9 +3,8 @@
 `Archive` 负责把 framework / suite / scenario / step 四个层级的 Context
 （以及 step 的 exchange 快照）持久化下来，供 reporter / debugger 后续使用。
 
-本模块只关心"Context 归档"，与"asset 仓库"（`gimbal.repository`）完全无关：
-- Archive  → 保存执行历史（按 suite_id / scenario_id / step_id 寻址，进程内或外部 DB）
-- Repository → 保存可复用的资产（按 namespace/name:tag 寻址，content-addressable）
+本模块只关心"Context 归档"（保存执行历史，按 suite_id / scenario_id /
+step_id 寻址，进程内或外部 DB），不承载任何可复用资产的存取。
 
 当前仅提供 `InMemoryArchive` 一个实现（开发/测试用）。
 生产实现可替换为 MongoArchive / PostgresArchive / S3Archive 等，
