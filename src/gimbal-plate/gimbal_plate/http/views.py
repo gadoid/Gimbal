@@ -454,7 +454,7 @@ class MetaView(BaseModel):
     version: str | None = None
     create_time: datetime | None = None
     expire: bool | None = None
-    requirement_ref: list[dict[str, Any]] = Field(default_factory=list)
+    requirement_ref: list[str] = Field(default_factory=list)
     system: list[str] = Field(default_factory=list)
 
     @classmethod
@@ -470,7 +470,7 @@ class MetaView(BaseModel):
             version=m.version,
             create_time=m.createTime,
             expire=m.expire,
-            requirement_ref=[r.model_dump(mode="json") for r in (m.requirementRef or [])],
+            requirement_ref=list(m.requirementRef or []),
             system=list(m.system or []),
         )
 
@@ -495,7 +495,7 @@ class MetaDetailView(BaseModel):
     version: str | None = None
     create_time: datetime | None = None
     expire: bool | None = None
-    requirement_ref: list[dict[str, Any]] = Field(default_factory=list)
+    requirement_ref: list[str] = Field(default_factory=list)
     system: list[str] = Field(default_factory=list)
     extra: dict[str, Any] = Field(default_factory=dict)
 
@@ -528,7 +528,7 @@ class MetaDetailView(BaseModel):
             version=m.version,
             create_time=m.createTime,
             expire=m.expire,
-            requirement_ref=[r.model_dump(mode="json") for r in (m.requirementRef or [])],
+            requirement_ref=list(m.requirementRef or []),
             system=list(m.system or []),
             extra=extra,
         )

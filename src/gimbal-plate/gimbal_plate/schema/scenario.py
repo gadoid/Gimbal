@@ -33,7 +33,7 @@ class Meta(BaseModel):
     version: str = Field(description="用例版本号")
     createTime: datetime = Field(description="创建时间")
     expire: bool = Field(description="过期标志位")
-    requirementRef: list[RefBase] = Field(description="需求,用例关联链接")
+    requirementRef: list[str] = Field(description="需求,用例关联链接")
     # V3 新增:归属被测系统标识。V3 PLATE_V3_DESIGN.md §3 要求"该系统的 Meta
     # 默认模板",必须携带 system 信息。
     # V3.2 变更为 list[str]:一条用例可同时归属多个被测系统(如"fin 与 mall

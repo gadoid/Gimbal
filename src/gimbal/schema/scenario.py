@@ -22,7 +22,7 @@ class Meta(BaseModel):
     version : str = Field(description= "用例版本号") 
     createTime : datetime = Field(description= "创建时间")
     expire : bool = Field(description= "过期标志位")
-    requirementRef : list[RefBase] = Field(description= "需求，用例关联链接")
+    requirementRef : list[str] = Field(description= "需求，用例关联链接")
 
 class Config(BaseModel):
     """ 用例执行配置模型 """
