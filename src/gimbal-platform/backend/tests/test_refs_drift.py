@@ -19,6 +19,9 @@ EP_PLATE_ONLY = "fin.order.book"  # plate 有、无场景引用
 
 async def _seed():
     async with db_module.SessionLocal() as s:
+        from .helpers import ensure_fk_users
+
+        await ensure_fk_users(s, 1, 2, make_admin=1)  # 直插 owner_id=1/2;id=1 造成可登录 admin
         await scenario_store.create(
             s,
             ScenarioDraft.model_validate(make_draft("sc-drift", steps=[
@@ -37,7 +40,9 @@ async def test_refs_drift_two_classes(client, plate):
         {"id": EP_REFFED, "version": "1.0.0", "updated_at": None},
         {"id": EP_PLATE_ONLY, "version": "1.0.0", "updated_at": None},
     ]
-    admin = await _admin(client)
+    from .helpers import FK_ADMIN_PASSWORD, login_user
+
+    admin = await login_user(client, "fkuser1", FK_ADMIN_PASSWORD)
     r = await client.get("/api/adaptations/refs-drift", headers=admin)
     assert r.status_code == 200, r.text
     body = r.json()
@@ -54,7 +59,9 @@ async def test_refs_drift_aligned(client, plate):
         {"id": EP_REFFED, "version": "1.0.0", "updated_at": None},
         {"id": EP_ANCHOR, "version": "1.0.0", "updated_at": None},
     ]
-    admin = await _admin(client)
+    from .helpers import FK_ADMIN_PASSWORD, login_user
+
+    admin = await login_user(client, "fkuser1", FK_ADMIN_PASSWORD)
     r = await client.get("/api/adaptations/refs-drift", headers=admin)
     body = r.json()
     assert body == {"dangling": [], "zeroRef": [], "plateReachable": True}
@@ -65,7 +72,9 @@ async def test_refs_drift_plate_down_flags_and_degrades(client, plate):
     dangling)— 面板先看信号再渲染,防把不可达误读成漂移(carry_drift 纪律)。"""
     await _seed()
     plate.down = True
-    admin = await _admin(client)
+    from .helpers import FK_ADMIN_PASSWORD, login_user
+
+    admin = await login_user(client, "fkuser1", FK_ADMIN_PASSWORD)
     r = await client.get("/api/adaptations/refs-drift", headers=admin)
     body = r.json()
     assert body["plateReachable"] is False

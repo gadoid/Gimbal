@@ -83,10 +83,10 @@ async def test_list_scenarios_with_filters(client: AsyncClient) -> None:
         )
     r = await client.get("/api/scenarios?system=fin", headers=headers)
     assert r.status_code == 200
-    ids = {s["meta"]["scenarioId"] for s in r.json()}
+    ids = {s["meta"]["scenarioId"] for s in r.json()["items"]}
     assert ids == {"sc-a", "sc-c"}
     r2 = await client.get("/api/scenarios?priority=0", headers=headers)
-    assert {s["meta"]["scenarioId"] for s in r2.json()} == {"sc-c"}
+    assert {s["meta"]["scenarioId"] for s in r2.json()["items"]} == {"sc-c"}
 
 
 async def test_update_scenario_owner_forbidden_403(client: AsyncClient) -> None:
@@ -394,7 +394,7 @@ async def test_member_cannot_attach_dataset_to_unowned_scenario(
         db.add(
             ComposerScenario(
                 scenario_id="sc-orphan",
-                owner="",
+                owner_name="",
                 payload={
                     "definition": {
                         "kind": "scenario",
@@ -447,7 +447,7 @@ async def test_create_dataset_admin_can_create_under_any_scenario(
 
     async with db_module.SessionLocal() as session:
         await session.execute(
-            update(User).where(User.username == "alice").values(is_admin=True)
+            update(User).where(User.username == "alice").values(role="admin")
         )
         await session.commit()
 
@@ -463,25 +463,3 @@ async def test_create_dataset_admin_can_create_under_any_scenario(
     assert r.status_code == 201
 
 
-async def test_stars_store_atomic_write_no_partial_corruption(
-    tmp_path, monkeypatch
-) -> None:
-    """A crash mid-write leaves the previous good file intact (the
-    temp file is cleaned up).  We simulate the crash by patching
-    ``os.replace`` to raise."""
-    from app.services.marks_store import stars
-
-    # Point the store at a fresh tmp dir + clear the in-memory dict.
-    stars.path = tmp_path / "stars.json"
-    stars.clear_for_tests()
-    monkeypatch.setattr(
-        "os.replace", lambda *a, **kw: (_ for _ in ()).throw(OSError("simulated crash"))
-    )
-    with pytest.raises(OSError, match="simulated crash"):
-        stars.set_mark(1, "sc-x", True)
-    # In-memory dict still updated (so the next successful write will
-    # persist both the old and new entry).
-    assert stars.has(1, "sc-x") is True
-    # No orphan temp files left in the dir.
-    leftovers = list(tmp_path.glob("*.marks.*.json.tmp"))
-    assert leftovers == []

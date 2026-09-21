@@ -1,5 +1,6 @@
 /**
- * 场景库共用小组件:SignalDots / StarToggle / PageHead / ListPager。
+ * 场景库共用小组件:SignalDots / StarToggle / PageHead。
+ * (ListPager 已升格为 ui/pagination 全站唯一分页实现,测试随迁。)
  * 三页都靠它们,行为必须钉死(尤其分页的「不满一页不渲染」和首末页禁用)。
  */
 import { describe, it, expect } from 'vitest'
@@ -7,7 +8,6 @@ import { mount } from '@vue/test-utils'
 import SignalDots from '@/components/scenario-lib/SignalDots.vue'
 import StarToggle from '@/components/scenario-lib/StarToggle.vue'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
-import ListPager from '@/components/scenario-lib/ListPager.vue'
 
 describe('SignalDots — 近 5 次趋势', () => {
   it('无执行记录整体不渲染(而不是画一排灰点)', () => {
@@ -59,34 +59,5 @@ describe('PageHead — 三页统一页头', () => {
   it('右侧 slot 落位(页头放动作按钮的口子)', () => {
     const w = mount(PageHead, { props: { icon: 'folder', title: 't' }, slots: { right: '<b class="go">act</b>' } })
     expect(w.find('.slib-head-right .go').text()).toBe('act')
-  })
-})
-
-describe('ListPager — 分页条', () => {
-  it('总数不超过一页时整体不渲染', () => {
-    expect(mount(ListPager, { props: { page: 1, total: 20, pageSize: 20 } }).find('.pager').exists()).toBe(false)
-    expect(mount(ListPager, { props: { page: 1, total: 0, pageSize: 20 } }).find('.pager').exists()).toBe(false)
-  })
-
-  it('首页禁「上一页」,末页禁「下一页」', async () => {
-    const first = mount(ListPager, { props: { page: 1, total: 45, pageSize: 20 } })
-    expect((first.find('button[aria-label="上一页"]').element as HTMLButtonElement).disabled).toBe(true)
-    expect(first.findAll('.pg-btn')).toHaveLength(2 + 3)   // 前后钮 + 3 个页码
-    await first.findAll('.pg-btn')[3]!.trigger('click')    // [0]=‹ [1..3]=页码 [4]=›
-    expect(first.emitted('update:page')?.[0]).toEqual([3])
-
-    const last = mount(ListPager, { props: { page: 3, total: 45, pageSize: 20 } })
-    expect((last.find('button[aria-label="下一页"]').element as HTMLButtonElement).disabled).toBe(true)
-    await last.find('button[aria-label="上一页"]').trigger('click')
-    expect(last.emitted('update:page')?.[0]).toEqual([2])
-  })
-
-  it('当前页高亮并带 aria-current;总数回显', () => {
-    const w = mount(ListPager, { props: { page: 2, total: 41, pageSize: 20 } })
-    const active = w.findAll('.pg-btn').filter((b) => b.classes().includes('active'))
-    expect(active).toHaveLength(1)
-    expect(active[0]!.text()).toBe('2')
-    expect(active[0]!.attributes('aria-current')).toBe('page')
-    expect(w.find('.pg-total').text()).toBe('共 41 条')
   })
 })

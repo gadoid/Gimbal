@@ -79,6 +79,43 @@ export interface Scenario {
   visibility?: 'private' | 'public'
 }
 
+// ─── M1 列表响应投影(PG迁移方案 §7 M1 / §4.1)──────────────────────
+/** 列表行形态:不含 steps/config/resource/orchestration(详情页专用)。 */
+export interface ScenarioListItem {
+  meta: Scenario['meta']
+  dataSetCount: number
+  schemeCount: number
+  stepCount: number
+  /** 声明变量数(列表「变量」列;count only,config 本体不出列表)*/
+  varCount: number
+  tags: string[]
+  starred: boolean
+  visibility: 'private' | 'public'
+}
+
+/** Page 信封(§4.1 统一列表契约):全部列表端点的统一返回形状。 */
+export interface ScenarioPage {
+  items: ScenarioListItem[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+/** ``?fields=options`` 轻量形态:选择器/名称映射专用(§4.2)。 */
+export interface ScenarioOptionsItem {
+  scenarioId: string
+  name: string
+  visibility: 'private' | 'public'
+  owner: string
+}
+
+export interface ScenarioOptionsPage {
+  items: ScenarioOptionsItem[]
+  total: number
+  page: number
+  pageSize: number
+}
+
 // ─── 数据集(Case 层已解散,数据集直接挂场景;执行环境已随 D2 退役)──
 export interface DataSetRow { [field: string]: string | number | boolean }
 

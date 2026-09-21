@@ -51,7 +51,7 @@ async def test_private_scenario_hidden_from_other_member(client: AsyncClient) ->
 
     # carol 列表看不到
     r = await client.get("/api/scenarios", headers=carol)
-    ids = {s["meta"]["scenarioId"] for s in r.json()}
+    ids = {s["meta"]["scenarioId"] for s in r.json()["items"]}
     assert "sc-test" not in ids
     # carol 详情 / draft 404(不泄露存在性)
     assert (
@@ -106,7 +106,7 @@ async def test_publish_unpublish_cycle(client: AsyncClient) -> None:
     ).status_code == 200
     # visibility 过滤参数:public 桶里有它
     r = await client.get("/api/scenarios?visibility=public", headers=carol)
-    assert "sc-test" in {s["meta"]["scenarioId"] for s in r.json()}
+    assert "sc-test" in {s["meta"]["scenarioId"] for s in r.json()["items"]}
 
     # 下架 → carol 再次 404
     r = await client.post("/api/scenarios/sc-test/unpublish", headers=bob)
@@ -169,12 +169,19 @@ async def test_delete_scenario_clears_stars(client: AsyncClient) -> None:
     )
     assert r.status_code == 204
 
-    # bob 删除 → stars 里不应残留孤儿 id
+    # bob 删除 → user_stars 不应残留孤儿行(CASCADE 接管,M6-2)
     r = await client.delete("/api/scenarios/sc-test", headers=bob)
     assert r.status_code == 204
-    from app.services.marks_store import stars
+    from sqlalchemy import select as _select
 
-    assert not any("sc-test" in ids for ids in stars._marks.values())
+    from app.core import db as _db
+    from app.models.permission import UserStar
+
+    async with _db.SessionLocal() as _s:
+        orphan = (await _s.execute(
+            _select(UserStar).where(UserStar.scenario_id == "sc-test")
+        )).scalar_one_or_none()
+    assert orphan is None
 
 
 # ── runs:stepTo(V1 能力移植)──────────────────────────────────────

@@ -12,11 +12,11 @@
     <div class="slib-toolbar">
       <input v-model="q" class="slib-search" data-testid="mine-search"
         placeholder="按名 / 模块 / 系统 / scenarioId / tag 搜索" />
-      <FilterPopover v-model="filters" :pool="filterableRows" />
+      <FilterPopover v-model="filters" :pool="filterableRows" :facets="facets" />
       <button type="button" class="slib-create" data-testid="mine-create" @click="onCreate">+ 新建场景</button>
     </div>
 
-    <div v-if="store.scenariosStatus === 'loading'" class="slib-loading">加载中…</div>
+    <div v-if="loading" class="slib-loading">加载中…</div>
 
     <div v-else-if="paged.length" class="lib-card">
       <table class="slib-table">
@@ -61,7 +61,7 @@
               <td class="c-center"><PriorityPill :priority="row.meta.priority" /></td>
               <td class="c-center"><span class="num">{{ row.dataSetCount }}</span></td>
               <td class="c-center"><span class="num">{{ row.stepCount }}</span></td>
-              <td class="c-center"><span class="num">{{ Object.keys(row.config?.vars || {}).length }}</span></td>
+              <td class="c-center"><span class="num">{{ row.varCount }}</span></td>
               <td><span class="muted">{{ formatTime(row.meta?.updateTime) }}</span></td>
               <td>
                 <div v-if="row.tags.length" class="sys-list">
@@ -117,7 +117,7 @@
       <button v-if="!filtering" type="button" class="slib-create" @click="onCreate">+ 新建场景</button>
     </div>
 
-    <ListPager v-model:page="page" :total="total" :page-size="pageSize" />
+    <Pagination v-model:page="page" :total="total" :page-size="pageSize" />
 
     <p class="slib-note">
       「次数」「并发」是卡片底部两个独立的小徽章,平时只显示当前值,点一下变成可编辑输入框直接改数字;不需要额外弹一整层面板。更深的参数还是要进方案管理去改。方案卡片左上角的「默认」标记指这个场景的默认方案——关注页的执行健康趋势只统计默认方案的执行结果,不跨方案聚合。
@@ -171,13 +171,13 @@ import { useScenarioListView } from '@/composables/useScenarioListView'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
 import StarToggle from '@/components/scenario-lib/StarToggle.vue'
 import SchemeCard from '@/components/scenario-lib/SchemeCard.vue'
-import ListPager from '@/components/scenario-lib/ListPager.vue'
+import { Pagination } from '@/components/ui/pagination'
 import FilterPopover from '@/components/FilterPopover.vue'
 import TagPill from '@/components/TagPill.vue'
 import SystemChip from '@/components/SystemChip.vue'
 import PriorityPill from '@/components/PriorityPill.vue'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import type { Scenario } from '@/types/scenario-composer'
+import type { ScenarioListItem } from '@/types/scenario-composer'
 
 const PREVIEW_MAX = 3
 const MAX = 3
@@ -186,11 +186,11 @@ const auth = useAuthStore()
 const router = useRouter()
 const runs = useScenarioRuns()
 
-// 我的场景 = 私有桶(公共场景在独立页,两页谓词互补)。搜索 / 筛选 / 分页
-// 的整套骨架在 useScenarioListView 里与公共页共用。
+// 我的场景 = 私有桶(公共场景在独立页,两页分桶互补)。检索/筛选/分页
+// 全部服务端化(Page 信封),骨架在 useScenarioListView 里与公共页共用。
 const {
-  store, q, filters, page, paged, rows, total, filtering, filterableRows, load, pageSize,
-} = useScenarioListView((r) => r.visibility !== 'public')
+  store, q, filters, page, paged, total, filtering, filterableRows, facets, load, pageSize, loading,
+} = useScenarioListView('mine')
 
 const expandedId = ref<string | null>(null)
 const schemesLoadingId = ref<string | null>(null)
@@ -208,18 +208,18 @@ const formatTime = shortDateTime
 
 onMounted(load)
 
-function openScenario(row: Scenario) {
+function openScenario(row: ScenarioListItem) {
   router.push(composerUrl(row.meta.scenarioId))
 }
 function onCreate() {
   router.push('/composer/new?step=1')
 }
-function goSchemes(row: Scenario) {
+function goSchemes(row: ScenarioListItem) {
   router.push(scenarioSchemesUrl(row.meta.scenarioId))
 }
 
 // ── 方案内联预览 ───────────────────────────────────────────────
-async function toggleExpand(row: Scenario) {
+async function toggleExpand(row: ScenarioListItem) {
   const id = row.meta.scenarioId
   if (expandedId.value === id) {
     expandedId.value = null
@@ -248,7 +248,7 @@ function overflowCount(scenarioId: string): number {
   return n > PREVIEW_MAX ? n - PREVIEW_MAX : 0
 }
 
-async function updateScheme(row: Scenario, scheme: SchemeV2, patch: { nRuns?: number; parallel?: number }) {
+async function updateScheme(row: ScenarioListItem, scheme: SchemeV2, patch: { nRuns?: number; parallel?: number }) {
   const id = row.meta.scenarioId
   try {
     const { schemeId, isDefault, ...rest } = { ...scheme, ...patch }
@@ -260,7 +260,7 @@ async function updateScheme(row: Scenario, scheme: SchemeV2, patch: { nRuns?: nu
   }
 }
 
-async function runScheme(row: Scenario, scheme: SchemeV2) {
+async function runScheme(row: ScenarioListItem, scheme: SchemeV2) {
   const id = row.meta.scenarioId
   try {
     const res = await runScenario(schemeToRunRequest(scheme, id))
@@ -273,9 +273,9 @@ async function runScheme(row: Scenario, scheme: SchemeV2) {
 }
 
 // ── 关注(20 上限)─────────────────────────────────────────────
-async function toggleStar(row: Scenario) {
+async function toggleStar(row: ScenarioListItem) {
   try {
-    await store.toggleStarWithCap(row.meta.scenarioId)
+    await store.toggleStarWithCap(row.meta.scenarioId, !row.starred)
   } catch (e) {
     // 上限是预期分支 → 一句人话;其余才走通用错误兜底
     if (e instanceof FollowCapError) toast.error(e.message)
@@ -314,7 +314,7 @@ function confirmExportPicker() {
   settleExportPicker(chosen ? (exportPicker.schemes.find((s) => s.schemeId === chosen) ?? null) : null)
 }
 
-async function exportRow(row: Scenario) {
+async function exportRow(row: ScenarioListItem) {
   try {
     const draft = await getScenarioDraft(row.meta.scenarioId)
     let schemes: SchemeV2[] = []
@@ -336,7 +336,7 @@ async function exportRow(row: Scenario) {
   }
 }
 
-async function onCmd(cmd: string, row: Scenario) {
+async function onCmd(cmd: string, row: ScenarioListItem) {
   if (cmd === 'detail') return router.push(scenarioDetailUrl(row.meta.scenarioId))
   if (cmd === 'edit') return openScenario(row)
   if (cmd === 'export') return exportRow(row)
@@ -350,6 +350,7 @@ async function onCmd(cmd: string, row: Scenario) {
     try {
       await store.publishScenario(row.meta.scenarioId)
       toast.success('已发布')
+      await load() // 当前页重拉(store 退位后不再有全量乐观 upsert)
     } catch (e) {
       showError('发布', undefined, (e as Error).message)
     }
@@ -365,6 +366,7 @@ async function onCmd(cmd: string, row: Scenario) {
     try {
       await store.unpublishScenario(row.meta.scenarioId)
       toast.success('已下架为私有')
+      await load()
     } catch (e) {
       showError('下架', undefined, (e as Error).message)
     }
@@ -380,6 +382,7 @@ async function onCmd(cmd: string, row: Scenario) {
     try {
       await store.removeScenario(row.meta.scenarioId)
       toast.success(`已删除：${row.meta.name || row.meta.scenarioId}`)
+      await load()
     } catch (e) {
       showError('删除', undefined, (e as Error).message)
     }

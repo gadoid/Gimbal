@@ -11,8 +11,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, getActivePinia, setActivePinia } from 'pinia'
 import ScenarioDetailView from '@/views/ScenarioDetailView.vue'
-import { useScenarioComposerStore } from '@/stores/scenario-composer'
 import type { Scenario } from '@/types/scenario-composer'
+import * as composerApi from '@/api/scenario-composer'
+
+vi.mock('@/api/scenario-composer', () => ({
+  getScenario: vi.fn(),
+  listDataSets: vi.fn().mockResolvedValue([]),
+}))
 
 const push = vi.fn()
 vi.mock('vue-router', async (importOriginal) => {
@@ -53,14 +58,13 @@ describe('ScenarioDetailView — 断言覆盖率徽标', () => {
   })
 
   it('覆盖口径 = 含 assertion 策略的步骤 / 总步骤;全覆盖态', async () => {
-    const store = useScenarioComposerStore()
-    store.scenarios = [scenario([
+    vi.mocked(composerApi.getScenario).mockResolvedValue(scenario([
       { name: '下单', api: { method: 'POST', path: '/o' },
         strategy: [{ kind: 'assertion', target: '$.code', operator: '==', expected: 0 }] },
       { name: '查单', api: { method: 'GET', path: '/q' },
         strategy: [{ kind: 'extract', target: 'v', expression: '$.id' },
                    { kind: 'assertion', target: '$.msg', operator: 'exists' }] },
-    ])] as never
+    ]))
     const w = await mountPage()
     const badge = w.find('[data-testid="assert-cov-badge"]')
     expect(badge.text()).toBe('断言覆盖 2/2')
@@ -69,12 +73,11 @@ describe('ScenarioDetailView — 断言覆盖率徽标', () => {
   })
 
   it('部分/零覆盖三态 + 徽标即注册表入口(可点直达)', async () => {
-    const store = useScenarioComposerStore()
-    store.scenarios = [scenario([
+    vi.mocked(composerApi.getScenario).mockResolvedValue(scenario([
       { name: '下单', api: { method: 'POST', path: '/o' },
         strategy: [{ kind: 'assertion', target: '$.code', operator: '==', expected: 0 }] },
       { name: '查单', api: { method: 'GET', path: '/q' }, strategy: [] },
-    ])] as never
+    ]))
     const w = await mountPage()
     const badge = w.find('[data-testid="assert-cov-badge"]')
     expect(badge.text()).toBe('断言覆盖 1/2')
@@ -85,9 +88,9 @@ describe('ScenarioDetailView — 断言覆盖率徽标', () => {
 
     // 零覆盖态:无 assertion 策略
     push.mockClear()
-    store.scenarios = [scenario([
+    vi.mocked(composerApi.getScenario).mockResolvedValue(scenario([
       { name: 'a', api: { method: 'GET', path: '/a' }, strategy: [] },
-    ])] as never
+    ]))
     await mountPage()
     w.unmount()
   })
@@ -100,12 +103,11 @@ describe('ScenarioDetailView — 修订小项', () => {
   })
 
   it('数据集计数可点直达方案工作台', async () => {
-    const store = useScenarioComposerStore()
-    store.scenarios = [scenario([])] as never
-    store.dataSets = [
+    vi.mocked(composerApi.getScenario).mockResolvedValue(scenario([]) as never)
+    vi.mocked(composerApi.listDataSets).mockResolvedValue([
       { datasetId: 'ds-1', scenarioId: 'sc-demo', name: '主流程', rowCount: 3, preview: [] },
       { datasetId: 'ds-2', scenarioId: 'sc-demo', name: '异常', rowCount: 1, preview: [] },
-    ] as never
+    ] as never)
     const w = await mountPage()
     const link = w.find('[data-testid="ds-count-link"]')
     expect(link.text()).toBe('2')
@@ -115,8 +117,7 @@ describe('ScenarioDetailView — 修订小项', () => {
   })
 
   it('「修改编排」已更名「编排」', async () => {
-    const store = useScenarioComposerStore()
-    store.scenarios = [scenario([])] as never
+    vi.mocked(composerApi.getScenario).mockResolvedValue(scenario([]) as never)
     const w = await mountPage()
     const btns = w.findAll('button').map((b) => b.text())
     expect(btns).toContain('编排')

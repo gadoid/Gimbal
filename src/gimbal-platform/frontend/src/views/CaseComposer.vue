@@ -964,7 +964,7 @@ async function saveDraft(advance = false, manual = true, silent = false): Promis
 async function onToggleStar() {
   if (!scenario.value) return
   try {
-    await store.toggleStar(scenario.value.meta.scenarioId)
+    await store.toggleStar(scenario.value.meta.scenarioId, !scenario.value.starred)
     scenario.value = { ...scenario.value, starred: !scenario.value.starred }
   } catch (e) {
     showError('操作', undefined, (e as Error).message)

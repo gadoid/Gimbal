@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import select
@@ -51,7 +51,13 @@ def _steps():
 
 
 async def _session():
-    return db_module.SessionLocal()
+    from .helpers import ensure_fk_users
+
+    s = db_module.SessionLocal()
+    # PG 强制 FK:本文件直插行以字面量 owner_id=1/operator_id=1 造数
+    # (SQLite 从不校验),进会话先垫 users.id=1。
+    await ensure_fk_users(s, 1)
+    return s
 
 
 async def _seed_scenario(sid: str = "sc-batch", *, with_dataset: bool = False):
@@ -73,7 +79,7 @@ async def _seed_scenario(sid: str = "sc-batch", *, with_dataset: bool = False):
 async def _seed_stamp():
     async with await _session() as s:
         s.add(CatalogVersion(endpoint_id=EP, version="1.0.0",
-                             spec_json=OLD_FULL, synced_at=datetime(2026, 1, 1)))
+                             spec_json=OLD_FULL, synced_at=datetime(2026, 1, 1, tzinfo=timezone.utc)))
         await s.commit()
 
 
@@ -202,7 +208,7 @@ async def test_open_batch_nested_remove_targets_container_ref(fresh_db, plate):
             owner="alice", owner_id=1,
         )
         s.add(CatalogVersion(endpoint_id=EP, version="1.0.0",
-                             spec_json=old_nested, synced_at=datetime(2026, 1, 1)))
+                             spec_json=old_nested, synced_at=datetime(2026, 1, 1, tzinfo=timezone.utc)))
         await s.commit()
     plate.items = [{"id": EP, "version": "1.1.0",
                     "updated_at": "2026-06-01T00:00:00Z"}]

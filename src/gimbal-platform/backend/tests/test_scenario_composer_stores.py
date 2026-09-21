@@ -391,6 +391,9 @@ async def test_scenario_copy_carries_dataset_var_unlocks(fresh_db) -> None:
             db, "sc-test",
             DataSetDraft(name="a", rows=[{"x": 1}], var_unlocks=["x"]),
         )
+        from .helpers import ensure_fk_users
+
+        await ensure_fk_users(db, 2)  # PG 强制 FK:new_owner_id=2 需垫
         copied = await scenario_store.copy_scenario(
             db, "sc-test", new_owner="bob", new_owner_id=2,
         )

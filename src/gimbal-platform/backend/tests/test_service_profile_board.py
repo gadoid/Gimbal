@@ -6,7 +6,7 @@ P1 断言面:主体三档降级的第二档、测试象限(场景/执行/适配)
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import update
@@ -50,6 +50,9 @@ async def _seed():
     """sc-a:字段引用 EP+EP2,最近执行 done;sc-b:仅锚点行引用 EP,最近执行
     failed → 唯一一条 trails;bt-1 有 pending op(未落定批次)。"""
     async with db_module.SessionLocal() as s:
+        from .helpers import ensure_fk_users
+
+        await ensure_fk_users(s, 1, 2)  # 直插 owner_id=1/2,PG 需垫 FK 用户
         await scenario_store.create(
             s,
             ScenarioDraft.model_validate(make_draft("sc-bd-a", steps=[{
@@ -75,9 +78,9 @@ async def _seed():
                              total_runs=2, passed=passed, failed=failed,
                              created_at=created, finished_at=created)
 
-        s.add(_exec("sc-bd-a", "done", created=datetime(2026, 9, 10)))
+        s.add(_exec("sc-bd-a", "done", created=datetime(2026, 9, 10, tzinfo=timezone.utc)))
         s.add(_exec("sc-bd-b", "failed", failed=1, passed=1,
-                    created=datetime(2026, 9, 12)))
+                    created=datetime(2026, 9, 12, tzinfo=timezone.utc)))
         from app.models.adaptation_batch import AdaptationBatch
         from app.models.adaptation_op import AdaptationOp
         s.add(AdaptationBatch(batch_id="bt-bd1", endpoint_id=EP,
@@ -223,6 +226,9 @@ async def test_cards_crud_promote_and_author_boundary(client, fresh_db, plate):
 async def test_root_double_insert_rejected_by_index(fresh_db):
     """partial unique index 兜底:绕过 service 直接双 root → IntegrityError。"""
     async with db_module.SessionLocal() as s:
+        from .helpers import ensure_fk_users
+
+        await ensure_fk_users(s, 1)  # PG 强制 FK:author_id=1 需垫
         s.add(BoardCard(subject_id=EP, body="a", quadrant="test",
                         is_root=True, author_id=1))
         await s.commit()

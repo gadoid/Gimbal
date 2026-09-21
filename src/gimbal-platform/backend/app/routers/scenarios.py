@@ -4,7 +4,7 @@ Path layout (per docs/PLATFORM-SCENARIO-COMPOSER-API.md §4.1–4.7):
 
 * ``POST /api/scenarios/preview-plate``  — Plate ``/convert`` preview
 * ``POST /api/scenarios``                 — create
-* ``GET  /api/scenarios?q&system&module&priority`` — list
+* ``GET  /api/scenarios?q&system&module&priority&…`` — list(Page 信封,M1)
 * ``POST /api/scenarios/{id}/star``       — toggle star
 * ``GET  /api/scenarios/{id}``            — detail
 * ``PUT  /api/scenarios/{id}``            — replace
@@ -17,9 +17,9 @@ their suffix and the static handler would never fire.
 """
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,12 +34,14 @@ from ..schemas.scenario_composer import (
     PreviewPlateResponse,
     Scenario,
     ScenarioDraft,
+    ScenarioListOut,
+    ScenarioOptionsItem,
+    ScenarioOptionsOut,
     StarIn,
 )
 from ..services import plate_client, run_dispatcher, scheme_store, scenario_store
 from ..services.auth_ref_scan import scan_auth_aliases
 from ..services.carry_injection import build_carry_context
-from ..services.marks_store import stars
 from ..services.run_materialize import materialize_run_copy
 
 
@@ -214,25 +216,250 @@ async def create_scenario(
         raise value_error_http(e, {"scenario_id_exists": 409})
 
 
+# ── 3a0) GET /signals(M5,债 12:关注页 N+1 消除)─────────────────────
+@router.get("/signals")
+async def scenario_signals(
+    user: CurrentUser,
+    db: DbSession,
+    ids: str = Query(min_length=1, max_length=2048),
+) -> dict:
+    """批量健康趋势(M5,§7 M5-2):``?ids=a,b,c``(≤20,对齐关注上限)
+    → 每场景 {trend(近5,旧→新), lastRun}。
+
+    口径与前端 useScenarioRuns.trend 逐字对齐:我的来源锁**默认方案**
+    的执行;公共原件锁自身全部(验证执行);执行池 = 调用者自己的
+    (owner 隔离,同 GET /executions)。一次 SQL 圈全集,替换关注页
+    每对象一次 listExecutions 的 N+1。
+    """
+    from sqlalchemy import select
+
+    from ..models.execution import Execution
+    from ..models.composer_run_scheme import ComposerRunScheme as RunScheme
+
+    sid_list = [x.strip() for x in ids.split(",") if x.strip()][:20]
+    if not sid_list:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="ids required",
+        )
+
+    # 场景可见性 + public 判定(follows 页的数据源,但口径仍守读侧纪律)
+    scen_rows = (await db.execute(
+        select(ComposerScenario.scenario_id, ComposerScenario.visibility,
+               ComposerScenario.owner_id)
+        .where(ComposerScenario.scenario_id.in_(sid_list))
+    )).all()
+    by_sid = {r.scenario_id: r for r in scen_rows}
+
+    # 方案面(默认方案 id + 名称 + 计数;非属主读不到方案 —— 对齐
+    # listRunSchemes 的属主隔离,public 关注对象给 0/None)
+    scheme_rows = (await db.execute(
+        select(RunScheme.scenario_id, RunScheme.scheme_id,
+               RunScheme.name, RunScheme.is_default)
+        .where(RunScheme.scenario_id.in_(sid_list))
+    )).all()
+    default_scheme: dict[str, str] = {}
+    scheme_count: dict[str, int] = {}
+    default_scheme_name: dict[str, str | None] = {}
+    for r in scheme_rows:
+        scheme_count[r.scenario_id] = scheme_count.get(r.scenario_id, 0) + 1
+        if r.is_default:
+            default_scheme[r.scenario_id] = r.scheme_id
+            default_scheme_name[r.scenario_id] = r.name
+
+    # 我的近期执行(一次圈回,按场景分组)
+    exec_rows = (await db.execute(
+        select(Execution)
+        .where(Execution.owner_id == user.id,
+               Execution.scenario_id.in_(sid_list))
+        .order_by(Execution.id.desc())
+    )).scalars().all()
+    by_sid_execs: dict[str, list[Execution]] = {}
+    for e in exec_rows:
+        by_sid_execs.setdefault(e.scenario_id, []).append(e)
+
+    def _scheme_of(e: Execution) -> str | None:
+        cfg = e.config_json or {}
+        v = cfg.get("schemeId")
+        return v if isinstance(v, str) else None
+
+    out: dict[str, dict] = {}
+    for sid in sid_list:
+        row = by_sid.get(sid)
+        if row is None:
+            out[sid] = {"trend": [], "lastRun": None}
+            continue
+        is_public = (row.visibility or "private") == "public"
+        execs = by_sid_execs.get(sid, [])
+        if not is_public:
+            lock = default_scheme.get(sid)
+            execs = [e for e in execs if lock and _scheme_of(e) == lock]
+        trend = [e.status for e in execs[:5]][::-1]
+        last = execs[0] if execs else None
+        own = row.owner_id == user.id
+        out[sid] = {
+            "trend": trend,
+            "lastRun": ({
+                "status": last.status,
+                "at": (last.finished_at or last.started_at or None),
+            } if last else None),
+            "schemeCount": scheme_count.get(sid, 0) if own else 0,
+            "defaultSchemeName": default_scheme_name.get(sid) if own else None,
+        }
+    return {"signals": out}
+
+
+# ── 3a) GET /facets(M3,§4.1)────────────────────────────────────────
+@router.get("/facets")
+async def scenario_facets(
+    user: CurrentUser,
+    db: DbSession,
+    q: str | None = None,
+    visibility: str | None = None,
+) -> dict:
+    """五维 facets:modules/systems/tags/authors/priorities 可选值+计数。
+
+    替代前端「全量拉回 FilterPopover unique」的 M1 过渡形态。PG 走
+    GROUP BY + jsonb unnest;SQLite Python 兜底(方言分派同 list)。
+    """
+    is_pg = db.bind.dialect.name == "postgresql"
+    if is_pg:
+        from ..services import scenario_query
+        out = await scenario_query.facets(
+            db, user=user, viewer_id=user.id, q=q, visibility=visibility)
+        return {
+            dim: [{"value": k, "count": n} for k, n in pairs]
+            for dim, pairs in out.items()
+        }
+
+    # SQLite 兜底:可见集全量行上 Python 聚合(本地量小)
+    rows = await scenario_store.list_rows(db)
+    visible = [
+        r for r in rows
+        if can_read_scenario(
+            user, owner_id=r.owner_id, visibility=r.visibility or "private")
+    ]
+    if visibility:
+        visible = [r for r in visible
+                   if (r.visibility or "private") == visibility]
+    if q:
+        ql = q.lower()
+
+        def _hit(r):
+            from ..services.scenario_store import _meta_from_row
+            m = _meta_from_row(r)
+            hay = [r.scenario_id or "", m.name or "", m.module or "",
+                   m.description or "", *(m.tags or [])]
+            return any(ql in (h or "").lower() for h in hay)
+
+        visible = [r for r in visible if _hit(r)]
+
+    from ..services.scenario_store import _meta_from_row
+    from collections import Counter
+    mod, sys_, tag, auth, prio = (Counter() for _ in range(5))
+    for r in visible:
+        m = _meta_from_row(r)
+        mod[m.module or ""] += 1
+        sys_.update(m.system or [])
+        tag.update(m.tags or [])
+        auth[m.author or ""] += 1
+        prio[m.priority] += 1
+    return {
+        "modules": [{"value": k, "count": n} for k, n in mod.most_common()],
+        "systems": [{"value": k, "count": n} for k, n in sys_.most_common()],
+        "tags": [{"value": k, "count": n} for k, n in tag.most_common()],
+        "authors": [{"value": k, "count": n} for k, n in auth.most_common()],
+        "priorities": [{"value": k, "count": n} for k, n in prio.most_common()],
+    }
+
+
 # ── 3) GET / (list) ────────────────────────────────────────────────
-@router.get("", response_model=list[Scenario])
+@router.get("", response_model=ScenarioListOut | ScenarioOptionsOut)
 async def list_scenarios(
     user: CurrentUser,
     db: DbSession,
     q: str | None = None,
     system: str | None = None,
     module: str | None = None,
-    priority: int | None = None,
+    priority: str | None = None,
+    tag: str | None = None,
+    author: str | None = None,
     visibility: str | None = None,
-) -> list[Scenario]:
-    """读侧收紧:admin 全量;普通用户 = public + 自己的。可选
+    updated_within: Literal["24h", "7d", "30d"] | None = None,
+    starred: bool | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    fields: Literal["options"] | None = None,
+) -> ScenarioListOut | ScenarioOptionsOut:
+    """列表(Page 信封 + M1 响应投影,PG迁移方案 §4.1/§7 M1)。
+
+    读侧收紧:admin 全量;普通用户 = public + 自己的。可选
     ``visibility=public|private`` 再过滤一层,供前端"公共 / 我的"分组
     标签使用。
 
     属主过滤直接在 store 已加载的行上做(此前为 readable_ids 再跑
-    一趟全表投影,单请求双全表扫描)。"""
+    一趟全表投影,单请求双全表扫描)。
+
+    多值筛选参数(system/module/priority/tag/author)收逗号联合字符串,
+    语义与前端 ``utils/filters.ts`` 对齐(system/tag=OR 携带,其余精确
+    命中其一);``updated_within`` 锚 DB 行 updated_at。排序服务端定死
+    ``updated_at DESC``(§4.1,不接受任意 sort)。分页在 Python 侧切片
+    ——M1 的服务端查询仍全表加载 payload,SQL 端过滤/排序是 M3 的事。
+    ``fields=options`` 返回轻量元数据形态(选择器/名称映射专用)。
+    """
+    # ── M3 方言分派(PG迁移方案 §7 M3)───────────────────────────────
+    # PG:过滤/排序/分页全 SQL(生成列承载 WHERE,债 3 消除);
+    # SQLite:Python 兜底(本地量小,正确性优先)。
+    # starred=true → 收藏集(≤20,cap 兜底)下推 SQL IN;
+    # starred=false(排除收藏)走 Python 兜底分支(量小,不值得 NOT IN 分支)
+    # M6-2:收藏源改 UserStar 表(marks_store/stars.json 退役)
+    from ..services import user_stars as user_stars_svc
+
+    user_star_ids = await user_stars_svc.star_ids(db, user.id)
+    starred_ids = sorted(user_star_ids) if starred is True else None
+    is_pg = db.bind.dialect.name == "postgresql"
+    if is_pg and starred is not False:
+        from ..services import scenario_query
+        page_rows, total = await scenario_query.list_page(
+            db, user=user, viewer_id=user.id, q=q,
+            systems=scenario_query.split_csv(system),
+            modules=scenario_query.split_csv(module),
+            priorities=scenario_query.split_ints(priority),
+            tags=scenario_query.split_csv(tag),
+            authors=scenario_query.split_csv(author),
+            cutoff=scenario_query.updated_cutoff(updated_within),
+            visibility=visibility, starred_ids=starred_ids,
+            page=page, page_size=page_size,
+        )
+        if fields == "options":
+            items = [
+                ScenarioOptionsItem(
+                    scenarioId=r.scenario_id,
+                    name=scenario_store._meta_from_row(r).name,
+                    visibility=r.visibility or "private",
+                    owner=r.owner_name or "",
+                )
+                for r in page_rows
+            ]
+            return ScenarioOptionsOut(
+                items=items, total=total, page=page, pageSize=page_size
+            )
+        ds_counts = await scenario_store.dataset_counts(db)
+        sch_counts = await scheme_store.scheme_counts(db)
+        items = [
+            scenario_store.to_list_item_shape(
+                r, starred_ids=user_star_ids,
+                data_set_count=ds_counts.get(r.scenario_id, 0),
+                scheme_count=sch_counts.get(r.scenario_id, 0),
+            )
+            for r in page_rows
+        ]
+        return ScenarioListOut(
+            items=items, total=total, page=page, pageSize=page_size)
+
     rows = await scenario_store.list_rows(
-        db, q=q, system=system, module=module, priority=priority
+        db, q=q, system=system, module=module, priority=priority,
+        tag=tag, author=author, updated_within=updated_within,
     )
     readable = [
         r for r in rows
@@ -242,15 +469,44 @@ async def list_scenarios(
     ]
     if visibility:
         readable = [r for r in readable if (r.visibility or "private") == visibility]
+    # 关注页/关注卡的服务端数据源(store 退位后前端不再持有全量可过滤,
+    # PG迁移方案 §7 M5 的 ?starred=true 端点提前随 M1 到位)。
+    if starred is not None:
+        readable = [
+            r for r in readable
+            if (r.scenario_id in user_star_ids) == starred
+        ]
+
+    total = len(readable)
+    start = (page - 1) * page_size
+    page_rows = readable[start : start + page_size]
+
+    if fields == "options":
+        items = [
+            ScenarioOptionsItem(
+                scenarioId=r.scenario_id,
+                name=scenario_store._meta_from_row(r).name,
+                visibility=r.visibility or "private",
+                owner=r.owner_name or "",
+            )
+            for r in page_rows
+        ]
+        return ScenarioOptionsOut(
+            items=items, total=total, page=page, pageSize=page_size
+        )
+
     ds_counts = await scenario_store.dataset_counts(db)
     sch_counts = await scheme_store.scheme_counts(db)
-    return [
-        await scenario_store.to_read_shape(
-            db, r, user_id=user.id, data_set_count=ds_counts.get(r.scenario_id, 0),
+    items = [
+        scenario_store.to_list_item_shape(
+            r,
+            starred_ids=user_star_ids,
+            data_set_count=ds_counts.get(r.scenario_id, 0),
             scheme_count=sch_counts.get(r.scenario_id, 0),
         )
-        for r in readable
+        for r in page_rows
     ]
+    return ScenarioListOut(items=items, total=total, page=page, pageSize=page_size)
 
 
 # ── 4) POST /{id}/star (static suffix — before /{id}) ──────────────
@@ -264,7 +520,20 @@ async def star_scenario(
     # silent no-op — and no starring other users' private scenarios).
     row = await _load_row(db, scenario_id)
     _require_reader(user, row)
-    stars.set_mark(user.id, scenario_id, body.starred)
+    from ..services.user_stars import STAR_CAP, StarCapExceeded
+    from ..services import user_stars as user_stars_svc
+
+    try:
+        await user_stars_svc.set_star(db, user.id, scenario_id, body.starred)
+    except StarCapExceeded:
+        # 关注上限 20 服务端兜底(M6-2;客户端先拦不变)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "star_cap_exceeded",
+                "message": f"关注上限 {STAR_CAP} 个:请先取消部分关注再试",
+            },
+        )
 
 
 # ── 4.1) POST /{id}/publish | /unpublish — 发布 / 下架 ─────────────
@@ -289,9 +558,27 @@ async def unpublish_scenario(
     row = await _load_row(db, scenario_id)
     _require_owner(user, row)
     try:
-        return await scenario_store.set_visibility(db, scenario_id, "private")
+        result = await scenario_store.set_visibility(db, scenario_id, "private")
     except KeyError as e:
         raise key_error_404(e)
+    # 通知接线(P1b,权限方案 §3.2):admin 下架**他人** public 场景是
+    # 全员视角下的写操作,须告知原作者(本人下架自己的不通知)。
+    if user.role == "admin" and row.owner_id is not None and row.owner_id != user.id:
+        from ..services import notifications as notify_svc
+        from ..core.timeutil import ensure_aware
+        try:
+            await notify_svc.create_notification(
+                db,
+                user_id=row.owner_id,
+                type_="scenario_unpublished",
+                title=f"你的公共场景已被下架:{scenario_id}",
+                body=f"管理员 {user.display_name or user.username} 将 "
+                     f"{scenario_id} 从公共库下架(现为私有,仅你与管理员可见)。",
+                link=f"/scenarios/{scenario_id}/detail",
+            )
+        except Exception:  # noqa: BLE001 — 通知失败不阻断下架
+            pass
+    return result
 
 
 # ── 4.2) POST /{id}/copy — 深拷贝到我的(取代 V1 公共库"复制") ─────

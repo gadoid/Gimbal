@@ -12,10 +12,10 @@
     <div class="slib-toolbar">
       <input v-model="q" class="slib-search" data-testid="pub-search"
         placeholder="按名 / 模块 / 系统 / scenarioId / tag 搜索" />
-      <FilterPopover v-model="filters" :pool="filterableRows" />
+      <FilterPopover v-model="filters" :pool="filterableRows" :facets="facets" />
     </div>
 
-    <div v-if="store.scenariosStatus === 'loading'" class="slib-loading">加载中…</div>
+    <div v-if="loading" class="slib-loading">加载中…</div>
 
     <div v-else-if="paged.length" class="lib-card">
       <table class="slib-table">
@@ -83,7 +83,7 @@
         : '暂无公共场景 — 团队共享的模板会出现在这里' }}</p>
     </div>
 
-    <ListPager v-model:page="page" :total="total" :page-size="pageSize" />
+    <Pagination v-model:page="page" :total="total" :page-size="pageSize" />
 
     <p class="slib-note">
       公共场景没有「+ 新建场景」——创建永远发生在我的场景,这里只做浏览/复用,避免两套编排入口混淆。公共场景不暴露「方案」这个概念——直接用 config 里写好的默认配置跑,没有多方案可选。要跑不同参数组合,先「复制到我的」再去方案管理拆场景。「执行」和「复制到我的」都收进「⋯」菜单里——执行只会用这个场景锁死的默认 config 跑,不能改参数,主要用途是验证公共场景里定义的步骤能不能正常跑通(尤其是适配中心提示接口有变更的时候,可以直接在这里跑一次确认),不是替代「复制到我的」之后的正式编排使用。
@@ -102,14 +102,14 @@ import { FollowCapError } from '@/composables/useFollowLayout'
 import { useScenarioListView } from '@/composables/useScenarioListView'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
 import StarToggle from '@/components/scenario-lib/StarToggle.vue'
-import ListPager from '@/components/scenario-lib/ListPager.vue'
+import { Pagination } from '@/components/ui/pagination'
 import FilterPopover from '@/components/FilterPopover.vue'
 import TagPill from '@/components/TagPill.vue'
 import SystemChip from '@/components/SystemChip.vue'
 import PriorityPill from '@/components/PriorityPill.vue'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { scenarioDetailUrl } from '@/utils/links'
-import type { Scenario } from '@/types/scenario-composer'
+import type { ScenarioListItem } from '@/types/scenario-composer'
 
 const MAX = 3
 
@@ -117,8 +117,8 @@ const router = useRouter()
 
 // 公共场景 = public 桶(与我的场景互补);骨架与我的场景共用一套。
 const {
-  store, q, filters, page, paged, total, filtering, filterableRows, load, pageSize,
-} = useScenarioListView((r) => r.visibility === 'public')
+  store, q, filters, page, paged, total, filtering, filterableRows, facets, load, pageSize, loading,
+} = useScenarioListView('public')
 
 const formatTime = shortDateTime
 
@@ -126,13 +126,13 @@ onMounted(load)
 
 /** 公共场景定义只读,但详情是可读的 —— 之前这里没有任何入口,想看步骤
  *  只能先「复制到我的」造一份副本,等于逼用户复制才能阅读。 */
-function openDetail(row: Scenario) {
+function openDetail(row: ScenarioListItem) {
   router.push(scenarioDetailUrl(row.meta.scenarioId))
 }
 
 /** 验证执行:用场景锁死的默认 config 跑一次(其数据集全集,不改参数、
  *  不套方案 → 执行记录无 schemeId,即关注页公共原件的健康趋势来源)。 */
-async function runPublic(row: Scenario) {
+async function runPublic(row: ScenarioListItem) {
   const id = row.meta.scenarioId
   try {
     const sets = await listDataSets({ scenarioId: id })
@@ -146,7 +146,7 @@ async function runPublic(row: Scenario) {
   }
 }
 
-async function copyToMine(row: Scenario) {
+async function copyToMine(row: ScenarioListItem) {
   try {
     const saved = await store.copyScenario(row.meta.scenarioId)
     toast.success(`已复制到我的场景：${saved.meta.name || saved.meta.scenarioId}`)
@@ -155,9 +155,9 @@ async function copyToMine(row: Scenario) {
   }
 }
 
-async function toggleStar(row: Scenario) {
+async function toggleStar(row: ScenarioListItem) {
   try {
-    await store.toggleStarWithCap(row.meta.scenarioId)
+    await store.toggleStarWithCap(row.meta.scenarioId, !row.starred)
   } catch (e) {
     if (e instanceof FollowCapError) toast.error(e.message)
     else showError('关注', undefined, (e as Error).message)

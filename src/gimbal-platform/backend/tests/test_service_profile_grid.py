@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core import db as db_module
 from app.models.adaptation_batch import AdaptationBatch
@@ -43,6 +43,9 @@ def _install_plate(plate):
 
 async def _seed():
     async with db_module.SessionLocal() as s:
+        from .helpers import ensure_fk_users
+
+        await ensure_fk_users(s, 1, 2)  # 直插 owner_id=1/2,PG 需垫 FK 用户
         await scenario_store.create(
             s,
             ScenarioDraft.model_validate(make_draft("sc-grid-a", steps=[{
@@ -78,11 +81,11 @@ async def _seed():
 
         # sc-grid-a:done(09-10)→ running(09-15,进行中按上一次完成态=pass)
         s.add(_exec("sc-grid-a", "done",
-                    created=datetime(2026, 9, 10), finished=datetime(2026, 9, 10)))
-        s.add(_exec("sc-grid-a", "running", created=datetime(2026, 9, 15)))
+                    created=datetime(2026, 9, 10, tzinfo=timezone.utc), finished=datetime(2026, 9, 10, tzinfo=timezone.utc)))
+        s.add(_exec("sc-grid-a", "running", created=datetime(2026, 9, 15, tzinfo=timezone.utc)))
         # sc-grid-b:failed(09-12)
         s.add(_exec("sc-grid-b", "failed", failed=1, passed=1,
-                    created=datetime(2026, 9, 12), finished=datetime(2026, 9, 12)))
+                    created=datetime(2026, 9, 12, tzinfo=timezone.utc), finished=datetime(2026, 9, 12, tzinfo=timezone.utc)))
 
         # 告警:EP_FULL 批次下 pending op;EP_ANCHOR 批次下 applied op(不计)
         s.add(AdaptationBatch(batch_id="bt-g1", endpoint_id=EP_FULL,

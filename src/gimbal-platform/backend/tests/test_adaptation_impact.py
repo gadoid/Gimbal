@@ -21,6 +21,9 @@ def _steps():
 async def _seed():
     """1 场景(2 字段引用:amount 模板 / fixed 直填)+ 2 数据集(一含 amount 列一不含)。"""
     async with db_module.SessionLocal() as s:
+        from .helpers import ensure_fk_users
+
+        await ensure_fk_users(s, 1, 2)  # 直插 owner_id=1/2,PG 需垫 FK 用户
         scenario = await scenario_store.create(
             s,
             ScenarioDraft.model_validate(
@@ -67,6 +70,9 @@ async def test_impact_field_filter_and_unknown(fresh_db):
 async def test_impact_var_default_path_when_no_dataset_has_column(fresh_db):
     """via_var 有引用但没有任何数据集行含该键 → 变量默认值通路条目(datasetId=None)。"""
     async with db_module.SessionLocal() as s:
+        from .helpers import ensure_fk_users
+
+        await ensure_fk_users(s, 1)  # PG 强制 FK:owner_id=1 需垫
         await scenario_store.create(
             s,
             ScenarioDraft.model_validate(
@@ -90,6 +96,9 @@ async def test_impact_anchor_step_with_all_empty_fields(fresh_db):
     原 O(全部场景) 兜底直扫的产出同形(直扫已删);字段过滤天然排除
     锚点行(field_name=''≠filter),与旧「带 field 不兜底」一致。"""
     async with db_module.SessionLocal() as s:
+        from .helpers import ensure_fk_users
+
+        await ensure_fk_users(s, 1)  # PG 强制 FK:owner_id=1 需垫
         await scenario_store.create(
             s,
             ScenarioDraft.model_validate(

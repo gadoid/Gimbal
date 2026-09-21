@@ -8,20 +8,84 @@
 import http from '@/api/http'
 import { sanitizeEndpointFull } from '@/utils/declarations'
 import type {
-  Scenario, DataSet, DataSetSummary,
-  ScenarioDraft, DataSetDraft,
+  Scenario, ScenarioOptionsPage, ScenarioPage,
+  ScenarioDraft, DataSet, DataSetDraft, DataSetSummary,
 } from '@/types/scenario-composer'
 import type {
   EndpointFullView, StrategyKindView, StrategyKindDetailView,
 } from '@/types/plate'
 
 // ── scenarios ────────────────────────────────────────────────
-export async function listScenarios(params: {
-  q?: string; system?: string; module?: string; priority?: number;
-  /** P1 读侧收紧后的分桶过滤:public=仅公共;private=仅私有(自己的) */
-  visibility?: 'public' | 'private';
-}): Promise<Scenario[]> {
-  const { data } = await http.get<Scenario[]>('/scenarios', { params })
+/** 列表筛选参数(M1 服务端化):多值维度收逗号联合字符串(与后端口径
+ *  一致:system/tag=OR 携带,module/author/priority=精确命中其一)。 */
+export interface ScenarioListParams {
+  q?: string
+  system?: string
+  module?: string
+  priority?: string
+  tag?: string
+  author?: string
+  visibility?: 'public' | 'private'
+  updatedWithin?: '24h' | '7d' | '30d'
+  /** 关注页/关注卡数据源(store 退位后 ?starred=true 服务端过滤)。 */
+  starred?: boolean
+  page?: number
+  page_size?: number
+}
+
+export async function listScenarios(
+  params: ScenarioListParams,
+): Promise<ScenarioPage> {
+  const { data } = await http.get<ScenarioPage>('/scenarios', { params })
+  return data
+}
+
+// ── facets(五维可选值+计数,M3)─────────────────────────────────
+/** priorities 的 value 是数字,其余维度是字符串。 */
+export type ScenarioFacetValue = { value: string | number; count: number }
+export interface ScenarioFacets {
+  modules: ScenarioFacetValue[]
+  systems: ScenarioFacetValue[]
+  tags: ScenarioFacetValue[]
+  authors: ScenarioFacetValue[]
+  priorities: ScenarioFacetValue[]
+}
+
+/** M5 bulk 信号(债 12):关注页每对象 2 请求的 N+1 消除。 */
+export interface ScenarioSignal {
+  trend: string[]
+  lastRun: { status: string; at: string | null } | null
+  schemeCount: number
+  defaultSchemeName: string | null
+}
+
+export async function fetchScenarioSignals(ids: string[]): Promise<
+  Record<string, ScenarioSignal>
+> {
+  const { data } = await http.get<{ signals: Record<string, ScenarioSignal> }>(
+    '/scenarios/signals', { params: { ids: ids.join(',') } })
+  return data.signals
+}
+
+/** GET /scenarios/facets — FilterPopover 维度可选值的服务端数据源
+ *  (GROUP BY 聚合,替代「当前页 uniq 池」的 M1 过渡形态)。 */
+export async function fetchScenarioFacets(params: {
+  q?: string
+  visibility?: 'public' | 'private'
+}): Promise<ScenarioFacets> {
+  const { data } = await http.get<ScenarioFacets>('/scenarios/facets', { params })
+  return data
+}
+
+/** ``?fields=options`` 轻量形态:选择器与名称映射(Runner picker /
+ *  OpConstructDialog / 台账场景名),砍掉「为拿名字拉全量场景表」。 */
+export async function listScenarioOptions(params?: {
+  page?: number
+  page_size?: number
+}): Promise<ScenarioOptionsPage> {
+  const { data } = await http.get<ScenarioOptionsPage>('/scenarios', {
+    params: { ...(params ?? {}), fields: 'options' },
+  })
   return data
 }
 

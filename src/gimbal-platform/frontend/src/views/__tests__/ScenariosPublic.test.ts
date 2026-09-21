@@ -14,7 +14,8 @@ import { toastState } from '@/utils/toast'
 import type { Scenario } from '@/types/scenario-composer'
 
 vi.mock('@/api/scenario-composer', () => ({
-  listScenarios: vi.fn().mockResolvedValue([]),
+  listScenarios: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }),
+  fetchScenarioFacets: vi.fn().mockResolvedValue({ modules: [], systems: [], tags: [], authors: [], priorities: [] }),
   listDataSets: vi.fn().mockResolvedValue([{ datasetId: 'd1' }, { datasetId: 'd2' }]),
   runScenario: vi.fn().mockResolvedValue({ runId: 'r-1' }),
   copyScenario: vi.fn(),
@@ -35,7 +36,13 @@ function scen(id: string, vis: 'private' | 'public'): Scenario {
 let router: Router
 
 function mountPage(scenarios: Scenario[]): VueWrapper {
-  vi.mocked(composerApi.listScenarios).mockResolvedValue(scenarios)
+  // 服务端分桶:mock 尊重 visibility 参数(页面不再做客户端桶过滤)。
+  vi.mocked(composerApi.listScenarios).mockImplementation(async (params) => {
+    const items = params?.visibility
+      ? scenarios.filter((s) => s.visibility === params.visibility)
+      : scenarios
+    return { items, total: items.length, page: params?.page ?? 1, pageSize: params?.page_size ?? 20 } as never
+  })
   router = createRouter({
     history: createMemoryHistory(),
     routes: [

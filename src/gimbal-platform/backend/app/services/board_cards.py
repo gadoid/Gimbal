@@ -11,6 +11,7 @@ from __future__ import annotations
 from sqlalchemy import case, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.timeutil import iso_naive_utc
 from ..models.board_card import QUADRANTS, BoardCard
 
 
@@ -25,8 +26,8 @@ def card_out(card: BoardCard) -> dict:
         "isRoot": card.is_root, "quadrant": card.quadrant,
         "annotatesNodeId": card.annotates_node_id,
         "authorId": card.author_id,
-        "createdAt": card.created_at.isoformat() if card.created_at else None,
-        "updatedAt": card.updated_at.isoformat() if card.updated_at else None,
+        "createdAt": iso_naive_utc(card.created_at),
+        "updatedAt": iso_naive_utc(card.updated_at),
     }
 
 
@@ -34,13 +35,14 @@ async def _get_owned(db: AsyncSession, card_id: int, user_id: int) -> BoardCard:
     card = await db.get(BoardCard, card_id)
     if card is None:
         raise KeyError(f"card_not_found: {card_id}")
-    if card.author_id != user_id:
+    if card.author_id is None or card.author_id != user_id:
+        # author_id NULL = 作者已注销 → 转只读(admin 接管旁路随 P2)
         raise CardForbidden(f"not_card_author: {card_id}")
     return card
 
 
 async def create_card(
-    db: AsyncSession, *, user_id: int, subject_id: str, body: str,
+    db: AsyncSession, *, user_id: int, author_name: str, subject_id: str, body: str,
     quadrant: str, annotates_node_id: str | None = None,
 ) -> dict:
     if quadrant not in QUADRANTS:
@@ -49,6 +51,8 @@ async def create_card(
         subject_kind="endpoint", subject_id=subject_id, body=body,
         quadrant=quadrant, annotates_node_id=annotates_node_id,
         author_id=user_id,
+        # 姓名快照(M2):作者注销后卡片转只读、展示「已注销」(§2.1)
+        author_name=author_name,
     )
     db.add(card)
     await db.commit()

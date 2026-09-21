@@ -129,7 +129,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { toast } from '@/utils/toast'
 import * as api from '@/api/adaptations'
 import type { MergeSeed, OpOut } from '@/api/adaptations'
-import { getScenario, listDataSets, listScenarios } from '@/api/scenario-composer'
+import { getScenario, listDataSets, listScenarioOptions } from '@/api/scenario-composer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -223,8 +223,8 @@ async function onOpen(): Promise<void> {
   resetForm()
   if (scenarios.value.length === 0) {
     try {
-      const list = await listScenarios({})
-      scenarios.value = list.map((s) => ({ scenarioId: s.meta.scenarioId }))
+      const env = await listScenarioOptions({ page_size: 100 })
+      scenarios.value = env.items.map((s) => ({ scenarioId: s.scenarioId }))
     } catch {
       scenarios.value = []
     }

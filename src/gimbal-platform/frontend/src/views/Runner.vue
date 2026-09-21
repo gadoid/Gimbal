@@ -52,17 +52,17 @@
             <div v-if="filteredPicker.length === 0" class="picker-empty">
               {{ pickerList.length ? '没有匹配的场景' : '无可发起场景(发起要过属主闸)' }}
             </div>
-            <div v-for="s in filteredPicker" :key="s.meta.scenarioId" class="picker-row"
-              :data-testid="`runner-add-${s.meta.scenarioId}`">
-              <span class="picker-name">{{ s.meta.name || s.meta.scenarioId }}</span>
+            <div v-for="s in filteredPicker" :key="s.scenarioId" class="picker-row"
+              :data-testid="`runner-add-${s.scenarioId}`">
+              <span class="picker-name">{{ s.name || s.scenarioId }}</span>
               <span class="picker-tag" :class="s.visibility === 'public' ? 'is-public' : 'is-private'">
                 {{ s.visibility === 'public' ? '公共' : '私有' }}
               </span>
-              <span class="picker-sid mono">{{ s.meta.scenarioId }}</span>
+              <span class="picker-sid mono">{{ s.scenarioId }}</span>
               <span class="zone-spacer"></span>
-              <button v-if="inQueue(s.meta.scenarioId)" class="picker-add is-in" disabled>✓ 在队列里</button>
-              <button v-else class="picker-add" :data-testid="`runner-add-btn-${s.meta.scenarioId}`"
-                @click="addToQueue(s.meta.scenarioId)">＋ 加入</button>
+              <button v-if="inQueue(s.scenarioId)" class="picker-add is-in" disabled>✓ 在队列里</button>
+              <button v-else class="picker-add" :data-testid="`runner-add-btn-${s.scenarioId}`"
+                @click="addToQueue(s.scenarioId)">＋ 加入</button>
             </div>
           </div>
           <p class="picker-foot">
@@ -234,9 +234,9 @@ import { Button } from '@/components/ui/button'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import { useAuthStore } from '@/stores/auth'
-import { listScenarios, listRunSchemes, precheckRun, runScenario } from '@/api/scenario-composer'
+import { listScenarioOptions, listRunSchemes, precheckRun, runScenario } from '@/api/scenario-composer'
 import type { PrecheckResult, SchemeV2, DataSetSelection } from '@/api/scenario-composer'
-import type { Scenario } from '@/types/scenario-composer'
+import type { ScenarioOptionsItem } from '@/types/scenario-composer'
 import { useRunAssembly, type RunConfirmOpts } from '@/composables/useRunAssembly'
 import { composerUrl, executionsBatchUrl, scenarioSchemesUrl } from '@/utils/links'
 
@@ -256,7 +256,8 @@ interface QueueItem {
 }
 
 // ── 场景库面板(只列能跑的)──────────────────────────────────────
-const pickerList = ref<Scenario[]>([])
+/** options 轻量形态(§4.2):picker 只要 id/name/visibility。 */
+const pickerList = ref<ScenarioOptionsItem[]>([])
 const pickerOpen = ref(false)
 const pickerQuery = ref('')
 const picking = ref(false)
@@ -265,13 +266,14 @@ const filteredPicker = computed(() => {
   const q = pickerQuery.value.trim().toLowerCase()
   if (!q) return pickerList.value
   return pickerList.value.filter((s) =>
-    (s.meta.name || '').toLowerCase().includes(q)
-    || s.meta.scenarioId.toLowerCase().includes(q))
+    (s.name || '').toLowerCase().includes(q)
+    || s.scenarioId.toLowerCase().includes(q))
 })
 
 onMounted(async () => {
   try {
-    const all = await listScenarios({})
+    const env = await listScenarioOptions({ page_size: 100 })
+    const all = env.items
     // 发起要过属主闸(runs 路由 ensure_owner):member 只列私有(=自己的,
     // 场景库 mine 页同口径);admin 全列。
     pickerList.value = auth.isAdmin
@@ -296,11 +298,11 @@ async function addToQueue(sid: string) {
   if (picking.value) return
   picking.value = true
   try {
-    const meta = pickerList.value.find((s) => s.meta.scenarioId === sid)
+    const meta = pickerList.value.find((s) => s.scenarioId === sid)
     const schemes = await listRunSchemes(sid)
     const item: QueueItem = {
       scenarioId: sid,
-      name: meta?.meta.name || sid,
+      name: meta?.name || sid,
       schemes,
       schemeId: schemes.find((s) => s.isDefault)?.schemeId ?? schemes[0]?.schemeId ?? '',
       precheck: null,

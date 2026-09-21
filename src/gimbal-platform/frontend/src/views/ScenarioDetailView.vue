@@ -166,11 +166,13 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
+import { getScenario } from '@/api/scenario-composer'
 import { showError } from '@/utils/errorFallback'
 import { composerUrl, scenarioSchemesUrl, scenarioAssertionsUrl } from '@/utils/links'
 import { relTime } from '@/utils/datetime'
 import { valueJson } from '@/utils/value-display'
 import type { ExtractView, AssignView, AssertionView } from '@/types/plate'
+import type { Scenario } from '@/types/scenario-composer'
 
 const route = useRoute()
 const router = useRouter()
@@ -179,7 +181,10 @@ const scenarioId = route.params.scenarioId as string
 
 const loading = ref(false)
 
-const scenario = computed(() => store.scenarioById(scenarioId))
+// 详情按 id 直拉单条(store 退位:不再有全量列表可 scenarioById,
+// 也不再有「store 空就全量 fetch」的兜底 —— PG迁移方案 §4.3)。
+const scenarioRef = ref<Scenario | null>(null)
+const scenario = computed(() => scenarioRef.value)
 const dataSets = computed(() => store.dataSetsOfScenario(scenarioId))
 const totalRows = computed(() => dataSets.value.reduce((s, d) => s + d.rowCount, 0))
 const steps = computed(() => (scenario.value?.steps ?? []) as unknown[])
@@ -331,8 +336,11 @@ function goRun() {
 onMounted(async () => {
   loading.value = true
   try {
-    if (!store.scenarios.length) await store.fetchScenarios()
-    await store.fetchDataSets(scenarioId)
+    const [s] = await Promise.all([
+      getScenario(scenarioId),
+      store.fetchDataSets(scenarioId),
+    ])
+    scenarioRef.value = s
   } catch (e) {
     showError('加载场景详情', undefined, (e as Error).message)
   } finally {

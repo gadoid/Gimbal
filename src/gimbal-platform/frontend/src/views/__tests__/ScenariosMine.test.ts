@@ -17,7 +17,8 @@ vi.mock('@/api/scenario-composer', () => {
     serviceBindings: {}, stepTo: null, nRuns: 1, parallel: 1,
   })
   return {
-    listScenarios: vi.fn().mockResolvedValue([]),
+    listScenarios: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }),
+    fetchScenarioFacets: vi.fn().mockResolvedValue({ modules: [], systems: [], tags: [], authors: [], priorities: [] }),
     listRunSchemes: vi.fn().mockResolvedValue([
       sch('s1', '标准回归', true), sch('s2', '边界值压测', false), sch('s3', '大促压测', false),
       sch('s4', '夜间巡检', false), sch('s5', '冒烟', false),
@@ -33,11 +34,11 @@ vi.mock('@/api/scenario-composer', () => {
 
 vi.mock('@/api/executions', () => ({
   listExecutions: vi.fn().mockResolvedValue({
-    total: 3,
+    total: 3, page: 1, pageSize: 200,
     items: [
-      { id: 5, scenario_id: 'sc-a', status: 'done', total_runs: 1, passed: 1, failed: 0, started_at: '2026-09-18T09:00:00', finished_at: '2026-09-18T10:00:00', has_scenario_snapshot: true, config: { schemeId: 's1' } },
-      { id: 4, scenario_id: 'sc-a', status: 'done', total_runs: 1, passed: 1, failed: 0, started_at: '2026-09-17T09:00:00', finished_at: '2026-09-17T10:00:00', has_scenario_snapshot: true, config: { schemeId: 's3' } },
-      { id: 3, scenario_id: 'sc-a', status: 'failed', total_runs: 1, passed: 0, failed: 1, started_at: '2026-09-16T09:00:00', finished_at: '2026-09-16T10:00:00', has_scenario_snapshot: true, config: { schemeId: 's2' } },
+      { id: 5, scenario_id: 'sc-a', status: 'done', total_runs: 1, passed: 1, failed: 0, started_at: '2026-09-18T09:00:00', finished_at: '2026-09-18T10:00:00', has_scenario_snapshot: true, configSummary: { schemeId: 's1' } },
+      { id: 4, scenario_id: 'sc-a', status: 'done', total_runs: 1, passed: 1, failed: 0, started_at: '2026-09-17T09:00:00', finished_at: '2026-09-17T10:00:00', has_scenario_snapshot: true, configSummary: { schemeId: 's3' } },
+      { id: 3, scenario_id: 'sc-a', status: 'failed', total_runs: 1, passed: 0, failed: 1, started_at: '2026-09-16T09:00:00', finished_at: '2026-09-16T10:00:00', has_scenario_snapshot: true, configSummary: { schemeId: 's2' } },
     ],
   }),
 }))
@@ -54,7 +55,13 @@ function scen(id: string, vis: 'private' | 'public', schemeCount: number): Scena
 }
 
 function mountPage(scenarios: Scenario[] = []) {
-  vi.mocked(composerApi.listScenarios).mockResolvedValue(scenarios)
+  // 服务端分桶:mock 尊重 visibility 参数(页面不再做客户端桶过滤)。
+  vi.mocked(composerApi.listScenarios).mockImplementation(async (params) => {
+    const items = params?.visibility
+      ? scenarios.filter((s) => s.visibility === params.visibility)
+      : scenarios
+    return { items, total: items.length, page: params?.page ?? 1, pageSize: params?.page_size ?? 20 } as never
+  })
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [

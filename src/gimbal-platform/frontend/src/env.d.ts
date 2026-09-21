@@ -15,6 +15,8 @@ declare module 'vue-router' {
   interface RouteMeta {
     requiresAuth?: boolean
     requiresAdmin?: boolean
+    /** M2.5:角色白名单(含 requiresAdmin 的泛化形态) */
+    requiresRoles?: string[]
     /** chrome 形态:'full' = 侧边栏(默认);'collapsed' = 收拢顶条 + 面包屑(编辑流页)。 */
     chromeMode?: 'full' | 'collapsed'
   }
