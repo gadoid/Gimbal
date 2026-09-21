@@ -90,6 +90,12 @@ const routes = [
     meta: { requiresAuth: true, requiresAdmin: true },
   },
   {
+    // 个人设置(P2-1):全员
+    path: '/profile',
+    component: () => import('@/views/Profile.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/auths',
     component: () => import('@/views/Auths.vue'),
     meta: { requiresAuth: true },
@@ -159,7 +165,8 @@ const routes = [
     // 服务信息管理(方案 §4;P1 唯一净新增页面)— 配置池,admin 写面
     path: '/service-admin',
     component: () => import('@/views/ServiceAdmin.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true },
+    // 权限方案 §1.2:服务信息管理 = operator+(共享别名行);旧 requiresAdmin 误标修正
+    meta: { requiresAuth: true, requiresRoles: ['operator', 'admin'] },
   },
   {
     // 键详情(配套方案 §2.2):别名全名或 base 服务名同一详情页,
@@ -181,7 +188,10 @@ router.beforeEach((to) => {
   if (to.meta.requiresAuth && !auth.accessToken) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
-  if (to.meta.requiresAdmin && !auth.isAdmin) {
+  // M2.5:requiresAdmin 泛化为 requiresRoles(旧 meta 继续有效 = ['admin'])
+  const needRoles: string[] = to.meta.requiresRoles
+    ?? (to.meta.requiresAdmin ? ['admin'] : [])
+  if (needRoles.length && !auth.hasRole(...(needRoles as never[]))) {
     // Backend enforces admin-only on these endpoints too; this is the
     // UX-side guard so members never land on a page that 403s.
     return { path: '/home' }
