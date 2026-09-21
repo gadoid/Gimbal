@@ -140,8 +140,8 @@ async def test_preview_plate_without_overlay_materializes_carry(
         {"path": "$.appCode", "state": "carry", "type": "string"}]}}}
     async with db_module.SessionLocal() as db:
         await carry_store.put_bindings(
-            db, "fin-service", {"$.remark": "压测-张三"}, "bob")
-        await carry_store.put_defaults(db, {"$.appCode": "TRACE-V2"}, "bob")
+            db, "fin-service", {"$.remark": "压测-张三"}, updated_by_id=None, updated_by_name="bob")
+        await carry_store.put_defaults(db, {"$.appCode": "TRACE-V2"}, updated_by_id=None, updated_by_name="bob")
         await db.commit()
 
     bob = await _member(client, "bob")
@@ -237,8 +237,8 @@ async def test_golden_equivalence_with_carry(
         {"path": "$.appCode", "state": "carry", "type": "string"}]}}}
     async with db_module.SessionLocal() as db:
         await carry_store.put_bindings(
-            db, "fin-service", {"$.remark": "压测-张三"}, "bob")
-        await carry_store.put_defaults(db, {"$.appCode": "TRACE-V2"}, "bob")
+            db, "fin-service", {"$.remark": "压测-张三"}, updated_by_id=None, updated_by_name="bob")
+        await carry_store.put_defaults(db, {"$.appCode": "TRACE-V2"}, updated_by_id=None, updated_by_name="bob")
         await db.commit()
 
     bob = await _member(client, "bob")

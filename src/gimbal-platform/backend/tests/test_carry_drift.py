@@ -12,7 +12,8 @@ async def _seed():
         # fin-service:$.old 绑了但 plate 面已无(orphaned);
         # $.new 面上有但没绑(uncovered);$.remark 面上有且有绑(对齐)
         await carry_store.put_bindings(
-            db, "fin-service", {"$.old": "x", "$.remark": "r"}, "alice")
+            db, "fin-service", {"$.old": "x", "$.remark": "r"},
+            updated_by_id=None, updated_by_name="alice")
         await db.commit()
 
 
@@ -53,7 +54,7 @@ async def test_drift_plate_down_flags_and_degrades(client, plate):
     (绑定全成 orphaned)— 面板先看信号再渲染,防不可达被误读成漂移。"""
     async with db_module.SessionLocal() as db:
         await carry_store.put_bindings(
-            db, "fin-service", {"$.old": "x"}, "alice")
+            db, "fin-service", {"$.old": "x"}, updated_by_id=None, updated_by_name="alice")
         await db.commit()
     plate.down = True
     admin = await _admin(client)
@@ -73,9 +74,10 @@ async def test_drift_alias_key_diffed_against_base_face(client, plate):
     async with db_module.SessionLocal() as db:
         # base 行:$.ok 对齐;别名行:$.ok 覆盖(对齐)+ $.gone 已无面
         await carry_store.put_bindings(
-            db, "fin-service", {"$.ok": "b"}, "alice")
+            db, "fin-service", {"$.ok": "b"}, updated_by_id=None, updated_by_name="alice")
         await carry_store.put_bindings(
-            db, "fin-service-测试", {"$.ok": "a", "$.gone": "g"}, "alice")
+            db, "fin-service-测试", {"$.ok": "a", "$.gone": "g"},
+            updated_by_id=None, updated_by_name="alice")
         await db.commit()
     plate.items = [{"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
                     "service": "fin-service"}]
@@ -99,7 +101,8 @@ async def test_drift_no_rename_suggestion_when_multiple_candidates(client, plate
     """2 orphaned × 2 uncovered → 不猜配对(多候选负分支)。"""
     async with db_module.SessionLocal() as db:
         await carry_store.put_bindings(
-            db, "fin-service", {"$.old": "x", "$.old2": "y"}, "alice")
+            db, "fin-service", {"$.old": "x", "$.old2": "y"},
+            updated_by_id=None, updated_by_name="alice")
         await db.commit()
     plate.items = [{"id": "fin.ep1", "version": "1.0.0", "updated_at": None,
                     "service": "fin-service"}]

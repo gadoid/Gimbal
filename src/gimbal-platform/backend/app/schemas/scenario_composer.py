@@ -378,6 +378,63 @@ class Scenario(BaseModel):
     visibility: str = Field(default="private")
 
 
+# ─── M1 列表响应投影(PG迁移方案 §7 M1 / §4.1)────────────────────────
+class ScenarioListItem(BaseModel):
+    """列表行形态 — 响应投影:不含 steps/config/resource/orchestration
+    (payload 重的字段),列表页只消费 meta 摘要 + 计数 + starred。
+
+    服务端查询仍是全表加载 payload + Python 过滤(M1 不假装拿到 SQL 端
+    过滤——那是 M3 生成列上线后的事);本形态砍的是**响应体**,不是查询。
+    """
+
+    model_config = _CAMEL
+
+    meta: ScenarioMeta
+    data_set_count: int = Field(default=0, ge=0, alias="dataSetCount")
+    scheme_count: int = Field(default=0, ge=0, alias="schemeCount")
+    step_count: int = Field(default=0, ge=0, alias="stepCount")
+    # 声明变量数(列表「变量」列;count only,config 本体不出列表)
+    var_count: int = Field(default=0, ge=0, alias="varCount")
+    tags: list[str] = Field(default_factory=list)
+    starred: bool = False
+    visibility: str = Field(default="private")
+
+
+class ScenarioOptionsItem(BaseModel):
+    """``?fields=options`` 轻量元数据形态(§4.2)——选择器与名称映射专用,
+    砍掉四处「为拿名字拉全量场景表」。可见性口径与列表一致(member =
+    自己 + public / admin = 全量,由路由层保证)。"""
+
+    model_config = _CAMEL
+
+    scenario_id: str = Field(alias="scenarioId")
+    name: str
+    visibility: str = Field(default="private")
+    owner: str = Field(default="")
+
+
+class ScenarioListOut(BaseModel):
+    """Page 信封(§4.1 统一列表契约):{items, total, page, pageSize}。"""
+
+    model_config = _CAMEL
+
+    items: list[ScenarioListItem]
+    total: int
+    page: int
+    page_size: int = Field(alias="pageSize")
+
+
+class ScenarioOptionsOut(BaseModel):
+    """options 形态共用同一 Page 信封(§4.1)。"""
+
+    model_config = _CAMEL
+
+    items: list[ScenarioOptionsItem]
+    total: int
+    page: int
+    page_size: int = Field(alias="pageSize")
+
+
 __all__ = [
     "DataSet",
     "DataSetDraft",
@@ -393,7 +450,11 @@ __all__ = [
     "RunScheme",
     "Scenario",
     "ScenarioDraft",
+    "ScenarioListItem",
+    "ScenarioListOut",
     "ScenarioMeta",
+    "ScenarioOptionsItem",
+    "ScenarioOptionsOut",
     "ServiceBinding",
     "StarIn",
     "StepOrchestration",

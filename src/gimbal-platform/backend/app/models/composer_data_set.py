@@ -9,10 +9,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
+from ._types import JsonVar
 
 
 class ComposerDataSet(Base):
@@ -24,21 +25,23 @@ class ComposerDataSet(Base):
     dataset_id: Mapped[str] = mapped_column(
         String(128), unique=True, index=True
     )  # matches DataSet.datasetId
+    # NO ACTION DEFERRABLE(§2.1):scenario_store.delete 在 Python 管整组
+    # 子表,FK 只做校验器。
     scenario_id: Mapped[str] = mapped_column(
         String(128),
-        ForeignKey("composer_scenarios.scenario_id", ondelete="CASCADE"),
+        ForeignKey("composer_scenarios.scenario_id", ondelete="NO ACTION", deferrable=True, initially="DEFERRED"),
         index=True,
     )
     name: Mapped[str] = mapped_column(String(255), default="")
     description: Mapped[str] = mapped_column(Text, default="")
-    rows: Mapped[list] = mapped_column(JSON, default=list)
+    rows: Mapped[list] = mapped_column(JsonVar, default=list)
     row_count: Mapped[int] = mapped_column(Integer, default=0)
-    var_unlocks: Mapped[list] = mapped_column(JSON, default=list)
+    var_unlocks: Mapped[list] = mapped_column(JsonVar, default=list)
     # 变量锁本地放开清单(spec 2026-09-15 §3.2):数据集级元数据,
     # 与场景级 config.var_locks 互不影响;引擎不读。
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now()
+        DateTime(timezone=True), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

@@ -17,11 +17,15 @@ from .core.config import settings
 from .core.db import init_db
 from .routers import (
     adaptations,
+    activity,
+    admin,
     auth,
     auth_sessions,
+    catalog,
     carry,
     constants,
     data_sets,
+    notifications,
     endpoint_catalog,
     executions,
     generator_catalog,
@@ -39,10 +43,21 @@ from .routers import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: run schema creation and warn on ephemeral crypto secrets.
+    """Startup: run schema policy (M2: alembic 启动分叉,create_all 退役)
+    and warn on ephemeral crypto secrets.
     Shutdown: drain in-flight dispatches and close the shared Plate /
     Gimbal httpx clients."""
-    await init_db()
+    from .core.migrations import ensure_schema
+    from .core import db as db_module
+    await ensure_schema(db_module.engine.url.render_as_string(hide_password=False))
+    # M6-2:user_stars 吸收 data/stars.json(一次性,幂等:吸收后改名)
+    try:
+        from .services.user_stars import absorb_legacy_stars
+
+        async with db_module.SessionLocal() as session:
+            await absorb_legacy_stars(session)
+    except Exception as e:  # noqa: BLE001  吸收失败不阻塞启动
+        logger.warning("lifespan: legacy stars absorb failed: {}", e)
     # (runSchemes → composer_run_schemes 一次性迁移已随阶段④清理下线 —
     #  迁移窗口已过,方案读写唯一面是 /run-schemes CRUD。)
     # Loud, actionable warnings when crypto secrets are ephemeral — every
@@ -133,6 +148,8 @@ def create_app() -> FastAPI:
     app.include_router(constants.router, prefix="/api")
     app.include_router(generator_catalog.router, prefix="/api")
     app.include_router(adaptations.router, prefix="/api")
+    # 通知中心(P1b/M2.5):三接口 + 偏好 + 公告
+    app.include_router(notifications.router, prefix="/api")
     app.include_router(carry.router, prefix="/api")
     # query-views rows 路由:注册在 scenarios 之前只为维持既有稳定注册
     # 序(scenarios prefix 是 /scenarios,与 /query-views 无实际路由
@@ -144,6 +161,12 @@ def create_app() -> FastAPI:
     app.include_router(service_profile.cards_router, prefix="/api")
     # 服务别名基础层(§4.1):读全员 / 写 admin;读侧挂 carry/凭证两条解析链
     app.include_router(service_aliases.router, prefix="/api")
+    # 服务目录聚合(M5,债 11):plate 目录代理 + 30s TTL,前端三处收编
+    app.include_router(catalog.router, prefix="/api")
+    # 活动时间线服务端合流(M5-3):三源一次请求
+    app.include_router(activity.router, prefix="/api")
+    # 审计日志查询(P2-3,admin only)
+    app.include_router(admin.router, prefix="/api")
     # run-schemes CRUD lives on scenario-nested paths; register BEFORE
     # scenarios' /{scenario_id} catch-all.
     app.include_router(run_schemes.router, prefix="/api")

@@ -14,3 +14,13 @@
 #     ValueError: password cannot be longer than 72 bytes
 # Cap at <4.1 (the latest version still compatible with passlib 1.7.4).
 bcrypt>=3.1,<4.1
+
+# ── PG 栈（PG迁移方案 §3.1，M0 实装版本）─────────────────────────────
+# asyncpg: 运行时异步驱动（pyproject dependencies 已列，此处钉准版本）。
+# alembic: 双方言迁移（SQLite 本地/测试启动自动 upgrade head 依赖）。
+# psycopg: 仅 ETL/preccheck 脚本用的同步驱动，按需安装：
+#   pip install -c requirements-platform-constraints.txt "psycopg[binary]"
+asyncpg==0.31.0
+alembic==1.20.0
+psycopg==3.3.6
+psycopg-binary==3.3.6

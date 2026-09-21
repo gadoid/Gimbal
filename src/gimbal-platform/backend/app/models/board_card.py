@@ -45,12 +45,15 @@ class BoardCard(Base):
     quadrant: Mapped[str] = mapped_column(String(16))
     # 可空:注解的是哪个节点(决定虚线连到谁);node id 形如 "sc:xxx"
     annotates_node_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    author_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    # SET NULL + 姓名快照(§2.1):协作内容不连坐,展示侧显示「已注销」;
+    # 作者注销后卡片转只读(admin 接管旁路随 P2)。
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    author_name: Mapped[str] = mapped_column(String(128), default="")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now()
+        DateTime(timezone=True), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

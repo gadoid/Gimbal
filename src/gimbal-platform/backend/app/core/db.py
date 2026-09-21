@@ -13,10 +13,19 @@ class Base(DeclarativeBase):
 
 from .config import settings  # noqa: E402
 
+# Pool 参数仅对 PG 生效（PG迁移方案 §3.1）；aiosqlite 引擎不接受
+# QueuePool 系参数，sqlite 路径保持零参构造不变。
+_IS_PG = settings.DATABASE_URL.startswith(("postgresql://", "postgresql+"))
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
     future=True,
+    **(
+        {"pool_size": 10, "max_overflow": 20, "pool_pre_ping": True}
+        if _IS_PG
+        else {}
+    ),
 )
 
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)

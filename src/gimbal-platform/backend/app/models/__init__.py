@@ -1,7 +1,7 @@
 from .user import User
 from .auth_session import AuthSession
 from .constant_entry import ConstantEntry
-from .execution import Execution
+from .execution import Execution, ExecutionRow, ExecutionSnapshot
 from .composer_scenario import ComposerScenario
 from .composer_data_set import ComposerDataSet
 from .composer_run_scheme import ComposerRunScheme
@@ -13,12 +13,16 @@ from .adaptation_op import AdaptationOp
 from .carry_binding import CarryGlobalDefault, CarryServiceBinding
 from .board_card import BoardCard
 from .service_alias import ServiceAlias
+# 权限域新表(M2 = P1a:只建表不上码;接口代码随 M2.5/P2)
+from .permission import AuditLog, Notification, UserPref, UserStar
 
 __all__ = [
     "User",
     "AuthSession",
     "ConstantEntry",
     "Execution",
+    "ExecutionRow",
+    "ExecutionSnapshot",
     "ComposerScenario",
     "ComposerDataSet",
     "ComposerRunScheme",
@@ -31,4 +35,8 @@ __all__ = [
     "CarryServiceBinding",
     "BoardCard",
     "ServiceAlias",
+    "AuditLog",
+    "Notification",
+    "UserPref",
+    "UserStar",
 ]

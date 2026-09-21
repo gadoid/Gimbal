@@ -12,10 +12,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
+from ._types import JsonVar
 
 
 class ConstantEntry(Base):
@@ -25,16 +26,17 @@ class ConstantEntry(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # NO ACTION DEFERRABLE(§2.1):删除处置由 Python 显式管(P1a 同车)。
     owner_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), index=True
+        ForeignKey("users.id", ondelete="NO ACTION", deferrable=True, initially="DEFERRED"), index=True
     )
     name: Mapped[str] = mapped_column(String(64))
     description: Mapped[str] = mapped_column(String(256), default="")
     # "literal" | "generator" —— 创建后不可变(PATCH 拒改)
     entry_kind: Mapped[str] = mapped_column(String(16))
-    value: Mapped[Any] = mapped_column(JSON, nullable=True, default=None)
-    spec: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    value: Mapped[Any] = mapped_column(JsonVar, nullable=True, default=None)
+    spec: Mapped[dict | None] = mapped_column(JsonVar, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

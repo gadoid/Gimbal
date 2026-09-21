@@ -1,0 +1,31 @@
+# PG 16 for the platform backend (PG迁移方案 §3.1).
+# 开发机与生产共用同一份文件；凭据/端口用环境变量覆盖，不改本文件。
+#   POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB 可在 shell 里 export 后再 up。
+# 本地默认库仍是 SQLite（DATABASE_URL 默认不变），PG 是 .env 显式 opt-in。
+#
+#   起库:  docker compose -f compose.pg.yml up -d
+#   健康:  docker compose -f compose.pg.yml ps   (healthy)
+#   连接:  postgresql+asyncpg://gimbal:gimbal@127.0.0.1:5432/gimbal
+services:
+  pg:
+    image: postgres:16
+    container_name: gimbal-pg
+    environment:
+      POSTGRES_USER: gimbal
+      POSTGRES_PASSWORD: gimbal # dev 默认；生产必须用 env 覆盖
+      POSTGRES_DB: gimbal
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_gimbal:/var/lib/postgresql/data
+      # init 脚本仅在卷首次初始化时执行（runbook 有既有卷的手工补跑步骤）
+      - ./pg-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gimbal -d gimbal"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  pgdata_gimbal:

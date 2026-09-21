@@ -11,10 +11,12 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.timeutil import ensure_aware
 from ..models.adaptation_batch import AdaptationBatch
+from ..models.user import User
 from ..models.adaptation_op import AdaptationOp
 from ..models.adaptation_snapshot import AdaptationSnapshot
 from ..models.catalog_version import CatalogVersion
@@ -165,7 +167,10 @@ async def catalog_diff(db: AsyncSession) -> dict:
             })
             continue
         updated = _parse_dt(it.get("updated_at"))
-        if ver == stamp.version and updated is not None and updated > stamp.synced_at:
+        # M2 timestamptz:synced_at 在 PG 读回 aware,_parse_dt 产 naive ——
+        # 统一 ensure_aware 后比较(naive 视为 UTC,与写入约定一致)。
+        synced = ensure_aware(stamp.synced_at)
+        if ver == stamp.version and updated is not None and ensure_aware(updated) > synced:
             anomalies.append({
                 "endpointId": eid, "reason": "updated_without_bump",
                 "detail": (
@@ -394,10 +399,14 @@ async def open_batch(
             scenario_rows[sid] = row
 
     batch_id = f"bt-{uuid4().hex[:12]}"
+    operator_name = (await db.execute(
+        select(User.display_name, User.username).where(User.id == operator_id)
+    )).first()
     db.add(AdaptationBatch(
         batch_id=batch_id, endpoint_id=endpoint_id,
         from_version=stamp.version, to_version=to_version,
         status="open", operator_id=operator_id,
+        operator_name=(operator_name[0] or operator_name[1]) if operator_name else "",
     ))
     # 存档:受影响场景的完整容器 payload + 其全部数据集(回滚安全网)
     for sid, row in scenario_rows.items():
@@ -497,6 +506,7 @@ async def _batch_detail(db: AsyncSession, batch_id: str) -> dict:
         "batchId": batch.batch_id, "endpointId": batch.endpoint_id,
         "fromVersion": batch.from_version, "toVersion": batch.to_version,
         "status": batch.status, "operatorId": batch.operator_id,
+        "operatorName": batch.operator_name,
         "createdAt": batch.created_at, "closedAt": batch.closed_at,
         "opCounts": counts,
         "ops": [_op_out(op) for op in ops],
@@ -583,7 +593,46 @@ async def apply_op(db: AsyncSession, op_id: int) -> dict:
         batch.status = "applying"
     await _maybe_complete(db, batch)
     await db.commit()
+    # 通知接线(P1b,权限方案 §3.2):仅 scenario/dataset 类实体产生
+    # 通知 —— carry_binding/carry_default 是全局资产无归属,不通知。
+    await _notify_adaptation_applied(db, op, batch)
     return _op_out(op)
+
+
+async def _notify_adaptation_applied(
+    db: AsyncSession, op: AdaptationOp, batch: AdaptationBatch
+) -> None:
+    """adaptation_applied:受影响 owner 收「你的场景被批次触碰」推送。
+
+    失败只记日志(通知是增强,不是 op 落地的前置)。
+    """
+    # 实体类型从字段推导:dataset_id 非空 = 数据集类;scenario_id 非空 =
+    # 场景类;两者皆空 = carry 类全局资产(无归属,不通知)。
+    if op.dataset_id is None and op.scenario_id is None:
+        return
+    from . import notifications as notify_svc
+    try:
+        scen_id = op.scenario_id
+        if scen_id is None:
+            return
+        scen = await scenario_store.get_row(db, scen_id)
+        if scen is None or scen.owner_id is None:
+            return
+        entity = op.dataset_id or scen_id
+        await notify_svc.create_notification(
+            db,
+            user_id=scen.owner_id,
+            type_="adaptation_applied",
+            title=f"适配批次已应用:{batch.endpoint_id}",
+            body=f"你的场景 {scen_id}({entity})已被适配批次 {batch.batch_id} 触碰,"
+                 f"请留意字段变更(批次由 {batch.operator_name or 'operator'} 处理)。",
+            link=f"/adaptations/{batch.batch_id}",
+            commit=False,
+        )
+        await db.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.opt(exception=True).warning(
+            "adaptation: notify applied failed (op {})", op.id)
 
 
 async def skip_op(db: AsyncSession, op_id: int) -> dict:
@@ -698,19 +747,27 @@ async def _apply_carry_op(db: AsyncSession, op: AdaptationOp,
             raise ValueError(f"carry_path_conflict: {dst} already present")
         entries[dst] = entries.pop(src)
         if service:
-            await carry_store.put_bindings(db, service, entries, "adaptation")
+            await carry_store.put_bindings(
+                db, service, entries,
+                updated_by_id=None, updated_by_name="adaptation")
         else:
-            await carry_store.put_defaults(db, entries, "adaptation")
+            await carry_store.put_defaults(
+                db, entries,
+                updated_by_id=None, updated_by_name="adaptation")
     elif op.op_type == "addCarryBinding":
         path, value = payload["path"], payload.get("value")
         if service:
             entries = await carry_store.get_bindings(db, service)
             entries[path] = value
-            await carry_store.put_bindings(db, service, entries, "adaptation")
+            await carry_store.put_bindings(
+                db, service, entries,
+                updated_by_id=None, updated_by_name="adaptation")
         else:
             entries = await carry_store.get_defaults(db)
             entries[path] = value
-            await carry_store.put_defaults(db, entries, "adaptation")
+            await carry_store.put_defaults(
+                db, entries,
+                updated_by_id=None, updated_by_name="adaptation")
     else:  # removeCarryBinding
         path = payload["path"]
         if service:
@@ -719,9 +776,13 @@ async def _apply_carry_op(db: AsyncSession, op: AdaptationOp,
             entries = await carry_store.get_defaults(db)
         entries.pop(path, None)  # 收敛:缺行 = 已达终态
         if service:
-            await carry_store.put_bindings(db, service, entries, "adaptation")
+            await carry_store.put_bindings(
+                db, service, entries,
+                updated_by_id=None, updated_by_name="adaptation")
         else:
-            await carry_store.put_defaults(db, entries, "adaptation")
+            await carry_store.put_defaults(
+                db, entries,
+                updated_by_id=None, updated_by_name="adaptation")
 
 
 async def open_carry_batch(db: AsyncSession, *, service: str | None,
@@ -983,21 +1044,39 @@ async def _rollback_carry(db: AsyncSession, snap: AdaptationSnapshot,
         raise _RollbackConflict(
             "edited_beyond_batch: current != before+ops replay")
     if service:
-        await carry_store.put_bindings(db, service, before, "rollback")
+        await carry_store.put_bindings(
+            db, service, before,
+            updated_by_id=None, updated_by_name="rollback")
     else:
-        await carry_store.put_defaults(db, before, "rollback")
+        await carry_store.put_defaults(
+            db, before,
+            updated_by_id=None, updated_by_name="rollback")
 
 
 # ─── 批次查询与人工 op(spec §5.3/§5.4)──────────────────────────
-async def list_batches(db: AsyncSession) -> list[dict]:
-    """批次列表(新→旧)。MVP 全量返回,分页留待 P5 前端需要时再加。"""
+async def list_batches(
+    db: AsyncSession, *, status: str | None = None,
+    page: int = 1, page_size: int = 50,
+) -> tuple[list[dict], int]:
+    """批次列表(新→旧)。M4(§6.3):status 精确 + Page 信封 —— detail
+    只为当前页构建(逐批 _batch_detail 是隐藏 N+1,分页把它钉在页大小)。"""
+    stmt = select(AdaptationBatch)
+    if status:
+        stmt = stmt.where(AdaptationBatch.status == status)
+    total = (await db.execute(
+        select(func.count()).select_from(stmt.subquery())
+    )).scalar_one()
     batches = (await db.execute(
-        select(AdaptationBatch).order_by(AdaptationBatch.created_at.desc())
+        stmt.order_by(AdaptationBatch.created_at.desc())
+        .offset((page - 1) * page_size).limit(page_size)
     )).scalars().all()
-    return [await _batch_detail(db, b.batch_id) for b in batches]
+    return [await _batch_detail(db, b.batch_id) for b in batches], int(total)
 
 
-async def list_batches_for_owner(db: AsyncSession, owner_id: int) -> list[dict]:
+async def list_batches_for_owner(
+    db: AsyncSession, owner_id: int, *, status: str | None = None,
+    page: int = 1, page_size: int = 50,
+) -> tuple[list[dict], int]:
     """owner 视图(C13):批次涉及场景中存在本人场景的批次(新→旧)。
 
     归属唯一权威是 ``ComposerScenario.owner_id``;``owner`` 字符串列仅展示
@@ -1010,7 +1089,7 @@ async def list_batches_for_owner(db: AsyncSession, owner_id: int) -> list[dict]:
         )
     )).scalars())
     if not owned_ids:
-        return []
+        return [], 0
     hit = set((await db.execute(
         select(AdaptationOp.batch_id).where(
             AdaptationOp.scenario_id.in_(owned_ids))
@@ -1022,12 +1101,18 @@ async def list_batches_for_owner(db: AsyncSession, owner_id: int) -> list[dict]:
         )
     )).scalars())
     if not hit:
-        return []
+        return [], 0
+    stmt = select(AdaptationBatch).where(AdaptationBatch.batch_id.in_(hit))
+    if status:
+        stmt = stmt.where(AdaptationBatch.status == status)
+    total = (await db.execute(
+        select(func.count()).select_from(stmt.subquery())
+    )).scalar_one()
     batches = (await db.execute(
-        select(AdaptationBatch).where(AdaptationBatch.batch_id.in_(hit))
-        .order_by(AdaptationBatch.created_at.desc())
+        stmt.order_by(AdaptationBatch.created_at.desc())
+        .offset((page - 1) * page_size).limit(page_size)
     )).scalars().all()
-    return [await _batch_detail(db, b.batch_id) for b in batches]
+    return [await _batch_detail(db, b.batch_id) for b in batches], int(total)
 
 
 async def get_batch_detail(db: AsyncSession, batch_id: str) -> dict:

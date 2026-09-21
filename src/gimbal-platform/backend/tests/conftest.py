@@ -13,6 +13,7 @@ provision the schema before each test.
 from __future__ import annotations
 
 import logging
+import os
 from typing import AsyncGenerator
 
 import httpx
@@ -32,10 +33,73 @@ from app.main import create_app
 
 logger = logging.getLogger(__name__)
 
+# PG 测试隔离(PG迁移方案 §3.4,M0-3 选型定案:schema-per-test):
+# 设 TEST_DATABASE_URL(postgresql+asyncpg://...)时,每测试 CREATE SCHEMA +
+# 钉 search_path + create_all,结束 DROP SCHEMA CASCADE——语义最贴近现行
+# 「每测试一个临时 SQLite 库」,不碰被测代码的事务/commit 语义(事务回滚
+# 路线与 run_dispatcher 后台线程的独立 session 相冲,未选)。不设则维持
+# sqlite 临时文件路径,双方言自律。
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "")
+
+
+async def _make_pg_engine(dsn: str, search_path: str | None = None):
+    connect_args = (
+        {"server_settings": {"search_path": search_path}} if search_path else {}
+    )
+    return create_async_engine(dsn, echo=False, future=True,
+                               connect_args=connect_args)
+
 
 @pytest.fixture
 async def fresh_db(monkeypatch, tmp_path) -> AsyncGenerator[None, None]:
-    """Swap the global DB engine for a per-test SQLite file + create schema."""
+    """Swap the global DB engine for a per-test isolated DB + create schema.
+
+    sqlite(默认): 每测试一个临时文件库;PG(设 TEST_DATABASE_URL 时):
+    每测试一个独立 schema,连进来的会话 search_path 钉在该 schema 上。
+    """
+    if TEST_DATABASE_URL.startswith("postgresql"):
+        import uuid
+
+        schema = f"t_{uuid.uuid4().hex}"
+        admin = await _make_pg_engine(TEST_DATABASE_URL)
+        async with admin.begin() as conn:
+            await conn.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+        await admin.dispose()
+
+        test_engine = await _make_pg_engine(
+            TEST_DATABASE_URL, search_path=f"{schema},public"
+        )
+        test_session_factory = async_sessionmaker(
+            test_engine, expire_on_commit=False, class_=AsyncSession
+        )
+        monkeypatch.setattr(db_module, "engine", test_engine, raising=True)
+        monkeypatch.setattr(db_module, "SessionLocal", test_session_factory,
+                            raising=True)
+
+        async with test_engine.begin() as conn:
+            # checkfirst 必须关:search_path 含 public 时,checkfirst 会把
+            # public 里的同名表误判为"已存在"→ 一张不建 → 读写全部穿透
+            # 到 public(生产表)。全新 schema 无需 checkfirst。
+            await conn.run_sync(
+                lambda ddl: Base.metadata.create_all(ddl, checkfirst=False),
+            )
+
+        try:
+            yield
+        finally:
+            # dispatcher 后台行落库与 DROP SCHEMA 的互锁防御:先等收尾
+            from app.services.run_dispatcher import wait_dispatchers_quiescent
+
+            await wait_dispatchers_quiescent()
+            await test_engine.dispose()
+            cleaner = await _make_pg_engine(TEST_DATABASE_URL)
+            try:
+                async with cleaner.begin() as conn:
+                    await conn.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
+            finally:
+                await cleaner.dispose()
+        return
+
     db_file = tmp_path / "test.db"
     test_engine = create_async_engine(
         f"sqlite+aiosqlite:///{db_file}",
@@ -58,21 +122,6 @@ async def fresh_db(monkeypatch, tmp_path) -> AsyncGenerator[None, None]:
 
 
 @pytest.fixture(autouse=True)
-def _isolate_marks(tmp_path, monkeypatch):
-    """Point the marks store (stars) at the per-test tmp dir.
-
-    Without this, marks written by one test pollute the next test in the
-    same pytest run (and any local ``data/stars.json`` from prior runs).
-    """
-    from app.services.marks_store import stars
-
-    stars.path = tmp_path / "stars.json"
-    stars.clear_for_tests()
-    yield
-    stars.clear_for_tests()
-
-
-@pytest.fixture(autouse=True)
 def _isolate_plate_contract_caches():
     """Reset the process-wide ``/full`` contract caches between tests.
 
@@ -92,6 +141,13 @@ def _isolate_plate_contract_caches():
 
     _reset_declared_paths_cache()
     plate_client._reset_full_cache_for_test()
+    # M5 目录聚合的 30s TTL 是模块级 —— 测试间必须重置(否则上个测试的
+    # plate mock 目录泄漏到下一个)。
+    from app.routers.catalog import reset_catalog_cache_for_tests
+    from app.services.auth_references import reset_counts_cache_for_tests
+
+    reset_catalog_cache_for_tests()
+    reset_counts_cache_for_tests()
     yield
 
 

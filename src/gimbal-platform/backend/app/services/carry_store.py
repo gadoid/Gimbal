@@ -19,14 +19,21 @@ async def get_bindings(db, service_name: str) -> dict[str, str | None]:
 
 
 async def put_bindings(
-    db, service_name: str, entries: dict[str, str | None], updated_by: str
+    db,
+    service_name: str,
+    entries: dict[str, str | None],
+    *,
+    updated_by_id: int | None,
+    updated_by_name: str,
 ) -> None:
     await db.execute(delete(CarryServiceBinding).where(
         CarryServiceBinding.service_name == service_name))
     for path, value in sorted(entries.items()):
-        db.add(CarryServiceBinding(service_name=service_name,
-                                   field_path=path, value=value,
-                                   updated_by=updated_by))
+        db.add(CarryServiceBinding(
+            service_name=service_name,
+            field_path=path, value=value,
+            updated_by_id=updated_by_id, updated_by_name=updated_by_name,
+        ))
 
 
 async def get_defaults(db) -> dict[str, str | None]:
@@ -35,12 +42,18 @@ async def get_defaults(db) -> dict[str, str | None]:
 
 
 async def put_defaults(
-    db, entries: dict[str, str | None], updated_by: str
+    db,
+    entries: dict[str, str | None],
+    *,
+    updated_by_id: int | None,
+    updated_by_name: str,
 ) -> None:
     await db.execute(delete(CarryGlobalDefault))
     for path, value in sorted(entries.items()):
-        db.add(CarryGlobalDefault(field_path=path, value=value,
-                                  updated_by=updated_by))
+        db.add(CarryGlobalDefault(
+            field_path=path, value=value,
+            updated_by_id=updated_by_id, updated_by_name=updated_by_name,
+        ))
 
 
 async def carry_drift(db) -> dict:

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -28,9 +28,13 @@ class CarryServiceBinding(Base):
     service_name: Mapped[str] = mapped_column(String(128), index=True)
     field_path: Mapped[str] = mapped_column(String(255))
     value: Mapped[str | None] = mapped_column(Text, nullable=True)
-    updated_by: Mapped[str] = mapped_column(String(64), default="")
+    # 三件套规范(§2.2):溯源列 FK SET NULL + 姓名快照
+    updated_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_by_name: Mapped[str] = mapped_column(String(128), default="")
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
 
@@ -43,7 +47,11 @@ class CarryGlobalDefault(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     field_path: Mapped[str] = mapped_column(String(255))
     value: Mapped[str | None] = mapped_column(Text, nullable=True)
-    updated_by: Mapped[str] = mapped_column(String(64), default="")
+    # 三件套规范(§2.2):溯源列 FK SET NULL + 姓名快照
+    updated_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_by_name: Mapped[str] = mapped_column(String(128), default="")
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

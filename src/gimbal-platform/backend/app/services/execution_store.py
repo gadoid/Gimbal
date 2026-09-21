@@ -8,9 +8,37 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import Execution
+from ..models import Execution, ExecutionSnapshot
 from ..models.execution import STATUS_FAILED
-from ..schemas.execution import ExecutionOut
+from ..schemas.execution import ExecutionListItemOut, ExecutionOut
+
+async def has_snapshot(db: AsyncSession, execution_id: int) -> bool:
+    """快照存在性(M2 拆表:一次存在性查询,不再依赖整实体加载)。"""
+    return (await db.execute(
+        select(ExecutionSnapshot.execution_id).where(
+            ExecutionSnapshot.execution_id == execution_id).limit(1)
+    )).first() is not None
+
+
+async def snapshot_of(db: AsyncSession, execution_id: int) -> dict | None:
+    """快照本体(唯一消费方:GET /executions/{id}/scenario-snapshot)。"""
+    row = (await db.execute(
+        select(ExecutionSnapshot).where(
+            ExecutionSnapshot.execution_id == execution_id)
+    )).scalar_one_or_none()
+    return row.snapshot if row is not None else None
+
+
+async def snapshot_ids(db: AsyncSession, execution_ids: list[int]) -> set[int]:
+    """批量存在性(列表端点一次 in 查询,替代逐行读大 JSON 列)。"""
+    if not execution_ids:
+        return set()
+    rows = (await db.execute(
+        select(ExecutionSnapshot.execution_id).where(
+            ExecutionSnapshot.execution_id.in_(execution_ids))
+    )).scalars().all()
+    return set(rows)
+
 
 # 连续失败计数回看的最大行数(执行设计 §3.2「连续第 N 次失败」信号)。
 # 内部平台量级下,owner 全量 (id, scenario_id, status) 轻行扫描足够;
@@ -18,7 +46,12 @@ from ..schemas.execution import ExecutionOut
 _STREAK_SCAN_LIMIT = 1000
 
 
-def execution_out(e: Execution, *, consecutive_failures: int = 0) -> ExecutionOut:
+def execution_out(
+    e: Execution,
+    *,
+    consecutive_failures: int = 0,
+    has_scenario_snapshot: bool = False,
+) -> ExecutionOut:
     return ExecutionOut(
         id=e.id,
         scenario_id=e.scenario_id,
@@ -29,7 +62,48 @@ def execution_out(e: Execution, *, consecutive_failures: int = 0) -> ExecutionOu
         started_at=e.started_at,
         finished_at=e.finished_at,
         config=e.config_json or {},
-        has_scenario_snapshot=e.scenario_snapshot is not None,
+        has_scenario_snapshot=has_scenario_snapshot,
+        batch_id=e.batch_id,
+        consecutive_failures=consecutive_failures,
+    )
+
+
+# 列表 UI 的非敏感窄投影键(ExecutionsList 行内方案徽标/次数/并发/停步/
+# 认证快失败信号;useScenarioRuns 的趋势过滤读 schemeId 做方案溯源)。
+# 凭证引用面(injectedAuths/serviceBindings)绝不进列表。
+_CONFIG_SUMMARY_KEYS = (
+    "schemeId", "schemeName", "nRuns", "parallel", "stepTo", "authFailFast",
+)
+
+
+def execution_list_item(
+    e: Execution,
+    *,
+    consecutive_failures: int = 0,
+    has_scenario_snapshot: bool = False,
+) -> ExecutionListItemOut:
+    """列表行形态(M1):响应去 config,只带窄投影 config_summary。
+
+    注:服务端仍读 config_json 现算 summary(M1 门禁不含 DB 扫描下降,
+    PG迁移方案 §7);响应面的敏感列清除是本函数的全部职责。
+    """
+    cfg = e.config_json if isinstance(e.config_json, dict) else {}
+    # P2-2:ownerName 台账快照;账号注销后(owner_id NULL)带「已注销」
+    owner_name = e.owner_name or ""
+    if e.owner_id is None and owner_name:
+        owner_name = f"{owner_name}(已注销)"
+    return ExecutionListItemOut(
+        id=e.id,
+        scenario_id=e.scenario_id,
+        status=e.status,
+        total_runs=e.total_runs,
+        passed=e.passed,
+        failed=e.failed,
+        started_at=e.started_at,
+        finished_at=e.finished_at,
+        owner_name=owner_name,
+        config_summary={k: cfg[k] for k in _CONFIG_SUMMARY_KEYS if k in cfg},
+        has_scenario_snapshot=has_scenario_snapshot,
         batch_id=e.batch_id,
         consecutive_failures=consecutive_failures,
     )

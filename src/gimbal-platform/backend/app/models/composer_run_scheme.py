@@ -12,11 +12,12 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
-    JSON, Boolean, DateTime, ForeignKey, Index, String, func, text,
+    Boolean, DateTime, ForeignKey, Index, String, func, text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
+from ._types import JsonVar
 
 
 class ComposerRunScheme(Base):
@@ -35,17 +36,19 @@ class ComposerRunScheme(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     scheme_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    # NO ACTION DEFERRABLE(§2.1):scenario_store.delete 在 Python 管整组
+    # 子表,FK 只做校验器。
     scenario_id: Mapped[str] = mapped_column(
         String(128),
-        ForeignKey("composer_scenarios.scenario_id", ondelete="CASCADE"),
+        ForeignKey("composer_scenarios.scenario_id", ondelete="NO ACTION", deferrable=True, initially="DEFERRED"),
         index=True,
     )
     name: Mapped[str] = mapped_column(String(64))
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
-    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    payload: Mapped[dict] = mapped_column(JsonVar, default=dict)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now()
+        DateTime(timezone=True), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

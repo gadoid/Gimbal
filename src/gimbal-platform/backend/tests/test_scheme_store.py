@@ -124,5 +124,5 @@ async def test_list_scenarios_scheme_count(client):
                               headers=h, json=_scheme_body(name))
         assert r.status_code == 201, r.text
     r = await client.get("/api/scenarios", headers=h)
-    mine = next(s for s in r.json() if s["meta"]["scenarioId"] == sid)
+    mine = next(s for s in r.json()["items"] if s["meta"]["scenarioId"] == sid)
     assert mine["schemeCount"] == 3

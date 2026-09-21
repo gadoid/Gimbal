@@ -16,6 +16,11 @@ dependencies = [
     "bcrypt>=3.1,<4.1",  # passlib 1.7.4 incompatible with bcrypt 4.1+ (no __about__)
     "python-multipart>=0.0.9",
     "aiosqlite>=0.20",
+    # PG 驱动（PG迁移方案 §3.1）：asyncpg 运行时；alembic 双方言迁移必经
+    # （SQLite 本地/测试启动自动 upgrade head 依赖它，M2 起 lifespan 引用）。
+    # psycopg 仅 ETL/preccheck 脚本用（同步 engine），按需安装见 constraints。
+    "asyncpg>=0.29",
+    "alembic>=1.13",
     "python-dotenv>=1.0",
     "loguru>=0.7",
 ]

@@ -8,10 +8,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, String, func
+from sqlalchemy import DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
+from ._types import JsonVar
 
 
 class CatalogVersion(Base):
@@ -19,7 +20,9 @@ class CatalogVersion(Base):
 
     endpoint_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     version: Mapped[str] = mapped_column(String(64), nullable=False)
+    # 唯一经 DB 生成的时刻(§2.1 风险 2 的破口):timestamptz 下 PG 的
+    # now() 存绝对时间,不再随会话时区漂移。
     synced_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), nullable=False
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    spec_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    spec_json: Mapped[dict] = mapped_column(JsonVar, nullable=False, default=dict)

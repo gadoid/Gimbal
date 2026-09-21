@@ -69,12 +69,12 @@ async def test_dispatch_snapshots_scenario_payload(
     execution_id = await _run_to_done(client, headers, "sc-snap")
 
     from app.core import db as db_module
-    from app.models.execution import Execution
+    from app.models.execution import Execution, ExecutionSnapshot
 
     async with db_module.SessionLocal() as s:
-        row = await s.get(Execution, execution_id)
+        row = await s.get(ExecutionSnapshot, execution_id)
         assert row is not None
-        snapshot = row.scenario_snapshot
+        snapshot = row.snapshot
         # 快照 = 执行时的 draft 容器(definition 含 authored 步骤原文)
         assert snapshot is not None
         assert snapshot["definition"]["meta"]["name"] == "快照版1"
@@ -88,7 +88,9 @@ async def test_dispatch_snapshots_scenario_payload(
     async with db_module.SessionLocal() as s:
         row_after = await s.get(Execution, execution_id)
         assert row_after is not None
-        assert row_after.scenario_snapshot["definition"]["meta"]["name"] == "快照版1"
+        snap_after = await s.get(ExecutionSnapshot, execution_id)
+        assert snap_after is not None
+        assert snap_after.snapshot["definition"]["meta"]["name"] == "快照版1"
 
 
 async def test_snapshot_endpoint_owner_scoped(

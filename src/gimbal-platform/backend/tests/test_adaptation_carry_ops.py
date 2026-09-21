@@ -38,7 +38,7 @@ async def test_carry_ops_apply_and_snapshot(client):
     admin = await _admin(client)
     async with db_module.SessionLocal() as db:
         await carry_store.put_bindings(
-            db, "fin-service", {"$.old": "v1"}, "alice")
+            db, "fin-service", {"$.old": "v1"}, updated_by_id=None, updated_by_name="alice")
         await db.commit()
 
     batch_id = await _open_carry_batch(client, admin, "fin-service")
@@ -65,7 +65,7 @@ async def test_carry_batch_rollback_restores(client):
     admin = await _admin(client)
     async with db_module.SessionLocal() as db:
         await carry_store.put_bindings(
-            db, "fin-service", {"$.old": "v1"}, "alice")
+            db, "fin-service", {"$.old": "v1"}, updated_by_id=None, updated_by_name="alice")
         await db.commit()
 
     batch_id = await _open_carry_batch(client, admin, "fin-service")

@@ -8,7 +8,9 @@ concurrent requests see consistent reads/writes.
 """
 from __future__ import annotations
 
-from datetime import timezone
+from datetime import datetime, timedelta
+
+from ..core.timeutil import ensure_aware
 
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func
@@ -24,11 +26,11 @@ from ..schemas.scenario_composer import (
     Orchestration,
     Scenario,
     ScenarioDraft,
+    ScenarioListItem,
     ScenarioMeta,
 )
 from . import endpoint_ref_index
 from . import scheme_store
-from .marks_store import stars
 
 
 # ─── write side ───────────────────────────────────────────────────
@@ -37,7 +39,7 @@ async def create(
     draft: ScenarioDraft,
     *,
     owner: str = "",
-    owner_id: int = 0,
+    owner_id: int | None = None,
     visibility: str = "private",
 ) -> Scenario:
     """Insert a new scenario.  Raises ValueError on duplicate scenarioId.
@@ -46,8 +48,10 @@ async def create(
     ``owner`` parameter (the authenticated user's display_name), so a
     caller cannot spoof the owner field by sending a different value in
     the request body.  ``owner_id`` 同理由路由层传入(int user.id,
-    P1 起为归属判断主键)。普通创建恒为 private;``visibility``
-    参数仅供 P2 迁移复用(公共目录导入 → public)。
+    P1 起为归属判断主键);缺省 None = 归属未知(与 ETL 把历史 0 行
+    映射 NULL 同语义 —— 0 在 PG 上恒违反 FK,M2 起不再落 0)。
+    普通创建恒为 private;``visibility`` 参数仅供 P2 迁移复用(公共
+    目录导入 → public)。
     """
     def_meta = draft.definition.get("meta") or {}
     scenario_id = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
@@ -73,7 +77,7 @@ async def create(
     ).model_dump(by_alias=True, mode="json")
     row = ComposerScenario(
         scenario_id=server_owned.scenario_id,
-        owner=server_owned.owner,
+        owner_name=server_owned.owner,
         owner_id=owner_id,
         visibility=visibility,
         payload=payload,
@@ -126,7 +130,7 @@ async def update(
         "module": (def_meta.get("module") or "").strip() or "default",
         "system": list(def_meta.get("system") or []) or ["default"],
     }
-    effective_owner = new_owner or def_meta.get("owner") or row.owner
+    effective_owner = new_owner or def_meta.get("owner") or row.owner_name
     server_owned = ScenarioMeta.model_validate({
         **repaired_meta, "scenarioId": scenario_id, "owner": effective_owner,
     })
@@ -138,7 +142,7 @@ async def update(
         "scenarioId": server_owned.scenario_id,
         "meta": server_owned.model_dump(by_alias=True, mode="json"),
     }
-    row.owner = effective_owner
+    row.owner_name = effective_owner
     # 方案不经 payload(阶段④:runSchemes sidecar 键下线)— 编排容器
     # 原样落库,方案读写唯一面是 /run-schemes CRUD(scheme_store)。
     orch_data = draft.orchestration.model_dump(by_alias=True, mode="json")
@@ -174,11 +178,16 @@ async def delete(db: AsyncSession, scenario_id: str) -> None:
             ComposerRunScheme.scenario_id == scenario_id
         )
     )
+    # user_stars 随场景 CASCADE(M6-2)。PG 上 DB 级 CASCADE 已处理,
+    # 这里是 SQLite 兜底(该方言默认不强制 FK,CASCADE 不触发)——
+    # 单条机械 DELETE,非逐用户簿记。
+    from ..models.permission import UserStar
+
+    await db.execute(
+        sa_delete(UserStar).where(UserStar.scenario_id == scenario_id)
+    )
     await db.delete(row)
     await db.commit()
-    # 场景删除后清理所有用户的 star 标记,避免 stars.json 里留下
-    # 指向不存在场景的孤儿 id(列表侧 starred 永远解析不到)。
-    stars.remove_item(scenario_id)
 
 
 async def set_visibility(
@@ -261,28 +270,73 @@ async def get(
 
 
 # ─── read side ────────────────────────────────────────────────────
+# 多值筛选参数的归一化形态:调用方(router)传逗号联合字符串或单值,store
+# 归一为 list;updated_within 以「now - 窗口」的 naive-UTC cutoff 表达
+# (行 updated_at 是 naive UTC,同基准比较)。
+_UPDATED_WITHIN_WINDOWS: dict[str, timedelta] = {
+    "24h": timedelta(hours=24),
+    "7d": timedelta(days=7),
+    "30d": timedelta(days=30),
+}
+
+
+def _split_csv(v: str | None) -> list[str]:
+    return [x.strip() for x in (v or "").split(",") if x.strip()]
+
+
+def _split_ints(v: str | int | None) -> list[int]:
+    if v is None or v == "":
+        return []
+    if isinstance(v, int):
+        return [v]
+    out: list[int] = []
+    for x in _split_csv(str(v)):
+        try:
+            out.append(int(x))
+        except ValueError:
+            continue
+    return out
+
+
+def _updated_cutoff(updated_within: str | None) -> datetime | None:
+    # aware:与 row.updated_at 的比较双方言统一在 aware 空间(PG 读回 aware)
+    window = _UPDATED_WITHIN_WINDOWS.get(updated_within or "")
+    return (
+        ensure_aware(datetime.utcnow() - window)
+        if window is not None
+        else None
+    )
+
+
 async def list_scenarios(
     db: AsyncSession,
     *,
     q: str | None = None,
     system: str | None = None,
     module: str | None = None,
-    priority: int | None = None,
+    priority: str | int | None = None,
+    tag: str | None = None,
+    author: str | None = None,
+    updated_within: str | None = None,
     user_id: int | None = None,
 ) -> list[Scenario]:
     """List scenarios with optional filters — **tests only**.
 
     生产 list 端点(scenarios 路由)自行组合 ``list_rows`` → 属主过滤
-    → ``dataset_counts`` → ``to_read_shape``,不再经过本函数;这里保留
-    供 store 单测做纯过滤断言。注意本函数**不做**可见性/属主过滤,
-    不要在新路由里复用。
+    → ``dataset_counts`` → ``to_read_shape``/``to_list_item_shape``,
+    不再经过本函数;这里保留供 store 单测做纯过滤断言。注意本函数
+    **不做**可见性/属主过滤,不要在新路由里复用。
 
     ``q`` is a case-insensitive substring against scenarioId / name /
-    module / description / tags.  ``system`` is a single-tag match
-    (any of the scenario's ``system[]``).  ``priority`` and ``module``
-    are exact matches.  ``user_id`` enables per-user ``starred`` flag.
+    module / description / tags.  ``system`` / ``module`` / ``tag`` /
+    ``author`` / ``priority`` accept single values or comma-joined
+    multi-values (semantics: 见 ``_passes_filters`` docstring)。
+    ``user_id`` enables per-user ``starred`` flag.
     """
-    rows = await list_rows(db, q=q, system=system, module=module, priority=priority)
+    rows = await list_rows(
+        db, q=q, system=system, module=module, priority=priority,
+        tag=tag, author=author, updated_within=updated_within,
+    )
     ds_counts = await dataset_counts(db)
     return [
         await to_read_shape(
@@ -298,16 +352,27 @@ async def list_rows(
     q: str | None = None,
     system: str | None = None,
     module: str | None = None,
-    priority: int | None = None,
+    priority: str | int | None = None,
+    tag: str | None = None,
+    author: str | None = None,
+    updated_within: str | None = None,
 ) -> list[ComposerScenario]:
     """Filtered rows (updated_at desc) — 调用方在已加载的行上做属主/
     可见性过滤,避免 list 端点为 readable_ids 再跑一趟全表扫描。"""
     stmt = select(ComposerScenario).order_by(ComposerScenario.updated_at.desc())
     rows = (await db.execute(stmt)).scalars().all()
+    systems = _split_csv(system)
+    modules = _split_csv(module)
+    priorities = _split_ints(priority)
+    tags = _split_csv(tag)
+    authors = _split_csv(author)
+    cutoff = _updated_cutoff(updated_within)
     return [
         r for r in rows
         if _passes_filters(
-            _meta_from_row(r), r, q=q, system=system, module=module, priority=priority
+            _meta_from_row(r), r, q=q, systems=systems, modules=modules,
+            priorities=priorities, tags=tags, authors=authors,
+            updated_cutoff=cutoff,
         )
     ]
 
@@ -409,8 +474,12 @@ async def to_read_shape(
     # 方案不经 payload(阶段④:runSchemes sidecar 读侧回填下线)—
     # 方案列表唯一读面是 /run-schemes CRUD。
     config, resource, orchestration = _extras_from_payload(row.payload)
+    # M6-2:收藏读时投影改 UserStar(marks_store 退役);单行详情一次
+    # 预取,列表路径由调用方走 to_list_item_shape(集合注入)。
+    from .user_stars import star_ids as _star_ids
+
     starred = (
-        stars.has(user_id, row.scenario_id)
+        row.scenario_id in await _star_ids(db, user_id)
         if user_id is not None
         else False
     )
@@ -429,28 +498,54 @@ async def to_read_shape(
     )
 
 
+def to_list_item_shape(
+    row: ComposerScenario,
+    *,
+    starred_ids: "set[str] | None" = None,
+    data_set_count: int = 0,
+    scheme_count: int = 0,
+) -> ScenarioListItem:
+    """列表行形态(M1 响应投影):meta + 计数 + starred,**不含**
+    steps/config/resource/orchestration — 大 JSON 字段不出列表响应。
+
+    stepCount/varCount 仍需读 payload(权威计数,只取长度不构造对象);
+    查询侧的全表加载是 M1 接受的现状(M3 生成列接管)。
+    """
+    meta = _meta_from_row(row)
+    # M6-2:收藏读时投影改 UserStar 集合(调用方一次 star_ids 预取,
+    # 不再逐行查 marks_store)
+    starred = (
+        row.scenario_id in starred_ids if starred_ids is not None else False
+    )
+    definition = definition_from_payload(row.payload)
+    config = definition.get("config")
+    vars_ = config.get("vars") if isinstance(config, dict) else None
+    return ScenarioListItem(
+        meta=meta,
+        dataSetCount=data_set_count,
+        schemeCount=scheme_count,
+        stepCount=len(steps_from_payload(row.payload)),
+        varCount=len(vars_) if isinstance(vars_, dict) else 0,
+        tags=list(meta.tags or []),
+        starred=starred,
+        visibility=row.visibility or "private",
+    )
+
+
 def _meta_from_row(row: ComposerScenario) -> ScenarioMeta:
     """Meta 投影:唯一权威是 payload.definition.meta。
 
-    Repair legacy rows whose ``module`` / ``system`` are empty — same
-    defaults as ``update()`` / ``create()`` — so a list / detail call
-    doesn't 500 on a row that was written before the meta became strict.
+    (M6-3:旧库 module/system 缺省的修复分支已删 —— ETL 已把修复值
+    写回 payload,新写入恒经 create/update 的严格 meta。)
+    「最后编辑」服务端权威:读时以 DB 行 updated_at 覆盖 — payload 里
+    客户端伪造/陈旧的 updateTime 一律不可信(与 starred/visibility
+    同族的读时投影)。SQLite CURRENT_TIMESTAMP 是 naive UTC,标上
+    tzinfo 让 wire 输出 ISO-Z,前端 new Date() 才不会按本地时间错位。
     """
     payload = row.payload or {}
     definition = payload.get("definition") or {}
     meta_dict = dict(definition.get("meta") or {})
-    if not (meta_dict.get("module") or "").strip():
-        meta_dict["module"] = "default"
-    if not list(meta_dict.get("system") or []):
-        meta_dict["system"] = ["default"]
-    # 「最后编辑」服务端权威:读时以 DB 行 updated_at 覆盖 — payload 里
-    # 客户端伪造/陈旧的 updateTime 一律不可信(与 starred/visibility
-    # 同族的读时投影)。SQLite CURRENT_TIMESTAMP 是 naive UTC,标上
-    # tzinfo 让 wire 输出 ISO-Z,前端 new Date() 才不会按本地时间错位。
-    meta_dict["updateTime"] = (
-        row.updated_at.replace(tzinfo=timezone.utc)
-        if row.updated_at is not None else None
-    )
+    meta_dict["updateTime"] = ensure_aware(row.updated_at)
     return ScenarioMeta.model_validate(meta_dict)
 
 
@@ -503,17 +598,31 @@ def _passes_filters(
     row: ComposerScenario,
     *,
     q: str | None,
-    system: str | None,
-    module: str | None,
-    priority: int | None,
+    systems: list[str],
+    modules: list[str],
+    priorities: list[int],
+    tags: list[str],
+    authors: list[str],
+    updated_cutoff: datetime | None,
 ) -> bool:
-    # Filters read the payload's meta projection — the mirror columns
-    # were retired, so this is a method over the source, not over a copy.
-    if system and system not in (meta.system or []):
+    """Python 过滤的唯一口径(M1;M3 生成列上线后平移到 SQL,语义不变)。
+
+    多值维度与前端 ``utils/filters.ts`` 的 ``applyFiltersToList`` 同语义:
+    module/author/priority = 精确命中其一;system/tag = 行携带任一选中值
+    (OR);``updated_cutoff`` = 行 updated_at 早于 cutoff 即滤掉(行缺
+    updated_at 视为通过,与前端「不可解析时间戳放行」一致)。
+    Filters read the payload's meta projection — the mirror columns
+    were retired, so this is a method over the source, not over a copy.
+    """
+    if systems and not any(s in (meta.system or []) for s in systems):
         return False
-    if module and (meta.module or "") != module:
+    if modules and (meta.module or "") not in modules:
         return False
-    if priority is not None and meta.priority != priority:
+    if priorities and meta.priority not in priorities:
+        return False
+    if tags and not any(t in (meta.tags or []) for t in tags):
+        return False
+    if authors and (meta.author or "") not in authors:
         return False
     if q:
         ql = q.lower()
@@ -526,4 +635,10 @@ def _passes_filters(
         haystacks.extend(meta.tags or [])
         if not any(ql in (h or "").lower() for h in haystacks):
             return False
+    if (
+        updated_cutoff is not None
+        and row.updated_at is not None
+        and ensure_aware(row.updated_at) < updated_cutoff
+    ):
+        return False
     return True

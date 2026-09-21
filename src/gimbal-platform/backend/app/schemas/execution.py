@@ -26,11 +26,43 @@ class ExecutionOut(BaseModel):
     # 连续第 N 次失败(§3.2 信号列;同 owner 同 scenario 失败链长,失败单
     # 自身计入)。仅 list 端点计算填充;detail/其他消费方恒 0。
     consecutive_failures: int = 0
+    # P2-2:归属台账快照(注销后带「已注销」后缀)
+    owner_name: str | None = Field(default=None, alias="ownerName")
+
+
+class ExecutionListItemOut(BaseModel):
+    """列表行形态(M1 响应投影,PG迁移方案 §2.2 债 4 补刀):去 ``config``
+    —— ``config_json`` 是凭证引用面(injectedAuths/serviceBindings),整列
+    随每行列表下发是敏感面泄漏;详情页保留完整 ``config``。
+
+    ``config_summary`` 是列表 UI 既有的四个非敏感展示字段的窄投影
+    (schemeName/nRuns/parallel/stepTo/authFailFast),不携带凭证引用。"""
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: int
+    scenario_id: str
+    status: str
+    total_runs: int
+    passed: int
+    failed: int
+    started_at: datetime | None
+    finished_at: datetime | None
+    config_summary: dict = Field(default_factory=dict, alias="configSummary")
+    has_scenario_snapshot: bool = False
+    batch_id: str | None = None
+    consecutive_failures: int = 0
 
 
 class ExecutionListOut(BaseModel):
-    items: list[ExecutionOut]
+    """Page 信封(§4.1):既有 {items,total} 补齐 page/pageSize 即向后兼容。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    items: list[ExecutionListItemOut]
     total: int
+    page: int = 1
+    page_size: int = Field(default=200, alias="pageSize")
 
 
 class ExecutionSummaryOut(BaseModel):
@@ -78,4 +110,11 @@ class ExecutionRowOut(BaseModel):
 
 
 class ExecutionRowsOut(BaseModel):
+    """M6(债 5):行级分页信封 —— {items,total,page,pageSize}。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
     items: list[ExecutionRowOut]
+    total: int = 0
+    page: int = 1
+    page_size: int = Field(default=200, alias="pageSize")

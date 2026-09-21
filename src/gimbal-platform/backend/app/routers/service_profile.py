@@ -70,7 +70,9 @@ async def create_card(
 ) -> CardOut:
     try:
         return CardOut.model_validate(await board_cards.create_card(
-            db, user_id=user.id, subject_id=body.subject_id, body=body.body,
+            db, user_id=user.id,
+            author_name=user.display_name or user.username,
+            subject_id=body.subject_id, body=body.body,
             quadrant=body.quadrant,
             annotates_node_id=body.annotates_node_id,
         ))

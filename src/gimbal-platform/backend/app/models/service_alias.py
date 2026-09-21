@@ -40,12 +40,16 @@ class ServiceAlias(Base):
     # 引用认证管理的凭证;可空 = 不绑,执行时走场景显式绑定/无凭证
     credential_alias: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # 非空 = 个人默认,空 = 团队共享;用户注销时置空(共享化)
+    # NO ACTION DEFERRABLE —— 显式推翻模型旧注释「注销时置空(共享化)」
+    # (PG迁移方案第八轮第 3 条):FK 从未生效、该意图从未执行过,且
+    # 「注销即共享化」该由人显式决定;不处置就删号当场报错(处置见
+    # 权限方案 §4.3,P1a 保守默认=删除)。
     owner_user_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+        ForeignKey("users.id", ondelete="NO ACTION", deferrable=True, initially="DEFERRED"), nullable=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now()
+        DateTime(timezone=True), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

@@ -89,7 +89,7 @@ async def list_data_sets(
     data (the previous behaviour) is a cross-user disclosure, so non-admin
     callers only see data-sets whose parent scenario they own.
     """
-    if user.is_admin:
+    if user.role == "admin":
         return await data_set_store.list_summaries(db, scenario_id=scenarioId)
     own_ids = await scenario_store.owned_scenario_ids(db, user)
     if scenarioId is not None:

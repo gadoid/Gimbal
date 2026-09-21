@@ -29,6 +29,17 @@ async def register_and_login(
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
+async def login_user(
+    client: AsyncClient, username: str, password: str
+) -> dict[str, str]:
+    """Login only (no register) → Bearer headers."""
+    r = await client.post(
+        "/api/auth/login", json={"username": username, "password": password}
+    )
+    assert r.status_code == 200, r.text
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+
 def make_draft(
     scenario_id: str = "sc-test",
     *,
@@ -80,3 +91,49 @@ async def wait_until(
         if predicate():
             return
         await asyncio.sleep(interval)
+
+
+FK_ADMIN_PASSWORD = "FkAdmin-Pw-123"
+
+
+async def ensure_fk_users(db: Any, *ids: int, make_admin: int | None = None) -> None:
+    """垫底 FK 用户:直插 owner_id=N 的业务行前保证 users.id=N 存在。
+
+    SQLite 默认不强制 FK,PG(M2 起)强制 —— 同一批测试在 PG 上会以
+    IntegrityError 落马(且被 create 的契约掩码成 scenario_id_exists)。
+    存在即跳过(先注册后插的测试路径不受影响,不挪自增序);PG 显式
+    id 插入后把序列推到 max 之后,后续 API 注册不再撞号。
+
+    ``make_admin=N``:把 id=N 的垫底用户造成**可登录的 admin**(密码
+    ``FK_ADMIN_PASSWORD``)。垫了用户后「首个 API 注册者自动 admin」
+    失效 —— 需要 admin 身份调 admin-only 路由的测试改用它登录
+    (``login_user(client, "fkuser1", FK_ADMIN_PASSWORD)``)。
+    """
+    from sqlalchemy import select, text
+
+    from app.models import User
+
+    if not ids:
+        return
+    existing = set(
+        (await db.execute(select(User.id).where(User.id.in_(ids)))).scalars()
+    )
+    from app.core.security import hash_password
+
+    for uid in ids:
+        if uid in existing:
+            continue
+        admin = make_admin == uid
+        db.add(User(
+            id=uid, username=f"fkuser{uid}", display_name="",
+            password_hash=(hash_password(FK_ADMIN_PASSWORD) if admin else "x"),
+            role="admin" if admin else "member",
+            is_active=True,
+        ))
+    await db.commit()
+    if db.get_bind().dialect.name == "postgresql":
+        await db.execute(text(
+            "SELECT setval(pg_get_serial_sequence('users', 'id'),"
+            " GREATEST((SELECT COALESCE(MAX(id), 1) FROM users), 1))"
+        ))
+        await db.commit()

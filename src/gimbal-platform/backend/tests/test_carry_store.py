@@ -9,7 +9,8 @@ async def test_put_get_bindings_roundtrip(fresh_db):
     async with db_module.SessionLocal() as db:
         await carry_store.put_bindings(db, "fin-service",
                                        {"$.remark": "压测-张三",
-                                        "$.notifyUsers": None}, "alice")
+                                        "$.notifyUsers": None},
+                                       updated_by_id=None, updated_by_name="alice")
         await db.commit()
     async with db_module.SessionLocal() as db:
         got = await carry_store.get_bindings(db, "fin-service")
@@ -18,8 +19,8 @@ async def test_put_get_bindings_roundtrip(fresh_db):
 
 async def test_put_replaces_whole_row_set(fresh_db):
     async with db_module.SessionLocal() as db:
-        await carry_store.put_bindings(db, "s", {"$.a": "1", "$.b": "2"}, "u")
-        await carry_store.put_bindings(db, "s", {"$.a": "1x"}, "u")
+        await carry_store.put_bindings(db, "s", {"$.a": "1", "$.b": "2"}, updated_by_id=None, updated_by_name="u")
+        await carry_store.put_bindings(db, "s", {"$.a": "1x"}, updated_by_id=None, updated_by_name="u")
         await db.commit()
         assert await carry_store.get_bindings(db, "s") == {"$.a": "1x"}
 
@@ -27,7 +28,8 @@ async def test_put_replaces_whole_row_set(fresh_db):
 async def test_defaults_null_semantics(fresh_db):
     async with db_module.SessionLocal() as db:
         await carry_store.put_defaults(db, {"$.appCode": "TRACE-V2",
-                                            "$.remark": None}, "bob")
+                                            "$.remark": None},
+                                       updated_by_id=None, updated_by_name="bob")
         await db.commit()
         defaults = await carry_store.get_defaults(db)
     assert defaults == {"$.appCode": "TRACE-V2", "$.remark": None}
