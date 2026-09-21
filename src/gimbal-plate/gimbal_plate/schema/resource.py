@@ -1,10 +1,8 @@
-"""schema.resource —— 用例级资源(Mock/File)及引用。"""
+"""schema.resource —— 用例级资源(Mock/File)。"""
 from __future__ import annotations
 
 from typing import Any, Literal, Annotated, Union
 from pydantic import BaseModel, Field
-
-from gimbal_plate.schema.ref import RefBase
 
 
 class Resource(BaseModel):
@@ -22,18 +20,10 @@ class Mock(Resource):
 
 class File(Resource):
     kind: Literal["file"] = "file"
-    path: str = Field(description="路径或ref")
-
-
-class MockRef(RefBase):
-    kind: Literal["mock_ref"] = "mock_ref"
-
-
-class FileRef(RefBase):
-    kind: Literal["file_ref"] = "file_ref"
+    path: str = Field(description="路径")
 
 
 ResourceUnion = Annotated[
-    Union[Mock, MockRef, File, FileRef],
+    Union[Mock, File],
     Field(discriminator="kind"),
 ]

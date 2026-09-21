@@ -1,15 +1,14 @@
-"""schema.step —— 单步骤数据模型与引用。
+"""schema.step —— 单步骤数据模型。
 
 迁移自 ``gimbal.schema.step``,保持 ``kind/api/request/strategy`` 字段名与
 discriminator 不变,确保现有 Scenario JSON 兼容。
 """
 from __future__ import annotations
 
-from typing import Literal, Annotated, Union, Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from gimbal_plate.schema.api import ApiUnion
-from gimbal_plate.schema.ref import RefBase
 from gimbal_plate.schema.request import RequestUnion
 from gimbal_plate.schema.strategy import StrategyUnion
 
@@ -48,11 +47,4 @@ class Step(BaseModel):
         return kept or None
 
 
-class StepRef(RefBase):
-    kind: Literal["step_ref"] = "step_ref"
-
-
-StepUnion = Annotated[
-    Union[Step, StepRef],
-    Field(discriminator="kind"),
-]
+StepUnion = Step

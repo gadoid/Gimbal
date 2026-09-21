@@ -11,7 +11,6 @@ from typing import Any, Optional, Literal, Annotated, Union
 from pydantic import BaseModel, Field
 
 from gimbal_plate.schema.auth import AuthSession
-from gimbal_plate.schema.ref import RefBase
 from gimbal_plate.schema.resource import ResourceUnion
 from gimbal_plate.schema.retry_policy import RetryPolicy
 from gimbal_plate.schema.setup import SetupUnion
@@ -98,20 +97,12 @@ class Scenario(BaseModel):
     )
 
 
-class ScenarioRef(RefBase):
-    kind: Literal["scenario_ref"] = "scenario_ref"
-
-
 class Suite(BaseModel):
     kind: Literal["suite"] = "suite"
     suite: list[Scenario] = Field(..., description="scenario集合,暂时使用列表实现")
 
 
-class SuiteRef(RefBase):
-    kind: Literal["suite_ref"] = "suite_ref"
-
-
 RunUnion = Annotated[
-    Union[Scenario, ScenarioRef, Suite, SuiteRef],
+    Union[Scenario, Suite],
     Field(discriminator="kind"),
 ]

@@ -5,8 +5,6 @@ from typing import Any, Optional, Literal, Union, Annotated, List
 from enum import Enum
 from pydantic import BaseModel, Field
 
-from gimbal_plate.schema.ref import RefBase
-
 
 class Scope(str, Enum):
     FRAMEWORK = "framework"
@@ -90,11 +88,7 @@ class Assertion(StrategyBase):
     soft: bool = False  # 软断言
 
 
-class StrategyRef(RefBase):
-    kind: Literal["strategy_ref"] = "strategy_ref"
-
-
 StrategyUnion = Annotated[
-    Union[Extract, Assign, Assertion, StrategyRef],
+    Union[Extract, Assign, Assertion],
     Field(discriminator="kind"),
 ]

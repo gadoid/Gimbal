@@ -1,15 +1,14 @@
-"""schema.request —— 请求体容器与引用。
+"""schema.request —— 请求体容器。
 
 与 ``gimbal.schema.request`` 行为一致;``body`` 支持 ``str | dict | list`` 三种形态,
 由调用方通过 ``api.headers.Content-Type`` 显式声明。
 """
 from __future__ import annotations
 
-from typing import Any, Literal, Union, Annotated, Dict, List
+from typing import Any, Literal, Union, Dict, List
 from pydantic import BaseModel, Field
 
 from gimbal_plate.schema.endpoint.io_spec import DeclarationEntry
-from gimbal_plate.schema.ref import RefBase
 
 
 class Request(BaseModel):
@@ -26,11 +25,4 @@ class Request(BaseModel):
     fields_meta: Dict[str, DeclarationEntry] | None = None
 
 
-class RequestRef(RefBase):
-    kind: Literal["request_ref"] = "request_ref"
-
-
-RequestUnion = Annotated[
-    Union[Request, RequestRef],
-    Field(discriminator="kind"),
-]
+RequestUnion = Request

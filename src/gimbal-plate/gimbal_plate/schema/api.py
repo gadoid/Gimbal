@@ -1,10 +1,8 @@
-"""schema.api —— 接口描述(transport)与引用。"""
+"""schema.api —— 接口描述(transport)。"""
 from __future__ import annotations
 
-from typing import Any, Literal, Union, Annotated
+from typing import Any, Literal
 from pydantic import BaseModel, Field
-
-from gimbal_plate.schema.ref import RefBase
 
 
 class Api(BaseModel):
@@ -23,11 +21,4 @@ class Api(BaseModel):
     view_hints: dict[str, Any] | None = None
 
 
-class ApiRef(RefBase):
-    kind: Literal["api_ref"] = "api_ref"
-
-
-ApiUnion = Annotated[
-    Union[Api, ApiRef],
-    Field(discriminator="kind"),
-]
+ApiUnion = Api

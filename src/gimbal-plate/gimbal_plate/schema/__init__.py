@@ -5,7 +5,7 @@
 - endpoint/:EndpointSpec 及其 4 个内嵌子类型,保留目录形式(契约复杂度高)
 
 依赖关系(单向,无环):
-    base 层(ref/states/time_policy/retry_policy/auth)
+    base 层(states/time_policy/retry_policy/auth)
       ↓
     interface 层(resource/setup/teardown/api/strategy/step/scenario/request)
       ↓
@@ -17,7 +17,6 @@ from __future__ import annotations
 
 # ── 基础类型 ──
 from gimbal_plate.schema.auth import AuthSession
-from gimbal_plate.schema.ref import Ref, RefBase
 from gimbal_plate.schema.retry_policy import RetryPolicy
 from gimbal_plate.schema.states import StepState
 from gimbal_plate.schema.time_policy import (
@@ -38,13 +37,11 @@ from gimbal_plate.schema.endpoint import (
 )
 
 # ── Step 及其下挂类型 ──
-from gimbal_plate.schema.api import Api, ApiRef, ApiUnion
-from gimbal_plate.schema.request import Request, RequestRef, RequestUnion
+from gimbal_plate.schema.api import Api, ApiUnion
+from gimbal_plate.schema.request import Request, RequestUnion
 from gimbal_plate.schema.resource import (
     File,
-    FileRef,
     Mock,
-    MockRef,
     Resource,
     ResourceUnion,
 )
@@ -57,12 +54,11 @@ from gimbal_plate.schema.strategy import (
     Scope,
     StrategyBase,
     StrategyPhase,
-    StrategyRef,
     StrategyUnion,
 )
-from gimbal_plate.schema.setup import Setup, SetupRef, SetupUnion
-from gimbal_plate.schema.teardown import Teardown, TeardownRef, TeardownUnion
-from gimbal_plate.schema.step import Step, StepRef, StepUnion
+from gimbal_plate.schema.setup import Setup, SetupUnion
+from gimbal_plate.schema.teardown import Teardown, TeardownUnion
+from gimbal_plate.schema.step import Step, StepUnion
 
 # ── Scenario / Suite ──
 from gimbal_plate.schema.scenario import (
@@ -70,17 +66,13 @@ from gimbal_plate.schema.scenario import (
     Meta,
     RunUnion,
     Scenario,
-    ScenarioRef,
     Suite,
-    SuiteRef,
 )
 
 
 __all__ = [
     # base
     "AuthSession",
-    "Ref",
-    "RefBase",
     "RetryPolicy",
     "StepState",
     "RecordPolicy",
@@ -96,16 +88,12 @@ __all__ = [
     "ResponseSpec",
     # api / request
     "Api",
-    "ApiRef",
     "ApiUnion",
     "Request",
-    "RequestRef",
     "RequestUnion",
     # resource
     "File",
-    "FileRef",
     "Mock",
-    "MockRef",
     "Resource",
     "ResourceUnion",
     # strategy
@@ -117,24 +105,18 @@ __all__ = [
     "Scope",
     "StrategyBase",
     "StrategyPhase",
-    "StrategyRef",
     "StrategyUnion",
     # setup / teardown / step
     "Setup",
-    "SetupRef",
     "SetupUnion",
     "Teardown",
-    "TeardownRef",
     "TeardownUnion",
     "Step",
-    "StepRef",
     "StepUnion",
     # scenario
     "Config",
     "Meta",
     "RunUnion",
     "Scenario",
-    "ScenarioRef",
     "Suite",
-    "SuiteRef",
 ]
