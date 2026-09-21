@@ -5,6 +5,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .page import PageOut
+
 
 class AuthSessionOut(BaseModel):
     """Public-facing view of an AuthSession row.
@@ -29,6 +31,13 @@ class AuthSessionOut(BaseModel):
     # 快照不进计数)。默认 0 — 非列表调用方(detail/test)不填。
     alias_ref_count: int = Field(default=0)
     scenario_ref_count: int = Field(default=0)
+
+
+class AuthListOut(PageOut[AuthSessionOut]):
+    """M4 Page 信封 + 全量类型计数(metaText 的服务端供给)。"""
+
+    token_type_counts: dict[str, int] = Field(
+        default_factory=dict, alias="tokenTypeCounts")
 
 
 class AliasRefItem(BaseModel):

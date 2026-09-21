@@ -28,7 +28,7 @@ describe('useAuthSessionsStore', () => {
   })
 
   it('fetchAll populates list', async () => {
-    vi.spyOn(api, 'list').mockResolvedValue([sample])
+    vi.spyOn(api, 'listAll').mockResolvedValue([sample])
     const s = useAuthSessionsStore()
     await s.fetchAll()
     expect(s.list).toEqual([sample])
@@ -36,7 +36,7 @@ describe('useAuthSessionsStore', () => {
   })
 
   it('fetchAll records error on failure', async () => {
-    vi.spyOn(api, 'list').mockRejectedValue(new Error('boom'))
+    vi.spyOn(api, 'listAll').mockRejectedValue(new Error('boom'))
     const s = useAuthSessionsStore()
     await expect(s.fetchAll()).rejects.toThrow('boom')
     expect(s.fetchStatus).toBe('error')

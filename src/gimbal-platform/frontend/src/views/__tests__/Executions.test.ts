@@ -36,7 +36,7 @@ vi.mock('@/api/executions', async (importOriginal) => {
     cancelExecution: vi.fn().mockResolvedValue(undefined),
     listExecutions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     // T13 行级可观测:rows/artifact 默认空实现,各用例按需 mockResolvedValue。
-    getExecutionRows: vi.fn().mockResolvedValue({ items: [] }),
+    getExecutionRows: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 500 }),
     getCaseArtifact: vi.fn().mockResolvedValue(''),
     // 场景快照导出:默认无快照(存量行形态),快照用例按需覆写。
     getScenarioSnapshot: vi.fn().mockRejectedValue(new Error('no snapshot')),
@@ -274,7 +274,7 @@ describe('Executions.vue — T13 行级明细 + 配方标签迁移', () => {
       { seq: 0, datasetId: null, rowIndex: 0, rep: 0, status: 'passed',
         caseDir: 'case-000-baseline-r0-n0', startedAt: 't1', finishedAt: 't2' },
       { seq: 1, datasetId: 'ds-1', rowIndex: 0, rep: 0, status: 'failed',
-        caseDir: 'case-001-ds-1-r0-n0', startedAt: 't1', finishedAt: 't3' } ] })
+        caseDir: 'case-001-ds-1-r0-n0', startedAt: 't1', finishedAt: 't3' } ], total: 2, page: 1, pageSize: 500 })
     vi.mocked(getCaseArtifact).mockResolvedValue('engine says hi')
 
     const execStore = useExecutionsStore()
@@ -300,7 +300,7 @@ describe('Executions.vue — T13 行级明细 + 配方标签迁移', () => {
   it('工件可收起:点击引擎日志展开,再点收起,又点重新展开并重拉', async () => {
     vi.mocked(getExecutionRows).mockResolvedValue({ items: [
       { seq: 0, datasetId: null, rowIndex: 0, rep: 0, status: 'passed',
-        caseDir: 'case-000-baseline-r0-n0', startedAt: 't1', finishedAt: 't2' } ] })
+        caseDir: 'case-000-baseline-r0-n0', startedAt: 't1', finishedAt: 't2' } ], total: 2, page: 1, pageSize: 500 })
     vi.mocked(getCaseArtifact).mockResolvedValue('engine says hi')
 
     const execStore = useExecutionsStore()
@@ -332,7 +332,7 @@ describe('Executions.vue — T13 行级明细 + 配方标签迁移', () => {
   it('工件可收起:步骤明细同样支持展开/收起', async () => {
     vi.mocked(getExecutionRows).mockResolvedValue({ items: [
       { seq: 0, datasetId: null, rowIndex: 0, rep: 0, status: 'passed',
-        caseDir: 'case-000-baseline-r0-n0', startedAt: 't1', finishedAt: 't2' } ] })
+        caseDir: 'case-000-baseline-r0-n0', startedAt: 't1', finishedAt: 't2' } ], total: 2, page: 1, pageSize: 500 })
     vi.mocked(getCaseArtifact).mockResolvedValue('{"launchStatus":"ok"}')
 
     const execStore = useExecutionsStore()
@@ -356,7 +356,7 @@ describe('Executions.vue — T13 行级明细 + 配方标签迁移', () => {
   })
 
   it('行级数据为空(预部署/认证快速失败)显示空态而非报错', async () => {
-    vi.mocked(getExecutionRows).mockResolvedValue({ items: [] })
+    vi.mocked(getExecutionRows).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 500 })
 
     const execStore = useExecutionsStore()
     const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
@@ -508,7 +508,7 @@ describe('Executions.vue — 执行信息(标题 + 使用基线配置)', () => {
   it('行级明细:基线虚行(datasetId null)数据集列显示「使用基线配置」', async () => {
     vi.mocked(getExecutionRows).mockResolvedValue({ items: [
       { seq: 0, datasetId: null, rowIndex: 0, rep: 0, status: 'passed',
-        caseDir: 'case-000-baseline-r0-n0', startedAt: 't1', finishedAt: 't2' } ] })
+        caseDir: 'case-000-baseline-r0-n0', startedAt: 't1', finishedAt: 't2' } ], total: 2, page: 1, pageSize: 500 })
 
     const execStore = useExecutionsStore()
     const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
@@ -538,7 +538,7 @@ describe('批次 4 原型修订项 — 失败数字直达失败用例', () => {
         started_at: '2026-09-17T10:00:00Z', finished_at: '2026-09-17T10:01:00Z' },
       { id: 2, scenario_id: 'sc_b', status: 'done', passed: 3, failed: 0, total_runs: 3,
         started_at: '2026-09-17T11:00:00Z', finished_at: '2026-09-17T11:01:00Z' },
-    ] as never, total: 2 })
+    ] as never, total: 2, page: 1, pageSize: 200 })
     const router = makeRouter()
     router.push('/executions')
     await router.isReady()
@@ -560,7 +560,7 @@ describe('批次 4 原型修订项 — 失败数字直达失败用例', () => {
   it('详情:?rows=failed → 行级表格自动展开(失败用例清单即行级表)', async () => {
     vi.mocked(getExecutionRows).mockResolvedValue({ items: [
       { seq: 0, datasetId: null, rowIndex: 0, rep: 0, status: 'failed',
-        caseDir: 'case-000', startedAt: 't1', finishedAt: 't2' } ] })
+        caseDir: 'case-000', startedAt: 't1', finishedAt: 't2' } ], total: 2, page: 1, pageSize: 500 })
     const execStore = useExecutionsStore()
     const detail7 = { ...fakeDetail, id: 7 } satisfies Execution
     execStore.detail = detail7

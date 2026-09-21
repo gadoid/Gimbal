@@ -12,7 +12,7 @@
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core import db as db_module
 from app.models.execution import Execution
@@ -30,6 +30,9 @@ EP_GHOST = "gone.endpoint"  # 不在 plate 轻列表 → 不进摘要
 
 async def _seed():
     async with db_module.SessionLocal() as s:
+        from .helpers import ensure_fk_users
+
+        await ensure_fk_users(s, 1, 2, make_admin=1)  # 直插 owner_id=1/2;id=1 造成可登录 admin
         await scenario_store.create(
             s, ScenarioDraft.model_validate(make_draft("sc-sum-1", steps=[
                 {"api": {"view_hints": {"endpoint_id": EP_A1}, "headers": {}},
@@ -49,20 +52,20 @@ async def _seed():
             ])), owner="bob", owner_id=2)
 
         def _exec(sid: str, status: str, owner: int, *, passed=2, failed=0,
-                  created=datetime(2026, 9, 10)):
+                  created=datetime(2026, 9, 10, tzinfo=timezone.utc)):
             return Execution(scenario_id=sid, owner_id=owner, status=status,
                              total_runs=2, passed=passed, failed=failed,
                              created_at=created, finished_at=created)
 
         # sc-sum-1:旧 failed → 新 done(最近一次未失败)
         s.add(_exec("sc-sum-1", "failed", 1, failed=2, passed=0,
-                    created=datetime(2026, 9, 8)))
-        s.add(_exec("sc-sum-1", "done", 1, created=datetime(2026, 9, 10)))
+                    created=datetime(2026, 9, 8, tzinfo=timezone.utc)))
+        s.add(_exec("sc-sum-1", "done", 1, created=datetime(2026, 9, 10, tzinfo=timezone.utc)))
         # sc-sum-2(他人场景,跨 owner 统计):最近一次 failed → 计失败
         s.add(_exec("sc-sum-2", "failed", 2, failed=1, passed=1,
-                    created=datetime(2026, 9, 12)))
+                    created=datetime(2026, 9, 12, tzinfo=timezone.utc)))
         # sc-sum-3:最近一次 canceled(灰)→ 不计失败
-        s.add(_exec("sc-sum-3", "canceled", 2, created=datetime(2026, 9, 11)))
+        s.add(_exec("sc-sum-3", "canceled", 2, created=datetime(2026, 9, 11, tzinfo=timezone.utc)))
         await s.commit()
 
 
@@ -80,7 +83,9 @@ def _plate():
 async def test_impact_summary_groups_by_endpoint_service(client, plate):
     await _seed()
     plate.items = _plate()
-    admin = await _admin(client)
+    from .helpers import FK_ADMIN_PASSWORD, login_user
+
+    admin = await login_user(client, "fkuser1", FK_ADMIN_PASSWORD)
     r = await client.get("/api/adaptations/impact-summary", headers=admin,
                          params=[("endpointIds", EP_A1), ("endpointIds", EP_A2),
                                  ("endpointIds", EP_B1), ("endpointIds", EP_GHOST)])
@@ -104,7 +109,7 @@ async def test_impact_summary_groups_by_endpoint_service(client, plate):
 
 async def test_impact_summary_empty_ids_returns_zeros(client, plate):
     plate.items = _plate()
-    admin = await _admin(client)
+    admin = await _admin(client)  # 未垫用户,首注册即 admin
     r = await client.get("/api/adaptations/impact-summary", headers=admin)
     assert r.status_code == 200, r.text
     assert r.json() == {"services": [], "totals": {

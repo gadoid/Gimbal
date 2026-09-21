@@ -263,7 +263,8 @@ vi.mock('@/api/scenario-composer', () => ({
   })),
 }))
 vi.mock('@/api/auth_sessions', () => ({
-  list: vi.fn().mockResolvedValue([]),
+  list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 }),
+  listAll: vi.fn().mockResolvedValue([]),
 }))
 // carry 值表默认空(与未 mock 时拉取失败 → carryValues=null 行为一致,
 // 既有用例零影响);E8 徽标用例内 mockResolvedValueOnce 注入非空默认

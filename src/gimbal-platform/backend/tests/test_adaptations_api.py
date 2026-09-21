@@ -1,7 +1,7 @@
 """adaptations 路由 API 测试:admin 门控(403/401)、diff 502、impact 只读。"""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 
@@ -60,7 +60,7 @@ async def _api_seed_scenario(sid: str = "sc-api", owner_id: int = 1):
 async def _api_seed_stamp():
     async with await _session() as s:
         s.add(CatalogVersion(endpoint_id=EP, version="1.0.0",
-                             spec_json=OLD_FULL, synced_at=datetime(2026, 1, 1)))
+                             spec_json=OLD_FULL, synced_at=datetime(2026, 1, 1, tzinfo=timezone.utc)))
         await s.commit()
 
 
@@ -146,8 +146,8 @@ async def test_batch_lifecycle_api(client, plate):
 
     listed = await client.get("/api/adaptations/batches", headers=admin)
     assert listed.status_code == 200
-    assert [b["batchId"] for b in listed.json()] == [detail["batchId"]]
-    assert listed.json()[0]["opCounts"] == {"applied": 3}
+    assert [b["batchId"] for b in listed.json()["items"]] == [detail["batchId"]]
+    assert listed.json()["items"][0]["opCounts"] == {"applied": 3}
 
     rolled = await client.post(
         f"/api/adaptations/batches/{detail['batchId']}/rollback", headers=admin)
@@ -291,9 +291,9 @@ async def test_batches_scope_mine_lists_owned(client, plate):
     mine = await client.get("/api/adaptations/batches",
                             params={"scope": "mine"}, headers=member)
     assert mine.status_code == 200
-    assert [b["batchId"] for b in mine.json()] == [detail["batchId"]]
+    assert [b["batchId"] for b in mine.json()["items"]] == [detail["batchId"]]
     # owner 视图不泄漏场景细节,但批次元数据 + opCounts 可见(知情)
-    assert mine.json()[0]["opCounts"] == {"pending": 3}
+    assert mine.json()["items"][0]["opCounts"] == {"pending": 3}
 
 
 async def test_batches_scope_mine_excludes_others(client, plate):
@@ -307,7 +307,7 @@ async def test_batches_scope_mine_excludes_others(client, plate):
     mine = await client.get("/api/adaptations/batches",
                             params={"scope": "mine"}, headers=member)
     assert mine.status_code == 200
-    assert mine.json() == []
+    assert mine.json()["items"] == []
 
 
 async def test_batches_member_without_scope_403_admin_full(client, plate):
@@ -318,13 +318,14 @@ async def test_batches_member_without_scope_403_admin_full(client, plate):
     _api_plate_ahead(plate)
     detail = await _open_batch_ok(client, admin)
 
+    # M2.5:member 无 scope → 403(operator_only;技术运营权归 operator)
     denied = await client.get("/api/adaptations/batches", headers=member)
     assert denied.status_code == 403
-    assert "admin_only" in denied.json()["detail"]
+    assert "operator_only" in denied.json()["detail"]
 
     full = await client.get("/api/adaptations/batches", headers=admin)
     assert full.status_code == 200
-    assert [b["batchId"] for b in full.json()] == [detail["batchId"]]
+    assert [b["batchId"] for b in full.json()["items"]] == [detail["batchId"]]
 
 
 # ─── skip / patch op(P5 Task 3)─────────────────────────────────

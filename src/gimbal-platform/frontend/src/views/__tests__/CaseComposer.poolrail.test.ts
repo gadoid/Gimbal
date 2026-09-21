@@ -39,13 +39,15 @@ const GEN_ENTRY = vi.hoisted(() => ({
   updated_at: '',
 }))
 vi.mock('@/api/constants', () => ({
-  list: vi.fn(() => Promise.resolve([GEN_ENTRY])),
+  list: vi.fn(() => Promise.resolve({ items: [GEN_ENTRY], total: 1, page: 1, pageSize: 200 })),
+  listAll: vi.fn(() => Promise.resolve([GEN_ENTRY])),
   create: vi.fn(),
   patch: vi.fn(),
   remove: vi.fn(),
 }))
 vi.mock('@/api/auth_sessions', () => ({
-  list: vi.fn(() => Promise.resolve([])),
+  list: vi.fn(() => Promise.resolve({ items: [], total: 0, page: 1, pageSize: 200 })),
+  listAll: vi.fn(() => Promise.resolve([])),
 }))
 
 function sampleScenario(steps: unknown[]): Scenario {

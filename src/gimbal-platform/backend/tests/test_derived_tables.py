@@ -17,9 +17,26 @@ async def _session():
     return db_module.SessionLocal()
 
 
+async def _seed_parents(s) -> None:
+    """垫 FK 父行:operator_id=1(users)与 scenario_id=sc-a
+    (composer_scenarios)—— SQLite 不校验 FK、PG 校验,双方言同垫。"""
+    from app.schemas.scenario_composer import ScenarioDraft
+    from app.services import scenario_store
+
+    from .helpers import ensure_fk_users, make_draft
+
+    await ensure_fk_users(s, 1)
+    try:
+        await scenario_store.create(
+            s, ScenarioDraft.model_validate(make_draft("sc-a")), owner="alice")
+    except ValueError:  # 已存在(同测试内二次进人)
+        pass
+
+
 @pytest.mark.filterwarnings("ignore:New instance.*:sqlalchemy.exc.SAWarning")
 async def test_endpoint_ref_roundtrip_and_pk(fresh_db):
     async with await _session() as s:
+        await _seed_parents(s)
         s.add(ScenarioEndpointRef(
             scenario_id="sc-a", step_index=0, source="body",
             field_name="amount", endpoint_id="fin.order.add", via_var="amount",
@@ -44,6 +61,7 @@ async def test_endpoint_ref_roundtrip_and_pk(fresh_db):
 
 async def test_catalog_batch_snapshot_roundtrip(fresh_db):
     async with await _session() as s:
+        await _seed_parents(s)
         s.add(CatalogVersion(
             endpoint_id="fin.order.add", version="1.0.0",
             spec_json={"id": "fin.order.add", "version": "1.0.0",
@@ -68,6 +86,7 @@ async def test_catalog_batch_snapshot_roundtrip(fresh_db):
 
 async def test_adaptation_op_roundtrip(fresh_db):
     async with await _session() as s:
+        await _seed_parents(s)
         s.add(AdaptationBatch(
             batch_id="bt-9", endpoint_id="fin.order.add",
             from_version="1.0.0", to_version="1.1.0",

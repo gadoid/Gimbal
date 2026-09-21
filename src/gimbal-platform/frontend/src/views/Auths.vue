@@ -8,7 +8,7 @@
     <PageHead
       icon="lock"
       title="认证管理"
-      :count="store.list.length ? `${store.list.length} 条凭证` : undefined"
+      :count="listTotal ? `${listTotal} 条凭证` : undefined"
       :subtitle="metaText"
     />
 
@@ -104,11 +104,18 @@
       </table>
     </div>
 
-    <div v-else-if="store.fetchStatus === 'loading'" class="py-10 text-center text-body text-muted-foreground">加载中…</div>
+    <div v-else-if="listLoading" class="py-10 text-center text-body text-muted-foreground">加载中…</div>
     <div v-else class="empty-cta" data-testid="auths-empty">
       <p>暂无认证 — 复制用例中的 alias 在此登记</p>
       <Button variant="outline" size="sm" @click="openCreate">+ 新增认证</Button>
     </div>
+
+    <Pagination
+      v-if="listPageCount > 1"
+      v-model:page="listPage"
+      :total="listTotal"
+      :page-size="list.pageSize"
+    />
 
     <!-- ── 创建 / 编辑(定稿表单范式)──────────────────────────── -->
     <Dialog :open="createOpen" @update:open="createOpen = $event">
@@ -324,13 +331,17 @@ import { computed, onMounted, ref } from 'vue'
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
 import { useForm } from 'vee-validate'
-import { useListSearch } from '@/utils/useListSearch'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
+import { useServerList } from '@/composables/useServerList'
 import { useAuthSessionsStore } from '@/stores/auth_sessions'
 import { useAuthStore } from '@/stores/auth'
-import { getReferences, type AuthReferences, type AuthSession, type TestResult } from '@/api/auth_sessions'
+import {
+  getReferences, list as apiList,
+  type AuthReferences, type AuthSession, type TestResult,
+} from '@/api/auth_sessions'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
+import { Pagination } from '@/components/ui/pagination'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -354,30 +365,50 @@ const ttClass: Record<string, string> = {
   Authorization: 'red',
 }
 
-// ── filters ────────────────────────────────────────────────────
-// Search via the shared composable; the token-type chip filter is
-// applied on top so the two concerns stay orthogonal.
-const { query: searchQuery, filtered: searchFiltered } = useListSearch(
-  () => store.list,
-  ['alias', 'username', 'url'],
-)
+// ── filters(M4:检索/类型过滤下推服务端,Page 信封)───────────────
+// useServerList 观察 params 签名:q/类型任一变化 → 300ms 防抖重拉 + 回页 1。
+// username 是服务端 Fernet 密文不可检索(q 只打 alias/url,占位文案如实)。
+const searchQuery = ref('')
 const TT_FILTERS = ['all', 'Bearer', 'Basic', 'Cookie', 'Authorization'] as const
 type TtFilter = typeof TT_FILTERS[number]
 const tokenTypeFilter = ref<TtFilter>('all')
 
-const visibleAuths = computed(() =>
-  searchFiltered.value.filter(
-    (a) => tokenTypeFilter.value === 'all' || a.token_type === tokenTypeFilter.value,
-  ),
-)
+const tokenTypeCounts = ref<Record<string, number>>({})
+const list = useServerList<AuthSession, Record<string, string | number | boolean | undefined>>({
+  fetch: async (params) => {
+    const env = await apiList(params)
+    tokenTypeCounts.value = env.tokenTypeCounts ?? {}
+    return env
+  },
+  params: () => ({
+    q: searchQuery.value.trim() || undefined,
+    token_type: tokenTypeFilter.value === 'all' ? undefined : tokenTypeFilter.value,
+  }),
+  pageSize: 50,
+})
+
+const visibleAuths = computed(() => list.items.value)
+const listTotal = computed(() => list.total.value)
+const listLoading = computed(() => list.loading.value)
+const listPageCount = computed(() => list.pageCount.value)
+const listPage = list.page
+
+async function reloadList(): Promise<void> {
+  await list.reload()
+}
 
 const metaText = computed(() => {
-  const total = store.list.length
+  const total = listTotal.value
   if (total === 0) return '用户级独立凭证池 · 与 yaml 文件 Config.users 解耦'
-  const unref = store.list.filter((a) => !a.alias_ref_count && !a.scenario_ref_count).length
-  // 原型 H-auths-v2 统计行:「N 条凭证 · …未被任何引用」(已过期无数据源,不列)
+  const unref = visibleAuths.value.filter(
+    (a) => !a.alias_ref_count && !a.scenario_ref_count,
+  ).length
+  // 原型 H-auths-v2 统计行:「N 条凭证 · …未被任何引用」(已过期无数据源,不列)。
+  // 类型计数走 tokenTypeCounts(全量口径,M4 服务端聚合;unref 是当前页口径)。
   const unrefSeg = unref ? ` · ${unref} 条未被任何引用` : ''
-  return `${total} 条凭证${unrefSeg} · ${store.list.filter((a) => a.token_type === 'Bearer').length} Bearer · ${store.list.filter((a) => a.token_type === 'Authorization').length} 整段头`
+  const bearer = tokenTypeCounts.value.Bearer ?? 0
+  const wholeHeader = tokenTypeCounts.value.Authorization ?? 0
+  return `${total} 条凭证${unrefSeg} · ${bearer} Bearer · ${wholeHeader} 整段头`
 })
 
 function formatExpires(seconds: number): string {
@@ -466,6 +497,7 @@ const onSubmitForm = handleSubmit(async (values) => {
       toast.success(`已创建 ${values.alias}`)
     }
     createOpen.value = false
+    void reloadList()
   } catch (e) {
     // store 的 mutation 不维护 lastError — 必须用捕获到的错误本身，
     // 否则会显示上一次 fetch 的陈旧错误。
@@ -582,6 +614,7 @@ async function submitDelete() {
     await store.deleteAuth(deleteTarget.value.id)
     toast.success(`已删除 ${deleteTarget.value.alias}`)
     deleteOpen.value = false
+    void reloadList()
   } catch (e) {
     // 409 = 本人场景的模板/方案引用拦截(配套方案 §1.5 窄口径):
     // 错误信息带场景清单 — 保持弹框开着让用户看完再处理
@@ -594,9 +627,9 @@ async function submitDelete() {
 // ── init ───────────────────────────────────────────────────────
 onMounted(async () => {
   try {
-    await store.fetchAll()
+    await reloadList()
   } catch {
-    showError('加载', undefined, store.lastError)
+    // useServerList 默认 onError 已弹全局提示;这里静默即可。
   }
 })
 </script>

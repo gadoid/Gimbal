@@ -567,8 +567,8 @@ import {
   listStrategyKinds, getStrategyKindFull, resolveResponsePaths,
   validateEndpointFieldStates,
 } from '@/api/scenario-composer'
-import { list as listAuths } from '@/api/auth_sessions'
-import { listAliases } from '@/api/service-aliases'
+import { listAll as listAuths } from '@/api/auth_sessions'
+import { listAllAliases } from '@/api/service-aliases'
 import { getBindings as getCarryBindings, getDefaults as getCarryDefaults } from '@/api/carry'
 import { fetchQueryViewIndex, fetchQueryViewRows } from '@/api/query-views'
 import type { QueryViewIndexEntry } from '@/api/query-views'
@@ -1723,7 +1723,7 @@ onMounted(() => {
 // 预填只是辅助,不绑也能手工选。
 const aliasCredMap = ref<Record<string, string>>({})
 onMounted(() => {
-  listAliases()
+  listAllAliases()
     .then((rows) => {
       const m: Record<string, string> = {}
       for (const r of rows) if (r.credentialAlias) m[r.aliasName] = r.credentialAlias

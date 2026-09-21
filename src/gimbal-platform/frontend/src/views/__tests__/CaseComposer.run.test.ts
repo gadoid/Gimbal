@@ -43,13 +43,15 @@ vi.mock('vue-router', async (importOriginal) => {
 })
 
 vi.mock('@/api/constants', () => ({
-  list: vi.fn(() => Promise.resolve([])),
+  list: vi.fn(() => Promise.resolve({ items: [], total: 0, page: 1, pageSize: 200 })),
+  listAll: vi.fn(() => Promise.resolve([])),
   create: vi.fn(),
   patch: vi.fn(),
   remove: vi.fn(),
 }))
 vi.mock('@/api/auth_sessions', () => ({
-  list: vi.fn(() => Promise.resolve([{ alias: 'qa1' }])),
+  list: vi.fn(() => Promise.resolve({ items: [], total: 0, page: 1, pageSize: 200 })),
+  listAll: vi.fn(() => Promise.resolve([{ alias: 'qa1' }])),
 }))
 
 /** V2 fixture:listRunSchemes 保证 default 置顶 */

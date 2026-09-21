@@ -6,8 +6,28 @@ import type {
   ConstantEntryPatchIn,
 } from '@/types/constants'
 
-export function list() {
-  return http.get<ConstantEntry[]>('/constants').then((r) => r.data)
+/** M4 Page 信封(§6.3)。 */
+export interface ConstantsPage {
+  items: ConstantEntry[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export function list(params?: {
+  q?: string
+  kind?: string
+  page?: number
+  page_size?: number
+}) {
+  return http
+    .get<ConstantsPage>('/constants', { params })
+    .then((r) => r.data)
+}
+
+/** 全量便利(小池消费方):编排面板/管理页仍要全集。 */
+export function listAll() {
+  return list({ page: 1, page_size: 200 }).then((p) => p.items)
 }
 
 export function create(payload: ConstantEntryCreateIn) {

@@ -14,6 +14,7 @@ import * as catalog from '@/utils/catalog-services'
 
 vi.mock('@/api/service-aliases', () => ({
   listAliases: vi.fn(),
+  listAllAliases: vi.fn(),
 }))
 vi.mock('@/utils/catalog-services', () => ({
   loadCatalogServiceNames: vi.fn(),
@@ -58,7 +59,7 @@ async function mountDetail(path: string) {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(aliasApi.listAliases).mockResolvedValue(aliases)
+  vi.mocked(aliasApi.listAllAliases).mockResolvedValue(aliases)
   vi.mocked(catalog.loadCatalogServiceNames).mockResolvedValue(['fin-service', 'wms-service'])
 })
 

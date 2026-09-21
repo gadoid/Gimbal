@@ -51,6 +51,27 @@ export interface Execution {
   }
 }
 
+/** 列表行形态(M1 响应投影,PG迁移方案 §2.2 债 4 补刀):去 config —
+ *  config_json 是凭证引用面,不随行下发;详情页保留完整 config。
+ *  configSummary = 列表 UI 既有的四个非敏感展示字段的窄投影。 */
+export interface ExecutionListItem extends Omit<Execution, 'config'> {
+  configSummary: {
+    schemeId?: string | null
+    schemeName?: string | null
+    nRuns?: number
+    parallel?: number
+    stepTo?: number | null
+    authFailFast?: { error: string }
+  }
+}
+
+export interface ExecutionListEnvelope {
+  items: ExecutionListItem[]
+  total: number
+  page: number
+  pageSize: number
+}
+
 /** 行级状态(spec §9.1)— rows 端点返回的 camelCase 行结构 */
 export interface ExecutionRow {
   seq: number
@@ -67,8 +88,12 @@ export interface ExecutionRow {
 
 export function listExecutions(params?: {
   scenarioId?: string
+  /** 检索词下推(M4):scenario_name/scenario_id 子串 + 执行号前缀 */
+  q?: string
   limit?: number
   offset?: number
+  page?: number
+  pageSize?: number
   /** 状态筛(执行设计 §3.4);后端校验非法值 422 */
   status?: ExecutionStatus
   /** 批次筛(队列归并视图) */
@@ -79,11 +104,14 @@ export function listExecutions(params?: {
 }) {
   // 后端 Query 形参是 snake_case — 出参侧保持 snake_case(既有约定)。
   return http
-    .get<{ items: Execution[]; total: number }>('/executions', {
+    .get<ExecutionListEnvelope>('/executions', {
       params: {
         scenario_id: params?.scenarioId,
+        q: params?.q,
         limit: params?.limit,
         offset: params?.offset,
+        page: params?.page,
+        page_size: params?.pageSize,
         status: params?.status,
         batch_id: params?.batchId,
         created_from: params?.createdFrom,
@@ -133,10 +161,15 @@ export function cancelExecution(id: number): Promise<Execution> {
   return http.post<Execution>(`/executions/${id}/cancel`).then((r) => r.data)
 }
 
-/** 行级状态(spec §9.1):活跃执行读 dispatcher registry,历史执行回放 JSONL。 */
-export function getExecutionRows(id: number): Promise<{ items: ExecutionRow[] }> {
+/** 行级状态(M6,债 5):活跃执行读 dispatcher registry,历史执行读
+ *  execution_rows DB;信封 {items,total,page,pageSize}(单执行行数
+ * 有限,默认一页全取,信封为超长单留分页口)。 */
+export function getExecutionRows(
+  id: number, page = 1, pageSize = 500,
+): Promise<{ items: ExecutionRow[]; total: number; page: number; pageSize: number }> {
   return http
-    .get<{ items: ExecutionRow[] }>(`/executions/${id}/rows`)
+    .get<{ items: ExecutionRow[]; total: number; page: number; pageSize: number }>(
+      `/executions/${id}/rows`, { params: { page, page_size: pageSize } })
     .then((r) => r.data)
 }
 

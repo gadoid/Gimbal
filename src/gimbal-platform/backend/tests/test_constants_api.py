@@ -39,8 +39,9 @@ async def test_b1_create_and_list_owned_entries(client: AsyncClient) -> None:
 
     r = await client.get("/api/constants", headers=headers)
     assert r.status_code == 200
-    items = r.json()
-    assert [it["name"] for it in items] == ["bank_id", "bl_no"]  # name 升序
+    body = r.json()
+    assert body["total"] == 2
+    assert [it["name"] for it in body["items"]] == ["bank_id", "bl_no"]  # name 升序
 
 
 async def test_b2_owner_isolation_404(client: AsyncClient) -> None:
@@ -62,7 +63,7 @@ async def test_b2_owner_isolation_404(client: AsyncClient) -> None:
         assert r.status_code == 404, (method, r.text)
     # bob 看不到 alice 的条目
     r = await client.get("/api/constants", headers=bob)
-    assert r.json() == []
+    assert r.json()["items"] == []
 
 
 async def test_b3_literal_requires_primitive_value(client: AsyncClient) -> None:
@@ -193,7 +194,7 @@ async def test_b8_delete(client: AsyncClient) -> None:
     r = await client.delete(f"/api/constants/{eid}", headers=headers)
     assert r.status_code == 204
     r = await client.get("/api/constants", headers=headers)
-    assert r.json() == []
+    assert r.json()["items"] == []
 
 
 async def test_b9_literal_primitive_roundtrip(client: AsyncClient) -> None:

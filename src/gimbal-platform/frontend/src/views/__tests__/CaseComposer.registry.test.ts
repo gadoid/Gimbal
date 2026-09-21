@@ -29,10 +29,12 @@ vi.mock('@/api/executions', () => ({
   listExecutions: vi.fn(() => Promise.resolve({ items: [], total: 0 })),
 }))
 vi.mock('@/api/auth_sessions', () => ({
-  list: vi.fn(() => Promise.resolve([])),
+  list: vi.fn(() => Promise.resolve({ items: [], total: 0, page: 1, pageSize: 200 })),
+  listAll: vi.fn(() => Promise.resolve([])),
 }))
 vi.mock('@/api/constants', () => ({
-  list: vi.fn(() => Promise.resolve([])),
+  list: vi.fn(() => Promise.resolve({ items: [], total: 0, page: 1, pageSize: 200 })),
+  listAll: vi.fn(() => Promise.resolve([])),
   create: vi.fn(),
   patch: vi.fn(),
   remove: vi.fn(),

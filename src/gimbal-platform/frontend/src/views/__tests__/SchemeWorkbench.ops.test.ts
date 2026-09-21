@@ -22,7 +22,7 @@ vi.mock('@/utils/confirmAction', () => ({
 }))
 
 // 运行配置区别名下拉:owner 凭证池(RunPanelHost 同款取数口)
-vi.mock('@/api/auth_sessions', () => ({ list: vi.fn(async () => [{ alias: 'alias-1' }]) }))
+vi.mock('@/api/auth_sessions', () => ({ list: vi.fn(async () => ({ items: [], total: 0, page: 1, pageSize: 200 })), listAll: vi.fn(async () => [{ alias: 'alias-1' }]) }))
 
 const SCHEME_DEFAULT = {
   schemeId: 'rs-001', name: '默认方案', isDefault: true,

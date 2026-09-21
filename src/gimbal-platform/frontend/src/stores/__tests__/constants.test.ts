@@ -11,6 +11,7 @@ import type { ConstantEntry } from '@/types/constants'
 
 vi.mock('@/api/constants', () => ({
   list: vi.fn(),
+  listAll: vi.fn(),
   create: vi.fn(),
   patch: vi.fn(),
   remove: vi.fn(),
@@ -35,12 +36,12 @@ beforeEach(() => {
 
 describe('useConstantsStore', () => {
   it('F19a: ensureEntries 并发去重 — 双调用仅一次 list', async () => {
-    vi.mocked(constantsApi.list).mockResolvedValue([
+    vi.mocked(constantsApi.listAll).mockResolvedValue([
       entry({ id: 1, name: 'a' }),
     ])
     const s = useConstantsStore()
     await Promise.all([s.ensureEntries(), s.ensureEntries()])
-    expect(constantsApi.list).toHaveBeenCalledTimes(1)
+    expect(constantsApi.listAll).toHaveBeenCalledTimes(1)
     expect(s.entries).toHaveLength(1)
   })
 
@@ -48,7 +49,7 @@ describe('useConstantsStore', () => {
     const s = useConstantsStore()
     s.entries = [entry({ id: 1 })]
     await s.ensureEntries()
-    expect(constantsApi.list).not.toHaveBeenCalled()
+    expect(constantsApi.listAll).not.toHaveBeenCalled()
   })
 
   it('F19c: 目录失败不抛 — catalogError 落地,条目链路不受影响', async () => {

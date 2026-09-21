@@ -56,7 +56,10 @@ async function clickMenuItem(testid: string) {
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.restoreAllMocks()
-  vi.spyOn(api, 'list').mockResolvedValue([sample])
+  vi.spyOn(api, 'list').mockResolvedValue({
+      items: [sample], total: 1, page: 1, pageSize: 50,
+      tokenTypeCounts: { Bearer: 1 },
+    })
   vi.spyOn(api, 'create').mockResolvedValue(sample)
   vi.spyOn(api, 'patch').mockResolvedValue(sample)
   vi.spyOn(api, 'remove').mockResolvedValue(undefined)
@@ -239,10 +242,13 @@ describe('Auths — 被引用列与反查侧板(配套方案 §1)', () => {
   })
 
   it('原型对齐:0 引用行灰字「未被引用 · 可安全删除」;副标题含未被引用统计', async () => {
-    vi.spyOn(api, 'list').mockResolvedValue([
-      { ...sample, id: 2, alias: 'lonely', alias_ref_count: 0, scenario_ref_count: 0 },
-      sample,
-    ] as never)
+    vi.spyOn(api, 'list').mockResolvedValue({
+      items: [
+        { ...sample, id: 2, alias: 'lonely', alias_ref_count: 0, scenario_ref_count: 0 },
+        sample,
+      ],
+      total: 2, page: 1, pageSize: 50, tokenTypeCounts: { Bearer: 2 },
+    } as never)
     const w = mountPage()
     await flushPromises()
 

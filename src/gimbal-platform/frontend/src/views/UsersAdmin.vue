@@ -6,6 +6,9 @@
 <template>
   <ListPage title="用户管理" width="wide" :subtitle="metaText">
     <template #actions>
+      <Button variant="outline" size="sm" data-testid="announce-btn" @click="announceOpen = true">
+        发布公告
+      </Button>
       <Input
         v-model="searchQuery"
         class="w-[240px] max-w-full"
@@ -17,12 +20,19 @@
         <SelectContent>
           <SelectItem value="all">全部角色</SelectItem>
           <SelectItem value="admin">admin</SelectItem>
+          <SelectItem value="operator">运维</SelectItem>
           <SelectItem value="member">成员</SelectItem>
         </SelectContent>
       </Select>
       <Button data-testid="open-create" @click="openCreate">+ 创建用户</Button>
     </template>
 
+    <Tabs v-model="mainTab" class="mt-1" data-testid="users-tabs">
+    <TabsList>
+      <TabsTrigger value="users" data-testid="tab-users">用户</TabsTrigger>
+      <TabsTrigger value="audit" data-testid="tab-audit">审计</TabsTrigger>
+    </TabsList>
+    <TabsContent value="users">
     <div v-if="visibleUsers.length" class="lib-card">
       <Table>
         <TableHeader>
@@ -55,10 +65,8 @@
             </span>
           </TableCell>
           <TableCell>
-            <span class="chip" :class="row.is_admin
-              ? 'bg-signal-failed/10 text-signal-failed'
-              : 'bg-signal-soft text-signal'">
-              {{ row.is_admin ? 'admin' : '成员' }}
+            <span class="chip" :class="roleChipClass(roleOf(row))" :data-testid="`user-role-${row.id}`">
+              {{ roleLabel(roleOf(row)) }}
             </span>
           </TableCell>
           <TableCell>
@@ -82,11 +90,13 @@
               <DropdownMenuContent align="end">
                 <DropdownMenuItem data-testid="act-edit" @click="onCommand('edit', row)">编辑昵称</DropdownMenuItem>
                 <DropdownMenuItem
-                  data-testid="act-toggle-role"
-                  :disabled="!canToggleRole(row)"
-                  :title="canToggleRole(row) ? '' : '不能降级最后一个 admin'"
-                  @click="onCommand('toggle-role', row)"
-                >{{ row.is_admin ? '降级为成员' : '升级为 admin' }}</DropdownMenuItem>
+                  v-for="r in OTHER_ROLES"
+                  :key="r"
+                  :data-testid="`act-role-${r}`"
+                  :disabled="!canSetRole(row, r)"
+                  :title="canSetRole(row, r) ? '' : '不能降级最后一个 admin'"
+                  @click="onCommand('set-role', row, r)"
+                >设为 {{ roleLabel(r) }}</DropdownMenuItem>
                 <DropdownMenuItem data-testid="act-reset-pw" @click="onCommand('reset-pw', row)">重置密码</DropdownMenuItem>
                 <DropdownMenuItem data-testid="act-toggle-active" @click="onCommand(row.is_active ? 'deactivate' : 'activate', row)">
                   {{ row.is_active ? '停用账号' : '启用账号' }}
@@ -105,14 +115,63 @@
       </Table>
     </div>
 
-    <div v-else-if="usersStore.fetchStatus === 'loading'" class="slib-loading">
+    <div v-else-if="list.loading.value" class="slib-loading">
       加载中…
     </div>
     <!-- 空态 = 引导 CTA(Signal 规范),非虚线占位 -->
     <div v-else class="empty-cta" data-testid="users-empty">
       <p>暂无用户</p>
       <Button variant="outline" size="sm" @click="openCreate">创建第一个用户</Button>
-    </div>
+    </div>    </TabsContent>
+
+    <TabsContent value="audit">
+      <div class="lib-card p-4">
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+          <span class="text-body font-semibold">特权写审计</span>
+          <span class="text-caption text-slate-500">角色变更 / 删号 / 重置密码 / 公告 / carry / 适配 / 别名</span>
+          <span class="flex-1"></span>
+          <button
+            v-for="a in auditActions"
+            :key="a"
+            type="button"
+            class="audit-chip"
+            :class="{ active: auditAction === a }"
+            @click="setAuditAction(auditAction === a ? '' : a)"
+          >{{ a }}</button>
+        </div>
+        <div v-if="auditLoading" class="py-6 text-center text-body text-slate-500">加载中…</div>
+        <Table v-else-if="auditRows.length">
+          <TableHeader>
+            <TableRow>
+              <TableHead class="w-[160px]">时间</TableHead>
+              <TableHead class="w-[140px]">操作者</TableHead>
+              <TableHead class="w-[200px]">动作</TableHead>
+              <TableHead class="w-[160px]">对象</TableHead>
+              <TableHead>详情</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="row in auditRows" :key="row.id">
+              <TableCell class="muted">{{ formatAuditTime(row.createdAt) }}</TableCell>
+              <TableCell>{{ row.actorName || (row.actorId ? `#${row.actorId}` : '系统') }}</TableCell>
+              <TableCell><span class="audit-chip static">{{ row.action }}</span></TableCell>
+              <TableCell class="mono">{{ row.resourceId ?? '—' }}</TableCell>
+              <TableCell class="mono audit-detail">{{ JSON.stringify(row.detail) }}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+        <p v-else class="py-6 text-center text-body text-slate-500">暂无审计记录</p>
+        <Pagination
+          v-if="auditPageCount > 1"
+          v-model:page="auditPage"
+          :total="auditTotal"
+          :page-size="auditPageSize"
+        />
+      </div>
+    </TabsContent>
+    </Tabs>
+
+
 
     <!-- ── 创建用户:定稿表单范式(useForm + zod)───────────────── -->
     <Dialog :open="createOpen" @update:open="createOpen = $event">
@@ -181,6 +240,37 @@
     </Dialog>
 
     <!-- ── 编辑昵称(单字段,无需校验真源,直受控)────────────────── -->
+    <Dialog :open="announceOpen" @update:open="announceOpen = $event">
+      <DialogContent class="w-[420px]">
+        <DialogHeader>
+          <DialogTitle>发布公告</DialogTitle>
+          <DialogDescription>
+            面向全员的通知(权限方案 §3.2);到期的公告自动从列表消失。
+          </DialogDescription>
+        </DialogHeader>
+        <div class="space-y-3">
+          <div>
+            <label class="mb-1 block text-caption text-muted-foreground">标题</label>
+            <Input v-model="announceForm.title" data-testid="announce-title" placeholder="如:今晚 23:00 停服迁移" />
+          </div>
+          <div>
+            <label class="mb-1 block text-caption text-muted-foreground">正文</label>
+            <Input v-model="announceForm.body" data-testid="announce-body" placeholder="补充说明(可选)" />
+          </div>
+          <div>
+            <label class="mb-1 block text-caption text-muted-foreground">有效期(小时,0 = 永久)</label>
+            <Input v-model.number="announceForm.hours" type="number" min="0" data-testid="announce-hours" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" size="sm" @click="announceOpen = false">取消</Button>
+          <Button size="sm" :disabled="!announceForm.title.trim() || announcing" data-testid="announce-submit" @click="submitAnnouncement">
+            {{ announcing ? '发布中…' : '发布' }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     <Dialog :open="editOpen" @update:open="editOpen = $event">
       <DialogContent class="max-w-[420px]">
         <DialogHeader>
@@ -228,18 +318,57 @@
       </DialogContent>
     </Dialog>
 
-    <!-- ── 删除确认:输入用户名才能执行(与旧版同款硬确认)────────── -->
+    <!-- ── 删除 + 资源处置三选一(P2-2,权限方案 §4.3)───────────── -->
     <Dialog :open="deleteOpen" @update:open="deleteOpen = $event">
-      <DialogContent class="max-w-[460px]">
+      <DialogContent class="max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>删除用户</DialogTitle>
+          <DialogTitle>删除用户并处置资源</DialogTitle>
         </DialogHeader>
         <div v-if="deleteTarget" class="flex flex-col gap-3">
           <p class="m-0 text-body leading-relaxed">
             此操作不可撤销。用户 <code class="rounded-chip bg-signal-failed/10 px-1.5 font-mono text-signal-failed">{{ deleteTarget.username }}</code>
-            的所有收藏将被一并清除，<b>该用户上传的私有用例保留</b>。
+            的<b>执行台账恒保留</b>(归属展示为「已注销」);其 case 目录当场清扫。请选择其私有场景的处置方式:
           </p>
-          <p class="m-0 text-body">要继续请输入 <code class="font-mono">{{ deleteTarget.username }}</code> 确认：</p>
+          <RadioGroup v-model="disposal" class="gap-2" data-testid="disposal-group">
+            <label class="disposal-opt" :class="{ on: disposal === 'publicize' }">
+              <RadioGroupItem value="publicize" data-testid="disposal-publicize" />
+              <span class="flex flex-col gap-0.5">
+                <span class="text-body font-medium">转为公共库(推荐)</span>
+                <span class="m-0 text-caption text-slate-500">私有场景转为公共场景,署名保留原作者快照。</span>
+              </span>
+            </label>
+            <label class="disposal-opt" :class="{ on: disposal === 'transfer' }">
+              <RadioGroupItem value="transfer" data-testid="disposal-transfer" />
+              <span class="flex flex-col gap-0.5">
+                <span class="text-body font-medium">转让给指定成员</span>
+                <span class="m-0 text-caption text-slate-500">场景归属改写(数据集/方案随场景走);个人别名转为团队共享;受让人收通知。</span>
+              </span>
+            </label>
+            <label class="disposal-opt" :class="{ on: disposal === 'purge' }">
+              <RadioGroupItem value="purge" data-testid="disposal-purge" />
+              <span class="flex flex-col gap-0.5">
+                <span class="text-body font-medium">一并删除</span>
+                <span class="m-0 text-caption text-signal-failed">场景及其数据集/方案/收藏全部删除,不可恢复。</span>
+              </span>
+            </label>
+          </RadioGroup>
+
+          <label v-if="disposal === 'transfer'" class="flex flex-col gap-1">
+            <span class="text-caption text-slate-500">受让成员</span>
+            <Select v-model="transferTo">
+              <SelectTrigger class="w-full" data-testid="transfer-to"><SelectValue placeholder="选择成员" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="u in transferCandidates" :key="u.id" :value="String(u.id)">
+                  {{ u.display_name || u.username }}({{ u.username }})
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </label>
+
+          <p class="m-0 text-body">
+            要继续请输入 <code class="font-mono">{{ deleteTarget.username }}</code> 确认
+            <span v-if="disposal === 'purge'" class="text-signal-failed">(连带删除场景,请再次确认)</span>:
+          </p>
           <Input v-model="deleteConfirmInput" :placeholder="`输入 ${deleteTarget.username} 以确认`" data-testid="delete-confirm" />
         </div>
         <DialogFooter>
@@ -257,17 +386,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
 import { useForm } from 'vee-validate'
-import { useListSearch } from '@/utils/useListSearch'
 import { avatarColor } from '@/utils/avatarColor'
 import { toast } from '@/utils/toast'
 import { showError } from '@/utils/errorFallback'
 import { useUsersStore } from '@/stores/users'
+import * as notificationsApi from '@/api/notifications'
 import { useAuthStore } from '@/stores/auth'
 import * as usersApi from '@/api/users'
+import { useServerList } from '@/composables/useServerList'
+import { Pagination } from '@/components/ui/pagination'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { listAuditLogs, type AuditLogRow } from '@/api/admin'
 import type { UserOut, ResetPasswordOut } from '@/api/users'
 import ListPage from '@/layouts/ListPage.vue'
 import { Button } from '@/components/ui/button'
@@ -282,30 +415,32 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 const usersStore = useUsersStore()
 const authStore = useAuthStore()
 
-// ── filters & visible rows ──────────────────────────────
-// Search + role filter split: useListSearch handles substring
-// matching, the role filter stays as a separate predicate so the
-// composable stays generic.
-const { query: searchQuery, filtered: searchFiltered } = useListSearch(
-  () => usersStore.list,
-  ['username', 'display_name'],
-)
-const roleFilter = ref<'all' | 'admin' | 'member'>('all')
+// ── filters & visible rows(M4:q/角色下推服务端,Page 信封)──────
+// useServerList 观察 params 签名:搜索词/角色任一变化 → 防抖重拉 + 回页 1。
+const searchQuery = ref('')
+const roleFilter = ref<'all' | 'admin' | 'member' | 'operator'>('all')
 
-const visibleUsers = computed(() =>
-  searchFiltered.value.filter((u) => {
-    if (roleFilter.value === 'admin' && !u.is_admin) return false
-    if (roleFilter.value === 'member' && u.is_admin) return false
-    return true
+const list = useServerList<UserOut, Record<string, string | number | boolean | undefined>>({
+  fetch: (params) => usersApi.list(params),
+  params: () => ({
+    q: searchQuery.value.trim() || undefined,
+    role: roleFilter.value === 'all' ? undefined : roleFilter.value,
   }),
-)
+  pageSize: 50,
+})
+const visibleUsers = computed(() => list.items.value)
+const usersTotal = computed(() => list.total.value)
+const listPage = list.page
+const listPageCount = computed(() => list.pageCount.value)
+async function reloadList(): Promise<void> {
+  await list.reload()
+}
 
-const adminCount = computed(() => usersStore.list.filter((u) => u.is_admin).length)
-const activeCount = computed(() => usersStore.list.filter((u) => u.is_active).length)
+const adminCount = computed(() => list.items.value.filter((u) => roleOf(u) === 'admin').length)
+const activeCount = computed(() => list.items.value.filter((u) => u.is_active).length)
 
 const metaText = computed(() => {
-  const total = usersStore.list.length
-  return `${total} 个用户 · ${activeCount.value} 启用 · ${adminCount.value} admin`
+  return `${usersTotal.value} 个用户 · ${activeCount.value} 启用 · ${adminCount.value} admin`
 })
 
 // ── row helpers ─────────────────────────────────────────
@@ -313,9 +448,24 @@ function isSelf(row: UserOut): boolean {
   return row.id === authStore.currentUser?.id
 }
 
-function canToggleRole(row: UserOut): boolean {
-  // 不能降级最后一个 admin（admin 且只剩自己是 admin 时禁止）
-  if (row.is_admin && adminCount.value <= 1) return false
+type Role = 'member' | 'operator' | 'admin'
+const ROLE_LABELS: Record<Role, string> = { member: '成员', operator: '运维', admin: 'admin' }
+const OTHER_ROLES: Role[] = ['member', 'operator', 'admin']
+/** 行角色:role 缺省(旧缓存)回落 is_admin。 */
+function roleOf(u: UserOut): Role {
+  const r = (u as { role?: Role }).role
+  if (r === 'member' || r === 'operator' || r === 'admin') return r
+  return u.is_admin ? 'admin' : 'member'
+}
+function roleLabel(r: Role): string { return ROLE_LABELS[r] }
+function roleChipClass(r: Role): string {
+  return r === 'admin' ? 'bg-signal-failed/10 text-signal-failed'
+    : r === 'operator' ? 'bg-blue-500/10 text-blue-600'
+    : 'bg-signal-soft text-signal'
+}
+function canSetRole(row: UserOut, target: Role): boolean {
+  if (roleOf(row) === target) return false
+  if (roleOf(row) === 'admin' && target !== 'admin' && adminCount.value <= 1) return false
   return true
 }
 
@@ -333,10 +483,10 @@ function formatDate(value: string): string {
 }
 
 // ── command dispatch ────────────────────────────────────
-async function onCommand(cmd: string, row: UserOut): Promise<void> {
+async function onCommand(cmd: string, row: UserOut, arg?: string): Promise<void> {
   switch (cmd) {
     case 'edit':       openEdit(row); return
-    case 'toggle-role': await toggleRole(row); return
+    case 'set-role':   await setRole(row, arg as Role); return
     case 'reset-pw':   await resetPassword(row); return
     case 'activate':   await setActive(row, true); return
     case 'deactivate': await setActive(row, false); return
@@ -344,10 +494,11 @@ async function onCommand(cmd: string, row: UserOut): Promise<void> {
   }
 }
 
-async function toggleRole(row: UserOut): Promise<void> {
+async function setRole(row: UserOut, target: Role): Promise<void> {
   try {
-    await usersStore.patchUser(row.id, { is_admin: !row.is_admin })
-    toast.success(`已${row.is_admin ? '降级' : '升级'} ${row.username}`)
+    await usersStore.patchUser(row.id, { role: target })
+    void reloadList()
+    toast.success(`${row.username} 已设为 ${ROLE_LABELS[target]}`)
   } catch {
     showError('修改', undefined, usersStore.lastError)
   }
@@ -356,6 +507,7 @@ async function toggleRole(row: UserOut): Promise<void> {
 async function setActive(row: UserOut, active: boolean): Promise<void> {
   try {
     await usersStore.patchUser(row.id, { is_active: active })
+    void reloadList()
     toast.success(`已${active ? '启用' : '停用'} ${row.username}`)
   } catch {
     showError('修改', undefined, usersStore.lastError)
@@ -388,6 +540,28 @@ async function copyResetPw() {
 
 // ── create user(定稿表单范式:useForm + zod)──────────────
 const createOpen = ref(false)
+const announceOpen = ref(false)
+const announcing = ref(false)
+const announceForm = ref({ title: '', body: '', hours: 0 })
+
+async function submitAnnouncement(): Promise<void> {
+  if (!announceForm.value.title.trim()) return
+  announcing.value = true
+  try {
+    const out = await notificationsApi.postAnnouncement({
+      title: announceForm.value.title.trim(),
+      body: announceForm.value.body.trim(),
+      hours: Number.isFinite(announceForm.value.hours) ? Math.max(0, announceForm.value.hours) : 0,
+    })
+    toast.success(`公告已发布(送达 ${out.delivered} 人)`)
+    announceOpen.value = false
+    announceForm.value = { title: '', body: '', hours: 0 }
+  } catch (e) {
+    showError('发布公告', e)
+  } finally {
+    announcing.value = false
+  }
+}
 const creating = ref(false)
 
 const createSchema = toTypedSchema(z.object({
@@ -434,6 +608,7 @@ const onCreateSubmit = handleSubmit(async (values) => {
     })
     toast.success(`已创建用户 ${values.username}`)
     createOpen.value = false
+    void reloadList()
   } catch {
     showError('创建', undefined, usersStore.lastError)
   } finally {
@@ -474,6 +649,7 @@ async function submitEdit() {
     })
     toast.success(`已更新 ${editTarget.value.username}`)
     editOpen.value = false
+    void reloadList()
   } catch {
     showError('保存', undefined, usersStore.lastError)
   } finally {
@@ -490,19 +666,38 @@ const deleteConfirmInput = ref('')
 const deleteConfirmed = computed(() =>
   Boolean(deleteTarget.value && deleteConfirmInput.value === deleteTarget.value.username),
 )
+/** P2-2 处置三选一(默认转公共库);transfer 需受让人;purge 二次确认在文案。 */
+const disposal = ref<'publicize' | 'transfer' | 'purge'>('publicize')
+const transferTo = ref('')
+
+const transferCandidates = computed(() =>
+  list.items.value.filter((u) => u.id !== deleteTarget.value?.id && u.is_active),
+)
 
 function openDelete(row: UserOut) {
   deleteTarget.value = row
   deleteConfirmInput.value = ''
+  disposal.value = 'publicize'
+  transferTo.value = ''
   deleteOpen.value = true
 }
 
 async function submitDelete() {
   if (!deleteTarget.value || !deleteConfirmed.value) return
+  if (disposal.value === 'transfer' && !transferTo.value) {
+    toast.error('请选择受让成员')
+    return
+  }
   deleteSubmitting.value = true
   try {
-    await usersStore.deleteUser(deleteTarget.value.id)
-    toast.success(`已删除 ${deleteTarget.value.username}`)
+    await usersStore.deleteUser(deleteTarget.value.id, {
+      disposal: disposal.value,
+      ...(disposal.value === 'transfer' ? { transfer_to: Number(transferTo.value) } : {}),
+    })
+    void reloadList()
+    toast.success(`已删除 ${deleteTarget.value.username}(处置:${
+      disposal.value === 'publicize' ? '转公共库' : disposal.value === 'transfer' ? '转让' : '一并删除'
+    })`)
     deleteOpen.value = false
   } catch {
     showError('删除', undefined, usersStore.lastError)
@@ -511,12 +706,59 @@ async function submitDelete() {
   }
 }
 
+// ── 审计 tab(P2-3:特权写审计,admin 页内第二 tab)──────────
+const mainTab = ref('users')
+const auditRows = ref<AuditLogRow[]>([])
+const auditTotal = ref(0)
+const auditPage = ref(1)
+const auditPageSize = 20
+const auditAction = ref('')
+const auditLoading = ref(false)
+const auditActions = ref<string[]>([])
+
+const auditPageCount = computed(() => Math.max(1, Math.ceil(auditTotal.value / auditPageSize)))
+
+async function loadAudit(): Promise<void> {
+  auditLoading.value = true
+  try {
+    const env = await listAuditLogs({
+      action: auditAction.value || undefined,
+      page: auditPage.value,
+      page_size: auditPageSize,
+    })
+    auditRows.value = env.items
+    auditTotal.value = env.total
+    auditActions.value = env.actions
+  } catch {
+    auditRows.value = []
+    auditTotal.value = 0
+  } finally {
+    auditLoading.value = false
+  }
+}
+
+function setAuditAction(a: string): void {
+  auditAction.value = a
+  auditPage.value = 1
+  void loadAudit()
+}
+
+watch(auditPage, () => void loadAudit())
+watch(mainTab, (t) => {
+  if (t === 'audit' && !auditRows.value.length) void loadAudit()
+})
+
+function formatAuditTime(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? iso : d.toISOString().slice(0, 16).replace('T', ' ')
+}
+
 // ── init ────────────────────────────────────────────────
 onMounted(async () => {
   try {
-    await usersStore.fetchAll()
+    await reloadList()
   } catch {
-    showError('加载', undefined, usersStore.lastError)
+    // useServerList 默认 onError 已弹全局提示
   }
 })
 </script>
@@ -559,4 +801,36 @@ onMounted(async () => {
 .empty-cta p {
   @apply m-0 text-body text-muted-foreground;
 }
+</style>
+
+
+<style scoped>
+.audit-chip {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  cursor: pointer;
+  border: 1px solid var(--color-border-tertiary, #e1e5eb);
+  background: transparent;
+}
+.audit-chip.active {
+  color: #2f6fed;
+  border-color: #2f6fed;
+  background: #e7efff;
+}
+.audit-chip.static { cursor: default; background: #f1f5f9; }
+.audit-detail { font-size: 11px; color: #64748b; word-break: break-all; }
+.muted { color: #64748b; }
+.mono { font-family: ui-monospace, monospace; font-size: 11.5px; }
+
+/* 处置三选一选项卡 */
+.disposal-opt {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e1e5eb;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.disposal-opt.on { border-color: #2f6fed; background: #f5f8ff; }
 </style>

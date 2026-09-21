@@ -30,8 +30,8 @@ const aliases: api.ServiceAliasRow[] = [
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.restoreAllMocks()
-  vi.spyOn(api, 'listAliases').mockResolvedValue(aliases)
-  vi.spyOn(authApi, 'list').mockResolvedValue([
+  vi.spyOn(api, 'listAllAliases').mockResolvedValue(aliases)
+  vi.spyOn(authApi, 'listAll').mockResolvedValue([
     { alias: 'uat-cred' } as never,
   ])
   vi.spyOn(catalog, 'loadCatalogEntries').mockResolvedValue([
@@ -111,7 +111,7 @@ it('登记调用 createAlias 并重载;编辑回填且别名不可改', async ()
   expect(create).toHaveBeenCalledWith({
     aliasName: 'mall-service-prod', groupTag: '生产', credentialAlias: null,
   })
-  expect(api.listAliases).toHaveBeenCalledTimes(2)
+  expect(api.listAllAliases).toHaveBeenCalledTimes(2)
 
   await w.find('[data-testid="alias-edit-fin-service-uat"]').trigger('click')
   const nameInput = w.find('[data-testid="alias-name-input"]')

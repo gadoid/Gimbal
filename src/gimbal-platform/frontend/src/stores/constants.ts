@@ -33,7 +33,7 @@ export const useConstantsStore = defineStore('constants', () => {
   async function fetchEntries(): Promise<ConstantEntry[]> {
     setStatus('loading')
     try {
-      entries.value = await constantsApi.list()
+      entries.value = await constantsApi.listAll()
       setStatus('idle')
       return entries.value
     } catch (e) {

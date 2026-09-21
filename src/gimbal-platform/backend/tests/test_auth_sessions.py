@@ -19,7 +19,7 @@ async def test_list_initially_empty(client: AsyncClient) -> None:
     auth = await register_and_login(client)
     r = await client.get("/api/auths", headers=auth)
     assert r.status_code == 200
-    assert r.json() == []
+    assert r.json()["items"] == []
 
 
 async def test_create_then_list_returns_one(client: AsyncClient) -> None:
@@ -46,7 +46,9 @@ async def test_create_then_list_returns_one(client: AsyncClient) -> None:
 
     r = await client.get("/api/auths", headers=auth)
     assert r.status_code == 200
-    items = r.json()
+    body = r.json()
+    assert body["total"] == 1 and body["page"] == 1
+    items = body["items"]
     assert len(items) == 1
     assert items[0]["alias"] == "qa1"
 
@@ -129,8 +131,8 @@ async def test_same_alias_different_owners_is_ok(client: AsyncClient) -> None:
     # Each sees only their own one entry.
     a_list = await client.get("/api/auths", headers=a_auth)
     b_list = await client.get("/api/auths", headers=b_auth)
-    assert len(a_list.json()) == 1
-    assert len(b_list.json()) == 1
+    assert len(a_list.json()["items"]) == 1
+    assert len(b_list.json()["items"]) == 1
 
 
 # ── cross-owner isolation ─────────────────────────────────────────

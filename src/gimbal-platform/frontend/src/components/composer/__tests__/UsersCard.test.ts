@@ -9,11 +9,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import UsersCard from '@/components/composer/UsersCard.vue'
-import { list, get } from '@/api/auth_sessions'
+import { list, listAll, get } from '@/api/auth_sessions'
 import type { UserAuthView } from '@/types/plate'
 
 vi.mock('@/api/auth_sessions', () => ({
   list: vi.fn(),
+  listAll: vi.fn(),
+
   get: vi.fn(),
 }))
 
@@ -30,7 +32,10 @@ const poolB = {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(list).mockResolvedValue([poolA, poolB] as any)
+  vi.mocked(list).mockResolvedValue({
+    items: [poolA, poolB], total: 2, page: 1, pageSize: 200,
+  } as any)
+  vi.mocked(listAll).mockResolvedValue([poolA, poolB] as any)
   vi.mocked(get).mockImplementation((id: number) =>
     Promise.resolve(
       id === 1 ? { ...poolA, password: 'plain-pw-1' } : { ...poolB, password: 'plain-pw-2' },

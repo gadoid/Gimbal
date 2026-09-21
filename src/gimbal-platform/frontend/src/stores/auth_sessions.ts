@@ -25,7 +25,7 @@ export const useAuthSessionsStore = defineStore('authSessions', () => {
   async function fetchAll(): Promise<AuthSession[]> {
     setStatus('loading')
     try {
-      list.value = await authSessionsApi.list()
+      list.value = await authSessionsApi.listAll()
       setStatus('idle')
       return list.value
     } catch (e) {

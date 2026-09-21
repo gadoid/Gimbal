@@ -60,8 +60,29 @@ export interface TestResult {
   message: string
 }
 
-export function list() {
-  return http.get<AuthSession[]>('/auths').then((r) => r.data)
+/** M4 Page 信封 + 全量类型计数(metaText 的服务端供给)。 */
+export interface AuthsPage {
+  items: AuthSession[]
+  total: number
+  page: number
+  pageSize: number
+  tokenTypeCounts: Record<string, number>
+}
+
+export function list(params?: {
+  q?: string
+  token_type?: string
+  page?: number
+  page_size?: number
+}) {
+  return http
+    .get<AuthsPage>('/auths', { params })
+    .then((r) => r.data)
+}
+
+/** 全量便利(小池消费方):单页 200 取回 items —— 凭证池量级远小于上限。 */
+export function listAll() {
+  return list({ page: 1, page_size: 200 }).then((p) => p.items)
 }
 
 export function create(payload: AuthSessionCreateIn) {

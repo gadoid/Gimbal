@@ -18,9 +18,9 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path as PathParam, status
+from fastapi import APIRouter, Depends, HTTPException, Path as PathParam, Query, status
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +29,7 @@ from ..core.deps import CurrentUser
 from ..core.security import fernet_decrypt, fernet_encrypt
 from ..models import AuthSession
 from ..schemas.auth_session import (
+    AuthListOut,
     AuthReferencesOut,
     AuthSessionCreateIn,
     AuthSessionOut,
@@ -83,26 +84,52 @@ async def _get_owned(session: AsyncSession, auth_id: int, owner_id: int) -> Auth
 
 
 # ── list ────────────────────────────────────────────────────────
-@router.get("", response_model=list[AuthSessionOut])
+@router.get("", response_model=AuthListOut)
 async def list_auths(
-    user: CurrentUser, session: DbSession
-) -> list[AuthSessionOut]:
-    """双计数一次扫描服务全部行(配套方案 §1.2):
+    user: CurrentUser, session: DbSession,
+    q: Annotated[str | None, Query(max_length=128)] = None,
+    token_type: Annotated[str | None, Query(max_length=32)] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> AuthListOut:
+    """Page 信封 + 服务端过滤(M4,§6.3):``q``(alias/url 子串;
+    username 是 Fernet 密文,服务端不可检索 —— 如实收缩,不含 username)、
+    ``token_type`` 精确。双计数一次扫描服务全部行(配套方案 §1.2):
     alias_ref_count = service_aliases 绑定数;scenario_ref_count =
-    模板 ∪ 方案绑定去重场景数(快照不进计数 — 面板里按 kind 展示)。"""
+    模板 ∪ 方案绑定去重场景数(快照不进计数 — 面板里按 kind 展示)。
+
+    ``tokenTypeCounts`` 是**全量过滤集**(非当前页)的类型计数 —— 服务端
+    分页后前端拿不到全集,metaText「N Bearer · N 整段头」改由这里供给。
+    """
+    base = select(AuthSession).where(AuthSession.owner_id == user.id)
+    if q:
+        base = base.where(or_(
+            AuthSession.alias.ilike(f"%{q}%"),
+            AuthSession.url.ilike(f"%{q}%"),
+        ))
+    if token_type:
+        base = base.where(AuthSession.token_type == token_type)
+    total = (await session.execute(
+        select(func.count()).select_from(base.subquery())
+    )).scalar_one()
+    tt_counts = dict((await session.execute(
+        select(AuthSession.token_type, func.count())
+        .where(AuthSession.owner_id == user.id)
+        .group_by(AuthSession.token_type)
+    )).all())
     rows = (
         (
             await session.execute(
-                select(AuthSession)
-                .where(AuthSession.owner_id == user.id)
-                .order_by(AuthSession.alias.asc())
+                base.order_by(AuthSession.alias.asc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
             )
         )
         .scalars()
         .all()
     )
     counts = await auth_references.counts(session)
-    return [
+    items = [
         AuthSessionOut(
             id=a.id,
             alias=a.alias,
@@ -117,6 +144,10 @@ async def list_auths(
         )
         for a in rows
     ]
+    return AuthListOut(
+        items=items, total=total, page=page, page_size=page_size,
+        token_type_counts=tt_counts,
+    )
 
 
 # ── create ──────────────────────────────────────────────────────

@@ -21,10 +21,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
+from ..core.timeutil import ensure_aware
 from ..core.deps import CurrentUser, get_owned_execution
 from ..core.timeutil import utcnow
 from ..models import Execution
@@ -141,6 +142,9 @@ async def list_executions(
     session: DbSession,
     limit: Annotated[int, Query(ge=1, le=500)] = 200,
     offset: Annotated[int, Query(ge=0)] = 0,
+    page: Annotated[int, Query(ge=1)] | None = None,
+    page_size: Annotated[int, Query(ge=1, le=500)] | None = None,
+    q: Annotated[str | None, Query(max_length=128)] = None,
     scenario_id: Annotated[str | None, Query(max_length=64)] = None,
     status_filter: Annotated[str | None, Query(alias="status", max_length=16)] = None,
     batch_id: Annotated[str | None, Query(max_length=64)] = None,
@@ -149,11 +153,28 @@ async def list_executions(
 ) -> ExecutionListOut:
     """分页列表(P:此前全量返回,无界)。默认 200 与前端现状兼容。
 
+    M1(§4.1):``page``/``page_size`` 是 Page 信封的正参(limit/offset
+    保留为旧调用兼容;两者并传时 page 优先),信封补齐 page/pageSize。
+    列表行形态去 ``config``(凭证引用面不随行下发,详情页保留),
+    只带窄投影 ``configSummary``。
+
     ``scenario_id`` 叠加在 owner 过滤之上(前端「上次运行」数据源)。
     执行设计 §3.4 增补:``status`` / 发起时间范围(锚 ``created_at``,
     queued 单 started_at 可空不作锚)/ ``batch_id``(队列归并视图)筛选。
+    M4(§6.3):``q`` 下推(scenario_name ILIKE / id 前缀)——列表页
+    检索框不再拉全量在客户端过滤。
     """
+    if page is not None:
+        page_size = page_size or 200
+        limit = page_size
+        offset = (page - 1) * page_size
     base = select(Execution).where(Execution.owner_id == user.id)
+    if q:
+        base = base.where(or_(
+            Execution.scenario_name.ilike(f"%{q}%"),
+            Execution.scenario_id.ilike(f"%{q}%"),
+            cast(Execution.id, String).like(f"{q}%"),
+        ))
     if scenario_id:
         base = base.where(Execution.scenario_id == scenario_id)
     if status_filter:
@@ -168,10 +189,12 @@ async def list_executions(
         base = base.where(Execution.status == status_filter)
     if batch_id:
         base = base.where(Execution.batch_id == batch_id)
+    # M2 timestamptz:查询串解析出的 naive 时间一律按 UTC 补 aware
+    # (asyncpg 对 timestamptz 绑定要求 aware)
     if created_from is not None:
-        base = base.where(Execution.created_at >= created_from)
+        base = base.where(Execution.created_at >= ensure_aware(created_from))
     if created_to is not None:
-        base = base.where(Execution.created_at < created_to)
+        base = base.where(Execution.created_at < ensure_aware(created_to))
     total = (
         await session.execute(select(func.count()).select_from(base.subquery()))
     ).scalar_one()
@@ -187,27 +210,49 @@ async def list_executions(
     # 「连续第 N 次失败」信号(§3.2):一次轻行扫描算好全量失败链,
     # 逐单映射进列表行;detail 不带该字段(它是列表层的"值不值得点开")。
     streaks = await execution_store.consecutive_failure_streaks(session, user.id)
+    # 快照存在性一次批量查(M2 拆表:不再随行加载大 JSON 列)
+    with_snap = await execution_store.snapshot_ids(session, [e.id for e in rows])
     items = [
-        execution_store.execution_out(
-            e, consecutive_failures=streaks.get(e.id, 0) if e.status == STATUS_FAILED else 0,
+        execution_store.execution_list_item(
+            e,
+            consecutive_failures=streaks.get(e.id, 0) if e.status == STATUS_FAILED else 0,
+            has_scenario_snapshot=e.id in with_snap,
         )
         for e in rows
     ]
-    return ExecutionListOut(items=items, total=total)
+    effective_page = (offset // limit) + 1 if limit else 1
+    return ExecutionListOut(
+        items=items,
+        total=total,
+        page=effective_page,
+        pageSize=limit,
+    )
 
 
 # ── detail ─────────────────────────────────────────────────────
 @router.get("/{execution_id}", response_model=ExecutionOut)
-async def get_execution(ex: OwnedExecution) -> ExecutionOut:
-    return execution_store.execution_out(ex)
+async def get_execution(
+    ex: OwnedExecution, session: DbSession
+) -> ExecutionOut:
+    return execution_store.execution_out(
+        ex, has_scenario_snapshot=await execution_store.has_snapshot(session, ex.id)
+    )
 
 
 # ── rows(行级可观测,spec §9.1)─────────────────────────────────
 @router.get("/{execution_id}/rows", response_model=ExecutionRowsOut)
-async def get_execution_rows(ex: OwnedExecution) -> ExecutionRowsOut:
-    """行级状态:活跃执行读 dispatcher 内存 registry,历史执行回放
-    JSONL(dispatched+final 两行/row,final 覆盖)。Task 13 前端消费。"""
-    return ExecutionRowsOut(items=run_dispatcher.execution_rows(ex.id))
+async def get_execution_rows(
+    ex: OwnedExecution, session: DbSession,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=500)] = 200,
+) -> ExecutionRowsOut:
+    """行级状态(M6 转正,债 5 消除):活跃执行读 dispatcher 内存
+    registry;历史执行读 execution_rows DB 分页;M6 前的存量单回放
+    JSONL(只读归档)兜底。信封 {items,total,page,pageSize}。"""
+    items, total = await run_dispatcher.execution_rows_page(
+        session, ex.id, page=page, page_size=page_size)
+    return ExecutionRowsOut(
+        items=items, total=total, page=page, page_size=page_size)
 
 
 # ── case-artifact(白名单工件,spec §9.1)────────────────────────
@@ -252,7 +297,7 @@ async def get_case_artifact(
 
 # ── scenario-snapshot(执行时场景快照,P-review)────────────────
 @router.get("/{execution_id}/scenario-snapshot")
-async def get_scenario_snapshot(ex: OwnedExecution) -> dict:
+async def get_scenario_snapshot(ex: OwnedExecution, session: DbSession) -> dict:
     """执行时的场景 draft 容器({definition, orchestration})原样返回。
 
     dispatch 同拍快照(见 run_dispatcher._create_execution)— 场景此后
@@ -260,7 +305,8 @@ async def get_scenario_snapshot(ex: OwnedExecution) -> dict:
     历史事实,schema 漂移不应让旧快照不可读(与 GET /scenarios/{id}/draft
     的校验语义不同,那是对"活草稿"的校验)。存量行无快照 → 404 带明确
     code(前端据此区分"无快照"与"无权限",两者对用户都呈现为不可导出)。"""
-    if not ex.scenario_snapshot:
+    snap = await execution_store.snapshot_of(session, ex.id)
+    if not snap:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
@@ -268,7 +314,7 @@ async def get_scenario_snapshot(ex: OwnedExecution) -> dict:
                 "message": "该执行早于快照功能上线,无场景快照",
             },
         )
-    return ex.scenario_snapshot
+    return snap
 
 
 # ── delete ─────────────────────────────────────────────────────

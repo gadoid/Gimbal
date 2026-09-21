@@ -16,7 +16,8 @@ import * as catalogApi from '@/api/generator_catalog'
 import { confirmAction } from '@/utils/confirmAction'
 
 vi.mock('@/api/constants', () => ({
-  list: vi.fn().mockResolvedValue([]),
+  list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 }),
+  listAll: vi.fn().mockResolvedValue([]),
   create: vi.fn(),
   patch: vi.fn(),
   remove: vi.fn().mockResolvedValue(undefined),
@@ -98,7 +99,7 @@ describe('ConstantsPool — 目录', () => {
 
   it('F18: 目录不可用 — 降级条 + 生成器类型禁用,条目表仍渲染', async () => {
     vi.mocked(catalogApi.listGeneratorKinds).mockRejectedValue(new Error('plate down'))
-    vi.mocked(constantsApi.list).mockResolvedValue([GEN_ROW as never])
+    vi.mocked(constantsApi.listAll).mockResolvedValue([GEN_ROW as never])
     const w = mountPage()
     await flushPromises()
 
@@ -165,7 +166,7 @@ describe('ConstantsPool — 条目 CRUD', () => {
   })
 
   it('F17: 编辑预填 + 删除确认(confirmAction)', async () => {
-    vi.mocked(constantsApi.list).mockResolvedValue([GEN_ROW as never])
+    vi.mocked(constantsApi.listAll).mockResolvedValue([GEN_ROW as never])
     vi.mocked(catalogApi.getGeneratorKindFull).mockResolvedValue(SEQ_FULL as never)
     vi.mocked(constantsApi.patch).mockResolvedValue(GEN_ROW as never)
     const w = mountPage()
@@ -191,7 +192,7 @@ describe('ConstantsPool — 条目 CRUD', () => {
   })
 
   it('F17b: 编辑降级 — full 拉取失败时提交不丢已存 spec 参数', async () => {
-    vi.mocked(constantsApi.list).mockResolvedValue([
+    vi.mocked(constantsApi.listAll).mockResolvedValue([
       { ...GEN_ROW, spec: { kind: 'seq', width: 6, start: 1 } } as never,
     ])
     vi.mocked(catalogApi.getGeneratorKindFull).mockRejectedValue(new Error('full down'))

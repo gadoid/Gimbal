@@ -5,7 +5,11 @@ import re
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
+
+from pydantic import model_validator
+
+from .page import PageOut
 
 NAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{1,64}$")
 
@@ -28,6 +32,10 @@ class ConstantEntryOut(BaseModel):
     spec: dict[str, Any] | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class ConstantListOut(PageOut[ConstantEntryOut]):
+    """M4 Page 信封(§6.3):常量池列表从全量裸数组迁信封。"""
 
 
 class ConstantEntryCreateIn(BaseModel):

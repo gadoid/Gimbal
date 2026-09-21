@@ -11,13 +11,14 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as api from '@/api/executions'
-import type { Execution, ExecutionRow } from '@/api/executions'
+import type { Execution, ExecutionListItem, ExecutionRow } from '@/api/executions'
+import { httpStatusOf } from '@/api/http'
 import { isTerminalExecutionStatus } from '@/utils/executionStatus'
 
 const POLL_INTERVAL_MS = 1000
 
 export const useExecutionsStore = defineStore('executions', () => {
-  const list = ref<Execution[]>([])
+  const list = ref<ExecutionListItem[]>([])
   /** 筛选后的总数(执行记录页筛选行显示;fetchList 不筛时 = list.length 对应总数) */
   const total = ref(0)
   const detail = ref<Execution | null>(null)
@@ -64,6 +65,16 @@ export const useExecutionsStore = defineStore('executions', () => {
       delete errs[key]
       artifactError.value = errs
     } catch (e) {
+      // 「已过期清扫」分支(M1,PG迁移方案 §2.2):caseDir 是软引用,
+      // 工件按 CASE_RETENTION_DAYS=14 启动期清扫 —— 404 不是错误,是
+      // 台账行还在、工件已被回收的既有事实,显式说人话而非死链 404。
+      if (httpStatusOf(e) === 404) {
+        artifactError.value = {
+          ...artifactError.value,
+          [key]: '该行工件已过期清扫(工件保留 14 天,台账行长期保留)',
+        }
+        return
+      }
       const msg = e instanceof Error ? e.message : '拉取失败'
       artifactError.value = { ...artifactError.value, [key]: `工件拉取失败：${msg}` }
     }
@@ -99,7 +110,7 @@ export const useExecutionsStore = defineStore('executions', () => {
     expandedArtifacts.value = next
   }
 
-  async function fetchList(): Promise<Execution[]> {
+  async function fetchList(): Promise<ExecutionListItem[]> {
     loading.value = true
     try {
       const r = await api.listExecutions()

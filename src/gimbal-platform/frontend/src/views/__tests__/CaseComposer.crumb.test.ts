@@ -32,7 +32,8 @@ vi.mock('@/api/constants', () => ({
   remove: vi.fn(),
 }))
 vi.mock('@/api/auth_sessions', () => ({
-  list: vi.fn(() => Promise.resolve([])),
+  list: vi.fn(() => Promise.resolve([])),  listAll: vi.fn(() => Promise.resolve(vi.fn(() => Promise.resolve([])))),
+
 }))
 vi.mock('@/api/executions', () => ({
   listExecutions: vi.fn(() => Promise.resolve({ items: [], total: 0 })),

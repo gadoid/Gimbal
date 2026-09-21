@@ -17,12 +17,25 @@ export interface ServiceAliasRow {
   updatedAt: string | null
 }
 
-export function listAliases(base?: string): Promise<ServiceAliasRow[]> {
+/** M4 Page 信封(§6.3)。 */
+export interface AliasPage {
+  items: ServiceAliasRow[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export function listAliases(
+  params?: { base?: string; q?: string; page?: number; page_size?: number },
+): Promise<AliasPage> {
   return http
-    .get<ServiceAliasRow[]>('/service-aliases', {
-      params: base ? { base } : undefined,
-    })
+    .get<AliasPage>('/service-aliases', { params })
     .then(({ data }) => data)
+}
+
+/** 全量便利(画像页/工作台卡等小池消费方)。 */
+export function listAllAliases(base?: string): Promise<ServiceAliasRow[]> {
+  return listAliases({ base, page: 1, page_size: 200 }).then((p) => p.items)
 }
 
 export function createAlias(input: {

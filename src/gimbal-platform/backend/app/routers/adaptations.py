@@ -17,6 +17,7 @@ from ..core.db import get_db
 from ..core.deps import AdminUser, CurrentUser
 from ..schemas.adaptations import (
     BatchDetail,
+    BatchListOut,
     BatchOut,
     CarryBatchIn,
     CatalogDiffReport,
@@ -60,6 +61,24 @@ async def impact(
     """endpoint(可选 field)→ 受影响清单(直填/模板、数据集列标注)。"""
     items = await adaptation_service.impact(db, endpointId, field or None)
     return [ImpactItem.model_validate(i) for i in items]
+
+
+@router.get("/impact-bulk")
+async def impact_bulk(
+    user: AdminUser,
+    db: DbSession,
+    endpointIds: list[str] = Query(default=[]),
+) -> dict:
+    """批量 impact(M5,债 12):一次请求回全部 pending 端点的受影响
+    清单 —— 前端 useInterfaceChange 的「每端点一次 × 限并发 4」N+1
+    消除。返回 {endpointId: [ImpactItem...]}(与单端点 /impact 同条目
+    形状,未命中端点给空数组)。"""
+    out: dict[str, list] = {}
+    for eid in endpointIds[:50]:  # 防御上限:适配面单批不会超
+        items = await adaptation_service.impact(db, eid, None)
+        out[eid] = [ImpactItem.model_validate(i).model_dump(by_alias=True)
+                    for i in items]
+    return out
 
 
 @router.get("/unindexed-steps", response_model=list[UnindexedStepOut])
@@ -125,23 +144,35 @@ async def open_carry_batch(
     return BatchDetail.model_validate(detail)
 
 
-@router.get("/batches", response_model=list[BatchOut])
+@router.get("/batches", response_model=BatchListOut)
 async def list_batches(
     user: CurrentUser, db: DbSession,
     scope: str | None = Query(default=None),
-) -> list[BatchOut]:
-    """批次列表:admin 全量;member 仅 ``scope=mine``(C13 owner 知情视图)。"""
-    if scope != "mine" and not user.is_admin:
+    status: str | None = Query(default=None, max_length=16),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+) -> BatchListOut:
+    """批次列表:operator/admin 全量;member 仅 ``scope=mine``(C13 owner
+    知情视图;M2.5 起技术运营权归 operator,权限方案 §1.2)。M4(§6.3):
+    status 精确 + Page 信封。"""
+    if scope != "mine" and user.role == "member":
+        from fastapi import status as http_status
+
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="admin_only: members must use ?scope=mine",
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="operator_only: members must use ?scope=mine",
         )
-    rows = (
-        await adaptation_service.list_batches_for_owner(db, user.id)
+    rows, total = (
+        await adaptation_service.list_batches_for_owner(
+            db, user.id, status=status, page=page, page_size=page_size)
         if scope == "mine"
-        else await adaptation_service.list_batches(db)
+        else await adaptation_service.list_batches(
+            db, status=status, page=page, page_size=page_size)
     )
-    return [BatchOut.model_validate(b) for b in rows]
+    return BatchListOut(
+        items=[BatchOut.model_validate(b) for b in rows],
+        total=total, page=page, page_size=page_size,
+    )
 
 
 @router.get("/batches/{batch_id}", response_model=BatchDetail)
@@ -185,6 +216,14 @@ async def apply_op(user: AdminUser, op_id: int, db: DbSession) -> OpOut:
         raise value_error_http(e, codes={
             "op_not_applicable": 409, "batch_not_active": 409,
         }) from e
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="adaptation.op.apply", resource_type="adaptation_op",
+        resource_id=str(op_id), detail={"status": op.get("status")},
+    )
     return OpOut.model_validate(op)
 
 
@@ -229,4 +268,13 @@ async def rollback_batch(
         raise value_error_http(e, codes={
             "batch_not_rollbackable": 409,
         }) from e
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="adaptation.batch.rollback", resource_type="adaptation_batch",
+        resource_id=batch_id,
+        detail={"skipped": len(getattr(report, "skipped", []) or [])},
+    )
     return RollbackReport.model_validate(report)

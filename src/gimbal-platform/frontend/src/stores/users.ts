@@ -18,7 +18,7 @@ export const useUsersStore = defineStore('users', () => {
   async function fetchAll(): Promise<UserOut[]> {
     setStatus('loading')
     try {
-      const rows = await usersApi.list()
+      const rows = await usersApi.listAll()
       list.value = rows
       setStatus('idle')
       return rows
@@ -41,8 +41,11 @@ export const useUsersStore = defineStore('users', () => {
     return u
   }
 
-  async function deleteUser(userId: number): Promise<void> {
-    await usersApi.remove(userId)
+  async function deleteUser(
+    userId: number,
+    disposal?: { disposal: 'publicize' | 'transfer' | 'purge'; transfer_to?: number },
+  ): Promise<void> {
+    await usersApi.remove(userId, disposal)
     list.value = list.value.filter((x) => x.id !== userId)
   }
 

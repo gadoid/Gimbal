@@ -20,6 +20,7 @@ import { toast } from '@/utils/toast'
 
 vi.mock('@/api/users', () => ({
   list: vi.fn(),
+  listAll: vi.fn(),
   create: vi.fn(),
   patch: vi.fn(),
   remove: vi.fn(),
@@ -62,7 +63,20 @@ function loginAs(id: number, isAdmin = true) {
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.clearAllMocks()
-  vi.mocked(usersApi.list).mockResolvedValue(USERS as never)
+  vi.mocked(usersApi.listAll).mockResolvedValue(USERS as never)
+  // 页面走服务端列表(M4 信封):mock 尊重 q/role 参数
+  vi.mocked(usersApi.list).mockImplementation(
+    (async (params?: { q?: string; role?: string }) => {
+      let items = USERS
+      if (params?.q) {
+        const q = params.q.toLowerCase()
+        items = items.filter((u) =>
+          u.username.toLowerCase().includes(q)
+          || (u.display_name ?? '').toLowerCase().includes(q))
+      }
+      return { items, total: items.length, page: 1, pageSize: 50 }
+    }) as never,
+  )
   // store 会把返回值写进 list 并渲染 — mock 必须回完整对象,
   // 否则 row.id 渲染崩溃,后续 DOM 更新全部中断(调试教训)
   vi.mocked(usersApi.patch).mockImplementation(
@@ -94,16 +108,22 @@ describe('UsersAdmin — 列表与筛选', () => {
     w.unmount()
   })
 
-  it('搜索按用户名/昵称过滤(useListSearch 接线)', async () => {
+  it('搜索词下推服务端(q 参数,300ms 防抖后重拉)', async () => {
     loginAs(1)
     const w = await mountPage()
     await w.find('[data-testid="user-search"]').setValue('ali')
+    await new Promise((r) => setTimeout(r, 400)) // 防抖窗口
+    await flushPromises()
     expect(w.findAll('tbody tr').length).toBe(1)
     expect(w.find('tbody').text()).toContain('alice')
 
     await w.find('[data-testid="user-search"]').setValue('Bob')
+    await new Promise((r) => setTimeout(r, 400))
+    await flushPromises()
     expect(w.findAll('tbody tr').length).toBe(1)
     expect(w.find('tbody').text()).toContain('bob')
+    // q 参数如实下推
+    expect(usersApi.list).toHaveBeenCalledWith(expect.objectContaining({ q: 'Bob' }))
     w.unmount()
   })
 })
@@ -186,8 +206,8 @@ describe('UsersAdmin — 行操作(DropdownMenu 经 Portal 渲染)', () => {
     loginAs(1)
     const w = await mountPage()
     await openMenu(w, 2)
-    await clickMenuItem('升级为 admin')
-    await vi.waitFor(() => expect(usersApi.patch).toHaveBeenCalledWith(2, { is_admin: true }))
+    await clickMenuItem('设为 admin')
+    await vi.waitFor(() => expect(usersApi.patch).toHaveBeenCalledWith(2, { role: 'admin' }))
 
     // bob 是停用态(is_active:false)→ 菜单给的是「启用账号」
     await openMenu(w, 3)
@@ -209,17 +229,22 @@ describe('UsersAdmin — 行操作(DropdownMenu 经 Portal 渲染)', () => {
     w.unmount()
   })
 
-  it('删除:输入用户名前禁用,输入后 remove(id)', async () => {
+  it('删除:P2-2 处置三选一在场,默认 publicize;确认后 remove(id, 处置体)', async () => {
     loginAs(1)
     const w = await mountPage()
     await openMenu(w, 2)
     await clickMenuItem('删除')
-    const submit = q('[data-testid="delete-submit"]')
-    expect((submit.element as HTMLButtonElement).disabled).toBe(true)
+    // P2-2:三选一在场(radix 异步挂载,等待出现再断言)
+    await vi.waitFor(() =>
+      expect(q('[data-testid="disposal-group"]').exists()).toBe(true))
+    // 未输入确认词时不可提交
+    expect((q('[data-testid="delete-submit"]').element as HTMLButtonElement).disabled).toBe(true)
     await q('[data-testid="delete-confirm"]').setValue('alice')
-    expect((q('[data-testid="delete-submit"]').element as HTMLButtonElement).disabled).toBe(false)
-    await submit.trigger('click')
-    await vi.waitFor(() => expect(usersApi.remove).toHaveBeenCalledWith(2))
+    await vi.waitFor(() =>
+      expect((q('[data-testid="delete-submit"]').element as HTMLButtonElement).disabled).toBe(false))
+    await q('[data-testid="delete-submit"]').trigger('click')
+    await vi.waitFor(() =>
+      expect(usersApi.remove).toHaveBeenCalledWith(2, { disposal: 'publicize' }))
     w.unmount()
   })
 })
@@ -227,7 +252,8 @@ describe('UsersAdmin — 行操作(DropdownMenu 经 Portal 渲染)', () => {
 describe('UsersAdmin — 空态', () => {
   it('无用户 → 引导 CTA 空态', async () => {
     loginAs(1)
-    vi.mocked(usersApi.list).mockResolvedValue([] as never)
+    vi.mocked(usersApi.list).mockResolvedValue(
+      { items: [], total: 0, page: 1, pageSize: 50 } as never)
     const w = await mountPage()
     expect(w.find('[data-testid="users-empty"]').exists()).toBe(true)
     expect(w.text()).toContain('创建第一个用户')

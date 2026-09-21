@@ -182,10 +182,10 @@ import { showError } from '@/utils/errorFallback'
 import { confirmAction } from '@/utils/confirmAction'
 import { loadCatalogEntries } from '@/utils/catalog-services'
 import {
-  createAlias, deleteAlias, listAliases, patchAlias,
+  createAlias, deleteAlias, listAllAliases, patchAlias,
   type ServiceAliasRow,
 } from '@/api/service-aliases'
-import { list as listMyCredentials } from '@/api/auth_sessions'
+import { listAll as listMyCredentials } from '@/api/auth_sessions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -292,7 +292,7 @@ async function save(): Promise<void> {
       toast.success('已登记')
     }
     cancelEdit()
-    aliases.value = await listAliases()
+    aliases.value = await listAllAliases()
   } catch (e) {
     showError('保存别名', e) // 409(裸声明/plate 不可达)走统一错误文案
   } finally {
@@ -310,7 +310,7 @@ async function remove(a: ServiceAliasRow): Promise<void> {
   try {
     await deleteAlias(a.aliasName)
     toast.success('已删除')
-    aliases.value = await listAliases()
+    aliases.value = await listAllAliases()
   } catch (e) {
     showError('删除别名', e)
   }
@@ -318,7 +318,7 @@ async function remove(a: ServiceAliasRow): Promise<void> {
 
 async function reload(): Promise<void> {
   try {
-    aliases.value = await listAliases()
+    aliases.value = await listAllAliases()
     catalogEntries.value = await loadCatalogEntries()
     myCredentials.value = (await listMyCredentials()).map((c) => c.alias)
   } catch (e) {

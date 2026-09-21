@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +21,7 @@ from ..schemas.constants import (
     ConstantEntryCreateIn,
     ConstantEntryOut,
     ConstantEntryPatchIn,
+    ConstantListOut,
     is_literal_primitive,
 )
 
@@ -69,16 +70,38 @@ def _validate_patch(entry: ConstantEntry, payload: ConstantEntryPatchIn) -> None
             )
 
 
-@router.get("", response_model=list[ConstantEntryOut])
+@router.get("", response_model=ConstantListOut)
 async def list_constants(
-    user: CurrentUser, session: DbSession
-) -> list[ConstantEntry]:
-    rows = await session.scalars(
-        select(ConstantEntry)
-        .where(ConstantEntry.owner_id == user.id)
-        .order_by(ConstantEntry.name.asc())
+    user: CurrentUser, session: DbSession,
+    q: Annotated[str | None, Query(max_length=128)] = None,
+    kind: Annotated[str | None, Query(max_length=16)] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> ConstantListOut:
+    """Page 信封 + 服务端过滤(M4,§6.3):``q``(name/description 子串)、
+    ``kind``(literal/generator 精确)。条目小但也会长,先立信封契约。"""
+    base = select(ConstantEntry).where(ConstantEntry.owner_id == user.id)
+    if q:
+        base = base.where(or_(
+            ConstantEntry.name.ilike(f"%{q}%"),
+            ConstantEntry.description.ilike(f"%{q}%"),
+        ))
+    if kind:
+        base = base.where(ConstantEntry.entry_kind == kind)
+    total = (await session.execute(
+        select(func.count()).select_from(base.subquery())
+    )).scalar_one()
+    rows = (
+        await session.execute(
+            base.order_by(ConstantEntry.name.asc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    ).scalars().all()
+    return ConstantListOut(
+        items=[ConstantEntryOut.model_validate(r) for r in rows],
+        total=total, page=page, page_size=page_size,
     )
-    return list(rows)
 
 
 @router.post("", response_model=ConstantEntryOut, status_code=status.HTTP_201_CREATED)

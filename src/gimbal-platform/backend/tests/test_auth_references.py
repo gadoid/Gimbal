@@ -148,7 +148,7 @@ async def test_list_carries_counts_snapshot_not_counted(client):
         "alias": ALIAS, "url": "https://auth", "username": "u",
         "password": "p", "token_type": "Bearer"})
     r = await client.get("/api/auths", headers=own)
-    row = next(a for a in r.json() if a["alias"] == ALIAS)
+    row = next(a for a in r.json()["items"] if a["alias"] == ALIAS)
     # N 别名 = 1(service_aliases);N 场景 = 模板∪方案绑定去重
     # = sc-own-tpl + sc-own-sch + sc-other-pub + sc-other-prv = 4(快照不计)
     assert row["alias_ref_count"] == 1

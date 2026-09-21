@@ -33,7 +33,8 @@ vi.mock('@/api/executions', () => ({
   listExecutions: vi.fn(() => Promise.resolve({ items: [], total: 0 })),
 }))
 vi.mock('@/api/auth_sessions', () => ({
-  list: vi.fn(() => Promise.resolve([])),
+  list: vi.fn(() => Promise.resolve([])),  listAll: vi.fn(() => Promise.resolve(vi.fn(() => Promise.resolve([])))),
+
 }))
 vi.mock('@/api/constants', () => ({
   list: vi.fn(() => Promise.resolve([])),

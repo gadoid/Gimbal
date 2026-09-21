@@ -64,7 +64,7 @@ async def test_crud_and_strong_registration(client, fresh_db, plate):
     # 读全员 / 写 admin
     member = await _member(client, "alias_member")
     r = await client.get("/api/service-aliases", headers=member)
-    assert r.status_code == 200 and len(r.json()) == 1
+    assert r.status_code == 200 and len(r.json()["items"]) == 1
     r = await client.post("/api/service-aliases", headers=member,
                           json={"aliasName": "fin-service-x"})
     assert r.status_code == 403
@@ -78,7 +78,7 @@ async def test_crud_and_strong_registration(client, fresh_db, plate):
                             headers=admin)
     assert r.status_code == 204
     r = await client.get("/api/service-aliases", headers=admin)
-    assert r.json() == []
+    assert r.json()["items"] == []
 
 
 # ─── 解析链①:carry 别名键稀疏覆盖 ───────────────────────────────
@@ -86,9 +86,9 @@ async def test_carry_alias_key_sparse_override(fresh_db, plate):
     plate.services = [{"name": "fin-service"}]
     async with db_module.SessionLocal() as s:
         await carry_store.put_bindings(s, "fin-service",
-                                       {"$.a": "base-a", "$.b": "base-b"}, "x")
-        await carry_store.put_bindings(s, "fin-service-uat",
-                                       {"$.b": "alias-b"}, "x")  # 稀疏:只盖 b
+                                       {"$.a": "base-a", "$.b": "base-b"},
+            updated_by_id=None, updated_by_name="x")
+        await carry_store.put_bindings(s, "fin-service-uat", {"$.b": "alias-b"}, updated_by_id=None, updated_by_name="x")  # 稀疏:只盖 b
         await s.commit()
 
     definition = {"steps": [

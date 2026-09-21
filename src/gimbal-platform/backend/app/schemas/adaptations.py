@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .page import PageOut
+
 _CAMEL = ConfigDict(populate_by_name=True)
 
 
@@ -138,6 +140,10 @@ class BatchOut(BaseModel):
     closed_at: datetime | None = Field(default=None, alias="closedAt")
     op_counts: dict[str, int] = Field(default_factory=dict, alias="opCounts")
 
+
+
+class BatchListOut(PageOut[BatchOut]):
+    """M4 Page 信封(§6.3)。"""
 
 class BatchDetail(BatchOut):
     ops: list[OpOut] = Field(default_factory=list)

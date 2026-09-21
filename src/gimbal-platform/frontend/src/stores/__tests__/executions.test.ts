@@ -8,7 +8,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import * as api from '@/api/executions'
 import { useExecutionsStore } from '@/stores/executions'
 
-function makeExec(id: number, status: api.ExecutionStatus): api.Execution {
+/** 列表行形态(M1:configSummary 窄投影,无 config)。 */
+function makeExec(id: number, status: api.ExecutionStatus): api.ExecutionListItem {
   return {
     id,
     scenario_id: 'sc-a',
@@ -17,12 +18,18 @@ function makeExec(id: number, status: api.ExecutionStatus): api.Execution {
     passed: 1,
     failed: 0,
     started_at: null,
+    configSummary: {},
     finished_at: null,
-    config: {},
     has_scenario_snapshot: false,
     batch_id: null,
     consecutive_failures: 0,
   }
+}
+
+/** 详情形态(保留完整 config)。 */
+function makeDetail(id: number, status: api.ExecutionStatus): api.Execution {
+  const { configSummary: _cs, ...rest } = makeExec(id, status)
+  return { ...rest, config: {} }
 }
 
 beforeEach(() => {
@@ -38,7 +45,7 @@ it('remove() 出清 list/detail + expanded/rows/工件缓存(不误伤其他 id)
   store.artifactText = { '9:case-a:engine-log': 'log', '10:case-b:result': '{ }' }
   store.artifactError = { '9:case-a:result': '拉取失败' }
   store.list = [makeExec(9, 'done'), makeExec(10, 'running')]
-  store.detail = makeExec(9, 'done')
+  store.detail = makeDetail(9, 'done')
 
   await store.remove(9)
 
@@ -74,7 +81,7 @@ it('remove() 同时出清该 id 的工件展开态', async () => {
   const store = useExecutionsStore()
   store.expandedArtifacts = new Set(['9:case-a:engine-log', '10:case-b:result'])
   store.list = [makeExec(9, 'done'), makeExec(10, 'running')]
-  store.detail = makeExec(9, 'done')
+  store.detail = makeDetail(9, 'done')
 
   await store.remove(9)
 
@@ -86,9 +93,9 @@ it('tick:已知终态且已有 rows 的执行跳过;首拍观察到终态的那�
   vi.useFakeTimers()
   try {
     const getSpy = vi.spyOn(api, 'get')
-      .mockResolvedValue(makeExec(7, 'running'))
+      .mockResolvedValue(makeDetail(7, 'running'))
     const rowsSpy = vi.spyOn(api, 'getExecutionRows')
-      .mockResolvedValue({ items: [] })
+      .mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 500 })
     const store = useExecutionsStore()
     // 7 = 轮询对象(list 快照 running,终态由 detail 推进);
     // 8 = 其他已展开执行,list 快照终态 → tick 跳过。
@@ -102,7 +109,7 @@ it('tick:已知终态且已有 rows 的执行跳过;首拍观察到终态的那�
     expect(rowsSpy).not.toHaveBeenCalledWith(8)
 
     // 7 收敛为终态的那一拍(FIRST 观察):终态判定之前仍拉到最终 rows。
-    getSpy.mockResolvedValue(makeExec(7, 'done'))
+    getSpy.mockResolvedValue(makeDetail(7, 'done'))
     const before = rowsSpy.mock.calls.length
     await vi.advanceTimersByTimeAsync(1000) // tick 2:prevDetail=running → 7 仍拉
     expect(rowsSpy.mock.calls.length).toBe(before + 1)

@@ -8,7 +8,7 @@ unverified 标记」的松绑 —— 空枪别名会静默漏 carry/凭证注入
 """
 from __future__ import annotations
 
-from sqlalchemy import delete as sa_delete
+from sqlalchemy import delete as sa_delete, func, or_
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,11 +32,29 @@ def alias_out(row: ServiceAlias) -> dict:
     }
 
 
-async def list_aliases(db: AsyncSession, *, base: str | None = None) -> list[dict]:
-    stmt = select(ServiceAlias).order_by(ServiceAlias.alias_name)
+async def list_aliases(
+    db: AsyncSession, *, base: str | None = None, q: str | None = None,
+    page: int = 1, page_size: int = 100,
+) -> tuple[list[dict], int]:
+    """M4(§6.3):q(alias/base 子串)+ base 精确 + Page 信封。
+    返回 (当前页 dicts, 全量 total)。"""
+    stmt = select(ServiceAlias)
     if base is not None:
         stmt = stmt.where(ServiceAlias.base_service == base)
-    return [alias_out(r) for r in (await db.execute(stmt)).scalars().all()]
+    if q:
+        stmt = stmt.where(or_(
+            ServiceAlias.alias_name.ilike(f"%{q}%"),
+            ServiceAlias.base_service.ilike(f"%{q}%"),
+            ServiceAlias.credential_alias.ilike(f"%{q}%"),
+        ))
+    total = (await db.execute(
+        select(func.count()).select_from(stmt.subquery())
+    )).scalar_one()
+    rows = (await db.execute(
+        stmt.order_by(ServiceAlias.alias_name)
+        .offset((page - 1) * page_size).limit(page_size)
+    )).scalars().all()
+    return [alias_out(r) for r in rows], int(total)
 
 
 async def create_alias(

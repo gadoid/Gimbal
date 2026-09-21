@@ -102,7 +102,7 @@ import PageHead from '@/components/scenario-lib/PageHead.vue'
 import ServiceBindingEditor from '@/components/carry/ServiceBindingEditor.vue'
 import { showError } from '@/utils/errorFallback'
 import { loadCatalogServiceNames } from '@/utils/catalog-services'
-import { listAliases, type ServiceAliasRow } from '@/api/service-aliases'
+import { listAllAliases, type ServiceAliasRow } from '@/api/service-aliases'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -133,7 +133,7 @@ const activeTab = ref(route.query.tab === 'credential' ? 'credential' : 'fields'
 onMounted(async () => {
   try {
     ;[aliases.value, catalogNames.value] = await Promise.all([
-      listAliases(),
+      listAllAliases(),
       loadCatalogServiceNames().catch((): string[] => []),
     ])
   } catch (e) {
