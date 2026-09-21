@@ -1,5 +1,5 @@
 """carry 配置面路由(spec §3.2):读 CurrentUser(编排器提示要用),
-写 AdminUser(平台配置维护者)。字段面聚合走 plate /full。"""
+写 OperatorUser(M2.5:默认值属技术运营权,权限方案 §1.2)。字段面聚合走 plate /full。"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
-from ..core.deps import AdminUser, CurrentUser
+from ..core.deps import CurrentUser, OperatorUser
 from ..models.carry_binding import CarryServiceBinding
 from ..schemas.carry import (
     BindingsOut,
@@ -43,9 +43,21 @@ async def get_defaults(user: CurrentUser, db=DbSession):
 
 
 @router.put("/defaults", response_model=DefaultsOut)
-async def put_defaults(user: AdminUser, body: DefaultsIn, db=DbSession):
-    await carry_store.put_defaults(db, body.defaults, user.username)
+async def put_defaults(user: OperatorUser, body: DefaultsIn, db=DbSession):
+    await carry_store.put_defaults(
+        db, body.defaults,
+        updated_by_id=user.id,
+        updated_by_name=user.display_name or user.username,
+    )
     await db.commit()
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="carry.write", resource_type="carry", resource_id="defaults",
+        detail={"keys": sorted((body.defaults or {}).keys())},
+    )
     return DefaultsOut(defaults=await carry_store.get_defaults(db))
 
 
@@ -62,16 +74,28 @@ async def get_bindings(service: str, user: CurrentUser, db=DbSession):
 
 
 @router.put("/bindings/{service}", response_model=ServiceBindingsOut)
-async def put_bindings(service: str, user: AdminUser, body: CarryMapIn,
+async def put_bindings(service: str, user: OperatorUser, body: CarryMapIn,
                        db=DbSession):
-    await carry_store.put_bindings(db, service, body.bindings, user.username)
+    await carry_store.put_bindings(
+        db, service, body.bindings,
+        updated_by_id=user.id,
+        updated_by_name=user.display_name or user.username,
+    )
     await db.commit()
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=user.id,
+        actor_name=user.display_name or user.username,
+        action="carry.write", resource_type="carry", resource_id=service,
+        detail={"service": service},
+    )
     return ServiceBindingsOut(
         bindings=await carry_store.get_bindings(db, service))
 
 
 @router.get("/drift", response_model=DriftReport)
-async def drift(user: AdminUser, db=DbSession):
+async def drift(user: OperatorUser, db=DbSession):
     raw = await carry_store.carry_drift(db)
     return DriftReport(
         plateReachable=raw["plateReachable"],
@@ -79,7 +103,7 @@ async def drift(user: AdminUser, db=DbSession):
 
 
 @router.get("/bindings/{service}/fields", response_model=ServiceFieldsOut)
-async def service_fields(service: str, user: AdminUser):
+async def service_fields(service: str, user: OperatorUser):
     """该服务全部接口 carry 面并集:GET /api/endpoint?service= → 逐 id /full。
     任一端点 /full 失败(抛错或 404)→ degraded=True:面不完整,
     配置页整表替换保存会删不可见端点的绑定值,须据此禁存。

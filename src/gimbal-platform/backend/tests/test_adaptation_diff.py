@@ -5,7 +5,7 @@ plate 下架残留戳异常 / full 404 异常 / plate 不可达。
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import select
@@ -58,7 +58,7 @@ async def test_cold_start_baselines_then_idempotent(fresh_db, plate):
 async def test_version_bump_pending(fresh_db, plate):
     async with await _session() as s:
         s.add(CatalogVersion(endpoint_id="fin.order.add", version="1.0.0",
-                             spec_json=FULL, synced_at=datetime(2026, 1, 1)))
+                             spec_json=FULL, synced_at=datetime(2026, 1, 1, tzinfo=timezone.utc)))
         await s.commit()
     plate.items = [{"id": "fin.order.add", "version": "1.1.0",
                     "updated_at": "2026-06-01T00:00:00Z"}]
@@ -75,7 +75,7 @@ async def test_version_bump_pending(fresh_db, plate):
 async def test_c12_updated_without_bump(fresh_db, plate):
     async with await _session() as s:
         s.add(CatalogVersion(endpoint_id="fin.order.add", version="1.0.0",
-                             spec_json=FULL, synced_at=datetime(2026, 1, 1)))
+                             spec_json=FULL, synced_at=datetime(2026, 1, 1, tzinfo=timezone.utc)))
         await s.commit()
     plate.items = [{"id": "fin.order.add", "version": "1.0.0",   # 版本没动
                     "updated_at": "2026-02-02T00:00:00Z"}]        # 但 plate 改过
@@ -91,7 +91,7 @@ async def test_c12_updated_without_bump(fresh_db, plate):
 async def test_missing_on_plate_and_full_404(fresh_db, plate):
     async with await _session() as s:
         s.add(CatalogVersion(endpoint_id="fin.order.gone", version="1.0.0",
-                             spec_json={}, synced_at=datetime(2026, 1, 1)))
+                             spec_json={}, synced_at=datetime(2026, 1, 1, tzinfo=timezone.utc)))
         await s.commit()
     plate.items = [{"id": "fin.order.ghost", "version": "1.0.0",
                     "updated_at": "2026-01-01T00:00:00Z"}]

@@ -32,7 +32,7 @@ import type { DataSetSummary, Scenario, ScenarioDraft } from '@/types/scenario-c
 import type { AssertionRegistry } from '@/types/assertion-registry'
 import { normalizeRegistry } from '@/utils/assertion-registry'
 import { useInjectableSurface } from '@/composables/useInjectableSurface'
-import { list as listAuthSessions } from '@/api/auth_sessions'
+import { listAll as listAuthSessions } from '@/api/auth_sessions'
 
 /** confirm 上送形状(RunDialog 面板 emit 的 opts,与 RunRequest 对齐) */
 export interface RunConfirmOpts {

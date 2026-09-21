@@ -20,7 +20,11 @@ import { useRunAssembly } from '@/composables/useRunAssembly'
 import { _resetEndpointFullCacheForTest } from '@/composables/useEndpointFull'
 
 vi.mock('@/api/auth_sessions', () => ({
-  list: vi.fn(() => Promise.resolve([{ alias: 'pool-1' }, { alias: 'shared' }])),
+  list: vi.fn(() => Promise.resolve({
+    items: [{ alias: 'pool-1' }, { alias: 'shared' }],
+    total: 2, page: 1, pageSize: 200,
+  })),
+  listAll: vi.fn(() => Promise.resolve([{ alias: 'pool-1' }, { alias: 'shared' }])),
 }))
 
 const DEFAULT_SCHEME: SchemeV2 = {
@@ -68,8 +72,8 @@ describe('useRunAssembly — 取数与派生(执行设计 §1.5)', () => {
   })
 
   it('UA-2b 凭证池不可达不阻塞装配:authOptions 仍有内置 users', async () => {
-    const { list } = await import('@/api/auth_sessions')
-    vi.mocked(list).mockImplementation(() => Promise.reject(new Error('down')))
+    const { listAll } = await import('@/api/auth_sessions')
+    vi.mocked(listAll).mockImplementation(() => Promise.reject(new Error('down')))
     const { asm } = await mountedAssembly()
     expect(asm.loaded.value).toBe(true)
     expect(asm.authOptions.value).toEqual(['shared', 'builtin'])
