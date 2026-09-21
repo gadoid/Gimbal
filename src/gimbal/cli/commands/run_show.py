@@ -1,9 +1,12 @@
-"""gimbal run show —— 只读解析 Scenario 资产，输出步骤索引 → 描述的映射。
+"""gimbal run show —— 只读解析本地 Scenario 文件，输出步骤索引 → 描述的映射。
 
 不执行、不 bootstrap 框架；只做"读 + 展示"，方便：
   - 人快速了解 scenario 内容
   - CLI 操作：决定 `--step-to=<idx>` 该设到几
   - AI 操作：把 step_map 当结构化上下文喂给 LLM
+
+输入只有一种来源：--from-path 本地 JSON/YAML 文件。
+（历史上有过"从资产仓库按 ID 拉取"的模式，随引用机制一并移除。）
 """
 from __future__ import annotations
 
@@ -14,16 +17,10 @@ from typing import Annotated, Literal
 
 import typer
 
-from gimbal.cli.common import (
-    AllowEmptyOpt, LogLevelOpt, NoCacheOpt,
-    RegistryOpt, SourceOpt, SourceStrategy, YesOpt,
-    resolve_source,
-)
 from gimbal.cli.context import CLIContext
-from gimbal.core.asset_resolver import AssetKind, AssetResolver
 from gimbal.log import get_logger
 from gimbal.schema.scenario import Scenario
-from gimbal.schema.step import Step, StepRef
+from gimbal.schema.step import Step
 
 logger = get_logger(__name__)
 
@@ -31,18 +28,15 @@ logger = get_logger(__name__)
 # ── 步骤元数据抽取 ────────────────────────────────────────────────────────────────
 
 def _step_kind(step: object) -> str:
-    """返回 step 的类型标签：'step' / 'step_ref' / 'unknown'。"""
+    """返回 step 的类型标签：'step' / 'unknown'。"""
     kind = getattr(step, "kind", None)
     if isinstance(step, Step):
         return "step"
-    if isinstance(step, StepRef):
-        return "step_ref"
     return str(kind) if kind else "unknown"
 
 
 def _step_summary(step: object) -> dict:
     """抽取 step 的轻量元数据（不动 HTTP、不跑策略）。"""
-    idx_attr = -1
     out: dict = {
         "kind": _step_kind(step),
         "description": getattr(step, "description", None) or "",
@@ -68,9 +62,6 @@ def _step_summary(step: object) -> dict:
             kinds.append(k)
         out["strategy_kinds"] = kinds
         out["strategy_count"] = len(kinds)
-    # StepRef 的特殊字段
-    if isinstance(step, StepRef):
-        out["ref"] = getattr(step, "ref", None)
     return out
 
 
@@ -95,8 +86,8 @@ def _scenario_to_step_map(scenario_id: str, scenario: Scenario) -> dict:
         "step_count":    len(step_rows),
         "steps":         step_rows,
         "usage_hint": {
-            "stop_at_step":      "gimbal run scenario <id> --step-to=<index>",
-            "stop_at_multiple":  "gimbal run scenario <id> --breakpoint=<index>",
+            "stop_at_step":      "gimbal run launch <file> --step-to=<index>",
+            "stop_at_multiple":  "gimbal run launch <file> --breakpoint=<index>",
         },
     }
 
@@ -122,12 +113,10 @@ def _render_table(payload: dict, no_color: bool = False) -> None:
         typer.echo("(no steps)")
         return
 
-    # 计算列宽：index / step_id / description / kind
-    # 由于没有 step_id 字段（schema 没要求），用 kind+ref 代之
+    # 计算列宽：index / kind / description
     rows = []
     for s in meta["steps"]:
         kind = s["kind"]
-        ref = s.get("ref") or "-"
         desc = s["description"] or "(no description)"
         api = s.get("api") or {}
         api_str = ""
@@ -135,25 +124,24 @@ def _render_table(payload: dict, no_color: bool = False) -> None:
             method = api.get("method") or "*"
             path = api.get("path") or "*"
             api_str = f"  [{method} {path}]"
-        rows.append((str(s["index"]), kind, ref, desc + api_str))
+        rows.append((str(s["index"]), kind, desc + api_str))
 
     idx_w = max(len("idx"), max(len(r[0]) for r in rows))
     kind_w = max(len("kind"), max(len(r[1]) for r in rows))
-    ref_w = max(len("ref"), max(len(r[2]) for r in rows))
 
-    sep = f"┌─{'─' * idx_w}─┬─{'─' * kind_w}─┬─{'─' * ref_w}─┬────────────────────────────────────────────────────┐"
-    mid = f"├─{'─' * idx_w}─┼─{'─' * kind_w}─┼─{'─' * ref_w}─┼────────────────────────────────────────────────────┤"
-    header = f"│ {'idx'.ljust(idx_w)} │ {'kind'.ljust(kind_w)} │ {'ref'.ljust(ref_w)} │ description                                        │"
-    bottom = f"└─{'─' * idx_w}─┴─{'─' * kind_w}─┴─{'─' * ref_w}─┴────────────────────────────────────────────────────┘"
-    line_fmt = f"│ {{}} │ {{}} │ {{}} │ {{}} │"
+    sep = f"┌─{'─' * idx_w}─┬─{'─' * kind_w}─┬────────────────────────────────────────────────────┐"
+    mid = f"├─{'─' * idx_w}─┼─{'─' * kind_w}─┼────────────────────────────────────────────────────┤"
+    header = f"│ {'idx'.ljust(idx_w)} │ {'kind'.ljust(kind_w)} │ description                                        │"
+    bottom = f"└─{'─' * idx_w}─┴─{'─' * kind_w}─┴────────────────────────────────────────────────────┘"
+    line_fmt = f"│ {{}} │ {{}} │ {{}} │"
 
     typer.echo(sep)
     typer.echo(header)
     typer.echo(mid)
     desc_w = 52
-    for idx_s, kind_s, ref_s, desc_s in rows:
+    for idx_s, kind_s, desc_s in rows:
         d = (desc_s[:desc_w - 3] + "...") if len(desc_s) > desc_w else desc_s
-        typer.echo(line_fmt.format(idx_s.ljust(idx_w), kind_s.ljust(kind_w), ref_s.ljust(ref_w), d.ljust(desc_w)))
+        typer.echo(line_fmt.format(idx_s.ljust(idx_w), kind_s.ljust(kind_w), d.ljust(desc_w)))
     typer.echo(bottom)
 
 
@@ -172,9 +160,8 @@ def _render_text(payload: dict) -> None:
     print(f"  {'-'*4}  {'-'*10}  {'-'*60}")
     for s in payload["steps"]:
         kind = s["kind"]
-        ref = s.get("ref") or "-"
         desc = (s["description"] or "(no description)")[:60]
-        print(f"  {s['index']:>4}  {kind:<10}  {desc:<60}  [{ref}]")
+        print(f"  {s['index']:>4}  {kind:<10}  {desc:<60}")
 
 
 def _render_markdown(payload: dict) -> None:
@@ -190,46 +177,30 @@ def _render_markdown(payload: dict) -> None:
     print()
     print(f"> {payload.get('description') or '(no description)'}")
     print()
-    print("| idx | kind | ref | description |")
-    print("| --- | ---- | --- | ----------- |")
+    print("| idx | kind | description |")
+    print("| --- | ---- | ----------- |")
     for s in payload["steps"]:
         kind = s["kind"]
-        ref = s.get("ref") or "-"
         desc = (s["description"] or "(no description)").replace("|", "\\|")
-        print(f"| {s['index']} | {kind} | {ref} | {desc} |")
+        print(f"| {s['index']} | {kind} | {desc} |")
     print()
     print("**Usage**:")
-    print(f"- 跑到 N 步后停止：`gimbal run scenario {payload['scenario_id']} --step-to=<idx>`")
-    print(f"- 在 idx 处暂停：`gimbal run scenario {payload['scenario_id']} --breakpoint=<idx>`")
+    print(f"- 跑到 N 步后停止：`gimbal run launch <file> --step-to=<idx>`")
+    print(f"- 在 idx 处暂停：`gimbal run launch <file> --breakpoint=<idx>`")
 
 
 # ── 主入口 ───────────────────────────────────────────────────────────────────────
 
 def show(
     ctx: typer.Context,
-    scenario_ids: Annotated[
-        list[str] | None,
-        typer.Argument(
-            help="一个或多个 Scenario ID；支持命名空间通配如 'customs/*'。与 --from-path 互斥。",
-            metavar="SCENARIO_ID...",
-        ),
-    ] = None,
-    # ========== 本地文件（不走资产仓库）==========
     from_path: Annotated[
-        Path | None,
+        Path,
         typer.Option(
             "--from-path",
-            help="直接从本地 JSON/YAML 文件读取（不走资产仓库；与 SCENARIO_ID 互斥）。",
+            help="从本地 JSON/YAML 文件读取 scenario。",
             exists=True, file_okay=True, dir_okay=False,
         ),
-    ] = None,
-    # ========== 资产来源（仅当传 SCENARIO_ID 时生效）==========
-    source: SourceOpt = SourceStrategy.auto,
-    registry: RegistryOpt = None,
-    no_cache: NoCacheOpt = False,
-    # ========== 确认（仅当传 SCENARIO_ID 时生效）==========
-    yes: YesOpt = False,
-    allow_empty: AllowEmptyOpt = False,
+    ],
     # ========== 输出 ==========
     format: Annotated[
         Literal["table", "text", "json", "md"],
@@ -247,94 +218,20 @@ def show(
 ) -> None:
     """Typer 命令：只读展示 Scenario 的 step 索引表（不执行）。
 
-    支持两种输入模式（互斥）：
-      1. SCENARIO_ID（从资产仓库查询）
-      2. --from-path <file>（直接读本地文件）
-
     [bold]示例：[/bold]
 
-      gimbal run show sc-payment-001
-      gimbal run show sc-payment-001 --format=json
-      gimbal run show "customs/*" --format=md
       gimbal run show --from-path ./debug-case.yaml
+      gimbal run show --from-path ./debug-case.yaml --format=json
     """
-    cli_ctx: CLIContext = ctx.obj  # noqa: F841  (保持与 run_scenario 一致的引用风格)
+    cli_ctx: CLIContext = ctx.obj  # noqa: F841  (保持与其余子命令一致的引用风格)
 
     # 0. 自动检测非 TTY 时强制关闭颜色（除非显式传 --no-color=False）
     if not sys.stdout.isatty() and not no_color:
         no_color = True
 
-    # 0.5 互斥校验
-    has_ids = bool(scenario_ids)
-    has_path = from_path is not None
-    if has_ids and has_path:
-        typer.secho(
-            "Error: SCENARIO_ID 与 --from-path 互斥，请只传其中一个。",
-            fg=typer.colors.RED, err=True,
-        )
-        raise typer.Exit(code=2)
-    if not has_ids and not has_path:
-        typer.secho(
-            "Error: 必须传 SCENARIO_ID 或 --from-path。\n"
-            "提示：gimbal run show --help 看用法。",
-            fg=typer.colors.RED, err=True,
-        )
-        raise typer.Exit(code=2)
+    payloads = _load_from_path(from_path, with_usage_hint and format == "json")
 
-    payloads: list[dict] = []
-
-    if has_path:
-        # 模式 2：本地文件直接读，绕过资产仓库
-        payloads = _load_from_path(from_path, with_usage_hint and format == "json")
-    else:
-        # 模式 1：从资产仓库查
-        resolved_source = resolve_source(source, no_cache, False)
-        from gimbal.cli.common import _build_default_asset_store  # 延迟导入避免循环
-        asset_store = _build_default_asset_store(Path(registry) if registry else None)
-        logger.debug("[show] asset_store ready: backend={}", asset_store.backend_name)
-
-        resolver = AssetResolver(
-            kind=AssetKind.SCENARIO,
-            asset_store=asset_store,
-            source=resolved_source.value,
-            registry=registry,
-        )
-        matched = resolver.resolve(scenario_ids or [])
-
-        if not matched:
-            if allow_empty:
-                typer.echo("No scenarios matched, exiting cleanly due to --allow-empty.")
-                raise typer.Exit(code=0)
-            typer.secho(
-                f"Error: No scenarios matched: {', '.join(scenario_ids or [])}",
-                fg=typer.colors.RED, bold=True, err=True,
-            )
-            raise typer.Exit(code=5)
-
-        if len(matched) > 1 and not yes and sys.stdin.isatty():
-            typer.echo(f"Matched {len(matched)} scenarios:")
-            for s in matched:
-                typer.echo(f"  - {s.id}")
-            if not typer.confirm("Show all?", default=True):
-                typer.echo("Aborted.")
-                raise typer.Exit(code=0)
-
-        for asset in matched:
-            try:
-                sc = Scenario.model_validate(asset.content.parsed)
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("[show] 校验失败: id={} err={}", asset.id, exc)
-                typer.secho(
-                    f"Scenario validation failed for {asset.id}: {exc}",
-                    fg=typer.colors.RED, err=True,
-                )
-                raise typer.Exit(code=2)
-            payload = _scenario_to_step_map(asset.id, sc)
-            if not with_usage_hint and format == "json":
-                payload.pop("usage_hint", None)
-            payloads.append(payload)
-
-    # 5. 渲染
+    # 渲染
     if format == "json":
         typer.echo(json.dumps(payloads, ensure_ascii=False, indent=2))
     elif format == "md":
@@ -386,5 +283,3 @@ def _load_from_path(path: Path, keep_usage_hint: bool) -> list[dict]:
     if not keep_usage_hint:
         payload.pop("usage_hint", None)
     return [payload]
-
-

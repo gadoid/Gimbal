@@ -2,7 +2,6 @@ from pydantic import BaseModel, Field, model_validator, ConfigDict
 from datetime import datetime
 from typing import Any, Optional, Literal, Annotated, Union
 from .resource import ResourceUnion
-from .ref import RefBase
 from .step import StepUnion
 from .timepolicy import TimePolicyUnion, RecordPolicy
 from .retrypolicy import RetryPolicy
@@ -47,18 +46,12 @@ class Scenario(BaseModel):
     resource : dict[str , ResourceUnion] = Field(description="存放用例需要执行的相关资源信息")
     steps : list[StepUnion] = Field(..., description="存放具体的执行过程")
 
-class ScenarioRef(RefBase) :
-    kind : Literal["scenario_ref"] = "scenario_ref"
-
 class Suite(BaseModel):
     kind : Literal["suite"] = "suite"
     suite : list[Scenario] = Field(..., description="scenario集合，暂时使用列表实现" )
 
-class SuiteRef(RefBase) :
-    kind : Literal["suite_ref"] = "suite_ref"
-
 RunUnion = Annotated[
-    Union[Scenario,ScenarioRef,Suite,SuiteRef],
+    Union[Scenario,Suite],
     Field(discriminator="kind")
 ]
 

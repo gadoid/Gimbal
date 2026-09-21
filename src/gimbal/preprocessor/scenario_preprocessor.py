@@ -315,18 +315,10 @@ class ScenarioPreprocessor:
     # ── 第三段：批量展开 steps ────────────────────────────────────────────────
 
     def _resolve_steps(self, root: dict[str, Any]) -> list["StepUnion"]:
-        """遍历所有 steps，对每个 Step 做模板展开，返回新列表。
-
-        StepRef 不做展开（未解析的引用，跳过）。
-        """
+        """遍历所有 steps，对每个 Step 做模板展开，返回新列表。"""
         resolved: list[Any] = []
-        for idx, step_union in enumerate(self._schema.steps):
-            if not hasattr(step_union, "api"):
-                # StepRef，原样保留
-                logger.debug("[Preprocessor] step[{}] 是 StepRef，跳过展开", idx)
-                resolved.append(step_union)
-                continue
-            resolved.append(self._resolve_step(step_union, root, idx))
+        for idx, step in enumerate(self._schema.steps):
+            resolved.append(self._resolve_step(step, root, idx))
         return resolved
 
     def _resolve_step(self, step: "Step", root: dict, idx: int) -> "Step":
@@ -349,10 +341,7 @@ class ScenarioPreprocessor:
         任一模板变量缺失由 _resolve_value 内部 fail-fast 抛 ValueError（与 body/strategy 一致）。
         因此不再做"先收集所有缺失再统一报错"的 B5 逻辑——单点失败直接上抛。
         """
-        from gimbal.schema.api import Api, ApiRef
-
-        if isinstance(api, ApiRef):
-            return api
+        from gimbal.schema.api import Api
 
         resolved_headers = {
             k: self._resolve_value(v, root)
@@ -370,11 +359,8 @@ class ScenarioPreprocessor:
         )
 
     def _resolve_request(self, request, root: dict):
-        """展开 Request 中的模板字段：递归解析 body 嵌套结构中的所有 ${} 占位符，返回新的 Request 实例（RequestRef 原样返回）。"""
-        from gimbal.schema.request import Request, RequestRef
-
-        if isinstance(request, RequestRef):
-            return request
+        """展开 Request 中的模板字段：递归解析 body 嵌套结构中的所有 ${} 占位符，返回新的 Request 实例。"""
+        from gimbal.schema.request import Request
 
         return Request(
             kind=request.kind,
@@ -387,15 +373,12 @@ class ScenarioPreprocessor:
         )
 
     def _resolve_strategy(self, strategy, root: dict):
-        """展开单条策略（Extract/Assign/Assertion）的模板字段，模板变量缺失时 fail-fast（避免 expected=None 误导），返回新的策略实例（StrategyRef 原样返回，未知类型原样返回）。
+        """展开单条策略（Extract/Assign/Assertion）的模板字段，模板变量缺失时 fail-fast（避免 expected=None 误导），返回新的策略实例（未知类型原样返回）。
 
         修复 #5：与 `_resolve_api` 一致——模板变量缺失时 fail-fast，
         避免 expected=None 这类误导性断言失败信息。
         """
-        from gimbal.schema.strategy import Extract, Assign, Assertion, StrategyRef
-
-        if isinstance(strategy, StrategyRef):
-            return strategy
+        from gimbal.schema.strategy import Extract, Assign, Assertion
 
         base = self._base_strategy_fields(strategy)
         owner = f"{type(strategy).__name__}#{strategy.name or '?'}"

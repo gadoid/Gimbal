@@ -81,10 +81,7 @@ class SpecResolver:
     # ── 各字段解析 ────────────────────────────────────────────────────────────
 
     def _resolve_api(self, api: "ApiUnion") -> "ApiUnion":
-        from gimbal.schema.api import Api, ApiRef
-
-        if isinstance(api, ApiRef):
-            return api  # Ref 未展开，跳过
+        from gimbal.schema.api import Api
 
         # 解析 headers，过滤 None 值（解析失败时）
         resolved_headers = {
@@ -104,10 +101,7 @@ class SpecResolver:
         )
 
     def _resolve_request(self, request: "RequestUnion") -> "RequestUnion":
-        from gimbal.schema.request import Request, RequestRef
-
-        if isinstance(request, RequestRef):
-            return request
+        from gimbal.schema.request import Request
 
         # body 类型从 Dict[str, Any] 扩展为 Union[Dict[str, Any], List[Any]]
         # 走 _resolve_nested 才能递归到 list 元素里的 ${} 模板；用 _resolve_dict
@@ -124,11 +118,8 @@ class SpecResolver:
 
     def _resolve_strategy(self, strategy: "StrategyUnion") -> "StrategyUnion":
         from gimbal.schema.strategy import (
-            Extract, Assign, Assertion, StrategyRef
+            Extract, Assign, Assertion
         )
-
-        if isinstance(strategy, StrategyRef):
-            return strategy
 
         if isinstance(strategy, Extract):
             return Extract(

@@ -1,45 +1,36 @@
 """静态描述层 - Pydantic 模型定义"""
 from .states import StepState
-from .ref import RefBase, Ref
-from .resource import Resource, Mock, File, MockRef, FileRef, ResourceUnion
-from .api import Api, ApiRef, ApiUnion
-from .request import Request, RequestRef, RequestUnion
-from .step import Step, StepRef, StepUnion
+from .resource import Resource, Mock, File, ResourceUnion
+from .api import Api, ApiUnion
+from .request import Request, RequestUnion
+from .step import Step, StepUnion
 from .strategy import (
-    StrategyBase, Extract, Assign, Assertion, StrategyRef, StrategyUnion,
+    StrategyBase, Extract, Assign, Assertion, StrategyUnion,
     Scope, AssertOperator, StrategyPhase, FailurePolicy,
 )
 from .timepolicy import TimePolicy, TimeoutPolicy, RecordPolicy, TimePolicyUnion
 from .retrypolicy import RetryPolicy
 from .scenario import Scenario, Meta, Config
-from .setup import Setup, SetupRef, SetupUnion
-from .teardown import Teardown, TeardownRef, TeardownUnion
+from .setup import Setup, SetupUnion
+from .teardown import Teardown, TeardownUnion
 from .auth import AuthSession
 
 __all__ = [
     "StepState",
-    "RefBase",
-    "Ref",
     "Resource",
     "Mock",
     "File",
-    "MockRef",
-    "FileRef",
     "ResourceUnion",
     "Api",
-    "ApiRef",
     "ApiUnion",
     "Request",
-    "RequestRef",
     "RequestUnion",
     "Step",
-    "StepRef",
     "StepUnion",
     "StrategyBase",
     "Extract",
     "Assign",
     "Assertion",
-    "StrategyRef",
     "StrategyUnion",
     "Scope",
     "AssertOperator",
@@ -54,10 +45,8 @@ __all__ = [
     "Meta",
     "Config",
     "Setup",
-    "SetupRef",
     "SetupUnion",
     "Teardown",
-    "TeardownRef",
     "TeardownUnion",
     "AuthSession",
 ]

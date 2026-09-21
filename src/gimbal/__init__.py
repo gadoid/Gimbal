@@ -10,33 +10,25 @@ from .schema import (
     AssertOperator,
     StrategyPhase,
     FailurePolicy,
-    # 引用基类
-    RefBase,
     # 资源模型
     Resource,
     Mock,
     File,
-    MockRef,
-    FileRef,
     ResourceUnion,
     # API 模型
     Api,
-    ApiRef,
     ApiUnion,
     # 请求模型
     Request,
-    RequestRef,
     RequestUnion,
     # 步骤模型
     Step,
-    StepRef,
     StepUnion,
     # 策略模型
     StrategyBase,
     Extract,
     Assign,
     Assertion,
-    StrategyRef,
     StrategyUnion,
     # 时间策略模型
     TimePolicy,
@@ -51,10 +43,8 @@ from .schema import (
     Scenario,
     # 前置/后置动作
     Setup,
-    SetupRef,
     SetupUnion,
     Teardown,
-    TeardownRef,
     TeardownUnion,
 )
 
@@ -67,33 +57,25 @@ __all__ = [
     "AssertOperator",
     "StrategyPhase",
     "FailurePolicy",
-    # 引用基类
-    "RefBase",
     # 资源模型
     "Resource",
     "Mock",
     "File",
-    "MockRef",
-    "FileRef",
     "ResourceUnion",
     # API 模型
     "Api",
-    "ApiRef",
     "ApiUnion",
     # 请求模型
     "Request",
-    "RequestRef",
     "RequestUnion",
     # 步骤模型
     "Step",
-    "StepRef",
     "StepUnion",
     # 策略模型
     "StrategyBase",
     "Extract",
     "Assign",
     "Assertion",
-    "StrategyRef",
     "StrategyUnion",
     # 时间策略模型
     "TimePolicy",
@@ -108,9 +90,7 @@ __all__ = [
     "Scenario",
     # 前置/后置动作
     "Setup",
-    "SetupRef",
     "SetupUnion",
     "Teardown",
-    "TeardownRef",
     "TeardownUnion",
 ]

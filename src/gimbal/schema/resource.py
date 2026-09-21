@@ -1,10 +1,9 @@
 from pydantic import BaseModel, Field
 from typing import Any , Literal , Annotated , Union
-from .ref import RefBase
 
 class Resource(BaseModel):
     """ 资源模型 """
-    name: str = Field(..., description="资源名称") 
+    name: str = Field(..., description="资源名称")
 
 class Mock(Resource):
     kind : Literal["mock"] = "mock"
@@ -14,16 +13,10 @@ class Mock(Resource):
 
 class File(Resource):
     kind : Literal["file"] = "file"
-    path : str = Field(description="路径或ref")
-
-class MockRef(RefBase) :
-    kind : Literal["mock_ref"] = "mock_ref"
-
-class FileRef(RefBase) :
-    kind : Literal["file_ref"] = "file_ref"
+    path : str = Field(description="路径")
 
 ResourceUnion = Annotated[
-    Union[Mock,MockRef,File,FileRef],
+    Union[Mock,File],
     Field(discriminator="kind")
 ]
 
@@ -45,10 +38,3 @@ if __name__ == "__main__":
     # 测试 File 实例化
     file = File(name="test_file", path="/tmp/test.txt")
     print(f"File 测试: name={file.name}, path={file.path}")
-
-    # 测试 Ref 实例化
-    mock_ref = MockRef(ref="mock_ref_1")
-    print(f"MockRef 测试: ref={mock_ref.ref}")
-
-    file_ref = FileRef(ref="file_ref_1")
-    print(f"FileRef 测试: ref={file_ref.ref}")

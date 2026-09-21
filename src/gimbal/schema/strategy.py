@@ -1,7 +1,6 @@
-from pydantic import BaseModel, Field 
+from pydantic import BaseModel, Field
 from typing import Any , Optional , Literal, Union, Annotated, List
 from enum import Enum
-from .ref import RefBase
 
 class Scope(str, Enum):
     FRAMEWORK = "framework"
@@ -82,12 +81,9 @@ class Assertion(StrategyBase) :
     message : Optional[str] = None # 断言失败信息
     soft: bool = False # 软断言
 
-class StrategyRef(RefBase) : 
-    kind : Literal["strategy_ref"] = "strategy_ref"
-
 
 StrategyUnion = Annotated[
-    Union[Extract, Assign, Assertion, StrategyRef],
+    Union[Extract, Assign, Assertion],
     Field(discriminator="kind")
 ]
 
@@ -126,7 +122,3 @@ if __name__ == "__main__":
         expected=200
     )
     print(f"Assertion 测试: target={assertion.target}, operator={assertion.operator}")
-
-    # 测试 StrategyRef 实例化
-    strategy_ref = StrategyRef(ref="strategy_ref_1")
-    print(f"StrategyRef 测试: ref={strategy_ref.ref}")
