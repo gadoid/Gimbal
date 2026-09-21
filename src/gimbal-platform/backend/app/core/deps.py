@@ -35,18 +35,40 @@ async def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+# ── 三级单角色(M2.5,权限方案 §1)─────────────────────────────────
+# role 不进 JWT:每请求查库,升降级即时生效(§1.3)。前端守卫只是 UX,
+# 这些依赖才是边界(§0.4)。
+def require_role(*roles: str):
+    """角色门工厂:允许的角色集合;不满足 → 403。"""
+    allowed = frozenset(roles)
+
+    async def _dep(user: CurrentUser) -> User:
+        if user.role not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "role_forbidden",
+                    "message": f"requires role in {sorted(allowed)}",
+                },
+            )
+        return user
+
+    return _dep
+
+
 async def require_admin(user: CurrentUser) -> User:
-    """Admin gate for adaptation routes(spec §5.5)—— 复用既有 ``is_admin``
-    判定(users.py 的内联判定将来可收敛到此),不新增权限面。"""
-    if not user.is_admin:
+    """Admin 门(require_role("admin") 的具名形态;既有 AdminUser 消费面不变)。"""
+    if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="admin_only: adaptation routes require an administrator",
+            detail="admin_only: this route requires an administrator",
         )
     return user
 
 
 AdminUser = Annotated[User, Depends(require_admin)]
+# operator = 技术运营权(适配/别名/默认值/信号);admin 天然包含(§1.1)。
+OperatorUser = Annotated[User, Depends(require_role("operator", "admin"))]
 
 
 async def get_owned_execution(

@@ -138,9 +138,9 @@ const { collapsed, toggle } = useSidebarCollapse()
 
 // D3:admin 登录/刷新后静默拉一次 diff(幂等,冷启动落基线属预期副作用)
 watch(
-  () => auth.currentUser?.is_admin,
-  (isAdmin) => {
-    if (isAdmin) void adaptations.ensureBadgeLoaded()
+  () => auth.role,
+  (role) => {
+    if (role !== 'member') void adaptations.ensureBadgeLoaded()
   },
   { immediate: true },
 )
@@ -151,6 +151,8 @@ interface SidebarEntry {
   icon: Component
   /** Render only for admins (route guard would bounce members anyway). */
   adminOnly?: boolean
+    /** M2.5:角色白名单(adminOnly 的泛化;适配/别名/默认值 = operator+) */
+    roles?: string[]
   /** 未落地入口:置灰且不可点(字段来源分析 — E2 未建,无页面可落)。 */
   disabled?: boolean
   disabledTitle?: string
@@ -182,11 +184,11 @@ const groups: SidebarGroup[] = [
     label: '服务',
     entries: [
       { path: '/services', label: '服务画像', icon: GridIcon },
-      { path: '/service-admin', label: '服务信息管理', icon: LayersIcon, adminOnly: true },
+      { path: '/service-admin', label: '服务信息管理', icon: LayersIcon, roles: ['operator', 'admin'] },
       { path: '/auths', label: '认证管理', icon: LockClosedIcon },
       // 配套方案 §2.2:传递字段 → 默认值(服务/别名绑定层已并进
       // 服务信息管理的键详情,本页只剩跨服务兜底层)
-      { path: '/carry-config', label: '默认值', icon: MixerHorizontalIcon, adminOnly: true },
+      { path: '/carry-config', label: '默认值', icon: MixerHorizontalIcon, roles: ['operator', 'admin'] },
       { path: '/adaptations', label: '适配中心', icon: ActivityLogIcon },
     ],
   },
@@ -212,7 +214,9 @@ interface FlatEntry extends SidebarEntry {
 const flatEntries = computed<FlatEntry[]>(() =>
   groups.flatMap((g) =>
     g.entries
-      .filter((e) => !e.adminOnly || auth.currentUser?.is_admin)
+      .filter((e) => !e.adminOnly && !e.roles
+        || (e.adminOnly && auth.isAdmin)
+        || (e.roles && auth.hasRole(...e.roles)))
       .map((e, i) => ({ ...e, group: g.label, firstOfGroup: i === 0 })),
   ),
 )

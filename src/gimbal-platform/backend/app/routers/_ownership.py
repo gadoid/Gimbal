@@ -27,7 +27,7 @@ def ensure_owner(user: Any, owner_id: int, detail: Any) -> None:
     ``detail`` is passed through verbatim to the HTTPException so each
     router keeps its existing error contract.
     """
-    if not user.is_admin and not _user_matches(user, owner_id):
+    if user.role != "admin" and not _user_matches(user, owner_id):
         raise HTTPException(status_code=403, detail=detail)
 
 
@@ -40,7 +40,7 @@ def can_read_scenario(
     """读侧规则(场景库收紧后):admin 全可见;public 所有登录用户
     可读;private 仅属主(owner_id)可见。
     """
-    if user.is_admin:
+    if user.role == "admin":
         return True
     if visibility == "public":
         return True

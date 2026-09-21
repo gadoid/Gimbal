@@ -45,30 +45,46 @@ async def test_list_users_contains_self(client: AsyncClient) -> None:
     token = payload["access_token"]
     r = await client.get("/api/users", headers=_bearer(token))
     assert r.status_code == 200, r.text
-    items = r.json()
+    items = r.json()["items"]
     assert len(items) == 1
     assert items[0]["username"] == "admin_one"
     assert items[0]["is_admin"] is True
 
 
 @pytest.mark.asyncio
-async def test_newly_created_user_is_member_even_if_flag_true(client: AsyncClient) -> None:
-    """Spec-1: ``UserCreateIn.is_admin=True`` is coerced to False on creation."""
-    token = (await _register(client, "first_admin"))["access_token"]
-    # create a second user trying to set is_admin=True — must end as member
+async def test_create_user_roles_and_admin_gate(client: AsyncClient) -> None:
+    """M2.5:开号收 admin;role 直落(不再强转 member);member 被挡 403。"""
+    admin = (await _register(client, "first_admin"))["access_token"]
+    member = (await _register(client, "plain_member"))["access_token"]
+
+    # member 开号 → 403(创建账号是人事权,spec-1 遗留闭合)
+    r = await client.post(
+        "/api/users",
+        json={"username": "x1", "password": "Test2026!", "display_name": "x"},
+        headers=_bearer(member),
+    )
+    assert r.status_code == 403, r.text
+
+    # admin 开 operator 号 → 201 且 role 直落
     r = await client.post(
         "/api/users",
         json={
-            "username": "wannabe_admin",
+            "username": "op_one",
             "password": "Test2026!",
-            "display_name": "wannabe",
-            "is_admin": True,
+            "display_name": "op",
+            "role": "operator",
         },
-        headers=_bearer(token),
+        headers=_bearer(admin),
     )
     assert r.status_code == 201, r.text
-    body = r.json()
-    assert body["is_admin"] is False  # coerced — spec-1 simplification
+    assert r.json()["role"] == "operator"
+    assert r.json()["is_admin"] is False  # 过渡镜像
+
+    # member 读用户列表 → 403(收紧:operator+ 可见)
+    r = await client.get("/api/users", headers=_bearer(member))
+    assert r.status_code == 403, r.text
+    r = await client.get("/api/users", headers=_bearer(admin))
+    assert r.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -101,7 +117,7 @@ async def test_cannot_demote_last_admin_4092(client: AsyncClient) -> None:
 
     r = await client.patch(
         f"/api/users/{admin_id}",
-        json={"is_admin": False},
+        json={"role": "member"},
         headers=_bearer(admin_token),
     )
     assert r.status_code == 409, r.text
@@ -126,21 +142,21 @@ async def test_member_cannot_escalate_or_demote(client: AsyncClient) -> None:
 
     # Escalate self
     r = await client.patch(
-        "/api/users/2", headers=member, json={"is_admin": True}
+        "/api/users/2", headers=member, json={"role": "admin"}
     )
     assert r.status_code == 403
     assert r.json()["detail"]["code"] == 4032
 
     # Demote the admin
     r = await client.patch(
-        "/api/users/1", headers=member, json={"is_admin": False}
+        "/api/users/1", headers=member, json={"role": "member"}
     )
     assert r.status_code == 403
 
-    # Follow-up: member is still not an admin
-    lst = await client.get("/api/users", headers=member)
-    row = next(u for u in lst.json() if u["username"] == "member")
-    assert row["is_admin"] is False
+    # Follow-up: member 角色未变(M2.5:列表已收 operator+,改走 /auth/me)
+    me = await client.get("/api/auth/me", headers=member)
+    assert me.json()["user"]["role"] == "member"
+    assert me.json()["user"]["is_admin"] is False
 
 
 @pytest.mark.asyncio
@@ -253,7 +269,7 @@ async def test_delete_then_get_404(client: AsyncClient) -> None:
 
     r = await client.get("/api/users", headers=_bearer(admin_token))
     assert r.status_code == 200
-    assert all(u["id"] != doomed_id for u in r.json())
+    assert all(u["id"] != doomed_id for u in r.json()["items"])
 
 
 # ── display_name ownership-identity uniqueness (security round) ──

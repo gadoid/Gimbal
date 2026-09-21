@@ -185,9 +185,10 @@ describe('Sidebar — 适配中心 pendingCount 徽标(沿用 TopNav 语义)', (
     w.unmount()
   })
 
-  it('登出按钮在场(身份与登出迁到侧栏底部)', async () => {
+  it('身份徽章在场(P2-1 起登出收进下拉;compact 态保留快捷登出)', async () => {
     const w = await mountSidebar({ isAdmin: true })
-    expect(w.find('.logout-btn').exists()).toBe(true)
+    // 展开态:身份徽章 = 下拉触发器(个人设置/登出在菜单内)
+    expect(w.find('[data-testid="user-badge-trigger"]').exists()).toBe(true)
     expect(w.find('.username').text()).toBe('Alice')
     w.unmount()
   })

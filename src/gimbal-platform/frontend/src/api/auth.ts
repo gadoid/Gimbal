@@ -6,6 +6,10 @@ export interface UserPublic {
   username: string
   display_name: string
   is_admin: boolean
+  /** M2.5 三级角色;旧快照可能缺省 → 前端回落 is_admin */
+  role?: 'member' | 'operator' | 'admin'
+  /** 通知 roleVersion 比对源(ISO);旧快照缺省 */
+  updated_at?: string | null
   is_active: boolean
   created_at: string
 }

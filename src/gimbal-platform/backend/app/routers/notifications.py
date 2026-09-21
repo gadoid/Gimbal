@@ -1,0 +1,162 @@
+"""通知中心接口(权限方案 §3.3,P1b/M2.5)。
+
+三只(§3.3):list / read / unread-count;外加按 type 开关的偏好读写
+(开关必须先于吵闹型通知 —— adaptation_applied 一批扫几十场景,没有
+关闭手段的铃铛上线第一天就会被整体关掉)。
+
+``unread-count`` 顺带回传**角色版本号**(users.updated_at):前端把
+currentUser 快照进 localStorage,降级后本地菜单要等 fetchMe 才收敛 ——
+铃铛 30s 轮询顺带比对,变了就 refetch me(§1.3 第六轮,几乎零成本)。
+"""
+from __future__ import annotations
+
+from typing import Annotated, Literal
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..core.db import get_db
+from ..core.deps import AdminUser, CurrentUser
+from ..models import UserPref
+from ..services import notifications as svc
+
+router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+
+
+class NotificationOut(BaseModel):
+    id: int
+    type: str
+    title: str
+    body: str
+    link: str | None = None
+    batch_id: str | None = Field(default=None, alias="batchId")
+    created_at: str
+    read_at: str | None = Field(default=None, alias="readAt")
+
+    model_config = {"populate_by_name": True, "from_attributes": True}
+
+
+class NotificationListOut(BaseModel):
+    items: list[NotificationOut]
+    unread: int
+
+
+class ReadIn(BaseModel):
+    ids: list[int] | None = Field(
+        default=None, description="要标读的通知 id;缺省 = 全部已读")
+
+
+class UnreadCountOut(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    count: int
+    # 角色版本(users.updated_at ISO):前端发现变了就 refetch me
+    role_version: str | None = Field(default=None, alias="roleVersion")
+
+
+class PrefsOut(BaseModel):
+    """按 type 通知开关;off 列表之外的类型全部开着。"""
+
+    off: list[str]
+
+
+class PrefsIn(BaseModel):
+    off: list[Literal[
+        "execution_finished", "adaptation_applied", "announcement",
+        "scenario_unpublished", "role_changed", "resource_transferred",
+    ]] = Field(default_factory=list)
+
+
+@router.get("", response_model=NotificationListOut)
+async def list_notifications(
+    user: CurrentUser, db: DbSession,
+    unread_only: bool = False, limit: int = 50,
+) -> NotificationListOut:
+    rows, unread = await svc.list_notifications(
+        db, user.id, unread_only=unread_only, limit=limit)
+    return NotificationListOut(
+        items=[
+            NotificationOut(
+                id=n.id, type=n.type, title=n.title, body=n.body, link=n.link,
+                batch_id=n.batch_id,
+                created_at=n.created_at.isoformat() if n.created_at else "",
+                read_at=n.read_at.isoformat() if n.read_at else None,
+            )
+            for n in rows
+        ],
+        unread=unread,
+    )
+
+
+@router.post("/read")
+async def mark_read(user: CurrentUser, db: DbSession, body: ReadIn) -> dict:
+    n = await svc.mark_read(db, user.id, body.ids)
+    return {"marked": n}
+
+
+@router.get("/unread-count", response_model=UnreadCountOut)
+async def unread_count(user: CurrentUser, db: DbSession) -> UnreadCountOut:
+    return UnreadCountOut(
+        count=await svc.unread_count(db, user.id),
+        role_version=(
+            user.updated_at.isoformat() if user.updated_at else None),
+    )
+
+
+# ── 按 type 开关(user_prefs,与铃铛同批上线)────────────────────────
+_PREF_KEY = "notification_types"
+
+
+@router.get("/preferences", response_model=PrefsOut)
+async def get_prefs(user: CurrentUser, db: DbSession) -> PrefsOut:
+    pref = (await db.execute(
+        select(UserPref).where(
+            UserPref.user_id == user.id, UserPref.key == _PREF_KEY)
+    )).scalar_one_or_none()
+    return PrefsOut(off=((pref.value or {}).get("off") or []) if pref else [])
+
+
+@router.put("/preferences", response_model=PrefsOut)
+async def put_prefs(
+    user: CurrentUser, db: DbSession, body: PrefsIn
+) -> PrefsOut:
+    pref = (await db.execute(
+        select(UserPref).where(
+            UserPref.user_id == user.id, UserPref.key == _PREF_KEY)
+    )).scalar_one_or_none()
+    if pref is None:
+        db.add(UserPref(
+            user_id=user.id, key=_PREF_KEY, value={"off": body.off}))
+    else:
+        pref.value = {"off": body.off}
+    await db.commit()
+    return PrefsOut(off=body.off)
+
+
+# ── 公告(admin only;写时对全员 fan-out 行)────────────────────────
+class AnnouncementIn(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    body: str = Field(default="", max_length=4096)
+    hours: int = Field(default=0, ge=0, le=24 * 365,
+                       description="有效小时数;0 = 永不过期")
+
+
+@router.post("/announcements", status_code=201)
+async def post_announcement(
+    admin: AdminUser, db: DbSession, body: AnnouncementIn
+) -> dict:
+    n = await svc.fan_out_announcement(
+        db, title=body.title, body=body.body, hours=body.hours, actor=admin)
+    from ..services import audit as audit_svc
+
+    await audit_svc.record(
+        db, actor_id=admin.id,
+        actor_name=admin.display_name or admin.username,
+        action="announcement.publish", resource_type="announcement",
+        resource_id=None, detail={"title": body.title, "delivered": n},
+    )
+    return {"delivered": n}

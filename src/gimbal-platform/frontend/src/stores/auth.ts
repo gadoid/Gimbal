@@ -72,9 +72,16 @@ export const useAuthStore = defineStore('auth', () => {
   const status = ref<'unknown' | 'authenticated' | 'guest'>('unknown')
 
   const isAuthenticated = computed(() => !!accessToken.value)
-  // 单一来源 —— 视图 / 抽屉 / 路由 guard 都从这里读,
-  // 未来加 is_super_admin / is_auditor 等位时只改这里。
-  const isAdmin = computed(() => Boolean(currentUser.value?.is_admin))
+  // 单一来源 —— 视图 / 抽屉 / 路由 guard 都从这里读。
+  // M2.5:三级单角色(member/operator/admin,权限方案 §1)。role 来自
+  // /auth/me 的 UserPublic;旧快照可能没有 role → 回落 is_admin 布尔位。
+  const role = computed<'member' | 'operator' | 'admin'>(() => {
+    const r = (currentUser.value as { role?: string } | null)?.role
+    if (r === 'member' || r === 'operator' || r === 'admin') return r
+    return currentUser.value?.is_admin ? 'admin' : 'member'
+  })
+  const isAdmin = computed(() => role.value === 'admin')
+  const hasRole = (...roles: string[]) => roles.includes(role.value)
 
   // Persist whenever tokens change.  watch runs on the .value mutations
   // we make below (setTokens / clear) and on initial assignment.
@@ -195,7 +202,9 @@ export const useAuthStore = defineStore('auth', () => {
     currentUser,
     status,
     isAuthenticated,
+    role,
     isAdmin,
+    hasRole,
     clear,
     refreshOnce,
     login,

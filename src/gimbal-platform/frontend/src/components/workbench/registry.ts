@@ -51,6 +51,8 @@ export interface WorkbenchCardDef {
   /** 初始尺寸(用户未调过时);缺省 'M'。用户级尺寸存 layout v2。 */
   defaultSize?: CardSize
   adminOnly?: boolean           // 复用侧栏同一权限判定源,不另写一套
+  /** M2.5 角色白名单(adminOnly 的泛化;优先于 adminOnly) */
+  roles?: string[]
   refreshMs?: number            // 需要轮询的卡(执行状态)声明;缺省不刷
 }
 
@@ -122,17 +124,17 @@ export const workbenchRegistry: WorkbenchCardDef[] = [
   {
     id: 'service-aliases',
     title: '服务信息管理',
-    description: '服务别名清单与未分组提醒(admin)',
+    description: '服务别名清单与未分组提醒(operator+)',
     accent: 'blue',
-    adminOnly: true,
+    roles: ['operator', 'admin'],
     component: () => import('./ServiceAliasCard.vue'),
   },
   {
     id: 'carry',
     title: '默认值',
-    description: '服务级传递默认值,行深链直达定位(admin)',
+    description: '服务级传递默认值,行深链直达定位(operator+)',
     accent: 'blue',
-    adminOnly: true,
+    roles: ['operator', 'admin'],
     component: () => import('./CarryDefaultsCard.vue'),
   },
   {

@@ -67,17 +67,28 @@ async def register(
         display_name=payload.display_name or None,
         code=NAME_TAKEN_ON_REGISTER,
     )
-    # First registered user becomes admin.
+    # First registered user becomes admin(M2.5:写 role,is_admin 镜像)。
     count = (await db.execute(select(func.count()).select_from(User))).scalar_one()
-    is_admin = count == 0
+    first = count == 0
 
     user = User(
         username=payload.username,
         display_name=payload.display_name,
         password_hash=hash_password(payload.password),
-        is_admin=is_admin,
+        role="admin" if first else "member",
     )
     db.add(user)
+    await db.flush()
+    if first:
+        # 并发双管理员窗口自愈(仓内审计 P9):count-then-insert 竞态会让
+        # 两个并发首注册都拿到 admin —— 插入后复检,若已有更早的 admin
+        # 在场,本单降级回 member。
+        earlier = (await db.execute(
+            select(func.count()).select_from(User).where(
+                User.role == "admin", User.id < user.id)
+        )).scalar_one()
+        if earlier:
+            user.role = "member"
     await db.commit()
     await db.refresh(user)
     return _token_out(user)
@@ -106,6 +117,27 @@ async def login(
 
 
 # ── POST /refresh ────────────────────────────────────────────────
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    payload: ChangePasswordIn, user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    """自服务改密(P2-1):核验旧密码 → 写新哈希。改密后现有会话保留
+    (JWT 不含密码指纹;审计按特权写口径不记 —— 本人常规自管)。"""
+    from sqlalchemy import select as _select
+
+    row = (await db.execute(
+        _select(User).where(User.id == user.id)
+    )).scalar_one()
+    if not verify_password(payload.old_password, row.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "bad_old_password", "msg": "旧密码不正确"},
+        )
+    row.password_hash = hash_password(payload.new_password)
+    await db.commit()
+
+
 @router.post("/refresh", response_model=TokenOut)
 async def refresh(
     payload: RefreshIn,
