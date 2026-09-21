@@ -1,0 +1,220 @@
+# SQLite → PostgreSQL 数据迁移方案(已部署环境通用版)
+
+> **用途**:把任意一台已部署、跑在 SQLite 上的 Gimbal Platform 数据完整迁到
+> PostgreSQL。本方案在本仓 M0–M2 切换期间实测走通(2026-09-21 首切,演练三轮
+> + 正式一轮,行数/checksum 双对账零差异),本文把那次实操固化成可重复执行的
+> 运维手册。
+>
+> **配套**:运行期运维见 `docs/runbook-pg.md`(起库/备份/回滚的日常面);
+> 设计依据见 `docs/superpowers/plans/PG迁移与权限域-实施计划/`。
+> 全部工具随代码库分发,无需额外安装包(SQLAlchemy/asyncpg 已在依赖里)。
+
+---
+
+## 0. 迁移资产清单
+
+| 资产 | 作用 |
+|---|---|
+| `backend/scripts/pg_preccheck.py` | 切换前体检(只读不改):类型亲和/超长/孤儿行/生成列拒插预演/stars 计数/密钥检查 |
+| `backend/scripts/migrate_sqlite_to_pg.py` | ETL 直切:全表搬运 + 变换 + 对账报告 |
+| `backend/alembic/`(0001→0004)+ `alembic.ini` | 目标库 schema 权威(空 PG 建表) |
+| `compose.pg.yml` + `pg-init/01-timezone.sql` | PG 一键起库(时区钉 UTC) |
+
+---
+
+## 1. 硬前提(不满足则停下)
+
+1. **版本对齐**:源环境的代码必须先升到**与 ETL 同版本**(即包含 M2 表结构:
+   `users.role`、`execution_rows`/`execution_snapshots`、通知五表、`scenario_endpoint_refs`
+   等)。旧版本 SQLite 库缺表缺列,ETL 按 models 取数会直接报错。
+   升级步骤:拉代码 → 起一次后端(启动自适应会把 pre-alembic 旧库原地补齐,
+   `app/core/migrations.py` 的 legacy 分支)→ 停掉。
+2. **密钥固定**:源环境 `.env` 的 `JWT_SECRET` / `FERNET_KEY` 必须是非临时值
+   (preccheck 第 9 项会查)。迁移后这两个值**原样照搬**到新环境 —— 否则全部
+   登录态失效、全部凭证密文不可解(`auth_sessions` 的 Fernet 加密绑死密钥)。
+3. **停机窗口**:ETL 是全量直切(非增量)。内部平台按「低峰窗口 + 公告预告」
+   执行;数据量 GB 级时窗口按 §7 的量级估算预留。
+4. **目标 PG**:14+;`compose.pg.yml` 起的库已把 `timezone` 钉为 UTC
+   (init 脚本只在卷首次初始化生效,复用旧卷要手工补 `ALTER DATABASE …
+   SET timezone TO 'UTC'`)。
+
+---
+
+## 2. 全流程(八步)
+
+### Step 0 — 版本对齐(窗口前)
+
+源环境升级代码并启动一次,让 SQLite schema 补齐到当前 models
+(启动日志确认 `ensure_schema` 走了 upgrade/adapt 而非报错)。**这步在窗口前
+做**,升级后源环境继续正常跑 SQLite,不影响业务。
+
+### Step 1 — 备份(窗口开始)
+
+```bash
+cd <源环境 backend 目录>
+cp data/app.db data/app.db.bak-migrate-$(date +%Y%m%d-%H%M%S)
+cp -r data data.bak-migrate-$(date +%Y%m%d-%H%M%S)   # stars.json / runs / cases 全量
+```
+
+`data/` 整目录备份覆盖:stars.json(收藏)、runs/*.jsonl(行级历史)、
+runs/cases/(执行工件)。**ETL 只搬数据库;文件资产在切换后原目录继续用,
+不用搬**。
+
+### Step 2 — 起目标 PG 并建空 schema
+
+```bash
+# 仓库根
+docker compose -f compose.pg.yml up -d && docker compose -f compose.pg.yml ps
+
+# backend 目录(生产用环境变量覆盖密码)
+export PGPASSWORD='<生产密码>'   # 仅 psql 用;alembic 走 DSN
+DATABASE_URL="postgresql+asyncpg://gimbal:<密码>@127.0.0.1:5432/gimbal" \
+    python -m alembic -c alembic.ini upgrade head
+```
+
+alembic 输出应走到 `0004_drop_is_admin`。**不要**用 create_all 手工建表 ——
+双方言细节(生成列方言变体/GIN 索引/部分唯一索引)只在 alembic 链里。
+
+### Step 3 — 体检(只读)
+
+```bash
+python scripts/pg_preccheck.py --db data/app.db --json preccheck.json
+```
+
+**门禁:`blocking_problems` 为空才允许继续**;警告项按下表处置:
+
+| 体检发现 | 处置 |
+|---|---|
+| `executions.owner_id` 孤儿 | **预期存在**,ETL 按 SET NULL 语义吸收,不用处理 |
+| `composer_scenarios.owner_id=0` | 预期(历史「未归属」),ETL 映射 NULL |
+| display_name 重复(非空) | 窗口内先在 UI 改名;partial unique 会拒插 |
+| payload 生成列拒插预演失败 | 按报错行修 meta(超 64 的 name、非法 priority);ETL 灌行时再遇会当场中止,窗口内修完重跑 |
+| execution_rows 量级百万+ | 正常;§7 有保留策略说明 |
+| JWT/FERNET ephemeral | 回 Step 0 前置项,固定后重跑体检 |
+
+### Step 4 — 演练(对副本,窗口前可做)
+
+```bash
+cp data/app.db /tmp/rehearsal.db
+python scripts/migrate_sqlite_to_pg.py \
+    --source /tmp/rehearsal.db \
+    --target postgresql+asyncpg://gimbal:<密码>@127.0.0.1:5432/gimbal \
+    --report etl-rehearsal.json
+```
+
+演练目标库用**另建的空库**(如 `gimbal_rehearsal`),不要污染正式目标。
+拿到报告后人工核对:
+- 每表 `rows == target_rows`;
+- `verifications.row_counts_match / checksums_match / generated_columns_match`
+  全 `true`;
+- `stars_dangling_skipped` 数量与源环境认知一致(悬空关注 = 场景已删而
+  stars.json 未清的历史缺口,按 CASCADE 语义丢弃);
+- `execution_rows_absorbed` 与 preccheck 第 7 项的实测数一致。
+
+### Step 5 — 停机 + 正式 ETL(窗口内)
+
+```bash
+# 1) 停旧后端(uvicorn 进程;不 kill -9,等 graceful)
+# 2) 最终 ETL(对生产 app.db 本体;目标库先清空重建一次保证幂等)
+dropdb … && createdb … gimbal   # 或 DROP SCHEMA public CASCADE; CREATE SCHEMA public;
+DATABASE_URL=… alembic upgrade head
+python scripts/migrate_sqlite_to_pg.py \
+    --source data/app.db \
+    --target postgresql+asyncpg://gimbal:<密码>@127.0.0.1:5432/gimbal \
+    --report etl-final.json
+```
+
+正式报告与演练报告**逐项 diff**,数字应一致(源库在两轮之间有增量则以正式为准,
+量级突变要能解释)。停机窗口从这步起算。
+
+### Step 6 — 切换配置并起新后端
+
+```bash
+# backend/.env
+DATABASE_URL=postgresql+asyncpg://gimbal:<密码>@127.0.0.1:5432/gimbal
+
+# 其余键(JWT_SECRET / FERNET_KEY / GIMBAL_BIN / CORS_ORIGINS)原样不动
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+启动日志三看:
+1. `ensure_schema` 无 `pg_schema_behind`(版本链对齐);
+2. `user_stars: absorbed N legacy stars`(若源环境 stars.json 尚未被应用吸收
+   —— M6 代码会自动吸收并改名 `.absorbed`;ETL 已导过则是 0,都正常);
+3. 无 `column … does not exist` 类报错。
+
+### Step 7 — 冒烟验收(窗口收尾)
+
+```bash
+# 登录(旧密码必须能登录 —— 密码哈希原样搬运)
+curl -X POST …/api/auth/login -d '{"username":"admin","password":"<旧密码>"}'
+# 列表三件套:场景/执行/凭证 —— total 与源环境一致
+curl …/api/scenarios | jq .total
+curl …/api/executions | jq .total
+curl …/api/auths | jq .total
+```
+
+UI 侧抽查:场景详情可开(生成列回读正常)、执行行级表有历史(M6 前存量单
+走 JSONL 归档回放)、收藏页在场。验收过 → 发布「恢复」公告,窗口结束。
+
+### Step 8 — 收尾
+
+- `scenario_endpoint_refs` **有意不导**(ETL SKIP):切换后首次访问适配中心
+  时由应用按 CASCADE 语义自动 rebuild,顺带补齐存量锚点行 —— 无需人工动作。
+- 旧 `data/app.db` 与备份**至少保留一个完整业务周期**再清。
+- 源机上的旧 SQLite 后端进程不要留双活(两写会分叉)。
+
+---
+
+## 3. ETL 数据变换语义(如实清单)
+
+设计偏离都有成因,换环境执行前过目:
+
+| 变换 | 语义 |
+|---|---|
+| 生成列排除 INSERT | composer 七列(name/module/system…)由 PG 生成表达式自算,拒插;源值经 checksum+抽样校验等价 |
+| 时间戳**照搬**(不重置) | 台账是审计数据;对账也依赖原始时间。naive 值按「视为 UTC」补 aware |
+| `owner_id=0` → NULL | 0 是历史「未归属」哨兵,PG 上恒违反 FK |
+| 姓名快照回填 | owner_name/scenario_name 等列源库可能为空,ETL 从关联表回填真值(故这些列不进 checksum) |
+| stars 悬空过滤 | 场景已删而 stars.json 未清的条目按 CASCADE 语义丢弃,计数进报告 |
+| JSONL → execution_rows | 行级历史按「同 (executionId, seq) 终态覆盖」折叠入库;M6 起运行期直接写 DB |
+| scenario_endpoint_refs 不搬 | 切换后 rebuild(见 Step 8) |
+| bool/JSON 归一 | SQLite `1/0` vs PG `True/False`、JSON 字符串解析后再比 —— checksum 的已知异型面 |
+
+## 4. 对账门禁(报告字段)
+
+| 字段 | 判定 |
+|---|---|
+| `tables[*].rows == target_rows` | 全表行数相等 |
+| `row_counts_match` / `checksums_match` | 抽样 50×2 行/表,PK 对齐后规范化 checksum 相等 |
+| `generated_columns_match` | 生成列「源 payload 推导值 == PG 生成值」抽样相等 |
+| `identity_columns_setval` | 全部整型序列列已 setval 到 max(id) —— 漏一个 = 切换后首次 INSERT 主键冲突 |
+| `stars_imported + dangling == stars_in_file` | 收藏吸收守恒 |
+
+## 5. 回滚预案
+
+切换后 72 小时内发现不可修复问题:
+1. 停 PG 后端;
+2. `.env` 的 `DATABASE_URL` 删掉或改回 `sqlite+aiosqlite:///data/app.db`;
+3. 起旧后端(旧 `app.db` 未被 ETL 触碰,ETT 全程只读源库);
+4. **切换窗口之后新产生的数据不回灌**(低峰窗口 + 提前公告的既定取舍);
+5. 旧库文件名不要改 —— 启动自适应认 `data/app.db`。
+
+## 6. 已知坑速查(本仓实操踩过)
+
+| 症状 | 根因与处置 |
+|---|---|
+| ETL 灌 composer_scenarios 当场拒插 | 源库有生成列同名列(不该有)或 payload 脏 —— preccheck 第 6 项会预演,窗口前修 |
+| checksum 假阳性 | 排序差异('.'/'_' collation)→ ETL 已按 PK 在 Python 侧对齐;自写对账工具要同样处理 |
+| 新后端首条 INSERT 主键冲突 | setval 漏列 → 报告 `identity_columns_setval` 应覆盖全部序列列,发现缺列手工补 |
+| 凭证列表全部「无法解密」 | FERNET_KEY 没照搬 —— Step 1 前置项 |
+| PG 起动报 `pg_schema_behind` | 目标库没 `alembic upgrade head` 或代码/链版本不一致 |
+| asyncpg 写 naive datetime 报错 | 外部工具直写时的已知行为:naive 按客户端时区编码;统一 aware-UTC |
+
+## 7. 量级与窗口估算
+
+- ETL 吞吐参考:GB 级库(数万场景/数十万执行)分钟级完成;窗口主要预算给
+  体检人工过目与冒烟,各留 15–30 分钟。
+- `execution_rows` 百万级:表本身照迁;如需瘦身,在**切换后**按保留参数清理
+  (`DELETE … WHERE finished_at < now() - interval '…'` + 行级明细走 JSONL
+  归档兜底的旧单不受影响)—— 不在迁移窗口内做删减,保持对账全集可验。
