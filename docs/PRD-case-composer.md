@@ -533,7 +533,7 @@ EndpointDetail Hero（接口元信息卡片）展示：
 - schema 定义：`src/gimbal-plate/gimbal_plate/schema/`
   - `endpoint/` — `EndpointSpec` / `ApiSpec` / `RequestSpec` / `ResponseSpec` / `EndpointMetadata`
   - `interface/` — `Step` / `Request` / `Strategy`(Extract/Assign/Assertion) / `Scenario`
-  - `base/` — `AuthSession` / `TimePolicy` / `RetryPolicy` / `RefBase`
+  - `base/` — `AuthSession` / `TimePolicy` / `RetryPolicy`
 - 平台需求：`docs/PLATFORM_REQUIREMENTS.md`
 - 平台架构：`docs/architecture.md`
 

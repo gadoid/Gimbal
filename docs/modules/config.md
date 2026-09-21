@@ -387,7 +387,7 @@ export GIMBAL_ENV=staging
 export GIMBAL_MODE=ci
 export GIMBAL_LOG_LEVEL=debug
 export GIMBAL_REPORT_DIR=/var/log/gimbal
-gimbal run scenario sc-001
+gimbal run launch ./case.yaml
 ```
 
 ### 配置文件示例

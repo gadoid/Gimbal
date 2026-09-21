@@ -543,7 +543,7 @@ class ResourceView(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    kind: Literal["mock", "file", "mock_ref", "file_ref"]
+    kind: Literal["mock", "file"]
 
     @classmethod
     def from_resource(cls, r: ResourceUnion) -> "ResourceView":
@@ -565,7 +565,7 @@ class ResourceDetailView(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     name: str
-    kind: Literal["mock", "file", "mock_ref", "file_ref"]
+    kind: Literal["mock", "file"]
     extra: dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
@@ -697,8 +697,7 @@ class StrategyKindDetailView(BaseModel):
 
     ``fields`` 是该 kind 的业务字段(extract 的 expression/target/scope/…),
     ``base_fields`` 是 StrategyBase 继承的公共字段(order/onFailure/timeout/
-    tags/…,第一版前端不渲染,默认值生效)。``strategy_ref`` 预埋字段不在
-    本 dim 的输出中(用户 2026-08-17 拍板,待重设计)。
+    tags/…,第一版前端不渲染,默认值生效)。
     """
 
     model_config = ConfigDict(extra="forbid")

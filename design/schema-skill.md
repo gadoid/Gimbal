@@ -2,7 +2,7 @@
 
 > 本文档描述 `src/gimbal/schema/` 下 Pydantic 静态描述层（DSL 数据契约），供 AI 将 API 描述/业务需求**转换为数据驱动场景用例**时使用。
 >
-> **不涉及**：`Ref / *Ref / Mock / File / ScenarioRef / SuiteRef` 等资产/引用层概念（由后续资产功能承载）。
+> **不涉及**：`Mock` / `File` 资源模型（由资源层承载，不由场景生成层触碰）；历史上的资产/引用层已随引用机制移除。
 
 ---
 
@@ -12,7 +12,7 @@ Schema 层定义**场景化测试用例的静态数据契约**。所有模型基
 
 **AI 必读集**：`Meta / Config / Step / Api / Request / Strategy(Extract/Assign/Assertion) / AuthSession / TimePolicy / RetryPolicy`
 
-**AI 不必读集**：所有 `*Ref`、`*Union` 多态层、`Resource/Mock/File`、`Suite`
+**AI 不必读集**：`*Union` 多态层、`Resource/Mock/File`、`Suite`
 
 ---
 
@@ -67,7 +67,7 @@ AI 生成时直接套用以下约定，避免任意编造：
 4. **提取驱动串联**：依赖前序结果的字段，前序 step 必须先有 `Extract` 提取到 `scope=scenario`，后续 step 的 `target`/`source` 才能引用。
 5. **作用域选型**：跨 step 共享 → `scope=scenario`；仅当前 step 用 → `scope=step`；多场景共享 → `session`。
 6. **认证凭据隔离**：`AuthSession` 只填 `url/username/password`（认证前态），**禁止**预设 `token` / `expires_at`。
-7. **不写资产层**：不生成 `Ref / *Ref / Mock / File / ScenarioRef / SuiteRef`；不写 `Suite` 顶层。
+7. **不写资源层与 Suite**：不生成 `Mock` / `File` 资源模型；不写 `Suite` 顶层。
 8. **失败策略分层**：单策略级用 `StrategyBase.onFailure`；step 整体级用 `Config.retry`，二者**不重复配置**。
 
 ---
@@ -96,7 +96,7 @@ AI 生成时直接套用以下约定，避免任意编造：
 
 | 模型 | kind | 字段 | 必填 | 语义 |
 |---|---|---|---|---|
-| `Request` | `"request"` | `body: dict \| list` | ✗ | 请求体；JSON 对象或数组，默认 `{}`；body 内部可内联 `Ref` 占位 |
+| `Request` | `"request"` | `body: dict \| list` | ✗ | 请求体；JSON 对象或数组，默认 `{}` |
 
 ---
 

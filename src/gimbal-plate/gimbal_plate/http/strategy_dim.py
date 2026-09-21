@@ -18,8 +18,6 @@ from typing import Any
 from gimbal_plate.schema.strategy import Assertion, Assign, Extract, StrategyBase
 
 # kind 清单: 显式枚举三个可编排策略。
-# strategy_ref 是预埋字段(待重新设计,用户 2026-08-17 拍板),整条排除 ——
-# union 定义原样保留;后续重设计后去掉排除即自动进菜单。
 _KIND_MODELS: dict[str, type] = {
     "extract": Extract,
     "assign": Assign,
@@ -173,7 +171,5 @@ class StrategyIndex:
     def to_view(self, item: _KindDescriptor) -> dict[str, Any]:
         return {"kind": item.kind, "label": item.label, "phase": item.phase}
 
-
-# strategy_ref 有意不在 _KIND_MODELS 中 —— 见模块 docstring(预埋,待重设计)。
 
 __all__ = ["StrategyIndex", "_KindDescriptor", "_descriptor_for", "_KIND_LABELS"]

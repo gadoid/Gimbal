@@ -43,7 +43,6 @@ CLI
 | `ScenarioRunner` | 单个 Scenario 的执行流程编排 |
 | `StepRunner` | 构造 StepStateMachine 并触发执行 |
 | `StepStateMachine` | 驱动单个 Step 的完整生命周期（自驱动） |
-| `AssetResolver` | 资产解析（占位） |
 
 ### 3. 职责分离原则
 
@@ -238,7 +237,7 @@ class ScenarioRunner:
         overall_status = "passed"
 
         for idx, step_union in enumerate(scenario_schema.steps):
-            # 跳过未展开的 Ref
+            # 跳过缺少 api 字段的不可执行条目
             if not hasattr(step_union, "api"):
                 continue
 

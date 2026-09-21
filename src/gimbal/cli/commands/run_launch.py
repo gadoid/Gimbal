@@ -170,7 +170,7 @@ def launch(
         bool,
         typer.Option("--fail-fast", help="首个失败即停止", rich_help_panel="执行控制"),
     ] = False,
-    # ========== 步骤级控制（与 gimbal run scenario 对齐；阶段 1 最小子集）==========
+    # ========== 步骤级控制（阶段 1 最小子集）==========
     step_from: Annotated[
         int | None,
         typer.Option("--step-from", help="从指定 step 开始执行（阶段 2 引入 StepResolver 后生效；当前仅提示警告）。", rich_help_panel="步骤控制"),

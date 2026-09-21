@@ -339,8 +339,6 @@ gimbal run resolve-step --service S --method M --path P
 
 | 命令 | 一期是否变动 | 说明 |
 | --- | :-: | --- |
-| `gimbal run scenario` | **不变** | 执行时不感知 plate |
-| `gimbal run suite` | **不变** | 同上 |
 | `gimbal run show` | **增强**（可选） | show 时自动调用 `resolve-steps` 注入 plate_* |
 | `gimbal run match` | **不变** | |
 | `gimbal run server` | **不变** | |

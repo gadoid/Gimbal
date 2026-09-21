@@ -35,7 +35,7 @@ def test_resource_full_exposes_extra(http_client: TestClient) -> None:
 
     # Light always exposes ``name`` / ``kind``; full ALSO has ``extra``.
     assert item["name"] == RESOURCE_ID
-    assert item["kind"] in {"mock", "file", "mock_ref", "file_ref"}
+    assert item["kind"] in {"mock", "file"}
     assert "extra" in item and isinstance(item["extra"], dict)
 
 

@@ -79,13 +79,6 @@ def test_detail_full_assertion_operator_enum(http_client: TestClient) -> None:
     assert len(op["enum"]) == 14
 
 
-def test_strategy_ref_excluded_404(http_client: TestClient) -> None:
-    """strategy_ref 是预埋字段 —— 不在 dim 输出中,按未知 kind 处理。"""
-    resp = http_client.get("/api/strategy/strategy_ref/full")
-    assert resp.status_code == 404
-    assert resp.json()["error"]["code"] == "dim_item_not_found"
-
-
 def test_unknown_kind_404(http_client: TestClient) -> None:
     resp = http_client.get("/api/strategy/nope")
     assert resp.status_code == 404
