@@ -9,7 +9,11 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('@/api/adaptations', () => ({
   catalogDiff: vi.fn(),
   impact: vi.fn(),
+  impactBulk: vi.fn(),
 }))
+vi.mock('@/api/activity', () => ({ getActivity: vi.fn().mockResolvedValue({
+  events: [], sources: { executions: true, scenarios: true, adaptations: true },
+}) }))
 
 /** 每个用例重取一份模块:loaded/changed 是 module 作用域单例。 */
 async function fresh() {
@@ -44,7 +48,9 @@ describe('useInterfaceChange', () => {
     expect(change.hasChange('sc-1')).toBe(false)
 
     vi.mocked(api.catalogDiff).mockResolvedValue(report(1))
-    vi.mocked(api.impact).mockResolvedValue([{ scenarioId: 'sc-1' }] as never)
+    vi.mocked(api.impactBulk).mockResolvedValue({
+      'ep-0': [{ scenarioId: 'sc-1' }] as never,
+    })
     await change.ensure()
     expect(api.catalogDiff).toHaveBeenCalledTimes(2)
     expect(change.hasChange('sc-1')).toBe(true)
@@ -57,24 +63,21 @@ describe('useInterfaceChange', () => {
     expect(api.catalogDiff).toHaveBeenCalledTimes(1)
   })
 
-  it('影响面查询限并发 4,且单端点失败不阻断整体', async () => {
+  it('M5:一次 impactBulk 拿回全部 pending 端点的受影响面(不再逐端点)', async () => {
     const { api, change } = await fresh()
     vi.mocked(api.catalogDiff).mockResolvedValue(report(10))
-    let live = 0
-    let peak = 0
-    vi.mocked(api.impact).mockImplementation(async (id: string) => {
-      live++
-      peak = Math.max(peak, live)
-      await new Promise((r) => setTimeout(r, 0))
-      live--
-      if (id === 'ep-3') throw httpErr(500)
-      return [{ scenarioId: `sc-of-${id}` }] as never
+    vi.mocked(api.impactBulk).mockImplementation(async (ids: string[]) => {
+      const out: Record<string, unknown[]> = {}
+      for (const id of ids) out[id] = [{ scenarioId: `sc-of-${id}` }]
+      return out as never
     })
 
     await change.ensure()
-    expect(peak).toBeGreaterThan(1)
-    expect(peak).toBeLessThanOrEqual(4)
+    // 一次批量请求,10 个端点全部点名
+    expect(api.impactBulk).toHaveBeenCalledTimes(1)
+    expect(api.impactBulk).toHaveBeenCalledWith(
+      Array.from({ length: 10 }, (_, i) => `ep-${i}`))
     expect(change.hasChange('sc-of-ep-0')).toBe(true)
-    expect(change.hasChange('sc-of-ep-9')).toBe(true)   // ep-3 挂了不影响其余
+    expect(change.hasChange('sc-of-ep-9')).toBe(true)
   })
 })

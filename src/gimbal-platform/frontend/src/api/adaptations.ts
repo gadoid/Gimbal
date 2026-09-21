@@ -139,6 +139,17 @@ export async function catalogDiff(): Promise<CatalogDiffReport> {
   return data
 }
 
+/** M5(债 12):批量 impact —— 一次请求回全部端点的受影响清单。 */
+export async function impactBulk(
+  endpointIds: string[],
+): Promise<Record<string, ImpactItem[]>> {
+  const { data } = await http.get<Record<string, ImpactItem[]>>(
+    '/adaptations/impact-bulk',
+    { params: endpointIds.map((e) => ['endpointIds', e]) },
+  )
+  return data
+}
+
 export async function impact(endpointId: string, field?: string): Promise<ImpactItem[]> {
   const { data } = await http.get<ImpactItem[]>('/adaptations/impact', {
     params: { endpointId, field: field || undefined },
@@ -161,9 +172,22 @@ export async function unindexedSteps(): Promise<UnindexedStep[]> {
   return data
 }
 
-export async function listBatches(scope?: 'mine'): Promise<BatchOut[]> {
-  const { data } = await http.get<BatchOut[]>('/adaptations/batches', {
-    params: scope ? { scope } : {},
+/** M4 Page 信封(§6.3):status 精确 + 分页。 */
+export interface BatchPage {
+  items: BatchOut[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export async function listBatches(params?: {
+  scope?: 'mine'
+  status?: string
+  page?: number
+  page_size?: number
+}): Promise<BatchPage> {
+  const { data } = await http.get<BatchPage>('/adaptations/batches', {
+    params: params ?? {},
   })
   return data
 }

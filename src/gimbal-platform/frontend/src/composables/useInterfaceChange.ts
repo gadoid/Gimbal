@@ -6,7 +6,7 @@
  * 不给配置项)。模块级单例缓存,三页共享同一份计算结果。
  */
 import { ref } from 'vue'
-import { catalogDiff, impact } from '@/api/adaptations'
+import { catalogDiff, impactBulk } from '@/api/adaptations'
 import { httpStatusOf } from '@/api/http'
 
 const changed = ref<Set<string>>(new Set())
@@ -21,19 +21,14 @@ export function useInterfaceChange() {
       const set = new Set<string>()
       try {
         const report = await catalogDiff()
-        // 每个 pending 端点一次 impact,限并发:待处理端点可能十几个,
-        // 全并发会瞬时打出同数量请求。
-        const pending = report.pending
-        let i = 0
-        const worker = async () => {
-          while (i < pending.length) {
-            const p = pending[i++]
-            try {
-              for (const it of await impact(p.endpointId)) set.add(it.scenarioId)
-            } catch { /* 单端点影响面失败不阻断整体信号 */ }
+        // M5(债 12):一次 impact-bulk 拿回全部 pending 端点的受影响面
+        // —— 替换「每端点一次 × 限并发 4」的 N+1。
+        if (report.pending.length) {
+          const bulk = await impactBulk(report.pending.map((p) => p.endpointId))
+          for (const items of Object.values(bulk)) {
+            for (const it of items) set.add(it.scenarioId)
           }
         }
-        await Promise.all(Array.from({ length: Math.min(4, pending.length) }, worker))
         changed.value = set
         loaded.value = true
       } catch (e) {

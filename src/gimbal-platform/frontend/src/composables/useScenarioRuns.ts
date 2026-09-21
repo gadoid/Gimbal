@@ -12,17 +12,17 @@
  * 这里是补齐同一纪律)。
  */
 import { ref, type Ref } from 'vue'
-import { listExecutions, type Execution } from '@/api/executions'
+import { listExecutions, type ExecutionListItem } from '@/api/executions'
 import { useAuthStore } from '@/stores/auth'
 
 /** key = `<username>::<scenarioId>` */
-const cache = new Map<string, Ref<Execution[]>>()
-const inflight = new Map<string, Promise<Execution[]>>()
+const cache = new Map<string, Ref<ExecutionListItem[]>>()
+const inflight = new Map<string, Promise<ExecutionListItem[]>>()
 
-function bucket(cacheKey: string): Ref<Execution[]> {
+function bucket(cacheKey: string): Ref<ExecutionListItem[]> {
   let r = cache.get(cacheKey)
   if (!r) {
-    r = ref([]) as Ref<Execution[]>
+    r = ref([]) as Ref<ExecutionListItem[]>
     cache.set(cacheKey, r)
   }
   return r
@@ -33,7 +33,7 @@ export interface RunStamp {
   at: string | null
 }
 
-function stamp(e: Execution): RunStamp {
+function stamp(e: ExecutionListItem): RunStamp {
   return { status: e.status, at: e.finished_at || e.started_at }
 }
 
@@ -42,7 +42,7 @@ export function useScenarioRuns() {
   const keyOf = (scenarioId: string) => `${auth.currentUser?.username ?? ''}::${scenarioId}`
 
   /** 拉取某场景近期执行(默认缓存;force 用于执行后刷新)。 */
-  async function load(scenarioId: string, force = false): Promise<Execution[]> {
+  async function load(scenarioId: string, force = false): Promise<ExecutionListItem[]> {
     const key = keyOf(scenarioId)
     if (!force && cache.has(key)) return cache.get(key)!.value
     let p = inflight.get(key)
@@ -60,13 +60,13 @@ export function useScenarioRuns() {
     }
   }
 
-  function runsOf(scenarioId: string): Ref<Execution[]> {
+  function runsOf(scenarioId: string): Ref<ExecutionListItem[] > {
     return bucket(keyOf(scenarioId))
   }
 
   /** 该方案最近一次执行;无记录 = null。 */
   function lastRunOfScheme(scenarioId: string, schemeId: string): RunStamp | null {
-    const hit = bucket(keyOf(scenarioId)).value.find((e) => e.config?.schemeId === schemeId)
+    const hit = bucket(keyOf(scenarioId)).value.find((e) => e.configSummary?.schemeId === schemeId)
     return hit ? stamp(hit) : null
   }
 
@@ -77,7 +77,7 @@ export function useScenarioRuns() {
     const relevant = isPublic
       ? all
       : defaultSchemeId
-        ? all.filter((e) => e.config?.schemeId === defaultSchemeId)
+        ? all.filter((e) => e.configSummary?.schemeId === defaultSchemeId)
         : []
     return relevant.slice(0, 5).map((e) => e.status).reverse()
   }

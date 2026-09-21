@@ -29,8 +29,24 @@ vi.mock('@/composables/useInterfaceChange', () => ({
 }))
 
 vi.mock('@/api/scenario-composer', () => ({
-  listScenarios: vi.fn().mockResolvedValue([]),
+  listScenarios: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }),
   starScenario: vi.fn().mockResolvedValue(undefined),
+  // M5 bulk 信号:一次请求回全部关注对象的 趋势/最近执行/方案面。
+  // f-a:默认方案 2 次执行(旧 done → 新 failed)+ 3 个方案(默认=标准回归)。
+  fetchScenarioSignals: vi.fn().mockImplementation(async (ids: string[]) => {
+    const signals: Record<string, unknown> = {}
+    for (const id of ids) {
+      signals[id] = id === 'f-a'
+        ? {
+            trend: ['done', 'failed'],
+            lastRun: { status: 'failed', at: '2026-09-18T10:00:00' },
+            schemeCount: 3,
+            defaultSchemeName: '标准回归',
+          }
+        : { trend: [], lastRun: null, schemeCount: 0, defaultSchemeName: null }
+    }
+    return signals
+  }),
   // 只有 f-a 有 3 个方案(默认 = 标准回归),其余 0 个
   listRunSchemes: vi.fn().mockImplementation(async (id: string) =>
     id === 'f-a'
@@ -47,9 +63,9 @@ vi.mock('@/api/executions', () => ({
     total: 3,
     items: [
       // 新→旧:默认方案 2 次(一次失败)+ 别的方案 1 次 —— 趋势不得跨方案聚合
-      { id: 9, scenario_id: 'f-a', status: 'failed', config: { schemeId: 'sch-1' }, started_at: '2026-09-18T09:00:00', finished_at: '2026-09-18T10:00:00' },
-      { id: 8, scenario_id: 'f-a', status: 'done', config: { schemeId: 'sch-2' }, started_at: '2026-09-17T09:00:00', finished_at: '2026-09-17T10:00:00' },
-      { id: 7, scenario_id: 'f-a', status: 'done', config: { schemeId: 'sch-1' }, started_at: '2026-09-16T09:00:00', finished_at: '2026-09-16T10:00:00' },
+      { id: 9, scenario_id: 'f-a', status: 'failed', configSummary: { schemeId: 'sch-1' }, started_at: '2026-09-18T09:00:00', finished_at: '2026-09-18T10:00:00' },
+      { id: 8, scenario_id: 'f-a', status: 'done', configSummary: { schemeId: 'sch-2' }, started_at: '2026-09-17T09:00:00', finished_at: '2026-09-17T10:00:00' },
+      { id: 7, scenario_id: 'f-a', status: 'done', configSummary: { schemeId: 'sch-1' }, started_at: '2026-09-16T09:00:00', finished_at: '2026-09-16T10:00:00' },
     ],
   }),
 }))
@@ -66,7 +82,9 @@ function followed(id: string): Scenario {
 }
 
 async function mountPage(scenarios: Scenario[]): Promise<VueWrapper> {
-  vi.mocked(composerApi.listScenarios).mockResolvedValue(scenarios)
+  vi.mocked(composerApi.listScenarios).mockResolvedValue({
+    items: scenarios, total: scenarios.length, page: 1, pageSize: 100,
+  } as never)
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -201,7 +219,9 @@ describe('ScenarioFollows — 关注页', () => {
 
   it('刷新首帧身份还没到 → 不写匿名键;身份到位后播种落对键', async () => {
     useAuthStore().currentUser = null
-    vi.mocked(composerApi.listScenarios).mockResolvedValue([followed('f-a'), followed('f-b')])
+    vi.mocked(composerApi.listScenarios).mockResolvedValue({
+      items: [followed('f-a'), followed('f-b')], total: 2, page: 1, pageSize: 100,
+    } as never)
     const w = mount(ScenarioFollows, {
       global: {
         plugins: [createRouter({

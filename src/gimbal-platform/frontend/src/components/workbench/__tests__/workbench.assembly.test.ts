@@ -18,17 +18,20 @@ vi.mock('@/api/constants', () => ({
   list: vi.fn().mockResolvedValue([]),
 }))
 vi.mock('@/api/executions', () => ({
-  listExecutions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+  listExecutions: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 }),
 }))
 // 右栏时间线会读适配批次 —— 不 mock 就打真网络,用例变慢且不稳定
 vi.mock('@/api/adaptations', () => ({
   listBatches: vi.fn().mockResolvedValue([]),
 }))
+vi.mock('@/api/activity', () => ({ getActivity: vi.fn().mockResolvedValue({
+  events: [], sources: { executions: true, scenarios: true, adaptations: true },
+}) }))
 vi.mock('@/api/scenario-composer', () => ({
-  listScenarios: vi.fn().mockResolvedValue([]),
+  listScenarios: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }),
 }))
 // 新增的 registry 卡(认证管理 / 服务画像)同样不能打真网络
-vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]), listAll: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/utils/catalog-services', () => ({
   loadCatalogServiceRows: vi.fn().mockResolvedValue([]),
   loadCatalogEntries: vi.fn().mockResolvedValue([]),
@@ -56,8 +59,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   useAuthStore().currentUser = { id: 1, username: 'alice', is_admin: false } as never
   vi.mocked(constantsApi.list).mockResolvedValue([] as never)
-  vi.mocked(executionsApi.listExecutions).mockResolvedValue({ items: [], total: 0 })
-  vi.mocked(scenarioApi.listScenarios).mockResolvedValue([] as never)
+  vi.mocked(executionsApi.listExecutions).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 })
+  vi.mocked(scenarioApi.listScenarios).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 } as never)
 })
 
 afterEach(() => { document.body.innerHTML = '' })
@@ -71,7 +74,8 @@ async function waitCards(w: ReturnType<typeof mountPage>, n: number) {
 /** 本文件的用例都是 member(alice is_admin: false)—— member 的默认板
  *  = 注册表去掉 adminOnly,那三张卡压根不该铺给他。 */
 function memberIds(): string[] {
-  return workbenchRegistry.filter((d) => !d.adminOnly).map((d) => d.id)
+  // M2.5:member 可见 = 无任何角色门控的卡(adminOnly 与 roles 都不算)
+  return workbenchRegistry.filter((d) => !d.adminOnly && !d.roles).map((d) => d.id)
 }
 
 describe('工作台组装 — draggable 接线(卡死根因防回归)', () => {
@@ -235,6 +239,8 @@ describe('工作台新卡 — 最近执行', () => {
           started_at: '2026-09-17T10:00:00Z', finished_at: null, has_scenario_snapshot: false } as never,
       ],
       total: 1,
+      page: 1,
+      pageSize: 5,
     })
     const w = mountPage()
     await vi.waitFor(() => {
@@ -251,11 +257,13 @@ describe('工作台新卡 — 最近执行', () => {
 
 describe('工作台新卡 — 收藏场景', () => {
   it('starred 过滤 + 行直达详情', async () => {
-    vi.mocked(scenarioApi.listScenarios).mockResolvedValue([
-      { meta: { scenarioId: 'sc-a', name: 'A', module: '订单' }, starred: true } as never,
-      { meta: { scenarioId: 'sc-b', name: 'B', module: '订单' }, starred: false } as never,
-      { meta: { scenarioId: 'sc-c', name: 'C', module: '物流' }, starred: true } as never,
-    ])
+    vi.mocked(scenarioApi.listScenarios).mockResolvedValue({
+      items: [
+        { meta: { scenarioId: 'sc-a', name: 'A', module: '订单' }, starred: true } as never,
+        { meta: { scenarioId: 'sc-b', name: 'B', module: '订单' }, starred: false } as never,
+        { meta: { scenarioId: 'sc-c', name: 'C', module: '物流' }, starred: true } as never,
+      ], total: 3, page: 1, pageSize: 100,
+    } as never)
     const w = mountPage()
     await vi.waitFor(() => {
       expect(w.find('[data-testid="wb-sc-row-sc-a"]').exists()).toBe(true)
@@ -278,7 +286,7 @@ describe('工作台新卡 — 我的场景 / 公共场景(场景库三页拆分)
   ] as never[]
 
   beforeEach(() => {
-    vi.mocked(scenarioApi.listScenarios).mockResolvedValue(MIXED)
+    vi.mocked(scenarioApi.listScenarios).mockResolvedValue({ items: MIXED, total: MIXED.length, page: 1, pageSize: 100 } as never)
   })
 
   it('分桶与完整页同谓词:public 只进公共卡,非 public 只进我的卡', async () => {

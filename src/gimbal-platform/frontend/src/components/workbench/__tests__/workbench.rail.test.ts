@@ -17,15 +17,17 @@ import { useAuthStore } from '@/stores/auth'
 import * as composerApi from '@/api/scenario-composer'
 import * as executionsApi from '@/api/executions'
 import * as adaptationsApi from '@/api/adaptations'
+import * as activityApi from '@/api/activity'
 
 vi.mock('@/api/scenario-composer', () => ({
-  listScenarios: vi.fn().mockResolvedValue([]),
+  listScenarios: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }),
 }))
 vi.mock('@/api/executions', () => ({ listExecutions: vi.fn() }))
+vi.mock('@/api/activity', () => ({ getActivity: vi.fn() }))
 vi.mock('@/api/adaptations', () => ({ listBatches: vi.fn() }))
 vi.mock('@/api/constants', () => ({ list: vi.fn().mockResolvedValue([]) }))
 // 新增的 registry 卡(认证管理 / 服务画像)同样不能打真网络
-vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]), listAll: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/utils/catalog-services', () => ({
   loadCatalogServiceRows: vi.fn().mockResolvedValue([]),
   loadCatalogEntries: vi.fn().mockResolvedValue([]),
@@ -62,7 +64,7 @@ describe('UserIdentityCard — 右栏身份卡', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()                      // 用例间不共享取数次数
-    vi.mocked(composerApi.listScenarios).mockResolvedValue([] as never)
+    vi.mocked(composerApi.listScenarios).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 } as never)
   })
 
   it('姓名靠左、头像放大靠右;角色徽标按 is_admin 分档', () => {
@@ -87,9 +89,10 @@ describe('UserIdentityCard — 右栏身份卡', () => {
   })
 
   it('计数走 store 同一份取数;store 未加载时显示占位而不是假 0', async () => {
-    vi.mocked(composerApi.listScenarios).mockResolvedValue([
-      scen('p1', 'private', ago(1)), scen('p2', 'private', ago(2)), scen('pub', 'public', ago(3)),
-    ] as never)
+    vi.mocked(composerApi.listScenarios).mockResolvedValue({
+      items: [scen('p1', 'private', ago(1)), scen('p2', 'private', ago(2)), scen('pub', 'public', ago(3))] as never[],
+      total: 3, page: 1, pageSize: 100,
+    } as never)
     useAuthStore().currentUser = as() as never
     const w = mountWithRouter(UserIdentityCard)
     expect(w.findAll('.id-stat dd').map((d) => d.text())).toEqual(['—', '—'])
@@ -122,26 +125,28 @@ describe('ActivityTimeline — 右栏时间线', () => {
     localStorage.clear()
     useAuthStore().currentUser = as() as never
     useTimelineColors().reset()              // 配色是 module 单例:用例间归零
-    vi.mocked(composerApi.listScenarios).mockResolvedValue([] as never)
+    vi.mocked(composerApi.listScenarios).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 } as never)
     vi.mocked(adaptationsApi.listBatches).mockResolvedValue([] as never)
+    // M5-3:时间线一次合流;默认空报告(各用例按需覆写)
+    vi.mocked(activityApi.getActivity).mockResolvedValue({
+      events: [], sources: { executions: true, scenarios: true, adaptations: true },
+    } as never)
   })
   afterEach(() => {
     vi.useRealTimers()                        // 还原 setSystemTime 的 Date  mock
   })
 
   it('三源合流按天分组,每行深链到自己的详情页', async () => {
-    vi.mocked(executionsApi.listExecutions).mockResolvedValue({
-      total: 2,
-      items: [
-        { id: 12, scenario_id: 'sc-a', status: 'failed', passed: 0, failed: 1, total_runs: 1, started_at: ago(2), finished_at: ago(2), config: {} },
-        { id: 11, scenario_id: 'sc-a', status: 'done', passed: 1, failed: 0, total_runs: 1, started_at: ago(30), finished_at: ago(30), config: {} },
+    vi.mocked(activityApi.getActivity).mockResolvedValue({
+      events: [
+        { kind: 'execution', at: ago(2), executionId: 12, status: 'failed', scenarioId: 'sc-a' },
+        { kind: 'scenario', at: ago(5), scenarioId: 'p1', name: '场景 p1', module: 'm' },
+        { kind: 'adaptation', at: ago(6), batchId: 'b1', fromVersion: 'v1', toVersion: 'v2',
+           status: 'completed', endpointId: 'fin.pay.create', opCount: 2 },
+        { kind: 'execution', at: ago(30), executionId: 11, status: 'done', scenarioId: 'sc-a' },
       ],
+      sources: { executions: true, scenarios: true, adaptations: true },
     } as never)
-    vi.mocked(composerApi.listScenarios).mockResolvedValue([scen('p1', 'private', ago(5))] as never)
-    vi.mocked(adaptationsApi.listBatches).mockResolvedValue([{
-      batchId: 'b1', endpointId: 'fin.pay.create', fromVersion: 'v1', toVersion: 'v2',
-      status: 'completed', operatorId: 3, createdAt: ago(6), closedAt: ago(6), opCounts: { api: 2 },
-    }] as never)
 
     const w = mountWithRouter(ActivityTimeline)
     await flushPromises()
@@ -168,9 +173,11 @@ describe('ActivityTimeline — 右栏时间线', () => {
   })
 
   it('「配色」打开映射面板:改色即时上图例、上圆点,并按用户名存档', async () => {
-    vi.mocked(executionsApi.listExecutions).mockResolvedValue({
-      total: 1,
-      items: [{ id: 5, scenario_id: 'sc-a', status: 'done', passed: 1, failed: 0, total_runs: 1, started_at: ago(1), finished_at: ago(1), config: {} }],
+    vi.mocked(activityApi.getActivity).mockResolvedValue({
+      events: [
+        { kind: 'execution', at: ago(1), executionId: 5, status: 'done', scenarioId: 'sc-a' },
+      ],
+      sources: { executions: true, scenarios: true, adaptations: true },
     } as never)
     const w = mountWithRouter(ActivityTimeline)
     await flushPromises()
@@ -194,12 +201,11 @@ describe('ActivityTimeline — 右栏时间线', () => {
   })
 
   it('超过 10 条才出「查看更多」,展开后给到池子', async () => {
-    vi.mocked(executionsApi.listExecutions).mockResolvedValue({
-      total: 14,
-      items: Array.from({ length: 14 }, (_, i) => ({
-        id: i + 1, scenario_id: 'sc-a', status: 'done', passed: 1, failed: 0, total_runs: 1,
-        started_at: ago(i + 1), finished_at: ago(i + 1), config: {},
+    vi.mocked(activityApi.getActivity).mockResolvedValue({
+      events: Array.from({ length: 14 }, (_, i) => ({
+        kind: 'execution', at: ago(i + 1), executionId: i + 1, status: 'done', scenarioId: 'sc-a',
       })),
+      sources: { executions: true, scenarios: true, adaptations: true },
     } as never)
     const w = mountWithRouter(ActivityTimeline)
     await flushPromises()
@@ -223,12 +229,11 @@ describe('ActivityTimeline — 右栏时间线', () => {
   }
 
   it('渐隐只在真还有剩余内容时出现;「查看更多」在滚动区之外', async () => {
-    vi.mocked(executionsApi.listExecutions).mockResolvedValue({
-      total: 14,
-      items: Array.from({ length: 14 }, (_, i) => ({
-        id: i + 1, scenario_id: 'sc-a', status: 'done', passed: 1, failed: 0, total_runs: 1,
-        started_at: ago(i + 1), finished_at: ago(i + 1), config: {},
+    vi.mocked(activityApi.getActivity).mockResolvedValue({
+      events: Array.from({ length: 14 }, (_, i) => ({
+        kind: 'execution', at: ago(i + 1), executionId: i + 1, status: 'done', scenarioId: 'sc-a',
       })),
+      sources: { executions: true, scenarios: true, adaptations: true },
     } as never)
     const w = mountWithRouter(ActivityTimeline)
     await flushPromises()
@@ -262,15 +267,14 @@ describe('ActivityTimeline — 右栏时间线', () => {
   })
 
   it('卡头圆点即筛流:点一颗只剩那一类、再点还原;池里没有的那类不给点', async () => {
-    vi.mocked(executionsApi.listExecutions).mockResolvedValue({
-      total: 2,
-      items: [
-        { id: 12, scenario_id: 'sc-a', status: 'failed', passed: 0, failed: 1, total_runs: 1, started_at: ago(2), finished_at: ago(2), config: {} },
-        { id: 11, scenario_id: 'sc-a', status: 'done', passed: 1, failed: 0, total_runs: 1, started_at: ago(3), finished_at: ago(3), config: {} },
+    vi.mocked(activityApi.getActivity).mockResolvedValue({
+      events: [
+        { kind: 'execution', at: ago(2), executionId: 12, status: 'failed', scenarioId: 'sc-a' },
+        { kind: 'scenario', at: ago(5), scenarioId: 'p1', name: '场景 p1', module: 'm' },
+        { kind: 'execution', at: ago(3), executionId: 11, status: 'done', scenarioId: 'sc-a' },
       ],
-    } as never)
-    vi.mocked(composerApi.listScenarios).mockResolvedValue([scen('p1', 'private', ago(5))] as never)
-    vi.mocked(adaptationsApi.listBatches).mockResolvedValue([] as never)   // 适配一类为空
+      sources: { executions: true, scenarios: true, adaptations: true },
+    } as never)   // 适配一类为空
     const w = mountWithRouter(ActivityTimeline)
     await flushPromises()
 
@@ -296,12 +300,14 @@ describe('ActivityTimeline — 右栏时间线', () => {
   })
 
   it('member 拿不到适配批次(403)→ 只少一类事件,不标降级', async () => {
-    const { ApiError } = await import('@/api/http')
-    vi.mocked(executionsApi.listExecutions).mockResolvedValue({
-      total: 1,
-      items: [{ id: 5, scenario_id: 'sc-a', status: 'done', passed: 1, failed: 0, total_runs: 1, started_at: ago(1), finished_at: ago(1), config: {} }],
+    // M5-3:member 的 403 在服务端折算(适配源 owner 视图可读)——
+    // sources 报告即「确定性答案」口径,不算降级
+    vi.mocked(activityApi.getActivity).mockResolvedValue({
+      events: [
+        { kind: 'execution', at: ago(1), executionId: 5, status: 'done', scenarioId: 'sc-a' },
+      ],
+      sources: { executions: true, scenarios: true, adaptations: true },
     } as never)
-    vi.mocked(adaptationsApi.listBatches).mockRejectedValue(new ApiError(403, 403, 'forbidden'))
     const w = mountWithRouter(ActivityTimeline)
     await flushPromises()
     expect(w.findAll('.tl-item')).toHaveLength(1)
@@ -310,14 +316,16 @@ describe('ActivityTimeline — 右栏时间线', () => {
   })
 
   it('没有任何活动 → 空态指引;取数全失败 → 错误态', async () => {
-    vi.mocked(executionsApi.listExecutions).mockResolvedValue({ total: 0, items: [] } as never)
-    const empty = mountWithRouter(ActivityTimeline)
+    const empty = mountWithRouter(ActivityTimeline)   // 默认空报告(beforeEach)
     await flushPromises()
     expect(empty.find('.tl-state p').text()).toContain('还没有动态')
     empty.unmount()
 
-    vi.mocked(executionsApi.listExecutions).mockRejectedValue(new Error('boom'))
-    vi.mocked(adaptationsApi.listBatches).mockRejectedValue(new Error('boom'))
+    // 三源全挂(sources 全 false 且无事件)→ 错误态
+    vi.mocked(activityApi.getActivity).mockResolvedValue({
+      events: [],
+      sources: { executions: false, scenarios: false, adaptations: false },
+    } as never)
     const broken = mountWithRouter(ActivityTimeline)
     await flushPromises()
     expect(broken.find('[data-testid="wb-rail-loading"]').exists()).toBe(false)
@@ -331,7 +339,7 @@ describe('右栏是固定区 — 不进 registry 组装', () => {
     setActivePinia(createPinia())
     localStorage.clear()
     useAuthStore().currentUser = as() as never
-    vi.mocked(composerApi.listScenarios).mockResolvedValue([] as never)
+    vi.mocked(composerApi.listScenarios).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 } as never)
     vi.mocked(executionsApi.listExecutions).mockResolvedValue({ total: 0, items: [] } as never)
     vi.mocked(adaptationsApi.listBatches).mockResolvedValue([] as never)
   })

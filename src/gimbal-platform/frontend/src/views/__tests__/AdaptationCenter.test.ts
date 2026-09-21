@@ -76,7 +76,7 @@ function mockAdminBasics() {
   vi.spyOn(api, 'catalogDiff').mockResolvedValue(
     { pending: [], anomalies: [], baselinedNow: 0 } as never)
   vi.spyOn(api, 'unindexedSteps').mockResolvedValue([] as never)
-  vi.spyOn(api, 'listBatches').mockResolvedValue(batches as never)
+  vi.spyOn(api, 'listBatches').mockResolvedValue({ items: batches, total: batches.length, page: 1, pageSize: 50 } as never)
 }
 
 describe('AdaptationCenter', () => {
@@ -96,7 +96,7 @@ describe('AdaptationCenter', () => {
     } as never)
     vi.spyOn(api, 'unindexedSteps').mockResolvedValue(
       [{ scenarioId: 'sc-x', stepIndex: 0, reason: 'no_endpoint_id' }] as never)
-    vi.spyOn(api, 'listBatches').mockResolvedValue(batches as never)
+    vi.spyOn(api, 'listBatches').mockResolvedValue({ items: batches, total: batches.length, page: 1, pageSize: 50 } as never)
     mockDrift([])
 
     const { w } = await mountPage()
@@ -123,7 +123,7 @@ describe('AdaptationCenter', () => {
     vi.spyOn(api, 'catalogDiff').mockResolvedValue(
       { pending: [], anomalies: [], baselinedNow: 1 } as never)
     vi.spyOn(api, 'unindexedSteps').mockResolvedValue([] as never)
-    vi.spyOn(api, 'listBatches').mockResolvedValue([] as never)
+    vi.spyOn(api, 'listBatches').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50 } as never)
     mockDrift([])
 
     const { w } = await mountPage()
@@ -144,11 +144,11 @@ describe('AdaptationCenter', () => {
     const unindexedSpy = vi.spyOn(api, 'unindexedSteps')
     const driftSpy = vi.spyOn(carryApi, 'getDrift')
     const listSpy = vi.spyOn(api, 'listBatches').mockResolvedValue(
-      batches as never)
+      { items: batches, total: batches.length, page: 1, pageSize: 50 } as never)
 
     const { w } = await mountPage()
 
-    expect(listSpy).toHaveBeenCalledWith('mine')
+    expect(listSpy).toHaveBeenCalledWith({ scope: 'mine', status: undefined })
     expect(diffSpy).not.toHaveBeenCalled()
     expect(unindexedSpy).not.toHaveBeenCalled()
     expect(driftSpy).not.toHaveBeenCalled()   // carry section 不渲染(后端 AdminUser)
@@ -164,7 +164,7 @@ describe('AdaptationCenter', () => {
 
   it('member:批次表 renders own batch rows', async () => {
     login(false)
-    vi.spyOn(api, 'listBatches').mockResolvedValue(batches as never)
+    vi.spyOn(api, 'listBatches').mockResolvedValue({ items: batches, total: batches.length, page: 1, pageSize: 50 } as never)
     const { w } = await mountPage()
     expect(w.text()).toContain('bt-1')
     w.unmount()
@@ -176,7 +176,7 @@ describe('AdaptationCenter', () => {
       { pending: [{ endpointId: 'fin.order.add', fromVersion: '1.0.0',
                     toVersion: '1.1.0' }], anomalies: [], baselinedNow: 0 } as never)
     vi.spyOn(api, 'unindexedSteps').mockResolvedValue([] as never)
-    vi.spyOn(api, 'listBatches').mockResolvedValue([] as never)
+    vi.spyOn(api, 'listBatches').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50 } as never)
     vi.spyOn(api, 'impact').mockResolvedValue([] as never)
     mockDrift([])
     const openSpy = vi.spyOn(api, 'openBatch').mockResolvedValue({
@@ -350,7 +350,7 @@ describe('AdaptationCenter — 影响面摘要与跳板(配套方案 C1)', () =>
       anomalies: [], baselinedNow: 0,
     } as never)
     vi.spyOn(api, 'unindexedSteps').mockResolvedValue([] as never)
-    vi.spyOn(api, 'listBatches').mockResolvedValue([] as never)
+    vi.spyOn(api, 'listBatches').mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50 } as never)
     mockDrift([])
   }
 

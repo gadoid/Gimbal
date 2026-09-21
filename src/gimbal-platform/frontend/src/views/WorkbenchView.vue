@@ -103,9 +103,11 @@ import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 
-/** adminOnly 过滤复用侧栏同一权限判定源(§7 第 2 条) */
+/** 角色过滤(M2.5):adminOnly 的泛化形态;三条判定同源侧栏。 */
 const visibleRegistry = computed(() =>
-  workbenchRegistry.filter((d) => !d.adminOnly || auth.isAdmin),
+  workbenchRegistry.filter((d) => !d.adminOnly && !d.roles
+    || (d.adminOnly && auth.isAdmin)
+    || (d.roles && auth.hasRole(...d.roles))),
 )
 
 /** 布局按用户名分键(登录后才持久化;未认证 = 会话内默认)。

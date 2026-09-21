@@ -100,7 +100,7 @@
               </div>
             </TableCell>
             <TableCell>
-              <span v-if="row.config?.schemeName" class="scheme-cell">{{ row.config.schemeName }}</span>
+              <span v-if="row.configSummary?.schemeName" class="scheme-cell">{{ row.configSummary.schemeName }}</span>
               <span v-else class="dim">—</span>
             </TableCell>
             <TableCell>
@@ -139,8 +139,8 @@
                 title="同场景连续失败(按时间序计)">
                 连续第 {{ row.consecutive_failures }} 次失败
               </span>
-              <span v-if="row.config?.authFailFast" class="sig sig-fail" data-testid="signal-auth-fail"
-                :title="row.config.authFailFast.error">
+              <span v-if="row.configSummary?.authFailFast" class="sig sig-fail" data-testid="signal-auth-fail"
+                :title="row.configSummary.authFailFast.error">
                 认证快速失败 · 无行可分析
               </span>
             </TableCell>
@@ -162,26 +162,15 @@
             <TableCell :colspan="8">
               <div class="expand-grid">
                 <div class="expand-block">
-                  <div class="expand-label">执行时注入快照(config_json,如实记录原始请求)</div>
-                  <div v-if="row.config?.schemeName" class="expand-line">
-                    发起方案:<code class="mono">{{ row.config.schemeName }}</code>
-                    <span v-if="row.config?.nRuns && row.config.nRuns !== 1" class="mono dim">· {{ row.config.nRuns }} 次</span>
-                    <span v-if="row.config?.parallel && row.config.parallel > 1" class="mono dim">· 并发 {{ row.config.parallel }}</span>
-                    <span v-if="row.config?.stepTo != null" class="mono dim">· 停于第 {{ row.config.stepTo + 1 }} 步</span>
+                  <div class="expand-label">执行时注入快照(窄投影;完整 config 见详情页)</div>
+                  <div v-if="row.configSummary?.schemeName" class="expand-line">
+                    发起方案:<code class="mono">{{ row.configSummary.schemeName }}</code>
+                    <span v-if="row.configSummary?.nRuns && row.configSummary.nRuns !== 1" class="mono dim">· {{ row.configSummary.nRuns }} 次</span>
+                    <span v-if="row.configSummary?.parallel && row.configSummary.parallel > 1" class="mono dim">· 并发 {{ row.configSummary.parallel }}</span>
+                    <span v-if="row.configSummary?.stepTo != null" class="mono dim">· 停于第 {{ row.configSummary.stepTo + 1 }} 步</span>
                   </div>
-                  <div class="expand-line">
-                    认证注入:
-                    <template v-if="row.config?.injectedAuths?.length">
-                      <code v-for="a in row.config.injectedAuths" :key="a" class="mono auth-chip">{{ a }}</code>
-                    </template>
-                    <span v-else class="dim">无</span>
-                  </div>
-                  <div class="expand-line" v-if="row.config?.serviceBindings && Object.keys(row.config.serviceBindings).length">
-                    绑定:
-                    <code v-for="(b, svc) in row.config.serviceBindings" :key="svc" class="mono auth-chip">
-                      {{ svc }}{{ b.authAlias ? ` → ${b.authAlias}` : '' }}{{ b.url ? ' (URL)' : '' }}
-                    </code>
-                  </div>
+                  <!-- 认证注入/服务绑定(injectedAuths/serviceBindings)是凭证引用面,
+                       M1 起不随列表行下发(PG迁移方案 §2.2 债 4 补刀)——详情页可见。 -->
                 </div>
                 <div class="expand-block">
                   <div class="expand-label">下一步</div>
@@ -245,7 +234,7 @@ import {
   cancelExecution, getExecutionsSummary, listExecutions, rerunExecution,
   type ExecutionsSummary, type Execution, type ExecutionStatus,
 } from '@/api/executions'
-import { listScenarios } from '@/api/scenario-composer'
+import { listScenarioOptions } from '@/api/scenario-composer'
 import { executionStatusText } from '@/utils/executionStatus'
 import { executionUrl, runnerUrl } from '@/utils/links'
 import { removeExecution } from '@/utils/removeExecution'
@@ -253,6 +242,7 @@ import { showError } from '@/utils/errorFallback'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Alert, AlertTitle } from '@/components/ui/alert'
+import type { ExecutionListItem } from '@/api/executions'
 
 const route = useRoute()
 const router = useRouter()
@@ -290,9 +280,9 @@ function formatDuration(sec: number): string {
 const scenarioNames = ref<Record<string, string>>({})
 onMounted(async () => {
   try {
-    const list = await listScenarios({})
+    const env = await listScenarioOptions({ page_size: 100 })
     const map: Record<string, string> = {}
-    for (const s of list) map[s.meta.scenarioId] = s.meta.name || s.meta.scenarioId
+    for (const s of env.items) map[s.scenarioId] = s.name || s.scenarioId
     scenarioNames.value = map
   } catch { /* 场景清单不可达 → 用 id 展示,不阻塞台账 */ }
 })
@@ -310,21 +300,16 @@ const filterWindow = ref('')
 /** 批次归并视图:执行器队列发起后 ?batch_id= 深链到达;chip 可清除。 */
 const filterBatch = ref(typeof route.query.batch_id === 'string' ? route.query.batch_id : '')
 
-/** 搜索 = 客户端过滤(场景名 / id / 执行号);后端筛选仍是列表请求参数 */
-const filtered = computed(() => {
-  const q = query.value.trim().toLowerCase()
-  if (!q) return store.list
-  return store.list.filter((r) =>
-    r.scenario_id.toLowerCase().includes(q)
-    || (scenarioNames.value[r.scenario_id] ?? '').toLowerCase().includes(q)
-    || String(r.id) === q || String(r.id).startsWith(q))
-})
+/** 搜索词下推服务端(M4):q = scenario_name/scenario_id 子串 + 执行号
+ * 前缀(与旧客户端口径一致);300ms 防抖进 fetchFiltered。 */
+const filtered = computed(() => store.list)
 const failedCount = computed(() => filtered.value.filter((r) => r.status === 'failed').length)
 
 let listSeq = 0
 async function fetchFiltered(): Promise<void> {
   const seq = ++listSeq
   const params: Parameters<typeof listExecutions>[0] = { limit: 200 }
+  if (query.value.trim()) params.q = query.value.trim()
   if (filterStatus.value) params.status = filterStatus.value as ExecutionStatus
   if (filterBatch.value) params.batchId = filterBatch.value
   if (filterWindow.value) {
@@ -350,6 +335,13 @@ watch([filterStatus, filterWindow], () => {
   refreshSummary()
 })
 
+// 搜索词:300ms 防抖下推(打字不逐请求)
+let qTimer: ReturnType<typeof setTimeout> | null = null
+watch(query, () => {
+  if (qTimer) clearTimeout(qTimer)
+  qTimer = setTimeout(() => { void fetchFiltered() }, 300)
+})
+
 function filterByBatch(batchId: string) {
   filterBatch.value = batchId
   void fetchFiltered()
@@ -371,7 +363,7 @@ function formatStart(started: string | null): string {
 }
 
 /** 行内耗时:finished − started(execution 级;行级分布等落库) */
-function durationOf(row: Execution): string {
+function durationOf(row: ExecutionListItem): string {
   if (!row.started_at || !row.finished_at) return ''
   const sec = (new Date(row.finished_at).getTime() - new Date(row.started_at).getTime()) / 1000
   if (!Number.isFinite(sec) || sec < 0) return ''
@@ -383,7 +375,7 @@ function durationOf(row: Execution): string {
 const expanded = ref<Set<number>>(new Set())
 
 const rerunningId = ref<number | null>(null)
-async function rerun(row: Execution) {
+async function rerun(row: ExecutionListItem) {
   rerunningId.value = row.id
   try {
     const resp = await rerunExecution(row.id)
@@ -423,17 +415,40 @@ async function cancel(id: number) {
 
 let handle: ReturnType<typeof setInterval> | null = null
 
+/** M5-4 轮询治理:3s 整表 → 10s 且只刷 summary + 当前页;页面不可见
+ *  暂停(visibilitychange),回来自下一拍继续 —— 台账不是实时监控台。 */
+const POLL_MS = 10_000
+
+function pollOnce(): void {
+  fetchFiltered().catch(() => undefined)
+  refreshSummary()
+}
+
+function startPolling(): void {
+  if (handle === null) handle = setInterval(pollOnce, POLL_MS)
+}
+function stopPolling(): void {
+  if (handle !== null) {
+    clearInterval(handle)
+    handle = null
+  }
+}
+
+function onVisibility(): void {
+  if (document.visibilityState === 'visible') startPolling()
+  else stopPolling()
+}
+
 onMounted(async () => {
   refreshSummary()
   await fetchFiltered().catch(() => undefined)
-  handle = setInterval(() => {
-    fetchFiltered().catch(() => undefined)
-    refreshSummary()
-  }, 3000)
+  startPolling()
+  document.addEventListener('visibilitychange', onVisibility)
 })
 
 onUnmounted(() => {
-  if (handle !== null) clearInterval(handle)
+  stopPolling()
+  document.removeEventListener('visibilitychange', onVisibility)
 })
 
 </script>

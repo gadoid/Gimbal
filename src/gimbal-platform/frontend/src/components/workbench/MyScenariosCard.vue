@@ -56,19 +56,19 @@ import { computed, onMounted } from 'vue'
 import { useCardSize } from './registry'
 import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
-import type { Scenario } from '@/types/scenario-composer'
+import type { ScenarioListItem } from '@/types/scenario-composer'
 import { scenarioDetailUrl } from '@/utils/links'
 import { relTime } from '@/utils/datetime'
 
 const size = useCardSize()
 const store = useScenarioComposerStore()
 
-const stampOf = (s: Scenario) => s.meta.updateTime || s.meta.createTime || ''
+const stampOf = (s: ScenarioListItem) => s.meta.updateTime || s.meta.createTime || ''
 
 // 与 ScenariosMine.vue 同一谓词:非 public 即我的 —— §7 第 6 条,卡上
 // 计数必须与点进完整页看到的条数一致。filter 已产新数组,sort 不碰 store。
 const rows = computed(() =>
-  store.scenarios
+  store.window
     .filter((s) => s.visibility !== 'public')
     .sort((a, b) => stampOf(b).localeCompare(stampOf(a))),
 )
@@ -76,12 +76,12 @@ const rows = computed(() =>
 /** M = 5 行;L = 8 行 */
 const visible = computed(() => rows.value.slice(0, size.value === 'L' ? 8 : 5))
 const expiredCount = computed(() => rows.value.filter((s) => s.meta.expire).length)
-const failed = computed(() => store.scenariosStatus === 'error')
+const failed = computed(() => store.windowStatus === 'error')
 
 const wbT = (suffix: string) => `wb-card-my-scenarios-${suffix}`
 
 // 三张场景卡同帧挂载,ensureScenarios 合流成一次请求(不复用 store 就是 3 连发)。
-onMounted(() => { void store.ensureScenarios() })
+onMounted(() => { void store.ensureWindow() })
 </script>
 
 <style scoped>

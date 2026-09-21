@@ -10,7 +10,7 @@
         <p class="id-welcome">{{ greeting }}，欢迎回到工作台</p>
         <div class="id-chips">
           <span class="id-user mono">@{{ user.username }}</span>
-          <span class="id-role" :class="{ admin: user.is_admin }">{{ user.is_admin ? '管理员' : '成员' }}</span>
+          <span class="id-role" :class="auth.role">{{ { member: '成员', operator: '运维', admin: '管理员' }[auth.role] }}</span>
         </div>
       </div>
       <span class="avatar" :style="{ background: avatarColor(user.id) }" :title="displayName" aria-hidden="true">
@@ -50,11 +50,11 @@ const HOUR = new Date().getHours()
 const greeting = HOUR < 6 ? '凌晨好' : HOUR < 11 ? '早上好' : HOUR < 13 ? '中午好'
   : HOUR < 18 ? '下午好' : '晚上好'
 
-const loaded = computed(() => store.scenariosLoaded)
-const mineCount = computed(() => store.scenarios.filter((s) => s.visibility !== 'public').length)
-const followCount = computed(() => store.starredScenarios.length)
+const loaded = computed(() => store.windowLoaded)
+const mineCount = computed(() => store.window.filter((s) => s.visibility !== 'public').length)
+const followCount = computed(() => store.window.filter((s) => s.starred).length)
 
-onMounted(() => { void store.ensureScenarios() })
+onMounted(() => { void store.ensureWindow() })
 </script>
 
 <style scoped>

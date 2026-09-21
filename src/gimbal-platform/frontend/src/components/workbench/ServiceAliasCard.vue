@@ -77,7 +77,7 @@ const wbT = (suffix: string) => `wb-card-service-aliases-${suffix}`
 
 onMounted(async () => {
   try {
-    rows.value = await listAliases()
+    rows.value = (await listAliases()).items
   } catch {
     error.value = '服务别名清单加载失败'
   } finally {

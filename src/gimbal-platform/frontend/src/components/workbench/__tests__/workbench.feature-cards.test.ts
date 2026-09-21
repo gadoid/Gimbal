@@ -21,16 +21,19 @@ vi.mock('@/api/constants', () => ({ list: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/api/executions', () => ({
   listExecutions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 }))
+vi.mock('@/api/activity', () => ({ getActivity: vi.fn().mockResolvedValue({
+  events: [], sources: { executions: true, scenarios: true, adaptations: true },
+}) }))
 vi.mock('@/api/scenario-composer', () => ({ listScenarios: vi.fn() }))
 vi.mock('@/api/adaptations', () => ({
   listBatches: vi.fn().mockResolvedValue([]),
   catalogDiff: vi.fn().mockResolvedValue({ pending: [], anomalies: [] }),
   errMsg: (_e: unknown, d: string) => d,
 }))
-vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]) }))
-vi.mock('@/api/service-aliases', () => ({ listAliases: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]), listAll: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/api/service-aliases', () => ({ listAliases: vi.fn().mockResolvedValue([]), listAllAliases: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/api/carry', () => ({ getDefaults: vi.fn().mockResolvedValue({}) }))
-vi.mock('@/api/users', () => ({ list: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/api/users', () => ({ list: vi.fn().mockResolvedValue([]), listAll: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/utils/catalog-services', () => ({
   loadCatalogServiceRows: vi.fn().mockResolvedValue([]),
   loadCatalogEntries: vi.fn().mockResolvedValue([]),
@@ -67,8 +70,8 @@ beforeEach(() => {
   localStorage.clear()
   vi.clearAllMocks()
   setAuth(false)
-  vi.mocked(composerApi.listScenarios).mockResolvedValue([] as never)
-  vi.mocked(adaptationsApi.listBatches).mockResolvedValue([])
+  vi.mocked(composerApi.listScenarios).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 } as never)
+  vi.mocked(adaptationsApi.listBatches).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 } as never)
   vi.mocked(authSessionsApi.list).mockResolvedValue([] as never)
   vi.mocked(catalogServices.loadCatalogServiceRows).mockResolvedValue([])
 })
@@ -128,10 +131,14 @@ describe('服务画像卡', () => {
 
 describe('认证管理卡', () => {
   it('未被引用 = alias_ref_count 与 scenario_ref_count 都空', async () => {
-    vi.mocked(authSessionsApi.list).mockResolvedValue([
+    const AUTHS = [
       { id: 1, alias: 'codfish', token_type: 'Bearer', url: 'u', username: 'x', updated_at: '', alias_ref_count: 0, scenario_ref_count: 0 },
       { id: 2, alias: 'svc-bot', token_type: 'Basic', url: 'u', username: 'y', updated_at: '', alias_ref_count: 0, scenario_ref_count: 2 },
-    ] as never)
+    ]
+    vi.mocked(authSessionsApi.list).mockResolvedValue({
+      items: AUTHS, total: 2, page: 1, pageSize: 200,
+    } as never)
+    vi.mocked(authSessionsApi.listAll).mockResolvedValue(AUTHS as never)
     const w = mountPage()
     await waitCard(w, 'auths')
     const card = w.find('[data-testid="wb-card-auths"]')
@@ -146,16 +153,16 @@ describe('适配中心卡', () => {
   it('member 只发 listBatches("mine"),不触发 admin 的 catalogDiff', async () => {
     const w = mountPage()
     await waitCard(w, 'adaptations')
-    expect(adaptationsApi.listBatches).toHaveBeenCalledWith('mine')
+    expect(adaptationsApi.listBatches).toHaveBeenCalledWith({ scope: 'mine' })
     expect(adaptationsApi.catalogDiff).not.toHaveBeenCalled()
     w.unmount()
   })
 
   it('批次行走 BATCH_LABEL 文案并深链批次详情', async () => {
-    vi.mocked(adaptationsApi.listBatches).mockResolvedValue([{
+    vi.mocked(adaptationsApi.listBatches).mockResolvedValue({ items: [{
       batchId: 'b1', endpointId: 'fin.pay.create', fromVersion: 'v1', toVersion: 'v2',
       status: 'open', operatorId: 1, createdAt: '2026-09-19T10:00:00Z', opCounts: { api: 2 },
-    }] as never)
+    }], total: 1, page: 1, pageSize: 50 } as never)
     setAuth(true)
     const w = mountPage()
     await waitCard(w, 'adaptations')
@@ -172,9 +179,10 @@ describe('适配中心卡', () => {
 
 describe('执行器卡', () => {
   it('缺方案的私有场景进行里,可执行数只算有方案的', async () => {
-    vi.mocked(composerApi.listScenarios).mockResolvedValue([
-      scen('p1', 0), scen('p2', 2), scen('pub', 1, 'public'),
-    ] as never)
+    vi.mocked(composerApi.listScenarios).mockResolvedValue({
+      items: [scen('p1', 0), scen('p2', 2), scen('pub', 1, 'public')],
+      total: 3, page: 1, pageSize: 100,
+    } as never)
     const w = mountPage()
     await waitCard(w, 'runner')
     const card = w.find('[data-testid="wb-card-runner"]')

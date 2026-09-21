@@ -85,7 +85,8 @@ const wbT = (suffix: string) => `wb-card-adaptations-${suffix}`
 onMounted(async () => {
   if (auth.isAdmin) void store.ensureBadgeLoaded()
   try {
-    const list = await listBatches(auth.isAdmin ? undefined : 'mine')
+    const env = await listBatches({ scope: auth.isAdmin ? undefined : 'mine' })
+    const list = env.items
     batches.value = list.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   } catch {
     error.value = '适配批次加载失败'

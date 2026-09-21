@@ -64,15 +64,15 @@ const size = useCardSize()
 const store = useScenarioComposerStore()
 
 /** 与关注页同源(store.starredScenarios 同一谓词)*/
-const rows = computed(() => store.scenarios.filter((s) => s.starred))
+const rows = computed(() => store.window.filter((s) => s.starred))
 
 /** M = 5 行;L = 8 行 */
 const visible = computed(() => rows.value.slice(0, size.value === 'L' ? 8 : 5))
-const failed = computed(() => store.scenariosStatus === 'error')
+const failed = computed(() => store.windowStatus === 'error')
 
 const wbT = (suffix: string) => `wb-card-starred-scenarios-${suffix}`
 
-onMounted(() => { void store.ensureScenarios() })
+onMounted(() => { void store.ensureWindow() })
 </script>
 
 <style scoped>

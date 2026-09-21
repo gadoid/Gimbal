@@ -56,18 +56,18 @@ import { computed, onMounted } from 'vue'
 import { useCardSize } from './registry'
 import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
-import type { Scenario } from '@/types/scenario-composer'
+import type { ScenarioListItem } from '@/types/scenario-composer'
 import { scenarioDetailUrl } from '@/utils/links'
 import { relTime } from '@/utils/datetime'
 
 const size = useCardSize()
 const store = useScenarioComposerStore()
 
-const stampOf = (s: Scenario) => s.meta.updateTime || s.meta.createTime || ''
+const stampOf = (s: ScenarioListItem) => s.meta.updateTime || s.meta.createTime || ''
 
 // 与 ScenariosPublic.vue 同一谓词:public 才进本卡 —— §7 第 6 条计数同源。
 const rows = computed(() =>
-  store.scenarios
+  store.window
     .filter((s) => s.visibility === 'public')
     .sort((a, b) => stampOf(b).localeCompare(stampOf(a))),
 )
@@ -77,11 +77,11 @@ const visible = computed(() => rows.value.slice(0, size.value === 'L' ? 8 : 5))
 const authorCount = computed(
   () => new Set(rows.value.map((s) => s.meta.author || s.meta.owner).filter(Boolean)).size,
 )
-const failed = computed(() => store.scenariosStatus === 'error')
+const failed = computed(() => store.windowStatus === 'error')
 
 const wbT = (suffix: string) => `wb-card-public-scenarios-${suffix}`
 
-onMounted(() => { void store.ensureScenarios() })
+onMounted(() => { void store.ensureWindow() })
 </script>
 
 <style scoped>

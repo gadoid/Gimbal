@@ -16,20 +16,26 @@ import SlibIcon, { type SlibIconName } from '@/components/scenario-lib/SlibIcon.
 import { useAuthStore } from '@/stores/auth'
 import { workbenchRegistry, type WorkbenchCardDef } from '../registry'
 
-vi.mock('@/api/constants', () => ({ list: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/api/constants', () => ({ list: vi.fn().mockResolvedValue([]), listAll: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/api/executions', () => ({
   listExecutions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 }))
-vi.mock('@/api/scenario-composer', () => ({ listScenarios: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/api/activity', () => ({ getActivity: vi.fn().mockResolvedValue({
+  events: [], sources: { executions: true, scenarios: true, adaptations: true },
+}) }))
+vi.mock('@/api/scenario-composer', () => ({ listScenarios: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 20 }) }))
 vi.mock('@/api/adaptations', () => ({
   listBatches: vi.fn().mockResolvedValue([]),
   catalogDiff: vi.fn().mockResolvedValue({ pending: [], anomalies: [] }),
   errMsg: (_e: unknown, d: string) => d,
 }))
-vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]) }))
-vi.mock('@/api/service-aliases', () => ({ listAliases: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]), listAll: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/api/service-aliases', () => ({
+  listAliases: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 }),
+  listAllAliases: vi.fn().mockResolvedValue([]),
+}))
 vi.mock('@/api/carry', () => ({ getDefaults: vi.fn().mockResolvedValue({}) }))
-vi.mock('@/api/users', () => ({ list: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/api/users', () => ({ list: vi.fn().mockResolvedValue([]), listAll: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/utils/catalog-services', () => ({
   loadCatalogServiceRows: vi.fn().mockResolvedValue([]),
   loadCatalogEntries: vi.fn().mockResolvedValue([]),

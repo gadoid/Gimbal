@@ -1,19 +1,19 @@
 /**
- * catalog-services.ts — plate 目录服务名加载器(共享,模块级缓存)
+ * catalog-services.ts — 服务目录加载器(共享,模块级缓存)
  *
- * 目录服务名全串集合 = 别名派生(deriveBase)的唯一外部输入。数据源与
- * CaseComposerCatalog 相同:plate /api/endpoint?per_page=500 的
- * items[].service / items[].system(必须用原生 fetch — axios baseURL=/api
- * 会把 /plate 拼成 /api/plate,绕过 Vite 的 /plate 代理)。
+ * M5(债 11)起数据源 = 平台后端聚合端点 GET /api/catalog/services
+ * (后端代理 plate /api/endpoint 全量 + 聚合 + 30s TTL)—— 浏览器不再
+ * 直连 plate /api/endpoint?per_page=500(超 500 静默丢 + 每浏览器一份
+ * 全量拉取的旧形态退役)。
  * 消费方:Canvas 别名下拉 / Config 归属列 / CaseComposer.checkSystemMismatch;
  * 失败静默降级为空集合(裸声明黄警)。
  *
- * 两个视图共享同一次拉取(单一 cached promise):
+ * 多个 loader 共享同一次拉取(单一 cached promise):
  *   - loadCatalogServiceNames:去重服务名集合(别名派生输入)
  *   - loadCatalogSystemByService:service → system 权威映射
- *     (endpoint 条目自带 system 字段 — 系统黄警不再靠字符串猜测)
+ *   - loadCatalogServiceRows:服务级聚合行(画像页/工作台卡,口径唯一)
  */
-import { useAuthStore } from '@/stores/auth'
+import http from '@/api/http'
 
 /** 目录 endpoint 条目中派生所需的字段(id 供 endpoint→service 映射,
  *  如适配中心待适配卡跳接口线索板;个别脏行可缺)。 */
@@ -23,32 +23,37 @@ interface CatalogServiceEntry {
   id?: string
 }
 
-let cached: Promise<CatalogServiceEntry[]> | null = null
+/** GET /api/catalog/services 响应形状(M5 聚合端点)。 */
+interface CatalogServicesEnvelope {
+  services: { name: string; system: string; endpointCount: number }[]
+  endpoints: { id: string; service: string }[]
+  plateReachable: boolean
+}
+
+let cached: Promise<CatalogServicesEnvelope> | null = null
+
+function fetchCatalogServices(): Promise<CatalogServicesEnvelope> {
+  return http.get<CatalogServicesEnvelope>('/catalog/services')
+    .then((r) => r.data)
+}
 
 /**
- * 目录条目全集(service×system,每 endpoint 一行)。
- * 消费方:服务画像落地页按服务聚合计数(2026-09-20 起);
- * 与另两个 loader 共享同一次缓存拉取。
+ * 目录条目全集(service×system,每 endpoint 一行 —— 由聚合端点的
+ * services × endpoints 复原,消费方形状不变)。
  */
 export function loadCatalogEntries(): Promise<CatalogServiceEntry[]> {
-  if (cached) return cached
-  const p: Promise<CatalogServiceEntry[]> = (async () => {
-    const token = useAuthStore().accessToken || ''
-    const r = await fetch('/plate/api/endpoint?per_page=500', {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+  if (!cached) {
+    cached = fetchCatalogServices().catch((e) => {
+      cached = null // 失败不缓存,下次可重试
+      throw e
     })
-    if (!r.ok) throw new Error(`catalog endpoint list HTTP ${r.status}`)
-    const data: any = await r.json()
-    const items = data?.data?.items || data?.items || (Array.isArray(data) ? data : [])
-    return items
-      .map((e: any) => ({ service: e.service, system: e.system, id: e.id }))
-      .filter((e: CatalogServiceEntry) => e.service && e.system)
-  })().catch((e) => {
-    cached = null          // 失败不缓存,下次可重试
-    throw e
-  })
-  cached = p
-  return p
+  }
+  return cached.then((env) =>
+    env.endpoints.map((ep) => ({
+      service: ep.service,
+      system: env.services.find((s) => s.name === ep.service)?.system ?? '',
+      id: ep.id,
+    })).filter((e) => e.service && e.system))
 }
 
 /** endpoint_id → service 映射(适配中心「看影响面」跳线索板要用;
@@ -76,13 +81,7 @@ export interface CatalogServiceRow {
 }
 
 export function loadCatalogServiceRows(): Promise<CatalogServiceRow[]> {
-  return loadCatalogEntries().then((entries) => {
-    const byName = new Map<string, CatalogServiceRow>()
-    for (const e of entries) {
-      const row = byName.get(e.service)
-      if (row) row.endpointCount += 1
-      else byName.set(e.service, { name: e.service, system: e.system, endpointCount: 1 })
-    }
-    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name))
-  })
+  // 聚合端点已按服务聚好 —— 直接取,不再前端重算(口径唯一,债 11 消除)
+  return loadCatalogEntries().then(() => (cached ? cached : fetchCatalogServices()))
+    .then((env) => env.services.map((s) => ({ ...s })))
 }

@@ -19,11 +19,12 @@ import { useAuthStore } from '@/stores/auth'
 
 vi.mock('@/api/constants', () => ({
   list: vi.fn(),
+  listAll: vi.fn(),
   create: vi.fn(),
   patch: vi.fn(),
   remove: vi.fn(),
 }))
-vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]), listAll: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/utils/catalog-services', () => ({
   loadCatalogServiceRows: vi.fn().mockResolvedValue([]),
   loadCatalogEntries: vi.fn().mockResolvedValue([]),
@@ -64,7 +65,7 @@ beforeEach(() => {
   setActivePinia(createPinia())
   vi.clearAllMocks()
   useAuthStore().currentUser = { id: 1, username: 'qa', is_admin: false } as never
-  vi.mocked(constantsApi.list).mockResolvedValue(ENTRIES as never)
+  vi.mocked(constantsApi.listAll).mockResolvedValue(ENTRIES as never)
 })
 
 afterEach(() => { document.body.innerHTML = '' })
@@ -113,7 +114,7 @@ describe('常量池摘要卡(§7 落地节奏:首张卡)', () => {
   })
 
   it('空态 = 引导 CTA(非虚线占位,§7 第 3 条)', async () => {
-    vi.mocked(constantsApi.list).mockResolvedValue([] as never)
+    vi.mocked(constantsApi.listAll).mockResolvedValue([] as never)
     const w = mountPage()
     await vi.waitFor(() => {
       expect(w.find('.card-empty').exists()).toBe(true)
@@ -124,7 +125,7 @@ describe('常量池摘要卡(§7 落地节奏:首张卡)', () => {
   })
 
   it('list 失败静默回空(不白屏;完整页有重试入口)', async () => {
-    vi.mocked(constantsApi.list).mockRejectedValue(new Error('down'))
+    vi.mocked(constantsApi.listAll).mockRejectedValue(new Error('down'))
     const w = mountPage()
     await vi.waitFor(() => {
       expect(w.find('.card-empty').exists()).toBe(true)

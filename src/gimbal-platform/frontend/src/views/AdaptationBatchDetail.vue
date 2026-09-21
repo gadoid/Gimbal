@@ -10,7 +10,7 @@
 
     <template #actions>
       <span class="chip" :class="statusClass[detail.status] ?? 'bg-muted text-muted-foreground'">{{ detail.status }}</span>
-      <template v-if="auth.isAdmin">
+      <template v-if="auth.hasRole('operator', 'admin')">
         <Button variant="outline" data-action="construct" @click="constructOpen = true">
           构造 op
         </Button>
@@ -40,7 +40,7 @@
       </p>
     </template>
 
-    <Alert v-if="!auth.isAdmin" class="mb-3">
+    <Alert v-if="!auth.hasRole('operator', 'admin')" class="mb-3">
       <AlertTitle>owner 只读视图:仅查看 op 与快照,操作请联系管理员</AlertTitle>
     </Alert>
 
@@ -48,7 +48,7 @@
       <div v-for="op in detail.ops" :key="op.id" class="op-row">
         <div class="op-head">
           <input
-            v-if="auth.isAdmin && selectable(op)"
+            v-if="auth.hasRole('operator', 'admin') && selectable(op)"
             type="checkbox"
             class="op-check"
             :data-testid="`op-check-${op.id}`"
@@ -61,7 +61,7 @@
           </span>
           <span v-if="op.appliedAt" class="hint">{{ op.appliedAt }}</span>
           <span v-if="op.note" class="hint note">{{ op.note }}</span>
-          <span v-if="auth.isAdmin && op.status === 'pending'" class="op-actions">
+          <span v-if="auth.hasRole('operator', 'admin') && op.status === 'pending'" class="op-actions">
             <Button
               size="sm"
               class="op-action"

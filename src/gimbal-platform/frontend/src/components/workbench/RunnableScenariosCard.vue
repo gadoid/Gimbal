@@ -24,7 +24,7 @@
     </div>
 
     <template v-else>
-      <div v-if="!store.scenariosLoaded" class="card-empty"><p>加载中…</p></div>
+      <div v-if="!store.windowLoaded" class="card-empty"><p>加载中…</p></div>
       <div v-else-if="blocked.length" class="rows">
         <router-link
           v-for="s in visible"
@@ -41,7 +41,7 @@
           还有 {{ blocked.length - visible.length }} 个场景没有方案 — 到完整页查看
         </p>
       </div>
-      <div v-else-if="store.scenariosStatus === 'error'" class="card-empty">
+      <div v-else-if="store.windowStatus === 'error'" class="card-empty">
         <p>场景加载失败 — 稍后在执行器页重试</p>
       </div>
       <div v-else class="card-empty">
@@ -57,16 +57,16 @@ import { computed, onMounted } from 'vue'
 import { useCardSize } from './registry'
 import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
-import type { Scenario } from '@/types/scenario-composer'
+import type { ScenarioListItem } from '@/types/scenario-composer'
 
 const size = useCardSize()
 const store = useScenarioComposerStore()
 
-const stampOf = (s: Scenario) => s.meta.updateTime || s.meta.createTime || ''
+const stampOf = (s: ScenarioListItem) => s.meta.updateTime || s.meta.createTime || ''
 
 // 可执行范围与 Runner.vue 一致:公共原件不在自己的执行器里跑。
 const mine = computed(() =>
-  store.scenarios
+  store.window
     .filter((s) => s.visibility !== 'public')
     .sort((a, b) => stampOf(b).localeCompare(stampOf(a))),
 )
@@ -78,7 +78,7 @@ const visible = computed(() => blocked.value.slice(0, size.value === 'L' ? 8 : 5
 
 const wbT = (suffix: string) => `wb-card-runner-${suffix}`
 
-onMounted(() => { void store.ensureScenarios() })
+onMounted(() => { void store.ensureWindow() })
 </script>
 
 <style scoped>

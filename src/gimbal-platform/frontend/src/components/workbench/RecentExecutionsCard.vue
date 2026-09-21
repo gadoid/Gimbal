@@ -56,14 +56,14 @@
 import { computed, onMounted, reactive } from 'vue'
 import { useCardSize } from './registry'
 import SlibIcon from '@/components/scenario-lib/SlibIcon.vue'
-import { listExecutions, type Execution, type ExecutionStatus } from '@/api/executions'
+import { listExecutions, type ExecutionListItem, type ExecutionStatus } from '@/api/executions'
 import { executionStatusText } from '@/utils/executionStatus'
 import { executionUrl } from '@/utils/links'
 import { relTime } from '@/utils/datetime'
 
 const size = useCardSize()
 
-const state = reactive<{ rows: Execution[]; error: boolean }>({ rows: [], error: false })
+const state = reactive<{ rows: ExecutionListItem[]; error: boolean }>({ rows: [], error: false })
 
 const statusText = (s: ExecutionStatus) => executionStatusText(s)
 

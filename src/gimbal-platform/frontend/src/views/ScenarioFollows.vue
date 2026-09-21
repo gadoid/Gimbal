@@ -11,7 +11,7 @@
       subtitle="关注页只负责记录和提醒,不提供执行/复制入口——想操作,点“前往场景”跳回原位置去做;关注上限 20 个,前 5 个常驻展示完整信号区,其余以堆叠卡片呈现,鼠标悬浮即可快速浏览"
     />
 
-    <div v-if="store.scenariosStatus === 'loading'" class="slib-loading">加载中…</div>
+    <div v-if="followLoading" class="slib-loading">加载中…</div>
 
     <template v-else>
       <div class="fav-section-label">常驻 · {{ pinnedRows.length }} 席</div>
@@ -123,11 +123,11 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { toast } from '@/utils/toast'
 import { useScenarioComposerStore } from '@/stores/scenario-composer'
-import { listRunSchemes } from '@/api/scenario-composer'
+import { fetchScenarioSignals, listScenarios } from '@/api/scenario-composer'
 import { showError } from '@/utils/errorFallback'
 import { relTime, shortDateTime } from '@/utils/datetime'
 import { scenarioSchemesUrl } from '@/utils/links'
-import { useScenarioRuns, type RunStamp } from '@/composables/useScenarioRuns'
+import type { RunStamp } from '@/composables/useScenarioRuns'
 import { useInterfaceChange } from '@/composables/useInterfaceChange'
 import { useFollowLayout, FOLLOW_CAP, PINNED_MAX } from '@/composables/useFollowLayout'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
@@ -135,10 +135,10 @@ import StarToggle from '@/components/scenario-lib/StarToggle.vue'
 import SignalDots from '@/components/scenario-lib/SignalDots.vue'
 import SystemChip from '@/components/SystemChip.vue'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import type { Scenario } from '@/types/scenario-composer'
+import type { ScenarioListItem } from '@/types/scenario-composer'
 
 interface FollowRow {
-  s: Scenario
+  s: ScenarioListItem
   isPublic: boolean
   schemeCount: number
   defaultSchemeName: string | null
@@ -148,7 +148,6 @@ interface FollowRow {
 }
 
 const store = useScenarioComposerStore()
-const runs = useScenarioRuns()
 const change = useInterfaceChange()
 const layout = useFollowLayout()
 
@@ -156,7 +155,10 @@ const signals = reactive(new Map<string, Omit<FollowRow, 's'>>())
 const dragId = ref<string | null>(null)
 const overId = ref<string | null>(null)
 
-const followed = computed(() => store.starredScenarios)
+// 关注清单 = 服务端 ?starred=true(单页 ≤ 上限 20;store 退位后不再有
+// 全量 starredScenarios 可过滤 —— PG迁移方案 §7 M5 的数据源随 M1 提前)。
+const followed = ref<ScenarioListItem[]>([])
+const followLoading = ref(true)
 
 const rows = computed<FollowRow[]>(() =>
   followed.value
@@ -188,12 +190,15 @@ onMounted(async () => {
   // 抢在 currentUser 到位前 prune/seed,会把状态写到匿名键上,
   // 表现成「刷新后常驻席顺序丢了」。
   const identity = layout.whenReady()
-  // fetchScenarios 自己吞异常,不 reject → 看状态判定失败,别写 catch
-  await store.fetchScenarios()
-  if (store.scenariosStatus === 'error') {
-    showError('加载场景', undefined, store.lastError)
+  try {
+    const env = await listScenarios({ starred: true, page_size: FOLLOW_CAP + 1 })
+    followed.value = env.items
+  } catch (e) {
+    followLoading.value = false
+    showError('加载关注清单', e)
     return
   }
+  followLoading.value = false
   await identity
   const ids = followed.value.map((s) => s.meta.scenarioId)
   // 先回收死席位再播种:prune 无变化时不写盘,所以首访(无 key)仍能播种
@@ -204,56 +209,36 @@ onMounted(async () => {
   await loadSignalsBounded(followed.value)
 })
 
-/** 单个关注对象的信号装配:执行趋势(我的锁默认方案 / 公共锁原件)+
- *  接口变更。任一子查询失败 → 该信号留白,不阻断整页。 */
-async function loadSignals(s: Scenario) {
-  const id = s.meta.scenarioId
-  const isPublic = s.visibility === 'public'
-  let defaultSchemeId: string | null = null
-  let defaultSchemeName: string | null = null
-  let schemeCount = 0
-  if (!isPublic) {
-    try {
-      const schemes = await listRunSchemes(id)
-      schemeCount = schemes.length
-      const def = schemes.find((x) => x.isDefault) || schemes[0]
-      if (def) {
-        defaultSchemeId = def.schemeId
-        defaultSchemeName = def.name
-      }
-    } catch { /* 非属主读不到方案 → 趋势留白 */ }
+/** 批量信号装配(M5,债 12):一次 GET /scenarios/signals 拿回全部
+ *  关注对象的 趋势/最近执行/方案计数/默认方案名 —— 替换「每对象
+ *  (方案 + 执行) 两个请求 × 限并发 4」的 N+1(40+ 请求 → 1 个)。
+ *  失败 → 全部留白,不阻断整页。 */
+async function loadSignalsBounded(list: ScenarioListItem[]) {
+  if (!list.length) return
+  const ids = list.map((s) => s.meta.scenarioId)
+  let bulk: Record<string, {
+    trend: string[]
+    lastRun: RunStamp | null
+    schemeCount: number
+    defaultSchemeName: string | null
+  }> = {}
+  try {
+    bulk = await fetchScenarioSignals(ids)
+  } catch { /* 信号端点不可达 → 卡片留白 */ }
+  for (const s of list) {
+    const id = s.meta.scenarioId
+    const sig = bulk[id] ?? {
+      trend: [], lastRun: null, schemeCount: 0, defaultSchemeName: null,
+    }
+    signals.set(id, {
+      isPublic: s.visibility === 'public',
+      schemeCount: sig.schemeCount,
+      defaultSchemeName: sig.defaultSchemeName,
+      last: sig.lastRun,
+      trend: sig.trend,
+      changed: change.hasChange(id),
+    })
   }
-  await runs.load(id)
-  const last = isPublic
-    ? firstRun(id)
-    : defaultSchemeId
-      ? runs.lastRunOfScheme(id, defaultSchemeId)
-      : null
-  signals.set(id, {
-    isPublic,
-    schemeCount,
-    defaultSchemeName,
-    last,
-    trend: runs.trend(id, defaultSchemeId, isPublic),
-    changed: change.hasChange(id),
-  })
-}
-
-/** 限并发装配信号:N 个关注 × (方案 + 执行) 全并发会瞬时打出数十个请求
- *  (关注上限 20 → 最多 40+),把浏览器连接池和后端一起打满。信号逐行落
- *  进响应式 Map,所以限流不减慢首屏 —— 卡片是一张张长出来的。 */
-async function loadSignalsBounded(list: Scenario[], width = 4) {
-  let i = 0
-  const worker = async () => {
-    while (i < list.length) await loadSignals(list[i++])
-  }
-  await Promise.all(Array.from({ length: Math.min(width, list.length) }, worker))
-}
-
-function firstRun(scenarioId: string): RunStamp | null {
-  const list = runs.runsOf(scenarioId).value
-  const e = list[0]
-  return e ? { status: e.status, at: e.finished_at || e.started_at } : null
 }
 
 function dotTone(last: RunStamp | null): string {
@@ -280,17 +265,18 @@ function nudge(id: string, delta: -1 | 1) {
   layout.move(id, (delta < 0 ? arr[idx - 1] : arr[idx + 2]) ?? null)
 }
 
-function pinRow(s: Scenario) {
+function pinRow(s: ScenarioListItem) {
   if (!layout.pin(s.meta.scenarioId)) {
     toast.error(`常驻席上限 ${PINNED_MAX} 个 — 请先取消一个常驻`)
   }
 }
 
-async function unfollow(s: Scenario) {
+async function unfollow(s: ScenarioListItem) {
   try {
-    await store.toggleStar(s.meta.scenarioId)
+    await store.toggleStar(s.meta.scenarioId, false)
+    followed.value = followed.value.filter((x) => x.meta.scenarioId !== s.meta.scenarioId)
     // 取消成功后再摘常驻席:先 unpin 的话,请求失败会留下"仍在关注列表
-    // 却掉了常驻位"的静默不一致(toggleStar 失败会回滚并抛出)。
+    // 却掉了常驻位"的静默不一致。
     layout.unpin(s.meta.scenarioId)
   } catch (e) {
     showError('取消关注', undefined, (e as Error).message)

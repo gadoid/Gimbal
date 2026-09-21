@@ -10,13 +10,13 @@
     <PageHead
       icon="activity"
       title="适配中心"
-      :count="auth.isAdmin && pendingCards.length + anomalies.length
+      :count="auth.hasRole('operator', 'admin') && pendingCards.length + anomalies.length
         ? `${pendingCards.length + anomalies.length} 个端点待处理` : undefined"
-      :subtitle="auth.isAdmin ? '目录变更检测与批次适配' : '仅显示触碰你场景的批次(只读)'"
+      :subtitle="auth.hasRole('operator', 'admin') ? '目录变更检测与批次适配' : '仅显示触碰你场景的批次(只读)'"
     >
       <template #right>
         <Button
-          v-if="auth.isAdmin"
+          v-if="auth.hasRole('operator', 'admin')"
           :disabled="adaptations.refreshing"
           data-testid="refresh-all"
           @click="refreshAll"
@@ -24,7 +24,7 @@
       </template>
     </PageHead>
 
-    <template v-if="auth.isAdmin">
+    <template v-if="auth.hasRole('operator', 'admin')">
       <UnindexedAlert :steps="unindexed" />
 
       <!-- 本批影响面摘要(配套方案 §3.2):pending 端点 → 按服务聚合;
@@ -133,8 +133,19 @@
 
     <div class="section-head">
       <span class="section-title">批次</span>
+      <span class="muted batch-count">共 {{ batchTotal }} 个</span>
     </div>
     <p v-if="!auth.isAdmin" class="hint mine-hint">仅显示触碰你场景的批次</p>
+    <div class="batch-status-filter" data-testid="batch-status-filter">
+      <button
+        v-for="opt in BATCH_STATUS_OPTS"
+        :key="opt.value"
+        type="button"
+        class="chip status-opt"
+        :class="{ active: batchStatus === opt.value }"
+        @click="setBatchStatus(opt.value)"
+      >{{ opt.label }}</button>
+    </div>
     <div v-if="batchesLoading" class="slib-loading">批次加载中…</div>
     <div v-else class="lib-card">
       <table class="slib-table">
@@ -148,7 +159,7 @@
             <th style="width:14%">创建时间</th>
             <!-- 详情入口仅 admin:GET /batches/{id} 为 admin-only,
                  member 点击只会得 403(死链),故整列不渲染。 -->
-            <th v-if="auth.isAdmin" style="width:6%" class="c-center">操作</th>
+            <th v-if="auth.hasRole('operator', 'admin')" style="width:6%" class="c-center">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -174,7 +185,7 @@
               >{{ s }} {{ n }}</span>
             </td>
             <td class="muted">{{ row.createdAt }}</td>
-            <td v-if="auth.isAdmin" class="c-center">
+            <td v-if="auth.hasRole('operator', 'admin')" class="c-center">
               <router-link
                 :to="`/adaptations/batches/${row.batchId}`"
                 class="link"
@@ -188,7 +199,7 @@
     <!-- carry 漂移(T16,admin-only:后端 drift 为 AdminUser,member 403)。
          plateReachable=False → 不渲染清单 + 显式警示 + 禁批生成(T11 硬性
          契约:plate 挂时 drift 会把全表绑定误报孤儿,防管理员误清空)。 -->
-    <template v-if="auth.isAdmin">
+    <template v-if="auth.hasRole('operator', 'admin')">
       <div class="section-head">
         <span class="section-title">carry 漂移(值表 vs plate 面)</span>
         <span v-if="carryDrift.length" class="section-count">
@@ -271,6 +282,22 @@ const route = useRoute()
 
 const unindexed = ref<UnindexedStep[]>([])
 const batchRows = ref<BatchOut[]>([])
+const batchTotal = ref(0)
+const batchStatus = ref('')
+/** M4(§6.3):状态下推服务端;空串 = 全部。 */
+const BATCH_STATUS_OPTS = [
+  { value: '', label: '全部' },
+  { value: 'open', label: 'open' },
+  { value: 'applying', label: 'applying' },
+  { value: 'completed', label: 'completed' },
+  { value: 'rolled_back', label: 'rolled_back' },
+] as const
+
+function setBatchStatus(v: string): void {
+  if (batchStatus.value === v) return
+  batchStatus.value = v
+  void loadBatches(auth.hasRole('operator', 'admin') ? undefined : 'mine')
+}
 const batchesLoading = ref(false)
 
 const drawerOpen = ref(false)
@@ -327,10 +354,13 @@ const batchStatusClass: Record<string, string> = {
 async function loadBatches(scope?: 'mine'): Promise<void> {
   batchesLoading.value = true
   try {
-    batchRows.value = await api.listBatches(scope)
+    const env = await api.listBatches({ scope, status: batchStatus.value || undefined })
+    batchRows.value = env.items
+    batchTotal.value = env.total
   } catch (e) {
     toast.error(api.errMsg(e, '批次列表加载失败'))
     batchRows.value = []
+    batchTotal.value = 0
   } finally {
     batchesLoading.value = false
   }
@@ -669,4 +699,16 @@ onMounted(() => {
 .mono { font-family: var(--font-mono, monospace); }
 .link { color: var(--sl-accent); }
 .link:hover { text-decoration: underline; }
+</style>
+
+
+<style scoped>
+.batch-status-filter { display: flex; gap: 6px; margin: 8px 0 12px; flex-wrap: wrap; }
+.batch-status-filter .status-opt { cursor: pointer; border: 1px solid transparent; }
+.batch-status-filter .status-opt.active {
+  color: #2f6fed;
+  border-color: #2f6fed;
+  background: #e7efff;
+}
+.batch-count { font-size: 12px; }
 </style>
