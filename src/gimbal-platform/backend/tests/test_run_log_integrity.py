@@ -21,6 +21,9 @@ async def _seed_execution(
     from app.models.execution import Execution
 
     async with db_module.SessionLocal() as session:
+        from .helpers import ensure_fk_users
+
+        await ensure_fk_users(session, owner_id)  # PG 强制 FK:owner 需垫
         ex = Execution(
             scenario_id="sc-integrity",
             owner_id=owner_id,

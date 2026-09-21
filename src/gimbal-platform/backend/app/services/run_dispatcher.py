@@ -46,7 +46,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
 from ..core.timeutil import utcnow as _utcnow
-from ..models import Execution
+from ..models import Execution, ExecutionSnapshot, User
 from ..models.execution import (
     STATUS_CANCELED,
     STATUS_DONE,
@@ -139,6 +139,17 @@ def _log_task_exception(task: asyncio.Task) -> None:
         logger.exception(
             "run_dispatcher: background fan-out task crashed: {}", exc
         )
+
+
+async def wait_dispatchers_quiescent(timeout_s: float = 10.0) -> bool:
+    """等待在途 dispatch 自然收尾(不取消、不置停机位)—— 测试 teardown
+    与 DROP SCHEMA 竞态的解:M6 起行终态落库把后台尾巴略微拉长,
+    PG teardown 若不等它,DELETE/INSERT 与 DROP SCHEMA 互锁死锁。"""
+    loop = asyncio.get_event_loop()
+    deadline = loop.time() + timeout_s
+    while _in_flight and loop.time() < deadline:
+        await asyncio.sleep(0.05)
+    return not _in_flight
 
 
 async def drain_in_flight_dispatches() -> int:
@@ -246,11 +257,131 @@ _row_states: dict[int, list[RowState]] = {}   # 活跃执行;finalize 后 pop
 
 
 def execution_rows(execution_id: int) -> list[dict]:
-    """行级状态读侧:活跃执行读内存 registry,历史执行回放 JSONL。"""
+    """行级状态读侧(内存段):活跃执行读内存 registry。
+
+    历史执行走 :func:`execution_rows_page`(M6 起 DB 行是持久层,
+    JSONL 回放只兜 M6 之前的存量单)。"""
     live = _row_states.get(execution_id)
     if live is not None:
         return [asdict(r) for r in live]
-    return _replay_rows(execution_id)
+    return []
+
+
+async def execution_rows_page(
+    db: Any, execution_id: int, *, page: int = 1, page_size: int = 200,
+) -> tuple[list[dict], int]:
+    """历史执行行级分页(M6,债 5):DB 行 LIMIT/OFFSET + total。
+
+    活跃执行(内存 registry 在场)整段返回后 Python 切片 —— 活跃行的
+    权威在内存,分页只是展示层。M6 之前的存量单 DB 无行 → JSONL 回放
+    (只读归档)兜底。
+    """
+    live = _row_states.get(execution_id)
+    if live is not None:
+        items = [asdict(r) for r in live]
+        total = len(items)
+        start = (page - 1) * page_size
+        return items[start : start + page_size], total
+
+    from sqlalchemy import func as sa_func, select as sa_select
+
+    from ..models.execution import ExecutionRow
+
+    total = (await db.execute(
+        sa_select(sa_func.count()).select_from(ExecutionRow)
+        .where(ExecutionRow.execution_id == execution_id)
+    )).scalar_one()
+    if total:
+        rows = (await db.execute(
+            sa_select(ExecutionRow)
+            .where(ExecutionRow.execution_id == execution_id)
+            .order_by(ExecutionRow.seq)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )).scalars().all()
+        return [
+            {
+                "seq": r.seq, "datasetId": r.dataset_id,
+                "injectionId": r.injection_id, "rowIndex": r.row_index,
+                "rep": r.rep, "status": r.status, "caseDir": r.case_dir or "",
+                "startedAt": _dt_to_iso(r.started_at),
+                "finishedAt": _dt_to_iso(r.finished_at),
+            }
+            for r in rows
+        ], int(total)
+    # 存量单(M6 前无 DB 行):JSONL 只读归档回放,整段回再切片
+    legacy = _replay_rows(execution_id)
+    start = (page - 1) * page_size
+    return legacy[start : start + page_size], len(legacy)
+
+
+def _iso_to_dt(ts: str | None):
+    """RowState 的 ISO 串(可带 Z / +00:00Z 杂交尾)→ aware datetime。"""
+    if not ts:
+        return None
+    from datetime import datetime
+
+    raw = ts[:-1] if ts.endswith("Z") else ts
+    try:
+        dt = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        from datetime import timezone
+
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _dt_to_iso(dt) -> str | None:
+    """DB datetime → naive-UTC ISO 串(与 registry/JSONL 口径一致)。"""
+    from ..core.timeutil import iso_naive_utc
+
+    return iso_naive_utc(dt)
+
+
+async def _persist_row_terminal(db_factory: Any, execution_id: int,
+                                state: "RowState") -> None:
+    """行终态即落库(M6 转正):崩溃窗口不丢已终态行。
+
+    best-effort —— 失败只记日志:活跃读侧的权威仍在内存 registry,
+    DB 是持久层跟进(§2.2);计数器审计面另由 JSONL 生命周期行承担。
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    from ..models.execution import ExecutionRow
+
+    try:
+        async with db_factory() as session:
+            session.add(ExecutionRow(
+                execution_id=execution_id, seq=state.seq,
+                dataset_id=state.dataset_id, injection_id=state.injection_id,
+                row_index=state.row_index, rep=state.rep,
+                status=state.status, case_dir=state.case_dir or "",
+                started_at=_iso_to_dt(state.started_at),
+                finished_at=_iso_to_dt(state.finished_at),
+            ))
+            try:
+                await session.commit()
+            except IntegrityError:
+                # 同 (execution, seq) 已有终态行(理论不可达,重启重放兜底)
+                await session.rollback()
+                from sqlalchemy import update
+
+                await session.execute(
+                    update(ExecutionRow)
+                    .where(ExecutionRow.execution_id == execution_id,
+                           ExecutionRow.seq == state.seq)
+                    .values(status=state.status, case_dir=state.case_dir or "",
+                            started_at=state.started_at,
+                            finished_at=state.finished_at)
+                )
+                await session.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "run_dispatcher: persist row terminal {}/{} failed: {}",
+            execution_id, state.seq, e,
+        )
 
 
 def _replay_rows(execution_id: int) -> list[dict]:
@@ -734,19 +865,11 @@ async def _fanout(
             # 已准入的行视为在飞、自然跑完;排队中的行在准入时刻检查,
             # 未启动的直接记 canceled,不进计数器。
             if execution_id in _cancel_requested:
-                await _append_log(log_path, {
-                    "ts": _utcnow().isoformat() + "Z",
-                    "runId": run_id,
-                    "executionId": execution_id,
-                    "seq": seq,
-                    "datasetId": ds_id,
-                    "injectionId": injection_id,
-                    "rowIndex": row_idx,
-                    "rep": rep,
-                    "status": "canceled",
-                })
+                # M6:行终态(canceled 含)即落库;行级 JSONL 停写(运行级
+                # 生命周期行保留为运维审计面)。
                 state.status = "canceled"
                 state.finished_at = _utcnow().isoformat() + "Z"
+                await _persist_row_terminal(db_factory, execution_id, state)
                 return
             # 交叉组合序(spec v3 §3):行值合入(vars)→ 条目 Assign 直补
             # + asserts patch — 偏离最后生效。基线/无行维度 = 空行字典。
@@ -779,7 +902,6 @@ async def _fanout(
                 "casePath": str((case_dir / "case.json")),
                 "reportDir": str((case_dir / "reports")),
             }
-            await _append_log(log_path, log_line)
             state.status = "dispatched"
             state.started_at = ts
 
@@ -901,16 +1023,12 @@ async def _fanout(
             finished_ts = _utcnow().isoformat() + "Z"
             log_line["ts"] = finished_ts
 
-            # Append the final log line for this row (covers all
-            # success / failure branches — previously the rejected
-            # branches ``continue``'d before this and lost the line).
-            await _append_log(log_path, log_line)
-
             # 行终态落 registry(spec §9.1):完成时刻 + case stem(供
-            # 工件端点;ts 与 JSONL final 行同一时刻)。
+            # 工件端点)。M6:终态即落 DB(崩溃窗口不丢),行级 JSONL 停写。
             state.status = log_line["status"]
             state.finished_at = finished_ts
             state.case_dir = case_dir.name
+            await _persist_row_terminal(db_factory, execution_id, state)
 
             # Atomic per-row counter bump.  Deltas (not absolute
             # write-backs) so concurrent rows and concurrent UI
@@ -1152,12 +1270,46 @@ async def _finalize_execution(
                     cfg["counterDrift"] = True
                     ex.config_json = cfg
                 await session.commit()
+                # 通知接线(P1b/M2.5,权限方案 §3.2):发起人收一条
+                # 「执行完成」;带 batch_id 的按批 upsert 单条聚合通知
+                # (50 条批次不刷屏),单发执行逐条。通知失败不影响终态
+                # 收口(独立会话 + 自吞异常)。
+                if final_status in (STATUS_DONE, STATUS_FAILED) and ex.owner_id:
+                    await _notify_finished(ex, final_status)
     except Exception as e:  # noqa: BLE001
         logger.warning("run_dispatcher: failed to update execution {}: {}", execution_id, e)
     # spec §9.1:执行终态化 → 活跃行状态出清(读侧此后走 JSONL 回放)。
     # DB 写失败也出清 —— fanout 已收尾,残留的"活跃"行状态会永久盖住
     # 回放路径。
     _row_states.pop(execution_id, None)
+
+
+async def _notify_finished(ex: Execution, final_status: str) -> None:
+    """execution_finished 通知(独立会话;任何失败只记日志)。"""
+    from . import notifications as notify_svc
+    from ..core import db as db_module
+    label = ex.scenario_name or ex.scenario_id
+    try:
+        async with db_module.SessionLocal() as s2:
+            if ex.batch_id:
+                await notify_svc.upsert_execution_finished(
+                    s2, user_id=ex.owner_id, batch_id=ex.batch_id,
+                    run_label=label,
+                )
+            else:
+                await notify_svc.create_notification(
+                    s2,
+                    user_id=ex.owner_id,
+                    type_="execution_finished",
+                    title=("执行完成:" if final_status == STATUS_DONE
+                           else "执行失败:") + label,
+                    body=f"{ex.passed} 通过 / {ex.failed} 失败",
+                    link=f"/executions/{ex.id}"
+                         + ("?rows=failed" if final_status == STATUS_FAILED else ""),
+                )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("run_dispatcher: notify execution {} failed: {}",
+                       ex.id, e)
 
 
 # ─── helpers ──────────────────────────────────────────────────────
@@ -1533,20 +1685,33 @@ async def _create_execution(
     config_json: dict,
     scenario_snapshot: dict | None = None,
     batch_id: str | None = None,
+    scenario_name: str = "",
 ) -> Execution:
-    """Insert an Execution row."""
+    """Insert an Execution row(+ 拆表后的快照行)。
+
+    M2:scenario_snapshot 大 JSON 移入 execution_snapshots(1:1),
+    executions 主表只留台账轻列(scenario_name/owner_name 快照)。
+    """
+    owner_name = (await db.execute(
+        select(User.display_name, User.username).where(User.id == owner_id)
+    )).first()
     ex = Execution(
         scenario_id=scenario_id,
+        scenario_name=scenario_name,
         owner_id=owner_id,
+        owner_name=(owner_name[0] or owner_name[1]) if owner_name else "",
         status=STATUS_QUEUED,
         total_runs=total_runs,
         passed=0,
         failed=0,
         config_json=config_json,
-        scenario_snapshot=scenario_snapshot,
         batch_id=batch_id,
     )
     db.add(ex)
+    await db.flush()  # 拿 execution.id,快照行同事务写入
+    if scenario_snapshot:
+        db.add(ExecutionSnapshot(
+            execution_id=ex.id, snapshot=scenario_snapshot))
     await db.commit()
     await db.refresh(ex)
     return ex
@@ -1555,6 +1720,7 @@ async def _create_execution(
 # ─── ad-hoc lookups (scenario_id is the string PK) ────────────────
 # 单行场景/数据集查询收敛到各自 store 的 get_row(全后端唯一实现)。
 from .scenario_store import get_row, steps_from_payload, definition_from_payload
+from .scenario_store import _meta_from_row  # noqa: PLC2701 台账快照列(M2)
 from .data_set_store import get_row as get_dataset_row
 
 

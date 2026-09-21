@@ -208,7 +208,7 @@ async def test_carry_anchored_entry_overrides_platform_carried_value(
     plate_mock.services = [{"name": "stubsvc"}]
     # ② 种一个与条目 value **不同**的值(999 ≠ 261),覆盖才有观察面。
     async with _db_module.SessionLocal() as db:
-        await carry_store.put_bindings(db, "stubsvc", {"$.customer_id": 999}, "bob")
+        await carry_store.put_bindings(db, "stubsvc", {"$.customer_id": "999"}, updated_by_id=None, updated_by_name="bob")
         await db.commit()
     plate_mock.fulls["ep-carry-wire"] = {"request": {"declarations": [
         {"name": "bl_no", "path": "$.bl_no", "state": "form", "required": True},

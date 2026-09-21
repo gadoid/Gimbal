@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.composer_run_scheme import ComposerRunScheme
@@ -155,9 +155,47 @@ async def blocking_refs(db: AsyncSession, *, user, alias: str) -> list[str]:
     )
 
 
+# ── M5-5 计数增量化 ─────────────────────────────────────────────────
+# /api/auths 每次调用都全表扫全部场景+方案 payload(_scan_scenario_refs,
+# 列表页最贵的隐藏成本)。缓存键 = 三表的 (count, max(updated_at)) 指纹:
+# 四个微型聚合查询换一次全 payload 扫描;任何 insert/update/delete 都会
+# 改变指纹(删除改变 count,更新改变 max)。反查面板 references() 保持
+# 实时扫(单一事实源,§1.4 的「不建反向索引」纪律不变 —— 这里只是缓存,
+# 不是索引)。
+_counts_cache: dict = {"fingerprint": None, "value": None}
+
+
+async def _counts_fingerprint(db: AsyncSession) -> tuple:
+    scen = (await db.execute(select(
+        func.count(), func.max(ComposerScenario.updated_at)
+    ).select_from(ComposerScenario))).one()
+    schemes = (await db.execute(select(
+        func.count(), func.max(ComposerRunScheme.updated_at)
+    ).select_from(ComposerRunScheme))).one()
+    aliases = (await db.execute(
+        select(func.count()).select_from(ServiceAlias))).scalar_one()
+    return (scen, schemes, aliases)
+
+
+def reset_counts_cache_for_tests() -> None:
+    _counts_cache["fingerprint"] = None
+    _counts_cache["value"] = None
+
+
 async def counts(db: AsyncSession) -> dict[str, dict[str, int]]:
     """列表页双计数(一次扫描服务所有行):``N 别名 / N 场景``。
-    场景计数 = 模板 ∪ 方案绑定去重场景数(快照不进计数)。"""
+    场景计数 = 模板 ∪ 方案绑定去重场景数(快照不进计数)。
+    结果按指纹缓存(M5-5)—— 指纹不变直接回缓存。"""
+    fp = await _counts_fingerprint(db)
+    if _counts_cache["value"] is not None and _counts_cache["fingerprint"] == fp:
+        return _counts_cache["value"]
+    value = await _counts_uncached(db)
+    _counts_cache["fingerprint"] = fp
+    _counts_cache["value"] = value
+    return value
+
+
+async def _counts_uncached(db: AsyncSession) -> dict[str, dict[str, int]]:
     by_alias = await _scan_scenario_refs(db)
     out: dict[str, dict[str, int]] = {}
     alias_rows = (await db.execute(select(ServiceAlias))).scalars().all()

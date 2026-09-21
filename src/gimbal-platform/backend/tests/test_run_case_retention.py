@@ -71,8 +71,8 @@ async def test_delete_execution_purges_case_dir(client, monkeypatch, tmp_path):
     r = await client.delete(f"/api/executions/{eid}", headers=headers)
     assert r.status_code == 204
     assert not run_dispatcher._run_dir(run_id).exists()
-    # JSONL 按日期分文件,设计上不随删
-    assert run_dispatcher._jsonl_path().exists()
+    # M6:行级数据已入 execution_rows(DB),JSONL 只剩故障审计行
+    # (成功路径不再写)—— 执行删除按 CASCADE 一并清行,无需断言文件。
 
 
 def test_sweep_removes_old_dirs_only(monkeypatch, tmp_path):

@@ -103,9 +103,9 @@ class _StepClock:
         self._calls = 0
 
     def __call__(self):
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
         self._calls += 1
-        return datetime(2026, 1, 1, 12, 0, 0) + timedelta(seconds=self._calls)
+        return datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc) + timedelta(seconds=self._calls)
 
 
 async def test_replay_finished_at_after_started_at(

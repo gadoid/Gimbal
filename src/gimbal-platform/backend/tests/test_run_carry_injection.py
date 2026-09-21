@@ -40,8 +40,8 @@ async def _seed_values() -> None:
     """ORM 直插两张值表(updated_by 只是审计串,读侧无 owner 过滤)。"""
     async with db_module.SessionLocal() as db:
         await carry_store.put_bindings(
-            db, "fin-service", {"$.remark": "压测-张三"}, "alice")
-        await carry_store.put_defaults(db, {"$.appCode": "TRACE-V2"}, "alice")
+            db, "fin-service", {"$.remark": "压测-张三"}, updated_by_id=None, updated_by_name="alice")
+        await carry_store.put_defaults(db, {"$.appCode": "TRACE-V2"}, updated_by_id=None, updated_by_name="alice")
         await db.commit()
 
 
@@ -216,7 +216,8 @@ async def test_run_step_field_states_overlay_flips_face(
     }
     async with db_module.SessionLocal() as db:
         await carry_store.put_bindings(db, "fin-service", {
-            "$.remark": "压测-张三", "$.trace": "T-1"}, "alice")
+            "$.remark": "压测-张三", "$.trace": "T-1"},
+            updated_by_id=None, updated_by_name="alice")
         await db.commit()
 
     def _step(field_states: dict | None = None) -> dict:
@@ -275,7 +276,8 @@ async def test_run_carry_container_whole_literal_injection(
     async with db_module.SessionLocal() as db:
         await carry_store.put_bindings(db, "fin-service", {
             "$.supplier": '[{"order_supplier_id": "S-9", "note": "N"}]',
-        }, "alice")
+        },
+            updated_by_id=None, updated_by_name="alice")
         await db.commit()
 
     bob = await _member(client, "bob")
