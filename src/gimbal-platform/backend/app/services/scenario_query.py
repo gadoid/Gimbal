@@ -53,7 +53,7 @@ def updated_cutoff(updated_within: str | None) -> datetime | None:
 # ── 谓词构造 ────────────────────────────────────────────────────────
 
 
-def _visibility_clause(user=None, viewer_id: int | None = None):
+def visibility_clause(user=None, viewer_id: int | None = None):
     """可见性谓词:admin 全量;member = public + 自己的(None = 全量)。"""
     is_admin = getattr(user, "role", None) == "admin"
     if user is not None and is_admin:
@@ -163,7 +163,7 @@ async def list_page(
         priorities=priorities or [], tags=tags or [], authors=authors or [],
         cutoff=cutoff, visibility=visibility, starred_ids=starred_ids,
     )
-    vis = _visibility_clause(user, viewer_id)
+    vis = visibility_clause(user, viewer_id)
     if vis is not None:
         clauses.append(vis)
 
@@ -205,7 +205,7 @@ async def facets(
         clauses.append(qc)
     if visibility:
         clauses.append(ComposerScenario.visibility == visibility)
-    vis = _visibility_clause(user, viewer_id)
+    vis = visibility_clause(user, viewer_id)
     if vis is not None:
         clauses.append(vis)
 

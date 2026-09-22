@@ -9,8 +9,49 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Execution, ExecutionSnapshot
+from ..models.composer_scenario import ComposerScenario
 from ..models.execution import STATUS_FAILED
 from ..schemas.execution import ExecutionListItemOut, ExecutionOut
+
+async def scenario_display_map(
+    db: AsyncSession, user, scenario_ids: list[str]
+) -> dict[str, tuple[str, bool]]:
+    """当页 scenario_id → (可读活名或空串, 场景行是否存在)。
+
+    G1 读侧投影的唯一实现(批量 IN,替代前端自拼映射):活名只在
+    「调用者可读该场景」时给出(与列表/详情同一口径 —— 场景被执行后
+    转让他人转 private 时,不向历史执行者泄露当前名);不可读/不存在
+    由调用方回落自己行上的 scenario_name 快照(快照是执行者自己的
+    记录,照常显示)。
+    """
+    from ..routers._ownership import can_read_scenario
+
+    ids = sorted({s for s in scenario_ids if s})
+    if not ids:
+        return {}
+    rows = (await db.execute(
+        select(ComposerScenario.scenario_id, ComposerScenario.name,
+               ComposerScenario.owner_id, ComposerScenario.visibility)
+        .where(ComposerScenario.scenario_id.in_(ids))
+    )).all()
+    return {
+        sid: (str(name or "") if can_read_scenario(
+                  user, owner_id=owner_id, visibility=vis or "private")
+              else "", True)
+        for sid, name, owner_id, vis in rows
+    }
+
+
+def display_kwargs(
+    e: Execution, disp: dict[str, tuple[str, bool]]
+) -> dict:
+    """执行行 → (scenario_display_name, scenario_deleted) 响应 kwargs。"""
+    live, exists = disp.get(e.scenario_id, ("", False))
+    if live:
+        return {"scenario_display_name": live, "scenario_deleted": False}
+    return {"scenario_display_name": e.scenario_name or e.scenario_id,
+            "scenario_deleted": not exists}
+
 
 async def has_snapshot(db: AsyncSession, execution_id: int) -> bool:
     """快照存在性(M2 拆表:一次存在性查询,不再依赖整实体加载)。"""
@@ -51,6 +92,8 @@ def execution_out(
     *,
     consecutive_failures: int = 0,
     has_scenario_snapshot: bool = False,
+    scenario_display_name: str = "",
+    scenario_deleted: bool = False,
 ) -> ExecutionOut:
     return ExecutionOut(
         id=e.id,
@@ -65,6 +108,8 @@ def execution_out(
         has_scenario_snapshot=has_scenario_snapshot,
         batch_id=e.batch_id,
         consecutive_failures=consecutive_failures,
+        scenario_display_name=scenario_display_name,
+        scenario_deleted=scenario_deleted,
     )
 
 
@@ -81,6 +126,8 @@ def execution_list_item(
     *,
     consecutive_failures: int = 0,
     has_scenario_snapshot: bool = False,
+    scenario_display_name: str = "",
+    scenario_deleted: bool = False,
 ) -> ExecutionListItemOut:
     """列表行形态(M1):响应去 config,只带窄投影 config_summary。
 
@@ -106,6 +153,8 @@ def execution_list_item(
         has_scenario_snapshot=has_scenario_snapshot,
         batch_id=e.batch_id,
         consecutive_failures=consecutive_failures,
+        scenario_display_name=scenario_display_name,
+        scenario_deleted=scenario_deleted,
     )
 
 

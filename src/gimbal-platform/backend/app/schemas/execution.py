@@ -28,6 +28,10 @@ class ExecutionOut(BaseModel):
     consecutive_failures: int = 0
     # P2-2:归属台账快照(注销后带「已注销」后缀)
     owner_name: str | None = Field(default=None, alias="ownerName")
+    # G1 读侧投影:展示名 = 可读活名 → 执行时快照 → 裸 id;
+    # deleted = 场景行已删(快照仍是审计权威,不随删消失)。
+    scenario_display_name: str = ""
+    scenario_deleted: bool = False
 
 
 class ExecutionListItemOut(BaseModel):
@@ -52,6 +56,9 @@ class ExecutionListItemOut(BaseModel):
     has_scenario_snapshot: bool = False
     batch_id: str | None = None
     consecutive_failures: int = 0
+    # G1 读侧投影(同 ExecutionOut 注释)
+    scenario_display_name: str = ""
+    scenario_deleted: bool = False
 
 
 class ExecutionListOut(BaseModel):
@@ -103,6 +110,8 @@ class ExecutionRowOut(BaseModel):
     injection_id: str | None = Field(default=None, alias="injectionId")
     row_index: int = Field(default=0, alias="rowIndex")
     rep: int = 0
+    # G1:数据集名投影(场景可读时;已删/不可读回落 datasetId 本身)
+    dataset_name: str | None = Field(default=None, alias="datasetName")
     status: str
     case_dir: str = Field(default="", alias="caseDir")
     started_at: str | None = Field(default=None, alias="startedAt")

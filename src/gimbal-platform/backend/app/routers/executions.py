@@ -170,10 +170,21 @@ async def list_executions(
         offset = (page - 1) * page_size
     base = select(Execution).where(Execution.owner_id == user.id)
     if q:
+        # G1 扩口径:快照名/活名都可命中(改名后旧名仍可搜到历史执行);
+        # 活名子查询套可见性谓词(吃 trgm),与展示投影同口径。
+        from ..models.composer_scenario import ComposerScenario
+        from ..services.scenario_query import visibility_clause
+
+        live_names = select(ComposerScenario.scenario_id).where(
+            ComposerScenario.name.ilike(f"%{q}%"))
+        vis = visibility_clause(user)
+        if vis is not None:
+            live_names = live_names.where(vis)
         base = base.where(or_(
             Execution.scenario_name.ilike(f"%{q}%"),
             Execution.scenario_id.ilike(f"%{q}%"),
             cast(Execution.id, String).like(f"{q}%"),
+            Execution.scenario_id.in_(live_names.scalar_subquery()),
         ))
     if scenario_id:
         base = base.where(Execution.scenario_id == scenario_id)
@@ -212,11 +223,15 @@ async def list_executions(
     streaks = await execution_store.consecutive_failure_streaks(session, user.id)
     # 快照存在性一次批量查(M2 拆表:不再随行加载大 JSON 列)
     with_snap = await execution_store.snapshot_ids(session, [e.id for e in rows])
+    # G1:展示名一次批量查(可读活名;否则回落行上快照)
+    disp = await execution_store.scenario_display_map(
+        session, user, [e.scenario_id for e in rows])
     items = [
         execution_store.execution_list_item(
             e,
             consecutive_failures=streaks.get(e.id, 0) if e.status == STATUS_FAILED else 0,
             has_scenario_snapshot=e.id in with_snap,
+            **execution_store.display_kwargs(e, disp),
         )
         for e in rows
     ]
@@ -232,17 +247,21 @@ async def list_executions(
 # ── detail ─────────────────────────────────────────────────────
 @router.get("/{execution_id}", response_model=ExecutionOut)
 async def get_execution(
-    ex: OwnedExecution, session: DbSession
+    ex: OwnedExecution, session: DbSession, user: CurrentUser
 ) -> ExecutionOut:
+    disp = await execution_store.scenario_display_map(
+        session, user, [ex.scenario_id])
     return execution_store.execution_out(
-        ex, has_scenario_snapshot=await execution_store.has_snapshot(session, ex.id)
+        ex,
+        has_scenario_snapshot=await execution_store.has_snapshot(session, ex.id),
+        **execution_store.display_kwargs(ex, disp),
     )
 
 
 # ── rows(行级可观测,spec §9.1)─────────────────────────────────
 @router.get("/{execution_id}/rows", response_model=ExecutionRowsOut)
 async def get_execution_rows(
-    ex: OwnedExecution, session: DbSession,
+    ex: OwnedExecution, session: DbSession, user: CurrentUser,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=500)] = 200,
 ) -> ExecutionRowsOut:
@@ -251,6 +270,32 @@ async def get_execution_rows(
     JSONL(只读归档)兜底。信封 {items,total,page,pageSize}。"""
     items, total = await run_dispatcher.execution_rows_page(
         session, ex.id, page=page, page_size=page_size)
+    # G1:datasetName 批量投影(随场景可见性;已删/不可读 = None,
+    # 前端回落 datasetId)
+    # 活跃行走 registry asdict(snake_case),历史/回放行走 camelCase —— 两种键都认
+    def _ds_id(it: dict) -> str | None:
+        return it.get("datasetId") or it.get("dataset_id")
+
+    ds_ids = sorted({d for it in items if (d := _ds_id(it))})
+    if ds_ids:
+        from ..models.composer_data_set import ComposerDataSet
+        from ..models.composer_scenario import ComposerScenario
+        from ..services.scenario_query import visibility_clause
+
+        stmt = select(ComposerDataSet.dataset_id, ComposerDataSet.name).where(
+            ComposerDataSet.dataset_id.in_(ds_ids))
+        vis = visibility_clause(user)
+        if vis is not None:
+            stmt = stmt.join(
+                ComposerScenario,
+                ComposerScenario.scenario_id == ComposerDataSet.scenario_id,
+            ).where(vis)
+        names = dict((await session.execute(stmt)).all())
+    else:
+        names = {}
+    for it in items:
+        dsid = _ds_id(it)
+        it["datasetName"] = names.get(dsid) if dsid else None
     return ExecutionRowsOut(
         items=items, total=total, page=page, page_size=page_size)
 
