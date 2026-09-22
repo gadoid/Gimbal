@@ -17,7 +17,7 @@
 |---|---|
 | `backend/scripts/pg_preccheck.py` | 切换前体检(只读不改):类型亲和/超长/孤儿行/生成列拒插预演/stars 计数/密钥检查 |
 | `backend/scripts/migrate_sqlite_to_pg.py` | ETL 直切:全表搬运 + 变换 + 对账报告 |
-| `backend/alembic/`(0001→0004)+ `alembic.ini` | 目标库 schema 权威(空 PG 建表) |
+| `backend/alembic/`(0001→0005)+ `alembic.ini` | 目标库 schema 权威(空 PG 建表) |
 | `compose.pg.yml` + `pg-init/01-timezone.sql` | PG 一键起库(时区钉 UTC) |
 
 ---
@@ -26,7 +26,8 @@
 
 1. **版本对齐**:源环境的代码必须先升到**与 ETL 同版本**(即包含 M2 表结构:
    `users.role`、`execution_rows`/`execution_snapshots`、通知五表、`scenario_endpoint_refs`
-   等)。旧版本 SQLite 库缺表缺列,ETL 按 models 取数会直接报错。
+   等;含 0005 起的 `composer_data_sets.row_count` 生成列与最终索引面)。
+   旧版本 SQLite 库缺表缺列,ETL 按 models 取数会直接报错。
    升级步骤:拉代码 → 起一次后端(启动自适应会把 pre-alembic 旧库原地补齐,
    `app/core/migrations.py` 的 legacy 分支)→ 停掉。
 2. **密钥固定**:源环境 `.env` 的 `JWT_SECRET` / `FERNET_KEY` 必须是非临时值
@@ -72,8 +73,18 @@ DATABASE_URL="postgresql+asyncpg://gimbal:<密码>@127.0.0.1:5432/gimbal" \
     python -m alembic -c alembic.ini upgrade head
 ```
 
-alembic 输出应走到 `0004_drop_is_admin`。**不要**用 create_all 手工建表 ——
+alembic 输出应走到 `0005_interaction_fields`。**不要**用 create_all 手工建表 ——
 双方言细节(生成列方言变体/GIN 索引/部分唯一索引)只在 alembic 链里。
+
+`0005`(交互字段统一轮,2026-09-22)对目标库的净效果,空库直建时自动成立:
+* `composer_data_sets.row_count` 变 STORED 生成列(`jsonb_array_length`,
+  带 `jsonb_typeof` 守卫)—— 应用写侧三处已停写,源值不再可写;
+* 六个前缀冗余单列索引不建(execution_rows.execution_id /
+  notifications.user_id / composer_scenarios.visibility 与 owner_name /
+  carry_service_bindings.service_name / composer_run_schemes.scenario_id),
+  `ix_executions_owner_id` 为 `(owner_id, id)` 复合;
+* PG-only 视图 `v_scenarios_readable`(security_invoker;直连消费前
+  `SET app.uid / app.role`,应用不消费它,见交互字段方案 §4 G5)。
 
 ### Step 3 — 体检(只读)
 
@@ -155,7 +166,10 @@ curl …/api/auths | jq .total
 ```
 
 UI 侧抽查:场景详情可开(生成列回读正常)、执行行级表有历史(M6 前存量单
-走 JSONL 归档回放)、收藏页在场。验收过 → 发布「恢复」公告,窗口结束。
+走 JSONL 归档回放)、收藏页在场;执行列表行应带 `scenario_display_name`
+(改名场景显示新名、已删场景显示快照名 +「已删」)。DB 侧抽查:
+`SELECT count(*) FROM v_scenarios_readable` 不带 GUC 时仅返回 public 行。
+验收过 → 发布「恢复」公告,窗口结束。
 
 ### Step 8 — 收尾
 
@@ -172,7 +186,7 @@ UI 侧抽查:场景详情可开(生成列回读正常)、执行行级表有历�
 
 | 变换 | 语义 |
 |---|---|
-| 生成列排除 INSERT | composer 七列(name/module/system…)由 PG 生成表达式自算,拒插;源值经 checksum+抽样校验等价 |
+| 生成列排除 INSERT | composer 七列(name/module/system…)由 PG 生成表达式自算,拒插;源值经 checksum+抽样校验等价。0005 起 `composer_data_sets.row_count` 同属此列(排除由 metadata 驱动,`c.computed is None`,非硬编码清单) |
 | 时间戳**照搬**(不重置) | 台账是审计数据;对账也依赖原始时间。naive 值按「视为 UTC」补 aware |
 | `owner_id=0` → NULL | 0 是历史「未归属」哨兵,PG 上恒违反 FK |
 | 姓名快照回填 | owner_name/scenario_name 等列源库可能为空,ETL 从关联表回填真值(故这些列不进 checksum) |
@@ -187,7 +201,7 @@ UI 侧抽查:场景详情可开(生成列回读正常)、执行行级表有历�
 |---|---|
 | `tables[*].rows == target_rows` | 全表行数相等 |
 | `row_counts_match` / `checksums_match` | 抽样 50×2 行/表,PK 对齐后规范化 checksum 相等 |
-| `generated_columns_match` | 生成列「源 payload 推导值 == PG 生成值」抽样相等 |
+| `generated_columns_match` | 生成列「源 payload 推导值 == PG 生成值」抽样相等(0005 起含 `row_count`:源 rows 数组长度 == PG 生成值 —— 源库过期的 row_count 会在目标侧**自愈**,不搬旧值) |
 | `identity_columns_setval` | 全部整型序列列已 setval 到 max(id) —— 漏一个 = 切换后首次 INSERT 主键冲突 |
 | `stars_imported + dangling == stars_in_file` | 收藏吸收守恒 |
 

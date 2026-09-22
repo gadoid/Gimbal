@@ -82,6 +82,26 @@ python scripts/migrate_sqlite_to_pg.py     --source <app.db 副本>     --target
   → 重启后端。`data/app.db` 已被 legacy-adapt 适配到新结构,直接指向即可;
   切换后新产生的数据不回灌(切换点之后的数据以 PG 为准)。
 
+### 存量 PG 库原地升级(版本化变更,如 0005)
+
+新 revision 上线而目标库已承载业务数据时(非切换日空库场景):
+
+1. [ ] 停平台后端(PG 起服**只校验不迁移**,落后会报 `pg_schema_behind`
+   拒绝启动 —— 这是刻意设计,见 §6 第一行的处置);
+2. [ ] backend 目录 `python -m alembic -c alembic.ini upgrade head`;
+3. [ ] 起服,看日志走到 `Application startup complete`。
+
+**量级注意**:加 STORED 生成列的 `ALTER TABLE … ADD COLUMN … GENERATED`
+是**全表重写**(`composer_data_sets` 行多时锁表耗时随行数走)—— 大库
+套用 0005 类变更走低峰窗口;空库切换日场景无此问题(直建即终态)。
+
+**原地升级记录**:
+
+- **2026-09-22 13:55 — 0005_interaction_fields 原地升级**(交互字段统一轮):
+  远端 192.168.22.106 库,2 行数据秒级完成;`row_count` 转生成列后存量值
+  自愈(ds-001=1/ds-002=2),六冗余索引消失、owner 复合索引在建、
+  `v_scenarios_readable` 视图在场;后端重启冒烟通过。
+
 ## 5. 回滚
 
 - `.env` 切回 sqlite + 旧库文件，**不回退代码**（M2 同车代码不读任何新列）。
