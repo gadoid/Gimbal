@@ -5,7 +5,10 @@
 > 点,给出统一处置规则与工作分包,供拍板。
 > **来源**:2026-09-22 全库盘点(后端 models/routers/services + 前端
 > views/stores/components 逐点核查,file:line 均为当期分支实测)。
-> **状态**:待评审。§7 决策点清单是需要拍板的全部事项。
+> **状态**:已实施(2026-09-22,分支 ``feat/join-projection-caliber-unification``,
+> E4 热修 + G1–G6 全包落地,后端 681/前端 1089 测试绿;远端 PG 已
+> ``alembic upgrade head`` 到 0005,存量 row_count 自愈)。拍板缺省见
+> §7 各条「已定」;§1.D 的 D2 勘误见该表下注。
 
 ---
 
@@ -73,7 +76,7 @@ PG 生产)全程保持。
 | # | 位置 | 现状 | 判定 |
 |---|---|---|---|
 | D1 | `backend/app/services/board_assembler.py:49-68` `_latest_terminals` | 全量拉 Execution 行内存折叠"每场景最近完成态"(跨 owner 平台视角) | 待下推(`DISTINCT ON`) |
-| D2 | `frontend/src/stores/executions.ts:116` `fetchList()` | 无参全量拉(默认 200 条)再客户端过滤;API 的 `scenario_id` 参数已存在但前端未用(ScenariosMine 展开行走此路) | 待改参 |
+| D2 | `frontend/src/stores/executions.ts:116` `fetchList()` | ~~API 的 `scenario_id` 参数未用~~ **实施轮勘误**:方案展开行走的是 `useScenarioRuns.load`(已传 `scenarioId`+limit 30),无参 `fetchList` 只服务台账列表页本身 —— D2 前端部分为误报,无需行动 | 勘误结案 |
 | D3 | `execution_store.py:112-144` `consecutive_failure_streaks` | 最近 1000 条轻行扫描内存折叠 | 量级可控,可选优化 |
 
 ### E 类:派生/聚合展示面缺实体上下文(二轮补充评审)
@@ -300,7 +303,7 @@ field_path`),field_path 不携带 endpoint 身份,逐行 join 键不存在 —�
 
 ---
 
-## 7. 决策点清单(评审拍板项)
+## 7. 决策点清单(已按文档推荐缺省实施,2026-09-22)
 
 1. **G1 范围**:rows 明细的 `dataset_name` 是否首期就做(涉及已删数据集
    的回落语义),还是首期只做场景名、数据集名二期?
@@ -318,7 +321,15 @@ field_path`),field_path 不携带 endpoint 身份,逐行 join 键不存在 —�
 8. **E5(grid lastRun 带场景身份)**:产品决策 —— 热力格是否需要展示
    "最近执行的是哪个场景"(实现轻:`best` 选中时带 display name)?
 9. **二轮扩展范围确认**:E1/E2 并入 G1、E3 立项 G6、run_scheme 不动 ——
-   是否认可该归并?
+   已按此归并实施。
+
+**实施拍板缺省**(用户「基于文档进行」授权,按文档推荐执行):
+① dataset_name 首期做(已做);② createTime 读时覆盖(已做,导出面不动,
+`test_draft_to_full_passes_definition_through` 边界测试仍绿);③ row_count
+生成列与索引清理/G5 视图合一个 0005 revision(已做);④ G5 轻档视图建
+(已做),RLS defer;⑤ 顺序 G3+G4 → G1 → G2 → G6(已走);⑥ A7 不做;
+⑦ board bug 先行热修(已做,首 commit);⑧ E5 挂起待产品;G4 的 D2 前端
+部分经核实为误报(见 §1.D 勘误),仅做后端下推。
 
 ---
 
