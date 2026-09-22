@@ -200,10 +200,12 @@ async def board(
         select(ScenarioEndpointRef.scenario_id).where(
             ScenarioEndpointRef.endpoint_id == endpoint_id).distinct()
     )).all()})
-    scen_rows = {r.scenario_id: r for r in (await db.execute(
-        select(ComposerScenario)
+    # 取名走生成列窄投影(E4 修复:旧代码 payload.get("meta") 读错容器
+    # 路径 —— 实际是 payload.definition.meta,标签恒回落裸 sid)。
+    scen_names = dict((await db.execute(
+        select(ComposerScenario.scenario_id, ComposerScenario.name)
         .where(ComposerScenario.scenario_id.in_(ref_scenarios))
-    )).scalars().all()} if ref_scenarios else {}
+    )).all()) if ref_scenarios else {}
     latest = await _latest_terminals(db, ref_scenarios)
 
     unhandled: dict[str, dict[str, Any]] = {}
@@ -234,16 +236,12 @@ async def board(
     scen_index: dict[str, int] = {}
     for i, sid in enumerate(ref_scenarios):
         scen_index[sid] = i
-        row = scen_rows.get(sid)
-        meta_name = ""
-        if row is not None and isinstance(row.payload, dict):
-            m = row.payload.get("meta")
-            meta_name = str(m.get("name") or "") if isinstance(m, dict) else ""
+        meta_name = str(scen_names.get(sid) or "")
         nodes.append({
             "id": f"sc:{sid}", "kind": "scenario", "quadrant": "test",
             "label": meta_name or sid,
             "meta": {"scenarioId": sid, "name": meta_name,
-                     "exists": row is not None},
+                     "exists": sid in scen_names},
         })
         edges.append({"from": subject_id, "to": f"sc:{sid}", "kind": "contains"})
 

@@ -55,13 +55,15 @@ async def _seed():
         await ensure_fk_users(s, 1, 2)  # 直插 owner_id=1/2,PG 需垫 FK 用户
         await scenario_store.create(
             s,
-            ScenarioDraft.model_validate(make_draft("sc-bd-a", steps=[{
-                "api": {"view_hints": {"endpoint_id": EP}, "headers": {}},
-                "request": {"body": {"amount": 1}},
-            }, {
-                "api": {"view_hints": {"endpoint_id": EP2}, "headers": {}},
-                "request": {"body": {"kw": "x"}},
-            }])),
+            ScenarioDraft.model_validate(make_draft(
+                "sc-bd-a", name="下单主链路",
+                steps=[{
+                    "api": {"view_hints": {"endpoint_id": EP}, "headers": {}},
+                    "request": {"body": {"amount": 1}},
+                }, {
+                    "api": {"view_hints": {"endpoint_id": EP2}, "headers": {}},
+                    "request": {"body": {"kw": "x"}},
+                }])),
             owner="alice", owner_id=1,
         )
         await scenario_store.create(
@@ -104,6 +106,10 @@ async def test_board_assembly_and_trail(fresh_db, plate):
     }
     ids = {n["id"] for n in out["nodes"]}
     assert {"ep:" + EP, "sc:sc-bd-a", "sc:sc-bd-b", "ad:bt-bd1"} <= ids
+    # E4 回归:场景节点标签取 meta.name(生成列投影),不再回落裸 sid
+    sc_a = next(n for n in out["nodes"] if n["id"] == "sc:sc-bd-a")
+    assert sc_a["label"] == "下单主链路"
+    assert sc_a["meta"]["name"] == "下单主链路" and sc_a["meta"]["exists"]
     # 执行节点只出最新完成态一行;sc-b(锚点行)同样在板
     exec_nodes = [n for n in out["nodes"] if n["kind"] == "execution"]
     assert len(exec_nodes) == 2
