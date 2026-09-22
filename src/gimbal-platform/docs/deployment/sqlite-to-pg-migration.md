@@ -73,6 +73,11 @@ DATABASE_URL="postgresql+asyncpg://gimbal:<密码>@127.0.0.1:5432/gimbal" \
     python -m alembic -c alembic.ini upgrade head
 ```
 
+PG 时区由 `pg-init/01-timezone.sql` 钉死 UTC —— init 脚本仅在卷**首次**
+初始化时执行,接手既有卷/远端库须手工补跑一次
+`ALTER DATABASE gimbal SET timezone TO 'UTC'`(运行期时间口径三防线的
+第 1 条,完整说明见 Step 6)。
+
 alembic 输出应走到 `0005_interaction_fields`。**不要**用 create_all 手工建表 ——
 双方言细节(生成列方言变体/GIN 索引/部分唯一索引)只在 alembic 链里。
 
@@ -154,6 +159,16 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
    —— M6 代码会自动吸收并改名 `.absorbed`;ETL 已导过则是 0,都正常);
 3. 无 `column … does not exist` 类报错。
 
+运行期时间口径(三防线,2026-09-22 事故后成文;照本文档部署当前代码即
+三线齐备,**宿主机任何时区都不影响正确性**):
+1. **库级**:PG 库时区 = UTC(Step 2 的 pg-init 脚本;既有卷手工补跑);
+2. **列级**:全部时间列 timestamptz(`timezone=True`,元数据断言测试把关);
+3. **驱动级**:asyncpg 对 timestamptz 的 **naive** 绑定按**客户端本地时区**
+   编码 —— `timeutil.utcnow()`(naive UTC)曾把 ORM 写入的时间整体
+   -8h(切库后首单 finished_at 实测,**静默偏移不报错**)。代码已全量换
+   `UtcDateTime` 装饰器(绑定侧 naive→UTC aware);自写外部工具直写库
+   时仍必须传 aware-UTC。Step 7 的冒烟含时间口径校验。
+
 ### Step 7 — 冒烟验收(窗口收尾)
 
 ```bash
@@ -169,7 +184,19 @@ UI 侧抽查:场景详情可开(生成列回读正常)、执行行级表有历�
 走 JSONL 归档回放)、收藏页在场;执行列表行应带 `scenario_display_name`
 (改名场景显示新名、已删场景显示快照名 +「已删」)。DB 侧抽查:
 `SELECT count(*) FROM v_scenarios_readable` 不带 GUC 时仅返回 public 行。
-验收过 → 发布「恢复」公告,窗口结束。
+
+时间口径校验(切库后首个 Python 写入的时间必须准,Step 6 三防线):
+发起一次小执行(任意场景单行跑完,或发起后立即取消),然后
+
+```sql
+SELECT id, started_at, finished_at,
+       EXTRACT(EPOCH FROM (finished_at - started_at)) AS dur_s
+FROM executions ORDER BY id DESC LIMIT 1;
+```
+
+`dur_s` 应为正且量级正常;若 ≈ 真实时长 **-8h**(负八小时量级)= naive
+绑定事故复现,查 §6 首行,不要带着偏差继续跑。验收过 → 发布「恢复」
+公告,窗口结束。
 
 ### Step 8 — 收尾
 
@@ -223,6 +250,7 @@ UI 侧抽查:场景详情可开(生成列回读正常)、执行行级表有历�
 | 新后端首条 INSERT 主键冲突 | setval 漏列 → 报告 `identity_columns_setval` 应覆盖全部序列列,发现缺列手工补 |
 | 凭证列表全部「无法解密」 | FERNET_KEY 没照搬 —— Step 1 前置项 |
 | PG 起动报 `pg_schema_behind` | 目标库没 `alembic upgrade head` 或代码/链版本不一致 |
+| 运行期时间整体差 8h(finished 早于 started/列表时间倒退) | asyncpg 对 timestamptz 的 naive 绑定按**客户端本地时区**编码,**静默偏移不报错** —— ORM 层曾中招(2026-09-22 切库首单),已由全模型 `UtcDateTime` 装饰器修复(Step 6 三防线第 3 条);自写外部工具直写库仍须传 aware-UTC |
 | asyncpg 写 naive datetime 报错 | 外部工具直写时的已知行为:naive 按客户端时区编码;统一 aware-UTC |
 
 ## 7. 量级与窗口估算
