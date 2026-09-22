@@ -132,7 +132,12 @@
           <template v-for="row in rows" :key="row.seq">
             <tr class="ex-table-row">
               <td class="mono">{{ row.seq }}</td>
-              <td>{{ row.datasetId ?? (row.injectionId ? '基线' : '使用基线配置') }}</td>
+              <td>{{
+                row.datasetName
+                  ?? (row.datasetId
+                    ? row.datasetId
+                    : (row.injectionId ? '基线' : '使用基线配置'))
+              }}</td>
               <td>
                 <span v-if="row.injectionId" class="inj-badge">⚠ {{ row.injectionId }}</span>
                 <span v-else>—</span>

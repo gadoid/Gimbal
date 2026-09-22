@@ -20,6 +20,10 @@ export interface Execution {
   batch_id: string | null
   /** 连续第 N 次失败(§3.2 信号列;仅 failed 行非 0)— 同 scenario 连续失败链长。 */
   consecutive_failures: number
+  /** G1 读侧投影:展示名 = 可读活名 → 执行时快照 → 裸 id(缺省回落 id)。 */
+  scenario_display_name?: string
+  /** 场景行已删(快照仍是审计权威,照常展示)。 */
+  scenario_deleted?: boolean
   config: {
     // V3 dispatcher 写入的配方键(run_dispatcher._create_execution,
     // 与 RunRequest 创建入参一一对应;camelCase)。
@@ -76,6 +80,8 @@ export interface ExecutionListEnvelope {
 export interface ExecutionRow {
   seq: number
   datasetId: string | null
+  /** G1:数据集名投影(随场景可见性;null = 已删/不可读,回落 datasetId)。 */
+  datasetName?: string | null
   /** 注入族行的条目 id(spec v2 §8);数据集行/旧 JSONL 回放缺键 → null */
   injectionId?: string | null
   rowIndex: number

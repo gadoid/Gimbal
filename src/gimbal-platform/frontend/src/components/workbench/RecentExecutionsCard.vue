@@ -35,7 +35,9 @@
           :data-testid="`wb-ex-row-${ex.id}`"
         >
           <span class="ex-id mono">#{{ ex.id }}</span>
-          <span class="wrow-name mono" :title="ex.scenario_id">{{ ex.scenario_id }}</span>
+          <span class="wrow-name" :title="ex.scenario_id">{{
+            ex.scenario_display_name || ex.scenario_id
+          }}<template v-if="ex.scenario_deleted">(已删)</template></span>
           <span :class="['ex-status', `status-${ex.status}`]">{{ statusText(ex.status) }}</span>
           <span class="ex-counts mono">{{ ex.passed }}<em>/</em>{{ ex.failed }}<em>/</em>{{ ex.total_runs }}</span>
           <span class="wrow-time">{{ relTime(ex.started_at) }}</span>

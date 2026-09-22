@@ -95,7 +95,9 @@
             <TableCell><code class="mono exec-id">{{ row.id }}</code></TableCell>
             <TableCell>
               <div class="scenario-cell">
-                <span class="scenario-name">{{ scenarioName(row.scenario_id) }}</span>
+                <span class="scenario-name">{{
+                  row.scenario_display_name || row.scenario_id
+                }}<template v-if="row.scenario_deleted">(已删)</template></span>
                 <span class="mono scenario-sid">{{ row.scenario_id }}</span>
               </div>
             </TableCell>
@@ -234,7 +236,6 @@ import {
   cancelExecution, getExecutionsSummary, listExecutions, rerunExecution,
   type ExecutionsSummary, type Execution, type ExecutionStatus,
 } from '@/api/executions'
-import { listScenarioOptions } from '@/api/scenario-composer'
 import { executionStatusText } from '@/utils/executionStatus'
 import { executionUrl, runnerUrl } from '@/utils/links'
 import { removeExecution } from '@/utils/removeExecution'
@@ -273,21 +274,6 @@ function formatDuration(sec: number): string {
   if (sec < 60) return `${sec.toFixed(1)}s`
   if (sec < 3600) return `${Math.floor(sec / 60)}m ${Math.round(sec % 60)}s`
   return `${(sec / 3600).toFixed(1)}h`
-}
-
-// ── 场景名解析(执行行只带 scenario_id;名字从我可读的场景清单来,
-//    读不到/已删除 → 回退 id。不向后端要 join — 台账不做第二份场景索引)──
-const scenarioNames = ref<Record<string, string>>({})
-onMounted(async () => {
-  try {
-    const env = await listScenarioOptions({ page_size: 100 })
-    const map: Record<string, string> = {}
-    for (const s of env.items) map[s.scenarioId] = s.name || s.scenarioId
-    scenarioNames.value = map
-  } catch { /* 场景清单不可达 → 用 id 展示,不阻塞台账 */ }
-})
-function scenarioName(sid: string): string {
-  return scenarioNames.value[sid] ?? sid
 }
 
 // ── 筛选(搜索 / status / 发起时间窗 / 批次归并)──────────────────
