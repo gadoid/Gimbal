@@ -12,7 +12,7 @@ SQLAlchemy 的 ``Computed`` 只接受一个表达式,方言变体经由自定义
 """
 from __future__ import annotations
 
-from sqlalchemy import literal
+from sqlalchemy import Integer, literal
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.expression import FunctionElement
 from sqlalchemy.types import JSON, Text
@@ -77,4 +77,29 @@ def _json_sqlite(element, compiler, **kw):
     return f"json_extract({col}, '$.{path}')"
 
 
-__all__ = ["json_path_text", "json_path_json", "literal"]
+class json_array_len(FunctionElement):
+    """JSON 数组长度(composer_data_sets.row_count 生成列,G3)。
+
+    PG 侧带 jsonb_typeof 守卫:rows 恒为数组,守卫只防脏数据把写入
+    打炸(SQLite 的 json_array_length 对非数组本就返回 0)。
+    """
+
+    type = Integer()
+    name = "json_array_len"
+    inherit_cache = True
+
+
+@compiles(json_array_len, "postgresql")
+def _arrlen_pg(element, compiler, **kw):
+    col = _col_name(list(element.clauses)[0])
+    return (f"(CASE WHEN jsonb_typeof({col}) = 'array' "
+            f"THEN jsonb_array_length({col}) ELSE 0 END)")
+
+
+@compiles(json_array_len, "sqlite")
+def _arrlen_sqlite(element, compiler, **kw):
+    col = _col_name(list(element.clauses)[0])
+    return f"json_array_length({col})"
+
+
+__all__ = ["json_path_text", "json_path_json", "json_array_len", "literal"]

@@ -321,12 +321,15 @@ def main() -> int:
                 break
     report["verifications"]["sample_checksums_match"] = checksums_ok
 
-    # 生成列抽样 = 提取函数直接求值(composer)
+    # 生成列抽样 = 提取函数直接求值(composer 七列 + data_sets.row_count)
     gen_ok = True
     gen_checked = 0
     with src.connect() as c:
         rows = c.execute(text(
             "SELECT scenario_id, payload FROM composer_scenarios LIMIT 20"
+        )).fetchall()
+        ds_rows = c.execute(text(
+            "SELECT dataset_id, rows FROM composer_data_sets LIMIT 20"
         )).fetchall()
     with dst.connect() as c:
         for sid, payload in rows:
@@ -336,6 +339,15 @@ def main() -> int:
                 "SELECT name, module, priority FROM composer_scenarios "
                 "WHERE scenario_id = :s"), {"s": sid}).fetchone()
             if got is None or got[0] != (meta.get("name") or None):
+                gen_ok = False
+            gen_checked += 1
+        # row_count 生成列(G3):源 rows 数组长度 == PG 生成值
+        for dsid, ds_rows_json in ds_rows:
+            src_len = len(_load_payload(ds_rows_json) or [])
+            got = c.execute(text(
+                "SELECT row_count FROM composer_data_sets "
+                "WHERE dataset_id = :d"), {"d": dsid}).fetchone()
+            if got is None or int(got[0] or 0) != src_len:
                 gen_ok = False
             gen_checked += 1
     report["verifications"]["generated_columns_sampled"] = {

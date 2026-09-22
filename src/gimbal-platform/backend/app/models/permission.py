@@ -69,7 +69,7 @@ class Notification(Base):
 
     id: Mapped[int] = mapped_column(BigIntPK, primary_key=True)
     user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), index=True
+        ForeignKey("users.id", ondelete="CASCADE")
     )
     type: Mapped[str] = mapped_column(String(32))
     title: Mapped[str] = mapped_column(String(255))

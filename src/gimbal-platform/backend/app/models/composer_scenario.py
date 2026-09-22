@@ -71,9 +71,7 @@ class ComposerScenario(Base):
     )  # matches meta.scenarioId
     # 属主字符串快照(展示;原 ``owner`` 列升正位为三件套规范命名)。
     # 归属判断的唯一权威是 owner_id。
-    owner_name: Mapped[str] = mapped_column(
-        String(128), default="", index=True
-    )
+    owner_name: Mapped[str] = mapped_column(String(128), default="")
     # 稳定属主(int user.id)。M2:FK + SET NULL —— 人走场景留(转公共库
     # 或转让,处置流程见权限方案 §4.3;历史 owner_id=0 行由 ETL 映射 NULL)。
     owner_id: Mapped[int | None] = mapped_column(
@@ -81,9 +79,7 @@ class ComposerScenario(Base):
         nullable=True,
         index=True,
     )
-    visibility: Mapped[str] = mapped_column(
-        String(16), default="private", index=True
-    )
+    visibility: Mapped[str] = mapped_column(String(16), default="private")
     # Full draft container: {definition, orchestration} — the single
     # source of truth for meta/steps/config/resource.  列表侧的 meta 投影
     # 由下方生成列自算(源存果算,DB 物化,应用不可写)。

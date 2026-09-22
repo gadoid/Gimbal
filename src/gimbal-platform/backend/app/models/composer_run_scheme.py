@@ -41,7 +41,6 @@ class ComposerRunScheme(Base):
     scenario_id: Mapped[str] = mapped_column(
         String(128),
         ForeignKey("composer_scenarios.scenario_id", ondelete="NO ACTION", deferrable=True, initially="DEFERRED"),
-        index=True,
     )
     name: Mapped[str] = mapped_column(String(64))
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)

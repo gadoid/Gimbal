@@ -25,7 +25,7 @@ class CarryServiceBinding(Base):
     # 读侧必须归一:别名键按 derive_base 解析到 base,与 carry_injection
     # 的三层链(精确别名键 > base 服务键 > 全局默认)同构;写侧整表
     # 替换按原始键操作。历史注释「目录服务名,非用户引用键」已废止。
-    service_name: Mapped[str] = mapped_column(String(128), index=True)
+    service_name: Mapped[str] = mapped_column(String(128))
     field_path: Mapped[str] = mapped_column(String(255))
     value: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 三件套规范(§2.2):溯源列 FK SET NULL + 姓名快照

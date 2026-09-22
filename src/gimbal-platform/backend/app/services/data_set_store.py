@@ -74,7 +74,6 @@ async def create(
         name=draft.name,
         description=draft.description or "",
         rows=list(draft.rows or []),
-        row_count=len(draft.rows or []),
         var_unlocks=list(draft.var_unlocks or []),
     )
     db.add(row)
@@ -107,7 +106,6 @@ async def update(
     row.name = draft.name
     row.description = draft.description or ""
     row.rows = list(draft.rows or [])
-    row.row_count = len(draft.rows or [])
     row.var_unlocks = list(draft.var_unlocks or [])
     await db.commit()
     await db.refresh(row)

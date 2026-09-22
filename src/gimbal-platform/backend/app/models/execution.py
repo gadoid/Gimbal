@@ -33,6 +33,11 @@ STATUS_CANCELED = "canceled"
 
 class Execution(Base):
     __tablename__ = "executions"
+    # (owner_id, id) 复合(0005 升级原单列 owner 索引):列表/汇总/streak
+    # 均为 owner 过滤 + id 倒序,前缀吃过滤、后缀吃倒序扫
+    __table_args__ = (
+        Index("ix_executions_owner_id", "owner_id", "id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     scenario_id: Mapped[str] = mapped_column(String(128), index=True)
@@ -40,7 +45,7 @@ class Execution(Base):
     scenario_name: Mapped[str] = mapped_column(String(255), default="")
     # 台账语义:人走执行留(SET NULL + 姓名快照;权限方案 §4.3)
     owner_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"), index=True
+        ForeignKey("users.id", ondelete="SET NULL")
     )
     owner_name: Mapped[str] = mapped_column(String(128), default="")
     status: Mapped[str] = mapped_column(String(16), default=STATUS_QUEUED)
@@ -97,7 +102,7 @@ class ExecutionRow(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     execution_id: Mapped[int] = mapped_column(
-        ForeignKey("executions.id", ondelete="CASCADE"), index=True
+        ForeignKey("executions.id", ondelete="CASCADE")
     )
     seq: Mapped[int] = mapped_column(Integer)
     dataset_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

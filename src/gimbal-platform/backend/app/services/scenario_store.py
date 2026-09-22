@@ -250,7 +250,6 @@ async def copy_scenario(
             name=ds.name,
             description=ds.description,
             rows=_copy.deepcopy(ds.rows or []),
-            row_count=ds.row_count,
             # 变量锁本地放开清单按名存储 — 深拷贝必须带走,否则分叉
             # 场景的解锁语义静默丢失
             var_unlocks=list(ds.var_unlocks or []),
@@ -537,14 +536,19 @@ def _meta_from_row(row: ComposerScenario) -> ScenarioMeta:
 
     (M6-3:旧库 module/system 缺省的修复分支已删 —— ETL 已把修复值
     写回 payload,新写入恒经 create/update 的严格 meta。)
-    「最后编辑」服务端权威:读时以 DB 行 updated_at 覆盖 — payload 里
-    客户端伪造/陈旧的 updateTime 一律不可信(与 starred/visibility
-    同族的读时投影)。SQLite CURRENT_TIMESTAMP 是 naive UTC,标上
+    双口径读时归一(G3/方案 §4):createTime/updateTime 同以 DB 行
+    为权威(C3 照 C2 范式 —— payload 里客户端伪造/陈旧值不采信);
+    scenarioId 缺键兜底 definition 顶层/行键(C1,存量行两处分叉时
+    读侧不再各说各话)。SQLite CURRENT_TIMESTAMP 是 naive UTC,标上
     tzinfo 让 wire 输出 ISO-Z,前端 new Date() 才不会按本地时间错位。
     """
     payload = row.payload or {}
     definition = payload.get("definition") or {}
     meta_dict = dict(definition.get("meta") or {})
+    meta_dict.setdefault(
+        "scenarioId", definition.get("scenarioId") or row.scenario_id
+    )
+    meta_dict["createTime"] = ensure_aware(row.created_at)
     meta_dict["updateTime"] = ensure_aware(row.updated_at)
     return ScenarioMeta.model_validate(meta_dict)
 
