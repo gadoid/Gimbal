@@ -54,9 +54,22 @@ async def _latest_terminals(
     按时间倒序扫,首个终态胜出;running/queued 跳过(§2.4「进行中按
     上一次完成态」);只有非终态 → 该场景无条目(= 灰)。grid 的槽③与
     board 的执行节点/trails 共用这一个口径。
+
+    G4 下推:PG 用 ``DISTINCT ON`` 在索引序上每场景取首行,不再全量
+    拉回 Python 折叠;SQLite 无对应惯用,保留原倒序扫(量小)。
     """
     if not scenario_ids:
         return {}
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        rows = (await db.execute(
+            select(Execution)
+            .where(Execution.scenario_id.in_(scenario_ids),
+                   Execution.status.notin_(("running", "queued")))
+            .distinct(Execution.scenario_id)
+            .order_by(Execution.scenario_id,
+                      Execution.created_at.desc(), Execution.id.desc())
+        )).scalars().all()
+        return {ex.scenario_id: ex for ex in rows}
     rows = (await db.execute(
         select(Execution)
         .where(Execution.scenario_id.in_(scenario_ids))
