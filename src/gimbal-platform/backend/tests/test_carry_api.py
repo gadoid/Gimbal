@@ -239,8 +239,8 @@ async def test_service_fields_container_absorbs_children(client, plate):
     r = await client.get("/api/carry/bindings/fin-service/fields",
                          headers=admin)
     assert r.status_code == 200, r.text
-    _eps = lambda: [{"id": "fin.ep1", "name": "", "method": "",
-                      "path": ""}]
+    def _eps():
+        return [{"id": "fin.ep1", "name": "", "method": "", "path": ""}]
     assert r.json()["fields"] == [
         {"path": "$.ext.trace_id", "type": "string", "description": "链路",
          "endpoints": _eps()},

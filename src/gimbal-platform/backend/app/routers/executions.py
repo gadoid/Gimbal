@@ -441,6 +441,7 @@ async def rerun_execution(
 async def cancel_execution(
     ex: OwnedExecution,
     session: DbSession,
+    user: CurrentUser,
 ) -> ExecutionOut:
     """P4 协作式取消:登记请求,在飞 fanout 在行边界收敛为 canceled。
 
@@ -461,4 +462,7 @@ async def cancel_execution(
         ex.finished_at = utcnow()
         await session.commit()
         await session.refresh(ex)
-    return execution_store.execution_out(ex)
+    disp = await execution_store.scenario_display_map(
+        session, user, [ex.scenario_id])
+    return execution_store.execution_out(
+        ex, **execution_store.display_kwargs(ex, disp))

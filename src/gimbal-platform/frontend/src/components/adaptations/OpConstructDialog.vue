@@ -238,6 +238,8 @@ async function loadScenarios(q = ''): Promise<void> {
 
 async function onOpen(): Promise<void> {
   resetForm()
+  // 重开复位检索(残留词会经 watch 触发重拉,窄化列表不跨会话)
+  scenSearch.value = ''
   if (scenarios.value.length === 0) await loadScenarios()
 }
 

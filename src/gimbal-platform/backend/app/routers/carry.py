@@ -113,6 +113,7 @@ async def service_fields(service: str, user: OperatorUser):
     无此服务也无其 base)无面可言,返回空面且不标 degraded(空是确定
     结论,不是面不完整);目录本身不可得(services dim 失败 → 空集)时
     无从归一,原样过滤 —— 退化为修复前行为,而不是全局面瘫痪。"""
+    from ..schemas.carry import CarryEndpointMini
     from ..services import service_names
     from ..services.adaptation_service import _plate_full_endpoint
 
@@ -136,7 +137,6 @@ async def service_fields(service: str, user: OperatorUser):
             degraded = True
             continue
         # G6:贡献端点上下文(字段 → 服务内哪些接口声明了它)
-        from ..schemas.carry import CarryEndpointMini
         ep_mini = CarryEndpointMini(
             id=str(item.get("id") or ""),
             name=str(item.get("name") or ""),
