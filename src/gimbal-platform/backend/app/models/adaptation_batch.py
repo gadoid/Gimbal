@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from ._types import UtcDateTime
+from sqlalchemy import ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -23,6 +24,6 @@ class AdaptationBatch(Base):
     )
     operator_name: Mapped[str] = mapped_column(String(128), default="")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        UtcDateTime, server_default=func.now(), nullable=False
     )
-    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)

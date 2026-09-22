@@ -17,7 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
-from ._types import JsonVar
+from ._types import JsonVar, UtcDateTime
 
 
 class ComposerRunScheme(Base):
@@ -46,8 +46,8 @@ class ComposerRunScheme(Base):
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     payload: Mapped[dict] = mapped_column(JsonVar, default=dict)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UtcDateTime, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UtcDateTime, server_default=func.now(), onupdate=func.now()
     )

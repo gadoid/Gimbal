@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Index, Integer, String, func
+from sqlalchemy import Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
-from ._types import JsonVar
+from ._types import JsonVar, UtcDateTime
 
 
 class AdaptationSnapshot(Base):
@@ -21,5 +21,5 @@ class AdaptationSnapshot(Base):
     entity_id: Mapped[str] = mapped_column(String(128), nullable=False)
     before_json: Mapped[dict] = mapped_column(JsonVar, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        UtcDateTime, server_default=func.now(), nullable=False
     )

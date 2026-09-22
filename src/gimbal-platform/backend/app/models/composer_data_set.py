@@ -9,12 +9,12 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Computed, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Computed, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
 from ._json_path import json_array_len
-from ._types import JsonVar
+from ._types import JsonVar, UtcDateTime
 
 
 class ComposerDataSet(Base):
@@ -46,8 +46,8 @@ class ComposerDataSet(Base):
     # 变量锁本地放开清单(spec 2026-09-15 §3.2):数据集级元数据,
     # 与场景级 config.var_locks 互不影响;引擎不读。
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UtcDateTime, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UtcDateTime, server_default=func.now(), onupdate=func.now()
     )

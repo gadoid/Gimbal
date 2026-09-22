@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Index, Integer, String, Text
+from sqlalchemy import Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
-from ._types import JsonVar
+from ._types import JsonVar, UtcDateTime
 
 
 class AdaptationOp(Base):
@@ -27,5 +27,5 @@ class AdaptationOp(Base):
     op_type: Mapped[str] = mapped_column(String(32), nullable=False)
     payload: Mapped[dict] = mapped_column(JsonVar, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
-    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    applied_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)

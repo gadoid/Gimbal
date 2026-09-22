@@ -19,7 +19,6 @@ from datetime import datetime
 
 from sqlalchemy import (
     Computed,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -34,7 +33,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
 from ._json_path import json_path_json, json_path_text
-from ._types import JsonVar
+from ._types import JsonVar, UtcDateTime
 
 
 def _meta(*keys: str):
@@ -115,8 +114,8 @@ class ComposerScenario(Base):
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UtcDateTime, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UtcDateTime, server_default=func.now(), onupdate=func.now()
     )

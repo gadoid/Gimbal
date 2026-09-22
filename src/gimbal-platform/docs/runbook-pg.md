@@ -101,6 +101,16 @@ python scripts/migrate_sqlite_to_pg.py     --source <app.db 副本>     --target
   远端 192.168.22.106 库,2 行数据秒级完成;`row_count` 转生成列后存量值
   自愈(ds-001=1/ds-002=2),六冗余索引消失、owner 复合索引在建、
   `v_scenarios_readable` 视图在场;后端重启冒烟通过。
+- **2026-09-22 17:0x — asyncpg naive 绑定 -8h 事故修复**(时区复查轮):
+  asyncpg 对 timestamptz 的 **naive** 绑定按客户端本地时区编码,
+  `timeutil.utcnow()`(naive UTC)经 ORM 属性赋值/WHERE 比较落库整体
+  -8h(`func.coalesce(col, naive)` 形态不受影响,PG 会话按 UTC 解析)。
+  切 PG 后仅 executions 137 一行中招(finished_at),已按 JSONL 调度日志
+  +case 目录 mtime 交叉验证后 `+interval '8 hours'` 修复;读侧影响仅
+  活动窗口 since 实际比请求宽 8h(方向无害)。修复 = 全模型时间列换
+  `UtcDateTime` TypeDecorator(PG 绑定侧 naive→UTC aware;DDL 逐字
+  不变,无迁移),元数据不变量测试加「时间列必须 UtcDateTime」门禁;
+  后端重启后线上探针 ORM 写入偏移 +0.000s、WHERE 绑定无偏移。
 
 ## 5. 回滚
 
@@ -114,7 +124,7 @@ python scripts/migrate_sqlite_to_pg.py     --source <app.db 副本>     --target
 |---|---|
 | 起服报 revision 不一致 | 按启动日志列出的待执行 revision，在备份后人工 `alembic upgrade <rev>`；**不要**改代码迁就 |
 | ETL 中途失败 | 旧 SQLite 库未动过（ETL 只读源）；PG 侧可整库 DROP 重建后重跑 |
-| 时区漂移（时间差 8h） | 检查 §2 的库级 UTC 设置；新加列必须 `timezone=True`（元数据断言测试把关） |
+| 时区漂移（时间差 8h） | 两条独立防线：库级 UTC(§2)+ 列级 `timezone=True`(元数据断言把关);**驱动级**:asyncpg 对 naive 绑定按客户端本地时区编码,时间列必须走 `UtcDateTime`(绑定侧补 UTC,不变量测试把关),业务代码持续用 `timeutil.utcnow()` 即可 |
 
 ---
 

@@ -12,11 +12,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
-from ._types import JsonVar
+from ._types import JsonVar, UtcDateTime
 
 
 class ConstantEntry(Base):
@@ -36,7 +36,7 @@ class ConstantEntry(Base):
     entry_kind: Mapped[str] = mapped_column(String(16))
     value: Mapped[Any] = mapped_column(JsonVar, nullable=True, default=None)
     spec: Mapped[dict | None] = mapped_column(JsonVar, nullable=True, default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UtcDateTime, server_default=func.now(), onupdate=func.now()
     )

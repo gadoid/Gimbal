@@ -13,8 +13,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from ._types import UtcDateTime
 from sqlalchemy import (
-    Boolean, DateTime, ForeignKey, Index, String, Text, func, text,
+    Boolean, ForeignKey, Index, String, Text, func, text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -52,8 +53,8 @@ class BoardCard(Base):
     )
     author_name: Mapped[str] = mapped_column(String(128), default="")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UtcDateTime, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UtcDateTime, server_default=func.now(), onupdate=func.now()
     )

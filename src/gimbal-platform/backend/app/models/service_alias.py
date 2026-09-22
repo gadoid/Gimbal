@@ -18,8 +18,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import (
-    DateTime, ForeignKey, Index, String, func,
+from ._types import UtcDateTime
+from sqlalchemy import ( ForeignKey, Index, String, func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -48,8 +48,8 @@ class ServiceAlias(Base):
         ForeignKey("users.id", ondelete="NO ACTION", deferrable=True, initially="DEFERRED"), nullable=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UtcDateTime, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UtcDateTime, server_default=func.now(), onupdate=func.now()
     )

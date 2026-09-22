@@ -13,7 +13,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from ._types import UtcDateTime
+from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -35,7 +36,7 @@ class AuthSession(Base):
     password_enc: Mapped[str] = mapped_column(Text)  # Fernet ciphertext(长度随密码变)
     token_type: Mapped[str] = mapped_column(String(32), default="Bearer")
     expires_in: Mapped[int] = mapped_column(Integer, default=7200)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UtcDateTime, server_default=func.now(), onupdate=func.now()
     )

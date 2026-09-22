@@ -15,7 +15,6 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -27,7 +26,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
-from ._types import JsonVar
+from ._types import JsonVar, UtcDateTime
 
 # SQLite 只对 INTEGER PRIMARY KEY 做 rowid 自增;BIGINT 主键在本地/测试
 # 方言不自动生成 → sqlite 侧降为 INTEGER,PG 保持 BIGINT。
@@ -45,7 +44,7 @@ class UserStar(Base):
         primary_key=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UtcDateTime, server_default=func.now()
     )
 
 
@@ -80,14 +79,14 @@ class Notification(Base):
     batch_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # 公告的过期时刻;查询侧过滤
     expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UtcDateTime, nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UtcDateTime, server_default=func.now()
     )
     # NULL = 未读
     read_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UtcDateTime, nullable=True
     )
 
 
@@ -121,5 +120,5 @@ class AuditLog(Base):
     resource_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     detail: Mapped[dict] = mapped_column(JsonVar, default=dict)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UtcDateTime, server_default=func.now()
     )

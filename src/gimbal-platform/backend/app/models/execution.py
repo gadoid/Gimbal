@@ -17,11 +17,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, func
+from sqlalchemy import ForeignKey, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
-from ._types import JsonVar
+from ._types import JsonVar, UtcDateTime
 
 # Execution.status values (V3 dispatcher lifecycle)
 STATUS_QUEUED = "queued"
@@ -64,13 +64,13 @@ class Execution(Base):
     # (D2 起执行环境键已退役;存量历史行仍含旧键,读侧按键驱动渲染)
     config_json: Mapped[dict] = mapped_column(JsonVar, default=dict)
     started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UtcDateTime, nullable=True
     )
     finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UtcDateTime, nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UtcDateTime, server_default=func.now()
     )
 
 
@@ -115,10 +115,10 @@ class ExecutionRow(Base):
     # 前端对已清扫工件显示「已过期清扫」而非死链(M1)。
     case_dir: Mapped[str] = mapped_column(String(255), default="")
     started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UtcDateTime, nullable=True
     )
     finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        UtcDateTime, nullable=True
     )
     # 事件流折叠的终态键:同 (execution_id, seq) 后行覆盖前行
     __table_args__ = (

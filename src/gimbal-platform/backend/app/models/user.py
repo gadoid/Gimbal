@@ -15,7 +15,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Index, String, Text, func, text
+from ._types import UtcDateTime
+from sqlalchemy import Boolean, Index, String, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -45,8 +46,8 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(16), default="member")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UtcDateTime, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UtcDateTime, server_default=func.now(), onupdate=func.now()
     )

@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from ._types import UtcDateTime
+from sqlalchemy import ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.db import Base
@@ -34,7 +35,7 @@ class CarryServiceBinding(Base):
     )
     updated_by_name: Mapped[str] = mapped_column(String(128), default="")
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UtcDateTime, server_default=func.now(), onupdate=func.now()
     )
 
 
@@ -53,5 +54,5 @@ class CarryGlobalDefault(Base):
     )
     updated_by_name: Mapped[str] = mapped_column(String(128), default="")
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UtcDateTime, server_default=func.now(), onupdate=func.now()
     )
