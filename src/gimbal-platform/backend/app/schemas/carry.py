@@ -25,10 +25,22 @@ class ServiceBindingsOut(BaseModel):
     bindings: dict[str, str | None] = Field(default_factory=dict)
 
 
+class CarryEndpointMini(BaseModel):
+    """face 行的贡献端点上下文(G6):字段属于服务内哪个接口。"""
+
+    id: str
+    name: str = ""
+    method: str = ""
+    path: str = ""
+
+
 class CarryFieldFace(BaseModel):
     path: str
     type: str = "string"
     description: str = ""
+    # G6:声明此字段的服务内端点集合(按 path 跨端点归并时保留贡献者;
+    # 绑定行是 service 级,一个字段可被多端点声明,单行覆盖它们)。
+    endpoints: list[CarryEndpointMini] = Field(default_factory=list)
 
 
 class ServiceFieldsOut(BaseModel):

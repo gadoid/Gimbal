@@ -93,9 +93,11 @@ export const useScenarioComposerStore = defineStore('scenario-composer', {
 
     // ── options:选择器/名称映射(Runner picker、OpConstructDialog、
     //    台账场景名)——「为拿名字拉全量场景表」就此退役。
-    async fetchOptions(): Promise<void> {
+    async fetchOptions(q?: string): Promise<void> {
       try {
-        const env = await api.listScenarioOptions({ page_size: 100 })
+        const env = await api.listScenarioOptions({
+          page_size: 100, q: q || undefined,
+        })
         this.options = env.items
         this.optionsLoaded = true
       } catch (e) {

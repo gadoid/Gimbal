@@ -135,6 +135,14 @@ async def service_fields(service: str, user: OperatorUser):
         if full is None:
             degraded = True
             continue
+        # G6:贡献端点上下文(字段 → 服务内哪些接口声明了它)
+        from ..schemas.carry import CarryEndpointMini
+        ep_mini = CarryEndpointMini(
+            id=str(item.get("id") or ""),
+            name=str(item.get("name") or ""),
+            method=str(item.get("method") or ""),
+            path=str(item.get("path") or ""),
+        )
         # 解析态 == 'carry' 投影(2026-09-05 目录化 §4):面基准 =
         # entry.state 共识默认 —— 值表是环境级,不 join step 增量
         # (场景覆盖是 step 级意图,不改值表候选宇宙)。投影走
@@ -143,11 +151,13 @@ async def service_fields(service: str, user: OperatorUser):
         decls = ((full.get("request") or {}).get("declarations")) or []
         for entry in carry_entries(decls):
             path = str(entry.get("path") or "")
-            faces.setdefault(path, CarryFieldFace(
+            face = faces.setdefault(path, CarryFieldFace(
                 path=path,
                 type=str(entry.get("type") or "string"),
                 description=str(entry.get("description") or ""),
             ))
+            if ep_mini not in face.endpoints:
+                face.endpoints.append(ep_mini)
     return ServiceFieldsOut(fields=sorted(faces.values(), key=lambda f: f.path),
                             degraded=degraded)
 

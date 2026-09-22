@@ -15,6 +15,12 @@
       </div>
       <!-- carry 值表 op 无场景落点:不渲染场景选择,提交也不校验 -->
       <div class="ocd-row"><span class="ocd-label">场景</span>
+        <input
+          v-model="scenSearch"
+          class="ocd-select"
+          placeholder="检索场景(服务端,支持超 100 条)"
+          data-testid="ocd-scen-search"
+        />
         <select v-model="form.scenarioId" class="ocd-select">
           <option value="" disabled>选择场景</option>
           <option v-for="sc in scenarios" :key="sc.scenarioId" :value="sc.scenarioId">{{ sc.scenarioId }}</option>
@@ -219,17 +225,31 @@ function resetForm(): void {
   }
 }
 
-async function onOpen(): Promise<void> {
-  resetForm()
-  if (scenarios.value.length === 0) {
-    try {
-      const env = await listScenarioOptions({ page_size: 100 })
-      scenarios.value = env.items.map((s) => ({ scenarioId: s.scenarioId }))
-    } catch {
-      scenarios.value = []
-    }
+const scenSearch = ref('')
+
+async function loadScenarios(q = ''): Promise<void> {
+  try {
+    const env = await listScenarioOptions({ page_size: 100, q: q || undefined })
+    scenarios.value = env.items.map((s) => ({ scenarioId: s.scenarioId }))
+  } catch {
+    scenarios.value = []
   }
 }
+
+async function onOpen(): Promise<void> {
+  resetForm()
+  if (scenarios.value.length === 0) await loadScenarios()
+}
+
+// G2:检索下推服务端(300ms 防抖;options 分页截断修复)
+let scenSeq = 0
+watch(scenSearch, (q) => {
+  const seq = ++scenSeq
+  setTimeout(() => {
+    if (seq !== scenSeq) return
+    void loadScenarios(q.trim())
+  }, 300)
+})
 
 // 初次挂载即打开(modelValue 出生为 true)时,el-dialog 不保证 emit open —— 兜底
 watch(() => props.modelValue, (v) => { if (v) void onOpen() }, { immediate: true })

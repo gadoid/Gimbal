@@ -82,6 +82,8 @@ export async function fetchScenarioFacets(params: {
 export async function listScenarioOptions(params?: {
   page?: number
   page_size?: number
+  /** G2:选择器检索下推(场景过百后第 101 条仍可选到;吃 trgm)。 */
+  q?: string
 }): Promise<ScenarioOptionsPage> {
   const { data } = await http.get<ScenarioOptionsPage>('/scenarios', {
     params: { ...(params ?? {}), fields: 'options' },

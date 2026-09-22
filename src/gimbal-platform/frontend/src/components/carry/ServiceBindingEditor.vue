@@ -79,7 +79,21 @@
         </thead>
         <tbody>
           <tr v-for="row in rows" :key="row.path" :data-testid="`svc-row-${row.path}`">
-            <td><code class="path">{{ row.path }}</code></td>
+            <td>
+              <code class="path">{{ row.path }}</code>
+              <!-- G6:贡献端点上下文 —— 字段属于服务内哪个(哪些)接口 -->
+              <div
+                v-if="row.endpoints?.length"
+                class="svc-endpoints muted"
+                :title="row.endpoints.map(e => e.id).join(', ')"
+              >
+                <span
+                  v-for="e in row.endpoints"
+                  :key="e.id"
+                  class="svc-ep-chip"
+                >{{ e.name || e.method || e.id }}</span>
+              </div>
+            </td>
             <td class="muted">{{ row.type }}</td>
             <td>
               <!-- 「来源」= 三层链的落点,配色与键详情那条链同一族:
@@ -161,7 +175,7 @@ import {
 } from '@/utils/carry-csv'
 import {
   getDefaults, getBindingsFor, putBindings, getServiceFields,
-  type CarryFieldFace, type CarryValues,
+  type CarryEndpointMini, type CarryFieldFace, type CarryValues,
 } from '@/api/carry'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -180,6 +194,8 @@ const props = defineProps<{
  *  无行在输入框里不可区分;保存编码收敛在 buildServiceEntries(R1-B1)。 */
 interface ServiceRow extends ServiceCarryRow {
   type: string
+  /** G6:贡献端点上下文(来自 face 折叠,展示 chip)。 */
+  endpoints: CarryEndpointMini[]
   description: string
 }
 
@@ -255,6 +271,7 @@ async function reload(): Promise<void> {
         path: f.path,
         type: f.type,
         description: f.description,
+        endpoints: f.endpoints ?? [],
         value: hasRow && boundValue !== null ? boundValue : '',
         isNull: hasRow && boundValue === null,
         hasRow,
@@ -386,4 +403,21 @@ onMounted(async () => {
 }
 .src-link { cursor: pointer; border: 0; }
 .src-link:hover { color: var(--sl-accent); text-decoration: underline; }
+</style>
+
+<style scoped>
+.svc-endpoints {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.svc-ep-chip {
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 0 6px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 999px;
+  white-space: nowrap;
+}
 </style>

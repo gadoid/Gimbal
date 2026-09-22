@@ -57,7 +57,9 @@ async def test_service_fields_aggregates_carry_face(client, plate):
                          headers=admin)
     assert r.status_code == 200, r.text
     assert r.json()["fields"] == [
-        {"path": "$.remark", "type": "string", "description": "备注"}]
+        {"path": "$.remark", "type": "string", "description": "备注",
+         "endpoints": [{"id": "fin.ep1", "name": "", "method": "",
+                        "path": ""}]}]
     assert r.json()["degraded"] is False
 
 
@@ -76,7 +78,9 @@ async def test_service_fields_alias_key_normalizes_to_base(client, plate):
                          headers=admin)
     assert r.status_code == 200, r.text
     assert r.json()["fields"] == [
-        {"path": "$.remark", "type": "string", "description": "备注"}]
+        {"path": "$.remark", "type": "string", "description": "备注",
+         "endpoints": [{"id": "fin.ep1", "name": "", "method": "",
+                        "path": ""}]}]
     assert r.json()["degraded"] is False
 
 
@@ -136,7 +140,9 @@ async def test_service_fields_degraded_when_single_full_fails(client, plate):
     assert body["degraded"] is True
     # 可达端点的面照常聚合(部分结果,不是全空)
     assert body["fields"] == [
-        {"path": "$.remark", "type": "string", "description": "备注"}]
+        {"path": "$.remark", "type": "string", "description": "备注",
+         "endpoints": [{"id": "fin.ep1", "name": "", "method": "",
+                        "path": ""}]}]
 
 
 async def test_service_fields_tolerates_missing_declarations(client, plate):
@@ -163,7 +169,9 @@ async def test_service_fields_tolerates_missing_declarations(client, plate):
     body = r.json()
     assert body["degraded"] is False
     assert body["fields"] == [
-        {"path": "$.remark", "type": "string", "description": "备注"}]
+        {"path": "$.remark", "type": "string", "description": "备注",
+         "endpoints": [{"id": "fin.ep1", "name": "", "method": "",
+                        "path": ""}]}]
 
 
 async def test_service_fields_502_when_plate_list_down(client, plate):
@@ -231,8 +239,12 @@ async def test_service_fields_container_absorbs_children(client, plate):
     r = await client.get("/api/carry/bindings/fin-service/fields",
                          headers=admin)
     assert r.status_code == 200, r.text
+    _eps = lambda: [{"id": "fin.ep1", "name": "", "method": "",
+                      "path": ""}]
     assert r.json()["fields"] == [
-        {"path": "$.ext.trace_id", "type": "string", "description": "链路"},
-        {"path": "$.supplier", "type": "array", "description": "供应商"},
+        {"path": "$.ext.trace_id", "type": "string", "description": "链路",
+         "endpoints": _eps()},
+        {"path": "$.supplier", "type": "array", "description": "供应商",
+         "endpoints": _eps()},
     ]
     assert r.json()["degraded"] is False

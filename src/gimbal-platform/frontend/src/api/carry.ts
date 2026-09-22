@@ -51,7 +51,20 @@ export async function putBindings(
 }
 
 /** 单个 carry 字段的面元信息(plate /full request.declarations 的 carry 通道条目聚合并集)。 */
-export interface CarryFieldFace { path: string; type: string; description: string }
+export interface CarryEndpointMini {
+  id: string
+  name?: string
+  method?: string
+  path?: string
+}
+
+export interface CarryFieldFace {
+  path: string
+  type: string
+  description: string
+  /** G6:声明此字段的服务内端点集合(配置页分组上下文)。 */
+  endpoints?: CarryEndpointMini[]
+}
 
 /** 字段面聚合响应(对齐后端 ServiceFieldsOut):degraded=True = 任一端点
  *  /full 失败(抛错或 404),面不完整 — 保存是整表替换,会不可逆删除
