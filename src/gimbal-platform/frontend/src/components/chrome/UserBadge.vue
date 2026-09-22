@@ -19,7 +19,8 @@
     >
       {{ initial }}
     </button>
-    <NotificationBell />
+    <!-- 底部左角落点:面板锚整条侧栏、弹到右侧内容区(见 NotificationBell) -->
+    <NotificationBell anchor-rail />
     <button
       class="logout-btn flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/20 bg-transparent text-slate-300 transition-colors hover:border-signal hover:text-white"
       title="登出"
@@ -45,7 +46,8 @@
       <span class="role-chip shrink-0">{{ roleLabel }}</span>
     </button>
     <div class="flex w-full items-center justify-between gap-2">
-      <NotificationBell />
+      <!-- 同 compact:面板弹到侧栏右侧内容区,不挤进 200px 导航轨 -->
+      <NotificationBell anchor-rail />
       <button
         class="logout-btn flex h-[26px] cursor-pointer items-center gap-1 rounded-chip border border-white/20 bg-transparent px-2 text-caption text-slate-300 transition-colors hover:border-signal-failed hover:text-white"
         title="登出"

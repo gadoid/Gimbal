@@ -90,7 +90,9 @@ describe('CarryConfig — 默认值(兜底层)', () => {
     const { w } = await mountPage()
     expect(w.find('[data-testid="svc-input"]').exists()).toBe(false)
     expect(w.find('[data-testid="save-service"]').exists()).toBe(false)
-    expect(w.text()).toContain('全局默认')
+    // 面板头「全局默认」与页题重复已撤;留下的身份标识是 warn 横幅
+    expect(w.text()).not.toContain('全局默认')
+    expect(w.text()).toContain('按纯 path 跨服务生效')
     w.unmount()
   })
 

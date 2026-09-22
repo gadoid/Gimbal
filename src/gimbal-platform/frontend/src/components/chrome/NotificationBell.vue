@@ -1,4 +1,5 @@
-<!-- NotificationBell.vue — 顶栏铃铛(P1b/M2.5,权限方案 §3.3)。
+<!-- NotificationBell.vue — 通知铃铛(P1b/M2.5,权限方案 §3.3)。
+     挂点:侧栏底部(UserBadge footer/compact,anchor-rail)、收拢顶条(bar)。
      30s 轮询 unread-count(不上长连接:活跃执行页已有 1s 轮询先例,
      为一个铃铛引入 WebSocket/SSE 不划算);顺带比对 roleVersion,
      变了 → refetch me(localStorage 角色快照的收敛钩子,§1.3 第六轮)。
@@ -6,6 +7,11 @@
      上线 —— 开关先于吵闹型通知,§7 P1b)。 -->
 <template>
   <Popover v-model:open="open">
+    <!-- 侧栏底部落点:320px 面板对 200px 侧栏,无论贴锚上弹还是左对齐
+         都会挤进导航轨。改锚整条侧栏、向右侧栏外(浅色内容区)弹出。 -->
+    <PopoverAnchor v-if="anchorRail" as-child>
+      <span class="rail-anchor" aria-hidden="true"></span>
+    </PopoverAnchor>
     <PopoverTrigger as-child>
       <button
         class="relative h-[26px] cursor-pointer rounded-chip border border-white/20 bg-transparent px-2 text-slate-300 transition-colors hover:border-signal hover:text-white"
@@ -21,7 +27,7 @@
         >{{ count > 99 ? '99+' : count }}</span>
       </button>
     </PopoverTrigger>
-    <PopoverContent align="end" class="w-80 p-0">
+    <PopoverContent :side="anchorRail ? 'right' : 'bottom'" align="end" :side-offset="6" class="w-80 p-0">
       <div class="flex items-center justify-between border-b px-3 py-2">
         <span class="text-sm font-medium">通知</span>
         <button
@@ -76,13 +82,17 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { BellIcon } from '@radix-icons/vue'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
 import * as api from '@/api/notifications'
 import { NOTIFICATION_TYPE_LABELS } from '@/api/notifications'
 import type { NotificationItem, SwitchableType } from '@/api/notifications'
 import { useAuthStore } from '@/stores/auth'
 import { relTime } from '@/utils/datetime'
+
+/** 锚整条侧栏轨道、面板弹到侧栏右侧内容区(侧栏底部铃铛专用)。
+ * 默认 false = 锚铃铛本身、向下弹(收拢顶条等常规落点)。 */
+defineProps<{ anchorRail?: boolean }>()
 
 const POLL_MS = 30_000
 
@@ -181,3 +191,17 @@ onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
 })
 </script>
+
+<style scoped>
+/* 撑满侧栏轨道的隐形锚点:包含块刻意取最近定位祖先 = 侧栏根(fixed),
+   与 DOM 层级无关 —— span 因此横跨侧栏全宽、贴其底缘,面板 side=right
+   即从侧栏右缘弹入内容区、底部对齐页脚。pointer-events 关掉,只做几何。 */
+.rail-anchor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  height: 44px;
+  pointer-events: none;
+}
+</style>

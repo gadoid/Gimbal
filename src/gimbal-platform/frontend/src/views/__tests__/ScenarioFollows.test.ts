@@ -11,12 +11,20 @@ import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import ScenarioFollows from '@/views/ScenarioFollows.vue'
 import { useFollowLayout } from '@/composables/useFollowLayout'
+import { resetUserPreferencesForTest } from '@/composables/useUserPreferences'
 import { useAuthStore } from '@/stores/auth'
 import * as composerApi from '@/api/scenario-composer'
 import type { Scenario } from '@/types/scenario-composer'
 
 const LS_KEY = 'gimbal.scenario-follows.pinned:alice'
 const readPinned = () => JSON.parse(localStorage.getItem(LS_KEY) ?? '[]') as string[]
+
+// 常驻席存档已改走服务端(user_prefs)+ 本地镜像:不打桩的话 pull 会去摸
+// 真 axios,首帧断言就看的是网络何时回来了。
+vi.mock('@/api/preferences', () => ({
+  getPreferences: vi.fn().mockResolvedValue({}),
+  putPreference: vi.fn().mockResolvedValue(undefined),
+}))
 
 const ensureSpy = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 
@@ -129,6 +137,7 @@ describe('ScenarioFollows — 关注页', () => {
     useAuthStore().currentUser = { id: 1, username: 'alice', display_name: 'Alice', is_admin: false } as never
     // 常驻席是 module 作用域单例:不清零会带着上一条用例的顺序进下一条,
     // 播种/回收断言就看的是别人的状态了。
+    resetUserPreferencesForTest()
     useFollowLayout().pinned.value = []
     vi.mocked(composerApi.starScenario).mockResolvedValue(undefined)
   })

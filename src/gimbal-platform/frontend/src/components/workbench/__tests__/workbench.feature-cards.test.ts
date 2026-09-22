@@ -11,6 +11,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, getActivePinia, setActivePinia } from 'pinia'
 import WorkbenchView from '@/views/WorkbenchView.vue'
 import { useAuthStore } from '@/stores/auth'
+import { resetUserPreferencesForTest } from '@/composables/useUserPreferences'
 import * as composerApi from '@/api/scenario-composer'
 import * as executionsApi from '@/api/executions'
 import * as adaptationsApi from '@/api/adaptations'
@@ -34,6 +35,12 @@ vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]), lis
 vi.mock('@/api/service-aliases', () => ({ listAliases: vi.fn().mockResolvedValue([]), listAllAliases: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/api/carry', () => ({ getDefaults: vi.fn().mockResolvedValue({}) }))
 vi.mock('@/api/users', () => ({ list: vi.fn().mockResolvedValue([]), listAll: vi.fn().mockResolvedValue([]) }))
+// 工作台布局已改走服务端偏好(user_prefs)+ 本地镜像:不桩掉 pull 就会去摸
+// 真 axios,用例一路等到超时。
+vi.mock('@/api/preferences', () => ({
+  getPreferences: vi.fn().mockResolvedValue({}),
+  putPreference: vi.fn().mockResolvedValue(undefined),
+}))
 vi.mock('@/utils/catalog-services', () => ({
   loadCatalogServiceRows: vi.fn().mockResolvedValue([]),
   loadCatalogEntries: vi.fn().mockResolvedValue([]),
@@ -68,6 +75,8 @@ const scen = (id: string, schemeCount: number, visibility = 'private') => ({
 beforeEach(() => {
   setActivePinia(createPinia())
   localStorage.clear()
+  // 布局偏好实例是模块作用域单例:不清零会带着上一条用例的 order 进来
+  resetUserPreferencesForTest()
   vi.clearAllMocks()
   setAuth(false)
   vi.mocked(composerApi.listScenarios).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 } as never)

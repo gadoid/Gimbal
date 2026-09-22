@@ -33,10 +33,12 @@ from .routers import (
     run_precheck,
     runs,
     run_schemes,
+    scenario_filter_groups,
     scenarios,
     service_aliases,
     service_profile,
     strategy_catalog,
+    user_preferences,
     users,
 )
 
@@ -150,6 +152,8 @@ def create_app() -> FastAPI:
     app.include_router(adaptations.router, prefix="/api")
     # 通知中心(P1b/M2.5):三接口 + 偏好 + 公告
     app.include_router(notifications.router, prefix="/api")
+    # 用户偏好通用读写(工作台布局/常驻席/时间线配色 → user_prefs)
+    app.include_router(user_preferences.router, prefix="/api")
     app.include_router(carry.router, prefix="/api")
     # query-views rows 路由:注册在 scenarios 之前只为维持既有稳定注册
     # 序(scenarios prefix 是 /scenarios,与 /query-views 无实际路由
@@ -170,6 +174,8 @@ def create_app() -> FastAPI:
     # run-schemes CRUD lives on scenario-nested paths; register BEFORE
     # scenarios' /{scenario_id} catch-all.
     app.include_router(run_schemes.router, prefix="/api")
+    # 场景库筛选分组(存 user_prefs,零迁移):命名的搜索/筛选条件入口
+    app.include_router(scenario_filter_groups.router, prefix="/api")
     app.include_router(scenarios.router, prefix="/api")  # MUST be last — has /{scenario_id}
 
     @app.get("/api/health")

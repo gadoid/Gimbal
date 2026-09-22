@@ -207,12 +207,14 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* 关键词 + 方法筛选行:与 ExecutionsList 的 filter 行同族观感 */
+/* 关键词 + 方法筛选行:与 ExecutionsList 的 filter 行同族观感。
+   下边距把筛选行与瓦片网格隔开一档(瓦片自带阴影,贴太近显得挤) */
 .grid-filter-row {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-top: 8px;
+  margin-bottom: 16px;
 }
 .grid-search {
   width: 220px;

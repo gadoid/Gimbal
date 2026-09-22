@@ -15,20 +15,8 @@
     <div v-if="loading" class="slib-loading">加载中…</div>
 
     <div v-else class="svc-panel">
-      <div class="svc-panel-head">
-        <span class="svc-panel-title">
-          <span class="icon-badge" aria-hidden="true">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 7h16M4 12h16M4 17h16" />
-              <circle cx="9" cy="7" r="2.2" />
-              <circle cx="15" cy="12" r="2.2" />
-              <circle cx="7" cy="17" r="2.2" />
-            </svg>
-          </span>
-          全局默认
-        </span>
-        <span class="svc-panel-desc">保存 = 整表替换;删行后保存即移除该默认。服务 / 别名级的覆盖层在服务信息管理的键详情里配</span>
-      </div>
+      <!-- C2 拆分后本页只剩全局兜底一层,面板头「全局默认」与页题「默认值」
+           语义重复已撤(2026-09-22);行为要点留在下方 warn 横幅与表内。 -->
 
       <div class="svc-banner warn">
         <span>
@@ -112,7 +100,7 @@
         </table>
       </div>
       <div v-else class="slib-empty">
-        <p>还没有全局默认 —— 加一行(例 <code class="mono">$.headers.X-Trace-Id</code>)</p>
+        <p>还没有默认行 —— 加一行(例 <code class="mono">$.headers.X-Trace-Id</code>)</p>
       </div>
 
       <div class="svc-foot">

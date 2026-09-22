@@ -10,19 +10,29 @@
     />
 
     <div class="slib-toolbar">
-      <input v-model="q" class="slib-search" data-testid="pub-search"
-        placeholder="按名 / 模块 / 系统 / scenarioId / tag 搜索" />
+      <!-- 分组态下展示值恒空(生效词是分组名,chip 高亮说明在搜什么);
+           一敲键盘即退出分组态转手动搜索 -->
+      <input
+        :value="searchBox"
+        class="slib-search"
+        data-testid="pub-search"
+        placeholder="按名 / 模块 / 系统 / scenarioId / tag 搜索"
+        @input="writeSearch(($event.target as HTMLInputElement).value)"
+      />
       <FilterPopover v-model="filters" :pool="filterableRows" :facets="facets" />
     </div>
 
-    <!-- 暂存分组:公共库同样适用(浏览大池时按条件留几个常用入口) -->
-    <FilterPresets
-      :presets="presets"
-      :active-id="activePresetId"
-      :can-save="filtering"
-      @apply="applyPreset"
-      @remove="onRemovePreset"
-      @save="onSavePreset"
+    <!-- 筛选分组:公共库同样适用(浏览大池时把常用条件存成入口) -->
+    <FilterGroups
+      :groups="groups"
+      :state="groupsState"
+      :active-id="activeGroupId"
+      :can-save="canSaveGroup"
+      :busy="savingGroup"
+      @apply="applyGroup"
+      @remove="removeGroup"
+      @save="saveGroup"
+      @retry="loadGroups"
     />
 
     <div v-if="loading" class="slib-loading">加载中…</div>
@@ -102,7 +112,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { listDataSets, runScenario } from '@/api/scenario-composer'
@@ -114,8 +124,7 @@ import PageHead from '@/components/scenario-lib/PageHead.vue'
 import StarToggle from '@/components/scenario-lib/StarToggle.vue'
 import { Pagination } from '@/components/ui/pagination'
 import FilterPopover from '@/components/FilterPopover.vue'
-import FilterPresets from '@/components/scenario-lib/FilterPresets.vue'
-import { useFilterPresets, type FilterPreset } from '@/composables/useFilterPresets'
+import FilterGroups from '@/components/scenario-lib/FilterGroups.vue'
 import TagPill from '@/components/TagPill.vue'
 import SystemChip from '@/components/SystemChip.vue'
 import PriorityPill from '@/components/PriorityPill.vue'
@@ -129,37 +138,12 @@ const router = useRouter()
 
 // 公共场景 = public 桶(与我的场景互补);骨架与我的场景共用一套。
 const {
-  store, q, filters, page, paged, total, filtering, filterableRows, facets, load, pageSize, loading,
+  store, filters, page, paged, total, filtering, filterableRows, facets, load, pageSize, loading,
+  searchBox, writeSearch,
+  groups, groupsState, savingGroup, activeGroupId, canSaveGroup, loadGroups, applyGroup, saveGroup, removeGroup,
 } = useScenarioListView('public')
 
 const formatTime = shortDateTime
-
-// ── 暂存分组(与我的场景页同一套;分桶键不同互不可见)──────────────
-const { presets, save: savePreset, remove: removePreset } = useFilterPresets('public')
-const activePresetId = ref('')
-
-function applyPreset(p: FilterPreset): void {
-  q.value = p.q
-  filters.value = JSON.parse(JSON.stringify(p.filters)) as typeof filters.value
-  activePresetId.value = p.id
-}
-function onSavePreset(name: string): void {
-  savePreset(name, q.value, filters.value)
-  toast.success(`已存为分组「${name}」`)
-}
-function onRemovePreset(id: string): void {
-  removePreset(id)
-  if (activePresetId.value === id) activePresetId.value = ''
-}
-// 条件被手动改到与分组不再一致 → 高亮熄灭(分组是入口快照,不是活引用)
-watch([q, () => JSON.stringify(filters.value)], () => {
-  const cur = activePresetId.value
-    ? presets.value.find((p) => p.id === activePresetId.value)
-    : null
-  if (!cur || q.value !== cur.q || JSON.stringify(filters.value) !== JSON.stringify(cur.filters)) {
-    activePresetId.value = ''
-  }
-})
 
 onMounted(load)
 
@@ -195,9 +179,13 @@ async function copyToMine(row: ScenarioListItem) {
 }
 
 async function toggleStar(row: ScenarioListItem) {
+  // 乐观翻转 + 失败回滚:行来自服务端分页,store.invalidate 不重拉当前页
+  const next = !row.starred
+  row.starred = next
   try {
-    await store.toggleStarWithCap(row.meta.scenarioId, !row.starred)
+    await store.toggleStarWithCap(row.meta.scenarioId, next)
   } catch (e) {
+    row.starred = !next
     if (e instanceof FollowCapError) toast.error(e.message)
     else showError('关注', undefined, (e as Error).message)
   }

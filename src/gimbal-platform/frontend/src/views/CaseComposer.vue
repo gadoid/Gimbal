@@ -74,8 +74,9 @@
 
           <div class="divider"></div>
 
-          <!-- 导出菜单 — 在每个 step 都可见,平台侧始终持有当前 draft -->
-          <ScenarioExportMenu variant="topbar" />
+          <!-- 导出菜单 — 在每个 step 都可见,平台侧始终持有当前 draft;
+               触发器为顶栏图形按钮同款(下载形图标) -->
+          <ScenarioExportMenu />
 
           <button class="primary-btn" :disabled="!canRun" @click="openRunDialog">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>

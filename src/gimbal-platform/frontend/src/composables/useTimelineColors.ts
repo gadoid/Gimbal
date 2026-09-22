@@ -5,11 +5,12 @@
  * (全站唯一 hex 真源),这里只存"选中的那一档"。默认值按类型分色,
  * 图例与圆点都从同一份映射取色,不会出现图例和轴上不一致。
  *
- * 存档按用户名分键 + 身份未知不写盘,走 useUserScopedStorage(与关注
- * 常驻席、工作台布局同一纪律)。
+ * 存档走 useUserPreference('timeline.colors'):服务端 user_prefs 为准 +
+ * localStorage 镜像管首帧。镜像键沿用迁移前的 `gimbal.workbench.
+ * timeline-colors:<username>`,所以老用户的既有配色是"被搬上云",不是清零。
+ * 同键多处消费拿到的是同一个实例(配色是跨卡片/跨路由复用的显示偏好)。
  */
-import { ref, watch } from 'vue'
-import { useUserScopedStorage } from './useUserScopedStorage'
+import { useUserPreference } from './useUserPreferences'
 import type { TimelineKind } from './useActivityTimeline'
 
 /** 可选色板 —— 与头像圆徽同一套分类色(theme.css 里定义),这里不新造 hex。 */
@@ -26,54 +27,54 @@ export const DEFAULT_TIMELINE_COLORS: Record<TimelineKind, string> = {
   adaptation: 'var(--avatar-4)',
 }
 
-const KEY_PREFIX = 'gimbal.workbench.timeline-colors'
+const MIRROR_PREFIX = 'gimbal.workbench.timeline-colors'
 
-/** 模块级:配色是跨卡片/跨路由复用的显示偏好,一处改全局生效。 */
-const colors = ref<Record<TimelineKind, string>>({ ...DEFAULT_TIMELINE_COLORS })
-let boundUser = ''
+/** 只认色板内的值:手改存档 / 色板收缩都退回默认,不把野值渲染出去。 */
+function clampColor(v: unknown): string | null {
+  return typeof v === 'string' && (DOT_PALETTE as readonly string[]).includes(v) ? v : null
+}
 
-function sanitize(raw: string | null): Record<TimelineKind, string> {
+function fromMirror(raw: string | null): Record<TimelineKind, string> {
   const next = { ...DEFAULT_TIMELINE_COLORS }
   if (!raw) return next
   try {
     const obj = JSON.parse(raw) as Partial<Record<TimelineKind, string>>
     for (const kind of TIMELINE_KINDS) {
-      const v = obj?.[kind]
-      // 只认色板内的值:手改 localStorage / 色板收缩都退回默认
-      if (v && (DOT_PALETTE as readonly string[]).includes(v)) next[kind] = v
+      const c = clampColor(obj?.[kind])
+      if (c) next[kind] = c
     }
   } catch { /* 损坏存档 → 默认色,不惊动用户 */ }
   return next
 }
 
 export function useTimelineColors() {
-  const storage = useUserScopedStorage(KEY_PREFIX)
-
-  function sync(): string {
-    const u = storage.bind()
-    if (u && u !== boundUser) {
-      boundUser = u
-      colors.value = sanitize(storage.read())
-    }
-    return u
-  }
-  sync()
-  watch(() => storage.bind(), sync)
+  const pref = useUserPreference('timeline.colors', {
+    mirrorPrefix: MIRROR_PREFIX,
+    fromMirror,
+    toMirror: (v) => JSON.stringify(v),
+    toServer: (v) => v,
+    fromServer: (raw) =>
+      raw && typeof raw === 'object' ? fromMirror(JSON.stringify(raw)) : null,
+  })
 
   function colorOf(kind: TimelineKind): string {
-    return colors.value[kind] ?? DEFAULT_TIMELINE_COLORS[kind]
+    return pref.value.value[kind] ?? DEFAULT_TIMELINE_COLORS[kind]
   }
 
-  function setColor(kind: TimelineKind, cssVar: string) {
-    if (!(DOT_PALETTE as readonly string[]).includes(cssVar)) return
-    colors.value = { ...colors.value, [kind]: cssVar }
-    storage.write(JSON.stringify(colors.value))
+  function setColor(kind: TimelineKind, cssVar: string): void {
+    const c = clampColor(cssVar)
+    if (!c) return
+    pref.value.value = { ...pref.value.value, [kind]: c }
+    pref.save()
   }
 
-  function reset() {
-    colors.value = { ...DEFAULT_TIMELINE_COLORS }
-    storage.write(JSON.stringify(colors.value))
+  function reset(): void {
+    pref.value.value = { ...DEFAULT_TIMELINE_COLORS }
+    pref.save()
   }
 
-  return { colors, colorOf, setColor, reset, whenReady: storage.whenReady }
+  return {
+    colors: pref.value, colorOf, setColor, reset,
+    synced: pref.synced, whenReady: pref.whenReady,
+  }
 }

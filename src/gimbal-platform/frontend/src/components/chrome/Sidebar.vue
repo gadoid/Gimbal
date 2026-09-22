@@ -61,7 +61,7 @@
       </button>
     </div>
 
-    <nav class="flex-1 overflow-y-auto" :class="collapsed ? 'px-1.5' : 'px-2'">
+    <nav class="nav-scroll flex-1 overflow-y-auto" :class="collapsed ? 'px-1.5' : 'px-2'">
       <component
         :is="entry.disabled ? 'span' : 'router-link'"
         v-for="entry in flatEntries"
@@ -242,3 +242,23 @@ function isActive(path: string): boolean {
   return route.path === path || route.path.startsWith(path + '/')
 }
 </script>
+
+<style scoped>
+/* 导航滑轨:与工作台时间线 .tl-scroll 同一范式(8px 车道挤成 2px 圆胶囊、
+   轨道透明、hover 才加深一档、scrollbar-gutter 保住车道防条目跳宽),
+   滑块换白系贴 #0B0E14 深色 chrome —— 系统默认灰轨在暗侧栏上像贴错
+   系统的补丁。引擎分流原因见 ActivityTimeline 同款注释。 */
+.nav-scroll { scrollbar-gutter: stable; }
+.nav-scroll::-webkit-scrollbar { width: 8px; }
+.nav-scroll::-webkit-scrollbar-track { background: transparent; }
+.nav-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+.nav-scroll:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.28); }
+@supports (-moz-appearance: none) {
+  .nav-scroll { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.16) transparent; }
+}
+</style>

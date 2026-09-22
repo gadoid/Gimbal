@@ -5,7 +5,12 @@
   §2.1 FK 映射表:Python 删得到但**不该管**)。
 * ``Notification`` — 站内通知(权限方案 §3.3 DDL 照抄);批量 upsert
   的并发命中面 = partial unique (user_id, type, batch_id)。
-* ``UserPref`` — 用户偏好 KV(首期只收通知开关;铃铛与开关代码随 M2.5)。
+* ``UserPref`` — 用户偏好 KV:一 ``(user_id, key)`` 一行整值 JSON,写即覆盖
+  (无行 id、无时间戳 → 只适合"整份读回整份写回"的小形态偏好)。现有键:
+  ``notification_types``(铃铛按 type 静音)、``scenario_filter_groups
+  .<bucket>``(场景库筛选分组)、以及 ``routers/user_preferences.py`` 白名单
+  里的 ``workbench.layout`` / ``follows.pinned`` / ``timeline.colors``。
+  新加键请走那张白名单(带形态校验),不要就地再开一只专用端点。
 * ``AuditLog`` — 特权操作留痕(权限方案 §6);actor SET NULL + 姓名
   快照(人注销后仍可读)。
 """

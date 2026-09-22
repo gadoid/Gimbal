@@ -148,16 +148,17 @@
               data-testid="alias-name-input"
             />
             <Input v-model="draft.groupTag" class="w-[160px]" placeholder="分组(如:测试)" data-testid="alias-group-input" />
-            <Input
+            <!-- 凭证别名:样式化凭证下拉(与认证选择器同件),替掉 Input+datalist;
+                 可选字段 → clearable 给清除钮。宽度走 flex-1 吃行内剩余空间
+                 (组件根是 width:100%,固定 w-[260px] 会被盖掉占满整行) -->
+            <CredentialSelect
               v-model="draft.credentialAlias"
-              class="w-[220px]"
-              list="alias-cred-options"
+              :credentials="myCredentials"
+              class="min-w-[160px] flex-1"
               placeholder="凭证别名(可选)"
+              clearable
               data-testid="alias-cred-input"
             />
-            <datalist id="alias-cred-options">
-              <option v-for="c in myCredentials" :key="c" :value="c" />
-            </datalist>
             <Button data-testid="alias-save" :disabled="!draft.aliasName.trim() || !!saving" @click="save">
               {{ editing ? '保存' : '登记' }}
             </Button>
@@ -185,16 +186,17 @@ import {
   createAlias, deleteAlias, listAllAliases, patchAlias,
   type ServiceAliasRow,
 } from '@/api/service-aliases'
-import { listAll as listMyCredentials } from '@/api/auth_sessions'
+import { listAll as listMyCredentials, type AuthSession } from '@/api/auth_sessions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import CredentialSelect from '@/components/credential/CredentialSelect.vue'
 
 const loading = ref(true)
 const router = useRouter()
 const aliases = ref<ServiceAliasRow[]>([])
 const selectedService = ref('')
 const selectedGroup = ref('')
-const myCredentials = ref<string[]>([])
+const myCredentials = ref<AuthSession[]>([])
 const saving = ref(false)
 const editing = ref<ServiceAliasRow | null>(null)
 
@@ -320,7 +322,7 @@ async function reload(): Promise<void> {
   try {
     aliases.value = await listAllAliases()
     catalogEntries.value = await loadCatalogEntries()
-    myCredentials.value = (await listMyCredentials()).map((c) => c.alias)
+    myCredentials.value = await listMyCredentials()
   } catch (e) {
     showError('加载', e)
   } finally {

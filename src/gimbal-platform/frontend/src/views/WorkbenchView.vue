@@ -110,13 +110,12 @@ const visibleRegistry = computed(() =>
     || (d.roles && auth.hasRole(...d.roles))),
 )
 
-/** 布局按用户名分键(登录后才持久化;未认证 = 会话内默认)。
- *  默认板只铺可见集内的卡 —— adminOnly 卡不该出现在 member 的默认布局。 */
-const username = computed(() =>
-  auth.currentUser?.username || auth.currentUser?.display_name || '')
+/** 默认板只铺可见集内的卡 —— adminOnly 卡不该出现在 member 的默认布局。
+ *  布局存档(服务端 + 本地镜像)由 useUserPreference 统一盯 auth 身份,
+ *  不再需要调用方传用户名。 */
 const eligibleIds = computed(() => visibleRegistry.value.map((d) => d.id))
 const { orderedIds, add, remove, move, reset, sizeOf, setSize } =
-  useWorkbenchLayout(username, eligibleIds)
+  useWorkbenchLayout(eligibleIds)
 
 /** draggable item-key:元素本身是 string id,键 = 自身 */
 const cardKey = (id: string) => id

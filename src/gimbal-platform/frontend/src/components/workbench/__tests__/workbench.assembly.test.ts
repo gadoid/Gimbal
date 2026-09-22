@@ -13,6 +13,7 @@ import * as constantsApi from '@/api/constants'
 import * as executionsApi from '@/api/executions'
 import * as scenarioApi from '@/api/scenario-composer'
 import { useAuthStore } from '@/stores/auth'
+import { resetUserPreferencesForTest } from '@/composables/useUserPreferences'
 
 vi.mock('@/api/constants', () => ({
   list: vi.fn().mockResolvedValue([]),
@@ -32,6 +33,12 @@ vi.mock('@/api/scenario-composer', () => ({
 }))
 // 新增的 registry 卡(认证管理 / 服务画像)同样不能打真网络
 vi.mock('@/api/auth_sessions', () => ({ list: vi.fn().mockResolvedValue([]), listAll: vi.fn().mockResolvedValue([]) }))
+// 工作台布局已改走服务端偏好(user_prefs)+ 本地镜像:不桩掉 pull 就会去摸
+// 真 axios,用例一路等到超时。
+vi.mock('@/api/preferences', () => ({
+  getPreferences: vi.fn().mockResolvedValue({}),
+  putPreference: vi.fn().mockResolvedValue(undefined),
+}))
 vi.mock('@/utils/catalog-services', () => ({
   loadCatalogServiceRows: vi.fn().mockResolvedValue([]),
   loadCatalogEntries: vi.fn().mockResolvedValue([]),
@@ -56,6 +63,8 @@ function mountPage() {
 beforeEach(() => {
   setActivePinia(createPinia())
   localStorage.clear()
+  // 布局偏好实例是模块作用域单例:不清零会带着上一条用例的 order 进来
+  resetUserPreferencesForTest()
   vi.clearAllMocks()
   useAuthStore().currentUser = { id: 1, username: 'alice', is_admin: false } as never
   vi.mocked(constantsApi.list).mockResolvedValue([] as never)

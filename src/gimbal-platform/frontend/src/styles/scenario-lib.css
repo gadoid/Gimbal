@@ -245,8 +245,10 @@
   cursor: pointer;
   white-space: nowrap;
 }
-.schemes-chip:hover { background: #d8e6fd; }
-.schemes-chip.open { background: #d8e6fd; }
+/* 选中态与展开态同色:都是"这条正被用着",不给第三个填充值。
+   (.open = 方案内联面板展开;.on = 当前条件与该分组一致) */
+.schemes-chip:hover, .schemes-chip.open, .schemes-chip.on { background: #d8e6fd; }
+.schemes-chip:disabled { opacity: 0.6; cursor: default; }
 .create-scheme-chip {
   display: inline-flex;
   align-items: center;
@@ -262,6 +264,58 @@
   white-space: nowrap;
 }
 .create-scheme-chip:hover { color: var(--sl-accent); border-color: var(--sl-accent); }
+.create-scheme-chip:disabled,
+.create-scheme-chip:disabled:hover {
+  color: var(--sl-ink-3);
+  border-color: var(--sl-divider);
+  cursor: not-allowed;
+}
+
+/* ── 筛选分组条(工具条下方第二行)──────────────────────────────
+   chip 本体复用上面的 .schemes-chip / .create-scheme-chip 族 —— 这里只
+   补"一行"的排布、副按钮的透明化,以及一个说明文案位。不在 SFC 里重画
+   第二套颜色(两处各自演值一定漂,见本文件抬头)。 */
+.slib-groups {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  /* 贴在工具条下沿:工具条自带 14px 下边距,回拉一半当同行间距 */
+  margin: -7px 0 14px;
+}
+.slib-groups-hint { font-size: 11px; color: var(--sl-ink-3); }
+.slib-groups-input {
+  height: 22px;
+  width: 170px;
+  padding: 0 8px;
+  font-size: 11.5px;
+  color: var(--sl-ink);
+  background: #fff;
+  border: 1px solid var(--sl-line);
+  border-radius: 6px;
+  outline: none;
+}
+.slib-groups-input:focus { border-color: var(--sl-accent); }
+/* chip 内两个副按钮:形制由外层 .schemes-chip 给,自己只当透明热区 */
+.slib-group-chip { padding-right: 3px; }
+.slib-group-apply {
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.slib-group-del {
+  padding: 0 1px;
+  font: inherit;
+  line-height: 1;
+  color: var(--sl-ink-3);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.slib-group-del:hover { color: var(--sl-bad); }
 
 /* ── 方案内联预览面板(展开行)────────────────────────────────── */
 .scheme-panel-row td {

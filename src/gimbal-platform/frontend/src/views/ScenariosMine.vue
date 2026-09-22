@@ -10,20 +10,30 @@
     />
 
     <div class="slib-toolbar">
-      <input v-model="q" class="slib-search" data-testid="mine-search"
-        placeholder="按名 / 模块 / 系统 / scenarioId / tag 搜索" />
+      <!-- 分组态下展示值恒空(生效词是分组名,chip 高亮说明在搜什么);
+           一敲键盘即退出分组态转手动搜索 -->
+      <input
+        :value="searchBox"
+        class="slib-search"
+        data-testid="mine-search"
+        placeholder="按名 / 模块 / 系统 / scenarioId / tag 搜索"
+        @input="writeSearch(($event.target as HTMLInputElement).value)"
+      />
       <FilterPopover v-model="filters" :pool="filterableRows" :facets="facets" />
       <button type="button" class="slib-create" data-testid="mine-create" @click="onCreate">+ 新建场景</button>
     </div>
 
-    <!-- 暂存分组:当前搜索/筛选存为命名分组,点分组整体还原(2026-09-22) -->
-    <FilterPresets
-      :presets="presets"
-      :active-id="activePresetId"
-      :can-save="filtering"
-      @apply="applyPreset"
-      @remove="onRemovePreset"
-      @save="onSavePreset"
+    <!-- 筛选分组:当前搜索/筛选存为命名分组,点名 = 以分组名搜索(存服务端) -->
+    <FilterGroups
+      :groups="groups"
+      :state="groupsState"
+      :active-id="activeGroupId"
+      :can-save="canSaveGroup"
+      :busy="savingGroup"
+      @apply="applyGroup"
+      @remove="removeGroup"
+      @save="saveGroup"
+      @retry="loadGroups"
     />
 
     <div v-if="loading" class="slib-loading">加载中…</div>
@@ -168,7 +178,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { useAuthStore } from '@/stores/auth'
@@ -177,8 +187,7 @@ import {
   type SchemeV2,
 } from '@/api/scenario-composer'
 import { convertDraftToExecutable, schemeToOverlay } from '@/stores/scenario-draft'
-import { useFilterPresets, type FilterPreset } from '@/composables/useFilterPresets'
-import FilterPresets from '@/components/scenario-lib/FilterPresets.vue'
+import FilterGroups from '@/components/scenario-lib/FilterGroups.vue'
 import { downloadFile } from '@/utils/download'
 import { confirmAction } from '@/utils/confirmAction'
 import { composerUrl, scenarioDetailUrl, scenarioSchemesUrl } from '@/utils/links'
@@ -209,9 +218,11 @@ const router = useRouter()
 const runs = useScenarioRuns()
 
 // 我的场景 = 私有桶(公共场景在独立页,两页分桶互补)。检索/筛选/分页
-// 全部服务端化(Page 信封),骨架在 useScenarioListView 里与公共页共用。
+// 与筛选分组骨架全在 useScenarioListView,与公共页共用。
 const {
-  store, q, filters, page, paged, total, filtering, filterableRows, facets, load, pageSize, loading,
+  store, filters, page, paged, total, filtering, filterableRows, facets, load, pageSize, loading,
+  searchBox, writeSearch,
+  groups, groupsState, savingGroup, activeGroupId, canSaveGroup, loadGroups, applyGroup, saveGroup, removeGroup,
 } = useScenarioListView('mine')
 
 const expandedId = ref<string | null>(null)
@@ -227,33 +238,6 @@ const pageSubtitle = computed(() =>
 )
 
 const formatTime = shortDateTime
-
-// ── 暂存分组(筛选条件 → 命名分组,localStorage 持久)──────────────
-const { presets, save: savePreset, remove: removePreset } = useFilterPresets('mine')
-const activePresetId = ref('')
-
-function applyPreset(p: FilterPreset): void {
-  q.value = p.q
-  filters.value = JSON.parse(JSON.stringify(p.filters)) as typeof filters.value
-  activePresetId.value = p.id
-}
-function onSavePreset(name: string): void {
-  savePreset(name, q.value, filters.value)
-  toast.success(`已存为分组「${name}」`)
-}
-function onRemovePreset(id: string): void {
-  removePreset(id)
-  if (activePresetId.value === id) activePresetId.value = ''
-}
-// 条件被手动改到与分组不再一致 → 高亮熄灭(分组是入口快照,不是活引用)
-watch([q, () => JSON.stringify(filters.value)], () => {
-  const cur = activePresetId.value
-    ? presets.value.find((p) => p.id === activePresetId.value)
-    : null
-  if (!cur || q.value !== cur.q || JSON.stringify(filters.value) !== JSON.stringify(cur.filters)) {
-    activePresetId.value = ''
-  }
-})
 
 onMounted(load)
 
@@ -323,9 +307,14 @@ async function runScheme(row: ScenarioListItem, scheme: SchemeV2) {
 
 // ── 关注(20 上限)─────────────────────────────────────────────
 async function toggleStar(row: ScenarioListItem) {
+  // 乐观翻转:行来自服务端分页(useServerList),store.invalidate 不会
+  // 重拉当前页 —— 不翻行内状态,星星要等刷新页面才变(2026-09-23 修)
+  const next = !row.starred
+  row.starred = next
   try {
-    await store.toggleStarWithCap(row.meta.scenarioId, !row.starred)
+    await store.toggleStarWithCap(row.meta.scenarioId, next)
   } catch (e) {
+    row.starred = !next // 回滚
     // 上限是预期分支 → 一句人话;其余才走通用错误兜底
     if (e instanceof FollowCapError) toast.error(e.message)
     else showError('关注', undefined, (e as Error).message)

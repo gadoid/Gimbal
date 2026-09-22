@@ -1,12 +1,12 @@
 <!-- CredentialSelect.vue — 凭证别名样式化下拉(2026-09-22,任务6)。
-     替掉两处原生形态:AuthSelectorModal 的 native select(浏览器默认
-     箭头/面板与 Dialog 观感脱节)。选项两行化:alias + token_type 在上,
-     username · url 在下,选凭证时 URL 映射直接可见。
+     替掉原生形态:AuthSelectorModal 的 native select(浏览器默认
+     箭头/面板与 Dialog 观感脱节)、ServiceAdmin 登记别名的 Input+datalist。
+     选项两行化:alias + token_type 在上,username · url 在下,选凭证时
+     URL 映射直接可见。可选字段场景传 clearable(值非空给清除钮)。
      刻意不基于 reka-ui Select:自管展开面板(无 portal),jsdom 可直接
      以 click 驱动(项目测试约定,参 AuthSelectorModal 原 select 注释);
      键盘至少保证 Esc 收起、Enter 开合。
-     注意:这只是「选凭证」的形态件;凭证池的管理(建/改/测)仍在认证
-     管理,任务5(别名-凭证-URL 管理贯通)延后,本组件届时复用。 -->
+     注意:这只是「选凭证」的形态件;凭证池的管理(建/改/测)仍在认证管理。 -->
 <template>
   <!-- data-testid 由调用方经 fallthrough 传入(避免与根上的静态值二义) -->
   <div ref="root" class="cred-select">
@@ -25,6 +25,18 @@
         <span v-else class="cred-out">不在当前列表</span>
       </span>
       <span v-else class="cred-placeholder">{{ placeholder }}</span>
+      <!-- 可选场景(ServiceAdmin 登记别名)的清除钮:trigger 是 button,
+           嵌套 button 非法 → span + 键盘可达 -->
+      <span
+        v-if="clearable && modelValue"
+        class="cred-clear"
+        role="button"
+        tabindex="0"
+        aria-label="清除已选凭证"
+        data-testid="credential-clear"
+        @click.stop="clearPick"
+        @keydown.enter.stop.prevent="clearPick"
+      >✕</span>
       <span class="cred-caret" aria-hidden="true">▾</span>
     </button>
 
@@ -72,6 +84,8 @@ const props = defineProps<{
   credentials: AuthSession[]
   placeholder?: string
   disabled?: boolean
+  /** 可选字段场景:值非空时给清除钮(emit '' — 调用方按空串转 null) */
+  clearable?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -108,6 +122,11 @@ function pick(alias: string): void {
   close()
 }
 
+function clearPick(): void {
+  emit('update:modelValue', '')
+  close()
+}
+
 // 点组件外收起(自管面板没有 overlay,监听 document)
 function onDocPointerDown(e: Event): void {
   if (open.value && root.value && !root.value.contains(e.target as Node)) close()
@@ -130,7 +149,7 @@ watch(() => props.disabled, (d) => { if (d) close() })
   align-items: center;
   gap: 6px;
   width: 100%;
-  height: 34px;
+  height: 36px;
   padding: 0 10px;
   font-size: 13px;
   color: #10151c;
@@ -148,6 +167,7 @@ watch(() => props.disabled, (d) => { if (d) close() })
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
+  flex: 1;
   min-width: 0;
   overflow: hidden;
 }
@@ -165,7 +185,17 @@ watch(() => props.disabled, (d) => { if (d) close() })
   white-space: nowrap;
 }
 .cred-placeholder { flex: 1; color: #9ca3af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cred-caret { margin-left: auto; color: #9ca3af; font-size: 10px; }
+.cred-clear {
+  flex: none;
+  padding: 2px 3px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1;
+  color: #9ca3af;
+  cursor: pointer;
+}
+.cred-clear:hover { color: #4b5563; background: #f3f4f6; }
+.cred-caret { flex: none; margin-left: auto; color: #9ca3af; font-size: 10px; }
 
 .cred-panel {
   position: absolute;
