@@ -486,9 +486,17 @@ def _op_out(op: AdaptationOp) -> dict:
     }
 
 
-async def _batch_detail(db: AsyncSession, batch_id: str) -> dict:
+async def _batch_detail(
+    db: AsyncSession, batch_id: str, *, viewer=None
+) -> dict:
     """批次详情 dict(camelCase)—— open_batch / get_batch_detail 共用,
-    Task 10 的 BatchDetail 响应模型按此形状校验。"""
+    Task 10 的 BatchDetail 响应模型按此形状校验。
+
+    G1 二轮扩展:``viewer``(读侧路由的当前用户)在场时补 op 行的
+    scenario/dataset 展示名 —— 活名仅在可读时给出(与台账同口径),
+    否则回落**本批快照**(回滚安全网恰是受影响实体的 before 整像,
+    含 meta.name / dataset name),最后裸 id。open/apply/rollback 等
+    写路径响应不带 viewer → 快照/裸 id 兜底,同样可读。"""
     batch = await _get_batch(db, batch_id)
     ops = (await db.execute(
         select(AdaptationOp).where(AdaptationOp.batch_id == batch_id)
@@ -502,14 +510,85 @@ async def _batch_detail(db: AsyncSession, batch_id: str) -> dict:
     counts: dict[str, int] = {}
     for op in ops:
         counts[op.status] = counts.get(op.status, 0) + 1
+
+    # G1-E2:endpoint 展示投影(批次开立时刻的形状,不问 plate 现值)
+    ep_name = ep_method = ep_path = ""
+    stamp_json = (await db.execute(
+        select(CatalogVersion.spec_json).where(
+            CatalogVersion.endpoint_id == batch.endpoint_id)
+    )).scalar_one_or_none()
+    if isinstance(stamp_json, dict):
+        api = stamp_json.get("api")
+        api = api if isinstance(api, dict) else {}
+        ep_name = str(stamp_json.get("name") or "")
+        ep_method = str(api.get("method") or "")
+        ep_path = str(api.get("path") or "")
+
+    # G1-E1:op 行展示名(活名[可读] → 本批快照 → 裸 id)
+    snap_name: dict[str, str] = {}
+    for s in snapshots:
+        if s.entity_type == "scenario":
+            meta = (((s.before_json or {}).get("payload") or {})
+                    .get("definition") or {}).get("meta")
+            n = str((meta or {}).get("name") or "")
+        elif s.entity_type == "dataset":
+            n = str((s.before_json or {}).get("name") or "")
+        else:
+            continue
+        if n:
+            snap_name.setdefault(f"{s.entity_type}:{s.entity_id}", n)
+
+    sid_live: dict[str, str] = {}
+    ds_live: dict[str, str] = {}
+    if viewer is not None:
+        from .execution_store import scenario_display_map
+
+        sids = sorted({op.scenario_id for op in ops if op.scenario_id})
+        disp = await scenario_display_map(db, viewer, sids)
+        sid_live = {sid: live for sid, (live, _e) in disp.items() if live}
+
+        from ..models.composer_data_set import ComposerDataSet
+        from ..models.composer_scenario import ComposerScenario
+        from .scenario_query import visibility_clause
+
+        dsids = sorted({op.dataset_id for op in ops if op.dataset_id})
+        if dsids:
+            stmt = select(
+                ComposerDataSet.dataset_id, ComposerDataSet.name
+            ).where(ComposerDataSet.dataset_id.in_(dsids))
+            vis = visibility_clause(viewer)
+            if vis is not None:
+                stmt = stmt.join(
+                    ComposerScenario,
+                    ComposerScenario.scenario_id
+                    == ComposerDataSet.scenario_id,
+                ).where(vis)
+            ds_live = {d: str(n or "") for d, n in (await db.execute(stmt))
+                       .all() if n}
+
+    ops_out = [_op_out(op) for op in ops]
+    for out, op in zip(ops_out, ops):
+        if op.scenario_id:
+            out["scenarioDisplayName"] = (
+                sid_live.get(op.scenario_id)
+                or snap_name.get(f"scenario:{op.scenario_id}")
+                or op.scenario_id)
+        if op.dataset_id:
+            out["datasetName"] = (
+                ds_live.get(op.dataset_id)
+                or snap_name.get(f"dataset:{op.dataset_id}")
+                or op.dataset_id)
+
     return {
         "batchId": batch.batch_id, "endpointId": batch.endpoint_id,
+        "endpointName": ep_name, "endpointMethod": ep_method,
+        "endpointPath": ep_path,
         "fromVersion": batch.from_version, "toVersion": batch.to_version,
         "status": batch.status, "operatorId": batch.operator_id,
         "operatorName": batch.operator_name,
         "createdAt": batch.created_at, "closedAt": batch.closed_at,
         "opCounts": counts,
-        "ops": [_op_out(op) for op in ops],
+        "ops": ops_out,
         "snapshots": [
             {"entityType": s.entity_type, "entityId": s.entity_id}
             for s in snapshots
@@ -1056,7 +1135,7 @@ async def _rollback_carry(db: AsyncSession, snap: AdaptationSnapshot,
 # ─── 批次查询与人工 op(spec §5.3/§5.4)──────────────────────────
 async def list_batches(
     db: AsyncSession, *, status: str | None = None,
-    page: int = 1, page_size: int = 50,
+    page: int = 1, page_size: int = 50, viewer=None,
 ) -> tuple[list[dict], int]:
     """批次列表(新→旧)。M4(§6.3):status 精确 + Page 信封 —— detail
     只为当前页构建(逐批 _batch_detail 是隐藏 N+1,分页把它钉在页大小)。"""
@@ -1070,12 +1149,13 @@ async def list_batches(
         stmt.order_by(AdaptationBatch.created_at.desc())
         .offset((page - 1) * page_size).limit(page_size)
     )).scalars().all()
-    return [await _batch_detail(db, b.batch_id) for b in batches], int(total)
+    return [await _batch_detail(db, b.batch_id, viewer=viewer)
+            for b in batches], int(total)
 
 
 async def list_batches_for_owner(
     db: AsyncSession, owner_id: int, *, status: str | None = None,
-    page: int = 1, page_size: int = 50,
+    page: int = 1, page_size: int = 50, viewer=None,
 ) -> tuple[list[dict], int]:
     """owner 视图(C13):批次涉及场景中存在本人场景的批次(新→旧)。
 
@@ -1112,11 +1192,14 @@ async def list_batches_for_owner(
         stmt.order_by(AdaptationBatch.created_at.desc())
         .offset((page - 1) * page_size).limit(page_size)
     )).scalars().all()
-    return [await _batch_detail(db, b.batch_id) for b in batches], int(total)
+    return [await _batch_detail(db, b.batch_id, viewer=viewer)
+            for b in batches], int(total)
 
 
-async def get_batch_detail(db: AsyncSession, batch_id: str) -> dict:
-    return await _batch_detail(db, batch_id)
+async def get_batch_detail(
+    db: AsyncSession, batch_id: str, *, viewer=None
+) -> dict:
+    return await _batch_detail(db, batch_id, viewer=viewer)
 
 
 async def create_op(

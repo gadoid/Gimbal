@@ -164,10 +164,12 @@ async def list_batches(
         )
     rows, total = (
         await adaptation_service.list_batches_for_owner(
-            db, user.id, status=status, page=page, page_size=page_size)
+            db, user.id, status=status, page=page, page_size=page_size,
+            viewer=user)
         if scope == "mine"
         else await adaptation_service.list_batches(
-            db, status=status, page=page, page_size=page_size)
+            db, status=status, page=page, page_size=page_size,
+            viewer=user)
     )
     return BatchListOut(
         items=[BatchOut.model_validate(b) for b in rows],
@@ -178,7 +180,8 @@ async def list_batches(
 @router.get("/batches/{batch_id}", response_model=BatchDetail)
 async def get_batch(batch_id: str, user: AdminUser, db: DbSession) -> BatchDetail:
     try:
-        detail = await adaptation_service.get_batch_detail(db, batch_id)
+        detail = await adaptation_service.get_batch_detail(
+            db, batch_id, viewer=user)
     except KeyError as e:
         raise key_error_404(e) from e
     return BatchDetail.model_validate(detail)

@@ -118,6 +118,10 @@ class OpOut(BaseModel):
     status: str
     applied_at: datetime | None = Field(default=None, alias="appliedAt")
     note: str | None = None
+    # G1-E1 读侧投影:活名(可读时)→ 本批快照 → 裸 id
+    scenario_display_name: str | None = Field(
+        default=None, alias="scenarioDisplayName")
+    dataset_name: str | None = Field(default=None, alias="datasetName")
 
 
 class SnapshotRef(BaseModel):
@@ -139,6 +143,11 @@ class BatchOut(BaseModel):
     created_at: datetime = Field(alias="createdAt")
     closed_at: datetime | None = Field(default=None, alias="closedAt")
     op_counts: dict[str, int] = Field(default_factory=dict, alias="opCounts")
+    # G1-E2 触发上下文投影:catalog_versions.spec_json = 批次开立时刻的
+    # 形状(审计正确,不问 plate 现值);空串 = 戳缺失(理论不可达)。
+    endpoint_name: str = Field(default="", alias="endpointName")
+    endpoint_method: str = Field(default="", alias="endpointMethod")
+    endpoint_path: str = Field(default="", alias="endpointPath")
 
 
 

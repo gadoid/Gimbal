@@ -25,6 +25,7 @@ EP = "fin.order.add"
 # OLD_FULL:基线戳的 spec_json 快照(declarations 形状,与现拉 /full 同构)
 OLD_FULL = {
     "id": EP, "version": "1.0.0",
+    "name": "下单", "api": {"method": "POST", "path": "/api/order"},
     "request": {"declarations": [
         {"name": "amount", "state": "form"},
         {"name": "legacy_field", "state": "form"},
@@ -111,6 +112,13 @@ async def test_open_batch_creates_snapshots_and_drafts(fresh_db, plate):
     assert all(o["status"] == "pending" for o in detail["ops"])
     assert all(o["payload"].get("step") == 0 for o in detail["ops"])
     assert detail["opCounts"] == {"pending": 3}
+    # G1-E2:endpoint 展示投影来自 catalog_versions 戳(批次时刻形状,
+    # 不问 plate 现值)
+    assert detail["endpointName"] == "下单"
+    assert detail["endpointMethod"] == "POST"
+    assert detail["endpointPath"] == "/api/order"
+    # G1-E1:open 响应无 viewer → 展示名走本批快照兜底(make_draft 名)
+    assert {o["scenarioDisplayName"] for o in detail["ops"]} == {"Test"}
 
 
 async def test_open_batch_requires_baseline_and_bump(fresh_db, plate):
