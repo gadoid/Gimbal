@@ -90,7 +90,7 @@ describe('CarryConfig — 默认值(兜底层)', () => {
     const { w } = await mountPage()
     expect(w.find('[data-testid="svc-input"]').exists()).toBe(false)
     expect(w.find('[data-testid="save-service"]').exists()).toBe(false)
-    expect(w.text()).toContain('兜底层')
+    expect(w.text()).toContain('全局默认')
     w.unmount()
   })
 

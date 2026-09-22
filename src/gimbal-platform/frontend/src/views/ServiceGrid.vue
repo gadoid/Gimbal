@@ -56,6 +56,23 @@
         </button>
       </div>
 
+      <!-- 关键词 + 方法筛选(2026-09-22 增补):与状态 chip 叠加过滤 -->
+      <div class="grid-filter-row">
+        <input
+          v-model="search"
+          class="grid-search"
+          data-testid="grid-search"
+          placeholder="按 path / 名称筛选"
+        />
+        <select v-model="methodFilter" class="grid-method" data-testid="grid-method" aria-label="按方法筛选">
+          <option value="">全部方法</option>
+          <option v-for="m in methodOptions" :key="m" :value="m">{{ m }}</option>
+        </select>
+        <span v-if="search || methodFilter" class="grid-filter-meta">
+          筛到 {{ filtered.length }} / {{ stats.total }}
+        </span>
+      </div>
+
       <!-- 瓦片网格(§2.3):告警瓦片顶部色边转红 -->
       <div
         v-if="filtered.length > 0"
@@ -94,8 +111,8 @@
         class="slib-empty"
         data-testid="grid-empty"
       >
-        <p>{{ filter === 'all' ? '该服务下没有登记接口' : '当前筛选下没有接口' }}</p>
-        <button v-if="filter !== 'all'" type="button" class="svc-chip" @click="filter = 'all'">看全部接口</button>
+        <p>{{ filter === 'all' && !search && !methodFilter ? '该服务下没有登记接口' : '当前筛选下没有接口' }}</p>
+        <button v-if="filter !== 'all' || search || methodFilter" type="button" class="svc-chip" @click="clearFilters">看全部接口</button>
       </div>
     </template>
   </section>
@@ -119,6 +136,10 @@ const grid = ref<ServiceGrid | null>(null)
 type FilterKey = 'all' | 'noCases' | 'hasAlarm' | 'neverRun'
 const filter = ref<FilterKey>('all')
 
+// 关键词(path/name/id 子串,大小写不敏感)+ 方法下拉 — 与状态 chip 叠加
+const search = ref('')
+const methodFilter = ref('')
+
 const EMPTY_STATS = { total: 0, noCases: 0, hasAlarm: 0, neverRun: 0 }
 const stats = computed(() => grid.value?.stats ?? EMPTY_STATS)
 
@@ -129,14 +150,25 @@ const chips = computed(() => [
   { key: 'neverRun' as FilterKey, label: '从未执行', count: stats.value.neverRun },
 ])
 
+const methodOptions = computed<string[]>(() =>
+  [...new Set((grid.value?.endpoints ?? []).map((e) => e.method).filter(Boolean))].sort())
+
 const filtered = computed<GridEndpoint[]>(() => {
-  const eps = grid.value?.endpoints ?? []
+  let eps = grid.value?.endpoints ?? []
   switch (filter.value) {
-    case 'noCases': return eps.filter((e) => !e.signals.cases)
-    case 'hasAlarm': return eps.filter((e) => e.signals.alarm)
-    case 'neverRun': return eps.filter((e) => e.signals.lastRun === null)
-    default: return eps
+    case 'noCases': eps = eps.filter((e) => !e.signals.cases); break
+    case 'hasAlarm': eps = eps.filter((e) => e.signals.alarm); break
+    case 'neverRun': eps = eps.filter((e) => e.signals.lastRun === null); break
   }
+  if (methodFilter.value) eps = eps.filter((e) => e.method === methodFilter.value)
+  const kw = search.value.trim().toLowerCase()
+  if (kw) {
+    eps = eps.filter((e) =>
+      e.path.toLowerCase().includes(kw)
+      || (e.name || '').toLowerCase().includes(kw)
+      || e.id.toLowerCase().includes(kw))
+  }
+  return eps
 })
 
 function lastRunClass(ep: GridEndpoint): string {
@@ -149,6 +181,12 @@ function lastRunTitle(ep: GridEndpoint): string {
   if (ep.signals.lastRun === 'pass') return `最近执行通过（${ep.lastRunAt?.slice(0, 19).replace('T', ' ') || ''}）`
   if (ep.signals.lastRun === 'fail') return `最近执行失败（${ep.lastRunAt?.slice(0, 19).replace('T', ' ') || ''}）`
   return '从未执行'
+}
+
+function clearFilters(): void {
+  filter.value = 'all'
+  search.value = ''
+  methodFilter.value = ''
 }
 
 function openBoard(endpointId: string): void {
@@ -167,3 +205,30 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+/* 关键词 + 方法筛选行:与 ExecutionsList 的 filter 行同族观感 */
+.grid-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.grid-search {
+  width: 220px;
+  padding: 5px 10px;
+  font-size: 12px;
+  border: 1px solid var(--sl-line);
+  border-radius: 6px;
+  background: #fff;
+}
+.grid-search:focus { outline: none; border-color: var(--sl-accent); }
+.grid-method {
+  padding: 5px 8px;
+  font-size: 12px;
+  border: 1px solid var(--sl-line);
+  border-radius: 6px;
+  background: #fff;
+}
+.grid-filter-meta { font-size: 11px; color: var(--sl-ink-3); }
+</style>

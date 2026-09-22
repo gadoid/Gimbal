@@ -1,8 +1,13 @@
-<!-- UserBadge.vue — chrome 上的用户身份 + 下拉菜单(侧栏底部 / 收拢顶条
-     右端共用,P2-1 改下拉:身份徽章 → 个人设置 → 登出)。深色 chrome 专用;
-     Signal token 经 @apply 消费,不零散写 hex。
-     compact = 侧栏折叠态:姓名/角色收进 title,只留首字圆徽 + 图标登出。 -->
+<!-- UserBadge.vue — chrome 上的用户身份区(侧栏底部 / 收拢顶条右端共用)。
+     layout = 'bar'(默认):横排单行 = 铃铛 + 身份下拉(个人设置/登出),
+     适配 48px 收拢顶条;
+     layout = 'footer':侧栏底部两行(定稿 2026-09-22)——
+       第一行 = 用户名 + 用户类型(整行可点 → 个人设置),
+       第二行 = 通知铃铛 + 登出按钮;下拉菜单退役。
+     compact(折叠态)随 footer 语义走:首字圆徽 / 铃铛 / 登出纵排。
+     深色 chrome 专用;Signal token 经 @apply 消费,不零散写 hex。 -->
 <template>
+  <!-- 折叠态:纵排图标轨(圆徽 → 个人设置) -->
   <div v-if="compact" class="flex flex-col items-center gap-2">
     <button
       v-if="auth.currentUser"
@@ -14,6 +19,7 @@
     >
       {{ initial }}
     </button>
+    <NotificationBell />
     <button
       class="logout-btn flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/20 bg-transparent text-slate-300 transition-colors hover:border-signal hover:text-white"
       title="登出"
@@ -24,6 +30,36 @@
     </button>
   </div>
 
+  <!-- 侧栏底部:两行定稿 -->
+  <div v-else-if="layout === 'footer'" class="flex w-full flex-col gap-1.5">
+    <button
+      type="button"
+      class="identity-row flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-white/5"
+      title="个人设置"
+      data-testid="user-badge-trigger"
+      @click="goProfile"
+    >
+      <span v-if="auth.currentUser" class="username min-w-0 truncate text-body font-medium text-slate-50">
+        {{ auth.currentUser.display_name || auth.currentUser.username }}
+      </span>
+      <span class="role-chip shrink-0">{{ roleLabel }}</span>
+    </button>
+    <div class="flex w-full items-center justify-between gap-2">
+      <NotificationBell />
+      <button
+        class="logout-btn flex h-[26px] cursor-pointer items-center gap-1 rounded-chip border border-white/20 bg-transparent px-2 text-caption text-slate-300 transition-colors hover:border-signal-failed hover:text-white"
+        title="登出"
+        data-testid="user-badge-logout"
+        aria-label="登出"
+        @click="onLogout"
+      >
+        <ExitIcon class="h-3 w-3" />
+        <span>退出</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 收拢顶条:横排单行(铃铛 + 身份下拉) -->
   <div v-else class="flex shrink-0 items-center gap-3">
     <NotificationBell />
     <DropdownMenu>
@@ -69,7 +105,11 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
-defineProps<{ compact?: boolean }>()
+withDefaults(defineProps<{
+  compact?: boolean
+  /** bar = 收拢顶条单行下拉;footer = 侧栏底部两行定稿。 */
+  layout?: 'bar' | 'footer'
+}>(), { layout: 'bar' })
 
 const auth = useAuthStore()
 const router = useRouter()

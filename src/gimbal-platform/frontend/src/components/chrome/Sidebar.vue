@@ -14,9 +14,18 @@
     class="sidebar fixed inset-y-0 left-0 z-[1000] flex flex-col bg-signal-sidebar text-slate-300 transition-[width] duration-200"
     :class="collapsed ? 'w-[56px]' : 'w-[200px]'"
   >
-    <!-- brand 行:展开 = 状态点 + platform + 折叠钮;折叠 = 状态点 + 折叠钮纵排 -->
+    <!-- brand 行:展开 = 状态点 + platform + 折叠钮;折叠 = 状态点 + 折叠钮纵排。
+         brand 可点 → 回工作台(/home);折叠态状态点承接同一入口。 -->
     <div v-if="collapsed" class="flex flex-col items-center gap-2 pb-3 pt-3.5">
-      <span class="status-dot h-2 w-2 shrink-0 rounded-full bg-signal-dot" title="服务在线"></span>
+      <router-link
+        to="/home"
+        class="status-dot flex h-5 w-5 items-center justify-center rounded-md transition-colors hover:bg-white/5"
+        title="回到工作台"
+        aria-label="回到工作台"
+        data-testid="sb-brand"
+      >
+        <span class="h-2 w-2 rounded-full bg-signal-dot"></span>
+      </router-link>
       <button
         type="button"
         class="collapse-toggle flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-slate-400 transition-colors duration-150 hover:bg-white/5 hover:text-white"
@@ -29,8 +38,16 @@
       </button>
     </div>
     <div v-else class="flex items-center gap-2 px-4 pb-3 pt-3.5">
-      <span class="status-dot h-2 w-2 shrink-0 rounded-full bg-signal-dot" title="服务在线"></span>
-      <span class="text-body font-semibold tracking-wide text-slate-50">platform</span>
+      <router-link
+        to="/home"
+        class="flex min-w-0 items-center gap-2 rounded-md py-0.5 pr-1 text-inherit no-underline transition-colors hover:bg-white/5"
+        title="回到工作台"
+        aria-label="回到工作台"
+        data-testid="sb-brand"
+      >
+        <span class="status-dot h-2 w-2 shrink-0 rounded-full bg-signal-dot" title="服务在线"></span>
+        <span class="text-body font-semibold tracking-wide text-slate-50">platform</span>
+      </router-link>
       <span class="flex-1"></span>
       <button
         type="button"
@@ -95,9 +112,9 @@
 
     <div
       class="flex items-center justify-between gap-2 border-t border-white/10 py-3"
-      :class="collapsed ? 'flex-col px-0' : 'px-4'"
+      :class="collapsed ? 'flex-col px-0' : 'flex-col px-4'"
     >
-      <UserBadge :compact="collapsed" />
+      <UserBadge :compact="collapsed" layout="footer" />
     </div>
   </aside>
 </template>

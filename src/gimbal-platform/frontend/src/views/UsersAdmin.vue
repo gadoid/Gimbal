@@ -125,49 +125,8 @@
     </div>    </TabsContent>
 
     <TabsContent value="audit">
-      <div class="lib-card p-4">
-        <div class="mb-3 flex flex-wrap items-center gap-2">
-          <span class="text-body font-semibold">特权写审计</span>
-          <span class="text-caption text-slate-500">角色变更 / 删号 / 重置密码 / 公告 / carry / 适配 / 别名</span>
-          <span class="flex-1"></span>
-          <button
-            v-for="a in auditActions"
-            :key="a"
-            type="button"
-            class="audit-chip"
-            :class="{ active: auditAction === a }"
-            @click="setAuditAction(auditAction === a ? '' : a)"
-          >{{ a }}</button>
-        </div>
-        <div v-if="auditLoading" class="py-6 text-center text-body text-slate-500">加载中…</div>
-        <Table v-else-if="auditRows.length">
-          <TableHeader>
-            <TableRow>
-              <TableHead class="w-[160px]">时间</TableHead>
-              <TableHead class="w-[140px]">操作者</TableHead>
-              <TableHead class="w-[200px]">动作</TableHead>
-              <TableHead class="w-[160px]">对象</TableHead>
-              <TableHead>详情</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="row in auditRows" :key="row.id">
-              <TableCell class="muted">{{ formatAuditTime(row.createdAt) }}</TableCell>
-              <TableCell>{{ row.actorName || (row.actorId ? `#${row.actorId}` : '系统') }}</TableCell>
-              <TableCell><span class="audit-chip static">{{ row.action }}</span></TableCell>
-              <TableCell class="mono">{{ row.resourceId ?? '—' }}</TableCell>
-              <TableCell class="mono audit-detail">{{ JSON.stringify(row.detail) }}</TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-        <p v-else class="py-6 text-center text-body text-slate-500">暂无审计记录</p>
-        <Pagination
-          v-if="auditPageCount > 1"
-          v-model:page="auditPage"
-          :total="auditTotal"
-          :page-size="auditPageSize"
-        />
-      </div>
+      <!-- P2-3 审计面板(2026-09-22 抽组件:懒加载判据/时区/对象列三修) -->
+      <AuditLogPanel />
     </TabsContent>
     </Tabs>
 
@@ -386,7 +345,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
 import { useForm } from 'vee-validate'
@@ -398,9 +357,9 @@ import * as notificationsApi from '@/api/notifications'
 import { useAuthStore } from '@/stores/auth'
 import * as usersApi from '@/api/users'
 import { useServerList } from '@/composables/useServerList'
-import { Pagination } from '@/components/ui/pagination'
+import { mediumDateTime } from '@/utils/datetime'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { listAuditLogs, type AuditLogRow } from '@/api/admin'
+import AuditLogPanel from '@/components/admin/AuditLogPanel.vue'
 import type { UserOut, ResetPasswordOut } from '@/api/users'
 import ListPage from '@/layouts/ListPage.vue'
 import { Button } from '@/components/ui/button'
@@ -479,7 +438,7 @@ function rowClass(row: UserOut): string {
 function formatDate(value: string): string {
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return value
-  return d.toISOString().slice(0, 10)
+  return mediumDateTime(d).slice(0, 10)
 }
 
 // ── command dispatch ────────────────────────────────────
@@ -706,52 +665,9 @@ async function submitDelete() {
   }
 }
 
-// ── 审计 tab(P2-3:特权写审计,admin 页内第二 tab)──────────
+// ── 审计 tab(P2-3)─ 面板已抽 components/admin/AuditLogPanel.vue:
+// 挂载即拉 + 刷新钮 + 本地时区,本页只留 tab 切换状态。
 const mainTab = ref('users')
-const auditRows = ref<AuditLogRow[]>([])
-const auditTotal = ref(0)
-const auditPage = ref(1)
-const auditPageSize = 20
-const auditAction = ref('')
-const auditLoading = ref(false)
-const auditActions = ref<string[]>([])
-
-const auditPageCount = computed(() => Math.max(1, Math.ceil(auditTotal.value / auditPageSize)))
-
-async function loadAudit(): Promise<void> {
-  auditLoading.value = true
-  try {
-    const env = await listAuditLogs({
-      action: auditAction.value || undefined,
-      page: auditPage.value,
-      page_size: auditPageSize,
-    })
-    auditRows.value = env.items
-    auditTotal.value = env.total
-    auditActions.value = env.actions
-  } catch {
-    auditRows.value = []
-    auditTotal.value = 0
-  } finally {
-    auditLoading.value = false
-  }
-}
-
-function setAuditAction(a: string): void {
-  auditAction.value = a
-  auditPage.value = 1
-  void loadAudit()
-}
-
-watch(auditPage, () => void loadAudit())
-watch(mainTab, (t) => {
-  if (t === 'audit' && !auditRows.value.length) void loadAudit()
-})
-
-function formatAuditTime(iso: string): string {
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? iso : d.toISOString().slice(0, 16).replace('T', ' ')
-}
 
 // ── init ────────────────────────────────────────────────
 onMounted(async () => {
@@ -805,25 +721,7 @@ onMounted(async () => {
 
 
 <style scoped>
-.audit-chip {
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  cursor: pointer;
-  border: 1px solid var(--color-border-tertiary, #e1e5eb);
-  background: transparent;
-}
-.audit-chip.active {
-  color: #2f6fed;
-  border-color: #2f6fed;
-  background: #e7efff;
-}
-.audit-chip.static { cursor: default; background: #f1f5f9; }
-.audit-detail { font-size: 11px; color: #64748b; word-break: break-all; }
-.muted { color: #64748b; }
-.mono { font-family: ui-monospace, monospace; font-size: 11.5px; }
-
-/* 处置三选一选项卡 */
+/* 处置三选一选项卡(审计 chip 样式随面板迁 AuditLogPanel) */
 .disposal-opt {
   display: flex;
   gap: 10px;

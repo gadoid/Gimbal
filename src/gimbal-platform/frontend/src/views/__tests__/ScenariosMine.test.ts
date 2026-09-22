@@ -43,6 +43,14 @@ vi.mock('@/api/executions', () => ({
   }),
 }))
 
+// 按方案导出走 plate /convert(经 scenario-draft store),单测不打真接口;
+// 下载工具依赖 URL.createObjectURL(jsdom 无),一并 mock。
+vi.mock('@/stores/scenario-draft', () => ({
+  convertDraftToExecutable: vi.fn().mockResolvedValue({ converted: true }),
+  schemeToOverlay: (s: { serviceBindings: Record<string, unknown> }) => ({ serviceBindings: s.serviceBindings }),
+}))
+vi.mock('@/utils/download', () => ({ downloadFile: vi.fn() }))
+
 function scen(id: string, vis: 'private' | 'public', schemeCount: number): Scenario {
   return {
     meta: {
@@ -79,6 +87,9 @@ function mountPage(scenarios: Scenario[] = []) {
         DropdownMenuTrigger: { template: '<button><slot /></button>' },
         DropdownMenuContent: { template: '<div><slot /></div>' },
         DropdownMenuItem: { template: '<div><slot /></div>' },
+        DropdownMenuSub: { template: '<div><slot /></div>' },
+        DropdownMenuSubTrigger: { template: '<div><slot /></div>' },
+        DropdownMenuSubContent: { template: '<div><slot /></div>' },
         FilterPopover: { template: '<div/>' },
       },
     },
@@ -161,25 +172,28 @@ describe('ScenariosMine — 拆分后的我的场景页', () => {
     w.unmount()
   })
 
-  it('导出选择器以 schemeId 为键 —— 同名方案不得互相串台', async () => {
+  it('按方案导出走行菜单子菜单 —— 同名方案以 schemeId 区分不串台', async () => {
     vi.mocked(composerApi.listRunSchemes).mockResolvedValueOnce([
       { schemeId: 'sX', name: '同名方案', isDefault: true, dataSetSelection: [],
         injectionEntryIds: [], serviceBindings: {}, stepTo: null, nRuns: 1, parallel: 1 },
       { schemeId: 'sY', name: '同名方案', isDefault: false, dataSetSelection: [],
         injectionEntryIds: [], serviceBindings: {}, stepTo: null, nRuns: 2, parallel: 3 },
     ] as never)
+    const { downloadFile } = await import('@/utils/download')
     const w = mountPage([scen('sc-a', 'private', 2)])
     await flushPromises()
-    const item = w.findAll('.sl-menu-item').find((i) => i.text().includes('导出'))!
-    await item.trigger('click')
+    // 打开行菜单 → 预取方案 → 子菜单项按 schemeId 渲染
+    await w.find('.more-btn').trigger('click')
     await flushPromises()
-    const picker = w.find('[data-testid="export-picker"]')
-    expect(picker.exists()).toBe(true)
-    const values = picker.findAll('input[type="radio"]').map((r) => (r.element as HTMLInputElement).value)
-    // 以 name 为键时这里会是两个一模一样的 '同名方案' → 选第二个仍拿第一个
-    expect(values).toContain('sX')
-    expect(values).toContain('sY')
-    expect(new Set(values).size).toBe(values.length)
+    const items = w.findAll('[data-testid^="export-scheme-"]')
+    const keys = items.map((i) => i.attributes('data-testid'))
+    // 以 name 为键时这里会是两个一模一样的 '同名方案' → 点第二个仍拿第一个
+    expect(keys).toContain('export-scheme-sX')
+    expect(keys).toContain('export-scheme-sY')
+    expect(new Set(keys).size).toBe(keys.length)
+    await items.find((i) => i.attributes('data-testid') === 'export-scheme-sY')!.trigger('click')
+    await flushPromises()
+    expect(downloadFile).toHaveBeenCalledTimes(1)
     w.unmount()
   })
 

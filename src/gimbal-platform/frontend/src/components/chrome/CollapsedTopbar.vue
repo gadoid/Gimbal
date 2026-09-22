@@ -7,10 +7,17 @@
      颜色全部经 Signal token(@apply/工具类),组件内零散 hex 为零。 -->
 <template>
   <header class="collapsed-topbar fixed inset-x-0 top-0 z-[1000] flex h-12 items-center gap-4 bg-signal-sidebar px-4">
-    <div class="flex shrink-0 items-center gap-2">
+    <!-- brand 可点 → 回工作台(与侧栏 brand 行为一致) -->
+    <router-link
+      to="/home"
+      class="flex shrink-0 items-center gap-2 rounded-md px-1 py-0.5 no-underline transition-colors hover:bg-white/5"
+      title="回到工作台"
+      aria-label="回到工作台"
+      data-testid="topbar-brand"
+    >
       <span class="status-dot h-2 w-2 rounded-full bg-signal-dot" title="服务在线"></span>
       <span class="brand-text text-body font-semibold tracking-wide text-slate-50">platform</span>
-    </div>
+    </router-link>
 
     <nav class="crumb flex min-w-0 flex-1 items-center gap-2 text-body" aria-label="面包屑">
       <template v-for="(seg, i) in segments" :key="`${seg.label}-${i}`">

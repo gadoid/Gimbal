@@ -16,6 +16,16 @@
       <button type="button" class="slib-create" data-testid="mine-create" @click="onCreate">+ 新建场景</button>
     </div>
 
+    <!-- 暂存分组:当前搜索/筛选存为命名分组,点分组整体还原(2026-09-22) -->
+    <FilterPresets
+      :presets="presets"
+      :active-id="activePresetId"
+      :can-save="filtering"
+      @apply="applyPreset"
+      @remove="onRemovePreset"
+      @save="onSavePreset"
+    />
+
     <div v-if="loading" class="slib-loading">加载中…</div>
 
     <div v-else-if="paged.length" class="lib-card">
@@ -72,12 +82,44 @@
               </td>
               <td class="c-center">
                 <DropdownMenu>
-                  <DropdownMenuTrigger class="more-btn" @click.stop>⋯</DropdownMenuTrigger>
+                  <DropdownMenuTrigger class="more-btn" @click.stop="openRowMenu(row)">⋯</DropdownMenuTrigger>
                   <DropdownMenuContent align="end" class="sl-menu">
                     <DropdownMenuItem class="sl-menu-item" @click="onCmd('detail', row)">查看详情</DropdownMenuItem>
                     <DropdownMenuItem class="sl-menu-item" @click="onCmd('edit', row)">编辑场景</DropdownMenuItem>
                     <DropdownMenuItem class="sl-menu-item" @click="goSchemes(row)">方案管理</DropdownMenuItem>
-                    <DropdownMenuItem class="sl-menu-item" @click="onCmd('export', row)">导出 (JSON/YAML)</DropdownMenuItem>
+                    <DropdownMenuItem class="sl-menu-item" @click="onCmd('export', row)">导出 JSON</DropdownMenuItem>
+                    <!-- 按方案导出(2026-09-22 重设计):原「导出 → 弹窗选方案」
+                         两步改一步 —— 方案平铺为子菜单项,闭包持 scheme 对象
+                         (同名方案以身份区分不串台)。打开行菜单即预取方案
+                         (与内联展开共用缓存);无方案时项置灰说明。 -->
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger
+                        class="sl-menu-item"
+                        data-testid="export-sub-trigger"
+                        :disabled="schemesLoadingId === row.meta.scenarioId"
+                      >按方案导出</DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent class="sl-menu" data-testid="export-sub">
+                        <DropdownMenuItem
+                          v-if="schemesLoadingId === row.meta.scenarioId"
+                          class="sl-menu-item"
+                          disabled
+                        >方案加载中…</DropdownMenuItem>
+                        <template v-else>
+                          <DropdownMenuItem
+                            v-if="!schemesByScenario.get(row.meta.scenarioId)?.length"
+                            class="sl-menu-item"
+                            disabled
+                          >该场景暂无方案</DropdownMenuItem>
+                          <DropdownMenuItem
+                            v-for="sc in schemesByScenario.get(row.meta.scenarioId) ?? []"
+                            :key="sc.schemeId"
+                            class="sl-menu-item"
+                            :data-testid="`export-scheme-${sc.schemeId}`"
+                            @click="exportByScheme(row, sc)"
+                          >{{ sc.name }}</DropdownMenuItem>
+                        </template>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
                     <DropdownMenuItem v-if="row.visibility !== 'public'" class="sl-menu-item" @click="onCmd('publish', row)">发布到公共库</DropdownMenuItem>
                     <DropdownMenuItem v-else class="sl-menu-item" @click="onCmd('unpublish', row)">下架为私有</DropdownMenuItem>
                     <DropdownMenuItem class="sl-menu-item danger" @click="onCmd('delete', row)">删除</DropdownMenuItem>
@@ -122,44 +164,21 @@
     <p class="slib-note">
       「次数」「并发」是卡片底部两个独立的小徽章,平时只显示当前值,点一下变成可编辑输入框直接改数字;不需要额外弹一整层面板。更深的参数还是要进方案管理去改。方案卡片左上角的「默认」标记指这个场景的默认方案——关注页的执行健康趋势只统计默认方案的执行结果,不跨方案聚合。
     </p>
-
-    <!-- 按方案导出选择器(点遮罩 / ESC = 取消,避免 promise 永挂)-->
-    <div
-      v-if="exportPicker.open"
-      class="exp-modal"
-      data-testid="export-picker"
-      role="presentation"
-      @click.self="settleExportPicker(undefined)"
-      @keyup.esc="settleExportPicker(undefined)"
-    >
-      <div ref="expPanel" class="exp-panel" role="dialog" aria-modal="true" aria-label="选择导出方案" tabindex="-1">
-        <h4>导出场景 {{ exportPicker.scenarioName }}</h4>
-        <p class="exp-hint">该场景存有运行方案 — 按方案导出会把方案的服务绑定物化进导出文件。</p>
-        <label class="exp-opt">
-          <input v-model="exportPicker.chosen" type="radio" value="" /> 默认导出(不套方案)
-        </label>
-        <label v-for="sc in exportPicker.schemes" :key="sc.schemeId" class="exp-opt">
-          <input v-model="exportPicker.chosen" type="radio" :value="sc.schemeId" /> 按方案导出 · {{ sc.name }}
-        </label>
-        <div class="exp-foot">
-          <button type="button" class="ghost-btn" @click="settleExportPicker(undefined)">取消</button>
-          <button type="button" class="primary-btn" @click="confirmExportPicker">导出</button>
-        </div>
-      </div>
-    </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { useAuthStore } from '@/stores/auth'
 import {
   getScenarioDraft, listRunSchemes, updateRunScheme, runScenario, schemeToRunRequest,
-  type SchemeV2, type RunOverlay,
+  type SchemeV2,
 } from '@/api/scenario-composer'
 import { convertDraftToExecutable, schemeToOverlay } from '@/stores/scenario-draft'
+import { useFilterPresets, type FilterPreset } from '@/composables/useFilterPresets'
+import FilterPresets from '@/components/scenario-lib/FilterPresets.vue'
 import { downloadFile } from '@/utils/download'
 import { confirmAction } from '@/utils/confirmAction'
 import { composerUrl, scenarioDetailUrl, scenarioSchemesUrl } from '@/utils/links'
@@ -176,7 +195,10 @@ import FilterPopover from '@/components/FilterPopover.vue'
 import TagPill from '@/components/TagPill.vue'
 import SystemChip from '@/components/SystemChip.vue'
 import PriorityPill from '@/components/PriorityPill.vue'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub,
+  DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import type { ScenarioListItem } from '@/types/scenario-composer'
 
 const PREVIEW_MAX = 3
@@ -205,6 +227,33 @@ const pageSubtitle = computed(() =>
 )
 
 const formatTime = shortDateTime
+
+// ── 暂存分组(筛选条件 → 命名分组,localStorage 持久)──────────────
+const { presets, save: savePreset, remove: removePreset } = useFilterPresets('mine')
+const activePresetId = ref('')
+
+function applyPreset(p: FilterPreset): void {
+  q.value = p.q
+  filters.value = JSON.parse(JSON.stringify(p.filters)) as typeof filters.value
+  activePresetId.value = p.id
+}
+function onSavePreset(name: string): void {
+  savePreset(name, q.value, filters.value)
+  toast.success(`已存为分组「${name}」`)
+}
+function onRemovePreset(id: string): void {
+  removePreset(id)
+  if (activePresetId.value === id) activePresetId.value = ''
+}
+// 条件被手动改到与分组不再一致 → 高亮熄灭(分组是入口快照,不是活引用)
+watch([q, () => JSON.stringify(filters.value)], () => {
+  const cur = activePresetId.value
+    ? presets.value.find((p) => p.id === activePresetId.value)
+    : null
+  if (!cur || q.value !== cur.q || JSON.stringify(filters.value) !== JSON.stringify(cur.filters)) {
+    activePresetId.value = ''
+  }
+})
 
 onMounted(load)
 
@@ -283,54 +332,45 @@ async function toggleStar(row: ScenarioListItem) {
   }
 }
 
-// ── 行级导出(沿用原 Scenarios 逻辑)───────────────────────────
-const exportPicker = reactive<{
-  open: boolean
-  schemes: SchemeV2[]
-  scenarioName: string
-  chosen: string
-  resolve: ((v: SchemeV2 | null | undefined) => void) | null
-}>({ open: false, schemes: [], scenarioName: '', chosen: '', resolve: null })
-
-const expPanel = ref<HTMLElement | null>(null)
-
-function pickExportScheme(schemes: SchemeV2[], scenarioName: string): Promise<SchemeV2 | null | undefined> {
-  exportPicker.schemes = schemes
-  exportPicker.scenarioName = scenarioName
-  exportPicker.chosen = ''
-  exportPicker.open = true
-  // 焦点进弹层:否则 ESC / 键盘操作落不到它身上,读屏用户也听不到它开了
-  void nextTick(() => expPanel.value?.focus())
-  return new Promise((resolve) => { exportPicker.resolve = resolve })
-}
-function settleExportPicker(v: SchemeV2 | null | undefined) {
-  exportPicker.open = false
-  exportPicker.resolve?.(v)
-  exportPicker.resolve = null
-}
-function confirmExportPicker() {
-  // 以 schemeId 为键:同名方案曾是真 bug(name 比对会静默拿到第一个)
-  const chosen = exportPicker.chosen
-  settleExportPicker(chosen ? (exportPicker.schemes.find((s) => s.schemeId === chosen) ?? null) : null)
+// ── 导出(2026-09-22 重设计:弹窗退役,方案平铺进行菜单子菜单)───
+/** 打开行菜单时预取该场景方案(与内联展开共用 schemesByScenario 缓存);
+ *  非属主读不到方案 → 空数组,子菜单显示「该场景暂无方案」。 */
+function openRowMenu(row: ScenarioListItem): void {
+  const id = row.meta.scenarioId
+  if (schemesByScenario.has(id) || schemesLoadingId.value === id) return
+  schemesLoadingId.value = id
+  listRunSchemes(id)
+    .then((schemes) => schemesByScenario.set(id, schemes))
+    .catch(() => schemesByScenario.set(id, []))
+    .finally(() => {
+      // 只清自己的加载态:A 的慢请求回来时不得灭掉 B 正在显示的 spinner
+      if (schemesLoadingId.value === id) schemesLoadingId.value = null
+    })
 }
 
-async function exportRow(row: ScenarioListItem) {
+async function downloadExecutable(
+  row: ScenarioListItem,
+  scheme: SchemeV2 | null,
+): Promise<void> {
+  const draft = await getScenarioDraft(row.meta.scenarioId)
+  const converted = await convertDraftToExecutable(draft, scheme ? schemeToOverlay(scheme) : undefined)
+  const filename = `${row.meta.scenarioId}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json`
+  downloadFile(filename, JSON.stringify(converted, null, 2), 'application/json')
+  toast.success(scheme ? `已按方案「${scheme.name}」导出 ${filename}` : `已导出 ${filename}`)
+}
+
+async function exportRow(row: ScenarioListItem): Promise<void> {
   try {
-    const draft = await getScenarioDraft(row.meta.scenarioId)
-    let schemes: SchemeV2[] = []
-    try {
-      schemes = await listRunSchemes(row.meta.scenarioId)
-    } catch { /* 非属主读不到方案 — 默认导出 */ }
-    let overlay: RunOverlay | undefined
-    if (schemes.length) {
-      const picked = await pickExportScheme(schemes, row.meta.name || row.meta.scenarioId)
-      if (picked === undefined) return
-      if (picked) overlay = schemeToOverlay(picked)
-    }
-    const converted = await convertDraftToExecutable(draft, overlay)
-    const filename = `${row.meta.scenarioId}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.json`
-    downloadFile(filename, JSON.stringify(converted, null, 2), 'application/json')
-    toast.success(`已导出 ${filename}`)
+    await downloadExecutable(row, null)
+  } catch (e) {
+    toast.error(`导出失败: ${(e as Error).message}`)
+  }
+}
+
+/** 按方案导出:方案的 serviceBindings 物化进导出文件(spec §8)。 */
+async function exportByScheme(row: ScenarioListItem, scheme: SchemeV2): Promise<void> {
+  try {
+    await downloadExecutable(row, scheme)
   } catch (e) {
     toast.error(`导出失败: ${(e as Error).message}`)
   }
@@ -393,28 +433,4 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
 <style scoped>
 .sys-list { display: flex; flex-wrap: wrap; gap: 4px; }
 .row-expired td { opacity: 0.55; }
-.exp-modal {
-  position: fixed; inset: 0; z-index: 2000;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(16, 21, 28, 0.4);
-}
-.exp-panel {
-  width: 440px; max-width: calc(100vw - 32px);
-  padding: 18px 20px; background: #fff;
-  border-radius: 10px; box-shadow: 0 8px 24px rgba(16, 21, 28, 0.12);
-}
-.exp-panel h4 { margin: 0 0 6px; font-size: 14px; }
-.exp-hint { margin: 0 0 12px; font-size: 12px; color: #5a6273; }
-.exp-opt { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12.5px; cursor: pointer; }
-.exp-opt input { accent-color: #2f6fed; }
-.exp-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
-.ghost-btn {
-  padding: 6px 14px; font-size: 12.5px; color: #5a6273;
-  background: transparent; border: 1px solid #e1e5eb; border-radius: 8px; cursor: pointer;
-}
-.primary-btn {
-  padding: 6px 16px; font-size: 12.5px; font-weight: 600; color: #fff;
-  background: #2f6fed; border: none; border-radius: 8px; cursor: pointer;
-}
-.primary-btn:hover { background: #265fd4; }
 </style>

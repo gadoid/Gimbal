@@ -27,6 +27,16 @@ export function shortDateTime(v?: string | Date): string {
   })
 }
 
+/** 中长绝对时间(YYYY-MM-DD HH:mm,本地时区)。toISOString 会把 +8 的
+ *  早上显示成前一天下午 — 审计/台账这类要看准确时刻的列一律用本函数。 */
+export function mediumDateTime(v?: string | Date): string {
+  if (!v) return '—'
+  const d = typeof v === 'string' ? new Date(v) : v
+  if (Number.isNaN(d.getTime())) return String(v)
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 /** 文件名安全时间戳(YYYY-MM-DDTHH-mm-ss),导出文件命名共用。 */
 export function exportTimestamp(): string {
   return new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)

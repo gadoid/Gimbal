@@ -15,6 +15,16 @@
       <FilterPopover v-model="filters" :pool="filterableRows" :facets="facets" />
     </div>
 
+    <!-- 暂存分组:公共库同样适用(浏览大池时按条件留几个常用入口) -->
+    <FilterPresets
+      :presets="presets"
+      :active-id="activePresetId"
+      :can-save="filtering"
+      @apply="applyPreset"
+      @remove="onRemovePreset"
+      @save="onSavePreset"
+    />
+
     <div v-if="loading" class="slib-loading">加载中…</div>
 
     <div v-else-if="paged.length" class="lib-card">
@@ -92,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { listDataSets, runScenario } from '@/api/scenario-composer'
@@ -104,6 +114,8 @@ import PageHead from '@/components/scenario-lib/PageHead.vue'
 import StarToggle from '@/components/scenario-lib/StarToggle.vue'
 import { Pagination } from '@/components/ui/pagination'
 import FilterPopover from '@/components/FilterPopover.vue'
+import FilterPresets from '@/components/scenario-lib/FilterPresets.vue'
+import { useFilterPresets, type FilterPreset } from '@/composables/useFilterPresets'
 import TagPill from '@/components/TagPill.vue'
 import SystemChip from '@/components/SystemChip.vue'
 import PriorityPill from '@/components/PriorityPill.vue'
@@ -121,6 +133,33 @@ const {
 } = useScenarioListView('public')
 
 const formatTime = shortDateTime
+
+// ── 暂存分组(与我的场景页同一套;分桶键不同互不可见)──────────────
+const { presets, save: savePreset, remove: removePreset } = useFilterPresets('public')
+const activePresetId = ref('')
+
+function applyPreset(p: FilterPreset): void {
+  q.value = p.q
+  filters.value = JSON.parse(JSON.stringify(p.filters)) as typeof filters.value
+  activePresetId.value = p.id
+}
+function onSavePreset(name: string): void {
+  savePreset(name, q.value, filters.value)
+  toast.success(`已存为分组「${name}」`)
+}
+function onRemovePreset(id: string): void {
+  removePreset(id)
+  if (activePresetId.value === id) activePresetId.value = ''
+}
+// 条件被手动改到与分组不再一致 → 高亮熄灭(分组是入口快照,不是活引用)
+watch([q, () => JSON.stringify(filters.value)], () => {
+  const cur = activePresetId.value
+    ? presets.value.find((p) => p.id === activePresetId.value)
+    : null
+  if (!cur || q.value !== cur.q || JSON.stringify(filters.value) !== JSON.stringify(cur.filters)) {
+    activePresetId.value = ''
+  }
+})
 
 onMounted(load)
 

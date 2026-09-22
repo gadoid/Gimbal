@@ -3,8 +3,12 @@
 
      原型落点:
      * KPI 带 = 一张白卡,指标间细竖线分隔;通过率带绿/红微条
-       (passedRuns/failedRuns 都是 Execution 计数器,行级分布不落库、不在其中)
-     * 筛选行 = 搜索(场景/执行号,客户端)+ 状态 + 时间窗 + 批次 chip
+       (2026-09-22 改制:全局通过率无判断价值 — 通过率由当前筛选结果
+       客户端重算:搜执行号 = 该单用例口径,批次 = 批内全部执行,
+       状态/时间 = 筛后执行集合;其余指标仍走服务端 summary)
+     * 筛选行 = 搜索(场景/执行号)+ 状态 + 时间窗 + 批次 chip + 查询钮;
+       条件改动不即时生效,点「查询」/回车统一发起(选中即查询会连打
+       请求,也看不出哪个条件组合产出了当前列表)
      * 表列序:#(执行号) / 场景 / 方案 / 开始 / 行(通过/失败/总)/ 状态 / 信号 / 操作
      * 信号列(§3.2):连续第 N 次失败(琥珀)/ 认证快速失败(红,无行可分析)
        / 配置漂移依赖前置①(执行时注入快照),本期不出现 — 不发明系统没有的信号
@@ -28,11 +32,12 @@
         <span class="kpi-sub">共 {{ summary.totalRuns }} 次运行</span>
       </div>
       <div class="kpi">
-        <span class="kpi-num">{{ summary.passRate == null ? '—' : (summary.passRate * 100).toFixed(1) + '%' }}</span>
-        <span class="kpi-label">通过率(运行级)</span>
-        <span class="kpi-pass-bar" :title="`通过 ${summary.passedRuns} · 失败 ${summary.failedRuns}`">
+        <span class="kpi-num">{{ scopeStats.rate == null ? '—' : (scopeStats.rate * 100).toFixed(1) + '%' }}</span>
+        <span class="kpi-label">通过率(随筛选重算)</span>
+        <span class="kpi-pass-bar" :title="`通过 ${scopeStats.passed} · 失败 ${scopeStats.failed}`">
           <i :style="{ width: passBarWidth }"></i>
         </span>
+        <span class="kpi-sub">口径:{{ rateScopeLabel }}</span>
       </div>
       <div class="kpi">
         <span class="kpi-num">{{ summary.avgDurationSec == null ? '—' : formatDuration(summary.avgDurationSec) }}</span>
@@ -46,13 +51,16 @@
       </div>
     </div>
     <p v-if="summary" class="kpi-foot">
-      计数为本人口径(owner 硬隔离,聚合不突破个体)· 时间窗随筛选行的「时间范围」联动 · 列表每 3s 刷新
+      计数为本人口径(owner 硬隔离,聚合不突破个体)· 通过率由筛选结果重算:搜执行号 = 该单用例口径,批次 = 批内全部执行 · 点「查询」生效 · 列表每 10s 刷新
     </p>
 
-    <!-- ── 筛选(§3.4:搜索 + status / 时间范围 / 批次)─────────────── -->
+    <!-- ── 筛选(§3.4:搜索 + status / 时间范围 / 批次 + 查询钮)───────
+         2026-09-22 改制:筛选条件改动不再即时生效,统一点「查询」发起
+         (选中即查询会连打请求,且看不出哪个条件组合产出了当前列表);
+         批次 chip 来自信号列点选,选 + 查一步到位,仍即时生效。 -->
     <div class="filter-row">
       <input v-model="query" class="filter-search" data-testid="exec-filter-search"
-        placeholder="搜索场景 / 执行号" />
+        placeholder="搜索场景 / 执行号" @keyup.enter="applyFilters" />
       <select v-model="filterStatus" class="filter-select" data-testid="exec-filter-status">
         <option value="">全部状态</option>
         <option v-for="(label, key) in STATUS_OPTIONS" :key="key" :value="key">{{ label }}</option>
@@ -67,6 +75,7 @@
         批次 {{ filterBatch }}
         <button class="batch-clear" title="清除批次筛" @click="clearBatch">×</button>
       </span>
+      <Button size="sm" class="h-7" data-testid="exec-apply" @click="applyFilters">查询</Button>
       <span class="filter-spacer"></span>
       <span class="filter-count">
         共 {{ filtered.length }} 条 · <template v-if="failedCount">失败 <strong>{{ failedCount }}</strong> 条</template><template v-else>失败 0 条</template>
@@ -227,7 +236,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ListPage from '@/layouts/ListPage.vue'
 import { toast } from '@/utils/toast'
@@ -254,20 +263,38 @@ function open(id: number, focusFailed = false) {
   router.push(focusFailed ? `${executionUrl(id)}?rows=failed` : executionUrl(id))
 }
 
-// ── KPI 带(时间窗随筛选行联动;软失败不阻塞列表)────────────────
+// ── KPI 带(时间窗随已应用的筛选联动;软失败不阻塞列表)────────────
 const summary = ref<ExecutionsSummary | null>(null)
 
 function refreshSummary() {
-  const days = filterWindow.value ? Number(filterWindow.value) : 7
+  const days = appliedWindow.value ? Number(appliedWindow.value) : 7
   getExecutionsSummary(days).then((s) => { summary.value = s }).catch(() => { /* KPI 软失败 */ })
 }
 
+// 通过率 = 当前筛选结果重算(Σpassed / Σ(passed+failed),Execution 计数器;
+// 搜执行号时自然收敛为该单的用例口径)——服务端全局通过率无判断价值。
+const scopeStats = computed(() => {
+  let passed = 0
+  let failed = 0
+  for (const r of store.list) {
+    passed += r.passed
+    failed += r.failed
+  }
+  const total = passed + failed
+  return { passed, failed, total, rate: total ? passed / total : null }
+})
+
+/** 口径标签:批次 → 批内全部执行;纯数字搜索词 → 执行号前缀;其余 = 筛后集合 */
+const rateScopeLabel = computed(() => {
+  if (appliedBatch.value) return `批次 ${shortBatch(appliedBatch.value)} 内全部执行`
+  const q = appliedQ.value.trim()
+  if (/^\d+$/.test(q)) return `执行号 ${q}* 的全部用例`
+  return '当前筛选到的执行'
+})
+
 const passBarWidth = computed(() => {
-  if (!summary.value) return '0%'
-  const { passedRuns, failedRuns } = summary.value
-  const total = passedRuns + failedRuns
-  if (!total) return '0%'
-  return `${((passedRuns / total) * 100).toFixed(1)}%`
+  const { rate } = scopeStats.value
+  return rate == null ? '0%' : `${(rate * 100).toFixed(1)}%`
 })
 
 function formatDuration(sec: number): string {
@@ -276,31 +303,46 @@ function formatDuration(sec: number): string {
   return `${(sec / 3600).toFixed(1)}h`
 }
 
-// ── 筛选(搜索 / status / 发起时间窗 / 批次归并)──────────────────
+// ── 筛选(搜索 / status / 发起时间窗 / 批次归并;点「查询」统一生效)─
 const STATUS_OPTIONS: Record<string, string> = {
   queued: '排队', running: '运行中', done: '完成', failed: '失败', canceled: '已取消',
 }
+// 草稿态(输入侧)与已应用态(查询侧)分离:草稿随便改,查询才落请求
 const query = ref('')
 const filterStatus = ref('')
 const filterWindow = ref('')
 /** 批次归并视图:执行器队列发起后 ?batch_id= 深链到达;chip 可清除。 */
 const filterBatch = ref(typeof route.query.batch_id === 'string' ? route.query.batch_id : '')
 
-/** 搜索词下推服务端(M4):q = scenario_name/scenario_id 子串 + 执行号
- * 前缀(与旧客户端口径一致);300ms 防抖进 fetchFiltered。 */
+const appliedQ = ref(query.value)
+const appliedStatus = ref(filterStatus.value)
+const appliedWindow = ref(filterWindow.value)
+const appliedBatch = ref(filterBatch.value)
+
+/** 搜索词/状态/时间窗下推服务端(M4):q = scenario_name/scenario_id
+ * 子串 + 执行号前缀;列表取回后通过率等 KPI 随之重算。 */
 const filtered = computed(() => store.list)
 const failedCount = computed(() => filtered.value.filter((r) => r.status === 'failed').length)
+
+function applyFilters(): void {
+  appliedQ.value = query.value
+  appliedStatus.value = filterStatus.value
+  appliedWindow.value = filterWindow.value
+  appliedBatch.value = filterBatch.value
+  void fetchFiltered()
+  refreshSummary()
+}
 
 let listSeq = 0
 async function fetchFiltered(): Promise<void> {
   const seq = ++listSeq
   const params: Parameters<typeof listExecutions>[0] = { limit: 200 }
-  if (query.value.trim()) params.q = query.value.trim()
-  if (filterStatus.value) params.status = filterStatus.value as ExecutionStatus
-  if (filterBatch.value) params.batchId = filterBatch.value
-  if (filterWindow.value) {
+  if (appliedQ.value.trim()) params.q = appliedQ.value.trim()
+  if (appliedStatus.value) params.status = appliedStatus.value as ExecutionStatus
+  if (appliedBatch.value) params.batchId = appliedBatch.value
+  if (appliedWindow.value) {
     params.createdFrom = new Date(
-      Date.now() - Number(filterWindow.value) * 86_400_000,
+      Date.now() - Number(appliedWindow.value) * 86_400_000,
     ).toISOString()
   }
   try {
@@ -315,26 +357,14 @@ async function fetchFiltered(): Promise<void> {
   }
 }
 
-// 状态/时间窗变化 → 重新拉列表;时间窗同时联动 KPI 带口径
-watch([filterStatus, filterWindow], () => {
-  void fetchFiltered()
-  refreshSummary()
-})
-
-// 搜索词:300ms 防抖下推(打字不逐请求)
-let qTimer: ReturnType<typeof setTimeout> | null = null
-watch(query, () => {
-  if (qTimer) clearTimeout(qTimer)
-  qTimer = setTimeout(() => { void fetchFiltered() }, 300)
-})
-
+// 批次 chip = 信号列点选而来,选 + 查一步到位(仍即时生效)
 function filterByBatch(batchId: string) {
   filterBatch.value = batchId
-  void fetchFiltered()
+  applyFilters()
 }
 function clearBatch() {
   filterBatch.value = ''
-  void fetchFiltered()
+  applyFilters()
 }
 
 /** 窄列里的批号截断(b-<ts36>-<rand4> → 尾段即可辨认) */

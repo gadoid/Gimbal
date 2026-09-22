@@ -9,7 +9,7 @@
       icon="sliders"
       title="默认值"
       :count="loading ? '' : `${defaultRows.length} 行`"
-      subtitle="哪个服务 / 别名都没配时生效(兜底层);删行 = 不注入,null = 显式注入 JSON null"
+      subtitle="服务 / 别名级都未命中时最后生效;删行 = 不注入,null = 显式注入 JSON null"
     />
 
     <div v-if="loading" class="slib-loading">加载中…</div>
@@ -25,15 +25,15 @@
               <circle cx="7" cy="17" r="2.2" />
             </svg>
           </span>
-          全局默认(兜底层)
+          全局默认
         </span>
         <span class="svc-panel-desc">保存 = 整表替换;删行后保存即移除该默认。服务 / 别名级的覆盖层在服务信息管理的键详情里配</span>
       </div>
 
       <div class="svc-banner warn">
         <span>
-          <b>全局默认按纯 path 跨服务生效</b> —— 契约门控只保证不注入未声明字段;
-          $.type 类语义敏感路径请用服务绑定覆盖兜底(配置纪律,spec §6)。
+          <b>按纯 path 跨服务生效</b> —— 契约门控只拦未声明字段;
+          $.type 类语义敏感路径请在键详情的服务绑定层覆盖。
         </span>
       </div>
 

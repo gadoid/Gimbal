@@ -12,14 +12,16 @@
       <div class="flex flex-col gap-3.5">
         <div class="flex flex-col gap-1.5">
           <span class="text-label font-medium text-signal-ink">alias *</span>
-          <!-- 原为 filterable select;凭证池通常不大,native select 兼具
-               键盘过滤与零依赖(jsdom 亦可用) -->
-          <select v-model="alias" class="auth-select" data-testid="auth-alias">
-            <option value="" disabled>选择一个凭证</option>
-            <option v-for="a in auths" :key="a.id" :value="a.alias">
-              {{ a.alias }} · {{ a.username }} · {{ a.token_type }}
-            </option>
-          </select>
+          <!-- 2026-09-22(任务6):native select → CredentialSelect 样式化
+               下拉(两行选项:alias+token_type / username·url)。原来选
+               native 是为了 jsdom 可测,新组件同为自管面板,click 可驱
+               动,测试契约不变。 -->
+          <CredentialSelect
+            v-model="alias"
+            :credentials="auths"
+            placeholder="选择一个凭证"
+            data-testid="auth-alias"
+          />
           <p v-if="originNote" class="origin-note" data-testid="auth-origin-note">⤷ {{ originNote }}</p>
           <p v-if="preselectMissing" class="origin-note" data-testid="auth-preselect-missing">
             绑定凭证不在你当前凭证池 — 模板仍可插入,执行时按执行者本人池解析
@@ -55,6 +57,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { AuthSession } from '@/api/auth_sessions'
+import CredentialSelect from '@/components/credential/CredentialSelect.vue'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 
@@ -124,15 +127,6 @@ function confirm() {
   font-size: 11px;
 }
 
-.auth-select {
-  height: 34px;
-  padding: 0 10px;
-  font-size: 13px;
-  color: #10151c;
-  background: #fff;
-  border: 1px solid #e1e5eb;
-  border-radius: 6px;
-}
 .seg { display: inline-flex; border: 1px solid #e1e5eb; border-radius: 6px; overflow: hidden; }
 .seg-btn {
   padding: 5px 14px;
