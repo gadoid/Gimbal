@@ -50,6 +50,13 @@ vi.mock('@/stores/scenario-draft', () => ({
   schemeToOverlay: (s: { serviceBindings: Record<string, unknown> }) => ({ serviceBindings: s.serviceBindings }),
 }))
 vi.mock('@/utils/download', () => ({ downloadFile: vi.fn() }))
+// F1(2026-09-23):分发徽标/销账走独立 api —— mock 掉避免测试环境发真请求
+vi.mock('@/api/handoff', () => ({
+  getHandoffUnread: vi.fn().mockResolvedValue({ items: [] }),
+  getRoster: vi.fn().mockResolvedValue({ items: [] }),
+  postHandoff: vi.fn(),
+}))
+vi.mock('@/api/notifications', () => ({ markRead: vi.fn().mockResolvedValue({ marked: 0 }) }))
 
 function scen(id: string, vis: 'private' | 'public', schemeCount: number): Scenario {
   return {
@@ -204,6 +211,57 @@ describe('ScenariosMine — 拆分后的我的场景页', () => {
     await flushPromises()
     expect(w.find('.slib-sub').text()).toContain('管理员可见全员私有编排')
     expect(w.find('.slib-sub').text()).not.toContain('你创建或拥有的')
+    w.unmount()
+  })
+
+  it('再次展开强刷执行状态:「执行中」旧照在执行完成后不得残留', async () => {
+    // 复现 2026-09-23 缺陷:发起执行时缓存里是 running;执行早已完成、
+    // 执行记录页也翻篇了,回到本页再展开若不强刷,卡面仍钉在「执行中」。
+    const { listExecutions } = await import('@/api/executions')
+    const mk = (status: string, extra: Record<string, unknown> = {}) => ({
+      id: 9, scenario_id: 'sc-a', status, total_runs: 1, passed: 0, failed: 0,
+      started_at: '2026-09-23T09:00:00', finished_at: null,
+      has_scenario_snapshot: true, configSummary: { schemeId: 's1' }, ...extra,
+    })
+    vi.mocked(listExecutions).mockResolvedValue({
+      total: 1, page: 1, pageSize: 200, items: [mk('running')],
+    } as never)
+    const w = mountPage([scen('sc-a', 'private', 5)])
+    await flushPromises()
+    await w.find('.schemes-chip').trigger('click')
+    await flushPromises()
+    expect(w.find('.scheme-card').text()).toContain('执行中')
+    // 服务端已终态(此时执行记录页能看到「已完成」)
+    vi.mocked(listExecutions).mockResolvedValue({
+      total: 1, page: 1, pageSize: 200,
+      items: [mk('done', { passed: 1, finished_at: '2026-09-23T09:01:00' })],
+    } as never)
+    await w.find('.schemes-chip').trigger('click')   // 收起
+    await w.find('.schemes-chip').trigger('click')   // 再展开 → 强刷拿新状态
+    await flushPromises()
+    const card = w.find('.scheme-card')
+    expect(card.text()).toContain('完成')
+    expect(card.classes()).toContain('st-ok')
+    w.unmount()
+  })
+
+  it('F1:未读分享徽标渲染,进入场景即销账', async () => {
+    const { getHandoffUnread } = await import('@/api/handoff')
+    const { markRead } = await import('@/api/notifications')
+    vi.mocked(getHandoffUnread).mockResolvedValue({
+      items: [{ id: 7, resourceId: 'sc-a', senderName: 'Alice' }],
+    })
+    const w = mountPage([scen('sc-a', 'private', 1)])
+    await flushPromises()
+    const badge = w.find('[data-testid="handoff-badge-sc-a"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.attributes('title')).toContain('来自 Alice 的分享')
+
+    // 点名进入场景 → 乐观摘牌 + 按通知 id 标读
+    await w.find('.sl-name button.nm').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="handoff-badge-sc-a"]').exists()).toBe(false)
+    expect(markRead).toHaveBeenCalledWith([7])
     w.unmount()
   })
 })

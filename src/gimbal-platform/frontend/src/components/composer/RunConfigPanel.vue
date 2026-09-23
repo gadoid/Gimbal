@@ -41,15 +41,20 @@
         <label class="run-label">用户与服务 <span class="muted small">(声明 ∪ 引用并集)</span></label>
         <div v-for="row in serviceRows" :key="row.service"
           class="rd-bind-row"
-          :class="{ 'is-degraded': degraded(row.service), 'is-undeclared': row.declaredUrl === null }">
+          :class="{ 'is-degraded': degraded(row.service), 'is-undeclared': row.declaredUrl === null && !aliasDefaultOf(row.service) }">
           <span class="rd-bind-svc">{{ row.service }}</span>
           <select class="rd-bind-user" v-model="bindings[row.service].authAlias">
             <option :value="undefined">— 未绑定 —</option>
             <option v-for="a in authOptions" :key="a" :value="a">{{ a }}</option>
           </select>
           <input class="rd-bind-url" v-model="bindings[row.service].url"
-            :placeholder="row.declaredUrl === null ? '未声明 — 现场填 URL 即可运行' : '覆盖 URL(可选,已预填声明值)'" />
-          <span v-if="row.declaredUrl === null" class="rd-bind-warn undeclared">未声明</span>
+            :placeholder="row.declaredUrl === null
+              ? (aliasDefaultOf(row.service) ?? '未声明 — 现场填 URL 即可运行')
+              : '覆盖 URL(可选,已预填声明值)'" />
+          <!-- F4:未声明但注册表 base_url 兜住 → 绿 chip,不误报「未声明」 -->
+          <span v-if="row.declaredUrl === null && aliasDefaultOf(row.service)"
+            class="rd-bind-warn alias-default" :title="aliasDefaultOf(row.service) ?? ''">别名默认</span>
+          <span v-else-if="row.declaredUrl === null" class="rd-bind-warn undeclared">未声明</span>
           <span v-else-if="degraded(row.service)" class="rd-bind-warn">凭证已删,运行时该用户不注入</span>
         </div>
         <p v-if="!serviceRows.length" class="rd-empty">场景未声明且未引用任何 service</p>
@@ -207,9 +212,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
+import { listAllAliases } from '@/api/service-aliases'
 import type { DataSetSelection, ServiceBinding, SchemeV2 } from '@/api/scenario-composer'
 import { scenarioSchemesUrl } from '@/utils/links'
 import type { Scenario, DataSetSummary } from '@/types/scenario-composer'
@@ -255,6 +261,21 @@ const props = withDefaults(defineProps<{
   assertionEntries: () => [] as AssertionEntry[],
   deadEntryIds: () => [] as string[],
 })
+
+/** F4(2026-09-23):注册表 base_url 默认层 —— 未声明行的「别名默认」判定。
+ *  仅展示层吸收误报;执行/导出的物化走 _apply_services 同一优先级链
+ *  (绑定 > 声明 > 别名默认 > 缺口),这里不另立解析规则。 */
+const aliasUrls = ref<Record<string, string>>({})
+onMounted(() => {
+  listAllAliases()
+    .then((rows) => {
+      const m: Record<string, string> = {}
+      for (const r of rows) if (r.baseUrl) m[r.aliasName] = r.baseUrl
+      aliasUrls.value = m
+    })
+    .catch(() => { /* 别名表不可达 → 维持旧「未声明」判定 */ })
+})
+const aliasDefaultOf = (svc: string): string | null => aliasUrls.value[svc] ?? null
 
 const emit = defineEmits<{
   /** footer 的取消键(仅弹层壳消费;内嵌态无 footer 不发) */
@@ -500,6 +521,8 @@ function onConfirm() {
 /* 未声明引用行(D3):service 名标红 + 「未声明」警示,现场填 URL 即救燃 */
 .rd-bind-row.is-undeclared .rd-bind-svc { color: #dc2626; font-weight: 600; }
 .rd-bind-warn.undeclared { color: #dc2626; }
+/* F4:注册表 base_url 兜住的未声明行 → 绿 chip(title 给完整 URL) */
+.rd-bind-warn.alias-default { color: #15803d; }
 .rd-bind-svc {
   min-width: 120px; font-family: var(--font-mono);
   font-size: 12px; font-weight: 600;

@@ -15,6 +15,8 @@ from .board_card import BoardCard
 from .service_alias import ServiceAlias
 # 权限域新表(M2 = P1a:只建表不上码;接口代码随 M2.5/P2)
 from .permission import AuditLog, Notification, UserPref, UserStar
+# 场景域事件日志(2026-09-23 批次 F3:时间线唯一数据源)
+from .activity_event import ActivityEvent
 
 __all__ = [
     "User",
@@ -37,6 +39,7 @@ __all__ = [
     "ServiceAlias",
     "AuditLog",
     "Notification",
+    "ActivityEvent",
     "UserPref",
     "UserStar",
 ]

@@ -260,3 +260,84 @@ FROM executions ORDER BY id DESC LIMIT 1;
 - `execution_rows` 百万级:表本身照迁;如需瘦身,在**切换后**按保留参数清理
   (`DELETE … WHERE finished_at < now() - interval '…'` + 行级明细走 JSONL
   归档兜底的旧单不受影响)—— 不在迁移窗口内做删减,保持对账全集可验。
+
+## 8. 增量 schema 演进 —— 0006(2026-09-23 迭代批次)
+
+> 来源:`docs/superpowers/plans/2026-09-23-some_feature .md` v2(F1 分发 /
+> F3 时间线事件化 / F4 服务引用方案 B)。`down_revision = 0005`。
+> 本节是既有 PG 库上的**在线增量**,不再涉及 SQLite→PG ETL。
+
+### 8.1 变更清单(4 列 + 1 表 + 2 索引)
+
+| 对象 | 变更 | 类型 | 服务 |
+|---|---|---|---|
+| `notifications` | +`resource_type` | `VARCHAR(32) NULL` | F1 悬浮标签 |
+| `notifications` | +`resource_id` | `VARCHAR(128) NULL` | F1 |
+| `notifications` | +`payload` | `JSONB NULL`(SQLite 侧 JSON 文本) | F1(sender/original_name 结构化) |
+| `service_aliases` | +`base_url` | `VARCHAR(512) NULL` | F4 方案 B 默认层 |
+| `activity_events` | 新表 | 见下 | F3 |
+| 新索引 ×2 | `ix_activity_events_actor_created (actor_id, created_at)`、`ix_activity_events_resource (resource_type, resource_id)` | — | F3 读侧 |
+
+`activity_events`:`id BigIntPK` / `actor_id BIGINT NULL FK users.id ON DELETE SET NULL`
+(镜像 `composer_scenarios.owner_id` 的「人走事留」模式)/ `kind VARCHAR(64) NOT NULL` /
+`resource_type VARCHAR(32) NOT NULL` / `resource_id VARCHAR(128) NOT NULL` /
+`detail JSONB NOT NULL`(客户端 default dict)/ `created_at timestamptz NOT NULL
+server_default now()`(与 `notifications.created_at` 同款,UtcDateTime 防线覆盖)。
+
+### 8.2 影响评估
+
+**存量数据:零触碰、零回填。** 四个新列全部 nullable 且无 server default;
+存量通知行 `resource_*` 为 NULL,而消费查询过滤 `type='resource_handoff'`
+(仅新代码写入),无脏读面;存量别名 `base_url` NULL = 默认层不生效,行为不变。
+
+**锁与时长:可在线执行。** PG 上 `ADD COLUMN … NULL`(不带默认)是纯元数据
+操作,不重写表,ACCESS EXCLUSIVE 锁毫秒级;`notifications`/`service_aliases`
+现有量级(千行内)无感知。CREATE TABLE + 新表索引无锁竞争。**但**为保持
+「代码与 schema 同批生效」,仍按停后端 → `alembic upgrade head` → 起新后端的
+顺序执行(与 §2 Step 5/6 同拍,不做在线双写)。
+
+**部署顺序(硬约束,方向与 pg_schema_behind 门禁一致):**
+- 先 upgrade、后起新代码:✅(旧 ORM 不 SELECT 新列,PG 多列无影响);
+- 反过来先起新代码:❌ ORM SELECT 带新列 → PG `UndefinedColumn` → 通知接口 500。
+即 **0006 先行安全,代码先行必炸**;顺序错了启动门禁(`pg_schema_behind`)会先拦。
+
+**行为影响(上线瞬间)——时间线冷启动空窗(需拍板,建议已给):**
+`/api/activity` 的 scenario 分支从 `updated_at` 反推切换为查 `activity_events`,
+上线时表为空 → 时间线「场景」段空,直到首个事件落库(下一次编辑/重命名/分发)。
+建议:**接受空窗**,不做「空表回退旧反推」的暖场逻辑 —— 旧口径本就不是真事件,
+保留它等于留双口径,违背本轮「一处实现」纪律;前端给空态文案即可。
+若不接受,替代方案是上线前用 `updated_at` 批量补一次 `scenario.edit` 存量事件
+(一次性脚本,标注 synthetic),两案二选一后不得再改。
+
+**数据增长:无需治理。** `activity_events` 在 autosave 5 分钟窗合并生效后,
+每场景每窗最多 1 条 edit;按百场景日活估日增数百行,年 tens-of-万行量级、
+detail 为小 JSON —— 不需要分区/保留期策略(P2 可选加清理)。
+`notifications` 每 handoff +1 行,可忽略。
+
+**回滚(0006 downgrade):**
+1. 先起旧代码(旧 ORM 容忍 PG 多列,顺序宽松);
+2. `alembic downgrade 0005`:`DROP TABLE activity_events`(**纯派生日志,
+   可弃**;要留先导出)+ `DROP COLUMN` ×4(PG 原生 DROP COLUMN,快)。
+3. SQLite 回滚源**不跑 0006**:本地 `app.db` 留在 0005 形态,回滚到 SQLite
+   旧后端时旧代码不认新列,天然无冲突。
+
+**未来 ETL(如有新环境再走 SQLite→PG):** 新列/新表由 ETL 的 metadata 驱动
+逻辑自动纳入搬运集(非生成列);`payload`/`detail` 的 JSON 归一沿用 §3 已知
+异型面,无新增变换语义。
+
+### 8.3 执行清单(既有 PG 库)
+
+```bash
+# 1) 停后端(等 graceful,不 kill -9)
+# 2) 迁移(cwd backend)
+C:/Python314/python.exe -m alembic -c alembic.ini upgrade head
+#    预期输出:0005_interaction_fields -> 0006_...(毫秒级)
+# 3) 验形(应看到新列/新表)
+#    psql: \d notifications  / \d service_aliases  / \d activity_events
+# 4) 起新后端 → 冒烟:
+#    - /docs 200、受保护路由 401(基线)
+#    - GET /api/notifications 200(新列序列化不炸)
+#    - GET /api/activity 200(scenario 段为空 = 空窗口径生效)
+#    - POST /api/service-aliases 创建/编辑含 base_url 字段往返一致
+# 5) 回滚预案:§8.2 末段
+```

@@ -122,9 +122,16 @@
               <span v-if="currentStep.api?.path" class="ep-path">{{ currentStep.api.path }}</span>
             </div>
 
-            <!-- 运行引用(别名消费点,spec §1.4 双显):目录事实只读,引用可切 -->
+            <!-- 运行引用(别名消费点,spec §1.4 双显):目录事实只读,引用可切。
+                 F4:来源三态 tag(系统/配置/已登记;声明+登记 = 覆盖)。 -->
             <div class="svc-ref">
-              <span class="svc-ref-label">服务引用</span>
+              <span class="svc-ref-label">服务</span>
+              <span
+                v-if="svcSource"
+                class="svc-src-tag"
+                :class="`src-${svcSource.tone}`"
+                :data-testid="`svc-source-${svcSource.tone}`"
+              >{{ svcSource.text }}</span>
               <select
                 class="svc-ref-select"
                 :value="currentStep.api?.service"
@@ -145,7 +152,7 @@
                 <button type="button" class="ghost-btn alias-create-confirm" @click="confirmAliasCreate(currentStep)">创建并切换</button>
                 <button type="button" class="ghost-btn" @click="creatingAlias = false">取消</button>
               </div>
-              <div class="svc-ref-url">URL: {{ declaredUrlOf(currentStep.api?.service || '') || '(未声明 — 运行前需补 URL)' }}</div>
+              <div class="svc-ref-url" data-testid="svc-ref-url">URL: {{ svcUrlHint }}</div>
             </div>
           </div>
           <!-- 契约降级提示:失败态**可见** + 可点重试入口(SurfaceNotice,与判定面
@@ -568,7 +575,7 @@ import {
   validateEndpointFieldStates,
 } from '@/api/scenario-composer'
 import { listAll as listAuths } from '@/api/auth_sessions'
-import { listAllAliases } from '@/api/service-aliases'
+import { listAllAliases, type ServiceAliasRow } from '@/api/service-aliases'
 import { getBindings as getCarryBindings, getDefaults as getCarryDefaults } from '@/api/carry'
 import { fetchQueryViewIndex, fetchQueryViewRows } from '@/api/query-views'
 import type { QueryViewIndexEntry } from '@/api/query-views'
@@ -1722,14 +1729,20 @@ onMounted(() => {
 // (模板引用仍写凭证名,执行时按执行者本人池解析)。拉取失败静默 —
 // 预填只是辅助,不绑也能手工选。
 const aliasCredMap = ref<Record<string, string>>({})
+/** F4(2026-09-23):注册表全量行 —— 下拉「已登记」来源 / base_url 默认
+ *  展示 / headers 模板注入共用同一次拉取(前端只展示,不做任何派生)。 */
+const registeredAliases = ref<ServiceAliasRow[]>([])
+const registeredByName = computed(
+  () => new Map(registeredAliases.value.map((a) => [a.aliasName, a])))
 onMounted(() => {
   listAllAliases()
     .then((rows) => {
+      registeredAliases.value = rows
       const m: Record<string, string> = {}
       for (const r of rows) if (r.credentialAlias) m[r.aliasName] = r.credentialAlias
       aliasCredMap.value = m
     })
-    .catch(() => { /* 别名表不可达 → 无预填,手工选择不受影响 */ })
+    .catch(() => { /* 别名表不可达 → 无预填/无已登记来源,手工选择不受影响 */ })
 })
 
 interface BoundCredential { aliasName: string; credentialAlias: string }
@@ -1805,14 +1818,40 @@ const serviceOptions = computed(() => {
     if (deriveBase(key, catalogNames.value) === anchor)
       push(key, key)                                           // 本服务别名
   }
+  // F4 第三来源:服务信息管理注册表(已登记)。本服务的优先展示,
+  // 跨服务的与下方 declared 跨服务键一起置底。
+  for (const a of registeredAliases.value) {
+    if (!anchor || a.baseService === anchor)
+      push(a.aliasName, `${a.aliasName}(已登记)`)
+  }
   for (const key of Object.keys(declared)) {                   // 其他键置底
     if (anchor && (key === anchor || deriveBase(key, catalogNames.value) === anchor)) continue
     push(key, `${key}(跨服务)`, true)
   }
+  for (const a of registeredAliases.value) {                   // 跨服务已登记置底
+    if (anchor && a.baseService !== anchor)
+      push(a.aliasName, `${a.aliasName}(已登记)`, true)
+  }
   return opts
 })
 
-/** 引用告警(§1.5 全表警告级,永不阻断):裸声明黄 / 跨服务黄 / 未声明红 */
+/** F4:当前引用键的来源三态(展示;判定只在展示层,不进执行链)。 */
+const svcSource = computed<
+  { text: string; tone: 'sys' | 'cfg' | 'reg' | 'override' } | null
+>(() => {
+  const cur = currentStep.value?.api?.service || ''
+  if (!cur) return null
+  const isDeclared = cur in (props.services ?? {})
+  const isRegistered = registeredByName.value.has(cur)
+  if (isDeclared && isRegistered) return { text: '配置 · 覆盖别名默认', tone: 'override' }
+  if (isDeclared) return { text: '配置', tone: 'cfg' }
+  if (isRegistered) return { text: '已登记', tone: 'reg' }
+  if (catalogNames.value.has(cur)) return { text: '系统', tone: 'sys' }
+  return null
+})
+
+/** 引用告警(§1.5 全表警告级,永不阻断):裸声明黄 / 跨服务黄 / 未声明红。
+ *  F4:未声明但注册表 base_url 兜住的键不再报红(默认层生效)。 */
 const refWarning = computed<{ text: string; level: 'warn' | 'error' } | null>(() => {
   const cur = currentStep.value?.api?.service || ''
   if (!cur) return null
@@ -1821,18 +1860,43 @@ const refWarning = computed<{ text: string; level: 'warn' | 'error' } | null>(()
     return { text: '未挂目录服务(裸声明)', level: 'warn' }
   if (cur !== anchor && deriveBase(cur, catalogNames.value) !== anchor)
     return { text: '跨服务引用', level: 'warn' }
-  if (!(cur in (props.services ?? {})))
+  if (!(cur in (props.services ?? {}))) {
+    if (registeredByName.value.get(cur)?.baseUrl) return null
     return { text: '未声明 — Config 或运行弹框补 URL 后可跑', level: 'error' }
+  }
   return null
 })
 
 /** 当前引用键的已声明 URL(未声明 → 空,模板给占位提示) */
 const declaredUrlOf = (svc: string) => (props.services ?? {})[svc] || ''
 
+/** F4:URL 提示行 —— 声明值 > 注册表 base_url(标注「别名默认」)> 缺口。
+ *  只展示,不写 payload(写了就成快照,默认层的动态性失效)。 */
+const svcUrlHint = computed(() => {
+  const cur = currentStep.value?.api?.service || ''
+  const declared = (props.services ?? {})[cur]
+  if (declared) return declared
+  const baseUrl = registeredByName.value.get(cur)?.baseUrl
+  if (baseUrl) return `${baseUrl}(别名默认)`
+  return '(未声明 — Config 补 URL,或在服务信息管理登记别名默认)'
+})
+
 function onServiceRefChange(step: StepView, value: string) {
   if (value === '__create__') { creatingAlias.value = true; return }
   creatingAlias.value = false
   step.api!.service = value          // local 直改,既有 watch 传播 update:steps
+  // F4 方案 B:选中已登记别名且带凭证绑定 → headers 直接注入 ${auth.*}
+  // 模板这一行(2026-09-23 调整:不做「已有 Authorization 则跳过」的补缺
+  // 守卫 —— 选中即写入,换选别名即刷新;既有大小写 Authorization 键先
+  // 清掉,保证注入后只有一行)。不写 services 声明 —— URL 走注册表
+  // 默认层(执行期物化第三档),写了就成快照。
+  const reg = registeredByName.value.get(value)
+  if (reg?.credentialAlias) {
+    const headers = (step.api!.headers ||= {})
+    for (const k of Object.keys(headers))
+      if (k.toLowerCase() === 'authorization') delete headers[k]
+    headers.Authorization = `$\{auth.${reg.credentialAlias}.token}`
+  }
 }
 
 // 内联创建器:前缀(目录名)固定不可改,只收后缀 + URL(spec §1.3)
@@ -2279,6 +2343,17 @@ function onStepReordered(evt: { oldIndex?: number; newIndex?: number }) {
 .svc-ref-warn { font-size: 10px; font-weight: 600; }
 .svc-ref-warn.warn { color: #b45309; }
 .svc-ref-warn.error { color: #dc2626; }
+/* F4 来源三态 tag:系统(灰)/ 配置(蓝)/ 已登记(绿)/ 覆盖(紫) */
+.svc-src-tag {
+  flex-shrink: 0;
+  font-size: 10px; font-weight: 600;
+  padding: 1px 7px; border-radius: 999px;
+  border: 1px solid transparent;
+}
+.svc-src-tag.src-sys { color: #64748b; background: rgb(100 116 139 / 10%); border-color: rgb(100 116 139 / 35%); }
+.svc-src-tag.src-cfg { color: #1d4ed8; background: rgb(59 130 246 / 10%); border-color: rgb(59 130 246 / 35%); }
+.svc-src-tag.src-reg { color: #15803d; background: rgb(34 197 94 / 10%); border-color: rgb(34 197 94 / 40%); }
+.svc-src-tag.src-override { color: #7e22ce; background: rgb(168 85 247 / 10%); border-color: rgb(168 85 247 / 35%); }
 /* 内联创建器:前缀(目录名)固定只读,后缀 + URL 两输入 */
 .alias-create {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;

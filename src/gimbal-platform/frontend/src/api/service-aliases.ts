@@ -10,6 +10,8 @@ import http from '@/api/http'
 export interface ServiceAliasRow {
   aliasName: string
   baseService: string
+  /** F4 方案 B:环境级端点默认层(NULL = 不提供;唯一权威,改一处全局生效) */
+  baseUrl: string | null
   groupTag: string | null
   credentialAlias: string | null
   ownerUserId: number | null
@@ -40,6 +42,8 @@ export function listAllAliases(base?: string): Promise<ServiceAliasRow[]> {
 
 export function createAlias(input: {
   aliasName: string
+  /** 必填(2026-09-23):别名 = 环境端点登记,后端缺省 422 */
+  baseUrl: string
   groupTag?: string | null
   credentialAlias?: string | null
 }): Promise<ServiceAliasRow> {
@@ -49,7 +53,7 @@ export function createAlias(input: {
 
 export function patchAlias(
   aliasName: string,
-  input: { groupTag?: string | null; credentialAlias?: string | null },
+  input: { baseUrl?: string | null; groupTag?: string | null; credentialAlias?: string | null },
 ): Promise<ServiceAliasRow> {
   return http
     .patch<ServiceAliasRow>(`/service-aliases/${encodeURIComponent(aliasName)}`, input)

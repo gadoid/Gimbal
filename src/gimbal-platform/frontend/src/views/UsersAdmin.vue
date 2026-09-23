@@ -122,7 +122,19 @@
     <div v-else class="empty-cta" data-testid="users-empty">
       <p>暂无用户</p>
       <Button variant="outline" size="sm" @click="openCreate">创建第一个用户</Button>
-    </div>    </TabsContent>
+    </div>
+
+    <Pagination
+      v-if="listPageCount > 1 || usersTotal > 0"
+      v-model:page="listPage"
+      :page-size="listPageSize"
+      :total="usersTotal"
+      :page-sizes="[20, 50, 100, 200]"
+      show-page-size
+      show-jump
+      @update:page-size="list.setPageSize"
+    />
+    </TabsContent>
 
     <TabsContent value="audit">
       <!-- P2-3 审计面板(2026-09-22 抽组件:懒加载判据/时区/对象列三修) -->
@@ -370,6 +382,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Pagination } from '@/components/ui/pagination'
 
 const usersStore = useUsersStore()
 const authStore = useAuthStore()
@@ -386,11 +399,13 @@ const list = useServerList<UserOut, Record<string, string | number | boolean | u
     role: roleFilter.value === 'all' ? undefined : roleFilter.value,
   }),
   pageSize: 50,
+  pagerKey: 'users',
 })
 const visibleUsers = computed(() => list.items.value)
 const usersTotal = computed(() => list.total.value)
 const listPage = list.page
 const listPageCount = computed(() => list.pageCount.value)
+const listPageSize = computed(() => list.pageSize.value)
 async function reloadList(): Promise<void> {
   await list.reload()
 }

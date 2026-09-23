@@ -193,6 +193,16 @@
             <svg v-else class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
             保存草稿
           </button>
+          <!-- F2(2026-09-23):另存为 —— 先保存当前编辑再拷贝(副本 = 最新
+               草稿),成功后跳转打开副本,原场景不动;重名 409 弹确认走
+               suggestion。 -->
+          <button
+            v-if="scenarioId"
+            class="primary-btn outline"
+            data-testid="save-as-btn"
+            :disabled="saving || saveAsBusy"
+            @click="saveAs"
+          >另存为…</button>
         </div>
 
         <button
@@ -276,7 +286,7 @@ import { showError } from '@/utils/errorFallback'
 import { relTime } from '@/utils/datetime'
 import { executionUrl, composerUrl } from '@/utils/links'
 import { seedScenarioName } from '@/composables/useScenarioName'
-import { confirmAction } from '@/utils/confirmAction'
+import { confirmAction, promptAction } from '@/utils/confirmAction'
 import { lintDraft } from '@/utils/draft-lint'
 import * as api from '@/api/scenario-composer'
 import type {
@@ -856,6 +866,51 @@ function genScenarioId(name: string): string {
   const rnd = Math.floor(Math.random() * 36 * 36 * 36).toString(36).padStart(3, '0')
   const id = `sc-${slug}-${ts}${rnd}`
   return id.length > 128 ? id.slice(0, 128) : id
+}
+
+// ── F2(2026-09-23):另存为 ───────────────────────────────────────
+const saveAsBusy = ref(false)
+
+/** 先保存当前编辑(副本 = 最新草稿,不吃旧快照)→ POST /copy {name};
+ * 重名 409(name_taken)→ 确认弹窗用服务端 suggestion 重发;成功跳转
+ * 打开副本(原场景不动)。数据集/方案随行由既有 copy 语义保证。 */
+async function saveAs() {
+  const id = scenarioId.value
+  if (!id || saveAsBusy.value) return
+  saveAsBusy.value = true
+  try {
+    if (!(await saveDraft(false, false, true))) {
+      toast.error('当前草稿保存失败,已中止另存为')
+      return
+    }
+    const input = await promptAction(
+      '副本名称(留空 = 沿用「(副本)」后缀)', '另存为',
+      { inputValue: meta.value.name })
+    if (input === null) return
+    const name = input.trim()
+    let saved: Scenario
+    try {
+      saved = await api.copyScenario(id, name || undefined)
+    } catch (e) {
+      const suggestion = (e as { status?: number; code?: string | number; detail?: Record<string, unknown> })
+      if (suggestion.status === 409 && suggestion.code === 'name_taken'
+          && typeof suggestion.detail?.suggestion === 'string') {
+        const ok = await confirmAction(
+          `已有同名场景。使用「${suggestion.detail.suggestion}」创建副本?`,
+          '重名确认', { type: 'info', confirmButtonText: '使用后缀名' })
+        if (!ok) return
+        saved = await api.copyScenario(id, suggestion.detail.suggestion)
+      } else {
+        throw e
+      }
+    }
+    toast.success(`已创建副本:${saved.meta.name}`)
+    router.push(composerUrl(saved.meta.scenarioId, stepIdx.value + 1))
+  } catch (e) {
+    showError('另存为', undefined, (e as Error).message)
+  } finally {
+    saveAsBusy.value = false
+  }
 }
 
 /** silent=true(防抖自动保存路径):失败不弹 toast,指示灯保持「未保存」,

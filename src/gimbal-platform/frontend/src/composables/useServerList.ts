@@ -22,6 +22,7 @@ import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { debounce } from '@/utils/debounce'
 import { showError } from '@/utils/errorFallback'
+import { usePagerSize } from './usePagerSize'
 
 export interface PageEnvelope<T> {
   items: T[]
@@ -41,6 +42,8 @@ export interface UseServerListOptions<T, P extends ServerListParams> {
   debounceMs?: number
   /** q/page 写回 URL query(router.replace,不进历史)。默认 false。 */
   syncUrl?: boolean
+  /** 每页行数存用户偏好(pager.sizes 键,服务端+镜像;2026-09-23 批次)。 */
+  pagerKey?: string
   /** 初始页码(syncUrl 深链恢复;在 watch 注册前生效,不触发首拉)。 */
   initialPage?: number
   /** 翻页后 scrollTo(0)。默认 true。 */
@@ -63,7 +66,12 @@ function signature(p: ServerListParams): string {
 export function useServerList<T, P extends ServerListParams>(
   opts: UseServerListOptions<T, P>,
 ) {
-  const pageSize = opts.pageSize ?? 20
+  // 2026-09-23 分页批次:pageSize 从定值改 ref,配合 Pagination 的每页行数
+  // 选择器;改尺寸 → 回页 1 重拉(见 watch)。给了 pagerKey 则初始值/持久
+  // 化交给用户偏好层(镜像管首帧,服务端管跨设备)。
+  const pageSize = opts.pagerKey
+    ? usePagerSize(opts.pagerKey, opts.pageSize ?? 20).pageSize
+    : ref(opts.pageSize ?? 20)
 
   const items = ref<T[]>([]) as Ref<T[]>
   const total = ref(0)
@@ -74,7 +82,7 @@ export function useServerList<T, P extends ServerListParams>(
   const route = opts.syncUrl ? useRoute() : null
   const router = opts.syncUrl ? useRouter() : null
 
-  const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
+  const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 
   let seq = 0
   async function load(): Promise<void> {
@@ -83,13 +91,13 @@ export function useServerList<T, P extends ServerListParams>(
     error.value = null
     const extra = opts.params()
     try {
-      const env = await opts.fetch({ ...extra, page: page.value, page_size: pageSize })
+      const env = await opts.fetch({ ...extra, page: page.value, page_size: pageSize.value })
       if (mine !== seq) return // 过期响应(参数又变了),丢弃
       items.value = env.items
       total.value = env.total
       if (env.items.length === 0 && page.value > 1) {
         // 结果集变小(删除/筛选收紧)后停在越界页 → 回拉到末页重取一次。
-        page.value = Math.max(1, Math.ceil(env.total / pageSize))
+        page.value = Math.max(1, Math.ceil(env.total / pageSize.value))
         await load()
         return
       }
@@ -132,6 +140,11 @@ export function useServerList<T, P extends ServerListParams>(
     void load()
     if (opts.scroll !== false) window.scrollTo(0, 0)
   })
+  // 每页行数变化 → 回页 1(页码 watch 立即拉;本来就在页 1 则主动拉一次)。
+  watch(pageSize, () => {
+    if (page.value !== 1) page.value = 1
+    else void load()
+  })
 
   onBeforeUnmount(() => debouncedLoad.cancel())
 
@@ -141,6 +154,10 @@ export function useServerList<T, P extends ServerListParams>(
     setPage(p: number): void {
       const clamped = Math.min(Math.max(p, 1), pageCount.value)
       if (clamped !== page.value) page.value = clamped
+    },
+    setPageSize(n: number): void {
+      const clamped = Math.max(1, Math.floor(n))
+      if (clamped !== pageSize.value) pageSize.value = clamped
     },
     reload: load,
     /** syncUrl 时的初始态读回:深链/刷新恢复 q 与 page。 */

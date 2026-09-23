@@ -41,8 +41,14 @@ class NotificationOut(BaseModel):
 
 
 class NotificationListOut(BaseModel):
+    model_config = {"populate_by_name": True}
+
     items: list[NotificationOut]
     unread: int
+    # 2026-09-23 分页批次:真分页信封(total = 未读优先同口径下的总条数)
+    total: int = 0
+    page: int = 1
+    page_size: int = Field(default=50, alias="pageSize")
 
 
 class ReadIn(BaseModel):
@@ -58,6 +64,26 @@ class UnreadCountOut(BaseModel):
     role_version: str | None = Field(default=None, alias="roleVersion")
 
 
+class HandoffUnreadItem(BaseModel):
+    """未读分享(悬浮标签数据源,2026-09-23 批次 F1)。
+
+    前端以 Set<resourceId> 维护,列表行渲染 O(1) 查找;销账走
+    POST /read(按 id)。
+    """
+
+    model_config = {"populate_by_name": True}
+
+    id: int
+    resource_id: str = Field(alias="resourceId")
+    sender_name: str | None = Field(default=None, alias="senderName")
+
+
+class HandoffUnreadOut(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    items: list[HandoffUnreadItem] = Field(default_factory=list)
+
+
 class PrefsOut(BaseModel):
     """按 type 通知开关;off 列表之外的类型全部开着。"""
 
@@ -68,16 +94,18 @@ class PrefsIn(BaseModel):
     off: list[Literal[
         "execution_finished", "adaptation_applied", "announcement",
         "scenario_unpublished", "role_changed", "resource_transferred",
+        "resource_handoff",
     ]] = Field(default_factory=list)
 
 
 @router.get("", response_model=NotificationListOut)
 async def list_notifications(
     user: CurrentUser, db: DbSession,
-    unread_only: bool = False, limit: int = 50,
+    unread_only: bool = False,
+    page: int = 1, page_size: int = 50,
 ) -> NotificationListOut:
-    rows, unread = await svc.list_notifications(
-        db, user.id, unread_only=unread_only, limit=limit)
+    rows, unread, total = await svc.list_notifications(
+        db, user.id, unread_only=unread_only, page=page, page_size=page_size)
     return NotificationListOut(
         items=[
             NotificationOut(
@@ -89,6 +117,9 @@ async def list_notifications(
             for n in rows
         ],
         unread=unread,
+        total=total,
+        page=page,
+        page_size=page_size,
     )
 
 
@@ -105,6 +136,31 @@ async def unread_count(user: CurrentUser, db: DbSession) -> UnreadCountOut:
         role_version=(
             user.updated_at.isoformat() if user.updated_at else None),
     )
+
+
+@router.get("/handoff-unread", response_model=HandoffUnreadOut)
+async def handoff_unread(user: CurrentUser, db: DbSession) -> HandoffUnreadOut:
+    """未读分享列表(F1 悬浮标签数据源):场景行渲染 O(1) 查 Set 用。
+
+    查询走 0005 已建的 (user_id, id) 索引,量级足够(方案 §1.4)。
+    """
+    from ..models import Notification
+
+    rows = (await db.execute(
+        select(Notification).where(
+            Notification.user_id == user.id,
+            Notification.type == "resource_handoff",
+            Notification.read_at.is_(None),
+        ).order_by(Notification.id.desc())
+    )).scalars().all()
+    return HandoffUnreadOut(items=[
+        HandoffUnreadItem(
+            id=n.id,
+            resource_id=n.resource_id or "",
+            sender_name=(n.payload or {}).get("sender_name"),
+        )
+        for n in rows
+    ])
 
 
 # ── 按 type 开关(user_prefs,与铃铛同批上线)────────────────────────

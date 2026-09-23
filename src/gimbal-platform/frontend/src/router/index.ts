@@ -90,6 +90,13 @@ const routes = [
     meta: { requiresAuth: true, requiresAdmin: true },
   },
   {
+    // 通知页(F5,2026-09-23;侧边栏入口名「通知」):全员;审计 tab 仅
+    // admin(渲染层隐藏 + 后端 /admin/audit-logs 403 双层守卫,方案 §5.5 T5)
+    path: '/notifications',
+    component: () => import('@/views/NotificationsCenter.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     // 个人设置(P2-1):全员
     path: '/profile',
     component: () => import('@/views/Profile.vue'),

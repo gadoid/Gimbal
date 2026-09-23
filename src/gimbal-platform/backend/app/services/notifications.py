@@ -34,6 +34,10 @@ NOTIFICATION_TYPES = (
     "scenario_unpublished",
     "role_changed",
     "resource_transferred",
+    # 2026-09-23 批次 F1:分发接收提醒(悬浮标签数据源)。
+    # resource_transferred(资源转让)语义是所有权转移,留给离职处置线,
+    # 与本类型的「副本交接」互不复用。
+    "resource_handoff",
 )
 
 
@@ -59,14 +63,23 @@ async def create_notification(
     link: str | None = None,
     batch_id: str | None = None,
     expires_at: datetime | None = None,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+    payload: dict | None = None,
     commit: bool = True,
 ) -> Notification | None:
-    """单条通知(尊重 type 开关;关 = 不入库,静默跳过)。"""
+    """单条通知(尊重 type 开关;关 = 不入库,静默跳过)。
+
+    resource_type/resource_id/payload(0006 新列)仅资源类通知
+    (resource_handoff)填写,其余调用方不感知。
+    """
     if await type_disabled(db, user_id, type_):
         return None
     n = Notification(
         user_id=user_id, type=type_, title=title, body=body,
         link=link, batch_id=batch_id, expires_at=expires_at,
+        resource_type=resource_type, resource_id=resource_id,
+        payload=payload,
     )
     db.add(n)
     if commit:
@@ -149,9 +162,13 @@ async def mark_read(
 
 
 async def list_notifications(
-    db: AsyncSession, user_id: int, *, unread_only: bool, limit: int
-) -> tuple[list[Notification], int]:
-    """(未读优先的最近列表, 未读总数);公告过期(expires_at)查询侧过滤。"""
+    db: AsyncSession, user_id: int, *, unread_only: bool,
+    page: int = 1, page_size: int = 50,
+) -> tuple[list[Notification], int, int]:
+    """(当前页, 未读总数, 总条数);未读优先 + id 倒序,公告过期(expires_at)
+    查询侧过滤。2026-09-23 分页批次:limit → page/page_size + total(原
+    「最近 50 条」截断改为真分页)。
+    """
     now = datetime.now(timezone.utc)
     live = or_(
         Notification.expires_at.is_(None),
@@ -160,10 +177,14 @@ async def list_notifications(
     cond = [Notification.user_id == user_id, live]
     if unread_only:
         cond.append(Notification.read_at.is_(None))
+    total = (await db.execute(
+        select(func.count()).select_from(Notification).where(*cond)
+    )).scalar_one()
     rows = (await db.execute(
         select(Notification).where(*cond)
         .order_by(Notification.read_at.is_(None).desc(), Notification.id.desc())
-        .limit(limit)
+        .offset(max(page - 1, 0) * page_size)
+        .limit(page_size)
     )).scalars().all()
     unread = (await db.execute(
         select(func.count()).select_from(Notification).where(
@@ -172,11 +193,11 @@ async def list_notifications(
             live,
         )
     )).scalar_one()
-    return list(rows), int(unread)
+    return list(rows), int(unread), int(total)
 
 
 async def unread_count(db: AsyncSession, user_id: int) -> int:
-    _, n = await list_notifications(db, user_id, unread_only=True, limit=1)
+    _, n, _ = await list_notifications(db, user_id, unread_only=True, page_size=1)
     return n
 
 

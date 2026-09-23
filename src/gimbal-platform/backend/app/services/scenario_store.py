@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..models.composer_scenario import ComposerScenario
 from ..models.composer_data_set import ComposerDataSet
 from ..models.composer_run_scheme import ComposerRunScheme
+from . import activity
 # 删除 ScenarioStep;ScenarioMeta 仍保留(读侧用)
 from ..schemas.scenario_composer import (
     Orchestration,
@@ -116,6 +117,9 @@ async def update(
     re-assign the scenario to a different user mid-edit.
     """
     row = await _get_row(db, scenario_id)
+    # F3:旧名快照(提交后判 rename/edit;在 payload 覆盖前取)
+    old_name = (((row.payload or {}).get("definition") or {})
+                .get("meta") or {}).get("name")
     def_meta = draft.definition.get("meta") or {}
     req_sid = draft.definition.get("scenarioId") or def_meta.get("scenarioId") or ""
     if req_sid != scenario_id:
@@ -156,6 +160,19 @@ async def update(
     await endpoint_ref_index.sync_scenario(db, scenario_id, row.payload)
     await db.commit()
     await db.refresh(row)
+    # F3 事件落账(业务提交后):name 变化 → rename,否则 edit;
+    # edit 走短窗合并吸收 autosave(2.5s 防抖全量 PUT)。
+    if old_name and server_owned.name and old_name != server_owned.name:
+        await activity.record(
+            db, actor_id=user_id, kind=activity.KIND_RENAME,
+            resource_type="scenario", resource_id=scenario_id,
+            detail={"name": server_owned.name,
+                    "oldName": old_name, "newName": server_owned.name})
+    else:
+        await activity.record(
+            db, actor_id=user_id, kind=activity.KIND_EDIT,
+            resource_type="scenario", resource_id=scenario_id,
+            detail={"name": server_owned.name})
     return await to_read_shape(db, row, user_id=user_id)
 
 
@@ -203,17 +220,55 @@ async def set_visibility(
     return await to_read_shape(db, row)
 
 
+async def resolve_name_conflict(
+    db: AsyncSession, owner_id: int, desired_name: str
+) -> tuple[str, bool]:
+    """该 owner 名下已有同名场景 → 返回 (计数后缀名, True);否则原样。
+
+    F1 分发(静默后缀)与 F2 另存为(前端确认后缀)共用 —— 重名判定
+    的唯一实现,不各写一份。name 上限 64(ScenarioMeta.name
+    max_length),拼后缀前先截断基名。现状无任何 name 唯一约束
+    (2026-09-23 评审拍板不加 DB 约束,存量重名会让索引迁移炸),
+    本 helper 是软校验。
+    """
+    names = {
+        n
+        for (n,) in await db.execute(
+            select(ComposerScenario.name).where(
+                ComposerScenario.owner_id == owner_id))
+    }
+    if desired_name not in names:
+        return desired_name, False
+    n = 2
+    while True:
+        suffix = f" ({n})"
+        cand = desired_name[: 64 - len(suffix)] + suffix
+        if cand not in names:
+            return cand, True
+        n += 1
+
+
 async def copy_scenario(
     db: AsyncSession,
     scenario_id: str,
     *,
     new_owner: str,
     new_owner_id: int,
+    new_name: str | None = None,
+    activity_kind: str | None = None,
+    activity_detail: dict | None = None,
 ) -> Scenario:
     """深拷贝场景 + 数据集(替代 V1 公共库"复制到我的")。
 
     新 id = 原 id + ``-copy-<6hex>``;属主 = 调用者;visibility 恒为
     private(复制来的公共场景也要先归自己再自行发布)。
+    ``new_name``(2026-09-23 批次 F2):另存为/分发自定义副本名;缺省
+    保留 ``(副本)`` 后缀行为(向后兼容)。重名判定不在本函数内 ——
+    调用方先走 :func:`resolve_name_conflict`(软校验,见其注释)。
+
+    ``activity_kind``/``activity_detail``(F1 分发复用):事件落账的
+    kind/detail 覆盖 —— 缺省 ``scenario.save_as``;分发传
+    ``scenario.handoff_received`` + 发送方信息,写入点保持唯一。
     """
     import copy as _copy
     from uuid import uuid4 as _uuid4
@@ -223,14 +278,16 @@ async def copy_scenario(
     new_sid = f"{scenario_id}-copy-{suffix}"[:128]
 
     payload = _copy.deepcopy(src.payload or {})
+    copied_name = new_name or ""
     definition = payload.get("definition")
     if isinstance(definition, dict):
         definition["scenarioId"] = new_sid
         meta = definition.setdefault("meta", {})
         if isinstance(meta, dict):
             meta["scenarioId"] = new_sid
-            meta["name"] = f"{meta.get('name') or src.scenario_id} (副本)"
+            meta["name"] = new_name or f"{meta.get('name') or src.scenario_id} (副本)"
             meta["owner"] = new_owner
+            copied_name = meta["name"]
     draft = ScenarioDraft.model_validate(payload)
     await create(db, draft, owner=new_owner, owner_id=new_owner_id)
 
@@ -258,6 +315,19 @@ async def copy_scenario(
     # 显式复制(新 scheme_id,仿上方 data_sets 循环)。
     await scheme_store.copy_schemes(db, scenario_id, new_sid)
     await db.commit()
+    # F3 事件落账(业务提交后):副本的创建事件归新属主的时间线。
+    await activity.record(
+        db,
+        actor_id=new_owner_id,
+        kind=activity_kind or activity.KIND_SAVE_AS,
+        resource_type="scenario",
+        resource_id=new_sid,
+        detail={
+            "name": copied_name,
+            "sourceScenarioId": scenario_id,
+            **(activity_detail or {}),
+        },
+    )
     return await to_read_shape(db, await _get_row(db, new_sid))
 
 

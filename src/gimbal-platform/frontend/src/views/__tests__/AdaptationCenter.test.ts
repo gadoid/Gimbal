@@ -148,7 +148,8 @@ describe('AdaptationCenter', () => {
 
     const { w } = await mountPage()
 
-    expect(listSpy).toHaveBeenCalledWith({ scope: 'mine', status: undefined })
+    expect(listSpy).toHaveBeenCalledWith(
+      { scope: 'mine', status: undefined, page: 1, page_size: 20 })
     expect(diffSpy).not.toHaveBeenCalled()
     expect(unindexedSpy).not.toHaveBeenCalled()
     expect(driftSpy).not.toHaveBeenCalled()   // carry section 不渲染(后端 AdminUser)

@@ -35,6 +35,11 @@ class ServiceAlias(Base):
 
     alias_name: Mapped[str] = mapped_column(String(128), primary_key=True)
     base_service: Mapped[str] = mapped_column(String(128))
+    # 环境级端点默认层(2026-09-23 批次 F4 方案 B):物化优先级链
+    # 「显式绑定 > 场景声明 > 本列 > 缺口引擎报错」的第三层。NULL =
+    # 该别名不提供 URL 默认,行为与加列前完全一致。别名表是 base_url
+    # 的唯一权威(服务器迁移一处改),不在前端/场景 payload 冗余存。
+    base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # 横向分组标签(环境只是常见用法之一);可空 = 未分组
     group_tag: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # 引用认证管理的凭证;可空 = 不绑,执行时走场景显式绑定/无凭证

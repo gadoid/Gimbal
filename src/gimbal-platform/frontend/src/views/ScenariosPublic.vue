@@ -103,7 +103,13 @@
         : '暂无公共场景 — 团队共享的模板会出现在这里' }}</p>
     </div>
 
-    <Pagination v-model:page="page" :total="total" :page-size="pageSize" />
+    <Pagination
+      v-model:page="page"
+      v-model:page-size="pageSize"
+      :total="total"
+      show-page-size
+      show-jump
+    />
 
     <p class="slib-note">
       公共场景没有「+ 新建场景」——创建永远发生在我的场景,这里只做浏览/复用,避免两套编排入口混淆。公共场景不暴露「方案」这个概念——直接用 config 里写好的默认配置跑,没有多方案可选。要跑不同参数组合,先「复制到我的」再去方案管理拆场景。「执行」和「复制到我的」都收进「⋯」菜单里——执行只会用这个场景锁死的默认 config 跑,不能改参数,主要用途是验证公共场景里定义的步骤能不能正常跑通(尤其是适配中心提示接口有变更的时候,可以直接在这里跑一次确认),不是替代「复制到我的」之后的正式编排使用。

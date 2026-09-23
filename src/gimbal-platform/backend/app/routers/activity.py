@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.db import get_db
 from ..core.deps import CurrentUser
 from ..core.timeutil import iso_naive_utc
-from ..models.composer_scenario import ComposerScenario
+from ..models import ActivityEvent as ActivityEventRow
 from ..models.execution import Execution
 from ..services import adaptation_service
 
@@ -37,9 +37,13 @@ class ActivityEvent(BaseModel):
     executionId: int | None = None
     status: str | None = None
     scenarioId: str | None = None
-    # scenario 面
+    # scenario 面(F3 起走 activity_events:action 是子动作
+    # edit/rename/save_as/handoff_received;detail 携带
+    # name/oldName/newName/sourceScenarioId/senderName)
     name: str | None = None
     module: str | None = None
+    action: str | None = None
+    detail: dict | None = None
     # adaptation 面
     batchId: str | None = None
     fromVersion: str | None = None
@@ -84,22 +88,24 @@ async def get_activity(
     except Exception:
         sources["executions"] = False
 
-    # ── 场景改动(私有桶 = 我的;公共原件的改动不是我的活动)─────────
+    # ── 场景事件(F3,2026-09-23:activity_events 真事件取代
+    #    updated_at 反推;冷启动空窗已拍板接受 —— 旧口径本是假事件,
+    #    不留暖场回退双口径)─────────────────────────────────────────
     try:
-        scen = (await db.execute(
-            select(ComposerScenario)
-            .where(ComposerScenario.owner_id == user.id,
-                   ComposerScenario.visibility == "private")
-            .order_by(ComposerScenario.updated_at.desc())
+        rows = (await db.execute(
+            select(ActivityEventRow)
+            .where(ActivityEventRow.actor_id == user.id,
+                   ActivityEventRow.resource_type == "scenario")
+            .order_by(ActivityEventRow.created_at.desc())
             .limit(SCEN_LIMIT)
         )).scalars().all()
-        for srow in scen:
-            if srow.updated_at is None:
-                continue
+        for r in rows:
+            d = r.detail or {}
             events.append(ActivityEvent(
-                kind="scenario", at=iso_naive_utc(srow.updated_at) or "",
-                scenarioId=srow.scenario_id, name=srow.name or srow.scenario_id,
-                module=srow.module or None))
+                kind="scenario", at=iso_naive_utc(r.created_at) or "",
+                scenarioId=r.resource_id,
+                name=d.get("name") or r.resource_id,
+                action=r.kind, detail=d or None))
         sources["scenarios"] = True
     except Exception:
         sources["scenarios"] = False

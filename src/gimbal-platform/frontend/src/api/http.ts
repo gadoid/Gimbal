@@ -24,12 +24,19 @@ export class ApiError extends Error {
    *  (query-views 域错误码如 sut_auth_expired,2026-09-07 spec §7.5)。 */
   code: number | string
   status: number
+  /** 结构化 detail 的原样引用(如 copy 409 的 {code, suggestion});
+   *  字符串/数组/缺省 detail 时为 undefined。 */
+  detail?: Record<string, unknown>
 
-  constructor(status: number, code: number | string, msg: string) {
+  constructor(
+    status: number, code: number | string, msg: string,
+    detail?: Record<string, unknown>,
+  ) {
     super(msg)
     this.name = 'ApiError'
     this.status = status
     this.code = code
+    this.detail = detail
   }
 }
 
@@ -84,6 +91,7 @@ function normalizeError(err: AxiosError): ApiError {
       : code
     // 平台错误信封字段是 {code, message};msg 兼容旧格式兜底。
     msg = detail.message ?? detail.msg ?? msg
+    return new ApiError(status, code, msg, detail)
   } else if (typeof detail === 'string') {
     msg = detail
   } else if (typeof payload.code === 'number') {

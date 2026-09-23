@@ -43,21 +43,28 @@ async def test_crud_and_strong_registration(client, fresh_db, plate):
 
     # 强约束:目录内服务可登记;裸声明(base 不在目录)→ 409
     r = await client.post("/api/service-aliases", headers=admin, json={
-        "aliasName": "fin-service-uat", "groupTag": "测试",
-        "credentialAlias": "uat-cred",
+        "aliasName": "fin-service-uat", "baseUrl": "https://uat.fin.local",
+        "groupTag": "测试", "credentialAlias": "uat-cred",
     })
     assert r.status_code == 201, r.text
     assert r.json()["baseService"] == "fin-service"  # 派生落库
 
+    # URL 必填(2026-09-23):缺省在 body 校验层拦 422
     r = await client.post("/api/service-aliases", headers=admin,
-                          json={"aliasName": "nope-bare"})
+                          json={"aliasName": "fin-service-qa"})
+    assert r.status_code == 422
+
+    r = await client.post("/api/service-aliases", headers=admin,
+                          json={"aliasName": "nope-bare",
+                                "baseUrl": "https://nowhere.local"})
     assert r.status_code == 409
     assert "unknown_base_service" in r.text
 
     # plate 宕机(空目录)→ 不能登记(2026-09-20 拍板:不做 unverified 松绑)
     plate.down = True
     r = await client.post("/api/service-aliases", headers=admin,
-                          json={"aliasName": "fin-service-sit"})
+                          json={"aliasName": "fin-service-sit",
+                                "baseUrl": "https://sit.fin.local"})
     assert r.status_code == 409
     plate.down = False
 
@@ -66,7 +73,8 @@ async def test_crud_and_strong_registration(client, fresh_db, plate):
     r = await client.get("/api/service-aliases", headers=member)
     assert r.status_code == 200 and len(r.json()["items"]) == 1
     r = await client.post("/api/service-aliases", headers=member,
-                          json={"aliasName": "fin-service-x"})
+                          json={"aliasName": "fin-service-x",
+                                "baseUrl": "https://x.fin.local"})
     assert r.status_code == 403
 
     # patch:显式 null = 清空;缺省 = 不动

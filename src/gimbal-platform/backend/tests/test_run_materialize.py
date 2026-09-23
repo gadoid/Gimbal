@@ -124,6 +124,36 @@ def test_no_env_layer_binding_and_authored_only() -> None:
         not out["config"]["services"].get("svc-orphan")
 
 
+# ── F4 方案 B(2026-09-23):别名 base_url 第三层 ────────────────────
+def test_alias_base_url_fills_undeclared_gap() -> None:
+    """③ 层只补缺:未声明的引用键吃别名 base_url。"""
+    out = materialize_run_copy(
+        _converted(), alias_base_urls={"svc-orphan": "https://alias"})
+    assert out["config"]["services"]["svc-orphan"] == "https://alias"
+
+
+def test_alias_base_url_never_overrides_binding_nor_authored() -> None:
+    """优先级链 ① 绑定 > ② authored > ③ base_url(方案 §4.3 定稿)。"""
+    out = materialize_run_copy(
+        _converted(),
+        service_bindings={"fin-service": {"url": "https://bound"}},
+        alias_base_urls={"fin-service": "https://alias",
+                         "svc-orphan": "https://alias"},
+    )
+    assert out["config"]["services"]["fin-service"] == "https://bound"  # ① 赢
+    out = materialize_run_copy(
+        _converted(), alias_base_urls={"fin-service": "https://alias"})
+    assert out["config"]["services"]["fin-service"] == "https://authored"  # ② 赢
+
+
+def test_alias_entry_without_url_stays_gap() -> None:
+    """base_url 为空串/缺键 = 该别名不提供默认,缺口语义不变。"""
+    out = materialize_run_copy(_converted(), alias_base_urls={"svc-orphan": ""})
+    assert "svc-orphan" not in out["config"]["services"]
+    out = materialize_run_copy(_converted(), alias_base_urls={})
+    assert "svc-orphan" not in out["config"]["services"]
+
+
 # ─── carry 填充(spec §4)────────────────────────────────────────
 from app.services.run_materialize import CarryContext
 

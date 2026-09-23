@@ -33,6 +33,8 @@ class AliasOut(BaseModel):
 
     alias_name: str = Field(alias="aliasName")
     base_service: str = Field(alias="baseService")
+    # F4 方案 B:环境级端点默认层(物化优先级链第三档;NULL = 不提供)
+    base_url: str | None = Field(default=None, alias="baseUrl")
     group_tag: str | None = Field(default=None, alias="groupTag")
     credential_alias: str | None = Field(default=None, alias="credentialAlias")
     owner_user_id: int | None = Field(default=None, alias="ownerUserId")
@@ -48,6 +50,9 @@ class AliasCreate(BaseModel):
     model_config = _CAMEL
 
     alias_name: str = Field(min_length=1, max_length=128, alias="aliasName")
+    # 2026-09-23 调整:别名 = 环境端点的登记,URL 必填(缺省/空串 422);
+    # patch 保持可空兼容(存量行可在触达时补齐)。
+    base_url: str = Field(min_length=1, max_length=512, alias="baseUrl")
     group_tag: str | None = Field(default=None, max_length=64, alias="groupTag")
     credential_alias: str | None = Field(
         default=None, max_length=64, alias="credentialAlias")
@@ -57,6 +62,8 @@ class AliasCreate(BaseModel):
 class AliasPatch(BaseModel):
     model_config = _CAMEL
 
+    base_url: str | None = Field(
+        default=None, max_length=512, alias="baseUrl")
     group_tag: str | None = Field(default=None, max_length=64, alias="groupTag")
     credential_alias: str | None = Field(
         default=None, max_length=64, alias="credentialAlias")
@@ -96,6 +103,7 @@ async def create_alias(
             db, alias_name=body.alias_name, group_tag=body.group_tag,
             credential_alias=body.credential_alias,
             owner_user_id=body.owner_user_id,
+            base_url=body.base_url,
         )
     except UnknownBaseService as e:
         # 强约束(§4.1 拍板):裸声明不猜;plate 宕机期间不能登记
@@ -129,10 +137,13 @@ async def patch_alias(
                           or "groupTag" in body.model_fields_set)
         explicit_cred = ("credential_alias" in body.model_fields_set
                          or "credentialAlias" in body.model_fields_set)
+        explicit_url = ("base_url" in body.model_fields_set
+                        or "baseUrl" in body.model_fields_set)
         patched = await service_aliases.patch_alias(
             db, alias_name,
             group_tag=body.group_tag if explicit_group else ...,
             credential_alias=body.credential_alias if explicit_cred else ...,
+            base_url=body.base_url if explicit_url else ...,
         )
     except KeyError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e

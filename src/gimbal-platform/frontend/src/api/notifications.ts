@@ -20,6 +20,10 @@ export interface NotificationItem {
 export interface NotificationList {
   items: NotificationItem[]
   unread: number
+  /** 2026-09-23 分页批次:后端 list 升级 page/pageSize/total 信封 */
+  total: number
+  page: number
+  pageSize: number
 }
 
 export interface UnreadCount {
@@ -35,6 +39,9 @@ export type SwitchableType =
   | 'scenario_unpublished'
   | 'role_changed'
   | 'resource_transferred'
+  // F1(2026-09-23):分发接收提醒(悬浮标签同一数据源;关 = 标签同步消失)。
+  // resource_transferred(资源转让)= 所有权转移,留给离职处置线,语义不同。
+  | 'resource_handoff'
 
 export const NOTIFICATION_TYPE_LABELS: Record<SwitchableType, string> = {
   execution_finished: '执行完成',
@@ -43,9 +50,14 @@ export const NOTIFICATION_TYPE_LABELS: Record<SwitchableType, string> = {
   scenario_unpublished: '场景下架',
   role_changed: '角色变更',
   resource_transferred: '资源转让',
+  resource_handoff: '收到分享',
 }
 
-export function list(params?: { unreadOnly?: boolean; limit?: number }) {
+export function list(params?: {
+  unreadOnly?: boolean
+  page?: number
+  pageSize?: number
+}) {
   return http
     .get<NotificationList>('/notifications', { params })
     .then((r) => r.data)

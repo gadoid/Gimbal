@@ -38,13 +38,18 @@ def materialize_run_copy(
     resolved_auths: list[Any] | None = None,
     built_in_users: dict[str, Any] | None = None,
     carry_context: "CarryContext | None" = None,
+    alias_base_urls: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """返回物化后的深拷贝;入参不可变(纯函数)。
 
     * users:merge 基座 ``{**built_in_users, **converted.config.users}``
       (内置认证以场景定义为唯一可信源),resolved_auths 按别名覆盖/追加
-    * services:显式绑定 url > 场景 authored(仅对 steps 实际引用的
-      service 键生效,未引用键原样保留;D2 env 补缺层已退役)
+    * services:显式绑定 url > 场景 authored > **别名 base_url**(F4 方案
+      B,2026-09-23 批次;仅对 steps 实际引用的 service 键生效,未引用键
+      原样保留;D2 env 补缺层已退役)。``alias_base_urls`` 由调用方经
+      ``service_aliases.base_urls_for`` 预解析传入(与 resolved_auths /
+      CarryContext 同款「dispatch 预解析、纯函数物化」模式),本函数
+      不查库 —— 优先级链的唯一组装点在此,两调用方(执行/导出)自动同源。
     * carry:预解析上下文注入(填缺失语义;spec §4)
     """
     out = copy.deepcopy(converted)
@@ -56,7 +61,8 @@ def materialize_run_copy(
     cfg["users"] = dict(cfg.get("users") or {})
 
     _apply_services(cfg, steps=out.get("steps") or [],
-                    bindings=service_bindings or {})
+                    bindings=service_bindings or {},
+                    alias_base_urls=alias_base_urls or {})
     _apply_users(cfg, resolved_auths or [], built_in_users=built_in_users or {})
     if carry_context is not None:
         _apply_carry(out, carry_context)
@@ -76,14 +82,23 @@ def _referenced_services(steps: list) -> list[str]:
 
 
 def _apply_services(cfg: dict, *, steps: list,
-                    bindings: dict[str, dict]) -> None:
+                    bindings: dict[str, dict],
+                    alias_base_urls: dict[str, str] | None = None) -> None:
+    """services 物化优先级链的唯一组装点(F4 方案 B 定稿):
+
+    ① 显式绑定 url(RunDialog 现场填)> ② 场景 authored 声明 >
+    ③ service_aliases.base_url > ④ 缺口留给引擎显式报错
+    (RunDialog 并集行提前发现)。③ 层只填「未声明且未绑定」的引用键,
+    与凭证默认「场景显式 > 注册表默认」同款裁决,不发明新语义。
+    """
     services: dict[str, Any] = cfg["services"]
     for svc in _referenced_services(steps):
         bound_url = (bindings.get(svc) or {}).get("url")
         if bound_url:
-            services[svc] = bound_url                    # 显式绑定最优先
-        # D2:env.baseUrl 补缺层退役 — 未绑定则留给 authored/缺口
-        # (未声明缺口由引擎显式报错,RunDialog 并集行提前发现)
+            services[svc] = bound_url                    # ① 显式绑定最优先
+        elif svc not in services and (alias_base_urls or {}).get(svc):
+            services[svc] = alias_base_urls[svc]         # ③ 别名默认(仅补缺)
+        # 未绑定且未命中 authored/别名 → 缺口,引擎显式报错(D2 语义不变)
 
 
 def _apply_users(cfg: dict, resolved_auths: list, *, built_in_users: dict) -> None:

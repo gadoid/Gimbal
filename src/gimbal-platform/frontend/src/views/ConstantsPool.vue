@@ -75,7 +75,7 @@
             </TableRow>
           </TableHeader>
           <TableBody data-testid="entries-table">
-          <TableRow v-for="row in constantsStore.entries" :key="row.id">
+          <TableRow v-for="row in paged" :key="row.id">
             <TableCell><code>{{ row.name }}</code></TableCell>
             <TableCell>
               <span class="chip" :class="row.entry_kind === 'generator'
@@ -94,6 +94,18 @@
           </TableRow>
         </TableBody>
         </Table>
+      </div>
+
+      <!-- 2026-09-23 分页批次:客户端切片(store 保持全量,编排页常量
+           轨道等消费方不受影响);重名校验仍查全量 entries -->
+      <div v-if="pageCount > 1 || constantsStore.entries.length > 0" class="mt-2 flex justify-end">
+        <Pagination
+          v-model:page="page"
+          v-model:page-size="pageSize"
+          :total="constantsStore.entries.length"
+          show-page-size
+          show-jump
+        />
       </div>
     </section>
 
@@ -264,6 +276,8 @@ import type {
   GeneratorParamDesc,
 } from '@/types/constants'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Pagination } from '@/components/ui/pagination'
+import { useClientPager } from '@/composables/useClientPager'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -271,6 +285,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 
 const constantsStore = useConstantsStore()
+
+// 客户端分页(2026-09-23 批次):表格只渲染当前页切片;每页行数存用户偏好
+const { page, pageSize, paged, pageCount } = useClientPager(
+  () => constantsStore.entries, 20, 'constants-pool',
+)
 
 onMounted(() => {
   void constantsStore.ensureEntries().catch(() => toast.error('常量池加载失败'))

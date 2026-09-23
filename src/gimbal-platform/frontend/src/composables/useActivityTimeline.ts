@@ -51,9 +51,23 @@ function toTimelineEvent(e: ActivityEventIn): TimelineEvent {
     }
   }
   if (e.kind === 'scenario') {
+    // F3(2026-09-23):按 action 细分文案 —— 事件表取代 updated_at
+    // 反推后,时间线第一次能区分「改了什么」。旧事件无 action = edit。
+    const d = (e.detail ?? {}) as Record<string, unknown>
+    const name = e.name || e.scenarioId || ''
+    let title = `更新场景 ${name}`
+    if (e.action === 'scenario.rename') {
+      title = `重命名场景 ${d.oldName ?? ''} → ${d.newName ?? name}`
+    } else if (e.action === 'scenario.save_as') {
+      title = `另存为场景 ${name}`
+    } else if (e.action === 'scenario.handoff_received') {
+      const sender = typeof d.senderName === 'string' ? d.senderName : ''
+      title = `收到分享 ${name}${sender ? `(来自 ${sender})` : ''}`
+    }
+    // key 带时间戳:同一场景在一个轴上可有多条事件,只带 id 会撞 key。
     return {
-      key: `scen-${e.scenarioId}`, kind: 'scenario', at: e.at,
-      title: `更新场景 ${e.name || e.scenarioId}`,
+      key: `scen-${e.scenarioId}-${e.at}`, kind: 'scenario', at: e.at,
+      title,
       detail: e.module ?? undefined,
       to: scenarioDetailUrl(e.scenarioId!),
     }

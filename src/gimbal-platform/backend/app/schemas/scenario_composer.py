@@ -249,6 +249,17 @@ class ExportOverlay(BaseModel):
                                                         alias="serviceBindings")
 
 
+class ScenarioCopyIn(BaseModel):
+    """POST /scenarios/{id}/copy 可选请求体(2026-09-23 批次 F2 另存为)。
+
+    缺省(无 body)= 旧「复制到我的」行为,副本名沿用 ``(副本)`` 后缀;
+    带 ``name`` = 另存为,重名由端点 409 + suggestion 交前端确认
+    (软校验口径见 scenario_store.resolve_name_conflict)。
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+
+
 class RunRequest(BaseModel):
     """一次执行的配方(recipe):数据集/认证等全是纯值。
 

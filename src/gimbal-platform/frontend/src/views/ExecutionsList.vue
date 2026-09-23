@@ -78,7 +78,7 @@
       <Button size="sm" class="h-7" data-testid="exec-apply" @click="applyFilters">查询</Button>
       <span class="filter-spacer"></span>
       <span class="filter-count">
-        共 {{ filtered.length }} 条 · <template v-if="failedCount">失败 <strong>{{ failedCount }}</strong> 条</template><template v-else>失败 0 条</template>
+        共 {{ store.total }} 条 · <template v-if="failedCount">失败 <strong>{{ failedCount }}</strong> 条</template><template v-else>失败 0 条</template>
       </span>
     </div>
 
@@ -216,6 +216,17 @@
       <Button variant="outline" size="sm" class="mt-2" @click="router.push(runnerUrl())">去执行器</Button>
     </div>
 
+    <!-- 2026-09-23 分页批次:原固定 limit 200 截断 → 服务端真分页 -->
+    <div v-if="pageCount > 1 || store.total > 0" class="exec-pager">
+      <Pagination
+        v-model:page="page"
+        v-model:page-size="pageSize"
+        :total="store.total"
+        show-page-size
+        show-jump
+      />
+    </div>
+
     <!-- ═══ 页尾图例(原型底部说明区:台账定位 + 信号口径) ═══════════ -->
     <div class="exec-legend">
       <p>
@@ -236,7 +247,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ListPage from '@/layouts/ListPage.vue'
 import { toast } from '@/utils/toast'
@@ -252,6 +263,8 @@ import { showError } from '@/utils/errorFallback'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Alert, AlertTitle } from '@/components/ui/alert'
+import { Pagination } from '@/components/ui/pagination'
+import { usePagerSize } from '@/composables/usePagerSize'
 import type { ExecutionListItem } from '@/api/executions'
 
 const route = useRoute()
@@ -319,6 +332,17 @@ const appliedStatus = ref(filterStatus.value)
 const appliedWindow = ref(filterWindow.value)
 const appliedBatch = ref(filterBatch.value)
 
+// ── 分页(2026-09-23 批次:固定 limit 200 截断 → 服务端真分页;
+//    每页行数存用户偏好)───────────────────────────────────────────
+const page = ref(1)
+const { pageSize } = usePagerSize('executions', 20)
+const pageCount = computed(() => Math.max(1, Math.ceil(store.total / pageSize.value)))
+watch(page, () => { void fetchFiltered().catch(() => undefined) })
+watch(pageSize, () => {
+  if (page.value !== 1) page.value = 1
+  else void fetchFiltered().catch(() => undefined)
+})
+
 /** 搜索词/状态/时间窗下推服务端(M4):q = scenario_name/scenario_id
  * 子串 + 执行号前缀;列表取回后通过率等 KPI 随之重算。 */
 const filtered = computed(() => store.list)
@@ -329,14 +353,17 @@ function applyFilters(): void {
   appliedStatus.value = filterStatus.value
   appliedWindow.value = filterWindow.value
   appliedBatch.value = filterBatch.value
-  void fetchFiltered()
+  if (page.value !== 1) page.value = 1 // watch 拉取
+  else void fetchFiltered()
   refreshSummary()
 }
 
 let listSeq = 0
 async function fetchFiltered(): Promise<void> {
   const seq = ++listSeq
-  const params: Parameters<typeof listExecutions>[0] = { limit: 200 }
+  const params: Parameters<typeof listExecutions>[0] = {
+    page: page.value, pageSize: pageSize.value,
+  }
   if (appliedQ.value.trim()) params.q = appliedQ.value.trim()
   if (appliedStatus.value) params.status = appliedStatus.value as ExecutionStatus
   if (appliedBatch.value) params.batchId = appliedBatch.value
@@ -351,6 +378,11 @@ async function fetchFiltered(): Promise<void> {
       store.list = r.items
       store.total = r.total
       store.lastError = ''
+      // 结果集变小后停在越界页 → 回末页重取一次。
+      if (r.items.length === 0 && page.value > 1) {
+        page.value = Math.max(1, Math.ceil(r.total / pageSize.value))
+        return
+      }
     }
   } catch (e) {
     if (seq === listSeq) store.lastError = e instanceof Error ? e.message : 'fetch failed'
@@ -614,6 +646,8 @@ onUnmounted(() => {
 
 .mono { font-family: var(--font-mono, monospace); }
 .dim { color: #8B93A1; }
+
+.exec-pager { display: flex; justify-content: flex-end; margin-top: 10px; }
 </style>
 
 <style src="@/styles/status-colors.css"></style>

@@ -24,6 +24,7 @@ def alias_out(row: ServiceAlias) -> dict:
     return {
         "aliasName": row.alias_name,
         "baseService": row.base_service,
+        "baseUrl": row.base_url,
         "groupTag": row.group_tag,
         "credentialAlias": row.credential_alias,
         "ownerUserId": row.owner_user_id,
@@ -60,6 +61,7 @@ async def list_aliases(
 async def create_alias(
     db: AsyncSession, *, alias_name: str, group_tag: str | None = None,
     credential_alias: str | None = None, owner_user_id: int | None = None,
+    base_url: str | None = None,
 ) -> dict:
     base = service_names.derive_base(
         alias_name, await service_names.catalog_service_names())
@@ -71,6 +73,7 @@ async def create_alias(
     row = ServiceAlias(
         alias_name=alias_name, base_service=base, group_tag=group_tag,
         credential_alias=credential_alias, owner_user_id=owner_user_id,
+        base_url=base_url,
     )
     db.add(row)
     await db.commit()
@@ -80,7 +83,7 @@ async def create_alias(
 
 async def patch_alias(
     db: AsyncSession, alias_name: str, *, group_tag: str | None = ...,
-    credential_alias: str | None = ...,
+    credential_alias: str | None = ..., base_url: str | None = ...,
 ) -> dict:
     row = await db.get(ServiceAlias, alias_name)
     if row is None:
@@ -89,6 +92,8 @@ async def patch_alias(
         row.group_tag = group_tag
     if credential_alias is not ...:
         row.credential_alias = credential_alias
+    if base_url is not ...:
+        row.base_url = base_url
     await db.commit()
     await db.refresh(row)
     return alias_out(row)
@@ -118,3 +123,25 @@ async def credential_aliases_for(
         )
     )).all()
     return {name: cred for name, cred in rows}
+
+
+async def base_urls_for(
+    db: AsyncSession, raw_names: list[str],
+) -> dict[str, str]:
+    """执行期读(F4 方案 B,2026-09-23 批次):raw 服务键 → 别名表
+    精确命中的 base_url —— services 物化优先级链的第三层
+    「显式绑定 > 场景声明 > **base_url** > 缺口引擎报错」的数据源。
+
+    与 credential_aliases_for 同款形态(照抄结构,别处不得另开第二份
+    查询实现);优先级裁决在唯一组装点
+    ``materialize_run_copy._apply_services``,本函数只提供数据。
+    """
+    if not raw_names:
+        return {}
+    rows = (await db.execute(
+        select(ServiceAlias.alias_name, ServiceAlias.base_url).where(
+            ServiceAlias.alias_name.in_(raw_names),
+            ServiceAlias.base_url.is_not(None),
+        )
+    )).all()
+    return {name: url for name, url in rows if url}

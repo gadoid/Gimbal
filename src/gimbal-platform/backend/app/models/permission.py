@@ -82,6 +82,13 @@ class Notification(Base):
     link: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # 批量执行聚合通知的归并键(§3.2 批量合并)
     batch_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # 资源维度归位(2026-09-23 批次 F1 分发):悬浮标签按
+    # (user_id, type, resource_type) 查未读;payload 存发送方/原名等
+    # 结构化数据。全可空 —— 仅 resource_handoff 类通知填写,存量行
+    # 不回填(消费查询过滤新类型,无脏读面)。
+    resource_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    resource_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    payload: Mapped[dict | None] = mapped_column(JsonVar, nullable=True)
     # 公告的过期时刻;查询侧过滤
     expires_at: Mapped[datetime | None] = mapped_column(
         UtcDateTime, nullable=True

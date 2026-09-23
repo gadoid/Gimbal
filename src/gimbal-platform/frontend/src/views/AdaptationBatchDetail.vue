@@ -45,7 +45,7 @@
     </Alert>
 
     <div class="ops">
-      <div v-for="op in detail.ops" :key="op.id" class="op-row">
+      <div v-for="op in paged" :key="op.id" class="op-row">
         <div class="op-head">
           <input
             v-if="auth.hasRole('operator', 'admin') && selectable(op)"
@@ -85,6 +85,17 @@
           </span>
         </div>
         <OpPreview :op="op" />
+      </div>
+      <!-- 2026-09-23 分页批次:单 GET 全量返回 → 客户端切片;勾选集按
+           op.id 存,跨页保留 -->
+      <div v-if="pageCount > 1 || detail.ops.length > 0" class="mt-2 flex justify-end">
+        <Pagination
+          v-model:page="page"
+          v-model:page-size="pageSize"
+          :total="detail.ops.length"
+          show-page-size
+          show-jump
+        />
       </div>
     </div>
 
@@ -174,6 +185,8 @@ import { mergeSeedFrom } from '@/utils/adaptation-merge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Alert, AlertTitle } from '@/components/ui/alert'
+import { Pagination } from '@/components/ui/pagination'
+import { useClientPager } from '@/composables/useClientPager'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -196,6 +209,12 @@ const rollbackReport = ref<RollbackReport | null>(null)
 const selectedIds = computed(
   () => new Set(selectedOps.value.map((o) => o.id)))
 const mergeReady = computed(() => mergeSeedFrom(selectedOps.value) !== null)
+
+// 客户端分页(2026-09-23 批次):detail 单 GET 全量,ops 表切片渲染;
+// 勾选集 selectedOps 按 op.id 存,翻页不丢。
+const { page, pageSize, paged, pageCount } = useClientPager(
+  () => detail.value?.ops ?? [], 20, 'adaptation-ops',
+)
 
 function selectable(op: OpOut): boolean {
   return op.status === 'pending'

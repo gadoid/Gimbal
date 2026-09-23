@@ -79,6 +79,32 @@ async def _count_admins(db: AsyncSession) -> int:
     ).scalar_one()
 
 
+# ── GET /roster — 成员选择器(2026-09-23 批次 F1 分发)─────────────────
+@router.get("/roster")
+async def get_roster(
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """分发对话框的成员选择器:CurrentUser 可调(分发是 member 级能力,
+    现有 GET /users 是 operator+ 且带管理字段,不能降级复用)。
+
+    仅 ``is_active`` 用户、排除自己;User 表无 email 列,不为选人器
+    加列 —— ``display_name (username)`` 对内部平台足够定位人。
+    不分页、上限 200,前端本地过滤(团队规模下比搜索接口省事)。
+    """
+    rows = (await db.execute(
+        select(User)
+        .where(User.is_active.is_(True), User.id != user.id)
+        .order_by(User.display_name, User.username)
+        .limit(200)
+    )).scalars().all()
+    return {"items": [
+        {"id": u.id, "username": u.username,
+         "display_name": u.display_name or ""}
+        for u in rows
+    ]}
+
+
 # ── GET / ──────────────────────────────────────────────────────────────
 @router.get("", response_model=UserListOut)
 async def list_users(

@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import CarryConfig from '@/views/CarryConfig.vue'
 import * as carryApi from '@/api/carry'
@@ -27,13 +28,18 @@ async function mountPage(query = ''): Promise<{ w: ReturnType<typeof mount>; rou
   })
   await router.push(`/carry-config${query}`)
   await router.isReady()
-  const w = mount(CarryConfig, { attachTo: document.body, global: { plugins: [router] } })
+  // 每页行数偏好(usePagerSize → useUserPreference → useAuthStore)需要 pinia
+  const w = mount(CarryConfig, {
+    attachTo: document.body,
+    global: { plugins: [createPinia(), router] },
+  })
   await flushPromises()
   return { w, router }
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  setActivePinia(createPinia())
   vi.mocked(carryApi.getDefaults).mockResolvedValue({
     '$.headers.X-Trace-Id': 'default-trace',
     '$.fee': '0.5',

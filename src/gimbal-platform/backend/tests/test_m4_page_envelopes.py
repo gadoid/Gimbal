@@ -170,7 +170,8 @@ async def test_service_aliases_envelope_q(client, plate):
     plate.services = [{"name": "fin-service"}]
     for alias in ("fin-service-uat", "fin-service-prod"):
         r = await client.post("/api/service-aliases", headers=admin,
-                              json={"aliasName": alias})
+                              json={"aliasName": alias,
+                                    "baseUrl": f"https://{alias.split('-')[-1]}.fin.local"})
         assert r.status_code == 201, r.text
 
     r = await client.get("/api/service-aliases", headers=admin)

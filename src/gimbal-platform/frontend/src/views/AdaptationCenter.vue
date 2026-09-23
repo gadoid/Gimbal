@@ -195,6 +195,15 @@
         </tbody>
       </table>
     </div>
+    <div v-if="batchPageCount > 1 || batchTotal > 0" class="mt-2 flex justify-end">
+      <Pagination
+        v-model:page="batchPage"
+        v-model:page-size="batchPageSize"
+        :total="batchTotal"
+        show-page-size
+        show-jump
+      />
+    </div>
 
     <!-- carry 漂移(T16,admin-only:后端 drift 为 AdminUser,member 403)。
          plateReachable=False → 不渲染清单 + 显式警示 + 禁批生成(T11 硬性
@@ -251,7 +260,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageHead from '@/components/scenario-lib/PageHead.vue'
 import { toast } from '@/utils/toast'
@@ -273,6 +282,8 @@ import { useAdaptationsStore } from '@/stores/adaptations'
 import UnindexedAlert from '@/components/adaptations/UnindexedAlert.vue'
 import ImpactDrawer from '@/components/adaptations/ImpactDrawer.vue'
 import { Button } from '@/components/ui/button'
+import { Pagination } from '@/components/ui/pagination'
+import { usePagerSize } from '@/composables/usePagerSize'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 const auth = useAuthStore()
@@ -284,6 +295,19 @@ const unindexed = ref<UnindexedStep[]>([])
 const batchRows = ref<BatchOut[]>([])
 const batchTotal = ref(0)
 const batchStatus = ref('')
+// ── 批次表分页(2026-09-23 批次:信封本就带 page/page_size/total,
+//    此前没传页码 = 服务端默认整页倒回来;现在真分页)────────────────
+const batchPage = ref(1)
+const { pageSize: batchPageSize } = usePagerSize('adaptation-batches', 20)
+const batchPageCount = computed(() =>
+  Math.max(1, Math.ceil(batchTotal.value / batchPageSize.value)))
+watch(batchPage, () => {
+  void loadBatches(auth.hasRole('operator', 'admin') ? undefined : 'mine')
+})
+watch(batchPageSize, () => {
+  if (batchPage.value !== 1) batchPage.value = 1
+  else void loadBatches(auth.hasRole('operator', 'admin') ? undefined : 'mine')
+})
 /** M4(§6.3):状态下推服务端;空串 = 全部。 */
 const BATCH_STATUS_OPTS = [
   { value: '', label: '全部' },
@@ -296,7 +320,8 @@ const BATCH_STATUS_OPTS = [
 function setBatchStatus(v: string): void {
   if (batchStatus.value === v) return
   batchStatus.value = v
-  void loadBatches(auth.hasRole('operator', 'admin') ? undefined : 'mine')
+  if (batchPage.value !== 1) batchPage.value = 1 // watch 拉取
+  else void loadBatches(auth.hasRole('operator', 'admin') ? undefined : 'mine')
 }
 const batchesLoading = ref(false)
 
@@ -354,9 +379,19 @@ const batchStatusClass: Record<string, string> = {
 async function loadBatches(scope?: 'mine'): Promise<void> {
   batchesLoading.value = true
   try {
-    const env = await api.listBatches({ scope, status: batchStatus.value || undefined })
+    const env = await api.listBatches({
+      scope,
+      status: batchStatus.value || undefined,
+      page: batchPage.value,
+      page_size: batchPageSize.value,
+    })
     batchRows.value = env.items
     batchTotal.value = env.total
+    // 结果集变小后停在越界页 → 回末页重取一次。
+    if (env.items.length === 0 && batchPage.value > 1) {
+      batchPage.value = Math.max(1, Math.ceil(env.total / batchPageSize.value))
+      return
+    }
   } catch (e) {
     toast.error(api.errMsg(e, '批次列表加载失败'))
     batchRows.value = []

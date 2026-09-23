@@ -63,6 +63,14 @@
                   <button type="button" class="nm" :title="row.meta.name || row.meta.scenarioId" @click.stop="openScenario(row)">
                     {{ row.meta.name || row.meta.scenarioId }}
                   </button>
+                  <!-- F1:未读分享悬浮标签(unread resource_handoff 驱动,
+                       进入场景即销账)—— hover title 给完整「来自 X 的分享」。 -->
+                  <span
+                    v-if="handoffSenders.has(row.meta.scenarioId)"
+                    class="handoff-badge"
+                    :data-testid="`handoff-badge-${row.meta.scenarioId}`"
+                    :title="`来自 ${handoffSenders.get(row.meta.scenarioId)} 的分享`"
+                  >分享</span>
                   <button
                     v-if="row.schemeCount"
                     type="button"
@@ -96,6 +104,10 @@
                   <DropdownMenuContent align="end" class="sl-menu">
                     <DropdownMenuItem class="sl-menu-item" @click="onCmd('detail', row)">查看详情</DropdownMenuItem>
                     <DropdownMenuItem class="sl-menu-item" @click="onCmd('edit', row)">编辑场景</DropdownMenuItem>
+                    <!-- F2(2026-09-23):重命名 —— 拉 draft 只改 meta.name 走既有
+                         PUT(name 生成列自动重算,后端零新增);软校验,重名不拦。 -->
+                    <DropdownMenuItem class="sl-menu-item" data-testid="rename-menu" @click="renameScenario(row)">重命名</DropdownMenuItem>
+                    <DropdownMenuItem class="sl-menu-item" data-testid="handoff-menu" @click="openHandoff(row)">分发给…</DropdownMenuItem>
                     <DropdownMenuItem class="sl-menu-item" @click="goSchemes(row)">方案管理</DropdownMenuItem>
                     <DropdownMenuItem class="sl-menu-item" @click="onCmd('export', row)">导出 JSON</DropdownMenuItem>
                     <!-- 按方案导出(2026-09-22 重设计):原「导出 → 弹窗选方案」
@@ -169,27 +181,40 @@
       <button v-if="!filtering" type="button" class="slib-create" @click="onCreate">+ 新建场景</button>
     </div>
 
-    <Pagination v-model:page="page" :total="total" :page-size="pageSize" />
+    <Pagination
+      v-model:page="page"
+      v-model:page-size="pageSize"
+      :total="total"
+      show-page-size
+      show-jump
+    />
 
     <p class="slib-note">
       「次数」「并发」是卡片底部两个独立的小徽章,平时只显示当前值,点一下变成可编辑输入框直接改数字;不需要额外弹一整层面板。更深的参数还是要进方案管理去改。方案卡片左上角的「默认」标记指这个场景的默认方案——关注页的执行健康趋势只统计默认方案的执行结果,不跨方案聚合。
     </p>
+
+    <!-- F1(2026-09-23):分发给…(副本交接;结果面板在弹窗内) -->
+    <HandoffDialog v-model:open="handoffOpen" :scenario="handoffTarget" />
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from '@/utils/toast'
 import { useAuthStore } from '@/stores/auth'
 import {
   getScenarioDraft, listRunSchemes, updateRunScheme, runScenario, schemeToRunRequest,
+  updateScenario,
   type SchemeV2,
 } from '@/api/scenario-composer'
 import { convertDraftToExecutable, schemeToOverlay } from '@/stores/scenario-draft'
 import FilterGroups from '@/components/scenario-lib/FilterGroups.vue'
+import HandoffDialog from '@/components/scenario-lib/HandoffDialog.vue'
+import { getHandoffUnread } from '@/api/handoff'
+import { markRead } from '@/api/notifications'
 import { downloadFile } from '@/utils/download'
-import { confirmAction } from '@/utils/confirmAction'
+import { confirmAction, promptAction } from '@/utils/confirmAction'
 import { composerUrl, scenarioDetailUrl, scenarioSchemesUrl } from '@/utils/links'
 import { showError } from '@/utils/errorFallback'
 import { shortDateTime } from '@/utils/datetime'
@@ -229,6 +254,22 @@ const expandedId = ref<string | null>(null)
 const schemesLoadingId = ref<string | null>(null)
 const schemesByScenario = reactive(new Map<string, SchemeV2[]>())
 
+/** 展开行是否还有在途执行(queued/running)—— 非空即启动轮询。 */
+const expandedInFlight = computed(() => {
+  const id = expandedId.value
+  if (!id) return null
+  const any = runs.runsOf(id).value.some(
+    (e) => e.status === 'running' || e.status === 'queued')
+  return any ? id : null
+})
+// 面板开着等结果:在途期间每 10s 强刷,终态落地卡面自动翻「完成/失败」,
+// 下一次刷新算出无在途 → computed 变 null → onCleanup 自停。
+watch(expandedInFlight, (id, _prev, onCleanup) => {
+  if (!id) return
+  const timer = window.setInterval(() => { void runs.load(id, true) }, 10_000)
+  onCleanup(() => window.clearInterval(timer))
+})
+
 /** 后端读侧「admin 全量;普通用户 = public + 自己的」→ 非 public 桶对管理员
  *  装的是全员的私有场景,副标题必须说实话,不能对管理员自称"你的"。 */
 const pageSubtitle = computed(() =>
@@ -240,8 +281,10 @@ const pageSubtitle = computed(() =>
 const formatTime = shortDateTime
 
 onMounted(load)
+onMounted(loadHandoffBadges)
 
 function openScenario(row: ScenarioListItem) {
+  void consumeHandoffBadge(row.meta.scenarioId)
   router.push(composerUrl(row.meta.scenarioId))
 }
 function onCreate() {
@@ -259,10 +302,14 @@ async function toggleExpand(row: ScenarioListItem) {
     return
   }
   expandedId.value = id
+  // 执行状态每次展开都强刷(方案列表仍走缓存):runs 缓存是模块级、
+  // 跨路由存活的,不强刷会一直显示发起时那份「执行中」旧照 ——
+  // 执行早已完成、执行记录页也翻篇了,这里还钉在 running。
+  const runsP = runs.load(id, true)
   if (schemesByScenario.has(id)) return
   schemesLoadingId.value = id
   try {
-    const [schemes] = await Promise.all([listRunSchemes(id), runs.load(id)])
+    const [schemes] = await Promise.all([listRunSchemes(id), runsP])
     schemesByScenario.set(id, schemes)
   } catch (e) {
     toast.error(`方案加载失败: ${(e as Error).message}`)
@@ -365,8 +412,72 @@ async function exportByScheme(row: ScenarioListItem, scheme: SchemeV2): Promise<
   }
 }
 
+// ── F2(2026-09-23):重命名 ───────────────────────────────────────
+/** 拉 draft 只改 meta.name 走既有 PUT(name 生成列自动重算,后端零新增)。
+ * 软校验口径:与已有场景重名不拦(库里躺着历史重名,硬拦会卡死老数据)。 */
+async function renameScenario(row: ScenarioListItem) {
+  const id = row.meta.scenarioId
+  const name = await promptAction(
+    '场景名称(1–64 字符)', '重命名场景', { inputValue: row.meta.name })
+  if (name === null) return
+  const trimmed = name.trim()
+  if (!trimmed || trimmed === row.meta.name) return
+  if (trimmed.length > 64) return toast.error('名称最长 64 字符')
+  try {
+    const draft = await getScenarioDraft(id)
+    draft.definition.meta = { ...draft.definition.meta, name: trimmed }
+    await updateScenario(id, draft)
+    toast.success(`已重命名为 ${trimmed}`)
+    await load() // 当前页重拉(名称列/筛选索引同步)
+  } catch (e) {
+    showError('重命名', undefined, (e as Error).message)
+  }
+}
+
+// ── F1(2026-09-23):分发给… + 「来自 X 的分享」悬浮标签 ──────────
+const handoffOpen = ref(false)
+const handoffTarget = ref<{ id: string; name: string } | null>(null)
+/** scenarioId → 发送方昵称(unread resource_handoff;空 Map = 无标签)。 */
+const handoffSenders = ref(new Map<string, string>())
+
+async function loadHandoffBadges() {
+  try {
+    const { items } = await getHandoffUnread()
+    handoffSenders.value = new Map(
+      items
+        .filter((i) => i.senderName)
+        .map((i) => [i.resourceId, i.senderName as string]))
+  } catch { /* 徽标是增强:失败静默留白 */ }
+}
+
+function openHandoff(row: ScenarioListItem) {
+  handoffTarget.value = {
+    id: row.meta.scenarioId,
+    name: row.meta.name || row.meta.scenarioId,
+  }
+  handoffOpen.value = true
+}
+
+/** 进入场景即销账悬浮标签(方案 §1.4 消失时机):乐观摘牌 +
+ *  按通知 id 标读;销账失败不拦导航。 */
+async function consumeHandoffBadge(scenarioId: string) {
+  if (!handoffSenders.value.has(scenarioId)) return
+  handoffSenders.value = new Map(
+    [...handoffSenders.value].filter(([k]) => k !== scenarioId))
+  try {
+    const { items } = await getHandoffUnread()
+    const ids = items
+      .filter((i) => i.resourceId === scenarioId)
+      .map((i) => i.id)
+    if (ids.length) await markRead(ids)
+  } catch { /* 静默 */ }
+}
+
 async function onCmd(cmd: string, row: ScenarioListItem) {
-  if (cmd === 'detail') return router.push(scenarioDetailUrl(row.meta.scenarioId))
+  if (cmd === 'detail') {
+    void consumeHandoffBadge(row.meta.scenarioId)
+    return router.push(scenarioDetailUrl(row.meta.scenarioId))
+  }
   if (cmd === 'edit') return openScenario(row)
   if (cmd === 'export') return exportRow(row)
   if (cmd === 'publish') {
@@ -422,4 +533,16 @@ async function onCmd(cmd: string, row: ScenarioListItem) {
 <style scoped>
 .sys-list { display: flex; flex-wrap: wrap; gap: 4px; }
 .row-expired td { opacity: 0.55; }
+/* F1:未读分享标签 —— hover title 由模板提供,这里只管形态 */
+.handoff-badge {
+  flex: none;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #b45309;
+  background: rgb(245 158 11 / 12%);
+  border: 1px solid rgb(245 158 11 / 45%);
+  cursor: help;
+}
 </style>

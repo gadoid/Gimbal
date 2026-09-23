@@ -65,12 +65,32 @@ async def test_value_shape_validated(client: AsyncClient):
         ("workbench.layout", "not-an-object"),                            # 整体形态
         ("timeline.colors", {"execution": "x" * 200}),                    # 单值过长
         ("follows.pinned", {"ids": [f"s{i}" for i in range(21)]}),        # 超上限
+        ("pager.sizes", {"sizes": {"auths": 0}}),                         # 行数下界
+        ("pager.sizes", {"sizes": {"auths": 501}}),                       # 行数上界
+        ("pager.sizes", {"sizes": {"auths": "20"}}),                      # 非整数
+        ("pager.sizes", {"sizes": {f"p{i}": 20 for i in range(65)}}),     # 页面键超上限
     ]
     for key, value in bad:
         r = await client.put(f"/api/me/preferences/{key}", headers=hdr, json={"value": value})
         assert r.status_code == 422, f"{key}={value} 本该被拒"
         assert r.json()["detail"]["code"] == "bad_pref_value"
     assert await _get(client, hdr) == {}   # 一次都没落库
+
+
+async def test_pager_sizes_roundtrip(client: AsyncClient):
+    """2026-09-23 分页批次:每页行数偏好走通用白名单键,整值覆盖。"""
+    hdr = await _mk(client, "pref_pager")
+    sizes = {"sizes": {"scenarios-mine": 50, "auths": 100}}
+    r = await client.put(
+        "/api/me/preferences/pager.sizes", headers=hdr, json={"value": sizes})
+    assert r.status_code == 200
+    assert await _get(client, hdr) == {"pager.sizes": sizes}
+    # 整值覆盖:改一页不动另一页由前端合并,服务端只见最终整值
+    r = await client.put(
+        "/api/me/preferences/pager.sizes", headers=hdr,
+        json={"value": {"sizes": {"auths": 20}}})
+    assert r.status_code == 200
+    assert await _get(client, hdr) == {"pager.sizes": {"sizes": {"auths": 20}}}
 
 
 async def test_preferences_do_not_leak_across_users(client: AsyncClient):

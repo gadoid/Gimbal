@@ -111,10 +111,14 @@
     </div>
 
     <Pagination
-      v-if="listPageCount > 1"
+      v-if="listPageCount > 1 || listTotal > 0"
       v-model:page="listPage"
+      :page-size="listPageSize"
       :total="listTotal"
-      :page-size="list.pageSize"
+      :page-sizes="[20, 50, 100, 200]"
+      show-page-size
+      show-jump
+      @update:page-size="list.setPageSize"
     />
 
     <!-- ── 创建 / 编辑(定稿表单范式)──────────────────────────── -->
@@ -386,12 +390,14 @@ const list = useServerList<AuthSession, Record<string, string | number | boolean
     token_type: tokenTypeFilter.value === 'all' ? undefined : tokenTypeFilter.value,
   }),
   pageSize: 50,
+  pagerKey: 'auths',
 })
 
 const visibleAuths = computed(() => list.items.value)
 const listTotal = computed(() => list.total.value)
 const listLoading = computed(() => list.loading.value)
 const listPageCount = computed(() => list.pageCount.value)
+const listPageSize = computed(() => list.pageSize.value)
 const listPage = list.page
 
 async function reloadList(): Promise<void> {

@@ -16,7 +16,7 @@ import json
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, StringConstraints, ValidationError
+from pydantic import BaseModel, Field, StrictInt, StringConstraints, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,12 +54,21 @@ class TimelineColors(BaseModel):
     adaptation: _IdStr = ""
 
 
+class PagerSizes(BaseModel):
+    """各列表页「每页行数」(2026-09-23 分页批次)。键 = 页面标识 slug
+    (前端定,如 ``scenarios-mine``/``auths``),值 = 1..500;整值覆盖。"""
+
+    sizes: dict[_IdStr, Annotated[StrictInt, Field(ge=1, le=500)]] = Field(
+        default_factory=dict, max_length=64)
+
+
 #: 白名单 = 键 → 校验模型。不在表里的键一律拒读拒写,免得这张表变成
 #: 谁都能塞的杂物间(体积/形态都没人管)。
 _MODELS: dict[str, type[BaseModel]] = {
     "workbench.layout": WorkbenchLayout,
     "follows.pinned": FollowsPinned,
     "timeline.colors": TimelineColors,
+    "pager.sizes": PagerSizes,
 }
 
 

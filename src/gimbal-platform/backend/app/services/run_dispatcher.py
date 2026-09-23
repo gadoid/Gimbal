@@ -650,6 +650,13 @@ async def dispatch_run(
         # 单条发起为 None。列 + config_json 双落:列驱动筛选,config 驱动
         # 重跑配方的原样保真。
         batch_id=req.batch_id,
+        # 台账快照列(M2):通知/列表展示用 name,场景删了执行仍可读。
+        # 直读唯一权威 payload.definition.meta.name,不走 _meta_from_row
+        # 的整 meta 严格校验 —— 畸形行不拦发起,空值由通知侧兜底链接住。
+        scenario_name=str(
+            (definition_from_payload(scen.payload).get("meta") or {}
+            ).get("name") or ""
+        ).strip(),
         # 执行时场景快照:与传给 _fanout 的 scenario_payload 同拍同源
         # (同一读取),保证"快照即所执行";深拷贝隔离后续 fanout 内的
         # setdefault 写穿,不污染快照。
@@ -804,6 +811,22 @@ async def _fanout(
     # 认证解析通过、即将分发行 → queued 置 running(UI 可见"在跑")。
     await _mark_running(db_factory, execution_id)
 
+    # F4 方案 B(2026-09-23):别名 base_url 预解析 —— dispatch 阶段查
+    # 一次,纯函数物化时消费(与 resolved_auths/CarryContext 同款传参
+    # 模式)。增强链路:查表失败降级空表,绝不阻塞执行。
+    try:
+        async with db_factory() as _alias_s:
+            alias_urls = await service_aliases.base_urls_for(
+                _alias_s,
+                _referenced_services(
+                    (definition_from_payload(scenario_payload)
+                     .get("steps") or [])),
+            )
+    except Exception:  # noqa: BLE001
+        logger.opt(exception=True).warning(
+            "run_dispatcher: alias base_url lookup failed; skipped")
+        alias_urls = {}
+
     sem = asyncio.Semaphore(max(1, parallel))
 
     # P6:整单固定一次 compose 时间戳 — fill_plate_defaults 对缺失的
@@ -945,6 +968,7 @@ async def _fanout(
                         resolved_auths=exec_auths,
                         built_in_users=built_in_users,
                         carry_context=carry_ctx,
+                        alias_base_urls=alias_urls,
                     )
                     # 落盘数据驱动用例快照后交给 CLI 子进程执行。
                     case_path = _write_case_file(case_dir, composed_exec)
@@ -1285,12 +1309,23 @@ async def _finalize_execution(
 
 
 async def _notify_finished(ex: Execution, final_status: str) -> None:
-    """execution_finished 通知(独立会话;任何失败只记日志)。"""
+    """execution_finished 通知(独立会话;任何失败只记日志)。
+
+    title 带场景 name(铃铛渲染 font-medium 着重),body 前缀
+    scenario_id(小字弱化)—— name + id 一起给。name 首选执行快照列;
+    存量行快照为空时查活场景行补,场景已删则回落 id。
+    """
     from . import notifications as notify_svc
     from ..core import db as db_module
-    label = ex.scenario_name or ex.scenario_id
     try:
         async with db_module.SessionLocal() as s2:
+            name = ex.scenario_name
+            if not name:
+                row = await get_row(s2, ex.scenario_id)
+                if row is not None:
+                    name = str((definition_from_payload(row.payload)
+                                .get("meta") or {}).get("name") or "").strip()
+            label = name or ex.scenario_id
             if ex.batch_id:
                 await notify_svc.upsert_execution_finished(
                     s2, user_id=ex.owner_id, batch_id=ex.batch_id,
@@ -1303,7 +1338,7 @@ async def _notify_finished(ex: Execution, final_status: str) -> None:
                     type_="execution_finished",
                     title=("执行完成:" if final_status == STATUS_DONE
                            else "执行失败:") + label,
-                    body=f"{ex.passed} 通过 / {ex.failed} 失败",
+                    body=f"{ex.scenario_id} · {ex.passed} 通过 / {ex.failed} 失败",
                     link=f"/executions/{ex.id}"
                          + ("?rows=failed" if final_status == STATUS_FAILED else ""),
                 )

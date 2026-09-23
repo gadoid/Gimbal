@@ -59,6 +59,14 @@
         </button>
       </div>
 
+      <!-- F5(2026-09-23):弹层只留 30 条滚动,整页视图走通知中心 -->
+      <button
+        type="button"
+        class="block w-full border-t px-3 py-2 text-center text-caption text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+        data-testid="bell-view-all"
+        @click="open = false; router.push('/notifications')"
+      >查看全部 →</button>
+
       <!-- 按 type 开关(开关先于吵闹型通知) -->
       <div class="border-t px-3 py-2">
         <div class="mb-1 text-caption font-medium text-slate-600">通知开关</div>
@@ -128,7 +136,7 @@ async function poll() {
 async function loadList() {
   loading.value = true
   try {
-    const out = await api.list({ limit: 30 })
+    const out = await api.list({ page: 1, pageSize: 30 })
     items.value = out.items
     count.value = out.unread
   } finally {

@@ -55,6 +55,38 @@ async def test_list_read_unread_count_and_role_version(client: AsyncClient):
     assert r.json()["count"] == 0
 
 
+async def test_list_pagination_envelope(client: AsyncClient):
+    """2026-09-23 分页批次:page/page_size/total 信封;越界页回空不报错。"""
+    admin = await _mk_user(client, "notify_pager")
+    from app.core import db as db_module
+    from app.services import notifications as svc
+
+    async with db_module.SessionLocal() as s:
+        uid = 1  # 本测试新库的首位用户
+        for i in range(5):
+            await svc.create_notification(
+                s, user_id=uid, type_="announcement",
+                title=f"p{i}", body="")
+
+    r = await client.get(
+        "/api/notifications", headers=admin,
+        params={"page": 1, "page_size": 2})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 5 and body["page"] == 1 and body["pageSize"] == 2
+    assert [i["title"] for i in body["items"]] == ["p4", "p3"]
+
+    r = await client.get(
+        "/api/notifications", headers=admin,
+        params={"page": 3, "page_size": 2})
+    assert [i["title"] for i in r.json()["items"]] == ["p0"]
+
+    r = await client.get(
+        "/api/notifications", headers=admin,
+        params={"page": 9, "page_size": 2})
+    assert r.status_code == 200 and r.json()["items"] == []
+
+
 async def test_type_switch_suppresses_creation(client: AsyncClient):
     user = await _mk_user(client, "notify_off_user")
     from app.core import db as db_module
@@ -155,3 +187,64 @@ async def test_role_change_notification(client: AsyncClient):
     r = await client.get("/api/notifications", headers=member)
     items = [i for i in r.json()["items"] if i["type"] == "role_changed"]
     assert items and "operator" in items[0]["title"]
+
+
+async def test_notify_finished_name_and_id(client: AsyncClient):
+    """执行终态通知:name + id 一起给,title=name(着重)、body 前缀 id。
+
+    三条 label 路径:执行快照 name → 存量空快照查活场景行补 →
+    场景已删回落 scenario_id。
+    """
+    from app.core import db as db_module
+    from app.models.composer_scenario import ComposerScenario
+    from app.models.execution import Execution, STATUS_DONE
+    from app.services.run_dispatcher import _notify_finished
+
+    async with db_module.SessionLocal() as s:
+        from sqlalchemy import select
+
+        from .helpers import ensure_fk_users
+        await ensure_fk_users(s, 1)  # PG 强制 FK:owner_id=1 需垫
+        # 活场景行(供空快照兜底查名;_notify_finished 只读
+        # payload.definition.meta.name,payload 造最小形即可)
+        s.add(ComposerScenario(
+            scenario_id="sc-notify-alive", owner_id=1, owner_name="垫底",
+            visibility="private",
+            payload={"definition": {"meta": {"name": "活行场景名"}}}))
+        # 三条单发执行:有快照名 / 空快照+场景存活 / 空快照+场景已删
+        for sid, snap in (
+            ("sc-notify-snap", "快照场景名"),
+            ("sc-notify-alive", ""),
+            ("sc-notify-gone", ""),
+        ):
+            s.add(Execution(
+                scenario_id=sid, scenario_name=snap, owner_id=1,
+                status="running", total_runs=2, passed=2, failed=0,
+                batch_id=None, config_json={}))
+        await s.commit()
+        exec_ids = {
+            row.scenario_id: row.id for row in (await s.execute(
+                select(Execution).where(
+                    Execution.scenario_id.like("sc-notify-%")))).scalars()}
+
+    async with db_module.SessionLocal() as s:
+        from sqlalchemy import select
+        for ex in (await s.execute(select(Execution).where(
+                Execution.scenario_id.like("sc-notify-%")))).scalars():
+            await _notify_finished(ex, STATUS_DONE)
+
+    async with db_module.SessionLocal() as s:
+        from sqlalchemy import select
+        from app.models import Notification
+        rows = {r.link: r for r in (await s.execute(
+            select(Notification).where(Notification.link.in_(
+                [f"/executions/{i}" for i in exec_ids.values()])))).scalars()}
+        snap_n = rows[f"/executions/{exec_ids['sc-notify-snap']}"]
+        assert snap_n.title == "执行完成:快照场景名", snap_n.title
+        assert snap_n.body == "sc-notify-snap · 2 通过 / 0 失败", snap_n.body
+        alive_n = rows[f"/executions/{exec_ids['sc-notify-alive']}"]
+        assert alive_n.title == "执行完成:活行场景名", alive_n.title
+        assert alive_n.body.startswith("sc-notify-alive · "), alive_n.body
+        gone_n = rows[f"/executions/{exec_ids['sc-notify-gone']}"]
+        assert gone_n.title == "执行完成:sc-notify-gone", gone_n.title
+        assert gone_n.body.startswith("sc-notify-gone · "), gone_n.body

@@ -72,9 +72,9 @@
           </thead>
           <tbody>
             <tr
-              v-for="(row, i) in defaultRows"
-              :key="i"
-              :data-testid="`defaults-row-${i}`"
+              v-for="(row, i) in paged"
+              :key="pageBase + i"
+              :data-testid="`defaults-row-${pageBase + i}`"
               :data-path="row.path"
               :class="{ 'path-hit': !!highlightPath && row.path === highlightPath }"
             >
@@ -92,12 +92,24 @@
                   <button type="button" class="svc-link" @click="row.isNull = !row.isNull">
                     {{ row.isNull ? '取消 null' : '设 null' }}
                   </button>
-                  <button type="button" class="svc-link danger" @click="defaultRows.splice(i, 1)">删</button>
+                  <button type="button" class="svc-link danger" @click="defaultRows.splice(pageBase + i, 1)">删</button>
                 </div>
               </td>
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- 2026-09-23 分页批次:可编辑草稿表分页 —— 删行/编辑都写全局
+           defaultRows 草稿,翻页只是换可见切片,未保存内容不丢。 -->
+      <div v-if="pageCount > 1 || defaultRows.length > 0" class="mt-2 flex justify-end">
+        <Pagination
+          v-model:page="page"
+          v-model:page-size="pageSize"
+          :total="defaultRows.length"
+          show-page-size
+          show-jump
+        />
       </div>
       <div v-else class="slib-empty">
         <p>还没有默认行 —— 加一行(例 <code class="mono">$.headers.X-Trace-Id</code>)</p>
@@ -131,6 +143,8 @@ import { getDefaults, putDefaults, type CarryValues } from '@/api/carry'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Pagination } from '@/components/ui/pagination'
+import { useClientPager } from '@/composables/useClientPager'
 
 const loading = ref(true)
 const defaultRows = ref<DefaultCarryRow[]>([])
@@ -239,6 +253,13 @@ const highlightPath = computed(() => {
   return typeof p === 'string' ? p : ''
 })
 
+// 客户端分页(2026-09-23 批次):pageBase = 当前页首行的全局下标,
+// 删行/编辑/splice 都按全局下标写 defaultRows 草稿。
+const { page, pageSize, paged, pageCount } = useClientPager(
+  () => defaultRows.value, 20, 'carry-defaults',
+)
+const pageBase = computed(() => (page.value - 1) * pageSize.value)
+
 onMounted(async () => {
   try {
     await loadDefaults()
@@ -249,6 +270,9 @@ onMounted(async () => {
   }
   loading.value = false
   if (highlightPath.value) {
+    // 命中行可能不在第 1 页 → 先翻到所在页再滚动
+    const idx = defaultRows.value.findIndex((r) => r.path === highlightPath.value)
+    if (idx >= 0) page.value = Math.floor(idx / pageSize.value) + 1
     await nextTick()
     // 不用 CSS.escape(jsdom 无 CSS 全局):按属性值直接比较
     const hit = [...document.querySelectorAll<HTMLElement>('[data-path]')]

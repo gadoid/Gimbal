@@ -47,4 +47,53 @@ describe('Pagination — 分页条', () => {
     const nums = w.findAll('button[aria-label^="第"]').map((b) => b.text())
     expect(nums).toEqual(['1', '4', '5', '6', '20'])
   })
+
+  // ── 2026-09-23 分页批次:每页行数 + 跳转 ─────────────────────────
+
+  it('showPageSize:单页也渲染;select 换值 emit update:pageSize', async () => {
+    const w = mount(Pagination, {
+      props: { page: 1, total: 8, pageSize: 20, showPageSize: true, pageSizes: [10, 20, 50] },
+    })
+    expect(w.find('nav').exists()).toBe(true)
+    const sel = w.find('[data-testid="pager-size"]')
+    expect(sel.exists()).toBe(true)
+    expect((sel.element as HTMLSelectElement).value).toBe('20')
+    await sel.setValue('50')
+    expect(w.emitted('update:pageSize')?.[0]).toEqual([50])
+  })
+
+  it('showPageSize:当前值不在候选里时补一项(不显示错位)', () => {
+    const w = mount(Pagination, {
+      props: { page: 1, total: 8, pageSize: 7, showPageSize: true, pageSizes: [10, 20, 50] },
+    })
+    const opts = w.findAll('[data-testid="pager-size"] option')
+      .map((o) => (o.element as HTMLOptionElement).value)
+    expect(opts).toEqual(['7', '10', '20', '50'])
+  })
+
+  it('showJump:输入页码回车/点跳转均 emit 目标页;非法输入不 emit', async () => {
+    const w = mount(Pagination, {
+      props: { page: 1, total: 100, pageSize: 20, showJump: true },
+    })
+    const input = w.find('[data-testid="pager-jump"]')
+    expect(input.exists()).toBe(true)
+    await input.setValue('3')
+    await w.find('[data-testid="pager-jump-btn"]').trigger('click')
+    expect(w.emitted('update:page')?.[0]).toEqual([3])
+    // 跳转后输入框清空
+    expect((input.element as HTMLInputElement).value).toBe('')
+
+    await input.setValue('999')
+    await input.trigger('keyup.enter')
+    expect(w.emitted('update:page')?.[1]).toEqual([5]) // 钳位到末页
+    await input.setValue('abc')
+    await input.trigger('keyup.enter')
+    expect(w.emitted('update:page')).toHaveLength(2) // 非法输入无事件
+  })
+
+  it('未开启新开关时行为与旧版一致(无选择器/无跳转)', () => {
+    const w = mount(Pagination, { props: { page: 2, total: 45, pageSize: 20 } })
+    expect(w.find('[data-testid="pager-size"]').exists()).toBe(false)
+    expect(w.find('[data-testid="pager-jump"]').exists()).toBe(false)
+  })
 })

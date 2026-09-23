@@ -127,6 +127,7 @@ import {
   ActivityLogIcon,
   ArchiveIcon,
   BarChartIcon,
+  BellIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CounterClockwiseClockIcon,
@@ -188,7 +189,14 @@ interface SidebarGroup {
 // 结构基准 = F-sitemap v2:服务组顺序 认证管理/传递字段/适配中心;
 // 常量池不进侧边栏(工作台卡片承接,/constants 仅深链可达)。
 const groups: SidebarGroup[] = [
-  { label: null, entries: [{ path: '/home', label: '工作台', icon: HomeIcon }] },
+  {
+    label: null,
+    entries: [
+      { path: '/home', label: '工作台', icon: HomeIcon },
+      // F5(2026-09-23):通知(全员;审计 tab 在页内按 admin 显隐)
+      { path: '/notifications', label: '通知', icon: BellIcon },
+    ],
+  },
   {
     label: '场景',
     entries: [

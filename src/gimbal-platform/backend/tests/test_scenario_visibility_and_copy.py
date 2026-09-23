@@ -251,3 +251,67 @@ async def test_run_step_to_passes_halt_at(
         await asyncio.sleep(0.05)
     assert len(calls) == 1
     assert calls[0].get("step_to") == 1
+
+
+# ── F2(2026-09-23 批次):另存为自定义名 + 重名软校验 ───────────────
+async def test_save_as_custom_name_and_conflict_409(client: AsyncClient) -> None:
+    """另存为带 name:无重名直接生效;重名 409 + 计数后缀 suggestion;
+    缺省 body 沿用 (副本) 后缀(向后兼容)。"""
+    bob = await _member(client, "bob")
+    await client.post("/api/scenarios", headers=bob, json=_draft())
+
+    r = await client.post(
+        "/api/scenarios/sc-test/copy", headers=bob, json={"name": "另存一号"})
+    assert r.status_code == 201, r.text
+    assert r.json()["meta"]["name"] == "另存一号"
+
+    r = await client.post(
+        "/api/scenarios/sc-test/copy", headers=bob, json={"name": "另存一号"})
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "name_taken"
+    assert r.json()["detail"]["suggestion"] == "另存一号 (2)"
+
+    # 按 suggestion 重发成功;再撞同名 → (3)
+    r = await client.post(
+        "/api/scenarios/sc-test/copy", headers=bob, json={"name": "另存一号 (2)"})
+    assert r.status_code == 201, r.text
+    r = await client.post(
+        "/api/scenarios/sc-test/copy", headers=bob, json={"name": "另存一号"})
+    assert r.status_code == 409
+    assert r.json()["detail"]["suggestion"] == "另存一号 (3)"
+
+    # 缺省 body:旧「复制到我的」行为不变
+    r = await client.post("/api/scenarios/sc-test/copy", headers=bob)
+    assert r.status_code == 201, r.text
+    assert r.json()["meta"]["name"] == "Test (副本)"
+
+
+async def test_resolve_name_conflict_truncates_to_64(
+    client: AsyncClient,
+) -> None:
+    """name 上限 64:拼后缀前先截断基名(ScenarioMeta max_length)。
+
+    必须挂 client 夹具:SessionLocal 的每测试覆盖由它驱动,不挂会
+    直连 .env 的常驻库(隔离漏洞,2026-09-23 全量跑发现)。
+    """
+    from app.core import db as db_module
+    from app.models import ComposerScenario
+    from app.services import scenario_store
+
+    from .helpers import ensure_fk_users
+
+    async with db_module.SessionLocal() as s:
+        await ensure_fk_users(s, 1)
+        long_name = "x" * 64
+        s.add(ComposerScenario(
+            scenario_id="sc-long-name", owner_id=1, owner_name="垫底",
+            visibility="private",
+            payload={"definition": {"meta": {"name": long_name}}}))
+
+        # 生成列 name 由 payload 派生;flush 后才可查询
+        await s.flush()
+        resolved, taken = await scenario_store.resolve_name_conflict(s, 1, long_name)
+        assert taken is True
+        assert len(resolved) == 64
+        assert resolved == "x" * 60 + " (2)"
+        await s.rollback()

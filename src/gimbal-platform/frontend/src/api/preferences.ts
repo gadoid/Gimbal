@@ -11,6 +11,8 @@ export interface PrefValues {
   'workbench.layout': { order: string[]; sizes: Record<string, CardSize> }
   'follows.pinned': { ids: string[] }
   'timeline.colors': { execution: string; scenario: string; adaptation: string }
+  /** 各列表页「每页行数」(2026-09-23 分页批次):键 = 页面 slug */
+  'pager.sizes': { sizes: Record<string, number> }
 }
 
 export type PrefKey = keyof PrefValues

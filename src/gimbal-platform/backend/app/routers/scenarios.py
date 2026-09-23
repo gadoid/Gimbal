@@ -33,6 +33,7 @@ from ..schemas.scenario_composer import (
     PreviewPlateIn,
     PreviewPlateResponse,
     Scenario,
+    ScenarioCopyIn,
     ScenarioDraft,
     ScenarioListOut,
     ScenarioOptionsItem,
@@ -40,9 +41,10 @@ from ..schemas.scenario_composer import (
     StarIn,
 )
 from ..services import plate_client, run_dispatcher, scheme_store, scenario_store
+from ..services import service_aliases
 from ..services.auth_ref_scan import scan_auth_aliases
 from ..services.carry_injection import build_carry_context
-from ..services.run_materialize import materialize_run_copy
+from ..services.run_materialize import _referenced_services, materialize_run_copy
 
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
@@ -186,12 +188,23 @@ async def preview_plate(
         logger.opt(exception=True).warning(
             "preview_plate: carry context build failed; skipped")
         carry_ctx = None
+    # F4 方案 B(2026-09-23):别名 base_url 预解析 —— 与 dispatch 同一
+    # helper、同一物化组装点(执行/导出同源);别名默认是增强不是前置
+    # 条件,查表失败降级空表。
+    try:
+        alias_urls = await service_aliases.base_urls_for(
+            db, _referenced_services(body.definition.get("steps") or []))
+    except Exception:  # noqa: BLE001 — 别名默认绝不阻塞导出
+        logger.opt(exception=True).warning(
+            "preview_plate: alias base_url lookup failed; skipped")
+        alias_urls = {}
     converted = materialize_run_copy(
         converted,
         service_bindings=service_bindings,
         resolved_auths=exec_auths,
         built_in_users=dict(built_in or {}),
         carry_context=carry_ctx,
+        alias_base_urls=alias_urls,
     )
     inner_errors = converted.get("errors") or []
     return PreviewPlateResponse(
@@ -586,18 +599,35 @@ async def unpublish_scenario(
     "/{scenario_id}/copy", response_model=Scenario, status_code=status.HTTP_201_CREATED
 )
 async def copy_scenario_to_me(
-    user: CurrentUser, db: DbSession, scenario_id: str
+    user: CurrentUser, db: DbSession, scenario_id: str,
+    payload: ScenarioCopyIn | None = None,
 ) -> Scenario:
     """深拷贝场景+用例+数据集;新属主 = 调用者,visibility=private。
-    需要读权限(public 或自己的场景才可复制)。"""
+    需要读权限(public 或自己的场景才可复制)。
+
+    带 ``name``(另存为,2026-09-23 批次 F2):与本人已有场景重名 →
+    409 ``name_taken``,detail 带 ``suggestion``(计数后缀名),前端
+    确认后带 suggestion 重发;重名判定走 resolve_name_conflict 唯一实现。
+    """
     row = await _load_row(db, scenario_id)
     _require_reader(user, row)
+    name = (payload.name if payload is not None else None) or ""
+    name = name.strip() or None
+    if name is not None:
+        resolved, taken = await scenario_store.resolve_name_conflict(
+            db, user.id, name)
+        if taken:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "name_taken", "suggestion": resolved},
+            )
     try:
         return await scenario_store.copy_scenario(
             db,
             scenario_id,
             new_owner=user.display_name or user.username,
             new_owner_id=user.id,
+            new_name=name,
         )
     except KeyError as e:
         raise key_error_404(e)

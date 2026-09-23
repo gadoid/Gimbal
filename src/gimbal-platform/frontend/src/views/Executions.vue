@@ -129,7 +129,7 @@
           </tr>
         </thead>
         <tbody>
-          <template v-for="row in rows" :key="row.seq">
+          <template v-for="row in pagedRows" :key="row.seq">
             <tr class="ex-table-row">
               <td class="mono">{{ row.seq }}</td>
               <td>{{
@@ -186,6 +186,17 @@
           </template>
         </tbody>
       </table>
+      <!-- 2026-09-23 分页批次:行级表客户端切片(store 的 rows 缓存与
+           轮询刷新语义不变,只换渲染切片) -->
+      <div v-if="rowsPageCount > 1 || rows.length > 0" class="mt-2 flex justify-end">
+        <Pagination
+          v-model:page="rowsPage"
+          v-model:page-size="rowsPageSize"
+          :total="rows.length"
+          show-page-size
+          show-jump
+        />
+      </div>
     </div>
   </HubDetailPage>
 
@@ -220,6 +231,8 @@ import { valueJson } from '@/utils/value-display'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Pagination } from '@/components/ui/pagination'
+import { useClientPager } from '@/composables/useClientPager'
 
 const route = useRoute()
 const router = useRouter()
@@ -307,6 +320,10 @@ function formatRecipeValue(v: unknown): string {
 const rows = computed<ExecutionRow[]>(() => execStore.rowsByExecution[executionId.value] ?? [])
 const rowsLoading = computed(() => execStore.rowsByExecution[executionId.value] === undefined)
 const isExpanded = computed(() => execStore.expanded.has(executionId.value))
+// 客户端分页(2026-09-23 批次):rows 端点单页 500 上限,视图侧切片;
+// 每页行数存用户偏好
+const { page: rowsPage, pageSize: rowsPageSize, paged: pagedRows, pageCount: rowsPageCount }
+  = useClientPager(() => rows.value, 50, 'execution-rows')
 
 function toggleRows(): void {
   if (!execStore.detail) return

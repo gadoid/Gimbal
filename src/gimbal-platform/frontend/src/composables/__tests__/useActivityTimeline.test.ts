@@ -171,4 +171,27 @@ describe('useActivityTimeline', () => {
     expect(t.counts.value.execution).toBe(0)
     expect(t.only.value).toBeNull()
   })
+
+  it('F3:scenario 子动作细分文案;同场景多事件 key 不撞', async () => {
+    const actEvent = (action: string, at: string, detail: Record<string, unknown> = {}) =>
+      ({ kind: 'scenario', at, scenarioId: 's1', name: '订单查询',
+         action, detail }) as never
+    const t = await loadWith({
+      events: [
+        actEvent('scenario.rename', ago(1), { oldName: '旧名', newName: '订单查询' }),
+        actEvent('scenario.save_as', ago(2), { sourceScenarioId: 's0' }),
+        actEvent('scenario.handoff_received', ago(3), { senderName: 'Alice' }),
+        actEvent('scenario.edit', ago(4)),
+        scenEvent('s1', ago(5)), // 旧事件(无 action)= 按 edit 渲染
+      ],
+    })
+    const titles = t.events.value.map((e) => e.title)
+    expect(titles[0]).toContain('重命名场景 旧名 → 订单查询')
+    expect(titles[1]).toContain('另存为场景 订单查询')
+    expect(titles[2]).toContain('收到分享 订单查询(来自 Alice)')
+    expect(titles[3]).toContain('更新场景 订单查询')
+    expect(titles[4]).toContain('更新场景 场景 s1')
+    // key 带时间戳:同一 s1 五条事件互不撞 key
+    expect(new Set(t.events.value.map((e) => e.key)).size).toBe(5)
+  })
 })

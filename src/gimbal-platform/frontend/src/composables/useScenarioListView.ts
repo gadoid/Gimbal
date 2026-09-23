@@ -78,6 +78,7 @@ export function useScenarioListView(bucket: Bucket) {
     fetch: (p) => store.fetchPage(p),
     params,
     pageSize: LIST_PAGE_SIZE,
+    pagerKey: bucket === 'mine' ? 'scenarios-mine' : 'scenarios-public',
     syncUrl: true,
     initialPage,
   })
@@ -242,7 +243,9 @@ export function useScenarioListView(bucket: Bucket) {
     pageCount: list.pageCount,
     loading: list.loading,
     filtering, filterableRows, facets, loadFacets,
-    pageSize: LIST_PAGE_SIZE,
+    // 2026-09-23 分页批次:每页行数可变(原为 LIST_PAGE_SIZE 定值直传)。
+    pageSize: list.pageSize,
+    setPageSize: list.setPageSize,
     load, reload: list.reload, setPage: list.setPage,
     searchBox, writeSearch,
     groups, groupsState, savingGroup, activeGroupId, canSaveGroup,

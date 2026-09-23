@@ -266,6 +266,11 @@ vi.mock('@/api/auth_sessions', () => ({
   list: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 200 }),
   listAll: vi.fn().mockResolvedValue([]),
 }))
+// F4 别名注册表默认空(与未 mock 时拉取失败 → registeredAliases=[] 行为
+// 一致);注入用例内 mockResolvedValueOnce 喂已登记行
+vi.mock('@/api/service-aliases', () => ({
+  listAllAliases: vi.fn(async () => []),
+}))
 // carry 值表默认空(与未 mock 时拉取失败 → carryValues=null 行为一致,
 // 既有用例零影响);E8 徽标用例内 mockResolvedValueOnce 注入非空默认
 vi.mock('@/api/carry', () => ({
@@ -886,6 +891,66 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     await w.find('.alias-suffix').setValue('a-b')
     await w.find('.alias-create-confirm').trigger('click')
     expect(canvas.emitted('update:services')).toHaveLength(1)  // 未再发
+    w.unmount()
+  })
+
+  it('F4 注入(2026-09-23 调整):选中带凭证的已登记别名 → headers 直接写入 ${auth.*} 行,既有 Authorization(含大小写变体)先清', async () => {
+    const { listAllAliases } = await import('@/api/service-aliases')
+    vi.mocked(listAllAliases).mockResolvedValueOnce([
+      {
+        aliasName: 'fin-service-uat', baseService: 'fin-service',
+        baseUrl: 'https://uat.fin.local', groupTag: null,
+        credentialAlias: 'uat-cred', ownerUserId: null,
+        createdAt: '', updatedAt: '',
+      },
+    ] as never)
+    // 既有小写 authorization 行 + 另一个无关头:注入后只留一行 Authorization
+    const s0 = mkStep({
+      api: {
+        kind: 'api', service: 'fin-service', method: 'POST', path: '/order',
+        headers: { authorization: 'Bearer old', 'X-Trace': 't1' },
+        view_hints: { endpoint_id: 'ep-1' },
+      },
+    })
+    const { w } = mountCanvas({ steps: [s0], services: { 'fin-service': 'https://a' } })
+    await flushPromises()
+    await w.find('.svc-ref-select').setValue('fin-service-uat')
+    expect(s0.api?.service).toBe('fin-service-uat')
+    expect(s0.api?.headers).toEqual({
+      Authorization: '${auth.uat-cred.token}',
+      'X-Trace': 't1',           // 无关头不动
+    })
+    w.unmount()
+  })
+
+  it('F4 注入:headers 原本为空 → 注入 Authorization 行;无凭证绑定的已登记别名不注入', async () => {
+    const { listAllAliases } = await import('@/api/service-aliases')
+    const s0 = stepOf('fin-service')
+    vi.mocked(listAllAliases).mockResolvedValueOnce([
+      {
+        aliasName: 'fin-service-uat', baseService: 'fin-service',
+        baseUrl: 'https://uat.fin.local', groupTag: null,
+        credentialAlias: 'uat-cred', ownerUserId: null,
+        createdAt: '', updatedAt: '',
+      },
+      {
+        aliasName: 'fin-service-bare', baseService: 'fin-service',
+        baseUrl: 'https://bare.fin.local', groupTag: null,
+        credentialAlias: null, ownerUserId: null,
+        createdAt: '', updatedAt: '',
+      },
+    ] as never)
+    const { w } = mountCanvas({
+      steps: [s0],
+      services: { 'fin-service': 'https://a' },
+    })
+    await flushPromises()
+    // 先选无凭证绑定的已登记别名:headers 保持空对象(不动)
+    await w.find('.svc-ref-select').setValue('fin-service-bare')
+    expect(s0.api?.headers).toEqual({})
+    // 再切到带凭证绑定的别名:空 headers 上注入一行
+    await w.find('.svc-ref-select').setValue('fin-service-uat')
+    expect(s0.api?.headers).toEqual({ Authorization: '${auth.uat-cred.token}' })
     w.unmount()
   })
 })

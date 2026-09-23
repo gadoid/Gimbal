@@ -141,9 +141,15 @@ export async function unpublishScenario(scenarioId: string): Promise<Scenario> {
   return data
 }
 
-/** 深拷贝场景+数据集到自己名下(新 id,恒 private) */
-export async function copyScenario(scenarioId: string): Promise<Scenario> {
-  const { data } = await http.post<Scenario>(`/scenarios/${enc(scenarioId)}/copy`)
+/** 深拷贝场景+数据集到自己名下(新 id,恒 private)。
+ * F2(2026-09-23)另存为:带 name = 自定义副本名,与本人已有场景重名 →
+ * 409 code='name_taken',ApiError.detail.suggestion 为计数后缀建议;
+ * 不传 name = 旧「(副本)」后缀行为。 */
+export async function copyScenario(
+  scenarioId: string, name?: string,
+): Promise<Scenario> {
+  const { data } = await http.post<Scenario>(
+    `/scenarios/${enc(scenarioId)}/copy`, name ? { name } : undefined)
   return data
 }
 

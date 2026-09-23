@@ -19,11 +19,11 @@ vi.mock('@/utils/toast', () => ({
 }))
 
 const aliases: api.ServiceAliasRow[] = [
-  { aliasName: 'fin-service', baseService: 'fin-service', groupTag: null,
+  { aliasName: 'fin-service', baseService: 'fin-service', baseUrl: null, groupTag: null,
     credentialAlias: null, ownerUserId: null, createdAt: '', updatedAt: '' },
-  { aliasName: 'fin-service-uat', baseService: 'fin-service', groupTag: '测试',
+  { aliasName: 'fin-service-uat', baseService: 'fin-service', baseUrl: 'https://uat.fin.local', groupTag: '测试',
     credentialAlias: 'uat-cred', ownerUserId: null, createdAt: '', updatedAt: '' },
-  { aliasName: 'wms-service-pre', baseService: 'wms-service', groupTag: '预发',
+  { aliasName: 'wms-service-pre', baseService: 'wms-service', baseUrl: null, groupTag: '预发',
     credentialAlias: null, ownerUserId: 7, createdAt: '', updatedAt: '' },
 ]
 
@@ -101,22 +101,63 @@ it('点树选服务 → 只看该服务;分组 chip 叠加筛选', async () => {
   expect(w.find('[data-testid="alias-row-fin-service-uat"]').exists()).toBe(true)
 })
 
-it('登记调用 createAlias 并重载;编辑回填且别名不可改', async () => {
+it('登记调用 createAlias 并重载(URL 必填,缺 URL 登记钮不可点);编辑回填且别名不可改', async () => {
   const create = vi.spyOn(api, 'createAlias').mockResolvedValue(aliases[1])
   const w = await mountPage()
-  await w.find('[data-testid="alias-name-input"]').setValue('mall-service-prod')
+  await w.find('[data-testid="svc-tree-fin-service"]').trigger('click')
+  await w.find('[data-testid="alias-name-input"]').setValue('prod2')
   await w.find('[data-testid="alias-group-input"]').setValue('生产')
+  // URL 必填(2026-09-23):没填时登记钮禁用,不发起请求
+  expect((w.find('[data-testid="alias-save"]').element as HTMLButtonElement).disabled).toBe(true)
+  await w.find('[data-testid="alias-url-input"]').setValue('https://prod.mall.local')
   await w.find('[data-testid="alias-save"]').trigger('click')
   await flushPromises()
   expect(create).toHaveBeenCalledWith({
-    aliasName: 'mall-service-prod', groupTag: '生产', credentialAlias: null,
+    aliasName: 'fin-service-prod2', baseUrl: 'https://prod.mall.local', groupTag: '生产', credentialAlias: null,
   })
   expect(api.listAllAliases).toHaveBeenCalledTimes(2)
 
   await w.find('[data-testid="alias-edit-fin-service-uat"]').trigger('click')
   const nameInput = w.find('[data-testid="alias-name-input"]')
-  expect((nameInput.element as HTMLInputElement).value).toBe('fin-service-uat')
+  expect((nameInput.element as HTMLInputElement).value).toBe('uat')
   expect((nameInput.element as HTMLInputElement).disabled).toBe(true)
+})
+
+it('前缀槽常驻:未选显「服务」占位;点选只换槽文字、后缀随身;取消选中剥前缀;编辑态槽显所属服务', async () => {
+  const create = vi.spyOn(api, 'createAlias').mockResolvedValue(aliases[1])
+  const w = await mountPage()
+  await w.find('[data-testid="alias-url-input"]').setValue('https://x.fin.local')
+  // 未选服务:槽占位「服务」,无基不可提交(槽恒在,输入框位置不跳)
+  expect(w.find('[data-testid="alias-prefix"]').text()).toBe('服务名')
+  expect((w.find('[data-testid="alias-save"]').element as HTMLButtonElement).disabled).toBe(true)
+  const nameInput = w.find('[data-testid="alias-name-input"]')
+  await nameInput.setValue('uat2')   // 无基时暂存裸后缀
+  await w.find('[data-testid="svc-tree-fin-service"]').trigger('click')
+  expect(w.find('[data-testid="alias-prefix"]').text()).toBe('fin-service-')
+  expect((nameInput.element as HTMLInputElement).value).toBe('uat2')   // 后缀随身
+  expect((w.find('[data-testid="alias-save"]').element as HTMLButtonElement).disabled).toBe(false)
+  // 换服务:槽文字换,后缀留
+  await w.find('[data-testid="svc-tree-wms-service"]').trigger('click')
+  expect(w.find('[data-testid="alias-prefix"]').text()).toBe('wms-service-')
+  expect((nameInput.element as HTMLInputElement).value).toBe('uat2')
+  // 取消选中:槽回占位,输入框只剩后缀,无基再次不可提交
+  await w.find('[data-testid="svc-tree-wms-service"]').trigger('click')
+  expect(w.find('[data-testid="alias-prefix"]').text()).toBe('服务名')
+  expect((nameInput.element as HTMLInputElement).value).toBe('uat2')
+  expect((w.find('[data-testid="alias-save"]').element as HTMLButtonElement).disabled).toBe(true)
+  // 选回并保存:提交完整全串
+  await w.find('[data-testid="svc-tree-fin-service"]').trigger('click')
+  await w.find('[data-testid="alias-save"]').trigger('click')
+  await flushPromises()
+  expect(create).toHaveBeenCalledWith({
+    aliasName: 'fin-service-uat2', baseUrl: 'https://x.fin.local', groupTag: null, credentialAlias: null,
+  })
+  // 编辑态:槽显该别名所属服务,输入框只读展示后缀
+  await w.find('[data-testid="alias-edit-fin-service-uat"]').trigger('click')
+  expect(w.find('[data-testid="alias-prefix"]').text()).toBe('fin-service-')
+  expect((nameInput.element as HTMLInputElement).value).toBe('uat')
+  expect((nameInput.element as HTMLInputElement).disabled).toBe(true)
+  w.unmount()
 })
 
 it('删除走确认对话框;取消不动', async () => {
