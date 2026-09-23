@@ -951,6 +951,40 @@ describe('CaseComposerCanvas — 服务引用下拉 + 内联创建别名(spec §
     // 再切到带凭证绑定的别名:空 headers 上注入一行
     await w.find('.svc-ref-select').setValue('fin-service-uat')
     expect(s0.api?.headers).toEqual({ Authorization: '${auth.uat-cred.token}' })
+    // 再切回无凭证别名:注入的模板行必须清掉 —— 不能带着上一个服务的
+    // token 发请求(2026-09-23 评审修补)
+    await w.find('.svc-ref-select').setValue('fin-service-bare')
+    expect(s0.api?.headers).toEqual({})
+    w.unmount()
+  })
+
+  it('F4 清行边界:切到无凭证别名只清注入的模板行,手写 Authorization 保留', async () => {
+    const { listAllAliases } = await import('@/api/service-aliases')
+    const s0 = stepOf('fin-service')
+    s0.api = {
+      kind: 'api', service: 'fin-service', method: 'POST', path: '/order',
+      headers: { Authorization: 'Bearer handwritten', 'X-Trace': 't1' },
+      view_hints: { endpoint_id: 'ep-1' },
+    }
+    vi.mocked(listAllAliases).mockResolvedValueOnce([
+      {
+        aliasName: 'fin-service-bare', baseService: 'fin-service',
+        baseUrl: 'https://bare.fin.local', groupTag: null,
+        credentialAlias: null, ownerUserId: null,
+        createdAt: '', updatedAt: '',
+      },
+    ] as never)
+    const { w } = mountCanvas({
+      steps: [s0],
+      services: { 'fin-service': 'https://a' },
+    })
+    await flushPromises()
+    // 无凭证别名:手写的字面凭证不是注入痕迹,原样保留
+    await w.find('.svc-ref-select').setValue('fin-service-bare')
+    expect(s0.api?.headers).toEqual({
+      Authorization: 'Bearer handwritten',
+      'X-Trace': 't1',
+    })
     w.unmount()
   })
 })

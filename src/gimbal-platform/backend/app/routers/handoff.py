@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from loguru import logger
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -92,7 +93,9 @@ async def handoff_resource(
         raise value_error_http(e, {"scenario_id_exists": 409})
 
     # 通知(悬浮标签数据源):失败不阻断分发结果(通知是增强,不是
-    # 前置条件;关闭「收到分享」类型的用户 = 同时放弃悬浮标签)。
+    # 前置条件;关闭「收到分享」类型的用户 = 同时放弃悬浮标签),但
+    # 必须 rollback + 记日志 —— 静默吞掉会让副本已建、通知没到的
+    # 排障无从下手(与 activity.record 同款口径)。
     try:
         await notify_svc.create_notification(
             db,
@@ -109,8 +112,11 @@ async def handoff_resource(
                 "original_name": current_name,
             },
         )
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as e:  # noqa: BLE001
+        await db.rollback()
+        logger.warning(
+            "handoff: notification for user {} scenario {} failed: {}",
+            target.id, out.meta.scenario_id, e)
 
     return HandoffOut(
         new_resource_id=out.meta.scenario_id,

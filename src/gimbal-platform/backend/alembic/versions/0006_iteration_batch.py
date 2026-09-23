@@ -1,6 +1,6 @@
 """2026-09-23 迭代批次:分发/事件日志/别名 URL 默认层。
 
-一车四件(方案 docs/superpowers/plans/2026-09-23-some_feature .md v2,
+一车四件(方案 docs/superpowers/plans/2026-09-23-iteration-batch.md v2,
 影响评估见 docs/deployment/sqlite-to-pg-migration.md §8):
 
 * ``notifications`` +resource_type/resource_id/payload 三可空列(F1

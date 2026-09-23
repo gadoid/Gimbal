@@ -227,10 +227,13 @@ async def resolve_name_conflict(
 
     F1 分发(静默后缀)与 F2 另存为(前端确认后缀)共用 —— 重名判定
     的唯一实现,不各写一份。name 上限 64(ScenarioMeta.name
-    max_length),拼后缀前先截断基名。现状无任何 name 唯一约束
-    (2026-09-23 评审拍板不加 DB 约束,存量重名会让索引迁移炸),
+    max_length),拼后缀前先截断基名。基名本身也在入口钳一次:源场景
+    name 为空时调用方用 scenario_id 兜底(最长 128),不撞名也得截断 ——
+    放过去会在 meta 校验变成一个不好理解的 422。现状无任何 name 唯一
+    约束(2026-09-23 评审拍板不加 DB 约束,存量重名会让索引迁移炸),
     本 helper 是软校验。
     """
+    desired_name = desired_name[:64]
     names = {
         n
         for (n,) in await db.execute(

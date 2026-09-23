@@ -86,6 +86,11 @@ async def test_list_pagination_envelope(client: AsyncClient):
         params={"page": 9, "page_size": 2})
     assert r.status_code == 200 and r.json()["items"] == []
 
+    # 边界校验:负/超上限/零页码一律 422,不打到 DB(LIMIT 负数会 500)
+    for bad in ({"page_size": -1}, {"page_size": 201}, {"page": 0}):
+        r = await client.get("/api/notifications", headers=admin, params=bad)
+        assert r.status_code == 422, f"{bad} 本该被拒"
+
 
 async def test_type_switch_suppresses_creation(client: AsyncClient):
     user = await _mk_user(client, "notify_off_user")

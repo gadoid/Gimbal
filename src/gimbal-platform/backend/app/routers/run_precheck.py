@@ -31,7 +31,7 @@ from ..models import ComposerDataSet
 from ..models.composer_scenario import ComposerScenario
 from ..services import run_dispatcher, scenario_store, scheme_store
 from ..services.run_dispatcher import definition_from_payload
-from ..services.run_materialize import _referenced_services
+from ..services.run_materialize import referenced_services
 
 router = APIRouter(prefix="/run", tags=["runs"])
 
@@ -135,7 +135,7 @@ async def _precheck_one(
     declared = (definition_from_payload(raw_payload).get("config") or {}).get("services")
     declared = declared if isinstance(declared, dict) else {}
     result.unbound_services = [
-        svc for svc in _referenced_services(steps)
+        svc for svc in referenced_services(steps)
         if not isinstance(declared.get(svc), str)
         and not (bindings.get(svc) or {}).get("url")
     ]

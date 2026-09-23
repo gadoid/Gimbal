@@ -69,7 +69,11 @@ def materialize_run_copy(
     return out
 
 
-def _referenced_services(steps: list) -> list[str]:
+def referenced_services(steps: list) -> list[str]:
+    """steps 里被引用的服务键(声明序去重)。公共函数 —— scenarios /
+    run_precheck / run_dispatcher 三处跨模块消费(2026-09-23 评审:私有
+    ``_`` 前缀不该出现在跨模块 import 面)。
+    """
     seen: dict[str, None] = {}
     for step in steps:
         if not isinstance(step, dict):
@@ -92,7 +96,7 @@ def _apply_services(cfg: dict, *, steps: list,
     与凭证默认「场景显式 > 注册表默认」同款裁决,不发明新语义。
     """
     services: dict[str, Any] = cfg["services"]
-    for svc in _referenced_services(steps):
+    for svc in referenced_services(steps):
         bound_url = (bindings.get(svc) or {}).get("url")
         if bound_url:
             services[svc] = bound_url                    # ① 显式绑定最优先

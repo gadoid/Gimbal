@@ -263,7 +263,7 @@ FROM executions ORDER BY id DESC LIMIT 1;
 
 ## 8. 增量 schema 演进 —— 0006(2026-09-23 迭代批次)
 
-> 来源:`docs/superpowers/plans/2026-09-23-some_feature .md` v2(F1 分发 /
+> 来源:`docs/superpowers/plans/2026-09-23-iteration-batch.md` v2(F1 分发 /
 > F3 时间线事件化 / F4 服务引用方案 B)。`down_revision = 0005`。
 > 本节是既有 PG 库上的**在线增量**,不再涉及 SQLite→PG ETL。
 

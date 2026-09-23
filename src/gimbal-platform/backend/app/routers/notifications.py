@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -102,7 +102,11 @@ class PrefsIn(BaseModel):
 async def list_notifications(
     user: CurrentUser, db: DbSession,
     unread_only: bool = False,
-    page: int = 1, page_size: int = 50,
+    # 边界校验与其他分页路由同款(auth_sessions/admin/adaptations):
+    # 裸 int 时 page_size=-1 会让 PG 抛 LIMIT must not be negative → 500,
+    # 超大值则等于一次拉全表。
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> NotificationListOut:
     rows, unread, total = await svc.list_notifications(
         db, user.id, unread_only=unread_only, page=page, page_size=page_size)

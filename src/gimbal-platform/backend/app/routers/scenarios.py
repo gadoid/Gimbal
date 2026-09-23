@@ -44,7 +44,7 @@ from ..services import plate_client, run_dispatcher, scheme_store, scenario_stor
 from ..services import service_aliases
 from ..services.auth_ref_scan import scan_auth_aliases
 from ..services.carry_injection import build_carry_context
-from ..services.run_materialize import _referenced_services, materialize_run_copy
+from ..services.run_materialize import referenced_services, materialize_run_copy
 
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
@@ -193,7 +193,7 @@ async def preview_plate(
     # 条件,查表失败降级空表。
     try:
         alias_urls = await service_aliases.base_urls_for(
-            db, _referenced_services(body.definition.get("steps") or []))
+            db, referenced_services(body.definition.get("steps") or []))
     except Exception:  # noqa: BLE001 — 别名默认绝不阻塞导出
         logger.opt(exception=True).warning(
             "preview_plate: alias base_url lookup failed; skipped")

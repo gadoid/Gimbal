@@ -67,7 +67,7 @@ from .run_injection import (
     entry_issues,
     injectable_universe,
 )
-from .run_materialize import _referenced_services, materialize_run_copy
+from .run_materialize import referenced_services, materialize_run_copy
 from . import service_aliases
 
 # 物理迁移自 gimbal 后:用平台侧标准 AuthSession 替代自创 ResolvedAuth dataclass。
@@ -628,7 +628,7 @@ async def dispatch_run(
     # 查表失败降级跳过(别名默认是增强,不是前置条件)。
     try:
         alias_creds = await service_aliases.credential_aliases_for(
-            db, _referenced_services(
+            db, referenced_services(
                 definition_from_payload(scen.payload).get("steps") or []))
     except Exception:  # noqa: BLE001
         logger.opt(exception=True).warning(
@@ -818,7 +818,7 @@ async def _fanout(
         async with db_factory() as _alias_s:
             alias_urls = await service_aliases.base_urls_for(
                 _alias_s,
-                _referenced_services(
+                referenced_services(
                     (definition_from_payload(scenario_payload)
                      .get("steps") or [])),
             )

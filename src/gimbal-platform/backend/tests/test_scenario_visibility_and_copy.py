@@ -315,3 +315,24 @@ async def test_resolve_name_conflict_truncates_to_64(
         assert len(resolved) == 64
         assert resolved == "x" * 60 + " (2)"
         await s.rollback()
+
+
+async def test_resolve_name_conflict_clamps_base_even_without_conflict(
+    client: AsyncClient,
+) -> None:
+    """不撞名也钳基名:源场景 name 为空时调用方以 scenario_id 兜底
+    (最长 128),超 ScenarioMeta.name 64 上限会在 meta 校验变成一个
+    不好理解的 422(2026-09-23 评审修补)。同上:必须挂 client 夹具。
+    """
+    from app.core import db as db_module
+    from app.services import scenario_store
+
+    from .helpers import ensure_fk_users
+
+    async with db_module.SessionLocal() as s:
+        await ensure_fk_users(s, 1)
+        resolved, taken = await scenario_store.resolve_name_conflict(
+            s, 1, "sc-" + "y" * 125)   # 128 字符的 scenario_id 兜底名
+        assert taken is False          # 没撞名,不加计数后缀
+        assert len(resolved) == 64     # 但基名被钳到上限
+        await s.rollback()

@@ -1888,13 +1888,18 @@ function onServiceRefChange(step: StepView, value: string) {
   // F4 方案 B:选中已登记别名且带凭证绑定 → headers 直接注入 ${auth.*}
   // 模板这一行(2026-09-23 调整:不做「已有 Authorization 则跳过」的补缺
   // 守卫 —— 选中即写入,换选别名即刷新;既有大小写 Authorization 键先
-  // 清掉,保证注入后只有一行)。不写 services 声明 —— URL 走注册表
-  // 默认层(执行期物化第三档),写了就成快照。
+  // 清掉,保证注入后只有一行)。切到**无凭证**别名时,上一轮注入的模板
+  // 行必须一并清掉 —— 留着会让请求带别的服务的 token 发出去;手写的
+  // 字面 Authorization 不是注入痕迹,保留。不写 services 声明 —— URL 走
+  // 注册表默认层(执行期物化第三档),写了就成快照。
   const reg = registeredByName.value.get(value)
+  const headers = (step.api!.headers ||= {})
+  for (const k of Object.keys(headers)) {
+    if (k.toLowerCase() !== 'authorization') continue
+    if (reg?.credentialAlias || String(headers[k]).startsWith('${auth.'))
+      delete headers[k]
+  }
   if (reg?.credentialAlias) {
-    const headers = (step.api!.headers ||= {})
-    for (const k of Object.keys(headers))
-      if (k.toLowerCase() === 'authorization') delete headers[k]
     headers.Authorization = `$\{auth.${reg.credentialAlias}.token}`
   }
 }
