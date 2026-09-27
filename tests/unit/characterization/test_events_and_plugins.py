@@ -160,6 +160,32 @@ class TestEventShapes:
             engine.run(scenario)
         assert got[0].result["request"]["headers"]["Authorization"] == "***redacted***"
 
+    def test_archive_exchange_stores_evidence_form(self):
+        """P0-3：scratch 存原值后，归档 exchange 的 ``call`` 键仍是证据形态
+        （脱敏 + 截断），不携带 scratch 原值。"""
+        engine, bus, archive, *_ = make_engine()
+        got = []
+        bus.subscribe(lambda e: got.append(e), "call.exchange")
+
+        scenario = http_scenario(sid="arch-redact")
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"code": 0}
+        resp.headers = {"Content-Type": "application/json", "accesstoken": "abc123"}
+        client = MagicMock()
+        client.__enter__ = MagicMock(return_value=client)
+        client.__exit__ = MagicMock(return_value=False)
+        client.request = MagicMock(return_value=resp)
+        with patch("httpx.Client", return_value=client):
+            result = engine.run(scenario)
+        assert result.passed == 1
+
+        ex = archive.get_exchange("step-000", scenario_id="arch-redact")
+        assert ex is not None
+        assert ex["call"]["response"]["meta"]["headers"]["accesstoken"] == "***redacted***"
+        # 事件出口同口径（两处证据出口都不携带原值）
+        assert got[0].result["response"]["meta"]["headers"]["accesstoken"] == "***redacted***"
+
 
 class TestPluginsEngineLevel:
     """v2.1 批次 F-2b：认证注入原生进 http 适配器（auth_headers 插件退役）。"""

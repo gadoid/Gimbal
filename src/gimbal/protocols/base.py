@@ -202,18 +202,20 @@ class ProtocolExecutor(StrategyExecutor):
         if not call_result.elapsed_ms:
             call_result.elapsed_ms = (time.monotonic() - t0) * 1000
 
-        # 脱敏复核 + scratch 写统一证据形状（v2.1 批次 F：旧 scratch 键退役，
+        # scratch 与证据分离（P0-3）：先记请求侧原值，再脱敏覆写 request；
+        # scratch 写原值（Extract/Assertion 经 $.call.* 消费），事件/归档
+        # 等证据出口一律 to_evidence()（v2.1 批次 F：旧 scratch 键退役，
         # `call` 是唯一证据键；下游一律经 $.call.request/response 导航）
+        call_result.remember_raw_request()
         call_result.request = self.redact(call_result.request or {})
-        evidence = call_result.to_scratch()
-        view.write_scratch("call", evidence)
+        view.write_scratch("call", call_result.to_scratch())
 
         message = self._summary(call_result)
         result = StrategyResult(
             status=StrategyStatus.PASSED,
             strategy_id=self.kind,
             message=message,
-            extracted={"call": evidence},
+            extracted={"call": call_result.to_evidence()},
         )
 
         # 协议命名空间扩展点（http：http.response 事件）

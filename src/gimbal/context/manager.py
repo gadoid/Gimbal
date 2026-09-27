@@ -7,6 +7,7 @@ from .suite import SuiteContext
 from .scenario import ScenarioContext
 from .step import StepContext, StepInputs, StepStatus
 from gimbal.core.bootstrap import Configuration
+from gimbal.protocols.result import evidence_from_call_dict
 from .projections import (
     project_scenario_started, project_scenario_completed,
     project_step_started, project_step_completed, project_promotion,
@@ -171,8 +172,14 @@ class ContextManager:
         # 会把按引用保存的 exchange 一并清空（历史 bug —— 归档的 exchange 恒空）
         scratch_snapshot = dict(ctx.scratch.as_dict())
         if "call" in scratch_snapshot:   # F 定稿：唯一证据键
+            # P0-3：scratch 存原值；归档是证据出口，call 键复核为证据形态
+            # （脱敏 + 截断），原值不出 scratch
+            exchange = dict(scratch_snapshot)
+            call_raw = scratch_snapshot["call"]
+            if isinstance(call_raw, dict):
+                exchange["call"] = evidence_from_call_dict(call_raw)
             self._archive.save_exchange(
-                scratch_snapshot, ctx.step_id,
+                exchange, ctx.step_id,
                 scenario_id=getattr(ctx.parent, "scenario_id", None),
             )
 

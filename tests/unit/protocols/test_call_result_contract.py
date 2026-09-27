@@ -22,7 +22,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "sr
 from gimbal.core.hooks import HookPoint, HookRegistry
 from gimbal.events.bus import InMemoryEventBus
 from gimbal.protocols.base import ProtocolCallContext, ProtocolExecutor, ProtocolTransportError
-from gimbal.protocols.result import CallResult, truncate_oversize
+from gimbal.protocols.result import (
+    CallResult,
+    evidence_from_call_dict,
+    redact_mapping,
+    truncate_oversize,
+)
 from gimbal.schema.call import Call
 from gimbal.schema.step import Step
 from gimbal.schema.strategy import AssertOperator, Assertion, Extract, StrategyPhase
@@ -222,7 +227,7 @@ class TestCallBeforePatch:
 class TestRedactionAndEvidence:
 
     def test_sensitive_headers_redacted_in_evidence(self):
-        """Authorization 不进 CallResult.request 与 CallExchangeEvent。"""
+        """Authorization 不进证据出口（CallExchangeEvent）；scratch 存原值（P0-3）。"""
         from gimbal.schema.call import Call
         from gimbal.schema.request import Request
 
@@ -245,9 +250,11 @@ class TestRedactionAndEvidence:
         with _mock_httpx(200, {"ok": True})[0]:
             sm._do_call()
 
+        # P0-3：scratch 存原值（请求侧原值在 redact 覆写前已记住）
         call_ev = view.read_scratch("call")
-        assert call_ev["request"]["headers"]["Authorization"] == "***redacted***"
+        assert call_ev["request"]["headers"]["Authorization"] == "Bearer secret-token"
         assert call_ev["request"]["headers"]["X-Ok"] == "1"
+        # 证据出口（事件）脱敏
         assert got[0].result["request"]["headers"]["Authorization"] == "***redacted***"
 
     def test_oversize_body_truncated_with_flag(self):
@@ -262,6 +269,114 @@ class TestRedactionAndEvidence:
         assert out["X-Auth-Token"] == "***redacted***"
         assert out["Keep"] == "v"
         assert out["user_password"] == "***redacted***"
+
+
+class TestScratchRawVsEvidence:
+    """P0-3：scratch 存**原值**（不脱敏、不截断）；脱敏/截断只在证据出口。"""
+
+    def test_scratch_keeps_raw_token_header(self):
+        """meta.headers.accesstoken：scratch 原值可取；evidence 脱敏。"""
+        r = CallResult.build(
+            protocol="http",
+            request={"method": "GET", "url": "/p",
+                     "headers": {"Authorization": "Bearer t-1", "X-Ok": "1"}},
+            status=200,
+            body={"orderNo": "O-1"},
+            meta={"headers": {"accesstoken": "abc123"}},
+        )
+        # 复现执行器模板顺序：先记原值，再脱敏覆写 request（P0-3）
+        r.remember_raw_request()
+        r.request = redact_mapping(r.request)
+
+        s = r.to_scratch()
+        assert s["response"]["meta"]["headers"]["accesstoken"] == "abc123"   # 不脱敏
+        assert s["request"]["headers"]["Authorization"] == "Bearer t-1"      # 请求侧原值
+        e = r.to_evidence()
+        assert e["response"]["meta"]["headers"]["accesstoken"] == "***redacted***"
+        assert e["request"]["headers"]["Authorization"] == "***redacted***"
+
+    def test_scratch_keeps_large_body_untruncated(self):
+        """> 64KB 的 body：scratch 不截断；evidence 截断带 _truncated 标记。"""
+        r = CallResult.build(
+            protocol="http", request={}, status=200,
+            body={"items": [{"i": n} for n in range(9000)]},   # 序列化 > 64KB
+        )
+        s = r.to_scratch()
+        assert s["response"]["body"]["items"][8999]["i"] == 8999
+        e = r.to_evidence()
+        assert isinstance(e["response"]["body"], str)
+        assert "_truncated" in e["response"]["body"]
+
+    def test_scratch_shape_parity_with_evidence(self):
+        """scratch 与 evidence 键结构一致（既有 JSONPath 兼容），仅值口径不同。"""
+        r = CallResult.build(
+            protocol="http", request={"method": "GET"}, status=200,
+            body={"a": 1}, meta={"headers": {"h": "v"}},
+        )
+        s, e = r.to_scratch(), r.to_evidence()
+        assert set(s) == set(e)
+        assert set(s["response"]) == set(e["response"])
+        assert set(s["response"]["meta"]) == set(e["response"]["meta"])
+
+    def test_evidence_from_scratch_dict_matches_to_evidence(self):
+        """归档出口辅助：从 scratch 原值 dict 复核出的证据 == CallResult.to_evidence()。"""
+        r = CallResult.build(
+            protocol="http",
+            request={"headers": {"Authorization": "Bearer t-1"}},
+            status=200,
+            body={"b": "x" * 10},
+            meta={"headers": {"accesstoken": "abc123"}},
+        )
+        r.remember_raw_request()
+        r.request = redact_mapping(r.request)
+        assert evidence_from_call_dict(r.to_scratch()) == r.to_evidence()
+
+    def test_assertion_on_token_header_passes_and_event_stays_redacted(self):
+        """端到端（自定义协议）：断言 ``$.call.response.meta.headers.accesstoken``
+        eq abc123 → passed（scratch 原值）；call.exchange 事件出口仍脱敏。"""
+        class TokenEchoExecutor(ProtocolExecutor):
+            protocol = "tokenecho"
+
+            def build_spec(self, call, pctx):
+                return dataclasses.replace(
+                    EchoSpec(message="m", pctx=pctx), kind="_call:tokenecho")
+
+            def send(self, spec, view):
+                return CallResult.build(
+                    protocol=self.protocol,
+                    request={"message": spec.message, "client_secret": "s-1"},
+                    status=0,
+                    body={"ok": 1},
+                    meta={"headers": {"accesstoken": "abc123"}},
+                )
+
+        bus = InMemoryEventBus()
+        got = []
+        bus.subscribe(lambda e: got.append(e), "call.exchange")
+
+        step = Step(
+            call=Call(protocol="tokenecho", message="m"),
+            strategy=[
+                Assertion(name="tok", target="$.call.response.meta.headers.accesstoken",
+                          operator=AssertOperator.EQ, expected="abc123"),
+            ],
+        )
+        dispatcher = build_default_dispatcher(hook_registry=HookRegistry())
+        dispatcher.protocols.register(TokenEchoExecutor())
+        view = _StubView()
+        sm = StepStateMachine(
+            step_id="s", step_schema=step, dispatcher=dispatcher, view=view,
+            event_bus=bus, protocol_registry=dispatcher.protocols,
+        )
+        result = sm.run()
+        assert result.status == "passed", result.error
+        # scratch 原值（Extract/Assertion 的消费面）
+        call_scratch = view.read_scratch("call")
+        assert call_scratch["response"]["meta"]["headers"]["accesstoken"] == "abc123"
+        assert call_scratch["request"]["client_secret"] == "s-1"
+        # 事件出口（证据面）脱敏
+        assert got[0].result["response"]["meta"]["headers"]["accesstoken"] == "***redacted***"
+        assert got[0].result["request"]["client_secret"] == "***redacted***"
 
 
 class TestTransportError:
