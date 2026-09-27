@@ -94,6 +94,25 @@ class EchoExecutor(ProtocolExecutor):
         )
 
 
+class TokenEchoExecutor(ProtocolExecutor):
+    """P0-3/P0-3b 测试样板：响应 meta 带敏感头（accesstoken）。"""
+
+    protocol = "tokenecho"
+
+    def build_spec(self, call, pctx):
+        return dataclasses.replace(
+            EchoSpec(message="m", pctx=pctx), kind="_call:tokenecho")
+
+    def send(self, spec, view):
+        return CallResult.build(
+            protocol=self.protocol,
+            request={"message": spec.message, "client_secret": "s-1"},
+            status=0,
+            body={"ok": 1},
+            meta={"headers": {"accesstoken": "abc123"}},
+        )
+
+
 def _mock_httpx(status=200, body=None):
     mock_response = MagicMock()
     mock_response.status_code = status
@@ -334,22 +353,6 @@ class TestScratchRawVsEvidence:
     def test_assertion_on_token_header_passes_and_event_stays_redacted(self):
         """端到端（自定义协议）：断言 ``$.call.response.meta.headers.accesstoken``
         eq abc123 → passed（scratch 原值）；call.exchange 事件出口仍脱敏。"""
-        class TokenEchoExecutor(ProtocolExecutor):
-            protocol = "tokenecho"
-
-            def build_spec(self, call, pctx):
-                return dataclasses.replace(
-                    EchoSpec(message="m", pctx=pctx), kind="_call:tokenecho")
-
-            def send(self, spec, view):
-                return CallResult.build(
-                    protocol=self.protocol,
-                    request={"message": spec.message, "client_secret": "s-1"},
-                    status=0,
-                    body={"ok": 1},
-                    meta={"headers": {"accesstoken": "abc123"}},
-                )
-
         bus = InMemoryEventBus()
         got = []
         bus.subscribe(lambda e: got.append(e), "call.exchange")
@@ -377,6 +380,73 @@ class TestScratchRawVsEvidence:
         # 事件出口（证据面）脱敏
         assert got[0].result["response"]["meta"]["headers"]["accesstoken"] == "***redacted***"
         assert got[0].result["request"]["client_secret"] == "***redacted***"
+
+
+class _RecordingView(_StubView):
+    """记录 record_assertion 的替身（P0-3b 断言出口口径测试用）。"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.assertions: list = []
+
+    def record_assertion(self, result) -> None:
+        self.assertions.append(result)
+
+
+class TestAssertionEvidenceRedaction:
+    """P0-3b：断言 actual/expected 在归档与日志出口按敏感键脱敏。
+
+    判定仍按 scratch 原值（P0-3 语义不变）；只有 AssertionResult 与日志
+    这些证据出口换成脱敏形态。
+    """
+
+    @staticmethod
+    def _run(target, expected, operator=AssertOperator.EQ):
+        step = Step(
+            call=Call(protocol="tokenecho", message="m"),
+            strategy=[Assertion(name="a", target=target,
+                                operator=operator, expected=expected)],
+        )
+        dispatcher = build_default_dispatcher(hook_registry=HookRegistry())
+        dispatcher.protocols.register(TokenEchoExecutor())
+        view = _RecordingView()
+        sm = StepStateMachine(
+            step_id="s", step_schema=step, dispatcher=dispatcher, view=view,
+            protocol_registry=dispatcher.protocols,
+        )
+        return sm.run(), view
+
+    def test_sensitive_target_records_redacted_but_verdict_from_raw(self):
+        """(a) target 含 token → actual/expected 记录为脱敏；判定仍按原值通过。"""
+        result, view = self._run("$.call.response.meta.headers.accesstoken", "abc123")
+        assert result.status == "passed", result.error
+        a = view.assertions[0]
+        assert a.passed is True                  # 判定按原值
+        assert a.actual == "***redacted***"      # 记录脱敏
+        assert a.expected == "***redacted***"
+        assert "abc123" not in (a.message or "")
+        # (c) scratch 原值不受影响（P0-3 不变）
+        assert view.read_scratch("call")["response"]["meta"]["headers"]["accesstoken"] == "abc123"
+
+    def test_sensitive_target_mismatch_still_fails_without_leak(self):
+        """失败诊断：脱敏形态下仍能看出 FAIL（passed=False），原值不泄露。"""
+        result, view = self._run("$.call.response.meta.headers.accesstoken", "wrong-token")
+        assert result.status == "failed"
+        a = view.assertions[0]
+        assert a.passed is False
+        assert a.actual == "***redacted***"
+        assert a.expected == "***redacted***"
+        assert "FAIL" in a.message
+        assert "abc123" not in a.message and "wrong-token" not in a.message
+
+    def test_plain_target_records_raw_values(self):
+        """(b) 非敏感路径 → actual/expected 原值（可诊断口径不变）。"""
+        result, view = self._run("$.call.response.body.ok", 1)
+        assert result.status == "passed", result.error
+        a = view.assertions[0]
+        assert a.passed is True
+        assert a.actual == 1
+        assert a.expected == 1
 
 
 class TestTransportError:

@@ -37,6 +37,17 @@ def redact_value(value: Any) -> str:
     return "***redacted***"
 
 
+def is_sensitive_path(path: Any) -> bool:
+    """键名 / JSONPath 是否命中默认脱敏键（与 ``redact_mapping`` 同表、
+    同口径的大小写不敏感子串匹配），如 ``accesstoken`` / ``$.x.password``。
+
+    供"按路径判断是否脱敏"的证据出口用（断言 actual/expected 一类，
+    P0-3b）：键表唯一，不另立第二套脱敏清单。
+    """
+    lowered = str(path).lower()
+    return any(pat in lowered for pat in _DEFAULT_REDACT_KEYS)
+
+
 def redact_mapping(data: dict, keys: tuple[str, ...] = _DEFAULT_REDACT_KEYS) -> dict:
     """按键名子串匹配递归脱敏 dict（含嵌套 dict/list），返回新 dict。
 

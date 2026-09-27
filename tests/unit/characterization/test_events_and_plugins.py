@@ -29,6 +29,7 @@ from gimbal.schema.call import Call
 from gimbal.schema.request import Request
 from gimbal.schema.scenario import Config as ScenarioConfig, Meta, Scenario
 from gimbal.schema.step import Step
+from gimbal.schema.strategy import AssertOperator, Assertion
 from gimbal.strategy.dispatcher import build_default_dispatcher
 
 
@@ -185,6 +186,37 @@ class TestEventShapes:
         assert ex["call"]["response"]["meta"]["headers"]["accesstoken"] == "***redacted***"
         # 事件出口同口径（两处证据出口都不携带原值）
         assert got[0].result["response"]["meta"]["headers"]["accesstoken"] == "***redacted***"
+
+    def test_archive_step_assertions_redacted_for_sensitive_target(self):
+        """P0-3b：断言 target 命中敏感键 → 归档 StepContext.outcome.assertions
+        的 actual/expected 为脱敏形态；判定仍按原值（run passed）。"""
+        engine, bus, archive, *_ = make_engine()
+
+        scenario = http_scenario(
+            sid="arch-assert",
+            strategy=[Assertion(name="tok",
+                                target="$.call.response.meta.headers.accesstoken",
+                                operator=AssertOperator.EQ, expected="abc123")],
+        )
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"code": 0}
+        resp.headers = {"Content-Type": "application/json", "accesstoken": "abc123"}
+        client = MagicMock()
+        client.__enter__ = MagicMock(return_value=client)
+        client.__exit__ = MagicMock(return_value=False)
+        client.request = MagicMock(return_value=resp)
+        with patch("httpx.Client", return_value=client):
+            result = engine.run(scenario)
+        assert result.passed == 1
+
+        step = archive.get_step("step-000", scenario_id="arch-assert")
+        assert step is not None
+        a = step.outcome.assertions[0]
+        assert a.passed is True                     # 判定按 scratch 原值
+        assert a.actual == "***redacted***"         # 归档出口脱敏
+        assert a.expected == "***redacted***"
+        assert "abc123" not in (a.message or "")
 
 
 class TestPluginsEngineLevel:

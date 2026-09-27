@@ -4,6 +4,7 @@ import traceback
 from typing import TYPE_CHECKING
 
 from .utils import _evaluate
+from gimbal.protocols.result import is_sensitive_path, redact_value
 from gimbal.utils.jsonpath import is_jsonpath, get as jget
 from gimbal.strategy.executor_base import StrategyExecutor, StrategyResult, StrategyStatus
 
@@ -17,9 +18,15 @@ class AssertionExecutor(StrategyExecutor):
     def execute(self, spec, view) -> StrategyResult:
         """执行断言策略：解析 spec.target 的实际值，用 spec.operator 与 spec.expected 比较，结果记入 view 并返回 StrategyResult。"""
         try:
+            # P0-3b：target 命中敏感键（token/cookie/... 与证据脱敏同表）时，
+            # actual/expected 只以脱敏形态进断言记录（outcome.assertions →
+            # 归档）与日志；**判定仍用 scratch 原值**（P0-3 语义不变）
+            sensitive = is_sensitive_path(spec.target)
+
             logger.info(
                 "[AssertionExecutor] 执行断言: target={} operator={} expected={}",
-                spec.target, spec.operator, spec.expected
+                spec.target, spec.operator,
+                redact_value(spec.expected) if sensitive else spec.expected
             )
 
             # 统一从 scratch 用 JSONPath 取值
@@ -41,18 +48,26 @@ class AssertionExecutor(StrategyExecutor):
 
             logger.info(
                 "[AssertionExecutor] 实际值: target={} actual={}",
-                spec.target, actual
+                spec.target, redact_value(actual) if sensitive else actual
             )
 
             passed, msg = _evaluate(spec.operator, actual, spec.expected)
+            if sensitive:
+                # 消息同样只携带脱敏形态；PASS/FAIL 前缀仍来自原值判定，
+                # 失败时可看出"值不一致"而不泄露原值
+                masked = redact_value(actual)
+                msg = (
+                    f"PASS: {masked} {spec.operator.value} {masked}" if passed
+                    else f"FAIL: expected {masked} {spec.operator.value} {masked}"
+                )
             human_msg = spec.message or msg
 
             from gimbal.context.step import AssertionResult
             view.record_assertion(AssertionResult(
                 name=spec.name or spec.target,
                 passed=passed,
-                expected=spec.expected,
-                actual=actual,
+                expected=redact_value(spec.expected) if sensitive else spec.expected,
+                actual=redact_value(actual) if sensitive else actual,
                 message=human_msg,
             ))
 
