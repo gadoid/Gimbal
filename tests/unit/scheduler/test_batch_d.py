@@ -7,6 +7,7 @@ import os
 import sys
 import threading
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
@@ -25,7 +26,8 @@ from gimbal.plugins import PluginRegistry
 from gimbal.protocols.base import ProtocolCallContext, ProtocolExecutor, ProtocolTransportError
 from gimbal.protocols.result import CallResult
 from gimbal.schema.call import Call
-from gimbal.schema.plan import UnitPolicy
+from gimbal.schema.plan import Plan, PlanPolicy, Unit, UnitPolicy
+from gimbal.scheduler.plan import PlanScheduler
 from gimbal.schema.scenario import (
     Config as ScenarioConfig, Meta, Scenario, SuiteGraph, UnitDecl,
 )
@@ -106,6 +108,52 @@ def _scenario(sid: str, assert_echo=None, extract_to=None) -> Scenario:
         resource={},
         steps=[Step(call=Call(protocol="echo", message=sid), strategy=strategy)],
     )
+
+
+def _make_plan(units: int, policy_kwargs: dict, parallel: int) -> Plan:
+    """最小 Plan：N 个无依赖单元（aggregate），统一单元策略 + Plan 级并发。"""
+    return Plan(
+        units=[Unit(id=f"u{i}", scenario=_scenario(f"u{i}"),
+                    policy=UnitPolicy(**policy_kwargs))
+               for i in range(units)],
+        policy=PlanPolicy(parallel=parallel),
+    )
+
+
+class TestParallelRunsMultiplicationCore:
+    """P0-2：并行分支必须走 _run_one —— n_runs 乘法与 lock 互斥不能被绕过。"""
+
+    def test_parallel_runs_n_runs_multiplication_and_lock(self):
+        """parallel=2、3 单元 × n_runs=3 → 发送 9 次；同 lock 标签最大并发 = 1。"""
+        calls = []
+        guard = threading.Lock()
+        lock_max = {"n": 0, "cur": 0}
+
+        class _R:
+            passed = True
+            status = "passed"
+
+        def fake_unit_run(unit, inputs):
+            with guard:
+                calls.append(unit.id)
+            # lock 标签单元内统计并发峰值（调度器应保证同标签互斥）
+            if unit.policy.lock == "db":
+                with guard:
+                    lock_max["cur"] += 1
+                    lock_max["n"] = max(lock_max["n"], lock_max["cur"])
+                time.sleep(0.05)
+                with guard:
+                    lock_max["cur"] -= 1
+            return _R()
+
+        plan = _make_plan(units=3, policy_kwargs={"n_runs": 3, "lock": "db"}, parallel=2)
+        sched = PlanScheduler()
+        outcome = sched.run(plan, fake_unit_run)
+
+        assert len(calls) == 3 * 3, f"n_runs 乘法在并行下被绕过: {len(calls)} != 9"
+        assert Counter(calls) == {"u0": 3, "u1": 3, "u2": 3}   # 每单元恰跑 n_runs 次
+        assert lock_max["n"] == 1, f"同 lock 标签出现并发: {lock_max['n']}"
+        assert not outcome.blocked and not outcome.cancelled
 
 
 class TestMultiplication:

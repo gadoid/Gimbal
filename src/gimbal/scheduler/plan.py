@@ -64,9 +64,12 @@ class PlanScheduler:
     def __init__(self) -> None:
         # lock 标签 → 互斥锁（"依赖满足、即将运行"时获取，防死锁）
         self._locks: dict[str, "threading.Lock"] = {}
+        # 锁表自身的互斥（并行分支多线程并发调用 _lock_for）
+        self._table_lock = threading.Lock()
 
     def _lock_for(self, tag: str):
-        return self._locks.setdefault(tag, threading.Lock())
+        with self._table_lock:
+            return self._locks.setdefault(tag, threading.Lock())
 
     def run(
         self,
@@ -211,7 +214,7 @@ class PlanScheduler:
             with lock:
                 initial = ready_units()
                 for u in initial:
-                    futures[pool.submit(run_unit, u, self._resolve_inputs(plan, outcome, u))] = u
+                    futures[pool.submit(self._run_one, run_unit, u, self._resolve_inputs(plan, outcome, u))] = u
 
             while futures:
                 done, _ = wait(list(futures), return_when=FIRST_COMPLETED)
@@ -233,7 +236,7 @@ class PlanScheduler:
                         continue
                     for u in ready_units():
                         if u.id not in {fu.id for fu in futures.values()}:
-                            futures[pool.submit(run_unit, u, self._resolve_inputs(plan, outcome, u))] = u
+                            futures[pool.submit(self._run_one, run_unit, u, self._resolve_inputs(plan, outcome, u))] = u
                 # 空转保护：无在飞且无 ready 但仍有 pending（理论不可达）
                 if not futures:
                     with lock:
