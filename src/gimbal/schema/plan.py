@@ -52,7 +52,18 @@ class Unit(BaseModel):
 
 
 class Plan(BaseModel):
-    """编译产物：Engine 的唯一执行输入。"""
+    """编译产物：Engine 的唯一执行输入。
+
+    括号（before/after）判定语义（v2.1 review P0-4；调度见
+    scheduler/plan.py 的 before 判定门，计数见 core/runner.py
+    `_assemble_aggregate`）：
+
+      - before 单元失败/超时 → 其所有主体单元记 ``blocked``（不执行），
+        ``exit_code=1``；after 括号不受影响，仍总是执行；
+      - after 单元失败 → ``failed += 1``，``exit_code=1``（不影响其他行）；
+      - 括号行计入 ``total``（before/after 各占一行），与主体行统一组装；
+      - ``exit_code = 0`` 当且仅当 ``failed == error == halted == blocked == 0``。
+    """
 
     units: list[Unit] = Field(default_factory=list)
     before: list[Unit] = Field(default_factory=list, description="suite 级前置括号（批次 C 落地语义）")

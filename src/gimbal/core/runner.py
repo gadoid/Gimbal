@@ -313,20 +313,42 @@ class Engine:
         )
 
     def _assemble_aggregate(self, plan: Any, outcome: Any) -> RunResult:
-        """Suite/Graph 历史计数口径：halted/passed/error/failed/blocked 分立；details 按提交序。"""
+        """Suite/Graph 计数口径：halted/passed/error/failed/blocked 分立；details 按提交序。
+
+        v2.1 review P0-4：before/after 括号行与主体行统一组装——各占一行计入
+        total；before 失败计 failed 且主体已被调度器置 blocked（各占一行计入
+        total）；after 失败计 failed（必达执行，不影响其他行）。
+        exit_code = 0 iff failed == error == halted == blocked == 0。
+        """
         results = outcome.results
         total = passed = failed = error = halted = blocked = 0
         details: list[dict[str, Any]] = []
 
-        # 括号单元行（不计 total；bracket 字段标识）
+        # 括号单元行（P0-4：计入 total 与 exit_code；bracket 字段标识）
         for bracket, units in (("before", plan.before), ("after", plan.after)):
             for unit in units:
                 result = results.get(unit.id)
+                if isinstance(result, Exception):
+                    total += 1
+                    error += 1
+                elif result is not None:
+                    total += len(getattr(result, "attempts", None) or [1])
+                    if result.halted:
+                        halted += 1
+                    elif result.passed:
+                        passed += 1
+                    elif result.status == "error":
+                        error += 1
+                    else:
+                        failed += 1
+                # result 为 None：理论不可达（括号必达执行）→ 仅占位行，不计入
                 details.append(self._bracket_row(bracket, unit, result))
 
         for idx, unit in enumerate(plan.units):
             status = outcome.status_of(unit.id)
             if status == "blocked":
+                # P0-4：blocked 行计入 total（before 失败阻断 / 依赖级联各占一行）
+                total += 1
                 blocked += 1
                 details.append({
                     "scenario_id": unit.id,
@@ -384,10 +406,13 @@ class Engine:
         if blocked:
             logger.warning("[Engine] {} 个单元因上游失败被 blocked", blocked)
 
+        # P0-4：exit_code = 0 iff failed == error == halted == blocked == 0
+        # （括号行失败计入 failed；halted 同为"未通过"口径）
+        exit_code = 0 if (failed + error + halted + blocked) == 0 else 1
         logger.info(
             "[Engine] Suite 执行完成: suite_id={} mode={} parallel={} total={} passed={} failed={} error={} halted={} blocked={} exit_code={}",
             plan.suite_id, plan.mode, plan.policy.parallel > 1, total, passed, failed,
-            error, halted, blocked, 0 if (failed + error + blocked) == 0 else 1,
+            error, halted, blocked, exit_code,
         )
         repaired = sum(
             1 for r in results.values()
@@ -396,7 +421,7 @@ class Engine:
             if getattr(s, "repaired", False)
         )
         return RunResult(
-            exit_code=0 if (failed + error + blocked) == 0 else 1,
+            exit_code=exit_code,
             total=total, passed=passed,
             failed=failed, error=error, halted=halted, blocked=blocked,
             repaired=repaired,
@@ -405,7 +430,7 @@ class Engine:
 
     @staticmethod
     def _bracket_row(bracket: str, unit: Any, result: Any) -> dict[str, Any]:
-        """before/after 括号单元的 details 行（不计 total；异常也呈现）。"""
+        """before/after 括号单元的 details 行（P0-4：计数已并入 _assemble_aggregate 统一组装）。"""
         if result is None or isinstance(result, Exception):
             return {
                 "scenario_id": unit.id,

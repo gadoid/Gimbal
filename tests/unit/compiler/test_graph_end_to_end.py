@@ -208,4 +208,6 @@ class TestBlockedAndBrackets:
             ],
         )
         result = engine.run(graph)
-        assert result.passed == 2 and result.exit_code == 0
+        # P0-4：括号行计入 total/passed —— login(before) + u1 + u2 各占一行
+        assert result.passed == 3 and result.exit_code == 0
+        assert result.total == 3

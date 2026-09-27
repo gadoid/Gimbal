@@ -1,7 +1,8 @@
 """scheduler/plan.py — Plan 调度器（v2 §运行时；批次 B 建立、批次 C 拓扑化）。
 
-顺序：before 括号（串行先行）→ units 拓扑调度 → after 拓东（串行，**必达**：
-无论 units 失败/取消都执行）→ 判定交 Engine。
+顺序：before 括号（串行先行；P0-4：任一失败/超时 → 主体全部记 blocked，
+不提交执行）→ units 拓扑调度 → after 拓扑（串行，**必达**：无论
+before/units 失败/取消都执行）→ 判定交 Engine。
 
 拓扑调度（needs 依赖）：
   - ready = needs 全部完成的单元；serial 按声明序、parallel 用线程池
@@ -80,15 +81,22 @@ class PlanScheduler:
     ) -> PlanOutcome:
         outcome = PlanOutcome()
 
-        # 1. before 括号（串行先行；失败记录但不阻断主体——业务语义由调用方判定）
+        # 1. before 括号（串行先行；P0-4：任一失败 → 判定门拦下主体）
         for unit in plan.before:
             outcome.results[unit.id] = self._run_one(run_unit, unit, self._resolve_inputs(plan, outcome, unit))
 
-        # 2. units 主体（拓扑）
-        if plan.policy.parallel > 1:
-            self._schedule_parallel(plan, run_unit, outcome, fail_fast)
+        # 1.5 P0-4 判定门：before 任一失败/超时（非 passed/异常/无结果）→
+        # 主体全部置 blocked、不提交执行（串行/并行两条路径共用此门）；
+        # after 不受影响，仍在下方必达执行。
+        if self._before_failed(plan, outcome):
+            for unit in plan.units:
+                outcome.blocked.add(unit.id)
         else:
-            self._schedule_serial(plan, run_unit, outcome, fail_fast)
+            # 2. units 主体（拓扑）
+            if plan.policy.parallel > 1:
+                self._schedule_parallel(plan, run_unit, outcome, fail_fast)
+            else:
+                self._schedule_serial(plan, run_unit, outcome, fail_fast)
 
         # 3. after 括号（串行，必达——units 失败/取消不影响其执行）
         for unit in plan.after:
@@ -247,6 +255,18 @@ class PlanScheduler:
                     break
 
     # ── 判定辅助 ─────────────────────────────────────────────
+
+    @staticmethod
+    def _before_failed(plan: Plan, outcome: PlanOutcome) -> bool:
+        """P0-4 判定门：before 括号任一未通过（失败/超时/异常/无结果）。
+
+        判定门 fail-closed：结果缺失同样视为失败（主体宁可 blocked 不可误跑）。
+        """
+        for unit in plan.before:
+            result = outcome.results.get(unit.id)
+            if result is None or PlanScheduler._result_failed(result):
+                return True
+        return False
 
     @staticmethod
     def _upstream_bad(outcome: PlanOutcome, need_id: str) -> bool:
