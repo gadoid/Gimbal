@@ -343,3 +343,35 @@ class TestDebuggerPlugin:
         finally:
             dbg.deactivate(hooks)
         assert result.failed == 1              # 超时按 abort → 失败保留
+
+    def test_abort_pauses_once(self):
+        """P1-9：every_step 下 [q] 中止 → 只暂停一次（当前为 2）。
+
+        step.before 发出 abort Decision → step 转 ERROR；abort 语义 =
+        run 直接终止，不再触发 step.failed 二次暂停/二次询问。
+        """
+        engine, hooks, bus = _make_engine()
+        session = ScriptedSession(["q"])
+        dbg = DebuggerPlugin(pause="every_step", session=session, event_bus=bus)
+        dbg.activate(hooks)
+        try:
+            result = engine.run(_scenario("s"))
+        finally:
+            dbg.deactivate(hooks)
+        assert dbg.paused_count == 1            # 无 step.failed 二次暂停
+        assert result.passed == 0 and result.failed == 1
+        step = result.details[0]["steps"][0]
+        assert "aborted" in (step["error"] or "")   # 状态反映 abort 来源
+
+    def test_abort_continue_control_single_step(self):
+        """对照：every_step 下 [c] 继续通过步 → 暂停一次，run 正常通过。"""
+        engine, hooks, bus = _make_engine()
+        session = ScriptedSession(["c"])
+        dbg = DebuggerPlugin(pause="every_step", session=session, event_bus=bus)
+        dbg.activate(hooks)
+        try:
+            result = engine.run(_scenario("s"))
+        finally:
+            dbg.deactivate(hooks)
+        assert dbg.paused_count == 1
+        assert result.passed == 1               # 守卫不影响正常流转

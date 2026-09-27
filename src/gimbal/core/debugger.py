@@ -116,6 +116,9 @@ class DebuggerPlugin:
         self.wait_timeout = wait_timeout
         self.hook_ids: list[str] = []
         self.paused_count = 0
+        # P1-9：debugger 自身已发出 abort（含等待超时按 abort）后不再暂停——
+        # abort 语义 = run 直接终止，避免 step.failed 二次暂停
+        self._aborting: bool = False
 
     # ── 装载 / 卸载 ─────────────────────────────────────────
 
@@ -151,6 +154,7 @@ class DebuggerPlugin:
             return None
         cmd, note = self._pause("step.before", step_id, payload)
         if cmd == "abort":
+            self._aborting = True
             raise HookSignal.STOP(Decision(action="abort", source="human", note=note))
         return None   # continue
 
@@ -160,15 +164,22 @@ class DebuggerPlugin:
             return None
         cmd, note = self._pause("call.before", step_id, payload)
         if cmd == "abort":
+            self._aborting = True
             raise HookSignal.STOP(Decision(action="abort", source="human", note=note))
         return None
 
     def _on_step_failed(self, payload: dict) -> None:
+        if self._aborting:
+            # P1-9：debugger 已发出 abort，该 abort 产生的 step 失败
+            # 不再二次暂停（run 已按 abort 终止）
+            return None
         if self.pause not in ("on_failure", "every_step"):
             return None
         step_id = getattr(payload.get("result"), "step_id", "?")
         cmd, note = self._pause("step.failed", step_id, payload)
         if cmd in ("retry", "skip", "abort"):
+            if cmd == "abort":
+                self._aborting = True
             raise HookSignal.STOP(Decision(action=cmd, source="human", note=note))
         return None   # continue（记失败）
 

@@ -199,6 +199,21 @@ class StepRunner:
         return result
 
 
+# ── abort 来源识别（P1-9）─────────────────────────────────────────────────────
+# 状态机对 STEP_BEFORE 决策 abort（debugger 主动中止）的 step 结果 error
+# 固定以 "[step.before] aborted" 开头（statemachine/engine.py）。scenario_runner
+# 据此识别 abort 来源的失败：跳过 STEP_FAILED 决策询问，run 直接终止——
+# abort 语义是框架级中止，不再触发二次裁决/二次暂停。
+
+_STEP_BEFORE_ABORTED_PREFIX = "[step.before] aborted"
+
+
+def _abort_originated(result: StepRunResult) -> bool:
+    """step 失败是否来自 STEP_BEFORE 决策 abort（如 debugger 会话中止）。"""
+    err = getattr(result, "error", None)
+    return isinstance(err, str) and err.startswith(_STEP_BEFORE_ABORTED_PREFIX)
+
+
 # ── ScenarioRunner ────────────────────────────────────────────────────────────
 
 class ScenarioRunner:
@@ -408,10 +423,12 @@ class ScenarioRunner:
             )
             result = step_runner.run(step_union, scenario_ctx, idx)
 
-            if not result.passed:
+            if not result.passed and not _abort_originated(result):
                 # 拦截决策点 STEP_FAILED（批次 E）：CONTINUE（记失败中断，默认）/
                 # RETRY（整步重跑，人工=human 标 repaired）/ SKIP（跳过本步继续）/
                 # ABORT（中断）
+                # P1-9：STEP_BEFORE 决策 abort 来源的失败跳过本决策点——
+                # abort 语义 = run 直接终止，不再触发 step.failed 二次询问
                 from gimbal.core.decisions import ask_decision
                 from gimbal.core.hooks import HookPoint
                 decision = ask_decision(self._hooks, HookPoint.STEP_FAILED, {
