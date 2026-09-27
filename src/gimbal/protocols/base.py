@@ -236,7 +236,14 @@ class ProtocolExecutor(StrategyExecutor):
 
     @staticmethod
     def _apply_patch(spec: Any, patch: dict) -> None:
-        """应用 CALL_BEFORE 补丁：标量覆盖、headers 合并、body 覆盖。"""
+        """应用 CALL_BEFORE 补丁：标量覆盖、headers 合并、body 覆盖；
+        ``$.request.`` 前缀键按 JSONPath 定位改写（P1-10 debugger patch 命令）。"""
+        jsonpath_keys = [k for k in patch
+                         if isinstance(k, str) and k.startswith("$.")]
+        if jsonpath_keys:
+            view = ProtocolExecutor._spec_request_view(spec)
+            for key in jsonpath_keys:
+                ProtocolExecutor._apply_jsonpath_patch(spec, view, key, patch[key])
         for key in ("method", "url", "timeout"):
             if key in patch:
                 setattr(spec, key, patch[key])
@@ -245,6 +252,29 @@ class ProtocolExecutor(StrategyExecutor):
         if "body" in patch:
             spec.body = patch["body"]
         logger.debug("[Protocol] CALL_BEFORE patch 已应用: keys={}", sorted(patch))
+
+    @staticmethod
+    def _apply_jsonpath_patch(spec: Any, view: dict, path: str, value: Any) -> None:
+        """``$.request.<rest>`` 形式补丁：在请求视图内按 JSONPath 写入。
+
+        剥离 ``$.request`` 命名空间后由 set_value 定位（中间节点不存在
+        时自动创建 dict/list）。set_value 的新建容器挂在视图 dict 上、
+        可能与 spec 字段脱钩，故写完把视图整体同步回 spec。
+        """
+        from gimbal.utils.jsonpath import set_value, JsonPathError
+        if not path.startswith("$.request."):
+            logger.warning("[Protocol] CALL_BEFORE JSONPath 补丁忽略"
+                           "（须以 $.request. 开头）: {}", path)
+            return
+        sub_path = "$" + path[len("$.request"):]
+        try:
+            set_value(view, sub_path, value)
+        except JsonPathError as exc:
+            logger.warning("[Protocol] CALL_BEFORE JSONPath 补丁失败: {} ({})",
+                           path, exc)
+            return
+        for attr, val in view.items():
+            setattr(spec, attr, val)
 
     @staticmethod
     def _spec_request_view(spec: Any) -> dict:

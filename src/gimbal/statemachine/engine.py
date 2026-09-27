@@ -220,6 +220,13 @@ class StepStateMachine:
                     step_id=self._step_id, status=self._state.value,
                     error=self._error, duration_ms=duration_ms,
                 )
+            # P1-10：continue 决策携带 write（debugger write 命令）→
+            # 注入 scratch 变量后继续——后续 Assign/调用/断言即见新值
+            if pre.write:
+                for key, value in pre.write.items():
+                    self._view.write_scratch(key, value)
+                logger.info("[SM {}] STEP_BEFORE write 注入 scratch: keys={}",
+                            self._step_id, sorted(pre.write))
 
             # 初始化 scratch.request_body（可能被 Assign 等策略修改）
             # body 现在可以是 Dict 或 List —— 不要用 `or {}` 兜底成 dict，

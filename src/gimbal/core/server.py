@@ -84,7 +84,7 @@ def _define_models() -> tuple[type, type]:
         debugEnabled: bool = False
 
     class DebugCommandRequest(BaseModel):
-        command: str = Field(..., description="continue/step/retry/skip/abort/read")
+        command: str = Field(..., description="continue/step/retry/skip/abort/read/write/patch")
 
     class DebugCommandResponse(BaseModel):
         accepted: bool

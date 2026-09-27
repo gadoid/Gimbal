@@ -436,16 +436,29 @@ class ScenarioRunner:
                     "result": result,
                     "ctx": scenario_ctx,
                 })
-                if decision.action == "retry":
+                # P1-10：retry 循环——重跑仍失败则再次询问（再次暂停），
+                # 直至通过 / continue / skip / abort（此前只重跑一次）
+                while decision.action == "retry":
                     logger.info(
                         "[ScenarioRunner] STEP_FAILED 决策 retry：整步重跑 step_id={}（source={}）",
                         result.step_id, decision.source,
                     )
                     rerun = step_runner.run(step_union, scenario_ctx, idx)
-                    if rerun.passed and decision.is_human:
-                        rerun.repaired = True   # 人工修复标记（extract→promote 幂等覆盖）
                     result = rerun
-                elif decision.action == "skip":
+                    if rerun.passed:
+                        if decision.is_human:
+                            rerun.repaired = True   # 人工修复标记（extract→promote 幂等覆盖）
+                        break
+                    if _abort_originated(rerun):
+                        # P1-9：abort 来源的失败不再二次询问
+                        break
+                    # 重跑仍失败 → 循环再次询问（debugger 再次暂停等命令）
+                    decision = ask_decision(self._hooks, HookPoint.STEP_FAILED, {
+                        "step_id": rerun.step_id,
+                        "result": rerun,
+                        "ctx": scenario_ctx,
+                    })
+                if decision.action == "skip":
                     logger.info(
                         "[ScenarioRunner] STEP_FAILED 决策 skip：跳过 step_id={}，继续后续 step",
                         result.step_id,

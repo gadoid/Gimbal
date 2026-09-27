@@ -4,7 +4,7 @@
 
   POST /runs                异步启动（单 run；立即返回 runId）
   GET  /runs/{id}           状态与摘要
-  POST /runs/{id}/debug     调试命令（continue/step/retry/skip/abort/read）
+  POST /runs/{id}/debug     调试命令（continue/step/retry/skip/abort/read/write/patch）
   GET  /runs/{id}/events    SSE 事件流（id=序号；批次 F 补 Last-Event-ID 续传）
 
 鉴权硬前置（v2：改值是特权面）：debug 与 events 端点要求

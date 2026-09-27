@@ -34,6 +34,8 @@ class Decision:
 
     action: str = "continue"                 # continue | retry | skip | abort
     patch: Optional[dict] = None             # 仅 CALL_BEFORE：请求补丁
+    # 仅 STEP_BEFORE：注入 scratch 变量后继续（debugger write 命令，P1-10）
+    write: Optional[dict] = None
     source: str = "auto"                     # auto | human（debugger 会话）
     note: str = ""
 

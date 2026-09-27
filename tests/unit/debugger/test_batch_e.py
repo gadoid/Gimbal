@@ -59,12 +59,12 @@ class ProgEcho(ProtocolExecutor):
         return self.send_fn(spec, view)
 
 
-def _make_engine(send_fn=None):
+def _make_engine(send_fn=None, executor=None):
     bus = InMemoryEventBus()
     archive = InMemoryArchive()
     hooks = HookRegistry()
     dispatcher = build_default_dispatcher(hook_registry=hooks)
-    dispatcher.protocols.register(ProgEcho(send_fn))
+    dispatcher.protocols.register(executor or ProgEcho(send_fn))
     ctx_manager = ContextManager(archive=archive, event_bus=bus)
     cfg = BootstrapConfig(env="test", mode="local", log_level="error")
     conf = Configuration(
@@ -375,3 +375,121 @@ class TestDebuggerPlugin:
             dbg.deactivate(hooks)
         assert dbg.paused_count == 1
         assert result.passed == 1               # 守卫不影响正常流转
+
+
+# ── P1-10：write/patch 改值命令 + retry 循环 ─────────────────
+
+class TestWritePatchRetry:
+    """总案决策 5 的会话命令全集（review P1-10）：
+
+    - write：STEP_BEFORE 暂停时改 scratch 变量 → Decision(continue, write=...)
+    - patch：CALL_BEFORE_SEND 暂停时改待发请求 → Decision(continue, patch=...)
+    - retry：STEP_FAILED 循环询问——重跑仍失败则再次暂停，直至 continue/skip/abort
+    """
+
+    def test_write_changes_variable(self):
+        captured: dict = {}
+
+        def capture(spec, view):
+            captured.update(view.get_scratch_dict())
+            return CallResult.build(protocol="echo", request={}, status=0,
+                                    body={"msg": "ok"})
+
+        engine, hooks, bus = _make_engine(capture)
+        session = ScriptedSession(['write orderId="O-9"'])
+        dbg = DebuggerPlugin(pause="every_step", session=session, event_bus=bus)
+        dbg.activate(hooks)
+        try:
+            result = engine.run(_scenario("s"))
+        finally:
+            dbg.deactivate(hooks)
+        assert dbg.paused_count == 1
+        assert captured.get("orderId") == "O-9"   # 步骤进行中已见新值
+        assert result.passed == 1
+
+    def test_write_bare_token_parses_as_string(self):
+        """裸 token（非合法 JSON）按字符串回落：write orderId=O-9 → "O-9"。"""
+        captured: dict = {}
+
+        def capture(spec, view):
+            captured.update(view.get_scratch_dict())
+            return CallResult.build(protocol="echo", request={}, status=0,
+                                    body={"msg": "ok"})
+
+        engine, hooks, bus = _make_engine(capture)
+        session = ScriptedSession(["write orderId=O-9"])
+        dbg = DebuggerPlugin(pause="every_step", session=session, event_bus=bus)
+        dbg.activate(hooks)
+        try:
+            engine.run(_scenario("s"))
+        finally:
+            dbg.deactivate(hooks)
+        assert captured.get("orderId") == "O-9"
+
+    def test_write_parse_error_reprompts(self):
+        """缺 '=' 的 write 命令：友好提示后重新等命令，会话不崩。"""
+        engine, hooks, bus = _make_engine()
+        session = ScriptedSession(["write orderId", "c"])
+        dbg = DebuggerPlugin(pause="every_step", session=session, event_bus=bus)
+        dbg.activate(hooks)
+        try:
+            result = engine.run(_scenario("s"))
+        finally:
+            dbg.deactivate(hooks)
+        assert result.passed == 1                  # 会话存活，继续执行
+        assert any("用法" in line for line in session.log)
+
+    def test_patch_changes_request(self):
+        sent: dict = {}
+
+        class BodyEcho(ProgEcho):
+            """spec 预置 body：验证 JSONPath 补丁原位改写、不伤兄弟键。"""
+
+            def build_spec(self, call, pctx):
+                spec = EchoSpec(pctx=pctx)
+                spec.body = {"qty": 1, "other": "x"}
+                return spec
+
+        def capture(spec, view):
+            body = getattr(spec, "body", None)
+            if isinstance(body, dict):
+                sent.update(body)
+            return CallResult.build(protocol="echo", request={}, status=0,
+                                    body={"msg": "ok"})
+
+        engine, hooks, bus = _make_engine(executor=BodyEcho(capture))
+        session = ScriptedSession(["patch $.request.body.qty=5"])
+        dbg = DebuggerPlugin(pause="none", breakpoints=["step-000:call_before"],
+                             session=session, event_bus=bus)
+        dbg.activate(hooks)
+        try:
+            result = engine.run(_scenario("s"))
+        finally:
+            dbg.deactivate(hooks)
+        assert dbg.paused_count == 1
+        # 适配器发送前已改写请求视图：qty 改为 5，兄弟键保留
+        assert sent == {"qty": 5, "other": "x"}
+        assert result.passed == 1
+
+    def test_retry_loops_until_skip(self):
+        """重跑仍失败 → 再次暂停；直至 skip（此前 retry 只重跑一次）。"""
+        calls = {"n": 0}
+
+        def always_bad(spec, view):
+            calls["n"] += 1
+            return CallResult.build(protocol="echo", request={}, status=0,
+                                    body={"msg": "bad"})
+
+        engine, hooks, bus = _make_engine(always_bad)
+        session = ScriptedSession(["retry", "retry", "skip"])
+        dbg = DebuggerPlugin(pause="on_failure", session=session, event_bus=bus)
+        dbg.activate(hooks)
+        try:
+            result = engine.run(_scenario("s"))
+        finally:
+            dbg.deactivate(hooks)
+        # 失败→retry→再失败→retry→再失败→skip：三次暂停
+        assert dbg.paused_count == 3
+        assert calls["n"] == 3                      # 初次 + 两次整步重跑
+        statuses = [s["status"] for s in result.details[0]["steps"]]
+        assert statuses == ["skipped"]              # 最终按 skip 落账
