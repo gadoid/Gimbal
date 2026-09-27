@@ -13,6 +13,9 @@ before/units 失败/取消都执行）→ 判定交 Engine。
     （连线值 = 上游 ScenarioRunResult.outputs[输出名]，按 Plan.wiring）。
     上游异常/无输出 → 该输入缺失：注入时跳过并告警（bind 已在编译期
     校验过存在性，运行期缺失只可能是上游失败路径，此时本单元多为 blocked）。
+    **after 单元例外（P0-5）**：after 可见上游 = before + 全部主体，缺供给
+    输入编译期不报错（Plan.after_optional 成文）；运行期连线值缺失 →
+    注入 None + ``debug.after_input_missing`` 事件（清理必达，不 Crash）。
 
 三种乘法的组合语义（v2 §三种乘法；总案开工门槛要求成文）：
 
@@ -62,11 +65,13 @@ class PlanOutcome:
 class PlanScheduler:
     """跑一个 Plan：括号先行/必达 + units 拓扑调度 + 运行期连线解析。"""
 
-    def __init__(self) -> None:
+    def __init__(self, event_bus: Any = None) -> None:
         # lock 标签 → 互斥锁（"依赖满足、即将运行"时获取，防死锁）
         self._locks: dict[str, "threading.Lock"] = {}
         # 锁表自身的互斥（并行分支多线程并发调用 _lock_for）
         self._table_lock = threading.Lock()
+        # 可选事件总线（P0-5：after 缺失输入注入 None 时发 debug.* 事件留痕）
+        self._event_bus = event_bus
 
     def _lock_for(self, tag: str):
         with self._table_lock:
@@ -106,10 +111,10 @@ class PlanScheduler:
 
     # ── 输入解析（字面量 ∪ 连线值）────────────────────────────
 
-    @staticmethod
-    def _resolve_inputs(plan: Plan, outcome: PlanOutcome, unit: Unit) -> dict:
+    def _resolve_inputs(self, plan: Plan, outcome: PlanOutcome, unit: Unit) -> dict:
         inputs = dict(unit.inputs or {})
         wires = plan.wiring.get(unit.id) or {}
+        after_ids = {a.id for a in plan.after}
         for input_name, src in wires.items():
             try:
                 src_unit, output_name = src.split(":", 1)
@@ -120,12 +125,34 @@ class PlanScheduler:
             outputs = getattr(upstream, "outputs", None) or {}
             if output_name in outputs:
                 inputs[input_name] = outputs[output_name]
+            elif unit.id in after_ids:
+                # P0-5：after 必达（业务清理）——主体未产出该名（失败/blocked/
+                # 无此输出）→ 注入 None 继续执行，不因主体失败而缺输入 Crash
+                inputs[input_name] = None
+                self._emit_after_input_missing(unit.id, input_name, src)
             else:
                 logger.warning(
                     "[PlanScheduler] 连线取值缺失: {} ← {}（上游无此输出或未成功），跳过注入",
                     input_name, src,
                 )
         return inputs
+
+    def _emit_after_input_missing(self, unit_id: str, input_name: str, src: str) -> None:
+        """P0-5：after 缺失输入注入 None 的留痕（debug.* 事件；无总线只记日志）。"""
+        logger.info(
+            "[PlanScheduler] after 输入缺失注入 None: unit={} input={} ← {}",
+            unit_id, input_name, src,
+        )
+        bus = self._event_bus
+        if bus is None:
+            return
+        try:
+            from gimbal.events.types import DebugAfterInputMissingEvent
+            bus.publish(DebugAfterInputMissingEvent(
+                unit_id=unit_id, input_name=input_name, source=src,
+            ))
+        except Exception:  # noqa: BLE001  # 事件留痕失败不影响调度
+            logger.debug("[PlanScheduler] after_input_missing 事件发布失败: {}", unit_id)
 
     # ── 串行拓扑 ─────────────────────────────────────────────
 

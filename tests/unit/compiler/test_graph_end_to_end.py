@@ -28,6 +28,7 @@ from gimbal.schema.scenario import (
     Config as ScenarioConfig, Meta, Scenario, SuiteGraph, UnitDecl,
 )
 from gimbal.schema.step import Step
+from gimbal.scheduler.plan import PlanScheduler
 from gimbal.strategy.dispatcher import build_default_dispatcher
 
 
@@ -211,3 +212,130 @@ class TestBlockedAndBrackets:
         # P0-4：括号行计入 total/passed —— login(before) + u1 + u2 各占一行
         assert result.passed == 3 and result.exit_code == 0
         assert result.total == 3
+
+
+# ── P0-5：after 可见上游含全部主体单元（清理单元引用主体产出）──
+
+def _scenario_extract_missing(sid: str, *, extract_to: str) -> Scenario:
+    """响应缺字段的提取：extract 失败（required，无 default，不提升）→
+    单元失败且输出面为空。
+
+    编译期 extract 声明仍在（分析输出面含 extract_to，bind 据此连线），
+    运行期却产不出该名——正是"主体未产出 → after 注入 None"的触发路径。
+    """
+    strategy = [
+        {"kind": "extract", "name": "out",
+         "expression": "$.call.response.body.absent_field",
+         "target": extract_to, "scope": "scenario"},
+    ]
+    return Scenario(
+        scenarioId=sid,
+        meta=Meta(name=sid, description="d", module="m", priority=1, author="a",
+                  owner="o", tags=[], version="1.0",
+                  createTime=datetime.now(timezone.utc), expire=False,
+                  requirementRef=[]),
+        config=ScenarioConfig(),
+        resource={},
+        steps=[Step(call=Call(protocol="echo", message=sid), strategy=strategy)],
+    )
+
+
+class TestAfterConsumesMainOutputs:
+
+    def _graph(self):
+        """主体提取 orderId，after 引用 ${orderId}（清理总案的最小形态）。"""
+        return SuiteGraph(
+            mode="aggregate",
+            units=[UnitDecl(ref="main-1", scenario=_scenario(
+                "main-1", message="ORD-7", extract_to="orderId"))],
+            after=[UnitDecl(ref="after-1", scenario=_scenario(
+                "after-1", message="cancel-${var.orderId}"))],
+        )
+
+    def test_after_consumes_main_output(self):
+        """主体提取 orderId，after 引用 ${orderId} → 编译通过且 wire 指向主体。"""
+        from gimbal.compiler.pipeline import compile_target
+        plan = compile_target(self._graph())
+        assert plan.wiring.get("after-1", {}).get("orderId") == "main-1:orderId"
+        assert not plan.after_optional            # 该输入有供给：不记 optional
+
+    def test_after_receives_main_output_end_to_end(self):
+        """数据真实流过：主体产出 orderId → after 取消单据断言收到的就是它。"""
+        engine = _make_engine()
+        graph = SuiteGraph(
+            mode="aggregate",
+            units=[UnitDecl(ref="main-1", scenario=_scenario(
+                "main-1", message="ORD-7", extract_to="orderId"))],
+            after=[UnitDecl(ref="after-1", scenario=_scenario(
+                "after-1", message="cancel-${var.orderId}",
+                assert_echo="cancel-ORD-7"))],
+        )
+        result = engine.run(graph)
+        assert result.exit_code == 0, [d for d in result.details]
+        assert result.passed == 2
+
+    def test_after_unsupplied_input_no_compile_error(self):
+        """after 引用无人产出的 refundId → 不 CompileError；有供给的照常连线。"""
+        from gimbal.compiler.pipeline import compile_target
+        graph = SuiteGraph(
+            mode="aggregate",
+            units=[UnitDecl(ref="main-1", scenario=_scenario(
+                "main-1", message="ORD-7", extract_to="orderId"))],
+            after=[UnitDecl(ref="after-1", scenario=_scenario(
+                "after-1", message="cancel-${var.orderId}-${var.refundId}"))],
+        )
+        plan = compile_target(graph)
+        assert plan.after_optional == {"after-1"}   # 缺供给的单元成文记录
+        assert plan.wiring["after-1"] == {"orderId": "main-1:orderId"}  # 有供给的照常连
+
+    def test_after_input_missing_at_runtime_injects_none(self):
+        """主体失败未产出 orderId → after 输入注入 None（非跳过）+ debug 事件。"""
+        from gimbal.compiler.pipeline import compile_target
+        bus = InMemoryEventBus()
+        events = []
+        bus.subscribe(events.append, "debug.after_input_missing")
+
+        class _FakeResult:
+            def __init__(self, uid: str, *, passed: bool = True, outputs: dict | None = None):
+                self.scenario_id = uid
+                self.passed = passed
+                self.status = "passed" if passed else "failed"
+                self.outputs = outputs or {}
+
+        seen: dict[str, dict] = {}
+
+        def fake_unit_run(unit, inputs):
+            seen[unit.id] = dict(inputs)
+            if unit.id == "main-1":
+                return _FakeResult(unit.id, passed=False)   # 失败且未产出 orderId
+            return _FakeResult(unit.id)
+
+        plan = compile_target(self._graph())
+        outcome = PlanScheduler(event_bus=bus).run(plan, fake_unit_run)
+
+        assert outcome.status_of("after-1") == "done"        # 必达执行完（非 blocked/crash）
+        assert outcome.results["after-1"].passed is True
+        assert "orderId" in seen["after-1"]                  # 注入（而非缺失跳过）
+        assert seen["after-1"]["orderId"] is None
+        assert len(events) == 1
+        assert events[0].event_type == "debug.after_input_missing"
+        assert events[0].unit_id == "after-1"
+        assert events[0].input_name == "orderId"
+        assert events[0].source == "main-1:orderId"
+
+    def test_after_input_missing_end_to_end_still_runs(self):
+        """端到端：主体失败（提取字段缺失、未产出 orderId）→ after 注入 None 跑完。"""
+        engine = _make_engine()
+        graph = SuiteGraph(
+            mode="aggregate",
+            units=[UnitDecl(ref="main-1", scenario=_scenario_extract_missing(
+                "main-1", extract_to="orderId"))],
+            after=[UnitDecl(ref="after-1", scenario=_scenario(
+                "after-1", message="cancel-${var.orderId}",
+                assert_echo="cancel-"))],   # None 渲染空串 → "cancel-"
+        )
+        result = engine.run(graph)
+        rows = {d["scenario_id"]: d for d in result.details}
+        assert rows["main-1"]["status"] == "failed"
+        assert rows["after-1"]["status"] == "passed"        # 不 CompileError、不 Crash
+        assert result.failed == 1 and result.exit_code == 1

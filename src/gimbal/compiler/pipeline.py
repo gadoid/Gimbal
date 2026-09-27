@@ -311,7 +311,9 @@ def _graph_plan(graph: SuiteGraph) -> Plan:
     needs_map: dict[str, list[str]] = {u.id: list(u.needs) for u in main_units + after_units}
     _check_acyclic(needs_map)
 
+    after_ids = {u.id for u in after_units}
     wiring: dict[str, dict[str, str]] = {}
+    after_optional: set[str] = set()
     for unit in main_units + after_units:
         analysis = analysis_map[unit.id]
         literal_keys = set(unit.inputs.keys())
@@ -320,6 +322,11 @@ def _graph_plan(graph: SuiteGraph) -> Plan:
         ancestors = _ancestors(unit.id, needs_map) | {
             u.id for u in before_units   # 括号先行，输出恒可用
         }
+        if unit.id in after_ids:
+            # P0-5：after 必达（业务清理）——主体输出恒可见，无须 needs 声明
+            # （清理单元引用主体提取的 orderId 之类不再"输入不满足"）；
+            # 同名歧义仍按 map 改名消解，主体未产出的名运行期注入 None 兜底
+            ancestors |= {u.id for u in main_units}
         consumer_map = consumer_maps.get(unit.id, {})
         wires: dict[str, str] = {}
         for name in sorted(hard | soft):
@@ -336,6 +343,11 @@ def _graph_plan(graph: SuiteGraph) -> Plan:
                 )
             if not candidates:
                 if name in hard:
+                    if unit.id in after_ids:
+                        # P0-5：after 单元硬输入无上游供给 → 不 CompileError，
+                        # 单元 id 记 after_optional 成文（运行期缺失注入 None）
+                        after_optional.add(unit.id)
+                        continue
                     raise CompileError(
                         f"单元 {unit.id!r} 的输入 {name!r} 无上游供给（输入不满足）；"
                         "检查连线/needs，或经 inputs/--var 提供"
@@ -352,6 +364,7 @@ def _graph_plan(graph: SuiteGraph) -> Plan:
         after=after_units,
         policy=graph.policy or PlanPolicy(),
         wiring=wiring,
+        after_optional=after_optional,
         suite_id="__graph__",
         suite_name="Graph",
         implicit=False,

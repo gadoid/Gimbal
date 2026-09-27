@@ -63,6 +63,16 @@ class Plan(BaseModel):
       - after 单元失败 → ``failed += 1``，``exit_code=1``（不影响其他行）；
       - 括号行计入 ``total``（before/after 各占一行），与主体行统一组装；
       - ``exit_code = 0`` 当且仅当 ``failed == error == halted == blocked == 0``。
+
+    after 输入可见性（v2.1 review P0-5；业务清理总案"取消主体创建的订单"）：
+
+      - after 单元可见上游 = before 括号 + **全部主体单元**（bind 期主体
+        输出恒可见，无须 needs 声明）；
+      - bind 期无上游供给的 after 输入不再 CompileError：单元 id 记入
+        ``after_optional`` 成文（有供给的输入照常连线）；
+      - 运行期主体未产出某连线名（失败/blocked/无该输出）→ after 该输入
+        注入 ``None`` 并发 ``debug.after_input_missing`` 事件——after 必达，
+        缺输入注入 None 不 Crash（见 scheduler/plan.py `_resolve_inputs`）。
     """
 
     units: list[Unit] = Field(default_factory=list)
@@ -80,6 +90,9 @@ class Plan(BaseModel):
     # bind 产物（批次 C）：unit_id → {输入名: "上游unit_id:输出名"}
     # 运行期由调度器解析：inputs[名] = results[上游].outputs[输出]
     wiring: dict[str, dict[str, str]] = Field(default_factory=dict)
+    # P0-5：bind 期即无上游供给的 after 单元 id（不 CompileError 成文记录；
+    # 其有供给的输入照常连线，缺失语义由运行期注入 None 兜底）
+    after_optional: set[str] = Field(default_factory=set)
 
     @property
     def all_units_in_order(self) -> list[Unit]:

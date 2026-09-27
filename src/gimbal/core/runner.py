@@ -255,7 +255,8 @@ class Engine:
         if plan.policy.fail_fast is not None:
             fail_fast = plan.policy.fail_fast
 
-        sched = PlanScheduler()
+        # P0-5：总线透传调度器——after 缺失输入注入 None 时发 debug.* 事件留痕
+        sched = PlanScheduler(event_bus=self._ictx.event_bus)
         outcome = sched.run(plan, _run_unit, fail_fast=fail_fast)
 
         # ── 判定：按计划清单对账（blocked / cancelled 由 outcome 呈现）──

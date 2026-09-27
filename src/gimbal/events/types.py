@@ -317,3 +317,16 @@ class DebugSessionEvent(FrameworkEvent):
     step_id: str = ""
     decision: str = ""        # resume 时的决策（continue/retry/skip/abort）
     data: dict = Field(default_factory=dict)
+
+
+# ── 调试注记（v2.1 review P0-5：after 缺失输入的运行期注入留痕）──
+class DebugAfterInputMissingEvent(FrameworkEvent):
+    """after 单元连线取值缺失（上游失败/blocked/未产出）→ 注入 None 继续执行。
+
+    P0-5：after 括号必达（业务清理语义），主体未产出的连线名不阻断
+    after——注入 None 并发本事件留痕（订阅 ``debug.after_input_missing``）。
+    """
+    event_type: Literal["debug.after_input_missing"] = "debug.after_input_missing"
+    unit_id: str = ""
+    input_name: str = ""
+    source: str = ""
